@@ -4,6 +4,8 @@ import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { step } from '../../support/steps';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { E2E_URLS } from '../../support/test-env';
+import { addTaskProvider, addProviderModel } from '../../fixtures/agent/task-ui';
+test.use({ actionTimeout: 10_000 });
 import type {
   APIRequestContext,
   Locator,
@@ -79,7 +81,7 @@ test('Agent launcher moves immediately on drag and opens only on click', async (
   await page.mouse.move(initial!.x + initial!.width / 2, initial!.y + initial!.height / 2);
   await page.mouse.down();
   await page.mouse.move(initial!.x + initial!.width / 2 - 90, initial!.y + initial!.height / 2 - 80, {
-    modelRequests: 4,
+    steps: 4,
   });
   await page.mouse.up();
 
@@ -116,7 +118,7 @@ test('Agent launcher docks on either edge, restores its side and expands on focu
     const width = await page.evaluate(() => document.documentElement.clientWidth);
     await page.mouse.move(initial.x + initial.width / 2, initial.y + initial.height / 2);
     await page.mouse.down();
-    await page.mouse.move(side === 'left' ? 22 : width - 22, initial.y + initial.height / 2 - 40, { modelRequests: 5 });
+    await page.mouse.move(side === 'left' ? 22 : width - 22, initial.y + initial.height / 2 - 40, { steps: 5 });
     await page.mouse.up();
     await page.mouse.move(width / 2, 50);
     await expect(hub).toHaveCount(0);
@@ -151,13 +153,32 @@ test.describe('touch Agent launcher', () => {
     await expect(launcher).toBeVisible();
     const initial = (await launcher.boundingBox())!;
     const y = initial.y + 22 - 60;
-    const cdp = await context.newCDPSession(page);
-    await cdp.send('Input.dispatchTouchEvent', {
-      type: 'touchStart',
-      touchPoints: [{ x: initial.x + 22, y: initial.y + 22 }],
+    await launcher.dispatchEvent('pointerdown', {
+      pointerType: 'touch',
+      pointerId: 1,
+      isPrimary: true,
+      clientX: initial.x + 22,
+      clientY: initial.y + 22,
+      button: 0,
+      buttons: 1,
     });
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 22, y }] });
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await launcher.dispatchEvent('pointermove', {
+      pointerType: 'touch',
+      pointerId: 1,
+      isPrimary: true,
+      clientX: 22,
+      clientY: y,
+      buttons: 1,
+    });
+    await launcher.dispatchEvent('pointerup', {
+      pointerType: 'touch',
+      pointerId: 1,
+      isPrimary: true,
+      clientX: 22,
+      clientY: y,
+      button: 0,
+      buttons: 0,
+    });
     await expect(hub).toHaveCount(0);
     await expect.poll(async () => Math.round((await launcher.boundingBox())!.x)).toBe(-22);
     await page.reload();
@@ -165,7 +186,6 @@ test.describe('touch Agent launcher', () => {
     await expect.poll(async () => Math.round((await launcher.boundingBox())!.x)).toBe(-22);
     await page.touchscreen.tap(11, (await launcher.boundingBox())!.y + 22);
     await expect(hub).toBeVisible();
-    await cdp.detach();
   });
 
   test('touch drag moves the launcher without opening the Hub', async ({ page, context }) => {
@@ -181,17 +201,40 @@ test.describe('touch Agent launcher', () => {
     expect(initial).toBeTruthy();
     const startX = initial!.x + initial!.width / 2;
     const startY = initial!.y + initial!.height / 2;
-    const cdp = await context.newCDPSession(page);
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: startX, y: startY }] });
-    await cdp.send('Input.dispatchTouchEvent', {
-      type: 'touchMove',
-      touchPoints: [{ x: startX - 45, y: startY - 40 }],
+    await launcher.dispatchEvent('pointerdown', {
+      pointerType: 'touch',
+      pointerId: 1,
+      isPrimary: true,
+      clientX: startX,
+      clientY: startY,
+      button: 0,
+      buttons: 1,
     });
-    await cdp.send('Input.dispatchTouchEvent', {
-      type: 'touchMove',
-      touchPoints: [{ x: startX - 90, y: startY - 80 }],
+    await launcher.dispatchEvent('pointermove', {
+      pointerType: 'touch',
+      pointerId: 1,
+      isPrimary: true,
+      clientX: startX - 45,
+      clientY: startY - 40,
+      buttons: 1,
     });
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await launcher.dispatchEvent('pointermove', {
+      pointerType: 'touch',
+      pointerId: 1,
+      isPrimary: true,
+      clientX: startX - 90,
+      clientY: startY - 80,
+      buttons: 1,
+    });
+    await launcher.dispatchEvent('pointerup', {
+      pointerType: 'touch',
+      pointerId: 1,
+      isPrimary: true,
+      clientX: startX - 90,
+      clientY: startY - 80,
+      button: 0,
+      buttons: 0,
+    });
 
     const moved = await launcher.boundingBox();
     expect(moved).toBeTruthy();
@@ -264,7 +307,7 @@ test('Agent Hub resizing keeps its current center and its bottom-right handle fo
     const y = box!.y + box!.height / 2;
     await page.mouse.move(x, y);
     await page.mouse.down();
-    await page.mouse.move(x + dx, y + dy, { modelRequests: 8 });
+    await page.mouse.move(x + dx, y + dy, { steps: 8 });
     await page.mouse.up();
   };
   const expectCenteredSize = async (before: Awaited<ReturnType<typeof bounds>>, dw: number, dh: number) => {
@@ -291,7 +334,7 @@ test('Agent Hub resizing keeps its current center and its bottom-right handle fo
   const headerY = headerBox!.y + headerBox!.height / 2;
   await page.mouse.move(headerX, headerY);
   await page.mouse.down();
-  await page.mouse.move(headerX + 40, headerY + 60, { modelRequests: 8 });
+  await page.mouse.move(headerX + 40, headerY + 60, { steps: 8 });
   await page.mouse.up();
   await expect.poll(async () => (await bounds()).x).toBeCloseTo(shrunk.x + 40, 0);
   const moved = await bounds();
@@ -976,36 +1019,10 @@ test('fallback settings drop stale models and provider deletion repairs the defa
   const csrf = await csrfToken(context.request);
   const headers = { 'X-Nexus-CSRF': csrf };
   const model = (id: string) => ({ id, contextWindow: 8192, maxOutputTokens: 128, supportsTools: true });
-  const createProvider = async (displayName: string, models: ReturnType<typeof model>[]) => {
-    const response = await context.request.post('/api/v1/agent/ai/providers', {
-      headers,
-      data: {
-        kind: 'openai-compatible',
-        displayName,
-        baseUrl: `${E2E_URLS.openAiProviderOrigin}/v1`,
-        protocol: 'chat-completions',
-        credential: 'e2e-provider-secret',
-        models,
-        enabled: true,
-      },
-    });
-    expect(response.status(), await response.text()).toBe(201);
-    return (
-      (await response.json()) as AgentEnvelope<{
-        id: string;
-        version: number;
-        displayName: string;
-        models: ReturnType<typeof model>[];
-      }>
-    ).data;
-  };
-
-  let primary = await createProvider('Fallback Primary', [
-    model('primary-model'),
-    model('stale-fallback'),
-    model('valid-fallback'),
-  ]);
-  const backup = await createProvider('Fallback Backup', [model('backup-model')]);
+  let primary = await addTaskProvider(page, 'Fallback Primary', 'primary-model');
+  primary = await addProviderModel(page, 'stale-fallback');
+  primary = await addProviderModel(page, 'valid-fallback');
+  const backup = await addTaskProvider(page, 'Fallback Backup', 'backup-model');
 
   const initialSettings = await context.request.get('/api/v1/agent/settings');
   expect(initialSettings.ok(), await initialSettings.text()).toBeTruthy();
@@ -1905,13 +1922,13 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
     expect(removed.ok(), await removed.text()).toBeTruthy();
   });
 
-  await step('Workspace Runtime availability reports the optional Runner as not configured', async () => {
+  await step('Workspace Runtime availability reports the isolated E2E Runner as ready', async () => {
     const response = await request.get('/api/v1/agent/workspace-runtime/availability');
     expect(response.ok(), await response.text()).toBeTruthy();
     await expect(response.json()).resolves.toMatchObject({
       data: {
-        available: false,
-        reason: 'runner_not_configured',
+        available: true,
+        reason: null,
         mode: 'native',
         isolation: 'logical',
       },

@@ -1,5 +1,6 @@
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
+import { addTaskProvider } from '../../fixtures/agent/task-ui';
 import { step } from '../../support/steps';
 import { E2E_URLS } from '../../support/test-env';
 
@@ -27,8 +28,13 @@ const csrfToken = async (request: APIRequestContext): Promise<string> => {
   return ((await response.json()) as Envelope<{ token: string }>).data.token;
 };
 
-test('Provider configuration protects credentials and enforces the OpenAI-compatible contract', async ({ request }) => {
+test('Provider configuration protects credentials and enforces the OpenAI-compatible contract', async ({
+  request,
+  page,
+}) => {
   await loginAsInitialAdmin(request);
+  await loginAsInitialAdmin(page.request);
+  await setUiLanguage(page.request);
   const csrf = await csrfToken(request);
   const headers = { 'X-Nexus-CSRF': csrf };
 
@@ -115,20 +121,7 @@ test('Provider configuration protects credentials and enforces the OpenAI-compat
   });
 
   await step('configured model endpoints can be saved without a private-network exception list', async () => {
-    const created = await request.post('/api/v1/agent/ai/providers', {
-      headers,
-      data: {
-        kind: 'openai-compatible',
-        displayName: 'E2E OpenAI Compatible',
-        baseUrl: providerBase,
-        protocol: 'chat-completions',
-        credential: providerSecret,
-        models: [model],
-        enabled: true,
-      },
-    });
-    expect(created.status(), await created.text()).toBe(201);
-    provider = ((await created.json()) as Envelope<ProviderView>).data;
+    provider = await addTaskProvider(page, 'E2E OpenAI Compatible');
     expect(provider).toMatchObject({
       kind: 'openai-compatible',
       displayName: 'E2E OpenAI Compatible',

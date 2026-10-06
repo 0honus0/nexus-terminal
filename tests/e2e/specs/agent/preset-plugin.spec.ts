@@ -5,6 +5,9 @@ import { captureFunctionalScreenshot } from '../../support/functional-screenshot
 import { slowStep, step } from '../../support/steps';
 import { ensureTestSshConnection } from '../../support/ssh';
 import { E2E_URLS } from '../../support/test-env';
+import { addTaskProvider, createTaskThread, sendTask, taskCommand } from '../../fixtures/agent/task-ui';
+
+test.use({ actionTimeout: 10_000 });
 
 type Envelope<T> = { data: T; requestId: string };
 type SettingsView = {
@@ -40,8 +43,6 @@ type RunView = {
 
 const repositoryUrl = `${E2E_URLS.pluginRepositoryOrigin}/catalog.json`;
 const repositoryException = `127.0.0.1:${new URL(E2E_URLS.pluginRepositoryOrigin).port}`;
-const providerBase = `${E2E_URLS.openAiProviderOrigin}/v1`;
-const providerSecret = 'e2e-provider-secret';
 
 const csrfToken = async (request: APIRequestContext): Promise<string> => {
   const response = await request.get('/api/v1/agent/security/csrf');
@@ -88,7 +89,7 @@ const waitForTerminalRun = async (request: APIRequestContext, runId: string): Pr
   throw new Error(`Preset Agent Run did not reach a terminal state: ${JSON.stringify(latest)}`);
 };
 
-const cancelRunForCleanup = async (request: APIRequestContext, runId: string): Promise<RunView> => {
+const cancelRunForCleanup = async (request: APIRequestContext, runId: string, page: Page): Promise<RunView> => {
   const terminalStatuses = ['completed', 'completed_unverified', 'failed', 'cancelled', 'interrupted'];
   const deadline = Date.now() + 10_000;
   let latest: RunView | null = null;
@@ -98,10 +99,7 @@ const cancelRunForCleanup = async (request: APIRequestContext, runId: string): P
     latest = ((await response.json()) as Envelope<RunView>).data;
     if (terminalStatuses.includes(latest.status)) return latest;
 
-    const cancelled = await request.post(`/api/v1/apps/nexus.agent/runs/${runId}/cancel`, {
-      headers: { 'X-Nexus-CSRF': await csrfToken(request), 'Idempotency-Key': randomUUID() },
-      data: { schemaVersion: 1, expectedVersion: latest.version },
-    });
+    const cancelled = await taskCommand(page, '/stop', `/runs/${runId}/cancel`);
     if (cancelled.ok()) return ((await cancelled.json()) as Envelope<RunView>).data;
 
     const failure = (await cancelled.json()) as {
@@ -114,13 +112,16 @@ const cancelRunForCleanup = async (request: APIRequestContext, runId: string): P
 
 const installAndRunNexusAgent = async (
   request: APIRequestContext,
-): Promise<{ threadId: string; connectionId: number }> => {
+  page: Page,
+): Promise<{ threadId: string; connectionId: number; parallelThreadId: string }> => {
   await loginAsInitialAdmin(request);
+  if (request !== page.request) await loginAsInitialAdmin(page.request);
+  await setUiLanguage(page.request);
   const csrf = await csrfToken(request);
   const headers = { 'X-Nexus-CSRF': csrf };
   const connectionId = await ensureTestSshConnection(request);
 
-  await step('configure the remote repository without installing a Runner', async () => {
+  await step('configure the remote repository with the isolated E2E Runner', async () => {
     const before = await request.get('/api/v1/agent/settings');
     expect(before.ok(), await before.text()).toBeTruthy();
     const settings = ((await before.json()) as Envelope<SettingsView>).data;
@@ -138,7 +139,7 @@ const installAndRunNexusAgent = async (
     const availability = await request.get('/api/v1/agent/workspace-runtime/availability');
     expect(availability.ok(), await availability.text()).toBeTruthy();
     await expect(availability.json()).resolves.toMatchObject({
-      data: { available: false, reason: 'runner_not_configured' },
+      data: { available: true, reason: null, mode: 'native', isolation: 'logical' },
     });
   });
 
@@ -291,23 +292,8 @@ const installAndRunNexusAgent = async (
 
   let provider!: ProviderView;
   await step('configure a real model provider and make it the Nexus Agent default', async () => {
-    const created = await request.post('/api/v1/agent/ai/providers', {
-      headers,
-      data: {
-        kind: 'openai-compatible',
-        displayName: 'Preset E2E Provider',
-        baseUrl: providerBase,
-        protocol: 'chat-completions',
-        credential: providerSecret,
-        models: [
-          { id: 'e2e-model', contextWindow: 8192, maxOutputTokens: 128, supportsTools: true },
-          { id: 'e2e-model-alt', contextWindow: 8192, maxOutputTokens: 128, supportsTools: true },
-        ],
-        enabled: true,
-      },
-    });
-    expect(created.status(), await created.text()).toBe(201);
-    provider = ((await created.json()) as Envelope<ProviderView>).data;
+    provider = await addTaskProvider(page, 'Preset E2E Provider');
+    await addTaskProvider(page, 'Preset alternate Provider', 'e2e-model-alt');
     const current = await request.get('/api/v1/agent/settings');
     const settings = ((await current.json()) as Envelope<SettingsView>).data;
     const patched = await request.patch('/api/v1/agent/settings', {
@@ -319,9 +305,13 @@ const installAndRunNexusAgent = async (
     });
     expect(patched.ok(), await patched.text()).toBeTruthy();
   });
+  const createTask = (options: { headers: Record<string, string>; data: Parameters<typeof sendTask>[1] }) =>
+    sendTask(page, options.data);
 
   let threadId = '';
-  await step('a real Browser context is reclaimed after the Agent Run reaches terminal state', async () => {
+  let parallelThreadId = '';
+  // This is a group of separately bounded lifecycle cases, not one 30-second operation.
+  await test.step('a real Browser context is reclaimed after the Agent Run reaches terminal state', async () => {
     const contexts = async () => {
       const response = await fetch(`${E2E_URLS.browserControlOrigin}/contexts`);
       expect(response.ok).toBeTruthy();
@@ -358,14 +348,11 @@ const installAndRunNexusAgent = async (
       },
     });
     expect(configured.ok(), await configured.text()).toBeTruthy();
-    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
-      headers,
-      data: { title: 'Browser lifecycle E2E' },
-    });
+    const thread = await createTaskThread(page);
     expect(thread.status()).toBe(201);
     const browserThreadId = (await thread.json()).data.id;
     const createBrowserRun = (approval = false, threadId = browserThreadId) =>
-      request.post('/api/v1/apps/nexus.agent/runs', {
+      createTask({
         headers: { ...headers, 'Idempotency-Key': randomUUID() },
         data: {
           schemaVersion: 1,
@@ -397,7 +384,7 @@ const installAndRunNexusAgent = async (
           })
           .toBe(true);
         await expect.poll(contexts).toHaveLength(baseline.length + 1);
-        await cancelRunForCleanup(request, creatingRunId);
+        await cancelRunForCleanup(request, creatingRunId, page);
       } finally {
         const released = await fetch(`${E2E_URLS.browserControlOrigin}/creation-barrier/release`, { method: 'POST' });
         expect(released.ok).toBeTruthy();
@@ -437,7 +424,7 @@ const installAndRunNexusAgent = async (
           expect(live.ok()).toBeTruthy();
           expect((await live.json()).data.status).toBe('running');
           if (cancel) {
-            await cancelRunForCleanup(request, run.id);
+            await cancelRunForCleanup(request, run.id, page);
             expect((await waitForTerminalRun(request, run.id)).status).toBe('cancelled');
             await expect.poll(contexts).toEqual(baseline);
           }
@@ -481,10 +468,7 @@ const installAndRunNexusAgent = async (
           expect(limited.ok(), await limited.text()).toBeTruthy();
           let budgetRunId = '';
           try {
-            const isolatedThread = await request.post('/api/v1/apps/nexus.agent/threads', {
-              headers,
-              data: { title: `Browser budget extension E2E ${cancelExpandedRun ? 'cancel' : 'preserve'}` },
-            });
+            const isolatedThread = await createTaskThread(page);
             expect(isolatedThread.status()).toBe(201);
             const created = await createBrowserRun(false, (await isolatedThread.json()).data.id);
             expect(created.status(), await created.text()).toBe(201);
@@ -502,7 +486,7 @@ const installAndRunNexusAgent = async (
             expect(waiting.budget.maxModelRequests).toBeGreaterThan(2);
             expect(waiting.budget.maxModelRequests).toBeLessThanOrEqual(waiting.budget.modelRequestCeiling);
             if (cancelExpandedRun) {
-              await cancelRunForCleanup(request, budgetRunId);
+              await cancelRunForCleanup(request, budgetRunId, page);
               expect((await waitForTerminalRun(request, budgetRunId)).status).toBe('cancelled');
               await expect.poll(contexts).toEqual(baseline);
               const late = await request.post(`/api/v1/apps/nexus.agent/runs/${budgetRunId}/budget`, {
@@ -530,7 +514,7 @@ const installAndRunNexusAgent = async (
             await expect.poll(contexts).toEqual(baseline);
           } finally {
             if (budgetRunId) {
-              await cancelRunForCleanup(request, budgetRunId);
+              await cancelRunForCleanup(request, budgetRunId, page);
               await waitForTerminalRun(request, budgetRunId);
             }
             const currentResponse = await request.get('/api/v1/agent/settings');
@@ -570,7 +554,7 @@ const installAndRunNexusAgent = async (
           const approval = pending[0];
           expect(approval.inspection.toolName).toBe('shell_execute');
           if (decision === 'cancelled') {
-            await cancelRunForCleanup(request, run.id);
+            await cancelRunForCleanup(request, run.id, page);
             expect((await waitForTerminalRun(request, run.id)).status).toBe('cancelled');
             await expect.poll(contexts).toEqual(baseline);
             const late = await request.post(`/api/v1/apps/nexus.agent/approvals/${approval.id}/resolve`, {
@@ -651,7 +635,7 @@ const installAndRunNexusAgent = async (
           }
           await expect.poll(contexts).toEqual(baseline);
         } finally {
-          await cancelRunForCleanup(request, run.id);
+          await cancelRunForCleanup(request, run.id, page);
           await waitForTerminalRun(request, run.id);
         }
       });
@@ -663,13 +647,10 @@ const installAndRunNexusAgent = async (
       data: [{ id: 'agent.default', version: '1.0.0', displayName: 'Nexus Agent' }],
     });
 
-    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
-      headers,
-      data: { title: 'Preset E2E thread' },
-    });
+    const thread = await createTaskThread(page);
     expect(thread.status(), await thread.text()).toBe(201);
     threadId = ((await thread.json()) as Envelope<{ id: string }>).data.id;
-    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
+    const created = await createTask({
       headers: { ...headers, 'Idempotency-Key': randomUUID() },
       data: {
         schemaVersion: 1,
@@ -700,27 +681,9 @@ const installAndRunNexusAgent = async (
     expect(running.status).toBe('running');
 
     const durableGoal = 'Confirm the Nexus Agent Developer Skill goal remains durable.';
-    const goalDeadline = Date.now() + 5_000;
-    let goalRun: RunView | null = null;
-    while (!goalRun && Date.now() < goalDeadline) {
-      const latestResponse = await request.get(`/api/v1/apps/nexus.agent/runs/${run.id}`);
-      expect(latestResponse.ok(), await latestResponse.text()).toBeTruthy();
-      const latest = ((await latestResponse.json()) as Envelope<RunView>).data;
-      expect(latest.status).toBe('running');
-      const goalUpdated = await request.post(`/api/v1/apps/nexus.agent/runs/${run.id}/goal`, {
-        headers: { ...headers, 'Idempotency-Key': randomUUID() },
-        data: { schemaVersion: 1, text: durableGoal, expectedVersion: latest.version },
-      });
-      if (goalUpdated.ok()) {
-        goalRun = ((await goalUpdated.json()) as Envelope<RunView>).data;
-        break;
-      }
-      const failure = (await goalUpdated.json()) as { error?: { code?: string } };
-      expect(failure.error?.code).toBe('STATE_CONFLICT');
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    expect(goalRun).not.toBeNull();
-    expect(goalRun!.goal).toMatchObject({ text: durableGoal, revision: 1 });
+    const goalUpdated = await taskCommand(page, `/goal ${durableGoal}`, `/runs/${run.id}/goal`);
+    expect(goalUpdated.ok()).toBe(true);
+    expect((await goalUpdated.json()).data.goal).toMatchObject({ text: durableGoal, revision: 1 });
 
     const terminal = await waitForTerminalRun(request, run.id);
     expect(['completed', 'completed_unverified']).toContain(terminal.status);
@@ -731,13 +694,10 @@ const installAndRunNexusAgent = async (
   });
 
   await step('the merged App exposes Operations separately through metadata-first Skill loading', async () => {
-    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
-      headers,
-      data: { title: 'Operations Skill E2E thread' },
-    });
+    const thread = await createTaskThread(page);
     expect(thread.status(), await thread.text()).toBe(201);
     const operationsThreadId = ((await thread.json()) as Envelope<{ id: string }>).data.id;
-    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
+    const created = await createTask({
       headers: { ...headers, 'Idempotency-Key': randomUUID() },
       data: {
         schemaVersion: 1,
@@ -764,13 +724,10 @@ const installAndRunNexusAgent = async (
   });
 
   await step('control-risk tools persist the current enum without compatibility remapping', async () => {
-    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
-      headers,
-      data: { title: 'Control risk enum E2E thread' },
-    });
+    const thread = await createTaskThread(page);
     expect(thread.status(), await thread.text()).toBe(201);
     const controlThreadId = ((await thread.json()) as Envelope<{ id: string }>).data.id;
-    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
+    const created = await createTask({
       headers: { ...headers, 'Idempotency-Key': randomUUID() },
       data: {
         schemaVersion: 1,
@@ -795,13 +752,10 @@ const installAndRunNexusAgent = async (
   });
 
   await step('one model turn persists and completes every tool call before the next inference', async () => {
-    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
-      headers,
-      data: { title: 'Multi-tool batch E2E thread' },
-    });
+    const thread = await createTaskThread(page);
     expect(thread.status(), await thread.text()).toBe(201);
     const batchThreadId = ((await thread.json()) as Envelope<{ id: string }>).data.id;
-    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
+    const created = await createTask({
       headers: { ...headers, 'Idempotency-Key': randomUUID() },
       data: {
         schemaVersion: 1,
@@ -831,13 +785,11 @@ const installAndRunNexusAgent = async (
   });
 
   await step('parallel-safe read tools from one model turn settle as one complete batch', async () => {
-    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
-      headers,
-      data: { title: 'Parallel read batch E2E thread' },
-    });
+    const thread = await createTaskThread(page);
     expect(thread.status(), await thread.text()).toBe(201);
     const batchThreadId = ((await thread.json()) as Envelope<{ id: string }>).data.id;
-    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
+    parallelThreadId = batchThreadId;
+    const created = await createTask({
       headers: { ...headers, 'Idempotency-Key': randomUUID() },
       data: {
         schemaVersion: 1,
@@ -867,7 +819,7 @@ const installAndRunNexusAgent = async (
     expect(serialized).toContain('nexus-e2e-seed');
   });
 
-  await step('subagent history preserves one assistant turn with every tool call and result', async () => {
+  await test.step('subagent history preserves one assistant turn with every tool call and result', async () => {
     const settingsResponse = await request.get('/api/v1/apps/nexus.agent/subagent-settings');
     expect(settingsResponse.ok(), await settingsResponse.text()).toBeTruthy();
     const subagentSettings = (
@@ -907,13 +859,10 @@ const installAndRunNexusAgent = async (
     });
     expect(configured.ok(), await configured.text()).toBeTruthy();
 
-    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
-      headers,
-      data: { title: 'Subagent multi-tool batch E2E thread' },
-    });
+    const thread = await createTaskThread(page);
     expect(thread.status(), await thread.text()).toBe(201);
     const threadId = ((await thread.json()) as Envelope<{ id: string }>).data.id;
-    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
+    const created = await createTask({
       headers: { ...headers, 'Idempotency-Key': randomUUID() },
       data: {
         schemaVersion: 1,
@@ -958,17 +907,14 @@ const installAndRunNexusAgent = async (
           return (await response.json()).browserContextIds as string[];
         };
         const baseline = await contexts();
-        const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
-          headers,
-          data: { title: 'Child Browser E2E' },
-        });
+        const thread = await createTaskThread(page);
         expect(thread.status()).toBe(201);
         const childThreadId = (await thread.json()).data.id;
         if (cancelCreating) {
           const armed = await fetch(`${E2E_URLS.browserControlOrigin}/creation-barrier`, { method: 'POST' });
           expect(armed.ok).toBeTruthy();
         }
-        const created = await request.post('/api/v1/apps/nexus.agent/runs', {
+        const created = await createTask({
           headers: { ...headers, 'Idempotency-Key': randomUUID() },
           data: {
             schemaVersion: 1,
@@ -1049,7 +995,7 @@ const installAndRunNexusAgent = async (
             expect((await parent.json()).data.status).toBe('running');
           }
           if (cancel) {
-            await cancelRunForCleanup(request, run.id);
+            await cancelRunForCleanup(request, run.id, page);
             if (cancelCreating) {
               const released = await fetch(`${E2E_URLS.browserControlOrigin}/creation-barrier/release`, {
                 method: 'POST',
@@ -1106,20 +1052,17 @@ const installAndRunNexusAgent = async (
           }
           await expect.poll(contexts).toEqual(baseline);
         } finally {
-          await cancelRunForCleanup(request, run.id);
+          await cancelRunForCleanup(request, run.id, page);
           await waitForTerminalRun(request, run.id);
         }
       });
   });
 
   await step('file_read reads a selected SSH target through the bounded SFTP capability', async () => {
-    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
-      headers,
-      data: { title: 'Machine read-file E2E thread' },
-    });
+    const thread = await createTaskThread(page);
     expect(thread.status(), await thread.text()).toBe(201);
     const readThreadId = ((await thread.json()) as Envelope<{ id: string }>).data.id;
-    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
+    const created = await createTask({
       headers: { ...headers, 'Idempotency-Key': randomUUID() },
       data: {
         schemaVersion: 1,
@@ -1146,13 +1089,10 @@ const installAndRunNexusAgent = async (
   });
 
   await step('distinct tool calls execute identical commands as separate intentional operations', async () => {
-    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
-      headers,
-      data: { title: 'Distinct mutation calls E2E thread' },
-    });
+    const thread = await createTaskThread(page);
     expect(thread.status(), await thread.text()).toBe(201);
     const duplicateThreadId = ((await thread.json()) as Envelope<{ id: string }>).data.id;
-    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
+    const created = await createTask({
       headers: { ...headers, 'Idempotency-Key': randomUUID() },
       data: {
         schemaVersion: 1,
@@ -1181,13 +1121,10 @@ const installAndRunNexusAgent = async (
   });
 
   await step('strict interrupt supersedes only a streaming model and drains the durable input queue', async () => {
-    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
-      headers,
-      data: { title: 'Preset interrupt E2E thread' },
-    });
+    const thread = await createTaskThread(page);
     expect(thread.status(), await thread.text()).toBe(201);
     const interruptThreadId = ((await thread.json()) as Envelope<{ id: string }>).data.id;
-    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
+    const created = await createTask({
       headers: { ...headers, 'Idempotency-Key': randomUUID() },
       data: {
         schemaVersion: 1,
@@ -1213,15 +1150,11 @@ const installAndRunNexusAgent = async (
     }
     expect(running.status).toBe('running');
 
-    const interrupted = await request.post(`/api/v1/apps/nexus.agent/runs/${run.id}/interrupt`, {
-      headers: { ...headers, 'Idempotency-Key': randomUUID() },
-      data: {
-        schemaVersion: 1,
-        text: 'E2E_INTERRUPT_RESUME Continue from the new user input.',
-        artifactRefs: [],
-        expectedVersion: running.version,
-      },
-    });
+    const interrupted = await taskCommand(
+      page,
+      '/interrupt E2E_INTERRUPT_RESUME Continue from the new user input.',
+      `/runs/${run.id}/interrupt`,
+    );
     expect(interrupted.status(), await interrupted.text()).toBe(202);
 
     const terminal = await waitForTerminalRun(request, run.id);
@@ -1235,7 +1168,7 @@ const installAndRunNexusAgent = async (
     expect(JSON.stringify(await ledger.json())).toContain('E2E_INTERRUPT_RESUME');
   });
 
-  return { threadId, connectionId };
+  return { threadId, connectionId, parallelThreadId };
 };
 
 test('unsafe remote plugin archive fails validation without terminating the Backend', async ({ request }) => {
@@ -1653,15 +1586,16 @@ test('frontend target owns a full Custom App Surface and connects through the is
 
 test('remote signed Nexus Agent plugin installs, registers an Agent definition, and completes a real Run', async ({
   request,
+  page,
 }) => {
-  await installAndRunNexusAgent(request);
+  await installAndRunNexusAgent(request, page);
 });
 
 test('installed Nexus Agent plugin uses the host-owned Agent surface and captures functional evidence', async ({
   page,
   context,
 }) => {
-  const { threadId, connectionId } = await installAndRunNexusAgent(context.request);
+  const { threadId, connectionId, parallelThreadId } = await installAndRunNexusAgent(context.request, page);
   await setUiLanguage(context.request);
   const onboardingCsrf = await csrfToken(context.request);
   const recommendedInstall = await context.request.post('/api/v1/agent/onboarding/recommended-plugin/install', {
@@ -1677,7 +1611,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     await page.goto('/connections');
     const hub = await openAgentHub(page);
     await hub.getByRole('button', { name: 'Switch to Nexus Agent', exact: true }).click();
-    const presetThread = hub.getByRole('button').filter({ hasText: 'Preset E2E thread' });
+    const presetThread = hub.getByRole('button').filter({ hasText: `#${threadId.slice(-6)}` });
     await expect(presetThread).toBeVisible();
     await presetThread.click();
     await expect(presetThread).toHaveAttribute('aria-current', 'true');
@@ -1695,7 +1629,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     await step(
       'batched tool calls use one group title and show concrete tool names only in expanded details',
       async () => {
-        const batchThread = hub.getByRole('button').filter({ hasText: 'Parallel read batch E2E thread' });
+        const batchThread = hub.getByRole('button').filter({ hasText: `#${parallelThreadId.slice(-6)}` });
         await expect(batchThread).toBeVisible();
         await batchThread.click();
         await expect(batchThread).toHaveAttribute('aria-current', 'true');
@@ -1829,7 +1763,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     });
 
     await step('users can create a new conversation and return to the existing thread', async () => {
-      const presetThread = hub.getByRole('button').filter({ hasText: 'Preset E2E thread' });
+      const presetThread = hub.getByRole('button').filter({ hasText: `#${threadId.slice(-6)}` });
       await expect(presetThread).toBeVisible();
       await presetThread.click();
       await expect(presetThread).toHaveAttribute('aria-current', 'true');
@@ -1838,7 +1772,9 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       const composer = hub.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...');
       await expect(composer).toBeFocused();
       await expect(presetThread).not.toHaveAttribute('aria-current', 'true');
-      await expect(hub.getByText('New conversation', { exact: true })).toHaveCount(2);
+      await expect(
+        hub.locator('.agent-thread-row[aria-current="true"]').getByText('New conversation', { exact: true }),
+      ).toBeVisible();
 
       await composer.fill('/goal UI durable goal');
       await hub.getByRole('button', { name: 'Send', exact: true }).click();
@@ -1849,12 +1785,12 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       await expect(hub.getByText('OK', { exact: true }).last()).toBeVisible({ timeout: 30_000 });
 
       const conversationSearch = hub.getByPlaceholder('Search conversations', { exact: true });
-      await conversationSearch.fill('Preset E2E');
+      await conversationSearch.fill(threadId);
       await expect(presetThread).toBeVisible();
-      await expect(hub.getByRole('button').filter({ hasText: 'New conversation' })).toHaveCount(0);
+      await expect(hub.getByRole('button').and(hub.locator('.agent-thread-row'))).toHaveCount(1);
       await presetThread.click();
       await expect(presetThread).toHaveAttribute('aria-current', 'true');
-      await expect(hub.getByText('Preset E2E thread', { exact: true })).toHaveCount(2);
+      await expect(presetThread).toContainText(`#${threadId.slice(-6)}`);
       await conversationSearch.fill('');
     });
 
@@ -1913,11 +1849,11 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     const terminalRunStatuses = ['completed', 'completed_unverified', 'failed', 'cancelled', 'interrupted'];
     const activeRun = threadRunPage.data.items.find((candidate) => !terminalRunStatuses.includes(candidate.status));
     if (activeRun) {
-      await cancelRunForCleanup(context.request, activeRun.id);
+      await cancelRunForCleanup(context.request, activeRun.id, page);
       await waitForTerminalRun(context.request, activeRun.id);
       await page.reload();
       await openAgentHub(page);
-      const presetThread = hub.getByRole('button').filter({ hasText: 'Preset E2E thread' });
+      const presetThread = hub.getByRole('button').filter({ hasText: `#${threadId.slice(-6)}` });
       await presetThread.click();
       await expect(presetThread).toHaveAttribute('aria-current', 'true');
     }
@@ -2045,7 +1981,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
         await taskRail.getByRole('button', { name: 'Confirm delete', exact: true }).click();
         if (verifyDeleteBarrier) {
           await deleteListHeld;
-          const selectedThread = hub.getByRole('button').filter({ hasText: 'Preset E2E thread' });
+          const selectedThread = hub.locator('.agent-thread-row[aria-current="true"]');
           await expect(selectedThread).toHaveAttribute('aria-current', 'true');
           await expect(selectedThread).toBeDisabled();
           releaseDeleteList();
@@ -2057,7 +1993,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
           await response.finished();
         }
         if (verifyDeleteBarrier) {
-          await expect(hub.getByRole('button').filter({ hasText: 'Preset E2E thread' })).toBeEnabled();
+          await expect(hub.locator('.agent-thread-row[aria-current="true"]')).toBeEnabled();
         }
         console.log(
           '[Run deletion UI profile]',

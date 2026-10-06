@@ -5,6 +5,9 @@ import { mkdir, readFile, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { ensureTestSshConnection } from '../../support/ssh';
 import { E2E_URLS } from '../../support/test-env';
+import { addTaskProvider, createTaskThread, sendTask } from '../../fixtures/agent/task-ui';
+
+test.use({ actionTimeout: 10_000 });
 
 for (const decision of ['denied', 'cancelled'] as const) {
   test(`SSH ACP settings product chain: ${decision} inner permission without a Workspace profile`, async ({
@@ -82,42 +85,23 @@ for (const decision of ['denied', 'cancelled'] as const) {
     await page.reload();
     await panel.getByRole('button', { name: 'Runtime & Environments', exact: true }).click();
     await expect(row).toContainText(`SSH · ${directory}`);
-    const provider = await request.post('/api/v1/agent/ai/providers', {
-      headers,
-      data: {
-        kind: 'openai-compatible',
-        displayName: 'ACP product chain fixture',
-        baseUrl: E2E_URLS.openAiProviderOrigin + '/v1',
-        protocol: 'chat-completions',
-        credential: 'e2e-provider-secret',
-        enabled: true,
-        models: [{ id: 'e2e-model', contextWindow: 8192, maxOutputTokens: 128, supportsTools: true }],
-      },
-    });
-    expect(provider.status(), await provider.text()).toBe(201);
-    const configuredProvider = (await provider.json()).data;
-    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
-      headers,
-      data: { title: 'SSH ACP product chain' },
-    });
+    const configuredProvider = await addTaskProvider(page, 'ACP product chain fixture');
+    const thread = await createTaskThread(page);
     expect(thread.status(), await thread.text()).toBe(201);
     const threadId = (await thread.json()).data.id;
-    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
-      headers: { ...headers, 'Idempotency-Key': randomUUID() },
-      data: {
-        schemaVersion: 1,
-        threadId,
-        input: { text: `E2E_ACP_EXECUTE connection=${connectionId} integration=${integration.id}`, artifactRefs: [] },
-        agentDefinitionId: 'agent.default',
-        model: {
-          providerId: configuredProvider.id,
-          modelId: 'e2e-model',
-          configurationVersion: configuredProvider.version,
-        },
-        approvalMode: 'full_access',
-        executionMode: 'execute',
-        connectionIds: [connectionId],
+    const created = await sendTask(page, {
+      schemaVersion: 1,
+      threadId,
+      input: { text: `E2E_ACP_EXECUTE connection=${connectionId} integration=${integration.id}`, artifactRefs: [] },
+      agentDefinitionId: 'agent.default',
+      model: {
+        providerId: configuredProvider.id,
+        modelId: 'e2e-model',
+        configurationVersion: configuredProvider.version,
       },
+      approvalMode: 'full_access',
+      executionMode: 'execute',
+      connectionIds: [connectionId],
     });
     expect(created.status(), await created.text()).toBe(201);
     const runId = (await created.json()).data.id;
@@ -155,12 +139,8 @@ for (const decision of ['denied', 'cancelled'] as const) {
         }
       };
       if (decision === 'cancelled') {
-        const current = await readRun();
-        const cancel = await request.post(`/api/v1/apps/nexus.agent/runs/${runId}/cancel`, {
-          headers: { ...headers, 'Idempotency-Key': randomUUID() },
-          data: { schemaVersion: 1, expectedVersion: current.version },
-        });
-        expect(cancel.ok(), await cancel.text()).toBeTruthy();
+        await page.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...').fill('/stop');
+        await page.getByRole('button', { name: 'Send', exact: true }).click();
         await expect.poll(async () => (await readRun()).status).toBe('interrupted');
         await expect.poll(async () => (await evidence()).some((item) => item.event === 'exited')).toBe(true);
         await expect.poll(processGone).toBe(true);

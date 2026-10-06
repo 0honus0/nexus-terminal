@@ -203,10 +203,11 @@
 
 ### 临时文档退出条件
 
-### 前端 E2E 入口迁移（当前进行，优先于后续场景）
+### 前端 E2E 入口整改（本地闭环，canonical Actions 未验收）
 
 - functional-regressions全部23项已经前端配置测试Provider、创建/发送任务并查看结果；mock仅返回模型数据，工具由产品真实执行。取消、恢复输入、Memory发布/撤销与stale Catalog反例也走前端；API/文件/进程检查独立核对状态与副作用，不替代任务入口。首次定位/权限/状态等待失败均保留日志，未放宽有效断言或timeout。
-- preset-plugin及SSH ACP设置回归已迁移前端Provider/Composer任务入口，共享fixture位于tests/e2e/fixtures/agent/task-ui.ts；Provider contract与fallback设置用例也从前端创建Provider。测试源码不直接操作CDP；触摸拖动用Pointer事件，实际打开用Playwright触摸输入。取消/goal/interrupt及新建Thread迁移后的最终Agent整组验证进行中，尚不计整改完成。公开API恶意/旧版本/晚到请求等独立反例保留，不以它们代替前端任务。
+- preset-plugin及SSH ACP设置回归已迁移前端Provider/Composer任务入口，共享fixture位于tests/e2e/fixtures/agent/task-ui.ts；Provider contract与fallback设置用例也从前端创建Provider。测试源码不直接操作CDP；触摸拖动用Pointer事件，实际打开用Playwright触摸输入。取消/goal/interrupt及新建Thread迁移后，最终完整Agent项目66项通过（9.9分钟，/tmp/opencode/frontend-agent-delivery-final.log）。公开API恶意/旧版本/晚到请求、协议contract与失败收尾保留，不以它们代替前端任务。第三方ACP及Workspace ACP剩余验收仍暂跳过、不计通过。
+- 最终check、三包build、任务E2E类型检查、已跟踪文件及新增fixture格式、git diff --check通过；format:all:check仍仅被tests/agent-functional/中84个原始资料文件阻断，资料未修改/删除/提交。会话身份与搜索断言按真实Thread ID及可操作按钮定位，排除布局占位行，不降低搜索过滤或资源回收判据。当前本地结果不代替推送SHA的canonical Actions与三项Docker smoke验收。
 - B02真实Run a647b082-476f-4412-bc91-8ebd53187e9b已completed/verified；独立确认仅上游socket配置最小修复、其他文件字节保留、直接上游和经网关HTTP验证通过、PID/socket消失及Workspace stop/delete终态。证据/tmp/opencode/b02-{input,waiting,project,result,independent,cleanup}.json。新前端回归与完整functional-regressions23项通过，B02本地闭环；canonical Actions未验收。本轮结束于B02，不进入B03，不部署线上。
 
 ### B01 本地闭环（接口500/数据保留，canonical Actions 未验收）
