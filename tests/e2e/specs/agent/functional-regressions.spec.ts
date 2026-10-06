@@ -150,6 +150,38 @@ test('SSH file search cancellation closes a held SFTP read and permits a new req
   }
 });
 
+test('SSH file search reaches a deeply nested real directory without changing files', async ({ request }) => {
+  const context = await prepare(request);
+  const connectionId = await ensureTestSshConnection(request);
+  const project = path.resolve(__dirname, '../../.tmp/ssh-root/search-scan');
+  const relative = Array.from({ length: 96 }, () => 'nested').join('/');
+  const leaf = path.join(project, relative, 'sentinel.txt');
+  await mkdir(path.dirname(leaf), { recursive: true });
+  await writeFile(leaf, 'SCAN_SENTINEL\n');
+  try {
+    const result = await execute(request, context, `E2E_SEARCH_SCAN connection=${connectionId}`, {
+      connectionIds: [connectionId],
+    });
+    expect(result.run.status).toMatch(/^completed/);
+    const searchResults = result.ledger
+      .filter((entry) => entry.kind === 'tool_result')
+      .map((entry) => JSON.parse(entry.payload.text!));
+    expect(searchResults).toHaveLength(1);
+    expect(searchResults[0]).toMatchObject({
+      ok: true,
+      data: {
+        scannedFiles: 1,
+        scannedBytes: 14,
+        truncated: false,
+        matches: [{ path: `/search-scan/${relative}/sentinel.txt`, line: 1, text: 'SCAN_SENTINEL' }],
+      },
+    });
+    expect(await readFile(leaf, 'utf8')).toBe('SCAN_SENTINEL\n');
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
 test('SSH file search passes former scan caps and continues after oversized files without following symlinks', async ({
   request,
 }) => {
