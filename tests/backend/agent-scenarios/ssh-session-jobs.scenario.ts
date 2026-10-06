@@ -15,6 +15,8 @@ import { ToolExecutor } from '../../../packages/backend/src/modules/agent/capabi
 import { ToolCatalog } from '../../../packages/backend/src/modules/agent/capabilities/tool-catalog';
 import { CapabilityRegistry } from '../../../packages/backend/src/modules/agent/host/capability-registry';
 import type { AppCapabilityBroker } from '../../../packages/backend/src/modules/agent/host/app-capability-broker';
+import { ShellCapabilityService } from '../../../packages/backend/src/modules/agent/capabilities/shell-capability.service';
+import { createShellExecuteTool } from '../../../packages/backend/src/modules/agent/tools/host/shell-tools';
 
 export const sshSessionJobsScenario = async () => {
   const directory = mkdtempSync(join(existsSync('/tmp/opencode') ? '/tmp/opencode' : tmpdir(), 'nexus-ssh-scenario-'));
@@ -214,6 +216,53 @@ export const sshSessionJobsScenario = async () => {
     assert.equal(authentications - baselineAuthentications, 2);
     const persistent = await sessions.open(context, 1, hash, 0);
     const scoped = { ...context, sshSessionId: persistent.sessionId };
+    const fingerprint = await resolver.get();
+    const target = {
+      kind: 'ssh' as const,
+      target: 'ssh' as const,
+      id: '1',
+      connectionId: 1,
+      targetIdentity: 'ssh:1',
+      endpoint: 'fixture',
+      loginUser: 'fixture',
+      configurationHash: fingerprint.configurationHash,
+    };
+    const shell = new ShellCapabilityService(
+      {
+        resolve: async () => ({
+          selector: { target: 'ssh', id: '1' },
+          fingerprint: target,
+          connectionId: 1,
+          resourceKeys: ['connection:1'],
+          preconditions: [],
+        }),
+      } as unknown as ConstructorParameters<typeof ShellCapabilityService>[0],
+      null!,
+      null!,
+      cryptoHash,
+      sessions,
+    );
+    const launchTool = createShellExecuteTool(shell, cryptoHash);
+    const launchInspection = await launchTool.inspect(
+      {
+        target: 'ssh',
+        id: '1',
+        sessionId: persistent.sessionId,
+        mode: 'background',
+        command: { kind: 'shell', shellScript: 'hold-lifetime-feedback' },
+        timeoutSeconds: 600,
+      },
+      scoped,
+      1,
+    );
+    const launch = await launchTool.execute(launchInspection, scoped);
+    assert.equal(launch.ok, true);
+    assert.equal(launch.verification.status, 'unverified');
+    assert.equal((launch.data as { executionTimeoutSeconds: number }).executionTimeoutSeconds, 600);
+    assert.match(launch.summary, /expiry terminates this Job/);
+    const launchedJobId = (launch.data as { jobId: string }).jobId;
+    pending.get('hold-lifetime-feedback')!();
+    assert.equal((await sessions.job(scoped, 1, launchedJobId, 'wait', 2)).status, 'succeeded');
     const job = await sessions.startJob(scoped, 1, hash, persistent.sessionId, 'hold-one', 600, 'operation-one');
     const abortRead = new AbortController();
     const blockedRead = sessions.withFileSystem(
