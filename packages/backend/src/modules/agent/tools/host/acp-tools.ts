@@ -90,7 +90,22 @@ export const createAcpExecuteTool = (
   isAvailable: ({ environment, connectionIds }) => environment !== null || (connectionIds?.length ?? 0) > 0,
   inspect: async (input, context, policyRevision): Promise<ToolInspection> => {
     const args = object(input);
-    if (Object.keys(args).some((key) => !['integrationId', 'target', 'id', 'prompt', 'cwd'].includes(key)))
+    if (
+      Object.keys(args).some(
+        (key) =>
+          ![
+            'integrationId',
+            'target',
+            'id',
+            'prompt',
+            'cwd',
+            'integrationVersion',
+            'generation',
+            'profileId',
+            'profileRevision',
+          ].includes(key),
+      )
+    )
       throw new Error('ACP_ARGUMENT_FIELD_UNSUPPORTED');
     if (args.target !== 'workspace' && args.target !== 'ssh') throw new Error('ACP_TARGET_REQUIRED');
     const id = string(args.id, 128);

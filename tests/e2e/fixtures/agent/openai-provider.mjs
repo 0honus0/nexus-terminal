@@ -261,6 +261,36 @@ const server = http.createServer(async (request, response) => {
     }
   }
   const outputCase = regressionInputs.modelOutputs.find((fixture) => latestUserText.includes(fixture.marker));
+  const acpExecution = latestUserText.match(/E2E_ACP_EXECUTE connection=(\d+) integration=([a-f0-9-]+)/);
+  if (acpExecution) {
+    const toolData = (id) => {
+      const message = messages.find((message) => message.role === 'tool' && message.tool_call_id === id);
+      return message ? JSON.parse(message.content) : null;
+    };
+    const call = (id, name, args) =>
+      regressionResponse(
+        response,
+        {
+          tool_calls: [{ index: 0, id, type: 'function', function: { name, arguments: JSON.stringify(args) } }],
+        },
+        'tool_calls',
+      );
+    const argumentsValue = {
+      integrationId: acpExecution[2],
+      target: 'ssh',
+      id: acpExecution[1],
+      prompt: 'Request permission; do not write if rejected.',
+    };
+    if (!toolData('call_acp_execute')) call('call_acp_execute', 'acp_execute', argumentsValue);
+    else if (!toolData('call_acp_evidence'))
+      call('call_acp_evidence', 'file_read', {
+        target: 'ssh',
+        id: acpExecution[1],
+        path: '/acp execution/protocol.jsonl',
+      });
+    else regressionResponse(response, { content: 'ACP protocol finished; follow-up file evidence is available.' });
+    return;
+  }
   const handover = latestUserText.match(/E2E_TASK_A01_READONLY connection=(\d+)/);
   const searchScan = latestUserText.match(/E2E_SEARCH_SCAN connection=(\d+)( persistent)?/);
   if (searchScan) {

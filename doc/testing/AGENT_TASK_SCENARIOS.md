@@ -205,7 +205,8 @@
 
 ### A02 当前执行（未完成）
 
-- ACP 目标参数统一：移除 Workspace 工具输入 workspaceId 别名，Workspace／SSH 的 acp_execute 均明确要求 target/id；规范化参数也保持相同选择器，Runner 内部 workspaceId wire contract 不变。迁移 Docker smoke 调用，非法旧字段／缺失目标返回具体未执行错误。定向场景验证两目标选择、Workspace 规范化、旧别名和缺目标拒绝且未触发权限／执行，以及既有内层审批与 stale version 拒绝；check、Backend build 通过。此项只关闭参数契约差异，第三方 ACP 二进制与 UI→Run 完整链仍待验收。
+- ACP 生产重复检查缺陷修复：治理执行前对 normalizedArguments 再次 inspect，公开字段白名单曾错误拒绝内部 integrationVersion／generation／profile 字段；现在允许内部规范化检查并继续从当前资源重新推导绑定，模型 schema 不开放这些字段。Workspace／SSH 两目标重复检查 operationHash 一致的场景通过。SSH 产品 E2E 从设置 UI 创建／刷新配置→生产 Run→真实 SSH 非 PTY channel 启动独立 NDJSON 进程→full_access 下仍等待内层审批，两反例通过：拒绝返回 reject_once、ACP 输出仍 unverified、后续真实 file_read 提供 verified 证据后完成；审批等待窗口取消则 interrupted／unknown，远端进程实际退出、无未授权写入、晚到批准 409、没有重放。check、Backend build 通过。fixture 不是第三方 ACP 二进制；Workspace UI→Run 整链、真实第三方程序与最新 Luna A02 仍未验收，A03 未开始。
+- ACP 目标参数统一：移除 Workspace 工具输入 workspaceId 别名，Workspace／SSH 的 acp_execute 均明确要求 target/id；规范化参数也保持相同选择器，Runner 内部 workspaceId wire contract 不变。迁移 Docker smoke 调用，非法旧字段／缺失目标返回具体未执行错误。定向场景验证两目标选择、Workspace 规范化、旧别名和缺目标拒绝且未触发权限／执行，以及既有内层审批与 stale version 拒绝；check、Backend build 通过。SSH UI→Run fixture 链已由上述回归补齐，第三方 ACP 二进制和 Workspace UI→Run 完整链仍待验收。
 - 代码调查范围按用户决定收敛为通用文件列表／搜索／读取与真实 Shell 构建／测试，不再要求语言专用语义导航。对应工具、Runner HTTP 路由、wire DTO、引擎、共享包、专用测试、运行时依赖、翻译及构建／Docker 引用整体删除。生产注册和模型 schema 不再暴露旧工具，真实 Runner 两个旧端点返回 404；现有通用文件／搜索／严格 patch／hash／generation 回归、check、全包 build、已跟踪文件格式检查通过。全量格式仍被未提交的 tests/agent-functional 原始资料阻断，未修改这些资料。仍需 ACP 完整链、剩余工具契约核对和最新真实 A02 回归；A03 未开始。
 - SFTP 打开中取消真实协议窗口通过：服务端暂不接受 subsystem，确认 opening 屏障后 abort，客户端在服务端仍未接受时拒绝操作并保留原取消原因；长会话 ready，再释放 subsystem，晚到 channel 关闭，后续命令仍复用原认证。与 READ 取消及 LSTAT deadline 同一真实 loopback SSH 回归覆盖，不新增 timeout 或机械重跑。ACP 完整链仍未闭环，A03 未开始。
 - SSH 文件 lease 错误归因与期限回归通过：取消保留原 AbortSignal.reason；deadline 打断远端挂住的 LSTAT 后报告 TOOL_TIMEOUT，不以 SFTP_CHANNEL_CLOSED 掩盖根因。真实 loopback SSH metadata 屏障独立确认已开始 I/O，期限后长会话 ready、并行 Job running；READ 取消断言原 reason 身份一致。

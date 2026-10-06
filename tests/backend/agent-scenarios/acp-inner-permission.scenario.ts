@@ -153,6 +153,8 @@ export const acpInnerPermissionScenario = async () => {
   assert.equal((canonical.normalizedArguments as Record<string, unknown>).target, 'workspace');
   assert.equal((canonical.normalizedArguments as Record<string, unknown>).id, workspaceId);
   assert.equal('workspaceId' in (canonical.normalizedArguments as Record<string, unknown>), false);
+  const reinspected = await tool.inspect(canonical.normalizedArguments, context, 1);
+  assert.equal(reinspected.operationHash, canonical.operationHash);
   await assert.rejects(
     () => tool.inspect({ integrationId, workspaceId, prompt: 'legacy' }, context, 1),
     /ACP_ARGUMENT_FIELD_UNSUPPORTED/,
@@ -431,6 +433,12 @@ export const acpInnerPermissionScenario = async () => {
     1,
   );
   assert.ok(sshInspection.resourceKeys.includes('connection:1'));
+  const sshReinspected = await sshTool.inspect(
+    sshInspection.normalizedArguments,
+    { ...context, connectionIds: [1] },
+    1,
+  );
+  assert.equal(sshReinspected.operationHash, sshInspection.operationHash);
   const sshResult = await sshTool.execute(sshInspection, { ...context, connectionIds: [1] });
   assert.equal(sshResult.ok, true);
   assert.equal(sshPermissionRequests, 1);

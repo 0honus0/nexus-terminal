@@ -161,6 +161,7 @@ Workspace 文件工具的非法路径或越界读取由 Runner 拒绝，模型�
 - Workspace 后台 Job 接纳及 running 状态反馈明确要求保留 jobId，不以重提命令获取结果；服务验收使用健康检查，等待终态使用有界 wait。running 是权威活跃状态而非失败或状态缺失，不改变正常并发与执行身份。
 - `shell_job_control(action="list")` 在 Workspace 和 SSH 均可用，省略 jobId；Workspace 返回本 generation 的活跃任务及并发容量，SSH 仅列出当前 user/App/Thread/connection 的活跃受管 Job，不列出其他线程或远端任意进程。
 - ACP 集成可选择 Workspace profile 或 SSH transport。SSH 配置启动 argv（JSON 数组）与绝对 cwd，不自动安装远端程序；环境变量可用 argv 的 env 命令显式传入。`acp_execute` 两目标均要求 integrationId、target、id、prompt，可选 cwd；不接受 workspaceId 别名或省略目标。SSH 使用独立非 PTY channel 与同一 ACP v1 客户端、内层权限审批和输出边界；取消关闭 channel/连接，断连不重放、不视为已验证成功。ACP 不是 OS 沙箱，输出不是独立验收证据。
+  - 执行前重新核对集成版本、Workspace generation／profile 或 SSH 配置，合法规范化参数可再次检查，内部冻结字段不作为模型输入开放。即使外层使用 full_access，内层敏感操作仍须单独审批；等待内层审批时取消会关闭本次执行，晚到授权不得继续执行。远端副作用无法确认时工具结果为 unknown、Run 可收敛为 interrupted，不承诺回滚；正常协议完成后仍需后续独立验证证据才能通过完成门禁。
 - Workspace 创建达到用户容量上限时，在创建记录与 Runner 调用前明确拒绝，工具结果为已确认未执行，不作为未知副作用隔离；需显式清理不再使用的 Workspace 后再继续。
 - 工具参数拒绝说明本次未执行，并提示按 Schema 与目标类型纠正后再尝试；反馈不回显参数值。循环警告按失败重复、稳定观察重复或其他无进展行为给出调整指引，不自动重放操作或停止端口占用者。
 - SSH `shell_execute(mode="background", sessionId=...)` 返回 `jobId`，任务继续运行；使用 `shell_job_control(target="ssh", id=连接ID, jobId, action="status/wait/cancel")` 查看有界输出、等待或取消。后台任务 timeoutSeconds 默认 3600 秒、最多 86400 秒，独立于提交工具期限；前台仍最多 300 秒且受工具预算约束。后台任务运行时不进行空闲回收，每用户最多 32 个活动任务。
