@@ -11,6 +11,8 @@ import {
   statWorkspacePath,
   writeWorkspaceFile,
   listWorkspaceFiles,
+  moveWorkspaceFile,
+  deleteWorkspaceFile,
 } from '../../../packages/agent-runner/src/controller/workspace-coding-files';
 import { RunnerJournal } from '../../../packages/agent-runner/src/controller/journal';
 import { RunnerControllerServer } from '../../../packages/agent-runner/src/controller/server';
@@ -20,6 +22,7 @@ import {
   registerWorkspaceToolContributions,
 } from '../../../packages/backend/src/bootstrap/agent/tool-contributions';
 import { RunnerHttpAdapter } from '../../../packages/backend/src/infrastructure/agent/workspace-runtime/runner-http.adapter';
+import { WorkspaceFileTargetAdapter } from '../../../packages/backend/src/infrastructure/agent/workspace-runtime/workspace-file-target.adapter';
 import { FileCapabilityService } from '../../../packages/backend/src/modules/agent/capabilities/file-capability.service';
 import { ToolCatalog } from '../../../packages/backend/src/modules/agent/capabilities/tool-catalog';
 import { modelFacingToolSchemas } from '../../../packages/backend/src/modules/agent/capabilities/tool-model-surface';
@@ -407,6 +410,10 @@ export const workspaceCodingToolSurfaceScenario = async () => {
           writeWorkspaceFile(workRoot, request),
         listWorkspaceFiles: (_id: string, _generation: number, request: Parameters<typeof listWorkspaceFiles>[1]) =>
           listWorkspaceFiles(workRoot, request),
+        moveWorkspaceFile: (_id: string, _generation: number, request: Parameters<typeof moveWorkspaceFile>[1]) =>
+          moveWorkspaceFile(workRoot, request),
+        deleteWorkspaceFile: (_id: string, _generation: number, request: Parameters<typeof deleteWorkspaceFile>[1]) =>
+          deleteWorkspaceFile(workRoot, request),
         readWorkspaceFile: (
           _workspaceId: string,
           _generation: number,
@@ -442,6 +449,79 @@ export const workspaceCodingToolSurfaceScenario = async () => {
         });
       });
       const adapter = new RunnerHttpAdapter(baseUrl, 'coding-token');
+      const httpWorkspace = {
+        ...(await codingRepository.getWorkspace(inspectContext, 'workspace-coding'))!,
+        id: 'coding-workspace',
+        generation: 5,
+      };
+      const httpRepository = { getWorkspace: async () => httpWorkspace } as unknown as AgentWorkspaceRepositoryPort;
+      const httpTargets = new AgentTargetResolver(httpRepository, null!, codingCryptoHash);
+      const productionFileTarget = new WorkspaceFileTargetAdapter(httpRepository, adapter);
+      const fileTools = new Map(
+        createUnifiedFileTools(
+          new FileCapabilityService(httpTargets, productionFileTarget, null!),
+          codingCryptoHash,
+        ).map((tool) => [tool.descriptor.name, tool]),
+      );
+      const invokeFile = async (name: string, args: Record<string, unknown>) => {
+        const tool = fileTools.get(name)!;
+        const inspection = await tool.inspect(
+          { target: 'workspace', id: httpWorkspace.id, ...args },
+          inspectContext,
+          7,
+        );
+        const result = await tool.execute(inspection, inspectContext);
+        assert.equal(result.ok, true);
+        assert.equal(result.outcome, 'confirmed');
+        assert.equal(result.verification.status, 'verified');
+        return result;
+      };
+      const lifecyclePath = '/workspace/work/http-lifecycle.txt';
+      const movedPath = '/workspace/work/http-lifecycle-moved.txt';
+      const preservedHash = createHash('sha256').update(fs.readFileSync(sourcePath)).digest('hex');
+      await invokeFile('file_write', { path: lifecyclePath, content: 'alpha\nkeep\n', mode: 0o640 });
+      const lifecyclePatch = `--- ${lifecyclePath}\n+++ ${lifecyclePath}\n@@ -1,2 +1,2 @@\n-alpha\n+ALPHA\n keep\n`;
+      await invokeFile('file_patch', { patch: lifecyclePatch });
+      const patchedRead = await invokeFile('file_read', { path: lifecyclePath });
+      assert.equal((patchedRead.data as { content: string }).content, 'ALPHA\nkeep\n');
+      assert.equal(fs.readFileSync(path.join(workRoot, 'http-lifecycle.txt'), 'utf8'), 'ALPHA\nkeep\n');
+      const searched = await invokeFile('file_search', {
+        path: '/workspace/work',
+        query: '^ALPHA$',
+        glob: 'http-lifecycle.txt',
+      });
+      assert.equal((searched.data as { matches: unknown[] }).matches.length, 1);
+      const moveTool = fileTools.get('file_move')!;
+      const moveInspection = await moveTool.inspect(
+        { target: 'workspace', id: httpWorkspace.id, path: lifecyclePath, destinationPath: movedPath },
+        inspectContext,
+        7,
+      );
+      await assert.rejects(
+        () => moveTool.execute(moveInspection, { ...inspectContext, runId: 'other-run' }),
+        /RESOURCE_FORBIDDEN/,
+      );
+      await assert.rejects(
+        () => moveTool.execute(moveInspection, { ...inspectContext, agentRuntimeId: 'other-runtime' }),
+        /RESOURCE_FORBIDDEN/,
+      );
+      assert.equal(fs.existsSync(path.join(workRoot, 'http-lifecycle-moved.txt')), false);
+      assert.equal(fs.readFileSync(path.join(workRoot, 'http-lifecycle.txt'), 'utf8'), 'ALPHA\nkeep\n');
+      await invokeFile('file_move', { path: lifecyclePath, destinationPath: movedPath });
+      assert.equal(fs.existsSync(path.join(workRoot, 'http-lifecycle.txt')), false);
+      assert.equal(fs.statSync(path.join(workRoot, 'http-lifecycle-moved.txt')).mode & 0o777, 0o640);
+      const movedRead = await invokeFile('file_read', { path: movedPath });
+      assert.deepEqual((movedRead.data as { sha256: string }).sha256, (patchedRead.data as { sha256: string }).sha256);
+      await invokeFile('file_delete', { path: movedPath });
+      assert.equal(fs.existsSync(path.join(workRoot, 'http-lifecycle-moved.txt')), false);
+      const finalList = await invokeFile('file_list', { path: '/workspace/work' });
+      assert.equal(
+        (finalList.data as { entries: Array<{ name: string }> }).entries.some((entry) =>
+          entry.name.startsWith('http-lifecycle'),
+        ),
+        false,
+      );
+      assert.equal(createHash('sha256').update(fs.readFileSync(sourcePath)).digest('hex'), preservedHash);
       for (const route of ['repo-map', 'code-intel']) {
         const response = await fetch(`${baseUrl}/v1/workspaces/coding-workspace/coding/${route}`, {
           method: 'POST',
