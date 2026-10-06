@@ -242,7 +242,7 @@ export interface WorkspaceSearchMatch {
 export interface WorkspaceSearchResult {
   query: string;
   path: string;
-  engine: 'rg' | 'fallback';
+  engine: 'javascript';
   matches: WorkspaceSearchMatch[];
   truncated: boolean;
   scannedFiles: number;

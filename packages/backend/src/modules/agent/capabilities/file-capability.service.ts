@@ -52,7 +52,7 @@ export interface UnifiedFileListResult {
 export interface UnifiedFileSearchResult {
   query: string;
   path: string;
-  engine: 'rg' | 'fallback' | 'sftp';
+  engine: 'javascript' | 'sftp';
   matches: Array<{
     path: string;
     line: number;

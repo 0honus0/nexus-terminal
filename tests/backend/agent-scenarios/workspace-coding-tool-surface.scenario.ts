@@ -147,12 +147,28 @@ export const workspaceCodingToolSurfaceScenario = async () => {
     } finally {
       process.env.PATH = originalPath;
     }
-    assert.equal(search.engine, 'fallback', 'search must have a bounded no-rg fallback');
+    assert.equal(search.engine, 'javascript', 'search uses the same regex engine regardless of installed tools');
     assert.equal(search.matches.length, 1);
     assert.equal(search.matches[0]?.path, '/workspace/work/src/example.ts');
     assert.equal(search.matches[0]?.line, 2);
     assert.equal(search.truncated, true, 'maxResults must bound search output');
     fallbackSearches += 1;
+    const regexRequest = {
+      query: '(?<=needle )here',
+      path: '/workspace/work/src',
+      maxResults: 10,
+      contextLines: 1,
+      maxOutputBytes: 8192,
+    };
+    const unicodeSearch = searchWorkspace(workRoot, regexRequest);
+    assert.equal(unicodeSearch.matches[0]?.column, 8);
+    assert.equal(unicodeSearch.matches[0]?.text, 'needle here');
+    fs.writeFileSync(path.join(workRoot, 'src', '.hidden.txt'), 'needle here\nneedle here\nneedle here\n', 'utf8');
+    const hiddenSearch = searchWorkspace(workRoot, { ...regexRequest, path: '/workspace/work/src/.hidden.txt' });
+    assert.equal(hiddenSearch.matches.length, 3);
+    assert.deepEqual(hiddenSearch.matches[1]?.before, ['needle here']);
+    assert.deepEqual(hiddenSearch.matches[1]?.after, ['needle here']);
+    assert.throws(() => searchWorkspace(workRoot, { ...regexRequest, query: '[' }), /WORKSPACE_SEARCH_INVALID/);
 
     const beforeHash = read.sha256;
     const patchText = [

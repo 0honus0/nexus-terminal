@@ -19,7 +19,6 @@ import type {
   WorkspaceSearchResult,
 } from '@nexus-terminal/protocol/runner';
 import { createHash, randomUUID } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { applyPatch, parsePatch, type StructuredPatch } from 'diff';
@@ -412,12 +411,18 @@ const boundedMatches = (
   let truncated = matchEvents.length > maxResults;
   for (const event of matchEvents) {
     if (matches.length >= maxResults) break;
-    const contexts = events.filter(
-      (candidate) =>
-        candidate.type === 'context' &&
-        candidate.path === event.path &&
-        Math.abs(candidate.line - event.line) <= contextLines,
-    );
+    const contexts = [
+      ...new Map(
+        events
+          .filter(
+            (candidate) =>
+              candidate.type === 'context' &&
+              candidate.path === event.path &&
+              Math.abs(candidate.line - event.line) <= contextLines,
+          )
+          .map((candidate) => [candidate.line, candidate]),
+      ).values(),
+    ];
     const candidate: WorkspaceSearchMatch = {
       path: event.path,
       line: event.line,
@@ -449,68 +454,6 @@ const logicalFromHost = (root: string, hostPath: string): string => {
   return relative ? `${WORK_LOGICAL_ROOT}/${relative.split(path.sep).join('/')}` : WORK_LOGICAL_ROOT;
 };
 
-const searchWithRipgrep = (
-  root: string,
-  logical: string,
-  request: WorkspaceSearchRequest,
-): WorkspaceSearchResult | null => {
-  const probe = spawnSync('rg', ['--version'], { encoding: 'utf8', timeout: 500, maxBuffer: 4096 });
-  if (probe.error || probe.status !== 0) return null;
-  const target = hostPathFor(root, logical);
-  assertNoSymlink(root, target, false);
-  const maxBuffer = Math.max(64 * 1024, Math.min(2 * 1024 * 1024, request.maxOutputBytes * 8));
-  const args = [
-    '--json',
-    '--no-messages',
-    '--max-filesize',
-    String(MAX_SOURCE_FILE_BYTES),
-    '--context',
-    String(request.contextLines),
-    ...(request.glob ? ['--glob', request.glob] : []),
-    '--',
-    request.query,
-    target,
-  ];
-  const result = spawnSync('rg', args, { encoding: 'utf8', timeout: 5_000, maxBuffer });
-  if (result.status !== 0 && result.status !== 1 && !result.error) throw new Error('WORKSPACE_SEARCH_INVALID');
-  const events: SearchEvent[] = [];
-  const seenFiles = new Set<string>();
-  for (const line of String(result.stdout ?? '').split('\n')) {
-    if (!line) continue;
-    let parsed: any;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (parsed?.type !== 'match' && parsed?.type !== 'context') continue;
-    const hostPath = parsed?.data?.path?.text;
-    const lineNumber = parsed?.data?.line_number;
-    const text = parsed?.data?.lines?.text;
-    if (typeof hostPath !== 'string' || !Number.isSafeInteger(lineNumber) || typeof text !== 'string') continue;
-    const logicalPath = logicalFromHost(root, hostPath);
-    seenFiles.add(logicalPath);
-    const submatchStart = parsed.type === 'match' ? parsed?.data?.submatches?.[0]?.start : 0;
-    events.push({
-      type: parsed.type,
-      path: logicalPath,
-      line: lineNumber,
-      column: Number.isSafeInteger(submatchStart) ? Number(submatchStart) + 1 : 1,
-      text,
-    });
-  }
-  const bounded = boundedMatches(events, request.maxResults, request.contextLines, request.maxOutputBytes);
-  return {
-    query: request.query,
-    path: logical,
-    engine: 'rg',
-    matches: bounded.matches,
-    truncated: bounded.truncated || Boolean(result.error),
-    scannedFiles: seenFiles.size,
-    scannedBytes: 0,
-  };
-};
-
 const compileSearch = (query: string): RegExp => {
   if (!query || Buffer.byteLength(query, 'utf8') > 1024) throw new Error('VALIDATION_FAILED');
   try {
@@ -520,7 +463,11 @@ const compileSearch = (query: string): RegExp => {
   }
 };
 
-const fallbackSearch = (root: string, logical: string, request: WorkspaceSearchRequest): WorkspaceSearchResult => {
+const searchWithJavaScript = (
+  root: string,
+  logical: string,
+  request: WorkspaceSearchRequest,
+): WorkspaceSearchResult => {
   const expression = compileSearch(request.query);
   const target = hostPathFor(root, logical);
   assertNoSymlink(root, target, false);
@@ -605,7 +552,7 @@ const fallbackSearch = (root: string, logical: string, request: WorkspaceSearchR
   return {
     query: request.query,
     path: logical,
-    engine: 'fallback',
+    engine: 'javascript',
     matches: bounded.matches,
     truncated: truncated || bounded.truncated,
     scannedFiles,
@@ -631,10 +578,7 @@ export const searchWorkspace = (workRoot: string, request: WorkspaceSearchReques
   }
   compileSearch(request.query);
   const logical = normalizeLogicalPath(request.path);
-  // Explicit globs share Node matching semantics with SSH, not rg glob rules.
-  return request.glob
-    ? fallbackSearch(root, logical, request)
-    : (searchWithRipgrep(root, logical, request) ?? fallbackSearch(root, logical, request));
+  return searchWithJavaScript(root, logical, request);
 };
 
 const normalizePatchFileName = (value: string | undefined): string => {

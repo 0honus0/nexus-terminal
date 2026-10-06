@@ -364,11 +364,7 @@ export const decodeWorkspaceFileDelete = (value: unknown): WorkspaceFileDeleteRe
 
 export const decodeWorkspaceSearch = (value: unknown): WorkspaceSearchResult => {
   const record = recordValue(value);
-  if (
-    (record.engine !== 'rg' && record.engine !== 'fallback') ||
-    !Array.isArray(record.matches) ||
-    record.matches.length > 100
-  ) {
+  if (record.engine !== 'javascript' || !Array.isArray(record.matches) || record.matches.length > 100) {
     throw protocolError();
   }
   return {
