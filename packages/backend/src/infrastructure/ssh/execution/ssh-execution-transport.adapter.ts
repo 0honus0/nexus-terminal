@@ -31,6 +31,7 @@ export class SshExecutionTransportAdapter implements RemoteExecutionTransport {
   private lastErrorValue?: Error;
   private readonly client: Client;
   private readonly sftpPool: SshSftpChannelPool;
+  private readonly fileSystemLeases = new Set<SshSftpChannelPool>();
 
   constructor(
     public readonly connectionId: number,
@@ -131,6 +132,19 @@ export class SshExecutionTransportAdapter implements RemoteExecutionTransport {
     return this.sftpPool.fileSystem(role);
   }
 
+  openFileSystemLease(): import('../../../platform/filesystem/remote-filesystem').RemoteFileSystemLease {
+    this.assertOpen();
+    const pool = new SshSftpChannelPool(this.client);
+    this.fileSystemLeases.add(pool);
+    return {
+      filesystem: pool.fileSystem('control'),
+      close: () => {
+        pool.closeAll();
+        this.fileSystemLeases.delete(pool);
+      },
+    };
+  }
+
   onClose(listener: () => void): () => void {
     if (this.closeEmitted) {
       let active = true;
@@ -173,6 +187,8 @@ export class SshExecutionTransportAdapter implements RemoteExecutionTransport {
   }
 
   private closeOwnedChannels(): void {
+    for (const pool of this.fileSystemLeases) pool.closeAll();
+    this.fileSystemLeases.clear();
     this.sftpPool.closeAll();
     for (const session of this.commandSessions) {
       try {

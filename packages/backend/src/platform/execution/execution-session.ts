@@ -70,6 +70,10 @@ export class ExecutionSession {
     return this.transport().fileSystem(role);
   }
 
+  openFileSystemLease(): import('../filesystem/remote-filesystem').RemoteFileSystemLease {
+    return this.transport().openFileSystemLease();
+  }
+
   onTransportClose(listener: () => void): () => void {
     return this.transport().onClose(listener);
   }

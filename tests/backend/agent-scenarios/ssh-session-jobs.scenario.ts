@@ -22,6 +22,15 @@ export const sshSessionJobsScenario = async () => {
   const key = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs1', format: 'pem' });
   let authentications = 0;
   const pending = new Map<string, () => void>();
+  let readStarted!: () => void;
+  let readClosed!: () => void;
+  const readBarrier = new Promise<void>((resolve) => {
+    readStarted = resolve;
+  });
+  const readTeardown = new Promise<void>((resolve) => {
+    readClosed = resolve;
+  });
+  let sftpChannels = 0;
   const server = new Server({ hostKeys: [key] }, (client) => {
     client.on('authentication', (auth) => {
       authentications++;
@@ -30,6 +39,14 @@ export const sshSessionJobsScenario = async () => {
     client.on('ready', () =>
       client.on('session', (accept) => {
         const session = accept();
+        session.on('sftp', (acceptSftp) => {
+          sftpChannels++;
+          const sftp = acceptSftp();
+          sftp.on('end', () => sftp.end());
+          sftp.on('OPEN', (id) => sftp.handle(id, Buffer.from('fixture')));
+          sftp.on('READ', () => readStarted());
+          sftp.on('close', readClosed);
+        });
         session.on('exec', (acceptCommand, _reject, info) => {
           const channel = acceptCommand();
           const complete = () => {
@@ -165,7 +182,7 @@ export const sshSessionJobsScenario = async () => {
     const wrapped = withSshSessionInput(listTool, cryptoHash);
     await assert.rejects(
       () => wrapped.inspect({ target: 'workspace', connectionId: 1, sessionId: 'invalid' }, context, 1),
-      /TOOL_ARGUMENTS_INVALID/,
+      /SSH_SESSION_TARGET_MISMATCH/,
     );
     const baselineAuthentications = authentications;
     await sessions.withSession(context, 1, hash, (s) => s.execute({ command: 'short-one' }));
@@ -174,6 +191,32 @@ export const sshSessionJobsScenario = async () => {
     const persistent = await sessions.open(context, 1, hash, 0);
     const scoped = { ...context, sshSessionId: persistent.sessionId };
     const job = await sessions.startJob(scoped, 1, hash, persistent.sessionId, 'hold-one', 600, 'operation-one');
+    const abortRead = new AbortController();
+    const blockedRead = sessions.withFileSystem(
+      { ...scoped, signal: abortRead.signal },
+      1,
+      hash,
+      async (filesystem) => {
+        const reader = await filesystem.openPositionedReader('/fixture.txt');
+        try {
+          return await reader.read(0, 16);
+        } finally {
+          await reader.close();
+        }
+      },
+    );
+    const readRejected = assert.rejects(blockedRead, /SFTP_CHANNEL_CLOSED/);
+    await readBarrier;
+    abortRead.abort();
+    await readRejected;
+    await readTeardown;
+    assert.equal(sftpChannels, 1);
+    assert.equal((await sessions.list(scoped, 1, persistent.sessionId))[0].status, 'ready');
+    assert.equal(
+      (await sessions.list(scoped, 1, persistent.sessionId))[0].activeOperations,
+      1,
+      'only the parallel Job remains active',
+    );
     assert.deepEqual(
       (await sessions.listJobs(scoped, 1)).map((job) => job.jobId),
       [job.jobId],

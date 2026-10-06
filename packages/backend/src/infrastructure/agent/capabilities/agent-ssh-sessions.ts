@@ -163,6 +163,30 @@ export class AgentSshSessions implements AgentSshSessionPort {
     }
   }
 
+  async withFileSystem<T>(
+    context: ToolContext,
+    connectionId: number,
+    hash: string | undefined,
+    work: (filesystem: import('../../../platform/filesystem/remote-filesystem').RemoteFileSystem) => Promise<T>,
+  ): Promise<T> {
+    return this.withSession(context, connectionId, hash, async (session) => {
+      assertActive(context);
+      const lease = session.openFileSystemLease();
+      const onAbort = () => lease.close();
+      context.signal.addEventListener('abort', onAbort, { once: true });
+      const timer = setTimeout(onAbort, Math.max(1, context.deadlineAt * 1000 - Date.now()));
+      timer.unref();
+      try {
+        assertActive(context);
+        return await work(lease.filesystem);
+      } finally {
+        clearTimeout(timer);
+        context.signal.removeEventListener('abort', onAbort);
+        lease.close();
+      }
+    });
+  }
+
   async list(context: ToolContext, connectionId: number, sessionId?: string): Promise<AgentSshSessionView[]> {
     assertActive(context);
     await this.check(context, connectionId);

@@ -16,7 +16,6 @@ import type {
   SshFileSearchResult,
   SshFileTargetPort,
 } from '../../../modules/agent/capabilities/ssh-file-target.port';
-import type { ExecutionSession } from '../../../platform/execution/execution-session';
 import type { AgentSshSessions } from './agent-ssh-sessions';
 import { isRemoteFileMissingError, type RemoteFileSystem } from '../../../platform/filesystem/remote-filesystem';
 
@@ -122,8 +121,7 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     return this.withSession(
       context,
       connectionId,
-      async (session) => {
-        const filesystem = await session.fileSystem('control');
+      async (filesystem) => {
         return this.inspectPathWithFilesystem(context, filesystem, remotePath);
       },
       expectedConfigurationHash,
@@ -141,8 +139,7 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     return this.withSession(
       context,
       connectionId,
-      async (session) => {
-        const filesystem = await session.fileSystem('control');
+      async (filesystem) => {
         const directory = await this.inspectPathWithFilesystem(context, filesystem, remotePath);
         if (!directory.exists || directory.type !== 'directory') throw new Error('RESOURCE_FORBIDDEN');
         const raw = (await filesystem.readDirectory(directory.resolvedPath)).sort((left, right) =>
@@ -199,8 +196,7 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     return this.withSession(
       context,
       connectionId,
-      async (session) => {
-        const filesystem = await session.fileSystem('control');
+      async (filesystem) => {
         const root = await this.inspectPathWithFilesystem(context, filesystem, request.path);
         if (!root.exists) throw new Error('NOT_FOUND');
         const queue: string[] = [root.resolvedPath];
@@ -309,8 +305,7 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     return this.withSession(
       context,
       connectionId,
-      async (session) => {
-        const filesystem = await session.fileSystem('control');
+      async (filesystem) => {
         const source = await this.inspectPathWithFilesystem(context, filesystem, remotePath);
         if (!source.exists || source.type === null) throw new Error('NOT_FOUND');
         if (source.type === 'file' ? source.sha256 !== expectedSha256 : expectedSha256 !== null) {
@@ -356,8 +351,7 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     return this.withSession(
       context,
       connectionId,
-      async (session) => {
-        const filesystem = await session.fileSystem('control');
+      async (filesystem) => {
         const before = await this.inspectPathWithFilesystem(context, filesystem, remotePath);
         if (!before.exists || before.type === null) throw new Error('NOT_FOUND');
         if (before.type === 'file' ? before.sha256 !== expectedSha256 : expectedSha256 !== null) {
@@ -401,8 +395,7 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     return this.withSession(
       context,
       connectionId,
-      async (session) => {
-        const filesystem = await session.fileSystem('control');
+      async (filesystem) => {
         const prepared: Array<{
           before: SshFileMutationInspection;
           content: Buffer;
@@ -467,8 +460,7 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     return this.withSession(
       context,
       connectionId,
-      async (session) => {
-        const filesystem = await session.fileSystem('control');
+      async (filesystem) => {
         const before = await this.inspectFileWithFilesystem(context, filesystem, remotePath);
         if ((before.exists ? before.sha256 : null) !== expectedSha256) throw new Error('RESOURCE_CHANGED');
         const directory = path.posix.dirname(before.resolvedPath);
@@ -533,9 +525,8 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     if (expectedConfigurationHash !== undefined && connection.configurationHash !== expectedConfigurationHash) {
       throw new Error('RESOURCE_CHANGED');
     }
-    return this.sessions.withSession(context, connectionId, expectedConfigurationHash, async (session) => {
+    return this.sessions.withFileSystem(context, connectionId, expectedConfigurationHash, async (filesystem) => {
       assertDeadline(context);
-      const filesystem = await session.fileSystem('control');
       try {
         const requestedMetadata = await filesystem.metadata(requestedPath, { followSymbolicLinks: false });
         if (requestedMetadata.isSymbolicLink) throw new Error('RESOURCE_FORBIDDEN');
@@ -699,7 +690,7 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
   private async withSession<T>(
     context: ToolContext,
     connectionId: number,
-    work: (session: ExecutionSession) => Promise<T>,
+    work: (filesystem: RemoteFileSystem) => Promise<T>,
     expectedConfigurationHash?: string,
   ): Promise<T> {
     assertDeadline(context);
@@ -710,6 +701,6 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     if (expectedConfigurationHash !== undefined && safe.configurationHash !== expectedConfigurationHash) {
       throw new Error('RESOURCE_CHANGED');
     }
-    return this.sessions.withSession(context, connectionId, expectedConfigurationHash, work);
+    return this.sessions.withFileSystem(context, connectionId, expectedConfigurationHash, work);
   }
 }

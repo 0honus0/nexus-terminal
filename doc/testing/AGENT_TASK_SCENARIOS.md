@@ -205,6 +205,7 @@
 
 ### A02 当前执行（未完成）
 
+- 显式 SSH 长会话文件取消修复：文件操作改为 operation-owned SFTP lease；abort/deadline 关闭本次 channel 并直接拒绝其等待 I/O，不依赖远端 close 确认、不关闭长连接或并行 Job。通用 metadata/realpath/readdir/open/write 回调及 positioned read 均处理 lease 取消；打开中取消拒绝等待，晚到 channel 收尾。真实 loopback SSH 回归 READ 屏障→abort→读取拒绝→channel 关闭，长会话仍 ready、activeOperations 仅剩并行 Job，后续命令和 Job 复用原认证通过；既有 SSH 搜索三项产品 E2E 通过。旧回归错误断言同步为现有具体 SSH_SESSION_TARGET_MISMATCH，不放宽权限断言。仍需语义导航、ACP 完整链和真实 A02，A03 未开始。
 - SSH 搜索深层目录产品 E2E 通过：96 层真实目录下唯一 sentinel，生产 Agent→SSH/SFTP 返回 scannedFiles=1、scannedBytes=14、精确路径和行、truncated=false；独立读取确认内容不变，finally 清理目录。此例补齐深层树覆盖，不代替显式长会话取消、语义导航及 ACP 完整产品链路验收。
 - ACP 两目标取消窗口补齐：transport 异步打开期间发生 abort 时，返回后检查已取消状态，关闭 transport 并抛出原取消原因，不进入 SDK initialize。共享 adapter 的 Workspace/SSH 屏障回归断言两端各关闭一次、零协议写入。此为取消机制回归，不代表第三方 ACP 程序或 UI→Run 完整验收；工具统一未全部完成，A03 未开始。
 - 工具统一收尾继续：确认搜索单文件边界 Workspace 8 MiB/SSH 1 MiB 不一致，SSH 将跳过超大文件与输出满混用 truncated 导致提前停止。统一搜索单文件 1 MiB，不改普通 file_read；分开输出满与扫描不完整状态，跳过超大文件后继续。Workspace 真实文件场景和 SSH 产品 E2E 增加超大文件 + 后续 sentinel 反例，预期 truncated=true 且仍命中。工具统一未全部完成，A03 未开始。
