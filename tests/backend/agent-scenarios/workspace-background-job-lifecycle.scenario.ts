@@ -306,6 +306,8 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
   const backgroundLaunch = await executeTool.execute(backgroundInspection, toolContext);
   assert.equal(backgroundLaunch.ok, true);
   assert.equal(backgroundLaunch.outcome, 'confirmed');
+  assert.equal((backgroundLaunch.data as Record<string, JsonValue>).executionTimeoutSeconds, 60);
+  assert.match(backgroundLaunch.summary, /expiry terminates this Job/);
   assert.equal(
     backgroundLaunch.verification.status,
     'unverified',

@@ -146,6 +146,8 @@ Agent 设置的「性能」提供“每个 Workspace 的命令并发数”，默
 
 Workspace 执行期限由协议统一定义，`timeoutSeconds` 默认 300 秒、范围 1–86400 秒，前台与后台使用同一执行期限契约；长任务使用后台 Job，并通过 `shell_job_control` 有界等待结果。等待窗口与执行期限不同，后台 accepted／running 不等于成功；取消按 Job 独立控制，Workspace stop／restart／delete 回收对应 generation 的全部 Job。
 
+后台服务同样会在执行期限到期时终止，`timeoutSeconds` 不是启动探测超时。Workspace／SSH 后台执行结果返回实际配置的 `executionTimeoutSeconds`，提示期限从进程启动计算，不伪造精确到期时间。Agent 应选择覆盖用户要求运行时段和验收／收尾的有界期限，报告期限，并在声称仍运行前核对 Job 状态及接口；健康检查只证明观测时刻，不承诺无限持续可用。该反馈不自动延长期限、不重启已超时 Job，也不保证模型一定遵守。
+
 `shell_job_control(action="list", target="workspace", id=WorkspaceID)` 不传 jobId，返回当前授权 Workspace/generation 的活跃 Job、数量和配置额度，不包含命令正文；SSH 暂不支持此 list。前台等待窗口结束后，只要 Runner 明确确认 Job 仍在运行，就返回 pending／running 和 jobId，可继续 wait／cancel，不伪造 unknown；只有无法核对真实状态才报告未知结果。
 
 Workspace 文件工具的非法路径或越界读取由 Runner 拒绝，模型收到明确的 `WORKSPACE_PATH_INVALID`／`WORKSPACE_PATH_FORBIDDEN` 等错误码，不退化为通用模型执行失败；错误不会授权读取项目外路径。无法解析的 Runner 错误只保留 HTTP 状态分类，不将上游正文作为模型反馈或日志内容。

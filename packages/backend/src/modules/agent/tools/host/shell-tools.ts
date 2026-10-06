@@ -495,7 +495,7 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
     name: 'shell_execute',
     version: '1.0.0',
     description:
-      'Execute argv or shellScript on either Workspace or SSH, with optional cwd. argv preserves literal argument boundaries (SSH safely quotes for its remote shell); shellScript is executable source, not a title (Workspace /bin/sh -c). Pass required environment variables via argv=[env,KEY=value,executable,...] or shellScript. Workspace foreground/background Jobs share configured generation capacity (default 8; 1=serial); full capacity rejects, never queues. Active Jobs block file-tool writes, not reads. Serialize dependent/shared writers; no file isolation. Background returns jobId; use shell_job_control list/status/wait/cancel, not busy-polling or detached bypasses. SSH background requires sessionId. Execution lifetime differs from result wait.',
+      'Execute argv or shellScript on either Workspace or SSH, with optional cwd. argv preserves literal argument boundaries (SSH safely quotes for its remote shell); shellScript is executable source, not a title (Workspace /bin/sh -c). Pass required environment variables via argv=[env,KEY=value,executable,...] or shellScript. Workspace foreground/background Jobs share configured generation capacity (default 8; 1=serial); full capacity rejects, never queues. Active Jobs block file-tool writes, not reads. Serialize dependent/shared writers; no file isolation. Background returns jobId; use shell_job_control list/status/wait/cancel, not busy-polling or detached bypasses. SSH background requires sessionId. timeoutSeconds kills the process when its execution lifetime expires, including background services; it is not a startup/health-check timeout. Choose an explicit bounded lifetime covering the requested service period and verification/cleanup; never promise indefinite uptime. Before reporting a service still running, check its Job status and endpoints; health evidence is only a point-in-time observation.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -522,7 +522,7 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
           type: 'integer',
           minimum: runnerJobLimits.minExecutionTimeoutMs / 1000,
           maximum: runnerJobLimits.maxExecutionTimeoutMs / 1000,
-          description: `Execution lifetime, not the result wait window. Workspace default is ${runnerJobLimits.defaultExecutionTimeoutMs / 1000} seconds.`,
+          description: `Hard process execution lifetime, including background services; expiry terminates the Job. Not a startup, health-check or result wait window. Workspace default is ${runnerJobLimits.defaultExecutionTimeoutMs / 1000} seconds. For a service, explicitly cover the requested operating period plus verification and cleanup; report the bounded lifetime.`,
         },
         sessionId: { type: 'string', minLength: 1, maxLength: 128 },
         mode: { type: 'string', enum: ['foreground', 'background'] },
@@ -619,8 +619,23 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
       mode,
       operationHash: inspection.operationHash,
     });
-    if (executed.job) return workspaceExecutionResult(executed.job, mode);
-    if (executed.sshJob) return sshJobResult(executed.sshJob, context.maxOutputBytes);
+    if (executed.job || executed.sshJob) {
+      const result = executed.job
+        ? workspaceExecutionResult(executed.job, mode)
+        : sshJobResult(executed.sshJob!, context.maxOutputBytes);
+      if (mode === 'background') {
+        const executionTimeoutSeconds = positiveInteger(args.timeoutSeconds);
+        result.data = { ...record(result.data ?? {}), executionTimeoutSeconds } as JsonValue;
+        if (
+          executed.job?.status === 'pending' ||
+          executed.job?.status === 'running' ||
+          executed.sshJob?.status === 'running'
+        ) {
+          result.summary += ` Execution lifetime is ${executionTimeoutSeconds} seconds from process start; expiry terminates this Job. This is not a startup timeout. Verify Job status and endpoints before reporting current uptime; do not claim indefinite availability.`;
+        }
+      }
+      return result;
+    }
     if (!executed.result) throw new Error('TOOL_STATE_CONFLICT');
     const ok = executed.result.exitCode === 0;
     return {
