@@ -98,97 +98,117 @@ const execute = async (
   return { run, ledger, text: textResult! };
 };
 
-test('A04 bounded API deployment has real endpoints and expires without detached processes', async ({ request }) => {
-  const context = await prepare(request);
-  const connectionId = await ensureTestSshConnection(request);
-  const portOwner = net.createServer();
-  await new Promise<void>((resolve) => portOwner.listen(0, '127.0.0.1', resolve));
-  const address = portOwner.address();
-  expect(address && typeof address !== 'string').toBeTruthy();
-  const port = (address as net.AddressInfo).port;
-  await new Promise<void>((resolve, reject) => portOwner.close((error) => (error ? reject(error) : resolve())));
-  const fixture = path.resolve(__dirname, '../../fixtures/agent/task-projects/startup-failure');
-  const project = path.resolve(__dirname, '../../.tmp/ssh-root/deploy-api');
-  await cp(fixture, project, { recursive: true });
-  await writeFile(path.join(project, 'config.json'), '{ "catalogPath": "data/catalog.json" }\n');
-  const files = await readdir(project, { recursive: true });
-  const baseline = new Map<string, Buffer>();
-  for (const file of files) {
-    if (['data'].includes(file)) continue;
-    baseline.set(file, await readFile(path.join(project, file)));
-  }
-  try {
-    const result = await execute(request, context, `E2E_DEPLOY_API connection=${connectionId} port=${port}`, {
-      connectionIds: [connectionId],
-    });
-    expect(result.run.status).toBe('completed');
-    expect(result.run.needsReconciliation).toBe(false);
-    const results = result.ledger
-      .filter((entry) => entry.kind === 'tool_result')
-      .map((entry) => JSON.parse(entry.payload.text!));
-    const launch = results.find((item) => item.data?.executionTimeoutSeconds);
-    expect(launch).toMatchObject({
-      ok: true,
-      data: { status: 'running', executionTimeoutSeconds: 15 },
-      verification: { status: 'unverified' },
-    });
-    expect(results.at(-1)).toMatchObject({ ok: true, data: { jobId: launch.data.jobId, status: 'running' } });
-    expect(result.text).toContain(launch.data.jobId);
-    const health = await fetch(`http://127.0.0.1:${port}/health`);
-    expect(health.status).toBe(200);
-    expect(await health.json()).toEqual({ status: 'ok' });
-    const catalog = await fetch(`http://127.0.0.1:${port}/catalog`);
-    expect(catalog.status).toBe(200);
-    expect(await catalog.json()).toEqual(JSON.parse(baseline.get('data/catalog.json')!.toString()));
-    const listener = execFileSync('ss', ['-ltnp', `sport = :${port}`], { encoding: 'utf8' });
-    expect(listener).toContain(`127.0.0.1:${port}`);
-    const pid = listener.match(/pid=(\d+)/)?.[1];
-    expect(pid).toBeDefined();
-    expect(await readlink(`/proc/${pid}/cwd`)).toBe(project);
-    expect((await readFile(`/proc/${pid}/environ`, 'utf8')).split('\0')).toContain(`PORT=${port}`);
-    for (const [file, bytes] of baseline) expect(await readFile(path.join(project, file))).toEqual(bytes);
-    await expect
-      .poll(
-        async () => {
-          try {
-            await fetch(`http://127.0.0.1:${port}/health`);
-            return 'listening';
-          } catch {
-            return 'closed';
-          }
+for (const useOperationsSkill of [false, true]) {
+  test(`${useOperationsSkill ? 'A05 signed Operations Skill' : 'A04 bounded API'} deployment has real endpoints and expires without detached processes`, async ({
+    request,
+  }) => {
+    const context = await prepare(request);
+    const connectionId = await ensureTestSshConnection(request);
+    const portOwner = net.createServer();
+    await new Promise<void>((resolve) => portOwner.listen(0, '127.0.0.1', resolve));
+    const address = portOwner.address();
+    expect(address && typeof address !== 'string').toBeTruthy();
+    const port = (address as net.AddressInfo).port;
+    await new Promise<void>((resolve, reject) => portOwner.close((error) => (error ? reject(error) : resolve())));
+    const fixture = path.resolve(__dirname, '../../fixtures/agent/task-projects/startup-failure');
+    const project = path.resolve(__dirname, '../../.tmp/ssh-root/deploy-api');
+    await cp(fixture, project, { recursive: true });
+    await writeFile(path.join(project, 'config.json'), '{ "catalogPath": "data/catalog.json" }\n');
+    const files = await readdir(project, { recursive: true });
+    const baseline = new Map<string, Buffer>();
+    for (const file of files) {
+      if (['data'].includes(file)) continue;
+      baseline.set(file, await readFile(path.join(project, file)));
+    }
+    try {
+      const result = await execute(
+        request,
+        context,
+        `E2E_DEPLOY_API connection=${connectionId} port=${port}${useOperationsSkill ? ' E2E_OPERATIONS_SKILL' : ''}`,
+        {
+          connectionIds: [connectionId],
         },
-        { timeout: 20_000 },
-      )
-      .toBe('closed');
-    await expect
-      .poll(async () => {
-        try {
-          await readFile(`/proc/${pid}/cmdline`);
-          return 'present';
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-          return 'gone';
-        }
-      })
-      .toBe('gone');
-  } finally {
-    // Keep source available until the bounded process has released its listener even on assertion failure.
-    await expect
-      .poll(
-        async () => {
+      );
+      expect(result.run.status).toBe('completed');
+      expect(result.run.needsReconciliation).toBe(false);
+      const results = result.ledger
+        .filter((entry) => entry.kind === 'tool_result')
+        .map((entry) => JSON.parse(entry.payload.text!));
+      const launch = results.find((item) => item.data?.executionTimeoutSeconds);
+      if (useOperationsSkill) {
+        expect(results[0]).toMatchObject({ ok: true, data: { matches: [{ id: 'nexus.agent.operations' }] } });
+        expect(results[1]).toMatchObject({
+          ok: true,
+          data: { id: 'nexus.agent.operations', name: 'operations' },
+          verification: { status: 'verified' },
+        });
+        expect(results[1].data.body).toContain('begin with bounded read-only inspection');
+        expect(results[1].data.body).toContain('Re-read authoritative state after a change');
+        expect(results.indexOf(launch)).toBeGreaterThan(1);
+      }
+      expect(launch).toMatchObject({
+        ok: true,
+        data: { status: 'running', executionTimeoutSeconds: 15 },
+        verification: { status: 'unverified' },
+      });
+      expect(results.at(-1)).toMatchObject({ ok: true, data: { jobId: launch.data.jobId, status: 'running' } });
+      expect(result.text).toContain(launch.data.jobId);
+      const health = await fetch(`http://127.0.0.1:${port}/health`);
+      expect(health.status).toBe(200);
+      expect(await health.json()).toEqual({ status: 'ok' });
+      const catalog = await fetch(`http://127.0.0.1:${port}/catalog`);
+      expect(catalog.status).toBe(200);
+      expect(await catalog.json()).toEqual(JSON.parse(baseline.get('data/catalog.json')!.toString()));
+      const listener = execFileSync('ss', ['-ltnp', `sport = :${port}`], { encoding: 'utf8' });
+      expect(listener).toContain(`127.0.0.1:${port}`);
+      const pid = listener.match(/pid=(\d+)/)?.[1];
+      expect(pid).toBeDefined();
+      expect(await readlink(`/proc/${pid}/cwd`)).toBe(project);
+      expect((await readFile(`/proc/${pid}/environ`, 'utf8')).split('\0')).toContain(`PORT=${port}`);
+      for (const [file, bytes] of baseline) expect(await readFile(path.join(project, file))).toEqual(bytes);
+      await expect
+        .poll(
+          async () => {
+            try {
+              await fetch(`http://127.0.0.1:${port}/health`);
+              return 'listening';
+            } catch {
+              return 'closed';
+            }
+          },
+          { timeout: 20_000 },
+        )
+        .toBe('closed');
+      await expect
+        .poll(async () => {
           try {
-            await fetch(`http://127.0.0.1:${port}/health`);
-            return false;
-          } catch {
-            return true;
+            await readFile(`/proc/${pid}/cmdline`);
+            return 'present';
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+            return 'gone';
           }
-        },
-        { timeout: 20_000 },
-      )
-      .toBe(true);
-    await rm(project, { recursive: true, force: true });
-  }
-});
+        })
+        .toBe('gone');
+    } finally {
+      // Keep source available until the bounded process has released its listener even on assertion failure.
+      await expect
+        .poll(
+          async () => {
+            try {
+              await fetch(`http://127.0.0.1:${port}/health`);
+              return false;
+            } catch {
+              return true;
+            }
+          },
+          { timeout: 20_000 },
+        )
+        .toBe(true);
+      await rm(project, { recursive: true, force: true });
+    }
+  });
+}
 
 test('A03 build repair preserves original validation and data through a production SSH Run', async ({ request }) => {
   const context = await prepare(request);

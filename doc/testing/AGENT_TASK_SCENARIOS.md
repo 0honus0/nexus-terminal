@@ -203,10 +203,12 @@
 
 ### 临时文档退出条件
 
-### A05 当前执行（Operations Skill，未闭环）
+### A05 本地闭环（Operations Skill，canonical Actions 未验收）
+
+- 确定性Skill→生产Run部署回归已补齐并实际通过：模拟Provider先skill_search/skill_read发现并加载签名Operations，测试断言正文约束及verified且读取早于启动；随后生产SSH受管Job启动真实API，独立接口/业务数据/项目字节/PID/cwd/PORT及到期端口关闭、PID消失通过。完整functional-regressions18项通过，不声明模拟Provider证明自主理解专用部署Skill，也不代替真实模型未授权只读证据；结合下述真实观察及管理收尾，A05本地关闭，canonical Actions未验收。
 
 - 本地已安装签名Skill只有Operations/Developer，无专用部署Skill；本轮验证Operations的先只读核对、授权边界、变更后权威状态复核，不声称Skill自带目录/端口或专用部署流程。真实Luna low Runbc095f62-2ecb-40e6-839f-b777e3f4c223／Threadd62f6622-c6f1-4d90-bf6b-d2565640e897实际skill_search发现并skill_read加载nexus.agent.operations，再创建/start Workspaceaf5e229a-0e54-4373-bc87-d5897fa1cdfb。暂不授权阶段只读调查后再次awaiting_input，独立全树SHA不变、29181无监听；前置一次澄清参数拒绝未执行，原证据保留。
-- 同Run明确授权后原样部署，Job660秒、PID243501/PORT29181，独立两接口200及正确内容、全树SHA、cwd/PORT/Job归属通过；最终completed／verified、无reconciliation。交付报告实际Skill加载、Job重读、接口和数据证据及用户管理收尾边界；未改文件或安装依赖。独立观察器实际采样600秒后按管理API stop/delete确认命令/Workspace/PID/端口，仍在运行，不能提前算10分钟或收尾通过。证据/tmp/opencode/a05-{input,preparation,baseline,readonly,result,independent,delivery}.json；确定性Skill→生产Run部署回归仍待补，A05未闭环、A06未开始，ACP仍暂跳过。
+- 同Run明确授权后原样部署，Job660秒、PID243501/PORT29181，独立两接口200及正确内容、全树SHA、cwd/PORT/Job归属通过；最终completed／verified、无reconciliation。交付报告实际Skill加载、Job重读、接口和数据证据及用户管理收尾边界；未改文件或安装依赖。独立观察已完成：61次采样跨600.504秒（启动后35–635秒），两接口内容正确、数据原hash保留；管理API stop/delete命令均succeeded，分别确认stopped/deleted，PID243501消失、29181无监听。周期采样不代表无间断监控。证据/tmp/opencode/a05-{input,preparation,baseline,readonly,result,independent,delivery,observations,settled,cleanup}.json；A06可开始，ACP仍暂跳过。
 
 ### A04 本地闭环（canonical Actions 未验收）
 

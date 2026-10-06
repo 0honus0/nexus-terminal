@@ -264,12 +264,19 @@ const server = http.createServer(async (request, response) => {
   const fileLifecycle = latestUserText.match(/E2E_FILE_LIFECYCLE connection=(\d+)/);
   const deployApi = latestUserText.match(/E2E_DEPLOY_API connection=(\d+) port=(\d+)/);
   if (deployApi) {
+    const useOperationsSkill = latestUserText.includes('E2E_OPERATIONS_SKILL');
     const selector = { target: 'ssh', id: deployApi[1] };
     const data = (id) => {
       const message = messages.find((item) => item.role === 'tool' && item.tool_call_id === id);
       return message ? JSON.parse(message.content) : null;
     };
     const steps = [
+      ...(useOperationsSkill
+        ? [
+            ['deploy_skill_search', 'skill_search', { query: 'operations', limit: 1 }],
+            ['deploy_skill_read', 'skill_read', () => ({ id: data('deploy_skill_search').data.matches[0].id })],
+          ]
+        : []),
       ['deploy_session_discover', 'tool_search', { query: 'ssh_session_open', limit: 1 }],
       [
         'deploy_session_open',
