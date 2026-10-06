@@ -338,6 +338,7 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
   assert.equal(cleanup.actionPath, `/api/v1/apps/${toolContext.appId}/workspaces/${toolWorkspace.id}/actions`);
   assert.deepEqual(cleanup.bodyFields, { schemaVersion: 1, action: 'stop' });
   assert.deepEqual(cleanup.requiredHeaders, ['X-Nexus-CSRF', 'Idempotency-Key']);
+  assert.match(String(cleanup.commandIdSource), /POST response data.id/);
   assert.equal(
     backgroundLaunch.verification.status,
     'unverified',

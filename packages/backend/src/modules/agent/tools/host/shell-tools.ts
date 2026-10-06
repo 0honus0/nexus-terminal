@@ -644,6 +644,8 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
                 expectedVersionSource:
                   'Set body.expectedVersion to the numeric data.version from a fresh Workspace GET; do not quote it or reuse an old version.',
                 requiredHeaders: ['X-Nexus-CSRF', 'Idempotency-Key'],
+                commandIdSource:
+                  'Use action POST response data.id for {commandId}; the management API does not return data.commandId. HTTP 202 is acceptance, not completion.',
                 commandReadPath: `/api/v1/apps/${encodeURIComponent(context.appId)}/workspace-runtime/commands/{commandId}`,
                 confirmation:
                   'Require command.status=succeeded, then GET Workspace and require status=stopped. For delete, GET a fresh version, submit action=delete, confirm command succeeded and Workspace deleted.',
