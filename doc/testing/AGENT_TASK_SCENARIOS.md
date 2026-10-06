@@ -203,6 +203,10 @@
 
 ### 临时文档退出条件
 
+### A03 当前执行（真实任务通过，确定性回归待补）
+
+- 真实Luna low Run e6f51f95-8c6f-4dd6-94dc-ce458008280c／Thread db23dfa7-16a2-4bb1-94c2-f2158f3e1cad 已completed／verified且无reconciliation。独立Workspace21f252a8-0389-4fc4-a13e-d8d6993c549b内注入build-failure fixture：生产模块导出totalPrices、原build.mjs／verify.mjs要求totalPrice，原构建实际失败。授权仅生产源文件最小修复，模型修正导出；独立全树SHA确认只src/catalog.mjs变化、精确单名称替换，build.mjs／verify.mjs／package.json／业务数据原字节保留，未安装依赖。独立重新执行原npm run build及npm test均0退出。随后stop／delete命令succeeded，Workspace最终deleted。证据 /tmp/opencode/a03-{input,baseline,result,independent,cleanup}.json。fixture现纳入tests/e2e/fixtures/agent/task-projects/build-failure，确定性生产Run回归尚待补，不声明canonical交付通过；A04未开始，ACP仍暂跳过。
+
 ### A02 本地闭环（canonical Actions 未验收）
 
 - 最新本地真实闭环：Run143dd302-230e-4918-8bd6-7295f166084e 最终 completed／verified、needsReconciliation=false，所有Plan项completed。服务实际780秒有界期限，独立满10分钟两接口200及正确内容；授权前全树SHA不变，授权后仅config.json改变，业务数据原hash不变，PID/cwd/PORT与本Run Workspace一致。明确收尾输入后模型取消Job并真实检查端口停止、读取数据；独立确认PID221433消失、29175无监听、数据hash不变。随后产品API stop／delete均succeeded，Workspacedc6a799e-68d9-4184-8823-3aa005df8d15最终deleted。观察器在10分钟时Run仍running而保护性退出，随后真实收尾及最终状态补齐，不将该退出算产品失败。证据 /tmp/opencode/a02-bounded-{settled,observations,independent,cleanup}.json；首次30秒期限失败仍保留，未提高门禁或最大期限。A02本地场景关闭，可开始A03；ACP剩余验收仍暂跳过、不计通过，canonical Actions／Docker smoke仍未送验，不代表工具全组或81场景全部验收。
