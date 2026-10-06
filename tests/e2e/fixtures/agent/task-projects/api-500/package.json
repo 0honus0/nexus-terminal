@@ -1,0 +1,8 @@
+{
+  "name": "isolated-api-500",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node verify.mjs"
+  }
+}

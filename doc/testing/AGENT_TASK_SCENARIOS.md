@@ -203,6 +203,11 @@
 
 ### 临时文档退出条件
 
+### B01 本地闭环（接口500/数据保留，canonical Actions 未验收）
+
+- 真实Luna low Run8792367f-a039-4f7e-af4b-720cbb2e1def／Thread28fae655-24b0-4db7-9bdc-e8c44508ee84，实际创建Workspace027574a4-8be9-4bc2-b4d5-4d137c7738af并等待注入；关联b01-request-one的HTTP500、/catalog日志及server.mjs:14，确认products/items字段不一致。仅生产源码catalog.products.map→catalog.items.map；completed/verified、无reconciliation。独立逐字节保护AGENTS.md/package.json/verify.mjs/data/catalog.json，原HTTP health/两次catalog/404检查通过。调查命令exit13/1及两次无效patch均保留，后续file_write按真实字节最小修复；未削弱检查。认证管理stop/delete命令succeeded及stopped→deleted确认，首次观察者误用Workspace路由404后按公开路径纠正。证据/tmp/opencode/b01-{input,waiting,result,independent,cleanup}.json与b01-fixture-before.log。
+- 确定性生产SSH Run聚焦通过真实HTTP500→request ID/stack→严格patch→原验证通过及全树保护。补强故障前后真实server PID/port的收尾断言，完整functional-regressions22项及check通过；结合真实模型诊断/独立数据保护和HTTP验证，B01本地关闭，B02可开始，canonical Actions未验收，ACP继续暂跳过。
+
 ### A08 本地闭环（授权内部署阻塞，canonical Actions 未验收）
 
 - 真实Luna low Run3dedb0a7-75f3-426b-9c7f-16d1ae55d3e3／Thread7d0757ad-636e-41cd-8f91-5ced95820003，plan/No Workspace/无SSH目标，completed_unverified、无reconciliation。实际只调用plan_update，明确未部署/未监听/未验证，保留准备/验证计划与下一轮明确选择环境、目标和授权的说明，不扩大本轮权限或冒称成功。独立数据库核对无Workspace/本Thread SSH Job、29182无监听；观察脚本首次误用SSH表不存在run_id，改按真实Thread身份核对。证据/tmp/opencode/a08-{input,result,independent}.json，无本轮执行资源需收尾。

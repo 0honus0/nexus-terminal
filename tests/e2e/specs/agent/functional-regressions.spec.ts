@@ -428,6 +428,64 @@ for (const useOperationsSkill of [false, true]) {
   });
 }
 
+test('B01 API 500 repair correlates request and source then preserves data and original HTTP checks', async ({
+  request,
+}) => {
+  const context = await prepare(request);
+  const connectionId = await ensureTestSshConnection(request);
+  const fixture = path.resolve(__dirname, '../../fixtures/agent/task-projects/api-500');
+  const project = path.resolve(__dirname, '../../.tmp/ssh-root/api-500');
+  const files = ['AGENTS.md', 'package.json', 'verify.mjs', 'server.mjs', 'data/catalog.json'];
+  const baseline = new Map(
+    await Promise.all(files.map(async (file) => [file, await readFile(path.join(fixture, file))] as const)),
+  );
+  await cp(fixture, project, { recursive: true });
+  try {
+    const result = await execute(request, context, `E2E_API_500_REPAIR connection=${connectionId}`, {
+      connectionIds: [connectionId],
+    });
+    expect(result.run.status).toBe('completed');
+    expect(result.run.needsReconciliation).toBe(false);
+    const results = result.ledger
+      .filter((entry) => entry.kind === 'tool_result')
+      .map((entry) => JSON.parse(entry.payload.text!));
+    expect(results).toHaveLength(5);
+    expect(results[1]).toMatchObject({ ok: false, data: { exitCode: 1 }, verification: { status: 'failed' } });
+    expect(results[1].data.stdout).toContain('"requestId":"b01-request-one","status":500');
+    expect(results[1].data.stderr).toContain('"requestId":"b01-request-one","path":"/catalog"');
+    expect(results[1].data.stderr).toContain('server.mjs:14');
+    expect(results[2]).toMatchObject({
+      ok: true,
+      data: { additions: 1, deletions: 1 },
+      verification: { status: 'verified' },
+    });
+    expect(results[3]).toMatchObject({ ok: true, data: { exitCode: 0 }, verification: { status: 'verified' } });
+    expect(results[3].data.stdout).toContain('HTTP health/catalog/404 verified');
+    for (const output of [results[1].data.stdout, results[3].data.stdout]) {
+      const identity = output.split('\n').find((line: string) => line.startsWith('{"serverPid":'));
+      expect(identity).toBeDefined();
+      const { serverPid, port } = JSON.parse(identity);
+      await expect(readFile(`/proc/${serverPid}/cmdline`)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(execFileSync('ss', ['-ltnp', `sport = :${port}`], { encoding: 'utf8' })).not.toContain(
+        `127.0.0.1:${port}`,
+      );
+    }
+    for (const [file, bytes] of baseline) {
+      const expected =
+        file === 'server.mjs'
+          ? Buffer.from(bytes.toString().replace('catalog.products.map', 'catalog.items.map'))
+          : bytes;
+      expect(await readFile(path.join(project, file))).toEqual(expected);
+    }
+    const independent = execFileSync(process.execPath, ['verify.mjs'], { cwd: project, encoding: 'utf8' });
+    expect(independent).toContain('"requestId":"b01-request-one","status":200');
+    expect(independent).toContain('"requestId":"b01-request-two","status":200');
+    expect(independent).toContain('HTTP health/catalog/404 verified');
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
 test('A03 build repair preserves original validation and data through a production SSH Run', async ({ request }) => {
   const context = await prepare(request);
   const connectionId = await ensureTestSshConnection(request);

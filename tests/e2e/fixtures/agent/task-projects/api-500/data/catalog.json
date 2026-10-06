@@ -1,0 +1,8 @@
+{
+  "items": [
+    { "id": "alpha", "price": 12.5 },
+    { "id": "beta", "price": 0 },
+    { "id": "gamma", "price": 7.25 }
+  ],
+  "revision": 3
+}

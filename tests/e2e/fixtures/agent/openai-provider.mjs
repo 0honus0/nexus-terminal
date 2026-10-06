@@ -540,6 +540,54 @@ const server = http.createServer(async (request, response) => {
     return;
   }
   const buildRepair = latestUserText.match(/E2E_BUILD_REPAIR connection=(\d+)/);
+  const apiRepair = latestUserText.match(/E2E_API_500_REPAIR connection=(\d+)/);
+  if (apiRepair) {
+    const selector = { target: 'ssh', id: apiRepair[1] };
+    const data = (id) => {
+      const message = messages.find((item) => item.role === 'tool' && item.tool_call_id === id);
+      return message ? JSON.parse(message.content) : null;
+    };
+    const steps = [
+      ['api_source', 'file_read', { ...selector, path: '/api-500/server.mjs' }],
+      [
+        'api_before',
+        'shell_execute',
+        { ...selector, command: { kind: 'shell', shellScript: 'cd "$NEXUS_E2E_ROOT/api-500" && npm test' } },
+      ],
+      [
+        'api_patch',
+        'file_patch',
+        {
+          ...selector,
+          patch:
+            '--- /api-500/server.mjs\n+++ /api-500/server.mjs\n@@ -14,1 +14,1 @@\n-      const items = catalog.products.map((item) => ({ id: item.id, price: item.price }));\n+      const items = catalog.items.map((item) => ({ id: item.id, price: item.price }));\n',
+        },
+      ],
+      [
+        'api_after',
+        'shell_execute',
+        { ...selector, command: { kind: 'shell', shellScript: 'cd "$NEXUS_E2E_ROOT/api-500" && npm test' } },
+      ],
+      ['api_data', 'file_read', { ...selector, path: '/api-500/data/catalog.json' }],
+    ];
+    for (const [id, name, args] of steps) {
+      const result = data(id);
+      if (result && !result.ok && id !== 'api_before') {
+        regressionResponse(response, { content: 'API repair failed; inspect durable evidence.' });
+        return;
+      }
+      if (!result) {
+        regressionResponse(
+          response,
+          { tool_calls: [{ index: 0, id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] },
+          'tool_calls',
+        );
+        return;
+      }
+    }
+    regressionResponse(response, { content: 'API 500 repaired and original HTTP checks passed; data preserved.' });
+    return;
+  }
   if (buildRepair) {
     const selector = { target: 'ssh', id: buildRepair[1] };
     const data = (id) => {
