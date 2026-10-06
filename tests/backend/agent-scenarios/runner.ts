@@ -65,6 +65,7 @@ import { cumulativeTokenCeilingRemovedScenario } from './cumulative-token-ceilin
 
 import { modelAwareContextBudgetScenario } from './model-aware-context-budget.scenario';
 import { acpInnerPermissionScenario } from './acp-inner-permission.scenario';
+import { sshAcpProtocolScenario } from './ssh-acp-protocol.scenario';
 import { mutationOutputProjectionScenario } from './mutation-output-projection.scenario';
 import { publicAgentErrorTaxonomyScenario } from './public-agent-error-taxonomy.scenario';
 import { acpInnerPermissionReplayScenario } from './acp-inner-permission-replay.scenario';
@@ -161,6 +162,7 @@ const scenarios = new Map<string, Scenario>([
   ['runtime/integration-refresh-generation', integrationRefreshGenerationScenario],
   ['runtime/integration-health-retry', integrationHealthRetryScenario],
   ['runtime/acp-inner-permission', acpInnerPermissionScenario],
+  ['runtime/ssh-acp-protocol', sshAcpProtocolScenario],
   ['runtime/acp-inner-permission-abort-race', acpInnerPermissionAbortRaceScenario],
   ['runtime/acp-inner-permission-replay', acpInnerPermissionReplayScenario],
   ['runtime/acp-inner-permission-durable', acpInnerPermissionDurabilityScenario],
