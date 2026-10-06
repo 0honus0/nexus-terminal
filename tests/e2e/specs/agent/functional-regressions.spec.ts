@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createHash } from 'node:crypto';
-import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import regressionInputs from '../../fixtures/agent/regression-inputs.json';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
@@ -96,7 +96,9 @@ const execute = async (
   return { run, ledger, text: textResult! };
 };
 
-test('SSH file search scans beyond former file and cumulative byte caps', async ({ request }) => {
+test('SSH file search scans beyond former entry, file and cumulative byte caps without following symlinks', async ({
+  request,
+}) => {
   const context = await prepare(request);
   const connectionId = await ensureTestSshConnection(request);
   const project = path.resolve(__dirname, '../../.tmp/ssh-root/search-scan');
@@ -106,6 +108,8 @@ test('SSH file search scans beyond former file and cumulative byte caps', async 
       await writeFile(path.join(project, `a-${String(index).padStart(4, '0')}.txt`), 'nothing\n');
     const chunk = 'x'.repeat(1024 * 1024 - 1) + '\n';
     for (let index = 0; index < 17; index++) await writeFile(path.join(project, `b-${index}.txt`), chunk);
+    for (let index = 0; index < 10_001; index++)
+      await symlink('z-sentinel.txt', path.join(project, `c-link-${String(index).padStart(5, '0')}`));
     await writeFile(path.join(project, 'z-sentinel.txt'), 'SCAN_SENTINEL\n');
     const result = await execute(request, context, `E2E_SEARCH_SCAN connection=${connectionId}`, {
       connectionIds: [connectionId],
