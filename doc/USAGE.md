@@ -126,6 +126,9 @@ Agent 实时订阅处理当前协议定义的全部持久事件：回复、取�
 - 接近初始额度时，已有工具批次先完成。存在新的成功观察数据或验证／Artifact 证据，且未触发循环警告、最近三次工具结果非连续失败时，runtime 将受压额度按 1.5 倍扩展至冻结上限，记录 `budget.auto_extended`。相同操作和结果、已经用于扩展的证据、仅编辑 Plan 不支持再次扩展。进展识别是有界启发式，不保证任意任务一定完成；独立循环保护与最终上限始终有效。
 - 每轮模型上下文包含最新 Goal、Plan 项目状态／证据、验证状态、是否需要 reconciliation、实际消耗、剩余额度和预算压力。子 Agent 只看到自己的目标／状态及共享资源，不继承主 Agent 私有 Goal／Plan。模型收到的是持久状态投影，不是虚构完成百分比；Plan 完成不等于验证通过。
 - 无有效进展或接近上限时记录 `budget.finishing`，预留最多两次模型请求及最多 30 秒用于收尾，子 Agent 不能占用 Root 的请求预留。收尾停止新工具和委派，尽力保存安全 checkpoint，并输出已完成、已验证、证据和未完成工作；模型／上下文失败仍会保存确定性的部分结果。Run 以 `interrupted` 结束，不把资源停止声称为成功。未确认写操作继续保留 reconciliation／隔离边界；取消不代表远端副作用已回滚。
+
+Workspace Job 的持久终态与执行结果保持一致：仅无超时、无终止信号且退出码为 0 时 succeeded；非零退出／超时为 failed，并保留 stdout、stderr、退出码和 timedOut。前台执行与 Job 查询均返回失败证据，不能将超时结果标为 succeeded 或用作完成验证；同 execution identity 的失败重放复用该结果，不再次启动进程。
+
 - 普通执行额度不再进入需要用户增额的 `awaiting_budget`，也不显示执行次数／时间的手动增额按钮。`awaiting_budget` 和 versioned budget API 仅保留协作 mailbox 数量／字节增额，不能扩大模型请求、工具执行或时间边界。
 - checkpoint 继续执行继承累计请求、工具消耗和活动时间；已经收尾或耗尽的源 Run 不可通过恢复绕过限制。明确发起独立的新任务才创建新额度。运行时 API／持久化 decoder 只接受当前字段，不提供 `maxRunSteps`、委派 `maxSteps` 或 `usage.steps` 别名；数据库升级一次性转换既有设置与计数。
 

@@ -136,7 +136,7 @@ export class RunnerCommandExecutor {
       return;
     }
     try {
-      this.dependencies.journal.succeedJob(request.jobId, result);
+      this.dependencies.journal.completeJob(request.jobId, result);
     } catch (persistenceError) {
       this.markJobOutcomeUnknown(request.jobId, persistenceError);
       return;

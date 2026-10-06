@@ -431,18 +431,18 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
       }>((resolve, reject) => {
         executeCalls += 1;
         pending.set(request.jobId, { resolve, reject });
-        if (request.argv[0] === 'complete-later') {
+        if (['complete-later', 'nonzero-later', 'timeout-later'].includes(request.argv[0]!)) {
           setTimeout(() => {
             const current = pending.get(request.jobId);
             if (!current) return;
             pending.delete(request.jobId);
             current.resolve({
-              exitCode: 0,
+              exitCode: request.argv[0] === 'nonzero-later' ? 7 : 0,
               signal: null,
               stdout: 'done\n',
-              stderr: '',
+              stderr: request.argv[0] === 'complete-later' ? '' : 'failure diagnostic\n',
               truncated: false,
-              timedOut: false,
+              timedOut: request.argv[0] === 'timeout-later',
             });
           }, 30);
         }
@@ -525,6 +525,63 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
     assert.notEqual(fresh.jobId, foreground.jobId);
     assert.equal(fresh.status, 'succeeded');
     assert.equal(executeCalls, 2, 'A new execution with identical argv must actually execute');
+    for (const [identity, command, code] of [
+      ['0', 'nonzero-later', 'WORKSPACE_JOB_NONZERO_EXIT'],
+      ['1', 'timeout-later', 'WORKSPACE_JOB_TIMEOUT'],
+    ] as const) {
+      const failed = await adapter.invoke(
+        { workspaceId: 'background-workspace', generation: 7 },
+        call(identity, [command]),
+        new AbortController().signal,
+      );
+      assert.equal(failed.status, 'failed');
+      assert.equal(failed.error, code);
+      assert.equal(failed.result?.stderr, 'failure diagnostic\n');
+      assert.equal(failed.result?.timedOut, command === 'timeout-later');
+      assert.deepEqual(await originalQueryJob(failed.jobId, new AbortController().signal), failed);
+      const replayedFailure = await adapter.invoke(
+        { workspaceId: 'background-workspace', generation: 7 },
+        call(identity, [command]),
+        new AbortController().signal,
+      );
+      assert.deepEqual(
+        replayedFailure,
+        failed,
+        'Failed execution replay must retain the durable result, not execute again',
+      );
+      toolGateway.queryJob = async () => ({ ...failed, workspaceId: toolWorkspace.id });
+      toolGateway.invoke = async () => ({ ...failed, workspaceId: toolWorkspace.id });
+      const statusTool = createUnifiedShellTools(shellService, toolCrypto).find(
+        (tool) => tool.descriptor.name === 'shell_job_control',
+      )!;
+      const inspection = await statusTool.inspect(
+        { target: 'workspace', id: toolWorkspace.id, jobId: failed.jobId, action: 'status' },
+        toolContext,
+        7,
+      );
+      const projected = await statusTool.execute(inspection, toolContext);
+      assert.equal(projected.ok, false);
+      assert.equal(projected.errorCode, code);
+      assert.equal(projected.verification.status, 'failed');
+      assert.equal((projected.data as Record<string, JsonValue>).stderrTail, 'failure diagnostic\n');
+      const foregroundInspection = await executeTool.inspect(
+        {
+          target: 'workspace',
+          id: toolWorkspace.id,
+          command: { kind: 'argv', argv: ['test-failure'] },
+          mode: 'foreground',
+        },
+        toolContext,
+        7,
+      );
+      const foregroundFailure = await executeTool.execute(foregroundInspection, toolContext);
+      assert.equal(foregroundFailure.ok, false);
+      assert.equal(foregroundFailure.errorCode, code);
+      assert.equal(foregroundFailure.verification.status, 'failed');
+      assert.equal((foregroundFailure.data as Record<string, JsonValue>).stderr, 'failure diagnostic\n');
+    }
+    toolGateway.queryJob = async () => runningJob;
+    toolGateway.invoke = async () => succeededJob;
     const foregroundQueryCalls = queryCalls;
     const originalWait = adapter.waitJob.bind(adapter);
     adapter.waitJob = async (jobId) => originalQueryJob(jobId);

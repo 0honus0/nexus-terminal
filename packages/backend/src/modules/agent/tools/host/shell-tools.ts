@@ -270,7 +270,7 @@ const workspaceExecutionResult = (job: WorkspaceJobView, mode: 'foreground' | 'b
       },
     };
   }
-  if (job.status === 'failed' || job.status === 'cancelled' || !job.result) {
+  if (job.status === 'cancelled' || !job.result) {
     return {
       ok: false,
       summary: `Workspace job ${job.status}.`,
@@ -294,7 +294,8 @@ const workspaceExecutionResult = (job: WorkspaceJobView, mode: 'foreground' | 'b
       },
     };
   }
-  const ok = job.result.exitCode === 0 && !job.result.timedOut;
+  const ok =
+    job.status === 'succeeded' && job.result.exitCode === 0 && !job.result.timedOut && job.result.signal === null;
   return {
     ok,
     summary: ok
@@ -411,7 +412,7 @@ const jobControlResult = (
       },
     };
   }
-  if (job.status === 'failed' || job.status === 'unknown' || !job.result) {
+  if (job.status === 'unknown' || !job.result) {
     return {
       ok: false,
       summary: `Workspace job is ${job.status}.`,
@@ -442,7 +443,8 @@ const jobControlResult = (
   const projectedBytes = Math.max(1024, Math.min(64 * 1024, Math.floor(maxOutputBytes / 2)));
   const stdout = utf8Tail(job.result.stdout, Math.max(512, Math.floor(projectedBytes / 2)));
   const stderr = utf8Tail(job.result.stderr, Math.max(512, Math.floor(projectedBytes / 2)));
-  const ok = job.result.exitCode === 0 && !job.result.timedOut;
+  const ok =
+    job.status === 'succeeded' && job.result.exitCode === 0 && !job.result.timedOut && job.result.signal === null;
   return {
     ok,
     summary: ok

@@ -355,17 +355,18 @@ export class RunnerJournal {
     this.patchJob(jobId, { status: 'running' });
   }
 
-  succeedJob(jobId: string, result: WorkspaceJobResult): void {
+  completeJob(jobId: string, result: WorkspaceJobResult): void {
     if (
       Buffer.byteLength(result.stdout, 'utf8') + Buffer.byteLength(result.stderr, 'utf8') >
       MAX_WORKSPACE_JOB_OUTPUT_BYTES
     ) {
       throw new Error('JOB_OUTPUT_LIMIT_INVALID');
     }
+    const succeeded = result.exitCode === 0 && !result.timedOut && result.signal === null;
     this.patchJob(jobId, {
-      status: 'succeeded',
+      status: succeeded ? 'succeeded' : 'failed',
       result,
-      error: null,
+      error: succeeded ? null : result.timedOut ? 'WORKSPACE_JOB_TIMEOUT' : 'WORKSPACE_JOB_NONZERO_EXIT',
       completedAt: Math.floor(Date.now() / 1000),
     });
   }
