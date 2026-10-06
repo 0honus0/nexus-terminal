@@ -21,6 +21,7 @@ export const E2E_PORTS = {
   browserControl: parsePort('NEXUS_E2E_BROWSER_CONTROL_PORT', 29093),
   browserCdp: parsePort('NEXUS_E2E_BROWSER_CDP_PORT', 29094),
   agentRunner: parsePort('NEXUS_E2E_AGENT_RUNNER_PORT', 29095),
+  deploymentPage: parsePort('NEXUS_E2E_DEPLOYMENT_PAGE_PORT', 29097),
 } as const;
 
 export const E2E_URLS = {
@@ -35,4 +36,5 @@ export const E2E_URLS = {
   openAiProviderOrigin: `http://127.0.0.1:${E2E_PORTS.openAiProvider}`,
   browserControlOrigin: `http://127.0.0.1:${E2E_PORTS.browserControl}`,
   browserCdpOrigin: `http://127.0.0.1:${E2E_PORTS.browserCdp}`,
+  deploymentPageOrigin: `http://127.0.0.1:${E2E_PORTS.deploymentPage}`,
 } as const;

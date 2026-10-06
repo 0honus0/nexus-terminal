@@ -203,10 +203,12 @@
 
 ### 临时文档退出条件
 
-### A07 当前执行（隔离浏览器页面/截图，未闭环）
+### A07 本地闭环（隔离浏览器页面/截图，canonical Actions 未验收）
+
+- 确定性生产Run/真实Chromium回归补齐：旧snapshot引用实际触发BROWSER_NODE_STALE，读取新snapshot前后状态仍Not deployed；新引用点击后独立state确认部署恰好1次，语义状态Deployed fixture-v1，截图认证下载/PNG/hash/size及浏览器image.decode尺寸通过，会话context回到原baseline。反例发现旧引用在动作派发前拒绝仍被当unknown导致interrupted/reconciliation；以适配器专用未派发错误在click/type工具边界返回confirmed failure修复，不按错误字符串宽泛降级、不改变已派发断连/超时unknown。首次Provider URL解析吞入上下文JSON引号导致404、以及修复前interrupted证据均保留。完整functional-regressions20项、check、完整build通过；结合下述真实模型证据，A07本地关闭，A08可开始；canonical Actions未验收。
 
 - 真实Luna low Run1cfa6e17-2d3b-415e-848d-fb5b755dddb1／Threadef66ea30-97d6-49d7-84d5-56fac60a9005 completed／verified、无reconciliation；独立Chromium target a07-isolated，不连接用户浏览器。实际session open→navigate→snapshot初始Not deployed→click一次Deploy fixture-v1→snapshot Deployed fixture-v1→发现/调用截图工具→close。页面是已部署的隔离fixture，按钮只变更该fixture状态，不代表线上发布。
-- 测试端独立GET state确认deployed=true/deployments=1/release=fixture-v1；截图Artifactee0f98f9-2762-43ed-8e26-65ecce1f24cd认证下载200/image/png，11574字节、800×600、SHA256 4c38f105b495f632290a8468d8bf6b71e748ea0ca528522b509e63198a5f3d66与工具返回匹配，context回到空集。观察脚本首次误取顶层hash，按data.artifact.sha256修正，未重复操作。临时Browser target已移除且保留其他配置，两个自有fixture进程收到SIGTERM并完成；截图保留作真实E2E证据，不新增人工image review流程。证据/tmp/opencode/a07-{browser-settings-before,baseline,input,result,independent,cleanup}.json及a07-screenshot.png。确定性Browser交互/Artifact链和有效反例仍待补，A07未闭环，A08未开始，ACP继续暂跳过。
+- 测试端独立GET state确认deployed=true/deployments=1/release=fixture-v1；截图Artifactee0f98f9-2762-43ed-8e26-65ecce1f24cd认证下载200/image/png，11574字节、800×600、SHA256 4c38f105b495f632290a8468d8bf6b71e748ea0ca528522b509e63198a5f3d66与工具返回匹配，context回到空集。观察脚本首次误取顶层hash，按data.artifact.sha256修正，未重复操作。临时Browser target已移除且保留其他配置，两个自有fixture进程收到SIGTERM并完成；截图保留作真实E2E证据，不新增人工image review流程。证据/tmp/opencode/a07-{browser-settings-before,baseline,input,result,independent,cleanup}.json及a07-screenshot.png。确定性回归与本地闭环见上项，ACP继续暂跳过。
 
 ### A06 本地闭环（指定 Node 工具环境，canonical Actions 未验收）
 

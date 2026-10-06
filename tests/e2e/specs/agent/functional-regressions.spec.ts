@@ -102,6 +102,96 @@ const execute = async (
   return { run, ledger, text: textResult! };
 };
 
+test('A07 browser rejects stale click then deploys once and delivers a readable PNG Artifact', async ({
+  request,
+  page,
+}) => {
+  const context = await prepare(request);
+  const contexts = async () =>
+    (await (await fetch(`${E2E_URLS.browserControlOrigin}/contexts`)).json()).browserContextIds;
+  const baseline = await contexts();
+  const state = async () => {
+    const response = await fetch(`${E2E_URLS.deploymentPageOrigin}/state`);
+    expect(response.ok).toBe(true);
+    return response.json();
+  };
+  expect(await state()).toEqual({ deployed: false, deployments: 0, release: 'fixture-v1' });
+  const settings = (await (await request.get('/api/v1/agent/settings')).json()).data;
+  const configured = await request.patch('/api/v1/agent/settings', {
+    headers: context.headers,
+    data: {
+      expectedVersion: settings.revision,
+      patch: {
+        browser: {
+          targets: [
+            {
+              id: 'e2e-deployment',
+              endpoints: [
+                {
+                  scope: 'external-network',
+                  via: 'backend',
+                  url: E2E_URLS.browserCdpOrigin,
+                  priority: 1,
+                  allowPlaintext: true,
+                  verifyTls: true,
+                },
+              ],
+              allowedUrlPatterns: [E2E_URLS.deploymentPageOrigin],
+            },
+          ],
+        },
+      },
+    },
+  });
+  expect(configured.ok(), await configured.text()).toBe(true);
+  const result = await execute(request, context, `E2E_BROWSER_DEPLOY url=${E2E_URLS.deploymentPageOrigin}/`);
+  expect(result.run.needsReconciliation).toBe(false);
+  const results = result.ledger
+    .filter((entry) => entry.kind === 'tool_result')
+    .map((entry) => JSON.parse(entry.payload.text!));
+  expect(results[4]).toMatchObject({
+    ok: false,
+    errorCode: 'BROWSER_NODE_STALE',
+    outcome: 'confirmed',
+    verification: { status: 'failed' },
+  });
+  expect(results[2].data.snapshotId).not.toBe(results[3].data.snapshotId);
+  expect(JSON.stringify(results[5].data.nodes)).toContain('Not deployed');
+  expect(results[6].ok).toBe(true);
+  expect(JSON.stringify(results[7].data.nodes)).toContain('Deployed fixture-v1');
+  expect(await state()).toEqual({ deployed: true, deployments: 1, release: 'fixture-v1' });
+  const capture = results.find((item) => item.data?.type === 'browser_screenshot_capture');
+  expect(capture).toMatchObject({
+    ok: true,
+    data: {
+      targetId: 'e2e-deployment',
+      url: `${E2E_URLS.deploymentPageOrigin}/`,
+      artifact: { mediaType: 'image/png' },
+    },
+  });
+  const artifact = capture.data.artifact;
+  expect(result.text).toContain(artifact.id);
+  const downloaded = await request.get(`/api/v1/apps/nexus.agent/artifacts/${artifact.id}/content`);
+  expect(downloaded.status()).toBe(200);
+  expect(downloaded.headers()['content-type']).toContain('image/png');
+  const bytes = await downloaded.body();
+  expect(bytes.length).toBe(artifact.sizeBytes);
+  expect(createHash('sha256').update(bytes).digest('hex')).toBe(artifact.sha256);
+  expect(bytes.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+  // Decode delivered bytes, rather than treating a PNG signature as a readable image.
+  const dimensions = await page.evaluate(async (base64) => {
+    const image = new Image();
+    image.src = 'data:image/png;base64,' + base64;
+    await image.decode();
+    return { width: image.naturalWidth, height: image.naturalHeight };
+  }, bytes.toString('base64'));
+  expect(dimensions).toEqual(capture.data.viewport);
+  expect(dimensions.width).toBeGreaterThan(0);
+  expect(dimensions.height).toBeGreaterThan(0);
+  expect(results.at(-1)).toMatchObject({ ok: true, summary: 'Browser session closed.' });
+  await expect.poll(contexts).toEqual(baseline);
+});
+
 test('A06 frozen environment rejects overrides and stale Catalog then executes a real Workspace Job', async ({
   request,
 }) => {

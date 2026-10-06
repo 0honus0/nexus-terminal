@@ -1219,7 +1219,7 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
 
   private requireNode(sessionId: string, snapshotId: string, nodeRef: string): ActiveBrowserSession {
     const active = this.requireSession(sessionId);
-    if (active.snapshotId !== snapshotId || !active.nodes.has(nodeRef)) throw new Error('BROWSER_NODE_STALE');
+    if (active.snapshotId !== snapshotId || !active.nodes.has(nodeRef)) throw new BrowserActionNotDispatchedError();
     return active;
   }
 
@@ -1245,3 +1245,4 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
     };
   }
 }
+import { BrowserActionNotDispatchedError } from '../../../modules/agent/ai/browser-action-not-dispatched';

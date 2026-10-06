@@ -103,6 +103,8 @@ Backend 正常停机时，Child 模型执行中断不作为用户取消，也不
 
 取消整个 Run 会同时中断其 Root 和 Child 执行。Root 等待子任务交接时不占用活跃执行计数；已开始的参与者完成取消结算后，Run 从 `cancelling` 收敛为 `cancelled` 并回收该 Run 的 Browser session，不依赖模型先返回正常响应。取消不回滚已经发生的外部副作用。
 
+Browser 点击／输入必须使用最新 snapshot 的 nodeRef。适配器在派发任何动作前拒绝过期引用时，返回 `BROWSER_NODE_STALE` 的已确认失败，不要求副作用 reconciliation；应先读取新 snapshot，再决定是否执行新动作。动作已派发后的断连、超时等不能据此视为未执行，仍保留未知副作用边界。
+
 Root 调用子任务 join 且条件尚未满足时让出执行槽位，等待子任务进展后恢复，不在等待状态继续发起模型请求。独立取消子任务不等于取消整个 Run；父级可在 join 被唤醒后继续处理结果。
 
 在等待审批时取消 Run，同样回收已打开的 Browser session，并使未消费审批失效；晚到的批准不能恢复被取消的 Run 或执行原命令。

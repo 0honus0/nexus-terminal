@@ -262,6 +262,65 @@ const server = http.createServer(async (request, response) => {
   }
   const outputCase = regressionInputs.modelOutputs.find((fixture) => latestUserText.includes(fixture.marker));
   const fileLifecycle = latestUserText.match(/E2E_FILE_LIFECYCLE connection=(\d+)/);
+  const browserDeploy = latestUserText.match(/E2E_BROWSER_DEPLOY url=([^\s"\\]+)/);
+  if (browserDeploy) {
+    const data = (id) => {
+      const message = messages.find((item) => item.role === 'tool' && item.tool_call_id === id);
+      return message ? JSON.parse(message.content) : null;
+    };
+    const session = () => data('page_open').data.sessionId;
+    const click = (id) => {
+      const snapshot = data(id).data;
+      const button = snapshot.nodes.find((node) => node.name === 'Deploy fixture-v1' && node.tag === 'button');
+      if (!button) throw Error('DEPLOY_BUTTON_NOT_OBSERVED');
+      return { sessionId: session(), snapshotId: snapshot.snapshotId, nodeRef: button.nodeRef };
+    };
+    const steps = [
+      ['page_open', 'browser_session_open', { targetId: 'e2e-deployment' }],
+      ['page_navigate', 'browser_navigate', () => ({ sessionId: session(), url: browserDeploy[1] })],
+      ['page_old', 'browser_snapshot_read', () => ({ sessionId: session() })],
+      ['page_fresh', 'browser_snapshot_read', () => ({ sessionId: session() })],
+      ['page_stale_click', 'browser_click', () => click('page_old')],
+      ['page_before', 'browser_snapshot_read', () => ({ sessionId: session() })],
+      ['page_click', 'browser_click', () => click('page_before')],
+      ['page_after', 'browser_snapshot_read', () => ({ sessionId: session() })],
+      ['page_capture_discover', 'tool_search', { query: 'browser_screenshot_capture', limit: 1 }],
+      [
+        'page_capture',
+        'tool_invoke',
+        () => ({ handle: data('page_capture_discover').data.matches[0].handle, arguments: { sessionId: session() } }),
+      ],
+      ['page_close', 'browser_session_close', () => ({ sessionId: session() })],
+    ];
+    for (const [id, name, args] of steps) {
+      const result = data(id);
+      if (result && !result.ok && id !== 'page_stale_click') {
+        regressionResponse(response, { content: 'Browser deployment failed; inspect durable evidence.' });
+        return;
+      }
+      if (!result) {
+        regressionResponse(
+          response,
+          {
+            tool_calls: [
+              {
+                index: 0,
+                id,
+                type: 'function',
+                function: { name, arguments: JSON.stringify(typeof args === 'function' ? args() : args) },
+              },
+            ],
+          },
+          'tool_calls',
+        );
+        return;
+      }
+    }
+    regressionResponse(response, {
+      content: `Browser deployed fixture-v1; screenshot Artifact=${data('page_capture').data.artifact.id}; session closed.`,
+    });
+    return;
+  }
   if (latestUserText.includes('E2E_FROZEN_ENVIRONMENT')) {
     const data = (id) => {
       const message = messages.find((item) => item.role === 'tool' && item.tool_call_id === id);

@@ -1,4 +1,5 @@
 import type { JsonValue } from '../../../agent.types';
+import { BrowserActionNotDispatchedError } from '../../../ai/browser-action-not-dispatched';
 import type { BrowserGatewayPort } from '../../../ai/integrations.types';
 import type { AgentTool } from '../../../capabilities/tool.types';
 import type { BrowserSessionBindingAuthority } from './browser-session-binding-authority';
@@ -92,21 +93,39 @@ export const createBrowserInteractionTools = (
       }
       const snapshotId = string(args.snapshotId, MAX_ID_BYTES);
       const nodeRef = string(args.nodeRef, MAX_ID_BYTES);
-      const state =
-        action === 'click'
-          ? await gateway.click(sessionId, snapshotId, nodeRef, { settleMs }, context.signal)
-          : await gateway.type(
-              sessionId,
-              snapshotId,
-              nodeRef,
-              string(args.text, MAX_TYPE_BYTES, true),
-              { settleMs },
-              context.signal,
-            );
-      return result(`Browser ${action} completed.`, state as unknown as JsonValue, {
-        key: 'agent.conversation.toolSummary.browserActionCompleted',
-        params: { actionKey: `agent.conversation.toolSummary.labels.browserAction.${action}` },
-      });
+      try {
+        const state =
+          action === 'click'
+            ? await gateway.click(sessionId, snapshotId, nodeRef, { settleMs }, context.signal)
+            : await gateway.type(
+                sessionId,
+                snapshotId,
+                nodeRef,
+                string(args.text, MAX_TYPE_BYTES, true),
+                { settleMs },
+                context.signal,
+              );
+        return result(`Browser ${action} completed.`, state as unknown as JsonValue, {
+          key: 'agent.conversation.toolSummary.browserActionCompleted',
+          params: { actionKey: `agent.conversation.toolSummary.labels.browserAction.${action}` },
+        });
+      } catch (error) {
+        if (!(error instanceof BrowserActionNotDispatchedError)) throw error;
+        return {
+          ok: false,
+          summary: 'Browser node reference is stale; no action was dispatched. Read a fresh snapshot before retrying.',
+          data: { error: { code: 'BROWSER_NODE_STALE' } },
+          artifactRefs: [],
+          truncated: false,
+          outcome: 'confirmed',
+          errorCode: 'BROWSER_NODE_STALE',
+          verification: {
+            status: 'failed',
+            summary: 'The adapter rejected the stale reference before dispatching any browser action.',
+            evidenceRefs: [],
+          },
+        };
+      }
     },
   })),
   {
