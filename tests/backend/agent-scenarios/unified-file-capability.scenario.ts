@@ -443,6 +443,88 @@ export const unifiedFileCapabilityScenario = async () => {
       const moved = `${target.root}/moved.txt`;
       const missing = `${target.root}/missing.txt`;
       const beforeState = target.target === 'workspace' ? statWorkspacePath(workRoot, source) : inspectSsh(source);
+      const canary = 'PRIVATE_FILE_ARGUMENT_CANARY';
+      for (const fixture of [
+        {
+          name: 'file_read',
+          args: { path: source, offsetBytes: -1 },
+          code: 'FILE_ARGUMENT_INTEGER_INVALID',
+          detail: 'offsetBytes',
+        },
+        {
+          name: 'file_read',
+          args: { path: source, maxBytes: 65537 },
+          code: 'FILE_ARGUMENT_INTEGER_INVALID',
+          detail: 'maxBytes',
+        },
+        {
+          name: 'file_list',
+          args: { path: target.root, maxEntries: 0 },
+          code: 'FILE_ARGUMENT_INTEGER_INVALID',
+          detail: 'maxEntries',
+        },
+        {
+          name: 'file_search',
+          args: { path: source, query: canary, contextLines: 6 },
+          code: 'FILE_ARGUMENT_INTEGER_INVALID',
+          detail: 'contextLines',
+        },
+        {
+          name: 'file_search',
+          args: { path: source, query: '', maxResults: 20 },
+          code: 'FILE_ARGUMENT_STRING_INVALID',
+          detail: 'query',
+        },
+        {
+          name: 'file_write',
+          args: { path: missing, content: canary, mode: 512 },
+          code: 'FILE_ARGUMENT_INTEGER_INVALID',
+          detail: 'mode',
+        },
+        {
+          name: 'file_write',
+          args: { path: missing, content: canary + '\0' },
+          code: 'FILE_ARGUMENT_CONTENT_INVALID',
+          detail: 'content',
+        },
+        {
+          name: 'file_move',
+          args: { path: source, destinationPath: '' },
+          code: 'FILE_ARGUMENT_STRING_INVALID',
+          detail: 'destinationPath',
+        },
+        {
+          name: 'file_delete',
+          args: { path: source, recursive: canary },
+          code: 'FILE_ARGUMENT_BOOLEAN_INVALID',
+          detail: 'recursive',
+        },
+        {
+          name: 'file_read',
+          args: { path: source, extra: canary },
+          code: 'FILE_ARGUMENT_FIELD_UNSUPPORTED',
+          detail: 'schema',
+        },
+        { name: 'file_search', args: { path: missing, query: canary }, code: 'FILE_NOT_FOUND', detail: 'path' },
+      ]) {
+        await assert.rejects(
+          () => invoke(fixture.name, { target: target.target, id: target.id, ...fixture.args } as JsonValue),
+          (error: unknown) => {
+            const result = failedToolResult(error, {
+              fallbackCode: 'TOOL_ARGUMENTS_INVALID',
+              summaryPrefix: 'Rejected',
+              verificationSummary: 'Not executed.',
+            });
+            assert.equal(result.errorCode, fixture.code);
+            assert.ok(result.summary.includes(fixture.detail));
+            assert.equal(JSON.stringify(result).includes(canary), false);
+            return true;
+          },
+        );
+      }
+      const missingAfterReject =
+        target.target === 'workspace' ? statWorkspacePath(workRoot, missing) : inspectSsh(missing);
+      assert.equal(missingAfterReject.exists, false, 'Invalid file writes must not create a destination');
       for (const fixture of [
         {
           name: 'file_write',
@@ -561,7 +643,7 @@ export const unifiedFileCapabilityScenario = async () => {
           context,
           7,
         ),
-      /TOOL_ARGUMENTS_INVALID/,
+      /FILE_ARGUMENT_INTEGER_INVALID/,
     );
     const privateWrite = await fileWriteTool.inspect(
       { target: 'workspace', id: 'ws-file', path: '/workspace/work/mode-hash.txt', content: '', mode: 0o600 },

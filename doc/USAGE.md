@@ -371,6 +371,8 @@ Agent 的 file_write 在 SSH／Workspace 上新建文件默认使用 0600，覆�
 
 通用文件工具在 Workspace／SSH 使用相同状态错误：file_write 的目录目标返回 FILE_WRITE_REQUIRES_FILE；file_move 的源不存在、源目标相同和目标已存在分别返回 FILE_NOT_FOUND、FILE_MOVE_SAME_PATH、FILE_MOVE_DESTINATION_EXISTS，不覆盖已有目标；file_delete 的路径不存在返回 FILE_NOT_FOUND。错误提供安全纠正说明，不回显输入路径，不绕过原 hash／metadata 与权限检查。
 
+文件参数错误用 FILE_ARGUMENT_* 区分对象、未知字段、目标类型、字符串／内容、整数范围、布尔值和内部 hash 格式；字符串／整数错误说明对应字段及既定 UTF-8 字节／范围约束，不回显输入值。file_search 的不存在路径同样返回 FILE_NOT_FOUND；无效输入不执行文件写入，内部冻结 hash 与资源变化仍分别处理。
+
 Memory 候选的 confidence 接受 0 到 1 的有限小数（如 0.5、0.8）；工具检查和操作哈希保留原始数值，不要求整数。候选仍须用户审核发布后才进入 Recall。
 
 Memory 管理和跨 App 导入来源可逐页加载更早记录，每页最多 200 条，按创建时间／ID 倒序；审核更新不改变分页排序。重新加载从首页开始，分页不是跨请求一致性快照。revoked／expired 历史仍保留，不自动物理删除，当前没有 Memory 总量硬配额，Recall 限制不等于存储容量限制。

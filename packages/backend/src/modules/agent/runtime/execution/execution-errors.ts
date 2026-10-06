@@ -37,6 +37,14 @@ const ERROR_DETAILS: Readonly<Record<string, string>> = {
   ACP_SSH_WRITE_FAILED:
     'ACP protocol input could not be written to the remote process; verify channel state before further action.',
   FILE_PATCH_BINARY_UNSUPPORTED: 'file_patch edits UTF-8 text only; binary patch content is unsupported.',
+  FILE_ARGUMENT_OBJECT_REQUIRED: 'File tool arguments must be a JSON object.',
+  FILE_ARGUMENT_FIELD_UNSUPPORTED:
+    'Remove fields not declared by the selected file tool schema; internal hash fields are host-resolved, not model inputs.',
+  FILE_ARGUMENT_TARGET_INVALID: 'Provide target as workspace or ssh with an explicit id.',
+  FILE_ARGUMENT_BOOLEAN_INVALID: 'recursive must be a boolean; recursive directory deletion requires explicit true.',
+  FILE_ARGUMENT_HASH_INVALID: 'A frozen content hash must contain exactly 64 lowercase hexadecimal characters.',
+  FILE_ARGUMENT_EXPECTED_FILES_INVALID: 'Frozen patch preconditions require 1 to 16 path/hash entries.',
+  FILE_ARGUMENT_EXPECTED_FILES_DUPLICATE: 'Frozen patch preconditions must not repeat a file path.',
   FILE_PATCH_CREATE_UNSUPPORTED: 'file_patch cannot create files; use file_write with content.',
   FILE_PATCH_DELETE_UNSUPPORTED: 'file_patch cannot delete files; use file_delete with explicit authorization.',
   FILE_PATCH_RENAME_UNSUPPORTED: 'file_patch must keep the same old/new path; use file_move for renaming.',

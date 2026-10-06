@@ -19,43 +19,57 @@ const MAX_CONTENT_BYTES = 24 * 1024;
 const MAX_PATCH_BYTES = 24 * 1024;
 
 const record = (value: JsonValue): Record<string, JsonValue> => {
-  if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error('TOOL_ARGUMENTS_INVALID');
+  if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error('FILE_ARGUMENT_OBJECT_REQUIRED');
   return value as Record<string, JsonValue>;
 };
 const onlyKeys = (value: Record<string, JsonValue>, allowed: readonly string[]): void => {
   const keys = new Set(allowed);
-  if (Object.keys(value).some((key) => !keys.has(key))) throw new Error('TOOL_ARGUMENTS_INVALID');
+  if (Object.keys(value).some((key) => !keys.has(key))) throw new Error('FILE_ARGUMENT_FIELD_UNSUPPORTED');
 };
-const stringValue = (value: JsonValue | undefined, maxBytes: number): string => {
+const stringValue = (value: JsonValue | undefined, maxBytes: number, field = 'value'): string => {
   if (typeof value !== 'string' || !value || value.includes('\0') || Buffer.byteLength(value, 'utf8') > maxBytes) {
-    throw new Error('TOOL_ARGUMENTS_INVALID');
+    throw new Error('FILE_ARGUMENT_STRING_INVALID', {
+      cause: new Error(`${field} must be a non-empty string without NUL, at most ${maxBytes} UTF-8 bytes.`),
+    });
   }
   return value;
 };
 const contentValue = (value: JsonValue | undefined, maxBytes: number): string => {
   if (typeof value !== 'string' || value.includes('\0') || Buffer.byteLength(value, 'utf8') > maxBytes) {
-    throw new Error('TOOL_ARGUMENTS_INVALID');
+    throw new Error('FILE_ARGUMENT_CONTENT_INVALID', {
+      cause: new Error(
+        `content must be a string without NUL, at most ${maxBytes} UTF-8 bytes; an empty file is allowed.`,
+      ),
+    });
   }
   return value;
 };
 const targetKind = (value: JsonValue | undefined): AgentTargetKind => {
-  if (value !== 'workspace' && value !== 'ssh') throw new Error('TOOL_ARGUMENTS_INVALID');
+  if (value !== 'workspace' && value !== 'ssh') throw new Error('FILE_ARGUMENT_TARGET_INVALID');
   return value;
 };
-const boundedInteger = (value: JsonValue | undefined, min: number, max: number, fallback: number): number => {
+const boundedInteger = (
+  value: JsonValue | undefined,
+  min: number,
+  max: number,
+  fallback: number,
+  field = 'value',
+): number => {
   if (value === undefined) return fallback;
   if (!Number.isSafeInteger(value) || Number(value) < min || Number(value) > max)
-    throw new Error('TOOL_ARGUMENTS_INVALID');
+    throw new Error('FILE_ARGUMENT_INTEGER_INVALID', {
+      cause: new Error(`${field} must be a safe integer from ${min} to ${max}.`),
+    });
   return Number(value);
 };
 const booleanValue = (value: JsonValue | undefined, fallback: boolean): boolean => {
   if (value === undefined) return fallback;
-  if (typeof value !== 'boolean') throw new Error('TOOL_ARGUMENTS_INVALID');
+  if (typeof value !== 'boolean') throw new Error('FILE_ARGUMENT_BOOLEAN_INVALID');
   return value;
 };
 const selectorFrom = (args: Record<string, JsonValue>) => ({
   target: targetKind(args.target),
-  id: stringValue(args.id, MAX_ID_BYTES),
+  id: stringValue(args.id, MAX_ID_BYTES, 'id'),
 });
 const statePreconditions = (state: UnifiedFileStat): ToolPrecondition[] => [
   { kind: 'fileHash', key: state.path, observedValue: state.type === 'file' ? state.sha256 : null },
@@ -205,7 +219,7 @@ export const createFileReadTool = (files: FileCapabilityService, cryptoHash: Cry
     const args = record(input);
     onlyKeys(args, ['target', 'id', 'path', 'offsetBytes', 'maxBytes']);
     const resolved = await files.resolve(context, selectorFrom(args));
-    const state = await files.stat(context, resolved, stringValue(args.path, MAX_PATH_BYTES));
+    const state = await files.stat(context, resolved, stringValue(args.path, MAX_PATH_BYTES, 'path'));
     if (!state.exists) throw new Error('FILE_NOT_FOUND');
     if (state.type !== 'file') throw new Error('FILE_READ_REQUIRES_FILE');
     if (!state.sha256) throw new Error('FILE_HASH_UNAVAILABLE');
@@ -213,8 +227,8 @@ export const createFileReadTool = (files: FileCapabilityService, cryptoHash: Cry
       target: resolved.selector.target,
       id: resolved.selector.id,
       path: state.path,
-      offsetBytes: boundedInteger(args.offsetBytes, 0, Number.MAX_SAFE_INTEGER, 0),
-      maxBytes: boundedInteger(args.maxBytes, 1, 64 * 1024, 64 * 1024),
+      offsetBytes: boundedInteger(args.offsetBytes, 0, Number.MAX_SAFE_INTEGER, 0, 'offsetBytes'),
+      maxBytes: boundedInteger(args.maxBytes, 1, 64 * 1024, 64 * 1024, 'maxBytes'),
     });
   },
   execute: async (inspection, context) => {
@@ -257,14 +271,14 @@ export const createFileListTool = (files: FileCapabilityService, cryptoHash: Cry
     const args = record(input);
     onlyKeys(args, ['target', 'id', 'path', 'maxEntries']);
     const resolved = await files.resolve(context, selectorFrom(args));
-    const state = await files.stat(context, resolved, stringValue(args.path, MAX_PATH_BYTES));
+    const state = await files.stat(context, resolved, stringValue(args.path, MAX_PATH_BYTES, 'path'));
     if (!state.exists) throw new Error('FILE_NOT_FOUND');
     if (state.type !== 'directory') throw new Error('FILE_LIST_REQUIRES_DIRECTORY');
     return readInspection(files, cryptoHash, 'file_list', args, context, policyRevision, state, {
       target: resolved.selector.target,
       id: resolved.selector.id,
       path: state.path,
-      maxEntries: boundedInteger(args.maxEntries, 1, 500, 100),
+      maxEntries: boundedInteger(args.maxEntries, 1, 500, 100, 'maxEntries'),
     });
   },
   execute: async (inspection, context) => {
@@ -314,16 +328,16 @@ export const createFileSearchTool = (files: FileCapabilityService, cryptoHash: C
     const args = record(input);
     onlyKeys(args, ['target', 'id', 'path', 'query', 'glob', 'maxResults', 'contextLines']);
     const resolved = await files.resolve(context, selectorFrom(args));
-    const state = await files.stat(context, resolved, stringValue(args.path, MAX_PATH_BYTES));
-    if (!state.exists) throw new Error('NOT_FOUND');
+    const state = await files.stat(context, resolved, stringValue(args.path, MAX_PATH_BYTES, 'path'));
+    if (!state.exists) throw new Error('FILE_NOT_FOUND');
     return readInspection(files, cryptoHash, 'file_search', args, context, policyRevision, state, {
       target: resolved.selector.target,
       id: resolved.selector.id,
       path: state.path,
-      query: stringValue(args.query, 1024),
-      ...(args.glob === undefined ? {} : { glob: stringValue(args.glob, 512) }),
-      maxResults: boundedInteger(args.maxResults, 1, 100, 20),
-      contextLines: boundedInteger(args.contextLines, 0, 5, 2),
+      query: stringValue(args.query, 1024, 'query'),
+      ...(args.glob === undefined ? {} : { glob: stringValue(args.glob, 512, 'glob') }),
+      maxResults: boundedInteger(args.maxResults, 1, 100, 20, 'maxResults'),
+      contextLines: boundedInteger(args.contextLines, 0, 5, 2, 'contextLines'),
     });
   },
   execute: async (inspection, context) => {
@@ -353,8 +367,9 @@ const expectedSha256 = (args: Record<string, JsonValue>, current: string | null)
     if (current !== null) throw new Error('RESOURCE_CHANGED');
     return null;
   }
-  const expected = stringValue(args.expectedSha256, 64);
-  if (!/^[a-f0-9]{64}$/.test(expected) || expected !== current) throw new Error('RESOURCE_CHANGED');
+  const expected = stringValue(args.expectedSha256, 64, 'expectedSha256');
+  if (!/^[a-f0-9]{64}$/.test(expected)) throw new Error('FILE_ARGUMENT_HASH_INVALID');
+  if (expected !== current) throw new Error('RESOURCE_CHANGED');
   return expected;
 };
 
@@ -422,7 +437,7 @@ export const createFileWriteTool = (files: FileCapabilityService, cryptoHash: Cr
     const args = record(input);
     onlyKeys(args, ['target', 'id', 'path', 'content', 'expectedSha256', 'mode']);
     const resolved = await files.resolve(context, selectorFrom(args));
-    const state = await files.stat(context, resolved, stringValue(args.path, MAX_PATH_BYTES));
+    const state = await files.stat(context, resolved, stringValue(args.path, MAX_PATH_BYTES, 'path'));
     if (state.type === 'directory') throw new Error('FILE_WRITE_REQUIRES_FILE');
     const expected = expectedSha256(args, state.sha256);
     return mutationInspection(files, cryptoHash, 'file_write', 'mutate', args, context, policyRevision, [state], {
@@ -431,7 +446,7 @@ export const createFileWriteTool = (files: FileCapabilityService, cryptoHash: Cr
       path: state.path,
       content: contentValue(args.content, MAX_CONTENT_BYTES),
       expectedSha256: expected,
-      mode: boundedInteger(args.mode, 0, 0o777, state.mode === null ? 0o600 : state.mode & 0o777),
+      mode: boundedInteger(args.mode, 0, 0o777, state.mode === null ? 0o600 : state.mode & 0o777, 'mode'),
     });
   },
   execute: async (inspection, context) => {
@@ -462,14 +477,16 @@ export const createFileWriteTool = (files: FileCapabilityService, cryptoHash: Cr
 
 const expectedFilesMap = (value: JsonValue | undefined): Map<string, string> | undefined => {
   if (value === undefined) return undefined;
-  if (!Array.isArray(value) || value.length < 1 || value.length > 16) throw new Error('TOOL_ARGUMENTS_INVALID');
+  if (!Array.isArray(value) || value.length < 1 || value.length > 16)
+    throw new Error('FILE_ARGUMENT_EXPECTED_FILES_INVALID');
   const map = new Map<string, string>();
   for (const item of value) {
     const entry = record(item);
     onlyKeys(entry, ['path', 'sha256']);
-    const path = stringValue(entry.path, MAX_PATH_BYTES);
-    const digest = stringValue(entry.sha256, 64);
-    if (!/^[a-f0-9]{64}$/.test(digest) || map.has(path)) throw new Error('TOOL_ARGUMENTS_INVALID');
+    const path = stringValue(entry.path, MAX_PATH_BYTES, 'expectedFiles.path');
+    const digest = stringValue(entry.sha256, 64, 'expectedFiles.sha256');
+    if (!/^[a-f0-9]{64}$/.test(digest)) throw new Error('FILE_ARGUMENT_HASH_INVALID');
+    if (map.has(path)) throw new Error('FILE_ARGUMENT_EXPECTED_FILES_DUPLICATE');
     map.set(path, digest);
   }
   return map;
@@ -495,7 +512,7 @@ export const createFilePatchTool = (files: FileCapabilityService, cryptoHash: Cr
     const args = record(input);
     onlyKeys(args, ['target', 'id', 'patch', 'expectedFiles']);
     const resolved = await files.resolve(context, selectorFrom(args));
-    const patch = stringValue(args.patch, MAX_PATCH_BYTES);
+    const patch = stringValue(args.patch, MAX_PATCH_BYTES, 'patch');
     const prepared = await files.preparePatch(context, resolved, patch, expectedFilesMap(args.expectedFiles));
     const states = await Promise.all(prepared.map((change) => files.stat(context, resolved, change.path)));
     return mutationInspection(files, cryptoHash, 'file_patch', 'mutate', args, context, policyRevision, states, {
@@ -553,8 +570,8 @@ export const createFileMoveTool = (files: FileCapabilityService, cryptoHash: Cry
     onlyKeys(args, ['target', 'id', 'path', 'destinationPath', 'expectedSha256']);
     const resolved = await files.resolve(context, selectorFrom(args));
     const [source, destination] = await Promise.all([
-      files.stat(context, resolved, stringValue(args.path, MAX_PATH_BYTES)),
-      files.stat(context, resolved, stringValue(args.destinationPath, MAX_PATH_BYTES)),
+      files.stat(context, resolved, stringValue(args.path, MAX_PATH_BYTES, 'path')),
+      files.stat(context, resolved, stringValue(args.destinationPath, MAX_PATH_BYTES, 'destinationPath')),
     ]);
     if (!source.exists || source.type === null) throw new Error('FILE_NOT_FOUND');
     if (source.path === destination.path) throw new Error('FILE_MOVE_SAME_PATH');
@@ -622,7 +639,7 @@ export const createFileDeleteTool = (files: FileCapabilityService, cryptoHash: C
     const args = record(input);
     onlyKeys(args, ['target', 'id', 'path', 'recursive', 'expectedSha256']);
     const resolved = await files.resolve(context, selectorFrom(args));
-    const state = await files.stat(context, resolved, stringValue(args.path, MAX_PATH_BYTES));
+    const state = await files.stat(context, resolved, stringValue(args.path, MAX_PATH_BYTES, 'path'));
     if (!state.exists || state.type === null) throw new Error('FILE_NOT_FOUND');
     const expected = expectedSha256(args, state.type === 'file' ? state.sha256 : null);
     return mutationInspection(files, cryptoHash, 'file_delete', 'destructive', args, context, policyRevision, [state], {
