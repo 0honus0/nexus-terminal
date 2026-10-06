@@ -179,6 +179,9 @@ export class AgentSshSessions implements AgentSshSessionPort {
       try {
         assertActive(context);
         return await work(lease.filesystem);
+      } catch (error) {
+        assertActive(context);
+        throw error;
       } finally {
         clearTimeout(timer);
         context.signal.removeEventListener('abort', onAbort);

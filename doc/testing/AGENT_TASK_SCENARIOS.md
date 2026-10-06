@@ -205,6 +205,7 @@
 
 ### A02 当前执行（未完成）
 
+- SSH 文件 lease 错误归因与期限回归通过：取消保留原 AbortSignal.reason；deadline 打断远端挂住的 LSTAT 后报告 TOOL_TIMEOUT，不以 SFTP_CHANNEL_CLOSED 掩盖根因。真实 loopback SSH metadata 屏障独立确认已开始 I/O，期限后长会话 ready、并行 Job running；READ 取消断言原 reason 身份一致。
 - 长会话搜索取消产品 E2E 补齐：模拟 Provider 仅通过 tool_search/tool_invoke 提出打开显式会话及 file_search，生产 Agent→SSH/SFTP 在 READ 屏障 pending>0 后取消 Run；临时/显式两变体均在屏障未释放时 cancelled、pending=0，新独立请求正常命中。长连接保留及并行 Job 存活由真实 loopback SSH 回归独立断言，不以模型声明替代。仍未开始 A03。
 - 显式 SSH 长会话文件取消修复：文件操作改为 operation-owned SFTP lease；abort/deadline 关闭本次 channel 并直接拒绝其等待 I/O，不依赖远端 close 确认、不关闭长连接或并行 Job。通用 metadata/realpath/readdir/open/write 回调及 positioned read 均处理 lease 取消；打开中取消拒绝等待，晚到 channel 收尾。真实 loopback SSH 回归 READ 屏障→abort→读取拒绝→channel 关闭，长会话仍 ready、activeOperations 仅剩并行 Job，后续命令和 Job 复用原认证通过；既有 SSH 搜索三项产品 E2E 通过。旧回归错误断言同步为现有具体 SSH_SESSION_TARGET_MISMATCH，不放宽权限断言。仍需语义导航、ACP 完整链和真实 A02，A03 未开始。
 - SSH 搜索深层目录产品 E2E 通过：96 层真实目录下唯一 sentinel，生产 Agent→SSH/SFTP 返回 scannedFiles=1、scannedBytes=14、精确路径和行、truncated=false；独立读取确认内容不变，finally 清理目录。此例补齐深层树覆盖，不代替显式长会话取消、语义导航及 ACP 完整产品链路验收。

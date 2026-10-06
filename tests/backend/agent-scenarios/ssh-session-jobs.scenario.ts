@@ -31,6 +31,10 @@ export const sshSessionJobsScenario = async () => {
     readClosed = resolve;
   });
   let sftpChannels = 0;
+  let statStarted!: () => void;
+  const statBarrier = new Promise<void>((resolve) => {
+    statStarted = resolve;
+  });
   const server = new Server({ hostKeys: [key] }, (client) => {
     client.on('authentication', (auth) => {
       authentications++;
@@ -45,6 +49,7 @@ export const sshSessionJobsScenario = async () => {
           sftp.on('end', () => sftp.end());
           sftp.on('OPEN', (id) => sftp.handle(id, Buffer.from('fixture')));
           sftp.on('READ', () => readStarted());
+          sftp.on('LSTAT', () => statStarted());
           sftp.on('close', readClosed);
         });
         session.on('exec', (acceptCommand, _reject, info) => {
@@ -205,7 +210,7 @@ export const sshSessionJobsScenario = async () => {
         }
       },
     );
-    const readRejected = assert.rejects(blockedRead, /SFTP_CHANNEL_CLOSED/);
+    const readRejected = assert.rejects(blockedRead, (error: unknown) => error === abortRead.signal.reason);
     await readBarrier;
     abortRead.abort();
     await readRejected;
@@ -224,6 +229,17 @@ export const sshSessionJobsScenario = async () => {
     assert.deepEqual(await sessions.listJobs({ ...scoped, appId: 'other-app' }, 1), []);
     assert.deepEqual(await sessions.listJobs({ ...scoped, threadId: 'other-thread' }, 1), []);
     assert.equal(job.status, 'running');
+    const deadlineRead = sessions.withFileSystem(
+      { ...scoped, deadlineAt: Math.floor(Date.now() / 1000) + 2 },
+      1,
+      hash,
+      (filesystem) => filesystem.metadata('/held-stat.txt'),
+    );
+    const deadlineRejected = assert.rejects(deadlineRead, /TOOL_TIMEOUT/);
+    await statBarrier;
+    await deadlineRejected;
+    assert.equal((await sessions.list(scoped, 1, persistent.sessionId))[0].status, 'ready');
+    assert.equal((await sessions.listJobs(scoped, 1))[0].status, 'running');
     const other = await sessions.withSession(
       { ...scoped, runId: 'run-two', agentRuntimeId: 'child-two' },
       1,
