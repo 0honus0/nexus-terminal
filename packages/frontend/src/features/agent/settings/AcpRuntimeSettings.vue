@@ -824,6 +824,7 @@
               }}</span>
               <UiSelect
                 v-model="integrationForm.transport"
+                :aria-label="$t('agent.settings.acpRuntime.transport')"
                 :options="[
                   { value: 'workspace-profile', label: 'Workspace' },
                   { value: 'ssh', label: 'SSH' },
@@ -835,6 +836,8 @@
                 $t('agent.settings.acpRuntime.sshArgv')
               }}</span>
               <input v-model="integrationForm.argv" class="w-full rounded-lg border border-border bg-background p-2" />
+            </label>
+            <label v-if="integrationForm.transport === 'ssh'" class="block">
               <span class="mb-1 block text-xs font-medium text-foreground">{{
                 $t('agent.settings.acpRuntime.sshCwd')
               }}</span>

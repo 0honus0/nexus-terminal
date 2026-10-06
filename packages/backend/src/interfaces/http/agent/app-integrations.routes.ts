@@ -104,16 +104,46 @@ const mcpConfiguration = (value: unknown): AgentMcpIntegrationConfigurationDto =
 
 const acpConfiguration = (value: unknown): AgentAcpIntegrationConfigurationDto => {
   const body = record(value);
-  const allowed = new Set(['displayName', 'transport', 'profileId', 'protocolVersion']);
+  const allowed = new Set(['displayName', 'transport', 'profileId', 'protocolVersion', 'argv', 'cwd']);
   if (Object.keys(body).some((key) => !allowed.has(key))) throw new Error('VALIDATION_FAILED');
   if (
     typeof body.displayName !== 'string' ||
-    body.transport !== 'workspace-profile' ||
+    (body.transport !== 'workspace-profile' && body.transport !== 'ssh') ||
     typeof body.profileId !== 'string' ||
     body.protocolVersion !== '1'
   ) {
     throw new Error('VALIDATION_FAILED');
   }
+  if (body.transport === 'ssh') {
+    const argv = body.argv;
+    const cwd = body.cwd;
+    if (
+      !Array.isArray(argv) ||
+      argv.length < 1 ||
+      argv.length > 128 ||
+      !argv.every(
+        (arg): arg is string =>
+          typeof arg === 'string' && !arg.includes('\0') && Buffer.byteLength(arg, 'utf8') <= 8192,
+      ) ||
+      !argv[0] ||
+      Buffer.byteLength(JSON.stringify(argv), 'utf8') > 65536 ||
+      typeof cwd !== 'string' ||
+      !cwd.trim() ||
+      !cwd.startsWith('/') ||
+      cwd.includes('\0') ||
+      Buffer.byteLength(cwd, 'utf8') > 4096
+    )
+      throw new Error('ACP_SSH_CONFIGURATION_INVALID');
+    return {
+      displayName: body.displayName,
+      transport: 'ssh',
+      profileId: body.profileId,
+      protocolVersion: '1',
+      argv,
+      cwd,
+    };
+  }
+  if (body.argv !== undefined || body.cwd !== undefined) throw new Error('VALIDATION_FAILED');
   return {
     displayName: body.displayName,
     transport: 'workspace-profile',
