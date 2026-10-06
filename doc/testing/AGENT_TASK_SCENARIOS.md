@@ -203,6 +203,11 @@
 
 ### 临时文档退出条件
 
+### A08 本地闭环（授权内部署阻塞，canonical Actions 未验收）
+
+- 真实Luna low Run3dedb0a7-75f3-426b-9c7f-16d1ae55d3e3／Thread7d0757ad-636e-41cd-8f91-5ced95820003，plan/No Workspace/无SSH目标，completed_unverified、无reconciliation。实际只调用plan_update，明确未部署/未监听/未验证，保留准备/验证计划与下一轮明确选择环境、目标和授权的说明，不扩大本轮权限或冒称成功。独立数据库核对无Workspace/本Thread SSH Job、29182无监听；观察脚本首次误用SSH表不存在run_id，改按真实Thread身份核对。证据/tmp/opencode/a08-{input,result,independent}.json，无本轮执行资源需收尾。
+- 确定性反例聚焦通过：选中真实SSH目标且full_access的plan Run提出写文件Shell，执行前PLAN_MODE_TOOL_FORBIDDEN confirmed failure，文件未产生；保留blocked计划、明确未执行的部分结果、completed_unverified且无reconciliation。初始Provider漏建durable计划触发完成门禁、误传内部expectedRevision触发参数拒绝，日志保留并纠正fixture，未改产品门禁。完整functional-regressions21项及check通过，结合真实任务与独立无副作用证据，A08本地关闭；B01可开始，canonical Actions未验收，ACP继续暂跳过。
+
 ### A07 本地闭环（隔离浏览器页面/截图，canonical Actions 未验收）
 
 - 确定性生产Run/真实Chromium回归补齐：旧snapshot引用实际触发BROWSER_NODE_STALE，读取新snapshot前后状态仍Not deployed；新引用点击后独立state确认部署恰好1次，语义状态Deployed fixture-v1，截图认证下载/PNG/hash/size及浏览器image.decode尺寸通过，会话context回到原baseline。反例发现旧引用在动作派发前拒绝仍被当unknown导致interrupted/reconciliation；以适配器专用未派发错误在click/type工具边界返回confirmed failure修复，不按错误字符串宽泛降级、不改变已派发断连/超时unknown。首次Provider URL解析吞入上下文JSON引号导致404、以及修复前interrupted证据均保留。完整functional-regressions20项、check、完整build通过；结合下述真实模型证据，A07本地关闭，A08可开始；canonical Actions未验收。

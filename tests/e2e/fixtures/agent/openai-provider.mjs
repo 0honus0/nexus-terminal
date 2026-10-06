@@ -262,6 +262,71 @@ const server = http.createServer(async (request, response) => {
   }
   const outputCase = regressionInputs.modelOutputs.find((fixture) => latestUserText.includes(fixture.marker));
   const fileLifecycle = latestUserText.match(/E2E_FILE_LIFECYCLE connection=(\d+)/);
+  const blockedDeploy = latestUserText.match(/E2E_BLOCKED_DEPLOY connection=(\d+)/);
+  if (blockedDeploy) {
+    const tool = messages.find((item) => item.role === 'tool' && item.tool_call_id === 'blocked_shell');
+    if (!tool) {
+      regressionResponse(
+        response,
+        {
+          tool_calls: [
+            {
+              index: 0,
+              id: 'blocked_shell',
+              type: 'function',
+              function: {
+                name: 'shell_execute',
+                arguments: JSON.stringify({
+                  target: 'ssh',
+                  id: blockedDeploy[1],
+                  command: { kind: 'shell', shellScript: 'printf unauthorized > "$NEXUS_E2E_ROOT/blocked-deploy.txt"' },
+                }),
+              },
+            },
+          ],
+        },
+        'tool_calls',
+      );
+      return;
+    }
+    if (!messages.some((item) => item.role === 'tool' && item.tool_call_id === 'blocked_plan')) {
+      regressionResponse(
+        response,
+        {
+          tool_calls: [
+            {
+              index: 0,
+              id: 'blocked_plan',
+              type: 'function',
+              function: {
+                name: 'plan_update',
+                arguments: JSON.stringify({
+                  items: [
+                    {
+                      id: 'deployment',
+                      title: 'Deployment awaits a separately authorized execution Run',
+                      status: 'blocked',
+                      detail:
+                        'No mutation executed; preserve data and verify endpoints after explicit target/environment selection.',
+                      dependsOn: [],
+                      evidenceRefs: [],
+                    },
+                  ],
+                }),
+              },
+            },
+          ],
+        },
+        'tool_calls',
+      );
+      return;
+    }
+    regressionResponse(response, {
+      content:
+        'Deployment blocked by plan-only authorization. No service was deployed. Partial result: select an authorized execution target and environment in a new Run; preserve catalog data, verify health/catalog, and confirm managed cleanup. These are unexecuted steps, not success evidence.',
+    });
+    return;
+  }
   const browserDeploy = latestUserText.match(/E2E_BROWSER_DEPLOY url=([^\s"\\]+)/);
   if (browserDeploy) {
     const data = (id) => {

@@ -68,6 +68,7 @@ const execute = async (
   options: {
     connectionIds: number[];
     environment?: { recipeId: string; versions: Record<string, string>; catalogRevision: string };
+    executionMode?: 'plan' | 'execute';
   } = { connectionIds: [] },
 ) => {
   const created = await request.post('/api/v1/apps/nexus.agent/runs', {
@@ -79,7 +80,7 @@ const execute = async (
       agentDefinitionId: 'agent.default',
       model: context.model,
       approvalMode: 'full_access',
-      executionMode: 'execute',
+      executionMode: options.executionMode ?? 'execute',
       connectionIds: options.connectionIds,
       ...(options.environment ? { environment: options.environment } : {}),
     },
@@ -101,6 +102,37 @@ const execute = async (
   expect(textResult).toBeDefined();
   return { run, ledger, text: textResult! };
 };
+
+test('A08 plan-only deployment reports blocked partial result and cannot execute a proposed SSH mutation', async ({
+  request,
+}) => {
+  const context = await prepare(request);
+  const connectionId = await ensureTestSshConnection(request);
+  const marker = path.resolve(__dirname, '../../.tmp/ssh-root/blocked-deploy.txt');
+  const result = await execute(request, context, `E2E_BLOCKED_DEPLOY connection=${connectionId}`, {
+    connectionIds: [connectionId],
+    executionMode: 'plan',
+  });
+  expect(result.run.status).toBe('completed_unverified');
+  expect(result.run.needsReconciliation).toBe(false);
+  expect(result.run.definition).toMatchObject({ executionMode: 'plan', environment: null });
+  const results = result.ledger
+    .filter((entry) => entry.kind === 'tool_result')
+    .map((entry) => JSON.parse(entry.payload.text!));
+  expect(results).toHaveLength(2);
+  expect(results[0]).toMatchObject({
+    ok: false,
+    errorCode: 'PLAN_MODE_TOOL_FORBIDDEN',
+    outcome: 'confirmed',
+    verification: { status: 'failed' },
+  });
+  await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(results[1].ok).toBe(true);
+  expect(result.run.plan.items).toEqual([expect.objectContaining({ id: 'deployment', status: 'blocked' })]);
+  expect(result.text).toContain('No service was deployed');
+  expect(result.text).toContain('Partial result');
+  expect(result.text).toContain('unexecuted steps, not success evidence');
+});
 
 test('A07 browser rejects stale click then deploys once and delivers a readable PNG Artifact', async ({
   request,
