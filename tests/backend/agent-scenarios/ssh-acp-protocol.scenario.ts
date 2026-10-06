@@ -13,13 +13,22 @@ import type { AgentConnectionResolverPort } from '../../../packages/backend/src/
 import type { ToolContext } from '../../../packages/backend/src/modules/agent/capabilities/tool.types';
 import type { IntegrationView } from '../../../packages/backend/src/modules/agent/ai/integrations.types';
 
-export const sshAcpProtocolScenario = async () => {
+const runProtocol = async (mode: 'complete' | 'cancel' | 'disconnect') => {
   const methods: string[] = [];
   let commandText = '';
   let permissionDecision: unknown;
   let channelClosed!: () => void;
   const closed = new Promise<void>((resolve) => {
     channelClosed = resolve;
+  });
+  let promptReceived!: () => void;
+  const waitingForResponse = new Promise<void>((resolve) => {
+    promptReceived = resolve;
+  });
+  let disconnect!: () => void;
+  let connectionClosed!: () => void;
+  const disconnected = new Promise<void>((resolve) => {
+    connectionClosed = resolve;
   });
   const server = new Server(
     {
@@ -28,6 +37,8 @@ export const sshAcpProtocolScenario = async () => {
       ],
     },
     (client) => {
+      disconnect = () => client.end();
+      client.on('close', connectionClosed);
       client.on('error', () => {});
       client.on('authentication', (auth) => auth.accept());
       client.on('ready', () =>
@@ -63,6 +74,8 @@ export const sshAcpProtocolScenario = async () => {
                   send({ jsonrpc: '2.0', id: message.id, result: { sessionId: 'ssh-session' } });
                 if (message.method === 'session/prompt') {
                   promptId = message.id;
+                  promptReceived();
+                  if (mode !== 'complete') continue;
                   send({
                     jsonrpc: '2.0',
                     id: 'permission',
@@ -103,8 +116,10 @@ export const sshAcpProtocolScenario = async () => {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
   assert.ok(address && typeof address !== 'string');
+  let connectionAttempts = 0;
   const manager = new ExecutionSessionManager({
     connect: async () => {
+      connectionAttempts++;
       const client = new Client();
       await new Promise<void>((resolve, reject) => {
         client.once('ready', resolve);
@@ -149,7 +164,7 @@ export const sshAcpProtocolScenario = async () => {
     },
   } as IntegrationView;
   try {
-    const result = await new AcpAdapter({
+    const execution = new AcpAdapter({
       open: async () => {
         throw new Error('Wrong transport');
       },
@@ -165,15 +180,33 @@ export const sshAcpProtocolScenario = async () => {
         openTransport: () => ssh.open(context, 1, 'fixture', ['agent', '--acp'], '/srv/project'),
       },
     );
+    if (mode !== 'complete') {
+      const rejected = assert.rejects(execution, mode === 'cancel' ? /ABORTED/ : /ACP_SSH_DISCONNECTED/);
+      await waitingForResponse;
+      assert.deepEqual(methods, ['initialize', 'session/new', 'session/prompt']);
+      if (mode === 'cancel') abort.abort(new Error('ABORTED'));
+      else disconnect();
+      await rejected;
+      await closed;
+      await disconnected;
+      assert.equal(connectionAttempts, 1, 'A failed ACP request must not reconnect or replay');
+      return;
+    }
+    const result = await execution;
     assert.equal(result.text, 'SSH protocol complete');
     assert.equal(result.stopReason, 'end_turn');
     assert.deepEqual(methods.slice(0, 3), ['initialize', 'session/new', 'session/prompt']);
     assert.deepEqual(permissionDecision, { outcome: { outcome: 'selected', optionId: 'reject' } });
     assert.equal(commandText, "cd '/srv/project' && exec 'agent' '--acp'");
     await closed;
-    return [{ name: 'ssh_acp_real_channel_protocol', value: 1, unit: 'scenarios' }];
+    await disconnected;
   } finally {
     abort.abort();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
+};
+
+export const sshAcpProtocolScenario = async () => {
+  for (const mode of ['complete', 'cancel', 'disconnect', 'complete'] as const) await runProtocol(mode);
+  return [{ name: 'ssh_acp_real_channel_protocol', value: 4, unit: 'scenarios' }];
 };

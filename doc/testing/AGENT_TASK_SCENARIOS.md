@@ -205,6 +205,7 @@
 
 ### A02 当前执行（未完成）
 
+- 真实 loopback SSH ACP 回归补齐故障窗口：服务端实际收到 session/prompt 后屏障停住、不发送回复，再由客户端 abort 或服务端关闭连接；断言执行分别拒绝 ABORTED/ACP_SSH_DISCONNECTED、双方 channel/连接关闭、仅一次连接且不重放，之后独立正常请求完成。该测试覆盖生产 SSH transport + ACP adapter/SDK，不是第三方 ACP 二进制、UI→Run 整链或代码导航验收。
 - SSH ACP 设置页产品 E2E 已补齐：在零 Workspace ACP Profile 下从 UI 创建 SSH 集成，独立检查 API 中 argv/cwd/transport，再刷新页面恢复；非法相对 cwd 更新返回 ACP_SSH_CONFIGURATION_INVALID/400，原配置保持。实际发现并修复 HTTP 配置 decoder 仍仅接收 workspace-profile（400）及 SQLite durable decoder 同样遗漏 SSH（500），补齐有界解码；两输入独立 label、transport 可访问名称和三语言说明同步修正。定向 E2E、check、三包 build 通过；全量 format 检查受未提交 tests/agent-functional 原始数据影响，不格式化这些资料。此项不代表真实第三方 ACP 程序或 SSH 代码导航已验收。
 - 2026-10-06 新增 runtime/ssh-acp-protocol 定向场景：真实 loopback ssh2 Server + 生产 SshExecutionTransportAdapter/ExecutionSessionManager/SshAcpTransport + AcpAdapter/SDK，验证非 PTY exec 安全引用、initialize/new/prompt 顺序、双向内层权限 reject_once、chunk/stop 输出与 channel 关闭，定向运行和 check 通过。服务端为 ACP 协议 fixture，不声称真实第三方 ACP 二进制或设置 UI E2E 已通过；SSH 代码导航仍待实现。
 - ACP 取消修复已提交 `77487c16`。进一步运行实际 SDK + NDJSON 协议 fixture 发现 AcpAdapter 未发送 initialize，只有 session/new/prompt；现补 initialize 和协商版本检查，对 Workspace/SSH 同时生效。协议 fixture 验证 initialize→new→prompt、真实 SDK chunk/stop 处理及 close 一次，check 通过；不是实际 SSH 服务或远端 ACP 二进制 E2E。
