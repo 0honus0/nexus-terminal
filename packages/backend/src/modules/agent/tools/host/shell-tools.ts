@@ -632,6 +632,10 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
           executed.sshJob?.status === 'running'
         ) {
           result.summary += ` Execution lifetime is ${executionTimeoutSeconds} seconds from process start; expiry terminates this Job. This is not a startup timeout. Verify Job status and endpoints before reporting current uptime; do not claim indefinite availability.`;
+          if (target.selector.target === 'workspace') {
+            result.summary +=
+              ' Workspace Job control is scoped to this Run/Runtime: cancel while this Run is active if requested. For user cleanup after this Run ends, use the authenticated Workspace management API, not Agent tools or a new Run: GET /api/v1/apps/{appId}/workspaces/{workspaceId}, then POST /api/v1/apps/{appId}/workspaces/{workspaceId}/actions with schemaVersion=1, current expectedVersion and action=stop or delete, CSRF and Idempotency-Key. Stop affects all Jobs in that Workspace generation; confirm the returned command succeeded and final Workspace state.';
+          }
         }
       }
       return result;

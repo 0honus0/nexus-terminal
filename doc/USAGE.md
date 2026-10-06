@@ -403,6 +403,7 @@ Agent Workspace Terminal 每个 Workspace 最多 8 个、单 Backend 合计最�
 - Environment 选择器决定下一次 Run 使用的 Workspace、Toolchain 和 target；服务端会验证并冻结本次执行配置。
 - Workspace 文件修改时间使用 Runner 返回的有限非负毫秒数，保留文件系统的小数精度；写入、元信息检查和目录列表不会因小数时间而被误判为协议异常。
 - `workspace_create` 使用空参数和本次 Run 冻结的 Environment，审批后复核仍使用同一份配置；模型不能临时改选 Recipe 或 Toolchain。同一 Runtime 已有未删除的 Workspace 时拒绝重复创建。Agent 工具等待 Runner 完成创建及启动、停止、删除操作后再返回结果；生命周期审批复核保留公开参数，并绑定已观察的版本和 Generation。
+- 部署交付须区分 Run 内工具与用户管理入口：`workspace_control` 和 Workspace `shell_job_control` 只控制所属 Run／Runtime 的资源，不能交付为终态后或新 Run 可直接复用的命令。后台启动反馈明确此交接边界。Run 结束后，用户通过已认证的 Workspace 管理 API 读取当前版本，再向 `/api/v1/apps/{appId}/workspaces/{workspaceId}/actions` 提交 `schemaVersion=1`、`expectedVersion` 和 `action=stop` 或 `delete`，携带 CSRF 与 Idempotency-Key；须确认返回命令 succeeded 和 Workspace 最终状态。stop 影响该 generation 全部 Job，不等同单 Job cancel；不暴露 Runner 凭据或放宽跨 Run 权限。
 - Workspace Terminal、Workspace ACP、Browser 和 Runner Plugin 依赖可用的 Agent Runner。Runner 不可用时，SSH ACP、普通 SSH/文件管理/远程桌面仍可使用。设置页可在未配置 Workspace ACP Profile 时创建 SSH ACP 集成；分别填写 argv 与绝对工作目录，保存后可刷新恢复配置。
 - Plugin App 只获得已声明并授权的 capability。需要确认的 mutation 会先显示 approval，未知执行结果会进入核对或恢复流程。
 

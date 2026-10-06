@@ -274,7 +274,8 @@ export const createWorkspaceControlTool = (
   descriptor: {
     name: 'workspace_control',
     version: '2.0.0',
-    description: 'Start, stop, restart, or delete one Nexus Agent Workspace generation. Requires user approval.',
+    description:
+      'Start, stop, restart, or delete one Nexus Agent Workspace generation owned by this active Run and Runtime. Requires user approval. This is an Agent tool, not a user management command. After the Run ends, hand off cleanup to the authenticated user Workspace management API: GET /api/v1/apps/{appId}/workspaces/{workspaceId}, then POST /api/v1/apps/{appId}/workspaces/{workspaceId}/actions with schemaVersion=1, current expectedVersion and action=stop or delete (CSRF and Idempotency-Key required). Confirm the returned command succeeded and final Workspace state. A new Run cannot reuse this Run-owned Workspace or Job permissions.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,

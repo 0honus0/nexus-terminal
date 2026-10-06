@@ -244,6 +244,20 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
     argumentsJson: JSON.stringify({ workspaceId: toolWorkspace.id, action: 'stop' }),
   });
   const refreshedLifecycle = await lifecycleExecutor.refreshInspection(toolContext, lifecycleInspection);
+  for (const deniedContext of [
+    { ...toolContext, runId: 'other-run' },
+    { ...toolContext, agentRuntimeId: 'other-runtime' },
+  ]) {
+    await assert.rejects(
+      () =>
+        lifecycleExecutor.inspect(deniedContext, {
+          providerCallId: 'control-denied-owner',
+          name: 'workspace_control',
+          argumentsJson: JSON.stringify({ workspaceId: toolWorkspace.id, action: 'stop' }),
+        }),
+      /RESOURCE_FORBIDDEN/,
+    );
+  }
   assert.equal(refreshedLifecycle.operationHash, lifecycleInspection.operationHash);
   assert.equal(
     (await lifecycleExecutor.executeMutation(toolContext, refreshedLifecycle)).verification.status,
@@ -308,6 +322,8 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
   assert.equal(backgroundLaunch.outcome, 'confirmed');
   assert.equal((backgroundLaunch.data as Record<string, JsonValue>).executionTimeoutSeconds, 60);
   assert.match(backgroundLaunch.summary, /expiry terminates this Job/);
+  assert.match(backgroundLaunch.summary, /user cleanup after this Run ends/);
+  assert.match(backgroundLaunch.summary, /authenticated Workspace management API/);
   assert.equal(
     backgroundLaunch.verification.status,
     'unverified',

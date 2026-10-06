@@ -203,6 +203,11 @@
 
 ### 临时文档退出条件
 
+### A04 当前执行（交付说明反例，未闭环）
+
+- 首轮真实Luna low Run337de09b-1c48-40da-a2d3-c02095e377fe completed／verified、无reconciliation；Workspace77d1d8db-48f6-44cb-a4ca-354944b4a226以720秒期限启动受管Job，独立两接口200及内容正确、全树SHA不变、PID227890/cwd/PORT与Job一致。独立启动后观测与第587–602秒接口复核通过，非完整连续10分钟采样；终态后用户管理API stop／delete命令均succeeded，最终deleted、PID消失、端口关闭。证据 /tmp/opencode/a04-{input,baseline,result,independent,observations,cleanup}.json。交付说明错误地建议终态后使用Agent workspace_control，没有区分用户管理API与Run内工具，因此本轮不计A04通过。
+- 交接反馈修复已完成本地验证：Workspace控制工具说明与后台launch反馈明确Run／Runtime边界、终态后的已认证管理API、版本/CSRF/幂等及命令/最终状态核对，保持原权限拒绝；生命周期场景补跨Run／Runtime拒绝及公开反馈验收并通过。check、完整build、完整functional-regressions16项及已跟踪格式通过；全量格式仍被保留的tests/agent-functional原始资料阻断，未改动这些资料。真实模型修复后复验与A04确定性部署交付回归尚待完成，不声称反馈修复保证模型交付正确；A05未开始，ACP仍暂跳过。
+
 ### A03 本地闭环（canonical Actions 未验收）
 
 - A03确定性生产回归补齐：模拟Provider仅发出调用，生产SSH Run实际执行原构建并非零失败→严格patch仅修生产导出→原npm run build／npm test零退出→数据读取；测试端独立核对最终完整目录、所有文件原字节以及唯一精确生产改动，Run completed且无reconciliation。完整functional-regressions 16项E2E通过；首次全树断言发现fixture改名遗留空test目录，已仅删除空目录、不放宽断言。结合上述真实模型Workspace最小修复和独立原命令验收，A03本地关闭；不是canonical Actions或完整双目标工具验收。A04尚未开始，ACP仍暂跳过。
