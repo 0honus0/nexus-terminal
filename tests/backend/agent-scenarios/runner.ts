@@ -20,6 +20,7 @@ import { subagentGovernedMutationScenario } from './subagent-governed-mutation.s
 import { restartRecoveryScenario } from './restart-recovery.scenario';
 import { checkpointWorkspaceEvidenceScenario } from './checkpoint-workspace-evidence.scenario';
 import { workspaceBackgroundJobLifecycleScenario } from './workspace-background-job-lifecycle.scenario';
+import { workspaceCleanupHandoffScenario } from './workspace-cleanup-handoff.scenario';
 import { agentDefinitionCapabilityContractScenario } from './agent-definition-capability-contract.scenario';
 import { workspaceCodingToolSurfaceScenario } from './workspace-coding-tool-surface.scenario';
 import { nestedJoinDurableWakeScenario } from './nested-join-durable-wake.scenario';
@@ -114,6 +115,7 @@ const scenarios = new Map<string, Scenario>([
   ['shell/unified-targets', unifiedShellCapabilityScenario],
   ['ssh/session-jobs', sshSessionJobsScenario],
   ['workspace/background-job-lifecycle', workspaceBackgroundJobLifecycleScenario],
+  ['workspace/cleanup-http-handoff', workspaceCleanupHandoffScenario],
   ['context/tool-result-projection', toolResultProjectionScenario],
   ['context/tool-surface-progressive-disclosure', toolSurfaceProgressiveDisclosureScenario],
   ['runtime/mcp-protocol-surface', mcpProtocolSurfaceScenario],
