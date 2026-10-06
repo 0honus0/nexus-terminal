@@ -89,6 +89,11 @@ export class AcpAdapter implements AcpRuntimePort {
           );
     const onAbort = () => void transport.close().catch(() => undefined);
     context.signal.addEventListener('abort', onAbort, { once: true });
+    if (context.signal.aborted) {
+      context.signal.removeEventListener('abort', onAbort);
+      await transport.close().catch(() => undefined);
+      throw context.signal.reason ?? new Error('ABORTED');
+    }
 
     const app = client({ name: 'nexus-terminal' })
       .onRequest(methods.client.session.requestPermission, async ({ params }) => {

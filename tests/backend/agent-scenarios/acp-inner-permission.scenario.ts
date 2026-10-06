@@ -312,6 +312,47 @@ export const acpInnerPermissionScenario = async () => {
       protocolMethods.includes('session/prompt'),
     JSON.stringify(protocolMethods),
   );
+  for (const candidate of [integration, sshIntegration]) {
+    const controller = new AbortController();
+    const reason = new Error('cancelled while opening ACP transport');
+    let closeCount = 0;
+    let writeCount = 0;
+    let opened!: () => void;
+    let release!: () => void;
+    const opening = new Promise<void>((resolve) => {
+      opened = resolve;
+    });
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const open = async () => {
+      opened();
+      await barrier;
+      return {
+        readable: new ReadableStream<Uint8Array>(),
+        writable: new WritableStream<Uint8Array>({
+          write() {
+            writeCount++;
+          },
+        }),
+        close: async () => {
+          closeCount++;
+        },
+      };
+    };
+    const pending = new AcpAdapter({ open }).execute(
+      candidate,
+      { workspaceId, generation: 1, cwd: '/workspace/work', prompt: 'must not send', maxOutputBytes: 4096 },
+      { signal: controller.signal, requestPermission: async () => 'reject_once', openTransport: open },
+    );
+    const rejected = assert.rejects(pending, (error) => error === reason);
+    await opening;
+    controller.abort(reason);
+    release();
+    await rejected;
+    assert.equal(closeCount, 1, `${candidate.configuration.transport}: transport closed exactly once`);
+    assert.equal(writeCount, 0, `${candidate.configuration.transport}: no protocol writes after cancellation`);
+  }
   const sshTool = createAcpExecuteTool(
     { get: async () => sshIntegration } as unknown as IntegrationRepositoryPort,
     workspaces,
