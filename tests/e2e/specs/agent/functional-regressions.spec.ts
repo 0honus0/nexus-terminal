@@ -96,6 +96,60 @@ const execute = async (
   return { run, ledger, text: textResult! };
 };
 
+test('SSH file search cancellation closes a held SFTP read and permits a new request', async ({ request }) => {
+  const context = await prepare(request);
+  const connectionId = await ensureTestSshConnection(request);
+  const project = path.resolve(__dirname, '../../.tmp/ssh-root/search-scan');
+  await mkdir(project);
+  await writeFile(path.join(project, 'sentinel.txt'), 'SCAN_SENTINEL\n');
+  const hold = `${E2E_URLS.sshControlOrigin}/sftp/read-hold`;
+  try {
+    expect((await request.post(`${hold}?blocked=1`)).ok()).toBeTruthy();
+    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
+      headers: { ...context.headers, 'Idempotency-Key': randomUUID() },
+      data: {
+        schemaVersion: 1,
+        threadId: context.threadId,
+        input: { text: `E2E_SEARCH_SCAN connection=${connectionId}`, artifactRefs: [] },
+        agentDefinitionId: 'agent.default',
+        model: context.model,
+        approvalMode: 'full_access',
+        executionMode: 'execute',
+        connectionIds: [connectionId],
+      },
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    const id = (await created.json()).data.id;
+    await expect.poll(async () => (await (await request.get(hold)).json()).pending).toBeGreaterThan(0);
+    const run = (await (await request.get(`/api/v1/apps/nexus.agent/runs/${id}`)).json()).data;
+    const cancelled = await request.post(`/api/v1/apps/nexus.agent/runs/${id}/cancel`, {
+      headers: { ...context.headers, 'Idempotency-Key': randomUUID() },
+      data: { schemaVersion: 1, expectedVersion: run.version },
+    });
+    expect(cancelled.ok(), await cancelled.text()).toBeTruthy();
+    await expect
+      .poll(async () => (await (await request.get(`/api/v1/apps/nexus.agent/runs/${id}`)).json()).data.status)
+      .toBe('cancelled');
+    await expect.poll(async () => (await (await request.get(hold)).json()).pending).toBe(0);
+    expect((await (await request.get(hold)).json()).blocked).toBe(true);
+    await request.post(`${hold}?blocked=0`);
+    const recoveryContext = await prepare(request);
+    const recovered = await execute(request, recoveryContext, `E2E_SEARCH_SCAN connection=${connectionId}`, {
+      connectionIds: [connectionId],
+    });
+    const results = recovered.ledger
+      .filter((entry) => entry.kind === 'tool_result')
+      .map((entry) => JSON.parse(entry.payload.text!));
+    expect(results.at(-1)).toMatchObject({
+      ok: true,
+      data: { matches: [{ path: '/search-scan/sentinel.txt' }], truncated: false },
+    });
+  } finally {
+    await request.post(`${hold}?blocked=0`);
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
 test('SSH file search scans beyond former entry, file and cumulative byte caps without following symlinks', async ({
   request,
 }) => {

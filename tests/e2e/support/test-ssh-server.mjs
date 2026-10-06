@@ -58,6 +58,8 @@ let prepareMkdirRequests = 0;
 let sftpSlowDirectory = '';
 let sftpSlowDirectoryDelayMs = 0;
 let sftpReadDelayMs = 0;
+let sftpReadBlocked = false;
+const sftpReadWaiters = new Set();
 let sftpDelayedReadCount = 0;
 let sftpReadBytesPerSecond = 0;
 let sftpReadNextDeliveryAt = 0;
@@ -811,6 +813,18 @@ function attachSftp(session, accept) {
     sftpReadPending += 1;
     sftpReadPeakPending = Math.max(sftpReadPeakPending, sftpReadPending);
     try {
+      if (sftpReadBlocked) {
+        await new Promise((resolve) => {
+          const release = () => {
+            sftpReadWaiters.delete(release);
+            sftp.off('close', release);
+            resolve();
+          };
+          sftpReadWaiters.add(release);
+          sftp.once('close', release);
+        });
+        if (sftp.destroyed) return;
+      }
       if (sftpReadDelayMs > 0) {
         sftpDelayedReadCount += 1;
         await new Promise((resolve) => setTimeout(resolve, sftpReadDelayMs));
@@ -1298,7 +1312,18 @@ const controlServer = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ ok: true, sshPort: SSH_PORT, rootDir }));
       return;
     }
+    if (requestUrl.pathname === '/sftp/read-hold' && (req.method === 'POST' || req.method === 'GET')) {
+      if (req.method === 'POST') {
+        sftpReadBlocked = requestUrl.searchParams.get('blocked') === '1';
+        if (!sftpReadBlocked) for (const release of [...sftpReadWaiters]) release();
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ blocked: sftpReadBlocked, pending: sftpReadWaiters.size }));
+      return;
+    }
     if (req.method === 'POST' && requestUrl.pathname === '/reset') {
+      sftpReadBlocked = false;
+      for (const release of [...sftpReadWaiters]) release();
       sftpRealpathBlocked = false;
       sftpRealpathDeny = false;
       for (const resolve of sftpRealpathWaiters) resolve();

@@ -151,6 +151,7 @@ Workspace 文件工具的非法路径或越界读取由 Runner 拒绝，模型�
 - SSH 会话入口将 connectionId 转为规范 SSH target 后校验同一 typed grant；会话创建、命令执行与文件操作共享连接授权，未选中或未授权的连接仍拒绝。
 - `file_search` 在 Workspace 和 SSH 均逐行使用 JavaScript Unicode 正则（u flag），每行最多返回首个匹配，column 为 1-based UTF-16 位置；不根据宿主是否安装 rg 切换语法或忽略规则。glob 使用 Node 匹配语义，匹配相对于本次搜索目录的路径或文件 basename；单文件搜索匹配 basename，不按项目根目录计算。结果有界且明确标记截断，读取与权限边界仍由各目标持有。
 - Workspace 与 SSH 文件搜索不设置目录项数、扫描文件数或累计扫描字节上限；仍保留结果数量、输出大小及单文件读取边界，结果达到返回额度时可停止并标记 truncated。Workspace 目录读取按批次进行，不先收集完整文件树，结束或截断后关闭目录句柄；SSH 仍检查取消与执行期限，读取范围受原权限和路径规则约束。
+- 取消使用临时 SSH 会话的文件操作时立即关闭该连接以打断等待中的远端 I/O，随后完成原资源收尾；不关闭用户显式长会话。SFTP positioned read 在 channel 结束或关闭时拒绝未完成读取，不等待远端补发响应。
 - `ssh_session_open(connectionId, idleTimeoutSeconds?)` 打开对话级连接，返回 `sessionId`。默认空闲 1800 秒，0 表示不因空闲关闭；最大可配置值 86400 秒。每用户最多 32 条，服务最多 128 条连接。任务结束或停止不会自动关闭会话；对话删除、应用停用、权限撤销、连接配置变化和服务退出会清理。
 - `ssh_session_list(connectionId, sessionId?)` 查看当前对话内指定目标的连接状态与活动操作数；`ssh_session_close(connectionId, sessionId, force?)` 关闭并移除连接。普通关闭拒绝活动会话；显式 force 按破坏性操作治理，可能中断全部活动命令，不保证远端进程已终止。
 - `shell_execute` 的 command 在 Workspace 和 SSH 均可使用 `{kind:"argv",argv:[可执行文件,参数...]}` 或 `{kind:"shell",shellScript:"待执行脚本"}`，支持可选 cwd。argv 适合单命令和字面参数，SSH 会逐参数安全引用；shellScript 支持管道、变量、条件和重定向，Workspace 使用 /bin/sh -c，SSH 使用远端命令 Shell。shellScript 是命令正文，不是展示标题，不接受旧 text 字段。必要环境变量可用 argv 的 env 命令或脚本显式传入。`shell_execute` 与全部 `file_read/list/search/write/patch/move/delete` 接受仅限 SSH 的可选 `sessionId`。省略时仍每次临时建连后关闭；指定时检查、执行和验证使用已有连接。失效时不自动重连、降级或重放。

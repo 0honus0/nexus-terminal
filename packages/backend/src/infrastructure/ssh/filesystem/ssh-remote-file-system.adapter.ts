@@ -134,6 +134,12 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
     const channel = await this.channelProvider();
     const handle = await call<Buffer>((callback) => channel.open(remotePath, 'r', callback));
     let closed = false;
+    let channelClosed = false;
+    const onChannelClose = () => {
+      channelClosed = true;
+    };
+    channel.once('end', onChannelClose);
+    channel.once('close', onChannelClose);
     const readInto = async (position: number, target: Uint8Array): Promise<number> => {
       if (closed) throw new Error(`Remote reader is closed: ${remotePath}`);
       if (!Number.isSafeInteger(position) || position < 0) {
@@ -145,9 +151,25 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
       let bytesRead = 0;
       try {
         bytesRead = await new Promise<number>((resolve, reject) => {
-          channel.read(handle, buffer, 0, buffer.length, position, (error, count) =>
-            error ? reject(error) : resolve(count),
-          );
+          const detach = () => {
+            channel.off('close', onClose);
+            channel.off('end', onClose);
+          };
+          const onClose = () => {
+            detach();
+            reject(new Error('SFTP_CHANNEL_CLOSED'));
+          };
+          channel.once('close', onClose);
+          channel.once('end', onClose);
+          try {
+            channel.read(handle, buffer, 0, buffer.length, position, (error, count) => {
+              detach();
+              error ? reject(error) : resolve(count);
+            });
+          } catch (error) {
+            detach();
+            reject(error);
+          }
         });
         return bytesRead;
       } finally {
@@ -170,6 +192,9 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
       close: async () => {
         if (closed) return;
         closed = true;
+        channel.off('end', onChannelClose);
+        channel.off('close', onChannelClose);
+        if (channelClosed) return;
         await callVoid((callback) => channel.close(handle, callback));
       },
     };

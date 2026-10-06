@@ -140,10 +140,13 @@ export class AgentSshSessions implements AgentSshSessionPort {
         connection: await this.connections.resolve(connectionId, hash),
         connect: { signal: context.signal, timeoutMs: Math.max(1, context.deadlineAt * 1000 - Date.now()) },
       });
+      const onAbort = () => void this.sessions.close(session.id).catch(() => undefined);
+      context.signal.addEventListener('abort', onAbort, { once: true });
       try {
         assertActive(context);
         return await work(session);
       } finally {
+        context.signal.removeEventListener('abort', onAbort);
         await this.sessions.close(session.id);
       }
     }
