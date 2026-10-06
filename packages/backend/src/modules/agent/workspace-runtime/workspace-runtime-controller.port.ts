@@ -2,8 +2,6 @@ import type {
   RunnerWorkspaceProjection,
   WorkspaceApplyPatchRequest,
   WorkspaceApplyPatchResult,
-  WorkspaceCodeIntelRequest,
-  WorkspaceCodeIntelResult,
   WorkspaceFileDeleteRequest,
   WorkspaceFileDeleteResult,
   WorkspaceFileListRequest,
@@ -15,8 +13,6 @@ import type {
   WorkspaceFileStatResult,
   WorkspaceFileWriteRequest,
   WorkspaceFileWriteResult,
-  WorkspaceRepoMapRequest,
-  WorkspaceRepoMapResult,
   WorkspaceSearchRequest,
   WorkspaceSearchResult,
 } from '@nexus-terminal/protocol/runner';
@@ -103,18 +99,6 @@ export interface WorkspaceRuntimeControllerPort {
     request: WorkspaceSearchRequest,
     signal?: AbortSignal,
   ): Promise<WorkspaceSearchResult>;
-  repoMap(
-    workspaceId: string,
-    generation: number,
-    request: WorkspaceRepoMapRequest,
-    signal?: AbortSignal,
-  ): Promise<WorkspaceRepoMapResult>;
-  codeIntel(
-    workspaceId: string,
-    generation: number,
-    request: WorkspaceCodeIntelRequest,
-    signal?: AbortSignal,
-  ): Promise<WorkspaceCodeIntelResult>;
   applyWorkspacePatch(
     workspaceId: string,
     generation: number,

@@ -167,11 +167,6 @@ const projectInstructionTargetDirectories = (snapshot: RunSnapshot, currentText:
           addTarget((item as Record<string, unknown>).path, 'work', true);
           if (targets.size >= 8) break;
         }
-      } else if (
-        argumentsRecord.target === 'workspace' &&
-        (call.name === 'workspace_repo_map' || call.name === 'workspace_code_query')
-      ) {
-        addTarget(argumentsRecord.path ?? PROJECT_WORK_ROOT, 'work', call.name === 'workspace_code_query');
       }
       if (targets.size >= 8) break;
     }

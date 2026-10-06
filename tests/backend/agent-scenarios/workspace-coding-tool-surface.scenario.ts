@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import runnerVersion from '@nexus-terminal/protocol/runner-version.json';
 import {
   applyWorkspacePatch,
   readWorkspaceFile,
@@ -57,8 +58,8 @@ export const workspaceCodingToolSurfaceScenario = async () => {
     'mutate',
     'canonical file patch must remain governed mutation',
   );
-  assert.equal(descriptors.get('workspace_repo_map')?.capability, 'file.read');
-  assert.equal(descriptors.get('workspace_code_query')?.capability, 'file.read');
+  assert.equal(descriptors.has('workspace_repo_map'), false);
+  assert.equal(descriptors.has('workspace_code_query'), false);
   assert.equal(descriptors.get('shell_execute')?.riskClass, 'mutate', 'canonical execution must remain governed');
   assert.equal(descriptors.get('shell_execute')?.capability, 'shell.execute');
   assert.equal(descriptors.get('shell_job_control')?.riskClass, 'control');
@@ -86,8 +87,8 @@ export const workspaceCodingToolSurfaceScenario = async () => {
   assert.equal(planToolNames.has('file_read'), true);
   assert.equal(planToolNames.has('file_search'), true);
   assert.equal(planToolNames.has('file_patch'), false);
-  assert.equal(planToolNames.has('workspace_repo_map'), true);
-  assert.equal(planToolNames.has('workspace_code_query'), true);
+  assert.equal(planToolNames.has('workspace_repo_map'), false);
+  assert.equal(planToolNames.has('workspace_code_query'), false);
   assert.equal(planToolNames.has('shell_execute'), false);
   assert.equal(planToolNames.has('shell_job_control'), true);
 
@@ -441,6 +442,18 @@ export const workspaceCodingToolSurfaceScenario = async () => {
         });
       });
       const adapter = new RunnerHttpAdapter(baseUrl, 'coding-token');
+      for (const route of ['repo-map', 'code-intel']) {
+        const response = await fetch(`${baseUrl}/v1/workspaces/coding-workspace/coding/${route}`, {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer coding-token',
+            'X-Nexus-Agent-Protocol': runnerVersion.RUNNER_PROTOCOL_VERSION,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ generation: 5 }),
+        });
+        assert.equal(response.status, 404, 'removed navigation endpoints must not remain callable');
+      }
       await assert.rejects(
         () => adapter.statWorkspacePath('coding-workspace', 5, '/workspace'),
         (error: unknown) => {

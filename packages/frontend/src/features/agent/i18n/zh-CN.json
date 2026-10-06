@@ -1402,12 +1402,6 @@
             "click": "点击",
             "type": "输入"
           },
-          "codeAction": {
-            "symbols": "符号",
-            "definition": "定义",
-            "references": "引用",
-            "diagnostics": "诊断"
-          },
           "acpStopReason": {
             "end_turn": "正常结束",
             "max_tokens": "达到 token 上限",
@@ -1449,9 +1443,6 @@
         "workspaceActionPending": "工作区{actionKey}操作仍处于{stateKey}。",
         "versionsSwitched": "工具版本已切换，当前 generation 为 {generation}。",
         "versionSwitchOutcome": "工具版本切换结果：{stateKey}。",
-        "codeFilesMapped": "已从 {indexed} 个已索引的 TypeScript/JavaScript 源文件映射出 {files} 个文件。",
-        "codeResults": "TypeScript 原生代码智能返回 {count} 条{actionKey}结果。",
-        "codeUnavailable": "{path} 暂不支持代码智能，请改用 {search} 与 {read}。",
         "skillMetadataFound": "找到 {count} 条相关的已签名 Skill 元数据。",
         "skillLoaded": "已加载已签名 Skill {name}（{id}）。",
         "deferredCapabilityFound": "找到 {count} 个延迟加载的 MCP 能力匹配项。",

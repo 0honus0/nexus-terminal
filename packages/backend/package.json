@@ -10,7 +10,6 @@
     "test:agent-scenarios": "tsx ../../tests/backend/agent-scenarios/runner.ts"
   },
   "dependencies": {
-    "@nexus-terminal/code-intelligence": "workspace:*",
     "@agentclientprotocol/sdk": "1.4.0",
     "@ai-sdk/openai": "^4.0.83",
     "@modelcontextprotocol/client": "2.0.0",

@@ -1,7 +1,6 @@
 import type {
   RunnerWorkspaceProjection,
   WorkspaceApplyPatchResult,
-  WorkspaceCodeIntelResult,
   WorkspaceFileDeleteResult,
   WorkspaceFileListResult,
   WorkspaceFileMoveResult,
@@ -9,7 +8,6 @@ import type {
   WorkspaceFileStatResult,
   WorkspaceFileWriteResult,
   WorkspaceJobView,
-  WorkspaceRepoMapResult,
   WorkspaceSearchResult,
 } from '@nexus-terminal/protocol/runner';
 import type { JsonValue } from '../../../modules/agent/agent.types';
@@ -385,160 +383,6 @@ export const decodeWorkspaceSearch = (value: unknown): WorkspaceSearchResult => 
     truncated: booleanValue(record.truncated),
     scannedFiles: integerValue(record.scannedFiles),
     scannedBytes: integerValue(record.scannedBytes),
-  };
-};
-
-export const decodeWorkspaceRepoMap = (value: unknown): WorkspaceRepoMapResult => {
-  const record = recordValue(value);
-  if (
-    record.engine !== 'typescript-native' ||
-    !Array.isArray(record.files) ||
-    record.files.length > 64 ||
-    !record.fallback ||
-    typeof record.fallback !== 'object' ||
-    Array.isArray(record.fallback)
-  ) {
-    throw protocolError();
-  }
-  const fallback = recordValue(record.fallback);
-  if (
-    fallback.searchTool !== 'file_search' ||
-    fallback.readTool !== 'file_read' ||
-    fallback.unsupportedLanguages !== true
-  ) {
-    throw protocolError();
-  }
-  const revision = stringValue(record.revision) as string;
-  if (!/^[a-f0-9]{64}$/.test(revision)) throw protocolError();
-  return {
-    engine: 'typescript-native',
-    path: stringValue(record.path) as string,
-    query: record.query === null ? null : boundedStringValue(record.query, 1024),
-    revision,
-    indexedFiles: integerValue(record.indexedFiles),
-    indexedBytes: integerValue(record.indexedBytes),
-    cacheHits: integerValue(record.cacheHits),
-    cacheMisses: integerValue(record.cacheMisses),
-    files: record.files.map((item) => {
-      const file = recordValue(item);
-      const digest = stringValue(file.sha256) as string;
-      if (!/^[a-f0-9]{64}$/.test(digest) || !Array.isArray(file.symbols) || file.symbols.length > 160) {
-        throw protocolError();
-      }
-      return {
-        path: stringValue(file.path) as string,
-        sha256: digest,
-        sizeBytes: integerValue(file.sizeBytes),
-        imports: stringArrayValue(file.imports, 32),
-        symbols: file.symbols.map((entry) => {
-          const symbol = recordValue(entry);
-          return {
-            name: boundedStringValue(symbol.name, 160),
-            kind: boundedStringValue(symbol.kind, 128),
-            line: integerValue(symbol.line, 1),
-            column: integerValue(symbol.column, 1),
-            signature: boundedStringValue(symbol.signature, 320),
-          };
-        }),
-      };
-    }),
-    truncated: booleanValue(record.truncated),
-    fallback: {
-      searchTool: 'file_search',
-      readTool: 'file_read',
-      unsupportedLanguages: true,
-    },
-  };
-};
-
-export const decodeWorkspaceCodeIntel = (value: unknown): WorkspaceCodeIntelResult => {
-  const record = recordValue(value);
-  if (
-    !['symbols', 'definition', 'references', 'diagnostics'].includes(String(record.action)) ||
-    (record.engine !== 'typescript-native' && record.engine !== 'fallback') ||
-    !Array.isArray(record.results) ||
-    record.results.length > 100
-  ) {
-    throw protocolError();
-  }
-  const revision =
-    record.revision === null
-      ? null
-      : (() => {
-          const candidate = stringValue(record.revision) as string;
-          if (!/^[a-f0-9]{64}$/.test(candidate)) throw protocolError();
-          return candidate;
-        })();
-  const digest =
-    record.sha256 === null
-      ? null
-      : (() => {
-          const candidate = stringValue(record.sha256) as string;
-          if (!/^[a-f0-9]{64}$/.test(candidate)) throw protocolError();
-          return candidate;
-        })();
-  const fallback =
-    record.fallback === null
-      ? null
-      : (() => {
-          const item = recordValue(record.fallback);
-          if (
-            (item.reason !== 'LANGUAGE_UNSUPPORTED' && item.reason !== 'FILE_NOT_INDEXED') ||
-            item.searchTool !== 'file_search' ||
-            item.readTool !== 'file_read'
-          ) {
-            throw protocolError();
-          }
-          return {
-            reason: item.reason as 'LANGUAGE_UNSUPPORTED' | 'FILE_NOT_INDEXED',
-            searchTool: 'file_search' as const,
-            readTool: 'file_read' as const,
-          };
-        })();
-
-  return {
-    action: record.action as WorkspaceCodeIntelResult['action'],
-    path: stringValue(record.path) as string,
-    engine: record.engine,
-    supported: booleanValue(record.supported),
-    revision,
-    sha256: digest,
-    results: record.results.map((entry) => {
-      const item = recordValue(entry);
-      if ('code' in item) {
-        return {
-          path: stringValue(item.path) as string,
-          line: integerValue(item.line, 1),
-          column: integerValue(item.column, 1),
-          endLine: integerValue(item.endLine, 1),
-          endColumn: integerValue(item.endColumn, 1),
-          code: integerValue(item.code),
-          category: boundedStringValue(item.category, 128),
-          text: boundedStringValue(item.text, 1024),
-        };
-      }
-      if ('path' in item) {
-        return {
-          path: stringValue(item.path) as string,
-          line: integerValue(item.line, 1),
-          column: integerValue(item.column, 1),
-          endLine: integerValue(item.endLine, 1),
-          endColumn: integerValue(item.endColumn, 1),
-          ...(item.name === undefined ? {} : { name: boundedStringValue(item.name, 160) }),
-          ...(item.kind === undefined ? {} : { kind: boundedStringValue(item.kind, 128) }),
-          ...(item.signature === undefined ? {} : { signature: boundedStringValue(item.signature, 320) }),
-        };
-      }
-      return {
-        name: boundedStringValue(item.name, 160),
-        kind: boundedStringValue(item.kind, 128),
-        line: integerValue(item.line, 1),
-        column: integerValue(item.column, 1),
-        signature: boundedStringValue(item.signature, 320),
-      };
-    }),
-    truncated: booleanValue(record.truncated),
-    fallback,
   };
 };
 

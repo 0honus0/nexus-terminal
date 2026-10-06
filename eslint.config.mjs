@@ -24,7 +24,6 @@ export default [
       'packages/backend/src/interfaces/http/agent/**/*.ts',
       'packages/backend/src/interfaces/websocket/agent*.ts',
       'packages/agent-runner/src/**/*.ts',
-      'packages/code-intelligence/src/**/*.ts',
       'tests/backend/agent-scenarios/**/*.ts',
     ],
     languageOptions: {

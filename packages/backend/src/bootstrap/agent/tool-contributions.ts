@@ -17,10 +17,6 @@ import {
   createWorkspaceCreateTool,
   createWorkspaceSwitchToolVersionsTool,
 } from '../../modules/agent/tools/host/workspace-runtime-management-tools';
-import {
-  createWorkspaceCodeIntelTool,
-  createWorkspaceRepoMapTool,
-} from '../../modules/agent/tools/host/workspace-coding-tools';
 import { createSkillReadTool, createSkillSearchTool } from '../../modules/agent/tools/host/skill-tools';
 import { createRequestUserInputTool } from '../../modules/agent/tools/host/user-input-tools';
 import { createToolSearchTool } from '../../modules/agent/tools/host/tool-discovery-tools';
@@ -116,10 +112,7 @@ export const registerWorkspaceToolContributions = ({
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'workspace.tools',
-    tools: [
-      createWorkspaceRepoMapTool(targets, runtime, cryptoHash),
-      createWorkspaceCodeIntelTool(targets, runtime, cryptoHash),
-    ],
+    tools: [],
   });
   catalog.registerContribution({
     schemaVersion: 1,

@@ -57,9 +57,6 @@ importers:
 
   packages/agent-runner:
     dependencies:
-      '@nexus-terminal/code-intelligence':
-        specifier: workspace:*
-        version: link:../code-intelligence
       '@nexus-terminal/protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -72,9 +69,6 @@ importers:
       tar:
         specifier: 'catalog:'
         version: 7.5.22
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
       ws:
         specifier: ^8.22.0
         version: 8.22.0
@@ -88,6 +82,9 @@ importers:
       '@types/ws':
         specifier: ^8.18.2
         version: 8.18.2
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
 
   packages/backend:
     dependencies:
@@ -100,9 +97,6 @@ importers:
       '@modelcontextprotocol/client':
         specifier: 2.0.0
         version: 2.0.0
-      '@nexus-terminal/code-intelligence':
-        specifier: workspace:*
-        version: link:../code-intelligence
       '@nexus-terminal/protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -257,19 +251,6 @@ importers:
       typescript:
         specifier: catalog:node-build
         version: 7.0.2
-
-  packages/code-intelligence:
-    dependencies:
-      '@nexus-terminal/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
-    devDependencies:
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.4
 
   packages/frontend:
     dependencies:

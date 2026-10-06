@@ -38,9 +38,6 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY scripts/patches ./scripts/patches
 COPY packages/agent-runner/package.json ./packages/agent-runner/package.json
 COPY packages/protocol/package.json ./packages/protocol/package.json
-COPY packages/code-intelligence/package.json ./packages/code-intelligence/package.json
-COPY packages/code-intelligence/src ./packages/code-intelligence/src
-COPY packages/code-intelligence/tsconfig.json ./packages/code-intelligence/tsconfig.json
 COPY packages/protocol/src ./packages/protocol/src
 RUN PNPM_VERSION="$(node -p "require('./package.json').packageManager.replace(/^pnpm@/, '')")" \
     && npm install --global "pnpm@${PNPM_VERSION}"
@@ -49,8 +46,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 COPY packages/agent-runner/tsconfig.json ./packages/agent-runner/tsconfig.json
 COPY packages/agent-runner/src ./packages/agent-runner/src
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm --filter @nexus-terminal/code-intelligence build \
-    && pnpm --filter @nexus-terminal/agent-runner build \
+    pnpm --filter @nexus-terminal/agent-runner build \
     && pnpm --filter @nexus-terminal/agent-runner --prod deploy /out/agent-runner
 
 FROM node:${NODE_VERSION}-${DEBIAN_SUITE} AS controller

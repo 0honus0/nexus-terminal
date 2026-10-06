@@ -1402,12 +1402,6 @@
             "click": "クリック",
             "type": "入力"
           },
-          "codeAction": {
-            "symbols": "シンボル",
-            "definition": "定義",
-            "references": "参照",
-            "diagnostics": "診断"
-          },
           "acpStopReason": {
             "end_turn": "正常終了",
             "max_tokens": "トークン上限",
@@ -1449,9 +1443,6 @@
         "workspaceActionPending": "ワークスペースの{actionKey}は{stateKey}のままです。",
         "versionsSwitched": "ツールバージョンを切り替え、generation は {generation} になりました。",
         "versionSwitchOutcome": "ツールバージョン切り替えの結果: {stateKey}",
-        "codeFilesMapped": "インデックス済みの TypeScript/JavaScript ソース {indexed} 件から {files} 件のファイルを対応付けました。",
-        "codeResults": "TypeScript ネイティブのコードインテリジェンスが {count} 件の{actionKey}結果を返しました。",
-        "codeUnavailable": "{path} ではコードインテリジェンスを利用できないため、{search} と {read} を使用してください。",
         "skillMetadataFound": "関連する署名済み Skill メタデータを {count} 件検出しました。",
         "skillLoaded": "署名済み Skill {name}（{id}）を読み込みました。",
         "deferredCapabilityFound": "遅延読み込みの MCP 機能が {count} 件一致しました。",

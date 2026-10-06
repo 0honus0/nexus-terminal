@@ -6,8 +6,6 @@ import type {
 import type {
   WorkspaceApplyPatchRequest,
   WorkspaceApplyPatchResult,
-  WorkspaceCodeIntelRequest,
-  WorkspaceCodeIntelResult,
   WorkspaceFileDeleteRequest,
   WorkspaceFileDeleteResult,
   WorkspaceFileListRequest,
@@ -19,8 +17,6 @@ import type {
   WorkspaceFileStatResult,
   WorkspaceFileWriteRequest,
   WorkspaceFileWriteResult,
-  WorkspaceRepoMapRequest,
-  WorkspaceRepoMapResult,
   WorkspaceSearchRequest,
   WorkspaceSearchResult,
 } from '@nexus-terminal/protocol/runner';
@@ -42,7 +38,6 @@ import {
   statWorkspacePath,
   writeWorkspaceFile,
 } from './workspace-coding-files';
-import { WorkspaceCodeIntelligence } from './workspace-code-intelligence';
 import {
   createWorkspaceCheckpointArchive,
   recoverWorkspaceCheckpointRestore,
@@ -60,7 +55,6 @@ interface ActiveWorkspaceJob {
 
 export class WorkspaceRuntimeEngine {
   private readonly runtime: WorkspaceRuntimeManager;
-  private readonly codeIntelligence = new WorkspaceCodeIntelligence();
   private readonly jobs = new Map<string, Set<ActiveWorkspaceJob>>();
   private readonly jobControllers = new Map<string, ActiveWorkspaceJob>();
   private readonly workspaceWriters = new Map<string, number>();
@@ -91,7 +85,6 @@ export class WorkspaceRuntimeEngine {
 
   async remove(workspaceId: string, generation: number): Promise<void> {
     await this.drainJobs(workspaceId, generation, () => {
-      this.codeIntelligence.dispose(workspaceKey(workspaceId, generation));
       this.runtime.remove(workspaceId, generation);
     });
   }
@@ -207,26 +200,6 @@ export class WorkspaceRuntimeEngine {
     return searchWorkspace(this.codingWorkRoot(workspaceId, generation), request);
   }
 
-  repoMap(workspaceId: string, generation: number, request: WorkspaceRepoMapRequest): Promise<WorkspaceRepoMapResult> {
-    return this.codeIntelligence.repoMap(
-      workspaceKey(workspaceId, generation),
-      this.codingWorkRoot(workspaceId, generation),
-      request,
-    );
-  }
-
-  codeIntel(
-    workspaceId: string,
-    generation: number,
-    request: WorkspaceCodeIntelRequest,
-  ): Promise<WorkspaceCodeIntelResult> {
-    return this.codeIntelligence.codeIntel(
-      workspaceKey(workspaceId, generation),
-      this.codingWorkRoot(workspaceId, generation),
-      request,
-    );
-  }
-
   applyWorkspacePatch(
     workspaceId: string,
     generation: number,
@@ -292,7 +265,6 @@ export class WorkspaceRuntimeEngine {
         source,
         expectedBytes,
       );
-      this.codeIntelligence.dispose(key);
     } finally {
       this.checkpointCaptures.delete(key);
     }

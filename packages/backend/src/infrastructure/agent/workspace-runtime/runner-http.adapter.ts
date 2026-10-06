@@ -3,8 +3,6 @@ import { WORKSPACE_JOB_LIMITS } from '@nexus-terminal/protocol/runner';
 import type {
   WorkspaceApplyPatchRequest,
   WorkspaceApplyPatchResult,
-  WorkspaceCodeIntelRequest,
-  WorkspaceCodeIntelResult,
   WorkspaceFileDeleteRequest,
   WorkspaceFileDeleteResult,
   WorkspaceFileListRequest,
@@ -19,8 +17,6 @@ import type {
   WorkspaceJobView,
   WorkspaceActiveJobsView,
   WorkspaceJobInput,
-  WorkspaceRepoMapRequest,
-  WorkspaceRepoMapResult,
   WorkspaceSearchRequest,
   WorkspaceSearchResult,
 } from '@nexus-terminal/protocol/runner';
@@ -105,8 +101,6 @@ import {
   decodeWorkspaceFileMove,
   decodeWorkspaceFileDelete,
   decodeWorkspaceSearch,
-  decodeWorkspaceRepoMap,
-  decodeWorkspaceCodeIntel,
   decodeWorkspaceApplyPatch,
   decodeErrorCode,
   commandResult,
@@ -363,38 +357,6 @@ export class RunnerHttpAdapter
         { method: 'POST', body: { generation, ...request } },
         signal,
         { maxResponseBytes: 384 * 1024 },
-      ),
-    );
-  }
-
-  async repoMap(
-    workspaceId: string,
-    generation: number,
-    request: WorkspaceRepoMapRequest,
-    signal?: AbortSignal,
-  ): Promise<WorkspaceRepoMapResult> {
-    return decodeWorkspaceRepoMap(
-      await this.request(
-        `/v1/workspaces/${encodeURIComponent(workspaceId)}/coding/repo-map`,
-        { method: 'POST', body: { generation, ...request } },
-        signal,
-        { maxResponseBytes: 128 * 1024 },
-      ),
-    );
-  }
-
-  async codeIntel(
-    workspaceId: string,
-    generation: number,
-    request: WorkspaceCodeIntelRequest,
-    signal?: AbortSignal,
-  ): Promise<WorkspaceCodeIntelResult> {
-    return decodeWorkspaceCodeIntel(
-      await this.request(
-        `/v1/workspaces/${encodeURIComponent(workspaceId)}/coding/code-intel`,
-        { method: 'POST', body: { generation, ...request } },
-        signal,
-        { maxResponseBytes: 128 * 1024 },
       ),
     );
   }

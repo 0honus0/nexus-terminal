@@ -1,9 +1,3 @@
-import type {
-  WorkspaceCodeIntelRequest,
-  WorkspaceCodeIntelResult,
-  WorkspaceRepoMapRequest,
-  WorkspaceRepoMapResult,
-} from '@nexus-terminal/protocol/runner';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { logger } from '../../../shared/logging/logger';
@@ -181,30 +175,6 @@ export class WorkspaceRuntimeService {
       generation: workspace.generation,
       ...projection,
     };
-  }
-
-  async repoMap(
-    scope: Scope,
-    workspaceId: string,
-    generation: number,
-    request: WorkspaceRepoMapRequest,
-    signal?: AbortSignal,
-  ): Promise<WorkspaceRepoMapResult> {
-    const workspace = await this.requireLiveWorkspace(scope, workspaceId);
-    if (workspace.generation !== generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
-    return this.controller.repoMap(workspace.id, workspace.generation, request, signal);
-  }
-
-  async codeIntel(
-    scope: Scope,
-    workspaceId: string,
-    generation: number,
-    request: WorkspaceCodeIntelRequest,
-    signal?: AbortSignal,
-  ): Promise<WorkspaceCodeIntelResult> {
-    const workspace = await this.requireLiveWorkspace(scope, workspaceId);
-    if (workspace.generation !== generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
-    return this.controller.codeIntel(workspace.id, workspace.generation, request, signal);
   }
 
   async getWorkspace(scope: Scope, workspaceId: string): Promise<AgentWorkspaceView> {

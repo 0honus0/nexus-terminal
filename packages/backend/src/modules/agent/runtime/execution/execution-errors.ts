@@ -52,9 +52,6 @@ const ERROR_DETAILS: Readonly<Record<string, string>> = {
     'text accepts startLine/lineCount, not startByte/maxBytes; use bytes for byte ranges.',
   ARTIFACT_BYTES_LINE_RANGE_CONFLICT:
     'bytes accepts startByte/maxBytes, not startLine/lineCount; use text for line ranges.',
-  CODE_QUERY_ACTION_INVALID: 'action must be symbols, definition, references or diagnostics.',
-  CODE_QUERY_POSITION_REQUIRED: 'definition and references require both line and column (1-based).',
-  CODE_QUERY_POSITION_UNSUPPORTED: 'symbols and diagnostics do not accept line or column; omit both fields.',
   BROWSER_NODE_SNAPSHOT_PAIR_REQUIRED:
     'Provide snapshotId and nodeRef together, or omit both for session-wide key input.',
   FILE_PATCH_UNSUPPORTED:

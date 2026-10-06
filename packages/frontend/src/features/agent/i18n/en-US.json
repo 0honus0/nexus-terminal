@@ -1402,12 +1402,6 @@
             "click": "click",
             "type": "type"
           },
-          "codeAction": {
-            "symbols": "symbol",
-            "definition": "definition",
-            "references": "reference",
-            "diagnostics": "diagnostic"
-          },
           "acpStopReason": {
             "end_turn": "end of turn",
             "max_tokens": "token limit",
@@ -1449,9 +1443,6 @@
         "workspaceActionPending": "Workspace {actionKey} is {stateKey}.",
         "versionsSwitched": "Workspace tool versions switched; generation is now {generation}.",
         "versionSwitchOutcome": "Workspace tool version switch is {stateKey}.",
-        "codeFilesMapped": "Mapped {files} file(s) from {indexed} indexed TypeScript/JavaScript source file(s).",
-        "codeResults": "Returned {count} {actionKey} result(s) from TypeScript native code intelligence.",
-        "codeUnavailable": "Code intelligence is unavailable for {path}; use {search} and {read}.",
         "skillMetadataFound": "Found {count} relevant signed Skill metadata entries.",
         "skillLoaded": "Loaded signed Skill {name} ({id}).",
         "deferredCapabilityFound": "Found {count} deferred MCP capability matches.",

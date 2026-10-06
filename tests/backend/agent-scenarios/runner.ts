@@ -19,11 +19,9 @@ import { sshSessionJobsScenario } from './ssh-session-jobs.scenario';
 import { subagentGovernedMutationScenario } from './subagent-governed-mutation.scenario';
 import { restartRecoveryScenario } from './restart-recovery.scenario';
 import { checkpointWorkspaceEvidenceScenario } from './checkpoint-workspace-evidence.scenario';
-import { workspaceRepoMapCodeIntelScenario } from './workspace-repo-map-code-intel.scenario';
 import { workspaceBackgroundJobLifecycleScenario } from './workspace-background-job-lifecycle.scenario';
 import { agentDefinitionCapabilityContractScenario } from './agent-definition-capability-contract.scenario';
 import { workspaceCodingToolSurfaceScenario } from './workspace-coding-tool-surface.scenario';
-import { codeIntelligenceSnapshotScenario } from './code-intelligence-snapshot.scenario';
 import { nestedJoinDurableWakeScenario } from './nested-join-durable-wake.scenario';
 import { userInputClarificationScenario } from './user-input-clarification.scenario';
 import { mcpInputRequiredDurableLifecycleScenario } from './mcp-input-required-durable-lifecycle.scenario';
@@ -112,11 +110,9 @@ const scenarios = new Map<string, Scenario>([
   ['context/token-accounting', contextTokenAccountingScenario],
   ['context/project-instructions', projectInstructionsContextScenario],
   ['workspace/coding-tool-surface', workspaceCodingToolSurfaceScenario],
-  ['workspace/code-intelligence-snapshot', codeIntelligenceSnapshotScenario],
   ['file/unified-targets', unifiedFileCapabilityScenario],
   ['shell/unified-targets', unifiedShellCapabilityScenario],
   ['ssh/session-jobs', sshSessionJobsScenario],
-  ['workspace/repo-map-code-intel', workspaceRepoMapCodeIntelScenario],
   ['workspace/background-job-lifecycle', workspaceBackgroundJobLifecycleScenario],
   ['context/tool-result-projection', toolResultProjectionScenario],
   ['context/tool-surface-progressive-disclosure', toolSurfaceProgressiveDisclosureScenario],

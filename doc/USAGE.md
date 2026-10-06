@@ -165,7 +165,7 @@ Workspace 文件工具的非法路径或越界读取由 Runner 拒绝，模型�
 - 工具参数拒绝说明本次未执行，并提示按 Schema 与目标类型纠正后再尝试；反馈不回显参数值。循环警告按失败重复、稳定观察重复或其他无进展行为给出调整指引，不自动重放操作或停止端口占用者。
 - SSH `shell_execute(mode="background", sessionId=...)` 返回 `jobId`，任务继续运行；使用 `shell_job_control(target="ssh", id=连接ID, jobId, action="status/wait/cancel")` 查看有界输出、等待或取消。后台任务 timeoutSeconds 默认 3600 秒、最多 86400 秒，独立于提交工具期限；前台仍最多 300 秒且受工具预算约束。后台任务运行时不进行空闲回收，每用户最多 32 个活动任务。
 - SSH 任务状态与终态结果持久保存，原始命令和凭据不写入任务记录。连接丢失、强制关闭或 Backend 重启后的未确认任务标记 unknown，不重放；单任务取消不关闭共享连接。取消只有收到远端执行结束证据才有确定结果，不把本地 channel 关闭当作远端进程已终止。
-- `shell_job_control` 同时管理 Workspace Job；`workspace_code_query` 提供 TS/JS symbols、definition、references、diagnostics，其他语言使用文件搜索／读取。SSH Job 不使用 Runner，普通 SSH 功能不依赖 Runner 可用性。
+- `shell_job_control` 同时管理 Workspace Job；代码调查使用通用 `file_list`、`file_search`、`file_read`，验证使用授权的 Shell 执行真实构建／测试，不提供语言专用语义导航。SSH Job 不使用 Runner，普通 SSH 功能不依赖 Runner 可用性。
 
 全局 Agent 呼出悬浮按钮使用 44px 圆形、实心主色底与高对比图标，图标为对话框内的终端提示符；保留拖动位置、点击打开和任务数量徽标。拖到左右边缘附近松手后吸附贴边并半隐藏；鼠标悬停或键盘聚焦时完整展开，手机点击露出的半圆直接打开 Agent，也可拖回页面内取消贴边。贴边侧和纵向位置随布局保存，右键重置位置。
 
