@@ -96,6 +96,70 @@ const execute = async (
   return { run, ledger, text: textResult! };
 };
 
+test('SSH file mutation lifecycle verifies strict patch, move, delete and preserved data through a Run', async ({
+  request,
+}) => {
+  const context = await prepare(request);
+  const connectionId = await ensureTestSshConnection(request);
+  const project = path.resolve(__dirname, '../../.tmp/ssh-root/file-lifecycle');
+  const preserved = '{"business":"keep","version":1}\n';
+  await mkdir(project);
+  await writeFile(path.join(project, 'preserved.json'), preserved);
+  const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+  try {
+    const result = await execute(request, context, `E2E_FILE_LIFECYCLE connection=${connectionId}`, {
+      connectionIds: [connectionId],
+    });
+    expect(result.run.status).toBe('completed');
+    expect(result.run.needsReconciliation).toBe(false);
+    const results = result.ledger
+      .filter((entry) => entry.kind === 'tool_result')
+      .map((entry) => JSON.parse(entry.payload.text!));
+    expect(results).toHaveLength(11);
+    expect(results.filter((_, index) => index !== 9).every((item) => item.ok && item.outcome === 'confirmed')).toBe(
+      true,
+    );
+    expect(results[0]).toMatchObject({
+      data: { created: true, sha256: digest('alpha\nkeep\n') },
+      verification: { status: 'verified' },
+    });
+    expect(results[1]).toMatchObject({
+      data: {
+        additions: 1,
+        deletions: 1,
+        changes: [{ beforeSha256: digest('alpha\nkeep\n'), afterSha256: digest('ALPHA\nkeep\n') }],
+      },
+      verification: { status: 'verified' },
+    });
+    for (const index of [2, 5])
+      expect(results[index]).toMatchObject({
+        data: { content: 'ALPHA\nkeep\n', sha256: digest('ALPHA\nkeep\n') },
+        verification: { status: 'verified' },
+      });
+    expect(results[4]).toMatchObject({
+      data: { path: '/file-lifecycle/original.txt', destinationPath: '/file-lifecycle/moved.txt' },
+      verification: { status: 'verified' },
+    });
+    expect(results[7]).toMatchObject({
+      data: { path: '/file-lifecycle/moved.txt', deleted: true },
+      verification: { status: 'verified' },
+    });
+    expect(results[9]).toMatchObject({
+      ok: false,
+      errorCode: 'FILE_PATCH_CONTEXT_MISMATCH',
+      verification: { status: 'failed' },
+    });
+    expect(results[10]).toMatchObject({
+      data: { content: preserved, sha256: digest(preserved) },
+      verification: { status: 'verified' },
+    });
+    expect(await readdir(project)).toEqual(['preserved.json']);
+    expect(digest(await readFile(path.join(project, 'preserved.json'), 'utf8'))).toBe(digest(preserved));
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
 for (const persistent of [false, true]) {
   test(`SSH file search cancellation closes a held SFTP read and permits a new request (${persistent ? 'persistent' : 'temporary'})`, async ({
     request,

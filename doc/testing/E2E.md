@@ -4,6 +4,8 @@
 
 Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end coverage.
 
+`agent/functional-regressions.spec.ts` exercises the production Run/governance/SFTP file mutation chain with a scripted model provider: create, strict patch, read, deferred move/delete and follow-up evidence. It compares durable content hashes and independently reads the fixture filesystem, including a rejected mismatched patch that must preserve business data and allow a subsequent read. The provider does not simulate filesystem success; this coverage does not establish real-model behavior or Workspace transport parity.
+
 Terminal pointer tests use locator clicks so layout changes and viewport scrolling cannot redirect clicks outside the terminal. OSC 52 clipboard tests start an independent SSH session: the pipe-based SSH fixture does not provide PTY signal semantics for stopping a preceding foreground command with Ctrl+C. Status detail assertions target the shared tooltip panel and live accessible metric label, not native title attributes.
 
 OSC 52 tests type ASCII-only shell commands and decode the Unicode heading from Base64 on the test server. Playwright's non-ASCII text insertion is not a physical key event and can interact with xterm's retained helper-textarea paste value; it must not be used to construct these shell commands. The clipboard assertion still compares the complete Unicode text and all 2000 lines.

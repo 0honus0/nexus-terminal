@@ -205,6 +205,7 @@
 
 ### A02 当前执行（未完成）
 
+- SSH 文件 mutation 生产链补齐：模拟 Provider 仅提出工具调用，生产 Run／治理／SFTP 实际执行 file_write→严格 file_patch→file_read→tool_search/invoke file_move→读取→tool_search/invoke file_delete→列表；独立断言创建和 patch 前后 SHA、移动后内容、删除状态与最终仅保留原业务文件。加入错误 hunk 上下文反例，FILE_PATCH_CONTEXT_MISMATCH 拒绝后同 Run 继续真实读取，业务数据 hash 不变、无 reconciliation、Run completed。定向 E2E 通过；该例验证生产 SSH adapter，不把场景中的模拟文件 port 当作真实 SFTP，也不替代 Workspace 或真实模型 A02。ACP 继续暂跳过，A03 未开始。
 - 文件参数错误细化：FILE_ARGUMENT_* 区分对象／未知字段／目标／字符串与内容／整数／布尔／内部 hash 格式和 patch preconditions，不再用泛化参数错误或资源变化掩盖格式错误。字符串与整数提供声明字段和固定范围，不回显输入；file_search 不存在路径统一 FILE_NOT_FOUND。双目标反例核对 read/list/search/write/move/delete 非法字段／范围、安全 canary 不泄漏、无文件创建和原文件 identity/hash 不变；正常七工具及 stale 授权回归保留。定向场景、check、Backend build 通过；全量格式仍受保留的原始实测资料阻断，已跟踪格式通过。ACP 剩余验收按用户决定暂跳过，A03 未开始。
 - 2026-10-06 用户决定：ACP 剩余验收暂时跳过，转到通用文件工具；跳过不计通过。ACP 已完成 canonical target/id、双目标规范化重复检查、SSH 配置持久化和生产 Run 的内层拒绝／取消 fixture 链；尚缺 Workspace UI→Run 完整链、真实第三方 ACP 程序及对应 canonical Actions。工具统一工作量暂估约 80%，不是验收通过率，也不是 81 个场景完成率；当前继续文件参数错误契约，A02 最新真实回归和收尾未完成，A03 未开始。
 - 通用文件状态错误统一：file_write 目录目标不再误报权限拒绝；file_move 源不存在／同路径／目标已存在分别报告具体 FILE_* 错误，file_delete 不存在路径报告 FILE_NOT_FOUND。双目标场景覆盖五类拒绝、安全错误投影及原文件 identity/hash 不变，并继续执行既有七工具正常路径、stale generation／SSH 配置与 capability 反例；该场景的 SSH 文件 port 为 fixture，不替代生产 SFTP E2E。剩余字段级错误核对与完整工具统一尚未闭环，A03 未开始。

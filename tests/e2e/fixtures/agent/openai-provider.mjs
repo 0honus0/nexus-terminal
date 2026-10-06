@@ -261,6 +261,86 @@ const server = http.createServer(async (request, response) => {
     }
   }
   const outputCase = regressionInputs.modelOutputs.find((fixture) => latestUserText.includes(fixture.marker));
+  const fileLifecycle = latestUserText.match(/E2E_FILE_LIFECYCLE connection=(\d+)/);
+  if (fileLifecycle) {
+    const data = (id) => {
+      const message = messages.find((item) => item.role === 'tool' && item.tool_call_id === id);
+      return message ? JSON.parse(message.content) : null;
+    };
+    const selector = { target: 'ssh', id: fileLifecycle[1] };
+    const root = '/file-lifecycle';
+    const steps = [
+      ['file_create', 'file_write', { ...selector, path: root + '/original.txt', content: 'alpha\nkeep\n' }],
+      [
+        'file_patch',
+        'file_patch',
+        {
+          ...selector,
+          patch: `--- ${root}/original.txt\n+++ ${root}/original.txt\n@@ -1,2 +1,2 @@\n-alpha\n+ALPHA\n keep\n`,
+        },
+      ],
+      ['file_patch_read', 'file_read', { ...selector, path: root + '/original.txt' }],
+      ['file_move_discover', 'tool_search', { query: 'file_move', limit: 1 }],
+      [
+        'file_move',
+        'tool_invoke',
+        () => ({
+          handle: data('file_move_discover').data.matches[0].handle,
+          arguments: { ...selector, path: root + '/original.txt', destinationPath: root + '/moved.txt' },
+        }),
+      ],
+      ['file_move_read', 'file_read', { ...selector, path: root + '/moved.txt' }],
+      ['file_delete_discover', 'tool_search', { query: 'file_delete', limit: 1 }],
+      [
+        'file_delete',
+        'tool_invoke',
+        () => ({
+          handle: data('file_delete_discover').data.matches[0].handle,
+          arguments: { ...selector, path: root + '/moved.txt' },
+        }),
+      ],
+      ['file_final_list', 'file_list', { ...selector, path: root }],
+      [
+        'file_patch_mismatch',
+        'file_patch',
+        {
+          ...selector,
+          patch: `--- ${root}/preserved.json\n+++ ${root}/preserved.json\n@@ -1 +1 @@\n-wrong context\n+must-not-write\n`,
+        },
+      ],
+      ['file_preserved_read', 'file_read', { ...selector, path: root + '/preserved.json' }],
+    ];
+    for (const [id, name, args] of steps) {
+      const result = data(id);
+      if (
+        result &&
+        !result.ok &&
+        !(id === 'file_patch_mismatch' && result.errorCode === 'FILE_PATCH_CONTEXT_MISMATCH')
+      ) {
+        regressionResponse(response, { content: 'File lifecycle failed; inspect durable tool result.' });
+        return;
+      }
+      if (!result) {
+        regressionResponse(
+          response,
+          {
+            tool_calls: [
+              {
+                index: 0,
+                id,
+                type: 'function',
+                function: { name, arguments: JSON.stringify(typeof args === 'function' ? args() : args) },
+              },
+            ],
+          },
+          'tool_calls',
+        );
+        return;
+      }
+    }
+    regressionResponse(response, { content: 'File lifecycle finished; independently verify the filesystem.' });
+    return;
+  }
   const acpExecution = latestUserText.match(/E2E_ACP_EXECUTE connection=(\d+) integration=([a-f0-9-]+)/);
   if (acpExecution) {
     const toolData = (id) => {
