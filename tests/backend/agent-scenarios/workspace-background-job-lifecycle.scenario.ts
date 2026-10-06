@@ -324,6 +324,11 @@ export const workspaceBackgroundJobLifecycleScenario = async () => {
   assert.match(backgroundLaunch.summary, /expiry terminates this Job/);
   assert.match(backgroundLaunch.summary, /user cleanup after this Run ends/);
   assert.match(backgroundLaunch.summary, /authenticated Workspace management API/);
+  const cleanup = (backgroundLaunch.data as { userCleanup: Record<string, JsonValue> }).userCleanup;
+  assert.equal(cleanup.workspaceReadPath, `/api/v1/apps/${toolContext.appId}/workspaces/${toolWorkspace.id}`);
+  assert.equal(cleanup.actionPath, `/api/v1/apps/${toolContext.appId}/workspaces/${toolWorkspace.id}/actions`);
+  assert.deepEqual(cleanup.bodyFields, { schemaVersion: 1, action: 'stop' });
+  assert.deepEqual(cleanup.requiredHeaders, ['X-Nexus-CSRF', 'Idempotency-Key']);
   assert.equal(
     backgroundLaunch.verification.status,
     'unverified',

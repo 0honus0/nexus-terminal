@@ -633,6 +633,24 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
         ) {
           result.summary += ` Execution lifetime is ${executionTimeoutSeconds} seconds from process start; expiry terminates this Job. This is not a startup timeout. Verify Job status and endpoints before reporting current uptime; do not claim indefinite availability.`;
           if (target.selector.target === 'workspace') {
+            const workspacePath = `/api/v1/apps/${encodeURIComponent(context.appId)}/workspaces/${encodeURIComponent(target.selector.id)}`;
+            result.data = {
+              ...record(result.data ?? {}),
+              userCleanup: {
+                workspaceReadPath: workspacePath,
+                actionPath: `${workspacePath}/actions`,
+                method: 'POST',
+                bodyFields: { schemaVersion: 1, action: 'stop' },
+                expectedVersionSource:
+                  'Set body.expectedVersion to the numeric data.version from a fresh Workspace GET; do not quote it or reuse an old version.',
+                requiredHeaders: ['X-Nexus-CSRF', 'Idempotency-Key'],
+                commandReadPath: `/api/v1/apps/${encodeURIComponent(context.appId)}/workspace-runtime/commands/{commandId}`,
+                confirmation:
+                  'Require command.status=succeeded, then GET Workspace and require status=stopped. For delete, GET a fresh version, submit action=delete, confirm command succeeded and Workspace deleted.',
+                scope:
+                  'Authenticated user management API; not an Agent tool or new Run. Stop affects all Jobs in this Workspace generation.',
+              },
+            } as JsonValue;
             result.summary +=
               ' Workspace Job control is scoped to this Run/Runtime: cancel while this Run is active if requested. For user cleanup after this Run ends, use the authenticated Workspace management API, not Agent tools or a new Run: GET /api/v1/apps/{appId}/workspaces/{workspaceId}, then POST /api/v1/apps/{appId}/workspaces/{workspaceId}/actions with schemaVersion=1, current expectedVersion and action=stop or delete, CSRF and Idempotency-Key. Stop affects all Jobs in that Workspace generation; confirm the returned command succeeded and final Workspace state.';
           }

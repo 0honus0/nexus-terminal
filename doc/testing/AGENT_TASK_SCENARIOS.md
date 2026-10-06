@@ -205,6 +205,9 @@
 
 ### A04 当前执行（交付说明反例，未闭环）
 
+- 修复后真实复验Run3ed36f4f-3b72-4999-88ff-c2ad1b075ddb completed／verified；Workspace922dd20a-ae74-4c28-97cb-0b7044f4e4d5，Job900秒，独立接口、全树SHA、PID231199/cwd/PORT29177及Job归属通过。交付已改用用户管理API，但仍留appId占位、expectedVersion字符串示例且未说明命令/最终状态核对，不计通过、不机械重跑。进一步在后台反馈增加本次具体路径与结构化userCleanup，明确数值版本和最终确认；不变更权限或管理API。观察／收尾任务已启动，证据/tmp/opencode/a04-recheck-*.json；10分钟与cleanup尚待完成通知，A04保持未闭环。
+- 具体交接反馈的生命周期场景、check、完整build、完整functional-regressions16项及已跟踪格式通过；全量格式仍被保留原始资料阻断。此验证不代替模型最终交付或管理API副作用验收，后续真实模型复验与A04确定性部署交付回归仍待完成。
+
 - 首轮真实Luna low Run337de09b-1c48-40da-a2d3-c02095e377fe completed／verified、无reconciliation；Workspace77d1d8db-48f6-44cb-a4ca-354944b4a226以720秒期限启动受管Job，独立两接口200及内容正确、全树SHA不变、PID227890/cwd/PORT与Job一致。独立启动后观测与第587–602秒接口复核通过，非完整连续10分钟采样；终态后用户管理API stop／delete命令均succeeded，最终deleted、PID消失、端口关闭。证据 /tmp/opencode/a04-{input,baseline,result,independent,observations,cleanup}.json。交付说明错误地建议终态后使用Agent workspace_control，没有区分用户管理API与Run内工具，因此本轮不计A04通过。
 - 交接反馈修复已完成本地验证：Workspace控制工具说明与后台launch反馈明确Run／Runtime边界、终态后的已认证管理API、版本/CSRF/幂等及命令/最终状态核对，保持原权限拒绝；生命周期场景补跨Run／Runtime拒绝及公开反馈验收并通过。check、完整build、完整functional-regressions16项及已跟踪格式通过；全量格式仍被保留的tests/agent-functional原始资料阻断，未改动这些资料。真实模型修复后复验与A04确定性部署交付回归尚待完成，不声称反馈修复保证模型交付正确；A05未开始，ACP仍暂跳过。
 
