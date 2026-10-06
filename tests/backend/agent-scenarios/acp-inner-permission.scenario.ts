@@ -217,6 +217,31 @@ export const acpInnerPermissionScenario = async () => {
   await Promise.all([byteTransport.close(), byteTransport.close()]);
   assert.equal(terminated, 1);
   assert.equal(closed, 1);
+  const cancelController = new AbortController();
+  const cancelledTransport = await transportFixture.open(
+    { ...context, signal: cancelController.signal, deadlineAt: Math.floor(Date.now() / 1000) + 60 },
+    1,
+    'ssh-config',
+    ['agent'],
+    '/srv/project',
+  );
+  const cancelledReader = cancelledTransport.readable.getReader();
+  const pendingRead = cancelledReader.read();
+  cancelController.abort();
+  await assert.rejects(() => pendingRead, /ABORTED/);
+  await cancelledTransport.close();
+  assert.equal(terminated, 2);
+  assert.equal(closed, 2);
+  const overflowTransport = await transportFixture.open(
+    { ...context, deadlineAt: Math.floor(Date.now() / 1000) + 60 },
+    1,
+    'ssh-config',
+    ['agent'],
+    '/srv/project',
+  );
+  stdout!(new Uint8Array(256 * 1024 + 1));
+  await assert.rejects(() => overflowTransport.readable.getReader().read(), /ACP_SSH_STREAM_OVERFLOW/);
+  await overflowTransport.close();
   let sshPermissionRequests = 0;
   const sshTool = createAcpExecuteTool(
     { get: async () => sshIntegration } as unknown as IntegrationRepositoryPort,

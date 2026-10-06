@@ -205,6 +205,7 @@
 
 ### A02 当前执行（未完成）
 
+- 2026-10-06 继续 SSH ACP 验证发现取消时 transport.close 只关闭 channel 未结束 readable，可能挂住协议 nextUpdate；现改为 close/abort 明确结束读取（ABORTED/ACP_SSH_TRANSPORT_CLOSED），单块输出超过剩余缓冲也直接拒绝，terminate promise 异常不产生未处理 rejection。定向场景验证未完成 read 在 abort 后拒绝、channel/session 收尾一次、超大 chunk 拒绝；check 通过。尚不是完整真实 SSH ACP E2E，代码导航 parity 仍未完成。
 - parity 后续：`bd6a571f` 已提交 glob 与错误改进。SSH ACP 已接通配置/协议 DTO、设置创建入口、target/id 工具、独立非 PTY byte transport 和现有 ACP v1 permission callback。定向场景覆盖 SSH 内层拒绝走 broker、配置版本变化拒绝、目标匹配、字节流转发、断连具体错误、幂等 close；check 通过。尚未真实 SSH ACP 程序/E2E 验收，代码导航的 SSH 后端仍未完成；不能据此宣布所有 Workspace/SSH 能力完全一致。
 - parity 第一项已本地提交 `72a01dab`；第二项将 SSH glob 改为 Node matchesGlob，Workspace 显式 glob 走同一语义的有界读取搜索，避免 rg glob/自定义 glob 差异；保留非 glob 查询 rg 路径和资源界限。统一文件场景覆盖 `{a,b}.txt` 搜索通过；错误反馈继续细化中。
 - 后续 parity 修复第一项：SSH 补齐 shell_job_control list，底层查询按 user/App/Thread/connection 隔离，仅返回 running Job，不伪造 Workspace generation 容量；已有 SSH 后台 start/status/wait/cancel 保留。真实 SQLite SSH 生命周期场景覆盖活跃列表、其他 App/Thread 不可见及终态移出，check 通过。其余搜索/错误细化仍在逐项处理，代码导航与 ACP 的 SSH 实现尚未完成。

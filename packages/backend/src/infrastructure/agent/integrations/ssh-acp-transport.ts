@@ -36,16 +36,18 @@ export class SshAcpTransport {
       });
       const subscriptions: (() => void)[] = [];
       let ended = false;
+      let streamController: ReadableStreamDefaultController<Uint8Array>;
       const readable = new ReadableStream<Uint8Array>(
         {
           start(controller) {
+            streamController = controller;
             subscriptions.push(
               command.onStdout((bytes) => {
                 if (ended) return;
-                if ((controller.desiredSize ?? 0) <= 0) {
+                if (bytes.byteLength > (controller.desiredSize ?? 0)) {
                   ended = true;
                   controller.error(new Error('ACP_SSH_STREAM_OVERFLOW'));
-                  void command.terminate();
+                  void command.terminate().catch(() => undefined);
                   return;
                 }
                 controller.enqueue(bytes);
@@ -82,6 +84,10 @@ export class SshAcpTransport {
       let closing: Promise<void> | undefined;
       const close = (): Promise<void> =>
         (closing ??= (async () => {
+          if (!ended) {
+            ended = true;
+            streamController.error(new Error(context.signal.aborted ? 'ABORTED' : 'ACP_SSH_TRANSPORT_CLOSED'));
+          }
           context.signal.removeEventListener('abort', abort);
           subscriptions.splice(0).forEach((unsubscribe) => unsubscribe());
           await command.terminate().finally(() => this.sessions.close(session.id));
