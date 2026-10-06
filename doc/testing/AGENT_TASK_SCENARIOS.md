@@ -203,7 +203,9 @@
 
 ### 临时文档退出条件
 
-### A02 当前执行（未完成）
+### A02 本地闭环（canonical Actions 未验收）
+
+- 最新本地真实闭环：Run143dd302-230e-4918-8bd6-7295f166084e 最终 completed／verified、needsReconciliation=false，所有Plan项completed。服务实际780秒有界期限，独立满10分钟两接口200及正确内容；授权前全树SHA不变，授权后仅config.json改变，业务数据原hash不变，PID/cwd/PORT与本Run Workspace一致。明确收尾输入后模型取消Job并真实检查端口停止、读取数据；独立确认PID221433消失、29175无监听、数据hash不变。随后产品API stop／delete均succeeded，Workspacedc6a799e-68d9-4184-8823-3aa005df8d15最终deleted。观察器在10分钟时Run仍running而保护性退出，随后真实收尾及最终状态补齐，不将该退出算产品失败。证据 /tmp/opencode/a02-bounded-{settled,observations,independent,cleanup}.json；首次30秒期限失败仍保留，未提高门禁或最大期限。A02本地场景关闭，可开始A03；ACP剩余验收仍暂跳过、不计通过，canonical Actions／Docker smoke仍未送验，不代表工具全组或81场景全部验收。
 
 - SSH期限反馈反例补齐：canonical shell_execute→生产ShellCapabilityService／AgentSshSessions→真实loopback SSH独立channel启动后台命令，实际返回executionTimeoutSeconds=600、active/unverified和到期终止提示；释放受控命令后真实wait确认succeeded。首次测试将channel取消误当确定cancelled，实际unknown符合取消不保证远端结果的contract，故改为真实正常退出收尾，不放宽产品断言、不把unknown视为通过；场景及check通过。
 - 期限反馈修复本地提交 a15e6919；完整 functional-regressions 的15项E2E通过。真实复验 Run143dd302-230e-4918-8bd6-7295f166084e／Workspacedc6a799e-68d9-4184-8823-3aa005df8d15 使用新契约；用户明确要求保留服务至少10分钟供独立验收，模型选择780秒有界期限。授权前全树SHA未变，授权后只改config.json；独立检查两接口200及内容、原业务数据hash、监听127.0.0.1:29175、PID221433的cwd/PORT归属通过，Jobacb1b151…真实running。当前尚未确认Run终态与完整10分钟观察；后台观察器在时段结束后仅对终态Run显式stop/delete并检查PID/监听消失，活动Run保留供诊断，不提前计通过。证据 /tmp/opencode/a02-bounded-*.json，A03未开始。
