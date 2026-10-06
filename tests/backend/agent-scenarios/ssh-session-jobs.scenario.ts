@@ -35,6 +35,16 @@ export const sshSessionJobsScenario = async () => {
   const statBarrier = new Promise<void>((resolve) => {
     statStarted = resolve;
   });
+  let holdSftpOpen = false;
+  let openingStarted!: () => void;
+  let releaseOpening!: () => void;
+  let openingClosed!: () => void;
+  const openingBarrier = new Promise<void>((resolve) => {
+    openingStarted = resolve;
+  });
+  const openingTeardown = new Promise<void>((resolve) => {
+    openingClosed = resolve;
+  });
   const server = new Server({ hostKeys: [key] }, (client) => {
     client.on('authentication', (auth) => {
       authentications++;
@@ -44,6 +54,15 @@ export const sshSessionJobsScenario = async () => {
       client.on('session', (accept) => {
         const session = accept();
         session.on('sftp', (acceptSftp) => {
+          if (holdSftpOpen) {
+            openingStarted();
+            releaseOpening = () => {
+              const late = acceptSftp();
+              late.on('end', () => late.end());
+              late.on('close', openingClosed);
+            };
+            return;
+          }
           sftpChannels++;
           const sftp = acceptSftp();
           sftp.on('end', () => sftp.end());
@@ -240,6 +259,22 @@ export const sshSessionJobsScenario = async () => {
     await deadlineRejected;
     assert.equal((await sessions.list(scoped, 1, persistent.sessionId))[0].status, 'ready');
     assert.equal((await sessions.listJobs(scoped, 1))[0].status, 'running');
+    holdSftpOpen = true;
+    const abortOpening = new AbortController();
+    const openingOperation = sessions.withFileSystem(
+      { ...scoped, signal: abortOpening.signal },
+      1,
+      hash,
+      (filesystem) => filesystem.metadata('/opening.txt'),
+    );
+    const openingRejected = assert.rejects(openingOperation, (error: unknown) => error === abortOpening.signal.reason);
+    await openingBarrier;
+    abortOpening.abort();
+    await openingRejected;
+    assert.equal((await sessions.list(scoped, 1, persistent.sessionId))[0].status, 'ready');
+    holdSftpOpen = false;
+    releaseOpening();
+    await openingTeardown;
     const other = await sessions.withSession(
       { ...scoped, runId: 'run-two', agentRuntimeId: 'child-two' },
       1,
