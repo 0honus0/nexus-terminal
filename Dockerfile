@@ -16,6 +16,7 @@ COPY packages/backend/package.json ./packages/backend/package.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @nexus-terminal/backend
 COPY packages/protocol/src ./packages/protocol/src
+COPY packages/protocol/runtime ./packages/protocol/runtime
 COPY packages/protocol/tsconfig.runtime.json ./packages/protocol/tsconfig.runtime.json
 COPY packages/backend/src ./packages/backend/src
 COPY packages/backend/tsconfig.json ./packages/backend/tsconfig.json
