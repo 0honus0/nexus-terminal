@@ -4,7 +4,7 @@
     "specs/agent/configuration-hints.spec.ts": 7173,
     "specs/agent/coverage-gaps.spec.ts": 1525,
     "specs/agent/event-catchup.spec.ts": 26543,
-    "specs/agent/functional-regressions.spec.ts": 263179,
+    "specs/agent/functional-regressions.spec.ts": 279229,
     "specs/agent/host.spec.ts": 86806,
     "specs/agent/preset-plugin.spec.ts": 152861,
     "specs/agent/provider.spec.ts": 310,
