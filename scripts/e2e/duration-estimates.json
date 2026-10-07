@@ -81,6 +81,7 @@
     "specs/ssh/terminal-ui.spec.ts": 56697,
     "specs/ssh/upload-prepare-profile.spec.ts": 13601,
     "specs/ssh/upload-protocol.spec.ts": 20666,
+    "specs/ssh/workspace-layout-restore.spec.ts": 4376,
     "specs/ssh/workspace-preferences-runtime.spec.ts": 10174,
     "specs/ui/audit-log-filtering.spec.ts": 8532,
     "specs/ui/backup-ui.spec.ts": 5637,
