@@ -248,17 +248,3 @@
     transition: none;
   }
 }
-
-:deep(.agent-thread-sidebar) ::-webkit-scrollbar {
-  width: 4px;
-}
-:deep(.agent-thread-sidebar) ::-webkit-scrollbar-track {
-  background: transparent;
-}
-:deep(.agent-thread-sidebar) ::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 9999px;
-}
-:deep(.agent-thread-sidebar) ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-color-secondary);
-}
