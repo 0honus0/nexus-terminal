@@ -115,7 +115,7 @@ async function createConnection(
 
 const dashboardRoot = (page: Page) => page.locator('.dashboard-page');
 const connectionRow = (page: Page, name: string) =>
-  page.locator('li.dashboard-host-card').filter({ has: page.getByTitle(name, { exact: true }) });
+  page.locator('.dashboard-quick-connect-grid > li').filter({ has: page.getByTitle(name, { exact: true }) });
 const remoteCard = (page: Page, address: string) =>
   page.locator('article.dashboard-host-card').filter({ hasText: address });
 const quickConnectPanel = (page: Page) => page.locator('.dashboard-workspace > section').first();
@@ -489,9 +489,17 @@ test('resource failures stay inside their panels and do not block quick connect'
     await expect(remoteError).toContainText('Network Error');
     await expect(connectionList).toBeVisible();
     await expect(row).toBeVisible();
-    await expect(row.getByRole('button', { name: 'Connect', exact: true })).toBeEnabled();
+    await expect(row.getByRole('button', { name: 'Connect E2E SSH', exact: true })).toBeEnabled();
 
     await expect(remoteList).toBeVisible();
+    const card = row.getByRole('button', { name: 'Connect E2E SSH', exact: true });
+    await expect(card.getByText('Connect', { exact: true })).toHaveCount(0);
+    await card.focus();
+    await card.press('Enter');
+    await expect(page).toHaveURL(/\/workspace(?:\?|$)/);
+    await expect(page.getByRole('tab', { selected: true })).toHaveAttribute('data-session-state', 'connected', {
+      timeout: 35_000,
+    });
   } finally {
     await page.unrouteAll({ behavior: 'wait' });
     const restoreSettings = await context.request.put('/api/v1/settings', {
@@ -627,7 +635,7 @@ test('dashboard filters connections and persists tag and sort preferences across
       const finalDashboard = dashboardRoot(page);
       await expect(sortFilter(page)).toHaveAttribute('data-value', 'name');
       const visibleFixtureRows = finalDashboard
-        .locator('li.dashboard-host-card')
+        .locator('.dashboard-quick-connect-grid > li')
         .filter({ hasText: /E2E Dashboard (Alpha|Beta)/ });
       await expect(visibleFixtureRows).toHaveCount(2);
       const texts = await visibleFixtureRows.allTextContents();

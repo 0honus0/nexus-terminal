@@ -567,45 +567,65 @@
                 {{ t('common.loading') }}
               </div>
               <ul v-else-if="filtered.length" class="dashboard-quick-connect-grid">
-                <DashboardHostCard
+                <li
                   v-for="item in filtered"
                   :key="item.id"
+                  class="min-w-0"
                   :data-last-connected-at="item.lastConnectedAt ?? 0"
-                  as="li"
-                  compact
-                  title-tag="span"
-                  :name="item.name || item.host"
-                  :address="`${item.username}@${item.host}:${item.port}`"
-                  :type="item.type"
                 >
-                  <template #metadata>
-                    <div class="mt-2 flex min-w-0 flex-wrap items-center gap-2">
-                      <span class="text-xs text-text-secondary"
-                        >{{ t('dashboard.lastConnected') }} {{ formatRelativeTime(item.lastConnectedAt) }}</span
-                      ><span
-                        v-for="tagName in tagNames(item)"
-                        :key="tagName"
-                        class="max-w-40 truncate rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] text-primary"
-                        :title="tagName"
-                        >{{ tagName }}</span
+                  <DashboardHostCard
+                    as="button"
+                    type="button"
+                    compact
+                    class="dashboard-quick-connect-card w-full text-left"
+                    :name="item.name || item.host"
+                    :aria-label="`${t('connections.actions.connect')} ${item.name || item.host}`"
+                    @click="connect(item)"
+                  >
+                    <template #header>
+                      <div class="flex min-w-0 items-center gap-3">
+                        <span class="grid min-w-0 flex-1 gap-1">
+                          <span
+                            class="truncate text-sm font-semibold tracking-tight text-foreground"
+                            :title="item.name || item.host"
+                          >
+                            {{ item.name || item.host }}
+                          </span>
+                          <span
+                            class="truncate font-mono text-[11px] text-text-secondary"
+                            :title="`${item.username}@${item.host}:${item.port}`"
+                          >
+                            {{ item.username }}@{{ item.host }}:{{ item.port }}
+                          </span>
+                        </span>
+                        <span
+                          class="shrink-0 rounded-md border border-border/60 bg-header/50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-secondary"
+                        >
+                          {{ item.type }}
+                        </span>
+                        <i
+                          class="dashboard-quick-connect-arrow fa-solid fa-arrow-right shrink-0 text-[11px] text-text-secondary"
+                          aria-hidden="true"
+                        ></i>
+                      </div>
+                      <div
+                        class="mt-2.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/40 pt-2"
                       >
-                    </div>
-                  </template>
-                  <template #action>
-                    <UiButton
-                      type="button"
-                      appearance="soft"
-                      tone="neutral"
-                      class="w-full shrink-0 px-3.5 sm:w-auto"
-                      @click="connect(item)"
-                    >
-                      <span class="inline-flex items-center gap-1.5 text-xs font-semibold">
-                        <i class="fa-solid fa-arrow-right-to-bracket text-[10px]" aria-hidden="true"></i>
-                        <span>{{ t('connections.actions.connect') }}</span>
-                      </span>
-                    </UiButton>
-                  </template>
-                </DashboardHostCard>
+                        <span class="mr-auto text-[11px] text-text-secondary">
+                          {{ t('dashboard.lastConnected') }} {{ formatRelativeTime(item.lastConnectedAt) }}
+                        </span>
+                        <span
+                          v-for="tagName in tagNames(item)"
+                          :key="tagName"
+                          class="max-w-40 truncate rounded-full bg-primary/10 px-2 py-0.5 text-[10px] text-primary"
+                          :title="tagName"
+                        >
+                          {{ tagName }}
+                        </span>
+                      </div>
+                    </template>
+                  </DashboardHostCard>
+                </li>
               </ul>
               <div v-else class="py-14 text-center text-sm text-text-secondary">
                 <template v-if="search">{{ t('dashboard.noConnectionsMatchSearch') }}</template>
@@ -810,8 +830,33 @@
 <style scoped>
   .dashboard-quick-connect-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
     gap: 8px;
+  }
+  .dashboard-quick-connect-card {
+    display: block;
+    height: 100%;
+    cursor: pointer;
+    appearance: none;
+  }
+  .dashboard-quick-connect-card:focus-visible {
+    outline: 2px solid var(--link-active-color);
+    outline-offset: 2px;
+  }
+  .dashboard-quick-connect-arrow {
+    transition:
+      transform 140ms ease,
+      color 140ms ease;
+  }
+  .dashboard-quick-connect-card:hover .dashboard-quick-connect-arrow,
+  .dashboard-quick-connect-card:focus-visible .dashboard-quick-connect-arrow {
+    color: var(--link-active-color);
+    transform: translateX(2px);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dashboard-quick-connect-arrow {
+      transition: none;
+    }
   }
   .dashboard-overview-metrics {
     container-type: inline-size;

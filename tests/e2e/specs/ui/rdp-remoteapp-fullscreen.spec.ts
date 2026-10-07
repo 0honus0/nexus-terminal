@@ -180,7 +180,7 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
       await expect(connectionRow).toBeVisible({ timeout: 20_000 });
       const previousLastConnectedAt = Number(await connectionRow.getAttribute('data-last-connected-at'));
       await page.waitForTimeout(1_100);
-      await connectionRow.getByRole('button', { name: 'Connect', exact: true }).click();
+      await connectionRow.getByRole('button', { name: `Connect ${CONNECTION_NAME}`, exact: true }).click();
       await expect(page).toHaveURL(/\/$/);
       const modal = remoteWindow(page);
       await expect(modal).toBeVisible();
