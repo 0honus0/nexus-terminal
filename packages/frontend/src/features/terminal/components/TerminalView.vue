@@ -12,6 +12,7 @@
   import '@xterm/xterm/css/xterm.css';
   import type { TerminalChannel } from '../ports/terminal-channel';
   import type { TerminalVisualOptions } from '../model/terminal';
+  import { mobileBackgroundRuntime } from '../model/mobileBackgroundRuntime';
   import { trackTerminalRuntimeModes, type TerminalRuntimeModeTracker } from '../model/terminalRuntimeModes';
   import { serializeTerminalSnapshot } from '../model/terminalSnapshot';
   import {
@@ -142,6 +143,7 @@
     return [
       `<meta http-equiv="Content-Security-Policy" content="${customHtmlCsp}">`,
       `<style>${customHtmlBaseStyle}${imageOverride}</style>`,
+      device.isMobile.value || device.hasCoarsePointer.value ? mobileBackgroundRuntime : '',
       html,
       customHtmlResizeBridge,
     ].join('');
