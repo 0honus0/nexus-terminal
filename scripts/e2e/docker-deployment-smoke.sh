@@ -1399,8 +1399,9 @@ cookie="$(awk 'BEGIN { first=1 } (!/^#/ || /^#HttpOnly_/) && NF >= 7 { if (!firs
 # Destructive Agent lifecycle smoke through the real authenticated HTTP API and host Runner.
 # This fixes two regressions that static architecture checks cannot observe: Run deletion must
 # refuse attached Workspaces, and runtime-cleanup confirmation must not expand after preview.
-COOKIE="$cookie" PORT="$http_port" PLUGIN_REPOSITORY_PORT="$plugin_repository_port" DATA_DIR="$data_dir" RUNNER_ROOT="$runner_root" node <<'NODE'
+COOKIE="$cookie" PORT="$http_port" PLUGIN_REPOSITORY_PORT="$plugin_repository_port" DATA_DIR="$data_dir" RUNNER_CONTAINER="nexus-e2e-agent-runner-$suffix" node <<'NODE'
 const { randomUUID } = require('node:crypto');
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const port = Number(process.env.PORT);
@@ -1763,8 +1764,9 @@ for (let attempt = 0; attempt < 450; attempt += 1) {
   const runningTool = evidenceDb.prepare("SELECT id FROM agent_tool_calls WHERE run_id = ? AND provider_call_id = 'queue_hold' AND status = 'running'").get(queueRun.id);
   const workspaceRecord = evidenceDb.prepare('SELECT id FROM agent_workspaces WHERE run_id = ?').get(queueRun.id);
   evidenceDb.close();
-  const readyPath = workspaceRecord && path.join(process.env.RUNNER_ROOT, 'runtime', 'workspaces', workspaceRecord.id, 'core', 'workspace', 'work', '.queue-ready');
-  if (runningTool && readyPath && fs.existsSync(readyPath)) break;
+  const readyPath = workspaceRecord && path.join('/var/lib/nexus-agent-runner', 'runtime', 'workspaces', workspaceRecord.id, 'core', 'workspace', 'work', '.queue-ready');
+  // Workspace directories belong to the Runner user, not the host CI user.
+  if (runningTool && readyPath && spawnSync('docker', ['exec', '--user', '0', process.env.RUNNER_CONTAINER, 'test', '-f', readyPath], { stdio: 'ignore', timeout: 5000 }).status === 0) break;
   if (attempt === 449) {
     throw new Error(`Pending-input hold tool did not start: ${JSON.stringify(queueRun)}`);
   }
