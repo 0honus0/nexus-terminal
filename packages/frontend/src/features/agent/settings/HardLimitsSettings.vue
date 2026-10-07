@@ -187,7 +187,7 @@
         :key="group.id"
         class="rounded-xl border border-border/80 bg-background/60 p-4 shadow-2xs"
       >
-        <div class="mb-3">
+        <div v-if="group.id !== 'execution'" class="mb-3">
           <h4 class="text-xs font-semibold text-foreground">
             {{ $t(`agent.settings.hardLimits.groups.${group.id}`) }}
           </h4>
@@ -196,8 +196,11 @@
           </p>
         </div>
 
-        <div class="grid gap-x-3 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
-          <label v-for="key in group.keys" :key="key" class="min-w-0">
+        <div
+          class="grid gap-x-3 gap-y-3"
+          :class="group.id === 'execution' ? 'grid-cols-2' : 'sm:grid-cols-2 xl:grid-cols-3'"
+        >
+          <label v-for="key in group.keys" :key="key" class="flex min-w-0 flex-col">
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
                 <span class="block text-xs font-medium text-foreground">
@@ -217,7 +220,7 @@
                 {{ formatHardLimitValue(key, settings.effectiveSettings.hardLimits[key]) }}
               </span>
             </div>
-            <div class="mt-1.5">
+            <div class="mt-auto pt-1.5">
               <QuantityInput v-model="draft[key]" :type="getFieldType(key)" :min="1" :disabled="busy" compact />
             </div>
           </label>
