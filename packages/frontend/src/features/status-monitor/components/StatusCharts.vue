@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { Line } from 'vue-chartjs';
   import {
@@ -13,7 +13,7 @@
     type ChartOptions,
   } from 'chart.js';
   import type { StatusHistory, StatusHistoryPoint } from '../model/status';
-  import { formatStatusPercent, formatStatusRate, formatStatusRateAxis } from '../model/statusFormatting';
+  import { formatStatusRateAxis } from '../model/statusFormatting';
 
   export type StatusMetric = 'cpu' | 'memory' | 'swap' | 'disk' | 'network';
   type DownsampleMode = 'average' | 'max';
@@ -48,18 +48,6 @@
         : null;
   };
   watch(() => [props.scale, props.metric], syncLegendPosition, { flush: 'post' });
-  const tooltipElement = ref<HTMLElement | null>(null);
-  const hoverTooltip = shallowRef<{
-    title: string;
-    lines: Array<{ text: string; color: string }>;
-    left: number;
-    top: number;
-    positioned: boolean;
-  } | null>(null);
-  const hideTooltip = () => {
-    hoverTooltip.value = null;
-  };
-  watch(() => [props.metric, props.rangeMinutes], hideTooltip);
   const rangeMs = computed(() => Math.max(1, props.rangeMinutes) * 60_000);
   const latestSampleTime = computed(() =>
     Math.max(
@@ -193,10 +181,7 @@
   };
   let themeObserver: MutationObserver | null = null;
   let chartObserver: ResizeObserver | null = null;
-  const handleViewportChange = () => {
-    hideTooltip();
-    syncLegendPosition();
-  };
+  const handleViewportChange = syncLegendPosition;
   onMounted(() => {
     readTheme();
     themeObserver = new MutationObserver(readTheme);
@@ -219,10 +204,6 @@
     const date = new Date(time);
     const base = `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
     return props.rangeMinutes <= 1 ? `${base}:${pad2(date.getSeconds())}` : base;
-  };
-  const formatTooltipTime = (time: number): string => {
-    const date = new Date(time);
-    return `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
   };
   const toTimedPoint = (point: StatusHistoryPoint): TimedChartPoint => ({ x: point.time, y: point.value });
 
@@ -271,6 +252,8 @@
 
   const options = computed<ChartOptions<'line'>>(() => ({
     responsive: true,
+    // Include the CSS zoom in the backing resolution so axis text is never upscaled.
+    devicePixelRatio: Math.ceil((window.devicePixelRatio || 1) * Math.max(1, props.scale)),
     maintainAspectRatio: false,
     animation: false,
     layout: {
@@ -283,47 +266,11 @@
       },
       tooltip: {
         enabled: false,
-        external: ({ chart, tooltip }) => {
-          if (!tooltip.opacity) {
-            hideTooltip();
-            return;
-          }
-          const rect = chart.canvas.getBoundingClientRect();
-          const anchorX = rect.left + (tooltip.caretX * rect.width) / chart.width;
-          const anchorY = rect.top + (tooltip.caretY * rect.height) / chart.height;
-          const state = {
-            title: tooltip.title.join(' '),
-            lines: tooltip.body.flatMap((body, index) =>
-              body.lines.map((text) => ({
-                text,
-                color: String(tooltip.labelColors[index]?.borderColor ?? chartTheme.value.primary),
-              })),
-            ),
-            left: Math.round(anchorX + 10),
-            top: Math.round(anchorY + 10),
-            positioned: false,
-          };
-          hoverTooltip.value = state;
-          void nextTick(() => {
-            if (hoverTooltip.value !== state || !tooltipElement.value) return;
-            const box = tooltipElement.value.getBoundingClientRect();
-            state.left = Math.round(Math.max(8, Math.min(anchorX + 10, window.innerWidth - box.width - 8)));
-            state.top = Math.round(Math.max(8, Math.min(anchorY + 10, window.innerHeight - box.height - 8)));
-            hoverTooltip.value = { ...state, positioned: true };
-          });
-        },
-        callbacks: {
-          title: (items) => (items[0] ? formatTooltipTime(Number(items[0].parsed.x)) : ''),
-          label: (context) => {
-            const value = context.parsed.y ?? 0;
-            const label = context.dataset.label ? `${context.dataset.label}: ` : '';
-            return `${label}${props.metric === 'network' ? formatStatusRate(value) : (formatStatusPercent(value) ?? '0%')}`;
-          },
-        },
       },
     },
     scales: {
       x: {
+        alignToPixels: true,
         type: 'linear',
         min: windowStart.value,
         max: windowEnd.value,
@@ -340,6 +287,7 @@
       y:
         props.metric === 'network'
           ? {
+              alignToPixels: true,
               beginAtZero: true,
               min: 0,
               max: networkAxisMax.value,
@@ -358,6 +306,7 @@
               border: { color: chartTheme.value.grid },
             }
           : {
+              alignToPixels: true,
               beginAtZero: true,
               min: 0,
               max: 100,
@@ -388,8 +337,6 @@
     :data-window-start="windowStart"
     :data-window-end="windowEnd"
     :data-visible-start="visibleStartTime"
-    @mouseleave="hideTooltip"
-    @wheel="hideTooltip"
   >
     <Line :data="data" :options="options" />
   </div>
@@ -398,56 +345,10 @@
       <span><i class="legend-download"></i>{{ t('statusMonitor.networkDownload') }}</span>
       <span><i class="legend-upload"></i>{{ t('statusMonitor.networkUpload') }}</span>
     </div>
-    <div
-      v-if="hoverTooltip"
-      ref="tooltipElement"
-      class="status-history-tooltip"
-      role="tooltip"
-      :style="{
-        left: `${hoverTooltip.left}px`,
-        top: `${hoverTooltip.top}px`,
-        visibility: hoverTooltip.positioned ? 'visible' : 'hidden',
-        backgroundColor: chartTheme.surface,
-        borderColor: chartTheme.border,
-        color: chartTheme.text,
-      }"
-    >
-      <strong>{{ hoverTooltip.title }}</strong>
-      <div v-for="(line, index) in hoverTooltip.lines" :key="index" class="status-history-tooltip-line">
-        <i :style="{ backgroundColor: line.color }" aria-hidden="true"></i>{{ line.text }}
-      </div>
-    </div>
   </Teleport>
 </template>
 
 <style scoped>
-  .status-history-tooltip {
-    position: fixed;
-    z-index: 10000;
-    pointer-events: none;
-    padding: 6px 8px;
-    border: 1px solid;
-    border-radius: 6px;
-    font-size: 12px;
-    line-height: 1.4;
-    max-width: calc(100vw - 16px);
-    overflow-wrap: anywhere;
-  }
-  .status-history-tooltip strong {
-    display: block;
-    margin-bottom: 3px;
-  }
-  .status-history-tooltip-line {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-  }
-  .status-history-tooltip-line i {
-    flex: 0 0 8px;
-    width: 8px;
-    height: 8px;
-    border-radius: 2px;
-  }
   .status-history-chart {
     min-width: 0;
     min-height: 0;

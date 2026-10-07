@@ -33,7 +33,7 @@
 .monitor-header {
   flex: none;
   min-width: 0;
-  padding: min(0.5rem, 1.5cqh) min(0.6rem, 3cqw);
+  padding: calc(3px / var(--status-scale, 1)) min(0.6rem, 3cqw);
   border-bottom: 1px solid var(--status-border);
 }
 .header-main {
@@ -338,7 +338,7 @@ button.live-state {
 .history-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 0.4em;
+  gap: 0.25em;
   flex: none;
 }
 .history-header > strong {
@@ -369,7 +369,8 @@ button.live-state {
   align-items: center;
   justify-content: center;
   min-width: 0;
-  height: 2.25em;
+  height: calc(20px / var(--status-scale, 1));
+  min-height: 0;
   padding: 0 0.2em;
   border: 0;
   border-radius: 0;
@@ -402,7 +403,7 @@ button.live-state {
   outline-offset: -2px;
 }
 .history-close {
-  width: 2.4em;
+  width: calc(24px / var(--status-scale, 1));
 }
 .empty-state {
   display: grid;
@@ -456,9 +457,6 @@ button.live-state {
 @container status-content (max-height: 270px) {
   .monitor-panel {
     font-size: min(0.75rem, 7cqw, 4.7cqh);
-  }
-  .monitor-header {
-    padding-block: 0.2em;
   }
   .metric-card:not(.network-card) {
     row-gap: 0.15em;

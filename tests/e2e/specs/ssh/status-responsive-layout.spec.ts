@@ -140,6 +140,7 @@ test('server status keeps values aligned and contained in narrow, short and zoom
         expect(box.y + box.height).toBeLessThanOrEqual(pane.y + pane.height);
       }
       const controls = history.locator('.history-controls');
+      expect((await controls.boundingBox())!.height).toBeLessThanOrEqual(24.1);
       expect(await controls.evaluate((element) => getComputedStyle(element).borderTopStyle)).toBe('solid');
       expect((await chart.locator('canvas').boundingBox())!.height).toBeGreaterThan(20);
       if (scale === 1.6 && size.width === 294)

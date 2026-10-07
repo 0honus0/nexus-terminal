@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, defineAsyncComponent, defineComponent, h, ref, watch, type Component } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { UiSpinner, UiTooltip } from '@/foundation/ui';
+  import { UiSpinner } from '@/foundation/ui';
   import { writeClipboardText } from '@/foundation/browser';
   import { createWheelScaleResolver } from '@/foundation/interaction';
   import { useFeedback } from '@/shared/feedback/public';
@@ -155,7 +155,6 @@
       detail: string;
       capacity?: ReturnType<typeof capacityParts>;
       load?: string;
-      tooltip: string;
       color: string;
       icon: Component;
     }>
@@ -170,14 +169,6 @@
           ? `${status.cpuModel.slice(0, 18)}...`
           : status.cpuModel.trim()
         : '');
-    const cpuTooltip = [
-      status?.cpuModel?.trim(),
-      status?.loadAvg?.length
-        ? `${t('statusMonitor.load')}: ${status.loadAvg.map((l) => l.toFixed(2)).join(', ')}`
-        : '',
-    ]
-      .filter(Boolean)
-      .join(' | ');
 
     return [
       {
@@ -188,7 +179,6 @@
         detail: cpuDetail,
         load:
           firstLoadAverage !== undefined && Number.isFinite(firstLoadAverage) ? firstLoadAverage.toFixed(2) : undefined,
-        tooltip: cpuTooltip || `${metricName('cpu')} ${percent(status?.cpuPercent)}`,
         color: '#3b82f6',
         icon: CpuIcon,
       },
@@ -199,7 +189,6 @@
         displayPercent: percent(status?.memPercent),
         detail: memory(status?.memUsed, status?.memTotal),
         capacity: capacityParts(memory(status?.memUsed, status?.memTotal)),
-        tooltip: `${metricName('memory')} ${memory(status?.memUsed, status?.memTotal)} (${percent(status?.memPercent)})`,
         color: '#10b981',
         icon: MemoryIcon,
       },
@@ -210,7 +199,6 @@
         displayPercent: percent(status?.swapPercent),
         detail: swap(status?.swapUsed, status?.swapTotal),
         capacity: capacityParts(swap(status?.swapUsed, status?.swapTotal)),
-        tooltip: `${metricName('swap')} ${swap(status?.swapUsed, status?.swapTotal)} (${percent(status?.swapPercent)})`,
         color: '#8b5cf6',
         icon: SwapIcon,
       },
@@ -221,7 +209,6 @@
         displayPercent: percent(status?.diskPercent),
         detail: disk(status?.diskUsed, status?.diskTotal),
         capacity: capacityParts(disk(status?.diskUsed, status?.diskTotal)),
-        tooltip: `${metricName('disk')} ${disk(status?.diskUsed, status?.diskTotal)} (${percent(status?.diskPercent)})`,
         color: '#f59e0b',
         icon: DiskIcon,
       },
@@ -260,13 +247,7 @@
         <header class="monitor-header">
           <span class="header-main">
             <strong>{{ t('statusMonitor.title') }}</strong>
-            <button
-              v-if="showIp && host"
-              type="button"
-              class="live-state status-touch-target"
-              :title="host"
-              @click="copyHost"
-            >
+            <button v-if="showIp && host" type="button" class="live-state status-touch-target" @click="copyHost">
               <i></i>{{ host }}
             </button>
             <span v-else class="live-state"><i></i>{{ t('statusMonitor.online') }}</span>
@@ -275,95 +256,91 @@
 
         <div class="monitor-content" :class="{ 'has-history': Boolean(selectedMetric) }">
           <div class="metric-list">
-            <UiTooltip v-for="metric in metrics" :key="metric.key" :text="metric.tooltip">
-              <button
-                type="button"
-                class="metric-card group"
-                :class="[{ selected: selectedMetric === metric.key }, `metric-${metric.key}`]"
-                :style="{ '--metric-accent': metric.color, '--metric-value': `${metric.percent}%` }"
-                :aria-label="`${metric.name} ${metric.displayPercent}`"
-                :aria-pressed="selectedMetric === metric.key"
-                @click="selectMetric(metric.key)"
-              >
-                <div class="metric-top">
-                  <div class="metric-identity">
-                    <span class="small-icon"><component :is="metric.icon" /></span>
-                    <span class="metric-name">{{ metric.name }}</span>
-                  </div>
-                  <span
-                    v-if="metric.detail"
-                    class="metric-detail"
-                    :class="{ 'metric-detail-group': metric.capacity || metric.load }"
-                  >
-                    <template v-if="metric.capacity">
-                      <strong class="detail-value">{{ metric.capacity.used }}</strong>
-                      <span class="detail-divider" aria-hidden="true">/</span>
-                      <span class="detail-total">{{ metric.capacity.total }}</span>
-                      <span class="detail-unit">{{ metric.capacity.unit }}</span>
-                    </template>
-                    <template v-else-if="metric.load">
-                      <span class="detail-label">{{ t('statusMonitor.load') }}</span>
-                      <strong class="detail-value">{{ metric.load }}</strong>
-                    </template>
-                    <template v-else>{{ metric.detail }}</template>
-                  </span>
-                </div>
-                <div class="metric-bottom">
-                  <div class="metric-progress" aria-hidden="true">
-                    <i :style="{ width: `${metric.percent}%` }"></i>
-                  </div>
-                  <strong class="metric-percent">{{ metric.displayPercent }}</strong>
-                </div>
-              </button>
-            </UiTooltip>
-
-            <UiTooltip
-              :text="`${t('statusMonitor.networkLabel')}${monitor.current.value.netInterface ? ` (${monitor.current.value.netInterface})` : ''}: ↓ ${formatStatusRate(monitor.current.value.netRxRate)} ↑ ${formatStatusRate(monitor.current.value.netTxRate)}`"
+            <button
+              v-for="metric in metrics"
+              :key="metric.key"
+              type="button"
+              class="metric-card group"
+              :class="[{ selected: selectedMetric === metric.key }, `metric-${metric.key}`]"
+              :style="{ '--metric-accent': metric.color, '--metric-value': `${metric.percent}%` }"
+              :aria-label="`${metric.name} ${metric.displayPercent}`"
+              :aria-pressed="selectedMetric === metric.key"
+              @click="selectMetric(metric.key)"
             >
-              <button
-                type="button"
-                class="metric-card network-card group"
-                :class="{ selected: selectedMetric === 'network' }"
-                :style="{ '--metric-accent': '#10b981' }"
-                :aria-label="`${t('statusMonitor.networkLabel')} ↓ ${formatStatusRate(monitor.current.value.netRxRate)} ↑ ${formatStatusRate(monitor.current.value.netTxRate)}`"
-                :aria-pressed="selectedMetric === 'network'"
-                @click="selectMetric('network')"
-              >
-                <div class="metric-top">
-                  <div class="metric-identity">
-                    <span class="small-icon network-icon"><i class="fas fa-network-wired text-[10px]"></i></span>
-                    <span class="metric-name">{{ t('statusMonitor.networkLabel') }}</span>
-                  </div>
-                  <span v-if="monitor.current.value.netInterface" class="metric-detail network-iface">{{
-                    monitor.current.value.netInterface
-                  }}</span>
-                  <div class="network-history-rates">
-                    <span class="rate-down"
-                      >↓ <span class="rate-full">{{ formatStatusRate(monitor.current.value.netRxRate) }}</span
-                      ><span class="rate-compact">{{ compactRate(monitor.current.value.netRxRate) }}</span></span
-                    >
-                    <span class="rate-up"
-                      >↑ <span class="rate-full">{{ formatStatusRate(monitor.current.value.netTxRate) }}</span
-                      ><span class="rate-compact">{{ compactRate(monitor.current.value.netTxRate) }}</span></span
-                    >
-                  </div>
+              <div class="metric-top">
+                <div class="metric-identity">
+                  <span class="small-icon"><component :is="metric.icon" /></span>
+                  <span class="metric-name">{{ metric.name }}</span>
                 </div>
-                <div class="metric-bottom network-bottom">
-                  <div class="network-pill rate-down">
-                    <DownloadIcon />
-                    <span class="rate-label">{{ t('statusMonitor.networkDownload') }}</span>
-                    <span class="rate-val rate-full">{{ formatStatusRate(monitor.current.value.netRxRate) }}</span>
-                    <span class="rate-val rate-compact">{{ compactRate(monitor.current.value.netRxRate) }}</span>
-                  </div>
-                  <div class="network-pill rate-up">
-                    <UploadIcon />
-                    <span class="rate-label">{{ t('statusMonitor.networkUpload') }}</span>
-                    <span class="rate-val rate-full">{{ formatStatusRate(monitor.current.value.netTxRate) }}</span>
-                    <span class="rate-val rate-compact">{{ compactRate(monitor.current.value.netTxRate) }}</span>
-                  </div>
+                <span
+                  v-if="metric.detail"
+                  class="metric-detail"
+                  :class="{ 'metric-detail-group': metric.capacity || metric.load }"
+                >
+                  <template v-if="metric.capacity">
+                    <strong class="detail-value">{{ metric.capacity.used }}</strong>
+                    <span class="detail-divider" aria-hidden="true">/</span>
+                    <span class="detail-total">{{ metric.capacity.total }}</span>
+                    <span class="detail-unit">{{ metric.capacity.unit }}</span>
+                  </template>
+                  <template v-else-if="metric.load">
+                    <span class="detail-label">{{ t('statusMonitor.load') }}</span>
+                    <strong class="detail-value">{{ metric.load }}</strong>
+                  </template>
+                  <template v-else>{{ metric.detail }}</template>
+                </span>
+              </div>
+              <div class="metric-bottom">
+                <div class="metric-progress" aria-hidden="true">
+                  <i :style="{ width: `${metric.percent}%` }"></i>
                 </div>
-              </button>
-            </UiTooltip>
+                <strong class="metric-percent">{{ metric.displayPercent }}</strong>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              class="metric-card network-card group"
+              :class="{ selected: selectedMetric === 'network' }"
+              :style="{ '--metric-accent': '#10b981' }"
+              :aria-label="`${t('statusMonitor.networkLabel')} ↓ ${formatStatusRate(monitor.current.value.netRxRate)} ↑ ${formatStatusRate(monitor.current.value.netTxRate)}`"
+              :aria-pressed="selectedMetric === 'network'"
+              @click="selectMetric('network')"
+            >
+              <div class="metric-top">
+                <div class="metric-identity">
+                  <span class="small-icon network-icon"><i class="fas fa-network-wired text-[10px]"></i></span>
+                  <span class="metric-name">{{ t('statusMonitor.networkLabel') }}</span>
+                </div>
+                <span v-if="monitor.current.value.netInterface" class="metric-detail network-iface">{{
+                  monitor.current.value.netInterface
+                }}</span>
+                <div class="network-history-rates">
+                  <span class="rate-down"
+                    >↓ <span class="rate-full">{{ formatStatusRate(monitor.current.value.netRxRate) }}</span
+                    ><span class="rate-compact">{{ compactRate(monitor.current.value.netRxRate) }}</span></span
+                  >
+                  <span class="rate-up"
+                    >↑ <span class="rate-full">{{ formatStatusRate(monitor.current.value.netTxRate) }}</span
+                    ><span class="rate-compact">{{ compactRate(monitor.current.value.netTxRate) }}</span></span
+                  >
+                </div>
+              </div>
+              <div class="metric-bottom network-bottom">
+                <div class="network-pill rate-down">
+                  <DownloadIcon />
+                  <span class="rate-label">{{ t('statusMonitor.networkDownload') }}</span>
+                  <span class="rate-val rate-full">{{ formatStatusRate(monitor.current.value.netRxRate) }}</span>
+                  <span class="rate-val rate-compact">{{ compactRate(monitor.current.value.netRxRate) }}</span>
+                </div>
+                <div class="network-pill rate-up">
+                  <UploadIcon />
+                  <span class="rate-label">{{ t('statusMonitor.networkUpload') }}</span>
+                  <span class="rate-val rate-full">{{ formatStatusRate(monitor.current.value.netTxRate) }}</span>
+                  <span class="rate-val rate-compact">{{ compactRate(monitor.current.value.netTxRate) }}</span>
+                </div>
+              </div>
+            </button>
           </div>
 
           <section v-if="selectedMetric" class="history-card" :style="{ '--history-accent': selectedMetricColor }">
@@ -385,7 +362,6 @@
                 <button
                   type="button"
                   class="history-close"
-                  :title="t('statusMonitor.closeTrend')"
                   :aria-label="t('statusMonitor.closeTrend')"
                   @click="selectedMetric = null"
                 >
