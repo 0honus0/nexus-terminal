@@ -607,15 +607,16 @@
   }
 
   .command-bar-root--desktop {
+    --command-bar-button-size: 1.625rem;
     align-items: flex-start;
     flex-shrink: 0;
   }
 
   .command-bar-root--desktop .command-bar-input {
     width: 0;
-    min-width: min(10rem, 100%);
+    min-width: min(calc(var(--command-bar-button-size) * 2), 100%);
     /* Give spare inline space to the input; wrapped controls fill their own row. */
-    flex: 999 1 10rem !important;
+    flex: 999 1 calc(var(--command-bar-button-size) * 2) !important;
     height: 2rem;
     min-height: 2rem;
     max-height: 2rem;
@@ -628,11 +629,11 @@
   }
 
   .command-bar-root--desktop .command-bar-button {
-    width: 1.625rem;
-    height: 1.625rem;
-    min-width: 1.625rem;
-    min-height: 1.625rem;
-    flex-basis: 1.625rem;
+    width: var(--command-bar-button-size);
+    height: var(--command-bar-button-size);
+    min-width: var(--command-bar-button-size);
+    min-height: var(--command-bar-button-size);
+    flex-basis: var(--command-bar-button-size);
     padding: 0;
     margin: 0;
     border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);

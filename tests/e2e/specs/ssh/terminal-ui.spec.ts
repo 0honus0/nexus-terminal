@@ -206,7 +206,7 @@ test('desktop command bar wraps only when needed and distributes second-row butt
   const bar = page.locator('.command-bar-root--desktop');
   const input = bar.locator('.command-bar-command-input');
   await expect(bar.getByRole('button')).toHaveCount(4);
-  for (const width of [720, 480, 400, 320, 300, 280, 180, 400, 720]) {
+  for (const width of [720, 480, 400, 320, 300, 280, 240, 203, 202, 201, 180, 240, 720]) {
     for (const height of [34, 65, 100, 180]) {
       await bar.evaluate(
         (element, size) => {
@@ -225,7 +225,7 @@ test('desktop command bar wraps only when needed and distributes second-row butt
             return input.bottom <= tools.top;
           }),
         )
-        .toBe(width < 310);
+        .toBe(width < 202);
       const geometry = await bar.evaluate((element) => {
         const root = element.getBoundingClientRect();
         const input = element.querySelector('input')!.getBoundingClientRect();
@@ -242,17 +242,24 @@ test('desktop command bar wraps only when needed and distributes second-row butt
           overflow: element.scrollWidth - element.clientWidth,
         };
       });
+      if (width >= 202) {
+        const buttonWidth = geometry.buttons[0].right - geometry.buttons[0].left;
+        expect(geometry.input.right - geometry.input.left).toBeGreaterThanOrEqual(buttonWidth * 2 - 1);
+        if (width === 202) {
+          expect(geometry.input.right - geometry.input.left).toBeLessThanOrEqual(buttonWidth * 2 + 1);
+        }
+      }
       expect(geometry.input.top).toBeGreaterThanOrEqual(geometry.root.top);
       expect(geometry.overflow).toBeLessThanOrEqual(1);
       for (const button of geometry.buttons) {
         expect(button.left).toBeGreaterThanOrEqual(geometry.root.left);
         expect(button.right).toBeLessThanOrEqual(geometry.root.right + 1);
-        if (width >= 310) {
+        if (width >= 202) {
           expect(button.top).toBeGreaterThanOrEqual(geometry.input.top);
           expect(button.bottom).toBeLessThanOrEqual(geometry.input.bottom);
         }
       }
-      if (width < 310) {
+      if (width < 202) {
         expect(Math.abs(geometry.buttons[0].left - geometry.input.left)).toBeLessThanOrEqual(1);
         expect(Math.abs(geometry.buttons.at(-1)!.right - geometry.input.right)).toBeLessThanOrEqual(1);
         const gaps = geometry.buttons.slice(1).map((button, index) => button.left - geometry.buttons[index].right);
@@ -262,7 +269,7 @@ test('desktop command bar wraps only when needed and distributes second-row butt
   }
   // Search adds two buttons, so the same available width must adapt to its actual contents.
   await bar.evaluate((element) => {
-    element.style.width = '360px';
+    element.style.width = '240px';
     element.style.height = '100px';
     element.scrollTop = 0;
   });
