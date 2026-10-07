@@ -435,6 +435,21 @@ export const sshSessionJobsScenario = async () => {
     );
     await sessions.initialize();
     assert.equal((await sessions.job(context, 1, 'restart-job', 'status')).status, 'unknown');
+    const beforeRestore = await sessions.open(context, 1, hash, 0);
+    await sessions.dispose();
+    await assert.rejects(() => sessions.open(context, 1, hash, 0), /SSH_SESSION_LIMIT/);
+    await sessions.initialize();
+    await assert.rejects(() => sessions.list(context, 1, beforeRestore.sessionId), /SSH_SESSION_NOT_FOUND/);
+    const afterRestore = await sessions.open(context, 1, hash, 0);
+    assert.notEqual(afterRestore.sessionId, beforeRestore.sessionId);
+    assert.equal(
+      (
+        await sessions.withSession({ ...context, sshSessionId: afterRestore.sessionId }, 1, hash, (session) =>
+          session.execute({ command: 'after-restore' }),
+        )
+      ).stdout,
+      'after-restore',
+    );
     return [{ name: 'ssh_persistent_background_isolation', value: 1, unit: 'scenarios' }];
   } finally {
     await sessions.dispose();

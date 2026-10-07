@@ -56,6 +56,7 @@ export class AgentSshSessions implements AgentSshSessionPort {
       "UPDATE agent_ssh_jobs SET status = 'unknown', completed_at = ? WHERE status = 'running'",
       [Date.now()],
     );
+    this.stopped = false;
     this.sweepTimer = setInterval(() => {
       void this.sweep().catch((error) => logger.warn({ err: error }, 'Agent SSH session sweep failed'));
     }, 10000);

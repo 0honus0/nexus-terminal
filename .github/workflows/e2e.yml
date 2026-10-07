@@ -223,6 +223,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: e2e-shard-${{ matrix.shard }}-${{ github.run_attempt }}
+          include-hidden-files: true
           path: |
             tests/e2e/logs/
             tests/e2e/playwright-report/
