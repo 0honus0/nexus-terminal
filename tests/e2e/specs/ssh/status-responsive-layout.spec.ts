@@ -120,10 +120,26 @@ test('server status keeps values aligned and contained in narrow, short and zoom
       }
       if (scale === 1.6 && size.width === 294)
         await monitor.screenshot({ path: testInfo.outputPath('status-narrow-zoomed.png') });
+      await monitor.locator('.metric-cpu').click();
+      const history = monitor.locator('.history-card');
+      const chart = history.locator('.status-history-chart');
+      await expect(history).toBeVisible();
+      for (const range of [1, 5, 10, 30]) {
+        const button = history.getByRole('button', { name: `${range}分`, exact: true });
+        await expect(button).toBeVisible();
+        await button.click();
+        await expect(chart).toHaveAttribute('data-range-minutes', String(range));
+        const box = (await button.boundingBox())!;
+        const pane = (await monitor.boundingBox())!;
+        expect(box.x).toBeGreaterThanOrEqual(pane.x);
+        expect(box.x + box.width).toBeLessThanOrEqual(pane.x + pane.width);
+        expect(box.y + box.height).toBeLessThanOrEqual(pane.y + pane.height);
+      }
+      expect((await chart.locator('canvas').boundingBox())!.height).toBeGreaterThan(20);
+      if (scale === 1.6 && size.width === 294)
+        await monitor.screenshot({ path: testInfo.outputPath('status-history-narrow-zoomed.png') });
+      await history.locator('.history-close').click();
+      await expect(history).toHaveCount(0);
     }
-    await monitor.locator('.metric-cpu').click();
-    await expect(monitor.locator('.history-card')).toBeVisible();
-    await monitor.locator('.history-close').click();
-    await expect(monitor.locator('.history-card')).toHaveCount(0);
   }
 });

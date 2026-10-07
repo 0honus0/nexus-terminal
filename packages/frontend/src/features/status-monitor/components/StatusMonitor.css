@@ -447,9 +447,6 @@ button.live-state {
   .has-history .metric-list {
     font-size: 0.85em;
   }
-  .range-tabs {
-    display: none;
-  }
 }
 @container status-content (min-width: 960px) and (max-height: 240px) {
   .monitor-panel {
