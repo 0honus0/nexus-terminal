@@ -151,6 +151,7 @@
   let lastColumns = 0;
   let lastRows = 0;
   let geometryFrame: number | undefined;
+  let geometryResizeTimer: ReturnType<typeof setTimeout> | undefined;
   let forceGeometrySync = false;
   const revealBackgroundWhenSized = () => {
     const element = root.value;
@@ -183,12 +184,12 @@
     { flush: 'post' },
   );
   const fitAndResize = (allowInactive = false) => {
+    clearTimeout(geometryResizeTimer);
+    geometryResizeTimer = undefined;
     const element = root.value;
     if (!terminal || !fit || !element) return;
-    // ResizeObserver fires again when an ancestor is hidden with display:none. Fitting xterm at
-    // that point collapses its viewport to a tiny fallback size; FitAddon clears the renderer
-    // before resizing, so restoring the tab later exposes a visible redraw/blank strip. Keep the
-    // last valid terminal geometry while hidden and fit only after the surface has real dimensions.
+    // Hidden ancestors trigger ResizeObserver with zero-size geometry. Keep the last
+    // valid viewport while hidden to avoid collapsing and reflowing the prompt on tab restore.
     if (
       (!props.active && !allowInactive) ||
       document.visibilityState === 'hidden' ||
@@ -199,7 +200,11 @@
     const dimensions = fit.proposeDimensions();
     if (!dimensions || !Number.isFinite(dimensions.cols) || !Number.isFinite(dimensions.rows)) return;
     revealBackgroundWhenSized();
-    fit.fit();
+    // Resize through the public API without FitAddon clearing the renderer first.
+    // This keeps the current prompt visible while xterm reflows and the PTY redraws.
+    if (terminal.cols !== dimensions.cols || terminal.rows !== dimensions.rows) {
+      terminal.resize(dimensions.cols, dimensions.rows);
+    }
     terminalState.replaceGeometry(terminal.cols, terminal.rows);
     if (wrapper.value && wrapper.value.scrollLeft !== 0) wrapper.value.scrollLeft = 0;
     if (element.scrollLeft !== 0) element.scrollLeft = 0;
@@ -210,6 +215,15 @@
       void props.channel.resize({ columns: terminal.cols, rows: terminal.rows });
     }
     if (device.supportsTouchInteraction.value && mobileTouchSelectionActive) syncMobileSelectionHandles();
+  };
+  // Splitter drags and pane transitions can produce a new size every frame. Fit
+  // once they settle so interactive TUIs do not receive a stream of SIGWINCH redraws.
+  const scheduleContainerResize = () => {
+    clearTimeout(geometryResizeTimer);
+    geometryResizeTimer = setTimeout(() => {
+      geometryResizeTimer = undefined;
+      fitAndResize();
+    }, 100);
   };
   // Browser wakeups and transport recovery need a fresh post-layout measurement even when
   // the container size did not change. Coalesce them rather than retaining a stale PTY size.
@@ -1384,7 +1398,7 @@
     root.value?.addEventListener('mousemove', handleLocalSelectionMouseMove, true);
     root.value?.addEventListener('mouseup', recordClipboardGesture, true);
     document.addEventListener('pointerdown', handleDocumentPointerDown, true);
-    resizeObserver = new ResizeObserver(() => fitAndResize());
+    resizeObserver = new ResizeObserver(scheduleContainerResize);
     resizeObserver.observe(root.value!);
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('pageshow', scheduleGeometrySync);
@@ -1438,6 +1452,7 @@
     window.removeEventListener('focus', scheduleGeometrySync);
     document.fonts.removeEventListener('loadingdone', scheduleGeometrySync);
     if (geometryFrame !== undefined) window.cancelAnimationFrame(geometryFrame);
+    clearTimeout(geometryResizeTimer);
     clearMobileLongPressTimer();
     if (mobileSelectionSyncFrame !== null) {
       window.cancelAnimationFrame(mobileSelectionSyncFrame);

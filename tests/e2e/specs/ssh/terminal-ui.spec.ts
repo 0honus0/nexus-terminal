@@ -194,79 +194,25 @@ test('plain Alt cycles the configured focus sequence from a live terminal and wr
   }
 });
 
-test('desktop command bar keeps editing space in narrow panes without changing Enter submission', async ({
+test('desktop command bar wraps only when needed and distributes second-row buttons across the input', async ({
   page,
   context,
 }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
+  expect((await context.request.put('/api/v1/settings', { data: { showPopupFileEditor: false } })).ok()).toBeTruthy();
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
   const bar = page.locator('.command-bar-root--desktop');
   const input = bar.locator('.command-bar-command-input');
-  for (const width of [720, 480, 280, 180]) {
-    await bar.evaluate((element, size) => {
-      element.style.width = `${size}px`;
-      element.style.height = '100px';
-      element.style.maxWidth = '100%';
-    }, width);
-    await expect
-      .poll(() => input.evaluate((element) => element.getBoundingClientRect().width))
-      .toBeGreaterThan(width < 481 ? width - 30 : 100);
-    expect(await bar.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-    for (const button of await bar.getByRole('button').all()) {
-      const bounds = await button.boundingBox();
-      const rootBounds = await bar.boundingBox();
-      expect(bounds!.x).toBeGreaterThanOrEqual(rootBounds!.x);
-      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(rootBounds!.x + rootBounds!.width + 1);
-    }
-  }
-  for (const width of [720, 480, 272, 180]) {
-    await bar.evaluate((element, size) => {
-      element.style.width = `${size}px`;
-      element.style.height = '34px';
-      element.scrollTop = 0;
-    }, width);
-    await expect.poll(() => input.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(20);
-    const geometry = await bar.evaluate((element) => {
-      const root = element.getBoundingClientRect();
-      const input = element.querySelector('input')!.getBoundingClientRect();
-      const tools = element.querySelector('.desktop-command-controls')!;
-      return {
-        top: input.top - root.top,
-        bottom: root.bottom - input.bottom,
-        overflow: element.scrollHeight - element.clientHeight,
-        toolHeight: tools.getBoundingClientRect().height,
-      };
-    });
-    expect(geometry.top).toBeGreaterThanOrEqual(0);
-    if (width > 480) {
-      expect(geometry.bottom).toBeGreaterThanOrEqual(0);
-      expect(geometry.overflow).toBeLessThanOrEqual(1);
-    } else {
-      // Narrow panes keep input first and tools second at every height. A short
-      // pane scrolls vertically rather than changing button columns or overlap.
-      expect(geometry.overflow).toBeGreaterThan(0);
-    }
-    expect(geometry.toolHeight).toBe(26);
-    const tools = bar.locator('.desktop-command-controls');
-    expect(await tools.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-    for (const button of await tools.getByRole('button').all()) {
-      const bounds = await button.boundingBox();
-      const root = await bar.boundingBox();
-      expect(bounds!.x).toBeGreaterThanOrEqual(root!.x);
-      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(root!.x + root!.width + 1);
-    }
-    await tools.getByRole('button').last().scrollIntoViewIfNeeded();
-    await expect(tools.getByRole('button').last()).toBeInViewport();
-  }
-  for (const width of [480, 280, 180]) {
-    const columns: string[] = [];
-    for (const height of [34, 64, 65, 100, 180]) {
+  await expect(bar.getByRole('button')).toHaveCount(4);
+  for (const width of [720, 480, 400, 320, 300, 280, 180, 400, 720]) {
+    for (const height of [34, 65, 100, 180]) {
       await bar.evaluate(
         (element, size) => {
           element.style.width = `${size.width}px`;
           element.style.height = `${size.height}px`;
+          element.style.maxWidth = '100%';
           element.scrollTop = 0;
         },
         { width, height },
@@ -279,23 +225,126 @@ test('desktop command bar keeps editing space in narrow panes without changing E
             return input.bottom <= tools.top;
           }),
         )
-        .toBe(true);
-      columns.push(
-        await bar
-          .locator('.desktop-command-controls')
-          .evaluate((element) => getComputedStyle(element).gridTemplateColumns),
-      );
+        .toBe(width < 310);
+      const geometry = await bar.evaluate((element) => {
+        const root = element.getBoundingClientRect();
+        const input = element.querySelector('input')!.getBoundingClientRect();
+        const buttons = [...element.querySelectorAll('button')].map((button) => button.getBoundingClientRect());
+        return {
+          input: { left: input.left, right: input.right, top: input.top, bottom: input.bottom },
+          buttons: buttons.map((button) => ({
+            left: button.left,
+            right: button.right,
+            top: button.top,
+            bottom: button.bottom,
+          })),
+          root: { left: root.left, right: root.right, top: root.top },
+          overflow: element.scrollWidth - element.clientWidth,
+        };
+      });
+      expect(geometry.input.top).toBeGreaterThanOrEqual(geometry.root.top);
+      expect(geometry.overflow).toBeLessThanOrEqual(1);
+      for (const button of geometry.buttons) {
+        expect(button.left).toBeGreaterThanOrEqual(geometry.root.left);
+        expect(button.right).toBeLessThanOrEqual(geometry.root.right + 1);
+        if (width >= 310) {
+          expect(button.top).toBeGreaterThanOrEqual(geometry.input.top);
+          expect(button.bottom).toBeLessThanOrEqual(geometry.input.bottom);
+        }
+      }
+      if (width < 310) {
+        expect(Math.abs(geometry.buttons[0].left - geometry.input.left)).toBeLessThanOrEqual(1);
+        expect(Math.abs(geometry.buttons.at(-1)!.right - geometry.input.right)).toBeLessThanOrEqual(1);
+        const gaps = geometry.buttons.slice(1).map((button, index) => button.left - geometry.buttons[index].right);
+        expect(Math.max(...gaps) - Math.min(...gaps)).toBeLessThanOrEqual(1);
+      }
     }
-    expect(new Set(columns).size).toBe(1);
   }
+  // Search adds two buttons, so the same available width must adapt to its actual contents.
   await bar.evaluate((element) => {
+    element.style.width = '360px';
     element.style.height = '100px';
     element.scrollTop = 0;
   });
+  await bar.getByTitle('Open terminal search').click();
+  await expect
+    .poll(() =>
+      bar.evaluate(
+        (element) =>
+          element.querySelector('input')!.getBoundingClientRect().bottom <=
+          element.querySelector('.desktop-command-controls')!.getBoundingClientRect().top,
+      ),
+    )
+    .toBe(true);
+  await bar.getByTitle('Close terminal search').click();
+  await expect
+    .poll(() =>
+      bar.evaluate(
+        (element) =>
+          element.querySelector('input')!.getBoundingClientRect().bottom <=
+          element.querySelector('.desktop-command-controls')!.getBoundingClientRect().top,
+      ),
+    )
+    .toBe(false);
   await input.fill("printf 'DESKTOP_COMMAND_LAYOUT_OK\\n'");
   await input.press('Enter');
   await expect(page.locator('.terminal-inner-container')).toContainText('DESKTOP_COMMAND_LAYOUT_OK');
   await expect(input).toHaveValue('');
+});
+
+test('terminal coalesces continuous resizing while output and keyboard input remain usable', async ({
+  page,
+  context,
+}) => {
+  const resizeFrames: Array<{ columns: number; rows: number }> = [];
+  page.on('websocket', (socket) => {
+    socket.on('framesent', (event) => {
+      if (typeof event.payload !== 'string') return;
+      try {
+        const frame = JSON.parse(event.payload);
+        if (frame.type === 'terminal.resize') resizeFrames.push(frame.payload);
+      } catch {
+        /* Binary terminal traffic is not a control message. */
+      }
+    });
+  });
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  const terminal = page.locator('.terminal-inner-container');
+  const input = terminal.locator('.xterm-helper-textarea');
+  await expect(terminal.locator('.xterm-screen')).toBeVisible();
+  await expect.poll(() => resizeFrames.length).toBeGreaterThan(0);
+  await page.waitForTimeout(250);
+  await page
+    .locator('.command-bar-command-input')
+    .fill('for i in $(seq 1 30); do printf \'RESIZE_OUTPUT_%s\\n\' "$i"; sleep 0.02; done');
+  await page.locator('.command-bar-command-input').press('Enter');
+  await expect(terminal).toContainText('RESIZE_OUTPUT_1');
+  await input.focus();
+  resizeFrames.length = 0;
+  const drag = terminal.evaluate(async (element) => {
+    const startWidth = element.getBoundingClientRect().width;
+    for (let frame = 0; frame < 24; frame++) {
+      element.style.width = `${startWidth - (frame + 1) * 5}px`;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+  });
+  await page.keyboard.type("printf 'RESIZE_INPUT_OK\\n'", { delay: 5 });
+  await drag;
+  await expect.poll(() => resizeFrames.length).toBe(1);
+  const countAfterResize = resizeFrames.length;
+  await page.waitForTimeout(350);
+  expect(resizeFrames.length).toBe(countAfterResize);
+  await expect(input).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(terminal).toContainText('RESIZE_OUTPUT_30');
+  await expect(terminal).toContainText('RESIZE_INPUT_OK');
+  // Repeating a measurement with unchanged geometry must not trigger another PTY redraw.
+  await page.evaluate(() => window.dispatchEvent(new Event('resize')));
+  await page.waitForTimeout(200);
+  expect(resizeFrames.length).toBe(countAfterResize);
 });
 
 async function holdFirstTwoTerminalFontWrites(page: Page): Promise<{
