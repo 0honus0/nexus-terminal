@@ -354,6 +354,8 @@ button.live-state {
   display: inline-flex;
   flex-wrap: wrap;
   gap: 0.2em;
+  font-size: calc(12px / var(--status-scale, 1));
+  line-height: 1.4;
 }
 .range-tabs button,
 .history-close {
@@ -369,6 +371,9 @@ button.live-state {
 .range-tabs button.active {
   color: var(--status-text);
   background: color-mix(in srgb, var(--history-accent) 12%, transparent);
+}
+.range-tabs button {
+  font-size: 1em;
 }
 .history-close {
   flex: none;

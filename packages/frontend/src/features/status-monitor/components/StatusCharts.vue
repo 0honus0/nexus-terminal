@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { Line } from 'vue-chartjs';
   import {
@@ -34,6 +34,32 @@
   const MAX_CHART_POINTS = 110;
   const Y_AXIS_GUTTER_PX = 2;
   const CHART_RIGHT_PAD_PX = 4;
+  const chartElement = ref<HTMLElement | null>(null);
+  const legendPosition = shallowRef<{ top: string; right: string; maxWidth: string } | null>(null);
+  const syncLegendPosition = () => {
+    const rect = chartElement.value?.getBoundingClientRect();
+    legendPosition.value =
+      rect && rect.width && rect.height
+        ? {
+            top: `${Math.round(rect.top + 4)}px`,
+            right: `${Math.round(window.innerWidth - rect.right + 6)}px`,
+            maxWidth: `${Math.max(0, rect.width - 12)}px`,
+          }
+        : null;
+  };
+  watch(() => [props.scale, props.metric], syncLegendPosition, { flush: 'post' });
+  const tooltipElement = ref<HTMLElement | null>(null);
+  const hoverTooltip = shallowRef<{
+    title: string;
+    lines: Array<{ text: string; color: string }>;
+    left: number;
+    top: number;
+    positioned: boolean;
+  } | null>(null);
+  const hideTooltip = () => {
+    hoverTooltip.value = null;
+  };
+  watch(() => [props.metric, props.rangeMinutes], hideTooltip);
   const rangeMs = computed(() => Math.max(1, props.rangeMinutes) * 60_000);
   const latestSampleTime = computed(() =>
     Math.max(
@@ -166,12 +192,27 @@
     };
   };
   let themeObserver: MutationObserver | null = null;
+  let chartObserver: ResizeObserver | null = null;
+  const handleViewportChange = () => {
+    hideTooltip();
+    syncLegendPosition();
+  };
   onMounted(() => {
     readTheme();
     themeObserver = new MutationObserver(readTheme);
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+    chartObserver = new ResizeObserver(syncLegendPosition);
+    if (chartElement.value) chartObserver.observe(chartElement.value);
+    syncLegendPosition();
+    window.addEventListener('resize', handleViewportChange);
+    window.addEventListener('scroll', handleViewportChange, true);
   });
-  onBeforeUnmount(() => themeObserver?.disconnect());
+  onBeforeUnmount(() => {
+    themeObserver?.disconnect();
+    chartObserver?.disconnect();
+    window.removeEventListener('resize', handleViewportChange);
+    window.removeEventListener('scroll', handleViewportChange, true);
+  });
 
   const pad2 = (value: number) => String(value).padStart(2, '0');
   const formatAxisTime = (time: number): string => {
@@ -241,14 +282,36 @@
         display: false,
       },
       tooltip: {
-        // The parent scales the whole canvas; keep hover text at 12 screen pixels.
-        titleFont: { size: 12 / props.scale },
-        bodyFont: { size: 12 / props.scale },
-        backgroundColor: chartTheme.value.surface,
-        borderColor: chartTheme.value.border,
-        borderWidth: 1,
-        titleColor: chartTheme.value.text,
-        bodyColor: chartTheme.value.text,
+        enabled: false,
+        external: ({ chart, tooltip }) => {
+          if (!tooltip.opacity) {
+            hideTooltip();
+            return;
+          }
+          const rect = chart.canvas.getBoundingClientRect();
+          const anchorX = rect.left + (tooltip.caretX * rect.width) / chart.width;
+          const anchorY = rect.top + (tooltip.caretY * rect.height) / chart.height;
+          const state = {
+            title: tooltip.title.join(' '),
+            lines: tooltip.body.flatMap((body, index) =>
+              body.lines.map((text) => ({
+                text,
+                color: String(tooltip.labelColors[index]?.borderColor ?? chartTheme.value.primary),
+              })),
+            ),
+            left: Math.round(anchorX + 10),
+            top: Math.round(anchorY + 10),
+            positioned: false,
+          };
+          hoverTooltip.value = state;
+          void nextTick(() => {
+            if (hoverTooltip.value !== state || !tooltipElement.value) return;
+            const box = tooltipElement.value.getBoundingClientRect();
+            state.left = Math.round(Math.max(8, Math.min(anchorX + 10, window.innerWidth - box.width - 8)));
+            state.top = Math.round(Math.max(8, Math.min(anchorY + 10, window.innerHeight - box.height - 8)));
+            hoverTooltip.value = { ...state, positioned: true };
+          });
+        },
         callbacks: {
           title: (items) => (items[0] ? formatTooltipTime(Number(items[0].parsed.x)) : ''),
           label: (context) => {
@@ -319,21 +382,72 @@
 
 <template>
   <div
+    ref="chartElement"
     class="status-history-chart"
     :data-range-minutes="props.rangeMinutes"
     :data-window-start="windowStart"
     :data-window-end="windowEnd"
     :data-visible-start="visibleStartTime"
+    @mouseleave="hideTooltip"
+    @wheel="hideTooltip"
   >
-    <div v-if="props.metric === 'network'" class="network-legend">
+    <Line :data="data" :options="options" />
+  </div>
+  <Teleport to="body">
+    <div v-if="props.metric === 'network' && legendPosition" class="network-legend" :style="legendPosition">
       <span><i class="legend-download"></i>{{ t('statusMonitor.networkDownload') }}</span>
       <span><i class="legend-upload"></i>{{ t('statusMonitor.networkUpload') }}</span>
     </div>
-    <Line :data="data" :options="options" />
-  </div>
+    <div
+      v-if="hoverTooltip"
+      ref="tooltipElement"
+      class="status-history-tooltip"
+      role="tooltip"
+      :style="{
+        left: `${hoverTooltip.left}px`,
+        top: `${hoverTooltip.top}px`,
+        visibility: hoverTooltip.positioned ? 'visible' : 'hidden',
+        backgroundColor: chartTheme.surface,
+        borderColor: chartTheme.border,
+        color: chartTheme.text,
+      }"
+    >
+      <strong>{{ hoverTooltip.title }}</strong>
+      <div v-for="(line, index) in hoverTooltip.lines" :key="index" class="status-history-tooltip-line">
+        <i :style="{ backgroundColor: line.color }" aria-hidden="true"></i>{{ line.text }}
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
+  .status-history-tooltip {
+    position: fixed;
+    z-index: 10000;
+    pointer-events: none;
+    padding: 6px 8px;
+    border: 1px solid;
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.4;
+    max-width: calc(100vw - 16px);
+    overflow-wrap: anywhere;
+  }
+  .status-history-tooltip strong {
+    display: block;
+    margin-bottom: 3px;
+  }
+  .status-history-tooltip-line {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .status-history-tooltip-line i {
+    flex: 0 0 8px;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+  }
   .status-history-chart {
     min-width: 0;
     min-height: 0;
@@ -344,10 +458,8 @@
   }
 
   .network-legend {
-    position: absolute;
-    top: 0.25rem;
-    right: 0.35rem;
-    z-index: 1;
+    position: fixed;
+    z-index: 1000;
     display: flex;
     flex-wrap: wrap;
     gap: 0.3rem 0.65rem;
@@ -355,7 +467,7 @@
     border-radius: 0.3rem;
     background: var(--card-bg-color);
     color: var(--text-color);
-    font-size: 0.75rem;
+    font-size: 12px;
     font-weight: 600;
     pointer-events: none;
   }
@@ -378,11 +490,5 @@
 
   .legend-upload {
     background: #3b82f6;
-  }
-
-  @media (max-width: 640px) {
-    .network-legend {
-      font-size: min(0.75rem, 4.5cqw, 4cqh);
-    }
   }
 </style>

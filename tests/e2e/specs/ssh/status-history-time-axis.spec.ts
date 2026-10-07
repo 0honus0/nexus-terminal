@@ -48,7 +48,7 @@ test('status history uses real time windows and keeps hover text fixed while zoo
     if (range === 30) expect(sampleWindow.first - sampleWindow.start).toBeGreaterThan(20 * 60_000);
   }
 
-  // Inspect text actually drawn on the canvas, including the parent's CSS transform.
+  // Hover text is rendered outside the scaled canvas to stay sharp at every zoom level.
   await monitor.evaluate((element) => {
     Object.assign((element as HTMLElement).style, {
       position: 'fixed',
@@ -60,20 +60,7 @@ test('status history uses real time windows and keeps hover text fixed while zoo
     });
   });
   const canvas = chart.locator('canvas');
-  await canvas.evaluate((element) => {
-    const canvas = element as HTMLCanvasElement & { tooltipFontSizes: number[] };
-    const context = canvas.getContext('2d')!;
-    const fillText = context.fillText.bind(context);
-    canvas.tooltipFontSizes = [];
-    context.fillText = (text, x, y, maxWidth) => {
-      if (/^\d{2}:\d{2}:\d{2}$/.test(text) || /:.*%$/.test(text)) {
-        const fontSize = Number(context.font.match(/([\d.]+)px/)?.[1]);
-        canvas.tooltipFontSizes.push((fontSize * canvas.getBoundingClientRect().width) / canvas.clientWidth);
-      }
-      if (maxWidth === undefined) fillText(text, x, y);
-      else fillText(text, x, y, maxWidth);
-    };
-  });
+  const tooltip = page.getByRole('tooltip').filter({ has: page.locator('.status-history-tooltip-line') });
   for (const [scale, deltaY, count] of [
     [1, 0, 0],
     [1.6, -100, 10],
@@ -84,17 +71,47 @@ test('status history uses real time windows and keeps hover text fixed while zoo
       await monitor.dispatchEvent('wheel', { ctrlKey: true, deltaY, deltaMode: 0 });
     }
     await expect(monitor).toHaveAttribute('data-status-scale', scale.toFixed(2));
-    await canvas.evaluate((element) => {
-      (element as HTMLCanvasElement & { tooltipFontSizes: number[] }).tooltipFontSizes = [];
-    });
+    for (const range of [1, 5, 10, 30]) {
+      const button = history.getByRole('button', { name: `${range}m`, exact: true });
+      await button.click();
+      await expect(chart).toHaveAttribute('data-range-minutes', String(range));
+      const fontSize = await button.evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
+      expect(fontSize * scale).toBeCloseTo(12, 1);
+    }
     await canvas.hover({ position: { x: 200, y: 30 } });
-    await expect
-      .poll(async () =>
-        canvas.evaluate((element) => {
-          const sizes = (element as HTMLCanvasElement & { tooltipFontSizes: number[] }).tooltipFontSizes;
-          return sizes.length >= 2 && sizes.slice(-2).every((size) => Math.abs(size - 12) < 0.15);
-        }),
-      )
-      .toBe(true);
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip.locator('strong')).toHaveText(/^\d{2}:\d{2}:\d{2}$/);
+    await expect(tooltip).toContainText(/CPU.*:.*%/);
+    const layout = await tooltip.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        fontSize: getComputedStyle(element).fontSize,
+        inBody: element.parentElement === document.body,
+        unscaled: getComputedStyle(element).transform === 'none',
+        insideViewport: rect.left >= 0 && rect.top >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight,
+      };
+    });
+    expect(layout).toEqual({ fontSize: '12px', inBody: true, unscaled: true, insideViewport: true });
+    await page.mouse.move(1100, 800);
+    await expect(tooltip).toBeHidden();
+    await monitor.locator('.network-card').click();
+    const legend = page.locator('.network-legend');
+    await expect(legend).toBeVisible();
+    await expect(legend).toHaveCSS('font-size', '12px');
+    expect(await legend.evaluate((element) => element.parentElement === document.body)).toBe(true);
+    const legendBox = (await legend.boundingBox())!;
+    const chartBox = (await chart.boundingBox())!;
+    expect(legendBox.x).toBeGreaterThanOrEqual(chartBox.x);
+    expect(legendBox.x + legendBox.width).toBeLessThanOrEqual(chartBox.x + chartBox.width);
+    expect(Math.abs(legendBox.y - chartBox.y - 4)).toBeLessThan(1);
+    await monitor.locator('.metric-cpu').click();
   }
+  await monitor.locator('.network-card').click();
+  await canvas.hover({ position: { x: 200, y: 30 } });
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip.locator('.status-history-tooltip-line')).toHaveCount(2);
+  await expect(tooltip).toContainText(/Download.*:.*B/);
+  await expect(tooltip).toContainText(/Upload.*:.*B/);
+  await history.locator('.history-close').click();
+  await expect(tooltip).toHaveCount(0);
 });

@@ -47,6 +47,7 @@
     const scale = localScale.value;
     const inverse = 100 / scale;
     return {
+      '--status-scale': scale,
       width: `${inverse}%`,
       height: `${inverse}%`,
       flex: '0 0 auto',
