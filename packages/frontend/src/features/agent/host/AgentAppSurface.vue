@@ -590,7 +590,7 @@
                     <div class="mb-2 flex items-center justify-between gap-2 px-1">
                       <div class="flex items-center gap-1.5">
                         <span class="text-xs font-semibold">{{ $t('agent.operations.executionMode') }}</span>
-                        <UiInfoHint :text="$t('agent.operations.executionModeHint')" />
+                        <UiInfoHint trigger="click" :text="$t('agent.operations.executionModeHint')" />
                       </div>
                       <span
                         v-if="modelSelectionLocked"
@@ -704,7 +704,7 @@
                     <div class="mb-2 flex items-center justify-between gap-2 px-1">
                       <div class="flex items-center gap-1.5">
                         <span class="text-xs font-semibold">{{ $t('agent.operations.approvalMode') }}</span>
-                        <UiInfoHint :text="$t('agent.operations.approvalModeHint')" />
+                        <UiInfoHint trigger="click" :text="$t('agent.operations.approvalModeHint')" />
                       </div>
                       <span
                         v-if="modelSelectionLocked"

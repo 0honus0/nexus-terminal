@@ -9,8 +9,9 @@
       label?: string;
       side?: 'top' | 'right' | 'bottom' | 'left';
       align?: 'start' | 'center' | 'end';
+      trigger?: 'hover' | 'click';
     }>(),
-    { text: '', tone: 'info', label: '', side: 'top', align: 'center' },
+    { text: '', tone: 'info', label: '', side: 'top', align: 'center', trigger: 'hover' },
   );
 
   const icon = computed(() =>
@@ -18,6 +19,11 @@
   );
 
   const open = ref(false);
+
+  const onOpenChange = (value: boolean) => {
+    // Click-only hints stay closed when a surrounding popover auto-focuses them.
+    if (!value || props.trigger !== 'click') open.value = value;
+  };
 
   const toggle = (event: MouseEvent) => {
     event.stopPropagation();
@@ -27,7 +33,7 @@
 
 <template>
   <TooltipProvider :delay-duration="120">
-    <TooltipRoot v-model:open="open">
+    <TooltipRoot :open="open" :disable-closing-trigger="props.trigger === 'click'" @update:open="onOpenChange">
       <TooltipTrigger as-child>
         <span
           data-ui="info-hint"
@@ -35,6 +41,7 @@
           class="ui-info-hint"
           :data-tone="props.tone"
           :aria-label="props.label || props.text"
+          :aria-expanded="open"
           tabindex="0"
           role="button"
           @click="toggle"
