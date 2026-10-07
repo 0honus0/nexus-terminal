@@ -26,8 +26,9 @@
       metric?: StatusMetric;
       rangeMinutes?: number;
       intervalSeconds?: number;
+      scale?: number;
     }>(),
-    { metric: 'cpu', rangeMinutes: 5, intervalSeconds: 3 },
+    { metric: 'cpu', rangeMinutes: 5, intervalSeconds: 3, scale: 1 },
   );
   const { t } = useI18n();
   const MAX_CHART_POINTS = 110;
@@ -240,6 +241,9 @@
         display: false,
       },
       tooltip: {
+        // The parent scales the whole canvas; keep hover text at 12 screen pixels.
+        titleFont: { size: 12 / props.scale },
+        bodyFont: { size: 12 / props.scale },
         backgroundColor: chartTheme.value.surface,
         borderColor: chartTheme.value.border,
         borderWidth: 1,

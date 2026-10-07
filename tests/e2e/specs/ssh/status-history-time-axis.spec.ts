@@ -7,10 +7,7 @@ import {
   resetTestSshFilesystem,
 } from '../../support/ssh';
 
-test('status history uses real 1/5/10/30 minute windows without stretching new-session samples', async ({
-  page,
-  context,
-}) => {
+test('status history uses real time windows and keeps hover text fixed while zooming', async ({ page, context }) => {
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 1280, height: 900 });
   await loginAsInitialAdmin(context.request);
@@ -49,5 +46,55 @@ test('status history uses real 1/5/10/30 minute windows without stretching new-s
     expect(sampleWindow.first).toBeGreaterThan(sampleWindow.start);
     if (range === 1) expect(sampleWindow.first - sampleWindow.start).toBeGreaterThan(20_000);
     if (range === 30) expect(sampleWindow.first - sampleWindow.start).toBeGreaterThan(20 * 60_000);
+  }
+
+  // Inspect text actually drawn on the canvas, including the parent's CSS transform.
+  await monitor.evaluate((element) => {
+    Object.assign((element as HTMLElement).style, {
+      position: 'fixed',
+      top: '40px',
+      left: '40px',
+      width: '480px',
+      height: '600px',
+      zIndex: '1000',
+    });
+  });
+  const canvas = chart.locator('canvas');
+  await canvas.evaluate((element) => {
+    const canvas = element as HTMLCanvasElement & { tooltipFontSizes: number[] };
+    const context = canvas.getContext('2d')!;
+    const fillText = context.fillText.bind(context);
+    canvas.tooltipFontSizes = [];
+    context.fillText = (text, x, y, maxWidth) => {
+      if (/^\d{2}:\d{2}:\d{2}$/.test(text) || /:.*%$/.test(text)) {
+        const fontSize = Number(context.font.match(/([\d.]+)px/)?.[1]);
+        canvas.tooltipFontSizes.push((fontSize * canvas.getBoundingClientRect().width) / canvas.clientWidth);
+      }
+      if (maxWidth === undefined) fillText(text, x, y);
+      else fillText(text, x, y, maxWidth);
+    };
+  });
+  for (const [scale, deltaY, count] of [
+    [1, 0, 0],
+    [1.6, -100, 10],
+    [0.65, 100, 20],
+  ] as const) {
+    await page.mouse.move(1100, 800);
+    for (let index = 0; index < count; index += 1) {
+      await monitor.dispatchEvent('wheel', { ctrlKey: true, deltaY, deltaMode: 0 });
+    }
+    await expect(monitor).toHaveAttribute('data-status-scale', scale.toFixed(2));
+    await canvas.evaluate((element) => {
+      (element as HTMLCanvasElement & { tooltipFontSizes: number[] }).tooltipFontSizes = [];
+    });
+    await canvas.hover({ position: { x: 200, y: 30 } });
+    await expect
+      .poll(async () =>
+        canvas.evaluate((element) => {
+          const sizes = (element as HTMLCanvasElement & { tooltipFontSizes: number[] }).tooltipFontSizes;
+          return sizes.length >= 2 && sizes.slice(-2).every((size) => Math.abs(size - 12) < 0.15);
+        }),
+      )
+      .toBe(true);
   }
 });

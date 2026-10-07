@@ -394,6 +394,7 @@
               :metric="selectedMetric"
               :range-minutes="historyRange"
               :interval-seconds="intervalSeconds"
+              :scale="localScale"
             />
           </section>
         </div>
