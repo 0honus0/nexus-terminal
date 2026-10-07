@@ -516,6 +516,54 @@ test('hidden desktop terminal keeps its fitted geometry while switching sessions
   }
 });
 
+test('inactive desktop terminal restores its fitted geometry after leaving and returning to Workspace', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await setTestSshOnline(true);
+  await resetTestSshFilesystem();
+  await removeMultiSessionConnections(context.request);
+  const connectionIds = await createMultiSessionConnections(context.request);
+
+  try {
+    await connectTestSshFromConnectionsPage(page, connectionIds[0]!);
+    const terminals = page.locator('.terminal-inner-container');
+    await expect(terminals).toHaveCount(1);
+    const firstGeometry = await xtermGeometry(terminals.nth(0));
+    expect(firstGeometry.rowCount).toBeGreaterThan(10);
+
+    await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
+    await expect(terminals).toHaveCount(2);
+    await expect(page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]')).toHaveText(
+      new RegExp(MULTI_SESSION_NAMES[1]),
+    );
+
+    await page.locator('.app-navigation a[href="/notifications"]').click();
+    await expect(page).toHaveURL(/\/notifications$/);
+    await page.locator('.app-navigation a[href="/workspace"]').click();
+    await expect(page).toHaveURL(/\/workspace$/);
+    await expect(terminals).toHaveCount(2);
+    await expect(page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]')).toHaveText(
+      new RegExp(MULTI_SESSION_NAMES[1]),
+    );
+
+    // Workspace itself is remounted after route navigation. The inactive terminal must restore
+    // its last valid xterm geometry before replaying its snapshot or consuming more output.
+    expect(await xtermGeometry(terminals.nth(0))).toEqual(firstGeometry);
+
+    await page.locator('.terminal-tab-shell').getByRole('tab').filter({ hasText: MULTI_SESSION_NAMES[0] }).click();
+    await expect(page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]')).toHaveText(
+      new RegExp(MULTI_SESSION_NAMES[0]),
+    );
+    expect(await xtermGeometry(terminals.nth(0))).toEqual(firstGeometry);
+  } finally {
+    await setTestSshOnline(true);
+    await removeMultiSessionConnections(context.request);
+  }
+});
+
 test('desktop Alt+Arrow cycles live Workspace sessions without reconnecting them', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);

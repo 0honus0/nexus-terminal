@@ -2,10 +2,12 @@ import { ref, type Ref } from 'vue';
 
 export interface TerminalSessionState {
   readonly snapshot: Ref<string>;
+  readonly geometry: Ref<{ columns: number; rows: number } | null>;
   readonly searchOpen: Ref<boolean>;
   readonly searchTerm: Ref<string>;
   readonly remotePtyGeneration: Ref<number>;
   replaceSnapshot(value: string): void;
+  replaceGeometry(columns: number, rows: number): void;
   discardRemotePty(): void;
 }
 
@@ -19,16 +21,22 @@ export const RESET_REMOTE_PTY_DISPLAY =
  */
 export function createTerminalSessionState(): TerminalSessionState {
   const snapshot = ref('');
+  const geometry = ref<{ columns: number; rows: number } | null>(null);
   const searchOpen = ref(false);
   const searchTerm = ref('');
   const remotePtyGeneration = ref(0);
   return {
     snapshot,
+    geometry,
     searchOpen,
     searchTerm,
     remotePtyGeneration,
     replaceSnapshot(value) {
       snapshot.value = value;
+    },
+    replaceGeometry(columns, rows) {
+      if (!Number.isInteger(columns) || !Number.isInteger(rows) || columns <= 0 || rows <= 0) return;
+      geometry.value = { columns, rows };
     },
     discardRemotePty() {
       if (!snapshot.value.endsWith(RESET_REMOTE_PTY_DISPLAY)) snapshot.value += RESET_REMOTE_PTY_DISPLAY;

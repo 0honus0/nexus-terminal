@@ -49,6 +49,7 @@
     terminalSnapshot?: () => Promise<string>;
     focusTerminal?: () => void;
     fitTerminal?: () => void;
+    prepareTerminal?: () => void;
     scrollTerminalToBottom?: () => void;
   }
 
@@ -441,7 +442,7 @@
     preparingSessionId.value = id;
     void nextTick(() => {
       if (generation !== activationGeneration || preparingSessionId.value !== id) return;
-      surfaces.get(id)?.fitTerminal?.();
+      surfaces.get(id)?.prepareTerminal?.();
       window.requestAnimationFrame(() => {
         if (generation !== activationGeneration || preparingSessionId.value !== id) return;
         registry.activate(id);

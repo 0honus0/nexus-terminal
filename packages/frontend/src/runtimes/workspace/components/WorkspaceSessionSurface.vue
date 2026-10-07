@@ -60,6 +60,7 @@
   interface TerminalApi {
     focus?: () => void;
     fit?: () => void;
+    fitVisible?: () => void;
     clear?: () => void;
     serialize?: () => Promise<string>;
     copySelection?: () => Promise<void>;
@@ -970,6 +971,7 @@
     terminalSnapshot: () => terminalApi.value?.serialize?.() ?? Promise.resolve(''),
     focusTerminal: () => terminalApi.value?.focus?.(),
     fitTerminal: () => terminalApi.value?.fit?.(),
+    prepareTerminal: () => terminalApi.value?.fitVisible?.(),
     scrollTerminalToBottom: () => terminalApi.value?.scrollToBottom?.(),
   });
 </script>

@@ -182,19 +182,25 @@
     },
     { flush: 'post' },
   );
-  const fitAndResize = () => {
+  const fitAndResize = (allowInactive = false) => {
     const element = root.value;
     if (!terminal || !fit || !element) return;
     // ResizeObserver fires again when an ancestor is hidden with display:none. Fitting xterm at
     // that point collapses its viewport to a tiny fallback size; FitAddon clears the renderer
     // before resizing, so restoring the tab later exposes a visible redraw/blank strip. Keep the
     // last valid terminal geometry while hidden and fit only after the surface has real dimensions.
-    if (!props.active || document.visibilityState === 'hidden' || element.clientWidth <= 0 || element.clientHeight <= 0)
+    if (
+      (!props.active && !allowInactive) ||
+      document.visibilityState === 'hidden' ||
+      element.clientWidth <= 0 ||
+      element.clientHeight <= 0
+    )
       return;
     const dimensions = fit.proposeDimensions();
     if (!dimensions || !Number.isFinite(dimensions.cols) || !Number.isFinite(dimensions.rows)) return;
     revealBackgroundWhenSized();
     fit.fit();
+    terminalState.replaceGeometry(terminal.cols, terminal.rows);
     if (wrapper.value && wrapper.value.scrollLeft !== 0) wrapper.value.scrollLeft = 0;
     if (element.scrollLeft !== 0) element.scrollLeft = 0;
     if (forceGeometrySync || terminal.cols !== lastColumns || terminal.rows !== lastRows) {
@@ -1235,6 +1241,8 @@
     terminal.loadAddon(serializeAddon);
     terminal.loadAddon(new WebLinksAddon());
     terminal.open(root.value!);
+    const savedGeometry = terminalState.geometry.value;
+    if (savedGeometry) terminal.resize(savedGeometry.columns, savedGeometry.rows);
     const clipboardOsc = terminal.parser.registerOscHandler(52, (data) => {
       // OSC 52 is application-independent. Only accept writes shortly after a
       // deliberate interaction in the active terminal; never disclose local clipboard data.
@@ -1376,7 +1384,7 @@
     root.value?.addEventListener('mousemove', handleLocalSelectionMouseMove, true);
     root.value?.addEventListener('mouseup', recordClipboardGesture, true);
     document.addEventListener('pointerdown', handleDocumentPointerDown, true);
-    resizeObserver = new ResizeObserver(fitAndResize);
+    resizeObserver = new ResizeObserver(() => fitAndResize());
     resizeObserver.observe(root.value!);
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('pageshow', scheduleGeometrySync);
@@ -1446,6 +1454,7 @@
   defineExpose({
     focus: () => terminal?.focus(),
     fit: fitAndResize,
+    fitVisible: () => fitAndResize(true),
     clear: clearTerminal,
     serialize: serializeAfterDrain,
     openSearch,
