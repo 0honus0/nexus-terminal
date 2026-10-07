@@ -784,6 +784,13 @@ for (const persistent of [false, true]) {
         .toBe('cancelled');
       await expect.poll(async () => (await (await request.get(hold)).json()).pending).toBe(0);
       expect((await (await request.get(hold)).json()).blocked).toBe(true);
+      expect((await request.get(`${E2E_URLS.sshControlOrigin}/health`)).ok()).toBeTruthy();
+      await expect
+        .poll(async () => {
+          const handles = await (await request.get(`${E2E_URLS.sshControlOrigin}/sftp/read-handles`)).json();
+          return handles.opened - handles.closed;
+        })
+        .toBe(0);
       await request.post(`${hold}?blocked=0`);
       const recoveryContext = await prepare(request);
       const recovered = await execute(request, recoveryContext, `E2E_SEARCH_SCAN connection=${connectionId}`, {
@@ -796,6 +803,7 @@ for (const persistent of [false, true]) {
         ok: true,
         data: { matches: [{ path: '/search-scan/sentinel.txt' }], truncated: false },
       });
+      expect((await request.get(`${E2E_URLS.sshControlOrigin}/health`)).ok()).toBeTruthy();
     } finally {
       await request.post(`${hold}?blocked=0`);
       await rm(project, { recursive: true, force: true });

@@ -676,22 +676,36 @@ function createHandleRegistry() {
       handles.delete(id);
       return value;
     },
+    drain() {
+      const values = [...handles.values()];
+      handles.clear();
+      return values;
+    },
   };
 }
 
 function attachSftp(session, accept) {
   const sftp = accept();
+  const registry = createHandleRegistry();
   const channelToken = Symbol('sftp-channel');
   activeSftpChannels.add(channelToken);
   openedSftpChannels += 1;
   let channelClosed = false;
+  const closeFile = async (state) => {
+    await state.fileHandle.close();
+    if (state.readOnly) sftpReadHandlesClosed += 1;
+  };
   const detachChannel = () => {
+    if (channelClosed) return;
     channelClosed = true;
     activeSftpChannels.delete(channelToken);
+    for (const state of registry.drain()) {
+      if (state.type !== 'file') continue;
+      void closeFile(state).catch(() => undefined);
+    }
   };
   sftp.once('end', detachChannel);
   sftp.once('close', detachChannel);
-  const registry = createHandleRegistry();
 
   const respondError = (reqid, error) => {
     if (channelClosed) return;
@@ -800,8 +814,14 @@ function attachSftp(session, accept) {
       await fsp.mkdir(path.dirname(fullPath), { recursive: true });
       const fileHandle = await fsp.open(fullPath, openModeToFsFlags(flags), attrs?.mode ? attrs.mode & 0o7777 : 0o644);
       const readOnly = Boolean(flags & OPEN_MODE.READ) && !(flags & OPEN_MODE.WRITE);
-      const handle = registry.add({ type: 'file', fileHandle, path: fullPath, readOnly });
       if (readOnly) sftpReadHandlesOpened += 1;
+      const state = { type: 'file', fileHandle, path: fullPath, readOnly };
+      // OPEN can finish after cancellation has already drained the channel.
+      if (channelClosed) {
+        await closeFile(state);
+        return;
+      }
+      const handle = registry.add(state);
       sftp.handle(reqid, handle);
     } catch (error) {
       respondError(reqid, error);
@@ -912,8 +932,7 @@ function attachSftp(session, accept) {
       return;
     }
     try {
-      if (state.type === 'file') await state.fileHandle.close();
-      if (state.readOnly) sftpReadHandlesClosed += 1;
+      if (state.type === 'file') await closeFile(state);
       sftp.status(reqid, STATUS_CODE.OK);
     } catch (error) {
       respondError(reqid, error);

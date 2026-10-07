@@ -99,7 +99,7 @@ Child 模型调用遇到瞬态连接、429 或 502／503／504 等错误时，�
 
 Backend 正常停机时，Child 模型执行中断不作为用户取消，也不发布部分回复的最终交接。旧执行由既有生命周期恢复流程关闭；重启仅按安全 checkpoint 恢复契约创建新执行，不承诺原 Child 原地续跑或恢复旧模型 stream。
 
-`/interrupt` 仅中断正在 streaming 的 Root 模型；仅 Child streaming 时返回不可中断冲突。普通输入、Goal 与 pending queue 更新不自动取消 Child；对子任务纠正使用 mailbox，终止使用既有取消链路。
+`/interrupt` 仅中断正在 streaming 的 Root 模型；仅 Child streaming 时返回不可中断冲突。普通输入、Goal 与 pending queue 更新不自动取消 Child；对子任务纠正使用 mailbox，终止使用既有取消链路。待处理输入的移动或删除仅在 Root 模型 streaming 时触发中断，不中断已开始的 Workspace 命令。
 
 取消整个 Run 会同时中断其 Root 和 Child 执行。Root 等待子任务交接时不占用活跃执行计数；已开始的参与者完成取消结算后，Run 从 `cancelling` 收敛为 `cancelled` 并回收该 Run 的 Browser session，不依赖模型先返回正常响应。取消不回滚已经发生的外部副作用。
 

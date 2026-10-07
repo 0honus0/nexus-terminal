@@ -4,6 +4,10 @@
 
 Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end coverage.
 
+SSH search cancellation checks both temporary and persistent SFTP sessions: held reads must settle, open read handles must return to zero, the fixture must stay healthy, and a new search must succeed. The SSH fixture closes remaining file handles when a channel ends, including OPEN operations that finish after cancellation.
+
+Docker deployment smoke supplies the Runner Job capacity contract and verifies pending-input move/remove and version conflicts while a bounded Workspace foreground command is executing. Its scripted Provider creates and starts the Workspace through production tools; streaming model requests are unsuitable for holding this queue because new input interrupts them.
+
 `fixtures/agent/task-projects/build-failure` is a dependency-free build-repair input: the production export name mismatches the original build and verification consumers. `agent/functional-regressions.spec.ts` executes the failure, strict patch and original build/verification through a production SSH Run with a scripted provider. It independently compares the final file tree and every preserved file, asserting the exact production source edit, zero exits and data hash. This SSH coverage and real-model Workspace evidence are distinct; fixture preparation alone does not establish transport parity.
 
 `workspace-background-job-lifecycle.scenario.ts` exercises Runner HTTP and the SQLite Job journal with controlled runtime results: nonzero exit and zero-exit-with-timeout must persist as failed, retain diagnostic output, survive queries and replay without another execution, and project failed verification through foreground execution and Job status. Controlled runtime results validate settlement, not native process timeout enforcement.

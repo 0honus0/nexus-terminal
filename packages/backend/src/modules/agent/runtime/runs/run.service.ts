@@ -573,7 +573,7 @@ export class RunService {
     });
     if (!committed.replayed) {
       this.onCommitted(committed.run);
-      this.onInputAppended(committed.run);
+      if (committed.shouldInterruptModel) this.onInputAppended(committed.run);
     }
     return committed.run;
   }

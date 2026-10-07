@@ -1002,6 +1002,7 @@ const job = {
   cwd: '/workspace',
   maxBytes: 4096,
   timeoutMs: 5000,
+  maxConcurrentJobs: 8,
 };
 await post(`/v1/workspaces/${encodeURIComponent(workspaceId)}/jobs`, job);
 let result;
@@ -1134,6 +1135,7 @@ const runWorkspaceJob = async (identity, shell, expectedStdout) => {
     cwd: '/workspace',
     maxBytes: 16 * 1024,
     timeoutMs: 30_000,
+    maxConcurrentJobs: 8,
   });
   let current;
   for (let attempt = 0; attempt < 300; attempt += 1) {
@@ -1397,7 +1399,7 @@ cookie="$(awk 'BEGIN { first=1 } (!/^#/ || /^#HttpOnly_/) && NF >= 7 { if (!firs
 # Destructive Agent lifecycle smoke through the real authenticated HTTP API and host Runner.
 # This fixes two regressions that static architecture checks cannot observe: Run deletion must
 # refuse attached Workspaces, and runtime-cleanup confirmation must not expand after preview.
-COOKIE="$cookie" PORT="$http_port" PLUGIN_REPOSITORY_PORT="$plugin_repository_port" DATA_DIR="$data_dir" node <<'NODE'
+COOKIE="$cookie" PORT="$http_port" PLUGIN_REPOSITORY_PORT="$plugin_repository_port" DATA_DIR="$data_dir" RUNNER_ROOT="$runner_root" node <<'NODE'
 const { randomUUID } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -1588,7 +1590,7 @@ if (!lifecycleSettings.effectiveSettings.workspaceRuntime.enabledRecipeIds.inclu
 }
 
 const terminalRunStatuses = new Set(['completed', 'completed_unverified', 'failed', 'cancelled', 'interrupted']);
-const createRun = async (title, runnerPluginIds = []) => {
+const createRun = async (title, runnerPluginIds = [], approvalMode = 'ask', text = 'deployment lifecycle smoke') => {
   const thread = await ok('POST', '/api/v1/apps/nexus.agent/threads', { title }, mutationHeaders, 201);
   const created = await ok(
     'POST',
@@ -1596,10 +1598,10 @@ const createRun = async (title, runnerPluginIds = []) => {
     {
       schemaVersion: 1,
       threadId: thread.id,
-      input: { text: 'deployment lifecycle smoke', artifactRefs: [] },
+      input: { text, artifactRefs: [] },
       agentDefinitionId: definition.id,
       model: { providerId: provider.id, modelId: 'smoke-model', configurationVersion: provider.version },
-      approvalMode: 'ask',
+      approvalMode,
       executionMode: 'execute',
       connectionIds: [],
       environment: { recipeId: recipe.id, catalogRevision: catalog.revision, runnerPluginIds },
@@ -1751,30 +1753,42 @@ for (let attempt = 0; attempt < 120; attempt += 1) {
 await cancelToTerminal(fullStackRun);
 console.log('full-stack plugin smoke: isolated frontend + native Backend child + Workspace Runner target ok');
 
-const originalMaxRunSteps = lifecycleSettings.effectiveSettings.budget.maxRunSteps;
-lifecycleSettings = await ok(
-  'PATCH',
-  '/api/v1/agent/settings',
-  { patch: { budget: { maxRunSteps: 1 } }, expectedVersion: lifecycleSettings.revision },
-  mutationHeaders,
-);
-let queueRun = await createRun('Docker pending-input smoke');
-for (let attempt = 0; attempt < 50; attempt += 1) {
-  const initialQueue = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}/pending-inputs`);
-  if (initialQueue.total === 0) break;
-  if (attempt === 49) {
-    throw new Error(`Initial input was not consumed by the active model step: ${JSON.stringify(initialQueue)}`);
+// Hold a bounded foreground mutation: new input interrupts streaming models,
+// but must remain queued while the command executes.
+let queueRun = await createRun('Docker pending-input smoke', [], 'full_access', 'Docker pending-input hold');
+for (let attempt = 0; attempt < 450; attempt += 1) {
+  queueRun = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}`);
+  const { DatabaseSync } = require('node:sqlite');
+  const evidenceDb = new DatabaseSync(path.join(process.env.DATA_DIR, 'nexus-terminal.db'), { readOnly: true });
+  const runningTool = evidenceDb.prepare("SELECT id FROM agent_tool_calls WHERE run_id = ? AND provider_call_id = 'queue_hold' AND status = 'running'").get(queueRun.id);
+  const workspaceRecord = evidenceDb.prepare('SELECT id FROM agent_workspaces WHERE run_id = ?').get(queueRun.id);
+  evidenceDb.close();
+  const readyPath = workspaceRecord && path.join(process.env.RUNNER_ROOT, 'runtime', 'workspaces', workspaceRecord.id, 'core', 'workspace', 'work', '.queue-ready');
+  if (runningTool && readyPath && fs.existsSync(readyPath)) break;
+  if (attempt === 449) {
+    throw new Error(`Pending-input hold tool did not start: ${JSON.stringify(queueRun)}`);
   }
   await wait(100);
 }
 const appendQueueInput = async (text) => {
-  const appended = await ok(
-    'POST',
-    `/api/v1/apps/nexus.agent/runs/${queueRun.id}/inputs`,
-    { schemaVersion: 1, text, artifactRefs: [], expectedVersion: queueRun.version },
-    { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
-    202,
-  );
+  const key = randomUUID();
+  let appended;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    queueRun = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}`);
+    const result = await call(
+      'POST',
+      `/api/v1/apps/nexus.agent/runs/${queueRun.id}/inputs`,
+      { schemaVersion: 1, text, artifactRefs: [], expectedVersion: queueRun.version },
+      { ...mutationHeaders, 'Idempotency-Key': key },
+    );
+    if (result.response.status === 409 && result.json?.error?.code === 'STATE_CONFLICT') continue;
+    if (result.response.status !== 202) {
+      throw new Error(`Pending-input append failed: ${result.response.status} ${result.text}`);
+    }
+    appended = result.json.data;
+    break;
+  }
+  if (!appended) throw new Error('Pending-input append exhausted version conflict retries.');
   queueRun = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}`);
   const projectedInput = queueRun.recentEntries?.find((entry) => entry.id === appended.inputId);
   if (
@@ -1786,13 +1800,8 @@ const appendQueueInput = async (text) => {
   }
 };
 await appendQueueInput('pending input two');
-for (let attempt = 0; attempt < 50; attempt += 1) {
-  queueRun = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}`);
-  if (queueRun.status === 'awaiting_budget') break;
-  if (attempt === 49) {
-    throw new Error(`Pending-input Run did not settle at the step budget boundary: ${JSON.stringify(queueRun)}`);
-  }
-  await wait(100);
+if (queueRun.status !== 'running') {
+  throw new Error(`Pending-input Run did not retain the held tool: ${JSON.stringify(queueRun)}`);
 }
 await appendQueueInput('pending input three');
 let pendingQueue = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}/pending-inputs`);
@@ -1801,18 +1810,22 @@ if (pendingQueue.total !== 2 || pendingQueue.items.map((item) => item.text).join
 }
 const originalQueue = [...pendingQueue.items];
 const staleQueueVersion = queueRun.version;
-queueRun = await ok(
-  'PATCH',
-  `/api/v1/apps/nexus.agent/runs/${queueRun.id}/pending-inputs`,
-  {
-    schemaVersion: 1,
-    action: 'move',
-    inputId: originalQueue[1].id,
-    beforeInputId: originalQueue[0].id,
-    expectedVersion: queueRun.version,
-  },
-  { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
-);
+const mutateQueue = async (action, inputId, beforeInputId) => {
+  const key = randomUUID();
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    queueRun = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}`);
+    const result = await call(
+      'PATCH', `/api/v1/apps/nexus.agent/runs/${queueRun.id}/pending-inputs`,
+      { schemaVersion: 1, action, inputId, beforeInputId, expectedVersion: queueRun.version },
+      { ...mutationHeaders, 'Idempotency-Key': key },
+    );
+    if (result.response.status === 409 && result.json?.error?.code === 'STATE_CONFLICT') continue;
+    if (!result.response.ok) throw new Error(`Pending-input mutation failed: ${result.response.status} ${result.text}`);
+    return result.json.data;
+  }
+  throw new Error('Pending-input mutation exhausted version conflict retries.');
+};
+queueRun = await mutateQueue('move', originalQueue[1].id, originalQueue[0].id);
 pendingQueue = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}/pending-inputs`);
 if (pendingQueue.items.map((item) => item.id).join('|') !== [originalQueue[1].id, originalQueue[0].id].join('|')) {
   throw new Error(`Pending-input move was not durable: ${JSON.stringify(pendingQueue)}`);
@@ -1836,18 +1849,7 @@ const staleMutation = await call(
 if (staleMutation.response.status !== 409 || staleMutation.json?.error?.code !== 'STATE_CONFLICT') {
   throw new Error(`Pending-input mutation did not enforce Run version CAS: ${staleMutation.response.status} ${staleMutation.text}`);
 }
-queueRun = await ok(
-  'PATCH',
-  `/api/v1/apps/nexus.agent/runs/${queueRun.id}/pending-inputs`,
-  {
-    schemaVersion: 1,
-    action: 'remove',
-    inputId: originalQueue[0].id,
-    beforeInputId: null,
-    expectedVersion: queueRun.version,
-  },
-  { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
-);
+queueRun = await mutateQueue('remove', originalQueue[0].id, null);
 pendingQueue = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}/pending-inputs`);
 if (pendingQueue.total !== 1 || pendingQueue.items.some((item) => item.id === originalQueue[0].id)) {
   throw new Error(`Pending-input remove was not durable: ${JSON.stringify(pendingQueue)}`);
@@ -1861,12 +1863,6 @@ if (!removedLedgerEntry || removedLedgerEntry.sequence !== originalQueue[0].sequ
   throw new Error(`Pending-input remove mutated append-only Ledger history: ${JSON.stringify(queueLedger)}`);
 }
 queueRun = await cancelToTerminal(queueRun);
-lifecycleSettings = await ok(
-  'PATCH',
-  '/api/v1/agent/settings',
-  { patch: { budget: { maxRunSteps: originalMaxRunSteps } }, expectedVersion: lifecycleSettings.revision },
-  mutationHeaders,
-);
 console.log('agent pending-input HTTP: durable move/remove + version CAS ok');
 
 let runA = await createRun('Docker lifecycle smoke A');
