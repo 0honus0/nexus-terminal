@@ -3,7 +3,7 @@
   import Guacamole from 'guacamole-common-js';
   import type { Client, Event as GuacamoleEvent, Keyboard, Mouse, Status } from 'guacamole-common-js';
   import { useI18n } from 'vue-i18n';
-  import { UiOverlayPanel, UiResizeHandle } from '@/foundation/ui';
+  import { UiButton, UiOverlayPanel, UiResizeHandle } from '@/foundation/ui';
   import { readStoredValue, stringStorageCodec, useDeviceCapabilities, writeStoredValue } from '@/foundation/browser';
   import { useDraggablePosition, useResizeHandle } from '@/foundation/interaction';
   import { apiErrorMessage } from '@/client/http';
@@ -44,6 +44,7 @@
   const panel = ref<HTMLElement | null>(null);
   const display = ref<HTMLElement | null>(null);
   const mobileKeyboardInput = ref<HTMLTextAreaElement | null>(null);
+  const mobileKeyboardFocused = ref(false);
   const state = ref<RemoteDesktopState>('idle');
   const stateLabel = computed(() => t(`remoteDesktopModal.status.${state.value}`));
   const windowTitle = computed(() =>
@@ -128,11 +129,19 @@
     mobileKeyboardInput.value.click();
     mobileKeyboardInput.value.select();
   };
+  const hideMobileKeyboard = () => {
+    mobileKeyboardInput.value?.blur();
+    mobileKeyboardFocused.value = false;
+  };
+  const toggleMobileKeyboard = () => {
+    if (mobileKeyboardFocused.value) hideMobileKeyboard();
+    else focusMobileKeyboard();
+  };
   const bindTouch = (element: HTMLElement) => {
     remoteTouch?.destroy();
     remoteTouch = undefined;
     if (!client || !device.hasTouch.value) return;
-    remoteTouch = attachRemoteTouchInput(element, client, touchMode.value, focusMobileKeyboard);
+    remoteTouch = attachRemoteTouchInput(element, client, touchMode.value);
   };
   const setTouchMode = (mode: RemoteTouchMode) => {
     if (touchMode.value === mode) return;
@@ -143,6 +152,7 @@
   };
 
   const cleanupInput = () => {
+    hideMobileKeyboard();
     const element = client?.getDisplay().getElement();
     clipboard?.destroy();
     clipboard = undefined;
@@ -234,8 +244,7 @@
     };
     mouse.onEach(['mousedown', 'mousemove', 'mouseup'], mouseForwarder);
     displayClick = () => {
-      if (device.hasTouch.value) focusMobileKeyboard();
-      else element.focus();
+      if (!device.hasTouch.value) element.focus();
     };
     displayMouseEnter = () => {
       element.style.cursor = 'none';
@@ -392,6 +401,7 @@
   });
   const minimize = () => {
     if (fullscreen.value) return;
+    hideMobileKeyboard();
     minimized.value = true;
   };
   const restore = () => {
@@ -613,6 +623,22 @@
 
       <div class="relative min-h-0 flex-1 overflow-hidden bg-black" :class="fullscreen ? 'h-full' : ''">
         <div ref="display" class="remote-display-container h-full w-full overflow-hidden"></div>
+        <div v-if="device.hasTouch.value" class="absolute right-2 top-2 z-20">
+          <UiButton
+            density="touch"
+            :disabled="state !== 'connected'"
+            :aria-pressed="mobileKeyboardFocused"
+            :aria-label="
+              t(mobileKeyboardFocused ? 'remoteDesktopModal.hideKeyboard' : 'remoteDesktopModal.showKeyboard')
+            "
+            :title="t(mobileKeyboardFocused ? 'remoteDesktopModal.hideKeyboard' : 'remoteDesktopModal.showKeyboard')"
+            @pointerdown.prevent
+            @click="toggleMobileKeyboard"
+          >
+            <template #leading><i class="fas fa-keyboard" aria-hidden="true"></i></template>
+            {{ t('remoteDesktopModal.keyboard') }}
+          </UiButton>
+        </div>
         <textarea
           v-if="device.hasTouch.value"
           ref="mobileKeyboardInput"
@@ -624,6 +650,8 @@
           autocapitalize="off"
           spellcheck="false"
           tabindex="-1"
+          @focus="mobileKeyboardFocused = true"
+          @blur="mobileKeyboardFocused = false"
           @compositionstart="beginMobileComposition"
           @compositionend="endMobileComposition"
           @input="clearMobileInput"

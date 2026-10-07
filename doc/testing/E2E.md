@@ -424,3 +424,5 @@ When adding, moving, grouping, or optimizing tests, follow [AGENTS.md](../AGENTS
 Run-channel durable replay regression consumes every current Protocol event through the production Frontend projector, then forces a disconnect and verifies resumption from the consumed cursor with duplicate suppression. Dedicated events use valid typed payloads; other known events invalidate snapshots. Live CDP validation additionally replays the actual Runner-task backlog from the real Backend. This covers event contract completeness, not every payload semantic or arbitrary future protocol versions.
 
 Agent 自适应预算场景同时验证真实 durable proposal/rejection/model continuation：检查失败的原始错误码跨持久化传给模型，拒绝调用的 toolExecutions 保持零。
+
+移动端远程桌面回归覆盖直接触摸和触控板模式下画面点按不聚焦键盘输入框、兼容 click 路径不唤起键盘、显式键盘按钮显示与收起、文字按键发送、全屏下键盘控制，以及模式切换不重连和偏好持久化。

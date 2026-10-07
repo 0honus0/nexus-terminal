@@ -30,10 +30,13 @@
     "touchModeDirect": "直接操作",
     "touchModeTouchpad": "タッチパッド",
     "mobileKeyboardInputLabel": "リモートデスクトップのキーボード入力",
-    "touchHintDirect": "タップ：クリックしてキーボード表示 · 長押し：右クリック · ダブルタップ後にドラッグ：ドラッグ",
-    "touchHintTouchpad": "1本指：ポインター移動 · タップ：左クリックしてキーボード表示 · 2本指タップ：右クリック · 2本指スワイプ：スクロール",
+    "touchHintDirect": "タップ：クリック · 長押し：右クリック · ダブルタップ後にドラッグ：ドラッグ",
+    "touchHintTouchpad": "1本指：ポインター移動 · タップ：左クリック · 2本指タップ：右クリック · 2本指スワイプ：スクロール",
     "resize": "ウィンドウサイズを変更",
-    "restoreWindow": "リモートデスクトップウィンドウを復元"
+    "restoreWindow": "リモートデスクトップウィンドウを復元",
+    "keyboard": "キーボード",
+    "showKeyboard": "キーボードを表示",
+    "hideKeyboard": "キーボードを閉じる"
   },
   "vncModal": {
     "title": "VNCセッション",
