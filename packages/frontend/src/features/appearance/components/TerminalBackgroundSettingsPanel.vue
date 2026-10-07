@@ -535,17 +535,17 @@
             <li
               v-for="theme in filteredLocalThemes"
               :key="theme.name"
-              class="min-w-0 space-y-3 rounded-xl border border-border/60 bg-header/30 p-3 text-sm"
+              class="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-header/30 p-3 text-sm"
             >
-              <div class="mb-2 flex min-w-0 items-center gap-2 md:mb-0">
-                <span class="truncate font-medium text-foreground" :title="theme.name">{{
+              <div class="flex min-w-[6rem] flex-1 items-center gap-2">
+                <span class="min-w-0 truncate font-medium text-foreground" :title="theme.name">{{
                   theme.name.replace(/\.html$/i, '')
                 }}</span>
-                <UiBadge>
+                <UiBadge class="shrink-0">
                   {{ t(theme.type === 'preset' ? 'styleCustomizer.presetTag' : 'styleCustomizer.customTag') }}
                 </UiBadge>
               </div>
-              <div class="flex flex-wrap justify-start gap-2 md:justify-end">
+              <div class="ml-auto flex shrink-0 items-center gap-2">
                 <UiButton density="compact" @click="applyLocalPreset(theme)">{{
                   t('styleCustomizer.applyButton')
                 }}</UiButton>
@@ -592,12 +592,12 @@
             <li
               v-for="theme in filteredRemoteThemes"
               :key="theme.name"
-              class="min-w-0 space-y-3 rounded-xl border border-border/60 bg-header/30 p-3 text-sm"
+              class="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-header/30 p-3 text-sm"
             >
-              <span class="mb-2 truncate font-medium text-foreground md:mb-0">{{
+              <span class="min-w-[6rem] flex-1 truncate font-medium text-foreground" :title="theme.name">{{
                 theme.name.replace(/\.html$/i, '')
               }}</span>
-              <div class="flex justify-start md:justify-end">
+              <div class="ml-auto flex shrink-0 items-center gap-2">
                 <UiButton density="compact" :disabled="!theme.downloadUrl" @click="applyRemotePreset(theme)">{{
                   t('styleCustomizer.applyButton')
                 }}</UiButton>
