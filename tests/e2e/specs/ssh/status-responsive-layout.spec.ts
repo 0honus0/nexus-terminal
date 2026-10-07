@@ -128,13 +128,19 @@ test('server status keeps values aligned and contained in narrow, short and zoom
         const button = history.getByRole('button', { name: `${range}分`, exact: true });
         await expect(button).toBeVisible();
         await button.click();
+        await expect(button).toHaveAttribute('aria-pressed', 'true');
         await expect(chart).toHaveAttribute('data-range-minutes', String(range));
         const box = (await button.boundingBox())!;
         const pane = (await monitor.boundingBox())!;
+        const close = (await history.locator('.history-close').boundingBox())!;
+        expect(Math.abs(box.y + box.height / 2 - close.y - close.height / 2)).toBeLessThan(1);
+        expect(box.x + box.width).toBeLessThanOrEqual(close.x + 1);
         expect(box.x).toBeGreaterThanOrEqual(pane.x);
         expect(box.x + box.width).toBeLessThanOrEqual(pane.x + pane.width);
         expect(box.y + box.height).toBeLessThanOrEqual(pane.y + pane.height);
       }
+      const controls = history.locator('.history-controls');
+      expect(await controls.evaluate((element) => getComputedStyle(element).borderTopStyle)).toBe('solid');
       expect((await chart.locator('canvas').boundingBox())!.height).toBeGreaterThan(20);
       if (scale === 1.6 && size.width === 294)
         await monitor.screenshot({ path: testInfo.outputPath('status-history-narrow-zoomed.png') });

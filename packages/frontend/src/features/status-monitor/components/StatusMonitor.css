@@ -336,47 +336,73 @@ button.live-state {
   display: none;
 }
 .history-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.3em;
-}
-.history-header > strong {
-  flex: 1 1 auto;
-  font-size: 0.95em;
-  font-weight: 600;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.4em;
+  flex: none;
 }
 .history-header > strong {
   min-width: 0;
+  font-size: 0.95em;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
-.range-tabs {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.2em;
+.history-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  border: calc(1px / var(--status-scale, 1)) solid var(--status-border);
+  border-radius: 0.5em;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--status-text) 3%, transparent);
   font-size: calc(12px / var(--status-scale, 1));
   line-height: 1.4;
 }
+.range-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-width: 0;
+}
 .range-tabs button,
 .history-close {
-  padding: 0.25em 0.35em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 2.25em;
+  padding: 0 0.2em;
   border: 0;
-  border-radius: 0.25em;
+  border-radius: 0;
   color: var(--status-muted);
   background: transparent;
   font: inherit;
-  font-size: 0.85em;
+  white-space: nowrap;
   cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+.range-tabs button + button,
+.history-close {
+  border-left: calc(1px / var(--status-scale, 1)) solid var(--status-border);
+}
+.range-tabs button:hover,
+.history-close:hover {
+  color: var(--status-text);
+  background: color-mix(in srgb, var(--status-text) 8%, transparent);
 }
 .range-tabs button.active {
-  color: var(--status-text);
-  background: color-mix(in srgb, var(--history-accent) 12%, transparent);
+  color: var(--history-accent);
+  background: color-mix(in srgb, var(--history-accent) 15%, transparent);
+  font-weight: 600;
 }
-.range-tabs button {
-  font-size: 1em;
+.range-tabs button:focus-visible,
+.history-close:focus-visible {
+  outline: 2px solid var(--history-accent);
+  outline-offset: -2px;
 }
 .history-close {
-  flex: none;
+  width: 2.4em;
 }
 .empty-state {
   display: grid;

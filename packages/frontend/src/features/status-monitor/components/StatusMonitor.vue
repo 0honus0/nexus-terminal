@@ -369,26 +369,29 @@
           <section v-if="selectedMetric" class="history-card" :style="{ '--history-accent': selectedMetricColor }">
             <header class="history-header">
               <strong>{{ selectedMetricTitle }}</strong>
-              <div class="range-tabs" role="group" :aria-label="t('statusMonitor.historyRange')">
+              <div class="history-controls">
+                <div class="range-tabs" role="group" :aria-label="t('statusMonitor.historyRange')">
+                  <button
+                    v-for="range in ranges"
+                    :key="range"
+                    type="button"
+                    :class="{ active: historyRange === range }"
+                    :aria-pressed="historyRange === range"
+                    @click="historyRange = range"
+                  >
+                    {{ t('statusMonitor.minutes', { count: range }) }}
+                  </button>
+                </div>
                 <button
-                  v-for="range in ranges"
-                  :key="range"
                   type="button"
-                  :class="{ active: historyRange === range }"
-                  @click="historyRange = range"
+                  class="history-close"
+                  :title="t('statusMonitor.closeTrend')"
+                  :aria-label="t('statusMonitor.closeTrend')"
+                  @click="selectedMetric = null"
                 >
-                  {{ t('statusMonitor.minutes', { count: range }) }}
+                  <i class="fas fa-times" aria-hidden="true"></i>
                 </button>
               </div>
-              <button
-                type="button"
-                class="history-close"
-                :title="t('statusMonitor.closeTrend')"
-                :aria-label="t('statusMonitor.closeTrend')"
-                @click="selectedMetric = null"
-              >
-                <i class="fas fa-times" aria-hidden="true"></i>
-              </button>
             </header>
             <StatusCharts
               :history="monitor.history.value"
