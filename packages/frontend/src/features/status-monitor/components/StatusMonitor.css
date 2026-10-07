@@ -33,7 +33,7 @@
 .monitor-header {
   flex: none;
   min-width: 0;
-  padding: calc(3px / var(--status-scale, 1)) min(0.6rem, 3cqw);
+  padding: calc(1px / var(--status-scale, 1)) min(0.6rem, 3cqw);
   border-bottom: 1px solid var(--status-border);
 }
 .header-main {
