@@ -1,6 +1,6 @@
 // Runs before theme scripts in the opaque-origin background document. Keep
 // background frame work separate from terminal input/output rendering.
-export const mobileBackgroundRuntime = `<script>(() => {
+const createBackgroundRuntime = (frameIntervalMs: number) => `<script>(() => {
   const requestFrame = window.requestAnimationFrame.bind(window);
   const cancelFrame = window.cancelAnimationFrame.bind(window);
   const callbacks = new Map();
@@ -17,8 +17,7 @@ export const mobileBackgroundRuntime = `<script>(() => {
   };
   const schedule = () => {
     if (paused() || !callbacks.size || timer !== null || frame !== null) return;
-    // A timer avoids waking the theme at the screen's full refresh rate.
-    timer = window.setTimeout(() => {
+    const paint = () => {
       timer = null;
       if (paused()) return;
       frame = requestFrame(timestamp => {
@@ -36,7 +35,10 @@ export const mobileBackgroundRuntime = `<script>(() => {
         painted = true;
         schedule();
       });
-    }, Math.max(0, 50 - (performance.now() - lastFrame)));
+    };
+    // Mobile backgrounds use a capped frame rate; desktop backgrounds keep native RAF timing.
+    if (${frameIntervalMs} > 0) timer = window.setTimeout(paint, Math.max(0, ${frameIntervalMs} - (performance.now() - lastFrame)));
+    else paint();
   };
   window.requestAnimationFrame = callback => {
     const id = ++nextId;
@@ -63,3 +65,6 @@ export const mobileBackgroundRuntime = `<script>(() => {
   reducedMotion.addEventListener('change', sync);
   sync();
 })();<\/script>`;
+
+export const mobileBackgroundRuntime = createBackgroundRuntime(50);
+export const desktopBackgroundRuntime = createBackgroundRuntime(0);

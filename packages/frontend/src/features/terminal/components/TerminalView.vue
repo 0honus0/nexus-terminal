@@ -12,7 +12,7 @@
   import '@xterm/xterm/css/xterm.css';
   import type { TerminalChannel } from '../ports/terminal-channel';
   import type { TerminalVisualOptions } from '../model/terminal';
-  import { mobileBackgroundRuntime } from '../model/mobileBackgroundRuntime';
+  import { desktopBackgroundRuntime, mobileBackgroundRuntime } from '../model/mobileBackgroundRuntime';
   import { trackTerminalRuntimeModes, type TerminalRuntimeModeTracker } from '../model/terminalRuntimeModes';
   import { serializeTerminalSnapshot } from '../model/terminalSnapshot';
   import {
@@ -143,7 +143,7 @@
     return [
       `<meta http-equiv="Content-Security-Policy" content="${customHtmlCsp}">`,
       `<style>${customHtmlBaseStyle}${imageOverride}</style>`,
-      device.isMobile.value || device.hasCoarsePointer.value ? mobileBackgroundRuntime : '',
+      device.isMobile.value || device.hasCoarsePointer.value ? mobileBackgroundRuntime : desktopBackgroundRuntime,
       html,
       customHtmlResizeBridge,
     ].join('');
@@ -225,15 +225,18 @@
       fitAndResize();
     }, 100);
   };
-  // Browser wakeups and transport recovery need a fresh post-layout measurement even when
-  // the container size did not change. Coalesce them rather than retaining a stale PTY size.
-  const scheduleGeometrySync = () => {
-    forceGeometrySync = true;
+  const scheduleGeometryFit = () => {
     if (geometryFrame !== undefined) return;
     geometryFrame = window.requestAnimationFrame(() => {
       geometryFrame = undefined;
       fitAndResize();
     });
+  };
+  // Browser wakeups and transport recovery need a fresh PTY sync. Ordinary tab switches
+  // only need a measurement, so unchanged geometry does not produce another resize frame.
+  const scheduleGeometrySync = () => {
+    forceGeometrySync = true;
+    scheduleGeometryFit();
   };
   const onVisibilityChange = () => {
     clearOutputSchedule();
@@ -1155,8 +1158,7 @@
   watch(
     () => props.active,
     (active) => {
-      if (!active) backgroundReady.value = false;
-      else scheduleGeometrySync();
+      if (active) scheduleGeometryFit();
       if (active && pendingOutput.length) flushPendingOutput();
     },
     { flush: 'post' },
@@ -1503,7 +1505,8 @@
     ></div>
     <!-- Custom backgrounds may size themselves only once, so start them after the session is visible. -->
     <iframe
-      v-if="active && backgroundReady && sandboxedCustomHtml"
+      v-if="backgroundReady && sandboxedCustomHtml"
+      v-show="active"
       ref="backgroundFrame"
       class="terminal-custom-html"
       sandbox="allow-scripts"
