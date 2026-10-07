@@ -107,6 +107,37 @@ button.live-state {
   text-align: left;
   cursor: pointer;
 }
+/* Give labels, values and percentages stable slots instead of independent flex wraps. */
+.metric-card:not(.network-card) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-content: center;
+  align-items: center;
+  column-gap: 0.6em;
+}
+.metric-card:not(.network-card) .metric-top,
+.metric-card:not(.network-card) .metric-bottom {
+  display: contents;
+}
+.metric-card:not(.network-card) .metric-identity {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+.metric-card:not(.network-card) .metric-detail {
+  grid-column: 2;
+  grid-row: 1;
+}
+.metric-card:not(.network-card) .metric-percent {
+  grid-column: 3;
+  grid-row: 1;
+  text-align: right;
+}
+.metric-card:not(.network-card) .metric-progress {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  width: 100%;
+}
 .metric-card + .metric-card {
   border-top-color: var(--status-border);
 }
@@ -361,6 +392,27 @@ button.live-state {
   color: #ef4444;
 }
 
+@container status-content (max-width: 280px) {
+  .metric-card:not(.network-card) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .metric-card:not(.network-card) .metric-percent {
+    grid-column: 2;
+  }
+  .metric-card:not(.network-card) .metric-detail {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: flex-end;
+    max-width: 100%;
+  }
+  .metric-card:not(.network-card) .metric-progress {
+    grid-row: 3;
+  }
+  .network-pill .rate-val {
+    flex-basis: 100%;
+    text-align: center;
+  }
+}
 @container status-content (max-width: 200px) {
   .has-history .metric-list {
     grid-template-columns: minmax(0, 1fr);
@@ -382,10 +434,6 @@ button.live-state {
   .metric-detail-group {
     flex: 0 0 auto;
   }
-  .network-pill .rate-val {
-    flex-basis: 100%;
-    text-align: center;
-  }
   .rate-full {
     display: none;
   }
@@ -401,30 +449,11 @@ button.live-state {
     padding-block: 0.2em;
   }
   .metric-card:not(.network-card) {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: minmax(0, 1fr) auto;
-    gap: 0.1em 0.4em;
+    row-gap: 0.15em;
     padding-block: 0.15em;
   }
   .metric-top {
     gap: 0.15em 0.4em;
-  }
-  .metric-card:not(.network-card) .metric-top {
-    grid-column: 1;
-    grid-row: 1;
-  }
-  .metric-card:not(.network-card) .metric-bottom {
-    display: contents;
-  }
-  .metric-percent {
-    grid-column: 2;
-    grid-row: 1;
-    align-self: center;
-  }
-  .metric-progress {
-    grid-column: 1 / -1;
-    grid-row: 2;
   }
   .network-pill {
     padding-block: 0.15em;
@@ -446,11 +475,15 @@ button.live-state {
   }
   .metric-card:not(.network-card) {
     display: flex;
+    align-items: stretch;
     gap: 0.6em;
   }
   .metric-card + .metric-card {
     border-top-color: transparent;
     border-left-color: var(--status-border);
+  }
+  .metric-card:not(.network-card) .metric-top {
+    display: flex;
   }
   .metric-top {
     flex-direction: column;
@@ -462,6 +495,10 @@ button.live-state {
   }
   .metric-card:not(.network-card) .metric-bottom {
     display: flex;
+  }
+  .metric-detail-group {
+    flex-wrap: wrap;
+    white-space: normal;
   }
   .network-bottom {
     grid-template-columns: minmax(0, 1fr);
