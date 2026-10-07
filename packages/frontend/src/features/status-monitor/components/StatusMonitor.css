@@ -107,17 +107,20 @@ button.live-state {
   text-align: left;
   cursor: pointer;
 }
-/* Give labels, values and percentages stable slots instead of independent flex wraps. */
+/* Keep names and capacity stable while the percentage stays beside its progress bar. */
 .metric-card:not(.network-card) {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-content: center;
   align-items: center;
   column-gap: 0.6em;
 }
-.metric-card:not(.network-card) .metric-top,
-.metric-card:not(.network-card) .metric-bottom {
+.metric-card:not(.network-card) .metric-top {
   display: contents;
+}
+.metric-card:not(.network-card) .metric-bottom {
+  grid-column: 1 / -1;
+  grid-row: 2;
 }
 .metric-card:not(.network-card) .metric-identity {
   grid-column: 1;
@@ -127,16 +130,6 @@ button.live-state {
 .metric-card:not(.network-card) .metric-detail {
   grid-column: 2;
   grid-row: 1;
-}
-.metric-card:not(.network-card) .metric-percent {
-  grid-column: 3;
-  grid-row: 1;
-  text-align: right;
-}
-.metric-card:not(.network-card) .metric-progress {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  width: 100%;
 }
 .metric-card + .metric-card {
   border-top-color: var(--status-border);
@@ -394,19 +387,7 @@ button.live-state {
 
 @container status-content (max-width: 280px) {
   .metric-card:not(.network-card) {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .metric-card:not(.network-card) .metric-percent {
-    grid-column: 2;
-  }
-  .metric-card:not(.network-card) .metric-detail {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    justify-content: flex-end;
-    max-width: 100%;
-  }
-  .metric-card:not(.network-card) .metric-progress {
-    grid-row: 3;
+    font-size: min(1em, 6cqw);
   }
   .network-pill .rate-val {
     flex-basis: 100%;
@@ -465,7 +446,7 @@ button.live-state {
     display: none;
   }
 }
-@container status-content (min-width: 480px) and (max-height: 240px) {
+@container status-content (min-width: 960px) and (max-height: 240px) {
   .monitor-panel {
     font-size: min(0.8rem, 7cqh);
   }
@@ -473,32 +454,13 @@ button.live-state {
     grid-template-columns: repeat(5, minmax(0, 1fr));
     grid-template-rows: minmax(0, 1fr);
   }
-  .metric-card:not(.network-card) {
-    display: flex;
-    align-items: stretch;
-    gap: 0.6em;
-  }
   .metric-card + .metric-card {
     border-top-color: transparent;
     border-left-color: var(--status-border);
   }
-  .metric-card:not(.network-card) .metric-top {
-    display: flex;
-  }
-  .metric-top {
-    flex-direction: column;
-    align-items: flex-start;
-  }
   .metric-detail {
-    margin-left: 0;
-    text-align: left;
-  }
-  .metric-card:not(.network-card) .metric-bottom {
-    display: flex;
-  }
-  .metric-detail-group {
-    flex-wrap: wrap;
-    white-space: normal;
+    margin-left: auto;
+    text-align: right;
   }
   .network-bottom {
     grid-template-columns: minmax(0, 1fr);

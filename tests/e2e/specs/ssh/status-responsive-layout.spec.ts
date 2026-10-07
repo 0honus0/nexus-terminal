@@ -67,6 +67,7 @@ test('server status keeps values aligned and contained in narrow, short and zoom
       { width: 320, height: 420 },
       { width: 480, height: 220 },
       { width: 800, height: 180 },
+      { width: 1000, height: 220 },
     ]) {
       await monitor.evaluate((element, size) => {
         Object.assign((element as HTMLElement).style, {
@@ -79,19 +80,21 @@ test('server status keeps values aligned and contained in narrow, short and zoom
         });
       }, size);
       const layout = await monitor.evaluate((element) => {
-        const surface = element.querySelector<HTMLElement>('.status-surface')!;
         const rect = (target: Element) => {
           const { left, right, top, bottom } = target.getBoundingClientRect();
           return { left, right, top, bottom };
         };
         return {
-          narrow: surface.clientWidth <= 280,
           cards: [...element.querySelectorAll('.metric-card:not(.network-card)')].map((card) => ({
             card: rect(card),
             identity: rect(card.querySelector('.metric-identity')!),
             detail: rect(card.querySelector('.metric-detail')!),
             percent: rect(card.querySelector('.metric-percent')!),
             progress: rect(card.querySelector('.metric-progress')!),
+            identityOverflow:
+              card.querySelector('.metric-identity')!.scrollWidth - card.querySelector('.metric-identity')!.clientWidth,
+            detailOverflow:
+              card.querySelector('.metric-detail')!.scrollWidth - card.querySelector('.metric-detail')!.clientWidth,
           })),
         };
       });
@@ -102,14 +105,18 @@ test('server status keeps values aligned and contained in narrow, short and zoom
           expect(bounds.top).toBeGreaterThanOrEqual(metric.card.top - 1);
           expect(bounds.bottom).toBeLessThanOrEqual(metric.card.bottom + 1);
         }
-        if (layout.narrow) {
-          const identityCenter = (metric.identity.top + metric.identity.bottom) / 2;
-          const percentCenter = (metric.percent.top + metric.percent.bottom) / 2;
-          expect(Math.abs(identityCenter - percentCenter)).toBeLessThan(2);
-          expect(metric.identity.right).toBeLessThanOrEqual(metric.percent.left);
-          expect(metric.detail.top).toBeGreaterThanOrEqual(Math.max(metric.identity.bottom, metric.percent.bottom) - 1);
-          expect(metric.progress.top).toBeGreaterThanOrEqual(metric.detail.bottom - 1);
-        }
+        const progressCenter = (metric.progress.top + metric.progress.bottom) / 2;
+        const percentCenter = (metric.percent.top + metric.percent.bottom) / 2;
+        expect(Math.abs(progressCenter - percentCenter)).toBeLessThan(2);
+        expect(metric.progress.right).toBeLessThan(metric.percent.left);
+        expect(metric.progress.right - metric.progress.left).toBeGreaterThan(10);
+        expect(metric.percent.top).toBeGreaterThanOrEqual(metric.detail.bottom - 1);
+        const identityCenter = (metric.identity.top + metric.identity.bottom) / 2;
+        const detailCenter = (metric.detail.top + metric.detail.bottom) / 2;
+        expect(Math.abs(identityCenter - detailCenter)).toBeLessThan(2);
+        expect(metric.identity.right).toBeLessThanOrEqual(metric.detail.left);
+        expect(metric.identityOverflow).toBeLessThanOrEqual(1);
+        expect(metric.detailOverflow).toBeLessThanOrEqual(1);
       }
       if (scale === 1.6 && size.width === 294)
         await monitor.screenshot({ path: testInfo.outputPath('status-narrow-zoomed.png') });
