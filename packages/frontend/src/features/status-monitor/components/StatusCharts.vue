@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+  import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, shallowRef, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { Line } from 'vue-chartjs';
   import {
@@ -48,6 +48,10 @@
         : null;
   };
   watch(() => [props.scale, props.metric], syncLegendPosition, { flush: 'post' });
+  onActivated(syncLegendPosition);
+  onDeactivated(() => {
+    legendPosition.value = null;
+  });
   const rangeMs = computed(() => Math.max(1, props.rangeMinutes) * 60_000);
   const latestSampleTime = computed(() =>
     Math.max(

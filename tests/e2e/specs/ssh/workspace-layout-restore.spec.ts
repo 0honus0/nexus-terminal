@@ -1,11 +1,13 @@
-import { expect, test, type Route } from '../../support/fixtures';
+import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
-import { configureSshE2eSettings, connectTestSshFromConnectionsPage, ensureTestSshConnection } from '../../support/ssh';
+import {
+  configureSshE2eSettings,
+  connectTestSshFromConnectionsPage,
+  ensureTestSshConnection,
+  E2E_SSH,
+} from '../../support/ssh';
 
-test('returning from settings waits for saved layout and sidebar before resizing a live terminal', async ({
-  page,
-  context,
-}) => {
+test('workspace keeps the live terminal and draft cached across page navigation', async ({ page, context }) => {
   test.setTimeout(60_000);
   const geometry: Array<{ columns: number; rows: number }> = [];
   page.on('websocket', (socket) => {
@@ -36,6 +38,22 @@ test('returning from settings waits for saved layout and sidebar before resizing
       })
     ).ok(),
   ).toBeTruthy();
+  const additionalName = 'E2E Cache Additional';
+  expect(
+    (
+      await context.request.post('/api/v1/connections', {
+        data: {
+          name: additionalName,
+          type: 'SSH',
+          host: E2E_SSH.host,
+          port: E2E_SSH.port,
+          username: E2E_SSH.username,
+          authMethod: 'password',
+          password: E2E_SSH.password,
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
   const terminal = page.locator('.terminal-inner-container');
@@ -47,57 +65,60 @@ test('returning from settings waits for saved layout and sidebar before resizing
   const savedGeometry = geometry.at(-1)!;
   const savedBox = (await terminal.boundingBox())!;
 
-  for (const setting of ['layout', 'sidebar']) {
-    await page.locator('a[href="/settings"]').first().click();
-    await expect(page).toHaveURL(/\/settings/);
-    let release!: () => void;
-    let started!: () => void;
-    const held = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const pending = new Promise<void>((resolve) => {
-      started = resolve;
-    });
-    const pattern = `**/api/v1/settings/${setting}`;
-    const handler = async (route: Route) => {
-      if (route.request().method() !== 'GET') {
-        await route.continue();
-        return;
-      }
-      const response = await route.fetch();
-      started();
-      await held;
-      await route.fulfill({ response });
-    };
-    await page.route(pattern, handler);
+  const originalTerminal = await terminal.elementHandle();
+  const originalScreen = await terminal.locator('.xterm-screen').elementHandle();
+  let settingsReads = 0;
+  await page.route('**/api/v1/settings/{layout,sidebar}', async (route) => {
+    if (route.request().method() === 'GET') settingsReads += 1;
+    await route.continue();
+  });
+  for (const destination of ['settings', 'connections']) {
+    await command.fill(`sleep 0.5; printf 'CACHE_BACKGROUND_${destination}\\n'`);
+    await command.press('Enter');
+    await command.fill(`draft-${destination}`);
     geometry.length = 0;
-    try {
-      await page.locator('a[href="/workspace"]').first().click();
-      await pending;
-      // Simulate a slow settings response and inspect the intermediate view, not just its final state.
-      await page.waitForTimeout(300);
-      await expect(page.getByRole('tab', { selected: true })).toHaveAttribute('data-session-state', 'connected');
-      await expect(page.locator('.workspace-split')).toHaveCount(0);
-      await expect(terminal).toHaveCount(0);
-      expect(geometry).toEqual([]);
-      release();
-      await expect(terminal).toContainText('LAYOUT_RESTORE_READY');
-      await expect.poll(() => geometry.length).toBeGreaterThan(0);
-      await page.waitForTimeout(250);
-      expect(
-        geometry.every(
-          (viewport) => viewport.columns === savedGeometry.columns && viewport.rows === savedGeometry.rows,
-        ),
-      ).toBe(true);
-      const restoredBox = (await terminal.boundingBox())!;
-      expect(Math.abs(restoredBox.width - savedBox.width)).toBeLessThan(1);
-      expect(Math.abs(restoredBox.height - savedBox.height)).toBeLessThan(1);
-      await command.fill(`printf 'LAYOUT_RESTORE_${setting}\\n'`);
-      await command.press('Enter');
-      await expect(terminal).toContainText(`LAYOUT_RESTORE_${setting}`);
-    } finally {
-      release();
-      await page.unroute(pattern, handler);
-    }
+    await page.locator(`a[href="/${destination}"]`).first().click();
+    await expect(page).toHaveURL(new RegExp(`/${destination}`));
+    await expect(terminal).toHaveCount(0);
+    await page.waitForTimeout(700);
+    expect(geometry).toEqual([]);
+    await page.locator('a[href="/workspace"]').first().click();
+    await expect(terminal).toContainText(`CACHE_BACKGROUND_${destination}`);
+    await expect(command).toHaveValue(`draft-${destination}`);
+    expect(await terminal.evaluate((element, original) => element === original, originalTerminal)).toBe(true);
+    expect(
+      await terminal.locator('.xterm-screen').evaluate((element, original) => element === original, originalScreen),
+    ).toBe(true);
+    await expect(page.getByRole('tab', { selected: true })).toHaveAttribute('data-session-state', 'connected');
+    const restoredBox = (await terminal.boundingBox())!;
+    expect(Math.abs(restoredBox.width - savedBox.width)).toBeLessThan(1);
+    expect(Math.abs(restoredBox.height - savedBox.height)).toBeLessThan(1);
+    await page.waitForTimeout(250);
+    expect(
+      geometry.every((viewport) => viewport.columns === savedGeometry.columns && viewport.rows === savedGeometry.rows),
+    ).toBe(true);
+    expect(settingsReads).toBe(0);
+    await command.fill(`printf 'CACHE_INPUT_${destination}\\n'`);
+    await command.press('Enter');
+    await expect(terminal).toContainText(`CACHE_INPUT_${destination}`);
   }
+  // A cached page must still consume new connection requests from the directory.
+  await page.locator('a[href="/connections"]').first().click();
+  await page
+    .locator('.connection-card')
+    .filter({ hasText: additionalName })
+    .getByRole('button', { name: 'Connect', exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/workspace$/);
+  await expect(page.getByRole('tab')).toHaveCount(2);
+  await expect(page.getByRole('tab', { selected: true })).toHaveAttribute('data-session-state', 'connected', {
+    timeout: 35_000,
+  });
+  await page.getByRole('tab').filter({ hasText: E2E_SSH.name }).click();
+  await expect(page.locator('.terminal-inner-container:visible')).toContainText('CACHE_INPUT_connections');
+  expect(
+    await page
+      .locator('.terminal-inner-container:visible')
+      .evaluate((element, original) => element === original, originalTerminal),
+  ).toBe(true);
 });
