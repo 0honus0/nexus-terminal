@@ -909,7 +909,7 @@
     />
 
     <div
-      v-if="registry.orderedSessions.value.length"
+      v-if="registry.orderedSessions.value.length && workspaceLayout.loaded.value"
       v-show="!connectionPickerVisible"
       class="relative min-h-0 flex-1"
       :class="
