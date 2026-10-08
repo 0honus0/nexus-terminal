@@ -6,11 +6,6 @@ on:
     types: [published]
   workflow_dispatch:
     inputs:
-      source_ref:
-        description: Source branch or ref to publish
-        required: true
-        default: main
-        type: string
       channel:
         description: Image channel to publish
         required: true
@@ -55,31 +50,10 @@ jobs:
       platforms: ${{ steps.architecture.outputs.platforms }}
 
     steps:
-      - name: Select publication source
-        id: source
-        shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          REQUESTED_SOURCE_REF: ${{ inputs.source_ref }}
-        run: |
-          if [[ "$EVENT_NAME" == "release" ]]; then
-            source_ref="$RELEASE_TAG"
-          else
-            source_ref="${REQUESTED_SOURCE_REF:-main}"
-          fi
-
-          if [[ -z "$source_ref" ]]; then
-            echo "Publication source ref must not be empty" >&2
-            exit 1
-          fi
-
-          echo "ref=$source_ref" >> "$GITHUB_OUTPUT"
-
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          ref: ${{ steps.source.outputs.ref }}
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.sha }}
 
       - name: Resolve source commit
         id: source_commit
