@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { JsonValue } from '../../../packages/backend/src/modules/agent/agent.types';
 import { FileCapabilityService } from '../../../packages/backend/src/modules/agent/capabilities/file-capability.service';
 import type { SshFileTargetPort } from '../../../packages/backend/src/modules/agent/capabilities/ssh-file-target.port';
+import type { SshTargetResolverPort } from '../../../packages/backend/src/modules/agent/capabilities/ssh-target-resolver.port';
 import { AgentTargetResolver } from '../../../packages/backend/src/modules/agent/capabilities/target-resolver';
 import { ToolCatalog } from '../../../packages/backend/src/modules/agent/capabilities/tool-catalog';
 import { ToolExecutor } from '../../../packages/backend/src/modules/agent/capabilities/tool-executor';
@@ -288,6 +289,43 @@ export const unifiedFileCapabilityScenario = async () => {
     maxOutputBytes: 256 * 1024,
     inputRevision: 1,
   };
+  let resolvedSshTargets = 0;
+  const canonicalResolver = new AgentTargetResolver({
+    target: async (_context, connectionId) => {
+      resolvedSshTargets++;
+      if (connectionId !== 1) throw new Error('TARGET_NOT_SELECTED');
+      return {
+        kind: 'ssh',
+        target: 'ssh',
+        id: '1',
+        connectionId: 1,
+        targetIdentity: 'ssh:1',
+        endpoint: 'ssh.example:22',
+        loginUser: 'tester',
+        configurationHash: sshConfigurationHash,
+        hostKeyTrust: 'unavailable',
+      };
+    },
+  } satisfies SshTargetResolverPort);
+  for (const invalid of [
+    { target: 'workspace', id: 'retired-workspace' },
+    { target: 'ssh', id: '0' },
+    { target: 'ssh', id: '01' },
+    { target: 'ssh', id: '1e3' },
+    { target: 'ssh', id: '9007199254740992' },
+  ] as const) {
+    await assert.rejects(
+      canonicalResolver.resolve(context, invalid),
+      /TOOL_ARGUMENTS_INVALID/,
+      'Retired Workspace and noncanonical connection IDs must be rejected before SSH resolution',
+    );
+  }
+  assert.equal(resolvedSshTargets, 0, 'Invalid targets must not consult SSH or Workspace resources');
+  const canonicalSsh = await canonicalResolver.resolve(context, { target: 'ssh', id: '1' });
+  assert.equal(canonicalSsh.connectionId, 1);
+  assert.deepEqual(canonicalSsh.resourceKeys, ['connection:1']);
+  assert.equal(canonicalSsh.fingerprint.configurationHash, sshConfigurationHash);
+  assert.equal(resolvedSshTargets, 1);
   const invoke = async (name: string, input: JsonValue): Promise<ToolResult> => {
     const tool = tools.get(name);
     assert.ok(tool, `${name} must be registered`);
@@ -644,6 +682,7 @@ export const unifiedFileCapabilityScenario = async () => {
       { name: 'unified_file_broker_scope_rejections', value: 2, unit: 'cases' },
       { name: 'unified_file_frozen_target_stale_rejections', value: 2, unit: 'cases' },
       { name: 'unified_file_legacy_branches', value: 0, unit: 'branches' },
+      { name: 'unified_file_resolver_retired_target_rejections', value: 5, unit: 'cases' },
     ];
   }
 };

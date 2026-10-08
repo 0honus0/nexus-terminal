@@ -231,7 +231,7 @@ Mutation 链：`inspect -> capability/grant -> policy -> approval -> lease/fence
 
 Tool descriptor 唯一声明 capability。模型调用、Run/Skill/Plan/输入/内部协作、当前 App Storage 与生成 Artifact 是 enabled App 的核心行为，不增加 `ai.model.use/runs.execute` 总闸门。
 
-Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 的 typed targets **仅为 SSH**（all 或指定 connection ids）。`CapabilityRegistry` 唯一持有 identity/scope/parser/intersection/authorization；旧含 Workspace 的授权范围在当前解析边界直接拒绝，不自动改为 SSH，也不接纳 Workspace+SSH 双轨 grant。HTTP/Protocol/UI 的 Agent grant 输入与 Host definition 只描述 SSH；原已发布的历史数据库迁移 SQL 不随之改写。UI 从服务端完整 grants 初始化，保存 CAS 后才更新已保存状态。通用 `AgentTargetResolver` 中尚存的 Workspace target 属于待迁移的 ACP/旧 API，不等于当前 File/Shell grant 权限。
+Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 的 typed targets **仅为 SSH**（all 或指定 connection ids）。`CapabilityRegistry` 唯一持有 identity/scope/parser/intersection/authorization；旧含 Workspace 的授权范围在当前解析边界直接拒绝，不自动改为 SSH，也不接纳 Workspace+SSH 双轨 grant。HTTP/Protocol/UI 的 Agent grant 输入与 Host definition 只描述 SSH；原已发布的历史数据库迁移 SQL 不随之改写。UI 从服务端完整 grants 初始化，保存 CAS 后才更新已保存状态。`AgentTargetResolver` 已移除 Workspace Repository 与解析分支，仅解析显式 SSH connection；Browser Workspace binding 和剩余旧用户 Workspace API 分别由独立 owner 待退出。
 
 ### 7.2 执行职责与结果
 
@@ -259,7 +259,7 @@ Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 的 typed
 
 ### 8.2 文件、执行与传输边界
 
-- `FileCapabilityService` 只消费 `SshFileTargetPort`，canonical 文件工具的 schema 仅允许 `target:'ssh'`，旧 Workspace 文件 adapter/port 已退出；`ShellCapabilityService` 已移除 Workspace 分支。当前 `AgentTargetResolver` 仍统一消费 Workspace Repository 与 SshTargetResolverPort，SSH File/Shell 执行必须消费冻结的连接身份和配置 hash，拒绝旧目标与伪造 inspection。Machine port 只持有 connection/diagnostics/Docker，不建万能 facade。
+- `FileCapabilityService` 只消费 `SshFileTargetPort`，canonical 文件工具的 schema 仅允许 `target:'ssh'`，旧 Workspace 文件 adapter/port 已退出；`ShellCapabilityService` 已移除 Workspace 分支。`AgentTargetResolver` 仅消费 `SshTargetResolverPort`，在解析任何目标之前拒绝非 SSH selector 与非规范正整数 connection ID；SSH File/Shell/ACP 的授权与后续执行仍须核对冻结的连接身份和配置 hash，拒绝伪造 inspection。Browser binding 由其独立 authority 管理，不通过本 resolver。Machine port 只持有 connection/diagnostics/Docker，不建万能 facade。
 - Governed Child mutation 两层权限判断均为 SSH-only：`SubagentToolStepExecutor` 执行层和 `beginSubagentMutationToolTransition` 持久事务层都使用同一 `governedSubagentSshMutation` contract（不使用旧 Workspace/generation 判断）。只接受五种 canonical File/Shell mutation Tool、当前 Run 显式 connectionIds、委派的能力与 SSH id scope、规范化目标参数及冻结 SSH SHA256 identity/config hash/resourceKeys。StateCommit **独立从持久 Run/Delegation 读回**后才允许消费审批／切 Tool running；非法 scope、过期/改写 inspection、旧 workspace target 都拒绝，不能自动改选目标；ToolCallRunner 还需在执行边界实测 SSH 连接是否仍有效，保留既有审批/lease/unknown 隔离。
 - canonical `file_read/list/search/write/patch/move/delete` 显式 `target:'ssh'` 和授权 id，SSH SFTP 拒绝非法路径、越权和过期连接配置；read/list/search 有 bytes/entries/results 上限；write 用 expected SHA-256/null-create，move/delete 冻结 metadata；patch 用严格 unified diff、精确 hunk、`fuzzFactor=0`，不 shell git apply。结果验证真实 SHA/metadata，不建第二 journal。旧 Runner 文件 API 只作为待移除的 Workspace 管理内部消费者，不再为 Agent File tool 提供 authority。
 - Agent `shell_execute`、`shell_job_control` 只接受显式 `target:'ssh'` 和授权连接 id，不提供 Workspace/Backend 本地命令入口。argv 的字面参数由 SSH 传输逐参数安全引用，shellScript 使用远端命令 Shell；可选 cwd，旧 text 参数不接受。拒绝说明执行未发生且不泄漏命令正文。前台和后台沿用独立执行/期限边界，后台必须有 `ssh_session_open` 取得的长会话；每条命令独立 channel，按 user/App/Thread 隔离。运行时 Job 操作重检冻结的连接配置，不能因配置变化或旧 Workspace target 静默重绑执行。

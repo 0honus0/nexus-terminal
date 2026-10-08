@@ -375,7 +375,7 @@ export const composeAgent = ({
     now: () => systemClock.nowUnixSeconds(),
   });
   const workspaceRepository = composedWorkspaceRuntime.repository;
-  const targets = new AgentTargetResolver(workspaceRepository, sshTargets, cryptoHash);
+  const targets = new AgentTargetResolver(sshTargets);
   const workspaceRuntime = composedWorkspaceRuntime.service;
   const files = new FileCapabilityService(targets, sshFiles);
   const shell = new ShellCapabilityService(targets, sshShell, sshSessions);
