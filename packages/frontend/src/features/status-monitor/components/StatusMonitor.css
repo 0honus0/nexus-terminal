@@ -341,11 +341,46 @@ button.live-state {
   gap: 0.25em;
   flex: none;
 }
-.history-header > strong {
+.history-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.25em 0.6em;
+  min-width: 0;
+  min-height: calc(16.8px / var(--status-scale, 1));
+}
+.history-heading > strong {
   min-width: 0;
   font-size: 0.95em;
   font-weight: 600;
   overflow-wrap: anywhere;
+}
+.network-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3em 0.8em;
+  color: var(--status-muted);
+  font-size: calc(12px / var(--status-scale, 1));
+  line-height: 1.4;
+}
+.network-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  white-space: nowrap;
+}
+.network-legend i {
+  width: 0.65em;
+  height: 0.2em;
+  border-radius: 999px;
+}
+.legend-download {
+  background: #10b981;
+}
+.legend-upload {
+  background: #3b82f6;
 }
 .history-controls {
   display: grid;

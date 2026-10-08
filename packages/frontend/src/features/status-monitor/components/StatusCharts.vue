@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, shallowRef, watch } from 'vue';
+  import { computed, onBeforeUnmount, onDeactivated, onMounted, ref, shallowRef, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { Line } from 'vue-chartjs';
   import {
@@ -35,36 +35,20 @@
   const MAX_CHART_POINTS = 110;
   const Y_AXIS_GUTTER_PX = 2;
   const CHART_RIGHT_PAD_PX = 4;
-  const chartElement = ref<HTMLElement | null>(null);
   const tooltip = shallowRef<{
     time: string;
     entries: Array<{ label: string; value: string }>;
     left: string;
     top: string;
   } | null>(null);
-  const legendPosition = shallowRef<{ top: string; right: string; maxWidth: string } | null>(null);
-  const syncLegendPosition = () => {
-    const rect = chartElement.value?.getBoundingClientRect();
-    legendPosition.value =
-      rect && rect.width && rect.height
-        ? {
-            top: `${Math.round(rect.top + 4)}px`,
-            right: `${Math.round(window.innerWidth - rect.right + 6)}px`,
-            maxWidth: `${Math.max(0, rect.width - 12)}px`,
-          }
-        : null;
-  };
   watch(
     () => [props.scale, props.metric, props.rangeMinutes],
     () => {
       tooltip.value = null;
-      syncLegendPosition();
     },
     { flush: 'post' },
   );
-  onActivated(syncLegendPosition);
   onDeactivated(() => {
-    legendPosition.value = null;
     tooltip.value = null;
   });
   const rangeMs = computed(() => Math.max(1, props.rangeMinutes) * 60_000);
@@ -199,24 +183,18 @@
     };
   };
   let themeObserver: MutationObserver | null = null;
-  let chartObserver: ResizeObserver | null = null;
   const handleViewportChange = () => {
     tooltip.value = null;
-    syncLegendPosition();
   };
   onMounted(() => {
     readTheme();
     themeObserver = new MutationObserver(readTheme);
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
-    chartObserver = new ResizeObserver(syncLegendPosition);
-    if (chartElement.value) chartObserver.observe(chartElement.value);
-    syncLegendPosition();
     window.addEventListener('resize', handleViewportChange);
     window.addEventListener('scroll', handleViewportChange, true);
   });
   onBeforeUnmount(() => {
     themeObserver?.disconnect();
-    chartObserver?.disconnect();
     window.removeEventListener('resize', handleViewportChange);
     window.removeEventListener('scroll', handleViewportChange, true);
   });
@@ -377,7 +355,6 @@
 
 <template>
   <div
-    ref="chartElement"
     class="status-history-chart"
     :data-range-minutes="props.rangeMinutes"
     :data-window-start="windowStart"
@@ -391,10 +368,6 @@
     <div v-if="tooltip" role="tooltip" class="status-history-tooltip" :style="{ left: tooltip.left, top: tooltip.top }">
       <strong>{{ tooltip.time }}</strong>
       <div v-for="entry in tooltip.entries" :key="entry.label">{{ entry.label }}: {{ entry.value }}</div>
-    </div>
-    <div v-if="props.metric === 'network' && legendPosition" class="network-legend" :style="legendPosition">
-      <span><i class="legend-download"></i>{{ t('statusMonitor.networkDownload') }}</span>
-      <span><i class="legend-upload"></i>{{ t('statusMonitor.networkUpload') }}</span>
     </div>
   </Teleport>
 </template>
@@ -422,40 +395,5 @@
     flex: 1 1 auto;
     position: relative;
     overflow: hidden;
-  }
-
-  .network-legend {
-    position: fixed;
-    z-index: 1000;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.3rem 0.65rem;
-    padding: 0.2rem 0.35rem;
-    border-radius: 0.3rem;
-    background: var(--card-bg-color);
-    color: var(--text-color);
-    font-size: 12px;
-    font-weight: 600;
-    pointer-events: none;
-  }
-
-  .network-legend span {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-  }
-
-  .network-legend i {
-    width: 0.65rem;
-    height: 0.2rem;
-    border-radius: 999px;
-  }
-
-  .legend-download {
-    background: #10b981;
-  }
-
-  .legend-upload {
-    background: #3b82f6;
   }
 </style>

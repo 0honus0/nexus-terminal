@@ -104,13 +104,14 @@ test('status history uses real time windows and keeps controls fixed and axes sh
     await monitor.locator('.network-card').click();
     const legend = page.locator('.network-legend');
     await expect(legend).toBeVisible();
-    await expect(legend).toHaveCSS('font-size', '12px');
-    expect(await legend.evaluate((element) => element.parentElement === document.body)).toBe(true);
+    const legendFontSize = await legend.evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
+    expect(legendFontSize * scale).toBeCloseTo(12, 1);
+    expect(await legend.evaluate((element) => Boolean(element.closest('.history-heading')))).toBe(true);
     const legendBox = (await legend.boundingBox())!;
     const chartBox = (await chart.boundingBox())!;
     expect(legendBox.x).toBeGreaterThanOrEqual(chartBox.x);
     expect(legendBox.x + legendBox.width).toBeLessThanOrEqual(chartBox.x + chartBox.width);
-    expect(Math.abs(legendBox.y - chartBox.y - 4)).toBeLessThan(1);
+    expect(legendBox.y + legendBox.height).toBeLessThanOrEqual(chartBox.y);
     await monitor.locator('.metric-cpu').click();
   }
   await monitor.locator('.network-card').click();

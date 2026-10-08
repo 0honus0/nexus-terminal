@@ -345,7 +345,15 @@
 
           <section v-if="selectedMetric" class="history-card" :style="{ '--history-accent': selectedMetricColor }">
             <header class="history-header">
-              <strong>{{ selectedMetricTitle }}</strong>
+              <div class="history-heading">
+                <strong>{{ selectedMetricTitle }}</strong>
+                <div v-if="selectedMetric === 'network'" class="network-legend">
+                  <span
+                    ><i class="legend-download" aria-hidden="true"></i>{{ t('statusMonitor.networkDownload') }}</span
+                  >
+                  <span><i class="legend-upload" aria-hidden="true"></i>{{ t('statusMonitor.networkUpload') }}</span>
+                </div>
+              </div>
               <div class="history-controls">
                 <div class="range-tabs" role="group" :aria-label="t('statusMonitor.historyRange')">
                   <button
