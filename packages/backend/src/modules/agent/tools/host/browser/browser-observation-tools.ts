@@ -160,7 +160,6 @@ export const createBrowserObservationTools = (
           type: 'browser_screenshot_capture',
           sessionId: capture.sessionId,
           targetId: capture.targetId,
-          generation: capture.generation,
           url: capture.url,
           title: capture.title,
           viewport: { width: capture.width, height: capture.height },

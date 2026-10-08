@@ -261,10 +261,10 @@ export const decodeRunEnvironment = (value: unknown): AgentRunEnvironmentSnapsho
               endpoints: target.endpoints.map((item) => {
                 const endpoint = durableRecord(item);
                 if (!['docker-network', 'external-network'].includes(String(endpoint.scope))) return invalid();
-                if (!['backend', 'runner'].includes(String(endpoint.via))) return invalid();
+                if (endpoint.via !== 'backend') return invalid();
                 return {
                   scope: endpoint.scope as 'docker-network' | 'external-network',
-                  via: endpoint.via as 'backend' | 'runner',
+                  via: 'backend',
                   url: durableString(endpoint.url) as string,
                   priority: durableInteger(endpoint.priority),
                   allowPlaintext: durableBoolean(endpoint.allowPlaintext),

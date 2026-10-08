@@ -412,7 +412,8 @@ Agent Workspace Terminal 每个 Workspace 最多 8 个、单 Backend 合计最�
 - SSH 后台执行仍通过 `shell_execute` 与 `shell_job_control` 在冻结的授权连接和 Thread 范围内操作，不能凭 Job 已受理就宣称命令成功；终态后核对已执行命令的状态，不通过重发未知副作用命令代替核对。
 - Workspace 后台启动结果的 `userCleanup` 提供本次 App／Workspace 的具体读取和操作路径、必要请求头、数值版本来源与命令查询路径。`expectedVersion` 必须使用新读取的数值，不能用字符串占位值；交付说明须保留命令成功与 Workspace stopped／deleted 的最终核对，不以 HTTP 202 代替完成。
 - 管理 API 的 actions 响应命令标识是 `data.id`，不是 Agent 工具结果的 `commandId` 字段；将该 `data.id` 代入 `/workspace-runtime/commands/{commandId}` 查询，再核对 `data.status` 和 Workspace 最终状态。后台交接结果明确此字段映射，避免混用工具结果与 HTTP DTO。
-- **Agent ACP 已完全移除 Workspace/Runner 运行模式**：旧 Runner ACP 进程、WebSocket stream、Workspace Runtime ACP profiles、Run/Runner wire profile 字段、前端 profile 编辑器与选择器均已删除。旧配置与建档请求直接拒绝，不自动升级、重放或转换目标。ACP 只经明确授权的 SSH connection 启动远端 argv/绝对 cwd，内层权限审批和断连 unknown 状态保留；不依赖 Agent Runner。剩余 Workspace 管理、Runner Job/Terminal/Browser 仍待独立清理；普通终端 Workspace 与 SSH 项目不在本次删除范围。
+- **Agent ACP 已完全移除 Workspace/Runner 运行模式**：旧 Runner ACP 进程、WebSocket stream、Workspace Runtime ACP profiles、Run/Runner wire profile 字段、前端 profile 编辑器与选择器均已删除。旧配置与建档请求直接拒绝，不自动升级、重放或转换目标。ACP 只经明确授权的 SSH connection 启动远端 argv/绝对 cwd，内层权限审批和断连 unknown 状态保留；不依赖 Agent Runner。剩余 Workspace 管理、Runner Job/Terminal 仍待独立清理；普通终端 Workspace 与 SSH 项目不在本次删除范围。
+- **Agent Browser 使用独立 CDP target**：`browser_session_open` 必须提供已配置的 `targetId`，不再接受 `workspaceId` 或 Workspace generation；Browser endpoint 仅允许 `via=backend`，不将旧 Runner tunnel/Workspace 目标自动改绑到 Backend。Session 按 user/App/Run/Runtime 隔离；所选 target 的 endpoints 和 URL allowlist 参与配置 hash 与内容派生 revision，修改或删除该 target 后旧 Session 关闭并拒绝继续操作；无关 settings revision 变化不误关闭。浏览器导航、子请求和下载仍遵循 URL allowlist、Artifact 与原有审批边界。
 - Plugin App 只获得已声明并授权的 capability。Agent 文件和 Shell capability 的授权目标只允许 SSH 全部或指定连接 ID；授权设置不再提供 Workspace 目标，发送旧 Workspace 或 Workspace+SSH grant 返回请求无效，不会自动转换为 SSH 或更新授权版本。需要确认的 mutation 会先显示 approval，未知执行结果会进入核对或恢复流程。
 
 ## 外观与 HTML Theme
@@ -461,7 +462,7 @@ Workspace 是独立的项目与运行环境管理模块。支持版本 JSON 保�
 - Integration 删除／禁用的旧 refresh 仍会被失效保护拦住，临时 generation 在最后在途 refresh 结束后回收，不无限保留历史 UUID。
 - SSH 远端断开会驱动 Execution／Workspace Registry 回收，不再保留已断开的 ready 记录；挂起移交先解除旧 Execution 监听，晚到关闭事件不会按同 ID 误关新会话。远端操作结果未知仍按原隔离契约处理。
 - SSH 资源采集不跨采样复用机器静态信息，实际采集会重新读取；删除／改地址后旧 host 缓存在下次状态请求时清理，全局 reset 不允许旧采样回填。已有 TTL 内状态仍可短暂显示旧信息。
-- Run进入completed/completed_unverified/failed/cancelled/interrupted终态后回收该Run的Browser session；审批／预算等待及新输入重调度不自动关闭，可在原Run/runtime授权范围继续使用。安全暂停若持久化为interrupted仍回收，checkpoint新Run须重新创建session。Child单独结束不关闭整个Run的session，显式close/Workspace/global cleanup仍有效。回收Context／连接不等于终止远端浏览器服务，失败记录日志并由全局清理兜底。
+- Run进入completed/completed_unverified/failed/cancelled/interrupted终态后回收该Run的Browser session；审批／预算等待及新输入重调度不自动关闭，可在原Run/runtime授权范围继续使用。安全暂停若持久化为interrupted仍回收，checkpoint新Run须重新创建session。Child单独结束不关闭整个Run的session，显式close/Run/global cleanup仍有效。回收Context／连接不等于终止远端浏览器服务，失败记录日志并由全局清理兜底。
 - 跳板连接的总连接预算覆盖所有握手与 forwarding，forward 阶段同样接受取消；超时后关闭已建立的跳板，晚到 channel 不发布。连接清理可能额外耗时，不保证远端即时退出。
 - Artifact 清理预览每批最多选择最旧的 1,000 个可回收对象，确认仅处理本批；清理后可重新预览继续，不代表一批清空全部。确认时仍重检保留／授权／活跃 Run 保护。
 - 替换连接标签关联最多 1,000 个安全正整数连接 ID，重复合并；空数组可清空已有标签，标签或连接不存在返回 404，失败不丢弃原关联。

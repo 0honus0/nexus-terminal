@@ -407,7 +407,7 @@ export const createCompositionRoot = (
 
   const workspaceRuntimeController = new RunnerHttpAdapter(config.agentRunnerUrl, config.agentRunnerToken);
   const workspaceInteractiveSessions = new RunnerWorkspaceTerminalAdapter(workspaceRuntimeController);
-  const browserRuntime = new BrowserRuntimeAdapter(workspaceRuntimeController);
+  const browserRuntime = new BrowserRuntimeAdapter();
 
   const diagnostics = new SystemDiagnosticsService([
     new ProcessDiagnosticProbe(),

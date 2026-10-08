@@ -88,10 +88,8 @@ export const browserScreenshotVisionScenario = async () => {
     agentRuntimeId: runtimeId,
     sessionId,
     targetId: target.id,
-    targetRevision,
+    targetRevision: Number.parseInt(targetConfigurationHash.slice(3, 16), 16) + 1,
     targetConfigurationHash,
-    workspaceId: null,
-    generation: null,
     url: 'https://example.test/chart',
     createdAt: now,
   };
@@ -267,7 +265,7 @@ export const browserScreenshotVisionScenario = async () => {
       [runId, runtimeId, now],
     );
 
-    const tools = createBrowserTools(null!, settings as never, gateway as never, cryptoHash, artifacts);
+    const tools = createBrowserTools(settings as never, gateway as never, cryptoHash, artifacts);
     const screenshot = tools.find((tool) => tool.descriptor.name === 'browser_screenshot_capture');
     const semantic = tools.find((tool) => tool.descriptor.name === 'browser_snapshot_read');
     assert.ok(

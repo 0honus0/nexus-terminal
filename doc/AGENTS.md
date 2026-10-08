@@ -231,7 +231,7 @@ Mutation 链：`inspect -> capability/grant -> policy -> approval -> lease/fence
 
 Tool descriptor 唯一声明 capability。模型调用、Run/Skill/Plan/输入/内部协作、当前 App Storage 与生成 Artifact 是 enabled App 的核心行为，不增加 `ai.model.use/runs.execute` 总闸门。
 
-Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 的 typed targets **仅为 SSH**（all 或指定 connection ids）。`CapabilityRegistry` 唯一持有 identity/scope/parser/intersection/authorization；旧含 Workspace 的授权范围在当前解析边界直接拒绝，不自动改为 SSH，也不接纳 Workspace+SSH 双轨 grant。HTTP/Protocol/UI 的 Agent grant 输入与 Host definition 只描述 SSH；原已发布的历史数据库迁移 SQL 不随之改写。UI 从服务端完整 grants 初始化，保存 CAS 后才更新已保存状态。`AgentTargetResolver` 已整体删除；File/Shell/ACP 直接依赖 `SshTargetResolverPort`，SSH selector 解析与持久 inspection 绑定由 `ssh-target-binding.ts` 的纯函数统一处理；Browser Workspace binding 和剩余旧用户 Workspace API 由独立 owner 待退出。
+Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 的 typed targets **仅为 SSH**（all 或指定 connection ids）。`CapabilityRegistry` 唯一持有 identity/scope/parser/intersection/authorization；旧含 Workspace 的授权范围在当前解析边界直接拒绝，不自动改为 SSH，也不接纳 Workspace+SSH 双轨 grant。HTTP/Protocol/UI 的 Agent grant 输入与 Host definition 只描述 SSH；原已发布的历史数据库迁移 SQL 不随之改写。UI 从服务端完整 grants 初始化，保存 CAS 后才更新已保存状态。`AgentTargetResolver` 已整体删除；File/Shell/ACP 直接依赖 `SshTargetResolverPort`，SSH selector 解析与持久 inspection 绑定由 `ssh-target-binding.ts` 的纯函数统一处理；Browser 已使用独立 target binding，剩余旧用户 Workspace API 仍待退出。
 
 ### 7.2 执行职责与结果
 
@@ -267,7 +267,7 @@ Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 的 typed
 - Runner Journal 使用 SQLite 按记录 durable commit 后更新内存，不重写全历史；旧 JSON 不迁移、不自动清空，格式／损坏启动失败并保留证据，未知副作用仍需 reconcile。SQLite 属于 Runner 自身 owner，不与 Backend 数据库合并。
 - 同 generation 的 pending/running argv Job 按 Agent performance.maxConcurrentWorkspaceJobs 接纳，默认 8、范围 1–64；额度和执行超时范围由 protocol/runner.ts 的 WORKSPACE_JOB_LIMITS 持有。Runner 使用现有 Journal 同步计数并提交接纳，无第二 lock/journal；额度满拒绝、不排队，设置降低不取消旧 Job。活跃 Job 阻止文件 write/move/delete/实际 patch，允许 read/search/patch inspection；Shell 共享文件写入不保证事务隔离。cancel 等 journal confirmed cancelled，stop/restart/delete 中断该 generation 的全部 Job；restart 将无法证明结果的遗留 running 标 unknown。无自动 model terminal wake，需结果时 server-side wait，不 busy-poll。
 - Repo instructions 窄 endpoint 仅 generation + 最多 8 个 target directory；Resolver 与文件 mutation owner 分离，Runner 不可用/live Workspace 消失时 Context fail-soft，不伪造 rules。
-- Nexus `NXW1`、upload socket、Agent `/ws/agent`、Plugin `NXR3`、Runner streaming、Browser tunnel、local terminal 独立 owner/protocol/version/requestId/handle，只共享 bounded/backpressure 原则。
+- Nexus `NXW1`、upload socket、Agent `/ws/agent`、Plugin `NXR3`、Runner streaming、Browser direct CDP、local terminal 独立 owner/protocol/version/requestId/handle，只共享 bounded/backpressure 原则。
 
 ## 9. Artifact、Memory 与集成
 
@@ -280,8 +280,8 @@ Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 的 typed
 
 ### 9.2 ACP、Browser、Terminal 与 MCP
 
-- ACP Host **与 Runner 双端均已 SSH-only/无 Workspace ACP**：`acp_execute` 仅接显式授权的 SSH target、集成 argv/绝对 cwd 与冻结 SSH 配置，`AcpAdapter` 经唯一 SSH `openTransport` 打开独立 non-PTY channel。Runner 内 ACP ProcessRuntime、WebSocket upgrade、Profile 选择、Process start/stop 已删；Backend/Runner wire、Environment DTO、持久 schema、Settings 和 UI 均移除 profile 字段，迁移 #56 直接删除旧列和设置属性，不提供兼容入口。外层 ACP approval 不授权内层操作；`client.session.requestPermission` 使用同一 durable approval owner 绑定 active Tool/Runtime/revisions/operation hash，用户 allow_once/reject_once；不改 Run version、重调度或替换 lease。rawInput 只留 bounded projection/hash，timeout/abort/restart fail closed，不伪造 completion。独立普通 Workspace Terminal/Runner Job/Browser 仍属尚未退出的 owner，不能混淆。
-- Browser target 冻结，受控 gateway/tunnel 不暴露任意宿主 CDP。唯一 `BrowserSessionBindingAuthority` 持有 target/config hash/session scope、inspection/revalidation；gateway/service 持有真实 session/process。stale generation/target 先关闭后 fail closed，无关 settings revision 不误关；网页不可信，下载先落 Artifact。
+- ACP Host **与 Runner 双端均已 SSH-only/无 Workspace ACP**：`acp_execute` 仅接显式授权的 SSH target、集成 argv/绝对 cwd 与冻结 SSH 配置，`AcpAdapter` 经唯一 SSH `openTransport` 打开独立 non-PTY channel。Runner 内 ACP ProcessRuntime、WebSocket upgrade、Profile 选择、Process start/stop 已删；Backend/Runner wire、Environment DTO、持久 schema、Settings 和 UI 均移除 profile 字段，迁移 #56 直接删除旧列和设置属性，不提供兼容入口。外层 ACP approval 不授权内层操作；`client.session.requestPermission` 使用同一 durable approval owner 绑定 active Tool/Runtime/revisions/operation hash，用户 allow_once/reject_once；不改 Run version、重调度或替换 lease。rawInput 只留 bounded projection/hash，timeout/abort/restart fail closed，不伪造 completion。独立普通 Workspace Terminal/Runner Job 仍属尚未退出的 owner，不能混淆。
+- Browser Session 仅使用明确配置的 `targetId`，Backend direct CDP 不再通过 Workspace Generation 或 Runner tunnel；Agent Browser endpoint 只接受 `via=backend`。`BrowserSessionBindingAuthority` 持有 target/config hash、Run/Runtime scope、inspection/revalidation；gateway 持有真实 session/process。目标修改或删除会关闭旧 Session 并 fail closed，无关 settings revision 不误关；网页不可信，导航及子请求仍受 URL allowlist 限制，下载先落 Artifact。
 - Workspace local Terminal 用 Runner direct PTY open/resize/write/detach/reattach/bounded replay，不复用 Remote SSH live session；系统 script(1) 分配 PTY，Backend 管 attach/replay，浏览器仅连受认证 WebSocket。
 - MCP 配置 enabled 不等于 ready。health 为可重建 `idle/refreshing/ready/error` projection；version/credential generation 的 refresh 经 schema-hash CAS 才发布 contribution，失败先撤销，再 bounded backoff；disable/delete/version 取消旧 retry，restart 从 durable config 重建。
 - MCP UI 提供 endpoint/credential、enable/delete/refresh 与 health，不让单个可选 MCP error 拖垮 App。MCP/Browser 网络边界要求 public HTTPS、精确 private allow、metadata/link-local hard deny、连接前后防 DNS rebinding/redirect；外部安全声明不覆盖本地 policy，不将此边界虚构给 Provider transport。

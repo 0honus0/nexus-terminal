@@ -1,14 +1,8 @@
 import WebSocket from 'ws';
-import type {
-  BrowserEndpointSetting,
-  BrowserMessageTransport,
-  BrowserTunnelPort,
-} from '../../../modules/agent/ai/integrations.types';
-import { invokeListenerSafely } from '../../../shared/events/safe-event-dispatch';
 
 const MAX_WEBSOCKET_FRAME_BYTES = 256 * 1024;
 
-export class RunnerWebSocketTransport implements BrowserTunnelPort {
+export class RunnerWebSocketTransport {
   constructor(
     private readonly baseUrl: URL | null,
     private readonly token: string | undefined,
@@ -41,77 +35,6 @@ export class RunnerWebSocketTransport implements BrowserTunnelPort {
       {},
       signal,
     );
-  }
-
-  async openBrowserTunnel(
-    endpoint: BrowserEndpointSetting,
-    binding: { targetId: string; targetRevision: number; workspaceId?: string; generation?: number },
-    signal: AbortSignal,
-  ): Promise<BrowserMessageTransport> {
-    if (endpoint.via !== 'runner') throw new Error('BROWSER_ENDPOINT_VIA_INVALID');
-    if (!binding.targetId || binding.targetId.length > 128 || !Number.isSafeInteger(binding.targetRevision)) {
-      throw new Error('VALIDATION_FAILED');
-    }
-    if ((binding.workspaceId === undefined) !== (binding.generation === undefined)) {
-      throw new Error('BROWSER_TUNNEL_BINDING_INVALID');
-    }
-    const query = new URLSearchParams();
-    if (binding.workspaceId) query.set('workspaceId', binding.workspaceId);
-    if (binding.generation !== undefined) query.set('generation', String(binding.generation));
-    const encodedEndpoint = Buffer.from(JSON.stringify(endpoint), 'utf8').toString('base64url');
-    const socket = await this.openWebSocket(
-      `/v1/browser/tunnel${query.size ? `?${query.toString()}` : ''}`,
-      {
-        'X-Nexus-Browser-Endpoint': encodedEndpoint,
-        'X-Nexus-Browser-Target': binding.targetId,
-        'X-Nexus-Browser-Revision': String(binding.targetRevision),
-      },
-      signal,
-      16 * 1024 * 1024,
-    );
-    const messageListeners = new Set<(message: string) => void>();
-    const closeListeners = new Set<() => void>();
-    let closed = false;
-    const emitClose = () => {
-      if (closed) return;
-      closed = true;
-      for (const listener of closeListeners) invokeListenerSafely(listener);
-      closeListeners.clear();
-      messageListeners.clear();
-    };
-    socket.on('message', (data, isBinary) => {
-      if (isBinary) {
-        socket.close(1003);
-        emitClose();
-        return;
-      }
-      const message = Buffer.isBuffer(data) ? data.toString('utf8') : Buffer.from(data as ArrayBuffer).toString('utf8');
-      for (const listener of messageListeners) invokeListenerSafely(listener, message);
-    });
-    socket.once('close', emitClose);
-    socket.once('error', emitClose);
-    return {
-      send: (message: string) => {
-        if (closed || socket.readyState !== WebSocket.OPEN) throw new Error('BROWSER_TRANSPORT_CLOSED');
-        if (Buffer.byteLength(message, 'utf8') > 16 * 1024 * 1024) throw new Error('BROWSER_MESSAGE_TOO_LARGE');
-        if (socket.bufferedAmount > 16 * 1024 * 1024) throw new Error('BROWSER_TRANSPORT_BACKPRESSURE');
-        socket.send(message);
-      },
-      onMessage: (listener) => {
-        messageListeners.add(listener);
-        return () => messageListeners.delete(listener);
-      },
-      onClose: (listener) => {
-        closeListeners.add(listener);
-        return () => closeListeners.delete(listener);
-      },
-      close: async () => {
-        if (!closed && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
-          socket.close(1000);
-        }
-        emitClose();
-      },
-    };
   }
 
   private openWebSocket(

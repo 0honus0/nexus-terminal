@@ -10,9 +10,7 @@ import { addTaskProvider, createTaskThread, sendTask } from '../../fixtures/agen
 
 test.use({ actionTimeout: 10_000 });
 
-test('retired Runner Workspace ACP WebSocket route rejects upgrades without spawning a process', async ({
-  request,
-}) => {
+test('retired Runner Workspace ACP and Browser WebSocket routes reject upgrades', async ({ request }) => {
   const available = await request.get(`http://127.0.0.1:${E2E_PORTS.agentRunner}/v1/catalog`, {
     headers: {
       Authorization: 'Bearer e2e-isolated-runner-token-not-for-production-00000000',
@@ -27,32 +25,34 @@ test('retired Runner Workspace ACP WebSocket route rejects upgrades without spaw
     },
   });
   expect(obsoleteProtocol.status(), await obsoleteProtocol.text()).toBe(426);
-  const status = await new Promise<string>((resolve, reject) => {
-    const socket = connect(E2E_PORTS.agentRunner, '127.0.0.1');
-    socket.setTimeout(5000, () => socket.destroy(new Error('RUNNER_UPGRADE_TIMEOUT')));
-    socket.once('error', reject);
-    socket.once('connect', () => {
-      socket.write(
-        [
-          'GET /v1/workspaces/retired-acp/acp/obsolete/stream?generation=1 HTTP/1.1',
-          `Host: 127.0.0.1:${E2E_PORTS.agentRunner}`,
-          'Connection: Upgrade',
-          'Upgrade: websocket',
-          'Sec-WebSocket-Version: 13',
-          'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==',
-          'Authorization: Bearer e2e-isolated-runner-token-not-for-production-00000000',
-          'X-Nexus-Agent-Protocol: 2026-10-08',
-          '',
-          '',
-        ].join('\r\n'),
-      );
+  for (const retiredRoute of ['/v1/workspaces/retired-acp/acp/obsolete/stream?generation=1', '/v1/browser/tunnel']) {
+    const status = await new Promise<string>((resolve, reject) => {
+      const socket = connect(E2E_PORTS.agentRunner, '127.0.0.1');
+      socket.setTimeout(5000, () => socket.destroy(new Error('RUNNER_UPGRADE_TIMEOUT')));
+      socket.once('error', reject);
+      socket.once('connect', () => {
+        socket.write(
+          [
+            `GET ${retiredRoute} HTTP/1.1`,
+            `Host: 127.0.0.1:${E2E_PORTS.agentRunner}`,
+            'Connection: Upgrade',
+            'Upgrade: websocket',
+            'Sec-WebSocket-Version: 13',
+            'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==',
+            'Authorization: Bearer e2e-isolated-runner-token-not-for-production-00000000',
+            'X-Nexus-Agent-Protocol: 2026-10-08',
+            '',
+            '',
+          ].join('\r\n'),
+        );
+      });
+      socket.once('data', (bytes) => {
+        socket.destroy();
+        resolve(bytes.toString('utf8').split('\r\n')[0] ?? '');
+      });
     });
-    socket.once('data', (bytes) => {
-      socket.destroy();
-      resolve(bytes.toString('utf8').split('\r\n')[0] ?? '');
-    });
-  });
-  expect(status).toBe('HTTP/1.1 404 Not Found');
+    expect(status).toBe('HTTP/1.1 404 Not Found');
+  }
 });
 
 for (const decision of ['denied', 'cancelled'] as const) {

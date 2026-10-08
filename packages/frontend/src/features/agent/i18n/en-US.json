@@ -826,7 +826,6 @@
         "scopeDocker": "Docker network",
         "scopeExternal": "External network",
         "viaBackend": "Direct from Backend",
-        "viaRunner": "Through Runner tunnel",
         "modalTitle": "Add CDP Target",
         "modalDescription": "Configure a CDP browser target and endpoint accessed by Backend BrowserRuntime.",
         "modalEndpointTitle": "Add CDP Endpoint",

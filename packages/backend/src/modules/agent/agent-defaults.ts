@@ -9,7 +9,7 @@ export interface AgentRunBudgetSnapshot {
 
 export interface AgentBrowserEndpointSetting {
   scope: 'docker-network' | 'external-network';
-  via: 'backend' | 'runner';
+  via: 'backend';
   url: string;
   priority: number;
   allowPlaintext: boolean;
@@ -229,7 +229,7 @@ const browserTargets = (value: unknown, fallback: AgentBrowserTargetSetting[] = 
       const priority = Number(raw.priority);
       if (
         (scope !== 'docker-network' && scope !== 'external-network') ||
-        (via !== 'backend' && via !== 'runner') ||
+        via !== 'backend' ||
         !Number.isSafeInteger(priority) ||
         priority < 0 ||
         priority > 10000 ||

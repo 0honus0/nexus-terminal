@@ -70,7 +70,6 @@ export const composeWorkspaceRuntime = ({
     now,
     {
       workspaceInvalidated: (workspaceId, generation) => {
-        browserGateway.closeWorkspace(workspaceId, generation);
         terminal.closeWorkspace(workspaceId, generation);
       },
     },

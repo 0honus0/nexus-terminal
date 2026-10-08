@@ -26,7 +26,6 @@ import type {
   BrowserSnapshotNode,
   BrowserSnapshotView,
   BrowserTargetSnapshot,
-  BrowserTunnelPort,
 } from '../../../modules/agent/ai/integrations.types';
 import { invokeListenerSafely } from '../../../shared/events/safe-event-dispatch';
 
@@ -289,8 +288,8 @@ const urlAllowed = (value: string, patterns: readonly string[]): boolean => {
   });
 };
 
-const validateEndpoint = (endpoint: BrowserEndpointSetting, expectedVia: 'backend' | 'runner'): URL => {
-  if (endpoint.via !== expectedVia) throw new Error('BROWSER_ENDPOINT_VIA_INVALID');
+const validateEndpoint = (endpoint: BrowserEndpointSetting): URL => {
+  if (endpoint.via !== 'backend') throw new Error('BROWSER_ENDPOINT_VIA_INVALID');
   let url: URL;
   try {
     url = new URL(endpoint.url);
@@ -355,7 +354,7 @@ const readDiscovery = (url: URL, verifyTls: boolean, signal: AbortSignal): Promi
   });
 
 const resolveDirectWebSocketUrl = async (endpoint: BrowserEndpointSetting, signal: AbortSignal): Promise<URL> => {
-  const configured = validateEndpoint(endpoint, 'backend');
+  const configured = validateEndpoint(endpoint);
   if (configured.protocol === 'ws:' || configured.protocol === 'wss:') return configured;
   const discovery = new URL('/json/version', configured);
   let parsed: unknown;
@@ -506,8 +505,6 @@ class PuppeteerMessageTransport implements ConnectionTransport {
 export class BrowserRuntimeAdapter implements BrowserGatewayPort {
   private readonly sessions = new Map<string, ActiveBrowserSession>();
 
-  constructor(private readonly tunnels: BrowserTunnelPort) {}
-
   async createSession(request: BrowserSessionRequest, signal: AbortSignal): Promise<BrowserSessionView> {
     if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
     const target = request.target;
@@ -519,29 +516,13 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
       throw new Error('BROWSER_TARGET_INVALID');
     }
     for (const pattern of target.allowedUrlPatterns) parsePattern(pattern);
-    if ((request.workspaceId === undefined) !== (request.generation === undefined)) {
-      throw new Error('BROWSER_WORKSPACE_BINDING_INVALID');
-    }
-
     let lastError: unknown = new Error('BROWSER_ENDPOINT_UNAVAILABLE');
     for (const endpoint of [...target.endpoints].sort((a, b) => a.priority - b.priority)) {
       let transport: BrowserMessageTransport | null = null;
       let browser: Browser | null = null;
       let context: BrowserContext | null = null;
       try {
-        transport =
-          endpoint.via === 'backend'
-            ? await DirectBrowserMessageTransport.open(endpoint, signal)
-            : await this.tunnels.openBrowserTunnel(
-                endpoint,
-                {
-                  targetId: target.id,
-                  targetRevision: target.profileRevision,
-                  ...(request.workspaceId ? { workspaceId: request.workspaceId } : {}),
-                  ...(request.generation ? { generation: request.generation } : {}),
-                },
-                signal,
-              );
+        transport = await DirectBrowserMessageTransport.open(endpoint, signal);
         const puppeteerTransport = new PuppeteerMessageTransport(transport);
         browser = await puppeteer.connect({
           transport: puppeteerTransport,
@@ -715,7 +696,6 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
     return {
       sessionId,
       snapshotId,
-      generation: active.request.generation ?? null,
       targetId: active.target.id,
       url: active.page.url(),
       title: boundedText(await active.page.title()) ?? '',
@@ -745,7 +725,6 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
     const dimensions = pngDimensions(bytes);
     return {
       sessionId,
-      generation: active.request.generation ?? null,
       targetId: active.target.id,
       url: active.page.url(),
       title: boundedText(await active.page.title()) ?? '',
@@ -1119,7 +1098,6 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
     if (bytes.byteLength > maxBytes) throw new Error('BROWSER_DOWNLOAD_INVALID');
     return {
       sessionId,
-      generation: active.request.generation ?? null,
       targetId: active.target.id,
       url: payload.url,
       name: filenameFromDownload(payload.url, payload.disposition ?? null),
@@ -1136,17 +1114,6 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
     await active.context.close().catch(() => undefined);
     active.browser.disconnect();
     await active.transport.close().catch(() => undefined);
-  }
-
-  closeWorkspace(workspaceId: string, generation?: number): void {
-    for (const [sessionId, active] of this.sessions) {
-      if (
-        active.request.workspaceId === workspaceId &&
-        (generation === undefined || active.request.generation === generation)
-      ) {
-        void this.close(sessionId);
-      }
-    }
   }
 
   async closeAll(): Promise<void> {
@@ -1183,7 +1150,6 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
     const url = active.page.url();
     return {
       sessionId,
-      generation: active.request.generation ?? null,
       targetId: active.target.id,
       url,
       title: boundedText(await active.page.title()) ?? '',
@@ -1238,8 +1204,6 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
       targetId: active.target.id,
       targetRevision: active.target.profileRevision,
       targetConfigurationHash: active.target.configurationHash,
-      workspaceId: active.request.workspaceId ?? null,
-      generation: active.request.generation ?? null,
       url: active.page.url(),
       createdAt: active.createdAt,
     };

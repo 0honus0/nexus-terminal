@@ -826,7 +826,6 @@
         "scopeDocker": "Docker 网络",
         "scopeExternal": "外部网络",
         "viaBackend": "Backend 直连",
-        "viaRunner": "通过 Runner 隧道",
         "modalTitle": "添加 CDP 目标",
         "modalDescription": "配置由 Backend BrowserRuntime 访问的 CDP 浏览器实例与端点。",
         "modalEndpointTitle": "添加 CDP 端点",

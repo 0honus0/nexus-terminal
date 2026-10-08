@@ -826,7 +826,6 @@
         "scopeDocker": "Docker ネットワーク",
         "scopeExternal": "外部ネットワーク",
         "viaBackend": "Backend から直接接続",
-        "viaRunner": "Runner トンネル経由",
         "modalTitle": "CDP ターゲットを追加",
         "modalDescription": "Backend BrowserRuntime がアクセスする CDP ブラウザターゲットとエンドポイントを設定します。",
         "modalEndpointTitle": "CDP エンドポイントを追加",

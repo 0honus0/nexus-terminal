@@ -66,7 +66,7 @@ export interface AgentSettingsDocumentDto {
       id: string;
       endpoints: Array<{
         scope: 'docker-network' | 'external-network';
-        via: 'backend' | 'runner';
+        via: 'backend';
         url: string;
         priority: number;
         allowPlaintext: boolean;

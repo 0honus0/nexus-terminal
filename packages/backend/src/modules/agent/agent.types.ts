@@ -34,7 +34,7 @@ export interface AgentRunEnvironmentRunnerPlugin {
 
 export interface AgentRunEnvironmentBrowserEndpoint {
   scope: 'docker-network' | 'external-network';
-  via: 'backend' | 'runner';
+  via: 'backend';
   url: string;
   priority: number;
   allowPlaintext: boolean;

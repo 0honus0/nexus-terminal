@@ -204,8 +204,6 @@ export interface BrowserSessionRequest extends Scope {
   runId: string;
   agentRuntimeId: string;
   target: BrowserTargetSnapshot;
-  workspaceId?: string;
-  generation?: number;
 }
 
 export interface BrowserSessionView extends Scope {
@@ -215,8 +213,6 @@ export interface BrowserSessionView extends Scope {
   targetId: string;
   targetRevision: number;
   targetConfigurationHash: string;
-  workspaceId: string | null;
-  generation: number | null;
   url: string;
   createdAt: number;
 }
@@ -226,14 +222,6 @@ export interface BrowserMessageTransport {
   onMessage(listener: (message: string) => void): () => void;
   onClose(listener: () => void): () => void;
   close(): Promise<void>;
-}
-
-export interface BrowserTunnelPort {
-  openBrowserTunnel(
-    endpoint: BrowserEndpointSetting,
-    binding: { targetId: string; targetRevision: number; workspaceId?: string; generation?: number },
-    signal: AbortSignal,
-  ): Promise<BrowserMessageTransport>;
 }
 
 export interface BrowserSnapshotNode {
@@ -251,7 +239,6 @@ export interface BrowserSnapshotNode {
 export interface BrowserSnapshotView {
   sessionId: string;
   snapshotId: string;
-  generation: number | null;
   targetId: string;
   url: string;
   title: string;
@@ -261,7 +248,6 @@ export interface BrowserSnapshotView {
 
 export interface BrowserScreenshotView {
   sessionId: string;
-  generation: number | null;
   targetId: string;
   url: string;
   title: string;
@@ -273,7 +259,6 @@ export interface BrowserScreenshotView {
 
 export interface BrowserPostActionView {
   sessionId: string;
-  generation: number | null;
   targetId: string;
   url: string;
   title: string;
@@ -304,7 +289,6 @@ export interface BrowserUploadFile {
 
 export interface BrowserDownloadView {
   sessionId: string;
-  generation: number | null;
   targetId: string;
   url: string;
   name: string;
@@ -394,6 +378,5 @@ export interface BrowserGatewayPort {
     signal: AbortSignal,
   ): Promise<BrowserDownloadView>;
   close(sessionId: string): Promise<void>;
-  closeWorkspace(workspaceId: string, generation?: number): void;
   closeAll(): Promise<void>;
 }

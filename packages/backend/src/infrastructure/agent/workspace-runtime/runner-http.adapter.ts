@@ -26,11 +26,6 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type WebSocket from 'ws';
 import type { ProjectInstructionProjection } from '../../../modules/agent/ai/project-instruction-source.port';
 import type {
-  BrowserEndpointSetting,
-  BrowserMessageTransport,
-  BrowserTunnelPort,
-} from '../../../modules/agent/ai/integrations.types';
-import type {
   WorkspaceExecutionGrant,
   WorkspaceRuntimeGatewayPort,
   WorkspaceJobCall,
@@ -104,9 +99,7 @@ import {
 } from './runner-http-protocol';
 import { RunnerWebSocketTransport } from './runner-websocket-transport';
 
-export class RunnerHttpAdapter
-  implements WorkspaceRuntimeControllerPort, WorkspaceRuntimeGatewayPort, BrowserTunnelPort
-{
+export class RunnerHttpAdapter implements WorkspaceRuntimeControllerPort, WorkspaceRuntimeGatewayPort {
   private readonly baseUrl: URL | null;
   private readonly streams: RunnerWebSocketTransport;
 
@@ -128,14 +121,6 @@ export class RunnerHttpAdapter
     signal?: AbortSignal,
   ): Promise<WebSocket> {
     return this.streams.openTerminalWebSocket(workspaceId, generation, columns, rows, signal);
-  }
-
-  openBrowserTunnel(
-    endpoint: BrowserEndpointSetting,
-    binding: { targetId: string; targetRevision: number; workspaceId?: string; generation?: number },
-    signal: AbortSignal,
-  ): Promise<BrowserMessageTransport> {
-    return this.streams.openBrowserTunnel(endpoint, binding, signal);
   }
 
   async availability(signal?: AbortSignal): Promise<WorkspaceRuntimeAvailability> {

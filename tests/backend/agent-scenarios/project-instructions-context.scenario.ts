@@ -283,7 +283,6 @@ export const projectInstructionsContextScenario = async () => {
       pluginRunner: {},
       acpRuntime: { closeAll: () => undefined },
       terminalRuntime: { closeAll: () => undefined },
-      browserTunnel: { closeAll: () => undefined },
     } as unknown as ConstructorParameters<typeof RunnerControllerServer>[0]).createServer();
     const baseUrl = await new Promise<string>((resolve, reject) => {
       runnerServer!.once('error', reject);

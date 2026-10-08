@@ -170,7 +170,6 @@ export const registerAcpToolContribution = ({
 
 export interface BrowserToolContributionOptions {
   catalog: ToolCatalog;
-  workspaces: AgentWorkspaceRepositoryPort;
   settings: AgentSettingsService;
   gateway: BrowserGatewayPort;
   cryptoHash: CryptoHashPort;
@@ -179,7 +178,6 @@ export interface BrowserToolContributionOptions {
 
 export const registerBrowserToolContribution = ({
   catalog,
-  workspaces,
   settings,
   gateway,
   cryptoHash,
@@ -188,7 +186,7 @@ export const registerBrowserToolContribution = ({
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'browser.tools',
-    tools: createBrowserTools(workspaces, settings, gateway, cryptoHash, artifacts),
+    tools: createBrowserTools(settings, gateway, cryptoHash, artifacts),
   });
 };
 

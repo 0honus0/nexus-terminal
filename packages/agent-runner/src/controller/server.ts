@@ -1,8 +1,4 @@
-import type {
-  WorkspaceJobInput,
-  WorkspaceBrowserEndpoint,
-  WorkspaceActiveJobsView,
-} from '@nexus-terminal/protocol/runner';
+import type { WorkspaceJobInput, WorkspaceActiveJobsView } from '@nexus-terminal/protocol/runner';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import runnerVersion = require('@nexus-terminal/protocol/runner-version.json');
 import type { RunnerCommandWireResponse } from '@nexus-terminal/protocol/runner';
@@ -20,10 +16,9 @@ import { CleanupPlanner } from './cleanup-planner';
 import { PluginRunnerRuntime } from './plugin-runner-runtime';
 import { MAX_HOST_WORKSPACE_TRANSFER_BYTES } from './plugin-workspace-store';
 import type { WorkspaceTerminalRuntime } from './workspace-terminal-runtime';
-import type { BrowserTunnelRuntime } from './browser-tunnel-runtime';
 
 import { RunnerCommandExecutor } from './runner-command-executor';
-import { asRecord, hasOnlyKeys, decodeBrowserEndpoint } from './runner-request-validation';
+import { asRecord, hasOnlyKeys } from './runner-request-validation';
 
 const { RUNNER_PROTOCOL_VERSION } = runnerVersion;
 const MAX_BODY_BYTES = 256 * 1024;
@@ -109,7 +104,6 @@ export interface RunnerControllerDependencies {
   cleanup: CleanupPlanner;
   pluginRunner: PluginRunnerRuntime;
   terminalRuntime: WorkspaceTerminalRuntime;
-  browserTunnel: BrowserTunnelRuntime;
 }
 
 export class RunnerControllerServer {
@@ -124,7 +118,6 @@ export class RunnerControllerServer {
     server.on('upgrade', (request, socket, head) => this.upgrade(request, socket, head));
     server.on('close', () => {
       this.dependencies.terminalRuntime.closeAll();
-      this.dependencies.browserTunnel.closeAll();
     });
     return server;
   }
@@ -167,37 +160,6 @@ export class RunnerControllerServer {
           columns,
           rows,
         );
-        return;
-      }
-
-      if (url.pathname === '/v1/browser/tunnel') {
-        const rawEndpoint = request.headers['x-nexus-browser-endpoint'];
-        if (typeof rawEndpoint !== 'string' || rawEndpoint.length > 12_000) throw new Error('BROWSER_ENDPOINT_INVALID');
-        let endpoint: WorkspaceBrowserEndpoint;
-        try {
-          endpoint = decodeBrowserEndpoint(
-            JSON.parse(Buffer.from(rawEndpoint, 'base64url').toString('utf8')) as unknown,
-          );
-        } catch {
-          throw new Error('BROWSER_ENDPOINT_INVALID');
-        }
-        const targetId = request.headers['x-nexus-browser-target'];
-        const targetRevision = Number(request.headers['x-nexus-browser-revision']);
-        if (typeof targetId !== 'string' || !Number.isSafeInteger(targetRevision) || targetRevision < 1) {
-          throw new Error('BROWSER_TARGET_INVALID');
-        }
-        const workspaceId = url.searchParams.get('workspaceId')?.trim() || undefined;
-        const generationValue = url.searchParams.get('generation');
-        const generation = generationValue === null ? undefined : Number(generationValue);
-        if (generation !== undefined && (!Number.isSafeInteger(generation) || generation < 1)) {
-          throw new Error('VALIDATION_FAILED');
-        }
-        this.dependencies.browserTunnel.handleUpgrade(request, socket, head, endpoint, {
-          targetId,
-          targetRevision,
-          ...(workspaceId ? { workspaceId } : {}),
-          ...(generation === undefined ? {} : { generation }),
-        });
         return;
       }
 

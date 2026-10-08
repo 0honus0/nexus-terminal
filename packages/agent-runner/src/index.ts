@@ -11,7 +11,6 @@ import { Reconciler } from './controller/reconciler';
 import { RunnerControllerServer } from './controller/server';
 import { PluginRunnerRuntime } from './controller/plugin-runner-runtime';
 import { WorkspaceTerminalRuntime } from './controller/workspace-terminal-runtime';
-import { BrowserTunnelRuntime } from './controller/browser-tunnel-runtime';
 import { ToolchainMutationCoordinator } from './controller/toolchain-mutation-coordinator';
 import { runnerLog } from './logging';
 import { initializeManagedProcessRegistry, terminateAllManagedProcesses } from './managed-process';
@@ -56,7 +55,6 @@ const main = async (): Promise<void> => {
   const cleanup = new CleanupPlanner(root, journal, runtimeEngine, toolchainMutations, pluginRunner);
   await new Reconciler(journal, runtimeEngine, pluginRunner).reconcile();
   const terminalRuntime = new WorkspaceTerminalRuntime(journal, runtimeEngine);
-  const browserTunnel = new BrowserTunnelRuntime(journal);
   const server = new RunnerControllerServer({
     token,
     catalog,
@@ -67,7 +65,6 @@ const main = async (): Promise<void> => {
     cleanup,
     pluginRunner,
     terminalRuntime,
-    browserTunnel,
   }).createServer();
   const port = Number(process.env.PORT || 8790);
   const host = process.env.NEXUS_AGENT_RUNNER_HOST?.trim() || '127.0.0.1';
@@ -79,7 +76,6 @@ const main = async (): Promise<void> => {
     shuttingDown = true;
     runnerLog('info', 'Agent Runner graceful shutdown started', { signal });
     terminalRuntime.closeAll();
-    browserTunnel.closeAll();
     server.closeAllConnections?.();
     await terminateAllManagedProcesses();
     await new Promise<void>((resolve) => {

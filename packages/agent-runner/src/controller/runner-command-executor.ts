@@ -15,7 +15,6 @@ import { PackInstaller } from './pack-installer';
 import { CleanupPlanner } from './cleanup-planner';
 import { PluginRunnerRuntime } from './plugin-runner-runtime';
 import type { WorkspaceTerminalRuntime } from './workspace-terminal-runtime';
-import type { BrowserTunnelRuntime } from './browser-tunnel-runtime';
 
 import { runnerLog } from '../logging';
 
@@ -29,7 +28,6 @@ export interface RunnerCommandExecutorDependencies {
   cleanup: CleanupPlanner;
   pluginRunner: PluginRunnerRuntime;
   terminalRuntime: WorkspaceTerminalRuntime;
-  browserTunnel: BrowserTunnelRuntime;
 }
 
 export class RunnerCommandExecutor {
@@ -573,7 +571,6 @@ export class RunnerCommandExecutor {
         await Promise.all([
           this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
         ]);
-        this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
         await this.dependencies.pluginRunner.quiesceWorkspace(workspace, Math.floor(Date.now() / 1000) + 10);
         await this.dependencies.pluginRunner.disposeWorkspace(workspace);
         await this.dependencies.runtimeEngine.stop(workspace.workspaceId, workspace.generation);
@@ -584,7 +581,6 @@ export class RunnerCommandExecutor {
         await Promise.all([
           this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
         ]);
-        this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
         await this.dependencies.pluginRunner.disposeWorkspace(workspace);
         try {
           await this.dependencies.runtimeEngine.restart(workspace.workspaceId, workspace.generation);
@@ -603,7 +599,6 @@ export class RunnerCommandExecutor {
       await Promise.all([
         this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
       ]);
-      this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
       await this.dependencies.pluginRunner.disposeWorkspace(workspace);
       await this.dependencies.runtimeEngine.remove(workspace.workspaceId, workspace.generation);
       this.dependencies.pluginRunner.cleanupGeneration(workspace.workspaceId, workspace.generation);

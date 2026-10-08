@@ -1,4 +1,4 @@
-import type { WorkspaceBrowserEndpoint, WorkspaceProvisionCommand } from '@nexus-terminal/protocol/runner';
+import type { WorkspaceProvisionCommand } from '@nexus-terminal/protocol/runner';
 
 export const asRecord = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('VALIDATION_FAILED');
@@ -18,39 +18,6 @@ const validBrowserUrlPattern = (value: string): boolean => {
   if (port && (Number(port) < 1 || Number(port) > 65535)) return false;
   const rawPath = match[5];
   return !rawPath || !rawPath.includes('*') || rawPath.endsWith('*');
-};
-
-export const decodeBrowserEndpoint = (value: unknown): WorkspaceBrowserEndpoint => {
-  const record = asRecord(value);
-  if (
-    (record.scope !== 'docker-network' && record.scope !== 'external-network') ||
-    record.via !== 'runner' ||
-    typeof record.url !== 'string' ||
-    !record.url ||
-    record.url.length > 4096 ||
-    !Number.isSafeInteger(record.priority) ||
-    Number(record.priority) < 0 ||
-    Number(record.priority) > 10000 ||
-    typeof record.allowPlaintext !== 'boolean' ||
-    typeof record.verifyTls !== 'boolean'
-  ) {
-    throw new Error('BROWSER_ENDPOINT_INVALID');
-  }
-  let url: URL;
-  try {
-    url = new URL(record.url);
-  } catch {
-    throw new Error('BROWSER_ENDPOINT_INVALID');
-  }
-  if (!['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol)) throw new Error('BROWSER_ENDPOINT_INVALID');
-  return {
-    scope: record.scope,
-    via: 'runner',
-    url: record.url,
-    priority: Number(record.priority),
-    allowPlaintext: record.allowPlaintext,
-    verifyTls: record.verifyTls,
-  };
 };
 
 export const validateWorkspaceBindings = (command: WorkspaceProvisionCommand): void => {

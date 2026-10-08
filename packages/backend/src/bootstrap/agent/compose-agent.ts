@@ -407,7 +407,6 @@ export const composeAgent = ({
   });
   registerBrowserToolContribution({
     catalog: toolCatalog,
-    workspaces: workspaceRepository,
     settings,
     gateway: browserGateway,
     cryptoHash,

@@ -221,7 +221,6 @@ export const createBrowserTransferTools = (
         data: {
           sessionId: downloaded.sessionId,
           targetId: downloaded.targetId,
-          generation: downloaded.generation,
           url: downloaded.url,
           artifact: {
             id: artifact.id,
