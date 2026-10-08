@@ -3,55 +3,21 @@ import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { connect } from 'node:net';
 import { ensureTestSshConnection } from '../../support/ssh';
-import { E2E_PORTS, E2E_URLS } from '../../support/test-env';
+import { E2E_URLS } from '../../support/test-env';
 import { addTaskProvider, createTaskThread, sendTask } from '../../fixtures/agent/task-ui';
 
 test.use({ actionTimeout: 10_000 });
 
-test('retired Runner Workspace ACP and Browser WebSocket routes reject upgrades', async ({ request }) => {
-  const available = await request.get(`http://127.0.0.1:${E2E_PORTS.agentRunner}/v1/catalog`, {
-    headers: {
-      Authorization: 'Bearer e2e-isolated-runner-token-not-for-production-00000000',
-      'X-Nexus-Agent-Protocol': '2026-10-08',
-    },
-  });
-  expect(available.ok(), await available.text()).toBeTruthy();
-  const obsoleteProtocol = await request.get(`http://127.0.0.1:${E2E_PORTS.agentRunner}/v1/catalog`, {
-    headers: {
-      Authorization: 'Bearer e2e-isolated-runner-token-not-for-production-00000000',
-      'X-Nexus-Agent-Protocol': '2026-09-13',
-    },
-  });
-  expect(obsoleteProtocol.status(), await obsoleteProtocol.text()).toBe(426);
-  for (const retiredRoute of ['/v1/workspaces/retired-acp/acp/obsolete/stream?generation=1', '/v1/browser/tunnel']) {
-    const status = await new Promise<string>((resolve, reject) => {
-      const socket = connect(E2E_PORTS.agentRunner, '127.0.0.1');
-      socket.setTimeout(5000, () => socket.destroy(new Error('RUNNER_UPGRADE_TIMEOUT')));
-      socket.once('error', reject);
-      socket.once('connect', () => {
-        socket.write(
-          [
-            `GET ${retiredRoute} HTTP/1.1`,
-            `Host: 127.0.0.1:${E2E_PORTS.agentRunner}`,
-            'Connection: Upgrade',
-            'Upgrade: websocket',
-            'Sec-WebSocket-Version: 13',
-            'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==',
-            'Authorization: Bearer e2e-isolated-runner-token-not-for-production-00000000',
-            'X-Nexus-Agent-Protocol: 2026-10-08',
-            '',
-            '',
-          ].join('\r\n'),
-        );
-      });
-      socket.once('data', (bytes) => {
-        socket.destroy();
-        resolve(bytes.toString('utf8').split('\r\n')[0] ?? '');
-      });
-    });
-    expect(status).toBe('HTTP/1.1 404 Not Found');
+test('retired Workspace control-plane endpoints stay unavailable without a production Runner', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  for (const uri of [
+    '/api/v1/agent/workspace-runtime/availability',
+    '/api/v1/agent/workspace-runtime/catalog',
+    '/api/v1/apps/nexus.agent/workspaces',
+  ]) {
+    const response = await request.get(uri);
+    expect(response.status(), uri).toBe(404);
   }
 });
 

@@ -123,7 +123,7 @@ const installAndRunNexusAgent = async (
   const headers = { 'X-Nexus-CSRF': csrf };
   const connectionId = await ensureTestSshConnection(request);
 
-  await step('configure the remote repository with the isolated E2E Runner', async () => {
+  await step('configure the remote plugin repository without a Runner dependency', async () => {
     const before = await request.get('/api/v1/agent/settings');
     expect(before.ok(), await before.text()).toBeTruthy();
     const settings = ((await before.json()) as Envelope<SettingsView>).data;
@@ -138,11 +138,6 @@ const installAndRunNexusAgent = async (
       },
     });
     expect(patched.ok(), await patched.text()).toBeTruthy();
-    const availability = await request.get('/api/v1/agent/workspace-runtime/availability');
-    expect(availability.ok(), await availability.text()).toBeTruthy();
-    await expect(availability.json()).resolves.toMatchObject({
-      data: { available: true, reason: null, mode: 'native', isolation: 'logical' },
-    });
   });
 
   let publisher!: { keyId: string; label: string; publicKeyPem: string };
@@ -1734,23 +1729,9 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       },
     );
 
-    await step('the next Run Environment uses the shared accessible Host popover contract', async () => {
-      const environment = hub.getByRole('button', { name: 'Environment', exact: true });
-      await expect(environment).toBeVisible();
-      await expect(environment).toHaveAttribute('aria-expanded', 'false');
-      await expect(environment).toContainText('Native Host');
-      await environment.click();
-      await expect(environment).toHaveAttribute('aria-expanded', 'true');
-      const environmentDialog = page.getByRole('dialog', { name: 'Environment', exact: true });
-      await expect(environmentDialog).toBeVisible();
-      await expect(environmentDialog.getByText('Environment', { exact: true })).toBeVisible();
-      await expect(
-        environmentDialog.getByRole('button', { name: 'Native Host Run directly on host system', exact: true }),
-      ).toBeVisible();
-      await page.keyboard.press('Escape');
-      await expect(environmentDialog).toHaveCount(0);
-      await expect(environment).toHaveAttribute('aria-expanded', 'false');
-      await expect(environment).toBeFocused();
+    await step('the next Run does not offer the retired Environment popover', async () => {
+      await expect(hub.getByRole('button', { name: 'Environment', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('dialog', { name: 'Environment', exact: true })).toHaveCount(0);
     });
 
     await step('the resize grip drives container-responsive Agent layout and persists bounds', async () => {
@@ -1972,13 +1953,13 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     await captureFunctionalScreenshot(page, 'agent-run-history.png', { viewport: { width: 1440, height: 900 } });
     await captureFunctionalScreenshot(page, 'agent-nexus-agent.png', { viewport: { width: 1440, height: 900 } });
 
-    await step('completed Runs expose details, checkpoints, and Workspace Runtime surfaces', async () => {
+    await step('completed Runs expose details and checkpoints without Workspace Runtime', async () => {
       await historyCard.locator(':scope > button').first().click();
       await expect(taskRail.getByRole('button', { name: 'Back to Tasks', exact: true })).toBeVisible();
       await expect(taskRail.getByText('Run overview', { exact: true })).toBeVisible();
       await expect(taskRail.getByText(/^Checkpoints · \d+$/)).toBeVisible();
-      await taskRail.getByText('Optional runtime', { exact: true }).click();
-      await expect(taskRail.getByText('Workspace dev environment', { exact: true })).toBeVisible();
+      await expect(taskRail.getByText('Optional runtime', { exact: true })).toHaveCount(0);
+      await expect(taskRail.getByText('Workspace dev environment', { exact: true })).toHaveCount(0);
       await captureFunctionalScreenshot(page, 'agent-run-details.png', { viewport: { width: 1440, height: 900 } });
 
       await taskRail.getByRole('button', { name: 'Save checkpoint', exact: true }).click();

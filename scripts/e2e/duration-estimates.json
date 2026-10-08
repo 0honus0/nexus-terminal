@@ -9,7 +9,7 @@
     "specs/agent/preset-plugin.spec.ts": 152861,
     "specs/agent/provider.spec.ts": 310,
     "specs/agent/ssh-acp-settings.spec.ts": 26546,
-    "specs/agent/workspace-job-settings.spec.ts": 5814,
+    "specs/agent/performance-settings.spec.ts": 5814,
     "specs/auth/setup-login.spec.ts": 8206,
     "specs/http/appearance-background.spec.ts": 1024,
     "specs/http/architecture-contracts.spec.ts": 1824,

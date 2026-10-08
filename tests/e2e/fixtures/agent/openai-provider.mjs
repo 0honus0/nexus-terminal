@@ -242,18 +242,15 @@ const server = http.createServer(async (request, response) => {
     const offeredToolNames = Array.isArray(body?.tools)
       ? body.tools.map((tool) => tool?.function?.name).filter((name) => typeof name === 'string')
       : [];
-    const unavailableWorkspaceTools = [
-      'workspace_create',
-      'workspace_control',
-      'workspace_toolchain_switch',
-      'acp_execute',
-    ].filter((name) => offeredToolNames.includes(name));
+    const unavailableWorkspaceTools = ['workspace_create', 'workspace_control', 'workspace_toolchain_switch'].filter(
+      (name) => offeredToolNames.includes(name),
+    );
     if (unavailableWorkspaceTools.length > 0) {
       response.writeHead(422, { 'Content-Type': 'application/json' });
       response.end(
         JSON.stringify({
           error: {
-            message: `Workspace-only tools were offered without a Run environment: ${unavailableWorkspaceTools.join(', ')}`,
+            message: `Retired Workspace-only tools were offered to an SSH-only Run: ${unavailableWorkspaceTools.join(', ')}`,
           },
         }),
       );
@@ -307,7 +304,7 @@ const server = http.createServer(async (request, response) => {
                       title: 'Deployment awaits a separately authorized execution Run',
                       status: 'blocked',
                       detail:
-                        'No mutation executed; preserve data and verify endpoints after explicit target/environment selection.',
+                        'No mutation executed; preserve data and verify endpoints after explicit SSH target selection.',
                       dependsOn: [],
                       evidenceRefs: [],
                     },
@@ -323,7 +320,7 @@ const server = http.createServer(async (request, response) => {
     }
     regressionResponse(response, {
       content:
-        'Deployment blocked by plan-only authorization. No service was deployed. Partial result: select an authorized execution target and environment in a new Run; preserve catalog data, verify health/catalog, and confirm managed cleanup. These are unexecuted steps, not success evidence.',
+        'Deployment blocked by plan-only authorization. No service was deployed. Partial result: select an authorized SSH execution target in a new Run; preserve catalog data, verify health/catalog, and confirm managed cleanup. These are unexecuted steps, not success evidence.',
     });
     return;
   }
@@ -383,70 +380,6 @@ const server = http.createServer(async (request, response) => {
     }
     regressionResponse(response, {
       content: `Browser deployed fixture-v1; screenshot Artifact=${data('page_capture').data.artifact.id}; session closed.`,
-    });
-    return;
-  }
-  if (latestUserText.includes('E2E_FROZEN_ENVIRONMENT')) {
-    const data = (id) => {
-      const message = messages.find((item) => item.role === 'tool' && item.tool_call_id === id);
-      return message ? JSON.parse(message.content) : null;
-    };
-    const steps = [
-      ['env_override', 'workspace_create', { recipeId: 'workspace-browser', versions: { node: '22.23.2' } }],
-      ['env_create', 'workspace_create', {}],
-      [
-        'env_start',
-        'workspace_control',
-        () => ({
-          workspaceId: data('env_create').data.workspaceId,
-          action: 'start',
-        }),
-      ],
-      [
-        'env_execute',
-        'shell_execute',
-        () => ({
-          target: 'workspace',
-          id: data('env_create').data.workspaceId,
-          command: { kind: 'argv', argv: ['/bin/sh', '-c', 'printf "frozen-environment-ready\\n"; pwd'] },
-          cwd: '/workspace/work',
-        }),
-      ],
-      [
-        'env_stop',
-        'workspace_control',
-        () => ({
-          workspaceId: data('env_create').data.workspaceId,
-          action: 'stop',
-        }),
-      ],
-    ];
-    for (const [id, name, args] of steps) {
-      const result = data(id);
-      if (result && !result.ok && id !== 'env_override') {
-        regressionResponse(response, { content: 'Environment task failed; inspect durable evidence.' });
-        return;
-      }
-      if (!result) {
-        regressionResponse(
-          response,
-          {
-            tool_calls: [
-              {
-                index: 0,
-                id,
-                type: 'function',
-                function: { name, arguments: JSON.stringify(typeof args === 'function' ? args() : args) },
-              },
-            ],
-          },
-          'tool_calls',
-        );
-        return;
-      }
-    }
-    regressionResponse(response, {
-      content: `Frozen environment executed and stopped; workspace=${data('env_create').data.workspaceId}; job=${data('env_execute').data.jobId}.`,
     });
     return;
   }
@@ -1178,7 +1111,11 @@ const server = http.createServer(async (request, response) => {
     return;
   }
   const expectedSkill = latestUserText.includes('E2E_EXPECT_DEVELOPER_SKILL')
-    ? { id: 'nexus.agent.developer', name: 'developer', bodyMarker: 'Prefer a Nexus Workspace Runtime' }
+    ? {
+        id: 'nexus.agent.developer',
+        name: 'developer',
+        bodyMarker: 'Use an explicitly selected and authorized SSH connection',
+      }
     : latestUserText.includes('E2E_EXPECT_OPERATIONS_SKILL')
       ? { id: 'nexus.agent.operations', name: 'operations', bodyMarker: 'Prefer structured diagnostics' }
       : null;

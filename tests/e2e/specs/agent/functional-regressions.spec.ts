@@ -134,7 +134,6 @@ const startTask = async (
   text: string,
   options: {
     connectionIds: number[];
-    environment?: { recipeId: string; versions: Record<string, string>; catalogRevision: string };
     executionMode?: 'plan' | 'execute';
     expectedStatus?: number;
   } = { connectionIds: [] },
@@ -146,12 +145,6 @@ const startTask = async (
   await page
     .getByRole('button')
     .filter({ hasText: `#${context.threadId.slice(-6)}` })
-    .click();
-  await page.getByRole('button', { name: 'Environment', exact: true }).click();
-  await page
-    .getByRole('dialog', { name: 'Environment', exact: true })
-    .getByRole('button')
-    .filter({ hasText: options.environment?.recipeId ?? 'Native Host' })
     .click();
   await page.getByRole('button', { name: 'Model', exact: true }).click();
   await page
@@ -223,7 +216,8 @@ test('A08 plan-only deployment reports blocked partial result and cannot execute
   });
   expect(result.run.status).toBe('completed_unverified');
   expect(result.run.needsReconciliation).toBe(false);
-  expect(result.run.definition).toMatchObject({ executionMode: 'plan', environment: null });
+  expect(result.run.definition).toMatchObject({ executionMode: 'plan' });
+  expect(result.run.definition).not.toHaveProperty('environment');
   const results = result.ledger
     .filter((entry) => entry.kind === 'tool_result')
     .map((entry) => JSON.parse(entry.payload.text!));
@@ -332,99 +326,48 @@ test('A07 browser rejects stale click then deploys once and delivers a readable 
   await expect.poll(contexts).toEqual(baseline);
 });
 
-test('A06 frozen environment rejects overrides and stale Catalog then executes a real Workspace Job', async ({
+test('A06 legacy Workspace Run environment and API are rejected while SSH-only Runs remain available', async ({
   request,
 }) => {
   const context = await prepare(request);
-  const catalog = (await (await request.get('/api/v1/agent/workspace-runtime/catalog')).json()).data;
-  const environment = { recipeId: 'workspace-dev', versions: { 'base-tools': '1' }, catalogRevision: catalog.revision };
-  const settings = (await (await request.get('/api/v1/agent/settings')).json()).data;
-  const configured = await request.patch('/api/v1/agent/settings', {
-    headers: context.headers,
-    data: {
-      expectedVersion: settings.revision,
-      patch: {
-        workspaceRuntime: {
-          enabledRecipeIds: ['workspace-dev'],
-          toolVersions: { 'base-tools': { enabledVersionIds: ['1'], defaultVersionId: '1' } },
-        },
-      },
-    },
-  });
-  expect(configured.ok(), await configured.text()).toBe(true);
-  await context.page.route(
-    '**/api/v1/apps/nexus.agent/runs',
-    async (route) => {
-      const body = route.request().postDataJSON();
-      await route.continue({
-        postData: JSON.stringify({ ...body, environment: { ...body.environment, catalogRevision: 'stale-catalog' } }),
-      });
-    },
-    { times: 1 },
-  );
-  const stale = await startTask(request, context, 'E2E_FROZEN_ENVIRONMENT', {
-    connectionIds: [],
-    environment,
-    expectedStatus: 409,
-  });
-  expect(stale.status()).toBe(409);
-  expect((await stale.json()).error.code).toBe('CATALOG_REVISION_CONFLICT');
-  await expect(context.page.getByRole('alert')).toContainText('This Agent resource changed. Refresh and try again.');
-  await context.page.getByRole('button', { name: 'Resync', exact: true }).click();
-  const result = await execute(request, context, 'E2E_FROZEN_ENVIRONMENT', { connectionIds: [], environment });
-  const results = result.ledger
-    .filter((entry) => entry.kind === 'tool_result')
-    .map((entry) => JSON.parse(entry.payload.text!));
-  expect(results[0]).toMatchObject({ ok: false, errorCode: 'TOOL_ARGUMENTS_INVALID' });
-  const created = results.find((item) => item.data?.recipeId);
-  expect(created).toMatchObject({ ok: true, data: { recipeId: 'workspace-dev', generation: 1, status: 'ready' } });
-  const id = created.data.workspaceId;
-  const workspacePath = `/api/v1/apps/nexus.agent/workspaces/${id}`;
-  try {
-    const workspace = (await (await request.get(workspacePath)).json()).data;
-    expect(workspace).toMatchObject({ runId: result.run.id, generation: 1, status: 'stopped' });
-    expect(workspace.profile).toEqual(result.run.definition.environment);
-    expect(workspace.profile.toolchain).toEqual([{ familyId: 'base-tools', versionId: '1' }]);
-    const execution = results.find((item) => item.data?.jobId);
-    expect(execution).toMatchObject({ ok: true, verification: { status: 'verified' } });
-    const jobResponse = await fetch(
-      `http://127.0.0.1:${process.env.NEXUS_E2E_AGENT_RUNNER_PORT ?? '29095'}/v1/jobs/${execution.data.jobId}`,
-      {
-        headers: {
-          Authorization: 'Bearer e2e-isolated-runner-token-not-for-production-00000000',
-          'X-Nexus-Agent-Protocol': '2026-10-08',
-        },
-      },
-    );
-    expect(jobResponse.ok).toBe(true);
-    const job = await jobResponse.json();
-    expect(job).toMatchObject({
-      workspaceId: id,
-      generation: 1,
-      status: 'succeeded',
-      result: { exitCode: 0, timedOut: false },
-    });
-    expect(job.result.stdout).toContain('frozen-environment-ready\n');
-    const cwd = job.result.stdout.trim().split('\n').at(-1);
-    expect(cwd).toContain(`/runtime/workspaces/${id}/core/workspace/work`);
-    expect(await readdir(cwd)).toEqual([]);
-  } finally {
-    const workspace = (await (await request.get(workspacePath)).json()).data;
-    const deleted = await request.post(workspacePath + '/actions', {
-      headers: { ...context.headers, 'Idempotency-Key': randomUUID() },
-      data: { schemaVersion: 1, expectedVersion: workspace.version, action: 'delete' },
-    });
-    expect(deleted.status()).toBe(202);
-    const command = (await deleted.json()).data;
-    await expect
-      .poll(
-        async () =>
-          (await (await request.get(`/api/v1/apps/nexus.agent/workspace-runtime/commands/${command.id}`)).json()).data
-            .status,
-      )
-      .toBe('succeeded');
-    expect((await (await request.get(workspacePath)).json()).data.status).toBe('deleted');
+  for (const endpoint of [
+    '/api/v1/agent/workspace-runtime/availability',
+    '/api/v1/agent/workspace-runtime/catalog',
+    '/api/v1/apps/nexus.agent/workspaces',
+  ]) {
+    const response = await request.get(endpoint);
+    expect(response.status(), endpoint).toBe(404);
   }
+
+  const createFields = {
+    schemaVersion: 1,
+    threadId: context.threadId,
+    input: { text: 'Do not start an obsolete Workspace environment.', artifactRefs: [] },
+    agentDefinitionId: 'agent.default',
+    model: context.model,
+    approvalMode: 'full_access',
+    executionMode: 'execute',
+    connectionIds: [],
+  };
+  for (const environment of [
+    null,
+    { recipeId: 'workspace-dev', versions: { 'base-tools': '1' }, catalogRevision: 'old' },
+  ]) {
+    const rejected = await request.post('/api/v1/apps/nexus.agent/runs', {
+      headers: { ...context.headers, 'Idempotency-Key': randomUUID() },
+      data: { ...createFields, environment },
+    });
+    expect(rejected.status(), await rejected.text()).toBe(400);
+    expect((await rejected.json()).error.code).toBe('VALIDATION_FAILED');
+  }
+  const runPage = await request.get(`/api/v1/apps/nexus.agent/runs?threadId=${context.threadId}`);
+  expect(runPage.ok(), await runPage.text()).toBe(true);
+  expect((await runPage.json()).data.items).toHaveLength(0);
+
+  const result = await execute(request, context, 'E2E_NO_WORKSPACE_TOOLS', { connectionIds: [] });
+  expect(result.run.definition).not.toHaveProperty('environment');
+  expect(result.run.definition).toMatchObject({ connectionIds: [], executionMode: 'execute' });
+  expect(result.run.needsReconciliation).toBe(false);
 });
 
 for (const useOperationsSkill of [false, true]) {
