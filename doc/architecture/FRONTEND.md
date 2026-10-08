@@ -35,7 +35,7 @@ Editor session 持有异步批量关闭 gate，由 FileEditor 提供本地化 di
 - HTTP 数据通过 `client/` 进入应用，业务代码使用 camelCase contract。
 - 终端、上传和 Workspace 使用明确的 WebSocket protocol/session owner。
 - Foundation UI 统一使用 `Ui*` 组件；自定义窗口表面使用 `UiOverlayPanel` 组合。
-- `packages/protocol/src` 是 HTTP、WebSocket 与 Runner wire DTO 的唯一公共 owner，网络 adapter 直接使用规范 DTO，不在 Frontend 重复声明兼容类型。
+- `packages/protocol/src` 是 HTTP 与 WebSocket DTO 的公共 owner，网络 adapter 直接使用规范 DTO，不在 Frontend 重复声明兼容类型；退役 Agent Runner wire 协议不再存在。
 
 ## 源码布局
 

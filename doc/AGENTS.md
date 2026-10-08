@@ -51,7 +51,7 @@
 
 ### 文档维护分工
 
-项目文档统一放在 `doc/`，根 README 只保留项目简介与导航，不另建需求、review 或通用进度文件。例外：项目所有者明确要求的 Agent Workspace 移除实施过程暂由 `doc/testing/process/AGENT_WORKSPACE_REMOVAL.md` 单文件记录执行要求、进度、证据和跨会话接手信息；它不定义现行产品需求或平行架构，最终验收时按项目所有者要求处置。
+项目文档统一放在 `doc/`，根 README 只保留项目简介与导航，不另建需求、review 或通用进度文件。已完成的 Agent Workspace 移除不再保留临时计划或进度文件；当前产品边界以本文件及 `USAGE.md` 为准，测试入口与验收证据见 `testing/E2E.md`。
 
 | 文档                  | 唯一维护内容                             | 同步时机                       |
 | --------------------- | ---------------------------------------- | ------------------------------ |
@@ -248,7 +248,7 @@ Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 的 typed
 
 - 生产 Agent Workspace Runner 已物理退出：Backend 不连接 Runner HTTP/WS，不提供 Workspace CRUD、Terminal、Toolchain、Recipe/Environment 选择或旧错误兼容。Agent File/Shell/ACP 只能使用明确授权的 SSH 连接；Browser 使用 Backend CDP。
 - SQLite 新 schema 不创建 Agent Workspace/commands 表；增量迁移 #58 **无历史兼容**，直接 DROP 这两表并删除 Agent Settings 中的 Workspace 字段。不得重新加入旧 Workspace 状态判断、历史 Run/Thread 兼容 guard 或迁移前置回退。普通 SSH Jobs/Project Directories、Artifact/Memory、普通终端 Workspace 仍有独立 owner，必须保留。
-- 生产 `packages/agent-runner`、宿主准备脚本、Tool Pack Catalog、Runner 镜像、Compose Runner profile、GHCR Runner 发布入口、根 Runner build/check 均已删除。**不要把 `tests/e2e/Dockerfile.runner` 当成生产 Runner 删除**：它是独立的 Playwright 测试容器；旧 Runner 业务 E2E 和场景尚待重新整理。
+- 生产 `packages/agent-runner`、宿主准备脚本、Tool Pack Catalog、Runner 镜像、Compose Runner profile、GHCR Runner 发布入口、根 Runner build/check 均已删除。**不要把 `tests/e2e/Dockerfile.runner` 当成生产 Runner 删除**：它是独立的 Playwright 测试容器；当前 Agent/SSH E2E 与无 Runner Docker smoke 已替换旧业务测试。
 - 本次破坏式迁移不兼容旧 Workspace 表、旧 Settings 字段与旧备份 schema；不会自动删除用户独立备份文件或普通 SSH 目录。保留新版本 Backup、SSH、Browser、ACP、Plugin Frontend/Backend、Artifact、Memory 正式 contract。
 
 ### 8.2 文件、执行与传输边界
