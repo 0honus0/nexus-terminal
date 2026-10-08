@@ -34,7 +34,6 @@ export const mutationOutputProjectionScenario = async () => {
     runId: 'tool-projection-run',
     agentRuntimeId: 'tool-projection-runtime',
     connectionIds: [],
-    environment: null,
     stepId: 'tool-projection-step',
     signal: new AbortController().signal,
     deadlineAt: 1_800_700_100,

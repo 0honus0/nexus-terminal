@@ -156,9 +156,6 @@ export class RunService {
     const input = validateInput(command.input);
     const automaticThreadTitle = deriveAutomaticThreadTitle(input.text);
     const connectionIds = validateConnectionIds(command.connectionIds);
-    if (command.environment !== undefined && command.environment !== null) {
-      throw new Error('VALIDATION_FAILED');
-    }
     const executionMode = command.executionMode;
     if (executionMode !== 'execute' && executionMode !== 'plan') throw new Error('VALIDATION_FAILED');
     if (command.plannedFromRunId !== undefined) {
@@ -318,7 +315,6 @@ export class RunService {
       approvalMode: command.approvalMode,
       executionMode,
       connectionIds,
-      environment: null,
       policyRevision: app.policyRevision,
       settingsRevision: settings.revision,
     };

@@ -168,7 +168,6 @@ export class SubagentContextBuilder {
                   this.capabilities.allows('file.read', grant.scope, { target: 'ssh', id: String(id) }),
               ),
             ),
-            environment: run.definition.environment ?? null,
             stepId: 'project-context',
             signal: AbortSignal.timeout(10_000),
             deadlineAt: Math.min(delegation.deadlineAt, this.clock.nowUnixSeconds() + 10),
@@ -525,7 +524,6 @@ export class SubagentContextBuilder {
     const allowedCapabilities = new Set(delegation.grants.map((grant) => grant.capability));
     const governedMutationsEnabled = delegation.mutationMode === 'governed' && run.definition.executionMode !== 'plan';
     const availability = {
-      environment: run.definition.environment ?? null,
       connectionIds: run.definition.connectionIds,
     };
     const descriptors = this.toolCatalog.list(scope, availability);

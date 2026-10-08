@@ -104,7 +104,6 @@ export const acpInnerPermissionScenario = async () => {
     agentRuntimeId: runtimeId,
     toolCallId: 'outer-tool-108',
     connectionIds: [1],
-    environment: null,
     stepId: 'acp-inner-permission-step',
     signal: abort.signal,
     deadlineAt: 1_801_100_600,

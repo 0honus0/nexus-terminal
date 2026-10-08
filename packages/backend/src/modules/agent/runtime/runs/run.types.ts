@@ -1,6 +1,6 @@
 import type { AgentDurableEventTypeDto, AgentHostEventTypeDto } from '@nexus-terminal/protocol/agent-events';
 import type { AgentContextProfile } from '../../agent-defaults';
-import type { AgentRunEnvironmentSelection, AgentRunEnvironmentSnapshot, JsonValue, Scope } from '../../agent.types';
+import type { JsonValue, Scope } from '../../agent.types';
 import type { AgentModelCapability, ModelCapabilitySnapshot, ModelRef, ReasoningEffort } from '../../ai/model.types';
 import type { RunPlan } from '../planning/plan.types';
 
@@ -90,7 +90,6 @@ export interface CreateRunCommand {
   executionMode: RunExecutionMode;
   plannedFromRunId?: string;
   connectionIds: number[];
-  environment?: AgentRunEnvironmentSelection | null;
   initialGoal?: string;
   command: CommandIdentity;
 }
@@ -171,7 +170,6 @@ export interface RunDefinitionSnapshot {
   approvalMode: RunApprovalMode;
   executionMode: RunExecutionMode;
   connectionIds: number[];
-  environment: AgentRunEnvironmentSnapshot | null;
   policyRevision: number;
   settingsRevision: number;
   contextBoundary?: RunContextBoundary;

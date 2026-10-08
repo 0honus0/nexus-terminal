@@ -161,7 +161,7 @@ Agent App 的应用控制逻辑由实例级 `host/useAgentAppController` 持有�
 
 ### 4.2 Next Run 与 Active Run
 
-Model、Environment、Targets 在无活动 Run 时是下一次选择；已有 Run 时只展示冻结的 `RunDefinition`。Frontend 保存 recipe 或 `No Workspace` 选择，创建 Run 携带 observed Catalog revision，Backend 校验 settings/Catalog 并解析完整 environment snapshot。
+Agent Composer 只选择当前 AgentDefinition、模型与显式授权的 SSH connectionIds；RunDefinition 不再包含 Environment/Recipe/Workspace snapshot，Frontend/Backend 也不暴露 Catalog 选择或历史 Workspace 解码。
 
 Run 当前仍冻结 Provider/model configuration、capability/reasoning、SSH `connectionIds`、policy/settings revision、可选 context boundary，以及尚未退出的 Recipe、Toolchain、ACP、Browser、retention 配置；这些剩余 Environment 字段将在 SSH-only Run contract 阶段删除。Agent 模型已不再暴露 `workspace_create`、`workspace_control`、`workspace_toolchain_switch`，不能靠旧工具创建或修改 Workspace；现有用户管理 API 仍由独立 owner 持有，后续与其他 Workspace 接口一并退出。
 

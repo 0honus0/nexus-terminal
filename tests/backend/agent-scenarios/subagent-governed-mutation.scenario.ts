@@ -249,7 +249,7 @@ export const subagentGovernedMutationScenario = async () => {
       id: baseDelegation.runId,
       userId: 1,
       appId: scenarioScope.appId,
-      definition: { approvalMode, executionMode: 'execute', connectionIds: [42], environment: null },
+      definition: { approvalMode, executionMode: 'execute', connectionIds: [42] },
     }) as unknown as RunView;
   assert.equal(
     toolSchemas(scenarioScope, governedDelegation, { supportsTools: true }, runForMode('ask')).some(
@@ -294,7 +294,6 @@ export const subagentGovernedMutationScenario = async () => {
       approvalMode: 'full_access',
       connectionIds: [42],
       policyRevision: 1,
-      environment: null,
     },
     budget: { toolTimeoutSeconds: 120, maxToolOutputBytes: 1_048_576 },
     usage: {
@@ -338,7 +337,6 @@ export const subagentGovernedMutationScenario = async () => {
     runId: fullAccessRun.id,
     agentRuntimeId: baseDelegation.childRuntimeId,
     connectionIds: [42],
-    environment: null,
     stepId: toolStepId,
     signal,
     deadlineAt: work.deadlineAt,
@@ -351,27 +349,10 @@ export const subagentGovernedMutationScenario = async () => {
     true,
     'governed SSH inspection must be selected and delegated',
   );
-  const oldWorkspaceInspection: ToolInspection = {
-    ...persistedInspection,
-    target: {
-      kind: 'workspace',
-      target: 'workspace',
-      id: 'old',
-      workspaceId: 'old',
-      generation: 1,
-      targetIdentity: 'workspace:old:1',
-      endpoint: 'workspace:old',
-      loginUser: 'runner',
-      configurationHash: 'old',
-    },
-    resourceKeys: ['workspace:old:1'],
-    normalizedArguments: { target: 'workspace', id: 'old' },
-  };
   for (const tampered of [
     { ...persistedInspection, target: { ...persistedInspection.target, configurationHash: 'tampered' } },
     { ...persistedInspection, normalizedArguments: { target: 'ssh', id: '43' } },
     { ...persistedInspection, resourceKeys: ['connection:43:file:src/example.ts'] },
-    oldWorkspaceInspection,
   ]) {
     assert.equal(governedSubagentSshMutation(tampered as ToolInspection, [42], governedDelegation.grants), false);
   }
@@ -902,7 +883,6 @@ export const subagentGovernedMutationScenario = async () => {
           approvalMode: 'full_access',
           executionMode: 'execute',
           connectionIds: [42],
-          environment: null,
           policyRevision: 1,
           settingsRevision: 1,
         }),
@@ -1229,20 +1209,6 @@ export const subagentGovernedMutationScenario = async () => {
       { ...durableInspection, normalizedArguments: { target: 'ssh', id: '43' } },
       { ...durableInspection, resourceKeys: ['connection:43:file:src/example.ts'] },
       { ...durableInspection, toolName: 'workspace_control' },
-      {
-        ...durableInspection,
-        target: {
-          kind: 'workspace',
-          target: 'workspace',
-          id: 'old',
-          workspaceId: 'old',
-          generation: 1,
-          targetIdentity: 'workspace:old:1',
-          endpoint: 'workspace:old',
-          loginUser: 'runner',
-          configurationHash: 'legacy',
-        },
-      },
     ]) {
       await durableDb.execute('UPDATE agent_tool_calls SET inspection_json = ? WHERE id = ?', [
         JSON.stringify(invalidInspection),

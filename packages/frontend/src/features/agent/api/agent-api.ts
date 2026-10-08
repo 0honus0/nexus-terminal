@@ -119,11 +119,6 @@ import { createArtifactApi } from './artifact-api';
 
 export { AgentApiError, formatAgentApiError, toAgentApiError, providerErrorCategory } from './agent-api-error';
 
-export type {
-  AgentRunEnvironmentRunnerPluginDto,
-  AgentRunEnvironmentSnapshotDto,
-} from '@nexus-terminal/protocol/agent-runs';
-
 export interface AgentServerClockAnchorViewModel {
   serverUnixMilliseconds: number;
   clientMonotonicMilliseconds: number;

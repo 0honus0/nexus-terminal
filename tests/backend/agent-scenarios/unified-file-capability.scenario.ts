@@ -275,7 +275,6 @@ export const unifiedFileCapabilityScenario = async () => {
     runId: 'file-run',
     agentRuntimeId: 'file-runtime',
     connectionIds: [1],
-    environment: null,
     stepId: 'file-step',
     signal: new AbortController().signal,
     deadlineAt: Math.floor(Date.now() / 1000) + 60,

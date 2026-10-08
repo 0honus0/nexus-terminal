@@ -1,6 +1,6 @@
 import type { AgentSettingsDocument } from './agent-defaults';
 import type { JsonValue, Scope } from './agent.types';
-export type { AgentRunEnvironmentSelection, JsonValue } from './agent.types';
+export type { JsonValue } from './agent.types';
 import type {
   ArtifactAttachResult,
   ArtifactCleanupPreview,

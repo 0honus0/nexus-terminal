@@ -536,8 +536,6 @@ export const adaptiveExecutionBudgetScenario = async () => {
           expectedRunVersion: current.version,
           definitionVersion: '1.0.0',
           activeModel: current.definition.model,
-          workspaceCaptures: [],
-          backgroundJobs: [],
           now,
         });
       },

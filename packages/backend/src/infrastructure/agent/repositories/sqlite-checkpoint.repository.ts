@@ -1,11 +1,8 @@
 import type { ToolRisk } from '../../../modules/agent/capabilities/tool.types';
 import type {
-  CheckpointBackgroundJobEntry,
-  CheckpointBackgroundJobStatus,
   CheckpointDelegationRecoveryEntry,
   CheckpointRecoveryHazards,
   CheckpointRepositoryPort,
-  CheckpointRunBackgroundJob,
   CheckpointSnapshot,
   CheckpointToolRecoveryEntry,
   CheckpointToolStatus,
@@ -57,41 +54,11 @@ interface QuarantineRecoveryRow {
   tool_call_id: string | null;
 }
 
-const backgroundJobStatuses: ReadonlySet<CheckpointBackgroundJobStatus> = new Set([
-  'pending',
-  'running',
-  'succeeded',
-  'failed',
-  'unknown',
-  'cancelled',
-]);
-
 const assertCheckpointKeys = (record: Record<string, unknown>, allowedKeys: readonly string[]): void => {
   const allowed = new Set(allowedKeys);
   if (Object.keys(record).length !== allowed.size || Object.keys(record).some((key) => !allowed.has(key))) {
     throw new Error('invalid');
   }
-};
-
-const backgroundJobFromTool = (row: ToolRecoveryRow): CheckpointBackgroundJobEntry | null => {
-  if (!row.result_json) return null;
-  const result = parseToolResult(row.result_json);
-  const semantic = result.semantic;
-  if (
-    semantic?.kind !== 'execution' ||
-    !semantic.job ||
-    semantic.target.target !== 'workspace' ||
-    semantic.target.id !== semantic.job.workspaceId ||
-    !backgroundJobStatuses.has(semantic.status as CheckpointBackgroundJobStatus)
-  ) {
-    return null;
-  }
-  return {
-    jobId: semantic.job.jobId,
-    workspaceId: semantic.job.workspaceId,
-    generation: semantic.job.generation,
-    status: semantic.status as CheckpointBackgroundJobStatus,
-  };
 };
 
 const decodeCheckpointSnapshot = (raw: string): CheckpointSnapshot => {
@@ -113,8 +80,6 @@ const decodeCheckpointSnapshot = (raw: string): CheckpointSnapshot => {
       'activeModel',
       'definitionVersion',
       'policyRevision',
-      'workspaceArtifactManifestRefs',
-      'workspaceArtifactRefs',
       'recoveryManifest',
     ]);
     if (record.schemaVersion !== 1) throw new Error('invalid');
@@ -129,7 +94,6 @@ const decodeCheckpointSnapshot = (raw: string): CheckpointSnapshot => {
       'contextBoundary',
       'tools',
       'delegations',
-      'backgroundJobs',
       'quarantinedResourceKeys',
     ]);
     if (recovery.schemaVersion !== 1) throw new Error('invalid');
@@ -139,7 +103,6 @@ const decodeCheckpointSnapshot = (raw: string): CheckpointSnapshot => {
     if (Object.keys(runThrough).length > 64) throw new Error('invalid');
     if (!Array.isArray(recovery.tools) || recovery.tools.length > 4096) throw new Error('invalid');
     if (!Array.isArray(recovery.delegations) || recovery.delegations.length > 4096) throw new Error('invalid');
-    if (!Array.isArray(recovery.backgroundJobs) || recovery.backgroundJobs.length > 256) throw new Error('invalid');
     const recoveryManifest: CheckpointSnapshot['recoveryManifest'] = {
       schemaVersion: 1,
       eventThrough: durableInteger(recovery.eventThrough),
@@ -200,19 +163,6 @@ const decodeCheckpointSnapshot = (raw: string): CheckpointSnapshot => {
           status: delegation.status as CheckpointDelegationRecoveryEntry['status'],
         };
       }),
-      backgroundJobs: recovery.backgroundJobs.map((item) => {
-        const job = durableRecord(item);
-        assertCheckpointKeys(job, ['jobId', 'workspaceId', 'generation', 'status']);
-        if (!backgroundJobStatuses.has(String(job.status) as CheckpointBackgroundJobStatus)) {
-          throw new Error('invalid');
-        }
-        return {
-          jobId: durableString(job.jobId) as string,
-          workspaceId: durableString(job.workspaceId) as string,
-          generation: durableInteger(job.generation, 1),
-          status: job.status as CheckpointBackgroundJobStatus,
-        };
-      }),
       quarantinedResourceKeys: decodeDurableStringArray(recovery.quarantinedResourceKeys, 4096),
     };
     return {
@@ -239,8 +189,6 @@ const decodeCheckpointSnapshot = (raw: string): CheckpointSnapshot => {
       },
       definitionVersion: durableString(record.definitionVersion) as string,
       policyRevision: durableInteger(record.policyRevision, 1),
-      workspaceArtifactManifestRefs: decodeDurableStringArray(record.workspaceArtifactManifestRefs, 4096),
-      workspaceArtifactRefs: decodeDurableStringArray(record.workspaceArtifactRefs, 4096),
       recoveryManifest,
     };
   } catch {
@@ -384,7 +332,6 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
         `SELECT artifact_id FROM agent_artifact_links WHERE run_id=? AND role='evidence' ORDER BY artifact_id`,
         [run.id],
       );
-      if (command.backgroundJobs.length > 0) throw new Error('CHECKPOINT_BACKGROUND_JOB_UNRESOLVED');
       const artifactRefs = [...new Set(evidence.map((row) => row.artifact_id))];
       for (const artifactId of artifactRefs) {
         const artifact = await tx.queryOne<{ status: string }>(
@@ -429,15 +376,12 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
         activeModel: { ...command.activeModel },
         definitionVersion: command.definitionVersion,
         policyRevision: definition.policyRevision,
-        workspaceArtifactManifestRefs: [],
-        workspaceArtifactRefs: [],
         recoveryManifest: {
           schemaVersion: 1,
           eventThrough,
           contextBoundary,
           tools: toolManifest,
           delegations: delegations.map((delegation) => ({ delegationId: delegation.id, status: delegation.status })),
-          backgroundJobs: [],
           quarantinedResourceKeys: quarantines.map((quarantine) => quarantine.resource_key),
         },
       };
@@ -573,35 +517,6 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
       await tx.execute(`DELETE FROM agent_checkpoints WHERE id=? AND run_id=? AND kind='user'`, [checkpointId, runId]);
       await cleanupCheckpointArtifactLinks(tx, runId, released);
     });
-  }
-
-  async runBackgroundJobs(
-    scope: { userId: number; appId: string },
-    runId: string,
-  ): Promise<CheckpointRunBackgroundJob[]> {
-    const rows = await this.db.queryAll<ToolRecoveryRow>(
-      `SELECT t.id,t.tool_name,t.operation_hash,t.risk,t.status,t.result_json,t.started_at,t.created_at
-       FROM agent_tool_calls t
-       JOIN agent_runs r ON r.id=t.run_id
-       WHERE t.run_id=? AND r.user_id=? AND r.app_id=?
-         AND t.result_json IS NOT NULL
-       ORDER BY t.created_at,t.id`,
-      [runId, scope.userId, scope.appId],
-    );
-    const jobs = new Map<string, CheckpointRunBackgroundJob>();
-    for (const row of rows) {
-      const projected = backgroundJobFromTool(row);
-      if (!projected) continue;
-      const current = jobs.get(projected.jobId);
-      if (current && (current.workspaceId !== projected.workspaceId || current.generation !== projected.generation)) {
-        throw new Error('CHECKPOINT_STATE_INVALID');
-      }
-      jobs.set(projected.jobId, {
-        ...projected,
-        toolCallIds: [...new Set([...(current?.toolCallIds ?? []), row.id])],
-      });
-    }
-    return [...jobs.values()].sort((left, right) => left.jobId.localeCompare(right.jobId));
   }
 
   async missingArtifactRefs(scope: { userId: number; appId: string }, checkpointId: string): Promise<string[]> {

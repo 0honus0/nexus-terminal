@@ -212,7 +212,6 @@ export const mcpProtocolSurfaceScenario = async () => {
     runId: 'mcp-protocol-run',
     agentRuntimeId: 'mcp-protocol-runtime',
     connectionIds: [],
-    environment: null,
     stepId: 'mcp-protocol-step',
     signal: new AbortController().signal,
     deadlineAt: 1_900_000_000,

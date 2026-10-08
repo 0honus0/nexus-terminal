@@ -18,8 +18,6 @@ import { unifiedShellCapabilityScenario } from './unified-shell-capability.scena
 import { sshSessionJobsScenario } from './ssh-session-jobs.scenario';
 import { subagentGovernedMutationScenario } from './subagent-governed-mutation.scenario';
 import { restartRecoveryScenario } from './restart-recovery.scenario';
-import { checkpointWorkspaceEvidenceScenario } from './checkpoint-workspace-evidence.scenario';
-import { workspaceCleanupHandoffScenario } from './workspace-cleanup-handoff.scenario';
 import { agentDefinitionCapabilityContractScenario } from './agent-definition-capability-contract.scenario';
 import { nestedJoinDurableWakeScenario } from './nested-join-durable-wake.scenario';
 import { userInputClarificationScenario } from './user-input-clarification.scenario';
@@ -50,7 +48,6 @@ import { skillProgressiveDisclosureScenario } from './skill-progressive-disclosu
 import { artifactModelInputScenario } from './artifact-model-input.scenario';
 import { contextToolExchangeScenario } from './context-tool-exchange.scenario';
 import { readToolBatchAuthorityScenario } from './read-tool-batch-authority.scenario';
-import { capabilityGrantMigrationScenario } from './capability-grant-migration.scenario';
 import { integrationRefreshGenerationScenario } from './integration-refresh-generation.scenario';
 import { artifactCrashReconciliationScenario } from './artifact-crash-reconciliation.scenario';
 import { artifactLifecycleSettingsScenario } from './artifact-lifecycle-settings.scenario';
@@ -70,8 +67,6 @@ import { acpInnerPermissionReplayScenario } from './acp-inner-permission-replay.
 import { acpInnerPermissionAbortRaceScenario } from './acp-inner-permission-abort-race.scenario';
 import { failFastSiblingCancellationScenario } from './fail-fast-sibling-cancellation.scenario';
 import { modelCapabilityRegistrySyncScenario } from './model-capability-registry-sync.scenario';
-import { legacyMachineInspectionMigrationScenario } from './legacy-machine-inspection-migration.scenario';
-import { legacySettingsMigrationScenario } from './legacy-settings-migration.scenario';
 import { durableBoundaryDecodeScenario } from './durable-boundary-decode.scenario';
 import { currentDurableSchemaScenario } from './current-durable-schema.scenario';
 import { providerSettingsDeadFieldScenario } from './provider-settings-dead-field.scenario';
@@ -103,15 +98,11 @@ type Scenario = () => Promise<ScenarioMetric[]>;
 const scenarios = new Map<string, Scenario>([
   ['context/tool-exchange-atomicity', contextToolExchangeScenario],
   ['context/durable-compaction-checkpoint', durableContextCheckpointScenario],
-  ['migration/legacy-machine-inspection-targets', legacyMachineInspectionMigrationScenario],
-  ['migration/legacy-agent-settings', legacySettingsMigrationScenario],
-  ['migration/capability-grants-v2', capabilityGrantMigrationScenario],
   ['context/token-accounting', contextTokenAccountingScenario],
   ['context/project-instructions', projectInstructionsContextScenario],
   ['file/unified-targets', unifiedFileCapabilityScenario],
   ['shell/unified-targets', unifiedShellCapabilityScenario],
   ['ssh/session-jobs', sshSessionJobsScenario],
-  ['workspace/cleanup-http-handoff', workspaceCleanupHandoffScenario],
   ['context/tool-result-projection', toolResultProjectionScenario],
   ['context/tool-surface-progressive-disclosure', toolSurfaceProgressiveDisclosureScenario],
   ['runtime/mcp-protocol-surface', mcpProtocolSurfaceScenario],
@@ -152,7 +143,6 @@ const scenarios = new Map<string, Scenario>([
   ['runtime/cancel-running-tool-settle', cancelRunningToolSettleScenario],
   ['runtime/mutation-output-projection', mutationOutputProjectionScenario],
   ['storage/artifact-lifecycle-settings', artifactLifecycleSettingsScenario],
-  ['recovery/checkpoint-workspace-evidence', checkpointWorkspaceEvidenceScenario],
   ['runtime/artifact-crash-reconciliation', artifactCrashReconciliationScenario],
   ['runtime/integration-cas-before-runtime', integrationCasBeforeRuntimeScenario],
   ['runtime/integration-refresh-generation', integrationRefreshGenerationScenario],

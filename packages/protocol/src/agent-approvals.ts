@@ -1,7 +1,7 @@
 import type { AgentJsonValueDto, AgentToolRiskDto, AgentVersionedRequestDto } from './agent-common.js';
 
 export interface AgentToolPreconditionDto {
-  kind: 'fileHash' | 'metadata' | 'serviceState' | 'workspaceGeneration';
+  kind: 'fileHash' | 'metadata' | 'serviceState';
   key: string;
   observedValue: AgentJsonValueDto;
 }
@@ -12,18 +12,16 @@ export interface AgentToolTargetBaseDto {
   loginUser: string;
   configurationHash: string;
   connectionId?: number;
-  workspaceId?: string;
   integrationId?: string;
   schemaHash?: string;
   browserSessionId?: string;
   snapshotId?: string;
-  generation?: number;
   hostKeyTrust?: 'unavailable';
 }
 
 export interface AgentCanonicalToolTargetDto extends AgentToolTargetBaseDto {
-  kind: 'workspace' | 'ssh';
-  target: 'workspace' | 'ssh';
+  kind: 'ssh';
+  target: 'ssh';
   id: string;
 }
 

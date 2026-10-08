@@ -131,7 +131,6 @@ export const sshSessionJobsScenario = async () => {
     agentRuntimeId: 'root-one',
     actor: { kind: 'user', userId: 1 },
     connectionIds: [1],
-    environment: null,
     stepId: 'step',
     signal: new AbortController().signal,
     deadlineAt: Math.floor(Date.now() / 1000) + 60,

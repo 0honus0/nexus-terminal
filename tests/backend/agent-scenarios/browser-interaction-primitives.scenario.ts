@@ -449,7 +449,6 @@ export const browserInteractionPrimitivesScenario = async () => {
       runId,
       agentRuntimeId,
       connectionIds: [],
-      environment: null,
       stepId: 'browser-interaction-step',
       signal: new AbortController().signal,
       deadlineAt: now + 120,

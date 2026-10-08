@@ -64,7 +64,6 @@ export const acpInnerPermissionAbortRaceScenario = async () => {
     agentRuntimeId: runtimeId,
     toolCallId: parentToolCallId,
     connectionIds: [],
-    environment: null,
     stepId: 'acp-inner-permission-abort-step',
     signal: abort.signal,
     deadlineAt: now + 120,

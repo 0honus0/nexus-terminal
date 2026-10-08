@@ -58,7 +58,6 @@ export const subagentMailboxTtlScenario = async () => {
     approvalMode: 'ask',
     executionMode: 'execute',
     connectionIds: [],
-    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   });
@@ -200,7 +199,7 @@ export const subagentMailboxTtlScenario = async () => {
           maxToolOutputBytes: 1_048_576,
           contextPolicy: freezeRunContextPolicy('normal'),
         },
-        definition: { environment: null },
+        definition: {},
       } as unknown as RunView,
     );
     assert.equal(context.kind, 'ready');

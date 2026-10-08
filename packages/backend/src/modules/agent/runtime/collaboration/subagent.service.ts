@@ -146,7 +146,7 @@ export class SubagentService {
       if (!inheritedScope) return [];
       const delegatedScope =
         capability.startsWith('file.') || capability === 'shell.execute'
-          ? this.capabilities.restrictTargets(capability, inheritedScope, ['workspace'])
+          ? this.capabilities.restrictTargets(capability, inheritedScope, ['ssh'])
           : inheritedScope;
       return delegatedScope ? [{ capability, schemaVersion: 2 as const, scope: delegatedScope }] : [];
     });

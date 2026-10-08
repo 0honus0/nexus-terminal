@@ -277,9 +277,6 @@ export const agentDefinitionCapabilityContractScenario = async () => {
         requiredModelCapabilities: [...definitionInfo.requiredModelCapabilities],
       }),
     } as never,
-    async () => {
-      throw new Error('SCENARIO_UNEXPECTED_ENVIRONMENT');
-    },
     {
       createRun: async (record: AtomicCreateRun) => {
         createCommits += 1;
@@ -380,15 +377,12 @@ export const agentDefinitionCapabilityContractScenario = async () => {
       activeModel: terminalSource.definition.model,
       definitionVersion: definitionInfo.version,
       policyRevision: 1,
-      workspaceArtifactManifestRefs: [],
-      workspaceArtifactRefs: [],
       recoveryManifest: {
         schemaVersion: 1,
         eventThrough: 0,
         contextBoundary: { baseThrough: 0, runThrough: {} },
         tools: [],
         delegations: [],
-        backgroundJobs: [],
         quarantinedResourceKeys: [],
       },
     },

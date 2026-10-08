@@ -116,7 +116,6 @@ export const toolResultProjectionScenario = async () => {
     runId: 'tool-result-projection-run',
     agentRuntimeId: 'tool-result-projection-runtime',
     connectionIds: [],
-    environment: null,
     stepId: 'tool-result-projection-step',
     signal: new AbortController().signal,
     deadlineAt: 1_900_000_000,
@@ -255,7 +254,7 @@ export const toolResultProjectionScenario = async () => {
       maxToolOutputBytes: maxModelBytes,
       contextPolicy: freezeRunContextPolicy('normal'),
     },
-    definition: { environment: null },
+    definition: {},
   } as unknown as RunView;
   const childPrepared = await childBuilder.prepare(
     scope,
@@ -328,7 +327,6 @@ export const toolResultProjectionScenario = async () => {
     approvalMode: 'ask',
     executionMode: 'execute',
     connectionIds: [],
-    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   });

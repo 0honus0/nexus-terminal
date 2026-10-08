@@ -87,7 +87,6 @@ export const acpInnerPermissionDurabilityScenario = async () => {
           approvalMode: 'ask',
           executionMode: 'execute',
           connectionIds: [],
-          environment: null,
           policyRevision: 1,
           settingsRevision: 1,
         }),

@@ -15,31 +15,13 @@ import type { ArtifactLimitPolicyPort } from '../../../packages/backend/src/modu
 
 export const artifactLifecycleSettingsScenario = async () => {
   const defaults = createDefaultAgentSettings();
-  assert.equal(
-    'workspaceIdleTtlSeconds' in defaults.workspaceRuntime,
-    false,
-    'P-094 must not expose an idle Workspace setting until Workspace activity has a trustworthy runtime owner',
-  );
-  assert.equal(
-    'workspaceIdleTtlSeconds' in defaults.hardLimits,
-    false,
-    'P-094 must remove the matching fake Workspace idle hard-limit contract',
-  );
-  const legacyWorkspaceIdle = {
-    ...(defaults as unknown as Record<string, unknown>),
-    workspaceRuntime: {
-      ...(defaults.workspaceRuntime as unknown as Record<string, unknown>),
-      workspaceIdleTtlSeconds: 900,
-    },
-    hardLimits: {
-      ...(defaults.hardLimits as unknown as Record<string, unknown>),
-      workspaceIdleTtlSeconds: 3_600,
-    },
-  };
+  assert.equal('workspaceRuntime' in defaults, false);
+  assert.equal('maxActiveWorkspaces' in defaults.hardLimits, false);
+  assert.equal('maxConcurrentWorkspaceJobs' in defaults.performance, false);
   assert.throws(
-    () => normalizeRequestedSettings(legacyWorkspaceIdle),
+    () => normalizeRequestedSettings({ ...defaults, workspaceRuntime: { enabledRecipeIds: [] } }),
     /VALIDATION_FAILED/,
-    'settings containing removed Workspace idle fields must fail closed',
+    'retired Agent Workspace settings must not reappear through the parser',
   );
 
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-artifact-lifecycle-'));

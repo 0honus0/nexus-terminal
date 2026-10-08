@@ -57,7 +57,6 @@ export const cancelRunningToolSettleScenario = async () => {
     approvalMode: 'full_access',
     executionMode: 'execute',
     connectionIds: [42],
-    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   };

@@ -412,6 +412,12 @@ export const durableContextCheckpointScenario = async () => {
         applied_at INTEGER NOT NULL
       );
       INSERT INTO migrations (id, name, applied_at) VALUES (29, 'legacy baseline', 1800000000);
+      CREATE TABLE agent_settings (
+        user_id INTEGER PRIMARY KEY,
+        value_json TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
       CREATE TABLE ai_threads (id TEXT PRIMARY KEY);
       CREATE TABLE ai_context_digests (
         id TEXT PRIMARY KEY,

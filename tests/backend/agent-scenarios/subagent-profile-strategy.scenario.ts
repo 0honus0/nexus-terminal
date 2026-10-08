@@ -253,7 +253,7 @@ export const subagentProfileStrategyScenario = async () => {
         maxToolOutputBytes: 1_048_576,
         contextPolicy: freezeRunContextPolicy('normal'),
       },
-      definition: { connectionIds: [], environment: { transport: 'workspace-profile' } },
+      definition: { connectionIds: [] },
     } as unknown as RunView,
   );
   assert.equal(prepared.kind, 'ready');
@@ -376,7 +376,7 @@ export const subagentProfileStrategyScenario = async () => {
           maxToolOutputBytes: 65536,
           contextPolicy: freezeRunContextPolicy('normal'),
         },
-        definition: { connectionIds: [], environment: null },
+        definition: { connectionIds: [] },
       } as never,
     );
   const fullHistory = await prepareChild();

@@ -182,7 +182,6 @@ export class NativeAgentBackend implements AgentBackendPort {
       const offeredTools = this.toolCalls.schemas(
         scope,
         {
-          environment: snapshot.definition.environment ?? null,
           connectionIds: snapshot.definition.connectionIds,
         },
         executionMode,

@@ -171,7 +171,7 @@ export const contextTokenAccountingScenario = async () => {
       maxToolOutputBytes: 65_536,
       contextPolicy: freezeRunContextPolicy('normal'),
     },
-    definition: { environment: null },
+    definition: {},
   } as unknown as RunView;
   const subagentModel = {
     id: 'scenario-model',
@@ -258,7 +258,6 @@ export const contextTokenAccountingScenario = async () => {
     approvalMode: 'ask',
     executionMode: 'execute',
     connectionIds: [],
-    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   });

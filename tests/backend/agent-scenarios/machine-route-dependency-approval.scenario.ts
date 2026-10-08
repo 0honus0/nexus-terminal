@@ -61,12 +61,9 @@ export const machineRouteDependencyApprovalScenario = async () => {
     tools: createUnifiedShellTools(null!, availabilityCryptoHash),
   });
   const withoutTarget = new Set(
-    modelFacingToolSchemas(
-      availabilityCatalog,
-      availabilityScope,
-      { environment: null, connectionIds: [] },
-      'execute',
-    ).map((tool) => tool.name),
+    modelFacingToolSchemas(availabilityCatalog, availabilityScope, { connectionIds: [] }, 'execute').map(
+      (tool) => tool.name,
+    ),
   );
   assert.ok(
     withoutTarget.has('machine_connection_list'),
@@ -86,12 +83,9 @@ export const machineRouteDependencyApprovalScenario = async () => {
     );
   }
   const withTarget = new Set(
-    modelFacingToolSchemas(
-      availabilityCatalog,
-      availabilityScope,
-      { environment: null, connectionIds: [1] },
-      'execute',
-    ).map((tool) => tool.name),
+    modelFacingToolSchemas(availabilityCatalog, availabilityScope, { connectionIds: [1] }, 'execute').map(
+      (tool) => tool.name,
+    ),
   );
   for (const toolName of ['machine_diagnostics_read', 'file_read', 'file_write', 'shell_execute']) {
     assert.ok(withTarget.has(toolName), `${toolName} must remain available when a connection is selected`);
@@ -103,7 +97,7 @@ export const machineRouteDependencyApprovalScenario = async () => {
   );
   assert.equal(
     availabilityCatalog
-      .list(availabilityScope, { environment: null, connectionIds: [1] })
+      .list(availabilityScope, { connectionIds: [1] })
       .some((tool) => tool.name === 'machine_docker_control'),
     true,
     'deferred Docker mutation must remain available in the authoritative target-scoped ToolCatalog',

@@ -16,7 +16,6 @@ export const browserTargetScopedRevisionScenario = async () => {
     runId,
     agentRuntimeId,
     connectionIds: [],
-    environment: null,
     stepId: 'browser-target-revision-step',
     signal: new AbortController().signal,
     deadlineAt: Math.floor(Date.now() / 1000) + 120,

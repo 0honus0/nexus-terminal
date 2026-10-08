@@ -31,26 +31,12 @@ export interface CheckpointDelegationRecoveryEntry {
 }
 
 export type CheckpointKind = 'user' | 'recovery';
-export type CheckpointBackgroundJobStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'unknown' | 'cancelled';
-
-export interface CheckpointBackgroundJobEntry {
-  jobId: string;
-  workspaceId: string;
-  generation: number;
-  status: CheckpointBackgroundJobStatus;
-}
-
-export interface CheckpointRunBackgroundJob extends CheckpointBackgroundJobEntry {
-  toolCallIds: string[];
-}
-
 export interface CheckpointRecoveryManifest {
   schemaVersion: 1;
   eventThrough: number;
   contextBoundary: RunContextBoundary;
   tools: CheckpointToolRecoveryEntry[];
   delegations: CheckpointDelegationRecoveryEntry[];
-  backgroundJobs: CheckpointBackgroundJobEntry[];
   quarantinedResourceKeys: string[];
 }
 
@@ -70,8 +56,6 @@ export interface CheckpointSnapshot {
   activeModel: ModelRef;
   definitionVersion: string;
   policyRevision: number;
-  workspaceArtifactManifestRefs: string[];
-  workspaceArtifactRefs: string[];
   recoveryManifest: CheckpointRecoveryManifest;
 }
 
@@ -99,7 +83,6 @@ export interface SaveCheckpointCommand {
   expectedRunVersion: number;
   definitionVersion: string;
   activeModel: ModelRef;
-  backgroundJobs: CheckpointBackgroundJobEntry[];
   now: number;
 }
 
@@ -110,7 +93,6 @@ export interface CheckpointRepositoryPort {
   latestRecovery(scope: Scope, runId: string): Promise<CheckpointView | null>;
   deleteRecovery(scope: Scope, runId: string, checkpointId: string): Promise<void>;
   deleteUser(scope: Scope, runId: string, checkpointId: string): Promise<void>;
-  runBackgroundJobs(scope: Scope, runId: string): Promise<CheckpointRunBackgroundJob[]>;
   missingArtifactRefs(scope: Scope, checkpointId: string): Promise<string[]>;
   recoveryHazards(scope: Scope, checkpointId: string): Promise<CheckpointRecoveryHazards>;
 }

@@ -4,7 +4,6 @@ import type {
   AgentModelCapabilitySnapshotDto,
   AgentModelRefDto,
   AgentPendingRunInputPageDto,
-  AgentRunEnvironmentSnapshotDto,
   AgentRunPageDto,
   AgentRunReconciliationViewDto,
   AgentRunSnapshotDto,
@@ -37,40 +36,6 @@ const modelCapabilitySnapshotDto = (snapshot: AgentModelCapabilitySnapshotDto): 
   ...(snapshot.defaultReasoningEffort === undefined ? {} : { defaultReasoningEffort: snapshot.defaultReasoningEffort }),
   ...(snapshot.reasoningMandatory === undefined ? {} : { reasoningMandatory: snapshot.reasoningMandatory }),
 });
-
-export const runEnvironmentDto = (
-  environment: RunView['definition']['environment'],
-): AgentRunEnvironmentSnapshotDto | null => {
-  if (!environment) return null;
-  return {
-    kind: environment.kind,
-    recipeId: environment.recipeId,
-    recipeRevision: environment.recipeRevision,
-    runtimeDigest: environment.runtimeDigest,
-    catalogRevision: environment.catalogRevision,
-    toolchain: environment.toolchain.map((pack) => ({
-      familyId: pack.familyId,
-      versionId: pack.versionId,
-    })),
-    runnerPlugins: environment.runnerPlugins.map((plugin) => ({
-      pluginId: plugin.pluginId,
-      version: plugin.version,
-      sdkVersion: plugin.sdkVersion,
-      protocolVersion: 3,
-      packageHash: plugin.packageHash,
-      entry: plugin.entry,
-    })),
-    browserTarget:
-      environment.browserTarget === null
-        ? null
-        : {
-            id: environment.browserTarget.id,
-            profileRevision: environment.browserTarget.profileRevision,
-            endpoints: environment.browserTarget.endpoints.map((endpoint) => ({ ...endpoint })),
-            allowedUrlPatterns: [...environment.browserTarget.allowedUrlPatterns],
-          },
-  };
-};
 
 const planDto = (plan: RunView['plan']): AgentRunViewDto['plan'] => ({
   schemaVersion: 1,
@@ -151,7 +116,6 @@ export const runDto = (run: RunView): AgentRunViewDto => ({
     approvalMode: run.definition.approvalMode,
     executionMode: run.definition.executionMode,
     connectionIds: [...run.definition.connectionIds],
-    environment: runEnvironmentDto(run.definition.environment),
     policyRevision: run.definition.policyRevision,
     settingsRevision: run.definition.settingsRevision,
     ...(run.definition.contextBoundary === undefined
@@ -293,8 +257,6 @@ export const checkpointDto = (checkpoint: Checkpoint): AgentCheckpointViewDto =>
     activeModel: modelRefDto(checkpoint.snapshot.activeModel),
     definitionVersion: checkpoint.snapshot.definitionVersion,
     policyRevision: checkpoint.snapshot.policyRevision,
-    workspaceArtifactManifestRefs: [...checkpoint.snapshot.workspaceArtifactManifestRefs],
-    workspaceArtifactRefs: [...checkpoint.snapshot.workspaceArtifactRefs],
     recoveryManifest: {
       schemaVersion: 1,
       eventThrough: checkpoint.snapshot.recoveryManifest.eventThrough,
@@ -312,7 +274,6 @@ export const checkpointDto = (checkpoint: Checkpoint): AgentCheckpointViewDto =>
         quarantinedResourceKeys: [...tool.quarantinedResourceKeys],
       })),
       delegations: checkpoint.snapshot.recoveryManifest.delegations.map((delegation) => ({ ...delegation })),
-      backgroundJobs: checkpoint.snapshot.recoveryManifest.backgroundJobs.map((job) => ({ ...job })),
       quarantinedResourceKeys: [...checkpoint.snapshot.recoveryManifest.quarantinedResourceKeys],
     },
   },

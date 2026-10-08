@@ -500,7 +500,6 @@ export class SubagentToolStepExecutor {
       threadId: run.threadId,
       ...(toolCallId === undefined ? {} : { toolCallId }),
       connectionIds: [...run.definition.connectionIds],
-      environment: run.definition.environment ?? null,
       stepId,
       signal,
       deadlineAt: Math.min(

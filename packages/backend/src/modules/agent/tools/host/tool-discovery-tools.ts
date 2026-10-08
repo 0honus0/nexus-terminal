@@ -69,16 +69,13 @@ export interface DeferredToolSearchResult {
 
 export const searchDeferredTools = (
   catalog: ToolCatalog,
-  context: Pick<
-    ToolContext,
-    'userId' | 'appId' | 'participantKind' | 'environment' | 'connectionIds' | 'maxOutputBytes'
-  >,
+  context: Pick<ToolContext, 'userId' | 'appId' | 'participantKind' | 'connectionIds' | 'maxOutputBytes'>,
   query: string,
   limit: number,
 ): DeferredToolSearchResult => {
   const terms = searchTerms(query);
   const ranked = catalog
-    .list(context, { environment: context.environment, connectionIds: context.connectionIds })
+    .list(context, { connectionIds: context.connectionIds })
     .filter(context.participantKind === 'subagent' ? isDeferredMcpToolDescriptor : isDeferredToolDescriptor)
     .map((descriptor) => ({ descriptor, score: descriptorScore(descriptor, query, terms) }))
     .filter((candidate) => candidate.score > 0)

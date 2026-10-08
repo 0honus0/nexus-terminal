@@ -66,8 +66,7 @@ const checkpointRecoveryReasons = (checkpoint: CheckpointView): string[] => {
   if (
     manifest.quarantinedResourceKeys.length > 0 ||
     manifest.tools.some((tool) => tool.sideEffectStatus === 'unknown' || tool.quarantinedResourceKeys.length > 0) ||
-    manifest.delegations.some((delegation) => ['queued', 'running', 'waiting'].includes(delegation.status)) ||
-    (manifest.backgroundJobs ?? []).length > 0
+    manifest.delegations.some((delegation) => ['queued', 'running', 'waiting'].includes(delegation.status))
   ) {
     reasons.push('CHECKPOINT_NOT_SAFE');
   }
@@ -124,8 +123,6 @@ export class CheckpointService {
         [
           'CHECKPOINT_NOT_SAFE',
           'CHECKPOINT_ARTIFACT_UNAVAILABLE',
-          'CHECKPOINT_WORKSPACE_MANIFEST_INVALID',
-          'CHECKPOINT_BACKGROUND_JOB_UNRESOLVED',
           'CHECKPOINT_MODEL_ROUTE_INVALID',
           'STATE_CONFLICT',
           'NOT_FOUND',
@@ -166,18 +163,6 @@ export class CheckpointService {
       throw new Error('CHECKPOINT_MODEL_ROUTE_INVALID');
     }
 
-    // Workspace execution is retired. Never silently checkpoint a legacy Run whose
-    // prior Workspace state or Runner jobs cannot be captured/restored.
-    if (run.definition.environment) throw new Error('CHECKPOINT_WORKSPACE_MANIFEST_INVALID');
-    if (
-      latestRecovery &&
-      (latestRecovery.snapshot.workspaceArtifactManifestRefs.length > 0 ||
-        latestRecovery.snapshot.workspaceArtifactRefs.length > 0)
-    )
-      throw new Error('CHECKPOINT_WORKSPACE_MANIFEST_INVALID');
-    if ((await this.checkpoints.runBackgroundJobs(scope, run.id)).length > 0)
-      throw new Error('CHECKPOINT_BACKGROUND_JOB_UNRESOLVED');
-
     return this.checkpoints.save({
       scope,
       checkpointId: randomUUID(),
@@ -186,7 +171,6 @@ export class CheckpointService {
       expectedRunVersion: run.version,
       definitionVersion: definition.version,
       activeModel,
-      backgroundJobs: [],
       now,
     });
   }
@@ -290,18 +274,6 @@ export class CheckpointService {
     ]);
     if (missingArtifactRefs.length) reasons.push('CHECKPOINT_ARTIFACT_UNAVAILABLE');
     if (
-      run.definition.environment ||
-      checkpoint.snapshot.workspaceArtifactManifestRefs.length > 0 ||
-      checkpoint.snapshot.workspaceArtifactRefs.length > 0
-    )
-      reasons.push('CHECKPOINT_WORKSPACE_MANIFEST_INVALID');
-    // Old Runner Workspace jobs cannot be observed without the retired transport.
-    if (
-      checkpoint.snapshot.recoveryManifest.backgroundJobs.length > 0 ||
-      (await this.checkpoints.runBackgroundJobs(scope, runId)).length > 0
-    )
-      reasons.push('CHECKPOINT_BACKGROUND_JOB_UNRESOLVED');
-    if (
       recoveryHazards.postCheckpointMutationToolCallIds.length > 0 ||
       recoveryHazards.quarantinedResourceKeys.length > 0
     ) {
@@ -330,10 +302,7 @@ export class CheckpointService {
           continue;
         }
         if (hazards.postCheckpointMutationToolCallIds.length > 0) {
-          const jobs = await this.checkpoints.runBackgroundJobs(scope, interrupted.id);
-          await this.auditRecoveryFailure(interrupted, checkpoint.id, [
-            jobs.length ? 'CHECKPOINT_BACKGROUND_JOB_UNRESOLVED' : 'CHECKPOINT_SIDE_EFFECT_DIVERGED',
-          ]);
+          await this.auditRecoveryFailure(interrupted, checkpoint.id, ['CHECKPOINT_SIDE_EFFECT_DIVERGED']);
           continue;
         }
 
@@ -444,7 +413,6 @@ export class CheckpointService {
     const budget = { ...clampBudget(source.budget, settings), progressSequence: 0 };
     const definition: RunDefinitionSnapshot = {
       ...source.definition,
-      environment: null,
       requiredModelCapabilities: [...requirements],
       ...(sameModelRef(activeModel, source.definition.model) ? { modelCapabilities: capabilities } : {}),
       policyRevision: app.policyRevision,
@@ -485,7 +453,6 @@ export class CheckpointService {
           ledgerThrough: validation.checkpoint.ledgerThrough,
           eventThrough: validation.checkpoint.eventThrough,
           activeModel: { ...activeModel },
-          backgroundJobs: (recoveryManifest.backgroundJobs ?? []).map((job) => ({ ...job })),
           contextBoundary: {
             baseThrough: recoveryManifest.contextBoundary.baseThrough,
             runThrough: { ...recoveryManifest.contextBoundary.runThrough },

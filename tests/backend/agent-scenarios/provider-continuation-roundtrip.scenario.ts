@@ -185,7 +185,6 @@ export const providerContinuationRoundTripScenario = async () => {
       approvalMode: 'full_access',
       executionMode: 'execute',
       connectionIds: [],
-      environment: null,
       policyRevision: 1,
       settingsRevision: 1,
     };

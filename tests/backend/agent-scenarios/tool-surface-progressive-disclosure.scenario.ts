@@ -158,7 +158,6 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
     runId: 'tool-surface-run',
     agentRuntimeId: 'tool-surface-runtime',
     connectionIds: [],
-    environment: null,
     stepId: 'tool-surface-step',
     signal: new AbortController().signal,
     deadlineAt: 1_800_500_000,
@@ -168,7 +167,7 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
 
   const fullSchemas = catalog.schemas(scope);
   const fullTokens = estimateTokens(JSON.stringify(fullSchemas));
-  const projected = runner.schemas(scope, { environment: null }, 'execute');
+  const projected = runner.schemas(scope, {}, 'execute');
   const projectedTokens = estimateTokens(JSON.stringify(projected));
   const projectedNames = new Set(projected.map((tool) => tool.name));
 
@@ -311,7 +310,7 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
     id: 'scenario.mcp.surface',
     tools: mcpTools(121),
   });
-  const refreshedProjection = runner.schemas(scope, { environment: null }, 'execute');
+  const refreshedProjection = runner.schemas(scope, {}, 'execute');
   assert.equal(
     JSON.stringify(refreshedProjection),
     stableProjection,
@@ -363,7 +362,7 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
     'version-bound deferred handles must fail closed after MCP schema refresh',
   );
 
-  const planProjection = runner.schemas(scope, { environment: null }, 'plan');
+  const planProjection = runner.schemas(scope, {}, 'plan');
   assert.ok(
     planProjection.some((tool) => tool.name === deferredNative.descriptor.name),
     'Root Plan mode must keep deferred native read/control Tools directly available for non-mutating investigation',
@@ -521,7 +520,7 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
         maxToolOutputBytes: 16 * 1024,
         contextPolicy: freezeRunContextPolicy('normal'),
       },
-      definition: { environment: null },
+      definition: {},
     } as unknown as RunView,
   );
   assert.equal(childPrepared.kind, 'ready');
@@ -593,7 +592,7 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
         maxToolOutputBytes: 16384,
         contextPolicy: freezeRunContextPolicy('normal'),
       },
-      definition: { environment: null, executionMode: 'execute' },
+      definition: { executionMode: 'execute' },
     } as unknown as RunView,
   );
   assert.equal(routedChild.kind, 'ready');

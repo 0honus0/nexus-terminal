@@ -232,7 +232,6 @@ export const scriptedAgentBenchmarkScenario = async () => {
       runId: snapshot.id,
       agentRuntimeId: `${benchmark.id}-runtime`,
       connectionIds: [],
-      environment: null,
       stepId: `${benchmark.id}-step-1`,
       signal,
       deadlineAt: snapshot.createdAt + 60,

@@ -182,7 +182,6 @@ export const unifiedShellCapabilityScenario = async () => {
     runId: 'shell-run',
     agentRuntimeId: 'shell-runtime',
     connectionIds: [1, 2],
-    environment: null,
     stepId: 'shell-step',
     toolCallId: 'shell-call',
     signal: new AbortController().signal,

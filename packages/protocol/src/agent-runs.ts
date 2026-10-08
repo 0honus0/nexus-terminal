@@ -34,55 +34,6 @@ export interface AgentDefinitionViewDto {
   modelCompatibility: AgentDefinitionModelCompatibilityDto[];
 }
 
-export interface AgentRunEnvironmentSelectionDto {
-  recipeId: string;
-  versions?: Record<string, string>;
-  runnerPluginIds?: string[];
-  browserTargetId?: string;
-  catalogRevision?: string;
-}
-
-export interface AgentRunEnvironmentToolchainPackDto {
-  familyId: string;
-  versionId: string;
-}
-
-export interface AgentRunEnvironmentRunnerPluginDto {
-  pluginId: string;
-  version: string;
-  sdkVersion: string;
-  protocolVersion: 3;
-  packageHash: string;
-  entry: string;
-}
-
-export interface AgentRunEnvironmentBrowserEndpointDto {
-  scope: 'docker-network' | 'external-network';
-  via: 'backend' | 'runner';
-  url: string;
-  priority: number;
-  allowPlaintext: boolean;
-  verifyTls: boolean;
-}
-
-export interface AgentRunEnvironmentBrowserTargetDto {
-  id: string;
-  profileRevision: number;
-  endpoints: AgentRunEnvironmentBrowserEndpointDto[];
-  allowedUrlPatterns: string[];
-}
-
-export interface AgentRunEnvironmentSnapshotDto {
-  kind: 'shell' | 'code' | 'data' | 'browser';
-  recipeId: string;
-  recipeRevision: string;
-  runtimeDigest: string;
-  catalogRevision: string;
-  toolchain: AgentRunEnvironmentToolchainPackDto[];
-  runnerPlugins: AgentRunEnvironmentRunnerPluginDto[];
-  browserTarget: AgentRunEnvironmentBrowserTargetDto | null;
-}
-
 export type AgentRunStatusDto =
   | 'created'
   | 'running'
@@ -222,7 +173,6 @@ export interface AgentRunDefinitionSnapshotDto {
   approvalMode: AgentApprovalModeDto;
   executionMode: AgentExecutionModeDto;
   connectionIds: number[];
-  environment: AgentRunEnvironmentSnapshotDto | null;
   policyRevision: number;
   settingsRevision: number;
   contextBoundary?: AgentRunContextBoundaryDto;
@@ -357,7 +307,6 @@ export interface AgentCreateRunFieldsDto {
   executionMode: AgentExecutionModeDto;
   plannedFromRunId?: string;
   connectionIds: number[];
-  environment?: AgentRunEnvironmentSelectionDto | null;
   initialGoal?: string;
 }
 
@@ -454,20 +403,12 @@ export interface AgentCheckpointDelegationRecoveryEntryDto {
   status: 'queued' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled';
 }
 
-export interface AgentCheckpointBackgroundJobEntryDto {
-  jobId: string;
-  workspaceId: string;
-  generation: number;
-  status: 'pending' | 'running' | 'succeeded' | 'failed' | 'unknown' | 'cancelled';
-}
-
 export interface AgentCheckpointRecoveryManifestDto {
   schemaVersion: 1;
   eventThrough: number;
   contextBoundary: AgentRunContextBoundaryDto;
   tools: AgentCheckpointToolRecoveryEntryDto[];
   delegations: AgentCheckpointDelegationRecoveryEntryDto[];
-  backgroundJobs: AgentCheckpointBackgroundJobEntryDto[];
   quarantinedResourceKeys: string[];
 }
 
@@ -487,8 +428,6 @@ export interface AgentCheckpointSnapshotDto {
   activeModel: AgentModelRefDto;
   definitionVersion: string;
   policyRevision: number;
-  workspaceArtifactManifestRefs: string[];
-  workspaceArtifactRefs: string[];
   recoveryManifest: AgentCheckpointRecoveryManifestDto;
 }
 

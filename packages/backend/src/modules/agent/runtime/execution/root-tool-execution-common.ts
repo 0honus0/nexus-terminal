@@ -37,7 +37,6 @@ export const rootToolContext = (
   agentRuntimeId: runtimeId,
   ...(toolCallId === undefined ? {} : { toolCallId }),
   connectionIds: [...run.definition.connectionIds],
-  environment: run.definition.environment ?? null,
   stepId,
   signal,
   deadlineAt: nowUnixSeconds + Math.min(run.budget.toolTimeoutSeconds, remainingExecutionSeconds(run, nowUnixSeconds)),

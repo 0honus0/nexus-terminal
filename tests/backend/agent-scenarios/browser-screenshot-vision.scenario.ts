@@ -164,7 +164,6 @@ export const browserScreenshotVisionScenario = async () => {
     approvalMode: 'ask',
     executionMode: 'execute',
     connectionIds: [],
-    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   });
@@ -287,7 +286,6 @@ export const browserScreenshotVisionScenario = async () => {
       runId,
       agentRuntimeId: runtimeId,
       connectionIds: [],
-      environment: null,
       stepId: 'browser-screenshot-tool-step',
       signal: new AbortController().signal,
       deadlineAt: now + 120,

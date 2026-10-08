@@ -103,7 +103,6 @@ export const planExecutionModeScenario = async () => {
     runId: 'plan-run',
     agentRuntimeId: 'plan-runtime',
     connectionIds: [],
-    environment: null,
     stepId: 'plan-step',
     signal: new AbortController().signal,
     deadlineAt: 1_800_900_000,
@@ -325,9 +324,6 @@ export const planExecutionModeScenario = async () => {
       }),
     } as never,
     { require: () => ({ id: 'scenario-agent', version: '1.0.0', requiredModelCapabilities: [] }) } as never,
-    async () => {
-      throw new Error('SCENARIO_UNEXPECTED_ENVIRONMENT');
-    },
     {
       createRun: async (record: AtomicCreateRun) => {
         createRecord = record;

@@ -381,17 +381,15 @@ export const decodeToolInspection = (value: string): RuntimeToolWorkView['inspec
     'loginUser',
     'configurationHash',
     'connectionId',
-    'workspaceId',
     'integrationId',
     'schemaHash',
     'browserSessionId',
     'snapshotId',
-    'generation',
     'hostKeyTrust',
   ]);
   const targetKind = String(target.kind);
-  if (!['ssh', 'workspace', 'integration', 'browser', 'run'].includes(targetKind)) return invalidDurableState();
-  const canonicalTarget = targetKind === 'ssh' || targetKind === 'workspace';
+  if (!['ssh', 'integration', 'browser', 'run'].includes(targetKind)) return invalidDurableState();
+  const canonicalTarget = targetKind === 'ssh';
   if (canonicalTarget) {
     if (target.target !== targetKind || typeof target.id !== 'string' || target.id.length < 1)
       return invalidDurableState();
@@ -405,18 +403,16 @@ export const decodeToolInspection = (value: string): RuntimeToolWorkView['inspec
     normalizedArguments: decodeJsonValue(record.normalizedArguments),
     target: {
       kind: targetKind as RuntimeToolWorkView['inspection']['target']['kind'],
-      ...(canonicalTarget ? { target: targetKind as 'ssh' | 'workspace', id: stringValue(target.id) } : {}),
+      ...(canonicalTarget ? { target: targetKind as 'ssh', id: stringValue(target.id) } : {}),
       targetIdentity: stringValue(target.targetIdentity),
       endpoint: stringValue(target.endpoint),
       loginUser: stringValue(target.loginUser),
       configurationHash: stringValue(target.configurationHash),
       ...(target.connectionId === undefined ? {} : { connectionId: integerValue(target.connectionId, 1) }),
-      ...(target.workspaceId === undefined ? {} : { workspaceId: stringValue(target.workspaceId) }),
       ...(target.integrationId === undefined ? {} : { integrationId: stringValue(target.integrationId) }),
       ...(target.schemaHash === undefined ? {} : { schemaHash: stringValue(target.schemaHash) }),
       ...(target.browserSessionId === undefined ? {} : { browserSessionId: stringValue(target.browserSessionId) }),
       ...(target.snapshotId === undefined ? {} : { snapshotId: stringValue(target.snapshotId) }),
-      ...(target.generation === undefined ? {} : { generation: integerValue(target.generation, 1) }),
       ...(target.hostKeyTrust === undefined
         ? {}
         : target.hostKeyTrust === 'unavailable'
@@ -432,8 +428,7 @@ export const decodeToolInspection = (value: string): RuntimeToolWorkView['inspec
     preconditions: record.preconditions.map((item) => {
       const precondition = recordValue(item);
       assertRecordKeys(precondition, ['kind', 'key', 'observedValue']);
-      if (!['fileHash', 'metadata', 'serviceState', 'workspaceGeneration'].includes(String(precondition.kind)))
-        return invalidDurableState();
+      if (!['fileHash', 'metadata', 'serviceState'].includes(String(precondition.kind))) return invalidDurableState();
       return {
         kind: precondition.kind as RuntimeToolWorkView['inspection']['preconditions'][number]['kind'],
         key: stringValue(precondition.key),

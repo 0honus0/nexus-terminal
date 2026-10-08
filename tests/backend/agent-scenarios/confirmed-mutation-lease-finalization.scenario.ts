@@ -67,7 +67,6 @@ export const confirmedMutationLeaseFinalizationScenario = async () => {
       approvalMode: 'ask',
       executionMode: 'execute',
       connectionIds: [42],
-      environment: null,
       policyRevision: 1,
       settingsRevision: 1,
     };

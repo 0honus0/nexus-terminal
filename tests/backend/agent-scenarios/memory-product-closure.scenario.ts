@@ -105,7 +105,6 @@ export const memoryProductClosureScenario = async () => {
       runId: 'memory-run',
       agentRuntimeId: 'memory-runtime',
       connectionIds: [],
-      environment: null,
       stepId: 'memory-step',
       signal: new AbortController().signal,
       deadlineAt: memoryNow + 60,

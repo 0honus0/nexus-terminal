@@ -85,7 +85,6 @@ export class RootReadToolExecutor {
     const limit = Math.min(MAX_PARALLEL_READ_TOOLS, remainingToolSteps);
     if (limit <= 1 || first.inspection.risk !== 'read') return [first];
     const availability = {
-      environment: snapshot.definition.environment ?? null,
       connectionIds: snapshot.definition.connectionIds,
     };
     if (
@@ -170,7 +169,6 @@ export class RootReadToolExecutor {
     if (wave.length === 0) return;
     const scope = { userId: snapshot.userId, appId: snapshot.appId };
     const availability = {
-      environment: snapshot.definition.environment ?? null,
       connectionIds: snapshot.definition.connectionIds,
     };
     let currentRun: RunView = snapshot;
