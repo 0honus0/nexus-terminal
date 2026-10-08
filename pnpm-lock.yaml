@@ -407,6 +407,9 @@ importers:
       sql.js:
         specifier: ^1.14.2
         version: 1.14.2
+      tailwindcss:
+        specifier: ^4.3.3
+        version: 4.3.3
       vue:
         specifier: ^3.5.43
         version: 3.5.43(@typescript/typescript6@6.0.2)
