@@ -5,7 +5,6 @@ import { AppIntentArtifactAdapter } from '../../infrastructure/agent/artifacts/a
 import { MachineCapabilityAdapter } from '../../infrastructure/agent/capabilities/machine-capability.adapter';
 import { FileCapabilityService } from '../../modules/agent/capabilities/file-capability.service';
 import { ShellCapabilityService } from '../../modules/agent/capabilities/shell-capability.service';
-import { AgentTargetResolver } from '../../modules/agent/capabilities/target-resolver';
 import { AgentMutationLeaseGuardAdapter } from '../../infrastructure/agent/capabilities/agent-mutation-lease-guard.adapter';
 import { NodeCryptoHashAdapter } from '../../infrastructure/agent/capabilities/node-crypto-hash.adapter';
 import { SqliteAgentSettingsRepository } from '../../infrastructure/agent/repositories/sqlite-agent-settings.repository';
@@ -375,10 +374,9 @@ export const composeAgent = ({
     now: () => systemClock.nowUnixSeconds(),
   });
   const workspaceRepository = composedWorkspaceRuntime.repository;
-  const targets = new AgentTargetResolver(sshTargets);
   const workspaceRuntime = composedWorkspaceRuntime.service;
-  const files = new FileCapabilityService(targets, sshFiles);
-  const shell = new ShellCapabilityService(targets, sshShell, sshSessions);
+  const files = new FileCapabilityService(sshTargets, sshFiles);
+  const shell = new ShellCapabilityService(sshTargets, sshShell, sshSessions);
   const workspaceRuntimeFacade = composedWorkspaceRuntime.facade;
   const acpRuntime = new AcpAdapter();
   const toolCatalog = new ToolCatalog();
@@ -402,7 +400,7 @@ export const composeAgent = ({
     cryptoHash,
     permissionRequests: acpPermissions,
     ssh: {
-      targets,
+      targets: sshTargets,
       open: (context, connectionId, hash, argv, cwd) =>
         new SshAcpTransport(connectionResolver, executionSessions).open(context, connectionId, hash, argv, cwd),
     },

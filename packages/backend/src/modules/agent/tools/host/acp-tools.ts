@@ -6,7 +6,8 @@ import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';
 import type { AcpPermissionRequestPort } from '../../runtime/approvals/acp-permission-broker';
 import { isAgentUuid } from '../../uuid';
-import type { AgentTargetResolver } from '../../capabilities/target-resolver';
+import { resolveSshTarget } from '../../capabilities/ssh-target-binding';
+import type { SshTargetResolverPort } from '../../capabilities/ssh-target-resolver.port';
 import type { AcpByteTransport } from '../../ai/integrations.types';
 
 const MAX_PROMPT_BYTES = 32 * 1024;
@@ -48,7 +49,7 @@ export const createAcpExecuteTool = (
   cryptoHash: CryptoHashPort,
   permissionRequests: AcpPermissionRequestPort,
   ssh: {
-    targets: AgentTargetResolver;
+    targets: SshTargetResolverPort;
     open(
       context: ToolContext,
       connectionId: number,
@@ -91,7 +92,7 @@ export const createAcpExecuteTool = (
     const id = string(args.id, 128);
     const integrationId = string(args.integrationId, 64);
     const configured = await currentIntegration(integrations, context, integrationId);
-    const binding = await ssh.targets.resolve(context, { target: 'ssh', id });
+    const binding = await resolveSshTarget(ssh.targets, context, { target: 'ssh', id });
     const cwd = args.cwd === undefined ? configured.configuration.cwd! : string(args.cwd, MAX_CWD_BYTES);
     if (!cwd.startsWith('/')) throw new Error('ACP_SSH_CWD_INVALID');
     const normalizedArguments: JsonValue = {
@@ -145,7 +146,7 @@ export const createAcpExecuteTool = (
     if (args.target !== 'ssh') throw new Error('ACP_TARGET_REQUIRED');
     const integration = await currentIntegration(integrations, context, integrationId);
     if (integration.version !== Number(args.integrationVersion)) throw new Error('RESOURCE_CHANGED');
-    const binding = await ssh.targets.resolve(context, { target: 'ssh', id: string(args.id, 128) });
+    const binding = await resolveSshTarget(ssh.targets, context, { target: 'ssh', id: string(args.id, 128) });
     if (
       binding.fingerprint.configurationHash !== inspection.target.configurationHash ||
       binding.fingerprint.targetIdentity !== inspection.target.targetIdentity

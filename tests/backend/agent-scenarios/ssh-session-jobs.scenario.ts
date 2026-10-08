@@ -228,15 +228,7 @@ export const sshSessionJobsScenario = async () => {
       configurationHash: fingerprint.configurationHash,
     };
     const shell = new ShellCapabilityService(
-      {
-        resolve: async () => ({
-          selector: { target: 'ssh', id: '1' },
-          fingerprint: target,
-          connectionId: 1,
-          resourceKeys: ['connection:1'],
-          preconditions: [],
-        }),
-      } as unknown as ConstructorParameters<typeof ShellCapabilityService>[0],
+      { target: async () => ({ ...target, hostKeyTrust: 'unavailable' }) },
       null!,
       sessions,
     );

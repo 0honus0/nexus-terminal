@@ -121,22 +121,24 @@ node --version && pnpm --version
 # 从下方「当前工作指针」继续一项，改完先更新本文件再检查与本地提交
 ```
 
-**当前工作指针（2026-10-08）**：以第 10–13 条最新破坏式移除要求为准；Plugin/AgentDefinition 版本固定 `1.0.0`，外仓远程 `main`/`v1.0.0` 指向 `ac096df` 且无需再发布。主仓 Host ACP SSH-only 提交 `536cb33b`、SSH 目标解析器独立提交 `5b58edaa`；本轮 Runner ACP 全链已正式本地提交 **`902668ef`**，**生产 Runner ACP 全链（P4/P5/P6 的 ACP 专属子项）**进一步删除 Runner ProcessRuntime/stream、Workspace/Run/Runner Profile 以及前端 CRUD，更新 Backend sqlite schema 与迁移 #56，提升内部 Runner wire protocol 至 `2026-10-08`；不是只禁用入口。已覆盖真实 Runner ACP 404、原 SSH ACP/内层审批和 Workspace Job 的 E2E 反例。**下一项**：优先完成 Browser 对 Workspace generation/Runner tunnel 的解绑并维持独立 CDP gateway/session 安全边界，然后清理其余用户 Agent Workspace REST、Run environment/admission/目标解析器及最终生产 Agent Runner/部署配置；完成后 P7 重跑全产品/CI E2E。**P3/P4/P5/P6 尚未整体完成，主仓只本地提交、不推送**。保持普通终端 Workspace、SSH 会话/Job/项目目录、Artifact/Memory、测试专用 Runner、未跟踪原计划和用户备份；新会话先确认 git HEAD/status 与本文件最新测试终态。
+**当前工作指针（2026-10-08）**：以第 10–13 条最新破坏式移除要求为准；Plugin/AgentDefinition 版本固定 `1.0.0`，外仓远程 `main`/`v1.0.0` 指向 `ac096df` 且无需再发布。主仓 Host ACP SSH-only 提交 `536cb33b`、SSH 目标解析器独立提交 `5b58edaa`；本轮 Runner ACP 全链已正式本地提交 **`902668ef`**，**生产 Runner ACP 全链（P4/P5/P6 的 ACP 专属子项）**进一步删除 Runner ProcessRuntime/stream、Workspace/Run/Runner Profile 以及前端 CRUD，更新 Backend sqlite schema 与迁移 #56，提升内部 Runner wire protocol 至 `2026-10-08`；不是只禁用入口。已覆盖真实 Runner ACP 404、原 SSH ACP/内层审批和 Workspace Job 的 E2E 反例。**本轮架构收敛**：移除不再承担任何独立策略的 `AgentTargetResolver` facade，File/Shell/ACP 直接注入 SSH Port，并复用两个小型 SSH 目标绑定函数，见下方 P3 架构切口。**本轮架构收敛已完成真实 SSH E2E 验证**：删除 `AgentTargetResolver` 类和文件，File/Shell/ACP 直接依赖 SSH Port，统一目标绑定纯函数，详见 P3 架构收敛切口。**下一项**：优先完成 Browser 对 Workspace generation/Runner tunnel 的解绑并维持独立 CDP gateway/session 安全边界，然后清理其余用户 Agent Workspace REST、Run environment/admission/目标解析器及最终生产 Agent Runner/部署配置；完成后 P7 重跑全产品/CI E2E。**P3/P4/P5/P6 尚未整体完成，主仓只本地提交、不推送**。保持普通终端 Workspace、SSH 会话/Job/项目目录、Artifact/Memory、测试专用 Runner、未跟踪原计划和用户备份；新会话先确认 git HEAD/status 与本文件最新测试终态。
 
 **P3 独立 SSH 目标解析器切口（2026-10-08）**：经实际消费者审计，`AgentTargetResolver` 只被 Agent File/Shell/ACP 使用，其三个模型执行入口已全部 SSH-only；Browser Session 的 Workspace/standalone binding 有独立 `BrowserSessionBindingAuthority`，不调用此 resolver。本切口删除 `target-resolver.ts` 的 Workspace Repository、profile hash、generation、Workspace preconditions 和 `requireRunningWorkspace` 分支，`compose-agent.ts` 只注入 `SshTargetResolverPort`。旧 `target:'workspace'`、0、前导零、科学记数法、超出 JavaScript 安全整数范围的 connection ID 在查询 SSH resolver 前 fail closed；合法正整数 ID 仍使用 SSH target adapter 的配置哈希、资源键和原有 scope 授权。保留 `tool-target.types.ts` 的其余通用持久 target 形状，等待 Browser/Workspace 相关消费者独立删除；此切口**不改 Browser owner，也不允许无授权的 SSH fallback**。已有 `unified-file-capability.scenario.ts` 新增真实 resolver 的五种失败/正例并继续跑完整 File 能力链；本切口已本地提交 `5b58edaa`；独立 `unifiedFileCapabilityScenario()`（含五个无副作用拒绝反例）**exit 0**，Backend `tsc --noEmit`、相关 ESLint、定向 Prettier 和 `git diff --check` **PASS**；在当前 ACP 迁移工作树上再运行完整 `pnpm --filter @nexus-terminal/backend run test:agent-scenarios` **exit 0**。旧的共享 `AgentTargetKind`/Workspace semantic 和 Browser binding 不在本切口改变，分别留后续 owner 消费者处理。
 
+**P3 架构收敛：删除多余的 AgentTargetResolver facade（2026-10-08）**：用户明确要求破坏式删除 Workspace 后连同不再有独立职责的中间架构一起收敛，不能只把旧 Resolver 改名为 SSH Resolver。再次审计真实调用方确认 File/Shell/ACP 均只依赖已授权 SSH target snapshot；`AgentTargetResolver` 现**删除文件和类**。File/Shell 服务与 ACP Host 直接注入已有 `SshTargetResolverPort`；原 Port 文件只保留契约，`ssh-target-binding.ts` 使用两个纯函数 `resolveSshTarget` / `bindSshInspectionTarget` 分别做规范 SSH selector 解析与 inspection target 恢复，且统一 connection resource key，消除 File/Shell 原先两份重复 binding 逻辑和 compose 层的无价值实例。五个旧 Workspace/非法连接 ID 反例在调用 SSH port **之前**拒绝；新增四个伪造/不一致 kind、id、connectionId inspection 的拒绝测试。真实 SSH port 仍唯一承担 Run 显式连接选择、denylist、配置 fingerprint，并保持执行前二次检验、capability grant/approval/lease，不容许 Backend local/workspace fallback。Browser 的独立 `BrowserSessionBindingAuthority` 及其他残存 Workspace REST/semantic 不借此次重构迁入 SSH，不提前改成虚假的 SSH 语义。相关文件 `doc/AGENTS.md`、`doc/architecture/BACKEND.md` 同步为当前代码事实；后续清理 Browser/Workspace 时还要处理仍保存旧 `AgentTargetKind='workspace'|'ssh'` 的共享 DTO，不应出现第二通用解析抽象。**验证终态**：File/Shell/ACP 三个独立场景 **exit 0**；完整 `pnpm --filter @nexus-terminal/backend run test:agent-scenarios` **exit 0**；`pnpm run check`（Frontend/Backend/Runner ESLint 与类型检查）**PASS**；`pnpm run format:all:check` **PASS**，`pnpm run build`（三包）**PASS**，`git diff --check` **PASS**。官方隔离 Playwright Docker 真实运行 `functional-regressions.spec.ts` A04 SSH Background Job、File SSH 写/严格 Patch/Move/Delete 两个用例，及 `ssh-acp-settings.spec.ts` 的 inner permission Denied/Cancelled 两个用例：合计 **4 passed (1.1m)，exit 0**。取消过程中有已知异步审批 `STATE_CONFLICT` 诊断日志，但 E2E 预期断言和最终退出码均通过，不宣称无日志。主仓仅本地 commit、不 push，不触碰用户未跟踪原计划或插件远程 v1.0.0。
+
 ## 阶段状态（2026-10-08）
 
-| 阶段                         | 状态   | 说明                                                                                         |
-| ---------------------------- | ------ | -------------------------------------------------------------------------------------------- |
-| P0 清单与升级边界            | 进行中 | P0-2/3/4 完成，旧版 Agent E2E 69/69；P0-1/5 的历史事项由最新破坏式规则覆盖                   |
-| P1 最终 contract 与迁移方案  | 进行中 | Plugin manifest/decoder 与 Plugin Runner DTO 已退出；Workspace/SSH DTO 仍待收敛              |
-| P2 存量数据、升级与备份      | 进行中 | 迁移 #55 删除 Plugin runner_entry，#56 删除 ACP column/旧设置属性；未操作用户生产实例        |
-| P3 Backend SSH 收敛          | 进行中 | File/Shell/Job 模型工具与 Capability grants 已 SSH-only；旧 ACP/Browser/REST/Resolver 待清理 |
-| P4 Browser、ACP、Plugin 解耦 | 进行中 | ACP 的 Host/Runner/Settings/DTO 全链退出；尚余 Browser Workspace 依赖与剩余 Plugin Runtime   |
-| P5 Frontend 移除             | 进行中 | 已删除 ACP Workspace Profile 编辑/选择入口；其他 Workspace 页面待迁移                        |
-| P6 生产 Runner 退出          | 进行中 | 已删 Runner ACP 进程/WebSocket 与配置字段；Job/Terminal/Browser/其余 Runner 待拆             |
-| P7 文档与验收                | 未开始 |                                                                                              |
+| 阶段                         | 状态   | 说明                                                                                       |
+| ---------------------------- | ------ | ------------------------------------------------------------------------------------------ |
+| P0 清单与升级边界            | 进行中 | P0-2/3/4 完成，旧版 Agent E2E 69/69；P0-1/5 的历史事项由最新破坏式规则覆盖                 |
+| P1 最终 contract 与迁移方案  | 进行中 | Plugin manifest/decoder 与 Plugin Runner DTO 已退出；Workspace/SSH DTO 仍待收敛            |
+| P2 存量数据、升级与备份      | 进行中 | 迁移 #55 删除 Plugin runner_entry，#56 删除 ACP column/旧设置属性；未操作用户生产实例      |
+| P3 Backend SSH 收敛          | 进行中 | File/Shell/Job/ACP 和 SSH 目标解析已收敛；Browser 与用户 Workspace REST 尚待退出           |
+| P4 Browser、ACP、Plugin 解耦 | 进行中 | ACP 的 Host/Runner/Settings/DTO 全链退出；尚余 Browser Workspace 依赖与剩余 Plugin Runtime |
+| P5 Frontend 移除             | 进行中 | 已删除 ACP Workspace Profile 编辑/选择入口；其他 Workspace 页面待迁移                      |
+| P6 生产 Runner 退出          | 进行中 | 已删 Runner ACP 进程/WebSocket 与配置字段；Job/Terminal/Browser/其余 Runner 待拆           |
+| P7 文档与验收                | 未开始 |                                                                                            |
 
 ## P1 边界准备：基于当前代码的迁移决策（仅设计，尚未改生产 contract）
 

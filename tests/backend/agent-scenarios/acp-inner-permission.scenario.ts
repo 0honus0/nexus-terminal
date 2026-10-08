@@ -8,7 +8,7 @@ import type {
   IntegrationView,
 } from '../../../packages/backend/src/modules/agent/ai/integrations.types';
 import { createAcpExecuteTool } from '../../../packages/backend/src/modules/agent/tools/host/acp-tools';
-import type { AgentTargetResolver } from '../../../packages/backend/src/modules/agent/capabilities/target-resolver';
+import type { SshTargetResolverPort } from '../../../packages/backend/src/modules/agent/capabilities/ssh-target-resolver.port';
 import { SshAcpTransport } from '../../../packages/backend/src/infrastructure/agent/integrations/ssh-acp-transport';
 import { AcpAdapter } from '../../../packages/backend/src/infrastructure/agent/integrations/acp.adapter';
 import type { ExecutionSessionManager } from '../../../packages/backend/src/platform/execution/execution-session-manager';
@@ -58,28 +58,22 @@ export const acpInnerPermissionScenario = async () => {
       return { text: 'permission scenario complete', stopReason: 'end_turn' };
     },
   };
-  const targetResolver = {
-    resolve: async (_context: ToolContext, selector: { target: string; id: string }) => {
-      assert.equal(selector.target, 'ssh');
-      assert.equal(selector.id, '1');
+  const targetResolver: SshTargetResolverPort = {
+    target: async (_context, connectionId) => {
+      assert.equal(connectionId, 1);
       return {
-        selector: { target: 'ssh', id: '1' },
+        kind: 'ssh',
+        target: 'ssh',
+        id: '1',
         connectionId: 1,
-        resourceKeys: ['connection:1'],
-        preconditions: [],
-        fingerprint: {
-          kind: 'ssh',
-          target: 'ssh',
-          id: '1',
-          connectionId: 1,
-          targetIdentity: 'ssh:1',
-          endpoint: 'fixture',
-          loginUser: 'fixture',
-          configurationHash: 'ssh-config',
-        },
+        targetIdentity: 'ssh:1',
+        endpoint: 'fixture',
+        loginUser: 'fixture',
+        configurationHash: 'ssh-config',
+        hostKeyTrust: 'unavailable',
       };
     },
-  } as unknown as AgentTargetResolver;
+  };
   const sshTransport = {
     targets: targetResolver,
     open: async () => {
@@ -353,26 +347,21 @@ export const acpInnerPermissionScenario = async () => {
     },
     {
       targets: {
-        resolve: async (_context: ToolContext, selector: { id: string }) => {
-          assert.equal(selector.id, '1');
+        target: async (_context: ToolContext, connectionId: number) => {
+          assert.equal(connectionId, 1);
           return {
-            selector: { target: 'ssh', id: '1' },
+            kind: 'ssh' as const,
+            target: 'ssh' as const,
+            id: '1',
             connectionId: 1,
-            resourceKeys: ['connection:1'],
-            preconditions: [],
-            fingerprint: {
-              kind: 'ssh',
-              target: 'ssh',
-              id: '1',
-              connectionId: 1,
-              targetIdentity: 'ssh:1',
-              endpoint: 'fixture',
-              loginUser: 'fixture',
-              configurationHash: 'ssh-config',
-            },
+            targetIdentity: 'ssh:1',
+            endpoint: 'fixture',
+            loginUser: 'fixture',
+            configurationHash: 'ssh-config',
+            hostKeyTrust: 'unavailable' as const,
           };
         },
-      } as unknown as AgentTargetResolver,
+      } satisfies SshTargetResolverPort,
       open: async () => {
         throw new Error('Transport fixture not invoked by mocked runtime');
       },

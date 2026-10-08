@@ -12,7 +12,7 @@ import type {
 import { CommandExecutionError } from '../../../packages/backend/src/platform/execution/remote-execution.port';
 import type { ExecutionSession } from '../../../packages/backend/src/platform/execution/execution-session';
 import { ShellCapabilityService } from '../../../packages/backend/src/modules/agent/capabilities/shell-capability.service';
-import { AgentTargetResolver } from '../../../packages/backend/src/modules/agent/capabilities/target-resolver';
+import type { SshTargetResolverPort } from '../../../packages/backend/src/modules/agent/capabilities/ssh-target-resolver.port';
 import { ToolCatalog } from '../../../packages/backend/src/modules/agent/capabilities/tool-catalog';
 import { ToolExecutor } from '../../../packages/backend/src/modules/agent/capabilities/tool-executor';
 import type { ToolContext } from '../../../packages/backend/src/modules/agent/capabilities/tool.types';
@@ -29,33 +29,24 @@ export const unifiedShellCapabilityScenario = async () => {
   let sshExitCode = 0;
   let sshSignal: string | undefined;
   const cryptoHash = { sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex') };
-  const targets = {
-    resolve: async (context: ToolContext, selector: { target: 'ssh' | 'workspace'; id: string }) => {
-      if (selector.target !== 'ssh') throw new Error('SHELL_TARGET_INVALID');
-      const connectionId = Number(selector.id);
-      if (!Number.isSafeInteger(connectionId) || !context.connectionIds?.includes(connectionId))
-        throw new Error('TARGET_NOT_SELECTED');
+  const targets: SshTargetResolverPort = {
+    target: async (context, connectionId) => {
+      if (!context.connectionIds.includes(connectionId)) throw new Error('TARGET_NOT_SELECTED');
       const configurationHash = sshHashes.get(connectionId);
       if (!configurationHash) throw new Error('NOT_FOUND');
       return {
-        selector,
-        fingerprint: {
-          kind: 'ssh' as const,
-          target: 'ssh' as const,
-          id: selector.id,
-          connectionId,
-          targetIdentity: `ssh:${connectionId}`,
-          endpoint: `ssh-${connectionId}.example:22`,
-          loginUser: `user-${connectionId}`,
-          configurationHash,
-          hostKeyTrust: 'unavailable' as const,
-        },
-        resourceKeys: [`connection:${connectionId}`],
-        preconditions: [],
+        kind: 'ssh',
+        target: 'ssh',
+        id: String(connectionId),
         connectionId,
+        targetIdentity: `ssh:${connectionId}`,
+        endpoint: `ssh-${connectionId}.example:22`,
+        loginUser: `user-${connectionId}`,
+        configurationHash,
+        hostKeyTrust: 'unavailable',
       };
     },
-  } as unknown as AgentTargetResolver;
+  };
   const shellPort = new SshShellTargetAdapter(
     {
       get: async (connectionId: number) => ({ type: 'SSH', configurationHash: sshHashes.get(connectionId) }),

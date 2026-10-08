@@ -1,6 +1,7 @@
 import type { SshShellExecutionResult, SshShellTargetPort } from './ssh-shell-target.port';
 import type { AgentSshSessionPort, SshJobView } from './ssh-session.port';
-import type { AgentTargetResolver, ResolvedAgentTarget } from './target-resolver';
+import { bindSshInspectionTarget, resolveSshTarget, type ResolvedSshTarget } from './ssh-target-binding';
+import type { SshTargetResolverPort } from './ssh-target-resolver.port';
 import type { ToolTargetFingerprint } from './tool-target.types';
 import type { ToolContext } from './tool.types';
 
@@ -33,39 +34,23 @@ export interface UnifiedShellExecutionView {
 
 export class ShellCapabilityService {
   constructor(
-    private readonly targets: AgentTargetResolver,
+    private readonly targets: SshTargetResolverPort,
     private readonly sshShell: SshShellTargetPort,
     private readonly sshSessions?: AgentSshSessionPort,
   ) {}
 
-  resolve(context: ToolContext, selector: SshShellSelector): Promise<ResolvedAgentTarget> {
+  resolve(context: ToolContext, selector: SshShellSelector): Promise<ResolvedSshTarget> {
     if (selector.target !== 'ssh') throw new Error('SHELL_TARGET_INVALID');
-    return this.targets.resolve(context, selector);
+    return resolveSshTarget(this.targets, context, selector);
   }
 
-  bindInspectionTarget(fingerprint: ToolTargetFingerprint): ResolvedAgentTarget {
-    if (fingerprint.kind === 'ssh') {
-      if (
-        fingerprint.target !== 'ssh' ||
-        fingerprint.connectionId === undefined ||
-        String(fingerprint.connectionId) !== fingerprint.id
-      ) {
-        throw new Error('TOOL_STATE_CONFLICT');
-      }
-      return {
-        selector: { target: 'ssh', id: fingerprint.id },
-        fingerprint,
-        resourceKeys: [`connection:${fingerprint.connectionId}`],
-        preconditions: [],
-        connectionId: fingerprint.connectionId,
-      };
-    }
-    throw new Error('TOOL_STATE_CONFLICT');
+  bindInspectionTarget(fingerprint: ToolTargetFingerprint): ResolvedSshTarget {
+    return bindSshInspectionTarget(fingerprint);
   }
 
   async execute(
     context: ToolContext,
-    target: ResolvedAgentTarget,
+    target: ResolvedSshTarget,
     request: UnifiedShellExecutionRequest,
   ): Promise<UnifiedShellExecutionView> {
     if (target.selector.target !== 'ssh') throw new Error('SHELL_TARGET_INVALID');
@@ -106,7 +91,7 @@ export class ShellCapabilityService {
 
   async listActiveJobs(
     context: ToolContext,
-    target: ResolvedAgentTarget,
+    target: ResolvedSshTarget,
   ): Promise<{ activeCount: number; jobs: { jobId: string; status: SshJobView['status']; createdAt: number }[] }> {
     if (target.selector.target !== 'ssh' || !this.sshSessions || target.connectionId === undefined)
       throw new Error('SSH_SESSION_NOT_FOUND');
@@ -132,7 +117,7 @@ export class ShellCapabilityService {
     return this.sshSessions.job(context, target.connectionId!, jobId, action, waitSeconds);
   }
 
-  async inspectSshSession(context: ToolContext, target: ResolvedAgentTarget): Promise<void> {
+  async inspectSshSession(context: ToolContext, target: ResolvedSshTarget): Promise<void> {
     if (!context.sshSessionId) return;
     if (!this.sshSessions || target.connectionId === undefined) throw new Error('SSH_SESSION_NOT_FOUND');
     const sessions = await this.sshSessions.list(context, target.connectionId, context.sshSessionId);

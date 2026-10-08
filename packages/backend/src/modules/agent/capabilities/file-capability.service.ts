@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { applyPatch, parsePatch, type StructuredPatch } from 'diff';
 import { remoteFileResourceKey } from '../../../platform/filesystem/remote-path';
 import type { SshFilePathInspection, SshFileTargetPort } from './ssh-file-target.port';
-import type { ResolvedAgentTarget, AgentTargetResolver } from './target-resolver';
+import { bindSshInspectionTarget, resolveSshTarget, type ResolvedSshTarget } from './ssh-target-binding';
+import type { SshTargetResolverPort } from './ssh-target-resolver.port';
 import type { ToolTargetFingerprint } from './tool-target.types';
 import type { ToolContext } from './tool.types';
 
@@ -97,40 +98,24 @@ const sourceLinesAtDeclaredLocation = (source: string, patchSpec: StructuredPatc
 
 export class FileCapabilityService {
   constructor(
-    private readonly targets: AgentTargetResolver,
+    private readonly targets: SshTargetResolverPort,
     private readonly sshFiles: SshFileTargetPort,
   ) {}
 
-  resolve(context: ToolContext, selector: FileTargetSelectorInput): Promise<ResolvedAgentTarget> {
+  resolve(context: ToolContext, selector: FileTargetSelectorInput): Promise<ResolvedSshTarget> {
     if (selector.target !== 'ssh') throw new Error('FILE_ARGUMENT_TARGET_INVALID');
-    return this.targets.resolve(context, selector);
+    return resolveSshTarget(this.targets, context, selector);
   }
 
-  bindInspectionTarget(fingerprint: ToolTargetFingerprint): ResolvedAgentTarget {
-    if (fingerprint.kind === 'ssh') {
-      if (
-        fingerprint.target !== 'ssh' ||
-        fingerprint.connectionId === undefined ||
-        String(fingerprint.connectionId) !== fingerprint.id
-      ) {
-        throw new Error('TOOL_STATE_CONFLICT');
-      }
-      return {
-        selector: { target: 'ssh', id: fingerprint.id },
-        fingerprint,
-        resourceKeys: [`connection:${fingerprint.connectionId}`],
-        preconditions: [],
-        connectionId: fingerprint.connectionId,
-      };
-    }
-    throw new Error('TOOL_STATE_CONFLICT');
+  bindInspectionTarget(fingerprint: ToolTargetFingerprint): ResolvedSshTarget {
+    return bindSshInspectionTarget(fingerprint);
   }
 
-  resourceKey(target: ResolvedAgentTarget, path: string): string {
+  resourceKey(target: ResolvedSshTarget, path: string): string {
     return remoteFileResourceKey(`connection:${target.connectionId}`, path);
   }
 
-  async stat(context: ToolContext, target: ResolvedAgentTarget, path: string): Promise<UnifiedFileStat> {
+  async stat(context: ToolContext, target: ResolvedSshTarget, path: string): Promise<UnifiedFileStat> {
     const connectionId = target.connectionId;
     if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
     const state = await this.sshFiles.stat(context, connectionId, path, target.fingerprint.configurationHash);
@@ -139,7 +124,7 @@ export class FileCapabilityService {
 
   async read(
     context: ToolContext,
-    target: ResolvedAgentTarget,
+    target: ResolvedSshTarget,
     path: string,
     offsetBytes: number,
     maxBytes: number,
@@ -164,7 +149,7 @@ export class FileCapabilityService {
 
   async list(
     context: ToolContext,
-    target: ResolvedAgentTarget,
+    target: ResolvedSshTarget,
     path: string,
     maxEntries: number,
   ): Promise<UnifiedFileListResult> {
@@ -175,7 +160,7 @@ export class FileCapabilityService {
 
   async search(
     context: ToolContext,
-    target: ResolvedAgentTarget,
+    target: ResolvedSshTarget,
     request: {
       query: string;
       path: string;
@@ -192,7 +177,7 @@ export class FileCapabilityService {
 
   async write(
     context: ToolContext,
-    target: ResolvedAgentTarget,
+    target: ResolvedSshTarget,
     path: string,
     content: string,
     expectedSha256: string | null,
@@ -216,7 +201,7 @@ export class FileCapabilityService {
 
   async move(
     context: ToolContext,
-    target: ResolvedAgentTarget,
+    target: ResolvedSshTarget,
     path: string,
     destinationPath: string,
     expectedSha256: string | null,
@@ -235,7 +220,7 @@ export class FileCapabilityService {
 
   async delete(
     context: ToolContext,
-    target: ResolvedAgentTarget,
+    target: ResolvedSshTarget,
     path: string,
     recursive: boolean,
     expectedSha256: string | null,
@@ -254,7 +239,7 @@ export class FileCapabilityService {
 
   async preparePatch(
     context: ToolContext,
-    target: ResolvedAgentTarget,
+    target: ResolvedSshTarget,
     patch: string,
     expectedFiles?: ReadonlyMap<string, string>,
   ): Promise<PreparedPatchChange[]> {
@@ -321,7 +306,7 @@ export class FileCapabilityService {
 
   async applyPreparedPatch(
     context: ToolContext,
-    target: ResolvedAgentTarget,
+    target: ResolvedSshTarget,
     patch: string,
     expectedFiles: ReadonlyMap<string, string>,
   ): Promise<Omit<PreparedPatchChange, 'content'>[]> {
@@ -360,7 +345,7 @@ export class FileCapabilityService {
 
   private async readWholeText(
     context: ToolContext,
-    target: ResolvedAgentTarget,
+    target: ResolvedSshTarget,
     state: UnifiedFileStat,
   ): Promise<string> {
     if (!state.exists || state.type !== 'file' || state.sizeBytes === null || state.sizeBytes > MAX_FILE_BYTES) {

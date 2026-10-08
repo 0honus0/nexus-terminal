@@ -4,8 +4,8 @@ import path from 'node:path';
 import type { JsonValue } from '../../../packages/backend/src/modules/agent/agent.types';
 import { FileCapabilityService } from '../../../packages/backend/src/modules/agent/capabilities/file-capability.service';
 import type { SshFileTargetPort } from '../../../packages/backend/src/modules/agent/capabilities/ssh-file-target.port';
+import { resolveSshTarget } from '../../../packages/backend/src/modules/agent/capabilities/ssh-target-binding';
 import type { SshTargetResolverPort } from '../../../packages/backend/src/modules/agent/capabilities/ssh-target-resolver.port';
-import { AgentTargetResolver } from '../../../packages/backend/src/modules/agent/capabilities/target-resolver';
 import { ToolCatalog } from '../../../packages/backend/src/modules/agent/capabilities/tool-catalog';
 import { ToolExecutor } from '../../../packages/backend/src/modules/agent/capabilities/tool-executor';
 import type { ToolContext, ToolResult } from '../../../packages/backend/src/modules/agent/capabilities/tool.types';
@@ -242,29 +242,22 @@ export const unifiedFileCapabilityScenario = async () => {
     },
   } as unknown as SshFileTargetPort;
 
-  const targets = {
-    resolve: async (_context: ToolContext, selector: { target: 'ssh' | 'workspace'; id: string }) => {
-      if (selector.target !== 'ssh') throw new Error('FILE_ARGUMENT_TARGET_INVALID');
-      if (selector.id !== '1') throw new Error('TARGET_NOT_SELECTED');
+  const targets: SshTargetResolverPort = {
+    target: async (_context, connectionId) => {
+      if (connectionId !== 1) throw new Error('TARGET_NOT_SELECTED');
       return {
-        selector,
-        fingerprint: {
-          kind: 'ssh' as const,
-          target: 'ssh' as const,
-          id: selector.id,
-          connectionId: 1,
-          targetIdentity: 'ssh:1',
-          endpoint: 'ssh.example:22',
-          loginUser: 'tester',
-          configurationHash: sshConfigurationHash,
-          hostKeyTrust: 'unavailable' as const,
-        },
-        resourceKeys: ['connection:1'],
-        preconditions: [],
+        kind: 'ssh',
+        target: 'ssh',
+        id: '1',
         connectionId: 1,
+        targetIdentity: 'ssh:1',
+        endpoint: 'ssh.example:22',
+        loginUser: 'tester',
+        configurationHash: sshConfigurationHash,
+        hostKeyTrust: 'unavailable',
       };
     },
-  } as unknown as AgentTargetResolver;
+  };
 
   const service = new FileCapabilityService(targets, sshFileTarget);
   const cryptoHash = { sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex') };
@@ -290,7 +283,7 @@ export const unifiedFileCapabilityScenario = async () => {
     inputRevision: 1,
   };
   let resolvedSshTargets = 0;
-  const canonicalResolver = new AgentTargetResolver({
+  const canonicalTargets = {
     target: async (_context, connectionId) => {
       resolvedSshTargets++;
       if (connectionId !== 1) throw new Error('TARGET_NOT_SELECTED');
@@ -306,7 +299,7 @@ export const unifiedFileCapabilityScenario = async () => {
         hostKeyTrust: 'unavailable',
       };
     },
-  } satisfies SshTargetResolverPort);
+  } satisfies SshTargetResolverPort;
   for (const invalid of [
     { target: 'workspace', id: 'retired-workspace' },
     { target: 'ssh', id: '0' },
@@ -315,17 +308,33 @@ export const unifiedFileCapabilityScenario = async () => {
     { target: 'ssh', id: '9007199254740992' },
   ] as const) {
     await assert.rejects(
-      canonicalResolver.resolve(context, invalid),
+      resolveSshTarget(canonicalTargets, context, invalid),
       /TOOL_ARGUMENTS_INVALID/,
       'Retired Workspace and noncanonical connection IDs must be rejected before SSH resolution',
     );
   }
   assert.equal(resolvedSshTargets, 0, 'Invalid targets must not consult SSH or Workspace resources');
-  const canonicalSsh = await canonicalResolver.resolve(context, { target: 'ssh', id: '1' });
+  const canonicalSsh = await resolveSshTarget(canonicalTargets, context, { target: 'ssh', id: '1' });
   assert.equal(canonicalSsh.connectionId, 1);
   assert.deepEqual(canonicalSsh.resourceKeys, ['connection:1']);
   assert.equal(canonicalSsh.fingerprint.configurationHash, sshConfigurationHash);
   assert.equal(resolvedSshTargets, 1);
+  const restoredSsh = service.bindInspectionTarget(canonicalSsh.fingerprint);
+  assert.deepEqual(restoredSsh.resourceKeys, ['connection:1']);
+  assert.equal(restoredSsh.connectionId, 1);
+  for (const invalid of [
+    { ...canonicalSsh.fingerprint, kind: 'workspace' as const, target: 'workspace' as const },
+    { ...canonicalSsh.fingerprint, id: '01' },
+    { ...canonicalSsh.fingerprint, connectionId: 0, id: '0' },
+    { ...canonicalSsh.fingerprint, connectionId: 2 },
+  ]) {
+    assert.throws(
+      () => service.bindInspectionTarget(invalid),
+      /TOOL_STATE_CONFLICT/,
+      'Persisted inspections cannot manufacture an SSH binding with mismatched identity',
+    );
+  }
+  assert.equal(resolvedSshTargets, 1, 'Restoring inspections must not resolve a different SSH connection');
   const invoke = async (name: string, input: JsonValue): Promise<ToolResult> => {
     const tool = tools.get(name);
     assert.ok(tool, `${name} must be registered`);
@@ -683,6 +692,7 @@ export const unifiedFileCapabilityScenario = async () => {
       { name: 'unified_file_frozen_target_stale_rejections', value: 2, unit: 'cases' },
       { name: 'unified_file_legacy_branches', value: 0, unit: 'branches' },
       { name: 'unified_file_resolver_retired_target_rejections', value: 5, unit: 'cases' },
+      { name: 'unified_file_binding_forgery_rejections', value: 4, unit: 'cases' },
     ];
   }
 };
