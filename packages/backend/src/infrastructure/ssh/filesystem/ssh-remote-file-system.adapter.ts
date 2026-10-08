@@ -15,6 +15,45 @@ import { isRemoteFileMissingError, RemoteDirectoryTypeConflict } from '../../../
 import { runtimePerformanceMetrics } from '../../../shared/observability/runtime-performance';
 
 const channelSignals = new WeakMap<SFTPWrapper, AbortSignal>();
+type PendingChannelCalls = {
+  cancellations: Set<() => void>;
+  detach: () => void;
+};
+const pendingChannelCalls = new WeakMap<SFTPWrapper, PendingChannelCalls>();
+
+// Prefetch can issue 64 reads on one channel. Share lifecycle listeners across
+// those requests and remove them as soon as the last request settles.
+const registerChannelCall = (channel: SFTPWrapper, cancel: () => void): (() => void) => {
+  let state = pendingChannelCalls.get(channel);
+  if (!state) {
+    const signal = channelSignals.get(channel);
+    const cancellations = new Set<() => void>();
+    const detach = () => {
+      channel.off('end', onClose);
+      channel.off('close', onClose);
+      signal?.removeEventListener('abort', onClose);
+      pendingChannelCalls.delete(channel);
+    };
+    const onClose = () => {
+      const pending = [...cancellations];
+      cancellations.clear();
+      detach();
+      for (const cancellation of pending) cancellation();
+    };
+    state = { cancellations, detach };
+    pendingChannelCalls.set(channel, state);
+    channel.once('end', onClose);
+    channel.once('close', onClose);
+    signal?.addEventListener('abort', onClose, { once: true });
+  }
+  const registered = state;
+  registered.cancellations.add(cancel);
+  return () => {
+    if (!registered.cancellations.delete(cancel)) return;
+    if (registered.cancellations.size === 0) registered.detach();
+  };
+};
+
 export const bindSftpChannelCancellation = (channel: SFTPWrapper, signal: AbortSignal): void => {
   channelSignals.set(channel, signal);
 };
@@ -24,23 +63,11 @@ const call = <T>(
   invoke: (callback: (error: Error | undefined | null, value: T) => void) => void,
 ): Promise<T> =>
   new Promise<T>((resolve, reject) => {
-    const signal = channelSignals.get(channel);
-    const detach = () => {
-      channel.off('end', onClose);
-      channel.off('close', onClose);
-      signal?.removeEventListener('abort', onClose);
-    };
-    const onClose = () => {
-      detach();
+    if (channelSignals.get(channel)?.aborted) {
       reject(new Error('SFTP_CHANNEL_CLOSED'));
-    };
-    channel.once('end', onClose);
-    channel.once('close', onClose);
-    signal?.addEventListener('abort', onClose, { once: true });
-    if (signal?.aborted) {
-      onClose();
       return;
     }
+    const detach = registerChannelCall(channel, () => reject(new Error('SFTP_CHANNEL_CLOSED')));
     try {
       invoke((error, value) => {
         detach();

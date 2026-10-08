@@ -115,7 +115,10 @@ try {
   }
   const production = await readFile('packages/frontend/nginx.conf', 'utf8');
   const config = production
-    .replaceAll('server backend:3001;', tcp ? 'server backend:3001;' : 'server unix:/fixture/upstream.sock;')
+    .replaceAll(
+      'server backend:3001 resolve;',
+      tcp ? 'server backend:3001 resolve;' : 'server unix:/fixture/upstream.sock;',
+    )
     .replaceAll('proxy_pass http://backend:3001;', 'proxy_pass http://nexus_backend;');
   await writeFile(path.join(directory, 'default.conf'), config);
   const validation = spawnSync(

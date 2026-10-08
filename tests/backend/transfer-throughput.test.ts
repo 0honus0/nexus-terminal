@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
+import { EventEmitter, getEventListeners } from 'node:events';
 import { Writable } from 'node:stream';
 import { test } from 'node:test';
 import { StreamUploadOperationService } from '../../packages/backend/src/platform/operations/upload/stream-upload-operation.service';
-import { SshRemoteFileSystemAdapter } from '../../packages/backend/src/infrastructure/ssh/filesystem/ssh-remote-file-system.adapter';
+import {
+  SshRemoteFileSystemAdapter,
+  bindSftpChannelCancellation,
+} from '../../packages/backend/src/infrastructure/ssh/filesystem/ssh-remote-file-system.adapter';
 
 test('upload queues bounded batches rather than awaiting every remote acknowledgement', async () => {
   let batches = 0;
@@ -66,7 +70,7 @@ test('download prefetch preserves byte order, range and short reads with bounded
   let active = 0,
     peak = 0,
     closes = 0;
-  const channel = {
+  const channel = Object.assign(new EventEmitter(), {
     stat(_path: string, cb: Function) {
       cb(null, { size: source.length, isDirectory: () => false, isFile: () => true, isSymbolicLink: () => false });
     },
@@ -86,15 +90,88 @@ test('download prefetch preserves byte order, range and short reads with bounded
       closes++;
       cb(null);
     },
-  };
+  });
   const adapter = new SshRemoteFileSystemAdapter(async () => channel as never);
   const stream = await adapter.openRead('/file', { start: 123, end: 1500123 });
   const chunks: Buffer[] = [];
   for await (const chunk of stream) chunks.push(chunk);
   assert.deepEqual(Buffer.concat(chunks), source.subarray(123, 1500124));
   assert.ok(peak > 1);
-  assert.ok(peak <= 16);
+  assert.ok(peak <= 64);
   assert.equal(closes, 1);
+  assert.equal(channel.listenerCount('end'), 0);
+  assert.equal(channel.listenerCount('close'), 0);
+});
+
+for (const cause of ['complete', 'error', 'end', 'close', 'abort', 'throw'] as const) {
+  test(`concurrent SFTP calls share listeners and clean up on ${cause}`, async () => {
+    const callbacks: Array<(error: Error | null, value: string) => void> = [];
+    const channel = Object.assign(new EventEmitter(), {
+      realpath(_path: string, callback: (error: Error | null, value: string) => void) {
+        if (cause === 'throw') throw new Error('invoke failed');
+        callbacks.push(callback);
+      },
+    });
+    const cancellation = new AbortController();
+    bindSftpChannelCancellation(channel as never, cancellation.signal);
+    const adapter = new SshRemoteFileSystemAdapter(async () => channel as never);
+    const pending = Array.from({ length: 64 }, () => adapter.resolvePath('/file'));
+    const settled = Promise.allSettled(pending);
+    await new Promise((resolve) => setImmediate(resolve));
+    if (cause !== 'throw') {
+      assert.equal(channel.listenerCount('end'), 1);
+      assert.equal(channel.listenerCount('close'), 1);
+      assert.equal(getEventListeners(cancellation.signal, 'abort').length, 1);
+    }
+    if (cause === 'complete') callbacks.forEach((callback) => callback(null, '/resolved'));
+    else if (cause === 'error') callbacks.forEach((callback) => callback(new Error('request failed'), ''));
+    else if (cause === 'abort') cancellation.abort();
+    else if (cause !== 'throw') channel.emit(cause);
+    const results = await settled;
+    for (const result of results) {
+      if (cause === 'complete') {
+        assert.equal(result.status, 'fulfilled');
+        if (result.status === 'fulfilled') assert.equal(result.value, '/resolved');
+      } else {
+        assert.equal(result.status, 'rejected');
+        if (result.status === 'rejected') {
+          assert.equal(
+            result.reason.message,
+            cause === 'throw' ? 'invoke failed' : cause === 'error' ? 'request failed' : 'SFTP_CHANNEL_CLOSED',
+          );
+        }
+      }
+    }
+    // Late replies after cancellation must not disturb a new group of requests.
+    if (cause === 'end' || cause === 'close') {
+      const next = adapter.resolvePath('/next');
+      await new Promise((resolve) => setImmediate(resolve));
+      callbacks.slice(0, 64).forEach((callback) => callback(null, '/late'));
+      assert.equal(channel.listenerCount('end'), 1);
+      assert.equal(channel.listenerCount('close'), 1);
+      callbacks.at(-1)!(null, '/next');
+      assert.equal(await next, '/next');
+    }
+    callbacks.forEach((callback) => callback(null, '/late'));
+    assert.equal(channel.listenerCount('end'), 0);
+    assert.equal(channel.listenerCount('close'), 0);
+    assert.equal(getEventListeners(cancellation.signal, 'abort').length, 0);
+  });
+}
+
+test('SFTP calls on an already cancelled channel never invoke the remote operation', async () => {
+  const channel = Object.assign(new EventEmitter(), {
+    realpath() {
+      assert.fail('cancelled channel must not issue a request');
+    },
+  });
+  const cancellation = new AbortController();
+  bindSftpChannelCancellation(channel as never, cancellation.signal);
+  cancellation.abort();
+  const adapter = new SshRemoteFileSystemAdapter(async () => channel as never);
+  await assert.rejects(adapter.resolvePath('/file'), /SFTP_CHANNEL_CLOSED/);
+  assert.equal(channel.listenerCount('end'), 0);
+  assert.equal(channel.listenerCount('close'), 0);
 });
 
 test('cancelling a backpressured upload releases the append queue without publishing a file', async () => {
