@@ -194,20 +194,28 @@ node --version && pnpm --version
 
 - 在 HEAD `249efb77` 生产能力/三语文案清理之后，执行官方 `mcr.microsoft.com/playwright:v1.63.0-noble` Docker 中的 `pnpm --filter @nexus-terminal/e2e exec playwright test --project=agent --workers=1 --timeout=80000 --global-timeout=535000`，**71 tests in 9 files / 71 passed (7.8m) / exit 0**。这是单一完整 Playwright 运行，而非累加分文件统计，验证删除 `workspace.manage` 与旧 Environment 之后各文件连续执行没有顺序状态串扰。运行日志有测试故意触发的 Tool 失败/取消和 `APPROVAL_STALE` 诊断，不代表没有 warning；所有断言与最后退出码通过。独立运行此前 Backend deterministic **78/78 PASS**；生产 Docker no-Runner smoke **exit 0**，远程 GitHub Actions 未运行。
 - 清理正式需求 `doc/USAGE.md` 中早期仍声称存在 Workspace Runner、Toolchain 安装、旧 API 管理与 Job journal 的过时条款；保留普通 SSH/终端 Workspace、WebSocket、挂起、Guacd、Artifact 与 Agent Checkpoint 实际契约。同步 `doc/FEATURES.md`、`doc/AGENTS.md`、`doc/architecture/BACKEND.md` 的执行所有权、构建、能力边界和 CI 说明，以及 `doc/testing/E2E.md` 的实测结果；不修改用户未跟踪实施计划文件。
-- **下一步**：本地基本质量/格式检查、完整构建和文档一致性复核后独立提交；远程 CI 仍需项目所有者明确允许推送后触发，不能在未授权时推进 `origin/dev`。
+- **后续最新本地验证**：独立 E2E Runner Docker 镜像、离线 pnpm Store/Playwright、真实 SSH/Workspace 与 WebSocket E2E 已验证通过，证据见下方新增 P7 切口。**下一步**：本地质量/构建与当前文档同步后独立提交；远程 CI 仍需用户授权推送才能触发，不擅自推进 `origin/dev`。
+
+**P7 独立 E2E Runner 镜像与普通终端 Workspace 保留性验收（2026-10-08）**：
+
+- 当前 HEAD `455024b9`，`dev` 分支，开工时 tracked 工作树干净，仅用户未跟踪 `doc/testing/AGENT_WORKSPACE_REMOVAL_PLAN.md`。生产 Agent Runner 已完全删除，本次只在本地执行测试镜像和普通终端回归，不改或迁移用户服务数据，也未 push。
+- 直接以 `tests/e2e/Dockerfile.runner`（保留的**独立 Playwright/CI 工具镜像**）及 `scripts/e2e/runner-image-info.mjs` 给定 Node/Playwright/pnpm/指纹参数，本地 Docker 成功构建 `nexus-terminal:e2e-runner-local`，**exit 0**，没有调用会自动 push GHCR 的 `build-runner-image.sh`。镜像内 `E2E_RUNNER_FINGERPRINT` 与当前仓库一致，Node **v26.10.0**、pnpm **11.26.0**，SSH/SCP/rsync/sshpass 可用，最终镜像不含构建专用 python3/make/g++，Playwright 浏览器存在，pnpm Store 路径 `/opt/pnpm/store/v11`、side-effects-cache 配置符合预期。镜像构建未使用 CI 脚本的 `--pull --no-cache`，不能声称逐字节等价远程 CI。
+- 以独立隔离目录 `git archive HEAD` 导出仅**已跟踪源文件**，在新构建 Runner 镜像内执行 `pnpm install --frozen-lockfile --offline` **PASS / exit 0**；`pnpm --filter @nexus-terminal/e2e exec playwright --version` 为 **1.63.0**，没有联网依赖补齐。随后在该 Runner 镜像、同样新 checkout 中实际执行 `playwright test --project=websocket --workers=1 --timeout=60000 --global-timeout=180000 specs/websocket/authenticated-session.spec.ts`，**4/4 PASS / exit 0（12.8s）**。这些都仅在本地完成，未推送镜像/仓库。
+- 独立官方 `mcr.microsoft.com/playwright:v1.63.0-noble` 容器真实运行保留的 `ssh/protocol.spec.ts`、`ssh/reconnect-ui.spec.ts` 和 `websocket/authenticated-session.spec.ts`，**29/29 PASS / exit 0（1.3m）**：涵盖普通终端 Workspace 授权与 attach/detach/resume、PTY/UTF-8/文件协议、SSH 断连/重连、桌面与移动端 session/tab 恢复、已认证 Workspace WS；保留功能并未因为 Agent Workspace 删除而移除。失败场景的临时 `session-file-store ENOENT`、`ECONNREFUSED` 等诊断日志仍出现，但最终断言/退出码全部通过。
+- `node scripts/e2e/balanced-shards.mjs plan --shards 8` 在当前源码解析出 **110 个 spec 文件、8 个独立分片**，无已删除生产 Runner 的 E2E 入口引用；只验证计划生成，不冒称分片运行。外部远程 GitHub Actions `E2E`、GHCR 新镜像推送以及全站七项目一次性运行均**没有执行**；下阶段仍需项目所有者明确授权推送/触发，或继续仅做本地验证。测试构建/检查的临时隔离目录执行后清理；未碰用户备份及未跟踪计划文件。
 
 ## 阶段状态（2026-10-08）
 
-| 阶段                         | 状态   | 说明                                                                                                   |
-| ---------------------------- | ------ | ------------------------------------------------------------------------------------------------------ |
-| P0 清单与升级边界            | 进行中 | P0-2/3/4 完成，旧版 Agent E2E 69/69；P0-1/5 的历史事项由最新破坏式规则覆盖                             |
-| P1 最终 contract 与迁移方案  | 进行中 | Run/Checkpoint/Approval Workspace DTO 与严格 decoder 已删；其余静态 consumer 待审计                    |
-| P2 存量数据、升级与备份      | 进行中 | #58 直接 DROP Workspace 两表并移除旧 Settings keys；无历史兼容                                         |
-| P3 Backend SSH 收敛          | 进行中 | Agent Tool/Run/Checkpoint SSH-only 且 78/78 deterministic PASS；Playwright 待验证                      |
-| P4 Browser、ACP、Plugin 解耦 | 进行中 | ACP/Browser Runner tunnel 与 Host binding 已退出；余 Workspace profile/Plugin Runtime                  |
-| P5 Frontend 移除             | 进行中 | Agent Workspace i18n/capability UI 已清理；剩余静态引用审计待完成                                      |
-| P6 生产 Runner 退出          | 已完成 | 生产包/镜像/部署已删，Playwright production Runner fixture 及旧 Docker smoke 已清理；独立 E2E 镜像保留 |
-| P7 文档与验收                | 进行中 | Backend deterministic 78/78、单次 Agent Playwright 71/71 PASS、本地 Docker smoke PASS；远程 CI 未执行  |
+| 阶段                         | 状态   | 说明                                                                                                              |
+| ---------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------- |
+| P0 清单与升级边界            | 进行中 | P0-2/3/4 完成，旧版 Agent E2E 69/69；P0-1/5 的历史事项由最新破坏式规则覆盖                                        |
+| P1 最终 contract 与迁移方案  | 进行中 | Run/Checkpoint/Approval Workspace DTO 与严格 decoder 已删；其余静态 consumer 待审计                               |
+| P2 存量数据、升级与备份      | 进行中 | #58 直接 DROP Workspace 两表并移除旧 Settings keys；无历史兼容                                                    |
+| P3 Backend SSH 收敛          | 进行中 | Agent Tool/Run/Checkpoint SSH-only；Backend 78/78、Agent Playwright 71/71 与独立终端回归 29/29 PASS               |
+| P4 Browser、ACP、Plugin 解耦 | 进行中 | ACP/Browser Runner tunnel 已退；Plugin strict manifest/SSH ACP/Browser 完整 Agent E2E PASS，远程 CI 待验          |
+| P5 Frontend 移除             | 进行中 | Agent Workspace i18n/capability UI 已清理；完整 Agent 71/71 PASS，其他项目/远程 CI 待验                           |
+| P6 生产 Runner 退出          | 已完成 | 生产包/镜像/部署已删，Playwright production Runner fixture 及旧 Docker smoke 已清理；独立 E2E 镜像保留            |
+| P7 文档与验收                | 进行中 | Backend 78/78、Agent 71/71、SSH+WebSocket 29/29、本地生产 Docker 与独立 E2E Runner CI 镜像均 PASS；远程 CI 未执行 |
 
 ## P1 边界准备：基于当前代码的迁移决策（仅设计，尚未改生产 contract）
 
