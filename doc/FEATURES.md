@@ -29,9 +29,9 @@ Nexus Terminal 提供 SSH / SFTP、远程桌面、Agent 工作台、安全认证
 
 - 认证后的全局悬浮 Agent Host，可在 Dashboard、Settings 和 Workspace 之间保持 Thread/Run 上下文。
 - 支持 Goal、Plan、运行中追加输入、approval、artifact、checkpoint、历史和运行详情。
-- 通过可选 Agent Runner 管理持久 Workspace、Toolchain、Workspace Terminal、ACP 和 Browser 执行。
+- Agent 的 File/Shell/Job 与 ACP 仅经明确授权的 SSH 目标运行，Browser 使用 Backend 独立 CDP Target；旧 Agent Workspace/Toolchain/Runner 已移除。
 - 支持 MCP 集成、Subagent 与签名 Plugin App；默认 first-party Agent 通过官方 Plugin catalog 安装。
-- Runner 不影响 SSH、SFTP、RDP/VNC 等核心远程管理能力，未配置时 Agent 增强执行能力显示为不可用。
+- 普通终端 Workspace、SSH/SFTP、RDP/VNC、Artifact/Memory 与 Agent 本身的 Run/Checkpoint/审批均保留，不因 Agent Workspace 的移除而改变。
 
 ## 安全与认证
 
