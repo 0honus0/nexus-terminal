@@ -15,6 +15,7 @@
   import { desktopBackgroundRuntime, mobileBackgroundRuntime } from '../model/mobileBackgroundRuntime';
   import { trackTerminalRuntimeModes, type TerminalRuntimeModeTracker } from '../model/terminalRuntimeModes';
   import { serializeTerminalSnapshot } from '../model/terminalSnapshot';
+  import { createTerminalOutputWriter } from '../model/terminalOutputWriter';
   import {
     createTerminalSessionState,
     RESET_REMOTE_PTY_DISPLAY,
@@ -81,6 +82,7 @@
   let deferredTerminalOutputBytes = 0;
   let historyRestoreTask: Promise<void> | null = null;
   let historyEntryTask: Promise<void> | null = null;
+  let historyCursorResetTask: Promise<boolean> | null = null;
   let historyViewGeneration = 0;
   let mobileSelectionSyncFrame: number | null = null;
   const deferredTerminalOutput: Array<string | Uint8Array> = [];
@@ -255,6 +257,7 @@
   };
   onActivated(() => {
     viewActive = true;
+    outputWriter.flush();
     scheduleGeometryFit();
   });
   onDeactivated(() => {
@@ -270,8 +273,7 @@
     scheduleGeometryFit();
   };
   const onVisibilityChange = () => {
-    clearOutputSchedule();
-    if (pendingOutput.length) flushPendingOutput();
+    outputWriter.flush();
     if (document.visibilityState === 'visible') scheduleGeometrySync();
   };
   const openSearch = () => {
@@ -382,9 +384,9 @@
     historyRebuilding = true;
     try {
       if (enteringHistory) {
-        // Divert new output before draining both the scheduled batch and xterm's
-        // async write queue. Otherwise a late live write lands in the history buffer.
-        historyEntryTask = drainPendingOutput();
+        // Divert new output while draining xterm's async write queue.
+        // Otherwise a late live write lands in the history buffer.
+        historyEntryTask = outputWriter.drain();
         await historyEntryTask;
         if (!terminal || generation !== historyViewGeneration) return;
         historyLiveSnapshot = `${serializeTerminalSnapshot(
@@ -437,6 +439,7 @@
       });
     }
     if (!historyBrowsing) {
+      cancelPendingHistoryLoad();
       terminal?.scrollToBottom();
       return Promise.resolve();
     }
@@ -457,8 +460,8 @@
         runtimeModes?.reset();
         if (snapshot) await writeTerminal(snapshot);
         if (generation !== historyViewGeneration) return;
-        await props.channel.resetPreviousOutput?.().catch(() => false);
-        if (generation !== historyViewGeneration) return;
+        // Reset paging independently; a slow network must not block live output or input.
+        void resetHistoryCursor();
         while (deferredTerminalOutput.length) {
           const queued = deferredTerminalOutput.splice(0);
           historyReplayingOutput = queued;
@@ -488,14 +491,31 @@
     return task;
   };
 
+  const resetHistoryCursor = (): Promise<boolean> => {
+    if (historyCursorResetTask) return historyCursorResetTask;
+    const task = (props.channel.resetPreviousOutput?.() ?? Promise.resolve(false))
+      .catch(() => false)
+      .finally(() => {
+        if (historyCursorResetTask === task) historyCursorResetTask = null;
+      });
+    historyCursorResetTask = task;
+    return task;
+  };
+  const cancelPendingHistoryLoad = (): void => {
+    if (!historyLoading || historyBrowsing || historyRebuilding) return;
+    historyViewGeneration += 1;
+    void resetHistoryCursor();
+  };
+
   const loadPreviousOutput = async (): Promise<void> => {
     if (disposed || historyLoading || historyRebuilding || !props.channel.loadPreviousOutput) return;
     activatePagedHistoryMode();
-    if (!props.channel.hasPreviousOutput?.()) return;
     const generation = historyViewGeneration;
     const remotePtyGeneration = terminalState.remotePtyGeneration.value;
     historyLoading = true;
     try {
+      if (historyCursorResetTask) await historyCursorResetTask;
+      if (generation !== historyViewGeneration || !props.channel.hasPreviousOutput?.()) return;
       const pageBytes = Math.max(16 * 1024, Math.min(64 * 1024, (terminal?.cols ?? 80) * (terminal?.rows ?? 24) * 8));
       const page = await props.channel.loadPreviousOutput(pageBytes);
       if (generation !== historyViewGeneration) return;
@@ -541,12 +561,13 @@
     const target = terminal;
     // Clear xterm's local buffer without injecting ANSI erase/cursor sequences. The remote PTY/readline
     // does not observe locally-written control codes, so moving the local cursor independently can corrupt later redraws.
-    if (historyBrowsing) {
+    if (historyBrowsing || historyRebuilding) {
       void restoreLatestOutput().then(() => {
         if (isCurrentInteraction(generation, target)) target?.clear();
       });
       return;
     }
+    cancelPendingHistoryLoad();
     terminal?.clear();
   };
 
@@ -554,9 +575,7 @@
     terminalState.remotePtyGeneration,
     () => {
       resetInteractions();
-      clearOutputSchedule();
-      pendingOutput = [];
-      pendingOutputBytes = 0;
+      outputWriter.discard();
       deferredTerminalOutput.length = 0;
       historyReplayingOutput = [];
       deferredTerminalOutputBytes = 0;
@@ -569,8 +588,8 @@
       historyWindowChunks = [];
       historyRestoreTask = null;
       historyEntryTask = null;
+      historyCursorResetTask = null;
       historyLastViewportY = 0;
-      for (const consumed of pendingOutputConsumers.splice(0)) consumed();
       for (const consumed of deferredOutputConsumers.splice(0)) consumed();
       if (terminal) {
         terminal.options.scrollback = props.scrollback;
@@ -1055,6 +1074,8 @@
       applyFontSize(change.next);
       return;
     }
+    if (event.ctrlKey) return;
+    if (event.deltaY > 0) cancelPendingHistoryLoad();
     if (
       !remoteMouseReportingActive() &&
       event.deltaY < 0 &&
@@ -1194,71 +1215,11 @@
     else syncSearchDecorations();
   });
 
-  const INACTIVE_OUTPUT_BATCH_MS = 80;
-  const INACTIVE_OUTPUT_MAX_BATCH_BYTES = 512 * 1024;
-  let pendingOutput: Uint8Array[] = [];
-  let pendingOutputBytes = 0;
-  let pendingOutputConsumers: Array<() => void> = [];
-  let outputFrame: number | undefined;
-  let outputTimer: number | undefined;
-  const outputEncoder = new TextEncoder();
-  const clearOutputSchedule = (): void => {
-    if (outputFrame !== undefined) window.cancelAnimationFrame(outputFrame);
-    if (outputTimer !== undefined) window.clearTimeout(outputTimer);
-    outputFrame = undefined;
-    outputTimer = undefined;
-  };
-  const flushPendingOutput = (showLatest = false): void => {
-    clearOutputSchedule();
-    if (!terminal || !pendingOutput.length) {
-      if (showLatest) terminal?.write('', () => terminal?.scrollToBottom());
-      return;
-    }
-    const batch = new Uint8Array(pendingOutputBytes);
-    let offset = 0;
-    for (const chunk of pendingOutput) {
-      batch.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    pendingOutput = [];
-    pendingOutputBytes = 0;
-    const consumers = pendingOutputConsumers.splice(0);
-    terminal.write(batch, () => {
-      for (const consumed of consumers) consumed();
-      if (!disposed && showLatest) terminal?.scrollToBottom();
-    });
-  };
-  const drainPendingOutput = async (): Promise<void> => {
-    clearOutputSchedule();
-    if (pendingOutput.length) {
-      const batch = new Uint8Array(pendingOutputBytes);
-      let offset = 0;
-      for (const chunk of pendingOutput) {
-        batch.set(chunk, offset);
-        offset += chunk.byteLength;
-      }
-      pendingOutput = [];
-      pendingOutputBytes = 0;
-      const consumers = pendingOutputConsumers.splice(0);
-      await writeTerminal(batch);
-      for (const consumed of consumers) consumed();
-    } else {
-      await writeTerminal('');
-    }
-  };
+  const outputWriter = createTerminalOutputWriter((data, consumed) => terminal!.write(data, consumed));
   const serializeAfterDrain = async (): Promise<string> => {
     if (disposed || !terminal) return terminalState.restoreSnapshot();
-    await drainPendingOutput();
+    await outputWriter.drain();
     return liveReplaySnapshot();
-  };
-  const scheduleOutputFlush = (): void => {
-    if (outputFrame !== undefined || outputTimer !== undefined) return;
-    if (props.active && document.visibilityState !== 'hidden')
-      outputFrame = window.requestAnimationFrame(() => flushPendingOutput());
-    // A visible mobile page can have animation frames deferred. Do not leave
-    // output parsing and flow-control credit dependent on the next paint.
-    // Flushing cancels both schedules, preventing duplicate batch consumption.
-    outputTimer = window.setTimeout(() => flushPendingOutput(), INACTIVE_OUTPUT_BATCH_MS);
   };
   const handleTerminalOutput = ({ data, consumed }: { data: string | Uint8Array; consumed?: () => void }): void => {
     const decoded = terminalState.decodeOutput(data);
@@ -1269,23 +1230,19 @@
       if (shouldRestore && historyBrowsing && !historyRebuilding) void restoreLatestOutput();
       return;
     }
-    const bytes = outputEncoder.encode(decoded);
-    pendingOutput.push(bytes);
-    pendingOutputBytes += bytes.byteLength;
-    if (consumed) pendingOutputConsumers.push(consumed);
-    if (
-      (!props.active || document.visibilityState === 'hidden') &&
-      pendingOutputBytes >= INACTIVE_OUTPUT_MAX_BATCH_BYTES
-    )
-      flushPendingOutput();
-    else scheduleOutputFlush();
+    outputWriter.enqueue(
+      decoded,
+      typeof data === 'string' ? outputByteLength(data) : data.byteLength,
+      !viewActive || !props.active || document.visibilityState === 'hidden',
+      consumed,
+    );
   };
   watch(
     () => props.active,
     (active) => {
       if (!active) resetInteractions();
       if (active) scheduleGeometryFit();
-      if (active && pendingOutput.length) flushPendingOutput();
+      if (active) outputWriter.flush();
     },
     { flush: 'post' },
   );
@@ -1458,7 +1415,7 @@
           if (clipboardShortcut) void copySelection();
           else if (event.ctrlKey && !event.shiftKey && !event.metaKey) {
             void props.channel.sendInput('\x03');
-            if (historyBrowsing || historyRebuilding) void restoreLatestOutput();
+            if (historyBrowsing || historyRebuilding || historyLoading) void restoreLatestOutput();
           }
           return false;
         }
@@ -1487,10 +1444,10 @@
         emit('interaction');
         if (data === '\x03') {
           void props.channel.sendInput(data);
-          if (historyBrowsing || historyRebuilding) void restoreLatestOutput();
+          if (historyBrowsing || historyRebuilding || historyLoading) void restoreLatestOutput();
           return;
         }
-        if (historyBrowsing || historyRebuilding) {
+        if (historyBrowsing || historyRebuilding || historyLoading) {
           const generation = terminalState.remotePtyGeneration.value;
           const presentationGeneration = interactionGeneration;
           void restoreLatestOutput().then(() => {
@@ -1508,7 +1465,21 @@
         void props.channel.sendInput(data);
       }).dispose,
       props.channel.onConnected?.(scheduleGeometrySync) ?? (() => undefined),
-      props.channel.onResumeComplete?.(() => flushPendingOutput(true)) ?? (() => undefined),
+      props.channel.onResumeComplete?.(() => {
+        const target = terminal;
+        const generation = terminalState.remotePtyGeneration.value;
+        outputWriter.flush();
+        target?.write('', () => {
+          if (
+            !disposed &&
+            terminal === target &&
+            generation === terminalState.remotePtyGeneration.value &&
+            !historyBrowsing &&
+            !historyRebuilding
+          )
+            target.scrollToBottom();
+        });
+      }) ?? (() => undefined),
       props.channel.onClose((reason) => {
         emit('closed', reason);
       }),
@@ -1581,7 +1552,8 @@
     const closingRuntimeModes = runtimeModes;
     if (closingTerminal && serializeAddon) {
       terminalState.captureSnapshot(
-        drainPendingOutput()
+        outputWriter
+          .drain()
           .then(() => {
             const snapshot = liveReplaySnapshot();
             for (const consumed of deferredOutputConsumers.splice(0)) consumed();
@@ -1594,7 +1566,8 @@
           }),
       );
     }
-    if (historyBrowsing) void props.channel.resetPreviousOutput?.().catch(() => false);
+    if (!closingTerminal || !serializeAddon) outputWriter.discard();
+    if (historyBrowsing || historyLoading) void resetHistoryCursor();
     if (root.value) {
       root.value.removeEventListener('wheel', handleWheelScale, true);
       root.value.removeEventListener('touchstart', handleTouchStart, true);
@@ -1613,7 +1586,6 @@
     document.fonts.removeEventListener('loadingdone', scheduleGeometrySync);
     if (geometryFrame !== undefined) window.cancelAnimationFrame(geometryFrame);
     clearTimeout(geometryResizeTimer);
-    clearOutputSchedule();
     resizeObserver?.disconnect();
     for (const stop of cleanup) stop();
   });

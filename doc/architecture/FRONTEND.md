@@ -140,6 +140,8 @@ Workspace Runtime 组合长生命周期的交互会话，包括 SSH terminal、�
 
 WorkspaceSocket 在发送前限制浏览器发送缓冲，并按请求限制二进制响应累计大小；Terminal adapter 将输入拒绝和服务端输入错误转交 channel 的错误消费者，不自动重放被拒绝的输入。SSH 输出携带本地 consumed 回调，TerminalView 在 xterm write 完成后调用；WorkspaceSocket 按当前 WebSocket 累计确认并合并发送 `terminal.flow`，旧连接回调不能确认新连接。历史浏览暂存的实时输出在恢复实时画面并解析后才确认。恢复 offset 仍记录浏览器已接收字节，不丢弃待解析数据或用消费计数替代恢复 offset。
 
+`features/terminal/model/terminalOutputWriter.ts` 唯一持有实时输出的提交策略：前台直接写入 xterm，后台按 80ms 或 512KiB 批处理；flush、parser barrier 和 PTY 替换时的 discard 共用同一队列及消费回调。TerminalView 持有实时/历史展示切换，历史游标重置独立于实时恢复，新翻页等待重置并用 generation 拒绝晚到页面。xterm 的 RenderDebouncer 仍以动画帧合并普通重绘，每批待刷新内容共用一次性 100ms deadline，任一路径执行就取消另一条；dispose 取消两者。同步绘屏的完整帧在 DEC 2026 关闭后直接提交，未完成帧继续遵循 xterm 的同步输出保护。依赖改动集中在现有 xterm 包补丁，源码及 ESM/UMD 构建同时维护，不在组件里访问 xterm 私有 renderer 或添加刷新轮询。
+
 ### `app/`
 
 App 是 composition root，负责：

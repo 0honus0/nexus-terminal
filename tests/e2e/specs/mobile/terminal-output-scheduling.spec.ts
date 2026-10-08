@@ -2,7 +2,10 @@ import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { configureSshE2eSettings, connectTestSshFromConnectionsPage, ensureTestSshConnection } from '../../support/ssh';
 
-test('visible mobile terminal consumes SSH output while animation frames are deferred', async ({ page, context }) => {
+test('visible mobile terminal consumes and renders SSH output while animation frames are deferred', async ({
+  page,
+  context,
+}) => {
   let consumedBytes = 0;
   let receivedBytes = 0;
   page.on('websocket', (socket) => {
@@ -59,6 +62,15 @@ test('visible mobile terminal consumes SSH output while animation frames are def
     await page.keyboard.press('Enter');
     await expect.poll(() => receivedBytes).toBeGreaterThanOrEqual(receivedBaseline + 4096);
     await expect.poll(() => consumedBytes).toBeGreaterThanOrEqual(baseline + 4096);
+    await expect(terminal.locator('.xterm-rows')).toContainText('SCHEDULING_TIMER_DRAINED');
+    await command.fill(
+      "i=1; while [ $i -le 3 ]; do printf '\\r\\033[2KSCHEDULING_TICK_%s' \"$i\"; sleep 1; i=$((i+1)); done; printf '\\n'",
+    );
+    await page.keyboard.press('Enter');
+    for (const tick of [1, 2, 3]) {
+      await expect(terminal.locator('.xterm-rows')).toContainText(`SCHEDULING_TICK_${tick}`);
+      if (tick > 1) await expect(terminal.locator('.xterm-rows')).not.toContainText(`SCHEDULING_TICK_${tick - 1}`);
+    }
   } finally {
     await page.evaluate(() => {
       const state = window as typeof window & { restoreFrames?: () => void };
