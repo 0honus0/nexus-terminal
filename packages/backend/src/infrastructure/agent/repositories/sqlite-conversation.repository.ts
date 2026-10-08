@@ -113,15 +113,6 @@ const assertThreadDeleteSafe = async (db: RelationalDatabase, scope: Scope, thre
   );
   if (reconciliation) throw new Error('THREAD_DELETE_RECONCILIATION_REQUIRED');
 
-  const workspace = await db.queryOne<{ id: string }>(
-    `SELECT w.id FROM agent_workspaces w
-     INNER JOIN agent_runs r ON r.id = w.run_id AND r.user_id = w.user_id AND r.app_id = w.app_id
-     WHERE r.user_id = ? AND r.app_id = ?${threadFilter}
-       AND (w.status <> 'deleted' OR w.retained = 1) LIMIT 1`,
-    params,
-  );
-  if (workspace) throw new Error('THREAD_DELETE_WORKSPACE_ATTACHED');
-
   if (threadId) {
     const externallyReferenced = await db.queryOne<{ id: string }>(
       `SELECT child.id

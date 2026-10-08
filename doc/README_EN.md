@@ -24,11 +24,11 @@ docker compose up -d
 
 Open `http://localhost:18111` · [Deployment & updates](./DEPLOYMENT.md)
 
-Agent Workspace execution uses the optional `nexus-agent-runner`. The core SSH, SFTP, RDP, and VNC stack works without it. When enabled, the Runner manages persistent Workspaces and selectable Toolchains and authenticates its control plane with `NEXUS_AGENT_RUNNER_TOKEN`.
+Agent File/Shell/ACP operations use explicitly authorized SSH connections, and Browser integration uses Backend CDP. The retired Agent Workspace Runner and Toolchain deployment are no longer supported; ordinary terminal Workspaces and SSH/SFTP/RDP/VNC remain available.
 
 ## Features
 
-A browser-based SSH / SFTP / RDP / VNC remote access tool with terminal sessions, file management, online editing, remote desktops, a persistent Agent workspace, security controls, mobile support, and interface customization.
+A browser-based SSH / SFTP / RDP / VNC remote access tool with terminal sessions, file management, online editing, remote desktops, Agent SSH tools, security controls, mobile support, and interface customization.
 
 ## Screenshots
 

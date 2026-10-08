@@ -30,7 +30,6 @@ COPY scripts/patches ./scripts/patches
 COPY packages/backend/package.json packages/backend/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/protocol/package.json packages/protocol/package.json
-COPY packages/agent-runner/package.json packages/agent-runner/package.json
 COPY tests/e2e/package.json tests/e2e/package.json
 RUN apt-get update \
   && apt-get install -y --no-install-recommends g++ make python3 \

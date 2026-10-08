@@ -2,6 +2,11 @@ import type { AgentErrorRule } from './rule';
 import { onCodes, onCodesOrPrefixes, rawCode } from './rule';
 
 export const integrationErrorRules: readonly AgentErrorRule[] = [
+  onCodes(['BROWSER_TARGET_NOT_FOUND'], {
+    status: 404,
+    code: 'NOT_FOUND',
+    message: 'The selected Browser target was not found.',
+  }),
   onCodes(
     ['ACP_SSH_CONFIGURATION_INVALID'],
     rawCode(400, 'SSH ACP requires bounded argv and an absolute working directory.'),

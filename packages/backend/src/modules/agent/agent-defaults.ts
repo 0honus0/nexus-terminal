@@ -1,5 +1,3 @@
-import { WORKSPACE_JOB_LIMITS as runnerJobLimits } from '@nexus-terminal/protocol/runner';
-
 export type AgentContextProfile = 'normal' | 'extended';
 
 export interface AgentRunBudgetSnapshot {
@@ -35,7 +33,6 @@ export interface AgentSettingsDocument {
     fallbackModels: Array<{ providerId: string; modelId: string }>;
   };
   performance: {
-    maxConcurrentWorkspaceJobs: number;
     maxConcurrentRuntimes: number;
     maxConcurrentModelCalls: 'auto' | number;
   };
@@ -63,7 +60,6 @@ export interface AgentSettingsDocument {
     maxDelegationDepth: number;
     maxSubagentMessagesPerRun: number;
     maxSubagentMessageBytesPerRun: number;
-    maxActiveWorkspaces: number;
     unretainedArtifactTtlSeconds: number;
   };
   subagents: {
@@ -76,11 +72,6 @@ export interface AgentSettingsDocument {
     maxSingleArtifactBytes: number;
     maxGlobalArtifactBytes: number;
     unretainedArtifactTtlSeconds: number;
-  };
-  workspaceRuntime: {
-    maxActiveWorkspaces: number;
-    enabledRecipeIds: string[];
-    toolVersions: Record<string, { enabledVersionIds: string[]; defaultVersionId: string | null }>;
   };
   browser: {
     targets: AgentBrowserTargetSetting[];
@@ -100,7 +91,6 @@ export const AGENT_DEFAULTS = {
     performance: {
       maxConcurrentRuntimes: 2,
       maxConcurrentModelCalls: 'auto',
-      maxConcurrentWorkspaceJobs: runnerJobLimits.defaultConcurrentJobs,
     },
     budget: {
       maxModelRequests: 80,
@@ -126,7 +116,6 @@ export const AGENT_DEFAULTS = {
       maxDelegationDepth: 3,
       maxSubagentMessagesPerRun: 5_000,
       maxSubagentMessageBytesPerRun: 8_388_608,
-      maxActiveWorkspaces: 8,
       unretainedArtifactTtlSeconds: 2_592_000,
     },
     subagents: {
@@ -139,11 +128,6 @@ export const AGENT_DEFAULTS = {
       maxSingleArtifactBytes: 52_428_800,
       maxGlobalArtifactBytes: 2_147_483_648,
       unretainedArtifactTtlSeconds: 604_800,
-    },
-    workspaceRuntime: {
-      maxActiveWorkspaces: 4,
-      enabledRecipeIds: [],
-      toolVersions: {},
     },
     browser: { targets: [] },
     plugins: { repositories: [] },
@@ -180,26 +164,6 @@ const stringList = (value: unknown, fallback: string[] = []): string[] =>
         .slice(0, 128)
         .sort()
     : [...fallback];
-
-const packVersionSettings = (
-  value: unknown,
-  fallback: Record<string, { enabledVersionIds: string[]; defaultVersionId: string | null }> = {},
-): Record<string, { enabledVersionIds: string[]; defaultVersionId: string | null }> => {
-  if (!isRecord(value)) return structuredClone(fallback);
-  const result: Record<string, { enabledVersionIds: string[]; defaultVersionId: string | null }> = {};
-  for (const [familyId, raw] of Object.entries(value).slice(0, 128)) {
-    const family = familyId.trim();
-    if (!family || family.length > 128 || !isRecord(raw)) continue;
-    assertExactKeys(raw, ['enabledVersionIds', 'defaultVersionId']);
-    const enabledVersionIds = stringList(raw.enabledVersionIds).slice(0, 64);
-    const defaultVersionId = stringOrNull(raw.defaultVersionId, null);
-    result[family] = {
-      enabledVersionIds,
-      defaultVersionId: defaultVersionId && enabledVersionIds.includes(defaultVersionId) ? defaultVersionId : null,
-    };
-  }
-  return result;
-};
 
 const validBrowserUrlPattern = (value: string): boolean => {
   const match = /^(\*|https?|wss?):\/\/(\*\.)?([^/:?#]+)(?::(\d{1,5}))?(\/[^?#]*)?$/.exec(value.trim());
@@ -327,7 +291,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
     'hardLimits',
     'subagents',
     'storage',
-    'workspaceRuntime',
     'browser',
     'plugins',
   ] as const;
@@ -343,18 +306,7 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
   const defaults = createDefaultAgentSettings();
   const feature = exactRecord(raw, 'feature', ['enabled']);
   const model = exactRecord(raw, 'model', ['defaultProviderId', 'defaultModelId', 'fallbackModels']);
-  const performance = exactRecord(raw, 'performance', [
-    'maxConcurrentRuntimes',
-    'maxConcurrentModelCalls',
-    'maxConcurrentWorkspaceJobs',
-  ]);
-  if (
-    performance.maxConcurrentWorkspaceJobs !== undefined &&
-    (!Number.isSafeInteger(performance.maxConcurrentWorkspaceJobs) ||
-      Number(performance.maxConcurrentWorkspaceJobs) < 1 ||
-      Number(performance.maxConcurrentWorkspaceJobs) > runnerJobLimits.maxConcurrentJobs)
-  )
-    throw new Error('VALIDATION_FAILED');
+  const performance = exactRecord(raw, 'performance', ['maxConcurrentRuntimes', 'maxConcurrentModelCalls']);
   const budget = exactRecord(raw, 'budget', [
     'maxModelRequests',
     'maxActiveExecutionSeconds',
@@ -379,7 +331,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
     'maxDelegationDepth',
     'maxSubagentMessagesPerRun',
     'maxSubagentMessageBytesPerRun',
-    'maxActiveWorkspaces',
     'unretainedArtifactTtlSeconds',
   ]);
   const subagents = exactRecord(raw, 'subagents', [
@@ -392,11 +343,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
     'maxSingleArtifactBytes',
     'maxGlobalArtifactBytes',
     'unretainedArtifactTtlSeconds',
-  ]);
-  const workspaceRuntime = exactRecord(raw, 'workspaceRuntime', [
-    'maxActiveWorkspaces',
-    'enabledRecipeIds',
-    'toolVersions',
   ]);
   const browser = exactRecord(raw, 'browser', ['targets']);
   const plugins = exactRecord(raw, 'plugins', ['repositories']);
@@ -427,11 +373,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
         : structuredClone(defaults.model.fallbackModels),
     },
     performance: {
-      maxConcurrentWorkspaceJobs: integer(
-        performance.maxConcurrentWorkspaceJobs,
-        defaults.performance.maxConcurrentWorkspaceJobs,
-        1,
-      ),
       maxConcurrentRuntimes: integer(performance.maxConcurrentRuntimes, defaults.performance.maxConcurrentRuntimes, 1),
       maxConcurrentModelCalls:
         performance.maxConcurrentModelCalls === 'auto'
@@ -482,7 +423,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
         defaults.hardLimits.maxSubagentMessageBytesPerRun,
         1,
       ),
-      maxActiveWorkspaces: integer(hardLimits.maxActiveWorkspaces, defaults.hardLimits.maxActiveWorkspaces, 1),
       unretainedArtifactTtlSeconds: integer(
         hardLimits.unretainedArtifactTtlSeconds,
         defaults.hardLimits.unretainedArtifactTtlSeconds,
@@ -511,15 +451,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
         defaults.storage.unretainedArtifactTtlSeconds,
         1,
       ),
-    },
-    workspaceRuntime: {
-      maxActiveWorkspaces: integer(
-        workspaceRuntime.maxActiveWorkspaces,
-        defaults.workspaceRuntime.maxActiveWorkspaces,
-        1,
-      ),
-      enabledRecipeIds: stringList(workspaceRuntime.enabledRecipeIds, defaults.workspaceRuntime.enabledRecipeIds),
-      toolVersions: packVersionSettings(workspaceRuntime.toolVersions, defaults.workspaceRuntime.toolVersions),
     },
     browser: {
       targets: browserTargets(browser.targets, defaults.browser.targets),
@@ -585,10 +516,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
   normalized.storage.unretainedArtifactTtlSeconds = Math.min(
     normalized.storage.unretainedArtifactTtlSeconds,
     normalized.hardLimits.unretainedArtifactTtlSeconds,
-  );
-  normalized.workspaceRuntime.maxActiveWorkspaces = Math.min(
-    normalized.workspaceRuntime.maxActiveWorkspaces,
-    normalized.hardLimits.maxActiveWorkspaces,
   );
 
   return normalized;

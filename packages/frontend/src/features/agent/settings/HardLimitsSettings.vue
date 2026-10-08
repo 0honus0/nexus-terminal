@@ -72,7 +72,6 @@
         'maxConcurrentModelCalls',
         'maxDelegationDepth',
         'maxSubagentMessagesPerRun',
-        'maxActiveWorkspaces',
       ],
     },
   ];

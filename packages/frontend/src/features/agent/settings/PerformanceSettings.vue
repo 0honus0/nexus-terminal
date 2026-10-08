@@ -1,7 +1,6 @@
 <script setup lang="ts">
   import { UiButton, UiInfoHint, UiSelect } from '@/foundation/ui';
   import { computed, ref, watch } from 'vue';
-  import { WORKSPACE_JOB_LIMITS as runnerJobLimits } from '@nexus-terminal/protocol/runner';
   import type { AgentSettingsViewDto } from '../api/agent-api';
 
   const props = defineProps<{ settings: AgentSettingsViewDto; busy: boolean }>();
@@ -10,12 +9,8 @@
   const baselineModelCalls = ref(String(props.settings.requestedSettings.performance.maxConcurrentModelCalls));
   const runtimes = ref(baselineRuntimes.value);
   const modelCalls = ref<string>(baselineModelCalls.value);
-  const baselineWorkspaceJobs = ref(props.settings.requestedSettings.performance.maxConcurrentWorkspaceJobs);
-  const workspaceJobs = ref(baselineWorkspaceJobs.value);
 
   const syncFromProps = (): void => {
-    baselineWorkspaceJobs.value = props.settings.requestedSettings.performance.maxConcurrentWorkspaceJobs;
-    workspaceJobs.value = baselineWorkspaceJobs.value;
     baselineRuntimes.value = props.settings.requestedSettings.performance.maxConcurrentRuntimes;
     baselineModelCalls.value = String(props.settings.requestedSettings.performance.maxConcurrentModelCalls);
     runtimes.value = baselineRuntimes.value;
@@ -30,14 +25,10 @@
   );
 
   const isDirty = computed(
-    () =>
-      runtimes.value !== baselineRuntimes.value ||
-      modelCalls.value !== baselineModelCalls.value ||
-      workspaceJobs.value !== baselineWorkspaceJobs.value,
+    () => runtimes.value !== baselineRuntimes.value || modelCalls.value !== baselineModelCalls.value,
   );
   const remoteMatchesDraft = computed(
     () =>
-      workspaceJobs.value === props.settings.requestedSettings.performance.maxConcurrentWorkspaceJobs &&
       runtimes.value === props.settings.requestedSettings.performance.maxConcurrentRuntimes &&
       modelCalls.value === String(props.settings.requestedSettings.performance.maxConcurrentModelCalls),
   );
@@ -51,12 +42,6 @@
   );
 
   const invalid = computed(() => {
-    if (
-      !Number.isSafeInteger(workspaceJobs.value) ||
-      workspaceJobs.value < 1 ||
-      workspaceJobs.value > runnerJobLimits.maxConcurrentJobs
-    )
-      return true;
     if (
       !Number.isSafeInteger(runtimes.value) ||
       runtimes.value < 1 ||
@@ -73,7 +58,6 @@
     if (invalid.value) return;
     const parsedModel = modelCalls.value === 'auto' ? 'auto' : Number(modelCalls.value);
     emit('save', {
-      maxConcurrentWorkspaceJobs: workspaceJobs.value,
       maxConcurrentRuntimes: runtimes.value,
       maxConcurrentModelCalls: parsedModel,
     });
@@ -100,24 +84,6 @@
     </div>
 
     <div class="grid gap-4 p-4 sm:p-5 md:grid-cols-2">
-      <div class="rounded-lg bg-header/25 p-4">
-        <label class="block">
-          <span class="text-xs font-semibold text-foreground">{{
-            $t('agent.settings.performance.workspaceJobs')
-          }}</span>
-          <p class="mt-0.5 mb-2 text-[11px] text-text-secondary">
-            {{ $t('agent.settings.performance.workspaceJobsHint') }}
-          </p>
-          <input
-            v-model.number="workspaceJobs"
-            type="number"
-            min="1"
-            :max="runnerJobLimits.maxConcurrentJobs"
-            :disabled="busy"
-            class="h-9 w-full rounded-lg border border-border bg-card px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
-          />
-        </label>
-      </div>
       <div class="rounded-lg bg-header/25 p-4">
         <label class="block">
           <span class="text-xs font-semibold text-foreground">{{ $t('agent.settings.performance.runtimes') }}</span>

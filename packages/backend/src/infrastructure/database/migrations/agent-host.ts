@@ -1,8 +1,7 @@
 import type { DatabaseSync as Database } from 'node:sqlite';
 import type { SqliteMigration } from './migration.types';
 import { tableExists, columnExists } from './schema-inspection';
-import { createAgentProjectDirectoriesTableSQL, createAgentSshJobsTableSQL } from '../schema/agent-workspace';
-import { WORKSPACE_JOB_LIMITS } from '@nexus-terminal/protocol/runner';
+import { createAgentProjectDirectoriesTableSQL, createAgentSshJobsTableSQL } from '../schema/agent-ssh';
 
 export const agentHostMigrations: SqliteMigration[] = [
   {
@@ -109,7 +108,7 @@ export const agentHostMigrations: SqliteMigration[] = [
     sql: `
       UPDATE agent_settings
       SET value_json = json_insert(value_json,
-        '$.performance.maxConcurrentWorkspaceJobs', ${WORKSPACE_JOB_LIMITS.defaultConcurrentJobs})
+        '$.performance.maxConcurrentWorkspaceJobs', 8)
       WHERE json_extract(value_json, '$.schemaVersion') = 1
         AND json_type(value_json, '$.performance') = 'object'
         AND json_type(value_json, '$.performance.maxConcurrentWorkspaceJobs') IS NULL;
@@ -140,5 +139,21 @@ export const agentHostMigrations: SqliteMigration[] = [
     name: 'Remove retired Agent Workspace management confirmations',
     check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_workspace_runtime_confirmations'),
     sql: 'DROP TABLE IF EXISTS agent_workspace_runtime_confirmations;',
+  },
+  {
+    id: 58,
+    name: 'Drop retired Agent Workspace metadata and runtime commands',
+    sql: `
+      DROP TABLE IF EXISTS agent_workspace_runtime_commands;
+      DROP TABLE IF EXISTS agent_workspaces;
+      UPDATE agent_settings
+      SET value_json = json_remove(value_json,
+        '$.workspaceRuntime',
+        '$.performance.maxConcurrentWorkspaceJobs',
+        '$.hardLimits.maxActiveWorkspaces')
+      WHERE json_valid(value_json);
+    `,
+    verify: async (db: Database): Promise<boolean> =>
+      !(await tableExists(db, 'agent_workspace_runtime_commands')) && !(await tableExists(db, 'agent_workspaces')),
   },
 ];

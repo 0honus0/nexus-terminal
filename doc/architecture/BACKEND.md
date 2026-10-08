@@ -411,6 +411,8 @@ Browser 已从 Workspace/Runner transport 分离：Host `browser_session_open` �
 
 Agent Workspace 用户控制面与 Backend Runtime 已破坏式收敛：Frontend Settings/Composer Recipe/Run Workspace 组件、Backend Workspace HTTP/WS/Terminal/Artifact API 均退出。进一步删除 Backend `WorkspaceCheckpointService`、`WorkspaceRuntimeService`、Runner HTTP Adapter/Controller/Gateway、Workspace Repository、Runner transport helper 与 Workspace reconcile/scheduled deferred recovery。Project Instructions 唯一 source 为 SSH Project Directory；model/subagent 的投影不再生成 Workspace generation/id。Checkpoint 正常保存 Artifact evidence、Model/Context/Goal/Plan；旧 Run environment 或已存在 Workspace snapshot refs/Runner background jobs 阻止新 checkpoint，旧 checkpoint validate/resume 按 `CHECKPOINT_WORKSPACE_MANIFEST_INVALID` / `CHECKPOINT_BACKGROUND_JOB_UNRESOLVED` fail closed，Backend restart 不再轮询 Runner job/后台等待。SQLite checkpoint writer 不再写入 Workspace Capture/Reference，并保留解码历史字段以拒绝不安全恢复。当前保留旧 `agent_workspaces` 元数据表的部分 Run/Thread 删除 guard、数据库初始化/备份白名单及生产 Runner/部署，需在删表/Runner 阶段处理；P7 E2E 尚未更新和验证，普通终端 Workspace 与 SSH 不能删除。
 
+后续 SQLite/部署切口：当前 schema 已删除 `agent_workspaces` / `agent_workspace_runtime_commands`，保留的 `agent_ssh_jobs` / `agent_project_directories` 移到 `schema/agent-ssh.ts`。#58 不兼容旧状态、不对未完成命令留等待/保护，按 FK 逆序直接 DROP 两表并通过 json_remove 去掉 Agent Settings 的过期字段。Run/Thread 删除路径已去除与旧 Workspace 相关的守卫；普通 Run 保护仍在。Backup 白名单剔除旧 Workspace/commands/confirmations。生产 `agent-runner` package、Toolchain assets、宿主准备脚本、Root 构建/类型检查、Compose 和发布任务已同步物理删除。E2E 测试 Runner 镜像与普通 SSH、终端 Workspace、Artifact/Memory 保留；旧端到端脚本需要后续重写。
+
 ## 数据、事务与并发
 
 - SQLite schema 描述新数据库结构，migration 负责已发布结构升级。

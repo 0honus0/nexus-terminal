@@ -13,8 +13,6 @@ export interface RuntimeConfig {
   agentOfficialPluginCatalogUrl?: string;
   agentOfficialPluginPublisherKeyId?: string;
   agentOfficialPluginPublisherPublicKeyPem?: string;
-  agentRunnerUrl?: string;
-  agentRunnerToken?: string;
   host: string;
   trustProxy: string;
   port: number;
@@ -122,8 +120,6 @@ export const loadRuntimeConfig = (dataDirectory: string, env: NodeJS.ProcessEnv 
     (env.NODE_ENV?.trim() || 'development') === 'test' || env.NEXUS_E2E_RESET_ENABLED === '1'
       ? env.NEXUS_AGENT_OFFICIAL_PLUGIN_PUBLISHER_PUBLIC_KEY_PEM?.trim() || undefined
       : undefined,
-  agentRunnerUrl: env.NEXUS_AGENT_RUNNER_URL?.trim() || undefined,
-  agentRunnerToken: env.NEXUS_AGENT_RUNNER_TOKEN?.trim() || undefined,
   host: env.HOST?.trim() || '0.0.0.0',
   trustProxy: env.TRUST_PROXY?.trim() || 'loopback',
   port: parsePositiveInteger(env.PORT, 3001, 'PORT'),

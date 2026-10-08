@@ -43,9 +43,6 @@ services:
       # 默认 nexus.agent（Operations + Developer Skills）以及 nexus.fullstack 等 first-party App 都是独立签名 Plugin，不编译进 Nexus 主镜像。
       # 这里只允许替换官方 catalog/mirror 地址；Publisher 信任根由 Nexus Host 固定 pin。
       NEXUS_AGENT_OFFICIAL_PLUGIN_CATALOG_URL: ${NEXUS_AGENT_OFFICIAL_PLUGIN_CATALOG_URL:-https://github.com/0honus0/nexus-agent-plugins/releases/latest/download/catalog.json}
-      # Runner is an optional enhancement. Leave URL empty for the core-only stack.
-      NEXUS_AGENT_RUNNER_URL: ${NEXUS_AGENT_RUNNER_URL:-}
-      NEXUS_AGENT_RUNNER_TOKEN: ${NEXUS_AGENT_RUNNER_TOKEN:-}
     volumes:
       - ./data:/app/data
     depends_on:
@@ -64,22 +61,6 @@ services:
     restart: unless-stopped
     networks:
       - nexus-terminal-network
-
-  agent-runner:
-    image: ${NEXUS_AGENT_RUNNER_IMAGE_REPOSITORY:-ghcr.io/0honus0/nexus-agent-runner}:${NEXUS_AGENT_RUNNER_IMAGE_TAG:-latest}
-    container_name: nexus-agent-runner
-    restart: unless-stopped
-    profiles: ['runner']
-    networks:
-      - nexus-terminal-network
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      NEXUS_AGENT_RUNNER_TOKEN: ${NEXUS_AGENT_RUNNER_TOKEN:-}
-    volumes:
-      - ${NEXUS_AGENT_RUNNER_DATA_DIR:-./agent-runner-data}:/var/lib/nexus-agent-runner
-      - ./data/agent/plugins:/var/lib/nexus-agent-runner/plugin-source:ro
 
 networks:
   nexus-terminal-network:

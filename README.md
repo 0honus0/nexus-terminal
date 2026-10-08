@@ -24,7 +24,7 @@ docker compose up -d
 
 访问 `http://localhost:18111` · [部署与更新](./doc/DEPLOYMENT.md)
 
-Agent Workspace Runtime 使用独立 `nexus-agent-runner` 执行平面；Nexus 当前按单用户应用设计，Runner 管理多个持久 Workspace 与可切换 Toolchain，不再为 Workspace 构造额外安全沙箱。Runner 控制面统一使用 `NEXUS_AGENT_RUNNER_TOKEN` Bearer 认证；支持宿主 Runner，也提供 `ghcr.io/0honus0/nexus-agent-runner` 独立镜像和默认注释掉的 Compose 配置。
+Agent 的 File/Shell/ACP 工具通过明确授权的 SSH 连接执行，Browser 通过 Backend CDP 接入。独立 Agent Workspace Runner、Toolchain 与其 Compose 部署入口已退出；普通终端 Workspace、SSH/SFTP、RDP/VNC 及 Artifact 继续提供。
 
 ## 功能
 

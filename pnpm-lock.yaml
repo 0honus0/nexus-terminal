@@ -55,37 +55,6 @@ importers:
         specifier: ^8.71.0
         version: 8.71.0(eslint@10.12.0(jiti@2.7.0))(typescript@6.0.3)
 
-  packages/agent-runner:
-    dependencies:
-      '@nexus-terminal/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      diff:
-        specifier: 9.0.0
-        version: 9.0.0
-      semver:
-        specifier: 7.7.2
-        version: 7.7.2
-      tar:
-        specifier: 'catalog:'
-        version: 7.5.22
-      ws:
-        specifier: ^8.22.0
-        version: 8.22.0
-    devDependencies:
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.4
-      '@types/semver':
-        specifier: 7.7.1
-        version: 7.7.1
-      '@types/ws':
-        specifier: ^8.18.2
-        version: 8.18.2
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
-
   packages/backend:
     dependencies:
       '@agentclientprotocol/sdk':
@@ -1409,9 +1378,6 @@ packages:
 
   '@types/readdir-glob@1.1.5':
     resolution: {integrity: sha512-raiuEPUYqXu+nvtY2Pe8s8FEmZ3x5yAH4VkLdihcPdalvsHltomrRC9BzuStrJ9yk06470hS0Crw0f1pXqD+Hg==}
-
-  '@types/semver@7.7.1':
-    resolution: {integrity: sha512-FmgJfu+MOcQ370SD0ev7EI8TlCAfKYU+B4m5T3yXc1CiRN94g/SZPtsCkk506aUDtlMnFZvasDwHHUcZUEaYuA==}
 
   '@types/semver@7.8.0':
     resolution: {integrity: sha512-1mAINjtQCXXeLkJ9ehXkwOcBpqtLxiVtKhpUf83DdRNdQKV0iXZpaHYqRr7nj+wvxuJzoAmAwXI+sCNMv1CzLQ==}
@@ -3114,11 +3080,6 @@ packages:
   scule@1.3.0:
     resolution: {integrity: sha512-6FtHJEvt+pVMIB9IBY+IcCJ6Z5f1iQnytgyfKMhDKgmzYG+TeH/wx1y3l27rshSbLiSanrR9ffZDrEsmjlQF2g==}
 
-  semver@7.7.2:
-    resolution: {integrity: sha512-RF0Fw+rO5AMf9MAyaRXI4AV0Ulj5lMHqVxxdSgiVbixSCXoEmmX/jk0CuJw4+3SqroYO9VoUh+HcuJivvtJemA==}
-    engines: {node: '>=10'}
-    hasBin: true
-
   semver@7.8.5:
     resolution: {integrity: sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==}
     engines: {node: '>=10'}
@@ -4669,8 +4630,6 @@ snapshots:
   '@types/readdir-glob@1.1.5':
     dependencies:
       '@types/node': 26.6.4
-
-  '@types/semver@7.7.1': {}
 
   '@types/semver@7.8.0': {}
 
@@ -6337,8 +6296,6 @@ snapshots:
   safer-buffer@2.1.2: {}
 
   scule@1.3.0: {}
-
-  semver@7.7.2: {}
 
   semver@7.8.5: {}
 

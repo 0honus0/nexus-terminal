@@ -165,7 +165,6 @@ const hardLimitKeys = [
   'maxDelegationDepth',
   'maxSubagentMessagesPerRun',
   'maxSubagentMessageBytesPerRun',
-  'maxActiveWorkspaces',
   'unretainedArtifactTtlSeconds',
 ] as const satisfies readonly (keyof AgentHardLimitsDto)[];
 

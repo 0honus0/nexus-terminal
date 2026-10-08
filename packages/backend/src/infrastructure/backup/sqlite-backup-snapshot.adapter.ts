@@ -80,9 +80,6 @@ const AGENT_TABLES = [
   'agent_app_intent_receipts',
   'agent_app_intent_artifact_grants',
   'agent_memory_import_confirmations',
-  'agent_workspaces',
-  'agent_workspace_runtime_commands',
-  'agent_workspace_runtime_confirmations',
 ] as const;
 
 const TABLES = [...PRODUCT_TABLES, ...AGENT_TABLES] as const;

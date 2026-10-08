@@ -121,7 +121,7 @@ node --version && pnpm --version
 # 从下方「当前工作指针」继续一项，改完先更新本文件再检查与本地提交
 ```
 
-**当前工作指针（2026-10-08）**：以第 10–13 条最新破坏式移除要求为准；Plugin/AgentDefinition 版本固定 `1.0.0`，外仓远程 `main`/`v1.0.0` 指向 `ac096df` 且无需再发布。主仓 Host ACP SSH-only 提交 `536cb33b`、SSH 目标解析器独立提交 `5b58edaa`；本轮 Runner ACP 全链已正式本地提交 **`902668ef`**，**生产 Runner ACP 全链（P4/P5/P6 的 ACP 专属子项）**进一步删除 Runner ProcessRuntime/stream、Workspace/Run/Runner Profile 以及前端 CRUD，更新 Backend sqlite schema 与迁移 #56，提升内部 Runner wire protocol 至 `2026-10-08`；不是只禁用入口。已覆盖真实 Runner ACP 404、原 SSH ACP/内层审批和 Workspace Job 的 E2E 反例。**本轮架构收敛**：移除不再承担任何独立策略的 `AgentTargetResolver` facade，File/Shell/ACP 直接注入 SSH Port，并复用两个小型 SSH 目标绑定函数，见下方 P3 架构切口。**本轮架构收敛已完成真实 SSH E2E 验证**：删除 `AgentTargetResolver` 类和文件，File/Shell/ACP 直接依赖 SSH Port，统一目标绑定纯函数，详见 P3 架构收敛切口。**已完成 Browser 独立 CDP/Runner tunnel、Agent Workspace 用户 HTTP/WS/UI、Backend WorkspaceCheckpoint capture/restore、WorkspaceRuntimeService/Repository、Runner HTTP client 和 Backend Workspace reconcile/Runner Job restart polling 的物理删除；新 Run 仅 SSH、environment 恒为 null，旧含 Workspace manifest/Job 的 Checkpoint fail closed。下一项**：先拆剩余 SQLite `agent_workspaces`/`agent_workspace_runtime_commands` 建表及 Run/Thread 删除 guard、备份快照表白名单，设计安全数据库删除迁移；再连同部署环境彻底移除生产 Runner package/进程/配置与残留 Workspace wire contract。前后端/Runner 编译通过优先，旧 E2E/场景测试最后集中重写。**P3/P4/P5/P6 尚未整体完成，主仓只本地提交、不推送**。保持普通终端 Workspace、SSH 会话/Job/项目目录、Artifact/Memory、测试专用 Runner、未跟踪原计划和用户备份；新会话先确认 git HEAD/status 与本文件最新测试终态。
+**当前工作指针（2026-10-08）**：以第 10–13 条最新破坏式移除要求为准；Plugin/AgentDefinition 版本固定 `1.0.0`，外仓远程 `main`/`v1.0.0` 指向 `ac096df` 且无需再发布。主仓 Host ACP SSH-only 提交 `536cb33b`、SSH 目标解析器独立提交 `5b58edaa`；本轮 Runner ACP 全链已正式本地提交 **`902668ef`**，**生产 Runner ACP 全链（P4/P5/P6 的 ACP 专属子项）**进一步删除 Runner ProcessRuntime/stream、Workspace/Run/Runner Profile 以及前端 CRUD，更新 Backend sqlite schema 与迁移 #56，提升内部 Runner wire protocol 至 `2026-10-08`；不是只禁用入口。已覆盖真实 Runner ACP 404、原 SSH ACP/内层审批和 Workspace Job 的 E2E 反例。**本轮架构收敛**：移除不再承担任何独立策略的 `AgentTargetResolver` facade，File/Shell/ACP 直接注入 SSH Port，并复用两个小型 SSH 目标绑定函数，见下方 P3 架构切口。**本轮架构收敛已完成真实 SSH E2E 验证**：删除 `AgentTargetResolver` 类和文件，File/Shell/ACP 直接依赖 SSH Port，统一目标绑定纯函数，详见 P3 架构收敛切口。**当前破坏式收敛**：Backend Workspace 服务与用户 HTTP/WS 已移除；本切口将 SQLite 旧 Workspace 专属表从新 schema/Backup 白名单物理移除，#58 直接 DROP 两表并清除 workspaceRuntime/Job 并发设置字段，不做旧 Workspace/命令迁移或 guard；删除生产 Runner package、Toolchain catalog、Compose service、Backend config、根构建、镜像发布/CI 生产部署任务，仅保留独立 Playwright E2E 容器及普通终端 Workspace。**下一项**：收敛仍存的 Run Environment/Checkpoint 旧 DTO/decoder、i18n 和过时的 E2E/场景及 Docker deployment smoke。前后端/Runner 编译通过优先，旧 E2E/场景测试最后集中重写。**P3/P4/P5/P6 尚未整体完成，主仓只本地提交、不推送**。保持普通终端 Workspace、SSH 会话/Job/项目目录、Artifact/Memory、测试专用 Runner、未跟踪原计划和用户备份；新会话先确认 git HEAD/status 与本文件最新测试终态。
 
 **P3 独立 SSH 目标解析器切口（2026-10-08）**：经实际消费者审计，`AgentTargetResolver` 只被 Agent File/Shell/ACP 使用，其三个模型执行入口已全部 SSH-only；Browser Session 的 Workspace/standalone binding 有独立 `BrowserSessionBindingAuthority`，不调用此 resolver。本切口删除 `target-resolver.ts` 的 Workspace Repository、profile hash、generation、Workspace preconditions 和 `requireRunningWorkspace` 分支，`compose-agent.ts` 只注入 `SshTargetResolverPort`。旧 `target:'workspace'`、0、前导零、科学记数法、超出 JavaScript 安全整数范围的 connection ID 在查询 SSH resolver 前 fail closed；合法正整数 ID 仍使用 SSH target adapter 的配置哈希、资源键和原有 scope 授权。保留 `tool-target.types.ts` 的其余通用持久 target 形状，等待 Browser/Workspace 相关消费者独立删除；此切口**不改 Browser owner，也不允许无授权的 SSH fallback**。已有 `unified-file-capability.scenario.ts` 新增真实 resolver 的五种失败/正例并继续跑完整 File 能力链；本切口已本地提交 `5b58edaa`；独立 `unifiedFileCapabilityScenario()`（含五个无副作用拒绝反例）**exit 0**，Backend `tsc --noEmit`、相关 ESLint、定向 Prettier 和 `git diff --check` **PASS**；在当前 ACP 迁移工作树上再运行完整 `pnpm --filter @nexus-terminal/backend run test:agent-scenarios` **exit 0**。旧的共享 `AgentTargetKind`/Workspace semantic 和 Browser binding 不在本切口改变，分别留后续 owner 消费者处理。
 
@@ -154,18 +154,25 @@ node --version && pnpm --version
 - 项目指令 source 只读 SSH Project Directory，移除 Workspace path/generation 元数据和 Runtime 注入，Model/Subagent 遵循原有 SSH target scope 和拒绝失败语义。普通终端 Workspace/SSH session/background jobs、Artifact 和 Memory 不变；Legacy SQLite 的 `agent_workspaces`、`agent_workspace_runtime_commands` 初始化表、Read-only Run/Thread deletion guard、Backup snapshot table allowlist **仍存在**，不得立即误删其表而留下失效的 guard 或影响用户备份。下一步先整理这些数据库生命周期，再处理生产 Runner package/配置。
 - **按用户当前优先顺序本轮只做代码编译/构建验证**：`pnpm run check`（Frontend/Backend/Runner 类型检查与 ESLint）、完整 `pnpm run format:all:check`、`pnpm run build`（三包）以及 `git diff --check` **全部 PASS / exit 0**。**未运行或修正旧 Workspace scenario/E2E**；不能引用上轮旧断言结果作为本轮证据，P7 保持待办。
 
+**P2/P6 直接删除 Agent Workspace SQLite/生产 Runner，无历史兼容（2026-10-08，本地切口）**：
+
+- 项目所有者再次明确“这部分不用做历史兼容，直接按不存在处理，代码不要兼容逻辑”，覆盖此前关于未结算 Workspace/命令的前置检查、历史 Run/Thread 保护和备份自动转换设计。SQLite schema 不再创建 `agent_workspaces`/`agent_workspace_runtime_commands`，迁移 **#58** 无条件先删除命令再删除 Workspace 表（`DROP TABLE IF EXISTS`，无状态判断/等待/归档判定），同时通过 `json_remove` 清除 Agent Settings 的 `workspaceRuntime`、旧 `maxConcurrentWorkspaceJobs` 和 `maxActiveWorkspaces`。不保存兼容在线表、不自动重建 Workspace。旧 Run/Thread metadata guard 完全移除，保留非 Workspace 的 ACTIVE、RECONCILIATION、Referenced 保护。旧实体数据会随迁移被删除，**不承诺备份兼容**；不会主动删除文件系统上的用户独立备份或普通 SSH/终端目录。
+- 剩余 `agent_ssh_jobs` 与 `agent_project_directories` 迁至 `schema/agent-ssh.ts` 且不删表。当前 Backup owner 白名单只含有效表；旧格式包含已移除表时按不支持拒绝。后端 Agent Settings/Host DTO、Frontend Performance/HardLimits 移除 Workspace/Runner-only 字段与 UI，独立 `protocol/runner`、Runner wire version、Workspace Catalog/DTO 和 Runtime 错误映射物理删除，Browser target not found 仍由 Integration handler 映射。
+- 整包删除 `packages/agent-runner/`、`scripts/agent-runner/`、`scripts/docker/agent-runner/`；根 Build/Check/Lockfile/ESLint、Backend RuntimeConfig、Compose/Env 模板与 Runner GHCR 发布任务同步退出，E2E workflow 的生产 Runner 构建和 Docker full-deployment smoke 暂不运行。**保留** `tests/e2e/Dockerfile.runner`、其 image fingerprint/缓存链（它是 Playwright 工具容器，不是生产 Agent Runner），普通 `workspaceRuntimeRegistry` 终端功能、SSH SFTP/Job、Guacamole/Artifact/Memory/Plugin。
+- 按用户优先级本切口验证 Frontend/Backend TypeScript、ESLint、Build、全仓 Prettier 与 diff；旧 Agent Workspace scenario/Playwright 和 Docker deployment smoke **仍待 P7 后续重写**，不得将本轮标记为 E2E PASS。新代码只接纳新 schema/settings，不做旧数据恢复兼容。
+
 ## 阶段状态（2026-10-08）
 
-| 阶段                         | 状态   | 说明                                                                                  |
-| ---------------------------- | ------ | ------------------------------------------------------------------------------------- |
-| P0 清单与升级边界            | 进行中 | P0-2/3/4 完成，旧版 Agent E2E 69/69；P0-1/5 的历史事项由最新破坏式规则覆盖            |
-| P1 最终 contract 与迁移方案  | 进行中 | Plugin manifest/decoder 与 Plugin Runner DTO 已退出；Workspace/SSH DTO 仍待收敛       |
-| P2 存量数据、升级与备份      | 进行中 | 迁移 #55/#56/#57 删除旧 Plugin/ACP/Workspace 管理确认表；未操作用户生产实例           |
-| P3 Backend SSH 收敛          | 进行中 | Workspace 用户 HTTP/WS、Backend Runtime/Checkpoint capture 已退出；SQLite 元数据待删  |
-| P4 Browser、ACP、Plugin 解耦 | 进行中 | ACP/Browser Runner tunnel 与 Host binding 已退出；余 Workspace profile/Plugin Runtime |
-| P5 Frontend 移除             | 进行中 | Settings/Composer/Run 详情 Workspace UI 和 API 已退出；持久 DTO/i18n 有待清理         |
-| P6 生产 Runner 退出          | 进行中 | Backend Runner HTTP client/Workspace runtime 已删；生产 Runner package/部署尚待拆     |
-| P7 文档与验收                | 未开始 | 按用户要求测试重写/E2E 暂后置，不能引用上一提交的 3-pass 为本轮结果                   |
+| 阶段                         | 状态   | 说明                                                                                       |
+| ---------------------------- | ------ | ------------------------------------------------------------------------------------------ |
+| P0 清单与升级边界            | 进行中 | P0-2/3/4 完成，旧版 Agent E2E 69/69；P0-1/5 的历史事项由最新破坏式规则覆盖                 |
+| P1 最终 contract 与迁移方案  | 进行中 | Plugin manifest/decoder 与 Plugin Runner DTO 已退出；Workspace/SSH DTO 仍待收敛            |
+| P2 存量数据、升级与备份      | 进行中 | #58 直接 DROP Workspace 两表并移除旧 Settings keys；无历史兼容                             |
+| P3 Backend SSH 收敛          | 进行中 | Workspace 用户端点/Runtime/SQLite owner 已退出；旧 Run DTO/decoder 尚待收敛                |
+| P4 Browser、ACP、Plugin 解耦 | 进行中 | ACP/Browser Runner tunnel 与 Host binding 已退出；余 Workspace profile/Plugin Runtime      |
+| P5 Frontend 移除             | 进行中 | Settings/Composer/Run 详情 Workspace UI 和 API 已退出；持久 DTO/i18n 有待清理              |
+| P6 生产 Runner 退出          | 已完成 | 生产包、镜像、Compose、Backend config、发布/构建入口已删；测试侧 Runner fixture 待 P7 修整 |
+| P7 文档与验收                | 未开始 | 按用户要求测试重写/E2E 暂后置，不能引用上一提交的 3-pass 为本轮结果                        |
 
 ## P1 边界准备：基于当前代码的迁移决策（仅设计，尚未改生产 contract）
 

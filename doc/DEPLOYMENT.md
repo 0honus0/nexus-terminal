@@ -4,15 +4,15 @@ Nexus Terminal 支持 Docker Compose 部署，并提供运行时配置、反向�
 
 ## 包管理与构建边界
 
-主镜像、独立 Agent Runner、E2E Runner 和 CI 使用浮动的 Node.js Current；第一方插件仓库的验证和发布也跟随 Current。Nginx 使用 stable 系列。镜像构建拉取基础镜像，Alpine/Debian 构建步骤升级系统包，不固定 Node patch 或镜像 digest；缓存命中的系统包步骤不会重新执行。E2E Runner 在后续 CI 运行时按周刷新并无缓存重建。Workspace catalog 中供用户选择的语言工具包仍独立按明确版本安装，已安装环境不自动替换。
+主镜像、Playwright E2E Runner 和 CI 使用浮动的 Node.js Current；第一方插件仓库的验证和发布也跟随 Current。Nginx 使用 stable 系列。镜像构建拉取基础镜像，Alpine/Debian 构建步骤升级系统包，不固定 Node patch 或镜像 digest；缓存命中的系统包步骤不会重新执行。E2E Runner 在后续 CI 运行时按周刷新并无缓存重建。
 
 `.github/workflows/update-dependencies.yml` 每周一或手动从默认分支创建依赖更新分支，使用 `pnpm update --depth 0 --recursive` 在声明范围内更新项目依赖及根锁文件；精确版本和跨 major 升级不由该命令自动放开。检测到变更后验证 frozen install、格式、生产构建和 high 级生产依赖审计，创建或更新 PR，再显式触发该分支的完整 E2E。更新任务成功不等于 E2E 已通过；合并前核对被测 SHA 的全部检查。pnpm 工具自身继续由 `packageManager` 固定，不由此任务升级。
 
-Docker 构建在 pnpm 安装前复制 `scripts/patches/`，与 workspace/lockfile 一起应用依赖补丁；统一镜像、Agent Runner 和 E2E Runner 使用同一补丁输入。E2E Runner 镜像缓存指纹包含补丁内容。
+Docker 构建在 pnpm 安装前复制 `scripts/patches/`，与 workspace/lockfile 一起应用依赖补丁；统一镜像和 E2E Runner 使用同一补丁输入。E2E Runner 镜像缓存指纹包含补丁内容。
 
 自动依赖更新在范围内更新后执行 `pnpm dedupe`，统一可共享的传递依赖版本，再验证 frozen install 和构建；这避免 CodeMirror 等包含私有类型或运行时身份的依赖保留新旧副本。去重不放开声明范围或构建脚本许可，构建失败仍阻止创建更新 PR。
 
-仓库只使用一个根 pnpm workspace：生产包位于 `packages/backend`、`packages/frontend`、`packages/agent-runner`，测试 package 位于 `tests/e2e`；依赖解析统一由根 `pnpm-workspace.yaml` 与 `pnpm-lock.yaml` 管理。workspace package 不得新增 `package-lock.json`、嵌套 lockfile 或独立安装流程；需要共享版本的依赖通过 pnpm catalog 管理，带 lifecycle/build script 的依赖必须经过根 `allowBuilds` 审查。
+仓库只使用一个根 pnpm workspace：生产包位于 `packages/backend`、`packages/frontend`，测试 package 位于 `tests/e2e`；依赖解析统一由根 `pnpm-workspace.yaml` 与 `pnpm-lock.yaml` 管理。workspace package 不得新增 `package-lock.json`、嵌套 lockfile 或独立安装流程；需要共享版本的依赖通过 pnpm catalog 管理，带 lifecycle/build script 的依赖必须经过根 `allowBuilds` 审查。
 
 从仓库根目录安装一次：
 
@@ -20,13 +20,13 @@ Docker 构建在 pnpm 安装前复制 `scripts/patches/`，与 workspace/lockfil
 pnpm install --frozen-lockfile
 ```
 
-随后通过 workspace filter 或根脚本执行构建，例如 `pnpm run build:backend`、`pnpm run build:frontend`、`pnpm run build:agent-runner`。根脚本可以编排多个 workspace，但 package script 不得再次执行第二套 package-manager install；`scripts/build/build.sh local ...` 假定根 workspace install 已完成。
+随后通过 workspace filter 或根脚本执行构建，例如 `pnpm run build:backend`、`pnpm run build:frontend`。根脚本可以编排多个 workspace，但 package script 不得再次执行第二套 package-manager install；`scripts/build/build.sh local ...` 假定根 workspace install 已完成。
 
-根 `pnpm run build` 串行构建 Backend、Frontend 和 Agent Runner；`pnpm run check` 串行执行 Frontend／Agent ESLint 及三个生产包的类型检查。Runner 是否部署仍由部署配置决定，完整构建不自动启用 Runner。只需某个包时使用对应 `build:*` 脚本；执行完整 build 后无需重复执行 `build:agent-runner`。
+根 `pnpm run build` 串行构建 Backend 和 Frontend；`pnpm run check` 运行 Frontend／Agent ESLint 及两个生产包的类型检查。原 Agent Workspace Runner 已从生产包与 Compose 退出；`tests/e2e/Dockerfile.runner` 是独立 Playwright 测试容器，不能误删。
 
-根 `packageManager` 字段 pin 本地、CI 与 Docker 使用的 pnpm release；开发机直接安装该版本的 pnpm，Docker builder 也通过 npm 全局安装该版本。升级 pnpm major 前必须确认 lockfile 与 GitHub dependency/security tooling 兼容。依赖刷新如果修改 shared catalog，需要重新生成唯一根 lockfile，并至少构建 Frontend、Backend、Agent Runner，因为 catalog 变化可能同时影响多个 package。
+根 `packageManager` 字段 pin 本地、CI 与 Docker 使用的 pnpm release；开发机直接安装该版本的 pnpm，Docker builder 也通过 npm 全局安装该版本。升级 pnpm major 前必须确认 lockfile 与 GitHub dependency/security tooling 兼容。依赖刷新如果修改 shared catalog，需要重新生成唯一根 lockfile，并至少构建 Frontend、Backend，因为 catalog 变化可能同时影响多个 package。
 
-Docker builder 与 CI 从根 workspace/lockfile 安装；Backend 与 Agent Runner 的 production tree 使用 workspace-aware `pnpm deploy --prod` 生成。Frontend 只产出静态 `dist`。开发约束见 [AGENTS.md](AGENTS.md)。
+Docker builder 与 CI 从根 workspace/lockfile 安装；Backend 的 production tree 使用 workspace-aware `pnpm deploy --prod` 生成。Frontend 只产出静态 `dist`。开发约束见 [AGENTS.md](AGENTS.md)。
 
 ## Docker Compose 部署
 
@@ -49,48 +49,17 @@ docker compose up -d
 
 Plugin Frontend 与 Frontend SDK 不使用独立公网 Origin/端口；浏览器统一通过主站同源 `/plugins/...` 与 `/sdk/...` 访问。自 P-023 起这两类静态资源与 API/WebSocket 复用 Backend `3001` listener，但仍由独立的 Plugin/SDK request handler 提供严格 CSP、iframe 与路径校验语义。
 
-### 可选 Agent Runner
+### Agent 执行能力
 
-Agent Workspace Runtime 使用独立的 `nexus-agent-runner` 执行平面。Nexus 当前是**单用户应用**，因此 Runner 的职责是管理多个持久 Workspace、共享 Tool Pack 与 Workspace generation，而不是在同一用户内部再构造一层安全沙箱。
-
-Workspace 是工作目录与运行环境边界：不同 Workspace 有独立项目文件；同一个 Workspace 可以选择不同的 Node/Python/Go Tool Pack 组合并生成新的 generation。Workspace 之间**不承诺** Linux namespace、network namespace、cgroup 或文件系统安全隔离。使用宿主 Runner 时，Runner 进程与其 Workspace 命令共享宿主系统安全上下文；使用容器 Runner 时，Docker 容器本身是 Runner 进程的操作系统边界。
-
-Ubuntu/Debian host 首次启用前，从源码 checkout 执行：
-
-```bash
-./scripts/agent-runner/prepare-ubuntu-host.sh
-```
-
-该脚本只安装与 Toolchain Catalog 一致、SHA-256 固定的 `mise 2026.9.5`、Tool Pack 解包工具以及 Workspace Terminal 使用的系统 `script(1)` / `stty`，不编译或安装 Nexus 自定义 native helper。Node/Python/Go 的支持版本由 catalog JSON 维护，mise 按指定版本安装并保留上游校验，Runner 检查实际版本，不维护语言工具链的构建来源 lock 或预设安装树摘要。工具链通过 `/opt/nexus/packs/<family>/<version>` 暴露；多个 Workspace 复用同一份已安装工具链。
-
-Runner 默认监听 `127.0.0.1:8790`。Runner 是可选增强能力：未配置 `NEXUS_AGENT_RUNNER_URL` 时，Frontend/Backend/guacd 基础栈独立启动，连接管理、SSH/基础命令和诊断能力不依赖 Runner。需要 Runner 时可使用宿主 Runner，或通过 Compose `runner` profile 启用容器 Runner；两种模式都必须在 `.env` 设置同一个 `NEXUS_AGENT_RUNNER_TOKEN`。Runner 所有 HTTP 与 WebSocket 控制入口统一要求 `Authorization: Bearer <NEXUS_AGENT_RUNNER_TOKEN>` 和 `X-Nexus-Agent-Protocol: 2026-10-08`；token 至少 32 字符，推荐使用 `openssl rand -hex 32` 生成。该 token 代表对 Runner 的完整控制权，不得写入日志或交给浏览器/Plugin。Runner HTTP 本身不负责 TLS：不要直接暴露到公网；跨主机部署应放在受信私网，或由 TLS 反向代理保护。
-
-仓库同时提供独立 Runner 镜像发布流程：
-
-```text
-ghcr.io/0honus0/nexus-agent-runner:latest
-ghcr.io/0honus0/nexus-agent-runner:dev
-```
-
-`docker-compose.yml` 已提供 `agent-runner` service，但通过 `profiles: [runner]` 保持默认关闭。容器模式可设置 `COMPOSE_PROFILES=runner`（或命令行 `--profile runner`），并把 `NEXUS_AGENT_RUNNER_URL` 设为 `http://agent-runner:8790`。Backend 不对 Runner 建立启动硬依赖；Runner 未就绪时仅增强能力不可用。独立镜像包含固定版本 `mise`、Tool Pack 解包工具与 `script/stty`；容器入口使用发行版 `tini` 作为 PID 1，只负责转发终止信号并回收 Runner 子进程产生的孤儿/zombie 进程，不参与 Workspace 隔离。HEALTHCHECK 调用 `/v1/availability` 验证 `native + logical` Workspace Runtime。
-
-容器 Runner 使用 Docker 默认 capability/seccomp/AppArmor 即可；Compose 示例**不需要** `privileged`、`SYS_ADMIN`、`seccomp=unconfined`、`apparmor=unconfined`、Docker socket 或 nested Docker。这里不要把“容器边界”和“Workspace 边界”混为一谈：容器可以隔离整个 Runner 服务，但容器内多个 Workspace 仍属于同一个 Nexus 用户并共享 Runner 进程权限、内核网络与 Tool Store。
-
-Runner 状态、Tool Pack、缓存和 Workspace runtime 默认持久化到 `NEXUS_AGENT_RUNNER_DATA_DIR`（默认 `./agent-runner-data`）。Runner Plugin 源码只读挂载 Backend 的 `./data/agent/plugins`。尚未退出的 Workspace Profile 仅冻结当前真实可执行配置（Recipe/Toolchain/Runner Plugin/Browser Target/retention），**不再含 ACP profile**；Agent ACP 仅在远端 SSH channel 运行。Agent Hard Limits 与 outbound/private-network policy 属于 Backend 自己的正式 owner，不由 Runner 模拟。
-
-Workspace local Terminal 由 Runner 通过系统 `script(1)` 创建 PTY，Backend/Frontend 继续使用 terminal session attach/detach/bounded replay；resize 写入真实 PTY size，显式 signal 发送到当前 PTY foreground process group。尚未退出的 Workspace Job 与 Runner Plugin 仍按 Runner-managed process group 管理，timeout/stop/restart/delete 清理整个进程组；**Runner ACP 进程及其 WebSocket stream 已删除**，不能经旧 URI 重启。
-
-当前 Runner 镜像可构建 `linux/amd64` 和 `linux/arm64`；Catalog 的 `base-tools` 已支持两种架构，但当前 Node/Python/Go 多版本 Tool Pack 仍只发布 x64，因此 arm64 上这些额外语言版本会按 Catalog 正确显示为 unavailable，而不会错误回退。
+Agent 的远程操作使用显式授权的 SSH 连接；Browser 使用 Backend CDP，ACP 使用 SSH。生产 `agent-runner` 服务、Toolchain Catalog 与相关配置已删除。普通终端 Workspace、SSH Session/Job、Artifact、Memory 不受影响。若原部署启用了 Runner profile，升级时使用 `docker compose up -d --remove-orphans` 退出旧容器；宿主数据目录不会由升级脚本自动删除。
 
 ## 容器与镜像结构
 
-Frontend 与 Backend 共用同一个主镜像；Agent Runner 使用独立镜像。两者由同一个发布 workflow 生成完全一致的 channel/version tag：
+Frontend 与 Backend 共用同一个主镜像，发布 workflow 仅构建 Nexus Terminal 主镜像：
 
 ```text
 ghcr.io/0honus0/nexus-terminal:latest       # 稳定 / Release
 ghcr.io/0honus0/nexus-terminal:dev          # 最近一次手动 Dev 发布
-ghcr.io/0honus0/nexus-agent-runner:latest  # 对应稳定 Runner
-ghcr.io/0honus0/nexus-agent-runner:dev     # 对应 Dev Runner
 ```
 
 `docker-compose.yml` / `.env.example` 默认仍使用 `:latest`。需要跟随开发镜像时，将 `.env` 中 `NEXUS_IMAGE_TAG=dev` 后再执行 `docker compose pull && docker compose up -d`。
@@ -100,13 +69,12 @@ Compose 默认以三个服务运行：
 - `frontend`：Web 静态资源与反向代理入口。
 - `backend`：认证、SSH/SFTP、设置、审计以及内置 RDP/VNC Guacamole runtime。
 - `guacd`：Guacamole 协议代理。
-- `agent-runner`：可选 profile；启用后使用独立 `nexus-agent-runner` 镜像。
 
 `frontend` 与 `backend` 使用同一 Nexus 镜像，镜像层由 Docker 复用；`guacd` 使用独立上游镜像。
 
 当前发布 workflow 构建 `linux/amd64` 与 `linux/arm64`。GitHub Release 事件固定发布 `latest + release tag`；手动 `workflow_dispatch` 可选择 `dev` 或 `release` channel，默认 `dev`，并同时保留自定义 tag 或 `sha-<commit>` tag。
 
-发布运行标题直接显示事件或输入确定的 channel、architecture 和 target；主镜像与 Runner 发布任务使用固定名称，prepare 失败时也不会显示未解析的表达式。生产依赖审计保留 high 阻断，不跳过漏洞检查；邮件、归档和 source-map-js 依赖由根 lockfile 固定到修复版本，MCP Client SDK 使用 2.2.0 及对应 Core，以通过已知高危漏洞审计。release channel 只允许当前 main 提交，并要求该提交已有完整成功的 E2E workflow（基础检查、所有动态 Playwright 分片、Docker deployment smoke），不再依赖已退出的逐项目 job 名称。
+发布运行标题显示确定的 channel 和 architecture；仅发布统一主镜像。生产依赖审计保留 high 阻断，不跳过漏洞检查；邮件、归档和 source-map-js 依赖由根 lockfile 固定到修复版本，MCP Client SDK 使用 2.2.0 及对应 Core，以通过已知高危漏洞审计。release channel 只允许当前 main 提交，并要求该提交已有完整成功的 E2E workflow（基础检查、所有动态 Playwright 分片、Docker deployment smoke），不再依赖已退出的逐项目 job 名称。
 
 正式发布 Agent 能力时应先发布 `nexus-agent-plugins` 的官方 catalog，再发布 Nexus 主镜像，因为生产 Host 默认从 `nexus-agent-plugins/releases/latest/download/catalog.json` 发现 first-party 插件。首次插件发布推荐先创建目标 tag 的 draft release，手动运行插件仓 `Release plugins` workflow 上传并核验 `catalog.json` 与两个签名 tar，再 publish release；随后再发布同一兼容线上的 Nexus 镜像。这样不会让已发布主镜像指向尚不存在的 `latest` catalog。
 

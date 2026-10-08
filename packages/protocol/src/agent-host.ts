@@ -19,7 +19,6 @@ export interface AgentHardLimitsDto {
   maxDelegationDepth: number;
   maxSubagentMessagesPerRun: number;
   maxSubagentMessageBytesPerRun: number;
-  maxActiveWorkspaces: number;
   unretainedArtifactTtlSeconds: number;
 }
 
@@ -32,7 +31,6 @@ export interface AgentSettingsDocumentDto {
     fallbackModels: Array<{ providerId: string; modelId: string }>;
   };
   performance: {
-    maxConcurrentWorkspaceJobs: number;
     maxConcurrentRuntimes: number;
     maxConcurrentModelCalls: number | 'auto';
   };
@@ -55,11 +53,6 @@ export interface AgentSettingsDocumentDto {
     maxSingleArtifactBytes: number;
     maxGlobalArtifactBytes: number;
     unretainedArtifactTtlSeconds: number;
-  };
-  workspaceRuntime: {
-    maxActiveWorkspaces: number;
-    enabledRecipeIds: string[];
-    toolVersions: Record<string, { enabledVersionIds: string[]; defaultVersionId: string | null }>;
   };
   browser: {
     targets: Array<{
@@ -89,7 +82,6 @@ export interface AgentSettingsViewDto {
   requestedSettings: AgentSettingsDocumentDto;
   effectiveSettings: AgentSettingsDocumentDto;
   hardLimits: AgentHardLimitsDto;
-  runtimeCapabilities: { workspaceRuntimeController: boolean };
   availability: AgentAvailabilityViewDto;
   revision: number;
 }
@@ -102,7 +94,6 @@ export interface AgentSettingsPatchDto {
   budget?: AgentSettingsSectionPatchDto<AgentSettingsDocumentDto['budget']>;
   subagents?: AgentSettingsSectionPatchDto<AgentSettingsDocumentDto['subagents']>;
   storage?: AgentSettingsSectionPatchDto<AgentSettingsDocumentDto['storage']>;
-  workspaceRuntime?: AgentSettingsSectionPatchDto<AgentSettingsDocumentDto['workspaceRuntime']>;
   browser?: AgentSettingsSectionPatchDto<AgentSettingsDocumentDto['browser']>;
   plugins?: AgentSettingsSectionPatchDto<AgentSettingsDocumentDto['plugins']>;
 }
@@ -143,7 +134,6 @@ export interface AgentHardLimitPreviewDto {
     usage: AgentHardLimitUsageDto;
   };
   expiresAt: number;
-  runtimeCapabilities: { workspaceRuntimeController: boolean };
 }
 
 export interface AgentHardLimitConfirmRequestDto {

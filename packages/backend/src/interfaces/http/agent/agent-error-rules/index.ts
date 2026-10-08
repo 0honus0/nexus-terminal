@@ -7,13 +7,11 @@ import { providerErrorRules } from './providers';
 import type { AgentErrorMapping, AgentErrorRule } from './rule';
 import { runErrorRules } from './runs';
 import { AgentRequestError } from '../agent-route-input';
-import { workspaceRuntimeErrorRules } from './workspace-runtime';
 
 const agentErrorRules: readonly AgentErrorRule[] = [
   ...providerErrorRules,
   ...artifactErrorRules,
   ...integrationErrorRules,
-  ...workspaceRuntimeErrorRules,
   ...collaborationErrorRules,
   ...pluginErrorRules,
   ...runErrorRules,

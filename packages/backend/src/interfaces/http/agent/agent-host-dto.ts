@@ -54,7 +54,6 @@ export const settingsViewDto = (
   requestedSettings: settings.requestedSettings,
   effectiveSettings: settings.effectiveSettings,
   hardLimits: settings.hardLimits,
-  runtimeCapabilities: { workspaceRuntimeController: false },
   availability,
   revision: settings.revision,
 });
@@ -71,7 +70,6 @@ export const hardLimitPreviewDto = (preview: HardLimitPreview): AgentHardLimitPr
     usage: { ...preview.impact.usage },
   },
   expiresAt: preview.expiresAt,
-  runtimeCapabilities: { workspaceRuntimeController: false },
 });
 
 export const capabilityDefinitionDto = (definition: CapabilityDefinition): AgentCapabilityDefinitionDto => ({

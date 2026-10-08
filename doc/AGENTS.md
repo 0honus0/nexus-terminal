@@ -144,7 +144,7 @@ Backend Agent 的 Module 根为 `packages/backend/src/modules/agent/`：
 
 具体 adapter 位于 `infrastructure/agent/`；HTTP 边界位于 `interfaces/http/agent/`，事件边界为 `interfaces/websocket/agent-protocol.session.ts`，组装位于 `bootstrap/agent/`。
 
-Frontend owner 为 `packages/frontend/src/features/agent/` 下的 `host/ai/runtime/files/settings/api/i18n`；Host 管窗口，API 管 transport。Runner package 是 `packages/agent-runner` / `@nexus-terminal/agent-runner`，不重新命名为 `agent-runtime`。
+Frontend owner 为 `packages/frontend/src/features/agent/` 下的 `host/ai/runtime/files/settings/api/i18n`；Host 管窗口，API 管 transport。旧生产 Runner package 已删除，普通终端 Workspace Runtime 位于 `packages/frontend/src/runtimes/workspace/`，不属于 Agent Runner。
 
 Agent App 的应用控制逻辑由实例级 `host/useAgentAppController` 持有，Surface 消费其状态和动作并负责展示／尺寸观察；异步订阅、缓存和 facade 清理由 controller 负责，不在模板组件复制 controller 状态。
 
@@ -244,31 +244,21 @@ Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 的 typed
 
 ## 8. Workspace 与 Runner
 
-### 8.1 环境与生命周期
+### 8.1 Agent SSH-only 执行与独立能力
 
-- Runner 可选：未配置/未启动/不可达不阻止核心 Backend、连接管理、SSH 能力启动；availability 明确 unavailable。Compose 显式 profile 启用，无固定宿主 URL 硬依赖。
-- Backend→Runner HTTP/WebSocket 统一 Bearer `NEXUS_AGENT_RUNNER_TOKEN`（至少 32 字符）与 `X-Nexus-Agent-Protocol: 2026-10-08`；token 是实例完整控制权，不暴露给浏览器、日志或 Plugin。
-- provision 发送完整 profile；start/stop/restart/delete 仅 `workspaceId + generation`；job 发送 generation/参数。Backend 自己持有 user/App/Run/Runtime 授权、version、operation hash 和 reconcile，不镜像给 Runner。
-- Runner Server 只持有 transport/route 边界；实例级 `RunnerCommandExecutor` 编排 command/job 与 Workspace 生命周期、工具链互斥及 Journal transition，复用现有 runtime 和 Journal，不在 Server 复制执行流程或持久状态。
-- Agent 用户可操作的 Workspace 已破坏式退出：前端设置面板、Composer Recipe/Environment 选择、Run 详情 Workspace/Terminal/Artifact 交换组件均已删除；Backend `/agent/workspace-runtime/*`、App Workspace REST 与 `/ws/agent-terminal` 已删除。Backend 旧 `WorkspaceCheckpointService`、`WorkspaceRuntimeService`、`SqliteWorkspaceRepository`、RunnerHttpAdapter/Controller/Protocol 和 Workspace reconcile sweep 亦已物理删除。Checkpoint 继续保留普通 Agent 证据/计划/Context 恢复，但遇旧 Workspace environment、manifest/artifact refs 或 Runner background jobs 必须 fail closed；不得降级伪造恢复。新建 Run 只允许 SSH connectionIds、environment 固定 null。SQLite 旧 Workspace 元数据表与历史读取保护、生产 Runner/部署仍待独立清理，不得在删表前忘记现存 Run/Thread 删除保护，也不得误删普通 Terminal Workspace、SSH、Artifact/Memory 和用户备份。
-- 单用户 native Runtime 组织项目而非 OS sandbox；generation 冻结环境，Workspace 文件独立持久。Host 子进程共享宿主上下文，Docker 子进程共享 Runner 容器，不用 Docker socket/dockerd/nested Docker/privileged/SYS_ADMIN/unconfined。
-- Node/Python/Go 支持版本/架构保留在 `scripts/docker/agent-runner/catalog/catalog.json`；mise 按版本安装并做上游与实际版本检查，ref 仅 family/version，缓存按架构，不固定来源/安装树摘要/选择指纹。已安装不自动替换，使用中不可卸载。
-- 全局共享不可变 Tool Pack，generation PATH 选版本；deps/build 按环境 profile 分区。版本切换仅重建目标 generation，终止其旧 process/session，项目文件与其他 Workspace 不受影响，不修改 `/usr/bin`。
-- 仍未退出的 Runner Job/Plugin 原生 process group 随 owner 整组回收，Terminal 用真实 PTY foreground group。Runner ACP process/stream 入口已删除；启用旧 Runner Plugin 等于允许以 Runner OS 权限运行，逻辑工作目录不是跨 Plugin ACL 或安全沙箱，不暴露伪 cgroup/network/quota 字段。
-- cleanup：preview 冻结 workspaceIds → confirm → Runner recheck → deleted[] → Backend projection sync；不扩大范围，跳过 retained/active/job/session。journal 损坏保留原件与 evidence 并 fail closed，不能当空 journal 启动。
-- Workspace 显式 delete 成功释放 retention；历史 deleted+retained 允许进入显式 cleanup，stop 不释放保留。persistent project root 由 cleanup owner 删除，不把 generation 删除当作全文件树已回收。
+- 生产 Agent Workspace Runner 已物理退出：Backend 不连接 Runner HTTP/WS，不提供 Workspace CRUD、Terminal、Toolchain、Recipe/Environment 选择或旧错误兼容。Agent File/Shell/ACP 只能使用明确授权的 SSH 连接；Browser 使用 Backend CDP。
+- SQLite 新 schema 不创建 Agent Workspace/commands 表；增量迁移 #58 **无历史兼容**，直接 DROP 这两表并删除 Agent Settings 中的 Workspace 字段。不得重新加入旧 Workspace 状态判断、历史 Run/Thread 兼容 guard 或迁移前置回退。普通 SSH Jobs/Project Directories、Artifact/Memory、普通终端 Workspace 仍有独立 owner，必须保留。
+- 生产 `packages/agent-runner`、宿主准备脚本、Tool Pack Catalog、Runner 镜像、Compose Runner profile、GHCR Runner 发布入口、根 Runner build/check 均已删除。**不要把 `tests/e2e/Dockerfile.runner` 当成生产 Runner 删除**：它是独立的 Playwright 测试容器；旧 Runner 业务 E2E 和场景尚待重新整理。
+- 本次破坏式迁移不兼容旧 Workspace 表、旧 Settings 字段与旧备份 schema；不会自动删除用户独立备份文件或普通 SSH 目录。保留新版本 Backup、SSH、Browser、ACP、Plugin Frontend/Backend、Artifact、Memory 正式 contract。
 
 ### 8.2 文件、执行与传输边界
 
 - `FileCapabilityService` 只消费 `SshFileTargetPort`，canonical 文件工具的 schema 仅允许 `target:'ssh'`，旧 Workspace 文件 adapter/port 已退出；`ShellCapabilityService` 已移除 Workspace 分支。File/Shell/ACP **直接注入** `SshTargetResolverPort`，通过 `resolveSshTarget` 拒绝非 SSH selector 与非规范正整数 connection ID；`bindSshInspectionTarget` 统一拒绝伪造的 kind/id/connectionId，执行仍核对冻结的连接身份和配置 hash。Browser binding 使用独立 authority，不存在通用目标解析 facade。Machine port 只持有 connection/diagnostics/Docker，不建万能 facade。
 - Governed Child mutation 两层权限判断均为 SSH-only：`SubagentToolStepExecutor` 执行层和 `beginSubagentMutationToolTransition` 持久事务层都使用同一 `governedSubagentSshMutation` contract（不使用旧 Workspace/generation 判断）。只接受五种 canonical File/Shell mutation Tool、当前 Run 显式 connectionIds、委派的能力与 SSH id scope、规范化目标参数及冻结 SSH SHA256 identity/config hash/resourceKeys。StateCommit **独立从持久 Run/Delegation 读回**后才允许消费审批／切 Tool running；非法 scope、过期/改写 inspection、旧 workspace target 都拒绝，不能自动改选目标；ToolCallRunner 还需在执行边界实测 SSH 连接是否仍有效，保留既有审批/lease/unknown 隔离。
-- canonical `file_read/list/search/write/patch/move/delete` 显式 `target:'ssh'` 和授权 id，SSH SFTP 拒绝非法路径、越权和过期连接配置；read/list/search 有 bytes/entries/results 上限；write 用 expected SHA-256/null-create，move/delete 冻结 metadata；patch 用严格 unified diff、精确 hunk、`fuzzFactor=0`，不 shell git apply。结果验证真实 SHA/metadata，不建第二 journal。旧 Runner 文件 API 只作为待移除的 Workspace 管理内部消费者，不再为 Agent File tool 提供 authority。
+- canonical `file_read/list/search/write/patch/move/delete` 显式 `target:'ssh'` 和授权 id，SSH SFTP 拒绝非法路径、越权和过期连接配置；read/list/search 有 bytes/entries/results 上限；write 用 expected SHA-256/null-create，move/delete 冻结 metadata；patch 用严格 unified diff、精确 hunk、`fuzzFactor=0`，不 shell git apply。结果验证真实 SHA/metadata，不建第二 journal。
 - Agent `shell_execute`、`shell_job_control` 只接受显式 `target:'ssh'` 和授权连接 id，不提供 Workspace/Backend 本地命令入口。argv 的字面参数由 SSH 传输逐参数安全引用，shellScript 使用远端命令 Shell；可选 cwd，旧 text 参数不接受。拒绝说明执行未发生且不泄漏命令正文。前台和后台沿用独立执行/期限边界，后台必须有 `ssh_session_open` 取得的长会话；每条命令独立 channel，按 user/App/Thread 隔离。运行时 Job 操作重检冻结的连接配置，不能因配置变化或旧 Workspace target 静默重绑执行。
-- Agent Shell Job 仅由 `AgentSshSessions` 与 `agent_ssh_jobs` 持有，`shell_job_control status/wait/cancel/list` 按当前 SSH connection、user/App/Thread 和配置 hash 再核对，后台 accepted 不等于完成，断线和重启收敛 unknown 而不重放。Runner 自身尚存在的 Workspace Job Journal 不再能通过 Agent Shell 工具访问，将在生产 Runner 移除阶段退出。
-- Runner Journal 使用 SQLite 按记录 durable commit 后更新内存，不重写全历史；旧 JSON 不迁移、不自动清空，格式／损坏启动失败并保留证据，未知副作用仍需 reconcile。SQLite 属于 Runner 自身 owner，不与 Backend 数据库合并。
-- 同 generation 的 pending/running argv Job 按 Agent performance.maxConcurrentWorkspaceJobs 接纳，默认 8、范围 1–64；额度和执行超时范围由 protocol/runner.ts 的 WORKSPACE_JOB_LIMITS 持有。Runner 使用现有 Journal 同步计数并提交接纳，无第二 lock/journal；额度满拒绝、不排队，设置降低不取消旧 Job。活跃 Job 阻止文件 write/move/delete/实际 patch，允许 read/search/patch inspection；Shell 共享文件写入不保证事务隔离。cancel 等 journal confirmed cancelled，stop/restart/delete 中断该 generation 的全部 Job；restart 将无法证明结果的遗留 running 标 unknown。无自动 model terminal wake，需结果时 server-side wait，不 busy-poll。
-- Repo instructions 窄 endpoint 仅 generation + 最多 8 个 target directory；Resolver 与文件 mutation owner 分离，Runner 不可用/live Workspace 消失时 Context fail-soft，不伪造 rules。
-- Nexus `NXW1`、upload socket、Agent `/ws/agent`、Plugin `NXR3`、Runner streaming、Browser direct CDP、local terminal 独立 owner/protocol/version/requestId/handle，只共享 bounded/backpressure 原则。
+- Agent Shell Job 仅由 `AgentSshSessions` 与 `agent_ssh_jobs` 持有，`shell_job_control status/wait/cancel/list` 按当前 SSH connection、user/App/Thread 和配置 hash 再核对，后台 accepted 不等于完成，断线和重启收敛 unknown 而不重放。
+- Nexus `NXW1`、upload socket、Agent `/ws/agent`、Plugin `NXR3`、Browser direct CDP、local terminal 独立 owner/protocol/version/requestId/handle，只共享 bounded/backpressure 原则。
 
 ## 9. Artifact、Memory 与集成
 
