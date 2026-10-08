@@ -1294,7 +1294,7 @@ test('official first-party catalog is discoverable without repository configurat
         appId: 'nexus.fullstack',
         frontendEntry: 'frontend/index.html',
         backendEntry: 'backend/index.mjs',
-        runnerEntry: 'runner/index.mjs',
+        runnerEntry: null,
       },
     },
   });
@@ -1497,7 +1497,7 @@ test('frontend target owns a full Custom App Surface and connects through the is
   });
 
   await step(
-    'multiple installable Agent plugins coexist and the full-stack package exposes all target classes',
+    'multiple installable Agent plugins coexist and the full-stack package exposes frontend/backend targets',
     async () => {
       const officialCatalogResponse = await request.get('/api/v1/agent/plugins/official/catalog');
       expect(officialCatalogResponse.ok(), await officialCatalogResponse.text()).toBeTruthy();
@@ -1525,7 +1525,7 @@ test('frontend target owns a full Custom App Surface and connects through the is
                 appId: 'nexus.fullstack',
                 frontendEntry: 'frontend/index.html',
                 backendEntry: 'backend/index.mjs',
-                runnerEntry: 'runner/index.mjs',
+                runnerEntry: null,
               },
             },
           });

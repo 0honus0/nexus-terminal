@@ -50,7 +50,6 @@ export interface AgentPluginManifestDto {
   targets?: {
     frontend?: { entry: string };
     backend?: { entry: string };
-    runner?: { entry: string };
   };
 }
 

@@ -47,6 +47,20 @@ export const agentDefinitionCapabilityContractScenario = async () => {
     decodePersistedAppManifest(JSON.stringify(canonicalManifest)).agents?.[0]?.requiredModelCapabilities,
     ['tools'],
   );
+  const unsupportedRunnerManifest = {
+    ...canonicalManifest,
+    targets: { runner: { entry: 'runner/index.mjs' } },
+  };
+  assert.throws(
+    () => validateManifest(unsupportedRunnerManifest, { nexusVersion: '1.0.0', supportedSdkMajor: 1 }),
+    /AGENT_MANIFEST_SCHEMA_INVALID/,
+    'Runner target must not survive plugin manifest validation',
+  );
+  assert.throws(
+    () => decodePersistedAppManifest(JSON.stringify(unsupportedRunnerManifest)),
+    /PLUGIN_MANIFEST_INVALID/,
+    'Persisted Runner target must not be accepted as a plugin manifest',
+  );
   assert.throws(
     () =>
       validateManifest(

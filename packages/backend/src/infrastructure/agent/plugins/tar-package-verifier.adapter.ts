@@ -325,19 +325,13 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
       }
       const frontendEntry = manifest.targets?.frontend?.entry ?? null;
       const backendEntry = manifest.targets?.backend?.entry ?? null;
-      const runnerEntry = manifest.targets?.runner?.entry ?? null;
-      const targetEntries = [frontendEntry, backendEntry, runnerEntry].filter((entry): entry is string =>
-        Boolean(entry),
-      );
+      const targetEntries = [frontendEntry, backendEntry].filter((entry): entry is string => Boolean(entry));
       if (targetEntries.some((entry) => !listed.has(entry))) throw new Error('PLUGIN_TARGET_ENTRY_MISSING');
       if (frontendEntry && (!/^frontend\/[A-Za-z0-9_./-]+$/.test(frontendEntry) || frontendEntry.includes('..'))) {
         throw new Error('PLUGIN_FRONTEND_ENTRY_INVALID');
       }
       if (backendEntry && (!/^backend\/[A-Za-z0-9_./-]+$/.test(backendEntry) || backendEntry.includes('..'))) {
         throw new Error('PLUGIN_BACKEND_ENTRY_INVALID');
-      }
-      if (runnerEntry && (!/^runner\/[A-Za-z0-9_./-]+$/.test(runnerEntry) || runnerEntry.includes('..'))) {
-        throw new Error('PLUGIN_RUNNER_ENTRY_INVALID');
       }
       const skillResourcePaths = fileList.files
         .map((file) => file.path)
@@ -365,7 +359,7 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
         files: fileList.files,
         frontendEntry,
         backendEntry,
-        runnerEntry,
+        runnerEntry: null,
         skillFiles,
       };
     } catch (error) {

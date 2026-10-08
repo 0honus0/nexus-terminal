@@ -17,6 +17,22 @@
 7. **外部依赖不冒认完成**：官方 `0honus0/nexus-agent-plugins` 签名新版、实际部署实例版本、旧 Workspace 枚举/导出、旧备份恢复、最终远程 CI 均需要独立证据；不能凭本仓 fixture、公开版本或静态 grep 假称验收通过。
 8. **临时迁移工具只放工作区**：所有者于 2026-10-08 明确要求 `agent-workspace-preflight.mjs` 放在 `/home/honus/workspace/`，不得留在 `nexus-terminal/scripts/backend/`；迁移完成后即可清理。这类一次性预检工具不加入产品包、build/CI 和仓库跟踪；只在本文件说明用法及退出时清理。
 9. **生产 Workspace 已自行清理且有备份**：项目所有者于 2026-10-08 明确确认“生产workspace也删除了 我都有备份 没问题”。以其声明作为旧生产 Workspace 的**已删除/备份存在**前提，不再要求恢复旧生产 Workspace 才开始非破坏性开发；但未取得备份 hash、完整性和恢复演练证据，不把这句话扩展解释为数据库/Plugin 兼容迁移成功，也不擅自删除剩余备份、Artifact 或其他服务数据。P0-5 的原生产实例枚举不再可行，后续只能验证**已有备份与可信副本**，同时完成新版本的升级/拒绝与回退测试。
+10. **2026-10-08 新的破坏式移除要求，替代上文涉及旧数据/备份/Plugin 兼容的前置门槛**：项目所有者明确要求“可以去把插件那个库也拉下来一块修改；要求做破坏式更新，不考虑备份恢复兼容问题，只保留最干净的代码状态”。当前任务的最终新版本**不为旧 Agent Workspace、Runner、旧备份 schema、旧 Plugin manifest/Runner entry 留兼容层、降级路径或旧值解码器**。旧格式在边界直接拒绝即可；只需维护**新版本自己的**备份导出/导入能力以及 SSH、Browser、ACP、Artifact、Memory 和 Plugin Frontend/Backend 等保留能力。允许按照依赖顺序直接实施破坏式 contract/数据库/消费端清理，不再以历史生产备份恢复演练或旧签名 Plugin Release 已发布作为代码施工门槛。**不要动用户独立存放的原始备份文件；不删普通终端 Workspace、SSH 项目、E2E 测试 Runner。**
+11. **双仓协同**：官方 `https://github.com/0honus0/nexus-agent-plugins` 已克隆至 `/home/honus/nexus-agent-plugins`（`main`，克隆 HEAD `826a597`），与 `/home/honus/nexus-terminal` 一起做更新；Node/pnpm、下载和临时打包仍使用 `/home/honus/workspace`。两个 Git 仓库分别检查 status、验证、创建本地提交，**不自动推送、不虚构官方签名发布**。所有进度和新会话交接要求继续只写在**本文件**。
+
+### 新要求后的执行优先级
+
+现在优先同步两个仓库的最新 Plugin contract：去掉 `workspace.manage`、`targets.runner`、Runner 源码和 Skills 内 Workspace 指令，仅保留 SSH 与 Frontend/Backend；先核实官方仓签名和 manifest 机制，运行其本地验证并独立提交。随后清理 Nexus Host 的能力、Runtime/Protocol、Frontend、Schema、Runner、部署/测试及有效文档，按可编译的安全边界分批提交。**P0 中“必须拿到旧生产备份与外部已签名版本才能开始代码移除”的历史阻塞被此规则取代**；之前的 E2E 全绿只是旧架构基线，不作为保留旧功能的理由。
+
+**双仓第一项已完成（2026-10-08）**：`/home/honus/nexus-agent-plugins` 的 `main` 提交 `00af729`（`feat(plugins): remove Workspace and Runner targets`），本地领先 `origin/main` 1 个提交、未推送。两个正式插件源码的 App 版本升至 `2.0.0`，SDK major 仍为 Host 目前支持的 `1`；去掉 `nexus.agent` 的 `workspace.manage` 和所有 Skills Workspace 目标指导、去掉 `nexus.fullstack` Runner target/源码/界面文字，并将仓库校验器限制为 Frontend/Backend target。执行 `node scripts/check.mjs` **PASS（2 plugins）**、`git diff --check` PASS；使用仅存于 `/home/honus/workspace/cache/plugin-migration/temporary-key.pem` 的临时 Ed25519 私钥构建两个新 `2.0.0` 完整签名 Tar **PASS**，检查完整 Tar 条目确认无 `runner/`。正式 `catalog/official-publisher.json` 没动，临时密钥与官方 publisher ID 不匹配；**这不是已发行或官方签名验证通过**，最终需使用 GitHub Release 工作流的正式签名密钥生成新 Catalog/Release。下一个施工入口：主仓 Host 的 `workspace.manage`、Runner manifest / Plugin SDK / 签名校验和所有消费者，最终同步其他旧 Workspace/Runner 部分。
+
+**双仓第二项（主仓 Plugin Runner manifest 接入移除）**：Host `app-manifest-validator.ts` 从公开 schema 删除 `targets.runner` 并拒绝带旧字段的包；`app.types.ts` / `protocol/agent-plugins.ts` 删除 manifest 对应类型；`persisted-app-manifest-decoder.ts` 对未知 target key（包括 `runner`）直接 `PLUGIN_MANIFEST_INVALID`，**不兼容转换**；Tar verifier 只解析 Frontend/Backend 入口；`plugin-dto.ts` 只输出这两类 manifest target。Plugin Management UI 删除 Runner badge；本仓第一方 E2E fullstack fixture 删除 Runner entry/源码并与外仓同步说明；原 `preset-plugin.spec.ts` 的正式 Plugin 断言改为 `runnerEntry:null`。现有 `agent-definition-capability-contract.scenario.ts` 加入旧 Runner manifest 在新包与持久化 decoder 双边拒绝的反例（真实错误 `PLUGIN_MANIFEST_INVALID`）。本项只是**新包准入与公开 manifest**的破坏式收敛；内部 Plugin Version 的 `runnerEntry` / `runner_entry`、Workspace Plugin runner target source 等尚未删除，必须在后续协调删除，**不允许标记 P4/P6 总阶段完成**。
+
+**E2E 实际位置与新增范围**：移除前通过的 **69/69** 全部位于已有 `nexus-terminal/tests/e2e/specs/agent/*.spec.ts` 的九个现有文件，运行日志仅在 `/home/honus/workspace/cache/e2e-agent-*.log`；并非新加 69 个 E2E。上一轮为备份后插件可用性**扩展了已有的** `tests/e2e/specs/http/backup.spec.ts` 断言；本次修改的是现有 `tests/e2e/specs/agent/preset-plugin.spec.ts` 的合同断言、`tests/e2e/fixtures/agent/plugin-source/nexus.fullstack/`、`tests/backend/agent-scenarios/agent-definition-capability-contract.scenario.ts`。本次官方插件 Catalog + Frontend Plugin 定向 Playwright E2E **2/2 PASS（17.7s）**；完整新架构移除后必须再跑保留行为，不能把旧版 69/69 冒充最终验收。
+
+**Host 新准入的场景验证**：第一遍完整 Agent scenario 执行出现 `FAIL model/agent-definition-capability-contract`，原因是测试新添加的旧 manifest 拒绝断言期待了错误码 `AGENT_DURABLE_STATE_INVALID`，实际唯一 owner 规范返回 `PLUGIN_MANIFEST_INVALID`。核实来源后只修正了**测试期望错误码**（没有调整安全解码逻辑），单独运行该 Agent scenario 已 **PASS**，随后完整 `pnpm --filter @nexus-terminal/backend run test:agent-scenarios` **exit 0**。新 manifest 和 persisted manifest 两个入口均在失败时拒绝 Runner target。这些都是变更后真实运行结果，和旧基线区别记录。
+
+**主仓第一项提交前检查**：`pnpm run check`（ESLint、Frontend/Backend/Agent Runner typecheck）**PASS**，`pnpm run format:all:check` **PASS**，`pnpm run build`（Backend、Frontend、当前尚未拆除的生产 Runner）**PASS**，`git diff --check` **PASS**；变更后定向 Plugin Catalog/Frontend SDK Playwright E2E **2/2 PASS**，且全量 Agent scenario PASS。还没有重新执行移除后全量 Agent 69 项或最终远程 CI。主仓仍含内部 Plugin `runner_entry`、Workspace/Runner 运行时；当前不是最终干净状态。下一项先查完 `workspace-runtime.service.ts`/Plugin Runner sources、SQLite schema/backup、DTO/UI 消费链再整体移除，不保留已废弃 Runner 字段或仅返回 `null` 的兼容槽位。
 
 为使明确的临时过程记录与仓库通用“`doc/` 不建进度文件”规则不冲突，本次同步在 `doc/AGENTS.md` 的“文档维护分工”与“修改与文档”段落声明**仅此文件**的项目所有者授权例外；`AGENTS.md` 仍是全局开发规则入口，`USAGE.md` 仍是唯一用户需求入口。
 
@@ -34,24 +50,24 @@ node --version && pnpm --version
 # 从下方「当前工作指针」继续一项，改完先更新本文件再检查与本地提交
 ```
 
-**当前工作指针（2026-10-08）**：先运行上方交接命令重新确认 `dev` HEAD、status 与其它会话的最新提交，保留用户初始未跟踪计划。所有者已确认**生产 Agent Workspace 已自行删除、有备份**，不再等待已不存在的线上 Workspace 枚举。**P0-1 旧架构 Agent E2E 69/69 已按九个 spec 在隔离 Playwright Docker 分别通过**；HTTP 全备份往返、恢复后 SSH 连通与 Plugin 签名安装也通过（强化后的完整 HTTP E2E），非远程 CI/新架构验收。P0-2/3 已完成，P1 不破坏的最终 contract/迁移草案记录在本文；P0-4 官方正式签名替代插件尚缺，P0-5 生产备份实物及恢复证据尚缺。**下一步**：取得官方签名替代插件及旧生产备份的可验证证据；在独立数据副本演练受控升级与拒绝行为后实施跨 FE/BE/Protocol 一致的 SSH-only contract，再移除旧在线表/Runner，不自动删除备份和 Artifact。
+**当前工作指针（2026-10-08）**：**按第 10、11 条最新破坏式移除/双仓规则施工**，不再要求旧生产备份可恢复或官方新版先发布才允许修改代码。插件仓 `main` 已本地提交 `00af729`，正式 Plugin 源码的 Workspace capability / Runner target/Skills 均已移除。主仓正改 Plugin 入口：新 manifest 与 durable decoder 拒绝 `targets.runner`，Tar verifier 不再提取 Runner entry，签名 E2E fullstack fixture 不再含 Runner，插件管理 UI 已去 Runner 标识。**下一项**：完成 Host Plugin Runner 的持久字段/DTO/Workspace target 剩余 owner 清理，再依次移除 Workspace、SSH/Browser/ACP/Frontend 和生产 Runner。不可将当前的 Plugin 入口清理误作全部 Workspace 已移除。旧版 69/69 Agent E2E 和 HTTP 备份通过是旧架构基线，新版本仍需重新执行。每次继续先核对两仓 HEAD/status，保留用户最初的未跟踪计划和已留存备份，按仓独立本地提交而不推送。
 
 ## 阶段状态（2026-10-08）
 
 | 阶段                         | 状态   | 说明                                                                           |
 | ---------------------------- | ------ | ------------------------------------------------------------------------------ |
 | P0 清单与升级边界            | 进行中 | P0-2/3 完成，check/build/Agent 场景通过；旧版 Agent E2E 69/69；P0-1/4/5 待验收 |
-| P1 最终 contract 与迁移方案  | 准备中 | 源码约束、目标和数据转换边界已在本文件成文；未改最终 DTO/Decoder               |
+| P1 最终 contract 与迁移方案  | 进行中 | Plugin manifest/decoder 已开始破坏式切换；其余 DTO 尚未收敛                    |
 | P2 存量数据、升级与备份      | 未开始 | 不在开发过程中直接删除真实数据                                                 |
 | P3 Backend SSH 收敛          | 未开始 |                                                                                |
-| P4 Browser、ACP、Plugin 解耦 | 未开始 |                                                                                |
+| P4 Browser、ACP、Plugin 解耦 | 进行中 | 双仓 Plugin Runner target 新接入已退出；内部 Runner/Browser/ACP 仍待清理       |
 | P5 Frontend 移除             | 未开始 |                                                                                |
 | P6 生产 Runner 退出          | 未开始 |                                                                                |
 | P7 文档与验收                | 未开始 |                                                                                |
 
 ## P1 边界准备：基于当前代码的迁移决策（仅设计，尚未改生产 contract）
 
-虽然 P0 的正式插件替代 Release 与备份恢复证据尚未完结，但下列**不改变生产行为**的 contract/升级方案可以预先确定；不能把这里的设计视为已完成 P1：
+以下属于原有拆解设计，**其中的旧备份兼容、旧包升级与必须先有正式 Release 等门槛已被第 10 条最新要求明确取代**。新 Host Plugin manifest 部分已开始落地；其余内容是目标，不表示实现完成：
 
 1. **文件/Shell 显式 SSH target**：当前 `capabilities/tool-target.types.ts` 定义 `AgentTargetKind='workspace'|'ssh'`；`target-resolver.ts` 优先分支 `ssh`、其他转 Workspace。最终 `AgentTargetSelector` 只能显式接受 `{target:'ssh',id:'<positive decimal connection id>'}`。无 target/旧 `workspace`/伪造 id 必须在解析和授权前 fail closed，不能回退“当前终端”或 Backend 本地执行。保留现有 SSH `SshTargetResolverPort.target` 的连接 scope、配置 hash/identity 与更改后撤销校验；`AgentTargetResolver` 不应继续依赖 Workspace repository。
 2. **Browser 独立绑定**：当前 `browser-session-binding-authority.ts` 接受 `workspaceId` 或 `targetId`，有 `workspaceBinding`、Workspace generation、`standaloneBinding` 哈希与 stale session 清理。最终只保留显式 `targetId` 路径并冻结 `id/endpoints/allowedUrlPatterns/configurationHash`、Run/用户/Runtime scope；创建后配置变化必须关闭旧 session 并报 `BROWSER_TARGET_STALE`。Runner-only endpoint 不能自动重写为 Backend CDP；旧带 workspaceId 的 session 需 fail closed 和释放，不读取已删除 Workspace 表。

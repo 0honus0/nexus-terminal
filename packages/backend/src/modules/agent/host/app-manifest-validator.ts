@@ -92,12 +92,6 @@ const MANIFEST_SCHEMA: JsonValue = {
           required: ['entry'],
           properties: { entry: { type: 'string', minLength: 1 } },
         },
-        runner: {
-          type: 'object',
-          additionalProperties: false,
-          required: ['entry'],
-          properties: { entry: { type: 'string', minLength: 1 } },
-        },
       },
     },
   },
@@ -236,7 +230,7 @@ export const validateManifest = (raw: unknown, options: ManifestValidatorOptions
   if (input.targets !== undefined) {
     const rawTargets = record(input.targets, 'manifest.targets');
     targets = {};
-    const validateTarget = (name: 'frontend' | 'backend' | 'runner', prefix: string): AgentAppTarget | undefined => {
+    const validateTarget = (name: 'frontend' | 'backend', prefix: string): AgentAppTarget | undefined => {
       const rawTarget = rawTargets[name];
       if (rawTarget === undefined) return undefined;
       const target = record(rawTarget, `manifest.targets.${name}`);
@@ -251,10 +245,8 @@ export const validateManifest = (raw: unknown, options: ManifestValidatorOptions
     };
     const frontend = validateTarget('frontend', 'frontend');
     const backend = validateTarget('backend', 'backend');
-    const runner = validateTarget('runner', 'runner');
     if (frontend) targets.frontend = frontend;
     if (backend) targets.backend = backend;
-    if (runner) targets.runner = runner;
   }
 
   let agentSurface: { defaultApprovalMode?: 'ask' | 'full_access' } | undefined;

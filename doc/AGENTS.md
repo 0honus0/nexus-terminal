@@ -288,10 +288,10 @@ Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 用 typed
 ## 10. Plugin 平台
 
 - Package 校验 manifest/allowlist/SHA-256/Ed25519/traversal/symlink/device/archive bomb/size；stage 位于 `agent/plugins/.staging`，验证后入 `agent/plugins/<appId>/versions/<version>` immutable scope。每 App 一条 current installation，同 App upgrade/drain，不伪装并存版本。
-- Frozen Run／Workspace 的 Runner target 可比当前 installation 活得更久；带 Runner entry 的 installed package 不参与自动版本清理，未建立共享引用 lease 前不以 installation count 删除 Runner source。
+- 新签名 Plugin manifest 只允许 `frontend`、`backend` target；Runner target 和声明字段 `targets.runner` 直接拒绝，不提供旧包自动重写成 Backend target 的兼容路径。拆除其它 Runner/Workspace 内部依赖时同步移除原有 Runner package 保留例外。
 - Skill 唯一来源 `skills/<slug>/SKILL.md`，标准 frontmatter 的 name 对应 slug、description 非空；id 派生自 App/slug，version 来自 package，不用旧 Nexus 私有字段或独立 index/body。签名覆盖 package/version，files.json 固定每 Skill hash；Context 只发 metadata，skill_read 时复验并 bounded 读取正文。
 - Plugin Frontend 主站同源资源 + `sandbox=allow-scripts` opaque iframe，不授予 allow-same-origin；只走 `/sdk/frontend-v1.mjs` bounded MessagePort，不拿 cookie/CSRF/HTTP client/内部 service，不拆独立公开 Origin/端口。
-- Backend target 不在主 Backend eval/import，独立 Node child Permission Model 限制文件/写入/child/worker/native/WASI，但不冒充 OS/network sandbox。Runner target 在冻结 generation 下通过本地 SDK 执行。
+- Backend target 不在主 Backend eval/import，独立 Node child Permission Model 限制文件/写入/child/worker/native/WASI，但不冒充 OS/network sandbox。Frontend target 在隔离 App surface 中运行。
 - Host/Core 持有 Run、Broker、Policy/Approval/Lease、bridge、verifier/SDK 与 governed Tool；Plugin 无 Host-authority Tool 注入接口，外部 Tool 优先 MCP。扩展需明确 versioned SDK/IPC/risk/outcome contract，不借动态 target 获得 raw authority。
 - 第一方源码与签名发布归 `0honus0/nexus-agent-plugins`；`nexus.agent` 是可安装 App，含 agent.default 与 Operations/Developer 两个 Skill；`nexus.fullstack` 是 Frontend/Backend/Runner 组合 reference。主仓只持 protocol/installer/permission/host/runtime/自包含 fixture，不依赖外仓在线做普通 E2E。
 - 官方 catalog 可镜像，publisher pin 不由普通生产变量替换；签名前核对同一 identity。官方 stage 使用 pinned source，额外 repo 显式 trust；仅 test/E2E 可注入 publisher。catalog/manifest 双重检查 SDK major/Nexus min/maxVersion，已安装重新启用优先本地，不重置 grant。

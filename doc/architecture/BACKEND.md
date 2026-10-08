@@ -395,7 +395,7 @@ Runner `controller/server.ts` 持有 HTTP/WebSocket transport、认证、输入�
 
 Workspace 工具链引用仅包含 familyId/versionId，架构由 Runner 决定；支持版本与架构来自 Runner catalog JSON。Node/Python/Go 共用 mise materializer，检查可执行文件和实际版本，不维护预编译来源 lock、预设安装树摘要或选择指纹。安装缓存按类型、版本、架构组织，保留不可变共享与使用中卸载保护；Backend 只消费 catalog 和生命周期 contract，不复制安装状态。内置 base-tools 的仓库随附 archive 仍做完整性校验，不属于语言版本来源锁定。
 
-Plugin package、immutable installed version、AppStorage、Workspace 和 Artifact 分别维护生命周期。Frontend target 在隔离 surface 中运行；backend/runner target 通过受控进程和版本化 SDK/IPC 运行。Plugin 不能把 Host authority function 注入 Tool catalog。
+当前可安装的 Plugin manifest 只支持 `frontend` 和 `backend` target，声明 `targets.runner` 会在 Host manifest 验证时直接拒绝（不执行旧字段转换）。Frontend target 在隔离 surface 中运行；Backend target 通过受控子进程和版本化 SDK/IPC 运行。Plugin package、immutable installed version、AppStorage、Artifact 分别维护生命周期，Plugin 不能把 Host authority function 注入 Tool catalog。Agent Workspace/生产 Runner 的其余内部消费者在统一移除阶段退出。
 
 ## 数据、事务与并发
 
