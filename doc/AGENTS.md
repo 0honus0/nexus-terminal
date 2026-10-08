@@ -300,7 +300,7 @@ Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 的 typed
 
 ### 11.2 行为证据与交付
 
-- canonical E2E 使用 Node.js Current；生产 Backend/Frontend 与第一方 Plugin 构建/CI 跟随 Current。基础 check/format/build 串行，七个 Playwright 项目按耗时分片（默认 8，手动 6–10）；统一生产 Docker 镜像经过 `docker-core-no-runner-smoke.sh` 验证，独立 Playwright Runner 镜像只用于 E2E 执行。
+- canonical E2E 使用 Node.js Current；生产主镜像构建与运行使用 `alpine:latest`，通过 APK 安装最新 `nodejs-current` 和运行所需的 `nginx`，不锁定版本；第一方 Plugin 构建/CI 跟随 Current。基础 check/format/build 串行，七个 Playwright 项目按耗时分片（默认 8，手动 6–10）；统一生产 Docker 镜像经过 `docker-core-no-runner-smoke.sh` 验证，独立 Playwright Runner 镜像只用于 E2E 执行。
 - 等待真实业务终态，不把按钮、socket 关闭、HTTP 返回视为完成；挂起恢复看 ownership，终端快照先真实 shell 往返。自动清理持续验证剩余记录终态或空态，“取消中”不是完成。
 - UI E2E 用可访问 role/name/label 与真实状态，不恢复生产测试标记；几何/滚动验证不锁定实现文本。
 - 挂起日志物理压缩缓冲不扩大公开历史：read/offset/export 仍限最近 100MiB；分批压缩是摊销优化，不宣称 append 严格 O(1) 或任意输出率不积压，状态仍由 Workspace/Backend owner 持有。
