@@ -38,7 +38,6 @@ export interface AgentRunEnvironmentSelectionDto {
   recipeId: string;
   versions?: Record<string, string>;
   runnerPluginIds?: string[];
-  acpProfileIds?: string[];
   browserTargetId?: string;
   catalogRevision?: string;
 }
@@ -55,13 +54,6 @@ export interface AgentRunEnvironmentRunnerPluginDto {
   protocolVersion: 3;
   packageHash: string;
   entry: string;
-}
-
-export interface AgentRunEnvironmentAcpProfileDto {
-  id: string;
-  profileRevision: number;
-  argv: string[];
-  cwd: string;
 }
 
 export interface AgentRunEnvironmentBrowserEndpointDto {
@@ -88,7 +80,6 @@ export interface AgentRunEnvironmentSnapshotDto {
   catalogRevision: string;
   toolchain: AgentRunEnvironmentToolchainPackDto[];
   runnerPlugins: AgentRunEnvironmentRunnerPluginDto[];
-  acpProfiles: AgentRunEnvironmentAcpProfileDto[];
   browserTarget: AgentRunEnvironmentBrowserTargetDto | null;
 }
 

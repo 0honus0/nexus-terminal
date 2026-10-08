@@ -26,7 +26,6 @@ journal.saveWorkspace({
   status: 'running',
   retained: false,
   runnerPlugins: [],
-  acpProfiles: [],
   browserTarget: null,
 });
 journal.close();
@@ -49,7 +48,7 @@ await new Promise((resolve) => listener.close(resolve));
 const token = 'isolated-kill-recovery-token-00000000000000';
 const headers = {
   authorization: `Bearer ${token}`,
-  'x-nexus-agent-protocol': '2026-09-13',
+  'x-nexus-agent-protocol': '2026-10-08',
   'content-type': 'application/json',
 };
 let child;

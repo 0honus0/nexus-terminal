@@ -10,13 +10,11 @@
     displayName: string;
   }
 
-  type AcpProfile = AgentSettingsViewDto['effectiveSettings']['workspaceRuntime']['acpProfiles'][number];
   type BrowserTarget = AgentSettingsViewDto['effectiveSettings']['browser']['targets'][number];
 
   const props = defineProps<{
     catalog: AgentWorkspaceRuntimeCatalogDto;
     runnerCandidates: RunnerCandidate[];
-    acpProfiles: AcpProfile[];
     browserTargets: BrowserTarget[];
     locked: boolean;
   }>();
@@ -27,7 +25,6 @@
         recipeId: string;
         versions: Record<string, string>;
         runnerPluginIds: string[];
-        acpProfileIds: string[];
         browserTargetId: string;
         retained: boolean;
       },
@@ -37,7 +34,6 @@
   const selectedRecipeId = ref('');
   const toolVersions = ref<Record<string, string>>({});
   const selectedRunnerPluginIds = ref<string[]>([]);
-  const selectedAcpProfileIds = ref<string[]>([]);
   const selectedBrowserTargetId = ref('');
   const retained = ref(false);
 
@@ -71,16 +67,13 @@
     selectedRunnerPluginIds.value = selectedRunnerPluginIds.value.filter((pluginId) =>
       props.runnerCandidates.some((candidate) => candidate.pluginId === pluginId),
     );
-    selectedAcpProfileIds.value = selectedAcpProfileIds.value.filter((profileId) =>
-      props.acpProfiles.some((profile) => profile.id === profileId),
-    );
     if (!props.browserTargets.some((target) => target.id === selectedBrowserTargetId.value)) {
       selectedBrowserTargetId.value = '';
     }
     if (!browserRecipe.value) selectedBrowserTargetId.value = '';
   };
 
-  watch(() => [props.catalog, props.runnerCandidates, props.acpProfiles, props.browserTargets] as const, normalize, {
+  watch(() => [props.catalog, props.runnerCandidates, props.browserTargets] as const, normalize, {
     immediate: true,
     deep: true,
   });
@@ -95,7 +88,6 @@
       recipeId: selectedRecipeId.value,
       versions: Object.fromEntries(Object.entries(toolVersions.value).filter(([, versionId]) => Boolean(versionId))),
       runnerPluginIds: [...selectedRunnerPluginIds.value],
-      acpProfileIds: [...selectedAcpProfileIds.value],
       browserTargetId: browserRecipe.value ? selectedBrowserTargetId.value : '',
       retained: retained.value,
     });
@@ -134,15 +126,6 @@
       />
       <span class="mt-1 block text-[11px]">{{ $t('agent.workspaceRuntime.browserTargetHint') }}</span>
     </label>
-
-    <div v-if="acpProfiles.length" class="mt-2 rounded border border-border p-2">
-      <div class="text-[11px] font-medium">{{ $t('agent.workspaceRuntime.acpProfiles') }}</div>
-      <p class="mt-0.5 text-[11px] text-text-secondary">{{ $t('agent.workspaceRuntime.acpProfilesHint') }}</p>
-      <label v-for="profile in acpProfiles" :key="profile.id" class="mt-1 flex items-center gap-2 text-[11px]">
-        <input v-model="selectedAcpProfileIds" type="checkbox" :value="profile.id" />
-        <span>{{ profile.id }} · {{ profile.argv.join(' ') }}</span>
-      </label>
-    </div>
 
     <div v-if="toolFamilies.length" class="mt-2 rounded border border-border p-2">
       <div class="text-[11px] font-medium">{{ $t('agent.workspaceRuntime.toolVersions') }}</div>

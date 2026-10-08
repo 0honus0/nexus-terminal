@@ -112,7 +112,6 @@
     recipeId: string;
     versions: Record<string, string>;
     runnerPluginIds: string[];
-    acpProfileIds: string[];
     browserTargetId: string;
     retained: boolean;
   }): void => {
@@ -125,7 +124,6 @@
           recipeId: input.recipeId,
           versions: input.versions,
           runnerPluginIds: input.runnerPluginIds,
-          ...(input.acpProfileIds.length ? { acpProfileIds: input.acpProfileIds } : {}),
           ...(input.browserTargetId ? { browserTargetId: input.browserTargetId } : {}),
         },
         input.retained,
@@ -291,7 +289,6 @@
       v-if="catalog && agentSettings && !activeWorkspace"
       :catalog="catalog"
       :runner-candidates="[]"
-      :acp-profiles="agentSettings!.effectiveSettings.workspaceRuntime.acpProfiles"
       :browser-targets="agentSettings!.effectiveSettings.browser.targets"
       :locked="locked"
       @create="createWorkspace"

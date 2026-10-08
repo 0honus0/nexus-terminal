@@ -220,10 +220,7 @@ export const parseBudgetIncreaseRequest = (body: unknown): AgentRunBudgetIncreas
 };
 
 const parseWorkspaceSpec = (value: unknown): AgentWorkspaceEnvironmentSpecDto => {
-  if (
-    !isRecord(value) ||
-    !hasOnlyKeys(value, ['recipeId', 'versions', 'runnerPluginIds', 'acpProfileIds', 'browserTargetId'])
-  ) {
+  if (!isRecord(value) || !hasOnlyKeys(value, ['recipeId', 'versions', 'runnerPluginIds', 'browserTargetId'])) {
     throw new Error('VALIDATION_FAILED');
   }
   if (typeof value.recipeId !== 'string' || value.recipeId.length < 1 || value.recipeId.length > 128) {
@@ -243,16 +240,6 @@ const parseWorkspaceSpec = (value: unknown): AgentWorkspaceEnvironmentSpecDto =>
       value.runnerPluginIds.some(
         (pluginId) => typeof pluginId !== 'string' || !/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$/.test(pluginId),
       )
-    ) {
-      throw new Error('VALIDATION_FAILED');
-    }
-  }
-  if (value.acpProfileIds !== undefined) {
-    if (
-      !Array.isArray(value.acpProfileIds) ||
-      value.acpProfileIds.length > 16 ||
-      new Set(value.acpProfileIds).size !== value.acpProfileIds.length ||
-      value.acpProfileIds.some((id) => typeof id !== 'string' || !/^[a-z][a-z0-9_.-]{0,127}$/.test(id))
     ) {
       throw new Error('VALIDATION_FAILED');
     }

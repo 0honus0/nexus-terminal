@@ -60,12 +60,6 @@ export const runEnvironmentDto = (
       packageHash: plugin.packageHash,
       entry: plugin.entry,
     })),
-    acpProfiles: environment.acpProfiles.map((profile) => ({
-      id: profile.id,
-      profileRevision: profile.profileRevision,
-      argv: [...profile.argv],
-      cwd: profile.cwd,
-    })),
     browserTarget:
       environment.browserTarget === null
         ? null

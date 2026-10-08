@@ -56,13 +56,6 @@ export const publicAgentErrorTaxonomyScenario = async () => {
       code: 'DELEGATION_VERSION_CONFLICT',
     },
     {
-      producer: 'workspace ACP selection',
-      raw: 'ACP_PROFILE_SELECTION_INVALID',
-      status: 400,
-      code: 'ACP_PROFILE_SELECTION_INVALID',
-    },
-    { producer: 'workspace ACP missing', raw: 'ACP_PROFILE_NOT_FOUND', status: 404, code: 'NOT_FOUND' },
-    {
       producer: 'provider explicit capability metadata',
       raw: 'PROVIDER_CAPABILITY_METADATA_INVALID',
       status: 502,

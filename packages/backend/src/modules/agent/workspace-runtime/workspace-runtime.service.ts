@@ -31,20 +31,6 @@ const TOOLCHAIN_COMMAND_SECONDS = 12 * 60;
 const COMMAND_POLL_MS = 250;
 const ADMIN_SCOPE = { userId: 0, appId: 'nexus.host' } as const;
 
-const selectedAcpProfiles = (
-  ids: readonly string[] | undefined,
-  profiles: readonly import('../agent-defaults').AgentAcpWorkspaceProfileSetting[],
-  profileRevision: number,
-): import('./workspace-runtime.types').WorkspaceAcpProfile[] => {
-  const unique = [...new Set(ids ?? [])];
-  if (unique.length > 16) throw new Error('ACP_PROFILE_SELECTION_INVALID');
-  return unique.map((id) => {
-    const profile = profiles.find((candidate) => candidate.id === id);
-    if (!profile) throw new Error('ACP_PROFILE_NOT_FOUND');
-    return { id: profile.id, profileRevision, argv: [...profile.argv], cwd: profile.cwd };
-  });
-};
-
 const selectedBrowserTarget = (
   id: string | undefined,
   targets: readonly import('../agent-defaults').AgentBrowserTargetSetting[],
@@ -98,14 +84,6 @@ const assertSpecMatchesFrozenProfile = (spec: AgentWorkspaceCreateSpec | null, p
     !sameIds(
       spec.runnerPluginIds,
       profile.runnerPlugins.map((target) => target.pluginId),
-    )
-  ) {
-    throw new Error('RUN_ENVIRONMENT_CONFLICT');
-  }
-  if (
-    !sameIds(
-      spec.acpProfileIds,
-      profile.acpProfiles.map((entry) => entry.id),
     )
   ) {
     throw new Error('RUN_ENVIRONMENT_CONFLICT');
@@ -261,7 +239,6 @@ export class WorkspaceRuntimeService {
       catalogRevision: catalog.revision,
       toolchain: resolveWorkspaceToolchain(catalog, recipe.id, versions),
       runnerPlugins: [],
-      acpProfiles: selectedAcpProfiles(spec.acpProfileIds, workspaceSettings.acpProfiles, settings.revision),
       browserTarget: selectedBrowserTarget(
         spec.browserTargetId,
         settings.effectiveSettings.browser.targets,
@@ -669,7 +646,6 @@ export class WorkspaceRuntimeService {
       catalogRevision: workspace.profile.catalogRevision,
       toolchain: workspace.profile.toolchain.map((pack) => ({ ...pack })),
       runnerPlugins: workspace.profile.runnerPlugins.map((target) => ({ ...target })),
-      acpProfiles: workspace.profile.acpProfiles.map((profile) => ({ ...profile, argv: [...profile.argv] })),
       browserTarget: workspace.profile.browserTarget
         ? {
             ...workspace.profile.browserTarget,

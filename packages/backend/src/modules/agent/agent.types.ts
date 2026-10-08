@@ -11,7 +11,6 @@ export interface AgentWorkspaceEnvironmentSpec {
   recipeId: string;
   versions?: Record<string, string>;
   runnerPluginIds?: string[];
-  acpProfileIds?: string[];
   browserTargetId?: string;
 }
 
@@ -31,13 +30,6 @@ export interface AgentRunEnvironmentRunnerPlugin {
   protocolVersion: 3;
   packageHash: string;
   entry: string;
-}
-
-export interface AgentRunEnvironmentAcpProfile {
-  id: string;
-  profileRevision: number;
-  argv: string[];
-  cwd: string;
 }
 
 export interface AgentRunEnvironmentBrowserEndpoint {
@@ -65,7 +57,6 @@ export interface AgentRunEnvironmentSnapshot {
   catalogRevision: string;
   toolchain: AgentRunEnvironmentToolchainPack[];
   runnerPlugins: AgentRunEnvironmentRunnerPlugin[];
-  acpProfiles: AgentRunEnvironmentAcpProfile[];
   browserTarget: AgentRunEnvironmentBrowserTarget | null;
 }
 

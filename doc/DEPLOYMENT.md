@@ -63,7 +63,7 @@ Ubuntu/Debian host 首次启用前，从源码 checkout 执行：
 
 该脚本只安装与 Toolchain Catalog 一致、SHA-256 固定的 `mise 2026.9.5`、Tool Pack 解包工具以及 Workspace Terminal 使用的系统 `script(1)` / `stty`，不编译或安装 Nexus 自定义 native helper。Node/Python/Go 的支持版本由 catalog JSON 维护，mise 按指定版本安装并保留上游校验，Runner 检查实际版本，不维护语言工具链的构建来源 lock 或预设安装树摘要。工具链通过 `/opt/nexus/packs/<family>/<version>` 暴露；多个 Workspace 复用同一份已安装工具链。
 
-Runner 默认监听 `127.0.0.1:8790`。Runner 是可选增强能力：未配置 `NEXUS_AGENT_RUNNER_URL` 时，Frontend/Backend/guacd 基础栈独立启动，连接管理、SSH/基础命令和诊断能力不依赖 Runner。需要 Runner 时可使用宿主 Runner，或通过 Compose `runner` profile 启用容器 Runner；两种模式都必须在 `.env` 设置同一个 `NEXUS_AGENT_RUNNER_TOKEN`。Runner 所有 HTTP 与 WebSocket 控制入口统一要求 `Authorization: Bearer <NEXUS_AGENT_RUNNER_TOKEN>` 和 `X-Nexus-Agent-Protocol: 2026-09-13`；token 至少 32 字符，推荐使用 `openssl rand -hex 32` 生成。该 token 代表对 Runner 的完整控制权，不得写入日志或交给浏览器/Plugin。Runner HTTP 本身不负责 TLS：不要直接暴露到公网；跨主机部署应放在受信私网，或由 TLS 反向代理保护。
+Runner 默认监听 `127.0.0.1:8790`。Runner 是可选增强能力：未配置 `NEXUS_AGENT_RUNNER_URL` 时，Frontend/Backend/guacd 基础栈独立启动，连接管理、SSH/基础命令和诊断能力不依赖 Runner。需要 Runner 时可使用宿主 Runner，或通过 Compose `runner` profile 启用容器 Runner；两种模式都必须在 `.env` 设置同一个 `NEXUS_AGENT_RUNNER_TOKEN`。Runner 所有 HTTP 与 WebSocket 控制入口统一要求 `Authorization: Bearer <NEXUS_AGENT_RUNNER_TOKEN>` 和 `X-Nexus-Agent-Protocol: 2026-10-08`；token 至少 32 字符，推荐使用 `openssl rand -hex 32` 生成。该 token 代表对 Runner 的完整控制权，不得写入日志或交给浏览器/Plugin。Runner HTTP 本身不负责 TLS：不要直接暴露到公网；跨主机部署应放在受信私网，或由 TLS 反向代理保护。
 
 仓库同时提供独立 Runner 镜像发布流程：
 
@@ -76,9 +76,9 @@ ghcr.io/0honus0/nexus-agent-runner:dev
 
 容器 Runner 使用 Docker 默认 capability/seccomp/AppArmor 即可；Compose 示例**不需要** `privileged`、`SYS_ADMIN`、`seccomp=unconfined`、`apparmor=unconfined`、Docker socket 或 nested Docker。这里不要把“容器边界”和“Workspace 边界”混为一谈：容器可以隔离整个 Runner 服务，但容器内多个 Workspace 仍属于同一个 Nexus 用户并共享 Runner 进程权限、内核网络与 Tool Store。
 
-Runner 状态、Tool Pack、缓存和 Workspace runtime 默认持久化到 `NEXUS_AGENT_RUNNER_DATA_DIR`（默认 `./agent-runner-data`）。Runner Plugin 源码只读挂载 Backend 的 `./data/agent/plugins`。Workspace Profile 只冻结真实可执行配置（Recipe/Toolchain/Runner Plugin/ACP Profile/Browser Target/retention）；不再保留没有执行效果的 per-Workspace limits/network 字段。Agent Hard Limits 与 outbound/private-network policy 属于 Backend 自己的正式 owner，不由 Runner 模拟。
+Runner 状态、Tool Pack、缓存和 Workspace runtime 默认持久化到 `NEXUS_AGENT_RUNNER_DATA_DIR`（默认 `./agent-runner-data`）。Runner Plugin 源码只读挂载 Backend 的 `./data/agent/plugins`。尚未退出的 Workspace Profile 仅冻结当前真实可执行配置（Recipe/Toolchain/Runner Plugin/Browser Target/retention），**不再含 ACP profile**；Agent ACP 仅在远端 SSH channel 运行。Agent Hard Limits 与 outbound/private-network policy 属于 Backend 自己的正式 owner，不由 Runner 模拟。
 
-Workspace local Terminal 由 Runner 通过系统 `script(1)` 创建 PTY，Backend/Frontend 继续使用 terminal session attach/detach/bounded replay；resize 写入真实 PTY size，显式 signal 发送到当前 PTY foreground process group。Workspace job、ACP 与 Runner Plugin 作为独立 Runner-managed process group 运行，timeout/stop/restart/delete 会清理整个进程组，避免留下后台孤儿进程。
+Workspace local Terminal 由 Runner 通过系统 `script(1)` 创建 PTY，Backend/Frontend 继续使用 terminal session attach/detach/bounded replay；resize 写入真实 PTY size，显式 signal 发送到当前 PTY foreground process group。尚未退出的 Workspace Job 与 Runner Plugin 仍按 Runner-managed process group 管理，timeout/stop/restart/delete 清理整个进程组；**Runner ACP 进程及其 WebSocket stream 已删除**，不能经旧 URI 重启。
 
 当前 Runner 镜像可构建 `linux/amd64` 和 `linux/arm64`；Catalog 的 `base-tools` 已支持两种架构，但当前 Node/Python/Go 多版本 Tool Pack 仍只发布 x64，因此 arm64 上这些额外语言版本会按 Catalog 正确显示为 unavailable，而不会错误回退。
 

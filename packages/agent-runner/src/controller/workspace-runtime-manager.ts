@@ -152,10 +152,6 @@ export class WorkspaceRuntimeManager {
     return this.prepareExecution(request.workspaceId, request.generation, request.argv, request.cwd);
   }
 
-  prepareAcpProcess(workspaceId: string, generation: number, argv: readonly string[], cwd: string): WorkspaceExecution {
-    return this.prepareExecution(workspaceId, generation, argv, cwd);
-  }
-
   prepareTerminalProcess(workspaceId: string, generation: number): WorkspaceExecution {
     const shell = process.env.SHELL?.trim() || '/bin/sh';
     return this.prepareExecution(workspaceId, generation, [shell, '-l'], '/workspace/work');

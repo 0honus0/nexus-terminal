@@ -229,15 +229,14 @@ export const checkpointWorkspaceEvidenceScenario = async () => {
       catalogRevision: 'catalog-r1',
       toolchain: [],
       runnerPlugins: [],
-      acpProfiles: [],
       browserTarget: null,
     };
     await db.execute(
       `INSERT INTO agent_workspaces
         (id,user_id,app_id,run_id,agent_runtime_id,retained,kind,recipe_id,recipe_revision,runtime_digest,catalog_revision,
-         toolchain_json,runner_plugins_json,generation,status,acp_profiles_json,browser_target_json,retained_manifest_ref,
+         toolchain_json,runner_plugins_json,generation,status,browser_target_json,retained_manifest_ref,
          version,last_active_at,created_at,updated_at)
-       VALUES (?,1,?,?,?,1,'code',?,?,?,?, '[]','[]',1,'running','[]',NULL,NULL,1,?,?,?)`,
+       VALUES (?,1,?,?,?,1,'code',?,?,?,?, '[]','[]',1,'running',NULL,NULL,1,?,?,?)`,
       [
         workspaceId,
         scenarioScope.appId,

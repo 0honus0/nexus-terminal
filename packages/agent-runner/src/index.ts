@@ -10,7 +10,6 @@ import { CleanupPlanner } from './controller/cleanup-planner';
 import { Reconciler } from './controller/reconciler';
 import { RunnerControllerServer } from './controller/server';
 import { PluginRunnerRuntime } from './controller/plugin-runner-runtime';
-import { AcpProcessRuntime } from './controller/acp-process-runtime';
 import { WorkspaceTerminalRuntime } from './controller/workspace-terminal-runtime';
 import { BrowserTunnelRuntime } from './controller/browser-tunnel-runtime';
 import { ToolchainMutationCoordinator } from './controller/toolchain-mutation-coordinator';
@@ -56,7 +55,6 @@ const main = async (): Promise<void> => {
   );
   const cleanup = new CleanupPlanner(root, journal, runtimeEngine, toolchainMutations, pluginRunner);
   await new Reconciler(journal, runtimeEngine, pluginRunner).reconcile();
-  const acpRuntime = new AcpProcessRuntime(journal, runtimeEngine);
   const terminalRuntime = new WorkspaceTerminalRuntime(journal, runtimeEngine);
   const browserTunnel = new BrowserTunnelRuntime(journal);
   const server = new RunnerControllerServer({
@@ -68,7 +66,6 @@ const main = async (): Promise<void> => {
     storage,
     cleanup,
     pluginRunner,
-    acpRuntime,
     terminalRuntime,
     browserTunnel,
   }).createServer();
@@ -81,7 +78,6 @@ const main = async (): Promise<void> => {
     if (shuttingDown) return;
     shuttingDown = true;
     runnerLog('info', 'Agent Runner graceful shutdown started', { signal });
-    acpRuntime.closeAll();
     terminalRuntime.closeAll();
     browserTunnel.closeAll();
     server.closeAllConnections?.();

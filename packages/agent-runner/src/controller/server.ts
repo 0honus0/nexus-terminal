@@ -19,7 +19,6 @@ import { SpaceReporter } from './space-reporter';
 import { CleanupPlanner } from './cleanup-planner';
 import { PluginRunnerRuntime } from './plugin-runner-runtime';
 import { MAX_HOST_WORKSPACE_TRANSFER_BYTES } from './plugin-workspace-store';
-import type { AcpProcessRuntime } from './acp-process-runtime';
 import type { WorkspaceTerminalRuntime } from './workspace-terminal-runtime';
 import type { BrowserTunnelRuntime } from './browser-tunnel-runtime';
 
@@ -109,7 +108,6 @@ export interface RunnerControllerDependencies {
   storage: SpaceReporter;
   cleanup: CleanupPlanner;
   pluginRunner: PluginRunnerRuntime;
-  acpRuntime: AcpProcessRuntime;
   terminalRuntime: WorkspaceTerminalRuntime;
   browserTunnel: BrowserTunnelRuntime;
 }
@@ -125,7 +123,6 @@ export class RunnerControllerServer {
     const server = http.createServer((request, response) => void this.route(request, response));
     server.on('upgrade', (request, socket, head) => this.upgrade(request, socket, head));
     server.on('close', () => {
-      this.dependencies.acpRuntime.closeAll();
       this.dependencies.terminalRuntime.closeAll();
       this.dependencies.browserTunnel.closeAll();
     });
@@ -143,21 +140,6 @@ export class RunnerControllerServer {
         return;
       }
       const url = new URL(request.url ?? '/', 'http://runner.internal');
-
-      const acp = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/acp\/([^/]+)\/stream$/);
-      if (acp) {
-        const generation = Number(url.searchParams.get('generation'));
-        if (!Number.isSafeInteger(generation) || generation < 1) throw new Error('VALIDATION_FAILED');
-        this.dependencies.acpRuntime.handleUpgrade(
-          request,
-          socket,
-          head,
-          decodeURIComponent(acp[1]!),
-          generation,
-          decodeURIComponent(acp[2]!),
-        );
-        return;
-      }
 
       const terminal = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/terminal\/stream$/);
       if (terminal) {

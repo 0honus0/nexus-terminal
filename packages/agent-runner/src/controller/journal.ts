@@ -89,19 +89,6 @@ const decodeRunnerPlugins = (value: unknown): WorkspaceRecord['runnerPlugins'] =
   });
 };
 
-const decodeAcpProfiles = (value: unknown): WorkspaceRecord['acpProfiles'] => {
-  if (!Array.isArray(value) || value.length > 64) return invalidJournal();
-  return value.map((item) => {
-    const record = recordValue(item);
-    return {
-      id: stringValue(record.id) as string,
-      profileRevision: integerValue(record.profileRevision, 1),
-      argv: stringArrayValue(record.argv, 128),
-      cwd: stringValue(record.cwd) as string,
-    };
-  });
-};
-
 const decodeBrowserTarget = (value: unknown): WorkspaceRecord['browserTarget'] => {
   if (value === null) return null;
   const record = recordValue(value);
@@ -128,6 +115,7 @@ const decodeBrowserTarget = (value: unknown): WorkspaceRecord['browserTarget'] =
 
 const decodeWorkspaceRecord = (value: unknown): WorkspaceRecord => {
   const record = recordValue(value);
+  if ('acpProfiles' in record) return invalidJournal();
   if (!['creating', 'ready', 'running', 'stopped', 'deleted', 'failed'].includes(String(record.status)))
     return invalidJournal();
   return {
@@ -137,7 +125,6 @@ const decodeWorkspaceRecord = (value: unknown): WorkspaceRecord => {
     retained: booleanValue(record.retained),
     toolchain: decodeToolchain(record.toolchain),
     runnerPlugins: decodeRunnerPlugins(record.runnerPlugins),
-    acpProfiles: decodeAcpProfiles(record.acpProfiles),
     browserTarget: decodeBrowserTarget(record.browserTarget),
   };
 };

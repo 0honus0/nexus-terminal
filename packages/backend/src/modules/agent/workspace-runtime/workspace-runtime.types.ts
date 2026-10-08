@@ -1,5 +1,4 @@
 import type {
-  AgentRunEnvironmentAcpProfile,
   AgentRunEnvironmentBrowserEndpoint,
   AgentRunEnvironmentBrowserTarget,
   AgentRunEnvironmentSnapshot,
@@ -18,7 +17,6 @@ export interface ToolchainPackRef {
   versionId: string;
 }
 
-export type WorkspaceAcpProfile = AgentRunEnvironmentAcpProfile;
 export type WorkspaceBrowserEndpoint = AgentRunEnvironmentBrowserEndpoint;
 export type WorkspaceBrowserTarget = AgentRunEnvironmentBrowserTarget;
 

@@ -7,12 +7,6 @@ export interface AgentRunBudgetSnapshot {
   maxActiveExecutionSeconds: number;
 }
 
-export interface AgentAcpWorkspaceProfileSetting {
-  id: string;
-  argv: string[];
-  cwd: string;
-}
-
 export interface AgentBrowserEndpointSetting {
   scope: 'docker-network' | 'external-network';
   via: 'backend' | 'runner';
@@ -87,7 +81,6 @@ export interface AgentSettingsDocument {
     maxActiveWorkspaces: number;
     enabledRecipeIds: string[];
     toolVersions: Record<string, { enabledVersionIds: string[]; defaultVersionId: string | null }>;
-    acpProfiles: AgentAcpWorkspaceProfileSetting[];
   };
   browser: {
     targets: AgentBrowserTargetSetting[];
@@ -151,7 +144,6 @@ export const AGENT_DEFAULTS = {
       maxActiveWorkspaces: 4,
       enabledRecipeIds: [],
       toolVersions: {},
-      acpProfiles: [],
     },
     browser: { targets: [] },
     plugins: { repositories: [] },
@@ -207,35 +199,6 @@ const packVersionSettings = (
     };
   }
   return result;
-};
-
-const acpProfiles = (
-  value: unknown,
-  fallback: AgentAcpWorkspaceProfileSetting[] = [],
-): AgentAcpWorkspaceProfileSetting[] => {
-  if (!Array.isArray(value)) return structuredClone(fallback);
-  const seen = new Set<string>();
-  const result: AgentAcpWorkspaceProfileSetting[] = [];
-  for (const candidate of value.slice(0, 32)) {
-    if (!isRecord(candidate)) continue;
-    assertExactKeys(candidate, ['id', 'argv', 'cwd']);
-    const id = typeof candidate.id === 'string' ? candidate.id.trim() : '';
-    const cwd = typeof candidate.cwd === 'string' ? candidate.cwd.trim() : '';
-    if (
-      !/^[a-z][a-z0-9_.-]{0,127}$/.test(id) ||
-      seen.has(id) ||
-      (cwd !== '/workspace' && !cwd.startsWith('/workspace/')) ||
-      cwd.includes('\0') ||
-      Buffer.byteLength(cwd, 'utf8') > 4096
-    )
-      continue;
-    if (!Array.isArray(candidate.argv) || candidate.argv.length < 1 || candidate.argv.length > 64) continue;
-    const argv = candidate.argv.filter((item): item is string => typeof item === 'string' && !item.includes('\0'));
-    if (argv.length !== candidate.argv.length || argv.some((item) => Buffer.byteLength(item, 'utf8') > 8192)) continue;
-    seen.add(id);
-    result.push({ id, argv, cwd });
-  }
-  return result.sort((a, b) => a.id.localeCompare(b.id));
 };
 
 const validBrowserUrlPattern = (value: string): boolean => {
@@ -434,7 +397,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
     'maxActiveWorkspaces',
     'enabledRecipeIds',
     'toolVersions',
-    'acpProfiles',
   ]);
   const browser = exactRecord(raw, 'browser', ['targets']);
   const plugins = exactRecord(raw, 'plugins', ['repositories']);
@@ -558,7 +520,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
       ),
       enabledRecipeIds: stringList(workspaceRuntime.enabledRecipeIds, defaults.workspaceRuntime.enabledRecipeIds),
       toolVersions: packVersionSettings(workspaceRuntime.toolVersions, defaults.workspaceRuntime.toolVersions),
-      acpProfiles: acpProfiles(workspaceRuntime.acpProfiles, defaults.workspaceRuntime.acpProfiles),
     },
     browser: {
       targets: browserTargets(browser.targets, defaults.browser.targets),

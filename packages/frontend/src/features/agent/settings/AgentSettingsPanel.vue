@@ -573,11 +573,6 @@
   const saveBrowserSettings = (patch: AgentSettingsViewDto['requestedSettings']['browser'], success?: string | null) =>
     patchSection('browser', patch, success);
 
-  const saveAcpProfiles = (
-    profiles: AgentSettingsViewDto['requestedSettings']['workspaceRuntime']['acpProfiles'],
-    success?: string | null,
-  ) => patchSection('workspaceRuntime', { acpProfiles: profiles }, success);
-
   const discoverProviderModels = (provider: AgentProviderViewDto) =>
     execute(
       'discover-provider-models',
@@ -810,7 +805,6 @@
               :settings="settings"
               :busy="runtimeIntegrationBusy"
               :agent-available="apps.some((app) => app.id === 'nexus.agent')"
-              :save-profiles="saveAcpProfiles"
             />
             <StorageArtifactSettings
               :settings="settings"

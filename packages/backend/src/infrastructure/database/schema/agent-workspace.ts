@@ -15,7 +15,6 @@ CREATE TABLE IF NOT EXISTS agent_workspaces (
     runner_plugins_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(runner_plugins_json)),
     generation INTEGER NOT NULL DEFAULT 1 CHECK(generation >= 1),
     status TEXT NOT NULL CHECK(status IN ('creating','ready','starting','running','stopping','stopped','deleting','deleted','failed')),
-    acp_profiles_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(acp_profiles_json)),
     browser_target_json TEXT CHECK(browser_target_json IS NULL OR json_valid(browser_target_json)),
     retained_manifest_ref TEXT REFERENCES ai_artifacts(id) ON DELETE SET NULL,
     version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0),

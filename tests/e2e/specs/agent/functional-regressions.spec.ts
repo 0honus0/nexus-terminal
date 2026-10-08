@@ -392,7 +392,7 @@ test('A06 frozen environment rejects overrides and stale Catalog then executes a
       {
         headers: {
           Authorization: 'Bearer e2e-isolated-runner-token-not-for-production-00000000',
-          'X-Nexus-Agent-Protocol': '2026-09-13',
+          'X-Nexus-Agent-Protocol': '2026-10-08',
         },
       },
     );

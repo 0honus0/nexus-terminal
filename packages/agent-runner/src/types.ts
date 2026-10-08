@@ -2,7 +2,6 @@ import type {
   WorkspaceStatus,
   ToolchainPackRef,
   PluginRunnerTarget,
-  WorkspaceAcpProfile,
   WorkspaceBrowserTarget,
   WorkspaceRecipe,
   WorkspaceJobResult,
@@ -38,7 +37,6 @@ export interface WorkspaceRecord {
   retained: boolean;
   toolchain: ToolchainPackRef[];
   runnerPlugins: PluginRunnerTarget[];
-  acpProfiles: WorkspaceAcpProfile[];
   browserTarget: WorkspaceBrowserTarget | null;
 }
 

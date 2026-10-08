@@ -4,7 +4,7 @@ import type { ChildProcess } from 'node:child_process';
 
 export const MANAGED_PROCESS_DETACHED = process.platform !== 'win32';
 
-export type ManagedProcessKind = 'job' | 'acp' | 'plugin' | 'pack';
+export type ManagedProcessKind = 'job' | 'plugin' | 'pack';
 
 interface ManagedProcessRecord {
   pid: number;
@@ -118,7 +118,7 @@ export const terminateAllManagedProcesses = async (): Promise<void> => {
 
 /**
  * Runner-managed 子进程在 Linux 上独占 process group，生命周期操作必须整组发送信号，
- * 避免 shell、ACP 或 Plugin 派生的孙进程在 Workspace stop/restart 后变成孤儿进程。
+ * 避免 shell 或 Plugin 派生的孙进程在 Workspace stop/restart 后变成孤儿进程。
  */
 export const signalManagedProcess = (child: ChildProcess, signal: NodeJS.Signals): boolean => {
   // detached group 可能在 leader 退出后仍有孙进程存活，因此优先按 group id 清理。

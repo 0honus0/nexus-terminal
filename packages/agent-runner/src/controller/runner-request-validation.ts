@@ -54,33 +54,6 @@ export const decodeBrowserEndpoint = (value: unknown): WorkspaceBrowserEndpoint 
 };
 
 export const validateWorkspaceBindings = (command: WorkspaceProvisionCommand): void => {
-  if (!Array.isArray(command.acpProfiles) || command.acpProfiles.length > 16) {
-    throw new Error('ACP_PROFILE_INVALID');
-  }
-  const profileIds = new Set<string>();
-  for (const profile of command.acpProfiles) {
-    if (
-      !profile ||
-      !SAFE_RUNTIME_RESOURCE_ID.test(profile.id) ||
-      profileIds.has(profile.id) ||
-      !Number.isSafeInteger(profile.profileRevision) ||
-      profile.profileRevision < 1 ||
-      !Array.isArray(profile.argv) ||
-      profile.argv.length < 1 ||
-      profile.argv.length > 64 ||
-      profile.argv.some(
-        (arg) => typeof arg !== 'string' || arg.includes('\0') || Buffer.byteLength(arg, 'utf8') > 8192,
-      ) ||
-      typeof profile.cwd !== 'string' ||
-      (profile.cwd !== '/workspace' && !profile.cwd.startsWith('/workspace/')) ||
-      profile.cwd.includes('\0') ||
-      Buffer.byteLength(profile.cwd, 'utf8') > 4096
-    ) {
-      throw new Error('ACP_PROFILE_INVALID');
-    }
-    profileIds.add(profile.id);
-  }
-
   const target = command.browserTarget;
   if (target === null) return;
   if (

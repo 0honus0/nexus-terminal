@@ -1835,7 +1835,7 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
     },
   );
 
-  await step('Browser targets and ACP profiles remain configurable while the optional Runner is absent', async () => {
+  await step('Browser targets remain configurable while retired Workspace ACP profiles are rejected', async () => {
     const before = await request.get('/api/v1/agent/settings');
     expect(before.ok(), await before.text()).toBeTruthy();
     const beforeBody = (await before.json()) as AgentEnvelope<{ revision: number }>;
@@ -1843,9 +1843,6 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
       headers: mutationHeaders,
       data: {
         patch: {
-          workspaceRuntime: {
-            acpProfiles: [{ id: 'local-acp', argv: ['/usr/bin/example-acp'], cwd: '/workspace' }],
-          },
           browser: {
             targets: [
               {
@@ -1872,7 +1869,6 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
     await expect(updated.json()).resolves.toMatchObject({
       data: {
         requestedSettings: {
-          workspaceRuntime: { acpProfiles: [{ id: 'local-acp' }] },
           browser: {
             targets: [
               {
@@ -1884,6 +1880,15 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
         },
       },
     });
+
+    const retiredProfile = await request.patch('/api/v1/agent/settings', {
+      headers: mutationHeaders,
+      data: {
+        patch: { workspaceRuntime: { acpProfiles: [{ id: 'local-acp', argv: ['agent'], cwd: '/workspace' }] } },
+        expectedVersion: beforeBody.data.revision + 1,
+      },
+    });
+    expect(retiredProfile.status(), await retiredProfile.text()).toBe(400);
 
     const retired = await request.post('/api/v1/apps/nexus.agent/integrations', {
       headers: { ...mutationHeaders, 'Idempotency-Key': randomUUID() },

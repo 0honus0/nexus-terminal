@@ -420,7 +420,7 @@ for _ in {1..60}; do
   if compose exec -T backend node - <<'NODE'
 const token = process.env.NEXUS_AGENT_RUNNER_TOKEN;
 const response = await fetch(process.env.NEXUS_AGENT_RUNNER_URL + '/v1/availability', {
-  headers: { authorization: `Bearer ${token}`, 'x-nexus-agent-protocol': '2026-09-13' },
+  headers: { authorization: `Bearer ${token}`, 'x-nexus-agent-protocol': '2026-10-08' },
 }).catch(() => null);
 if (!response?.ok) process.exit(1);
 const body = await response.json();
@@ -437,7 +437,7 @@ if [[ "$runner_ready" -ne 1 ]]; then
   compose exec -T backend node - <<'NODE' || true
 const token = process.env.NEXUS_AGENT_RUNNER_TOKEN;
 const response = await fetch(process.env.NEXUS_AGENT_RUNNER_URL + '/v1/availability', {
-  headers: { authorization: `Bearer ${token}`, 'x-nexus-agent-protocol': '2026-09-13' },
+  headers: { authorization: `Bearer ${token}`, 'x-nexus-agent-protocol': '2026-10-08' },
 }).catch(() => null);
 if (!response) {
   console.error('runner availability: unreachable');
@@ -473,7 +473,7 @@ const { randomUUID } = await import('node:crypto');
 const { lookup } = await import('node:dns/promises');
 const baseUrl = process.env.NEXUS_AGENT_RUNNER_URL;
 const token = process.env.NEXUS_AGENT_RUNNER_TOKEN;
-const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'x-nexus-agent-protocol': '2026-09-13' };
+const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'x-nexus-agent-protocol': '2026-10-08' };
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const get = async (path) => {
   for (let attempt = 1; attempt <= 5; attempt += 1) {
@@ -1998,4 +1998,3 @@ socket.on('error', (error) => {
 NODE
 
 failed=0
-echo "Docker Compose deployment smoke passed for $image"

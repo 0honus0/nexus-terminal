@@ -14,7 +14,6 @@ import { RunnerJournal, payloadHash } from './journal';
 import { PackInstaller } from './pack-installer';
 import { CleanupPlanner } from './cleanup-planner';
 import { PluginRunnerRuntime } from './plugin-runner-runtime';
-import type { AcpProcessRuntime } from './acp-process-runtime';
 import type { WorkspaceTerminalRuntime } from './workspace-terminal-runtime';
 import type { BrowserTunnelRuntime } from './browser-tunnel-runtime';
 
@@ -29,7 +28,6 @@ export interface RunnerCommandExecutorDependencies {
   installer: PackInstaller;
   cleanup: CleanupPlanner;
   pluginRunner: PluginRunnerRuntime;
-  acpRuntime: AcpProcessRuntime;
   terminalRuntime: WorkspaceTerminalRuntime;
   browserTunnel: BrowserTunnelRuntime;
 }
@@ -448,7 +446,6 @@ export class RunnerCommandExecutor {
       'catalogRevision',
       'toolchain',
       'runnerPlugins',
-      'acpProfiles',
       'browserTarget',
       'retained',
     ];
@@ -504,7 +501,6 @@ export class RunnerCommandExecutor {
       retained: command.retained,
       toolchain: command.toolchain.map((pack) => ({ ...pack })),
       runnerPlugins: command.runnerPlugins.map((target) => ({ ...target })),
-      acpProfiles: command.acpProfiles.map((profile) => ({ ...profile, argv: [...profile.argv] })),
       browserTarget: command.browserTarget
         ? {
             ...command.browserTarget,
@@ -575,7 +571,6 @@ export class RunnerCommandExecutor {
       }
       if (command.action === 'stop') {
         await Promise.all([
-          this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
           this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
         ]);
         this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
@@ -587,7 +582,6 @@ export class RunnerCommandExecutor {
       }
       if (command.action === 'restart') {
         await Promise.all([
-          this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
           this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
         ]);
         this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
@@ -607,7 +601,6 @@ export class RunnerCommandExecutor {
         return;
       }
       await Promise.all([
-        this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
         this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation),
       ]);
       this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);

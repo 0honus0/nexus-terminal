@@ -313,7 +313,6 @@ export const progressAwareLoopGuardScenario = async () => {
         catalogRevision: 'catalog',
         toolchain: [],
         runnerPlugins: [],
-        acpProfiles: [],
         browserTarget: null,
       },
     };

@@ -29,7 +29,6 @@ export const workspaceCleanupHandoffScenario = async () => {
       catalogRevision: 'scenario',
       toolchain: [],
       runnerPlugins: [],
-      acpProfiles: [],
       browserTarget: null,
     },
     generation: 1,

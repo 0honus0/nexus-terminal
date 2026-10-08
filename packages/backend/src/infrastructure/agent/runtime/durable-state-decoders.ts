@@ -220,10 +220,10 @@ export const parseRunUsage = (raw: string): RunUsage => {
 
 export const decodeRunEnvironment = (value: unknown): AgentRunEnvironmentSnapshot => {
   const record = durableRecord(value);
+  if ('acpProfiles' in record) return invalid();
   if (!['shell', 'code', 'data', 'browser'].includes(String(record.kind))) return invalid();
   if (!Array.isArray(record.toolchain) || record.toolchain.length > 32) return invalid();
   if (!Array.isArray(record.runnerPlugins) || record.runnerPlugins.length > 128) return invalid();
-  if (!Array.isArray(record.acpProfiles) || record.acpProfiles.length > 64) return invalid();
   return {
     kind: record.kind as AgentRunEnvironmentSnapshot['kind'],
     recipeId: durableString(record.recipeId) as string,
@@ -247,15 +247,6 @@ export const decodeRunEnvironment = (value: unknown): AgentRunEnvironmentSnapsho
         protocolVersion: 3,
         packageHash: durableString(row.packageHash) as string,
         entry: durableString(row.entry) as string,
-      };
-    }),
-    acpProfiles: record.acpProfiles.map((item) => {
-      const row = durableRecord(item);
-      return {
-        id: durableString(row.id) as string,
-        profileRevision: durableInteger(row.profileRevision, 1),
-        argv: decodeDurableStringArray(row.argv, 128),
-        cwd: durableString(row.cwd) as string,
       };
     }),
     browserTarget:

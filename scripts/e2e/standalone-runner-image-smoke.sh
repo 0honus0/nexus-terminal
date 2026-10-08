@@ -33,7 +33,7 @@ availability=''
 for _ in {1..30}; do
   if availability="$(curl -fsS \
     -H "Authorization: Bearer $token" \
-    -H 'X-Nexus-Agent-Protocol: 2026-09-13' \
+    -H 'X-Nexus-Agent-Protocol: 2026-10-08' \
     "$base_url/v1/availability" 2>/dev/null)"; then
     if RUNNER_AVAILABILITY="$availability" node -e '
       const value = JSON.parse(process.env.RUNNER_AVAILABILITY || "{}");
@@ -59,18 +59,18 @@ RUNNER_AVAILABILITY="$availability" node -e '
 
 # Runner 控制面不是匿名服务：HTTP 和 WebSocket upgrade 都必须先通过同一个 Bearer token。
 unauthorized_status="$(curl -sS -o /dev/null -w '%{http_code}' \
-  -H 'X-Nexus-Agent-Protocol: 2026-09-13' "$base_url/v1/catalog")"
+  -H 'X-Nexus-Agent-Protocol: 2026-10-08' "$base_url/v1/catalog")"
 [[ "$unauthorized_status" == '401' ]] || { echo "Unauthenticated Runner HTTP request returned $unauthorized_status, expected 401." >&2; exit 1; }
 wrong_token_status="$(curl -sS -o /dev/null -w '%{http_code}' \
   -H 'Authorization: Bearer 0123456789abcdef0123456789abcdef' \
-  -H 'X-Nexus-Agent-Protocol: 2026-09-13' "$base_url/v1/catalog")"
+  -H 'X-Nexus-Agent-Protocol: 2026-10-08' "$base_url/v1/catalog")"
 [[ "$wrong_token_status" == '401' ]] || { echo "Wrong Runner token returned $wrong_token_status, expected 401." >&2; exit 1; }
 wrong_protocol_status="$(curl -sS -o /dev/null -w '%{http_code}' \
   -H "Authorization: Bearer $token" -H 'X-Nexus-Agent-Protocol: 2026-09-12' "$base_url/v1/catalog")"
 [[ "$wrong_protocol_status" == '426' ]] || { echo "Stale Runner protocol returned $wrong_protocol_status, expected 426." >&2; exit 1; }
 unauthorized_ws_status="$(curl --http1.1 --max-time 2 -sS -o /dev/null -w '%{http_code}' \
   -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' \
-  -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' -H 'X-Nexus-Agent-Protocol: 2026-09-13' \
+  -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' -H 'X-Nexus-Agent-Protocol: 2026-10-08' \
   "$base_url/v1/workspaces/auth-smoke/terminal/stream?generation=1&columns=80&rows=24" || true)"
 [[ "$unauthorized_ws_status" == '401' ]] || { echo "Unauthenticated Runner WebSocket upgrade returned $unauthorized_ws_status, expected 401." >&2; exit 1; }
 
@@ -82,7 +82,7 @@ const token = process.env.RUNNER_TOKEN;
 const headers = {
   authorization: `Bearer ${token}`,
   'content-type': 'application/json',
-  'x-nexus-agent-protocol': '2026-09-13',
+  'x-nexus-agent-protocol': '2026-10-08',
 };
 const readJson = async (response) => {
   const text = await response.text();

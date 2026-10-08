@@ -247,13 +247,13 @@ Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 的 typed
 ### 8.1 环境与生命周期
 
 - Runner 可选：未配置/未启动/不可达不阻止核心 Backend、连接管理、SSH 能力启动；availability 明确 unavailable。Compose 显式 profile 启用，无固定宿主 URL 硬依赖。
-- Backend→Runner HTTP/WebSocket 统一 Bearer `NEXUS_AGENT_RUNNER_TOKEN`（至少 32 字符）与 `X-Nexus-Agent-Protocol: 2026-09-13`；token 是实例完整控制权，不暴露给浏览器、日志或 Plugin。
+- Backend→Runner HTTP/WebSocket 统一 Bearer `NEXUS_AGENT_RUNNER_TOKEN`（至少 32 字符）与 `X-Nexus-Agent-Protocol: 2026-10-08`；token 是实例完整控制权，不暴露给浏览器、日志或 Plugin。
 - provision 发送完整 profile；start/stop/restart/delete 仅 `workspaceId + generation`；job 发送 generation/参数。Backend 自己持有 user/App/Run/Runtime 授权、version、operation hash 和 reconcile，不镜像给 Runner。
 - Runner Server 只持有 transport/route 边界；实例级 `RunnerCommandExecutor` 编排 command/job 与 Workspace 生命周期、工具链互斥及 Journal transition，复用现有 runtime 和 Journal，不在 Server 复制执行流程或持久状态。
 - 单用户 native Runtime 组织项目而非 OS sandbox；generation 冻结环境，Workspace 文件独立持久。Host 子进程共享宿主上下文，Docker 子进程共享 Runner 容器，不用 Docker socket/dockerd/nested Docker/privileged/SYS_ADMIN/unconfined。
 - Node/Python/Go 支持版本/架构保留在 `scripts/docker/agent-runner/catalog/catalog.json`；mise 按版本安装并做上游与实际版本检查，ref 仅 family/version，缓存按架构，不固定来源/安装树摘要/选择指纹。已安装不自动替换，使用中不可卸载。
 - 全局共享不可变 Tool Pack，generation PATH 选版本；deps/build 按环境 profile 分区。版本切换仅重建目标 generation，终止其旧 process/session，项目文件与其他 Workspace 不受影响，不修改 `/usr/bin`。
-- job/ACP/Plugin 原生 process group 随 owner 整组回收，Terminal 用真实 PTY foreground group。启用 Runner Plugin 等于允许以 Runner OS 权限运行；逻辑工作目录不是跨 Plugin ACL 或安全沙箱，不暴露伪 cgroup/network/quota 字段。
+- 仍未退出的 Runner Job/Plugin 原生 process group 随 owner 整组回收，Terminal 用真实 PTY foreground group。Runner ACP process/stream 入口已删除；启用旧 Runner Plugin 等于允许以 Runner OS 权限运行，逻辑工作目录不是跨 Plugin ACL 或安全沙箱，不暴露伪 cgroup/network/quota 字段。
 - cleanup：preview 冻结 workspaceIds → confirm → Runner recheck → deleted[] → Backend projection sync；不扩大范围，跳过 retained/active/job/session。journal 损坏保留原件与 evidence 并 fail closed，不能当空 journal 启动。
 - Workspace 显式 delete 成功释放 retention；历史 deleted+retained 允许进入显式 cleanup，stop 不释放保留。persistent project root 由 cleanup owner 删除，不把 generation 删除当作全文件树已回收。
 
@@ -280,7 +280,7 @@ Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 的 typed
 
 ### 9.2 ACP、Browser、Terminal 与 MCP
 
-- ACP Host 已 SSH-only：`acp_execute` 仅接显式授权的 SSH target、集成 argv/绝对 cwd 与冻结 SSH 配置，不再注入 Workspace Repository 或 Runner ACP WebSocket transport。`AcpAdapter` 通过唯一 SSH `openTransport` 打开独立 non-PTY channel，不在 Backend 本机运行 ACP；外层 ACP approval 不授权内层操作。`client.session.requestPermission` 使用同一 durable approval owner，绑定 active Tool/Runtime/revisions/operation hash，用户 allow_once/reject_once；不改 Run version、重调度或替换 lease。rawInput 只保留 bounded projection/hash，timeout/abort/restart fail closed，不伪造 completion。原 Agent Runner 自身 ACP endpoint/profile 与用户 Workspace 设置仍待 Runner/Workspace 生命周期阶段物理清理，不能因此恢复 ACP Host 入口。
+- ACP Host **与 Runner 双端均已 SSH-only/无 Workspace ACP**：`acp_execute` 仅接显式授权的 SSH target、集成 argv/绝对 cwd 与冻结 SSH 配置，`AcpAdapter` 经唯一 SSH `openTransport` 打开独立 non-PTY channel。Runner 内 ACP ProcessRuntime、WebSocket upgrade、Profile 选择、Process start/stop 已删；Backend/Runner wire、Environment DTO、持久 schema、Settings 和 UI 均移除 profile 字段，迁移 #56 直接删除旧列和设置属性，不提供兼容入口。外层 ACP approval 不授权内层操作；`client.session.requestPermission` 使用同一 durable approval owner 绑定 active Tool/Runtime/revisions/operation hash，用户 allow_once/reject_once；不改 Run version、重调度或替换 lease。rawInput 只留 bounded projection/hash，timeout/abort/restart fail closed，不伪造 completion。独立普通 Workspace Terminal/Runner Job/Browser 仍属尚未退出的 owner，不能混淆。
 - Browser target 冻结，受控 gateway/tunnel 不暴露任意宿主 CDP。唯一 `BrowserSessionBindingAuthority` 持有 target/config hash/session scope、inspection/revalidation；gateway/service 持有真实 session/process。stale generation/target 先关闭后 fail closed，无关 settings revision 不误关；网页不可信，下载先落 Artifact。
 - Workspace local Terminal 用 Runner direct PTY open/resize/write/detach/reattach/bounded replay，不复用 Remote SSH live session；系统 script(1) 分配 PTY，Backend 管 attach/replay，浏览器仅连受认证 WebSocket。
 - MCP 配置 enabled 不等于 ready。health 为可重建 `idle/refreshing/ready/error` projection；version/credential generation 的 refresh 经 schema-hash CAS 才发布 contribution，失败先撤销，再 bounded backoff；disable/delete/version 取消旧 retry，restart 从 durable config 重建。

@@ -124,10 +124,6 @@ export class WorkspaceRuntimeEngine {
     };
   }
 
-  prepareAcpProcess(workspaceId: string, generation: number, argv: readonly string[], cwd: string) {
-    return this.runtime.prepareAcpProcess(workspaceId, generation, argv, cwd);
-  }
-
   prepareTerminalProcess(workspaceId: string, generation: number) {
     return this.runtime.prepareTerminalProcess(workspaceId, generation);
   }

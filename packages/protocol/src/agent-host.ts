@@ -60,7 +60,6 @@ export interface AgentSettingsDocumentDto {
     maxActiveWorkspaces: number;
     enabledRecipeIds: string[];
     toolVersions: Record<string, { enabledVersionIds: string[]; defaultVersionId: string | null }>;
-    acpProfiles: Array<{ id: string; argv: string[]; cwd: string }>;
   };
   browser: {
     targets: Array<{

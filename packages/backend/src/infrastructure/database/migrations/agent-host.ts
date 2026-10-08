@@ -123,4 +123,16 @@ export const agentHostMigrations: SqliteMigration[] = [
       (await columnExists(db, 'agent_plugin_versions', 'runner_entry')),
     sql: 'ALTER TABLE agent_plugin_versions DROP COLUMN runner_entry;',
   },
+  {
+    id: 56,
+    name: 'Remove retired Runner Workspace ACP profiles',
+    check: async (db: Database): Promise<boolean> =>
+      (await tableExists(db, 'agent_workspaces')) && (await columnExists(db, 'agent_workspaces', 'acp_profiles_json')),
+    sql: `
+      ALTER TABLE agent_workspaces DROP COLUMN acp_profiles_json;
+      UPDATE agent_settings
+      SET value_json = json_remove(value_json, '$.workspaceRuntime.acpProfiles')
+      WHERE json_type(value_json, '$.workspaceRuntime.acpProfiles') IS NOT NULL;
+    `,
+  },
 ];

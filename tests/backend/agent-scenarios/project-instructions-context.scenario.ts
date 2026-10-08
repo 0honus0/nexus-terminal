@@ -248,7 +248,6 @@ export const projectInstructionsContextScenario = async () => {
       retained: false,
       toolchain: [],
       runnerPlugins: [],
-      acpProfiles: [],
       browserTarget: null,
     });
     runnerServer = new RunnerControllerServer({
@@ -310,7 +309,7 @@ export const projectInstructionsContextScenario = async () => {
       headers: {
         Authorization: 'Bearer scenario-token',
         'Content-Type': 'application/json',
-        'X-Nexus-Agent-Protocol': '2026-09-13',
+        'X-Nexus-Agent-Protocol': '2026-10-08',
       },
       body: JSON.stringify({
         generation: 7,
@@ -360,7 +359,6 @@ export const projectInstructionsContextScenario = async () => {
       catalogRevision: 'scenario-catalog',
       toolchain: [],
       runnerPlugins: [],
-      acpProfiles: [],
       browserTarget: null,
     },
   };

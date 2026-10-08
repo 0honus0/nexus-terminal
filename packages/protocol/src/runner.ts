@@ -29,12 +29,6 @@ export interface WorkspaceRecipe {
   allowedFamilies: string[];
   defaultFamilies: string[];
 }
-export interface WorkspaceAcpProfile {
-  id: string;
-  profileRevision: number;
-  argv: string[];
-  cwd: string;
-}
 export interface WorkspaceBrowserEndpoint {
   scope: 'docker-network' | 'external-network';
   via: 'backend' | 'runner';
@@ -63,7 +57,6 @@ export interface WorkspaceProvisionCommand extends WorkspaceCommandBase {
   catalogRevision: string;
   toolchain: ToolchainPackRef[];
   runnerPlugins: PluginRunnerTarget[];
-  acpProfiles: WorkspaceAcpProfile[];
   browserTarget: WorkspaceBrowserTarget | null;
   retained: boolean;
 }

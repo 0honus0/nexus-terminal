@@ -412,7 +412,7 @@ Agent Workspace Terminal 每个 Workspace 最多 8 个、单 Backend 合计最�
 - SSH 后台执行仍通过 `shell_execute` 与 `shell_job_control` 在冻结的授权连接和 Thread 范围内操作，不能凭 Job 已受理就宣称命令成功；终态后核对已执行命令的状态，不通过重发未知副作用命令代替核对。
 - Workspace 后台启动结果的 `userCleanup` 提供本次 App／Workspace 的具体读取和操作路径、必要请求头、数值版本来源与命令查询路径。`expectedVersion` 必须使用新读取的数值，不能用字符串占位值；交付说明须保留命令成功与 Workspace stopped／deleted 的最终核对，不以 HTTP 202 代替完成。
 - 管理 API 的 actions 响应命令标识是 `data.id`，不是 Agent 工具结果的 `commandId` 字段；将该 `data.id` 代入 `/workspace-runtime/commands/{commandId}` 查询，再核对 `data.status` 和 Workspace 最终状态。后台交接结果明确此字段映射，避免混用工具结果与 HTTP DTO。
-- 普通终端 Workspace/Agent Runner 的剩余管理 API、Runner 内 ACP profile 记录与 Workspace 绑定 Browser 尚待各自退出；但 **Agent ACP 集成和模型工具已经不能启动 Runner Workspace ACP**。Plugin Runner target 已移除。SSH ACP、普通 SSH/文件管理/远程桌面不依赖 Agent Runner；ACP 集成设置页只提供 SSH 启动 argv 与绝对 cwd，保存后可重新读取配置。旧 Workspace 运行时 profile 配置目前仍属于待清理的 Workspace 设置，不会被 ACP 集成选用。
+- **Agent ACP 已完全移除 Workspace/Runner 运行模式**：旧 Runner ACP 进程、WebSocket stream、Workspace Runtime ACP profiles、Run/Runner wire profile 字段、前端 profile 编辑器与选择器均已删除。旧配置与建档请求直接拒绝，不自动升级、重放或转换目标。ACP 只经明确授权的 SSH connection 启动远端 argv/绝对 cwd，内层权限审批和断连 unknown 状态保留；不依赖 Agent Runner。剩余 Workspace 管理、Runner Job/Terminal/Browser 仍待独立清理；普通终端 Workspace 与 SSH 项目不在本次删除范围。
 - Plugin App 只获得已声明并授权的 capability。Agent 文件和 Shell capability 的授权目标只允许 SSH 全部或指定连接 ID；授权设置不再提供 Workspace 目标，发送旧 Workspace 或 Workspace+SSH grant 返回请求无效，不会自动转换为 SSH 或更新授权版本。需要确认的 mutation 会先显示 approval，未知执行结果会进入核对或恢复流程。
 
 ## 外观与 HTML Theme

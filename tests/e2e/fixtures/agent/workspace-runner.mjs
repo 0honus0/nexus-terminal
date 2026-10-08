@@ -33,7 +33,7 @@ const health = http.createServer(async (_request, response) => {
     const ready = await fetch(`http://127.0.0.1:${process.env.NEXUS_E2E_AGENT_RUNNER_PORT ?? '29095'}/v1/catalog`, {
       headers: {
         Authorization: 'Bearer e2e-isolated-runner-token-not-for-production-00000000',
-        'X-Nexus-Agent-Protocol': '2026-09-13',
+        'X-Nexus-Agent-Protocol': '2026-10-08',
       },
       signal: AbortSignal.timeout(1000),
     });
