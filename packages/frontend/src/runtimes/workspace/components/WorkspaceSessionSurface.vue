@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n';
   import { logger } from '@/client/logging/logger';
-  import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
   import {
     UiButton,
     UiCheckbox,
@@ -60,6 +60,7 @@
   interface TerminalApi {
     focus?: () => void;
     fit?: () => void;
+    fitVisible?: () => void;
     clear?: () => void;
     serialize?: () => Promise<string>;
     copySelection?: () => Promise<void>;
@@ -691,6 +692,11 @@
     uploadInput.value?.click();
   };
   const uploadChooserVisible = ref(false);
+  onDeactivated(() => {
+    documentPopupVisible.value = false;
+    fileManagerPopupVisible.value = false;
+    uploadChooserVisible.value = false;
+  });
   const selectUploadFiles = async () => {
     uploadChooserVisible.value = false;
     const picker = (
@@ -970,6 +976,7 @@
     terminalSnapshot: () => terminalApi.value?.serialize?.() ?? Promise.resolve(''),
     focusTerminal: () => terminalApi.value?.focus?.(),
     fitTerminal: () => terminalApi.value?.fit?.(),
+    prepareTerminal: () => terminalApi.value?.fitVisible?.(),
     scrollTerminalToBottom: () => terminalApi.value?.scrollToBottom?.(),
   });
 </script>

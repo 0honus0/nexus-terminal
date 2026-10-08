@@ -14,13 +14,19 @@ export class RootRunLifecycleCoordinator {
       (run.executingRuntimeCount > 0 && run.activeExecutionStartedAt !== null
         ? Math.max(0, this.clock.nowUnixSeconds() - run.activeExecutionStartedAt)
         : 0);
-    const reason = activeExecutionSeconds >= run.budget.maxActiveExecutionSeconds ? 'active_time_limit' : null;
+    const reason =
+      usage.modelRequests >= Math.min(run.budget.maxModelRequests, run.budget.modelRequestCeiling)
+        ? 'model_request_limit'
+        : activeExecutionSeconds >=
+            Math.min(run.budget.maxActiveExecutionSeconds, run.budget.activeExecutionCeilingSeconds)
+          ? 'active_time_limit'
+          : null;
     if (!reason) return null;
     return {
       reason,
       retry: true,
-      currentSteps: usage.steps,
-      requestedSteps: usage.steps + 1,
+      currentModelRequests: usage.modelRequests,
+      requestedModelRequests: usage.modelRequests + 1,
       activeExecutionSeconds,
       maxActiveExecutionSeconds: run.budget.maxActiveExecutionSeconds,
     };
@@ -35,34 +41,25 @@ export class RootRunLifecycleCoordinator {
         ? Math.max(0, this.clock.nowUnixSeconds() - snapshot.activeExecutionStartedAt)
         : 0);
     const reason =
-      snapshot.usage.steps >= snapshot.budget.maxRunSteps
-        ? 'step_limit'
+      snapshot.usage.modelRequests >= snapshot.budget.maxModelRequests
+        ? 'model_request_limit'
         : activeSeconds >= snapshot.budget.maxActiveExecutionSeconds
           ? 'active_time_limit'
           : null;
     if (!reason) return null;
 
-    const now = this.clock.nowUnixSeconds();
-    return this.stateCommit.commit({
-      scope: { userId: snapshot.userId, appId: snapshot.appId },
-      runId: snapshot.id,
-      expectedRunVersion: snapshot.version,
-      events: [
-        {
-          type: 'budget.increase_requested',
-          payload: {
-            reason,
-            currentSteps: snapshot.usage.steps,
-            requestedSteps: snapshot.usage.steps + 1,
-            activeExecutionSeconds: activeSeconds,
-            maxActiveExecutionSeconds: snapshot.budget.maxActiveExecutionSeconds,
-          },
-        },
-        { type: 'run.status_changed', payload: { from: snapshot.status, to: 'awaiting_budget' } },
-      ],
-      runPatch: { status: 'awaiting_budget' },
-      now,
+    return this.stopAtSafeBoundary(snapshot, reason);
+  }
+
+  async stopAtSafeBoundary(run: RunView, _reason: string) {
+    const result = await this.stateCommit.interruptUnexpectedRootExecution({
+      scope: { userId: run.userId, appId: run.appId },
+      runId: run.id,
+      errorCode: 'RUN_EXECUTION_LIMIT',
+      now: this.clock.nowUnixSeconds(),
     });
+    if (!result) throw new Error('RUN_NOT_SETTLEABLE');
+    return result;
   }
 
   async failAtSafeBoundary(

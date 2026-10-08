@@ -91,6 +91,7 @@ export interface RemoteExecutionTransport {
   startCommand(request: CommandSessionRequest): Promise<RemoteCommandSession>;
   openShell(request?: ShellRequest): Promise<RemoteShellSession>;
   fileSystem(role: RemoteFileSystemRole): Promise<RemoteFileSystem>;
+  openFileSystemLease(): import('../filesystem/remote-filesystem').RemoteFileSystemLease;
   onClose(listener: () => void): () => void;
   onError(listener: (error: Error) => void): () => void;
   close(): Promise<void>;

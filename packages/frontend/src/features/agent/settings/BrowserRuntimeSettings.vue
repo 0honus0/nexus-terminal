@@ -46,10 +46,7 @@
     { value: 'docker-network', label: 'agent.settings.browserRuntime.scopeDocker' },
     { value: 'external-network', label: 'agent.settings.browserRuntime.scopeExternal' },
   ];
-  const viaOptions = [
-    { value: 'backend', label: 'agent.settings.browserRuntime.viaBackend' },
-    { value: 'runner', label: 'agent.settings.browserRuntime.viaRunner' },
-  ];
+  const viaOptions = [{ value: 'backend', label: 'agent.settings.browserRuntime.viaBackend' }];
 
   // 模态弹窗 1：添加目标 (Target)
   const targetModalOpen = ref(false);
@@ -240,7 +237,7 @@
   };
 
   const setTargetEndpointVia = (value: unknown): void => {
-    const next = pickOption(value, ['backend', 'runner'] as const);
+    const next = pickOption(value, ['backend'] as const);
     if (next) targetForm.endpointVia = next;
   };
 
@@ -250,7 +247,7 @@
   };
 
   const setModalEndpointVia = (value: unknown): void => {
-    const next = pickOption(value, ['backend', 'runner'] as const);
+    const next = pickOption(value, ['backend'] as const);
     if (next) endpointForm.via = next;
   };
 

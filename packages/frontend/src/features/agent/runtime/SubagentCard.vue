@@ -14,8 +14,8 @@
 
   const terminal = new Set(['completed', 'failed', 'cancelled']);
   const percent = (): number => {
-    const max = Math.max(1, props.delegation.budget.maxSteps);
-    return Math.min(100, Math.round((props.delegation.usage.steps / max) * 100));
+    const max = Math.max(1, props.delegation.budget.maxModelRequests);
+    return Math.min(100, Math.round((props.delegation.usage.modelRequests / max) * 100));
   };
 </script>
 
@@ -39,7 +39,10 @@
       <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-text-secondary">
         <span>{{ $t('agent.subagents.depth', { value: delegation.depth }) }}</span>
         <span>{{
-          $t('agent.subagents.steps', { used: delegation.usage.steps, max: delegation.budget.maxSteps })
+          $t('agent.subagents.modelRequests', {
+            used: delegation.usage.modelRequests,
+            max: delegation.budget.maxModelRequests,
+          })
         }}</span>
         <span>{{ delegation.usage.tokens }} tok</span>
       </div>

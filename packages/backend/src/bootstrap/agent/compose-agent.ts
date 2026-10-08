@@ -3,11 +3,8 @@ import { TERMINAL_RUN_STATUSES } from '../../modules/agent/runtime/runs/run.type
 import { LocalArtifactStore } from '../../infrastructure/agent/artifacts/local-artifact-store';
 import { AppIntentArtifactAdapter } from '../../infrastructure/agent/artifacts/app-intent-artifact.adapter';
 import { MachineCapabilityAdapter } from '../../infrastructure/agent/capabilities/machine-capability.adapter';
-import { WorkspaceFileTargetAdapter } from '../../infrastructure/agent/workspace-runtime/workspace-file-target.adapter';
-import { WorkspaceShellTargetAdapter } from '../../infrastructure/agent/workspace-runtime/workspace-shell-target.adapter';
 import { FileCapabilityService } from '../../modules/agent/capabilities/file-capability.service';
 import { ShellCapabilityService } from '../../modules/agent/capabilities/shell-capability.service';
-import { AgentTargetResolver } from '../../modules/agent/capabilities/target-resolver';
 import { AgentMutationLeaseGuardAdapter } from '../../infrastructure/agent/capabilities/agent-mutation-lease-guard.adapter';
 import { NodeCryptoHashAdapter } from '../../infrastructure/agent/capabilities/node-crypto-hash.adapter';
 import { SqliteAgentSettingsRepository } from '../../infrastructure/agent/repositories/sqlite-agent-settings.repository';
@@ -26,6 +23,7 @@ import { SqliteModelContinuationRepository } from '../../infrastructure/agent/re
 import { InstalledPluginSkillSourceAdapter } from '../../infrastructure/agent/plugins/installed-plugin-skill-source.adapter';
 import { McpAdapter } from '../../infrastructure/agent/integrations/mcp.adapter';
 import { AcpAdapter } from '../../infrastructure/agent/integrations/acp.adapter';
+import { SshAcpTransport } from '../../infrastructure/agent/integrations/ssh-acp-transport';
 import { OutboundPolicyAdapter } from '../../infrastructure/agent/providers/outbound-policy.adapter';
 import { SqliteIntegrationRepository } from '../../infrastructure/agent/repositories/sqlite-integration.repository';
 import { SqliteRecallRepository } from '../../infrastructure/agent/repositories/sqlite-recall.repository';
@@ -33,14 +31,11 @@ import { SqliteRunRepository } from '../../infrastructure/agent/repositories/sql
 import { SqliteCheckpointRepository } from '../../infrastructure/agent/repositories/sqlite-checkpoint.repository';
 import { SqliteTargetDenylistRepository } from '../../infrastructure/agent/repositories/sqlite-target-denylist.repository';
 import { SqliteStateCommitAdapter } from '../../infrastructure/agent/runtime/sqlite-state-commit.adapter';
-import type { WorkspaceRuntimeControllerPort } from '../../modules/agent/workspace-runtime/workspace-runtime-controller.port';
-import type { WorkspaceRuntimeGatewayPort } from '../../modules/agent/workspace-runtime/workspace-runtime-gateway.port';
-import type { WorkspaceRuntimeInteractiveSessionPort } from '../../modules/agent/workspace-runtime/workspace-runtime-interactive-session.port';
 import { AGENT_DEFAULTS } from '../../modules/agent/agent-defaults';
 import { systemClock, type Scope } from '../../modules/agent/agent.types';
 import { ArtifactService } from '../../modules/agent/ai/artifact.service';
 import { IntegrationService } from '../../modules/agent/ai/integration.service';
-import type { AcpTransportPort, BrowserGatewayPort } from '../../modules/agent/ai/integrations.types';
+import type { BrowserGatewayPort } from '../../modules/agent/ai/integrations.types';
 import type { ArtifactLimitPolicyPort } from '../../modules/agent/ai/artifact.port';
 import { ConversationService } from '../../modules/agent/ai/conversation.service';
 import { createProjectDirectoryTools } from '../../modules/agent/tools/host/project-directory-tools';
@@ -77,7 +72,6 @@ import { ModelStepRunner } from '../../modules/agent/runtime/execution/model-ste
 import { ToolCallRunner } from '../../modules/agent/runtime/execution/tool-call-runner';
 import { RunService } from '../../modules/agent/runtime/runs/run.service';
 import { CheckpointService } from '../../modules/agent/runtime/recovery/checkpoint.service';
-import { WorkspaceCheckpointService } from '../../modules/agent/runtime/recovery/workspace-checkpoint.service';
 import { AgentScheduler } from '../../modules/agent/runtime/scheduling/scheduler';
 import { SubagentCompletionCoordinator } from '../../modules/agent/runtime/collaboration/subagent-completion-coordinator';
 import { SubagentContextBuilder } from '../../modules/agent/runtime/collaboration/subagent-context-builder';
@@ -116,7 +110,6 @@ import { AgentNotificationBridge } from './agent-notification-bridge';
 import { composePlugins } from './compose-plugins';
 import { composeProviders } from './compose-providers';
 import { composeSshCapabilities } from './compose-ssh-capabilities';
-import { composeWorkspaceRuntime } from './compose-workspace-runtime';
 import { createAgentLifecycleSweeps } from './lifecycle-sweeps';
 import {
   createMcpToolContributionHooks,
@@ -126,7 +119,6 @@ import {
   registerAcpToolContribution,
   registerBrowserToolContribution,
   registerRuntimeToolContributions,
-  registerWorkspaceToolContributions,
 } from './tool-contributions';
 
 export interface ComposeAgentOptions {
@@ -143,9 +135,6 @@ export interface ComposeAgentOptions {
   executionSessions: ExecutionSessionManager;
   docker: RemoteDockerService;
   leases: LeasePort;
-  workspaceRuntimeController: WorkspaceRuntimeControllerPort & WorkspaceRuntimeGatewayPort;
-  workspaceInteractiveSessions: WorkspaceRuntimeInteractiveSessionPort;
-  acpTransport: AcpTransportPort;
   browserGateway: BrowserGatewayPort;
   audit: AuditLogService;
   notifications: NotificationService;
@@ -165,9 +154,6 @@ export const composeAgent = ({
   executionSessions,
   docker,
   leases,
-  workspaceRuntimeController,
-  workspaceInteractiveSessions,
-  acpTransport,
   browserGateway,
   audit,
   notifications,
@@ -276,8 +262,10 @@ export const composeAgent = ({
   );
   const context = new ContextService(conversations, recall, skills, modelContinuations, artifacts, contextCheckpoints);
   const notificationBridge = new AgentNotificationBridge(notifications, conversationRepository);
+  let subagentScheduler: SubagentScheduler | null = null;
   const stateCommit = new SqliteStateCommitAdapter(database, (run, events) => {
     if (TERMINAL_RUN_STATUSES.has(run.status)) {
+      subagentScheduler?.cancel(run.id);
       void browserGateway
         .closeRun(run.id)
         .catch((error) => logger.warn({ err: error, runId: run.id }, 'Terminal Run browser cleanup failed'));
@@ -301,7 +289,6 @@ export const composeAgent = ({
   const schedulerExecution: SchedulerWorkExecutionPort = subagentRepository;
   const sharedFactRepository: SharedFactRepositoryPort = subagentRepository;
   const subagentPolicy = new SubagentPolicyService(appStorage, settings, providers);
-  let subagentScheduler: SubagentScheduler | null = null;
   const mailbox = new MailboxService(
     mailboxRepository,
     runtimeParticipants,
@@ -365,28 +352,9 @@ export const composeAgent = ({
     });
   });
   const plans = new PlanService(runRepository, stateCommit, () => systemClock.nowUnixSeconds());
-  const composedWorkspaceRuntime = composeWorkspaceRuntime({
-    database,
-    controller: workspaceRuntimeController,
-    pluginTargets: plugins,
-    settings,
-    lifecycle,
-    capabilities: capabilityBroker,
-    cryptoHash,
-    artifacts,
-    interactiveSessions: workspaceInteractiveSessions,
-    browserGateway,
-    now: () => systemClock.nowUnixSeconds(),
-  });
-  const workspaceRepository = composedWorkspaceRuntime.repository;
-  const targets = new AgentTargetResolver(workspaceRepository, sshTargets, cryptoHash);
-  const workspaceRuntime = composedWorkspaceRuntime.service;
-  const workspaceFiles = new WorkspaceFileTargetAdapter(workspaceRepository, workspaceRuntimeController);
-  const workspaceShell = new WorkspaceShellTargetAdapter(workspaceRepository, workspaceRuntimeController);
-  const files = new FileCapabilityService(targets, workspaceFiles, sshFiles);
-  const shell = new ShellCapabilityService(targets, workspaceShell, sshShell, cryptoHash, sshSessions);
-  const workspaceRuntimeFacade = composedWorkspaceRuntime.facade;
-  const acpRuntime = new AcpAdapter(acpTransport);
+  const files = new FileCapabilityService(sshTargets, sshFiles);
+  const shell = new ShellCapabilityService(sshTargets, sshShell, sshSessions);
+  const acpRuntime = new AcpAdapter();
   const toolCatalog = new ToolCatalog();
   toolCatalog.registerContribution({
     schemaVersion: 1,
@@ -401,24 +369,20 @@ export const composeAgent = ({
   registerFileToolContributions({ catalog: toolCatalog, files, cryptoHash });
   registerShellToolContributions({ catalog: toolCatalog, shell, cryptoHash });
   registerMachineToolContributions({ catalog: toolCatalog, machine, sshTargets, cryptoHash });
-  registerWorkspaceToolContributions({
-    catalog: toolCatalog,
-    repository: workspaceRepository,
-    targets,
-    runtime: workspaceRuntime,
-    cryptoHash,
-  });
   registerAcpToolContribution({
     catalog: toolCatalog,
     repository: integrationRepository,
-    workspaces: workspaceRepository,
     runtime: acpRuntime,
     cryptoHash,
     permissionRequests: acpPermissions,
+    ssh: {
+      targets: sshTargets,
+      open: (context, connectionId, hash, argv, cwd) =>
+        new SshAcpTransport(connectionResolver, executionSessions).open(context, connectionId, hash, argv, cwd),
+    },
   });
   registerBrowserToolContribution({
     catalog: toolCatalog,
-    workspaces: workspaceRepository,
     settings,
     gateway: browserGateway,
     cryptoHash,
@@ -462,44 +426,33 @@ export const composeAgent = ({
         import('../../modules/agent/ai/project-instruction-source.port').ProjectInstructionSourcePort['load']
       >
     ) => {
-      const [scope, runId, runtimeId, targetDirectories, signal, toolContext] = args;
-      const workspace = toolContext?.environment
-        ? await workspaceRuntime
-            .loadProjectInstructions(
-              scope,
-              runId,
-              runtimeId,
-              targetDirectories.filter(
-                (directory) => directory === '/workspace/work' || directory.startsWith('/workspace/work/'),
-              ),
-              signal,
-            )
-            .catch(() => {
-              logger.warn({ runId, runtimeId }, 'Workspace project instructions unavailable; no rules synthesized');
-              return null;
-            })
-        : null;
+      const [, runId, runtimeId, targetDirectories, , toolContext] = args;
       const remote = toolContext
         ? await projectDirectories.instructions(toolContext, targetDirectories).catch(() => {
             logger.warn({ runId, runtimeId }, 'SSH project instructions unavailable; no remote rules synthesized');
             return [];
           })
         : [];
-      if (!workspace && !remote.length) return null;
+      if (!remote.length) return null;
       return {
-        workspaceId: workspace?.workspaceId ?? '',
-        generation: workspace?.generation ?? 0,
         targetDirectories: [...targetDirectories],
-        instructions: [...(workspace?.instructions ?? []), ...remote],
-        omitted: workspace?.omitted ?? [],
+        instructions: remote,
+        omitted: [],
       };
     },
   };
-  const modelSteps = new ModelStepRunner(providers, context, languageModel, modelCalls, projectInstructionSource);
+  const modelSteps = new ModelStepRunner(
+    providers,
+    context,
+    languageModel,
+    modelCalls,
+    systemClock,
+    projectInstructionSource,
+  );
   const toolCalls = new ToolCallRunner(toolCatalog, toolExecutor, policy, leaseCoordinator, mutationLeaseGuard);
   let recordRecoverySafePoint: (
     run: Parameters<AgentScheduler['enqueue']>[0],
-    reason: 'model_boundary' | 'read_batch' | 'mutation_confirmed',
+    reason: 'model_boundary' | 'read_batch' | 'mutation_confirmed' | 'execution_limit',
   ) => Promise<void> = async () => undefined;
   const nativeBackend = new NativeAgentBackend(
     runRepository,
@@ -629,10 +582,6 @@ export const composeAgent = ({
     providers,
     executionPolicies,
     definitions,
-    (scope, selection, expectedSettingsRevision) => {
-      const { catalogRevision, ...workspace } = selection;
-      return workspaceRuntime.resolveRunEnvironment(scope, workspace, catalogRevision, expectedSettingsRevision);
-    },
     stateCommit,
     runRepository,
     systemClock,
@@ -647,12 +596,6 @@ export const composeAgent = ({
     (userId, cursor) => eventHub.publishHostWake(userId, cursor),
   );
   const checkpointRepository = new SqliteCheckpointRepository(database);
-  const workspaceCheckpoints = new WorkspaceCheckpointService(
-    workspaceRepository,
-    workspaceRuntime,
-    workspaceRuntimeController,
-    artifacts,
-  );
   let recoveringStartup = false;
   const startupRecoveredRuns: Parameters<AgentScheduler['enqueue']>[0][] = [];
   const checkpoints = new CheckpointService(
@@ -670,21 +613,17 @@ export const composeAgent = ({
       else scheduler.enqueue(run);
     },
     (run) => notifyCommitted(run),
-    workspaceCheckpoints,
-    workspaceRuntimeController,
   );
   recordRecoverySafePoint = async (run, reason) => {
     await checkpoints.recordSafePoint(run, reason);
   };
   const lifecycleSweeps = createAgentLifecycleSweeps({
     stateCommit,
-    workspaceRuntime,
     artifactMaintenance: artifactStore,
     mailbox,
     scheduler,
     clock: systemClock,
     notifyCommitted,
-    retryRestartRecovery: () => checkpoints.retryDeferredRecoveries(),
     retryMcpIntegrations: () => integrations.retryDue(),
   });
 
@@ -958,7 +897,6 @@ export const composeAgent = ({
         onHostWake: (userId, listener) => eventHub.onHostWake(userId, listener),
         onTransient: (runId, listener) => eventHub.onTransient(runId, listener),
       },
-      workspaceRuntime: workspaceRuntimeFacade,
       approvals: {
         get: (scope, approvalId) => approvals.get(scope, approvalId),
         list: (scope, runId) => approvals.list(scope, runId),
@@ -1005,16 +943,10 @@ export const composeAgent = ({
     prepareRestore: async (deadlineUnixSeconds) => {
       await lifecycleSweeps.stop();
       await Promise.all([scheduler.quiesce(deadlineUnixSeconds), subagentScheduler?.quiesce(deadlineUnixSeconds)]);
-      await Promise.all([
-        mcpRuntime.closeAll(),
-        sshSessions.dispose(),
-        workspaceInteractiveSessions.closeAll(),
-        browserGateway.closeAll(),
-      ]);
+      await Promise.all([mcpRuntime.closeAll(), sshSessions.dispose(), browserGateway.closeAll()]);
       await resetRuntime();
       modelRegistry.dispose();
       startupRecoveredRuns.length = 0;
-      checkpoints.resetRecovery();
     },
     dispose: async () => {
       modelRegistry.dispose();
@@ -1023,7 +955,6 @@ export const composeAgent = ({
         lifecycleSweeps.stop(),
         subagentScheduler?.dispose() ?? Promise.resolve(),
         mcpRuntime.closeAll(),
-        workspaceInteractiveSessions.closeAll(),
         browserGateway.closeAll(),
         resetRuntime(),
       ]);

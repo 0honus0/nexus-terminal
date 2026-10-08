@@ -56,25 +56,12 @@ export const publicAgentErrorTaxonomyScenario = async () => {
       code: 'DELEGATION_VERSION_CONFLICT',
     },
     {
-      producer: 'workspace ACP selection',
-      raw: 'ACP_PROFILE_SELECTION_INVALID',
-      status: 400,
-      code: 'ACP_PROFILE_SELECTION_INVALID',
-    },
-    { producer: 'workspace ACP missing', raw: 'ACP_PROFILE_NOT_FOUND', status: 404, code: 'NOT_FOUND' },
-    {
       producer: 'provider explicit capability metadata',
       raw: 'PROVIDER_CAPABILITY_METADATA_INVALID',
       status: 502,
       code: 'PROVIDER_CAPABILITY_METADATA_INVALID',
     },
-    { producer: 'workspace browser missing', raw: 'BROWSER_TARGET_NOT_FOUND', status: 404, code: 'NOT_FOUND' },
-    {
-      producer: 'workspace browser incompatible',
-      raw: 'BROWSER_TARGET_REQUIRES_BROWSER_RECIPE',
-      status: 422,
-      code: 'BROWSER_TARGET_REQUIRES_BROWSER_RECIPE',
-    },
+    { producer: 'CDP browser target missing', raw: 'BROWSER_TARGET_NOT_FOUND', status: 404, code: 'NOT_FOUND' },
     {
       producer: 'plugin storage CAS',
       raw: 'APP_STORAGE_VERSION_CONFLICT',
@@ -93,7 +80,7 @@ export const publicAgentErrorTaxonomyScenario = async () => {
       status: 507,
       code: 'APP_STORAGE_QUOTA_EXCEEDED',
     },
-    { producer: 'workspace artifact import', raw: 'ARTIFACT_NOT_READY', status: 409, code: 'ARTIFACT_NOT_READY' },
+    { producer: 'artifact readiness', raw: 'ARTIFACT_NOT_READY', status: 409, code: 'ARTIFACT_NOT_READY' },
     {
       producer: 'per-Run artifact quota',
       raw: 'ARTIFACT_RUN_QUOTA_EXCEEDED',

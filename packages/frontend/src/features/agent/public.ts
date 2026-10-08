@@ -10,7 +10,6 @@ export type {
   AgentSettingsDocumentDto,
   AgentSettingsViewDto,
   AgentArtifactStorageSummaryDto,
-  AgentWorkspaceRuntimeAvailabilityDto,
   AgentHardLimitPreviewDto,
   AgentTargetDenylistViewDto,
   AgentApprovalBatchViewModel,

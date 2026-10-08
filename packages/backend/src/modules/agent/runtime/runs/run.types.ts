@@ -1,6 +1,6 @@
 import type { AgentDurableEventTypeDto, AgentHostEventTypeDto } from '@nexus-terminal/protocol/agent-events';
 import type { AgentContextProfile } from '../../agent-defaults';
-import type { AgentRunEnvironmentSelection, AgentRunEnvironmentSnapshot, JsonValue, Scope } from '../../agent.types';
+import type { JsonValue, Scope } from '../../agent.types';
 import type { AgentModelCapability, ModelCapabilitySnapshot, ModelRef, ReasoningEffort } from '../../ai/model.types';
 import type { RunPlan } from '../planning/plan.types';
 
@@ -90,7 +90,6 @@ export interface CreateRunCommand {
   executionMode: RunExecutionMode;
   plannedFromRunId?: string;
   connectionIds: number[];
-  environment?: AgentRunEnvironmentSelection | null;
   initialGoal?: string;
   command: CommandIdentity;
 }
@@ -104,7 +103,14 @@ export interface RunContextPolicy {
 
 export interface RunBudget {
   contextPolicy: RunContextPolicy;
-  maxRunSteps: number;
+  modelRequestCeiling: number;
+  activeExecutionCeilingSeconds: number;
+  maxToolExecutions: number;
+  phase: 'executing' | 'finishing';
+  stopReason: 'model_request_limit' | 'active_time_limit' | 'tool_execution_limit' | 'no_progress' | null;
+  extensionCount: number;
+  progressSequence: number;
+  maxModelRequests: number;
   maxActiveExecutionSeconds: number;
   toolTimeoutSeconds: number;
   maxToolOutputBytes: number;
@@ -117,8 +123,6 @@ export interface RunBudget {
 }
 
 export interface RunBudgetIncrease {
-  maxRunSteps?: number;
-  maxActiveExecutionSeconds?: number;
   maxSubagentMessages?: number;
   maxSubagentMessageBytes?: number;
 }
@@ -138,7 +142,8 @@ export interface RunUsage {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
-  steps: number;
+  modelRequests: number;
+  toolExecutions: number;
   subagentMessages: number;
   subagentMessageBytes: number;
   context?: RunContextUsage;
@@ -165,7 +170,6 @@ export interface RunDefinitionSnapshot {
   approvalMode: RunApprovalMode;
   executionMode: RunExecutionMode;
   connectionIds: number[];
-  environment: AgentRunEnvironmentSnapshot | null;
   policyRevision: number;
   settingsRevision: number;
   contextBoundary?: RunContextBoundary;
@@ -242,6 +246,7 @@ export interface RunTerminalIssue {
 }
 
 export interface RunSnapshot extends RunView {
+  loopPause: import('@nexus-terminal/protocol/agent-runs').AgentRunLoopPauseDto | null;
   terminalIssue: RunTerminalIssue | null;
   pendingInputRequest: PendingUserInputRequest | null;
   recentEntries: Array<{

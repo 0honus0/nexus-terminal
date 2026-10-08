@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { SqliteStateCommitAdapter } from '../../../packages/backend/src/infrastructure/agent/runtime/sqlite-state-commit.adapter';
+import { SqliteRunRepository } from '../../../packages/backend/src/infrastructure/agent/repositories/sqlite-run.repository';
 import { DatabaseAdapter } from '../../../packages/backend/src/infrastructure/database/database.adapter';
 import type { Scope } from '../../../packages/backend/src/modules/agent/agent.types';
 import { freezeRunContextPolicy } from '../../../packages/backend/src/modules/agent/runtime/runs/run-budget-policy';
@@ -22,7 +23,15 @@ export const progressAwareLoopGuardScenario = async () => {
     configurationVersion: 1,
   });
   const budget = JSON.stringify({
-    maxRunSteps: 100,
+    modelRequestCeiling: 100,
+    activeExecutionCeilingSeconds: 7200,
+    maxToolExecutions: 4000,
+    phase: 'executing',
+    stopReason: null,
+    extensionCount: 0,
+    progressSequence: 0,
+
+    maxModelRequests: 100,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
     maxToolOutputBytes: 1_048_576,
@@ -44,7 +53,6 @@ export const progressAwareLoopGuardScenario = async () => {
     approvalMode: 'ask',
     executionMode: 'execute',
     connectionIds: [],
-    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   });
@@ -52,7 +60,8 @@ export const progressAwareLoopGuardScenario = async () => {
     inputTokens: 0,
     outputTokens: 0,
     cachedInputTokens: 0,
-    steps: 0,
+    toolExecutions: 0,
+    modelRequests: 0,
     subagentMessages: 0,
     subagentMessageBytes: 0,
   });
@@ -126,6 +135,11 @@ export const progressAwareLoopGuardScenario = async () => {
     }
     assert.equal(warningTransitions, 2, 'repeated failure must warn before pausing');
     assert.equal(pausedStatus, 'awaiting_input');
+    const repository = new SqliteRunRepository(db);
+    const pausedSnapshot = await repository.snapshot(scenarioScope, runId);
+    assert.equal(pausedSnapshot?.pendingInputRequest, null);
+    assert.deepEqual(pausedSnapshot?.loopPause, { reason: 'exact_failure_replay', occurredAt: now + 4 });
+    assert.equal(await repository.snapshot({ ...scenarioScope, appId: 'other-app' }, runId), null);
     assert.deepEqual(
       await db.queryOne<{ schedule_state: string }>(
         'SELECT schedule_state FROM agent_runtimes WHERE id = ? AND run_id = ?',
@@ -158,6 +172,7 @@ export const progressAwareLoopGuardScenario = async () => {
       now: now + 10,
     });
     assert.equal(resumed.run.status, 'running');
+    assert.equal((await repository.snapshot(scenarioScope, runId))?.loopPause, null);
     assert.equal(resumed.shouldReschedule, true);
     assert.deepEqual(
       await db.queryOne<{ epoch: number; no_progress_count: number; warning_level: number }>(

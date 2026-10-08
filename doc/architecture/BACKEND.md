@@ -56,6 +56,8 @@ Memory repository按created_at/id keyset枚举，service有界limit+1，HTTP返�
 
 RunnerJournal 唯一持有 Runner command/job/workspace 持久化：Node.js 内建 `node:sqlite`，`journal_records(kind,id,payload)` 按记录 UPSERT、`DELETE`，SQLite DELETE rollback journal + synchronous FULL，提交后发布内存变更。普通transition不复制／序列化全历史；compact仅事务删除裁剪记录。恢复校验SQLite及逐记录decode，格式／损坏fail closed保留原库；无旧JSON导入或双轨写入。同步单记录commit仍可能等待磁盘，未承诺event loop完全无阻塞或commit严格O(1)。
 
+剩余生产 Runner 的 Workspace Job 执行期限与并发边界仍由 `protocol/runner.ts` 的 `WORKSPACE_JOB_LIMITS` 持有；RunnerCommandExecutor 在 Journal 接纳边界统计同 generation 的 pending/running Job，满额拒绝、不排队。**Backend Agent Shell 工具已移除 WorkspaceShellTargetAdapter/port 及 Workspace Job 控制和容量投影**，不能再调用此路径；尚存 Runner 自身 Journal/控制 API 将在 P6 物理退出。旧持久设置随 Workspace Runtime 设置清理阶段退出。
+
 Model stream cardinality fence：OpenAI adapter indexFor先检查64再分配，多组状态只在admission后写入；Root/Child model owner分别在toolCalls Map新增前检查64/32；Responses collector新part前检查512、tools64，终态batch校验保留。
 
 McpAdapter按integration/version拥有session，配置owner负责disable/remove/closeAll；无aggregate session quota，单连接schema/transport deadline不构成总连接预算。
@@ -80,9 +82,9 @@ Terminal Theme 删除由 SQLite repository 在单一事务中删除 user theme�
 
 Workspace deleted 成功投影在同一 status CAS 清 retained，Runner journal 同步释放；persistent root 仍属 preview/confirm runtimeCleanup，legacy deleted+retained 不阻止候选，cleanup projection 清 retention。
 
-Plugin installation 与独立 Workspace generation 是不同 lifecycle owner；App uninstall/drain 不级联 Workspace Runner process，后者 stop/delete 经 RunnerCommandExecutor 回收，冻结版本不重绑定当前 installation。
+Plugin installation 与 Backend 子进程 lifecycle 分离，App uninstall/drain 仅作用于所属 App Run 和 Plugin Backend；不再向 Workspace generation 提供 Plugin Runner 执行入口。
 
-Plugin package cleanup 对 runnerEntry 保守保留：installation count 不是冻结 Run/Workspace 的完整引用 owner，未建立共享 package-reference lease 前禁止 count-then-unlink Runner source。当前 installation 切换与旧 package 文件保留分离。
+Plugin package cleanup 对无 installation 引用的版本进行受控回收；版本记录和备份校验仅包含 Frontend、Backend 入口和 Skills，不为旧 Runner Plugin 源码提供保留例外。SQLite 的增量迁移 #55 删除 `agent_plugin_versions.runner_entry`；旧带 Runner target 的 Manifest 在解析阶段拒绝。
 
 BackgroundAssetService 单 mutationTail 串行 upload/remove 的读引用、save、setReference、旧文件 cleanup；失败 tail 转 fulfilled 保证后续继续，settings.get(false) 不启动额外引用修复；不是多进程锁或 crash reconciliation。
 
@@ -102,7 +104,7 @@ Resource status collector unique sampleKey/finally clear，bootstrap仅同次采
 
 RunnerPluginProcess constructor ready timer30s，timeout protocolFailure/failAll+managed SIGKILL，ready/error/exit clear；批激活补偿复用既有owner，不将其描述为所有command总deadline。
 
-BrowserGateway.closeRun由StateCommit提交终态后的Bootstrap回调触发，Root scheduler finally按最新durable status补查；wait/input supersede不释放，terminal释放整个Run owned sessions（含Child）。Child单独结束不closeRun，run/runtime authority保留，Workspace/global cleanup仍有效；提交与外部资源关闭非原子，不把disconnect等同远端browser process退出。
+BrowserGateway.closeRun由StateCommit提交终态后的Bootstrap回调触发，Root scheduler finally按最新durable status补查；wait/input supersede不释放，terminal释放整个Run owned sessions（含Child）。Child单独结束不closeRun，run/runtime authority保留，global cleanup仍有效；提交与外部资源关闭非原子，不把disconnect等同远端browser process退出。
 
 Jump connector总deadline remaining覆盖handshake/forward；forward single-settle timer/abort/close/error和late destroy，catch route owner统一close，不以readyTimeout覆盖channel-open。
 
@@ -300,13 +302,15 @@ Input／Goal／pending-input transition 的 streaming 检测以 `agent_runtimes.
 
 Root／Child 共用 `model-retry-policy` 的瞬态分类、次数与退避。Child 失败 Model attempt settle 同事务计 usage、结束旧 work、保持 delegation runnable 并 enqueue versioned retry work（notBefore／原 deadline／retryAttemptIndex）；下一次调用仍冻结模型、limiter 与预算。StateCommit 验证 retry 次数、错误与剩余预算，取消优先，失败 partial output 不提交 proposal／checkpoint、不消费 inbox。重启沿用 interrupted 收敛，不重放遗留请求。
 
-Child tool surface 复用 `modelFacingToolSchemas`，以 grants／risk 过滤 direct 与 deferred router；模型 proposal 在 `SubagentContextBuilder.resolveProposal` 复用 `resolveDeferredToolProposal`，随后按解析出的实际 Tool 校验 delegation grants 再 inspect。没有第二 handle、catalog 或授权 owner，MCP mutation 不因 router 开放而越过 Workspace-only Child mutation policy。
+Root Tool model surface 以 `ToolCatalog` 为唯一 authoritative catalog，并复用既有 `modelExposure=deferred` 机制做 progressive disclosure。execute 时低频原生 Tool 与 MCP Tool 从直接 schema 集移除，Host `tool_search` 对当前 scope/availability 搜索 deferred descriptors，并生成绑定 name/version 的 `tool1.*` handle；`tool_invoke` 只负责解析该 handle，解析出的实际 descriptor 随后继续进入 `ToolCallRunner` 的 capability、policy、approval、stale/version 检查，不建立第二执行或授权 owner。Root plan 不开放 discovery mutation router，而是直接保留当前可用的原生 read/control deferred Tool，避免工具面优化削弱非变更调查路径。
+
+Child tool surface 复用 `modelFacingToolSchemas`，以 grants／risk 过滤 direct 与 deferred router；模型 proposal 在 `SubagentContextBuilder.resolveProposal` 复用 `resolveDeferredToolProposal`，随后按解析出的实际 Tool 校验 delegation grants 再 inspect。没有第二 handle、catalog 或授权 owner。Governed coding worker 只允许经 `file_write/patch/move/delete` 或 `shell_execute` 在**Run 已选中、Delegation 已授权的 SSH 连接**上变更。执行 Owner 与 StateCommit 分别验证规范化 Tool 参数、SSH connection ID、规范 SHA256 target identity、configurationHash、connection resource key、能力 scope、Run connectionIds 和 mutation 风险；后者从持久 Run/Delegation 重新读取授权，在校验完成前不得消费审批或开始副作用。实际执行仍由 ToolCallRunner 重检 SSH 当前连接和原有 policy/approval/lease。旧 Workspace generation 或 pending Workspace creation 不再是 Child 写入准入理由，MCP mutation 不因 router 开放而越过 SSH-only policy。
 
 Child plan-mode guard 分布在 schema（只读／control）、model proposal inspection（mutation 拒绝结果）、Tool executor 与 StateCommit mutation begin（副作用和审批消费前 fail closed）；Run executionMode 不因 delegation grants 或 full_access 被放宽。
 
 Child governed mutation 与 Root 共用 `GovernedMutationExecutor` 和 durable Approval。`ask` request 在审批事务将该 Tool work 转 waiting；resolve approved 将 work 重新入队，denied／expired／input superseded 通过 `child-approval-work` 调用已有 Child tool settle owner，同事务保存自身失败结果并恢复 batch continuation。内部结算平衡 execution slot，不递减其他正在执行 runtime 的计数；无外部 mutation、无第二审批 owner。`full_access` 保持 claimed work 的即时自动批准流程。
 
-Root `ModelStepRunner` 的 project target discovery 优先消费 authoritative input projection、当前 Goal 与活动 Plan 的显式 Workspace 路径，再补 recent Tool 参数；路径归一化限定 `/workspace/work`，最多 8 个 target，沿用 `ProjectInstructionSourcePort` 的授权／字节边界。参考 [OpenCode V2 按目标 scope 发现](https://opencode.ai/v2/docs/instructions/)，不移植代码、不全仓扫描、不将文本路径解析作为授权机制。
+Root `ModelStepRunner` 的 project target discovery 只收集近期已观察的 SSH File/Shell Tool 目标绝对路径，不从 Goal、用户文本或 Plan 推断 Workspace；最多 8 个 target，沿用 `ProjectInstructionSourcePort` 的 SSH 授权、configurationHash 和字节边界。参考 [OpenCode V2 按目标 scope 发现](https://opencode.ai/v2/docs/instructions/)，不移植代码、不全仓扫描、不将文本路径解析作为授权机制。
 
 Root Ledger 与 Child 工具 projection 在截断时写入 durable Tool Call id／sha256；`tool_result_read` 经 `ToolResultReaderPort` 由 `SqliteRunRepository` 按 user／App／Run／Runtime 查询终态 captured result，保留原始 JSON 顺序并排除 UI userSummary，使 hash 与 projection 一致。Host Tool 返回当前 output budget 内的 Unicode 字符分页；不新增文件存储、执行重放或 evidence authority。参考 OpenCode V2 的有界输出／read 分页 contract，未移植其代码。
 
@@ -371,27 +375,37 @@ SshSuspend catalog 只存在于进程内，因此日志文件不能跨重启成�
 
 ## Agent 与 Plugin Platform
 
-Agent Core 位于 `modules/agent`，具体 provider、plugin、Runner、browser 与存储实现位于 `infrastructure/agent`，HTTP/WebSocket surface 位于 `interfaces`，composition 位于 `bootstrap/agent`。
+Agent Core 位于 `modules/agent`，具体 provider、plugin、SSH/Browser 与存储实现位于 `infrastructure/agent`，HTTP/WebSocket surface 位于 `interfaces`，composition 位于 `bootstrap/agent`。
 
-Backend 持有用户、App、Thread、Run、Ledger、Plan、approval、lease、artifact、memory、checkpoint、policy 与 durable mutation authority。Runner 只执行已冻结的 Workspace generation 和 execution input；它不成为 Backend durable state 的第二 owner。
+Backend 持有用户、App、Thread、Run、Ledger、Plan、approval、lease、artifact、memory、checkpoint、policy 与 durable mutation authority。Agent File/Shell/ACP 通过已授权的 SSH target adapter 执行，Browser 使用独立 Backend CDP；不存在第二套 Runner Workspace execution owner。
 
 Context checkpoint 由 `modules/agent/ai/context-checkpoint.service.ts` 规划可见 Ledger prefix 和模型输入，采用 `context-checkpoint-v2`／`semantic-handoff-v1`。已验证旧摘要与新增历史按窗口分批合并，历史序列以 JSON 数据送入模型，不投影为可执行 Tool call，不按关键词、首尾样本或固定字符截断。Context 保留有界近期完整 causal groups，并以低权威 user 历史交接数据投影有效摘要；content 和 generator 纳入 context lineage。
 
-`NativeAgentBackend` 在正式推理前执行独立 compaction model step，`ModelStepRunner` 复用冻结 route、ModelCallLimiter、取消、重试和 Run step/time 预算；摘要没有 Tool、普通回复 delta 或助手 Ledger。`state-commit/compaction-transitions.ts` 在 Adapter 事务内重新校验 source hash、visibility、输入／Goal revision，原子更新 checkpoint、attempt、usage、执行时间与事件，不消费输入，不覆盖主推理 context usage。每批重新 compose 后继续压缩；空／截断／超预算／不缩小结果、来源变化与取消不发布摘要，失败不静默降级为只删历史。超过单批窗口的单条记录明确报错；原始 Ledger 保留。迁移 #51 清理旧策略派生摘要，不改原始历史。
+`NativeAgentBackend` 在正式推理前执行独立 compaction model step，`ModelStepRunner` 复用冻结 route、ModelCallLimiter、取消、重试和 Run model-request/time 预算；摘要没有 Tool、普通回复 delta 或助手 Ledger。`state-commit/compaction-transitions.ts` 在 Adapter 事务内重新校验 source hash、visibility、输入／Goal revision，原子更新 checkpoint、attempt、usage、执行时间与事件，不消费输入，不覆盖主推理 context usage。每批重新 compose 后继续压缩；空／截断／超预算／来源变化与取消不发布摘要。若模型生成的摘要没有实际缩小历史，或既有 checkpoint 与必须保留的最新完整 causal group 无法同时落入规划后的摘要预留，Root 只允许重新 compose 一次完整原始 Ledger：完整历史能落入当前硬 context budget 时直接继续，放不下时仍明确失败，不允许以 drop-only 历史掩盖压缩失败。超过单批窗口的单条记录明确报错；原始 Ledger 保留。迁移 #51 清理旧策略派生摘要，不改原始历史。
 
 `SqliteStateCommitAdapter` 持有事务入口与提交后观察；恢复／App 禁用的 durable 转换位于 `infrastructure/agent/runtime/state-commit/recovery-transitions.ts`，与其他 transition 一样接收当前事务。Quarantine、子状态、审批、Run、事件与 Host summary 必须同事务收敛，不将 SQL 拆到事务外的 Recovery service。历史 restart 候选查询保持在提交和通知之后，不复用旧执行 stack。
 
-SQLite schema authority 位于 `infrastructure/database/`：`schema/` 按 core 与 Agent host/AI/execution/collaboration/plugins/workspace 分组定义当前 SQL，`sqlite-schema.registry.ts` 唯一持有初始化及 post-migration 定义顺序。`migrations/` 按 core/runtime/capabilities/host 分组保存升级定义与共用 schema inspection，`migrations/registry.ts` 汇总全局 ID，`sqlite-migrations.ts` 唯一执行事务、检查及版本记录。分组不建立独立版本号，不调整已发布 SQL 或全局执行顺序；Worker 和迁移直接消费真实定义模块。
+SQLite schema authority 位于 `infrastructure/database/`：`schema/` 按 core 与 Agent host/AI/execution/collaboration/plugins/ssh 分组定义当前 SQL，`sqlite-schema.registry.ts` 唯一持有初始化及 post-migration 定义顺序。`migrations/` 按 core/runtime/capabilities/host 分组保存升级定义与共用 schema inspection，`migrations/registry.ts` 汇总全局 ID，`sqlite-migrations.ts` 唯一执行事务、检查及版本记录。分组不建立独立版本号，不调整已发布 SQL 或全局执行顺序；Worker 和迁移直接消费真实定义模块。
 
-Backend 到 Runner 的所有 HTTP/WebSocket 调用集中在 Runner adapter，使用 Bearer token 与 `X-Nexus-Agent-Protocol: 2026-09-13`。Provision 发送冻结 profile；后续 lifecycle/job 调用使用 Workspace id、generation 与必要执行输入。
+Agent Host Capability 注册表仅声明现行有效的 SSH File/Shell、Machine、Browser、Integration、Artifact、AppIntent 能力；旧 `workspace.manage` 已从 Backend、Protocol、Frontend 类别/授权 UI 与新签名插件 fixture 物理删除。Manifest 验证对未知旧能力直接拒绝，不提供旧 Workspace grant 解码或默认授权。Subagent governed mutation 保留现有 SSH scope/approval/lease/fence/verification 约束。
 
-Runner `controller/server.ts` 持有 HTTP/WebSocket transport、认证、输入读取与 route/response 映射；每个 Server 实例创建一个 `RunnerCommandExecutor`，统一编排 command/job acceptance、Journal transition、后台执行、工具链互斥及 Workspace provision/lifecycle。Executor 复用原 Journal 和具体 runtime，不创建第二份 workspace/job 状态；文件 mutation 的 active-job 检查也查询同一 Executor/Journal。无状态的 record/key/browser/binding 校验位于 `runner-request-validation.ts`，路由专用校验保留在 transport 边界；Server close 仍关闭原 ACP、Terminal、Browser runtime。
+当前可安装的 Plugin manifest 只支持 `frontend` 和 `backend` target，声明 `targets.runner` 会在 Host manifest 验证时直接拒绝（不执行旧字段转换）。Frontend target 在隔离 surface 中运行；Backend target 通过受控子进程和版本化 SDK/IPC 运行。Plugin package、immutable installed version、AppStorage、Artifact 分别维护生命周期，Plugin 不能把 Host authority function 注入 Tool catalog。Agent Workspace/生产 Runner 已完全退出当前实现。
 
-`packages/protocol/src/runner.ts` 唯一声明 Runner command、generation projection、job、文件读写／搜索／patch、代码导航及项目规则 wire DTO；可用性、Catalog 与 Storage 复用已有 `agent-workspace-runtime` DTO。双方直接消费这些规范类型，不保留旧 Runner 前缀类型或 port 的转导出别名。版本值由 `runner-version.json` 持有，供两端 CommonJS runtime 直接读取；Runner Docker build/deploy 包含 protocol workspace dependency。Runner durable journal record 与 Backend 授权／领域结果仍由本地 owner 持有，输入与响应的有界运行时校验仍分别留在各 transport 边界。
+Agent Model Tool Catalog 不再注册 Workspace 生命周期工具 `workspace_create`、`workspace_control` 和 `workspace_toolchain_switch`。这些旧模型工具的生产实现及专属 Runner 场景均已移除；SSH 文件、Shell、Job、ACP 分别由现行 SSH/Agent owner 负责，不因此改变它们的授权或生命周期语义。完成门禁只将不强制的 SSH session close 视为已验证资源回收，不再特殊认可已删除的 `workspace_control` 操作。
 
-Workspace 工具链引用仅包含 familyId/versionId，架构由 Runner 决定；支持版本与架构来自 Runner catalog JSON。Node/Python/Go 共用 mise materializer，检查可执行文件和实际版本，不维护预编译来源 lock、预设安装树摘要或选择指纹。安装缓存按类型、版本、架构组织，保留不可变共享与使用中卸载保护；Backend 只消费 catalog 和生命周期 contract，不复制安装状态。内置 base-tools 的仓库随附 archive 仍做完整性校验，不属于语言版本来源锁定。
+Agent 文件工具已收敛为 **SSH-only**：`file-tools.ts` 的工具 schema、`FileCapabilityService` 与 `compose-agent.ts` 不再提供 Workspace 文件 adapter/port；冻结的 SSH connection ID/configuration hash、SFTP 结果 SHA 和元数据 preconditions 仍由原 owner 复核。旧 `target:'workspace'` 被 schema/运行时拒绝，不自动映射到本地或任一 SSH Connection。Shell、ACP 和 Browser 已分别迁移为 SSH-only 或独立 target，用户 Workspace 管理 API 仍处于独立迁移阶段；不能把当前 File 切口当作完整 P3。
 
-Plugin package、immutable installed version、AppStorage、Workspace 和 Artifact 分别维护生命周期。Frontend target 在隔离 surface 中运行；backend/runner target 通过受控进程和版本化 SDK/IPC 运行。Plugin 不能把 Host authority function 注入 Tool catalog。
+Agent Shell/Job 工具也已收敛为 **SSH-only**：`shell-tools.ts` 与 `ShellCapabilityService` 仅连接 `SshShellTargetPort`、`AgentSshSessionPort` 和目标解析器，不再消费 Workspace Shell adapter/port 或产出 Runner Job 投影。Foreground 逐参数安全引用，Background 按 Thread/connection 和带 configurationHash 的持久 SSH session 执行。Job inspect/execute 间及 listActiveJobs 再核实 SSH 配置 fingerprint，拒绝旧 Snapshot 后自动重绑。旧 Agent Workspace ACL 和用户 API 已删除；普通终端 Workspace 的 owner 独立保留。
+
+ACP Host Tool、HTTP/Protocol/SQLite integration config 与 Agent App 集成创建 UI 仅接受 **SSH transport**。旧 `workspace-profile` 配置在 HTTP 输入层拒绝，持久解码 fail closed，无 Runtime fallback。`createAcpExecuteTool` 只在冻结 Run connection ID 上复核 SSH 配置 hash/target identity 和集成版本；`AcpAdapter` 仅经 SSH openTransport 执行 ACP v1。已移除 Host Runner ACP port/byte bridge，**生产 Agent Runner 的 AcpProcessRuntime、ACP WebSocket route、profile validation/launch/process close** 也全部退出。Runner/Host Protocol Provision/Environment/AgentSettings 的 ACP Profile 字段、Frontend Workspace Profile 编辑/选择器以及 SQLite Workspace `acp_profiles_json` 列一并移除；迁移 #56 直接 DROP 旧列并移除持久 AgentSettings 的 `workspaceRuntime.acpProfiles`。旧 Workspace profile 请求 fail closed，无兼容转换。普通终端 Workspace 由独立终端 Runtime 继续管理，生产 Runner Job 与 Browser tunnel 已退出；ACP 内层 Approval、abort/disconnect/unknown 流程保留在 SSH channel。
+
+File/Shell 的授权 contract 也已收敛：`CapabilityRegistry` 四个目标 capability 只声明 `supportedTargets=['ssh']`，默认和 ID 范围授权仅能指向 SSH connection；`parseScope/parseGrant` 拒绝包含 `workspace` 的旧范围，`allows` 对旧 Workspace 目标明确返回 false。HTTP grant 解码和 `@nexus-terminal/protocol/agent-host` 的 `AgentTargetKindDto` 只接受 `ssh`；Agent App 授权 UI 只显示 SSH 配置，旧 Workspace grant UI 翻译项退出。此更改不创建兼容分支，也不扩大老 Workspace grant 的网络能力。`AgentTargetResolver`（原本仅转发 SSH 的中间 facade）现已**物理删除**。`compose-agent` 将 `SshTargetResolverPort` 直接注入 File/Shell/ACP，`ssh-target-resolver.port.ts` 只定义边界，`ssh-target-binding.ts` 的纯函数集中完成规范 connection ID 校验、SSH 连接快照 resourceKey 和 inspection target 恢复，避免重复判断或再次引入万能目标 owner。Browser Session 的 Workspace binding 已移除，剩余用户 Workspace HTTP API 尚待物理移除。
+
+Browser 已从 Workspace/Runner transport 分离：Host `browser_session_open` 仅接受明确配置的 `targetId`；`BrowserSessionBindingAuthority` 根据有效 Browser 配置内容计算 `configurationHash` 和 target-specific revision，inspection 与 execute 复核 hash/Run scope。目标更新/删除时旧 Session 先关闭再报 `BROWSER_TARGET_STALE`，无关 Agent Settings revision 不造成失效。`BrowserRuntimeAdapter` 仅以 Backend 直连 CDP，保留 endpoint 协议/TLS、`allowedUrlPatterns`、Puppeteer request interception、Artifact capture 和 Run 终态 `closeRun`；新 Agent Browser 设置/Protocol 与持久 Run decoder 拒绝旧 `via=runner`。生产 Runner 的 `/v1/browser/tunnel` upgrade、`BrowserTunnelRuntime`、Backend Runner WS tunnel adapter 均已删除，未知 Runner upgrade 路由返回 404。旧 Workspace Provision/Profile 与 Runner Browser tunnel 子图已完全退出生产代码，不能被重新用作独立 Browser target。
+
+Agent Workspace 用户 HTTP/WS、Backend Workspace Runtime/Repository/Runner Controller/Checkpoint Archive capture/restore 均已破坏式删除。进一步移除 `RunDefinitionSnapshot.environment`、HTTP/Protocol RunEnvironment DTO、Checkpoint `workspaceArtifactManifestRefs` / `workspaceArtifactRefs` / `backgroundJobs` 字段、SQLite writer/strict decoder、Agent Tool target/Inspection/Approval 中的 Workspace fingerprint/generation、Runner semantic job 与 Subagent legacy target。Run 创建只持久化 AgentDefinition/模型/SSH connectionIds；Checkpoint 仍验证 Tool Side Effects/Quarantine、Provider/Model、Plan/Goal、Artifact/Context 和输入版本，但不再读取旧 Workspace metadata。Project Instructions 使用现有 SSH Project Directory 的 scope/configurationHash 且只从已观察 SSH Tool 中导出目标绝对目录，不再猜测 `/workspace/work` 或从用户文本推断本地 Workspace。正常终端 Workspace 不属于 Agent Runtime。
+
+后续 SQLite/部署切口：当前 schema 已删除 `agent_workspaces` / `agent_workspace_runtime_commands`，保留的 `agent_ssh_jobs` / `agent_project_directories` 移到 `schema/agent-ssh.ts`。#58 不兼容旧状态、不对未完成命令留等待/保护，按 FK 逆序直接 DROP 两表并通过 json_remove 去掉 Agent Settings 的过期字段。Run/Thread 删除路径已去除与旧 Workspace 相关的守卫；普通 Run 保护仍在。Backup 白名单剔除旧 Workspace/commands/confirmations。生产 `agent-runner` package、Toolchain assets、宿主准备脚本、Root 构建/类型检查、Compose 和发布任务已同步物理删除。E2E 测试 Runner 镜像与普通 SSH、终端 Workspace、Artifact/Memory 保留；Runner-only Playwright fixture / Docker smoke 已删除，现行 71 个 Agent Playwright 用例均在官方容器按文件通过，生产 Docker no-Runner smoke 通过。
 
 ## 数据、事务与并发
 
@@ -404,7 +418,7 @@ Plugin package、immutable installed version、AppStorage、Workspace 和 Artifa
 
 ## 诊断与关闭
 
-Bootstrap 注册 process、database、Runner、provider、plugin 和 transport 诊断。诊断是可观测证据，不替代真实 API/UI 行为验证。
+Bootstrap 注册 process、database、provider、plugin 和 transport 诊断。诊断是可观测证据，不替代真实 API/UI 行为验证。
 
 关闭顺序由 composition root 控制：停止接收新请求，停止 scheduler/sweeps，drain 或终止受管工作，关闭 WebSocket/HTTP，再关闭数据库和底层资源。各 adapter 的临时进程、listener、timer 和文件句柄由创建它们的 owner 清理。
 
@@ -425,7 +439,23 @@ Bootstrap 注册 process、database、Runner、provider、plugin 和 transport �
 - `pnpm run check` 执行 Frontend/Agent ESLint 与 Frontend type check。
 - 架构和生命周期规则由 [AGENTS.md](../AGENTS.md) 约束 AI 开发与审查，不使用源码文本扫描测试。
 - `pnpm run build:backend` 执行 Backend TypeScript build 并复制 locale/Plugin SDK runtime asset。
-- 根 `pnpm run build` 覆盖 Backend、Frontend、Agent Runner；根 `check` 覆盖 Frontend／Agent ESLint 和三个生产包类型检查。CI 消费该完整入口，不在同一步重复构建 Runner；独立 Runner 作业仍使用包级入口。
+- 根 `pnpm run build` 覆盖 Backend、Frontend；根 `check` 覆盖 Frontend／Agent ESLint 与两个生产包类型检查。CI 使用完整构建入口；独立 Playwright E2E Runner 镜像只包含测试环境。
 - Agent deterministic scenarios 位于 `tests/backend/agent-scenarios/`。
 - 用户可达 HTTP/WebSocket/SSH/Agent 行为由 `tests/e2e/` 验证。
 - Canonical workflow 保留 production-style Docker smoke。
+
+### 自适应执行预算与当前进度
+
+`runtime/execution/runtime-progress.ts` 从最新 Run／Delegation 构造必需控制上下文，投影 Goal／Plan revision、项目状态／证据、验证与 reconciliation、计数和剩余额度，数据不提升为授权。Root prepare 与 Child context 每次重建都注入；有限窗口仍由 Context owner 规划，不能用可选历史截断悄悄丢失资源指令。
+
+`state-commit/execution-budget-transitions.ts` 在同一 SQLite transaction 内校验并预留全 Run 模型请求和工具执行。每个新 attempt（包括摘要、retry、route fallback）在开始时计数，settle 只累加 token；实际开始的工具计独立 `toolExecutions`。Child 保留本地请求上限，并为 Root 留最多两个请求。各模型／工具 deadline 按尚在进行的活动时间扣减，不等待 settle 才发现时间耗尽。
+
+Native 在既有工具 proposal batch 结算后、下次模型 admission 前评估额度；Child model work 在请求前刷新同一预算。进展读取上次扩展 event cursor 后最多 32 条工具终态，要求新成功数据或证据，排除相同 operation／data／verification 的旧记录、连续三次失败及 loop warning。仅增长受压维度，1.5 倍且冻结 ceiling 截断，revision／cursor／事件／Host projection 同事务提交；该有界启发式不是成功证明，hard ceiling 是最终资源边界。
+
+finishing 禁止新工具／委派。安全 checkpoint callback 使用 `execution_limit` 强制保存；最终 model summary 或确定性 partial report 与终态持久化，子 work 取消、活动 attempt 收敛，未确认 mutation／lease 隔离继续保留。Post-commit observer 中止 Child scheduler 与回收 Run-owned Browser。CheckpointService 拒绝 finishing／耗尽源，合法 continuation 在 createRun transaction 继承父级 usage 和 active seconds，不能重置保险丝。
+
+迁移 #53 将设置、应用策略、委派和旧 Run 数据一次性转换为当前字段；模型请求数从持久 attempt 重建，工具数从实际 started Tool 重建。历史 Run 的旧限额作为保守冻结 ceiling，启动恢复仍由既有 recovery owner 收敛非终态，不在 migration 伪造完成事件或重放工作。公开 API 和 decoder 不接受旧字段。
+
+工具预检查失败由 Root 与子 Agent 的合成 forbidden inspection 保存 rejectionCode，持久 decoder 校验其只能用于未执行的拒绝项。PolicyService 保持 deny 并传递该码，使回放后的 ledger 与模型结果仍能区分参数、授权和资源错误。
+
+Agent mutation execution 使用 durable ToolCall 而非 approval operation hash 区分一次执行。GovernedMutationExecutor 只负责复核、审批、lease、执行和结算，不查询相同参数的历史调用来拒绝新调用。ShellCapabilityService 根据 Run／Runtime／ToolCall 和冻结的 SSH target 执行，使用现有持久 SSH Job 与 scope/identity 检查；已删除 Workspace executionId、RunnerHttpAdapter 与 Runner Journal。StateCommit 的进度循环检测与共享 RunBudget 负责无进展和绝对上限，unknown outcome 仍须 reconciliation。

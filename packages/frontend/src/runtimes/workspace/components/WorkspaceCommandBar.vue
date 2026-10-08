@@ -595,9 +595,11 @@
 
   /* Desktop adapts to its pane, including narrow split layouts, not the viewport. */
   .command-bar-root--desktop .command-bar-inner {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
+    align-content: center;
+    align-self: flex-start;
     min-height: 100%;
     padding: 0.375rem 0.5rem;
     gap: 0.375rem;
@@ -605,12 +607,16 @@
   }
 
   .command-bar-root--desktop {
+    --command-bar-button-size: 1.625rem;
     align-items: flex-start;
     flex-shrink: 0;
   }
 
   .command-bar-root--desktop .command-bar-input {
-    width: 100%;
+    width: 0;
+    min-width: min(calc(var(--command-bar-button-size) * 2), 100%);
+    /* Give spare inline space to the input; wrapped controls fill their own row. */
+    flex: 999 1 calc(var(--command-bar-button-size) * 2) !important;
     height: 2rem;
     min-height: 2rem;
     max-height: 2rem;
@@ -623,11 +629,11 @@
   }
 
   .command-bar-root--desktop .command-bar-button {
-    width: 1.625rem;
-    height: 1.625rem;
-    min-width: 1.625rem;
-    min-height: 1.625rem;
-    flex-basis: 1.625rem;
+    width: var(--command-bar-button-size);
+    height: var(--command-bar-button-size);
+    min-width: var(--command-bar-button-size);
+    min-height: var(--command-bar-button-size);
+    flex-basis: var(--command-bar-button-size);
     padding: 0;
     margin: 0;
     border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
@@ -646,40 +652,13 @@
   }
 
   .desktop-command-controls {
-    grid-column: 2;
     min-width: 0;
-    display: grid;
-    grid-template-columns: none;
-    grid-auto-flow: column;
-    grid-auto-columns: 1.625rem;
-    column-gap: 0.5rem;
-    row-gap: 0.25rem;
-    width: max-content;
+    display: flex;
+    flex: 1 0 auto;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.5rem;
     justify-content: space-between;
-    padding-left: 0.375rem;
-  }
-
-  @container command-bar-pane (max-width: 480px) {
-    .command-bar-root--desktop .command-bar-inner {
-      grid-template-columns: minmax(0, 1fr);
-      align-content: center;
-    }
-
-    .command-bar-root--desktop .desktop-command-controls {
-      grid-column: 1 / -1;
-      grid-row: 2;
-      grid-auto-flow: row;
-      grid-auto-columns: auto;
-      grid-template-columns: repeat(auto-fit, minmax(1.625rem, 1fr));
-      width: 100%;
-      justify-content: space-between;
-      padding-left: 0;
-      border-left: none;
-    }
-    .command-bar-root--desktop .command-bar-input {
-      grid-column: 1;
-      grid-row: 1;
-    }
+    max-width: 100%;
   }
 
   @container command-bar-pane (max-height: 52px) {
@@ -704,32 +683,6 @@
       max-width: max-content;
       flex: 0 0 max-content;
       flex-wrap: nowrap;
-    }
-  }
-
-  @container command-bar-pane (max-width: 480px) {
-    .command-bar-root--desktop .command-bar-inner {
-      grid-template-columns: minmax(0, 1fr);
-      align-content: start;
-      padding-block: 0.375rem;
-      align-self: flex-start;
-      box-sizing: border-box;
-      flex: 0 0 auto;
-      width: 100%;
-    }
-
-    .command-bar-root--desktop .desktop-command-controls {
-      grid-column: 1;
-      grid-row: 2;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(1.625rem, 1fr));
-      column-gap: 0.25rem;
-      overflow: hidden;
-    }
-
-    .command-bar-root--desktop .command-bar-input {
-      grid-column: 1;
-      grid-row: 1;
     }
   }
 </style>

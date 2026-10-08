@@ -112,6 +112,16 @@ export default defineConfig({
   ],
   webServer: [
     {
+      command: 'node fixtures/agent/deployment-page.mjs',
+      cwd: e2eRoot,
+      env: { ...inheritedEnv, NEXUS_E2E_DEPLOYMENT_PAGE_PORT: String(E2E_PORTS.deploymentPage) },
+      url: `${E2E_URLS.deploymentPageOrigin}/state`,
+      reuseExistingServer: false,
+      timeout: 30_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+    {
       command: 'node support/test-browser-server.mjs',
       cwd: e2eRoot,
       env: {

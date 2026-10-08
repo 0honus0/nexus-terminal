@@ -124,10 +124,20 @@ const parseTrajectory = (value: string): GuardObservation[] => {
     });
 };
 
-const noticeText = (level: 1 | 2, reason: string): string =>
-  level === 1
-    ? `Loop guard: repeated no-progress behavior detected (${reason}). Change strategy, evidence source, or wait for authoritative state change before repeating the same action.`
-    : `Loop guard: the current strategy is still repeating without meaningful progress (${reason}). Do not repeat the same action/result pattern; choose a different approach or request user input.`;
+const noticeText = (level: 1 | 2, reason: string): string => {
+  const guidance =
+    reason === 'exact_failure_replay'
+      ? ' Inspect the previous error and correct its cause before retrying; unchanged failed arguments are not a new strategy.'
+      : reason === 'repeated_stable_observation'
+        ? ' The previous observation is already authoritative. Use it to decide the next step instead of repeatedly searching or checking the same state.'
+        : ' Preserve active jobIds; running is not failure. Verify service health or wait, rather than resubmitting a startup command. Do not stop a port owner without identifying and authorizing it.';
+  return (
+    (level === 1
+      ? `Loop guard: repeated no-progress behavior detected (${reason}). Change strategy, evidence source, or wait for authoritative state change before repeating the same action.`
+      : `Loop guard: the current strategy is still repeating without meaningful progress (${reason}). Do not repeat the same action/result pattern; choose a different approach or request user input.`) +
+    guidance
+  );
+};
 
 export const resetLoopGuard = async (tx: RelationalDatabase, runId: string, now: number): Promise<void> => {
   await tx.execute(

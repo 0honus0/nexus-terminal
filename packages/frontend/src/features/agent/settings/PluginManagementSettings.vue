@@ -520,19 +520,6 @@
                 }}</span
               >
             </span>
-            <span
-              class="inline-flex items-center gap-1 rounded-md border border-border/60 bg-header/40 px-2 py-1 text-[11px]"
-            >
-              <i class="fa-solid fa-play text-text-secondary text-[10px]" aria-hidden="true"></i>
-              <span
-                >Runner:
-                {{
-                  candidate.plugin.runnerEntry
-                    ? $t('agent.settings.plugins.present')
-                    : $t('agent.settings.plugins.absent')
-                }}</span
-              >
-            </span>
           </div>
 
           <div class="mt-3.5 flex items-center justify-between border-t border-border pt-3">

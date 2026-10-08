@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { Terminal } from '@xterm/xterm';
   import { FitAddon } from '@xterm/addon-fit';
@@ -12,8 +12,10 @@
   import '@xterm/xterm/css/xterm.css';
   import type { TerminalChannel } from '../ports/terminal-channel';
   import type { TerminalVisualOptions } from '../model/terminal';
+  import { desktopBackgroundRuntime, mobileBackgroundRuntime } from '../model/mobileBackgroundRuntime';
   import { trackTerminalRuntimeModes, type TerminalRuntimeModeTracker } from '../model/terminalRuntimeModes';
   import { serializeTerminalSnapshot } from '../model/terminalSnapshot';
+  import { createTerminalOutputWriter } from '../model/terminalOutputWriter';
   import {
     createTerminalSessionState,
     RESET_REMOTE_PTY_DISPLAY,
@@ -58,6 +60,10 @@
   let serializeAddon: SerializeAddon | undefined;
   let runtimeModes: TerminalRuntimeModeTracker | undefined;
   let resizeObserver: ResizeObserver | undefined;
+  let disposed = false;
+  let viewActive = true;
+  let interactionGeneration = 0;
+  let stopOutput: (() => void) | undefined;
   const cleanup: Array<() => void> = [];
   const HISTORY_LIVE_SCROLLBACK_LINES = 20_000;
   const HISTORY_WINDOW_SCROLLBACK_LINES = 20_000;
@@ -75,9 +81,12 @@
   let historyWindowChunks: Uint8Array[] = [];
   let deferredTerminalOutputBytes = 0;
   let historyRestoreTask: Promise<void> | null = null;
+  let historyEntryTask: Promise<void> | null = null;
+  let historyCursorResetTask: Promise<boolean> | null = null;
   let historyViewGeneration = 0;
   let mobileSelectionSyncFrame: number | null = null;
   const deferredTerminalOutput: Array<string | Uint8Array> = [];
+  let historyReplayingOutput: Array<string | Uint8Array> = [];
   const deferredOutputConsumers: Array<() => void> = [];
   const hasVisualBackground = computed(() =>
     Boolean(props.visual?.backgroundEnabled && (props.visual.backgroundImageUrl || props.visual.customHtml)),
@@ -92,6 +101,7 @@
     props.visual?.backgroundImageUrl ? { backgroundImage: `url(${props.visual.backgroundImageUrl})` } : {},
   );
   const terminalStyle = computed(() => ({
+    backgroundColor: hasVisualBackground.value ? 'transparent' : props.theme?.background,
     '--terminal-stroke-width': `${props.visual?.textStroke?.width ?? 0}px`,
     '--terminal-stroke-color': props.visual?.textStroke?.color ?? 'transparent',
     '--terminal-shadow': `${props.visual?.textShadow?.offsetX ?? 0}px ${props.visual?.textShadow?.offsetY ?? 0}px ${props.visual?.textShadow?.blur ?? 0}px ${props.visual?.textShadow?.color ?? 'transparent'}`,
@@ -106,6 +116,31 @@
     'media-src data: blob:',
   ].join('; ');
   const customHtmlBaseStyle = 'html,body{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}';
+  // Notify resize-aware themes inside the opaque-origin sandbox, without
+  // changing their canvas attributes or reloading their animation state.
+  const customHtmlResizeBridge = `<script>(() => {
+    let width = -1, height = -1;
+    const sync = () => {
+      const nextWidth = document.documentElement.clientWidth;
+      const nextHeight = document.documentElement.clientHeight;
+      if (nextWidth === width && nextHeight === height) return;
+      width = nextWidth; height = nextHeight;
+      if (width > 0 && height > 0) window.dispatchEvent(new Event('resize'));
+    };
+    const reset = () => { width = height = -1; sync(); };
+    const observer = new ResizeObserver(sync);
+    observer.observe(document.documentElement);
+    window.addEventListener('message', event => {
+      if (event.source !== window.parent || event.data?.type !== 'nexus-background-geometry') return;
+      if (!event.data.visible) { width = height = -1; return; }
+      sync();
+    });
+    window.addEventListener('pageshow', reset);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') reset();
+    });
+    sync();
+  })();<\/script>`;
 
   const sandboxedCustomHtml = computed(() => {
     const html = props.visual?.customHtml;
@@ -116,16 +151,27 @@
     return [
       `<meta http-equiv="Content-Security-Policy" content="${customHtmlCsp}">`,
       `<style>${customHtmlBaseStyle}${imageOverride}</style>`,
+      device.isMobile.value || device.hasCoarsePointer.value ? mobileBackgroundRuntime : desktopBackgroundRuntime,
       html,
+      customHtmlResizeBridge,
     ].join('');
   });
   let lastColumns = 0;
   let lastRows = 0;
   let geometryFrame: number | undefined;
+  let geometryResizeTimer: ReturnType<typeof setTimeout> | undefined;
   let forceGeometrySync = false;
   const revealBackgroundWhenSized = () => {
     const element = root.value;
-    if (!props.active || !element || element.clientWidth <= 0 || element.clientHeight <= 0) return;
+    if (
+      disposed ||
+      !viewActive ||
+      !props.active ||
+      !element?.isConnected ||
+      element.clientWidth <= 0 ||
+      element.clientHeight <= 0
+    )
+      return;
     backgroundReady.value = true;
   };
   watch(
@@ -133,29 +179,55 @@
     ([frame, html], _previous, onCleanup) => {
       if (!frame || !html) return;
       const loadWhenSized = () => {
-        if (frame.clientWidth > 0 && frame.clientHeight > 0 && frame.getAttribute('srcdoc') !== html)
+        if (
+          props.active &&
+          frame.isConnected &&
+          frame.clientWidth > 0 &&
+          frame.clientHeight > 0 &&
+          frame.getAttribute('srcdoc') !== html
+        )
           frame.srcdoc = html;
+        // Hidden iframes may retain a nonzero internal viewport. The parent
+        // observer supplies the missing visibility transition to the bridge.
+        frame.contentWindow?.postMessage(
+          { type: 'nexus-background-geometry', visible: frame.clientWidth > 0 && frame.clientHeight > 0 },
+          '*',
+        );
       };
       const observer = new ResizeObserver(loadWhenSized);
       observer.observe(frame);
+      frame.addEventListener('load', loadWhenSized);
       loadWhenSized();
-      onCleanup(() => observer.disconnect());
+      onCleanup(() => {
+        observer.disconnect();
+        frame.removeEventListener('load', loadWhenSized);
+      });
     },
     { flush: 'post' },
   );
-  const fitAndResize = () => {
+  const fitAndResize = (allowInactive = false) => {
+    clearTimeout(geometryResizeTimer);
+    geometryResizeTimer = undefined;
     const element = root.value;
-    if (!terminal || !fit || !element) return;
-    // ResizeObserver fires again when an ancestor is hidden with display:none. Fitting xterm at
-    // that point collapses its viewport to a tiny fallback size; FitAddon clears the renderer
-    // before resizing, so restoring the tab later exposes a visible redraw/blank strip. Keep the
-    // last valid terminal geometry while hidden and fit only after the surface has real dimensions.
-    if (!props.active || document.visibilityState === 'hidden' || element.clientWidth <= 0 || element.clientHeight <= 0)
+    if (disposed || !viewActive || !terminal || !fit || !element?.isConnected) return;
+    // Hidden ancestors trigger ResizeObserver with zero-size geometry. Keep the last
+    // valid viewport while hidden to avoid collapsing and reflowing the prompt on tab restore.
+    if (
+      (!props.active && !allowInactive) ||
+      document.visibilityState === 'hidden' ||
+      element.clientWidth <= 0 ||
+      element.clientHeight <= 0
+    )
       return;
     const dimensions = fit.proposeDimensions();
     if (!dimensions || !Number.isFinite(dimensions.cols) || !Number.isFinite(dimensions.rows)) return;
     revealBackgroundWhenSized();
-    fit.fit();
+    // Resize through the public API without FitAddon clearing the renderer first.
+    // This keeps the current prompt visible while xterm reflows and the PTY redraws.
+    if (terminal.cols !== dimensions.cols || terminal.rows !== dimensions.rows) {
+      terminal.resize(dimensions.cols, dimensions.rows);
+    }
+    terminalState.replaceGeometry(terminal.cols, terminal.rows);
     if (wrapper.value && wrapper.value.scrollLeft !== 0) wrapper.value.scrollLeft = 0;
     if (element.scrollLeft !== 0) element.scrollLeft = 0;
     if (forceGeometrySync || terminal.cols !== lastColumns || terminal.rows !== lastRows) {
@@ -166,22 +238,46 @@
     }
     if (device.supportsTouchInteraction.value && mobileTouchSelectionActive) syncMobileSelectionHandles();
   };
-  // Browser wakeups and transport recovery need a fresh post-layout measurement even when
-  // the container size did not change. Coalesce them rather than retaining a stale PTY size.
-  const scheduleGeometrySync = () => {
-    forceGeometrySync = true;
-    if (geometryFrame !== undefined) return;
+  // Splitter drags and pane transitions can produce a new size every frame. Fit
+  // once they settle so interactive TUIs do not receive a stream of SIGWINCH redraws.
+  const scheduleContainerResize = () => {
+    if (disposed) return;
+    clearTimeout(geometryResizeTimer);
+    geometryResizeTimer = setTimeout(() => {
+      geometryResizeTimer = undefined;
+      fitAndResize();
+    }, 100);
+  };
+  const scheduleGeometryFit = () => {
+    if (disposed || geometryFrame !== undefined) return;
     geometryFrame = window.requestAnimationFrame(() => {
       geometryFrame = undefined;
       fitAndResize();
     });
   };
+  onActivated(() => {
+    viewActive = true;
+    outputWriter.flush();
+    scheduleGeometryFit();
+  });
+  onDeactivated(() => {
+    viewActive = false;
+    resetInteractions();
+    backgroundReady.value = false;
+  });
+  // Browser wakeups and transport recovery need a fresh PTY sync. Ordinary tab switches
+  // only need a measurement, so unchanged geometry does not produce another resize frame.
+  const scheduleGeometrySync = () => {
+    if (disposed) return;
+    forceGeometrySync = true;
+    scheduleGeometryFit();
+  };
   const onVisibilityChange = () => {
-    clearOutputSchedule();
-    if (pendingOutput.length) flushPendingOutput();
+    outputWriter.flush();
     if (document.visibilityState === 'visible') scheduleGeometrySync();
   };
   const openSearch = () => {
+    if (!canInteract()) return;
     searchOpen.value = true;
   };
   const closeSearch = () => {
@@ -226,10 +322,11 @@
   };
 
   const deferredTerminalOutputReplay = (): string => {
-    if (!deferredTerminalOutput.length) return '';
+    const chunks = [...historyReplayingOutput, ...deferredTerminalOutput];
+    if (!chunks.length) return '';
     const decoder = new TextDecoder();
     let replay = '';
-    for (const chunk of deferredTerminalOutput) {
+    for (const chunk of chunks) {
       if (typeof chunk === 'string') replay += chunk;
       else replay += decoder.decode(chunk, { stream: true });
     }
@@ -239,7 +336,7 @@
 
   const liveReplaySnapshot = (): string => {
     if (!historyBrowsing) {
-      return `${terminal && serializeAddon ? serializeTerminalSnapshot(terminal, serializeAddon) : ''}${runtimeModes?.restoreSuffix() ?? ''}`;
+      return `${terminal && serializeAddon ? serializeTerminalSnapshot(terminal, serializeAddon) : ''}${runtimeModes?.restoreSuffix() ?? ''}${historyRebuilding ? deferredTerminalOutputReplay() : ''}`;
     }
     return `${historyLiveSnapshot}${deferredTerminalOutputReplay()}`;
   };
@@ -282,54 +379,79 @@
 
   const rebuildHistoryWindow = async (newPage: Uint8Array): Promise<void> => {
     if (!terminal || !serializeAddon || newPage.byteLength === 0 || historyRebuilding) return;
+    const generation = historyViewGeneration;
     const enteringHistory = !historyBrowsing;
-    if (enteringHistory) {
-      historyLiveSnapshot = `${serializeTerminalSnapshot(
-        terminal,
-        serializeAddon,
-        HISTORY_LIVE_SNAPSHOT_MAX_BYTES,
-      )}${runtimeModes?.restoreSuffix() ?? ''}`;
-      const continuation = currentHistoryContinuation();
-      historyWindowChunks = continuation.byteLength ? [continuation] : [];
-      historyBrowsing = true;
-      pagedHistorySession = true;
-    }
-
-    historyWindowChunks = trimHistoryWindowChunks([newPage.slice(), ...historyWindowChunks]);
     historyRebuilding = true;
     try {
+      if (enteringHistory) {
+        // Divert new output while draining xterm's async write queue.
+        // Otherwise a late live write lands in the history buffer.
+        historyEntryTask = outputWriter.drain();
+        await historyEntryTask;
+        if (!terminal || generation !== historyViewGeneration) return;
+        historyLiveSnapshot = `${serializeTerminalSnapshot(
+          terminal,
+          serializeAddon,
+          HISTORY_LIVE_SNAPSHOT_MAX_BYTES,
+        )}${runtimeModes?.restoreSuffix() ?? ''}`;
+        const continuation = currentHistoryContinuation();
+        historyWindowChunks = continuation.byteLength ? [continuation] : [];
+        historyBrowsing = true;
+        pagedHistorySession = true;
+        historyEntryTask = null;
+      }
+
+      historyWindowChunks = trimHistoryWindowChunks([newPage.slice(), ...historyWindowChunks]);
       terminal.options.scrollback = HISTORY_WINDOW_SCROLLBACK_LINES;
       terminal.reset();
       runtimeModes?.reset();
       const [pageChunk, ...continuation] = historyWindowChunks;
       if (pageChunk) await writeTerminal(pageChunk);
-      if (!terminal) return;
+      if (!terminal || generation !== historyViewGeneration) return;
       const continuationStart = Math.max(0, terminal.buffer.active.baseY + terminal.buffer.active.cursorY);
-      for (const chunk of continuation) await writeTerminal(chunk);
-      if (!terminal) return;
+      for (const chunk of continuation) {
+        if (generation !== historyViewGeneration) return;
+        await writeTerminal(chunk);
+      }
+      if (!terminal || generation !== historyViewGeneration) return;
       const anchoredViewportY = Math.max(0, Math.min(terminal.buffer.active.baseY, continuationStart - terminal.rows));
       terminal.scrollToLine(anchoredViewportY);
       historyLastViewportY = anchoredViewportY;
       syncSearchDecorations();
     } finally {
-      historyRebuilding = false;
-      if (historyBrowsing && deferredTerminalOutputBytes >= HISTORY_DEFERRED_OUTPUT_MAX_BYTES) {
-        void restoreLatestOutput();
+      if (generation === historyViewGeneration) {
+        historyEntryTask = null;
+        historyRebuilding = false;
+        if (historyBrowsing && deferredTerminalOutputBytes >= HISTORY_DEFERRED_OUTPUT_MAX_BYTES) {
+          void restoreLatestOutput();
+        }
       }
     }
   };
 
   const restoreLatestOutput = (): Promise<void> => {
+    if (disposed) return Promise.resolve();
+    if (historyRestoreTask) return historyRestoreTask;
+    if (historyEntryTask) {
+      const generation = historyViewGeneration;
+      return historyEntryTask.then(() => {
+        if (generation === historyViewGeneration) return restoreLatestOutput();
+      });
+    }
     if (!historyBrowsing) {
+      cancelPendingHistoryLoad();
       terminal?.scrollToBottom();
       return Promise.resolve();
     }
-    if (historyRestoreTask) return historyRestoreTask;
     const generation = ++historyViewGeneration;
     const task = (async () => {
       if (!terminal) return;
       historyRebuilding = true;
       try {
+        // An old history write may still be parsing when scrolling back or typing.
+        // Let it finish before resetting so it cannot contaminate the live snapshot.
+        await writeTerminal('');
+        if (!terminal || generation !== historyViewGeneration) return;
         const snapshot = historyLiveSnapshot;
         historyBrowsing = false;
         historyWindowChunks = [];
@@ -337,13 +459,21 @@
         terminal.reset();
         runtimeModes?.reset();
         if (snapshot) await writeTerminal(snapshot);
-        await props.channel.resetPreviousOutput?.().catch(() => false);
+        if (generation !== historyViewGeneration) return;
+        // Reset paging independently; a slow network must not block live output or input.
+        void resetHistoryCursor();
         while (deferredTerminalOutput.length) {
           const queued = deferredTerminalOutput.splice(0);
+          historyReplayingOutput = queued;
           const consumers = deferredOutputConsumers.splice(0);
           deferredTerminalOutputBytes = 0;
-          for (const chunk of queued) await writeTerminal(chunk);
+          while (queued.length) {
+            if (generation !== historyViewGeneration) break;
+            await writeTerminal(queued[0]!);
+            queued.shift();
+          }
           for (const consumed of consumers) consumed();
+          if (generation !== historyViewGeneration) return;
         }
         historyLiveSnapshot = '';
         if (generation === historyViewGeneration) {
@@ -352,7 +482,7 @@
           syncSearchDecorations();
         }
       } finally {
-        historyRebuilding = false;
+        if (generation === historyViewGeneration) historyRebuilding = false;
       }
     })().finally(() => {
       if (historyRestoreTask === task) historyRestoreTask = null;
@@ -361,13 +491,31 @@
     return task;
   };
 
+  const resetHistoryCursor = (): Promise<boolean> => {
+    if (historyCursorResetTask) return historyCursorResetTask;
+    const task = (props.channel.resetPreviousOutput?.() ?? Promise.resolve(false))
+      .catch(() => false)
+      .finally(() => {
+        if (historyCursorResetTask === task) historyCursorResetTask = null;
+      });
+    historyCursorResetTask = task;
+    return task;
+  };
+  const cancelPendingHistoryLoad = (): void => {
+    if (!historyLoading || historyBrowsing || historyRebuilding) return;
+    historyViewGeneration += 1;
+    void resetHistoryCursor();
+  };
+
   const loadPreviousOutput = async (): Promise<void> => {
-    if (historyLoading || historyRebuilding || !props.channel.loadPreviousOutput) return;
+    if (disposed || historyLoading || historyRebuilding || !props.channel.loadPreviousOutput) return;
     activatePagedHistoryMode();
-    if (!props.channel.hasPreviousOutput?.()) return;
     const generation = historyViewGeneration;
+    const remotePtyGeneration = terminalState.remotePtyGeneration.value;
     historyLoading = true;
     try {
+      if (historyCursorResetTask) await historyCursorResetTask;
+      if (generation !== historyViewGeneration || !props.channel.hasPreviousOutput?.()) return;
       const pageBytes = Math.max(16 * 1024, Math.min(64 * 1024, (terminal?.cols ?? 80) * (terminal?.rows ?? 24) * 8));
       const page = await props.channel.loadPreviousOutput(pageBytes);
       if (generation !== historyViewGeneration) return;
@@ -376,15 +524,18 @@
       // Lazy history is auxiliary. A failed historical-page fetch must never tear down an
       // otherwise healthy resumed terminal.
     } finally {
-      historyLoading = false;
+      if (remotePtyGeneration === terminalState.remotePtyGeneration.value) historyLoading = false;
     }
   };
 
   const historyLoadThreshold = (): number => Math.max(4, Math.ceil((terminal?.rows ?? 24) * 0.2));
   const remoteMouseReportingActive = (): boolean => terminal?.modes.mouseTrackingMode !== 'none';
   let clipboardGestureAt = -Infinity;
+  const canInteract = (): boolean => !disposed && viewActive && props.active && Boolean(root.value?.isConnected);
+  const isCurrentInteraction = (generation: number, target: Terminal | undefined): boolean =>
+    canInteract() && generation === interactionGeneration && Boolean(target) && terminal === target;
   const recordClipboardGesture = (): void => {
-    if (props.active && props.inputEnabled) clipboardGestureAt = performance.now();
+    if (canInteract() && props.inputEnabled) clipboardGestureAt = performance.now();
   };
   const copySelection = async () => {
     if (terminal?.hasSelection()) await writeClipboardText(terminal.getSelection());
@@ -395,38 +546,58 @@
     if (!event.buttons && remoteMouseReportingActive() && localClipboardGesture(event)) event.stopPropagation();
   };
   const paste = async () => {
-    if (!props.inputEnabled) return;
+    if (!canInteract() || !props.inputEnabled) return false;
+    const generation = interactionGeneration;
+    const target = terminal;
     const text = await navigator.clipboard.readText();
-    if (text && props.inputEnabled) terminal?.paste(text.replace(/\r\n?/g, '\n'));
+    if (!text || !props.inputEnabled || !isCurrentInteraction(generation, target)) return false;
+    target?.paste(text.replace(/\r\n?/g, '\n'));
+    return true;
   };
   const selectAll = () => terminal?.selectAll();
   const clearTerminal = () => {
+    if (disposed) return;
+    const generation = interactionGeneration;
+    const target = terminal;
     // Clear xterm's local buffer without injecting ANSI erase/cursor sequences. The remote PTY/readline
     // does not observe locally-written control codes, so moving the local cursor independently can corrupt later redraws.
-    if (historyBrowsing) {
-      void restoreLatestOutput().then(() => terminal?.clear());
+    if (historyBrowsing || historyRebuilding) {
+      void restoreLatestOutput().then(() => {
+        if (isCurrentInteraction(generation, target)) target?.clear();
+      });
       return;
     }
+    cancelPendingHistoryLoad();
     terminal?.clear();
-  };
-
-  const prepareForTransportReset = (): void => {
-    if (!terminal) return;
-    // A Workspace reconnect creates a fresh remote PTY while this xterm instance and its
-    // scrollback intentionally stay alive. If the old PTY stopped at a shell prompt, the new
-    // PTY's first prompt would otherwise be appended at the old cursor column (for example
-    // "root@host:# root@host:#"). Preserve scrollback, but discard the now-invalid active
-    // input line before the reconnect starts. This is local-only; the remote readline state is
-    // already gone, so there is no cursor-state divergence to introduce here.
-    flushPendingOutput();
-    terminal.write('\r\x1b[2K');
   };
 
   watch(
     terminalState.remotePtyGeneration,
     () => {
-      flushPendingOutput();
-      terminal?.write(RESET_REMOTE_PTY_DISPLAY);
+      resetInteractions();
+      outputWriter.discard();
+      deferredTerminalOutput.length = 0;
+      historyReplayingOutput = [];
+      deferredTerminalOutputBytes = 0;
+      historyViewGeneration += 1;
+      historyLoading = false;
+      historyRebuilding = false;
+      historyBrowsing = false;
+      pagedHistorySession = false;
+      historyLiveSnapshot = '';
+      historyWindowChunks = [];
+      historyRestoreTask = null;
+      historyEntryTask = null;
+      historyCursorResetTask = null;
+      historyLastViewportY = 0;
+      for (const consumed of deferredOutputConsumers.splice(0)) consumed();
+      if (terminal) {
+        terminal.options.scrollback = props.scrollback;
+        terminal.write(RESET_REMOTE_PTY_DISPLAY, () => {
+          runtimeModes?.reset();
+          syncSearchDecorations();
+        });
+      }
     },
     { flush: 'sync' },
   );
@@ -785,7 +956,7 @@
   };
 
   const pasteMobileClipboard = async (): Promise<void> => {
-    await paste();
+    if (!(await paste())) return;
     terminal?.clearSelection();
     mobileTouchSelectionActive = false;
     hideMobileSelectionHandles();
@@ -834,18 +1005,21 @@
     if (!props.rightClickCopyPaste) return;
     event.preventDefault();
     if (terminal?.hasSelection()) {
+      const generation = interactionGeneration;
+      const target = terminal;
       try {
         await copySelection();
-        terminal.clearSelection();
-        terminal.focus();
+        if (isCurrentInteraction(generation, target)) {
+          target?.clearSelection();
+          target?.focus();
+        }
       } catch {
         // Clipboard availability is browser-controlled.
       }
       return;
     }
     try {
-      await paste();
-      terminal?.focus();
+      if (await paste()) terminal?.focus();
     } catch {
       // Clipboard permissions are browser-controlled.
     }
@@ -890,11 +1064,18 @@
     emit('fontSizeChange', next);
   };
   const handleWheelScale = (event: WheelEvent) => {
+    if (historyRebuilding) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
     const change = resolveWheelScale(event, renderedFontSize.value);
     if (change) {
       applyFontSize(change.next);
       return;
     }
+    if (event.ctrlKey) return;
+    if (event.deltaY > 0) cancelPendingHistoryLoad();
     if (
       !remoteMouseReportingActive() &&
       event.deltaY < 0 &&
@@ -904,6 +1085,7 @@
     }
   };
   const handleTouchStart = (event: TouchEvent) => {
+    if (!canInteract()) return;
     clearMobileLongPressTimer();
     if (event.touches.length === 1 && device.supportsTouchInteraction.value) {
       const touch = event.touches[0]!;
@@ -998,6 +1180,30 @@
     }
   };
 
+  const resetInteractions = (): void => {
+    interactionGeneration += 1;
+    clipboardGestureAt = -Infinity;
+    clearMobileLongPressTimer();
+    mobileLongPressStart = null;
+    mobileSelectionLastPoint = null;
+    mobileSelectionBaseRange = null;
+    mobileLongPressTriggered = false;
+    mobileTouchMoved = false;
+    mobileGestureHadMultipleTouches = false;
+    mobileClipboardMenu.value.visible = false;
+    if (mobileTouchSelectionActive) terminal?.clearSelection();
+    mobileTouchSelectionActive = false;
+    hideMobileSelectionHandles();
+    restoreMobileSoftKeyboard(false);
+    resetMobileTouchScroll();
+    pinchStartDistance = 0;
+    if (mobileSelectionSyncFrame !== null) {
+      window.cancelAnimationFrame(mobileSelectionSyncFrame);
+      mobileSelectionSyncFrame = null;
+    }
+    if (disposed || !viewActive || !props.active) terminal?.blur();
+  };
+
   const syncSearchDecorations = (): void => {
     if (!searchOpen.value || !searchAddon) return;
     if (!searchTerm.value) searchAddon.clearDecorations();
@@ -1009,96 +1215,34 @@
     else syncSearchDecorations();
   });
 
-  const INACTIVE_OUTPUT_BATCH_MS = 80;
-  const INACTIVE_OUTPUT_MAX_BATCH_BYTES = 512 * 1024;
-  let pendingOutput: Uint8Array[] = [];
-  let pendingOutputBytes = 0;
-  let pendingOutputConsumers: Array<() => void> = [];
-  let outputFrame: number | undefined;
-  let outputTimer: number | undefined;
-  const outputEncoder = new TextEncoder();
-  const clearOutputSchedule = (): void => {
-    if (outputFrame !== undefined) window.cancelAnimationFrame(outputFrame);
-    if (outputTimer !== undefined) window.clearTimeout(outputTimer);
-    outputFrame = undefined;
-    outputTimer = undefined;
-  };
-  const flushPendingOutput = (showLatest = false): void => {
-    clearOutputSchedule();
-    if (!terminal || !pendingOutput.length) {
-      if (showLatest) terminal?.write('', () => terminal?.scrollToBottom());
-      return;
-    }
-    const batch = new Uint8Array(pendingOutputBytes);
-    let offset = 0;
-    for (const chunk of pendingOutput) {
-      batch.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    pendingOutput = [];
-    pendingOutputBytes = 0;
-    const consumers = pendingOutputConsumers.splice(0);
-    terminal.write(batch, () => {
-      for (const consumed of consumers) consumed();
-      if (showLatest) terminal?.scrollToBottom();
-    });
-  };
-  const drainPendingOutput = async (): Promise<void> => {
-    clearOutputSchedule();
-    if (pendingOutput.length) {
-      const batch = new Uint8Array(pendingOutputBytes);
-      let offset = 0;
-      for (const chunk of pendingOutput) {
-        batch.set(chunk, offset);
-        offset += chunk.byteLength;
-      }
-      pendingOutput = [];
-      pendingOutputBytes = 0;
-      const consumers = pendingOutputConsumers.splice(0);
-      await writeTerminal(batch);
-      for (const consumed of consumers) consumed();
-    } else {
-      await writeTerminal('');
-    }
-  };
+  const outputWriter = createTerminalOutputWriter((data, consumed) => terminal!.write(data, consumed));
   const serializeAfterDrain = async (): Promise<string> => {
-    await drainPendingOutput();
+    if (disposed || !terminal) return terminalState.restoreSnapshot();
+    await outputWriter.drain();
     return liveReplaySnapshot();
   };
-  const scheduleOutputFlush = (): void => {
-    if (outputFrame !== undefined || outputTimer !== undefined) return;
-    if (props.active && document.visibilityState !== 'hidden')
-      outputFrame = window.requestAnimationFrame(() => flushPendingOutput());
-    // A visible mobile page can have animation frames deferred. Do not leave
-    // output parsing and flow-control credit dependent on the next paint.
-    // Flushing cancels both schedules, preventing duplicate batch consumption.
-    outputTimer = window.setTimeout(() => flushPendingOutput(), INACTIVE_OUTPUT_BATCH_MS);
-  };
   const handleTerminalOutput = ({ data, consumed }: { data: string | Uint8Array; consumed?: () => void }): void => {
+    const decoded = terminalState.decodeOutput(data);
     activatePagedHistoryMode();
     if (historyBrowsing || historyRebuilding) {
-      const shouldRestore = appendDeferredTerminalOutput(data);
+      const shouldRestore = appendDeferredTerminalOutput(decoded);
       if (consumed) deferredOutputConsumers.push(consumed);
       if (shouldRestore && historyBrowsing && !historyRebuilding) void restoreLatestOutput();
       return;
     }
-    const bytes = typeof data === 'string' ? outputEncoder.encode(data) : data.slice();
-    pendingOutput.push(bytes);
-    pendingOutputBytes += bytes.byteLength;
-    if (consumed) pendingOutputConsumers.push(consumed);
-    if (
-      (!props.active || document.visibilityState === 'hidden') &&
-      pendingOutputBytes >= INACTIVE_OUTPUT_MAX_BATCH_BYTES
-    )
-      flushPendingOutput();
-    else scheduleOutputFlush();
+    outputWriter.enqueue(
+      decoded,
+      typeof data === 'string' ? outputByteLength(data) : data.byteLength,
+      !viewActive || !props.active || document.visibilityState === 'hidden',
+      consumed,
+    );
   };
   watch(
     () => props.active,
     (active) => {
-      if (!active) backgroundReady.value = false;
-      else scheduleGeometrySync();
-      if (active && pendingOutput.length) flushPendingOutput();
+      if (!active) resetInteractions();
+      if (active) scheduleGeometryFit();
+      if (active) outputWriter.flush();
     },
     { flush: 'post' },
   );
@@ -1110,8 +1254,10 @@
     if (!textarea || !compView || !xtermEl) return () => undefined;
 
     let isClamping = false;
+    let compositionDisposed = false;
+    let compositionTimer: number | undefined;
     const clampBounds = () => {
-      if (isClamping || !compView.classList.contains('active')) return;
+      if (compositionDisposed || isClamping || !compView.classList.contains('active')) return;
       isClamping = true;
       try {
         const termWidth = xtermEl.clientWidth;
@@ -1143,7 +1289,11 @@
     const onCompUpdate = () => {
       clampBounds();
       queueMicrotask(clampBounds);
-      window.setTimeout(clampBounds, 0);
+      window.clearTimeout(compositionTimer);
+      compositionTimer = window.setTimeout(() => {
+        compositionTimer = undefined;
+        clampBounds();
+      }, 0);
     };
 
     const onCompEnd = () => {
@@ -1163,6 +1313,8 @@
     root.value?.addEventListener('scroll', onScrollReset, { passive: true });
 
     return () => {
+      compositionDisposed = true;
+      window.clearTimeout(compositionTimer);
       observer.disconnect();
       textarea.removeEventListener('compositionstart', onCompUpdate);
       textarea.removeEventListener('compositionupdate', onCompUpdate);
@@ -1172,7 +1324,9 @@
     };
   };
 
-  onMounted(() => {
+  onMounted(async () => {
+    const snapshot = await terminalState.restoreSnapshot();
+    if (disposed) return;
     // Start the sandboxed background while xterm initializes; its own script can draw in parallel.
     revealBackgroundWhenSized();
     terminal = new Terminal({
@@ -1196,6 +1350,8 @@
     terminal.loadAddon(serializeAddon);
     terminal.loadAddon(new WebLinksAddon());
     terminal.open(root.value!);
+    const savedGeometry = terminalState.geometry.value;
+    if (savedGeometry) terminal.resize(savedGeometry.columns, savedGeometry.rows);
     const clipboardOsc = terminal.parser.registerOscHandler(52, (data) => {
       // OSC 52 is application-independent. Only accept writes shortly after a
       // deliberate interaction in the active terminal; never disclose local clipboard data.
@@ -1227,7 +1383,6 @@
     });
     cleanup.push(() => clipboardOsc.dispose());
     runtimeModes = trackTerminalRuntimeModes(terminal);
-    cleanup.push(() => runtimeModes?.dispose());
     cleanup.push(setupImeCompositionBoundsProtection());
     historyLastViewportY = terminal.buffer.active.viewportY;
     const backgroundOsc = terminal.parser.registerOscHandler(11, (data) =>
@@ -1238,7 +1393,7 @@
       () => backgroundOsc.dispose(),
       () => backgroundResetOsc.dispose(),
     );
-    if (terminalState.snapshot.value) terminal.write(terminalState.snapshot.value, syncSearchDecorations);
+    if (snapshot) terminal.write(snapshot, syncSearchDecorations);
     else syncSearchDecorations();
     root.value!.addEventListener('wheel', handleWheelScale, { capture: true, passive: false });
     root.value!.addEventListener('touchstart', handleTouchStart, { capture: true, passive: false });
@@ -1246,34 +1401,27 @@
     root.value!.addEventListener('touchend', handleTouchEnd, { passive: false });
     root.value!.addEventListener('touchcancel', handleTouchEnd, { passive: false });
     terminal.attachCustomKeyEventHandler((event) => {
+      if (!canInteract()) return false;
       // Keep an explicit key press able to kick reconnect without forwarding
       // that key to a transport whose current attachment is not ready.
       if (!props.inputEnabled && event.type === 'keydown') emit('interaction');
       if (event.type === 'keydown' && !['Shift', 'Control', 'Alt', 'Meta'].includes(event.key))
         recordClipboardGesture();
-      if (
-        event.type === 'keydown' &&
-        event.ctrlKey &&
-        !event.shiftKey &&
-        !event.altKey &&
-        !event.metaKey &&
-        event.key.toLowerCase() === 'c'
-      ) {
-        event.preventDefault();
-        void props.channel.sendInput('\x03');
-        if (historyBrowsing || historyRebuilding) void restoreLatestOutput();
-        return false;
-      }
-      if (event.type === 'keydown' && (event.ctrlKey || event.metaKey) && event.shiftKey) {
+      if (event.type === 'keydown' && (event.ctrlKey || event.metaKey) && !event.altKey) {
         const key = event.key.toLowerCase();
+        const clipboardShortcut = event.ctrlKey && event.shiftKey && !event.metaKey;
         if (key === 'c') {
           event.preventDefault();
-          void copySelection();
+          if (clipboardShortcut) void copySelection();
+          else if (event.ctrlKey && !event.shiftKey && !event.metaKey) {
+            void props.channel.sendInput('\x03');
+            if (historyBrowsing || historyRebuilding || historyLoading) void restoreLatestOutput();
+          }
           return false;
         }
         if (key === 'v') {
           event.preventDefault();
-          void paste().catch(() => undefined);
+          if (clipboardShortcut) void paste().catch(() => undefined);
           return false;
         }
       }
@@ -1289,26 +1437,50 @@
       return true;
     });
     fitAndResize();
+    stopOutput = props.channel.onOutput(handleTerminalOutput);
     cleanup.push(
       terminal.onData((data) => {
-        if (!props.inputEnabled) return;
+        if (disposed || !props.inputEnabled) return;
         emit('interaction');
         if (data === '\x03') {
           void props.channel.sendInput(data);
-          if (historyBrowsing || historyRebuilding) void restoreLatestOutput();
+          if (historyBrowsing || historyRebuilding || historyLoading) void restoreLatestOutput();
           return;
         }
-        if (historyBrowsing || historyRebuilding) {
-          void restoreLatestOutput().then(() => props.channel.sendInput(data));
+        if (historyBrowsing || historyRebuilding || historyLoading) {
+          const generation = terminalState.remotePtyGeneration.value;
+          const presentationGeneration = interactionGeneration;
+          void restoreLatestOutput().then(() => {
+            if (
+              !disposed &&
+              canInteract() &&
+              props.inputEnabled &&
+              presentationGeneration === interactionGeneration &&
+              generation === terminalState.remotePtyGeneration.value
+            )
+              return props.channel.sendInput(data);
+          });
           return;
         }
         void props.channel.sendInput(data);
       }).dispose,
-      props.channel.onOutput(handleTerminalOutput),
       props.channel.onConnected?.(scheduleGeometrySync) ?? (() => undefined),
-      props.channel.onResumeComplete?.(() => flushPendingOutput(true)) ?? (() => undefined),
+      props.channel.onResumeComplete?.(() => {
+        const target = terminal;
+        const generation = terminalState.remotePtyGeneration.value;
+        outputWriter.flush();
+        target?.write('', () => {
+          if (
+            !disposed &&
+            terminal === target &&
+            generation === terminalState.remotePtyGeneration.value &&
+            !historyBrowsing &&
+            !historyRebuilding
+          )
+            target.scrollToBottom();
+        });
+      }) ?? (() => undefined),
       props.channel.onClose((reason) => {
-        prepareForTransportReset();
         emit('closed', reason);
       }),
       props.channel.onError((message) => emit('error', message)),
@@ -1337,7 +1509,7 @@
     root.value?.addEventListener('mousemove', handleLocalSelectionMouseMove, true);
     root.value?.addEventListener('mouseup', recordClipboardGesture, true);
     document.addEventListener('pointerdown', handleDocumentPointerDown, true);
-    resizeObserver = new ResizeObserver(fitAndResize);
+    resizeObserver = new ResizeObserver(scheduleContainerResize);
     resizeObserver.observe(root.value!);
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('pageshow', scheduleGeometrySync);
@@ -1352,6 +1524,7 @@
   watch(
     () => props.inputEnabled,
     (enabled) => {
+      if (!enabled) resetInteractions();
       if (terminal) terminal.options.disableStdin = !enabled;
     },
   );
@@ -1371,9 +1544,30 @@
   );
 
   onBeforeUnmount(() => {
-    flushPendingOutput();
-    if (terminal && serializeAddon) terminalState.replaceSnapshot(liveReplaySnapshot());
-    if (historyBrowsing) void props.channel.resetPreviousOutput?.().catch(() => false);
+    disposed = true;
+    historyViewGeneration += 1;
+    resetInteractions();
+    stopOutput?.();
+    const closingTerminal = terminal;
+    const closingRuntimeModes = runtimeModes;
+    if (closingTerminal && serializeAddon) {
+      terminalState.captureSnapshot(
+        outputWriter
+          .drain()
+          .then(() => {
+            const snapshot = liveReplaySnapshot();
+            for (const consumed of deferredOutputConsumers.splice(0)) consumed();
+            return snapshot;
+          })
+          .finally(() => {
+            closingRuntimeModes?.dispose();
+            closingTerminal.dispose();
+            terminal = undefined;
+          }),
+      );
+    }
+    if (!closingTerminal || !serializeAddon) outputWriter.discard();
+    if (historyBrowsing || historyLoading) void resetHistoryCursor();
     if (root.value) {
       root.value.removeEventListener('wheel', handleWheelScale, true);
       root.value.removeEventListener('touchstart', handleTouchStart, true);
@@ -1391,22 +1585,17 @@
     window.removeEventListener('focus', scheduleGeometrySync);
     document.fonts.removeEventListener('loadingdone', scheduleGeometrySync);
     if (geometryFrame !== undefined) window.cancelAnimationFrame(geometryFrame);
-    clearMobileLongPressTimer();
-    if (mobileSelectionSyncFrame !== null) {
-      window.cancelAnimationFrame(mobileSelectionSyncFrame);
-      mobileSelectionSyncFrame = null;
-    }
-    hideMobileSelectionHandles();
-    restoreMobileSoftKeyboard(false);
-    clearOutputSchedule();
+    clearTimeout(geometryResizeTimer);
     resizeObserver?.disconnect();
     for (const stop of cleanup) stop();
-    terminal?.dispose();
   });
 
   defineExpose({
-    focus: () => terminal?.focus(),
+    focus: () => {
+      if (canInteract()) terminal?.focus();
+    },
     fit: fitAndResize,
+    fitVisible: () => fitAndResize(true),
     clear: clearTerminal,
     serialize: serializeAfterDrain,
     openSearch,
@@ -1440,7 +1629,8 @@
     ></div>
     <!-- Custom backgrounds may size themselves only once, so start them after the session is visible. -->
     <iframe
-      v-if="active && backgroundReady && sandboxedCustomHtml"
+      v-if="backgroundReady && sandboxedCustomHtml"
+      v-show="active"
       ref="backgroundFrame"
       class="terminal-custom-html"
       sandbox="allow-scripts"

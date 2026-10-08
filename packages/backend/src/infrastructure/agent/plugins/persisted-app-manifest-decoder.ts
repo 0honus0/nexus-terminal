@@ -51,8 +51,9 @@ const safeEntry = (value: unknown): string => {
 
 const decodeTargets = (value: unknown): AgentAppTargets => {
   const record = durableRecord(value);
+  if (Object.keys(record).some((key) => key !== 'frontend' && key !== 'backend')) return invalid();
   const result: AgentAppTargets = {};
-  for (const key of ['frontend', 'backend', 'runner'] as const) {
+  for (const key of ['frontend', 'backend'] as const) {
     if (record[key] === undefined) continue;
     const target = durableRecord(record[key]);
     result[key] = { entry: safeEntry(target.entry) };

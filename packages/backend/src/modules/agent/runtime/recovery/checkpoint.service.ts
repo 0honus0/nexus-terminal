@@ -8,29 +8,28 @@ import type { AppLifecycleService } from '../../host/app-lifecycle.service';
 import type { TargetDenylistRepositoryPort } from '../../host/target-denylist.repository.port';
 import { isAgentUuid } from '../../uuid';
 import type { AgentDefinitionRegistryPort } from '../definitions/agent-definition.port';
-import type {
-  CheckpointBackgroundJobEntry,
-  CheckpointKind,
-  CheckpointRepositoryPort,
-  CheckpointView,
-} from './checkpoint.repository.port';
-import type { WorkspaceCheckpointService } from './workspace-checkpoint.service';
-import type { WorkspaceRuntimeGatewayPort } from '../../workspace-runtime/workspace-runtime-gateway.port';
+import type { CheckpointKind, CheckpointRepositoryPort, CheckpointView } from './checkpoint.repository.port';
+
 import { requestHash, requireIdempotencyKey } from '../runs/idempotency';
 import type { RunExecutionReaderPort, RunSnapshotReaderPort } from '../runs/run.repository.port';
 import type { CheckpointRecoveryCommitPort } from '../runs/state-commit.port';
 import { runModelRoutes, sameModelRef } from '../runs/model-routes';
 import { TERMINAL_RUN_STATUSES, type RunBudget, type RunDefinitionSnapshot, type RunView } from '../runs/run.types';
 
-export type RecoverySafePointReason = 'model_boundary' | 'read_batch' | 'mutation_confirmed' | 'restart_recapture';
+export type RecoverySafePointReason =
+  'model_boundary' | 'read_batch' | 'mutation_confirmed' | 'execution_limit' | 'restart_recapture';
 
 const RECOVERY_CHECKPOINT_MIN_INTERVAL_SECONDS = 30;
 
 const clampBudget = (source: RunBudget, settings: Awaited<ReturnType<AgentSettingsService['get']>>): RunBudget => {
   const hard = settings.hardLimits;
   return {
+    ...source,
+    modelRequestCeiling: Math.min(source.modelRequestCeiling, hard.maxModelRequests),
+    activeExecutionCeilingSeconds: Math.min(source.activeExecutionCeilingSeconds, hard.maxActiveExecutionSeconds),
+    maxToolExecutions: Math.min(source.maxToolExecutions, hard.maxToolExecutions),
     contextPolicy: { ...source.contextPolicy },
-    maxRunSteps: Math.min(source.maxRunSteps, hard.maxRunSteps),
+    maxModelRequests: Math.min(source.maxModelRequests, hard.maxModelRequests),
     maxActiveExecutionSeconds: Math.min(source.maxActiveExecutionSeconds, hard.maxActiveExecutionSeconds),
     toolTimeoutSeconds: Math.min(source.toolTimeoutSeconds, hard.toolTimeoutSeconds),
     maxToolOutputBytes: Math.min(source.maxToolOutputBytes, hard.maxToolOutputBytes),
@@ -67,8 +66,7 @@ const checkpointRecoveryReasons = (checkpoint: CheckpointView): string[] => {
   if (
     manifest.quarantinedResourceKeys.length > 0 ||
     manifest.tools.some((tool) => tool.sideEffectStatus === 'unknown' || tool.quarantinedResourceKeys.length > 0) ||
-    manifest.delegations.some((delegation) => ['queued', 'running', 'waiting'].includes(delegation.status)) ||
-    (manifest.backgroundJobs ?? []).some((job) => ['pending', 'running', 'unknown'].includes(job.status))
+    manifest.delegations.some((delegation) => ['queued', 'running', 'waiting'].includes(delegation.status))
   ) {
     reasons.push('CHECKPOINT_NOT_SAFE');
   }
@@ -76,12 +74,6 @@ const checkpointRecoveryReasons = (checkpoint: CheckpointView): string[] => {
 };
 
 export class CheckpointService {
-  private readonly deferredRestartRuns = new Map<string, Scope>();
-
-  resetRecovery(): void {
-    this.deferredRestartRuns.clear();
-  }
-
   constructor(
     private readonly checkpoints: CheckpointRepositoryPort,
     private readonly runs: RunSnapshotReaderPort &
@@ -95,8 +87,6 @@ export class CheckpointService {
     private readonly clock: ClockPort,
     private readonly onCreated: (run: RunView) => void = () => undefined,
     private readonly onCommitted: (run: RunView) => void = () => undefined,
-    private readonly workspaceCheckpoints: WorkspaceCheckpointService | null = null,
-    private readonly workspaceJobs: WorkspaceRuntimeGatewayPort | null = null,
   ) {}
 
   async save(scope: Scope, runId: string, expectedVersion: number): Promise<CheckpointView> {
@@ -112,7 +102,7 @@ export class CheckpointService {
   async recordSafePoint(
     run: RunView,
     reason: RecoverySafePointReason,
-    force = reason === 'mutation_confirmed' || reason === 'restart_recapture',
+    force = reason === 'execution_limit' || reason === 'mutation_confirmed' || reason === 'restart_recapture',
   ): Promise<CheckpointView | null> {
     const scope = { userId: run.userId, appId: run.appId };
     try {
@@ -133,8 +123,6 @@ export class CheckpointService {
         [
           'CHECKPOINT_NOT_SAFE',
           'CHECKPOINT_ARTIFACT_UNAVAILABLE',
-          'CHECKPOINT_WORKSPACE_MANIFEST_INVALID',
-          'CHECKPOINT_BACKGROUND_JOB_UNRESOLVED',
           'CHECKPOINT_MODEL_ROUTE_INVALID',
           'STATE_CONFLICT',
           'NOT_FOUND',
@@ -175,43 +163,6 @@ export class CheckpointService {
       throw new Error('CHECKPOINT_MODEL_ROUTE_INVALID');
     }
 
-    const backgroundJobs = await this.liveBackgroundJobs(scope, run.id);
-    let workspaceCaptures = [] as Awaited<ReturnType<WorkspaceCheckpointService['capture']>>;
-    let workspaceReference:
-      | {
-          manifestArtifactIds: string[];
-          artifactRefs: string[];
-        }
-      | undefined;
-
-    const mayReuseWorkspace =
-      kind === 'recovery' &&
-      latestRecovery !== null &&
-      reason !== 'mutation_confirmed' &&
-      reason !== 'restart_recapture';
-    if (mayReuseWorkspace) {
-      const hazards = await this.checkpoints.recoveryHazards(scope, latestRecovery.id);
-      const manifestArtifactIds = latestRecovery.snapshot.workspaceArtifactManifestRefs;
-      const workspaceArtifactRefs = latestRecovery.snapshot.workspaceArtifactRefs;
-      if (hazards.postCheckpointMutationToolCallIds.length === 0 && hazards.quarantinedResourceKeys.length === 0) {
-        workspaceReference = {
-          manifestArtifactIds: [...manifestArtifactIds],
-          artifactRefs: [...workspaceArtifactRefs],
-        };
-      }
-    }
-
-    if (!workspaceReference) {
-      workspaceCaptures = this.workspaceCheckpoints ? await this.workspaceCheckpoints.capture(scope, run.id) : [];
-      if (
-        !this.workspaceCheckpoints &&
-        latestRecovery &&
-        latestRecovery.snapshot.workspaceArtifactManifestRefs.length > 0
-      ) {
-        throw new Error('CHECKPOINT_WORKSPACE_MANIFEST_INVALID');
-      }
-    }
-
     return this.checkpoints.save({
       scope,
       checkpointId: randomUUID(),
@@ -220,53 +171,8 @@ export class CheckpointService {
       expectedRunVersion: run.version,
       definitionVersion: definition.version,
       activeModel,
-      workspaceCaptures,
-      ...(workspaceReference ? { workspaceReference } : {}),
-      backgroundJobs,
       now,
     });
-  }
-
-  private async observeBackgroundJobs(
-    scope: Scope,
-    runId: string,
-    allowPending: boolean,
-  ): Promise<{ jobs: CheckpointBackgroundJobEntry[]; pending: boolean }> {
-    const durable = await this.checkpoints.runBackgroundJobs(scope, runId);
-    if (durable.length === 0) return { jobs: [], pending: false };
-    if (!this.workspaceJobs) throw new Error('CHECKPOINT_BACKGROUND_JOB_UNRESOLVED');
-    const current: CheckpointBackgroundJobEntry[] = [];
-    let pending = false;
-    for (const recorded of durable) {
-      let job;
-      try {
-        job = await this.workspaceJobs.queryJob(recorded.jobId);
-      } catch {
-        if (allowPending) return { jobs: current, pending: true };
-        throw new Error('CHECKPOINT_BACKGROUND_JOB_UNRESOLVED');
-      }
-      if (
-        job.jobId !== recorded.jobId ||
-        job.workspaceId !== recorded.workspaceId ||
-        job.generation !== recorded.generation ||
-        job.status === 'unknown'
-      ) {
-        throw new Error('CHECKPOINT_BACKGROUND_JOB_UNRESOLVED');
-      }
-      if (job.status === 'pending' || job.status === 'running') pending = true;
-      current.push({
-        jobId: job.jobId,
-        workspaceId: job.workspaceId,
-        generation: job.generation,
-        status: job.status,
-      });
-    }
-    if (pending && !allowPending) throw new Error('CHECKPOINT_BACKGROUND_JOB_UNRESOLVED');
-    return { jobs: current, pending };
-  }
-
-  private async liveBackgroundJobs(scope: Scope, runId: string): Promise<CheckpointBackgroundJobEntry[]> {
-    return (await this.observeBackgroundJobs(scope, runId, false)).jobs;
   }
 
   async list(scope: Scope, runId: string): Promise<CheckpointView[]> {
@@ -305,6 +211,13 @@ export class CheckpointService {
     reasons.push(...checkpointRecoveryReasons(checkpoint));
     if (run.version !== expectedVersion) reasons.push('STATE_CONFLICT');
     if (!TERMINAL_RUN_STATUSES.has(run.status)) reasons.push('RUN_RESUME_SOURCE_NOT_TERMINAL');
+    if (
+      run.budget.phase === 'finishing' ||
+      run.usage.modelRequests >= run.budget.modelRequestCeiling ||
+      run.usage.toolExecutions >= run.budget.maxToolExecutions ||
+      run.activeExecutionSeconds >= run.budget.activeExecutionCeilingSeconds
+    )
+      reasons.push('RUN_EXECUTION_LIMIT');
     if (run.needsReconciliation) reasons.push('RECONCILIATION_REQUIRED');
     const [app, currentSettings] = await Promise.all([this.lifecycle.get(scope), this.settings.get(scope.userId)]);
     const definition = this.definitions.require(scope.appId, app.activeVersion, run.definition.agentDefinitionId);
@@ -360,47 +273,6 @@ export class CheckpointService {
       this.checkpoints.recoveryHazards(scope, checkpointId),
     ]);
     if (missingArtifactRefs.length) reasons.push('CHECKPOINT_ARTIFACT_UNAVAILABLE');
-    if (checkpoint.snapshot.workspaceArtifactManifestRefs.length > 0) {
-      if (!this.workspaceCheckpoints) {
-        reasons.push('CHECKPOINT_WORKSPACE_MANIFEST_INVALID');
-      } else {
-        try {
-          await this.workspaceCheckpoints.validate(
-            scope,
-            runId,
-            run.definition.environment,
-            checkpoint.snapshot.workspaceArtifactManifestRefs,
-          );
-        } catch {
-          reasons.push('CHECKPOINT_WORKSPACE_MANIFEST_INVALID');
-        }
-      }
-    }
-    const backgroundJobs = checkpoint.snapshot.recoveryManifest.backgroundJobs;
-    if (backgroundJobs.length > 0) {
-      if (!this.workspaceJobs) {
-        reasons.push('CHECKPOINT_BACKGROUND_JOB_UNRESOLVED');
-      } else {
-        for (const recorded of backgroundJobs) {
-          try {
-            const current = await this.workspaceJobs.queryJob(recorded.jobId);
-            if (
-              current.jobId !== recorded.jobId ||
-              current.workspaceId !== recorded.workspaceId ||
-              current.generation !== recorded.generation ||
-              current.status !== recorded.status ||
-              ['pending', 'running', 'unknown'].includes(current.status)
-            ) {
-              reasons.push('CHECKPOINT_BACKGROUND_JOB_UNRESOLVED');
-              break;
-            }
-          } catch {
-            reasons.push('CHECKPOINT_BACKGROUND_JOB_UNRESOLVED');
-            break;
-          }
-        }
-      }
-    }
     if (
       recoveryHazards.postCheckpointMutationToolCallIds.length > 0 ||
       recoveryHazards.quarantinedResourceKeys.length > 0
@@ -414,7 +286,6 @@ export class CheckpointService {
     const resumed: RunView[] = [];
     for (const interrupted of interruptedRuns) {
       if (interrupted.status !== 'interrupted' || interrupted.needsReconciliation) {
-        this.deferredRestartRuns.delete(interrupted.id);
         continue;
       }
       const scope = { userId: interrupted.userId, appId: interrupted.appId };
@@ -431,39 +302,12 @@ export class CheckpointService {
           continue;
         }
         if (hazards.postCheckpointMutationToolCallIds.length > 0) {
-          const jobs = await this.checkpoints.runBackgroundJobs(scope, interrupted.id);
-          const backgroundToolIds = new Set(jobs.flatMap((job) => job.toolCallIds));
-          if (
-            jobs.length === 0 ||
-            hazards.postCheckpointMutationToolCallIds.some((toolCallId) => !backgroundToolIds.has(toolCallId))
-          ) {
-            await this.auditRecoveryFailure(interrupted, checkpoint.id, ['CHECKPOINT_SIDE_EFFECT_DIVERGED']);
-            continue;
-          }
-          try {
-            const observed = await this.observeBackgroundJobs(scope, interrupted.id, true);
-            if (observed.pending) {
-              await this.deferRecovery(
-                interrupted,
-                checkpoint.id,
-                jobs.map((job) => job.jobId),
-              );
-              continue;
-            }
-          } catch {
-            await this.auditRecoveryFailure(interrupted, checkpoint.id, ['CHECKPOINT_BACKGROUND_JOB_UNRESOLVED']);
-            continue;
-          }
-          checkpoint = await this.recordSafePoint(interrupted, 'restart_recapture', true);
-          if (!checkpoint) {
-            await this.auditRecoveryFailure(interrupted, null, ['CHECKPOINT_RECAPTURE_FAILED']);
-            continue;
-          }
+          await this.auditRecoveryFailure(interrupted, checkpoint.id, ['CHECKPOINT_SIDE_EFFECT_DIVERGED']);
+          continue;
         }
 
         const current = await this.runs.snapshot(scope, interrupted.id);
         if (!current || current.status !== 'interrupted') {
-          this.deferredRestartRuns.delete(interrupted.id);
           continue;
         }
         const validation = await this.validate(scope, current.id, checkpoint.id, current.version, 'backend_restart');
@@ -479,7 +323,6 @@ export class CheckpointService {
           checkpoint.id,
           'backend_restart',
         );
-        this.deferredRestartRuns.delete(interrupted.id);
         resumed.push(continued);
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
@@ -489,67 +332,11 @@ export class CheckpointService {
     return resumed;
   }
 
-  async retryDeferredRecoveries(): Promise<number> {
-    let recovered = 0;
-    for (const [runId, scope] of [...this.deferredRestartRuns]) {
-      let checkpoint: CheckpointView | null;
-      let source: RunView | null;
-      try {
-        [checkpoint, source] = await Promise.all([
-          this.checkpoints.latestRecovery(scope, runId),
-          this.runs.snapshot(scope, runId),
-        ]);
-      } catch (error) {
-        logger.warn({ err: error, runId }, 'Agent deferred restart-recovery lookup failed; retry remains scheduled');
-        continue;
-      }
-      if (!source || source.status !== 'interrupted' || source.needsReconciliation) {
-        this.deferredRestartRuns.delete(runId);
-        continue;
-      }
-      if (!checkpoint) {
-        this.deferredRestartRuns.delete(runId);
-        await this.auditRecoveryFailure(source, null, ['CHECKPOINT_NOT_FOUND']);
-        continue;
-      }
-      recovered += (await this.recoverInterrupted([source])).length;
-    }
-    return recovered;
-  }
-
-  private async deferRecovery(run: RunView, checkpointId: string, jobIds: readonly string[]): Promise<void> {
-    if (this.deferredRestartRuns.has(run.id)) return;
-    const scope = { userId: run.userId, appId: run.appId };
-    const current = await this.runs.snapshot(scope, run.id);
-    if (!current || current.status !== 'interrupted' || current.needsReconciliation) return;
-    const committed = await this.stateCommit.commit({
-      scope,
-      runId: current.id,
-      expectedRunVersion: current.version,
-      events: [
-        {
-          type: 'run.recovery_deferred',
-          payload: {
-            reason: 'backend_restart',
-            checkpointId,
-            waitingFor: 'workspace_background_jobs',
-            jobIds: [...new Set(jobIds)].sort(),
-          },
-        },
-      ],
-      runPatch: {},
-      now: this.clock.nowUnixSeconds(),
-    });
-    this.deferredRestartRuns.set(run.id, scope);
-    this.onCommitted(committed.run);
-  }
-
   private async auditRecoveryFailure(
     run: RunView,
     checkpointId: string | null,
     reasons: readonly string[],
   ): Promise<void> {
-    this.deferredRestartRuns.delete(run.id);
     try {
       const current = await this.runs.snapshot({ userId: run.userId, appId: run.appId }, run.id);
       if (!current || current.status !== 'interrupted') return;
@@ -623,20 +410,7 @@ export class CheckpointService {
     if (missingRequiredModelCapabilities(requirements, capabilities).length > 0) {
       throw new Error('CHECKPOINT_MODEL_CAPABILITY_UNSUPPORTED');
     }
-    const budget = clampBudget(source.budget, settings);
-    const workspaceManifests =
-      validation.checkpoint.snapshot.workspaceArtifactManifestRefs.length === 0
-        ? []
-        : this.workspaceCheckpoints
-          ? await this.workspaceCheckpoints.validate(
-              scope,
-              source.id,
-              source.definition.environment,
-              validation.checkpoint.snapshot.workspaceArtifactManifestRefs,
-            )
-          : (() => {
-              throw new Error('CHECKPOINT_WORKSPACE_MANIFEST_INVALID');
-            })();
+    const budget = { ...clampBudget(source.budget, settings), progressSequence: 0 };
     const definition: RunDefinitionSnapshot = {
       ...source.definition,
       requiredModelCapabilities: [...requirements],
@@ -648,12 +422,7 @@ export class CheckpointService {
         runThrough: { ...recoveryManifest.contextBoundary.runThrough },
       },
     };
-    const refs = [
-      ...new Set([
-        ...validation.checkpoint.snapshot.evidenceRefs,
-        ...validation.checkpoint.snapshot.workspaceArtifactManifestRefs,
-      ]),
-    ];
+    const refs = [...new Set([...validation.checkpoint.snapshot.evidenceRefs])];
     const request: JsonValue = {
       sourceRunId: runId,
       checkpointId,
@@ -684,7 +453,6 @@ export class CheckpointService {
           ledgerThrough: validation.checkpoint.ledgerThrough,
           eventThrough: validation.checkpoint.eventThrough,
           activeModel: { ...activeModel },
-          backgroundJobs: (recoveryManifest.backgroundJobs ?? []).map((job) => ({ ...job })),
           contextBoundary: {
             baseThrough: recoveryManifest.contextBoundary.baseThrough,
             runThrough: { ...recoveryManifest.contextBoundary.runThrough },
@@ -705,13 +473,6 @@ export class CheckpointService {
       requestId: randomUUID(),
       now: this.clock.nowUnixSeconds(),
     });
-    if (workspaceManifests.length > 0) {
-      if (!this.workspaceCheckpoints || !this.runs.rootRuntimeId) {
-        throw new Error('CHECKPOINT_WORKSPACE_MANIFEST_INVALID');
-      }
-      const resumedRuntimeId = await this.runs.rootRuntimeId(scope, committed.run.id);
-      await this.workspaceCheckpoints.restore(scope, committed.run.id, resumedRuntimeId, workspaceManifests);
-    }
     if (mode === 'backend_restart' && !committed.replayed) {
       const sourceAudit = await this.stateCommit.commit({
         scope,

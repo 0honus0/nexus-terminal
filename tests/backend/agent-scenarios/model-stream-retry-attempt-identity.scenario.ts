@@ -70,7 +70,15 @@ export const modelStreamRetryAttemptIdentityScenario = async () => {
         threadId,
         now,
         JSON.stringify({
-          maxRunSteps: 20,
+          modelRequestCeiling: 20,
+          activeExecutionCeilingSeconds: 7200,
+          maxToolExecutions: 4000,
+          phase: 'executing',
+          stopReason: null,
+          extensionCount: 0,
+          progressSequence: 0,
+
+          maxModelRequests: 20,
           maxActiveExecutionSeconds: 3_600,
           toolTimeoutSeconds: 120,
           maxToolOutputBytes: 1_048_576,
@@ -92,7 +100,6 @@ export const modelStreamRetryAttemptIdentityScenario = async () => {
           approvalMode: 'ask',
           executionMode: 'execute',
           connectionIds: [],
-          environment: null,
           policyRevision: 1,
           settingsRevision: 1,
         }),
@@ -101,7 +108,8 @@ export const modelStreamRetryAttemptIdentityScenario = async () => {
           inputTokens: 0,
           outputTokens: 0,
           cachedInputTokens: 0,
-          steps: 0,
+          toolExecutions: 0,
+          modelRequests: 0,
           subagentMessages: 0,
           subagentMessageBytes: 0,
         }),
@@ -158,7 +166,7 @@ export const modelStreamRetryAttemptIdentityScenario = async () => {
       },
     ]);
     const providers = new ProviderService(new StaticProviderRepository(benchmarkProvider), scriptedModel, clock);
-    const modelRunner = new ModelStepRunner(providers, context, scriptedModel, new ScenarioModelCallLimiter());
+    const modelRunner = new ModelStepRunner(providers, context, scriptedModel, new ScenarioModelCallLimiter(), clock);
     const snapshot = await repository.snapshot(scope, runId);
     assert.ok(snapshot, 'stream retry fixture run must exist');
     const prepared = await modelRunner.prepare(snapshot, scope, [], {});
@@ -313,7 +321,8 @@ export const modelStreamRetryAttemptIdentityScenario = async () => {
       inputTokens: retried.run.usage.inputTokens + successfulUsage.inputTokens,
       outputTokens: retried.run.usage.outputTokens + successfulUsage.outputTokens,
       cachedInputTokens: retried.run.usage.cachedInputTokens + successfulUsage.cachedInputTokens,
-      steps: retried.run.usage.steps + 1,
+      toolExecutions: 0,
+      modelRequests: retried.run.usage.modelRequests + 1,
     };
     const settled = await stateCommit.settleModelStep({
       scope,
@@ -419,7 +428,13 @@ export const modelStreamRetryAttemptIdentityScenario = async () => {
         ],
       },
     ]);
-    const compactionRunner = new ModelStepRunner(providers, context, compactionModel, new ScenarioModelCallLimiter());
+    const compactionRunner = new ModelStepRunner(
+      providers,
+      context,
+      compactionModel,
+      new ScenarioModelCallLimiter(),
+      clock,
+    );
     const compactionSnapshot = (await repository.snapshot(scope, runId))!;
     await db.execute(`UPDATE ai_thread_entries SET payload_json = ? WHERE id = 'stream-retry-input'`, [
       JSON.stringify({ text: 'Say hello world. '.repeat(80), artifactRefs: [] }),
@@ -469,7 +484,7 @@ export const modelStreamRetryAttemptIdentityScenario = async () => {
       now,
     });
     assert.equal(compactionCommit.run.usage.inputTokens, finalSnapshot.usage.inputTokens + 700);
-    assert.equal(compactionCommit.run.usage.steps, finalSnapshot.usage.steps + 1);
+    assert.equal(compactionCommit.run.usage.modelRequests, finalSnapshot.usage.modelRequests + 1);
     assert.equal(compactionCommit.run.consumedInputSequence, compactionSnapshot.consumedInputSequence);
     assert.equal(
       (await conversationRepository.readEntries(scope, threadId, 20)).items.length,
@@ -602,6 +617,7 @@ export const modelStreamRetryAttemptIdentityScenario = async () => {
       orchestrationContext,
       orchestrationModel,
       new ScenarioModelCallLimiter(),
+      clock,
     );
     orchestrationRunner.waitBeforeRetry = async () => undefined;
     const backend = new NativeAgentBackend(

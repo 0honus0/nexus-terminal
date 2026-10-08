@@ -121,7 +121,7 @@ export const settleSubagentToolTransition = async (
       nextExecuting === 0 && row.active_execution_started_at !== null
         ? Math.max(0, command.now - row.active_execution_started_at)
         : 0;
-    const mergedUsage = usageWithDelta(row, { steps: 1 });
+    const mergedUsage = usageWithDelta(row, {});
     const changedRun = await tx.execute(
       `UPDATE agent_runs SET status = 'interrupted', needs_reconciliation = 1, completed_at = ?,
        usage_json = ?, active_execution_seconds = active_execution_seconds + ?,
@@ -307,7 +307,7 @@ export const settleSubagentToolTransition = async (
     nextExecuting === 0 && row.active_execution_started_at !== null
       ? Math.max(0, command.now - row.active_execution_started_at)
       : 0;
-  const mergedUsage = usageWithDelta(row, { steps: 1 });
+  const mergedUsage = usageWithDelta(row, {});
   const changedRun = await tx.execute(
     `UPDATE agent_runs SET status = ?, completed_at = CASE WHEN ? = 'cancelled' THEN ? ELSE completed_at END,
      usage_json = ?, active_execution_seconds = active_execution_seconds + ?,

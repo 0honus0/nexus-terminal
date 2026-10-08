@@ -55,8 +55,6 @@ set_env NEXUS_IMAGE_REPOSITORY "$repo"
 set_env NEXUS_IMAGE_TAG "$tag"
 set_env NEXUS_HTTP_PORT 0
 set_env NEXUS_PUBLIC_ORIGIN http://127.0.0.1
-set_env NEXUS_AGENT_RUNNER_URL ''
-set_env NEXUS_AGENT_RUNNER_TOKEN ''
 set_env NEXUS_IPV6_SUBNET "fd01:ed:${hex}::/80"
 set_env NEXUS_IPV6_GATEWAY "fd01:ed:${hex}::1"
 grep -v '^COMPOSE_PROFILES=' "$env_file" >"$env_file.tmp" || true; mv "$env_file.tmp" "$env_file"
@@ -75,12 +73,17 @@ for _ in {1..60}; do
 done
 compose exec -T backend wget -q -O - http://127.0.0.1:3001/api/v1/status | grep -q '"status":"ok"'
 compose exec -T backend node --input-type=module - <<'NODE'
-const { RunnerHttpAdapter } = await import('/app/dist/infrastructure/agent/workspace-runtime/runner-http.adapter.js');
-const result = await new RunnerHttpAdapter(undefined, undefined).availability();
-if (result.available !== false || result.reason !== 'runner_not_configured') {
-  console.error(result); process.exit(1);
+import { existsSync } from 'node:fs';
+const retired = [
+  '/app/dist/infrastructure/agent/workspace-runtime/runner-http.adapter.js',
+  '/app/dist/modules/agent/workspace-runtime/workspace-runtime.service.js',
+];
+for (const modulePath of retired) {
+  if (existsSync(modulePath)) throw new Error(`Retired Agent Workspace module still shipped: ${modulePath}`);
 }
-console.log(`runner=${result.available}/${result.reason}`);
+const status = await fetch('http://127.0.0.1:3001/api/v1/status');
+if (!status.ok) throw new Error(`Backend health returned ${status.status}`);
+console.log('Production Backend starts without a Runner or Agent Workspace execution modules.');
 NODE
 failed=0
 echo 'Docker core no-Runner smoke passed.'

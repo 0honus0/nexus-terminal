@@ -1,5 +1,15 @@
 <script setup lang="ts">
-  import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import {
+    computed,
+    defineAsyncComponent,
+    nextTick,
+    onActivated,
+    onBeforeUnmount,
+    onDeactivated,
+    onMounted,
+    ref,
+    watch,
+  } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { logger } from '@/client/logging/logger';
@@ -49,6 +59,7 @@
     terminalSnapshot?: () => Promise<string>;
     focusTerminal?: () => void;
     fitTerminal?: () => void;
+    prepareTerminal?: () => void;
     scrollTerminalToBottom?: () => void;
   }
 
@@ -74,6 +85,7 @@
   let sessionReconcilePromise: Promise<void> | null = null;
   let sessionReconcileRequested = false;
   let workspaceActive = false;
+  const workspaceVisible = ref(true);
   watch(registry.suspendAutoTerminationNotice, (notice) => {
     if (!notice) return;
     const name =
@@ -441,7 +453,7 @@
     preparingSessionId.value = id;
     void nextTick(() => {
       if (generation !== activationGeneration || preparingSessionId.value !== id) return;
-      surfaces.get(id)?.fitTerminal?.();
+      surfaces.get(id)?.prepareTerminal?.();
       window.requestAnimationFrame(() => {
         if (generation !== activationGeneration || preparingSessionId.value !== id) return;
         registry.activate(id);
@@ -780,6 +792,7 @@
   };
 
   const handleGlobalKeydown = (event: KeyboardEvent) => {
+    if (!workspaceActive) return;
     if (event.key === 'Alt' && !event.repeat) {
       altCycleCandidate = true;
       return;
@@ -808,6 +821,7 @@
     }
   };
   const handleGlobalKeyup = (event: KeyboardEvent) => {
+    if (!workspaceActive) return;
     if (event.key !== 'Alt') return;
     if (altCycleCandidate) void focusRegistry.focusNext(workspaceFocus.config.value.sequence);
     altCycleCandidate = false;
@@ -835,6 +849,27 @@
     if (document.visibilityState === 'visible') {
       void recoverForegroundSessions();
     }
+  });
+  onActivated(() => {
+    workspaceActive = true;
+    workspaceVisible.value = true;
+    if (!workspaceLayout.loaded.value) return;
+    stopServerTransferPolling ??= serverTransfers.startPolling();
+    void nextTick(() => surfaces.get(registry.activeId.value ?? '')?.fitTerminal?.());
+    void loadQueryActions();
+    void recoverForegroundSessions();
+  });
+  onDeactivated(() => {
+    workspaceActive = false;
+    workspaceVisible.value = false;
+    altCycleCandidate = false;
+    stopServerTransferPolling?.();
+    stopServerTransferPolling = undefined;
+    suspendedVisible.value = false;
+    layoutConfiguratorVisible.value = false;
+    focusConfiguratorVisible.value = false;
+    progressDisplayVisible.value = false;
+    void flushWorkspacePresentation();
   });
   onBeforeUnmount(() => {
     workspaceActive = false;
@@ -908,7 +943,7 @@
     />
 
     <div
-      v-if="registry.orderedSessions.value.length"
+      v-if="registry.orderedSessions.value.length && workspaceLayout.loaded.value"
       v-show="!connectionPickerVisible"
       class="relative min-h-0 flex-1"
       :class="
@@ -927,7 +962,7 @@
             : ''
         "
         :aria-hidden="session.id !== registry.activeId.value"
-        :active="session.id === registry.activeId.value"
+        :active="workspaceVisible && session.id === registry.activeId.value"
         :session="session"
         :layout="workspaceLayout.tree.value"
         :sidebars="workspaceLayout.sidebars.value"

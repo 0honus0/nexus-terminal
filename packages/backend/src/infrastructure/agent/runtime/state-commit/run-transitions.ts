@@ -114,6 +114,13 @@ export const createRunTransition = async (
     ],
   );
 
+  const source = command.parentRunId
+    ? await tx.queryOne<RunRow>(`SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`, [
+        command.parentRunId,
+        command.scope.userId,
+        command.scope.appId,
+      ])
+    : null;
   const inputSequence = thread.next_sequence;
   await tx.execute(
     `INSERT INTO agent_runs (
@@ -123,7 +130,7 @@ export const createRunTransition = async (
       active_execution_seconds, active_execution_started_at, executing_runtime_count,
       next_event_sequence, consumed_input_sequence, input_revision, version,
       created_at, started_at, completed_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, 'created', 'unknown', ?, ?, ?, 'not_started', 0, ?, ?, ?, ?, 0, NULL, 0, 2, 0, 1, 1, ?, NULL, NULL, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, 'created', 'unknown', ?, ?, ?, 'not_started', 0, ?, ?, ?, ?, ?, NULL, 0, 2, 0, 1, 1, ?, NULL, NULL, ?)`,
     [
       command.runId,
       command.scope.userId,
@@ -136,7 +143,8 @@ export const createRunTransition = async (
       JSON.stringify(command.budget),
       JSON.stringify(command.definition),
       JSON.stringify(command.initialPlan ?? { schemaVersion: 1, revision: 0, items: [] }),
-      JSON.stringify(emptyUsage()),
+      source ? source.usage_json : JSON.stringify(emptyUsage()),
+      source ? source.active_execution_seconds : 0,
       command.now,
       command.now,
     ],
@@ -299,7 +307,12 @@ export const cancelRunTransition = async (
   let committedEvents: RunEvent[] = [];
   if (NON_TERMINAL.has(row.status)) {
     accepted = true;
-    const immediate = row.executing_runtime_count === 0 || (row.status !== 'running' && row.status !== 'cancelling');
+    const runningTool = await tx.queryOne<{ id: string }>(
+      `SELECT id FROM agent_tool_calls WHERE run_id = ? AND status = 'running' LIMIT 1`,
+      [row.id],
+    );
+    const immediate =
+      (row.executing_runtime_count === 0 && !runningTool) || (row.status !== 'running' && row.status !== 'cancelling');
     const nextStatus: RunStatus = immediate ? 'cancelled' : 'cancelling';
     const unresolvedTools = await tx.queryAll<{
       id: string;
@@ -547,7 +560,6 @@ export const resolveRunReconciliationTransition = async (
   );
   if (!row) throw new Error('NOT_FOUND');
   if (row.version !== command.expectedRunVersion) throw new Error('STATE_CONFLICT');
-  if (row.needs_reconciliation !== 1) throw new Error('RECONCILIATION_NOT_REQUIRED');
 
   const current = await tx.queryAll<{
     resource_key: string;
@@ -563,6 +575,7 @@ export const resolveRunReconciliationTransition = async (
      ORDER BY q.resource_key`,
     [row.id],
   );
+  if (row.needs_reconciliation !== 1 && current.length === 0) throw new Error('RECONCILIATION_NOT_REQUIRED');
   const requested = [...command.resources].sort((a, b) => a.resourceKey.localeCompare(b.resourceKey));
   if (
     current.length === 0 ||
@@ -669,12 +682,6 @@ export const deleteRunTransition = async (
   if (row.version !== command.expectedRunVersion) throw new Error('STATE_CONFLICT');
   if (NON_TERMINAL.has(row.status)) throw new Error('RUN_DELETE_ACTIVE');
   if (row.needs_reconciliation === 1) throw new Error('RUN_DELETE_RECONCILIATION_REQUIRED');
-  const workspace = await tx.queryOne<{ id: string }>(
-    `SELECT id FROM agent_workspaces
-     WHERE run_id = ? AND user_id = ? AND app_id = ? AND (status <> 'deleted' OR retained = 1) LIMIT 1`,
-    [row.id, row.user_id, row.app_id],
-  );
-  if (workspace) throw new Error('RUN_DELETE_WORKSPACE_ATTACHED');
   const child = await tx.queryOne<{ id: string }>(
     `SELECT id FROM agent_runs
      WHERE parent_run_id = ? AND user_id = ? AND app_id = ? LIMIT 1`,

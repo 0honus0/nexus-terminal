@@ -11,7 +11,6 @@ import {
   type PluginFrontendDescriptor,
   type PluginInstallHooks,
 } from './plugin-install.types';
-import { PLUGIN_RUNNER_PROTOCOL_VERSION, type PluginRunnerTarget } from './plugin-runner-target.port';
 
 export class PluginRuntimeLifecycleCoordinator {
   constructor(
@@ -138,42 +137,6 @@ export class PluginRuntimeLifecycleCoordinator {
         ),
       );
     for (const entry of entries) await this.reconcileRuntime(userId, entry.plugin);
-  }
-
-  async resolveRunnerTargets(userId: number, pluginIds: readonly string[]): Promise<PluginRunnerTarget[]> {
-    if (!Array.isArray(pluginIds) || pluginIds.length > 32 || new Set(pluginIds).size !== pluginIds.length) {
-      throw new Error('PLUGIN_RUNNER_TARGET_INVALID');
-    }
-    const targets: PluginRunnerTarget[] = [];
-    for (const pluginId of pluginIds) {
-      if (!/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$/.test(pluginId)) {
-        throw new Error('PLUGIN_RUNNER_TARGET_INVALID');
-      }
-      const installation = await this.repository.getInstallation(userId, pluginId);
-      if (!installation || installation.status !== 'installed') throw new Error('PLUGIN_RUNNER_TARGET_UNAVAILABLE');
-      const plugin = await this.repository.getVersion(pluginId, installation.version);
-      if (!plugin || plugin.status !== 'installed' || !plugin.runnerEntry) {
-        throw new Error('PLUGIN_RUNNER_TARGET_UNAVAILABLE');
-      }
-      const state = await this.states.get({ userId, appId: plugin.appId });
-      if (
-        !state ||
-        state.activeVersion !== plugin.version ||
-        state.desiredState !== 'enabled' ||
-        !['running', 'degraded'].includes(state.observedState)
-      ) {
-        throw new Error('PLUGIN_RUNNER_TARGET_UNAVAILABLE');
-      }
-      targets.push({
-        pluginId: plugin.appId,
-        version: plugin.version,
-        sdkVersion: plugin.manifest.sdkVersion,
-        protocolVersion: PLUGIN_RUNNER_PROTOCOL_VERSION,
-        packageHash: plugin.packageHash,
-        entry: plugin.runnerEntry,
-      });
-    }
-    return targets;
   }
 
   private async reconcileRuntime(userId: number, plugin: PluginVersionRecord): Promise<void> {

@@ -35,7 +35,7 @@ Editor session 持有异步批量关闭 gate，由 FileEditor 提供本地化 di
 - HTTP 数据通过 `client/` 进入应用，业务代码使用 camelCase contract。
 - 终端、上传和 Workspace 使用明确的 WebSocket protocol/session owner。
 - Foundation UI 统一使用 `Ui*` 组件；自定义窗口表面使用 `UiOverlayPanel` 组合。
-- `packages/protocol/src` 是 HTTP、WebSocket 与 Runner wire DTO 的唯一公共 owner，网络 adapter 直接使用规范 DTO，不在 Frontend 重复声明兼容类型。
+- `packages/protocol/src` 是 HTTP 与 WebSocket DTO 的公共 owner，网络 adapter 直接使用规范 DTO，不在 Frontend 重复声明兼容类型；退役 Agent Runner wire 协议不再存在。
 
 ## 源码布局
 
@@ -140,6 +140,8 @@ Workspace Runtime 组合长生命周期的交互会话，包括 SSH terminal、�
 
 WorkspaceSocket 在发送前限制浏览器发送缓冲，并按请求限制二进制响应累计大小；Terminal adapter 将输入拒绝和服务端输入错误转交 channel 的错误消费者，不自动重放被拒绝的输入。SSH 输出携带本地 consumed 回调，TerminalView 在 xterm write 完成后调用；WorkspaceSocket 按当前 WebSocket 累计确认并合并发送 `terminal.flow`，旧连接回调不能确认新连接。历史浏览暂存的实时输出在恢复实时画面并解析后才确认。恢复 offset 仍记录浏览器已接收字节，不丢弃待解析数据或用消费计数替代恢复 offset。
 
+`features/terminal/model/terminalOutputWriter.ts` 唯一持有实时输出的提交策略：前台直接写入 xterm，后台按 80ms 或 512KiB 批处理；flush、parser barrier 和 PTY 替换时的 discard 共用同一队列及消费回调。TerminalView 持有实时/历史展示切换，历史游标重置独立于实时恢复，新翻页等待重置并用 generation 拒绝晚到页面。xterm 的 RenderDebouncer 仍以动画帧合并普通重绘，每批待刷新内容共用一次性 100ms deadline，任一路径执行就取消另一条；dispose 取消两者。同步绘屏的完整帧在 DEC 2026 关闭后直接提交，未完成帧继续遵循 xterm 的同步输出保护。依赖改动集中在现有 xterm 包补丁，源码及 ESM/UMD 构建同时维护，不在组件里访问 xterm 私有 renderer 或添加刷新轮询。
+
 ### `app/`
 
 App 是 composition root，负责：
@@ -243,3 +245,5 @@ Plugin frontend 运行在隔离 iframe/origin 中，通过版本化 SDK 与 Mess
 - Frontend TypeScript check。
 
 模块公开入口、跨 feature 依赖、状态 owner、组件拆分和国际化规则由 [AGENTS.md](../AGENTS.md) 约束 AI 开发与审查。仓库不再用读取源码文本、匹配 import 或统计文件形状的脚本和测试充当架构门禁；用户可见行为通过真实 E2E 路径验证。
+
+Agent `api/agent-events` 的 Run 持久事件投影直接消费 Protocol 的 `AGENT_DURABLE_EVENT_TYPES`，专用事件先执行字段校验，其余规范事件统一产生 snapshot.changed。事件名称只由 Protocol 持有，Frontend 不维护会遗漏新事件的部分白名单；未知类型／版本和非法 payload 仍 fail closed，不前移消费 cursor。

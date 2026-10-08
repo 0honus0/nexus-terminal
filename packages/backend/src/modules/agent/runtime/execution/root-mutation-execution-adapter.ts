@@ -8,13 +8,13 @@ import {
   type GovernedMutationFailure,
   type GovernedMutationHooks,
 } from './governed-mutation-executor';
-import type { PendingRootTool, RunExecutionReaderPort } from '../runs/run.repository.port';
+import type { PendingRootTool } from '../runs/run.repository.port';
 import type { RootExecutionCommitPort, StateCommitResult } from '../runs/state-commit.port';
 import type { RunSnapshot, RunUsage, RunView } from '../runs/run.types';
-import { rejectedRootToolResult, rootToolContext } from './root-tool-execution-common';
+import { rootToolContext } from './root-tool-execution-common';
 import { ToolCallRunner } from './tool-call-runner';
 
-const usageWithToolStep = (base: RunUsage): RunUsage => ({ ...base, steps: base.steps + 1 });
+const usageWithToolStep = (base: RunUsage): RunUsage => ({ ...base, modelRequests: base.modelRequests });
 const errorCode = (error: unknown): string => executionErrorCode(error, 'MODEL_EXECUTION_FAILED');
 
 const mutationLeaseFailureReason = (error: unknown, code: string, resourceKeys: readonly string[]): string => {
@@ -36,15 +36,12 @@ export class RootMutationExecutionAdapter {
   private readonly governedMutations: GovernedMutationExecutor;
 
   constructor(
-    repository: RunExecutionReaderPort,
     private readonly stateCommit: RootExecutionCommitPort,
     private readonly toolCalls: ToolCallRunner,
     private readonly clock: ClockPort,
     private readonly recoverySafePoint: (run: RunView, reason: 'mutation_confirmed') => Promise<void>,
   ) {
-    this.governedMutations = new GovernedMutationExecutor(repository, stateCommit, toolCalls, () =>
-      this.clock.nowUnixSeconds(),
-    );
+    this.governedMutations = new GovernedMutationExecutor(stateCommit, toolCalls, () => this.clock.nowUnixSeconds());
   }
 
   async *supersedeForBudget(snapshot: RunSnapshot, pending: PendingRootTool): AsyncGenerator<BackendSignal, void> {
@@ -56,8 +53,8 @@ export class RootMutationExecutionAdapter {
       toolCallId: pending.toolCallId,
       approvalId: pending.approvalId,
       expectedRunVersion: snapshot.version,
-      reason: 'The Run step budget was exhausted before this approved mutation could execute.',
-      errorCode: 'RUN_STEP_BUDGET_EXHAUSTED',
+      reason: 'The Run execution allowance was exhausted before this approved mutation could execute.',
+      errorCode: 'RUN_EXECUTION_LIMIT',
       details: { phase: 'budget', resourceKeys: pending.inspection.resourceKeys },
       now: this.clock.nowUnixSeconds(),
     });
@@ -155,11 +152,6 @@ export class RootMutationExecutionAdapter {
         return new Error(decision.action === 'deny' ? decision.reason : 'TOOL_POLICY_INVALID');
       },
       failedResult: (error) => this.toolCalls.failedProposal(error),
-      duplicateResult: () =>
-        rejectedRootToolResult(
-          'MUTATION_ALREADY_CONFIRMED',
-          'An identical mutation already completed successfully earlier in this Run. This duplicate proposal was not executed again.',
-        ),
       rejectProposed: async (run, inspection, result) => {
         const rejected = await this.stateCommit.rejectProposedTool({
           scope,
@@ -274,20 +266,6 @@ export class RootMutationExecutionAdapter {
           targetChanged: failure.inspection.operationHash !== failure.previousInspection.operationHash,
           inputChanged: failure.inspection.inputRevision !== failure.previousInspection.inputRevision,
           policyChanged: failure.inspection.policyRevision !== failure.previousInspection.policyRevision,
-        },
-      };
-    }
-    if (failure.phase === 'duplicate_guard') {
-      return {
-        reason:
-          'An identical mutation already completed successfully earlier in this Run. This duplicate proposal was not executed again.',
-        errorCode: 'MUTATION_ALREADY_CONFIRMED',
-        details: {
-          phase: 'duplicate_guard',
-          operationHash: failure.inspection.operationHash,
-          previousToolCallId: failure.duplicate?.toolCallId ?? null,
-          previousProviderCallId: failure.duplicate?.providerCallId ?? null,
-          resourceKeys: failure.inspection.resourceKeys,
         },
       };
     }

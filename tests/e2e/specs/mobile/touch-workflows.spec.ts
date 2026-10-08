@@ -48,7 +48,6 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
       applyDisplayScale: boolean;
     }> = [];
     let cursorShowCount = 0;
-    let keyboardTapCount = 0;
 
     const target = document.createElement('div');
     Object.assign(target.style, {
@@ -59,14 +58,6 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
       height: '120px',
     });
     document.body.appendChild(target);
-
-    const keyboardSink = document.createElement('textarea');
-    keyboardSink.dataset.testid = 'e2e-mobile-keyboard-sink';
-    document.body.appendChild(keyboardSink);
-    const focusKeyboard = () => {
-      keyboardTapCount += 1;
-      keyboardSink.focus();
-    };
 
     const fakeClient = {
       getDisplay: () => ({
@@ -86,7 +77,7 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
         });
       },
     };
-    const input = attachRemoteTouchInput(target, fakeClient, 'direct', focusKeyboard);
+    const input = attachRemoteTouchInput(target, fakeClient, 'direct');
 
     const touch = (identifier: number, clientX: number, clientY: number, force: number) =>
       new Touch({
@@ -121,14 +112,12 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
     dispatch('touchend', [], [touch(1, 80, 90, 0)]);
     await wait(300);
     const tapCalls = calls.slice();
-    const directTapFocusedKeyboard = document.activeElement === keyboardSink && keyboardTapCount === 1;
 
     const holdTouch = touch(2, 130, 110, 0.5);
     dispatch('touchstart', [holdTouch], [holdTouch]);
     await wait(550);
     dispatch('touchend', [], [touch(2, 130, 110, 0)]);
     const holdCalls = calls.slice(tapCalls.length);
-    const holdSkippedKeyboard = keyboardTapCount === 1;
 
     const dragCallStart = calls.length;
     const firstDragTap = touch(3, 90, 100, 0.5);
@@ -142,7 +131,6 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
     dispatch('touchend', [], [touch(4, 150, 120, 0)]);
     await wait(300);
     const dragCalls = calls.slice(dragCallStart);
-    const dragMoveDidNotAddExtraKeyboard = keyboardTapCount === 2;
     const allCalls = calls.slice();
 
     const touchActionWhileAttached = target.style.touchAction;
@@ -154,10 +142,9 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
     dispatch('touchend', [], [touch(5, 60, 70, 0)]);
     await wait(300);
     const stoppedAfterDestroy = calls.length === callCountAfterDestroy;
-    const keyboardStoppedAfterDestroy = keyboardTapCount === 2;
 
     const touchpadCallStart = calls.length;
-    const touchpadInput = attachRemoteTouchInput(target, fakeClient, 'touchpad', focusKeyboard);
+    const touchpadInput = attachRemoteTouchInput(target, fakeClient, 'touchpad');
 
     const moveStart = touch(6, 70, 70, 0.5);
     dispatch('touchstart', [moveStart], [moveStart]);
@@ -168,7 +155,6 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
     const touchpadTap = touch(11, 100, 90, 0.5);
     dispatch('touchstart', [touchpadTap], [touchpadTap]);
     dispatch('touchend', [], [touch(11, 100, 90, 0)]);
-    const touchpadTapFocusedKeyboard = document.activeElement === keyboardSink && keyboardTapCount === 3;
 
     const rightTouches = [touch(7, 80, 80, 0.5), touch(8, 120, 80, 0.5)];
     dispatch('touchstart', rightTouches, rightTouches);
@@ -181,10 +167,8 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
     dispatch('touchmove', scrollEnd, scrollEnd);
     dispatch('touchend', [], [touch(9, 85, 180, 0), touch(10, 125, 180, 0)]);
     const touchpadCalls = calls.slice(touchpadCallStart);
-    const multiTouchSkippedKeyboard = keyboardTapCount === 3;
     touchpadInput.destroy();
     target.remove();
-    keyboardSink.remove();
 
     return {
       touchActionWhileAttached,
@@ -193,12 +177,6 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
       allScaled: [...allCalls, ...touchpadCalls].every((call) => call.applyDisplayScale),
       tapPressedLeft: tapCalls.some((call) => call.left),
       tapReleasedLeft: tapCalls.some((call) => !call.left),
-      directTapFocusedKeyboard,
-      holdSkippedKeyboard,
-      dragMoveDidNotAddExtraKeyboard,
-      keyboardStoppedAfterDestroy,
-      touchpadTapFocusedKeyboard,
-      multiTouchSkippedKeyboard,
       holdPressedRight: holdCalls.some((call) => call.right),
       holdReleasedRight: holdCalls.some((call, index) => index > 0 && !call.right),
       dragMovedWhilePressed: dragCalls.some((call) => call.left && call.x >= 120),
@@ -217,12 +195,6 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
     allScaled: true,
     tapPressedLeft: true,
     tapReleasedLeft: true,
-    directTapFocusedKeyboard: true,
-    holdSkippedKeyboard: true,
-    dragMoveDidNotAddExtraKeyboard: true,
-    keyboardStoppedAfterDestroy: true,
-    touchpadTapFocusedKeyboard: true,
-    multiTouchSkippedKeyboard: true,
     holdPressedRight: true,
     holdReleasedRight: true,
     dragMovedWhilePressed: true,
@@ -267,8 +239,39 @@ test('mobile keyboard sink preserves IME composition before clearing input', asy
   expect(result.clearedAfterComposition).toBe(true);
 });
 
-test('mobile RDP touch mode toggle persists without reconnecting the session', async ({ page, context }) => {
+test('mobile RDP opens keyboard explicitly and persists touch mode without reconnecting', async ({ page, context }) => {
   const connectionName = 'E2E Mobile RDP Touch Modes';
+  const remoteFrames: string[] = [];
+  page.on('websocket', (socket) => {
+    socket.on('framesent', (event) => {
+      if (typeof event.payload === 'string') remoteFrames.push(event.payload);
+    });
+  });
+  // Match the desktop fullscreen regression: exercise application fullscreen
+  // controls independently of the headless browser's native fullscreen support.
+  await page.addInitScript(() => {
+    let fullscreenElement: Element | null = null;
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      get: () => fullscreenElement,
+    });
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+      configurable: true,
+      value: function requestFullscreen() {
+        fullscreenElement = this;
+        document.dispatchEvent(new Event('fullscreenchange'));
+        return Promise.resolve();
+      },
+    });
+    Object.defineProperty(document, 'exitFullscreen', {
+      configurable: true,
+      value: () => {
+        fullscreenElement = null;
+        document.dispatchEvent(new Event('fullscreenchange'));
+        return Promise.resolve();
+      },
+    });
+  });
   let sessionCreateRequests = 0;
   page.on('request', (request) => {
     if (/\/api\/v1\/connections\/\d+\/rdp-session(?:\?|$)/.test(request.url())) sessionCreateRequests += 1;
@@ -316,12 +319,47 @@ test('mobile RDP touch mode toggle persists without reconnecting the session', a
     await expect(directMode).toBeVisible();
     await expect(directMode).toHaveAttribute('aria-pressed', 'true');
     await expect(touchpadMode).toHaveAttribute('aria-pressed', 'false');
-    await expect(directMode).toHaveAttribute('title', /Tap: click \+ keyboard/);
+    await expect(directMode).toHaveAttribute('title', /Tap: click/);
+
+    const keyboardInput = page.getByRole('textbox', { name: 'Remote desktop keyboard input', exact: true });
+    const remoteDisplay = page.locator('.remote-display-container [tabindex="0"]');
+    await remoteDisplay.tap({ position: { x: 40, y: 40 } });
+    await expect(keyboardInput).not.toBeFocused();
+    // Also cover the compatibility click path used by touch browsers.
+    await remoteDisplay.click({ position: { x: 40, y: 40 } });
+    await expect(keyboardInput).not.toBeFocused();
+    await page.getByRole('button', { name: 'Show keyboard', exact: true }).tap();
+    await expect(keyboardInput).toBeFocused();
+    await page.keyboard.type('mobile');
+    for (const keysym of [109, 111, 98, 105, 108, 101]) {
+      await expect
+        .poll(() => remoteFrames.some((frame) => frame.includes(`3.key,${String(keysym).length}.${keysym},1.1;`)))
+        .toBeTruthy();
+      await expect
+        .poll(() => remoteFrames.some((frame) => frame.includes(`3.key,${String(keysym).length}.${keysym},1.0;`)))
+        .toBeTruthy();
+    }
+    await page.getByRole('button', { name: 'Hide keyboard', exact: true }).tap();
+    await expect(keyboardInput).not.toBeFocused();
 
     await touchpadMode.click();
     await expect(touchpadMode).toHaveAttribute('aria-pressed', 'true');
     await expect(directMode).toHaveAttribute('aria-pressed', 'false');
     await expect(touchpadMode).toHaveAttribute('title', /One finger: move/);
+    await remoteDisplay.tap({ position: { x: 40, y: 40 } });
+    await expect(keyboardInput).not.toBeFocused();
+    expect(sessionCreateRequests).toBe(1);
+
+    await page.getByRole('button', { name: 'Browser Fullscreen', exact: true }).tap();
+    await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(true);
+    await remoteDisplay.tap({ position: { x: 40, y: 40 } });
+    await expect(keyboardInput).not.toBeFocused();
+    await page.getByRole('button', { name: 'Show keyboard', exact: true }).tap();
+    await expect(keyboardInput).toBeFocused();
+    await page.getByRole('button', { name: 'Hide keyboard', exact: true }).tap();
+    await expect(keyboardInput).not.toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement)).toBeNull();
     expect(sessionCreateRequests).toBe(1);
 
     await page

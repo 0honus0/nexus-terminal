@@ -16,14 +16,11 @@ import type {
   SshFileSearchResult,
   SshFileTargetPort,
 } from '../../../modules/agent/capabilities/ssh-file-target.port';
-import type { ExecutionSession } from '../../../platform/execution/execution-session';
 import type { AgentSshSessions } from './agent-ssh-sessions';
 import { isRemoteFileMissingError, type RemoteFileSystem } from '../../../platform/filesystem/remote-filesystem';
 
 const MAX_FILE_READ_BYTES = 1024 * 1024;
 const MAX_MUTATION_FILE_BYTES = 16 * 1024 * 1024;
-const MAX_SEARCH_FILES = 2_000;
-const MAX_SEARCH_BYTES = 16 * 1024 * 1024;
 const MAX_SEARCH_FILE_BYTES = 1024 * 1024;
 const MAX_SEARCH_LINE_BYTES = 4 * 1024;
 const MAX_RECURSIVE_DELETE_ENTRIES = 10_000;
@@ -101,22 +98,12 @@ const decodeUtf8Prefix = (bytes: Uint8Array): { content: string; bytesRead: numb
   throw new Error('REMOTE_FILE_NOT_TEXT');
 };
 
-const globRegex = (glob: string | undefined): RegExp | null => {
+const globRegex = (glob: string | undefined): { test(value: string): boolean } | null => {
   if (glob === undefined) return null;
-  if (!glob || glob.length > 512 || glob.includes('\\0')) throw new Error('VALIDATION_FAILED');
-  let source = '^';
-  for (let index = 0; index < glob.length; index += 1) {
-    const char = glob[index]!;
-    if (char === '*') {
-      if (glob[index + 1] === '*') {
-        source += '.*';
-        index += 1;
-      } else source += '[^/]*';
-    } else if (char === '?') source += '[^/]';
-    else source += char.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&');
-  }
-  source += '$';
-  return new RegExp(source, 'u');
+  if (!glob || glob.length > 512 || glob.includes('\0')) throw new Error('VALIDATION_FAILED');
+  return {
+    test: (value) => path.posix.matchesGlob(value, glob) || path.posix.matchesGlob(path.posix.basename(value), glob),
+  };
 };
 
 export class SshFileTargetAdapter implements SshFileTargetPort {
@@ -134,8 +121,7 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     return this.withSession(
       context,
       connectionId,
-      async (session) => {
-        const filesystem = await session.fileSystem('control');
+      async (filesystem) => {
         return this.inspectPathWithFilesystem(context, filesystem, remotePath);
       },
       expectedConfigurationHash,
@@ -153,8 +139,7 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     return this.withSession(
       context,
       connectionId,
-      async (session) => {
-        const filesystem = await session.fileSystem('control');
+      async (filesystem) => {
         const directory = await this.inspectPathWithFilesystem(context, filesystem, remotePath);
         if (!directory.exists || directory.type !== 'directory') throw new Error('RESOURCE_FORBIDDEN');
         const raw = (await filesystem.readDirectory(directory.resolvedPath)).sort((left, right) =>
@@ -211,29 +196,25 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     return this.withSession(
       context,
       connectionId,
-      async (session) => {
-        const filesystem = await session.fileSystem('control');
+      async (filesystem) => {
         const root = await this.inspectPathWithFilesystem(context, filesystem, request.path);
         if (!root.exists) throw new Error('NOT_FOUND');
         const queue: string[] = [root.resolvedPath];
         const matches: SshFileSearchResult['matches'] = [];
         let scannedFiles = 0;
         let scannedBytes = 0;
-        let visitedEntries = 0;
         let outputBytes = 2;
         let truncated = false;
-        while (queue.length > 0 && !truncated) {
+        let outputFull = false;
+        while (queue.length > 0 && !outputFull) {
+          assertDeadline(context);
           const currentPath = queue.shift()!;
           const current = await this.inspectPathWithFilesystem(context, filesystem, currentPath);
           if (!current.exists) continue;
           if (current.type === 'directory') {
             const entries = await filesystem.readDirectory(current.resolvedPath);
             for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
-              visitedEntries += 1;
-              if (visitedEntries > MAX_RECURSIVE_DELETE_ENTRIES) {
-                truncated = true;
-                break;
-              }
+              assertDeadline(context);
               if (entry.metadata.isSymbolicLink || (!entry.metadata.isFile && !entry.metadata.isDirectory)) continue;
               const child = normalizeRemotePath(path.posix.join(current.resolvedPath, entry.name));
               if (hardDeniedPath(child)) continue;
@@ -241,19 +222,12 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
             }
             continue;
           }
-          if (scannedFiles >= MAX_SEARCH_FILES || scannedBytes >= MAX_SEARCH_BYTES) {
-            truncated = true;
-            break;
-          }
           const relative =
             root.type === 'directory'
               ? path.posix.relative(root.resolvedPath, current.resolvedPath)
               : path.posix.basename(current.resolvedPath);
           if (glob && !glob.test(relative)) continue;
-          if (
-            (current.sizeBytes ?? 0) > MAX_SEARCH_FILE_BYTES ||
-            scannedBytes + (current.sizeBytes ?? 0) > MAX_SEARCH_BYTES
-          ) {
+          if ((current.sizeBytes ?? 0) > MAX_SEARCH_FILE_BYTES) {
             truncated = true;
             continue;
           }
@@ -298,6 +272,7 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
             const candidateBytes = Buffer.byteLength(JSON.stringify(candidate), 'utf8') + (matches.length > 0 ? 1 : 0);
             if (matches.length >= request.maxResults || outputBytes + candidateBytes > request.maxOutputBytes) {
               truncated = true;
+              outputFull = true;
               break;
             }
             matches.push(candidate);
@@ -330,8 +305,7 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     return this.withSession(
       context,
       connectionId,
-      async (session) => {
-        const filesystem = await session.fileSystem('control');
+      async (filesystem) => {
         const source = await this.inspectPathWithFilesystem(context, filesystem, remotePath);
         if (!source.exists || source.type === null) throw new Error('NOT_FOUND');
         if (source.type === 'file' ? source.sha256 !== expectedSha256 : expectedSha256 !== null) {
@@ -377,8 +351,7 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     return this.withSession(
       context,
       connectionId,
-      async (session) => {
-        const filesystem = await session.fileSystem('control');
+      async (filesystem) => {
         const before = await this.inspectPathWithFilesystem(context, filesystem, remotePath);
         if (!before.exists || before.type === null) throw new Error('NOT_FOUND');
         if (before.type === 'file' ? before.sha256 !== expectedSha256 : expectedSha256 !== null) {
@@ -422,8 +395,7 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     return this.withSession(
       context,
       connectionId,
-      async (session) => {
-        const filesystem = await session.fileSystem('control');
+      async (filesystem) => {
         const prepared: Array<{
           before: SshFileMutationInspection;
           content: Buffer;
@@ -442,10 +414,11 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
             );
             const stream = await filesystem.openWrite(temporary, {
               flags: 'wx',
-              ...(before.mode === null ? {} : { mode: before.mode }),
+              mode: before.mode === null ? 0o600 : before.mode & 0o777,
             });
             stream.end(content);
             await finished(stream);
+            await filesystem.chmod(temporary, before.mode === null ? 0o600 : before.mode & 0o777);
             prepared.push({ before, content, temporary, expectedAfter });
           }
           for (const item of prepared) {
@@ -476,16 +449,18 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     content: Uint8Array,
     expectedSha256: string | null,
     expectedConfigurationHash: string,
+    mode?: number,
   ): Promise<SshFileMutationResult> {
     assertDeadline(context);
+    if (mode !== undefined && (!Number.isSafeInteger(mode) || mode < 0 || mode > 0o777))
+      throw new Error('VALIDATION_FAILED');
     if (!(content instanceof Uint8Array) || content.byteLength > MAX_MUTATION_FILE_BYTES)
       throw new Error('TOOL_INPUT_TOO_LARGE');
     if (expectedSha256 !== null && !/^[a-f0-9]{64}$/.test(expectedSha256)) throw new Error('VALIDATION_FAILED');
     return this.withSession(
       context,
       connectionId,
-      async (session) => {
-        const filesystem = await session.fileSystem('control');
+      async (filesystem) => {
         const before = await this.inspectFileWithFilesystem(context, filesystem, remotePath);
         if ((before.exists ? before.sha256 : null) !== expectedSha256) throw new Error('RESOURCE_CHANGED');
         const directory = path.posix.dirname(before.resolvedPath);
@@ -495,15 +470,17 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
         );
         if (hardDeniedPath(temporary)) throw new Error('RESOURCE_FORBIDDEN');
         const bytes = Buffer.from(content);
+        const permissions = mode ?? (before.mode === null ? 0o600 : before.mode & 0o777);
         let temporaryCreated = false;
         try {
           const stream = await filesystem.openWrite(temporary, {
             flags: 'wx',
-            ...(before.mode !== null ? { mode: before.mode } : {}),
+            mode: permissions,
           });
           temporaryCreated = true;
           stream.end(bytes);
           await finished(stream);
+          await filesystem.chmod(temporary, permissions);
           assertDeadline(context);
           const current = await this.inspectFileWithFilesystem(context, filesystem, remotePath);
           if ((current.exists ? current.sha256 : null) !== expectedSha256) throw new Error('RESOURCE_CHANGED');
@@ -511,7 +488,13 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
           temporaryCreated = false;
           const after = await this.inspectFileWithFilesystem(context, filesystem, before.resolvedPath);
           const expectedNewHash = createHash('sha256').update(bytes).digest('hex');
-          if (!after.exists || after.sha256 !== expectedNewHash) throw new Error('VERIFICATION_FAILED');
+          if (
+            !after.exists ||
+            after.sha256 !== expectedNewHash ||
+            after.mode === null ||
+            (after.mode & 0o777) !== permissions
+          )
+            throw new Error('VERIFICATION_FAILED');
           return { ...after, bytesWritten: bytes.byteLength };
         } finally {
           if (temporaryCreated) await filesystem.removeFile(temporary, { ignoreMissing: true }).catch(() => undefined);
@@ -542,9 +525,8 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     if (expectedConfigurationHash !== undefined && connection.configurationHash !== expectedConfigurationHash) {
       throw new Error('RESOURCE_CHANGED');
     }
-    return this.sessions.withSession(context, connectionId, expectedConfigurationHash, async (session) => {
+    return this.sessions.withFileSystem(context, connectionId, expectedConfigurationHash, async (filesystem) => {
       assertDeadline(context);
-      const filesystem = await session.fileSystem('control');
       try {
         const requestedMetadata = await filesystem.metadata(requestedPath, { followSymbolicLinks: false });
         if (requestedMetadata.isSymbolicLink) throw new Error('RESOURCE_FORBIDDEN');
@@ -708,7 +690,7 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
   private async withSession<T>(
     context: ToolContext,
     connectionId: number,
-    work: (session: ExecutionSession) => Promise<T>,
+    work: (filesystem: RemoteFileSystem) => Promise<T>,
     expectedConfigurationHash?: string,
   ): Promise<T> {
     assertDeadline(context);
@@ -719,6 +701,6 @@ export class SshFileTargetAdapter implements SshFileTargetPort {
     if (expectedConfigurationHash !== undefined && safe.configurationHash !== expectedConfigurationHash) {
       throw new Error('RESOURCE_CHANGED');
     }
-    return this.sessions.withSession(context, connectionId, expectedConfigurationHash, work);
+    return this.sessions.withFileSystem(context, connectionId, expectedConfigurationHash, work);
   }
 }

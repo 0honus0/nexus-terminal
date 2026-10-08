@@ -126,6 +126,7 @@ export interface SshFileTargetPort {
     content: Uint8Array,
     expectedSha256: string | null,
     expectedConfigurationHash: string,
+    mode?: number,
   ): Promise<SshFileMutationResult>;
   move(
     context: ToolContext,

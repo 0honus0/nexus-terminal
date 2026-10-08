@@ -106,6 +106,7 @@ export const createDockerMutationTool = (
   descriptor: {
     name: 'machine_docker_control',
     version: '1.0.0',
+    modelExposure: 'deferred',
     description: 'Start, stop, restart, or remove one existing Docker container on an authorized SSH target.',
     inputSchema: {
       type: 'object',

@@ -1,19 +1,13 @@
 export type AgentContextProfile = 'normal' | 'extended';
 
 export interface AgentRunBudgetSnapshot {
-  maxRunSteps: number;
+  maxModelRequests: number;
   maxActiveExecutionSeconds: number;
-}
-
-export interface AgentAcpWorkspaceProfileSetting {
-  id: string;
-  argv: string[];
-  cwd: string;
 }
 
 export interface AgentBrowserEndpointSetting {
   scope: 'docker-network' | 'external-network';
-  via: 'backend' | 'runner';
+  via: 'backend';
   url: string;
   priority: number;
   allowPlaintext: boolean;
@@ -43,7 +37,7 @@ export interface AgentSettingsDocument {
     maxConcurrentModelCalls: 'auto' | number;
   };
   budget: {
-    maxRunSteps: number;
+    maxModelRequests: number;
     maxActiveExecutionSeconds: number;
     toolTimeoutSeconds: number;
     maxToolOutputBytes: number;
@@ -51,7 +45,8 @@ export interface AgentSettingsDocument {
     maxRecallBytes: number;
   };
   hardLimits: {
-    maxRunSteps: number;
+    maxModelRequests: number;
+    maxToolExecutions: number;
     maxActiveExecutionSeconds: number;
     toolTimeoutSeconds: number;
     maxToolOutputBytes: number;
@@ -65,7 +60,6 @@ export interface AgentSettingsDocument {
     maxDelegationDepth: number;
     maxSubagentMessagesPerRun: number;
     maxSubagentMessageBytesPerRun: number;
-    maxActiveWorkspaces: number;
     unretainedArtifactTtlSeconds: number;
   };
   subagents: {
@@ -78,12 +72,6 @@ export interface AgentSettingsDocument {
     maxSingleArtifactBytes: number;
     maxGlobalArtifactBytes: number;
     unretainedArtifactTtlSeconds: number;
-  };
-  workspaceRuntime: {
-    maxActiveWorkspaces: number;
-    enabledRecipeIds: string[];
-    toolVersions: Record<string, { enabledVersionIds: string[]; defaultVersionId: string | null }>;
-    acpProfiles: AgentAcpWorkspaceProfileSetting[];
   };
   browser: {
     targets: AgentBrowserTargetSetting[];
@@ -100,9 +88,12 @@ export const AGENT_DEFAULTS = {
     schemaVersion: 1,
     feature: { enabled: false },
     model: { defaultProviderId: null, defaultModelId: null, fallbackModels: [] },
-    performance: { maxConcurrentRuntimes: 2, maxConcurrentModelCalls: 'auto' },
+    performance: {
+      maxConcurrentRuntimes: 2,
+      maxConcurrentModelCalls: 'auto',
+    },
     budget: {
-      maxRunSteps: 80,
+      maxModelRequests: 80,
       maxActiveExecutionSeconds: 1_800,
       toolTimeoutSeconds: 60,
       maxToolOutputBytes: 65_536,
@@ -110,7 +101,8 @@ export const AGENT_DEFAULTS = {
       maxRecallBytes: 8_192,
     },
     hardLimits: {
-      maxRunSteps: 400,
+      maxModelRequests: 400,
+      maxToolExecutions: 4000,
       maxActiveExecutionSeconds: 7_200,
       toolTimeoutSeconds: 300,
       maxToolOutputBytes: 262_144,
@@ -124,7 +116,6 @@ export const AGENT_DEFAULTS = {
       maxDelegationDepth: 3,
       maxSubagentMessagesPerRun: 5_000,
       maxSubagentMessageBytesPerRun: 8_388_608,
-      maxActiveWorkspaces: 8,
       unretainedArtifactTtlSeconds: 2_592_000,
     },
     subagents: {
@@ -137,12 +128,6 @@ export const AGENT_DEFAULTS = {
       maxSingleArtifactBytes: 52_428_800,
       maxGlobalArtifactBytes: 2_147_483_648,
       unretainedArtifactTtlSeconds: 604_800,
-    },
-    workspaceRuntime: {
-      maxActiveWorkspaces: 4,
-      enabledRecipeIds: [],
-      toolVersions: {},
-      acpProfiles: [],
     },
     browser: { targets: [] },
     plugins: { repositories: [] },
@@ -180,55 +165,6 @@ const stringList = (value: unknown, fallback: string[] = []): string[] =>
         .sort()
     : [...fallback];
 
-const packVersionSettings = (
-  value: unknown,
-  fallback: Record<string, { enabledVersionIds: string[]; defaultVersionId: string | null }> = {},
-): Record<string, { enabledVersionIds: string[]; defaultVersionId: string | null }> => {
-  if (!isRecord(value)) return structuredClone(fallback);
-  const result: Record<string, { enabledVersionIds: string[]; defaultVersionId: string | null }> = {};
-  for (const [familyId, raw] of Object.entries(value).slice(0, 128)) {
-    const family = familyId.trim();
-    if (!family || family.length > 128 || !isRecord(raw)) continue;
-    assertExactKeys(raw, ['enabledVersionIds', 'defaultVersionId']);
-    const enabledVersionIds = stringList(raw.enabledVersionIds).slice(0, 64);
-    const defaultVersionId = stringOrNull(raw.defaultVersionId, null);
-    result[family] = {
-      enabledVersionIds,
-      defaultVersionId: defaultVersionId && enabledVersionIds.includes(defaultVersionId) ? defaultVersionId : null,
-    };
-  }
-  return result;
-};
-
-const acpProfiles = (
-  value: unknown,
-  fallback: AgentAcpWorkspaceProfileSetting[] = [],
-): AgentAcpWorkspaceProfileSetting[] => {
-  if (!Array.isArray(value)) return structuredClone(fallback);
-  const seen = new Set<string>();
-  const result: AgentAcpWorkspaceProfileSetting[] = [];
-  for (const candidate of value.slice(0, 32)) {
-    if (!isRecord(candidate)) continue;
-    assertExactKeys(candidate, ['id', 'argv', 'cwd']);
-    const id = typeof candidate.id === 'string' ? candidate.id.trim() : '';
-    const cwd = typeof candidate.cwd === 'string' ? candidate.cwd.trim() : '';
-    if (
-      !/^[a-z][a-z0-9_.-]{0,127}$/.test(id) ||
-      seen.has(id) ||
-      (cwd !== '/workspace' && !cwd.startsWith('/workspace/')) ||
-      cwd.includes('\0') ||
-      Buffer.byteLength(cwd, 'utf8') > 4096
-    )
-      continue;
-    if (!Array.isArray(candidate.argv) || candidate.argv.length < 1 || candidate.argv.length > 64) continue;
-    const argv = candidate.argv.filter((item): item is string => typeof item === 'string' && !item.includes('\0'));
-    if (argv.length !== candidate.argv.length || argv.some((item) => Buffer.byteLength(item, 'utf8') > 8192)) continue;
-    seen.add(id);
-    result.push({ id, argv, cwd });
-  }
-  return result.sort((a, b) => a.id.localeCompare(b.id));
-};
-
 const validBrowserUrlPattern = (value: string): boolean => {
   const match = /^(\*|https?|wss?):\/\/(\*\.)?([^/:?#]+)(?::(\d{1,5}))?(\/[^?#]*)?$/.exec(value.trim());
   if (!match) return false;
@@ -257,7 +193,7 @@ const browserTargets = (value: unknown, fallback: AgentBrowserTargetSetting[] = 
       const priority = Number(raw.priority);
       if (
         (scope !== 'docker-network' && scope !== 'external-network') ||
-        (via !== 'backend' && via !== 'runner') ||
+        via !== 'backend' ||
         !Number.isSafeInteger(priority) ||
         priority < 0 ||
         priority > 10000 ||
@@ -355,7 +291,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
     'hardLimits',
     'subagents',
     'storage',
-    'workspaceRuntime',
     'browser',
     'plugins',
   ] as const;
@@ -373,7 +308,7 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
   const model = exactRecord(raw, 'model', ['defaultProviderId', 'defaultModelId', 'fallbackModels']);
   const performance = exactRecord(raw, 'performance', ['maxConcurrentRuntimes', 'maxConcurrentModelCalls']);
   const budget = exactRecord(raw, 'budget', [
-    'maxRunSteps',
+    'maxModelRequests',
     'maxActiveExecutionSeconds',
     'toolTimeoutSeconds',
     'maxToolOutputBytes',
@@ -381,7 +316,8 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
     'maxRecallBytes',
   ]);
   const hardLimits = exactRecord(raw, 'hardLimits', [
-    'maxRunSteps',
+    'maxModelRequests',
+    'maxToolExecutions',
     'maxActiveExecutionSeconds',
     'toolTimeoutSeconds',
     'maxToolOutputBytes',
@@ -395,7 +331,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
     'maxDelegationDepth',
     'maxSubagentMessagesPerRun',
     'maxSubagentMessageBytesPerRun',
-    'maxActiveWorkspaces',
     'unretainedArtifactTtlSeconds',
   ]);
   const subagents = exactRecord(raw, 'subagents', [
@@ -408,12 +343,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
     'maxSingleArtifactBytes',
     'maxGlobalArtifactBytes',
     'unretainedArtifactTtlSeconds',
-  ]);
-  const workspaceRuntime = exactRecord(raw, 'workspaceRuntime', [
-    'maxActiveWorkspaces',
-    'enabledRecipeIds',
-    'toolVersions',
-    'acpProfiles',
   ]);
   const browser = exactRecord(raw, 'browser', ['targets']);
   const plugins = exactRecord(raw, 'plugins', ['repositories']);
@@ -451,7 +380,7 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
           : integer(performance.maxConcurrentModelCalls, defaults.performance.maxConcurrentRuntimes, 1),
     },
     budget: {
-      maxRunSteps: integer(budget.maxRunSteps, defaults.budget.maxRunSteps, 1),
+      maxModelRequests: integer(budget.maxModelRequests, defaults.budget.maxModelRequests, 1),
       maxActiveExecutionSeconds: integer(
         budget.maxActiveExecutionSeconds,
         defaults.budget.maxActiveExecutionSeconds,
@@ -463,7 +392,8 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
       maxRecallBytes: integer(budget.maxRecallBytes, defaults.budget.maxRecallBytes, 1),
     },
     hardLimits: {
-      maxRunSteps: integer(hardLimits.maxRunSteps, defaults.hardLimits.maxRunSteps, 1),
+      maxModelRequests: integer(hardLimits.maxModelRequests, defaults.hardLimits.maxModelRequests, 1),
+      maxToolExecutions: integer(hardLimits.maxToolExecutions, defaults.hardLimits.maxToolExecutions, 1),
       maxActiveExecutionSeconds: integer(
         hardLimits.maxActiveExecutionSeconds,
         defaults.hardLimits.maxActiveExecutionSeconds,
@@ -493,7 +423,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
         defaults.hardLimits.maxSubagentMessageBytesPerRun,
         1,
       ),
-      maxActiveWorkspaces: integer(hardLimits.maxActiveWorkspaces, defaults.hardLimits.maxActiveWorkspaces, 1),
       unretainedArtifactTtlSeconds: integer(
         hardLimits.unretainedArtifactTtlSeconds,
         defaults.hardLimits.unretainedArtifactTtlSeconds,
@@ -523,16 +452,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
         1,
       ),
     },
-    workspaceRuntime: {
-      maxActiveWorkspaces: integer(
-        workspaceRuntime.maxActiveWorkspaces,
-        defaults.workspaceRuntime.maxActiveWorkspaces,
-        1,
-      ),
-      enabledRecipeIds: stringList(workspaceRuntime.enabledRecipeIds, defaults.workspaceRuntime.enabledRecipeIds),
-      toolVersions: packVersionSettings(workspaceRuntime.toolVersions, defaults.workspaceRuntime.toolVersions),
-      acpProfiles: acpProfiles(workspaceRuntime.acpProfiles, defaults.workspaceRuntime.acpProfiles),
-    },
     browser: {
       targets: browserTargets(browser.targets, defaults.browser.targets),
     },
@@ -556,7 +475,7 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
   }
 
   const cappedPairs: Array<[keyof AgentSettingsDocument['budget'], keyof AgentSettingsDocument['hardLimits']]> = [
-    ['maxRunSteps', 'maxRunSteps'],
+    ['maxModelRequests', 'maxModelRequests'],
     ['maxActiveExecutionSeconds', 'maxActiveExecutionSeconds'],
     ['toolTimeoutSeconds', 'toolTimeoutSeconds'],
     ['maxToolOutputBytes', 'maxToolOutputBytes'],
@@ -598,10 +517,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
     normalized.storage.unretainedArtifactTtlSeconds,
     normalized.hardLimits.unretainedArtifactTtlSeconds,
   );
-  normalized.workspaceRuntime.maxActiveWorkspaces = Math.min(
-    normalized.workspaceRuntime.maxActiveWorkspaces,
-    normalized.hardLimits.maxActiveWorkspaces,
-  );
 
   return normalized;
 };
@@ -613,6 +528,6 @@ export const normalizeRequestedSettings = (raw: unknown): AgentSettingsDocument 
 export const validateSettings = (raw: unknown): AgentSettingsDocument => normalizeSettings(raw, true);
 
 export const snapshotBudget = (settings: AgentSettingsDocument): AgentRunBudgetSnapshot => ({
-  maxRunSteps: settings.budget.maxRunSteps,
+  maxModelRequests: settings.budget.maxModelRequests,
   maxActiveExecutionSeconds: settings.budget.maxActiveExecutionSeconds,
 });

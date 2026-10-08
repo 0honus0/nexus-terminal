@@ -123,7 +123,7 @@ export const artifactModelInputScenario = async () => {
       `INSERT INTO agent_delegations
         (id, run_id, parent_runtime_id, child_runtime_id, profile_id, grants_json, peer_messaging,
          model_ref_json, objective, constraints_json, input_artifact_refs_json, completion_criteria_json,
-         dependency_mode, status, depth, failure_mode, max_steps, idempotency_key, request_hash,
+         dependency_mode, status, depth, failure_mode, max_model_requests, idempotency_key, request_hash,
          deadline_at, created_at, updated_at)
        VALUES (?, ?, ?, ?, 'default', ?, 'parent-child', ?, 'read delegated text artifact', '[]', ?, '[]',
                'settled', 'running', 1, 'isolate', 10, ?, ?, ?, ?, ?)`,

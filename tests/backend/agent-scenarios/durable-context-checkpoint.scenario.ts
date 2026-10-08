@@ -169,6 +169,63 @@ export const durableContextCheckpointScenario = async () => {
   );
   assertValidToolExchange(plan.messages);
 
+  const rawFallbackHistory = Array.from({ length: 12 }, (_, index) =>
+    entry(index + 1, index % 2 === 0 ? 'user_input' : 'assistant_message', {
+      text:
+        (index === 0
+          ? 'RAW_FALLBACK_OLDEST: preserve this short historical constraint exactly. '
+          : 'Routine bounded history ' + index + '. ') + 'working context '.repeat(20),
+    }),
+  );
+  const rawFallbackContext = contextService(rawFallbackHistory);
+  const rawFallbackRequest = {
+    scope,
+    threadId: 'scenario-thread',
+    runId: 'scenario-run',
+    currentInput: 'Proceed with the current task.',
+    modelContextWindow: 4_096,
+    maxContextTokens: 3_000,
+    softContextTokens: 256,
+    reservedOutputTokens: 256,
+    maxRecallItems: 5,
+    maxRecallBytes: 8_192,
+    compactionMode: 'balanced' as const,
+    tools: [],
+  };
+  const summaryPreferred = await rawFallbackContext.compose(rawFallbackRequest);
+  assert.ok(
+    summaryPreferred.checkpointGeneration,
+    'soft pressure should normally request a semantic checkpoint before dropping older Ledger history',
+  );
+  const rawFallback = await rawFallbackContext.compose({ ...rawFallbackRequest, rawHistoryFallback: true });
+  assert.equal(rawFallback.checkpointGeneration, undefined);
+  assert.equal(rawFallback.compacted, false);
+  assert.match(JSON.stringify(rawFallback.messages), /RAW_FALLBACK_OLDEST/);
+  assert.equal(
+    rawFallback.droppedSections.some((section) => section.startsWith('ledger:')),
+    false,
+    'no-savings fallback may continue only with the complete raw Ledger page',
+  );
+
+  const oversizedRawFallback = contextService(
+    Array.from({ length: 24 }, (_, index) =>
+      entry(index + 1, index % 2 === 0 ? 'user_input' : 'assistant_message', {
+        text: 'RAW_FALLBACK_PRESSURE_' + index + ' ' + 'bounded history '.repeat(90),
+      }),
+    ),
+  );
+  await assert.rejects(
+    oversizedRawFallback.compose({
+      ...rawFallbackRequest,
+      maxContextTokens: 900,
+      softContextTokens: 700,
+      reservedOutputTokens: 128,
+      rawHistoryFallback: true,
+    }),
+    /CONTEXT_COMPACTION_NO_SAVINGS/,
+    'no-savings fallback must fail when complete raw history cannot fit the hard Context budget',
+  );
+
   const fallbackRepository = new StaticConversationRepository(history);
   const fallbackConversations = new ConversationService(fallbackRepository, clock, null!, null!);
   const failingCheckpoints = new ContextCheckpointService(
@@ -355,6 +412,12 @@ export const durableContextCheckpointScenario = async () => {
         applied_at INTEGER NOT NULL
       );
       INSERT INTO migrations (id, name, applied_at) VALUES (29, 'legacy baseline', 1800000000);
+      CREATE TABLE agent_settings (
+        user_id INTEGER PRIMARY KEY,
+        value_json TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
       CREATE TABLE ai_threads (id TEXT PRIMARY KEY);
       CREATE TABLE ai_context_digests (
         id TEXT PRIMARY KEY,
@@ -385,7 +448,7 @@ export const durableContextCheckpointScenario = async () => {
     legacyDb.exec(`INSERT INTO ai_threads (id) VALUES ('retired-checkpoint-thread');
       INSERT INTO ai_context_checkpoints (id, thread_id, visibility_hash, visibility_json, from_sequence, to_sequence, source_hash, strategy_version, generator_json, source_tokens, summary_tokens, content, created_at)
       VALUES ('retired-checkpoint', 'retired-checkpoint-thread', 'visibility', '{"kind":"thread_prefix"}', 1, 1, 'source', 'context-checkpoint-v1', '{"kind":"deterministic","version":"deterministic-summary-v2"}', 100, 20, 'retired derived summary', 1);
-      DELETE FROM migrations WHERE id = 51;`);
+      DELETE FROM migrations WHERE id >= 51;`);
     await runMigrations(legacyDb);
     assert.equal(
       (legacyDb.prepare('SELECT COUNT(*) AS count FROM ai_context_checkpoints').get() as { count: number }).count,

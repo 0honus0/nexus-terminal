@@ -113,15 +113,6 @@ const assertThreadDeleteSafe = async (db: RelationalDatabase, scope: Scope, thre
   );
   if (reconciliation) throw new Error('THREAD_DELETE_RECONCILIATION_REQUIRED');
 
-  const workspace = await db.queryOne<{ id: string }>(
-    `SELECT w.id FROM agent_workspaces w
-     INNER JOIN agent_runs r ON r.id = w.run_id AND r.user_id = w.user_id AND r.app_id = w.app_id
-     WHERE r.user_id = ? AND r.app_id = ?${threadFilter}
-       AND (w.status <> 'deleted' OR w.retained = 1) LIMIT 1`,
-    params,
-  );
-  if (workspace) throw new Error('THREAD_DELETE_WORKSPACE_ATTACHED');
-
   if (threadId) {
     const externallyReferenced = await db.queryOne<{ id: string }>(
       `SELECT child.id
@@ -182,11 +173,30 @@ export class SqliteConversationRepository implements ConversationRepositoryPort 
     titleSource: ThreadTitleSource,
     now: number,
   ): Promise<ThreadView> {
-    const inserted = await this.db.execute(
-      `INSERT OR IGNORE INTO ai_threads (id, user_id, app_id, title, title_source, next_sequence, version, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)`,
-      [id, scope.userId, scope.appId, title, titleSource, now, now],
-    );
+    const inserted = await this.db.transaction(async (tx) => {
+      const result = await tx.execute(
+        `INSERT OR IGNORE INTO ai_threads (id, user_id, app_id, title, title_source, next_sequence, version, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)`,
+        [id, scope.userId, scope.appId, title, titleSource, now, now],
+      );
+      if (result.changes === 1) {
+        await appendHostEvent(
+          tx,
+          scope.userId,
+          'thread.changed',
+          {
+            appId: scope.appId,
+            threadId: id,
+            title,
+            titleSource,
+            version: 1,
+            updatedAt: now,
+          },
+          now,
+        );
+      }
+      return result;
+    });
     const created = await this.getThread(scope, id);
     if (!created) throw new Error('NOT_FOUND');
     if (inserted.changes === 0 && (created.title !== title || created.titleSource !== titleSource)) {

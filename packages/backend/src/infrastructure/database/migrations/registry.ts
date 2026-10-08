@@ -1,3 +1,4 @@
+import { executionBudgetMigrations } from './agent-execution-budget';
 import { coreMigrations } from './core';
 import { agentRuntimeMigrations } from './agent-runtime';
 import { agentCapabilitiesMigrations } from './agent-capabilities';
@@ -10,4 +11,5 @@ export const definedMigrations: SqliteMigration[] = [
   ...agentRuntimeMigrations,
   ...agentCapabilitiesMigrations,
   ...agentHostMigrations,
+  ...executionBudgetMigrations,
 ];

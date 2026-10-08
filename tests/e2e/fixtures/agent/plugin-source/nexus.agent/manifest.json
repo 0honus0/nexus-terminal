@@ -15,7 +15,6 @@
     "machine.inspect",
     "shell.execute",
     "machine.docker.manage",
-    "workspace.manage",
     "browser.read",
     "browser.interact",
     "integration.mcp.read",
@@ -35,7 +34,7 @@
       "id": "agent.default",
       "version": "1.0.0",
       "displayName": "Nexus Agent",
-      "description": "General-purpose Nexus Agent that selects signed first-party Skills while all execution remains governed by Host capabilities, policy, approvals, leases, Workspace Runtime, and Browser boundaries.",
+      "description": "General-purpose Nexus Agent that selects signed first-party Skills while all execution remains governed by Host capabilities, policy, approvals, leases, SSH execution targets, and Browser boundaries.",
       "requiredModelCapabilities": ["tools"]
     }
   ],

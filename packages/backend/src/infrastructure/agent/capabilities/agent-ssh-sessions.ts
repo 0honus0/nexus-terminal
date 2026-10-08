@@ -56,6 +56,7 @@ export class AgentSshSessions implements AgentSshSessionPort {
       "UPDATE agent_ssh_jobs SET status = 'unknown', completed_at = ? WHERE status = 'running'",
       [Date.now()],
     );
+    this.stopped = false;
     this.sweepTimer = setInterval(() => {
       void this.sweep().catch((error) => logger.warn({ err: error }, 'Agent SSH session sweep failed'));
     }, 10000);
@@ -140,10 +141,13 @@ export class AgentSshSessions implements AgentSshSessionPort {
         connection: await this.connections.resolve(connectionId, hash),
         connect: { signal: context.signal, timeoutMs: Math.max(1, context.deadlineAt * 1000 - Date.now()) },
       });
+      const onAbort = () => void this.sessions.close(session.id).catch(() => undefined);
+      context.signal.addEventListener('abort', onAbort, { once: true });
       try {
         assertActive(context);
         return await work(session);
       } finally {
+        context.signal.removeEventListener('abort', onAbort);
         await this.sessions.close(session.id);
       }
     }
@@ -158,6 +162,33 @@ export class AgentSshSessions implements AgentSshSessionPort {
       entry.view.activeOperations -= 1;
       entry.view.lastUsedAt = Date.now();
     }
+  }
+
+  async withFileSystem<T>(
+    context: ToolContext,
+    connectionId: number,
+    hash: string | undefined,
+    work: (filesystem: import('../../../platform/filesystem/remote-filesystem').RemoteFileSystem) => Promise<T>,
+  ): Promise<T> {
+    return this.withSession(context, connectionId, hash, async (session) => {
+      assertActive(context);
+      const lease = session.openFileSystemLease();
+      const onAbort = () => lease.close();
+      context.signal.addEventListener('abort', onAbort, { once: true });
+      const timer = setTimeout(onAbort, Math.max(1, context.deadlineAt * 1000 - Date.now()));
+      timer.unref();
+      try {
+        assertActive(context);
+        return await work(lease.filesystem);
+      } catch (error) {
+        assertActive(context);
+        throw error;
+      } finally {
+        clearTimeout(timer);
+        context.signal.removeEventListener('abort', onAbort);
+        lease.close();
+      }
+    });
   }
 
   async list(context: ToolContext, connectionId: number, sessionId?: string): Promise<AgentSshSessionView[]> {
@@ -357,6 +388,21 @@ export class AgentSshSessions implements AgentSshSessionPort {
     }, timeoutSeconds * 1000);
     timeout.unref?.();
     return this.output(job);
+  }
+
+  async listJobs(
+    context: ToolContext,
+    connectionId: number,
+  ): Promise<{ jobId: string; status: SshJobView['status']; createdAt: number }[]> {
+    assertActive(context);
+    await this.check(context, connectionId);
+    if (!context.threadId || !(await this.validateOwner(context, context.threadId, connectionId)))
+      throw new Error('RESOURCE_FORBIDDEN');
+    const rows = await this.database.queryAll<{ job_id: string; status: SshJobView['status']; created_at: number }>(
+      "SELECT job_id,status,created_at FROM agent_ssh_jobs WHERE user_id=? AND app_id=? AND thread_id=? AND connection_id=? AND status='running' ORDER BY created_at,job_id",
+      [context.userId, context.appId, context.threadId, connectionId],
+    );
+    return rows.map((row) => ({ jobId: row.job_id, status: row.status, createdAt: row.created_at }));
   }
 
   async job(

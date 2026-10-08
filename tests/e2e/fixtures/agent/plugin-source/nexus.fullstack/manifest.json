@@ -16,9 +16,6 @@
     },
     "backend": {
       "entry": "backend/index.mjs"
-    },
-    "runner": {
-      "entry": "runner/index.mjs"
     }
   }
 }

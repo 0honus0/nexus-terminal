@@ -58,6 +58,8 @@ let prepareMkdirRequests = 0;
 let sftpSlowDirectory = '';
 let sftpSlowDirectoryDelayMs = 0;
 let sftpReadDelayMs = 0;
+let sftpReadBlocked = false;
+const sftpReadWaiters = new Set();
 let sftpDelayedReadCount = 0;
 let sftpReadBytesPerSecond = 0;
 let sftpReadNextDeliveryAt = 0;
@@ -674,20 +676,39 @@ function createHandleRegistry() {
       handles.delete(id);
       return value;
     },
+    drain() {
+      const values = [...handles.values()];
+      handles.clear();
+      return values;
+    },
   };
 }
 
 function attachSftp(session, accept) {
   const sftp = accept();
+  const registry = createHandleRegistry();
   const channelToken = Symbol('sftp-channel');
   activeSftpChannels.add(channelToken);
   openedSftpChannels += 1;
-  const detachChannel = () => activeSftpChannels.delete(channelToken);
+  let channelClosed = false;
+  const closeFile = async (state) => {
+    await state.fileHandle.close();
+    if (state.readOnly) sftpReadHandlesClosed += 1;
+  };
+  const detachChannel = () => {
+    if (channelClosed) return;
+    channelClosed = true;
+    activeSftpChannels.delete(channelToken);
+    for (const state of registry.drain()) {
+      if (state.type !== 'file') continue;
+      void closeFile(state).catch(() => undefined);
+    }
+  };
   sftp.once('end', detachChannel);
   sftp.once('close', detachChannel);
-  const registry = createHandleRegistry();
 
   const respondError = (reqid, error) => {
+    if (channelClosed) return;
     sftp.status(reqid, statusForError(error), error?.message || 'SFTP test server failure');
   };
 
@@ -793,8 +814,14 @@ function attachSftp(session, accept) {
       await fsp.mkdir(path.dirname(fullPath), { recursive: true });
       const fileHandle = await fsp.open(fullPath, openModeToFsFlags(flags), attrs?.mode ? attrs.mode & 0o7777 : 0o644);
       const readOnly = Boolean(flags & OPEN_MODE.READ) && !(flags & OPEN_MODE.WRITE);
-      const handle = registry.add({ type: 'file', fileHandle, path: fullPath, readOnly });
       if (readOnly) sftpReadHandlesOpened += 1;
+      const state = { type: 'file', fileHandle, path: fullPath, readOnly };
+      // OPEN can finish after cancellation has already drained the channel.
+      if (channelClosed) {
+        await closeFile(state);
+        return;
+      }
+      const handle = registry.add(state);
       sftp.handle(reqid, handle);
     } catch (error) {
       respondError(reqid, error);
@@ -811,10 +838,23 @@ function attachSftp(session, accept) {
     sftpReadPending += 1;
     sftpReadPeakPending = Math.max(sftpReadPeakPending, sftpReadPending);
     try {
+      if (sftpReadBlocked) {
+        await new Promise((resolve) => {
+          const release = () => {
+            sftpReadWaiters.delete(release);
+            sftp.off('close', release);
+            resolve();
+          };
+          sftpReadWaiters.add(release);
+          sftp.once('close', release);
+        });
+        if (channelClosed) return;
+      }
       if (sftpReadDelayMs > 0) {
         sftpDelayedReadCount += 1;
         await new Promise((resolve) => setTimeout(resolve, sftpReadDelayMs));
       }
+      if (channelClosed) return;
       const buffer = Buffer.alloc(length);
       const { bytesRead } = await state.fileHandle.read(buffer, 0, length, Number(offset));
       if (bytesRead > 0 && sftpReadBytesPerSecond > 0) {
@@ -823,6 +863,7 @@ function attachSftp(session, accept) {
         sftpReadNextDeliveryAt = deliveryAt;
         await new Promise((resolve) => setTimeout(resolve, Math.max(0, deliveryAt - performance.now())));
       }
+      if (channelClosed) return;
       sftpReadResponseBytes += bytesRead;
       if (bytesRead === 0) sftp.status(reqid, STATUS_CODE.EOF);
       else sftp.data(reqid, buffer.subarray(0, bytesRead));
@@ -891,8 +932,7 @@ function attachSftp(session, accept) {
       return;
     }
     try {
-      if (state.type === 'file') await state.fileHandle.close();
-      if (state.readOnly) sftpReadHandlesClosed += 1;
+      if (state.type === 'file') await closeFile(state);
       sftp.status(reqid, STATUS_CODE.OK);
     } catch (error) {
       respondError(reqid, error);
@@ -1298,7 +1338,18 @@ const controlServer = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ ok: true, sshPort: SSH_PORT, rootDir }));
       return;
     }
+    if (requestUrl.pathname === '/sftp/read-hold' && (req.method === 'POST' || req.method === 'GET')) {
+      if (req.method === 'POST') {
+        sftpReadBlocked = requestUrl.searchParams.get('blocked') === '1';
+        if (!sftpReadBlocked) for (const release of [...sftpReadWaiters]) release();
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ blocked: sftpReadBlocked, pending: sftpReadWaiters.size }));
+      return;
+    }
     if (req.method === 'POST' && requestUrl.pathname === '/reset') {
+      sftpReadBlocked = false;
+      for (const release of [...sftpReadWaiters]) release();
       sftpRealpathBlocked = false;
       sftpRealpathDeny = false;
       for (const resolve of sftpRealpathWaiters) resolve();

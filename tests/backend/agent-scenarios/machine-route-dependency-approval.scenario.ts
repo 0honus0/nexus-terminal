@@ -61,12 +61,9 @@ export const machineRouteDependencyApprovalScenario = async () => {
     tools: createUnifiedShellTools(null!, availabilityCryptoHash),
   });
   const withoutTarget = new Set(
-    modelFacingToolSchemas(
-      availabilityCatalog,
-      availabilityScope,
-      { environment: null, connectionIds: [] },
-      'execute',
-    ).map((tool) => tool.name),
+    modelFacingToolSchemas(availabilityCatalog, availabilityScope, { connectionIds: [] }, 'execute').map(
+      (tool) => tool.name,
+    ),
   );
   assert.ok(
     withoutTarget.has('machine_connection_list'),
@@ -86,22 +83,25 @@ export const machineRouteDependencyApprovalScenario = async () => {
     );
   }
   const withTarget = new Set(
-    modelFacingToolSchemas(
-      availabilityCatalog,
-      availabilityScope,
-      { environment: null, connectionIds: [1] },
-      'execute',
-    ).map((tool) => tool.name),
+    modelFacingToolSchemas(availabilityCatalog, availabilityScope, { connectionIds: [1] }, 'execute').map(
+      (tool) => tool.name,
+    ),
   );
-  for (const toolName of [
-    'machine_diagnostics_read',
-    'file_read',
-    'file_write',
-    'shell_execute',
-    'machine_docker_control',
-  ]) {
+  for (const toolName of ['machine_diagnostics_read', 'file_read', 'file_write', 'shell_execute']) {
     assert.ok(withTarget.has(toolName), `${toolName} must remain available when a connection is selected`);
   }
+  assert.equal(
+    withTarget.has('machine_docker_control'),
+    false,
+    'low-frequency Docker mutation should be deferred from the always-on Root execute surface',
+  );
+  assert.equal(
+    availabilityCatalog
+      .list(availabilityScope, { connectionIds: [1] })
+      .some((tool) => tool.name === 'machine_docker_control'),
+    true,
+    'deferred Docker mutation must remain available in the authoritative target-scoped ToolCatalog',
+  );
 
   const noTargetContext = await contextService([]).compose({
     scope: availabilityScope,

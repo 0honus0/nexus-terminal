@@ -11,7 +11,6 @@ export interface AgentAppViewState {
   approvalMode?: AgentApprovalModeDto;
   executionMode?: AgentExecutionModeDto;
   connectionIds?: number[];
-  environmentRecipeId?: string;
   hubView: 'conversation' | 'files';
 }
 
@@ -91,14 +90,6 @@ export const createAgentSurfaceSession = () => {
       const state = ensure(appId);
       if (connectionIds) state.connectionIds = [...connectionIds];
       else delete state.connectionIds;
-    },
-    restoreEnvironmentRecipeId(appId: string): string | undefined {
-      return ensure(appId).environmentRecipeId;
-    },
-    setEnvironmentRecipeId(appId: string, recipeId?: string): void {
-      const state = ensure(appId);
-      if (recipeId) state.environmentRecipeId = recipeId;
-      else delete state.environmentRecipeId;
     },
     pauseDetail(_appId: string): void {
       navigationGeneration += 1;

@@ -39,7 +39,7 @@ export const modelAwareContextBudgetScenario = async () => {
 
   const budget: RunView['budget'] = {
     contextPolicy: normal,
-    maxRunSteps: 80,
+    maxModelRequests: 80,
     maxActiveExecutionSeconds: 1_800,
     toolTimeoutSeconds: 60,
     maxToolOutputBytes: 65_536,

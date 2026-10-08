@@ -51,14 +51,31 @@ const decodeConfiguration = (kind: IntegrationKind, raw: string): IntegrationCon
       protocolVersion: '2026-07-28',
     };
   }
-  if (record.transport !== 'workspace-profile' || record.protocolVersion !== '1') {
+  if (record.transport !== 'ssh' || record.protocolVersion !== '1') {
     throw new Error('AGENT_DURABLE_STATE_INVALID');
   }
+  if (
+    Object.keys(record).some((key) => !['displayName', 'transport', 'protocolVersion', 'argv', 'cwd'].includes(key))
+  ) {
+    throw new Error('AGENT_DURABLE_STATE_INVALID');
+  }
+  const argv = decodeDurableStringArray(record.argv, 128);
+  const cwd = durableString(record.cwd) as string;
+  if (
+    !argv[0] ||
+    argv.some((arg) => arg.includes('\0') || Buffer.byteLength(arg, 'utf8') > 8192) ||
+    Buffer.byteLength(JSON.stringify(argv), 'utf8') > 65536 ||
+    !cwd.startsWith('/') ||
+    cwd.includes('\0') ||
+    Buffer.byteLength(cwd, 'utf8') > 4096
+  )
+    throw new Error('AGENT_DURABLE_STATE_INVALID');
   return {
     displayName: durableString(record.displayName) as string,
-    transport: 'workspace-profile',
-    profileId: durableString(record.profileId) as string,
+    transport: 'ssh',
     protocolVersion: '1',
+    argv,
+    cwd,
   };
 };
 

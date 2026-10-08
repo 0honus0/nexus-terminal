@@ -19,7 +19,6 @@ export class SqliteHardLimitUsageAdapter implements HardLimitUsagePort {
       artifactUsedBytes: artifact?.used_bytes ?? 0,
       artifactReservedBytes: artifact?.reserved_bytes ?? 0,
       executingRuntimes: runtimes?.count ?? 0,
-      activeWorkspaces: 0,
     };
   }
 }

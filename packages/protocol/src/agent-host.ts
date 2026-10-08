@@ -4,7 +4,8 @@ export type AgentContextProfileDto = 'normal' | 'extended';
 export type AgentAvailabilityStateDto = 'disabled' | 'enabling' | 'enabled' | 'degraded' | 'unavailable';
 
 export interface AgentHardLimitsDto {
-  maxRunSteps: number;
+  maxToolExecutions: number;
+  maxModelRequests: number;
   maxActiveExecutionSeconds: number;
   toolTimeoutSeconds: number;
   maxToolOutputBytes: number;
@@ -18,7 +19,6 @@ export interface AgentHardLimitsDto {
   maxDelegationDepth: number;
   maxSubagentMessagesPerRun: number;
   maxSubagentMessageBytesPerRun: number;
-  maxActiveWorkspaces: number;
   unretainedArtifactTtlSeconds: number;
 }
 
@@ -35,7 +35,7 @@ export interface AgentSettingsDocumentDto {
     maxConcurrentModelCalls: number | 'auto';
   };
   budget: {
-    maxRunSteps: number;
+    maxModelRequests: number;
     maxActiveExecutionSeconds: number;
     toolTimeoutSeconds: number;
     maxToolOutputBytes: number;
@@ -54,18 +54,12 @@ export interface AgentSettingsDocumentDto {
     maxGlobalArtifactBytes: number;
     unretainedArtifactTtlSeconds: number;
   };
-  workspaceRuntime: {
-    maxActiveWorkspaces: number;
-    enabledRecipeIds: string[];
-    toolVersions: Record<string, { enabledVersionIds: string[]; defaultVersionId: string | null }>;
-    acpProfiles: Array<{ id: string; argv: string[]; cwd: string }>;
-  };
   browser: {
     targets: Array<{
       id: string;
       endpoints: Array<{
         scope: 'docker-network' | 'external-network';
-        via: 'backend' | 'runner';
+        via: 'backend';
         url: string;
         priority: number;
         allowPlaintext: boolean;
@@ -88,7 +82,6 @@ export interface AgentSettingsViewDto {
   requestedSettings: AgentSettingsDocumentDto;
   effectiveSettings: AgentSettingsDocumentDto;
   hardLimits: AgentHardLimitsDto;
-  runtimeCapabilities: { workspaceRuntimeController: boolean };
   availability: AgentAvailabilityViewDto;
   revision: number;
 }
@@ -101,7 +94,6 @@ export interface AgentSettingsPatchDto {
   budget?: AgentSettingsSectionPatchDto<AgentSettingsDocumentDto['budget']>;
   subagents?: AgentSettingsSectionPatchDto<AgentSettingsDocumentDto['subagents']>;
   storage?: AgentSettingsSectionPatchDto<AgentSettingsDocumentDto['storage']>;
-  workspaceRuntime?: AgentSettingsSectionPatchDto<AgentSettingsDocumentDto['workspaceRuntime']>;
   browser?: AgentSettingsSectionPatchDto<AgentSettingsDocumentDto['browser']>;
   plugins?: AgentSettingsSectionPatchDto<AgentSettingsDocumentDto['plugins']>;
 }
@@ -115,7 +107,6 @@ export interface AgentHardLimitUsageDto {
   artifactUsedBytes: number;
   artifactReservedBytes: number;
   executingRuntimes: number;
-  activeWorkspaces: number;
 }
 
 export interface AgentHardLimitChangeDto {
@@ -142,7 +133,6 @@ export interface AgentHardLimitPreviewDto {
     usage: AgentHardLimitUsageDto;
   };
   expiresAt: number;
-  runtimeCapabilities: { workspaceRuntimeController: boolean };
 }
 
 export interface AgentHardLimitConfirmRequestDto {
@@ -170,7 +160,7 @@ export interface AgentAppStateUpdateRequestDto {
   expectedVersion: number;
 }
 
-export type AgentTargetKindDto = 'workspace' | 'ssh';
+export type AgentTargetKindDto = 'ssh';
 export type AgentTargetGrantSelectionDto = { mode: 'all' } | { mode: 'ids'; ids: string[] };
 export type AgentCapabilityScopeDto =
   { kind: 'global' } | { kind: 'targets'; targets: Partial<Record<AgentTargetKindDto, AgentTargetGrantSelectionDto>> };
@@ -182,7 +172,6 @@ export type AgentCapabilityDto =
   | 'machine.inspect'
   | 'shell.execute'
   | 'machine.docker.manage'
-  | 'workspace.manage'
   | 'browser.read'
   | 'browser.interact'
   | 'integration.mcp.read'
@@ -221,7 +210,9 @@ export interface AgentAppGrantReplaceRequestDto {
 }
 
 export interface AgentExecutionPolicyOverridesDto {
-  maxRunSteps?: number;
+  maxModelRequests?: number;
+  maxAutoModelRequests?: number;
+  maxAutoActiveExecutionSeconds?: number;
   maxActiveExecutionSeconds?: number;
   toolTimeoutSeconds?: number;
   maxToolOutputBytes?: number;
@@ -234,7 +225,9 @@ export interface AgentExecutionPolicyOverridesDto {
 }
 
 export interface AgentExecutionPolicyEffectiveDto {
-  maxRunSteps: number;
+  maxAutoModelRequests: number;
+  maxAutoActiveExecutionSeconds: number;
+  maxModelRequests: number;
   maxActiveExecutionSeconds: number;
   toolTimeoutSeconds: number;
   maxToolOutputBytes: number;

@@ -18,15 +18,14 @@ export const createBrowserLifecycleTools = (
     descriptor: {
       name: 'browser_session_open',
       version: TOOL_VERSION,
-      description:
-        'Create a Browser session using either a configured standalone targetId or the Browser target frozen into a running Workspace.',
+      description: 'Create a Browser session using an explicitly configured Browser targetId.',
       inputSchema: {
         type: 'object',
         additionalProperties: false,
         properties: {
           targetId: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
-          workspaceId: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
         },
+        required: ['targetId'],
       },
       riskClass: 'control',
       capability: 'browser.read',
@@ -39,10 +38,6 @@ export const createBrowserLifecycleTools = (
         targetRevision: binding.target.profileRevision,
         targetConfigurationHash: binding.target.configurationHash,
       };
-      if (binding.workspace) {
-        normalized.workspaceId = binding.workspace.id;
-        normalized.generation = binding.workspace.generation;
-      }
       return authority.inspection(
         context,
         'browser_session_open',
@@ -64,7 +59,6 @@ export const createBrowserLifecycleTools = (
           runId: context.runId,
           agentRuntimeId: context.agentRuntimeId,
           target: binding.target,
-          ...(binding.workspace ? { workspaceId: binding.workspace.id, generation: binding.workspace.generation } : {}),
         },
         context.signal,
       );

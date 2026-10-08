@@ -1,6 +1,5 @@
 <script setup lang="ts">
-  import { structurallyEqual } from '@/foundation/data';
-  import { UiModal, UiButton, UiCheckbox, UiInfoHint, UiSelect } from '@/foundation/ui';
+  import { UiModal, UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
   import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useFeedback, useOperationFeedback } from '@/shared/feedback/public';
@@ -12,60 +11,30 @@
     type AgentSettingsViewDto,
   } from '../api/agent-api';
   import { agentHostEvents, type AgentConfigurationChangedEvent } from '../events/agent-host-events';
-  import { parseAcpCommandToArgv } from './acp-command-argv';
-
-  type Profile = AgentSettingsViewDto['requestedSettings']['workspaceRuntime']['acpProfiles'][number];
-  interface ProfileDraft {
-    id: string;
-    argvText: string;
-    cwd: string;
-  }
 
   const DEFAULT_AGENT_APP_ID = 'nexus.agent';
   const props = defineProps<{
     settings: AgentSettingsViewDto;
     busy: boolean;
     agentAvailable: boolean;
-    saveProfiles: (profiles: Profile[], success?: string | null) => Promise<boolean>;
   }>();
   const { t } = useI18n();
   const feedback = useFeedback();
   const operationFeedback = useOperationFeedback('agent.settings.acp-runtime');
 
-  const draftProfilesFromProps = (): ProfileDraft[] =>
-    props.settings.requestedSettings.workspaceRuntime.acpProfiles.map((profile) => ({
-      id: profile.id,
-      argvText: JSON.stringify(profile.argv),
-      cwd: profile.cwd,
-    }));
-
-  const profileBaseline = ref<ProfileDraft[]>(draftProfilesFromProps());
-  const profiles = ref<ProfileDraft[]>(profileBaseline.value.map((profile) => ({ ...profile })));
   const integrations = ref<AgentIntegrationViewDto[]>([]);
   const localBusy = ref(false);
   const loading = ref(false);
   const disabled = computed(() => props.busy || localBusy.value);
   const integrationDisabled = computed(() => disabled.value || !props.agentAvailable);
   let integrationsGeneration = 0;
-  const configuredProfiles = computed(() => props.settings.effectiveSettings.workspaceRuntime.acpProfiles);
-  const profileOptions = computed(() =>
-    configuredProfiles.value.map((profile) => ({ value: profile.id, label: profile.id })),
-  );
 
   const acpConfiguration = (integration: AgentIntegrationViewDto): AgentAcpIntegrationConfigurationDto => {
-    if (integration.kind !== 'acp' || integration.configuration.transport !== 'workspace-profile') {
+    if (integration.kind !== 'acp' || integration.configuration.transport !== 'ssh') {
       throw new Error('ACP_INTEGRATION_INVALID');
     }
     return integration.configuration as AgentAcpIntegrationConfigurationDto;
   };
-
-  const syncProfiles = (): void => {
-    const next = draftProfilesFromProps();
-    profileBaseline.value = next.map((profile) => ({ ...profile }));
-    profiles.value = next;
-  };
-  const profilesDirty = computed(() => !structurallyEqual(profiles.value, profileBaseline.value));
-  const remoteMatchesProfiles = computed(() => structurallyEqual(profiles.value, draftProfilesFromProps()));
 
   const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'), t);
 
@@ -113,146 +82,14 @@
     }
   };
 
-  const normalizeProfiles = (draftList: ProfileDraft[]): Profile[] => {
-    const normalized: Profile[] = draftList.map((profile) => {
-      const id = profile.id.trim();
-      if (!/^[a-z][a-z0-9_.-]{0,127}$/.test(id)) throw new Error('ACP_PROFILE_ID_INVALID');
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(profile.argvText);
-      } catch {
-        throw new Error('ACP_PROFILE_ARGV_INVALID');
-      }
-      if (
-        !Array.isArray(parsed) ||
-        parsed.length < 1 ||
-        parsed.length > 64 ||
-        parsed.some((item) => typeof item !== 'string' || item.includes('\u0000'))
-      ) {
-        throw new Error('ACP_PROFILE_ARGV_INVALID');
-      }
-      const cwd = profile.cwd.trim();
-      if (cwd !== '/workspace' && !cwd.startsWith('/workspace/')) throw new Error('ACP_PROFILE_CWD_INVALID');
-      return { id, argv: parsed as string[], cwd };
-    });
-    if (new Set(normalized.map((profile) => profile.id)).size !== normalized.length) {
-      throw new Error('ACP_PROFILE_ID_DUPLICATE');
-    }
-    return normalized;
-  };
-
-  // 模态弹窗 1：添加配置档 (Profile)
-  const profileModalOpen = ref(false);
-  const profileModalError = ref('');
-  const editingProfileId = ref<string | null>(null);
-  const editingProfileIdLocked = ref(false);
-  const profileForm = reactive({
-    id: '',
-    cwd: '/workspace/work',
-    commandInput: 'acp-agent',
-  });
-
-  const isProfileIdValid = computed(() => /^[a-z][a-z0-9_.-]{0,127}$/.test(profileForm.id.trim()));
-  const isProfileIdDuplicate = computed(() =>
-    profiles.value.some(
-      (candidate) => candidate.id === profileForm.id.trim() && candidate.id !== editingProfileId.value,
-    ),
-  );
-  const isCwdValid = computed(() => {
-    const cwd = profileForm.cwd.trim();
-    return cwd === '/workspace' || cwd.startsWith('/workspace/');
-  });
-  const parsedModalArgv = computed(() => parseAcpCommandToArgv(profileForm.commandInput));
-  const isArgvValid = computed(
-    () => parsedModalArgv.value !== null && parsedModalArgv.value.length >= 1 && parsedModalArgv.value.length <= 64,
-  );
-  const canSubmitProfile = computed(
-    () =>
-      isProfileIdValid.value && !isProfileIdDuplicate.value && isCwdValid.value && isArgvValid.value && !disabled.value,
-  );
-
-  const openAddProfileModal = (): void => {
-    editingProfileId.value = null;
-    editingProfileIdLocked.value = false;
-    let index = profiles.value.length + 1;
-    let defaultId = `acp-profile-${index}`;
-    while (profiles.value.some((candidate) => candidate.id === defaultId)) defaultId = `acp-profile-${++index}`;
-
-    profileForm.id = defaultId;
-    profileForm.cwd = '/workspace/work';
-    profileForm.commandInput = 'acp-agent';
-    profileModalError.value = '';
-    profileModalOpen.value = true;
-  };
-
-  const openEditProfileModal = (profile: ProfileDraft): void => {
-    editingProfileId.value = profile.id;
-    editingProfileIdLocked.value = integrations.value.some(
-      (integration) => integration.kind === 'acp' && acpConfiguration(integration).profileId === profile.id,
-    );
-    profileForm.id = profile.id;
-    profileForm.cwd = profile.cwd;
-    profileForm.commandInput = profile.argvText;
-    profileModalError.value = '';
-    profileModalOpen.value = true;
-  };
-
-  const submitAddProfile = async (): Promise<void> => {
-    profileModalError.value = '';
-    const id = profileForm.id.trim();
-    const cwd = profileForm.cwd.trim();
-    const argv = parsedModalArgv.value;
-
-    if (!id || !cwd || !argv || argv.length === 0) {
-      profileModalError.value = t('agent.settings.disabledReason.incompleteForm');
-      return;
-    }
-
-    const nextDraft: ProfileDraft = { id, argvText: JSON.stringify(argv), cwd };
-    const nextProfiles: ProfileDraft[] = editingProfileId.value
-      ? profiles.value.map((profile) => (profile.id === editingProfileId.value ? nextDraft : profile))
-      : [...profiles.value, nextDraft];
-
-    try {
-      const normalized = normalizeProfiles(nextProfiles);
-      const saved = await props.saveProfiles(normalized, t('agent.settings.acpRuntime.profileSaved'));
-      if (!saved) return;
-      profiles.value = nextProfiles;
-      profileModalOpen.value = false;
-      editingProfileId.value = null;
-      editingProfileIdLocked.value = false;
-    } catch (cause) {
-      profileModalError.value = explain(cause);
-    }
-  };
-
-  const removeProfile = async (index: number): Promise<void> => {
-    const nextProfiles = [...profiles.value];
-    nextProfiles.splice(index, 1);
-    try {
-      const normalized = normalizeProfiles(nextProfiles);
-      const saved = await props.saveProfiles(normalized, t('agent.settings.acpRuntime.profileRemoved'));
-      if (saved) profiles.value = nextProfiles;
-    } catch (cause) {
-      operationFeedback.notifyError({ operation: 'remove-profile', message: explain(cause), cause });
-    }
-  };
-
-  const parsedArgv = (profile: ProfileDraft): string[] => {
-    try {
-      const parsed = JSON.parse(profile.argvText);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  };
-
   // 模态弹窗 2：添加集成 (Integration)
   const integrationModalOpen = ref(false);
   const integrationModalError = ref('');
   const integrationForm = reactive({
     displayName: '',
-    profileId: '',
+    transport: 'ssh' as const,
+    argv: '["agent", "--acp"]',
+    cwd: '/tmp',
     enabled: true,
   });
   let pendingIntegrationCreateIdentity: { fingerprint: string; idempotencyKey: string } | null = null;
@@ -260,7 +97,6 @@
   const openAddIntegrationModal = (): void => {
     pendingIntegrationCreateIdentity = null;
     integrationForm.displayName = '';
-    integrationForm.profileId = configuredProfiles.value[0]?.id ?? '';
     integrationForm.enabled = true;
     integrationModalError.value = '';
     integrationModalOpen.value = true;
@@ -268,8 +104,7 @@
 
   const submitAddIntegration = async (): Promise<void> => {
     const name = integrationForm.displayName.trim();
-    const pid = integrationForm.profileId.trim();
-    if (!name || !pid) return;
+    if (!name) return;
 
     await run(
       'create-integration',
@@ -278,9 +113,10 @@
           kind: 'acp' as const,
           configuration: {
             displayName: name,
-            transport: 'workspace-profile' as const,
-            profileId: pid,
+            transport: integrationForm.transport,
             protocolVersion: '1' as const,
+            argv: JSON.parse(integrationForm.argv) as string[],
+            cwd: integrationForm.cwd.trim(),
           },
           enabled: integrationForm.enabled,
         };
@@ -294,23 +130,6 @@
         await loadIntegrations();
       },
       t('agent.settings.acpRuntime.integrationCreated'),
-    );
-  };
-
-  const changeIntegrationProfile = (integration: AgentIntegrationViewDto, nextProfileId: string): void => {
-    const configuration = acpConfiguration(integration);
-    if (!nextProfileId || nextProfileId === configuration.profileId) return;
-    void run(
-      'update-integration-profile',
-      async () => {
-        await agentApi.updateIntegration(DEFAULT_AGENT_APP_ID, integration, {
-          kind: 'acp',
-          configuration: { ...configuration, profileId: nextProfileId },
-          enabled: integration.enabled,
-        });
-        await loadIntegrations();
-      },
-      t('agent.settings.acpRuntime.integrationUpdated'),
     );
   };
 
@@ -336,7 +155,6 @@
       title: t('agent.settings.acpRuntime.deleteIntegration'),
       message: t('agent.settings.acpRuntime.confirmDeleteIntegration', {
         name: configuration.displayName,
-        profile: configuration.profileId,
       }),
       confirmText: t('common.delete'),
       cancelText: t('common.cancel'),
@@ -353,14 +171,6 @@
   };
 
   watch(
-    () => props.settings.requestedSettings.workspaceRuntime.acpProfiles,
-    () => {
-      if (!profilesDirty.value || remoteMatchesProfiles.value) syncProfiles();
-    },
-    { immediate: true },
-  );
-
-  watch(
     () => props.agentAvailable,
     () => {
       void loadIntegrations();
@@ -371,123 +181,6 @@
 
 <template>
   <div class="space-y-5">
-    <!-- 模块 1：ACP 运行时 (配置档管理) -->
-    <section class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs transition-all">
-      <div
-        class="flex flex-wrap items-center justify-between gap-3 bg-header/35 px-4 py-3 sm:px-5 sm:py-3.5 rounded-t-2xl agent-settings-head"
-        :class="{ 'border-b border-border': profiles.length > 0 }"
-      >
-        <div class="flex items-center gap-2">
-          <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.acpRuntime.title') }}</h3>
-          <span
-            v-if="profiles.length > 0"
-            class="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-[11px] font-medium text-text-secondary"
-          >
-            {{ profiles.length }}
-          </span>
-          <UiInfoHint :text="$t('agent.settings.acpRuntime.description')" />
-        </div>
-        <UiButton
-          appearance="soft"
-          tone="neutral"
-          type="button"
-          :disabled="disabled"
-          class="w-[88px]"
-          @click="openAddProfileModal"
-        >
-          <span class="inline-flex items-center gap-1.5 text-xs">
-            <i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
-            <span>{{ $t('agent.settings.acpRuntime.addProfile') }}</span>
-          </span>
-        </UiButton>
-      </div>
-
-      <!-- 已添加列表：没有的话完全不显示任何占位 -->
-      <div v-if="profiles.length > 0" class="space-y-3 p-4 sm:p-5">
-        <article
-          v-for="(profile, index) in profiles"
-          :key="profile.id"
-          class="rounded-2xl border border-border/85 bg-card/80 transition-all hover:bg-card/95 hover:border-primary/50 shadow-2xs overflow-hidden"
-        >
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3.5">
-            <div class="flex items-start sm:items-center gap-3 min-w-0 flex-1">
-              <div
-                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 via-primary/10 to-primary/5 border border-primary/25 text-primary shadow-2xs"
-              >
-                <i class="fa-solid fa-terminal text-sm" aria-hidden="true"></i>
-              </div>
-              <div class="min-w-0 flex-1 space-y-1.5">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span
-                    class="inline-flex items-center rounded-xl border border-border/90 bg-background/90 px-3 py-1 font-mono text-sm sm:text-base font-bold tracking-tight text-foreground shadow-2xs"
-                  >
-                    {{ profile.id }}
-                  </span>
-                  <span
-                    class="inline-flex items-center gap-1 rounded-full border border-border/70 bg-header/50 px-2.5 py-0.5 font-mono text-[11px] text-text-secondary"
-                  >
-                    <i class="fa-solid fa-folder text-[10px] text-text-secondary/60"></i>
-                    <span>{{ profile.cwd }}</span>
-                  </span>
-                </div>
-                <div class="flex items-center gap-1.5 text-xs text-text-secondary font-mono">
-                  <i class="fa-solid fa-chevron-right text-[10px] text-primary shrink-0"></i>
-                  <span class="truncate text-foreground font-medium max-w-[500px]">{{
-                    parsedArgv(profile).join(' ')
-                  }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div
-              class="flex items-center justify-end gap-1.5 shrink-0 pt-2 sm:pt-0 border-t border-border/40 sm:border-0"
-            >
-              <UiButton
-                appearance="ghost"
-                tone="neutral"
-                density="compact"
-                icon-only
-                type="button"
-                :disabled="disabled"
-                :title="$t('common.edit')"
-                :aria-label="$t('common.edit')"
-                @click="openEditProfileModal(profile)"
-              >
-                <i class="fa-solid fa-pen text-xs" aria-hidden="true"></i>
-              </UiButton>
-              <UiButton
-                appearance="ghost"
-                tone="danger"
-                density="compact"
-                icon-only
-                type="button"
-                :disabled="disabled"
-                :title="$t('agent.settings.acpRuntime.remove')"
-                :aria-label="$t('agent.settings.acpRuntime.remove')"
-                @click="removeProfile(index)"
-              >
-                <i class="fa-regular fa-trash-can text-xs" aria-hidden="true"></i>
-              </UiButton>
-            </div>
-          </div>
-        </article>
-
-        <!-- 底部轻量新增按钮 -->
-        <button
-          type="button"
-          :disabled="disabled"
-          class="group flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border/80 bg-header/10 hover:bg-primary/5 hover:border-primary/45 py-2.5 text-xs text-text-secondary hover:text-primary transition-colors duration-200 cursor-pointer select-none disabled:pointer-events-none disabled:opacity-40"
-          @click="openAddProfileModal"
-        >
-          <i
-            class="fa-solid fa-plus text-[11px] text-primary/70 group-hover:text-primary transition-colors"
-            aria-hidden="true"
-          ></i>
-          <span class="font-medium">{{ $t('agent.settings.acpRuntime.addProfile') }}</span>
-        </button>
-      </div>
-    </section>
-
     <!-- 模块 2：ACP 集成 (ACP Integrations) -->
     <section class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs transition-all">
       <div
@@ -522,8 +215,7 @@
             appearance="soft"
             tone="neutral"
             type="button"
-            :disabled="integrationDisabled || configuredProfiles.length === 0"
-            :title="configuredProfiles.length === 0 ? $t('agent.settings.acpRuntime.saveProfileFirst') : undefined"
+            :disabled="integrationDisabled"
             class="w-[88px]"
             @click="openAddIntegrationModal"
           >
@@ -579,7 +271,7 @@
                     class="inline-flex items-center gap-1 rounded-full border border-border/70 bg-header/50 px-2.5 py-0.5 font-mono text-[11px] text-text-secondary"
                   >
                     <i class="fa-solid fa-terminal text-[10px] text-text-secondary/60"></i>
-                    <span>{{ acpConfiguration(integration).profileId }}</span>
+                    <span>SSH</span>
                   </span>
                 </div>
                 <div class="font-mono text-xs text-text-secondary truncate max-w-[500px]">
@@ -592,14 +284,7 @@
             <div
               class="flex flex-wrap items-center justify-end gap-2 pt-2 lg:pt-0 border-t border-border/40 lg:border-0"
             >
-              <UiSelect
-                density="compact"
-                :disabled="integrationDisabled"
-                :model-value="acpConfiguration(integration).profileId"
-                :options="profileOptions"
-                class="w-36"
-                @update:model-value="(value: unknown) => changeIntegrationProfile(integration, String(value))"
-              />
+              <span class="font-mono text-xs text-text-secondary">SSH · {{ acpConfiguration(integration).cwd }}</span>
               <div
                 class="flex items-center gap-2 rounded-xl border border-border/70 bg-header/25 px-2.5 py-1 text-xs text-foreground select-none"
               >
@@ -629,7 +314,7 @@
         <!-- 底部轻量新增按钮 -->
         <button
           type="button"
-          :disabled="integrationDisabled || configuredProfiles.length === 0"
+          :disabled="integrationDisabled"
           class="group flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border/80 bg-header/10 hover:bg-primary/5 hover:border-primary/45 py-2.5 text-xs text-text-secondary hover:text-primary transition-colors duration-200 cursor-pointer select-none disabled:pointer-events-none disabled:opacity-40"
           @click="openAddIntegrationModal"
         >
@@ -641,134 +326,6 @@
         </button>
       </div>
     </section>
-
-    <!-- 弹窗 1：添加 ACP 配置档模态弹窗 -->
-    <UiModal
-      :visible="profileModalOpen"
-      :title="editingProfileId ? $t('common.edit') : $t('agent.settings.acpRuntime.modalProfileTitle')"
-      :aria-label="editingProfileId ? $t('common.edit') : $t('agent.settings.acpRuntime.modalProfileTitle')"
-      :close-on-backdrop="!disabled"
-      :close-on-escape="!disabled"
-      :focus-on-open="true"
-      :restore-focus="true"
-      panel-class="max-w-xl p-5 sm:p-6 rounded-2xl"
-      @close="profileModalOpen = false"
-    >
-      <div class="space-y-4">
-        <p class="text-xs text-text-secondary leading-relaxed">
-          {{ $t('agent.settings.acpRuntime.modalProfileDescription') }}
-        </p>
-
-        <div class="space-y-3.5">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label class="block">
-              <span class="mb-1 block text-xs font-medium text-foreground">
-                {{ $t('agent.settings.acpRuntime.profileId') }} <span class="text-error">*</span>
-              </span>
-              <div class="relative flex items-center">
-                <i
-                  class="fa-solid fa-fingerprint absolute left-3 text-text-secondary text-xs pointer-events-none"
-                  aria-hidden="true"
-                ></i>
-                <input
-                  v-model="profileForm.id"
-                  :disabled="editingProfileIdLocked"
-                  required
-                  data-no-highlight
-                  class="h-9 w-full rounded-lg border border-border/80 bg-background pl-8 pr-3 font-mono text-xs text-foreground outline-none focus:border-border-hover transition-colors"
-                  :class="{ 'border-error/70 focus:border-error': !isProfileIdValid || isProfileIdDuplicate }"
-                  placeholder="acp-profile-1"
-                />
-              </div>
-            </label>
-
-            <label class="block">
-              <span class="mb-1 block text-xs font-medium text-foreground">
-                {{ $t('agent.settings.acpRuntime.cwd') }} <span class="text-error">*</span>
-              </span>
-              <div class="relative flex items-center">
-                <i
-                  class="fa-solid fa-folder-open absolute left-3 text-text-secondary text-xs pointer-events-none"
-                  aria-hidden="true"
-                ></i>
-                <input
-                  v-model="profileForm.cwd"
-                  required
-                  data-no-highlight
-                  class="h-9 w-full rounded-lg border border-border/80 bg-background pl-8 pr-3 font-mono text-xs text-foreground outline-none focus:border-border-hover transition-colors"
-                  :class="{ 'border-error/70 focus:border-error': !isCwdValid }"
-                  placeholder="/workspace/work"
-                />
-              </div>
-            </label>
-          </div>
-
-          <div class="rounded-xl border border-border/60 bg-header/15 p-3.5 space-y-2">
-            <div class="text-[11px] font-semibold text-foreground flex items-center gap-1.5">
-              <i class="fa-solid fa-terminal text-primary text-[10px]" aria-hidden="true"></i>
-              <span>{{ $t('agent.settings.acpRuntime.argvCommand') }}</span>
-              <span class="text-error">*</span>
-            </div>
-
-            <label class="block">
-              <div class="relative flex items-center">
-                <i
-                  class="fa-solid fa-terminal absolute left-3 text-text-secondary text-xs pointer-events-none"
-                  aria-hidden="true"
-                ></i>
-                <input
-                  v-model="profileForm.commandInput"
-                  required
-                  data-no-highlight
-                  class="h-9 w-full rounded-lg border border-border/80 bg-background pl-8 pr-3 font-mono text-xs text-foreground outline-none focus:border-border-hover transition-colors"
-                  :class="{ 'border-error/70 focus:border-error': !isArgvValid }"
-                  :placeholder="$t('agent.settings.acpRuntime.argvPlaceholder')"
-                />
-              </div>
-            </label>
-            <p class="text-[11px] text-text-secondary leading-relaxed">
-              {{ $t('agent.settings.acpRuntime.argvHint') }}
-            </p>
-          </div>
-        </div>
-
-        <div
-          v-if="profileModalError"
-          class="rounded-lg border border-error/30 bg-error/10 p-2.5 text-xs text-error flex items-center gap-2"
-        >
-          <i class="fa-solid fa-triangle-exclamation shrink-0" aria-hidden="true"></i>
-          <span>{{ profileModalError }}</span>
-        </div>
-      </div>
-
-      <template #footer>
-        <div class="flex items-center justify-end gap-2">
-          <UiButton
-            appearance="soft"
-            tone="neutral"
-            type="button"
-            :disabled="disabled"
-            @click="profileModalOpen = false"
-          >
-            {{ $t('common.cancel') }}
-          </UiButton>
-          <UiButton
-            appearance="solid"
-            tone="primary"
-            type="button"
-            :disabled="!canSubmitProfile"
-            @click="submitAddProfile"
-          >
-            <i
-              :class="editingProfileId ? 'fa-solid fa-floppy-disk' : 'fa-solid fa-plus'"
-              class="text-xs"
-              aria-hidden="true"
-            ></i>
-            <span>{{ editingProfileId ? $t('common.save') : $t('agent.settings.providers.saveAndAdd') }}</span>
-          </UiButton>
-        </div>
-      </template>
-    </UiModal>
 
     <!-- 弹窗 2：添加 ACP 集成模态弹窗 -->
     <UiModal
@@ -809,15 +366,22 @@
             </label>
 
             <label class="block">
-              <span class="mb-1 block text-xs font-medium text-foreground">
-                {{ $t('agent.settings.acpRuntime.integrationProfile') }} <span class="text-error">*</span>
-              </span>
-              <UiSelect
-                v-model="integrationForm.profileId"
-                class="w-full"
-                :placeholder="$t('agent.settings.acpRuntime.selectProfile')"
-                :options="profileOptions"
-              />
+              <span class="mb-1 block text-xs font-medium text-foreground">{{
+                $t('agent.settings.acpRuntime.transport')
+              }}</span>
+              <span class="text-xs text-text-secondary">SSH</span>
+            </label>
+            <label class="block">
+              <span class="mb-1 block text-xs font-medium text-foreground">{{
+                $t('agent.settings.acpRuntime.sshArgv')
+              }}</span>
+              <input v-model="integrationForm.argv" class="w-full rounded-lg border border-border bg-background p-2" />
+            </label>
+            <label class="block">
+              <span class="mb-1 block text-xs font-medium text-foreground">{{
+                $t('agent.settings.acpRuntime.sshCwd')
+              }}</span>
+              <input v-model="integrationForm.cwd" class="w-full rounded-lg border border-border bg-background p-2" />
             </label>
           </div>
 
@@ -858,7 +422,7 @@
             appearance="solid"
             tone="primary"
             type="button"
-            :disabled="integrationDisabled || !integrationForm.displayName.trim() || !integrationForm.profileId.trim()"
+            :disabled="integrationDisabled || !integrationForm.displayName.trim()"
             @click="submitAddIntegration"
           >
             <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>

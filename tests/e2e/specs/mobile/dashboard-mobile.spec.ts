@@ -24,7 +24,7 @@ const connectionRow = (page: Page, name: string): Locator =>
   connectionPanel(page)
     .getByRole('listitem')
     .filter({ has: page.getByText(name, { exact: true }) });
-const connectButton = (row: Locator): Locator => row.getByRole('button', { name: /^(Connect|连接)$/ });
+const connectCard = (row: Locator): Locator => row.getByRole('button', { name: /^(Connect|连接) / });
 
 async function expectHorizontallyInside(locator: Locator, viewportWidth: number): Promise<void> {
   const box = await locator.boundingBox();
@@ -215,18 +215,15 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
       await expectHorizontallyInside(toolbar, viewport.width);
 
       const row = connectionRow(page, 'E2E SSH');
-      const connect = connectButton(row);
+      const connect = connectCard(row);
       await expect(row).toBeVisible();
       const rowBox = await row.boundingBox();
       const connectBox = await connect.boundingBox();
       expect(rowBox).not.toBeNull();
       expect(connectBox).not.toBeNull();
-      const rowPadding = await row.evaluate((element) => {
-        const style = getComputedStyle(element);
-        return Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight);
-      });
-      expect(connectBox!.width).toBeGreaterThanOrEqual(rowBox!.width - rowPadding - 2);
-      expect(connectBox!.y).toBeGreaterThan(rowBox!.y + 20);
+      expect(Math.abs(connectBox!.width - rowBox!.width)).toBeLessThanOrEqual(2);
+      expect(Math.abs(connectBox!.y - rowBox!.y)).toBeLessThanOrEqual(1);
+      expect(Math.abs(connectBox!.height - rowBox!.height)).toBeLessThanOrEqual(2);
       await expectHorizontallyInside(row, viewport.width);
     }
   } finally {
@@ -307,7 +304,7 @@ test('mobile dashboard keeps empty and multi-connection states usable when resou
 
       for (const name of MOBILE_NAMES) {
         const row = connectionRow(page, name);
-        const connect = connectButton(row);
+        const connect = connectCard(row);
         await expect(row).toBeVisible();
         await expect(connect).toBeVisible();
         await expectHorizontallyInside(row, viewport.width);
@@ -323,7 +320,7 @@ test('mobile dashboard keeps empty and multi-connection states usable when resou
         page.waitForURL(
           (url) => url.pathname.includes('/workspace') && url.searchParams.get('connectionId') === String(ids[0]),
         ),
-        connectButton(connectionRow(page, MOBILE_NAMES[0])).click(),
+        connectCard(connectionRow(page, MOBILE_NAMES[0])).click(),
       ]);
       await page.goto('/');
     }

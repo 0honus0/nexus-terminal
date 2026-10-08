@@ -75,11 +75,17 @@ SSH 选择使用固定标题与全选栏、独立纵向滚动列表。全选复�
 
 终端断线重连后重新同步当前可见区域的行列数；浏览器从后台恢复、页面恢复或字体加载完成时重新测量。隐藏／后台状态下保留最近有效尺寸，不将临时缩小的布局写入远端 PTY；切回终端后按实际区域调整，无需手动拖动窗口恢复。
 
-终端收到的输出不只依赖浏览器绘制帧消费：手机可见页面暂缓动画帧时，仍通过定时器排空输出并返回流控额度，避免因等待绘制而停止接收。浏览器完全冻结时定时器也可能暂停，画面绘制仍由浏览器调度；不因此自动重连或重发输入。
+终端输出解析与屏幕重绘分开处理：前台输出直接进入 xterm 异步解析队列，后台输出按 80ms 或 512KiB 合并提交，解析完成后返回流控额度。普通重绘使用浏览器动画帧；每批待重绘内容有一次性 100ms 超时保障，避免动画帧暂缓时必须点击才更新，空闲时不轮询。DEC 2026 同步绘屏结束时提交完整画面，下一帧未完成的内容不会提前显示。浏览器完全冻结时定时器也可能暂停；不因此自动重连或重发输入。
+
+返回实时终端或输入命令时，实时输出恢复不等待历史游标的网络重置；新的历史翻页等待该重置完成，已取消或晚到的历史页面不能覆盖实时画面。
+
+HTML 终端背景在区域尺寸非零后加载；容器尺寸变化、隐藏后重新显示或页面恢复时，会在隔离背景文档中通知主题的 `resize` 处理，不重载背景或直接修改画布属性。主题仍需自行实现尺寸更新和重绘；只有一次性初始化、没有 `resize` 处理的主题不会自动获得重绘能力。这是生命周期保护，不保证浏览器冻结或任意主题脚本错误时动画仍正常运行。
+
+手机与粗指针设备的 HTML 终端背景将 `requestAnimationFrame` 动画限制到最高 20 帧/秒；背景不可见时暂停帧回调及 CSS 动画，恢复可见后继续。系统启用减少动态效果时保留首次绘制并暂停后续动画。该限制只作用于隔离背景，不限制终端输入、输出或远程桌面；自定义脚本的独立定时器、视频及远端持续输出仍可能产生持续负载。
 
 ### Agent 长对话上下文
 
-Agent 在模型请求前优先加载当前输入、Goal 和活动 Plan 明确指向的 Workspace 项目目录规则，再补已探索目录；支持显式 `/workspace/work/...` 与相对项目路径。归一化后拒绝仓库工作目录之外的候选，最多加载 8 个目标目录。没有全仓扫描，也不保证预先发现模型临时自行选址的所有嵌套规则；项目规则不改变工具权限。
+Agent 项目指令只从已观察到的、带显式 SSH Connection ID 的 File/Shell Tool 路径推导最多 8 个目标目录，并从授权 SSH Project Directory 读取 `AGENTS.md`；不读取旧 Workspace 路径、不将 Goal／Plan 文字当作目标，也不全仓扫描。配置哈希、授权与文件读取边界不因此放宽。
 
 工具输出因模型窗口预算被截断时，模型可用 `tool_result_read` 和返回的 Tool Call 引用／hash 分页读取当前 runtime 已捕获的完整结果，无需重新执行原工具。分页使用 Unicode 字符 offset／nextOffset，每页受工具输出预算限制；拒绝跨用户、应用、Run 或子任务访问及 hash 不匹配。读取成功不改变原操作的成功／失败或验证状态，无法恢复执行端 capture limit 之外的字节。
 
@@ -89,15 +95,19 @@ Run 审批保留 `ask` 与 `full_access` 两档：前者逐次等待用户批准
 
 `plan` 模式同样约束子任务：仅提供 read／control 工具，拒绝 Child mutation；已有写权限、governed profile 或 full_access 均不能解除禁写边界。禁写检查在执行及审批消费之前生效，不以最终完成检测代替。
 
+主 Agent 在 execute 模式不会把所有低频工具 schema 永久塞进模型上下文。标记为 deferred 的原生工具和 MCP 工具通过 `tool_search` 按需发现，再用 `tool_invoke` 携带版本绑定引用调用；真正执行前仍走原工具的可用性、能力、策略和审批检查，隐藏工具名不能靠猜测绕过发现。plan 模式继续直接提供当前可用的原生 read/control 工具，确保查看后台任务状态、读取诊断或观察 Browser 等调查操作不因压缩工具面而消失；写操作仍不可执行。
+
 Child 的 MCP 能力同样按需发现：使用 `tool_search` 查找、`tool_invoke` 携带版本绑定引用调用，不默认把全部 MCP schema 发给模型。引用过期或对应能力不在 delegation grants 内时拒绝，发现引用不授予执行权限；Child mutation 仍仅允许受治理的 Workspace 目标。
 
 Child 模型调用遇到瞬态连接、429 或 502／503／504 等错误时，在既有重试次数、任务 deadline 与 Run／delegation 预算内退避重试。失败请求的 usage 同样计入预算；部分回复和未完成工具建议不会提交为结果，不消费 pending mailbox。不切换冻结模型，不重放工具副作用；非瞬态错误、取消、预算耗尽和重启遗留中断不自动重试。
 
 Backend 正常停机时，Child 模型执行中断不作为用户取消，也不发布部分回复的最终交接。旧执行由既有生命周期恢复流程关闭；重启仅按安全 checkpoint 恢复契约创建新执行，不承诺原 Child 原地续跑或恢复旧模型 stream。
 
-`/interrupt` 仅中断正在 streaming 的 Root 模型；仅 Child streaming 时返回不可中断冲突。普通输入、Goal 与 pending queue 更新不自动取消 Child；对子任务纠正使用 mailbox，终止使用既有取消链路。
+`/interrupt` 仅中断正在 streaming 的 Root 模型；仅 Child streaming 时返回不可中断冲突。普通输入、Goal 与 pending queue 更新不自动取消 Child；对子任务纠正使用 mailbox，终止使用既有取消链路。待处理输入的移动或删除仅在 Root 模型 streaming 时触发中断，不中断已开始的 Workspace 命令。
 
 取消整个 Run 会同时中断其 Root 和 Child 执行。Root 等待子任务交接时不占用活跃执行计数；已开始的参与者完成取消结算后，Run 从 `cancelling` 收敛为 `cancelled` 并回收该 Run 的 Browser session，不依赖模型先返回正常响应。取消不回滚已经发生的外部副作用。
+
+Browser 点击／输入必须使用最新 snapshot 的 nodeRef。适配器在派发任何动作前拒绝过期引用时，返回 `BROWSER_NODE_STALE` 的已确认失败，不要求副作用 reconciliation；应先读取新 snapshot，再决定是否执行新动作。动作已派发后的断连、超时等不能据此视为未执行，仍保留未知副作用边界。
 
 Root 调用子任务 join 且条件尚未满足时让出执行槽位，等待子任务进展后恢复，不在等待状态继续发起模型请求。独立取消子任务不等于取消整个 Run；父级可在 join 被唤醒后继续处理结果。
 
@@ -109,9 +119,22 @@ Child 完成交接会从自身完整已保存工具历史收集成功且已验�
 
 子 Agent 不继承主 Agent 的私有对话或 Recall，只使用委派约束、获授权资料及自身工具／协作历史。容量充足时保留自身全部工具交互与已消费的父级纠正，不因超过 8 组工具交互自动遗忘；接近窗口时，使用冻结模型分批生成历史交接摘要并保留近期完整交互。摘要计入同一 Run 和委派预算，不作为子 Agent 回复显示，不提前消费新 mailbox；失败、截断或取消不覆盖旧摘要，不静默丢历史继续。无法安全压缩或委派预算不足会明确结束子任务，父级可决定重新委派；不保证真实模型摘要无损保留所有细节。
 
-长对话接近上下文容量时，Agent 使用当前冻结模型生成结构化历史交接摘要，保留近期完整对话和工具交互。历史按顺序分批送入模型，后续批次合并已有摘要，不按英文关键词、首尾四条或单条 220 字筛选；摘要关注目标、约束、纠正、决策、工作状态、阻碍、下一步和证据。原始对话保留，授权、审批、Goal、Plan 和待处理输入仍由原控制面管理，摘要不授予权限。
+长对话接近上下文容量时，Agent 使用当前冻结模型生成结构化历史交接摘要，保留近期完整对话和工具交互。历史按顺序分批送入模型，后续批次合并已有摘要，不按英文关键词、首尾四条或单条 220 字筛选；摘要关注目标、约束、纠正、决策、工作状态、阻碍、下一步和证据。若一次摘要没有比被覆盖历史更小，或已有摘要与必须保留的最新完整交互不能同时放入规划后的摘要空间，Agent 会尝试直接保留完整原始历史；只有完整历史仍能放进当前硬上下文预算时才继续，否则明确结束该 Run。原始对话保留，授权、审批、Goal、Plan 和待处理输入仍由原控制面管理，摘要不授予权限。
 
-摘要调用计入 Run 的模型步数、执行时间和 token usage；预算不足时等待增额。摘要不会作为普通助手回复显示，也不提前消费待处理输入。空结果、截断、超预算、不缩小、取消或来源变化不会覆盖有效摘要；无法安全压缩时明确结束或中断当前执行，不静默丢弃旧历史继续。单条历史记录大于摘要请求窗口时会明确失败。语义摘要仍可能遗漏细节，不承诺模型对任意任务无损归纳；重要约束也可保留在当前 Goal 中。
+摘要调用计入 Run 的模型请求数、执行时间和 token usage；执行额度趋紧时按下述策略扩展或受控收尾。摘要不会作为普通助手回复显示，也不提前消费待处理输入。空结果、截断、超预算、不缩小、取消或来源变化不会覆盖有效摘要；无法安全压缩时明确结束或中断当前执行，不静默丢弃旧历史继续。单条历史记录大于摘要请求窗口时会明确失败。语义摘要仍可能遗漏细节，不承诺模型对任意任务无损归纳；重要约束也可保留在当前 Goal 中。
+
+Agent 实时订阅处理当前协议定义的全部持久事件：回复、取消、错误和恢复等事件按各自字段校验，其他合法事件触发快照刷新，避免工具完成、计划／目标或协作更新造成实时订阅中断。回放仍按已消费 sequence 去重与续接；未知事件、非法 payload 或不支持的 schema 明确报错，不静默跳过。
+
+### Agent 执行额度与进度
+
+- `maxModelRequests` 是初始模型请求额度，不再把成功工具调用混入模型步数。Root、子 Agent、语义摘要、重试和模型 fallback 每次获准请求都计数；失败、取消不退还。工具开始执行时独立累计 `toolExecutions`，批量调用逐项计数，未执行的建议和拒绝不计数。
+- 默认 Balanced 初始 80 次请求／1800 秒，Deep 150 次／3600 秒。系统 hard limits 默认最多 400 次模型请求、4000 次工具执行和 7200 秒活动执行时间。应用策略 `maxAutoModelRequests`／`maxAutoActiveExecutionSeconds` 可降低自动扩展上限；新 Run 冻结上限，运行中修改设置不改变该 Run 的边界。活动时间软额度在安全边界评估，已获准请求／工具的 deadline 受冻结时间上限及各自期限约束，不为初始时间额度强行打断正常副作用。
+- 接近初始额度时，已有工具批次先完成。存在新的成功观察数据或验证／Artifact 证据，且未触发循环警告、最近三次工具结果非连续失败时，runtime 将受压额度按 1.5 倍扩展至冻结上限，记录 `budget.auto_extended`。相同操作和结果、已经用于扩展的证据、仅编辑 Plan 不支持再次扩展。进展识别是有界启发式，不保证任意任务一定完成；独立循环保护与最终上限始终有效。
+- 每轮模型上下文包含最新 Goal、Plan 项目状态／证据、验证状态、是否需要 reconciliation、实际消耗、剩余额度和预算压力。子 Agent 只看到自己的目标／状态及共享资源，不继承主 Agent 私有 Goal／Plan。模型收到的是持久状态投影，不是虚构完成百分比；Plan 完成不等于验证通过。
+- 无有效进展或接近上限时记录 `budget.finishing`，预留最多两次模型请求及最多 30 秒用于收尾，子 Agent 不能占用 Root 的请求预留。收尾停止新工具和委派，尽力保存安全 checkpoint，并输出已完成、已验证、证据和未完成工作；模型／上下文失败仍会保存确定性的部分结果。Run 以 `interrupted` 结束，不把资源停止声称为成功。未确认写操作继续保留 reconciliation／隔离边界；取消不代表远端副作用已回滚。
+
+- 普通执行额度不再进入需要用户增额的 `awaiting_budget`，也不显示执行次数／时间的手动增额按钮。`awaiting_budget` 和 versioned budget API 仅保留协作 mailbox 数量／字节增额，不能扩大模型请求、工具执行或时间边界。
+- checkpoint 继续执行继承累计请求、工具消耗和活动时间；已经收尾或耗尽的源 Run 不可通过恢复绕过限制。明确发起独立的新任务才创建新额度。运行时 API／持久化 decoder 只接受当前字段，不提供 `maxRunSteps`、委派 `maxSteps` 或 `usage.steps` 别名；数据库升级一次性转换既有设置与计数。
 
 ### Agent 项目目录规则
 
@@ -123,14 +146,31 @@ Child 完成交接会从自身完整已保存工具历史收集成功且已验�
 
 ### Agent SSH 长会话与后台任务
 
+Agent SSH 前台 `timeoutSeconds` 默认受剩余工具期限限制，最长 300 秒；后台默认 3600 秒、最长 86400 秒，必须绑定合法长会话并使用 `shell_job_control` 有界等待或取消。等待窗口与执行期限不同，后台 accepted／running 不等于成功。生产 Agent Workspace Runner 不再存在，SSH Job 仅由 SSH session owner 管理。
+
+SSH 后台服务同样会在执行期限到期时终止；`timeoutSeconds` 不是启动探测超时，Agent SSH 后台执行结果返回实际配置的 `executionTimeoutSeconds`。Agent 应选择覆盖用户要求运行时段及验收／收尾的有界期限，报告期限，并在声称仍运行前核对 SSH Job 状态及接口；健康检查只证明观测时刻，不承诺无限持续可用，不自动重启已超时 Job。
+
+`shell_job_control(action="list", target="ssh", id=ConnectionID)` 不传 jobId，返回当前授权 Thread/SSH 连接的受管 Job 数量与身份，不包含命令正文或其他 Thread 的 Job。旧 Workspace Job 列表不再提供给 Agent Shell 工具；SSH Job wait 窗口到期仍 running 时保留原 jobId 和真实状态，不伪造 unknown 或自行重放。
+
 - Agent 工具按功能模块命名：`shell_*`、`ssh_*`、`file_*`、`machine_*`、`workspace_*`、`collaboration_*`、`memory_*`、`browser_*`、`tool_*`、`skill_*`、`plan_*`、`user_*`、`artifact_*`、`acp_*`、`mcp_*`。只接受当前名称，不提供旧工具名别名。
+- SSH 会话入口将 connectionId 转为规范 SSH target 后校验同一 typed grant；会话创建、命令执行与文件操作共享连接授权，未选中或未授权的连接仍拒绝。
+- Agent `file_search` 通过 SSH 逐行使用 JavaScript Unicode 正则（u flag），每行最多返回首个匹配，column 为 1-based UTF-16 位置；不根据宿主是否安装 rg 切换语法或忽略规则。glob 匹配相对于本次搜索目录的路径或文件 basename，单文件搜索匹配 basename。结果有界且明确标记截断，读取与权限边界由 SSH 目标持有。
+- Agent 的 SSH 文件搜索不设置目录项数、扫描文件数或累计扫描字节上限，仍保留结果数量、输出大小及单文件读取边界，结果达到返回额度时可以标记 truncated；执行过程检查取消与期限，不突破权限和路径约束。
+- SSH 搜索单文件边界为 1 MiB；超出时跳过该文件、标记 truncated，并继续搜索其他文件，不因一个超大文件停止整树调查。此边界不改变 `file_read` 的既有读取契约。
+- 取消使用临时 SSH 会话的文件操作时立即关闭该连接以打断等待中的远端 I/O，随后完成原资源收尾；不关闭用户显式长会话。SFTP positioned read 在 channel 结束或关闭时拒绝未完成读取，不等待远端补发响应。
+- SSH 文件操作各自拥有独立 SFTP channel；显式长会话中取消或到达执行期限时只关闭本次操作的 channel，直接拒绝待完成 I/O，不等待远端确认关闭，不影响长连接、其他文件操作或后台 Job。
 - `ssh_session_open(connectionId, idleTimeoutSeconds?)` 打开对话级连接，返回 `sessionId`。默认空闲 1800 秒，0 表示不因空闲关闭；最大可配置值 86400 秒。每用户最多 32 条，服务最多 128 条连接。任务结束或停止不会自动关闭会话；对话删除、应用停用、权限撤销、连接配置变化和服务退出会清理。
 - `ssh_session_list(connectionId, sessionId?)` 查看当前对话内指定目标的连接状态与活动操作数；`ssh_session_close(connectionId, sessionId, force?)` 关闭并移除连接。普通关闭拒绝活动会话；显式 force 按破坏性操作治理，可能中断全部活动命令，不保证远端进程已终止。
-- `shell_execute` 与全部 `file_read/list/search/write/patch/move/delete` 接受仅限 SSH 的可选 `sessionId`。省略时仍每次临时建连后关闭；指定时检查、执行和验证使用已有连接。失效时不自动重连、降级或重放。
+- Agent `shell_execute` 的 command **仅在明确授权的 SSH 连接**使用 `{kind:"argv",argv:[可执行文件,参数...]}` 或 `{kind:"shell",shellScript:"待执行脚本"}`，支持可选 cwd。argv 字面参数逐一安全引用；shellScript 支持管道、变量、条件和重定向，由远端命令 Shell 执行。shellScript 是命令正文，不是展示标题，旧 text 字段与 `target:"workspace"` 一律拒绝，不改选任意 SSH 或本地执行。必要环境变量通过 env argv 或脚本显式传入。`shell_execute` 与七项 Agent 文件工具接受可选 `sessionId`，省略时临时建连，指定时在相同连接上检查、执行和验证；失效不自动重连、降级或重放，后台必须显式提供合法 sessionId。
 - 同一用户、应用和对话的 Root/Subagent 可以显式共享会话，但仍须有当前目标授权；跨用户、应用、对话禁止访问。命令各自使用独立 exec channel，文件使用独立句柄，不向其他任务插入输入，不继承前一命令的工作目录或环境变量；远端共享文件和服务仍可能相互影响。
+- Agent SSH 后台 Job 接纳及 running 状态反馈必须保留原 jobId，不以重提命令获取结果；服务验收使用健康检查，等待终态使用有界 wait。running 是活跃状态而非失败或状态缺失，不改变正常并发与执行身份。
+- `shell_job_control(action="list", target="ssh")` 省略 jobId，只列出当前 user/App/Thread/connection 的活跃受管 SSH Job，不列出其他线程、Runner Job 或远端任意进程；status/wait/cancel 必须使用原始 `ssh-job-UUID`，配置或授权失效均拒绝而不重绑。
+- ACP 集成**仅支持 SSH**。配置远端启动 argv（JSON 数组）与绝对 cwd，不自动安装程序；环境变量可由 env argv 显式传入。`acp_execute` 必须指定 integrationId、`target:'ssh'`、明确的已选中 connection id 和 prompt，可选绝对 cwd；旧 `workspace-profile` 集成配置、Workspace target/generation/profile、workspaceId 别名和省略目标都拒绝，不映射到 Backend 本地进程或任意 SSH 连接。SSH 使用独立非 PTY channel 与 ACP v1 客户端、内层权限审批和输出边界；取消关闭 channel/连接，断连不重放、不视为已验证成功。ACP 不是 OS 沙箱，输出不是独立验收证据。
+  - 执行前重新核对集成版本和 SSH 连接配置及冻结目标身份；内部冻结字段不作为模型输入开放。即使外层使用 full_access，内层敏感操作仍须单独审批；等待内层审批时取消会关闭本次执行，晚到授权不得继续执行。远端副作用无法确认时工具结果为 unknown、Run 可收敛为 interrupted，不承诺回滚；正常协议完成后仍需后续独立验证证据才能通过完成门禁。
+- 工具参数拒绝说明本次未执行，并提示按 Schema 与目标类型纠正后再尝试；反馈不回显参数值。循环警告按失败重复、稳定观察重复或其他无进展行为给出调整指引，不自动重放操作或停止端口占用者。
 - SSH `shell_execute(mode="background", sessionId=...)` 返回 `jobId`，任务继续运行；使用 `shell_job_control(target="ssh", id=连接ID, jobId, action="status/wait/cancel")` 查看有界输出、等待或取消。后台任务 timeoutSeconds 默认 3600 秒、最多 86400 秒，独立于提交工具期限；前台仍最多 300 秒且受工具预算约束。后台任务运行时不进行空闲回收，每用户最多 32 个活动任务。
 - SSH 任务状态与终态结果持久保存，原始命令和凭据不写入任务记录。连接丢失、强制关闭或 Backend 重启后的未确认任务标记 unknown，不重放；单任务取消不关闭共享连接。取消只有收到远端执行结束证据才有确定结果，不把本地 channel 关闭当作远端进程已终止。
-- `shell_job_control` 同时管理 Workspace Job；`workspace_code_query` 提供 TS/JS symbols、definition、references、diagnostics，其他语言使用文件搜索／读取。SSH Job 不使用 Runner，普通 SSH 功能不依赖 Runner 可用性。
+- `shell_job_control` 只管理 SSH Job；代码调查使用 SSH-only 的 `file_list`、`file_search`、`file_read`，验证使用授权 SSH Shell 的真实构建／测试，不提供语言专用语义导航。普通 SSH 和 Agent SSH Job 不依赖生产 Runner 可用性。
 
 全局 Agent 呼出悬浮按钮使用 44px 圆形、实心主色底与高对比图标，图标为对话框内的终端提示符；保留拖动位置、点击打开和任务数量徽标。拖到左右边缘附近松手后吸附贴边并半隐藏；鼠标悬停或键盘聚焦时完整展开，手机点击露出的半圆直接打开 Agent，也可拖回页面内取消贴边。贴边侧和纵向位置随布局保存，右键重置位置。
 
@@ -179,6 +219,7 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 
 - UI 样式、终端样式、背景设置和其他设置采用统一的分区卡片与公共控件；桌面左侧导航保持紧凑，窄屏改为顶部导航。
 - 终端主题、本地 HTML 背景和远程 HTML 背景使用一致的搜索区；当前终端主题可以通过下拉选择器直接切换。
+- HTML 背景主题的名称、预设标签和操作按钮优先同排显示；长名称省略，手机窄屏空间不足时换行，应用和编辑按钮保持同一行，不产生横向溢出。
 - 内置 HTML 背景采用深黑底色，保留各自的图案、光影和动画。已经应用的 HTML 保存为内容副本，预设更新后需重新应用才能采用新内容。
 
 ## 终端
@@ -203,6 +244,7 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
   手机启动页优先展示发起连接，挂起会话在下方；桌面仍为左侧连接、右侧挂起。连接标签分组展开后，子项类型图标与分组箭头左侧对齐。
 
   连接标签分组标题使用中性浅底色和细边界区分，不使用紫色选中背景；适用的批量连接、分组管理和批量删除工具常显，无需悬停。
+  启动页的发起连接列表使用紧凑的中性分组标题和统一边框容器，减轻标题高亮；连接子项保留清晰的缩进与操作区域。
 
 浏览器剪贴板能力通常要求 HTTPS 或 localhost 安全上下文。
 
@@ -243,6 +285,7 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 - File Manager 在很窄的 pane/sidebar 中会自动收起 `Size / Permissions / Modified` 次要列，只保留紧凑的文件类型图标与名称；恢复较宽 pane 后仍使用原来持久化的列宽。目录或搜索加载期间，加载动画显示在文件列表剩余区域中央。
 - Quick Commands 的 Copy / Edit / Delete 行级操作通过右键菜单提供，不再在每一行末尾占用三个图标位置；单击指令行仍执行当前指令。
 - 手机端顶部导航通过页面选择菜单访问全部页面，不需要横向滚动。
+- 手机端远程桌面点按画面只发送鼠标操作，不自动弹出键盘；需要输入时先点击远端输入区域，再使用画面右上角的「键盘」按钮显示或收起系统键盘，全屏下也可使用。最小化或断开连接时释放输入焦点。
 - 手机端终端长按选择/复制期间会暂时抑制系统软键盘，拖动选择手柄和点击 Copy 不会反复触发键盘弹入/收回；Copy 后不会主动重新聚焦输入框，下一次普通轻点终端时恢复键盘输入，Paste 仍会按原有行为恢复终端输入焦点。
 - 终端触摸拖动、长按选择与文件长按菜单按设备触摸能力启用，不按页面宽度判断；宽屏 Pad 或桌面 UA 触屏设备保留桌面布局，也可使用触摸操作。终端拖动由终端处理，包括无历史、历史顶部及全屏程序边界，不交给外层页面滚动；鼠标操作保持可用。
 - SSH 标签栏和文件管理器标签栏支持右键菜单，包括关闭当前、关闭左侧、关闭其他、关闭右侧等操作。
@@ -268,8 +311,6 @@ SSH 标签页支持挂起会话。点击挂起只设置保留标记，不关闭�
 远端归档取消只有收到命令退出码或 SSH exit-signal 才确认取消；仅关闭 channel 仍是结果未知，不据此清理可能仍有 writer 的临时归档。
 
 Agent HTTP 的来源拒绝仍返回标准 `error.code=CSRF_REJECTED` envelope 与 request ID；全局浏览器来源检查不改变 Agent API 的错误协议。
-
-Toolchain安装与版本检查子进程接入Runner统一managed-process生命周期，正常关闭终止登记进程，重启按现有PID/start-time记录回收遗留组；登记失败终止并报告失败。进程启动与登记不是跨崩溃原子事务，不保证任意时刻崩溃都无遗留进程，也不重放未知安装副作用。
 
 OpenAI-compatible Provider允许本地／内网HTTP(S)模型服务，可信管理员配置的baseUrl用于discovery/test/run；不新增私网封禁、逐跳重定向allowlist或DNS pinning。本地模型是支持用途，若需要限制Backend出站目标由部署网络层提供，discovery大小/超时限制不等于网络隔离。
 
@@ -317,11 +358,31 @@ Plugin Frontend 的静态代码和 SDK 可匿名获取并使用公开 immutable 
 
 Plugin 包在本部署以 `appId + version` 表示全局不可变身份；同名同版本的不同内容不能并存，换 publisher 不会获得独立 namespace。修改包内容须发布新版本或使用不同 App ID。verify 会登记版本元数据，尚无 verified-only 版本自动回收；该行为不代表支持多用户私有同名插件。
 
+副作用以持久 ToolCall 身份区分执行；同一次调用的协议重放不会未经核对地重新启动 SSH Job，新 ToolCall 即使参数相同也是新的授权操作，不将审批哈希替代执行身份。重复动作／结果且无进展时，循环检测先提示调整策略，再暂停等待输入；loopPause 与 pendingInputRequest 分别说明循环暂停与澄清问题。暂停不自动取消后台 Job；未知副作用仍需核对，不自动重放。
+
+模型上下文明确要求遵循最新用户任务及其最终输出格式；运行进度不构成重复执行已完成工作的请求。用户要求原始 JSON／精确标记时，模型应先完成必要的 Plan 和验证记录，再按指定格式回答。该指令不把未经验证的任务强制转换成成功，模型输出仍需实际验收。
+
+Plan 只包含当前用户任务的交付范围。只读分析完成后，未请求的后续修复或部署作为报告建议，不应成为阻止本次完成的待办。如果当前任务需要等待授权或澄清后继续，Agent 应提出结构化问题并挂起，收到回答后在当前 Run 内继续；不能保留未完成计划却直接结束。完成门禁拒绝后，Agent 应核对范围、取消不属于当前任务的项目或请求必要输入，不得将未执行工作标成完成。这些模型指令改善任务划分，但不保证每次模型都遵循；权限和完成门禁仍独立强制执行。
+
+未完成 Plan 的门禁反馈明确给出三条恢复路径：继续已授权的当前工作；仅取消当前范围外的未来工作并作为后续建议说明；或调用 user_input_request 等待当前任务所需的用户授权／澄清。blocked 项本身不代表已经发起用户输入请求。运行时不会自动取消 blocked 项，也不会为通过门禁取消必要工作、推定授权或放行未完成项。
+
+Root／Child 的执行进度投影提供服务器 currentUnixSeconds 和剩余活动执行硬预算秒数。Subagent deadlineAt 必须按该时间加所需时长计算，不能超过 Root 剩余硬预算或父委派截止时间；远期占位时间会在创建前拒绝。
+
+Browser 导航在执行前被 URL 策略拒绝或 SSH 文件工具因目标配置／授权失败而在 inspection 阶段拒绝时，工具返回已确认未执行的失败及错误码，模型可调整后继续；此类拒绝不触发未知副作用隔离。网络中断、执行后的策略失败、lease 丢失仍需核对真实结果。
+
+完成判定保留已验证测试结果：测试成功后，已确认且未强制的 SSH 空闲会话普通 close 不会使先前的测试证据失效。后续文件修改、命令重启、SSH force close 等操作仍需重新验证；Job 仅已接受或正在运行不算测试通过。已删除的 Agent `workspace_control` 工具不再被当作资源清理的特殊成功证据。
+
+Agent 的 `file_write` 只在 SSH 目标上新建文件（默认 0600），覆盖及补丁保留现有权限。可用 `mode` 指定 0 到 511 的十进制 Unix 权限（384 为 0600、420 为 0644）；权限属于审批操作哈希的一部分，并在写入后验证。
+
+Agent 的七项通用文件工具 `file_read/list/search/write/patch/move/delete` 只接受显式 `target:'ssh'` 与有权访问的连接 ID；`target:'workspace'` 直接拒绝，不自动改选 SSH 或在 Backend 本地读写。SSH 文件状态错误仍明确区分：file_write 的目录目标返回 FILE_WRITE_REQUIRES_FILE；file_move 的源不存在、源目标相同和目标已存在分别返回 FILE_NOT_FOUND、FILE_MOVE_SAME_PATH、FILE_MOVE_DESTINATION_EXISTS，不覆盖已有目标；file_delete 的路径不存在返回 FILE_NOT_FOUND。错误提供安全纠正说明，不回显输入路径，不绕过原 hash／metadata 与权限检查。
+
+文件参数错误用 FILE_ARGUMENT_* 区分对象、未知字段、目标类型、字符串／内容、整数范围、布尔值和内部 hash 格式；字符串／整数错误说明对应字段及既定 UTF-8 字节／范围约束，不回显输入值。file_search 的不存在路径同样返回 FILE_NOT_FOUND；无效输入不执行文件写入，内部冻结 hash 与资源变化仍分别处理。
+
+Memory 候选的 confidence 接受 0 到 1 的有限小数（如 0.5、0.8）；工具检查和操作哈希保留原始数值，不要求整数。候选仍须用户审核发布后才进入 Recall。
+
 Memory 管理和跨 App 导入来源可逐页加载更早记录，每页最多 200 条，按创建时间／ID 倒序；审核更新不改变分页排序。重新加载从首页开始，分页不是跨请求一致性快照。revoked／expired 历史仍保留，不自动物理删除，当前没有 Memory 总量硬配额，Recall 限制不等于存储容量限制。
 
 单用户 Agent Root／Subagent 共享 Runtime 并发预算；预算满时 queued Run 等待释放，不因切换 App 额外获得槽位。Root 按 App 轮转，但不承诺优先级、严格无饥饿或跨用户公平调度；created Run 的全局 admission 仍独立生效。
-
-Runner 的 command/job/workspace Journal 使用 `state/journal.sqlite` 按记录增量提交，成功提交后才更新内存状态；终态历史保留与容量限制不变。不迁移旧 JSON Journal：发现旧 `state/journal.json` 或其损坏标记时拒绝启动并保留原件，管理员须先停止相关工作、核对 Backend／Runner 状态并备份，再显式处理旧状态；不可仅删除旧文件来绕过未知副作用的核对。SQLite 损坏或不支持的版本同样拒绝启动，不自动重建空库。
 
 单轮模型流在接收阶段最多累计 64 个不同 Tool call（Subagent 为 32）；超出即失败，不等待上游结束，也不会执行该超限批次。Responses continuation 在接收阶段最多 512 个 part／64 个 Tool identity，重复 identity 不增加数量。
 
@@ -331,15 +392,18 @@ MCP 的连接超时、schema 与调用限制作用于单个 integration，不代
 
 远程桌面在单 Backend 内最多 16 个正在建连或已连接的会话；达到上限拒绝新连接，现有桌面不被踢下线。一次性票据数量限制与桌面连接容量相互独立；名额在建连任务及 socket 关闭收敛后归还。
 
-Agent Workspace Terminal 每个 Workspace 最多 8 个、单 Backend 合计最多 64 个在途会话；打开中、断线宽限期和关闭中均占名额，满载拒绝新建，携带原 sessionId 的合法续接不新增名额。名额在打开失败或会话关闭收敛后归还。
-
-- 首次启用 Agent 时按 onboarding 安装推荐的 first-party Plugin，并在 Settings 中配置 Provider、模型和 Runner。
+- 首次启用 Agent 时按 onboarding 安装推荐的 first-party Plugin，在 Settings 配置 Provider、模型和需要授权的 SSH 连接；不安装 Agent Runner。
 - Agent launcher 在认证后显示；打开 Host 后可创建 Thread、设置 Goal、提交输入并查看 Plan、approval、artifact 和运行历史。
 - 桌面 Agent 窗口可拖动标题栏调整位置；右下角缩放手柄围绕窗口当前中心对称扩展或收缩，并跟随鼠标移动。任一边缘到达屏幕边界后停止该方向的扩展；键盘方向键调整大小采用同样的居中缩放方式。
 - Run 执行期间可以继续提交输入。输入会进入 durable queue，并按当前 Run 状态打断或留待后续消费。
-- Environment 选择器决定下一次 Run 使用的 Workspace、Toolchain 和 target；服务端会验证并冻结本次执行配置。
-- Workspace Terminal、ACP、Browser 和 Runner Plugin 依赖可用的 Agent Runner。Runner 不可用时，普通 SSH/文件管理/远程桌面仍可使用。
-- Plugin App 只获得已声明并授权的 capability。需要确认的 mutation 会先显示 approval，未知执行结果会进入核对或恢复流程。
+- Agent Workspace 的创建／管理／Toolchain 模型工具及用户管理 API 均已物理删除；Agent 执行只经明确授权的 SSH 连接，不能静默回落到 Backend 本机。
+- SSH 后台执行仍通过 `shell_execute` 与 `shell_job_control` 在冻结的授权连接和 Thread 范围内操作，不能凭 Job 已受理就宣称命令成功；终态后核对已执行命令的状态，不通过重发未知副作用命令代替核对。
+- **Agent ACP 已完全移除 Workspace/Runner 运行模式**：旧 Runner ACP 进程、WebSocket stream、Workspace Runtime ACP profiles、Run/Runner wire profile 字段、前端 profile 编辑器与选择器均已删除。旧配置与建档请求直接拒绝，不自动升级、重放或转换目标。ACP 只经明确授权的 SSH connection 启动远端 argv/绝对 cwd，内层权限审批和断连 unknown 状态保留；不依赖 Agent Runner。Agent Workspace 管理、Runner Job/Terminal 已从当前版本物理移除；普通终端 Workspace 与 SSH 项目保持不变。
+- **Agent Capability 授权清单只保留当前有效能力**：删除旧 `workspace.manage` 定义、授权分类和官方 E2E 签名插件 manifest 中的该声明；File/Shell 的文件/命令授权只针对明确授权的 SSH target，Subagent governed mutation 同样遵循 Child grant、审批与 lease。现行 Agent Settings 的三语文案不再呈现 Runner/Workspace 管理、Native Host Environment 或旧 Workspace Job/Toolchain 成功消息。
+- **Agent Browser 使用独立 CDP target**：`browser_session_open` 必须提供已配置的 `targetId`，不再接受 `workspaceId` 或 Workspace generation；Browser endpoint 仅允许 `via=backend`，不将旧 Runner tunnel/Workspace 目标自动改绑到 Backend。Session 按 user/App/Run/Runtime 隔离；所选 target 的 endpoints 和 URL allowlist 参与配置 hash 与内容派生 revision，修改或删除该 target 后旧 Session 关闭并拒绝继续操作；无关 settings revision 变化不误关闭。浏览器导航、子请求和下载仍遵循 URL allowlist、Artifact 与原有审批边界。
+- **Agent Workspace Run/Checkpoint 契约已退出**：Composer/Run/Settings 不存在 Workspace Environment、Recipe、Toolchain 或 Runner Job 配置；新 Run 不含 `environment` 字段。恢复仍保留标准 Agent Goal/Plan/Context/Model/Artifact/Tool 证据与安全审计，新的持久化类型/Checkpoint schema 不接受历史 Workspace manifest/job 字段，不做旧格式转换。SSH-only File/Shell/ACP、独立 CDP Browser、普通终端 Workspace、SSH/SFTP 与 Artifact/Memory 保留。
+- 数据库迁移 **#58** 直接删除退役的 Agent Workspace 和 runtime commands 表（不判断旧状态），并删除 Agent Settings 的 `workspaceRuntime`、Workspace Job 并发和 Workspace Hard Limit 字段；旧 Workspace/Runner 数据不会作为历史兼容层提供。Backend Run/Thread 删除路径不再读取旧 Workspace 表或进行旧值兼容。用户独立备份文件和普通 SSH/终端项目数据不会由迁移主动清理。新 Compose、构建和发布流程已移除生产 Runner 服务/镜像；旧格式备份无法直接导入新版本。
+- Plugin App 只获得已声明并授权的 capability。Agent 文件和 Shell capability 的授权目标只允许 SSH 全部或指定连接 ID；授权设置不再提供 Workspace 目标，发送旧 Workspace 或 Workspace+SSH grant 返回请求无效，不会自动转换为 SSH 或更新授权版本。需要确认的 mutation 会先显示 approval，未知执行结果会进入核对或恢复流程。
 
 ## 外观与 HTML Theme
 
@@ -360,25 +424,22 @@ Passkey 的部署域名配置见 [部署与更新](./DEPLOYMENT.md#passkey--weba
 
 ## 镜像发布
 
-Workspace 是独立的项目与运行环境管理模块。支持版本 JSON 保留 Node、Python、Go 的可选版本和架构，用户从列表选择；安装使用 mise 获取指定版本并检查实际版本，不限制该版本具体的上游构建来源，也不要求维护安装树摘要或选择指纹。已安装环境重复使用，不因上游重建自动替换；使用中的版本不能卸载，明确卸载后重新安装可获取该版本当前的上游构建。
-
-镜像发布保留生产依赖 high 级安全审计；release channel 仅发布当前 main 提交，并要求该提交的完整 E2E（基础检查、全部 Playwright 分片和 Docker smoke）成功。Actions 运行标题显示 channel、架构和发布目标，主镜像与 Runner 任务使用固定名称，准备失败时仍可辨认任务。发布和部署方式见 [部署与更新](./DEPLOYMENT.md)。
+镜像发布保留生产依赖 high 级安全审计；release channel 仅发布当前 main 提交，并要求该提交的完整 E2E（基础检查、全部 Playwright 分片和 Docker smoke）成功。Actions 运行标题显示 channel、架构和发布目标，主镜像发布任务保持固定名称，准备失败时仍可辨认任务。发布和部署方式见 [部署与更新](./DEPLOYMENT.md)。
 
 ## 当前限制与注意事项
 
 - 双文件管理器布局属于实验性能力，复杂场景可能存在边界行为。
 - 同一布局中添加多个文本编辑器目前并非完整支持场景。
 - 请自行备份部署目录中的 `data`；项目本身不替代外部备份方案。
-- 普通 SSH Workspace 在单 Backend 内最多 64 个（包含正在连接的预留名额及弱网待续接会话）；满载拒绝新连接／挂起恢复，关闭或移交后可再创建，已有会话续接不重复占槽。该上限不覆盖 Agent Workspace、Server Transfer 或 Suspend 的独立预算。
+- 普通 SSH Workspace 在单 Backend 内最多 64 个（包含正在连接的预留名额及弱网待续接会话）；满载拒绝新连接／挂起恢复，关闭或移交后可再创建，已有会话续接不重复占槽。该上限不覆盖 Server Transfer 或 Suspend 的独立预算。
 - Backend Plugin `intents.create` 必须提供稳定 UUID `operationId`；插件应在首次提交前持久保存该 ID，未知提交结果时以同 ID／同 payload 重试，Host replay 原 receipt。复用 ID 修改 payload 会拒绝；这不保证接收方的外部动作只执行一次。
 - AppIntent replay 仅在原 receipt 仍保留时有效：receipt 有效期为 10 分钟，到期清理会丢失该 ID 的去重证据。超过该窗口的未知提交结果须先核对业务状态，不可把同 ID 重试当作永久去重；重试仍须通过当前 App／grant 校验。
 - Backend Plugin 若停止读取 Host RPC response，Host 对协议写入与关闭前 active RPC drain 都有硬 deadline；超时会把该 runtime 视为协议失败并进入进程终止，Plugin uninstall／upgrade 不会无限卡在等待 stdin drain。
 - 同一用户下同一 Plugin App 的首次 install 串行提交；并发安装不同版本时，先完成的版本成为当前 installation，后到请求会要求走 upgrade，不会把 App activeVersion 与 Installation version 写成不同版本。
 - 删除当前使用的自定义 Terminal Theme 时，Backend 会在同一持久化事务中清除 `activeTerminalThemeId`；直接调用删除 API 也不会留下指向已删除主题的悬挂设置。
-- Workspace delete 成功后释放保留标记，Run／Thread 不再因该 Workspace retention 永久阻塞删除；项目文件树随后可通过 runtime cleanup 清理，delete 本身仍先删除运行 generation。stop 不释放项目保留，失败或结果未知不视为删除成功；旧 deleted 保留记录也可清理。
-- Plugin App 升级／卸载的 drain 针对 App Run 与 Backend runtime，不级联停止独立 Workspace 的冻结 Runner Plugin。已有 Workspace 可继续执行旧版本；如需停止旧代码，应先显式 stop／delete 相应 Workspace。
+- Plugin App 升级／卸载的 drain 针对 App Run 与隔离 Backend runtime；Plugin 不提供 Runner target。包含 `targets.runner` 的签名 Manifest 不可安装。
 - Plugin Frontend Run 订阅单实例最多 2 个、当前页面所有 Plugin 合计最多 4 个，同实例不能重复订阅同一 Run；取消完成释放 transport 后归还名额，超限调用直接拒绝，避免 Plugin 占满 Host 共享订阅槽。
-- 带 Runner entry 的已安装 Plugin package 在升级／卸载后不会自动删除旧版本文件，保留冻结 Run／Workspace 使用的版本；当前 installation 仍只有一个版本。旧 package 会持续占用磁盘，不提供自动 package GC，也不会自动升级旧 Workspace。
+- 不再为 Runner Plugin 保留旧安装包：无安装引用的旧 Plugin 版本可以按现行清理规则回收，不能自动复活旧 Runner target。
 - 背景上传与删除在单 Backend 内顺序执行，后一次操作读取前一次提交的引用，避免并发上传遗留被覆盖的新文件；文件清理失败或进程崩溃仍可能留下未引用文件，不承诺跨文件／数据库原子更新。
 - Backend 正常关闭会调用所有 Backend Plugin child 的 dispose／终止及退出确认；失败会报告关闭错误，不把发送 kill 信号当作已退出。
 - Backend Plugin 的 ready 握手限时 30 秒，模块导入卡住会终止 child 并报告 `PLUGIN_BACKEND_READY_TIMEOUT`；不再无限等待该握手，后续退出确认可能额外耗时。
@@ -387,8 +448,7 @@ Workspace 是独立的项目与运行环境管理模块。支持版本 JSON 保�
 - Integration 删除／禁用的旧 refresh 仍会被失效保护拦住，临时 generation 在最后在途 refresh 结束后回收，不无限保留历史 UUID。
 - SSH 远端断开会驱动 Execution／Workspace Registry 回收，不再保留已断开的 ready 记录；挂起移交先解除旧 Execution 监听，晚到关闭事件不会按同 ID 误关新会话。远端操作结果未知仍按原隔离契约处理。
 - SSH 资源采集不跨采样复用机器静态信息，实际采集会重新读取；删除／改地址后旧 host 缓存在下次状态请求时清理，全局 reset 不允许旧采样回填。已有 TTL 内状态仍可短暂显示旧信息。
-- Runner Plugin 必须在 30 秒内完成 ready 握手；模块导入卡住会报超时并终止进程，Workspace 激活走既有失败补偿，不再无限等待。后续 dispose／退出收敛可能额外耗时。
-- Run进入completed/completed_unverified/failed/cancelled/interrupted终态后回收该Run的Browser session；审批／预算等待及新输入重调度不自动关闭，可在原Run/runtime授权范围继续使用。安全暂停若持久化为interrupted仍回收，checkpoint新Run须重新创建session。Child单独结束不关闭整个Run的session，显式close/Workspace/global cleanup仍有效。回收Context／连接不等于终止远端浏览器服务，失败记录日志并由全局清理兜底。
+- Run进入completed/completed_unverified/failed/cancelled/interrupted终态后回收该Run的Browser session；审批／预算等待及新输入重调度不自动关闭，可在原Run/runtime授权范围继续使用。安全暂停若持久化为interrupted仍回收，checkpoint新Run须重新创建session。Child单独结束不关闭整个Run的session，显式close/Run/global cleanup仍有效。回收Context／连接不等于终止远端浏览器服务，失败记录日志并由全局清理兜底。
 - 跳板连接的总连接预算覆盖所有握手与 forwarding，forward 阶段同样接受取消；超时后关闭已建立的跳板，晚到 channel 不发布。连接清理可能额外耗时，不保证远端即时退出。
 - Artifact 清理预览每批最多选择最旧的 1,000 个可回收对象，确认仅处理本批；清理后可重新预览继续，不代表一批清空全部。确认时仍重检保留／授权／活跃 Run 保护。
 - 替换连接标签关联最多 1,000 个安全正整数连接 ID，重复合并；空数组可清空已有标签，标签或连接不存在返回 404，失败不丢弃原关联。
@@ -416,25 +476,20 @@ Workspace 是独立的项目与运行环境管理模块。支持版本 JSON 保�
 - 远端解压直接写入目标目录，不承诺全部成功或全部回滚。失败／取消可能已经输出部分文件，应刷新并检查实际目录后再决定如何处理；结果未知时不自动重试，也不能以通道关闭推断远端解压已退出。
 - SSH transport 已关闭后才返回的命令／shell channel 会关闭并拒绝，不发布为可用 session；不声称对所有远端进程终止提供物理证明。
 - WebSocket Origin 校验仅在 TCP peer 属于现有受信代理地址范围时使用 forwarded host／proto；非受信直连不能借转发头自定义允许来源。受信代理必须覆盖客户端提供的转发头；Origin 不代替 session 认证。
-- HTTP 登出会撤销同一认证 session 已建立的 Workspace／Upload／Remote Desktop／Agent／Agent Terminal WebSocket，包括其他持有同 session 的页面；不撤销其他独立 session，不回滚已经接受的远端操作。与登出交错的握手可能被安全拒绝，需重新认证或重试。
+- HTTP 登出会撤销同一认证 session 已建立的 普通终端 Workspace／Upload／Remote Desktop／Agent WebSocket，包括其他持有同 session 的页面；不撤销其他独立 session，不回滚已经接受的远端操作。与登出交错的握手可能被安全拒绝，需重新认证或重试。
 - Plugin Agent SDK 的 operationId 不代表所有 mutation 统一 durable replay：创建 Thread／Run、追加输入、Run 取消和审批决定透传稳定身份；Thread 重命名、Subagent 取消使用版本 CAS。后两类超时应重读状态，可能返回版本冲突，不能盲目用新版本重发原操作。
 - SSH 资源状态缓存有效期从采集开始计时，不从完成计时；慢采集完成时可能已经过期，下次请求会重新采集。同主机／配置的并发请求复用正在进行的采集。
 - 服务器传输启动前的 sshpass／rsync／scp 探测也接受任务取消，取消后不继续后续探测；远端终止仍受 SSH transport 收敛能力约束。
 - 服务器直传（rsync／scp，包括 auto）要求信任源服务器：目标密码、私钥或口令会交给源端，源端管理员可以读取；0600 和事后临时文件清理无法隔离管理员。UI 每次提交前确认该风险，API 使用者也须接受此信任前提；此功能不是 Backend relay。
 - 有界 SSH 命令只有远端明确返回零退出码且没有退出 signal 才报告成功；channel 关闭但缺少 exit status 会报错，不当作成功或自动重放。
+- Agent 前台 SSH 命令的已确认非零退出码会保留 stdout、stderr 和实际退出码，报告已确认失败；不会仅因命令失败隔离连接。超时、断线、缺失退出状态或退出 signal 等无法确认的结果仍按未知副作用处理。
 - 退出认证会话时清空 SSH Key、命令历史、快捷命令及服务器传输的前端缓存并停止传输轮询；旧响应不会重新填入新会话。已发送的服务端操作不因清空前端缓存而回滚。
 - Workspace 关闭或文件操作使编辑器 scope 失效后，之前尚未完成的打开请求不会再插入标签；批量关闭也失效旧打开请求。底层读取可能仍完成，但结果不再发布。
 - 文件管理器重命名／删除前会使对应编辑器文档及目录后代失效，保留草稿但禁止旧路径保存；保存中的文档会阻止该文件操作。操作失败也需检查实际路径，关闭旧文档后重新打开，不会自动用旧标签重建旧文件。
 - 编辑器关闭单个／批量标签或弹窗会确认丢弃未保存内容，保存中不能关闭；Workspace 强制移除时保留未保存草稿但不能再保存到已断开的会话，可复制内容后关闭。草稿不跨网页刷新持久化。
 - Agent 多文件 patch 完整预校验后逐文件替换，不承诺整个集合原子提交或崩溃回滚。只有全部成功才报告 applied；失败可能已经修改部分文件，需重新读取全部目标的实际内容与 hash 后重新规划，不能以失败推断未修改或原样自动重试。
-- Workspace 多插件启动中任何一个失败时，会关闭该 generation 已注册的插件实例，不保留“Workspace 未运行、前序插件仍运行”的部分激活状态。
-- Workspace checkpoint 捕获／恢复期间，同 generation 的启动、重启、删除等生命周期请求会拒绝冲突；待 checkpoint 操作结束再重试，不与工作目录替换并行执行。
 - Agent 在步骤之间收到新输入、目标更新或服务停机信号时，不会将这些控制中断误记为用户取消；停机恢复仍按安全 checkpoint／新 Run 契约处理。
 - 完整备份恢复会清理当前挂起会话，但保留挂起服务的维护任务与所有权撤销订阅，恢复成功或失败后仍可创建新的挂起会话。
-- Runtime setup／pack uninstall 只有 Runner 明确成功才提交配置；失败、运行中或未知结果不提前启用／移除版本，同一确认重复提交复用原命令。远端成功后配置版本冲突会报错并保留有效确认，需检查实际安装状态后重新预览，不覆盖新配置，也不自动回滚远端。
-- Runtime 管理命令明确失败后可用相同参数重新提交，新操作保留独立命令记录；相同参数仍在执行或结果未知时复用原命令，未知结果先 reconciliation，不盲目重放。
-- Workspace 数量限制按用户所有 App 的未 deleted／failed 实例统计，并发创建在同一数据库提交边界检查名额；已有创建的幂等重试不占用新名额。每次请求使用其读取的有效配置上限。
-- Workspace 创建在幂等记录有效期内用相同 key／参数重试时返回原 Workspace，不因已有实例而冲突，也不重新 provision；同 key 不同参数仍拒绝，未知结果仍需 reconciliation。
 - 删除背景先清除设置引用，再清理旧图片；设置写入失败不会先删图片。旧文件清理失败记录服务端诊断，不改变已成功清除背景的结果。
 - Passkey 认证在提交时重检签名计数器；并发认证导致旧快照失效时，该请求不登录，请重新认证。持续使用零计数器的同步 Passkey 不受递增限制。
 - 文件编辑保存先完整写入同目录临时文件，再使用远端支持的 replace 操作替换目标；写入失败不提前截断原文件，编码和原文件 mode 保持。断链导致替换结果不明时仍需检查，不保证远端不支持原子 rename 时的原子性。
@@ -454,3 +509,5 @@ Workspace 是独立的项目与运行环境管理模块。支持版本 JSON 保�
 - Full Backup 导出验证 ready Artifact 的大小／hash，以及已安装 Plugin 的包标记、入口和文件清单；文件缺失或内容不符会拒绝导出，避免成功生成带缺失引用的备份。并发文件持续变化也会报错，不保证导出冻结所有文件 writer。
 - 导入备份前停止 Agent 调度和维护任务，关闭旧 Plugin／模型集成运行句柄；恢复完成后从恢复的数据重新初始化。无法安全停止时不执行恢复；文件／数据库恢复失败并回滚后也重新初始化存活数据，不复用旧执行队列或批准。
 - 生产访问建议启用 HTTPS。
+
+工具在执行前因参数、能力授权或目标限制被拒绝时，Run 记录与模型收到的结果保留原始错误码，例如 VALIDATION_FAILED、TOOL_ARGUMENTS_INVALID、APP_CAPABILITY_DENIED。检查拒绝始终不执行工具，不会将这些原因统一显示成 RESOURCE_FORBIDDEN，也不计入实际启动的工具执行额度。

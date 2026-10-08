@@ -66,6 +66,12 @@ export interface RemoteFileSystem {
 
 export type RemoteFileSystemRole = 'control' | 'transfer' | 'background';
 
+/** An operation-owned channel; closing it must not close the transport. */
+export interface RemoteFileSystemLease {
+  filesystem: RemoteFileSystem;
+  close(): void;
+}
+
 /** Metadata acknowledged a non-directory before this ensure attempt could mutate it. */
 export class RemoteDirectoryTypeConflict extends Error {
   constructor(remotePath: string) {

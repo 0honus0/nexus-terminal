@@ -285,14 +285,22 @@ test('stale suspended-session resume logs structured not-found diagnostics', asy
   await requestWorkspace(original.socket, 'suspend.mark');
   await closeWebSocket(original.socket);
 
-  type SuspendedSession = { id: string; originalWorkspaceId: string; status: 'active' | 'disconnected' };
+  type SuspendedSession = {
+    id: string;
+    originalWorkspaceId: string;
+    status: 'active' | 'disconnected';
+    ownershipState: 'available' | 'resuming' | 'attached';
+  };
   let suspended: SuspendedSession | undefined;
   const catalogSocket = await openAuthenticatedWebSocket(context.request);
   try {
     for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
       const list = await requestWorkspace<SuspendedSession[]>(catalogSocket, 'suspend.list');
       suspended = list.find(
-        (session) => session.originalWorkspaceId === original.workspaceId && session.status === 'active',
+        (session) =>
+          session.originalWorkspaceId === original.workspaceId &&
+          session.status === 'active' &&
+          session.ownershipState === 'available',
       );
       if (!suspended) await new Promise((resolve) => setTimeout(resolve, 100));
     }
@@ -464,14 +472,22 @@ test('resumed terminal preserves SGR wheel encoding requested by the remote TUI'
   });
   await closeWebSocket(original.socket);
 
-  type SuspendedSession = { id: string; originalWorkspaceId: string; status: 'active' | 'disconnected' };
+  type SuspendedSession = {
+    id: string;
+    originalWorkspaceId: string;
+    status: 'active' | 'disconnected';
+    ownershipState: 'available' | 'resuming' | 'attached';
+  };
   let suspended: SuspendedSession | undefined;
   const catalogSocket = await openAuthenticatedWebSocket(context.request);
   try {
     for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
       const list = await requestWorkspace<SuspendedSession[]>(catalogSocket, 'suspend.list');
       suspended = list.find(
-        (session) => session.originalWorkspaceId === original.workspaceId && session.status === 'active',
+        (session) =>
+          session.originalWorkspaceId === original.workspaceId &&
+          session.status === 'active' &&
+          session.ownershipState === 'available',
       );
       if (!suspended) await new Promise((resolve) => setTimeout(resolve, 100));
     }
@@ -533,14 +549,22 @@ test('resizing a suspended fullscreen terminal is ordered after its checkpoint',
   await requestWorkspace(original.socket, 'suspend.mark', { terminalSnapshot: snapshot });
   await closeWebSocket(original.socket);
 
-  type SuspendedSession = { id: string; originalWorkspaceId: string; status: 'active' | 'disconnected' };
+  type SuspendedSession = {
+    id: string;
+    originalWorkspaceId: string;
+    status: 'active' | 'disconnected';
+    ownershipState: 'available' | 'resuming' | 'attached';
+  };
   const recovery = await openAuthenticatedWebSocket(request);
   try {
     let suspended: SuspendedSession | undefined;
     for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
       const list = await requestWorkspace<SuspendedSession[]>(recovery, 'suspend.list');
       suspended = list.find(
-        (session) => session.originalWorkspaceId === original.workspaceId && session.status === 'active',
+        (session) =>
+          session.originalWorkspaceId === original.workspaceId &&
+          session.status === 'active' &&
+          session.ownershipState === 'available',
       );
       if (!suspended) await new Promise((resolve) => setTimeout(resolve, 100));
     }
@@ -601,7 +625,10 @@ test('a second device explicitly takes over an attached suspended SSH owner with
     for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
       const list = await requestWorkspace<SuspendedSession[]>(ownerA, 'suspend.list');
       suspended = list.find(
-        (session) => session.originalWorkspaceId === original.workspaceId && session.status === 'active',
+        (session) =>
+          session.originalWorkspaceId === original.workspaceId &&
+          session.status === 'active' &&
+          session.ownershipState === 'available',
       );
       if (!suspended) await new Promise((resolve) => setTimeout(resolve, 100));
     }
@@ -723,7 +750,10 @@ test('closing a resume request rolls the handoff back to the original suspended 
   for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
     const list = await requestWorkspace<SuspendedSession[]>(recoverySocket, 'suspend.list');
     suspended = list.find(
-      (session) => session.originalWorkspaceId === original.workspaceId && session.status === 'active',
+      (session) =>
+        session.originalWorkspaceId === original.workspaceId &&
+        session.status === 'active' &&
+        session.ownershipState === 'available',
     );
     if (!suspended) await new Promise((resolve) => setTimeout(resolve, 100));
   }
@@ -799,12 +829,20 @@ test('terminal output produced after marking is retained in suspended history', 
 
   const verifier = await openAuthenticatedWebSocket(request);
   try {
-    type SuspendedSession = { id: string; originalWorkspaceId: string; status: 'active' | 'disconnected' };
+    type SuspendedSession = {
+      id: string;
+      originalWorkspaceId: string;
+      status: 'active' | 'disconnected';
+      ownershipState: 'available' | 'resuming' | 'attached';
+    };
     let suspended: SuspendedSession | undefined;
     for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
       const list = await requestWorkspace<SuspendedSession[]>(verifier, 'suspend.list');
       suspended = list.find(
-        (session) => session.originalWorkspaceId === workspace.workspaceId && session.status === 'active',
+        (session) =>
+          session.originalWorkspaceId === workspace.workspaceId &&
+          session.status === 'active' &&
+          session.ownershipState === 'available',
       );
       if (!suspended) await new Promise((resolve) => setTimeout(resolve, 100));
     }
@@ -999,6 +1037,7 @@ test('resumed terminal pages older history through a bounded window and restores
     id: string;
     originalWorkspaceId: string;
     status: 'active' | 'disconnected';
+    ownershipState: 'available' | 'resuming' | 'attached';
   };
   let suspended: SuspendedSession | undefined;
   const catalogSocket = await openAuthenticatedWebSocket(context.request);
@@ -1006,7 +1045,10 @@ test('resumed terminal pages older history through a bounded window and restores
     for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
       const list = await requestWorkspace<SuspendedSession[]>(catalogSocket, 'suspend.list');
       suspended = list.find(
-        (session) => session.originalWorkspaceId === suspendedWorkspace.workspaceId && session.status === 'active',
+        (session) =>
+          session.originalWorkspaceId === suspendedWorkspace.workspaceId &&
+          session.status === 'active' &&
+          session.ownershipState === 'available',
       );
       if (!suspended) await new Promise((resolve) => setTimeout(resolve, 100));
     }

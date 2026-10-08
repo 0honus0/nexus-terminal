@@ -3,7 +3,7 @@
     "settings": {
       "tab": "Agent",
       "title": "Agent",
-      "description": "管理模型、执行环境与权限。选择一个分区开始配置。",
+      "description": "管理模型、已授权的 SSH 执行、集成与权限。选择分区开始配置。",
       "loading": "正在加载 Agent 设置...",
       "feature": {
         "title": "Agent 功能",
@@ -34,8 +34,8 @@
         "badge": "官方核心插件",
         "featureSkillsTitle": "双核心技能包",
         "featureSkillsDesc": "内置签名认证的 Operations 与 Developer 运维及代码工程能力",
-        "featureSandboxTitle": "受控安全沙箱",
-        "featureSandboxDesc": "严格遵循 Host 权限策略、审批流与 Workspace 边界",
+        "featureSandboxTitle": "SSH 授权执行",
+        "featureSandboxDesc": "远端操作仅通过明确授权的 SSH 目标，并受 Host 权限、策略与审批约束；不提供本地 Workspace 沙箱。",
         "featureDecoupledTitle": "热插拔架构",
         "featureDecoupledDesc": "支持随时独立热升级或卸载停用，不侵入系统内核",
         "publisherVerified": "官方签名通过",
@@ -48,9 +48,9 @@
         "installingTitle": "正在安全部署与挂载 Agent...",
         "installStep1": "正在下载并校验 Ed25519 官方签名与完整性...",
         "installStep2": "正在注册并装载 Operations 与 Developer 技能包...",
-        "installStep3": "正在初始化安全沙箱与启用 Agent 实例...",
-        "sandboxProtected": "执行环境受 Host 安全策略沙箱保护",
-        "defaultPluginSummary": "官方通用智能体核心，内置自动化运维诊断与全栈工程协作技能，在受控安全沙箱内执行任务。"
+        "installStep3": "注册权限并启用通过 SSH 授权执行的 Agent...",
+        "sandboxProtected": "受 Host 权限、审批和 SSH 目标边界保护",
+        "defaultPluginSummary": "官方通用 Agent，通过已授权 SSH 连接执行远端诊断与开发任务。"
       },
       "apps": {
         "title": "Agent App",
@@ -67,7 +67,6 @@
         "targetScope": "目标范围",
         "targetScopeAll": "全部目标",
         "targetScopeIds": "指定 ID",
-        "targetWorkspace": "工作区",
         "empty": "当前没有可用的 Agent App。",
         "permissionsCollapsedHint": "展开后查看并编辑此 App 的能力授权。",
         "capabilitiesHeader": "系统能力与安全沙箱授权",
@@ -92,7 +91,6 @@
         "categoryFiles": "文件与目标",
         "categoryExecution": "执行",
         "categoryMachine": "主机",
-        "categoryWorkspace": "Workspace 沙箱",
         "categoryBrowser": "浏览器",
         "categoryIntegration": "外部集成",
         "categoryData": "数据访问与交换",
@@ -117,15 +115,15 @@
           "file": {
             "read": {
               "name": "读取文件",
-              "desc": "读取与搜索已授权 Workspace 或 SSH 目标中的文件内容"
+              "desc": "读取并搜索已授权 SSH 目标中的文件"
             },
             "write": {
               "name": "写入文件",
-              "desc": "在已授权 Workspace 或 SSH 目标中创建、替换、移动或应用补丁"
+              "desc": "在已授权 SSH 目标中创建、替换、移动或修补文件"
             },
             "delete": {
               "name": "删除文件",
-              "desc": "删除已授权 Workspace 或 SSH 目标中的文件或目录"
+              "desc": "删除已授权 SSH 目标中的文件或目录"
             }
           },
           "machine": {
@@ -143,13 +141,7 @@
           "shell": {
             "execute": {
               "name": "执行命令",
-              "desc": "在已授权 Workspace 或 SSH 目标执行受策略与审批约束的命令"
-            }
-          },
-          "workspace": {
-            "manage": {
-              "name": "管理 Workspace 环境",
-              "desc": "创建、启停、删除环境并切换工具链版本"
+              "desc": "在已授权 SSH 目标执行受策略和审批约束的命令"
             }
           },
           "browser": {
@@ -209,7 +201,6 @@
         "noPublishers": "尚未信任任何发布者密钥。",
         "package": "包验证",
         "packageHint": "包会先作为 Artifact 上传，再检查签名、文件哈希、不安全归档项、manifest 兼容性与大小限制，之后才能安装。",
-        "packageContents": "Skill：{skills} · Frontend：{ui} · Backend：{backend} · Runner：{runner}",
         "present": "有",
         "absent": "无",
         "noCandidate": "请选择 .tar 包，验证通过后再安装。",
@@ -295,20 +286,20 @@
           "storage": "存储与数据流硬限制",
           "storageDesc": "限制产物文件占用空间与工具/记忆回溯数据流体积",
           "concurrency": "并发配额与代理环境",
-          "concurrencyDesc": "限制并发任务、活跃工作区与子代理委托深度",
+          "concurrencyDesc": "限制 Agent Runtime 并发、模型请求数量和 Subagent 委派深度",
           "extra": "其他系统级限制",
           "extraDesc": "其他扩展策略参数",
-          "execution": "执行步数限制",
-          "executionDesc": "限制单个 Run 最多可执行的模型/工具循环步数"
+          "execution": "模型请求硬上限",
+          "executionDesc": "所有运行单元共享的累计请求保险丝；包含失败请求、重试和压缩，收尾额度也包含在内"
         },
         "fields": {
-          "maxRunSteps": {
-            "label": "单次 Run 最大步数",
-            "hint": "单次任务允许循环执行工具与模型思考的最大步数"
+          "maxModelRequests": {
+            "label": "模型请求硬上限",
+            "hint": "所有运行单元共享的累计请求保险丝；包含失败请求、重试和压缩，收尾额度也包含在内"
           },
           "maxActiveExecutionSeconds": {
             "label": "任务最大执行时长",
-            "hint": "单次任务执行的最长持续时间，超时将自动取消"
+            "hint": "累计活动执行时间上限；接近上限时收尾并保留部分结果"
           },
           "toolTimeoutSeconds": {
             "label": "单工具调用超时",
@@ -362,9 +353,9 @@
             "label": "子代理通信字节上限",
             "hint": "单次任务中子代理通信消息所占用的数据总字节数"
           },
-          "maxActiveWorkspaces": {
-            "label": "最大活跃工作区数",
-            "hint": "系统同时保活的代码工作区容器或目录数"
+          "maxToolExecutions": {
+            "label": "工具执行",
+            "hint": "实际启动的工具累计上限，失败执行同样计入"
           }
         }
       },
@@ -389,17 +380,17 @@
         "presetBalanced": "标准均衡",
         "presetBalancedDesc": "推荐配置，兼顾推理质量、多步执行与资源控制",
         "presetDeep": "深度探索",
-        "presetDeepDesc": "高步数长超时，适合复杂重构与深层次调试",
+        "presetDeepDesc": "更多模型请求和执行时间，适合复杂任务",
         "presetCustom": "自定义微调",
         "presetCustomDesc": "按需自由配置各项底层参数，完全掌控执行上限",
         "customBadge": "已自定义",
         "recommendedBadge": "推荐",
         "saveSuccess": "预算与上下文配置已保存",
         "fields": {
-          "maxRunSteps": "最大执行步数",
-          "maxRunStepsHint": "单个 Run 允许执行的工具调用与思考最大步数",
-          "maxActiveExecutionSeconds": "执行超时时间 (秒)",
-          "maxActiveExecutionSecondsHint": "单次 Run 活跃执行的最长持续时间",
+          "maxModelRequests": "初始模型请求额度",
+          "maxModelRequestsHint": "Root、子 Agent、重试和压缩共享；有新增进展证据时在应用上限内自动扩容",
+          "maxActiveExecutionSeconds": "初始活动执行额度",
+          "maxActiveExecutionSecondsHint": "Root、子 Agent、重试和压缩共享；有新增进展证据时在应用上限内自动扩容",
           "toolTimeoutSeconds": "单工具超时 (秒)",
           "toolTimeoutSecondsHint": "单个工具调用的执行超时时限",
           "maxToolOutputBytes": "工具输出截断 (字节)",
@@ -412,14 +403,14 @@
         "readyNotice": "当前配置已就绪，将在下一次 Run 执行时生效",
         "modelCapabilityNotice": "模型单次上下文与最大输出直接使用 Provider/Registry 声明的物理能力；这里仅控制整个 Run 的总预算与工具资源。",
         "groups": {
-          "steps": "执行步数保险丝",
           "timeControl": "执行与超时控制",
-          "toolsData": "工具截断与上下文记忆"
+          "toolsData": "工具截断与上下文记忆",
+          "modelRequests": "初始模型请求额度"
         },
-        "presetSteps": "{steps} 步 · {minutes} min",
         "customTuning": "自定义微调",
         "effective": "有效: {value}",
-        "unsavedChanges": "有尚未保存的预算变更"
+        "unsavedChanges": "有尚未保存的预算变更",
+        "presetRequests": "{requests} 次请求 · {minutes} min"
       },
       "quantity": {
         "placeholderBytes": "例: 10M, 500K",
@@ -469,86 +460,6 @@
             "label": "临时产物生命周期 (TTL)",
             "hint": "未标记保留的临时构建物保留时长"
           }
-        }
-      },
-      "workspaceRuntime": {
-        "title": "Workspace 开发环境",
-        "description": "管理 Agent Runner、Workspace Profile、共享多版本 Tool Pack、存储和运行态清理。",
-        "available": "可用",
-        "unavailable": "不可用",
-        "refresh": "刷新",
-        "requestFailed": "Workspace Runtime 请求失败。",
-        "selectRecipe": "请至少选择一个 Workspace Profile。",
-        "setupTitle": "初始化与 Profile",
-        "setupDescription": "启用 Workspace 开发 Profile 并准备精确 Tool Pack；“已启用”和“已安装”分别记录。",
-        "previewSetup": "预览初始化",
-        "setupImpact": "需要安装 {count} 个 Pack，预计 {bytes}。",
-        "confirmSetup": "确认初始化",
-        "setupSubmitted": "Workspace Runtime 初始化命令已提交。",
-        "storageTitle": "Runner 存储",
-        "stateBytes": "状态",
-        "packBytes": "Packs",
-        "cacheBytes": "缓存",
-        "runtimeBytes": "运行数据",
-        "quarantineBytes": "隔离区",
-        "reclaimable": "可立即回收：{bytes}",
-        "previewCleanup": "预览运行态清理",
-        "clearCache": "清理缓存",
-        "previewReset": "预览恢复默认配置",
-        "cleanupImpact": "可清理 {count} 个 Workspace，预计回收 {bytes}。活跃：{active}；保留：{retained}。",
-        "confirmCleanup": "确认清理运行态",
-        "resetImpact": "将 Workspace Profile 和工具版本偏好恢复为发行默认值；不会修改 Artifact 或 Provider。",
-        "confirmReset": "确认恢复默认配置",
-        "packsTitle": "工具包",
-        "catalogRevision": "Catalog 修订 {revision}",
-        "installed": "已安装",
-        "inUse": "使用中",
-        "enabled": "已启用",
-        "defaultVersion": "默认版本",
-        "install": "安装",
-        "disableVersion": "停用",
-        "enableVersion": "启用",
-        "makeDefault": "设为默认",
-        "uninstall": "卸载",
-        "preferencesSaved": "工具版本偏好已保存。",
-        "installSubmitted": "Pack 安装命令已提交。",
-        "uninstallSubmitted": "Pack 卸载命令已提交。",
-        "cleanupSubmitted": "运行态清理命令已提交。",
-        "cacheSubmitted": "缓存清理命令已提交。",
-        "resetComplete": "Workspace Runtime 配置已恢复默认值。",
-        "uninstallTitle": "卸载 {name}",
-        "uninstallImpact": "预计释放 {bytes}。正在使用：{inUse}。替代默认版本：{replacement}。",
-        "yes": "是",
-        "no": "否",
-        "none": "无",
-        "confirmUninstall": "确认卸载",
-        "cancel": "取消",
-        "commandStatus": "最近命令：{action} · {status}",
-        "reasonUnknown": "Workspace 运行时当前不可用，后端未提供进一步说明。",
-        "reason": {
-          "runner_not_configured": "尚未配置 Workspace Runner（缺少地址或访问令牌），Workspace 运行时不可用。",
-          "runner_unavailable": "无法连接 Workspace Runner，Workspace 运行时暂不可用。",
-          "runtime_not_configured": "Workspace Runner 尚未配置可用的运行时环境。"
-        },
-        "commandState": {
-          "pending": "等待中",
-          "running": "执行中",
-          "succeeded": "已成功",
-          "failed": "已失败",
-          "unknown": "结果未知"
-        },
-        "commandAction": {
-          "setup": "运行时安装",
-          "packInstall": "安装工具包",
-          "packUninstall": "卸载工具包",
-          "cleanup": "清理",
-          "cacheCleanup": "清理缓存",
-          "settingsReset": "重置设置",
-          "provision": "准备环境",
-          "start": "启动",
-          "stop": "停止",
-          "restart": "重启",
-          "delete": "删除"
         }
       },
       "safety": {
@@ -771,14 +682,14 @@
         "profileId": "配置档 ID",
         "role": "角色",
         "defaultModel": "默认模型",
-        "maxSteps": "最大步骤",
+        "maxModelRequests": "模型请求",
         "peerMessaging": "同伴通信",
         "peerParentChild": "仅父子 Agent",
         "peerSameRun": "同一 Run 内已授权同伴",
         "mutationMode": "修改模式",
         "mutationReadOnly": "只读",
-        "mutationGoverned": "受治理 Workspace 修改",
-        "mutationHint": "受治理修改配置档只会开放 Workspace mutation Tool，且仅在 Run 使用“完全访问”时生效。每个 Worker 必须使用归属于自身 Child Runtime 的 Workspace；approval、lease/fence、verification、evidence 与 reconciliation 仍全部执行。",
+        "mutationGoverned": "受治理的 SSH 修改",
+        "mutationHint": "受治理修改配置档仅在 Run 选择“完全访问”时允许已授权 SSH 修改工具。每个 Worker 仍受 Child 授权、审批、租约/隔离、验证、证据和核对流程约束。",
         "failureMode": "失败模式",
         "failureIsolate": "隔离失败",
         "failureFailFast": "快速失败",
@@ -801,14 +712,14 @@
       },
       "browserRuntime": {
         "title": "CDP",
-        "description": "配置由 Backend 单份 BrowserRuntime 使用的 CDP 目标。endpoint 的网络位置（scope）与访问路径（via）彼此独立；via=runner 仅使用 Runner 作为网络隧道。",
+        "description": "配置由 Backend BrowserRuntime 直接连接的 CDP 目标及允许访问的 URL。",
         "addTarget": "添加目标",
-        "empty": "尚未配置浏览器目标。无需 Runner 的外部 CDP 可直接配置 via=backend。",
+        "empty": "尚未配置浏览器目标。请添加 Backend 可直接访问的 CDP Endpoint。",
         "targetId": "目标 ID",
         "remove": "删除目标",
         "allowedUrls": "允许访问的页面 URL Pattern（每行一个）",
         "endpoints": "CDP 端点",
-        "endpointHint": "scope 描述 endpoint 所在网络；via 决定 Backend 直连还是通过 Runner 隧道。v1 不允许把凭据放进 URL 的 userinfo、query 或 fragment。",
+        "endpointHint": "scope 描述 endpoint 所在网络；仅支持 Backend 直连，不再通过 Runner 隧道。不允许在 URL 的 userinfo、query 或 fragment 中传入凭据。",
         "addEndpoint": "添加 Endpoint",
         "scope": "网络范围",
         "via": "访问路径",
@@ -821,7 +732,6 @@
         "scopeDocker": "Docker 网络",
         "scopeExternal": "外部网络",
         "viaBackend": "Backend 直连",
-        "viaRunner": "通过 Runner 隧道",
         "modalTitle": "添加 CDP 目标",
         "modalDescription": "配置由 Backend BrowserRuntime 访问的 CDP 浏览器实例与端点。",
         "modalEndpointTitle": "添加 CDP 端点",
@@ -873,43 +783,23 @@
         "mcpEndpointHint": "支持 SSE 或 Streamable HTTP 端点"
       },
       "acpRuntime": {
-        "title": "ACP",
-        "description": "配置 Workspace 内可启动的 ACP 进程 Profile，以及 Nexus Agent 可调用的 ACP Integration。ACP 进程绑定冻结的 Workspace generation/runtime profile，但在单用户 native Runner 中不再声明只读挂载或网络沙箱。",
-        "addProfile": "添加配置",
-        "profiles": "工作区 ACP 配置档",
-        "profilesHint": "argv 使用 JSON 字符串数组；cwd 必须位于 /workspace。保存 Profile 后，创建 Workspace 时可选择并冻结到 generation。",
-        "noProfiles": "尚未配置 ACP Profile。",
-        "profileId": "Profile ID",
-        "argv": "argv（JSON 数组）",
-        "cwd": "工作目录",
-        "remove": "删除",
-        "saveProfiles": "保存 Profiles",
+        "transport": "执行目标类型",
+        "sshArgv": "SSH 启动参数（JSON 数组；环境变量可通过 env 传入）",
+        "sshCwd": "SSH 工作目录（绝对路径）",
         "integrations": "ACP 集成",
-        "integrationsHint": "Integration 是 Agent 的逻辑入口，只引用已保存的 Workspace Profile；执行时仍必须选择包含该 Profile 的运行中 Workspace。",
+        "integrationsHint": "配置在已授权 SSH 连接上运行的 ACP 程序。",
         "refresh": "刷新",
         "displayName": "显示名称",
-        "integrationProfile": "工作区配置档",
-        "selectProfile": "选择 Profile",
         "enabled": "启用",
         "createIntegration": "添加集成",
-        "saveProfileFirst": "请先保存至少一个 ACP Profile，再创建 Integration。",
-        "installAgentFirst": "请先安装 Nexus Agent Plugin，再管理 ACP Integration；Workspace ACP Profile 可以提前配置。",
-        "loading": "正在加载 ACP Integrations…",
-        "noIntegrations": "尚未配置 ACP Integration。",
+        "disabled": "已禁用",
+        "integrationCreated": "ACP 集成已创建。",
+        "integrationUpdated": "ACP 集成已更新。",
+        "integrationDeleted": "ACP 集成已删除。",
         "deleteIntegration": "删除",
-        "confirmDeleteIntegration": "确定删除绑定到 Profile \"{profile}\" 的 ACP Integration \"{name}\" 吗？该 Integration 入口会被永久移除。",
-        "modalProfileTitle": "添加 ACP 配置档",
-        "modalProfileDescription": "定义在 Workspace 环境中启动 ACP 代理进程的执行参数与目录。",
+        "confirmDeleteIntegration": "确定删除 SSH ACP 集成“{name}”吗？该集成入口将被永久移除。",
         "modalIntegrationTitle": "添加 ACP 集成",
-        "modalIntegrationDescription": "创建 Nexus Agent 逻辑入口并绑定对应工作区 ACP 配置档。",
-        "profileCreated": "ACP 配置档已添加并保存。",
-        "profileDeleted": "ACP 配置档已删除并保存。",
-        "profileIdHint": "以小写字母开头，仅允许小写字母、数字、点、减号与下划线",
-        "profileIdDuplicate": "该 Profile ID 已存在",
-        "cwdHint": "必须为 /workspace 或其子目录",
-        "argvCommand": "启动命令与参数",
-        "argvHint": "支持用于 argv 的类 shell 引号与转义（不会执行 shell 展开），也可输入 JSON 字符串数组",
-        "argvPlaceholder": "例如 acp-agent --port 8000 或 [\"acp-agent\"]",
+        "modalIntegrationDescription": "为已授权 SSH 连接上安装的 ACP 程序创建集成入口。",
         "integrationEnabledHint": "创建后立即允许 Nexus Agent 调用此 ACP 运行时"
       },
       "navigation": "Agent 设置分区",
@@ -927,17 +817,15 @@
         "overview": "概览",
         "models": "模型与预算",
         "execution": "执行与 Agent",
-        "environments": "运行环境",
         "storage": "文件与存储",
         "extensions": "App 与扩展",
         "safety": "安全与系统",
-        "runtime": "运行与环境"
+        "runtime": "执行与集成"
       },
       "groupDescriptions": {
         "overview": "查看功能状态、Agent App、活动情况与能力授权。",
         "models": "管理默认模型、Provider、上下文预算和实例上限。",
         "execution": "配置并发、性能与用于委派工作的 Subagent Profile。",
-        "environments": "管理 Workspace Runner、浏览器目标与 ACP 进程集成。",
         "storage": "管理 Artifact 配额、保留策略和当前存储压力。",
         "extensions": "管理签名 Agent App、插件仓库、安装包与发布者信任。",
         "safety": "管理目标 deny 规则与只读系统保护边界。"
@@ -947,7 +835,6 @@
         "enabled": "已启用",
         "models": "模型",
         "providers": "{count} 个已启用 Provider",
-        "runtime": "Workspace Runtime",
         "storage": "Artifact 存储",
         "storageLimit": "上限 {value}",
         "defaultModel": "默认模型",
@@ -971,8 +858,8 @@
           "conservative": "保守压缩"
         },
         "fields": {
-          "maxRunSteps": "Run 最大步骤保险丝",
-          "maxActiveExecutionSeconds": "最长活跃执行时间",
+          "maxModelRequests": "初始模型请求额度",
+          "maxActiveExecutionSeconds": "初始活动执行额度",
           "toolTimeoutSeconds": "单工具超时",
           "maxToolOutputBytes": "模型可见工具输出",
           "maxRecallItems": "Recall 条目数",
@@ -980,7 +867,9 @@
           "maxSubagentMessages": "Subagent 消息总数",
           "maxSubagentMessageBytes": "Subagent 消息总容量",
           "contextCompactionMode": "上下文动态压缩策略",
-          "contextProfile": "上下文窗口策略"
+          "contextProfile": "上下文窗口策略",
+          "maxAutoModelRequests": "自动续跑请求上限",
+          "maxAutoActiveExecutionSeconds": "自动续跑时间上限（秒）"
         },
         "profileHint": "Normal 保留更多上下文安全余量；Extended 使用更多模型窗口。两者都不会放宽硬性限制。",
         "profileInherited": "继承：{value}",
@@ -1156,10 +1045,6 @@
       "threadZoomOut": "缩小",
       "threadZoomReset": "重置为 100%",
       "noThreadsFound": "没有匹配的会话。",
-      "environment": "运行环境",
-      "environmentHint": "选择运行环境",
-      "environmentNone": "原生环境",
-      "environmentNoneHint": "在宿主环境直接执行",
       "frozen": "已冻结",
       "openThreads": "打开会话列表",
       "closeThreads": "关闭会话列表"
@@ -1264,6 +1149,8 @@
       "sendEmptyHint": "请先输入内容",
       "sendBusyHint": "正在处理上一条操作，请稍候",
       "clarificationTitle": "需要更多信息",
+      "loopPauseTitle": "循环保护已暂停执行",
+      "loopPauseHint": "重复操作未产生新进展。请发送新的指引以恢复本轮 Run，或停止它。运行中的后台任务不会自动取消。",
       "clarificationHint": "请在下方回复以继续同一个任务。你可以选择选项，或直接在输入框中回答。",
       "clarificationRecommended": "推荐",
       "clarificationTextHint": "请在下方输入框中填写回答。",
@@ -1355,30 +1242,6 @@
             "unknown": "未知",
             "cancelled": "已取消"
           },
-          "workspaceState": {
-            "creating": "创建中",
-            "ready": "已就绪",
-            "starting": "启动中",
-            "running": "运行中",
-            "stopping": "停止中",
-            "stopped": "已停止",
-            "deleting": "删除中",
-            "deleted": "已删除",
-            "failed": "失败"
-          },
-          "commandState": {
-            "pending": "等待中",
-            "running": "运行中",
-            "succeeded": "已完成",
-            "failed": "失败",
-            "unknown": "未知"
-          },
-          "workspaceAction": {
-            "start": "启动",
-            "stop": "停止",
-            "restart": "重启",
-            "delete": "删除"
-          },
           "containerAction": {
             "start": "启动",
             "stop": "停止",
@@ -1388,12 +1251,6 @@
           "browserAction": {
             "click": "点击",
             "type": "输入"
-          },
-          "codeAction": {
-            "symbols": "符号",
-            "definition": "定义",
-            "references": "引用",
-            "diagnostics": "诊断"
           },
           "acpStopReason": {
             "end_turn": "正常结束",
@@ -1413,32 +1270,12 @@
         "fileDelete": "已删除 {path}。",
         "connectionsFound": "找到 {count} 个已授权的 SSH 连接。",
         "diagnosticsCollected": "已采集 {count} 项诊断观测。",
-        "backgroundJobAccepted": "后台任务已记入 Runner 持久化任务日志。",
-        "jobOutcomeUnknown": "无法确认工作区任务的执行结果。",
-        "jobState": "工作区任务状态：{stateKey}。",
-        "commandCompleted": "工作区命令执行成功。",
-        "commandTimedOut": "工作区命令执行超时。",
-        "commandExited": "工作区命令以退出码 {code} 结束。",
-        "jobCancelPending": "取消尚未确认，任务仍处于{stateKey}。",
-        "jobWaitWindowExpired": "等待窗口已结束，任务仍处于{stateKey}。",
-        "jobCancelled": "Runner 已确认工作区任务被取消。",
-        "jobCompleted": "工作区任务执行成功。",
-        "jobTimedOut": "工作区任务执行超时。",
-        "jobExited": "工作区任务以退出码 {code} 结束。",
+        "jobState": "SSH 任务状态：{stateKey}。",
         "sshShellCompleted": "SSH 命令执行成功。",
         "sshSessionOpen": "SSH 长会话已打开。",
         "sshSessionList": "已获取 SSH 会话信息。",
         "sshSessionClose": "SSH 会话已关闭并移除。",
         "sshShellExited": "SSH 命令以退出码 {code} 结束。",
-        "workspaceProvisioned": "工作区已创建并就绪。",
-        "workspaceStatusIs": "工作区状态：{stateKey}。",
-        "workspaceActionConfirmed": "工作区{actionKey}操作已确认。",
-        "workspaceActionPending": "工作区{actionKey}操作仍处于{stateKey}。",
-        "versionsSwitched": "工具版本已切换，当前 generation 为 {generation}。",
-        "versionSwitchOutcome": "工具版本切换结果：{stateKey}。",
-        "codeFilesMapped": "已从 {indexed} 个已索引的 TypeScript/JavaScript 源文件映射出 {files} 个文件。",
-        "codeResults": "TypeScript 原生代码智能返回 {count} 条{actionKey}结果。",
-        "codeUnavailable": "{path} 暂不支持代码智能，请改用 {search} 与 {read}。",
         "skillMetadataFound": "找到 {count} 条相关的已签名 Skill 元数据。",
         "skillLoaded": "已加载已签名 Skill {name}（{id}）。",
         "deferredCapabilityFound": "找到 {count} 个延迟加载的 MCP 能力匹配项。",
@@ -1521,17 +1358,6 @@
         "tool_result": "工具结果",
         "system_notice": "系统通知"
       },
-      "workspaceKind": {
-        "shell": "命令行",
-        "code": "代码",
-        "data": "数据",
-        "browser": "浏览器"
-      },
-      "packStatus": {
-        "supported": "支持",
-        "deprecated": "已弃用",
-        "unavailable": "不可用"
-      },
       "subagentMessageKind": {
         "request": "请求",
         "reply": "回复",
@@ -1558,10 +1384,9 @@
         "anchored_estimate": "Provider 锚定估算",
         "provider": "Provider 实测"
       },
-      "steps": "步骤",
       "activeTime": "执行时间",
       "verification": "验证",
-      "increaseBudget": "增加本次 Run 预算",
+      "increaseBudget": "增加通信额度",
       "plan": "计划",
       "planStatus": {
         "pending": "待执行",
@@ -1621,90 +1446,22 @@
       "tokenBreakdown": "输入 {input} · 输出 {output} · 缓存 {cached}",
       "dragCardHint": "拖动或按 ↑/↓ 调整卡片顺序",
       "resetCardOrder": "重置卡片顺序",
-      "showOlderRuns": "显示更早的 Run（还有 {count} 条）"
-    },
-    "workspaceRuntime": {
-      "title": "Workspace 开发环境",
-      "description": "一个 Workspace 共享稳定项目文件，并在独立 generation 中组合 Node、Python、Go 等工具版本与 Runner Plugin。",
-      "refresh": "刷新",
-      "recipe": "Workspace Profile",
-      "retained": "保留 Workspace",
-      "toolVersions": "工具链版本",
-      "toolVersionsHint": "可选工具按版本从共享只读 Tool Store 挂载；不同 Workspace 可使用不同版本。",
-      "toolNotSelected": "不启用",
-      "workspaceToolVersions": "当前 Workspace 工具链",
-      "workspaceToolVersionsHint": "切换版本会重建此 Workspace 的 runtime generation，但不会复制项目文件或影响其他 Workspace。",
-      "switchToolVersions": "切换工具版本",
-      "versionSwitched": "Workspace 工具版本已切换。",
-      "versionSwitchFailed": "Workspace 工具版本切换失败。",
-      "versionSwitchUnknown": "Workspace 工具版本切换结果未知，需要对账后再继续。",
-      "generationAndTargets": "Generation {generation} · 已冻结 {count} 个 Runner Plugin target",
-      "runnerPlugins": "Runner Plugin",
-      "runnerPluginsHint": "Target 必须显式选择并冻结到 Workspace profile；Plugin 不会创建 Docker 容器。",
-      "noRunnerPlugins": "当前没有已启用且已安装、同时提供 Runner target 的 Plugin。",
-      "create": "创建 Workspace",
-      "created": "Workspace 已创建。",
-      "actionSubmitted": "Workspace 操作已提交。",
-      "targetContract": "版本 {version} · SDK {sdk} · 协议 {protocol}",
-      "targetSource": "{entry} · sha256:{hash}",
-      "start": "启动",
-      "stop": "停止",
-      "restart": "重启",
-      "delete": "删除",
-      "confirmDeleteTitle": "删除 Workspace？",
-      "confirmDeleteWorkspace": "确定删除 Workspace {id} 吗？正在运行的作业与 runtime 进程会被终止，运行环境会被移除。此操作无法撤销。",
-      "exportTitle": "工作区 → Artifact",
-      "importTitle": "Artifact → 工作区",
-      "workspacePath": "Workspace 路径",
-      "artifactName": "Artifact 名称",
-      "selectArtifact": "选择当前 App 的就绪 Artifact",
-      "mediaType": "Media type，例如 application/octet-stream",
-      "status": {
-        "creating": "创建中",
-        "ready": "就绪",
-        "starting": "启动中",
-        "running": "运行中",
-        "stopping": "停止中",
-        "stopped": "已停止",
-        "deleting": "删除中",
-        "deleted": "已删除",
-        "failed": "失败"
-      },
-      "exportAction": "导出",
-      "importAction": "导入",
-      "exported": "已导出 Artifact {id}。",
-      "imported": "已向 Workspace 导入 {bytes} 字节。",
-      "requestFailed": "Workspace Runtime 请求失败。",
-      "oneWorkspacePerRuntime": "每个 runtime 最多拥有一个活跃 Workspace；创建替代项前需先删除当前 Workspace。",
-      "reconciliationRequired": "Workspace 命令结果未知；请先核实结果，再发送新的修改操作。",
-      "verifyOutcome": "核实结果",
-      "reconciliationPending": "Workspace 命令结果仍未知；系统没有重试原修改操作。",
-      "reconciliationResolved": "Workspace 命令结果已完成对账。",
-      "localTerminal": "本地终端",
-      "localTerminalHint": "为此 Workspace generation 打开 direct PTY 终端。",
-      "openTerminal": "打开终端",
-      "closeTerminal": "关闭终端",
-      "terminalClosed": "终端连接已关闭。可重新打开终端建立新的连接。",
-      "terminalError": {
-        "protocolInvalid": "终端连接返回了无效的协议消息。请重新打开终端后重试。",
-        "attachFailed": "终端无法连接到当前 Workspace。请重新打开终端后重试。",
-        "reconnectExhausted": "终端连接无法恢复。请重新打开终端后重试。",
-        "inputQueueFull": "终端输入暂时积压。请等待连接恢复后再继续输入。",
-        "sessionChanged": "重连期间终端会话已发生变化。请重新打开终端。",
-        "generic": "终端连接失败。请重新打开终端后重试。"
-      },
-      "browserTarget": "浏览器目标",
-      "browserTargetNone": "不绑定（仍可 standalone 使用）",
-      "browserTargetHint": "选择后会把目标配置冻结到该 Workspace generation。",
-      "acpProfiles": "ACP 配置档",
-      "acpProfilesHint": "选择允许在该 Workspace generation 内启动的 ACP workspace profiles。"
+      "showOlderRuns": "显示更早的 Run（还有 {count} 条）",
+      "modelRequests": "模型请求",
+      "toolExecutions": "工具执行",
+      "finishing": "正在保存结果并收尾",
+      "stopReasons": {
+        "model_request_limit": "模型请求上限",
+        "active_time_limit": "活跃执行时间上限",
+        "tool_execution_limit": "工具执行上限",
+        "no_progress": "缺少新增进展证据"
+      }
     },
     "subagents": {
       "title": "Subagent",
       "description": "这里只显示公开协作状态，不展示子 Agent 的私有提示词或模型上下文。",
       "empty": "此 Run 尚无子 Agent 委派。",
       "depth": "深度 {value}",
-      "steps": "步骤 {used}/{max}",
       "cancel": "取消子 Agent",
       "messages": "Mailbox 交换",
       "noMessages": "此子 Agent 暂无公开消息。",
@@ -1721,7 +1478,8 @@
         "isolate": "失败仅影响自身",
         "failFast": "失败即中止同级"
       },
-      "profileLabel": "配置档 {id}"
+      "profileLabel": "配置档 {id}",
+      "modelRequests": "模型请求 {used}/{max}"
     },
     "approvals": {
       "title": "需要批准的操作",
@@ -1783,12 +1541,11 @@
       "promptExplain": "解释一下当前环境的工作方式",
       "promptDiagnose": "帮我检查可用的连接，只读取，不做修改",
       "promptProjectOverview": "快速梳理当前项目结构，说明关键模块、入口文件、运行方式和主要依赖",
-      "promptReviewChanges": "检查当前工作区的未提交改动，指出潜在问题、回归风险和可改进点",
+      "promptReviewChanges": "检查选定 SSH 项目中的未提交修改，找出潜在问题、回归风险和改进点",
       "promptTroubleshoot": "定位当前环境中最可能的问题，按优先级执行安全排查，并说明发现",
       "promptRunChecks": "运行与当前改动最相关的检查或测试，修复明确的失败项，并汇总结果",
-      "promptAutomation": "找出当前工作区里重复且适合自动化的操作，给出可落地的实现方案",
+      "promptAutomation": "分析选定 SSH 项目中的重复工作并提出可执行的自动化方案",
       "promptNextSteps": "根据当前项目状态整理一份简洁、按优先级排序的下一步行动清单",
-      "optionalRuntime": "可选运行环境",
       "approvalHistory": "已处理审批",
       "reasoningDescriptions": {
         "none": "关闭深度思考，直接快速回复",

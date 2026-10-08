@@ -17,7 +17,6 @@ import type {
 import { normalizeUserInputQuestions } from '../../../modules/agent/runtime/runs/user-input-request';
 import type {
   CompletionEvidenceSnapshot,
-  ConfirmedMutationTool,
   HostCursorReaderPort,
   PendingRootTool,
   PendingToolInputContinuation,
@@ -177,7 +176,7 @@ export class SqliteRunRepository
       const historyClause = historyBoundary
         ? `AND (${['sequence <= ?', 'run_id = ?', ...inherited.map(() => '(run_id = ? AND sequence <= ?)')].join(' OR ')})`
         : '';
-      const [entries, issueRow, pendingInputRequestRow] = await Promise.all([
+      const [entries, issueRow, pendingInputRequestRow, loopPauseRow] = await Promise.all([
         tx.queryAll<EntryRow>(
           `SELECT id, sequence, kind, payload_json, created_at
            FROM ai_thread_entries
@@ -213,15 +212,32 @@ export class SqliteRunRepository
               [row.id, scope.userId, scope.appId],
             )
           : Promise.resolve(null),
+        run.status === 'awaiting_input'
+          ? tx.queryOne<{ last_reason: string; updated_at: number }>(
+              `SELECT last_reason, updated_at FROM agent_loop_guards
+               WHERE run_id = ? AND paused_runtime_id IS NOT NULL AND last_reason IS NOT NULL`,
+              [row.id],
+            )
+          : Promise.resolve(null),
       ]);
       const issuePayload = issueRow ? durableRecord(parseDurableJsonValue(issueRow.payload_json)) : null;
+      const loopPauseReason = loopPauseRow ? durableString(loopPauseRow.last_reason) : null;
       return {
         ...run,
+        loopPause:
+          loopPauseRow && loopPauseReason !== null
+            ? { reason: loopPauseReason, occurredAt: durableInteger(loopPauseRow.updated_at) }
+            : null,
         pendingInputRequest: mapPendingUserInputRequest(pendingInputRequestRow),
         terminalIssue: issueRow
           ? {
               eventType: issueRow.type,
-              errorCode: typeof issuePayload?.errorCode === 'string' ? issuePayload.errorCode : null,
+              errorCode:
+                typeof issuePayload?.errorCode === 'string'
+                  ? issuePayload.errorCode
+                  : typeof issuePayload?.code === 'string'
+                    ? issuePayload.code
+                    : null,
               reason:
                 typeof issuePayload?.reason === 'string'
                   ? issuePayload.reason
@@ -280,7 +296,7 @@ export class SqliteRunRepository
     );
     return {
       runId,
-      required: run.needs_reconciliation === 1,
+      required: run.needs_reconciliation === 1 || resources.length > 0,
       resources: resources.map((row) => ({
         resourceKey: row.resource_key,
         toolCallId: row.tool_call_id,
@@ -470,19 +486,6 @@ export class SqliteRunRepository
       continuation: parseDurableJsonValue(row.continuation_json),
       answerText,
     };
-  }
-
-  async confirmedMutation(scope: Scope, runId: string, operationHash: string): Promise<ConfirmedMutationTool | null> {
-    const row = await this.db.queryOne<{ tool_call_id: string; provider_call_id: string }>(
-      `SELECT t.id AS tool_call_id, t.provider_call_id
-       FROM agent_tool_calls t
-       JOIN agent_runs r ON r.id = t.run_id
-       WHERE t.run_id = ? AND r.user_id = ? AND r.app_id = ?
-         AND t.operation_hash = ? AND t.status = 'succeeded' AND t.risk <> 'read'
-       ORDER BY t.completed_at, t.created_at, t.id LIMIT 1`,
-      [runId, scope.userId, scope.appId, operationHash],
-    );
-    return row ? { toolCallId: row.tool_call_id, providerCallId: row.provider_call_id } : null;
   }
 
   async completionEvidence(scope: Scope, runId: string): Promise<CompletionEvidenceSnapshot> {

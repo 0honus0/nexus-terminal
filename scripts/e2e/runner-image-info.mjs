@@ -24,7 +24,6 @@ const definitionFiles = [
   'packages/backend/package.json',
   'packages/frontend/package.json',
   'packages/protocol/package.json',
-  'packages/agent-runner/package.json',
   'tests/e2e/package.json',
   'tests/e2e/Dockerfile.runner',
   'scripts/e2e/build-runner-image.sh',

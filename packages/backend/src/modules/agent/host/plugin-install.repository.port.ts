@@ -62,7 +62,6 @@ export interface PluginVersionRecord {
   manifest: AgentAppManifest;
   frontendEntry: string | null;
   backendEntry: string | null;
-  runnerEntry: string | null;
   skillFiles: string[];
   status: PluginVersionStatus;
   installedAt: number | null;

@@ -8,8 +8,8 @@ import {
   type PreferencesDto,
 } from '../model/preferences';
 
-const mergePreferences = (raw: SettingsResponseDto): PreferencesDto => {
-  const result = { ...defaultPreferences };
+const mergePreferences = (raw: SettingsResponseDto, fallbackLanguage: string): PreferencesDto => {
+  const result = { ...defaultPreferences, language: fallbackLanguage };
   for (const key of Object.keys(defaultPreferences) as PreferenceKey[]) {
     const value = raw[key];
     if (value !== undefined) (result as Record<string, unknown>)[key] = value;
@@ -18,9 +18,9 @@ const mergePreferences = (raw: SettingsResponseDto): PreferencesDto => {
 };
 
 export const preferencesApi = {
-  async load(): Promise<PreferencesDto> {
+  async load(fallbackLanguage = defaultPreferences.language): Promise<PreferencesDto> {
     const settings = await httpClient.get<SettingsResponseDto>('/settings');
-    return mergePreferences(settings.data);
+    return mergePreferences(settings.data, fallbackLanguage);
   },
   async update(patch: PreferencesPatchDto): Promise<void> {
     if (!Object.keys(patch).length) return;

@@ -1,4 +1,5 @@
 import type { JsonValue } from '../../../agent.types';
+import { BrowserActionNotDispatchedError } from '../../../ai/browser-action-not-dispatched';
 import type { BrowserGatewayPort } from '../../../ai/integrations.types';
 import type { AgentTool } from '../../../capabilities/tool.types';
 import type { BrowserSessionBindingAuthority } from './browser-session-binding-authority';
@@ -92,27 +93,46 @@ export const createBrowserInteractionTools = (
       }
       const snapshotId = string(args.snapshotId, MAX_ID_BYTES);
       const nodeRef = string(args.nodeRef, MAX_ID_BYTES);
-      const state =
-        action === 'click'
-          ? await gateway.click(sessionId, snapshotId, nodeRef, { settleMs }, context.signal)
-          : await gateway.type(
-              sessionId,
-              snapshotId,
-              nodeRef,
-              string(args.text, MAX_TYPE_BYTES, true),
-              { settleMs },
-              context.signal,
-            );
-      return result(`Browser ${action} completed.`, state as unknown as JsonValue, {
-        key: 'agent.conversation.toolSummary.browserActionCompleted',
-        params: { actionKey: `agent.conversation.toolSummary.labels.browserAction.${action}` },
-      });
+      try {
+        const state =
+          action === 'click'
+            ? await gateway.click(sessionId, snapshotId, nodeRef, { settleMs }, context.signal)
+            : await gateway.type(
+                sessionId,
+                snapshotId,
+                nodeRef,
+                string(args.text, MAX_TYPE_BYTES, true),
+                { settleMs },
+                context.signal,
+              );
+        return result(`Browser ${action} completed.`, state as unknown as JsonValue, {
+          key: 'agent.conversation.toolSummary.browserActionCompleted',
+          params: { actionKey: `agent.conversation.toolSummary.labels.browserAction.${action}` },
+        });
+      } catch (error) {
+        if (!(error instanceof BrowserActionNotDispatchedError)) throw error;
+        return {
+          ok: false,
+          summary: 'Browser node reference is stale; no action was dispatched. Read a fresh snapshot before retrying.',
+          data: { error: { code: 'BROWSER_NODE_STALE' } },
+          artifactRefs: [],
+          truncated: false,
+          outcome: 'confirmed',
+          errorCode: 'BROWSER_NODE_STALE',
+          verification: {
+            status: 'failed',
+            summary: 'The adapter rejected the stale reference before dispatching any browser action.',
+            evidenceRefs: [],
+          },
+        };
+      }
     },
   })),
   {
     descriptor: {
       name: 'browser_scroll',
       version: TOOL_VERSION,
+      modelExposure: 'deferred',
       description:
         'Scroll the current Browser page by bounded CSS-pixel deltas and return lightweight post-action state.',
       inputSchema: {
@@ -171,6 +191,7 @@ export const createBrowserInteractionTools = (
     descriptor: {
       name: 'browser_press',
       version: TOOL_VERSION,
+      modelExposure: 'deferred',
       description:
         'Press a bounded keyboard key or shortcut at page level or on an opaque nodeRef, then return lightweight post-action state.',
       inputSchema: {
@@ -199,7 +220,7 @@ export const createBrowserInteractionTools = (
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
       const hasSnapshot = args.snapshotId !== undefined;
       const hasNode = args.nodeRef !== undefined;
-      if (hasSnapshot !== hasNode) throw new Error('TOOL_ARGUMENTS_INVALID');
+      if (hasSnapshot !== hasNode) throw new Error('BROWSER_NODE_SNAPSHOT_PAIR_REQUIRED');
       const { binding } = await authority.session(context, sessionId);
       const modifiers =
         args.modifiers === undefined ? [] : stringArray(args.modifiers, { minItems: 0, maxItems: 4, maxBytes: 16 });
@@ -255,6 +276,7 @@ export const createBrowserInteractionTools = (
     descriptor: {
       name: 'browser_back',
       version: TOOL_VERSION,
+      modelExposure: 'deferred',
       description: 'Navigate one history entry back and return lightweight post-action state.',
       inputSchema: {
         type: 'object',
@@ -301,6 +323,7 @@ export const createBrowserInteractionTools = (
     descriptor: {
       name: 'browser_select',
       version: TOOL_VERSION,
+      modelExposure: 'deferred',
       description:
         'Select one or more option values on an opaque select nodeRef from the latest Browser snapshot and return post-action state.',
       inputSchema: {

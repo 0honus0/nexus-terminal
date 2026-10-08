@@ -1,3 +1,11 @@
+import { randomUUID } from 'node:crypto';
+import { partialExecutionReport } from '../../../modules/agent/runtime/execution/runtime-progress';
+import { settleInterruptedRunChildren } from './state-commit/recovery-transitions';
+import { cancelRunSubagentWork } from './state-commit/transaction-primitives';
+import {
+  advanceExecutionBudgetTransition,
+  type AdvanceExecutionBudgetCommand,
+} from './state-commit/execution-budget-transitions';
 import type { Scope } from '../../../modules/agent/agent.types';
 import type {
   AppendInputCommitResult,
@@ -36,7 +44,6 @@ import type {
   MutatePendingInputCommitResult,
   SetRunGoalCommitResult,
   InterruptUnexpectedRootExecutionCommand,
-  PauseModelStepForBudgetCommand,
   PauseRuntimeForBudgetCommand,
   ParkMcpInputRequiredToolCommand,
   ParkModelStepCommand,
@@ -67,7 +74,6 @@ import {
   beginModelStepTransition,
   continueModelStepForCompletionGateTransition,
   parkModelStepTransition,
-  pauseModelStepForBudgetTransition,
   retryModelStepTransition,
   settleModelStepTransition,
   supersedeModelStepTransition,
@@ -211,6 +217,10 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
     });
   }
 
+  async advanceExecutionBudget(command: AdvanceExecutionBudgetCommand): Promise<StateCommitResult> {
+    return this.observedTransaction((tx) => advanceExecutionBudgetTransition(tx, command));
+  }
+
   async beginModelStep(command: BeginModelStepCommand): Promise<BeginModelStepResult> {
     return this.observedTransaction((tx) => beginModelStepTransition(tx, command));
   }
@@ -281,10 +291,6 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
       }),
     );
     return { ...result, previousAttemptId };
-  }
-
-  async pauseModelStepForBudget(command: PauseModelStepForBudgetCommand): Promise<StateCommitResult> {
-    return this.observedTransaction((tx) => pauseModelStepForBudgetTransition(tx, command));
   }
 
   async settleModelStep(command: SettleModelStepCommand): Promise<StateCommitResult> {
@@ -426,24 +432,61 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
          WHERE run_id = ? AND risk <> 'read' AND status IN ('running','reconciling')`,
         [row.id],
       );
-      const needsReconciliation = (unknownMutation?.count ?? 0) > 0;
+      const resourceStop = command.errorCode === 'RUN_EXECUTION_LIMIT';
+      const childState = resourceStop
+        ? await settleInterruptedRunChildren(tx, row, command.now, 'execution_limit')
+        : null;
+      const needsReconciliation =
+        row.needs_reconciliation === 1 || (unknownMutation?.count ?? 0) > 0 || Boolean(childState?.needsReconciliation);
+      if (resourceStop) {
+        await cancelRunSubagentWork(tx, row.id, command.now, true);
+        await tx.execute(
+          `UPDATE agent_runs SET active_execution_seconds = active_execution_seconds + ?, executing_runtime_count = 0, active_execution_started_at = NULL WHERE id = ?`,
+          [
+            row.active_execution_started_at === null ? 0 : Math.max(0, command.now - row.active_execution_started_at),
+            row.id,
+          ],
+        );
+      }
       const events: DurableEventInput[] = [
         { type: 'run.error', payload: { code: command.errorCode } },
         {
           type: 'run.interrupted',
           payload: {
-            reason: 'execution_boundary_error',
+            reason: resourceStop ? 'execution_limit' : 'execution_boundary_error',
             errorCode: command.errorCode,
             needsReconciliation,
           },
         },
         { type: 'run.status_changed', payload: { from: row.status, to: 'interrupted' } },
       ];
+      const text = resourceStop ? partialExecutionReport(mapRunRow(row), command.now) : null;
+      if (text) events.push({ type: 'message.final', payload: { text, partial: true, reason: 'execution_limit' } });
+      const ledgerCursor = text
+        ? await appendLedger(
+            tx,
+            row,
+            [
+              {
+                id: randomUUID(),
+                runId: row.id,
+                kind: 'assistant_message',
+                payload: { text, partial: true, reason: 'execution_limit' },
+              },
+            ],
+            command.now,
+          )
+        : 0;
       const committedEvents = await appendEvents(tx, row, events, command.now);
       const updatedRow = await patchRun(
         tx,
         row,
-        { status: 'interrupted', needsReconciliation, completedAt: command.now },
+        {
+          status: 'interrupted',
+          needsReconciliation,
+          completedAt: command.now,
+          ...(resourceStop ? { goalStatus: 'not_satisfied' as const, verificationStatus: 'unverified' as const } : {}),
+        },
         events.length,
         command.now,
       );
@@ -460,7 +503,7 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
       if (COUNTED_LIVE.has(row.status)) await updateAppLiveCount(tx, row.user_id, row.app_id, -1, command.now);
       const run = mapRunRow(updatedRow);
       await allocateHostEvent(tx, row.user_id, 'summary.changed', summaryPayload(run), command.now);
-      return { run, eventCursor: run.eventCursor, ledgerCursor: 0, committedEvents };
+      return { run, eventCursor: run.eventCursor, ledgerCursor, committedEvents };
     });
     return result ? this.observe(result) : null;
   }

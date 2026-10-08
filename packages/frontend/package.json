@@ -60,6 +60,7 @@
     "reka-ui": "^2.10.5",
     "splitpanes": "^4.1.2",
     "sql.js": "^1.14.2",
+    "tailwindcss": "^4.3.3",
     "vue": "^3.5.43",
     "vue-chartjs": "^5.3.4",
     "vue-i18n": "^11.4.13",

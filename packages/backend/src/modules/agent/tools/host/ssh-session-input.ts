@@ -5,14 +5,21 @@ import { hashOperation } from '../../operation-hash';
 
 export const sshSessionContext = (input: Record<string, JsonValue>, context: ToolContext): ToolContext => {
   if (input.sessionId === undefined) return context;
+  if (input.target !== 'ssh')
+    throw new Error('SSH_SESSION_TARGET_MISMATCH', {
+      cause: new Error('sessionId is only valid with target=ssh and identifies an existing authorized SSH transport.'),
+    });
   if (
-    input.target !== 'ssh' ||
     typeof input.sessionId !== 'string' ||
     input.sessionId.length < 1 ||
     input.sessionId.length > 128 ||
     input.sessionId.includes('\0')
   )
-    throw new Error('TOOL_ARGUMENTS_INVALID');
+    throw new Error('SSH_SESSION_ID_INVALID', {
+      cause: new Error(
+        'sessionId must be a non-empty SSH session ID of at most 128 characters without NUL. Use ssh_session_open/list to obtain it.',
+      ),
+    });
   return { ...context, sshSessionId: input.sessionId };
 };
 

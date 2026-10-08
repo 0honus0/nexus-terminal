@@ -4,7 +4,6 @@ import type {
   AgentModelCapabilitySnapshotDto,
   AgentModelRefDto,
   AgentPendingRunInputPageDto,
-  AgentRunEnvironmentSnapshotDto,
   AgentRunPageDto,
   AgentRunReconciliationViewDto,
   AgentRunSnapshotDto,
@@ -37,46 +36,6 @@ const modelCapabilitySnapshotDto = (snapshot: AgentModelCapabilitySnapshotDto): 
   ...(snapshot.defaultReasoningEffort === undefined ? {} : { defaultReasoningEffort: snapshot.defaultReasoningEffort }),
   ...(snapshot.reasoningMandatory === undefined ? {} : { reasoningMandatory: snapshot.reasoningMandatory }),
 });
-
-export const runEnvironmentDto = (
-  environment: RunView['definition']['environment'],
-): AgentRunEnvironmentSnapshotDto | null => {
-  if (!environment) return null;
-  return {
-    kind: environment.kind,
-    recipeId: environment.recipeId,
-    recipeRevision: environment.recipeRevision,
-    runtimeDigest: environment.runtimeDigest,
-    catalogRevision: environment.catalogRevision,
-    toolchain: environment.toolchain.map((pack) => ({
-      familyId: pack.familyId,
-      versionId: pack.versionId,
-    })),
-    runnerPlugins: environment.runnerPlugins.map((plugin) => ({
-      pluginId: plugin.pluginId,
-      version: plugin.version,
-      sdkVersion: plugin.sdkVersion,
-      protocolVersion: 3,
-      packageHash: plugin.packageHash,
-      entry: plugin.entry,
-    })),
-    acpProfiles: environment.acpProfiles.map((profile) => ({
-      id: profile.id,
-      profileRevision: profile.profileRevision,
-      argv: [...profile.argv],
-      cwd: profile.cwd,
-    })),
-    browserTarget:
-      environment.browserTarget === null
-        ? null
-        : {
-            id: environment.browserTarget.id,
-            profileRevision: environment.browserTarget.profileRevision,
-            endpoints: environment.browserTarget.endpoints.map((endpoint) => ({ ...endpoint })),
-            allowedUrlPatterns: [...environment.browserTarget.allowedUrlPatterns],
-          },
-  };
-};
 
 const planDto = (plan: RunView['plan']): AgentRunViewDto['plan'] => ({
   schemaVersion: 1,
@@ -125,7 +84,14 @@ export const runDto = (run: RunView): AgentRunViewDto => ({
   needsReconciliation: run.needsReconciliation,
   budget: {
     contextPolicy: { ...run.budget.contextPolicy },
-    maxRunSteps: run.budget.maxRunSteps,
+    maxModelRequests: run.budget.maxModelRequests,
+    modelRequestCeiling: run.budget.modelRequestCeiling,
+    activeExecutionCeilingSeconds: run.budget.activeExecutionCeilingSeconds,
+    maxToolExecutions: run.budget.maxToolExecutions,
+    phase: run.budget.phase,
+    stopReason: run.budget.stopReason,
+    extensionCount: run.budget.extensionCount,
+    progressSequence: run.budget.progressSequence,
     maxActiveExecutionSeconds: run.budget.maxActiveExecutionSeconds,
     toolTimeoutSeconds: run.budget.toolTimeoutSeconds,
     maxToolOutputBytes: run.budget.maxToolOutputBytes,
@@ -150,7 +116,6 @@ export const runDto = (run: RunView): AgentRunViewDto => ({
     approvalMode: run.definition.approvalMode,
     executionMode: run.definition.executionMode,
     connectionIds: [...run.definition.connectionIds],
-    environment: runEnvironmentDto(run.definition.environment),
     policyRevision: run.definition.policyRevision,
     settingsRevision: run.definition.settingsRevision,
     ...(run.definition.contextBoundary === undefined
@@ -167,7 +132,8 @@ export const runDto = (run: RunView): AgentRunViewDto => ({
     inputTokens: run.usage.inputTokens,
     outputTokens: run.usage.outputTokens,
     cachedInputTokens: run.usage.cachedInputTokens,
-    steps: run.usage.steps,
+    modelRequests: run.usage.modelRequests,
+    toolExecutions: run.usage.toolExecutions,
     subagentMessages: run.usage.subagentMessages,
     subagentMessageBytes: run.usage.subagentMessageBytes,
     ...(run.usage.context === undefined
@@ -202,6 +168,7 @@ export const runDto = (run: RunView): AgentRunViewDto => ({
 
 export const runSnapshotDto = (run: RunSnapshot): AgentRunSnapshotDto => ({
   ...runDto(run),
+  loopPause: run.loopPause,
   terminalIssue:
     run.terminalIssue === null
       ? null
@@ -290,8 +257,6 @@ export const checkpointDto = (checkpoint: Checkpoint): AgentCheckpointViewDto =>
     activeModel: modelRefDto(checkpoint.snapshot.activeModel),
     definitionVersion: checkpoint.snapshot.definitionVersion,
     policyRevision: checkpoint.snapshot.policyRevision,
-    workspaceArtifactManifestRefs: [...checkpoint.snapshot.workspaceArtifactManifestRefs],
-    workspaceArtifactRefs: [...checkpoint.snapshot.workspaceArtifactRefs],
     recoveryManifest: {
       schemaVersion: 1,
       eventThrough: checkpoint.snapshot.recoveryManifest.eventThrough,
@@ -309,7 +274,6 @@ export const checkpointDto = (checkpoint: Checkpoint): AgentCheckpointViewDto =>
         quarantinedResourceKeys: [...tool.quarantinedResourceKeys],
       })),
       delegations: checkpoint.snapshot.recoveryManifest.delegations.map((delegation) => ({ ...delegation })),
-      backgroundJobs: checkpoint.snapshot.recoveryManifest.backgroundJobs.map((job) => ({ ...job })),
       quarantinedResourceKeys: [...checkpoint.snapshot.recoveryManifest.quarantinedResourceKeys],
     },
   },

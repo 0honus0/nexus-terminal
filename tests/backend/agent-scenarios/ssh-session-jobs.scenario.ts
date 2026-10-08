@@ -11,6 +11,12 @@ import { ExecutionSessionManager } from '../../../packages/backend/src/platform/
 import type { ToolContext } from '../../../packages/backend/src/modules/agent/capabilities/tool.types';
 import { createSshSessionTools } from '../../../packages/backend/src/modules/agent/tools/host/ssh-session-tools';
 import { withSshSessionInput } from '../../../packages/backend/src/modules/agent/tools/host/ssh-session-input';
+import { ToolExecutor } from '../../../packages/backend/src/modules/agent/capabilities/tool-executor';
+import { ToolCatalog } from '../../../packages/backend/src/modules/agent/capabilities/tool-catalog';
+import { CapabilityRegistry } from '../../../packages/backend/src/modules/agent/host/capability-registry';
+import type { AppCapabilityBroker } from '../../../packages/backend/src/modules/agent/host/app-capability-broker';
+import { ShellCapabilityService } from '../../../packages/backend/src/modules/agent/capabilities/shell-capability.service';
+import { createShellExecuteTool } from '../../../packages/backend/src/modules/agent/tools/host/shell-tools';
 
 export const sshSessionJobsScenario = async () => {
   const directory = mkdtempSync(join(existsSync('/tmp/opencode') ? '/tmp/opencode' : tmpdir(), 'nexus-ssh-scenario-'));
@@ -18,6 +24,29 @@ export const sshSessionJobsScenario = async () => {
   const key = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs1', format: 'pem' });
   let authentications = 0;
   const pending = new Map<string, () => void>();
+  let readStarted!: () => void;
+  let readClosed!: () => void;
+  const readBarrier = new Promise<void>((resolve) => {
+    readStarted = resolve;
+  });
+  const readTeardown = new Promise<void>((resolve) => {
+    readClosed = resolve;
+  });
+  let sftpChannels = 0;
+  let statStarted!: () => void;
+  const statBarrier = new Promise<void>((resolve) => {
+    statStarted = resolve;
+  });
+  let holdSftpOpen = false;
+  let openingStarted!: () => void;
+  let releaseOpening!: () => void;
+  let openingClosed!: () => void;
+  const openingBarrier = new Promise<void>((resolve) => {
+    openingStarted = resolve;
+  });
+  const openingTeardown = new Promise<void>((resolve) => {
+    openingClosed = resolve;
+  });
   const server = new Server({ hostKeys: [key] }, (client) => {
     client.on('authentication', (auth) => {
       authentications++;
@@ -26,6 +55,24 @@ export const sshSessionJobsScenario = async () => {
     client.on('ready', () =>
       client.on('session', (accept) => {
         const session = accept();
+        session.on('sftp', (acceptSftp) => {
+          if (holdSftpOpen) {
+            openingStarted();
+            releaseOpening = () => {
+              const late = acceptSftp();
+              late.on('end', () => late.end());
+              late.on('close', openingClosed);
+            };
+            return;
+          }
+          sftpChannels++;
+          const sftp = acceptSftp();
+          sftp.on('end', () => sftp.end());
+          sftp.on('OPEN', (id) => sftp.handle(id, Buffer.from('fixture')));
+          sftp.on('READ', () => readStarted());
+          sftp.on('LSTAT', () => statStarted());
+          sftp.on('close', readClosed);
+        });
         session.on('exec', (acceptCommand, _reject, info) => {
           const channel = acceptCommand();
           const complete = () => {
@@ -84,7 +131,6 @@ export const sshSessionJobsScenario = async () => {
     agentRuntimeId: 'root-one',
     actor: { kind: 'user', userId: 1 },
     connectionIds: [1],
-    environment: null,
     stepId: 'step',
     signal: new AbortController().signal,
     deadlineAt: Math.floor(Date.now() / 1000) + 60,
@@ -111,13 +157,39 @@ export const sshSessionJobsScenario = async () => {
       },
       cryptoHash,
     );
-    const openTool = tools.find((t) => t.descriptor.name === 'ssh_session_open')!;
     const listTool = tools.find((t) => t.descriptor.name === 'ssh_session_list')!;
     const closeTool = tools.find((t) => t.descriptor.name === 'ssh_session_close')!;
-    const opening = await openTool.inspect({ connectionId: 1 }, context, 1);
+    const catalog = new ToolCatalog();
+    catalog.registerContribution({ schemaVersion: 1, id: 'ssh-session-regression', tools });
+    const capabilities = new CapabilityRegistry();
+    const broker: Pick<AppCapabilityBroker, 'authorize'> = {
+      authorize: async (_scope, capability, resource) =>
+        capabilities.allows(
+          capability!,
+          { kind: 'targets', targets: { ssh: { mode: 'ids', ids: ['1'] } } },
+          resource?.target,
+        )
+          ? { allowed: true, policyRevision: 1 }
+          : { allowed: false, code: 'APP_CAPABILITY_DENIED', policyRevision: 1 },
+    };
+    const executor = new ToolExecutor(catalog, broker as AppCapabilityBroker);
+    await assert.rejects(
+      () =>
+        executor.inspect(context, {
+          providerCallId: 'denied-session',
+          name: 'ssh_session_open',
+          argumentsJson: '{"connectionId":2}',
+        }),
+      /APP_CAPABILITY_DENIED/,
+    );
+    const opening = await executor.inspect(context, {
+      providerCallId: 'allowed-session',
+      name: 'ssh_session_open',
+      argumentsJson: '{"connectionId":1}',
+    });
     assert.equal(opening.risk, 'control');
     assert.equal(opening.mutation, false);
-    const opened = await openTool.execute(opening, context);
+    const opened = await executor.execute(context, opening);
     const data = opened.data as { session: { sessionId: string } };
     const listing = await listTool.inspect({ connectionId: 1, sessionId: data.session.sessionId }, context, 1);
     assert.equal((await listTool.execute(listing, context)).ok, true);
@@ -135,7 +207,7 @@ export const sshSessionJobsScenario = async () => {
     const wrapped = withSshSessionInput(listTool, cryptoHash);
     await assert.rejects(
       () => wrapped.inspect({ target: 'workspace', connectionId: 1, sessionId: 'invalid' }, context, 1),
-      /TOOL_ARGUMENTS_INVALID/,
+      /SSH_SESSION_TARGET_MISMATCH/,
     );
     const baselineAuthentications = authentications;
     await sessions.withSession(context, 1, hash, (s) => s.execute({ command: 'short-one' }));
@@ -143,8 +215,104 @@ export const sshSessionJobsScenario = async () => {
     assert.equal(authentications - baselineAuthentications, 2);
     const persistent = await sessions.open(context, 1, hash, 0);
     const scoped = { ...context, sshSessionId: persistent.sessionId };
+    const fingerprint = await resolver.get();
+    const target = {
+      kind: 'ssh' as const,
+      target: 'ssh' as const,
+      id: '1',
+      connectionId: 1,
+      targetIdentity: 'ssh:1',
+      endpoint: 'fixture',
+      loginUser: 'fixture',
+      configurationHash: fingerprint.configurationHash,
+    };
+    const shell = new ShellCapabilityService(
+      { target: async () => ({ ...target, hostKeyTrust: 'unavailable' }) },
+      null!,
+      sessions,
+    );
+    const launchTool = createShellExecuteTool(shell, cryptoHash);
+    const launchInspection = await launchTool.inspect(
+      {
+        target: 'ssh',
+        id: '1',
+        sessionId: persistent.sessionId,
+        mode: 'background',
+        command: { kind: 'shell', shellScript: 'hold-lifetime-feedback' },
+        timeoutSeconds: 600,
+      },
+      scoped,
+      1,
+    );
+    const launch = await launchTool.execute(launchInspection, scoped);
+    assert.equal(launch.ok, true);
+    assert.equal(launch.verification.status, 'unverified');
+    assert.equal((launch.data as { executionTimeoutSeconds: number }).executionTimeoutSeconds, 600);
+    assert.match(launch.summary, /expiry terminates this Job/);
+    const launchedJobId = (launch.data as { jobId: string }).jobId;
+    pending.get('hold-lifetime-feedback')!();
+    assert.equal((await sessions.job(scoped, 1, launchedJobId, 'wait', 2)).status, 'succeeded');
     const job = await sessions.startJob(scoped, 1, hash, persistent.sessionId, 'hold-one', 600, 'operation-one');
+    const abortRead = new AbortController();
+    const blockedRead = sessions.withFileSystem(
+      { ...scoped, signal: abortRead.signal },
+      1,
+      hash,
+      async (filesystem) => {
+        const reader = await filesystem.openPositionedReader('/fixture.txt');
+        try {
+          return await reader.read(0, 16);
+        } finally {
+          await reader.close();
+        }
+      },
+    );
+    const readRejected = assert.rejects(blockedRead, (error: unknown) => error === abortRead.signal.reason);
+    await readBarrier;
+    abortRead.abort();
+    await readRejected;
+    await readTeardown;
+    assert.equal(sftpChannels, 1);
+    assert.equal((await sessions.list(scoped, 1, persistent.sessionId))[0].status, 'ready');
+    assert.equal(
+      (await sessions.list(scoped, 1, persistent.sessionId))[0].activeOperations,
+      1,
+      'only the parallel Job remains active',
+    );
+    assert.deepEqual(
+      (await sessions.listJobs(scoped, 1)).map((job) => job.jobId),
+      [job.jobId],
+    );
+    assert.deepEqual(await sessions.listJobs({ ...scoped, appId: 'other-app' }, 1), []);
+    assert.deepEqual(await sessions.listJobs({ ...scoped, threadId: 'other-thread' }, 1), []);
     assert.equal(job.status, 'running');
+    const deadlineRead = sessions.withFileSystem(
+      { ...scoped, deadlineAt: Math.floor(Date.now() / 1000) + 2 },
+      1,
+      hash,
+      (filesystem) => filesystem.metadata('/held-stat.txt'),
+    );
+    const deadlineRejected = assert.rejects(deadlineRead, /TOOL_TIMEOUT/);
+    await statBarrier;
+    await deadlineRejected;
+    assert.equal((await sessions.list(scoped, 1, persistent.sessionId))[0].status, 'ready');
+    assert.equal((await sessions.listJobs(scoped, 1))[0].status, 'running');
+    holdSftpOpen = true;
+    const abortOpening = new AbortController();
+    const openingOperation = sessions.withFileSystem(
+      { ...scoped, signal: abortOpening.signal },
+      1,
+      hash,
+      (filesystem) => filesystem.metadata('/opening.txt'),
+    );
+    const openingRejected = assert.rejects(openingOperation, (error: unknown) => error === abortOpening.signal.reason);
+    await openingBarrier;
+    abortOpening.abort();
+    await openingRejected;
+    assert.equal((await sessions.list(scoped, 1, persistent.sessionId))[0].status, 'ready');
+    holdSftpOpen = false;
+    releaseOpening();
+    await openingTeardown;
     const other = await sessions.withSession(
       { ...scoped, runId: 'run-two', agentRuntimeId: 'child-two' },
       1,
@@ -168,6 +336,7 @@ export const sshSessionJobsScenario = async () => {
     );
     pending.get('hold-one')!();
     const completed = await sessions.job(scoped, 1, job.jobId, 'wait', 5);
+    assert.deepEqual(await sessions.listJobs(scoped, 1), []);
     assert.equal(completed.status, 'succeeded');
     assert.equal(completed.result.stdout, 'hold-one');
     await assert.rejects(() => sessions.job({ ...scoped, appId: 'other-app' }, 1, job.jobId, 'status'), /NOT_FOUND/);
@@ -255,6 +424,21 @@ export const sshSessionJobsScenario = async () => {
     );
     await sessions.initialize();
     assert.equal((await sessions.job(context, 1, 'restart-job', 'status')).status, 'unknown');
+    const beforeRestore = await sessions.open(context, 1, hash, 0);
+    await sessions.dispose();
+    await assert.rejects(() => sessions.open(context, 1, hash, 0), /SSH_SESSION_LIMIT/);
+    await sessions.initialize();
+    await assert.rejects(() => sessions.list(context, 1, beforeRestore.sessionId), /SSH_SESSION_NOT_FOUND/);
+    const afterRestore = await sessions.open(context, 1, hash, 0);
+    assert.notEqual(afterRestore.sessionId, beforeRestore.sessionId);
+    assert.equal(
+      (
+        await sessions.withSession({ ...context, sshSessionId: afterRestore.sessionId }, 1, hash, (session) =>
+          session.execute({ command: 'after-restore' }),
+        )
+      ).stdout,
+      'after-restore',
+    );
     return [{ name: 'ssh_persistent_background_isolation', value: 1, unit: 'scenarios' }];
   } finally {
     await sessions.dispose();

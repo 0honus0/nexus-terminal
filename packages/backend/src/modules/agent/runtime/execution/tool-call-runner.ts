@@ -6,6 +6,7 @@ import type { ToolPolicyDecision } from '../../capabilities/policy.service';
 import { PolicyService } from '../../capabilities/policy.service';
 import { ToolCatalog } from '../../capabilities/tool-catalog';
 import { ToolExecutor } from '../../capabilities/tool-executor';
+import { ToolMutationNotStartedError } from '../../capabilities/tool-mutation-not-started.error';
 import { modelFacingToolSchemas, resolveDeferredToolProposal } from '../../capabilities/tool-model-surface';
 import type {
   ToolAvailabilityContext,
@@ -101,7 +102,7 @@ export class ToolCallRunner {
     executionMode: RunExecutionMode = 'execute',
   ): Promise<ResolvedInspectedToolCall> {
     try {
-      const resolvedProposal = resolveDeferredToolProposal(this.catalog, context, proposal);
+      const resolvedProposal = resolveDeferredToolProposal(this.catalog, context, proposal, executionMode);
       if (executionMode === 'plan') {
         const descriptor = this.catalog.require(resolvedProposal.name, context).descriptor;
         if (descriptor.riskClass !== 'read' && descriptor.riskClass !== 'control') {
@@ -303,9 +304,19 @@ export class ToolCallRunner {
           toolName: inspection.toolName,
           resourceCount: inspection.resourceKeys.length,
         },
-        'Agent mutation tool execution outcome unknown',
+        error instanceof ToolMutationNotStartedError
+          ? 'Agent mutation rejected before execution'
+          : 'Agent mutation tool execution outcome unknown',
       );
-      result = unknownMutationResult(error);
+      result =
+        error instanceof ToolMutationNotStartedError
+          ? buildFailedToolResult(error, {
+              fallbackCode: 'MODEL_EXECUTION_FAILED',
+              summaryPrefix: 'Mutation rejected before execution',
+              verificationSummary:
+                'The adapter confirmed that the operation was rejected before its side effect started.',
+            })
+          : unknownMutationResult(error);
     }
     const renewalError = await lease.stopRenewal();
     if (renewalError) {

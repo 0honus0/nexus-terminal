@@ -12,6 +12,7 @@ import type { DelegationRepositoryPort, RuntimeParticipantRepositoryPort } from 
 import type { DelegationView, DependencyMode, JoinResult, SubagentProfile } from './subagent.types';
 import type { SubagentPolicyService } from './subagent-policy';
 import type { AgentEventHub } from '../events/event-hub';
+import { remainingExecutionSeconds } from '../execution/runtime-progress';
 
 const MAX_OBJECTIVE_BYTES = 16 * 1024;
 const MAX_CONSTRAINTS = 32;
@@ -39,7 +40,7 @@ interface ParsedRequest {
   objective: string;
   constraints: string[];
   inputArtifactRefs: string[];
-  maxSteps: number;
+  maxModelRequests: number;
   deadlineAt: number;
   completionCriteria: string[];
   dependsOn: string[];
@@ -53,7 +54,7 @@ const parseRequest = (raw: unknown, now: number): ParsedRequest => {
     'objective',
     'constraints',
     'inputArtifactRefs',
-    'maxSteps',
+    'maxModelRequests',
     'deadlineAt',
     'completionCriteria',
     'dependsOn',
@@ -62,7 +63,7 @@ const parseRequest = (raw: unknown, now: number): ParsedRequest => {
   if (Object.keys(raw).some((key) => !allowed.has(key))) throw new Error('VALIDATION_FAILED');
   if (!nonEmpty(raw.profileId, 64) || !nonEmpty(raw.objective, MAX_OBJECTIVE_BYTES))
     throw new Error('VALIDATION_FAILED');
-  if (!positiveInteger(raw.maxSteps)) throw new Error('VALIDATION_FAILED');
+  if (!positiveInteger(raw.maxModelRequests)) throw new Error('VALIDATION_FAILED');
   if (!Number.isSafeInteger(raw.deadlineAt) || (raw.deadlineAt as number) <= now) throw new Error('VALIDATION_FAILED');
   if (!['success', 'settled'].includes(String(raw.dependencyMode))) throw new Error('VALIDATION_FAILED');
   return {
@@ -70,7 +71,7 @@ const parseRequest = (raw: unknown, now: number): ParsedRequest => {
     objective: raw.objective.trim(),
     constraints: stringArray(raw.constraints, MAX_CONSTRAINTS, MAX_CONSTRAINT_BYTES),
     inputArtifactRefs: stringArray(raw.inputArtifactRefs, MAX_ARTIFACT_REFS, 256),
-    maxSteps: raw.maxSteps,
+    maxModelRequests: raw.maxModelRequests,
     deadlineAt: raw.deadlineAt as number,
     completionCriteria: stringArray(raw.completionCriteria, MAX_CRITERIA, MAX_CONSTRAINT_BYTES),
     dependsOn: stringArray(raw.dependsOn, MAX_DEPENDENCIES, 128),
@@ -117,6 +118,11 @@ export class SubagentService {
     if (!['created', 'running', 'awaiting_approval', 'awaiting_budget', 'awaiting_input'].includes(run.status))
       throw new Error('RUN_NOT_ACTIVE');
     const parentDelegation = allDelegations.find((delegation) => delegation.childRuntimeId === parentRuntimeId) ?? null;
+    const deadlineCeiling = Math.min(
+      now + remainingExecutionSeconds(run, now),
+      parentDelegation?.deadlineAt ?? Number.MAX_SAFE_INTEGER,
+    );
+    if (input.deadlineAt > deadlineCeiling) throw new Error('VALIDATION_FAILED');
     const depth = (parentDelegation?.depth ?? 0) + 1;
     if (depth > settings.policy.maxDelegationDepth) throw new Error('DELEGATION_DEPTH_EXCEEDED');
     const profile = settings.policy.profiles.find((candidate) => candidate.id === input.profileId);
@@ -140,7 +146,7 @@ export class SubagentService {
       if (!inheritedScope) return [];
       const delegatedScope =
         capability.startsWith('file.') || capability === 'shell.execute'
-          ? this.capabilities.restrictTargets(capability, inheritedScope, ['workspace'])
+          ? this.capabilities.restrictTargets(capability, inheritedScope, ['ssh'])
           : inheritedScope;
       return delegatedScope ? [{ capability, schemaVersion: 2 as const, scope: delegatedScope }] : [];
     });
@@ -154,7 +160,7 @@ export class SubagentService {
       objective: input.objective,
       constraints: input.constraints,
       inputArtifactRefs: input.inputArtifactRefs,
-      maxSteps: Math.min(input.maxSteps, profile.maxSteps),
+      maxModelRequests: Math.min(input.maxModelRequests, profile.maxModelRequests),
       deadlineAt: input.deadlineAt,
       completionCriteria: input.completionCriteria,
       dependsOn: input.dependsOn,
@@ -189,7 +195,7 @@ export class SubagentService {
       dependsOn: input.dependsOn,
       depth,
       failureMode: profile.failureMode,
-      maxSteps: Math.min(input.maxSteps, profile.maxSteps),
+      maxModelRequests: Math.min(input.maxModelRequests, profile.maxModelRequests),
       idempotencyKey: key,
       requestHash: requestHash(1, payload),
       deadlineAt: input.deadlineAt,

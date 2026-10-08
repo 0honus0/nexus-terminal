@@ -16,7 +16,6 @@ import type {
   InterruptUnexpectedRootExecutionCommand,
   ParkModelStepCommand,
   ParkRuntimeCommand,
-  PauseModelStepForBudgetCommand,
   PauseRuntimeForBudgetCommand,
   RetryModelStepCommand,
   RetryModelStepResult,
@@ -63,6 +62,7 @@ import type {
 } from './state-commit-tool.contracts';
 
 export interface StateCommitPort {
+  advanceExecutionBudget(command: { scope: Scope; runId: string; now: number }): Promise<StateCommitResult>;
   createRun(command: AtomicCreateRun): Promise<CreateRunCommitResult>;
   appendInput(command: AtomicAppendInput): Promise<AppendInputCommitResult>;
   mutatePendingInput(command: AtomicMutatePendingInput): Promise<MutatePendingInputCommitResult>;
@@ -89,7 +89,6 @@ export interface StateCommitPort {
   settleSubagentModelStep(command: SettleSubagentModelStepCommand): Promise<StateCommitResult>;
   retryModelStep(command: RetryModelStepCommand): Promise<RetryModelStepResult>;
   changeModelRoute(command: ChangeModelRouteCommand): Promise<ChangeModelRouteResult>;
-  pauseModelStepForBudget(command: PauseModelStepForBudgetCommand): Promise<StateCommitResult>;
   settleModelStep(command: SettleModelStepCommand): Promise<StateCommitResult>;
   commitToolProposalBatch(command: CommitToolProposalBatchCommand): Promise<CommitToolProposalBatchResult>;
   refreshProposedTool(command: RefreshProposedToolCommand): Promise<StateCommitResult>;
@@ -144,6 +143,7 @@ export type ProjectionCommitPort = Pick<StateCommitPort, 'commit'>;
 
 export type CollaborationCommitPort = Pick<
   StateCommitPort,
+  | 'advanceExecutionBudget'
   | 'beginSubagentModelStep'
   | 'beginSubagentMutationTool'
   | 'beginSubagentTool'
@@ -160,6 +160,7 @@ export type CollaborationCommitPort = Pick<
 
 export type RootExecutionCommitPort = Pick<
   StateCommitPort,
+  | 'advanceExecutionBudget'
   | 'beginModelStep'
   | 'completeCompactionStep'
   | 'beginMutationTool'
@@ -170,7 +171,6 @@ export type RootExecutionCommitPort = Pick<
   | 'interruptUnexpectedRootExecution'
   | 'parkModelStep'
   | 'parkRuntime'
-  | 'pauseModelStepForBudget'
   | 'pauseRuntimeForBudget'
   | 'requestToolApproval'
   | 'refreshProposedTool'

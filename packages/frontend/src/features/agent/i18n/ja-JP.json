@@ -3,7 +3,7 @@
     "settings": {
       "tab": "Agent",
       "title": "Agent",
-      "description": "モデル、実行環境、権限を管理します。設定する項目を選択してください。",
+      "description": "モデル、許可された SSH 実行、連携、権限を管理します。設定する項目を選択してください。",
       "loading": "Agent 設定を読み込んでいます...",
       "feature": {
         "title": "Agent 機能",
@@ -34,8 +34,8 @@
         "badge": "公式コアプラグイン",
         "featureSkillsTitle": "デュアルコアスキル",
         "featureSkillsDesc": "署名済みの Operations と Developer 運用・開発スキルを内包",
-        "featureSandboxTitle": "隔離サンドボックス",
-        "featureSandboxDesc": "ホストポリシー・承認・ワークスペース境界で厳格に保護",
+        "featureSandboxTitle": "SSH の許可に基づく実行",
+        "featureSandboxDesc": "明示的に許可された SSH 接続を通じて実行し、Host の権限・ポリシー・承認を適用します。ローカル Workspace サンドボックスは使用しません。",
         "featureDecoupledTitle": "疎結合アーキテクチャ",
         "featureDecoupledDesc": "本体を改変せず独立してホットアップグレードやアンインストールが可能",
         "publisherVerified": "検証済み署名",
@@ -48,9 +48,9 @@
         "installingTitle": "エージェントを安全に配備中...",
         "installStep1": "公式 Ed25519 署名と完全性の検証中...",
         "installStep2": "Operations / Developer スキルの登録中...",
-        "installStep3": "サンドボックスポリシーの初期化とエージェントの起動中...",
-        "sandboxProtected": "ホストサンドボックス保護下で実行",
-        "defaultPluginSummary": "公式の汎用エージェントエンジン。安全なサンドボックス境界内で運用診断と開発協调を実行します。"
+        "installStep3": "権限を登録し、SSH の承認に基づく Agent を有効化しています...",
+        "sandboxProtected": "Host の権限・承認・SSH ターゲット境界で保護",
+        "defaultPluginSummary": "許可された SSH 接続を通じてリモート診断と開発を行う公式汎用 Agent。"
       },
       "apps": {
         "title": "Agent App",
@@ -67,7 +67,6 @@
         "targetScope": "ターゲット範囲",
         "targetScopeAll": "すべてのターゲット",
         "targetScopeIds": "特定の ID",
-        "targetWorkspace": "ワークスペース",
         "empty": "利用可能な Agent App はありません。",
         "permissionsCollapsedHint": "展開してこの App の Capability grant を確認・編集します。",
         "capabilitiesHeader": "システム権限とセキュリティポリシー",
@@ -92,7 +91,6 @@
         "categoryFiles": "ファイルとターゲット",
         "categoryExecution": "実行",
         "categoryMachine": "ホストマシン",
-        "categoryWorkspace": "Workspace サンドボックス",
         "categoryBrowser": "ブラウザ",
         "categoryIntegration": "外部連携",
         "categoryData": "データアクセスと交換",
@@ -117,15 +115,15 @@
           "file": {
             "read": {
               "name": "ファイルを読む",
-              "desc": "許可された Workspace または SSH ターゲット内のファイル内容を読み取り・検索します"
+              "desc": "許可された SSH ターゲットのファイルを読み取り・検索します"
             },
             "write": {
               "name": "ファイルを書き込む",
-              "desc": "許可された Workspace または SSH ターゲットでファイルを作成・置換・移動・パッチ適用します"
+              "desc": "許可された SSH ターゲットのファイルを作成・置換・移動・パッチ適用します"
             },
             "delete": {
               "name": "ファイルを削除",
-              "desc": "許可された Workspace または SSH ターゲット内のファイルやディレクトリを削除します"
+              "desc": "許可された SSH ターゲットのファイルやディレクトリを削除します"
             }
           },
           "machine": {
@@ -143,13 +141,7 @@
           "shell": {
             "execute": {
               "name": "コマンドを実行",
-              "desc": "許可された Workspace または SSH ターゲットでポリシーと承認に従ってコマンドを実行します"
-            }
-          },
-          "workspace": {
-            "manage": {
-              "name": "Workspace 環境を管理",
-              "desc": "環境の作成・起動・停止・削除とツールチェーンの切り替えを行います"
+              "desc": "許可された SSH ターゲットで、ポリシーと承認に従ってコマンドを実行します"
             }
           },
           "browser": {
@@ -209,7 +201,6 @@
         "noPublishers": "信頼済み publisher key はありません。",
         "package": "パッケージ検証",
         "packageHint": "パッケージは Artifact としてアップロードされ、署名、ファイル hash、危険な archive entry、manifest 互換性、サイズ制限を検証してからインストールされます。",
-        "packageContents": "Skill: {skills} · Frontend: {ui} · Backend: {backend} · Runner: {runner}",
         "present": "あり",
         "absent": "なし",
         "noCandidate": ".tar パッケージを選択し、インストール前に検証してください。",
@@ -295,20 +286,20 @@
           "storage": "ストレージとデータ流量の制限",
           "storageDesc": "成果物ファイルの容量とツール・記憶回想の通信データ量を制限します",
           "concurrency": "並列クォータとエージェント環境",
-          "concurrencyDesc": "並列タスク数、有効なワークスペース、サブエージェント委譲深度を制限します",
+          "concurrencyDesc": "Agent Runtime とモデルリクエストの同時実行数、および Subagent の委任深度を制限します",
           "extra": "その他のシステム制限",
           "extraDesc": "その他の拡張ポリシーパラメータ",
-          "execution": "実行ステップ上限",
-          "executionDesc": "1 Run あたりのモデル/ツールループの最大ステップ数を制限します"
+          "execution": "モデルリクエスト上限",
+          "executionDesc": "失敗・再試行・圧縮・最終報告の予約枠を含む全ランタイムの累計上限"
         },
         "fields": {
-          "maxRunSteps": {
-            "label": "Run 最大ステップ数",
-            "hint": "1 回の Run で許可される思考・ツール実行ループの最大回数"
+          "maxModelRequests": {
+            "label": "モデルリクエスト上限",
+            "hint": "失敗・再試行・圧縮・最終報告の予約枠を含む全ランタイムの累計上限"
           },
           "maxActiveExecutionSeconds": {
             "label": "タスク最長実行時間",
-            "hint": "タスクが継続実行可能な最長秒数 (タイムアウトで自動キャンセル)"
+            "hint": "累積の実行時間上限。上限に近づくと部分結果を保存して終了します"
           },
           "toolTimeoutSeconds": {
             "label": "ツール実行タイムアウト",
@@ -362,9 +353,9 @@
             "label": "サブエージェント通信バイト上限",
             "hint": "サブエージェント間通信のデータ総バイト数"
           },
-          "maxActiveWorkspaces": {
-            "label": "最大アクティブワークスペース数",
-            "hint": "同時に維持されるワークスペースの最大数"
+          "maxToolExecutions": {
+            "label": "ツール実行",
+            "hint": "失敗を含む実際に開始したツール実行の累計上限"
           }
         }
       },
@@ -389,17 +380,17 @@
         "presetBalanced": "標準バランス",
         "presetBalancedDesc": "推奨構成。推論の質・複数ステップ実行・リソースのバランスを両立",
         "presetDeep": "ディープワーク",
-        "presetDeepDesc": "ステップ数とタイムアウトに余裕を持たせ、複雑なリファクタリングに最適",
+        "presetDeepDesc": "複雑なタスク向けにモデルリクエストと実行時間を増やします",
         "presetCustom": "カスタム微調整",
         "presetCustomDesc": "すべてのパラメータを手動で自由にカスタマイズします",
         "customBadge": "カスタム",
         "recommendedBadge": "推奨",
         "saveSuccess": "予算とコンテキスト設定を保存しました",
         "fields": {
-          "maxRunSteps": "最大実行ステップ数",
-          "maxRunStepsHint": "1回の Run で許可される最大ツール呼び出し・推論ステップ数",
-          "maxActiveExecutionSeconds": "実行タイムアウト (秒)",
-          "maxActiveExecutionSecondsHint": "Run のアクティブ実行の最长継続時間",
+          "maxModelRequests": "初期モデルリクエスト枠",
+          "maxModelRequestsHint": "Root・子エージェント・再試行・圧縮で共有し、新しい進捗の根拠があればアプリ上限内で自動拡張",
+          "maxActiveExecutionSeconds": "初期実行時間枠",
+          "maxActiveExecutionSecondsHint": "Root・子エージェント・再試行・圧縮で共有し、新しい進捗の根拠があればアプリ上限内で自動拡張",
           "toolTimeoutSeconds": "単一ツールタイムアウト (秒)",
           "toolTimeoutSecondsHint": "個別ツール実行のタイムアウト制限",
           "maxToolOutputBytes": "ツール出力切り詰め (バイト)",
@@ -412,14 +403,14 @@
         "readyNotice": "現在の設定は準備済みで、次回の Run から適用されます。",
         "modelCapabilityNotice": "1 回のコンテキストと最大出力は Provider/Registry の物理モデル能力をそのまま使用します。ここでは Run 全体とツール資源の予算だけを制御します。",
         "groups": {
-          "steps": "実行ステップのヒューズ",
           "timeControl": "実行とタイムアウト制御",
-          "toolsData": "ツール切り詰めとコンテキスト記憶"
+          "toolsData": "ツール切り詰めとコンテキスト記憶",
+          "modelRequests": "初期モデルリクエスト枠"
         },
-        "presetSteps": "{steps} ステップ · {minutes} min",
         "customTuning": "カスタム調整",
         "effective": "有効: {value}",
-        "unsavedChanges": "保存されていない予算変更があります"
+        "unsavedChanges": "保存されていない予算変更があります",
+        "presetRequests": "{requests} リクエスト · {minutes} min"
       },
       "quantity": {
         "placeholderBytes": "例: 10M, 500K",
@@ -469,86 +460,6 @@
             "label": "一時成果物のライフサイクル (TTL)",
             "hint": "保持指定のない一時ビルド生成物を残す期間"
           }
-        }
-      },
-      "workspaceRuntime": {
-        "title": "Workspace 開発環境",
-        "description": "Agent Runner、Workspace profile、共有マルチバージョン Tool Pack、ストレージ、ランタイムクリーンアップを管理します。",
-        "available": "利用可能",
-        "unavailable": "利用不可",
-        "refresh": "更新",
-        "requestFailed": "Workspace Runtime リクエストに失敗しました。",
-        "selectRecipe": "少なくとも 1 つの Workspace profile を選択してください。",
-        "setupTitle": "セットアップと profile",
-        "setupDescription": "Workspace 開発 profile を有効化し、必要な正確な Tool Pack を準備します。有効化状態とインストール状態は別々に管理されます。",
-        "previewSetup": "セットアップをプレビュー",
-        "setupImpact": "{count} 個の Pack のインストールが必要です。約 {bytes}。",
-        "confirmSetup": "セットアップを確認",
-        "setupSubmitted": "Workspace Runtime セットアップを送信しました。",
-        "storageTitle": "Runner ストレージ",
-        "stateBytes": "状態",
-        "packBytes": "Packs",
-        "cacheBytes": "キャッシュ",
-        "runtimeBytes": "ランタイム",
-        "quarantineBytes": "隔離",
-        "reclaimable": "すぐに回収可能：{bytes}",
-        "previewCleanup": "ランタイムクリーンアップをプレビュー",
-        "clearCache": "キャッシュを消去",
-        "previewReset": "設定リセットをプレビュー",
-        "cleanupImpact": "{count} 個の Workspace、約 {bytes} を回収可能。アクティブ：{active}、保持：{retained}。",
-        "confirmCleanup": "ランタイムクリーンアップを確認",
-        "resetImpact": "Workspace profile とツールバージョン設定を配布時の既定値に戻します。Artifact と Provider は変更しません。",
-        "confirmReset": "設定リセットを確認",
-        "packsTitle": "ツールパック",
-        "catalogRevision": "Catalog リビジョン {revision}",
-        "installed": "インストール済み",
-        "inUse": "使用中",
-        "enabled": "有効",
-        "defaultVersion": "既定",
-        "install": "インストール",
-        "disableVersion": "無効化",
-        "enableVersion": "有効化",
-        "makeDefault": "既定に設定",
-        "uninstall": "アンインストール",
-        "preferencesSaved": "Tool version 設定を保存しました。",
-        "installSubmitted": "Pack インストールを送信しました。",
-        "uninstallSubmitted": "Pack アンインストールを送信しました。",
-        "cleanupSubmitted": "ランタイムクリーンアップを送信しました。",
-        "cacheSubmitted": "キャッシュクリーンアップを送信しました。",
-        "resetComplete": "Workspace Runtime 設定を既定値に戻しました。",
-        "uninstallTitle": "{name} をアンインストール",
-        "uninstallImpact": "約 {bytes} を解放します。使用中：{inUse}。代替の既定バージョン：{replacement}。",
-        "yes": "はい",
-        "no": "いいえ",
-        "none": "なし",
-        "confirmUninstall": "アンインストールを確認",
-        "cancel": "キャンセル",
-        "commandStatus": "最新コマンド：{action} · {status}",
-        "reasonUnknown": "Workspace ランタイムは現在利用できません。バックエンドからの詳細情報はありません。",
-        "reason": {
-          "runner_not_configured": "Workspace Runner が未設定です（アドレスまたはトークンがありません）。Workspace ランタイムは利用できません。",
-          "runner_unavailable": "Workspace Runner に接続できません。Workspace ランタイムは一時的に利用できません。",
-          "runtime_not_configured": "Workspace Runner に利用可能なランタイム環境が設定されていません。"
-        },
-        "commandState": {
-          "pending": "待機中",
-          "running": "実行中",
-          "succeeded": "成功",
-          "failed": "失敗",
-          "unknown": "結果不明"
-        },
-        "commandAction": {
-          "setup": "ランタイムのセットアップ",
-          "packInstall": "ツールパックのインストール",
-          "packUninstall": "ツールパックのアンインストール",
-          "cleanup": "クリーンアップ",
-          "cacheCleanup": "キャッシュ削除",
-          "settingsReset": "設定リセット",
-          "provision": "環境準備",
-          "start": "起動",
-          "stop": "停止",
-          "restart": "再起動",
-          "delete": "削除"
         }
       },
       "safety": {
@@ -771,14 +682,14 @@
         "profileId": "プロファイル ID",
         "role": "役割",
         "defaultModel": "既定モデル",
-        "maxSteps": "最大ステップ",
+        "maxModelRequests": "モデルリクエスト",
         "peerMessaging": "ピア間メッセージング",
         "peerParentChild": "親子 Agent のみ",
         "peerSameRun": "同じ Run の許可済み peer",
         "mutationMode": "変更モード",
         "mutationReadOnly": "読み取り専用",
-        "mutationGoverned": "Governed Workspace mutation",
-        "mutationHint": "Governed mutation プロファイルは Workspace の mutation Tool のみを公開し、Run が Full Access の場合にだけ有効です。各 Worker は自身の Child Runtime が所有する Workspace を使用し、approval、lease/fence、verification、evidence、reconciliation は引き続き適用されます。",
+        "mutationGoverned": "管理された SSH 変更",
+        "mutationHint": "Full Access の Run では、許可された SSH 変更ツールを使用できます。各 Worker にも Child 権限、承認、リース/フェンス、検証、証跡、調整の制約が適用されます。",
         "failureMode": "失敗モード",
         "failureIsolate": "失敗を隔離",
         "failureFailFast": "即時失敗",
@@ -801,14 +712,14 @@
       },
       "browserRuntime": {
         "title": "CDP",
-        "description": "Backend の単一 BrowserRuntime が使用する CDP ターゲットを設定します。endpoint のネットワーク scope と到達経路 via は独立し、via=runner の場合 Runner はネットワークトンネルとしてのみ使用されます。",
+        "description": "Backend BrowserRuntime が直接接続する CDP ターゲットと許可 URL を設定します。",
         "addTarget": "ターゲット追加",
-        "empty": "ブラウザーターゲットは未設定です。Backend から到達できる外部 CDP は via=backend で Runner なしでも利用できます。",
+        "empty": "ブラウザーターゲットは未設定です。Backend から直接接続できる CDP エンドポイントを追加してください。",
         "targetId": "ターゲット ID",
         "remove": "ターゲットを削除",
         "allowedUrls": "許可するページ URL Pattern（1 行 1 件）",
         "endpoints": "CDP エンドポイント",
-        "endpointHint": "scope は endpoint のネットワーク位置、via は Backend 直結または Runner トンネルを指定します。v1 では URL の userinfo・query・fragment に資格情報を含めることはできません。",
+        "endpointHint": "scope は endpoint のネットワーク位置を示します。Backend からの直接接続のみ対応し、Runner トンネルは使用しません。URL の userinfo・query・fragment に資格情報を含めることはできません。",
         "addEndpoint": "Endpoint を追加",
         "scope": "ネットワーク範囲",
         "via": "到達経路",
@@ -821,7 +732,6 @@
         "scopeDocker": "Docker ネットワーク",
         "scopeExternal": "外部ネットワーク",
         "viaBackend": "Backend から直接接続",
-        "viaRunner": "Runner トンネル経由",
         "modalTitle": "CDP ターゲットを追加",
         "modalDescription": "Backend BrowserRuntime がアクセスする CDP ブラウザターゲットとエンドポイントを設定します。",
         "modalEndpointTitle": "CDP エンドポイントを追加",
@@ -873,43 +783,23 @@
         "mcpEndpointHint": "SSE または Streamable HTTP エンドポイントに対応"
       },
       "acpRuntime": {
-        "title": "ACP",
-        "description": "Workspace 内で起動できる ACP プロセス Profile と、Nexus Agent が呼び出す ACP Integration を設定します。ACP プロセスは凍結済み Workspace generation/runtime profile に固定されますが、単一ユーザー native Runner ではプロセス単位の読み取り専用・ネットワーク sandbox を保証しません。",
-        "addProfile": "プロファイル追加",
-        "profiles": "ワークスペース ACP プロファイル",
-        "profilesHint": "argv は JSON 文字列配列、cwd は /workspace 配下である必要があります。保存した Profile は Workspace generation 作成時に選択して固定できます。",
-        "noProfiles": "ACP Profile は未設定です。",
-        "profileId": "Profile ID",
-        "argv": "argv（JSON 配列）",
-        "cwd": "作業ディレクトリ",
-        "remove": "削除",
-        "saveProfiles": "Profiles を保存",
+        "transport": "実行対象の種類",
+        "sshArgv": "SSH 起動引数（JSON 配列、環境変数は env で指定）",
+        "sshCwd": "SSH 作業ディレクトリ（絶対パス）",
         "integrations": "ACP 連携",
-        "integrationsHint": "Integration は Agent 向けの論理エントリで、保存済み Workspace Profile を参照します。実行にはその Profile を含む実行中 Workspace が必要です。",
+        "integrationsHint": "明示的に許可された SSH 接続上の ACP プログラムを設定します。",
         "refresh": "更新",
         "displayName": "表示名",
-        "integrationProfile": "ワークスペースプロファイル",
-        "selectProfile": "Profile を選択",
         "enabled": "有効",
         "createIntegration": "統合を追加",
-        "saveProfileFirst": "Integration を作成する前に ACP Profile を 1 件以上保存してください。",
-        "installAgentFirst": "ACP Integration を管理する前に Nexus Agent Plugin をインストールしてください。Workspace ACP Profile は先に設定できます。",
-        "loading": "ACP Integrations を読み込み中…",
-        "noIntegrations": "ACP Integration は未設定です。",
+        "disabled": "無効",
+        "integrationCreated": "ACP 連携を作成しました。",
+        "integrationUpdated": "ACP 連携を更新しました。",
+        "integrationDeleted": "ACP 連携を削除しました。",
         "deleteIntegration": "削除",
-        "confirmDeleteIntegration": "プロファイル \"{profile}\" に紐づく ACP Integration \"{name}\" を削除しますか？この Integration エントリは完全に削除されます。",
-        "modalProfileTitle": "ACP プロファイルを追加",
-        "modalProfileDescription": "Workspace 環境で ACP エージェントプロセスを起動するための実行引数とディレクトリを定義します。",
+        "confirmDeleteIntegration": "SSH ACP 連携「{name}」を削除しますか？この操作は取り消せません。",
         "modalIntegrationTitle": "ACP 連携を追加",
-        "modalIntegrationDescription": "Nexus Agent のエントリポイントを作成し、保存された Workspace ACP プロファイルにバインドします。",
-        "profileCreated": "ACP プロファイルが追加され、保存されました。",
-        "profileDeleted": "ACP プロファイルが削除され、保存されました。",
-        "profileIdHint": "英小文字で始まり、英小文字・数字・ドット・ハイフン・アンダースコアを使用可能",
-        "profileIdDuplicate": "この Profile ID は既に存在します",
-        "cwdHint": "/workspace またはそのサブディレクトリである必要があります",
-        "argvCommand": "起動コマンドと引数",
-        "argvHint": "argv 用の shell 風クォートとエスケープ（shell 展開は実行しません）、または JSON 文字列配列を入力",
-        "argvPlaceholder": "例: acp-agent --port 8000 または [\"acp-agent\"]",
+        "modalIntegrationDescription": "許可済み SSH 接続にインストールされた ACP プログラム用の連携を作成します。",
         "integrationEnabledHint": "作成後すぐに Nexus Agent からこの ACP ランタイムの呼び出しを許可します"
       },
       "navigation": "Agent 設定セクション",
@@ -927,17 +817,15 @@
         "overview": "概要",
         "models": "モデルと予算",
         "execution": "実行と Agent",
-        "environments": "ランタイム環境",
         "storage": "ファイルとストレージ",
         "extensions": "App と拡張",
         "safety": "安全とシステム",
-        "runtime": "実行と環境"
+        "runtime": "実行と連携"
       },
       "groupDescriptions": {
         "overview": "機能状態、Agent App、アクティビティ、Capability grant を確認します。",
         "models": "既定モデル、Provider、コンテキスト予算、インスタンス上限を管理します。",
         "execution": "並列数、性能、委任用 Subagent profile を設定します。",
-        "environments": "Workspace Runner、ブラウザターゲット、ACP プロセス連携を管理します。",
         "storage": "Artifact quota、保持、現在のストレージ使用状況を管理します。",
         "extensions": "署名済み Agent App、プラグインリポジトリ、パッケージ、publisher trust を管理します。",
         "safety": "ターゲット deny ルールと読み取り専用のシステム guardrail を管理します。"
@@ -947,7 +835,6 @@
         "enabled": "有効",
         "models": "モデル",
         "providers": "有効な Provider {count} 件",
-        "runtime": "Workspace Runtime",
         "storage": "Artifact ストレージ",
         "storageLimit": "上限 {value}",
         "defaultModel": "既定モデル",
@@ -971,8 +858,8 @@
           "conservative": "保守的"
         },
         "fields": {
-          "maxRunSteps": "Run 最大ステップ保険",
-          "maxActiveExecutionSeconds": "最大アクティブ実行時間",
+          "maxModelRequests": "初期モデルリクエスト枠",
+          "maxActiveExecutionSeconds": "初期実行時間枠",
           "toolTimeoutSeconds": "ツールタイムアウト",
           "maxToolOutputBytes": "モデル可視ツール出力",
           "maxRecallItems": "Recall 件数",
@@ -980,7 +867,9 @@
           "maxSubagentMessages": "Subagent メッセージ数",
           "maxSubagentMessageBytes": "Subagent メッセージ容量",
           "contextCompactionMode": "動的コンテキスト圧縮",
-          "contextProfile": "コンテキスト window プロファイル"
+          "contextProfile": "コンテキスト window プロファイル",
+          "maxAutoModelRequests": "自動継続リクエスト上限",
+          "maxAutoActiveExecutionSeconds": "自動継続実行時間上限（秒）"
         },
         "profileHint": "Normal はコンテキスト余裕を多く確保し、Extended はモデル window をより広く使用します。どちらもハードリミットは緩和しません。",
         "profileInherited": "継承: {value}",
@@ -1156,10 +1045,6 @@
       "threadZoomOut": "縮小",
       "threadZoomReset": "100% に戻す",
       "noThreadsFound": "一致する会話はありません。",
-      "environment": "実行環境",
-      "environmentHint": "実行環境を選択",
-      "environmentNone": "ネイティブ環境",
-      "environmentNoneHint": "ホスト環境で直接実行",
       "frozen": "固定済み",
       "openThreads": "会話一覧を開く",
       "closeThreads": "会話一覧を閉じる"
@@ -1264,6 +1149,8 @@
       "sendEmptyHint": "先に入力してください",
       "sendBusyHint": "前の操作が完了するまでお待ちください",
       "clarificationTitle": "追加情報が必要です",
+      "loopPauseTitle": "ループ保護により実行を一時停止しました",
+      "loopPauseHint": "操作の繰り返しで新しい進展がありません。同じ Run を再開するには新しい指示を送信するか、停止してください。実行中のバックグラウンドジョブは自動キャンセルされません。",
       "clarificationHint": "同じタスクを続けるため、下で回答してください。選択肢を選ぶか、入力欄に直接回答できます。",
       "clarificationRecommended": "推奨",
       "clarificationTextHint": "下の入力欄に回答を入力してください。",
@@ -1328,7 +1215,7 @@
       "bentoAutomationDesc": "繰り返し作業を自動化",
       "bentoNextStepsTitle": "次のアクション",
       "bentoNextStepsDesc": "次の作業と優先順位を整理",
-      "heroTag": "エージェントワークスペース",
+      "heroTag": "Nexus Agent",
       "usage": {
         "estimated": "推定トークン: {total}",
         "total": "合計: {total} (入力: {input}, 出力: {output})",
@@ -1355,30 +1242,6 @@
             "unknown": "不明",
             "cancelled": "キャンセル済み"
           },
-          "workspaceState": {
-            "creating": "作成中",
-            "ready": "準備完了",
-            "starting": "起動中",
-            "running": "実行中",
-            "stopping": "停止中",
-            "stopped": "停止済み",
-            "deleting": "削除中",
-            "deleted": "削除済み",
-            "failed": "失敗"
-          },
-          "commandState": {
-            "pending": "待機中",
-            "running": "実行中",
-            "succeeded": "完了",
-            "failed": "失敗",
-            "unknown": "不明"
-          },
-          "workspaceAction": {
-            "start": "起動",
-            "stop": "停止",
-            "restart": "再起動",
-            "delete": "削除"
-          },
           "containerAction": {
             "start": "起動",
             "stop": "停止",
@@ -1388,12 +1251,6 @@
           "browserAction": {
             "click": "クリック",
             "type": "入力"
-          },
-          "codeAction": {
-            "symbols": "シンボル",
-            "definition": "定義",
-            "references": "参照",
-            "diagnostics": "診断"
           },
           "acpStopReason": {
             "end_turn": "正常終了",
@@ -1413,32 +1270,12 @@
         "fileDelete": "{path} を削除しました。",
         "connectionsFound": "承認済みの SSH 接続を {count} 件検出しました。",
         "diagnosticsCollected": "診断観測を {count} 件収集しました。",
-        "backgroundJobAccepted": "バックグラウンドジョブを Runner の永続ジョブジャーナルに登録しました。",
-        "jobOutcomeUnknown": "ワークスペースジョブの結果を確認できませんでした。",
-        "jobState": "ワークスペースジョブの状態: {stateKey}",
-        "commandCompleted": "ワークスペースコマンドが正常に完了しました。",
-        "commandTimedOut": "ワークスペースコマンドがタイムアウトしました。",
-        "commandExited": "ワークスペースコマンドが終了コード {code} で終了しました。",
-        "jobCancelPending": "キャンセルは未確認で、ジョブは依然として{stateKey}です。",
-        "jobWaitWindowExpired": "サーバー側の待機時間を過ぎても、ジョブは{stateKey}のままです。",
-        "jobCancelled": "Runner がワークスペースジョブのキャンセルを確認しました。",
-        "jobCompleted": "ワークスペースジョブが正常に完了しました。",
-        "jobTimedOut": "ワークスペースジョブがタイムアウトしました。",
-        "jobExited": "ワークスペースジョブが終了コード {code} で終了しました。",
+        "jobState": "SSH ジョブの状態: {stateKey}",
         "sshShellCompleted": "SSH コマンドが正常に完了しました。",
         "sshSessionOpen": "SSH 持続セッションを開きました。",
         "sshSessionList": "SSH セッション情報を取得しました。",
         "sshSessionClose": "SSH セッションを閉じて削除しました。",
         "sshShellExited": "SSH コマンドが終了コード {code} で終了しました。",
-        "workspaceProvisioned": "ワークスペースを作成し、準備が完了しました。",
-        "workspaceStatusIs": "ワークスペースの状態: {stateKey}",
-        "workspaceActionConfirmed": "ワークスペースの{actionKey}を確認しました。",
-        "workspaceActionPending": "ワークスペースの{actionKey}は{stateKey}のままです。",
-        "versionsSwitched": "ツールバージョンを切り替え、generation は {generation} になりました。",
-        "versionSwitchOutcome": "ツールバージョン切り替えの結果: {stateKey}",
-        "codeFilesMapped": "インデックス済みの TypeScript/JavaScript ソース {indexed} 件から {files} 件のファイルを対応付けました。",
-        "codeResults": "TypeScript ネイティブのコードインテリジェンスが {count} 件の{actionKey}結果を返しました。",
-        "codeUnavailable": "{path} ではコードインテリジェンスを利用できないため、{search} と {read} を使用してください。",
         "skillMetadataFound": "関連する署名済み Skill メタデータを {count} 件検出しました。",
         "skillLoaded": "署名済み Skill {name}（{id}）を読み込みました。",
         "deferredCapabilityFound": "遅延読み込みの MCP 機能が {count} 件一致しました。",
@@ -1521,17 +1358,6 @@
         "tool_result": "ツール結果",
         "system_notice": "システム通知"
       },
-      "workspaceKind": {
-        "shell": "シェル",
-        "code": "コード",
-        "data": "データ",
-        "browser": "ブラウザー"
-      },
-      "packStatus": {
-        "supported": "対応",
-        "deprecated": "非推奨",
-        "unavailable": "利用不可"
-      },
       "subagentMessageKind": {
         "request": "リクエスト",
         "reply": "返信",
@@ -1558,10 +1384,9 @@
         "anchored_estimate": "Provider アンカー推定",
         "provider": "Provider 実測"
       },
-      "steps": "ステップ",
       "activeTime": "実行時間",
       "verification": "検証",
-      "increaseBudget": "Run 予算を増やす",
+      "increaseBudget": "通信枠を増やす",
       "plan": "計画",
       "planStatus": {
         "pending": "保留",
@@ -1621,90 +1446,22 @@
       "tokenBreakdown": "入力 {input} · 出力 {output} · キャッシュ {cached}",
       "dragCardHint": "ドラッグまたは ↑/↓ で並べ替え",
       "resetCardOrder": "カード順をリセット",
-      "showOlderRuns": "以前の Run を表示（残り {count} 件）"
-    },
-    "workspaceRuntime": {
-      "title": "Workspace 開発環境",
-      "description": "1 つの Workspace でプロジェクトファイルを安定して共有し、各 runtime generation で Node、Python、Go と Runner Plugin のバージョンを構成します。",
-      "refresh": "更新",
-      "recipe": "ワークスペースプロファイル",
-      "retained": "Workspace を保持",
-      "toolVersions": "ツールチェーンのバージョン",
-      "toolVersionsHint": "オプションのツールは共有の読み取り専用 Tool Store からバージョン単位でマウントされ、Workspace ごとに異なるバージョンを選択できます。",
-      "toolNotSelected": "有効にしない",
-      "workspaceToolVersions": "Workspace ツールチェーン",
-      "workspaceToolVersionsHint": "バージョン切り替えではこの Workspace の runtime generation だけを再作成し、プロジェクトファイルや他の Workspace は変更しません。",
-      "switchToolVersions": "ツールバージョンを切り替え",
-      "versionSwitched": "Workspace のツールバージョンを切り替えました。",
-      "versionSwitchFailed": "Workspace のツールバージョン切り替えに失敗しました。",
-      "versionSwitchUnknown": "Workspace のツールバージョン切り替え結果が不明です。続行前に照合が必要です。",
-      "generationAndTargets": "Generation {generation} · 固定済み Runner Plugin target: {count} 件",
-      "runnerPlugins": "Runner Plugin",
-      "runnerPluginsHint": "Target は明示的に選択され Workspace profile に固定されます。Plugin は Docker コンテナを作成しません。",
-      "noRunnerPlugins": "有効かつインストール済みで Runner target を公開する Plugin はありません。",
-      "create": "Workspace を作成",
-      "created": "Workspace を作成しました。",
-      "actionSubmitted": "Workspace 操作を送信しました。",
-      "targetContract": "バージョン {version} · SDK {sdk} · プロトコル {protocol}",
-      "targetSource": "{entry} · sha256:{hash}",
-      "start": "開始",
-      "stop": "停止",
-      "restart": "再起動",
-      "delete": "削除",
-      "confirmDeleteTitle": "Workspace を削除しますか？",
-      "confirmDeleteWorkspace": "Workspace {id} を削除しますか？実行中のジョブと runtime プロセスを停止し、実行環境を削除します。この操作は元に戻せません。",
-      "exportTitle": "ワークスペース → Artifact",
-      "importTitle": "Artifact → ワークスペース",
-      "workspacePath": "Workspace パス",
-      "artifactName": "Artifact 名",
-      "selectArtifact": "この App の準備済み Artifact を選択",
-      "mediaType": "Media type（例: application/octet-stream）",
-      "status": {
-        "creating": "作成中",
-        "ready": "準備完了",
-        "starting": "開始中",
-        "running": "実行中",
-        "stopping": "停止中",
-        "stopped": "停止済み",
-        "deleting": "削除中",
-        "deleted": "削除済み",
-        "failed": "失敗"
-      },
-      "exportAction": "エクスポート",
-      "importAction": "インポート",
-      "exported": "Artifact {id} をエクスポートしました。",
-      "imported": "Workspace に {bytes} バイトをインポートしました。",
-      "requestFailed": "Workspace Runtime リクエストに失敗しました。",
-      "oneWorkspacePerRuntime": "各 runtime が持てるアクティブな Workspace は 1 つです。置き換える前に現在の Workspace を削除してください。",
-      "reconciliationRequired": "Workspace コマンドの結果が不明です。別の変更操作を送信する前に結果を確認してください。",
-      "verifyOutcome": "結果を確認",
-      "reconciliationPending": "Workspace コマンドの結果はまだ不明です。元の変更操作は再実行していません。",
-      "reconciliationResolved": "Workspace コマンドの結果を照合しました。",
-      "localTerminal": "ローカルターミナル",
-      "localTerminalHint": "この Workspace generation の direct PTY terminal を開きます。",
-      "openTerminal": "ターミナルを開く",
-      "closeTerminal": "ターミナルを閉じる",
-      "terminalClosed": "ターミナル接続が閉じられました。ターミナルを開き直すと新しい接続を開始できます。",
-      "terminalError": {
-        "protocolInvalid": "ターミナル接続から無効なプロトコルメッセージが返されました。ターミナルを開き直して再試行してください。",
-        "attachFailed": "この Workspace にターミナルを接続できませんでした。ターミナルを開き直して再試行してください。",
-        "reconnectExhausted": "ターミナル接続を復旧できませんでした。ターミナルを開き直して再試行してください。",
-        "inputQueueFull": "ターミナル入力が一時的に滞留しています。接続が復旧してから入力を続けてください。",
-        "sessionChanged": "再接続中にターミナルセッションが変更されました。ターミナルを開き直してください。",
-        "generic": "ターミナル接続に失敗しました。ターミナルを開き直して再試行してください。"
-      },
-      "browserTarget": "ブラウザーターゲット",
-      "browserTargetNone": "バインドなし（standalone は利用可能）",
-      "browserTargetHint": "選択するとターゲット設定がこの Workspace generation に固定されます。",
-      "acpProfiles": "ACP プロファイル",
-      "acpProfilesHint": "この Workspace generation 内で起動可能な ACP workspace profile を選択します。"
+      "showOlderRuns": "以前の Run を表示（残り {count} 件）",
+      "modelRequests": "モデルリクエスト",
+      "toolExecutions": "ツール実行",
+      "finishing": "結果を保存して終了中",
+      "stopReasons": {
+        "model_request_limit": "モデルリクエスト上限",
+        "active_time_limit": "アクティブ実行時間上限",
+        "tool_execution_limit": "ツール実行上限",
+        "no_progress": "新しい進捗の根拠がない"
+      }
     },
     "subagents": {
       "title": "Subagent",
       "description": "公開コラボレーション状態のみを表示します。子 Agent の非公開プロンプトやモデル文脈は表示しません。",
       "empty": "この Run には子 Agent の委任がありません。",
       "depth": "深さ {value}",
-      "steps": "ステップ {used}/{max}",
       "cancel": "子 Agent をキャンセル",
       "messages": "Mailbox 交換",
       "noMessages": "この子 Agent の公開メッセージはありません。",
@@ -1721,7 +1478,8 @@
         "isolate": "失敗は自身のみ",
         "failFast": "失敗時に即時中止"
       },
-      "profileLabel": "プロファイル {id}"
+      "profileLabel": "プロファイル {id}",
+      "modelRequests": "モデルリクエスト {used}/{max}"
     },
     "approvals": {
       "title": "操作の承認が必要です",
@@ -1783,12 +1541,11 @@
       "promptExplain": "現在の環境の仕組みを説明してください",
       "promptDiagnose": "利用可能な接続を読み取り専用で確認してください",
       "promptProjectOverview": "現在のプロジェクト構成を素早く整理し、主要モジュール、入口、実行フロー、主な依存関係を説明してください",
-      "promptReviewChanges": "現在のワークスペースの未コミット変更を確認し、潜在的な問題、回帰リスク、改善点を指摘してください",
+      "promptReviewChanges": "選択された SSH プロジェクトの未コミット変更を確認し、問題点・回帰リスク・改善案を示してください",
       "promptTroubleshoot": "現在の環境で可能性の高い問題を特定し、優先順位に沿って安全な診断を行い、結果を説明してください",
       "promptRunChecks": "現在の変更に最も関係するチェックやテストを実行し、明確な失敗を修正して結果をまとめてください",
-      "promptAutomation": "現在のワークスペースで反復している作業から自動化に適したものを見つけ、実装可能な方法を提案してください",
+      "promptAutomation": "選択された SSH プロジェクトの繰り返し作業を見つけ、具体的な自動化案を提案してください",
       "promptNextSteps": "現在のプロジェクト状態から、簡潔で優先順位付きの次のアクション一覧を作成してください",
-      "optionalRuntime": "オプションの実行環境",
       "approvalHistory": "処理済みの承認",
       "reasoningDescriptions": {
         "none": "思考を無効化し標準応答",

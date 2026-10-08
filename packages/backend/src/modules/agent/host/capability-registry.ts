@@ -14,14 +14,14 @@ import {
 interface CapabilityDefinition {
   id: AgentCapability;
   scopeKind: CapabilityScopeKind;
-  supportedTargets: readonly AgentTargetKind[];
+  supportedTargets: readonly 'ssh'[];
 }
 
-const TARGET_CAPABILITIES = new Map<AgentCapability, readonly AgentTargetKind[]>([
-  ['file.read', ['workspace', 'ssh']],
-  ['file.write', ['workspace', 'ssh']],
-  ['file.delete', ['workspace', 'ssh']],
-  ['shell.execute', ['workspace', 'ssh']],
+const TARGET_CAPABILITIES = new Map<AgentCapability, readonly 'ssh'[]>([
+  ['file.read', ['ssh']],
+  ['file.write', ['ssh']],
+  ['file.delete', ['ssh']],
+  ['shell.execute', ['ssh']],
 ]);
 
 const definitions = new Map<AgentCapability, CapabilityDefinition>(
@@ -109,7 +109,7 @@ export class CapabilityRegistry {
       return invalid();
     }
     const targetsRecord = record.targets as Record<string, unknown>;
-    if (Object.keys(targetsRecord).some((target) => !definition.supportedTargets.includes(target as AgentTargetKind))) {
+    if (Object.keys(targetsRecord).some((target) => target !== 'ssh' || !definition.supportedTargets.includes('ssh'))) {
       return invalid();
     }
     const targets: TargetCapabilityScope['targets'] = {};
@@ -169,7 +169,8 @@ export class CapabilityRegistry {
     const parsed = this.parseScope(capability, scope);
     if (definition.scopeKind === 'global') return true;
     if (!target || parsed.kind !== 'targets') return false;
-    const selection = parsed.targets[target.target];
+    if (target.target !== 'ssh') return false;
+    const selection = parsed.targets.ssh;
     if (!selection) return false;
     return selection.mode === 'all' || selection.ids.includes(target.id);
   }

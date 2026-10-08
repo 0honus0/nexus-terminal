@@ -22,7 +22,15 @@ export const idempotencyTtlScenario = async () => {
     configurationVersion: 1,
   };
   const budget = {
-    maxRunSteps: 100,
+    modelRequestCeiling: 100,
+    activeExecutionCeilingSeconds: 7200,
+    maxToolExecutions: 4000,
+    phase: 'executing',
+    stopReason: null,
+    extensionCount: 0,
+    progressSequence: 0,
+
+    maxModelRequests: 100,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
     maxToolOutputBytes: 1_048_576,
@@ -44,7 +52,6 @@ export const idempotencyTtlScenario = async () => {
     approvalMode: 'ask',
     executionMode: 'execute',
     connectionIds: [],
-    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   };
@@ -52,7 +59,8 @@ export const idempotencyTtlScenario = async () => {
     inputTokens: 0,
     outputTokens: 0,
     cachedInputTokens: 0,
-    steps: 0,
+    toolExecutions: 0,
+    modelRequests: 0,
     subagentMessages: 0,
     subagentMessageBytes: 0,
   };

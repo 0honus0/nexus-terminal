@@ -1,0 +1,9 @@
+{
+  "name": "catalog-build-fixture",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node verify.mjs"
+  }
+}

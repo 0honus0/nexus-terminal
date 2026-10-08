@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import {
   resolveToolApprovalTransition,
   expireToolApprovalsTransition,
@@ -25,7 +26,7 @@ import { SubagentContextBuilder } from '../../../packages/backend/src/modules/ag
 import { SubagentCompletionCoordinator } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent-completion-coordinator';
 import { SubagentToolStepExecutor } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent-tool-step-executor';
 import { builtInSubagentProfileTemplates } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent-profile-templates';
-import { governedSubagentWorkspaceMutation } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent-mutation-policy';
+import { governedSubagentSshMutation } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent-mutation-policy';
 import type {
   DelegationView,
   SchedulerWorkView,
@@ -35,6 +36,22 @@ import { requestHash } from '../../../packages/backend/src/modules/agent/runtime
 import type { RunView } from '../../../packages/backend/src/modules/agent/runtime/runs/run.types';
 import { emptyModelContinuations, scenarioDelegationModel, SCENARIO_MODEL_CAPABILITIES } from './scenario-fixtures';
 
+const sshFingerprint = (connectionId: number, configurationHash = 'scenario-ssh-config') => {
+  const endpoint = 'ssh.example.invalid:22';
+  const loginUser = 'worker';
+  return {
+    kind: 'ssh' as const,
+    target: 'ssh' as const,
+    id: String(connectionId),
+    connectionId,
+    endpoint,
+    loginUser,
+    configurationHash,
+    hostKeyTrust: 'unavailable' as const,
+    targetIdentity: createHash('sha256').update(`${endpoint}\n${loginUser}\n${configurationHash}`).digest('hex'),
+  };
+};
+
 export const subagentGovernedMutationScenario = async () => {
   const scenarioScope: Scope = { userId: 1, appId: 'subagent-governed-mutation-app' };
   const executionOrder: string[] = [];
@@ -42,29 +59,19 @@ export const subagentGovernedMutationScenario = async () => {
   const catalog = new ToolCatalog();
   const mutationTool: AgentTool = {
     descriptor: {
-      name: 'scenario_workspace_mutate',
+      name: 'file_write',
       version: '1',
-      description: 'Scenario-only governed Workspace mutation.',
+      description: 'Scenario-only governed SSH mutation.',
       inputSchema: { type: 'object', additionalProperties: false },
       riskClass: 'mutate',
       capability: 'file.write',
     },
     inspect: async (_input, context, policyRevision) => ({
-      toolName: 'scenario_workspace_mutate',
+      toolName: 'file_write',
       toolVersion: '1',
-      normalizedArguments: {},
-      target: {
-        kind: 'workspace',
-        target: 'workspace',
-        id: 'scenario-child',
-        workspaceId: 'scenario-child',
-        generation: 1,
-        targetIdentity: 'workspace:scenario-child:1',
-        endpoint: 'workspace:scenario-child',
-        loginUser: 'agent-runtime',
-        configurationHash: 'scenario-workspace-generation-1',
-      },
-      resourceKeys: ['workspace:scenario-child:1:file:src/example.ts'],
+      normalizedArguments: { target: 'ssh', id: '42', path: 'src/example.ts', content: 'updated' },
+      target: sshFingerprint(42),
+      resourceKeys: ['connection:42:file:src/example.ts'],
       risk: 'mutate',
       mutation: true,
       operationHash: 'scenario-subagent-mutation-operation',
@@ -175,22 +182,22 @@ export const subagentGovernedMutationScenario = async () => {
       {
         capability: 'file.write',
         schemaVersion: 2,
-        scope: { kind: 'targets', targets: { workspace: { mode: 'ids', ids: ['scenario-child'] } } },
+        scope: { kind: 'targets', targets: { ssh: { mode: 'ids', ids: ['42'] } } },
       },
     ],
     peerMessaging: 'parent-child',
     mutationMode: 'read-only',
     modelRef: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
     objective: 'Modify only src/example.ts and run the focused test.',
-    constraints: ['Use only the isolated child Workspace.'],
+    constraints: ['Use only the delegated SSH connection 42.'],
     inputArtifactRefs: [],
     completionCriteria: ['Return verified mutation evidence.'],
     dependencyMode: 'settled',
     status: 'running',
     depth: 1,
     failureMode: 'isolate',
-    budget: { maxSteps: 12 },
-    usage: { tokens: 0, steps: 0 },
+    budget: { maxModelRequests: 12 },
+    usage: { tokens: 0, modelRequests: 0 },
     result: null,
     evidenceRefs: [],
     deadlineAt: 1_900_000_000,
@@ -217,10 +224,10 @@ export const subagentGovernedMutationScenario = async () => {
     builder.allowsProposal(scenarioScope, governedDelegation, {
       providerCallId: 'scenario-ssh-write',
       name: machineMutationTool.descriptor.name,
-      argumentsJson: JSON.stringify({ target: 'ssh', id: '42' }),
+      argumentsJson: JSON.stringify({ target: 'ssh', id: '43' }),
     }),
     false,
-    'governed workers must stay confined to the Workspace target scope carried by their delegated file.write grant',
+    'governed workers must stay confined to the SSH target scope carried by their delegated file.write grant',
   );
   assert.deepEqual(
     builtInSubagentProfileTemplates(64).map((template) => template.id),
@@ -242,7 +249,7 @@ export const subagentGovernedMutationScenario = async () => {
       id: baseDelegation.runId,
       userId: 1,
       appId: scenarioScope.appId,
-      definition: { approvalMode, executionMode: 'execute', environment: { transport: 'workspace-profile' } },
+      definition: { approvalMode, executionMode: 'execute', connectionIds: [42] },
     }) as unknown as RunView;
   assert.equal(
     toolSchemas(scenarioScope, governedDelegation, { supportsTools: true }, runForMode('ask')).some(
@@ -256,7 +263,7 @@ export const subagentGovernedMutationScenario = async () => {
       (schema) => schema.name === mutationTool.descriptor.name,
     ),
     true,
-    'governed workers on explicit Full Access Runs may expose Workspace mutation Tools',
+    'governed workers on explicit Full Access Runs may expose delegated SSH mutation Tools',
   );
   assert.equal(
     toolSchemas(scenarioScope, baseDelegation, { supportsTools: true }, runForMode('full_access')).some(
@@ -285,16 +292,16 @@ export const subagentGovernedMutationScenario = async () => {
     inputRevision: 1,
     definition: {
       approvalMode: 'full_access',
-      connectionIds: [],
+      connectionIds: [42],
       policyRevision: 1,
-      environment: null,
     },
     budget: { toolTimeoutSeconds: 120, maxToolOutputBytes: 1_048_576 },
     usage: {
       inputTokens: 0,
       outputTokens: 0,
       cachedInputTokens: 0,
-      steps: 0,
+      toolExecutions: 0,
+      modelRequests: 0,
       subagentMessages: 0,
       subagentMessageBytes: 0,
     },
@@ -329,8 +336,7 @@ export const subagentGovernedMutationScenario = async () => {
     },
     runId: fullAccessRun.id,
     agentRuntimeId: baseDelegation.childRuntimeId,
-    connectionIds: [],
-    environment: null,
+    connectionIds: [42],
     stepId: toolStepId,
     signal,
     deadlineAt: work.deadlineAt,
@@ -338,27 +344,70 @@ export const subagentGovernedMutationScenario = async () => {
     inputRevision: 1,
   };
   const persistedInspection = await mutationTool.inspect({}, mutationContext, 1);
-  const pendingWorkspaceResource = `workspace:new:${fullAccessRun.id}:${baseDelegation.childRuntimeId}`;
   assert.equal(
-    governedSubagentWorkspaceMutation(
-      {
-        ...persistedInspection,
-        target: {
-          kind: 'workspace',
-          target: 'workspace',
-          id: `new:${fullAccessRun.id}:${baseDelegation.childRuntimeId}`,
-          targetIdentity: pendingWorkspaceResource,
-          endpoint: 'workspace:new',
-          loginUser: 'runner:65532',
-          configurationHash: 'scenario-pending-workspace',
-        },
-        resourceKeys: [pendingWorkspaceResource],
-      },
-      fullAccessRun.id,
-      baseDelegation.childRuntimeId,
-    ),
+    governedSubagentSshMutation(persistedInspection, fullAccessRun.definition.connectionIds, governedDelegation.grants),
     true,
-    'governed Child must be able to provision a Workspace bound to its own Run/runtime before an id exists',
+    'governed SSH inspection must be selected and delegated',
+  );
+  for (const tampered of [
+    { ...persistedInspection, target: { ...persistedInspection.target, configurationHash: 'tampered' } },
+    { ...persistedInspection, normalizedArguments: { target: 'ssh', id: '43' } },
+    { ...persistedInspection, resourceKeys: ['connection:43:file:src/example.ts'] },
+  ]) {
+    assert.equal(governedSubagentSshMutation(tampered as ToolInspection, [42], governedDelegation.grants), false);
+  }
+  assert.equal(governedSubagentSshMutation(persistedInspection, [43], governedDelegation.grants), false);
+  assert.equal(governedSubagentSshMutation(persistedInspection, [42], []), false);
+  assert.equal(
+    governedSubagentSshMutation(
+      persistedInspection,
+      [42],
+      [
+        {
+          capability: 'file.write',
+          schemaVersion: 2,
+          scope: {
+            kind: 'targets',
+            targets: {
+              workspace: { mode: 'all' },
+              ssh: { mode: 'all' },
+            },
+          },
+        },
+      ],
+    ),
+    false,
+  );
+  for (const toolName of ['file_write', 'file_patch', 'file_move', 'file_delete', 'shell_execute'] as const) {
+    const capability =
+      toolName === 'file_delete' ? 'file.delete' : toolName === 'shell_execute' ? 'shell.execute' : 'file.write';
+    const inspection: ToolInspection = { ...persistedInspection, toolName };
+    const grants = [
+      {
+        capability,
+        schemaVersion: 2,
+        scope: { kind: 'targets', targets: { ssh: { mode: 'ids', ids: ['42'] } } },
+      },
+    ];
+    assert.equal(
+      governedSubagentSshMutation(inspection, [42], grants),
+      true,
+      `${toolName} must use its own delegated capability on the selected SSH connection`,
+    );
+    assert.equal(
+      governedSubagentSshMutation(inspection, [42], governedDelegation.grants),
+      capability === 'file.write',
+      `${toolName} must not borrow a different mutation capability`,
+    );
+  }
+  assert.equal(
+    governedSubagentSshMutation(
+      { ...persistedInspection, toolName: 'scenario_machine_mutate' },
+      [42],
+      governedDelegation.grants,
+    ),
+    false,
+    'Unrecognized mutation tools must not gain authority from a broadly granted capability',
   );
   let mutationLeaseAcquisitions = 0;
   const mutationLeasePort = {
@@ -516,7 +565,7 @@ export const subagentGovernedMutationScenario = async () => {
     null!,
     null!,
     null!,
-    { confirmedMutation: async () => null } as never,
+    {} as never,
     stateCommit as never,
     null!,
     toolRunner,
@@ -622,16 +671,16 @@ export const subagentGovernedMutationScenario = async () => {
     approvalId: null,
     inspection: forbiddenInspection,
   });
-  assert.equal(forbiddenTargetExecutions, 0, 'governed Child must never execute a non-Workspace mutation target');
   assert.equal(
-    mutationLeaseAcquisitions,
+    forbiddenTargetExecutions,
     0,
-    'non-Workspace mutation targets must be rejected before acquiring any mutation lease',
+    'governed Child must never execute a nondelegated or misdeclared SSH mutation target',
   );
+  assert.equal(mutationLeaseAcquisitions, 0, 'unauthorized SSH targets must be rejected before any mutation lease');
   assert.deepEqual(
     executionOrder,
     ['state.begin-read', 'state.settle'],
-    'misdeclared Workspace-capability mutations must settle as failed without approval or side effects',
+    'misdeclared SSH-capability mutations must settle as failed without approval or side effects',
   );
 
   executionOrder.length = 0;
@@ -804,7 +853,15 @@ export const subagentGovernedMutationScenario = async () => {
         durableRunId,
         scenarioScope.appId,
         JSON.stringify({
-          maxRunSteps: 100,
+          modelRequestCeiling: 100,
+          activeExecutionCeilingSeconds: 7200,
+          maxToolExecutions: 4000,
+          phase: 'executing',
+          stopReason: null,
+          extensionCount: 0,
+          progressSequence: 0,
+
+          maxModelRequests: 100,
           maxActiveExecutionSeconds: 3_600,
           toolTimeoutSeconds: 120,
           maxToolOutputBytes: 1_048_576,
@@ -825,8 +882,7 @@ export const subagentGovernedMutationScenario = async () => {
           rootModelRoutes: [],
           approvalMode: 'full_access',
           executionMode: 'execute',
-          connectionIds: [],
-          environment: null,
+          connectionIds: [42],
           policyRevision: 1,
           settingsRevision: 1,
         }),
@@ -835,7 +891,8 @@ export const subagentGovernedMutationScenario = async () => {
           inputTokens: 0,
           outputTokens: 0,
           cachedInputTokens: 0,
-          steps: 0,
+          toolExecutions: 0,
+          modelRequests: 0,
           subagentMessages: 0,
           subagentMessageBytes: 0,
         }),
@@ -868,9 +925,9 @@ export const subagentGovernedMutationScenario = async () => {
       `INSERT INTO agent_delegations
         (id, run_id, parent_runtime_id, child_runtime_id, profile_id, grants_json, peer_messaging,
          mutation_mode, model_ref_json, objective, constraints_json, input_artifact_refs_json, completion_criteria_json,
-         dependency_mode, status, depth, failure_mode, max_steps, idempotency_key, request_hash,
+         dependency_mode, status, depth, failure_mode, max_model_requests, idempotency_key, request_hash,
          deadline_at, version, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'worker', ?, 'parent-child', 'governed', ?, 'Edit isolated workspace',
+       VALUES (?, ?, ?, ?, 'worker', ?, 'parent-child', 'governed', ?, 'Edit via delegated SSH',
                '[]', '[]', '[]', 'settled', 'running', 1, 'isolate', 12, 'governed-key',
                'governed-request-hash', ?, 1, ?, ?)`,
       [
@@ -882,7 +939,7 @@ export const subagentGovernedMutationScenario = async () => {
           {
             capability: 'file.write',
             schemaVersion: 2,
-            scope: { kind: 'targets', targets: { workspace: { mode: 'all' } } },
+            scope: { kind: 'targets', targets: { ssh: { mode: 'ids', ids: ['42'] } } },
           },
         ]),
         scenarioDelegationModel(durableModelRef),
@@ -911,21 +968,11 @@ export const subagentGovernedMutationScenario = async () => {
       ],
     );
     const durableInspection: ToolInspection = {
-      toolName: 'scenario_workspace_mutate',
+      toolName: 'file_write',
       toolVersion: '1',
-      normalizedArguments: {},
-      target: {
-        kind: 'workspace',
-        target: 'workspace',
-        id: 'governed-child',
-        workspaceId: 'governed-child',
-        generation: 1,
-        targetIdentity: 'workspace:governed-child:1',
-        endpoint: 'workspace:governed-child',
-        loginUser: 'agent-runtime',
-        configurationHash: 'workspace-generation-1',
-      },
-      resourceKeys: ['workspace:governed-child:1:file:src/example.ts'],
+      normalizedArguments: { target: 'ssh', id: '42', path: 'src/example.ts', content: 'updated' },
+      target: sshFingerprint(42, 'durable-ssh-config'),
+      resourceKeys: ['connection:42:file:src/example.ts'],
       risk: 'mutate',
       mutation: true,
       operationHash: durableOperationHash,
@@ -939,7 +986,7 @@ export const subagentGovernedMutationScenario = async () => {
         (id, run_id, agent_runtime_id, step_id, source_model_step_id, batch_index, batch_size,
          provider_call_id, tool_name, tool_version, inspection_json, operation_hash,
          operation_hash_version, risk, status, created_at)
-       VALUES (?, ?, ?, ?, ?, 0, 1, 'provider-governed-mutation', 'scenario_workspace_mutate', '1',
+       VALUES (?, ?, ?, ?, ?, 0, 1, 'provider-governed-mutation', 'file_write', '1',
                ?, ?, 1, 'mutate', 'proposed', ?)`,
       [
         durableToolCallId,
@@ -1151,11 +1198,60 @@ export const subagentGovernedMutationScenario = async () => {
     await assert.rejects(
       beginDurableMutation,
       (error: unknown) => error instanceof Error && error.message === 'SUBAGENT_MUTATION_TARGET_FORBIDDEN',
-      'StateCommit must independently reject a non-Workspace Child mutation target before consuming approval',
+      'StateCommit must independently reject forged SSH targets before consuming approval',
     );
     await durableDb.execute('UPDATE agent_tool_calls SET inspection_json = ? WHERE id = ?', [
       JSON.stringify(durableInspection),
       durableToolCallId,
+    ]);
+    for (const invalidInspection of [
+      { ...durableInspection, target: { ...durableInspection.target, configurationHash: 'changed-after-inspection' } },
+      { ...durableInspection, normalizedArguments: { target: 'ssh', id: '43' } },
+      { ...durableInspection, resourceKeys: ['connection:43:file:src/example.ts'] },
+      { ...durableInspection, toolName: 'workspace_control' },
+    ]) {
+      await durableDb.execute('UPDATE agent_tool_calls SET inspection_json = ? WHERE id = ?', [
+        JSON.stringify(invalidInspection),
+        durableToolCallId,
+      ]);
+      await assert.rejects(beginDurableMutation, /SUBAGENT_MUTATION_TARGET_FORBIDDEN/);
+    }
+    await durableDb.execute('UPDATE agent_tool_calls SET inspection_json = ? WHERE id = ?', [
+      JSON.stringify(durableInspection),
+      durableToolCallId,
+    ]);
+    const persistedRunDefinition = (await durableDb.queryOne<{ definition_json: string }>(
+      'SELECT definition_json FROM agent_runs WHERE id = ?',
+      [durableRunId],
+    ))!;
+    await durableDb.execute('UPDATE agent_runs SET definition_json = ? WHERE id = ?', [
+      JSON.stringify({ ...JSON.parse(persistedRunDefinition.definition_json), connectionIds: [43] }),
+      durableRunId,
+    ]);
+    await assert.rejects(beginDurableMutation, /SUBAGENT_MUTATION_TARGET_FORBIDDEN/);
+    await durableDb.execute('UPDATE agent_runs SET definition_json = ? WHERE id = ?', [
+      persistedRunDefinition.definition_json,
+      durableRunId,
+    ]);
+    const originalGrantRow = (await durableDb.queryOne<{ grants_json: string }>(
+      'SELECT grants_json FROM agent_delegations WHERE id = ?',
+      [durableDelegationId],
+    ))!;
+    for (const forbiddenScope of [
+      { ssh: { mode: 'ids', ids: ['43'] } },
+      { workspace: { mode: 'all' }, ssh: { mode: 'all' } },
+    ]) {
+      await durableDb.execute('UPDATE agent_delegations SET grants_json = ? WHERE id = ?', [
+        JSON.stringify([
+          { capability: 'file.write', schemaVersion: 2, scope: { kind: 'targets', targets: forbiddenScope } },
+        ]),
+        durableDelegationId,
+      ]);
+      await assert.rejects(beginDurableMutation, /SUBAGENT_MUTATION_TARGET_FORBIDDEN/);
+    }
+    await durableDb.execute('UPDATE agent_delegations SET grants_json = ? WHERE id = ?', [
+      originalGrantRow.grants_json,
+      durableDelegationId,
     ]);
     assert.equal(
       (
@@ -1306,11 +1402,11 @@ export const subagentGovernedMutationScenario = async () => {
     { name: 'governed_worker_mutation_tools', value: 1, unit: 'tools' },
     { name: 'raw_machine_mutation_tools', value: 0, unit: 'tools' },
     {
-      name: 'governed_subagent_non_workspace_target_rejections',
+      name: 'governed_subagent_unauthorized_ssh_target_rejections',
       value: forbiddenTargetExecutions === 0 ? 1 : 0,
       unit: 'cases',
     },
-    { name: 'durable_non_workspace_target_rejections', value: 1, unit: 'cases' },
+    { name: 'durable_unauthorized_ssh_target_rejections', value: 1, unit: 'cases' },
     { name: 'governed_worker_templates', value: 1, unit: 'templates' },
     { name: 'fresh_mutation_executions', value: scenarioMutationExecutions, unit: 'mutations' },
     { name: 'restart_mutation_replays', value: 0, unit: 'mutations' },

@@ -209,11 +209,30 @@ for (const outputKind of ['line logs', 'single line'] as const) {
           }
           send('touchend', [], [touch(box.y + 360)]);
         });
-      await dragHistory();
-      await expect(terminal).toContainText('PAD_HISTORY_098');
-      await dragHistory();
+      const firstVisibleHistory = () =>
+        terminal.locator('.xterm-rows').evaluate((element) => {
+          const match = element.textContent?.match(/PAD_HISTORY_(\d{3})/);
+          return match ? Number(match[1]) : 120;
+        });
+      const initialHistory = await firstVisibleHistory();
+      expect(initialHistory).toBeGreaterThan(0);
+      expect(initialHistory).toBeLessThan(120);
+      // Actual row height, command wrapping and shell notices change which line
+      // one drag reaches. Require observable progress and a known older marker.
+      await expect
+        .poll(async () => {
+          await dragHistory();
+          return firstVisibleHistory();
+        })
+        .toBeLessThan(initialHistory);
+      await expect
+        .poll(async () => {
+          await dragHistory();
+          return terminal.locator('.xterm-rows').textContent();
+        })
+        .toContain('PAD_HISTORY_000');
       await expect(terminal).not.toContainText('PAD_ORIGINAL_SHELL_OK');
-      await expect(terminal).toContainText('PAD_HISTORY_');
+      expect(await page.evaluate(() => window.scrollY)).toBe(0);
     } finally {
       await fs.writeFile(gate, 'release');
       await closeWebSocket(original.socket);

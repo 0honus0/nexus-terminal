@@ -251,7 +251,7 @@
     class="workspace-connection-list flex min-h-0 flex-col text-foreground"
     :class="props.pageScroll ? 'workspace-connection-list--page' : 'h-full overflow-hidden'"
   >
-    <div class="workspace-connection-toolbar flex items-center gap-2" :class="props.pageScroll ? 'mb-3 pb-3' : 'p-2'">
+    <div class="workspace-connection-toolbar flex items-center gap-2" :class="props.pageScroll ? 'mb-3' : 'p-2'">
       <UiInput
         v-model="search"
         data-focus-id="connectionListSearch"
@@ -316,7 +316,7 @@
       </div>
 
       <template v-else-if="showTags">
-        <section v-for="group in groups" :key="group.key" class="mb-1 last:mb-0">
+        <section v-for="group in groups" :key="group.key" class="workspace-connection-section mb-1 last:mb-0">
           <header
             class="workspace-connection-group group flex cursor-pointer items-center rounded-lg px-3 py-2 font-semibold text-foreground transition-colors duration-150"
             @click="toggleGroup(group.key)"
@@ -326,7 +326,9 @@
               class="mr-2 w-4 shrink-0 cursor-pointer text-center text-text-secondary transition-transform duration-200 ease-in-out group-hover:text-foreground"
               aria-hidden="true"
             ></i>
-            <span class="inline-block min-w-0 truncate text-sm" :title="group.name">{{ group.name }}</span>
+            <span class="workspace-connection-group-name inline-block min-w-0 truncate text-sm" :title="group.name">{{
+              group.name
+            }}</span>
             <span class="ml-1 text-xs font-normal text-text-secondary">({{ group.connections.length }})</span>
             <div class="min-w-0 flex-1"></div>
             <button
@@ -358,7 +360,7 @@
             </button>
           </header>
 
-          <ul v-show="isExpanded(group.key)" class="m-0 list-none p-0">
+          <ul v-show="isExpanded(group.key)" class="workspace-connection-group-items m-0 list-none p-0">
             <li
               v-for="connection in group.connections"
               :key="connection.id"
@@ -456,9 +458,6 @@
   .workspace-connection-content {
     background: var(--app-bg-color);
   }
-  .workspace-connection-list--page .workspace-connection-item {
-    margin-block: 0.375rem;
-  }
   .workspace-connection-group:hover {
     background: color-mix(in srgb, var(--text-color) 9%, var(--app-bg-color));
   }
@@ -471,6 +470,48 @@
   }
   .workspace-connection-item.bg-primary\/20 {
     background: color-mix(in srgb, var(--link-active-color) 16%, var(--app-bg-color));
+  }
+  .workspace-connection-list--page .workspace-connection-section {
+    margin-bottom: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+    border-radius: 0.625rem;
+    overflow: hidden;
+  }
+  .workspace-connection-list--page .workspace-connection-section:last-child {
+    margin-bottom: 0;
+  }
+  .workspace-connection-list--page .workspace-connection-group {
+    min-height: 2.25rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text-color-secondary);
+    font-weight: 500;
+  }
+  .workspace-connection-list--page .workspace-connection-group:hover {
+    background: color-mix(in srgb, var(--text-color) 3%, var(--app-bg-color));
+  }
+  .workspace-connection-list--page .workspace-connection-group-name {
+    font-size: 0.75rem;
+  }
+  .workspace-connection-list--page .workspace-connection-group > i {
+    width: 0.75rem;
+    font-size: 0.625rem;
+  }
+  .workspace-connection-list--page .workspace-connection-group button {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+  .workspace-connection-list--page .workspace-connection-group-items {
+    padding: 0 0.375rem 0.375rem;
+  }
+  .workspace-connection-list--page .workspace-connection-item {
+    margin-block: 0.125rem;
+    border-radius: 0.375rem;
+  }
+  .workspace-connection-list--page .workspace-connection-group-items .workspace-connection-item {
+    padding-left: 1.25rem;
   }
 
   .context-item {

@@ -4,7 +4,7 @@ import * as agentAi from './schema/agent-ai';
 import * as agentExecution from './schema/agent-execution';
 import * as agentCollaboration from './schema/agent-collaboration';
 import * as agentPlugins from './schema/agent-plugins';
-import * as agentWorkspace from './schema/agent-workspace';
+import * as agentSsh from './schema/agent-ssh';
 
 export interface SqliteTableDefinition {
   name: string;
@@ -45,8 +45,8 @@ export const sqliteTableDefinitions: readonly SqliteTableDefinition[] = [
   { name: 'agent_quota_usage', sql: agentAi.createAgentQuotaUsageTableSQL },
   { name: 'ai_threads', sql: agentExecution.createAiThreadsTableSQL },
   { name: 'agent_runs', sql: agentExecution.createAgentRunsTableSQL },
-  { name: 'agent_ssh_jobs', sql: agentWorkspace.createAgentSshJobsTableSQL },
-  { name: 'agent_project_directories', sql: agentWorkspace.createAgentProjectDirectoriesTableSQL },
+  { name: 'agent_ssh_jobs', sql: agentSsh.createAgentSshJobsTableSQL },
+  { name: 'agent_project_directories', sql: agentSsh.createAgentProjectDirectoriesTableSQL },
   { name: 'agent_loop_guards', sql: agentExecution.createAgentLoopGuardsTableSQL },
   { name: 'ai_thread_entries', sql: agentExecution.createAiThreadEntriesTableSQL },
   { name: 'ai_thread_entries_search', sql: agentExecution.createAiThreadEntrySearchIndexSQL },
@@ -69,13 +69,7 @@ export const sqliteTableDefinitions: readonly SqliteTableDefinition[] = [
   { name: 'agent_resource_fences', sql: agentExecution.createAgentResourceFencesTableSQL },
   { name: 'agent_leases', sql: agentExecution.createAgentLeasesTableSQL },
   { name: 'agent_resource_quarantine', sql: agentExecution.createAgentResourceQuarantineTableSQL },
-  { name: 'agent_workspaces', sql: agentWorkspace.createAgentWorkspacesTableSQL },
-  { name: 'agent_workspace_runtime_commands', sql: agentWorkspace.createAgentWorkspaceRuntimeCommandsTableSQL },
   { name: 'agent_integrations', sql: agentExecution.createAgentIntegrationsTableSQL },
-  {
-    name: 'agent_workspace_runtime_confirmations',
-    sql: agentWorkspace.createAgentWorkspaceRuntimeConfirmationsTableSQL,
-  },
   { name: 'agent_delegations', sql: agentCollaboration.createAgentDelegationsTableSQL },
   { name: 'agent_runtime_context_checkpoints', sql: agentCollaboration.createAgentRuntimeContextCheckpointsTableSQL },
   { name: 'agent_mailbox_cursors', sql: agentCollaboration.createAgentMailboxCursorsTableSQL },

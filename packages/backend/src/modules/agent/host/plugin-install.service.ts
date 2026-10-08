@@ -31,7 +31,6 @@ import {
 import type { OfficialAgentPluginSource } from './official-plugin-source';
 import type { RemotePluginCatalog, RemotePluginRepositoryPort } from './remote-plugin-repository.port';
 import { PluginRuntimeLifecycleCoordinator } from './plugin-runtime-lifecycle-coordinator';
-import type { PluginRunnerTarget } from './plugin-runner-target.port';
 
 export type {
   PluginFrontendDescriptor,
@@ -177,10 +176,6 @@ export class PluginInstallService {
 
   reconcileUserRuntime(userId: number): Promise<void> {
     return this.runtimeLifecycle.reconcileUserRuntime(userId);
-  }
-
-  resolveRunnerTargets(userId: number, pluginIds: readonly string[]): Promise<PluginRunnerTarget[]> {
-    return this.runtimeLifecycle.resolveRunnerTargets(userId, pluginIds);
   }
 
   listVersions(userId: number, appId?: string): Promise<PluginVersionRecord[]> {

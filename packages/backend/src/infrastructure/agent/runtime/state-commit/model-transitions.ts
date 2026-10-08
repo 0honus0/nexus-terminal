@@ -1,3 +1,5 @@
+import { settleInterruptedRunChildren } from './recovery-transitions';
+import { assertModelAdmission } from './execution-budget-transitions';
 import { randomUUID } from 'node:crypto';
 import type {
   BeginModelStepCommand,
@@ -5,7 +7,6 @@ import type {
   ContinueModelStepForCompletionGateCommand,
   DurableEventInput,
   ParkModelStepCommand,
-  PauseModelStepForBudgetCommand,
   RetryModelStepCommand,
   RetryModelStepResult,
   SettleModelStepCommand,
@@ -19,6 +20,7 @@ import type { RelationalDatabase } from '../../../../platform/storage/relational
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
 import { parseRunUsage } from '../durable-state-decoders';
 import {
+  cancelRunSubagentWork,
   allocateHostEvent,
   appendEvents,
   appendLedger,
@@ -41,6 +43,7 @@ export const beginModelStepTransition = async (
   if (row.version < command.expectedRunVersion) throw new Error('STATE_CONFLICT');
   if (row.input_revision !== command.inputWatermark) throw new Error('INPUT_REVISION_CONFLICT');
   if (!['created', 'running'].includes(row.status)) throw new Error('RUN_NOT_SCHEDULABLE');
+  assertModelAdmission(row, command.now);
   const firstStep = row.status === 'created';
   const app = await tx.queryOne<{ desired_state: string }>(
     'SELECT desired_state FROM agent_apps WHERE user_id = ? AND app_id = ?',
@@ -102,6 +105,7 @@ export const beginModelStepTransition = async (
   const currentUsage = parseRunUsage(row.usage_json);
   const nextUsage: RunUsage = {
     ...currentUsage,
+    modelRequests: currentUsage.modelRequests + 1,
     context:
       command.purpose === 'compaction'
         ? currentUsage.context
@@ -261,7 +265,6 @@ export const parkModelStepTransition = async (
             inputTokens: command.inputTokens,
             outputTokens: command.outputTokens,
             cachedInputTokens: command.cachedInputTokens,
-            steps: 1,
           }),
           command.inputTokens,
           command.estimatedUsage,
@@ -390,7 +393,6 @@ export const continueModelStepForCompletionGateTransition = async (
           inputTokens: command.inputTokens,
           outputTokens: command.outputTokens,
           cachedInputTokens: command.cachedInputTokens,
-          steps: 1,
         }),
         command.inputTokens,
         command.estimatedUsage,
@@ -426,6 +428,7 @@ export const retryModelStepTransition = async (
   );
   if (!row) throw new Error('NOT_FOUND');
   if (row.version < command.expectedRunVersion || row.status !== 'running') throw new Error('STATE_CONFLICT');
+  assertModelAdmission(row, command.now);
   const step = await tx.queryOne<{ status: string }>(
     'SELECT status FROM agent_steps WHERE id = ? AND run_id = ? AND agent_runtime_id = ?',
     [command.stepId, command.runId, command.runtimeId],
@@ -506,6 +509,7 @@ export const retryModelStepTransition = async (
   const committedEvents = await appendEvents(tx, row, events, command.now);
   let mergedUsage = usageWithProviderContext(
     usageWithDelta(row, {
+      modelRequests: 1,
       inputTokens: command.inputTokens,
       outputTokens: command.outputTokens,
       cachedInputTokens: command.cachedInputTokens,
@@ -546,112 +550,6 @@ export const retryModelStepTransition = async (
     attemptId,
     attemptIndex,
   };
-};
-
-export const pauseModelStepForBudgetTransition = async (
-  tx: RelationalDatabase,
-  command: PauseModelStepForBudgetCommand,
-): Promise<StateCommitResult> => {
-  const row = await tx.queryOne<RunRow>(
-    `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
-    [command.runId, command.scope.userId, command.scope.appId],
-  );
-  if (!row) throw new Error('NOT_FOUND');
-  if (row.version < command.expectedRunVersion || row.status !== 'running') throw new Error('STATE_CONFLICT');
-  const step = await tx.queryOne<{ status: string }>(
-    'SELECT status FROM agent_steps WHERE id = ? AND run_id = ? AND agent_runtime_id = ?',
-    [command.stepId, command.runId, command.runtimeId],
-  );
-  if (!step || step.status !== 'running') throw new Error('STEP_STATE_CONFLICT');
-  const attempt = await tx.queryOne<{ status: string }>(
-    `SELECT a.status FROM agent_model_attempts a
-     JOIN agent_steps s ON s.id = a.step_id
-     WHERE a.id = ? AND a.step_id = ? AND s.run_id = ?`,
-    [command.attemptId, command.stepId, command.runId],
-  );
-  if (!attempt || attempt.status !== 'streaming') throw new Error('ATTEMPT_STATE_CONFLICT');
-
-  const attemptChanged = await tx.execute(
-    `UPDATE agent_model_attempts SET status = 'failed', input_tokens = ?, output_tokens = ?,
-       cached_input_tokens = ?, estimated = ?, error_code = ?, completed_at = ?
-     WHERE id = ? AND status = 'streaming'`,
-    [
-      command.inputTokens ?? null,
-      command.outputTokens ?? null,
-      command.cachedInputTokens ?? null,
-      command.estimatedUsage ? 1 : 0,
-      command.errorCode,
-      command.now,
-      command.attemptId,
-    ],
-  );
-  const stepChanged = await tx.execute(
-    `UPDATE agent_steps SET status = 'cancelled', completed_at = ?
-     WHERE id = ? AND run_id = ? AND status = 'running'`,
-    [command.now, command.stepId, command.runId],
-  );
-  if (attemptChanged.changes !== 1 || stepChanged.changes !== 1) throw new Error('ATTEMPT_STATE_CONFLICT');
-  const runtimeChanged = await tx.execute(
-    `UPDATE agent_runtimes SET schedule_state = 'waiting_budget', updated_at = ?
-     WHERE id = ? AND run_id = ? AND status = 'running' AND schedule_state = 'executing'`,
-    [command.now, command.runtimeId, command.runId],
-  );
-  if (runtimeChanged.changes !== 1) throw new Error('RUNTIME_NOT_SCHEDULABLE');
-
-  const events: DurableEventInput[] = [
-    {
-      type: 'model.failed',
-      payload: { stepId: command.stepId, attemptId: command.attemptId, errorCode: command.errorCode },
-    },
-    { type: 'budget.increase_requested', payload: command.budgetReason },
-    { type: 'run.status_changed', payload: { from: 'running', to: 'awaiting_budget' } },
-  ];
-  const committedEvents = await appendEvents(tx, row, events, command.now);
-  const mergedUsage = usageWithProviderContext(
-    usageWithDelta(row, {
-      inputTokens: command.inputTokens,
-      outputTokens: command.outputTokens,
-      cachedInputTokens: command.cachedInputTokens,
-    }),
-    command.inputTokens,
-    command.estimatedUsage,
-    command.now,
-  );
-  const nextExecuting = Math.max(0, row.executing_runtime_count - 1);
-  const activeDelta =
-    nextExecuting === 0 && row.active_execution_started_at !== null
-      ? Math.max(0, command.now - row.active_execution_started_at)
-      : 0;
-  const changedRun = await tx.execute(
-    `UPDATE agent_runs SET status = 'awaiting_budget', usage_json = ?,
-     active_execution_seconds = active_execution_seconds + ?,
-     active_execution_started_at = CASE WHEN ? = 0 THEN NULL ELSE active_execution_started_at END,
-     executing_runtime_count = ?, next_event_sequence = next_event_sequence + ?, version = version + 1, updated_at = ?
-     WHERE id = ? AND user_id = ? AND app_id = ? AND version = ? AND status = 'running'`,
-    [
-      JSON.stringify(mergedUsage),
-      activeDelta,
-      nextExecuting,
-      nextExecuting,
-      events.length,
-      command.now,
-      row.id,
-      row.user_id,
-      row.app_id,
-      row.version,
-    ],
-  );
-  if (changedRun.changes !== 1) throw new Error('STATE_CONFLICT');
-  const updatedRow = await tx.queryOne<RunRow>(`SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ?`, [row.id]);
-  if (!updatedRow) throw new Error('NOT_FOUND');
-  await tx.execute(
-    `UPDATE agent_apps SET budget_request_count = budget_request_count + 1, updated_at = ?
-     WHERE user_id = ? AND app_id = ?`,
-    [command.now, row.user_id, row.app_id],
-  );
-  const run = mapRunRow(updatedRow);
-  await allocateHostEvent(tx, run.userId, 'summary.changed', summaryPayload(run), command.now);
-  return { run, eventCursor: run.eventCursor, ledgerCursor: 0, committedEvents };
 };
 
 export const settleModelStepTransition = async (
@@ -780,6 +678,15 @@ export const settleModelStepTransition = async (
             errorCode: command.errorCode ?? null,
           },
         },
+        ...(command.terminalStatus === 'interrupted'
+          ? [
+              { type: 'message.final' as const, payload: { text: command.assistantText ?? '' } },
+              {
+                type: 'run.interrupted' as const,
+                payload: { reason: 'execution_limit', errorCode: command.errorCode ?? 'RUN_EXECUTION_LIMIT' },
+              },
+            ]
+          : []),
         { type: 'run.status_changed', payload: { from: row.status, to: command.terminalStatus } },
       ];
   const committedEvents = await appendEvents(tx, row, events, command.now);
@@ -790,12 +697,16 @@ export const settleModelStepTransition = async (
   const activeDelta = activeStarted?.active_execution_started_at
     ? Math.max(0, command.now - activeStarted.active_execution_started_at)
     : 0;
+  const interruptedChildren =
+    command.terminalStatus === 'interrupted'
+      ? await settleInterruptedRunChildren(tx, row, command.now, 'execution_limit')
+      : null;
+  if (interruptedChildren) await cancelRunSubagentWork(tx, row.id, command.now, true);
   const mergedUsage = usageWithProviderContext(
     usageWithDelta(row, {
       inputTokens: command.inputTokens,
       outputTokens: command.outputTokens,
       cachedInputTokens: command.cachedInputTokens,
-      steps: 1,
     }),
     command.inputTokens,
     command.estimatedUsage,
@@ -803,7 +714,7 @@ export const settleModelStepTransition = async (
   );
   const updated = await tx.execute(
     `UPDATE agent_runs SET
-       status = ?, verification_status = ?, goal_status = ?, needs_reconciliation = 0,
+       status = ?, verification_status = ?, goal_status = ?, needs_reconciliation = ?,
        usage_json = ?, active_execution_seconds = active_execution_seconds + ?,
        active_execution_started_at = NULL, executing_runtime_count = 0,
        completed_at = ?, updated_at = ?, next_event_sequence = next_event_sequence + ?, version = version + 1
@@ -814,10 +725,13 @@ export const settleModelStepTransition = async (
         ? 'verified'
         : succeeded
           ? 'unverified'
-          : command.terminalStatus === 'cancelled'
-            ? 'not_started'
-            : 'failed',
+          : command.terminalStatus === 'interrupted'
+            ? 'unverified'
+            : command.terminalStatus === 'cancelled'
+              ? 'not_started'
+              : 'failed',
       succeeded ? 'satisfied' : command.terminalStatus === 'cancelled' ? row.goal_status : 'not_satisfied',
+      row.needs_reconciliation === 1 || interruptedChildren?.needsReconciliation ? 1 : 0,
       JSON.stringify(mergedUsage),
       activeDelta,
       command.now,
@@ -916,7 +830,6 @@ export const supersedeModelStepTransition = async (
       inputTokens: command.inputTokens,
       outputTokens: command.outputTokens,
       cachedInputTokens: command.cachedInputTokens,
-      steps: 1,
     }),
     command.inputTokens,
     command.estimatedUsage,

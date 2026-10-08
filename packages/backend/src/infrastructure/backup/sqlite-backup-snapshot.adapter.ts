@@ -80,9 +80,6 @@ const AGENT_TABLES = [
   'agent_app_intent_receipts',
   'agent_app_intent_artifact_grants',
   'agent_memory_import_confirmations',
-  'agent_workspaces',
-  'agent_workspace_runtime_commands',
-  'agent_workspace_runtime_confirmations',
 ] as const;
 
 const TABLES = [...PRODUCT_TABLES, ...AGENT_TABLES] as const;
@@ -367,7 +364,7 @@ export class SqliteBackupSnapshotAdapter implements BackupSnapshotPort {
       const marker = captured.get(`${root}.nexus-package-hash`);
       if (marker === undefined || Buffer.from(marker, 'base64').toString('utf8').trim() !== version.package_hash)
         throw new Error('BACKUP_SNAPSHOT_REFERENCE_INVALID');
-      for (const entry of [version.frontend_entry, version.backend_entry, version.runner_entry]) {
+      for (const entry of [version.frontend_entry, version.backend_entry]) {
         if (typeof entry === 'string' && !captured.has(`${root}${entry}`))
           throw new Error('BACKUP_SNAPSHOT_REFERENCE_INVALID');
       }

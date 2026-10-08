@@ -14,11 +14,73 @@ import type {
 import { isRemoteFileMissingError, RemoteDirectoryTypeConflict } from '../../../platform/filesystem/remote-filesystem';
 import { runtimePerformanceMetrics } from '../../../shared/observability/runtime-performance';
 
-const call = <T>(invoke: (callback: (error: Error | undefined | null, value: T) => void) => void): Promise<T> =>
-  new Promise<T>((resolve, reject) => invoke((error, value) => (error ? reject(error) : resolve(value))));
+const channelSignals = new WeakMap<SFTPWrapper, AbortSignal>();
+type PendingChannelCalls = {
+  cancellations: Set<() => void>;
+  detach: () => void;
+};
+const pendingChannelCalls = new WeakMap<SFTPWrapper, PendingChannelCalls>();
 
-const callVoid = (invoke: (callback: (error?: Error | null) => void) => void): Promise<void> =>
-  new Promise<void>((resolve, reject) => invoke((error) => (error ? reject(error) : resolve())));
+// Prefetch can issue 64 reads on one channel. Share lifecycle listeners across
+// those requests and remove them as soon as the last request settles.
+const registerChannelCall = (channel: SFTPWrapper, cancel: () => void): (() => void) => {
+  let state = pendingChannelCalls.get(channel);
+  if (!state) {
+    const signal = channelSignals.get(channel);
+    const cancellations = new Set<() => void>();
+    const detach = () => {
+      channel.off('end', onClose);
+      channel.off('close', onClose);
+      signal?.removeEventListener('abort', onClose);
+      pendingChannelCalls.delete(channel);
+    };
+    const onClose = () => {
+      const pending = [...cancellations];
+      cancellations.clear();
+      detach();
+      for (const cancellation of pending) cancellation();
+    };
+    state = { cancellations, detach };
+    pendingChannelCalls.set(channel, state);
+    channel.once('end', onClose);
+    channel.once('close', onClose);
+    signal?.addEventListener('abort', onClose, { once: true });
+  }
+  const registered = state;
+  registered.cancellations.add(cancel);
+  return () => {
+    if (!registered.cancellations.delete(cancel)) return;
+    if (registered.cancellations.size === 0) registered.detach();
+  };
+};
+
+export const bindSftpChannelCancellation = (channel: SFTPWrapper, signal: AbortSignal): void => {
+  channelSignals.set(channel, signal);
+};
+
+const call = <T>(
+  channel: SFTPWrapper,
+  invoke: (callback: (error: Error | undefined | null, value: T) => void) => void,
+): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    if (channelSignals.get(channel)?.aborted) {
+      reject(new Error('SFTP_CHANNEL_CLOSED'));
+      return;
+    }
+    const detach = registerChannelCall(channel, () => reject(new Error('SFTP_CHANNEL_CLOSED')));
+    try {
+      invoke((error, value) => {
+        detach();
+        error ? reject(error) : resolve(value);
+      });
+    } catch (error) {
+      detach();
+      reject(error);
+    }
+  });
+
+const callVoid = (channel: SFTPWrapper, invoke: (callback: (error?: Error | null) => void) => void): Promise<void> =>
+  call<void>(channel, (callback) => invoke((error) => callback(error, undefined)));
 
 export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
   private readonly directoryPromises = new Map<string, Promise<void>>();
@@ -28,8 +90,8 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
   async metadata(remotePath: string, options?: { followSymbolicLinks?: boolean }): Promise<RemoteFileMetadata> {
     const channel = await this.channelProvider();
     const stats = options?.followSymbolicLinks
-      ? await call<Stats>((callback) => channel.stat(remotePath, callback))
-      : await call<Stats>((callback) => channel.lstat(remotePath, callback));
+      ? await call<Stats>(channel, (callback) => channel.stat(remotePath, callback))
+      : await call<Stats>(channel, (callback) => channel.lstat(remotePath, callback));
     return toMetadata(stats);
   }
 
@@ -45,12 +107,12 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
 
   async resolvePath(remotePath: string): Promise<string> {
     const channel = await this.channelProvider();
-    return call<string>((callback) => channel.realpath(remotePath, callback));
+    return call<string>(channel, (callback) => channel.realpath(remotePath, callback));
   }
 
   async readDirectory(remotePath: string): Promise<RemoteDirectoryEntry[]> {
     const channel = await this.channelProvider();
-    const entries = await call<Array<{ filename: string; longname: string; attrs: Stats }>>((callback) =>
+    const entries = await call<Array<{ filename: string; longname: string; attrs: Stats }>>(channel, (callback) =>
       channel.readdir(remotePath, callback),
     );
     return entries.map((entry) => ({
@@ -132,8 +194,14 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
 
   async openPositionedReader(remotePath: string): Promise<RemotePositionedReader> {
     const channel = await this.channelProvider();
-    const handle = await call<Buffer>((callback) => channel.open(remotePath, 'r', callback));
+    const handle = await call<Buffer>(channel, (callback) => channel.open(remotePath, 'r', callback));
     let closed = false;
+    let channelClosed = false;
+    const onChannelClose = () => {
+      channelClosed = true;
+    };
+    channel.once('end', onChannelClose);
+    channel.once('close', onChannelClose);
     const readInto = async (position: number, target: Uint8Array): Promise<number> => {
       if (closed) throw new Error(`Remote reader is closed: ${remotePath}`);
       if (!Number.isSafeInteger(position) || position < 0) {
@@ -144,10 +212,8 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
       const startedAt = runtimePerformanceMetrics.sftpPositionedReadStarted(buffer.length);
       let bytesRead = 0;
       try {
-        bytesRead = await new Promise<number>((resolve, reject) => {
-          channel.read(handle, buffer, 0, buffer.length, position, (error, count) =>
-            error ? reject(error) : resolve(count),
-          );
+        bytesRead = await call<number>(channel, (callback) => {
+          channel.read(handle, buffer, 0, buffer.length, position, (error, count) => callback(error, count));
         });
         return bytesRead;
       } finally {
@@ -170,7 +236,10 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
       close: async () => {
         if (closed) return;
         closed = true;
-        await callVoid((callback) => channel.close(handle, callback));
+        channel.off('end', onChannelClose);
+        channel.off('close', onChannelClose);
+        if (channelClosed || channelSignals.get(channel)?.aborted) return;
+        await callVoid(channel, (callback) => channel.close(handle, callback));
       },
     };
   }
@@ -180,7 +249,7 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
     options: RemotePositionedWriteOptions = {},
   ): Promise<RemotePositionedWriter> {
     const channel = await this.channelProvider();
-    const handle = await call<Buffer>((callback) =>
+    const handle = await call<Buffer>(channel, (callback) =>
       options.mode === undefined
         ? channel.open(remotePath, 'w', callback)
         : channel.open(remotePath, 'w', options.mode, callback),
@@ -196,7 +265,7 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
         if (buffer.length === 0) return;
         const startedAt = runtimePerformanceMetrics.sftpPositionedWriteStarted(buffer.length);
         try {
-          await callVoid((callback) => channel.write(handle, buffer, 0, buffer.length, position, callback));
+          await callVoid(channel, (callback) => channel.write(handle, buffer, 0, buffer.length, position, callback));
         } finally {
           runtimePerformanceMetrics.sftpPositionedWriteFinished(startedAt);
         }
@@ -204,14 +273,14 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
       close: async () => {
         if (closed) return;
         closed = true;
-        await callVoid((callback) => channel.close(handle, callback));
+        await callVoid(channel, (callback) => channel.close(handle, callback));
       },
     };
   }
 
   async createDirectory(remotePath: string): Promise<void> {
     const channel = await this.channelProvider();
-    await callVoid((callback) => channel.mkdir(remotePath, callback));
+    await callVoid(channel, (callback) => channel.mkdir(remotePath, callback));
   }
 
   async ensureDirectory(remotePath: string): Promise<void> {
@@ -229,7 +298,7 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
   async removeFile(remotePath: string, options?: { ignoreMissing?: boolean }): Promise<void> {
     const channel = await this.channelProvider();
     try {
-      await callVoid((callback) => channel.unlink(remotePath, callback));
+      await callVoid(channel, (callback) => channel.unlink(remotePath, callback));
     } catch (error) {
       if (options?.ignoreMissing && isRemoteFileMissingError(error)) return;
       throw error;
@@ -238,18 +307,18 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
 
   async removeDirectory(remotePath: string): Promise<void> {
     const channel = await this.channelProvider();
-    await callVoid((callback) => channel.rmdir(remotePath, callback));
+    await callVoid(channel, (callback) => channel.rmdir(remotePath, callback));
   }
 
   async rename(sourcePath: string, destinationPath: string): Promise<void> {
     const channel = await this.channelProvider();
-    await callVoid((callback) => channel.rename(sourcePath, destinationPath, callback));
+    await callVoid(channel, (callback) => channel.rename(sourcePath, destinationPath, callback));
   }
 
   async replaceFile(sourcePath: string, destinationPath: string): Promise<void> {
     const channel = await this.channelProvider();
     try {
-      await callVoid((callback) => channel.ext_openssh_rename(sourcePath, destinationPath, callback));
+      await callVoid(channel, (callback) => channel.ext_openssh_rename(sourcePath, destinationPath, callback));
       return;
     } catch (atomicRenameError) {
       let destinationMetadata: RemoteFileMetadata | null = null;
@@ -288,7 +357,7 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
 
   async chmod(remotePath: string, mode: number): Promise<void> {
     const channel = await this.channelProvider();
-    await callVoid((callback) => channel.chmod(remotePath, mode, callback));
+    await callVoid(channel, (callback) => channel.chmod(remotePath, mode, callback));
   }
 
   private async ensureDirectoryInternal(remotePath: string): Promise<void> {

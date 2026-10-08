@@ -81,7 +81,8 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
     const monitor = modal.locator('.status-monitor');
     await expect(monitor.locator('.metric-cpu')).toHaveAccessibleName(/CPU 50\.0%/, { timeout: 15_000 });
     await monitor.locator('.metric-cpu').hover();
-    await expect(page.locator('[data-ui="tooltip-panel"]').filter({ hasText: 'Nexus Virtual CPU' })).toBeVisible();
+    await page.waitForTimeout(350);
+    await expect(page.locator('[data-ui="tooltip-panel"]')).toHaveCount(0);
     await expect(monitor).toContainText('CPU');
     await expect(monitor.getByText('Online', { exact: true })).toBeVisible();
     await expect(monitor.getByText('127.0.0.1', { exact: true })).toHaveCount(0);

@@ -1,23 +1,11 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import {
-  applyWorkspacePatch,
-  deleteWorkspaceFile,
-  listWorkspaceFiles,
-  moveWorkspaceFile,
-  readWorkspaceFile,
-  searchWorkspace,
-  statWorkspacePath,
-  writeWorkspaceFile,
-} from '../../../packages/agent-runner/src/controller/workspace-coding-files';
-import { WorkspaceFileTargetAdapter } from '../../../packages/backend/src/infrastructure/agent/workspace-runtime/workspace-file-target.adapter';
 import type { JsonValue } from '../../../packages/backend/src/modules/agent/agent.types';
 import { FileCapabilityService } from '../../../packages/backend/src/modules/agent/capabilities/file-capability.service';
 import type { SshFileTargetPort } from '../../../packages/backend/src/modules/agent/capabilities/ssh-file-target.port';
-import { AgentTargetResolver } from '../../../packages/backend/src/modules/agent/capabilities/target-resolver';
+import { resolveSshTarget } from '../../../packages/backend/src/modules/agent/capabilities/ssh-target-binding';
+import type { SshTargetResolverPort } from '../../../packages/backend/src/modules/agent/capabilities/ssh-target-resolver.port';
 import { ToolCatalog } from '../../../packages/backend/src/modules/agent/capabilities/tool-catalog';
 import { ToolExecutor } from '../../../packages/backend/src/modules/agent/capabilities/tool-executor';
 import type { ToolContext, ToolResult } from '../../../packages/backend/src/modules/agent/capabilities/tool.types';
@@ -26,85 +14,9 @@ import { validateManifest } from '../../../packages/backend/src/modules/agent/ho
 import { AppRegistryService } from '../../../packages/backend/src/modules/agent/host/app-registry.service';
 import { CapabilityRegistry } from '../../../packages/backend/src/modules/agent/host/capability-registry';
 import { createUnifiedFileTools } from '../../../packages/backend/src/modules/agent/tools/host/file-tools';
-import type { AgentWorkspaceRepositoryPort } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-runtime.repository.port';
-import type { WorkspaceRuntimeControllerPort } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-runtime-controller.port';
+import { failedToolResult } from '../../../packages/backend/src/modules/agent/runtime/execution/execution-errors';
 
 export const unifiedFileCapabilityScenario = async () => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-unified-file-'));
-  const workRoot = path.join(directory, 'work');
-  fs.mkdirSync(workRoot, { recursive: true });
-  fs.writeFileSync(path.join(workRoot, 'a.txt'), 'alpha\nneedle\nomega\n', 'utf8');
-
-  let workspaceGeneration = 1;
-  const workspaceFileRepository = {
-    getWorkspace: async () => ({
-      userId: 1,
-      appId: 'scenario.unified-file',
-      id: 'ws-file',
-      runId: 'file-run',
-      agentRuntimeId: 'file-runtime',
-      retained: false,
-      profile: {
-        kind: 'code' as const,
-        recipeId: 'file-recipe',
-        recipeRevision: '1',
-        runtimeDigest: 'file-runtime-digest',
-        catalogRevision: 'file-catalog',
-        toolchain: [],
-        runnerPlugins: [],
-        acpProfiles: [],
-        browserTarget: null,
-      },
-      generation: workspaceGeneration,
-      status: 'running' as const,
-      retainedManifestRef: null,
-      version: 1,
-      lastActiveAt: 1_800_000_000,
-      createdAt: 1_800_000_000,
-      updatedAt: 1_800_000_000,
-    }),
-  } as unknown as AgentWorkspaceRepositoryPort;
-  const workspaceFileController = {
-    statWorkspacePath: async (_workspaceId: string, _generation: number, requestedPath: string) =>
-      statWorkspacePath(workRoot, requestedPath),
-    readWorkspaceFile: async (
-      _workspaceId: string,
-      _generation: number,
-      request: Parameters<typeof readWorkspaceFile>[1],
-    ) => readWorkspaceFile(workRoot, request),
-    writeWorkspaceFile: async (
-      _workspaceId: string,
-      _generation: number,
-      request: Parameters<typeof writeWorkspaceFile>[1],
-    ) => writeWorkspaceFile(workRoot, request),
-    listWorkspaceFiles: async (
-      _workspaceId: string,
-      _generation: number,
-      request: Parameters<typeof listWorkspaceFiles>[1],
-    ) => listWorkspaceFiles(workRoot, request),
-    searchWorkspace: async (
-      _workspaceId: string,
-      _generation: number,
-      request: Parameters<typeof searchWorkspace>[1],
-    ) => searchWorkspace(workRoot, request),
-    moveWorkspaceFile: async (
-      _workspaceId: string,
-      _generation: number,
-      request: Parameters<typeof moveWorkspaceFile>[1],
-    ) => moveWorkspaceFile(workRoot, request),
-    deleteWorkspaceFile: async (
-      _workspaceId: string,
-      _generation: number,
-      request: Parameters<typeof deleteWorkspaceFile>[1],
-    ) => deleteWorkspaceFile(workRoot, request),
-    applyWorkspacePatch: async (
-      _workspaceId: string,
-      _generation: number,
-      request: Parameters<typeof applyWorkspacePatch>[1],
-    ) => applyWorkspacePatch(workRoot, request),
-  } as unknown as WorkspaceRuntimeControllerPort;
-  const workspaceFileTarget = new WorkspaceFileTargetAdapter(workspaceFileRepository, workspaceFileController);
-
   let sshConfigurationHash = 'ssh-config';
   const assertSshConfiguration = (configurationHash: string | undefined): void => {
     if (configurationHash !== sshConfigurationHash) throw new Error('RESOURCE_CHANGED');
@@ -330,52 +242,24 @@ export const unifiedFileCapabilityScenario = async () => {
     },
   } as unknown as SshFileTargetPort;
 
-  const targets = {
-    resolve: async (_context: ToolContext, selector: { target: 'workspace' | 'ssh'; id: string }) =>
-      selector.target === 'workspace'
-        ? {
-            selector,
-            fingerprint: {
-              kind: 'workspace' as const,
-              target: 'workspace' as const,
-              id: selector.id,
-              workspaceId: selector.id,
-              generation: workspaceGeneration,
-              targetIdentity: `workspace:${selector.id}:${workspaceGeneration}`,
-              endpoint: `workspace:${selector.id}`,
-              loginUser: 'runner:65532',
-              configurationHash: `workspace-config-${workspaceGeneration}`,
-            },
-            resourceKeys: [`workspace:${selector.id}:${workspaceGeneration}`],
-            preconditions: [
-              {
-                kind: 'workspaceGeneration' as const,
-                key: selector.id,
-                observedValue: { generation: workspaceGeneration },
-              },
-            ],
-            workspaceGeneration,
-          }
-        : {
-            selector,
-            fingerprint: {
-              kind: 'ssh' as const,
-              target: 'ssh' as const,
-              id: selector.id,
-              connectionId: 1,
-              targetIdentity: 'ssh:1',
-              endpoint: 'ssh.example:22',
-              loginUser: 'tester',
-              configurationHash: sshConfigurationHash,
-              hostKeyTrust: 'unavailable' as const,
-            },
-            resourceKeys: ['connection:1'],
-            preconditions: [],
-            connectionId: 1,
-          },
-  } as unknown as AgentTargetResolver;
+  const targets: SshTargetResolverPort = {
+    target: async (_context, connectionId) => {
+      if (connectionId !== 1) throw new Error('TARGET_NOT_SELECTED');
+      return {
+        kind: 'ssh',
+        target: 'ssh',
+        id: '1',
+        connectionId: 1,
+        targetIdentity: 'ssh:1',
+        endpoint: 'ssh.example:22',
+        loginUser: 'tester',
+        configurationHash: sshConfigurationHash,
+        hostKeyTrust: 'unavailable',
+      };
+    },
+  };
 
-  const service = new FileCapabilityService(targets, workspaceFileTarget, sshFileTarget);
+  const service = new FileCapabilityService(targets, sshFileTarget);
   const cryptoHash = { sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex') };
   const tools = new Map(createUnifiedFileTools(service, cryptoHash).map((tool) => [tool.descriptor.name, tool]));
   const context: ToolContext = {
@@ -391,13 +275,65 @@ export const unifiedFileCapabilityScenario = async () => {
     runId: 'file-run',
     agentRuntimeId: 'file-runtime',
     connectionIds: [1],
-    environment: null,
     stepId: 'file-step',
     signal: new AbortController().signal,
     deadlineAt: Math.floor(Date.now() / 1000) + 60,
     maxOutputBytes: 256 * 1024,
     inputRevision: 1,
   };
+  let resolvedSshTargets = 0;
+  const canonicalTargets = {
+    target: async (_context, connectionId) => {
+      resolvedSshTargets++;
+      if (connectionId !== 1) throw new Error('TARGET_NOT_SELECTED');
+      return {
+        kind: 'ssh',
+        target: 'ssh',
+        id: '1',
+        connectionId: 1,
+        targetIdentity: 'ssh:1',
+        endpoint: 'ssh.example:22',
+        loginUser: 'tester',
+        configurationHash: sshConfigurationHash,
+        hostKeyTrust: 'unavailable',
+      };
+    },
+  } satisfies SshTargetResolverPort;
+  for (const invalid of [
+    { target: 'workspace', id: 'retired-workspace' },
+    { target: 'ssh', id: '0' },
+    { target: 'ssh', id: '01' },
+    { target: 'ssh', id: '1e3' },
+    { target: 'ssh', id: '9007199254740992' },
+  ] as const) {
+    await assert.rejects(
+      resolveSshTarget(canonicalTargets, context, invalid),
+      /TOOL_ARGUMENTS_INVALID/,
+      'Retired Workspace and noncanonical connection IDs must be rejected before SSH resolution',
+    );
+  }
+  assert.equal(resolvedSshTargets, 0, 'Invalid targets must not consult SSH or Workspace resources');
+  const canonicalSsh = await resolveSshTarget(canonicalTargets, context, { target: 'ssh', id: '1' });
+  assert.equal(canonicalSsh.connectionId, 1);
+  assert.deepEqual(canonicalSsh.resourceKeys, ['connection:1']);
+  assert.equal(canonicalSsh.fingerprint.configurationHash, sshConfigurationHash);
+  assert.equal(resolvedSshTargets, 1);
+  const restoredSsh = service.bindInspectionTarget(canonicalSsh.fingerprint);
+  assert.deepEqual(restoredSsh.resourceKeys, ['connection:1']);
+  assert.equal(restoredSsh.connectionId, 1);
+  for (const invalid of [
+    { ...canonicalSsh.fingerprint, kind: 'workspace' as const, target: 'workspace' as const },
+    { ...canonicalSsh.fingerprint, id: '01' },
+    { ...canonicalSsh.fingerprint, connectionId: 0, id: '0' },
+    { ...canonicalSsh.fingerprint, connectionId: 2 },
+  ]) {
+    assert.throws(
+      () => service.bindInspectionTarget(invalid),
+      /TOOL_STATE_CONFLICT/,
+      'Persisted inspections cannot manufacture an SSH binding with mismatched identity',
+    );
+  }
+  assert.equal(resolvedSshTargets, 1, 'Restoring inspections must not resolve a different SSH connection');
   const invoke = async (name: string, input: JsonValue): Promise<ToolResult> => {
     const tool = tools.get(name);
     assert.ok(tool, `${name} must be registered`);
@@ -405,7 +341,7 @@ export const unifiedFileCapabilityScenario = async () => {
     return tool.execute(inspection, context);
   };
 
-  try {
+  {
     const readTool = tools.get('file_read')!;
     const args = { target: 'ssh', id: '1', path: '/srv/a.txt' };
     const temporary = await readTool.inspect(args, context, 7);
@@ -418,27 +354,149 @@ export const unifiedFileCapabilityScenario = async () => {
       borrowedSessions.every((id) => id === 'explicit-session'),
       'inspection/execution must preserve the selected session',
     );
+    const observedCalls = borrowedSessions.length;
     await assert.rejects(
-      () =>
-        readTool.inspect(
-          { target: 'workspace', id: 'ws-file', path: '/workspace/work/a.txt', sessionId: 'invalid' },
-          context,
-          7,
-        ),
-      /TOOL_ARGUMENTS_INVALID/,
+      () => invoke('file_read', { target: 'workspace', id: 'ws-file', path: '/srv/a.txt' }),
+      /FILE_ARGUMENT_TARGET_INVALID/,
     );
-    for (const target of [
-      { target: 'workspace' as const, id: 'ws-file', root: '/workspace/work' },
-      { target: 'ssh' as const, id: '1', root: '/srv' },
-    ]) {
+    assert.equal(borrowedSessions.length, observedCalls, 'retired target must not access SSH files');
+    for (const target of [{ target: 'ssh' as const, id: '1', root: '/srv' }]) {
       const source = `${target.root}/a.txt`;
       const created = `${target.root}/created.txt`;
       const moved = `${target.root}/moved.txt`;
+      const missing = `${target.root}/missing.txt`;
+      const beforeState = inspectSsh(source);
+      const canary = 'PRIVATE_FILE_ARGUMENT_CANARY';
+      for (const fixture of [
+        {
+          name: 'file_read',
+          args: { path: source, offsetBytes: -1 },
+          code: 'FILE_ARGUMENT_INTEGER_INVALID',
+          detail: 'offsetBytes',
+        },
+        {
+          name: 'file_read',
+          args: { path: source, maxBytes: 65537 },
+          code: 'FILE_ARGUMENT_INTEGER_INVALID',
+          detail: 'maxBytes',
+        },
+        {
+          name: 'file_list',
+          args: { path: target.root, maxEntries: 0 },
+          code: 'FILE_ARGUMENT_INTEGER_INVALID',
+          detail: 'maxEntries',
+        },
+        {
+          name: 'file_search',
+          args: { path: source, query: canary, contextLines: 6 },
+          code: 'FILE_ARGUMENT_INTEGER_INVALID',
+          detail: 'contextLines',
+        },
+        {
+          name: 'file_search',
+          args: { path: source, query: '', maxResults: 20 },
+          code: 'FILE_ARGUMENT_STRING_INVALID',
+          detail: 'query',
+        },
+        {
+          name: 'file_write',
+          args: { path: missing, content: canary, mode: 512 },
+          code: 'FILE_ARGUMENT_INTEGER_INVALID',
+          detail: 'mode',
+        },
+        {
+          name: 'file_write',
+          args: { path: missing, content: canary + '\0' },
+          code: 'FILE_ARGUMENT_CONTENT_INVALID',
+          detail: 'content',
+        },
+        {
+          name: 'file_move',
+          args: { path: source, destinationPath: '' },
+          code: 'FILE_ARGUMENT_STRING_INVALID',
+          detail: 'destinationPath',
+        },
+        {
+          name: 'file_delete',
+          args: { path: source, recursive: canary },
+          code: 'FILE_ARGUMENT_BOOLEAN_INVALID',
+          detail: 'recursive',
+        },
+        {
+          name: 'file_read',
+          args: { path: source, extra: canary },
+          code: 'FILE_ARGUMENT_FIELD_UNSUPPORTED',
+          detail: 'schema',
+        },
+        { name: 'file_search', args: { path: missing, query: canary }, code: 'FILE_NOT_FOUND', detail: 'path' },
+      ]) {
+        await assert.rejects(
+          () => invoke(fixture.name, { target: target.target, id: target.id, ...fixture.args } as JsonValue),
+          (error: unknown) => {
+            const result = failedToolResult(error, {
+              fallbackCode: 'TOOL_ARGUMENTS_INVALID',
+              summaryPrefix: 'Rejected',
+              verificationSummary: 'Not executed.',
+            });
+            assert.equal(result.errorCode, fixture.code);
+            assert.ok(result.summary.includes(fixture.detail));
+            assert.equal(JSON.stringify(result).includes(canary), false);
+            return true;
+          },
+        );
+      }
+      const missingAfterReject = inspectSsh(missing);
+      assert.equal(missingAfterReject.exists, false, 'Invalid file writes must not create a destination');
+      for (const fixture of [
+        {
+          name: 'file_write',
+          args: { path: target.root, content: 'must-not-write' },
+          code: 'FILE_WRITE_REQUIRES_FILE',
+        },
+        { name: 'file_move', args: { path: missing, destinationPath: moved }, code: 'FILE_NOT_FOUND' },
+        { name: 'file_move', args: { path: source, destinationPath: source }, code: 'FILE_MOVE_SAME_PATH' },
+        {
+          name: 'file_move',
+          args: { path: source, destinationPath: target.root },
+          code: 'FILE_MOVE_DESTINATION_EXISTS',
+        },
+        { name: 'file_delete', args: { path: missing }, code: 'FILE_NOT_FOUND' },
+      ]) {
+        await assert.rejects(
+          () => invoke(fixture.name, { target: target.target, id: target.id, ...fixture.args } as JsonValue),
+          (error: unknown) => {
+            const result = failedToolResult(error, {
+              fallbackCode: 'TOOL_ARGUMENTS_INVALID',
+              summaryPrefix: 'Rejected',
+              verificationSummary: 'Not executed.',
+            });
+            assert.equal(result.errorCode, fixture.code);
+            assert.equal(result.ok, false);
+            assert.equal(result.verification.status, 'failed');
+            assert.equal(result.summary.includes(source), false, 'Correction details must not echo input paths');
+            return true;
+          },
+        );
+      }
+      const afterState = inspectSsh(source);
+      assert.deepEqual(
+        afterState,
+        beforeState,
+        'Rejected operations must preserve the original file identity and hash',
+      );
       const read = await invoke('file_read', { target: target.target, id: target.id, path: source });
       assert.equal(read.ok, true);
       assert.match(String((read.data as Record<string, JsonValue>).content), /needle/);
       const listed = await invoke('file_list', { target: target.target, id: target.id, path: target.root });
       assert.equal(listed.ok, true);
+      await assert.rejects(
+        () => invoke('file_read', { target: target.target, id: target.id, path: target.root }),
+        /FILE_READ_REQUIRES_FILE/,
+      );
+      await assert.rejects(
+        () => invoke('file_list', { target: target.target, id: target.id, path: source }),
+        /FILE_LIST_REQUIRES_DIRECTORY/,
+      );
       const searched = await invoke('file_search', {
         target: target.target,
         id: target.id,
@@ -446,7 +504,16 @@ export const unifiedFileCapabilityScenario = async () => {
         query: 'needle',
       });
       assert.equal(((searched.data as Record<string, JsonValue>).matches as JsonValue[]).length, 1);
-      await invoke('file_write', { target: target.target, id: target.id, path: created, content: 'created\n' });
+      const globSearch = await invoke('file_search', {
+        target: target.target,
+        id: target.id,
+        path: target.root,
+        query: 'needle',
+        glob: '{a,b}.txt',
+      });
+      assert.equal(((globSearch.data as Record<string, JsonValue>).matches as JsonValue[]).length, 1);
+      const writeInput = { target: target.target, id: target.id, path: created, content: 'created\n' };
+      await invoke('file_write', writeInput);
       const patch = `--- ${source}\n+++ ${source}\n@@ -1,3 +1,3 @@\n-alpha\n+ALPHA\n needle\n omega\n`;
       const patched = await invoke('file_patch', { target: target.target, id: target.id, patch });
       assert.equal(patched.ok, true);
@@ -454,31 +521,32 @@ export const unifiedFileCapabilityScenario = async () => {
       assert.match(String((reread.data as Record<string, JsonValue>).content), /^ALPHA/m);
       await invoke('file_move', { target: target.target, id: target.id, path: created, destinationPath: moved });
       await invoke('file_delete', { target: target.target, id: target.id, path: moved });
-      const afterDelete = target.target === 'workspace' ? statWorkspacePath(workRoot, moved) : inspectSsh(moved);
+      const afterDelete = inspectSsh(moved);
       assert.equal(afterDelete.exists, false);
     }
 
-    const fileWriteTool = tools.get('file_write');
-    const fileReadTool = tools.get('file_read');
-    assert.ok(fileWriteTool && fileReadTool);
-
-    const frozenWorkspaceWrite = await fileWriteTool.inspect(
-      { target: 'workspace', id: 'ws-file', path: '/workspace/work/stale-generation.txt', content: 'must-not-write\n' },
+    const fileWriteTool = tools.get('file_write')!;
+    const fileReadTool = tools.get('file_read')!;
+    const privateWrite = await fileWriteTool.inspect(
+      { target: 'ssh', id: '1', path: '/srv/mode-hash.txt', content: '', mode: 0o600 },
       context,
       7,
     );
-    workspaceGeneration = 2;
+    const sharedWrite = await fileWriteTool.inspect(
+      { target: 'ssh', id: '1', path: '/srv/mode-hash.txt', content: '', mode: 0o644 },
+      context,
+      7,
+    );
+    assert.notEqual(privateWrite.operationHash, sharedWrite.operationHash, 'SSH mode requires new approval');
     await assert.rejects(
-      () => fileWriteTool.execute(frozenWorkspaceWrite, context),
-      /WORKSPACE_GENERATION_CONFLICT/,
-      'file execution must keep the inspected Workspace generation pinned instead of rebinding target + id after inspection',
+      () =>
+        fileWriteTool.inspect(
+          { target: 'workspace', id: 'ws-file', path: '/srv/invalid.txt', content: 'must-not-write' },
+          context,
+          7,
+        ),
+      /FILE_ARGUMENT_TARGET_INVALID/,
     );
-    assert.equal(
-      statWorkspacePath(workRoot, '/workspace/work/stale-generation.txt').exists,
-      false,
-      'a stale Workspace generation must not receive the approved write',
-    );
-    workspaceGeneration = 1;
 
     const frozenSshWrite = await fileWriteTool.inspect(
       { target: 'ssh', id: '1', path: '/srv/stale-config.txt', content: 'must-not-write\n' },
@@ -508,6 +576,35 @@ export const unifiedFileCapabilityScenario = async () => {
     sshConfigurationHash = 'ssh-config';
 
     const capabilityRegistry = new CapabilityRegistry();
+    for (const capability of ['file.read', 'file.write', 'file.delete', 'shell.execute'] as const) {
+      assert.deepEqual(
+        capabilityRegistry.require(capability).supportedTargets,
+        ['ssh'],
+        'File/Shell capability grants must expose only SSH connections',
+      );
+      assert.deepEqual(capabilityRegistry.defaultScope(capability), {
+        kind: 'targets',
+        targets: { ssh: { mode: 'all' } },
+      });
+      for (const rejectedTargets of [
+        { workspace: { mode: 'all' } },
+        { workspace: { mode: 'all' }, ssh: { mode: 'all' } },
+      ]) {
+        assert.throws(
+          () => capabilityRegistry.parseScope(capability, { kind: 'targets', targets: rejectedTargets }),
+          /APP_GRANT_SCOPE_INVALID/,
+          'Legacy Workspace grants must be rejected without normalization or SSH escalation',
+        );
+      }
+      assert.equal(
+        capabilityRegistry.allows(capability, capabilityRegistry.defaultScope(capability), {
+          target: 'workspace',
+          id: 'legacy-workspace',
+        }),
+        false,
+        'An SSH grant cannot authorize the old Workspace target',
+      );
+    }
     const appRegistry = new AppRegistryService();
     appRegistry.registerVersion({
       manifest: validateManifest(
@@ -527,11 +624,7 @@ export const unifiedFileCapabilityScenario = async () => {
       defaultGrants: [],
     });
     let brokerGrants = [
-      capabilityRegistry.grant(
-        'file.read',
-        { kind: 'targets', targets: { workspace: { mode: 'ids', ids: ['ws-file'] } } },
-        1,
-      ),
+      capabilityRegistry.grant('file.read', { kind: 'targets', targets: { ssh: { mode: 'ids', ids: ['1'] } } }, 1),
     ];
     const broker = new AppCapabilityBroker(
       appRegistry,
@@ -564,45 +657,41 @@ export const unifiedFileCapabilityScenario = async () => {
       tools: createUnifiedFileTools(service, cryptoHash),
     });
     const executor = new ToolExecutor(authorizedCatalog, broker);
-    const workspaceProposal = {
-      providerCallId: 'file-workspace-read',
+    const sshProposal = {
+      providerCallId: 'file-ssh-read',
       name: 'file_read',
-      argumentsJson: JSON.stringify({ target: 'workspace', id: 'ws-file', path: '/workspace/work/a.txt' }),
+      argumentsJson: JSON.stringify({ target: 'ssh', id: '1', path: '/srv/a.txt' }),
     };
-    const authorizedRead = await executor.invoke(context, workspaceProposal);
-    assert.equal(authorizedRead.result.ok, true, 'ToolExecutor/AppCapabilityBroker must allow a matching target grant');
+    const authorizedRead = await executor.invoke(context, sshProposal);
+    assert.equal(authorizedRead.result.ok, true, 'Authorized SSH file read must complete');
     await assert.rejects(
       () =>
         executor.inspect(context, {
-          providerCallId: 'file-ssh-read',
+          providerCallId: 'file-ungranted-ssh-read',
           name: 'file_read',
-          argumentsJson: JSON.stringify({ target: 'ssh', id: '1', path: '/srv/a.txt' }),
+          argumentsJson: JSON.stringify({ target: 'ssh', id: '2', path: '/srv/a.txt' }),
         }),
       /APP_CAPABILITY_DENIED/,
-      'a Workspace-only file.read grant must not authorize the same canonical Tool against SSH',
+      'an SSH id-specific file grant must not authorize another SSH connection',
     );
-    const staleInspection = await executor.inspect(context, workspaceProposal);
+    const staleInspection = await executor.inspect(context, sshProposal);
     brokerGrants = [
-      capabilityRegistry.grant(
-        'file.read',
-        { kind: 'targets', targets: { workspace: { mode: 'ids', ids: ['other-workspace'] } } },
-        2,
-      ),
+      capabilityRegistry.grant('file.read', { kind: 'targets', targets: { ssh: { mode: 'ids', ids: ['2'] } } }, 2),
     ];
     await assert.rejects(
       () => executor.execute(context, staleInspection),
       /POLICY_REVISION_CONFLICT/,
-      'ToolExecutor must re-authorize the inspected target before execution so a narrowed grant cannot be bypassed',
+      'Reauthorization must reject narrowed SSH grants after inspection',
     );
 
     return [
-      { name: 'unified_file_targets', value: 2, unit: 'targets' },
+      { name: 'unified_file_targets', value: 1, unit: 'targets' },
       { name: 'unified_file_operations', value: 7, unit: 'operations' },
       { name: 'unified_file_broker_scope_rejections', value: 2, unit: 'cases' },
-      { name: 'unified_file_frozen_target_stale_rejections', value: 3, unit: 'cases' },
+      { name: 'unified_file_frozen_target_stale_rejections', value: 2, unit: 'cases' },
       { name: 'unified_file_legacy_branches', value: 0, unit: 'branches' },
+      { name: 'unified_file_resolver_retired_target_rejections', value: 5, unit: 'cases' },
+      { name: 'unified_file_binding_forgery_rejections', value: 4, unit: 'cases' },
     ];
-  } finally {
-    fs.rmSync(directory, { recursive: true, force: true });
   }
 };

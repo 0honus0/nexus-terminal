@@ -58,7 +58,8 @@ export const modelFinishReasonStateMachineScenario = async () => {
     inputTokens: 0,
     outputTokens: 0,
     cachedInputTokens: 0,
-    steps: 0,
+    toolExecutions: 0,
+    modelRequests: 0,
     subagentMessages: 0,
     subagentMessageBytes: 0,
   };
@@ -85,7 +86,15 @@ export const modelFinishReasonStateMachineScenario = async () => {
                ?, ?, ?, ?, 1, ?, ?, ?)`,
       [
         JSON.stringify({
-          maxRunSteps: 100,
+          modelRequestCeiling: 100,
+          activeExecutionCeilingSeconds: 7200,
+          maxToolExecutions: 4000,
+          phase: 'executing',
+          stopReason: null,
+          extensionCount: 0,
+          progressSequence: 0,
+
+          maxModelRequests: 100,
           maxActiveExecutionSeconds: 3_600,
           toolTimeoutSeconds: 120,
           maxToolOutputBytes: 1_048_576,
@@ -107,7 +116,6 @@ export const modelFinishReasonStateMachineScenario = async () => {
           approvalMode: 'ask',
           executionMode: 'execute',
           connectionIds: [],
-          environment: null,
           policyRevision: 1,
           settingsRevision: 1,
         }),
@@ -153,7 +161,7 @@ export const modelFinishReasonStateMachineScenario = async () => {
       expectedRunVersion: 1,
       assistantEntryId: 'finish-partial-entry',
       assistantText: 'partial output before provider length stop',
-      usage: { ...runUsage, inputTokens: 120, outputTokens: 64, steps: 1 },
+      usage: { ...runUsage, inputTokens: 120, outputTokens: 64, modelRequests: 1 },
       inputTokens: 120,
       outputTokens: 64,
       cachedInputTokens: 0,

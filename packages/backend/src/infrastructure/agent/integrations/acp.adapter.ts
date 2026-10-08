@@ -6,7 +6,6 @@ import type {
   AcpExecutionResult,
   AcpIntegrationConfiguration,
   AcpRuntimePort,
-  AcpTransportPort,
   IntegrationView,
 } from '../../../modules/agent/ai/integrations.types';
 
@@ -14,7 +13,7 @@ const MAX_PROMPT_BYTES = 32 * 1024;
 const MAX_UPDATE_BYTES = 256 * 1024;
 
 const acpConfig = (integration: IntegrationView): AcpIntegrationConfiguration => {
-  if (integration.kind !== 'acp' || integration.configuration.transport !== 'workspace-profile') {
+  if (integration.kind !== 'acp' || integration.configuration.transport !== 'ssh') {
     throw new Error('INTEGRATION_KIND_MISMATCH');
   }
   if (integration.configuration.protocolVersion !== String(PROTOCOL_VERSION)) {
@@ -46,8 +45,8 @@ const textChunk = (update: unknown): string => {
 
 const assertRequest = (request: AcpExecutionRequest): void => {
   if (
-    !request.cwd.startsWith('/workspace') ||
-    (request.cwd !== '/workspace' && !request.cwd.startsWith('/workspace/')) ||
+    !request.cwd.startsWith('/') ||
+    request.cwd.includes('\0') ||
     !request.prompt.trim() ||
     Buffer.byteLength(request.prompt, 'utf8') > MAX_PROMPT_BYTES ||
     !Number.isSafeInteger(request.maxOutputBytes) ||
@@ -60,27 +59,28 @@ const assertRequest = (request: AcpExecutionRequest): void => {
 
 /**
  * Stable ACP v1 client adapter. The transport is deliberately injected: Nexus
- * only wires transports created inside an isolated Workspace profile. This
+ * only wires an authorized SSH transport to the remote ACP process. This
  * class never spawns an ACP backend in the Backend process and never grants
  * direct filesystem/terminal access to the remote agent.
  */
 export class AcpAdapter implements AcpRuntimePort {
-  constructor(private readonly transports: AcpTransportPort) {}
-
   async execute(
     integration: IntegrationView,
     request: AcpExecutionRequest,
     context: AcpExecutionContext,
   ): Promise<AcpExecutionResult> {
+    acpConfig(integration);
     assertRequest(request);
     if (context.signal.aborted) throw context.signal.reason ?? new Error('ABORTED');
-    const config = acpConfig(integration);
-    const transport = await this.transports.open(
-      { workspaceId: request.workspaceId, generation: request.generation, profileId: config.profileId },
-      context.signal,
-    );
+    if (!context.openTransport) throw new Error('ACP_SSH_TRANSPORT_NOT_CONFIGURED');
+    const transport = await context.openTransport();
     const onAbort = () => void transport.close().catch(() => undefined);
     context.signal.addEventListener('abort', onAbort, { once: true });
+    if (context.signal.aborted) {
+      context.signal.removeEventListener('abort', onAbort);
+      await transport.close().catch(() => undefined);
+      throw context.signal.reason ?? new Error('ABORTED');
+    }
 
     const app = client({ name: 'nexus-terminal' })
       .onRequest(methods.client.session.requestPermission, async ({ params }) => {
@@ -119,8 +119,14 @@ export class AcpAdapter implements AcpRuntimePort {
       });
 
     try {
-      return await app.connectWith(ndJsonStream(transport.writable, transport.readable), async (agent) =>
-        agent.buildSession(request.cwd).withSession(async (session) => {
+      return await app.connectWith(ndJsonStream(transport.writable, transport.readable), async (agent) => {
+        const initialized = await agent.request(methods.agent.initialize, {
+          protocolVersion: PROTOCOL_VERSION,
+          clientCapabilities: {},
+          clientInfo: { name: 'nexus-terminal', version: '1' },
+        });
+        if (initialized.protocolVersion !== PROTOCOL_VERSION) throw new Error('ACP_PROTOCOL_VERSION_UNSUPPORTED');
+        return agent.buildSession(request.cwd).withSession(async (session) => {
           const prompt = session.prompt(request.prompt);
           let output = '';
           let stopReason = 'unknown';
@@ -143,8 +149,8 @@ export class AcpAdapter implements AcpRuntimePort {
           const response = await prompt;
           if (response.stopReason !== stopReason) throw new Error('ACP_PROTOCOL_STATE_INVALID');
           return { text: output, stopReason };
-        }),
-      );
+        });
+      });
     } finally {
       context.signal.removeEventListener('abort', onAbort);
       await transport.close().catch(() => undefined);

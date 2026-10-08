@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto';
 import { applyPatch, parsePatch, type StructuredPatch } from 'diff';
 import { remoteFileResourceKey } from '../../../platform/filesystem/remote-path';
 import type { SshFilePathInspection, SshFileTargetPort } from './ssh-file-target.port';
-import type { ResolvedAgentTarget, AgentTargetResolver } from './target-resolver';
-import type { AgentTargetKind, ToolTargetFingerprint } from './tool-target.types';
+import { bindSshInspectionTarget, resolveSshTarget, type ResolvedSshTarget } from './ssh-target-binding';
+import type { SshTargetResolverPort } from './ssh-target-resolver.port';
+import type { ToolTargetFingerprint } from './tool-target.types';
 import type { ToolContext } from './tool.types';
-import type { WorkspaceFileTargetPort } from '../workspace-runtime/workspace-file-target.port';
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_READ_BYTES = 64 * 1024;
@@ -13,7 +13,7 @@ const MAX_PATCH_FILES = 16;
 const MAX_PATCH_BYTES = 30 * 1024;
 
 export interface FileTargetSelectorInput {
-  target: AgentTargetKind;
+  target: 'ssh';
   id: string;
 }
 
@@ -52,7 +52,7 @@ export interface UnifiedFileListResult {
 export interface UnifiedFileSearchResult {
   query: string;
   path: string;
-  engine: 'rg' | 'fallback' | 'sftp';
+  engine: 'javascript' | 'sftp';
   matches: Array<{
     path: string;
     line: number;
@@ -98,63 +98,24 @@ const sourceLinesAtDeclaredLocation = (source: string, patchSpec: StructuredPatc
 
 export class FileCapabilityService {
   constructor(
-    private readonly targets: AgentTargetResolver,
-    private readonly workspaceFiles: WorkspaceFileTargetPort,
+    private readonly targets: SshTargetResolverPort,
     private readonly sshFiles: SshFileTargetPort,
   ) {}
 
-  resolve(context: ToolContext, selector: FileTargetSelectorInput): Promise<ResolvedAgentTarget> {
-    return this.targets.resolve(context, selector);
+  resolve(context: ToolContext, selector: FileTargetSelectorInput): Promise<ResolvedSshTarget> {
+    if (selector.target !== 'ssh') throw new Error('FILE_ARGUMENT_TARGET_INVALID');
+    return resolveSshTarget(this.targets, context, selector);
   }
 
-  bindInspectionTarget(fingerprint: ToolTargetFingerprint): ResolvedAgentTarget {
-    if (fingerprint.kind === 'workspace') {
-      if (
-        fingerprint.target !== 'workspace' ||
-        fingerprint.workspaceId !== fingerprint.id ||
-        fingerprint.generation === undefined
-      ) {
-        throw new Error('TOOL_STATE_CONFLICT');
-      }
-      return {
-        selector: { target: 'workspace', id: fingerprint.id },
-        fingerprint,
-        resourceKeys: [`workspace:${fingerprint.id}:${fingerprint.generation}`],
-        preconditions: [],
-        workspaceGeneration: fingerprint.generation,
-      };
-    }
-    if (fingerprint.kind === 'ssh') {
-      if (
-        fingerprint.target !== 'ssh' ||
-        fingerprint.connectionId === undefined ||
-        String(fingerprint.connectionId) !== fingerprint.id
-      ) {
-        throw new Error('TOOL_STATE_CONFLICT');
-      }
-      return {
-        selector: { target: 'ssh', id: fingerprint.id },
-        fingerprint,
-        resourceKeys: [`connection:${fingerprint.connectionId}`],
-        preconditions: [],
-        connectionId: fingerprint.connectionId,
-      };
-    }
-    throw new Error('TOOL_STATE_CONFLICT');
+  bindInspectionTarget(fingerprint: ToolTargetFingerprint): ResolvedSshTarget {
+    return bindSshInspectionTarget(fingerprint);
   }
 
-  resourceKey(target: ResolvedAgentTarget, path: string): string {
-    return target.selector.target === 'workspace'
-      ? remoteFileResourceKey(`workspace:${target.selector.id}:${target.workspaceGeneration}`, path)
-      : remoteFileResourceKey(`connection:${target.connectionId}`, path);
+  resourceKey(target: ResolvedSshTarget, path: string): string {
+    return remoteFileResourceKey(`connection:${target.connectionId}`, path);
   }
 
-  async stat(context: ToolContext, target: ResolvedAgentTarget, path: string): Promise<UnifiedFileStat> {
-    if (target.selector.target === 'workspace') {
-      const generation = target.workspaceGeneration;
-      if (generation === undefined) throw new Error('TOOL_STATE_CONFLICT');
-      return this.workspaceFiles.stat(context, target.selector.id, generation, path);
-    }
+  async stat(context: ToolContext, target: ResolvedSshTarget, path: string): Promise<UnifiedFileStat> {
     const connectionId = target.connectionId;
     if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
     const state = await this.sshFiles.stat(context, connectionId, path, target.fingerprint.configurationHash);
@@ -163,29 +124,11 @@ export class FileCapabilityService {
 
   async read(
     context: ToolContext,
-    target: ResolvedAgentTarget,
+    target: ResolvedSshTarget,
     path: string,
     offsetBytes: number,
     maxBytes: number,
   ): Promise<UnifiedFileReadResult> {
-    if (target.selector.target === 'workspace') {
-      const generation = target.workspaceGeneration;
-      if (generation === undefined) throw new Error('TOOL_STATE_CONFLICT');
-      const result = await this.workspaceFiles.read(context, target.selector.id, generation, {
-        path,
-        offsetBytes,
-        maxBytes,
-      });
-      return {
-        path: result.path,
-        sha256: result.sha256,
-        sizeBytes: result.sizeBytes,
-        content: result.content,
-        offsetBytes: result.offsetBytes ?? 0,
-        contentBytes: result.contentBytes,
-        truncated: result.truncated,
-      };
-    }
     const connectionId = target.connectionId;
     if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
     const [state, result] = await Promise.all([
@@ -206,15 +149,10 @@ export class FileCapabilityService {
 
   async list(
     context: ToolContext,
-    target: ResolvedAgentTarget,
+    target: ResolvedSshTarget,
     path: string,
     maxEntries: number,
   ): Promise<UnifiedFileListResult> {
-    if (target.selector.target === 'workspace') {
-      const generation = target.workspaceGeneration;
-      if (generation === undefined) throw new Error('TOOL_STATE_CONFLICT');
-      return this.workspaceFiles.list(context, target.selector.id, generation, { path, maxEntries });
-    }
     const connectionId = target.connectionId;
     if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
     return this.sshFiles.list(context, connectionId, path, maxEntries, target.fingerprint.configurationHash);
@@ -222,7 +160,7 @@ export class FileCapabilityService {
 
   async search(
     context: ToolContext,
-    target: ResolvedAgentTarget,
+    target: ResolvedSshTarget,
     request: {
       query: string;
       path: string;
@@ -232,11 +170,6 @@ export class FileCapabilityService {
       maxOutputBytes: number;
     },
   ): Promise<UnifiedFileSearchResult> {
-    if (target.selector.target === 'workspace') {
-      const generation = target.workspaceGeneration;
-      if (generation === undefined) throw new Error('TOOL_STATE_CONFLICT');
-      return this.workspaceFiles.search(context, target.selector.id, generation, request);
-    }
     const connectionId = target.connectionId;
     if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
     return this.sshFiles.search(context, connectionId, request, target.fingerprint.configurationHash);
@@ -244,22 +177,13 @@ export class FileCapabilityService {
 
   async write(
     context: ToolContext,
-    target: ResolvedAgentTarget,
+    target: ResolvedSshTarget,
     path: string,
     content: string,
     expectedSha256: string | null,
+    mode?: number,
   ): Promise<{ path: string; sha256: string; sizeBytes: number; created: boolean }> {
     if (Buffer.byteLength(content, 'utf8') > MAX_FILE_BYTES) throw new Error('TOOL_INPUT_TOO_LARGE');
-    if (target.selector.target === 'workspace') {
-      const generation = target.workspaceGeneration;
-      if (generation === undefined) throw new Error('TOOL_STATE_CONFLICT');
-      const result = await this.workspaceFiles.write(context, target.selector.id, generation, {
-        path,
-        content,
-        expectedSha256,
-      });
-      return { path: result.path, sha256: result.sha256, sizeBytes: result.sizeBytes, created: result.created };
-    }
     const connectionId = target.connectionId;
     if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
     const result = await this.sshFiles.write(
@@ -269,6 +193,7 @@ export class FileCapabilityService {
       Buffer.from(content, 'utf8'),
       expectedSha256,
       target.fingerprint.configurationHash,
+      mode,
     );
     if (!result.sha256 || result.sizeBytes === null) throw new Error('VERIFICATION_FAILED');
     return { path: result.resolvedPath, sha256: result.sha256, sizeBytes: result.sizeBytes, created: !expectedSha256 };
@@ -276,20 +201,11 @@ export class FileCapabilityService {
 
   async move(
     context: ToolContext,
-    target: ResolvedAgentTarget,
+    target: ResolvedSshTarget,
     path: string,
     destinationPath: string,
     expectedSha256: string | null,
   ): Promise<{ path: string; destinationPath: string; type: 'file' | 'directory'; sha256: string | null }> {
-    if (target.selector.target === 'workspace') {
-      const generation = target.workspaceGeneration;
-      if (generation === undefined) throw new Error('TOOL_STATE_CONFLICT');
-      return this.workspaceFiles.move(context, target.selector.id, generation, {
-        path,
-        destinationPath,
-        expectedSha256,
-      });
-    }
     const connectionId = target.connectionId;
     if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
     return this.sshFiles.move(
@@ -304,16 +220,11 @@ export class FileCapabilityService {
 
   async delete(
     context: ToolContext,
-    target: ResolvedAgentTarget,
+    target: ResolvedSshTarget,
     path: string,
     recursive: boolean,
     expectedSha256: string | null,
   ): Promise<{ path: string; type: 'file' | 'directory'; deleted: true }> {
-    if (target.selector.target === 'workspace') {
-      const generation = target.workspaceGeneration;
-      if (generation === undefined) throw new Error('TOOL_STATE_CONFLICT');
-      return this.workspaceFiles.delete(context, target.selector.id, generation, { path, recursive, expectedSha256 });
-    }
     const connectionId = target.connectionId;
     if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
     return this.sshFiles.delete(
@@ -328,7 +239,7 @@ export class FileCapabilityService {
 
   async preparePatch(
     context: ToolContext,
-    target: ResolvedAgentTarget,
+    target: ResolvedSshTarget,
     patch: string,
     expectedFiles?: ReadonlyMap<string, string>,
   ): Promise<PreparedPatchChange[]> {
@@ -343,29 +254,20 @@ export class FileCapabilityService {
     const changes: PreparedPatchChange[] = [];
     const seen = new Set<string>();
     for (const patchSpec of patches) {
-      if (
-        patchSpec.isBinary ||
-        patchSpec.isCreate ||
-        patchSpec.isDelete ||
-        patchSpec.isRename ||
-        patchSpec.isCopy ||
-        patchSpec.hunks.length < 1
-      ) {
-        throw new Error('FILE_PATCH_UNSUPPORTED');
-      }
+      if (patchSpec.isBinary) throw new Error('FILE_PATCH_BINARY_UNSUPPORTED');
+      if (patchSpec.isCreate) throw new Error('FILE_PATCH_CREATE_UNSUPPORTED');
+      if (patchSpec.isDelete) throw new Error('FILE_PATCH_DELETE_UNSUPPORTED');
+      if (patchSpec.isRename || patchSpec.isCopy) throw new Error('FILE_PATCH_RENAME_UNSUPPORTED');
+      if (patchSpec.hunks.length < 1) throw new Error('FILE_PATCH_HUNKS_REQUIRED');
       const oldPath = patchPath(patchSpec.oldFileName);
       const newPath = patchPath(patchSpec.newFileName);
       const oldState = await this.stat(context, target, oldPath);
       const newState = await this.stat(context, target, newPath);
-      if (
-        !oldState.exists ||
-        oldState.type !== 'file' ||
-        !oldState.sha256 ||
-        oldState.path !== newState.path ||
-        seen.has(oldState.path)
-      ) {
-        throw new Error('FILE_PATCH_UNSUPPORTED');
-      }
+      if (!oldState.exists) throw new Error('FILE_NOT_FOUND');
+      if (oldState.type !== 'file') throw new Error('FILE_PATCH_REQUIRES_FILE');
+      if (!oldState.sha256) throw new Error('FILE_HASH_UNAVAILABLE');
+      if (oldState.path !== newState.path) throw new Error('FILE_PATCH_RENAME_UNSUPPORTED');
+      if (seen.has(oldState.path)) throw new Error('FILE_PATCH_DUPLICATE_PATH');
       seen.add(oldState.path);
       if (expectedFiles && expectedFiles.get(oldState.path) !== oldState.sha256) throw new Error('RESOURCE_CHANGED');
       const source = await this.readWholeText(context, target, oldState);
@@ -404,47 +306,27 @@ export class FileCapabilityService {
 
   async applyPreparedPatch(
     context: ToolContext,
-    target: ResolvedAgentTarget,
+    target: ResolvedSshTarget,
     patch: string,
     expectedFiles: ReadonlyMap<string, string>,
   ): Promise<Omit<PreparedPatchChange, 'content'>[]> {
     const prepared = await this.preparePatch(context, target, patch, expectedFiles);
-    if (target.selector.target === 'workspace') {
-      const generation = target.workspaceGeneration;
-      if (generation === undefined) throw new Error('TOOL_STATE_CONFLICT');
-      const result = await this.workspaceFiles.applyPatch(context, target.selector.id, generation, {
-        patch,
-        expectedFiles: prepared.map((change) => ({ path: change.path, sha256: change.beforeSha256 })),
-      });
-      if (!result.applied || result.changes.length !== prepared.length) throw new Error('VERIFICATION_FAILED');
-      for (const change of prepared) {
-        const confirmed = result.changes.find((candidate) => candidate.path === change.path);
-        if (
-          !confirmed ||
-          confirmed.afterSha256 !== change.afterSha256 ||
-          confirmed.beforeSha256 !== change.beforeSha256
-        ) {
-          throw new Error('VERIFICATION_FAILED');
-        }
-      }
-    } else {
-      const connectionId = target.connectionId;
-      if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
-      const results = await this.sshFiles.replace(
-        context,
-        connectionId,
-        prepared.map((change) => ({
-          path: change.path,
-          content: Buffer.from(change.content, 'utf8'),
-          expectedSha256: change.beforeSha256,
-        })),
-        target.fingerprint.configurationHash,
-      );
-      if (results.length !== prepared.length) throw new Error('VERIFICATION_FAILED');
-      for (const change of prepared) {
-        const confirmed = results.find((candidate) => candidate.path === change.path);
-        if (!confirmed || confirmed.sha256 !== change.afterSha256) throw new Error('VERIFICATION_FAILED');
-      }
+    const connectionId = target.connectionId;
+    if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
+    const results = await this.sshFiles.replace(
+      context,
+      connectionId,
+      prepared.map((change) => ({
+        path: change.path,
+        content: Buffer.from(change.content, 'utf8'),
+        expectedSha256: change.beforeSha256,
+      })),
+      target.fingerprint.configurationHash,
+    );
+    if (results.length !== prepared.length) throw new Error('VERIFICATION_FAILED');
+    for (const change of prepared) {
+      const confirmed = results.find((candidate) => candidate.path === change.path);
+      if (!confirmed || confirmed.sha256 !== change.afterSha256) throw new Error('VERIFICATION_FAILED');
     }
     return prepared.map(({ content: _content, ...change }) => change);
   }
@@ -463,7 +345,7 @@ export class FileCapabilityService {
 
   private async readWholeText(
     context: ToolContext,
-    target: ResolvedAgentTarget,
+    target: ResolvedSshTarget,
     state: UnifiedFileStat,
   ): Promise<string> {
     if (!state.exists || state.type !== 'file' || state.sizeBytes === null || state.sizeBytes > MAX_FILE_BYTES) {

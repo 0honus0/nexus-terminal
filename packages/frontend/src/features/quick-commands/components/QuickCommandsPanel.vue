@@ -434,7 +434,7 @@
               <button
                 v-else
                 type="button"
-                class="inline-flex items-center min-w-0 shrink truncate text-left text-sm font-semibold text-foreground tracking-tight hover:text-primary transition-colors cursor-pointer leading-none py-0.5"
+                class="quick-command-group-name inline-flex items-center min-w-0 shrink truncate text-left text-sm font-semibold text-foreground tracking-tight hover:text-primary transition-colors cursor-pointer"
                 :title="t('quickCommands.tags.clickToEditTag')"
                 @click.stop="startTagEdit(group)"
               >
@@ -580,6 +580,16 @@
     min-width: 14px;
     height: 18px;
     padding: 0;
+    line-height: 1;
+  }
+  .quick-command-group-name {
+    height: 20px;
+    padding: 0;
+    line-height: 20px;
+    vertical-align: middle;
+  }
+  .quick-command-group-badge {
+    line-height: 1;
   }
   .quick-command-group-header {
     min-width: 0;

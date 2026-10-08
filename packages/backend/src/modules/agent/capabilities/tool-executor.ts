@@ -50,9 +50,11 @@ const capabilityResourceFromInput = (input: JsonValue): CapabilityResource => {
   const record = input as Record<string, JsonValue>;
   const connectionId = Number.isSafeInteger(record.connectionId) ? (record.connectionId as number) : undefined;
   const target: CapabilityResource['target'] =
-    (record.target === 'workspace' || record.target === 'ssh') && typeof record.id === 'string' && record.id.length > 0
+    record.target === 'ssh' && typeof record.id === 'string' && record.id.length > 0
       ? { target: record.target, id: record.id }
-      : undefined;
+      : connectionId !== undefined && connectionId > 0 && record.target === undefined
+        ? { target: 'ssh', id: String(connectionId) }
+        : undefined;
   return { ...(connectionId === undefined ? {} : { connectionId }), ...(target === undefined ? {} : { target }) };
 };
 

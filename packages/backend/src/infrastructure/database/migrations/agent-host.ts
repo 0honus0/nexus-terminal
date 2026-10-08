@@ -1,7 +1,7 @@
 import type { DatabaseSync as Database } from 'node:sqlite';
 import type { SqliteMigration } from './migration.types';
 import { tableExists, columnExists } from './schema-inspection';
-import { createAgentProjectDirectoriesTableSQL, createAgentSshJobsTableSQL } from '../schema/agent-workspace';
+import { createAgentProjectDirectoriesTableSQL, createAgentSshJobsTableSQL } from '../schema/agent-ssh';
 
 export const agentHostMigrations: SqliteMigration[] = [
   {
@@ -100,5 +100,81 @@ export const agentHostMigrations: SqliteMigration[] = [
     id: 50,
     name: 'Add conversation SSH project directories',
     sql: createAgentProjectDirectoriesTableSQL,
+  },
+  {
+    id: 54,
+    name: 'Add configurable Workspace Job capacity to persisted Agent settings',
+    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_settings'),
+    sql: `
+      UPDATE agent_settings
+      SET value_json = json_insert(value_json,
+        '$.performance.maxConcurrentWorkspaceJobs', 8)
+      WHERE json_extract(value_json, '$.schemaVersion') = 1
+        AND json_type(value_json, '$.performance') = 'object'
+        AND json_type(value_json, '$.performance.maxConcurrentWorkspaceJobs') IS NULL;
+    `,
+  },
+  {
+    id: 55,
+    name: 'Remove retired Agent Plugin Runner entry',
+    check: async (db: Database): Promise<boolean> =>
+      (await tableExists(db, 'agent_plugin_versions')) &&
+      (await columnExists(db, 'agent_plugin_versions', 'runner_entry')),
+    sql: 'ALTER TABLE agent_plugin_versions DROP COLUMN runner_entry;',
+  },
+  {
+    id: 56,
+    name: 'Remove retired Runner Workspace ACP profiles',
+    check: async (db: Database): Promise<boolean> =>
+      (await tableExists(db, 'agent_workspaces')) && (await columnExists(db, 'agent_workspaces', 'acp_profiles_json')),
+    sql: `
+      ALTER TABLE agent_workspaces DROP COLUMN acp_profiles_json;
+      UPDATE agent_settings
+      SET value_json = json_remove(value_json, '$.workspaceRuntime.acpProfiles')
+      WHERE json_type(value_json, '$.workspaceRuntime.acpProfiles') IS NOT NULL;
+    `,
+  },
+  {
+    id: 57,
+    name: 'Remove retired Agent Workspace management confirmations',
+    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_workspace_runtime_confirmations'),
+    sql: 'DROP TABLE IF EXISTS agent_workspace_runtime_confirmations;',
+  },
+  {
+    id: 58,
+    name: 'Drop retired Agent Workspace metadata and runtime commands',
+    sql: `
+      DROP TABLE IF EXISTS agent_workspace_runtime_commands;
+      DROP TABLE IF EXISTS agent_workspaces;
+      UPDATE agent_settings
+      SET value_json = json_remove(value_json,
+        '$.workspaceRuntime',
+        '$.performance.maxConcurrentWorkspaceJobs',
+        '$.hardLimits.maxActiveWorkspaces')
+      WHERE json_valid(value_json);
+    `,
+    verify: async (db: Database): Promise<boolean> =>
+      !(await tableExists(db, 'agent_workspace_runtime_commands')) && !(await tableExists(db, 'agent_workspaces')),
+  },
+  {
+    id: 59,
+    name: 'Remove retired Runner targets from persisted Plugin version manifests',
+    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_plugin_versions'),
+    sql: `
+      UPDATE agent_plugin_versions
+      SET manifest_json = json_remove(manifest_json, '$.targets.runner')
+      WHERE json_type(manifest_json, '$.targets.runner') IS NOT NULL;
+    `,
+  },
+  {
+    id: 60,
+    name: 'Remove retired Runner targets from staged Plugin manifests',
+    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_plugin_stages'),
+    sql: `
+      UPDATE agent_plugin_stages
+      SET manifest_json = json_remove(manifest_json, '$.targets.runner')
+      WHERE manifest_json IS NOT NULL
+        AND json_type(manifest_json, '$.targets.runner') IS NOT NULL;
+    `,
   },
 ];

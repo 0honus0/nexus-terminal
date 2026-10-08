@@ -1,3 +1,4 @@
+import { remainingExecutionSeconds } from './runtime-progress';
 import type { JsonValue } from '../../agent.types';
 import type { ToolContext, ToolResult } from '../../capabilities/tool.types';
 import type { RunView } from '../runs/run.types';
@@ -36,10 +37,9 @@ export const rootToolContext = (
   agentRuntimeId: runtimeId,
   ...(toolCallId === undefined ? {} : { toolCallId }),
   connectionIds: [...run.definition.connectionIds],
-  environment: run.definition.environment ?? null,
   stepId,
   signal,
-  deadlineAt: nowUnixSeconds + run.budget.toolTimeoutSeconds,
+  deadlineAt: nowUnixSeconds + Math.min(run.budget.toolTimeoutSeconds, remainingExecutionSeconds(run, nowUnixSeconds)),
   maxOutputBytes: run.budget.maxToolOutputBytes,
   inputRevision: run.inputRevision,
   ...(continuation === undefined ? {} : { continuation }),

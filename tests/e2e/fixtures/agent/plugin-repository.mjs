@@ -26,7 +26,7 @@ else {
   fs.writeFileSync(keyPath, privateKey.export({ type: 'pkcs8', format: 'pem' }));
 }
 
-const buildPackage = (appId, version) => {
+const buildPackage = (appId, version, sourceAppId = appId) => {
   const packageName = `${appId}-${version}.tar`;
   const packagePath = path.join(temp, packageName);
   const metadata = JSON.parse(
@@ -34,7 +34,7 @@ const buildPackage = (appId, version) => {
       process.execPath,
       [
         path.join(current, 'build-plugin-package.mjs'),
-        path.join(current, `plugin-source/${appId}`),
+        path.join(current, `plugin-source/${sourceAppId}`),
         packagePath,
         keyPath,
       ],
@@ -54,6 +54,9 @@ const packages = [
     description: 'Signed E2E first-party frontend/backend/runner target fixture.',
   },
   { ...buildPackage('nexus.custom-surface', '1.0.0'), description: 'E2E-only focused Custom App Surface SDK fixture.' },
+  { ...buildPackage('nexus.intent-peer', '1.0.0'), description: 'E2E-only AppIntent receiver fixture.' },
+  { ...buildPackage('nexus.upgrade', '1.0.0', 'nexus.upgrade-v1'), description: 'E2E-only Plugin upgrade v1 fixture.' },
+  { ...buildPackage('nexus.upgrade', '2.0.0', 'nexus.upgrade-v2'), description: 'E2E-only Plugin upgrade v2 fixture.' },
 ];
 const publisher = packages[0].metadata;
 
@@ -130,9 +133,63 @@ const packageByUrl = new Map([
 
 const server = http.createServer((request, response) => {
   if (hangOpenAiRequests && request.method === 'POST' && request.url === '/v1/chat/completions') {
-    request.resume();
-    hangingProviderResponses.add(response);
-    response.on('close', () => hangingProviderResponses.delete(response));
+    let body = '';
+    request.on('data', (chunk) => {
+      body += chunk;
+    });
+    request.on('end', () => {
+      const messages = JSON.parse(body).messages ?? [];
+      const latestInput = messages.filter((message) => message.role === 'user').at(-1)?.content;
+      if (latestInput === 'Docker pending-input hold') {
+        const resultFor = (id) => {
+          const message = messages.find((candidate) => candidate.role === 'tool' && candidate.tool_call_id === id);
+          return message ? JSON.parse(message.content) : null;
+        };
+        const workspaceId = resultFor('queue_create')?.data?.workspaceId;
+        const started = resultFor('queue_start')?.ok;
+        const name = !workspaceId ? 'workspace_create' : !started ? 'workspace_control' : 'shell_execute';
+        const args = !workspaceId
+          ? {}
+          : !started
+            ? { workspaceId, action: 'start' }
+            : {
+                target: 'workspace',
+                id: workspaceId,
+                command: { kind: 'argv', argv: ['/bin/sh', '-c', 'printf ready > .queue-ready; sleep 60'] },
+                timeoutSeconds: 90,
+                mode: 'foreground',
+              };
+        response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        response.end(
+          `data: ${JSON.stringify({
+            id: 'docker-pending-input-hold',
+            object: 'chat.completion.chunk',
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: !workspaceId ? 'queue_create' : !started ? 'queue_start' : 'queue_hold',
+                      type: 'function',
+                      function: {
+                        name,
+                        arguments: JSON.stringify(args),
+                      },
+                    },
+                  ],
+                },
+                finish_reason: 'tool_calls',
+              },
+            ],
+          })}\n\ndata: [DONE]\n\n`,
+        );
+        return;
+      }
+      hangingProviderResponses.add(response);
+      response.on('close', () => hangingProviderResponses.delete(response));
+    });
     return;
   }
   if (request.method === 'POST' && request.url === '/control/official-catalog/disable') {

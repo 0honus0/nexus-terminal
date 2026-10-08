@@ -3,7 +3,7 @@
     "settings": {
       "tab": "Agent",
       "title": "Agent",
-      "description": "Manage models, execution environments and permissions. Choose a section to configure.",
+      "description": "Manage models, authorized SSH execution, integrations, and permissions. Choose a section to configure.",
       "loading": "Loading Agent settings...",
       "feature": {
         "title": "Agent feature",
@@ -34,8 +34,8 @@
         "badge": "Official Core",
         "featureSkillsTitle": "Dual Core Skills",
         "featureSkillsDesc": "Includes signed Operations and Developer skills for operations and coding",
-        "featureSandboxTitle": "Sandboxed Execution",
-        "featureSandboxDesc": "Strictly bounded by host policy, approvals, and workspace boundaries",
+        "featureSandboxTitle": "SSH-governed execution",
+        "featureSandboxDesc": "Operations use explicitly authorized SSH targets, Host policy, and approvals—not a local Workspace sandbox.",
         "featureDecoupledTitle": "Decoupled Architecture",
         "featureDecoupledDesc": "Independently upgradable or removable without mutating core images",
         "publisherVerified": "Verified Signature",
@@ -48,9 +48,9 @@
         "installingTitle": "Deploying and enabling Agent safely...",
         "installStep1": "Downloading and verifying Ed25519 signature & integrity...",
         "installStep2": "Registering and loading Operations & Developer skills...",
-        "installStep3": "Initializing sandbox policy and enabling Agent instance...",
-        "sandboxProtected": "Runtime guarded by Host sandbox security policies",
-        "defaultPluginSummary": "Official general-purpose agent engine with verified operations and developer skills running inside secure sandbox boundaries."
+        "installStep3": "Registering permissions and enabling the SSH-governed Agent instance...",
+        "sandboxProtected": "Protected by Host grants, approvals, and SSH target boundaries",
+        "defaultPluginSummary": "Official general-purpose agent for remote diagnostics and development over authorized SSH connections."
       },
       "apps": {
         "title": "Agent apps",
@@ -67,7 +67,6 @@
         "targetScope": "Target scope",
         "targetScopeAll": "All targets",
         "targetScopeIds": "Specific IDs",
-        "targetWorkspace": "Workspace",
         "empty": "No Agent apps are available.",
         "permissionsCollapsedHint": "Expand to review and edit this app’s capability grants.",
         "capabilitiesHeader": "Capabilities & Security Grants",
@@ -92,7 +91,6 @@
         "categoryFiles": "Files & Targets",
         "categoryExecution": "Execution",
         "categoryMachine": "Host Machine",
-        "categoryWorkspace": "Workspace Sandbox",
         "categoryBrowser": "Browser",
         "categoryIntegration": "External Integrations",
         "categoryData": "Data Access & Exchange",
@@ -117,15 +115,15 @@
           "file": {
             "read": {
               "name": "Read files",
-              "desc": "Read and search file contents in authorized Workspace or SSH targets"
+              "desc": "Read and search files on authorized SSH targets"
             },
             "write": {
               "name": "Write files",
-              "desc": "Create, replace, move or patch files in authorized Workspace or SSH targets"
+              "desc": "Create, replace, move, or patch files on authorized SSH targets"
             },
             "delete": {
               "name": "Delete files",
-              "desc": "Delete files or directories in authorized Workspace or SSH targets"
+              "desc": "Delete files or directories on authorized SSH targets"
             }
           },
           "machine": {
@@ -143,13 +141,7 @@
           "shell": {
             "execute": {
               "name": "Execute commands",
-              "desc": "Run commands bounded by policy and approvals in authorized Workspace or SSH targets"
-            }
-          },
-          "workspace": {
-            "manage": {
-              "name": "Manage Workspace environments",
-              "desc": "Create, start, stop and delete environments and switch toolchain versions"
+              "desc": "Run policy- and approval-governed commands on authorized SSH targets"
             }
           },
           "browser": {
@@ -209,7 +201,6 @@
         "noPublishers": "No publisher keys have been trusted.",
         "package": "Package verification",
         "packageHint": "The package is uploaded as an Artifact, then checked for signature, hashes, unsafe archive entries, manifest compatibility, and size limits before installation.",
-        "packageContents": "Skills: {skills} · Frontend: {ui} · Backend: {backend} · Runner: {runner}",
         "present": "present",
         "absent": "none",
         "noCandidate": "Choose a .tar package to verify it before installation.",
@@ -295,20 +286,20 @@
           "storage": "Storage and Data Stream Limits",
           "storageDesc": "Limits artifact disk usage and tool/recall data payload volumes",
           "concurrency": "Concurrency and Runtime Quotas",
-          "concurrencyDesc": "Limits concurrent runs, active workspaces, and subagent delegation depth",
+          "concurrencyDesc": "Limits concurrent Agent runtimes, model requests, and Subagent delegation depth",
           "extra": "Additional System Limits",
           "extraDesc": "Other instance-level policy parameters",
-          "execution": "Execution Step Limit",
-          "executionDesc": "Caps the maximum number of model/tool loop steps per Run"
+          "execution": "Model request hard ceiling",
+          "executionDesc": "Cumulative requests across all runtimes, including failures, retries, compaction and reserved final reporting"
         },
         "fields": {
-          "maxRunSteps": {
-            "label": "Hard Max Run Steps",
-            "hint": "Maximum thinking and tool execution loop steps allowed per run"
+          "maxModelRequests": {
+            "label": "Model request hard ceiling",
+            "hint": "Cumulative requests across all runtimes, including failures, retries, compaction and reserved final reporting"
           },
           "maxActiveExecutionSeconds": {
             "label": "Max Active Execution Time",
-            "hint": "Maximum continuous execution duration before auto-cancellation"
+            "hint": "Cumulative active execution ceiling; ends with a partial result when reached"
           },
           "toolTimeoutSeconds": {
             "label": "Tool Execution Timeout",
@@ -362,9 +353,9 @@
             "label": "Max Subagent Message Bytes",
             "hint": "Total byte ceiling for subagent message exchanges in a run"
           },
-          "maxActiveWorkspaces": {
-            "label": "Max Active Workspaces",
-            "hint": "Maximum number of concurrent workspace containers or directories"
+          "maxToolExecutions": {
+            "label": "Tool executions",
+            "hint": "Cumulative tools actually started, including failed executions"
           }
         }
       },
@@ -389,17 +380,17 @@
         "presetBalanced": "Balanced",
         "presetBalancedDesc": "Recommended defaults balancing reasoning depth, multi-step actions, and resources",
         "presetDeep": "Deep Work",
-        "presetDeepDesc": "High steps and long timeouts, best for complex refactoring and large codebases",
+        "presetDeepDesc": "More model requests and execution time for complex tasks",
         "presetCustom": "Custom",
         "presetCustomDesc": "Manually tune all underlying parameters with complete control",
         "customBadge": "Customized",
         "recommendedBadge": "Recommended",
         "saveSuccess": "Budget & context settings saved successfully",
         "fields": {
-          "maxRunSteps": "Max Execution Steps",
-          "maxRunStepsHint": "Maximum tool actions and reasoning turns per run",
-          "maxActiveExecutionSeconds": "Execution Timeout (sec)",
-          "maxActiveExecutionSecondsHint": "Maximum active wall-clock execution time",
+          "maxModelRequests": "Initial model request allowance",
+          "maxModelRequestsHint": "Shared by Root, children, retries and compaction; automatically extends within the app ceiling when fresh execution evidence supports progress",
+          "maxActiveExecutionSeconds": "Initial active execution allowance",
+          "maxActiveExecutionSecondsHint": "Shared by Root, children, retries and compaction; automatically extends within the app ceiling when fresh execution evidence supports progress",
           "toolTimeoutSeconds": "Tool Timeout (sec)",
           "toolTimeoutSecondsHint": "Timeout for individual tool executions",
           "maxToolOutputBytes": "Tool Output Truncation (Bytes)",
@@ -412,14 +403,14 @@
         "readyNotice": "The current configuration is ready and will apply to the next Run.",
         "modelCapabilityNotice": "Per-call context and output limits come directly from the Provider/Registry model capabilities. These settings only govern total Run and tool-resource budgets.",
         "groups": {
-          "steps": "Execution step fuse",
           "timeControl": "Execution and timeout control",
-          "toolsData": "Tool truncation and context recall"
+          "toolsData": "Tool truncation and context recall",
+          "modelRequests": "Initial model request allowance"
         },
-        "presetSteps": "{steps} steps · {minutes} min",
         "customTuning": "Custom tuning",
         "effective": "Effective: {value}",
-        "unsavedChanges": "Budget changes are not saved yet"
+        "unsavedChanges": "Budget changes are not saved yet",
+        "presetRequests": "{requests} requests · {minutes} min"
       },
       "quantity": {
         "placeholderBytes": "e.g. 10M, 500K",
@@ -469,86 +460,6 @@
             "label": "Temporary artifact lifetime (TTL)",
             "hint": "How long unretained temporary build artifacts are kept"
           }
-        }
-      },
-      "workspaceRuntime": {
-        "title": "Workspace dev environment",
-        "description": "Manage the Agent Runner, Workspace profiles, shared multi-version Tool Packs, storage, and runtime cleanup.",
-        "available": "Available",
-        "unavailable": "Unavailable",
-        "refresh": "Refresh",
-        "requestFailed": "Workspace Runtime request failed.",
-        "selectRecipe": "Select at least one Workspace profile.",
-        "setupTitle": "Setup and profiles",
-        "setupDescription": "Enable the Workspace dev profile and prepare its exact Tool Packs. Enabled and installed are tracked separately.",
-        "previewSetup": "Preview setup",
-        "setupImpact": "{count} pack(s) need installation, approximately {bytes}.",
-        "confirmSetup": "Confirm setup",
-        "setupSubmitted": "Workspace Runtime setup submitted.",
-        "storageTitle": "Runner storage",
-        "stateBytes": "State",
-        "packBytes": "Packs",
-        "cacheBytes": "Cache",
-        "runtimeBytes": "Runtime",
-        "quarantineBytes": "Quarantine",
-        "reclaimable": "Immediately reclaimable: {bytes}",
-        "previewCleanup": "Preview runtime cleanup",
-        "clearCache": "Clear cache",
-        "previewReset": "Preview settings reset",
-        "cleanupImpact": "{count} workspace(s), about {bytes} reclaimable. Active: {active}; retained: {retained}.",
-        "confirmCleanup": "Confirm runtime cleanup",
-        "resetImpact": "This restores Workspace profile and tool-version preferences to release defaults. Artifacts and Providers are not changed.",
-        "confirmReset": "Confirm settings reset",
-        "packsTitle": "Tool Packs",
-        "catalogRevision": "Catalog revision {revision}",
-        "installed": "Installed",
-        "inUse": "In use",
-        "enabled": "Enabled",
-        "defaultVersion": "Default",
-        "install": "Install",
-        "disableVersion": "Disable",
-        "enableVersion": "Enable",
-        "makeDefault": "Make default",
-        "uninstall": "Uninstall",
-        "preferencesSaved": "Tool version preferences saved.",
-        "installSubmitted": "Pack installation submitted.",
-        "uninstallSubmitted": "Pack uninstall submitted.",
-        "cleanupSubmitted": "Runtime cleanup submitted.",
-        "cacheSubmitted": "Cache cleanup submitted.",
-        "resetComplete": "Workspace Runtime settings restored to defaults.",
-        "uninstallTitle": "Uninstall {name}",
-        "uninstallImpact": "Releases about {bytes}. In use: {inUse}. Replacement default: {replacement}.",
-        "yes": "Yes",
-        "no": "No",
-        "none": "None",
-        "confirmUninstall": "Confirm uninstall",
-        "cancel": "Cancel",
-        "commandStatus": "Last command: {action} · {status}",
-        "reasonUnknown": "The Workspace runtime is currently unavailable; the backend did not provide a further explanation.",
-        "reason": {
-          "runner_not_configured": "The Workspace Runner is not configured (missing address or token), so the Workspace runtime is unavailable.",
-          "runner_unavailable": "The Workspace Runner cannot be reached; the Workspace runtime is temporarily unavailable.",
-          "runtime_not_configured": "The Workspace Runner has no runtime environment configured."
-        },
-        "commandState": {
-          "pending": "Pending",
-          "running": "Running",
-          "succeeded": "Succeeded",
-          "failed": "Failed",
-          "unknown": "Outcome unknown"
-        },
-        "commandAction": {
-          "setup": "Runtime setup",
-          "packInstall": "Install tool pack",
-          "packUninstall": "Uninstall tool pack",
-          "cleanup": "Cleanup",
-          "cacheCleanup": "Clear cache",
-          "settingsReset": "Reset settings",
-          "provision": "Provision",
-          "start": "Start",
-          "stop": "Stop",
-          "restart": "Restart",
-          "delete": "Delete"
         }
       },
       "safety": {
@@ -771,14 +682,14 @@
         "profileId": "Profile ID",
         "role": "Role",
         "defaultModel": "Default model",
-        "maxSteps": "Maximum steps",
+        "maxModelRequests": "Model requests",
         "peerMessaging": "Peer messaging",
         "peerParentChild": "Parent and child only",
         "peerSameRun": "Any authorized peer in the same Run",
         "mutationMode": "Mutation mode",
         "mutationReadOnly": "Read-only",
-        "mutationGoverned": "Governed Workspace mutations",
-        "mutationHint": "Governed mutation profiles expose only Workspace mutation tools, and only on Runs using Full Access. Each worker must use a Workspace owned by its child runtime; approval, lease/fence, verification, evidence, and reconciliation remain enforced.",
+        "mutationGoverned": "Governed SSH mutations",
+        "mutationHint": "Governed mutation profiles may use authorized SSH mutation tools when a Run uses Full Access. Each worker remains subject to child grants, approvals, leases/fences, verification, evidence, and reconciliation.",
         "failureMode": "Failure mode",
         "failureIsolate": "Isolate failure",
         "failureFailFast": "Fail fast",
@@ -801,14 +712,14 @@
       },
       "browserRuntime": {
         "title": "CDP",
-        "description": "Configure CDP targets used by the single Backend BrowserRuntime. Endpoint network scope and reachability path are independent; via=runner uses Runner only as a network tunnel.",
+        "description": "Configure independent CDP targets reached directly by the Backend BrowserRuntime.",
         "addTarget": "Add target",
-        "empty": "No browser targets configured. External CDP reachable by Backend can work without Runner using via=backend.",
+        "empty": "No browser targets configured. Add a CDP endpoint reachable directly by Backend.",
         "targetId": "Target ID",
         "remove": "Remove target",
         "allowedUrls": "Allowed page URL patterns (one per line)",
         "endpoints": "CDP Endpoints",
-        "endpointHint": "scope describes where the endpoint lives; via selects direct Backend access or a Runner tunnel. v1 rejects credentials in URL userinfo, query, or fragment.",
+        "endpointHint": "Scope describes the endpoint network. Only direct Backend access is supported. Credentials in URL userinfo, query, or fragment are rejected.",
         "addEndpoint": "Add endpoint",
         "scope": "Network scope",
         "via": "Reachability path",
@@ -821,7 +732,6 @@
         "scopeDocker": "Docker network",
         "scopeExternal": "External network",
         "viaBackend": "Direct from Backend",
-        "viaRunner": "Through Runner tunnel",
         "modalTitle": "Add CDP Target",
         "modalDescription": "Configure a CDP browser target and endpoint accessed by Backend BrowserRuntime.",
         "modalEndpointTitle": "Add CDP Endpoint",
@@ -873,43 +783,23 @@
         "mcpEndpointHint": "Supports SSE or Streamable HTTP endpoints"
       },
       "acpRuntime": {
-        "title": "ACP",
-        "description": "Configure ACP process profiles that may run inside Workspaces and ACP integrations exposed to Nexus Agent. ACP processes are bound to the frozen Workspace generation/runtime profile; the single-user native Runner does not claim per-process read-only or network sandboxing.",
-        "addProfile": "Add profile",
-        "profiles": "Workspace ACP Profiles",
-        "profilesHint": "argv is a JSON string array; cwd must be under /workspace. Saved profiles can be selected and frozen when a Workspace generation is created.",
-        "noProfiles": "No ACP profiles configured.",
-        "profileId": "Profile ID",
-        "argv": "argv (JSON array)",
-        "cwd": "Working directory",
-        "remove": "Remove",
-        "saveProfiles": "Save profiles",
+        "transport": "Execution target type",
+        "sshArgv": "SSH argv (JSON array; use env for environment variables)",
+        "sshCwd": "SSH working directory (absolute path)",
         "integrations": "ACP Integrations",
-        "integrationsHint": "An integration is the Agent-facing logical entry and references a saved Workspace profile. Execution still requires a running Workspace containing that profile.",
+        "integrationsHint": "Configure installed ACP programs on explicitly authorized SSH connections.",
         "refresh": "Refresh",
         "displayName": "Display name",
-        "integrationProfile": "Workspace Profile",
-        "selectProfile": "Select profile",
         "enabled": "Enabled",
         "createIntegration": "Add integration",
-        "saveProfileFirst": "Save at least one ACP profile before creating an integration.",
-        "installAgentFirst": "Install the Nexus Agent plugin before managing ACP integrations. Workspace ACP profiles can still be configured in advance.",
-        "loading": "Loading ACP integrations…",
-        "noIntegrations": "No ACP integrations configured.",
+        "disabled": "Disabled",
+        "integrationCreated": "ACP integration created.",
+        "integrationUpdated": "ACP integration updated.",
+        "integrationDeleted": "ACP integration deleted.",
         "deleteIntegration": "Delete",
-        "confirmDeleteIntegration": "Delete ACP integration \"{name}\" bound to profile \"{profile}\"? This permanently removes the integration entry.",
-        "modalProfileTitle": "Add ACP Profile",
-        "modalProfileDescription": "Define execution arguments and working directory to launch an ACP agent process in the Workspace.",
+        "confirmDeleteIntegration": "Delete SSH ACP integration \"{name}\"? This permanently removes the integration entry.",
         "modalIntegrationTitle": "Add ACP Integration",
-        "modalIntegrationDescription": "Create a Nexus Agent entry point bound to a saved Workspace ACP profile.",
-        "profileCreated": "ACP profile added and saved.",
-        "profileDeleted": "ACP profile deleted and saved.",
-        "profileIdHint": "Starts with lowercase letter; allows lowercase letters, numbers, dot, dash, and underscore",
-        "profileIdDuplicate": "This Profile ID already exists",
-        "cwdHint": "Must be /workspace or a subdirectory",
-        "argvCommand": "Launch Command & Arguments",
-        "argvHint": "Accepts shell-style quoting and escaping for argv only (no shell expansion), or a JSON string array",
-        "argvPlaceholder": "e.g. acp-agent --port 8000 or [\"acp-agent\"]",
+        "modalIntegrationDescription": "Create an ACP integration using an installed program on an authorized SSH connection.",
         "integrationEnabledHint": "Allow Nexus Agent to call this ACP runtime immediately upon creation"
       },
       "navigation": "Agent settings sections",
@@ -927,17 +817,15 @@
         "overview": "Overview",
         "models": "Models & Budget",
         "execution": "Execution and agents",
-        "environments": "Runtime environments",
         "storage": "Files and storage",
         "extensions": "Apps and extensions",
         "safety": "Safety and system",
-        "runtime": "Runtime & Environments"
+        "runtime": "Execution & Integrations"
       },
       "groupDescriptions": {
         "overview": "Feature state, installed Agent apps, app activity, and capability grants.",
         "models": "Default model, providers, context budgets, and instance ceilings.",
         "execution": "Concurrency, performance, and Subagent profiles for delegated work.",
-        "environments": "Workspace Runner, browser targets, and ACP process integrations.",
         "storage": "Artifact quotas, retention, and current storage pressure.",
         "extensions": "Signed Agent apps, plugin repositories, packages, and publisher trust.",
         "safety": "Target deny rules and read-only system guardrails."
@@ -947,7 +835,6 @@
         "enabled": "enabled",
         "models": "Models",
         "providers": "{count} enabled providers",
-        "runtime": "Workspace runtime",
         "storage": "Artifact storage",
         "storageLimit": "Limit {value}",
         "defaultModel": "Default model",
@@ -971,8 +858,8 @@
           "conservative": "Conservative"
         },
         "fields": {
-          "maxRunSteps": "Run step fuse",
-          "maxActiveExecutionSeconds": "Active execution limit",
+          "maxModelRequests": "Initial model request allowance",
+          "maxActiveExecutionSeconds": "Initial active execution allowance",
           "toolTimeoutSeconds": "Tool timeout",
           "maxToolOutputBytes": "Model-visible tool output",
           "maxRecallItems": "Recall items",
@@ -980,7 +867,9 @@
           "maxSubagentMessages": "Subagent messages",
           "maxSubagentMessageBytes": "Subagent message bytes",
           "contextCompactionMode": "Dynamic context compaction",
-          "contextProfile": "Context window profile"
+          "contextProfile": "Context window profile",
+          "maxAutoModelRequests": "Automatic request ceiling",
+          "maxAutoActiveExecutionSeconds": "Automatic active time ceiling (seconds)"
         },
         "profileHint": "Normal keeps more context headroom; Extended uses more of the model window. Neither profile relaxes Hard Limits.",
         "profileInherited": "Inherited: {value}",
@@ -1156,10 +1045,6 @@
       "threadZoomOut": "Zoom out",
       "threadZoomReset": "Reset to 100%",
       "noThreadsFound": "No conversations match this search.",
-      "environment": "Environment",
-      "environmentHint": "Select environment",
-      "environmentNone": "Native Host",
-      "environmentNoneHint": "Run directly on host system",
       "frozen": "Frozen",
       "openThreads": "Open conversations",
       "closeThreads": "Close conversations"
@@ -1264,6 +1149,8 @@
       "sendEmptyHint": "Type a message first",
       "sendBusyHint": "Waiting for the current operation to finish",
       "clarificationTitle": "More information needed",
+      "loopPauseTitle": "Execution paused by loop protection",
+      "loopPauseHint": "Repeated actions produced no new progress. Send new guidance to resume this Run, or stop it. Running background jobs are not automatically cancelled.",
       "clarificationHint": "Reply below to continue this same run. Choose an option or type your answer in the composer.",
       "clarificationRecommended": "Recommended",
       "clarificationTextHint": "Type your answer in the composer below.",
@@ -1328,7 +1215,7 @@
       "bentoAutomationDesc": "Automate repetitive tasks",
       "bentoNextStepsTitle": "Next-Step Checklist",
       "bentoNextStepsDesc": "Prioritize your next steps",
-      "heroTag": "Agent Workspace",
+      "heroTag": "Nexus Agent",
       "usage": {
         "estimated": "Estimated tokens: {total}",
         "total": "Total: {total} (input: {input}, output: {output})",
@@ -1355,30 +1242,6 @@
             "unknown": "unknown",
             "cancelled": "cancelled"
           },
-          "workspaceState": {
-            "creating": "being created",
-            "ready": "ready",
-            "starting": "starting",
-            "running": "running",
-            "stopping": "stopping",
-            "stopped": "stopped",
-            "deleting": "being deleted",
-            "deleted": "deleted",
-            "failed": "failed"
-          },
-          "commandState": {
-            "pending": "pending",
-            "running": "running",
-            "succeeded": "completed",
-            "failed": "failed",
-            "unknown": "unknown"
-          },
-          "workspaceAction": {
-            "start": "start",
-            "stop": "stop",
-            "restart": "restart",
-            "delete": "delete"
-          },
           "containerAction": {
             "start": "start",
             "stop": "stop",
@@ -1388,12 +1251,6 @@
           "browserAction": {
             "click": "click",
             "type": "type"
-          },
-          "codeAction": {
-            "symbols": "symbol",
-            "definition": "definition",
-            "references": "reference",
-            "diagnostics": "diagnostic"
           },
           "acpStopReason": {
             "end_turn": "end of turn",
@@ -1413,32 +1270,12 @@
         "fileDelete": "Deleted {path}.",
         "connectionsFound": "Found {count} authorized SSH connection(s).",
         "diagnosticsCollected": "Collected {count} diagnostic observation(s).",
-        "backgroundJobAccepted": "Workspace background job accepted by the durable Runner job journal.",
-        "jobOutcomeUnknown": "The Workspace job outcome could not be confirmed.",
-        "jobState": "Workspace job is {stateKey}.",
-        "commandCompleted": "Workspace command completed successfully.",
-        "commandTimedOut": "Workspace command timed out.",
-        "commandExited": "Workspace command exited with code {code}.",
-        "jobCancelPending": "Workspace job cancellation is not yet confirmed; the durable job is still {stateKey}.",
-        "jobWaitWindowExpired": "Workspace job is still {stateKey} after the server-side wait window.",
-        "jobCancelled": "Runner confirmed that the Workspace job is cancelled.",
-        "jobCompleted": "Workspace job completed successfully.",
-        "jobTimedOut": "Workspace job timed out.",
-        "jobExited": "Workspace job exited with code {code}.",
+        "jobState": "SSH job is {stateKey}.",
         "sshShellCompleted": "SSH shell command completed successfully.",
         "sshSessionOpen": "SSH persistent session opened.",
         "sshSessionList": "SSH sessions retrieved.",
         "sshSessionClose": "SSH session closed and removed.",
         "sshShellExited": "SSH shell command exited with code {code}.",
-        "workspaceProvisioned": "Workspace provisioned and ready.",
-        "workspaceStatusIs": "Workspace is {stateKey}.",
-        "workspaceActionConfirmed": "Workspace {actionKey} confirmed.",
-        "workspaceActionPending": "Workspace {actionKey} is {stateKey}.",
-        "versionsSwitched": "Workspace tool versions switched; generation is now {generation}.",
-        "versionSwitchOutcome": "Workspace tool version switch is {stateKey}.",
-        "codeFilesMapped": "Mapped {files} file(s) from {indexed} indexed TypeScript/JavaScript source file(s).",
-        "codeResults": "Returned {count} {actionKey} result(s) from TypeScript native code intelligence.",
-        "codeUnavailable": "Code intelligence is unavailable for {path}; use {search} and {read}.",
         "skillMetadataFound": "Found {count} relevant signed Skill metadata entries.",
         "skillLoaded": "Loaded signed Skill {name} ({id}).",
         "deferredCapabilityFound": "Found {count} deferred MCP capability matches.",
@@ -1521,17 +1358,6 @@
         "tool_result": "Tool result",
         "system_notice": "System notice"
       },
-      "workspaceKind": {
-        "shell": "Shell",
-        "code": "Code",
-        "data": "Data",
-        "browser": "Browser"
-      },
-      "packStatus": {
-        "supported": "Supported",
-        "deprecated": "Deprecated",
-        "unavailable": "Unavailable"
-      },
       "subagentMessageKind": {
         "request": "Request",
         "reply": "Reply",
@@ -1558,10 +1384,9 @@
         "anchored_estimate": "Provider-anchored estimate",
         "provider": "Provider measured"
       },
-      "steps": "Steps",
       "activeTime": "Active time",
       "verification": "Verification",
-      "increaseBudget": "Increase run budget",
+      "increaseBudget": "Increase messaging allowance",
       "plan": "Plan",
       "planStatus": {
         "pending": "Pending",
@@ -1621,90 +1446,22 @@
       "tokenBreakdown": "In {input} · Out {output} · Cached {cached}",
       "dragCardHint": "Drag or press ↑/↓ to reorder",
       "resetCardOrder": "Reset card order",
-      "showOlderRuns": "Show older runs ({count} more)"
-    },
-    "workspaceRuntime": {
-      "title": "Workspace dev environment",
-      "description": "One Workspace keeps stable project files while each runtime generation composes Node, Python, Go, and Runner Plugin versions.",
-      "refresh": "Refresh",
-      "recipe": "Workspace profile",
-      "retained": "Retain workspace",
-      "toolVersions": "Toolchain versions",
-      "toolVersionsHint": "Optional tools are mounted by version from the shared read-only Tool Store. Different Workspaces can use different versions.",
-      "toolNotSelected": "Not enabled",
-      "workspaceToolVersions": "Workspace toolchain",
-      "workspaceToolVersionsHint": "Switching a version recreates only this Workspace runtime generation; project files and other Workspaces are unchanged.",
-      "switchToolVersions": "Switch tool versions",
-      "versionSwitched": "Workspace tool versions switched.",
-      "versionSwitchFailed": "Workspace tool version switch failed.",
-      "versionSwitchUnknown": "Workspace tool version switch outcome is unknown and must be reconciled before continuing.",
-      "generationAndTargets": "Generation {generation} · {count} frozen Runner Plugin target(s)",
-      "runnerPlugins": "Runner Plugins",
-      "runnerPluginsHint": "Targets are explicit and frozen into the Workspace profile. Plugins do not create Docker containers.",
-      "noRunnerPlugins": "No enabled installed Plugin exposes a Runner target.",
-      "create": "Create Workspace",
-      "created": "Workspace created.",
-      "actionSubmitted": "Workspace action submitted.",
-      "targetContract": "Version {version} · SDK {sdk} · protocol {protocol}",
-      "targetSource": "{entry} · sha256:{hash}",
-      "start": "Start",
-      "stop": "Stop",
-      "restart": "Restart",
-      "delete": "Delete",
-      "confirmDeleteTitle": "Delete Workspace?",
-      "confirmDeleteWorkspace": "Delete Workspace {id}? Active jobs and runtime processes will be stopped and the runtime environment will be removed. This action cannot be undone.",
-      "exportTitle": "Workspace → Artifact",
-      "importTitle": "Artifact → Workspace",
-      "workspacePath": "Workspace path",
-      "artifactName": "Artifact name",
-      "selectArtifact": "Choose a ready Artifact from this App",
-      "mediaType": "Media type, e.g. application/octet-stream",
-      "status": {
-        "creating": "Creating",
-        "ready": "Ready",
-        "starting": "Starting",
-        "running": "Running",
-        "stopping": "Stopping",
-        "stopped": "Stopped",
-        "deleting": "Deleting",
-        "deleted": "Deleted",
-        "failed": "Failed"
-      },
-      "exportAction": "Export",
-      "importAction": "Import",
-      "exported": "Exported Artifact {id}.",
-      "imported": "Imported {bytes} bytes into the workspace.",
-      "requestFailed": "Workspace Runtime request failed.",
-      "oneWorkspacePerRuntime": "A runtime owns at most one active Workspace. Delete it before creating a replacement.",
-      "reconciliationRequired": "A Workspace command has an unknown outcome. Verify it before sending another mutation.",
-      "verifyOutcome": "Verify outcome",
-      "reconciliationPending": "The Workspace command outcome is still unknown. The original mutation was not retried.",
-      "reconciliationResolved": "Workspace command outcome reconciled.",
-      "localTerminal": "Local terminal",
-      "localTerminalHint": "Open a direct PTY terminal for this Workspace generation.",
-      "openTerminal": "Open terminal",
-      "closeTerminal": "Close terminal",
-      "terminalClosed": "Terminal closed. Reopen it to start a new terminal connection.",
-      "terminalError": {
-        "protocolInvalid": "The terminal connection returned an invalid protocol message. Reopen the terminal to retry.",
-        "attachFailed": "The terminal could not attach to this Workspace. Reopen it to retry.",
-        "reconnectExhausted": "The terminal connection could not be restored. Reopen it to retry.",
-        "inputQueueFull": "Terminal input is temporarily backed up. Wait for the connection to recover before sending more input.",
-        "sessionChanged": "The terminal session changed while reconnecting. Reopen the terminal.",
-        "generic": "The terminal connection failed. Reopen it to retry."
-      },
-      "browserTarget": "Browser target",
-      "browserTargetNone": "No binding (standalone remains available)",
-      "browserTargetHint": "When selected, the target configuration is frozen into this Workspace generation.",
-      "acpProfiles": "ACP Profiles",
-      "acpProfilesHint": "Select ACP workspace profiles that may start inside this Workspace generation."
+      "showOlderRuns": "Show older runs ({count} more)",
+      "modelRequests": "Model requests",
+      "toolExecutions": "Tool executions",
+      "finishing": "Saving results and finishing",
+      "stopReasons": {
+        "model_request_limit": "Model request ceiling",
+        "active_time_limit": "Active execution time ceiling",
+        "tool_execution_limit": "Tool execution ceiling",
+        "no_progress": "No fresh progress evidence"
+      }
     },
     "subagents": {
       "title": "Subagents",
       "description": "Public collaboration state only. Private child prompts and model context are not shown here.",
       "empty": "No child delegations for this run.",
       "depth": "Depth {value}",
-      "steps": "Steps {used}/{max}",
       "cancel": "Cancel child",
       "messages": "Mailbox exchange",
       "noMessages": "No public messages for this child.",
@@ -1721,7 +1478,8 @@
         "isolate": "Isolated failures",
         "failFast": "Fail fast"
       },
-      "profileLabel": "Profile {id}"
+      "profileLabel": "Profile {id}",
+      "modelRequests": "Model requests {used}/{max}"
     },
     "approvals": {
       "title": "Operation requires approval",
@@ -1783,12 +1541,11 @@
       "promptExplain": "Explain how the current environment works",
       "promptDiagnose": "Check available connections, read only, without changes",
       "promptProjectOverview": "Quickly map the current project structure, including key modules, entry points, runtime flow, and major dependencies",
-      "promptReviewChanges": "Review the current workspace's uncommitted changes and point out potential issues, regression risks, and improvements",
+      "promptReviewChanges": "Review uncommitted changes in the selected SSH project and identify issues, regression risks, and improvements",
       "promptTroubleshoot": "Identify the most likely issues in the current environment, run safe diagnostics by priority, and explain what you find",
       "promptRunChecks": "Run the checks or tests most relevant to the current changes, fix clear failures, and summarize the results",
-      "promptAutomation": "Find repetitive work in the current workspace that is suitable for automation and propose a practical implementation",
+      "promptAutomation": "Find repetitive work in the selected SSH project and propose practical automation",
       "promptNextSteps": "Turn the current project state into a concise, prioritized checklist of next actions",
-      "optionalRuntime": "Optional runtime",
       "approvalHistory": "Approval history",
       "reasoningDescriptions": {
         "none": "Standard response without extended thinking",

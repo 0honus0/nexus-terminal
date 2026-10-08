@@ -3,7 +3,6 @@ import type { BrowserGatewayPort } from '../../ai/integrations.types';
 import type { AgentTool } from '../../capabilities/tool.types';
 import type { CryptoHashPort } from '../../crypto-hash.port';
 import type { AgentSettingsService } from '../../host/agent-settings.service';
-import type { AgentWorkspaceRepositoryPort } from '../../workspace-runtime/workspace-runtime.repository.port';
 import { createBrowserInteractionTools } from './browser/browser-interaction-tools';
 import { createBrowserLifecycleTools } from './browser/browser-lifecycle-tools';
 import { createBrowserObservationTools } from './browser/browser-observation-tools';
@@ -29,13 +28,12 @@ const BROWSER_TOOL_ORDER = [
 ] as const;
 
 export const createBrowserTools = (
-  repository: AgentWorkspaceRepositoryPort,
   settings: AgentSettingsService,
   gateway: BrowserGatewayPort,
   cryptoHash: CryptoHashPort,
   artifacts?: ArtifactService,
 ): AgentTool[] => {
-  const authority = new BrowserSessionBindingAuthority(repository, settings, gateway, cryptoHash);
+  const authority = new BrowserSessionBindingAuthority(settings, gateway, cryptoHash);
   const tools = [
     ...createBrowserLifecycleTools(authority, gateway),
     ...createBrowserObservationTools(authority, gateway, artifacts),

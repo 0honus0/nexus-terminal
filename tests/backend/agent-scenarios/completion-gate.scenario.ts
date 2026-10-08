@@ -20,7 +20,8 @@ export const completionGateScenario = async () => {
     inputTokens: 20,
     outputTokens: 10,
     cachedInputTokens: 0,
-    steps: 2,
+    toolExecutions: 0,
+    modelRequests: 2,
     subagentMessages: 0,
     subagentMessageBytes: 0,
   };
@@ -30,17 +31,16 @@ export const completionGateScenario = async () => {
       toolVersion: '1.0.0',
       normalizedArguments,
       target: {
-        kind: 'workspace',
-        target: 'workspace',
-        id: 'gate-workspace',
-        targetIdentity: 'workspace:gate-workspace:1',
-        endpoint: 'workspace:gate-workspace',
-        loginUser: 'runner:65532',
+        kind: 'ssh',
+        target: 'ssh',
+        id: '1',
+        targetIdentity: 'ssh:1',
+        endpoint: 'ssh.fixture',
+        loginUser: 'scenario',
         configurationHash: 'gate-config',
-        workspaceId: 'gate-workspace',
-        generation: 1,
+        connectionId: 1,
       },
-      resourceKeys: ['workspace:gate-workspace:1'],
+      resourceKeys: ['ssh:1'],
       risk: 'mutate',
       mutation: true,
       operationHash,
@@ -92,7 +92,15 @@ export const completionGateScenario = async () => {
       [
         now,
         JSON.stringify({
-          maxRunSteps: 100,
+          modelRequestCeiling: 100,
+          activeExecutionCeilingSeconds: 7200,
+          maxToolExecutions: 4000,
+          phase: 'executing',
+          stopReason: null,
+          extensionCount: 0,
+          progressSequence: 0,
+
+          maxModelRequests: 100,
           maxActiveExecutionSeconds: 3_600,
           toolTimeoutSeconds: 120,
           maxToolOutputBytes: 1_048_576,
@@ -114,7 +122,6 @@ export const completionGateScenario = async () => {
           approvalMode: 'ask',
           executionMode: 'execute',
           connectionIds: [],
-          environment: null,
           policyRevision: 1,
           settingsRevision: 1,
         }),
@@ -161,7 +168,7 @@ export const completionGateScenario = async () => {
                'completion-model-source', 'provider-write', 'file_write', '1.0.0', ?, 'gate-write', 1,
                'mutate', 'succeeded', ?, ?, ?, ?)`,
       [
-        inspection('file_write', { path: '/workspace/work/example.ts' }, 'gate-write'),
+        inspection('file_write', { path: '/repo/example.ts' }, 'gate-write'),
         successfulResult('File write', 'unverified'),
         now,
         now,
@@ -239,10 +246,10 @@ export const completionGateScenario = async () => {
         inspection(
           'shell_execute',
           {
-            target: 'workspace',
-            id: 'gate-workspace',
+            target: 'ssh',
+            id: '1',
             command: { kind: 'argv', argv: ['pnpm', 'test'] },
-            cwd: '/workspace/work',
+            cwd: '/repo',
             timeoutSeconds: 60,
             mode: 'foreground',
           },
@@ -250,9 +257,8 @@ export const completionGateScenario = async () => {
         ),
         successfulResult('Test command', 'verified', {
           kind: 'execution',
-          target: { target: 'workspace', id: 'gate-workspace' },
+          target: { target: 'ssh', id: '1' },
           status: 'succeeded',
-          job: { jobId: 'job-' + 'a'.repeat(64), workspaceId: 'gate-workspace', generation: 1 },
         }),
         now + 2,
         now + 2,
@@ -266,6 +272,77 @@ export const completionGateScenario = async () => {
       terminalStatus: 'completed',
       summary: 'Verified execution evidence satisfied the requested completion check.',
     });
+
+    const executionEvidence = evidenceAfterTest.tools.find((item) => item.result.semantic?.kind === 'execution');
+    assert.ok(executionEvidence);
+    const lastStep = Math.max(...evidenceAfterTest.tools.map((item) => item.stepIndex));
+    const sshClose = {
+      ...executionEvidence,
+      toolName: 'ssh_session_close',
+      stepIndex: lastStep + 1,
+      inspection: {
+        ...executionEvidence.inspection,
+        toolName: 'ssh_session_close',
+        target: { ...executionEvidence.inspection.target, kind: 'ssh' as const },
+        normalizedArguments: { connectionId: 1, sessionId: 'owned-session', force: false },
+      },
+      result: JSON.parse(successfulResult('Idle SSH session closed', 'verified')) as ToolResult,
+    };
+    assert.equal(
+      completionGateDecision(
+        afterGate,
+        {
+          ...evidenceAfterTest,
+          tools: [...evidenceAfterTest.tools, sshClose],
+        },
+        'Verify SSH commands and close the session.',
+      ).kind,
+      'complete',
+    );
+    assert.equal(
+      completionGateDecision(
+        afterGate,
+        {
+          ...evidenceAfterTest,
+          tools: [
+            ...evidenceAfterTest.tools,
+            sshClose,
+            {
+              ...sshClose,
+              toolName: 'file_write',
+              stepIndex: lastStep + 2,
+              inspection: { ...sshClose.inspection, toolName: 'file_write' },
+            },
+          ],
+          gateBlocksSinceToolProgress: 0,
+        },
+        'Verify SSH commands and close the session.',
+      ).kind,
+      'continue',
+      'A later content mutation still invalidates earlier verification after SSH cleanup',
+    );
+    assert.equal(
+      completionGateDecision(
+        afterGate,
+        {
+          ...evidenceAfterTest,
+          gateBlocksSinceToolProgress: 0,
+          tools: [
+            ...evidenceAfterTest.tools,
+            {
+              ...sshClose,
+              inspection: {
+                ...sshClose.inspection,
+                normalizedArguments: { ...sshClose.inspection.normalizedArguments, force: true },
+              },
+            },
+          ],
+        },
+        'Verify SSH commands and close the session.',
+      ).kind,
+      'continue',
+      'Force interruption must not preserve stale success evidence',
+    );
 
     const begun = await stateCommit.beginModelStep({
       scope,

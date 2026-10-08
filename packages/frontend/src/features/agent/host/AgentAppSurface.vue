@@ -42,7 +42,6 @@
     detailSubagentMessages,
     detailVisible,
     selectedModelKey,
-    selectedEnvironmentRecipeId,
     taskRailVisible,
     threadDeleteArmedId,
     deleteAllThreadsArmed,
@@ -85,10 +84,6 @@
     onTrackPointerUp,
     onTrackPointerCancel,
     displayedConnectionIds,
-    enabledEnvironmentRecipes,
-    activeEnvironment,
-    environmentLabel,
-    environmentStatusClass,
     mutationLocked,
     canSend,
     clearCurrentError,
@@ -96,7 +91,6 @@
     errorRetryLabel,
     retryFailedOperation,
     setModelSelection,
-    setEnvironmentSelection,
     toggleConnectionSelection,
     connectionSelectionState,
     toggleAllConnectionSelections,
@@ -590,7 +584,7 @@
                     <div class="mb-2 flex items-center justify-between gap-2 px-1">
                       <div class="flex items-center gap-1.5">
                         <span class="text-xs font-semibold">{{ $t('agent.operations.executionMode') }}</span>
-                        <UiInfoHint :text="$t('agent.operations.executionModeHint')" />
+                        <UiInfoHint trigger="click" :text="$t('agent.operations.executionModeHint')" />
                       </div>
                       <span
                         v-if="modelSelectionLocked"
@@ -704,7 +698,7 @@
                     <div class="mb-2 flex items-center justify-between gap-2 px-1">
                       <div class="flex items-center gap-1.5">
                         <span class="text-xs font-semibold">{{ $t('agent.operations.approvalMode') }}</span>
-                        <UiInfoHint :text="$t('agent.operations.approvalModeHint')" />
+                        <UiInfoHint trigger="click" :text="$t('agent.operations.approvalModeHint')" />
                       </div>
                       <span
                         v-if="modelSelectionLocked"
@@ -781,123 +775,6 @@
                           aria-hidden="true"
                         ></i>
                       </button>
-                    </div>
-                  </template>
-                </AgentConfigPopover>
-
-                <!-- 运行环境 -->
-                <AgentConfigPopover
-                  :ariaLabel="$t('agent.operations.environment')"
-                  :title="`${$t('agent.operations.environmentHint')}: ${environmentLabel}`"
-                  panel-class="w-72"
-                >
-                  <template #trigger>
-                    <span class="h-1.5 w-1.5 rounded-full shrink-0" :class="environmentStatusClass"></span>
-                    <span class="agent-config-verbose max-w-20 truncate whitespace-nowrap text-left">{{
-                      environmentLabel
-                    }}</span>
-                    <i
-                      :class="modelSelectionLocked ? 'fa-solid fa-lock' : 'fa-solid fa-chevron-down'"
-                      class="agent-config-affordance text-[11px] text-text-secondary"
-                      aria-hidden="true"
-                    ></i>
-                  </template>
-                  <template #panel="{ close }">
-                    <div class="mb-2 flex items-center justify-between gap-2 px-1">
-                      <span class="text-xs font-semibold">{{ $t('agent.operations.environment') }}</span>
-                      <span
-                        v-if="modelSelectionLocked"
-                        class="rounded-full bg-header px-2 py-0.5 text-[11px] text-text-secondary"
-                      >
-                        <i class="fa-solid fa-lock mr-1 text-[7px]" aria-hidden="true"></i
-                        >{{ $t('agent.operations.frozen') }}
-                      </span>
-                    </div>
-                    <div v-if="!modelSelectionLocked" class="max-h-64 space-y-1 overflow-y-auto">
-                      <button
-                        type="button"
-                        class="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors"
-                        :class="
-                          selectedEnvironmentRecipeId === ''
-                            ? 'border border-border/80 bg-card font-medium text-foreground shadow-xs'
-                            : 'border border-transparent text-text-secondary hover:bg-card/70'
-                        "
-                        @click="
-                          setEnvironmentSelection('');
-                          close(true);
-                        "
-                      >
-                        <span
-                          class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border"
-                          :class="
-                            selectedEnvironmentRecipeId === ''
-                              ? 'border-border/60 bg-header text-foreground'
-                              : 'border-transparent bg-header/60 text-text-secondary'
-                          "
-                        >
-                          <i class="fa-solid fa-terminal text-[9px]" aria-hidden="true"></i>
-                        </span>
-                        <span class="min-w-0 flex-1">
-                          <span class="block truncate text-xs font-medium text-foreground">{{
-                            $t('agent.operations.environmentNone')
-                          }}</span>
-                          <span class="block truncate text-[11px] text-text-secondary">{{
-                            $t('agent.operations.environmentNoneHint')
-                          }}</span>
-                        </span>
-                        <i
-                          v-if="selectedEnvironmentRecipeId === ''"
-                          class="fa-solid fa-check text-[10px] text-foreground"
-                          aria-hidden="true"
-                        ></i>
-                      </button>
-
-                      <button
-                        v-for="recipe in enabledEnvironmentRecipes"
-                        :key="recipe.id"
-                        type="button"
-                        class="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors"
-                        :class="
-                          selectedEnvironmentRecipeId === recipe.id
-                            ? 'border border-border/80 bg-card font-medium text-foreground shadow-xs'
-                            : 'border border-transparent text-text-secondary hover:bg-card/70'
-                        "
-                        @click="
-                          setEnvironmentSelection(recipe.id);
-                          close(true);
-                        "
-                      >
-                        <span
-                          class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border"
-                          :class="
-                            selectedEnvironmentRecipeId === recipe.id
-                              ? 'border-border/60 bg-header text-foreground'
-                              : 'border-transparent bg-header/60 text-text-secondary'
-                          "
-                        >
-                          <i class="fa-solid fa-box text-[9px]" aria-hidden="true"></i>
-                        </span>
-                        <span class="min-w-0 flex-1">
-                          <span class="block truncate text-xs font-medium text-foreground">{{
-                            recipe.displayName
-                          }}</span>
-                          <span class="block truncate font-mono text-[11px] text-text-secondary">{{ recipe.id }}</span>
-                        </span>
-                        <i
-                          v-if="selectedEnvironmentRecipeId === recipe.id"
-                          class="fa-solid fa-check text-[10px] text-foreground"
-                          aria-hidden="true"
-                        ></i>
-                      </button>
-                    </div>
-                    <div v-else class="rounded-xl border border-border/60 bg-card/50 p-2.5">
-                      <div class="text-xs font-medium text-foreground">
-                        {{
-                          activeEnvironment
-                            ? `${activeEnvironment.recipeId} · ${activeEnvironment.recipeRevision}`
-                            : $t('agent.operations.environmentNone')
-                        }}
-                      </div>
                     </div>
                   </template>
                 </AgentConfigPopover>

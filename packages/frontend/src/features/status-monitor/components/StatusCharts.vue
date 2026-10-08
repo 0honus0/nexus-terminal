@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, onDeactivated, onMounted, ref, shallowRef, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { Line } from 'vue-chartjs';
   import {
@@ -11,6 +11,7 @@
     Legend,
     type ChartData,
     type ChartOptions,
+    type TooltipModel,
   } from 'chart.js';
   import type { StatusHistory, StatusHistoryPoint } from '../model/status';
   import { formatStatusPercent, formatStatusRate, formatStatusRateAxis } from '../model/statusFormatting';
@@ -26,13 +27,30 @@
       metric?: StatusMetric;
       rangeMinutes?: number;
       intervalSeconds?: number;
+      scale?: number;
     }>(),
-    { metric: 'cpu', rangeMinutes: 5, intervalSeconds: 3 },
+    { metric: 'cpu', rangeMinutes: 5, intervalSeconds: 3, scale: 1 },
   );
   const { t } = useI18n();
   const MAX_CHART_POINTS = 110;
   const Y_AXIS_GUTTER_PX = 2;
   const CHART_RIGHT_PAD_PX = 4;
+  const tooltip = shallowRef<{
+    time: string;
+    entries: Array<{ label: string; value: string }>;
+    left: string;
+    top: string;
+  } | null>(null);
+  watch(
+    () => [props.scale, props.metric, props.rangeMinutes],
+    () => {
+      tooltip.value = null;
+    },
+    { flush: 'post' },
+  );
+  onDeactivated(() => {
+    tooltip.value = null;
+  });
   const rangeMs = computed(() => Math.max(1, props.rangeMinutes) * 60_000);
   const latestSampleTime = computed(() =>
     Math.max(
@@ -165,12 +183,21 @@
     };
   };
   let themeObserver: MutationObserver | null = null;
+  const handleViewportChange = () => {
+    tooltip.value = null;
+  };
   onMounted(() => {
     readTheme();
     themeObserver = new MutationObserver(readTheme);
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+    window.addEventListener('resize', handleViewportChange);
+    window.addEventListener('scroll', handleViewportChange, true);
   });
-  onBeforeUnmount(() => themeObserver?.disconnect());
+  onBeforeUnmount(() => {
+    themeObserver?.disconnect();
+    window.removeEventListener('resize', handleViewportChange);
+    window.removeEventListener('scroll', handleViewportChange, true);
+  });
 
   const pad2 = (value: number) => String(value).padStart(2, '0');
   const formatAxisTime = (time: number): string => {
@@ -178,11 +205,30 @@
     const base = `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
     return props.rangeMinutes <= 1 ? `${base}:${pad2(date.getSeconds())}` : base;
   };
-  const formatTooltipTime = (time: number): string => {
-    const date = new Date(time);
-    return `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
-  };
   const toTimedPoint = (point: StatusHistoryPoint): TimedChartPoint => ({ x: point.time, y: point.value });
+  const showTooltip = ({ chart, tooltip: model }: { chart: ChartJS; tooltip: TooltipModel<'line'> }): void => {
+    const sampleTime = model.dataPoints?.[0]?.parsed.x;
+    if (!model.opacity || !model.dataPoints?.length || sampleTime == null) {
+      tooltip.value = null;
+      return;
+    }
+    const rect = chart.canvas.getBoundingClientRect();
+    const date = new Date(sampleTime);
+    const pointerX = rect.left + (model.caretX / chart.width) * rect.width;
+    const pointerY = rect.top + (model.caretY / chart.height) * rect.height;
+    tooltip.value = {
+      time: `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`,
+      entries: model.dataPoints.map((point) => ({
+        label: point.dataset.label ?? '',
+        value:
+          props.metric === 'network'
+            ? formatStatusRate(point.parsed.y ?? undefined)
+            : (formatStatusPercent(point.parsed.y ?? undefined) ?? ''),
+      })),
+      left: `${Math.max(8, Math.min(pointerX + 12, window.innerWidth - 248))}px`,
+      top: `${Math.max(8, Math.min(pointerY + 12, window.innerHeight - 46 - model.dataPoints.length * 24))}px`,
+    };
+  };
 
   const data = computed<ChartData<'line', TimedChartPoint[]>>(() => {
     if (props.metric === 'network') {
@@ -229,34 +275,26 @@
 
   const options = computed<ChartOptions<'line'>>(() => ({
     responsive: true,
+    // Include the CSS zoom in the backing resolution so axis text is never upscaled.
+    devicePixelRatio: Math.ceil((window.devicePixelRatio || 1) * Math.max(1, props.scale)),
     maintainAspectRatio: false,
     animation: false,
     layout: {
       padding: { left: 0, right: CHART_RIGHT_PAD_PX },
     },
-    interaction: { mode: 'index', intersect: false },
+    interaction: { mode: 'index', axis: 'x', intersect: false },
     plugins: {
       legend: {
         display: false,
       },
       tooltip: {
-        backgroundColor: chartTheme.value.surface,
-        borderColor: chartTheme.value.border,
-        borderWidth: 1,
-        titleColor: chartTheme.value.text,
-        bodyColor: chartTheme.value.text,
-        callbacks: {
-          title: (items) => (items[0] ? formatTooltipTime(Number(items[0].parsed.x)) : ''),
-          label: (context) => {
-            const value = context.parsed.y ?? 0;
-            const label = context.dataset.label ? `${context.dataset.label}: ` : '';
-            return `${label}${props.metric === 'network' ? formatStatusRate(value) : (formatStatusPercent(value) ?? '0%')}`;
-          },
-        },
+        enabled: false,
+        external: showTooltip,
       },
     },
     scales: {
       x: {
+        alignToPixels: true,
         type: 'linear',
         min: windowStart.value,
         max: windowEnd.value,
@@ -273,6 +311,7 @@
       y:
         props.metric === 'network'
           ? {
+              alignToPixels: true,
               beginAtZero: true,
               min: 0,
               max: networkAxisMax.value,
@@ -291,6 +330,7 @@
               border: { color: chartTheme.value.grid },
             }
           : {
+              alignToPixels: true,
               beginAtZero: true,
               min: 0,
               max: 100,
@@ -320,16 +360,34 @@
     :data-window-start="windowStart"
     :data-window-end="windowEnd"
     :data-visible-start="visibleStartTime"
+    @mouseleave="tooltip = null"
   >
-    <div v-if="props.metric === 'network'" class="network-legend">
-      <span><i class="legend-download"></i>{{ t('statusMonitor.networkDownload') }}</span>
-      <span><i class="legend-upload"></i>{{ t('statusMonitor.networkUpload') }}</span>
-    </div>
     <Line :data="data" :options="options" />
   </div>
+  <Teleport to="body">
+    <div v-if="tooltip" role="tooltip" class="status-history-tooltip" :style="{ left: tooltip.left, top: tooltip.top }">
+      <strong>{{ tooltip.time }}</strong>
+      <div v-for="entry in tooltip.entries" :key="entry.label">{{ entry.label }}: {{ entry.value }}</div>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
+  .status-history-tooltip {
+    position: fixed;
+    z-index: 1001;
+    max-width: min(240px, calc(100vw - 16px));
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--card-bg-color);
+    color: var(--text-color);
+    font-size: 12px;
+    line-height: 24px;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
+  }
+
   .status-history-chart {
     min-width: 0;
     min-height: 0;
@@ -337,48 +395,5 @@
     flex: 1 1 auto;
     position: relative;
     overflow: hidden;
-  }
-
-  .network-legend {
-    position: absolute;
-    top: 0.25rem;
-    right: 0.35rem;
-    z-index: 1;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.3rem 0.65rem;
-    padding: 0.2rem 0.35rem;
-    border-radius: 0.3rem;
-    background: var(--card-bg-color);
-    color: var(--text-color);
-    font-size: 0.75rem;
-    font-weight: 600;
-    pointer-events: none;
-  }
-
-  .network-legend span {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-  }
-
-  .network-legend i {
-    width: 0.65rem;
-    height: 0.2rem;
-    border-radius: 999px;
-  }
-
-  .legend-download {
-    background: #10b981;
-  }
-
-  .legend-upload {
-    background: #3b82f6;
-  }
-
-  @media (max-width: 640px) {
-    .network-legend {
-      font-size: min(0.75rem, 4.5cqw, 4cqh);
-    }
   }
 </style>

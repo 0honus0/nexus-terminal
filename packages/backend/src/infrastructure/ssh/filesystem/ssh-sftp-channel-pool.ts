@@ -1,18 +1,20 @@
 import type { Client, SFTPWrapper } from 'ssh2';
 import type { RemoteFileSystem, RemoteFileSystemRole } from '../../../platform/filesystem/remote-filesystem';
-import { SshRemoteFileSystemAdapter } from './ssh-remote-file-system.adapter';
+import { SshRemoteFileSystemAdapter, bindSftpChannelCancellation } from './ssh-remote-file-system.adapter';
 import { runtimePerformanceMetrics } from '../../../shared/observability/runtime-performance';
 
 type ChannelState = {
   channel?: SFTPWrapper;
   opening?: Promise<SFTPWrapper>;
   filesystem?: RemoteFileSystem;
+  cancelOpening?: () => void;
 };
 
 /** Owns independent SFTP channels by workload role over one SSH transport. */
 export class SshSftpChannelPool {
   private readonly states = new Map<RemoteFileSystemRole, ChannelState>();
   private closed = false;
+  private readonly cancellation = new AbortController();
 
   constructor(private readonly client: Client) {}
 
@@ -26,14 +28,16 @@ export class SshSftpChannelPool {
   closeAll(): void {
     if (this.closed) return;
     this.closed = true;
+    this.cancellation.abort();
     for (const state of this.states.values()) {
+      state.cancelOpening?.();
       const channel = state.channel;
       state.channel = undefined;
       state.opening = undefined;
       state.filesystem = undefined;
       if (channel) {
         try {
-          channel.end();
+          channel.destroy();
         } catch {
           /* SSH teardown is the final lifecycle backstop. */
         }
@@ -58,6 +62,7 @@ export class SshSftpChannelPool {
 
     const startedAt = runtimePerformanceMetrics.sftpChannelOpenStarted();
     const opening = new Promise<SFTPWrapper>((resolve, reject) => {
+      state.cancelOpening = () => reject(new Error('SFTP_CHANNEL_CLOSED'));
       this.client.sftp((error, channel) => {
         if (error) {
           runtimePerformanceMetrics.sftpChannelOpenFinished(startedAt, false);
@@ -66,7 +71,7 @@ export class SshSftpChannelPool {
         }
         if (this.closed) {
           try {
-            channel.end();
+            channel.destroy();
           } catch {
             /* best effort */
           }
@@ -75,6 +80,7 @@ export class SshSftpChannelPool {
           return;
         }
         state.channel = channel;
+        bindSftpChannelCancellation(channel, this.cancellation.signal);
         const detach = () => {
           if (state.channel === channel) state.channel = undefined;
         };
@@ -90,6 +96,7 @@ export class SshSftpChannelPool {
     try {
       return await opening;
     } finally {
+      state.cancelOpening = undefined;
       if (state.opening === opening) state.opening = undefined;
     }
   }

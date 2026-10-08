@@ -15,12 +15,10 @@ const toolTargetDto = (target: ToolTarget): AgentToolTargetDto => {
     loginUser: target.loginUser,
     configurationHash: target.configurationHash,
     ...(target.connectionId === undefined ? {} : { connectionId: target.connectionId }),
-    ...(target.workspaceId === undefined ? {} : { workspaceId: target.workspaceId }),
     ...(target.integrationId === undefined ? {} : { integrationId: target.integrationId }),
     ...(target.schemaHash === undefined ? {} : { schemaHash: target.schemaHash }),
     ...(target.browserSessionId === undefined ? {} : { browserSessionId: target.browserSessionId }),
     ...(target.snapshotId === undefined ? {} : { snapshotId: target.snapshotId }),
-    ...(target.generation === undefined ? {} : { generation: target.generation }),
     ...(target.hostKeyTrust === undefined ? {} : { hostKeyTrust: target.hostKeyTrust }),
   };
   if ('target' in target) {

@@ -4,11 +4,9 @@ import type {
   AgentRunDeleteResponseDto,
   AgentRunListQueryDto,
 } from '@nexus-terminal/protocol/agent-runs';
-import type { AgentWorkspaceListQueryDto } from '@nexus-terminal/protocol/agent-workspace-runtime';
 import { Router, type Request } from 'express';
-import type { AgentApprovalFacade, AgentWorkspaceRuntimeFacade, AgentRunFacade } from '../../../modules/agent/public';
+import type { AgentApprovalFacade, AgentRunFacade } from '../../../modules/agent/public';
 import { approvalDto } from './approval-dto';
-import { artifactDto } from './artifact-dto';
 import {
   checkpointDto,
   definitionDto,
@@ -18,12 +16,6 @@ import {
   runPageDto,
   runSnapshotDto,
 } from './run-dto';
-import {
-  workspaceArtifactImportResultDto,
-  workspaceDto,
-  workspaceRuntimeCommandDto,
-  workspaceToolchainSwitchDto,
-} from './workspace-runtime-dto';
 import { agentData, agentError, agentRequestId, agentRoute } from './agent-http';
 import { pathParam, positiveInteger, withVersionConflictDetails } from './agent-route-input';
 import { agentUserId, createAgentMutationSecurity, requireAgentAuthenticated } from './agent-security';
@@ -36,17 +28,11 @@ import {
   parseReconciliationResolveRequest,
   parseResumeRunRequest,
   parseSetGoalRequest,
-  parseWorkspaceActionRequest,
-  parseWorkspaceArtifactExportRequest,
-  parseWorkspaceArtifactImportRequest,
-  parseWorkspaceCreateRequest,
-  parseWorkspaceToolVersionsRequest,
 } from './agent-runtime-route-input';
 
 export interface AppRuntimeRouterDependencies {
   runs: AgentRunFacade;
   approvals: AgentApprovalFacade;
-  workspaceRuntime: AgentWorkspaceRuntimeFacade;
   nodeEnv: string;
   publicOrigin?: string;
   csrfSecret: string;
@@ -393,168 +379,6 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
       );
       const payload: AgentRunDeleteResponseDto = { runId, deleted: true };
       agentData(request, response, payload, 202);
-    }),
-  );
-
-  router.get(
-    '/runs/:runId/workspaces',
-    agentRoute(async (request, response) => {
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const runId = pathParam(request.params.runId);
-      const runtime = queryString(request.query.runtime);
-      if (runtime !== undefined && runtime !== 'root') throw new Error('VALIDATION_FAILED');
-      const query: AgentWorkspaceListQueryDto = runtime === undefined ? {} : { runtime };
-      const workspaces = await dependencies.workspaceRuntime.listWorkspaces(scope, runId);
-      if (query.runtime !== 'root') {
-        agentData(request, response, workspaces.map(workspaceDto));
-        return;
-      }
-      const rootRuntimeId = await dependencies.runs.rootRuntimeId(scope, runId);
-      agentData(
-        request,
-        response,
-        workspaces.filter((workspace) => workspace.agentRuntimeId === rootRuntimeId).map(workspaceDto),
-      );
-    }),
-  );
-
-  router.post(
-    '/runs/:runId/workspaces',
-    mutationSecurity,
-    agentRoute(async (request, response) => {
-      const input = parseWorkspaceCreateRequest(request.body);
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const runId = pathParam(request.params.runId);
-      const run = await dependencies.runs.get(scope, runId);
-      const environmentWasFrozen = Object.prototype.hasOwnProperty.call(run.definition, 'environment');
-      if (environmentWasFrozen && !run.definition.environment) throw new Error('RUN_ENVIRONMENT_NOT_CONFIGURED');
-      const agentRuntimeId = await dependencies.runs.rootRuntimeId(scope, runId);
-      const workspace = await dependencies.workspaceRuntime.createWorkspace(
-        scope,
-        runId,
-        agentRuntimeId,
-        input.workspace,
-        input.retained,
-        idempotencyKey(request),
-        input.catalogRevision,
-        run.definition.environment ?? undefined,
-      );
-      response.setHeader('Location', `/api/v1/apps/${encodeURIComponent(scope.appId)}/workspaces/${workspace.id}`);
-      agentData(request, response, workspaceDto(workspace), 202);
-    }),
-  );
-
-  router.get(
-    '/workspaces/:workspaceId',
-    agentRoute(async (request, response) => {
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(
-        request,
-        response,
-        workspaceDto(await dependencies.workspaceRuntime.getWorkspace(scope, pathParam(request.params.workspaceId))),
-      );
-    }),
-  );
-
-  router.get(
-    '/workspace-runtime/commands/:commandId',
-    agentRoute(async (request, response) => {
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(
-        request,
-        response,
-        workspaceRuntimeCommandDto(
-          await dependencies.workspaceRuntime.getCommand(scope, pathParam(request.params.commandId)),
-        ),
-      );
-    }),
-  );
-
-  router.post(
-    '/workspaces/:workspaceId/actions',
-    mutationSecurity,
-    agentRoute(async (request, response) => {
-      const input = parseWorkspaceActionRequest(request.body);
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const workspaceId = pathParam(request.params.workspaceId);
-      const command = await withVersionConflictDetails(
-        input.expectedVersion,
-        async () => (await dependencies.workspaceRuntime.getWorkspace(scope, workspaceId)).version,
-        () => dependencies.workspaceRuntime.action(scope, workspaceId, input.action, input.expectedVersion),
-      );
-      agentData(request, response, workspaceRuntimeCommandDto(command), 202);
-    }),
-  );
-
-  router.post(
-    '/workspaces/:workspaceId/plugins/:targetPluginId/artifacts/export',
-    mutationSecurity,
-    agentRoute(async (request, response) => {
-      const input = parseWorkspaceArtifactExportRequest(request.body);
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(
-        request,
-        response,
-        artifactDto(
-          await dependencies.workspaceRuntime.exportWorkspaceArtifact(
-            scope,
-            {
-              workspaceId: pathParam(request.params.workspaceId),
-              targetPluginId: pathParam(request.params.targetPluginId),
-              ...input,
-            },
-            AbortSignal.timeout(120_000),
-          ),
-        ),
-        201,
-      );
-    }),
-  );
-
-  router.post(
-    '/workspaces/:workspaceId/plugins/:targetPluginId/artifacts/import',
-    mutationSecurity,
-    agentRoute(async (request, response) => {
-      const input = parseWorkspaceArtifactImportRequest(request.body);
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(
-        request,
-        response,
-        workspaceArtifactImportResultDto(
-          await dependencies.workspaceRuntime.importArtifactToWorkspace(
-            scope,
-            {
-              workspaceId: pathParam(request.params.workspaceId),
-              targetPluginId: pathParam(request.params.targetPluginId),
-              ...input,
-            },
-            AbortSignal.timeout(120_000),
-          ),
-        ),
-      );
-    }),
-  );
-
-  router.post(
-    '/workspaces/:workspaceId/tool-versions',
-    mutationSecurity,
-    agentRoute(async (request, response) => {
-      const input = parseWorkspaceToolVersionsRequest(request.body);
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const workspaceId = pathParam(request.params.workspaceId);
-      const switched = await withVersionConflictDetails(
-        input.expectedVersion,
-        async () => (await dependencies.workspaceRuntime.getWorkspace(scope, workspaceId)).version,
-        () =>
-          dependencies.workspaceRuntime.switchToolVersions(
-            scope,
-            workspaceId,
-            input.versions,
-            input.expectedVersion,
-            input.catalogRevision,
-          ),
-      );
-      agentData(request, response, workspaceToolchainSwitchDto(switched), 202);
     }),
   );
 

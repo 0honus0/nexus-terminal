@@ -28,8 +28,6 @@ import type {
   AgentSubagentViewDto,
   AgentThreadViewDto,
   AgentTargetDenylistViewDto,
-  AgentWorkspaceRuntimeAvailabilityDto,
-  AgentWorkspaceRuntimeCatalogDto,
 } from '../api/agent-api';
 import { agentRunAcceptsInput, isAgentRunNonTerminal } from '../api/agent-api';
 import { agentHostEvents } from '../events/agent-host-events';
@@ -131,10 +129,6 @@ export function useAgentAppController(props: Readonly<AgentAppControllerProps>) 
   const hardLimits = ref<AgentHardLimitsDto | null>(null);
 
   const settingsView = ref<AgentSettingsViewDto | null>(null);
-
-  const workspaceRuntimeAvailability = ref<AgentWorkspaceRuntimeAvailabilityDto | null>(null);
-
-  const workspaceRuntimeCatalog = ref<AgentWorkspaceRuntimeCatalogDto | null>(null);
 
   const backgroundRuns = ref<AgentRunViewDto[]>([]);
 
@@ -288,8 +282,6 @@ export function useAgentAppController(props: Readonly<AgentAppControllerProps>) 
   const selectedExecutionMode = ref<AgentExecutionModeDto>(
     agentSurfaceSession.restoreExecutionMode(props.appId) ?? 'execute',
   );
-
-  const selectedEnvironmentRecipeId = ref(agentSurfaceSession.restoreEnvironmentRecipeId(props.appId) ?? '');
 
   const taskRailVisible = ref(agentWindowManager.state.taskRailVisible);
 
@@ -605,46 +597,6 @@ export function useAgentAppController(props: Readonly<AgentAppControllerProps>) 
     { immediate: true },
   );
 
-  const enabledEnvironmentRecipes = computed(() => {
-    const catalog = workspaceRuntimeCatalog.value;
-    const settings = settingsView.value;
-    if (!catalog || !settings) return [];
-    const enabled = new Set(settings.effectiveSettings.workspaceRuntime.enabledRecipeIds);
-    return catalog.recipes.filter((recipe) => enabled.has(recipe.id));
-  });
-
-  const selectedEnvironmentRecipe = computed(
-    () => enabledEnvironmentRecipes.value.find((recipe) => recipe.id === selectedEnvironmentRecipeId.value) ?? null,
-  );
-
-  const activeEnvironment = computed(() =>
-    modelSelectionLocked.value ? (run.value?.definition.environment ?? null) : null,
-  );
-
-  const environmentLabel = computed(() => {
-    if (modelSelectionLocked.value) {
-      const frozen = activeEnvironment.value;
-      if (!frozen) return t('agent.operations.environmentNone');
-      return (
-        workspaceRuntimeCatalog.value?.recipes.find((recipe) => recipe.id === frozen.recipeId)?.displayName ??
-        frozen.recipeId
-      );
-    }
-    if (selectedEnvironmentRecipe.value) return selectedEnvironmentRecipe.value.displayName;
-    const availability = workspaceRuntimeAvailability.value;
-    if (!availability?.available) return t('agent.operations.environmentNone');
-    return t('agent.operations.environmentNone');
-  });
-
-  const environmentStatusClass = computed(() => {
-    if (modelSelectionLocked.value) return activeEnvironment.value ? 'bg-success' : 'bg-text-secondary/50';
-    if (!selectedEnvironmentRecipe.value) return 'bg-text-secondary/50';
-    const availability = workspaceRuntimeAvailability.value;
-    if (!availability) return 'bg-text-secondary/40';
-    if (!availability.available) return 'bg-text-secondary/50';
-    return 'bg-success';
-  });
-
   const mutationLocked = computed(
     () =>
       busy.value ||
@@ -744,13 +696,6 @@ export function useAgentAppController(props: Readonly<AgentAppControllerProps>) 
     if (modelSelectionLocked.value || !reasoningLevels.value.includes(effort)) return;
     selectedReasoningEffort.value = effort;
     agentSurfaceSession.setReasoningEffort(props.appId, effort);
-  };
-
-  const setEnvironmentSelection = (recipeId: string): void => {
-    if (modelSelectionLocked.value) return;
-    if (recipeId && !enabledEnvironmentRecipes.value.some((recipe) => recipe.id === recipeId)) return;
-    selectedEnvironmentRecipeId.value = recipeId;
-    agentSurfaceSession.setEnvironmentRecipeId(props.appId, recipeId || undefined);
   };
 
   const toggleConnectionSelection = (connectionId: number, checked: boolean): void => {
@@ -1006,10 +951,7 @@ export function useAgentAppController(props: Readonly<AgentAppControllerProps>) 
           return;
         }
         if (event.type === 'message.final') resetStreamingPresentation();
-        const recoveryEvent =
-          event.type === 'run.recovery_continued' ||
-          event.type === 'run.recovery_deferred' ||
-          event.type === 'run.recovery_failed';
+        const recoveryEvent = event.type === 'run.recovery_continued' || event.type === 'run.recovery_failed';
         if (event.type === 'run.recovery_failed') {
           applyFailure(t('agent.operations.restartRecoveryFailed', { reasons: event.payload.reasons.join(', ') }), '', {
             domainKey: 'agent.operations.failureDomain.run',
@@ -1101,8 +1043,7 @@ export function useAgentAppController(props: Readonly<AgentAppControllerProps>) 
           'Agent UI background Run refresh deferred',
         );
       });
-      const active =
-        selectedRun && !isAgentRunNonTerminal(selectedRun.status) ? await facade.getRun(selectedRun.id) : selectedRun;
+      const active = selectedRun ? await facade.getRun(selectedRun.id) : null;
       if (selectionGeneration !== threadSelectionGeneration || currentThread.value?.id !== thread.id) return;
       run.value = active;
       if (active) rememberThreadRun(active);
@@ -1210,24 +1151,18 @@ export function useAgentAppController(props: Readonly<AgentAppControllerProps>) 
     const requestGeneration = ++configurationGeneration;
     const authorizationRequestGeneration = ++authorizationGeneration;
     try {
-      const [nextDefinitions, nextProviders, settings, , runtimeAvailability, nextDenylist] = await Promise.all([
+      const [nextDefinitions, nextProviders, settings, , nextDenylist] = await Promise.all([
         facade.definitions(),
         facade.providers(),
         facade.settings(),
         connectionsStore.revalidate(0),
-        agentApi.workspaceRuntimeAvailability().catch(() => null),
         agentApi.targetDenylist(),
       ]);
-      const runtimeCatalog = runtimeAvailability?.available
-        ? await agentApi.workspaceRuntimeCatalog().catch(() => null)
-        : null;
       if (surfaceDisposed || requestGeneration !== configurationGeneration) return;
 
       definitions.value = nextDefinitions;
       providers.value = nextProviders;
       settingsView.value = settings;
-      workspaceRuntimeAvailability.value = runtimeAvailability;
-      workspaceRuntimeCatalog.value = runtimeCatalog;
       if (authorizationRequestGeneration === authorizationGeneration) targetDenylist.value = nextDenylist;
 
       const restoredModelKey = agentSurfaceSession.restoreModelKey(props.appId);
@@ -1252,13 +1187,6 @@ export function useAgentAppController(props: Readonly<AgentAppControllerProps>) 
           : (selectedModel?.model.defaultReasoningEffort ?? null);
       selectedReasoningEffort.value = initialReasoningEffort;
       agentSurfaceSession.setReasoningEffort(props.appId, initialReasoningEffort ?? undefined);
-      const restoredEnvironmentId = agentSurfaceSession.restoreEnvironmentRecipeId(props.appId);
-      const selectedEnvironment =
-        enabledEnvironmentRecipes.value.find((recipe) => recipe.id === restoredEnvironmentId) ??
-        enabledEnvironmentRecipes.value[0] ??
-        null;
-      selectedEnvironmentRecipeId.value = selectedEnvironment?.id ?? '';
-      agentSurfaceSession.setEnvironmentRecipeId(props.appId, selectedEnvironment?.id);
       hardLimits.value = settings.hardLimits;
       clearError('agent.operations.failureDomain.configuration');
     } catch (cause) {
@@ -1358,7 +1286,6 @@ export function useAgentAppController(props: Readonly<AgentAppControllerProps>) 
         inputBytes: new TextEncoder().encode(text).byteLength,
         artifactCount: artifactRefs.length,
         connectionCount: selectedConnectionIds.value.length,
-        environmentRecipeId: selectedEnvironmentRecipe.value?.id ?? null,
       },
       'Agent UI creating run',
     );
@@ -1384,12 +1311,6 @@ export function useAgentAppController(props: Readonly<AgentAppControllerProps>) 
       executionMode: selectedExecutionMode.value,
       ...(plannedFromRunId ? { plannedFromRunId } : {}),
       connectionIds: selectedConnectionIds.value,
-      environment: selectedEnvironmentRecipe.value
-        ? {
-            recipeId: selectedEnvironmentRecipe.value.id,
-            ...(workspaceRuntimeCatalog.value ? { catalogRevision: workspaceRuntimeCatalog.value.revision } : {}),
-          }
-        : null,
       ...(initialGoal ? { initialGoal } : {}),
     };
     const idempotencyKey = runCreateIdempotencyKey(fields);
@@ -2114,7 +2035,6 @@ export function useAgentAppController(props: Readonly<AgentAppControllerProps>) 
     detailSubagentMessages,
     detailVisible,
     selectedModelKey,
-    selectedEnvironmentRecipeId,
     taskRailVisible,
     threadDeleteArmedId,
     deleteAllThreadsArmed,
@@ -2157,10 +2077,6 @@ export function useAgentAppController(props: Readonly<AgentAppControllerProps>) 
     onTrackPointerUp,
     onTrackPointerCancel,
     displayedConnectionIds,
-    enabledEnvironmentRecipes,
-    activeEnvironment,
-    environmentLabel,
-    environmentStatusClass,
     mutationLocked,
     canSend,
     clearCurrentError,
@@ -2168,7 +2084,6 @@ export function useAgentAppController(props: Readonly<AgentAppControllerProps>) 
     errorRetryLabel,
     retryFailedOperation,
     setModelSelection,
-    setEnvironmentSelection,
     toggleConnectionSelection,
     connectionSelectionState,
     toggleAllConnectionSelections,

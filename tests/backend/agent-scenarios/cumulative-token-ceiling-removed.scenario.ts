@@ -25,7 +25,15 @@ export const cumulativeTokenCeilingRemovedScenario = async () => {
     configurationVersion: 1,
   });
   const budget = JSON.stringify({
-    maxRunSteps: 100,
+    modelRequestCeiling: 100,
+    activeExecutionCeilingSeconds: 7200,
+    maxToolExecutions: 4000,
+    phase: 'executing',
+    stopReason: null,
+    extensionCount: 0,
+    progressSequence: 0,
+
+    maxModelRequests: 100,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
     maxToolOutputBytes: 1_048_576,
@@ -47,7 +55,6 @@ export const cumulativeTokenCeilingRemovedScenario = async () => {
     approvalMode: 'ask',
     executionMode: 'execute',
     connectionIds: [],
-    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   });
@@ -55,7 +62,8 @@ export const cumulativeTokenCeilingRemovedScenario = async () => {
     inputTokens: 1_250_000,
     outputTokens: 350_000,
     cachedInputTokens: 700_000,
-    steps: 4,
+    toolExecutions: 0,
+    modelRequests: 4,
     subagentMessages: 0,
     subagentMessageBytes: 0,
   });
@@ -102,7 +110,7 @@ export const cumulativeTokenCeilingRemovedScenario = async () => {
       `INSERT INTO agent_delegations
         (id, run_id, parent_runtime_id, child_runtime_id, profile_id, grants_json, peer_messaging,
          model_ref_json, objective, constraints_json, input_artifact_refs_json, completion_criteria_json,
-         dependency_mode, status, depth, failure_mode, max_steps, idempotency_key, request_hash,
+         dependency_mode, status, depth, failure_mode, max_model_requests, idempotency_key, request_hash,
          deadline_at, version, created_at, updated_at)
        VALUES (?, ?, ?, ?, 'default', '[]', 'parent-child', ?, 'continue despite cumulative token telemetry',
                '[]', '[]', '[]', 'settled', 'running', 1, 'isolate', 10,

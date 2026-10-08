@@ -16,7 +16,6 @@
     type AgentProviderViewDto,
     type AgentSettingsViewDto,
     type AgentArtifactStorageSummaryDto,
-    type AgentWorkspaceRuntimeAvailabilityDto,
     type AgentHardLimitPreviewDto,
     type AgentRecommendedPluginDto,
     type AgentTargetDenylistViewDto,
@@ -28,7 +27,6 @@
   import BrowserRuntimeSettings from './BrowserRuntimeSettings.vue';
   import McpIntegrationSettings from './McpIntegrationSettings.vue';
   import MemorySettings from './MemorySettings.vue';
-  import WorkspaceRuntimeSettings from './WorkspaceRuntimeSettings.vue';
   import HardLimitsSettings from './HardLimitsSettings.vue';
   import ModelProviderSettings from './ModelProviderSettings.vue';
   import PerformanceSettings from './PerformanceSettings.vue';
@@ -45,7 +43,6 @@
   const providers = ref<AgentProviderViewDto[]>([]);
   const discoveredModels = ref<Record<string, AgentDiscoveredProviderModelDto[]>>({});
   const storage = ref<AgentArtifactStorageSummaryDto | null>(null);
-  const workspaceRuntime = ref<AgentWorkspaceRuntimeAvailabilityDto | null>(null);
   const denylist = ref<AgentTargetDenylistViewDto | null>(null);
   const hardLimitPreview = ref<AgentHardLimitPreviewDto | null>(null);
   const loading = ref(true);
@@ -100,7 +97,7 @@
     return t('agent.settings.onboarding.installStep3');
   });
 
-  // 4 个高内聚核心维度：模型与预算、工具与扩展、运行与环境、安全与防护
+  // 四组当前功能：模型与预算、工具与扩展、执行与集成、安全与防护。
   const groups = [
     {
       id: 'models',
@@ -186,20 +183,17 @@
     if (showLoading) loading.value = true;
     loadError.value = '';
     try {
-      const [nextSettings, nextApps, nextProviders, nextStorage, nextWorkspaceRuntime, nextDenylist] =
-        await Promise.all([
-          agentApi.settings(),
-          agentApi.apps(),
-          agentApi.providers(),
-          agentApi.storage(),
-          agentApi.workspaceRuntimeAvailability(),
-          agentApi.targetDenylist(),
-        ]);
+      const [nextSettings, nextApps, nextProviders, nextStorage, nextDenylist] = await Promise.all([
+        agentApi.settings(),
+        agentApi.apps(),
+        agentApi.providers(),
+        agentApi.storage(),
+        agentApi.targetDenylist(),
+      ]);
       settings.value = nextSettings;
       apps.value = nextApps;
       providers.value = nextProviders;
       storage.value = nextStorage;
-      workspaceRuntime.value = nextWorkspaceRuntime;
       denylist.value = nextDenylist;
     } catch (cause) {
       loadError.value = message(cause);
@@ -573,11 +567,6 @@
   const saveBrowserSettings = (patch: AgentSettingsViewDto['requestedSettings']['browser'], success?: string | null) =>
     patchSection('browser', patch, success);
 
-  const saveAcpProfiles = (
-    profiles: AgentSettingsViewDto['requestedSettings']['workspaceRuntime']['acpProfiles'],
-    success?: string | null,
-  ) => patchSection('workspaceRuntime', { acpProfiles: profiles }, success);
-
   const discoverProviderModels = (provider: AgentProviderViewDto) =>
     execute(
       'discover-provider-models',
@@ -705,7 +694,7 @@
     <p v-else-if="!settings && loadError" role="alert" class="p-6 text-sm text-error">{{ loadError }}</p>
 
     <!-- 主配置区域：简约清晰的二级子项分解结构 -->
-    <template v-else-if="settings && storage && workspaceRuntime && denylist">
+    <template v-else-if="settings && storage && denylist">
       <div class="space-y-3 sm:space-y-4">
         <!-- 核心维度导航 (4 个子项直接平铺展示，外部不再套层) -->
         <nav class="grid grid-cols-4 gap-2 sm:gap-2.5 w-full" :aria-label="$t('agent.settings.navigation')">
@@ -792,25 +781,18 @@
             <AppExecutionPolicySettings :apps="apps" :busy="appContextBusy" />
           </div>
 
-          <!-- 3. 运行与环境 -->
+          <!-- 3. 执行与集成：并发、CDP、SSH ACP 和 Artifact，不含 Workspace 环境选择 -->
           <div v-if="visitedGroups.has('runtime')" v-show="activeGroup === 'runtime'" class="space-y-5">
             <PerformanceSettings
               :settings="settings"
               :busy="settingsMutationBusy"
               @save="(patch) => patchSection('performance', patch)"
             />
-            <WorkspaceRuntimeSettings
-              :availability="workspaceRuntime"
-              :settings="settings"
-              :busy="settingsMutationBusy"
-              @settings-updated="applySettingsUpdate"
-            />
             <BrowserRuntimeSettings :settings="settings" :busy="settingsMutationBusy" :save="saveBrowserSettings" />
             <AcpRuntimeSettings
               :settings="settings"
               :busy="runtimeIntegrationBusy"
               :agent-available="apps.some((app) => app.id === 'nexus.agent')"
-              :save-profiles="saveAcpProfiles"
             />
             <StorageArtifactSettings
               :settings="settings"

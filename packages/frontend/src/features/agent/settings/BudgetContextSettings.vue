@@ -24,7 +24,7 @@
   type BudgetDraft = Record<BudgetKey, string | number | null>;
 
   const budgetKeys: readonly BudgetKey[] = [
-    'maxRunSteps',
+    'maxModelRequests',
     'maxActiveExecutionSeconds',
     'toolTimeoutSeconds',
     'maxToolOutputBytes',
@@ -48,7 +48,7 @@
       label: t('agent.settings.budget.presetLight'),
       description: t('agent.settings.budget.presetLightDesc'),
       values: {
-        maxRunSteps: 25,
+        maxModelRequests: 25,
         maxActiveExecutionSeconds: 600,
         toolTimeoutSeconds: 30,
         maxToolOutputBytes: 32768,
@@ -63,7 +63,7 @@
       description: t('agent.settings.budget.presetBalancedDesc'),
       badge: t('agent.settings.budget.recommendedBadge'),
       values: {
-        maxRunSteps: 80,
+        maxModelRequests: 80,
         maxActiveExecutionSeconds: 1800,
         toolTimeoutSeconds: 60,
         maxToolOutputBytes: 65536,
@@ -77,7 +77,7 @@
       label: t('agent.settings.budget.presetDeep'),
       description: t('agent.settings.budget.presetDeepDesc'),
       values: {
-        maxRunSteps: 150,
+        maxModelRequests: 150,
         maxActiveExecutionSeconds: 3600,
         toolTimeoutSeconds: 120,
         maxToolOutputBytes: 131072,
@@ -92,7 +92,7 @@
       description: t('agent.settings.budget.presetCustomDesc'),
       badge: t('agent.settings.budget.customBadge'),
       values: {
-        maxRunSteps: 80,
+        maxModelRequests: 80,
         maxActiveExecutionSeconds: 1800,
         toolTimeoutSeconds: 60,
         maxToolOutputBytes: 65536,
@@ -112,7 +112,7 @@
     parseQuantity(raw, getFieldType(key));
 
   const draftFromBudget = (budget: BudgetSettings): BudgetDraft => ({
-    maxRunSteps: toCompactQuantityString(budget.maxRunSteps, getFieldType('maxRunSteps')),
+    maxModelRequests: toCompactQuantityString(budget.maxModelRequests, getFieldType('maxModelRequests')),
     maxActiveExecutionSeconds: toCompactQuantityString(
       budget.maxActiveExecutionSeconds,
       getFieldType('maxActiveExecutionSeconds'),
@@ -205,9 +205,9 @@
 
   const fieldGroups = computed<FieldGroup[]>(() => [
     {
-      id: 'tokens_steps',
-      title: t('agent.settings.budget.groups.steps'),
-      keys: ['maxRunSteps'],
+      id: 'model_requests',
+      title: t('agent.settings.budget.groups.modelRequests'),
+      keys: ['maxModelRequests'],
     },
     {
       id: 'time_control',
@@ -283,8 +283,8 @@
             >
               <span v-if="preset.id !== 'custom'">
                 {{
-                  $t('agent.settings.budget.presetSteps', {
-                    steps: preset.values.maxRunSteps,
+                  $t('agent.settings.budget.presetRequests', {
+                    requests: preset.values.maxModelRequests,
                     minutes: Math.round(preset.values.maxActiveExecutionSeconds / 60),
                   })
                 }}

@@ -43,7 +43,7 @@
 21. `doc/USAGE.md` 是实际软件需求与用户可见行为的唯一规范入口；Bug 修复和需求变更必须在同一提交同步维护对应内容，架构或 owner 变化同时更新 `doc/architecture/` 与适用的 `doc/AGENTS.md`，不得重建独立的软件需求登记体系。
 22. UI 统一样式需求优先修改公共组件及其 foundation 样式 owner，使所有使用处同步生效；通用结构应组件化，不以全局覆盖、深层选择器或使用处补丁替代组件能力。仅在项目所有者明确允许时，才可对某个使用公共组件的 UI 添加局部样式补丁；业务布局仍由业务 owner 持有。
 23. UI 生产代码不得新增或保留测试专用标记、属性、接口或 hook（包括 `data-testid` 和 TestId props）。删除前须核对消费者，确认没有产品逻辑或其他非 E2E 消费者；有真实行为用途的状态、语义、ARIA 和 `data-ui` 属性不得作为测试残骸删除。保留 E2E 与 Agent 场景测试，本次 UI 清理不修复 E2E 问题。
-24. Workspace 保持独立、简单的项目与运行环境管理模块；保留 Node/Python/Go 支持版本 JSON 供用户选择，不限制具体上游构建来源，不维护预设安装树摘要或选择指纹；保留基本安装与版本检查、上游完整性校验和生命周期管理。
+24. 普通终端 Workspace 是 SSH 会话和项目目录的独立能力，不能因为删除 Agent Workspace Runner 而移除；它不包含已退役的 Agent Toolchain、Recipe 或 Runner 环境管理。
 25. 仓库开发规则与 Agent 架构统一维护在 `doc/AGENTS.md`；合并内容并按职责精简分章，不再保留根目录 `AGENTS.md`。
 26. OpenCode V2 项目规则文件使用大写复数文件名 `AGENTS.md`；本仓库规则位于 `doc/`，开发前须读取该目录规则，不假定它在仓库根目录会话启动时自动加载。
 
@@ -51,7 +51,7 @@
 
 ### 文档维护分工
 
-项目文档统一放在 `doc/`，根 README 只保留项目简介与导航，不另建需求、review 或进度文件。
+项目文档统一放在 `doc/`，根 README 只保留项目简介与导航，不另建需求、review 或通用进度文件。已完成的 Agent Workspace 移除不再保留临时计划或进度文件；当前产品边界以本文件及 `USAGE.md` 为准，测试入口与验收证据见 `testing/E2E.md`。
 
 | 文档                  | 唯一维护内容                             | 同步时机                       |
 | --------------------- | ---------------------------------------- | ------------------------------ |
@@ -69,18 +69,17 @@
 - 修改前查看 `git status`、源码、公开 contract、测试与文档，确认真实 owner 和调用链；未知改动视为潜在用户工作，不覆盖或删除。
 - 修复产生问题的 owner/边界，不放宽断言、复制状态或增加兼容分支掩盖问题。相邻独立缺陷先记录证据，不扩大当前任务。
 - 删除或替换能力时核对代码、导出、package script、workflow、文档和测试消费者，同步清理失效引用。
-- `doc/` 只描述当前需求、架构、使用和部署事实，不保留阶段 review、迁移完成报告、废弃方案或平行 Agent 架构文档。行为变化更新 USAGE，owner/contract 变化更新对应架构。
+- 除上述项目所有者明确指定的临时实施过程记录外，`doc/` 只描述当前需求、架构、使用和部署事实，不保留阶段 review、迁移完成报告、废弃方案或平行 Agent 架构文档。行为变化更新 USAGE，owner/contract 变化更新对应架构。
 
 ### 2.2 分层与依赖
 
-- `packages/protocol` 唯一持有 HTTP、WebSocket 与 Runner wire DTO；adapter 直接使用规范名称，不重复声明或创建兼容别名。
-- Runner wire 类型直接从 `@nexus-terminal/protocol/runner` 导入，HTTP/WebSocket 协议版本从 `@nexus-terminal/protocol/runner-version.json` 读取；本地 durable record 与授权 port 不成为 wire 类型的重复 owner。
+- `packages/protocol` 唯一持有现行 HTTP、WebSocket 公共 DTO；Agent Runner wire 已删除，adapter 不复制协议类型或恢复旧导出。
 - Backend 按 `shared -> platform -> modules -> interfaces/infrastructure -> bootstrap` 分工：Module 持有用例与 port，Infrastructure 实现 adapter，Interface 仅转换协议，Bootstrap 组装。Interface 不访问数据库或持有产品事务；业务模块不读 `process.env` 或依赖具体 Infrastructure。
 - Frontend 分为 `app/features/runtimes/foundation/shared`；跨模块通过 `public.ts` 或 foundation `index.ts`，不深层导入私有实现。共享能力提升到已有公共 owner。
 - Workspace 路由页面的跨 Feature 组合位于 `app/pages/workspace`，只通过 Feature 与 Runtime 的公开入口消费能力；Runtime 保留会话、布局、组件与 transport owner，不反向加载 App 页面。
 - Workspace transport 由 adapter/session owner 管理；View/composable 不持有 HTTP、WebSocket、frame、重连、心跳或 backpressure。Agent 与 Workspace Runtime 通过公开 contract/capability 协作，不读对方私有状态。
 - 根 pnpm workspace、lockfile、catalog 是唯一依赖 authority。
-- Agent Bootstrap 独立子图通过 `compose-providers`、`compose-ssh-capabilities`、Plugin／Workspace 工厂构造；跨子图 wiring 与 initialize/quiesce/dispose 仍由 `compose-agent` 持有，工厂不得自启动或创建第二生命周期 owner。
+- Agent Bootstrap 独立子图通过 Provider、SSH capability、Plugin 和 Browser 等现行工厂构造；跨子图 wiring 与 initialize/quiesce/dispose 仍由 `compose-agent` 持有，不再装配 Agent Workspace Runtime。
 
 ### 2.3 状态、并发与资源
 
@@ -113,7 +112,7 @@
 - 本地通过仅是送验前证据；最终验收以对应推送 SHA 的 canonical Actions 为准，必须通过 check/format/build、全部 Playwright 分片与三项 Docker smoke。全绿只证明实际断言范围，须明确未覆盖行为和环境限制，不将简单覆盖计为根因确认或完整验收。
 - 低风险可逆文本/样式改动不增加测试；并发、持久化、权限、协议与恢复修复保留行为证据。类型、ESLint、格式或构建能发现的问题不编镜像测试。
 - 本地运行受影响检查/构建/E2E；提交前运行 `pnpm run check`、`pnpm run format:all:check`、`git diff --check`。不加 sleep、扩大 timeout 或允许 flaky 掩盖问题。
-- 根 `build` 串行构建 Backend／Frontend／Agent Runner；根 `check` 串行执行现有 ESLint 及三个生产包类型检查。完整 build 后不重复构建 Runner，独立包／镜像作业可使用包级构建入口；构建覆盖不改变 Runner 可选部署契约。
+- 根 `build` 串行构建 Backend／Frontend；根 `check` 执行现有 ESLint 与两个生产包类型检查。生产 Agent Runner package 和镜像已删除；独立 Playwright E2E Runner 只作为测试容器，不进入产品构建。
 - 提交描述单一完成事项；推送后检查对应 workflow 的日志/artifact。合并或发布前确认工作区、未跟踪文件、失效引用、未完成标记、版本一致与远程 E2E/Docker smoke，无被忽略的失败。
 
 ## 3. Agent 定位与源码职责
@@ -144,7 +143,7 @@ Backend Agent 的 Module 根为 `packages/backend/src/modules/agent/`：
 
 具体 adapter 位于 `infrastructure/agent/`；HTTP 边界位于 `interfaces/http/agent/`，事件边界为 `interfaces/websocket/agent-protocol.session.ts`，组装位于 `bootstrap/agent/`。
 
-Frontend owner 为 `packages/frontend/src/features/agent/` 下的 `host/ai/runtime/files/settings/api/i18n`；Host 管窗口，API 管 transport。Runner package 是 `packages/agent-runner` / `@nexus-terminal/agent-runner`，不重新命名为 `agent-runtime`。
+Frontend owner 为 `packages/frontend/src/features/agent/` 下的 `host/ai/runtime/files/settings/api/i18n`；Host 管窗口，API 管 transport。旧生产 Runner package 已删除，普通终端 Workspace Runtime 位于 `packages/frontend/src/runtimes/workspace/`，不属于 Agent Runner。
 
 Agent App 的应用控制逻辑由实例级 `host/useAgentAppController` 持有，Surface 消费其状态和动作并负责展示／尺寸观察；异步订阅、缓存和 facade 清理由 controller 负责，不在模板组件复制 controller 状态。
 
@@ -161,9 +160,9 @@ Agent App 的应用控制逻辑由实例级 `host/useAgentAppController` 持有�
 
 ### 4.2 Next Run 与 Active Run
 
-Model、Environment、Targets 在无活动 Run 时是下一次选择；已有 Run 时只展示冻结的 `RunDefinition`。Frontend 保存 recipe 或 `No Workspace` 选择，创建 Run 携带 observed Catalog revision，Backend 校验 settings/Catalog 并解析完整 environment snapshot。
+Agent Composer 只选择当前 AgentDefinition、模型与显式授权的 SSH connectionIds；RunDefinition 不再包含 Environment/Recipe/Workspace snapshot，Frontend/Backend 也不暴露 Catalog 选择或历史 Workspace 解码。
 
-Run 冻结 Provider/model configuration、capability/reasoning、SSH `connectionIds`、policy/settings revision、可选 context boundary，以及 Recipe、Toolchain、Runner Plugin、ACP、Browser、retention。Run-aware `workspace_create` 只消费此 snapshot，不接受模型临时 recipe/toolchain；`No Workspace` 拒绝创建。独立管理 API 使用自己的管理 contract。
+Run 当前仍冻结 Provider/model configuration、capability/reasoning、SSH `connectionIds`、policy/settings revision、可选 context boundary，以及尚未退出的 Recipe、Toolchain、ACP、Browser、retention 配置；这些剩余 Environment 字段将在 SSH-only Run contract 阶段删除。Agent 模型已不再暴露 `workspace_create`、`workspace_control`、`workspace_toolchain_switch`，不能靠旧工具创建或修改 Workspace；现有用户管理 API 仍由独立 owner 持有，后续与其他 Workspace 接口一并退出。
 
 ## 5. 执行状态与持久一致性
 
@@ -206,10 +205,11 @@ Run 冻结 Provider/model configuration、capability/reasoning、SSH `connection
 
 - Child Context 只维护自身完整工具批次与已消费 mailbox，不继承 Root 私有对话／Recall。容量充足不按固定最近条数丢历史；压力时按完整单位分批语义合并并保留近期原始交互。独立摘要步骤复用冻结 delegation 模型、limiter、取消、deadline 与 Run／delegation 预算；StateCommit 原子提交派生 checkpoint、attempt 和 usage，来源 hash／owner epoch 防过期覆盖。摘要不发布回复、不消费新 inbox、不改变授权，失败不退化为静默丢历史；Child 瞬态模型错误复用 Root 有界 retry policy，经 durable work 退避，每次 usage 结算，不重放 Tool、不新增 fallback route 或 Root Recall。
 
-- 稳定 instructions 按 Nexus safety → Repo instructions → signed Skill metadata 排序，再放 append-oriented Ledger/tool chronology、用户输入，Goal/Plan/Collaboration/Recall 易变快照置尾。控制面 run/attempt/epoch/credential/routing ID 不进入模型正文。
+- 稳定 instructions 按 Nexus safety → Repo instructions → signed Skill metadata 排序，再放 append-oriented Ledger/tool chronology、用户输入，Goal/Plan/Collaboration/Recall 易变快照置尾；每轮附加最新持久进度／资源投影，Child 不继承 Root 私有目标／计划。控制面 run/attempt/epoch/credential/routing ID 不进入模型正文。
 - Tool schema canonicalize/稳定排序；预算耗尽用 `toolMode=none` 禁新 Tool，不删除 schema。generation compaction 不每轮改写旧 history，保留最新完整 causal exchange；Tool 可见结果按 pressure 收紧到冻结 floor，原 evidence 完整持久化。
-- Normal input boundary/soft pressure 为物理容量的 92%/80%，Extended 为 96%/88%。模型物理容量只在 definition/route capability snapshot；RunBudget 保存 step/time/tool/recall/subagent 与冻结 context policy，受用户/App 默认和 hard limit 约束。预算不足进入 `awaiting_budget`，versioned 增额不能超 hard limit。
-- Context checkpoint 是 derived state，不能吞掉未消费输入、授权、审批或 reconciliation。Ledger 和控制 owner 仍 authoritative。Context 只规划和投影摘要，Root execution 使用冻结模型、limiter、取消与同一 Run 预算执行独立 compaction attempt；StateCommit 同事务提交 checkpoint 和 usage，不写普通助手 Ledger、不消费输入。结构化摘要按顺序分批合并旧摘要与新增历史，保留近期完整 causal groups，不使用首尾抽样或关键词过滤；来源、输入／Goal revision、预算、完整结束和实际缩小校验失败时不覆盖旧摘要，不退化为静默 drop-only。摘要作为低权威历史数据，不成为 system 指令，不承诺完整语义保真。
+- Root execute surface 对低频原生 Tool 和 MCP Tool 复用同一 progressive-disclosure：`modelExposure=deferred` 的 Tool 不常驻模型 schema，由 `tool_search` 返回版本绑定 handle，再由 `tool_invoke` 解析回 authoritative descriptor 后继续既有 capability／policy／approval 链；猜测隐藏 Tool 名直接调用须拒绝。Root plan 为避免削弱正常调查能力，仍直接提供可用的原生 read/control Tool，但不通过 discovery 暴露 mutation；Child 保持已授权原生 Tool 直出、MCP 按需发现，发现不授予 delegation 权限。
+- Normal input boundary/soft pressure 为物理容量的 92%/80%，Extended 为 96%/88%。模型物理容量只在 definition/route capability snapshot；RunBudget 保存初始／当前模型请求额度、冻结自动扩展 ceiling、独立工具上限、time/recall/subagent 与 context policy。StateCommit 在 admission 同事务计请求／工具；有新执行证据时自动扩展，无进展／触顶进入 finishing 和 interrupted 部分结果。`awaiting_budget` 仅用于协作 mailbox 增额，执行上限不可手动绕过；checkpoint continuation 继承累计消耗。
+- Context checkpoint 是 derived state，不能吞掉未消费输入、授权、审批或 reconciliation。Ledger 和控制 owner 仍 authoritative。Context 只规划和投影摘要，Root execution 使用冻结模型、limiter、取消与同一 Run 预算执行独立 compaction attempt；StateCommit 同事务提交 checkpoint 和 usage，不写普通助手 Ledger、不消费输入。结构化摘要按顺序分批合并旧摘要与新增历史，保留近期完整 causal groups，不使用首尾抽样或关键词过滤；来源、输入／Goal revision、预算和完整结束校验失败时不覆盖旧摘要。摘要没有实际缩小，或既有 checkpoint 与必须保留的最新完整 causal group 不能同时落入摘要预留时，Root 可改用完整原始 Ledger 重新 compose，但仅在完整历史仍落入硬 context budget 时继续；否则明确失败，不允许 drop-only 降级。摘要作为低权威历史数据，不成为 system 指令，不承诺完整语义保真。
 - 不透传 raw prompt cache key 或 Codex thread/turn identity。仅官方 `https://api.openai.com/v1` 且 frozen capability 允许时，将 provider-neutral hint、配置与稳定 lineage 有界 hash 为 `promptCacheKey`；第三方不默认发送，不启用 explicit breakpoint。
 - 项目规则识别 `AGENTS.md` / `AGENT.md`，大小写不限（不同于本仓库规则入口）。Runner 按最近 `.git` directory/worktree file 定 Workspace project root，无 repo 用 work root；只加载 root→target scope。SSH 由 conversation-scoped project directory binding 明确根目录，经 file.read 授权和配置 hash 验证读取根→已探索子目录；Root/Subagent 使用统一 source，子 Agent 不越过 delegation grants。path/scope/hash/bytes provenance 是 transient Context source，不进入 Memory/Ledger/checkpoint，不获得审批或安全权威；源变化通过 stablePrefixHash 自然失效。
 
@@ -223,14 +223,15 @@ Mutation 链：`inspect -> capability/grant -> policy -> approval -> lease/fence
 | ---------- | ----------------------------------------------------------- |
 | 文件       | `file.read/write/delete`                                    |
 | 命令与主机 | `shell.execute`、`machine.inspect`、`machine.docker.manage` |
-| Workspace  | `workspace.manage`                                          |
 | Browser    | `browser.read/interact`                                     |
 | 外部集成   | `integration.mcp.read/invoke`、`integration.acp.invoke`     |
 | 数据交换   | `artifacts.read`、`app.intents.exchange`                    |
 
+`workspace.manage` 已从 Capability 注册表、Protocol 和 App grant UI 物理移除；新签名 Plugin manifest 不允许声明该能力，也不恢复旧 Workspace grant。File/Shell mutation 只经显式授权的 SSH target。保留普通终端 Workspace 的独立功能。
+
 Tool descriptor 唯一声明 capability。模型调用、Run/Skill/Plan/输入/内部协作、当前 App Storage 与生成 Artifact 是 enabled App 的核心行为，不增加 `ai.model.use/runs.execute` 总闸门。
 
-Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 用 typed targets（Workspace/SSH 的 all 或 ids）。`CapabilityRegistry` 唯一持有 identity/scope/parser/intersection/authorization；旧 scope 只通过一次性 migration 转换。UI 从服务端完整 grants 初始化，definition 来自 Host，本地只持有 label/icon；编辑三态 draft，保存 CAS 后才更新已保存状态。
+Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 的 typed targets **仅为 SSH**（all 或指定 connection ids）。`CapabilityRegistry` 唯一持有 identity/scope/parser/intersection/authorization；旧含 Workspace 的授权范围在当前解析边界直接拒绝，不自动改为 SSH，也不接纳 Workspace+SSH 双轨 grant。HTTP/Protocol/UI 的 Agent grant 输入与 Host definition 只描述 SSH；原已发布的历史数据库迁移 SQL 不随之改写。UI 从服务端完整 grants 初始化，保存 CAS 后才更新已保存状态。`AgentTargetResolver` 已整体删除；File/Shell/ACP 直接依赖 `SshTargetResolverPort`，SSH selector 解析与持久 inspection 绑定由 `ssh-target-binding.ts` 的纯函数统一处理；Browser 已使用独立 target binding，旧 Agent Workspace 用户 API 已完全退出。
 
 ### 7.2 执行职责与结果
 
@@ -238,35 +239,26 @@ Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 用 typed
 - `plan` 禁写覆盖 Root／Child model surface、actual inspection 与 Child durable mutation begin；governed profile、grants 和 full_access 不覆盖 executionMode，禁止仅依赖提示词或事后 completion evidence。
 - Root 分派由 `RootToolExecutionCoordinator`，read/control wave 与 read lease 由 `RootReadToolExecutor`，Root hooks/信号由 `RootMutationExecutionAdapter`。Subagent 的 Tool、Model、completion/mailbox/fail-fast 分别由 `SubagentToolStepExecutor/ModelStepExecutor/CompletionCoordinator`；Participant 仅 dispatch/inbox/join，不回吸职责或新建 authority。
 - Multi-tool proposal 先 bounded inspection + durable lineage，拒绝单项也持久化；只有 read、parallelSafe、resourceKeys 不冲突可小批并行，control 顺序执行，mutation 不削弱单 Tool 安全链。
-- execution identity 为 Run + Runtime + canonical target + revision + ToolCall/Job；Workspace 冻结 generation，SSH 冻结 configurationHash。execute 不重绑定“当前终端/SSH”。
+- approval operation hash 只绑定审批内容，不按参数跨 ToolCall 去重；Runner Job identity 由 durable Run + Runtime + ToolCall + frozen target 派生，同调用重放复用 Job，不同调用不返回旧结果。循环检测和预算独立限制重复行为。execution identity 为 Run + Runtime + canonical target + revision + ToolCall/Job；Workspace 冻结 generation，SSH 冻结 configurationHash。execute 不重绑定“当前终端/SSH”。
 - Completion Gate/checkpoint 只消费 durable `ToolResult.semantic`，不按 Tool 名猜成功；terminal zero-exit 才 verified，后台 accepted/running 仍 unverified，unknown/failed/cancelled 不计成功。遗留 split-shell 只由 migration 转换，不保留运行时 shim。
 
 ## 8. Workspace 与 Runner
 
-### 8.1 环境与生命周期
+### 8.1 Agent SSH-only 执行与独立能力
 
-- Runner 可选：未配置/未启动/不可达不阻止核心 Backend、连接管理、SSH 能力启动；availability 明确 unavailable。Compose 显式 profile 启用，无固定宿主 URL 硬依赖。
-- Backend→Runner HTTP/WebSocket 统一 Bearer `NEXUS_AGENT_RUNNER_TOKEN`（至少 32 字符）与 `X-Nexus-Agent-Protocol: 2026-09-13`；token 是实例完整控制权，不暴露给浏览器、日志或 Plugin。
-- provision 发送完整 profile；start/stop/restart/delete 仅 `workspaceId + generation`；job 发送 generation/参数。Backend 自己持有 user/App/Run/Runtime 授权、version、operation hash 和 reconcile，不镜像给 Runner。
-- Runner Server 只持有 transport/route 边界；实例级 `RunnerCommandExecutor` 编排 command/job 与 Workspace 生命周期、工具链互斥及 Journal transition，复用现有 runtime 和 Journal，不在 Server 复制执行流程或持久状态。
-- 单用户 native Runtime 组织项目而非 OS sandbox；generation 冻结环境，Workspace 文件独立持久。Host 子进程共享宿主上下文，Docker 子进程共享 Runner 容器，不用 Docker socket/dockerd/nested Docker/privileged/SYS_ADMIN/unconfined。
-- Node/Python/Go 支持版本/架构保留在 `scripts/docker/agent-runner/catalog/catalog.json`；mise 按版本安装并做上游与实际版本检查，ref 仅 family/version，缓存按架构，不固定来源/安装树摘要/选择指纹。已安装不自动替换，使用中不可卸载。
-- 全局共享不可变 Tool Pack，generation PATH 选版本；deps/build 按环境 profile 分区。版本切换仅重建目标 generation，终止其旧 process/session，项目文件与其他 Workspace 不受影响，不修改 `/usr/bin`。
-- job/ACP/Plugin 原生 process group 随 owner 整组回收，Terminal 用真实 PTY foreground group。启用 Runner Plugin 等于允许以 Runner OS 权限运行；逻辑工作目录不是跨 Plugin ACL 或安全沙箱，不暴露伪 cgroup/network/quota 字段。
-- cleanup：preview 冻结 workspaceIds → confirm → Runner recheck → deleted[] → Backend projection sync；不扩大范围，跳过 retained/active/job/session。journal 损坏保留原件与 evidence 并 fail closed，不能当空 journal 启动。
-- Workspace 显式 delete 成功释放 retention；历史 deleted+retained 允许进入显式 cleanup，stop 不释放保留。persistent project root 由 cleanup owner 删除，不把 generation 删除当作全文件树已回收。
+- 生产 Agent Workspace Runner 已物理退出：Backend 不连接 Runner HTTP/WS，不提供 Workspace CRUD、Terminal、Toolchain、Recipe/Environment 选择或旧错误兼容。Agent File/Shell/ACP 只能使用明确授权的 SSH 连接；Browser 使用 Backend CDP。
+- SQLite 新 schema 不创建 Agent Workspace/commands 表；增量迁移 #58 **无历史兼容**，直接 DROP 这两表并删除 Agent Settings 中的 Workspace 字段。不得重新加入旧 Workspace 状态判断、历史 Run/Thread 兼容 guard 或迁移前置回退。普通 SSH Jobs/Project Directories、Artifact/Memory、普通终端 Workspace 仍有独立 owner，必须保留。
+- 生产 `packages/agent-runner`、宿主准备脚本、Tool Pack Catalog、Runner 镜像、Compose Runner profile、GHCR Runner 发布入口、根 Runner build/check 均已删除。**不要把 `tests/e2e/Dockerfile.runner` 当成生产 Runner 删除**：它是独立的 Playwright 测试容器；当前 Agent/SSH E2E 与无 Runner Docker smoke 已替换旧业务测试。
+- 本次破坏式迁移不兼容旧 Workspace 表、旧 Settings 字段与旧备份 schema；不会自动删除用户独立备份文件或普通 SSH 目录。保留新版本 Backup、SSH、Browser、ACP、Plugin Frontend/Backend、Artifact、Memory 正式 contract。
 
 ### 8.2 文件、执行与传输边界
 
-- `FileCapabilityService` 只消费 WorkspaceFileTargetPort + SshFileTargetPort，`ShellCapabilityService` 消费对应 Shell ports；`AgentTargetResolver` 消费 SshTargetResolverPort。Workspace adapter 重检 Run/Runtime/generation，SSH adapter 冻结所选连接与 denylist/configuration。Machine port 只持有 connection/diagnostics/Docker，不建万能 facade。
-- canonical `file_read/list/search/write/patch/move/delete` 显式 target/id。Runner `workspace-coding-files` 持有 `/workspace/work` 文件 authority，防 traversal/symlink，read/list/search 有 bytes/entries/results 上限；write 用 expected SHA-256/null-create，move/delete 冻结 metadata；patch 用严格 unified diff、精确 hunk、`fuzzFactor=0`，不 shell git apply。结果验证真实 SHA/metadata，不建第二 journal。
-- `workspace_repo_map` / `workspace_code_query` 为 Workspace-only read navigation，使用 file.read；索引按 generation + source/config hash 可重建，支持 TS/JS symbols/definition/references/diagnostics，不支持语言回退 file_search/read。编辑前真实文件 read 仍 authoritative。
-- `shell_execute` 显式 target/id/结构化 command：Workspace 为 argv、foreground/background/cwd，SSH 为 shell text、foreground/background，无 Workspace cwd。SSH 可选 sessionId 组合 `ssh_session_open/list/close`，后台任务必须指定长会话；会话按 user/App/Thread 隔离，每条命令使用独立 channel。两者共享授权与结果语义，不伪造相同 transport。
-- Runner durable Job Journal 持有 Workspace 后台任务；AgentSshSessions 与 agent_ssh_jobs 持有 SSH 后台任务。后台 accepted 不等于完成；`shell_job_control status/wait/cancel` 先 concrete target 授权，Workspace 按 Job generation/Run/Runtime 控制，SSH 按 user/App/Thread 与会话配置控制。SSH 断线或重启收敛 unknown，不重放。
-- Runner Journal 使用 SQLite 按记录 durable commit 后更新内存，不重写全历史；旧 JSON 不迁移、不自动清空，格式／损坏启动失败并保留证据，未知副作用仍需 reconcile。SQLite 属于 Runner 自身 owner，不与 Backend 数据库合并。
-- 同 generation 的 pending/running argv job 阻止第二 argv 和实际 file_patch，允许 read/search/patch inspection；无第二 lock/journal。cancel 等 journal confirmed cancelled，stop/restart/delete 中断该 generation；restart 将无法证明结果的遗留 running 标 unknown。无自动 model terminal wake，需结果时 server-side wait，不 busy-poll。
-- Repo instructions 窄 endpoint 仅 generation + 最多 8 个 target directory；Resolver 与文件 mutation owner 分离，Runner 不可用/live Workspace 消失时 Context fail-soft，不伪造 rules。
-- Nexus `NXW1`、upload socket、Agent `/ws/agent`、Plugin `NXR3`、Runner streaming、Browser tunnel、local terminal 独立 owner/protocol/version/requestId/handle，只共享 bounded/backpressure 原则。
+- `FileCapabilityService` 只消费 `SshFileTargetPort`，canonical 文件工具的 schema 仅允许 `target:'ssh'`，旧 Workspace 文件 adapter/port 已退出；`ShellCapabilityService` 已移除 Workspace 分支。File/Shell/ACP **直接注入** `SshTargetResolverPort`，通过 `resolveSshTarget` 拒绝非 SSH selector 与非规范正整数 connection ID；`bindSshInspectionTarget` 统一拒绝伪造的 kind/id/connectionId，执行仍核对冻结的连接身份和配置 hash。Browser binding 使用独立 authority，不存在通用目标解析 facade。Machine port 只持有 connection/diagnostics/Docker，不建万能 facade。
+- Governed Child mutation 两层权限判断均为 SSH-only：`SubagentToolStepExecutor` 执行层和 `beginSubagentMutationToolTransition` 持久事务层都使用同一 `governedSubagentSshMutation` contract（不使用旧 Workspace/generation 判断）。只接受五种 canonical File/Shell mutation Tool、当前 Run 显式 connectionIds、委派的能力与 SSH id scope、规范化目标参数及冻结 SSH SHA256 identity/config hash/resourceKeys。StateCommit **独立从持久 Run/Delegation 读回**后才允许消费审批／切 Tool running；非法 scope、过期/改写 inspection、旧 workspace target 都拒绝，不能自动改选目标；ToolCallRunner 还需在执行边界实测 SSH 连接是否仍有效，保留既有审批/lease/unknown 隔离。
+- canonical `file_read/list/search/write/patch/move/delete` 显式 `target:'ssh'` 和授权 id，SSH SFTP 拒绝非法路径、越权和过期连接配置；read/list/search 有 bytes/entries/results 上限；write 用 expected SHA-256/null-create，move/delete 冻结 metadata；patch 用严格 unified diff、精确 hunk、`fuzzFactor=0`，不 shell git apply。结果验证真实 SHA/metadata，不建第二 journal。
+- Agent `shell_execute`、`shell_job_control` 只接受显式 `target:'ssh'` 和授权连接 id，不提供 Workspace/Backend 本地命令入口。argv 的字面参数由 SSH 传输逐参数安全引用，shellScript 使用远端命令 Shell；可选 cwd，旧 text 参数不接受。拒绝说明执行未发生且不泄漏命令正文。前台和后台沿用独立执行/期限边界，后台必须有 `ssh_session_open` 取得的长会话；每条命令独立 channel，按 user/App/Thread 隔离。运行时 Job 操作重检冻结的连接配置，不能因配置变化或旧 Workspace target 静默重绑执行。
+- Agent Shell Job 仅由 `AgentSshSessions` 与 `agent_ssh_jobs` 持有，`shell_job_control status/wait/cancel/list` 按当前 SSH connection、user/App/Thread 和配置 hash 再核对，后台 accepted 不等于完成，断线和重启收敛 unknown 而不重放。
+- Nexus `NXW1`、upload socket、Agent `/ws/agent`、Plugin `NXR3`、Browser direct CDP、local terminal 独立 owner/protocol/version/requestId/handle，只共享 bounded/backpressure 原则。
 
 ## 9. Artifact、Memory 与集成
 
@@ -279,8 +271,8 @@ Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 用 typed
 
 ### 9.2 ACP、Browser、Terminal 与 MCP
 
-- ACP profile 冻结，外层 acp_execute 走同一治理；outer approval 不授权 inner action。`client.session.requestPermission` 使用同一 durable approval owner，绑定 active Tool/Runtime/revisions/operation hash，用户 allow_once/reject_once；不改 Run version、重调度或替换 lease。rawInput 只保留 bounded projection/hash，timeout/abort/restart fail closed，不伪造 completion。
-- Browser target 冻结，受控 gateway/tunnel 不暴露任意宿主 CDP。唯一 `BrowserSessionBindingAuthority` 持有 target/config hash/session scope、inspection/revalidation；gateway/service 持有真实 session/process。stale generation/target 先关闭后 fail closed，无关 settings revision 不误关；网页不可信，下载先落 Artifact。
+- ACP Host 已收敛为 SSH-only，生产 Runner 已删除：`acp_execute` 仅接显式授权的 SSH target、集成 argv/绝对 cwd 与冻结 SSH 配置，`AcpAdapter` 经唯一 SSH `openTransport` 打开独立 non-PTY channel。Runner 内 ACP ProcessRuntime、WebSocket upgrade、Profile 选择、Process start/stop 已删；Backend/Runner wire、Environment DTO、持久 schema、Settings 和 UI 均移除 profile 字段，迁移 #56 直接删除旧列和设置属性，不提供兼容入口。外层 ACP approval 不授权内层操作；`client.session.requestPermission` 使用同一 durable approval owner 绑定 active Tool/Runtime/revisions/operation hash，用户 allow_once/reject_once；不改 Run version、重调度或替换 lease。rawInput 只留 bounded projection/hash，timeout/abort/restart fail closed，不伪造 completion。普通终端 Workspace 由独立 Terminal Runtime 持有；Agent Runner Job 已退出，不能混淆。
+- Browser Session 仅使用明确配置的 `targetId`，Backend direct CDP 不再通过 Workspace Generation 或 Runner tunnel；Agent Browser endpoint 只接受 `via=backend`。`BrowserSessionBindingAuthority` 持有 target/config hash、Run/Runtime scope、inspection/revalidation；gateway 持有真实 session/process。目标修改或删除会关闭旧 Session 并 fail closed，无关 settings revision 不误关；网页不可信，导航及子请求仍受 URL allowlist 限制，下载先落 Artifact。
 - Workspace local Terminal 用 Runner direct PTY open/resize/write/detach/reattach/bounded replay，不复用 Remote SSH live session；系统 script(1) 分配 PTY，Backend 管 attach/replay，浏览器仅连受认证 WebSocket。
 - MCP 配置 enabled 不等于 ready。health 为可重建 `idle/refreshing/ready/error` projection；version/credential generation 的 refresh 经 schema-hash CAS 才发布 contribution，失败先撤销，再 bounded backoff；disable/delete/version 取消旧 retry，restart 从 durable config 重建。
 - MCP UI 提供 endpoint/credential、enable/delete/refresh 与 health，不让单个可选 MCP error 拖垮 App。MCP/Browser 网络边界要求 public HTTPS、精确 private allow、metadata/link-local hard deny、连接前后防 DNS rebinding/redirect；外部安全声明不覆盖本地 policy，不将此边界虚构给 Provider transport。
@@ -288,12 +280,12 @@ Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 用 typed
 ## 10. Plugin 平台
 
 - Package 校验 manifest/allowlist/SHA-256/Ed25519/traversal/symlink/device/archive bomb/size；stage 位于 `agent/plugins/.staging`，验证后入 `agent/plugins/<appId>/versions/<version>` immutable scope。每 App 一条 current installation，同 App upgrade/drain，不伪装并存版本。
-- Frozen Run／Workspace 的 Runner target 可比当前 installation 活得更久；带 Runner entry 的 installed package 不参与自动版本清理，未建立共享引用 lease 前不以 installation count 删除 Runner source。
+- 新签名 Plugin manifest 只允许 `frontend`、`backend` target；Runner target 和声明字段 `targets.runner` 直接拒绝，不提供旧包自动重写成 Backend target 的兼容路径。拆除其它 Runner/Workspace 内部依赖时同步移除原有 Runner package 保留例外。
 - Skill 唯一来源 `skills/<slug>/SKILL.md`，标准 frontmatter 的 name 对应 slug、description 非空；id 派生自 App/slug，version 来自 package，不用旧 Nexus 私有字段或独立 index/body。签名覆盖 package/version，files.json 固定每 Skill hash；Context 只发 metadata，skill_read 时复验并 bounded 读取正文。
 - Plugin Frontend 主站同源资源 + `sandbox=allow-scripts` opaque iframe，不授予 allow-same-origin；只走 `/sdk/frontend-v1.mjs` bounded MessagePort，不拿 cookie/CSRF/HTTP client/内部 service，不拆独立公开 Origin/端口。
-- Backend target 不在主 Backend eval/import，独立 Node child Permission Model 限制文件/写入/child/worker/native/WASI，但不冒充 OS/network sandbox。Runner target 在冻结 generation 下通过本地 SDK 执行。
+- Backend target 不在主 Backend eval/import，独立 Node child Permission Model 限制文件/写入/child/worker/native/WASI，但不冒充 OS/network sandbox。Frontend target 在隔离 App surface 中运行。
 - Host/Core 持有 Run、Broker、Policy/Approval/Lease、bridge、verifier/SDK 与 governed Tool；Plugin 无 Host-authority Tool 注入接口，外部 Tool 优先 MCP。扩展需明确 versioned SDK/IPC/risk/outcome contract，不借动态 target 获得 raw authority。
-- 第一方源码与签名发布归 `0honus0/nexus-agent-plugins`；`nexus.agent` 是可安装 App，含 agent.default 与 Operations/Developer 两个 Skill；`nexus.fullstack` 是 Frontend/Backend/Runner 组合 reference。主仓只持 protocol/installer/permission/host/runtime/自包含 fixture，不依赖外仓在线做普通 E2E。
+- 第一方源码与签名发布归 `0honus0/nexus-agent-plugins`；`nexus.agent` 是可安装 App，含 agent.default 与 Operations/Developer 两个 Skill；`nexus.fullstack` 的历史 Runner target 不在现行 Plugin manifest 支持范围内；任何外部官方 Plugin 必须按当前 Frontend/Backend-only manifest 与 SSH-only 能力清单重新打包签名，不提供旧包自动兼容。主仓只持 protocol/installer/permission/host/runtime/自包含 fixture，不依赖外仓在线做普通 E2E。
 - 官方 catalog 可镜像，publisher pin 不由普通生产变量替换；签名前核对同一 identity。官方 stage 使用 pinned source，额外 repo 显式 trust；仅 test/E2E 可注入 publisher。catalog/manifest 双重检查 SDK major/Nexus min/maxVersion，已安装重新启用优先本地，不重置 grant。
 - `PluginInstallService` 薄 facade，PackageInstallCoordinator 管 trust/stage/verify/transaction/drain/CAS/rollback，RuntimeLifecycleCoordinator 管注册/reconcile/target/runtime，DataManager 管 retained storage/intents/snapshot。复用原 repository/authority，保持 stage reconcile 先于 installed reconcile 及 drain/migration/rollback/cleanup 顺序。
 
@@ -308,8 +300,8 @@ Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 用 typed
 
 ### 11.2 行为证据与交付
 
-- canonical E2E 使用最新 Node.js Current；主服务、Runner 服务与第一方 Plugin 构建/CI 跟随 Current，不声明 Node 24 最低版本；Workspace 可选工具包保留独立版本。基础 check/format/build 串行，七个 Playwright 项目按耗时分片（默认 8，手动 6–10），构建统一/Runner 镜像后运行 standalone、core-without-Runner、full deployment smoke。依赖更新触发同一 workflow。
+- canonical E2E 使用 Node.js Current；生产 Backend/Frontend 与第一方 Plugin 构建/CI 跟随 Current。基础 check/format/build 串行，七个 Playwright 项目按耗时分片（默认 8，手动 6–10）；统一生产 Docker 镜像经过 `docker-core-no-runner-smoke.sh` 验证，独立 Playwright Runner 镜像只用于 E2E 执行。
 - 等待真实业务终态，不把按钮、socket 关闭、HTTP 返回视为完成；挂起恢复看 ownership，终端快照先真实 shell 往返。自动清理持续验证剩余记录终态或空态，“取消中”不是完成。
 - UI E2E 用可访问 role/name/label 与真实状态，不恢复生产测试标记；几何/滚动验证不锁定实现文本。
 - 挂起日志物理压缩缓冲不扩大公开历史：read/offset/export 仍限最近 100MiB；分批压缩是摊销优化，不宣称 append 严格 O(1) 或任意输出率不积压，状态仍由 Workspace/Backend owner 持有。
-- Provider/Runner/Plugin/mutation/approval/lease/reconcile/JSON fail closed；签名、scope、版本切换、drain、恢复通过真实产品、Agent 场景与 smoke 验证，日志保持 bounded/redacted。
+- Provider/Plugin/mutation/approval/lease/reconcile/JSON fail closed；签名、scope、drain、恢复通过真实产品、Agent 场景与 smoke 验证，日志保持 bounded/redacted。

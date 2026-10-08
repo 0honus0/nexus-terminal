@@ -1,4 +1,4 @@
-import type { AgentRunEnvironmentSnapshot, JsonValue } from '../../../modules/agent/agent.types';
+import type { JsonValue } from '../../../modules/agent/agent.types';
 import type {
   AgentModelCapability,
   ModelCapabilitySnapshot,
@@ -100,7 +100,14 @@ export const parseRunBudget = (raw: string): RunBudget => {
   const record = durableRecord(parseDurableJson(raw));
   assertDurableKeys(record, [
     'contextPolicy',
-    'maxRunSteps',
+    'maxModelRequests',
+    'modelRequestCeiling',
+    'activeExecutionCeilingSeconds',
+    'maxToolExecutions',
+    'phase',
+    'stopReason',
+    'extensionCount',
+    'progressSequence',
     'maxActiveExecutionSeconds',
     'toolTimeoutSeconds',
     'maxToolOutputBytes',
@@ -111,6 +118,13 @@ export const parseRunBudget = (raw: string): RunBudget => {
     'contextCompactionMode',
     'revision',
   ]);
+  if (
+    !['executing', 'finishing'].includes(String(record.phase)) ||
+    ![null, 'model_request_limit', 'active_time_limit', 'tool_execution_limit', 'no_progress'].some(
+      (value) => value === record.stopReason,
+    )
+  )
+    throw new Error('AGENT_DURABLE_STATE_INVALID');
   const compactionMode = record.contextCompactionMode;
   if (!['aggressive', 'balanced', 'conservative'].includes(String(compactionMode))) return invalid();
   const contextPolicy = durableRecord(record.contextPolicy);
@@ -132,7 +146,14 @@ export const parseRunBudget = (raw: string): RunBudget => {
       softPressurePercent,
       toolOutputFloorPercent,
     },
-    maxRunSteps: durableInteger(record.maxRunSteps, 1),
+    maxModelRequests: durableInteger(record.maxModelRequests, 1),
+    modelRequestCeiling: durableInteger(record.modelRequestCeiling, 1),
+    activeExecutionCeilingSeconds: durableInteger(record.activeExecutionCeilingSeconds, 1),
+    maxToolExecutions: durableInteger(record.maxToolExecutions, 1),
+    phase: record.phase as RunBudget['phase'],
+    stopReason: record.stopReason as RunBudget['stopReason'],
+    extensionCount: durableInteger(record.extensionCount),
+    progressSequence: durableInteger(record.progressSequence),
     maxActiveExecutionSeconds: durableInteger(record.maxActiveExecutionSeconds, 1),
     toolTimeoutSeconds: durableInteger(record.toolTimeoutSeconds, 1),
     maxToolOutputBytes: durableInteger(record.maxToolOutputBytes, 1),
@@ -156,13 +177,24 @@ const decodeRunContextModel = (value: unknown): ModelRef => {
 
 export const parseRunUsage = (raw: string): RunUsage => {
   const record = durableRecord(parseDurableJson(raw));
+  assertDurableKeys(record, [
+    'inputTokens',
+    'outputTokens',
+    'cachedInputTokens',
+    'modelRequests',
+    'toolExecutions',
+    'subagentMessages',
+    'subagentMessageBytes',
+    'context',
+  ]);
   const context = record.context === undefined ? null : durableRecord(record.context);
   if (context && !['estimated', 'anchored_estimate', 'provider'].includes(String(context.source))) return invalid();
   return {
     inputTokens: durableInteger(record.inputTokens),
     outputTokens: durableInteger(record.outputTokens),
     cachedInputTokens: durableInteger(record.cachedInputTokens),
-    steps: durableInteger(record.steps),
+    modelRequests: durableInteger(record.modelRequests),
+    toolExecutions: durableInteger(record.toolExecutions),
     subagentMessages: durableInteger(record.subagentMessages),
     subagentMessageBytes: durableInteger(record.subagentMessageBytes),
     ...(context === null
@@ -183,74 +215,6 @@ export const parseRunUsage = (raw: string): RunUsage => {
             updatedAt: durableInteger(context.updatedAt),
           },
         }),
-  };
-};
-
-export const decodeRunEnvironment = (value: unknown): AgentRunEnvironmentSnapshot => {
-  const record = durableRecord(value);
-  if (!['shell', 'code', 'data', 'browser'].includes(String(record.kind))) return invalid();
-  if (!Array.isArray(record.toolchain) || record.toolchain.length > 32) return invalid();
-  if (!Array.isArray(record.runnerPlugins) || record.runnerPlugins.length > 128) return invalid();
-  if (!Array.isArray(record.acpProfiles) || record.acpProfiles.length > 64) return invalid();
-  return {
-    kind: record.kind as AgentRunEnvironmentSnapshot['kind'],
-    recipeId: durableString(record.recipeId) as string,
-    recipeRevision: durableString(record.recipeRevision) as string,
-    runtimeDigest: durableString(record.runtimeDigest) as string,
-    catalogRevision: durableString(record.catalogRevision) as string,
-    toolchain: record.toolchain.map((item) => {
-      const row = durableRecord(item);
-      return {
-        familyId: durableString(row.familyId) as string,
-        versionId: durableString(row.versionId) as string,
-      };
-    }),
-    runnerPlugins: record.runnerPlugins.map((item) => {
-      const row = durableRecord(item);
-      if (row.protocolVersion !== 3) return invalid();
-      return {
-        pluginId: durableString(row.pluginId) as string,
-        version: durableString(row.version) as string,
-        sdkVersion: durableString(row.sdkVersion) as string,
-        protocolVersion: 3,
-        packageHash: durableString(row.packageHash) as string,
-        entry: durableString(row.entry) as string,
-      };
-    }),
-    acpProfiles: record.acpProfiles.map((item) => {
-      const row = durableRecord(item);
-      return {
-        id: durableString(row.id) as string,
-        profileRevision: durableInteger(row.profileRevision, 1),
-        argv: decodeDurableStringArray(row.argv, 128),
-        cwd: durableString(row.cwd) as string,
-      };
-    }),
-    browserTarget:
-      record.browserTarget === null
-        ? null
-        : (() => {
-            const target = durableRecord(record.browserTarget);
-            if (!Array.isArray(target.endpoints) || target.endpoints.length > 32) return invalid();
-            return {
-              id: durableString(target.id) as string,
-              profileRevision: durableInteger(target.profileRevision, 1),
-              endpoints: target.endpoints.map((item) => {
-                const endpoint = durableRecord(item);
-                if (!['docker-network', 'external-network'].includes(String(endpoint.scope))) return invalid();
-                if (!['backend', 'runner'].includes(String(endpoint.via))) return invalid();
-                return {
-                  scope: endpoint.scope as 'docker-network' | 'external-network',
-                  via: endpoint.via as 'backend' | 'runner',
-                  url: durableString(endpoint.url) as string,
-                  priority: durableInteger(endpoint.priority),
-                  allowPlaintext: durableBoolean(endpoint.allowPlaintext),
-                  verifyTls: durableBoolean(endpoint.verifyTls),
-                };
-              }),
-              allowedUrlPatterns: decodeDurableStringArray(target.allowedUrlPatterns, 256),
-            };
-          })(),
   };
 };
 
@@ -326,7 +290,6 @@ export const parseRunDefinition = (raw: string): RunDefinitionSnapshot => {
     'approvalMode',
     'executionMode',
     'connectionIds',
-    'environment',
     'policyRevision',
     'settingsRevision',
     'contextBoundary',
@@ -385,7 +348,6 @@ export const parseRunDefinition = (raw: string): RunDefinitionSnapshot => {
     approvalMode: record.approvalMode as 'ask' | 'full_access',
     executionMode: record.executionMode as 'execute' | 'plan',
     connectionIds: decodeDurableIntegerArray(record.connectionIds, 1024, 1),
-    environment: record.environment === null ? null : decodeRunEnvironment(record.environment),
     policyRevision: durableInteger(record.policyRevision, 1),
     settingsRevision: durableInteger(record.settingsRevision, 1),
     ...(contextBoundary === undefined ? {} : { contextBoundary }),
@@ -401,6 +363,7 @@ export const parseToolInspection = (raw: string): ToolInspection => {
     'target',
     'resourceKeys',
     'risk',
+    'rejectionCode',
     'mutation',
     'operationHash',
     'operationHashVersion',
@@ -410,6 +373,14 @@ export const parseToolInspection = (raw: string): ToolInspection => {
   ]);
   if (!['read', 'control', 'mutate', 'destructive', 'forbidden'].includes(String(record.risk))) return invalid();
   if (record.operationHashVersion !== 1) return invalid();
+  if (
+    record.rejectionCode !== undefined &&
+    (record.risk !== 'forbidden' ||
+      record.mutation !== false ||
+      typeof record.rejectionCode !== 'string' ||
+      !/^[A-Z][A-Z0-9_]+$/.test(record.rejectionCode))
+  )
+    return invalid();
   const target = durableRecord(record.target);
   assertDurableKeys(target, [
     'kind',
@@ -420,17 +391,15 @@ export const parseToolInspection = (raw: string): ToolInspection => {
     'loginUser',
     'configurationHash',
     'connectionId',
-    'workspaceId',
     'integrationId',
     'schemaHash',
     'browserSessionId',
     'snapshotId',
-    'generation',
     'hostKeyTrust',
   ]);
   const targetKind = String(target.kind);
-  if (!['ssh', 'workspace', 'integration', 'browser', 'run'].includes(targetKind)) return invalid();
-  const canonicalTarget = targetKind === 'ssh' || targetKind === 'workspace';
+  if (!['ssh', 'integration', 'browser', 'run'].includes(targetKind)) return invalid();
+  const canonicalTarget = targetKind === 'ssh';
   if (canonicalTarget) {
     if (target.target !== targetKind || typeof target.id !== 'string' || target.id.length < 1) return invalid();
   } else if (target.target !== undefined || target.id !== undefined) {
@@ -443,20 +412,18 @@ export const parseToolInspection = (raw: string): ToolInspection => {
     normalizedArguments: decodeDurableJsonValue(record.normalizedArguments),
     target: {
       kind: targetKind as ToolInspection['target']['kind'],
-      ...(canonicalTarget ? { target: targetKind as 'ssh' | 'workspace', id: durableString(target.id) as string } : {}),
+      ...(canonicalTarget ? { target: targetKind as 'ssh', id: durableString(target.id) as string } : {}),
       targetIdentity: durableString(target.targetIdentity) as string,
       endpoint: durableString(target.endpoint) as string,
       loginUser: durableString(target.loginUser) as string,
       configurationHash: durableString(target.configurationHash) as string,
       ...(target.connectionId === undefined ? {} : { connectionId: durableInteger(target.connectionId, 1) }),
-      ...(target.workspaceId === undefined ? {} : { workspaceId: durableString(target.workspaceId) as string }),
       ...(target.integrationId === undefined ? {} : { integrationId: durableString(target.integrationId) as string }),
       ...(target.schemaHash === undefined ? {} : { schemaHash: durableString(target.schemaHash) as string }),
       ...(target.browserSessionId === undefined
         ? {}
         : { browserSessionId: durableString(target.browserSessionId) as string }),
       ...(target.snapshotId === undefined ? {} : { snapshotId: durableString(target.snapshotId) as string }),
-      ...(target.generation === undefined ? {} : { generation: durableInteger(target.generation, 1) }),
       ...(target.hostKeyTrust === undefined
         ? {}
         : target.hostKeyTrust === 'unavailable'
@@ -465,14 +432,14 @@ export const parseToolInspection = (raw: string): ToolInspection => {
     } as ToolInspection['target'],
     resourceKeys: decodeDurableStringArray(record.resourceKeys, 256),
     risk: record.risk as ToolInspection['risk'],
+    ...(record.rejectionCode === undefined ? {} : { rejectionCode: durableString(record.rejectionCode) as string }),
     mutation: durableBoolean(record.mutation),
     operationHash: durableString(record.operationHash) as string,
     operationHashVersion: 1,
     preconditions: record.preconditions.map((item) => {
       const precondition = durableRecord(item);
       assertDurableKeys(precondition, ['kind', 'key', 'observedValue']);
-      if (!['fileHash', 'metadata', 'serviceState', 'workspaceGeneration'].includes(String(precondition.kind)))
-        return invalid();
+      if (!['fileHash', 'metadata', 'serviceState'].includes(String(precondition.kind))) return invalid();
       return {
         kind: precondition.kind as ToolInspection['preconditions'][number]['kind'],
         key: durableString(precondition.key) as string,
@@ -492,34 +459,20 @@ export const parseToolResult = (raw: string): ToolResult => {
   let semantic: ToolResult['semantic'];
   if (record.semantic !== undefined) {
     const rawSemantic = durableRecord(record.semantic);
-    assertDurableKeys(rawSemantic, ['kind', 'target', 'status', 'job']);
+    assertDurableKeys(rawSemantic, ['kind', 'target', 'status']);
     if (rawSemantic.kind !== 'execution') return invalid();
     const target = durableRecord(rawSemantic.target);
     assertDurableKeys(target, ['target', 'id']);
-    if ((target.target !== 'workspace' && target.target !== 'ssh') || typeof target.id !== 'string' || !target.id) {
+    if (target.target !== 'ssh' || typeof target.id !== 'string' || !target.id) {
       return invalid();
     }
     if (!['pending', 'running', 'succeeded', 'failed', 'unknown', 'cancelled'].includes(String(rawSemantic.status))) {
       return invalid();
     }
-    let job: NonNullable<ToolResult['semantic']>['job'];
-    if (rawSemantic.job !== undefined) {
-      const rawJob = durableRecord(rawSemantic.job);
-      assertDurableKeys(rawJob, ['jobId', 'workspaceId', 'generation']);
-      const jobId = durableString(rawJob.jobId) as string;
-      if (!/^job-[a-f0-9]{64}$/.test(jobId)) return invalid();
-      job = {
-        jobId,
-        workspaceId: durableString(rawJob.workspaceId) as string,
-        generation: durableInteger(rawJob.generation, 1),
-      };
-      if (target.target !== 'workspace' || job.workspaceId !== target.id) return invalid();
-    }
     semantic = {
       kind: 'execution',
       target: { target: target.target, id: target.id } as NonNullable<ToolResult['semantic']>['target'],
       status: rawSemantic.status as NonNullable<ToolResult['semantic']>['status'],
-      ...(job === undefined ? {} : { job }),
     };
   }
   return {

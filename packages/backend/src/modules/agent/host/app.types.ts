@@ -17,7 +17,6 @@ export interface AgentAppTarget {
 export interface AgentAppTargets {
   frontend?: AgentAppTarget;
   backend?: AgentAppTarget;
-  runner?: AgentAppTarget;
 }
 
 export interface AgentAppSurfacePreferences {

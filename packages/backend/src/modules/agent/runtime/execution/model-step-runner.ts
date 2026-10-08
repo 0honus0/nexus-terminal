@@ -1,3 +1,5 @@
+import type { ClockPort } from '../../agent.types';
+import { runtimeProgressContext, activeExecutionSeconds } from './runtime-progress';
 import type { AgentModelAttemptIdentityDto } from '@nexus-terminal/protocol/agent-events';
 import path from 'node:path';
 import type { ContextPlan } from '../../ai/context.types';
@@ -77,21 +79,8 @@ const latestInput = (run: RunSnapshot): { id: string; text: string; artifactRefs
   return { id: '', text: '', artifactRefs: [] };
 };
 
-const PROJECT_WORK_ROOT = '/workspace/work';
-
-const projectInstructionTargetDirectories = (snapshot: RunSnapshot, currentText: readonly string[]): string[] => {
-  const targets = new Set<string>([PROJECT_WORK_ROOT]);
-  for (const text of currentText) {
-    for (const match of text.matchAll(/(?:\/workspace\/work\/|\b(?:[A-Za-z0-9_.-]+\/)+)[A-Za-z0-9_./-]+/g)) {
-      const raw = match[0];
-      if (raw.length > 4096 || raw.includes('\0')) continue;
-      const logical = path.posix.normalize(raw.startsWith('/') ? raw : `${PROJECT_WORK_ROOT}/${raw}`);
-      if (!logical.startsWith(PROJECT_WORK_ROOT + '/')) continue;
-      const basename = path.posix.basename(logical);
-      targets.add(basename.includes('.') && !basename.startsWith('.') ? path.posix.dirname(logical) : logical);
-      if (targets.size >= 8) return [...targets];
-    }
-  }
+const projectInstructionTargetDirectories = (snapshot: RunSnapshot): string[] => {
+  const targets = new Set<string>();
   for (const entry of [...snapshot.recentEntries].reverse()) {
     if (targets.size >= 8) break;
     if (
@@ -99,9 +88,8 @@ const projectInstructionTargetDirectories = (snapshot: RunSnapshot, currentText:
       !entry.payload ||
       Array.isArray(entry.payload) ||
       typeof entry.payload !== 'object'
-    ) {
+    )
       continue;
-    }
     const rawCalls = (entry.payload as Record<string, unknown>).toolCalls;
     if (!Array.isArray(rawCalls)) continue;
     for (const rawCall of rawCalls) {
@@ -115,66 +103,30 @@ const projectInstructionTargetDirectories = (snapshot: RunSnapshot, currentText:
         continue;
       }
       if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') continue;
-      const argumentsRecord = parsed as Record<string, unknown>;
-      if (argumentsRecord.target === 'ssh' && call.name.startsWith('file_')) {
-        for (const value of [argumentsRecord.path, argumentsRecord.destinationPath]) {
-          if (typeof value === 'string' && value.startsWith('/') && !value.includes('\0') && value.length <= 4096) {
-            const directory = ['file_list', 'file_search'].includes(call.name)
-              ? path.posix.normalize(value)
-              : path.posix.dirname(value);
-            targets.add(`ssh:${argumentsRecord.id}:${directory}`);
-          }
-          if (targets.size >= 8) break;
-        }
-      }
-      const addTarget = (rawValue: unknown, relativeBase: 'workspace' | 'work', fileTarget = false): void => {
-        if (typeof rawValue !== 'string' || !rawValue.trim() || rawValue.length > 4096 || rawValue.includes('\0'))
-          return;
-        const raw = rawValue.trim();
-        const base = relativeBase === 'workspace' ? '/workspace/' : PROJECT_WORK_ROOT + '/';
-        const logical = path.posix.normalize(raw.startsWith('/') ? raw : base + raw);
-        if (logical !== PROJECT_WORK_ROOT && !logical.startsWith(PROJECT_WORK_ROOT + '/')) return;
-        targets.add(fileTarget ? path.posix.dirname(logical) : logical);
+      const args = parsed as Record<string, unknown>;
+      if (args.target !== 'ssh' || typeof args.id !== 'string' || !/^[1-9][0-9]*$/.test(args.id)) continue;
+      const addDirectory = (value: unknown, useParent = false): void => {
+        if (typeof value !== 'string' || !value.startsWith('/') || value.length > 4096 || value.includes('\0')) return;
+        const resolved = path.posix.normalize(value);
+        targets.add(`ssh:${args.id}:${useParent ? path.posix.dirname(resolved) : resolved}`);
       };
-      if (
-        call.name === 'shell_execute' &&
-        argumentsRecord.target === 'workspace' &&
-        argumentsRecord.command &&
-        !Array.isArray(argumentsRecord.command) &&
-        typeof argumentsRecord.command === 'object' &&
-        (argumentsRecord.command as Record<string, unknown>).kind === 'argv'
-      ) {
-        addTarget(argumentsRecord.cwd ?? PROJECT_WORK_ROOT, 'workspace');
-      } else if (
-        argumentsRecord.target === 'workspace' &&
-        ['file_read', 'file_write', 'file_delete', 'file_move'].includes(call.name)
-      ) {
-        addTarget(argumentsRecord.path, 'work', true);
-        if (call.name === 'file_move') addTarget(argumentsRecord.destinationPath, 'work', true);
-      } else if (argumentsRecord.target === 'workspace' && call.name === 'file_list') {
-        addTarget(argumentsRecord.path ?? PROJECT_WORK_ROOT, 'work');
-      } else if (argumentsRecord.target === 'workspace' && call.name === 'file_search') {
-        addTarget(argumentsRecord.path ?? PROJECT_WORK_ROOT, 'work');
-      } else if (
-        argumentsRecord.target === 'workspace' &&
-        call.name === 'file_patch' &&
-        Array.isArray(argumentsRecord.expectedFiles)
-      ) {
-        for (const item of argumentsRecord.expectedFiles) {
+      if (call.name === 'shell_execute') addDirectory(args.cwd);
+      if (call.name === 'file_list' || call.name === 'file_search') addDirectory(args.path);
+      if (['file_read', 'file_write', 'file_delete', 'file_move'].includes(call.name)) {
+        addDirectory(args.path, true);
+        if (call.name === 'file_move') addDirectory(args.destinationPath, true);
+      }
+      if (call.name === 'file_patch' && Array.isArray(args.expectedFiles)) {
+        for (const item of args.expectedFiles) {
           if (!item || Array.isArray(item) || typeof item !== 'object') continue;
-          addTarget((item as Record<string, unknown>).path, 'work', true);
+          addDirectory((item as Record<string, unknown>).path, true);
           if (targets.size >= 8) break;
         }
-      } else if (
-        argumentsRecord.target === 'workspace' &&
-        (call.name === 'workspace_repo_map' || call.name === 'workspace_code_query')
-      ) {
-        addTarget(argumentsRecord.path ?? PROJECT_WORK_ROOT, 'work', call.name === 'workspace_code_query');
       }
       if (targets.size >= 8) break;
     }
   }
-  return [...targets];
+  return [...targets].slice(0, 8);
 };
 
 export class ModelStepRunner {
@@ -188,7 +140,10 @@ export class ModelStepRunner {
     let usage: TokenUsage | undefined;
     let finishReason: ModelFinishReason | null = null;
     let error: unknown;
-    const remainingSeconds = Math.max(1, snapshot.budget.maxActiveExecutionSeconds - snapshot.activeExecutionSeconds);
+    const remainingSeconds = Math.max(
+      1,
+      snapshot.budget.activeExecutionCeilingSeconds - activeExecutionSeconds(snapshot, this.clock.nowUnixSeconds()),
+    );
     const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(remainingSeconds * 1000)]);
     let checkpoint;
     let requested = false;
@@ -246,6 +201,7 @@ export class ModelStepRunner {
     private readonly context: ContextService,
     private readonly modelPort: LanguageModelPort,
     private readonly modelCalls: ModelCallLimiter,
+    private readonly clock: ClockPort,
     private readonly projectInstructionSource: ProjectInstructionSourcePort | null = null,
   ) {}
 
@@ -257,6 +213,7 @@ export class ModelStepRunner {
     collaborationContext?: string,
     route?: { model: ModelRef; capabilities?: ModelCapabilitySnapshot },
     runtimeId?: string,
+    options?: { rawHistoryFallback?: boolean },
   ): Promise<PreparedModelStep> {
     const modelRef = route?.model ?? snapshot.definition.model;
     const capabilitySnapshot = route?.capabilities ?? snapshot.definition.modelCapabilities;
@@ -279,14 +236,7 @@ export class ModelStepRunner {
     const currentInput = currentProjection.ordered.at(-1) ?? latestInput(snapshot);
     let projectInstructions: ProjectInstructionSnapshot[] | undefined;
     if (this.projectInstructionSource && runtimeId) {
-      const targetDirectories = projectInstructionTargetDirectories(snapshot, [
-        ...currentProjection.pending.map((input) => input.text),
-        currentInput?.text ?? '',
-        snapshot.goal.text ?? '',
-        ...snapshot.plan.items
-          .filter((item) => item.status === 'in_progress' || item.status === 'pending')
-          .flatMap((item) => [item.title, item.detail ?? '']),
-      ]);
+      const targetDirectories = projectInstructionTargetDirectories(snapshot);
       try {
         const projection = await this.projectInstructionSource.load(
           scope,
@@ -301,7 +251,6 @@ export class ModelStepRunner {
             agentRuntimeId: runtimeId,
             actor: { kind: 'agent', ...scope, runId: snapshot.id, agentRuntimeId: runtimeId },
             connectionIds: snapshot.definition.connectionIds,
-            environment: snapshot.definition.environment ?? null,
             stepId: 'project-context',
             signal: AbortSignal.timeout(10_000),
             deadlineAt: Math.floor(Date.now() / 1000) + 10,
@@ -315,12 +264,10 @@ export class ModelStepRunner {
             {
               runId: snapshot.id,
               runtimeId,
-              workspaceId: projection.workspaceId,
-              generation: projection.generation,
               targetDirectories: projection.targetDirectories,
               omitted: projection.omitted,
             },
-            'Agent project instructions were partially omitted by bounded Workspace projection',
+            'Agent SSH project instructions were partially omitted by bounded projection',
           );
         }
       } catch (error) {
@@ -374,6 +321,7 @@ export class ModelStepRunner {
           }
         : {}),
       runScopeContext: [
+        runtimeProgressContext(snapshot, this.clock.nowUnixSeconds()),
         `Selected SSH connection IDs for this Run: ${
           snapshot.definition.connectionIds.length > 0 ? snapshot.definition.connectionIds.join(', ') : 'none'
         }.`,
@@ -391,6 +339,7 @@ export class ModelStepRunner {
       maxRecallBytes: snapshot.budget.maxRecallBytes,
       tools,
       ...(usageAnchor ? { usageAnchor } : {}),
+      ...(options?.rawHistoryFallback ? { rawHistoryFallback: true } : {}),
     });
     return { model, contextPlan };
   }
@@ -403,6 +352,11 @@ export class ModelStepRunner {
     toolMode: 'auto' | 'none' = 'auto',
     route?: { model: ModelRef; capabilities?: ModelCapabilitySnapshot },
   ): AsyncGenerator<BackendSignal, ModelAttemptResult> {
+    const remainingSeconds = Math.max(
+      1,
+      snapshot.budget.activeExecutionCeilingSeconds - activeExecutionSeconds(snapshot, this.clock.nowUnixSeconds()),
+    );
+    signal = AbortSignal.any([signal, AbortSignal.timeout(remainingSeconds * 1000)]);
     const modelRef = route?.model ?? snapshot.definition.model;
     const capabilitySnapshot = route?.capabilities ?? snapshot.definition.modelCapabilities;
     const toolCalls = new Map<number, ModelToolCall>();

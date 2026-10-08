@@ -47,6 +47,20 @@ export const agentDefinitionCapabilityContractScenario = async () => {
     decodePersistedAppManifest(JSON.stringify(canonicalManifest)).agents?.[0]?.requiredModelCapabilities,
     ['tools'],
   );
+  const unsupportedRunnerManifest = {
+    ...canonicalManifest,
+    targets: { runner: { entry: 'runner/index.mjs' } },
+  };
+  assert.throws(
+    () => validateManifest(unsupportedRunnerManifest, { nexusVersion: '1.0.0', supportedSdkMajor: 1 }),
+    /AGENT_MANIFEST_SCHEMA_INVALID/,
+    'Runner target must not survive plugin manifest validation',
+  );
+  assert.throws(
+    () => decodePersistedAppManifest(JSON.stringify(unsupportedRunnerManifest)),
+    /PLUGIN_MANIFEST_INVALID/,
+    'Persisted Runner target must not be accepted as a plugin manifest',
+  );
   assert.throws(
     () =>
       validateManifest(
@@ -177,7 +191,7 @@ export const agentDefinitionCapabilityContractScenario = async () => {
     requestedSettings: { model: { fallbackModels: [] as Array<{ providerId: string; modelId: string }> } },
     effectiveSettings: { feature: { enabled: true } },
     hardLimits: {
-      maxRunSteps: 1_000,
+      maxModelRequests: 1_000,
       maxActiveExecutionSeconds: 86_400,
       toolTimeoutSeconds: 600,
       maxToolOutputBytes: 16 * 1024 * 1024,
@@ -197,7 +211,7 @@ export const agentDefinitionCapabilityContractScenario = async () => {
   const executionPolicy = {
     version: 1,
     effective: {
-      maxRunSteps: 100,
+      maxModelRequests: 100,
       maxActiveExecutionSeconds: 3_600,
       toolTimeoutSeconds: 120,
       maxToolOutputBytes: 1_048_576,
@@ -228,7 +242,8 @@ export const agentDefinitionCapabilityContractScenario = async () => {
       inputTokens: 0,
       outputTokens: 0,
       cachedInputTokens: 0,
-      steps: 0,
+      toolExecutions: 0,
+      modelRequests: 0,
       subagentMessages: 0,
       subagentMessageBytes: 0,
     },
@@ -262,9 +277,6 @@ export const agentDefinitionCapabilityContractScenario = async () => {
         requiredModelCapabilities: [...definitionInfo.requiredModelCapabilities],
       }),
     } as never,
-    async () => {
-      throw new Error('SCENARIO_UNEXPECTED_ENVIRONMENT');
-    },
     {
       createRun: async (record: AtomicCreateRun) => {
         createCommits += 1;
@@ -365,15 +377,12 @@ export const agentDefinitionCapabilityContractScenario = async () => {
       activeModel: terminalSource.definition.model,
       definitionVersion: definitionInfo.version,
       policyRevision: 1,
-      workspaceArtifactManifestRefs: [],
-      workspaceArtifactRefs: [],
       recoveryManifest: {
         schemaVersion: 1,
         eventThrough: 0,
         contextBoundary: { baseThrough: 0, runThrough: {} },
         tools: [],
         delegations: [],
-        backgroundJobs: [],
         quarantinedResourceKeys: [],
       },
     },

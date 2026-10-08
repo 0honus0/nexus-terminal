@@ -186,6 +186,22 @@
     }
   };
 
+  const bootstrapLocalSummary = async (controller: AbortController, currentGeneration: number): Promise<boolean> => {
+    let refreshAttempt = 0;
+    while (!controller.signal.aborted && currentGeneration === generation) {
+      const initial = await refresh('initial');
+      if (controller.signal.aborted || currentGeneration !== generation) return false;
+      if (initial) return true;
+      refreshAttempt += 1;
+      logger.warn(
+        { userId: activeUserId, generation: currentGeneration, refreshAttempt },
+        'Agent global surface local summary unavailable; retrying',
+      );
+      await waitForHostRefreshRetry(refreshAttempt, controller.signal);
+    }
+    return false;
+  };
+
   const start = (): void => {
     stop('restart');
     const controller = new AbortController();
@@ -197,6 +213,8 @@
     );
     void (async () => {
       try {
+        const bootstrapped = await bootstrapLocalSummary(controller, currentGeneration);
+        if (!bootstrapped || controller.signal.aborted || currentGeneration !== generation) return;
         if (typeof navigator.locks?.request === 'function') {
           await navigator.locks.request(
             HOST_STREAM_LOCK_NAME,

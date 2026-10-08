@@ -1,3 +1,4 @@
+import { remainingExecutionSeconds } from '../execution/runtime-progress';
 import { createHash, randomUUID } from 'node:crypto';
 import { shouldRetryModel, modelRetryDelayMs } from '../execution/model-retry-policy';
 import { logErrorCode, logger } from '../../../../shared/logging/logger';
@@ -83,6 +84,7 @@ const rejectedToolInspection = (
     },
     resourceKeys: [],
     risk: 'forbidden',
+    rejectionCode: failureCode,
     mutation: false,
     operationHash,
     operationHashVersion: 1,
@@ -141,9 +143,24 @@ export class SubagentModelStepExecutor {
       return;
     }
     const delegation = await this.delegations.delegation(scope, work.runId, payload.delegationId);
+    const advanced = await this.stateCommit.advanceExecutionBudget({
+      scope,
+      runId: work.runId,
+      now: this.clock.nowUnixSeconds(),
+    });
+    if (advanced.committedEvents.length) this.events.publishRunWake(work.runId, advanced.eventCursor);
     const run = await this.runs.snapshot(scope, work.runId);
     if (!delegation || !run || terminalDelegation(delegation) || run.status !== 'running') {
       await this.work.settleWork(work.id, ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
+      return;
+    }
+    if (
+      run.budget.phase === 'finishing' ||
+      delegation.usage.modelRequests >= delegation.budget.maxModelRequests ||
+      run.usage.modelRequests >=
+        run.budget.maxModelRequests - Math.min(2, Math.max(0, run.budget.modelRequestCeiling - 1))
+    ) {
+      await this.completion.failBeforeModel(scope, work, delegation, ownerEpoch, 'RUN_EXECUTION_LIMIT');
       return;
     }
     if (delegation.deadlineAt <= this.clock.nowUnixSeconds()) {
@@ -231,7 +248,8 @@ export class SubagentModelStepExecutor {
     } = preparedContext.plan;
     if (
       compaction &&
-      (delegation.usage.steps + 2 > delegation.budget.maxSteps || run.usage.steps + 2 > run.budget.maxRunSteps)
+      (delegation.usage.modelRequests + 2 > delegation.budget.maxModelRequests ||
+        run.usage.modelRequests + 2 > run.budget.maxModelRequests)
     ) {
       await this.completion.failBeforeModel(scope, work, delegation, ownerEpoch, 'DELEGATION_BUDGET_EXCEEDED');
       return;
@@ -259,20 +277,18 @@ export class SubagentModelStepExecutor {
     let failureCode: string | undefined;
     let retry: { nextAttemptIndex: number; notBefore: number } | undefined;
     const retryAttemptIndex = typeof payload.retryAttemptIndex === 'number' ? payload.retryAttemptIndex : 1;
-    const requestSignal = compaction
-      ? AbortSignal.any([
-          signal,
-          AbortSignal.timeout(
-            Math.max(
-              1,
-              Math.min(
-                delegation.deadlineAt - this.clock.nowUnixSeconds(),
-                run.budget.maxActiveExecutionSeconds - run.activeExecutionSeconds,
-              ),
-            ) * 1000,
+    const requestSignal = AbortSignal.any([
+      signal,
+      AbortSignal.timeout(
+        Math.max(
+          1,
+          Math.min(
+            delegation.deadlineAt - this.clock.nowUnixSeconds(),
+            remainingExecutionSeconds(run, this.clock.nowUnixSeconds()),
           ),
-        ])
-      : signal;
+        ) * 1000,
+      ),
+    ]);
     try {
       const releaseModelCall = await this.modelCalls.acquire(scope.userId, requestSignal);
       try {
@@ -339,8 +355,8 @@ export class SubagentModelStepExecutor {
           this.clock.nowUnixSeconds() + Math.ceil(modelRetryDelayMs(error, retryAttemptIndex + 1) / 1000);
         if (
           notBefore < Math.min(delegation.deadlineAt, work.deadlineAt) &&
-          delegation.usage.steps + 1 < delegation.budget.maxSteps &&
-          begun.run.usage.steps < begun.run.budget.maxRunSteps
+          delegation.usage.modelRequests + 1 < delegation.budget.maxModelRequests &&
+          begun.run.usage.modelRequests < begun.run.budget.maxModelRequests
         )
           retry = { nextAttemptIndex: retryAttemptIndex + 1, notBefore };
       }
@@ -432,6 +448,7 @@ export class SubagentModelStepExecutor {
             proposal = this.contextBuilder.resolveProposal(
               this.toolContext(begun.run, work.agentRuntimeId, begun.stepId, signal, delegation.deadlineAt),
               proposal,
+              begun.run.definition.executionMode,
             );
             if (!this.contextBuilder.allowsProposal(scope, delegation, proposal))
               throw new Error('SUBAGENT_TOOL_NOT_ALLOWED');
@@ -609,6 +626,7 @@ export class SubagentModelStepExecutor {
     return {
       userId: run.userId,
       appId: run.appId,
+      participantKind: 'subagent',
       actor: {
         kind: 'agent',
         userId: run.userId,
@@ -620,10 +638,13 @@ export class SubagentModelStepExecutor {
       agentRuntimeId: runtimeId,
       ...(toolCallId === undefined ? {} : { toolCallId }),
       connectionIds: [...run.definition.connectionIds],
-      environment: run.definition.environment ?? null,
       stepId,
       signal,
-      deadlineAt: Math.min(delegationDeadlineAt, this.clock.nowUnixSeconds() + run.budget.toolTimeoutSeconds),
+      deadlineAt: Math.min(
+        delegationDeadlineAt,
+        this.clock.nowUnixSeconds() +
+          Math.min(run.budget.toolTimeoutSeconds, remainingExecutionSeconds(run, this.clock.nowUnixSeconds())),
+      ),
       maxOutputBytes: run.budget.maxToolOutputBytes,
       inputRevision: run.inputRevision,
     };

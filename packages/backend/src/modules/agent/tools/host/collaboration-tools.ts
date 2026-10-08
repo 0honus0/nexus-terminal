@@ -95,7 +95,7 @@ const delegateTool = (subagents: SubagentService, cryptoHash: CryptoHashPort): A
     name: 'collaboration_subagent_delegate',
     version: '1',
     description:
-      'Create a bounded child agent for a specific objective using a configured Subagent profile. The caller identity and parent runtime are bound by Nexus.',
+      'Create a bounded child agent for a specific objective using a configured Subagent profile. Compute deadlineAt from currentUnixSeconds in the server execution progress plus the requested duration. It must not exceed remainingActiveExecutionCeilingSeconds or the parent delegation deadline. Never guess the clock or use a distant sentinel date. The caller identity and parent runtime are bound by Nexus.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -104,7 +104,7 @@ const delegateTool = (subagents: SubagentService, cryptoHash: CryptoHashPort): A
         'objective',
         'constraints',
         'inputArtifactRefs',
-        'maxSteps',
+        'maxModelRequests',
         'deadlineAt',
         'completionCriteria',
         'dependsOn',
@@ -116,7 +116,7 @@ const delegateTool = (subagents: SubagentService, cryptoHash: CryptoHashPort): A
         objective: { type: 'string', minLength: 1, maxLength: 16384 },
         constraints: { type: 'array', maxItems: 32, items: { type: 'string', minLength: 1, maxLength: 2048 } },
         inputArtifactRefs: { type: 'array', maxItems: 64, items: { type: 'string', minLength: 1, maxLength: 256 } },
-        maxSteps: { type: 'integer', minimum: 1 },
+        maxModelRequests: { type: 'integer', minimum: 1 },
         deadlineAt: { type: 'integer', minimum: 1 },
         completionCriteria: { type: 'array', maxItems: 32, items: { type: 'string', minLength: 1, maxLength: 2048 } },
         dependsOn: { type: 'array', maxItems: 64, items: { type: 'string', minLength: 1, maxLength: 128 } },
@@ -395,10 +395,11 @@ const compareAndSetFactTool = (facts: SharedFactsService, cryptoHash: CryptoHash
   },
 });
 
-const proposeMemoryTool = (memories: MemoryService, cryptoHash: CryptoHashPort): AgentTool => ({
+export const createMemoryProposeTool = (memories: MemoryService, cryptoHash: CryptoHashPort): AgentTool => ({
   descriptor: {
     name: 'memory_propose',
     version: '1',
+    modelExposure: 'deferred',
     description:
       'Submit a memory candidate for user review. Candidates are not recalled until the user explicitly publishes them.',
     inputSchema: {
@@ -442,5 +443,5 @@ export const createCollaborationTools = (
   consumeMessagesTool(mailbox, cryptoHash),
   getFactTool(facts, cryptoHash),
   compareAndSetFactTool(facts, cryptoHash),
-  proposeMemoryTool(memories, cryptoHash),
+  createMemoryProposeTool(memories, cryptoHash),
 ];

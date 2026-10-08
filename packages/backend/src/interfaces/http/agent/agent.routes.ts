@@ -53,7 +53,6 @@ import {
   type AgentArtifactFacade,
   type AgentCapability,
   type AgentEventFacade,
-  type AgentWorkspaceRuntimeFacade,
   type AgentHostFacade,
   type AgentPluginFacade,
   type AgentProviderFacade,
@@ -90,7 +89,6 @@ import {
 } from './agent-route-input';
 import { agentUserId, createAgentMutationSecurity, issueAgentCsrf, requireAgentAuthenticated } from './agent-security';
 import { createPluginRouter } from './plugins.routes';
-import { createWorkspaceRuntimeRouter } from './workspace-runtime.routes';
 
 export interface AgentRouterDependencies {
   host: AgentHostFacade;
@@ -99,7 +97,6 @@ export interface AgentRouterDependencies {
   modelRegistry: AgentModelRegistryFacade;
   artifacts: AgentArtifactFacade;
   events: AgentEventFacade;
-  workspaceRuntime: AgentWorkspaceRuntimeFacade;
   nodeEnv: string;
   publicOrigin?: string;
   csrfSecret: string;
@@ -138,7 +135,6 @@ const settingsPatchRequest = (value: unknown): AgentSettingsPatchRequestDto => {
     'budget',
     'subagents',
     'storage',
-    'workspaceRuntime',
     'browser',
     'plugins',
   ]);
@@ -154,7 +150,8 @@ const settingsPatchRequest = (value: unknown): AgentSettingsPatchRequestDto => {
 };
 
 const hardLimitKeys = [
-  'maxRunSteps',
+  'maxModelRequests',
+  'maxToolExecutions',
   'maxActiveExecutionSeconds',
   'toolTimeoutSeconds',
   'maxToolOutputBytes',
@@ -168,7 +165,6 @@ const hardLimitKeys = [
   'maxDelegationDepth',
   'maxSubagentMessagesPerRun',
   'maxSubagentMessageBytesPerRun',
-  'maxActiveWorkspaces',
   'unretainedArtifactTtlSeconds',
 ] as const satisfies readonly (keyof AgentHardLimitsDto)[];
 
@@ -225,11 +221,10 @@ const capabilityScope = (value: unknown): AgentCapabilityScopeDto => {
   if (value.kind !== 'targets' || !hasOnlyKeys(value, ['kind', 'targets']) || !isRecord(value.targets)) {
     throw new Error('VALIDATION_FAILED');
   }
-  if (Object.keys(value.targets).some((key) => key !== 'workspace' && key !== 'ssh')) {
+  if (Object.keys(value.targets).some((key) => key !== 'ssh')) {
     throw new Error('VALIDATION_FAILED');
   }
   const targets: AgentCapabilityScopeDto & { kind: 'targets' } = { kind: 'targets', targets: {} };
-  if (value.targets.workspace !== undefined) targets.targets.workspace = grantSelection(value.targets.workspace);
   if (value.targets.ssh !== undefined) targets.targets.ssh = grantSelection(value.targets.ssh);
   return targets;
 };
@@ -1201,8 +1196,6 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       );
     }),
   );
-
-  router.use('/workspace-runtime', createWorkspaceRuntimeRouter(dependencies.workspaceRuntime, mutationSecurity));
 
   return router;
 };

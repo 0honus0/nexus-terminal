@@ -163,7 +163,7 @@
       capabilities: [],
       peerMessaging: 'parent-child',
       mutationMode: 'read-only',
-      maxSteps: Math.min(12, props.settings.hardLimits.maxRunSteps),
+      maxModelRequests: Math.min(12, props.settings.hardLimits.maxModelRequests),
       failureMode: 'isolate',
     });
   };
@@ -191,7 +191,7 @@
       capabilities: [...template.capabilities],
       peerMessaging: template.peerMessaging,
       mutationMode: template.mutationMode,
-      maxSteps: Math.min(template.maxSteps, props.settings.hardLimits.maxRunSteps),
+      maxModelRequests: Math.min(template.maxModelRequests, props.settings.hardLimits.maxModelRequests),
       failureMode: template.failureMode,
     });
   };
@@ -288,7 +288,7 @@
   const invalidProfileLimits = computed(() =>
     Boolean(
       profileSettings.value?.policy.profiles.some(
-        (profile) => !Number.isSafeInteger(profile.maxSteps) || profile.maxSteps < 1,
+        (profile) => !Number.isSafeInteger(profile.maxModelRequests) || profile.maxModelRequests < 1,
       ),
     ),
   );
@@ -530,10 +530,10 @@
               </label>
               <label>
                 <span class="mb-1 block text-xs text-text-secondary">{{
-                  $t('agent.settings.subagents.maxSteps')
+                  $t('agent.settings.subagents.maxModelRequests')
                 }}</span>
                 <input
-                  v-model.number="profile.maxSteps"
+                  v-model.number="profile.maxModelRequests"
                   type="number"
                   min="1"
                   class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm"

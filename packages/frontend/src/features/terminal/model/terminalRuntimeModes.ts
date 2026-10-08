@@ -24,6 +24,10 @@ export function trackTerminalRuntimeModes(terminal: Terminal): TerminalRuntimeMo
   const disposables = [
     terminal.parser.registerCsiHandler({ prefix: '?', final: 'h' }, apply(true)),
     terminal.parser.registerCsiHandler({ prefix: '?', final: 'l' }, apply(false)),
+    terminal.parser.registerEscHandler({ final: 'c' }, () => {
+      mouseEncoding = 'default';
+      return false;
+    }),
   ];
   return {
     restoreSuffix() {

@@ -4,21 +4,12 @@ import type {
   AgentCreateRunFieldsDto,
   AgentRunBudgetIncreaseDto,
   AgentRunBudgetIncreaseFieldsDto,
-  AgentRunEnvironmentSelectionDto,
   AgentRunPendingInputMutationFieldsDto,
   AgentRunReconciliationResolveFieldsDto,
   AgentRunResumeFieldsDto,
   AgentRunSetGoalFieldsDto,
   AgentUserInputDataDto,
 } from '@nexus-terminal/protocol/agent-runs';
-import type {
-  AgentWorkspaceActionFieldsDto,
-  AgentWorkspaceArtifactExportRequestDto,
-  AgentWorkspaceArtifactImportRequestDto,
-  AgentWorkspaceCreateFieldsDto,
-  AgentWorkspaceEnvironmentSpecDto,
-  AgentWorkspaceToolVersionsFieldsDto,
-} from '@nexus-terminal/protocol/agent-workspace-runtime';
 import { hasOnlyKeys, isRecord, positiveInteger, versionedRecord } from './agent-route-input';
 
 export const AGENT_RUNTIME_REQUEST_SCHEMA_VERSION = 1 as const;
@@ -51,7 +42,6 @@ export const parseCreateRunRequest = (body: unknown): AgentCreateRunFieldsDto =>
     'executionMode',
     'plannedFromRunId',
     'connectionIds',
-    'environment',
     'initialGoal',
   ]);
   const model = value.model;
@@ -94,7 +84,6 @@ export const parseCreateRunRequest = (body: unknown): AgentCreateRunFieldsDto =>
     executionMode: value.executionMode as AgentCreateRunFieldsDto['executionMode'],
     ...(typeof value.plannedFromRunId === 'string' ? { plannedFromRunId: value.plannedFromRunId } : {}),
     connectionIds: value.connectionIds as number[],
-    ...(value.environment === undefined ? {} : { environment: parseRunEnvironmentSelection(value.environment) }),
     ...(typeof value.initialGoal === 'string' && value.initialGoal.trim()
       ? { initialGoal: value.initialGoal.trim() }
       : {}),
@@ -197,7 +186,12 @@ export const parseResumeRunRequest = (body: unknown): AgentRunResumeFieldsDto =>
 const parseBudgetIncrease = (value: unknown): AgentRunBudgetIncreaseDto => {
   if (
     !isRecord(value) ||
-    !hasOnlyKeys(value, ['maxRunSteps', 'maxActiveExecutionSeconds', 'maxSubagentMessages', 'maxSubagentMessageBytes'])
+    !hasOnlyKeys(value, [
+      'maxModelRequests',
+      'maxActiveExecutionSeconds',
+      'maxSubagentMessages',
+      'maxSubagentMessageBytes',
+    ])
   ) {
     throw new Error('VALIDATION_FAILED');
   }
@@ -212,160 +206,6 @@ export const parseBudgetIncreaseRequest = (body: unknown): AgentRunBudgetIncreas
   const value = versionedRecord(body, ['increase', 'expectedVersion']);
   if (!positiveInteger(value.expectedVersion)) throw new Error('VALIDATION_FAILED');
   return { increase: parseBudgetIncrease(value.increase), expectedVersion: value.expectedVersion };
-};
-
-const parseWorkspaceSpec = (value: unknown): AgentWorkspaceEnvironmentSpecDto => {
-  if (
-    !isRecord(value) ||
-    !hasOnlyKeys(value, ['recipeId', 'versions', 'runnerPluginIds', 'acpProfileIds', 'browserTargetId'])
-  ) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  if (typeof value.recipeId !== 'string' || value.recipeId.length < 1 || value.recipeId.length > 128) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  if (value.versions !== undefined) {
-    if (!isRecord(value.versions) || Object.keys(value.versions).length > 32) throw new Error('VALIDATION_FAILED');
-    if (Object.entries(value.versions).some(([key, entry]) => !key || typeof entry !== 'string' || !entry)) {
-      throw new Error('VALIDATION_FAILED');
-    }
-  }
-  if (value.runnerPluginIds !== undefined) {
-    if (
-      !Array.isArray(value.runnerPluginIds) ||
-      value.runnerPluginIds.length > 32 ||
-      new Set(value.runnerPluginIds).size !== value.runnerPluginIds.length ||
-      value.runnerPluginIds.some(
-        (pluginId) => typeof pluginId !== 'string' || !/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$/.test(pluginId),
-      )
-    ) {
-      throw new Error('VALIDATION_FAILED');
-    }
-  }
-  if (value.acpProfileIds !== undefined) {
-    if (
-      !Array.isArray(value.acpProfileIds) ||
-      value.acpProfileIds.length > 16 ||
-      new Set(value.acpProfileIds).size !== value.acpProfileIds.length ||
-      value.acpProfileIds.some((id) => typeof id !== 'string' || !/^[a-z][a-z0-9_.-]{0,127}$/.test(id))
-    ) {
-      throw new Error('VALIDATION_FAILED');
-    }
-  }
-  if (
-    value.browserTargetId !== undefined &&
-    (typeof value.browserTargetId !== 'string' || !/^[a-z][a-z0-9_.-]{0,127}$/.test(value.browserTargetId))
-  ) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  return value as AgentWorkspaceEnvironmentSpecDto;
-};
-
-const parseRunEnvironmentSelection = (value: unknown): AgentRunEnvironmentSelectionDto | null => {
-  if (value === null) return null;
-  if (!isRecord(value)) throw new Error('VALIDATION_FAILED');
-  const { catalogRevision, ...workspace } = value;
-  if (
-    catalogRevision !== undefined &&
-    (typeof catalogRevision !== 'string' || !catalogRevision || catalogRevision.length > 128)
-  ) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  const parsed = parseWorkspaceSpec(workspace);
-  return {
-    ...parsed,
-    ...(typeof catalogRevision === 'string' ? { catalogRevision } : {}),
-  };
-};
-
-export const parseWorkspaceCreateRequest = (body: unknown): AgentWorkspaceCreateFieldsDto => {
-  const value = versionedRecord(body, ['workspace', 'retained', 'catalogRevision']);
-  if (
-    (value.retained !== undefined && typeof value.retained !== 'boolean') ||
-    (value.catalogRevision !== undefined &&
-      (typeof value.catalogRevision !== 'string' || !value.catalogRevision || value.catalogRevision.length > 128))
-  ) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  return {
-    workspace: parseWorkspaceSpec(value.workspace),
-    retained: value.retained === true,
-    ...(typeof value.catalogRevision === 'string' ? { catalogRevision: value.catalogRevision } : {}),
-  };
-};
-
-export const parseWorkspaceActionRequest = (body: unknown): AgentWorkspaceActionFieldsDto => {
-  const value = versionedRecord(body, ['action', 'expectedVersion']);
-  if (
-    !['start', 'stop', 'restart', 'delete'].includes(String(value.action)) ||
-    !positiveInteger(value.expectedVersion)
-  ) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  return {
-    action: value.action as AgentWorkspaceActionFieldsDto['action'],
-    expectedVersion: value.expectedVersion,
-  };
-};
-
-export const parseWorkspaceArtifactExportRequest = (body: unknown): AgentWorkspaceArtifactExportRequestDto => {
-  if (!isRecord(body) || !hasOnlyKeys(body, ['path', 'name', 'mediaType'])) throw new Error('VALIDATION_FAILED');
-  if (
-    typeof body.path !== 'string' ||
-    !body.path.startsWith('/') ||
-    body.path.length > 4096 ||
-    typeof body.name !== 'string' ||
-    !body.name.trim() ||
-    Buffer.byteLength(body.name.trim(), 'utf8') > 512 ||
-    typeof body.mediaType !== 'string' ||
-    !body.mediaType.trim() ||
-    body.mediaType.trim().length > 128
-  ) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  return {
-    path: body.path,
-    name: body.name.trim(),
-    mediaType: body.mediaType.trim().toLowerCase(),
-  };
-};
-
-export const parseWorkspaceArtifactImportRequest = (body: unknown): AgentWorkspaceArtifactImportRequestDto => {
-  if (!isRecord(body) || !hasOnlyKeys(body, ['artifactId', 'path'])) throw new Error('VALIDATION_FAILED');
-  if (
-    typeof body.artifactId !== 'string' ||
-    !body.artifactId ||
-    body.artifactId.length > 256 ||
-    typeof body.path !== 'string' ||
-    !body.path.startsWith('/') ||
-    body.path.length > 4096
-  ) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  return { artifactId: body.artifactId, path: body.path };
-};
-
-export const parseWorkspaceToolVersionsRequest = (body: unknown): AgentWorkspaceToolVersionsFieldsDto => {
-  const value = versionedRecord(body, ['versions', 'expectedVersion', 'catalogRevision']);
-  if (
-    !isRecord(value.versions) ||
-    Object.keys(value.versions).length < 1 ||
-    Object.keys(value.versions).length > 32 ||
-    Object.entries(value.versions).some(
-      ([familyId, versionId]) =>
-        !familyId || familyId.length > 128 || typeof versionId !== 'string' || !versionId || versionId.length > 128,
-    ) ||
-    !positiveInteger(value.expectedVersion) ||
-    (value.catalogRevision !== undefined &&
-      (typeof value.catalogRevision !== 'string' || !value.catalogRevision || value.catalogRevision.length > 128))
-  ) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  return {
-    versions: value.versions as Record<string, string>,
-    expectedVersion: value.expectedVersion,
-    ...(typeof value.catalogRevision === 'string' ? { catalogRevision: value.catalogRevision } : {}),
-  };
 };
 
 export const parseApprovalResolveRequest = (body: unknown): AgentApprovalResolveFieldsDto => {

@@ -394,6 +394,33 @@ test('mobile terminal long press selects a word, exposes selection handles, and 
   });
 });
 
+test('mobile terminal cancels an unfinished touch selection when leaving and returning to Workspace', async ({
+  page,
+  context,
+}) => {
+  test.setTimeout(60_000);
+  await connectMobileTerminal(page, context.request);
+  const commandInput = page.locator('.command-bar-command-input');
+  const marker = 'MOBILE_CANCELLED_SELECTION';
+  await commandInput.fill(`printf '\\033[2J\\033[H\\n\\n\\n${marker}\\n'`);
+  await commandInput.press('Enter');
+  await expect(page.locator('.xterm-rows')).toContainText(marker);
+  const point = await terminalTextPoint(page, marker);
+  const original = await terminalTextareaState(page);
+  await longPressTerminal(page, point, async () => {
+    expect((await terminalTextareaState(page)).readOnly).toBe(true);
+    await page.locator('.app-nav-links a[href="/settings"]').click();
+    await expect(page).toHaveURL(/\/settings/);
+    await page.locator('.app-nav-links a[href="/workspace"]').click();
+    await expect(page).toHaveURL(/\/workspace/);
+  });
+  await expect(page.locator('.mobile-terminal-clipboard-menu')).toHaveCount(0);
+  await expect(page.locator('.mobile-terminal-selection-handle')).toHaveCount(0);
+  const restored = await terminalTextareaState(page);
+  expect(restored.readOnly).toBe(false);
+  expect(restored.inputMode).toBe(original.inputMode);
+});
+
 test('mobile clipboard Paste normalizes CR line endings and executes through the live SSH terminal', async ({
   page,
   context,

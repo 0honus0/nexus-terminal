@@ -1,3 +1,4 @@
+import { remainingExecutionSeconds } from '../execution/runtime-progress';
 import { isDeepStrictEqual } from 'node:util';
 import type { ClockPort, JsonValue, Scope } from '../../agent.types';
 import type { ToolContext, ToolInspection, ToolResult } from '../../capabilities/tool.types';
@@ -5,12 +6,12 @@ import { executionErrorCode, failedToolResult as buildFailedToolResult } from '.
 import { GovernedMutationExecutor, type GovernedMutationHooks } from '../execution/governed-mutation-executor';
 import { toolLeaseTtlSeconds } from '../execution/tool-lease-policy';
 import type { ToolCallRunner } from '../execution/tool-call-runner';
-import type { RunExecutionReaderPort, RunSnapshotReaderPort } from '../runs/run.repository.port';
+import type { RunSnapshotReaderPort } from '../runs/run.repository.port';
 import type { CollaborationCommitPort, StateCommitResult } from '../runs/state-commit.port';
 import type { RunView } from '../runs/run.types';
 import type { AgentEventHub } from '../events/event-hub';
 import type { SubagentCompletionCoordinator } from './subagent-completion-coordinator';
-import { governedSubagentWorkspaceMutation } from './subagent-mutation-policy';
+import { governedSubagentSshMutation } from './subagent-mutation-policy';
 import type { SubagentContextBuilder } from './subagent-context-builder';
 import type {
   DelegationCancellationPort,
@@ -43,7 +44,7 @@ const interruptedMutationResult = (): ToolResult => ({
   errorCode: 'SUBAGENT_MUTATION_OUTCOME_UNKNOWN',
   verification: {
     status: 'unverified',
-    summary: 'The actual Workspace state must be reconciled before another mutation is attempted.',
+    summary: 'The actual SSH execution outcome must be reconciled before another mutation is attempted.',
     evidenceRefs: [],
   },
 });
@@ -57,7 +58,7 @@ export class SubagentToolStepExecutor {
     private readonly work: SchedulerWorkExecutionPort,
     private readonly delegations: DelegationCancellationPort,
     private readonly runtimes: RuntimeParticipantRepositoryPort,
-    private readonly runs: RunSnapshotReaderPort & Pick<RunExecutionReaderPort, 'confirmedMutation'>,
+    private readonly runs: RunSnapshotReaderPort,
     private readonly stateCommit: CollaborationCommitPort,
     private readonly contextBuilder: SubagentContextBuilder,
     private readonly toolCalls: ToolCallRunner,
@@ -67,9 +68,7 @@ export class SubagentToolStepExecutor {
     private readonly recoverySafePoint: (run: RunView, reason: 'mutation_confirmed') => Promise<void> = async () =>
       undefined,
   ) {
-    this.governedMutations = new GovernedMutationExecutor(runs, stateCommit, toolCalls, () =>
-      this.clock.nowUnixSeconds(),
-    );
+    this.governedMutations = new GovernedMutationExecutor(stateCommit, toolCalls, () => this.clock.nowUnixSeconds());
   }
 
   async execute(scope: Scope, work: SchedulerWorkView, ownerEpoch: number, signal: AbortSignal): Promise<void> {
@@ -288,7 +287,7 @@ export class SubagentToolStepExecutor {
         inspection: toolWork.inspection,
         signal,
         autoApprove: run.definition.approvalMode === 'full_access',
-        hooks: this.subagentMutationHooks(scope, work, ownerEpoch, delegation, toolWork),
+        hooks: this.subagentMutationHooks(scope, work, ownerEpoch, delegation, toolWork, run),
       });
       if (prepared.status !== 'ready') return;
       activeRun = prepared.run;
@@ -315,7 +314,7 @@ export class SubagentToolStepExecutor {
       inspection: approvedWork.inspection,
       approvalId,
       signal,
-      hooks: this.subagentMutationHooks(scope, work, ownerEpoch, delegation, approvedWork),
+      hooks: this.subagentMutationHooks(scope, work, ownerEpoch, delegation, approvedWork, activeRun),
     });
   }
 
@@ -325,6 +324,7 @@ export class SubagentToolStepExecutor {
     ownerEpoch: number,
     delegation: DelegationView,
     toolWork: RuntimeToolWorkView,
+    run: RunView,
   ): GovernedMutationHooks {
     return {
       context: (run, signal, toolCallId) =>
@@ -337,18 +337,17 @@ export class SubagentToolStepExecutor {
           toolCallId,
         ),
       validateInspection: (inspection, decision) => {
-        const workspaceMutation = governedSubagentWorkspaceMutation(inspection, work.runId, work.agentRuntimeId);
-        if (decision.action === 'requireApproval' && workspaceMutation) return null;
+        const sshMutation = governedSubagentSshMutation(inspection, run.definition.connectionIds, delegation.grants);
+        if (decision.action === 'requireApproval' && sshMutation) return null;
         return new Error(
           decision.action === 'deny'
             ? decision.reason
-            : workspaceMutation
+            : sshMutation
               ? 'TOOL_POLICY_INVALID'
               : 'SUBAGENT_MUTATION_TARGET_FORBIDDEN',
         );
       },
       failedResult: (error) => failedToolResult(error),
-      duplicateResult: () => failedToolResult(new Error('MUTATION_ALREADY_CONFIRMED')),
       rejectProposed: (_run, inspection, result) =>
         this.settleChildMutationWithoutExecution(
           scope,
@@ -488,6 +487,7 @@ export class SubagentToolStepExecutor {
     return {
       userId: run.userId,
       appId: run.appId,
+      participantKind: 'subagent',
       actor: {
         kind: 'agent',
         userId: run.userId,
@@ -500,10 +500,13 @@ export class SubagentToolStepExecutor {
       threadId: run.threadId,
       ...(toolCallId === undefined ? {} : { toolCallId }),
       connectionIds: [...run.definition.connectionIds],
-      environment: run.definition.environment ?? null,
       stepId,
       signal,
-      deadlineAt: Math.min(delegationDeadlineAt, this.clock.nowUnixSeconds() + run.budget.toolTimeoutSeconds),
+      deadlineAt: Math.min(
+        delegationDeadlineAt,
+        this.clock.nowUnixSeconds() +
+          Math.min(run.budget.toolTimeoutSeconds, remainingExecutionSeconds(run, this.clock.nowUnixSeconds())),
+      ),
       maxOutputBytes: run.budget.maxToolOutputBytes,
       inputRevision: run.inputRevision,
     };

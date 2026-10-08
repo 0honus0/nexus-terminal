@@ -88,10 +88,8 @@ export const browserScreenshotVisionScenario = async () => {
     agentRuntimeId: runtimeId,
     sessionId,
     targetId: target.id,
-    targetRevision,
+    targetRevision: Number.parseInt(targetConfigurationHash.slice(3, 16), 16) + 1,
     targetConfigurationHash,
-    workspaceId: null,
-    generation: null,
     url: 'https://example.test/chart',
     createdAt: now,
   };
@@ -136,7 +134,15 @@ export const browserScreenshotVisionScenario = async () => {
     close: async () => undefined,
   };
   const budget = JSON.stringify({
-    maxRunSteps: 100,
+    modelRequestCeiling: 100,
+    activeExecutionCeilingSeconds: 7200,
+    maxToolExecutions: 4000,
+    phase: 'executing',
+    stopReason: null,
+    extensionCount: 0,
+    progressSequence: 0,
+
+    maxModelRequests: 100,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
     maxToolOutputBytes: 1_048_576,
@@ -158,7 +164,6 @@ export const browserScreenshotVisionScenario = async () => {
     approvalMode: 'ask',
     executionMode: 'execute',
     connectionIds: [],
-    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   });
@@ -166,7 +171,8 @@ export const browserScreenshotVisionScenario = async () => {
     inputTokens: 0,
     outputTokens: 0,
     cachedInputTokens: 0,
-    steps: 0,
+    toolExecutions: 0,
+    modelRequests: 0,
     subagentMessages: 0,
     subagentMessageBytes: 0,
   });
@@ -258,7 +264,7 @@ export const browserScreenshotVisionScenario = async () => {
       [runId, runtimeId, now],
     );
 
-    const tools = createBrowserTools(null!, settings as never, gateway as never, cryptoHash, artifacts);
+    const tools = createBrowserTools(settings as never, gateway as never, cryptoHash, artifacts);
     const screenshot = tools.find((tool) => tool.descriptor.name === 'browser_screenshot_capture');
     const semantic = tools.find((tool) => tool.descriptor.name === 'browser_snapshot_read');
     assert.ok(
@@ -280,7 +286,6 @@ export const browserScreenshotVisionScenario = async () => {
       runId,
       agentRuntimeId: runtimeId,
       connectionIds: [],
-      environment: null,
       stepId: 'browser-screenshot-tool-step',
       signal: new AbortController().signal,
       deadlineAt: now + 120,

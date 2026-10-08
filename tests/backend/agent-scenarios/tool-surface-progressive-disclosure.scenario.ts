@@ -93,14 +93,23 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
   });
   const core = inertTool({
     name: 'scenario_core_read',
+    capability: 'browser.read',
     riskClass: 'read',
     version: '1.0.0',
     description: 'Frequently used built-in read tool that must remain directly available.',
   });
+  const deferredNative = inertTool({
+    name: 'scenario_native_deferred_read',
+    capability: 'browser.read',
+    riskClass: 'read',
+    version: '1.0.0',
+    modelExposure: 'deferred',
+    description: 'Low-frequency built-in read tool that Root discovers on demand.',
+  });
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'scenario.core-tools',
-    tools: [core],
+    tools: [core, deferredNative],
   });
   catalog.registerContribution({
     schemaVersion: 1,
@@ -149,7 +158,6 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
     runId: 'tool-surface-run',
     agentRuntimeId: 'tool-surface-runtime',
     connectionIds: [],
-    environment: null,
     stepId: 'tool-surface-step',
     signal: new AbortController().signal,
     deadlineAt: 1_800_500_000,
@@ -159,16 +167,21 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
 
   const fullSchemas = catalog.schemas(scope);
   const fullTokens = estimateTokens(JSON.stringify(fullSchemas));
-  const projected = runner.schemas(scope, { environment: null }, 'execute');
+  const projected = runner.schemas(scope, {}, 'execute');
   const projectedTokens = estimateTokens(JSON.stringify(projected));
   const projectedNames = new Set(projected.map((tool) => tool.name));
 
   assert.equal(
     fullSchemas.length,
-    122,
-    'fixture must expose core/discovery Tools plus 120 MCP Tools in the authoritative catalog',
+    123,
+    'fixture must expose direct/deferred native Tools, discovery, and 120 MCP Tools in the authoritative catalog',
   );
   assert.ok(projectedNames.has('scenario_core_read'), 'frequent built-in Tool must remain directly model-visible');
+  assert.equal(
+    projectedNames.has('scenario_native_deferred_read'),
+    false,
+    'Root must remove low-frequency deferred native Tool schemas from the always-on model surface',
+  );
   assert.ok(projectedNames.has('tool_search'), 'large deferred Tool catalogs must expose bounded discovery');
   assert.ok(projectedNames.has('tool_invoke'), 'large deferred Tool catalogs must expose one stable invoke router');
   assert.equal(
@@ -179,6 +192,41 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
   assert.ok(
     projectedTokens < Math.floor(fullTokens * 0.25),
     `projected Tool schema tokens must materially shrink: full=${fullTokens}, projected=${projectedTokens}`,
+  );
+
+  const nativeSearch = await executor.invoke(context, {
+    providerCallId: 'surface-native-search-call',
+    name: 'tool_search',
+    argumentsJson: JSON.stringify({ query: 'scenario_native_deferred_read', limit: 1 }),
+  });
+  assert.equal(nativeSearch.result.ok, true);
+  const nativeMatches = (nativeSearch.result.data as Record<string, JsonValue>).matches;
+  assert.ok(Array.isArray(nativeMatches) && nativeMatches.length === 1);
+  const nativeMatch = nativeMatches[0];
+  assert.ok(nativeMatch && !Array.isArray(nativeMatch) && typeof nativeMatch === 'object');
+  const nativeHandle = (nativeMatch as Record<string, JsonValue>).handle;
+  assert.equal(typeof nativeHandle, 'string');
+  const nativeRouted = await runner.inspect(
+    context,
+    {
+      providerCallId: 'surface-native-invoke-call',
+      name: 'tool_invoke',
+      argumentsJson: JSON.stringify({ handle: nativeHandle, arguments: { query: 'needle' } }),
+    },
+    'execute',
+  );
+  assert.equal(nativeRouted.proposal.name, deferredNative.descriptor.name);
+  assert.equal(nativeRouted.inspection.toolName, deferredNative.descriptor.name);
+  assert.equal(nativeRouted.inspection.toolVersion, deferredNative.descriptor.version);
+  await assert.rejects(
+    () =>
+      runner.inspect(context, {
+        providerCallId: 'surface-native-direct-hidden-call',
+        name: deferredNative.descriptor.name,
+        argumentsJson: JSON.stringify({ query: 'needle' }),
+      }),
+    /MODEL_TOOL_CALL_INVALID/,
+    'a Root deferred native Tool must not be directly callable by guessing its hidden name',
   );
 
   const searched = await executor.invoke(context, {
@@ -262,7 +310,7 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
     id: 'scenario.mcp.surface',
     tools: mcpTools(121),
   });
-  const refreshedProjection = runner.schemas(scope, { environment: null }, 'execute');
+  const refreshedProjection = runner.schemas(scope, {}, 'execute');
   assert.equal(
     JSON.stringify(refreshedProjection),
     stableProjection,
@@ -314,7 +362,36 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
     'version-bound deferred handles must fail closed after MCP schema refresh',
   );
 
-  const planProjection = runner.schemas(scope, { environment: null }, 'plan');
+  const planProjection = runner.schemas(scope, {}, 'plan');
+  assert.ok(
+    planProjection.some((tool) => tool.name === deferredNative.descriptor.name),
+    'Root Plan mode must keep deferred native read/control Tools directly available for non-mutating investigation',
+  );
+  const planNative = await runner.inspect(
+    context,
+    {
+      providerCallId: 'surface-native-plan-direct-call',
+      name: deferredNative.descriptor.name,
+      argumentsJson: JSON.stringify({ query: 'inspect-only' }),
+    },
+    'plan',
+  );
+  assert.equal(planNative.proposal.name, deferredNative.descriptor.name);
+  assert.equal(planNative.inspection.toolName, deferredNative.descriptor.name);
+  await assert.rejects(
+    () =>
+      runner.inspect(
+        context,
+        {
+          providerCallId: 'surface-native-plan-router-call',
+          name: 'tool_invoke',
+          argumentsJson: JSON.stringify({ handle: nativeHandle, arguments: { query: 'inspect-only' } }),
+        },
+        'plan',
+      ),
+    /MODEL_TOOL_CALL_INVALID/,
+    'Root Plan mode must not reopen the deferred execute router with a stale handle',
+  );
   assert.equal(
     planProjection.some(
       (tool) => tool.name === 'tool_search' || tool.name === 'tool_invoke' || tool.name.startsWith('mcp_surface_'),
@@ -382,7 +459,10 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
     parentRuntimeId: 'root-runtime',
     childRuntimeId: childRuntime.id,
     profileId: 'default',
-    grants: [{ capability: 'integration.mcp.invoke', schemaVersion: 2, scope: { kind: 'global' } }],
+    grants: [
+      { capability: 'integration.mcp.invoke', schemaVersion: 2, scope: { kind: 'global' } },
+      { capability: 'browser.read', schemaVersion: 2, scope: { kind: 'global' } },
+    ],
     peerMessaging: 'parent-child',
     mutationMode: 'read-only',
     modelRef: childRuntime.modelRef,
@@ -394,8 +474,8 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
     status: 'running',
     depth: 1,
     failureMode: 'isolate',
-    budget: { maxSteps: 8 },
-    usage: { tokens: 0, steps: 0 },
+    budget: { maxModelRequests: 8 },
+    usage: { tokens: 0, modelRequests: 0 },
     result: null,
     evidenceRefs: [],
     deadlineAt: 1_900_000_000,
@@ -423,12 +503,24 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
         inputTokens: 0,
         outputTokens: 0,
         cachedInputTokens: 0,
-        steps: 0,
+        toolExecutions: 0,
+        modelRequests: 0,
         subagentMessages: 0,
         subagentMessageBytes: 0,
       },
-      budget: { maxRunSteps: 32, maxToolOutputBytes: 16 * 1024, contextPolicy: freezeRunContextPolicy('normal') },
-      definition: { environment: null },
+      budget: {
+        modelRequestCeiling: 32,
+        activeExecutionCeilingSeconds: 7200,
+        maxToolExecutions: 4000,
+        phase: 'executing',
+        stopReason: null,
+        extensionCount: 0,
+        progressSequence: 0,
+        maxModelRequests: 32,
+        maxToolOutputBytes: 16 * 1024,
+        contextPolicy: freezeRunContextPolicy('normal'),
+      },
+      definition: {},
     } as unknown as RunView,
   );
   assert.equal(childPrepared.kind, 'ready');
@@ -439,6 +531,10 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
     ),
     false,
     'Subagent read/control surface must not accidentally expose the Root-only MCP mutation discovery/router path',
+  );
+  assert.ok(
+    childPrepared.plan.offeredTools.some((tool) => tool.name === deferredNative.descriptor.name),
+    'Subagent native Tools allowed by delegation grants must remain directly model-visible even when Root defers them',
   );
   catalog.registerContribution({
     schemaVersion: 1,
@@ -479,12 +575,24 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
         inputTokens: 0,
         outputTokens: 0,
         cachedInputTokens: 0,
-        steps: 0,
+        toolExecutions: 0,
+        modelRequests: 0,
         subagentMessages: 0,
         subagentMessageBytes: 0,
       },
-      budget: { maxRunSteps: 32, maxToolOutputBytes: 16384, contextPolicy: freezeRunContextPolicy('normal') },
-      definition: { environment: null, executionMode: 'execute' },
+      budget: {
+        modelRequestCeiling: 32,
+        activeExecutionCeilingSeconds: 7200,
+        maxToolExecutions: 4000,
+        phase: 'executing',
+        stopReason: null,
+        extensionCount: 0,
+        progressSequence: 0,
+        maxModelRequests: 32,
+        maxToolOutputBytes: 16384,
+        contextPolicy: freezeRunContextPolicy('normal'),
+      },
+      definition: { executionMode: 'execute' },
     } as unknown as RunView,
   );
   assert.equal(routedChild.kind, 'ready');
@@ -504,11 +612,15 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
     string,
     JsonValue
   >;
-  const resolvedChild = childContext.resolveProposal(context, {
-    providerCallId: 'child-invoke',
-    name: 'tool_invoke',
-    argumentsJson: JSON.stringify({ handle: childHandle.handle, arguments: {} }),
-  });
+  const resolvedChild = childContext.resolveProposal(
+    context,
+    {
+      providerCallId: 'child-invoke',
+      name: 'tool_invoke',
+      argumentsJson: JSON.stringify({ handle: childHandle.handle, arguments: {} }),
+    },
+    'execute',
+  );
   assert.equal(childContext.allowsProposal(scope, readDelegation, resolvedChild), true);
   assert.equal(
     childContext.allowsProposal(scope, { ...readDelegation, grants: [] }, resolvedChild),
@@ -517,20 +629,28 @@ export const toolSurfaceProgressiveDisclosureScenario = async () => {
   );
   assert.throws(
     () =>
-      childContext.resolveProposal(context, {
-        providerCallId: 'direct-child',
-        name: resolvedChild.name,
-        argumentsJson: '{}',
-      }),
+      childContext.resolveProposal(
+        context,
+        {
+          providerCallId: 'direct-child',
+          name: resolvedChild.name,
+          argumentsJson: '{}',
+        },
+        'execute',
+      ),
     /MODEL_TOOL_CALL_INVALID/,
   );
   assert.throws(
     () =>
-      childContext.resolveProposal(context, {
-        providerCallId: 'stale-child',
-        name: 'tool_invoke',
-        argumentsJson: JSON.stringify({ handle, arguments: {} }),
-      }),
+      childContext.resolveProposal(
+        context,
+        {
+          providerCallId: 'stale-child',
+          name: 'tool_invoke',
+          argumentsJson: JSON.stringify({ handle, arguments: {} }),
+        },
+        'execute',
+      ),
     /RESOURCE_CHANGED/,
   );
 

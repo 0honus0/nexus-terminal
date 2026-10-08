@@ -4,6 +4,8 @@ import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { step } from '../../support/steps';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { E2E_URLS } from '../../support/test-env';
+import { addTaskProvider, addProviderModel } from '../../fixtures/agent/task-ui';
+test.use({ actionTimeout: 10_000 });
 import type {
   APIRequestContext,
   Locator,
@@ -78,7 +80,9 @@ test('Agent launcher moves immediately on drag and opens only on click', async (
 
   await page.mouse.move(initial!.x + initial!.width / 2, initial!.y + initial!.height / 2);
   await page.mouse.down();
-  await page.mouse.move(initial!.x + initial!.width / 2 - 90, initial!.y + initial!.height / 2 - 80, { steps: 4 });
+  await page.mouse.move(initial!.x + initial!.width / 2 - 90, initial!.y + initial!.height / 2 - 80, {
+    steps: 4,
+  });
   await page.mouse.up();
 
   const moved = await launcher.boundingBox();
@@ -149,13 +153,32 @@ test.describe('touch Agent launcher', () => {
     await expect(launcher).toBeVisible();
     const initial = (await launcher.boundingBox())!;
     const y = initial.y + 22 - 60;
-    const cdp = await context.newCDPSession(page);
-    await cdp.send('Input.dispatchTouchEvent', {
-      type: 'touchStart',
-      touchPoints: [{ x: initial.x + 22, y: initial.y + 22 }],
+    await launcher.dispatchEvent('pointerdown', {
+      pointerType: 'touch',
+      pointerId: 1,
+      isPrimary: true,
+      clientX: initial.x + 22,
+      clientY: initial.y + 22,
+      button: 0,
+      buttons: 1,
     });
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 22, y }] });
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await launcher.dispatchEvent('pointermove', {
+      pointerType: 'touch',
+      pointerId: 1,
+      isPrimary: true,
+      clientX: 22,
+      clientY: y,
+      buttons: 1,
+    });
+    await launcher.dispatchEvent('pointerup', {
+      pointerType: 'touch',
+      pointerId: 1,
+      isPrimary: true,
+      clientX: 22,
+      clientY: y,
+      button: 0,
+      buttons: 0,
+    });
     await expect(hub).toHaveCount(0);
     await expect.poll(async () => Math.round((await launcher.boundingBox())!.x)).toBe(-22);
     await page.reload();
@@ -163,7 +186,6 @@ test.describe('touch Agent launcher', () => {
     await expect.poll(async () => Math.round((await launcher.boundingBox())!.x)).toBe(-22);
     await page.touchscreen.tap(11, (await launcher.boundingBox())!.y + 22);
     await expect(hub).toBeVisible();
-    await cdp.detach();
   });
 
   test('touch drag moves the launcher without opening the Hub', async ({ page, context }) => {
@@ -179,17 +201,40 @@ test.describe('touch Agent launcher', () => {
     expect(initial).toBeTruthy();
     const startX = initial!.x + initial!.width / 2;
     const startY = initial!.y + initial!.height / 2;
-    const cdp = await context.newCDPSession(page);
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: startX, y: startY }] });
-    await cdp.send('Input.dispatchTouchEvent', {
-      type: 'touchMove',
-      touchPoints: [{ x: startX - 45, y: startY - 40 }],
+    await launcher.dispatchEvent('pointerdown', {
+      pointerType: 'touch',
+      pointerId: 1,
+      isPrimary: true,
+      clientX: startX,
+      clientY: startY,
+      button: 0,
+      buttons: 1,
     });
-    await cdp.send('Input.dispatchTouchEvent', {
-      type: 'touchMove',
-      touchPoints: [{ x: startX - 90, y: startY - 80 }],
+    await launcher.dispatchEvent('pointermove', {
+      pointerType: 'touch',
+      pointerId: 1,
+      isPrimary: true,
+      clientX: startX - 45,
+      clientY: startY - 40,
+      buttons: 1,
     });
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await launcher.dispatchEvent('pointermove', {
+      pointerType: 'touch',
+      pointerId: 1,
+      isPrimary: true,
+      clientX: startX - 90,
+      clientY: startY - 80,
+      buttons: 1,
+    });
+    await launcher.dispatchEvent('pointerup', {
+      pointerType: 'touch',
+      pointerId: 1,
+      isPrimary: true,
+      clientX: startX - 90,
+      clientY: startY - 80,
+      button: 0,
+      buttons: 0,
+    });
 
     const moved = await launcher.boundingBox();
     expect(moved).toBeTruthy();
@@ -701,6 +746,29 @@ test('Agent feature enable opens one global floating window that survives route 
   await expect(launcher).toHaveCount(0);
 });
 
+test('Agent settings load without Runner Workspace availability and preserve Browser/ACP settings', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await setUiLanguage(context.request);
+  await enableAgentWithRecommendedNexusAgent(context.request);
+  const obsoleteRequests: string[] = [];
+  await page.route('**/api/v1/agent/workspace-runtime/**', (route) => {
+    obsoleteRequests.push(route.request().url());
+    return route.abort();
+  });
+  await page.goto('/settings?tab=agent');
+  const panel = page.locator('#settings-panel-agent');
+  await expect(panel.getByRole('heading', { name: 'Model providers', exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: 'Execution & Integrations', exact: true }).click();
+  await expect(panel.getByRole('heading', { name: 'Execution and performance', exact: true })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: 'CDP', exact: true })).toBeAttached();
+  await expect(panel.getByRole('heading', { name: 'ACP Integrations', exact: true })).toBeAttached();
+  await expect(panel.getByRole('heading', { name: 'Workspace dev environment', exact: true })).toHaveCount(0);
+  expect(obsoleteRequests).toEqual([]);
+});
+
 test('Agent settings surface exposes the production control plane and captures functional evidence', async ({
   page,
   context,
@@ -716,7 +784,7 @@ test('Agent settings surface exposes the production control plane and captures f
   await expect(settingsNavigation).toBeVisible();
   await expect(settingsNavigation.getByRole('button', { name: 'Models & Budget', exact: true })).toBeVisible();
   await expect(settingsNavigation.getByRole('button', { name: 'Apps and extensions', exact: true })).toBeVisible();
-  await expect(settingsNavigation.getByRole('button', { name: 'Runtime & Environments', exact: true })).toBeVisible();
+  await expect(settingsNavigation.getByRole('button', { name: 'Execution & Integrations', exact: true })).toBeVisible();
   await expect(settingsNavigation.getByRole('button', { name: 'Safety and system', exact: true })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Disable Agent', exact: true })).toBeVisible();
   const providersHeading = panel.getByRole('heading', { name: 'Model providers', exact: true });
@@ -890,13 +958,11 @@ test('Agent settings surface exposes the production control plane and captures f
   expect((await fallbackSaved).ok()).toBeTruthy();
   await expect(page.getByText('Fallback chain updated and saved', { exact: true })).toBeVisible();
 
-  await settingsNavigation.getByRole('button', { name: 'Runtime & Environments', exact: true }).click();
+  await settingsNavigation.getByRole('button', { name: 'Execution & Integrations', exact: true }).click();
   await expect(panel.getByRole('heading', { name: 'Execution and performance', exact: true })).toBeVisible();
-  const workspaceRuntime = panel.getByRole('heading', { name: 'Workspace dev environment', exact: true });
-  await workspaceRuntime.scrollIntoViewIfNeeded();
-  await expect(workspaceRuntime).toBeVisible();
+  await expect(panel.getByRole('heading', { name: 'Workspace dev environment', exact: true })).toHaveCount(0);
   await expect(panel.getByRole('heading', { name: 'CDP', exact: true })).toBeAttached();
-  await expect(panel.getByRole('heading', { name: 'ACP', exact: true })).toBeAttached();
+  await expect(panel.getByRole('heading', { name: 'ACP Integrations', exact: true })).toBeAttached();
   await expect(panel.getByRole('heading', { name: 'Artifacts and storage', exact: true })).toBeAttached();
   await captureFunctionalScreenshot(page, 'agent-settings-runtime.png', { viewport: { width: 1440, height: 900 } });
 
@@ -956,8 +1022,10 @@ test('Agent settings surface exposes the production control plane and captures f
   const narrowPanel = page.locator('#settings-panel-agent');
   const narrowNavigation = narrowPanel.getByRole('navigation', { name: 'Agent settings sections', exact: true });
   await expect(narrowNavigation).toBeVisible();
-  await narrowNavigation.getByRole('button', { name: 'Runtime & Environments', exact: true }).click();
-  await expect(narrowPanel.getByRole('heading', { name: 'Workspace dev environment', exact: true })).toBeVisible();
+  await narrowNavigation.getByRole('button', { name: 'Execution & Integrations', exact: true }).click();
+  await expect(narrowPanel.getByRole('heading', { name: 'Workspace dev environment', exact: true })).toHaveCount(0);
+  await expect(narrowPanel.getByRole('heading', { name: 'CDP', exact: true })).toBeAttached();
+  await expect(narrowPanel.getByRole('heading', { name: 'ACP Integrations', exact: true })).toBeAttached();
   const horizontalExcess = await page.evaluate(() =>
     Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
   );
@@ -974,36 +1042,10 @@ test('fallback settings drop stale models and provider deletion repairs the defa
   const csrf = await csrfToken(context.request);
   const headers = { 'X-Nexus-CSRF': csrf };
   const model = (id: string) => ({ id, contextWindow: 8192, maxOutputTokens: 128, supportsTools: true });
-  const createProvider = async (displayName: string, models: ReturnType<typeof model>[]) => {
-    const response = await context.request.post('/api/v1/agent/ai/providers', {
-      headers,
-      data: {
-        kind: 'openai-compatible',
-        displayName,
-        baseUrl: `${E2E_URLS.openAiProviderOrigin}/v1`,
-        protocol: 'chat-completions',
-        credential: 'e2e-provider-secret',
-        models,
-        enabled: true,
-      },
-    });
-    expect(response.status(), await response.text()).toBe(201);
-    return (
-      (await response.json()) as AgentEnvelope<{
-        id: string;
-        version: number;
-        displayName: string;
-        models: ReturnType<typeof model>[];
-      }>
-    ).data;
-  };
-
-  let primary = await createProvider('Fallback Primary', [
-    model('primary-model'),
-    model('stale-fallback'),
-    model('valid-fallback'),
-  ]);
-  const backup = await createProvider('Fallback Backup', [model('backup-model')]);
+  let primary = await addTaskProvider(page, 'Fallback Primary', 'primary-model');
+  primary = await addProviderModel(page, 'stale-fallback');
+  primary = await addProviderModel(page, 'valid-fallback');
+  const backup = await addTaskProvider(page, 'Fallback Backup', 'backup-model');
 
   const initialSettings = await context.request.get('/api/v1/agent/settings');
   expect(initialSettings.ok(), await initialSettings.text()).toBeTruthy();
@@ -1457,6 +1499,7 @@ test('Agent WebSocket replays durable Host events after a disconnect', async ({ 
 test('Agent Host event stream elects one cross-tab leader', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await enableAgentWithRecommendedNexusAgent(context.request);
+  const csrf = await csrfToken(context.request);
 
   const leaderSocketPromise = page.waitForEvent('websocket', {
     predicate: (socket) => new URL(socket.url()).pathname === '/ws/agent',
@@ -1471,8 +1514,19 @@ test('Agent Host event stream elects one cross-tab leader', async ({ page, conte
     if (new URL(socket.url()).pathname === '/ws/agent') followerSockets += 1;
   });
   await follower.goto('/connections');
+  await expect(follower.getByRole('button', { name: 'Open Agent', exact: true })).toBeVisible();
+  await follower.getByRole('button', { name: 'Open Agent', exact: true }).click();
+  await expect(follower.locator('section[aria-label="Agent"]')).toBeVisible();
   await follower.waitForTimeout(750);
   expect(followerSockets).toBe(0);
+
+  const externalThreadTitle = `E2E Cross-tab Thread ${Date.now()}`;
+  const createdThread = await context.request.post('/api/v1/apps/nexus.agent/threads', {
+    headers: { 'X-Nexus-CSRF': csrf },
+    data: { title: externalThreadTitle },
+  });
+  expect(createdThread.status(), await createdThread.text()).toBe(201);
+  await expect(follower.getByText(externalThreadTitle, { exact: true })).toBeVisible();
 
   await page.close();
   await expect.poll(() => followerSockets, { timeout: 10_000 }).toBe(1);
@@ -1491,7 +1545,7 @@ test('Agent configuration changes propagate across tabs without overwriting dirt
     await target.goto('/settings?tab=agent');
     const panel = target.locator('#settings-panel-agent');
     await expect(panel).toBeVisible();
-    await panel.getByRole('button', { name: 'Runtime & Environments', exact: true }).click();
+    await panel.getByRole('button', { name: 'Execution & Integrations', exact: true }).click();
     const section = panel
       .getByRole('heading', { name: 'Execution and performance', exact: true })
       .locator('xpath=ancestor::section[1]');
@@ -1502,8 +1556,8 @@ test('Agent configuration changes propagate across tabs without overwriting dirt
   const leaderSection = await openPerformanceSettings(page);
   const follower = await context.newPage();
   const followerSection = await openPerformanceSettings(follower);
-  const leaderInput = leaderSection.getByRole('spinbutton');
-  const followerInput = followerSection.getByRole('spinbutton');
+  const leaderInput = leaderSection.getByRole('spinbutton', { name: 'Agent execution concurrency', exact: false });
+  const followerInput = followerSection.getByRole('spinbutton', { name: 'Agent execution concurrency', exact: false });
 
   const currentValue = Number(await leaderInput.inputValue());
   const minValue = Number((await leaderInput.getAttribute('min')) ?? '1');
@@ -1700,6 +1754,7 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
       expect(declaredCapabilities).toContain('integration.acp.invoke');
       expect(declaredCapabilities).toContain('browser.read');
       expect(declaredCapabilities).toContain('browser.interact');
+      expect(declaredCapabilities).not.toContain('workspace.manage');
       expect(grantedCapabilities).toContain('integration.acp.invoke');
       expect(grantedCapabilities).toContain('browser.read');
       expect(grantedCapabilities).toContain('browser.interact');
@@ -1804,7 +1859,7 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
     },
   );
 
-  await step('Browser targets and ACP profiles remain configurable while the optional Runner is absent', async () => {
+  await step('Browser targets remain configurable while retired Workspace ACP profiles are rejected', async () => {
     const before = await request.get('/api/v1/agent/settings');
     expect(before.ok(), await before.text()).toBeTruthy();
     const beforeBody = (await before.json()) as AgentEnvelope<{ revision: number }>;
@@ -1812,9 +1867,6 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
       headers: mutationHeaders,
       data: {
         patch: {
-          workspaceRuntime: {
-            acpProfiles: [{ id: 'local-acp', argv: ['/usr/bin/example-acp'], cwd: '/workspace' }],
-          },
           browser: {
             targets: [
               {
@@ -1841,7 +1893,6 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
     await expect(updated.json()).resolves.toMatchObject({
       data: {
         requestedSettings: {
-          workspaceRuntime: { acpProfiles: [{ id: 'local-acp' }] },
           browser: {
             targets: [
               {
@@ -1854,15 +1905,55 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
       },
     });
 
+    const retiredProfile = await request.patch('/api/v1/agent/settings', {
+      headers: mutationHeaders,
+      data: {
+        patch: { workspaceRuntime: { acpProfiles: [{ id: 'local-acp', argv: ['agent'], cwd: '/workspace' }] } },
+        expectedVersion: beforeBody.data.revision + 1,
+      },
+    });
+    expect(retiredProfile.status(), await retiredProfile.text()).toBe(400);
+
+    const retired = await request.post('/api/v1/apps/nexus.agent/integrations', {
+      headers: { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
+      data: {
+        kind: 'acp',
+        enabled: true,
+        configuration: {
+          displayName: 'Retired ACP',
+          transport: 'workspace-profile',
+          profileId: 'local-acp',
+          protocolVersion: '1',
+        },
+      },
+    });
+    expect(retired.status(), await retired.text()).toBe(400);
+    const retiredProfileField = await request.post('/api/v1/apps/nexus.agent/integrations', {
+      headers: { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
+      data: {
+        kind: 'acp',
+        enabled: true,
+        configuration: {
+          displayName: 'Obsolete SSH ACP Profile',
+          transport: 'ssh',
+          profileId: 'obsolete',
+          argv: ['agent', '--acp'],
+          cwd: '/srv/project',
+          protocolVersion: '1',
+        },
+      },
+    });
+    expect(retiredProfileField.status(), await retiredProfileField.text()).toBe(400);
     const created = await request.post('/api/v1/apps/nexus.agent/integrations', {
       headers: { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
       data: {
         kind: 'acp',
         enabled: true,
         configuration: {
-          displayName: 'Local ACP',
-          transport: 'workspace-profile',
-          profileId: 'local-acp',
+          displayName: 'SSH ACP',
+          transport: 'ssh',
+          argv: ['agent', '--acp'],
+          cwd: '/srv/project',
           protocolVersion: '1',
         },
       },
@@ -1879,7 +1970,7 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
           id: createdBody.data.id,
           kind: 'acp',
           enabled: true,
-          configuration: { profileId: 'local-acp', transport: 'workspace-profile' },
+          configuration: { transport: 'ssh', cwd: '/srv/project', argv: ['agent', '--acp'] },
         },
       ],
     });
@@ -1891,16 +1982,36 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
     expect(removed.ok(), await removed.text()).toBeTruthy();
   });
 
-  await step('Workspace Runtime availability reports the optional Runner as not configured', async () => {
-    const response = await request.get('/api/v1/agent/workspace-runtime/availability');
-    expect(response.ok(), await response.text()).toBeTruthy();
-    await expect(response.json()).resolves.toMatchObject({
-      data: {
-        available: false,
-        reason: 'runner_not_configured',
-        mode: 'native',
-        isolation: 'logical',
-      },
-    });
+  await step('retired Workspace management APIs reject requests without rewriting settings', async () => {
+    const before = await request.get('/api/v1/agent/settings');
+    expect(before.ok(), await before.text()).toBeTruthy();
+    const baseline = await before.json();
+    const mutationHeaders = { 'X-Nexus-CSRF': await csrfToken(request) };
+    const retiredMutations = [
+      'setup/preview',
+      'setup/confirm',
+      'tool-packs/node/22/install',
+      'tool-packs/node/22/uninstall/preview',
+      'tool-packs/node/22/uninstall/confirm',
+      'runtime-cleanup/preview',
+      'runtime-cleanup/confirm',
+      'settings/reset/preview',
+      'settings/reset/confirm',
+      'cache-cleanup',
+    ];
+    for (const uri of retiredMutations) {
+      const response = await request.post(`/api/v1/agent/workspace-runtime/${uri}`, {
+        headers: mutationHeaders,
+        data: { expectedVersion: baseline.data.revision, confirmationId: randomUUID() },
+      });
+      expect(response.status(), await response.text()).toBe(404);
+    }
+    for (const uri of ['storage', 'commands/obsolete']) {
+      const response = await request.get(`/api/v1/agent/workspace-runtime/${uri}`);
+      expect(response.status(), await response.text()).toBe(404);
+    }
+    const after = await request.get('/api/v1/agent/settings');
+    expect(after.ok(), await after.text()).toBeTruthy();
+    expect((await after.json()).data.revision).toBe(baseline.data.revision);
   });
 });

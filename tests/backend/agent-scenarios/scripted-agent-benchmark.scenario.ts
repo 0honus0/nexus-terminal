@@ -142,7 +142,7 @@ export const scriptedAgentBenchmarkScenario = async () => {
       },
     ]);
     const providers = new ProviderService(new StaticProviderRepository(benchmarkProvider), scriptedModel, clock);
-    const modelRunner = new ModelStepRunner(providers, context, scriptedModel, new ScenarioModelCallLimiter());
+    const modelRunner = new ModelStepRunner(providers, context, scriptedModel, new ScenarioModelCallLimiter(), clock);
 
     const catalog = new ToolCatalog();
     const executedKeys = new Set<string>();
@@ -232,7 +232,6 @@ export const scriptedAgentBenchmarkScenario = async () => {
       runId: snapshot.id,
       agentRuntimeId: `${benchmark.id}-runtime`,
       connectionIds: [],
-      environment: null,
       stepId: `${benchmark.id}-step-1`,
       signal,
       deadlineAt: snapshot.createdAt + 60,

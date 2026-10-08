@@ -1,4 +1,4 @@
-export type AgentTargetKind = 'workspace' | 'ssh';
+export type AgentTargetKind = 'ssh';
 
 export interface AgentTargetSelector {
   target: AgentTargetKind;
@@ -11,12 +11,10 @@ interface ToolTargetFingerprintBase {
   loginUser: string;
   configurationHash: string;
   connectionId?: number;
-  workspaceId?: string;
   integrationId?: string;
   schemaHash?: string;
   browserSessionId?: string;
   snapshotId?: string;
-  generation?: number;
   hostKeyTrust?: 'unavailable';
 }
 

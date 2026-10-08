@@ -55,7 +55,7 @@ const routes: RouteRecordRaw[] = [
     name: 'Setup',
     component: loadSetupView,
   },
-  { path: '/workspace', name: 'Workspace', component: loadWorkspacePage },
+  { path: '/workspace', name: 'Workspace', component: loadWorkspacePage, meta: { keepAlive: true } },
   {
     path: '/connections',
     name: 'Connections',

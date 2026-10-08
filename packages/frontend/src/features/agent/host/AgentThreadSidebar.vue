@@ -371,7 +371,7 @@
 
     <div
       ref="scroller"
-      class="min-h-0 flex-1 overflow-y-auto px-2 py-1.5 scrollbar-thin"
+      class="agent-thread-scroller min-h-0 flex-1 overflow-y-auto px-2 py-1.5"
       :title="$t('agent.operations.threadZoomHint')"
       @scroll.passive="onScroll"
       @wheel="onWheel"
@@ -515,6 +515,58 @@
 </template>
 
 <style scoped>
+  .agent-thread-scroller {
+    --agent-scroll-thumb: color-mix(in srgb, var(--text-color-secondary) 40%, transparent);
+    scrollbar-gutter: stable;
+  }
+
+  .agent-thread-scroller:hover,
+  .agent-thread-scroller:focus-within {
+    --agent-scroll-thumb: color-mix(in srgb, var(--text-color-secondary) 65%, transparent);
+  }
+
+  .agent-thread-scroller::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .agent-thread-scroller::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .agent-thread-scroller::-webkit-scrollbar-thumb {
+    min-height: 32px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background-color: var(--agent-scroll-thumb);
+    background-clip: padding-box;
+  }
+
+  .agent-thread-scroller::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--text-color-secondary) 85%, transparent);
+  }
+
+  .agent-thread-scroller::-webkit-scrollbar-thumb:active {
+    background-color: var(--link-active-color);
+  }
+
+  .agent-thread-scroller::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  .agent-thread-scroller::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  @supports not selector(::-webkit-scrollbar) {
+    .agent-thread-scroller {
+      scrollbar-width: thin;
+      scrollbar-color: var(--agent-scroll-thumb) transparent;
+    }
+  }
+
   /*
    * §7.13-d：缩放系数只写在根节点的 `--agent-thread-scale` 上，字号与内边距都在这里统一
    * 换算——不再用内联 `font-size`，否则同一份代码在不同机器上侧栏字号可以差 30%。

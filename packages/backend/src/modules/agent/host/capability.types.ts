@@ -1,4 +1,4 @@
-import type { AgentTargetKind, AgentTargetSelector } from '../capabilities/tool-target.types';
+import type { AgentTargetSelector } from '../capabilities/tool-target.types';
 
 export const AGENT_CAPABILITIES = [
   'file.read',
@@ -7,7 +7,6 @@ export const AGENT_CAPABILITIES = [
   'machine.inspect',
   'shell.execute',
   'machine.docker.manage',
-  'workspace.manage',
   'browser.read',
   'browser.interact',
   'integration.mcp.read',
@@ -27,7 +26,7 @@ export type TargetGrantSelection = { mode: 'all' } | { mode: 'ids'; ids: string[
 
 export interface TargetCapabilityScope {
   kind: 'targets';
-  targets: Partial<Record<AgentTargetKind, TargetGrantSelection>>;
+  targets: Partial<Record<'ssh', TargetGrantSelection>>;
 }
 
 export type CapabilityGrantScope = GlobalCapabilityScope | TargetCapabilityScope;
@@ -54,6 +53,6 @@ export type CapabilityScopeKind = CapabilityGrantScope['kind'];
 export interface CapabilityDefinitionView {
   id: AgentCapability;
   scopeKind: CapabilityScopeKind;
-  supportedTargets: AgentTargetKind[];
+  supportedTargets: 'ssh'[];
   defaultScope: CapabilityGrantScope;
 }

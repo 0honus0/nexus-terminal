@@ -15,7 +15,7 @@ import { hashOperation } from '../../../packages/backend/src/modules/agent/opera
 
 export const browserInteractionPrimitivesScenario = async () => {
   const cryptoHash = { sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex') };
-  const descriptorTools = createBrowserTools(null!, null!, null!, cryptoHash);
+  const descriptorTools = createBrowserTools(null!, null!, cryptoHash);
   assert.deepEqual(
     descriptorTools.map((tool) => tool.descriptor.name),
     [
@@ -51,7 +51,7 @@ export const browserInteractionPrimitivesScenario = async () => {
     assert.ok(names.has(expected), `P-084 requires controlled Browser primitive ${expected}`);
   }
 
-  const runtime = new BrowserRuntimeAdapter(null!);
+  const runtime = new BrowserRuntimeAdapter();
   const runtimeSessionId = randomUUID();
   const runtimeRunId = randomUUID();
   const runtimeId = randomUUID();
@@ -344,10 +344,8 @@ export const browserInteractionPrimitivesScenario = async () => {
       agentRuntimeId,
       sessionId: toolSessionId,
       targetId: target.id,
-      targetRevision: target.profileRevision,
+      targetRevision: Number.parseInt(targetConfigurationHash.slice(3, 16), 16) + 1,
       targetConfigurationHash,
-      workspaceId: null,
-      generation: null,
       url: 'https://example.test/form',
       createdAt: now,
     }),
@@ -360,7 +358,6 @@ export const browserInteractionPrimitivesScenario = async () => {
       uploadedBytes = Buffer.from(file.bytes);
       return {
         sessionId: toolSessionId,
-        generation: null,
         targetId: target.id,
         url: 'https://example.test/form',
         title: 'Upload form',
@@ -369,7 +366,6 @@ export const browserInteractionPrimitivesScenario = async () => {
     },
     download: async () => ({
       sessionId: toolSessionId,
-      generation: null,
       targetId: target.id,
       url: 'https://example.test/files/result.txt',
       name: 'result.txt',
@@ -431,7 +427,7 @@ export const browserInteractionPrimitivesScenario = async () => {
       [sourceArtifact.id, runId, now],
     );
 
-    const tools = createBrowserTools(null!, settings as never, toolGateway as never, cryptoHash, artifacts);
+    const tools = createBrowserTools(settings as never, toolGateway as never, cryptoHash, artifacts);
     const uploadTool = tools.find((tool) => tool.descriptor.name === 'browser_upload')!;
     const downloadTool = tools.find((tool) => tool.descriptor.name === 'browser_download')!;
     const uploadSchema = uploadTool.descriptor.inputSchema as Record<string, JsonValue>;
@@ -453,7 +449,6 @@ export const browserInteractionPrimitivesScenario = async () => {
       runId,
       agentRuntimeId,
       connectionIds: [],
-      environment: null,
       stepId: 'browser-interaction-step',
       signal: new AbortController().signal,
       deadlineAt: now + 120,

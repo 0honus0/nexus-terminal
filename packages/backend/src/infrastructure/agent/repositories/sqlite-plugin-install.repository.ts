@@ -80,7 +80,6 @@ interface VersionRow {
   manifest_json: string;
   frontend_entry: string | null;
   backend_entry: string | null;
-  runner_entry: string | null;
   skill_files_json: string;
   status: PluginVersionStatus;
   installed_at: number | null;
@@ -167,7 +166,6 @@ const mapVersion = (row: VersionRow): PluginVersionRecord => ({
   manifest: decodePersistedAppManifest(row.manifest_json),
   frontendEntry: row.frontend_entry,
   backendEntry: row.backend_entry,
-  runnerEntry: row.runner_entry,
   skillFiles: decodeDurableStringArray(parseDurableJson(row.skill_files_json), 64),
   status: row.status,
   installedAt: row.installed_at,
@@ -175,7 +173,7 @@ const mapVersion = (row: VersionRow): PluginVersionRecord => ({
 });
 
 const STAGE_COLUMNS = `id,user_id,source_kind,source_json,package_hash,size_bytes,publisher_key_id,app_id,app_version,manifest_json,status,error_code,created_at,updated_at,version`;
-const VERSION_COLUMNS = `app_id,version,package_hash,publisher_key_id,manifest_json,frontend_entry,backend_entry,runner_entry,skill_files_json,status,installed_at,updated_at`;
+const VERSION_COLUMNS = `app_id,version,package_hash,publisher_key_id,manifest_json,frontend_entry,backend_entry,skill_files_json,status,installed_at,updated_at`;
 const APP_STATE_COLUMNS = `user_id,app_id,active_version,desired_state,observed_state,health_reason,policy_revision,running_count,approval_count,budget_request_count,accept_new_runs,version,created_at,updated_at`;
 
 export class SqlitePluginInstallRepository implements PluginInstallRepositoryPort {
@@ -388,8 +386,8 @@ export class SqlitePluginInstallRepository implements PluginInstallRepositoryPor
     if (existing && existing.packageHash !== record.packageHash) throw new Error('PLUGIN_VERSION_IMMUTABLE');
     await this.db.execute(
       `INSERT INTO agent_plugin_versions
-       (app_id,version,package_hash,publisher_key_id,manifest_json,frontend_entry,backend_entry,runner_entry,skill_files_json,status,installed_at,updated_at)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+       (app_id,version,package_hash,publisher_key_id,manifest_json,frontend_entry,backend_entry,skill_files_json,status,installed_at,updated_at)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT(app_id,version) DO UPDATE SET
          status=CASE
            WHEN agent_plugin_versions.status='installed' AND excluded.status='verified' THEN 'installed'
@@ -408,7 +406,6 @@ export class SqlitePluginInstallRepository implements PluginInstallRepositoryPor
         JSON.stringify(record.manifest),
         record.frontendEntry,
         record.backendEntry,
-        record.runnerEntry,
         JSON.stringify(record.skillFiles),
         record.status,
         record.installedAt,

@@ -45,9 +45,9 @@ export interface DelegationRow {
   status: DelegationView['status'];
   depth: number;
   failure_mode: DelegationView['failureMode'];
-  max_steps: number;
+  max_model_requests: number;
   used_tokens: number;
-  used_steps: number;
+  used_model_requests: number;
   result_json: string | null;
   evidence_refs_json: string;
   deadline_at: number;
@@ -233,7 +233,14 @@ export const decodeRunBudget = (value: string): RunBudget => {
   const record = recordValue(parsePersistedJson(value));
   assertRecordKeys(record, [
     'contextPolicy',
-    'maxRunSteps',
+    'maxModelRequests',
+    'modelRequestCeiling',
+    'activeExecutionCeilingSeconds',
+    'maxToolExecutions',
+    'phase',
+    'stopReason',
+    'extensionCount',
+    'progressSequence',
     'maxActiveExecutionSeconds',
     'toolTimeoutSeconds',
     'maxToolOutputBytes',
@@ -244,6 +251,13 @@ export const decodeRunBudget = (value: string): RunBudget => {
     'contextCompactionMode',
     'revision',
   ]);
+  if (
+    !['executing', 'finishing'].includes(String(record.phase)) ||
+    ![null, 'model_request_limit', 'active_time_limit', 'tool_execution_limit', 'no_progress'].some(
+      (value) => value === record.stopReason,
+    )
+  )
+    throw new Error('AGENT_DURABLE_STATE_INVALID');
   const compactionMode = record.contextCompactionMode;
   if (!['aggressive', 'balanced', 'conservative'].includes(String(compactionMode))) return invalidDurableState();
   const contextPolicy = recordValue(record.contextPolicy);
@@ -267,7 +281,14 @@ export const decodeRunBudget = (value: string): RunBudget => {
       softPressurePercent,
       toolOutputFloorPercent,
     },
-    maxRunSteps: integerValue(record.maxRunSteps, 1),
+    maxModelRequests: integerValue(record.maxModelRequests, 1),
+    modelRequestCeiling: integerValue(record.modelRequestCeiling, 1),
+    activeExecutionCeilingSeconds: integerValue(record.activeExecutionCeilingSeconds, 1),
+    maxToolExecutions: integerValue(record.maxToolExecutions, 1),
+    phase: record.phase as RunBudget['phase'],
+    stopReason: record.stopReason as RunBudget['stopReason'],
+    extensionCount: integerValue(record.extensionCount),
+    progressSequence: integerValue(record.progressSequence),
     maxActiveExecutionSeconds: integerValue(record.maxActiveExecutionSeconds, 1),
     toolTimeoutSeconds: integerValue(record.toolTimeoutSeconds, 1),
     maxToolOutputBytes: integerValue(record.maxToolOutputBytes, 1),
@@ -282,6 +303,16 @@ export const decodeRunBudget = (value: string): RunBudget => {
 
 export const decodeRunUsage = (value: string): RunUsage => {
   const record = recordValue(parsePersistedJson(value));
+  assertRecordKeys(record, [
+    'inputTokens',
+    'outputTokens',
+    'cachedInputTokens',
+    'modelRequests',
+    'toolExecutions',
+    'subagentMessages',
+    'subagentMessageBytes',
+    'context',
+  ]);
   const context = record.context === undefined ? null : recordValue(record.context);
   if (context && !['estimated', 'anchored_estimate', 'provider'].includes(String(context.source)))
     return invalidDurableState();
@@ -289,7 +320,8 @@ export const decodeRunUsage = (value: string): RunUsage => {
     inputTokens: integerValue(record.inputTokens),
     outputTokens: integerValue(record.outputTokens),
     cachedInputTokens: integerValue(record.cachedInputTokens),
-    steps: integerValue(record.steps),
+    modelRequests: integerValue(record.modelRequests),
+    toolExecutions: integerValue(record.toolExecutions),
     subagentMessages: integerValue(record.subagentMessages),
     subagentMessageBytes: integerValue(record.subagentMessageBytes),
     ...(context === null
@@ -320,6 +352,7 @@ export const decodeToolInspection = (value: string): RuntimeToolWorkView['inspec
     'target',
     'resourceKeys',
     'risk',
+    'rejectionCode',
     'mutation',
     'operationHash',
     'operationHashVersion',
@@ -330,6 +363,14 @@ export const decodeToolInspection = (value: string): RuntimeToolWorkView['inspec
   if (!['read', 'control', 'mutate', 'destructive', 'forbidden'].includes(String(record.risk)))
     return invalidDurableState();
   if (record.operationHashVersion !== 1) return invalidDurableState();
+  if (
+    record.rejectionCode !== undefined &&
+    (record.risk !== 'forbidden' ||
+      record.mutation !== false ||
+      typeof record.rejectionCode !== 'string' ||
+      !/^[A-Z][A-Z0-9_]+$/.test(record.rejectionCode))
+  )
+    return invalidDurableState();
   const target = recordValue(record.target);
   assertRecordKeys(target, [
     'kind',
@@ -340,17 +381,15 @@ export const decodeToolInspection = (value: string): RuntimeToolWorkView['inspec
     'loginUser',
     'configurationHash',
     'connectionId',
-    'workspaceId',
     'integrationId',
     'schemaHash',
     'browserSessionId',
     'snapshotId',
-    'generation',
     'hostKeyTrust',
   ]);
   const targetKind = String(target.kind);
-  if (!['ssh', 'workspace', 'integration', 'browser', 'run'].includes(targetKind)) return invalidDurableState();
-  const canonicalTarget = targetKind === 'ssh' || targetKind === 'workspace';
+  if (!['ssh', 'integration', 'browser', 'run'].includes(targetKind)) return invalidDurableState();
+  const canonicalTarget = targetKind === 'ssh';
   if (canonicalTarget) {
     if (target.target !== targetKind || typeof target.id !== 'string' || target.id.length < 1)
       return invalidDurableState();
@@ -364,18 +403,16 @@ export const decodeToolInspection = (value: string): RuntimeToolWorkView['inspec
     normalizedArguments: decodeJsonValue(record.normalizedArguments),
     target: {
       kind: targetKind as RuntimeToolWorkView['inspection']['target']['kind'],
-      ...(canonicalTarget ? { target: targetKind as 'ssh' | 'workspace', id: stringValue(target.id) } : {}),
+      ...(canonicalTarget ? { target: targetKind as 'ssh', id: stringValue(target.id) } : {}),
       targetIdentity: stringValue(target.targetIdentity),
       endpoint: stringValue(target.endpoint),
       loginUser: stringValue(target.loginUser),
       configurationHash: stringValue(target.configurationHash),
       ...(target.connectionId === undefined ? {} : { connectionId: integerValue(target.connectionId, 1) }),
-      ...(target.workspaceId === undefined ? {} : { workspaceId: stringValue(target.workspaceId) }),
       ...(target.integrationId === undefined ? {} : { integrationId: stringValue(target.integrationId) }),
       ...(target.schemaHash === undefined ? {} : { schemaHash: stringValue(target.schemaHash) }),
       ...(target.browserSessionId === undefined ? {} : { browserSessionId: stringValue(target.browserSessionId) }),
       ...(target.snapshotId === undefined ? {} : { snapshotId: stringValue(target.snapshotId) }),
-      ...(target.generation === undefined ? {} : { generation: integerValue(target.generation, 1) }),
       ...(target.hostKeyTrust === undefined
         ? {}
         : target.hostKeyTrust === 'unavailable'
@@ -384,14 +421,14 @@ export const decodeToolInspection = (value: string): RuntimeToolWorkView['inspec
     } as RuntimeToolWorkView['inspection']['target'],
     resourceKeys: decodeStringArray(record.resourceKeys, 256),
     risk: record.risk as RuntimeToolWorkView['inspection']['risk'],
+    ...(record.rejectionCode === undefined ? {} : { rejectionCode: stringValue(record.rejectionCode) }),
     mutation: booleanValue(record.mutation),
     operationHash: stringValue(record.operationHash),
     operationHashVersion: 1,
     preconditions: record.preconditions.map((item) => {
       const precondition = recordValue(item);
       assertRecordKeys(precondition, ['kind', 'key', 'observedValue']);
-      if (!['fileHash', 'metadata', 'serviceState', 'workspaceGeneration'].includes(String(precondition.kind)))
-        return invalidDurableState();
+      if (!['fileHash', 'metadata', 'serviceState'].includes(String(precondition.kind))) return invalidDurableState();
       return {
         kind: precondition.kind as RuntimeToolWorkView['inspection']['preconditions'][number]['kind'],
         key: stringValue(precondition.key),
@@ -404,8 +441,8 @@ export const decodeToolInspection = (value: string): RuntimeToolWorkView['inspec
 };
 export const delegationColumns = `d.id, d.run_id, r.user_id, r.app_id, d.parent_runtime_id, d.child_runtime_id,
   d.profile_id, d.grants_json, d.peer_messaging, d.mutation_mode, d.model_ref_json, d.objective, d.constraints_json, d.input_artifact_refs_json,
-  d.completion_criteria_json, d.dependency_mode, d.status, d.depth, d.failure_mode, d.max_steps,
-  d.used_tokens, d.used_steps, d.result_json, d.evidence_refs_json,
+  d.completion_criteria_json, d.dependency_mode, d.status, d.depth, d.failure_mode, d.max_model_requests,
+  d.used_tokens, d.used_model_requests, d.result_json, d.evidence_refs_json,
   d.deadline_at, d.version, d.created_at, d.updated_at, d.completed_at, d.request_hash`;
 export const workColumns = `enqueue_sequence, id, run_id, agent_runtime_id, kind, status, payload_json, owner_epoch,
   not_before, deadline_at, created_at, updated_at, version`;
@@ -447,9 +484,9 @@ export const mapDelegation = (row: DelegationRow): DelegationView => {
     depth: row.depth,
     failureMode: row.failure_mode,
     budget: {
-      maxSteps: row.max_steps,
+      maxModelRequests: row.max_model_requests,
     },
-    usage: { tokens: row.used_tokens, steps: row.used_steps },
+    usage: { tokens: row.used_tokens, modelRequests: row.used_model_requests },
     result: row.result_json === null ? null : parseJsonValue(row.result_json),
     evidenceRefs: parseStringArray(row.evidence_refs_json, 1024),
     deadlineAt: row.deadline_at,

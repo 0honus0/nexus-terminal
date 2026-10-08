@@ -239,10 +239,13 @@ export class SqliteSubagentRepository
 
       const budget = decodeRunBudget(run.budget_json);
       const usage = decodeRunUsage(run.usage_json);
-      // Delegation creation itself consumes one Run step. Future Child steps are not pre-reserved;
-      // each beginSubagentModelStep atomically checks the parent Run emergency step fuse.
-      if (usage.steps >= budget.maxRunSteps) throw new Error('RUN_BUDGET_EXCEEDED');
-      const effectiveSteps = record.maxSteps;
+      // Child model admissions share the Run ceiling and leave requests for Root reporting.
+      if (
+        budget.phase === 'finishing' ||
+        usage.modelRequests >= budget.maxModelRequests - Math.min(2, Math.max(0, budget.modelRequestCeiling - 1))
+      )
+        throw new Error('RUN_BUDGET_EXCEEDED');
+      const effectiveModelRequests = record.maxModelRequests;
 
       const scheduleState = record.dependsOn.length === 0 ? 'runnable' : 'queued';
       await tx.execute(
@@ -288,8 +291,8 @@ export class SqliteSubagentRepository
         `INSERT INTO agent_delegations
           (id, run_id, parent_runtime_id, child_runtime_id, profile_id, grants_json, peer_messaging,
            mutation_mode, model_ref_json, objective, constraints_json, input_artifact_refs_json, completion_criteria_json,
-           dependency_mode, status, depth, failure_mode, max_steps,
-           used_tokens, used_steps, result_json, evidence_refs_json, idempotency_key, request_hash, deadline_at,
+           dependency_mode, status, depth, failure_mode, max_model_requests,
+           used_tokens, used_model_requests, result_json, evidence_refs_json, idempotency_key, request_hash, deadline_at,
            version, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, 0, 0, NULL, '[]', ?, ?, ?, 1, ?, ?)`,
         [
@@ -309,7 +312,7 @@ export class SqliteSubagentRepository
           record.dependencyMode,
           record.depth,
           record.failureMode,
-          effectiveSteps,
+          effectiveModelRequests,
           record.idempotencyKey,
           record.requestHash,
           record.deadlineAt,
@@ -340,7 +343,7 @@ export class SqliteSubagentRepository
         ],
       );
 
-      const nextUsage: RunUsage = { ...usage, steps: usage.steps + 1 };
+      const nextUsage: RunUsage = { ...usage, modelRequests: usage.modelRequests + 1 };
       await appendRunEvent(
         tx,
         run,

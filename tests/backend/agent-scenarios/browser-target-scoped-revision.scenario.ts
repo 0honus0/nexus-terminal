@@ -9,7 +9,6 @@ export const browserTargetScopedRevisionScenario = async () => {
   const runId = randomUUID();
   const agentRuntimeId = randomUUID();
   const sessionId = randomUUID();
-  const workspaceId = randomUUID();
   const context: ToolContext = {
     userId: 1,
     appId: 'browser-target-revision-app',
@@ -17,7 +16,6 @@ export const browserTargetScopedRevisionScenario = async () => {
     runId,
     agentRuntimeId,
     connectionIds: [],
-    environment: null,
     stepId: 'browser-target-revision-step',
     signal: new AbortController().signal,
     deadlineAt: Math.floor(Date.now() / 1000) + 120,
@@ -49,34 +47,6 @@ export const browserTargetScopedRevisionScenario = async () => {
       },
     }),
   };
-  const workspace = {
-    id: workspaceId,
-    runId,
-    agentRuntimeId,
-    generation: 3,
-    status: 'running',
-    profile: {
-      browserTarget: {
-        id: 'workspace-frozen-target',
-        profileRevision: 42,
-        endpoints: [
-          {
-            scope: 'docker-network' as const,
-            via: 'runner' as const,
-            url: 'http://browser.internal:9222/',
-            priority: 1,
-            allowPlaintext: true,
-            verifyTls: true,
-          },
-        ],
-        allowedUrlPatterns: ['https://workspace.example.test/*'],
-      },
-    },
-  };
-  const repository = {
-    getWorkspace: async (_scope: unknown, requestedWorkspaceId: string) =>
-      requestedWorkspaceId === workspaceId ? workspace : null,
-  };
   let session: import('../../../packages/backend/src/modules/agent/ai/integrations.types').BrowserSessionView | null =
     null;
   let closeCount = 0;
@@ -93,8 +63,6 @@ export const browserTargetScopedRevisionScenario = async () => {
         targetId: request.target.id,
         targetRevision: request.target.profileRevision,
         targetConfigurationHash: request.target.configurationHash,
-        workspaceId: request.workspaceId ?? null,
-        generation: request.generation ?? null,
         url: 'about:blank',
         createdAt: 1_800_000_000,
       };
@@ -108,7 +76,7 @@ export const browserTargetScopedRevisionScenario = async () => {
       closeCount += 1;
     },
   };
-  const tools = createBrowserTools(repository as never, settings as never, gateway as never, cryptoHash);
+  const tools = createBrowserTools(settings as never, gateway as never, cryptoHash);
   const createTool = tools.find((tool) => tool.descriptor.name === 'browser_session_open')!;
   const snapshotTool = tools.find((tool) => tool.descriptor.name === 'browser_snapshot_read')!;
 
@@ -158,18 +126,36 @@ export const browserTargetScopedRevisionScenario = async () => {
   );
   assert.equal(closeCount, 2);
 
-  const workspaceInspection = await createTool.inspect({ workspaceId }, context, 1);
-  const workspaceNormalized = workspaceInspection.normalizedArguments as Record<string, JsonValue>;
-  assert.equal(
-    workspaceNormalized.targetRevision,
-    42,
-    'Workspace Browser target must keep its frozen profile revision',
+  await assert.rejects(
+    () => createTool.inspect({ workspaceId: randomUUID() }, context, 1),
+    /BROWSER_TARGET_SELECTION_INVALID/,
+    'legacy Workspace Browser selector must not be reinterpreted as an independent target',
   );
-  await createTool.execute(workspaceInspection, context);
+  await assert.rejects(
+    () => createTool.inspect({ targetId: initialTarget.id, workspaceId: randomUUID() }, context, 1),
+    /BROWSER_TARGET_SELECTION_INVALID/,
+    'mixed Workspace and target selectors cannot bypass the independent Browser authority',
+  );
+  targetAvailable = true;
   settingsRevision = 11;
-  await assert.doesNotReject(
-    () => snapshotTool.inspect({ sessionId }, context, 1),
-    'Workspace-bound Browser session must remain governed by frozen workspace target/generation, not global settings revision',
+  const freshInspection = await createTool.inspect({ targetId: initialTarget.id }, context, 1);
+  await assert.rejects(
+    () =>
+      createTool.execute(
+        {
+          ...freshInspection,
+          normalizedArguments: { ...(freshInspection.normalizedArguments as object), generation: 3 },
+        },
+        context,
+      ),
+    /BROWSER_TARGET_SELECTION_INVALID/,
+    'old Workspace generation in a persisted Browser inspection must fail before creating a session',
+  );
+  const otherRun = { ...context, runId: randomUUID() };
+  await assert.rejects(
+    () => snapshotTool.inspect({ sessionId }, otherRun, 1),
+    /RESOURCE_FORBIDDEN/,
+    'a Browser session cannot be transferred to another Run',
   );
   assert.equal(closeCount, 2);
 
@@ -178,7 +164,8 @@ export const browserTargetScopedRevisionScenario = async () => {
     { name: 'browser_target_operation_identity_survivals', value: 1, unit: 'operations' },
     { name: 'browser_target_content_stale_rejections', value: 1, unit: 'sessions' },
     { name: 'browser_target_deletion_stale_rejections', value: 1, unit: 'sessions' },
-    { name: 'browser_workspace_frozen_revision_preservations', value: 1, unit: 'sessions' },
+    { name: 'browser_legacy_workspace_selector_rejections', value: 3, unit: 'requests' },
+    { name: 'browser_cross_run_denials', value: 1, unit: 'sessions' },
     { name: 'browser_spurious_session_closes', value: 0, unit: 'sessions' },
   ];
 };

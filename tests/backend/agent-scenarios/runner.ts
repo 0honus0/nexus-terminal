@@ -1,3 +1,4 @@
+import { adaptiveExecutionBudgetScenario } from './adaptive-execution-budget.scenario';
 import { performance } from 'node:perf_hooks';
 
 import { artifactSingleDeleteProductScenario } from './artifact-single-delete-product.scenario';
@@ -17,11 +18,7 @@ import { unifiedShellCapabilityScenario } from './unified-shell-capability.scena
 import { sshSessionJobsScenario } from './ssh-session-jobs.scenario';
 import { subagentGovernedMutationScenario } from './subagent-governed-mutation.scenario';
 import { restartRecoveryScenario } from './restart-recovery.scenario';
-import { checkpointWorkspaceEvidenceScenario } from './checkpoint-workspace-evidence.scenario';
-import { workspaceRepoMapCodeIntelScenario } from './workspace-repo-map-code-intel.scenario';
-import { workspaceBackgroundJobLifecycleScenario } from './workspace-background-job-lifecycle.scenario';
 import { agentDefinitionCapabilityContractScenario } from './agent-definition-capability-contract.scenario';
-import { workspaceCodingToolSurfaceScenario } from './workspace-coding-tool-surface.scenario';
 import { nestedJoinDurableWakeScenario } from './nested-join-durable-wake.scenario';
 import { userInputClarificationScenario } from './user-input-clarification.scenario';
 import { mcpInputRequiredDurableLifecycleScenario } from './mcp-input-required-durable-lifecycle.scenario';
@@ -32,6 +29,7 @@ import { subagentMailboxTtlScenario } from './subagent-mailbox-ttl.scenario';
 import { progressAwareLoopGuardScenario } from './progress-aware-loop-guard.scenario';
 import { appDisableScopeScenario } from './app-disable-scope.scenario';
 import { confirmedMutationLeaseFinalizationScenario } from './confirmed-mutation-lease-finalization.scenario';
+import { cancelRunningToolSettleScenario } from './cancel-running-tool-settle.scenario';
 import { mcpProtocolSurfaceScenario } from './mcp-protocol-surface.scenario';
 import { integrationHealthRetryScenario } from './integration-health-retry.scenario';
 import { idempotencyTtlScenario } from './idempotency-ttl.scenario';
@@ -50,7 +48,6 @@ import { skillProgressiveDisclosureScenario } from './skill-progressive-disclosu
 import { artifactModelInputScenario } from './artifact-model-input.scenario';
 import { contextToolExchangeScenario } from './context-tool-exchange.scenario';
 import { readToolBatchAuthorityScenario } from './read-tool-batch-authority.scenario';
-import { capabilityGrantMigrationScenario } from './capability-grant-migration.scenario';
 import { integrationRefreshGenerationScenario } from './integration-refresh-generation.scenario';
 import { artifactCrashReconciliationScenario } from './artifact-crash-reconciliation.scenario';
 import { artifactLifecycleSettingsScenario } from './artifact-lifecycle-settings.scenario';
@@ -63,14 +60,13 @@ import { cumulativeTokenCeilingRemovedScenario } from './cumulative-token-ceilin
 
 import { modelAwareContextBudgetScenario } from './model-aware-context-budget.scenario';
 import { acpInnerPermissionScenario } from './acp-inner-permission.scenario';
+import { sshAcpProtocolScenario } from './ssh-acp-protocol.scenario';
 import { mutationOutputProjectionScenario } from './mutation-output-projection.scenario';
 import { publicAgentErrorTaxonomyScenario } from './public-agent-error-taxonomy.scenario';
 import { acpInnerPermissionReplayScenario } from './acp-inner-permission-replay.scenario';
 import { acpInnerPermissionAbortRaceScenario } from './acp-inner-permission-abort-race.scenario';
 import { failFastSiblingCancellationScenario } from './fail-fast-sibling-cancellation.scenario';
 import { modelCapabilityRegistrySyncScenario } from './model-capability-registry-sync.scenario';
-import { legacyMachineInspectionMigrationScenario } from './legacy-machine-inspection-migration.scenario';
-import { legacySettingsMigrationScenario } from './legacy-settings-migration.scenario';
 import { durableBoundaryDecodeScenario } from './durable-boundary-decode.scenario';
 import { currentDurableSchemaScenario } from './current-durable-schema.scenario';
 import { providerSettingsDeadFieldScenario } from './provider-settings-dead-field.scenario';
@@ -102,17 +98,11 @@ type Scenario = () => Promise<ScenarioMetric[]>;
 const scenarios = new Map<string, Scenario>([
   ['context/tool-exchange-atomicity', contextToolExchangeScenario],
   ['context/durable-compaction-checkpoint', durableContextCheckpointScenario],
-  ['migration/legacy-machine-inspection-targets', legacyMachineInspectionMigrationScenario],
-  ['migration/legacy-agent-settings', legacySettingsMigrationScenario],
-  ['migration/capability-grants-v2', capabilityGrantMigrationScenario],
   ['context/token-accounting', contextTokenAccountingScenario],
   ['context/project-instructions', projectInstructionsContextScenario],
-  ['workspace/coding-tool-surface', workspaceCodingToolSurfaceScenario],
   ['file/unified-targets', unifiedFileCapabilityScenario],
   ['shell/unified-targets', unifiedShellCapabilityScenario],
   ['ssh/session-jobs', sshSessionJobsScenario],
-  ['workspace/repo-map-code-intel', workspaceRepoMapCodeIntelScenario],
-  ['workspace/background-job-lifecycle', workspaceBackgroundJobLifecycleScenario],
   ['context/tool-result-projection', toolResultProjectionScenario],
   ['context/tool-surface-progressive-disclosure', toolSurfaceProgressiveDisclosureScenario],
   ['runtime/mcp-protocol-surface', mcpProtocolSurfaceScenario],
@@ -142,6 +132,7 @@ const scenarios = new Map<string, Scenario>([
   ['runtime/restart-recovery-closure', restartRecoveryScenario],
   ['runtime/app-disable-scope-closure', appDisableScopeScenario],
   ['runtime/read-tool-batch-authority', readToolBatchAuthorityScenario],
+  ['runtime/adaptive-execution-budget', adaptiveExecutionBudgetScenario],
   ['runtime/subagent-claimed-cancellation', subagentClaimedCancellationScenario],
   ['runtime/subagent-fail-fast-cancellation', failFastSiblingCancellationScenario],
   ['runtime/nested-join-durable-wake', nestedJoinDurableWakeScenario],
@@ -149,14 +140,15 @@ const scenarios = new Map<string, Scenario>([
   ['runtime/subagent-profile-strategy', subagentProfileStrategyScenario],
   ['runtime/subagent-governed-mutation', subagentGovernedMutationScenario],
   ['runtime/confirmed-mutation-lease-finalization', confirmedMutationLeaseFinalizationScenario],
+  ['runtime/cancel-running-tool-settle', cancelRunningToolSettleScenario],
   ['runtime/mutation-output-projection', mutationOutputProjectionScenario],
   ['storage/artifact-lifecycle-settings', artifactLifecycleSettingsScenario],
-  ['recovery/checkpoint-workspace-evidence', checkpointWorkspaceEvidenceScenario],
   ['runtime/artifact-crash-reconciliation', artifactCrashReconciliationScenario],
   ['runtime/integration-cas-before-runtime', integrationCasBeforeRuntimeScenario],
   ['runtime/integration-refresh-generation', integrationRefreshGenerationScenario],
   ['runtime/integration-health-retry', integrationHealthRetryScenario],
   ['runtime/acp-inner-permission', acpInnerPermissionScenario],
+  ['runtime/ssh-acp-protocol', sshAcpProtocolScenario],
   ['runtime/acp-inner-permission-abort-race', acpInnerPermissionAbortRaceScenario],
   ['runtime/acp-inner-permission-replay', acpInnerPermissionReplayScenario],
   ['runtime/acp-inner-permission-durable', acpInnerPermissionDurabilityScenario],
@@ -184,7 +176,6 @@ const scenarios = new Map<string, Scenario>([
 ]);
 
 const SERIAL_SCENARIOS = new Set([
-  'workspace/coding-tool-surface',
   'provider/prompt-cache-hint',
   'model/capability-registry-sync',
   'model/provider-live-capability-authority',

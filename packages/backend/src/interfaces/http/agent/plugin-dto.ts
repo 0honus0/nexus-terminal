@@ -65,7 +65,6 @@ export const pluginManifestDto = (manifest: Version['manifest']): AgentPluginMan
         targets: {
           ...(manifest.targets.frontend === undefined ? {} : { frontend: { entry: manifest.targets.frontend.entry } }),
           ...(manifest.targets.backend === undefined ? {} : { backend: { entry: manifest.targets.backend.entry } }),
-          ...(manifest.targets.runner === undefined ? {} : { runner: { entry: manifest.targets.runner.entry } }),
         },
       }),
 });
@@ -97,7 +96,6 @@ export const pluginVersionDto = (plugin: Version): AgentPluginVersionDto => ({
   manifest: pluginManifestDto(plugin.manifest),
   frontendEntry: plugin.frontendEntry,
   backendEntry: plugin.backendEntry,
-  runnerEntry: plugin.runnerEntry,
   skillFiles: [...plugin.skillFiles],
   status: plugin.status,
   installedAt: plugin.installedAt,

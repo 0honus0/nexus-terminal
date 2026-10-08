@@ -183,7 +183,6 @@ export const skillProgressiveDisclosureScenario = async () => {
     runId: 'skill-progressive-run',
     agentRuntimeId: 'skill-progressive-runtime',
     connectionIds: [],
-    environment: null,
     stepId: 'skill-progressive-step',
     signal: new AbortController().signal,
     deadlineAt: clock.nowUnixSeconds() + 60,

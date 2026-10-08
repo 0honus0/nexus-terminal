@@ -13,7 +13,15 @@ export const readToolBatchAuthorityScenario = async () => {
   const stateCommit = new SqliteStateCommitAdapter(db);
   const now = 1_800_200_000;
   const budget = JSON.stringify({
-    maxRunSteps: 100,
+    modelRequestCeiling: 100,
+    activeExecutionCeilingSeconds: 7200,
+    maxToolExecutions: 4000,
+    phase: 'executing',
+    stopReason: null,
+    extensionCount: 0,
+    progressSequence: 0,
+
+    maxModelRequests: 100,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
     maxToolOutputBytes: 1_048_576,
@@ -35,7 +43,6 @@ export const readToolBatchAuthorityScenario = async () => {
     approvalMode: 'ask',
     executionMode: 'execute',
     connectionIds: [],
-    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   });
@@ -44,7 +51,8 @@ export const readToolBatchAuthorityScenario = async () => {
     inputTokens: 0,
     outputTokens: 0,
     cachedInputTokens: 0,
-    steps: 0,
+    toolExecutions: 0,
+    modelRequests: 0,
     subagentMessages: 0,
     subagentMessageBytes: 0,
   });
@@ -162,7 +170,8 @@ export const readToolBatchAuthorityScenario = async () => {
       now: now + 2,
     });
     assert.equal(singleSettled.run.version, 3);
-    assert.equal(singleSettled.run.usage.steps, 1);
+    assert.equal(singleSettled.run.usage.modelRequests, 0);
+    assert.equal(singleSettled.run.usage.toolExecutions, 1);
 
     await db.execute(
       `INSERT INTO agent_steps
@@ -205,7 +214,8 @@ export const readToolBatchAuthorityScenario = async () => {
       now: now + 4,
     });
     assert.equal(parallelSettled.run.version, 5);
-    assert.equal(parallelSettled.run.usage.steps, 3);
+    assert.equal(parallelSettled.run.usage.modelRequests, 0);
+    assert.equal(parallelSettled.run.usage.toolExecutions, 3);
 
     const toolRows = await db.queryAll<{ id: string; status: string }>(
       `SELECT id, status FROM agent_tool_calls WHERE run_id = 'read-batch-run' ORDER BY id`,

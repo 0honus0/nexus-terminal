@@ -59,6 +59,7 @@ export const createBrowserTransferTools = (
     descriptor: {
       name: 'browser_upload',
       version: TOOL_VERSION,
+      modelExposure: 'deferred',
       description:
         'Upload one Run-authorized Nexus Artifact into an opaque file-input nodeRef. No Backend or Browser host path is accepted.',
       inputSchema: {
@@ -151,6 +152,7 @@ export const createBrowserTransferTools = (
     descriptor: {
       name: 'browser_download',
       version: TOOL_VERSION,
+      modelExposure: 'deferred',
       description:
         'Fetch a download link from the latest Browser snapshot through the live page session, bound bytes, and persist the result as a Nexus Artifact. No Browser host filesystem path is exposed.',
       inputSchema: {
@@ -219,7 +221,6 @@ export const createBrowserTransferTools = (
         data: {
           sessionId: downloaded.sessionId,
           targetId: downloaded.targetId,
-          generation: downloaded.generation,
           url: downloaded.url,
           artifact: {
             id: artifact.id,

@@ -149,9 +149,6 @@
   const targetEnabled = (appId: string, capability: CapabilityId, target: AgentTargetKindDto): boolean =>
     targetScopeSelection(appId, capability, target) !== undefined;
 
-  const targetLabel = (target: AgentTargetKindDto): string =>
-    target === 'workspace' ? t('agent.settings.apps.targetWorkspace') : 'SSH';
-
   const setTargetEnabled = (
     appId: string,
     capability: CapabilityId,
@@ -354,7 +351,7 @@
   };
 
   interface CapabilityMeta {
-    category: 'files' | 'execution' | 'machine' | 'workspace' | 'browser' | 'integration' | 'data';
+    category: 'files' | 'execution' | 'machine' | 'browser' | 'integration' | 'data';
     icon: string;
     name?: string;
     desc?: string;
@@ -384,10 +381,6 @@
     'machine.docker.manage': {
       category: 'machine',
       icon: 'fa-brands fa-docker',
-    },
-    'workspace.manage': {
-      category: 'workspace',
-      icon: 'fa-solid fa-cubes',
     },
     'browser.read': {
       category: 'browser',
@@ -434,7 +427,6 @@
     { id: 'files', label: 'agent.settings.apps.categoryFiles', icon: 'fa-solid fa-folder-tree' },
     { id: 'execution', label: 'agent.settings.apps.categoryExecution', icon: 'fa-solid fa-terminal' },
     { id: 'machine', label: 'agent.settings.apps.categoryMachine', icon: 'fa-solid fa-server' },
-    { id: 'workspace', label: 'agent.settings.apps.categoryWorkspace', icon: 'fa-solid fa-cubes' },
     { id: 'browser', label: 'agent.settings.apps.categoryBrowser', icon: 'fa-solid fa-globe' },
     { id: 'integration', label: 'agent.settings.apps.categoryIntegration', icon: 'fa-solid fa-plug' },
     { id: 'data', label: 'agent.settings.apps.categoryData', icon: 'fa-solid fa-box-archive' },
@@ -791,13 +783,13 @@
                           <UiCheckbox
                             density="compact"
                             :model-value="targetEnabled(app.id, capability, target)"
-                            :aria-label="targetLabel(target)"
+                            aria-label="SSH"
                             :disabled="busy || grantBusy[app.id]"
                             @update:model-value="
                               (value: boolean) => onTargetEnabledChange(app.id, capability, target, value)
                             "
                           />
-                          <span class="text-[11px] font-semibold text-foreground">{{ targetLabel(target) }}</span>
+                          <span class="text-[11px] font-semibold text-foreground">SSH</span>
                           <UiSelect
                             v-if="targetEnabled(app.id, capability, target)"
                             class="ml-auto"

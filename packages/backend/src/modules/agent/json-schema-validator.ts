@@ -33,5 +33,17 @@ export const prepareJsonSchema = (schema: JsonValue): void => {
 };
 
 export const assertJsonSchema = (schema: JsonValue, value: unknown, errorCode = 'VALIDATION_FAILED'): void => {
-  if (!validatorFor(schema)(value)) throw new Error(errorCode);
+  const validator = validatorFor(schema);
+  if (!validator(value)) {
+    // schemaPath belongs to the declared schema; instancePath and params can
+    // contain arbitrary caller-controlled keys or values and are not echoed.
+    const keywords = [
+      ...new Set((validator.errors ?? []).map((error) => `${error.keyword} at ${error.schemaPath}`)),
+    ].slice(0, 6);
+    throw new Error(errorCode, {
+      cause: new Error(
+        `Arguments do not match the declared schema (${keywords.join(', ')}). Check required fields and allowed properties; do not repeat unchanged arguments. The tool was not executed.`,
+      ),
+    });
+  }
 };

@@ -126,4 +126,15 @@ test('full backup restores settings and connection data', async ({ request }) =>
     expect(connectionTest.ok()).toBeTruthy();
     await expect(connectionTest.json()).resolves.toMatchObject({ success: true });
   });
+
+  await slowStep('verify signed Agent plugin staging still works after full backup restore', async () => {
+    const csrfResponse = await request.get('/api/v1/agent/security/csrf');
+    expect(csrfResponse.ok()).toBeTruthy();
+    const csrf = (await csrfResponse.json()) as { data: { token: string } };
+    const install = await request.post('/api/v1/agent/onboarding/recommended-plugin/install', {
+      headers: { 'X-Nexus-CSRF': csrf.data.token },
+      data: {},
+    });
+    expect(install.ok(), await install.text()).toBeTruthy();
+  });
 });

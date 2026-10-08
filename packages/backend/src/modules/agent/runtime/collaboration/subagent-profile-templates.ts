@@ -8,7 +8,7 @@ const templates: readonly SubagentProfileTemplate[] = [
     capabilities: ['file.read', 'artifacts.read'],
     peerMessaging: 'parent-child',
     mutationMode: 'read-only',
-    maxSteps: 12,
+    maxModelRequests: 12,
     failureMode: 'isolate',
   },
   {
@@ -18,7 +18,7 @@ const templates: readonly SubagentProfileTemplate[] = [
     capabilities: ['integration.mcp.read', 'browser.read', 'artifacts.read'],
     peerMessaging: 'parent-child',
     mutationMode: 'read-only',
-    maxSteps: 12,
+    maxModelRequests: 12,
     failureMode: 'isolate',
   },
   {
@@ -28,7 +28,7 @@ const templates: readonly SubagentProfileTemplate[] = [
     capabilities: ['file.read', 'artifacts.read'],
     peerMessaging: 'parent-child',
     mutationMode: 'read-only',
-    maxSteps: 12,
+    maxModelRequests: 12,
     failureMode: 'isolate',
   },
   {
@@ -38,25 +38,25 @@ const templates: readonly SubagentProfileTemplate[] = [
     capabilities: ['file.read', 'integration.mcp.read', 'artifacts.read'],
     peerMessaging: 'parent-child',
     mutationMode: 'read-only',
-    maxSteps: 16,
+    maxModelRequests: 16,
     failureMode: 'isolate',
   },
   {
     id: 'worker',
-    role: 'Governed coding worker for an explicitly bounded implementation assignment in its own Workspace.',
+    role: 'Governed coding worker for an explicitly bounded implementation assignment on an authorized SSH target.',
     delegationHint:
-      'Use only for substantial implementation work with an explicit file/task boundary. Create and use a child-owned Workspace, run focused verification, and return durable evidence.',
-    capabilities: ['file.read', 'file.write', 'file.delete', 'shell.execute', 'workspace.manage', 'artifacts.read'],
+      'Use only for substantial implementation work with an explicit file/task boundary. Use delegated SSH targets, run focused verification, and return durable evidence.',
+    capabilities: ['file.read', 'file.write', 'file.delete', 'shell.execute', 'artifacts.read'],
     peerMessaging: 'parent-child',
     mutationMode: 'governed',
-    maxSteps: 24,
+    maxModelRequests: 24,
     failureMode: 'isolate',
   },
 ] as const;
 
-export const builtInSubagentProfileTemplates = (maxSteps: number): SubagentProfileTemplate[] =>
+export const builtInSubagentProfileTemplates = (maxModelRequests: number): SubagentProfileTemplate[] =>
   templates.map((template) => ({
     ...template,
     capabilities: [...template.capabilities],
-    maxSteps: Math.min(template.maxSteps, maxSteps),
+    maxModelRequests: Math.min(template.maxModelRequests, maxModelRequests),
   }));
