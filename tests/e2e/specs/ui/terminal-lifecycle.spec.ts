@@ -9,6 +9,7 @@ interface TerminalLifecycleHarness {
   releaseClipboard(value: string): void;
   delayClipboard(): void;
   serialize(): Promise<string>;
+  scrollToBottom(): void;
   discardRemotePty(): void;
   delayHistory(): void;
   releaseHistory(data: string): void;
@@ -50,7 +51,7 @@ async function mountTerminalHarness(page: Page): Promise<void> {
     });
     document.body.appendChild(host);
     let app: { mount(host: HTMLElement): void; unmount(): void } | null = null;
-    let terminalApi: { paste(): Promise<boolean>; serialize(): Promise<string> } | null = null;
+    let terminalApi: { paste(): Promise<boolean>; serialize(): Promise<string>; scrollToBottom(): void } | null = null;
     const outputHandlers = new Set<(output: { data: string | Uint8Array; consumed(): void }) => void>();
     let resolveClipboard: ((value: string) => void) | null = null;
     let resolveHistory: ((value: { data: Uint8Array; hasMore: boolean }) => void) | null = null;
@@ -119,6 +120,7 @@ async function mountTerminalHarness(page: Page): Promise<void> {
         resolveClipboard = null;
       },
       serialize: () => terminalApi!.serialize(),
+      scrollToBottom: () => terminalApi!.scrollToBottom(),
       discardRemotePty: () => state.discardRemotePty(),
       delayHistory() {
         historyAvailable = true;
@@ -268,4 +270,29 @@ test('late history pages do not write into an unmounted terminal', async ({ page
   expect(snapshot).toContain('LIVE_PANE_OUTPUT');
   expect(snapshot).not.toContain('OBSOLETE_HISTORY_PAGE');
   expect(errors).toEqual([]);
+});
+
+test('scrolling into history drains pending live output before capturing the live snapshot', async ({ page }) => {
+  await mountTerminalHarness(page);
+  await page.evaluate(async () => {
+    const harness = window.__terminalLifecycle;
+    harness.output('LIVE_BEFORE_HISTORY\r\n');
+    await harness.serialize();
+    harness.delayHistory();
+  });
+  await page.locator('#terminal-lifecycle-host .terminal-inner-container').dispatchEvent('wheel', { deltaY: -100 });
+  await expect.poll(() => page.evaluate(() => window.__terminalLifecycle.historyRequests)).toBe(1);
+  await page.evaluate(() => {
+    const harness = window.__terminalLifecycle;
+    harness.output('PENDING_LIVE_DURING_HISTORY\r\n');
+    harness.releaseHistory(Array.from({ length: 100 }, (_, index) => `OLD_HISTORY_${index}\r\n`).join(''));
+  });
+  const rows = page.locator('#terminal-lifecycle-host .xterm-rows');
+  await expect(rows).toContainText('OLD_HISTORY_');
+  await expect.poll(() => page.evaluate(() => window.__terminalLifecycle.consumed)).toBe(2);
+  await page.evaluate(() => window.__terminalLifecycle.scrollToBottom());
+  await expect(rows).toContainText('LIVE_BEFORE_HISTORY');
+  await expect(rows).toContainText('PENDING_LIVE_DURING_HISTORY');
+  const snapshot = await page.evaluate(() => window.__terminalLifecycle.serialize());
+  expect(snapshot.match(/PENDING_LIVE_DURING_HISTORY/g)).toHaveLength(1);
 });

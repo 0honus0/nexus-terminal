@@ -80,6 +80,7 @@
   let historyWindowChunks: Uint8Array[] = [];
   let deferredTerminalOutputBytes = 0;
   let historyRestoreTask: Promise<void> | null = null;
+  let historyEntryTask: Promise<void> | null = null;
   let historyViewGeneration = 0;
   let mobileSelectionSyncFrame: number | null = null;
   const deferredTerminalOutput: Array<string | Uint8Array> = [];
@@ -378,21 +379,27 @@
     if (!terminal || !serializeAddon || newPage.byteLength === 0 || historyRebuilding) return;
     const generation = historyViewGeneration;
     const enteringHistory = !historyBrowsing;
-    if (enteringHistory) {
-      historyLiveSnapshot = `${serializeTerminalSnapshot(
-        terminal,
-        serializeAddon,
-        HISTORY_LIVE_SNAPSHOT_MAX_BYTES,
-      )}${runtimeModes?.restoreSuffix() ?? ''}`;
-      const continuation = currentHistoryContinuation();
-      historyWindowChunks = continuation.byteLength ? [continuation] : [];
-      historyBrowsing = true;
-      pagedHistorySession = true;
-    }
-
-    historyWindowChunks = trimHistoryWindowChunks([newPage.slice(), ...historyWindowChunks]);
     historyRebuilding = true;
     try {
+      if (enteringHistory) {
+        // Divert new output before draining both the scheduled batch and xterm's
+        // async write queue. Otherwise a late live write lands in the history buffer.
+        historyEntryTask = drainPendingOutput();
+        await historyEntryTask;
+        if (!terminal || generation !== historyViewGeneration) return;
+        historyLiveSnapshot = `${serializeTerminalSnapshot(
+          terminal,
+          serializeAddon,
+          HISTORY_LIVE_SNAPSHOT_MAX_BYTES,
+        )}${runtimeModes?.restoreSuffix() ?? ''}`;
+        const continuation = currentHistoryContinuation();
+        historyWindowChunks = continuation.byteLength ? [continuation] : [];
+        historyBrowsing = true;
+        pagedHistorySession = true;
+        historyEntryTask = null;
+      }
+
+      historyWindowChunks = trimHistoryWindowChunks([newPage.slice(), ...historyWindowChunks]);
       terminal.options.scrollback = HISTORY_WINDOW_SCROLLBACK_LINES;
       terminal.reset();
       runtimeModes?.reset();
@@ -411,6 +418,7 @@
       syncSearchDecorations();
     } finally {
       if (generation === historyViewGeneration) {
+        historyEntryTask = null;
         historyRebuilding = false;
         if (historyBrowsing && deferredTerminalOutputBytes >= HISTORY_DEFERRED_OUTPUT_MAX_BYTES) {
           void restoreLatestOutput();
@@ -422,6 +430,12 @@
   const restoreLatestOutput = (): Promise<void> => {
     if (disposed) return Promise.resolve();
     if (historyRestoreTask) return historyRestoreTask;
+    if (historyEntryTask) {
+      const generation = historyViewGeneration;
+      return historyEntryTask.then(() => {
+        if (generation === historyViewGeneration) return restoreLatestOutput();
+      });
+    }
     if (!historyBrowsing) {
       terminal?.scrollToBottom();
       return Promise.resolve();
@@ -431,6 +445,10 @@
       if (!terminal) return;
       historyRebuilding = true;
       try {
+        // An old history write may still be parsing when scrolling back or typing.
+        // Let it finish before resetting so it cannot contaminate the live snapshot.
+        await writeTerminal('');
+        if (!terminal || generation !== historyViewGeneration) return;
         const snapshot = historyLiveSnapshot;
         historyBrowsing = false;
         historyWindowChunks = [];
@@ -550,6 +568,7 @@
       historyLiveSnapshot = '';
       historyWindowChunks = [];
       historyRestoreTask = null;
+      historyEntryTask = null;
       historyLastViewportY = 0;
       for (const consumed of pendingOutputConsumers.splice(0)) consumed();
       for (const consumed of deferredOutputConsumers.splice(0)) consumed();
@@ -1026,6 +1045,11 @@
     emit('fontSizeChange', next);
   };
   const handleWheelScale = (event: WheelEvent) => {
+    if (historyRebuilding) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
     const change = resolveWheelScale(event, renderedFontSize.value);
     if (change) {
       applyFontSize(change.next);
