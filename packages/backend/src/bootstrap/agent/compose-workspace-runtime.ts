@@ -1,18 +1,13 @@
 import { SqliteWorkspaceRepository } from '../../infrastructure/agent/workspace-runtime/sqlite-workspace.repository';
 import type { RelationalDatabase } from '../../platform/storage/relational-database.port';
-import type { ArtifactService } from '../../modules/agent/ai/artifact.service';
 import type { BrowserGatewayPort } from '../../modules/agent/ai/integrations.types';
 import type { CryptoHashPort } from '../../modules/agent/crypto-hash.port';
 import type { AppCapabilityBroker } from '../../modules/agent/host/app-capability-broker';
 import type { AppLifecycleService } from '../../modules/agent/host/app-lifecycle.service';
 import type { AgentSettingsService } from '../../modules/agent/host/agent-settings.service';
-import type { AgentWorkspaceRuntimeFacade } from '../../modules/agent/public';
-import { WorkspaceArtifactService } from '../../modules/agent/exchange/workspace-artifact.service';
 import type { WorkspaceRuntimeControllerPort } from '../../modules/agent/workspace-runtime/workspace-runtime-controller.port';
 import type { WorkspaceRuntimeGatewayPort } from '../../modules/agent/workspace-runtime/workspace-runtime-gateway.port';
 import { WorkspaceRuntimeService } from '../../modules/agent/workspace-runtime/workspace-runtime.service';
-import type { WorkspaceRuntimeInteractiveSessionPort } from '../../modules/agent/workspace-runtime/workspace-runtime-interactive-session.port';
-import { WorkspaceRuntimeTerminalService } from '../../modules/agent/workspace-runtime/workspace-runtime-terminal.service';
 
 export interface ComposeWorkspaceRuntimeOptions {
   database: RelationalDatabase;
@@ -21,8 +16,6 @@ export interface ComposeWorkspaceRuntimeOptions {
   lifecycle: AppLifecycleService;
   capabilities: AppCapabilityBroker;
   cryptoHash: CryptoHashPort;
-  artifacts: ArtifactService;
-  interactiveSessions: WorkspaceRuntimeInteractiveSessionPort;
   browserGateway: BrowserGatewayPort;
   now: () => number;
 }
@@ -30,7 +23,6 @@ export interface ComposeWorkspaceRuntimeOptions {
 export interface ComposedWorkspaceRuntime {
   repository: SqliteWorkspaceRepository;
   service: WorkspaceRuntimeService;
-  facade: AgentWorkspaceRuntimeFacade;
 }
 
 /**
@@ -44,19 +36,10 @@ export const composeWorkspaceRuntime = ({
   lifecycle,
   capabilities,
   cryptoHash,
-  artifacts,
-  interactiveSessions,
   browserGateway,
   now,
 }: ComposeWorkspaceRuntimeOptions): ComposedWorkspaceRuntime => {
   const repository = new SqliteWorkspaceRepository(database);
-  const terminal = new WorkspaceRuntimeTerminalService(
-    repository,
-    interactiveSessions,
-    settings,
-    lifecycle,
-    capabilities,
-  );
   const service = new WorkspaceRuntimeService(
     controller,
     repository,
@@ -65,49 +48,7 @@ export const composeWorkspaceRuntime = ({
     capabilities,
     cryptoHash,
     now,
-    {
-      workspaceInvalidated: (workspaceId, generation) => {
-        terminal.closeWorkspace(workspaceId, generation);
-      },
-    },
   );
-  const workspaceArtifacts = new WorkspaceArtifactService(service, artifacts, capabilities);
 
-  const facade: AgentWorkspaceRuntimeFacade = {
-    availability: (signal) => service.availability(signal),
-    catalog: (signal) => service.catalog(signal),
-    listWorkspaces: (scope, runId) => service.listWorkspaces(scope, runId),
-    getWorkspace: (scope, workspaceId) => service.getWorkspace(scope, workspaceId),
-    openTerminal: (scope, workspaceId, generation, columns, rows, sessionId, signal) =>
-      terminal.open(scope, workspaceId, generation, columns, rows, sessionId, signal),
-    exportWorkspaceArtifact: (scope, input, signal) => workspaceArtifacts.export(scope, input, signal),
-    importArtifactToWorkspace: (scope, input, signal) => workspaceArtifacts.import(scope, input, signal),
-    createWorkspace: (
-      scope,
-      runId,
-      agentRuntimeId,
-      workspace,
-      retained,
-      idempotencyKey,
-      catalogRevision,
-      frozenProfile,
-    ) =>
-      service.createWorkspace(
-        scope,
-        runId,
-        agentRuntimeId,
-        workspace,
-        retained,
-        idempotencyKey,
-        catalogRevision,
-        frozenProfile,
-      ),
-    action: (scope, workspaceId, action, expectedVersion) =>
-      service.action(scope, workspaceId, action, expectedVersion),
-    switchToolVersions: (scope, workspaceId, versions, expectedVersion, expectedCatalogRevision) =>
-      service.switchToolVersions(scope, workspaceId, versions, expectedVersion, expectedCatalogRevision),
-    getCommand: (scope, commandId) => service.getCommand(scope, commandId),
-  };
-
-  return { repository, service, facade };
+  return { repository, service };
 };

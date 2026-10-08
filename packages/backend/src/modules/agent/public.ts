@@ -1,21 +1,5 @@
 import type { AgentSettingsDocument } from './agent-defaults';
-import type {
-  WorkspaceRuntimeAvailability,
-  WorkspaceRuntimeCatalog,
-  WorkspaceRuntimeCommandView,
-  AgentWorkspaceCreateSpec,
-  AgentWorkspaceView,
-  WorkspaceProfileView,
-  WorkspaceToolchainSwitchView,
-} from './workspace-runtime/workspace-runtime.types';
-import type { WorkspaceRuntimeTerminalAttachment } from './workspace-runtime/workspace-runtime-interactive-session.port';
-export type { WorkspaceRuntimeTerminalAttachment } from './workspace-runtime/workspace-runtime-interactive-session.port';
 export type { AgentWorkspaceCreateSpec } from './workspace-runtime/workspace-runtime.types';
-import type {
-  WorkspaceArtifactExportInput,
-  WorkspaceArtifactImportInput,
-  WorkspaceArtifactImportResult,
-} from './exchange/workspace-artifact.types';
 import type { JsonValue, Scope } from './agent.types';
 export type { AgentRunEnvironmentSelection, JsonValue } from './agent.types';
 import type {
@@ -393,52 +377,6 @@ export interface AgentEventFacade {
   onTransient(runId: string, listener: (event: TransientRunEvent) => void): () => void;
 }
 
-export interface AgentWorkspaceRuntimeFacade {
-  availability(signal?: AbortSignal): Promise<WorkspaceRuntimeAvailability>;
-  catalog(signal?: AbortSignal): Promise<WorkspaceRuntimeCatalog>;
-  listWorkspaces(scope: Scope, runId?: string): Promise<AgentWorkspaceView[]>;
-  getWorkspace(scope: Scope, workspaceId: string): Promise<AgentWorkspaceView>;
-  openTerminal(
-    scope: Scope,
-    workspaceId: string,
-    generation: number,
-    columns: number,
-    rows: number,
-    sessionId?: string,
-    signal?: AbortSignal,
-  ): Promise<WorkspaceRuntimeTerminalAttachment>;
-  exportWorkspaceArtifact(scope: Scope, input: WorkspaceArtifactExportInput, signal: AbortSignal): Promise<ArtifactRef>;
-  importArtifactToWorkspace(
-    scope: Scope,
-    input: WorkspaceArtifactImportInput,
-    signal: AbortSignal,
-  ): Promise<WorkspaceArtifactImportResult>;
-  createWorkspace(
-    scope: Scope,
-    runId: string,
-    agentRuntimeId: string,
-    workspace: AgentWorkspaceCreateSpec | null,
-    retained: boolean,
-    idempotencyKey: string,
-    expectedCatalogRevision?: string,
-    frozenProfile?: WorkspaceProfileView,
-  ): Promise<AgentWorkspaceView>;
-  action(
-    scope: Scope,
-    workspaceId: string,
-    action: 'start' | 'stop' | 'restart' | 'delete',
-    expectedVersion: number,
-  ): Promise<WorkspaceRuntimeCommandView>;
-  switchToolVersions(
-    scope: Scope,
-    workspaceId: string,
-    versions: Record<string, string>,
-    expectedVersion: number,
-    expectedCatalogRevision?: string,
-  ): Promise<WorkspaceToolchainSwitchView>;
-  getCommand(scope: Scope, commandId: string): Promise<WorkspaceRuntimeCommandView>;
-}
-
 export interface AgentApprovalFacade {
   get(scope: Scope, approvalId: string): Promise<ApprovalView>;
   list(scope: Scope, runId: string): Promise<ApprovalView[]>;
@@ -472,7 +410,6 @@ export interface AgentServices {
     collaboration: AgentCollaborationFacade;
     events: AgentEventFacade;
     approvals: AgentApprovalFacade;
-    workspaceRuntime: AgentWorkspaceRuntimeFacade;
   };
   initialize(): Promise<void>;
   initializeForUser(userId: number): Promise<void>;

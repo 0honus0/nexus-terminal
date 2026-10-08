@@ -33,7 +33,6 @@ import { SqliteTargetDenylistRepository } from '../../infrastructure/agent/repos
 import { SqliteStateCommitAdapter } from '../../infrastructure/agent/runtime/sqlite-state-commit.adapter';
 import type { WorkspaceRuntimeControllerPort } from '../../modules/agent/workspace-runtime/workspace-runtime-controller.port';
 import type { WorkspaceRuntimeGatewayPort } from '../../modules/agent/workspace-runtime/workspace-runtime-gateway.port';
-import type { WorkspaceRuntimeInteractiveSessionPort } from '../../modules/agent/workspace-runtime/workspace-runtime-interactive-session.port';
 import { AGENT_DEFAULTS } from '../../modules/agent/agent-defaults';
 import { systemClock, type Scope } from '../../modules/agent/agent.types';
 import { ArtifactService } from '../../modules/agent/ai/artifact.service';
@@ -141,7 +140,6 @@ export interface ComposeAgentOptions {
   docker: RemoteDockerService;
   leases: LeasePort;
   workspaceRuntimeController: WorkspaceRuntimeControllerPort & WorkspaceRuntimeGatewayPort;
-  workspaceInteractiveSessions: WorkspaceRuntimeInteractiveSessionPort;
   browserGateway: BrowserGatewayPort;
   audit: AuditLogService;
   notifications: NotificationService;
@@ -162,7 +160,6 @@ export const composeAgent = ({
   docker,
   leases,
   workspaceRuntimeController,
-  workspaceInteractiveSessions,
   browserGateway,
   audit,
   notifications,
@@ -368,8 +365,6 @@ export const composeAgent = ({
     lifecycle,
     capabilities: capabilityBroker,
     cryptoHash,
-    artifacts,
-    interactiveSessions: workspaceInteractiveSessions,
     browserGateway,
     now: () => systemClock.nowUnixSeconds(),
   });
@@ -377,7 +372,6 @@ export const composeAgent = ({
   const workspaceRuntime = composedWorkspaceRuntime.service;
   const files = new FileCapabilityService(sshTargets, sshFiles);
   const shell = new ShellCapabilityService(sshTargets, sshShell, sshSessions);
-  const workspaceRuntimeFacade = composedWorkspaceRuntime.facade;
   const acpRuntime = new AcpAdapter();
   const toolCatalog = new ToolCatalog();
   toolCatalog.registerContribution({
@@ -624,10 +618,6 @@ export const composeAgent = ({
     providers,
     executionPolicies,
     definitions,
-    (scope, selection, expectedSettingsRevision) => {
-      const { catalogRevision, ...workspace } = selection;
-      return workspaceRuntime.resolveRunEnvironment(scope, workspace, catalogRevision, expectedSettingsRevision);
-    },
     stateCommit,
     runRepository,
     systemClock,
@@ -953,7 +943,6 @@ export const composeAgent = ({
         onHostWake: (userId, listener) => eventHub.onHostWake(userId, listener),
         onTransient: (runId, listener) => eventHub.onTransient(runId, listener),
       },
-      workspaceRuntime: workspaceRuntimeFacade,
       approvals: {
         get: (scope, approvalId) => approvals.get(scope, approvalId),
         list: (scope, runId) => approvals.list(scope, runId),
@@ -1000,12 +989,7 @@ export const composeAgent = ({
     prepareRestore: async (deadlineUnixSeconds) => {
       await lifecycleSweeps.stop();
       await Promise.all([scheduler.quiesce(deadlineUnixSeconds), subagentScheduler?.quiesce(deadlineUnixSeconds)]);
-      await Promise.all([
-        mcpRuntime.closeAll(),
-        sshSessions.dispose(),
-        workspaceInteractiveSessions.closeAll(),
-        browserGateway.closeAll(),
-      ]);
+      await Promise.all([mcpRuntime.closeAll(), sshSessions.dispose(), browserGateway.closeAll()]);
       await resetRuntime();
       modelRegistry.dispose();
       startupRecoveredRuns.length = 0;
@@ -1018,7 +1002,6 @@ export const composeAgent = ({
         lifecycleSweeps.stop(),
         subagentScheduler?.dispose() ?? Promise.resolve(),
         mcpRuntime.closeAll(),
-        workspaceInteractiveSessions.closeAll(),
         browserGateway.closeAll(),
         resetRuntime(),
       ]);

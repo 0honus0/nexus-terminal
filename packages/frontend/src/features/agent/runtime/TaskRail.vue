@@ -14,7 +14,6 @@
     AgentSubagentViewDto,
   } from '../api/agent-api';
   import ApprovalCard from './ApprovalCard.vue';
-  import WorkspaceRuntimePanel from './WorkspaceRuntimePanel.vue';
   import SubagentTree from './SubagentTree.vue';
   import ApprovalTimeline from './ApprovalTimeline.vue';
   import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
@@ -551,14 +550,6 @@
               </button>
             </div>
           </article>
-        </details>
-
-        <!-- 运行时面板 -->
-        <details class="rounded-xl border border-border/70 bg-card p-3">
-          <summary class="cursor-pointer text-xs font-semibold text-foreground">
-            {{ $t('agent.ui.optionalRuntime') }}
-          </summary>
-          <WorkspaceRuntimePanel class="mt-2" :app-id="detailSnapshot.appId" :run-id="detailSnapshot.id" :busy="busy" />
         </details>
 
         <!-- 子智能体树 -->

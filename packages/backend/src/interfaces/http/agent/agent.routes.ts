@@ -53,7 +53,6 @@ import {
   type AgentArtifactFacade,
   type AgentCapability,
   type AgentEventFacade,
-  type AgentWorkspaceRuntimeFacade,
   type AgentHostFacade,
   type AgentPluginFacade,
   type AgentProviderFacade,
@@ -90,7 +89,6 @@ import {
 } from './agent-route-input';
 import { agentUserId, createAgentMutationSecurity, issueAgentCsrf, requireAgentAuthenticated } from './agent-security';
 import { createPluginRouter } from './plugins.routes';
-import { createWorkspaceRuntimeRouter } from './workspace-runtime.routes';
 
 export interface AgentRouterDependencies {
   host: AgentHostFacade;
@@ -99,7 +97,6 @@ export interface AgentRouterDependencies {
   modelRegistry: AgentModelRegistryFacade;
   artifacts: AgentArtifactFacade;
   events: AgentEventFacade;
-  workspaceRuntime: AgentWorkspaceRuntimeFacade;
   nodeEnv: string;
   publicOrigin?: string;
   csrfSecret: string;
@@ -138,7 +135,6 @@ const settingsPatchRequest = (value: unknown): AgentSettingsPatchRequestDto => {
     'budget',
     'subagents',
     'storage',
-    'workspaceRuntime',
     'browser',
     'plugins',
   ]);
@@ -1201,8 +1197,6 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       );
     }),
   );
-
-  router.use('/workspace-runtime', createWorkspaceRuntimeRouter(dependencies.workspaceRuntime));
 
   return router;
 };

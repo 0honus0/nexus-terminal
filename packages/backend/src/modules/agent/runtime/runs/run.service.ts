@@ -126,11 +126,6 @@ export class RunService {
     private readonly providers: ProviderService,
     private readonly executionPolicies: AgentExecutionPolicyService,
     private readonly definitions: AgentDefinitionRegistryPort,
-    private readonly resolveEnvironment: (
-      scope: Scope,
-      selection: NonNullable<CreateRunCommand['environment']>,
-      expectedSettingsRevision: number,
-    ) => Promise<NonNullable<RunDefinitionSnapshot['environment']>>,
     private readonly stateCommit: RunCommandCommitPort,
     private readonly repository: RunQueryPort,
     private readonly clock: ClockPort,
@@ -161,10 +156,9 @@ export class RunService {
     const input = validateInput(command.input);
     const automaticThreadTitle = deriveAutomaticThreadTitle(input.text);
     const connectionIds = validateConnectionIds(command.connectionIds);
-    if (command.environment !== undefined && command.environment !== null && !isRecord(command.environment)) {
+    if (command.environment !== undefined && command.environment !== null) {
       throw new Error('VALIDATION_FAILED');
     }
-    const environmentSelection = command.environment ?? null;
     const executionMode = command.executionMode;
     if (executionMode !== 'execute' && executionMode !== 'plan') throw new Error('VALIDATION_FAILED');
     if (command.plannedFromRunId !== undefined) {
@@ -313,9 +307,6 @@ export class RunService {
     }
 
     const budget = runBudgetFrom(settings, executionPolicy);
-    const environment = environmentSelection
-      ? await this.resolveEnvironment(scope, environmentSelection, settings.revision)
-      : null;
     const definition: RunDefinitionSnapshot = {
       schemaVersion: 1,
       agentDefinitionId: command.agentDefinitionId,
@@ -327,7 +318,7 @@ export class RunService {
       approvalMode: command.approvalMode,
       executionMode,
       connectionIds,
-      environment,
+      environment: null,
       policyRevision: app.policyRevision,
       settingsRevision: settings.revision,
     };
@@ -345,7 +336,6 @@ export class RunService {
       executionMode,
       ...(command.plannedFromRunId ? { plannedFromRunId: command.plannedFromRunId } : {}),
       connectionIds,
-      environment: environmentSelection ? (JSON.parse(JSON.stringify(environmentSelection)) as JsonValue) : null,
       ...(initialGoal ? { initialGoal } : {}),
     };
     const committed = await this.stateCommit.createRun({

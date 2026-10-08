@@ -116,7 +116,6 @@ import { httpClient, mutationHeaders, unwrap } from './agent-api-common';
 import { createPluginApi } from './plugin-api';
 import { createProviderApi } from './provider-api';
 import { createArtifactApi } from './artifact-api';
-import { createWorkspaceRuntimeApi } from './workspace-runtime-api';
 
 export { AgentApiError, formatAgentApiError, toAgentApiError, providerErrorCategory } from './agent-api-error';
 
@@ -124,17 +123,6 @@ export type {
   AgentRunEnvironmentRunnerPluginDto,
   AgentRunEnvironmentSnapshotDto,
 } from '@nexus-terminal/protocol/agent-runs';
-export type {
-  AgentToolchainCatalogPackDto,
-  AgentToolchainPackRefDto,
-  AgentWorkspaceArtifactImportResultDto,
-  AgentWorkspaceDto,
-  AgentWorkspaceRecipeDto,
-  AgentWorkspaceRuntimeAvailabilityDto,
-  AgentWorkspaceRuntimeCatalogDto,
-  AgentWorkspaceRuntimeCommandDto,
-  AgentWorkspaceToolchainSwitchDto,
-} from '@nexus-terminal/protocol/agent-workspace-runtime';
 
 export interface AgentServerClockAnchorViewModel {
   serverUnixMilliseconds: number;
@@ -269,7 +257,6 @@ export const agentApi = {
   ...createPluginApi(),
   ...createProviderApi(),
   ...createArtifactApi(),
-  ...createWorkspaceRuntimeApi(mutationHeaders),
   async integrations(appId: string, kind?: AgentIntegrationKindDto): Promise<AgentIntegrationViewDto[]> {
     const params: AgentIntegrationListQueryDto | undefined = kind ? { kind } : undefined;
     return unwrap(

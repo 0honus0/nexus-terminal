@@ -93,10 +93,6 @@ const assertSpecMatchesFrozenProfile = (spec: AgentWorkspaceCreateSpec | null, p
   }
 };
 
-export interface WorkspaceRuntimeLifecycleHooks {
-  workspaceInvalidated?(workspaceId: string, generation: number): void;
-}
-
 export class WorkspaceRuntimeService {
   constructor(
     private readonly controller: WorkspaceRuntimeControllerPort,
@@ -106,7 +102,6 @@ export class WorkspaceRuntimeService {
     private readonly capabilities: AppCapabilityBroker,
     private readonly cryptoHash: CryptoHashPort,
     private readonly now: () => number,
-    private readonly runtimeHooks: WorkspaceRuntimeLifecycleHooks = {},
   ) {}
 
   availability(signal?: AbortSignal) {
@@ -653,9 +648,6 @@ export class WorkspaceRuntimeService {
     waitForTerminal = false,
     confirmationId?: string,
   ): Promise<WorkspaceRuntimeCommandView> {
-    if (workspaceId && (action === 'stop' || action === 'restart' || action === 'delete')) {
-      this.runtimeHooks.workspaceInvalidated?.(workspaceId, generation);
-    }
     const now = this.now();
     const commandId = randomUUID();
     const operationHash = hashOperation(

@@ -38,7 +38,6 @@ import type {
   AgentApprovalFacade,
   AgentConversationFacade,
   AgentEventFacade,
-  AgentWorkspaceRuntimeFacade,
   AgentHostFacade,
   AgentPluginFacade,
   AgentProviderFacade,
@@ -101,7 +100,6 @@ export interface HttpApplicationDependencies {
   agentCollaboration: AgentCollaborationFacade;
   agentMemories: AgentMemoryFacade;
   agentEvents: AgentEventFacade;
-  agentWorkspaceRuntime: AgentWorkspaceRuntimeFacade;
   e2eResetEnabled: boolean;
   resetForE2E(mode: 'seed' | 'empty'): Promise<void>;
   systemHealth: SystemHealthService;
@@ -289,7 +287,6 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
       modelRegistry: dependencies.agentModelRegistry,
       artifacts: dependencies.agentArtifacts,
       events: dependencies.agentEvents,
-      workspaceRuntime: dependencies.agentWorkspaceRuntime,
       nodeEnv: dependencies.nodeEnv,
       publicOrigin: dependencies.agentPublicOrigin,
       csrfSecret: dependencies.agentCsrfSecret,
@@ -346,7 +343,6 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
     createAppRuntimeRouter({
       runs: dependencies.agentRuns,
       approvals: dependencies.agentApprovals,
-      workspaceRuntime: dependencies.agentWorkspaceRuntime,
       nodeEnv: dependencies.nodeEnv,
       publicOrigin: dependencies.agentPublicOrigin,
       csrfSecret: dependencies.agentCsrfSecret,
