@@ -359,7 +359,6 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
         files: fileList.files,
         frontendEntry,
         backendEntry,
-        runnerEntry: null,
         skillFiles,
       };
     } catch (error) {

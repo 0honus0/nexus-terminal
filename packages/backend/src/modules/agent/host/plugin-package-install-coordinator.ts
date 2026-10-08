@@ -788,9 +788,6 @@ export class PluginPackageInstallCoordinator {
     plugin: PluginVersionRecord,
     reason: 'upgrade' | 'uninstall' | 'startup',
   ): Promise<void> {
-    // Frozen Workspace/Run targets outlive the current installation. Without a
-    // shared package-reference lease, a count-then-unlink can race provisioning.
-    if (plugin.runnerEntry) return;
     let installedCount: number;
     try {
       installedCount = await this.repository.countInstalled(plugin.appId, plugin.version);
@@ -1068,7 +1065,6 @@ export class PluginPackageInstallCoordinator {
       manifest: verified.manifest,
       frontendEntry: verified.frontendEntry,
       backendEntry: verified.backendEntry,
-      runnerEntry: verified.runnerEntry,
       skillFiles: [...verified.skillFiles],
       status,
       installedAt,

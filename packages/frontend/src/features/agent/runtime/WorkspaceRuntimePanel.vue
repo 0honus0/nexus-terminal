@@ -6,12 +6,9 @@
   import {
     agentApi,
     formatAgentApiError,
-    type AgentAppSummaryDto,
     type AgentArtifactRefDto,
     type AgentWorkspaceDto,
     type AgentSettingsViewDto,
-    type AgentPluginInstallationDto,
-    type AgentPluginVersionDto,
     type AgentWorkspaceRuntimeCatalogDto,
   } from '../api/agent-api';
   import { formatAgentEnumLabel } from '../enum-labels';
@@ -27,9 +24,6 @@
 
   const catalog = ref<AgentWorkspaceRuntimeCatalogDto | null>(null);
   const workspaceList = ref<AgentWorkspaceDto[]>([]);
-  const apps = ref<AgentAppSummaryDto[]>([]);
-  const installations = ref<AgentPluginInstallationDto[]>([]);
-  const versions = ref<AgentPluginVersionDto[]>([]);
   const artifacts = ref<AgentArtifactRefDto[]>([]);
   const agentSettings = ref<AgentSettingsViewDto | null>(null);
   const workspaceKey = ref('');
@@ -42,26 +36,6 @@
 
   const activeWorkspace = computed(
     () => workspaceList.value.find((workspace) => !['deleted', 'failed'].includes(workspace.status)) ?? null,
-  );
-  const runnerCandidates = computed(() =>
-    installations.value
-      .filter((installation) => installation.status === 'installed')
-      .map((installation) => {
-        const plugin = versions.value.find(
-          (version) =>
-            version.appId === installation.appId &&
-            version.version === installation.version &&
-            version.status === 'installed' &&
-            Boolean(version.runnerEntry),
-        );
-        const app = apps.value.find((candidate) => candidate.id === installation.appId && candidate.enabled);
-        return plugin && app
-          ? { pluginId: installation.appId, version: installation.version, displayName: app.displayName }
-          : null;
-      })
-      .filter((candidate): candidate is { pluginId: string; version: string; displayName: string } =>
-        Boolean(candidate),
-      ),
   );
   const pluginTargets = computed(() =>
     workspaceList.value
@@ -87,21 +61,14 @@
     loading.value = true;
     if (!preserveError) error.value = '';
     try {
-      const [nextCatalog, summaries, nextInstallations, nextVersions, nextWorkspaces, artifactPage, nextSettings] =
-        await Promise.all([
-          agentApi.workspaceRuntimeCatalog(),
-          agentApi.apps(),
-          agentApi.pluginInstallations(),
-          agentApi.pluginVersions(),
-          agentApi.workspaces(props.appId, props.runId, true),
-          agentApi.files({ appId: props.appId }),
-          agentApi.settings(),
-        ]);
+      const [nextCatalog, nextWorkspaces, artifactPage, nextSettings] = await Promise.all([
+        agentApi.workspaceRuntimeCatalog(),
+        agentApi.workspaces(props.appId, props.runId, true),
+        agentApi.files({ appId: props.appId }),
+        agentApi.settings(),
+      ]);
       if (current !== refreshGeneration) return false;
       catalog.value = nextCatalog;
-      apps.value = summaries;
-      installations.value = nextInstallations;
-      versions.value = nextVersions;
       artifacts.value = artifactPage.items.filter(
         (artifact) => artifact.appId === props.appId && artifact.status === 'ready',
       );
@@ -323,7 +290,7 @@
     <WorkspaceCreateCard
       v-if="catalog && agentSettings && !activeWorkspace"
       :catalog="catalog"
-      :runner-candidates="runnerCandidates"
+      :runner-candidates="[]"
       :acp-profiles="agentSettings!.effectiveSettings.workspaceRuntime.acpProfiles"
       :browser-targets="agentSettings!.effectiveSettings.browser.targets"
       :locked="locked"

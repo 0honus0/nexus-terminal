@@ -7,7 +7,6 @@ import type { CryptoHashPort } from '../../modules/agent/crypto-hash.port';
 import type { AppCapabilityBroker } from '../../modules/agent/host/app-capability-broker';
 import type { AppLifecycleService } from '../../modules/agent/host/app-lifecycle.service';
 import type { AgentSettingsService } from '../../modules/agent/host/agent-settings.service';
-import type { PluginRunnerTargetSourcePort } from '../../modules/agent/host/plugin-runner-target.port';
 import type { AgentWorkspaceRuntimeFacade } from '../../modules/agent/public';
 import { WorkspaceArtifactService } from '../../modules/agent/exchange/workspace-artifact.service';
 import type { WorkspaceRuntimeControllerPort } from '../../modules/agent/workspace-runtime/workspace-runtime-controller.port';
@@ -20,7 +19,6 @@ import { WorkspaceRuntimeTerminalService } from '../../modules/agent/workspace-r
 export interface ComposeWorkspaceRuntimeOptions {
   database: RelationalDatabase;
   controller: WorkspaceRuntimeControllerPort & WorkspaceRuntimeGatewayPort;
-  pluginTargets: PluginRunnerTargetSourcePort;
   settings: AgentSettingsService;
   lifecycle: AppLifecycleService;
   capabilities: AppCapabilityBroker;
@@ -40,12 +38,10 @@ export interface ComposedWorkspaceRuntime {
 /**
  * Owns Workspace Runtime composition so the Agent root does not know about
  * confirmation persistence, artifact exchange plumbing, or facade delegation.
- * Plugin integration crosses this boundary only through PluginRunnerTargetSourcePort.
  */
 export const composeWorkspaceRuntime = ({
   database,
   controller,
-  pluginTargets,
   settings,
   lifecycle,
   capabilities,
@@ -67,7 +63,6 @@ export const composeWorkspaceRuntime = ({
   const service = new WorkspaceRuntimeService(
     controller,
     repository,
-    pluginTargets,
     settings,
     lifecycle,
     capabilities,

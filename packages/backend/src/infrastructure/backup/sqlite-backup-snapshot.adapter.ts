@@ -367,7 +367,7 @@ export class SqliteBackupSnapshotAdapter implements BackupSnapshotPort {
       const marker = captured.get(`${root}.nexus-package-hash`);
       if (marker === undefined || Buffer.from(marker, 'base64').toString('utf8').trim() !== version.package_hash)
         throw new Error('BACKUP_SNAPSHOT_REFERENCE_INVALID');
-      for (const entry of [version.frontend_entry, version.backend_entry, version.runner_entry]) {
+      for (const entry of [version.frontend_entry, version.backend_entry]) {
         if (typeof entry === 'string' && !captured.has(`${root}${entry}`))
           throw new Error('BACKUP_SNAPSHOT_REFERENCE_INVALID');
       }

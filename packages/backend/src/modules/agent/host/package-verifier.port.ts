@@ -26,7 +26,6 @@ export interface VerifiedPluginPackage {
   files: VerifiedPluginFile[];
   frontendEntry: string | null;
   backendEntry: string | null;
-  runnerEntry: string | null;
   skillFiles: string[];
 }
 

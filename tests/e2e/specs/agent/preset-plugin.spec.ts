@@ -1294,7 +1294,6 @@ test('official first-party catalog is discoverable without repository configurat
         appId: 'nexus.fullstack',
         frontendEntry: 'frontend/index.html',
         backendEntry: 'backend/index.mjs',
-        runnerEntry: null,
       },
     },
   });
@@ -1525,7 +1524,6 @@ test('frontend target owns a full Custom App Surface and connects through the is
                 appId: 'nexus.fullstack',
                 frontendEntry: 'frontend/index.html',
                 backendEntry: 'backend/index.mjs',
-                runnerEntry: null,
               },
             },
           });

@@ -20,6 +20,11 @@
 10. **2026-10-08 新的破坏式移除要求，替代上文涉及旧数据/备份/Plugin 兼容的前置门槛**：项目所有者明确要求“可以去把插件那个库也拉下来一块修改；要求做破坏式更新，不考虑备份恢复兼容问题，只保留最干净的代码状态”。当前任务的最终新版本**不为旧 Agent Workspace、Runner、旧备份 schema、旧 Plugin manifest/Runner entry 留兼容层、降级路径或旧值解码器**。旧格式在边界直接拒绝即可；只需维护**新版本自己的**备份导出/导入能力以及 SSH、Browser、ACP、Artifact、Memory 和 Plugin Frontend/Backend 等保留能力。允许按照依赖顺序直接实施破坏式 contract/数据库/消费端清理，不再以历史生产备份恢复演练或旧签名 Plugin Release 已发布作为代码施工门槛。**不要动用户独立存放的原始备份文件；不删普通终端 Workspace、SSH 项目、E2E 测试 Runner。**
 11. **双仓协同**：官方 `https://github.com/0honus0/nexus-agent-plugins` 已克隆至 `/home/honus/nexus-agent-plugins`（`main`，克隆 HEAD `826a597`），与 `/home/honus/nexus-terminal` 一起做更新；Node/pnpm、下载和临时打包仍使用 `/home/honus/workspace`。两个 Git 仓库分别检查 status、验证、创建本地提交，**不自动推送、不虚构官方签名发布**。所有进度和新会话交接要求继续只写在**本文件**。
 12. **2026-10-08 最新插件发布授权**：所有者明确指示“插件可以推送到远程 触发actions发布 版本还是要1.0.0”。**仅对官方插件仓**授权远程推送及 `v1.0.0` 已发布 Release 的签名资产替换；插件包 `version`、AgentDefinition `version` 与仓库版本都固定 **`1.0.0`**，Manifest `schemaVersion=1`、Host SDK `sdkVersion=1.0.0` 不另起新版本。**主仓 `nexus-terminal` 不随之推送**。同版本更新是破坏式的：不会自动迁移安装在旧数据库中的 immutable 同版本不同哈希 Plugin，用户已明确不要求旧版数据/备份兼容。以下最新正式发布结果优先于文档中早期“`2.0.0` 尚未发布”的过程记录。
+13. **2026-10-08 标签引用必须指向新源码**：所有者要求“远程插件标签指向新提交，继续 nexus 本体修改”。目标为官方仓 `refs/tags/v1.0.0` → `ac096df28467c5ae42e5d47da6768ac214f2d901`，保留正式包和 manifest 版本 1.0.0。本地 Plugin 仓标签已经更新到目标；**远程标签尚未移动**（GitHub 连接可写分支，但没有管理 tag 的操作，本机 HTTPS git 没有凭据，带精确旧值的 force-with-lease push 返回 GitHub Username unavailable）。不要通过伪造 `tags/v1.0.0` 分支、重新创建 Release 或覆盖无关分支冒充完成。可在获得 Git HTTPS/SSH 推送认证后，仅执行 `git -C /home/honus/nexus-agent-plugins push --force-with-lease=refs/tags/v1.0.0:1a17345526075a54823a1eb7c197a31900e9950f origin refs/tags/v1.0.0`，之后以 `git ls-remote origin refs/tags/v1.0.0` 核验 SHA；若服务器标签保护拒绝，应通过仓库授权管理操作解决，不关闭此待办。
+
+**本轮 P4 Plugin Runner 持久化与执行 Source 清理（2026-10-08）**：主仓在既有 Runner manifest 拒绝基础上，去除 `PluginVersionRecord` / `VerifiedPluginPackage` / HTTP `AgentPluginVersionDto` 的 `runnerEntry`、Plugin 版本 SQLite 仓读写列、备份安装包引用检查中的 Runner entry，并以增量迁移 **#55** `ALTER TABLE agent_plugin_versions DROP COLUMN runner_entry` 删除旧列（不改历史迁移）；新 schema 不再创建该列。取消了 `PluginRuntimeLifecycleCoordinator.resolveRunnerTargets`、Plugin facade 接口、`plugin-runner-target.port.ts` 和 Workspace composition 的 Plugin Source 注入；旧 Workspace Runtime 对非空 Runner Plugin 目标及 frozen profile **fail closed**，不回退到 Backend 或 SSH。Frontend 旧 Workspace 面板不再从 Plugin 安装和版本读取 Runner candidate；既有 Plugin E2E/Agent 场景断言已去除 `runnerEntry:null` 兼容槽，`doc/USAGE.md` 不再声称旧 Runner Plugin 受包保留保护。**这仅是 Plugin Runner Source 收敛，不代表整个 Agent Workspace/生产 Runner 已删除。**
+
+**本轮验证**：`pnpm run check`、`pnpm run format:all:check`、`pnpm run build` 和 `git diff --check` 均 PASS；`pnpm --filter @nexus-terminal/backend run test:agent-scenarios` **exit 0**；官方 Playwright 容器中定向 `preset-plugin.spec.ts` 的 Catalog/Frontend Plugin 用例 **2 passed (18.4s)，exit 0**，真实 E2E Backend 启动记录增量迁移 #55 已执行成功。另在内存 SQLite 构造带旧 `runner_entry` 和保留 `backend_entry` 的表，直接执行迁移 #55：旧列删除、Backend entry 未丢失、二次执行的 migration check 跳过，打印 `PLUGIN_RUNNER_COLUMN_MIGRATION_PASS`、退出码 0。尚需后续完整 SSH-only 清理和新架构全量 E2E，保留普通终端 Workspace 和 SSH。主仓不可推送，插件远程标签未移动状态必须继续可见。
 
 ### 新要求后的执行优先级
 
@@ -59,20 +64,20 @@ node --version && pnpm --version
 # 从下方「当前工作指针」继续一项，改完先更新本文件再检查与本地提交
 ```
 
-**当前工作指针（2026-10-08）**：**最新所有者要求以第 10–12 条为准：破坏式移除、Plugin/AgentDefinition 版本保持 `1.0.0`、仅插件仓允许远程发布**。官方 `0honus0/nexus-agent-plugins` 已发布替代签名包：远程 `main=ac096df`，`v1.0.0` Release 三件附件已重传，官方 publisher 签名和 SHA 校验通过；P0-4 完成。**本地插件 Clone 也已无损对齐远程 `main=ac096df` 且工作树干净**。主仓 `nexus-terminal/dev=976d1a76` 未推送，Host manifest 与持久 manifest decoder 已拒绝 `targets.runner`、Plugin 页面已去 Runner badge，签名 E2E fixture 已去 Runner；**内部 Plugin Runner `runner_entry`/Workspace Source、Agent Workspace、Browser/ACP 的残留和生产 Runner 服务仍未移除**。**下一项**：清理 Plugin Runner 的数据库字段/Repository/公开 DTO、Workspace target source，保持其他资源 owner 完整，再继续 SSH-only/Browser/ACP/Frontend/部署收敛；正式外仓发行已不再是阻塞。旧版 69/69 Agent E2E 只是基线，新版需完整重验；主仓不得擅自推送，保留用户的原始未跟踪计划与既有备份。先确认两仓 `git status`、远程 SHA 和用户并发改动。
+**当前工作指针（2026-10-08）**：**最新所有者要求以第 10–13 条为准**：破坏式移除、Plugin/AgentDefinition 版本固定 `1.0.0`、仅插件仓授权远程推送，且官方 **`refs/tags/v1.0.0` 必须最终指向 `ac096df`**。最新发布包的官方 Ed25519 签名已确认；本地 Plugin tag 也已指向 `ac096df`，但**远程 tag 更新因 Git HTTPS 无认证而未完成**，GitHub 连接没有 tag 写入入口，须继续跟进；正式 Release 资产本身已发布。主仓 Plugin Runner `runnerEntry` 的公开 DTO、Repository、SQLite schema / 迁移 #55、备份引用、Host target resolver、Frontend 候选列表和相应旧源接口已清理；原 Runner-Plugin 请求 fail closed，**生产 Agent Workspace Runtime / Browser / ACP / 整个 Runner 服务尚未删除**。本轮主仓 `check`、格式、build、全量 Agent scenario 和定向 Plugin E2E **PASS**，主仓仍不推送。**下一项**：P3 SSH-only target/tool/API 全消费者与 P4 Browser/ACP 独立化，然后 P5 UI、P6 生产 Runner、P7 新版整套回归；优先做可验证的窄切口本地提交，始终保留普通终端 Workspace、SSH 后台 Job/项目、E2E 测试 Runner。新会话先核对双仓 HEAD/status、最新远程 tag 和用户并发改动，不碰用户原始未跟踪计划及备份。
 
 ## 阶段状态（2026-10-08）
 
-| 阶段                         | 状态   | 说明                                                                       |
-| ---------------------------- | ------ | -------------------------------------------------------------------------- |
-| P0 清单与升级边界            | 进行中 | P0-2/3/4 完成，旧版 Agent E2E 69/69；P0-1/5 的历史事项由最新破坏式规则覆盖 |
-| P1 最终 contract 与迁移方案  | 进行中 | Plugin manifest/decoder 已开始破坏式切换；其余 DTO 尚未收敛                |
-| P2 存量数据、升级与备份      | 未开始 | 不在开发过程中直接删除真实数据                                             |
-| P3 Backend SSH 收敛          | 未开始 |                                                                            |
-| P4 Browser、ACP、Plugin 解耦 | 进行中 | 双仓 Plugin Runner target 新接入已退出；内部 Runner/Browser/ACP 仍待清理   |
-| P5 Frontend 移除             | 未开始 |                                                                            |
-| P6 生产 Runner 退出          | 未开始 |                                                                            |
-| P7 文档与验收                | 未开始 |                                                                            |
+| 阶段                         | 状态   | 说明                                                                            |
+| ---------------------------- | ------ | ------------------------------------------------------------------------------- |
+| P0 清单与升级边界            | 进行中 | P0-2/3/4 完成，旧版 Agent E2E 69/69；P0-1/5 的历史事项由最新破坏式规则覆盖      |
+| P1 最终 contract 与迁移方案  | 进行中 | Plugin manifest/decoder 与 Plugin Runner DTO 已退出；Workspace/SSH DTO 仍待收敛 |
+| P2 存量数据、升级与备份      | 进行中 | 增量迁移 #55 删除 Plugin runner_entry；不直接操作用户真实备份/线上数据库        |
+| P3 Backend SSH 收敛          | 未开始 |                                                                                 |
+| P4 Browser、ACP、Plugin 解耦 | 进行中 | Plugin Runner Source/持久字段已退出；Browser/ACP 和 Workspace Runtime 待清理    |
+| P5 Frontend 移除             | 未开始 |                                                                                 |
+| P6 生产 Runner 退出          | 未开始 |                                                                                 |
+| P7 文档与验收                | 未开始 |                                                                                 |
 
 ## P1 边界准备：基于当前代码的迁移决策（仅设计，尚未改生产 contract）
 

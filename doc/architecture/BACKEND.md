@@ -82,9 +82,9 @@ Terminal Theme 删除由 SQLite repository 在单一事务中删除 user theme�
 
 Workspace deleted 成功投影在同一 status CAS 清 retained，Runner journal 同步释放；persistent root 仍属 preview/confirm runtimeCleanup，legacy deleted+retained 不阻止候选，cleanup projection 清 retention。
 
-Plugin installation 与独立 Workspace generation 是不同 lifecycle owner；App uninstall/drain 不级联 Workspace Runner process，后者 stop/delete 经 RunnerCommandExecutor 回收，冻结版本不重绑定当前 installation。
+Plugin installation 与 Backend 子进程 lifecycle 分离，App uninstall/drain 仅作用于所属 App Run 和 Plugin Backend；不再向 Workspace generation 提供 Plugin Runner 执行入口。
 
-Plugin package cleanup 对 runnerEntry 保守保留：installation count 不是冻结 Run/Workspace 的完整引用 owner，未建立共享 package-reference lease 前禁止 count-then-unlink Runner source。当前 installation 切换与旧 package 文件保留分离。
+Plugin package cleanup 对无 installation 引用的版本进行受控回收；版本记录和备份校验仅包含 Frontend、Backend 入口和 Skills，不为旧 Runner Plugin 源码提供保留例外。SQLite 的增量迁移 #55 删除 `agent_plugin_versions.runner_entry`；旧带 Runner target 的 Manifest 在解析阶段拒绝。
 
 BackgroundAssetService 单 mutationTail 串行 upload/remove 的读引用、save、setReference、旧文件 cleanup；失败 tail 转 fulfilled 保证后续继续，settings.get(false) 不启动额外引用修复；不是多进程锁或 crash reconciliation。
 

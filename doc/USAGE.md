@@ -413,7 +413,7 @@ Agent Workspace Terminal 每个 Workspace 最多 8 个、单 Backend 合计最�
 - Workspace 后台启动结果的 `userCleanup` 提供本次 App／Workspace 的具体读取和操作路径、必要请求头、数值版本来源与命令查询路径。`expectedVersion` 必须使用新读取的数值，不能用字符串占位值；交付说明须保留命令成功与 Workspace stopped／deleted 的最终核对，不以 HTTP 202 代替完成。
 - 管理 API 的 actions 响应命令标识是 `data.id`，不是 Agent 工具结果的 `commandId` 字段；将该 `data.id` 代入 `/workspace-runtime/commands/{commandId}` 查询，再核对 `data.status` 和 Workspace 最终状态。后台交接结果明确此字段映射，避免混用工具结果与 HTTP DTO。
 - Agent `workspace_control(action=start)` 对已 running 的 Workspace 返回 `WORKSPACE_ALREADY_RUNNING`，不重复提交启动命令或制造新的生命周期进展；应继续项目准备或验收。如需重启使用明确授权的 restart，不以重复 start 代替。跨 Run／Runtime 权限仍优先核对，不跨 ToolCall 复用旧结果。
-- Workspace Terminal、Workspace ACP、Browser 和 Runner Plugin 依赖可用的 Agent Runner。Runner 不可用时，SSH ACP、普通 SSH/文件管理/远程桌面仍可使用。设置页可在未配置 Workspace ACP Profile 时创建 SSH ACP 集成；分别填写 argv 与绝对工作目录，保存后可刷新恢复配置。
+- 现有 Workspace Terminal、Workspace ACP 与 Workspace 绑定的 Browser 仍依赖 Agent Runner；**Plugin Runner target 已移除，不允许新建或激活**。Runner 不可用时，SSH ACP、普通 SSH/文件管理/远程桌面仍可使用。设置页可在未配置 Workspace ACP Profile 时创建 SSH ACP 集成；分别填写 argv 与绝对工作目录，保存后可刷新恢复配置。
 - Plugin App 只获得已声明并授权的 capability。需要确认的 mutation 会先显示 approval，未知执行结果会进入核对或恢复流程。
 
 ## 外观与 HTML Theme
@@ -451,9 +451,9 @@ Workspace 是独立的项目与运行环境管理模块。支持版本 JSON 保�
 - 同一用户下同一 Plugin App 的首次 install 串行提交；并发安装不同版本时，先完成的版本成为当前 installation，后到请求会要求走 upgrade，不会把 App activeVersion 与 Installation version 写成不同版本。
 - 删除当前使用的自定义 Terminal Theme 时，Backend 会在同一持久化事务中清除 `activeTerminalThemeId`；直接调用删除 API 也不会留下指向已删除主题的悬挂设置。
 - Workspace delete 成功后释放保留标记，Run／Thread 不再因该 Workspace retention 永久阻塞删除；项目文件树随后可通过 runtime cleanup 清理，delete 本身仍先删除运行 generation。stop 不释放项目保留，失败或结果未知不视为删除成功；旧 deleted 保留记录也可清理。
-- Plugin App 升级／卸载的 drain 针对 App Run 与 Backend runtime，不级联停止独立 Workspace 的冻结 Runner Plugin。已有 Workspace 可继续执行旧版本；如需停止旧代码，应先显式 stop／delete 相应 Workspace。
+- Plugin App 升级／卸载的 drain 针对 App Run 与隔离 Backend runtime；Plugin 不提供 Runner target。包含 `targets.runner` 的签名 Manifest 不可安装。
 - Plugin Frontend Run 订阅单实例最多 2 个、当前页面所有 Plugin 合计最多 4 个，同实例不能重复订阅同一 Run；取消完成释放 transport 后归还名额，超限调用直接拒绝，避免 Plugin 占满 Host 共享订阅槽。
-- 带 Runner entry 的已安装 Plugin package 在升级／卸载后不会自动删除旧版本文件，保留冻结 Run／Workspace 使用的版本；当前 installation 仍只有一个版本。旧 package 会持续占用磁盘，不提供自动 package GC，也不会自动升级旧 Workspace。
+- 不再为 Runner Plugin 保留旧安装包：无安装引用的旧 Plugin 版本可以按现行清理规则回收，不能自动复活旧 Runner target。
 - 背景上传与删除在单 Backend 内顺序执行，后一次操作读取前一次提交的引用，避免并发上传遗留被覆盖的新文件；文件清理失败或进程崩溃仍可能留下未引用文件，不承诺跨文件／数据库原子更新。
 - Backend 正常关闭会调用所有 Backend Plugin child 的 dispose／终止及退出确认；失败会报告关闭错误，不把发送 kill 信号当作已退出。
 - Backend Plugin 的 ready 握手限时 30 秒，模块导入卡住会终止 child 并报告 `PLUGIN_BACKEND_READY_TIMEOUT`；不再无限等待该握手，后续退出确认可能额外耗时。
@@ -462,7 +462,6 @@ Workspace 是独立的项目与运行环境管理模块。支持版本 JSON 保�
 - Integration 删除／禁用的旧 refresh 仍会被失效保护拦住，临时 generation 在最后在途 refresh 结束后回收，不无限保留历史 UUID。
 - SSH 远端断开会驱动 Execution／Workspace Registry 回收，不再保留已断开的 ready 记录；挂起移交先解除旧 Execution 监听，晚到关闭事件不会按同 ID 误关新会话。远端操作结果未知仍按原隔离契约处理。
 - SSH 资源采集不跨采样复用机器静态信息，实际采集会重新读取；删除／改地址后旧 host 缓存在下次状态请求时清理，全局 reset 不允许旧采样回填。已有 TTL 内状态仍可短暂显示旧信息。
-- Runner Plugin 必须在 30 秒内完成 ready 握手；模块导入卡住会报超时并终止进程，Workspace 激活走既有失败补偿，不再无限等待。后续 dispose／退出收敛可能额外耗时。
 - Run进入completed/completed_unverified/failed/cancelled/interrupted终态后回收该Run的Browser session；审批／预算等待及新输入重调度不自动关闭，可在原Run/runtime授权范围继续使用。安全暂停若持久化为interrupted仍回收，checkpoint新Run须重新创建session。Child单独结束不关闭整个Run的session，显式close/Workspace/global cleanup仍有效。回收Context／连接不等于终止远端浏览器服务，失败记录日志并由全局清理兜底。
 - 跳板连接的总连接预算覆盖所有握手与 forwarding，forward 阶段同样接受取消；超时后关闭已建立的跳板，晚到 channel 不发布。连接清理可能额外耗时，不保证远端即时退出。
 - Artifact 清理预览每批最多选择最旧的 1,000 个可回收对象，确认仅处理本批；清理后可重新预览继续，不代表一批清空全部。确认时仍重检保留／授权／活跃 Run 保护。

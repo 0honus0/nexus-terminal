@@ -61,7 +61,6 @@ export interface AgentPluginVersionDto {
   manifest: AgentPluginManifestDto;
   frontendEntry: string | null;
   backendEntry: string | null;
-  runnerEntry: string | null;
   skillFiles: string[];
   status: 'verified' | 'installed' | 'failed' | 'removed';
   installedAt: number | null;

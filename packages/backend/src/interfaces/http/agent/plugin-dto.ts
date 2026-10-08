@@ -96,7 +96,6 @@ export const pluginVersionDto = (plugin: Version): AgentPluginVersionDto => ({
   manifest: pluginManifestDto(plugin.manifest),
   frontendEntry: plugin.frontendEntry,
   backendEntry: plugin.backendEntry,
-  runnerEntry: plugin.runnerEntry,
   skillFiles: [...plugin.skillFiles],
   status: plugin.status,
   installedAt: plugin.installedAt,

@@ -115,4 +115,12 @@ export const agentHostMigrations: SqliteMigration[] = [
         AND json_type(value_json, '$.performance.maxConcurrentWorkspaceJobs') IS NULL;
     `,
   },
+  {
+    id: 55,
+    name: 'Remove retired Agent Plugin Runner entry',
+    check: async (db: Database): Promise<boolean> =>
+      (await tableExists(db, 'agent_plugin_versions')) &&
+      (await columnExists(db, 'agent_plugin_versions', 'runner_entry')),
+    sql: 'ALTER TABLE agent_plugin_versions DROP COLUMN runner_entry;',
+  },
 ];

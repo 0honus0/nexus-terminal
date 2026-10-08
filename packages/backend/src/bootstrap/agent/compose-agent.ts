@@ -370,7 +370,6 @@ export const composeAgent = ({
   const composedWorkspaceRuntime = composeWorkspaceRuntime({
     database,
     controller: workspaceRuntimeController,
-    pluginTargets: plugins,
     settings,
     lifecycle,
     capabilities: capabilityBroker,

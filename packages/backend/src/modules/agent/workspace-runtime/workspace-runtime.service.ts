@@ -14,7 +14,6 @@ import type {
   RunnerCommandResult,
   WorkspaceRuntimeControllerPort,
 } from './workspace-runtime-controller.port';
-import { PLUGIN_RUNNER_PROTOCOL_VERSION, type PluginRunnerTargetSourcePort } from '../host/plugin-runner-target.port';
 import type { AgentWorkspaceRepositoryPort } from './workspace-runtime.repository.port';
 import type {
   AgentWorkspaceCreateSpec,
@@ -124,7 +123,6 @@ export class WorkspaceRuntimeService {
   constructor(
     private readonly controller: WorkspaceRuntimeControllerPort,
     private readonly repository: AgentWorkspaceRepositoryPort,
-    private readonly pluginTargets: PluginRunnerTargetSourcePort,
     private readonly settings: AgentSettingsService,
     private readonly lifecycle: AppLifecycleService,
     private readonly capabilities: AppCapabilityBroker,
@@ -238,10 +236,7 @@ export class WorkspaceRuntimeService {
     }
     const workspaceSettings = settings.effectiveSettings.workspaceRuntime;
     if (!workspaceSettings.enabledRecipeIds.includes(spec.recipeId)) throw new Error('WORKSPACE_RECIPE_DISABLED');
-    if (
-      (spec.runnerPluginIds?.length ?? 0) > 32 ||
-      new Set(spec.runnerPluginIds ?? []).size !== (spec.runnerPluginIds?.length ?? 0)
-    ) {
+    if (spec.runnerPluginIds?.length) {
       throw new Error('PLUGIN_RUNNER_TARGET_INVALID');
     }
     const recipe = catalog.recipes.find((candidate) => candidate.id === spec.recipeId);
@@ -258,10 +253,6 @@ export class WorkspaceRuntimeService {
         throw new Error('WORKSPACE_TOOLCHAIN_VERSION_DISABLED');
       }
     }
-    const resolvedRunnerPlugins = await this.pluginTargets.resolveRunnerTargets(
-      scope.userId,
-      spec.runnerPluginIds ?? [],
-    );
     const profile: WorkspaceProfileView = {
       kind: recipe.kind,
       recipeId: recipe.id,
@@ -269,7 +260,7 @@ export class WorkspaceRuntimeService {
       runtimeDigest: catalog.runtimeDigest,
       catalogRevision: catalog.revision,
       toolchain: resolveWorkspaceToolchain(catalog, recipe.id, versions),
-      runnerPlugins: resolvedRunnerPlugins.map((target) => ({ ...target })),
+      runnerPlugins: [],
       acpProfiles: selectedAcpProfiles(spec.acpProfileIds, workspaceSettings.acpProfiles, settings.revision),
       browserTarget: selectedBrowserTarget(
         spec.browserTargetId,
@@ -342,6 +333,7 @@ export class WorkspaceRuntimeService {
       if (expectedCatalogRevision && frozenProfile.catalogRevision !== expectedCatalogRevision) {
         throw new Error('CATALOG_REVISION_CONFLICT');
       }
+      if (frozenProfile.runnerPlugins.length) throw new Error('PLUGIN_RUNNER_TARGET_INVALID');
       assertSpecMatchesFrozenProfile(spec, frozenProfile);
       profile = structuredClone(frozenProfile);
     } else {
@@ -403,13 +395,8 @@ export class WorkspaceRuntimeService {
     const workspace = await this.repository.getWorkspace(scope, workspaceId);
     if (!workspace) throw new Error('NOT_FOUND');
     if (workspace.version !== expectedVersion) throw new Error('STATE_CONFLICT');
-    if (
-      (action === 'start' || action === 'restart') &&
-      workspace.profile.runnerPlugins.some(
-        (target) => Number(target.protocolVersion) !== PLUGIN_RUNNER_PROTOCOL_VERSION,
-      )
-    ) {
-      throw new Error('PLUGIN_RUNNER_PROTOCOL_VERSION_UNSUPPORTED');
+    if ((action === 'start' || action === 'restart') && workspace.profile.runnerPlugins.length) {
+      throw new Error('PLUGIN_RUNNER_TARGET_INVALID');
     }
     const transitionStatus: WorkspaceStatus =
       action === 'start' ? 'starting' : action === 'delete' ? 'deleting' : 'stopping';

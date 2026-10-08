@@ -60,7 +60,6 @@ CREATE TABLE IF NOT EXISTS agent_plugin_versions (
     manifest_json TEXT NOT NULL CHECK(json_valid(manifest_json)),
     frontend_entry TEXT,
     backend_entry TEXT,
-    runner_entry TEXT,
     skill_files_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(skill_files_json)),
     status TEXT NOT NULL CHECK(status IN ('verified','installed','failed','removed')),
     installed_at INTEGER,
