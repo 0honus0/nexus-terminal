@@ -363,13 +363,13 @@ export async function findRestartRecoveryCandidates(
          AND e.sequence=(
            SELECT MAX(e2.sequence) FROM agent_events e2
            WHERE e2.run_id=r.id
-             AND e2.type IN ('run.interrupted','run.recovery_deferred','run.recovery_continued','run.recovery_failed')
+             AND e2.type IN ('run.interrupted','run.recovery_continued','run.recovery_failed')
          )
        ORDER BY r.created_at,r.id`,
   );
   for (const candidate of prior) {
     if (recoveryCandidates.has(candidate.id)) continue;
-    let eligible = candidate.type === 'run.recovery_deferred';
+    let eligible = false;
     if (candidate.type === 'run.interrupted') {
       try {
         const payload = JSON.parse(candidate.payload_json) as { reason?: unknown };

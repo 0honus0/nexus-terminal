@@ -41,7 +41,7 @@ export class BrowserSessionBindingAuthority {
   ) {}
 
   async createBinding(context: ToolContext, args: Record<string, JsonValue>): Promise<ResolvedBrowserBinding> {
-    if (args.workspaceId !== undefined) throw new Error('BROWSER_TARGET_SELECTION_INVALID');
+    if (Object.keys(args).some((key) => key !== 'targetId')) throw new Error('BROWSER_TARGET_SELECTION_INVALID');
     return this.targetBinding(context, browserToolString(args.targetId, MAX_ID_BYTES));
   }
 
@@ -119,7 +119,11 @@ export class BrowserSessionBindingAuthority {
   async revalidateCreate(context: ToolContext, args: Record<string, JsonValue>): Promise<ResolvedBrowserBinding> {
     const targetId = browserToolString(args.targetId, MAX_ID_BYTES);
     const targetRevision = browserToolInteger(args.targetRevision, 0, 1, Number.MAX_SAFE_INTEGER);
-    if (args.workspaceId !== undefined || args.generation !== undefined) {
+    if (
+      Object.keys(args).some(
+        (key) => key !== 'targetId' && key !== 'targetRevision' && key !== 'targetConfigurationHash',
+      )
+    ) {
       throw new Error('BROWSER_TARGET_SELECTION_INVALID');
     }
     const binding = await this.targetBinding(context, targetId);

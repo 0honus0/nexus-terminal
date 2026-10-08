@@ -97,7 +97,7 @@
     return t('agent.settings.onboarding.installStep3');
   });
 
-  // 4 个高内聚核心维度：模型与预算、工具与扩展、运行与环境、安全与防护
+  // 四组当前功能：模型与预算、工具与扩展、执行与集成、安全与防护。
   const groups = [
     {
       id: 'models',
@@ -781,7 +781,7 @@
             <AppExecutionPolicySettings :apps="apps" :busy="appContextBusy" />
           </div>
 
-          <!-- 3. 运行与环境 -->
+          <!-- 3. 执行与集成：并发、CDP、SSH ACP 和 Artifact，不含 Workspace 环境选择 -->
           <div v-if="visitedGroups.has('runtime')" v-show="activeGroup === 'runtime'" class="space-y-5">
             <PerformanceSettings
               :settings="settings"

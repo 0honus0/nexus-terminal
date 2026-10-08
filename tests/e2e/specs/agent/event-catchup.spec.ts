@@ -301,12 +301,6 @@ test('Run subscription accepts every current durable event and reconnects after 
     'run.interrupted': { reason: 'execution_limit', needsReconciliation: false },
     'run.cancel_requested': { previousStatus: 'running' },
     'run.recovery_continued': { reason: 'backend_restart', checkpointId: 'checkpoint', continuedRunId: 'continued' },
-    'run.recovery_deferred': {
-      reason: 'backend_restart',
-      checkpointId: 'checkpoint',
-      waitingFor: 'workspace_background_jobs',
-      jobIds: ['job'],
-    },
     'run.recovery_failed': { reason: 'backend_restart', checkpointId: null, reasons: ['unavailable'] },
     'model.retrying': {
       stepId: 'step',

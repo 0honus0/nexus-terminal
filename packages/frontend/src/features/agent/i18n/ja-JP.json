@@ -3,7 +3,7 @@
     "settings": {
       "tab": "Agent",
       "title": "Agent",
-      "description": "モデル、実行環境、権限を管理します。設定する項目を選択してください。",
+      "description": "モデル、許可された SSH 実行、連携、権限を管理します。設定する項目を選択してください。",
       "loading": "Agent 設定を読み込んでいます...",
       "feature": {
         "title": "Agent 機能",
@@ -201,7 +201,6 @@
         "noPublishers": "信頼済み publisher key はありません。",
         "package": "パッケージ検証",
         "packageHint": "パッケージは Artifact としてアップロードされ、署名、ファイル hash、危険な archive entry、manifest 互換性、サイズ制限を検証してからインストールされます。",
-        "packageContents": "Skill: {skills} · Frontend: {ui} · Backend: {backend} · Runner: {runner}",
         "present": "あり",
         "absent": "なし",
         "noCandidate": ".tar パッケージを選択し、インストール前に検証してください。",
@@ -713,7 +712,7 @@
       },
       "browserRuntime": {
         "title": "CDP",
-        "description": "Backend BrowserRuntime が直接接続する CDP ターゲットを設定します。Runner トンネルは使用できません。",
+        "description": "Backend BrowserRuntime が直接接続する CDP ターゲットと許可 URL を設定します。",
         "addTarget": "ターゲット追加",
         "empty": "ブラウザーターゲットは未設定です。Backend から直接接続できる CDP エンドポイントを追加してください。",
         "targetId": "ターゲット ID",
@@ -788,7 +787,7 @@
         "sshArgv": "SSH 起動引数（JSON 配列、環境変数は env で指定）",
         "sshCwd": "SSH 作業ディレクトリ（絶対パス）",
         "integrations": "ACP 連携",
-        "integrationsHint": "認可された SSH 接続上の ACP プログラムを設定します。Workspace ACP プロファイルと Runner トランスポートはサポートされません。",
+        "integrationsHint": "明示的に許可された SSH 接続上の ACP プログラムを設定します。",
         "refresh": "更新",
         "displayName": "表示名",
         "enabled": "有効",
@@ -818,17 +817,15 @@
         "overview": "概要",
         "models": "モデルと予算",
         "execution": "実行と Agent",
-        "environments": "ランタイム環境",
         "storage": "ファイルとストレージ",
         "extensions": "App と拡張",
         "safety": "安全とシステム",
-        "runtime": "実行と環境"
+        "runtime": "実行と連携"
       },
       "groupDescriptions": {
         "overview": "機能状態、Agent App、アクティビティ、Capability grant を確認します。",
         "models": "既定モデル、Provider、コンテキスト予算、インスタンス上限を管理します。",
         "execution": "並列数、性能、委任用 Subagent profile を設定します。",
-        "environments": "Backend 直結の CDP ブラウザーターゲットと SSH ACP プロセス連携を設定します。",
         "storage": "Artifact quota、保持、現在のストレージ使用状況を管理します。",
         "extensions": "署名済み Agent App、プラグインリポジトリ、パッケージ、publisher trust を管理します。",
         "safety": "ターゲット deny ルールと読み取り専用のシステム guardrail を管理します。"

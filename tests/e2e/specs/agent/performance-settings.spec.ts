@@ -9,7 +9,7 @@ test('Agent execution concurrency validates, saves and rejects retired Workspace
   await setUiLanguage(context.request);
   await page.goto('/settings?tab=agent');
   const panel = page.locator('#settings-panel-agent');
-  await panel.getByRole('button', { name: 'Runtime & Environments', exact: true }).click();
+  await panel.getByRole('button', { name: 'Execution & Integrations', exact: true }).click();
   const section = panel
     .getByRole('heading', { name: 'Execution and performance', exact: true })
     .locator('xpath=ancestor::section[1]');
@@ -46,7 +46,7 @@ test('Agent execution concurrency validates, saves and rejects retired Workspace
     expect(rejected.status()).toBe(400);
   }
   await page.reload();
-  await panel.getByRole('button', { name: 'Runtime & Environments', exact: true }).click();
+  await panel.getByRole('button', { name: 'Execution & Integrations', exact: true }).click();
   await expect(input).toHaveValue(String(desired));
   const unchanged = (await (await context.request.get('/api/v1/agent/settings')).json()).data;
   expect(unchanged.revision).toBe(settings.revision);

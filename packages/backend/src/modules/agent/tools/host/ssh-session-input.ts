@@ -7,9 +7,7 @@ export const sshSessionContext = (input: Record<string, JsonValue>, context: Too
   if (input.sessionId === undefined) return context;
   if (input.target !== 'ssh')
     throw new Error('SSH_SESSION_TARGET_MISMATCH', {
-      cause: new Error(
-        'sessionId identifies an SSH transport, not a Workspace. Omit sessionId for Workspace; command forms remain supported on both targets.',
-      ),
+      cause: new Error('sessionId is only valid with target=ssh and identifies an existing authorized SSH transport.'),
     });
   if (
     typeof input.sessionId !== 'string' ||

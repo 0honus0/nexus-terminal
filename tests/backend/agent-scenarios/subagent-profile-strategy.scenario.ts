@@ -77,7 +77,7 @@ export const subagentProfileStrategyScenario = async () => {
   );
   assert.ok(
     templates.find((template) => template.id === 'worker')?.capabilities.includes('file.write'),
-    'the worker template must request explicit Workspace write access',
+    'the worker template must request explicit SSH write access',
   );
   assert.ok(
     templates.find((template) => template.id === 'scout')?.capabilities.includes('browser.read'),
@@ -114,7 +114,13 @@ export const subagentProfileStrategyScenario = async () => {
     parentRuntimeId: 'profile-strategy-root-runtime',
     childRuntimeId: runtime.id,
     profileId: 'custom-worker',
-    grants: [],
+    grants: [
+      {
+        capability: 'file.read',
+        schemaVersion: 2,
+        scope: { kind: 'targets', targets: { ssh: { mode: 'ids', ids: ['7'] } } },
+      },
+    ],
     peerMessaging: 'parent-child',
     mutationMode: 'read-only',
     modelRef,
@@ -194,20 +200,19 @@ export const subagentProfileStrategyScenario = async () => {
         inheritedRuntimeId = runtimeId;
         inheritedTargets = [...targetDirectories];
         return {
-          workspaceId: 'profile-strategy-workspace',
-          generation: 1,
           targetDirectories: [...targetDirectories],
           instructions: [
             {
-              path: '/workspace/work/AGENTS.md',
-              scopePath: '/workspace/work',
-              projectRoot: '/workspace/work',
+              path: '/srv/project/AGENTS.md',
+              scopePath: '/srv/project',
+              projectRoot: '/srv/project',
               hash: 'a'.repeat(64),
               content: 'PROJECT_CHILD_MARKER: parser work must remain read-only.',
               sourceBytes: 64,
               contentBytes: 64,
               truncated: false,
-              provenance: 'workspace',
+              provenance: 'ssh',
+              connectionId: 7,
             },
           ],
           omitted: [],
@@ -253,7 +258,7 @@ export const subagentProfileStrategyScenario = async () => {
         maxToolOutputBytes: 1_048_576,
         contextPolicy: freezeRunContextPolicy('normal'),
       },
-      definition: { connectionIds: [] },
+      definition: { connectionIds: [7] },
     } as unknown as RunView,
   );
   assert.equal(prepared.kind, 'ready');
@@ -261,12 +266,9 @@ export const subagentProfileStrategyScenario = async () => {
   assert.equal(
     inheritedRuntimeId,
     delegation.parentRuntimeId,
-    'Child project instructions must be inherited from the parent runtime Workspace without copying Root history',
+    'Child project instructions must be inherited from the parent runtime SSH scope without copying Root history',
   );
-  assert.ok(
-    inheritedTargets.includes('/workspace/work/src/parser'),
-    'delegation objective/constraints must narrow inherited project-instruction targets',
-  );
+  assert.deepEqual(inheritedTargets, [], 'untrusted objective text must not invent a Workspace root or SSH path');
   assert.match(JSON.stringify(prepared.plan.instructions), /PROJECT_CHILD_MARKER/);
   assert.match(
     prepared.plan.instructions[0] ?? '',
@@ -316,7 +318,7 @@ export const subagentProfileStrategyScenario = async () => {
         batchSize: 1,
         providerCallId: `call-${index}`,
         toolName: 'file_read',
-        arguments: { path: `/workspace/work/src/parser/file-${index}.ts` },
+        arguments: { target: 'ssh', id: index === 0 ? '8' : '7', path: `/srv/project/src/parser/file-${index}.ts` },
         status: 'succeeded',
         result: {
           ok: true,
@@ -376,12 +378,17 @@ export const subagentProfileStrategyScenario = async () => {
           maxToolOutputBytes: 65536,
           contextPolicy: freezeRunContextPolicy('normal'),
         },
-        definition: { connectionIds: [] },
+        definition: { connectionIds: [7] },
       } as never,
     );
   const fullHistory = await prepareChild();
   assert.equal(fullHistory.kind, 'ready');
   if (fullHistory.kind !== 'ready') throw new Error('SCENARIO_INVALID');
+  assert.ok(
+    inheritedTargets.includes('ssh:7:/srv/project/src/parser'),
+    'only observed authorized SSH file reads must narrow inherited project instructions',
+  );
+  assert.ok(inheritedTargets.every((target) => target.startsWith('ssh:7:/')));
   assert.equal(fullHistory.plan.compaction, undefined);
   assert.match(JSON.stringify(fullHistory.plan.messages), /EARLY_CHILD_DECISION/);
   assert.match(JSON.stringify(fullHistory.plan.messages), /CONSUMED_PARENT_CORRECTION/);

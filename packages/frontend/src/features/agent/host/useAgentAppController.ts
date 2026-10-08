@@ -951,10 +951,7 @@ export function useAgentAppController(props: Readonly<AgentAppControllerProps>) 
           return;
         }
         if (event.type === 'message.final') resetStreamingPresentation();
-        const recoveryEvent =
-          event.type === 'run.recovery_continued' ||
-          event.type === 'run.recovery_deferred' ||
-          event.type === 'run.recovery_failed';
+        const recoveryEvent = event.type === 'run.recovery_continued' || event.type === 'run.recovery_failed';
         if (event.type === 'run.recovery_failed') {
           applyFailure(t('agent.operations.restartRecoveryFailed', { reasons: event.payload.reasons.join(', ') }), '', {
             domainKey: 'agent.operations.failureDomain.run',

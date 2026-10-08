@@ -44,29 +44,9 @@ import { childCheckpointBoundary, planChildCompaction, type SubagentCompactionPl
 
 const MAX_DELEGATION_PAYLOAD_BYTES = 32 * 1024;
 const INBOX_LIMIT = 8;
-const PROJECT_WORK_ROOT = '/workspace/work';
 const MAX_PROJECT_TARGETS = 8;
 const MAX_PROJECT_INSTRUCTION_BYTES = 8 * 1024;
 const MAX_PROJECT_INSTRUCTION_FILE_BYTES = 4 * 1024;
-
-const projectInstructionTargets = (delegation: DelegationView): string[] => {
-  const targets = new Set<string>([PROJECT_WORK_ROOT]);
-  const pathPattern = /(?:\/workspace\/work(?:\/[A-Za-z0-9._-]+)+|(?:\.\/)?[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)+)/g;
-  for (const text of [delegation.objective, ...delegation.constraints]) {
-    for (const match of text.matchAll(pathPattern)) {
-      const raw = match[0].replace(/[),.;:'"\]]+$/g, '');
-      const logical = path.posix.normalize(
-        raw.startsWith('/workspace/work') ? raw : `${PROJECT_WORK_ROOT}/${raw.replace(/^\.\//, '')}`,
-      );
-      if (logical !== PROJECT_WORK_ROOT && !logical.startsWith(`${PROJECT_WORK_ROOT}/`)) continue;
-      const basename = path.posix.basename(logical);
-      const target = basename.includes('.') && !basename.startsWith('.') ? path.posix.dirname(logical) : logical;
-      targets.add(target);
-      if (targets.size >= MAX_PROJECT_TARGETS) return [...targets];
-    }
-  }
-  return [...targets];
-};
 
 const projectInstructionMessages = (projection: ProjectInstructionProjection | null): string[] => {
   if (!projection) return [];
@@ -125,7 +105,9 @@ export class SubagentContextBuilder {
     const runtime = await this.runtimes.runtime(scope, runId, runtimeId);
     if (!runtime) return { kind: 'cancel' };
 
-    const targets = projectInstructionTargets(delegation);
+    // The SSH Project Directory binding supplies each authorized project's root. Never
+    // infer paths or a former Workspace root from untrusted objective text.
+    const targets: string[] = [];
     const [inbox, history] = await Promise.all([
       this.mailboxes.readMessages(
         scope,
@@ -142,14 +124,24 @@ export class SubagentContextBuilder {
     const toolExchanges = retainedUnits.flatMap((unit) => unit.exchanges ?? []);
     for (const exchange of history.units.flatMap((unit) => unit.exchanges ?? []).reverse()) {
       const args = exchange.arguments;
-      if (!args || typeof args !== 'object' || Array.isArray(args) || !exchange.toolName.startsWith('file_')) continue;
+      if (
+        !args ||
+        typeof args !== 'object' ||
+        Array.isArray(args) ||
+        !exchange.toolName.startsWith('file_') ||
+        args.target !== 'ssh' ||
+        typeof args.id !== 'string' ||
+        !/^[1-9][0-9]*$/.test(args.id) ||
+        !run.definition.connectionIds.some((id) => String(id) === args.id)
+      )
+        continue;
       for (const value of [args.path, args.destinationPath]) {
         if (typeof value !== 'string' || !value.startsWith('/') || value.includes('\0') || value.length > 4096)
           continue;
         const directory = ['file_list', 'file_search'].includes(exchange.toolName)
           ? path.posix.normalize(value)
           : path.posix.dirname(value);
-        const target = args.target === 'ssh' ? `ssh:${args.id}:${directory}` : directory;
+        const target = `ssh:${args.id}:${directory}`;
         if (targets.length < MAX_PROJECT_TARGETS && !targets.includes(target)) targets.push(target);
       }
     }

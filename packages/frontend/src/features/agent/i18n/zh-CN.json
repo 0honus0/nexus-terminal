@@ -3,7 +3,7 @@
     "settings": {
       "tab": "Agent",
       "title": "Agent",
-      "description": "管理模型、执行环境与权限。选择一个分区开始配置。",
+      "description": "管理模型、已授权的 SSH 执行、集成与权限。选择分区开始配置。",
       "loading": "正在加载 Agent 设置...",
       "feature": {
         "title": "Agent 功能",
@@ -201,7 +201,6 @@
         "noPublishers": "尚未信任任何发布者密钥。",
         "package": "包验证",
         "packageHint": "包会先作为 Artifact 上传，再检查签名、文件哈希、不安全归档项、manifest 兼容性与大小限制，之后才能安装。",
-        "packageContents": "Skill：{skills} · Frontend：{ui} · Backend：{backend} · Runner：{runner}",
         "present": "有",
         "absent": "无",
         "noCandidate": "请选择 .tar 包，验证通过后再安装。",
@@ -713,7 +712,7 @@
       },
       "browserRuntime": {
         "title": "CDP",
-        "description": "配置由 Backend BrowserRuntime 直连的 CDP 目标。endpoint 描述网络位置与允许访问的 URL，不再支持 Runner 隧道。",
+        "description": "配置由 Backend BrowserRuntime 直接连接的 CDP 目标及允许访问的 URL。",
         "addTarget": "添加目标",
         "empty": "尚未配置浏览器目标。请添加 Backend 可直接访问的 CDP Endpoint。",
         "targetId": "目标 ID",
@@ -788,7 +787,7 @@
         "sshArgv": "SSH 启动参数（JSON 数组；环境变量可通过 env 传入）",
         "sshCwd": "SSH 工作目录（绝对路径）",
         "integrations": "ACP 集成",
-        "integrationsHint": "配置授权 SSH 连接上的 ACP 程序，不再支持 Workspace ACP 配置档或 Runner 传输。",
+        "integrationsHint": "配置在已授权 SSH 连接上运行的 ACP 程序。",
         "refresh": "刷新",
         "displayName": "显示名称",
         "enabled": "启用",
@@ -818,17 +817,15 @@
         "overview": "概览",
         "models": "模型与预算",
         "execution": "执行与 Agent",
-        "environments": "运行环境",
         "storage": "文件与存储",
         "extensions": "App 与扩展",
         "safety": "安全与系统",
-        "runtime": "运行与环境"
+        "runtime": "执行与集成"
       },
       "groupDescriptions": {
         "overview": "查看功能状态、Agent App、活动情况与能力授权。",
         "models": "管理默认模型、Provider、上下文预算和实例上限。",
         "execution": "配置并发、性能与用于委派工作的 Subagent Profile。",
-        "environments": "配置由 Backend 直连的 CDP 浏览器目标与 SSH ACP 进程集成。",
         "storage": "管理 Artifact 配额、保留策略和当前存储压力。",
         "extensions": "管理签名 Agent App、插件仓库、安装包与发布者信任。",
         "safety": "管理目标 deny 规则与只读系统保护边界。"

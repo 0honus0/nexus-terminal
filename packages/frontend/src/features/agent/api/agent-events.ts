@@ -90,16 +90,6 @@ interface AgentRunRecoveryContinuedEvent extends AgentVersionedEventMetadata {
   };
 }
 
-interface AgentRunRecoveryDeferredEvent extends AgentVersionedEventMetadata {
-  type: 'run.recovery_deferred';
-  payload: {
-    reason: 'backend_restart';
-    checkpointId: string;
-    waitingFor: 'workspace_background_jobs';
-    jobIds: string[];
-  };
-}
-
 interface AgentRunRecoveryFailedEvent extends AgentVersionedEventMetadata {
   type: 'run.recovery_failed';
   payload: {
@@ -153,7 +143,6 @@ export type AgentStreamEvent =
   | AgentRunInterruptedEvent
   | AgentRunCancelRequestedEvent
   | AgentRunRecoveryContinuedEvent
-  | AgentRunRecoveryDeferredEvent
   | AgentRunRecoveryFailedEvent
   | AgentSnapshotChangedEvent
   | AgentHostChangedEvent
@@ -358,28 +347,6 @@ const parseRunEventV1 = (
         reason: 'backend_restart',
         checkpointId: event.payload.checkpointId,
         continuedRunId: event.payload.continuedRunId,
-      },
-    };
-  }
-  if (event.eventType === 'run.recovery_deferred') {
-    if (
-      !isRecord(event.payload) ||
-      event.payload.reason !== 'backend_restart' ||
-      typeof event.payload.checkpointId !== 'string' ||
-      event.payload.waitingFor !== 'workspace_background_jobs' ||
-      !Array.isArray(event.payload.jobIds) ||
-      event.payload.jobIds.some((jobId) => typeof jobId !== 'string')
-    ) {
-      return unknownEvent(event, channel, 'invalid_payload');
-    }
-    return {
-      ...metadata,
-      type: 'run.recovery_deferred',
-      payload: {
-        reason: 'backend_restart',
-        checkpointId: event.payload.checkpointId,
-        waitingFor: 'workspace_background_jobs',
-        jobIds: [...event.payload.jobIds] as string[],
       },
     };
   }

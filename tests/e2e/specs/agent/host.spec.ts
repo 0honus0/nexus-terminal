@@ -761,7 +761,7 @@ test('Agent settings load without Runner Workspace availability and preserve Bro
   await page.goto('/settings?tab=agent');
   const panel = page.locator('#settings-panel-agent');
   await expect(panel.getByRole('heading', { name: 'Model providers', exact: true })).toBeVisible();
-  await panel.getByRole('button', { name: 'Runtime & Environments', exact: true }).click();
+  await panel.getByRole('button', { name: 'Execution & Integrations', exact: true }).click();
   await expect(panel.getByRole('heading', { name: 'Execution and performance', exact: true })).toBeVisible();
   await expect(panel.getByRole('heading', { name: 'CDP', exact: true })).toBeAttached();
   await expect(panel.getByRole('heading', { name: 'ACP Integrations', exact: true })).toBeAttached();
@@ -784,7 +784,7 @@ test('Agent settings surface exposes the production control plane and captures f
   await expect(settingsNavigation).toBeVisible();
   await expect(settingsNavigation.getByRole('button', { name: 'Models & Budget', exact: true })).toBeVisible();
   await expect(settingsNavigation.getByRole('button', { name: 'Apps and extensions', exact: true })).toBeVisible();
-  await expect(settingsNavigation.getByRole('button', { name: 'Runtime & Environments', exact: true })).toBeVisible();
+  await expect(settingsNavigation.getByRole('button', { name: 'Execution & Integrations', exact: true })).toBeVisible();
   await expect(settingsNavigation.getByRole('button', { name: 'Safety and system', exact: true })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Disable Agent', exact: true })).toBeVisible();
   const providersHeading = panel.getByRole('heading', { name: 'Model providers', exact: true });
@@ -958,7 +958,7 @@ test('Agent settings surface exposes the production control plane and captures f
   expect((await fallbackSaved).ok()).toBeTruthy();
   await expect(page.getByText('Fallback chain updated and saved', { exact: true })).toBeVisible();
 
-  await settingsNavigation.getByRole('button', { name: 'Runtime & Environments', exact: true }).click();
+  await settingsNavigation.getByRole('button', { name: 'Execution & Integrations', exact: true }).click();
   await expect(panel.getByRole('heading', { name: 'Execution and performance', exact: true })).toBeVisible();
   await expect(panel.getByRole('heading', { name: 'Workspace dev environment', exact: true })).toHaveCount(0);
   await expect(panel.getByRole('heading', { name: 'CDP', exact: true })).toBeAttached();
@@ -1022,7 +1022,7 @@ test('Agent settings surface exposes the production control plane and captures f
   const narrowPanel = page.locator('#settings-panel-agent');
   const narrowNavigation = narrowPanel.getByRole('navigation', { name: 'Agent settings sections', exact: true });
   await expect(narrowNavigation).toBeVisible();
-  await narrowNavigation.getByRole('button', { name: 'Runtime & Environments', exact: true }).click();
+  await narrowNavigation.getByRole('button', { name: 'Execution & Integrations', exact: true }).click();
   await expect(narrowPanel.getByRole('heading', { name: 'Workspace dev environment', exact: true })).toHaveCount(0);
   await expect(narrowPanel.getByRole('heading', { name: 'CDP', exact: true })).toBeAttached();
   await expect(narrowPanel.getByRole('heading', { name: 'ACP Integrations', exact: true })).toBeAttached();
@@ -1545,7 +1545,7 @@ test('Agent configuration changes propagate across tabs without overwriting dirt
     await target.goto('/settings?tab=agent');
     const panel = target.locator('#settings-panel-agent');
     await expect(panel).toBeVisible();
-    await panel.getByRole('button', { name: 'Runtime & Environments', exact: true }).click();
+    await panel.getByRole('button', { name: 'Execution & Integrations', exact: true }).click();
     const section = panel
       .getByRole('heading', { name: 'Execution and performance', exact: true })
       .locator('xpath=ancestor::section[1]');

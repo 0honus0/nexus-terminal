@@ -38,7 +38,6 @@ export const AGENT_DURABLE_EVENT_TYPES = [
   'run.reconciliation_required',
   'run.reconciliation_resolved',
   'run.recovery_continued',
-  'run.recovery_deferred',
   'run.recovery_failed',
   'run.status_changed',
   'subagent.cancelled',

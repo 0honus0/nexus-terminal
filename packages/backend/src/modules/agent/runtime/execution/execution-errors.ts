@@ -18,7 +18,7 @@ export const executionErrorCode = (error: unknown, fallbackCode: string): string
 
 const ERROR_DETAILS: Readonly<Record<string, string>> = {
   ACP_ARGUMENT_FIELD_UNSUPPORTED:
-    'Use only integrationId, target=ssh, id, prompt and optional cwd; old Workspace fields are not accepted.',
+    'Use only integrationId, target=ssh, id, prompt, and optional cwd for an authorized SSH connection.',
   ACP_TARGET_REQUIRED: 'Provide target=ssh with its explicit connection id. No ACP process was started.',
   ACP_SSH_CWD_INVALID: 'SSH ACP cwd must be an absolute remote directory path.',
   ACP_SSH_CONFIGURATION_INVALID:
@@ -38,7 +38,7 @@ const ERROR_DETAILS: Readonly<Record<string, string>> = {
   FILE_ARGUMENT_OBJECT_REQUIRED: 'File tool arguments must be a JSON object.',
   FILE_ARGUMENT_FIELD_UNSUPPORTED:
     'Remove fields not declared by the selected file tool schema; internal hash fields are host-resolved, not model inputs.',
-  FILE_ARGUMENT_TARGET_INVALID: 'Provide target as workspace or ssh with an explicit id.',
+  FILE_ARGUMENT_TARGET_INVALID: 'Provide target=ssh and the explicit authorized SSH connection id.',
   FILE_ARGUMENT_BOOLEAN_INVALID: 'recursive must be a boolean; recursive directory deletion requires explicit true.',
   FILE_ARGUMENT_HASH_INVALID: 'A frozen content hash must contain exactly 64 lowercase hexadecimal characters.',
   FILE_ARGUMENT_EXPECTED_FILES_INVALID: 'Frozen patch preconditions require 1 to 16 path/hash entries.',
@@ -72,7 +72,7 @@ const ERROR_DETAILS: Readonly<Record<string, string>> = {
   FILE_PATCH_CONTEXT_MISMATCH:
     'Patch context does not match the current file at the declared line; read the current content and regenerate an exact diff. Fuzzy matching is disabled.',
   TOOL_ARGUMENTS_INVALID:
-    'Arguments are invalid; no operation was executed. Check the declared schema before retrying. shell_execute accepts kind=argv/argv or kind=shell/shellScript on both Workspace and SSH; neither command field is a display title.',
+    'Arguments are invalid; no operation was executed. Check the declared schema before retrying. shell_execute accepts kind=argv/argv or kind=shell/shellScript on an authorized SSH target; neither command field is a display title.',
   ABORTED: 'The operation was interrupted before it completed.',
   LEASE_CONFLICT: 'Another active operation currently holds the required resource lease.',
   LEASE_LOST: 'The resource lease was lost while the operation was still in progress.',

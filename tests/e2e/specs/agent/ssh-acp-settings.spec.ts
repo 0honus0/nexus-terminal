@@ -49,7 +49,7 @@ for (const decision of ['denied', 'cancelled'] as const) {
     expect(configured.ok(), await configured.text()).toBeTruthy();
     await page.goto('/settings?tab=agent');
     const panel = page.locator('#settings-panel-agent');
-    await panel.getByRole('button', { name: 'Runtime & Environments', exact: true }).click();
+    await panel.getByRole('button', { name: 'Execution & Integrations', exact: true }).click();
     const section = panel
       .getByRole('heading', { name: 'ACP Integrations', exact: true })
       .locator('xpath=ancestor::section[1]');
@@ -95,7 +95,7 @@ for (const decision of ['denied', 'cancelled'] as const) {
     expect(invalid.status()).toBe(400);
     expect(await invalid.json()).toMatchObject({ error: { code: 'ACP_SSH_CONFIGURATION_INVALID' } });
     await page.reload();
-    await panel.getByRole('button', { name: 'Runtime & Environments', exact: true }).click();
+    await panel.getByRole('button', { name: 'Execution & Integrations', exact: true }).click();
     await expect(row).toContainText(`SSH · ${directory}`);
     const configuredProvider = await addTaskProvider(page, 'ACP product chain fixture');
     const thread = await createTaskThread(page);

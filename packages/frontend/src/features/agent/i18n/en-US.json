@@ -3,7 +3,7 @@
     "settings": {
       "tab": "Agent",
       "title": "Agent",
-      "description": "Manage models, execution environments and permissions. Choose a section to configure.",
+      "description": "Manage models, authorized SSH execution, integrations, and permissions. Choose a section to configure.",
       "loading": "Loading Agent settings...",
       "feature": {
         "title": "Agent feature",
@@ -201,7 +201,6 @@
         "noPublishers": "No publisher keys have been trusted.",
         "package": "Package verification",
         "packageHint": "The package is uploaded as an Artifact, then checked for signature, hashes, unsafe archive entries, manifest compatibility, and size limits before installation.",
-        "packageContents": "Skills: {skills} · Frontend: {ui} · Backend: {backend} · Runner: {runner}",
         "present": "present",
         "absent": "none",
         "noCandidate": "Choose a .tar package to verify it before installation.",
@@ -713,7 +712,7 @@
       },
       "browserRuntime": {
         "title": "CDP",
-        "description": "Configure independent CDP targets reached directly by the Backend BrowserRuntime. Agent Browser does not use Workspace or Runner tunnels.",
+        "description": "Configure independent CDP targets reached directly by the Backend BrowserRuntime.",
         "addTarget": "Add target",
         "empty": "No browser targets configured. Add a CDP endpoint reachable directly by Backend.",
         "targetId": "Target ID",
@@ -788,7 +787,7 @@
         "sshArgv": "SSH argv (JSON array; use env for environment variables)",
         "sshCwd": "SSH working directory (absolute path)",
         "integrations": "ACP Integrations",
-        "integrationsHint": "Configure installed ACP programs on authorized SSH connections. Workspace ACP profiles and Runner transports are no longer supported.",
+        "integrationsHint": "Configure installed ACP programs on explicitly authorized SSH connections.",
         "refresh": "Refresh",
         "displayName": "Display name",
         "enabled": "Enabled",
@@ -818,17 +817,15 @@
         "overview": "Overview",
         "models": "Models & Budget",
         "execution": "Execution and agents",
-        "environments": "Runtime environments",
         "storage": "Files and storage",
         "extensions": "Apps and extensions",
         "safety": "Safety and system",
-        "runtime": "Runtime & Environments"
+        "runtime": "Execution & Integrations"
       },
       "groupDescriptions": {
         "overview": "Feature state, installed Agent apps, app activity, and capability grants.",
         "models": "Default model, providers, context budgets, and instance ceilings.",
         "execution": "Concurrency, performance, and Subagent profiles for delegated work.",
-        "environments": "Configure Backend CDP browser targets and SSH ACP process integrations.",
         "storage": "Artifact quotas, retention, and current storage pressure.",
         "extensions": "Signed Agent apps, plugin repositories, packages, and publisher trust.",
         "safety": "Target deny rules and read-only system guardrails."

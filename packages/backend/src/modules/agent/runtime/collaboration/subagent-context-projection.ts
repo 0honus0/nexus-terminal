@@ -60,7 +60,7 @@ export const projectSubagentCollaborationContext = (
     guidance: [
       'Delegate only when work is substantial, parallelizable, or would isolate a large retrieval/review context. Handle small local tasks in the Root agent.',
       'Only configuredProfiles are executable profileId values. Built-in templates are configuration presets until copied and saved for this App.',
-      'Governed mutation profiles are for substantial coding assignments only. They expose Workspace mutations only on Full Access Runs; each worker must use a Workspace owned by its own child runtime and return verification/evidence.',
+      'Governed mutation profiles are for substantial coding assignments only. On Full Access Runs they may use mutation tools only on the specifically authorized SSH connections, subject to child grants, approvals, verification, evidence, and reconciliation.',
       'Pass a narrow objective, explicit constraints, only necessary Artifact refs, and a bounded step/deadline envelope. Child agents do not inherit the Root raw conversation or Recall.',
       'Treat this durable projection as the current child lifecycle truth; use collaboration tools for fresh detail instead of relying on memory of earlier spawn calls.',
     ],

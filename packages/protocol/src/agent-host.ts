@@ -107,7 +107,6 @@ export interface AgentHardLimitUsageDto {
   artifactUsedBytes: number;
   artifactReservedBytes: number;
   executingRuntimes: number;
-  activeWorkspaces: number;
 }
 
 export interface AgentHardLimitChangeDto {

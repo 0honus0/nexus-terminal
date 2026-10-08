@@ -211,18 +211,27 @@ node --version && pnpm --version
 - **重要本地模拟差异**：shard-8 首次使用无 `.git` 的 `git archive` 容器，且没有 CI 环境变量 `GITHUB_SHA`，在收集 `ui/theme-switching.spec.ts` 时调用 `git rev-parse HEAD` 导致**首次执行 exit 1，未开始断言**。真实 GitHub Actions Checkout 提供 `.git` 与 `GITHUB_SHA`。当前 HEAD 未推送，GitHub 不可能按其 SHA 提供测试所需远程 HTML 主题资产；经 `git diff --name-only origin/dev..HEAD -- assets/html-themes/remote doc/custom_html_theme` 核实资源无改动，重跑时只给容器环境传入**已发布的 `origin/dev` SHA 作为远程主题资源引用**，不改变产品/测试逻辑和其他本地被测 HEAD 文件，shard-8 才获得 **76/76 PASS**。必须在最终远程 CI 用真正待发布 SHA 复核此路径，不能伪称该模拟等于远端发布验证。
 - 此结果完整覆盖本地常规七项目八分片与独立 Runner 镜像离线缓存执行链；**不是远程 GitHub Actions 或 GHCR push/release 成功证据**，也没有运行独立 ingress 配置。仅同步现有 `doc/testing/E2E.md` 与本进度文件，不改用户未跟踪 `doc/testing/AGENT_WORKSPACE_REMOVAL_PLAN.md`；下一步只在得到用户明确推送授权后才可以推进远程 CI。
 
+**P7 当前可达 Agent UI / 子代理 SSH-only / 协议残留二次清理（2026-10-08）**：
+
+- 当前本地 `dev` 从 `580e073f` 出发，仅用户未跟踪 `doc/testing/AGENT_WORKSPACE_REMOVAL_PLAN.md`；全程仅扫描和修改本地代码，不 push、不改用户文件/备份。审计 `AgentConversation.vue`、`AgentAppSurface.vue`、`AgentHubWindow.vue`、`useAgentAppController.ts`、`surface-session.ts`、Run request API/Protocol，**已不存在**可用的 Run Environment/Native Host/Workspace Recipe/Toolchain 选择器及 Run 创建 `environment` 字段，不另造 UI 假删除。
+- **真实残留**：`subagent-context-builder.ts` 曾将任务目标/约束内相对路径转换为 `/workspace/work`，并可从无目标类型的历史 file tool exchange 推测路径。移除整段 Workspace 根目录与启发式：SSH Project Directory owner 负责当前绑定项目根目录；追加路径只接受当前 Run 显式 SSH connectionId 所对应的已观测 SSH file tool exchange。并更新 Subagent governed 文案、文件/SSH tool 错误指导；`subagent-profile-strategy` deterministic fixture 改为已授权 SSH Project Instructions，并覆盖凭空任务文字不得创建目标、仅观测指定 SSH 连接才下钻到子目录的情形。
+- **无消费者旧协议**：从 durable event registry、Frontend decoder/Union、Run subscription、Backend recovery event SQL 和 E2E event replay 中物理删除已无 Backend emission 的 `run.recovery_deferred` / `workspace_background_jobs`；删除 HardLimit usage port/Protocol/SQLite adapter 内常数 `activeWorkspaces:0`。均不提供旧字段兼容、转换或自动恢复。
+- **前端设置和本地化**：四组设置中的原“运行与环境 / Runtime & Environments”改为“执行与集成 / Execution & Integrations”，导航三语同步并更新 Host、Performance、ACP E2E 定位器；保留真实的并发、Backend CDP、授权 SSH ACP、Artifact 配置。三语 Agent Settings 描述去除旧“执行环境”，删除无组件消费的 `settings.groups.environments`、`groupDescriptions.environments` 与含 Runner 槽位的 `settings.plugins.packageContents`，CDP/ACP 文案改为当前正向行为。
+- **必须保留的同名所有权**：普通终端 Workspace 仍调用共享 `LeaseMutationGuardAdapter`，实际持有 `MutationGuardOwnerType='workspace'`；因此保留 `LeaseOwnerType='workspace'` 与 SQLite owner 校验（不是 Agent Workspace 回退）。Browser binding authority 的创建输入和冻结目标重验改为按当前 `targetId` / Revision / ConfigurationHash 契约作通用 exact-key 校验；彻底移除显式针对旧 `workspaceId`/generation 的代码分支，同时继续 fail closed 拒绝所有非 Schema 字段。普通 `packages/protocol/src/workspace.ts`、SSH/SFTP/Upload/暂停恢复和独立 Browser 代码均不受此轮删除影响。
+- **当前验收**：在修改后的真实代码执行 `pnpm run check`（Frontend/Backend typecheck + ESLint）、完整 `pnpm run format:all:check`、`pnpm run build`（Backend tsc / Frontend vue-tsc + Vite）、`git diff --check` **均 exit 0**；Backend deterministic `test:agent-scenarios` **78/78 PASS / exit 0**（包含普通终端 Workspace 和 Browser target/revision）。独立官方 Playwright Docker 重新跑全 Agent 项目 **71/71 PASS / exit 0（8.1m）**，验证 Run/聊天栏、Settings 改名、环境字段拒绝、Host/event-catchup/ACP/Plugin/Browser。随后 Browser binding authority 将旧字段专用拒绝改为通用 exact-key 严格验证、三语无消费者键整理完毕后，又对当前最终代码专门复验 `Run subscription accepts every current durable event`、`A07 browser rejects stale click`、`Agent settings surface exposes the production control plane`，**3/3 PASS / exit 0（36.4s）**；不将后续定向复验冒称为 71 例均对最后几处文本/Browser 校验改动重跑。远程 GitHub Actions/GHCR 仍未推送或触发。
+
 ## 阶段状态（2026-10-08）
 
-| 阶段                         | 状态   | 说明                                                                                                     |
-| ---------------------------- | ------ | -------------------------------------------------------------------------------------------------------- |
-| P0 清单与升级边界            | 进行中 | P0-2/3/4 完成，旧版 Agent E2E 69/69；P0-1/5 的历史事项由最新破坏式规则覆盖                               |
-| P1 最终 contract 与迁移方案  | 进行中 | Run/Checkpoint/Approval Workspace DTO 与严格 decoder 已删；其余静态 consumer 待审计                      |
-| P2 存量数据、升级与备份      | 进行中 | #58 直接 DROP Workspace 两表并移除旧 Settings keys；无历史兼容                                           |
-| P3 Backend SSH 收敛          | 进行中 | Agent Tool/Run/Checkpoint SSH-only；Backend 78/78、Agent Playwright 71/71 与独立终端回归 29/29 PASS      |
-| P4 Browser、ACP、Plugin 解耦 | 进行中 | ACP/Browser Runner tunnel 已退；Plugin strict manifest/SSH ACP/Browser 完整 Agent E2E PASS，远程 CI 待验 |
-| P5 Frontend 移除             | 进行中 | Agent Workspace i18n/capability UI 已清理；完整 Agent 71/71 PASS，其他项目/远程 CI 待验                  |
-| P6 生产 Runner 退出          | 已完成 | 生产包/镜像/部署已删，Playwright production Runner fixture 及旧 Docker smoke 已清理；独立 E2E 镜像保留   |
-| P7 文档与验收                | 进行中 | Backend 78/78、常规七项目八分片本地 CI 模拟 439/439 PASS、Docker/CI 工具镜像 PASS；远程 CI 未执行        |
+| 阶段                         | 状态   | 说明                                                                                                                         |
+| ---------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| P0 清单与升级边界            | 进行中 | P0-2/3/4 完成，旧版 Agent E2E 69/69；P0-1/5 的历史事项由最新破坏式规则覆盖                                                   |
+| P1 最终 contract 与迁移方案  | 进行中 | Run/Checkpoint/Approval Workspace DTO 与严格 decoder 已删；其余静态 consumer 待审计                                          |
+| P2 存量数据、升级与备份      | 进行中 | #58 直接 DROP Workspace 两表并移除旧 Settings keys；无历史兼容                                                               |
+| P3 Backend SSH 收敛          | 进行中 | Agent Tool/Run/Checkpoint SSH-only；Backend 78/78、Agent Playwright 71/71 与独立终端回归 29/29 PASS                          |
+| P4 Browser、ACP、Plugin 解耦 | 进行中 | ACP/Browser Runner tunnel 已退；Plugin strict manifest/SSH ACP/Browser 完整 Agent E2E PASS，远程 CI 待验                     |
+| P5 Frontend 移除             | 进行中 | Agent Workspace i18n/capability UI 已清理；完整 Agent 71/71 PASS，其他项目/远程 CI 待验                                      |
+| P6 生产 Runner 退出          | 已完成 | 生产包/镜像/部署已删，Playwright production Runner fixture 及旧 Docker smoke 已清理；独立 E2E 镜像保留                       |
+| P7 文档与验收                | 进行中 | 二次清理 Backend 78/78、完整 Agent E2E 71/71、最终 Browser/设置定向 3/3 PASS；本地全项目分片历史基线 439/439，远程 CI 未执行 |
 
 ## P1 边界准备：基于当前代码的迁移决策（仅设计，尚未改生产 contract）
 
