@@ -1754,6 +1754,7 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
       expect(declaredCapabilities).toContain('integration.acp.invoke');
       expect(declaredCapabilities).toContain('browser.read');
       expect(declaredCapabilities).toContain('browser.interact');
+      expect(declaredCapabilities).not.toContain('workspace.manage');
       expect(grantedCapabilities).toContain('integration.acp.invoke');
       expect(grantedCapabilities).toContain('browser.read');
       expect(grantedCapabilities).toContain('browser.interact');

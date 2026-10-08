@@ -34,8 +34,8 @@
         "badge": "Official Core",
         "featureSkillsTitle": "Dual Core Skills",
         "featureSkillsDesc": "Includes signed Operations and Developer skills for operations and coding",
-        "featureSandboxTitle": "Sandboxed Execution",
-        "featureSandboxDesc": "Strictly bounded by host policy, approvals, and workspace boundaries",
+        "featureSandboxTitle": "SSH-governed execution",
+        "featureSandboxDesc": "Operations use explicitly authorized SSH targets, Host policy, and approvals—not a local Workspace sandbox.",
         "featureDecoupledTitle": "Decoupled Architecture",
         "featureDecoupledDesc": "Independently upgradable or removable without mutating core images",
         "publisherVerified": "Verified Signature",
@@ -48,9 +48,9 @@
         "installingTitle": "Deploying and enabling Agent safely...",
         "installStep1": "Downloading and verifying Ed25519 signature & integrity...",
         "installStep2": "Registering and loading Operations & Developer skills...",
-        "installStep3": "Initializing sandbox policy and enabling Agent instance...",
-        "sandboxProtected": "Runtime guarded by Host sandbox security policies",
-        "defaultPluginSummary": "Official general-purpose agent engine with verified operations and developer skills running inside secure sandbox boundaries."
+        "installStep3": "Registering permissions and enabling the SSH-governed Agent instance...",
+        "sandboxProtected": "Protected by Host grants, approvals, and SSH target boundaries",
+        "defaultPluginSummary": "Official general-purpose agent for remote diagnostics and development over authorized SSH connections."
       },
       "apps": {
         "title": "Agent apps",
@@ -91,7 +91,6 @@
         "categoryFiles": "Files & Targets",
         "categoryExecution": "Execution",
         "categoryMachine": "Host Machine",
-        "categoryWorkspace": "Workspace Sandbox",
         "categoryBrowser": "Browser",
         "categoryIntegration": "External Integrations",
         "categoryData": "Data Access & Exchange",
@@ -116,15 +115,15 @@
           "file": {
             "read": {
               "name": "Read files",
-              "desc": "Read and search file contents in authorized Workspace or SSH targets"
+              "desc": "Read and search files on authorized SSH targets"
             },
             "write": {
               "name": "Write files",
-              "desc": "Create, replace, move or patch files in authorized Workspace or SSH targets"
+              "desc": "Create, replace, move, or patch files on authorized SSH targets"
             },
             "delete": {
               "name": "Delete files",
-              "desc": "Delete files or directories in authorized Workspace or SSH targets"
+              "desc": "Delete files or directories on authorized SSH targets"
             }
           },
           "machine": {
@@ -142,13 +141,7 @@
           "shell": {
             "execute": {
               "name": "Execute commands",
-              "desc": "Run commands bounded by policy and approvals in authorized Workspace or SSH targets"
-            }
-          },
-          "workspace": {
-            "manage": {
-              "name": "Manage Workspace environments",
-              "desc": "Create, start, stop and delete environments and switch toolchain versions"
+              "desc": "Run policy- and approval-governed commands on authorized SSH targets"
             }
           },
           "browser": {
@@ -294,7 +287,7 @@
           "storage": "Storage and Data Stream Limits",
           "storageDesc": "Limits artifact disk usage and tool/recall data payload volumes",
           "concurrency": "Concurrency and Runtime Quotas",
-          "concurrencyDesc": "Limits concurrent runs, active workspaces, and subagent delegation depth",
+          "concurrencyDesc": "Limits concurrent Agent runtimes, model requests, and Subagent delegation depth",
           "extra": "Additional System Limits",
           "extraDesc": "Other instance-level policy parameters",
           "execution": "Model request hard ceiling",
@@ -696,8 +689,8 @@
         "peerSameRun": "Any authorized peer in the same Run",
         "mutationMode": "Mutation mode",
         "mutationReadOnly": "Read-only",
-        "mutationGoverned": "Governed Workspace mutations",
-        "mutationHint": "Governed mutation profiles expose only Workspace mutation tools, and only on Runs using Full Access. Each worker must use a Workspace owned by its child runtime; approval, lease/fence, verification, evidence, and reconciliation remain enforced.",
+        "mutationGoverned": "Governed SSH mutations",
+        "mutationHint": "Governed mutation profiles may use authorized SSH mutation tools when a Run uses Full Access. Each worker remains subject to child grants, approvals, leases/fences, verification, evidence, and reconciliation.",
         "failureMode": "Failure mode",
         "failureIsolate": "Isolate failure",
         "failureFailFast": "Fail fast",
@@ -835,7 +828,7 @@
         "overview": "Feature state, installed Agent apps, app activity, and capability grants.",
         "models": "Default model, providers, context budgets, and instance ceilings.",
         "execution": "Concurrency, performance, and Subagent profiles for delegated work.",
-        "environments": "Workspace Runner, browser targets, and ACP process integrations.",
+        "environments": "Configure Backend CDP browser targets and SSH ACP process integrations.",
         "storage": "Artifact quotas, retention, and current storage pressure.",
         "extensions": "Signed Agent apps, plugin repositories, packages, and publisher trust.",
         "safety": "Target deny rules and read-only system guardrails."
@@ -845,7 +838,6 @@
         "enabled": "enabled",
         "models": "Models",
         "providers": "{count} enabled providers",
-        "runtime": "Workspace runtime",
         "storage": "Artifact storage",
         "storageLimit": "Limit {value}",
         "defaultModel": "Default model",
@@ -1056,10 +1048,6 @@
       "threadZoomOut": "Zoom out",
       "threadZoomReset": "Reset to 100%",
       "noThreadsFound": "No conversations match this search.",
-      "environment": "Environment",
-      "environmentHint": "Select environment",
-      "environmentNone": "Native Host",
-      "environmentNoneHint": "Run directly on host system",
       "frozen": "Frozen",
       "openThreads": "Open conversations",
       "closeThreads": "Close conversations"
@@ -1230,7 +1218,7 @@
       "bentoAutomationDesc": "Automate repetitive tasks",
       "bentoNextStepsTitle": "Next-Step Checklist",
       "bentoNextStepsDesc": "Prioritize your next steps",
-      "heroTag": "Agent Workspace",
+      "heroTag": "Nexus Agent",
       "usage": {
         "estimated": "Estimated tokens: {total}",
         "total": "Total: {total} (input: {input}, output: {output})",
@@ -1256,30 +1244,6 @@
             "failed": "failed",
             "unknown": "unknown",
             "cancelled": "cancelled"
-          },
-          "workspaceState": {
-            "creating": "being created",
-            "ready": "ready",
-            "starting": "starting",
-            "running": "running",
-            "stopping": "stopping",
-            "stopped": "stopped",
-            "deleting": "being deleted",
-            "deleted": "deleted",
-            "failed": "failed"
-          },
-          "commandState": {
-            "pending": "pending",
-            "running": "running",
-            "succeeded": "completed",
-            "failed": "failed",
-            "unknown": "unknown"
-          },
-          "workspaceAction": {
-            "start": "start",
-            "stop": "stop",
-            "restart": "restart",
-            "delete": "delete"
           },
           "containerAction": {
             "start": "start",
@@ -1309,29 +1273,12 @@
         "fileDelete": "Deleted {path}.",
         "connectionsFound": "Found {count} authorized SSH connection(s).",
         "diagnosticsCollected": "Collected {count} diagnostic observation(s).",
-        "backgroundJobAccepted": "Workspace background job accepted by the durable Runner job journal.",
-        "jobOutcomeUnknown": "The Workspace job outcome could not be confirmed.",
-        "jobState": "Workspace job is {stateKey}.",
-        "commandCompleted": "Workspace command completed successfully.",
-        "commandTimedOut": "Workspace command timed out.",
-        "commandExited": "Workspace command exited with code {code}.",
-        "jobCancelPending": "Workspace job cancellation is not yet confirmed; the durable job is still {stateKey}.",
-        "jobWaitWindowExpired": "Workspace job is still {stateKey} after the server-side wait window.",
-        "jobCancelled": "Runner confirmed that the Workspace job is cancelled.",
-        "jobCompleted": "Workspace job completed successfully.",
-        "jobTimedOut": "Workspace job timed out.",
-        "jobExited": "Workspace job exited with code {code}.",
+        "jobState": "SSH job is {stateKey}.",
         "sshShellCompleted": "SSH shell command completed successfully.",
         "sshSessionOpen": "SSH persistent session opened.",
         "sshSessionList": "SSH sessions retrieved.",
         "sshSessionClose": "SSH session closed and removed.",
         "sshShellExited": "SSH shell command exited with code {code}.",
-        "workspaceProvisioned": "Workspace provisioned and ready.",
-        "workspaceStatusIs": "Workspace is {stateKey}.",
-        "workspaceActionConfirmed": "Workspace {actionKey} confirmed.",
-        "workspaceActionPending": "Workspace {actionKey} is {stateKey}.",
-        "versionsSwitched": "Workspace tool versions switched; generation is now {generation}.",
-        "versionSwitchOutcome": "Workspace tool version switch is {stateKey}.",
         "skillMetadataFound": "Found {count} relevant signed Skill metadata entries.",
         "skillLoaded": "Loaded signed Skill {name} ({id}).",
         "deferredCapabilityFound": "Found {count} deferred MCP capability matches.",
@@ -1413,17 +1360,6 @@
         "assistant_message": "Assistant message",
         "tool_result": "Tool result",
         "system_notice": "System notice"
-      },
-      "workspaceKind": {
-        "shell": "Shell",
-        "code": "Code",
-        "data": "Data",
-        "browser": "Browser"
-      },
-      "packStatus": {
-        "supported": "Supported",
-        "deprecated": "Deprecated",
-        "unavailable": "Unavailable"
       },
       "subagentMessageKind": {
         "request": "Request",
@@ -1608,12 +1544,11 @@
       "promptExplain": "Explain how the current environment works",
       "promptDiagnose": "Check available connections, read only, without changes",
       "promptProjectOverview": "Quickly map the current project structure, including key modules, entry points, runtime flow, and major dependencies",
-      "promptReviewChanges": "Review the current workspace's uncommitted changes and point out potential issues, regression risks, and improvements",
+      "promptReviewChanges": "Review uncommitted changes in the selected SSH project and identify issues, regression risks, and improvements",
       "promptTroubleshoot": "Identify the most likely issues in the current environment, run safe diagnostics by priority, and explain what you find",
       "promptRunChecks": "Run the checks or tests most relevant to the current changes, fix clear failures, and summarize the results",
-      "promptAutomation": "Find repetitive work in the current workspace that is suitable for automation and propose a practical implementation",
+      "promptAutomation": "Find repetitive work in the selected SSH project and propose practical automation",
       "promptNextSteps": "Turn the current project state into a concise, prioritized checklist of next actions",
-      "optionalRuntime": "Optional runtime",
       "approvalHistory": "Approval history",
       "reasoningDescriptions": {
         "none": "Standard response without extended thinking",

@@ -34,8 +34,8 @@
         "badge": "公式コアプラグイン",
         "featureSkillsTitle": "デュアルコアスキル",
         "featureSkillsDesc": "署名済みの Operations と Developer 運用・開発スキルを内包",
-        "featureSandboxTitle": "隔離サンドボックス",
-        "featureSandboxDesc": "ホストポリシー・承認・ワークスペース境界で厳格に保護",
+        "featureSandboxTitle": "SSH の許可に基づく実行",
+        "featureSandboxDesc": "明示的に許可された SSH 接続を通じて実行し、Host の権限・ポリシー・承認を適用します。ローカル Workspace サンドボックスは使用しません。",
         "featureDecoupledTitle": "疎結合アーキテクチャ",
         "featureDecoupledDesc": "本体を改変せず独立してホットアップグレードやアンインストールが可能",
         "publisherVerified": "検証済み署名",
@@ -48,9 +48,9 @@
         "installingTitle": "エージェントを安全に配備中...",
         "installStep1": "公式 Ed25519 署名と完全性の検証中...",
         "installStep2": "Operations / Developer スキルの登録中...",
-        "installStep3": "サンドボックスポリシーの初期化とエージェントの起動中...",
-        "sandboxProtected": "ホストサンドボックス保護下で実行",
-        "defaultPluginSummary": "公式の汎用エージェントエンジン。安全なサンドボックス境界内で運用診断と開発協调を実行します。"
+        "installStep3": "権限を登録し、SSH の承認に基づく Agent を有効化しています...",
+        "sandboxProtected": "Host の権限・承認・SSH ターゲット境界で保護",
+        "defaultPluginSummary": "許可された SSH 接続を通じてリモート診断と開発を行う公式汎用 Agent。"
       },
       "apps": {
         "title": "Agent App",
@@ -91,7 +91,6 @@
         "categoryFiles": "ファイルとターゲット",
         "categoryExecution": "実行",
         "categoryMachine": "ホストマシン",
-        "categoryWorkspace": "Workspace サンドボックス",
         "categoryBrowser": "ブラウザ",
         "categoryIntegration": "外部連携",
         "categoryData": "データアクセスと交換",
@@ -116,15 +115,15 @@
           "file": {
             "read": {
               "name": "ファイルを読む",
-              "desc": "許可された Workspace または SSH ターゲット内のファイル内容を読み取り・検索します"
+              "desc": "許可された SSH ターゲットのファイルを読み取り・検索します"
             },
             "write": {
               "name": "ファイルを書き込む",
-              "desc": "許可された Workspace または SSH ターゲットでファイルを作成・置換・移動・パッチ適用します"
+              "desc": "許可された SSH ターゲットのファイルを作成・置換・移動・パッチ適用します"
             },
             "delete": {
               "name": "ファイルを削除",
-              "desc": "許可された Workspace または SSH ターゲット内のファイルやディレクトリを削除します"
+              "desc": "許可された SSH ターゲットのファイルやディレクトリを削除します"
             }
           },
           "machine": {
@@ -142,13 +141,7 @@
           "shell": {
             "execute": {
               "name": "コマンドを実行",
-              "desc": "許可された Workspace または SSH ターゲットでポリシーと承認に従ってコマンドを実行します"
-            }
-          },
-          "workspace": {
-            "manage": {
-              "name": "Workspace 環境を管理",
-              "desc": "環境の作成・起動・停止・削除とツールチェーンの切り替えを行います"
+              "desc": "許可された SSH ターゲットで、ポリシーと承認に従ってコマンドを実行します"
             }
           },
           "browser": {
@@ -294,7 +287,7 @@
           "storage": "ストレージとデータ流量の制限",
           "storageDesc": "成果物ファイルの容量とツール・記憶回想の通信データ量を制限します",
           "concurrency": "並列クォータとエージェント環境",
-          "concurrencyDesc": "並列タスク数、有効なワークスペース、サブエージェント委譲深度を制限します",
+          "concurrencyDesc": "Agent Runtime とモデルリクエストの同時実行数、および Subagent の委任深度を制限します",
           "extra": "その他のシステム制限",
           "extraDesc": "その他の拡張ポリシーパラメータ",
           "execution": "モデルリクエスト上限",
@@ -696,8 +689,8 @@
         "peerSameRun": "同じ Run の許可済み peer",
         "mutationMode": "変更モード",
         "mutationReadOnly": "読み取り専用",
-        "mutationGoverned": "Governed Workspace mutation",
-        "mutationHint": "Governed mutation プロファイルは Workspace の mutation Tool のみを公開し、Run が Full Access の場合にだけ有効です。各 Worker は自身の Child Runtime が所有する Workspace を使用し、approval、lease/fence、verification、evidence、reconciliation は引き続き適用されます。",
+        "mutationGoverned": "管理された SSH 変更",
+        "mutationHint": "Full Access の Run では、許可された SSH 変更ツールを使用できます。各 Worker にも Child 権限、承認、リース/フェンス、検証、証跡、調整の制約が適用されます。",
         "failureMode": "失敗モード",
         "failureIsolate": "失敗を隔離",
         "failureFailFast": "即時失敗",
@@ -720,9 +713,9 @@
       },
       "browserRuntime": {
         "title": "CDP",
-        "description": "Backend の単一 BrowserRuntime が使用する CDP ターゲットを設定します。endpoint のネットワーク scope と到達経路 via は独立し、via=runner の場合 Runner はネットワークトンネルとしてのみ使用されます。",
+        "description": "Backend BrowserRuntime が直接接続する CDP ターゲットを設定します。Runner トンネルは使用できません。",
         "addTarget": "ターゲット追加",
-        "empty": "ブラウザーターゲットは未設定です。Backend から到達できる外部 CDP は via=backend で Runner なしでも利用できます。",
+        "empty": "ブラウザーターゲットは未設定です。Backend から直接接続できる CDP エンドポイントを追加してください。",
         "targetId": "ターゲット ID",
         "remove": "ターゲットを削除",
         "allowedUrls": "許可するページ URL Pattern（1 行 1 件）",
@@ -835,7 +828,7 @@
         "overview": "機能状態、Agent App、アクティビティ、Capability grant を確認します。",
         "models": "既定モデル、Provider、コンテキスト予算、インスタンス上限を管理します。",
         "execution": "並列数、性能、委任用 Subagent profile を設定します。",
-        "environments": "Workspace Runner、ブラウザターゲット、ACP プロセス連携を管理します。",
+        "environments": "Backend 直結の CDP ブラウザーターゲットと SSH ACP プロセス連携を設定します。",
         "storage": "Artifact quota、保持、現在のストレージ使用状況を管理します。",
         "extensions": "署名済み Agent App、プラグインリポジトリ、パッケージ、publisher trust を管理します。",
         "safety": "ターゲット deny ルールと読み取り専用のシステム guardrail を管理します。"
@@ -845,7 +838,6 @@
         "enabled": "有効",
         "models": "モデル",
         "providers": "有効な Provider {count} 件",
-        "runtime": "Workspace Runtime",
         "storage": "Artifact ストレージ",
         "storageLimit": "上限 {value}",
         "defaultModel": "既定モデル",
@@ -1056,10 +1048,6 @@
       "threadZoomOut": "縮小",
       "threadZoomReset": "100% に戻す",
       "noThreadsFound": "一致する会話はありません。",
-      "environment": "実行環境",
-      "environmentHint": "実行環境を選択",
-      "environmentNone": "ネイティブ環境",
-      "environmentNoneHint": "ホスト環境で直接実行",
       "frozen": "固定済み",
       "openThreads": "会話一覧を開く",
       "closeThreads": "会話一覧を閉じる"
@@ -1230,7 +1218,7 @@
       "bentoAutomationDesc": "繰り返し作業を自動化",
       "bentoNextStepsTitle": "次のアクション",
       "bentoNextStepsDesc": "次の作業と優先順位を整理",
-      "heroTag": "エージェントワークスペース",
+      "heroTag": "Nexus Agent",
       "usage": {
         "estimated": "推定トークン: {total}",
         "total": "合計: {total} (入力: {input}, 出力: {output})",
@@ -1256,30 +1244,6 @@
             "failed": "失敗",
             "unknown": "不明",
             "cancelled": "キャンセル済み"
-          },
-          "workspaceState": {
-            "creating": "作成中",
-            "ready": "準備完了",
-            "starting": "起動中",
-            "running": "実行中",
-            "stopping": "停止中",
-            "stopped": "停止済み",
-            "deleting": "削除中",
-            "deleted": "削除済み",
-            "failed": "失敗"
-          },
-          "commandState": {
-            "pending": "待機中",
-            "running": "実行中",
-            "succeeded": "完了",
-            "failed": "失敗",
-            "unknown": "不明"
-          },
-          "workspaceAction": {
-            "start": "起動",
-            "stop": "停止",
-            "restart": "再起動",
-            "delete": "削除"
           },
           "containerAction": {
             "start": "起動",
@@ -1309,29 +1273,12 @@
         "fileDelete": "{path} を削除しました。",
         "connectionsFound": "承認済みの SSH 接続を {count} 件検出しました。",
         "diagnosticsCollected": "診断観測を {count} 件収集しました。",
-        "backgroundJobAccepted": "バックグラウンドジョブを Runner の永続ジョブジャーナルに登録しました。",
-        "jobOutcomeUnknown": "ワークスペースジョブの結果を確認できませんでした。",
-        "jobState": "ワークスペースジョブの状態: {stateKey}",
-        "commandCompleted": "ワークスペースコマンドが正常に完了しました。",
-        "commandTimedOut": "ワークスペースコマンドがタイムアウトしました。",
-        "commandExited": "ワークスペースコマンドが終了コード {code} で終了しました。",
-        "jobCancelPending": "キャンセルは未確認で、ジョブは依然として{stateKey}です。",
-        "jobWaitWindowExpired": "サーバー側の待機時間を過ぎても、ジョブは{stateKey}のままです。",
-        "jobCancelled": "Runner がワークスペースジョブのキャンセルを確認しました。",
-        "jobCompleted": "ワークスペースジョブが正常に完了しました。",
-        "jobTimedOut": "ワークスペースジョブがタイムアウトしました。",
-        "jobExited": "ワークスペースジョブが終了コード {code} で終了しました。",
+        "jobState": "SSH ジョブの状態: {stateKey}",
         "sshShellCompleted": "SSH コマンドが正常に完了しました。",
         "sshSessionOpen": "SSH 持続セッションを開きました。",
         "sshSessionList": "SSH セッション情報を取得しました。",
         "sshSessionClose": "SSH セッションを閉じて削除しました。",
         "sshShellExited": "SSH コマンドが終了コード {code} で終了しました。",
-        "workspaceProvisioned": "ワークスペースを作成し、準備が完了しました。",
-        "workspaceStatusIs": "ワークスペースの状態: {stateKey}",
-        "workspaceActionConfirmed": "ワークスペースの{actionKey}を確認しました。",
-        "workspaceActionPending": "ワークスペースの{actionKey}は{stateKey}のままです。",
-        "versionsSwitched": "ツールバージョンを切り替え、generation は {generation} になりました。",
-        "versionSwitchOutcome": "ツールバージョン切り替えの結果: {stateKey}",
         "skillMetadataFound": "関連する署名済み Skill メタデータを {count} 件検出しました。",
         "skillLoaded": "署名済み Skill {name}（{id}）を読み込みました。",
         "deferredCapabilityFound": "遅延読み込みの MCP 機能が {count} 件一致しました。",
@@ -1413,17 +1360,6 @@
         "assistant_message": "アシスタントメッセージ",
         "tool_result": "ツール結果",
         "system_notice": "システム通知"
-      },
-      "workspaceKind": {
-        "shell": "シェル",
-        "code": "コード",
-        "data": "データ",
-        "browser": "ブラウザー"
-      },
-      "packStatus": {
-        "supported": "対応",
-        "deprecated": "非推奨",
-        "unavailable": "利用不可"
       },
       "subagentMessageKind": {
         "request": "リクエスト",
@@ -1608,12 +1544,11 @@
       "promptExplain": "現在の環境の仕組みを説明してください",
       "promptDiagnose": "利用可能な接続を読み取り専用で確認してください",
       "promptProjectOverview": "現在のプロジェクト構成を素早く整理し、主要モジュール、入口、実行フロー、主な依存関係を説明してください",
-      "promptReviewChanges": "現在のワークスペースの未コミット変更を確認し、潜在的な問題、回帰リスク、改善点を指摘してください",
+      "promptReviewChanges": "選択された SSH プロジェクトの未コミット変更を確認し、問題点・回帰リスク・改善案を示してください",
       "promptTroubleshoot": "現在の環境で可能性の高い問題を特定し、優先順位に沿って安全な診断を行い、結果を説明してください",
       "promptRunChecks": "現在の変更に最も関係するチェックやテストを実行し、明確な失敗を修正して結果をまとめてください",
-      "promptAutomation": "現在のワークスペースで反復している作業から自動化に適したものを見つけ、実装可能な方法を提案してください",
+      "promptAutomation": "選択された SSH プロジェクトの繰り返し作業を見つけ、具体的な自動化案を提案してください",
       "promptNextSteps": "現在のプロジェクト状態から、簡潔で優先順位付きの次のアクション一覧を作成してください",
-      "optionalRuntime": "オプションの実行環境",
       "approvalHistory": "処理済みの承認",
       "reasoningDescriptions": {
         "none": "思考を無効化し標準応答",

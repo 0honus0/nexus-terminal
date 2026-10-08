@@ -7,7 +7,6 @@ export const AGENT_CAPABILITIES = [
   'machine.inspect',
   'shell.execute',
   'machine.docker.manage',
-  'workspace.manage',
   'browser.read',
   'browser.interact',
   'integration.mcp.read',

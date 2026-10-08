@@ -255,6 +255,8 @@ const installAndRunNexusAgent = async (
         'browser.interact',
       ]),
     );
+    expect(grantView.data.capabilityDefinitions.map((definition) => definition.id)).not.toContain('workspace.manage');
+    expect(grantView.data.grants.map((grant) => grant.capability)).not.toContain('workspace.manage');
     for (const capability of ['file.read', 'file.write', 'file.delete', 'shell.execute']) {
       expect(
         grantView.data.capabilityDefinitions.find((definition) => definition.id === capability)?.supportedTargets,

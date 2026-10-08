@@ -13,17 +13,6 @@ const AGENT_ENUM_LABEL_KEYS = {
     tool_result: 'agent.enumLabels.ledgerKind.tool_result',
     system_notice: 'agent.enumLabels.ledgerKind.system_notice',
   },
-  workspaceKind: {
-    shell: 'agent.enumLabels.workspaceKind.shell',
-    code: 'agent.enumLabels.workspaceKind.code',
-    data: 'agent.enumLabels.workspaceKind.data',
-    browser: 'agent.enumLabels.workspaceKind.browser',
-  },
-  packStatus: {
-    supported: 'agent.enumLabels.packStatus.supported',
-    deprecated: 'agent.enumLabels.packStatus.deprecated',
-    unavailable: 'agent.enumLabels.packStatus.unavailable',
-  },
   subagentMessageKind: {
     request: 'agent.enumLabels.subagentMessageKind.request',
     reply: 'agent.enumLabels.subagentMessageKind.reply',

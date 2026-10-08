@@ -173,7 +173,6 @@ export type AgentCapabilityDto =
   | 'machine.inspect'
   | 'shell.execute'
   | 'machine.docker.manage'
-  | 'workspace.manage'
   | 'browser.read'
   | 'browser.interact'
   | 'integration.mcp.read'

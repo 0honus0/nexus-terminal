@@ -224,10 +224,11 @@ Mutation 链：`inspect -> capability/grant -> policy -> approval -> lease/fence
 | ---------- | ----------------------------------------------------------- |
 | 文件       | `file.read/write/delete`                                    |
 | 命令与主机 | `shell.execute`、`machine.inspect`、`machine.docker.manage` |
-| Workspace  | `workspace.manage`                                          |
 | Browser    | `browser.read/interact`                                     |
 | 外部集成   | `integration.mcp.read/invoke`、`integration.acp.invoke`     |
 | 数据交换   | `artifacts.read`、`app.intents.exchange`                    |
+
+`workspace.manage` 已从 Capability 注册表、Protocol 和 App grant UI 物理移除；新签名 Plugin manifest 不允许声明该能力，也不恢复旧 Workspace grant。File/Shell mutation 只经显式授权的 SSH target。保留普通终端 Workspace 的独立功能。
 
 Tool descriptor 唯一声明 capability。模型调用、Run/Skill/Plan/输入/内部协作、当前 App Storage 与生成 Artifact 是 enabled App 的核心行为，不增加 `ai.model.use/runs.execute` 总闸门。
 
@@ -285,7 +286,7 @@ Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 的 typed
 - Plugin Frontend 主站同源资源 + `sandbox=allow-scripts` opaque iframe，不授予 allow-same-origin；只走 `/sdk/frontend-v1.mjs` bounded MessagePort，不拿 cookie/CSRF/HTTP client/内部 service，不拆独立公开 Origin/端口。
 - Backend target 不在主 Backend eval/import，独立 Node child Permission Model 限制文件/写入/child/worker/native/WASI，但不冒充 OS/network sandbox。Frontend target 在隔离 App surface 中运行。
 - Host/Core 持有 Run、Broker、Policy/Approval/Lease、bridge、verifier/SDK 与 governed Tool；Plugin 无 Host-authority Tool 注入接口，外部 Tool 优先 MCP。扩展需明确 versioned SDK/IPC/risk/outcome contract，不借动态 target 获得 raw authority。
-- 第一方源码与签名发布归 `0honus0/nexus-agent-plugins`；`nexus.agent` 是可安装 App，含 agent.default 与 Operations/Developer 两个 Skill；`nexus.fullstack` 是 Frontend/Backend/Runner 组合 reference。主仓只持 protocol/installer/permission/host/runtime/自包含 fixture，不依赖外仓在线做普通 E2E。
+- 第一方源码与签名发布归 `0honus0/nexus-agent-plugins`；`nexus.agent` 是可安装 App，含 agent.default 与 Operations/Developer 两个 Skill；`nexus.fullstack` 的历史 Runner target 不在现行 Plugin manifest 支持范围内；任何外部官方 Plugin 必须按当前 Frontend/Backend-only manifest 与 SSH-only 能力清单重新打包签名，不提供旧包自动兼容。主仓只持 protocol/installer/permission/host/runtime/自包含 fixture，不依赖外仓在线做普通 E2E。
 - 官方 catalog 可镜像，publisher pin 不由普通生产变量替换；签名前核对同一 identity。官方 stage 使用 pinned source，额外 repo 显式 trust；仅 test/E2E 可注入 publisher。catalog/manifest 双重检查 SDK major/Nexus min/maxVersion，已安装重新启用优先本地，不重置 grant。
 - `PluginInstallService` 薄 facade，PackageInstallCoordinator 管 trust/stage/verify/transaction/drain/CAS/rollback，RuntimeLifecycleCoordinator 管注册/reconcile/target/runtime，DataManager 管 retained storage/intents/snapshot。复用原 repository/authority，保持 stage reconcile 先于 installed reconcile 及 drain/migration/rollback/cleanup 顺序。
 
