@@ -1,8 +1,5 @@
 import WebSocket from 'ws';
 import type {
-  AcpByteTransport,
-  AcpTransportOpenRequest,
-  AcpTransportPort,
   BrowserEndpointSetting,
   BrowserMessageTransport,
   BrowserTunnelPort,
@@ -10,80 +7,13 @@ import type {
 import { invokeListenerSafely } from '../../../shared/events/safe-event-dispatch';
 
 const MAX_WEBSOCKET_FRAME_BYTES = 256 * 1024;
-const MAX_WEBSOCKET_BUFFER_BYTES = 1024 * 1024;
 
-export class RunnerWebSocketTransport implements AcpTransportPort, BrowserTunnelPort {
+export class RunnerWebSocketTransport implements BrowserTunnelPort {
   constructor(
     private readonly baseUrl: URL | null,
     private readonly token: string | undefined,
     private readonly protocolVersion: string,
   ) {}
-
-  async open(request: AcpTransportOpenRequest, signal: AbortSignal): Promise<AcpByteTransport> {
-    if (
-      !request.workspaceId ||
-      request.workspaceId.length > 128 ||
-      !Number.isSafeInteger(request.generation) ||
-      request.generation < 1 ||
-      !/^[a-z][a-z0-9_.-]{0,127}$/.test(request.profileId)
-    ) {
-      throw new Error('VALIDATION_FAILED');
-    }
-    const socket = await this.openWebSocket(
-      `/v1/workspaces/${encodeURIComponent(request.workspaceId)}/acp/${encodeURIComponent(request.profileId)}/stream?generation=${request.generation}`,
-      {},
-      signal,
-    );
-    let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
-    let closed = false;
-    const close = async (): Promise<void> => {
-      if (closed) return;
-      closed = true;
-      if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) socket.close(1000);
-    };
-    const readable = new ReadableStream<Uint8Array>({
-      start(next) {
-        controller = next;
-        socket.on('message', (data, isBinary) => {
-          if (!isBinary) {
-            next.error(new Error('ACP_STREAM_PROTOCOL_INVALID'));
-            void close();
-            return;
-          }
-          const bytes = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
-          next.enqueue(new Uint8Array(bytes));
-        });
-        socket.once('close', () => {
-          if (!closed) {
-            closed = true;
-            next.close();
-          }
-        });
-        socket.once('error', (error) => {
-          if (!closed) next.error(error);
-        });
-      },
-      cancel() {
-        return close();
-      },
-    });
-    const writable = new WritableStream<Uint8Array>({
-      write: async (chunk) => {
-        if (closed || socket.readyState !== WebSocket.OPEN) throw new Error('ACP_STREAM_CLOSED');
-        if (socket.bufferedAmount > MAX_WEBSOCKET_BUFFER_BYTES) throw new Error('ACP_STREAM_BACKPRESSURE');
-        for (let offset = 0; offset < chunk.byteLength; offset += MAX_WEBSOCKET_FRAME_BYTES) {
-          const frame = chunk.subarray(offset, Math.min(offset + MAX_WEBSOCKET_FRAME_BYTES, chunk.byteLength));
-          await new Promise<void>((resolve, reject) =>
-            socket.send(frame, { binary: true }, (error) => (error ? reject(error) : resolve())),
-          );
-        }
-      },
-      close,
-      abort: close,
-    });
-    void controller;
-    return { readable, writable, close };
-  }
 
   async openTerminalWebSocket(
     workspaceId: string,

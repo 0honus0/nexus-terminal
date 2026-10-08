@@ -44,9 +44,9 @@ for (const decision of ['denied', 'cancelled'] as const) {
     await section.getByRole('button', { name: 'Add integration', exact: true }).first().click();
     const dialog = page.getByRole('dialog', { name: 'Add ACP Integration', exact: true });
     await dialog.getByRole('textbox', { name: 'Display name' }).fill('SSH ACP settings fixture');
-    await expect(dialog.getByRole('button', { name: 'Save & Add', exact: true })).toBeDisabled();
-    await dialog.getByRole('combobox', { name: 'Execution target type', exact: true }).click();
-    await page.getByRole('option', { name: 'SSH', exact: true }).click();
+    await expect(dialog.getByRole('button', { name: 'Save & Add', exact: true })).toBeEnabled();
+    await expect(dialog.getByText('SSH', { exact: true })).toBeVisible();
+    await expect(dialog.getByRole('combobox', { name: 'Execution target type', exact: true })).toHaveCount(0);
     await dialog
       .getByRole('textbox', { name: 'SSH argv (JSON array; use env for environment variables)', exact: true })
       .fill(JSON.stringify(argv));

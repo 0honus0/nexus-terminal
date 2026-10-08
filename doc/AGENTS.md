@@ -280,7 +280,7 @@ Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 的 typed
 
 ### 9.2 ACP、Browser、Terminal 与 MCP
 
-- ACP profile 冻结，外层 acp_execute 走同一治理；outer approval 不授权 inner action。`client.session.requestPermission` 使用同一 durable approval owner，绑定 active Tool/Runtime/revisions/operation hash，用户 allow_once/reject_once；不改 Run version、重调度或替换 lease。rawInput 只保留 bounded projection/hash，timeout/abort/restart fail closed，不伪造 completion。
+- ACP Host 已 SSH-only：`acp_execute` 仅接显式授权的 SSH target、集成 argv/绝对 cwd 与冻结 SSH 配置，不再注入 Workspace Repository 或 Runner ACP WebSocket transport。`AcpAdapter` 通过唯一 SSH `openTransport` 打开独立 non-PTY channel，不在 Backend 本机运行 ACP；外层 ACP approval 不授权内层操作。`client.session.requestPermission` 使用同一 durable approval owner，绑定 active Tool/Runtime/revisions/operation hash，用户 allow_once/reject_once；不改 Run version、重调度或替换 lease。rawInput 只保留 bounded projection/hash，timeout/abort/restart fail closed，不伪造 completion。原 Agent Runner 自身 ACP endpoint/profile 与用户 Workspace 设置仍待 Runner/Workspace 生命周期阶段物理清理，不能因此恢复 ACP Host 入口。
 - Browser target 冻结，受控 gateway/tunnel 不暴露任意宿主 CDP。唯一 `BrowserSessionBindingAuthority` 持有 target/config hash/session scope、inspection/revalidation；gateway/service 持有真实 session/process。stale generation/target 先关闭后 fail closed，无关 settings revision 不误关；网页不可信，下载先落 Artifact。
 - Workspace local Terminal 用 Runner direct PTY open/resize/write/detach/reattach/bounded replay，不复用 Remote SSH live session；系统 script(1) 分配 PTY，Backend 管 attach/replay，浏览器仅连受认证 WebSocket。
 - MCP 配置 enabled 不等于 ready。health 为可重建 `idle/refreshing/ready/error` projection；version/credential generation 的 refresh 经 schema-hash CAS 才发布 contribution，失败先撤销，再 bounded backoff；disable/delete/version 取消旧 retry，restart 从 durable config 重建。

@@ -169,8 +169,8 @@ SSH 后台服务同样会在执行期限到期时终止；`timeoutSeconds` 不�
 - 同一用户、应用和对话的 Root/Subagent 可以显式共享会话，但仍须有当前目标授权；跨用户、应用、对话禁止访问。命令各自使用独立 exec channel，文件使用独立句柄，不向其他任务插入输入，不继承前一命令的工作目录或环境变量；远端共享文件和服务仍可能相互影响。
 - Agent SSH 后台 Job 接纳及 running 状态反馈必须保留原 jobId，不以重提命令获取结果；服务验收使用健康检查，等待终态使用有界 wait。running 是活跃状态而非失败或状态缺失，不改变正常并发与执行身份。
 - `shell_job_control(action="list", target="ssh")` 省略 jobId，只列出当前 user/App/Thread/connection 的活跃受管 SSH Job，不列出其他线程、Runner Job 或远端任意进程；status/wait/cancel 必须使用原始 `ssh-job-UUID`，配置或授权失效均拒绝而不重绑。
-- ACP 集成可选择 Workspace profile 或 SSH transport。SSH 配置启动 argv（JSON 数组）与绝对 cwd，不自动安装远端程序；环境变量可用 argv 的 env 命令显式传入。`acp_execute` 两目标均要求 integrationId、target、id、prompt，可选 cwd；不接受 workspaceId 别名或省略目标。SSH 使用独立非 PTY channel 与同一 ACP v1 客户端、内层权限审批和输出边界；取消关闭 channel/连接，断连不重放、不视为已验证成功。ACP 不是 OS 沙箱，输出不是独立验收证据。
-  - 执行前重新核对集成版本、Workspace generation／profile 或 SSH 配置，合法规范化参数可再次检查，内部冻结字段不作为模型输入开放。即使外层使用 full_access，内层敏感操作仍须单独审批；等待内层审批时取消会关闭本次执行，晚到授权不得继续执行。远端副作用无法确认时工具结果为 unknown、Run 可收敛为 interrupted，不承诺回滚；正常协议完成后仍需后续独立验证证据才能通过完成门禁。
+- ACP 集成**仅支持 SSH**。配置远端启动 argv（JSON 数组）与绝对 cwd，不自动安装程序；环境变量可由 env argv 显式传入。`acp_execute` 必须指定 integrationId、`target:'ssh'`、明确的已选中 connection id 和 prompt，可选绝对 cwd；旧 `workspace-profile` 集成配置、Workspace target/generation/profile、workspaceId 别名和省略目标都拒绝，不映射到 Backend 本地进程或任意 SSH 连接。SSH 使用独立非 PTY channel 与 ACP v1 客户端、内层权限审批和输出边界；取消关闭 channel/连接，断连不重放、不视为已验证成功。ACP 不是 OS 沙箱，输出不是独立验收证据。
+  - 执行前重新核对集成版本和 SSH 连接配置及冻结目标身份；内部冻结字段不作为模型输入开放。即使外层使用 full_access，内层敏感操作仍须单独审批；等待内层审批时取消会关闭本次执行，晚到授权不得继续执行。远端副作用无法确认时工具结果为 unknown、Run 可收敛为 interrupted，不承诺回滚；正常协议完成后仍需后续独立验证证据才能通过完成门禁。
 - 尚存用户 Workspace 管理 API 达到容量上限时在创建记录与 Runner 调用前拒绝；模型 `workspace_create` 已完全退出，不通过 Shell/Job 的旧错误码绕过 Workspace 容量或权限边界。
 - 工具参数拒绝说明本次未执行，并提示按 Schema 与目标类型纠正后再尝试；反馈不回显参数值。循环警告按失败重复、稳定观察重复或其他无进展行为给出调整指引，不自动重放操作或停止端口占用者。
 - SSH `shell_execute(mode="background", sessionId=...)` 返回 `jobId`，任务继续运行；使用 `shell_job_control(target="ssh", id=连接ID, jobId, action="status/wait/cancel")` 查看有界输出、等待或取消。后台任务 timeoutSeconds 默认 3600 秒、最多 86400 秒，独立于提交工具期限；前台仍最多 300 秒且受工具预算约束。后台任务运行时不进行空闲回收，每用户最多 32 个活动任务。
@@ -412,7 +412,7 @@ Agent Workspace Terminal 每个 Workspace 最多 8 个、单 Backend 合计最�
 - SSH 后台执行仍通过 `shell_execute` 与 `shell_job_control` 在冻结的授权连接和 Thread 范围内操作，不能凭 Job 已受理就宣称命令成功；终态后核对已执行命令的状态，不通过重发未知副作用命令代替核对。
 - Workspace 后台启动结果的 `userCleanup` 提供本次 App／Workspace 的具体读取和操作路径、必要请求头、数值版本来源与命令查询路径。`expectedVersion` 必须使用新读取的数值，不能用字符串占位值；交付说明须保留命令成功与 Workspace stopped／deleted 的最终核对，不以 HTTP 202 代替完成。
 - 管理 API 的 actions 响应命令标识是 `data.id`，不是 Agent 工具结果的 `commandId` 字段；将该 `data.id` 代入 `/workspace-runtime/commands/{commandId}` 查询，再核对 `data.status` 和 Workspace 最终状态。后台交接结果明确此字段映射，避免混用工具结果与 HTTP DTO。
-- 现有 Workspace Terminal、Workspace ACP 与 Workspace 绑定的 Browser 仍依赖 Agent Runner；**Plugin Runner target 已移除，不允许新建或激活**。Runner 不可用时，SSH ACP、普通 SSH/文件管理/远程桌面仍可使用。设置页可在未配置 Workspace ACP Profile 时创建 SSH ACP 集成；分别填写 argv 与绝对工作目录，保存后可刷新恢复配置。
+- 普通终端 Workspace/Agent Runner 的剩余管理 API、Runner 内 ACP profile 记录与 Workspace 绑定 Browser 尚待各自退出；但 **Agent ACP 集成和模型工具已经不能启动 Runner Workspace ACP**。Plugin Runner target 已移除。SSH ACP、普通 SSH/文件管理/远程桌面不依赖 Agent Runner；ACP 集成设置页只提供 SSH 启动 argv 与绝对 cwd，保存后可重新读取配置。旧 Workspace 运行时 profile 配置目前仍属于待清理的 Workspace 设置，不会被 ACP 集成选用。
 - Plugin App 只获得已声明并授权的 capability。Agent 文件和 Shell capability 的授权目标只允许 SSH 全部或指定连接 ID；授权设置不再提供 Workspace 目标，发送旧 Workspace 或 Workspace+SSH grant 返回请求无效，不会自动转换为 SSH 或更新授权版本。需要确认的 mutation 会先显示 approval，未知执行结果会进入核对或恢复流程。
 
 ## 外观与 HTML Theme

@@ -39,7 +39,7 @@ import { AGENT_DEFAULTS } from '../../modules/agent/agent-defaults';
 import { systemClock, type Scope } from '../../modules/agent/agent.types';
 import { ArtifactService } from '../../modules/agent/ai/artifact.service';
 import { IntegrationService } from '../../modules/agent/ai/integration.service';
-import type { AcpTransportPort, BrowserGatewayPort } from '../../modules/agent/ai/integrations.types';
+import type { BrowserGatewayPort } from '../../modules/agent/ai/integrations.types';
 import type { ArtifactLimitPolicyPort } from '../../modules/agent/ai/artifact.port';
 import { ConversationService } from '../../modules/agent/ai/conversation.service';
 import { createProjectDirectoryTools } from '../../modules/agent/tools/host/project-directory-tools';
@@ -143,7 +143,6 @@ export interface ComposeAgentOptions {
   leases: LeasePort;
   workspaceRuntimeController: WorkspaceRuntimeControllerPort & WorkspaceRuntimeGatewayPort;
   workspaceInteractiveSessions: WorkspaceRuntimeInteractiveSessionPort;
-  acpTransport: AcpTransportPort;
   browserGateway: BrowserGatewayPort;
   audit: AuditLogService;
   notifications: NotificationService;
@@ -165,7 +164,6 @@ export const composeAgent = ({
   leases,
   workspaceRuntimeController,
   workspaceInteractiveSessions,
-  acpTransport,
   browserGateway,
   audit,
   notifications,
@@ -382,7 +380,7 @@ export const composeAgent = ({
   const files = new FileCapabilityService(targets, sshFiles);
   const shell = new ShellCapabilityService(targets, sshShell, sshSessions);
   const workspaceRuntimeFacade = composedWorkspaceRuntime.facade;
-  const acpRuntime = new AcpAdapter(acpTransport);
+  const acpRuntime = new AcpAdapter();
   const toolCatalog = new ToolCatalog();
   toolCatalog.registerContribution({
     schemaVersion: 1,
@@ -400,7 +398,6 @@ export const composeAgent = ({
   registerAcpToolContribution({
     catalog: toolCatalog,
     repository: integrationRepository,
-    workspaces: workspaceRepository,
     runtime: acpRuntime,
     cryptoHash,
     permissionRequests: acpPermissions,

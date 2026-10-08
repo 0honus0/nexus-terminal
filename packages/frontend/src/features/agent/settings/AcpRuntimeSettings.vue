@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { structurallyEqual } from '@/foundation/data';
-  import { UiModal, UiButton, UiCheckbox, UiInfoHint, UiSelect } from '@/foundation/ui';
+  import { UiModal, UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
   import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useFeedback, useOperationFeedback } from '@/shared/feedback/public';
@@ -47,13 +47,9 @@
   const disabled = computed(() => props.busy || localBusy.value);
   const integrationDisabled = computed(() => disabled.value || !props.agentAvailable);
   let integrationsGeneration = 0;
-  const configuredProfiles = computed(() => props.settings.effectiveSettings.workspaceRuntime.acpProfiles);
-  const profileOptions = computed(() =>
-    configuredProfiles.value.map((profile) => ({ value: profile.id, label: profile.id })),
-  );
 
   const acpConfiguration = (integration: AgentIntegrationViewDto): AgentAcpIntegrationConfigurationDto => {
-    if (integration.kind !== 'acp' || !['workspace-profile', 'ssh'].includes(integration.configuration.transport)) {
+    if (integration.kind !== 'acp' || integration.configuration.transport !== 'ssh') {
       throw new Error('ACP_INTEGRATION_INVALID');
     }
     return integration.configuration as AgentAcpIntegrationConfigurationDto;
@@ -187,9 +183,7 @@
 
   const openEditProfileModal = (profile: ProfileDraft): void => {
     editingProfileId.value = profile.id;
-    editingProfileIdLocked.value = integrations.value.some(
-      (integration) => integration.kind === 'acp' && acpConfiguration(integration).profileId === profile.id,
-    );
+    editingProfileIdLocked.value = false;
     profileForm.id = profile.id;
     profileForm.cwd = profile.cwd;
     profileForm.commandInput = profile.argvText;
@@ -252,8 +246,7 @@
   const integrationModalError = ref('');
   const integrationForm = reactive({
     displayName: '',
-    profileId: '',
-    transport: 'workspace-profile' as 'workspace-profile' | 'ssh',
+    transport: 'ssh' as const,
     argv: '["agent", "--acp"]',
     cwd: '/tmp',
     enabled: true,
@@ -263,8 +256,6 @@
   const openAddIntegrationModal = (): void => {
     pendingIntegrationCreateIdentity = null;
     integrationForm.displayName = '';
-    integrationForm.transport = 'workspace-profile';
-    integrationForm.profileId = configuredProfiles.value[0]?.id ?? '';
     integrationForm.enabled = true;
     integrationModalError.value = '';
     integrationModalOpen.value = true;
@@ -272,8 +263,7 @@
 
   const submitAddIntegration = async (): Promise<void> => {
     const name = integrationForm.displayName.trim();
-    const pid = integrationForm.transport === 'ssh' ? 'ssh-acp' : integrationForm.profileId.trim();
-    if (!name || !pid) return;
+    if (!name) return;
 
     await run(
       'create-integration',
@@ -283,11 +273,9 @@
           configuration: {
             displayName: name,
             transport: integrationForm.transport,
-            profileId: pid,
             protocolVersion: '1' as const,
-            ...(integrationForm.transport === 'ssh'
-              ? { argv: JSON.parse(integrationForm.argv) as string[], cwd: integrationForm.cwd.trim() }
-              : {}),
+            argv: JSON.parse(integrationForm.argv) as string[],
+            cwd: integrationForm.cwd.trim(),
           },
           enabled: integrationForm.enabled,
         };
@@ -301,23 +289,6 @@
         await loadIntegrations();
       },
       t('agent.settings.acpRuntime.integrationCreated'),
-    );
-  };
-
-  const changeIntegrationProfile = (integration: AgentIntegrationViewDto, nextProfileId: string): void => {
-    const configuration = acpConfiguration(integration);
-    if (!nextProfileId || nextProfileId === configuration.profileId) return;
-    void run(
-      'update-integration-profile',
-      async () => {
-        await agentApi.updateIntegration(DEFAULT_AGENT_APP_ID, integration, {
-          kind: 'acp',
-          configuration: { ...configuration, profileId: nextProfileId },
-          enabled: integration.enabled,
-        });
-        await loadIntegrations();
-      },
-      t('agent.settings.acpRuntime.integrationUpdated'),
     );
   };
 
@@ -343,7 +314,7 @@
       title: t('agent.settings.acpRuntime.deleteIntegration'),
       message: t('agent.settings.acpRuntime.confirmDeleteIntegration', {
         name: configuration.displayName,
-        profile: configuration.profileId,
+        profile: 'SSH',
       }),
       confirmText: t('common.delete'),
       cancelText: t('common.cancel'),
@@ -585,7 +556,7 @@
                     class="inline-flex items-center gap-1 rounded-full border border-border/70 bg-header/50 px-2.5 py-0.5 font-mono text-[11px] text-text-secondary"
                   >
                     <i class="fa-solid fa-terminal text-[10px] text-text-secondary/60"></i>
-                    <span>{{ acpConfiguration(integration).profileId }}</span>
+                    <span>SSH</span>
                   </span>
                 </div>
                 <div class="font-mono text-xs text-text-secondary truncate max-w-[500px]">
@@ -598,18 +569,7 @@
             <div
               class="flex flex-wrap items-center justify-end gap-2 pt-2 lg:pt-0 border-t border-border/40 lg:border-0"
             >
-              <UiSelect
-                v-if="acpConfiguration(integration).transport === 'workspace-profile'"
-                density="compact"
-                :disabled="integrationDisabled"
-                :model-value="acpConfiguration(integration).profileId"
-                :options="profileOptions"
-                class="w-36"
-                @update:model-value="(value: unknown) => changeIntegrationProfile(integration, String(value))"
-              />
-              <span v-else class="font-mono text-xs text-text-secondary"
-                >SSH · {{ acpConfiguration(integration).cwd }}</span
-              >
+              <span class="font-mono text-xs text-text-secondary">SSH · {{ acpConfiguration(integration).cwd }}</span>
               <div
                 class="flex items-center gap-2 rounded-xl border border-border/70 bg-header/25 px-2.5 py-1 text-xs text-foreground select-none"
               >
@@ -822,37 +782,19 @@
               <span class="mb-1 block text-xs font-medium text-foreground">{{
                 $t('agent.settings.acpRuntime.transport')
               }}</span>
-              <UiSelect
-                v-model="integrationForm.transport"
-                :aria-label="$t('agent.settings.acpRuntime.transport')"
-                :options="[
-                  { value: 'workspace-profile', label: 'Workspace' },
-                  { value: 'ssh', label: 'SSH' },
-                ]"
-              />
+              <span class="text-xs text-text-secondary">SSH</span>
             </label>
-            <label v-if="integrationForm.transport === 'ssh'" class="block">
+            <label class="block">
               <span class="mb-1 block text-xs font-medium text-foreground">{{
                 $t('agent.settings.acpRuntime.sshArgv')
               }}</span>
               <input v-model="integrationForm.argv" class="w-full rounded-lg border border-border bg-background p-2" />
             </label>
-            <label v-if="integrationForm.transport === 'ssh'" class="block">
+            <label class="block">
               <span class="mb-1 block text-xs font-medium text-foreground">{{
                 $t('agent.settings.acpRuntime.sshCwd')
               }}</span>
               <input v-model="integrationForm.cwd" class="w-full rounded-lg border border-border bg-background p-2" />
-            </label>
-            <label v-if="integrationForm.transport === 'workspace-profile'" class="block">
-              <span class="mb-1 block text-xs font-medium text-foreground">
-                {{ $t('agent.settings.acpRuntime.integrationProfile') }} <span class="text-error">*</span>
-              </span>
-              <UiSelect
-                v-model="integrationForm.profileId"
-                class="w-full"
-                :placeholder="$t('agent.settings.acpRuntime.selectProfile')"
-                :options="profileOptions"
-              />
             </label>
           </div>
 
@@ -893,11 +835,7 @@
             appearance="solid"
             tone="primary"
             type="button"
-            :disabled="
-              integrationDisabled ||
-              !integrationForm.displayName.trim() ||
-              (integrationForm.transport === 'workspace-profile' && !integrationForm.profileId.trim())
-            "
+            :disabled="integrationDisabled || !integrationForm.displayName.trim()"
             @click="submitAddIntegration"
           >
             <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>

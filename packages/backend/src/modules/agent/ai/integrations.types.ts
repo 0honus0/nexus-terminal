@@ -14,10 +14,9 @@ export interface McpIntegrationConfiguration {
 
 export interface AcpIntegrationConfiguration {
   displayName: string;
-  transport: 'workspace-profile' | 'ssh';
-  profileId: string;
-  argv?: string[];
-  cwd?: string;
+  transport: 'ssh';
+  argv: string[];
+  cwd: string;
   protocolVersion: '1';
 }
 
@@ -157,16 +156,6 @@ export interface AcpByteTransport {
   close(): Promise<void>;
 }
 
-export interface AcpTransportOpenRequest {
-  workspaceId: string;
-  generation: number;
-  profileId: string;
-}
-
-export interface AcpTransportPort {
-  open(request: AcpTransportOpenRequest, signal: AbortSignal): Promise<AcpByteTransport>;
-}
-
 export interface AcpPermissionRequest {
   sessionId: string;
   toolCallId: string;
@@ -176,8 +165,6 @@ export interface AcpPermissionRequest {
 }
 
 export interface AcpExecutionRequest {
-  workspaceId: string;
-  generation: number;
   cwd: string;
   prompt: string;
   maxOutputBytes: number;

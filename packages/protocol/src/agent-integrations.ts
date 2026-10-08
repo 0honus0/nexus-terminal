@@ -11,10 +11,9 @@ export interface AgentMcpIntegrationConfigurationDto {
 
 export interface AgentAcpIntegrationConfigurationDto {
   displayName: string;
-  transport: 'workspace-profile' | 'ssh';
-  profileId: string;
-  argv?: string[];
-  cwd?: string;
+  transport: 'ssh';
+  argv: string[];
+  cwd: string;
   protocolVersion: '1';
 }
 

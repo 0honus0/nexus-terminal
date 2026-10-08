@@ -26,9 +26,6 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type WebSocket from 'ws';
 import type { ProjectInstructionProjection } from '../../../modules/agent/ai/project-instruction-source.port';
 import type {
-  AcpByteTransport,
-  AcpTransportOpenRequest,
-  AcpTransportPort,
   BrowserEndpointSetting,
   BrowserMessageTransport,
   BrowserTunnelPort,
@@ -108,7 +105,7 @@ import {
 import { RunnerWebSocketTransport } from './runner-websocket-transport';
 
 export class RunnerHttpAdapter
-  implements WorkspaceRuntimeControllerPort, WorkspaceRuntimeGatewayPort, AcpTransportPort, BrowserTunnelPort
+  implements WorkspaceRuntimeControllerPort, WorkspaceRuntimeGatewayPort, BrowserTunnelPort
 {
   private readonly baseUrl: URL | null;
   private readonly streams: RunnerWebSocketTransport;
@@ -121,10 +118,6 @@ export class RunnerHttpAdapter
     if (this.baseUrl && !['http:', 'https:'].includes(this.baseUrl.protocol))
       throw new Error('AGENT_RUNNER_URL_INVALID');
     this.streams = new RunnerWebSocketTransport(this.baseUrl, this.token, RUNNER_PROTOCOL_VERSION);
-  }
-
-  open(request: AcpTransportOpenRequest, signal: AbortSignal): Promise<AcpByteTransport> {
-    return this.streams.open(request, signal);
   }
 
   openTerminalWebSocket(

@@ -157,20 +157,15 @@ const runProtocol = async (mode: 'complete' | 'cancel' | 'disconnect') => {
     configuration: {
       displayName: 'fixture',
       transport: 'ssh',
-      profileId: 'fixture',
       protocolVersion: '1',
       argv: ['agent', '--acp'],
       cwd: '/srv/project',
     },
   } as IntegrationView;
   try {
-    const execution = new AcpAdapter({
-      open: async () => {
-        throw new Error('Wrong transport');
-      },
-    }).execute(
+    const execution = new AcpAdapter().execute(
       integration,
-      { workspaceId: '', generation: 0, cwd: '/srv/project', prompt: 'Inspect fixture', maxOutputBytes: 4096 },
+      { cwd: '/srv/project', prompt: 'Inspect fixture', maxOutputBytes: 4096 },
       {
         signal: abort.signal,
         requestPermission: async (request) => {

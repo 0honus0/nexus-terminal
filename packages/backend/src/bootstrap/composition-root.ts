@@ -437,7 +437,6 @@ export const createCompositionRoot = (
     leases: agentLeases,
     workspaceRuntimeController,
     workspaceInteractiveSessions,
-    acpTransport: workspaceRuntimeController,
     browserGateway: browserRuntime,
     audit,
     notifications,

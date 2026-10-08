@@ -37,6 +37,16 @@
 
 **第五项验证终态（2026-10-08）**：独立 `subagentGovernedMutationScenario()` 经过最后追加的五种 Tool / 授权一一对应反例后重跑 **exit 0**，打印 `GOVERNED_SSH_DURABLE_AND_ALL_MUTATION_CAPABILITIES_PASS`；持久 SQLite 事务拒绝越权连接、失效配置指纹、旧 Workspace、伪造 tool name/risk、删除 scope 后的写入等行为，且 approval `consumed_at` 保持 null / tool status 保持 ready。包含正常批准→lease→执行→settle/验证/回收顺序、read-only/plan 拒绝与运行中未知副作用不重放。**追加场景后最终二次复核**：完整 `pnpm --filter @nexus-terminal/backend run test:agent-scenarios` **exit 0**；`pnpm run check`（Frontend/Backend/Runner lint/typecheck）**PASS**，`pnpm run format:all:check` **PASS**，`pnpm run build`（Backend/Frontend/Runner 三包）**PASS**，`git diff --check` 已无空白错误。隔离 Playwright 容器中运行原有 `preset-plugin.spec.ts --grep "Nexus Agent subagent lifecycle preserves tool batches"`，**1 passed (29.7s)，exit 0**，验证真实 Agent Provider、Child 生命周期/多 Tool 批次和 Browser session 回收（**不是**实际远程 SSH 文件写入的 E2E）。原始用户备份、普通终端 Workspace 和生产 Runner 未动。
 
+**P4 ACP Host SSH-only 切口（2026-10-08）**：
+
+- 原 `createAcpExecuteTool` 的 Workspace profile inspect/execute 分支已完全删除：模型 schema 仅 `target:'ssh'`、显式 selected SSH connection id，保留 prompt、可选绝对 cwd、冻结 SSH configuration hash / targetIdentity 与 integration version、operation hash/approval、内层独立 `client.session.requestPermission`。不通过旧 Workspace 或 Backend local 运行 ACP；SSH 非 PTY channel 的取消/断连/unknown 语义保留。
+- `AcpAdapter` 仅通过 SSH `openTransport` 打开 ACP v1 会话，不再注入 `AcpTransportPort`；Host `compose-agent`、tool contribution 和 `composition-root` 不再传 Workspace Repository/Runner ACP transport。Backend `RunnerHttpAdapter` 和 `RunnerWebSocketTransport` 的专用 Workspace ACP byte stream bridge 删除，同时保留 Workspace Terminal/Browser Tunnel（属于后续独立清理）。`AcpExecutionRequest` 不再有无用的 WorkspaceId/generation。
+- ACP Integration 的 **HTTP decoder、Core validator、Protocol DTO、SQLite durable decoder、Frontend 新建集成表单** 统一仅支持 SSH `argv` + 绝对 `cwd`；无效 `workspace-profile` HTTP 请求 400，旧 Workspace Integration 持久记录 fail closed；删除 SSH 配置中不被消费的旧 `profileId`，不保留双轨或自动转换。Frontend 不再显示 Workspace ACP integration transport 选项、旧 profile selector；旧用户 Workspace Runtime acpProfiles 设置页与 Runner 自身 ACP endpoint/进程尚未物理移除，留 P5/P6 继续，不能称作全产品 ACP 完成。
+- 原 `acp-inner-permission.scenario.ts` 保留 outer/inner approval、真实 SSH 字节传输流、断连/取消、不重放与配置失效测试并改成 SSH-only；`ssh-acp-protocol.scenario.ts` 直接使用新的无 Runner port adapter。公开 E2E 在 `ssh-acp-settings.spec.ts` 证明前端只有 SSH ACP transport、真实选中 SSH 连接的协议和内层拒绝/取消链；`host.spec.ts` 在真实 HTTP API 检查旧 Workspace Integration 返回 400、合法 SSH argv/cwd 创建/查询/删除。
+- 同步有效用户合同 `doc/USAGE.md`、工程边界 `doc/AGENTS.md`、架构 `doc/architecture/BACKEND.md`、E2E 覆盖 `doc/testing/E2E.md`，只在本过程文档记录迁移证据。实际需要保留的 SSH ACP 提权/权限请求仍由原 durable Approval owner 持有，`ACP_DIRECT_CAPABILITY_DENIED` 直接文件/terminal 客户端能力默认拒绝。
+
+**ACP 切口真实验证终态（2026-10-08）**：最新修改后完整 `pnpm --filter @nexus-terminal/backend run test:agent-scenarios` **exit 0**，包含 SSH ACP outer/inner permission、协议、审批持久化/abort/replay 测试；`pnpm run check`（Frontend/Backend/Runner lint/typecheck）**PASS**，`pnpm run format:all:check` **PASS**，`pnpm run build`（Backend/Frontend/Agent Runner 三包）**PASS**，`git diff --check` **PASS**。隔离官方 Playwright Docker 对 `ssh-acp-settings.spec.ts` 两例与 `host.spec.ts` Host install 一例，在撤除空耗的 SSH `profileId` 后二次实跑 **3 passed (35.1s)，exit 0**：真实 SSH non-PTY ACP channel、内层权限拒绝/取消、进程清理、旧 `workspace-profile` 配置与 SSH `profileId` 旧字段 HTTP 400、合法 SSH argv/cwd 增删查均通过。测试过程存在 Vite WebSocket `ECONNRESET` 日志但 Playwright 最终退出 0，不冒充网络完全无警告。尚未清理的 Runner 内 ACP Process endpoint、用户 Workspace profile Settings/Runner command DTO、Browser/REST/Resolver 保留为下一阶段显式工作；此次未触碰用户旧数据或生产部署。
+
 **P3 第二项：Agent 文件工具收敛为 SSH-only（2026-10-08）**：
 
 - `modules/agent/capabilities/file-capability.service.ts` 不再依赖 Workspace File port，删除 read/stat/list/search/write/move/delete/patch 中所有 Runner Workspace 分支，保留 SSH SFTP、严格 patch、SHA/metadata precondition、冻结配置复核以及后台取消边界。已删除专用 `workspace-file-target.port.ts` 和 `infrastructure/agent/workspace-runtime/workspace-file-target.adapter.ts`；`compose-agent.ts` 只向 FileCapabilityService 注入 SshFileTargetPort。
@@ -101,20 +111,20 @@ node --version && pnpm --version
 # 从下方「当前工作指针」继续一项，改完先更新本文件再检查与本地提交
 ```
 
-**当前工作指针（2026-10-08）**：以第 10–13 条最新要求破坏式移除旧 Agent Workspace，Plugin/AgentDefinition 版本固定 `1.0.0`，插件远程 `main`/`v1.0.0` Tag 已同指向 `ac096df`。主仓本轮代码提交 `5cf7aac2`，已按用户明确追加要求把 **governed coding Subagent 两层 Workspace-only 校验和 child-owned Workspace 模型指令**一并换成 SSH-only：执行层和持久 StateCommit 复核 Run 选中连接、Delegation SSH capability/scope、规范化 Tool target、共享 SHA256 SSH identity 和资源锁 key，不自动提升权限；保留批准、lease、Policy、read-only/Plan 和未知结果隔离。通过了真实 SQLite StateCommit 正反例和保留的 Child E2E。**下一项**仍是 ACP：优先删除 `workspace-profile` transport 及 Runner ACP bridge，但保留独立 SSH ACP 与内层权限审批、取消、Session；清理 ACP DTO/持久解码/HTTP/Frontend/E2E 后再收敛通用 `AgentTargetResolver`，之后处理 Browser、Workspace REST/Schema/UI 和生产 Runner。**P3/P4 尚未整体完成，主仓只本地提交不推送**；保护普通终端 Workspace、SSH 连接/会话/Job/项目目录、Artifact/Memory 和 E2E Test Runner。每次继续先检查 HEAD/status、本文件及源事实，保留未跟踪的用户计划文件。
+**当前工作指针（2026-10-08）**：按第 10–13 条和用户最新指示破坏式移除 Agent Workspace，Plugin/AgentDefinition 版本仍固定 `1.0.0`，插件远程 `main` 与 `v1.0.0` 均指向 `ac096df`；主仓最近的 Subagent 双层 SSH 安全准入提交 `5cf7aac2`、过程交接 `8d685bcc`。**本轮 P4 ACP Host 切口**已把 ACP Tool、HTTP/Protocol/SQLite Integration、Frontend 创建入口收敛为 SSH-only，删除 Backend Runner ACP byte bridge，保留真实 SSH ACP 内层 durable Approval、取消及独立 channel；完整 Agent 场景及 3 个真实 Host/SSH ACP E2E 均 PASS。**接下来**：首先清理生产 Agent Runner 内 ACP profile/stream/process endpoint 及 Workspace Runtime Settings 的 ACP profiles（连同前端 Workspace profile 编辑器、Runner wire/profile DTO、旧 Run Definition），确认普通终端 Workspace/SSH 项目与 Browser 隧道不受损；再剥离 Browser Workspace、用户 Workspace REST 与 AgentTargetResolver Repository，最后统一删除 Agent Runner/部署并执行 P7 全量 E2E。**P3/P4 未整体完成，不推送主仓**；Plugin 仓已发布不再改版本或标签。保留普通终端 Workspace、SSH 项目目录/会话/Job、Artifact/Memory、E2E test runner、原始未跟踪计划及用户备份；每轮先核实双仓 HEAD/status 与本过程文档的测试终态。
 
 ## 阶段状态（2026-10-08）
 
-| 阶段                         | 状态   | 说明                                                                                         |
-| ---------------------------- | ------ | -------------------------------------------------------------------------------------------- |
-| P0 清单与升级边界            | 进行中 | P0-2/3/4 完成，旧版 Agent E2E 69/69；P0-1/5 的历史事项由最新破坏式规则覆盖                   |
-| P1 最终 contract 与迁移方案  | 进行中 | Plugin manifest/decoder 与 Plugin Runner DTO 已退出；Workspace/SSH DTO 仍待收敛              |
-| P2 存量数据、升级与备份      | 进行中 | 增量迁移 #55 删除 Plugin runner_entry；不直接操作用户真实备份/线上数据库                     |
-| P3 Backend SSH 收敛          | 进行中 | File/Shell/Job 模型工具与 Capability grants 已 SSH-only；旧 ACP/Browser/REST/Resolver 待清理 |
-| P4 Browser、ACP、Plugin 解耦 | 进行中 | Plugin Runner Source/持久字段已退出；Browser/ACP 和 Workspace Runtime 待清理                 |
-| P5 Frontend 移除             | 未开始 |                                                                                              |
-| P6 生产 Runner 退出          | 未开始 |                                                                                              |
-| P7 文档与验收                | 未开始 |                                                                                              |
+| 阶段                         | 状态   | 说明                                                                                                              |
+| ---------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------- |
+| P0 清单与升级边界            | 进行中 | P0-2/3/4 完成，旧版 Agent E2E 69/69；P0-1/5 的历史事项由最新破坏式规则覆盖                                        |
+| P1 最终 contract 与迁移方案  | 进行中 | Plugin manifest/decoder 与 Plugin Runner DTO 已退出；Workspace/SSH DTO 仍待收敛                                   |
+| P2 存量数据、升级与备份      | 进行中 | 增量迁移 #55 删除 Plugin runner_entry；不直接操作用户真实备份/线上数据库                                          |
+| P3 Backend SSH 收敛          | 进行中 | File/Shell/Job 模型工具与 Capability grants 已 SSH-only；旧 ACP/Browser/REST/Resolver 待清理                      |
+| P4 Browser、ACP、Plugin 解耦 | 进行中 | Plugin Runner Source/持久字段和 ACP Host/Runner Backend bridge 已退出；剩余 Runner ACP endpoint 与 Browser 待清理 |
+| P5 Frontend 移除             | 未开始 |                                                                                                                   |
+| P6 生产 Runner 退出          | 未开始 |                                                                                                                   |
+| P7 文档与验收                | 未开始 |                                                                                                                   |
 
 ## P1 边界准备：基于当前代码的迁移决策（仅设计，尚未改生产 contract）
 

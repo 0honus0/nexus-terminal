@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import type { Scope } from '../../../packages/backend/src/modules/agent/agent.types';
-import type { ToolContext, ToolInspection } from '../../../packages/backend/src/modules/agent/capabilities/tool.types';
-import type { AgentWorkspaceRepositoryPort } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-runtime.repository.port';
+import type { ToolContext } from '../../../packages/backend/src/modules/agent/capabilities/tool.types';
 import type { IntegrationRepositoryPort } from '../../../packages/backend/src/modules/agent/ai/integration.repository.port';
 import type {
   AcpRuntimePort,
@@ -20,16 +19,17 @@ export const acpInnerPermissionScenario = async () => {
   const runId = 'acp-inner-permission-run';
   const runtimeId = 'acp-inner-permission-runtime';
   const integrationId = '00000000-0000-4000-8000-000000000108';
-  const workspaceId = 'acp-inner-permission-workspace';
+  const workspaceId = 'retired-acp-workspace';
   const integration: IntegrationView = {
     ...scope,
     id: integrationId,
     kind: 'acp',
     configuration: {
-      displayName: 'scenario-acp',
-      transport: 'workspace-profile',
-      profileId: 'scenario-acp-profile',
+      displayName: 'SSH ACP',
+      transport: 'ssh',
       protocolVersion: '1',
+      argv: ['agent', '--acp'],
+      cwd: '/srv/project',
     },
     hasCredential: false,
     credentialRevision: 1,
@@ -39,96 +39,69 @@ export const acpInnerPermissionScenario = async () => {
     createdAt: 1_801_100_000,
     updatedAt: 1_801_100_000,
   };
-  const integrations = {
-    get: async () => integration,
-  } as unknown as IntegrationRepositoryPort;
-  const workspaces = {
-    getWorkspace: async () =>
-      ({
-        id: workspaceId,
-        ...scope,
-        runId,
-        agentRuntimeId: runtimeId,
-        generation: 1,
-        version: 1,
-        status: 'running',
-        profile: {
-          acpProfiles: [
-            {
-              id: 'scenario-acp-profile',
-              profileRevision: 1,
-              argv: ['scenario-acp'],
-              cwd: '/workspace/work',
-            },
-          ],
-        },
-      }) as never,
-  } as unknown as AgentWorkspaceRepositoryPort;
+  const sshIntegration = integration;
+  const integrations = { get: async () => integration } as unknown as IntegrationRepositoryPort;
   const decisions: Array<'allow_once' | 'reject_once'> = [];
   let permissionRequests = 0;
+  let expectedOperationHash = '';
   const runtime: AcpRuntimePort = {
-    execute: async (_integration, _request, context) => {
+    execute: async (_integration, _request, execution) => {
       decisions.push(
-        await context.requestPermission({
+        await execution.requestPermission({
           sessionId: 'session-108',
           toolCallId: 'inner-tool-108',
           title: 'Write generated source',
           kind: 'edit',
-          rawInput: { path: '/workspace/work/generated.ts', bytes: 128 },
+          rawInput: { path: '/srv/project/generated.ts', bytes: 128 },
         }),
       );
       return { text: 'permission scenario complete', stopReason: 'end_turn' };
     },
   };
+  const targetResolver = {
+    resolve: async (_context: ToolContext, selector: { target: string; id: string }) => {
+      assert.equal(selector.target, 'ssh');
+      assert.equal(selector.id, '1');
+      return {
+        selector: { target: 'ssh', id: '1' },
+        connectionId: 1,
+        resourceKeys: ['connection:1'],
+        preconditions: [],
+        fingerprint: {
+          kind: 'ssh',
+          target: 'ssh',
+          id: '1',
+          connectionId: 1,
+          targetIdentity: 'ssh:1',
+          endpoint: 'fixture',
+          loginUser: 'fixture',
+          configurationHash: 'ssh-config',
+        },
+      };
+    },
+  } as unknown as AgentTargetResolver;
+  const sshTransport = {
+    targets: targetResolver,
+    open: async () => {
+      throw new Error('Transport fixture not invoked by mocked runtime');
+    },
+  };
   const tool = createAcpExecuteTool(
     integrations,
-    workspaces,
     runtime,
     { sha256Utf8: (value) => createHash('sha256').update(value, 'utf8').digest('hex') },
     {
       request: async (toolContext, parentInspection, request) => {
-        permissionRequests += 1;
+        permissionRequests++;
         assert.equal(toolContext.toolCallId, 'outer-tool-108');
-        assert.equal(parentInspection.operationHash, 'scenario-outer-operation-hash');
+        assert.equal(parentInspection.operationHash, expectedOperationHash);
         assert.equal(request.sessionId, 'session-108');
         assert.equal(request.toolCallId, 'inner-tool-108');
         return 'allow_once';
       },
     },
+    sshTransport,
   );
-  const inspection: ToolInspection = {
-    toolName: 'acp_execute',
-    toolVersion: '1.0.0',
-    normalizedArguments: {
-      integrationId,
-      integrationVersion: 1,
-      target: 'workspace',
-      id: workspaceId,
-      generation: 1,
-      profileId: 'scenario-acp-profile',
-      profileRevision: 1,
-      prompt: 'implement the requested change',
-      cwd: '/workspace/work',
-    },
-    target: {
-      kind: 'integration',
-      integrationId,
-      workspaceId,
-      generation: 1,
-      targetIdentity: `acp:${integrationId}:${workspaceId}:1:scenario-acp-profile`,
-      endpoint: `workspace-acp:${workspaceId}:scenario-acp-profile`,
-      loginUser: 'runner:acp',
-      configurationHash: 'scenario-acp-configuration',
-    },
-    resourceKeys: [`integration:acp:${integrationId}`, `workspace:${workspaceId}:1`],
-    risk: 'mutate',
-    mutation: true,
-    operationHash: 'scenario-outer-operation-hash',
-    operationHashVersion: 1,
-    preconditions: [],
-    policyRevision: 1,
-    inputRevision: 1,
-  };
   const abort = new AbortController();
   const context: ToolContext = {
     ...scope,
@@ -136,7 +109,7 @@ export const acpInnerPermissionScenario = async () => {
     runId,
     agentRuntimeId: runtimeId,
     toolCallId: 'outer-tool-108',
-    connectionIds: [],
+    connectionIds: [1],
     environment: null,
     stepId: 'acp-inner-permission-step',
     signal: abort.signal,
@@ -144,44 +117,27 @@ export const acpInnerPermissionScenario = async () => {
     maxOutputBytes: 64 * 1024,
     inputRevision: 1,
   };
-
-  const canonical = await tool.inspect(
-    { integrationId, target: 'workspace', id: workspaceId, prompt: 'inspect' },
-    context,
-    1,
-  );
-  assert.equal((canonical.normalizedArguments as Record<string, unknown>).target, 'workspace');
-  assert.equal((canonical.normalizedArguments as Record<string, unknown>).id, workspaceId);
-  assert.equal('workspaceId' in (canonical.normalizedArguments as Record<string, unknown>), false);
+  const canonical = await tool.inspect({ integrationId, target: 'ssh', id: '1', prompt: 'inspect' }, context, 1);
+  assert.equal((canonical.normalizedArguments as Record<string, unknown>).target, 'ssh');
+  assert.equal((canonical.normalizedArguments as Record<string, unknown>).id, '1');
+  expectedOperationHash = canonical.operationHash;
   const reinspected = await tool.inspect(canonical.normalizedArguments, context, 1);
   assert.equal(reinspected.operationHash, canonical.operationHash);
+  await assert.rejects(
+    () => tool.inspect({ integrationId, target: 'workspace', id: workspaceId, prompt: 'legacy' }, context, 1),
+    /ACP_TARGET_REQUIRED/,
+  );
   await assert.rejects(
     () => tool.inspect({ integrationId, workspaceId, prompt: 'legacy' }, context, 1),
     /ACP_ARGUMENT_FIELD_UNSUPPORTED/,
   );
-  await assert.rejects(
-    () => tool.inspect({ integrationId, id: workspaceId, prompt: 'missing target' }, context, 1),
-    /ACP_TARGET_REQUIRED/,
-  );
   assert.equal(permissionRequests, 0);
-  await tool.execute(inspection, context);
+  await tool.execute(canonical, context);
   assert.deepEqual(
     decisions,
     ['allow_once'],
-    'an explicit user-approved ACP inner action must resume the original ACP permission request',
+    'An approved ACP inner action resumes the original SSH ACP permission request.',
   );
-
-  const sshIntegration: IntegrationView = {
-    ...integration,
-    configuration: {
-      displayName: 'SSH ACP',
-      transport: 'ssh',
-      profileId: 'ssh-acp',
-      protocolVersion: '1',
-      argv: ['agent', '--acp'],
-      cwd: '/srv/project',
-    },
-  };
   let stdout: ((bytes: Uint8Array) => void) | undefined;
   let disconnected: (() => void) | undefined;
   let startedCommand = '';
@@ -273,11 +229,7 @@ export const acpInnerPermissionScenario = async () => {
     },
   });
   const send = (value: unknown) => protocolController.enqueue(new TextEncoder().encode(JSON.stringify(value) + '\n'));
-  const adapter = new AcpAdapter({
-    open: async () => {
-      throw new Error('SSH must not open Workspace transport');
-    },
-  });
+  const adapter = new AcpAdapter();
   const protocolResult = await adapter.execute(
     sshIntegration,
     { workspaceId: '', generation: 0, cwd: '/srv/project', prompt: 'fixture prompt', maxOutputBytes: 4096 },
@@ -332,7 +284,7 @@ export const acpInnerPermissionScenario = async () => {
       protocolMethods.includes('session/prompt'),
     JSON.stringify(protocolMethods),
   );
-  for (const candidate of [integration, sshIntegration]) {
+  for (const candidate of [sshIntegration]) {
     const controller = new AbortController();
     const reason = new Error('cancelled while opening ACP transport');
     let closeCount = 0;
@@ -360,7 +312,7 @@ export const acpInnerPermissionScenario = async () => {
         },
       };
     };
-    const pending = new AcpAdapter({ open }).execute(
+    const pending = new AcpAdapter().execute(
       candidate,
       { workspaceId, generation: 1, cwd: '/workspace/work', prompt: 'must not send', maxOutputBytes: 4096 },
       { signal: controller.signal, requestPermission: async () => 'reject_once', openTransport: open },
@@ -375,7 +327,6 @@ export const acpInnerPermissionScenario = async () => {
   }
   const sshTool = createAcpExecuteTool(
     { get: async () => sshIntegration } as unknown as IntegrationRepositoryPort,
-    workspaces,
     {
       execute: async (_integration, request, execution) => {
         assert.equal(request.cwd, '/srv/project');
@@ -446,7 +397,7 @@ export const acpInnerPermissionScenario = async () => {
   await assert.rejects(() => sshTool.execute(sshInspection, context), /RESOURCE_CHANGED/);
   await assert.rejects(
     () => sshTool.inspect({ integrationId, target: 'workspace', id: workspaceId, prompt: 'inspect' }, context, 1),
-    /ACP_TARGET_CONFIGURATION_MISMATCH/,
+    /ACP_TARGET_REQUIRED/,
   );
 
   return [

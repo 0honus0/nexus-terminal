@@ -6,7 +6,6 @@ import type {
   AcpExecutionResult,
   AcpIntegrationConfiguration,
   AcpRuntimePort,
-  AcpTransportPort,
   IntegrationView,
 } from '../../../modules/agent/ai/integrations.types';
 
@@ -14,10 +13,7 @@ const MAX_PROMPT_BYTES = 32 * 1024;
 const MAX_UPDATE_BYTES = 256 * 1024;
 
 const acpConfig = (integration: IntegrationView): AcpIntegrationConfiguration => {
-  if (
-    integration.kind !== 'acp' ||
-    (integration.configuration.transport !== 'workspace-profile' && integration.configuration.transport !== 'ssh')
-  ) {
+  if (integration.kind !== 'acp' || integration.configuration.transport !== 'ssh') {
     throw new Error('INTEGRATION_KIND_MISMATCH');
   }
   if (integration.configuration.protocolVersion !== String(PROTOCOL_VERSION)) {
@@ -47,9 +43,8 @@ const textChunk = (update: unknown): string => {
   return block.type === 'text' && typeof block.text === 'string' ? block.text : '';
 };
 
-const assertRequest = (request: AcpExecutionRequest, ssh: boolean): void => {
+const assertRequest = (request: AcpExecutionRequest): void => {
   if (
-    (!ssh && request.cwd !== '/workspace' && !request.cwd.startsWith('/workspace/')) ||
     !request.cwd.startsWith('/') ||
     request.cwd.includes('\0') ||
     !request.prompt.trim() ||
@@ -64,29 +59,21 @@ const assertRequest = (request: AcpExecutionRequest, ssh: boolean): void => {
 
 /**
  * Stable ACP v1 client adapter. The transport is deliberately injected: Nexus
- * only wires transports created inside an isolated Workspace profile. This
+ * only wires an authorized SSH transport to the remote ACP process. This
  * class never spawns an ACP backend in the Backend process and never grants
  * direct filesystem/terminal access to the remote agent.
  */
 export class AcpAdapter implements AcpRuntimePort {
-  constructor(private readonly transports: AcpTransportPort) {}
-
   async execute(
     integration: IntegrationView,
     request: AcpExecutionRequest,
     context: AcpExecutionContext,
   ): Promise<AcpExecutionResult> {
-    const config = acpConfig(integration);
-    assertRequest(request, config.transport === 'ssh');
+    acpConfig(integration);
+    assertRequest(request);
     if (context.signal.aborted) throw context.signal.reason ?? new Error('ABORTED');
-    if (config.transport === 'ssh' && !context.openTransport) throw new Error('ACP_SSH_TRANSPORT_NOT_CONFIGURED');
-    const transport =
-      config.transport === 'ssh'
-        ? await context.openTransport!()
-        : await this.transports.open(
-            { workspaceId: request.workspaceId, generation: request.generation, profileId: config.profileId },
-            context.signal,
-          );
+    if (!context.openTransport) throw new Error('ACP_SSH_TRANSPORT_NOT_CONFIGURED');
+    const transport = await context.openTransport();
     const onAbort = () => void transport.close().catch(() => undefined);
     context.signal.addEventListener('abort', onAbort, { once: true });
     if (context.signal.aborted) {

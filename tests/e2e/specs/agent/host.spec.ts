@@ -1885,15 +1885,46 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
       },
     });
 
+    const retired = await request.post('/api/v1/apps/nexus.agent/integrations', {
+      headers: { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
+      data: {
+        kind: 'acp',
+        enabled: true,
+        configuration: {
+          displayName: 'Retired ACP',
+          transport: 'workspace-profile',
+          profileId: 'local-acp',
+          protocolVersion: '1',
+        },
+      },
+    });
+    expect(retired.status(), await retired.text()).toBe(400);
+    const retiredProfileField = await request.post('/api/v1/apps/nexus.agent/integrations', {
+      headers: { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
+      data: {
+        kind: 'acp',
+        enabled: true,
+        configuration: {
+          displayName: 'Obsolete SSH ACP Profile',
+          transport: 'ssh',
+          profileId: 'obsolete',
+          argv: ['agent', '--acp'],
+          cwd: '/srv/project',
+          protocolVersion: '1',
+        },
+      },
+    });
+    expect(retiredProfileField.status(), await retiredProfileField.text()).toBe(400);
     const created = await request.post('/api/v1/apps/nexus.agent/integrations', {
       headers: { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
       data: {
         kind: 'acp',
         enabled: true,
         configuration: {
-          displayName: 'Local ACP',
-          transport: 'workspace-profile',
-          profileId: 'local-acp',
+          displayName: 'SSH ACP',
+          transport: 'ssh',
+          argv: ['agent', '--acp'],
+          cwd: '/srv/project',
           protocolVersion: '1',
         },
       },
@@ -1910,7 +1941,7 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
           id: createdBody.data.id,
           kind: 'acp',
           enabled: true,
-          configuration: { profileId: 'local-acp', transport: 'workspace-profile' },
+          configuration: { transport: 'ssh', cwd: '/srv/project', argv: ['agent', '--acp'] },
         },
       ],
     });
