@@ -177,4 +177,66 @@ export const agentHostMigrations: SqliteMigration[] = [
         AND json_type(manifest_json, '$.targets.runner') IS NOT NULL;
     `,
   },
+  {
+    id: 61,
+    name: 'Remove retired Workspace capability from persisted Plugin manifests',
+    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_plugin_versions'),
+    sql: `
+      UPDATE agent_plugin_versions
+      SET manifest_json = json_set(manifest_json, '$.capabilities', json((
+        SELECT json_group_array(value)
+        FROM json_each(agent_plugin_versions.manifest_json, '$.capabilities')
+        WHERE value <> 'workspace.manage'
+      )))
+      WHERE EXISTS (
+        SELECT 1 FROM json_each(manifest_json, '$.capabilities') WHERE value = 'workspace.manage'
+      );
+    `,
+  },
+  {
+    id: 62,
+    name: 'Remove retired Workspace capability from staged Plugin manifests',
+    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_plugin_stages'),
+    sql: `
+      UPDATE agent_plugin_stages
+      SET manifest_json = json_set(manifest_json, '$.capabilities', json((
+        SELECT json_group_array(value)
+        FROM json_each(agent_plugin_stages.manifest_json, '$.capabilities')
+        WHERE value <> 'workspace.manage'
+      )))
+      WHERE manifest_json IS NOT NULL AND EXISTS (
+        SELECT 1 FROM json_each(manifest_json, '$.capabilities') WHERE value = 'workspace.manage'
+      );
+    `,
+  },
+  {
+    id: 63,
+    name: 'Remove retired Workspace app grants and target scopes',
+    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_app_grants'),
+    sql: `
+      DELETE FROM agent_app_grants WHERE capability = 'workspace.manage';
+      UPDATE agent_app_grants
+      SET scope_json = json_remove(scope_json, '$.targets.workspace')
+      WHERE json_type(scope_json, '$.targets.workspace') IS NOT NULL;
+    `,
+  },
+  {
+    id: 64,
+    name: 'Remove retired Workspace delegated grants and target scopes',
+    check: async (db: Database): Promise<boolean> =>
+      (await tableExists(db, 'agent_delegations')) && (await columnExists(db, 'agent_delegations', 'grants_json')),
+    sql: `
+      UPDATE agent_delegations
+      SET grants_json = (
+        SELECT json_group_array(json(json_remove(source.value, '$.scope.targets.workspace')))
+        FROM json_each(agent_delegations.grants_json) AS source
+        WHERE json_extract(source.value, '$.capability') <> 'workspace.manage'
+      )
+      WHERE EXISTS (
+        SELECT 1 FROM json_each(grants_json) AS source
+        WHERE json_extract(source.value, '$.capability') = 'workspace.manage'
+          OR json_type(source.value, '$.scope.targets.workspace') IS NOT NULL
+      );
+    `,
+  },
 ];
