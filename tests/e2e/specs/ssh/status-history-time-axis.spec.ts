@@ -94,9 +94,13 @@ test('status history uses real time windows and keeps controls fixed and axes sh
       expect(fontSize * scale).toBeCloseTo(12, 1);
     }
     await canvas.hover({ position: { x: 200, y: 30 } });
-    await page.waitForTimeout(350);
-    await expect(tooltip).toHaveCount(0);
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip).toContainText(/\d{2}:\d{2}:\d{2}/);
+    await expect(tooltip).toContainText(/\d+\.\d%/);
+    await expect(tooltip).toHaveCSS('font-size', '12px');
+    expect(await tooltip.evaluate((element) => element.parentElement === document.body)).toBe(true);
     await page.mouse.move(1100, 800);
+    await expect(tooltip).toHaveCount(0);
     await monitor.locator('.network-card').click();
     const legend = page.locator('.network-legend');
     await expect(legend).toBeVisible();
@@ -111,8 +115,12 @@ test('status history uses real time windows and keeps controls fixed and axes sh
   }
   await monitor.locator('.network-card').click();
   await canvas.hover({ position: { x: 200, y: 30 } });
-  await page.waitForTimeout(350);
-  await expect(tooltip).toHaveCount(0);
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toContainText(/\d{2}:\d{2}:\d{2}/);
+  await expect(tooltip.locator('div')).toHaveCount(2);
+  for (const entry of await tooltip.locator('div').all()) {
+    await expect(entry).toContainText(/\d+(?:\.\d+)? (?:B|KB|MB|GB)\/s/);
+  }
   await history.locator('.history-close').click();
   await expect(tooltip).toHaveCount(0);
 });

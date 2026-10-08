@@ -17,7 +17,7 @@
   import { DialogHost, NotificationHost, RuntimeErrorBoundary } from '@/shared/feedback/public';
   import { authenticatedSessionLifecycle, type AuthenticatedSessionDispatch } from '@/shared/session/public';
   import { provideRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
-  import { setLocale } from './i18n';
+  import { getLocale, setLocale } from './i18n';
   import { disposeWorkspaceRuntime } from './workspaceLifecycle';
 
   const RemoteDesktopModal = defineAsyncComponent(loadRemoteDesktopModal);
@@ -115,7 +115,7 @@
         preloadAuthenticatedRoutes();
         void appearance.load().catch((cause) => logger.error({ err: cause }, 'Failed to load appearance settings'));
         void preferences
-          .load()
+          .load(false, getLocale())
           .catch((cause) => logger.error({ err: cause }, 'Failed to load application preferences'));
         return;
       }

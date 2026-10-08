@@ -4,6 +4,54 @@ import { E2E_ADMIN } from '../../support/auth';
 
 test.describe('initial setup', () => {
   test.use({ e2eDatabaseMode: 'empty' });
+  for (const { browserLocale, storedLocale, expectedLocale } of [
+    { browserLocale: 'zh-CN', storedLocale: null, expectedLocale: 'zh-CN' },
+    { browserLocale: 'en-US', storedLocale: 'ja-JP', expectedLocale: 'ja-JP' },
+  ]) {
+    test.describe(`initial language ${expectedLocale}`, () => {
+      test.use({ locale: browserLocale });
+      test('retains the setup language after login and reload when no server language is saved', async ({
+        page,
+        context,
+      }) => {
+        test.setTimeout(60_000);
+        if (storedLocale) {
+          await page.addInitScript((language) => localStorage.setItem('user-locale', language), storedLocale);
+        }
+        await page.goto('/');
+        await expect(page).toHaveURL(/\/setup$/);
+        if (expectedLocale === 'zh-CN') {
+          await expect(
+            page.getByRole('heading', { name: '初始设置', exact: true }).filter({ visible: true }),
+          ).toBeVisible();
+        }
+        await page.locator('#username').fill(E2E_ADMIN.username);
+        await page.locator('#password').fill(E2E_ADMIN.password);
+        await page.locator('#confirmPassword').fill(E2E_ADMIN.password);
+        await page.locator('form button[type="submit"]').click();
+        await expect(page).toHaveURL(/\/login$/);
+        await page.locator('#username').fill(E2E_ADMIN.username);
+        await page.locator('#password').fill(E2E_ADMIN.password);
+        const settingsLoaded = page.waitForResponse(
+          (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'GET',
+        );
+        await page.locator('form button[type="submit"]').click();
+        expect((await settingsLoaded).ok()).toBeTruthy();
+        await expect(page).toHaveURL(/\/$/);
+        await expect(page.locator('html')).toHaveAttribute('lang', expectedLocale);
+        const settings = await context.request.get('/api/v1/settings');
+        expect(settings.ok()).toBeTruthy();
+        expect((await settings.json()).language).toBeUndefined();
+        const reloadedSettings = page.waitForResponse(
+          (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'GET',
+        );
+        await page.reload();
+        expect((await reloadedSettings).ok()).toBeTruthy();
+        await expect(page.locator('html')).toHaveAttribute('lang', expectedLocale);
+      });
+    });
+  }
+
   test('creates the initial administrator and redirects to login', async ({ page, request }) => {
     const initialSetupState = await request.get('/api/v1/auth/needs-setup');
     expect(initialSetupState.ok()).toBeTruthy();

@@ -7,12 +7,14 @@ export interface TerminalSessionState {
   readonly searchTerm: Ref<string>;
   readonly remotePtyGeneration: Ref<number>;
   replaceSnapshot(value: string): void;
+  captureSnapshot(value: Promise<string>): void;
+  restoreSnapshot(): Promise<string>;
+  decodeOutput(value: string | Uint8Array): string;
   replaceGeometry(columns: number, rows: number): void;
   discardRemotePty(): void;
 }
 
-export const RESET_REMOTE_PTY_DISPLAY =
-  '\x1b[?47;1047;1049l\x1b[?9;1000;1002;1003;1004;1005;1006;1015;1016;2004;2026l\x1b[!p\r\x1b[2K';
+export const RESET_REMOTE_PTY_DISPLAY = '\x18\x1bc';
 
 /**
  * Keeps terminal presentation state across pane remounts without making the
@@ -25,6 +27,8 @@ export function createTerminalSessionState(): TerminalSessionState {
   const searchOpen = ref(false);
   const searchTerm = ref('');
   const remotePtyGeneration = ref(0);
+  let snapshotTask: Promise<void> | null = null;
+  let outputDecoder = new TextDecoder();
   return {
     snapshot,
     geometry,
@@ -32,14 +36,36 @@ export function createTerminalSessionState(): TerminalSessionState {
     searchTerm,
     remotePtyGeneration,
     replaceSnapshot(value) {
+      snapshotTask = null;
       snapshot.value = value;
+    },
+    captureSnapshot(value) {
+      const generation = remotePtyGeneration.value;
+      const task = value
+        .then((captured) => {
+          if (snapshotTask === task && generation === remotePtyGeneration.value) snapshot.value = captured;
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (snapshotTask === task) snapshotTask = null;
+        });
+      snapshotTask = task;
+    },
+    async restoreSnapshot() {
+      while (snapshotTask) await snapshotTask;
+      return snapshot.value;
+    },
+    decodeOutput(value) {
+      return typeof value === 'string' ? value : outputDecoder.decode(value, { stream: true });
     },
     replaceGeometry(columns, rows) {
       if (!Number.isInteger(columns) || !Number.isInteger(rows) || columns <= 0 || rows <= 0) return;
       geometry.value = { columns, rows };
     },
     discardRemotePty() {
-      if (!snapshot.value.endsWith(RESET_REMOTE_PTY_DISPLAY)) snapshot.value += RESET_REMOTE_PTY_DISPLAY;
+      snapshotTask = null;
+      outputDecoder = new TextDecoder();
+      snapshot.value = '';
       remotePtyGeneration.value += 1;
     },
   };

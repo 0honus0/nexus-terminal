@@ -945,6 +945,54 @@ test('terminal rejects oversized pasted input and remains usable', async ({ page
   await cdp.detach();
 });
 
+test('desktop terminal only uses Ctrl+Shift+C/V for keyboard clipboard actions', async ({ page, context }) => {
+  test.setTimeout(60_000);
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: E2E_URLS.frontendLoopbackOrigin });
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  const connectionId = await ensureTestSshConnection(context.request);
+  const sentInput: string[] = [];
+  page.on('websocket', (socket) => {
+    if (new URL(socket.url()).pathname !== '/ws/workspace') return;
+    socket.on('framesent', ({ payload }) => {
+      if (typeof payload !== 'string') return;
+      const message = JSON.parse(payload);
+      if (message.type === 'terminal.input') sentInput.push(message.payload.data);
+    });
+  });
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  const terminal = page.locator('[data-font-size]');
+  const rows = terminal.locator('.xterm-rows');
+  const commandInput = page.locator('.command-bar-command-input');
+  const marker = 'KEYBOARD_CLIPBOARD_COPY_MARKER';
+  const clipboardSentinel = 'CLIPBOARD_UNCHANGED';
+  await commandInput.fill(`printf '\\033[2J\\033[H\\n\\n\\n${marker}\\n'`);
+  await commandInput.press('Enter');
+  await expect(rows).toContainText(marker);
+  await page.evaluate((text) => navigator.clipboard.writeText(text), clipboardSentinel);
+  const point = await terminalTextPoint(page, marker);
+  await page.mouse.dblclick(point.x, point.y);
+  await page.keyboard.press('Control+C');
+  await expect.poll(() => sentInput.at(-1)).toBe('\x03');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(clipboardSentinel);
+  await page.mouse.dblclick(point.x, point.y);
+  await page.keyboard.press('Control+Shift+C');
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(marker);
+  await terminal.locator('.xterm-helper-textarea').focus();
+  const pasteMarker = 'KEYBOARD_CLIPBOARD_PASTE_MARKER';
+  await page.evaluate((text) => navigator.clipboard.writeText(text), pasteMarker);
+  const inputCount = sentInput.length;
+  await page.keyboard.press('Control+V');
+  await page.keyboard.press('Meta+V');
+  await page.keyboard.press('Meta+Shift+V');
+  await page.waitForTimeout(150);
+  expect(sentInput).toHaveLength(inputCount);
+  await expect(rows).not.toContainText(pasteMarker);
+  await page.keyboard.press('Control+Shift+V');
+  await expect.poll(() => sentInput.at(-1)).toBe(pasteMarker);
+  await expect(rows).toContainText(pasteMarker);
+});
+
 test('desktop terminal right-click copies a selection then pastes when no selection remains', async ({
   page,
   context,

@@ -29,11 +29,11 @@ export const usePreferencesStore = defineStore('preferences', () => {
       loaded.value = false;
       setFrontendLogLevel(defaultPreferences.frontendLogLevel);
     },
-    async load(force = false) {
+    async load(force = false, fallbackLanguage?: string) {
       if (loaded.value && !force) return values.value;
       if (!force && preferenceLoadPromise) return preferenceLoadPromise;
       const generation = preferenceCacheGeneration;
-      const load = preferencesApi.load().then((incoming) => {
+      const load = preferencesApi.load(fallbackLanguage ?? values.value.language).then((incoming) => {
         if (generation !== preferenceCacheGeneration) return values.value;
         values.value = incoming;
         setFrontendLogLevel(incoming.frontendLogLevel);

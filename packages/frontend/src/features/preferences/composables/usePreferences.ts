@@ -6,7 +6,7 @@ import { usePreferencesStore } from '../store/preferences.store';
 export interface PreferencesController {
   values: ComputedRef<PreferencesDto>;
   loaded: ComputedRef<boolean>;
-  load(force?: boolean): Promise<PreferencesDto>;
+  load(force?: boolean, fallbackLanguage?: string): Promise<PreferencesDto>;
   update(patch: PreferencesPatchDto): Promise<void>;
   reset(): void;
 }

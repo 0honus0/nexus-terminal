@@ -61,6 +61,16 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
   let resumeCompletePending = false;
   const resumeCompleteHandlers = new Set<() => void>();
   let historyLoad: Promise<{ data: Uint8Array; hasMore: boolean } | null> | null = null;
+  let remoteOutputGeneration = 0;
+  const discardRemoteOutput = (): void => {
+    remoteOutputGeneration += 1;
+    for (const output of buffered.splice(0)) output.consumed?.();
+    previousOutputAvailable = false;
+    resumeCompletePending = false;
+    historyLoad = null;
+  };
+  socket.on('terminal.closed', discardRemoteOutput);
+  socket.on('terminal.error', discardRemoteOutput);
 
   socket.onBinary((data, consumed) => {
     if (outputHandlers.size) {
@@ -141,11 +151,13 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
       return previousOutputAvailable;
     },
     async loadPreviousOutput(maxBytes) {
-      if (!previousOutputAvailable) return null;
+      if (!previousOutputAvailable || !socket.connected) return null;
       if (historyLoad) return historyLoad;
+      const generation = remoteOutputGeneration;
       const task = socket
         .requestBinary('suspend.history.previous', maxBytes ? { maxBytes } : {})
         .then(({ data: page, bytes }) => {
+          if (generation !== remoteOutputGeneration) return null;
           previousOutputAvailable = page.hasMore;
           return {
             data: bytes,
@@ -159,8 +171,11 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
       return task;
     },
     async resetPreviousOutput() {
+      const generation = remoteOutputGeneration;
       if (historyLoad) await historyLoad.catch(() => null);
+      if (generation !== remoteOutputGeneration || !socket.connected) return false;
       const result = await socket.request('suspend.history.reset', {});
+      if (generation !== remoteOutputGeneration) return false;
       previousOutputAvailable = result.available;
       return result.available;
     },

@@ -266,6 +266,111 @@ test('hidden terminals consume sustained output without animation frames or reco
   expect(connectRequests).toBe(initialConnects);
 });
 
+test('transport resume retains terminal output and the active SSH input line', async ({ page, context }) => {
+  test.setTimeout(60_000);
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await setTestSshOnline(true);
+  const connectionId = await ensureTestSshConnection(context.request);
+  await page.addInitScript(() => {
+    const NativeWebSocket = window.WebSocket;
+    const sockets: WebSocket[] = [];
+    Object.assign(window, { __resumeTestSockets: sockets });
+    window.WebSocket = class extends NativeWebSocket {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols);
+        if (new URL(String(url)).pathname === '/ws/workspace') sockets.push(this);
+      }
+    };
+  });
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  const terminal = page.locator('.terminal-inner-container');
+  const rows = terminal.locator('.xterm-rows');
+  const input = terminal.locator('.xterm-helper-textarea');
+  const command = page.locator('.command-bar-command-input');
+  const tab = page.getByRole('tab', { selected: true });
+  await command.fill("printf 'RETAINED_SSH_OUTPUT\\n'");
+  await command.press('Enter');
+  await expect(rows).toContainText('RETAINED_SSH_OUTPUT');
+  await input.focus();
+  await page.keyboard.type("printf 'RESUMED_SSH_INPUT");
+  await expect(rows).toContainText("printf 'RESUMED_SSH_INPUT");
+  await page.evaluate(() => {
+    const sockets = (window as unknown as { __resumeTestSockets: WebSocket[] }).__resumeTestSockets;
+    sockets.at(-1)!.close(4000, 'E2E transport interruption');
+  });
+  await expect(tab).not.toHaveAttribute('data-session-state', 'connected');
+  await expect(tab).toHaveAttribute('data-session-state', 'connected', { timeout: 30_000 });
+  await expect(rows).toContainText('RETAINED_SSH_OUTPUT');
+  await expect(rows).toContainText("printf 'RESUMED_SSH_INPUT");
+  await input.focus();
+  await page.keyboard.type("\\n'");
+  await page.keyboard.press('Enter');
+  await expect.poll(() => rows.innerText()).toMatch(/(?:^|\n|nexus-e2e\$ )RESUMED_SSH_INPUT\s*(?:\n|$)/);
+});
+
+for (const background of [false, true]) {
+  test(`SSH restart clears old terminal output and unfinished input (${background ? 'background' : 'foreground'})`, async ({
+    page,
+    context,
+  }) => {
+    test.setTimeout(60_000);
+    await loginAsInitialAdmin(context.request);
+    await configureSshE2eSettings(context.request);
+    await setTestSshOnline(true);
+    const connectionId = await ensureTestSshConnection(context.request);
+    try {
+      await connectTestSshFromConnectionsPage(page, connectionId);
+      const terminal = page.locator('.terminal-inner-container');
+      const rows = terminal.locator('.xterm-rows');
+      const input = terminal.locator('.xterm-helper-textarea');
+      const tab = page.getByRole('tab', { selected: true });
+      const command = page.locator('.command-bar-command-input');
+      await command.fill("printf 'OLD_SSH_OUTPUT\\n'");
+      await command.press('Enter');
+      await expect(rows).toContainText('OLD_SSH_OUTPUT');
+      if (background) {
+        await command.fill("printf '\\033[?1049h\\033[?1000h\\033[?1006h\\033[?2004hOLD_ALT_SCREEN\\n'");
+        await command.press('Enter');
+        await expect(rows).toContainText('OLD_ALT_SCREEN');
+        await expect(terminal.locator('.xterm')).toHaveClass(/enable-mouse-events/);
+      }
+      await input.focus();
+      await page.keyboard.type('UNFINISHED_OLD_INPUT');
+      await expect(rows).toContainText('UNFINISHED_OLD_INPUT');
+      if (background) {
+        await page.evaluate(() => {
+          Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+          document.dispatchEvent(new Event('visibilitychange'));
+        });
+      }
+      await setTestSshOnline(false);
+      await expect(tab).not.toHaveAttribute('data-session-state', 'connected');
+      await setTestSshOnline(true);
+      await expect(tab).toHaveAttribute('data-session-state', 'connected', { timeout: 30_000 });
+      if (background) {
+        await page.evaluate(() => {
+          Reflect.deleteProperty(document, 'visibilityState');
+          document.dispatchEvent(new Event('visibilitychange'));
+        });
+      }
+      await expect(rows).toContainText('nexus-e2e$');
+      await expect(rows).not.toContainText('OLD_SSH_OUTPUT');
+      await expect(rows).not.toContainText('OLD_ALT_SCREEN');
+      await expect(rows).not.toContainText('UNFINISHED_OLD_INPUT');
+      await expect(terminal.locator('.xterm')).not.toHaveClass(/enable-mouse-events/);
+      await input.focus();
+      await page.keyboard.type("printf 'NEW_SSH_INPUT\\n'");
+      await page.keyboard.press('Enter');
+      await expect.poll(() => rows.innerText()).toMatch(/(?:^|\n|nexus-e2e\$ )NEW_SSH_INPUT\s*(?:\n|$)/);
+      await expect(rows).not.toContainText('command not found');
+      await expect(rows).not.toContainText('nexus-e2e$ nexus-e2e$');
+    } finally {
+      await setTestSshOnline(true);
+    }
+  });
+}
+
 test('disconnected SSH retries periodically and any key reconnects immediately', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
@@ -748,10 +853,11 @@ test('command history broadcasts a saved command to every connected SSH session'
   }
 });
 
-test('HTML terminal background starts with a visible viewport on initial load and after switching sessions', async ({
+test('HTML terminal background starts with a visible viewport after session switches and page returns', async ({
   page,
   context,
 }) => {
+  test.setTimeout(60_000);
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   await setTestSshOnline(true);
@@ -808,6 +914,17 @@ test('HTML terminal background starts with a visible viewport on initial load an
     await expectPaintedBackground();
     await page.locator('.terminal-tab-shell').getByRole('tab').filter({ hasText: MULTI_SESSION_NAMES[0] }).click();
     await expectPaintedBackground();
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      await page.locator('.app-nav-links a[href="/settings"]').click();
+      await expect(page).toHaveURL(/\/settings/);
+      await page.locator('.app-nav-links a[href="/workspace"]').click();
+      await expect(page).toHaveURL(/\/workspace/);
+      await expectPaintedBackground();
+      await page.locator('.terminal-tab-shell').getByRole('tab').filter({ hasText: MULTI_SESSION_NAMES[1] }).click();
+      await expectPaintedBackground();
+      await page.locator('.terminal-tab-shell').getByRole('tab').filter({ hasText: MULTI_SESSION_NAMES[0] }).click();
+      await expectPaintedBackground();
+    }
   } finally {
     await context.request.put('/api/v1/appearance', {
       data: {

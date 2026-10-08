@@ -11,9 +11,10 @@
     Legend,
     type ChartData,
     type ChartOptions,
+    type TooltipModel,
   } from 'chart.js';
   import type { StatusHistory, StatusHistoryPoint } from '../model/status';
-  import { formatStatusRateAxis } from '../model/statusFormatting';
+  import { formatStatusPercent, formatStatusRate, formatStatusRateAxis } from '../model/statusFormatting';
 
   export type StatusMetric = 'cpu' | 'memory' | 'swap' | 'disk' | 'network';
   type DownsampleMode = 'average' | 'max';
@@ -35,6 +36,12 @@
   const Y_AXIS_GUTTER_PX = 2;
   const CHART_RIGHT_PAD_PX = 4;
   const chartElement = ref<HTMLElement | null>(null);
+  const tooltip = shallowRef<{
+    time: string;
+    entries: Array<{ label: string; value: string }>;
+    left: string;
+    top: string;
+  } | null>(null);
   const legendPosition = shallowRef<{ top: string; right: string; maxWidth: string } | null>(null);
   const syncLegendPosition = () => {
     const rect = chartElement.value?.getBoundingClientRect();
@@ -47,10 +54,18 @@
           }
         : null;
   };
-  watch(() => [props.scale, props.metric], syncLegendPosition, { flush: 'post' });
+  watch(
+    () => [props.scale, props.metric, props.rangeMinutes],
+    () => {
+      tooltip.value = null;
+      syncLegendPosition();
+    },
+    { flush: 'post' },
+  );
   onActivated(syncLegendPosition);
   onDeactivated(() => {
     legendPosition.value = null;
+    tooltip.value = null;
   });
   const rangeMs = computed(() => Math.max(1, props.rangeMinutes) * 60_000);
   const latestSampleTime = computed(() =>
@@ -185,7 +200,10 @@
   };
   let themeObserver: MutationObserver | null = null;
   let chartObserver: ResizeObserver | null = null;
-  const handleViewportChange = syncLegendPosition;
+  const handleViewportChange = () => {
+    tooltip.value = null;
+    syncLegendPosition();
+  };
   onMounted(() => {
     readTheme();
     themeObserver = new MutationObserver(readTheme);
@@ -210,6 +228,29 @@
     return props.rangeMinutes <= 1 ? `${base}:${pad2(date.getSeconds())}` : base;
   };
   const toTimedPoint = (point: StatusHistoryPoint): TimedChartPoint => ({ x: point.time, y: point.value });
+  const showTooltip = ({ chart, tooltip: model }: { chart: ChartJS; tooltip: TooltipModel<'line'> }): void => {
+    const sampleTime = model.dataPoints?.[0]?.parsed.x;
+    if (!model.opacity || !model.dataPoints?.length || sampleTime == null) {
+      tooltip.value = null;
+      return;
+    }
+    const rect = chart.canvas.getBoundingClientRect();
+    const date = new Date(sampleTime);
+    const pointerX = rect.left + (model.caretX / chart.width) * rect.width;
+    const pointerY = rect.top + (model.caretY / chart.height) * rect.height;
+    tooltip.value = {
+      time: `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`,
+      entries: model.dataPoints.map((point) => ({
+        label: point.dataset.label ?? '',
+        value:
+          props.metric === 'network'
+            ? formatStatusRate(point.parsed.y ?? undefined)
+            : (formatStatusPercent(point.parsed.y ?? undefined) ?? ''),
+      })),
+      left: `${Math.max(8, Math.min(pointerX + 12, window.innerWidth - 248))}px`,
+      top: `${Math.max(8, Math.min(pointerY + 12, window.innerHeight - 46 - model.dataPoints.length * 24))}px`,
+    };
+  };
 
   const data = computed<ChartData<'line', TimedChartPoint[]>>(() => {
     if (props.metric === 'network') {
@@ -263,13 +304,14 @@
     layout: {
       padding: { left: 0, right: CHART_RIGHT_PAD_PX },
     },
-    interaction: { mode: 'index', intersect: false },
+    interaction: { mode: 'index', axis: 'x', intersect: false },
     plugins: {
       legend: {
         display: false,
       },
       tooltip: {
         enabled: false,
+        external: showTooltip,
       },
     },
     scales: {
@@ -341,10 +383,15 @@
     :data-window-start="windowStart"
     :data-window-end="windowEnd"
     :data-visible-start="visibleStartTime"
+    @mouseleave="tooltip = null"
   >
     <Line :data="data" :options="options" />
   </div>
   <Teleport to="body">
+    <div v-if="tooltip" role="tooltip" class="status-history-tooltip" :style="{ left: tooltip.left, top: tooltip.top }">
+      <strong>{{ tooltip.time }}</strong>
+      <div v-for="entry in tooltip.entries" :key="entry.label">{{ entry.label }}: {{ entry.value }}</div>
+    </div>
     <div v-if="props.metric === 'network' && legendPosition" class="network-legend" :style="legendPosition">
       <span><i class="legend-download"></i>{{ t('statusMonitor.networkDownload') }}</span>
       <span><i class="legend-upload"></i>{{ t('statusMonitor.networkUpload') }}</span>
@@ -353,6 +400,21 @@
 </template>
 
 <style scoped>
+  .status-history-tooltip {
+    position: fixed;
+    z-index: 1001;
+    max-width: min(240px, calc(100vw - 16px));
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--card-bg-color);
+    color: var(--text-color);
+    font-size: 12px;
+    line-height: 24px;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
+  }
+
   .status-history-chart {
     min-width: 0;
     min-height: 0;
