@@ -15,6 +15,7 @@
 5. **环境隔离**：工作区为 `/home/honus/nexus-terminal`、分支 `dev`；测试、缓存和临时 Node/pnpm 使用 `/home/honus/workspace`，不改系统工具链。每次执行项目脚本前运行 `. /home/honus/workspace/cache-env.sh`（在仓库根运行时为 `. ../workspace/cache-env.sh`）。Node `v26.11.1`、pnpm `11.26.0`；下载/缓存不放入代码仓库。Codex 自身 `TMPDIR` 使用其沙箱目录。
 6. **代码/验证/提交纪律**：依照 `doc/AGENTS.md`，先核实真实 owner、协议和消费者，再同步改生产代码与相关有效文档，保留真实 E2E/Agent 场景与反例，不新增 unit tests 或测试源码文字门禁。按实际风险运行检查；每个完整单项应单独本地提交，**不自动推送**。提交前检查工作区残余、引用、`pnpm run check`、`pnpm run format:all:check` 和 `git diff --check`，结果记录在此；未通过或不能验证的事项不得标记完成。
 7. **外部依赖不冒认完成**：官方 `0honus0/nexus-agent-plugins` 签名新版、实际部署实例版本、旧 Workspace 枚举/导出、旧备份恢复、最终远程 CI 均需要独立证据；不能凭本仓 fixture、公开版本或静态 grep 假称验收通过。
+8. **临时迁移工具只放工作区**：所有者于 2026-10-08 明确要求 `agent-workspace-preflight.mjs` 放在 `/home/honus/workspace/`，不得留在 `nexus-terminal/scripts/backend/`；迁移完成后即可清理。这类一次性预检工具不加入产品包、build/CI 和仓库跟踪；只在本文件说明用法及退出时清理。
 
 为使明确的临时过程记录与仓库通用“`doc/` 不建进度文件”规则不冲突，本次同步在 `doc/AGENTS.md` 的“文档维护分工”与“修改与文档”段落声明**仅此文件**的项目所有者授权例外；`AGENTS.md` 仍是全局开发规则入口，`USAGE.md` 仍是唯一用户需求入口。
 
@@ -32,20 +33,20 @@ node --version && pnpm --version
 # 从下方「当前工作指针」继续一项，改完先更新本文件再检查与本地提交
 ```
 
-**当前工作指针（2026-10-08）**：P0-2/3 已完成；**P0-5 只读双 SQLite 盘点脚本已完成合成样例行为验证，下一步必须在真实旧部署停止写入后的可信快照上运行，并取得进程/文件导出/备份证据**。该实际实例尚不可用，P0-5 不得打勾。P0-1 的 E2E、实际部署版本，P0-4 的官方签名插件替代发布未闭环。P0 尚未达到 P1/P2 的破坏性变更前置门槛。此前 `check/format/build` 通过，Agent 场景整体失败 1 项（见下方证据）。
+**当前工作指针（2026-10-08）**：P0-2/3 已完成；P0-5 临时预检已迁往仓库外、合成副本再次 PASS，真实停写/导出/进程证据待取得。P0-1 Agent 场景安全预算基线已修复并全量 PASS，Playwright Chromium 已安装进工作区缓存，但 E2E webServer 的 Chromium GPU subprocess 在当前 Codex Landlock 沙箱崩溃，**真正 E2E 测试尚未执行**；真实部署版本仍不明。P0-4 官方签名插件替代发布仍缺。**P0 尚未跨越 P1/P2 破坏性变更门槛**。本次已从 Git 仓库移出旧预检脚本，应确认删除被提交，同时保留仓库外工具。
 
 ## 阶段状态（2026-10-08）
 
-| 阶段                         | 状态   | 说明                                                                                   |
-| ---------------------------- | ------ | -------------------------------------------------------------------------------------- |
-| P0 清单与升级边界            | 进行中 | P0-2 消费者/owner 映射已完成；工具链与 build/check 通过，场景基线失败；P0-1/4/5 未闭环 |
-| P1 最终 contract 与迁移方案  | 未开始 | 等待 P0 边界确认                                                                       |
-| P2 存量数据、升级与备份      | 未开始 | 不在开发过程中直接删除真实数据                                                         |
-| P3 Backend SSH 收敛          | 未开始 |                                                                                        |
-| P4 Browser、ACP、Plugin 解耦 | 未开始 |                                                                                        |
-| P5 Frontend 移除             | 未开始 |                                                                                        |
-| P6 生产 Runner 退出          | 未开始 |                                                                                        |
-| P7 文档与验收                | 未开始 |                                                                                        |
+| 阶段                         | 状态   | 说明                                                                       |
+| ---------------------------- | ------ | -------------------------------------------------------------------------- |
+| P0 清单与升级边界            | 进行中 | P0-2/3 完成，check/build/Agent 场景通过；E2E GPU 沙箱阻塞；P0-1/4/5 未闭环 |
+| P1 最终 contract 与迁移方案  | 未开始 | 等待 P0 边界确认                                                           |
+| P2 存量数据、升级与备份      | 未开始 | 不在开发过程中直接删除真实数据                                             |
+| P3 Backend SSH 收敛          | 未开始 |                                                                            |
+| P4 Browser、ACP、Plugin 解耦 | 未开始 |                                                                            |
+| P5 Frontend 移除             | 未开始 |                                                                            |
+| P6 生产 Runner 退出          | 未开始 |                                                                            |
+| P7 文档与验收                | 未开始 |                                                                            |
 
 ## P0：逐项执行记录
 
@@ -59,8 +60,10 @@ node --version && pnpm --version
   - 2026-10-08 独立工具链修复：`.node-version` 指定 `node`（Current），从 Node 官方 `nodejs.org/dist` 下载 `v26.11.1`（Linux x64），校验 SHA-256 匹配官方 `SHASUMS256.txt`，解压至 `/home/honus/workspace/toolchains/node/node-v26.11.1-linux-x64/`；npm 为 `11.20.0`。通过 npm 将项目固定的 pnpm `11.26.0` 安装至 `/home/honus/workspace/toolchains/npm-global/`，并将两个独立 binary 路径 prepend 到 `/home/honus/workspace/cache-env.sh` 的 `PATH`。系统 Node/pnpm 保持不变。
   - 修复后经 `. ../workspace/cache-env.sh && pnpm run check`：Frontend ESLint、Agent ESLint、Frontend type check、Backend type check、Agent Runner type check 全部 PASS；原本的系统 Node/pnpm 沙箱权限阻塞可绕过。
   - 新一轮 `. ../workspace/cache-env.sh && pnpm run build` **PASS**（Backend tsc + 文件复制、Frontend vue-tsc/Vite、Agent Runner tsc，exit 0）。`pnpm run format:all:check` 已在修正本进度 Markdown 格式后 **PASS**，`git diff --check` **PASS**。
-  - `pnpm --filter @nexus-terminal/backend run test:agent-scenarios` **exit 1**：`FAIL context/tool-exchange-atomicity`，其余场景仍可见 PASS；失败来自 `ContextService.compose` 的 `CONTEXT_BUDGET_EXCEEDED`，堆栈是 `context.service.ts:500` → `tests/backend/agent-scenarios/context-tool-exchange.scenario.ts:23`。后者用 `maxContextTokens` [273, 320, 384, 512, 768, 1024] 循环验证原子工具调用历史保留；至少首个预算已不足以放下 safety 指令和当前输入。独立只运行该 scenario 的实际导出后仍得到同样 `CONTEXT_BUDGET_EXCEEDED`（exit 1），说明不是并发波次导致，但**尚不能断言是产品缺陷还是场景预期已过时**。P0 范围外不通过改小真实安全指令或降低断言来掩盖，后续需单独分析。
-  - 待办：收集 Agent 场景完整失败细节和最终退出状态、受影响 E2E 基线，并记录实际部署版本。
+  - **历史失败及修复**：最初 `pnpm --filter @nexus-terminal/backend run test:agent-scenarios` **exit 1**，仅 `context/tool-exchange-atomicity` 失败，`CONTEXT_BUDGET_EXCEEDED` 来自 `ContextService.compose` mandatory safety/当前输入上限；测试以 273 tokens 作为“成功压缩”样例已经不适用于真实安全提示规模。没有降低生产安全限制或放松历史工具调用原子性：改为**显式断言 273 budget fail closed**，可容纳必需 safety 的六组预算 [640, 768, 1024, 1280, 1536, 2048] 仍运行完整 exchange 校验和压缩统计。独立重跑该场景 **PASS**（6 预算、3 次压缩、1 次安全下限拒绝），随后全量 Agent scenarios **exit 0、无 FAIL**。此改动仅在既有 Agent 场景中，不增加 unit test。
+  - 最终补强为直接断言 **compactedRuns 大于 0 且小于 6**（必须同时测试原子压缩与完整保留，而不只是写指标），全量 Agent scenarios 再次执行 **exit 0**；同次 `pnpm run check` 再次全部 PASS。此为 P0 基线有效修复，未更改 ContextService 或削弱安全预算校验。
+  - **E2E 环境调查**：`pnpm --filter @nexus-terminal/e2e exec playwright test --project=agent --list` **exit 0**，列出 agent 项目 69 个用例。最初 `ssh-acp-settings.spec.ts` 因缺 Chromium 无法启动。然后 `pnpm --filter @nexus-terminal/e2e exec playwright install chromium` **exit 0**，下载 Chrome 153 headless shell v1243 到 `/home/honus/workspace/cache/playwright/`。第二次启动仍 **exit 1**：Playwright 的 `support/test-browser-server.mjs` Chromium GPU 子进程连续失败，出现 `GPU process isn't usable. Goodbye.`、`error_code=1002`；没有任何测试用例运行。独立手动浏览器启动试验（含 `--disable-gpu`、`--single-process` 等组合）同样失败，并显示 `/etc/fonts/fonts.conf`、`/proc/sys/fs/inotify/max_user_watches` 读取受当前执行沙箱限制。不更改产品代码、E2E 断言或跳过 webServer 冒认结果；需要在允许 Chromium 系统资源的真实 E2E/CI 执行环境运行。
+  - 待办：在支持 Chromium 子进程、字体和 `/proc` 读取的隔离 E2E 环境运行 SSH ACP/Agent，核对实际部署版本（仓库及公开 Release 不代表线上实例）。迁移前仍需旧发布版本升级数据演练。
 - [x] **P0-2：完成生产消费者和迁移/保留 owner 映射。** 见下方逐条矩阵；它确认源代码的修改入口与处置 owner，**不意味着这些修改已经实施或验证**：
   - Frontend：`features/agent/host/useAgentAppController.ts`、`api/workspace-runtime-api.ts`、`runtime/WorkspaceRuntimePanel.vue`、`runtime/AgentWorkspaceTerminal.vue`、`settings/WorkspaceRuntimeSettings.vue`、三语 i18n；普通终端 Workspace 是**保留**边界。
   - Backend：`bootstrap/agent/compose-workspace-runtime.ts`、`compose-agent.ts`、`modules/agent/workspace-runtime/`、`infrastructure/agent/workspace-runtime/`、`interfaces/http/agent/workspace-runtime.routes.ts`、`interfaces/websocket/agent-terminal-protocol.session.ts`。
@@ -70,18 +73,21 @@ node --version && pnpm --version
   - 复核结论：Browser、SSH ACP、Subagent、Checkpoint、旧备份、UI 暂存、官方插件分别进入下方矩阵，所有映射属于**待实施的计划**，不能误报代码已退出 Workspace。
 - [x] **P0-3：确认 SSH-only 范围和退出说明（目标 contract，不是已经实施）。** 执行规则：新文件/Shell/Job request 必须显式 `target:'ssh'` 与受权 id；删除 `workspace.manage`、`target:'workspace'`、Environment/Recipe/Generation、Workspace Terminal、workspace_create/control/toolchain_switch、Workspace checkpoint 复原和 Runner Plugin execution。不建立任何 Backend 本地 Shell/文件 target 或默认 `No Workspace` 兼容分支；未选/未授权/伪造旧 target 一律 fail closed，不重选“当前 SSH 标签”执行。保留普通终端、SSH 连接/长会话/后台 Job/项目目录、Browser 独立 CDP、SSH ACP、MCP、Artifact/Memory/Skill、Plugin Frontend/Backend、Run/Thread/审批/Checkpoint 历史证据。此处仅锁定移除边界，P1–P7 仍须真正修改并验收。
 - [ ] **P0-4：官方签名插件替代版本。** 已核对公开 `0honus0/nexus-agent-plugins` 最新 Release `v1.0.0`（2026-09-21）：该标签的 `nexus.agent` manifest 仍声明 `workspace.manage`，`nexus.fullstack` 仍有 `targets.runner`。**正式替代发布尚无验收证据**；在确认签名新版和 Host SDK 适配前，不可将 P4/P6 标为完成。
+  - 再核对 GitHub 公开 Releases（2026-10-08）：仍是 `v1.0.0`，签名资产有 `catalog.json`、`nexus.agent-1.0.0.tar`、`nexus.fullstack-1.0.0.tar`；外仓近期提交 `826a597` 是 Node Current 验证/发布调整，`6d4eecc` 是 Skill 文档，**都不是正式可验的去 Workspace 替代 Release**。现状为外仓发布依赖阻塞，不自行修改插件或伪造签名资产。
+  - 精确迁移需求与边界：公开标签 `plugins/nexus.agent/manifest.json` 的 `sdkVersion=1.0.0`、Nexus Host 兼容范围 `1.0.0–1.99.99`，能力中包含 `workspace.manage`；`plugins/nexus.fullstack/manifest.json` 三个 target 为 `frontend/index.html`、`backend/index.mjs`、`runner/index.mjs`。Host 当前 `plugin-package-install-coordinator.ts` 支持 SDK major 1；`official-plugin-source.ts` 从外仓 Release latest catalog 发现官方插件、固定了官方 Ed25519 publisher key id。新正式签名包必须去掉 `workspace.manage` 和 `targets.runner`、保留有效 Frontend/Backend/Skills 与旧插件不兼容时的显式升级/拒绝语义，独立验证签名、Catalog、Host SDK；**不能把 runner entry 直接作为 Backend entry 运行**。此为外仓 owner 的发布任务，未完成前 P0-4 不勾选。
 - [ ] **P0-5：旧 Workspace 活跃资源枚举、导出、终止与 retained 处置可执行。** 尚未验证旧部署的真实数据与进程；不得在此之前进行破坏性迁移。
 
   - 2026-10-08 环境现状：工作区 `/home/honus/nexus-terminal`（dev HEAD `227669bc`，仅存在预先的未跟踪 Workspace removal 计划）；`docker ps --format` 和 `docker volume ls --format` 均无条目（退出码 0），不能据此推断其他主机或离线持久卷已清理，也不能把本机空态标为完整资源处置。
-  - 新增 `scripts/backend/agent-workspace-preflight.mjs`：对**明确指定的两份冻结 SQLite 快照**只读检查 Backend `agent_workspaces`、workspace command、SSH 保留表和 Runner `journal_records`（schema v5），整理 Workspace/retained/generation/status、后台 job/command pending/running/unknown、双端不一致。明文 argv、结果、secret、文件正文不输出；完整盘点报告必须显式提供全新 `--output` 文件，权限 0600；`eligibleForDestructiveMigration` 始终为 false，不执行 HTTP/终止/删除操作。
+  - **2026-10-08 所有者要求：临时脚本不得长期留在项目源码。** 原 `scripts/backend/agent-workspace-preflight.mjs` 已移动为 `/home/honus/workspace/agent-workspace-preflight.mjs`，从 Git 跟踪中退出；仅作为本次迁移可删除的工作区工具。对**明确指定的两份冻结 SQLite 快照**只读检查 Backend `agent_workspaces`、workspace command、SSH 保留表和 Runner `journal_records`（schema v5），整理 Workspace/retained/generation/status、后台 job/command pending/running/unknown、双端不一致。明文 argv、结果、secret、文件正文不输出；完整盘点报告必须显式提供全新 `--output` 文件，权限 0600；`eligibleForDestructiveMigration` 始终为 false，不执行 HTTP/终止/删除操作。
   - 合成副本 smoke **PASS**（2026-10-08）：构造独立 Backend 和 Runner SQLite，含 retained Workspace、pending 命令、running Job、额外 Runner-only Workspace；预检发现 1 retained / 1 pending Backend command / 1 running Runner job / 1 mismatch；原始两个 SQLite 逐字节 SHA-256 前后不变；报告 mode 0600、隐藏 `argv` 和 Job `stdout` 中的测试秘密、不覆盖已有报告、缺失快照拒绝且不创建数据库（全部断言通过，exit 0）。样例产物位于 `/home/honus/workspace/cache/tmp/workspace-preflight-smoke-LaLhE0/`，仅为合成数据，**不是旧生产实例证据**。
   - 将脚本和本文格式化后再次运行 `node --check` 与只读盘点 smoke **PASS**：输出仍为 1 retained、1 Backend pending command、1 Runner running job、1 mismatch，且明确 `INVENTORY_ONLY_NOT_CLEARED_FOR_MIGRATION`（exit 0）。仓库 `pnpm run check`、`pnpm run format:all:check`、`git diff --check` 本次均 **PASS**；未运行新的 E2E 或修改生产逻辑。
+  - 迁移后在 `/home/honus` 工作区直接运行 `node workspace/agent-workspace-preflight.mjs`、对同一合成数据库盘点 **exit 0**、状态/计数不变，证明迁移后的脚本无需在仓库保存副本也可直接执行。请不要把一次性脚本重新加入 git。
   - 在取得实际旧版停止写入后的 Backend SQLite、Runner `state/journal.sqlite` 的一致副本后，执行：
 
     ```sh
     cd /home/honus/nexus-terminal
     . /home/honus/workspace/cache-env.sh
-    node scripts/backend/agent-workspace-preflight.mjs \
+    node /home/honus/workspace/agent-workspace-preflight.mjs \
       --backend-db /path/to/quiesced/backend.sqlite \
       --runner-journal /path/to/quiesced/state/journal.sqlite \
       --output /home/honus/workspace/cache/workspace-removal-inventory.json

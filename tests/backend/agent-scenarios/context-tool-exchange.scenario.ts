@@ -18,8 +18,28 @@ export const contextToolExchangeScenario = async () => {
     entry(5, 'assistant_message', { text: 'I found the relevant call sites.' }),
   ]);
 
+  // A budget below the mandatory system-safety plus current-input cost must
+  // fail closed, not silently truncate the security context to make room for history.
+  await assert.rejects(
+    service.compose({
+      scope,
+      threadId: 'scenario-thread',
+      runId: 'scenario-run',
+      currentInput: 'Continue with the fix.',
+      modelContextWindow: 4_096,
+      maxContextTokens: 273,
+      reservedOutputTokens: 128,
+      maxRecallItems: 5,
+      maxRecallBytes: 8_192,
+      compactionMode: 'balanced',
+      tools: [],
+    }),
+    /CONTEXT_BUDGET_EXCEEDED/,
+    'mandatory system safety text must never be truncated to satisfy an undersized budget',
+  );
+
   let compactedRuns = 0;
-  for (const budget of [273, 320, 384, 512, 768, 1_024]) {
+  for (const budget of [640, 768, 1_024, 1_280, 1_536, 2_048]) {
     const plan = await service.compose({
       scope,
       threadId: 'scenario-thread',
@@ -36,6 +56,10 @@ export const contextToolExchangeScenario = async () => {
     assertValidToolExchange(plan.messages);
     if (plan.compacted) compactedRuns += 1;
   }
+  assert.ok(
+    compactedRuns > 0 && compactedRuns < 6,
+    'budget variants must still exercise both atomic compaction and intact exchange retention',
+  );
 
   const fullPlan = await service.compose({
     scope,
@@ -217,6 +241,7 @@ export const contextToolExchangeScenario = async () => {
 
   return [
     { name: 'budget_variants', value: 6, unit: 'cases' },
+    { name: 'mandatory_safety_budget_rejections', value: 1, unit: 'cases' },
     { name: 'compacted_variants', value: compactedRuns, unit: 'cases' },
     { name: 'tool_argument_estimate', value: assistantDiagnostic.estimatedTokens, unit: 'tokens' },
     { name: 'boundary_fragment_cases', value: 3, unit: 'cases' },
