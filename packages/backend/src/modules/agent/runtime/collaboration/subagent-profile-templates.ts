@@ -43,10 +43,10 @@ const templates: readonly SubagentProfileTemplate[] = [
   },
   {
     id: 'worker',
-    role: 'Governed coding worker for an explicitly bounded implementation assignment in its own Workspace.',
+    role: 'Governed coding worker for an explicitly bounded implementation assignment on an authorized SSH target.',
     delegationHint:
-      'Use only for substantial implementation work with an explicit file/task boundary. Create and use a child-owned Workspace, run focused verification, and return durable evidence.',
-    capabilities: ['file.read', 'file.write', 'file.delete', 'shell.execute', 'workspace.manage', 'artifacts.read'],
+      'Use only for substantial implementation work with an explicit file/task boundary. Use delegated SSH targets, run focused verification, and return durable evidence.',
+    capabilities: ['file.read', 'file.write', 'file.delete', 'shell.execute', 'artifacts.read'],
     peerMessaging: 'parent-child',
     mutationMode: 'governed',
     maxModelRequests: 24,

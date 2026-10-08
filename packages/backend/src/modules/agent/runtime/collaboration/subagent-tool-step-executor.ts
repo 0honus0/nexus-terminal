@@ -11,7 +11,7 @@ import type { CollaborationCommitPort, StateCommitResult } from '../runs/state-c
 import type { RunView } from '../runs/run.types';
 import type { AgentEventHub } from '../events/event-hub';
 import type { SubagentCompletionCoordinator } from './subagent-completion-coordinator';
-import { governedSubagentWorkspaceMutation } from './subagent-mutation-policy';
+import { governedSubagentSshMutation } from './subagent-mutation-policy';
 import type { SubagentContextBuilder } from './subagent-context-builder';
 import type {
   DelegationCancellationPort,
@@ -44,7 +44,7 @@ const interruptedMutationResult = (): ToolResult => ({
   errorCode: 'SUBAGENT_MUTATION_OUTCOME_UNKNOWN',
   verification: {
     status: 'unverified',
-    summary: 'The actual Workspace state must be reconciled before another mutation is attempted.',
+    summary: 'The actual SSH execution outcome must be reconciled before another mutation is attempted.',
     evidenceRefs: [],
   },
 });
@@ -287,7 +287,7 @@ export class SubagentToolStepExecutor {
         inspection: toolWork.inspection,
         signal,
         autoApprove: run.definition.approvalMode === 'full_access',
-        hooks: this.subagentMutationHooks(scope, work, ownerEpoch, delegation, toolWork),
+        hooks: this.subagentMutationHooks(scope, work, ownerEpoch, delegation, toolWork, run),
       });
       if (prepared.status !== 'ready') return;
       activeRun = prepared.run;
@@ -314,7 +314,7 @@ export class SubagentToolStepExecutor {
       inspection: approvedWork.inspection,
       approvalId,
       signal,
-      hooks: this.subagentMutationHooks(scope, work, ownerEpoch, delegation, approvedWork),
+      hooks: this.subagentMutationHooks(scope, work, ownerEpoch, delegation, approvedWork, activeRun),
     });
   }
 
@@ -324,6 +324,7 @@ export class SubagentToolStepExecutor {
     ownerEpoch: number,
     delegation: DelegationView,
     toolWork: RuntimeToolWorkView,
+    run: RunView,
   ): GovernedMutationHooks {
     return {
       context: (run, signal, toolCallId) =>
@@ -336,12 +337,12 @@ export class SubagentToolStepExecutor {
           toolCallId,
         ),
       validateInspection: (inspection, decision) => {
-        const workspaceMutation = governedSubagentWorkspaceMutation(inspection, work.runId, work.agentRuntimeId);
-        if (decision.action === 'requireApproval' && workspaceMutation) return null;
+        const sshMutation = governedSubagentSshMutation(inspection, run.definition.connectionIds, delegation.grants);
+        if (decision.action === 'requireApproval' && sshMutation) return null;
         return new Error(
           decision.action === 'deny'
             ? decision.reason
-            : workspaceMutation
+            : sshMutation
               ? 'TOOL_POLICY_INVALID'
               : 'SUBAGENT_MUTATION_TARGET_FORBIDDEN',
         );

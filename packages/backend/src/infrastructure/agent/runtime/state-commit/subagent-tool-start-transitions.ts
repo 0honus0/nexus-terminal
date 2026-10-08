@@ -10,11 +10,11 @@ import type {
   StateCommitResult,
 } from '../../../../modules/agent/runtime/runs/state-commit.port';
 import { encodeModelProviderContinuation } from '../../../../modules/agent/ai/model-continuation';
-import { governedSubagentWorkspaceMutation } from '../../../../modules/agent/runtime/collaboration/subagent-mutation-policy';
+import { governedSubagentSshMutation } from '../../../../modules/agent/runtime/collaboration/subagent-mutation-policy';
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
 import { mapRunRow, RUN_COLUMNS } from '../../repositories/sqlite-run.mapper';
 import type { RunRow } from '../../repositories/sqlite-run.mapper';
-import { parseRunBudget, parseToolInspection } from '../durable-state-decoders';
+import { parseDurableJson, parseRunBudget, parseToolInspection } from '../durable-state-decoders';
 import { allocateHostEvent, appendEvents, summaryPayload, usageWithDelta } from './transaction-primitives';
 
 export const commitSubagentToolProposalBatchTransition = async (
@@ -327,10 +327,11 @@ export const beginSubagentMutationToolTransition = async (
     child_runtime_id: string;
     mutation_mode: string;
     deadline_at: number;
-  }>('SELECT status, child_runtime_id, mutation_mode, deadline_at FROM agent_delegations WHERE id = ? AND run_id = ?', [
-    command.delegationId,
-    command.runId,
-  ]);
+    grants_json: string;
+  }>(
+    'SELECT status, child_runtime_id, mutation_mode, deadline_at, grants_json FROM agent_delegations WHERE id = ? AND run_id = ?',
+    [command.delegationId, command.runId],
+  );
   if (
     !delegation ||
     delegation.child_runtime_id !== command.runtimeId ||
@@ -369,12 +370,13 @@ export const beginSubagentMutationToolTransition = async (
   );
   const tool = await tx.queryOne<{
     status: string;
+    tool_name: string;
     operation_hash: string;
     risk: string;
     inspection_json: string;
     version: number;
   }>(
-    `SELECT status, operation_hash, risk, inspection_json, version FROM agent_tool_calls
+    `SELECT status, tool_name, operation_hash, risk, inspection_json, version FROM agent_tool_calls
      WHERE id = ? AND run_id = ? AND step_id = ? AND agent_runtime_id = ?`,
     [command.toolCallId, command.runId, command.toolStepId, command.runtimeId],
   );
@@ -390,8 +392,14 @@ export const beginSubagentMutationToolTransition = async (
   }
   const persistedInspection = parseToolInspection(tool.inspection_json);
   if (
+    persistedInspection.toolName !== tool.tool_name ||
+    persistedInspection.risk !== tool.risk ||
     persistedInspection.operationHash !== tool.operation_hash ||
-    !governedSubagentWorkspaceMutation(persistedInspection, command.runId, command.runtimeId)
+    !governedSubagentSshMutation(
+      persistedInspection,
+      mapRunRow(row).definition.connectionIds,
+      parseDurableJson(delegation.grants_json),
+    )
   ) {
     throw new Error('SUBAGENT_MUTATION_TARGET_FORBIDDEN');
   }

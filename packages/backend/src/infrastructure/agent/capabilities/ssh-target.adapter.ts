@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sshTargetIdentity } from '../../../modules/agent/capabilities/ssh-target-identity';
 import type {
   AgentConnectionResolverPort,
   SshTargetFingerprint,
@@ -24,9 +24,7 @@ export class SshTargetAdapter implements SshTargetResolverPort {
     const connection = await this.connections.get(connectionId);
     if (!connection || connection.type !== 'SSH') throw new Error('NOT_FOUND');
     const endpoint = `${connection.host.trim().toLowerCase()}:${connection.port}`;
-    const targetIdentity = createHash('sha256')
-      .update(`${endpoint}\n${connection.username}\n${connection.configurationHash}`, 'utf8')
-      .digest('hex');
+    const targetIdentity = sshTargetIdentity(endpoint, connection.username, connection.configurationHash);
     return {
       kind: 'ssh',
       target: 'ssh',
