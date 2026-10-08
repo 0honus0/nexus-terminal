@@ -67,7 +67,6 @@
         "targetScope": "ターゲット範囲",
         "targetScopeAll": "すべてのターゲット",
         "targetScopeIds": "特定の ID",
-        "targetWorkspace": "ワークスペース",
         "empty": "利用可能な Agent App はありません。",
         "permissionsCollapsedHint": "展開してこの App の Capability grant を確認・編集します。",
         "capabilitiesHeader": "システム権限とセキュリティポリシー",

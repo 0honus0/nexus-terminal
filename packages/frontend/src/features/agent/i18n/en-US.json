@@ -67,7 +67,6 @@
         "targetScope": "Target scope",
         "targetScopeAll": "All targets",
         "targetScopeIds": "Specific IDs",
-        "targetWorkspace": "Workspace",
         "empty": "No Agent apps are available.",
         "permissionsCollapsedHint": "Expand to review and edit this app’s capability grants.",
         "capabilitiesHeader": "Capabilities & Security Grants",

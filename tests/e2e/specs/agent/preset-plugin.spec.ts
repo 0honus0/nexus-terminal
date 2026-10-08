@@ -260,7 +260,28 @@ const installAndRunNexusAgent = async (
         'browser.interact',
       ]),
     );
+    for (const capability of ['file.read', 'file.write', 'file.delete', 'shell.execute']) {
+      expect(
+        grantView.data.capabilityDefinitions.find((definition) => definition.id === capability)?.supportedTargets,
+      ).toEqual(['ssh']);
+    }
     expect(grantView.data.grants).toHaveLength(0);
+    for (const targets of [{ workspace: { mode: 'all' } }, { workspace: { mode: 'all' }, ssh: { mode: 'all' } }]) {
+      const rejected = await request.put('/api/v1/agent/apps/nexus.agent/grants', {
+        headers,
+        data: {
+          grants: [{ capability: 'file.read', scope: { kind: 'targets', targets } }],
+          expectedPolicyRevision: grantView.data.policyRevision,
+        },
+      });
+      expect(rejected.status(), await rejected.text()).toBe(400);
+      await expect(rejected.json()).resolves.toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
+    }
+    const afterLegacyRequests = await request.get('/api/v1/agent/apps/nexus.agent/grants');
+    expect(afterLegacyRequests.ok(), await afterLegacyRequests.text()).toBeTruthy();
+    await expect(afterLegacyRequests.json()).resolves.toMatchObject({
+      data: { policyRevision: grantView.data.policyRevision, grants: [] },
+    });
     const replaced = await request.put('/api/v1/agent/apps/nexus.agent/grants', {
       headers,
       data: {

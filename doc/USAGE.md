@@ -413,7 +413,7 @@ Agent Workspace Terminal 每个 Workspace 最多 8 个、单 Backend 合计最�
 - Workspace 后台启动结果的 `userCleanup` 提供本次 App／Workspace 的具体读取和操作路径、必要请求头、数值版本来源与命令查询路径。`expectedVersion` 必须使用新读取的数值，不能用字符串占位值；交付说明须保留命令成功与 Workspace stopped／deleted 的最终核对，不以 HTTP 202 代替完成。
 - 管理 API 的 actions 响应命令标识是 `data.id`，不是 Agent 工具结果的 `commandId` 字段；将该 `data.id` 代入 `/workspace-runtime/commands/{commandId}` 查询，再核对 `data.status` 和 Workspace 最终状态。后台交接结果明确此字段映射，避免混用工具结果与 HTTP DTO。
 - 现有 Workspace Terminal、Workspace ACP 与 Workspace 绑定的 Browser 仍依赖 Agent Runner；**Plugin Runner target 已移除，不允许新建或激活**。Runner 不可用时，SSH ACP、普通 SSH/文件管理/远程桌面仍可使用。设置页可在未配置 Workspace ACP Profile 时创建 SSH ACP 集成；分别填写 argv 与绝对工作目录，保存后可刷新恢复配置。
-- Plugin App 只获得已声明并授权的 capability。需要确认的 mutation 会先显示 approval，未知执行结果会进入核对或恢复流程。
+- Plugin App 只获得已声明并授权的 capability。Agent 文件和 Shell capability 的授权目标只允许 SSH 全部或指定连接 ID；授权设置不再提供 Workspace 目标，发送旧 Workspace 或 Workspace+SSH grant 返回请求无效，不会自动转换为 SSH 或更新授权版本。需要确认的 mutation 会先显示 approval，未知执行结果会进入核对或恢复流程。
 
 ## 外观与 HTML Theme
 

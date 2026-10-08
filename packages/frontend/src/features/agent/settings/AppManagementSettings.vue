@@ -149,9 +149,6 @@
   const targetEnabled = (appId: string, capability: CapabilityId, target: AgentTargetKindDto): boolean =>
     targetScopeSelection(appId, capability, target) !== undefined;
 
-  const targetLabel = (target: AgentTargetKindDto): string =>
-    target === 'workspace' ? t('agent.settings.apps.targetWorkspace') : 'SSH';
-
   const setTargetEnabled = (
     appId: string,
     capability: CapabilityId,
@@ -791,13 +788,13 @@
                           <UiCheckbox
                             density="compact"
                             :model-value="targetEnabled(app.id, capability, target)"
-                            :aria-label="targetLabel(target)"
+                            aria-label="SSH"
                             :disabled="busy || grantBusy[app.id]"
                             @update:model-value="
                               (value: boolean) => onTargetEnabledChange(app.id, capability, target, value)
                             "
                           />
-                          <span class="text-[11px] font-semibold text-foreground">{{ targetLabel(target) }}</span>
+                          <span class="text-[11px] font-semibold text-foreground">SSH</span>
                           <UiSelect
                             v-if="targetEnabled(app.id, capability, target)"
                             class="ml-auto"

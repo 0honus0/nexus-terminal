@@ -172,7 +172,7 @@ export interface AgentAppStateUpdateRequestDto {
   expectedVersion: number;
 }
 
-export type AgentTargetKindDto = 'workspace' | 'ssh';
+export type AgentTargetKindDto = 'ssh';
 export type AgentTargetGrantSelectionDto = { mode: 'all' } | { mode: 'ids'; ids: string[] };
 export type AgentCapabilityScopeDto =
   { kind: 'global' } | { kind: 'targets'; targets: Partial<Record<AgentTargetKindDto, AgentTargetGrantSelectionDto>> };

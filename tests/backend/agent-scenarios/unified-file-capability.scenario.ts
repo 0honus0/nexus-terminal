@@ -530,6 +530,35 @@ export const unifiedFileCapabilityScenario = async () => {
     sshConfigurationHash = 'ssh-config';
 
     const capabilityRegistry = new CapabilityRegistry();
+    for (const capability of ['file.read', 'file.write', 'file.delete', 'shell.execute'] as const) {
+      assert.deepEqual(
+        capabilityRegistry.require(capability).supportedTargets,
+        ['ssh'],
+        'File/Shell capability grants must expose only SSH connections',
+      );
+      assert.deepEqual(capabilityRegistry.defaultScope(capability), {
+        kind: 'targets',
+        targets: { ssh: { mode: 'all' } },
+      });
+      for (const rejectedTargets of [
+        { workspace: { mode: 'all' } },
+        { workspace: { mode: 'all' }, ssh: { mode: 'all' } },
+      ]) {
+        assert.throws(
+          () => capabilityRegistry.parseScope(capability, { kind: 'targets', targets: rejectedTargets }),
+          /APP_GRANT_SCOPE_INVALID/,
+          'Legacy Workspace grants must be rejected without normalization or SSH escalation',
+        );
+      }
+      assert.equal(
+        capabilityRegistry.allows(capability, capabilityRegistry.defaultScope(capability), {
+          target: 'workspace',
+          id: 'legacy-workspace',
+        }),
+        false,
+        'An SSH grant cannot authorize the old Workspace target',
+      );
+    }
     const appRegistry = new AppRegistryService();
     appRegistry.registerVersion({
       manifest: validateManifest(

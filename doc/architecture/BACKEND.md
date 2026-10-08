@@ -403,6 +403,8 @@ Agent 文件工具已收敛为 **SSH-only**：`file-tools.ts` 的工具 schema�
 
 Agent Shell/Job 工具也已收敛为 **SSH-only**：`shell-tools.ts` 与 `ShellCapabilityService` 仅连接 `SshShellTargetPort`、`AgentSshSessionPort` 和目标解析器，不再消费 Workspace Shell adapter/port 或产出 Runner Job 投影。Foreground 逐参数安全引用，Background 按 Thread/connection 和带 configurationHash 的持久 SSH session 执行。Job inspect/execute 间及 listActiveJobs 再核实 SSH 配置 fingerprint，拒绝旧 Snapshot 后自动重绑。剩余 Workspace ACL、目标解析器、Browser/ACP 和用户 API 仍待逐步退出，不能冒称最终 SSH-only Host contract 已完成。
 
+File/Shell 的授权 contract 也已收敛：`CapabilityRegistry` 四个目标 capability 只声明 `supportedTargets=['ssh']`，默认和 ID 范围授权仅能指向 SSH connection；`parseScope/parseGrant` 拒绝包含 `workspace` 的旧范围，`allows` 对旧 Workspace 目标明确返回 false。HTTP grant 解码和 `@nexus-terminal/protocol/agent-host` 的 `AgentTargetKindDto` 只接受 `ssh`；Agent App 授权 UI 只显示 SSH 配置，旧 Workspace grant UI 翻译项退出。此更改不创建兼容分支，也不扩大老 Workspace grant 的网络能力。通用目标解析器及旧 Workspace HTTP API 仍等待独立迁移。
+
 ## 数据、事务与并发
 
 - SQLite schema 描述新数据库结构，migration 负责已发布结构升级。

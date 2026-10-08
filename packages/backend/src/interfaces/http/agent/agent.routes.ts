@@ -226,11 +226,10 @@ const capabilityScope = (value: unknown): AgentCapabilityScopeDto => {
   if (value.kind !== 'targets' || !hasOnlyKeys(value, ['kind', 'targets']) || !isRecord(value.targets)) {
     throw new Error('VALIDATION_FAILED');
   }
-  if (Object.keys(value.targets).some((key) => key !== 'workspace' && key !== 'ssh')) {
+  if (Object.keys(value.targets).some((key) => key !== 'ssh')) {
     throw new Error('VALIDATION_FAILED');
   }
   const targets: AgentCapabilityScopeDto & { kind: 'targets' } = { kind: 'targets', targets: {} };
-  if (value.targets.workspace !== undefined) targets.targets.workspace = grantSelection(value.targets.workspace);
   if (value.targets.ssh !== undefined) targets.targets.ssh = grantSelection(value.targets.ssh);
   return targets;
 };

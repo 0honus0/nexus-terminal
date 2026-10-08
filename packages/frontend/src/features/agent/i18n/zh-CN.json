@@ -67,7 +67,6 @@
         "targetScope": "目标范围",
         "targetScopeAll": "全部目标",
         "targetScopeIds": "指定 ID",
-        "targetWorkspace": "工作区",
         "empty": "当前没有可用的 Agent App。",
         "permissionsCollapsedHint": "展开后查看并编辑此 App 的能力授权。",
         "capabilitiesHeader": "系统能力与安全沙箱授权",

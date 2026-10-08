@@ -231,7 +231,7 @@ Mutation 链：`inspect -> capability/grant -> policy -> approval -> lease/fence
 
 Tool descriptor 唯一声明 capability。模型调用、Run/Skill/Plan/输入/内部协作、当前 App Storage 与生成 Artifact 是 enabled App 的核心行为，不增加 `ai.model.use/runs.execute` 总闸门。
 
-Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 用 typed targets（Workspace/SSH 的 all 或 ids）。`CapabilityRegistry` 唯一持有 identity/scope/parser/intersection/authorization；旧 scope 只通过一次性 migration 转换。UI 从服务端完整 grants 初始化，definition 来自 Host，本地只持有 label/icon；编辑三态 draft，保存 CAS 后才更新已保存状态。
+Grant 仅 schema v2：无 target 用 global，`file.*`/`shell.execute` 的 typed targets **仅为 SSH**（all 或指定 connection ids）。`CapabilityRegistry` 唯一持有 identity/scope/parser/intersection/authorization；旧含 Workspace 的授权范围在当前解析边界直接拒绝，不自动改为 SSH，也不接纳 Workspace+SSH 双轨 grant。HTTP/Protocol/UI 的 Agent grant 输入与 Host definition 只描述 SSH；原已发布的历史数据库迁移 SQL 不随之改写。UI 从服务端完整 grants 初始化，保存 CAS 后才更新已保存状态。通用 `AgentTargetResolver` 中尚存的 Workspace target 属于待迁移的 ACP/旧 API，不等于当前 File/Shell grant 权限。
 
 ### 7.2 执行职责与结果
 

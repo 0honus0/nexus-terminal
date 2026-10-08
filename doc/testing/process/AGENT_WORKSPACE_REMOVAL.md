@@ -22,6 +22,15 @@
 12. **2026-10-08 最新插件发布授权**：所有者明确指示“插件可以推送到远程 触发actions发布 版本还是要1.0.0”。**仅对官方插件仓**授权远程推送及 `v1.0.0` 已发布 Release 的签名资产替换；插件包 `version`、AgentDefinition `version` 与仓库版本都固定 **`1.0.0`**，Manifest `schemaVersion=1`、Host SDK `sdkVersion=1.0.0` 不另起新版本。**主仓 `nexus-terminal` 不随之推送**。同版本更新是破坏式的：不会自动迁移安装在旧数据库中的 immutable 同版本不同哈希 Plugin，用户已明确不要求旧版数据/备份兼容。以下最新正式发布结果优先于文档中早期“`2.0.0` 尚未发布”的过程记录。
 13. **2026-10-08 官方插件标签已对齐新源码（完成）**：所有者确认“完成了”。随后**独立运行** `git ls-remote origin refs/tags/v1.0.0 refs/heads/main`，确认两个远程引用**均为** `ac096df28467c5ae42e5d47da6768ac214f2d901`；本地 `main` 工作区干净，原发布包 `version`、AgentDefinition `version` 均保持 `1.0.0`。上轮无认证导致推送失败的阻塞**已由所有者处理并得到远程证据**，无需再推、再建 Release 或修改版本。
 
+**P3 第四项：File/Shell Capability Grant 的 Workspace scope 破坏式退出（2026-10-08）**：
+
+- 基于主仓已提交 `4e8b3405`，`capability-registry.ts` 将 `file.read/write/delete`、`shell.execute` 四个 targeted capability 的 `supportedTargets` 从旧双目标收敛为仅 `ssh`；`defaultScope` 只生成 SSH，`parseScope/parseGrant` 对传入任何含旧 `workspace` 键的 scope 均抛 `APP_GRANT_SCOPE_INVALID`，包括旧 Workspace-only 和 Workspace+SSH 组合。不转换、不自动授予其他 SSH 连接；`allows` 对假冒 Workspace selector 恒返回 false。
+- Backend grant 类型、HTTP request decoder 与 `packages/protocol/src/agent-host.ts` 中专属于授权 API 的 `AgentTargetKindDto` 均只允许 `ssh`；Frontend Agent App 授权编辑页仅展示 SSH，删除 Agent-only `targetWorkspace` 翻译键（普通终端 Workspace 文案完全保留）。`tests/backend/agent-scenarios/unified-file-capability.scenario.ts` 在原 SSH 实操作与 Broker 授权测试基础上，覆盖四种 capability 当前默认 scope、两种旧授权的拒绝和已有 SSH grant 不允许 Workspace selector 的反例；原始 `capability-grant-migration.scenario.ts` 是已经发布的历史 SQL 格式事实，不改写历史迁移编号/SQL/fixture。
+- 现有 `tests/e2e/specs/agent/preset-plugin.spec.ts` 增强生产 HTTP 真实反例：新安装 App 的四项 Tool grant definition 均只返回 SSH；对旧 Workspace-only、Workspace+SSH 的 PUT 必须 HTTP 400 VALIDATION_FAILED，且随后 GET 的 policyRevision/grants **不变**，之后合法 SSH scoped grant PUT 仍可成功。此验证属于原有 Agent E2E，不是假造 unit test。
+- 同步 `doc/AGENTS.md`、`doc/USAGE.md`、`doc/architecture/BACKEND.md` 的授权 contract 与模型/用户行为。本切口**不修改尚有其他消费者的** `AgentTargetResolver` 通用 Workspace 分支、`AgentTargetKind` 内部 ACP/Browser/旧用户 API 语义或 `workspace.manage` 全局能力；这些须随后协调移除。
+
+**第四项真实验证结果**：新增的 `unifiedFileCapabilityScenario()` 授权场景单独执行 **exit 0**；完整 `pnpm --filter @nexus-terminal/backend run test:agent-scenarios` **exit 0**；`pnpm run check` 含 Frontend/Backend/Agent Runner lint/typecheck **PASS**，`pnpm run build` 三包构建 **PASS**。官方 Playwright 容器运行原有 `preset-plugin.spec.ts --grep "remote signed Nexus Agent plugin installs"`：**1 passed (54.9s)，exit 0**，真实 Stage/Verify/Install/Host grant API/Provider/Run 链路通过，包括旧 Workspace/混合 grant 两次 HTTP 400、无已保存状态变化、合法 SSH grant PUT 成功。初次 `format:all:check` 报出 `AppManagementSettings.vue` 和 `preset-plugin.spec.ts` 两个文件需排版，使用 Prettier 修正后**二次 `pnpm run format:all:check` 与 `git diff --check` 均 exit 0**，不将初次失败冒称 PASS。E2E 覆盖说明已同步 `doc/testing/E2E.md`。Plugin 仓远程 `v1.0.0` 已发布且无需重发；主仓只本地提交不推送。
+
 **P3 第二项：Agent 文件工具收敛为 SSH-only（2026-10-08）**：
 
 - `modules/agent/capabilities/file-capability.service.ts` 不再依赖 Workspace File port，删除 read/stat/list/search/write/move/delete/patch 中所有 Runner Workspace 分支，保留 SSH SFTP、严格 patch、SHA/metadata precondition、冻结配置复核以及后台取消边界。已删除专用 `workspace-file-target.port.ts` 和 `infrastructure/agent/workspace-runtime/workspace-file-target.adapter.ts`；`compose-agent.ts` 只向 FileCapabilityService 注入 SshFileTargetPort。
@@ -86,20 +95,20 @@ node --version && pnpm --version
 # 从下方「当前工作指针」继续一项，改完先更新本文件再检查与本地提交
 ```
 
-**当前工作指针（2026-10-08）**：按第 10–13 条执行破坏式移除，Plugin/AgentDefinition 版本保持 `1.0.0`，插件远程 `main`/`v1.0.0` 标签均指向 `ac096df`。主仓已有 `3c89be1f`（Workspace 模型管理工具退出）、`2efa1b7f`（File 工具 SSH-only），以及**本轮已验证的 Shell/Job SSH-only 切口**：`ShellCapabilityService`、`shell_execute/shell_job_control` 不再连接旧 Runner Shell port/adapter，完整 Agent scenario、构建、check/format 和真实 A04 SSH Job E2E 均 PASS，详见上方 P3 第三项。**下一项**：清理 `AgentTargetResolver`、CapabilityRegistry/Grants、Protocol DTO 的 Workspace scope 和消费者，再收敛用户 Workspace HTTP API、ACP/Browser、Frontend 与生产 Runner；注意其余 `target:'workspace'` 的 Browser/ACP、环境冻结及用户 REST 仍待迁移，不能宣称 P3 已完成。主仓仅做本地提交不推送；保留普通终端 Workspace、SSH 会话/Job/项目目录、Artifact/Memory、E2E Runner 镜像、用户未跟踪原始计划及备份。新会话先检查双仓 HEAD/status 与远程版本，读本文及最新源码后继续。
+**当前工作指针（2026-10-08）**：按第 10–13 条执行破坏式移除，Plugin/AgentDefinition 版本保持 `1.0.0`，插件远程 `main`/`v1.0.0` Tag 均是 `ac096df`。主仓已本地提交 `3c89be1f`（Agent Workspace 模型管理工具退出）、`2efa1b7f`（File SSH-only）、`4e8b3405`（Shell/Job SSH-only）；本轮 **P3 第四项**已把四个 File/Shell Capability grants、Host/HTTP/Protocol 授权和 Agent App 设置 UI 统一为 SSH-only，完成全量 Agent 场景、真实 Plugin HTTP E2E、检查、构建、格式与差异校验。**下一项**：优先协调 ACP Workspace transport/Runner 与独立 SSH ACP 的退出路径，使通用 `AgentTargetResolver` 可以删除 Workspace repository 依赖及旧 `AgentTargetKind`；再检查旧用户 Workspace 管理、Artifact、Browser、Checkpoint、Run admission 等共享消费者，按独立切口处理后继续 Frontend/生产 Runner。**P3 仍进行中，不能标完成**。主仓不得推送；保留普通终端 Workspace、SSH 会话/Job/项目目录、Artifact/Memory、E2E Runner 镜像、用户未跟踪原始计划和备份。新会话先核实双仓 Git/status、最新进度和用户并发改动。
 
 ## 阶段状态（2026-10-08）
 
-| 阶段                         | 状态   | 说明                                                                            |
-| ---------------------------- | ------ | ------------------------------------------------------------------------------- |
-| P0 清单与升级边界            | 进行中 | P0-2/3/4 完成，旧版 Agent E2E 69/69；P0-1/5 的历史事项由最新破坏式规则覆盖      |
-| P1 最终 contract 与迁移方案  | 进行中 | Plugin manifest/decoder 与 Plugin Runner DTO 已退出；Workspace/SSH DTO 仍待收敛 |
-| P2 存量数据、升级与备份      | 进行中 | 增量迁移 #55 删除 Plugin runner_entry；不直接操作用户真实备份/线上数据库        |
-| P3 Backend SSH 收敛          | 进行中 | 模型 Workspace 生命周期工具及其旧测试退出；SSH-only target/REST/Runner 尚待迁移 |
-| P4 Browser、ACP、Plugin 解耦 | 进行中 | Plugin Runner Source/持久字段已退出；Browser/ACP 和 Workspace Runtime 待清理    |
-| P5 Frontend 移除             | 未开始 |                                                                                 |
-| P6 生产 Runner 退出          | 未开始 |                                                                                 |
-| P7 文档与验收                | 未开始 |                                                                                 |
+| 阶段                         | 状态   | 说明                                                                                         |
+| ---------------------------- | ------ | -------------------------------------------------------------------------------------------- |
+| P0 清单与升级边界            | 进行中 | P0-2/3/4 完成，旧版 Agent E2E 69/69；P0-1/5 的历史事项由最新破坏式规则覆盖                   |
+| P1 最终 contract 与迁移方案  | 进行中 | Plugin manifest/decoder 与 Plugin Runner DTO 已退出；Workspace/SSH DTO 仍待收敛              |
+| P2 存量数据、升级与备份      | 进行中 | 增量迁移 #55 删除 Plugin runner_entry；不直接操作用户真实备份/线上数据库                     |
+| P3 Backend SSH 收敛          | 进行中 | File/Shell/Job 模型工具与 Capability grants 已 SSH-only；旧 ACP/Browser/REST/Resolver 待清理 |
+| P4 Browser、ACP、Plugin 解耦 | 进行中 | Plugin Runner Source/持久字段已退出；Browser/ACP 和 Workspace Runtime 待清理                 |
+| P5 Frontend 移除             | 未开始 |                                                                                              |
+| P6 生产 Runner 退出          | 未开始 |                                                                                              |
+| P7 文档与验收                | 未开始 |                                                                                              |
 
 ## P1 边界准备：基于当前代码的迁移决策（仅设计，尚未改生产 contract）
 
