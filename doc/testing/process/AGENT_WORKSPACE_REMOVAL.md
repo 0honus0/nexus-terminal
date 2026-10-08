@@ -16,6 +16,7 @@
 6. **代码/验证/提交纪律**：依照 `doc/AGENTS.md`，先核实真实 owner、协议和消费者，再同步改生产代码与相关有效文档，保留真实 E2E/Agent 场景与反例，不新增 unit tests 或测试源码文字门禁。按实际风险运行检查；每个完整单项应单独本地提交，**不自动推送**。提交前检查工作区残余、引用、`pnpm run check`、`pnpm run format:all:check` 和 `git diff --check`，结果记录在此；未通过或不能验证的事项不得标记完成。
 7. **外部依赖不冒认完成**：官方 `0honus0/nexus-agent-plugins` 签名新版、实际部署实例版本、旧 Workspace 枚举/导出、旧备份恢复、最终远程 CI 均需要独立证据；不能凭本仓 fixture、公开版本或静态 grep 假称验收通过。
 8. **临时迁移工具只放工作区**：所有者于 2026-10-08 明确要求 `agent-workspace-preflight.mjs` 放在 `/home/honus/workspace/`，不得留在 `nexus-terminal/scripts/backend/`；迁移完成后即可清理。这类一次性预检工具不加入产品包、build/CI 和仓库跟踪；只在本文件说明用法及退出时清理。
+9. **生产 Workspace 已自行清理且有备份**：项目所有者于 2026-10-08 明确确认“生产workspace也删除了 我都有备份 没问题”。以其声明作为旧生产 Workspace 的**已删除/备份存在**前提，不再要求恢复旧生产 Workspace 才开始非破坏性开发；但未取得备份 hash、完整性和恢复演练证据，不把这句话扩展解释为数据库/Plugin 兼容迁移成功，也不擅自删除剩余备份、Artifact 或其他服务数据。P0-5 的原生产实例枚举不再可行，后续只能验证**已有备份与可信副本**，同时完成新版本的升级/拒绝与回退测试。
 
 为使明确的临时过程记录与仓库通用“`doc/` 不建进度文件”规则不冲突，本次同步在 `doc/AGENTS.md` 的“文档维护分工”与“修改与文档”段落声明**仅此文件**的项目所有者授权例外；`AGENTS.md` 仍是全局开发规则入口，`USAGE.md` 仍是唯一用户需求入口。
 
@@ -33,20 +34,33 @@ node --version && pnpm --version
 # 从下方「当前工作指针」继续一项，改完先更新本文件再检查与本地提交
 ```
 
-**当前工作指针（2026-10-08）**：P0-2/3 已完成，P0-5 临时预检脚本仍在 `/home/honus/workspace/agent-workspace-preflight.mjs`；P0-1 已利用隔离 Playwright Docker 验证 **4 个真实 Agent E2E 用例全部 PASS（2 个 SSH ACP、1 个 Provider、1 个 Workspace Job Settings）**，并补上 Frontend `tailwindcss` 直接依赖及 root lockfile importer。原本的 GPU/Landlock 无法运行浏览器问题已解决；**这 4 项不代表 69 项 Agent E2E 或全量 E2E 都通过**，仍需后续分片和 CI。本工作中出现另一会话对 SSH SFTP/nginx 的独立提交 `c1c95c26`（2026-10-08，本次 P0 合入前的 HEAD），未覆盖、修改、归并为本次变更；新会话须重新核实 HEAD 和 status。P0-4 仍需正式插件替代 Release；P0-5 仍需旧环境真实快照、导出、OS 进程退出与回退证据。**不满足 P0 前置条件就不做破坏性 P1/P2 删除**。初始未跟踪计划仍属用户，原样保留。
+**当前工作指针（2026-10-08）**：当前基点 `2e4b8887`，`dev` 原领先 `origin/dev` 6 个提交；新会话须重新确认提交与并发更改，保留用户初始未跟踪计划。所有者已确认**生产 Agent Workspace 已自行删除、有备份**，不再等待已不存在的线上 Workspace 枚举。**P0-1 旧架构的 Agent E2E 69/69 已按九个 spec 在隔离 Playwright Docker 分别完整通过**，附加 HTTP 全备份往返 1/1 PASS、SSH 连接恢复验证 PASS；非远程 CI，仍非新架构验收。P0-2/3 已完成，P1 不破坏的最终 contract/迁移草案记录在本文件；P0-4 官方正式签名替代插件尚缺，P0-5 生产备份实物及恢复验证尚缺。**下一步**：继续在隔离数据上演练旧备份导入和 Plugin/Agent 初始化，解除签名发布依赖后实施一套联动的 SSH-only P1/P2 迁移；当前阶段不直接删线上表/文件或 Runner 包。
 
 ## 阶段状态（2026-10-08）
 
-| 阶段                         | 状态   | 说明                                                                       |
-| ---------------------------- | ------ | -------------------------------------------------------------------------- |
-| P0 清单与升级边界            | 进行中 | P0-2/3 完成，check/build/Agent 场景通过；E2E GPU 沙箱阻塞；P0-1/4/5 未闭环 |
-| P1 最终 contract 与迁移方案  | 未开始 | 等待 P0 边界确认                                                           |
-| P2 存量数据、升级与备份      | 未开始 | 不在开发过程中直接删除真实数据                                             |
-| P3 Backend SSH 收敛          | 未开始 |                                                                            |
-| P4 Browser、ACP、Plugin 解耦 | 未开始 |                                                                            |
-| P5 Frontend 移除             | 未开始 |                                                                            |
-| P6 生产 Runner 退出          | 未开始 |                                                                            |
-| P7 文档与验收                | 未开始 |                                                                            |
+| 阶段                         | 状态   | 说明                                                                           |
+| ---------------------------- | ------ | ------------------------------------------------------------------------------ |
+| P0 清单与升级边界            | 进行中 | P0-2/3 完成，check/build/Agent 场景通过；旧版 Agent E2E 69/69；P0-1/4/5 待验收 |
+| P1 最终 contract 与迁移方案  | 未开始 | 等待 P0 边界确认                                                               |
+| P2 存量数据、升级与备份      | 未开始 | 不在开发过程中直接删除真实数据                                                 |
+| P3 Backend SSH 收敛          | 未开始 |                                                                                |
+| P4 Browser、ACP、Plugin 解耦 | 未开始 |                                                                                |
+| P5 Frontend 移除             | 未开始 |                                                                                |
+| P6 生产 Runner 退出          | 未开始 |                                                                                |
+| P7 文档与验收                | 未开始 |                                                                                |
+
+## P1 边界准备：基于当前代码的迁移决策（仅设计，尚未改生产 contract）
+
+虽然 P0 的正式插件替代 Release 与备份恢复证据尚未完结，但下列**不改变生产行为**的 contract/升级方案可以预先确定；不能把这里的设计视为已完成 P1：
+
+1. **文件/Shell 显式 SSH target**：当前 `capabilities/tool-target.types.ts` 定义 `AgentTargetKind='workspace'|'ssh'`；`target-resolver.ts` 优先分支 `ssh`、其他转 Workspace。最终 `AgentTargetSelector` 只能显式接受 `{target:'ssh',id:'<positive decimal connection id>'}`。无 target/旧 `workspace`/伪造 id 必须在解析和授权前 fail closed，不能回退“当前终端”或 Backend 本地执行。保留现有 SSH `SshTargetResolverPort.target` 的连接 scope、配置 hash/identity 与更改后撤销校验；`AgentTargetResolver` 不应继续依赖 Workspace repository。
+2. **Browser 独立绑定**：当前 `browser-session-binding-authority.ts` 接受 `workspaceId` 或 `targetId`，有 `workspaceBinding`、Workspace generation、`standaloneBinding` 哈希与 stale session 清理。最终只保留显式 `targetId` 路径并冻结 `id/endpoints/allowedUrlPatterns/configurationHash`、Run/用户/Runtime scope；创建后配置变化必须关闭旧 session 并报 `BROWSER_TARGET_STALE`。Runner-only endpoint 不能自动重写为 Backend CDP；旧带 workspaceId 的 session 需 fail closed 和释放，不读取已删除 Workspace 表。
+3. **ACP SSH-only**：目前 `ai/integrations.types.ts` 的 `AcpIntegrationConfiguration.transport` 可为 `workspace-profile|ssh`；`integration.service.ts` 按两种配置验证；`acp.adapter.ts` 同时能通过 Runner 或 SSH 开流。最终仅保留已受验证的 SSH argv/cwd、profileId、Integration 配置版本及冻结的目标；旧 `workspace-profile` 历史导出后退出现行解码/执行，不猜测 SSH connectionId、不复制旧授权，取消与内层敏感操作审批保持原样。
+4. **Plugin 发布与 Host 拒绝**：`tar-package-verifier.adapter.ts` 当前验证 Frontend、Backend、Runner 三个 target；`plugin-package-install-coordinator.ts` 和备份的 `runner_entry` 有持久化消费者。最终 SDK/Host 不接受新 Runner entry 和 Workspace capability，但保留旧**签名原包与用户 AppStorage**的可读取/迁移证据；旧包必须返回确定的不支持/升级错误，绝不能把 runner entry 直接转运行于 Backend。官方新版的 Catalog、publisher 签名、Host SDK major/support 范围仍需外仓 Release 证据。
+5. **持久化升级与恢复**：`database/schema/agent-workspace.ts` 当前同时持有三张 Workspace 表和 **`agent_project_directories`、`agent_ssh_jobs` 两张 SSH 表**。先拆保留表的独立 schema owner/registry（保持创建顺序），再以高于 `54` 的正常增量 migration 受控移除旧表；历史 migration 不改写。备份外 envelope/内部 snapshot 当前均 v1，`sqlite-backup-snapshot.adapter.ts` 的白名单包含旧 Workspace 表，且按 manifest 的 `runner_entry` 引用文件；旧版恢复先做有界校验/数据筛选与转换、对不支持格式**写入前拒绝**，禁止恢复后重新创建 Workspace 表或激活 Runner Plugin。具体格式版本 bump 由 codec 与 restore owner 一起确定，不能只改常量。
+6. **历史读与实时运行隔离**：Workspace-dependent 旧 Run/Checkpoint 不假装可以恢复 Runner/项目；Ledger、Thread、Artifact、批准记录保持只读证据，旧活跃审批/Job 不自动继续或重放。Settings 仅清理 Workspace Runtime、Environment/Recipe、权限 grant 旧字段，不扩大 SSH ids/all；Frontend 草稿定向清理已废弃选择，不删除其它偏好。
+
+**P1 实施门槛/拆分原则**：跨 Frontend/Backend/Protocol 的最终 DTO/decoder/route 要在同一可编译提交统一切换，DB 数据转换先在备份副本上具备行为证据，插件签名替代版的外部阻塞解除前不能提交删除 Runner 的半成品。以上为静态源码审核后的升级设计决策；所有最终实现仍需真实 SSH/Browser/ACP/Plugin E2E 验证。
 
 ## P0：逐项执行记录
 
@@ -69,6 +83,15 @@ node --version && pnpm --version
   - **修复**：在 `packages/frontend/package.json` 明确声明 `tailwindcss: ^4.3.3`，并在唯一根 `pnpm-lock.yaml` 将已存在的 `4.3.3` 接入 frontend importer。以工作区临时 pnpm 运行 `CI=true pnpm install --frozen-lockfile --prefer-offline` 完整重建了 `node_modules`，**exit 0**，锁文件一致性/供应链校验通过（633 包）；`ssh2` optional crypto binding 的 node-gyp 构建警告不阻止安装，后续需通过真实 SSH 场景确认功能。正在重试原始 SSH ACP E2E，未放松任何断言。
   - **SSH ACP 真实基线恢复：PASS**。通过隔离官方 Playwright Docker（`--rm --init --shm-size=1g`；挂载 Git checkout 与 `/home/honus/workspace`；Node v26.11.1 / pnpm v11.26.0 与原仓依赖；Chrome shell v1243）重新运行**原始** `pnpm --filter @nexus-terminal/e2e exec playwright test --project=agent specs/agent/ssh-acp-settings.spec.ts`，两例（内层 denied、cancelled）**2 passed (31.4s)，exit 0**，不改 E2E source/harness 或跳过设置路由。取消场景的 Backend 日志存在 `ACP approval abort cleanup failed` / `STATE_CONFLICT` 告警，但用例语义仍通过；归档为后续独立原因分析线索，不在本轮放宽断言。
   - **另外两个真实用例：PASS**。同样独立 Playwright 容器中运行 `specs/agent/provider.spec.ts`，Provider 配置、密钥/协议用例 **1 passed (12.3s)，exit 0**；再独立运行 `specs/agent/workspace-job-settings.spec.ts`，旧 Workspace job capacity 设置、保存、重载用例 **1 passed (11.8s)，exit 0**。后者是**现行基线**，不是将来应保留 Workspace 设置的证据。合计本轮 4 个有效用例全部通过。
+  - **Configuration Hints 单独真实验证 PASS**：`pnpm --filter @nexus-terminal/e2e exec playwright test --project=agent --timeout=45000 --global-timeout=110000 specs/agent/configuration-hints.spec.ts`（Playwright 官方 Docker + 工作区临时 Node/pnpm），**1 passed (13.6s)，exit 0**；涉及 Agent Hub 执行/审批模式提示的显式激活、hover 不自动打开、焦点和键盘行为。之前合跑超时不代表该用例本身失败；已通过独立完整测试确定当前基线。累计 P0 实际 Agent E2E **5/69 通过**（未运行的 64 个不得记作 PASS）。
+  - **Coverage Gaps 实际 E2E 5/5 PASS**：在相同独立 Playwright Docker 中，使用 `--project=agent --workers=1 --timeout=45000 --global-timeout=240000 specs/agent/coverage-gaps.spec.ts`，结果 `5 passed (9.6s)`、exit 0；包含正式界面的已签名插件升级场景（旧 1.0.0 → 2.0.0，验证并正确清理无引用旧版本），以及其余公开行为测试。专用输出为 `/home/honus/workspace/cache/e2e-agent-coverage-gaps.log`。此测试仅为仓库签名 fixture 的升级，并**不能**替代 P0-4 外仓官方签名发布。累计已经实际通过 **10/69** 个不同 Agent Playwright 用例；其余未执行。
+  - **Event Catch-up 实际 E2E 8/8 PASS**：同一隔离环境运行 `--project=agent --workers=1 --timeout=45000 --global-timeout=240000 specs/agent/event-catchup.spec.ts`，结果 `8 passed (28.5s)`、exit 0；包括损坏 snapshot 应拒绝且不能跳过 cursor 的负例。证据日志 `/home/honus/workspace/cache/e2e-agent-event-catchup.log`。截至此处累计 **18/69** 个不同 Agent E2E 用例通过。
+  - **Preset Plugin 实际 E2E 8/8 PASS**：同一容器内执行 `--project=agent --workers=1 --timeout=45000 --global-timeout=240000 specs/agent/preset-plugin.spec.ts`，结果 `8 passed (2.1m)`、exit 0。涵盖不安全归档拒绝、官方 pinned plugin source discover、用户数据清理、Frontend Plugin SDK、Browser 和 Subagent 运行与清理、签名包安装/真实 Agent Run、Host App Surface 的功能证据。日志 `/home/honus/workspace/cache/e2e-agent-preset-plugin.log`。至此**累计 26/69 Agent E2E 已真实通过**，仍不能据此宣布完整 69 或 P0-4 正式外仓替代插件已通过。
+  - **Host 实际 E2E 20/20 PASS**：同一官方 Playwright 容器运行 `--project=agent --workers=1 --timeout=45000 --global-timeout=360000 specs/agent/host.spec.ts`，结果 `20 passed (1.4m)`、exit 0；包括移动 touch launcher、拖拽/定位、窗口恢复、模型配置、WebSocket 断线 catch-up、onboarding 和 CSRF 拒绝等实际交互。日志 `/home/honus/workspace/cache/e2e-agent-host.log`。累计 **46/69** 个不同 Agent E2E 已真实通过，剩余 23 个 `functional-regressions.spec.ts` 尚未执行。
+  - **Functional Regressions 实际 E2E 23/23 PASS**：同一隔离环境运行 `--project=agent --workers=1 --timeout=45000 --global-timeout=420000 specs/agent/functional-regressions.spec.ts`，`23 passed (4.1m)`、exit 0，含 Plan 禁止执行 SSH mutation、Browser stale/Artifact、当前 Workspace Job 基线、API 502/500 修复、真实 SSH 文件 patch/move/delete、SFTP 搜索取消/深层搜索、read-only 计划验收、Memory/输入恢复等。日志 `/home/honus/workspace/cache/e2e-agent-functional-regressions.log`。
+  - **P0-1 的 Agent E2E 旧版基线达成：69/69 已分 spec 全部通过**。9 个 spec 分别单独执行、每次退出码均为 0：configuration-hints 1 + coverage-gaps 5 + event-catchup 8 + functional-regressions 23 + host 20 + preset-plugin 8 + provider 1 + ssh-acp-settings 2 + workspace-job-settings 1 = 69；**未宣称一个整套单进程 69/69 运行或正式远程 CI 全绿**。这只是当前有 Runner 的旧架构基线，移除后必须重构退出场景并重测保留能力。
+  - **HTTP 全备份 round-trip E2E：PASS**：在相同官方 Docker 中执行 `--project=http --workers=1 --timeout=60000 --global-timeout=180000 specs/http/backup.spec.ts`，结果 `1 passed (8.8s)`、exit 0；验证密码保护的 v1 全量备份、错误密码不被接受、导入恢复原设置及 SSH 连接和实际 connection test。日志 `/home/honus/workspace/cache/e2e-http-backup-roundtrip.log`。这仅是由 E2E 数据生成的**当前版本**往返，不是所有者生产备份的解密/完整性/旧版本升级演练。
+  - **备份后 Plugin 初始化告警待处理**：该 HTTP E2E 虽 PASS，但 Backend 在 `afterRestore` 执行 `TarPackageVerifierAdapter.reconcileStages` 时记录 `ENOENT scandir .../agent/plugins/.staging` 与 `Agent plugin staged package reconciliation failed during startup`。原因线索：Verifier constructor 创建 .staging，而 restore 交换 plugin 文件根后未必存在该空目录；reconcile 仍直接 `readdirSync`。不能把已有 SSH 连接恢复通过推定 Plugin stage owner 无告警；应在其真实 owner 内恢复目录不变量，并以备份 round-trip 实际重测，无需修改远端数据。
   - **未完成的一次试验**：把 `configuration-hints.spec.ts`、Provider 和 Workspace Job Settings 合跑时，首个用例在 Playwright 非 CI `timeout=0` 环境长时间无进展，手动终止该试验；该尝试没有可主张的测试通过/失败结论。之后分别单测 Provider 与 Workspace Job Settings 都 PASS。后续在真实分片使用明确全局 timeout，继续诊断 configuration-hints，而不是跳过这个消费者。
   - **并行工作区保护**：本轮检查期间，其他任务独立修改并提交了 SFTP 连接生命周期和 nginx IPv4 路由（`c1c95c26`），以及对应其它测试文件。本轮 P0 修改仅包括 Frontend `package.json`、根 lockfile 和本进度文档；**没有将其他任务更改混入 P0 提交**。此文件的下一次接手指令必须先核实 HEAD 和所有未跟踪文件，勿复原这些改动。
   - **本轮提交前静态/构建验收**：在仓库恢复完 633 个 pnpm 包、加入 Tailwind 直接依赖，且其它会话的 SFTP/nginx 修改已独立提交的 HEAD `c1c95c26` 上，重新执行 `pnpm run check` **PASS**、`pnpm run format:all:check` **PASS**、`pnpm run build`（Backend tsc、Frontend vue-tsc/Vite、Agent Runner tsc）**PASS**、`git diff --check` **PASS**。当前 E2E 真实用例只声称前述 4 项通过，未覆盖其余 65 项 Agent、其它 Playwright 分片及正式远程 CI。
@@ -86,6 +109,7 @@ node --version && pnpm --version
   - 精确迁移需求与边界：公开标签 `plugins/nexus.agent/manifest.json` 的 `sdkVersion=1.0.0`、Nexus Host 兼容范围 `1.0.0–1.99.99`，能力中包含 `workspace.manage`；`plugins/nexus.fullstack/manifest.json` 三个 target 为 `frontend/index.html`、`backend/index.mjs`、`runner/index.mjs`。Host 当前 `plugin-package-install-coordinator.ts` 支持 SDK major 1；`official-plugin-source.ts` 从外仓 Release latest catalog 发现官方插件、固定了官方 Ed25519 publisher key id。新正式签名包必须去掉 `workspace.manage` 和 `targets.runner`、保留有效 Frontend/Backend/Skills 与旧插件不兼容时的显式升级/拒绝语义，独立验证签名、Catalog、Host SDK；**不能把 runner entry 直接作为 Backend entry 运行**。此为外仓 owner 的发布任务，未完成前 P0-4 不勾选。
 - [ ] **P0-5：旧 Workspace 活跃资源枚举、导出、终止与 retained 处置可执行。** 尚未验证旧部署的真实数据与进程；不得在此之前进行破坏性迁移。
 
+  - **所有者的现场状态确认（2026-10-08）**：生产 Agent Workspace 已由所有者删除，已有备份；这是项目所有者提供的事实，但本会话尚无备份文件、hash、版本信息和独立恢复报告，不能推定旧 Runner 的 OS 进程已退出或旧 live Job 被处置。原在线枚举步骤因已删除不再现实，改为在脱敏/隔离副本上核对保留数据与备份完整性、可恢复性，无法核实的历史资源明确记录未知，不重新创建生产 Workspace。
   - 2026-10-08 环境现状：工作区 `/home/honus/nexus-terminal`（dev HEAD `227669bc`，仅存在预先的未跟踪 Workspace removal 计划）；`docker ps --format` 和 `docker volume ls --format` 均无条目（退出码 0），不能据此推断其他主机或离线持久卷已清理，也不能把本机空态标为完整资源处置。
   - **2026-10-08 所有者要求：临时脚本不得长期留在项目源码。** 原 `scripts/backend/agent-workspace-preflight.mjs` 已移动为 `/home/honus/workspace/agent-workspace-preflight.mjs`，从 Git 跟踪中退出；仅作为本次迁移可删除的工作区工具。对**明确指定的两份冻结 SQLite 快照**只读检查 Backend `agent_workspaces`、workspace command、SSH 保留表和 Runner `journal_records`（schema v5），整理 Workspace/retained/generation/status、后台 job/command pending/running/unknown、双端不一致。明文 argv、结果、secret、文件正文不输出；完整盘点报告必须显式提供全新 `--output` 文件，权限 0600；`eligibleForDestructiveMigration` 始终为 false，不执行 HTTP/终止/删除操作。
   - 合成副本 smoke **PASS**（2026-10-08）：构造独立 Backend 和 Runner SQLite，含 retained Workspace、pending 命令、running Job、额外 Runner-only Workspace；预检发现 1 retained / 1 pending Backend command / 1 running Runner job / 1 mismatch；原始两个 SQLite 逐字节 SHA-256 前后不变；报告 mode 0600、隐藏 `argv` 和 Job `stdout` 中的测试秘密、不覆盖已有报告、缺失快照拒绝且不创建数据库（全部断言通过，exit 0）。样例产物位于 `/home/honus/workspace/cache/tmp/workspace-preflight-smoke-LaLhE0/`，仅为合成数据，**不是旧生产实例证据**。
