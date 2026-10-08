@@ -154,13 +154,13 @@ Workspace 执行期限由协议统一定义，`timeoutSeconds` 默认 300 秒、
 
 `shell_job_control(action="list", target="workspace", id=WorkspaceID)` 不传 jobId，返回当前授权 Workspace/generation 的活跃 Job、数量和配置额度，不包含命令正文；SSH 暂不支持此 list。前台等待窗口结束后，只要 Runner 明确确认 Job 仍在运行，就返回 pending／running 和 jobId，可继续 wait／cancel，不伪造 unknown；只有无法核对真实状态才报告未知结果。
 
-Workspace 文件工具的非法路径或越界读取由 Runner 拒绝，模型收到明确的 `WORKSPACE_PATH_INVALID`／`WORKSPACE_PATH_FORBIDDEN` 等错误码，不退化为通用模型执行失败；错误不会授权读取项目外路径。无法解析的 Runner 错误只保留 HTTP 状态分类，不将上游正文作为模型反馈或日志内容。
+旧 Runner Workspace 文件 API 的路径与越界错误仍由独立 Runner 边界处理，仅供尚未退出的用户 Workspace 相关 API；**Agent 模型的七项文件工具不再走该路径**，只能通过受授权的 SSH/SFTP 目标执行，不将旧 Workspace 路径或错误当作 SSH 执行许可。
 
 - Agent 工具按功能模块命名：`shell_*`、`ssh_*`、`file_*`、`machine_*`、`workspace_*`、`collaboration_*`、`memory_*`、`browser_*`、`tool_*`、`skill_*`、`plan_*`、`user_*`、`artifact_*`、`acp_*`、`mcp_*`。只接受当前名称，不提供旧工具名别名。
 - SSH 会话入口将 connectionId 转为规范 SSH target 后校验同一 typed grant；会话创建、命令执行与文件操作共享连接授权，未选中或未授权的连接仍拒绝。
-- `file_search` 在 Workspace 和 SSH 均逐行使用 JavaScript Unicode 正则（u flag），每行最多返回首个匹配，column 为 1-based UTF-16 位置；不根据宿主是否安装 rg 切换语法或忽略规则。glob 使用 Node 匹配语义，匹配相对于本次搜索目录的路径或文件 basename；单文件搜索匹配 basename，不按项目根目录计算。结果有界且明确标记截断，读取与权限边界仍由各目标持有。
-- Workspace 与 SSH 文件搜索不设置目录项数、扫描文件数或累计扫描字节上限；仍保留结果数量、输出大小及单文件读取边界，结果达到返回额度时可停止并标记 truncated。Workspace 目录读取按批次进行，不先收集完整文件树，结束或截断后关闭目录句柄；SSH 仍检查取消与执行期限，读取范围受原权限和路径规则约束。
-- 两目标的文件搜索单文件边界统一为 1 MiB；超出时跳过该文件、标记 truncated，并继续搜索其他文件，不因一个超大文件停止整树调查。此边界不改变 file_read 的既有读取契约。
+- Agent `file_search` 通过 SSH 逐行使用 JavaScript Unicode 正则（u flag），每行最多返回首个匹配，column 为 1-based UTF-16 位置；不根据宿主是否安装 rg 切换语法或忽略规则。glob 匹配相对于本次搜索目录的路径或文件 basename，单文件搜索匹配 basename。结果有界且明确标记截断，读取与权限边界由 SSH 目标持有。
+- Agent 的 SSH 文件搜索不设置目录项数、扫描文件数或累计扫描字节上限，仍保留结果数量、输出大小及单文件读取边界，结果达到返回额度时可以标记 truncated；执行过程检查取消与期限，不突破权限和路径约束。
+- SSH 搜索单文件边界为 1 MiB；超出时跳过该文件、标记 truncated，并继续搜索其他文件，不因一个超大文件停止整树调查。此边界不改变 `file_read` 的既有读取契约。
 - 取消使用临时 SSH 会话的文件操作时立即关闭该连接以打断等待中的远端 I/O，随后完成原资源收尾；不关闭用户显式长会话。SFTP positioned read 在 channel 结束或关闭时拒绝未完成读取，不等待远端补发响应。
 - SSH 文件操作各自拥有独立 SFTP channel；显式长会话中取消或到达执行期限时只关闭本次操作的 channel，直接拒绝待完成 I/O，不等待远端确认关闭，不影响长连接、其他文件操作或后台 Job。
 - `ssh_session_open(connectionId, idleTimeoutSeconds?)` 打开对话级连接，返回 `sessionId`。默认空闲 1800 秒，0 表示不因空闲关闭；最大可配置值 86400 秒。每用户最多 32 条，服务最多 128 条连接。任务结束或停止不会自动关闭会话；对话删除、应用停用、权限撤销、连接配置变化和服务退出会清理。
@@ -376,11 +376,11 @@ Root／Child 的执行进度投影提供服务器 currentUnixSeconds 和剩余�
 
 Browser 导航在执行前被 URL 策略拒绝，以及 Runner 因活动 Job 拒绝文件操作时，工具返回已确认失败并保留精确错误码，模型可调整后继续；此类明确未执行的拒绝不会触发未知副作用隔离。网络中断、执行后的策略失败、lease 丢失仍需核对真实结果。
 
-完成判定保留已验证测试结果：测试成功后，经 Runner 确认完成的 Workspace stop／delete，或 SSH 空闲会话的普通 close，不会使先前的测试证据失效。后续文件修改、restart、SSH force close 等操作仍需重新验证；Job 仅已接受或正在运行不算测试通过。
+完成判定保留已验证测试结果：测试成功后，已确认且未强制的 SSH 空闲会话普通 close 不会使先前的测试证据失效。后续文件修改、命令重启、SSH force close 等操作仍需重新验证；Job 仅已接受或正在运行不算测试通过。已删除的 Agent `workspace_control` 工具不再被当作资源清理的特殊成功证据。
 
-Agent 的 file_write 在 SSH／Workspace 上新建文件默认使用 0600，覆盖及补丁保留现有权限。可用 mode 指定 0 到 511 的十进制 Unix 权限（384 为 0600、420 为 0644）；权限属于审批操作哈希的一部分，并在写入后验证。
+Agent 的 `file_write` 只在 SSH 目标上新建文件（默认 0600），覆盖及补丁保留现有权限。可用 `mode` 指定 0 到 511 的十进制 Unix 权限（384 为 0600、420 为 0644）；权限属于审批操作哈希的一部分，并在写入后验证。
 
-通用文件工具在 Workspace／SSH 使用相同状态错误：file_write 的目录目标返回 FILE_WRITE_REQUIRES_FILE；file_move 的源不存在、源目标相同和目标已存在分别返回 FILE_NOT_FOUND、FILE_MOVE_SAME_PATH、FILE_MOVE_DESTINATION_EXISTS，不覆盖已有目标；file_delete 的路径不存在返回 FILE_NOT_FOUND。错误提供安全纠正说明，不回显输入路径，不绕过原 hash／metadata 与权限检查。
+Agent 的七项通用文件工具 `file_read/list/search/write/patch/move/delete` 只接受显式 `target:'ssh'` 与有权访问的连接 ID；`target:'workspace'` 直接拒绝，不自动改选 SSH 或在 Backend 本地读写。SSH 文件状态错误仍明确区分：file_write 的目录目标返回 FILE_WRITE_REQUIRES_FILE；file_move 的源不存在、源目标相同和目标已存在分别返回 FILE_NOT_FOUND、FILE_MOVE_SAME_PATH、FILE_MOVE_DESTINATION_EXISTS，不覆盖已有目标；file_delete 的路径不存在返回 FILE_NOT_FOUND。错误提供安全纠正说明，不回显输入路径，不绕过原 hash／metadata 与权限检查。
 
 文件参数错误用 FILE_ARGUMENT_* 区分对象、未知字段、目标类型、字符串／内容、整数范围、布尔值和内部 hash 格式；字符串／整数错误说明对应字段及既定 UTF-8 字节／范围约束，不回显输入值。file_search 的不存在路径同样返回 FILE_NOT_FOUND；无效输入不执行文件写入，内部冻结 hash 与资源变化仍分别处理。
 

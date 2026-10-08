@@ -3,7 +3,6 @@ import { TERMINAL_RUN_STATUSES } from '../../modules/agent/runtime/runs/run.type
 import { LocalArtifactStore } from '../../infrastructure/agent/artifacts/local-artifact-store';
 import { AppIntentArtifactAdapter } from '../../infrastructure/agent/artifacts/app-intent-artifact.adapter';
 import { MachineCapabilityAdapter } from '../../infrastructure/agent/capabilities/machine-capability.adapter';
-import { WorkspaceFileTargetAdapter } from '../../infrastructure/agent/workspace-runtime/workspace-file-target.adapter';
 import { WorkspaceShellTargetAdapter } from '../../infrastructure/agent/workspace-runtime/workspace-shell-target.adapter';
 import { FileCapabilityService } from '../../modules/agent/capabilities/file-capability.service';
 import { ShellCapabilityService } from '../../modules/agent/capabilities/shell-capability.service';
@@ -381,9 +380,8 @@ export const composeAgent = ({
   const workspaceRepository = composedWorkspaceRuntime.repository;
   const targets = new AgentTargetResolver(workspaceRepository, sshTargets, cryptoHash);
   const workspaceRuntime = composedWorkspaceRuntime.service;
-  const workspaceFiles = new WorkspaceFileTargetAdapter(workspaceRepository, workspaceRuntimeController);
   const workspaceShell = new WorkspaceShellTargetAdapter(workspaceRepository, workspaceRuntimeController, settings);
-  const files = new FileCapabilityService(targets, workspaceFiles, sshFiles);
+  const files = new FileCapabilityService(targets, sshFiles);
   const shell = new ShellCapabilityService(targets, workspaceShell, sshShell, cryptoHash, sshSessions);
   const workspaceRuntimeFacade = composedWorkspaceRuntime.facade;
   const acpRuntime = new AcpAdapter(acpTransport);

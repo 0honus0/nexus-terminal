@@ -1,25 +1,6 @@
 import assert from 'node:assert/strict';
-const filePermissions = [
-  { id: 'private-default', mode: null, expectedMode: 0o600 },
-  { id: 'explicit-private', mode: 0o600, expectedMode: 0o600 },
-  { id: 'explicit-group-readable', mode: 0o640, expectedMode: 0o640 },
-  { id: 'explicit-world-readable', mode: 0o644, expectedMode: 0o644 },
-];
 import { createHash } from 'node:crypto';
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import {
-  applyWorkspacePatch,
-  deleteWorkspaceFile,
-  listWorkspaceFiles,
-  moveWorkspaceFile,
-  readWorkspaceFile,
-  searchWorkspace,
-  statWorkspacePath,
-  writeWorkspaceFile,
-} from '../../../packages/agent-runner/src/controller/workspace-coding-files';
-import { WorkspaceFileTargetAdapter } from '../../../packages/backend/src/infrastructure/agent/workspace-runtime/workspace-file-target.adapter';
 import type { JsonValue } from '../../../packages/backend/src/modules/agent/agent.types';
 import { FileCapabilityService } from '../../../packages/backend/src/modules/agent/capabilities/file-capability.service';
 import type { SshFileTargetPort } from '../../../packages/backend/src/modules/agent/capabilities/ssh-file-target.port';
@@ -32,86 +13,9 @@ import { validateManifest } from '../../../packages/backend/src/modules/agent/ho
 import { AppRegistryService } from '../../../packages/backend/src/modules/agent/host/app-registry.service';
 import { CapabilityRegistry } from '../../../packages/backend/src/modules/agent/host/capability-registry';
 import { createUnifiedFileTools } from '../../../packages/backend/src/modules/agent/tools/host/file-tools';
-import type { AgentWorkspaceRepositoryPort } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-runtime.repository.port';
-import type { WorkspaceRuntimeControllerPort } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-runtime-controller.port';
 import { failedToolResult } from '../../../packages/backend/src/modules/agent/runtime/execution/execution-errors';
 
 export const unifiedFileCapabilityScenario = async () => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-unified-file-'));
-  const workRoot = path.join(directory, 'work');
-  fs.mkdirSync(workRoot, { recursive: true });
-  fs.writeFileSync(path.join(workRoot, 'a.txt'), 'alpha\nneedle\nomega\n', 'utf8');
-
-  let workspaceGeneration = 1;
-  const workspaceFileRepository = {
-    getWorkspace: async () => ({
-      userId: 1,
-      appId: 'scenario.unified-file',
-      id: 'ws-file',
-      runId: 'file-run',
-      agentRuntimeId: 'file-runtime',
-      retained: false,
-      profile: {
-        kind: 'code' as const,
-        recipeId: 'file-recipe',
-        recipeRevision: '1',
-        runtimeDigest: 'file-runtime-digest',
-        catalogRevision: 'file-catalog',
-        toolchain: [],
-        runnerPlugins: [],
-        acpProfiles: [],
-        browserTarget: null,
-      },
-      generation: workspaceGeneration,
-      status: 'running' as const,
-      retainedManifestRef: null,
-      version: 1,
-      lastActiveAt: 1_800_000_000,
-      createdAt: 1_800_000_000,
-      updatedAt: 1_800_000_000,
-    }),
-  } as unknown as AgentWorkspaceRepositoryPort;
-  const workspaceFileController = {
-    statWorkspacePath: async (_workspaceId: string, _generation: number, requestedPath: string) =>
-      statWorkspacePath(workRoot, requestedPath),
-    readWorkspaceFile: async (
-      _workspaceId: string,
-      _generation: number,
-      request: Parameters<typeof readWorkspaceFile>[1],
-    ) => readWorkspaceFile(workRoot, request),
-    writeWorkspaceFile: async (
-      _workspaceId: string,
-      _generation: number,
-      request: Parameters<typeof writeWorkspaceFile>[1],
-    ) => writeWorkspaceFile(workRoot, request),
-    listWorkspaceFiles: async (
-      _workspaceId: string,
-      _generation: number,
-      request: Parameters<typeof listWorkspaceFiles>[1],
-    ) => listWorkspaceFiles(workRoot, request),
-    searchWorkspace: async (
-      _workspaceId: string,
-      _generation: number,
-      request: Parameters<typeof searchWorkspace>[1],
-    ) => searchWorkspace(workRoot, request),
-    moveWorkspaceFile: async (
-      _workspaceId: string,
-      _generation: number,
-      request: Parameters<typeof moveWorkspaceFile>[1],
-    ) => moveWorkspaceFile(workRoot, request),
-    deleteWorkspaceFile: async (
-      _workspaceId: string,
-      _generation: number,
-      request: Parameters<typeof deleteWorkspaceFile>[1],
-    ) => deleteWorkspaceFile(workRoot, request),
-    applyWorkspacePatch: async (
-      _workspaceId: string,
-      _generation: number,
-      request: Parameters<typeof applyWorkspacePatch>[1],
-    ) => applyWorkspacePatch(workRoot, request),
-  } as unknown as WorkspaceRuntimeControllerPort;
-  const workspaceFileTarget = new WorkspaceFileTargetAdapter(workspaceFileRepository, workspaceFileController);
-
   let sshConfigurationHash = 'ssh-config';
   const assertSshConfiguration = (configurationHash: string | undefined): void => {
     if (configurationHash !== sshConfigurationHash) throw new Error('RESOURCE_CHANGED');
@@ -338,51 +242,30 @@ export const unifiedFileCapabilityScenario = async () => {
   } as unknown as SshFileTargetPort;
 
   const targets = {
-    resolve: async (_context: ToolContext, selector: { target: 'workspace' | 'ssh'; id: string }) =>
-      selector.target === 'workspace'
-        ? {
-            selector,
-            fingerprint: {
-              kind: 'workspace' as const,
-              target: 'workspace' as const,
-              id: selector.id,
-              workspaceId: selector.id,
-              generation: workspaceGeneration,
-              targetIdentity: `workspace:${selector.id}:${workspaceGeneration}`,
-              endpoint: `workspace:${selector.id}`,
-              loginUser: 'runner:65532',
-              configurationHash: `workspace-config-${workspaceGeneration}`,
-            },
-            resourceKeys: [`workspace:${selector.id}:${workspaceGeneration}`],
-            preconditions: [
-              {
-                kind: 'workspaceGeneration' as const,
-                key: selector.id,
-                observedValue: { generation: workspaceGeneration },
-              },
-            ],
-            workspaceGeneration,
-          }
-        : {
-            selector,
-            fingerprint: {
-              kind: 'ssh' as const,
-              target: 'ssh' as const,
-              id: selector.id,
-              connectionId: 1,
-              targetIdentity: 'ssh:1',
-              endpoint: 'ssh.example:22',
-              loginUser: 'tester',
-              configurationHash: sshConfigurationHash,
-              hostKeyTrust: 'unavailable' as const,
-            },
-            resourceKeys: ['connection:1'],
-            preconditions: [],
-            connectionId: 1,
-          },
+    resolve: async (_context: ToolContext, selector: { target: 'ssh' | 'workspace'; id: string }) => {
+      if (selector.target !== 'ssh') throw new Error('FILE_ARGUMENT_TARGET_INVALID');
+      if (selector.id !== '1') throw new Error('TARGET_NOT_SELECTED');
+      return {
+        selector,
+        fingerprint: {
+          kind: 'ssh' as const,
+          target: 'ssh' as const,
+          id: selector.id,
+          connectionId: 1,
+          targetIdentity: 'ssh:1',
+          endpoint: 'ssh.example:22',
+          loginUser: 'tester',
+          configurationHash: sshConfigurationHash,
+          hostKeyTrust: 'unavailable' as const,
+        },
+        resourceKeys: ['connection:1'],
+        preconditions: [],
+        connectionId: 1,
+      };
+    },
   } as unknown as AgentTargetResolver;
 
-  const service = new FileCapabilityService(targets, workspaceFileTarget, sshFileTarget);
+  const service = new FileCapabilityService(targets, sshFileTarget);
   const cryptoHash = { sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex') };
   const tools = new Map(createUnifiedFileTools(service, cryptoHash).map((tool) => [tool.descriptor.name, tool]));
   const context: ToolContext = {
@@ -412,7 +295,7 @@ export const unifiedFileCapabilityScenario = async () => {
     return tool.execute(inspection, context);
   };
 
-  try {
+  {
     const readTool = tools.get('file_read')!;
     const args = { target: 'ssh', id: '1', path: '/srv/a.txt' };
     const temporary = await readTool.inspect(args, context, 7);
@@ -425,24 +308,18 @@ export const unifiedFileCapabilityScenario = async () => {
       borrowedSessions.every((id) => id === 'explicit-session'),
       'inspection/execution must preserve the selected session',
     );
+    const observedCalls = borrowedSessions.length;
     await assert.rejects(
-      () =>
-        readTool.inspect(
-          { target: 'workspace', id: 'ws-file', path: '/workspace/work/a.txt', sessionId: 'invalid' },
-          context,
-          7,
-        ),
-      /SSH_SESSION_TARGET_MISMATCH/,
+      () => invoke('file_read', { target: 'workspace', id: 'ws-file', path: '/srv/a.txt' }),
+      /FILE_ARGUMENT_TARGET_INVALID/,
     );
-    for (const target of [
-      { target: 'workspace' as const, id: 'ws-file', root: '/workspace/work' },
-      { target: 'ssh' as const, id: '1', root: '/srv' },
-    ]) {
+    assert.equal(borrowedSessions.length, observedCalls, 'retired target must not access SSH files');
+    for (const target of [{ target: 'ssh' as const, id: '1', root: '/srv' }]) {
       const source = `${target.root}/a.txt`;
       const created = `${target.root}/created.txt`;
       const moved = `${target.root}/moved.txt`;
       const missing = `${target.root}/missing.txt`;
-      const beforeState = target.target === 'workspace' ? statWorkspacePath(workRoot, source) : inspectSsh(source);
+      const beforeState = inspectSsh(source);
       const canary = 'PRIVATE_FILE_ARGUMENT_CANARY';
       for (const fixture of [
         {
@@ -522,8 +399,7 @@ export const unifiedFileCapabilityScenario = async () => {
           },
         );
       }
-      const missingAfterReject =
-        target.target === 'workspace' ? statWorkspacePath(workRoot, missing) : inspectSsh(missing);
+      const missingAfterReject = inspectSsh(missing);
       assert.equal(missingAfterReject.exists, false, 'Invalid file writes must not create a destination');
       for (const fixture of [
         {
@@ -556,7 +432,7 @@ export const unifiedFileCapabilityScenario = async () => {
           },
         );
       }
-      const afterState = target.target === 'workspace' ? statWorkspacePath(workRoot, source) : inspectSsh(source);
+      const afterState = inspectSsh(source);
       assert.deepEqual(
         afterState,
         beforeState,
@@ -582,31 +458,16 @@ export const unifiedFileCapabilityScenario = async () => {
         query: 'needle',
       });
       assert.equal(((searched.data as Record<string, JsonValue>).matches as JsonValue[]).length, 1);
-      if (target.target === 'workspace') {
-        const globSearch = await invoke('file_search', {
-          target: target.target,
-          id: target.id,
-          path: target.root,
-          query: 'needle',
-          glob: '{a,b}.txt',
-        });
-        assert.equal(((globSearch.data as Record<string, JsonValue>).matches as JsonValue[]).length, 1);
-      }
+      const globSearch = await invoke('file_search', {
+        target: target.target,
+        id: target.id,
+        path: target.root,
+        query: 'needle',
+        glob: '{a,b}.txt',
+      });
+      assert.equal(((globSearch.data as Record<string, JsonValue>).matches as JsonValue[]).length, 1);
       const writeInput = { target: target.target, id: target.id, path: created, content: 'created\n' };
       await invoke('file_write', writeInput);
-      if (target.target === 'workspace') {
-        assert.equal(statWorkspacePath(workRoot, created).mode, 0o600, 'New files must be private by default');
-        await invoke('file_write', { ...writeInput, mode: 0o640 });
-        assert.equal(statWorkspacePath(workRoot, created).mode, 0o640);
-        await invoke('file_write', { ...writeInput, content: 'replaced\n' });
-        assert.equal(statWorkspacePath(workRoot, created).mode, 0o640, 'Replacement must preserve permissions');
-        await invoke('file_patch', {
-          target: target.target,
-          id: target.id,
-          patch: `--- ${created}\n+++ ${created}\n@@ -1 +1 @@\n-replaced\n+patched\n`,
-        });
-        assert.equal(statWorkspacePath(workRoot, created).mode, 0o640, 'Patching must preserve permissions');
-      }
       const patch = `--- ${source}\n+++ ${source}\n@@ -1,3 +1,3 @@\n-alpha\n+ALPHA\n needle\n omega\n`;
       const patched = await invoke('file_patch', { target: target.target, id: target.id, patch });
       assert.equal(patched.ok, true);
@@ -614,70 +475,32 @@ export const unifiedFileCapabilityScenario = async () => {
       assert.match(String((reread.data as Record<string, JsonValue>).content), /^ALPHA/m);
       await invoke('file_move', { target: target.target, id: target.id, path: created, destinationPath: moved });
       await invoke('file_delete', { target: target.target, id: target.id, path: moved });
-      const afterDelete = target.target === 'workspace' ? statWorkspacePath(workRoot, moved) : inspectSsh(moved);
+      const afterDelete = inspectSsh(moved);
       assert.equal(afterDelete.exists, false);
     }
 
-    const fileWriteTool = tools.get('file_write');
-    for (const fixture of filePermissions) {
-      const file = `/workspace/work/${fixture.id}.txt`;
-      await invoke('file_write', {
-        target: 'workspace',
-        id: 'ws-file',
-        path: file,
-        content: fixture.id,
-        ...(fixture.mode === null ? {} : { mode: fixture.mode }),
-      });
-      assert.equal(statWorkspacePath(workRoot, file).mode, fixture.expectedMode);
-      await invoke('file_write', { target: 'workspace', id: 'ws-file', path: file, content: `${fixture.id}-updated` });
-      assert.equal(statWorkspacePath(workRoot, file).mode, fixture.expectedMode);
-      await invoke('file_delete', { target: 'workspace', id: 'ws-file', path: file });
-      assert.equal(statWorkspacePath(workRoot, file).exists, false);
-    }
-    const fileReadTool = tools.get('file_read');
-    assert.ok(fileWriteTool && fileReadTool);
-    await assert.rejects(
-      () =>
-        fileWriteTool.inspect(
-          { target: 'workspace', id: 'ws-file', path: '/workspace/work/invalid-mode.txt', content: '', mode: 512 },
-          context,
-          7,
-        ),
-      /FILE_ARGUMENT_INTEGER_INVALID/,
-    );
+    const fileWriteTool = tools.get('file_write')!;
+    const fileReadTool = tools.get('file_read')!;
     const privateWrite = await fileWriteTool.inspect(
-      { target: 'workspace', id: 'ws-file', path: '/workspace/work/mode-hash.txt', content: '', mode: 0o600 },
+      { target: 'ssh', id: '1', path: '/srv/mode-hash.txt', content: '', mode: 0o600 },
       context,
       7,
     );
     const sharedWrite = await fileWriteTool.inspect(
-      { target: 'workspace', id: 'ws-file', path: '/workspace/work/mode-hash.txt', content: '', mode: 0o644 },
+      { target: 'ssh', id: '1', path: '/srv/mode-hash.txt', content: '', mode: 0o644 },
       context,
       7,
     );
-    assert.notEqual(
-      privateWrite.operationHash,
-      sharedWrite.operationHash,
-      'Changing permissions requires a new approval',
-    );
-
-    const frozenWorkspaceWrite = await fileWriteTool.inspect(
-      { target: 'workspace', id: 'ws-file', path: '/workspace/work/stale-generation.txt', content: 'must-not-write\n' },
-      context,
-      7,
-    );
-    workspaceGeneration = 2;
+    assert.notEqual(privateWrite.operationHash, sharedWrite.operationHash, 'SSH mode requires new approval');
     await assert.rejects(
-      () => fileWriteTool.execute(frozenWorkspaceWrite, context),
-      /WORKSPACE_GENERATION_CONFLICT/,
-      'file execution must keep the inspected Workspace generation pinned instead of rebinding target + id after inspection',
+      () =>
+        fileWriteTool.inspect(
+          { target: 'workspace', id: 'ws-file', path: '/srv/invalid.txt', content: 'must-not-write' },
+          context,
+          7,
+        ),
+      /FILE_ARGUMENT_TARGET_INVALID/,
     );
-    assert.equal(
-      statWorkspacePath(workRoot, '/workspace/work/stale-generation.txt').exists,
-      false,
-      'a stale Workspace generation must not receive the approved write',
-    );
-    workspaceGeneration = 1;
 
     const frozenSshWrite = await fileWriteTool.inspect(
       { target: 'ssh', id: '1', path: '/srv/stale-config.txt', content: 'must-not-write\n' },
@@ -726,11 +549,7 @@ export const unifiedFileCapabilityScenario = async () => {
       defaultGrants: [],
     });
     let brokerGrants = [
-      capabilityRegistry.grant(
-        'file.read',
-        { kind: 'targets', targets: { workspace: { mode: 'ids', ids: ['ws-file'] } } },
-        1,
-      ),
+      capabilityRegistry.grant('file.read', { kind: 'targets', targets: { ssh: { mode: 'ids', ids: ['1'] } } }, 1),
     ];
     const broker = new AppCapabilityBroker(
       appRegistry,
@@ -763,45 +582,39 @@ export const unifiedFileCapabilityScenario = async () => {
       tools: createUnifiedFileTools(service, cryptoHash),
     });
     const executor = new ToolExecutor(authorizedCatalog, broker);
-    const workspaceProposal = {
-      providerCallId: 'file-workspace-read',
+    const sshProposal = {
+      providerCallId: 'file-ssh-read',
       name: 'file_read',
-      argumentsJson: JSON.stringify({ target: 'workspace', id: 'ws-file', path: '/workspace/work/a.txt' }),
+      argumentsJson: JSON.stringify({ target: 'ssh', id: '1', path: '/srv/a.txt' }),
     };
-    const authorizedRead = await executor.invoke(context, workspaceProposal);
-    assert.equal(authorizedRead.result.ok, true, 'ToolExecutor/AppCapabilityBroker must allow a matching target grant');
+    const authorizedRead = await executor.invoke(context, sshProposal);
+    assert.equal(authorizedRead.result.ok, true, 'Authorized SSH file read must complete');
     await assert.rejects(
       () =>
         executor.inspect(context, {
-          providerCallId: 'file-ssh-read',
+          providerCallId: 'file-ungranted-ssh-read',
           name: 'file_read',
-          argumentsJson: JSON.stringify({ target: 'ssh', id: '1', path: '/srv/a.txt' }),
+          argumentsJson: JSON.stringify({ target: 'ssh', id: '2', path: '/srv/a.txt' }),
         }),
       /APP_CAPABILITY_DENIED/,
-      'a Workspace-only file.read grant must not authorize the same canonical Tool against SSH',
+      'an SSH id-specific file grant must not authorize another SSH connection',
     );
-    const staleInspection = await executor.inspect(context, workspaceProposal);
+    const staleInspection = await executor.inspect(context, sshProposal);
     brokerGrants = [
-      capabilityRegistry.grant(
-        'file.read',
-        { kind: 'targets', targets: { workspace: { mode: 'ids', ids: ['other-workspace'] } } },
-        2,
-      ),
+      capabilityRegistry.grant('file.read', { kind: 'targets', targets: { ssh: { mode: 'ids', ids: ['2'] } } }, 2),
     ];
     await assert.rejects(
       () => executor.execute(context, staleInspection),
       /POLICY_REVISION_CONFLICT/,
-      'ToolExecutor must re-authorize the inspected target before execution so a narrowed grant cannot be bypassed',
+      'Reauthorization must reject narrowed SSH grants after inspection',
     );
 
     return [
-      { name: 'unified_file_targets', value: 2, unit: 'targets' },
+      { name: 'unified_file_targets', value: 1, unit: 'targets' },
       { name: 'unified_file_operations', value: 7, unit: 'operations' },
       { name: 'unified_file_broker_scope_rejections', value: 2, unit: 'cases' },
-      { name: 'unified_file_frozen_target_stale_rejections', value: 3, unit: 'cases' },
+      { name: 'unified_file_frozen_target_stale_rejections', value: 2, unit: 'cases' },
       { name: 'unified_file_legacy_branches', value: 0, unit: 'branches' },
     ];
-  } finally {
-    fs.rmSync(directory, { recursive: true, force: true });
   }
 };

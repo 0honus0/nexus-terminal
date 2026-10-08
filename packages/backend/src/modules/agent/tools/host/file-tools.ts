@@ -2,7 +2,6 @@ import type { JsonValue } from '../../agent.types';
 import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';
 import type { FileCapabilityService, UnifiedFileStat } from '../../capabilities/file-capability.service';
-import type { AgentTargetKind } from '../../capabilities/tool-target.types';
 import { withSshSessionInput } from './ssh-session-input';
 import type {
   AgentTool,
@@ -44,8 +43,8 @@ const contentValue = (value: JsonValue | undefined, maxBytes: number): string =>
   }
   return value;
 };
-const targetKind = (value: JsonValue | undefined): AgentTargetKind => {
-  if (value !== 'workspace' && value !== 'ssh') throw new Error('FILE_ARGUMENT_TARGET_INVALID');
+const targetKind = (value: JsonValue | undefined): 'ssh' => {
+  if (value !== 'ssh') throw new Error('FILE_ARGUMENT_TARGET_INVALID');
   return value;
 };
 const boundedInteger = (
@@ -113,8 +112,6 @@ const operation = (
         loginUser: target.loginUser,
         configurationHash: target.configurationHash,
         connectionId: target.connectionId ?? null,
-        workspaceId: target.workspaceId ?? null,
-        generation: target.generation ?? null,
       },
       arguments: normalizedArguments,
       resourceKeys: [...new Set(resourceKeys)].sort(),
@@ -143,17 +140,12 @@ const confirmed = (
   verification: { status: 'verified', summary: verification, evidenceRefs: [] },
 });
 const targetSchema: Record<string, JsonValue> = {
-  target: { type: 'string', enum: ['workspace', 'ssh'] },
+  target: { type: 'string', enum: ['ssh'] },
   id: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
 };
 const pathSchema: Record<string, JsonValue> = { type: 'string', minLength: 1, maxLength: MAX_PATH_BYTES };
-const targetAvailable = ({
-  environment,
-  connectionIds,
-}: {
-  environment: unknown;
-  connectionIds?: readonly number[];
-}): boolean => environment !== null || connectionIds === undefined || connectionIds.length > 0;
+const targetAvailable = ({ connectionIds }: { connectionIds?: readonly number[] }): boolean =>
+  connectionIds === undefined || connectionIds.length > 0;
 
 const readInspection = async (
   files: FileCapabilityService,
@@ -198,7 +190,7 @@ export const createFileReadTool = (files: FileCapabilityService, cryptoHash: Cry
     name: 'file_read',
     version: '1.0.0',
     description:
-      'Read bounded UTF-8 text from a Workspace or SSH file selected by target + id. Returns a stable source SHA-256.',
+      'Read bounded UTF-8 text from an authorized SSH file selected by target=ssh + id. Returns a stable source SHA-256.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -255,7 +247,7 @@ export const createFileListTool = (files: FileCapabilityService, cryptoHash: Cry
   descriptor: {
     name: 'file_list',
     version: '1.0.0',
-    description: 'List bounded directory entries on a Workspace or SSH target selected by target + id.',
+    description: 'List bounded directory entries on an authorized SSH target selected by target=ssh + id.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -305,7 +297,7 @@ export const createFileSearchTool = (files: FileCapabilityService, cryptoHash: C
     name: 'file_search',
     version: '1.0.0',
     description:
-      'Search bounded UTF-8 text on a Workspace or SSH target. query is a JavaScript Unicode regular expression evaluated per line; returns the first match per line with a 1-based UTF-16 column. Explicit glob uses Node glob syntax on both targets, matching a relative path or basename (including brace alternatives). Results remain bounded.',
+      'Search bounded UTF-8 text over SSH. query is a JavaScript Unicode regular expression evaluated per line; returns the first match per line with a 1-based UTF-16 column. Explicit glob uses the SSH file search glob syntax, matching a relative path or basename (including brace alternatives). Results remain bounded.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -417,7 +409,7 @@ export const createFileWriteTool = (files: FileCapabilityService, cryptoHash: Cr
     name: 'file_write',
     version: '1.0.0',
     description:
-      'Atomically create or replace one UTF-8 file on a Workspace or SSH target. New files default to 0600; replacements preserve permissions unless mode is specified as a decimal Unix permission integer (384 = 0600, 420 = 0644). Host-resolved hash and metadata preconditions prevent stale writes.',
+      'Atomically create or replace one UTF-8 file on an authorized SSH target. New files default to 0600; replacements preserve permissions unless mode is specified as a decimal Unix permission integer (384 = 0600, 420 = 0644). Host-resolved hash and metadata preconditions prevent stale writes.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -497,7 +489,7 @@ export const createFilePatchTool = (files: FileCapabilityService, cryptoHash: Cr
     name: 'file_patch',
     version: '1.0.0',
     description:
-      'Apply a strict unified diff with exact declared hunk context and fuzz=0 on either Workspace or SSH. Create/delete/rename patches are rejected.',
+      'Apply a strict unified diff over SSH with exact declared hunk context and fuzz=0. Create/delete/rename patches are rejected.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -554,7 +546,7 @@ export const createFileMoveTool = (files: FileCapabilityService, cryptoHash: Cry
     version: '1.0.0',
     modelExposure: 'deferred',
     description:
-      'Move or rename one file or directory on a Workspace or SSH target. Source and destination metadata are frozen during inspection.',
+      'Move or rename one file or directory over SSH. Source and destination metadata are frozen during inspection.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -623,8 +615,7 @@ export const createFileDeleteTool = (files: FileCapabilityService, cryptoHash: C
     name: 'file_delete',
     version: '1.0.0',
     modelExposure: 'deferred',
-    description:
-      'Delete one file or directory on a Workspace or SSH target. Recursive directory deletion is explicit and destructive.',
+    description: 'Delete one file or directory over SSH. Recursive directory deletion is explicit and destructive.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
