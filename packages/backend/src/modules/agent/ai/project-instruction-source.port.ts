@@ -10,7 +10,7 @@ export interface ProjectInstructionSnapshot {
   sourceBytes: number;
   contentBytes: number;
   truncated: boolean;
-  provenance: 'workspace' | 'ssh';
+  provenance: 'ssh';
   connectionId?: number;
 }
 
@@ -20,8 +20,6 @@ export interface ProjectInstructionOmission {
 }
 
 export interface ProjectInstructionProjection {
-  workspaceId: string;
-  generation: number;
   targetDirectories: string[];
   instructions: ProjectInstructionSnapshot[];
   omitted: ProjectInstructionOmission[];

@@ -91,19 +91,6 @@ export interface CheckpointRecoveryHazards {
   quarantinedResourceKeys: string[];
 }
 
-export interface CheckpointWorkspaceCapture {
-  workspaceId: string;
-  generation: number;
-  expectedVersion: number;
-  manifestArtifactId: string;
-  artifactRefs: string[];
-}
-
-export interface CheckpointWorkspaceReference {
-  manifestArtifactIds: string[];
-  artifactRefs: string[];
-}
-
 export interface SaveCheckpointCommand {
   scope: Scope;
   checkpointId: string;
@@ -112,8 +99,6 @@ export interface SaveCheckpointCommand {
   expectedRunVersion: number;
   definitionVersion: string;
   activeModel: ModelRef;
-  workspaceCaptures: CheckpointWorkspaceCapture[];
-  workspaceReference?: CheckpointWorkspaceReference;
   backgroundJobs: CheckpointBackgroundJobEntry[];
   now: number;
 }

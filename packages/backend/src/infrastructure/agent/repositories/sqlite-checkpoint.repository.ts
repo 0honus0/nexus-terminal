@@ -265,23 +265,12 @@ const cleanupCheckpointArtifactLinks = async (
     for (const artifactId of checkpointArtifactRefs(decodeCheckpointSnapshot(row.snapshot_json)))
       retained.add(artifactId);
   }
-  const releasedManifestRefs = new Set<string>();
   for (const artifactId of releasedArtifactRefs) {
     if (retained.has(artifactId)) continue;
     await db.execute(`DELETE FROM agent_artifact_links WHERE artifact_id=? AND run_id=? AND role='checkpoint'`, [
       artifactId,
       runId,
     ]);
-    releasedManifestRefs.add(artifactId);
-  }
-  if (releasedManifestRefs.size > 0) {
-    for (const artifactId of releasedManifestRefs) {
-      await db.execute(
-        `UPDATE agent_workspaces SET retained_manifest_ref=NULL
-         WHERE run_id=? AND retained_manifest_ref=?`,
-        [runId, artifactId],
-      );
-    }
   }
 };
 
@@ -395,72 +384,8 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
         `SELECT artifact_id FROM agent_artifact_links WHERE run_id=? AND role='evidence' ORDER BY artifact_id`,
         [run.id],
       );
-      const backgroundJobs = command.backgroundJobs;
-      if (
-        backgroundJobs.length > 256 ||
-        new Set(backgroundJobs.map((job) => job.jobId)).size !== backgroundJobs.length ||
-        backgroundJobs.some(
-          (job) =>
-            !/^job-[a-f0-9]{64}$/.test(job.jobId) ||
-            !job.workspaceId ||
-            job.workspaceId.length > 128 ||
-            !Number.isSafeInteger(job.generation) ||
-            job.generation < 1 ||
-            !['succeeded', 'failed', 'cancelled'].includes(job.status),
-        )
-      ) {
-        throw new Error('CHECKPOINT_NOT_SAFE');
-      }
-
-      const workspaceCaptures = command.workspaceCaptures;
-      const workspaceReference = command.workspaceReference;
-      if (
-        (workspaceCaptures.length > 0 && workspaceReference !== undefined) ||
-        workspaceCaptures.length > 64 ||
-        new Set(workspaceCaptures.map((capture) => capture.workspaceId)).size !== workspaceCaptures.length
-      ) {
-        throw new Error('CHECKPOINT_STATE_INVALID');
-      }
-      for (const capture of workspaceCaptures) {
-        if (
-          !capture.artifactRefs.includes(capture.manifestArtifactId) ||
-          capture.artifactRefs.length < 2 ||
-          capture.artifactRefs.length > 16 ||
-          new Set(capture.artifactRefs).size !== capture.artifactRefs.length
-        ) {
-          throw new Error('CHECKPOINT_STATE_INVALID');
-        }
-        const workspace = await tx.queryOne<{ id: string; generation: number; version: number; status: string }>(
-          `SELECT id,generation,version,status FROM agent_workspaces
-           WHERE id=? AND run_id=? AND user_id=? AND app_id=?`,
-          [capture.workspaceId, run.id, command.scope.userId, command.scope.appId],
-        );
-        if (
-          !workspace ||
-          workspace.generation !== capture.generation ||
-          workspace.version !== capture.expectedVersion ||
-          !['ready', 'running', 'stopped'].includes(workspace.status)
-        ) {
-          throw new Error('CHECKPOINT_NOT_SAFE');
-        }
-      }
-      if (
-        workspaceReference &&
-        (workspaceReference.manifestArtifactIds.length > 64 ||
-          workspaceReference.artifactRefs.length > 1024 ||
-          new Set(workspaceReference.manifestArtifactIds).size !== workspaceReference.manifestArtifactIds.length ||
-          new Set(workspaceReference.artifactRefs).size !== workspaceReference.artifactRefs.length ||
-          workspaceReference.manifestArtifactIds.some(
-            (artifactId) => !workspaceReference.artifactRefs.includes(artifactId),
-          ))
-      ) {
-        throw new Error('CHECKPOINT_STATE_INVALID');
-      }
-      const workspaceArtifactRefs =
-        workspaceReference?.artifactRefs ?? workspaceCaptures.flatMap((capture) => capture.artifactRefs);
-      const manifestRefs =
-        workspaceReference?.manifestArtifactIds ?? workspaceCaptures.map((capture) => capture.manifestArtifactId);
-      const artifactRefs = [...new Set([...evidence.map((row) => row.artifact_id), ...workspaceArtifactRefs])];
+      if (command.backgroundJobs.length > 0) throw new Error('CHECKPOINT_BACKGROUND_JOB_UNRESOLVED');
+      const artifactRefs = [...new Set(evidence.map((row) => row.artifact_id))];
       for (const artifactId of artifactRefs) {
         const artifact = await tx.queryOne<{ status: string }>(
           `SELECT status FROM ai_artifacts WHERE id=? AND user_id=? AND app_id=?`,
@@ -504,15 +429,15 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
         activeModel: { ...command.activeModel },
         definitionVersion: command.definitionVersion,
         policyRevision: definition.policyRevision,
-        workspaceArtifactManifestRefs: [...manifestRefs].sort(),
-        workspaceArtifactRefs: [...new Set(workspaceArtifactRefs)].sort(),
+        workspaceArtifactManifestRefs: [],
+        workspaceArtifactRefs: [],
         recoveryManifest: {
           schemaVersion: 1,
           eventThrough,
           contextBoundary,
           tools: toolManifest,
           delegations: delegations.map((delegation) => ({ delegationId: delegation.id, status: delegation.status })),
-          backgroundJobs: backgroundJobs.map((job) => ({ ...job })),
+          backgroundJobs: [],
           quarantinedResourceKeys: quarantines.map((quarantine) => quarantine.resource_key),
         },
       };
@@ -544,24 +469,6 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
           command.now,
         ],
       );
-      for (const capture of workspaceCaptures) {
-        const changed = await tx.execute(
-          `UPDATE agent_workspaces
-           SET retained_manifest_ref=?, version=version+1, updated_at=?
-           WHERE id=? AND run_id=? AND user_id=? AND app_id=? AND generation=? AND version=?`,
-          [
-            capture.manifestArtifactId,
-            command.now,
-            capture.workspaceId,
-            run.id,
-            command.scope.userId,
-            command.scope.appId,
-            capture.generation,
-            capture.expectedVersion,
-          ],
-        );
-        if (changed.changes !== 1) throw new Error('CHECKPOINT_NOT_SAFE');
-      }
       for (const artifactId of artifactRefs) {
         await tx.execute(
           `INSERT OR IGNORE INTO agent_artifact_links (artifact_id,run_id,role,created_at) VALUES (?,?,'checkpoint',?)`,

@@ -16,7 +16,6 @@ import { SpeakeasyTwoFactorAdapter } from '../infrastructure/auth/speakeasy-two-
 import { DatabaseAdapter } from '../infrastructure/database/database.adapter';
 import { LeaseMutationGuardAdapter } from '../infrastructure/agent/capabilities/lease-mutation-guard.adapter';
 import { BrowserRuntimeAdapter } from '../infrastructure/agent/integrations/browser-runtime.adapter';
-import { RunnerHttpAdapter } from '../infrastructure/agent/workspace-runtime/runner-http.adapter';
 import { SqliteLeaseRepository } from '../infrastructure/agent/repositories/sqlite-lease.repository';
 import { SqliteAppearanceSettingsRepository } from '../infrastructure/database/repositories/sqlite-appearance-settings.repository';
 import { SqliteAuditLogRepository } from '../infrastructure/database/repositories/sqlite-audit-log.repository';
@@ -404,7 +403,6 @@ export const createCompositionRoot = (
     },
   );
 
-  const workspaceRuntimeController = new RunnerHttpAdapter(config.agentRunnerUrl, config.agentRunnerToken);
   const browserRuntime = new BrowserRuntimeAdapter();
 
   const diagnostics = new SystemDiagnosticsService([
@@ -433,7 +431,6 @@ export const createCompositionRoot = (
     executionSessions,
     docker,
     leases: agentLeases,
-    workspaceRuntimeController,
     browserGateway: browserRuntime,
     audit,
     notifications,

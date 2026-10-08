@@ -317,12 +317,10 @@ export class ModelStepRunner {
             {
               runId: snapshot.id,
               runtimeId,
-              workspaceId: projection.workspaceId,
-              generation: projection.generation,
               targetDirectories: projection.targetDirectories,
               omitted: projection.omitted,
             },
-            'Agent project instructions were partially omitted by bounded Workspace projection',
+            'Agent SSH project instructions were partially omitted by bounded projection',
           );
         }
       } catch (error) {

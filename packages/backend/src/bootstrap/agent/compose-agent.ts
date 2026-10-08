@@ -31,8 +31,6 @@ import { SqliteRunRepository } from '../../infrastructure/agent/repositories/sql
 import { SqliteCheckpointRepository } from '../../infrastructure/agent/repositories/sqlite-checkpoint.repository';
 import { SqliteTargetDenylistRepository } from '../../infrastructure/agent/repositories/sqlite-target-denylist.repository';
 import { SqliteStateCommitAdapter } from '../../infrastructure/agent/runtime/sqlite-state-commit.adapter';
-import type { WorkspaceRuntimeControllerPort } from '../../modules/agent/workspace-runtime/workspace-runtime-controller.port';
-import type { WorkspaceRuntimeGatewayPort } from '../../modules/agent/workspace-runtime/workspace-runtime-gateway.port';
 import { AGENT_DEFAULTS } from '../../modules/agent/agent-defaults';
 import { systemClock, type Scope } from '../../modules/agent/agent.types';
 import { ArtifactService } from '../../modules/agent/ai/artifact.service';
@@ -74,7 +72,6 @@ import { ModelStepRunner } from '../../modules/agent/runtime/execution/model-ste
 import { ToolCallRunner } from '../../modules/agent/runtime/execution/tool-call-runner';
 import { RunService } from '../../modules/agent/runtime/runs/run.service';
 import { CheckpointService } from '../../modules/agent/runtime/recovery/checkpoint.service';
-import { WorkspaceCheckpointService } from '../../modules/agent/runtime/recovery/workspace-checkpoint.service';
 import { AgentScheduler } from '../../modules/agent/runtime/scheduling/scheduler';
 import { SubagentCompletionCoordinator } from '../../modules/agent/runtime/collaboration/subagent-completion-coordinator';
 import { SubagentContextBuilder } from '../../modules/agent/runtime/collaboration/subagent-context-builder';
@@ -113,7 +110,6 @@ import { AgentNotificationBridge } from './agent-notification-bridge';
 import { composePlugins } from './compose-plugins';
 import { composeProviders } from './compose-providers';
 import { composeSshCapabilities } from './compose-ssh-capabilities';
-import { composeWorkspaceRuntime } from './compose-workspace-runtime';
 import { createAgentLifecycleSweeps } from './lifecycle-sweeps';
 import {
   createMcpToolContributionHooks,
@@ -139,7 +135,6 @@ export interface ComposeAgentOptions {
   executionSessions: ExecutionSessionManager;
   docker: RemoteDockerService;
   leases: LeasePort;
-  workspaceRuntimeController: WorkspaceRuntimeControllerPort & WorkspaceRuntimeGatewayPort;
   browserGateway: BrowserGatewayPort;
   audit: AuditLogService;
   notifications: NotificationService;
@@ -159,7 +154,6 @@ export const composeAgent = ({
   executionSessions,
   docker,
   leases,
-  workspaceRuntimeController,
   browserGateway,
   audit,
   notifications,
@@ -358,18 +352,6 @@ export const composeAgent = ({
     });
   });
   const plans = new PlanService(runRepository, stateCommit, () => systemClock.nowUnixSeconds());
-  const composedWorkspaceRuntime = composeWorkspaceRuntime({
-    database,
-    controller: workspaceRuntimeController,
-    settings,
-    lifecycle,
-    capabilities: capabilityBroker,
-    cryptoHash,
-    browserGateway,
-    now: () => systemClock.nowUnixSeconds(),
-  });
-  const workspaceRepository = composedWorkspaceRuntime.repository;
-  const workspaceRuntime = composedWorkspaceRuntime.service;
   const files = new FileCapabilityService(sshTargets, sshFiles);
   const shell = new ShellCapabilityService(sshTargets, sshShell, sshSessions);
   const acpRuntime = new AcpAdapter();
@@ -444,36 +426,18 @@ export const composeAgent = ({
         import('../../modules/agent/ai/project-instruction-source.port').ProjectInstructionSourcePort['load']
       >
     ) => {
-      const [scope, runId, runtimeId, targetDirectories, signal, toolContext] = args;
-      const workspace = toolContext?.environment
-        ? await workspaceRuntime
-            .loadProjectInstructions(
-              scope,
-              runId,
-              runtimeId,
-              targetDirectories.filter(
-                (directory) => directory === '/workspace/work' || directory.startsWith('/workspace/work/'),
-              ),
-              signal,
-            )
-            .catch(() => {
-              logger.warn({ runId, runtimeId }, 'Workspace project instructions unavailable; no rules synthesized');
-              return null;
-            })
-        : null;
+      const [, runId, runtimeId, targetDirectories, , toolContext] = args;
       const remote = toolContext
         ? await projectDirectories.instructions(toolContext, targetDirectories).catch(() => {
             logger.warn({ runId, runtimeId }, 'SSH project instructions unavailable; no remote rules synthesized');
             return [];
           })
         : [];
-      if (!workspace && !remote.length) return null;
+      if (!remote.length) return null;
       return {
-        workspaceId: workspace?.workspaceId ?? '',
-        generation: workspace?.generation ?? 0,
         targetDirectories: [...targetDirectories],
-        instructions: [...(workspace?.instructions ?? []), ...remote],
-        omitted: workspace?.omitted ?? [],
+        instructions: remote,
+        omitted: [],
       };
     },
   };
@@ -632,12 +596,6 @@ export const composeAgent = ({
     (userId, cursor) => eventHub.publishHostWake(userId, cursor),
   );
   const checkpointRepository = new SqliteCheckpointRepository(database);
-  const workspaceCheckpoints = new WorkspaceCheckpointService(
-    workspaceRepository,
-    workspaceRuntime,
-    workspaceRuntimeController,
-    artifacts,
-  );
   let recoveringStartup = false;
   const startupRecoveredRuns: Parameters<AgentScheduler['enqueue']>[0][] = [];
   const checkpoints = new CheckpointService(
@@ -655,21 +613,17 @@ export const composeAgent = ({
       else scheduler.enqueue(run);
     },
     (run) => notifyCommitted(run),
-    workspaceCheckpoints,
-    workspaceRuntimeController,
   );
   recordRecoverySafePoint = async (run, reason) => {
     await checkpoints.recordSafePoint(run, reason);
   };
   const lifecycleSweeps = createAgentLifecycleSweeps({
     stateCommit,
-    workspaceRuntime,
     artifactMaintenance: artifactStore,
     mailbox,
     scheduler,
     clock: systemClock,
     notifyCommitted,
-    retryRestartRecovery: () => checkpoints.retryDeferredRecoveries(),
     retryMcpIntegrations: () => integrations.retryDue(),
   });
 
@@ -993,7 +947,6 @@ export const composeAgent = ({
       await resetRuntime();
       modelRegistry.dispose();
       startupRecoveredRuns.length = 0;
-      checkpoints.resetRecovery();
     },
     dispose: async () => {
       modelRegistry.dispose();

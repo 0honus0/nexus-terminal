@@ -24,7 +24,6 @@ import type { MachineCapabilityPort } from '../../modules/agent/capabilities/mac
 import type { SshTargetResolverPort } from '../../modules/agent/capabilities/ssh-target-resolver.port';
 import type { ShellCapabilityService } from '../../modules/agent/capabilities/shell-capability.service';
 import type { ToolCatalog } from '../../modules/agent/capabilities/tool-catalog';
-import type { AgentWorkspaceRepositoryPort } from '../../modules/agent/workspace-runtime/workspace-runtime.repository.port';
 import type { MailboxService } from '../../modules/agent/runtime/collaboration/mailbox.service';
 import type { SharedFactsService } from '../../modules/agent/runtime/collaboration/shared-facts.service';
 import type { AcpPermissionRequestPort } from '../../modules/agent/runtime/approvals/acp-permission-broker';

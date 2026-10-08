@@ -1,5 +1,4 @@
 import type { AgentSettingsDocument } from './agent-defaults';
-export type { AgentWorkspaceCreateSpec } from './workspace-runtime/workspace-runtime.types';
 import type { JsonValue, Scope } from './agent.types';
 export type { AgentRunEnvironmentSelection, JsonValue } from './agent.types';
 import type {
