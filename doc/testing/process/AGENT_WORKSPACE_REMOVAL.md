@@ -34,14 +34,14 @@ node --version && pnpm --version
 # 从下方「当前工作指针」继续一项，改完先更新本文件再检查与本地提交
 ```
 
-**当前工作指针（2026-10-08）**：当前基点 `2e4b8887`，`dev` 原领先 `origin/dev` 6 个提交；新会话须重新确认提交与并发更改，保留用户初始未跟踪计划。所有者已确认**生产 Agent Workspace 已自行删除、有备份**，不再等待已不存在的线上 Workspace 枚举。**P0-1 旧架构的 Agent E2E 69/69 已按九个 spec 在隔离 Playwright Docker 分别完整通过**，附加 HTTP 全备份往返 1/1 PASS、SSH 连接恢复验证 PASS；非远程 CI，仍非新架构验收。P0-2/3 已完成，P1 不破坏的最终 contract/迁移草案记录在本文件；P0-4 官方正式签名替代插件尚缺，P0-5 生产备份实物及恢复验证尚缺。**下一步**：继续在隔离数据上演练旧备份导入和 Plugin/Agent 初始化，解除签名发布依赖后实施一套联动的 SSH-only P1/P2 迁移；当前阶段不直接删线上表/文件或 Runner 包。
+**当前工作指针（2026-10-08）**：先运行上方交接命令重新确认 `dev` HEAD、status 与其它会话的最新提交，保留用户初始未跟踪计划。所有者已确认**生产 Agent Workspace 已自行删除、有备份**，不再等待已不存在的线上 Workspace 枚举。**P0-1 旧架构 Agent E2E 69/69 已按九个 spec 在隔离 Playwright Docker 分别通过**；HTTP 全备份往返、恢复后 SSH 连通与 Plugin 签名安装也通过（强化后的完整 HTTP E2E），非远程 CI/新架构验收。P0-2/3 已完成，P1 不破坏的最终 contract/迁移草案记录在本文；P0-4 官方正式签名替代插件尚缺，P0-5 生产备份实物及恢复证据尚缺。**下一步**：取得官方签名替代插件及旧生产备份的可验证证据；在独立数据副本演练受控升级与拒绝行为后实施跨 FE/BE/Protocol 一致的 SSH-only contract，再移除旧在线表/Runner，不自动删除备份和 Artifact。
 
 ## 阶段状态（2026-10-08）
 
 | 阶段                         | 状态   | 说明                                                                           |
 | ---------------------------- | ------ | ------------------------------------------------------------------------------ |
 | P0 清单与升级边界            | 进行中 | P0-2/3 完成，check/build/Agent 场景通过；旧版 Agent E2E 69/69；P0-1/4/5 待验收 |
-| P1 最终 contract 与迁移方案  | 未开始 | 等待 P0 边界确认                                                               |
+| P1 最终 contract 与迁移方案  | 准备中 | 源码约束、目标和数据转换边界已在本文件成文；未改最终 DTO/Decoder               |
 | P2 存量数据、升级与备份      | 未开始 | 不在开发过程中直接删除真实数据                                                 |
 | P3 Backend SSH 收敛          | 未开始 |                                                                                |
 | P4 Browser、ACP、Plugin 解耦 | 未开始 |                                                                                |
@@ -64,7 +64,7 @@ node --version && pnpm --version
 
 ## P0：逐项执行记录
 
-- [ ] **P0-1：起点、已发布版本、schema/SDK/备份版本与可重复测试基线。** 版本与起点已核实，check、格式、build 通过；仍待 E2E、实际部署版本与升级演练数据，整项未完成。
+- [ ] **P0-1：起点、已发布版本、schema/SDK/备份版本与可重复测试基线。** 起点/schema/SDK/备份格式已核实，check、格式、build、Agent 场景、分文件完整 69/69 Agent E2E 和现行备份 HTTP E2E 已通过；仍待**实际旧部署版本、正式远程 CI、旧生产备份及升级演练数据**，整项未完成。
   - 起点：分支 `dev`，HEAD `f0461a4692fd65ecee2cdd9a19da9114f2cadf4d`（2026-10-08）；`origin/dev` 无领先/落后。起点前存在未跟踪 `doc/testing/AGENT_WORKSPACE_REMOVAL_PLAN.md`，视作用户工作，保持不变。
   - 本地根、Protocol 与 Agent Runner package 版本 `1.0.2`；GitHub `0honus0/nexus-terminal` 最近公开 Release 为 `v1.0.1`（2026-09-13）。这只证明公开发布记录，**不证明实际部署实例正在使用该版本**；升级演练前还须确认目标实例版本。
   - SQLite 已定义 migration 的最高 id 为 `54`（`packages/backend/src/infrastructure/database/migrations/agent-host.ts`）；列表 owner 为 `migrations/registry.ts`。这不是针对目标生产库已执行迁移的证明。
@@ -92,10 +92,12 @@ node --version && pnpm --version
   - **P0-1 的 Agent E2E 旧版基线达成：69/69 已分 spec 全部通过**。9 个 spec 分别单独执行、每次退出码均为 0：configuration-hints 1 + coverage-gaps 5 + event-catchup 8 + functional-regressions 23 + host 20 + preset-plugin 8 + provider 1 + ssh-acp-settings 2 + workspace-job-settings 1 = 69；**未宣称一个整套单进程 69/69 运行或正式远程 CI 全绿**。这只是当前有 Runner 的旧架构基线，移除后必须重构退出场景并重测保留能力。
   - **HTTP 全备份 round-trip E2E：PASS**：在相同官方 Docker 中执行 `--project=http --workers=1 --timeout=60000 --global-timeout=180000 specs/http/backup.spec.ts`，结果 `1 passed (8.8s)`、exit 0；验证密码保护的 v1 全量备份、错误密码不被接受、导入恢复原设置及 SSH 连接和实际 connection test。日志 `/home/honus/workspace/cache/e2e-http-backup-roundtrip.log`。这仅是由 E2E 数据生成的**当前版本**往返，不是所有者生产备份的解密/完整性/旧版本升级演练。
   - **备份后 Plugin 初始化告警待处理**：该 HTTP E2E 虽 PASS，但 Backend 在 `afterRestore` 执行 `TarPackageVerifierAdapter.reconcileStages` 时记录 `ENOENT scandir .../agent/plugins/.staging` 与 `Agent plugin staged package reconciliation failed during startup`。原因线索：Verifier constructor 创建 .staging，而 restore 交换 plugin 文件根后未必存在该空目录；reconcile 仍直接 `readdirSync`。不能把已有 SSH 连接恢复通过推定 Plugin stage owner 无告警；应在其真实 owner 内恢复目录不变量，并以备份 round-trip 实际重测，无需修改远端数据。
+  - **备份后 Plugin stage 的根因修复与完整行为复测**：`packages/backend/src/infrastructure/agent/plugins/tar-package-verifier.adapter.ts` 的 `reconcileStages` 现在在旧备份文件 swap 后恢复私有 `.staging` 目录、mode 0700，并校验是真实目录（不允许 symlink），保留原 stage 签名、清理与授权语义。既有 `tests/e2e/specs/http/backup.spec.ts` 在密码、设置、SSH 连通恢复之外，新增通过公开 API 实际安装推荐签名 Agent Plugin 的 post-restore 验证。官方 Playwright Docker 完整复测 **1 passed (8.9s)、exit 0**；旧日志中 `Agent plugin staged package reconciliation failed` **1 次**、修复后 `/home/honus/workspace/cache/e2e-http-backup-after-plugin-fix.log` **0 次**，真实 `Agent remote plugin staged` **1 次**。这是当前版本隔离数据库的备份恢复与初始化证据，仍**不是用户真实旧备份升级验证**。
   - **未完成的一次试验**：把 `configuration-hints.spec.ts`、Provider 和 Workspace Job Settings 合跑时，首个用例在 Playwright 非 CI `timeout=0` 环境长时间无进展，手动终止该试验；该尝试没有可主张的测试通过/失败结论。之后分别单测 Provider 与 Workspace Job Settings 都 PASS。后续在真实分片使用明确全局 timeout，继续诊断 configuration-hints，而不是跳过这个消费者。
   - **并行工作区保护**：本轮检查期间，其他任务独立修改并提交了 SFTP 连接生命周期和 nginx IPv4 路由（`c1c95c26`），以及对应其它测试文件。本轮 P0 修改仅包括 Frontend `package.json`、根 lockfile 和本进度文档；**没有将其他任务更改混入 P0 提交**。此文件的下一次接手指令必须先核实 HEAD 和所有未跟踪文件，勿复原这些改动。
   - **本轮提交前静态/构建验收**：在仓库恢复完 633 个 pnpm 包、加入 Tailwind 直接依赖，且其它会话的 SFTP/nginx 修改已独立提交的 HEAD `c1c95c26` 上，重新执行 `pnpm run check` **PASS**、`pnpm run format:all:check` **PASS**、`pnpm run build`（Backend tsc、Frontend vue-tsc/Vite、Agent Runner tsc）**PASS**、`git diff --check` **PASS**。当前 E2E 真实用例只声称前述 4 项通过，未覆盖其余 65 项 Agent、其它 Playwright 分片及正式远程 CI。
-  - 待办：在支持 Chromium 子进程、字体和 `/proc` 读取的隔离 E2E 环境运行 SSH ACP/Agent，核对实际部署版本（仓库及公开 Release 不代表线上实例）。迁移前仍需旧发布版本升级数据演练。
+  - 本轮更改（Plugin 恢复 .staging、扩展 HTTP 备份 E2E）在现行仓库执行 `pnpm run check` **PASS**、`pnpm run format:all:check` **PASS**、`pnpm run build` **PASS**（Backend/Frontend/Runner）、`git diff --check` **PASS**；没有更改 Plugin 签名校验和原有权限规则。
+  - **待办**：从所有者保留的正式旧备份中选取隔离副本，取得原部署/备份版本，在无写入危险的环境中验证历史数据/Plugin 迁移与拒绝及正确恢复；完整新架构 E2E 需在移除后重建场景重新跑，正式远程 CI 要与最终发布 SHA 对应。本轮 Docker 只是已确认可用的**旧版基线**环境。
 - [x] **P0-2：完成生产消费者和迁移/保留 owner 映射。** 见下方逐条矩阵；它确认源代码的修改入口与处置 owner，**不意味着这些修改已经实施或验证**：
   - Frontend：`features/agent/host/useAgentAppController.ts`、`api/workspace-runtime-api.ts`、`runtime/WorkspaceRuntimePanel.vue`、`runtime/AgentWorkspaceTerminal.vue`、`settings/WorkspaceRuntimeSettings.vue`、三语 i18n；普通终端 Workspace 是**保留**边界。
   - Backend：`bootstrap/agent/compose-workspace-runtime.ts`、`compose-agent.ts`、`modules/agent/workspace-runtime/`、`infrastructure/agent/workspace-runtime/`、`interfaces/http/agent/workspace-runtime.routes.ts`、`interfaces/websocket/agent-terminal-protocol.session.ts`。

@@ -448,6 +448,11 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
 
   async reconcileStages(activeStages: readonly { stageId: string; appId: string | null }[]): Promise<void> {
     if (activeStages.length > 100_000) throw new Error('PLUGIN_STAGE_RECONCILE_TOO_LARGE');
+    // A full backup restore swaps the plugin filesystem after this adapter was
+    // constructed. Empty .staging directories are not durable backup content.
+    fs.mkdirSync(this.unverifiedStagingRoot, { recursive: true, mode: 0o700 });
+    if (!fs.lstatSync(this.unverifiedStagingRoot).isDirectory()) throw new Error('PLUGIN_STAGE_STORAGE_INVALID');
+    fs.chmodSync(this.unverifiedStagingRoot, 0o700);
     const active = new Map(
       activeStages.map((stage) => [safeSegment(stage.stageId), stage.appId && safeSegment(stage.appId)]),
     );
