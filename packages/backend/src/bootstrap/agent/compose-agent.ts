@@ -127,7 +127,6 @@ import {
   registerAcpToolContribution,
   registerBrowserToolContribution,
   registerRuntimeToolContributions,
-  registerWorkspaceToolContributions,
 } from './tool-contributions';
 
 export interface ComposeAgentOptions {
@@ -402,13 +401,6 @@ export const composeAgent = ({
   registerFileToolContributions({ catalog: toolCatalog, files, cryptoHash });
   registerShellToolContributions({ catalog: toolCatalog, shell, cryptoHash });
   registerMachineToolContributions({ catalog: toolCatalog, machine, sshTargets, cryptoHash });
-  registerWorkspaceToolContributions({
-    catalog: toolCatalog,
-    repository: workspaceRepository,
-    targets,
-    runtime: workspaceRuntime,
-    cryptoHash,
-  });
   registerAcpToolContribution({
     catalog: toolCatalog,
     repository: integrationRepository,

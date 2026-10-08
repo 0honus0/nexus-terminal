@@ -19,10 +19,8 @@ import { sshSessionJobsScenario } from './ssh-session-jobs.scenario';
 import { subagentGovernedMutationScenario } from './subagent-governed-mutation.scenario';
 import { restartRecoveryScenario } from './restart-recovery.scenario';
 import { checkpointWorkspaceEvidenceScenario } from './checkpoint-workspace-evidence.scenario';
-import { workspaceBackgroundJobLifecycleScenario } from './workspace-background-job-lifecycle.scenario';
 import { workspaceCleanupHandoffScenario } from './workspace-cleanup-handoff.scenario';
 import { agentDefinitionCapabilityContractScenario } from './agent-definition-capability-contract.scenario';
-import { workspaceCodingToolSurfaceScenario } from './workspace-coding-tool-surface.scenario';
 import { nestedJoinDurableWakeScenario } from './nested-join-durable-wake.scenario';
 import { userInputClarificationScenario } from './user-input-clarification.scenario';
 import { mcpInputRequiredDurableLifecycleScenario } from './mcp-input-required-durable-lifecycle.scenario';
@@ -110,11 +108,9 @@ const scenarios = new Map<string, Scenario>([
   ['migration/capability-grants-v2', capabilityGrantMigrationScenario],
   ['context/token-accounting', contextTokenAccountingScenario],
   ['context/project-instructions', projectInstructionsContextScenario],
-  ['workspace/coding-tool-surface', workspaceCodingToolSurfaceScenario],
   ['file/unified-targets', unifiedFileCapabilityScenario],
   ['shell/unified-targets', unifiedShellCapabilityScenario],
   ['ssh/session-jobs', sshSessionJobsScenario],
-  ['workspace/background-job-lifecycle', workspaceBackgroundJobLifecycleScenario],
   ['workspace/cleanup-http-handoff', workspaceCleanupHandoffScenario],
   ['context/tool-result-projection', toolResultProjectionScenario],
   ['context/tool-surface-progressive-disclosure', toolSurfaceProgressiveDisclosureScenario],
@@ -190,7 +186,6 @@ const scenarios = new Map<string, Scenario>([
 ]);
 
 const SERIAL_SCENARIOS = new Set([
-  'workspace/coding-tool-surface',
   'provider/prompt-cache-hint',
   'model/capability-registry-sync',
   'model/provider-live-capability-authority',

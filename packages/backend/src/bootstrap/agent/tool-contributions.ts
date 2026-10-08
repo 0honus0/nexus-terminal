@@ -12,11 +12,6 @@ import { createAcpExecuteTool } from '../../modules/agent/tools/host/acp-tools';
 import { createBrowserTools } from '../../modules/agent/tools/host/browser-tools';
 import { createDockerMutationTool } from '../../modules/agent/tools/host/mutation-tools';
 import { createConnectionListTool, createDiagnosticsTool } from '../../modules/agent/tools/host/tools';
-import {
-  createWorkspaceControlTool,
-  createWorkspaceCreateTool,
-  createWorkspaceSwitchToolVersionsTool,
-} from '../../modules/agent/tools/host/workspace-runtime-management-tools';
 import { createSkillReadTool, createSkillSearchTool } from '../../modules/agent/tools/host/skill-tools';
 import { createRequestUserInputTool } from '../../modules/agent/tools/host/user-input-tools';
 import { createToolSearchTool } from '../../modules/agent/tools/host/tool-discovery-tools';
@@ -28,8 +23,8 @@ import type { FileCapabilityService } from '../../modules/agent/capabilities/fil
 import type { MachineCapabilityPort } from '../../modules/agent/capabilities/machine.port';
 import type { SshTargetResolverPort } from '../../modules/agent/capabilities/ssh-target-resolver.port';
 import type { ShellCapabilityService } from '../../modules/agent/capabilities/shell-capability.service';
-import type { AgentTargetResolver } from '../../modules/agent/capabilities/target-resolver';
 import type { ToolCatalog } from '../../modules/agent/capabilities/tool-catalog';
+import type { AgentWorkspaceRepositoryPort } from '../../modules/agent/workspace-runtime/workspace-runtime.repository.port';
 import type { MailboxService } from '../../modules/agent/runtime/collaboration/mailbox.service';
 import type { SharedFactsService } from '../../modules/agent/runtime/collaboration/shared-facts.service';
 import type { AcpPermissionRequestPort } from '../../modules/agent/runtime/approvals/acp-permission-broker';
@@ -37,8 +32,6 @@ import type { SubagentService } from '../../modules/agent/runtime/collaboration/
 import { createPlanUpdateTool } from '../../modules/agent/runtime/planning/plan-tool';
 import type { PlanService } from '../../modules/agent/runtime/planning/plan.service';
 import type { RunSnapshotReaderPort } from '../../modules/agent/runtime/runs/run.repository.port';
-import type { AgentWorkspaceRepositoryPort } from '../../modules/agent/workspace-runtime/workspace-runtime.repository.port';
-import type { WorkspaceRuntimeService } from '../../modules/agent/workspace-runtime/workspace-runtime.service';
 import { createUnifiedShellTools } from '../../modules/agent/tools/host/shell-tools';
 
 export interface FileToolContributionOptions {
@@ -91,37 +84,6 @@ export const registerShellToolContributions = ({ catalog, shell, cryptoHash }: S
     schemaVersion: 1,
     id: 'shell.tools',
     tools: createUnifiedShellTools(shell, cryptoHash),
-  });
-};
-
-export interface WorkspaceToolContributionOptions {
-  catalog: ToolCatalog;
-  repository: AgentWorkspaceRepositoryPort;
-  targets: AgentTargetResolver;
-  runtime: WorkspaceRuntimeService;
-  cryptoHash: CryptoHashPort;
-}
-
-export const registerWorkspaceToolContributions = ({
-  catalog,
-  repository,
-  targets,
-  runtime,
-  cryptoHash,
-}: WorkspaceToolContributionOptions): void => {
-  catalog.registerContribution({
-    schemaVersion: 1,
-    id: 'workspace.tools',
-    tools: [],
-  });
-  catalog.registerContribution({
-    schemaVersion: 1,
-    id: 'workspace.runtime',
-    tools: [
-      createWorkspaceCreateTool(runtime, repository, cryptoHash),
-      createWorkspaceControlTool(runtime, repository, cryptoHash),
-      createWorkspaceSwitchToolVersionsTool(runtime, repository, cryptoHash),
-    ],
   });
 };
 

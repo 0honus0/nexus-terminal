@@ -18,12 +18,7 @@ const verified = (result: CompletionEvidenceSnapshot['tools'][number]['result'])
 const verifiedResourceCleanup = (item: CompletionEvidenceSnapshot['tools'][number]): boolean => {
   const args = item.inspection.normalizedArguments;
   if (args === null || Array.isArray(args) || typeof args !== 'object' || !verified(item.result)) return false;
-  if (item.toolName === 'ssh_session_close' && item.inspection.target.kind === 'ssh') return args.force !== true;
-  return (
-    item.toolName === 'workspace_control' &&
-    item.inspection.target.kind === 'workspace' &&
-    (args.action === 'stop' || args.action === 'delete')
-  );
+  return item.toolName === 'ssh_session_close' && item.inspection.target.kind === 'ssh' && args.force !== true;
 };
 
 const repeatedGateFailure = (

@@ -279,46 +279,6 @@ export const completionGateScenario = async () => {
     const executionEvidence = evidenceAfterTest.tools.find((item) => item.result.semantic?.kind === 'execution');
     assert.ok(executionEvidence);
     const lastStep = Math.max(...evidenceAfterTest.tools.map((item) => item.stepIndex));
-    for (const action of ['stop', 'delete']) {
-      const cleanup = {
-        ...executionEvidence,
-        toolName: 'workspace_control',
-        stepIndex: lastStep + 1,
-        inspection: {
-          ...executionEvidence.inspection,
-          toolName: 'workspace_control',
-          normalizedArguments: { workspaceId: 'gate-workspace', action },
-        },
-        result: JSON.parse(successfulResult('Cleanup terminal confirmed', 'verified')) as ToolResult,
-      };
-      const afterCleanup = { ...evidenceAfterTest, tools: [...evidenceAfterTest.tools, cleanup] };
-      assert.equal(
-        completionGateDecision(afterGate, afterCleanup, 'Run tests and clean up the Workspace.').kind,
-        'complete',
-      );
-      assert.equal(
-        completionGateDecision(
-          afterGate,
-          {
-            ...afterCleanup,
-            tools: [
-              ...afterCleanup.tools,
-              {
-                ...cleanup,
-                toolName: 'file_write',
-                stepIndex: lastStep + 2,
-                inspection: { ...cleanup.inspection, toolName: 'file_write' },
-              },
-            ],
-            gateBlocksSinceToolProgress: 0,
-          },
-          'Run tests and clean up the Workspace.',
-        ).kind,
-        'continue',
-        'A later content mutation still invalidates old test evidence',
-      );
-    }
-
     const sshClose = {
       ...executionEvidence,
       toolName: 'ssh_session_close',
@@ -341,6 +301,28 @@ export const completionGateScenario = async () => {
         'Verify SSH commands and close the session.',
       ).kind,
       'complete',
+    );
+    assert.equal(
+      completionGateDecision(
+        afterGate,
+        {
+          ...evidenceAfterTest,
+          tools: [
+            ...evidenceAfterTest.tools,
+            sshClose,
+            {
+              ...sshClose,
+              toolName: 'file_write',
+              stepIndex: lastStep + 2,
+              inspection: { ...sshClose.inspection, toolName: 'file_write' },
+            },
+          ],
+          gateBlocksSinceToolProgress: 0,
+        },
+        'Verify SSH commands and close the session.',
+      ).kind,
+      'continue',
+      'A later content mutation still invalidates earlier verification after SSH cleanup',
     );
     assert.equal(
       completionGateDecision(
