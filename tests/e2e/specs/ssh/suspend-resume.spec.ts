@@ -380,11 +380,16 @@ test('a marked live SSH session survives WebSocket disconnect and resumes the sa
       ownershipState: 'available' | 'resuming' | 'attached';
       attachedWorkspaceId?: string;
     };
+    // The client close handshake can finish before the server flushes retained output
+    // and returns ownership. An active session may still belong to the old socket.
     let suspended: SuspendedSession | undefined;
     for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
       const list = await requestWorkspace<SuspendedSession[]>(recoverySocket, 'suspend.list');
       suspended = list.find(
-        (session) => session.originalWorkspaceId === original.workspaceId && session.status === 'active',
+        (session) =>
+          session.originalWorkspaceId === original.workspaceId &&
+          session.status === 'active' &&
+          session.ownershipState === 'available',
       );
       if (!suspended) await new Promise((resolve) => setTimeout(resolve, 150));
     }
@@ -393,6 +398,7 @@ test('a marked live SSH session survives WebSocket disconnect and resumes the sa
       originalWorkspaceId: original.workspaceId,
       connectionId,
       status: 'active',
+      ownershipState: 'available',
     });
 
     const resumedWorkspaceId = `resumed-${crypto.randomUUID()}`;
@@ -430,7 +436,10 @@ test('a marked live SSH session survives WebSocket disconnect and resumes the sa
       for (let attempt = 0; attempt < 30 && !resuspended; attempt += 1) {
         const list = await requestWorkspace<SuspendedSession[]>(verifier, 'suspend.list');
         resuspended = list.find(
-          (session) => session.originalWorkspaceId === resumedWorkspaceId && session.status === 'active',
+          (session) =>
+            session.originalWorkspaceId === resumedWorkspaceId &&
+            session.status === 'active' &&
+            session.ownershipState === 'available',
         );
         if (!resuspended) await new Promise((resolve) => setTimeout(resolve, 100));
       }
