@@ -156,4 +156,25 @@ export const agentHostMigrations: SqliteMigration[] = [
     verify: async (db: Database): Promise<boolean> =>
       !(await tableExists(db, 'agent_workspace_runtime_commands')) && !(await tableExists(db, 'agent_workspaces')),
   },
+  {
+    id: 59,
+    name: 'Remove retired Runner targets from persisted Plugin version manifests',
+    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_plugin_versions'),
+    sql: `
+      UPDATE agent_plugin_versions
+      SET manifest_json = json_remove(manifest_json, '$.targets.runner')
+      WHERE json_type(manifest_json, '$.targets.runner') IS NOT NULL;
+    `,
+  },
+  {
+    id: 60,
+    name: 'Remove retired Runner targets from staged Plugin manifests',
+    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_plugin_stages'),
+    sql: `
+      UPDATE agent_plugin_stages
+      SET manifest_json = json_remove(manifest_json, '$.targets.runner')
+      WHERE manifest_json IS NOT NULL
+        AND json_type(manifest_json, '$.targets.runner') IS NOT NULL;
+    `,
+  },
 ];
