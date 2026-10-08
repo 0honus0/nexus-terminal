@@ -19,12 +19,21 @@
 9. **生产 Workspace 已自行清理且有备份**：项目所有者于 2026-10-08 明确确认“生产workspace也删除了 我都有备份 没问题”。以其声明作为旧生产 Workspace 的**已删除/备份存在**前提，不再要求恢复旧生产 Workspace 才开始非破坏性开发；但未取得备份 hash、完整性和恢复演练证据，不把这句话扩展解释为数据库/Plugin 兼容迁移成功，也不擅自删除剩余备份、Artifact 或其他服务数据。P0-5 的原生产实例枚举不再可行，后续只能验证**已有备份与可信副本**，同时完成新版本的升级/拒绝与回退测试。
 10. **2026-10-08 新的破坏式移除要求，替代上文涉及旧数据/备份/Plugin 兼容的前置门槛**：项目所有者明确要求“可以去把插件那个库也拉下来一块修改；要求做破坏式更新，不考虑备份恢复兼容问题，只保留最干净的代码状态”。当前任务的最终新版本**不为旧 Agent Workspace、Runner、旧备份 schema、旧 Plugin manifest/Runner entry 留兼容层、降级路径或旧值解码器**。旧格式在边界直接拒绝即可；只需维护**新版本自己的**备份导出/导入能力以及 SSH、Browser、ACP、Artifact、Memory 和 Plugin Frontend/Backend 等保留能力。允许按照依赖顺序直接实施破坏式 contract/数据库/消费端清理，不再以历史生产备份恢复演练或旧签名 Plugin Release 已发布作为代码施工门槛。**不要动用户独立存放的原始备份文件；不删普通终端 Workspace、SSH 项目、E2E 测试 Runner。**
 11. **双仓协同**：官方 `https://github.com/0honus0/nexus-agent-plugins` 已克隆至 `/home/honus/nexus-agent-plugins`（`main`，克隆 HEAD `826a597`），与 `/home/honus/nexus-terminal` 一起做更新；Node/pnpm、下载和临时打包仍使用 `/home/honus/workspace`。两个 Git 仓库分别检查 status、验证、创建本地提交，**不自动推送、不虚构官方签名发布**。所有进度和新会话交接要求继续只写在**本文件**。
+12. **2026-10-08 最新插件发布授权**：所有者明确指示“插件可以推送到远程 触发actions发布 版本还是要1.0.0”。**仅对官方插件仓**授权远程推送及 `v1.0.0` 已发布 Release 的签名资产替换；插件包 `version`、AgentDefinition `version` 与仓库版本都固定 **`1.0.0`**，Manifest `schemaVersion=1`、Host SDK `sdkVersion=1.0.0` 不另起新版本。**主仓 `nexus-terminal` 不随之推送**。同版本更新是破坏式的：不会自动迁移安装在旧数据库中的 immutable 同版本不同哈希 Plugin，用户已明确不要求旧版数据/备份兼容。以下最新正式发布结果优先于文档中早期“`2.0.0` 尚未发布”的过程记录。
 
 ### 新要求后的执行优先级
 
 现在优先同步两个仓库的最新 Plugin contract：去掉 `workspace.manage`、`targets.runner`、Runner 源码和 Skills 内 Workspace 指令，仅保留 SSH 与 Frontend/Backend；先核实官方仓签名和 manifest 机制，运行其本地验证并独立提交。随后清理 Nexus Host 的能力、Runtime/Protocol、Frontend、Schema、Runner、部署/测试及有效文档，按可编译的安全边界分批提交。**P0 中“必须拿到旧生产备份与外部已签名版本才能开始代码移除”的历史阻塞被此规则取代**；之前的 E2E 全绿只是旧架构基线，不作为保留旧功能的理由。
 
 **双仓第一项已完成（2026-10-08）**：`/home/honus/nexus-agent-plugins` 的 `main` 提交 `00af729`（`feat(plugins): remove Workspace and Runner targets`），本地领先 `origin/main` 1 个提交、未推送。两个正式插件源码的 App 版本升至 `2.0.0`，SDK major 仍为 Host 目前支持的 `1`；去掉 `nexus.agent` 的 `workspace.manage` 和所有 Skills Workspace 目标指导、去掉 `nexus.fullstack` Runner target/源码/界面文字，并将仓库校验器限制为 Frontend/Backend target。执行 `node scripts/check.mjs` **PASS（2 plugins）**、`git diff --check` PASS；使用仅存于 `/home/honus/workspace/cache/plugin-migration/temporary-key.pem` 的临时 Ed25519 私钥构建两个新 `2.0.0` 完整签名 Tar **PASS**，检查完整 Tar 条目确认无 `runner/`。正式 `catalog/official-publisher.json` 没动，临时密钥与官方 publisher ID 不匹配；**这不是已发行或官方签名验证通过**，最终需使用 GitHub Release 工作流的正式签名密钥生成新 Catalog/Release。下一个施工入口：主仓 Host 的 `workspace.manage`、Runner manifest / Plugin SDK / 签名校验和所有消费者，最终同步其他旧 Workspace/Runner 部分。
+
+**官方插件 `v1.0.0` 破坏式替换已正式发布（2026-10-08，取代上一段历史版本状态）**：
+
+- 版本回退并本地提交 `68b50d0`；仓库 `package.json`、`nexus.agent`、其 `agent.default`、`nexus.fullstack` 的版本均 **`1.0.0`**，不是 2.0.0，`pnpm run check` **PASS**。
+- 直接 Git HTTPS push 因本机无凭据失败；使用**已授权 GitHub 连接**以 base tree `42f55e05` 构造提交，校验远程树 `fcbd08e5` 和本地最终 HEAD tree **完全相同**，CAS 更新官方仓 `main` 成功至 **`ac096df28467c5ae42e5d47da6768ac214f2d901`**（不可将原本本地两次提交的 SHA 当作远程 SHA）。该 commit 对应 <https://github.com/0honus0/nexus-agent-plugins/commit/ac096df28467c5ae42e5d47da6768ac214f2d901>。
+- 推送触发的 `Plugin validation gate` 工作流 <https://github.com/0honus0/nexus-agent-plugins/actions/runs/37726441219> **success**。外仓此前已有已发布 `v1.0.0`（2026-09-21），因此复用之前确认为 `release_tag=v1.0.0` 的正式 `workflow_dispatch` 运行，重跑其 build job（**第 2 次 attempt**）：<https://github.com/0honus0/nexus-agent-plugins/actions/runs/35614066536> **success**。该 workflow 手动触发路径拉取最新 `main`，执行官方签名并以 `gh release upload --clobber` 替换原 Release 附件。
+- 已独立从**公开 Release URL**下载并核验新 `catalog.json` 与两个 `1.0.0` tar：三件 SHA256 分别为 `31e54650f7d87df3ec6dba3e502247ed040b8c7ebdd81f44cb0f224c95422a54`、`9c5f57a6ad63e60837fb988a0216473890d2fd81dc4b70ffea3d76132f364eb6`、`c1f61f509ce90afbb34c05c86f153b56cd6c692389d95bf5eb54dcb52d17fa1d`，与 Catalog 和 GitHub Release digest 一致；两包完整 Ed25519 签名与每个列举文件的哈希/大小均验证 **PASS**，publisher key id 为官方 `ed25519:617ec64b03cd6ed1a1ddf373e3a47f38666cdcd27753d674e136a4d0a359a1a0`；无 Runner target、无 `workspace.manage`。下载与验证临时材料仅在 `/home/honus/workspace/cache/plugin-release-v1/`。Release 附件创建/更新时间均为 **2026-10-08**。
+- **注意 Git ref 与本地 Clone**：公开 `v1.0.0` Tag 仍指向 2026-09-21 的历史源码 SHA `1a173455`；签名附件是按最新 `main` `ac096df` 生成，**不要误认为 Tag 的源代码树就是新版 Release 的源码**。GitHub 连接以相同文件树重新生成远程提交（`ac096df`）而非本地两次提交 SHA，最终 Git tree hash 均为 `fcbd08e5`。为避免不必要的强推/历史改写，在验证两个 Git tree 完全一致、原本本地 Clone 无未提交工作之后，重新克隆已发布的远程 `main` 并以目录交换恢复 `/home/honus/nexus-agent-plugins`：**现在插件仓本地 `main=origin/main=ac096df`、工作树干净**；先前两个本地提交的原 Clone 完整保存在 `/home/honus/workspace/cache/plugin-migration/local-prepublish-clone`，没有删除用户数据。正式 Plugin/Host 联调、已安装同版本插件重新安装规则仍需按破坏式版本验证；主仓不在本轮推送。
 
 **双仓第二项（主仓 Plugin Runner manifest 接入移除）**：Host `app-manifest-validator.ts` 从公开 schema 删除 `targets.runner` 并拒绝带旧字段的包；`app.types.ts` / `protocol/agent-plugins.ts` 删除 manifest 对应类型；`persisted-app-manifest-decoder.ts` 对未知 target key（包括 `runner`）直接 `PLUGIN_MANIFEST_INVALID`，**不兼容转换**；Tar verifier 只解析 Frontend/Backend 入口；`plugin-dto.ts` 只输出这两类 manifest target。Plugin Management UI 删除 Runner badge；本仓第一方 E2E fullstack fixture 删除 Runner entry/源码并与外仓同步说明；原 `preset-plugin.spec.ts` 的正式 Plugin 断言改为 `runnerEntry:null`。现有 `agent-definition-capability-contract.scenario.ts` 加入旧 Runner manifest 在新包与持久化 decoder 双边拒绝的反例（真实错误 `PLUGIN_MANIFEST_INVALID`）。本项只是**新包准入与公开 manifest**的破坏式收敛；内部 Plugin Version 的 `runnerEntry` / `runner_entry`、Workspace Plugin runner target source 等尚未删除，必须在后续协调删除，**不允许标记 P4/P6 总阶段完成**。
 
@@ -50,20 +59,20 @@ node --version && pnpm --version
 # 从下方「当前工作指针」继续一项，改完先更新本文件再检查与本地提交
 ```
 
-**当前工作指针（2026-10-08）**：**按第 10、11 条最新破坏式移除/双仓规则施工**，不再要求旧生产备份可恢复或官方新版先发布才允许修改代码。插件仓 `main` 已本地提交 `00af729`，正式 Plugin 源码的 Workspace capability / Runner target/Skills 均已移除。主仓正改 Plugin 入口：新 manifest 与 durable decoder 拒绝 `targets.runner`，Tar verifier 不再提取 Runner entry，签名 E2E fullstack fixture 不再含 Runner，插件管理 UI 已去 Runner 标识。**下一项**：完成 Host Plugin Runner 的持久字段/DTO/Workspace target 剩余 owner 清理，再依次移除 Workspace、SSH/Browser/ACP/Frontend 和生产 Runner。不可将当前的 Plugin 入口清理误作全部 Workspace 已移除。旧版 69/69 Agent E2E 和 HTTP 备份通过是旧架构基线，新版本仍需重新执行。每次继续先核对两仓 HEAD/status，保留用户最初的未跟踪计划和已留存备份，按仓独立本地提交而不推送。
+**当前工作指针（2026-10-08）**：**最新所有者要求以第 10–12 条为准：破坏式移除、Plugin/AgentDefinition 版本保持 `1.0.0`、仅插件仓允许远程发布**。官方 `0honus0/nexus-agent-plugins` 已发布替代签名包：远程 `main=ac096df`，`v1.0.0` Release 三件附件已重传，官方 publisher 签名和 SHA 校验通过；P0-4 完成。**本地插件 Clone 也已无损对齐远程 `main=ac096df` 且工作树干净**。主仓 `nexus-terminal/dev=976d1a76` 未推送，Host manifest 与持久 manifest decoder 已拒绝 `targets.runner`、Plugin 页面已去 Runner badge，签名 E2E fixture 已去 Runner；**内部 Plugin Runner `runner_entry`/Workspace Source、Agent Workspace、Browser/ACP 的残留和生产 Runner 服务仍未移除**。**下一项**：清理 Plugin Runner 的数据库字段/Repository/公开 DTO、Workspace target source，保持其他资源 owner 完整，再继续 SSH-only/Browser/ACP/Frontend/部署收敛；正式外仓发行已不再是阻塞。旧版 69/69 Agent E2E 只是基线，新版需完整重验；主仓不得擅自推送，保留用户的原始未跟踪计划与既有备份。先确认两仓 `git status`、远程 SHA 和用户并发改动。
 
 ## 阶段状态（2026-10-08）
 
-| 阶段                         | 状态   | 说明                                                                           |
-| ---------------------------- | ------ | ------------------------------------------------------------------------------ |
-| P0 清单与升级边界            | 进行中 | P0-2/3 完成，check/build/Agent 场景通过；旧版 Agent E2E 69/69；P0-1/4/5 待验收 |
-| P1 最终 contract 与迁移方案  | 进行中 | Plugin manifest/decoder 已开始破坏式切换；其余 DTO 尚未收敛                    |
-| P2 存量数据、升级与备份      | 未开始 | 不在开发过程中直接删除真实数据                                                 |
-| P3 Backend SSH 收敛          | 未开始 |                                                                                |
-| P4 Browser、ACP、Plugin 解耦 | 进行中 | 双仓 Plugin Runner target 新接入已退出；内部 Runner/Browser/ACP 仍待清理       |
-| P5 Frontend 移除             | 未开始 |                                                                                |
-| P6 生产 Runner 退出          | 未开始 |                                                                                |
-| P7 文档与验收                | 未开始 |                                                                                |
+| 阶段                         | 状态   | 说明                                                                       |
+| ---------------------------- | ------ | -------------------------------------------------------------------------- |
+| P0 清单与升级边界            | 进行中 | P0-2/3/4 完成，旧版 Agent E2E 69/69；P0-1/5 的历史事项由最新破坏式规则覆盖 |
+| P1 最终 contract 与迁移方案  | 进行中 | Plugin manifest/decoder 已开始破坏式切换；其余 DTO 尚未收敛                |
+| P2 存量数据、升级与备份      | 未开始 | 不在开发过程中直接删除真实数据                                             |
+| P3 Backend SSH 收敛          | 未开始 |                                                                            |
+| P4 Browser、ACP、Plugin 解耦 | 进行中 | 双仓 Plugin Runner target 新接入已退出；内部 Runner/Browser/ACP 仍待清理   |
+| P5 Frontend 移除             | 未开始 |                                                                            |
+| P6 生产 Runner 退出          | 未开始 |                                                                            |
+| P7 文档与验收                | 未开始 |                                                                            |
 
 ## P1 边界准备：基于当前代码的迁移决策（仅设计，尚未改生产 contract）
 
@@ -122,9 +131,7 @@ node --version && pnpm --version
   - 构建/部署/E2E：`packages/agent-runner/`、`scripts/docker/agent-runner/`、`scripts/e2e/standalone-runner-image-smoke.sh`、`.github/workflows/publish-ghcr.yml`、`tests/e2e/fixtures/agent/workspace-runner.mjs` 等仍有消费者。
   - 复核结论：Browser、SSH ACP、Subagent、Checkpoint、旧备份、UI 暂存、官方插件分别进入下方矩阵，所有映射属于**待实施的计划**，不能误报代码已退出 Workspace。
 - [x] **P0-3：确认 SSH-only 范围和退出说明（目标 contract，不是已经实施）。** 执行规则：新文件/Shell/Job request 必须显式 `target:'ssh'` 与受权 id；删除 `workspace.manage`、`target:'workspace'`、Environment/Recipe/Generation、Workspace Terminal、workspace_create/control/toolchain_switch、Workspace checkpoint 复原和 Runner Plugin execution。不建立任何 Backend 本地 Shell/文件 target 或默认 `No Workspace` 兼容分支；未选/未授权/伪造旧 target 一律 fail closed，不重选“当前 SSH 标签”执行。保留普通终端、SSH 连接/长会话/后台 Job/项目目录、Browser 独立 CDP、SSH ACP、MCP、Artifact/Memory/Skill、Plugin Frontend/Backend、Run/Thread/审批/Checkpoint 历史证据。此处仅锁定移除边界，P1–P7 仍须真正修改并验收。
-- [ ] **P0-4：官方签名插件替代版本。** 已核对公开 `0honus0/nexus-agent-plugins` 最新 Release `v1.0.0`（2026-09-21）：该标签的 `nexus.agent` manifest 仍声明 `workspace.manage`，`nexus.fullstack` 仍有 `targets.runner`。**正式替代发布尚无验收证据**；在确认签名新版和 Host SDK 适配前，不可将 P4/P6 标为完成。
-  - 再核对 GitHub 公开 Releases（2026-10-08）：仍是 `v1.0.0`，签名资产有 `catalog.json`、`nexus.agent-1.0.0.tar`、`nexus.fullstack-1.0.0.tar`；外仓近期提交 `826a597` 是 Node Current 验证/发布调整，`6d4eecc` 是 Skill 文档，**都不是正式可验的去 Workspace 替代 Release**。现状为外仓发布依赖阻塞，不自行修改插件或伪造签名资产。
-  - 精确迁移需求与边界：公开标签 `plugins/nexus.agent/manifest.json` 的 `sdkVersion=1.0.0`、Nexus Host 兼容范围 `1.0.0–1.99.99`，能力中包含 `workspace.manage`；`plugins/nexus.fullstack/manifest.json` 三个 target 为 `frontend/index.html`、`backend/index.mjs`、`runner/index.mjs`。Host 当前 `plugin-package-install-coordinator.ts` 支持 SDK major 1；`official-plugin-source.ts` 从外仓 Release latest catalog 发现官方插件、固定了官方 Ed25519 publisher key id。新正式签名包必须去掉 `workspace.manage` 和 `targets.runner`、保留有效 Frontend/Backend/Skills 与旧插件不兼容时的显式升级/拒绝语义，独立验证签名、Catalog、Host SDK；**不能把 runner entry 直接作为 Backend entry 运行**。此为外仓 owner 的发布任务，未完成前 P0-4 不勾选。
+- [x] **P0-4：官方签名插件替代发布完成（2026-10-08）。** 用户决定**保持 `1.0.0` 版本并允许同版本破坏式覆盖**；插件外仓远程 `main` 为 `ac096df`，官方 Release `v1.0.0` 的 `catalog.json`、`nexus.agent-1.0.0.tar`、`nexus.fullstack-1.0.0.tar` 已经由官方 Actions 重新签名上传，签名和完整文件 digest 均独立复验通过。具体 SHA、publisher、URL 和 Actions 见本文件前部“官方插件 `v1.0.0` 破坏式替换”证据。新包不含 `workspace.manage`、Runner target，SDK major 仍为 `1`。**P0-4 只表明正式签名发行物已存在，不表示 Host 在线安装/升级或 P4/P6 主仓旧依赖已完成。**已有同版本 Plugin 不做旧版本兼容转换，保持新源码 fail closed。
 - [ ] **P0-5：旧 Workspace 活跃资源枚举、导出、终止与 retained 处置可执行。** 尚未验证旧部署的真实数据与进程；不得在此之前进行破坏性迁移。
 
   - **所有者的现场状态确认（2026-10-08）**：生产 Agent Workspace 已由所有者删除，已有备份；这是项目所有者提供的事实，但本会话尚无备份文件、hash、版本信息和独立恢复报告，不能推定旧 Runner 的 OS 进程已退出或旧 live Job 被处置。原在线枚举步骤因已删除不再现实，改为在脱敏/隔离副本上核对保留数据与备份完整性、可恢复性，无法核实的历史资源明确记录未知，不重新创建生产 Workspace。
