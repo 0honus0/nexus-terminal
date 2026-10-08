@@ -32,7 +32,7 @@ node --version && pnpm --version
 # 从下方「当前工作指针」继续一项，改完先更新本文件再检查与本地提交
 ```
 
-**当前工作指针（2026-10-08）**：P0-2 消费者/owner 矩阵已完成；下一项为 **P0-5 旧部署资源清点/导出/终止链实际核对**，同时补齐 P0-1 的 E2E 和实际部署版本、P0-4 外仓替代版本。P0 尚未通过阶段完成门槛，暂不实施 P1 破坏性 contract 或 P2 删表。独立 Node/pnpm 下 `pnpm run check`、`pnpm run format:all:check`、`pnpm run build` 已通过。Agent 场景整体失败 1 项，且独立复现，见下方证据。
+**当前工作指针（2026-10-08）**：P0-2/3 已完成；**P0-5 只读双 SQLite 盘点脚本已完成合成样例行为验证，下一步必须在真实旧部署停止写入后的可信快照上运行，并取得进程/文件导出/备份证据**。该实际实例尚不可用，P0-5 不得打勾。P0-1 的 E2E、实际部署版本，P0-4 的官方签名插件替代发布未闭环。P0 尚未达到 P1/P2 的破坏性变更前置门槛。此前 `check/format/build` 通过，Agent 场景整体失败 1 项（见下方证据）。
 
 ## 阶段状态（2026-10-08）
 
@@ -49,7 +49,7 @@ node --version && pnpm --version
 
 ## P0：逐项执行记录
 
-- [ ] **P0-1：起点、已发布版本、schema/SDK/备份版本与可重复测试基线。** 版本与起点已核实，基础 check 通过；仍待 build、E2E、实际部署版本与升级演练数据，整项未完成。
+- [ ] **P0-1：起点、已发布版本、schema/SDK/备份版本与可重复测试基线。** 版本与起点已核实，check、格式、build 通过；仍待 E2E、实际部署版本与升级演练数据，整项未完成。
   - 起点：分支 `dev`，HEAD `f0461a4692fd65ecee2cdd9a19da9114f2cadf4d`（2026-10-08）；`origin/dev` 无领先/落后。起点前存在未跟踪 `doc/testing/AGENT_WORKSPACE_REMOVAL_PLAN.md`，视作用户工作，保持不变。
   - 本地根、Protocol 与 Agent Runner package 版本 `1.0.2`；GitHub `0honus0/nexus-terminal` 最近公开 Release 为 `v1.0.1`（2026-09-13）。这只证明公开发布记录，**不证明实际部署实例正在使用该版本**；升级演练前还须确认目标实例版本。
   - SQLite 已定义 migration 的最高 id 为 `54`（`packages/backend/src/infrastructure/database/migrations/agent-host.ts`）；列表 owner 为 `migrations/registry.ts`。这不是针对目标生产库已执行迁移的证明。
@@ -71,6 +71,23 @@ node --version && pnpm --version
 - [x] **P0-3：确认 SSH-only 范围和退出说明（目标 contract，不是已经实施）。** 执行规则：新文件/Shell/Job request 必须显式 `target:'ssh'` 与受权 id；删除 `workspace.manage`、`target:'workspace'`、Environment/Recipe/Generation、Workspace Terminal、workspace_create/control/toolchain_switch、Workspace checkpoint 复原和 Runner Plugin execution。不建立任何 Backend 本地 Shell/文件 target 或默认 `No Workspace` 兼容分支；未选/未授权/伪造旧 target 一律 fail closed，不重选“当前 SSH 标签”执行。保留普通终端、SSH 连接/长会话/后台 Job/项目目录、Browser 独立 CDP、SSH ACP、MCP、Artifact/Memory/Skill、Plugin Frontend/Backend、Run/Thread/审批/Checkpoint 历史证据。此处仅锁定移除边界，P1–P7 仍须真正修改并验收。
 - [ ] **P0-4：官方签名插件替代版本。** 已核对公开 `0honus0/nexus-agent-plugins` 最新 Release `v1.0.0`（2026-09-21）：该标签的 `nexus.agent` manifest 仍声明 `workspace.manage`，`nexus.fullstack` 仍有 `targets.runner`。**正式替代发布尚无验收证据**；在确认签名新版和 Host SDK 适配前，不可将 P4/P6 标为完成。
 - [ ] **P0-5：旧 Workspace 活跃资源枚举、导出、终止与 retained 处置可执行。** 尚未验证旧部署的真实数据与进程；不得在此之前进行破坏性迁移。
+
+  - 2026-10-08 环境现状：工作区 `/home/honus/nexus-terminal`（dev HEAD `227669bc`，仅存在预先的未跟踪 Workspace removal 计划）；`docker ps --format` 和 `docker volume ls --format` 均无条目（退出码 0），不能据此推断其他主机或离线持久卷已清理，也不能把本机空态标为完整资源处置。
+  - 新增 `scripts/backend/agent-workspace-preflight.mjs`：对**明确指定的两份冻结 SQLite 快照**只读检查 Backend `agent_workspaces`、workspace command、SSH 保留表和 Runner `journal_records`（schema v5），整理 Workspace/retained/generation/status、后台 job/command pending/running/unknown、双端不一致。明文 argv、结果、secret、文件正文不输出；完整盘点报告必须显式提供全新 `--output` 文件，权限 0600；`eligibleForDestructiveMigration` 始终为 false，不执行 HTTP/终止/删除操作。
+  - 合成副本 smoke **PASS**（2026-10-08）：构造独立 Backend 和 Runner SQLite，含 retained Workspace、pending 命令、running Job、额外 Runner-only Workspace；预检发现 1 retained / 1 pending Backend command / 1 running Runner job / 1 mismatch；原始两个 SQLite 逐字节 SHA-256 前后不变；报告 mode 0600、隐藏 `argv` 和 Job `stdout` 中的测试秘密、不覆盖已有报告、缺失快照拒绝且不创建数据库（全部断言通过，exit 0）。样例产物位于 `/home/honus/workspace/cache/tmp/workspace-preflight-smoke-LaLhE0/`，仅为合成数据，**不是旧生产实例证据**。
+  - 将脚本和本文格式化后再次运行 `node --check` 与只读盘点 smoke **PASS**：输出仍为 1 retained、1 Backend pending command、1 Runner running job、1 mismatch，且明确 `INVENTORY_ONLY_NOT_CLEARED_FOR_MIGRATION`（exit 0）。仓库 `pnpm run check`、`pnpm run format:all:check`、`git diff --check` 本次均 **PASS**；未运行新的 E2E 或修改生产逻辑。
+  - 在取得实际旧版停止写入后的 Backend SQLite、Runner `state/journal.sqlite` 的一致副本后，执行：
+
+    ```sh
+    cd /home/honus/nexus-terminal
+    . /home/honus/workspace/cache-env.sh
+    node scripts/backend/agent-workspace-preflight.mjs \
+      --backend-db /path/to/quiesced/backend.sqlite \
+      --runner-journal /path/to/quiesced/state/journal.sqlite \
+      --output /home/honus/workspace/cache/workspace-removal-inventory.json
+    ```
+
+    输出文件必须是新文件，勿用真实线上路径替代副本；不得把报告中的 `eligibleForDestructiveMigration:false` 改为 true。工具不枚举真实 OS 的 PTY/ACP/Plugin 进程、不会自动导出项目树/Artifact 或证明写入已冻结；需要现场额外核对。
 
   **旧版可用的检查/处置 owner（只读核对，不是已完成清理）：**
 
