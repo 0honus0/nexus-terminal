@@ -1,8 +1,5 @@
-import type { WorkspaceJobView } from '@nexus-terminal/protocol/runner';
-import { WORKSPACE_JOB_LIMITS as runnerJobLimits } from '@nexus-terminal/protocol/runner';
 import type { JsonValue } from '../../agent.types';
 import type { ShellCapabilityService, UnifiedShellCommand } from '../../capabilities/shell-capability.service';
-import type { AgentTargetKind } from '../../capabilities/tool-target.types';
 import type {
   AgentTool,
   ToolContext,
@@ -91,12 +88,8 @@ const stringValue = (value: JsonValue | undefined, maxBytes: number, field = 'st
   return value;
 };
 
-const targetKind = (value: JsonValue | undefined): AgentTargetKind => {
-  if (value !== 'workspace' && value !== 'ssh')
-    invalidArgument(
-      'SHELL_TARGET_INVALID',
-      'target must be workspace or ssh. Both accept argv and shellScript commands.',
-    );
+const targetKind = (value: JsonValue | undefined): 'ssh' => {
+  if (value !== 'ssh') invalidArgument('SHELL_TARGET_INVALID', 'target must be ssh.');
   return value;
 };
 
@@ -163,7 +156,7 @@ const commandValue = (value: JsonValue | undefined): UnifiedShellCommand => {
   }
   return invalidArgument(
     'SHELL_COMMAND_KIND_INVALID',
-    'command.kind must be argv or shell; both forms work on Workspace and SSH.',
+    'command.kind must be argv or shell for the selected SSH target.',
   );
 };
 
@@ -209,8 +202,6 @@ const operation = (
         loginUser: target.loginUser,
         configurationHash: target.configurationHash,
         connectionId: target.connectionId ?? null,
-        workspaceId: target.workspaceId ?? null,
-        generation: target.generation ?? null,
       },
       arguments: normalizedArguments,
       resourceKeys: [...new Set(resourceKeys)].sort(),
@@ -223,120 +214,6 @@ const operation = (
     cryptoHash,
   );
 
-const jobSemantic = (job: WorkspaceJobView): NonNullable<ToolResult['semantic']> => ({
-  kind: 'execution',
-  target: { target: 'workspace', id: job.workspaceId },
-  status: job.status,
-  job: { jobId: job.jobId, workspaceId: job.workspaceId, generation: job.generation },
-});
-
-const jobStateKey = (status: WorkspaceJobView['status']): string =>
-  `agent.conversation.toolSummary.labels.jobState.${status}`;
-
-const workspaceExecutionResult = (job: WorkspaceJobView, mode: 'foreground' | 'background'): ToolResult => {
-  if (mode === 'background' && (job.status === 'pending' || job.status === 'running')) {
-    return {
-      ok: true,
-      summary:
-        'Workspace background job accepted and active. Keep this jobId; do not resubmit to obtain a result. For services, run health checks; for completion, use shell_job_control wait.',
-      userSummary: { key: 'agent.conversation.toolSummary.backgroundJobAccepted' },
-      data: { jobId: job.jobId, workspaceId: job.workspaceId, generation: job.generation, status: job.status },
-      artifactRefs: [],
-      truncated: false,
-      outcome: 'confirmed',
-      semantic: jobSemantic(job),
-      verification: {
-        status: 'unverified',
-        summary: 'Runner confirmed job submission, but the command has not reached a terminal result yet.',
-        evidenceRefs: [],
-      },
-    };
-  }
-  if (job.status === 'unknown' || job.status === 'pending' || job.status === 'running') {
-    return {
-      ok: false,
-      summary: 'The Workspace job outcome could not be confirmed.',
-      userSummary: { key: 'agent.conversation.toolSummary.jobOutcomeUnknown' },
-      data: { jobId: job.jobId, workspaceId: job.workspaceId, generation: job.generation, status: job.status },
-      artifactRefs: [],
-      truncated: false,
-      outcome: 'unknown',
-      errorCode: job.error ?? 'WORKSPACE_JOB_OUTCOME_UNKNOWN',
-      semantic: jobSemantic(job),
-      verification: {
-        status: 'unverified',
-        summary: 'Runner could not prove whether the native Workspace job completed.',
-        evidenceRefs: [],
-      },
-    };
-  }
-  if (job.status === 'cancelled' || !job.result) {
-    return {
-      ok: false,
-      summary: `Workspace job ${job.status}.`,
-      userSummary: { key: 'agent.conversation.toolSummary.jobState', params: { stateKey: jobStateKey(job.status) } },
-      data: {
-        jobId: job.jobId,
-        workspaceId: job.workspaceId,
-        generation: job.generation,
-        status: job.status,
-        errorCode: job.error ?? null,
-      },
-      artifactRefs: [],
-      truncated: false,
-      outcome: 'confirmed',
-      errorCode: job.error ?? 'WORKSPACE_JOB_FAILED',
-      semantic: jobSemantic(job),
-      verification: {
-        status: 'failed',
-        summary: 'Runner confirmed that the Workspace job did not complete successfully.',
-        evidenceRefs: [],
-      },
-    };
-  }
-  const ok =
-    job.status === 'succeeded' && job.result.exitCode === 0 && !job.result.timedOut && job.result.signal === null;
-  return {
-    ok,
-    summary: ok
-      ? 'Workspace command completed successfully.'
-      : job.result.timedOut
-        ? 'Workspace command timed out.'
-        : `Workspace command exited with code ${job.result.exitCode}.`,
-    userSummary: ok
-      ? { key: 'agent.conversation.toolSummary.commandCompleted' }
-      : job.result.timedOut
-        ? { key: 'agent.conversation.toolSummary.commandTimedOut' }
-        : {
-            key: 'agent.conversation.toolSummary.commandExited',
-            params: { code: job.result.exitCode ?? 0 },
-          },
-    data: {
-      jobId: job.jobId,
-      workspaceId: job.workspaceId,
-      generation: job.generation,
-      status: job.status,
-      exitCode: job.result.exitCode,
-      signal: job.result.signal,
-      stdout: job.result.stdout,
-      stderr: job.result.stderr,
-      timedOut: job.result.timedOut,
-    },
-    artifactRefs: [],
-    truncated: job.result.truncated,
-    outcome: 'confirmed',
-    ...(ok ? {} : { errorCode: job.result.timedOut ? 'WORKSPACE_JOB_TIMEOUT' : 'WORKSPACE_JOB_NONZERO_EXIT' }),
-    semantic: { ...jobSemantic(job), status: ok ? 'succeeded' : 'failed' },
-    verification: {
-      status: ok ? 'verified' : 'failed',
-      summary: ok
-        ? 'Runner confirmed a zero exit code inside the requested Workspace generation.'
-        : 'Runner confirmed that the Workspace command returned a non-success result.',
-      evidenceRefs: [],
-    },
-  };
-};
-
 const utf8Tail = (value: string, maxBytes: number): { text: string; truncated: boolean } => {
   const buffer = Buffer.from(value, 'utf8');
   if (buffer.byteLength <= maxBytes) return { text: value, truncated: false };
@@ -345,148 +222,8 @@ const utf8Tail = (value: string, maxBytes: number): { text: string; truncated: b
   return { text: buffer.subarray(start).toString('utf8'), truncated: true };
 };
 
-const jobControlResult = (
-  job: WorkspaceJobView,
-  action: 'status' | 'wait' | 'cancel',
-  maxOutputBytes: number,
-): ToolResult => {
-  if (job.status === 'pending' || job.status === 'running') {
-    return {
-      ok: action !== 'cancel',
-      summary:
-        action === 'cancel'
-          ? `Workspace job cancellation is not yet confirmed; the durable job is still ${job.status}.`
-          : action === 'wait'
-            ? `Workspace job is still ${job.status} after the server-side wait window.`
-            : `Workspace job is ${job.status}. This is authoritative active state, not failure or missing details. Keep this jobId; verify service health or use bounded wait, rather than starting it again.`,
-      userSummary:
-        action === 'cancel'
-          ? { key: 'agent.conversation.toolSummary.jobCancelPending', params: { stateKey: jobStateKey(job.status) } }
-          : action === 'wait'
-            ? {
-                key: 'agent.conversation.toolSummary.jobWaitWindowExpired',
-                params: { stateKey: jobStateKey(job.status) },
-              }
-            : { key: 'agent.conversation.toolSummary.jobState', params: { stateKey: jobStateKey(job.status) } },
-      data: {
-        jobId: job.jobId,
-        workspaceId: job.workspaceId,
-        generation: job.generation,
-        status: job.status,
-        createdAt: job.createdAt,
-      },
-      artifactRefs: [],
-      truncated: false,
-      outcome: 'confirmed',
-      ...(action === 'cancel' ? { errorCode: 'WORKSPACE_JOB_CANCEL_PENDING' } : {}),
-      semantic: jobSemantic(job),
-      verification: {
-        status: 'unverified',
-        summary: 'Runner confirmed the durable job state, but the command has not reached a terminal result.',
-        evidenceRefs: [],
-      },
-    };
-  }
-  if (job.status === 'cancelled') {
-    return {
-      ok: action === 'cancel',
-      summary: 'Runner confirmed that the Workspace job is cancelled.',
-      userSummary: { key: 'agent.conversation.toolSummary.jobCancelled' },
-      data: {
-        jobId: job.jobId,
-        workspaceId: job.workspaceId,
-        generation: job.generation,
-        status: job.status,
-        errorCode: job.error,
-        completedAt: job.completedAt,
-      },
-      artifactRefs: [],
-      truncated: false,
-      outcome: 'confirmed',
-      ...(action === 'cancel' ? {} : { errorCode: job.error ?? 'WORKSPACE_JOB_CANCELLED' }),
-      semantic: jobSemantic(job),
-      verification: {
-        status: 'failed',
-        summary: 'The job reached a terminal cancelled state and therefore is not successful execution evidence.',
-        evidenceRefs: [],
-      },
-    };
-  }
-  if (job.status === 'unknown' || !job.result) {
-    return {
-      ok: false,
-      summary: `Workspace job is ${job.status}.`,
-      userSummary: { key: 'agent.conversation.toolSummary.jobState', params: { stateKey: jobStateKey(job.status) } },
-      data: {
-        jobId: job.jobId,
-        workspaceId: job.workspaceId,
-        generation: job.generation,
-        status: job.status,
-        errorCode: job.error,
-        completedAt: job.completedAt,
-      },
-      artifactRefs: [],
-      truncated: false,
-      outcome: 'confirmed',
-      errorCode: job.error ?? (job.status === 'unknown' ? 'WORKSPACE_JOB_OUTCOME_UNKNOWN' : 'WORKSPACE_JOB_FAILED'),
-      semantic: jobSemantic(job),
-      verification: {
-        status: job.status === 'unknown' ? 'unverified' : 'failed',
-        summary:
-          job.status === 'unknown'
-            ? 'Runner retained the durable job record but could not prove its terminal command outcome.'
-            : 'Runner confirmed that the Workspace job failed.',
-        evidenceRefs: [],
-      },
-    };
-  }
-  const projectedBytes = Math.max(1024, Math.min(64 * 1024, Math.floor(maxOutputBytes / 2)));
-  const stdout = utf8Tail(job.result.stdout, Math.max(512, Math.floor(projectedBytes / 2)));
-  const stderr = utf8Tail(job.result.stderr, Math.max(512, Math.floor(projectedBytes / 2)));
-  const ok =
-    job.status === 'succeeded' && job.result.exitCode === 0 && !job.result.timedOut && job.result.signal === null;
-  return {
-    ok,
-    summary: ok
-      ? 'Workspace job completed successfully.'
-      : job.result.timedOut
-        ? 'Workspace job timed out.'
-        : `Workspace job exited with code ${job.result.exitCode}.`,
-    userSummary: ok
-      ? { key: 'agent.conversation.toolSummary.jobCompleted' }
-      : job.result.timedOut
-        ? { key: 'agent.conversation.toolSummary.jobTimedOut' }
-        : { key: 'agent.conversation.toolSummary.jobExited', params: { code: job.result.exitCode ?? 0 } },
-    data: {
-      jobId: job.jobId,
-      workspaceId: job.workspaceId,
-      generation: job.generation,
-      status: job.status,
-      exitCode: job.result.exitCode,
-      signal: job.result.signal,
-      stdoutTail: stdout.text,
-      stderrTail: stderr.text,
-      timedOut: job.result.timedOut,
-      createdAt: job.createdAt,
-      completedAt: job.completedAt,
-    },
-    artifactRefs: [],
-    truncated: job.result.truncated || stdout.truncated || stderr.truncated,
-    outcome: 'confirmed',
-    ...(ok ? {} : { errorCode: job.result.timedOut ? 'WORKSPACE_JOB_TIMEOUT' : 'WORKSPACE_JOB_NONZERO_EXIT' }),
-    semantic: { ...jobSemantic(job), status: ok ? 'succeeded' : 'failed' },
-    verification: {
-      status: ok ? 'verified' : 'failed',
-      summary: ok
-        ? 'Runner durable job state confirms a zero exit code inside the bound Workspace generation.'
-        : 'Runner durable job state confirms a non-success command result.',
-      evidenceRefs: [],
-    },
-  };
-};
-
 const targetSchema: Record<string, JsonValue> = {
-  target: { type: 'string', enum: ['workspace', 'ssh'] },
+  target: { type: 'string', enum: ['ssh'] },
   id: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
 };
 
@@ -495,7 +232,7 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
     name: 'shell_execute',
     version: '1.0.0',
     description:
-      'Execute argv or shellScript on either Workspace or SSH, with optional cwd. argv preserves literal argument boundaries (SSH safely quotes for its remote shell); shellScript is executable source, not a title (Workspace /bin/sh -c). Pass required environment variables via argv=[env,KEY=value,executable,...] or shellScript. Workspace foreground/background Jobs share configured generation capacity (default 8; 1=serial); full capacity rejects, never queues. Active Jobs block file-tool writes, not reads. Serialize dependent/shared writers; no file isolation. Background returns jobId; use shell_job_control list/status/wait/cancel, not busy-polling or detached bypasses. SSH background requires sessionId. timeoutSeconds kills the process when its execution lifetime expires, including background services; it is not a startup/health-check timeout. Choose an explicit bounded lifetime covering the requested service period and verification/cleanup; never promise indefinite uptime. Before reporting a service still running, check its Job status and endpoints; health evidence is only a point-in-time observation.',
+      'Execute argv or shellScript on an authorized SSH connection with optional cwd. argv arguments are quoted individually for the remote shell; shellScript is executable source, not a title. Pass environment variables explicitly through env/argv or shellScript. Background requires an owned SSH sessionId and returns a durable jobId; use shell_job_control list/status/wait/cancel, not busy-polling or detached bypasses. timeoutSeconds is a bounded execution lifetime, not a startup/health-check timeout. Never claim indefinite uptime; verify Job status and endpoints before reporting active services.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -511,8 +248,7 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
               type: 'string',
               minLength: 1,
               maxLength: MAX_SHELL_BYTES,
-              description:
-                'Executable shell script, not a display title; use with kind=shell on either Workspace or SSH. Workspace executes /bin/sh -c; SSH uses its remote command shell.',
+              description: 'Executable shell script, not a display title; SSH uses its remote command shell.',
             },
           },
           required: ['kind'],
@@ -520,9 +256,10 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
         cwd: { type: 'string', minLength: 1, maxLength: MAX_CWD_BYTES },
         timeoutSeconds: {
           type: 'integer',
-          minimum: runnerJobLimits.minExecutionTimeoutMs / 1000,
-          maximum: runnerJobLimits.maxExecutionTimeoutMs / 1000,
-          description: `Hard process execution lifetime, including background services; expiry terminates the Job. Not a startup, health-check or result wait window. Workspace default is ${runnerJobLimits.defaultExecutionTimeoutMs / 1000} seconds. For a service, explicitly cover the requested operating period plus verification and cleanup; report the bounded lifetime.`,
+          minimum: 1,
+          maximum: 86400,
+          description:
+            'Hard SSH process execution lifetime, including background services. Foreground at most 300 seconds, background at most 86400 seconds. Not a startup or wait timeout; include verification and cleanup within the selected lifetime.',
         },
         sessionId: { type: 'string', minLength: 1, maxLength: 128 },
         mode: { type: 'string', enum: ['foreground', 'background'] },
@@ -532,8 +269,7 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
     riskClass: 'mutate',
     capability: 'shell.execute',
   },
-  isAvailable: ({ environment, connectionIds }) =>
-    environment !== null || connectionIds === undefined || connectionIds.length > 0,
+  isAvailable: ({ connectionIds }) => connectionIds === undefined || connectionIds.length > 0,
   inspect: async (input, context, policyRevision) => {
     const args = record(input);
     onlyKeys(args, ['target', 'id', 'command', 'cwd', 'timeoutSeconds', 'mode', 'sessionId']);
@@ -547,32 +283,13 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
       invalidArgument('SHELL_MODE_INVALID', 'mode must be foreground or background.');
     const timeoutSeconds = positiveInteger(
       args.timeoutSeconds,
-      selector.target === 'workspace'
-        ? runnerJobLimits.defaultExecutionTimeoutMs / 1000
-        : selector.target === 'ssh' && rawMode === 'background'
-          ? 3600
-          : Math.min(300, Math.max(1, context.deadlineAt - Math.floor(Date.now() / 1000))),
+      rawMode === 'background' ? 3600 : Math.min(300, Math.max(1, context.deadlineAt - Math.floor(Date.now() / 1000))),
     );
-    if (
-      timeoutSeconds >
-      (selector.target === 'workspace'
-        ? runnerJobLimits.maxExecutionTimeoutMs / 1000
-        : rawMode === 'background'
-          ? 86400
-          : 300)
-    )
-      invalidArgument(
-        'SHELL_TIMEOUT_EXCEEDED',
-        `timeoutSeconds exceeds the execution limit: ${selector.target === 'workspace' ? runnerJobLimits.maxExecutionTimeoutMs / 1000 : rawMode === 'background' ? 86400 : 300} seconds for this target/mode.`,
-      );
-    if (selector.target === 'ssh' && rawMode === 'background' && args.sessionId === undefined)
-      throw new Error('SSH_SESSION_REQUIRED');
-    const cwd =
-      args.cwd === undefined
-        ? selector.target === 'workspace'
-          ? '/workspace/work'
-          : undefined
-        : stringValue(args.cwd, MAX_CWD_BYTES, 'cwd');
+    const limit = rawMode === 'background' ? 86400 : 300;
+    if (timeoutSeconds > limit)
+      invalidArgument('SHELL_TIMEOUT_EXCEEDED', `timeoutSeconds exceeds the SSH ${rawMode} limit of ${limit} seconds.`);
+    if (rawMode === 'background' && args.sessionId === undefined) throw new Error('SSH_SESSION_REQUIRED');
+    const cwd = args.cwd === undefined ? undefined : stringValue(args.cwd, MAX_CWD_BYTES, 'cwd');
     const normalizedArguments: JsonValue = {
       target: resolved.selector.target,
       id: resolved.selector.id,
@@ -619,43 +336,13 @@ export const createShellExecuteTool = (shell: ShellCapabilityService, cryptoHash
       mode,
       operationHash: inspection.operationHash,
     });
-    if (executed.job || executed.sshJob) {
-      const result = executed.job
-        ? workspaceExecutionResult(executed.job, mode)
-        : sshJobResult(executed.sshJob!, context.maxOutputBytes);
+    if (executed.sshJob) {
+      const result = sshJobResult(executed.sshJob, context.maxOutputBytes);
       if (mode === 'background') {
         const executionTimeoutSeconds = positiveInteger(args.timeoutSeconds);
         result.data = { ...record(result.data ?? {}), executionTimeoutSeconds } as JsonValue;
-        if (
-          executed.job?.status === 'pending' ||
-          executed.job?.status === 'running' ||
-          executed.sshJob?.status === 'running'
-        ) {
-          result.summary += ` Execution lifetime is ${executionTimeoutSeconds} seconds from process start; expiry terminates this Job. This is not a startup timeout. Verify Job status and endpoints before reporting current uptime; do not claim indefinite availability.`;
-          if (target.selector.target === 'workspace') {
-            const workspacePath = `/api/v1/apps/${encodeURIComponent(context.appId)}/workspaces/${encodeURIComponent(target.selector.id)}`;
-            result.data = {
-              ...record(result.data ?? {}),
-              userCleanup: {
-                workspaceReadPath: workspacePath,
-                actionPath: `${workspacePath}/actions`,
-                method: 'POST',
-                bodyFields: { schemaVersion: 1, action: 'stop' },
-                expectedVersionSource:
-                  'Set body.expectedVersion to the numeric data.version from a fresh Workspace GET; do not quote it or reuse an old version.',
-                requiredHeaders: ['X-Nexus-CSRF', 'Idempotency-Key'],
-                commandIdSource:
-                  'Use action POST response data.id for {commandId}; the management API does not return data.commandId. HTTP 202 is acceptance, not completion.',
-                commandReadPath: `/api/v1/apps/${encodeURIComponent(context.appId)}/workspace-runtime/commands/{commandId}`,
-                confirmation:
-                  'Require command.status=succeeded, then GET Workspace and require status=stopped. For delete, GET a fresh version, submit action=delete, confirm command succeeded and Workspace deleted.',
-                scope:
-                  'Authenticated user management API; not an Agent tool or new Run. Stop affects all Jobs in this Workspace generation.',
-              },
-            } as JsonValue;
-            result.summary +=
-              ' Workspace Job control is scoped to this Run/Runtime: cancel while this Run is active if requested. For user cleanup after this Run ends, use the authenticated Workspace management API, not Agent tools or a new Run: GET /api/v1/apps/{appId}/workspaces/{workspaceId}, then POST /api/v1/apps/{appId}/workspaces/{workspaceId}/actions with schemaVersion=1, current expectedVersion and action=stop or delete, CSRF and Idempotency-Key. Stop affects all Jobs in that Workspace generation; confirm the returned command succeeded and final Workspace state.';
-          }
+        if (executed.sshJob.status === 'running') {
+          result.summary += ` Execution lifetime is ${executionTimeoutSeconds} seconds from process start; expiry terminates this Job. This is not a startup timeout. Verify Job status and endpoints before reporting uptime; do not claim indefinite availability.`;
         }
       }
       return result;
@@ -703,12 +390,12 @@ export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: Cr
     version: '1.0.0',
     modelExposure: 'deferred',
     description:
-      'Workspace/SSH Job list/status/wait/cancel; list omits jobId and returns authorized active Jobs (Workspace adds generation capacity; SSH is scoped to this Thread/connection). Wait expiry leaves Jobs running, not failed. Prefer bounded wait to busy-polling; cancel only an authorized Job. SSH disconnect outcomes are unknown, never replayed.',
+      'SSH Job list/status/wait/cancel on the authorized Thread/connection; list omits jobId. Wait expiry leaves Jobs running, not failed. Prefer bounded wait; cancel only an authorized Job. SSH disconnect outcomes are unknown, never replayed.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        target: { type: 'string', enum: ['workspace', 'ssh'] },
+        target: { type: 'string', enum: ['ssh'] },
         id: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
         jobId: { type: 'string', minLength: 1, maxLength: 80 },
         action: { type: 'string', enum: ['list', 'status', 'wait', 'cancel'] },
@@ -719,8 +406,7 @@ export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: Cr
     riskClass: 'control',
     capability: 'shell.execute',
   },
-  isAvailable: ({ environment, connectionIds }) =>
-    environment !== null || connectionIds === undefined || connectionIds.length > 0,
+  isAvailable: ({ connectionIds }) => connectionIds === undefined || connectionIds.length > 0,
   inspect: async (input, context, policyRevision) => {
     const args = record(input);
     onlyKeys(args, ['target', 'id', 'jobId', 'action', 'waitSeconds']);
@@ -729,19 +415,10 @@ export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: Cr
     if (action !== 'list' && action !== 'status' && action !== 'wait' && action !== 'cancel')
       invalidArgument('SHELL_JOB_ACTION_INVALID', 'action must be list, status, wait or cancel.');
     if (action === 'list' && args.jobId !== undefined)
-      invalidArgument(
-        'SHELL_JOB_LIST_FIELDS_CONFLICT',
-        'list returns authorized active jobs on either target; omit jobId.',
-      );
+      invalidArgument('SHELL_JOB_LIST_FIELDS_CONFLICT', 'list returns authorized active SSH jobs; omit jobId.');
     const jobId = action === 'list' ? undefined : stringValue(args.jobId, 80);
-    if (
-      jobId !== undefined &&
-      !(selector.target === 'ssh' ? /^ssh-job-[a-f0-9-]{36}$/ : /^job-[a-f0-9]{64}$/).test(jobId)
-    )
-      invalidArgument(
-        'SHELL_JOB_ID_INVALID',
-        'jobId must be the exact ID returned by shell_execute for this target (SSH ssh-job-UUID; Workspace job-64-hex).',
-      );
+    if (jobId !== undefined && !/^ssh-job-[a-f0-9-]{36}$/.test(jobId))
+      invalidArgument('SHELL_JOB_ID_INVALID', 'jobId must be the exact SSH ssh-job-UUID returned by shell_execute.');
     const waitSeconds =
       action === 'wait'
         ? positiveInteger(
@@ -751,11 +428,8 @@ export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: Cr
         : undefined;
     if (action !== 'wait' && args.waitSeconds !== undefined)
       invalidArgument('SHELL_JOB_WAIT_FIELDS_CONFLICT', 'waitSeconds is accepted only with action=wait.');
-    const resolved =
-      selector.target === 'ssh' || action === 'list'
-        ? { target: await shell.resolve(context, selector) }
-        : await shell.resolveJob(context, selector, jobId!);
-    if (selector.target === 'ssh' && action !== 'list') await shell.sshJob(context, selector, jobId!, 'status');
+    const resolved = { target: await shell.resolve(context, selector) };
+    if (action !== 'list') await shell.sshJob(context, selector, jobId!, 'status');
     const normalizedArguments: JsonValue = {
       target: selector.target,
       id: resolved.target.selector.id,
@@ -795,7 +469,7 @@ export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: Cr
       return {
         ok: true,
         summary:
-          'Authorized active Jobs observed. Workspace also reports generation capacity; SSH lists this Thread/connection only, not a Workspace capacity. This does not verify command success.',
+          'Authorized active SSH jobs observed for this Thread/connection. This does not verify command success.',
         data: { ...data, jobs: data.jobs.map((job) => ({ ...job })) },
         artifactRefs: [],
         truncated: false,
@@ -808,25 +482,17 @@ export const createShellJobTool = (shell: ShellCapabilityService, cryptoHash: Cr
       };
     }
     const action = stringValue(args.action, 16) as 'status' | 'wait' | 'cancel';
-    if (target.selector.target === 'ssh')
-      return sshJobResult(
-        await shell.sshJob(
-          context,
-          target.selector,
-          stringValue(args.jobId, 80),
-          action,
-          args.waitSeconds === undefined ? undefined : positiveInteger(args.waitSeconds),
-        ),
-        context.maxOutputBytes,
-      );
-    const job = await shell.controlJob(
-      context,
-      target,
-      stringValue(args.jobId, 80),
-      action,
-      args.waitSeconds === undefined ? undefined : positiveInteger(args.waitSeconds),
+    return sshJobResult(
+      await shell.sshJob(
+        context,
+        { target: 'ssh', id: target.selector.id },
+        stringValue(args.jobId, 80),
+        action,
+        args.waitSeconds === undefined ? undefined : positiveInteger(args.waitSeconds),
+        inspection.target.configurationHash,
+      ),
+      context.maxOutputBytes,
     );
-    return jobControlResult(job, action, context.maxOutputBytes);
   },
 });
 

@@ -238,8 +238,6 @@ export const sshSessionJobsScenario = async () => {
         }),
       } as unknown as ConstructorParameters<typeof ShellCapabilityService>[0],
       null!,
-      null!,
-      cryptoHash,
       sessions,
     );
     const launchTool = createShellExecuteTool(shell, cryptoHash);

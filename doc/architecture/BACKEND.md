@@ -56,7 +56,7 @@ Memory repository按created_at/id keyset枚举，service有界limit+1，HTTP返�
 
 RunnerJournal 唯一持有 Runner command/job/workspace 持久化：Node.js 内建 `node:sqlite`，`journal_records(kind,id,payload)` 按记录 UPSERT、`DELETE`，SQLite DELETE rollback journal + synchronous FULL，提交后发布内存变更。普通transition不复制／序列化全历史；compact仅事务删除裁剪记录。恢复校验SQLite及逐记录decode，格式／损坏fail closed保留原库；无旧JSON导入或双轨写入。同步单记录commit仍可能等待磁盘，未承诺event loop完全无阻塞或commit严格O(1)。
 
-Workspace Job 的执行期限与并发边界由 `protocol/runner.ts` 的 `WORKSPACE_JOB_LIMITS` 持有。WorkspaceShellTargetAdapter 从用户有效 Agent settings 读取 `performance.maxConcurrentWorkspaceJobs`，RunnerCommandExecutor 在同步 Journal 接纳边界统计同 generation 的 pending/running Job，再持久化新 Job；满额拒绝、不排队，文件 mutation 仍与活跃 Job 互斥。活动列表使用 `WorkspaceActiveJobsView`，Backend 重检 Run/Runtime/generation 后投影 `WorkspaceJobCapacityView`，不返回命令正文。等待窗口到期不改变 Runner 终态，权威查询仍 active 就返回真实状态与 Job 身份。新增设置通过一次性数据库迁移升级旧持久化记录，运行时 decoder 仅接受完整当前设置。
+剩余生产 Runner 的 Workspace Job 执行期限与并发边界仍由 `protocol/runner.ts` 的 `WORKSPACE_JOB_LIMITS` 持有；RunnerCommandExecutor 在 Journal 接纳边界统计同 generation 的 pending/running Job，满额拒绝、不排队。**Backend Agent Shell 工具已移除 WorkspaceShellTargetAdapter/port 及 Workspace Job 控制和容量投影**，不能再调用此路径；尚存 Runner 自身 Journal/控制 API 将在 P6 物理退出。旧持久设置随 Workspace Runtime 设置清理阶段退出。
 
 Model stream cardinality fence：OpenAI adapter indexFor先检查64再分配，多组状态只在admission后写入；Root/Child model owner分别在toolCalls Map新增前检查64/32；Responses collector新part前检查512、tools64，终态batch校验保留。
 
@@ -400,6 +400,8 @@ Workspace 工具链引用仅包含 familyId/versionId，架构由 Runner 决定�
 Agent Model Tool Catalog 不再注册 Workspace 生命周期工具 `workspace_create`、`workspace_control` 和 `workspace_toolchain_switch`。这些旧模型工具的生产实现及专属 Runner 场景均已移除；SSH 文件、Shell、Job、ACP 和现行仍待拆除的用户 Workspace 管理 API 是独立 owner，不因此改变它们的授权或生命周期语义。完成门禁只将不强制的 SSH session close 视为已验证资源回收，不再特殊认可已删除的 `workspace_control` 操作。
 
 Agent 文件工具已收敛为 **SSH-only**：`file-tools.ts` 的工具 schema、`FileCapabilityService` 与 `compose-agent.ts` 不再提供 Workspace 文件 adapter/port；冻结的 SSH connection ID/configuration hash、SFTP 结果 SHA 和元数据 preconditions 仍由原 owner 复核。旧 `target:'workspace'` 被 schema/运行时拒绝，不自动映射到本地或任一 SSH Connection。Shell、ACP、Browser 和用户 Workspace 管理 API 仍处于独立迁移阶段；不能把当前 File 切口当作完整 P3。
+
+Agent Shell/Job 工具也已收敛为 **SSH-only**：`shell-tools.ts` 与 `ShellCapabilityService` 仅连接 `SshShellTargetPort`、`AgentSshSessionPort` 和目标解析器，不再消费 Workspace Shell adapter/port 或产出 Runner Job 投影。Foreground 逐参数安全引用，Background 按 Thread/connection 和带 configurationHash 的持久 SSH session 执行。Job inspect/execute 间及 listActiveJobs 再核实 SSH 配置 fingerprint，拒绝旧 Snapshot 后自动重绑。剩余 Workspace ACL、目标解析器、Browser/ACP 和用户 API 仍待逐步退出，不能冒称最终 SSH-only Host contract 已完成。
 
 ## 数据、事务与并发
 

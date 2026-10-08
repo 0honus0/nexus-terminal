@@ -146,13 +146,13 @@ Workspace Job 的持久终态与执行结果保持一致：仅无超时、无终
 
 ### Agent SSH 长会话与后台任务
 
-Agent 设置的「性能」提供“每个 Workspace 的命令并发数”，默认 8，范围 1–64；1 表示串行。每个 Workspace／generation 的前台与后台 Job 共用额度，额度满返回 `WORKSPACE_JOB_ACTIVE_CONFLICT`，不自动排队。修改设置仅影响后续作业接纳，不终止已运行作业；降低额度后须等待或显式取消已有 Job，不能重试刷屏或脱离作业管理绕过限制。SSH 使用独立 channel，不套用此 Workspace 额度。活跃 Job 仍阻止 Workspace 文件工具的 write／patch／move／delete，允许 read／list／search；并发 Shell 不提供共享文件事务保证，有依赖或重叠写入的命令须串行执行，独立开发任务可使用不同 Workspace 隔离。
+现有用户 Workspace 管理设置暂时仍提供“每个 Workspace 的命令并发数”，默认 8、范围 1–64，作用于尚未拆除的 Runner 内部 Workspace Job，不再作用于 Agent 模型 Shell/Job 工具。Agent SSH 使用独立 channel 和 SSH Job 配额，不套用此 Workspace 额度；并发命令也不提供远端共享文件事务隔离，重叠写入须显式串行化。
 
-Workspace 执行期限由协议统一定义，`timeoutSeconds` 默认 300 秒、范围 1–86400 秒，前台与后台使用同一执行期限契约；长任务使用后台 Job，并通过 `shell_job_control` 有界等待结果。等待窗口与执行期限不同，后台 accepted／running 不等于成功；取消按 Job 独立控制，Workspace stop／restart／delete 回收对应 generation 的全部 Job。
+Agent SSH 前台 `timeoutSeconds` 默认受剩余工具期限限制，最长 300 秒；后台默认 3600 秒、最长 86400 秒，必须绑定合法长会话并使用 `shell_job_control` 有界等待或取消。等待窗口与执行期限不同，后台 accepted／running 不等于成功。Runner Workspace 的生命周期和执行期限仍只由尚未退出的用户管理 API 处理，不对 Agent 模型暴露。
 
-后台服务同样会在执行期限到期时终止，`timeoutSeconds` 不是启动探测超时。Workspace／SSH 后台执行结果返回实际配置的 `executionTimeoutSeconds`，提示期限从进程启动计算，不伪造精确到期时间。Agent 应选择覆盖用户要求运行时段和验收／收尾的有界期限，报告期限，并在声称仍运行前核对 Job 状态及接口；健康检查只证明观测时刻，不承诺无限持续可用。该反馈不自动延长期限、不重启已超时 Job，也不保证模型一定遵守。
+SSH 后台服务同样会在执行期限到期时终止；`timeoutSeconds` 不是启动探测超时，Agent SSH 后台执行结果返回实际配置的 `executionTimeoutSeconds`。Agent 应选择覆盖用户要求运行时段及验收／收尾的有界期限，报告期限，并在声称仍运行前核对 SSH Job 状态及接口；健康检查只证明观测时刻，不承诺无限持续可用，不自动重启已超时 Job。
 
-`shell_job_control(action="list", target="workspace", id=WorkspaceID)` 不传 jobId，返回当前授权 Workspace/generation 的活跃 Job、数量和配置额度，不包含命令正文；SSH 暂不支持此 list。前台等待窗口结束后，只要 Runner 明确确认 Job 仍在运行，就返回 pending／running 和 jobId，可继续 wait／cancel，不伪造 unknown；只有无法核对真实状态才报告未知结果。
+`shell_job_control(action="list", target="ssh", id=ConnectionID)` 不传 jobId，返回当前授权 Thread/SSH 连接的受管 Job 数量与身份，不包含命令正文或其他 Thread 的 Job。旧 Workspace Job 列表不再提供给 Agent Shell 工具；SSH Job wait 窗口到期仍 running 时保留原 jobId 和真实状态，不伪造 unknown 或自行重放。
 
 旧 Runner Workspace 文件 API 的路径与越界错误仍由独立 Runner 边界处理，仅供尚未退出的用户 Workspace 相关 API；**Agent 模型的七项文件工具不再走该路径**，只能通过受授权的 SSH/SFTP 目标执行，不将旧 Workspace 路径或错误当作 SSH 执行许可。
 
@@ -165,17 +165,17 @@ Workspace 执行期限由协议统一定义，`timeoutSeconds` 默认 300 秒、
 - SSH 文件操作各自拥有独立 SFTP channel；显式长会话中取消或到达执行期限时只关闭本次操作的 channel，直接拒绝待完成 I/O，不等待远端确认关闭，不影响长连接、其他文件操作或后台 Job。
 - `ssh_session_open(connectionId, idleTimeoutSeconds?)` 打开对话级连接，返回 `sessionId`。默认空闲 1800 秒，0 表示不因空闲关闭；最大可配置值 86400 秒。每用户最多 32 条，服务最多 128 条连接。任务结束或停止不会自动关闭会话；对话删除、应用停用、权限撤销、连接配置变化和服务退出会清理。
 - `ssh_session_list(connectionId, sessionId?)` 查看当前对话内指定目标的连接状态与活动操作数；`ssh_session_close(connectionId, sessionId, force?)` 关闭并移除连接。普通关闭拒绝活动会话；显式 force 按破坏性操作治理，可能中断全部活动命令，不保证远端进程已终止。
-- `shell_execute` 的 command 在 Workspace 和 SSH 均可使用 `{kind:"argv",argv:[可执行文件,参数...]}` 或 `{kind:"shell",shellScript:"待执行脚本"}`，支持可选 cwd。argv 适合单命令和字面参数，SSH 会逐参数安全引用；shellScript 支持管道、变量、条件和重定向，Workspace 使用 /bin/sh -c，SSH 使用远端命令 Shell。shellScript 是命令正文，不是展示标题，不接受旧 text 字段。必要环境变量可用 argv 的 env 命令或脚本显式传入。`shell_execute` 与全部 `file_read/list/search/write/patch/move/delete` 接受仅限 SSH 的可选 `sessionId`。省略时仍每次临时建连后关闭；指定时检查、执行和验证使用已有连接。失效时不自动重连、降级或重放。
+- Agent `shell_execute` 的 command **仅在明确授权的 SSH 连接**使用 `{kind:"argv",argv:[可执行文件,参数...]}` 或 `{kind:"shell",shellScript:"待执行脚本"}`，支持可选 cwd。argv 字面参数逐一安全引用；shellScript 支持管道、变量、条件和重定向，由远端命令 Shell 执行。shellScript 是命令正文，不是展示标题，旧 text 字段与 `target:"workspace"` 一律拒绝，不改选任意 SSH 或本地执行。必要环境变量通过 env argv 或脚本显式传入。`shell_execute` 与七项 Agent 文件工具接受可选 `sessionId`，省略时临时建连，指定时在相同连接上检查、执行和验证；失效不自动重连、降级或重放，后台必须显式提供合法 sessionId。
 - 同一用户、应用和对话的 Root/Subagent 可以显式共享会话，但仍须有当前目标授权；跨用户、应用、对话禁止访问。命令各自使用独立 exec channel，文件使用独立句柄，不向其他任务插入输入，不继承前一命令的工作目录或环境变量；远端共享文件和服务仍可能相互影响。
-- Workspace 后台 Job 接纳及 running 状态反馈明确要求保留 jobId，不以重提命令获取结果；服务验收使用健康检查，等待终态使用有界 wait。running 是权威活跃状态而非失败或状态缺失，不改变正常并发与执行身份。
-- `shell_job_control(action="list")` 在 Workspace 和 SSH 均可用，省略 jobId；Workspace 返回本 generation 的活跃任务及并发容量，SSH 仅列出当前 user/App/Thread/connection 的活跃受管 Job，不列出其他线程或远端任意进程。
+- Agent SSH 后台 Job 接纳及 running 状态反馈必须保留原 jobId，不以重提命令获取结果；服务验收使用健康检查，等待终态使用有界 wait。running 是活跃状态而非失败或状态缺失，不改变正常并发与执行身份。
+- `shell_job_control(action="list", target="ssh")` 省略 jobId，只列出当前 user/App/Thread/connection 的活跃受管 SSH Job，不列出其他线程、Runner Job 或远端任意进程；status/wait/cancel 必须使用原始 `ssh-job-UUID`，配置或授权失效均拒绝而不重绑。
 - ACP 集成可选择 Workspace profile 或 SSH transport。SSH 配置启动 argv（JSON 数组）与绝对 cwd，不自动安装远端程序；环境变量可用 argv 的 env 命令显式传入。`acp_execute` 两目标均要求 integrationId、target、id、prompt，可选 cwd；不接受 workspaceId 别名或省略目标。SSH 使用独立非 PTY channel 与同一 ACP v1 客户端、内层权限审批和输出边界；取消关闭 channel/连接，断连不重放、不视为已验证成功。ACP 不是 OS 沙箱，输出不是独立验收证据。
   - 执行前重新核对集成版本、Workspace generation／profile 或 SSH 配置，合法规范化参数可再次检查，内部冻结字段不作为模型输入开放。即使外层使用 full_access，内层敏感操作仍须单独审批；等待内层审批时取消会关闭本次执行，晚到授权不得继续执行。远端副作用无法确认时工具结果为 unknown、Run 可收敛为 interrupted，不承诺回滚；正常协议完成后仍需后续独立验证证据才能通过完成门禁。
-- Workspace 创建达到用户容量上限时，在创建记录与 Runner 调用前明确拒绝，工具结果为已确认未执行，不作为未知副作用隔离；需显式清理不再使用的 Workspace 后再继续。
+- 尚存用户 Workspace 管理 API 达到容量上限时在创建记录与 Runner 调用前拒绝；模型 `workspace_create` 已完全退出，不通过 Shell/Job 的旧错误码绕过 Workspace 容量或权限边界。
 - 工具参数拒绝说明本次未执行，并提示按 Schema 与目标类型纠正后再尝试；反馈不回显参数值。循环警告按失败重复、稳定观察重复或其他无进展行为给出调整指引，不自动重放操作或停止端口占用者。
 - SSH `shell_execute(mode="background", sessionId=...)` 返回 `jobId`，任务继续运行；使用 `shell_job_control(target="ssh", id=连接ID, jobId, action="status/wait/cancel")` 查看有界输出、等待或取消。后台任务 timeoutSeconds 默认 3600 秒、最多 86400 秒，独立于提交工具期限；前台仍最多 300 秒且受工具预算约束。后台任务运行时不进行空闲回收，每用户最多 32 个活动任务。
 - SSH 任务状态与终态结果持久保存，原始命令和凭据不写入任务记录。连接丢失、强制关闭或 Backend 重启后的未确认任务标记 unknown，不重放；单任务取消不关闭共享连接。取消只有收到远端执行结束证据才有确定结果，不把本地 channel 关闭当作远端进程已终止。
-- `shell_job_control` 同时管理 Workspace Job；代码调查使用通用 `file_list`、`file_search`、`file_read`，验证使用授权的 Shell 执行真实构建／测试，不提供语言专用语义导航。SSH Job 不使用 Runner，普通 SSH 功能不依赖 Runner 可用性。
+- `shell_job_control` 只管理 SSH Job；代码调查使用 SSH-only 的 `file_list`、`file_search`、`file_read`，验证使用授权 SSH Shell 的真实构建／测试，不提供语言专用语义导航。普通 SSH 和 Agent SSH Job 不依赖生产 Runner 可用性。
 
 全局 Agent 呼出悬浮按钮使用 44px 圆形、实心主色底与高对比图标，图标为对话框内的终端提示符；保留拖动位置、点击打开和任务数量徽标。拖到左右边缘附近松手后吸附贴边并半隐藏；鼠标悬停或键盘聚焦时完整展开，手机点击露出的半圆直接打开 Agent，也可拖回页面内取消贴边。贴边侧和纵向位置随布局保存，右键重置位置。
 
@@ -364,7 +364,7 @@ Plugin Frontend 的静态代码和 SDK 可匿名获取并使用公开 immutable 
 
 Plugin 包在本部署以 `appId + version` 表示全局不可变身份；同名同版本的不同内容不能并存，换 publisher 不会获得独立 namespace。修改包内容须发布新版本或使用不同 App ID。verify 会登记版本元数据，尚无 verified-only 版本自动回收；该行为不代表支持多用户私有同名插件。
 
-副作用以持久 ToolCall 身份区分执行；同一次调用的协议重放不重新启动 Workspace Job，新 ToolCall 即使参数相同也执行新的操作，避免重复检查返回旧结果。审批参数哈希只用于冻结并复核授权内容，不代替执行身份。重复动作／结果且无进展时，循环检测先提示模型调整策略，再暂停等待输入；快照的 loopPause 明确给出循环暂停原因与时间，区别于 pendingInputRequest 澄清问题，界面提示发送新指引恢复同一 Run 或停止。暂停不自动取消后台 Job；独立运行预算提供硬上限。未知副作用仍走隔离核对，不能自动重放。
+副作用以持久 ToolCall 身份区分执行；同一次调用的协议重放不会未经核对地重新启动 SSH Job，新 ToolCall 即使参数相同也是新的授权操作，不将审批哈希替代执行身份。重复动作／结果且无进展时，循环检测先提示调整策略，再暂停等待输入；loopPause 与 pendingInputRequest 分别说明循环暂停与澄清问题。暂停不自动取消后台 Job；未知副作用仍需核对，不自动重放。
 
 模型上下文明确要求遵循最新用户任务及其最终输出格式；运行进度不构成重复执行已完成工作的请求。用户要求原始 JSON／精确标记时，模型应先完成必要的 Plan 和验证记录，再按指定格式回答。该指令不把未经验证的任务强制转换成成功，模型输出仍需实际验收。
 
