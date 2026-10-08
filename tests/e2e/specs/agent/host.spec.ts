@@ -746,6 +746,29 @@ test('Agent feature enable opens one global floating window that survives route 
   await expect(launcher).toHaveCount(0);
 });
 
+test('Agent settings load without Runner Workspace availability and preserve Browser/ACP settings', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await setUiLanguage(context.request);
+  await enableAgentWithRecommendedNexusAgent(context.request);
+  const obsoleteRequests: string[] = [];
+  await page.route('**/api/v1/agent/workspace-runtime/**', (route) => {
+    obsoleteRequests.push(route.request().url());
+    return route.abort();
+  });
+  await page.goto('/settings?tab=agent');
+  const panel = page.locator('#settings-panel-agent');
+  await expect(panel.getByRole('heading', { name: 'Model providers', exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: 'Runtime & Environments', exact: true }).click();
+  await expect(panel.getByRole('heading', { name: 'Execution and performance', exact: true })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: 'CDP', exact: true })).toBeAttached();
+  await expect(panel.getByRole('heading', { name: 'ACP Integrations', exact: true })).toBeAttached();
+  await expect(panel.getByRole('heading', { name: 'Workspace dev environment', exact: true })).toHaveCount(0);
+  expect(obsoleteRequests).toEqual([]);
+});
+
 test('Agent settings surface exposes the production control plane and captures functional evidence', async ({
   page,
   context,
@@ -937,11 +960,9 @@ test('Agent settings surface exposes the production control plane and captures f
 
   await settingsNavigation.getByRole('button', { name: 'Runtime & Environments', exact: true }).click();
   await expect(panel.getByRole('heading', { name: 'Execution and performance', exact: true })).toBeVisible();
-  const workspaceRuntime = panel.getByRole('heading', { name: 'Workspace dev environment', exact: true });
-  await workspaceRuntime.scrollIntoViewIfNeeded();
-  await expect(workspaceRuntime).toBeVisible();
+  await expect(panel.getByRole('heading', { name: 'Workspace dev environment', exact: true })).toHaveCount(0);
   await expect(panel.getByRole('heading', { name: 'CDP', exact: true })).toBeAttached();
-  await expect(panel.getByRole('heading', { name: 'ACP', exact: true })).toBeAttached();
+  await expect(panel.getByRole('heading', { name: 'ACP Integrations', exact: true })).toBeAttached();
   await expect(panel.getByRole('heading', { name: 'Artifacts and storage', exact: true })).toBeAttached();
   await captureFunctionalScreenshot(page, 'agent-settings-runtime.png', { viewport: { width: 1440, height: 900 } });
 
@@ -1002,7 +1023,9 @@ test('Agent settings surface exposes the production control plane and captures f
   const narrowNavigation = narrowPanel.getByRole('navigation', { name: 'Agent settings sections', exact: true });
   await expect(narrowNavigation).toBeVisible();
   await narrowNavigation.getByRole('button', { name: 'Runtime & Environments', exact: true }).click();
-  await expect(narrowPanel.getByRole('heading', { name: 'Workspace dev environment', exact: true })).toBeVisible();
+  await expect(narrowPanel.getByRole('heading', { name: 'Workspace dev environment', exact: true })).toHaveCount(0);
+  await expect(narrowPanel.getByRole('heading', { name: 'CDP', exact: true })).toBeAttached();
+  await expect(narrowPanel.getByRole('heading', { name: 'ACP Integrations', exact: true })).toBeAttached();
   const horizontalExcess = await page.evaluate(() =>
     Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
   );
@@ -1958,16 +1981,36 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
     expect(removed.ok(), await removed.text()).toBeTruthy();
   });
 
-  await step('Workspace Runtime availability reports the isolated E2E Runner as ready', async () => {
-    const response = await request.get('/api/v1/agent/workspace-runtime/availability');
-    expect(response.ok(), await response.text()).toBeTruthy();
-    await expect(response.json()).resolves.toMatchObject({
-      data: {
-        available: true,
-        reason: null,
-        mode: 'native',
-        isolation: 'logical',
-      },
-    });
+  await step('retired Workspace management APIs reject requests without rewriting settings', async () => {
+    const before = await request.get('/api/v1/agent/settings');
+    expect(before.ok(), await before.text()).toBeTruthy();
+    const baseline = await before.json();
+    const mutationHeaders = { 'X-Nexus-CSRF': await csrfToken(request) };
+    const retiredMutations = [
+      'setup/preview',
+      'setup/confirm',
+      'tool-packs/node/22/install',
+      'tool-packs/node/22/uninstall/preview',
+      'tool-packs/node/22/uninstall/confirm',
+      'runtime-cleanup/preview',
+      'runtime-cleanup/confirm',
+      'settings/reset/preview',
+      'settings/reset/confirm',
+      'cache-cleanup',
+    ];
+    for (const uri of retiredMutations) {
+      const response = await request.post(`/api/v1/agent/workspace-runtime/${uri}`, {
+        headers: mutationHeaders,
+        data: { expectedVersion: baseline.data.revision, confirmationId: randomUUID() },
+      });
+      expect(response.status(), await response.text()).toBe(404);
+    }
+    for (const uri of ['storage', 'commands/obsolete']) {
+      const response = await request.get(`/api/v1/agent/workspace-runtime/${uri}`);
+      expect(response.status(), await response.text()).toBe(404);
+    }
+    const after = await request.get('/api/v1/agent/settings');
+    expect(after.ok(), await after.text()).toBeTruthy();
+    expect((await after.json()).data.revision).toBe(baseline.data.revision);
   });
 });

@@ -1202,7 +1202,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     }),
   );
 
-  router.use('/workspace-runtime', createWorkspaceRuntimeRouter(dependencies.workspaceRuntime, mutationSecurity));
+  router.use('/workspace-runtime', createWorkspaceRuntimeRouter(dependencies.workspaceRuntime));
 
   return router;
 };

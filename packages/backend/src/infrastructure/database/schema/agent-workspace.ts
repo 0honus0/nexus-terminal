@@ -51,21 +51,6 @@ CREATE INDEX IF NOT EXISTS agent_workspace_runtime_commands_scope ON agent_works
 CREATE INDEX IF NOT EXISTS agent_workspace_runtime_commands_pending ON agent_workspace_runtime_commands(status, deadline_at);
 `;
 
-export const createAgentWorkspaceRuntimeConfirmationsTableSQL = `
-CREATE TABLE IF NOT EXISTS agent_workspace_runtime_confirmations (
-    id TEXT PRIMARY KEY,
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    kind TEXT NOT NULL CHECK(kind IN ('setup','packUninstall','runtimeCleanup','settingsReset')),
-    expected_settings_revision INTEGER NOT NULL CHECK(expected_settings_revision > 0),
-    catalog_revision TEXT NOT NULL,
-    payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
-    snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
-    created_at INTEGER NOT NULL,
-    expires_at INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS agent_workspace_runtime_confirmations_expiry ON agent_workspace_runtime_confirmations(expires_at);
-`;
-
 export const createAgentProjectDirectoriesTableSQL = `
 CREATE TABLE IF NOT EXISTS agent_project_directories (
   user_id INTEGER NOT NULL,

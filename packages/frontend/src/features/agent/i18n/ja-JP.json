@@ -813,7 +813,7 @@
         "remove": "ターゲットを削除",
         "allowedUrls": "許可するページ URL Pattern（1 行 1 件）",
         "endpoints": "CDP エンドポイント",
-        "endpointHint": "scope は endpoint のネットワーク位置、via は Backend 直結または Runner トンネルを指定します。v1 では URL の userinfo・query・fragment に資格情報を含めることはできません。",
+        "endpointHint": "scope は endpoint のネットワーク位置を示します。Backend からの直接接続のみ対応し、Runner トンネルは使用しません。URL の userinfo・query・fragment に資格情報を含めることはできません。",
         "addEndpoint": "Endpoint を追加",
         "scope": "ネットワーク範囲",
         "via": "到達経路",

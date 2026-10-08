@@ -72,10 +72,6 @@ export const sqliteTableDefinitions: readonly SqliteTableDefinition[] = [
   { name: 'agent_workspaces', sql: agentWorkspace.createAgentWorkspacesTableSQL },
   { name: 'agent_workspace_runtime_commands', sql: agentWorkspace.createAgentWorkspaceRuntimeCommandsTableSQL },
   { name: 'agent_integrations', sql: agentExecution.createAgentIntegrationsTableSQL },
-  {
-    name: 'agent_workspace_runtime_confirmations',
-    sql: agentWorkspace.createAgentWorkspaceRuntimeConfirmationsTableSQL,
-  },
   { name: 'agent_delegations', sql: agentCollaboration.createAgentDelegationsTableSQL },
   { name: 'agent_runtime_context_checkpoints', sql: agentCollaboration.createAgentRuntimeContextCheckpointsTableSQL },
   { name: 'agent_mailbox_cursors', sql: agentCollaboration.createAgentMailboxCursorsTableSQL },

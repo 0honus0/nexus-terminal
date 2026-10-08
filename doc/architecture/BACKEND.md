@@ -409,6 +409,8 @@ File/Shell 的授权 contract 也已收敛：`CapabilityRegistry` 四个目标 c
 
 Browser 已从 Workspace/Runner transport 分离：Host `browser_session_open` 仅接受明确配置的 `targetId`；`BrowserSessionBindingAuthority` 根据有效 Browser 配置内容计算 `configurationHash` 和 target-specific revision，inspection 与 execute 复核 hash/Run scope。目标更新/删除时旧 Session 先关闭再报 `BROWSER_TARGET_STALE`，无关 Agent Settings revision 不造成失效。`BrowserRuntimeAdapter` 仅以 Backend 直连 CDP，保留 endpoint 协议/TLS、`allowedUrlPatterns`、Puppeteer request interception、Artifact capture 和 Run 终态 `closeRun`；新 Agent Browser 设置/Protocol 与持久 Run decoder 拒绝旧 `via=runner`。生产 Runner 的 `/v1/browser/tunnel` upgrade、`BrowserTunnelRuntime`、Backend Runner WS tunnel adapter 均已删除，未知 Runner upgrade 路由返回 404。Runner Workspace Provision/Profile 的遗留 Browser 字段属尚未拆除的 Workspace 子图，不能被重新用作独立 Browser target。
 
+Agent Workspace 管理控制面第一组已前后端同步移除：前端 `WorkspaceRuntimeSettings.vue`、设置页 Runner availability 并行加载和 Workspace Setup/Tool Pack/Runtime Cleanup/Settings Reset 客户端 API 退出；Backend 的管理 REST endpoint、`WorkspaceRuntimeManagementService`、SQLite confirmation repository/port、Facade 方法以及确认预览 DTO 物理删除。数据库迁移 #57 删除仅用于该控制面的 `agent_workspace_runtime_confirmations` 临时表，同时从新建 schema registry 移除；不删除用户 Workspace 项目文件或 Run 历史。`/agent/workspace-runtime/availability`、`/catalog` 仍供当前 Run Environment 选择使用，App Run Workspace API 和后端 WorkspaceService 仍在其拥有者的迁移阶段，严禁把此切口称作整套 Workspace/Runner 已退出。
+
 ## 数据、事务与并发
 
 - SQLite schema 描述新数据库结构，migration 负责已发布结构升级。

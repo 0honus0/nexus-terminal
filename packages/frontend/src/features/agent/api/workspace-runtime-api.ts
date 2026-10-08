@@ -14,20 +14,10 @@ import type {
   AgentWorkspaceListQueryDto,
   AgentWorkspaceRuntimeAvailabilityDto,
   AgentWorkspaceRuntimeCatalogDto,
-  AgentWorkspaceRuntimeCleanupPreviewDto,
   AgentWorkspaceRuntimeCommandDto,
-  AgentWorkspaceRuntimeConfirmationRequestDto,
-  AgentWorkspaceRuntimeEmptyRequestDto,
-  AgentWorkspaceRuntimeExpectedVersionRequestDto,
-  AgentWorkspaceRuntimeSettingsResetPreviewDto,
-  AgentWorkspaceRuntimeSettingsResetResultDto,
-  AgentWorkspaceRuntimeSetupPreviewDto,
-  AgentWorkspaceRuntimeSetupPreviewRequestDto,
-  AgentWorkspaceRuntimeStorageDto,
   AgentWorkspaceToolchainSwitchDto,
   AgentWorkspaceToolVersionsFieldsDto,
   AgentWorkspaceToolVersionsRequestDto,
-  AgentToolchainPackUninstallPreviewDto,
 } from '@nexus-terminal/protocol/agent-workspace-runtime';
 
 const unwrap = <T>(envelope: AgentEnvelopeDto<T>): T => envelope.data;
@@ -46,155 +36,6 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
     return unwrap(
       (await httpClient.get<AgentEnvelopeDto<AgentWorkspaceRuntimeCatalogDto>>('/agent/workspace-runtime/catalog'))
         .data,
-    );
-  },
-  async workspaceRuntimeStorage(): Promise<AgentWorkspaceRuntimeStorageDto> {
-    return unwrap(
-      (await httpClient.get<AgentEnvelopeDto<AgentWorkspaceRuntimeStorageDto>>('/agent/workspace-runtime/storage'))
-        .data,
-    );
-  },
-  async previewWorkspaceRuntimeSetup(
-    recipes: AgentWorkspaceRuntimeSetupPreviewRequestDto['recipes'],
-    expectedVersion: number,
-  ): Promise<AgentWorkspaceRuntimeSetupPreviewDto> {
-    const input: AgentWorkspaceRuntimeSetupPreviewRequestDto = { recipes, expectedVersion };
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelopeDto<AgentWorkspaceRuntimeSetupPreviewDto>>(
-          '/agent/workspace-runtime/setup/preview',
-          input,
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async confirmWorkspaceRuntimeSetup(
-    confirmationId: string,
-    expectedVersion: number,
-  ): Promise<AgentWorkspaceRuntimeCommandDto> {
-    const input: AgentWorkspaceRuntimeConfirmationRequestDto = { confirmationId, expectedVersion };
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelopeDto<AgentWorkspaceRuntimeCommandDto>>(
-          '/agent/workspace-runtime/setup/confirm',
-          input,
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async installToolchainPack(familyId: string, versionId: string): Promise<AgentWorkspaceRuntimeCommandDto> {
-    const input: AgentWorkspaceRuntimeEmptyRequestDto = {};
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelopeDto<AgentWorkspaceRuntimeCommandDto>>(
-          `/agent/workspace-runtime/tool-packs/${encodeURIComponent(familyId)}/${encodeURIComponent(versionId)}/install`,
-          input,
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async previewToolchainPackUninstall(
-    familyId: string,
-    versionId: string,
-    expectedVersion: number,
-  ): Promise<AgentToolchainPackUninstallPreviewDto> {
-    const input: AgentWorkspaceRuntimeExpectedVersionRequestDto = { expectedVersion };
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelopeDto<AgentToolchainPackUninstallPreviewDto>>(
-          `/agent/workspace-runtime/tool-packs/${encodeURIComponent(familyId)}/${encodeURIComponent(versionId)}/uninstall/preview`,
-          input,
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async confirmToolchainPackUninstall(
-    familyId: string,
-    versionId: string,
-    confirmationId: string,
-    expectedVersion: number,
-  ): Promise<AgentWorkspaceRuntimeCommandDto> {
-    const input: AgentWorkspaceRuntimeConfirmationRequestDto = { confirmationId, expectedVersion };
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelopeDto<AgentWorkspaceRuntimeCommandDto>>(
-          `/agent/workspace-runtime/tool-packs/${encodeURIComponent(familyId)}/${encodeURIComponent(versionId)}/uninstall/confirm`,
-          input,
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async previewWorkspaceRuntimeCleanup(expectedVersion: number): Promise<AgentWorkspaceRuntimeCleanupPreviewDto> {
-    const input: AgentWorkspaceRuntimeExpectedVersionRequestDto = { expectedVersion };
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelopeDto<AgentWorkspaceRuntimeCleanupPreviewDto>>(
-          '/agent/workspace-runtime/runtime-cleanup/preview',
-          input,
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async confirmWorkspaceRuntimeCleanup(
-    confirmationId: string,
-    expectedVersion: number,
-  ): Promise<AgentWorkspaceRuntimeCommandDto> {
-    const input: AgentWorkspaceRuntimeConfirmationRequestDto = { confirmationId, expectedVersion };
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelopeDto<AgentWorkspaceRuntimeCommandDto>>(
-          '/agent/workspace-runtime/runtime-cleanup/confirm',
-          input,
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async cleanupWorkspaceRuntimeCache(): Promise<AgentWorkspaceRuntimeCommandDto> {
-    const input: AgentWorkspaceRuntimeEmptyRequestDto = {};
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelopeDto<AgentWorkspaceRuntimeCommandDto>>(
-          '/agent/workspace-runtime/cache-cleanup',
-          input,
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async previewWorkspaceRuntimeSettingsReset(
-    expectedVersion: number,
-  ): Promise<AgentWorkspaceRuntimeSettingsResetPreviewDto> {
-    const input: AgentWorkspaceRuntimeExpectedVersionRequestDto = { expectedVersion };
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelopeDto<AgentWorkspaceRuntimeSettingsResetPreviewDto>>(
-          '/agent/workspace-runtime/settings/reset/preview',
-          input,
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async confirmWorkspaceRuntimeSettingsReset(
-    confirmationId: string,
-    expectedVersion: number,
-  ): Promise<AgentWorkspaceRuntimeSettingsResetResultDto> {
-    const input: AgentWorkspaceRuntimeConfirmationRequestDto = { confirmationId, expectedVersion };
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelopeDto<AgentWorkspaceRuntimeSettingsResetResultDto>>(
-          '/agent/workspace-runtime/settings/reset/confirm',
-          input,
-          { headers: await mutationHeaders() },
-        )
-      ).data,
     );
   },
   async workspaceCommand(appId: string, commandId: string): Promise<AgentWorkspaceRuntimeCommandDto> {

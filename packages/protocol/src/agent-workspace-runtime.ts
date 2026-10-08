@@ -1,6 +1,5 @@
 import type { AgentArtifactRefDto } from './agent-artifacts.js';
 import type { AgentJsonValueDto, AgentVersionedRequestDto } from './agent-common.js';
-import type { AgentHardLimitsDto, AgentSettingsDocumentDto } from './agent-host.js';
 import type { AgentRunEnvironmentSelectionDto, AgentRunEnvironmentSnapshotDto } from './agent-runs.js';
 
 export interface AgentToolchainPackRefDto {
@@ -101,79 +100,6 @@ export interface AgentWorkspaceArtifactImportResultDto {
   path: string;
   writtenBytes: number;
 }
-
-export interface AgentWorkspaceRuntimeSetupRecipeSelectionDto {
-  recipeId: string;
-  versions?: Record<string, string>;
-}
-
-export interface AgentWorkspaceRuntimeSetupPreviewRequestDto {
-  recipes: AgentWorkspaceRuntimeSetupRecipeSelectionDto[];
-  expectedVersion: number;
-}
-
-export interface AgentWorkspaceRuntimeSetupPreviewDto {
-  confirmationId: string;
-  expectedVersion: number;
-  catalogRevision: string;
-  enabledRecipeIds: string[];
-  packs: AgentToolchainPackRefDto[];
-  missingPacks: AgentToolchainPackRefDto[];
-  installBytes: number;
-  expiresAt: number;
-}
-
-export interface AgentToolchainPackUninstallPreviewDto {
-  confirmationId: string;
-  expectedVersion: number;
-  catalogRevision: string;
-  pack: AgentToolchainPackRefDto & { displayName: string; bytes: number };
-  installed: boolean;
-  inUse: boolean;
-  wasEnabled: boolean;
-  wasDefault: boolean;
-  replacementDefaultVersionId: string | null;
-  expiresAt: number;
-}
-
-export interface AgentWorkspaceRuntimeCleanupPreviewDto {
-  confirmationId: string;
-  expectedVersion: number;
-  catalogRevision: string;
-  workspaceCount: number;
-  activeCount: number;
-  retainedCount: number;
-  estimatedReclaimableBytes: number;
-  workspaceIds: string[];
-  expiresAt: number;
-}
-
-export interface AgentWorkspaceRuntimeSettingsResetPreviewDto {
-  confirmationId: string;
-  expectedVersion: number;
-  catalogRevision: string;
-  current: AgentJsonValueDto;
-  proposed: AgentJsonValueDto;
-  expiresAt: number;
-}
-
-export interface AgentWorkspaceRuntimeSettingsResetResultDto {
-  requestedSettings: AgentSettingsDocumentDto;
-  effectiveSettings: AgentSettingsDocumentDto;
-  hardLimits: AgentHardLimitsDto;
-  revision: number;
-}
-
-export interface AgentWorkspaceRuntimeConfirmationRequestDto {
-  confirmationId: string;
-  expectedVersion: number;
-}
-
-export interface AgentWorkspaceRuntimeExpectedVersionRequestDto {
-  expectedVersion: number;
-}
-
-export type AgentWorkspaceRuntimeEmptyRequestDto = Record<string, never>;
 
 export type AgentWorkspaceEnvironmentSpecDto = Omit<AgentRunEnvironmentSelectionDto, 'catalogRevision'>;
 

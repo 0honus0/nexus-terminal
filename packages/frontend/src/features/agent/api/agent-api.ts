@@ -127,17 +127,12 @@ export type {
 export type {
   AgentToolchainCatalogPackDto,
   AgentToolchainPackRefDto,
-  AgentToolchainPackUninstallPreviewDto,
   AgentWorkspaceArtifactImportResultDto,
   AgentWorkspaceDto,
   AgentWorkspaceRecipeDto,
   AgentWorkspaceRuntimeAvailabilityDto,
   AgentWorkspaceRuntimeCatalogDto,
-  AgentWorkspaceRuntimeCleanupPreviewDto,
   AgentWorkspaceRuntimeCommandDto,
-  AgentWorkspaceRuntimeSettingsResetPreviewDto,
-  AgentWorkspaceRuntimeSetupPreviewDto,
-  AgentWorkspaceRuntimeStorageDto,
   AgentWorkspaceToolchainSwitchDto,
 } from '@nexus-terminal/protocol/agent-workspace-runtime';
 

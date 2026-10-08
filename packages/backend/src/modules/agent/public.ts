@@ -6,11 +6,6 @@ import type {
   AgentWorkspaceCreateSpec,
   AgentWorkspaceView,
   WorkspaceProfileView,
-  ToolchainPackUninstallPreview,
-  WorkspaceRuntimeCleanupPreview,
-  WorkspaceRuntimeSettingsResetPreview,
-  WorkspaceRuntimeSetupPreview,
-  WorkspaceRuntimeStorageView,
   WorkspaceToolchainSwitchView,
 } from './workspace-runtime/workspace-runtime.types';
 import type { WorkspaceRuntimeTerminalAttachment } from './workspace-runtime/workspace-runtime-interactive-session.port';
@@ -401,7 +396,6 @@ export interface AgentEventFacade {
 export interface AgentWorkspaceRuntimeFacade {
   availability(signal?: AbortSignal): Promise<WorkspaceRuntimeAvailability>;
   catalog(signal?: AbortSignal): Promise<WorkspaceRuntimeCatalog>;
-  storage(signal?: AbortSignal): Promise<WorkspaceRuntimeStorageView>;
   listWorkspaces(scope: Scope, runId?: string): Promise<AgentWorkspaceView[]>;
   getWorkspace(scope: Scope, workspaceId: string): Promise<AgentWorkspaceView>;
   openTerminal(
@@ -443,29 +437,6 @@ export interface AgentWorkspaceRuntimeFacade {
     expectedCatalogRevision?: string,
   ): Promise<WorkspaceToolchainSwitchView>;
   getCommand(scope: Scope, commandId: string): Promise<WorkspaceRuntimeCommandView>;
-  previewSetup(userId: number, selections: unknown, expectedVersion: number): Promise<WorkspaceRuntimeSetupPreview>;
-  confirmSetup(userId: number, confirmationId: string, expectedVersion: number): Promise<WorkspaceRuntimeCommandView>;
-  installPack(userId: number, familyId: string, versionId: string): Promise<WorkspaceRuntimeCommandView>;
-  previewPackUninstall(
-    userId: number,
-    familyId: string,
-    versionId: string,
-    expectedVersion: number,
-  ): Promise<ToolchainPackUninstallPreview>;
-  confirmPackUninstall(
-    userId: number,
-    confirmationId: string,
-    expectedVersion: number,
-  ): Promise<WorkspaceRuntimeCommandView>;
-  previewRuntimeCleanup(userId: number, expectedVersion: number): Promise<WorkspaceRuntimeCleanupPreview>;
-  confirmRuntimeCleanup(
-    userId: number,
-    confirmationId: string,
-    expectedVersion: number,
-  ): Promise<WorkspaceRuntimeCommandView>;
-  previewSettingsReset(userId: number, expectedVersion: number): Promise<WorkspaceRuntimeSettingsResetPreview>;
-  confirmSettingsReset(userId: number, confirmationId: string, expectedVersion: number): Promise<AgentSettingsView>;
-  adminAction(userId: number, action: string, payload: JsonValue): Promise<WorkspaceRuntimeCommandView>;
 }
 
 export interface AgentApprovalFacade {

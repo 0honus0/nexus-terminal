@@ -117,10 +117,6 @@ export class WorkspaceRuntimeService {
     return this.controller.catalog(signal);
   }
 
-  storage(signal?: AbortSignal) {
-    return this.controller.storage(signal);
-  }
-
   listWorkspaces(scope: Scope, runId?: string): Promise<AgentWorkspaceView[]> {
     return this.repository.listWorkspaces(scope, runId);
   }
@@ -585,16 +581,6 @@ export class WorkspaceRuntimeService {
     } catch {
       return local;
     }
-  }
-
-  async adminAction(
-    userId: number,
-    action: string,
-    payload: JsonValue,
-    confirmationId?: string,
-  ): Promise<WorkspaceRuntimeCommandView> {
-    const input = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
-    return this.dispatch({ userId, appId: ADMIN_SCOPE.appId }, action, undefined, 1, input, true, true, confirmationId);
   }
 
   async reconcile(limit = 100): Promise<number> {

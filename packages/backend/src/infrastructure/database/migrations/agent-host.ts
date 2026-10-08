@@ -135,4 +135,10 @@ export const agentHostMigrations: SqliteMigration[] = [
       WHERE json_type(value_json, '$.workspaceRuntime.acpProfiles') IS NOT NULL;
     `,
   },
+  {
+    id: 57,
+    name: 'Remove retired Agent Workspace management confirmations',
+    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_workspace_runtime_confirmations'),
+    sql: 'DROP TABLE IF EXISTS agent_workspace_runtime_confirmations;',
+  },
 ];

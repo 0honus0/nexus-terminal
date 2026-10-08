@@ -813,7 +813,7 @@
         "remove": "删除目标",
         "allowedUrls": "允许访问的页面 URL Pattern（每行一个）",
         "endpoints": "CDP 端点",
-        "endpointHint": "scope 描述 endpoint 所在网络；via 决定 Backend 直连还是通过 Runner 隧道。v1 不允许把凭据放进 URL 的 userinfo、query 或 fragment。",
+        "endpointHint": "scope 描述 endpoint 所在网络；仅支持 Backend 直连，不再通过 Runner 隧道。不允许在 URL 的 userinfo、query 或 fragment 中传入凭据。",
         "addEndpoint": "添加 Endpoint",
         "scope": "网络范围",
         "via": "访问路径",

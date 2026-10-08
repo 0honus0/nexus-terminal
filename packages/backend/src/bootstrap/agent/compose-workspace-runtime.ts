@@ -1,5 +1,4 @@
 import { SqliteWorkspaceRepository } from '../../infrastructure/agent/workspace-runtime/sqlite-workspace.repository';
-import { SqliteWorkspaceRuntimeConfirmationRepository } from '../../infrastructure/agent/workspace-runtime/sqlite-workspace-runtime-confirmation.repository';
 import type { RelationalDatabase } from '../../platform/storage/relational-database.port';
 import type { ArtifactService } from '../../modules/agent/ai/artifact.service';
 import type { BrowserGatewayPort } from '../../modules/agent/ai/integrations.types';
@@ -11,7 +10,6 @@ import type { AgentWorkspaceRuntimeFacade } from '../../modules/agent/public';
 import { WorkspaceArtifactService } from '../../modules/agent/exchange/workspace-artifact.service';
 import type { WorkspaceRuntimeControllerPort } from '../../modules/agent/workspace-runtime/workspace-runtime-controller.port';
 import type { WorkspaceRuntimeGatewayPort } from '../../modules/agent/workspace-runtime/workspace-runtime-gateway.port';
-import { WorkspaceRuntimeManagementService } from '../../modules/agent/workspace-runtime/workspace-runtime-management.service';
 import { WorkspaceRuntimeService } from '../../modules/agent/workspace-runtime/workspace-runtime.service';
 import type { WorkspaceRuntimeInteractiveSessionPort } from '../../modules/agent/workspace-runtime/workspace-runtime-interactive-session.port';
 import { WorkspaceRuntimeTerminalService } from '../../modules/agent/workspace-runtime/workspace-runtime-terminal.service';
@@ -52,7 +50,6 @@ export const composeWorkspaceRuntime = ({
   now,
 }: ComposeWorkspaceRuntimeOptions): ComposedWorkspaceRuntime => {
   const repository = new SqliteWorkspaceRepository(database);
-  const confirmations = new SqliteWorkspaceRuntimeConfirmationRepository(database);
   const terminal = new WorkspaceRuntimeTerminalService(
     repository,
     interactiveSessions,
@@ -74,20 +71,11 @@ export const composeWorkspaceRuntime = ({
       },
     },
   );
-  const management = new WorkspaceRuntimeManagementService(
-    controller,
-    repository,
-    confirmations,
-    settings,
-    service,
-    now,
-  );
   const workspaceArtifacts = new WorkspaceArtifactService(service, artifacts, capabilities);
 
   const facade: AgentWorkspaceRuntimeFacade = {
     availability: (signal) => service.availability(signal),
     catalog: (signal) => service.catalog(signal),
-    storage: (signal) => service.storage(signal),
     listWorkspaces: (scope, runId) => service.listWorkspaces(scope, runId),
     getWorkspace: (scope, workspaceId) => service.getWorkspace(scope, workspaceId),
     openTerminal: (scope, workspaceId, generation, columns, rows, sessionId, signal) =>
@@ -119,21 +107,6 @@ export const composeWorkspaceRuntime = ({
     switchToolVersions: (scope, workspaceId, versions, expectedVersion, expectedCatalogRevision) =>
       service.switchToolVersions(scope, workspaceId, versions, expectedVersion, expectedCatalogRevision),
     getCommand: (scope, commandId) => service.getCommand(scope, commandId),
-    previewSetup: (userId, selections, expectedVersion) => management.previewSetup(userId, selections, expectedVersion),
-    confirmSetup: (userId, confirmationId, expectedVersion) =>
-      management.confirmSetup(userId, confirmationId, expectedVersion),
-    installPack: (userId, familyId, versionId) => management.installPack(userId, familyId, versionId),
-    previewPackUninstall: (userId, familyId, versionId, expectedVersion) =>
-      management.previewPackUninstall(userId, familyId, versionId, expectedVersion),
-    confirmPackUninstall: (userId, confirmationId, expectedVersion) =>
-      management.confirmPackUninstall(userId, confirmationId, expectedVersion),
-    previewRuntimeCleanup: (userId, expectedVersion) => management.previewRuntimeCleanup(userId, expectedVersion),
-    confirmRuntimeCleanup: (userId, confirmationId, expectedVersion) =>
-      management.confirmRuntimeCleanup(userId, confirmationId, expectedVersion),
-    previewSettingsReset: (userId, expectedVersion) => management.previewSettingsReset(userId, expectedVersion),
-    confirmSettingsReset: (userId, confirmationId, expectedVersion) =>
-      management.confirmSettingsReset(userId, confirmationId, expectedVersion),
-    adminAction: (userId, action, payload) => service.adminAction(userId, action, payload),
   };
 
   return { repository, service, facade };
