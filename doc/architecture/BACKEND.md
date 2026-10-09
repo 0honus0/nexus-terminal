@@ -32,7 +32,7 @@ SFTP Lease 的打开信号贯穿整个租约；各请求/流可带独立 AbortSi
 
 Remote 按会话 ID 保存进行中的关闭 Promise，先发布关闭等待再清理资源；会话从活动表移除之后，并发关闭仍取得相同 Promise 和相同失败结果。关闭完成后清除等待表，实例停机统一等待进行中的会话关闭。
 
-Bootstrap 的 `createApp` 负责初始化与装配；同文件的 `createCloseHandler` 持有实例关闭 Promise 并同步停止模块准入，`closeResources` 按模块、SQLite 的顺序释放资源。模块关闭失败仍继续关闭数据库；单个错误保留原值，多个错误聚合，不将关闭编排嵌入公开对象的大型匿名函数。
+Bootstrap 的 `createApp` 负责初始化与装配；同文件的 `createLifecycle` 持有实例关闭 Promise 并同步停止模块准入，`closeResources` 先关闭 HTTP 并等待全部已接纳的业务 Promise 收敛，再按 Remote 模块、SQLite 的顺序释放资源。模块关闭失败仍继续关闭数据库；单个错误保留原值，多个错误聚合，不将关闭编排嵌入公开对象的大型匿名函数。
 
 Remote Service 只接收本模块 Model，使用独立的 `OpenSessionRequest`、`RemoteSessionResource` 和会话快照；不直接调用 Targets Resolver 或 Platform SSH 工厂。Model 解析可信目标、逐字段转换机器请求、执行建连与 Shell 打开，统一传递打开期限及取消，并在失败时等待底层资源清理。机器连接、Shell 与 Node Stream 封装在 Model 内，Service 通过应用资源契约管理准入、订阅、背压和会话生命周期；模块出口继续逐字段投影公开快照及请求，字节数据复制后传递。
 
@@ -40,9 +40,9 @@ Remote Service 的会话注册、单会话释放和实例停机分别由私有 `
 
 ## backend-next Access 最小认证切片
 
-Access 账号与会话模型属于 `modules/access`，加密的 password verifier 使用 `platform/security/password-hasher.ts` 的 scrypt；Session Model 显式转换应用/存储结果，SQL 行解码与事务只在模块内的 SQLite Adapter。初始管理员创建在排他事务中检查空库，单一全库 v1 由 `bootstrap/schema.ts` 合成 Targets+Access 的 schema，不能另立 Access 版本号。密码变更事务更新散列并删除该账号全部持久会话，登录会话只存 SHA-256 摘要、版本和期限，前端不能提供身份 owner。
+Access 账号与会话模型属于 `modules/access`，加密的 password verifier 使用 `platform/security/password-hasher.ts` 的 scrypt；Accounts/Session Model 将应用命令与存储命令逐字段转换，Account Storage 不引用 Model 类型，Session Model 显式转换应用/存储结果，SQL 行解码与事务只在模块内的 SQLite Adapter。初始管理员创建在排他事务中检查空库，单一全库 v1 由 `bootstrap/schema.ts` 合成 Targets+Access 的 schema，不能另立 Access 版本号。密码变更事务更新散列并删除该账号全部持久会话，登录会话只存 SHA-256 摘要、版本和期限，前端不能提供身份 owner。
 
-新 `platform/http` 只接收通用路由，固定 Origin、明确可信代理、严格 body 限制、无旁路 CORS；`modules/access/interfaces/http` 负责 Login、Setup、Status、Logout、Password 并构造安全码和公开 DTO。登录成功更换 token，普通 cookie 只在浏览器会话内、持久 cookie 最多 30 天；两者服务端记录均最多保留 30 天。TOTP/Passkey 尚未实施，有启用标志时拒绝密码登录；验证码和可配置网络策略后续补齐。独立入口从 `packages/backend-next` 启动且默认监听 127.0.0.1，必须先完成受控初始化。启动变量为 `NEXUS_NEXT_DB_PATH`、`NEXUS_NEXT_ENCRYPTION_KEY`（32 字节 base64）、`NEXUS_NEXT_PUBLIC_ORIGIN`，可选 `NEXUS_NEXT_HOST/NEXUS_NEXT_PORT/NEXUS_NEXT_TRUSTED_PROXIES`。仅 Access API 注册，所有 Targets/Remote HTTP/WS 路由仍需先按 B/C 批接授权。
+新 `platform/http` 只接收通用路由，固定 Origin、明确可信代理、严格 body 限制、无旁路 CORS；非法 JSON/Content-Type/大小错误在传输层分别保留 400/415/413，业务错误只在 Access 路由映射。平台保留 query 参数交由业务端点严格验证，Access 端点当前均拒绝未知 query；`modules/access/interfaces/http` 负责 Login、Setup、Status、Logout、Password 并构造安全码和公开 DTO。登录成功更换 token，普通 cookie 只在浏览器会话内、持久 cookie 最多 30 天；浏览器会话 Cookie 不设置 Max-Age，记住我 Cookie 的 Max-Age 为 30 天；两者服务端均按签发起最长 30 天的有效期拒绝过期认证。未访问的过期记录目前没有全量清扫，因此失效不等于数据库物理删除。TOTP/Passkey 尚未实施，有启用标志时拒绝密码登录；失败封禁策略由 Access Service 持有并显式配置，默认未启用；loopback、RFC1918、IPv6 ULA/link-local（含映射地址）跳过封禁。启用时由 Access 提供阈值与时长，SQLite Adapter 仅在显式事务中原子更新计数。验证码和完整的持久策略配置/管理 API 后续补齐。独立入口从 `packages/backend-next` 启动且默认监听 127.0.0.1，必须先完成受控初始化。启动变量为 `NEXUS_NEXT_DB_PATH`、`NEXUS_NEXT_ENCRYPTION_KEY`（32 字节 base64）、`NEXUS_NEXT_PUBLIC_ORIGIN`，可选 `NEXUS_NEXT_HOST/NEXUS_NEXT_PORT/NEXUS_NEXT_TRUSTED_PROXIES`。仅 Access API 注册，所有 Targets/Remote HTTP/WS 路由仍需先按 B/C 批接授权。
 
 ## 技术基线
 
