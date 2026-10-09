@@ -16,6 +16,8 @@ SSH 路由从 Socket/Client 创建起持续监控 error/close，任何一跳失�
 
 SFTP Lease 的打开信号贯穿整个租约；各请求/流可带独立 AbortSignal 和期限，回调请求默认 30 秒，流使用调用方显式期限。关闭立即拒绝待完成请求并销毁流，等待通道关闭，超时强制 destroy；重复关闭共享 Promise。取消前未派发的请求标记 not_started，已派发请求的取消、期限或断线只标记 unknown，不能视为远端副作用回滚。
 
+Remote 按会话 ID 保存进行中的关闭 Promise，先发布关闭等待再清理资源；会话从活动表移除之后，并发关闭仍取得相同 Promise 和相同失败结果。关闭完成后清除等待表，实例停机统一等待进行中的会话关闭。
+
 ## 技术基线
 
 Runner PackInstaller.runProcess复用registerManagedProcess(kind pack)覆盖mise/工具版本检查，opaque invocation ID不含command payload，登记失败kill/close收敛，exit清派生group、close后完成Promise；shutdown/startup仍由共享managed-process registry负责，无新增pack registry。

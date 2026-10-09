@@ -39,6 +39,7 @@ export class RemoteSessionService {
 	private readonly opening = new Set<AbortController>();
 	private readonly openingTasks = new Set<Promise<unknown>>();
 	private readonly closingTasks = new Set<Promise<void>>();
+	private readonly sessionClosings = new Map<string, Promise<void>>();
 	private closing: Promise<void> | null = null;
 	private accepting = true;
 
@@ -234,10 +235,12 @@ export class RemoteSessionService {
 	}
 
 	closeSession(id: string): Promise<void> {
+		const pending = this.sessionClosings.get(id);
+		if (pending) return pending;
 		const session = this.sessions.get(id);
 		if (!session) return Promise.resolve();
 		if (session.closing) return session.closing;
-		session.closing = (async () => {
+		session.closing = Promise.resolve().then(async () => {
 			this.sessions.delete(id);
 			session.offTransport();
 			session.offShell();
@@ -258,10 +261,16 @@ export class RemoteSessionService {
 				session.stderrListeners.clear();
 				session.closedListeners.clear();
 			}
-		})();
+		});
 		const task = session.closing;
+		this.sessionClosings.set(id, task);
 		this.closingTasks.add(task);
-		void task.finally(() => this.closingTasks.delete(task)).catch(() => undefined);
+		void task
+			.finally(() => {
+				this.closingTasks.delete(task);
+				this.sessionClosings.delete(id);
+			})
+			.catch(() => undefined);
 		return task;
 	}
 
