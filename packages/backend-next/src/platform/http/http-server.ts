@@ -1,6 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
 import { isIP } from 'node:net';
 import proxyaddr from 'proxy-addr';
+import { WebSocketServer, WebSocket } from 'ws';
+import type { Duplex } from 'node:stream';
 
 export interface HttpRouteContext {
 	readonly method: string;
@@ -28,6 +30,21 @@ export interface HttpServerOptions {
 	port: number;
 	trustedProxies: readonly string[];
 	routes: readonly HttpRoute[];
+	webSockets?: readonly HttpWebSocketRoute[];
+}
+
+/** Technology-only channel. Message parsing, authorization and sessions belong to modules. */
+export interface HttpWebSocketChannel {
+	send(value: string): boolean;
+	onMessage(listener: (value: string) => Promise<void>): void;
+	onClose(listener: () => Promise<void>): void;
+	close(): void;
+}
+
+export interface HttpWebSocketRoute {
+	path: string;
+	authorize(request: IncomingMessage, url: URL): Promise<boolean>;
+	connected(channel: HttpWebSocketChannel, request: IncomingMessage, url: URL): void;
 }
 
 export interface HttpListener {
@@ -35,7 +52,7 @@ export interface HttpListener {
 	close(): Promise<void>;
 }
 
-class HttpInputFailure extends Error {
+export class HttpInputFailure extends Error {
 	constructor(
 		readonly status: number,
 		readonly code: string,
@@ -52,7 +69,7 @@ function firstHeader(request: IncomingMessage, key: string): string | null {
 	return raw ?? null;
 }
 
-function cookie(request: IncomingMessage, name: string): string | null {
+export function readRequestCookie(request: IncomingMessage, name: string): string | null {
 	const raw = firstHeader(request, 'cookie');
 	if (!raw || raw.length > 8192) {
 		return null;
@@ -170,6 +187,16 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 		throw new Error('Invalid HTTP listen or external origin');
 	}
 	const trust = proxyaddr.compile([...options.trustedProxies]);
+	const websocketServer = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024, perMessageDeflate: false });
+	const activeSockets = new Set<WebSocket>();
+	const websocketTasks = new Set<Promise<unknown>>();
+	const webSocketRoutes = new Map<string, HttpWebSocketRoute>();
+	for (const route of options.webSockets ?? []) {
+		if (webSocketRoutes.has(route.path)) {
+			throw new Error('Duplicate websocket route');
+		}
+		webSocketRoutes.set(route.path, route);
+	}
 	const routes = new Map<string, HttpRoute>();
 	const parameterized: { route: HttpRoute; parts: string[] }[] = [];
 	for (const route of options.routes) {
@@ -238,7 +265,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 
 				json: () => readJson(request),
 
-				cookie: (name) => cookie(request, name),
+				cookie: (name) => readRequestCookie(request, name),
 
 				send: (status, body, headers) => sendJson(response, status, body, headers),
 			};
@@ -257,6 +284,113 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 		const task = handleRequest(request, response);
 		activeRequests.add(task);
 		void task.finally(() => activeRequests.delete(task)).catch(() => undefined);
+	});
+
+	function trackWebSocketTask(task: Promise<unknown>): void {
+		websocketTasks.add(task);
+		void task.finally(() => websocketTasks.delete(task)).catch(() => undefined);
+	}
+
+	async function upgrade(request: IncomingMessage, socket: Duplex, head: Buffer): Promise<void> {
+		const reject = (status: number) => {
+			if (!socket.destroyed) {
+				socket.end('HTTP/1.1 ' + status + ' Rejected\r\nConnection: close\r\n\r\n');
+			}
+		};
+
+		try {
+			const trustedPeer = trust(request.socket.remoteAddress ?? '', 0);
+			validateOrigin(request, origin, trustedPeer);
+			// GET upgrade needs a strict Origin; never inherit ordinary GET exemption.
+			if (
+				request.method !== 'GET' ||
+				firstHeader(request, 'origin') !== origin.origin ||
+				(firstHeader(request, 'sec-fetch-site') ?? 'same-origin') !== 'same-origin'
+			) {
+				reject(403);
+				return;
+			}
+			const url = new URL(request.url ?? '/', origin);
+			const route = webSocketRoutes.get(url.pathname);
+			if (!route || url.origin !== origin.origin) {
+				reject(404);
+				return;
+			}
+			if (!(await route.authorize(request, url))) {
+				reject(401);
+				return;
+			}
+			if (!accepting || socket.destroyed) {
+				reject(503);
+				return;
+			}
+			websocketServer.handleUpgrade(request, socket, head, (ws) => {
+				activeSockets.add(ws);
+				let listener: ((value: string) => Promise<void>) | null = null;
+				let closing: (() => Promise<void>) | null = null;
+				let incoming = Promise.resolve();
+				ws.on('message', (data, isBinary) => {
+					if (isBinary || !listener) {
+						ws.close(1003);
+						return;
+					}
+					const message = data.toString();
+					incoming = incoming.then(async () => {
+						if (ws.readyState === WebSocket.OPEN && listener) {
+							await listener(message);
+						}
+					});
+					trackWebSocketTask(incoming.catch(() => ws.terminate()));
+				});
+				ws.on('close', () => {
+					activeSockets.delete(ws);
+					if (closing) {
+						trackWebSocketTask(Promise.resolve().then(closing));
+					}
+				});
+				const channel: HttpWebSocketChannel = {
+					send(value) {
+						if (
+							ws.readyState !== WebSocket.OPEN ||
+							ws.bufferedAmount + Buffer.byteLength(value) > 1024 * 1024
+						) {
+							return false;
+						}
+						ws.send(value, (error) => {
+							if (error) ws.terminate();
+						});
+						return true;
+					},
+
+					onMessage(callback) {
+						listener = callback;
+					},
+
+					onClose(callback) {
+						closing = callback;
+					},
+
+					close() {
+						ws.terminate();
+					},
+				};
+				try {
+					route.connected(channel, request, url);
+				} catch {
+					ws.terminate();
+				}
+			});
+		} catch {
+			reject(403);
+		}
+	}
+
+	server.on('upgrade', (request, socket, head) => {
+		if (!accepting) {
+			socket.destroy();
+			return;
+		}
+		trackWebSocketTask(upgrade(request, socket, head));
 	});
 	server.requestTimeout = 15000;
 	server.headersTimeout = 10000;
@@ -280,6 +414,9 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 			}
 			// Admission closes synchronously, before the returned Promise is published.
 			accepting = false;
+			for (const socket of activeSockets) {
+				socket.terminate();
+			}
 			// Resolve with the failure so a shutdown error cannot reject before
 			// already-admitted business handlers have finished draining.
 			const serverClosed = new Promise<Error | null>((resolve) => {
@@ -289,6 +426,13 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 			server.closeAllConnections();
 			closePromise = (async () => {
 				const results = await Promise.allSettled([...activeRequests]);
+				// Upgrade auth and websocket handlers can still have Access/SQLite work.
+				// Closing an upgrade can enqueue its onClose cleanup after the first
+				// snapshot. Drain until no owned WebSocket task remains.
+				while (websocketTasks.size > 0) {
+					await Promise.allSettled([...websocketTasks]);
+				}
+				websocketServer.close();
 				const serverFailure = await serverClosed;
 				const failures = results
 					.filter((result): result is PromiseRejectedResult => result.status === 'rejected')

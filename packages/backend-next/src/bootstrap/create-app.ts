@@ -31,7 +31,7 @@ export interface BackendApplication {
 	trustedSshTargets: TrustedSshTargetResolver;
 	remote: RemoteSessions;
 	access: AccessPublicApi;
-	/** Access plus authenticated Targets management only; Remote remains internal. */
+	/** Access, Targets management and one-owner SSH Shell HTTP/WS. */
 	listenHttp(options: AccessHttpOptions): Promise<string>;
 	close(): Promise<void>;
 }
@@ -87,6 +87,7 @@ function createLifecycle(
 			port: options.port,
 			trustedProxies: options.trustedProxies ?? ['loopback'],
 			routes,
+			webSockets: modules.webSocketRoutes(),
 		});
 		return http.then((listener) => listener.address);
 	}

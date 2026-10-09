@@ -13,6 +13,7 @@ interface ActiveSession {
 	offStderr: () => void;
 	onChunk: (bytes: Uint8Array) => void;
 	closePromise: Promise<void> | null;
+	transportPaused: boolean;
 }
 
 function notifyDataListeners(listeners: Set<(bytes: Uint8Array) => void>, bytes: Uint8Array): void {
@@ -147,6 +148,7 @@ export class RemoteSessionService {
 			onChunk: () => undefined,
 
 			closePromise: null,
+			transportPaused: false,
 		};
 		current.onChunk = (bytes) => notifyDataListeners(current.dataListeners, bytes);
 		current.offResource = resource.onClose(() => {
@@ -191,7 +193,9 @@ export class RemoteSessionService {
 		if (first) {
 			// The remote channel stays paused when no output consumer exists.
 			session.offData = session.resource.onData(session.onChunk);
-			session.resource.resume();
+			if (!session.transportPaused) {
+				session.resource.resume();
+			}
 		}
 		return () => {
 			session.dataListeners.delete(listener);
@@ -206,6 +210,20 @@ export class RemoteSessionService {
 		const session = this.requireSession(id);
 		session.stderrListeners.add(listener);
 		return () => session.stderrListeners.delete(listener);
+	}
+
+	pauseOutput(id: string): void {
+		const session = this.requireSession(id);
+		session.transportPaused = true;
+		session.resource.pause();
+	}
+
+	resumeOutput(id: string): void {
+		const session = this.requireSession(id);
+		session.transportPaused = false;
+		if (session.dataListeners.size) {
+			session.resource.resume();
+		}
 	}
 
 	onDrain(id: string, listener: () => void): () => void {
