@@ -20,6 +20,8 @@ SFTP Lease 的打开信号贯穿整个租约；各请求/流可带独立 AbortSi
 
 Remote 按会话 ID 保存进行中的关闭 Promise，先发布关闭等待再清理资源；会话从活动表移除之后，并发关闭仍取得相同 Promise 和相同失败结果。关闭完成后清除等待表，实例停机统一等待进行中的会话关闭。
 
+Bootstrap 的 `createApp` 负责初始化与装配；同文件的 `createCloseHandler` 持有实例关闭 Promise 并同步停止模块准入，`closeResources` 按模块、SQLite 的顺序释放资源。模块关闭失败仍继续关闭数据库；单个错误保留原值，多个错误聚合，不将关闭编排嵌入公开对象的大型匿名函数。
+
 Remote Service 只接收本模块 Model，使用独立的 `OpenSessionRequest`、`RemoteSessionResource` 和会话快照；不直接调用 Targets Resolver 或 Platform SSH 工厂。Model 解析可信目标、逐字段转换机器请求、执行建连与 Shell 打开，统一传递打开期限及取消，并在失败时等待底层资源清理。机器连接、Shell 与 Node Stream 封装在 Model 内，Service 通过应用资源契约管理准入、订阅、背压和会话生命周期；模块出口继续逐字段投影公开快照及请求，字节数据复制后传递。
 
 ## 技术基线

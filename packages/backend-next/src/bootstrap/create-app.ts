@@ -12,13 +12,47 @@ export interface AppOptions {
 	verifyHostKey?: MachineConnectOptions['verifyHostKey'];
 }
 
+type RegisteredModules = ReturnType<typeof registerModules>;
+
+async function closeResources(modules: RegisteredModules, db: SqliteRuntime): Promise<void> {
+	const failures: unknown[] = [];
+	try {
+		await modules.close();
+	} catch (error) {
+		failures.push(error);
+	}
+	try {
+		await db.close();
+	} catch (error) {
+		failures.push(error);
+	}
+	if (failures.length === 1) {
+		throw failures[0];
+	}
+	if (failures.length > 1) {
+		throw new AggregateError(failures, 'Remote and SQLite shutdown failed');
+	}
+}
+
+function createCloseHandler(modules: RegisteredModules, db: SqliteRuntime): () => Promise<void> {
+	let closePromise: Promise<void> | null = null;
+
+	return function close(): Promise<void> {
+		if (closePromise) {
+			return closePromise;
+		}
+		modules.quiesce();
+		closePromise = Promise.resolve().then(() => closeResources(modules, db));
+		return closePromise;
+	};
+}
+
 export async function createApp(dbPath: string, options: AppOptions = {}) {
 	const db = SqliteRuntime.open(dbPath);
 	try {
 		await initializeSchema(db, targetMigrations);
 		const secrets = options.encryptionKey ? new SecretBox(options.encryptionKey) : null;
 		const modules = registerModules(db, secrets, options.verifyHostKey ?? null);
-		let closePromise: Promise<void> | null = null;
 		return {
 			targets: modules.targets,
 			/** Trusted backend-only capability; never mount on an unauthenticated transport. */
@@ -26,30 +60,7 @@ export async function createApp(dbPath: string, options: AppOptions = {}) {
 			/** Internal Remote session owner; no HTTP or WebSocket routes are installed. */
 			remote: modules.remote,
 
-			close: (): Promise<void> => {
-				if (closePromise) return closePromise;
-				modules.quiesce();
-				closePromise = (async () => {
-					let remoteFailure: unknown = null;
-					try {
-						await modules.close();
-					} catch (error) {
-						remoteFailure = error;
-					}
-					let storageFailure: unknown = null;
-					try {
-						await db.close();
-					} catch (error) {
-						storageFailure = error;
-					}
-					if (remoteFailure !== null && storageFailure !== null) {
-						throw new AggregateError([remoteFailure, storageFailure], 'Remote and SQLite shutdown failed');
-					}
-					if (remoteFailure !== null) throw remoteFailure;
-					if (storageFailure !== null) throw storageFailure;
-				})();
-				return closePromise;
-			},
+			close: createCloseHandler(modules, db),
 		};
 	} catch (error) {
 		try {
