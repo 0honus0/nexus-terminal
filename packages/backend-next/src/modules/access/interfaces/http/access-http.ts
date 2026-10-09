@@ -88,9 +88,18 @@ function errorResponse(context: HttpRouteContext, error: unknown): void {
 
 async function handle(context: HttpRouteContext, action: () => Promise<void>): Promise<void> {
 	try {
-		await accessBoundary(action);
+		// No Access route accepts query parameters. Other modules validate their own.
+		if (context.query.size > 0) {
+			throw new AccessOperationError('invalid_input');
+		}
+		await action();
 	} catch (error) {
-		errorResponse(context, error);
+		if (error instanceof AccessOperationError) {
+			errorResponse(context, error);
+			return;
+		}
+		// HTTP parsing/size/content-type failures belong to the HTTP runtime.
+		throw error;
 	}
 }
 
@@ -103,7 +112,7 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 
 			handle: (context) =>
 				handle(context, async () => {
-					const needsSetup = await access.needsSetup();
+					const needsSetup = await accessBoundary(() => access.needsSetup());
 					context.send(200, { needsSetup: Boolean(needsSetup) });
 				}),
 		},
@@ -120,7 +129,7 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 					if (password !== confirmation) {
 						throw new AccessOperationError('invalid_input');
 					}
-					const identity = await access.setupAdmin(username, password);
+					const identity = await accessBoundary(() => access.setupAdmin(username, password));
 					context.send(201, { user: toUser(identity) });
 				}),
 		},
@@ -136,13 +145,15 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 					if (data.rememberMe !== undefined && typeof data.rememberMe !== 'boolean') {
 						throw new AccessOperationError('invalid_input');
 					}
-					const result = await access.login({
-						username,
-						password,
-						rememberMe: data.rememberMe === true,
-						source: context.sourceIp,
-						previousToken: readSession(context),
-					});
+					const result = await accessBoundary(() =>
+						access.login({
+							username,
+							password,
+							rememberMe: data.rememberMe === true,
+							source: context.sourceIp,
+							previousToken: readSession(context),
+						}),
+					);
 					if (result.status !== 'authenticated') {
 						const code = result.status;
 						context.send(code === 'rate_limited' ? 429 : code === 'factor_unavailable' ? 403 : 401, {
@@ -178,7 +189,7 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 					const token = readSession(context);
 					const identity = await requireIdentity(context, access);
 					if (identity !== null) {
-						await access.logout(token);
+						await accessBoundary(() => access.logout(token));
 						context.send(200, { loggedOut: true }, { 'Set-Cookie': clearedCookie(secureCookies) });
 					}
 				}),
@@ -194,10 +205,12 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 						return;
 					}
 					const data = strictBody(await context.json(), ['currentPassword', 'newPassword']);
-					await access.changePassword(
-						readSession(context),
-						validateText(data.currentPassword, 1, 1024),
-						validateText(data.newPassword, 8, 1024),
+					await accessBoundary(() =>
+						access.changePassword(
+							readSession(context),
+							validateText(data.currentPassword, 1, 1024),
+							validateText(data.newPassword, 8, 1024),
+						),
 					);
 					context.send(200, { passwordChanged: true }, { 'Set-Cookie': clearedCookie(secureCookies) });
 				}),

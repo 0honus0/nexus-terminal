@@ -5,6 +5,7 @@ import proxyaddr from 'proxy-addr';
 export interface HttpRouteContext {
 	readonly method: string;
 	readonly path: string;
+	readonly query: URLSearchParams;
 	readonly request: IncomingMessage;
 	readonly response: ServerResponse;
 	readonly sourceIp: string;
@@ -176,42 +177,54 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 		}
 		routes.set(key, route);
 	}
-	const server: Server = createServer((request, response) => {
-		void (async () => {
-			try {
-				const directIp = request.socket.remoteAddress ?? '';
-				const trustedPeer = trust(directIp, 0);
-				validateOrigin(request, origin, trustedPeer);
-				const url = new URL(request.url ?? '/', origin);
-				if (url.origin !== origin.origin || url.search) {
-					throw new HttpInputFailure(400, 'invalid_path');
-				}
-				const method = request.method ?? '';
-				const route = routes.get(method + ' ' + url.pathname);
-				if (!route) {
-					sendJson(response, 404, { code: 'not_found' });
-					return;
-				}
-				const context: HttpRouteContext = {
-					method,
-					path: url.pathname,
-					request,
-					response,
-					sourceIp: proxyaddr(request, trust),
 
-					json: () => readJson(request),
+	let accepting = true;
+	const activeRequests = new Set<Promise<void>>();
 
-					cookie: (name) => cookie(request, name),
-
-					send: (status, body, headers) => sendJson(response, status, body, headers),
-				};
-				await route.handle(context);
-			} catch (error) {
-				const failure =
-					error instanceof HttpInputFailure ? error : new HttpInputFailure(500, 'internal_failure');
-				sendJson(response, failure.status, { code: failure.code });
+	async function handleRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
+		try {
+			const directIp = request.socket.remoteAddress ?? '';
+			const trustedPeer = trust(directIp, 0);
+			validateOrigin(request, origin, trustedPeer);
+			const url = new URL(request.url ?? '/', origin);
+			if (url.origin !== origin.origin) {
+				throw new HttpInputFailure(400, 'invalid_path');
 			}
-		})();
+			const method = request.method ?? '';
+			const route = routes.get(method + ' ' + url.pathname);
+			if (!route) {
+				sendJson(response, 404, { code: 'not_found' });
+				return;
+			}
+			const context: HttpRouteContext = {
+				method,
+				path: url.pathname,
+				query: new URLSearchParams(url.searchParams),
+				request,
+				response,
+				sourceIp: proxyaddr(request, trust),
+
+				json: () => readJson(request),
+
+				cookie: (name) => cookie(request, name),
+
+				send: (status, body, headers) => sendJson(response, status, body, headers),
+			};
+			await route.handle(context);
+		} catch (error) {
+			const failure = error instanceof HttpInputFailure ? error : new HttpInputFailure(500, 'internal_failure');
+			sendJson(response, failure.status, { code: failure.code });
+		}
+	}
+
+	const server: Server = createServer((request, response) => {
+		if (!accepting) {
+			sendJson(response, 503, { code: 'shutting_down' });
+			return;
+		}
+		const task = handleRequest(request, response);
+		activeRequests.add(task);
+		void task.finally(() => activeRequests.delete(task)).catch(() => undefined);
 	});
 	server.requestTimeout = 15000;
 	server.headersTimeout = 10000;
@@ -224,6 +237,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 	});
 	const address = server.address();
 	const boundAddress = address && typeof address !== 'string' ? address.address + ':' + address.port : '';
+
 	let closePromise: Promise<void> | null = null;
 	return {
 		address: boundAddress,
@@ -232,10 +246,28 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 			if (closePromise) {
 				return closePromise;
 			}
-			closePromise = new Promise<void>((resolve, reject) => {
-				server.close((error) => (error ? reject(error) : resolve()));
-				server.closeIdleConnections();
+			// Admission closes synchronously, before the returned Promise is published.
+			accepting = false;
+			// Resolve with the failure so a shutdown error cannot reject before
+			// already-admitted business handlers have finished draining.
+			const serverClosed = new Promise<Error | null>((resolve) => {
+				server.close((error) => resolve(error ?? null));
 			});
+			// Cancel incomplete HTTP transport, not its already-started business operation.
+			server.closeAllConnections();
+			closePromise = (async () => {
+				const results = await Promise.allSettled([...activeRequests]);
+				const serverFailure = await serverClosed;
+				const failures = results
+					.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+					.map((result) => result.reason);
+				if (serverFailure !== null) {
+					failures.push(serverFailure);
+				}
+				if (failures.length > 0) {
+					throw new AggregateError(failures, 'HTTP request drain or listener close failed');
+				}
+			})();
 			return closePromise;
 		},
 	};
