@@ -5,6 +5,7 @@ import type {
 	ConnectionStorage,
 	MutationResult,
 } from '../../storage/connection-storage.js';
+import { validateAffectedSshGraph } from './ssh-graph-sql.js';
 
 const fields = [
 	'name',
@@ -118,17 +119,7 @@ async function relationships(tx: SqlExecutor, id: number, data: ConnectionData):
 			i,
 			data.jumpIds[i],
 		]);
-	// A reference can be valid locally and still close a cycle through another SSH hop.
-	const cyclic = await tx.one(
-		`WITH RECURSIVE chain(id,depth) AS (
-		   SELECT jump_connection_id,1 FROM connection_jumps WHERE connection_id=?
-		   UNION ALL
-		   SELECT j.jump_connection_id,chain.depth+1
-		   FROM chain JOIN connection_jumps j ON j.connection_id=chain.id WHERE chain.depth<17
-		 ) SELECT 1 AS invalid FROM chain WHERE id=? OR depth>16 LIMIT 1`,
-		[id, id],
-	);
-	if (cyclic) throw new Error('SSH jump chain contains a cycle or exceeds 16 hops');
+	await validateAffectedSshGraph(tx, id);
 	await tx.run('DELETE FROM connection_tags WHERE connection_id=?', [id]);
 	for (const tag of data.tagIds)
 		await tx.run('INSERT INTO connection_tags(connection_id,tag_id) VALUES(?,?)', [id, tag]);

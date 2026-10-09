@@ -1,5 +1,6 @@
 import type { SqliteRuntime, SqlExecutor } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type { SshTargetStorage, EncodedSshTarget } from '../../storage/ssh-target-storage.js';
+import { SSH_MAX_JUMP_EDGES, SSH_MAX_EXPANDED_TARGETS } from '../../../connections/model/ssh-graph-limits.js';
 
 function integer(value: unknown): number {
 	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
@@ -12,8 +13,16 @@ function string(value: unknown): string {
 	return value;
 }
 
-async function load(tx: SqlExecutor, id: number, path: Set<number>): Promise<EncodedSshTarget> {
-	if (path.has(id) || path.size >= 16) throw new Error('SSH jump chain cycle or excessive depth');
+async function load(
+	tx: SqlExecutor,
+	id: number,
+	path: Set<number>,
+	depth: number,
+	budget: { expanded: number },
+): Promise<EncodedSshTarget> {
+	if (path.has(id) || depth > SSH_MAX_JUMP_EDGES || ++budget.expanded > SSH_MAX_EXPANDED_TARGETS) {
+		throw new Error('Invalid SSH jump chain');
+	}
 	const current = new Set(path);
 	current.add(id);
 	const row = await tx.one('SELECT id,type,host,port,username,route,proxy_id FROM connections WHERE id=?', [id]);
@@ -67,7 +76,7 @@ async function load(tx: SqlExecutor, id: number, path: Set<number>): Promise<Enc
 		if (!chain.length) throw new Error('SSH jump chain empty');
 		for (let i = 0; i < chain.length; i++) {
 			if (chain[i].position !== i) throw new Error('Invalid jump order');
-			jumps.push(await load(tx, integer(chain[i].jump_connection_id), current));
+			jumps.push(await load(tx, integer(chain[i].jump_connection_id), current, depth + 1, budget));
 		}
 	}
 	return {
@@ -85,6 +94,6 @@ export class SqliteSshTargetStorage implements SshTargetStorage {
 	constructor(private readonly db: SqliteRuntime) {}
 
 	get(id: number) {
-		return this.db.transaction((tx) => load(tx, id, new Set()));
+		return this.db.transaction((tx) => load(tx, id, new Set(), 0, { expanded: 0 }));
 	}
 }
