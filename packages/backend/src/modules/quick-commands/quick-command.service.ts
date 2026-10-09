@@ -1,5 +1,6 @@
 import type { QuickCommand, QuickCommandRepository, QuickCommandSort } from './quick-command.repository.port';
 import type { QuickCommandTagRepository } from '../quick-command-tags/quick-command-tag.repository.port';
+
 export class QuickCommandService {
 	constructor(
 		private readonly repository: QuickCommandRepository,

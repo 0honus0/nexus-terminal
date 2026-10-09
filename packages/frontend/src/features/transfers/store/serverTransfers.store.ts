@@ -160,4 +160,5 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
 		stopPolling,
 	};
 });
+
 registerAuthenticatedSessionReset('server-transfers-cache', () => useServerTransfersStore().reset());

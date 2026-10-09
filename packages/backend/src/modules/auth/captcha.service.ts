@@ -1,5 +1,6 @@
 import type { SettingsService } from '../settings/settings.service';
 import type { CaptchaProviderName, CaptchaVerifierPort } from './captcha-verifier.port';
+
 export class CaptchaService {
 	constructor(
 		private readonly settings: SettingsService,

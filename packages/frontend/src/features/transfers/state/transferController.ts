@@ -9,7 +9,9 @@ import type {
 } from '../model/transfer';
 
 export type ConflictStrategy = 'overwrite' | 'skip';
+
 const TERMINAL_TASK_CLEANUP_DELAY_MS = 800;
+
 export interface UploadConflict {
 	id: string;
 	path: string;

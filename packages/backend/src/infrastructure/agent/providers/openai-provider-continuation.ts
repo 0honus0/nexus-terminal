@@ -9,6 +9,7 @@ import type {
 } from '../../../modules/agent/ai/model.types';
 
 export const OPENAI_RESPONSES_CONTINUATION_FORMAT = 'openai.responses.stateless.v1';
+
 const MAX_CONTINUATION_PARTS = 512;
 
 export type OpenAiResponsesContinuationPart =

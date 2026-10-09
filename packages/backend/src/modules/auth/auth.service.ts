@@ -8,6 +8,7 @@ export interface AuthenticatedUser {
 	id: number;
 	username: string;
 }
+
 export type PasswordAuthenticationResult =
 	| { status: 'authenticated'; user: AuthenticatedUser; credentialRevision: string }
 	| { status: 'requiresTwoFactor'; userId: number; credentialRevision: string }

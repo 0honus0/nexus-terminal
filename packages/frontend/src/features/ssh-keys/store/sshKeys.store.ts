@@ -53,4 +53,5 @@ export const useSshKeysStore = defineStore('ssh-keys', {
 		},
 	},
 });
+
 registerAuthenticatedSessionReset('ssh-keys-cache', () => useSshKeysStore().reset());

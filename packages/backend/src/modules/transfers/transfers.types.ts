@@ -1,4 +1,5 @@
 export type TransferMethodPreference = 'auto' | 'rsync' | 'scp';
+
 export type TransferMethodUsed = 'rsync' | 'scp';
 
 export interface InitiateTransferPayload {
@@ -11,6 +12,7 @@ export interface InitiateTransferPayload {
 
 export type TransferSubTaskStatus =
 	'queued' | 'connecting' | 'transferring' | 'completed' | 'failed' | 'cancelling' | 'cancelled';
+
 export interface TransferSubTask {
 	subTaskId: string;
 	connectionId: number;
@@ -26,6 +28,7 @@ export interface TransferSubTask {
 
 export type TransferTaskStatus =
 	'queued' | 'in-progress' | 'completed' | 'failed' | 'partially-completed' | 'cancelling' | 'cancelled';
+
 export interface TransferTask {
 	taskId: string;
 	status: TransferTaskStatus;

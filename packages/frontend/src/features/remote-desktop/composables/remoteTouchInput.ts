@@ -2,6 +2,7 @@ import Guacamole from 'guacamole-common-js';
 import type { Client, Event as GuacamoleEvent } from 'guacamole-common-js';
 
 export type RemoteTouchMode = 'direct' | 'touchpad';
+
 export interface RemoteTouchInput {
 	destroy(): void;
 }

@@ -6,7 +6,9 @@ export interface FavoritePath {
 	createdAt: number;
 	updatedAt: number;
 }
+
 export type FavoritePathSort = 'name' | 'lastUsedAt';
+
 export interface FavoritePathRepository {
 	create(name: string | null, path: string): Promise<number>;
 	update(id: number, name: string | null, path: string): Promise<boolean>;

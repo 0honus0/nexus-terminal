@@ -1,4 +1,5 @@
 import type { WorkspaceRemoteFileEntryDto } from '@nexus-terminal/protocol/workspace';
+
 export type { WorkspaceRemoteFileEntryDto };
 
 export type {

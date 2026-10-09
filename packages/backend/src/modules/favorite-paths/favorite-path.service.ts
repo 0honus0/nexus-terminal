@@ -1,4 +1,5 @@
 import type { FavoritePath, FavoritePathRepository, FavoritePathSort } from './favorite-path.repository.port';
+
 export class FavoritePathService {
 	constructor(private readonly repository: FavoritePathRepository) {}
 

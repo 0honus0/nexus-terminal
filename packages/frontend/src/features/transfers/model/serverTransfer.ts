@@ -9,6 +9,7 @@ import type {
 	ServerTransferTaskStatusDto,
 } from '@nexus-terminal/protocol/transfers';
 import type { TransferTask } from './transfer';
+
 export type {
 	SendFileSourceItemDto,
 	SendFilesRequestDto,

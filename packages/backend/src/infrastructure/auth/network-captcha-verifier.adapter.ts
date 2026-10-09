@@ -1,5 +1,6 @@
 import axios from 'axios';
 import type { CaptchaProviderName, CaptchaVerifierPort } from '../../modules/auth/captcha-verifier.port';
+
 export class NetworkCaptchaVerifierAdapter implements CaptchaVerifierPort {
 	async verify(provider: CaptchaProviderName, token: string, secretKey: string, siteKey?: string) {
 		const params = new URLSearchParams({ secret: secretKey, response: token });

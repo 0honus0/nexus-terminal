@@ -4,6 +4,7 @@ import type { SshConnectionResolver } from '../connections/services/ssh-connecti
 import type { SettingsService } from '../settings/settings.service';
 import type { ExecutionSessionManager } from '../../platform/execution/execution-session-manager';
 import type { ServerStatus, ServerStatusCollector } from '../../platform/system/server-status.port';
+
 export interface SshResourceStatus {
 	key: string;
 	connectionId: number;

@@ -3,6 +3,7 @@ export interface CommandHistoryEntry {
 	command: string;
 	timestamp: number;
 }
+
 export interface CommandHistoryRepository {
 	upsert(command: string): Promise<number>;
 	list(): Promise<CommandHistoryEntry[]>;

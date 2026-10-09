@@ -1,6 +1,7 @@
 import type { SecretBox } from '../../../../platform/security/secret-box.js';
 import type { SshCredentialInput, CredentialMutation } from '../model/connection-credential-types.js';
 import type { ConnectionCredentialModel } from '../model/connection-credential-model.js';
+
 export class ConnectionCredentialService {
 	constructor(
 		private readonly model: ConnectionCredentialModel,

@@ -5,18 +5,22 @@ export interface SshKeySummary {
 	createdAt: number;
 	updatedAt: number;
 }
+
 export type SshKeyMutation =
 	{ status: 'updated'; value: SshKeySummary } | { status: 'not_found' } | { status: 'version_conflict' };
+
 export interface SshKeyWrite {
 	name: string;
 	encryptedPrivateKey: string;
 	encryptedPassphrase: string | null;
 }
+
 export interface SshKeyPatch {
 	name?: string;
 	encryptedPrivateKey?: string;
 	encryptedPassphrase?: string | null;
 }
+
 export interface SshKeyStorage {
 	list(): Promise<SshKeySummary[]>;
 	get(id: number): Promise<SshKeySummary | null>;

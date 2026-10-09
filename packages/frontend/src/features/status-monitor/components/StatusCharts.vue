@@ -17,6 +17,7 @@
 	import { formatStatusPercent, formatStatusRate, formatStatusRateAxis } from '../model/statusFormatting';
 
 	export type StatusMetric = 'cpu' | 'memory' | 'swap' | 'disk' | 'network';
+
 	type DownsampleMode = 'average' | 'max';
 	type TimedChartPoint = { x: number; y: number };
 

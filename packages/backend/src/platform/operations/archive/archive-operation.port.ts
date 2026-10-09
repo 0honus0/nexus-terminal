@@ -1,4 +1,5 @@
 export type ArchiveFormat = 'zip' | 'targz' | 'tarbz2';
+
 export type ArchiveOperationKind = 'compress' | 'decompress';
 
 export type ArchiveErrorCode =

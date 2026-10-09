@@ -1,6 +1,7 @@
 import type { JsonValue, Scope } from '../agent.types';
 
 export type MemoryStatus = 'candidate' | 'published' | 'revoked';
+
 export type MemoryReviewAction = 'publish' | 'reject' | 'revoke';
 
 export interface MemoryView extends Scope {

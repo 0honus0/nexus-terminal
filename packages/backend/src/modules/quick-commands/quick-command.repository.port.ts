@@ -8,7 +8,9 @@ export interface QuickCommand {
 	createdAt: number;
 	updatedAt: number;
 }
+
 export type QuickCommandSort = 'name' | 'usageCount';
+
 export interface QuickCommandRepository {
 	create(
 		name: string | null,

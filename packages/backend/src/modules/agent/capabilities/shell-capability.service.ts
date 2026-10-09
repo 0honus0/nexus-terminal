@@ -6,7 +6,9 @@ import type { ToolTargetFingerprint } from './tool-target.types';
 import type { ToolContext } from './tool.types';
 
 export type UnifiedShellCommand = { kind: 'argv'; argv: string[] } | { kind: 'shell'; shellScript: string };
+
 export type UnifiedShellMode = 'foreground' | 'background';
+
 export interface SshShellSelector {
 	target: 'ssh';
 	id: string;

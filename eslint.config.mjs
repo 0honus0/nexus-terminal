@@ -16,10 +16,10 @@ const functionSpacingPlugin = {
 		'function-spacing': {
 			meta: {
 				type: 'layout',
-				docs: { description: 'require a blank line around functions and methods' },
+				docs: { description: 'require a blank line around functions, methods and export declarations' },
 				fixable: 'whitespace',
 				schema: [],
-				messages: { needsSpacing: 'Add a blank line around this function or method.' },
+				messages: { needsSpacing: 'Add a blank line around this function, method or export declaration.' },
 			},
 
 			create(context) {
@@ -66,11 +66,21 @@ const functionSpacingPlugin = {
 					return false;
 				};
 
+				const isExport = (node) =>
+					['ExportNamedDeclaration', 'ExportDefaultDeclaration', 'ExportAllDeclaration'].includes(node.type);
+
 				const checkSpacing = (members) => {
 					for (let index = 1; index < members.length; index += 1) {
 						const previous = members[index - 1];
 						const current = members[index];
-						if (!isFunctionLike(previous) && !isFunctionLike(current)) continue;
+						if (
+							!isFunctionLike(previous) &&
+							!isFunctionLike(current) &&
+							!isExport(previous) &&
+							!isExport(current)
+						) {
+							continue;
+						}
 
 						const comments = sourceCode
 							.getCommentsBefore(current)

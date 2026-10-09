@@ -4,6 +4,7 @@ import type {
 	NotificationSetting,
 	UpdateNotificationSetting,
 } from './notification.types';
+
 export interface NotificationSettingsRepository {
 	list(): Promise<NotificationSetting[]>;
 	get(id: number): Promise<NotificationSetting | null>;

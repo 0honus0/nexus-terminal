@@ -8,8 +8,11 @@ export {
 	resetConnectionsCache,
 	useConnections,
 } from './composables/useConnections';
+
 export type { ConnectionsController } from './composables/useConnections';
+
 export { connectionsApi as connectionService } from './api/connectionsApi';
+
 export type {
 	ConnectionDto,
 	ConnectionAuthMethodDto,

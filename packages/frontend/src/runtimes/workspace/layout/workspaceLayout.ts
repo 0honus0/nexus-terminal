@@ -18,6 +18,7 @@ export interface WorkspaceLayoutNodeState extends Omit<WorkspaceLayoutNodeDto, '
 }
 
 export const WORKSPACE_LAYOUT_MIN_SIZE = 5;
+
 const WORKSPACE_LAYOUT_MAX_CHILDREN = Math.floor(100 / WORKSPACE_LAYOUT_MIN_SIZE);
 
 const paneNames = new Set<WorkspacePaneNameDto>([

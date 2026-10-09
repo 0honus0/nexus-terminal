@@ -18,6 +18,7 @@ export interface EncodedSshTarget {
 	} | null;
 	jumps: EncodedSshTarget[];
 }
+
 export interface SshTargetStorage {
 	get(id: number): Promise<EncodedSshTarget>;
 }

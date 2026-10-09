@@ -1,8 +1,11 @@
 import type { ModelCapabilityDefaults, ReasoningEffort } from './model.types';
 
 export const MODEL_REGISTRY_SOURCE_URL = 'https://models.dev/api.json?type=all';
+
 export const MODEL_REGISTRY_MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
+
 export const MODEL_REGISTRY_STARTUP_TIMEOUT_MS = 3_000;
+
 export const MODEL_REGISTRY_MANUAL_REFRESH_TIMEOUT_MS = 15_000;
 
 export const MODEL_REGISTRY_PROVIDERS = [

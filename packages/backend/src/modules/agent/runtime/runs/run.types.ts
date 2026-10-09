@@ -18,6 +18,7 @@ export type RunStatus =
 	| 'interrupted';
 
 export type GoalStatus = 'unknown' | 'in_progress' | 'satisfied' | 'not_satisfied';
+
 export type VerificationStatus = 'not_started' | 'verified' | 'unverified' | 'failed';
 
 export interface RunGoal {
@@ -78,6 +79,7 @@ export interface CommandIdentity {
 }
 
 export type RunApprovalMode = 'ask' | 'full_access';
+
 export type RunExecutionMode = 'execute' | 'plan';
 
 export interface CreateRunCommand {

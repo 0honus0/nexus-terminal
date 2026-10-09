@@ -10,6 +10,7 @@ import type {
 } from './remote-execution.port';
 
 export type ExecutionSessionOwnerType = 'workspace' | 'agent' | 'system';
+
 export type ExecutionSessionStatus = 'ready' | 'detached' | 'closed';
 
 export interface ExecutionSessionIdentity {

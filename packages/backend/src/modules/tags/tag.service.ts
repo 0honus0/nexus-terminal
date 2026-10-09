@@ -1,4 +1,5 @@
 import type { Tag, TagRepository } from './tag.repository.port';
+
 export class TagService {
 	constructor(private readonly repository: TagRepository) {}
 

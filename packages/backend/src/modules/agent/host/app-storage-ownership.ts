@@ -1,6 +1,7 @@
 import type { AppStorageSnapshot, AppStorageSnapshotEntry } from './app-storage-snapshot.port';
 
 export const AGENT_EXECUTION_POLICY_STORAGE_KEY = 'agent.execution-policy.v1';
+
 export const SUBAGENT_PROFILES_STORAGE_KEY = 'subagent.profiles.v1';
 
 const HOST_OWNED_APP_STORAGE_KEYS = new Set<string>([

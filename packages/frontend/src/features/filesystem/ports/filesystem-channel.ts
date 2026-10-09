@@ -4,6 +4,7 @@ import type {
 	WorkspaceRemoteFileEntryDto,
 	ResolvedRemotePath,
 } from '../model/filesystem';
+
 export interface FilesystemChannel {
 	listDirectory(path: string): Promise<WorkspaceFilesystemListResponseDto>;
 	search(path: string, query: string): Promise<WorkspaceFilesystemSearchResponseDto>;

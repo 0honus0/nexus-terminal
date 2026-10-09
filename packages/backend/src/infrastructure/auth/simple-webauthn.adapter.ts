@@ -18,6 +18,7 @@ export interface PasskeyRelyingPartyConfig {
 	rpId: string;
 	origin: string;
 }
+
 export interface SimpleWebAuthnAdapterOptions {
 	appName: string;
 	relyingParties: readonly PasskeyRelyingPartyConfig[];

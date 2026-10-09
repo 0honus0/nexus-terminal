@@ -10,6 +10,7 @@ export interface LocalSystemStatus {
 	osName?: string;
 	uptimeSeconds: number;
 }
+
 export interface LocalSystemStatusProvider {
 	collect(): Promise<LocalSystemStatus>;
 }

@@ -1,6 +1,7 @@
 import pino from 'pino';
 
 export const LOG_LEVELS = ['trace', 'debug', 'info', 'warn', 'error', 'silent'] as const;
+
 export type LogLevelDto = (typeof LOG_LEVELS)[number];
 
 export const isLogLevel = (value: unknown): value is LogLevelDto =>

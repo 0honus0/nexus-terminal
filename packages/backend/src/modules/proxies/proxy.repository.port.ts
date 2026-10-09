@@ -16,6 +16,7 @@ export interface StoredProxyRecord {
 }
 
 export type CreateStoredProxyRecord = Omit<StoredProxyRecord, 'id' | 'createdAt' | 'updatedAt'>;
+
 export type UpdateStoredProxyRecord = Partial<Omit<StoredProxyRecord, 'id' | 'createdAt' | 'updatedAt'>>;
 
 export interface ProxyRepository {

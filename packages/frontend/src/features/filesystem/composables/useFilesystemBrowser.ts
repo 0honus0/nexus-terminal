@@ -3,6 +3,7 @@ import type { FilesystemChannel } from '../ports/filesystem-channel';
 import type { WorkspaceFileSearchEntryDto, WorkspaceRemoteFileEntryDto } from '../model/filesystem';
 
 export type FilesystemSortKey = 'name' | 'size' | 'permissions' | 'modified';
+
 export type FilesystemSortDirection = 'asc' | 'desc';
 
 export interface FilesystemBrowserController {

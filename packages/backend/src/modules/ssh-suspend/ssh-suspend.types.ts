@@ -6,8 +6,11 @@ import type {
 } from './suspended-terminal-checkpoint.port';
 
 export type SuspendedSessionStatus = 'hanging' | 'disconnected_by_backend';
+
 export type SuspendedSessionOwnershipState = 'available' | 'resuming' | 'attached';
+
 export type SuspendedSessionOwnershipRevokeReason = 'takeover' | 'lease_expired';
+
 export type ShellKind = 'bash' | 'zsh' | 'other';
 
 export interface SuspendedSessionInfo {

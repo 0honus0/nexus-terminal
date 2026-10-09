@@ -16,7 +16,9 @@ import { RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
 import { parseRunUsage } from '../durable-state-decoders';
 
 export const NON_TERMINAL = new Set<RunStatus>(AGENT_RUN_NON_TERMINAL_STATUSES);
+
 export const ACCEPTS_INPUT = new Set<RunStatus>(AGENT_RUN_INPUT_ACCEPTING_STATUSES);
+
 export const COUNTED_LIVE = new Set<RunStatus>([
 	'running',
 	'awaiting_approval',
@@ -24,8 +26,11 @@ export const COUNTED_LIVE = new Set<RunStatus>([
 	'awaiting_input',
 	'cancelling',
 ]);
+
 export const CREATED_QUEUE_LIMIT = 20;
+
 export const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60;
+
 const MAX_EVENTS_PER_COMMIT = 64;
 const MAX_EVENT_BYTES_PER_COMMIT = 256 * 1024;
 

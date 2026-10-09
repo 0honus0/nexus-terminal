@@ -1,6 +1,8 @@
 import type { AgentSettingsDocument } from './agent-defaults';
 import type { JsonValue, Scope } from './agent.types';
+
 export type { JsonValue } from './agent.types';
+
 import type {
 	ArtifactAttachResult,
 	ArtifactCleanupPreview,
@@ -24,20 +26,28 @@ import type {
 import type { ContextPlan, ContextRequest } from './ai/context.types';
 import type { LanguageModelPort } from './ai/language-model.port';
 import type { IntegrationKind, IntegrationManagementView, IntegrationRefreshView } from './ai/integrations.types';
+
 export type { IntegrationKind } from './ai/integrations.types';
+
 import type {
 	DiscoveredProviderModel,
 	ModelCapabilityDefaults,
 	ProviderTestResult,
 	ProviderView,
 } from './ai/model.types';
+
 export type { ReasoningEffort } from './ai/model.types';
+
 import type { ModelCapabilityRegistryStatus } from './ai/model-capability-registry.service';
 import type { MemoryImportConfirmation, MemoryStatus, MemoryView } from './ai/memory.repository.port';
+
 export type { MemoryStatus } from './ai/memory.repository.port';
+
 import type { ApprovalView } from './runtime/approvals/approval.repository.port';
 import type { AgentExecutionPolicyView } from './host/agent-execution-policy.service';
+
 export { resolveAgentAvailability } from './host/agent-availability';
+
 import type { CheckpointView } from './runtime/recovery/checkpoint.repository.port';
 import type { AgentDefinitionSelectionView } from './runtime/definitions/agent-definition.port';
 import type { TransientRunEvent } from './runtime/events/event.types';
@@ -54,7 +64,9 @@ import type {
 	RunView,
 	UserInputData,
 } from './runtime/runs/run.types';
+
 export type { RunApprovalMode, RunBudgetIncrease, RunExecutionMode, UserInputData } from './runtime/runs/run.types';
+
 import type { GrantDecision } from './host/app-capability-broker';
 import type { AppView } from './host/app.types';
 import type {
@@ -64,6 +76,7 @@ import type {
 	CapabilityGrantInput,
 	CapabilityResource,
 } from './host/capability.types';
+
 export { AGENT_CAPABILITIES } from './host/capability.types';
 
 import type { AppIntentReceipt } from './host/app-intent.repository.port';

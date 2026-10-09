@@ -105,6 +105,7 @@ export interface RunStateRow {
 	next_event_sequence: number;
 	version: number;
 }
+
 const MAX_DURABLE_COLLECTION_ITEMS = 16_384;
 const MAX_DURABLE_STRING_BYTES = 2 * 1024 * 1024;
 const MAX_DURABLE_JSON_DEPTH = 64;
@@ -450,8 +451,10 @@ export const delegationColumns = `d.id, d.run_id, r.user_id, r.app_id, d.parent_
   d.completion_criteria_json, d.dependency_mode, d.status, d.depth, d.failure_mode, d.max_model_requests,
   d.used_tokens, d.used_model_requests, d.result_json, d.evidence_refs_json,
   d.deadline_at, d.version, d.created_at, d.updated_at, d.completed_at, d.request_hash`;
+
 export const workColumns = `enqueue_sequence, id, run_id, agent_runtime_id, kind, status, payload_json, owner_epoch,
   not_before, deadline_at, created_at, updated_at, version`;
+
 export const qualifiedWorkColumns = `w.enqueue_sequence, w.id, w.run_id, w.agent_runtime_id, w.kind, w.status, w.payload_json, w.owner_epoch,
   w.not_before, w.deadline_at, w.created_at, w.updated_at, w.version`;
 

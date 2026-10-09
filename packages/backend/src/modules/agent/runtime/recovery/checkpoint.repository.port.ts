@@ -31,6 +31,7 @@ export interface CheckpointDelegationRecoveryEntry {
 }
 
 export type CheckpointKind = 'user' | 'recovery';
+
 export interface CheckpointRecoveryManifest {
 	schemaVersion: 1;
 	eventThrough: number;

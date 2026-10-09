@@ -16,6 +16,7 @@ export interface OpenSessionRequest {
 	timeoutMs: number;
 	signal?: AbortSignal;
 }
+
 export interface RemoteSessionResource {
 	readonly targetId: number;
 	readonly fingerprint: string;

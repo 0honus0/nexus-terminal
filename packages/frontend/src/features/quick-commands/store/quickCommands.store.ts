@@ -21,6 +21,7 @@ const expandedGroupsStorage = {
 	}),
 	legacyKeys: ['quick-commands.expanded-groups'],
 } as const;
+
 export const useQuickCommandsStore = defineStore('quick-commands', () => {
 	const items = ref<QuickCommandDto[]>([]),
 		tags = ref<QuickCommandTagDto[]>([]),
@@ -269,4 +270,5 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
 		resetSelection,
 	};
 });
+
 registerAuthenticatedSessionReset('quick-commands-cache', () => useQuickCommandsStore().reset());

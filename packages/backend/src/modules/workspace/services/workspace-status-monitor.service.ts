@@ -10,6 +10,7 @@ interface PollState {
 	fetching: boolean;
 	subscribed: boolean;
 }
+
 export class WorkspaceStatusMonitorService {
 	private readonly states = new Map<string, PollState>();
 

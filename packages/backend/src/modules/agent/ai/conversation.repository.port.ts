@@ -2,6 +2,7 @@ import type { JsonValue, Scope } from '../agent.types';
 import type { ContextHistoryBoundary } from './context.types';
 
 export type LedgerEntryKind = 'user_input' | 'assistant_message' | 'tool_result' | 'system_notice';
+
 export type ThreadTitleSource = 'placeholder' | 'auto' | 'manual';
 
 export interface ThreadView {

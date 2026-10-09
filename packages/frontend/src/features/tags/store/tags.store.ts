@@ -4,6 +4,7 @@ import { tagsApi } from '../api/tagsApi';
 import type { ConnectionTagDto } from '../model/tag';
 
 const DEFAULT_STALE_MS = 60_000;
+
 export const useTagsStore = defineStore('connection-tags', () => {
 	const items = ref<ConnectionTagDto[]>([]);
 	const loaded = ref(false);

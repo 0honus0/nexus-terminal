@@ -21,12 +21,14 @@ export interface ConnectionMetadata {
 	tagIds: number[];
 	jumpIds: number[];
 }
+
 export interface ConnectionSnapshot extends ConnectionMetadata {
 	id: number;
 	version: number;
 	createdAt: number;
 	updatedAt: number;
 }
+
 export type ConnectionMutation =
 	{ status: 'updated'; value: ConnectionSnapshot } | { status: 'not_found' } | { status: 'version_conflict' };
 
@@ -38,6 +40,7 @@ export interface ProxyInput {
 	username: string | null;
 	password?: string | null;
 }
+
 export interface ProxyUpdateInput {
 	name?: string;
 	type?: ProxyType;
@@ -46,6 +49,7 @@ export interface ProxyUpdateInput {
 	username?: string | null;
 	password?: string | null;
 }
+
 export interface ProxyView {
 	id: number;
 	name: string;
@@ -57,6 +61,7 @@ export interface ProxyView {
 	createdAt: number;
 	updatedAt: number;
 }
+
 export type ProxyMutation =
 	{ status: 'updated'; value: ProxyView } | { status: 'not_found' } | { status: 'version_conflict' };
 
@@ -67,6 +72,7 @@ export interface TagView {
 	createdAt: number;
 	updatedAt: number;
 }
+
 export type TagMutation =
 	{ status: 'updated'; value: TagView } | { status: 'not_found' } | { status: 'version_conflict' };
 
@@ -75,11 +81,13 @@ export interface SshKeyInput {
 	privateKey: string;
 	passphrase?: string | null;
 }
+
 export interface SshKeyChanges {
 	name?: string;
 	privateKey?: string;
 	passphrase?: string | null;
 }
+
 export interface SshKeyView {
 	id: number;
 	name: string;
@@ -87,10 +95,12 @@ export interface SshKeyView {
 	createdAt: number;
 	updatedAt: number;
 }
+
 export type SshKeyMutation =
 	{ status: 'updated'; value: SshKeyView } | { status: 'not_found' } | { status: 'version_conflict' };
 
 export type SshCredentialInput = { kind: 'password'; password: string } | { kind: 'ssh_key'; sshKeyId: number };
+
 export type CredentialMutation = { status: 'updated' } | { status: 'not_found' } | { status: 'version_conflict' };
 
 export interface ConnectionImport {
@@ -98,12 +108,14 @@ export interface ConnectionImport {
 	inlineProxy?: Omit<ProxyInput, 'password'>;
 	tagNames?: string[];
 }
+
 export type ImportItemResult = { status: 'ok'; id: number } | { status: 'error'; code: TargetErrorCode };
 
 export interface ConnectionCatalog {
 	list(): Promise<ConnectionSnapshot[]>;
 	get(id: number): Promise<ConnectionSnapshot | null>;
 }
+
 export interface ConnectionMutations {
 	create(data: ConnectionMetadata): Promise<ConnectionSnapshot>;
 	update(id: number, version: number, changes: Partial<ConnectionMetadata>): Promise<ConnectionMutation>;
@@ -113,6 +125,7 @@ export interface ConnectionMutations {
 	importOne(command: ConnectionImport): Promise<ConnectionSnapshot>;
 	importMany(commands: ConnectionImport[]): Promise<ImportItemResult[]>;
 }
+
 export interface ProxyManagement {
 	list(): Promise<ProxyView[]>;
 	get(id: number): Promise<ProxyView | null>;
@@ -120,6 +133,7 @@ export interface ProxyManagement {
 	update(id: number, version: number, patch: ProxyUpdateInput): Promise<ProxyMutation>;
 	delete(id: number): Promise<boolean>;
 }
+
 export interface TagManagement {
 	list(): Promise<TagView[]>;
 	get(id: number): Promise<TagView | null>;
@@ -127,6 +141,7 @@ export interface TagManagement {
 	rename(id: number, version: number, name: string): Promise<TagMutation>;
 	delete(id: number): Promise<boolean>;
 }
+
 export interface SshKeyManagement {
 	list(): Promise<SshKeyView[]>;
 	get(id: number): Promise<SshKeyView | null>;
@@ -134,10 +149,12 @@ export interface SshKeyManagement {
 	update(id: number, version: number, changes: SshKeyChanges): Promise<SshKeyMutation>;
 	delete(id: number): Promise<boolean>;
 }
+
 export interface ConnectionCredentialManagement {
 	set(id: number, version: number, input: SshCredentialInput): Promise<CredentialMutation>;
 	clear(id: number, version: number): Promise<CredentialMutation>;
 }
+
 export type TargetsPublicApi = ConnectionCatalog &
 	ConnectionMutations & {
 		proxies: ProxyManagement;
@@ -149,6 +166,7 @@ export type TargetsPublicApi = ConnectionCatalog &
 /** Trusted backend-only machine connection output. Never expose via management HTTP. */
 export type TrustedSshAuthentication =
 	{ kind: 'password'; password: string } | { kind: 'ssh_key'; privateKey: string; passphrase: string | null };
+
 export interface TrustedSshProxy {
 	type: ProxyType;
 	host: string;
@@ -156,6 +174,7 @@ export interface TrustedSshProxy {
 	username: string | null;
 	password: string | null;
 }
+
 export interface TrustedResolvedSshTarget {
 	readonly id: number;
 	readonly host: string;
@@ -166,6 +185,7 @@ export interface TrustedResolvedSshTarget {
 	readonly jumps: readonly TrustedResolvedSshTarget[];
 	readonly fingerprint: string;
 }
+
 export interface TrustedSshTargetResolver {
 	fingerprintStored(id: number): Promise<string>;
 	resolveStored(id: number): Promise<TrustedResolvedSshTarget>;

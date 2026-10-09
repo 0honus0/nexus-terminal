@@ -84,8 +84,11 @@ export const PLUGIN_FRONTEND_RPC_METHODS = [
 ] as const;
 
 export type PluginFrontendBackendRpcMethod = (typeof PLUGIN_FRONTEND_BACKEND_RPC_METHODS)[number];
+
 export type PluginFrontendAgentRpcMethod = (typeof PLUGIN_FRONTEND_AGENT_RPC_METHODS)[number];
+
 export type PluginFrontendBinaryRpcMethod = (typeof PLUGIN_FRONTEND_BINARY_RPC_METHODS)[number];
+
 export type PluginFrontendRpcMethod = (typeof PLUGIN_FRONTEND_RPC_METHODS)[number];
 
 export const PLUGIN_APP_INTENT_ARTIFACT_CHUNK_BYTES = 128 * 1024;

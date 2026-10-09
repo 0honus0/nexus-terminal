@@ -1239,4 +1239,5 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
 		};
 	}
 }
+
 import { BrowserActionNotDispatchedError } from '../../../modules/agent/ai/browser-action-not-dispatched';

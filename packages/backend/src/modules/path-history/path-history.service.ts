@@ -1,4 +1,5 @@
 import type { PathHistoryEntry, PathHistoryRepository } from './path-history.repository.port';
+
 export class PathHistoryService {
 	constructor(private readonly repository: PathHistoryRepository) {}
 

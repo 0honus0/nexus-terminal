@@ -3,6 +3,7 @@ import type { UnsavedSshConnectionInput } from '../connection.types';
 import type { SshConnectionResolver } from './ssh-connection-resolver.service';
 
 const TEST_TIMEOUT_MS = 15_000;
+
 export class SshConnectionTestService {
 	constructor(
 		private readonly resolver: SshConnectionResolver,

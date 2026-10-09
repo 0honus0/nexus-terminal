@@ -4,6 +4,7 @@ export interface IpBlacklistEntry {
 	lastAttemptAt: number;
 	blockedUntil: number | null;
 }
+
 export interface IpBlacklistRepository {
 	get(ip: string): Promise<IpBlacklistEntry | null>;
 	recordFailure(

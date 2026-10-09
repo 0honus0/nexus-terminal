@@ -25,6 +25,7 @@ export interface AppearanceSettings {
 }
 
 export type UpdateAppearanceInput = Partial<AppearanceSettings>;
+
 export type BackgroundKind = 'page' | 'terminal';
 
 export interface HtmlThemeSummary {

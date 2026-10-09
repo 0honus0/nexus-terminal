@@ -1,6 +1,7 @@
 import type { AuditLogActionType } from './audit.types';
 import type { AuditLogRepository } from './audit.repository.port';
 import { logger, logErrorCode } from '../../shared/logging/logger';
+
 export class AuditLogService {
 	constructor(private readonly repository: AuditLogRepository) {}
 

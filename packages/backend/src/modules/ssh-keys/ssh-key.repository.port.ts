@@ -6,8 +6,11 @@ export interface StoredSshKeyRecord {
 	createdAt: number;
 	updatedAt: number;
 }
+
 export type CreateStoredSshKeyRecord = Omit<StoredSshKeyRecord, 'id' | 'createdAt' | 'updatedAt'>;
+
 export type UpdateStoredSshKeyRecord = Partial<Omit<StoredSshKeyRecord, 'id' | 'createdAt' | 'updatedAt'>>;
+
 export interface SshKeyRepository {
 	create(data: CreateStoredSshKeyRecord): Promise<number>;
 	get(id: number): Promise<StoredSshKeyRecord | null>;

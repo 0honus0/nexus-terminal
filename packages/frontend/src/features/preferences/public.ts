@@ -3,6 +3,9 @@ export const loadPreferencesSettingsPanel = () => import('./components/Preferenc
 export const loadWorkspacePreferencesPanel = () => import('./components/WorkspacePreferencesPanel.vue');
 
 export { resetPreferencesCache, usePreferences } from './composables/usePreferences';
+
 export type { PreferencesController } from './composables/usePreferences';
+
 export type { PreferencesDto, PreferenceKey, PreferencesPatchDto } from './model/preferences';
+
 export { commonTimezones, preferenceLanguageNames, terminalScrollbackForRuntime } from './model/preferences';

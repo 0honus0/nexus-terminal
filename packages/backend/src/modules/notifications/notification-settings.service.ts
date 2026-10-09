@@ -11,6 +11,7 @@ import type {
 	NotificationSetting,
 	UpdateNotificationSetting,
 } from './notification.types';
+
 export class NotificationSettingsService {
 	constructor(
 		private readonly repository: NotificationSettingsRepository,

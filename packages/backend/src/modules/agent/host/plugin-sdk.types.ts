@@ -1,6 +1,7 @@
 import type { JsonValue, Scope } from '../agent.types';
 
 export const PLUGIN_BACKEND_PROTOCOL_VERSION = 1 as const;
+
 export const PLUGIN_APP_INTENT_ARTIFACT_CHUNK_BYTES = 128 * 1024;
 
 export interface PluginBackendStorageRecord {

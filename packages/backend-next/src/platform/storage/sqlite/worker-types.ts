@@ -1,6 +1,7 @@
 import type { WorkerSqliteError } from './sqlite-errors.js';
 
 export type SqlParameter = string | number | null;
+
 export type SqlRow = Record<string, unknown>;
 
 export interface SqlRunResult {

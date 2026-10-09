@@ -67,4 +67,5 @@ const createBackgroundRuntime = (frameIntervalMs: number) => `<script>(() => {
 })();<\/script>`;
 
 export const mobileBackgroundRuntime = createBackgroundRuntime(50);
+
 export const desktopBackgroundRuntime = createBackgroundRuntime(0);

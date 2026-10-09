@@ -21,6 +21,7 @@ interface Writer {
 	revision: number;
 	error?: unknown;
 }
+
 export class LocalSuspendedSessionLogAdapter implements SuspendedSessionLogStore {
 	private readonly writers = new Map<string, Writer>();
 	private readonly directory: string;

@@ -15,6 +15,7 @@ export interface MachineProxy {
 	readonly username: string | null;
 	readonly password: string | null;
 }
+
 export type MachineRoute =
 	| { readonly kind: 'direct' }
 	| { readonly kind: 'proxy'; readonly proxy: MachineProxy }

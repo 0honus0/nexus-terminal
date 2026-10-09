@@ -6,6 +6,7 @@ export interface CreatedTransferTask {
 	task: TransferTask;
 	signal: AbortSignal;
 }
+
 const FINAL = new Set<TransferTaskStatus>(['completed', 'failed', 'partially-completed', 'cancelled']);
 
 /** In-process task state and cancellation ownership. It never owns network transports. */

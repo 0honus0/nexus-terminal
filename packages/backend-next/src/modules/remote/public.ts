@@ -6,6 +6,7 @@ export interface SessionView {
 	startedAt: number;
 	status: 'open' | 'closed';
 }
+
 export interface OpenShellRequest {
 	targetId: number;
 	columns: number;
@@ -14,6 +15,7 @@ export interface OpenShellRequest {
 	timeoutMs: number;
 	signal?: AbortSignal;
 }
+
 export interface RemoteSessions {
 	open(request: OpenShellRequest): Promise<SessionView>;
 	get(id: string): SessionView | null;

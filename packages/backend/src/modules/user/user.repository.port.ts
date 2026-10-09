@@ -1,8 +1,10 @@
 import type { User } from './user.types';
+
 export interface StoredUserRecord extends User {
 	hashedPassword: string;
 	twoFactorSecret: string | null;
 }
+
 export interface UserRepository {
 	get(id: number): Promise<StoredUserRecord | null>;
 	findByUsername(username: string): Promise<StoredUserRecord | null>;

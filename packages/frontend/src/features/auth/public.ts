@@ -15,7 +15,9 @@ export type {
 	AuthSessionState,
 	SetupState,
 } from './model/auth';
+
 export { useAuthSession };
+
 export type { AuthSessionController } from './composables/useAuthSession';
 
 export interface AuthNavigationFacade {

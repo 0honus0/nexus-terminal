@@ -10,6 +10,7 @@ export interface QuickCommandTag {
 	createdAt: number;
 	updatedAt: number;
 }
+
 export interface QuickCommandTagRepository {
 	list(): Promise<QuickCommandTag[]>;
 	get(id: number): Promise<QuickCommandTag | null>;

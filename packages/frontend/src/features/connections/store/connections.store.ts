@@ -4,6 +4,7 @@ import { connectionsApi } from '../api/connectionsApi';
 import type { ConnectionDto, ConnectionFormInput, ConnectionFormUpdate } from '../model/connection';
 
 const DEFAULT_STALE_MS = 30_000;
+
 export const useConnectionsStore = defineStore('connections', () => {
 	const items = ref<ConnectionDto[]>([]);
 	const loaded = ref(false);

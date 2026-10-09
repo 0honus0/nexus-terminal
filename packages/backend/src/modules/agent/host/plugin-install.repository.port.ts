@@ -1,6 +1,7 @@
 import type { AgentAppManifest, AppRecord } from './app.types';
 
 export type PluginStageStatus = 'staged' | 'verified' | 'failed' | 'installed';
+
 export type PluginVersionStatus = 'verified' | 'installed' | 'failed' | 'removed';
 
 export interface TrustedPublisherKey {

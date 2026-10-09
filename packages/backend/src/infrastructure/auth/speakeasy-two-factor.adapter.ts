@@ -1,6 +1,7 @@
 import qrcode from 'qrcode';
 import speakeasy from 'speakeasy';
 import type { TwoFactorPort } from '../../modules/auth/two-factor.port';
+
 export class SpeakeasyTwoFactorAdapter implements TwoFactorPort {
 	async generate(label: string) {
 		const secret = speakeasy.generateSecret({ length: 20, name: label });

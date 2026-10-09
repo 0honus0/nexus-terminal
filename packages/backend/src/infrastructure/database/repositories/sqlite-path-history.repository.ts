@@ -3,6 +3,7 @@ import type {
 	PathHistoryEntry,
 	PathHistoryRepository,
 } from '../../../modules/path-history/path-history.repository.port';
+
 export class SqlitePathHistoryRepository implements PathHistoryRepository {
 	constructor(private readonly db: RelationalDatabase) {}
 

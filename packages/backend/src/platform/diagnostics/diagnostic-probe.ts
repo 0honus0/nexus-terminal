@@ -1,4 +1,5 @@
 export type DiagnosticStatus = 'ok' | 'warning' | 'error' | 'unavailable';
+
 export type DiagnosticActorType = 'system' | 'user' | 'agent';
 
 export type DiagnosticScope =
@@ -25,6 +26,7 @@ export interface DiagnosticContext {
 }
 
 export type DiagnosticScalar = string | number | boolean | null;
+
 export type DiagnosticDetails = Readonly<Record<string, DiagnosticScalar | readonly DiagnosticScalar[]>>;
 
 export interface DiagnosticObservation {

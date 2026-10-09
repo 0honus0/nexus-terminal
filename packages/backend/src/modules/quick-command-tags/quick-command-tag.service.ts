@@ -1,4 +1,5 @@
 import type { QuickCommandTag, QuickCommandTagRepository } from './quick-command-tag.repository.port';
+
 export class QuickCommandTagService {
 	constructor(private readonly repository: QuickCommandTagRepository) {}
 

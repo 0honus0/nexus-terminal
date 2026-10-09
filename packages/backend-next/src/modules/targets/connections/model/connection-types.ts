@@ -1,4 +1,5 @@
 import type { ConnectionType, ConnectionRoute } from '@nexus-terminal/shared/connections/values';
+
 export interface ConnectionMetadata {
 	name: string;
 	type: ConnectionType;
@@ -14,11 +15,13 @@ export interface ConnectionMetadata {
 	tagIds: number[];
 	jumpIds: number[];
 }
+
 export interface ConnectionSnapshot extends ConnectionMetadata {
 	id: number;
 	version: number;
 	createdAt: number;
 	updatedAt: number;
 }
+
 export type ConnectionMutation =
 	{ status: 'updated'; value: ConnectionSnapshot } | { status: 'not_found' } | { status: 'version_conflict' };

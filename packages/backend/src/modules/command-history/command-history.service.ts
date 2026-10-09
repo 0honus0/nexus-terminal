@@ -1,4 +1,5 @@
 import type { CommandHistoryEntry, CommandHistoryRepository } from './command-history.repository.port';
+
 export class CommandHistoryService {
 	constructor(private readonly repository: CommandHistoryRepository) {}
 

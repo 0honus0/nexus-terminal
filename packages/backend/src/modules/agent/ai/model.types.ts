@@ -1,13 +1,21 @@
 import type { JsonValue } from '../agent.types';
 
 export type OpenAiCompatibleProtocol = 'chat-completions' | 'responses';
+
 export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
 export const MODEL_FINISH_REASONS = ['stop', 'length', 'content-filter', 'tool-calls', 'error', 'other'] as const;
+
 export type ModelFinishReason = (typeof MODEL_FINISH_REASONS)[number];
+
 export type ReasoningCapabilitySource = 'provider' | 'registry' | 'manual';
+
 export const AGENT_MODEL_CAPABILITIES = ['tools', 'image_input', 'file_input', 'reasoning'] as const;
+
 export type AgentModelCapability = (typeof AGENT_MODEL_CAPABILITIES)[number];
+
 export type ModelCapabilitySource = 'registry' | 'provider' | 'manual';
+
 export type ModelCapabilityField =
 	| 'contextWindow'
 	| 'maxOutputTokens'

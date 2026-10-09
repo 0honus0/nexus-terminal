@@ -3,6 +3,7 @@ import type { AgentCapability } from '../host/app.types';
 import type { AgentTargetSelector, ToolTargetFingerprint } from './tool-target.types';
 
 export type ToolRisk = 'read' | 'control' | 'mutate' | 'destructive' | 'forbidden';
+
 export type ToolRiskClass = Exclude<ToolRisk, 'forbidden'>;
 
 export interface ToolDescriptor {

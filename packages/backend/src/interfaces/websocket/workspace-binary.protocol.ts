@@ -5,8 +5,11 @@ const FRAME_HEADER_BYTES = 16;
 const FRAME_TERMINAL = 1;
 const FRAME_RESPONSE = 2;
 const FLAG_FINAL = 1;
+
 export const MAX_WORKSPACE_BINARY_REQUEST_ID_BYTES = 128;
+
 export const WORKSPACE_BINARY_PROTOCOL_VERSION = 1 as const;
+
 export const MAX_WORKSPACE_BINARY_PAYLOAD_BYTES = 256 * 1024;
 
 export type WorkspaceBinaryFrameKind = 'terminal' | 'response';

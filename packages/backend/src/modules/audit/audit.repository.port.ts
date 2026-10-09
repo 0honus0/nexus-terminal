@@ -1,4 +1,5 @@
 import type { AuditLogActionType, AuditLogEntry } from './audit.types';
+
 export interface AuditLogRepository {
 	add(actionType: AuditLogActionType, details?: Record<string, unknown> | string | null): Promise<void>;
 	list(options: {

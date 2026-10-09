@@ -4,6 +4,7 @@ import { ToolCatalog } from './tool-catalog';
 import type { ToolAvailabilityContext, ToolContext, ToolDescriptor, ToolProposal } from './tool.types';
 
 export const TOOL_SEARCH_NAME = 'tool_search';
+
 export const TOOL_INVOKE_NAME = 'tool_invoke';
 
 const DEFERRED_HANDLE_PREFIX = 'tool1.';

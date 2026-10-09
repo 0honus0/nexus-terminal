@@ -2,6 +2,7 @@ import type { RelationalDatabase } from '../../../platform/storage/relational-da
 import type { SettingRecord, SettingsRepository } from '../../../modules/settings/settings.repository.port';
 import type { SecretCipher } from '../../../shared/security/crypto.port';
 import { protectOperationalSecret, readOperationalSecret } from '../../security/operational-secret-storage';
+
 export class SqliteSettingsRepository implements SettingsRepository {
 	constructor(
 		private readonly db: RelationalDatabase,

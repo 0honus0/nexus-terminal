@@ -2,15 +2,25 @@ import type { JsonValue } from '../../../agent.types';
 import type { ToolResult, ToolUserSummary } from '../../../capabilities/tool.types';
 
 export const MAX_URL_BYTES = 8 * 1024;
+
 export const MAX_TYPE_BYTES = 16 * 1024;
+
 export const MAX_SCREENSHOT_BYTES = 4 * 1024 * 1024;
+
 export const MIN_SCREENSHOT_BYTES = 64 * 1024;
+
 export const MAX_TRANSFER_BYTES = 8 * 1024 * 1024;
+
 export const MAX_SETTLE_MS = 2_000;
+
 export const MAX_WAIT_MS = 5_000;
+
 export const MAX_SCROLL_DELTA = 10_000;
+
 export const MAX_OPTION_BYTES = 512;
+
 export const MAX_ID_BYTES = 128;
+
 export const TOOL_VERSION = '1.0.0';
 
 export const browserToolObject = (value: JsonValue): Record<string, JsonValue> => {

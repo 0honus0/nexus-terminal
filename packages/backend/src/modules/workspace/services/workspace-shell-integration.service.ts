@@ -6,6 +6,7 @@ import type { WorkspaceEventHub } from '../workspace-event-hub';
 import type { WorkspaceSessionRegistry } from '../workspace-session-registry';
 
 export type WorkspaceShellKind = 'bash' | 'zsh' | 'other';
+
 export interface WorkspaceShellIntegrationSnapshot {
 	shellPid?: number;
 	shellKind?: WorkspaceShellKind;

@@ -5,6 +5,7 @@ import type {
 	UploadPrepareCommand,
 	UploadCommand,
 } from '../model/transfer';
+
 export interface TransferChannel {
 	prepareUpload(request: UploadPrepareCommand): Promise<void>;
 	upload(request: UploadCommand): Promise<void>;

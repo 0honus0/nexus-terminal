@@ -13,7 +13,9 @@ const MAX_FRONTMATTER_METADATA_FIELDS = 64;
 const MAX_FRONTMATTER_VALUE_BYTES = 4 * 1024;
 
 export const DIRECT_SKILL_METADATA_LIMIT = 8;
+
 export const CONTEXT_SKILL_MATCH_LIMIT = 6;
+
 export const MAX_SKILL_SEARCH_RESULTS = 8;
 
 export interface SkillMetadata {

@@ -1,7 +1,9 @@
 import type { WorkspaceArchiveErrorCodeDto } from '@nexus-terminal/protocol/workspace';
+
 export type { WorkspaceArchiveErrorCodeDto };
 
 export type TransferKind = 'upload' | 'copy' | 'move' | 'compress' | 'decompress' | 'transfer';
+
 export type TransferErrorKind =
 	| 'upload_directory_state_lost'
 	| 'upload_stream_closed'
@@ -10,11 +12,14 @@ export type TransferErrorKind =
 	| 'transfer_failed'
 	| 'workspace_connection_closed'
 	| 'archive_failed';
+
 export type TransferWarningKind = 'archive_completed_with_warning' | 'partial_failure';
+
 export interface TransferErrorContext {
 	closeCode?: number;
 	fileName?: string;
 }
+
 export type TransferStatus =
 	| 'queued'
 	| 'preparing'

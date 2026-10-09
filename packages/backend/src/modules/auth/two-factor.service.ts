@@ -4,6 +4,7 @@ import type { NotificationService } from '../notifications/notification.service'
 import type { UserService } from '../user/user.service';
 import type { AuthService } from './auth.service';
 import type { TwoFactorPort } from './two-factor.port';
+
 export class TwoFactorService {
 	constructor(
 		private readonly users: UserService,

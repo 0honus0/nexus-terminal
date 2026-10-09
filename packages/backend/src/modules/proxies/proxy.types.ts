@@ -1,4 +1,5 @@
 export type ProxyType = 'SOCKS5' | 'HTTP';
+
 export type ProxyAuthMethod = 'none' | 'password' | 'key';
 
 export interface Proxy {

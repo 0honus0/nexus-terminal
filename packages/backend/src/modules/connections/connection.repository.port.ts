@@ -13,6 +13,7 @@ export interface StoredConnectionRecord extends Omit<Connection, 'tagIds'> {
 }
 
 export type CreateStoredConnection = Omit<StoredConnectionRecord, 'id' | 'createdAt' | 'updatedAt' | 'lastConnectedAt'>;
+
 export type UpdateStoredConnection = Partial<
 	Pick<
 		StoredConnectionRecord,
@@ -49,6 +50,9 @@ export interface ConnectionRepository {
 
 // Keep these imports anchored in the port so DB adapters never invent parallel domain enums.
 export type StoredConnectionType = ConnectionType;
+
 export type StoredConnectionAuthMethod = ConnectionAuthMethod;
+
 export type StoredConnectionRoute = ConnectionRoute;
+
 export type StoredRdpConnectionOptions = RdpConnectionOptions;

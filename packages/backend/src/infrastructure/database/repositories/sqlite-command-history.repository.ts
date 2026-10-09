@@ -3,6 +3,7 @@ import type {
 	CommandHistoryEntry,
 	CommandHistoryRepository,
 } from '../../../modules/command-history/command-history.repository.port';
+
 export class SqliteCommandHistoryRepository implements CommandHistoryRepository {
 	constructor(private readonly db: RelationalDatabase) {}
 

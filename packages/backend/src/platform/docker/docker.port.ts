@@ -4,6 +4,7 @@ export interface DockerPortInfo {
 	PublicPort?: number;
 	Type: string;
 }
+
 export interface DockerStats {
 	ID: string;
 	Name: string;
@@ -14,6 +15,7 @@ export interface DockerStats {
 	BlockIO: string;
 	PIDs: string;
 }
+
 export interface DockerContainer {
 	id: string;
 	Names: string[];
@@ -27,7 +29,9 @@ export interface DockerContainer {
 	Labels: Record<string, string> | string;
 	stats?: DockerStats | null;
 }
+
 export type DockerCommand = 'start' | 'stop' | 'restart' | 'remove';
+
 export interface DockerStatus {
 	available: boolean;
 	containers: DockerContainer[];

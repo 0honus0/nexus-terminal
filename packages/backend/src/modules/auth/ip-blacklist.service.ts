@@ -2,6 +2,7 @@ import type { NotificationService } from '../notifications/notification.service'
 import type { SettingsService } from '../settings/settings.service';
 import type { IpBlacklistRepository } from './ip-blacklist.repository.port';
 import { isInternalIp } from './internal-ip';
+
 export class IpBlacklistService {
 	constructor(
 		private readonly repository: IpBlacklistRepository,

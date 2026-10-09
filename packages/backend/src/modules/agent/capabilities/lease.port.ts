@@ -4,6 +4,7 @@ import type { JsonValue } from '../agent.types';
 // Dead mutation methods are removed rather than kept as alternate paths around the authoritative state transition.
 
 export type LeaseMode = 'read' | 'write';
+
 // Shared with the ordinary terminal Workspace mutation guard, not Agent Workspace execution.
 export type LeaseOwnerType = 'agent' | 'workspace' | 'system';
 

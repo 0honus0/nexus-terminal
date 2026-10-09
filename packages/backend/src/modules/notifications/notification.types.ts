@@ -1,4 +1,5 @@
 export type NotificationChannelType = 'webhook' | 'email' | 'telegram';
+
 export type NotificationEvent =
 	| 'LOGIN_SUCCESS'
 	| 'LOGIN_FAILURE'
@@ -44,6 +45,7 @@ export interface WebhookConfig {
 	secretHeaderNames?: string[];
 	bodyTemplate?: string;
 }
+
 export interface EmailConfig {
 	to: string;
 	bodyTemplate?: string;
@@ -54,12 +56,14 @@ export interface EmailConfig {
 	smtpPass?: string;
 	from?: string;
 }
+
 export interface TelegramConfig {
 	botToken: string;
 	chatId: string;
 	messageTemplate?: string;
 	customDomain?: string;
 }
+
 export type NotificationChannelConfig = WebhookConfig | EmailConfig | TelegramConfig;
 
 export interface NotificationSetting {
@@ -72,13 +76,17 @@ export interface NotificationSetting {
 	createdAt: number;
 	updatedAt: number;
 }
+
 export type CreateNotificationSetting = Omit<NotificationSetting, 'id' | 'createdAt' | 'updatedAt'>;
+
 export type UpdateNotificationSetting = Partial<CreateNotificationSetting>;
+
 export interface NotificationPayload {
 	event: NotificationEvent;
 	timestamp: number;
 	details?: Record<string, unknown> | string;
 }
+
 export interface PreparedNotification {
 	channelType: NotificationChannelType;
 	config: NotificationChannelConfig;
@@ -86,6 +94,7 @@ export interface PreparedNotification {
 	body: string;
 	payload: NotificationPayload;
 }
+
 export interface NotificationTestResult {
 	success: boolean;
 	message: string;

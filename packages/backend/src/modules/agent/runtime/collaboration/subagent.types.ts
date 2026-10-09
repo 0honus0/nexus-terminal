@@ -4,6 +4,7 @@ import type { CommandIdentity } from '../runs/run.types';
 import type { AgentCapability, CapabilityGrantScope } from '../../host/capability.types';
 
 export type SubagentStatus = 'queued' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled';
+
 export type ScheduleState =
 	| 'queued'
 	| 'runnable'
@@ -13,9 +14,13 @@ export type ScheduleState =
 	| 'waiting_budget'
 	| 'joining'
 	| 'finished';
+
 export type DependencyMode = 'success' | 'settled';
+
 export type SubagentFailureMode = 'isolate' | 'failFast';
+
 export type PeerMessaging = 'parent-child' | 'same-run';
+
 export type SubagentMutationMode = 'read-only' | 'governed';
 
 export interface DelegatedCapabilityGrant {
@@ -106,6 +111,7 @@ export interface DelegationView extends Scope {
 }
 
 export type AgentMessageKind = 'request' | 'reply' | 'progress' | 'evidence' | 'completion';
+
 export type AgentMessageStatus = 'accepted' | 'delivered' | 'consumed' | 'expired' | 'rejected';
 
 export interface AgentMessage {
@@ -135,6 +141,7 @@ export interface MessageReceipt {
 }
 
 export type SchedulerWorkKind = 'model_step' | 'tool_step' | 'consume_inbox' | 'verify' | 'join_resume';
+
 export type SchedulerWorkStatus = 'queued' | 'claimed' | 'waiting' | 'completed' | 'cancelled';
 
 export interface SchedulerWorkView {

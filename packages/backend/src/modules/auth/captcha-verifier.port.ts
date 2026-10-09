@@ -1,4 +1,5 @@
 export type CaptchaProviderName = 'hcaptcha' | 'recaptcha';
+
 export interface CaptchaVerifierPort {
 	verify(
 		provider: CaptchaProviderName,

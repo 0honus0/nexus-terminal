@@ -1,5 +1,7 @@
 export type ConnectionType = 'SSH' | 'RDP' | 'VNC';
+
 export type ConnectionAuthMethod = 'password' | 'key';
+
 export type ConnectionRoute = 'proxy' | 'jump' | null;
 
 export interface RdpConnectionOptions {

@@ -98,17 +98,29 @@ import type {
 	AgentThreadRenameRequestDto,
 	AgentThreadViewDto,
 } from '@nexus-terminal/protocol/agent-threads';
+
 export type * from '@nexus-terminal/protocol/agent-approvals';
+
 export type * from '@nexus-terminal/protocol/agent-artifacts';
+
 export type * from '@nexus-terminal/protocol/agent-collaboration';
+
 export type * from '@nexus-terminal/protocol/agent-common';
+
 export type * from '@nexus-terminal/protocol/agent-host';
+
 export type * from '@nexus-terminal/protocol/agent-integrations';
+
 export type * from '@nexus-terminal/protocol/agent-memories';
+
 export type * from '@nexus-terminal/protocol/agent-plugins';
+
 export type * from '@nexus-terminal/protocol/agent-providers';
+
 export type * from '@nexus-terminal/protocol/agent-runs';
+
 export { agentRunAcceptsInput, isAgentRunNonTerminal } from '@nexus-terminal/protocol/agent-runs';
+
 export type * from '@nexus-terminal/protocol/agent-threads';
 
 import { agentRuntimeRequest } from './agent-http-client';

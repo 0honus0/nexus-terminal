@@ -3,6 +3,7 @@ import type {
 	QuickCommandMutationRequestDto,
 	QuickCommandTagDto,
 } from '@nexus-terminal/protocol/quick-commands';
+
 export type { QuickCommandDto, QuickCommandTagDto };
 
 export type QuickCommandFormInput = Omit<QuickCommandMutationRequestDto, 'name' | 'variables' | 'tagIds'> & {
@@ -10,16 +11,20 @@ export type QuickCommandFormInput = Omit<QuickCommandMutationRequestDto, 'name' 
 	variables: Record<string, string>;
 	tagIds: number[];
 };
+
 export interface QuickCommandGroup {
 	id: number | null;
 	name: string;
 	commands: QuickCommandDto[];
 }
+
 export type QuickCommandSort = 'name' | 'usageCount' | 'lastUsed';
+
 export interface QuickCommandExpansion {
 	command: string;
 	unresolvedVariables: string[];
 }
+
 export interface ExecuteCommandIntent {
 	command: string;
 	sourceId?: number;

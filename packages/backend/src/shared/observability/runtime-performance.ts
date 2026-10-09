@@ -9,6 +9,7 @@ import {
 const EVENT_LOOP_RESOLUTION_MS = 10;
 
 export type DatabaseOperationKind = 'execute' | 'queryOne' | 'queryAll' | 'transaction';
+
 export type CpuTaskKind =
 	| 'backup.encode.total'
 	| 'backup.decode.total'

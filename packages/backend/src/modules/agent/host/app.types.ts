@@ -3,6 +3,7 @@ import type { AgentModelCapability } from '../ai/model.types';
 import type { AgentCapability, CapabilityGrant } from './capability.types';
 
 export { AGENT_CAPABILITIES } from './capability.types';
+
 export type { AgentCapability, CapabilityGrant } from './capability.types';
 
 export interface AgentAppIntent {
@@ -53,6 +54,7 @@ export interface ValidatedManifest extends AgentAppManifest {
 }
 
 export type AppDesiredState = 'enabled' | 'disabled';
+
 export type AppObservedState = 'disabled' | 'enabling' | 'running' | 'degraded' | 'failed' | 'disabling';
 
 export interface AppRecord extends Scope {

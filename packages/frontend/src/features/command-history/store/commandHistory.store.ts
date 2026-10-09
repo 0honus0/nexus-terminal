@@ -3,6 +3,7 @@ import { defineStore } from 'pinia';
 import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 import { commandHistoryApi } from '../api/commandHistoryApi';
 import type { CommandHistoryEntryDto } from '../model/commandHistory';
+
 export const useCommandHistoryStore = defineStore('command-history', () => {
 	const items = ref<CommandHistoryEntryDto[]>([]),
 		search = ref(''),
@@ -137,4 +138,5 @@ export const useCommandHistoryStore = defineStore('command-history', () => {
 		resetSelection,
 	};
 });
+
 registerAuthenticatedSessionReset('command-history-cache', () => useCommandHistoryStore().reset());

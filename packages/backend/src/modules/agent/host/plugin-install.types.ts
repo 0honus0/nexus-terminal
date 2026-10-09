@@ -32,6 +32,7 @@ export interface PluginUpgradeResult {
 	app: AppView;
 	plugin: PluginVersionRecord;
 }
+
 export interface PluginPendingUpgradeView extends PluginPendingUpgradeRecord {
 	stage: PluginStageRecord;
 	plugin: PluginVersionRecord;

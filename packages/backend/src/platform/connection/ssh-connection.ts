@@ -1,4 +1,5 @@
 export type SshAuthMethod = 'password' | 'key';
+
 export type SshRoute = 'proxy' | 'jump' | null;
 
 export interface ResolvedSshProxy {

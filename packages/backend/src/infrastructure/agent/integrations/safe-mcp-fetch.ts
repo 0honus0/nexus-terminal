@@ -4,7 +4,9 @@ import type { FetchLike } from '@modelcontextprotocol/client';
 import type { OutboundPolicyPort } from '../../../modules/agent/ai/outbound-policy.port';
 
 const MAX_DISPATCHERS = 128;
+
 export const MCP_WIRE_RESPONSE_LIMIT_BYTES = 10 * 1024 * 1024 + 256 * 1024;
+
 export const MCP_SSE_EVENT_LIMIT_BYTES = 10 * 1024 * 1024 + 64 * 1024;
 
 const boundedByteStream = (

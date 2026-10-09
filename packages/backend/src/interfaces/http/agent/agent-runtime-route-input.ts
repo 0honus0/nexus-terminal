@@ -13,6 +13,7 @@ import type {
 import { hasOnlyKeys, isRecord, positiveInteger, versionedRecord } from './agent-route-input';
 
 export const AGENT_RUNTIME_REQUEST_SCHEMA_VERSION = 1 as const;
+
 const reasoningEfforts = new Set<AgentReasoningEffortDto>(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 
 const isReasoningEffort = (value: unknown): value is AgentReasoningEffortDto =>

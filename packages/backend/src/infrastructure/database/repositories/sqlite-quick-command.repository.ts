@@ -37,6 +37,7 @@ const parseVariables = (value: string | null): Record<string, string> => {
 };
 
 const select = `SELECT qc.id,qc.name,qc.command,qc.usage_count,qc.variables,qc.created_at,qc.updated_at,GROUP_CONCAT(qta.tag_id) AS tag_ids_str FROM quick_commands qc LEFT JOIN quick_command_tag_associations qta ON qc.id=qta.quick_command_id`;
+
 export class SqliteQuickCommandRepository implements QuickCommandRepository {
 	constructor(private readonly db: RelationalDatabase) {}
 

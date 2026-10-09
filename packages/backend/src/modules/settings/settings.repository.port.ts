@@ -2,6 +2,7 @@ export interface SettingRecord {
 	key: string;
 	value: string;
 }
+
 export interface SettingsRepository {
 	list(): Promise<SettingRecord[]>;
 	get(key: string): Promise<string | null>;

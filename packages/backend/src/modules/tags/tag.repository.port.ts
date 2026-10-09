@@ -4,6 +4,7 @@ export interface Tag {
 	createdAt: number;
 	updatedAt: number;
 }
+
 export interface TagRepository {
 	list(): Promise<Tag[]>;
 	get(id: number): Promise<Tag | null>;

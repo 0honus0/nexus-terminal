@@ -3,6 +3,7 @@ import type { Readable } from 'node:stream';
 import { logger } from '../../../shared/logging/logger';
 
 export const DOWNLOAD_TICKET_TTL_SECONDS = 5 * 60;
+
 const TTL_MS = DOWNLOAD_TICKET_TTL_SECONDS * 1000;
 const MAX_PER_USER = 64;
 const MAX_TOTAL = 512;

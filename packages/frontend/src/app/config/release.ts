@@ -1,7 +1,9 @@
 const RELEASE_REPOSITORY = '0honus0/nexus-terminal';
 
 export const releaseRepository = RELEASE_REPOSITORY;
+
 export const releaseRepositoryUrl = `https://github.com/${RELEASE_REPOSITORY}`;
+
 export const latestReleaseApiUrl = `https://api.github.com/repos/${RELEASE_REPOSITORY}/releases/latest`;
 
 export const releaseUrl = (tag: string) => `${releaseRepositoryUrl}/releases/tag/${encodeURIComponent(tag)}`;

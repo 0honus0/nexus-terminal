@@ -6,6 +6,7 @@ import { logger } from '@/client/logging/logger';
 import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 import { sshSuspendApi } from '../api/sshSuspendApi';
 import type { SuspendedSessionDto } from '../model/sshSuspend';
+
 export type { WorkspaceSuspendAutoTerminatedEventDto };
 
 const BASE_POLL_MS = 1_500;

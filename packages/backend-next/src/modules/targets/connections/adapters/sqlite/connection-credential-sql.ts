@@ -4,6 +4,7 @@ import type {
 	SshCredentialWrite,
 	CredentialMutation,
 } from '../../storage/connection-credential-storage.js';
+
 export class SqliteConnectionCredentialStorage implements ConnectionCredentialStorage {
 	constructor(private readonly db: SqliteRuntime) {}
 
