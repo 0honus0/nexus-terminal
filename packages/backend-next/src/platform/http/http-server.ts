@@ -38,6 +38,9 @@ export interface HttpWebSocketChannel {
 	send(value: string): boolean;
 	onMessage(listener: (value: string) => Promise<void>): void;
 	onClose(listener: () => Promise<void>): void;
+	/** Flush ordered frames and finish the close handshake within a bounded deadline. */
+	finish(): Promise<void>;
+	/** Reject further traffic immediately; intended for revoke/error/shutdown. */
 	close(): void;
 }
 
@@ -329,18 +332,37 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 				let listener: ((value: string) => Promise<void>) | null = null;
 				let closing: (() => Promise<void>) | null = null;
 				let incoming = Promise.resolve();
+				let queuedMessages = 0;
+				let queuedBytes = 0;
+				let finishing: Promise<void> | null = null;
+				const MAX_INPUT_MESSAGES = 64;
+				const MAX_INPUT_BYTES = 256 * 1024;
 				ws.on('message', (data, isBinary) => {
-					if (isBinary || !listener) {
-						ws.close(1003);
+					if (isBinary || !listener || finishing || !accepting) {
+						ws.terminate();
 						return;
 					}
 					const message = data.toString();
-					incoming = incoming.then(async () => {
-						if (ws.readyState === WebSocket.OPEN && listener) {
-							await listener(message);
+					const bytes = Buffer.byteLength(message);
+					if (queuedMessages >= MAX_INPUT_MESSAGES || queuedBytes + bytes > MAX_INPUT_BYTES) {
+						ws.terminate();
+						return;
+					}
+					queuedMessages += 1;
+					queuedBytes += bytes;
+					const current = incoming.then(async () => {
+						try {
+							if (ws.readyState === WebSocket.OPEN && listener) {
+								await listener(message);
+							}
+						} finally {
+							queuedMessages -= 1;
+							queuedBytes -= bytes;
 						}
 					});
-					trackWebSocketTask(incoming.catch(() => ws.terminate()));
+					incoming = current.catch(() => ws.terminate());
+					// One chain per socket, rather than tracking every ancestor Promise.
+					trackWebSocketTask(current.catch(() => undefined));
 				});
 				ws.on('close', () => {
 					activeSockets.delete(ws);
@@ -368,6 +390,28 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 
 					onClose(callback) {
 						closing = callback;
+					},
+
+					finish() {
+						if (finishing) return finishing;
+						finishing = new Promise<void>((resolve) => {
+							if (ws.readyState === WebSocket.CLOSED) {
+								resolve();
+								return;
+							}
+							const deadline = setTimeout(() => ws.terminate(), 5000);
+							deadline.unref();
+							ws.once('close', () => {
+								clearTimeout(deadline);
+								resolve();
+							});
+							if (ws.readyState === WebSocket.OPEN) {
+								ws.close(1000);
+							} else {
+								ws.terminate();
+							}
+						});
+						return finishing;
 					},
 
 					close() {
@@ -432,13 +476,24 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 				while (websocketTasks.size > 0) {
 					await Promise.allSettled([...websocketTasks]);
 				}
-				websocketServer.close();
+				const webSocketServerClosed = new Promise<Error | null>((resolve) => {
+					websocketServer.close((error) => resolve(error ?? null));
+				});
 				const serverFailure = await serverClosed;
+				// Closing the HTTP server may deliver the final upgrade/socket close
+				// callbacks and register additional business cleanup tasks.
+				while (websocketTasks.size > 0) {
+					await Promise.allSettled([...websocketTasks]);
+				}
+				const webSocketFailure = await webSocketServerClosed;
 				const failures = results
 					.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
 					.map((result) => result.reason);
 				if (serverFailure !== null) {
 					failures.push(serverFailure);
+				}
+				if (webSocketFailure !== null) {
+					failures.push(webSocketFailure);
 				}
 				if (failures.length > 0) {
 					throw new AggregateError(failures, 'HTTP request drain or listener close failed');
