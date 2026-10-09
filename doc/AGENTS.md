@@ -132,6 +132,8 @@ Nexus Agent 是全局智能执行层，不是独立 `/agent` 页面或 Workspace
 | Artifact     | 输入、输出、证据、下载与跨能力交换的持久文件                            |
 | Plan         | 用户可见 durable task projection，不是内部 Step dump                    |
 
+下表描述**当前正式生产** Backend Agent（`packages/backend`）的 owner，不是新包目录：
+
 Backend Agent 的 Module 根为 `packages/backend/src/modules/agent/`：
 
 | 目录                                  | Owner                                                          |
@@ -145,6 +147,8 @@ Backend Agent 的 Module 根为 `packages/backend/src/modules/agent/`：
 | `runtime/recovery/`、`collaboration/` | checkpoint/resume、Subagent/mailbox/durable work               |
 
 具体 adapter 位于 `infrastructure/agent/`；HTTP 边界位于 `interfaces/http/agent/`，事件边界为 `interfaces/websocket/agent-protocol.session.ts`，组装位于 `bootstrap/agent/`。
+
+独立重构包 `packages/backend-next/src/modules/agent/` 目前只持有 `scope` 和 `runs` 的应用 Model/Service、独立存储契约和 SQLite Adapter，以及受 Access 认证的有限状态 HTTP。全库 v3 仅允许 Root Run `pending/cancelled` 并保证创建、取消、事件和幂等记录的原子提交；**没有**完整 Agent Provider/调度、审批、Tool、grant、Checkpoint 或执行恢复。后续仍按本文件关于提交后发布、幂等/未知副作用及 Agent 自有授权的规则实施，不能沿用 Remote 终端会话权限。具体已实现范围和验收缺口见[下一阶段实施方案](后端重构下一阶段实施方案.md)。
 
 Frontend owner 为 `packages/frontend/src/features/agent/` 下的 `host/ai/runtime/files/settings/api/i18n`；Host 管窗口，API 管 transport。旧生产 Runner package 已删除，普通终端 Workspace Runtime 位于 `packages/frontend/src/runtimes/workspace/`，不属于 Agent Runner。
 

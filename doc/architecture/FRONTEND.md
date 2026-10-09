@@ -86,9 +86,11 @@ packages/frontend/src/
 │   ├── status-monitor/
 │   ├── system-overview/
 │   ├── tags/
+│   ├── targets-next/               新 Backend 的独立开发管理入口
 │   ├── terminal/
 │   └── transfers/
 └── runtimes/
+    ├── remote-next/                新 Backend 的独立最小 SSH 终端
     └── workspace/
         ├── adapters/
         ├── components/
@@ -99,7 +101,7 @@ packages/frontend/src/
         ├── protocol/
         ├── session/
         ├── state/
-         ├── presentation/             public page-composition entry
+        ├── presentation/              public page-composition entry
         └── public.ts
 ```
 
@@ -240,6 +242,8 @@ Workspace WebSocket 由 runtime protocol/session owner 处理：
 `runtimes/remote-next/transport` 是新实例 WS 连接与消息状态 owner，使用 `@nexus-terminal/shared/remote/model,events` 的窄契约及同一个 `/__next` 代理；一次显式 PTY open 后才升级独立 `/remote/stream`，不会复用旧 Workspace WebSocket 或 Store。Transport 对发出的字节长度/浏览器缓冲及返回事件做有界校验，收到远端 data 后等待 xterm.write 完成才发送 `consumed` 确认，不自动重连、不重放终端输入。组件在卸载时释放句柄，服务端也在 WS 断开时关闭本次 PTY。开发管理页通过单独的 Host Key 表格让操作者手动录入**独立已核实**的 SHA256 公钥指纹，并明确区分配置指纹和公钥信任。前端不从未知 SSH Server 的首次握手直接自动信任。旧 Workspace 的挂起/恢复、文件和桌面连接链路均不迁移到此最小入口。
 
 ## Agent frontend
+
+`backend-next` 的 Agent v3 App/Thread/Root Run 持久状态和有限 HTTP 仅有后端消费者，**没有 Agent-next 前端接口、Store、路由或 Run 执行 UI**。本节其余内容属于当前正式 `packages/backend` 的 Agent 前端。不能把旧 Agent 的完整状态、Socket、审批 UI 直接连接到新状态切片，也不能将它理解成 Provider/调度已经迁移。
 
 `features/agent` 提供全局悬浮 Host、设置、历史、运行详情、approval、artifact、plugin App surface 与 onboarding。Agent 不属于 Workspace Runtime；需要 Workspace、terminal 或文件能力时使用 Backend contract 或 app 提供的 capability，不读取 Workspace 私有 state。
 
