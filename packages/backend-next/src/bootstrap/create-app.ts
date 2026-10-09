@@ -8,6 +8,7 @@ import type { MachineConnectOptions } from '../platform/ssh/ssh-port.js';
 import type { TargetsPublicApi, TrustedSshTargetResolver } from '../modules/targets/public.js';
 import type { RemoteSessions } from '../modules/remote/public.js';
 import type { AccessPublicApi } from '../modules/access/public.js';
+import type { AgentStateApi } from '../modules/agent/public.js';
 import type { LoginFailurePolicyOptions } from '../modules/access/authentication/service/login-failure-policy.js';
 
 export interface AppOptions {
@@ -31,6 +32,7 @@ export interface BackendApplication {
 	trustedSshTargets: TrustedSshTargetResolver;
 	remote: RemoteSessions;
 	access: AccessPublicApi;
+	agent: AgentStateApi;
 	/** Access, Targets management and one-owner SSH Shell HTTP/WS. */
 	listenHttp(options: AccessHttpOptions): Promise<string>;
 	close(): Promise<void>;
@@ -117,6 +119,7 @@ export async function createApp(dbPath: string, options: AppOptions = {}): Promi
 			trustedSshTargets: modules.trustedSshTargets,
 			remote: modules.remote,
 			access: modules.access,
+			agent: modules.agent,
 			listenHttp: lifecycle.listenHttp,
 			close: lifecycle.close,
 		};

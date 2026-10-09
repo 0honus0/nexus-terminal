@@ -12,6 +12,9 @@ import type { HttpRoute, HttpWebSocketRoute } from '../platform/http/http-server
 import { createTargetsRoutes } from '../modules/targets/interfaces/http/target-http.js';
 import { RemoteSessionOwner } from '../modules/remote/sessions/service/session-owner.js';
 import { createRemoteHttpRoutes, createRemoteWebSocketRoute } from '../modules/remote/interfaces/http/remote-http.js';
+import { registerAgent } from '../modules/agent/register.js';
+import { createAgentHttpRoutes } from '../modules/agent/interfaces/http/agent-http.js';
+import type { AgentStateApi } from '../modules/agent/public.js';
 import type { LoginFailurePolicyOptions } from '../modules/access/authentication/service/login-failure-policy.js';
 
 export interface RegisteredModules {
@@ -21,6 +24,7 @@ export interface RegisteredModules {
 	targets: TargetsPublicApi;
 	trustedSshTargets: TrustedSshTargetResolver;
 	remote: RemoteSessions;
+	agent: AgentStateApi;
 	quiesce(): void;
 	close(): Promise<void>;
 }
@@ -41,6 +45,7 @@ export function registerModules(
 		hostKeys: targets.publicApi.hostKeys,
 	});
 	const remoteOwner = new RemoteSessionOwner(access.publicApi, remote.publicApi);
+	const agent = registerAgent(sqlite);
 	return {
 		access: access.publicApi,
 
@@ -48,6 +53,7 @@ export function registerModules(
 			...access.routes(secureCookies),
 			...createTargetsRoutes(access.publicApi, targets.publicApi),
 			...createRemoteHttpRoutes(remoteOwner, access.publicApi),
+			...createAgentHttpRoutes(access.publicApi, agent),
 		],
 
 		webSocketRoutes: () => [createRemoteWebSocketRoute(remoteOwner, remote.publicApi)],
@@ -55,6 +61,7 @@ export function registerModules(
 		targets: targets.publicApi,
 		trustedSshTargets: targets.trustedSshTargets,
 		remote: remote.publicApi,
+		agent,
 
 		quiesce: () => {
 			remoteOwner.quiesce();
