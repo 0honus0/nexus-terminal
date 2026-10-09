@@ -1,6 +1,5 @@
 import type { SqliteRuntime, SqlExecutor } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
-import type { AccountStorage, AccountRecord } from '../../storage/account-storage.js';
-import type { InitialAdminCommand } from '../../model/account-types.js';
+import type { AccountStorage, AccountRecord, CreateInitialAdminRecord } from '../../storage/account-storage.js';
 
 function decodeAccount(row: Record<string, unknown>): AccountRecord {
 	const numeric = (value: unknown): number => {
@@ -49,7 +48,7 @@ export class SqliteAccountStorage implements AccountStorage {
 		return getAccount(this.db, 'SELECT * FROM access_accounts WHERE id=?', id);
 	}
 
-	createInitialAdmin(command: InitialAdminCommand): Promise<AccountRecord | null> {
+	createInitialAdmin(command: CreateInitialAdminRecord): Promise<AccountRecord | null> {
 		return this.db.transaction(async (tx) => {
 			const existing = await tx.one('SELECT 1 AS present FROM access_accounts LIMIT 1');
 			if (existing !== null) {
