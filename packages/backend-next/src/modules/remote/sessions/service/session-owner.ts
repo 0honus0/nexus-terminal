@@ -28,6 +28,8 @@ function digest(token: string): string {
 export class RemoteSessionOwner {
 	private readonly owners = new Map<string, Owner>();
 	private readonly pending = new Set<Promise<unknown>>();
+	private readonly releasing = new Map<string, Promise<void>>();
+	private readonly cleanupFailures: unknown[] = [];
 	private accepting = true;
 	private closePromise: Promise<void> | null = null;
 
@@ -37,10 +39,16 @@ export class RemoteSessionOwner {
 	) {}
 
 	private async identity(token: string | null): Promise<number> {
-		if (!token) throw new RemotePermissionError('unauthenticated');
+		if (!token) {
+			throw new RemotePermissionError('unauthenticated');
+		}
 		const identity = await this.access.authenticate(token);
-		if (!identity) throw new RemotePermissionError('unauthenticated');
-		if (identity.userId !== 1) throw new RemotePermissionError('forbidden');
+		if (!identity) {
+			throw new RemotePermissionError('unauthenticated');
+		}
+		if (identity.userId !== 1) {
+			throw new RemotePermissionError('forbidden');
+		}
 		return identity.userId;
 	}
 
@@ -51,9 +59,13 @@ export class RemoteSessionOwner {
 	}
 
 	async open(token: string | null, request: OpenShellRequest): Promise<SessionView> {
-		if (!this.accepting) throw new RemotePermissionError('remote_unavailable');
+		if (!this.accepting) {
+			throw new RemotePermissionError('remote_unavailable');
+		}
 		const userId = await this.identity(token);
-		if (!this.accepting) throw new RemotePermissionError('remote_unavailable');
+		if (!this.accepting) {
+			throw new RemotePermissionError('remote_unavailable');
+		}
 		const task = this.remote.open({
 			targetId: request.targetId,
 			columns: request.columns,
@@ -75,7 +87,9 @@ export class RemoteSessionOwner {
 			};
 			// Do not strand a privileged PTY when an HTTP caller never attaches.
 			record.attachDeadline = setTimeout(() => {
-				if (!record.attached) void this.release(view.id).catch(() => undefined);
+				if (!record.attached) {
+					void this.release(view.id).catch(() => undefined);
+				}
 			}, 30_000);
 			record.attachDeadline.unref();
 			this.owners.set(view.id, record);
@@ -97,13 +111,22 @@ export class RemoteSessionOwner {
 	}
 
 	allowed(token: string | null, id: string): Promise<boolean> {
-		return this.track(this.checkAllowed(token, id));
+		return this.track(this.checkAllowed(token, id, true));
 	}
 
-	private async checkAllowed(token: string | null, id: string): Promise<boolean> {
-		if (!this.accepting || !token) return false;
+	/** Normal EOF can drain already-read bytes even after the PTY leaves active sessions. */
+	allowedOutput(token: string | null, id: string): Promise<boolean> {
+		return this.track(this.checkAllowed(token, id, false));
+	}
+
+	private async checkAllowed(token: string | null, id: string, active: boolean): Promise<boolean> {
+		if (!this.accepting || !token) {
+			return false;
+		}
 		const owner = this.owners.get(id);
-		if (!owner || owner.tokenDigest !== digest(token) || this.remote.get(id) === null) return false;
+		if (!owner || owner.tokenDigest !== digest(token) || (active && this.remote.get(id) === null)) {
+			return false;
+		}
 		try {
 			return (await this.identity(token)) === owner.userId && this.owners.get(id) === owner;
 		} catch {
@@ -112,7 +135,9 @@ export class RemoteSessionOwner {
 	}
 
 	async get(token: string | null, id: string): Promise<SessionView | null> {
-		if (!(await this.allowed(token, id))) return null;
+		if (!(await this.allowed(token, id))) {
+			return null;
+		}
 		const view = this.remote.get(id);
 		return view
 			? {
@@ -126,28 +151,55 @@ export class RemoteSessionOwner {
 	}
 
 	async closeSession(token: string | null, id: string): Promise<boolean> {
-		if (!(await this.allowed(token, id))) return false;
+		if (!(await this.allowed(token, id))) {
+			return false;
+		}
 		await this.release(id);
 		return true;
 	}
 
 	attach(token: string, id: string): boolean {
-		if (!this.accepting || this.remote.get(id) === null) return false;
+		if (!this.accepting || this.remote.get(id) === null) {
+			return false;
+		}
 		const owner = this.owners.get(id);
-		if (!owner || owner.attached || owner.tokenDigest !== digest(token)) return false;
+		if (!owner || owner.attached || owner.tokenDigest !== digest(token)) {
+			return false;
+		}
 		owner.attached = true;
-		if (owner.attachDeadline) clearTimeout(owner.attachDeadline);
+		if (owner.attachDeadline) {
+			clearTimeout(owner.attachDeadline);
+		}
 		owner.attachDeadline = null;
 		return true;
 	}
 
 	/** The transport closing destroys the PTY: no implicit detach or restoration. */
-	async release(id: string): Promise<void> {
+	release(id: string): Promise<void> {
+		const existing = this.releasing.get(id);
+		if (existing) {
+			return existing;
+		}
 		const owner = this.owners.get(id);
-		if (!owner) return;
+		if (!owner) {
+			return Promise.resolve();
+		}
 		this.owners.delete(id);
-		if (owner.attachDeadline) clearTimeout(owner.attachDeadline);
-		await this.track(this.remote.closeSession(id));
+		if (owner.attachDeadline) {
+			clearTimeout(owner.attachDeadline);
+		}
+		const task = Promise.resolve().then(() => this.remote.closeSession(id));
+		this.releasing.set(id, task);
+		this.track(task);
+		void task.then(
+			() => this.releasing.delete(id),
+			(error) => {
+				this.cleanupFailures.push(error);
+				// Preserve the failed Promise for a repeat release as well as shutdown.
+				// A second caller must not mistake failed cleanup for success.
+			},
+		);
+		return task;
 	}
 
 	quiesce(): void {
@@ -155,17 +207,22 @@ export class RemoteSessionOwner {
 	}
 
 	close(): Promise<void> {
-		if (this.closePromise) return this.closePromise;
+		if (this.closePromise) {
+			return this.closePromise;
+		}
 		this.quiesce();
 		this.closePromise = (async () => {
 			const failures = await Promise.allSettled([...this.owners.keys()].map((id) => this.release(id)));
-			await Promise.allSettled([...this.pending]);
-			const rejected = failures.filter((item): item is PromiseRejectedResult => item.status === 'rejected');
-			if (rejected.length)
-				throw new AggregateError(
-					rejected.map((item) => item.reason),
-					'Remote owner shutdown failed',
-				);
+			while (this.pending.size) {
+				await Promise.allSettled([...this.pending]);
+			}
+			const errors = failures
+				.filter((item): item is PromiseRejectedResult => item.status === 'rejected')
+				.map((item) => item.reason);
+			errors.push(...this.cleanupFailures);
+			if (errors.length) {
+				throw new AggregateError([...new Set(errors)], 'Remote owner shutdown failed');
+			}
 		})();
 		return this.closePromise;
 	}

@@ -216,7 +216,9 @@ export class RemoteSessionService {
 		}
 		return () => {
 			session.stderrListeners.delete(listener);
-			if (!session.stderrListeners.size) session.offStderr();
+			if (!session.stderrListeners.size) {
+				session.offStderr();
+			}
 		};
 	}
 
@@ -260,12 +262,17 @@ export class RemoteSessionService {
 		const task = session.closePromise;
 		this.sessionClosePromises.set(id, task);
 		this.closingTasks.add(task);
-		void task
-			.finally(() => {
+		void task.then(
+			() => {
 				this.closingTasks.delete(task);
 				this.sessionClosePromises.delete(id);
-			})
-			.catch(() => undefined);
+			},
+			() => {
+				this.closingTasks.delete(task);
+				// Keep the rejected promise available to the Remote owner even when
+				// SSH itself initiated closure before the owner began releasing it.
+			},
+		);
 		return task;
 	}
 
@@ -313,6 +320,7 @@ export class RemoteSessionService {
 		await Promise.allSettled([...this.openingTasks]);
 		const completions = await Promise.allSettled([
 			...this.closingTasks,
+			...this.sessionClosePromises.values(),
 			...[...this.sessions.keys()].map((id) => this.closeSession(id)),
 		]);
 		const failures = completions.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
