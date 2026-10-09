@@ -2,6 +2,7 @@ import type { SchemaMigration } from '../platform/storage/sqlite/schema.js';
 import { targetMigrations } from '../modules/targets/schema.js';
 import { initializeAccessSchema } from '../modules/access/migrations.js';
 import { initializeHostKeySchema } from '../modules/targets/host-keys/schema.js';
+import { initializeAgentSchema } from '../modules/agent/migrations.js';
 
 /** Application owns the only ordered migration registry; modules own DDL. */
 export const applicationMigrations: readonly SchemaMigration[] = [
@@ -20,6 +21,14 @@ export const applicationMigrations: readonly SchemaMigration[] = [
 
 		async apply(tx) {
 			await initializeHostKeySchema(tx);
+		},
+	},
+	{
+		version: 3,
+		signature: 'backend-next-v3-agent-root-run-20261010',
+
+		async apply(tx) {
+			await initializeAgentSchema(tx);
 		},
 	},
 ];
