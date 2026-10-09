@@ -1,0 +1,23 @@
+{
+  "name": "@nexus-terminal/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit"
+  },
+  "exports": {
+    "./connections/values": {
+      "types": "./dist/connections/values.d.ts",
+      "default": "./dist/connections/values.js"
+    },
+    "./proxies/values": {
+      "types": "./dist/proxies/values.d.ts",
+      "default": "./dist/proxies/values.js"
+    }
+  },
+  "devDependencies": {
+    "typescript": "catalog:node-build"
+  }
+}

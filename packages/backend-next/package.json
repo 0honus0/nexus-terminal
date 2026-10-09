@@ -1,0 +1,17 @@
+{
+  "name": "@nexus-terminal/backend-next",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "pnpm --filter @nexus-terminal/shared build && tsc --noEmit",
+    "build": "pnpm --filter @nexus-terminal/shared build && tsc"
+  },
+  "dependencies": {
+    "@nexus-terminal/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "catalog:node-build",
+    "@types/node": "catalog:"
+  }
+}
