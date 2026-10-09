@@ -1,5 +1,6 @@
 import { Client, type ConnectConfig, type ClientChannel } from 'ssh2';
 import net from 'node:net';
+import type { EventEmitter } from 'node:events';
 import type { Duplex } from 'node:stream';
 import type { MachineEndpoint, MachineProxy, MachineConnectOptions } from '../../ssh-port.js';
 
@@ -7,11 +8,14 @@ export interface ConnectedRoute {
 	readonly clients: Client[];
 	readonly sockets: Duplex[];
 	readonly primary: Client;
+	assertOpen(): void;
+	releaseMonitors(): void;
 }
 interface Deadline {
 	readonly signal: AbortSignal;
 	remaining(): number;
 	finish(): void;
+	fail(error: Error): void;
 }
 
 function abortCause(signal: AbortSignal): Error {
@@ -33,6 +37,10 @@ function makeDeadline(options: MachineConnectOptions): Deadline {
 	const timer = setTimeout(() => controller.abort(new Error('SSH connect deadline exceeded')), options.timeoutMs);
 	return {
 		signal: controller.signal,
+
+		fail(error) {
+			controller.abort(error);
+		},
 
 		remaining() {
 			if (controller.signal.aborted) throw abortCause(controller.signal);
@@ -64,9 +72,15 @@ function flatten(endpoint: MachineEndpoint): MachineEndpoint[] {
 	return result;
 }
 
-async function connectTcp(host: string, port: number, ctx: Deadline): Promise<Duplex> {
+async function connectTcp(
+	host: string,
+	port: number,
+	ctx: Deadline,
+	ownSocket: (socket: Duplex) => void,
+): Promise<Duplex> {
 	ctx.remaining();
 	const socket = net.connect({ host, port });
+	ownSocket(socket);
 	return new Promise((resolve, reject) => {
 		let settled = false;
 
@@ -99,7 +113,13 @@ async function connectTcp(host: string, port: number, ctx: Deadline): Promise<Du
 	});
 }
 
-async function forward(client: Client, host: string, port: number, ctx: Deadline): Promise<ClientChannel> {
+async function forward(
+	client: Client,
+	host: string,
+	port: number,
+	ctx: Deadline,
+	ownSocket: (socket: Duplex) => void,
+): Promise<ClientChannel> {
 	ctx.remaining();
 	return new Promise((resolve, reject) => {
 		let settled = false;
@@ -128,7 +148,10 @@ async function forward(client: Client, host: string, port: number, ctx: Deadline
 		ctx.signal.addEventListener('abort', aborted, { once: true });
 		if (ctx.signal.aborted) return aborted();
 		try {
-			client.forwardOut('127.0.0.1', 0, host, port, (error, channel) => finish(error, channel));
+			client.forwardOut('127.0.0.1', 0, host, port, (error, channel) => {
+				if (channel) ownSocket(channel);
+				finish(error, channel);
+			});
 		} catch (error) {
 			finish(error instanceof Error ? error : new Error('SSH forwarding rejected'));
 		}
@@ -238,10 +261,11 @@ async function proxyTunnel(
 	proxy: MachineProxy,
 	previous: Client | null,
 	ctx: Deadline,
+	ownSocket: (socket: Duplex) => void,
 ): Promise<Duplex> {
 	const socket = previous
-		? await forward(previous, proxy.host, proxy.port, ctx)
-		: await connectTcp(proxy.host, proxy.port, ctx);
+		? await forward(previous, proxy.host, proxy.port, ctx, ownSocket)
+		: await connectTcp(proxy.host, proxy.port, ctx, ownSocket);
 	try {
 		if (proxy.type === 'HTTP') await httpConnect(socket, target, proxy, ctx);
 		else if (proxy.type === 'SOCKS5') await socks5(socket, target, proxy, ctx);
@@ -258,6 +282,7 @@ async function connectClient(
 	sock: Duplex | null,
 	ctx: Deadline,
 	verify: MachineConnectOptions['verifyHostKey'],
+	ownClient: (client: Client) => void,
 ): Promise<Client> {
 	ctx.remaining();
 	const auth = endpoint.authentication;
@@ -277,6 +302,7 @@ async function connectClient(
 		...(sock ? { sock } : {}),
 	};
 	const client = new Client();
+	ownClient(client);
 	try {
 		await new Promise<void>((resolve, reject) => {
 			let settled = false;
@@ -327,19 +353,61 @@ export async function openSshRoute(endpoint: MachineEndpoint, options: MachineCo
 	const ctx = makeDeadline(options);
 	const clients: Client[] = [];
 	const sockets: Duplex[] = [];
+	const monitors = new Set<() => void>();
+
+	const monitor = (resource: EventEmitter) => {
+		const failed = (error: Error) => ctx.fail(error);
+
+		const closed = () => {
+			ctx.fail(new Error('SSH route resource closed'));
+			release();
+		};
+
+		const release = () => {
+			resource.off('error', failed);
+			resource.off('close', closed);
+			monitors.delete(release);
+		};
+
+		resource.on('error', failed);
+		resource.once('close', closed);
+		monitors.add(release);
+	};
+
+	const ownSocket = (socket: Duplex) => {
+		sockets.push(socket);
+		monitor(socket);
+	};
+
+	const ownClient = (client: Client) => {
+		clients.push(client);
+		monitor(client);
+	};
+
 	try {
 		for (const stage of stages) {
 			const previous = clients.length ? clients[clients.length - 1] : null;
 			let socket: Duplex | null = null;
-			if (stage.route.kind === 'proxy') socket = await proxyTunnel(stage, stage.route.proxy, previous, ctx);
-			else if (previous) socket = await forward(previous, stage.host, stage.port, ctx);
-			if (socket) sockets.push(socket);
-			const client = await connectClient(stage, socket, ctx, options.verifyHostKey);
-			clients.push(client);
+			if (stage.route.kind === 'proxy')
+				socket = await proxyTunnel(stage, stage.route.proxy, previous, ctx, ownSocket);
+			else if (previous) socket = await forward(previous, stage.host, stage.port, ctx, ownSocket);
+			await connectClient(stage, socket, ctx, options.verifyHostKey, ownClient);
 			ctx.remaining();
 		}
 		if (ctx.signal.aborted) throw abortCause(ctx.signal);
-		return { clients, sockets, primary: clients[clients.length - 1] };
+		return {
+			clients,
+			sockets,
+			primary: clients[clients.length - 1],
+
+			assertOpen() {
+				if (ctx.signal.aborted) throw abortCause(ctx.signal);
+			},
+
+			releaseMonitors() {
+				for (const release of [...monitors]) release();
+			},
+		};
 	} catch (error) {
 		for (const client of [...clients].reverse()) client.destroy();
 		for (const socket of [...sockets].reverse()) socket.destroy();

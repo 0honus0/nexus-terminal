@@ -1,5 +1,5 @@
 import { Client, type ClientChannel, type SFTPWrapper } from 'ssh2';
-import type { Duplex } from 'node:stream';
+import type { EventEmitter } from 'node:events';
 import type {
 	MachineConnection,
 	MachineConnectOptions,
@@ -29,10 +29,17 @@ class ConnectedMachine implements MachineConnection {
 	private disconnected = false;
 
 	constructor(private readonly route: ConnectedRoute) {
-		for (const client of route.clients) {
-			client.on('error', () => this.disconnectedByRemote());
-			client.on('close', () => this.disconnectedByRemote());
-		}
+		route.assertOpen();
+
+		const monitor = (resource: EventEmitter) => {
+			resource.on('error', () => this.disconnectedByRemote());
+			resource.on('close', () => this.disconnectedByRemote());
+		};
+
+		route.clients.forEach(monitor);
+		route.sockets.forEach(monitor);
+		// Install the live owner before removing construction-time monitoring.
+		route.releaseMonitors();
 	}
 
 	get isOpen(): boolean {
@@ -321,6 +328,12 @@ export class Ssh2MachineFactory implements MachineSshFactory {
 			for (const socket of route.sockets) socket.destroy();
 			throw new DOMException('SSH connection aborted', 'AbortError');
 		}
-		return new ConnectedMachine(route);
+		try {
+			return new ConnectedMachine(route);
+		} catch (error) {
+			for (const client of route.clients) client.destroy();
+			for (const socket of route.sockets) socket.destroy();
+			throw error;
+		}
 	}
 }

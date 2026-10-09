@@ -12,6 +12,8 @@ SQLite Worker 传递 `node:sqlite` 的数值 `errcode`，保留扩展结果码�
 
 SSH 命令在发出 exec 请求前拒绝已取消的信号；持续命令与原始非 PTY 通道在打开之后仍监听调用方取消，通道关闭时解除订阅。一次执行的期限与取消分别形成 unknown/timeout 和 unknown/cancelled，不把取消作为远端命令未发生的证明。
 
+SSH 路由从 Socket/Client 创建起持续监控 error/close，任何一跳失败都终止共同建连期限并清理半建连资源；完整机器连接安装运行期监听后才交接并解除建连监听，消除各跳 ready 到整条路由就绪之间的错误监听空档。
+
 ## 技术基线
 
 Runner PackInstaller.runProcess复用registerManagedProcess(kind pack)覆盖mise/工具版本检查，opaque invocation ID不含command payload，登记失败kill/close收敛，exit清派生group、close后完成Promise；shutdown/startup仍由共享managed-process registry负责，无新增pack registry。
