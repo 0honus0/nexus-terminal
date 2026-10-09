@@ -14,6 +14,8 @@ SSH 命令在发出 exec 请求前拒绝已取消的信号；持续命令与原�
 
 SSH 路由从 Socket/Client 创建起持续监控 error/close，任何一跳失败都终止共同建连期限并清理半建连资源；完整机器连接安装运行期监听后才交接并解除建连监听，消除各跳 ready 到整条路由就绪之间的错误监听空档。
 
+SFTP Lease 的打开信号贯穿整个租约；各请求/流可带独立 AbortSignal 和期限，回调请求默认 30 秒，流使用调用方显式期限。关闭立即拒绝待完成请求并销毁流，等待通道关闭，超时强制 destroy；重复关闭共享 Promise。取消前未派发的请求标记 not_started，已派发请求的取消、期限或断线只标记 unknown，不能视为远端副作用回滚。
+
 ## 技术基线
 
 Runner PackInstaller.runProcess复用registerManagedProcess(kind pack)覆盖mise/工具版本检查，opaque invocation ID不含command payload，登记失败kill/close收敛，exit清派生group、close后完成Promise；shutdown/startup仍由共享managed-process registry负责，无新增pack registry。

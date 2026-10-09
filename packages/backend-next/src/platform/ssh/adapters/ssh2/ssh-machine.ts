@@ -279,14 +279,18 @@ class ConnectedMachine implements MachineConnection {
 				finish(error instanceof Error ? error : new Error('SFTP request rejected'));
 			}
 		});
-		const lease = new SshSftpLease(sftp, () => this.leases.delete(lease));
+		const lease = new SshSftpLease(sftp, () => queueMicrotask(() => this.leases.delete(lease)), signal);
 		this.leases.add(lease);
+		if (signal?.aborted || !this.isOpen) {
+			await lease.close();
+			throw new DOMException('SFTP lease no longer owned', 'AbortError');
+		}
 		return lease;
 	}
 
 	close(): Promise<void> {
 		if (this.closePromise) return this.closePromise;
-		this.closePromise = (async () => {
+		this.closePromise = Promise.resolve().then(async () => {
 			this.disconnected = true;
 			this.stop.abort(new Error('SSH connection closing'));
 			for (const listener of [...this.closeListeners]) {
@@ -298,7 +302,7 @@ class ConnectedMachine implements MachineConnection {
 			}
 			this.closeListeners.clear();
 			for (const channel of [...this.channels]) channel.close();
-			await Promise.allSettled([...this.leases].map((lease) => lease.close()));
+			const leaseResults = await Promise.allSettled([...this.leases].map((lease) => lease.close()));
 			const closings = this.route.clients.map(
 				(client) =>
 					new Promise<void>((resolve) => {
@@ -315,7 +319,15 @@ class ConnectedMachine implements MachineConnection {
 			);
 			await Promise.all(closings);
 			for (const socket of this.route.sockets) socket.destroy();
-		})();
+			const failures = leaseResults.filter(
+				(result): result is PromiseRejectedResult => result.status === 'rejected',
+			);
+			if (failures.length)
+				throw new AggregateError(
+					failures.map((result) => result.reason),
+					'SFTP leases failed to close',
+				);
+		});
 		return this.closePromise;
 	}
 }

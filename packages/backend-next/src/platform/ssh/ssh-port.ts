@@ -88,16 +88,33 @@ export interface MachineDirectoryEntry {
 	readonly info: MachineFileInfo;
 }
 
+export interface MachineOperationOptions {
+	readonly signal?: AbortSignal;
+	readonly timeoutMs?: number;
+}
+
+/** Local failure never proves that an already dispatched remote mutation was rolled back. */
+export class MachineSftpFailure extends Error {
+	constructor(
+		readonly reason: 'cancelled' | 'timeout' | 'closed' | 'operation_failed',
+		readonly outcome: 'not_started' | 'unknown',
+		options?: ErrorOptions,
+	) {
+		super('SFTP ' + reason, options);
+		this.name = 'MachineSftpFailure';
+	}
+}
+
 export interface MachineSftpLease {
-	stat(path: string): Promise<MachineFileInfo>;
-	lstat(path: string): Promise<MachineFileInfo>;
-	list(path: string): Promise<MachineDirectoryEntry[]>;
-	read(path: string, options?: { start?: number; end?: number }): Readable;
-	write(path: string, options?: { flags?: string; mode?: number }): Writable;
-	rename(from: string, to: string): Promise<void>;
-	remove(path: string): Promise<void>;
-	mkdir(path: string): Promise<void>;
-	rmdir(path: string): Promise<void>;
+	stat(path: string, options?: MachineOperationOptions): Promise<MachineFileInfo>;
+	lstat(path: string, options?: MachineOperationOptions): Promise<MachineFileInfo>;
+	list(path: string, options?: MachineOperationOptions): Promise<MachineDirectoryEntry[]>;
+	read(path: string, options?: MachineOperationOptions & { start?: number; end?: number }): Readable;
+	write(path: string, options?: MachineOperationOptions & { flags?: string; mode?: number }): Writable;
+	rename(from: string, to: string, options?: MachineOperationOptions): Promise<void>;
+	remove(path: string, options?: MachineOperationOptions): Promise<void>;
+	mkdir(path: string, options?: MachineOperationOptions): Promise<void>;
+	rmdir(path: string, options?: MachineOperationOptions): Promise<void>;
 	close(): Promise<void>;
 }
 
