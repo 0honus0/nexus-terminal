@@ -11,18 +11,26 @@ parentPort!.on('message', (message: { id: number; kind: string; sql?: string; pa
 			parentPort!.postMessage({ id: message.id, value: null });
 			parentPort!.close();
 			return;
-		} else if (message.kind === 'exec') db.exec(message.sql!);
+		}
+		if (message.kind === 'exec') db.exec(message.sql!);
 		else {
 			const stmt = db.prepare(message.sql!);
 			if (message.kind === 'all') value = stmt.all(...(message.params ?? []));
-			if (message.kind === 'one') value = stmt.get(...(message.params ?? [])) ?? null;
-			if (message.kind === 'run') {
+			else if (message.kind === 'one') value = stmt.get(...(message.params ?? [])) ?? null;
+			else if (message.kind === 'run') {
 				const result = stmt.run(...(message.params ?? []));
 				value = { changes: Number(result.changes), lastId: Number(result.lastInsertRowid) };
-			}
+			} else throw new Error('Unsupported SQLite worker operation');
 		}
 		parentPort!.postMessage({ id: message.id, value });
 	} catch (error) {
-		parentPort!.postMessage({ id: message.id, error: String(error) });
+		const err = error as Error & { code?: unknown };
+		parentPort!.postMessage({
+			id: message.id,
+			error: {
+				message: err instanceof Error ? err.message : 'Unknown SQLite failure',
+				code: typeof err?.code === 'string' ? err.code : null,
+			},
+		});
 	}
 });
