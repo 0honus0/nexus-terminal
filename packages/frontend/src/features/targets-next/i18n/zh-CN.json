@@ -24,6 +24,17 @@
     "renamePrompt": "新名称",
     "deleteConfirm": "确定删除此项目？",
     "saved": "已保存修改",
-    "import": "导入单条连接"
+    "import": "导入单条连接",
+    "terminalScope": "仅提供基础 SSH PTY；暂不支持恢复、文件传输或远程桌面。旧工作区相互独立。",
+    "hostKeyTitle": "已信任 SSH 主机密钥",
+    "hostKeyWarning": "确认之前，必须通过独立的可信渠道核对服务器 SSH 公钥 SHA256 指纹。每个跳板主机也必须核对。",
+    "hostKeyFingerprint": "SSH 公钥指纹",
+    "hostKeyVerified": "我已通过独立渠道核对此主机密钥指纹。",
+    "hostKeyConfirm": "确认信任",
+    "verifyFirst": "请先从独立可信渠道验证 SSH 主机密钥。",
+    "terminalTitle": "新版后端 SSH 终端",
+    "selectTarget": "选择 SSH 目标",
+    "openTerminal": "打开 SSH 终端",
+    "closeTerminal": "关闭终端"
   }
 }

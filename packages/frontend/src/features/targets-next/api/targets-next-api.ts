@@ -19,6 +19,7 @@ import type { TargetSshKeyMutation } from '@nexus-terminal/shared/ssh-keys/api';
 import { CONNECTION_ROUTES, CONNECTION_TYPES } from '@nexus-terminal/shared/connections/values';
 import { PROXY_TYPES } from '@nexus-terminal/shared/proxies/values';
 import type { TargetErrorCode } from '@nexus-terminal/shared/targets/api';
+import type { TargetHostKeyView } from '@nexus-terminal/shared/targets/host-keys';
 
 type Json = Record<string, unknown>;
 
@@ -113,6 +114,16 @@ function keyView(input: unknown): TargetSshKeyView {
 	};
 }
 
+function hostKeyView(input: unknown): TargetHostKeyView {
+	const value = object(input);
+	return {
+		host: string(value.host),
+		port: number(value.port),
+		fingerprint: string(value.fingerprint),
+		confirmedAt: number(value.confirmedAt),
+	};
+}
+
 function mutation<T>(
 	input: unknown,
 	decode: (value: unknown) => T,
@@ -182,6 +193,17 @@ export function createTargetsNextApi(baseUrl: string) {
 	}
 
 	return {
+		hostKeys: {
+			list: async (): Promise<TargetHostKeyView[]> => array(await call('GET', '/host-keys'), hostKeyView),
+
+			confirm: async (host: string, port: number, fingerprint: string): Promise<TargetHostKeyView> =>
+				hostKeyView(await call('POST', '/host-keys/confirm', { host, port, fingerprint })),
+
+			remove: async (host: string, port: number): Promise<void> => {
+				await call('POST', '/host-keys/remove', { host, port });
+			},
+		},
+
 		connections: {
 			list: async (): Promise<TargetConnectionView[]> => array(await call('GET', '/connections'), connectionView),
 

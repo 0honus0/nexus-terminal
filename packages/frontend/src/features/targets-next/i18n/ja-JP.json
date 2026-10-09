@@ -24,6 +24,17 @@
     "renamePrompt": "新しい名前",
     "deleteConfirm": "この項目を削除しますか？",
     "saved": "保存しました",
-    "import": "接続を1件インポート"
+    "import": "接続を1件インポート",
+    "terminalScope": "基本 SSH PTY のみです。再接続、ファイル転送、リモートデスクトップは未対応で、旧 Workspace とは独立しています。",
+    "hostKeyTitle": "信頼済み SSH ホスト鍵",
+    "hostKeyWarning": "確認する前に、別の信頼できる経路でサーバーの SSH 公開鍵 SHA256 指紋を照合してください。踏み台ホストも確認が必要です。",
+    "hostKeyFingerprint": "SSH 鍵の指紋",
+    "hostKeyVerified": "別経路でこのホスト鍵指紋を確認しました。",
+    "hostKeyConfirm": "信頼を確定",
+    "verifyFirst": "先に別の信頼できる経路で SSH ホスト鍵を確認してください。",
+    "terminalTitle": "新バックエンド SSH 端末",
+    "selectTarget": "SSH 接続先を選択",
+    "openTerminal": "SSH 端末を開く",
+    "closeTerminal": "端末を閉じる"
   }
 }

@@ -24,6 +24,17 @@
     "renamePrompt": "New name",
     "deleteConfirm": "Delete this item?",
     "saved": "Changes saved",
-    "import": "Import one connection"
+    "import": "Import one connection",
+    "terminalScope": "Minimal SSH PTY only; no resume, file transfer or remote desktop. Legacy Workspace is separate.",
+    "hostKeyTitle": "Trusted SSH host keys",
+    "hostKeyWarning": "Verify the server's SHA256 SSH public-key fingerprint through a separate trusted channel before confirming. Every jump host also needs a verified key.",
+    "hostKeyFingerprint": "SSH key fingerprint",
+    "hostKeyVerified": "I independently verified this host key fingerprint.",
+    "hostKeyConfirm": "Confirm trusted key",
+    "verifyFirst": "Verify the SSH host key out of band before confirming.",
+    "terminalTitle": "New backend SSH terminal",
+    "selectTarget": "Select an SSH target",
+    "openTerminal": "Open SSH terminal",
+    "closeTerminal": "Close terminal"
   }
 }

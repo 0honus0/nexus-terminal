@@ -1,6 +1,7 @@
 <script setup lang="ts">
-	import { onMounted, ref } from 'vue';
+	import { defineAsyncComponent, onMounted, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
+	import { loadRemoteNextTerminal } from '@/runtimes/remote-next/public';
 	import { createTargetsNextApi } from '../api/targets-next-api';
 	import type {
 		TargetConnectionInput,
@@ -10,7 +11,9 @@
 	import type { TargetProxyView } from '@nexus-terminal/shared/proxies/model';
 	import type { TargetTagView } from '@nexus-terminal/shared/tags/model';
 	import type { TargetSshKeyView } from '@nexus-terminal/shared/ssh-keys/model';
+	import type { TargetHostKeyView } from '@nexus-terminal/shared/targets/host-keys';
 
+	const RemoteNextTerminal = defineAsyncComponent(loadRemoteNextTerminal);
 	const { t } = useI18n();
 	const base = new URL('/__next/', window.location.href);
 	const api = createTargetsNextApi(base.toString());
@@ -26,6 +29,12 @@
 	const proxies = ref<TargetProxyView[]>([]);
 	const tags = ref<TargetTagView[]>([]);
 	const keys = ref<TargetSshKeyView[]>([]);
+	const trustedHosts = ref<TargetHostKeyView[]>([]);
+	const hostKeyHost = ref('');
+	const hostKeyPort = ref(22);
+	const hostKeyFingerprint = ref('');
+	const verifiedOutOfBand = ref(false);
+	const selectedRemoteId = ref<number | null>(null);
 	const name = ref('');
 	const host = ref('');
 	const port = ref(22);
@@ -66,16 +75,18 @@
 	}
 
 	async function refresh(): Promise<void> {
-		const [c, p, t, k] = await Promise.all([
+		const [c, p, t, k, h] = await Promise.all([
 			api.connections.list(),
 			api.proxies.list(),
 			api.tags.list(),
 			api.sshKeys.list(),
+			api.hostKeys.list(),
 		]);
 		connections.value = c;
 		proxies.value = p;
 		tags.value = t;
 		keys.value = k;
+		trustedHosts.value = h;
 	}
 
 	async function checkSession(): Promise<void> {
@@ -114,6 +125,8 @@
 			proxies.value = [];
 			tags.value = [];
 			keys.value = [];
+			trustedHosts.value = [];
+			selectedRemoteId.value = null;
 		});
 	}
 
@@ -213,6 +226,26 @@
 		});
 	}
 
+	function confirmHostKey(): void {
+		if (!verifiedOutOfBand.value) {
+			error.value = t('targetsNext.verifyFirst');
+			return;
+		}
+		void run(async () => {
+			await api.hostKeys.confirm(hostKeyHost.value, hostKeyPort.value, hostKeyFingerprint.value);
+			verifiedOutOfBand.value = false;
+			await refresh();
+		});
+	}
+
+	function removeHostKey(host: string, port: number): void {
+		if (!window.confirm(t('targetsNext.deleteConfirm'))) return;
+		void run(async () => {
+			await api.hostKeys.remove(host, port);
+			await refresh();
+		});
+	}
+
 	onMounted(() => void checkSession());
 </script>
 
@@ -247,7 +280,60 @@
 			<button class="rounded border px-3 py-2" :disabled="busy" @click="logout">
 				{{ t('targetsNext.logout') }}
 			</button>
-			<p class="text-sm">{{ t('targetsNext.noRemote') }}</p>
+			<p class="text-sm">{{ t('targetsNext.terminalScope') }}</p>
+			<section class="space-y-2 rounded border p-3">
+				<h2 class="font-semibold">{{ t('targetsNext.hostKeyTitle') }}</h2>
+				<p class="text-sm">{{ t('targetsNext.hostKeyWarning') }}</p>
+				<form class="grid gap-2 sm:grid-cols-3" @submit.prevent="confirmHostKey">
+					<label
+						>{{ t('targetsNext.host') }}
+						<input v-model="hostKeyHost" class="block w-full border p-2" required />
+					</label>
+					<label
+						>{{ t('targetsNext.port') }}
+						<input
+							v-model.number="hostKeyPort"
+							class="block w-full border p-2"
+							type="number"
+							min="1"
+							max="65535"
+							required
+						/>
+					</label>
+					<label
+						>{{ t('targetsNext.hostKeyFingerprint') }}
+						<input
+							v-model="hostKeyFingerprint"
+							class="block w-full border p-2"
+							placeholder="SHA256:…"
+							required
+						/>
+					</label>
+					<label class="sm:col-span-3">
+						<input v-model="verifiedOutOfBand" type="checkbox" />
+						{{ t('targetsNext.hostKeyVerified') }}
+					</label>
+					<button :disabled="busy || !verifiedOutOfBand" class="rounded border px-3 py-2">
+						{{ t('targetsNext.hostKeyConfirm') }}
+					</button>
+				</form>
+				<ul>
+					<li
+						v-for="hostKey in trustedHosts"
+						:key="hostKey.host + ':' + hostKey.port"
+						class="flex flex-wrap gap-2 py-1"
+					>
+						<span>{{ hostKey.host }}:{{ hostKey.port }} — {{ hostKey.fingerprint }}</span>
+						<button
+							class="rounded border px-2"
+							:disabled="busy"
+							@click="removeHostKey(hostKey.host, hostKey.port)"
+						>
+							{{ t('targetsNext.delete') }}
+						</button>
+					</li>
+				</ul>
+			</section>
 			<div class="flex flex-wrap gap-2">
 				<button
 					v-for="tab in ['connections', 'proxies', 'tags', 'keys'] as const"
@@ -325,6 +411,27 @@
 					</span>
 				</li>
 			</ul>
+			<section class="space-y-2 rounded border p-3">
+				<h2 class="font-semibold">{{ t('targetsNext.terminalTitle') }}</h2>
+				<label class="block">
+					{{ t('targetsNext.connections') }}
+					<select v-model.number="selectedRemoteId" class="block w-full border p-2">
+						<option :value="null">{{ t('targetsNext.selectTarget') }}</option>
+						<option
+							v-for="item in connections.filter((row) => row.type === 'SSH')"
+							:key="item.id"
+							:value="item.id"
+						>
+							{{ item.name }} ({{ item.host }}:{{ item.port }})
+						</option>
+					</select>
+				</label>
+				<RemoteNextTerminal
+					v-if="selectedRemoteId !== null"
+					:key="selectedRemoteId"
+					:target-id="selectedRemoteId"
+				/>
+			</section>
 		</template>
 	</main>
 </template>

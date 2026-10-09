@@ -50,6 +50,7 @@ export default defineConfig({
 						'/__next': {
 							target: devNextOrigin,
 							changeOrigin: false,
+							ws: true,
 							rewrite: (path: string) => path.replace(/^\/__next/, ''),
 						},
 					}
