@@ -14,7 +14,7 @@
 	import type { TargetHostKeyView } from '@nexus-terminal/shared/targets/host-keys';
 
 	const RemoteNextTerminal = defineAsyncComponent(loadRemoteNextTerminal);
-	const { t } = useI18n();
+	const { t, te } = useI18n();
 	const base = new URL('/__next/', window.location.href);
 	const api = createTargetsNextApi(base.toString());
 	const username = ref('');
@@ -43,6 +43,12 @@
 	const secretKey = ref('');
 	const tagNames = ref('');
 
+	function localizedError(cause: unknown): string {
+		const code = cause instanceof Error ? cause.message : 'request_failed';
+		const key = 'targetsNext.errors.' + code;
+		return te(key) ? t(key) : t('targetsNext.errors.request_failed');
+	}
+
 	async function access(path: string, body?: unknown): Promise<unknown> {
 		const response = await fetch('/__next/api/v1/auth/' + path, {
 			method: body === undefined ? 'GET' : 'POST',
@@ -52,12 +58,13 @@
 			...(body === undefined ? {} : { body: JSON.stringify(body) }),
 		});
 		const value: unknown = await response.json();
-		if (!response.ok)
+		if (!response.ok) {
 			throw new Error(
 				typeof value === 'object' && value !== null && 'code' in value && typeof value.code === 'string'
 					? value.code
 					: 'request_failed',
 			);
+		}
 		return value;
 	}
 
@@ -68,7 +75,7 @@
 		try {
 			await job();
 		} catch (cause) {
-			error.value = cause instanceof Error ? cause.message : 'request_failed';
+			error.value = localizedError(cause);
 		} finally {
 			busy.value = false;
 		}
@@ -97,18 +104,21 @@
 			}
 			const status = await fetch('/__next/api/v1/auth/status', { credentials: 'same-origin', cache: 'no-store' });
 			loggedIn.value = status.ok;
-			if (loggedIn.value) await refresh();
+			if (loggedIn.value) {
+				await refresh();
+			}
 		});
 	}
 
 	function login(): void {
 		void run(async () => {
-			if (setupNeeded.value)
+			if (setupNeeded.value) {
 				await access('setup', {
 					username: username.value,
 					password: password.value,
 					confirmPassword: password.value,
 				});
+			}
 			await access('login', { username: username.value, password: password.value, rememberMe: false });
 			password.value = '';
 			loggedIn.value = true;
@@ -158,7 +168,9 @@
 						kind: 'password',
 						password: passwordField.value,
 					});
-					if (outcome.status !== 'updated') throw new Error(outcome.status);
+					if (outcome.status !== 'updated') {
+						throw new Error(outcome.status);
+					}
 				}
 			} else if (active.value === 'proxies') {
 				await api.proxies.create({
@@ -191,8 +203,9 @@
 					.filter(Boolean),
 			};
 			const items = await api.connections.importMany([item]);
-			if (items[0]?.status !== 'ok')
+			if (items[0]?.status !== 'ok') {
 				throw new Error(items[0]?.status === 'error' ? items[0].code : 'import_failed');
+			}
 			await refresh();
 			message.value = t('targetsNext.saved');
 		});
@@ -200,7 +213,9 @@
 
 	function rename(id: number, version: number): void {
 		const updated = window.prompt(t('targetsNext.renamePrompt'));
-		if (!updated) return;
+		if (!updated) {
+			return;
+		}
 		void run(async () => {
 			const result =
 				active.value === 'connections'
@@ -210,18 +225,27 @@
 						: active.value === 'tags'
 							? await api.tags.rename(id, version, updated)
 							: await api.sshKeys.update(id, version, { name: updated });
-			if (result.status !== 'updated') throw new Error(result.status);
+			if (result.status !== 'updated') {
+				throw new Error(result.status);
+			}
 			await refresh();
 		});
 	}
 
 	function remove(id: number): void {
-		if (!window.confirm(t('targetsNext.deleteConfirm'))) return;
+		if (!window.confirm(t('targetsNext.deleteConfirm'))) {
+			return;
+		}
 		void run(async () => {
-			if (active.value === 'connections') await api.connections.remove(id);
-			else if (active.value === 'proxies') await api.proxies.remove(id);
-			else if (active.value === 'tags') await api.tags.remove(id);
-			else await api.sshKeys.remove(id);
+			if (active.value === 'connections') {
+				await api.connections.remove(id);
+			} else if (active.value === 'proxies') {
+				await api.proxies.remove(id);
+			} else if (active.value === 'tags') {
+				await api.tags.remove(id);
+			} else {
+				await api.sshKeys.remove(id);
+			}
 			await refresh();
 		});
 	}
@@ -239,7 +263,9 @@
 	}
 
 	function removeHostKey(host: string, port: number): void {
-		if (!window.confirm(t('targetsNext.deleteConfirm'))) return;
+		if (!window.confirm(t('targetsNext.deleteConfirm'))) {
+			return;
+		}
 		void run(async () => {
 			await api.hostKeys.remove(host, port);
 			await refresh();

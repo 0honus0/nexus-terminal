@@ -35,6 +35,21 @@
     "terminalTitle": "新バックエンド SSH 端末",
     "selectTarget": "SSH 接続先を選択",
     "openTerminal": "SSH 端末を開く",
-    "closeTerminal": "端末を閉じる"
+    "closeTerminal": "端末を閉じる",
+    "errors": {
+      "remote_unavailable": "リモート端末を利用できません。接続を確認して再試行してください。",
+      "transport_overflow": "端末の通信量が安全なバッファ上限を超えました。",
+      "unauthenticated": "ログインの有効期限が切れました。再ログインしてください。",
+      "not_found": "指定した項目は存在しません。",
+      "invalid_input": "端末データの形式が正しくありません。",
+      "request_failed": "管理リクエストに失敗しました。再試行してください。",
+      "version_conflict": "別の操作で変更されています。更新して再試行してください。",
+      "reference_not_found": "参照先の項目が存在しません。",
+      "reference_in_use": "この項目は使用中のため削除できません。",
+      "conflict": "既存データと競合しています。",
+      "storage_unavailable": "ストレージを一時的に利用できません。",
+      "already_cancelled": "この操作はすでに終了しています。",
+      "import_failed": "インポートに失敗しました。"
+    }
   }
 }

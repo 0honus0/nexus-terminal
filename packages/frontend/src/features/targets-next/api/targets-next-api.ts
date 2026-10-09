@@ -24,13 +24,16 @@ import type { TargetHostKeyView } from '@nexus-terminal/shared/targets/host-keys
 type Json = Record<string, unknown>;
 
 function object(value: unknown): Json {
-	if (value === null || typeof value !== 'object' || Array.isArray(value))
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
 		throw new Error('Invalid Targets response');
+	}
 	return value as Json;
 }
 
 function string(value: unknown): string {
-	if (typeof value !== 'string') throw new Error('Invalid Targets response');
+	if (typeof value !== 'string') {
+		throw new Error('Invalid Targets response');
+	}
 	return value;
 }
 
@@ -39,18 +42,24 @@ function nullable(value: unknown): string | null {
 }
 
 function number(value: unknown): number {
-	if (typeof value !== 'number' || !Number.isSafeInteger(value)) throw new Error('Invalid Targets response');
+	if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+		throw new Error('Invalid Targets response');
+	}
 	return value;
 }
 
 function array<T>(input: unknown, decode: (value: unknown) => T): T[] {
-	if (!Array.isArray(input)) throw new Error('Invalid Targets response');
+	if (!Array.isArray(input)) {
+		throw new Error('Invalid Targets response');
+	}
 	return input.map((value: unknown) => decode(value));
 }
 
 function option<T extends string>(value: unknown, choices: readonly T[]): T {
 	const accepted = choices.find((candidate) => candidate === value);
-	if (accepted === undefined) throw new Error('Invalid Targets response');
+	if (accepted === undefined) {
+		throw new Error('Invalid Targets response');
+	}
 	return accepted;
 }
 
@@ -129,15 +138,20 @@ function mutation<T>(
 	decode: (value: unknown) => T,
 ): { status: 'updated'; value: T } | { status: 'not_found' } | { status: 'version_conflict' } {
 	const v = object(input);
-	if (v.status === 'updated') return { status: 'updated', value: decode(v.value) };
-	if (v.status === 'not_found' || v.status === 'version_conflict') return { status: v.status };
+	if (v.status === 'updated') {
+		return { status: 'updated', value: decode(v.value) };
+	}
+	if (v.status === 'not_found' || v.status === 'version_conflict') {
+		return { status: v.status };
+	}
 	throw new Error('Invalid Targets mutation response');
 }
 
 function credentialMutation(input: unknown): TargetCredentialMutation {
 	const v = object(input);
-	if (v.status === 'updated' || v.status === 'not_found' || v.status === 'version_conflict')
+	if (v.status === 'updated' || v.status === 'not_found' || v.status === 'version_conflict') {
 		return { status: v.status };
+	}
 	throw new Error('Invalid Targets credentials response');
 }
 
@@ -145,7 +159,9 @@ function imports(input: unknown): TargetImportItem[] {
 	const v = object(input);
 	return array(v.items, (item) => {
 		const row = object(item);
-		if (row.status === 'ok') return { status: 'ok', id: number(row.id) };
+		if (row.status === 'ok') {
+			return { status: 'ok', id: number(row.id) };
+		}
 		if (row.status === 'error' && typeof row.code === 'string') {
 			const allowed: readonly TargetErrorCode[] = [
 				'invalid_input',
@@ -157,7 +173,9 @@ function imports(input: unknown): TargetImportItem[] {
 				'internal_failure',
 			];
 			const code = allowed.find((candidate) => candidate === row.code);
-			if (code === undefined) throw new Error('Invalid Targets import result');
+			if (code === undefined) {
+				throw new Error('Invalid Targets import result');
+			}
 			return { status: 'error', code };
 		}
 		throw new Error('Invalid Targets import result');
@@ -172,8 +190,9 @@ export function createTargetsNextApi(baseUrl: string) {
 		!['/', '/__next/'].includes(origin.pathname) ||
 		origin.search ||
 		origin.hash
-	)
+	) {
 		throw new Error('Targets management requires an explicit same-origin backend');
+	}
 	const base = origin.origin + (origin.pathname === '/__next/' ? '/__next' : '') + '/api/v1/targets';
 
 	async function call(method: string, path: string, body?: unknown): Promise<unknown> {

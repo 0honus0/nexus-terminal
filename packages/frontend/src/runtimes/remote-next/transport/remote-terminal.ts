@@ -4,7 +4,9 @@ import type { RemoteClientEvent, RemoteServerEvent } from '@nexus-terminal/share
 const ROOT = '/__next/api/v1/remote';
 
 function parseView(input: unknown): RemoteShellView {
-	if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid Remote response');
+	if (!input || typeof input !== 'object' || Array.isArray(input)) {
+		throw new Error('Invalid Remote response');
+	}
 	const row = input as Record<string, unknown>;
 	if (
 		typeof row.id !== 'string' ||
@@ -33,7 +35,9 @@ function bytesFromBase64(data: string): Uint8Array {
 
 function bytesToBase64(input: Uint8Array): string {
 	let text = '';
-	for (const byte of input) text += String.fromCharCode(byte);
+	for (const byte of input) {
+		text += String.fromCharCode(byte);
+	}
 	return btoa(text);
 }
 
@@ -50,11 +54,12 @@ export interface RemoteTerminalListener {
 	failure(code: string): void;
 }
 
-async function request(method: string, path: string, body?: unknown): Promise<unknown> {
+async function request(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<unknown> {
 	const response = await fetch(ROOT + path, {
 		method,
 		credentials: 'same-origin',
 		cache: 'no-store',
+		signal,
 		...(body === undefined
 			? {}
 			: {
@@ -73,11 +78,15 @@ async function request(method: string, path: string, body?: unknown): Promise<un
 }
 
 function decodeEvent(input: unknown): RemoteServerEvent {
-	if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid Remote event');
+	if (!input || typeof input !== 'object' || Array.isArray(input)) {
+		throw new Error('Invalid Remote event');
+	}
 	const row = input as Record<string, unknown>;
 	switch (row.type) {
 		case 'ready':
-			if (typeof row.sessionId === 'string') return { type: 'ready', sessionId: row.sessionId };
+			if (typeof row.sessionId === 'string') {
+				return { type: 'ready', sessionId: row.sessionId };
+			}
 			break;
 		case 'data':
 			if (typeof row.data === 'string' && (row.stream === 'stdout' || row.stream === 'stderr')) {
@@ -107,43 +116,97 @@ function decodeEvent(input: unknown): RemoteServerEvent {
 	throw new Error('Invalid Remote event');
 }
 
-/** A single-instance, non-resumable terminal channel. Never use the legacy Workspace socket. */
+/** Owns a single ephemeral websocket; all close paths share one cleanup promise. */
 export async function openRemoteTerminal(
 	input: RemoteOpenShell,
 	listener: RemoteTerminalListener,
+	signal?: AbortSignal,
 ): Promise<RemoteTerminalHandle> {
-	const session = parseView(await request('POST', '/sessions', input));
+	if (signal?.aborted) {
+		throw new Error('remote_unavailable');
+	}
+	const session = parseView(await request('POST', '/sessions', input, signal));
 	const wsUrl = new URL(ROOT + '/stream?sessionId=' + encodeURIComponent(session.id), window.location.href);
 	wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:';
-	const socket = new WebSocket(wsUrl);
-	let finished = false;
+	let socket: WebSocket;
+	try {
+		if (signal?.aborted) {
+			throw new Error('remote_unavailable');
+		}
+		socket = new WebSocket(wsUrl);
+	} catch (error) {
+		try {
+			await request('DELETE', '/sessions/' + encodeURIComponent(session.id));
+		} catch (cleanupError) {
+			throw new AggregateError([error, cleanupError], 'remote_unavailable');
+		}
+		throw error;
+	}
 	let open = false;
+	let finished = false;
 	let inputBlocked = false;
 	let pending = Promise.resolve();
-	let handle: RemoteTerminalHandle;
-
-	const close = async (): Promise<void> => {
-		if (finished) return;
-		finished = true;
-		socket.close();
-		await request('DELETE', '/sessions/' + encodeURIComponent(session.id)).catch(() => undefined);
-		listener.closed();
-	};
+	let closePromise: Promise<void> | null = null;
+	let normalEof = false;
+	let onAbort: (() => void) | null = null;
 
 	function send(event: RemoteClientEvent): void {
-		if (!open || finished || socket.readyState !== WebSocket.OPEN) throw new Error('Remote transport not ready');
+		if (!open || finished || socket.readyState !== WebSocket.OPEN) {
+			throw new Error('remote_unavailable');
+		}
 		const encoded = JSON.stringify(event);
-		if (socket.bufferedAmount + encoded.length > 1024 * 1024) throw new Error('Remote input buffer full');
+		if (socket.bufferedAmount + encoded.length > 1024 * 1024) {
+			throw new Error('transport_overflow');
+		}
 		socket.send(encoded);
 	}
 
-	handle = {
+	function close(): Promise<void> {
+		if (closePromise) {
+			return closePromise;
+		}
+		closePromise = (async () => {
+			// Output that has already arrived must finish terminal.write before
+			// notifying the component, including a normal server EOF.
+			try {
+				await pending.catch(() => listener.failure('remote_unavailable'));
+			} finally {
+				finished = true;
+				if (onAbort && signal) {
+					signal.removeEventListener('abort', onAbort);
+				}
+				socket.onmessage = null;
+				socket.onerror = null;
+				socket.onclose = null;
+				socket.close();
+			}
+			try {
+				if (!normalEof) {
+					await request('DELETE', '/sessions/' + encodeURIComponent(session.id));
+				}
+			} finally {
+				listener.closed();
+			}
+		})();
+		return closePromise;
+	}
+
+	function report(code: string): void {
+		listener.failure(code);
+		void close().catch(() => listener.failure('remote_unavailable'));
+	}
+
+	const handle: RemoteTerminalHandle = {
 		session,
 
 		input(value) {
-			if (inputBlocked) throw new Error('Remote input backpressure');
+			if (inputBlocked) {
+				throw new Error('transport_overflow');
+			}
 			const bytes = new TextEncoder().encode(value);
-			if (bytes.length > 32 * 1024) throw new Error('Remote input too large');
+			if (bytes.length > 32 * 1024) {
+				throw new Error('invalid_input');
+			}
 			send({ type: 'input', data: bytesToBase64(bytes) });
 		},
 
@@ -153,50 +216,71 @@ export async function openRemoteTerminal(
 
 		close,
 	};
+
 	try {
 		await new Promise<void>((resolve, reject) => {
-			const timer = window.setTimeout(() => reject(new Error('Remote websocket deadline exceeded')), 10000);
+			const timer = window.setTimeout(() => reject(new Error('remote_unavailable')), 10000);
+			let connected = false;
 
-			const fail = (error: Error) => {
+			const fail = (error: Error): void => {
 				window.clearTimeout(timer);
 				reject(error);
 			};
 
+			onAbort = () => {
+				fail(new Error('remote_unavailable'));
+				void close().catch(() => undefined);
+			};
+			signal?.addEventListener('abort', onAbort, { once: true });
+			if (signal?.aborted) {
+				onAbort();
+				return;
+			}
 			socket.onerror = () => {
-				if (open) {
-					listener.failure('remote_unavailable');
-					void close();
+				if (connected) {
+					report('remote_unavailable');
 				} else {
-					fail(new Error('Remote websocket failed'));
+					fail(new Error('remote_unavailable'));
 				}
 			};
 			socket.onclose = () => {
-				if (!open) fail(new Error('Remote websocket closed'));
-				else void close();
+				if (connected) {
+					void close().catch(() => listener.failure('remote_unavailable'));
+				} else {
+					fail(new Error('remote_unavailable'));
+				}
 			};
 			socket.onmessage = (event) => {
 				try {
-					if (typeof event.data !== 'string') throw new Error('Unsupported remote frame');
+					if (typeof event.data !== 'string') {
+						throw new Error('invalid_input');
+					}
 					const message = decodeEvent(JSON.parse(event.data) as unknown);
 					if (message.type === 'ready') {
-						if (message.sessionId !== session.id) throw new Error('Remote session mismatch');
+						if (connected || message.sessionId !== session.id) {
+							throw new Error('invalid_input');
+						}
+						connected = true;
 						open = true;
 						window.clearTimeout(timer);
 						resolve();
 						return;
 					}
-					if (!open) throw new Error('Remote protocol not ready');
+					if (!connected) {
+						throw new Error('invalid_input');
+					}
 					switch (message.type) {
 						case 'data': {
 							const bytes = bytesFromBase64(message.data);
 							pending = pending.then(async () => {
 								await listener.output(bytes, message.stream);
-								if (!finished) send({ type: 'consumed', bytes: bytes.length });
+								// The server has not yet acknowledged delivery until
+								// terminal.write has called back.
+								if (!finished && socket.readyState === WebSocket.OPEN) {
+									send({ type: 'consumed', bytes: bytes.length });
+								}
 							});
-							void pending.catch((error: unknown) => {
-								listener.failure(error instanceof Error ? error.message : 'remote_unavailable');
-								void close();
-							});
+							void pending.catch(() => report('remote_unavailable'));
 							break;
 						}
 						case 'drain':
@@ -206,23 +290,28 @@ export async function openRemoteTerminal(
 							inputBlocked = true;
 							break;
 						case 'closed':
-							void close();
+							normalEof = true;
+							void close().catch(() => listener.failure('remote_unavailable'));
 							break;
 						case 'error':
-							listener.failure(message.code);
-							void close();
+							report(message.code);
 							break;
 					}
-				} catch (error) {
-					listener.failure(error instanceof Error ? error.message : 'remote_unavailable');
-					if (!open) fail(new Error('Remote protocol failure'));
-					void close();
+				} catch {
+					if (!connected) {
+						fail(new Error('invalid_input'));
+					}
+					report('invalid_input');
 				}
 			};
 		});
 		return handle;
 	} catch (error) {
-		await close();
+		try {
+			await close();
+		} catch (cleanupError) {
+			throw new AggregateError([error, cleanupError], 'remote_unavailable');
+		}
 		throw error;
 	}
 }

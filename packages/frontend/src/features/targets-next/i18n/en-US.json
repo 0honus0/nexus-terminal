@@ -35,6 +35,21 @@
     "terminalTitle": "New backend SSH terminal",
     "selectTarget": "Select an SSH target",
     "openTerminal": "Open SSH terminal",
-    "closeTerminal": "Close terminal"
+    "closeTerminal": "Close terminal",
+    "errors": {
+      "remote_unavailable": "Remote terminal is unavailable. Check the connection and retry.",
+      "transport_overflow": "Terminal traffic exceeded the safe buffer limit.",
+      "unauthenticated": "Your session expired. Sign in again.",
+      "not_found": "The requested item no longer exists.",
+      "invalid_input": "The terminal sent or received invalid data.",
+      "request_failed": "Management request failed. Please retry.",
+      "version_conflict": "This item was changed elsewhere. Refresh and retry.",
+      "reference_not_found": "A referenced item no longer exists.",
+      "reference_in_use": "This item is in use and cannot be removed.",
+      "conflict": "The item conflicts with existing data.",
+      "storage_unavailable": "Storage is temporarily unavailable.",
+      "already_cancelled": "The operation has already completed.",
+      "import_failed": "The import could not be completed."
+    }
   }
 }

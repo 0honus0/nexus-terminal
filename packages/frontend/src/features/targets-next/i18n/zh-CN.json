@@ -35,6 +35,21 @@
     "terminalTitle": "新版后端 SSH 终端",
     "selectTarget": "选择 SSH 目标",
     "openTerminal": "打开 SSH 终端",
-    "closeTerminal": "关闭终端"
+    "closeTerminal": "关闭终端",
+    "errors": {
+      "remote_unavailable": "远程终端不可用，请检查连接后重试。",
+      "transport_overflow": "终端流量超出安全缓冲上限，连接已关闭。",
+      "unauthenticated": "登录状态已失效，请重新登录。",
+      "not_found": "请求的项目已不存在。",
+      "invalid_input": "终端数据格式无效。",
+      "request_failed": "管理请求失败，请重试。",
+      "version_conflict": "项目已被其他操作修改，请刷新后重试。",
+      "reference_not_found": "引用的项目已不存在。",
+      "reference_in_use": "该项目正在使用中，无法删除。",
+      "conflict": "此项目与现有数据冲突。",
+      "storage_unavailable": "存储服务暂时不可用。",
+      "already_cancelled": "该操作已经结束。",
+      "import_failed": "导入未能完成。"
+    }
   }
 }
