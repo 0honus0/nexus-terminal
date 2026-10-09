@@ -82,9 +82,13 @@ const functionSpacingPlugin = {
 							continue;
 						}
 
-						const comments = sourceCode
-							.getCommentsBefore(current)
-							.filter((comment) => comment.range[0] >= previous.range[1]);
+						const comments = sourceCode.getCommentsBefore(current).filter(
+							(comment) =>
+								comment.range[0] >= previous.range[1] &&
+								// Trailing same-line comments belong to the previous declaration,
+								// not to the next one. Only move an actual leading comment group.
+								comment.loc.start.line > previous.loc.end.line,
+						);
 						const boundary = comments[0] ?? current;
 						if (boundary.loc.start.line - previous.loc.end.line >= 2) continue;
 
