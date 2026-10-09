@@ -56,7 +56,9 @@ Targets 的 `host-keys` 子功能持有已确认 SSH 服务端公钥指纹及 v2
 
 `modules/remote/sessions/service/session-owner.ts` 绑定初始管理员身份和登录令牌摘要，且在 HTTP 打开/查询/关闭、WS 握手与消息、输出发送/周期校验时重新认证。会话最多一个接入的 WebSocket；没有恢复协议，浏览器断开或超出初次接入限期就关闭 PTY，不允许两个设备或两个 Access 登录令牌接管。独立 Remote HTTP/WS 模块只使用公开 RemoteSessions 与 AccessPublicApi，向 Shared 公开仅允许的快照、事件和安全错误，不解密 Targets 明文。
 
-`platform/http/http-server.ts` 持有通用 WS Upgrade、和 HTTP 一致的 Host/Proto 与固定 Origin 检验、64 KiB 单帧及 1 MiB 待发送上限、监听器/业务 Promise/Socket 的停机释放；不导入 Remote 业务类型。Remote WS 文本事件以 base64 传递真实 PTY 字节，输出累计上限 128 KiB，按客户端 terminal.write 完成后的 `consumed` 确认补充额度，远端 Shell 的 `pause/resume` 跟随该额度。SSH 写入返回背压时通过 `blocked/drain` 拒绝后续输入，不自动重放写入。Remote 服务已实现的 Model/Service/Platform 资源生命周期仍唯一负责关闭 PTY/Client/Socket。新功能还没有 SSH 实机、代理、缓冲竞态或断线集成验证，不能用于声称正式 Remote 产品迁移完成。
+`platform/http/http-server.ts` 持有通用 WS Upgrade、和 HTTP 一致的 Host/Proto 与固定 Origin 检验、64 KiB 单帧及 1 MiB 待发送上限、监听器/业务 Promise/Socket 的停机释放；不导入 Remote 业务类型。Remote WS 文本事件以 base64 传递真实 PTY 字节，未确认输出窗口和本地待发送队列分别限制为 128 KiB，按客户端 terminal.write 完成后的 `consumed` 确认补充额度，远端 Shell 的 `pause/resume` 跟随该额度。SSH 写入返回背压时通过 `blocked/drain` 拒绝后续输入，不自动重放写入。Remote 服务的 Model/Service/Platform 负责关闭 PTY/Client/Socket。
+
+当前技术边界仍有缺口：Platform 的串行 WS 接收 Promise 队列没有累计数量/字节上限；Remote 正常 EOF 时直接发 closed 并强制终止 WS，不等待末尾输出 drain；SessionOwner 未将底层按 ID 共享关闭 Promise 的保证完整传递给重复释放。Bootstrap 当前还直接构造 SessionOwner 并安装部分模块内部路由工厂，模块安装边界尚未完全收口。Frontend 失败/自然关闭后重连的展示资源释放也需修正。具体方案统一维护在[下一阶段实施方案的当前审核项](../后端重构下一阶段实施方案.md#a–d-当前审核待修正项)，不把拟定方案写成已实现。新功能还没有 SSH 实机、代理、缓冲竞态或断线集成验证，不能用于声称正式 Remote 产品迁移完成。
 
 ## backend-next Agent 首个持久 Run 状态切片
 
