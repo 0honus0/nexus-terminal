@@ -58,7 +58,7 @@ Targets 的 `host-keys` 子功能持有已确认 SSH 服务端公钥指纹及 v2
 
 `platform/http/http-server.ts` 持有通用 WS Upgrade、和 HTTP 一致的 Host/Proto 与固定 Origin 检验、64 KiB 单帧及 1 MiB 待发送上限、监听器/业务 Promise/Socket 的停机释放；不导入 Remote 业务类型。Remote WS 文本事件以 base64 传递真实 PTY 字节，未确认输出窗口和本地待发送队列分别限制为 128 KiB，按客户端 terminal.write 完成后的 `consumed` 确认补充额度，远端 Shell 的 `pause/resume` 跟随该额度。SSH 写入返回背压时通过 `blocked/drain` 拒绝后续输入，不自动重放写入。Remote 服务的 Model/Service/Platform 负责关闭 PTY/Client/Socket。
 
-当前技术边界仍有缺口：Platform 的串行 WS 接收 Promise 队列没有累计数量/字节上限；Remote 正常 EOF 时直接发 closed 并强制终止 WS，不等待末尾输出 drain；SessionOwner 未将底层按 ID 共享关闭 Promise 的保证完整传递给重复释放。Bootstrap 当前还直接构造 SessionOwner 并安装部分模块内部路由工厂，模块安装边界尚未完全收口。Frontend 失败/自然关闭后重连的展示资源释放也需修正。具体方案统一维护在[下一阶段实施方案的当前审核项](../后端重构下一阶段实施方案.md#a–d-当前审核待修正项)，不把拟定方案写成已实现。新功能还没有 SSH 实机、代理、缓冲竞态或断线集成验证，不能用于声称正式 Remote 产品迁移完成。
+A–D 审核指出的六处基础缺口已做源码修正：Platform 每个 WS 输入队列限定 64 条/256 KiB（包含正在处理的消息），超过上限立即终止；正常 PTY EOF 不再直接 terminate，Remote 允许仍有效的原持有人完成队列与 `consumed` 收尾，EOF 等待最多 10 秒，Platform `finish()` 有界等待正常 close 握手（最多 5 秒）；主动断线/撤销/停机仍强制释放。SessionOwner 保存按 ID 共享的 release Promise，底层 SessionService 保留失败的关闭结果，模块 shutdown 聚合错误。Targets/Agent/Remote 的 register 返回各自的 HTTP/WS 安装能力，Remote 在模块内拥有 owner/Service 的 quiesce 与 close，Bootstrap 不再深层导入业务 HTTP 工厂。前端 Transport 的 close 共用 Promise、组件以 generation/AbortSignal 清理 xterm 与 ResizeObserver，错误码转成现有三语言文案。上述为**静态源码修正，不是运行验收**；SSH 实机、正常 EOF 尾帧和 `consumed` 竞态、连续小帧洪泛、并发释放/失败、断线后重连仍按[实施方案的审核收口记录](../后端重构下一阶段实施方案.md)等待真实验证。
 
 ## backend-next Agent 首个持久 Run 状态切片
 
