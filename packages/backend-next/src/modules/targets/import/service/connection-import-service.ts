@@ -1,7 +1,7 @@
-import type { ConnectionImport } from '../model/import-types.js';
+import type { ConnectionImport, ImportItemResult } from '../model/import-types.js';
 import { ConnectionImportModel } from '../model/import-model.js';
 import { validateConnection } from '../../connections/service/connection-validation.js';
-import { targetErrorCode, type TargetErrorCode } from '../../target-errors.js';
+import { targetErrorCode } from '../../target-errors.js';
 
 export class ConnectionImportService {
 	constructor(private readonly model: ConnectionImportModel) {}
@@ -24,8 +24,8 @@ export class ConnectionImportService {
 		return this.model.importOne({ ...command, connection: validateConnection(command.connection) });
 	}
 
-	async importMany(commands: ConnectionImport[]) {
-		const results: ({ status: 'ok'; id: number } | { status: 'error'; code: TargetErrorCode })[] = [];
+	async importMany(commands: ConnectionImport[]): Promise<ImportItemResult[]> {
+		const results: ImportItemResult[] = [];
 		for (const command of commands) {
 			try {
 				const result = await this.importOne(command);
