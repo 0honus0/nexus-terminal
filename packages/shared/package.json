@@ -51,6 +51,22 @@
     "./targets/api": {
       "types": "./dist/targets/api.d.ts",
       "default": "./dist/targets/api.js"
+    },
+    "./remote/model": {
+      "types": "./dist/remote/model.d.ts",
+      "default": "./dist/remote/model.js"
+    },
+    "./remote/events": {
+      "types": "./dist/remote/events.d.ts",
+      "default": "./dist/remote/events.js"
+    },
+    "./remote/api": {
+      "types": "./dist/remote/api.d.ts",
+      "default": "./dist/remote/api.js"
+    },
+    "./targets/host-keys": {
+      "types": "./dist/targets/host-keys.d.ts",
+      "default": "./dist/targets/host-keys.js"
     }
   },
   "devDependencies": {
