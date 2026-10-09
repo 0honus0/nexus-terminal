@@ -8,7 +8,7 @@
 
 正式产品仍由 `packages/backend` 服务；`packages/backend-next` 是独立重构包，不调用旧 Backend/Protocol、不接收正式流量，当前装配 Access、Targets 和 Remote 的内部 SSH Shell 会话；Access 认证 HTTP 和受保护的 Targets 管理 HTTP 可独立监听。新包的 Platform 只持有通用 SQLite 事务/迁移/生命周期、SecretBox 与通用 SSH 技术能力；Targets 持有业务 Schema、存储契约及 SQLite Adapter。Service 使用应用类型，Model 逐字段转换存储命令与读取结果；凭据加解密由 Service 调用通用 SecretBox 完成。
 
-Targets 的模块出口独立定义管理与可信 SSH 契约，出入对象均通过字段白名单转换，普通管理结果不含凭据。可信解析作为独立 Backend 能力注入 Remote；Remote 将其转换为与业务无关的 SSH 机器请求。Targets 安全错误码、SQLite 不可用状态和统一跳板限制均已按真实 owner 实现；整体关机先取消并关闭 Remote Session，再关闭 SQLite。具体机器通道与待验收场景见[架构重构](../架构重构.md)，后续功能施工见[下一阶段实施方案](../后端重构下一阶段实施方案.md)。本节不改变下文现行旧包的 owner。
+Targets 的模块出口从 Shared 精确引用双端同义同表示的管理输入、视图和状态契约；含明文凭据的可信 SSH 解析契约只在 backend-next 的 `public.ts` 定义。管理与可信结果均通过字段白名单转换，不从内部存储类型派生，普通管理结果不含凭据。可信解析作为独立 Backend 能力注入 Remote；Remote 将其转换为与业务无关的 SSH 机器请求。Targets 安全错误码、SQLite 不可用状态和统一跳板限制均已按真实 owner 实现；整体关机先取消并关闭 Remote Session，再关闭 SQLite。具体机器通道与待验收场景见[架构重构](../架构重构.md)，后续功能施工见[下一阶段实施方案](../后端重构下一阶段实施方案.md)。本节不改变下文现行旧包的 owner。
 
 SQLite Worker 传递 `node:sqlite` 的数值 `errcode`，保留扩展结果码；Runtime 按低 8 位分类 constraint、busy/locked 与普通 SQL 失败，Targets 再按扩展外键码形成安全业务错误。Node 的通用 `ERR_SQLITE_ERROR` 字符串不作为 SQLite 类别判断依据。
 
@@ -16,7 +16,7 @@ SQLite Runtime 的事务入口管理回调与未等待操作；私有 `rollbackA
 
 SQLite Worker 请求及各操作结果定义在技术层 `worker-types.ts`；Runtime 的 pending owner 按发起的操作解码未知结果，不使用 `any` 传递行或写入结果。事务回调结果以成功/失败联合表达，排队入口调用具名 `runTransaction`；关闭入口先保存 Promise，再执行 `closeResources`。Worker 的查询执行、错误序列化与消息响应分别为具名函数，数据库路径与 parent port 在初始化时确认。
 
-Targets 批量导入的内部结果以 `import/model/import-types.ts` 中的 `ImportItemResult` 定义成功 ID 与失败错误码的可辨识联合；Service 使用这个具名应用类型。`public.ts` 独立定义出口结果，仍由出口映射逐字段转换，不从内部类型派生。
+Targets 批量导入的内部结果以 `import/model/import-types.ts` 中的 `ImportItemResult` 定义成功 ID 与失败错误码的可辨识联合；Service 使用这个具名应用类型。`public.ts` 对双端一致的管理结果引用 Shared 的出口定义，仍由出口映射逐字段转换，不从内部 Storage/Service 类型派生。
 
 Targets 的 Service/Model 和 SQLite 存储实现明确声明返回类型，校验使用 `validateId/validateName` 等动作名称。应用补丁规范化与存储补丁投影分别由 Service 校验函数和 Model mapper 承担，均保留字段允许清单；SQL 行解码先校验再构造记录，成功写入后的必需记录通过具名读取函数确认。Resolver 的密文快照与解密应用类型集中于 `resolver/model/ssh-target-types.ts`，Model 文件只持有映射与存储调用。
 

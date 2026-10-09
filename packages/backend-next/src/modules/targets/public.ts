@@ -1,115 +1,60 @@
-import type { ConnectionRoute, ConnectionType } from '@nexus-terminal/shared/connections/values';
 import type { ProxyType } from '@nexus-terminal/shared/proxies/values';
-import type { TargetErrorCode } from './public-errors.js';
+import type {
+	TargetConnectionInput,
+	TargetConnectionView,
+	TargetImportInput,
+	TargetCredentialInput,
+} from '@nexus-terminal/shared/connections/model';
+import type {
+	TargetConnectionMutation,
+	TargetImportItem,
+	TargetCredentialMutation,
+} from '@nexus-terminal/shared/connections/api';
+import type { TargetProxyInput, TargetProxyChanges, TargetProxyView } from '@nexus-terminal/shared/proxies/model';
+import type { TargetProxyMutation } from '@nexus-terminal/shared/proxies/api';
+import type { TargetTagView } from '@nexus-terminal/shared/tags/model';
+import type { TargetTagMutation } from '@nexus-terminal/shared/tags/api';
+import type { TargetSshKeyInput, TargetSshKeyChanges, TargetSshKeyView } from '@nexus-terminal/shared/ssh-keys/model';
+import type { TargetSshKeyMutation } from '@nexus-terminal/shared/ssh-keys/api';
 
 /**
- * Stable cross-module boundary. Never import storage records or internal
- * Service/Model DTOs here. Every value is projected by public-mappers.ts.
+ * Management types are the exact Shared contract consumed by Frontend.
+ * Internal Service and Storage types remain independent and are always mapped
+ * explicitly at registerTargets. Trusted resolved targets are backend-only.
  */
-export interface ConnectionMetadata {
-	name: string;
-	type: ConnectionType;
-	host: string;
-	port: number;
-	username: string;
-	route: ConnectionRoute;
-	proxyId: number | null;
-	notes: string | null;
-	rdpRemoteApp: string | null;
-	rdpRemoteAppDirectory: string | null;
-	rdpRemoteAppArguments: string | null;
-	tagIds: number[];
-	jumpIds: number[];
-}
+export type ConnectionMetadata = TargetConnectionInput;
 
-export interface ConnectionSnapshot extends ConnectionMetadata {
-	id: number;
-	version: number;
-	createdAt: number;
-	updatedAt: number;
-}
+export type ConnectionSnapshot = TargetConnectionView;
 
-export type ConnectionMutation =
-	{ status: 'updated'; value: ConnectionSnapshot } | { status: 'not_found' } | { status: 'version_conflict' };
+export type ConnectionMutation = TargetConnectionMutation;
 
-export interface ProxyInput {
-	name: string;
-	type: ProxyType;
-	host: string;
-	port: number;
-	username: string | null;
-	password?: string | null;
-}
+export type ConnectionImport = TargetImportInput;
 
-export interface ProxyUpdateInput {
-	name?: string;
-	type?: ProxyType;
-	host?: string;
-	port?: number;
-	username?: string | null;
-	password?: string | null;
-}
+export type ImportItemResult = TargetImportItem;
 
-export interface ProxyView {
-	id: number;
-	name: string;
-	type: ProxyType;
-	host: string;
-	port: number;
-	username: string | null;
-	version: number;
-	createdAt: number;
-	updatedAt: number;
-}
+export type ProxyInput = TargetProxyInput;
 
-export type ProxyMutation =
-	{ status: 'updated'; value: ProxyView } | { status: 'not_found' } | { status: 'version_conflict' };
+export type ProxyUpdateInput = TargetProxyChanges;
 
-export interface TagView {
-	id: number;
-	name: string;
-	version: number;
-	createdAt: number;
-	updatedAt: number;
-}
+export type ProxyView = TargetProxyView;
 
-export type TagMutation =
-	{ status: 'updated'; value: TagView } | { status: 'not_found' } | { status: 'version_conflict' };
+export type ProxyMutation = TargetProxyMutation;
 
-export interface SshKeyInput {
-	name: string;
-	privateKey: string;
-	passphrase?: string | null;
-}
+export type TagView = TargetTagView;
 
-export interface SshKeyChanges {
-	name?: string;
-	privateKey?: string;
-	passphrase?: string | null;
-}
+export type TagMutation = TargetTagMutation;
 
-export interface SshKeyView {
-	id: number;
-	name: string;
-	version: number;
-	createdAt: number;
-	updatedAt: number;
-}
+export type SshKeyInput = TargetSshKeyInput;
 
-export type SshKeyMutation =
-	{ status: 'updated'; value: SshKeyView } | { status: 'not_found' } | { status: 'version_conflict' };
+export type SshKeyChanges = TargetSshKeyChanges;
 
-export type SshCredentialInput = { kind: 'password'; password: string } | { kind: 'ssh_key'; sshKeyId: number };
+export type SshKeyView = TargetSshKeyView;
 
-export type CredentialMutation = { status: 'updated' } | { status: 'not_found' } | { status: 'version_conflict' };
+export type SshKeyMutation = TargetSshKeyMutation;
 
-export interface ConnectionImport {
-	connection: ConnectionMetadata;
-	inlineProxy?: Omit<ProxyInput, 'password'>;
-	tagNames?: string[];
-}
+export type SshCredentialInput = TargetCredentialInput;
 
-export type ImportItemResult = { status: 'ok'; id: number } | { status: 'error'; code: TargetErrorCode };
+export type CredentialMutation = TargetCredentialMutation;
 
 export interface ConnectionCatalog {
 	list(): Promise<ConnectionSnapshot[]>;
