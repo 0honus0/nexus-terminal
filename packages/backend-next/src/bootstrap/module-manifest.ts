@@ -6,8 +6,13 @@ import type { SecretBox } from '../platform/security/secret-box.js';
 import type { MachineConnectOptions } from '../platform/ssh/ssh-port.js';
 import type { TargetsPublicApi, TrustedSshTargetResolver } from '../modules/targets/public.js';
 import type { RemoteSessions } from '../modules/remote/public.js';
+import { registerAccess } from '../modules/access/register.js';
+import type { AccessPublicApi } from '../modules/access/public.js';
+import type { HttpRoute } from '../platform/http/http-server.js';
 
 export interface RegisteredModules {
+	access: AccessPublicApi;
+	accessRoutes(secureCookies: boolean): HttpRoute[];
 	targets: TargetsPublicApi;
 	trustedSshTargets: TrustedSshTargetResolver;
 	remote: RemoteSessions;
@@ -21,6 +26,7 @@ export function registerModules(
 	secrets: SecretBox | null,
 	verifyHostKey: MachineConnectOptions['verifyHostKey'] | null,
 ): RegisteredModules {
+	const access = registerAccess(sqlite);
 	const targets = registerTargets({ sqlite, secrets });
 	const remote = registerRemote({
 		resolver: targets.trustedSshTargets,
@@ -28,6 +34,8 @@ export function registerModules(
 		verifyHostKey,
 	});
 	return {
+		access: access.publicApi,
+		accessRoutes: access.routes,
 		targets: targets.publicApi,
 		trustedSshTargets: targets.trustedSshTargets,
 		remote: remote.publicApi,
