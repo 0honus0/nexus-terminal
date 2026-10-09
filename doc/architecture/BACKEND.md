@@ -6,7 +6,7 @@
 
 新包遵守[全局编码约定](../架构重构.md#全局编码约定)：控制语句使用花括号，函数/方法及独立 export 声明前后保留一行空行，注释贴近所属声明，格式由仓库现有 ESLint/Prettier 执行；封装、命名及类型 owner 在代码审核时一并检查。SecretBox/SSH Adapter 捕获并包装失败时保留 `cause`，Targets 的安全出口仍只传递稳定错误码，不传出原始异常。
 
-正式产品仍由 `packages/backend` 服务；`packages/backend-next` 是独立重构包，不调用旧 Backend/Protocol、不接收正式流量，当前装配 Access、Targets 和 Remote 的内部 SSH Shell 会话；仅 Access 的最小 HTTP 入口可监听。新包的 Platform 只持有通用 SQLite 事务/迁移/生命周期、SecretBox 与通用 SSH 技术能力；Targets 持有业务 Schema、存储契约及 SQLite Adapter。Service 使用应用类型，Model 逐字段转换存储命令与读取结果；凭据加解密由 Service 调用通用 SecretBox 完成。
+正式产品仍由 `packages/backend` 服务；`packages/backend-next` 是独立重构包，不调用旧 Backend/Protocol、不接收正式流量，当前装配 Access、Targets 和 Remote 的内部 SSH Shell 会话；Access 认证 HTTP 和受保护的 Targets 管理 HTTP 可独立监听。新包的 Platform 只持有通用 SQLite 事务/迁移/生命周期、SecretBox 与通用 SSH 技术能力；Targets 持有业务 Schema、存储契约及 SQLite Adapter。Service 使用应用类型，Model 逐字段转换存储命令与读取结果；凭据加解密由 Service 调用通用 SecretBox 完成。
 
 Targets 的模块出口独立定义管理与可信 SSH 契约，出入对象均通过字段白名单转换，普通管理结果不含凭据。可信解析作为独立 Backend 能力注入 Remote；Remote 将其转换为与业务无关的 SSH 机器请求。Targets 安全错误码、SQLite 不可用状态和统一跳板限制均已按真实 owner 实现；整体关机先取消并关闭 Remote Session，再关闭 SQLite。具体机器通道与待验收场景见[架构重构](../架构重构.md)，后续功能施工见[下一阶段实施方案](../后端重构下一阶段实施方案.md)。本节不改变下文现行旧包的 owner。
 
@@ -42,7 +42,13 @@ Remote Service 的会话注册、单会话释放和实例停机分别由私有 `
 
 Access 账号与会话模型属于 `modules/access`，加密的 password verifier 使用 `platform/security/password-hasher.ts` 的 scrypt；Accounts/Session Model 将应用命令与存储命令逐字段转换，Account Storage 不引用 Model 类型，Session Model 显式转换应用/存储结果，SQL 行解码与事务只在模块内的 SQLite Adapter。初始管理员创建在排他事务中检查空库，单一全库 v1 由 `bootstrap/schema.ts` 合成 Targets+Access 的 schema，不能另立 Access 版本号。密码变更事务更新散列并删除该账号全部持久会话，登录会话只存 SHA-256 摘要、版本和期限，前端不能提供身份 owner。
 
-新 `platform/http` 只接收通用路由，固定 Origin、明确可信代理、严格 body 限制、无旁路 CORS；非法 JSON/Content-Type/大小错误在传输层分别保留 400/415/413，业务错误只在 Access 路由映射。平台保留 query 参数交由业务端点严格验证，Access 端点当前均拒绝未知 query；`modules/access/interfaces/http` 负责 Login、Setup、Status、Logout、Password 并构造安全码和公开 DTO。登录成功更换 token，普通 cookie 只在浏览器会话内、持久 cookie 最多 30 天；浏览器会话 Cookie 不设置 Max-Age，记住我 Cookie 的 Max-Age 为 30 天；两者服务端均按签发起最长 30 天的有效期拒绝过期认证。未访问的过期记录目前没有全量清扫，因此失效不等于数据库物理删除。TOTP/Passkey 尚未实施，有启用标志时拒绝密码登录；失败封禁策略由 Access Service 持有并显式配置，默认未启用；loopback、RFC1918、IPv6 ULA/link-local（含映射地址）跳过封禁。启用时由 Access 提供阈值与时长，SQLite Adapter 仅在显式事务中原子更新计数。验证码和完整的持久策略配置/管理 API 后续补齐。独立入口从 `packages/backend-next` 启动且默认监听 127.0.0.1，必须先完成受控初始化。启动变量为 `NEXUS_NEXT_DB_PATH`、`NEXUS_NEXT_ENCRYPTION_KEY`（32 字节 base64）、`NEXUS_NEXT_PUBLIC_ORIGIN`，可选 `NEXUS_NEXT_HOST/NEXUS_NEXT_PORT/NEXUS_NEXT_TRUSTED_PROXIES`。仅 Access API 注册，所有 Targets/Remote HTTP/WS 路由仍需先按 B/C 批接授权。
+新 `platform/http` 只接收通用路由，固定 Origin、明确可信代理、严格 body 限制、无旁路 CORS；非法 JSON/Content-Type/大小错误在传输层分别保留 400/415/413，业务错误只在 Access 路由映射。平台保留 query 参数交由业务端点严格验证，Access 端点当前均拒绝未知 query；`modules/access/interfaces/http` 负责 Login、Setup、Status、Logout、Password 并构造安全码和公开 DTO。登录成功更换 token，普通 cookie 只在浏览器会话内、持久 cookie 最多 30 天；浏览器会话 Cookie 不设置 Max-Age，记住我 Cookie 的 Max-Age 为 30 天；两者服务端均按签发起最长 30 天的有效期拒绝过期认证。未访问的过期记录目前没有全量清扫，因此失效不等于数据库物理删除。TOTP/Passkey 尚未实施，有启用标志时拒绝密码登录；失败封禁策略由 Access Service 持有并显式配置，默认未启用；loopback、RFC1918、IPv6 ULA/link-local（含映射地址）跳过封禁。启用时由 Access 提供阈值与时长，SQLite Adapter 仅在显式事务中原子更新计数。验证码和完整的持久策略配置/管理 API 后续补齐。独立入口从 `packages/backend-next` 启动且默认监听 127.0.0.1，必须先完成受控初始化。启动变量为 `NEXUS_NEXT_DB_PATH`、`NEXUS_NEXT_ENCRYPTION_KEY`（32 字节 base64）、`NEXUS_NEXT_PUBLIC_ORIGIN`，可选 `NEXUS_NEXT_HOST/NEXUS_NEXT_PORT/NEXUS_NEXT_TRUSTED_PROXIES`。Access 与 Targets 管理 API 已注册；Remote/Agent HTTP/WS 仍需后续授权装配。
+
+## backend-next Targets 受认证 HTTP 切片
+
+`modules/targets/interfaces/http` 是唯一 Targets 管理 HTTP 入口，使用 Access 公开的身份恢复契约；当前数据库仅由首次管理员初始化，因此明确只允许管理员 ID 1 的会话请求，其余身份拒绝。Platform HTTP 只持有通用路由和参数位置（精确静态匹配优先，其后参数段），不包含 Targets 业务对象和授权语义。Targets 的 decoder 从 `unknown` 严格验证字段、类型、长度、输入数组和关系，再创建独立 Service 输入；更新要求 `version` 及补丁，省略保留、null 仅在可空字段上有效，导入每批不超过 50 个并按条提交。模块出口错误仅映射稳定码与 HTTP 状态。
+
+管理视图的 Connection/Proxy/Tag/SSH Key、变更结果、Credential 状态和导入结果均经 `interfaces/http/target-http-view.ts` 逐字段投影到 Shared wire，不从内部对象展开，也不公开 trusted SSH Resolver。Shared 新 contract 按 `connections/proxies/ssh-keys/tags` 的 `model/api`、`targets/api` 精确子路径导出；旧 Protocol 只继续用于不同形态的旧产品 wire，不被新包引用。新 `/__targets-next` Frontend 开发入口使用同一个新实例和 Access Cookie，旧 Pinia/Workspace 不混用该数据；未提供真实连接测试与 Remote HTTP 终端。
 
 ## 技术基线
 

@@ -229,6 +229,12 @@ Workspace WebSocket 由 runtime protocol/session owner 处理：
 
 组件只消费已解码事件和 domain model。二进制 frame、重连、心跳、backpressure 和 teardown 留在 transport/session 层。
 
+## backend-next 的独立 Targets 开发入口
+
+`features/targets-next` 是独立于正式连接管理和运行期的开发功能。路由只在 `import.meta.env.DEV` 出现，地址为 `/__targets-next`；需配置 `NEXUS_VITE_BACKEND_NEXT_ORIGIN` 才在 Vite 建立 `/__next` 单独代理，绝不覆盖旧 `/api` 和旧 WebSocket。新 `backend-next` 的外部 `NEXUS_NEXT_PUBLIC_ORIGIN` 必须是访问该 Vite 页面使用的 Origin。页面的 Access 登录、管理 API 与 cookie 都走同一 `/__next`，不得使用旧 auth Store、连接 Store 或 Workspace 能力。会话数据由当前页面内独立状态持有，关闭/刷新失效；新客户端对 Connection/Proxy/SSH Key/Tag/Import 的 wire 结果执行明确字段解码，类型来源于 Shared 精确子路径。
+
+旧生产表单中的 `ConnectionTypeDto` 和 `ProxyTypeDto` 与新包有限取值相同，已在所属前端 model 改从 Shared 引用；但旧 `ConnectionDto` 的 nullable route、authMethod、jumpChain、lastConnectedAt，旧 Proxy authMethod 以及其它业务 View 与新管理 contract 表示不同，旧 feature API/Store/表单仍继续使用 Protocol 并访问正式 Backend。不能直接替换这些类型，必须待终端和相关消费同步迁移后再重构。
+
 ## Agent frontend
 
 `features/agent` 提供全局悬浮 Host、设置、历史、运行详情、approval、artifact、plugin App surface 与 onboarding。Agent 不属于 Workspace Runtime；需要 Workspace、terminal 或文件能力时使用 Backend contract 或 app 提供的 capability，不读取 Workspace 私有 state。
