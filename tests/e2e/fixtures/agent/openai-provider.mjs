@@ -579,7 +579,7 @@ const server = http.createServer(async (request, response) => {
 				'file_patch',
 				{
 					...selector,
-					patch: '--- /api-500/server.mjs\n+++ /api-500/server.mjs\n@@ -14,1 +14,1 @@\n-      const items = catalog.products.map((item) => ({ id: item.id, price: item.price }));\n+      const items = catalog.items.map((item) => ({ id: item.id, price: item.price }));\n',
+					patch: '--- /api-500/server.mjs\n+++ /api-500/server.mjs\n@@ -14,1 +14,1 @@\n-\t\t\tconst items = catalog.products.map((item) => ({ id: item.id, price: item.price }));\n+\t\t\tconst items = catalog.items.map((item) => ({ id: item.id, price: item.price }));\n',
 				},
 			],
 			[
@@ -634,7 +634,7 @@ const server = http.createServer(async (request, response) => {
 				'file_patch',
 				{
 					...selector,
-					patch: '--- /build-repair/src/catalog.mjs\n+++ /build-repair/src/catalog.mjs\n@@ -1,3 +1,3 @@\n-export const totalPrices = (items) => {\n+export const totalPrice = (items) => {\n   return items.reduce((sum, item) => sum + item.price * item.quantity, 0);\n };\n',
+					patch: '--- /build-repair/src/catalog.mjs\n+++ /build-repair/src/catalog.mjs\n@@ -1,3 +1,3 @@\n-export const totalPrices = (items) => {\n+export const totalPrice = (items) => {\n \treturn items.reduce((sum, item) => sum + item.price * item.quantity, 0);\n };\n',
 				},
 			],
 			[
