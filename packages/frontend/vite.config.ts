@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 const resolveLocalModule = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 const devBackendOrigin = process.env.NEXUS_VITE_BACKEND_ORIGIN || 'http://localhost:3001';
 const devBackendWebSocketOrigin = devBackendOrigin.replace(/^http/, 'ws');
+// Opt-in development backend. The legacy /api proxy remains untouched.
+const devNextOrigin = process.env.NEXUS_VITE_BACKEND_NEXT_ORIGIN;
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -43,6 +45,15 @@ export default defineConfig({
 		// Keep this explicit instead of disabling host checks globally.
 		allowedHosts: ['api.honus.top'],
 		proxy: {
+			...(devNextOrigin
+				? {
+						'/__next': {
+							target: devNextOrigin,
+							changeOrigin: false,
+							rewrite: (path: string) => path.replace(/^\/__next/, ''),
+						},
+					}
+				: {}),
 			'/plugins': {
 				target: devBackendOrigin,
 				changeOrigin: false,

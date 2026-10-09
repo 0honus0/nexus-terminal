@@ -1,0 +1,29 @@
+{
+  "targetsNext": {
+    "title": "新バックエンド Targets — 開発用",
+    "isolation": "この画面は backend-next のみを使用します。従来の接続とワークスペースには引き継がれません。",
+    "setup": "初期管理者の設定",
+    "login": "新バックエンドにログイン",
+    "username": "ユーザー名",
+    "password": "パスワード",
+    "continue": "続行",
+    "logout": "ログアウト",
+    "noRemote": "この開発用管理画面では接続テストとリモートセッションを利用できません。",
+    "connections": "接続",
+    "proxies": "プロキシ",
+    "tags": "タグ",
+    "keys": "SSH キー",
+    "refresh": "更新",
+    "name": "名前",
+    "host": "ホスト",
+    "port": "ポート",
+    "privateKey": "秘密鍵",
+    "create": "作成",
+    "rename": "名前変更",
+    "delete": "削除",
+    "renamePrompt": "新しい名前",
+    "deleteConfirm": "この項目を削除しますか？",
+    "saved": "保存しました",
+    "import": "接続を1件インポート"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "targetsNext": {
+    "title": "新版后端 Targets — 开发入口",
+    "isolation": "此页面只访问 backend-next。旧版连接页和工作区不会使用这里的记录。",
+    "setup": "首次管理员初始化",
+    "login": "登录新版后端",
+    "username": "用户名",
+    "password": "密码",
+    "continue": "继续",
+    "logout": "退出登录",
+    "noRemote": "此开发管理页面暂不提供连接测试和远程会话。",
+    "connections": "连接",
+    "proxies": "代理",
+    "tags": "标签",
+    "keys": "SSH 密钥",
+    "refresh": "刷新",
+    "name": "名称",
+    "host": "主机",
+    "port": "端口",
+    "privateKey": "私钥",
+    "create": "创建",
+    "rename": "重命名",
+    "delete": "删除",
+    "renamePrompt": "新名称",
+    "deleteConfirm": "确定删除此项目？",
+    "saved": "已保存修改",
+    "import": "导入单条连接"
+  }
+}

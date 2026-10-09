@@ -1,0 +1,29 @@
+{
+  "targetsNext": {
+    "title": "New Backend Targets — Development",
+    "isolation": "This view uses only backend-next. Legacy Connections/Workspace are not connected to these records.",
+    "setup": "Initial administrator setup",
+    "login": "Sign in to backend-next",
+    "username": "Username",
+    "password": "Password",
+    "continue": "Continue",
+    "logout": "Sign out",
+    "noRemote": "Connection tests and remote sessions are unavailable on this development management screen.",
+    "connections": "Connections",
+    "proxies": "Proxies",
+    "tags": "Tags",
+    "keys": "SSH Keys",
+    "refresh": "Refresh",
+    "name": "Name",
+    "host": "Host",
+    "port": "Port",
+    "privateKey": "Private key",
+    "create": "Create",
+    "rename": "Rename",
+    "delete": "Delete",
+    "renamePrompt": "New name",
+    "deleteConfirm": "Delete this item?",
+    "saved": "Changes saved",
+    "import": "Import one connection"
+  }
+}
