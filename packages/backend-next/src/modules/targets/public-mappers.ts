@@ -65,19 +65,45 @@ export function connectionInput(input: PublicMetadata): InternalMetadata {
 
 export function connectionPatch(input: Partial<PublicMetadata>): Partial<InternalMetadata> {
 	const result: Partial<InternalMetadata> = {};
-	if (input.name !== undefined) result.name = input.name;
-	if (input.type !== undefined) result.type = input.type;
-	if (input.host !== undefined) result.host = input.host;
-	if (input.port !== undefined) result.port = input.port;
-	if (input.username !== undefined) result.username = input.username;
-	if (input.route !== undefined) result.route = input.route;
-	if (input.proxyId !== undefined) result.proxyId = input.proxyId;
-	if (input.notes !== undefined) result.notes = input.notes;
-	if (input.rdpRemoteApp !== undefined) result.rdpRemoteApp = input.rdpRemoteApp;
-	if (input.rdpRemoteAppDirectory !== undefined) result.rdpRemoteAppDirectory = input.rdpRemoteAppDirectory;
-	if (input.rdpRemoteAppArguments !== undefined) result.rdpRemoteAppArguments = input.rdpRemoteAppArguments;
-	if (input.tagIds !== undefined) result.tagIds = input.tagIds.map((id) => id);
-	if (input.jumpIds !== undefined) result.jumpIds = input.jumpIds.map((id) => id);
+	if (input.name !== undefined) {
+		result.name = input.name;
+	}
+	if (input.type !== undefined) {
+		result.type = input.type;
+	}
+	if (input.host !== undefined) {
+		result.host = input.host;
+	}
+	if (input.port !== undefined) {
+		result.port = input.port;
+	}
+	if (input.username !== undefined) {
+		result.username = input.username;
+	}
+	if (input.route !== undefined) {
+		result.route = input.route;
+	}
+	if (input.proxyId !== undefined) {
+		result.proxyId = input.proxyId;
+	}
+	if (input.notes !== undefined) {
+		result.notes = input.notes;
+	}
+	if (input.rdpRemoteApp !== undefined) {
+		result.rdpRemoteApp = input.rdpRemoteApp;
+	}
+	if (input.rdpRemoteAppDirectory !== undefined) {
+		result.rdpRemoteAppDirectory = input.rdpRemoteAppDirectory;
+	}
+	if (input.rdpRemoteAppArguments !== undefined) {
+		result.rdpRemoteAppArguments = input.rdpRemoteAppArguments;
+	}
+	if (input.tagIds !== undefined) {
+		result.tagIds = input.tagIds.map((id) => id);
+	}
+	if (input.jumpIds !== undefined) {
+		result.jumpIds = input.jumpIds.map((id) => id);
+	}
 	return result;
 }
 
@@ -104,8 +130,12 @@ export function connectionView(record: InternalSnapshot): PublicSnapshot {
 }
 
 export function connectionMutation(result: InternalConnectionMutation): PublicConnectionMutation {
-	if (result.status === 'updated') return { status: 'updated', value: connectionView(result.value) };
-	if (result.status === 'not_found') return { status: 'not_found' };
+	if (result.status === 'updated') {
+		return { status: 'updated', value: connectionView(result.value) };
+	}
+	if (result.status === 'not_found') {
+		return { status: 'not_found' };
+	}
 	return { status: 'version_conflict' };
 }
 
@@ -121,7 +151,9 @@ export function importInput(command: PublicImport): InternalImport {
 			username: proxy.username,
 		};
 	}
-	if (command.tagNames !== undefined) result.tagNames = command.tagNames.map((name) => name);
+	if (command.tagNames !== undefined) {
+		result.tagNames = command.tagNames.map((name) => name);
+	}
 	return result;
 }
 
@@ -139,18 +171,32 @@ export function proxyInput(input: ProxyInput): InternalProxyInput {
 		port: input.port,
 		username: input.username,
 	};
-	if (input.password !== undefined) result.password = input.password;
+	if (input.password !== undefined) {
+		result.password = input.password;
+	}
 	return result;
 }
 
 export function proxyPatch(input: ProxyUpdateInput): InternalProxyChanges {
 	const result: InternalProxyChanges = {};
-	if (input.name !== undefined) result.name = input.name;
-	if (input.type !== undefined) result.type = input.type;
-	if (input.host !== undefined) result.host = input.host;
-	if (input.port !== undefined) result.port = input.port;
-	if (input.username !== undefined) result.username = input.username;
-	if (input.password !== undefined) result.password = input.password;
+	if (input.name !== undefined) {
+		result.name = input.name;
+	}
+	if (input.type !== undefined) {
+		result.type = input.type;
+	}
+	if (input.host !== undefined) {
+		result.host = input.host;
+	}
+	if (input.port !== undefined) {
+		result.port = input.port;
+	}
+	if (input.username !== undefined) {
+		result.username = input.username;
+	}
+	if (input.password !== undefined) {
+		result.password = input.password;
+	}
 	return result;
 }
 
@@ -169,8 +215,12 @@ export function proxyView(record: ProxySnapshot): ProxyView {
 }
 
 export function proxyMutation(result: ProxyMutation): PublicProxyMutation {
-	if (result.status === 'updated') return { status: 'updated', value: proxyView(result.value) };
-	if (result.status === 'not_found') return { status: 'not_found' };
+	if (result.status === 'updated') {
+		return { status: 'updated', value: proxyView(result.value) };
+	}
+	if (result.status === 'not_found') {
+		return { status: 'not_found' };
+	}
 	return { status: 'version_conflict' };
 }
 
@@ -185,22 +235,34 @@ export function tagView(record: TagSnapshot): TagView {
 }
 
 export function tagMutation(result: TagMutation): PublicTagMutation {
-	if (result.status === 'updated') return { status: 'updated', value: tagView(result.value) };
-	if (result.status === 'not_found') return { status: 'not_found' };
+	if (result.status === 'updated') {
+		return { status: 'updated', value: tagView(result.value) };
+	}
+	if (result.status === 'not_found') {
+		return { status: 'not_found' };
+	}
 	return { status: 'version_conflict' };
 }
 
 export function sshKeyInput(input: PublicKeyInput): InternalKeyInput {
 	const result: InternalKeyInput = { name: input.name, privateKey: input.privateKey };
-	if (input.passphrase !== undefined) result.passphrase = input.passphrase;
+	if (input.passphrase !== undefined) {
+		result.passphrase = input.passphrase;
+	}
 	return result;
 }
 
 export function sshKeyPatch(input: PublicKeyChanges): InternalKeyChanges {
 	const result: InternalKeyChanges = {};
-	if (input.name !== undefined) result.name = input.name;
-	if (input.privateKey !== undefined) result.privateKey = input.privateKey;
-	if (input.passphrase !== undefined) result.passphrase = input.passphrase;
+	if (input.name !== undefined) {
+		result.name = input.name;
+	}
+	if (input.privateKey !== undefined) {
+		result.privateKey = input.privateKey;
+	}
+	if (input.passphrase !== undefined) {
+		result.passphrase = input.passphrase;
+	}
 	return result;
 }
 
@@ -215,19 +277,29 @@ export function sshKeyView(record: SshKeySnapshot): SshKeyView {
 }
 
 export function sshKeyMutation(result: SshKeyMutation): PublicKeyMutation {
-	if (result.status === 'updated') return { status: 'updated', value: sshKeyView(result.value) };
-	if (result.status === 'not_found') return { status: 'not_found' };
+	if (result.status === 'updated') {
+		return { status: 'updated', value: sshKeyView(result.value) };
+	}
+	if (result.status === 'not_found') {
+		return { status: 'not_found' };
+	}
 	return { status: 'version_conflict' };
 }
 
 export function credentialInput(input: PublicCredentialInput): InternalCredentialInput {
-	if (input.kind === 'password') return { kind: 'password', password: input.password };
+	if (input.kind === 'password') {
+		return { kind: 'password', password: input.password };
+	}
 	return { kind: 'ssh_key', sshKeyId: input.sshKeyId };
 }
 
 export function credentialMutation(result: InternalCredentialMutation): PublicCredentialMutation {
-	if (result.status === 'updated') return { status: 'updated' };
-	if (result.status === 'not_found') return { status: 'not_found' };
+	if (result.status === 'updated') {
+		return { status: 'updated' };
+	}
+	if (result.status === 'not_found') {
+		return { status: 'not_found' };
+	}
 	return { status: 'version_conflict' };
 }
 

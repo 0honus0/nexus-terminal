@@ -17,7 +17,9 @@ export class ConnectionImportModel {
 				username: proxy.username,
 			};
 		}
-		if (command.tagNames !== undefined) input.tagNames = [...command.tagNames];
+		if (command.tagNames !== undefined) {
+			input.tagNames = [...command.tagNames];
+		}
 		return fromStorage(await this.storage.importOne(input));
 	}
 }

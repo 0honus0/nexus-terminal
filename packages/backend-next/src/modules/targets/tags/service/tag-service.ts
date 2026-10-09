@@ -1,11 +1,15 @@
 import { TagModel } from '../model/tag-model.js';
 
 function id(value: number) {
-	if (!Number.isSafeInteger(value) || value <= 0) throw new Error('Invalid ID');
+	if (!Number.isSafeInteger(value) || value <= 0) {
+		throw new Error('Invalid ID');
+	}
 }
 
 function name(value: string) {
-	if (typeof value !== 'string' || !value.trim()) throw new Error('Invalid tag name');
+	if (typeof value !== 'string' || !value.trim()) {
+		throw new Error('Invalid tag name');
+	}
 	return value.trim();
 }
 

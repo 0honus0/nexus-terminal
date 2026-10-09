@@ -4,6 +4,8 @@
 
 ## 独立重构包边界
 
+新包遵守[全局编码约定](../架构重构.md#全局编码约定)：控制语句使用花括号，函数之间保留空行，格式由仓库现有 ESLint/Prettier 执行；封装、命名及类型 owner 在代码审核时一并检查。
+
 正式产品仍由 `packages/backend` 服务；`packages/backend-next` 是独立重构包，不调用旧 Backend/Protocol、不接收正式流量，当前装配 Targets 和 Remote 的内部 SSH Shell 会话。新包的 Platform 只持有通用 SQLite 事务/迁移/生命周期、SecretBox 与通用 SSH 技术能力；Targets 持有业务 Schema、存储契约及 SQLite Adapter。Service 使用应用类型，Model 逐字段转换存储命令与读取结果；凭据加解密由 Service 调用通用 SecretBox 完成。
 
 Targets 的模块出口独立定义管理与可信 SSH 契约，出入对象均通过字段白名单转换，普通管理结果不含凭据。可信解析作为独立 Backend 能力注入 Remote；Remote 将其转换为与业务无关的 SSH 机器请求。Targets 安全错误码、SQLite 不可用状态和统一跳板限制均已按真实 owner 实现；整体关机先取消并关闭 Remote Session，再关闭 SQLite。具体机器通道与待验收场景见[架构重构](../架构重构.md)，后续功能施工见[下一阶段实施方案](../后端重构下一阶段实施方案.md)。本节不改变下文现行旧包的 owner。

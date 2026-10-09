@@ -58,7 +58,9 @@ function resource(
 	});
 
 	const ensure = () => {
-		if (closed || closePromise || !machine.isOpen) throw new Error('Remote session resource closed');
+		if (closed || closePromise || !machine.isOpen) {
+			throw new Error('Remote session resource closed');
+		}
 	};
 
 	return {
@@ -124,7 +126,9 @@ function resource(
 		},
 
 		close() {
-			if (closePromise) return closePromise;
+			if (closePromise) {
+				return closePromise;
+			}
 			closePromise = Promise.resolve().then(async () => {
 				closed = true;
 				offMachine();
@@ -140,7 +144,9 @@ function resource(
 				} catch (error) {
 					failures.push(error);
 				}
-				if (failures.length) throw new AggregateError(failures, 'Remote resource close failed');
+				if (failures.length) {
+					throw new AggregateError(failures, 'Remote resource close failed');
+				}
 			});
 			return closePromise;
 		},
@@ -156,7 +162,9 @@ export class RemoteSessionModel {
 	) {}
 
 	async open(request: OpenSessionRequest): Promise<RemoteSessionResource> {
-		if (!this.verifyHostKey) throw new Error('SSH host-key verification policy is not configured');
+		if (!this.verifyHostKey) {
+			throw new Error('SSH host-key verification policy is not configured');
+		}
 		request.signal?.throwIfAborted();
 		const controller = new AbortController();
 
@@ -173,7 +181,9 @@ export class RemoteSessionModel {
 			const target = await this.resolver.resolveStored(request.targetId);
 			controller.signal.throwIfAborted();
 			const remaining = deadline - Date.now();
-			if (remaining <= 0) throw new Error('Remote session opening deadline exceeded');
+			if (remaining <= 0) {
+				throw new Error('Remote session opening deadline exceeded');
+			}
 			machine = await this.ssh.connect(toMachineTarget(target), {
 				timeoutMs: remaining,
 				signal: controller.signal,

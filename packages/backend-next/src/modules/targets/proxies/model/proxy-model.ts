@@ -22,8 +22,12 @@ function fromStorage(record: ProxyRecord): ProxySnapshot {
 }
 
 function mutation(result: StoredMutation): ProxyMutation {
-	if (result.status === 'updated') return { status: 'updated', value: fromStorage(result.value) };
-	if (result.status === 'not_found') return { status: 'not_found' };
+	if (result.status === 'updated') {
+		return { status: 'updated', value: fromStorage(result.value) };
+	}
+	if (result.status === 'not_found') {
+		return { status: 'not_found' };
+	}
 	return { status: 'version_conflict' };
 }
 
@@ -47,18 +51,32 @@ export class ProxyModel {
 			port: data.port,
 			username: data.username,
 		};
-		if (data.encryptedPassword !== undefined) command.encryptedPassword = data.encryptedPassword;
+		if (data.encryptedPassword !== undefined) {
+			command.encryptedPassword = data.encryptedPassword;
+		}
 		return fromStorage(await this.storage.create(command));
 	}
 
 	async update(id: number, version: number, data: ProxyCommandPatch): Promise<ProxyMutation> {
 		const patch: ProxyPatch = {};
-		if (data.name !== undefined) patch.name = data.name;
-		if (data.type !== undefined) patch.type = data.type;
-		if (data.host !== undefined) patch.host = data.host;
-		if (data.port !== undefined) patch.port = data.port;
-		if (data.username !== undefined) patch.username = data.username;
-		if (data.encryptedPassword !== undefined) patch.encryptedPassword = data.encryptedPassword;
+		if (data.name !== undefined) {
+			patch.name = data.name;
+		}
+		if (data.type !== undefined) {
+			patch.type = data.type;
+		}
+		if (data.host !== undefined) {
+			patch.host = data.host;
+		}
+		if (data.port !== undefined) {
+			patch.port = data.port;
+		}
+		if (data.username !== undefined) {
+			patch.username = data.username;
+		}
+		if (data.encryptedPassword !== undefined) {
+			patch.encryptedPassword = data.encryptedPassword;
+		}
 		return mutation(await this.storage.update(id, version, patch));
 	}
 

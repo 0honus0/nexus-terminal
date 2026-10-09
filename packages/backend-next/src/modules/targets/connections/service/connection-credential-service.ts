@@ -8,14 +8,21 @@ export class ConnectionCredentialService {
 	) {}
 
 	async set(id: number, version: number, input: SshCredentialInput) {
-		if (!Number.isSafeInteger(id) || id <= 0 || !Number.isSafeInteger(version) || version <= 0)
+		if (!Number.isSafeInteger(id) || id <= 0 || !Number.isSafeInteger(version) || version <= 0) {
 			throw new Error('Invalid ID/version');
+		}
 		if (input.kind === 'ssh_key') {
-			if (!Number.isSafeInteger(input.sshKeyId) || input.sshKeyId <= 0) throw new Error('Invalid SSH key ID');
+			if (!Number.isSafeInteger(input.sshKeyId) || input.sshKeyId <= 0) {
+				throw new Error('Invalid SSH key ID');
+			}
 			return this.model.set(id, version, { kind: 'ssh_key', sshKeyId: input.sshKeyId });
 		}
-		if (input.kind !== 'password' || !input.password) throw new Error('Invalid SSH password');
-		if (!this.secrets) throw new Error('Encryption key required');
+		if (input.kind !== 'password' || !input.password) {
+			throw new Error('Invalid SSH password');
+		}
+		if (!this.secrets) {
+			throw new Error('Encryption key required');
+		}
 		return this.model.set(id, version, {
 			kind: 'password',
 			encryptedPassword: this.secrets.encrypt(input.password, 'connection:password'),
@@ -23,8 +30,9 @@ export class ConnectionCredentialService {
 	}
 
 	clear(id: number, version: number) {
-		if (!Number.isSafeInteger(id) || id <= 0 || !Number.isSafeInteger(version) || version <= 0)
+		if (!Number.isSafeInteger(id) || id <= 0 || !Number.isSafeInteger(version) || version <= 0) {
 			throw new Error('Invalid ID/version');
+		}
 		return this.model.clear(id, version);
 	}
 }

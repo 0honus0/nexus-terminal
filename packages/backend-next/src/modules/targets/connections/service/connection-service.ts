@@ -22,7 +22,9 @@ export class ConnectionService {
 		validId(id);
 		validId(version);
 		const old = await this.model.get(id);
-		if (!old) return { status: 'not_found' as const };
+		if (!old) {
+			return { status: 'not_found' as const };
+		}
 		const normalized = validateConnection({ ...old, ...changes });
 		const update = Object.fromEntries(
 			Object.keys(changes).map((key) => [key, normalized[key as keyof ConnectionMetadata]]),
@@ -32,7 +34,9 @@ export class ConnectionService {
 
 	clone(id: number, name: string) {
 		validId(id);
-		if (!name.trim()) throw new Error('Empty name');
+		if (!name.trim()) {
+			throw new Error('Empty name');
+		}
 		return this.model.clone(id, name.trim());
 	}
 

@@ -31,12 +31,16 @@ export class RemoteSessionService {
 
 	private requireSession(id: string): ActiveSession {
 		const session = this.sessions.get(id);
-		if (!session) throw new Error('Remote session not found');
+		if (!session) {
+			throw new Error('Remote session not found');
+		}
 		return session;
 	}
 
 	private admitted(): void {
-		if (!this.accepting) throw new Error('Remote sessions are closing');
+		if (!this.accepting) {
+			throw new Error('Remote sessions are closing');
+		}
 	}
 
 	open(request: OpenSessionRequest): Promise<RemoteSessionSnapshot> {
@@ -51,16 +55,20 @@ export class RemoteSessionService {
 			!Number.isSafeInteger(request.timeoutMs) ||
 			request.timeoutMs < 1 ||
 			request.timeoutMs > MAX_CONNECT_TIMEOUT
-		)
+		) {
 			throw new Error('Invalid remote session request');
-		if (this.sessions.size + this.opening.size >= MAX_LIVE_SESSIONS)
+		}
+		if (this.sessions.size + this.opening.size >= MAX_LIVE_SESSIONS) {
 			throw new Error('Remote session capacity exceeded');
+		}
 		const controller = new AbortController();
 
 		const abort = () => controller.abort(request.signal?.reason);
 
 		request.signal?.addEventListener('abort', abort, { once: true });
-		if (request.signal?.aborted) abort();
+		if (request.signal?.aborted) {
+			abort();
+		}
 		this.opening.add(controller);
 		const task = this.openAdmitted(request, controller);
 		this.openingTasks.add(task);
@@ -88,8 +96,9 @@ export class RemoteSessionService {
 				timeoutMs: request.timeoutMs,
 				signal: controller.signal,
 			});
-			if (controller.signal.aborted || !this.accepting || !opened.isOpen)
+			if (controller.signal.aborted || !this.accepting || !opened.isOpen) {
 				throw new Error('Remote session opening cancelled');
+			}
 			const id = randomUUID();
 			const view: RemoteSessionSnapshot = {
 				id,
@@ -166,7 +175,9 @@ export class RemoteSessionService {
 
 	write(id: string, bytes: Uint8Array): boolean {
 		const session = this.requireSession(id);
-		if (!session.resource.isOpen || session.closing) throw new Error('Remote session closed');
+		if (!session.resource.isOpen || session.closing) {
+			throw new Error('Remote session closed');
+		}
 		return session.resource.write(bytes);
 	}
 
@@ -211,10 +222,16 @@ export class RemoteSessionService {
 
 	closeSession(id: string): Promise<void> {
 		const pending = this.sessionClosings.get(id);
-		if (pending) return pending;
+		if (pending) {
+			return pending;
+		}
 		const session = this.sessions.get(id);
-		if (!session) return Promise.resolve();
-		if (session.closing) return session.closing;
+		if (!session) {
+			return Promise.resolve();
+		}
+		if (session.closing) {
+			return session.closing;
+		}
 		session.closing = Promise.resolve().then(async () => {
 			this.sessions.delete(id);
 			session.offResource();
@@ -248,13 +265,19 @@ export class RemoteSessionService {
 	}
 
 	quiesce(): void {
-		if (!this.accepting) return;
+		if (!this.accepting) {
+			return;
+		}
 		this.accepting = false;
-		for (const controller of this.opening) controller.abort(new Error('Remote sessions shutting down'));
+		for (const controller of this.opening) {
+			controller.abort(new Error('Remote sessions shutting down'));
+		}
 	}
 
 	close(): Promise<void> {
-		if (this.closing) return this.closing;
+		if (this.closing) {
+			return this.closing;
+		}
 		this.quiesce();
 		this.closing = (async () => {
 			await Promise.allSettled([...this.openingTasks]);
@@ -265,11 +288,12 @@ export class RemoteSessionService {
 			const failures = completions.filter(
 				(result): result is PromiseRejectedResult => result.status === 'rejected',
 			);
-			if (failures.length)
+			if (failures.length) {
 				throw new AggregateError(
 					failures.map((item) => item.reason),
 					'Remote sessions failed to close',
 				);
+			}
 		})();
 		return this.closing;
 	}

@@ -3,11 +3,15 @@ import { SshKeyModel } from '../model/ssh-key-model.js';
 import type { SecretBox } from '../../../../platform/security/secret-box.js';
 
 function id(n: number) {
-	if (!Number.isSafeInteger(n) || n <= 0) throw new Error('Invalid ID');
+	if (!Number.isSafeInteger(n) || n <= 0) {
+		throw new Error('Invalid ID');
+	}
 }
 
 function name(n: string) {
-	if (typeof n !== 'string' || !n.trim()) throw new Error('Invalid SSH key name');
+	if (typeof n !== 'string' || !n.trim()) {
+		throw new Error('Invalid SSH key name');
+	}
 	return n.trim();
 }
 
@@ -18,7 +22,9 @@ export class SshKeyService {
 	) {}
 
 	private crypto() {
-		if (!this.secrets) throw new Error('Encryption key required');
+		if (!this.secrets) {
+			throw new Error('Encryption key required');
+		}
 		return this.secrets;
 	}
 
@@ -32,7 +38,9 @@ export class SshKeyService {
 	}
 
 	create(data: SshKeyInput) {
-		if (typeof data.privateKey !== 'string' || !data.privateKey.trim()) throw new Error('Invalid SSH private key');
+		if (typeof data.privateKey !== 'string' || !data.privateKey.trim()) {
+			throw new Error('Invalid SSH private key');
+		}
 		const secret = this.crypto();
 		return this.model.create({
 			name: name(data.name),
@@ -45,15 +53,20 @@ export class SshKeyService {
 		id(n);
 		id(v);
 		const patch: SshKeyCommandPatch = {};
-		if (data.name !== undefined) patch.name = name(data.name);
+		if (data.name !== undefined) {
+			patch.name = name(data.name);
+		}
 		if (data.privateKey !== undefined) {
-			if (!data.privateKey.trim()) throw new Error('Invalid SSH private key');
+			if (!data.privateKey.trim()) {
+				throw new Error('Invalid SSH private key');
+			}
 			patch.encryptedPrivateKey = this.crypto().encrypt(data.privateKey, 'ssh-key:private');
 		}
-		if (data.passphrase !== undefined)
+		if (data.passphrase !== undefined) {
 			patch.encryptedPassphrase = data.passphrase
 				? this.crypto().encrypt(data.passphrase, 'ssh-key:passphrase')
 				: null;
+		}
 		return this.model.update(n, v, patch);
 	}
 

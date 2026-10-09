@@ -20,7 +20,9 @@ export class ConnectionImportService {
 				throw new Error('Invalid inline proxy');
 			}
 		}
-		if (command.tagNames?.some((name) => !name.trim())) throw new Error('Invalid tag name');
+		if (command.tagNames?.some((name) => !name.trim())) {
+			throw new Error('Invalid tag name');
+		}
 		return this.model.importOne({ ...command, connection: validateConnection(command.connection) });
 	}
 

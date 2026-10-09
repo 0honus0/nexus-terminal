@@ -52,26 +52,40 @@ export class SshSftpLease implements MachineSftpLease {
 			void this.shutdown(new MachineSftpFailure('closed', 'unknown')).catch(() => undefined);
 		});
 		signal?.addEventListener('abort', this.abortLease, { once: true });
-		if (signal?.aborted) this.abortLease();
+		if (signal?.aborted) {
+			this.abortLease();
+		}
 	}
 
 	private release(): void {
-		if (this.released) return;
+		if (this.released) {
+			return;
+		}
 		this.released = true;
 		this.signal?.removeEventListener('abort', this.abortLease);
 		this.onEnded();
 	}
 
 	private markClosed(error: Error): void {
-		if (this.closed) return;
+		if (this.closed) {
+			return;
+		}
 		this.closed = true;
-		for (const reject of [...this.pending]) reject(error);
-		for (const stream of [...this.streams]) stream.destroy(error);
+		for (const reject of [...this.pending]) {
+			reject(error);
+		}
+		for (const stream of [...this.streams]) {
+			stream.destroy(error);
+		}
 	}
 
 	private ensure(options?: MachineOperationOptions): void {
-		if (options?.signal?.aborted || this.signal?.aborted) throw new MachineSftpFailure('cancelled', 'not_started');
-		if (this.closed || this.closePromise) throw new MachineSftpFailure('closed', 'not_started');
+		if (options?.signal?.aborted || this.signal?.aborted) {
+			throw new MachineSftpFailure('cancelled', 'not_started');
+		}
+		if (this.closed || this.closePromise) {
+			throw new MachineSftpFailure('closed', 'not_started');
+		}
 	}
 
 	private call<T>(
@@ -84,13 +98,18 @@ export class SshSftpLease implements MachineSftpLease {
 			let settled = false;
 
 			const finish = (error: Error | null | undefined, value?: T) => {
-				if (settled) return;
+				if (settled) {
+					return;
+				}
 				settled = true;
 				clearTimeout(timer);
 				options?.signal?.removeEventListener('abort', aborted);
 				this.pending.delete(failed);
-				if (error) reject(error);
-				else resolve(value!);
+				if (error) {
+					reject(error);
+				} else {
+					resolve(value!);
+				}
 			};
 
 			const failed = (error: Error) => finish(error);
@@ -152,7 +171,9 @@ export class SshSftpLease implements MachineSftpLease {
 			this.streams.delete(stream);
 		});
 		options?.signal?.addEventListener('abort', aborted, { once: true });
-		if (options?.signal?.aborted) aborted();
+		if (options?.signal?.aborted) {
+			aborted();
+		}
 		return stream;
 	}
 
@@ -204,8 +225,12 @@ export class SshSftpLease implements MachineSftpLease {
 	}
 
 	private shutdown(error: Error): Promise<void> {
-		if (this.closePromise) return this.closePromise;
-		if (this.released) return Promise.resolve();
+		if (this.closePromise) {
+			return this.closePromise;
+		}
+		if (this.released) {
+			return Promise.resolve();
+		}
 		let resolve!: () => void;
 		let reject!: (error: unknown) => void;
 		this.closePromise = new Promise<void>((success, failure) => {
@@ -215,13 +240,18 @@ export class SshSftpLease implements MachineSftpLease {
 		let finished = false;
 
 		const finish = (failure?: unknown) => {
-			if (finished) return;
+			if (finished) {
+				return;
+			}
 			finished = true;
 			clearTimeout(timer);
 			this.sftp.off('close', closed);
 			this.release();
-			if (failure === undefined) resolve();
-			else reject(failure);
+			if (failure === undefined) {
+				resolve();
+			} else {
+				reject(failure);
+			}
 		};
 
 		const closed = () => finish();

@@ -5,8 +5,12 @@ import type {
 import type { SshCredentialCommand, CredentialMutation } from './connection-credential-types.js';
 
 function mutation(result: StoredMutation): CredentialMutation {
-	if (result.status === 'updated') return { status: 'updated' };
-	if (result.status === 'not_found') return { status: 'not_found' };
+	if (result.status === 'updated') {
+		return { status: 'updated' };
+	}
+	if (result.status === 'not_found') {
+		return { status: 'not_found' };
+	}
 	return { status: 'version_conflict' };
 }
 

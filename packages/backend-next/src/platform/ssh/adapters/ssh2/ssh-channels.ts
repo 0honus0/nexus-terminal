@@ -30,7 +30,9 @@ class ByteChannel implements MachineByteChannel {
 		);
 		channel.on('drain', () => notify(this.drains));
 		channel.on('close', () => {
-			if (this.ended) return;
+			if (this.ended) {
+				return;
+			}
 			this.ended = true;
 			notify(this.closes);
 			this.drains.clear();
@@ -70,7 +72,9 @@ class ByteChannel implements MachineByteChannel {
 	}
 
 	close(): void {
-		if (this.channel.destroyed) return;
+		if (this.channel.destroyed) {
+			return;
+		}
 		this.channel.close();
 		this.channel.destroy();
 	}
@@ -82,8 +86,9 @@ export class SshShellChannel extends ByteChannel implements MachineShell {
 	}
 
 	resize(columns: number, rows: number): void {
-		if (!Number.isInteger(columns) || !Number.isInteger(rows) || columns < 1 || rows < 1)
+		if (!Number.isInteger(columns) || !Number.isInteger(rows) || columns < 1 || rows < 1) {
 			throw new Error('Invalid PTY size');
+		}
 		this.channel.setWindow(rows, columns, 0, 0);
 	}
 }
@@ -99,16 +104,21 @@ export class SshCommandChannel extends ByteChannel implements MachineCommand {
 			this.settle = resolve;
 		});
 		channel.on('close', (code: number | null, signal?: string | null) => {
-			if (typeof code !== 'number' || !Number.isInteger(code))
+			if (typeof code !== 'number' || !Number.isInteger(code)) {
 				this.finish({ status: 'unknown', reason: 'disconnect' });
-			else if (code === 0) this.finish({ status: 'completed', exitCode: 0, signal: signal ?? null });
-			else this.finish({ status: 'nonzero', exitCode: code, signal: signal ?? null });
+			} else if (code === 0) {
+				this.finish({ status: 'completed', exitCode: 0, signal: signal ?? null });
+			} else {
+				this.finish({ status: 'nonzero', exitCode: code, signal: signal ?? null });
+			}
 		});
 		channel.on('error', () => this.finish({ status: 'unknown', reason: 'channel_error' }));
 	}
 
 	private finish(result: MachineCommandOutcome): void {
-		if (this.settled) return;
+		if (this.settled) {
+			return;
+		}
 		this.settled = true;
 		this.settle(result);
 	}

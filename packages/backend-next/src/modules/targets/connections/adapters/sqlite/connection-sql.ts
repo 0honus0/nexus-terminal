@@ -47,35 +47,49 @@ function columns(input: Partial<ConnectionData>): { cols: string[]; vals: (strin
 }
 
 function number(value: unknown): number {
-	if (typeof value !== 'number' || !Number.isSafeInteger(value)) throw new Error('Corrupt integer');
+	if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+		throw new Error('Corrupt integer');
+	}
 	return value;
 }
 
 function string(value: unknown): string {
-	if (typeof value !== 'string') throw new Error('Corrupt string');
+	if (typeof value !== 'string') {
+		throw new Error('Corrupt string');
+	}
 	return value;
 }
 
 function nullable(value: unknown): string | null {
-	if (value === null) return null;
+	if (value === null) {
+		return null;
+	}
 	return string(value);
 }
 
 async function read(tx: SqlExecutor, id: number): Promise<StoredConnection | null> {
 	const row = await tx.one('SELECT * FROM connections WHERE id=?', [id]);
-	if (!row) return null;
+	if (!row) {
+		return null;
+	}
 	const tags = await tx.all('SELECT tag_id FROM connection_tags WHERE connection_id=? ORDER BY tag_id', [id]);
 	const jumps = await tx.all(
 		'SELECT jump_connection_id,position FROM connection_jumps WHERE connection_id=? ORDER BY position',
 		[id],
 	);
 	jumps.forEach((j, i) => {
-		if (j.position !== i) throw new Error('Corrupt jump positions');
+		if (j.position !== i) {
+			throw new Error('Corrupt jump positions');
+		}
 	});
 	const type = string(row.type);
-	if (!['SSH', 'RDP', 'VNC'].includes(type)) throw new Error('Corrupt connection type');
+	if (!['SSH', 'RDP', 'VNC'].includes(type)) {
+		throw new Error('Corrupt connection type');
+	}
 	const route = string(row.route);
-	if (!['direct', 'proxy', 'jump'].includes(route)) throw new Error('Corrupt route');
+	if (!['direct', 'proxy', 'jump'].includes(route)) {
+		throw new Error('Corrupt route');
+	}
 	const item: StoredConnection = {
 		id: number(row.id),
 		name: string(row.name),
@@ -95,34 +109,47 @@ async function read(tx: SqlExecutor, id: number): Promise<StoredConnection | nul
 		tagIds: tags.map((t) => number(t.tag_id)),
 		jumpIds: jumps.map((j) => number(j.jump_connection_id)),
 	};
-	if (item.route === 'jump' && (!item.jumpIds.length || item.type !== 'SSH')) throw new Error('Corrupt jump route');
-	if (item.route !== 'jump' && item.jumpIds.length) throw new Error('Corrupt jump relation');
+	if (item.route === 'jump' && (!item.jumpIds.length || item.type !== 'SSH')) {
+		throw new Error('Corrupt jump route');
+	}
+	if (item.route !== 'jump' && item.jumpIds.length) {
+		throw new Error('Corrupt jump relation');
+	}
 	return item;
 }
 
 async function relationships(tx: SqlExecutor, id: number, data: ConnectionData): Promise<void> {
-	if (data.route === 'jump' && (data.type !== 'SSH' || data.jumpIds.length === 0))
+	if (data.route === 'jump' && (data.type !== 'SSH' || data.jumpIds.length === 0)) {
 		throw new Error('Jump requires SSH chain');
-	if (data.route !== 'jump' && data.jumpIds.length) throw new Error('Unexpected jump chain');
-	if ((data.route === 'proxy' && data.proxyId === null) || (data.route !== 'proxy' && data.proxyId !== null))
+	}
+	if (data.route !== 'jump' && data.jumpIds.length) {
+		throw new Error('Unexpected jump chain');
+	}
+	if ((data.route === 'proxy' && data.proxyId === null) || (data.route !== 'proxy' && data.proxyId !== null)) {
 		throw new Error('Invalid proxy route');
-	if (new Set(data.jumpIds).size !== data.jumpIds.length || new Set(data.tagIds).size !== data.tagIds.length)
+	}
+	if (new Set(data.jumpIds).size !== data.jumpIds.length || new Set(data.tagIds).size !== data.tagIds.length) {
 		throw new Error('Duplicate relations');
+	}
 	for (const target of data.jumpIds) {
 		const row = await tx.one('SELECT type FROM connections WHERE id=?', [target]);
-		if (!row || row.type !== 'SSH' || target === id) throw new Error('Invalid SSH jump reference');
+		if (!row || row.type !== 'SSH' || target === id) {
+			throw new Error('Invalid SSH jump reference');
+		}
 	}
 	await tx.run('DELETE FROM connection_jumps WHERE connection_id=?', [id]);
-	for (let i = 0; i < data.jumpIds.length; i++)
+	for (let i = 0; i < data.jumpIds.length; i++) {
 		await tx.run('INSERT INTO connection_jumps(connection_id,position,jump_connection_id) VALUES(?,?,?)', [
 			id,
 			i,
 			data.jumpIds[i],
 		]);
+	}
 	await validateAffectedSshGraph(tx, id);
 	await tx.run('DELETE FROM connection_tags WHERE connection_id=?', [id]);
-	for (const tag of data.tagIds)
+	for (const tag of data.tagIds) {
 		await tx.run('INSERT INTO connection_tags(connection_id,tag_id) VALUES(?,?)', [id, tag]);
+	}
 }
 
 export async function insertConnectionInTransaction(tx: SqlExecutor, data: ConnectionData): Promise<StoredConnection> {
@@ -145,7 +172,9 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 			const items: StoredConnection[] = [];
 			for (const r of rows) {
 				const c = await read(tx, number(r.id));
-				if (c) items.push(c);
+				if (c) {
+					items.push(c);
+				}
 			}
 			return items;
 		});
@@ -162,8 +191,12 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 	update(id: number, expectedVersion: number, changes: Partial<ConnectionData>): Promise<MutationResult> {
 		return this.db.transaction(async (tx) => {
 			const old = await read(tx, id);
-			if (!old) return { status: 'not_found' };
-			if (old.version !== expectedVersion) return { status: 'version_conflict' };
+			if (!old) {
+				return { status: 'not_found' };
+			}
+			if (old.version !== expectedVersion) {
+				return { status: 'version_conflict' };
+			}
 			if (old.type === 'SSH' && changes.type && changes.type !== 'SSH') {
 				if (await tx.one('SELECT 1 AS present FROM connection_credentials WHERE connection_id=?', [id])) {
 					throw new Error('Remove SSH credentials before changing connection type');
@@ -172,7 +205,9 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 					'SELECT 1 AS present FROM connection_jumps WHERE jump_connection_id=? LIMIT 1',
 					[id],
 				);
-				if (refs) throw new Error('Connection is referenced as SSH jump');
+				if (refs) {
+					throw new Error('Connection is referenced as SSH jump');
+				}
 			}
 			const merged: ConnectionData = { ...old, ...changes };
 			const { cols, vals } = columns(changes);
@@ -181,7 +216,9 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 				`UPDATE connections SET ${[...cols.map((c) => c + '=?'), 'version=version+1', 'updated_at=?'].join(',')} WHERE id=? AND version=?`,
 				[...vals, timestamp, id, expectedVersion],
 			);
-			if (!update.changes) return { status: 'version_conflict' };
+			if (!update.changes) {
+				return { status: 'version_conflict' };
+			}
 			await relationships(tx, id, merged);
 			return { status: 'updated', value: (await read(tx, id))! };
 		});
@@ -190,7 +227,9 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 	clone(id: number, name: string): Promise<StoredConnection | null> {
 		return this.db.transaction(async (tx) => {
 			const old = await read(tx, id);
-			if (!old) return null;
+			if (!old) {
+				return null;
+			}
 			const copy = await insertConnectionInTransaction(tx, { ...old, name });
 			// Cloning must preserve authentication as well as visible metadata.
 			// All three statements participate in the same transaction.
@@ -207,7 +246,9 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 			const refs = await tx.one('SELECT 1 AS present FROM connection_jumps WHERE jump_connection_id=? LIMIT 1', [
 				id,
 			]);
-			if (refs) throw new Error('Connection is referenced as SSH jump');
+			if (refs) {
+				throw new Error('Connection is referenced as SSH jump');
+			}
 			return (await tx.run('DELETE FROM connections WHERE id=?', [id])).changes > 0;
 		});
 	}

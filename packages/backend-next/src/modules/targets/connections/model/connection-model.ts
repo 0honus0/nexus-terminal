@@ -3,8 +3,12 @@ import type { ConnectionMetadata, ConnectionMutation } from './connection-types.
 import { fromStorage, toStorage } from './connection-mapper.js';
 
 function mutation(value: MutationResult): ConnectionMutation {
-	if (value.status === 'updated') return { status: 'updated', value: fromStorage(value.value) };
-	if (value.status === 'not_found') return { status: 'not_found' };
+	if (value.status === 'updated') {
+		return { status: 'updated', value: fromStorage(value.value) };
+	}
+	if (value.status === 'not_found') {
+		return { status: 'not_found' };
+	}
 	return { status: 'version_conflict' };
 }
 
@@ -26,19 +30,45 @@ export class ConnectionModel {
 
 	async update(id: number, version: number, changes: Partial<ConnectionMetadata>) {
 		const copy: Partial<ConnectionData> = {};
-		if (changes.name !== undefined) copy.name = changes.name;
-		if (changes.type !== undefined) copy.type = changes.type;
-		if (changes.host !== undefined) copy.host = changes.host;
-		if (changes.port !== undefined) copy.port = changes.port;
-		if (changes.username !== undefined) copy.username = changes.username;
-		if (changes.route !== undefined) copy.route = changes.route;
-		if (changes.proxyId !== undefined) copy.proxyId = changes.proxyId;
-		if (changes.notes !== undefined) copy.notes = changes.notes;
-		if (changes.rdpRemoteApp !== undefined) copy.rdpRemoteApp = changes.rdpRemoteApp;
-		if (changes.rdpRemoteAppDirectory !== undefined) copy.rdpRemoteAppDirectory = changes.rdpRemoteAppDirectory;
-		if (changes.rdpRemoteAppArguments !== undefined) copy.rdpRemoteAppArguments = changes.rdpRemoteAppArguments;
-		if (changes.tagIds !== undefined) copy.tagIds = [...changes.tagIds];
-		if (changes.jumpIds !== undefined) copy.jumpIds = [...changes.jumpIds];
+		if (changes.name !== undefined) {
+			copy.name = changes.name;
+		}
+		if (changes.type !== undefined) {
+			copy.type = changes.type;
+		}
+		if (changes.host !== undefined) {
+			copy.host = changes.host;
+		}
+		if (changes.port !== undefined) {
+			copy.port = changes.port;
+		}
+		if (changes.username !== undefined) {
+			copy.username = changes.username;
+		}
+		if (changes.route !== undefined) {
+			copy.route = changes.route;
+		}
+		if (changes.proxyId !== undefined) {
+			copy.proxyId = changes.proxyId;
+		}
+		if (changes.notes !== undefined) {
+			copy.notes = changes.notes;
+		}
+		if (changes.rdpRemoteApp !== undefined) {
+			copy.rdpRemoteApp = changes.rdpRemoteApp;
+		}
+		if (changes.rdpRemoteAppDirectory !== undefined) {
+			copy.rdpRemoteAppDirectory = changes.rdpRemoteAppDirectory;
+		}
+		if (changes.rdpRemoteAppArguments !== undefined) {
+			copy.rdpRemoteAppArguments = changes.rdpRemoteAppArguments;
+		}
+		if (changes.tagIds !== undefined) {
+			copy.tagIds = [...changes.tagIds];
+		}
+		if (changes.jumpIds !== undefined) {
+			copy.jumpIds = [...changes.jumpIds];
+		}
 		return mutation(await this.storage.update(id, version, copy));
 	}
 

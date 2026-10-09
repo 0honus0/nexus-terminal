@@ -31,23 +31,34 @@ export class SqliteRuntime implements SqlExecutor {
 		this.worker = new Worker(new URL('./worker.js', import.meta.url), { workerData: { path } });
 		this.worker.on('message', (message: { id: number; value?: any; error?: WorkerSqliteError }) => {
 			const pending = this.pending.get(message.id);
-			if (!pending) return;
+			if (!pending) {
+				return;
+			}
 			this.pending.delete(message.id);
-			if (message.error) pending.reject(sqliteError(message.error));
-			else pending.resolve(message.value);
+			if (message.error) {
+				pending.reject(sqliteError(message.error));
+			} else {
+				pending.resolve(message.value);
+			}
 		});
 		this.worker.on('error', (error) => this.poison(new SqliteFailure('worker_exit', null, { cause: error })));
 		this.worker.on('exit', (code) => {
-			if (!this.closed) this.poison(new SqliteFailure('worker_exit', null, { cause: new Error('exit ' + code) }));
+			if (!this.closed) {
+				this.poison(new SqliteFailure('worker_exit', null, { cause: new Error('exit ' + code) }));
+			}
 		});
 	}
 
 	static open(path: string): SqliteRuntime {
-		if (path === ':memory:') throw new Error('Use a dedicated on-disk test database');
+		if (path === ':memory:') {
+			throw new Error('Use a dedicated on-disk test database');
+		}
 		const absolute = resolve(path);
 		mkdirSync(dirname(absolute), { recursive: true });
 		const canonical = resolve(realpathSync(dirname(absolute)), absolute.slice(dirname(absolute).length + 1));
-		if (paths.has(canonical)) throw new SqliteFailure('unavailable');
+		if (paths.has(canonical)) {
+			throw new SqliteFailure('unavailable');
+		}
 		paths.add(canonical);
 		try {
 			return new SqliteRuntime(canonical);
@@ -58,16 +69,24 @@ export class SqliteRuntime implements SqlExecutor {
 	}
 
 	private poison(error: SqliteFailure): void {
-		if (this.unavailable) return;
+		if (this.unavailable) {
+			return;
+		}
 		this.unavailable = error;
-		for (const pending of this.pending.values()) pending.reject(error);
+		for (const pending of this.pending.values()) {
+			pending.reject(error);
+		}
 		this.pending.clear();
 	}
 
 	private call<T>(kind: string, sql?: string, params?: Param[]): Promise<T> {
 		return new Promise((resolve, reject) => {
-			if (this.unavailable) return reject(this.unavailable);
-			if (this.closed) return reject(new SqliteFailure('closed'));
+			if (this.unavailable) {
+				return reject(this.unavailable);
+			}
+			if (this.closed) {
+				return reject(new SqliteFailure('closed'));
+			}
 			const id = ++this.nextId;
 			this.pending.set(id, { resolve, reject });
 			try {
@@ -87,8 +106,12 @@ export class SqliteRuntime implements SqlExecutor {
 				}),
 			);
 		}
-		if (this.closePromise) return Promise.reject(new SqliteFailure('closed'));
-		if (this.unavailable) return Promise.reject(this.unavailable);
+		if (this.closePromise) {
+			return Promise.reject(new SqliteFailure('closed'));
+		}
+		if (this.unavailable) {
+			return Promise.reject(this.unavailable);
+		}
 		const result = this.tail.then(work);
 		this.tail = result.catch(() => undefined);
 		return result;
@@ -117,7 +140,9 @@ export class SqliteRuntime implements SqlExecutor {
 			const operations = new Set<Promise<unknown>>();
 
 			const withinTransaction = <R>(kind: string, sql: string, params: Param[]): Promise<R> => {
-				if (!active) return Promise.reject(new SqliteFailure('transaction'));
+				if (!active) {
+					return Promise.reject(new SqliteFailure('transaction'));
+				}
 				const task = this.call<R>(kind, sql, params);
 				operations.add(task);
 				void task.then(
@@ -194,12 +219,16 @@ export class SqliteRuntime implements SqlExecutor {
 				}),
 			);
 		}
-		if (this.closePromise) return this.closePromise;
+		if (this.closePromise) {
+			return this.closePromise;
+		}
 		this.closePromise = (async () => {
 			let failure: unknown = null;
 			try {
 				await this.tail;
-				if (this.unavailable) throw this.unavailable;
+				if (this.unavailable) {
+					throw this.unavailable;
+				}
 				await this.call('close');
 			} catch (error) {
 				failure = error;
@@ -215,7 +244,9 @@ export class SqliteRuntime implements SqlExecutor {
 				}
 				paths.delete(this.path);
 			}
-			if (failure !== null) throw failure;
+			if (failure !== null) {
+				throw failure;
+			}
 		})();
 		return this.closePromise;
 	}

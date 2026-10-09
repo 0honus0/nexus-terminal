@@ -59,10 +59,14 @@ const inUse = new Set([
 const missing = new Set(['SSH target not found', 'SSH key not found']);
 
 export function targetErrorCode(error: unknown): TargetErrorCode {
-	if (error instanceof TargetOperationError) return error.code;
+	if (error instanceof TargetOperationError) {
+		return error.code;
+	}
 	if (error instanceof SqliteFailure) {
 		if (error.kind === 'constraint') {
-			if (error.sqliteCode === SQLITE_CONSTRAINT_FOREIGNKEY) return 'reference_in_use';
+			if (error.sqliteCode === SQLITE_CONSTRAINT_FOREIGNKEY) {
+				return 'reference_in_use';
+			}
 			return 'conflict';
 		}
 		if (
@@ -72,19 +76,29 @@ export function targetErrorCode(error: unknown): TargetErrorCode {
 			error.kind === 'commit_unknown' ||
 			error.kind === 'rollback_failed' ||
 			error.kind === 'busy'
-		)
+		) {
 			return 'storage_unavailable';
+		}
 		return 'internal_failure';
 	}
 	// Legacy domain code currently throws Error with constant messages. Recognize only
 	// these exact, non-sensitive messages; everything else fails closed.
 	if (error instanceof Error) {
-		if (invalidInputs.has(error.message)) return 'invalid_input';
-		if (missing.has(error.message)) return 'reference_not_found';
-		if (inUse.has(error.message)) return 'reference_in_use';
-		if (unavailableTarget.has(error.message)) return 'unresolvable';
-		if (error.message === 'Encryption key required' || error.message === 'Credential authentication failed')
+		if (invalidInputs.has(error.message)) {
+			return 'invalid_input';
+		}
+		if (missing.has(error.message)) {
+			return 'reference_not_found';
+		}
+		if (inUse.has(error.message)) {
+			return 'reference_in_use';
+		}
+		if (unavailableTarget.has(error.message)) {
 			return 'unresolvable';
+		}
+		if (error.message === 'Encryption key required' || error.message === 'Credential authentication failed') {
+			return 'unresolvable';
+		}
 	}
 	return 'internal_failure';
 }

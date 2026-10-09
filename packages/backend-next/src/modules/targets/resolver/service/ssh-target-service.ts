@@ -42,7 +42,9 @@ export class SshTargetService {
 	) {}
 
 	private id(value: number) {
-		if (!Number.isSafeInteger(value) || value <= 0) throw new Error('Invalid target ID');
+		if (!Number.isSafeInteger(value) || value <= 0) {
+			throw new Error('Invalid target ID');
+		}
 	}
 
 	fingerprintStored(value: number) {
@@ -53,7 +55,9 @@ export class SshTargetService {
 	/** Trusted backend call only. No HTTP route or serialized response. */
 	async resolveStored(value: number): Promise<ResolvedSshTarget> {
 		this.id(value);
-		if (!this.secrets) throw new Error('Encryption key required');
+		if (!this.secrets) {
+			throw new Error('Encryption key required');
+		}
 		return decrypt(await this.model.resolveStored(value), this.secrets);
 	}
 }

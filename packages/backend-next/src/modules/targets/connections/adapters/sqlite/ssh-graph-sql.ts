@@ -33,9 +33,12 @@ export async function validateAffectedSshGraph(tx: SqlExecutor, changedId: numbe
 		const parent = positiveId(row.connection_id);
 		const target = positiveId(row.jump_connection_id);
 		const node = graph.get(parent);
-		if (!node || !graph.has(target) || node.jumps.length !== row.position)
+		if (!node || !graph.has(target) || node.jumps.length !== row.position) {
 			throw new Error('Invalid SSH jump chain');
-		if (node.jumps.includes(target)) throw new Error('Invalid SSH jump chain');
+		}
+		if (node.jumps.includes(target)) {
+			throw new Error('Invalid SSH jump chain');
+		}
 		node.jumps.push(target);
 		const ancestors = reverse.get(target) ?? new Set<number>();
 		ancestors.add(parent);
@@ -63,13 +66,21 @@ export async function validateAffectedSshGraph(tx: SqlExecutor, changedId: numbe
 				throw new Error('Invalid SSH jump chain');
 			}
 			const node = graph.get(id);
-			if (!node) throw new Error('Invalid SSH jump chain');
+			if (!node) {
+				throw new Error('Invalid SSH jump chain');
+			}
 			if (node.route === 'jump') {
-				if (node.type !== 'SSH' || node.jumps.length === 0) throw new Error('Invalid SSH jump chain');
-			} else if (node.jumps.length) throw new Error('Invalid SSH jump chain');
+				if (node.type !== 'SSH' || node.jumps.length === 0) {
+					throw new Error('Invalid SSH jump chain');
+				}
+			} else if (node.jumps.length) {
+				throw new Error('Invalid SSH jump chain');
+			}
 			path.add(id);
 			for (const child of node.jumps) {
-				if (graph.get(child)?.type !== 'SSH') throw new Error('Invalid SSH jump chain');
+				if (graph.get(child)?.type !== 'SSH') {
+					throw new Error('Invalid SSH jump chain');
+				}
 				walk(child, depth + 1);
 			}
 			path.delete(id);

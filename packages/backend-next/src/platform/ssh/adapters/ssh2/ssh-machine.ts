@@ -47,7 +47,9 @@ class ConnectedMachine implements MachineConnection {
 	}
 
 	private disconnectedByRemote(): void {
-		if (this.disconnected) return;
+		if (this.disconnected) {
+			return;
+		}
 		this.disconnected = true;
 		this.stop.abort(new Error('SSH transport disconnected'));
 		for (const listener of [...this.closeListeners]) {
@@ -71,7 +73,9 @@ class ConnectedMachine implements MachineConnection {
 	}
 
 	private ensure(): Client {
-		if (!this.isOpen) throw new Error('SSH machine connection closed');
+		if (!this.isOpen) {
+			throw new Error('SSH machine connection closed');
+		}
 		return this.route.primary;
 	}
 
@@ -104,7 +108,9 @@ class ConnectedMachine implements MachineConnection {
 				} else if (!this.isOpen || signal?.aborted) {
 					channel?.destroy();
 					reject(new Error('SSH channel no longer owned'));
-				} else resolve(channel!);
+				} else {
+					resolve(channel!);
+				}
 			};
 
 			const disconnected = () => finish(new Error('SSH transport disconnected'));
@@ -118,7 +124,9 @@ class ConnectedMachine implements MachineConnection {
 			client.once('error', failed);
 			signal?.addEventListener('abort', aborted, { once: true });
 			this.stop.signal.addEventListener('abort', aborted, { once: true });
-			if (signal?.aborted || this.stop.signal.aborted) return aborted();
+			if (signal?.aborted || this.stop.signal.aborted) {
+				return aborted();
+			}
 			try {
 				create(client, (error, channel) => finish(error, channel));
 			} catch (error) {
@@ -128,8 +136,9 @@ class ConnectedMachine implements MachineConnection {
 	}
 
 	async openShell(pty: MachinePty, signal?: AbortSignal): Promise<MachineShell> {
-		if (!Number.isInteger(pty.columns) || !Number.isInteger(pty.rows) || pty.columns < 1 || pty.rows < 1)
+		if (!Number.isInteger(pty.columns) || !Number.isInteger(pty.rows) || pty.columns < 1 || pty.rows < 1) {
 			throw new Error('Invalid terminal dimensions');
+		}
 		const channel = await this.openChannel(
 			(client, callback) =>
 				client.shell({ term: pty.term ?? 'xterm-256color', cols: pty.columns, rows: pty.rows }, callback),
@@ -145,7 +154,9 @@ class ConnectedMachine implements MachineConnection {
 		signal?: AbortSignal,
 		cancelWhenAborted = true,
 	): Promise<MachineCommand> {
-		if (!command) throw new Error('Empty SSH command');
+		if (!command) {
+			throw new Error('Empty SSH command');
+		}
 		const channel = await this.openChannel(
 			(client, callback) => client.exec(command, { pty: false }, callback),
 			signal,
@@ -160,7 +171,9 @@ class ConnectedMachine implements MachineConnection {
 				offClose();
 			});
 			signal.addEventListener('abort', abort, { once: true });
-			if (signal.aborted) abort();
+			if (signal.aborted) {
+				abort();
+			}
 		}
 		return result;
 	}
@@ -181,10 +194,12 @@ class ConnectedMachine implements MachineConnection {
 			!Number.isSafeInteger(options.maxOutputBytes) ||
 			options.maxOutputBytes < 1 ||
 			options.maxOutputBytes > 16 * 1024 * 1024
-		)
+		) {
 			throw new Error('Invalid command output budget');
-		if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1 || options.timeoutMs > 300000)
+		}
+		if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1 || options.timeoutMs > 300000) {
 			throw new Error('Invalid command timeout');
+		}
 		options.signal?.throwIfAborted();
 		const controller = new AbortController();
 
@@ -203,7 +218,9 @@ class ConnectedMachine implements MachineConnection {
 			const collect = (index: number, data: Buffer | string) => {
 				const bytes = Buffer.isBuffer(data) ? data : Buffer.from(data);
 				const available = options.maxOutputBytes - size;
-				if (bytes.length > available) truncated = true;
+				if (bytes.length > available) {
+					truncated = true;
+				}
 				if (available > 0) {
 					const item = bytes.subarray(0, Math.min(bytes.length, available));
 					outputs[index].push(item);
@@ -218,7 +235,9 @@ class ConnectedMachine implements MachineConnection {
 				(channel as SshCommandChannel).cancel(options.signal?.aborted ? 'cancelled' : 'timeout');
 
 			controller.signal.addEventListener('abort', abortCommand, { once: true });
-			if (controller.signal.aborted) abortCommand();
+			if (controller.signal.aborted) {
+				abortCommand();
+			}
 			const outcome: MachineCommandOutcome = await channel.outcome;
 			controller.signal.removeEventListener('abort', abortCommand);
 			unsubscribe();
@@ -258,7 +277,9 @@ class ConnectedMachine implements MachineConnection {
 				if (error || !this.isOpen || signal?.aborted) {
 					channel?.end();
 					reject(error ?? new Error('SSH connection closed before SFTP ready'));
-				} else resolve(channel!);
+				} else {
+					resolve(channel!);
+				}
 			};
 
 			const aborted = () => finish(new DOMException('SFTP opening cancelled', 'AbortError'));
@@ -272,7 +293,9 @@ class ConnectedMachine implements MachineConnection {
 			this.stop.signal.addEventListener('abort', aborted, { once: true });
 			client.once('close', lost);
 			client.once('error', failed);
-			if (signal?.aborted || this.stop.signal.aborted) return aborted();
+			if (signal?.aborted || this.stop.signal.aborted) {
+				return aborted();
+			}
 			try {
 				client.sftp((error, channel) => finish(error, channel));
 			} catch (error) {
@@ -289,7 +312,9 @@ class ConnectedMachine implements MachineConnection {
 	}
 
 	close(): Promise<void> {
-		if (this.closePromise) return this.closePromise;
+		if (this.closePromise) {
+			return this.closePromise;
+		}
 		this.closePromise = Promise.resolve().then(async () => {
 			this.disconnected = true;
 			this.stop.abort(new Error('SSH connection closing'));
@@ -301,7 +326,9 @@ class ConnectedMachine implements MachineConnection {
 				}
 			}
 			this.closeListeners.clear();
-			for (const channel of [...this.channels]) channel.close();
+			for (const channel of [...this.channels]) {
+				channel.close();
+			}
 			const leaseResults = await Promise.allSettled([...this.leases].map((lease) => lease.close()));
 			const closings = this.route.clients.map(
 				(client) =>
@@ -318,15 +345,18 @@ class ConnectedMachine implements MachineConnection {
 					}),
 			);
 			await Promise.all(closings);
-			for (const socket of this.route.sockets) socket.destroy();
+			for (const socket of this.route.sockets) {
+				socket.destroy();
+			}
 			const failures = leaseResults.filter(
 				(result): result is PromiseRejectedResult => result.status === 'rejected',
 			);
-			if (failures.length)
+			if (failures.length) {
 				throw new AggregateError(
 					failures.map((result) => result.reason),
 					'SFTP leases failed to close',
 				);
+			}
 		});
 		return this.closePromise;
 	}
@@ -336,15 +366,23 @@ export class Ssh2MachineFactory implements MachineSshFactory {
 	async connect(endpoint: MachineEndpoint, options: MachineConnectOptions): Promise<MachineConnection> {
 		const route = await openSshRoute(endpoint, options);
 		if (options.signal?.aborted) {
-			for (const client of route.clients) client.destroy();
-			for (const socket of route.sockets) socket.destroy();
+			for (const client of route.clients) {
+				client.destroy();
+			}
+			for (const socket of route.sockets) {
+				socket.destroy();
+			}
 			throw new DOMException('SSH connection aborted', 'AbortError');
 		}
 		try {
 			return new ConnectedMachine(route);
 		} catch (error) {
-			for (const client of route.clients) client.destroy();
-			for (const socket of route.sockets) socket.destroy();
+			for (const client of route.clients) {
+				client.destroy();
+			}
+			for (const socket of route.sockets) {
+				socket.destroy();
+			}
 			throw error;
 		}
 	}

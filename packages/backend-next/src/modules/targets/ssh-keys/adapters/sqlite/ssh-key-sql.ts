@@ -8,9 +8,14 @@ import type {
 } from '../../storage/ssh-key-storage.js';
 
 function decode(row: Record<string, unknown>): SshKeySummary {
-	if (typeof row.name !== 'string') throw new Error('Corrupt SSH key name');
-	for (const k of ['id', 'version', 'created_at', 'updated_at'])
-		if (typeof row[k] !== 'number' || !Number.isSafeInteger(row[k])) throw new Error('Corrupt SSH key integer');
+	if (typeof row.name !== 'string') {
+		throw new Error('Corrupt SSH key name');
+	}
+	for (const k of ['id', 'version', 'created_at', 'updated_at']) {
+		if (typeof row[k] !== 'number' || !Number.isSafeInteger(row[k])) {
+			throw new Error('Corrupt SSH key integer');
+		}
+	}
 	return {
 		id: row.id as number,
 		name: row.name,
@@ -52,8 +57,12 @@ export class SqliteSshKeyStorage implements SshKeyStorage {
 	update(id: number, version: number, patch: SshKeyPatch): Promise<SshKeyMutation> {
 		return this.db.transaction(async (tx) => {
 			const existing = await get(tx, id);
-			if (!existing) return { status: 'not_found' };
-			if (existing.version !== version) return { status: 'version_conflict' };
+			if (!existing) {
+				return { status: 'not_found' };
+			}
+			if (existing.version !== version) {
+				return { status: 'version_conflict' };
+			}
 			const allowed = {
 				name: 'name',
 				encryptedPrivateKey: 'encrypted_private_key',

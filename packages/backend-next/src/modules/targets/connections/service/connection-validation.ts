@@ -1,7 +1,9 @@
 import type { ConnectionMetadata } from '../model/connection-types.js';
 
 export function validId(value: number): void {
-	if (!Number.isSafeInteger(value) || value <= 0) throw new Error('Invalid ID');
+	if (!Number.isSafeInteger(value) || value <= 0) {
+		throw new Error('Invalid ID');
+	}
 }
 
 export function validateConnection(data: ConnectionMetadata): ConnectionMetadata {
@@ -29,8 +31,12 @@ export function validateConnection(data: ConnectionMetadata): ConnectionMetadata
 	) {
 		throw new Error('Invalid RemoteApp settings');
 	}
-	for (const id of [...data.tagIds, ...data.jumpIds]) validId(id);
-	if (data.proxyId !== null) validId(data.proxyId);
+	for (const id of [...data.tagIds, ...data.jumpIds]) {
+		validId(id);
+	}
+	if (data.proxyId !== null) {
+		validId(data.proxyId);
+	}
 	return {
 		...data,
 		name: data.name.trim(),

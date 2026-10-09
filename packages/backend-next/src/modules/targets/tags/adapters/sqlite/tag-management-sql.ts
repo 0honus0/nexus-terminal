@@ -2,9 +2,14 @@ import type { SqlExecutor, SqliteRuntime } from '../../../../../platform/storage
 import type { TagStorage, TagRecord, TagMutation } from '../../storage/tag-storage.js';
 
 function decode(row: Record<string, unknown>): TagRecord {
-	if (typeof row.name !== 'string') throw new Error('Corrupt tag name');
-	for (const key of ['id', 'version', 'created_at', 'updated_at'])
-		if (typeof row[key] !== 'number' || !Number.isSafeInteger(row[key])) throw new Error('Corrupt tag integer');
+	if (typeof row.name !== 'string') {
+		throw new Error('Corrupt tag name');
+	}
+	for (const key of ['id', 'version', 'created_at', 'updated_at']) {
+		if (typeof row[key] !== 'number' || !Number.isSafeInteger(row[key])) {
+			throw new Error('Corrupt tag integer');
+		}
+	}
 	return {
 		id: row.id as number,
 		name: row.name,
@@ -43,8 +48,12 @@ export class SqliteTagStorage implements TagStorage {
 	rename(id: number, version: number, name: string): Promise<TagMutation> {
 		return this.db.transaction(async (tx) => {
 			const before = await get(tx, id);
-			if (!before) return { status: 'not_found' };
-			if (before.version !== version) return { status: 'version_conflict' };
+			if (!before) {
+				return { status: 'not_found' };
+			}
+			if (before.version !== version) {
+				return { status: 'version_conflict' };
+			}
 			await tx.run('UPDATE tags SET name=?,version=version+1,updated_at=? WHERE id=? AND version=?', [
 				name,
 				Date.now(),
@@ -57,8 +66,9 @@ export class SqliteTagStorage implements TagStorage {
 
 	delete(id: number) {
 		return this.db.transaction(async (tx) => {
-			if (await tx.one('SELECT 1 AS used FROM connection_tags WHERE tag_id=? LIMIT 1', [id]))
+			if (await tx.one('SELECT 1 AS used FROM connection_tags WHERE tag_id=? LIMIT 1', [id])) {
 				throw new Error('Tag is in use');
+			}
 			return (await tx.run('DELETE FROM tags WHERE id=?', [id])).changes > 0;
 		});
 	}

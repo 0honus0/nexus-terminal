@@ -27,8 +27,12 @@ function openInput(input: OpenShellRequest): OpenShellRequest {
 		rows: input.rows,
 		timeoutMs: input.timeoutMs,
 	};
-	if (input.term !== undefined) result.term = input.term;
-	if (input.signal !== undefined) result.signal = input.signal;
+	if (input.term !== undefined) {
+		result.term = input.term;
+	}
+	if (input.signal !== undefined) {
+		result.signal = input.signal;
+	}
 	return result;
 }
 

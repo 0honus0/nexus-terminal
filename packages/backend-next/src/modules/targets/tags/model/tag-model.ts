@@ -12,8 +12,12 @@ function fromStorage(record: TagRecord): TagSnapshot {
 }
 
 function mutation(result: StoredMutation): TagMutation {
-	if (result.status === 'updated') return { status: 'updated', value: fromStorage(result.value) };
-	if (result.status === 'not_found') return { status: 'not_found' };
+	if (result.status === 'updated') {
+		return { status: 'updated', value: fromStorage(result.value) };
+	}
+	if (result.status === 'not_found') {
+		return { status: 'not_found' };
+	}
 	return { status: 'version_conflict' };
 }
 
