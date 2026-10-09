@@ -10,6 +10,8 @@ Targets 的模块出口独立定义管理与可信 SSH 契约，出入对象均�
 
 SQLite Worker 传递 `node:sqlite` 的数值 `errcode`，保留扩展结果码；Runtime 按低 8 位分类 constraint、busy/locked 与普通 SQL 失败，Targets 再按扩展外键码形成安全业务错误。Node 的通用 `ERR_SQLITE_ERROR` 字符串不作为 SQLite 类别判断依据。
 
+SQLite Runtime 的事务入口管理回调与未等待操作；私有 `rollbackAndThrow` 完成回滚后重新抛出原始失败，回滚失败时聚合两项原因并使实例不可用；私有 `commit` 在提交失败时报告 `commit_unknown` 并使实例不可用。错误原因先作为具名局部值构造，再包装技术错误，事务主流程保留明确的回滚/提交顺序。
+
 Targets 批量导入的内部结果以 `import/model/import-types.ts` 中的 `ImportItemResult` 定义成功 ID 与失败错误码的可辨识联合；Service 使用这个具名应用类型。`public.ts` 独立定义出口结果，仍由出口映射逐字段转换，不从内部类型派生。
 
 SSH 命令在发出 exec 请求前拒绝已取消的信号；持续命令与原始非 PTY 通道在打开之后仍监听调用方取消，通道关闭时解除订阅。一次执行的期限与取消分别形成 unknown/timeout 和 unknown/cancelled，不把取消作为远端命令未发生的证明。

@@ -157,29 +157,33 @@ export class SqliteRuntime implements SqlExecutor {
 				}
 			}
 			if (callbackFailed) {
-				try {
-					await this.call('exec', 'ROLLBACK');
-				} catch (rollbackError) {
-					const failure = new SqliteFailure('rollback_failed', null, {
-						cause: new AggregateError(
-							[callbackError, rollbackError],
-							'Transaction and rollback both failed',
-						),
-					});
-					this.poison(failure);
-					throw failure;
-				}
-				throw callbackError;
+				return this.rollbackAndThrow(callbackError);
 			}
-			try {
-				await this.call('exec', 'COMMIT');
-			} catch (error) {
-				const failure = new SqliteFailure('commit_unknown', null, { cause: error });
-				this.poison(failure);
-				throw failure;
-			}
+			await this.commit();
 			return result!;
 		});
+	}
+
+	private async rollbackAndThrow(callbackError: unknown): Promise<never> {
+		try {
+			await this.call('exec', 'ROLLBACK');
+		} catch (rollbackError) {
+			const cause = new AggregateError([callbackError, rollbackError], 'Transaction and rollback both failed');
+			const failure = new SqliteFailure('rollback_failed', null, { cause });
+			this.poison(failure);
+			throw failure;
+		}
+		throw callbackError;
+	}
+
+	private async commit(): Promise<void> {
+		try {
+			await this.call('exec', 'COMMIT');
+		} catch (error) {
+			const failure = new SqliteFailure('commit_unknown', null, { cause: error });
+			this.poison(failure);
+			throw failure;
+		}
 	}
 
 	close(): Promise<void> {
