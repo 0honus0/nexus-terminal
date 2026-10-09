@@ -127,7 +127,7 @@ export function importInput(command: PublicImport): InternalImport {
 
 export function importItems(results: readonly ImportItemResult[]): ImportItemResult[] {
 	return results.map((result) =>
-		result.status === 'ok' ? { status: 'ok', id: result.id } : { status: 'error', error: result.error },
+		result.status === 'ok' ? { status: 'ok', id: result.id } : { status: 'error', code: result.code },
 	);
 }
 

@@ -97,7 +97,8 @@ export interface ConnectionImport {
 	inlineProxy?: Omit<ProxyInput, 'password'>;
 	tagNames?: string[];
 }
-export type ImportItemResult = { status: 'ok'; id: number } | { status: 'error'; error: string };
+export type ImportItemResult =
+	{ status: 'ok'; id: number } | { status: 'error'; code: import('./target-errors.js').TargetErrorCode };
 
 export interface ConnectionCatalog {
 	list(): Promise<ConnectionSnapshot[]>;

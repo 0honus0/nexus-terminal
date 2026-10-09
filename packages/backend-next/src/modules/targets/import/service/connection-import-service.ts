@@ -1,6 +1,7 @@
 import type { ConnectionImport } from '../model/import-types.js';
 import { ConnectionImportModel } from '../model/import-model.js';
 import { validateConnection } from '../../connections/service/connection-validation.js';
+import { targetErrorCode, type TargetErrorCode } from '../../target-errors.js';
 
 export class ConnectionImportService {
 	constructor(private readonly model: ConnectionImportModel) {}
@@ -24,13 +25,13 @@ export class ConnectionImportService {
 	}
 
 	async importMany(commands: ConnectionImport[]) {
-		const results: ({ status: 'ok'; id: number } | { status: 'error'; error: string })[] = [];
+		const results: ({ status: 'ok'; id: number } | { status: 'error'; code: TargetErrorCode })[] = [];
 		for (const command of commands) {
 			try {
 				const result = await this.importOne(command);
 				results.push({ status: 'ok', id: result.id });
 			} catch (error) {
-				results.push({ status: 'error', error: String(error) });
+				results.push({ status: 'error', code: targetErrorCode(error) });
 			}
 		}
 		return results;

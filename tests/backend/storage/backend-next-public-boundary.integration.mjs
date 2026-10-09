@@ -123,11 +123,11 @@ assert.notStrictEqual(mappedImport.tagNames, importCommand.tagNames);
 assert.deepEqual(
 	importItems([
 		{ status: 'ok', id: 8, leak: forbidden },
-		{ status: 'error', error: 'failed', leak: forbidden },
+		{ status: 'error', code: 'invalid_input', leak: forbidden },
 	]),
 	[
 		{ status: 'ok', id: 8 },
-		{ status: 'error', error: 'failed' },
+		{ status: 'error', code: 'invalid_input' },
 	],
 );
 
