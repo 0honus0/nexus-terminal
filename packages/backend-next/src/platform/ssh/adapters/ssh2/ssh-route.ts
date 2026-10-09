@@ -178,7 +178,7 @@ async function openForwardChannel(
 				finish(error, channel);
 			});
 		} catch (error) {
-			finish(error instanceof Error ? error : new Error('SSH forwarding rejected'));
+			finish(error instanceof Error ? error : new Error('SSH forwarding rejected', { cause: error }));
 		}
 	});
 }
@@ -430,7 +430,7 @@ async function connectClient(
 			try {
 				client.connect(config);
 			} catch (error) {
-				finish(error instanceof Error ? error : new Error('SSH connection refused'));
+				finish(error instanceof Error ? error : new Error('SSH connection refused', { cause: error }));
 			}
 		});
 		return client;

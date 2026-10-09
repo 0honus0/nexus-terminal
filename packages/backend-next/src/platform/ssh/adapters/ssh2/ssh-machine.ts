@@ -152,7 +152,7 @@ class ConnectedMachine implements MachineConnection {
 			try {
 				create(client, (error, channel) => finish(error, channel));
 			} catch (error) {
-				finish(error instanceof Error ? error : new Error('SSH channel rejected'));
+				finish(error instanceof Error ? error : new Error('SSH channel rejected', { cause: error }));
 			}
 		});
 	}
@@ -339,7 +339,7 @@ class ConnectedMachine implements MachineConnection {
 			try {
 				client.sftp((error, channel) => finish(error, channel));
 			} catch (error) {
-				finish(error instanceof Error ? error : new Error('SFTP request rejected'));
+				finish(error instanceof Error ? error : new Error('SFTP request rejected', { cause: error }));
 			}
 		});
 	}

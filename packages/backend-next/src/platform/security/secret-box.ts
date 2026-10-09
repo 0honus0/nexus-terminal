@@ -44,8 +44,8 @@ export class SecretBox {
 			return Buffer.concat([decipher.update(Buffer.from(parts[3], 'base64url')), decipher.final()]).toString(
 				'utf8',
 			);
-		} catch {
-			throw new Error('Credential authentication failed');
+		} catch (cause) {
+			throw new Error('Credential authentication failed', { cause });
 		}
 	}
 }

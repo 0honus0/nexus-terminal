@@ -4,7 +4,7 @@
 
 ## 独立重构包边界
 
-新包遵守[全局编码约定](../架构重构.md#全局编码约定)：控制语句使用花括号，函数之间保留空行，格式由仓库现有 ESLint/Prettier 执行；封装、命名及类型 owner 在代码审核时一并检查。
+新包遵守[全局编码约定](../架构重构.md#全局编码约定)：控制语句使用花括号，函数之间保留空行，格式由仓库现有 ESLint/Prettier 执行；封装、命名及类型 owner 在代码审核时一并检查。SecretBox/SSH Adapter 捕获并包装失败时保留 `cause`，Targets 的安全出口仍只传递稳定错误码，不传出原始异常。
 
 正式产品仍由 `packages/backend` 服务；`packages/backend-next` 是独立重构包，不调用旧 Backend/Protocol、不接收正式流量，当前装配 Targets 和 Remote 的内部 SSH Shell 会话。新包的 Platform 只持有通用 SQLite 事务/迁移/生命周期、SecretBox 与通用 SSH 技术能力；Targets 持有业务 Schema、存储契约及 SQLite Adapter。Service 使用应用类型，Model 逐字段转换存储命令与读取结果；凭据加解密由 Service 调用通用 SecretBox 完成。
 
