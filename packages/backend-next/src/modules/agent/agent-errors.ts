@@ -17,7 +17,9 @@ export class AgentOperationError extends Error {
 }
 
 export function validateUserId(id: number): void {
-	if (!Number.isSafeInteger(id) || id < 1) throw new AgentOperationError('invalid_input');
+	if (!Number.isSafeInteger(id) || id < 1) {
+		throw new AgentOperationError('invalid_input');
+	}
 }
 
 export function validateAgentId(id: string): void {
@@ -37,7 +39,9 @@ export async function agentBoundary<T>(action: () => Promise<T>): Promise<T> {
 	try {
 		return await action();
 	} catch (error) {
-		if (error instanceof AgentOperationError) throw error;
+		if (error instanceof AgentOperationError) {
+			throw error;
+		}
 		if (error instanceof SqliteFailure) {
 			if (
 				['closed', 'unavailable', 'worker_exit', 'busy', 'rollback_failed', 'commit_unknown'].includes(

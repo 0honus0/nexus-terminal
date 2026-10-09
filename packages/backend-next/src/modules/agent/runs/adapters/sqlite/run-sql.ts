@@ -13,18 +13,23 @@ import type {
 type Row = Record<string, unknown>;
 
 function stringValue(value: unknown): string {
-	if (typeof value !== 'string') throw new Error('Corrupt Agent text');
+	if (typeof value !== 'string') {
+		throw new Error('Corrupt Agent text');
+	}
 	return value;
 }
 
 function integer(value: unknown, min = 0): number {
-	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < min)
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < min) {
 		throw new Error('Corrupt Agent integer');
+	}
 	return value;
 }
 
 function runStatus(value: unknown): 'pending' | 'cancelled' {
-	if (value === 'pending' || value === 'cancelled') return value;
+	if (value === 'pending' || value === 'cancelled') {
+		return value;
+	}
 	throw new Error('Corrupt Agent Run status');
 }
 
@@ -43,7 +48,9 @@ function decodeRun(row: Row): StoredRun {
 
 function decodeEvent(row: Row): StoredRunEvent {
 	const type = row.event_type;
-	if (type !== 'run.created' && type !== 'run.cancelled') throw new Error('Corrupt Agent event');
+	if (type !== 'run.created' && type !== 'run.cancelled') {
+		throw new Error('Corrupt Agent event');
+	}
 	return {
 		runId: stringValue(row.run_id),
 		sequence: integer(row.sequence, 1),
@@ -150,10 +157,14 @@ export class SqliteRunStorage implements RunStorage {
 			`,
 				[command.threadId, command.appId, command.userId],
 			);
-			if (scope === null) return { status: 'scope_not_found' };
+			if (scope === null) {
+				return { status: 'scope_not_found' };
+			}
 			const row = await tx.one(SELECT_RUN + ' WHERE thread_id=? AND status=?', [command.threadId, 'pending']);
 			const active = row === null ? null : decodeRun(row);
-			if (!mayCreate(active)) return { status: 'active_run_conflict' };
+			if (!mayCreate(active)) {
+				return { status: 'active_run_conflict' };
+			}
 			await tx.run(
 				`
 				INSERT INTO agent_runs(id,user_id,app_id,thread_id,run_kind,status,version,input_text,created_at,updated_at)
@@ -215,10 +226,14 @@ export class SqliteRunStorage implements RunStorage {
 				command.appId,
 				command.userId,
 			]);
-			if (row === null) return { status: 'not_found' };
+			if (row === null) {
+				return { status: 'not_found' };
+			}
 			const current = decodeRun(row);
 			const decision = decide(current);
-			if (decision === 'version_conflict') return { status: 'version_conflict' };
+			if (decision === 'version_conflict') {
+				return { status: 'version_conflict' };
+			}
 			if (decision === 'already_cancelled') {
 				await saveReplay(tx, command, 'cancel_run', current, 'already_cancelled');
 				return { status: 'already_cancelled', run: current };
@@ -240,11 +255,15 @@ export class SqliteRunStorage implements RunStorage {
 			`,
 				[updated.version, updated.updatedAt, updated.id, updated.appId, updated.userId, current.version],
 			);
-			if (changed.changes !== 1) throw new Error('Lost Agent Run CAS inside transaction');
+			if (changed.changes !== 1) {
+				throw new Error('Lost Agent Run CAS inside transaction');
+			}
 			const maximum = await tx.one('SELECT MAX(sequence) AS last_sequence FROM agent_run_events WHERE run_id=?', [
 				updated.id,
 			]);
-			if (maximum === null) throw new Error('Missing Agent event watermark');
+			if (maximum === null) {
+				throw new Error('Missing Agent event watermark');
+			}
 			const sequence = integer(maximum.last_sequence, 1) + 1;
 			await tx.run(
 				`
@@ -276,7 +295,9 @@ export class SqliteRunStorage implements RunStorage {
 				appId,
 				userId,
 			]);
-			if (run === null) return null;
+			if (run === null) {
+				return null;
+			}
 			const rows = await tx.all(
 				`
 				SELECT run_id,sequence,event_type,run_version,created_at FROM agent_run_events

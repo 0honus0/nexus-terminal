@@ -13,7 +13,11 @@ export function decideCancelRootRun(
 	run: RootRunState,
 	expectedVersion: number,
 ): 'cancel' | 'already_cancelled' | 'version_conflict' {
-	if (run.version !== expectedVersion) return 'version_conflict';
-	if (run.status === 'cancelled') return 'already_cancelled';
+	if (run.version !== expectedVersion) {
+		return 'version_conflict';
+	}
+	if (run.status === 'cancelled') {
+		return 'already_cancelled';
+	}
 	return 'cancel';
 }

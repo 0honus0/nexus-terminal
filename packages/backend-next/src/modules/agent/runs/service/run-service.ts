@@ -14,7 +14,9 @@ function validatePrompt(prompt: string): void {
 }
 
 function validateCursor(value: number): void {
-	if (!Number.isSafeInteger(value) || value < 0) throw new AgentOperationError('invalid_input');
+	if (!Number.isSafeInteger(value) || value < 0) {
+		throw new AgentOperationError('invalid_input');
+	}
 }
 
 function hashCommand(name: 'create_run' | 'cancel_run', value: readonly (string | number)[]): string {
@@ -97,7 +99,9 @@ export class RunService {
 		validateScope(userId, appId);
 		validateAgentId(runId);
 		validateCursor(after);
-		if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new AgentOperationError('invalid_input');
+		if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+			throw new AgentOperationError('invalid_input');
+		}
 		return this.model.listEvents(userId, appId, runId, after, limit);
 	}
 }

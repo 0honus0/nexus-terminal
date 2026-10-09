@@ -23,7 +23,9 @@ export class SqliteScopeStorage implements AgentScopeStorage {
 	async createThread(input: CreateThreadRecord): Promise<ThreadRecord | null> {
 		return this.db.transaction(async (tx) => {
 			const app = await tx.one('SELECT id FROM agent_apps WHERE id=? AND user_id=?', [input.appId, input.userId]);
-			if (app === null) return null;
+			if (app === null) {
+				return null;
+			}
 			await tx.run('INSERT INTO agent_threads(id,user_id,app_id,title,created_at) VALUES(?,?,?,?,?)', [
 				input.id,
 				input.userId,

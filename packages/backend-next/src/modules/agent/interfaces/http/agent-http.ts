@@ -15,8 +15,9 @@ const ROOT = '/api/v1/agent';
 type Handler = (context: HttpRouteContext, userId: number) => Promise<void>;
 
 function strictBody(value: unknown, keys: readonly string[]): Record<string, unknown> {
-	if (value === null || typeof value !== 'object' || Array.isArray(value))
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
 		throw new AgentOperationError('invalid_input');
+	}
 	const object = value as Record<string, unknown>;
 	if (Object.keys(object).some((key) => !keys.includes(key)) || keys.some((key) => !(key in object))) {
 		throw new AgentOperationError('invalid_input');
@@ -32,14 +33,18 @@ function name(value: unknown, max = 128): string {
 }
 
 function id(value: string | undefined): string {
-	if (!value) throw new AgentOperationError('invalid_input');
+	if (!value) {
+		throw new AgentOperationError('invalid_input');
+	}
 	validateAgentId(value);
 	return value.toLowerCase();
 }
 
 function operationKey(context: HttpRouteContext): string {
 	const raw = context.request.headers['idempotency-key'];
-	if (typeof raw !== 'string') throw new AgentOperationError('invalid_input');
+	if (typeof raw !== 'string') {
+		throw new AgentOperationError('invalid_input');
+	}
 	validateOperationKey(raw);
 	return raw.toLowerCase();
 }
@@ -53,10 +58,16 @@ function integer(value: unknown, min: number, max: number): number {
 
 function queryNumber(context: HttpRouteContext, key: string, fallback: number, max: number): number {
 	const values = context.query.getAll(key);
-	if (values.length > 1) throw new AgentOperationError('invalid_input');
-	if (!values.length) return fallback;
+	if (values.length > 1) {
+		throw new AgentOperationError('invalid_input');
+	}
+	if (!values.length) {
+		return fallback;
+	}
 	const raw = values[0];
-	if (!/^(0|[1-9][0-9]{0,14})$/u.test(raw)) throw new AgentOperationError('invalid_input');
+	if (!/^(0|[1-9][0-9]{0,14})$/u.test(raw)) {
+		throw new AgentOperationError('invalid_input');
+	}
 	return integer(Number(raw), key === 'limit' ? 1 : 0, max);
 }
 
@@ -83,20 +94,11 @@ function toEvent(value: AgentRunEventView): AgentRunEventView {
 }
 
 function failure(context: HttpRouteContext, error: unknown): void {
-	if (error instanceof HttpInputFailure) throw error;
+	if (error instanceof HttpInputFailure) {
+		throw error;
+	}
 	if (error instanceof AgentOperationError) {
-		const status =
-			error.code === 'invalid_input'
-				? 400
-				: error.code === 'not_found'
-					? 404
-					: error.code === 'idempotency_conflict' ||
-						  error.code === 'active_run_conflict' ||
-						  error.code === 'version_conflict'
-						? 409
-						: error.code === 'storage_unavailable'
-							? 503
-							: 500;
+		const status = agentErrorStatus(error.code);
 		context.send(status, { code: error.code });
 		return;
 	}
@@ -107,6 +109,23 @@ function failure(context: HttpRouteContext, error: unknown): void {
 		return;
 	}
 	context.send(500, { code: 'internal_failure' });
+}
+
+function agentErrorStatus(code: AgentOperationError['code']): number {
+	switch (code) {
+		case 'invalid_input':
+			return 400;
+		case 'not_found':
+			return 404;
+		case 'active_run_conflict':
+		case 'idempotency_conflict':
+		case 'version_conflict':
+			return 409;
+		case 'storage_unavailable':
+			return 503;
+		case 'internal_failure':
+			return 500;
+	}
 }
 
 function add(
