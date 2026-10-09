@@ -1,13 +1,13 @@
 import type { SecretBox } from '../../../../platform/security/secret-box.js';
-import type { SshCredentialInput } from '../model/connection-credential-types.js';
-import { ConnectionCredentialModel } from '../model/connection-credential-model.js';
+import type { SshCredentialInput, CredentialMutation } from '../model/connection-credential-types.js';
+import type { ConnectionCredentialModel } from '../model/connection-credential-model.js';
 export class ConnectionCredentialService {
 	constructor(
 		private readonly model: ConnectionCredentialModel,
 		private readonly secrets: SecretBox | null,
 	) {}
 
-	async set(id: number, version: number, input: SshCredentialInput) {
+	async set(id: number, version: number, input: SshCredentialInput): Promise<CredentialMutation> {
 		if (!Number.isSafeInteger(id) || id <= 0 || !Number.isSafeInteger(version) || version <= 0) {
 			throw new Error('Invalid ID/version');
 		}
@@ -29,7 +29,7 @@ export class ConnectionCredentialService {
 		});
 	}
 
-	clear(id: number, version: number) {
+	clear(id: number, version: number): Promise<CredentialMutation> {
 		if (!Number.isSafeInteger(id) || id <= 0 || !Number.isSafeInteger(version) || version <= 0) {
 			throw new Error('Invalid ID/version');
 		}

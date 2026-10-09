@@ -1,34 +1,37 @@
 import type { SqlExecutor, SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type { ProxyRecord, ProxyStorage, ProxyMutation, ProxyPatch, ProxyWrite } from '../../storage/proxy-storage.js';
 
+function decodeInteger(value: unknown): number {
+	if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+		throw new Error('Corrupt proxy integer');
+	}
+	return value;
+}
+
 function decode(row: Record<string, unknown>): ProxyRecord {
 	if (
 		typeof row.name !== 'string' ||
 		typeof row.host !== 'string' ||
-		!['HTTP', 'SOCKS5'].includes(String(row.type)) ||
+		(row.type !== 'HTTP' && row.type !== 'SOCKS5') ||
 		!(row.username === null || typeof row.username === 'string')
 	) {
 		throw new Error('Corrupt proxy record');
 	}
-	for (const col of ['id', 'port', 'version', 'created_at', 'updated_at']) {
-		if (typeof row[col] !== 'number' || !Number.isSafeInteger(row[col])) {
-			throw new Error('Corrupt proxy integer');
-		}
-	}
+
 	return {
-		id: row.id as number,
+		id: decodeInteger(row.id),
 		name: row.name,
-		type: row.type as ProxyRecord['type'],
+		type: row.type,
 		host: row.host,
-		port: row.port as number,
+		port: decodeInteger(row.port),
 		username: row.username,
-		version: row.version as number,
-		createdAt: row.created_at as number,
-		updatedAt: row.updated_at as number,
+		version: decodeInteger(row.version),
+		createdAt: decodeInteger(row.created_at),
+		updatedAt: decodeInteger(row.updated_at),
 	};
 }
 
-async function get(tx: SqlExecutor, id: number): Promise<ProxyRecord | null> {
+async function readProxyRecord(tx: SqlExecutor, id: number): Promise<ProxyRecord | null> {
 	const row = await tx.one(
 		'SELECT id,name,type,host,port,username,version,created_at,updated_at FROM proxies WHERE id=?',
 		[id],
@@ -36,10 +39,18 @@ async function get(tx: SqlExecutor, id: number): Promise<ProxyRecord | null> {
 	return row ? decode(row) : null;
 }
 
+async function readRequiredProxyRecord(tx: SqlExecutor, id: number): Promise<ProxyRecord> {
+	const record = await readProxyRecord(tx, id);
+	if (record === null) {
+		throw new Error('proxy missing after write');
+	}
+	return record;
+}
+
 export class SqliteProxyStorage implements ProxyStorage {
 	constructor(private readonly db: SqliteRuntime) {}
 
-	list() {
+	list(): Promise<ProxyRecord[]> {
 		return this.db.transaction(async (tx) =>
 			(
 				await tx.all(
@@ -49,11 +60,11 @@ export class SqliteProxyStorage implements ProxyStorage {
 		);
 	}
 
-	get(id: number) {
-		return this.db.transaction((tx) => get(tx, id));
+	get(id: number): Promise<ProxyRecord | null> {
+		return this.db.transaction((tx) => readProxyRecord(tx, id));
 	}
 
-	create(data: ProxyWrite) {
+	create(data: ProxyWrite): Promise<ProxyRecord> {
 		return this.db.transaction(async (tx) => {
 			const now = Date.now();
 			const row = await tx.run(
@@ -67,34 +78,41 @@ export class SqliteProxyStorage implements ProxyStorage {
 					now,
 				]);
 			}
-			return (await get(tx, row.lastId))!;
+			return await readRequiredProxyRecord(tx, row.lastId);
 		});
 	}
 
 	update(id: number, version: number, patch: ProxyPatch): Promise<ProxyMutation> {
 		return this.db.transaction(async (tx) => {
-			const old = await get(tx, id);
+			const old = await readProxyRecord(tx, id);
 			if (!old) {
 				return { status: 'not_found' };
 			}
 			if (old.version !== version) {
 				return { status: 'version_conflict' };
 			}
-			const allowed = { name: 'name', type: 'type', host: 'host', port: 'port', username: 'username' } as const;
-			const cols: string[] = [],
-				vals: (string | number | null)[] = [];
-			for (const key of Object.keys(allowed) as (keyof typeof allowed)[]) {
-				if (patch[key] !== undefined) {
-					cols.push(allowed[key] + '=?');
-					vals.push(patch[key] as string | number | null);
+			const allowed = [
+				['name', 'name'],
+				['type', 'type'],
+				['host', 'host'],
+				['port', 'port'],
+				['username', 'username'],
+			] as const;
+			const columns: string[] = [];
+			const parameters: (string | number | null)[] = [];
+			for (const [key, column] of allowed) {
+				const value = patch[key];
+				if (value !== undefined) {
+					columns.push(column + '=?');
+					parameters.push(value);
 				}
 			}
 			const now = Date.now();
 			await tx.run(
 				'UPDATE proxies SET ' +
-					[...cols, 'version=version+1', 'updated_at=?'].join(',') +
+					[...columns, 'version=version+1', 'updated_at=?'].join(',') +
 					' WHERE id=? AND version=?',
-				[...vals, now, id, version],
+				[...parameters, now, id, version],
 			);
 			if (patch.encryptedPassword !== undefined) {
 				if (patch.encryptedPassword === null) {
@@ -106,11 +124,11 @@ export class SqliteProxyStorage implements ProxyStorage {
 					);
 				}
 			}
-			return { status: 'updated', value: (await get(tx, id))! };
+			return { status: 'updated', value: await readRequiredProxyRecord(tx, id) };
 		});
 	}
 
-	delete(id: number) {
+	delete(id: number): Promise<boolean> {
 		return this.db.transaction(async (tx) => (await tx.run('DELETE FROM proxies WHERE id=?', [id])).changes > 0);
 	}
 }

@@ -1,25 +1,29 @@
 import type { SecretBox } from '../../../../platform/security/secret-box.js';
-import { SshTargetModel, type SshTargetSnapshot } from '../model/ssh-target-model.js';
-import type { ResolvedSshTarget } from '../model/resolved-target.js';
+import type { SshTargetModel } from '../model/ssh-target-model.js';
+import type { ResolvedSshTarget, ResolvedAuthentication, SshTargetSnapshot } from '../model/ssh-target-types.js';
 
 function decrypt(source: SshTargetSnapshot, secrets: SecretBox): ResolvedSshTarget {
-	const c = source.credential;
-	const authentication =
-		c.kind === 'password'
-			? { kind: 'password' as const, password: secrets.decrypt(c.ciphertext, 'connection:password') }
+	const credential = source.credential;
+	const authentication: ResolvedAuthentication =
+		credential.kind === 'password'
+			? { kind: 'password', password: secrets.decrypt(credential.ciphertext, 'connection:password') }
 			: {
-					kind: 'ssh_key' as const,
-					privateKey: secrets.decrypt(c.privateKey, 'ssh-key:private'),
-					passphrase: c.passphrase === null ? null : secrets.decrypt(c.passphrase, 'ssh-key:passphrase'),
+					kind: 'ssh_key',
+					privateKey: secrets.decrypt(credential.privateKey, 'ssh-key:private'),
+					passphrase:
+						credential.passphrase === null
+							? null
+							: secrets.decrypt(credential.passphrase, 'ssh-key:passphrase'),
 				};
-	const p = source.proxy;
-	const proxy = p
+	const proxyRecord = source.proxy;
+	const proxy = proxyRecord
 		? {
-				type: p.type,
-				host: p.host,
-				port: p.port,
-				username: p.username,
-				password: p.ciphertext === null ? null : secrets.decrypt(p.ciphertext, 'proxy:password'),
+				type: proxyRecord.type,
+				host: proxyRecord.host,
+				port: proxyRecord.port,
+				username: proxyRecord.username,
+				password:
+					proxyRecord.ciphertext === null ? null : secrets.decrypt(proxyRecord.ciphertext, 'proxy:password'),
 			}
 		: null;
 	const jumps = source.jumps.map((item) => decrypt(item, secrets));
@@ -41,20 +45,20 @@ export class SshTargetService {
 		private readonly secrets: SecretBox | null,
 	) {}
 
-	private id(value: number) {
+	private validateId(value: number): void {
 		if (!Number.isSafeInteger(value) || value <= 0) {
 			throw new Error('Invalid target ID');
 		}
 	}
 
-	fingerprintStored(value: number) {
-		this.id(value);
+	fingerprintStored(value: number): Promise<string> {
+		this.validateId(value);
 		return this.model.fingerprintStored(value);
 	}
 
 	/** Trusted backend call only. No HTTP route or serialized response. */
 	async resolveStored(value: number): Promise<ResolvedSshTarget> {
-		this.id(value);
+		this.validateId(value);
 		if (!this.secrets) {
 			throw new Error('Encryption key required');
 		}

@@ -7,7 +7,7 @@ import type {
 } from '../../storage/connection-storage.js';
 import { validateAffectedSshGraph } from './ssh-graph-sql.js';
 
-const fields = [
+const columnNames = [
 	'name',
 	'type',
 	'host',
@@ -20,7 +20,7 @@ const fields = [
 	'rdp_remote_app_directory',
 	'rdp_remote_app_arguments',
 ] as const;
-const keys = [
+const propertyNames = [
 	'name',
 	'type',
 	'host',
@@ -34,40 +34,46 @@ const keys = [
 	'rdpRemoteAppArguments',
 ] as const;
 
-function columns(input: Partial<ConnectionData>): { cols: string[]; vals: (string | number | null)[] } {
-	const cols: string[] = [];
-	const vals: (string | number | null)[] = [];
-	keys.forEach((key, i) => {
-		if (input[key] !== undefined) {
-			cols.push(fields[i]);
-			vals.push(input[key] as string | number | null);
-		}
-	});
-	return { cols, vals };
+interface ConnectionColumnValues {
+	columns: string[];
+	parameters: (string | number | null)[];
 }
 
-function number(value: unknown): number {
+function buildColumnValues(input: Partial<ConnectionData>): ConnectionColumnValues {
+	const columns: string[] = [];
+	const parameters: (string | number | null)[] = [];
+	propertyNames.forEach((key, index) => {
+		const value = input[key];
+		if (value !== undefined) {
+			columns.push(columnNames[index]);
+			parameters.push(value);
+		}
+	});
+	return { columns, parameters };
+}
+
+function decodeInteger(value: unknown): number {
 	if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
 		throw new Error('Corrupt integer');
 	}
 	return value;
 }
 
-function string(value: unknown): string {
+function decodeString(value: unknown): string {
 	if (typeof value !== 'string') {
 		throw new Error('Corrupt string');
 	}
 	return value;
 }
 
-function nullable(value: unknown): string | null {
+function decodeNullableString(value: unknown): string | null {
 	if (value === null) {
 		return null;
 	}
-	return string(value);
+	return decodeString(value);
 }
 
-async function read(tx: SqlExecutor, id: number): Promise<StoredConnection | null> {
+async function readConnection(tx: SqlExecutor, id: number): Promise<StoredConnection | null> {
 	const row = await tx.one('SELECT * FROM connections WHERE id=?', [id]);
 	if (!row) {
 		return null;
@@ -77,37 +83,37 @@ async function read(tx: SqlExecutor, id: number): Promise<StoredConnection | nul
 		'SELECT jump_connection_id,position FROM connection_jumps WHERE connection_id=? ORDER BY position',
 		[id],
 	);
-	jumps.forEach((j, i) => {
-		if (j.position !== i) {
+	jumps.forEach((jump, index) => {
+		if (jump.position !== index) {
 			throw new Error('Corrupt jump positions');
 		}
 	});
-	const type = string(row.type);
-	if (!['SSH', 'RDP', 'VNC'].includes(type)) {
+	const type = decodeString(row.type);
+	if (type !== 'SSH' && type !== 'RDP' && type !== 'VNC') {
 		throw new Error('Corrupt connection type');
 	}
-	const route = string(row.route);
-	if (!['direct', 'proxy', 'jump'].includes(route)) {
+	const route = decodeString(row.route);
+	if (route !== 'direct' && route !== 'proxy' && route !== 'jump') {
 		throw new Error('Corrupt route');
 	}
 	const item: StoredConnection = {
-		id: number(row.id),
-		name: string(row.name),
-		type: type as ConnectionData['type'],
-		host: string(row.host),
-		port: number(row.port),
-		username: string(row.username),
-		route: route as ConnectionData['route'],
-		proxyId: row.proxy_id === null ? null : number(row.proxy_id),
-		notes: nullable(row.notes),
-		rdpRemoteApp: nullable(row.rdp_remote_app),
-		rdpRemoteAppDirectory: nullable(row.rdp_remote_app_directory),
-		rdpRemoteAppArguments: nullable(row.rdp_remote_app_arguments),
-		version: number(row.version),
-		createdAt: number(row.created_at),
-		updatedAt: number(row.updated_at),
-		tagIds: tags.map((t) => number(t.tag_id)),
-		jumpIds: jumps.map((j) => number(j.jump_connection_id)),
+		id: decodeInteger(row.id),
+		name: decodeString(row.name),
+		type,
+		host: decodeString(row.host),
+		port: decodeInteger(row.port),
+		username: decodeString(row.username),
+		route,
+		proxyId: row.proxy_id === null ? null : decodeInteger(row.proxy_id),
+		notes: decodeNullableString(row.notes),
+		rdpRemoteApp: decodeNullableString(row.rdp_remote_app),
+		rdpRemoteAppDirectory: decodeNullableString(row.rdp_remote_app_directory),
+		rdpRemoteAppArguments: decodeNullableString(row.rdp_remote_app_arguments),
+		version: decodeInteger(row.version),
+		createdAt: decodeInteger(row.created_at),
+		updatedAt: decodeInteger(row.updated_at),
+		tagIds: tags.map((tag) => decodeInteger(tag.tag_id)),
+		jumpIds: jumps.map((jump) => decodeInteger(jump.jump_connection_id)),
 	};
 	if (item.route === 'jump' && (!item.jumpIds.length || item.type !== 'SSH')) {
 		throw new Error('Corrupt jump route');
@@ -118,7 +124,15 @@ async function read(tx: SqlExecutor, id: number): Promise<StoredConnection | nul
 	return item;
 }
 
-async function relationships(tx: SqlExecutor, id: number, data: ConnectionData): Promise<void> {
+async function readRequiredConnection(tx: SqlExecutor, id: number): Promise<StoredConnection> {
+	const connection = await readConnection(tx, id);
+	if (connection === null) {
+		throw new Error('Connection missing after write');
+	}
+	return connection;
+}
+
+async function writeRelationships(tx: SqlExecutor, id: number, data: ConnectionData): Promise<void> {
 	if (data.route === 'jump' && (data.type !== 'SSH' || data.jumpIds.length === 0)) {
 		throw new Error('Jump requires SSH chain');
 	}
@@ -153,14 +167,14 @@ async function relationships(tx: SqlExecutor, id: number, data: ConnectionData):
 }
 
 export async function insertConnectionInTransaction(tx: SqlExecutor, data: ConnectionData): Promise<StoredConnection> {
-	const { cols, vals } = columns(data);
+	const { columns, parameters } = buildColumnValues(data);
 	const now = Date.now();
 	const result = await tx.run(
-		`INSERT INTO connections(${cols.join(',')},version,created_at,updated_at) VALUES(${cols.map(() => '?').join(',')},1,?,?)`,
-		[...vals, now, now],
+		`INSERT INTO connections(${columns.join(',')},version,created_at,updated_at) VALUES(${columns.map(() => '?').join(',')},1,?,?)`,
+		[...parameters, now, now],
 	);
-	await relationships(tx, result.lastId, data);
-	return (await read(tx, result.lastId))!;
+	await writeRelationships(tx, result.lastId, data);
+	return readRequiredConnection(tx, result.lastId);
 }
 
 export class ConnectionSqliteAdapter implements ConnectionStorage {
@@ -170,10 +184,10 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 		return this.db.transaction(async (tx) => {
 			const rows = await tx.all('SELECT id FROM connections ORDER BY id');
 			const items: StoredConnection[] = [];
-			for (const r of rows) {
-				const c = await read(tx, number(r.id));
-				if (c) {
-					items.push(c);
+			for (const row of rows) {
+				const connection = await readConnection(tx, decodeInteger(row.id));
+				if (connection) {
+					items.push(connection);
 				}
 			}
 			return items;
@@ -181,7 +195,7 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 	}
 
 	get(id: number): Promise<StoredConnection | null> {
-		return this.db.transaction((tx) => read(tx, id));
+		return this.db.transaction((tx) => readConnection(tx, id));
 	}
 
 	create(data: ConnectionData): Promise<StoredConnection> {
@@ -190,7 +204,7 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 
 	update(id: number, expectedVersion: number, changes: Partial<ConnectionData>): Promise<MutationResult> {
 		return this.db.transaction(async (tx) => {
-			const old = await read(tx, id);
+			const old = await readConnection(tx, id);
 			if (!old) {
 				return { status: 'not_found' };
 			}
@@ -210,23 +224,23 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 				}
 			}
 			const merged: ConnectionData = { ...old, ...changes };
-			const { cols, vals } = columns(changes);
+			const { columns, parameters } = buildColumnValues(changes);
 			const timestamp = Date.now();
 			const update = await tx.run(
-				`UPDATE connections SET ${[...cols.map((c) => c + '=?'), 'version=version+1', 'updated_at=?'].join(',')} WHERE id=? AND version=?`,
-				[...vals, timestamp, id, expectedVersion],
+				`UPDATE connections SET ${[...columns.map((column) => column + '=?'), 'version=version+1', 'updated_at=?'].join(',')} WHERE id=? AND version=?`,
+				[...parameters, timestamp, id, expectedVersion],
 			);
 			if (!update.changes) {
 				return { status: 'version_conflict' };
 			}
-			await relationships(tx, id, merged);
-			return { status: 'updated', value: (await read(tx, id))! };
+			await writeRelationships(tx, id, merged);
+			return { status: 'updated', value: await readRequiredConnection(tx, id) };
 		});
 	}
 
 	clone(id: number, name: string): Promise<StoredConnection | null> {
 		return this.db.transaction(async (tx) => {
-			const old = await read(tx, id);
+			const old = await readConnection(tx, id);
 			if (!old) {
 				return null;
 			}

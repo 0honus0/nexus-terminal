@@ -1,12 +1,13 @@
-import { TagModel } from '../model/tag-model.js';
+import type { TagModel } from '../model/tag-model.js';
+import type { TagSnapshot, TagMutation } from '../model/tag-types.js';
 
-function id(value: number) {
+function validateId(value: number): void {
 	if (!Number.isSafeInteger(value) || value <= 0) {
 		throw new Error('Invalid ID');
 	}
 }
 
-function name(value: string) {
+function validateName(value: string): string {
 	if (typeof value !== 'string' || !value.trim()) {
 		throw new Error('Invalid tag name');
 	}
@@ -16,27 +17,27 @@ function name(value: string) {
 export class TagService {
 	constructor(private readonly model: TagModel) {}
 
-	list() {
+	list(): Promise<TagSnapshot[]> {
 		return this.model.list();
 	}
 
-	get(value: number) {
-		id(value);
-		return this.model.get(value);
+	get(id: number): Promise<TagSnapshot | null> {
+		validateId(id);
+		return this.model.get(id);
 	}
 
-	create(value: string) {
-		return this.model.create(name(value));
+	create(name: string): Promise<TagSnapshot> {
+		return this.model.create(validateName(name));
 	}
 
-	rename(value: number, version: number, next: string) {
-		id(value);
-		id(version);
-		return this.model.rename(value, version, name(next));
+	rename(id: number, version: number, name: string): Promise<TagMutation> {
+		validateId(id);
+		validateId(version);
+		return this.model.rename(id, version, validateName(name));
 	}
 
-	delete(value: number) {
-		id(value);
-		return this.model.delete(value);
+	delete(id: number): Promise<boolean> {
+		validateId(id);
+		return this.model.delete(id);
 	}
 }

@@ -16,6 +16,8 @@ SQLite Runtime 的事务入口管理回调与未等待操作；私有 `rollbackA
 
 Targets 批量导入的内部结果以 `import/model/import-types.ts` 中的 `ImportItemResult` 定义成功 ID 与失败错误码的可辨识联合；Service 使用这个具名应用类型。`public.ts` 独立定义出口结果，仍由出口映射逐字段转换，不从内部类型派生。
 
+Targets 的 Service/Model 和 SQLite 存储实现明确声明返回类型，校验使用 `validateId/validateName` 等动作名称。应用补丁规范化与存储补丁投影分别由 Service 校验函数和 Model mapper 承担，均保留字段允许清单；SQL 行解码先校验再构造记录，成功写入后的必需记录通过具名读取函数确认。Resolver 的密文快照与解密应用类型集中于 `resolver/model/ssh-target-types.ts`，Model 文件只持有映射与存储调用。
+
 SSH 命令在发出 exec 请求前拒绝已取消的信号；持续命令与原始非 PTY 通道在打开之后仍监听调用方取消，通道关闭时解除订阅。一次执行的期限与取消分别形成 unknown/timeout 和 unknown/cancelled，不把取消作为远端命令未发生的证明。
 
 SSH 路由从 Socket/Client 创建起持续监控 error/close，任何一跳失败都终止共同建连期限并清理半建连资源；完整机器连接安装运行期监听后才交接并解除建连监听，消除各跳 ready 到整条路由就绪之间的错误监听空档。

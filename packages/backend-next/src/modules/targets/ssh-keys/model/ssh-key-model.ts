@@ -62,7 +62,7 @@ export class SshKeyModel {
 		return mutation(await this.storage.update(id, version, patch));
 	}
 
-	delete(id: number) {
+	delete(id: number): Promise<boolean> {
 		return this.storage.delete(id);
 	}
 }

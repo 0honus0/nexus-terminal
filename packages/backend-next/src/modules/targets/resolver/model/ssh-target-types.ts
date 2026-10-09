@@ -20,3 +20,24 @@ export interface ResolvedSshTarget {
 	readonly jumps: readonly ResolvedSshTarget[];
 	readonly fingerprint: string;
 }
+
+/** Internal ciphertext snapshot. Each fingerprint comes from the same storage read. */
+export interface SshTargetSnapshot {
+	id: number;
+	host: string;
+	port: number;
+	username: string;
+	credential:
+		| { kind: 'password'; ciphertext: string }
+		| { kind: 'ssh_key'; keyId: number; privateKey: string; passphrase: string | null };
+	proxy: {
+		id: number;
+		type: ProxyType;
+		host: string;
+		port: number;
+		username: string | null;
+		ciphertext: string | null;
+	} | null;
+	fingerprint: string;
+	jumps: SshTargetSnapshot[];
+}

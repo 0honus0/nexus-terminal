@@ -41,7 +41,7 @@ export class TagModel {
 		return mutation(await this.storage.rename(id, version, name));
 	}
 
-	delete(id: number) {
+	delete(id: number): Promise<boolean> {
 		return this.storage.delete(id);
 	}
 }

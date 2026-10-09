@@ -1,8 +1,15 @@
-import type { ProxyMetadata, ProxyInput, ProxyChanges, ProxyCommandPatch } from '../model/proxy-types.js';
-import { ProxyModel } from '../model/proxy-model.js';
+import type {
+	ProxyMetadata,
+	ProxyInput,
+	ProxyChanges,
+	ProxyCommandPatch,
+	ProxySnapshot,
+	ProxyMutation,
+} from '../model/proxy-types.js';
+import type { ProxyModel } from '../model/proxy-model.js';
 import type { SecretBox } from '../../../../platform/security/secret-box.js';
 
-function validate(data: ProxyMetadata) {
+function validateProxy(data: ProxyMetadata): ProxyMetadata {
 	if (
 		!data.name.trim() ||
 		!data.host.trim() ||
@@ -19,7 +26,28 @@ function validate(data: ProxyMetadata) {
 	return { ...data, name: data.name.trim(), host: data.host.trim() };
 }
 
-function id(value: number) {
+function normalizeProxyChanges(current: ProxyMetadata, fields: Partial<ProxyMetadata>): ProxyCommandPatch {
+	const normalized = validateProxy({ ...current, ...fields });
+	const patch: ProxyCommandPatch = {};
+	if (fields.name !== undefined) {
+		patch.name = normalized.name;
+	}
+	if (fields.type !== undefined) {
+		patch.type = normalized.type;
+	}
+	if (fields.host !== undefined) {
+		patch.host = normalized.host;
+	}
+	if (fields.port !== undefined) {
+		patch.port = normalized.port;
+	}
+	if (fields.username !== undefined) {
+		patch.username = normalized.username;
+	}
+	return patch;
+}
+
+function validateId(value: number): void {
 	if (!Number.isSafeInteger(value) || value <= 0) {
 		throw new Error('Invalid ID');
 	}
@@ -31,18 +59,18 @@ export class ProxyService {
 		private readonly secrets: SecretBox | null,
 	) {}
 
-	list() {
+	list(): Promise<ProxySnapshot[]> {
 		return this.model.list();
 	}
 
-	get(value: number) {
-		id(value);
-		return this.model.get(value);
+	get(id: number): Promise<ProxySnapshot | null> {
+		validateId(id);
+		return this.model.get(id);
 	}
 
-	create(data: ProxyInput) {
+	create(data: ProxyInput): Promise<ProxySnapshot> {
 		const { password, ...metadata } = data;
-		const result = validate(metadata);
+		const result = validateProxy(metadata);
 		if (password !== undefined && password !== null && !password) {
 			throw new Error('Empty proxy password');
 		}
@@ -52,34 +80,31 @@ export class ProxyService {
 		});
 	}
 
-	async update(value: number, version: number, patch: ProxyChanges) {
-		id(value);
-		id(version);
-		const old = await this.model.get(value);
+	async update(id: number, version: number, patch: ProxyChanges): Promise<ProxyMutation> {
+		validateId(id);
+		validateId(version);
+		const old = await this.model.get(id);
 		if (!old) {
-			return { status: 'not_found' as const };
+			return { status: 'not_found' };
 		}
 		const { password, ...fields } = patch;
 		if (password === '') {
 			throw new Error('Empty proxy password');
 		}
-		const normalized = validate({ ...old, ...fields });
-		const changes = Object.fromEntries(
-			Object.keys(fields).map((k) => [k, normalized[k as keyof ProxyMetadata]]),
-		) as ProxyCommandPatch;
+		const changes = normalizeProxyChanges(old, fields);
 		if (password !== undefined) {
 			changes.encryptedPassword =
 				password === null ? null : this.requireSecrets().encrypt(password, 'proxy:password');
 		}
-		return this.model.update(value, version, changes);
+		return this.model.update(id, version, changes);
 	}
 
-	delete(value: number) {
-		id(value);
-		return this.model.delete(value);
+	delete(id: number): Promise<boolean> {
+		validateId(id);
+		return this.model.delete(id);
 	}
 
-	private requireSecrets() {
+	private requireSecrets(): SecretBox {
 		if (!this.secrets) {
 			throw new Error('Encryption key required');
 		}

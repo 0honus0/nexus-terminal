@@ -42,7 +42,7 @@ import type {
 	SshKeyInput as InternalKeyInput,
 	SshKeyChanges as InternalKeyChanges,
 } from './ssh-keys/model/ssh-key-types.js';
-import type { ResolvedSshTarget } from './resolver/model/resolved-target.js';
+import type { ResolvedSshTarget } from './resolver/model/ssh-target-types.js';
 
 /** All projections are allowlists. Never spread an internal object through this boundary. */
 export function connectionInput(input: PublicMetadata): InternalMetadata {

@@ -1,12 +1,13 @@
 import type { ConnectionImport, ImportItemResult } from '../model/import-types.js';
-import { ConnectionImportModel } from '../model/import-model.js';
+import type { ConnectionSnapshot } from '../../connections/model/connection-types.js';
+import type { ConnectionImportModel } from '../model/import-model.js';
 import { validateConnection } from '../../connections/service/connection-validation.js';
 import { targetErrorCode } from '../../target-errors.js';
 
 export class ConnectionImportService {
 	constructor(private readonly model: ConnectionImportModel) {}
 
-	importOne(command: ConnectionImport) {
+	importOne(command: ConnectionImport): Promise<ConnectionSnapshot> {
 		if (command.inlineProxy) {
 			const proxy = command.inlineProxy;
 			if (

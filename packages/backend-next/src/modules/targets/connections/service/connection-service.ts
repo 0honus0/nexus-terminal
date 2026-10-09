@@ -1,54 +1,51 @@
-import type { ConnectionMetadata } from '../model/connection-types.js';
-import { ConnectionModel } from '../model/connection-model.js';
-import { validId, validateConnection } from './connection-validation.js';
+import type { ConnectionMetadata, ConnectionSnapshot, ConnectionMutation } from '../model/connection-types.js';
+import type { ConnectionModel } from '../model/connection-model.js';
+import { validateId, validateConnection, normalizeConnectionChanges } from './connection-validation.js';
 
 export class ConnectionService {
 	constructor(private readonly model: ConnectionModel) {}
 
-	list() {
+	list(): Promise<ConnectionSnapshot[]> {
 		return this.model.list();
 	}
 
-	get(id: number) {
-		validId(id);
+	get(id: number): Promise<ConnectionSnapshot | null> {
+		validateId(id);
 		return this.model.get(id);
 	}
 
-	create(data: ConnectionMetadata) {
+	create(data: ConnectionMetadata): Promise<ConnectionSnapshot> {
 		return this.model.create(validateConnection(data));
 	}
 
-	async update(id: number, version: number, changes: Partial<ConnectionMetadata>) {
-		validId(id);
-		validId(version);
+	async update(id: number, version: number, changes: Partial<ConnectionMetadata>): Promise<ConnectionMutation> {
+		validateId(id);
+		validateId(version);
 		const old = await this.model.get(id);
 		if (!old) {
-			return { status: 'not_found' as const };
+			return { status: 'not_found' };
 		}
-		const normalized = validateConnection({ ...old, ...changes });
-		const update = Object.fromEntries(
-			Object.keys(changes).map((key) => [key, normalized[key as keyof ConnectionMetadata]]),
-		) as Partial<ConnectionMetadata>;
+		const update = normalizeConnectionChanges(old, changes);
 		return this.model.update(id, version, update);
 	}
 
-	clone(id: number, name: string) {
-		validId(id);
+	clone(id: number, name: string): Promise<ConnectionSnapshot | null> {
+		validateId(id);
 		if (!name.trim()) {
 			throw new Error('Empty name');
 		}
 		return this.model.clone(id, name.trim());
 	}
 
-	delete(id: number) {
-		validId(id);
+	delete(id: number): Promise<boolean> {
+		validateId(id);
 		return this.model.delete(id);
 	}
 
-	setTags(id: number, version: number, tags: number[]) {
-		validId(id);
-		validId(version);
-		tags.forEach(validId);
+	setTags(id: number, version: number, tags: number[]): Promise<ConnectionMutation> {
+		validateId(id);
+		validateId(version);
+		tags.forEach(validateId);
 		return this.model.setTags(id, version, tags);
 	}
 

@@ -1,30 +1,9 @@
 import { createHash } from 'node:crypto';
-import type { ProxyType } from '@nexus-terminal/shared/proxies/values';
+import type { SshTargetSnapshot } from './ssh-target-types.js';
 import type { EncodedSshTarget, SshTargetStorage } from '../storage/ssh-target-storage.js';
 
-/** Internal ciphertext snapshot. Each fingerprint comes from the same storage read. */
-export interface SshTargetSnapshot {
-	id: number;
-	host: string;
-	port: number;
-	username: string;
-	credential:
-		| { kind: 'password'; ciphertext: string }
-		| { kind: 'ssh_key'; keyId: number; privateKey: string; passphrase: string | null };
-	proxy: {
-		id: number;
-		type: ProxyType;
-		host: string;
-		port: number;
-		username: string | null;
-		ciphertext: string | null;
-	} | null;
-	fingerprint: string;
-	jumps: SshTargetSnapshot[];
-}
-
 function fingerprint(encoded: EncodedSshTarget): string {
-	// Ciphertext and dependent versions participate, plaintext never enters the digest input.
+	// Machine configuration, reference identities and ciphertext determine the digest; plaintext is excluded.
 	return createHash('sha256').update(JSON.stringify(encoded), 'utf8').digest('hex');
 }
 

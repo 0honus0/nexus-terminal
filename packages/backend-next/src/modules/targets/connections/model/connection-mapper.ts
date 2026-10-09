@@ -53,3 +53,47 @@ export function fromStorage(value: StoredConnection): ConnectionSnapshot {
 		jumpIds: [...value.jumpIds],
 	};
 }
+
+export function toStoragePatch(changes: Partial<ConnectionMetadata>): Partial<ConnectionData> {
+	const patch: Partial<ConnectionData> = {};
+	if (changes.name !== undefined) {
+		patch.name = changes.name;
+	}
+	if (changes.type !== undefined) {
+		patch.type = changes.type;
+	}
+	if (changes.host !== undefined) {
+		patch.host = changes.host;
+	}
+	if (changes.port !== undefined) {
+		patch.port = changes.port;
+	}
+	if (changes.username !== undefined) {
+		patch.username = changes.username;
+	}
+	if (changes.route !== undefined) {
+		patch.route = changes.route;
+	}
+	if (changes.proxyId !== undefined) {
+		patch.proxyId = changes.proxyId;
+	}
+	if (changes.notes !== undefined) {
+		patch.notes = changes.notes;
+	}
+	if (changes.rdpRemoteApp !== undefined) {
+		patch.rdpRemoteApp = changes.rdpRemoteApp;
+	}
+	if (changes.rdpRemoteAppDirectory !== undefined) {
+		patch.rdpRemoteAppDirectory = changes.rdpRemoteAppDirectory;
+	}
+	if (changes.rdpRemoteAppArguments !== undefined) {
+		patch.rdpRemoteAppArguments = changes.rdpRemoteAppArguments;
+	}
+	if (changes.tagIds !== undefined) {
+		patch.tagIds = [...changes.tagIds];
+	}
+	if (changes.jumpIds !== undefined) {
+		patch.jumpIds = [...changes.jumpIds];
+	}
+	return patch;
+}

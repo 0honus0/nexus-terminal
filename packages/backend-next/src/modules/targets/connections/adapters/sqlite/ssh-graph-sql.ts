@@ -1,7 +1,11 @@
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import { SSH_MAX_EXPANDED_TARGETS, SSH_MAX_JUMP_EDGES } from '../../model/ssh-graph-limits.js';
 
-type Node = { type: string; route: string; jumps: number[] };
+interface SshGraphNode {
+	type: string;
+	route: string;
+	jumps: number[];
+}
 
 function positiveId(value: unknown): number {
 	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
@@ -20,7 +24,7 @@ export async function validateAffectedSshGraph(tx: SqlExecutor, changedId: numbe
 	const edgeRows = await tx.all(
 		'SELECT connection_id,position,jump_connection_id FROM connection_jumps ORDER BY connection_id,position',
 	);
-	const graph = new Map<number, Node>();
+	const graph = new Map<number, SshGraphNode>();
 	const reverse = new Map<number, Set<number>>();
 	for (const row of records) {
 		graph.set(positiveId(row.id), {

@@ -113,7 +113,7 @@ async function load(
 export class SqliteSshTargetStorage implements SshTargetStorage {
 	constructor(private readonly db: SqliteRuntime) {}
 
-	get(id: number) {
+	get(id: number): Promise<EncodedSshTarget> {
 		return this.db.transaction((tx) => load(tx, id, new Set(), 0, { expanded: 0 }));
 	}
 }
