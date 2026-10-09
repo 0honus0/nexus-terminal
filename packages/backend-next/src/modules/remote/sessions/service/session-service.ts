@@ -12,7 +12,17 @@ interface ActiveSession {
 	offData: () => void;
 	offStderr: () => void;
 	onChunk: (bytes: Uint8Array) => void;
-	closing: Promise<void> | null;
+	closePromise: Promise<void> | null;
+}
+
+function notifyDataListeners(listeners: Set<(bytes: Uint8Array) => void>, bytes: Uint8Array): void {
+	for (const listener of listeners) {
+		try {
+			listener(Uint8Array.from(bytes));
+		} catch {
+			// A consumer cannot interrupt delivery or change session ownership.
+		}
+	}
 }
 
 const MAX_LIVE_SESSIONS = 64;
@@ -23,8 +33,8 @@ export class RemoteSessionService {
 	private readonly opening = new Set<AbortController>();
 	private readonly openingTasks = new Set<Promise<unknown>>();
 	private readonly closingTasks = new Set<Promise<void>>();
-	private readonly sessionClosings = new Map<string, Promise<void>>();
-	private closing: Promise<void> | null = null;
+	private readonly sessionClosePromises = new Map<string, Promise<void>>();
+	private closePromise: Promise<void> | null = null;
 	private accepting = true;
 
 	constructor(private readonly model: RemoteSessionModel) {}
@@ -37,14 +47,14 @@ export class RemoteSessionService {
 		return session;
 	}
 
-	private admitted(): void {
+	private assertAccepting(): void {
 		if (!this.accepting) {
 			throw new Error('Remote sessions are closing');
 		}
 	}
 
 	open(request: OpenSessionRequest): Promise<RemoteSessionSnapshot> {
-		this.admitted();
+		this.assertAccepting();
 		if (
 			!Number.isSafeInteger(request.targetId) ||
 			request.targetId < 1 ||
@@ -99,54 +109,7 @@ export class RemoteSessionService {
 			if (controller.signal.aborted || !this.accepting || !opened.isOpen) {
 				throw new Error('Remote session opening cancelled');
 			}
-			const id = randomUUID();
-			const view: RemoteSessionSnapshot = {
-				id,
-				targetId: opened.targetId,
-				fingerprint: opened.fingerprint,
-				startedAt: Date.now(),
-				status: 'open',
-			};
-			const current: ActiveSession = {
-				view,
-				resource: opened,
-				dataListeners: new Set(),
-				stderrListeners: new Set(),
-				closedListeners: new Set(),
-
-				offResource: () => undefined,
-
-				offData: () => undefined,
-
-				offStderr: () => undefined,
-
-				onChunk: () => undefined,
-
-				closing: null,
-			};
-			current.onChunk = (bytes: Uint8Array) => {
-				for (const fn of current.dataListeners) {
-					try {
-						fn(Uint8Array.from(bytes));
-					} catch {
-						/* isolate client listeners */
-					}
-				}
-			};
-			current.offResource = opened.onClose(() => {
-				void this.closeSession(id).catch(() => undefined);
-			});
-			current.offStderr = opened.onStderr((bytes) => {
-				for (const listener of current.stderrListeners) {
-					try {
-						listener(Uint8Array.from(bytes));
-					} catch {
-						/* caller cannot break session lifecycle */
-					}
-				}
-			});
-			this.sessions.set(id, current);
-			return this.view(current);
+			return this.registerSession(opened);
 		} catch (error) {
 			if (opened) {
 				try {
@@ -159,23 +122,58 @@ export class RemoteSessionService {
 		}
 	}
 
-	private view(session: ActiveSession): RemoteSessionSnapshot {
+	private registerSession(resource: RemoteSessionResource): RemoteSessionSnapshot {
+		const id = randomUUID();
+		const view: RemoteSessionSnapshot = {
+			id,
+			targetId: resource.targetId,
+			fingerprint: resource.fingerprint,
+			startedAt: Date.now(),
+			status: 'open',
+		};
+		const current: ActiveSession = {
+			view,
+			resource,
+			dataListeners: new Set(),
+			stderrListeners: new Set(),
+			closedListeners: new Set(),
+
+			offResource: () => undefined,
+
+			offData: () => undefined,
+
+			offStderr: () => undefined,
+
+			onChunk: () => undefined,
+
+			closePromise: null,
+		};
+		current.onChunk = (bytes) => notifyDataListeners(current.dataListeners, bytes);
+		current.offResource = resource.onClose(() => {
+			void this.closeSession(id).catch(() => undefined);
+		});
+		current.offStderr = resource.onStderr((bytes) => notifyDataListeners(current.stderrListeners, bytes));
+		this.sessions.set(id, current);
+		return this.toSnapshot(current);
+	}
+
+	private toSnapshot(session: ActiveSession): RemoteSessionSnapshot {
 		const { id, targetId, fingerprint, startedAt } = session.view;
 		return { id, targetId, fingerprint, startedAt, status: 'open' };
 	}
 
 	get(id: string): RemoteSessionSnapshot | null {
 		const current = this.sessions.get(id);
-		return current ? this.view(current) : null;
+		return current ? this.toSnapshot(current) : null;
 	}
 
 	list(): RemoteSessionSnapshot[] {
-		return [...this.sessions.values()].map((session) => this.view(session));
+		return [...this.sessions.values()].map((session) => this.toSnapshot(session));
 	}
 
 	write(id: string, bytes: Uint8Array): boolean {
 		const session = this.requireSession(id);
-		if (!session.resource.isOpen || session.closing) {
+		if (!session.resource.isOpen || session.closePromise) {
 			throw new Error('Remote session closed');
 		}
 		return session.resource.write(bytes);
@@ -221,7 +219,7 @@ export class RemoteSessionService {
 	}
 
 	closeSession(id: string): Promise<void> {
-		const pending = this.sessionClosings.get(id);
+		const pending = this.sessionClosePromises.get(id);
 		if (pending) {
 			return pending;
 		}
@@ -229,39 +227,41 @@ export class RemoteSessionService {
 		if (!session) {
 			return Promise.resolve();
 		}
-		if (session.closing) {
-			return session.closing;
+		if (session.closePromise) {
+			return session.closePromise;
 		}
-		session.closing = Promise.resolve().then(async () => {
-			this.sessions.delete(id);
-			session.offResource();
-			session.offStderr();
-			session.offData();
-			try {
-				await session.resource.close();
-			} finally {
-				for (const listener of session.closedListeners) {
-					try {
-						listener();
-					} catch {
-						/* lifecycle is already closed */
-					}
-				}
-				session.dataListeners.clear();
-				session.stderrListeners.clear();
-				session.closedListeners.clear();
-			}
-		});
-		const task = session.closing;
-		this.sessionClosings.set(id, task);
+		session.closePromise = Promise.resolve().then(() => this.closeActiveSession(id, session));
+		const task = session.closePromise;
+		this.sessionClosePromises.set(id, task);
 		this.closingTasks.add(task);
 		void task
 			.finally(() => {
 				this.closingTasks.delete(task);
-				this.sessionClosings.delete(id);
+				this.sessionClosePromises.delete(id);
 			})
 			.catch(() => undefined);
 		return task;
+	}
+
+	private async closeActiveSession(id: string, session: ActiveSession): Promise<void> {
+		this.sessions.delete(id);
+		session.offResource();
+		session.offStderr();
+		session.offData();
+		try {
+			await session.resource.close();
+		} finally {
+			for (const listener of session.closedListeners) {
+				try {
+					listener();
+				} catch {
+					/* lifecycle is already closed */
+				}
+			}
+			session.dataListeners.clear();
+			session.stderrListeners.clear();
+			session.closedListeners.clear();
+		}
 	}
 
 	quiesce(): void {
@@ -275,26 +275,26 @@ export class RemoteSessionService {
 	}
 
 	close(): Promise<void> {
-		if (this.closing) {
-			return this.closing;
+		if (this.closePromise) {
+			return this.closePromise;
 		}
 		this.quiesce();
-		this.closing = (async () => {
-			await Promise.allSettled([...this.openingTasks]);
-			const completions = await Promise.allSettled([
-				...this.closingTasks,
-				...[...this.sessions.keys()].map((id) => this.closeSession(id)),
-			]);
-			const failures = completions.filter(
-				(result): result is PromiseRejectedResult => result.status === 'rejected',
+		this.closePromise = Promise.resolve().then(() => this.closeSessions());
+		return this.closePromise;
+	}
+
+	private async closeSessions(): Promise<void> {
+		await Promise.allSettled([...this.openingTasks]);
+		const completions = await Promise.allSettled([
+			...this.closingTasks,
+			...[...this.sessions.keys()].map((id) => this.closeSession(id)),
+		]);
+		const failures = completions.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+		if (failures.length) {
+			throw new AggregateError(
+				failures.map((item) => item.reason),
+				'Remote sessions failed to close',
 			);
-			if (failures.length) {
-				throw new AggregateError(
-					failures.map((item) => item.reason),
-					'Remote sessions failed to close',
-				);
-			}
-		})();
-		return this.closing;
+		}
 	}
 }

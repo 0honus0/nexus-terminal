@@ -1,9 +1,11 @@
 import { SqliteRuntime } from '../platform/storage/sqlite/sqlite-runtime.js';
 import { initializeSchema } from '../platform/storage/sqlite/schema.js';
 import { targetMigrations } from '../modules/targets/schema.js';
-import { registerModules } from './module-manifest.js';
+import { registerModules, type RegisteredModules } from './module-manifest.js';
 import { SecretBox } from '../platform/security/secret-box.js';
 import type { MachineConnectOptions } from '../platform/ssh/ssh-port.js';
+import type { TargetsPublicApi, TrustedSshTargetResolver } from '../modules/targets/public.js';
+import type { RemoteSessions } from '../modules/remote/public.js';
 
 export interface AppOptions {
 	/** 32-byte application-managed key. Required for storing or resolving credentials. */
@@ -12,7 +14,12 @@ export interface AppOptions {
 	verifyHostKey?: MachineConnectOptions['verifyHostKey'];
 }
 
-type RegisteredModules = ReturnType<typeof registerModules>;
+export interface BackendApplication {
+	targets: TargetsPublicApi;
+	trustedSshTargets: TrustedSshTargetResolver;
+	remote: RemoteSessions;
+	close(): Promise<void>;
+}
 
 async function closeResources(modules: RegisteredModules, db: SqliteRuntime): Promise<void> {
 	const failures: unknown[] = [];
@@ -47,7 +54,7 @@ function createCloseHandler(modules: RegisteredModules, db: SqliteRuntime): () =
 	};
 }
 
-export async function createApp(dbPath: string, options: AppOptions = {}) {
+export async function createApp(dbPath: string, options: AppOptions = {}): Promise<BackendApplication> {
 	const db = SqliteRuntime.open(dbPath);
 	try {
 		await initializeSchema(db, targetMigrations);

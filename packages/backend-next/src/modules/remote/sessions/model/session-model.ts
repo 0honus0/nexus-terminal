@@ -2,6 +2,7 @@ import type { OpenSessionRequest, RemoteSessionResource } from './session-types.
 import type { TrustedResolvedSshTarget, TrustedSshTargetResolver } from '../../../targets/public.js';
 import type {
 	MachineEndpoint,
+	MachineRoute,
 	MachineAuthentication,
 	MachineProxy,
 	MachineSshFactory,
@@ -11,7 +12,7 @@ import type {
 } from '../../../../platform/ssh/ssh-port.js';
 
 /** Remote owns business target → generic machine contract transformation. */
-export function toMachineTarget(target: TrustedResolvedSshTarget): MachineEndpoint {
+function toMachineTarget(target: TrustedResolvedSshTarget): MachineEndpoint {
 	const credentials = target.authentication;
 	const authentication: MachineAuthentication =
 		credentials.kind === 'password'
@@ -28,12 +29,7 @@ export function toMachineTarget(target: TrustedResolvedSshTarget): MachineEndpoi
 					username: proxy.username,
 					password: proxy.password,
 				};
-	const route =
-		target.jumps.length > 0
-			? { kind: 'jump' as const, hops: target.jumps.map((hop) => toMachineTarget(hop)) }
-			: proxyInput === null
-				? { kind: 'direct' as const }
-				: { kind: 'proxy' as const, proxy: proxyInput };
+	const route = toMachineRoute(target.jumps, proxyInput);
 	return {
 		host: target.host,
 		port: target.port,
@@ -43,7 +39,17 @@ export function toMachineTarget(target: TrustedResolvedSshTarget): MachineEndpoi
 	};
 }
 
-function resource(
+function toMachineRoute(jumps: readonly TrustedResolvedSshTarget[], proxy: MachineProxy | null): MachineRoute {
+	if (jumps.length > 0) {
+		return { kind: 'jump', hops: jumps.map(toMachineTarget) };
+	}
+	if (proxy === null) {
+		return { kind: 'direct' };
+	}
+	return { kind: 'proxy', proxy };
+}
+
+function createSessionResource(
 	target: TrustedResolvedSshTarget,
 	machine: MachineConnection,
 	shell: MachineShell,
@@ -57,11 +63,31 @@ function resource(
 		closed = true;
 	});
 
-	const ensure = () => {
+	const assertOpen = (): void => {
 		if (closed || closePromise || !machine.isOpen) {
 			throw new Error('Remote session resource closed');
 		}
 	};
+
+	async function closeResources(): Promise<void> {
+		closed = true;
+		offMachine();
+		offShell();
+		const failures: unknown[] = [];
+		try {
+			shell.close();
+		} catch (error) {
+			failures.push(error);
+		}
+		try {
+			await machine.close();
+		} catch (error) {
+			failures.push(error);
+		}
+		if (failures.length) {
+			throw new AggregateError(failures, 'Remote resource close failed');
+		}
+	}
 
 	return {
 		targetId: target.id,
@@ -72,12 +98,12 @@ function resource(
 		},
 
 		write(bytes) {
-			ensure();
+			assertOpen();
 			return shell.writable.write(Buffer.from(bytes));
 		},
 
 		resize(columns, rows) {
-			ensure();
+			assertOpen();
 			shell.resize(columns, rows);
 		},
 
@@ -86,7 +112,7 @@ function resource(
 		},
 
 		resume() {
-			ensure();
+			assertOpen();
 			shell.resume();
 		},
 
@@ -129,25 +155,7 @@ function resource(
 			if (closePromise) {
 				return closePromise;
 			}
-			closePromise = Promise.resolve().then(async () => {
-				closed = true;
-				offMachine();
-				offShell();
-				const failures: unknown[] = [];
-				try {
-					shell.close();
-				} catch (error) {
-					failures.push(error);
-				}
-				try {
-					await machine.close();
-				} catch (error) {
-					failures.push(error);
-				}
-				if (failures.length) {
-					throw new AggregateError(failures, 'Remote resource close failed');
-				}
-			});
+			closePromise = Promise.resolve().then(closeResources);
 			return closePromise;
 		},
 	};
@@ -196,7 +204,7 @@ export class RemoteSessionModel {
 			);
 			controller.signal.throwIfAborted();
 			shell.pause();
-			return resource(target, machine, shell);
+			return createSessionResource(target, machine, shell);
 		} catch (error) {
 			if (machine) {
 				try {

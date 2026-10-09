@@ -34,6 +34,8 @@ Bootstrap 的 `createApp` 负责初始化与装配；同文件的 `createCloseHa
 
 Remote Service 只接收本模块 Model，使用独立的 `OpenSessionRequest`、`RemoteSessionResource` 和会话快照；不直接调用 Targets Resolver 或 Platform SSH 工厂。Model 解析可信目标、逐字段转换机器请求、执行建连与 Shell 打开，统一传递打开期限及取消，并在失败时等待底层资源清理。机器连接、Shell 与 Node Stream 封装在 Model 内，Service 通过应用资源契约管理准入、订阅、背压和会话生命周期；模块出口继续逐字段投影公开快照及请求，字节数据复制后传递。
 
+Remote Service 的会话注册、单会话释放和实例停机分别由私有 `registerSession/closeActiveSession/closeSessions` 承担，关闭入口只发布共享完成 Promise。Model 的机器目标与路由映射留在文件内，不导出给其他消费者；应用资源工厂内的具名关闭流程释放 Shell 与机器连接。Bootstrap 显式声明 `RegisteredModules` 和 `BackendApplication` 返回契约，组装与公开类型转换保持原有边界。
+
 ## 技术基线
 
 Runner PackInstaller.runProcess复用registerManagedProcess(kind pack)覆盖mise/工具版本检查，opaque invocation ID不含command payload，登记失败kill/close收敛，exit清派生group、close后完成Promise；shutdown/startup仍由共享managed-process registry负责，无新增pack registry。
