@@ -9,6 +9,7 @@ import { AccessService } from './authentication/service/access-service.js';
 import { accessBoundary } from './authentication/model/access-errors.js';
 import { createAccessRoutes } from './interfaces/http/access-http.js';
 import type { AccessPublicApi, AccessIdentity } from './public.js';
+import type { LoginFailurePolicyOptions } from './authentication/service/login-failure-policy.js';
 
 function toAccessIdentity(identity: { userId: number; username: string; twoFactorEnabled: boolean }): AccessIdentity {
 	return {
@@ -24,10 +25,10 @@ export interface RegisteredAccess {
 	routes(secureCookies: boolean): HttpRoute[];
 }
 
-export function registerAccess(db: SqliteRuntime): RegisteredAccess {
+export function registerAccess(db: SqliteRuntime, loginFailureOptions?: LoginFailurePolicyOptions): RegisteredAccess {
 	const accounts = new AccountModel(new SqliteAccountStorage(db));
 	const sessions = new SessionModel(new SqliteSessionStorage(db));
-	const service = new AccessService(accounts, sessions, new ScryptPasswordHasher());
+	const service = new AccessService(accounts, sessions, new ScryptPasswordHasher(), loginFailureOptions);
 	const publicApi: AccessPublicApi = {
 		needsSetup: () => accessBoundary(() => service.needsSetup()),
 

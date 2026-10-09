@@ -3,6 +3,7 @@ import { AccountModel } from '../../accounts/model/account-model.js';
 import { SessionModel } from '../../sessions/model/session-model.js';
 import type { AuthenticatedIdentity, LoginAttempt, PasswordLogin } from '../model/access-types.js';
 import { toIdentity } from '../model/access-types.js';
+import { LoginFailurePolicy, type LoginFailurePolicyOptions } from './login-failure-policy.js';
 
 // Browser cookie is session-only; the old persistent server-side store retains data for 30 days.
 const STANDARD_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -35,13 +36,16 @@ function validatePassword(value: string): void {
 
 export class AccessService {
 	private readonly dummyHash: Promise<string>;
+	private readonly loginFailurePolicy: LoginFailurePolicy;
 
 	constructor(
 		private readonly accounts: AccountModel,
 		private readonly sessions: SessionModel,
 		private readonly hasher: PasswordHasher,
+		loginFailureOptions: LoginFailurePolicyOptions = { enabled: false },
 	) {
 		this.dummyHash = hasher.hash('never-used-unknown-account');
+		this.loginFailurePolicy = new LoginFailurePolicy(loginFailureOptions);
 	}
 
 	needsSetup(): Promise<boolean> {
@@ -70,14 +74,17 @@ export class AccessService {
 		) {
 			throw new AccessFailure('invalid_input');
 		}
-		if (!(await this.sessions.checkLoginAdmission(command.source))) {
+		const enforceFailurePolicy = this.loginFailurePolicy.shouldEnforce(command.source);
+		if (enforceFailurePolicy && !(await this.sessions.checkLoginAdmission(command.source))) {
 			return { status: 'rate_limited' };
 		}
 		const account = await this.accounts.getByUsername(username);
 		const verifier = account?.passwordHash ?? (await this.dummyHash);
 		const valid = await this.hasher.verify(command.password, verifier);
 		if (!valid || account === null) {
-			await this.sessions.recordFailedPassword(command.source);
+			if (enforceFailurePolicy) {
+				await this.sessions.recordFailedPassword(command.source, this.loginFailurePolicy.limits);
+			}
 			return { status: 'invalid_credentials' };
 		}
 		// TODO(Access later authentication-factors batch): implement real TOTP and
@@ -94,6 +101,7 @@ export class AccessService {
 			rememberMe: command.rememberMe,
 			expiresAt,
 			source: command.source,
+			clearLoginAttempts: enforceFailurePolicy,
 		});
 		if (token === null) {
 			return { status: 'invalid_credentials' };

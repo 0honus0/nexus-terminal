@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { SessionStorage } from '../storage/session-storage.js';
 import type { SessionIdentity } from './session-types.js';
+import type { LoginFailureLimits } from '../../authentication/service/login-failure-policy.js';
 
 export class SessionModel {
 	constructor(private readonly storage: Readonly<SessionStorage>) {}
@@ -20,6 +21,7 @@ export class SessionModel {
 		rememberMe: boolean;
 		expiresAt: number;
 		source: string;
+		clearLoginAttempts: boolean;
 	}): Promise<string | null> {
 		const token = SessionModel.newToken();
 		const success = await this.storage.issue({
@@ -30,6 +32,7 @@ export class SessionModel {
 			rememberMe: input.rememberMe,
 			expiresAt: input.expiresAt,
 			source: input.source,
+			clearLoginAttempts: input.clearLoginAttempts,
 		});
 		return success ? token : null;
 	}
@@ -60,7 +63,13 @@ export class SessionModel {
 		return this.storage.checkLoginAdmission(source, Date.now());
 	}
 
-	recordFailedPassword(source: string): Promise<void> {
-		return this.storage.recordFailedPassword(source, Date.now());
+	recordFailedPassword(source: string, limits: LoginFailureLimits): Promise<void> {
+		return this.storage.recordFailedPassword({
+			source,
+			now: Date.now(),
+			maxAttempts: limits.maxAttempts,
+			banMs: limits.banMs,
+			windowMs: limits.windowMs,
+		});
 	}
 }

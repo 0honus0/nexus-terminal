@@ -9,6 +9,7 @@ import type { RemoteSessions } from '../modules/remote/public.js';
 import { registerAccess } from '../modules/access/register.js';
 import type { AccessPublicApi } from '../modules/access/public.js';
 import type { HttpRoute } from '../platform/http/http-server.js';
+import type { LoginFailurePolicyOptions } from '../modules/access/authentication/service/login-failure-policy.js';
 
 export interface RegisteredModules {
 	access: AccessPublicApi;
@@ -25,8 +26,9 @@ export function registerModules(
 	sqlite: SqliteRuntime,
 	secrets: SecretBox | null,
 	verifyHostKey: MachineConnectOptions['verifyHostKey'] | null,
+	loginFailureOptions?: LoginFailurePolicyOptions,
 ): RegisteredModules {
-	const access = registerAccess(sqlite);
+	const access = registerAccess(sqlite, loginFailureOptions);
 	const targets = registerTargets({ sqlite, secrets });
 	const remote = registerRemote({
 		resolver: targets.trustedSshTargets,

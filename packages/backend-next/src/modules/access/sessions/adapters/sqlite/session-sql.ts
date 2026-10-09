@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
-import type { SessionStorage, SessionWrite, SessionRecord } from '../../storage/session-storage.js';
+import type {
+	SessionStorage,
+	SessionWrite,
+	SessionRecord,
+	FailureCounterCommand,
+} from '../../storage/session-storage.js';
 
-const ATTEMPT_WINDOW_MS = 15 * 60_000;
-const LOGIN_ATTEMPTS_LIMIT = 5;
-const BLOCK_MS = 15 * 60_000;
 // TODO(Access later network-policy batch): configurable IP allow/deny policies
 // and CAPTCHA require their own stored settings and real enforcement paths.
 
@@ -44,7 +46,9 @@ export class SqliteSessionStorage implements SessionStorage {
 					Date.now(),
 				],
 			);
-			await tx.run('DELETE FROM access_login_attempts WHERE source=?', [command.source]);
+			if (command.clearLoginAttempts) {
+				await tx.run('DELETE FROM access_login_attempts WHERE source=?', [command.source]);
+			}
 			return true;
 		});
 	}
@@ -110,26 +114,33 @@ export class SqliteSessionStorage implements SessionStorage {
 		return typeof row.blocked_until === 'number' && row.blocked_until <= now;
 	}
 
-	async recordFailedPassword(source: string, now: number): Promise<void> {
+	async recordFailedPassword(command: FailureCounterCommand): Promise<void> {
 		await this.db.transaction(async (tx) => {
 			const previous = await tx.one(
 				'SELECT attempts,window_started_at,blocked_until FROM access_login_attempts WHERE source=?',
-				[source],
+				[command.source],
 			);
+			const existingBlock = typeof previous?.blocked_until === 'number' ? previous.blocked_until : 0;
+			const activeBlock = existingBlock > command.now;
+			const expiredBlock = existingBlock > 0 && existingBlock <= command.now;
 			const currentWindow =
 				previous &&
 				typeof previous.window_started_at === 'number' &&
-				now - previous.window_started_at < ATTEMPT_WINDOW_MS;
+				!expiredBlock &&
+				command.now - previous.window_started_at < command.windowMs;
 			const attempts = currentWindow && typeof previous.attempts === 'number' ? previous.attempts + 1 : 1;
-			const windowStart = currentWindow ? (previous.window_started_at as number) : now;
-			const oldBlock = previous && typeof previous.blocked_until === 'number' ? previous.blocked_until : 0;
-			const blockedUntil = Math.max(oldBlock, attempts >= LOGIN_ATTEMPTS_LIMIT ? now + BLOCK_MS : 0);
+			const windowStart = currentWindow ? (previous.window_started_at as number) : command.now;
+			const blockedUntil = activeBlock
+				? existingBlock
+				: attempts >= command.maxAttempts
+					? command.now + command.banMs
+					: 0;
 			await tx.run(
 				`INSERT INTO access_login_attempts(source,attempts,window_started_at,blocked_until)
          VALUES(?,?,?,?)
          ON CONFLICT(source) DO UPDATE SET attempts=excluded.attempts,
            window_started_at=excluded.window_started_at,blocked_until=excluded.blocked_until`,
-				[source, attempts, windowStart, blockedUntil],
+				[command.source, attempts, windowStart, blockedUntil],
 			);
 		});
 	}

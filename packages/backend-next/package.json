@@ -11,7 +11,8 @@
   "dependencies": {
     "@nexus-terminal/shared": "workspace:*",
     "ssh2": "^1.17.0",
-    "proxy-addr": "^2.0.7"
+    "proxy-addr": "^2.0.7",
+    "ipaddr.js": "^2.5.0"
   },
   "devDependencies": {
     "typescript": "catalog:node-build",

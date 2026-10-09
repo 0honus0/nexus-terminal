@@ -8,12 +8,15 @@ import type { MachineConnectOptions } from '../platform/ssh/ssh-port.js';
 import type { TargetsPublicApi, TrustedSshTargetResolver } from '../modules/targets/public.js';
 import type { RemoteSessions } from '../modules/remote/public.js';
 import type { AccessPublicApi } from '../modules/access/public.js';
+import type { LoginFailurePolicyOptions } from '../modules/access/authentication/service/login-failure-policy.js';
 
 export interface AppOptions {
 	/** 32-byte application-managed key. Required for storing or resolving credentials. */
 	encryptionKey?: Uint8Array;
 	/** Explicit host-key trust owner for internal Remote SSH. Missing policy denies SSH opens. */
 	verifyHostKey?: MachineConnectOptions['verifyHostKey'];
+	/** Disabled unless explicitly enabled. Internal IPs are always exempt. */
+	loginFailurePolicy?: LoginFailurePolicyOptions;
 }
 
 export interface AccessHttpOptions {
@@ -105,7 +108,7 @@ export async function createApp(dbPath: string, options: AppOptions = {}): Promi
 	try {
 		await initializeSchema(db, applicationMigrations);
 		const secrets = options.encryptionKey ? new SecretBox(options.encryptionKey) : null;
-		const modules = registerModules(db, secrets, options.verifyHostKey ?? null);
+		const modules = registerModules(db, secrets, options.verifyHostKey ?? null, options.loginFailurePolicy);
 		const lifecycle = createLifecycle(modules, db);
 		return {
 			targets: modules.targets,
