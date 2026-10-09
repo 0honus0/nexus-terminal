@@ -4,11 +4,14 @@ import type {
 	ConnectionDto,
 	ConnectionRouteDto,
 	ConnectionTestResponseDto,
-	ConnectionTypeDto,
 	RdpConnectionOptionsDto,
 } from '@nexus-terminal/protocol/connections';
+import type { ConnectionType } from '@nexus-terminal/shared/connections/values';
 
-export type { ConnectionAuthMethodDto, ConnectionDto, ConnectionRouteDto, ConnectionTypeDto, RdpConnectionOptionsDto };
+// Same finite value set on both backends. Legacy route/auth/view shapes remain Protocol.
+export type ConnectionTypeDto = ConnectionType;
+
+export type { ConnectionAuthMethodDto, ConnectionDto, ConnectionRouteDto, RdpConnectionOptionsDto };
 
 export type ConnectionFormInput = Omit<ConnectionCreateRequestDto, 'port' | 'authMethod'> & {
 	port: number;

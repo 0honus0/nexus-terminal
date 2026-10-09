@@ -68,7 +68,8 @@
     "vue-virtual-scroller": "^3.0.5",
     "vue3-recaptcha2": "^1.8.0",
     "vuedraggable": "^4.1.0",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "@nexus-terminal/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/guacamole-common-js": "^1.5.5",

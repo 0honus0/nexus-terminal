@@ -15,6 +15,42 @@
     "./proxies/values": {
       "types": "./dist/proxies/values.d.ts",
       "default": "./dist/proxies/values.js"
+    },
+    "./connections/model": {
+      "types": "./dist/connections/model.d.ts",
+      "default": "./dist/connections/model.js"
+    },
+    "./connections/api": {
+      "types": "./dist/connections/api.d.ts",
+      "default": "./dist/connections/api.js"
+    },
+    "./proxies/model": {
+      "types": "./dist/proxies/model.d.ts",
+      "default": "./dist/proxies/model.js"
+    },
+    "./proxies/api": {
+      "types": "./dist/proxies/api.d.ts",
+      "default": "./dist/proxies/api.js"
+    },
+    "./ssh-keys/model": {
+      "types": "./dist/ssh-keys/model.d.ts",
+      "default": "./dist/ssh-keys/model.js"
+    },
+    "./ssh-keys/api": {
+      "types": "./dist/ssh-keys/api.d.ts",
+      "default": "./dist/ssh-keys/api.js"
+    },
+    "./tags/model": {
+      "types": "./dist/tags/model.d.ts",
+      "default": "./dist/tags/model.js"
+    },
+    "./tags/api": {
+      "types": "./dist/tags/api.d.ts",
+      "default": "./dist/tags/api.js"
+    },
+    "./targets/api": {
+      "types": "./dist/targets/api.d.ts",
+      "default": "./dist/targets/api.js"
     }
   },
   "devDependencies": {

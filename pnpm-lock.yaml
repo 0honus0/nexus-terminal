@@ -329,6 +329,9 @@ importers:
       '@nexus-terminal/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@nexus-terminal/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@simplewebauthn/browser':
         specifier: ^14.0.0
         version: 14.0.0
