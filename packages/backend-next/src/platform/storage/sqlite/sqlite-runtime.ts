@@ -20,6 +20,7 @@ export class SqliteRuntime implements SqlExecutor {
 	private closed = false;
 	private failure: Error | null = null;
 	private readonly transactionScope = new AsyncLocalStorage<boolean>();
+
 	private constructor(readonly path: string) {
 		this.worker = new Worker(new URL('./worker.js', import.meta.url), { workerData: { path } });
 		this.worker.on('message', (msg: { id: number; value?: any; error?: string }) => {
@@ -29,15 +30,18 @@ export class SqliteRuntime implements SqlExecutor {
 			if (msg.error) item.reject(new Error(msg.error));
 			else item.resolve(msg.value);
 		});
+
 		const failure = (error: Error) => {
 			if (this.closed || this.failure) return;
 			this.failure = error;
 			for (const p of this.pending.values()) p.reject(error);
 			this.pending.clear();
 		};
+
 		this.worker.on('error', failure);
 		this.worker.on('exit', (code) => failure(new Error('SQLite worker exited: ' + code)));
 	}
+
 	static open(path: string): SqliteRuntime {
 		if (path === ':memory:') throw new Error('Use a dedicated on-disk test database');
 		const absolute = resolve(path);
@@ -52,6 +56,7 @@ export class SqliteRuntime implements SqlExecutor {
 			throw e;
 		}
 	}
+
 	private call<T>(kind: string, sql?: string, params?: Param[]): Promise<T> {
 		return new Promise((resolve, reject) => {
 			if (this.failure) {
@@ -72,6 +77,7 @@ export class SqliteRuntime implements SqlExecutor {
 			}
 		});
 	}
+
 	private enqueue<T>(work: () => Promise<T>): Promise<T> {
 		if (this.transactionScope.getStore())
 			return Promise.reject(new Error('Use the transaction-scoped SQL executor inside a transaction'));
@@ -81,29 +87,38 @@ export class SqliteRuntime implements SqlExecutor {
 		this.tail = result.catch(() => undefined);
 		return result;
 	}
+
 	all(sql: string, params: Param[] = []): Promise<Row[]> {
 		return this.enqueue(() => this.call('all', sql, params));
 	}
+
 	one(sql: string, params: Param[] = []): Promise<Row | null> {
 		return this.enqueue(() => this.call('one', sql, params));
 	}
+
 	run(sql: string, params: Param[] = []): Promise<Run> {
 		return this.enqueue(() => this.call('run', sql, params));
 	}
+
 	exec(sql: string): Promise<void> {
 		return this.enqueue(() => this.call('exec', sql));
 	}
+
 	transaction<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> {
 		return this.enqueue(async () => {
 			await this.call('exec', 'BEGIN IMMEDIATE');
 			let active = true;
+
 			const withinTransaction = <T>(kind: string, sql: string, params: Param[]): Promise<T> =>
 				active
 					? this.call(kind, sql, params)
 					: Promise.reject(new Error('Transaction executor is no longer active'));
+
 			const tx: SqlExecutor = {
 				all: (sql, params = []) => withinTransaction('all', sql, params),
+
 				one: (sql, params = []) => withinTransaction('one', sql, params),
+
 				run: (sql, params = []) => withinTransaction('run', sql, params),
 			};
 			try {
@@ -120,6 +135,7 @@ export class SqliteRuntime implements SqlExecutor {
 			}
 		});
 	}
+
 	async close(): Promise<void> {
 		if (this.closing) return this.tail.then(() => undefined);
 		this.closing = true;

@@ -32,6 +32,7 @@ const keys = [
 	'rdpRemoteAppDirectory',
 	'rdpRemoteAppArguments',
 ] as const;
+
 function columns(input: Partial<ConnectionData>): { cols: string[]; vals: (string | number | null)[] } {
 	const cols: string[] = [];
 	const vals: (string | number | null)[] = [];
@@ -43,18 +44,22 @@ function columns(input: Partial<ConnectionData>): { cols: string[]; vals: (strin
 	});
 	return { cols, vals };
 }
+
 function number(value: unknown): number {
 	if (typeof value !== 'number' || !Number.isSafeInteger(value)) throw new Error('Corrupt integer');
 	return value;
 }
+
 function string(value: unknown): string {
 	if (typeof value !== 'string') throw new Error('Corrupt string');
 	return value;
 }
+
 function nullable(value: unknown): string | null {
 	if (value === null) return null;
 	return string(value);
 }
+
 async function read(tx: SqlExecutor, id: number): Promise<StoredConnection | null> {
 	const row = await tx.one('SELECT * FROM connections WHERE id=?', [id]);
 	if (!row) return null;
@@ -93,6 +98,7 @@ async function read(tx: SqlExecutor, id: number): Promise<StoredConnection | nul
 	if (item.route !== 'jump' && item.jumpIds.length) throw new Error('Corrupt jump relation');
 	return item;
 }
+
 async function relationships(tx: SqlExecutor, id: number, data: ConnectionData): Promise<void> {
 	if (data.route === 'jump' && (data.type !== 'SSH' || data.jumpIds.length === 0))
 		throw new Error('Jump requires SSH chain');
@@ -116,6 +122,7 @@ async function relationships(tx: SqlExecutor, id: number, data: ConnectionData):
 	for (const tag of data.tagIds)
 		await tx.run('INSERT INTO connection_tags(connection_id,tag_id) VALUES(?,?)', [id, tag]);
 }
+
 export async function insertConnectionInTransaction(tx: SqlExecutor, data: ConnectionData): Promise<StoredConnection> {
 	const { cols, vals } = columns(data);
 	const now = Date.now();
@@ -126,8 +133,10 @@ export async function insertConnectionInTransaction(tx: SqlExecutor, data: Conne
 	await relationships(tx, result.lastId, data);
 	return (await read(tx, result.lastId))!;
 }
+
 export class ConnectionSqliteAdapter implements ConnectionStorage {
 	constructor(private readonly db: SqliteRuntime) {}
+
 	list(): Promise<StoredConnection[]> {
 		return this.db.transaction(async (tx) => {
 			const rows = await tx.all('SELECT id FROM connections ORDER BY id');
@@ -139,12 +148,15 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 			return items;
 		});
 	}
+
 	get(id: number): Promise<StoredConnection | null> {
 		return this.db.transaction((tx) => read(tx, id));
 	}
+
 	create(data: ConnectionData): Promise<StoredConnection> {
 		return this.db.transaction((tx) => insertConnectionInTransaction(tx, data));
 	}
+
 	update(id: number, expectedVersion: number, changes: Partial<ConnectionData>): Promise<MutationResult> {
 		return this.db.transaction(async (tx) => {
 			const old = await read(tx, id);
@@ -169,6 +181,7 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 			return { status: 'updated', value: (await read(tx, id))! };
 		});
 	}
+
 	clone(id: number, name: string): Promise<StoredConnection | null> {
 		return this.db.transaction(async (tx) => {
 			const old = await read(tx, id);
@@ -176,6 +189,7 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 			return insertConnectionInTransaction(tx, { ...old, name });
 		});
 	}
+
 	delete(id: number): Promise<boolean> {
 		return this.db.transaction(async (tx) => {
 			const refs = await tx.one('SELECT 1 AS present FROM connection_jumps WHERE jump_connection_id=? LIMIT 1', [
@@ -185,6 +199,7 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 			return (await tx.run('DELETE FROM connections WHERE id=?', [id])).changes > 0;
 		});
 	}
+
 	setTags(id: number, expectedVersion: number, tagIds: number[]): Promise<MutationResult> {
 		return this.update(id, expectedVersion, { tagIds });
 	}

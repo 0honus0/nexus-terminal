@@ -29,13 +29,21 @@ export function registerTargets({ sqlite }: { sqlite: SqliteRuntime }): {
 	return {
 		publicApi: {
 			list: () => service.list(),
+
 			get: (id) => service.get(id),
+
 			create: (data) => service.create(data),
+
 			update: (id, version, changes) => service.update(id, version, changes),
+
 			clone: (id, name) => service.clone(id, name),
+
 			delete: (id) => service.delete(id),
+
 			setTags: (id, version, tags) => service.setTags(id, version, tags),
+
 			importOne: (command) => importService.importOne(command),
+
 			importMany: (commands) => importService.importMany(commands),
 		},
 	};

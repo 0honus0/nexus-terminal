@@ -11,6 +11,7 @@ export async function createApp(dbPath: string) {
 		let closed = false;
 		return {
 			targets: modules.targets,
+
 			close: async () => {
 				if (closed) return;
 				closed = true;
