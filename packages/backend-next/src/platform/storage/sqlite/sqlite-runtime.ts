@@ -6,6 +6,7 @@ type Param = string | number | null;
 type Row = Record<string, unknown>;
 type Run = { changes: number; lastId: number };
 export interface SqlExecutor {
+	exec(sql: string): Promise<void>;
 	all(sql: string, params?: Param[]): Promise<Row[]>;
 	one(sql: string, params?: Param[]): Promise<Row | null>;
 	run(sql: string, params?: Param[]): Promise<Run>;
@@ -115,6 +116,8 @@ export class SqliteRuntime implements SqlExecutor {
 					: Promise.reject(new Error('Transaction executor is no longer active'));
 
 			const tx: SqlExecutor = {
+				exec: (sql) => withinTransaction('exec', sql, []),
+
 				all: (sql, params = []) => withinTransaction('all', sql, params),
 
 				one: (sql, params = []) => withinTransaction('one', sql, params),

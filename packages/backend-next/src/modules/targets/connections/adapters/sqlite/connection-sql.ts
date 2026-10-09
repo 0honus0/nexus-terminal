@@ -118,6 +118,17 @@ async function relationships(tx: SqlExecutor, id: number, data: ConnectionData):
 			i,
 			data.jumpIds[i],
 		]);
+	// A reference can be valid locally and still close a cycle through another SSH hop.
+	const cyclic = await tx.one(
+		`WITH RECURSIVE chain(id,depth) AS (
+		   SELECT jump_connection_id,1 FROM connection_jumps WHERE connection_id=?
+		   UNION ALL
+		   SELECT j.jump_connection_id,chain.depth+1
+		   FROM chain JOIN connection_jumps j ON j.connection_id=chain.id WHERE chain.depth<17
+		 ) SELECT 1 AS invalid FROM chain WHERE id=? OR depth>16 LIMIT 1`,
+		[id, id],
+	);
+	if (cyclic) throw new Error('SSH jump chain contains a cycle or exceeds 16 hops');
 	await tx.run('DELETE FROM connection_tags WHERE connection_id=?', [id]);
 	for (const tag of data.tagIds)
 		await tx.run('INSERT INTO connection_tags(connection_id,tag_id) VALUES(?,?)', [id, tag]);
@@ -163,6 +174,9 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 			if (!old) return { status: 'not_found' };
 			if (old.version !== expectedVersion) return { status: 'version_conflict' };
 			if (old.type === 'SSH' && changes.type && changes.type !== 'SSH') {
+				if (await tx.one('SELECT 1 AS present FROM connection_credentials WHERE connection_id=?', [id])) {
+					throw new Error('Remove SSH credentials before changing connection type');
+				}
 				const refs = await tx.one(
 					'SELECT 1 AS present FROM connection_jumps WHERE jump_connection_id=? LIMIT 1',
 					[id],
@@ -186,7 +200,14 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 		return this.db.transaction(async (tx) => {
 			const old = await read(tx, id);
 			if (!old) return null;
-			return insertConnectionInTransaction(tx, { ...old, name });
+			const copy = await insertConnectionInTransaction(tx, { ...old, name });
+			// Cloning must preserve authentication as well as visible metadata.
+			// All three statements participate in the same transaction.
+			await tx.run(
+				'INSERT INTO connection_credentials(connection_id,auth_method,encrypted_password,ssh_key_id,updated_at) SELECT ?,auth_method,encrypted_password,ssh_key_id,? FROM connection_credentials WHERE connection_id=?',
+				[copy.id, Date.now(), id],
+			);
+			return copy;
 		});
 	}
 

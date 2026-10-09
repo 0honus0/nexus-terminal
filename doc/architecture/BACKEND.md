@@ -2,6 +2,12 @@
 
 本文描述当前 Backend 的分层、owner 与运行时边界，不重复维护功能需求。实际产品需求见 [USAGE](../USAGE.md)，Agent 关键边界与开发规则见 [AGENTS.md](../AGENTS.md)。owner、contract、事务或调用关系变化时，在同一提交更新对应章节。
 
+## 独立重构包边界
+
+正式产品仍由 `packages/backend` 服务；`packages/backend-next` 是独立重构包，不调用旧 Backend/Protocol、不接收正式流量，当前装配 Targets。新包的 Platform 只持有通用 SQLite 事务/迁移/生命周期与 SecretBox；Targets 持有业务 Schema、存储契约及 SQLite Adapter。Service 使用应用类型，Model 逐字段转换存储命令与读取结果；凭据加解密由 Service 调用通用 SecretBox 完成。
+
+Targets 的模块出口独立定义管理与可信 SSH 契约，出入对象均通过字段白名单转换，普通管理结果不含凭据。可信解析独立提供给后续 Remote/Agent，不能直接作为 HTTP/WS 响应。完整设计及尚未收口的错误、数据库失败生命周期和跳板约束见[架构重构](../架构重构.md)，后续功能施工见[下一阶段实施方案](../后端重构下一阶段实施方案.md)。本节不改变下文现行旧包的 owner。
+
 ## 技术基线
 
 Runner PackInstaller.runProcess复用registerManagedProcess(kind pack)覆盖mise/工具版本检查，opaque invocation ID不含command payload，登记失败kill/close收敛，exit清派生group、close后完成Promise；shutdown/startup仍由共享managed-process registry负责，无新增pack registry。

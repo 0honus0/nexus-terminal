@@ -1,7 +1,7 @@
-import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
+import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 
 /** Connections and their relations; Proxy/Tag tables belong to their sibling features. */
-export async function initializeConnectionsSchema(db: SqliteRuntime): Promise<void> {
+export async function initializeConnectionsSchema(db: SqlExecutor): Promise<void> {
 	await db.exec(`
     CREATE TABLE IF NOT EXISTS connections(
       id INTEGER PRIMARY KEY,
@@ -20,7 +20,15 @@ export async function initializeConnectionsSchema(db: SqliteRuntime): Promise<vo
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       CHECK ((route='proxy' AND proxy_id IS NOT NULL) OR (route!='proxy' AND proxy_id IS NULL)),
-      CHECK (route!='jump' OR type='SSH')
+      CHECK (route!='jump' OR type='SSH'),
+      CHECK (
+        (type='RDP' AND
+          ((rdp_remote_app IS NOT NULL) OR
+           (rdp_remote_app_directory IS NULL AND rdp_remote_app_arguments IS NULL)))
+        OR
+        (type!='RDP' AND
+          rdp_remote_app IS NULL AND rdp_remote_app_directory IS NULL AND rdp_remote_app_arguments IS NULL)
+      )
     );
     CREATE INDEX IF NOT EXISTS idx_connections_proxy ON connections(proxy_id);
     CREATE TABLE IF NOT EXISTS connection_tags(

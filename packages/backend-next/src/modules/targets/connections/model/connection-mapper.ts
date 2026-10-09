@@ -1,9 +1,23 @@
 import type { ConnectionData, StoredConnection } from '../storage/connection-storage.js';
 import type { ConnectionMetadata, ConnectionSnapshot } from './connection-types.js';
 
-/** Application and storage metadata currently share a representation. */
+/** Explicit application/storage projection, even while field representations match. */
 export function toStorage(value: ConnectionMetadata): ConnectionData {
-	return { ...value, tagIds: [...value.tagIds], jumpIds: [...value.jumpIds] };
+	return {
+		name: value.name,
+		type: value.type,
+		host: value.host,
+		port: value.port,
+		username: value.username,
+		route: value.route,
+		proxyId: value.proxyId,
+		notes: value.notes,
+		rdpRemoteApp: value.rdpRemoteApp,
+		rdpRemoteAppDirectory: value.rdpRemoteAppDirectory,
+		rdpRemoteAppArguments: value.rdpRemoteAppArguments,
+		tagIds: [...value.tagIds],
+		jumpIds: [...value.jumpIds],
+	};
 }
 
 export function fromStorage(value: StoredConnection): ConnectionSnapshot {
@@ -19,5 +33,23 @@ export function fromStorage(value: StoredConnection): ConnectionSnapshot {
 	) {
 		throw new Error('Corrupt connection record');
 	}
-	return { ...value, tagIds: [...value.tagIds], jumpIds: [...value.jumpIds] };
+	return {
+		id: value.id,
+		version: value.version,
+		createdAt: value.createdAt,
+		updatedAt: value.updatedAt,
+		name: value.name,
+		type: value.type,
+		host: value.host,
+		port: value.port,
+		username: value.username,
+		route: value.route,
+		proxyId: value.proxyId,
+		notes: value.notes,
+		rdpRemoteApp: value.rdpRemoteApp,
+		rdpRemoteAppDirectory: value.rdpRemoteAppDirectory,
+		rdpRemoteAppArguments: value.rdpRemoteAppArguments,
+		tagIds: [...value.tagIds],
+		jumpIds: [...value.jumpIds],
+	};
 }

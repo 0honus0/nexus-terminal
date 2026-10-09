@@ -48,5 +48,5 @@ export class ConnectionService {
 		return this.model.setTags(id, version, tags);
 	}
 
-	// TODO: credentials, auth, audit, SSH tests, RDP/VNC tickets and HTTP routes.
+	// TODO: Targets connection testing and post-commit audit; Access/Remote own auth and running sessions.
 }

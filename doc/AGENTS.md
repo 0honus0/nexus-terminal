@@ -73,6 +73,8 @@
 
 ### 2.2 分层与依赖
 
+本节现行 Backend/Protocol 规则描述旧生产包。独立重构中的 `packages/backend-next` 按[架构重构](架构重构.md)施工：Platform 不持有业务类型或业务注册槽位；模块 Service 使用应用类型，Model 显式转换内部存储契约；加解密归 Service，模块所有对象出口均逐字段转换。新包不调用旧 Backend/Protocol，Shared 按真实双端消费者增量迁移，正式流量切换前保留双包参考结构。
+
 - `packages/protocol` 唯一持有现行 HTTP、WebSocket 公共 DTO；Agent Runner wire 已删除，adapter 不复制协议类型或恢复旧导出。
 - Backend 按 `shared -> platform -> modules -> interfaces/infrastructure -> bootstrap` 分工：Module 持有用例与 port，Infrastructure 实现 adapter，Interface 仅转换协议，Bootstrap 组装。Interface 不访问数据库或持有产品事务；业务模块不读 `process.env` 或依赖具体 Infrastructure。
 - Frontend 分为 `app/features/runtimes/foundation/shared`；跨模块通过 `public.ts` 或 foundation `index.ts`，不深层导入私有实现。共享能力提升到已有公共 owner。

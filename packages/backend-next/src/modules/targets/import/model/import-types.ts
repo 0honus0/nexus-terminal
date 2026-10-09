@@ -1,9 +1,9 @@
 import type { ConnectionMetadata } from '../../connections/model/connection-types.js';
-import type { ProxyData } from '../../proxies/storage/proxy-storage.js';
+import type { ProxyMetadata } from '../../proxies/model/proxy-types.js';
 
 /** One metadata-only import item. Credentials and upload formats are out of scope. */
 export interface ConnectionImport {
 	connection: ConnectionMetadata;
-	inlineProxy?: ProxyData;
+	inlineProxy?: ProxyMetadata;
 	tagNames?: string[];
 }

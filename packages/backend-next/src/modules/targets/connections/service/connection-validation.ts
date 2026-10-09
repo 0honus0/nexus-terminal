@@ -11,6 +11,24 @@ export function validateConnection(data: ConnectionMetadata): ConnectionMetadata
 	if (!['SSH', 'RDP', 'VNC'].includes(data.type) || !['direct', 'proxy', 'jump'].includes(data.route)) {
 		throw new Error('Invalid type or route');
 	}
+	if (
+		(data.type !== 'RDP' &&
+			(data.rdpRemoteApp !== null ||
+				data.rdpRemoteAppDirectory !== null ||
+				data.rdpRemoteAppArguments !== null)) ||
+		(data.type === 'RDP' &&
+			data.rdpRemoteApp === null &&
+			(data.rdpRemoteAppDirectory !== null || data.rdpRemoteAppArguments !== null))
+	) {
+		throw new Error('RemoteApp options are only valid on RDP connections with an application');
+	}
+	if (
+		(data.rdpRemoteApp !== null && (!data.rdpRemoteApp.trim() || data.rdpRemoteApp.length > 256)) ||
+		(data.rdpRemoteAppDirectory !== null && data.rdpRemoteAppDirectory.length > 1024) ||
+		(data.rdpRemoteAppArguments !== null && data.rdpRemoteAppArguments.length > 4096)
+	) {
+		throw new Error('Invalid RemoteApp settings');
+	}
 	for (const id of [...data.tagIds, ...data.jumpIds]) validId(id);
 	if (data.proxyId !== null) validId(data.proxyId);
 	return {
