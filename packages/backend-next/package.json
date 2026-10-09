@@ -8,10 +8,12 @@
     "build": "pnpm --filter @nexus-terminal/shared build && tsc"
   },
   "dependencies": {
-    "@nexus-terminal/shared": "workspace:*"
+    "@nexus-terminal/shared": "workspace:*",
+    "ssh2": "^1.17.0"
   },
   "devDependencies": {
     "typescript": "catalog:node-build",
-    "@types/node": "catalog:"
+    "@types/node": "catalog:",
+    "@types/ssh2": "^1.15.6"
   }
 }

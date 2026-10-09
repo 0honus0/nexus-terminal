@@ -226,10 +226,16 @@ importers:
       '@nexus-terminal/shared':
         specifier: workspace:*
         version: link:../shared
+      ssh2:
+        specifier: ^1.17.0
+        version: 1.17.0
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.4
+      '@types/ssh2':
+        specifier: ^1.15.6
+        version: 1.15.6
       typescript:
         specifier: catalog:node-build
         version: 7.0.2

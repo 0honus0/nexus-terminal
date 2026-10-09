@@ -1,0 +1,120 @@
+import type { Readable, Writable } from 'node:stream';
+
+/**
+ * Technical machine inputs: deliberately no Connection ID, Workspace, Agent,
+ * user identity, approval or configuration fingerprint.
+ */
+export type MachineAuthentication =
+	| { readonly kind: 'password'; readonly password: string }
+	| { readonly kind: 'private_key'; readonly privateKey: string; readonly passphrase: string | null };
+
+export interface MachineProxy {
+	readonly type: 'HTTP' | 'SOCKS5';
+	readonly host: string;
+	readonly port: number;
+	readonly username: string | null;
+	readonly password: string | null;
+}
+export type MachineRoute =
+	| { readonly kind: 'direct' }
+	| { readonly kind: 'proxy'; readonly proxy: MachineProxy }
+	| { readonly kind: 'jump'; readonly hops: readonly MachineEndpoint[] };
+
+export interface MachineEndpoint {
+	readonly host: string;
+	readonly port: number;
+	readonly username: string;
+	readonly authentication: MachineAuthentication;
+	readonly route: MachineRoute;
+}
+
+export interface MachineConnectOptions {
+	/** Entire route deadline, not a per-hop timer. */
+	readonly timeoutMs: number;
+	readonly signal?: AbortSignal;
+	/** Caller owns host-key policy. No silent accept-all fallback. */
+	verifyHostKey(host: string, port: number, publicKey: Buffer): boolean;
+}
+
+export interface MachinePty {
+	readonly term?: string;
+	readonly columns: number;
+	readonly rows: number;
+}
+
+export type MachineCommandOutcome =
+	| { status: 'completed'; exitCode: 0; signal: string | null }
+	| { status: 'nonzero'; exitCode: number; signal: string | null }
+	| { status: 'unknown'; reason: 'disconnect' | 'timeout' | 'cancelled' | 'channel_error' };
+
+export interface MachineByteChannel {
+	readonly readable: Readable;
+	readonly writable: Writable;
+	onStderr(listener: (bytes: Uint8Array) => void): () => void;
+	onClose(listener: () => void): () => void;
+	onDrain(listener: () => void): () => void;
+	pause(): void;
+	resume(): void;
+	close(): void;
+}
+
+export interface MachineShell extends MachineByteChannel {
+	resize(columns: number, rows: number): void;
+}
+
+export interface MachineCommand extends MachineByteChannel {
+	readonly outcome: Promise<MachineCommandOutcome>;
+	cancel(): void;
+}
+
+export interface MachineCommandResult {
+	readonly outcome: MachineCommandOutcome;
+	readonly stdout: string;
+	readonly stderr: string;
+	readonly truncated: boolean;
+}
+
+export interface MachineFileInfo {
+	readonly size: number;
+	readonly mode: number;
+	readonly modifiedAt: number;
+	readonly isDirectory: boolean;
+	readonly isFile: boolean;
+	readonly isSymbolicLink: boolean;
+}
+
+export interface MachineDirectoryEntry {
+	readonly name: string;
+	readonly info: MachineFileInfo;
+}
+
+export interface MachineSftpLease {
+	stat(path: string): Promise<MachineFileInfo>;
+	lstat(path: string): Promise<MachineFileInfo>;
+	list(path: string): Promise<MachineDirectoryEntry[]>;
+	read(path: string, options?: { start?: number; end?: number }): Readable;
+	write(path: string, options?: { flags?: string; mode?: number }): Writable;
+	rename(from: string, to: string): Promise<void>;
+	remove(path: string): Promise<void>;
+	mkdir(path: string): Promise<void>;
+	rmdir(path: string): Promise<void>;
+	close(): Promise<void>;
+}
+
+export interface MachineConnection {
+	readonly isOpen: boolean;
+	openShell(pty: MachinePty, signal?: AbortSignal): Promise<MachineShell>;
+	openRawCommand(command: string, signal?: AbortSignal): Promise<MachineCommand>;
+	startCommand(command: string, signal?: AbortSignal): Promise<MachineCommand>;
+	execute(
+		command: string,
+		options: { timeoutMs: number; maxOutputBytes: number; signal?: AbortSignal },
+	): Promise<MachineCommandResult>;
+	openSftp(signal?: AbortSignal): Promise<MachineSftpLease>;
+	onClose(listener: () => void): () => void;
+	close(): Promise<void>;
+}
+
+export interface MachineSshFactory {
+	connect(endpoint: MachineEndpoint, options: MachineConnectOptions): Promise<MachineConnection>;
+}
