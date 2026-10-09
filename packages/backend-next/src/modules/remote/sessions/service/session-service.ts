@@ -154,7 +154,6 @@ export class RemoteSessionService {
 		current.offResource = resource.onClose(() => {
 			void this.closeSession(id).catch(() => undefined);
 		});
-		current.offStderr = resource.onStderr((bytes) => notifyDataListeners(current.stderrListeners, bytes));
 		this.sessions.set(id, current);
 		return this.toSnapshot(current);
 	}
@@ -208,8 +207,17 @@ export class RemoteSessionService {
 
 	onStderr(id: string, listener: (bytes: Uint8Array) => void): () => void {
 		const session = this.requireSession(id);
+		const first = session.stderrListeners.size === 0;
 		session.stderrListeners.add(listener);
-		return () => session.stderrListeners.delete(listener);
+		if (first) {
+			session.offStderr = session.resource.onStderr((bytes) =>
+				notifyDataListeners(session.stderrListeners, bytes),
+			);
+		}
+		return () => {
+			session.stderrListeners.delete(listener);
+			if (!session.stderrListeners.size) session.offStderr();
+		};
 	}
 
 	pauseOutput(id: string): void {

@@ -201,6 +201,20 @@ function connectStream(
 			});
 	}, 15_000);
 	identityTimer.unref();
+	// Register cleanup before touching the PTY. An exception while attaching a
+	// listener must not leave an attached session without an onClose owner.
+	channel.onClose(async () => {
+		ended = true;
+		clearInterval(identityTimer);
+		for (const unsubscribe of subscriptions) {
+			try {
+				unsubscribe();
+			} catch {
+				/* PTY release still owns the final cleanup */
+			}
+		}
+		await owner.release(id);
+	});
 
 	function terminate(code: 'unauthenticated' | 'transport_overflow' | 'remote_unavailable'): void {
 		if (ended) return;
@@ -348,18 +362,6 @@ function connectStream(
 		} catch (error) {
 			terminate(error instanceof RemoteInputError ? 'transport_overflow' : 'remote_unavailable');
 		}
-	});
-	channel.onClose(async () => {
-		ended = true;
-		clearInterval(identityTimer);
-		for (const unsubscribe of subscriptions) {
-			try {
-				unsubscribe();
-			} catch {
-				/* PTY release still owns the final cleanup */
-			}
-		}
-		await owner.release(id);
 	});
 	if (!wireEvent(channel, { type: 'ready', sessionId: id })) {
 		terminate('transport_overflow');

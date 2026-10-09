@@ -18,6 +18,7 @@ class ByteChannel implements MachineByteChannel {
 	private readonly drains = new Set<() => void>();
 	private readonly closes = new Set<() => void>();
 	private ended = false;
+	private paused = false;
 
 	constructor(
 		protected readonly channel: ClientChannel,
@@ -28,6 +29,8 @@ class ByteChannel implements MachineByteChannel {
 		channel.stderr.on('data', (chunk: Buffer | string) =>
 			notify(this.stderr, Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)),
 		);
+		// Do not consume extended data until a real stderr subscriber exists.
+		channel.stderr.pause();
 		channel.on('drain', () => notify(this.drains));
 		channel.on('close', () => {
 			if (this.ended) {
@@ -46,7 +49,11 @@ class ByteChannel implements MachineByteChannel {
 
 	onStderr(listener: (bytes: Uint8Array) => void): () => void {
 		this.stderr.add(listener);
-		return () => this.stderr.delete(listener);
+		if (!this.paused) this.channel.stderr.resume();
+		return () => {
+			this.stderr.delete(listener);
+			if (!this.stderr.size) this.channel.stderr.pause();
+		};
 	}
 
 	onClose(listener: () => void): () => void {
@@ -64,11 +71,15 @@ class ByteChannel implements MachineByteChannel {
 	}
 
 	pause(): void {
+		this.paused = true;
 		this.channel.pause();
+		this.channel.stderr.pause();
 	}
 
 	resume(): void {
+		this.paused = false;
 		this.channel.resume();
+		if (this.stderr.size) this.channel.stderr.resume();
 	}
 
 	close(): void {
