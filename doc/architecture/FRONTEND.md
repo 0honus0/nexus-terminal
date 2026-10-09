@@ -231,9 +231,13 @@ Workspace WebSocket 由 runtime protocol/session owner 处理：
 
 ## backend-next 的独立 Targets 开发入口
 
-`features/targets-next` 是独立于正式连接管理和运行期的开发功能。路由只在 `import.meta.env.DEV` 出现，地址为 `/__targets-next`；需配置 `NEXUS_VITE_BACKEND_NEXT_ORIGIN` 才在 Vite 建立 `/__next` 单独代理，绝不覆盖旧 `/api` 和旧 WebSocket。新 `backend-next` 的外部 `NEXUS_NEXT_PUBLIC_ORIGIN` 必须是访问该 Vite 页面使用的 Origin。页面的 Access 登录、管理 API 与 cookie 都走同一 `/__next`，不得使用旧 auth Store、连接 Store 或 Workspace 能力。会话数据由当前页面内独立状态持有，关闭/刷新失效；新客户端对 Connection/Proxy/SSH Key/Tag/Import 的 wire 结果执行明确字段解码，类型来源于 Shared 精确子路径。
+`features/targets-next` 是独立于正式连接管理和运行期的开发功能。路由只在 `import.meta.env.DEV` 出现，地址为 `/__targets-next`；需配置 `NEXUS_VITE_BACKEND_NEXT_ORIGIN` 才在 Vite 建立 `/__next` 单独代理，绝不覆盖旧 `/api` 和旧 WebSocket。新 `backend-next` 的外部 `NEXUS_NEXT_PUBLIC_ORIGIN` 必须是访问该 Vite 页面使用的 Origin。页面的 Access 登录、管理 API、最小 Remote PTY 与 cookie 都走同一 `/__next`，不得使用旧 auth Store、连接 Store 或 Workspace 能力。会话数据由当前页面内独立状态持有，关闭/刷新失效；新客户端对 Connection/Proxy/SSH Key/Tag/Import 的 wire 结果执行明确字段解码，类型来源于 Shared 精确子路径。
 
 旧生产表单中的 `ConnectionTypeDto` 和 `ProxyTypeDto` 与新包有限取值相同，已在所属前端 model 改从 Shared 引用；但旧 `ConnectionDto` 的 nullable route、authMethod、jumpChain、lastConnectedAt，旧 Proxy authMethod 以及其它业务 View 与新管理 contract 表示不同，旧 feature API/Store/表单仍继续使用 Protocol 并访问正式 Backend。不能直接替换这些类型，必须待终端和相关消费同步迁移后再重构。
+
+## 新后端独立 SSH 终端
+
+`runtimes/remote-next/transport` 是新实例 WS 连接与消息状态 owner，使用 `@nexus-terminal/shared/remote/model,events` 的窄契约及同一个 `/__next` 代理；一次显式 PTY open 后才升级独立 `/remote/stream`，不会复用旧 Workspace WebSocket 或 Store。Transport 对发出的字节长度/浏览器缓冲及返回事件做有界校验，收到远端 data 后等待 xterm.write 完成才发送 `consumed` 确认，不自动重连、不重放终端输入。组件在卸载时释放句柄，服务端也在 WS 断开时关闭本次 PTY。开发管理页通过单独的 Host Key 表格让操作者手动录入**独立已核实**的 SHA256 公钥指纹，并明确区分配置指纹和公钥信任。前端不从未知 SSH Server 的首次握手直接自动信任。旧 Workspace 的挂起/恢复、文件和桌面连接链路均不迁移到此最小入口。
 
 ## Agent frontend
 

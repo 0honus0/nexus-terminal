@@ -6,9 +6,9 @@
 
 新包遵守[全局编码约定](../架构重构.md#全局编码约定)：控制语句使用花括号，函数/方法及独立 export 声明前后保留一行空行，注释贴近所属声明，格式由仓库现有 ESLint/Prettier 执行；封装、命名及类型 owner 在代码审核时一并检查。SecretBox/SSH Adapter 捕获并包装失败时保留 `cause`，Targets 的安全出口仍只传递稳定错误码，不传出原始异常。
 
-正式产品仍由 `packages/backend` 服务；`packages/backend-next` 是独立重构包，不调用旧 Backend/Protocol、不接收正式流量，当前装配 Access、Targets 和 Remote 的内部 SSH Shell 会话；Access 认证 HTTP 和受保护的 Targets 管理 HTTP 可独立监听。新包的 Platform 只持有通用 SQLite 事务/迁移/生命周期、SecretBox 与通用 SSH 技术能力；Targets 持有业务 Schema、存储契约及 SQLite Adapter。Service 使用应用类型，Model 逐字段转换存储命令与读取结果；凭据加解密由 Service 调用通用 SecretBox 完成。
+正式产品仍由 `packages/backend` 服务；`packages/backend-next` 是独立重构包，不调用旧 Backend/Protocol、不接收正式流量，当前装配 Access、Targets 和 Remote；Access、Targets 管理与基础 SSH PTY HTTP/WS 在独立服务实例提供受保护入口。新包的 Platform 只持有通用 SQLite 事务/迁移/生命周期、SecretBox 与通用 SSH 技术能力；Targets 持有业务 Schema、存储契约及 SQLite Adapter。Service 使用应用类型，Model 逐字段转换存储命令与读取结果；凭据加解密由 Service 调用通用 SecretBox 完成。
 
-Targets 的模块出口从 Shared 精确引用双端同义同表示的管理输入、视图和状态契约；含明文凭据的可信 SSH 解析契约只在 backend-next 的 `public.ts` 定义。管理与可信结果均通过字段白名单转换，不从内部存储类型派生，普通管理结果不含凭据。可信解析作为独立 Backend 能力注入 Remote；Remote 将其转换为与业务无关的 SSH 机器请求。Targets 安全错误码、SQLite 不可用状态和统一跳板限制均已按真实 owner 实现；整体关机先取消并关闭 Remote Session，再关闭 SQLite。具体机器通道与待验收场景见[架构重构](../架构重构.md)，后续功能施工见[下一阶段实施方案](../后端重构下一阶段实施方案.md)。本节不改变下文现行旧包的 owner。
+Targets 的模块出口从 Shared 精确引用双端同义同表示的管理输入、视图和状态契约；含明文凭据的可信 SSH 解析契约只在 backend-next 的 `public.ts` 定义。管理与可信结果均通过字段白名单转换，不从内部存储类型派生，普通管理结果不含凭据。可信解析作为独立 Backend 能力注入 Remote；Remote 将其转换为与业务无关的 SSH 机器请求。Targets 安全错误码、SQLite 不可用状态和统一跳板限制均已按真实 owner 实现；整体关机先停止 HTTP/WS 并等待已接纳任务，随后取消并关闭 Remote Session，最后关闭 SQLite。具体机器通道与待验收场景见[架构重构](../架构重构.md)，后续功能施工见[下一阶段实施方案](../后端重构下一阶段实施方案.md)。本节不改变下文现行旧包的 owner。
 
 SQLite Worker 传递 `node:sqlite` 的数值 `errcode`，保留扩展结果码；Runtime 按低 8 位分类 constraint、busy/locked 与普通 SQL 失败，Targets 再按扩展外键码形成安全业务错误。Node 的通用 `ERR_SQLITE_ERROR` 字符串不作为 SQLite 类别判断依据。
 
@@ -49,6 +49,14 @@ Access 账号与会话模型属于 `modules/access`，加密的 password verifie
 `modules/targets/interfaces/http` 是唯一 Targets 管理 HTTP 入口，使用 Access 公开的身份恢复契约；当前数据库仅由首次管理员初始化，因此明确只允许管理员 ID 1 的会话请求，其余身份拒绝。Platform HTTP 只持有通用路由和参数位置（精确静态匹配优先，其后参数段），不包含 Targets 业务对象和授权语义。Targets 的 decoder 从 `unknown` 严格验证字段、类型、长度、输入数组和关系，再创建独立 Service 输入；更新要求 `version` 及补丁，省略保留、null 仅在可空字段上有效，导入每批不超过 50 个并按条提交。模块出口错误仅映射稳定码与 HTTP 状态。
 
 管理视图的 Connection/Proxy/Tag/SSH Key、变更结果、Credential 状态和导入结果均经 `interfaces/http/target-http-view.ts` 逐字段投影到 Shared wire，不从内部对象展开，也不公开 trusted SSH Resolver。Shared 新 contract 按 `connections/proxies/ssh-keys/tags` 的 `model/api`、`targets/api` 精确子路径导出；旧 Protocol 只继续用于不同形态的旧产品 wire，不被新包引用。新 `/__targets-next` Frontend 开发入口使用同一个新实例和 Access Cookie，旧 Pinia/Workspace 不混用该数据；未提供真实连接测试与 Remote HTTP 终端。
+
+## backend-next Remote HTTP/WS 与 SSH Host Key 信任
+
+Targets 的 `host-keys` 子功能持有已确认 SSH 服务端公钥指纹及 v2 数据迁移（`target_host_keys`）；Bootstrap 只编排签名迁移顺序，Platform 无 Targets DDL。管理路由向已认证管理员提供列表、明确确认和删除，私钥与原始公钥不写入信任表；操作员需从**独立可信渠道**核对真实 SHA256 指纹后再确认。Remote Model 先取得 Targets 信任快照，对每个最终 SSH 目标和跳板按照 SSH wire 主机公钥 SHA256 精确比较；不接受 TOFU、未知密钥或 `verifyHostKey: true` 形式的绕过。Targets 的配置指纹只表示连接配置变更，绝不是 Host Key 证明。信任删除/轮换影响新建连接，当前会话不强制回收。
+
+`modules/remote/sessions/service/session-owner.ts` 绑定初始管理员身份和登录令牌摘要，且在 HTTP 打开/查询/关闭、WS 握手与消息、输出发送/周期校验时重新认证。会话最多一个接入的 WebSocket；没有恢复协议，浏览器断开或超出初次接入限期就关闭 PTY，不允许两个设备或两个 Access 登录令牌接管。独立 Remote HTTP/WS 模块只使用公开 RemoteSessions 与 AccessPublicApi，向 Shared 公开仅允许的快照、事件和安全错误，不解密 Targets 明文。
+
+`platform/http/http-server.ts` 持有通用 WS Upgrade、和 HTTP 一致的 Host/Proto 与固定 Origin 检验、64 KiB 单帧及 1 MiB 待发送上限、监听器/业务 Promise/Socket 的停机释放；不导入 Remote 业务类型。Remote WS 文本事件以 base64 传递真实 PTY 字节，输出累计上限 128 KiB，按客户端 terminal.write 完成后的 `consumed` 确认补充额度，远端 Shell 的 `pause/resume` 跟随该额度。SSH 写入返回背压时通过 `blocked/drain` 拒绝后续输入，不自动重放写入。Remote 服务已实现的 Model/Service/Platform 资源生命周期仍唯一负责关闭 PTY/Client/Socket。新功能还没有 SSH 实机、代理、缓冲竞态或断线集成验证，不能用于声称正式 Remote 产品迁移完成。
 
 ## 技术基线
 
