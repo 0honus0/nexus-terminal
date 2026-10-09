@@ -133,7 +133,11 @@ class ConnectedMachine implements MachineConnection {
 		return shell;
 	}
 
-	async openRawCommand(command: string, signal?: AbortSignal): Promise<MachineCommand> {
+	private async openCommand(
+		command: string,
+		signal?: AbortSignal,
+		cancelWhenAborted = true,
+	): Promise<MachineCommand> {
 		if (!command) throw new Error('Empty SSH command');
 		const channel = await this.openChannel(
 			(client, callback) => client.exec(command, { pty: false }, callback),
@@ -141,7 +145,21 @@ class ConnectedMachine implements MachineConnection {
 		);
 		const result = new SshCommandChannel(channel, () => this.channels.delete(result));
 		this.channels.add(result);
+		if (signal && cancelWhenAborted) {
+			const abort = () => result.cancel();
+
+			const offClose = result.onClose(() => {
+				signal.removeEventListener('abort', abort);
+				offClose();
+			});
+			signal.addEventListener('abort', abort, { once: true });
+			if (signal.aborted) abort();
+		}
 		return result;
+	}
+
+	openRawCommand(command: string, signal?: AbortSignal): Promise<MachineCommand> {
+		return this.openCommand(command, signal);
 	}
 
 	startCommand(command: string, signal?: AbortSignal): Promise<MachineCommand> {
@@ -160,6 +178,7 @@ class ConnectedMachine implements MachineConnection {
 			throw new Error('Invalid command output budget');
 		if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1 || options.timeoutMs > 300000)
 			throw new Error('Invalid command timeout');
+		options.signal?.throwIfAborted();
 		const controller = new AbortController();
 
 		const abort = () => controller.abort(options.signal?.reason);
@@ -168,7 +187,7 @@ class ConnectedMachine implements MachineConnection {
 		const timeout = setTimeout(() => controller.abort(new Error('SSH command timeout')), options.timeoutMs);
 		let commandChannel: MachineCommand | null = null;
 		try {
-			commandChannel = await this.openRawCommand(command, controller.signal);
+			commandChannel = await this.openCommand(command, controller.signal, false);
 			const channel = commandChannel;
 			const outputs: Buffer[][] = [[], []];
 			let size = 0;
