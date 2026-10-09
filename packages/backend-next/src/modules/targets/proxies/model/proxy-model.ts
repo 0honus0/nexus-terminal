@@ -21,7 +21,7 @@ function fromStorage(record: ProxyRecord): ProxySnapshot {
 	};
 }
 
-function mutation(result: StoredMutation): ProxyMutation {
+function toApplicationMutation(result: StoredMutation): ProxyMutation {
 	if (result.status === 'updated') {
 		return { status: 'updated', value: fromStorage(result.value) };
 	}
@@ -77,7 +77,7 @@ export class ProxyModel {
 		if (data.encryptedPassword !== undefined) {
 			patch.encryptedPassword = data.encryptedPassword;
 		}
-		return mutation(await this.storage.update(id, version, patch));
+		return toApplicationMutation(await this.storage.update(id, version, patch));
 	}
 
 	delete(id: number): Promise<boolean> {

@@ -16,7 +16,7 @@ function fromStorage(record: SshKeySummary): SshKeySnapshot {
 	};
 }
 
-function mutation(result: StoredMutation): SshKeyMutation {
+function toApplicationMutation(result: StoredMutation): SshKeyMutation {
 	if (result.status === 'updated') {
 		return { status: 'updated', value: fromStorage(result.value) };
 	}
@@ -39,13 +39,12 @@ export class SshKeyModel {
 	}
 
 	async create(data: SshKeyCommand): Promise<SshKeySnapshot> {
-		return fromStorage(
-			await this.storage.create({
-				name: data.name,
-				encryptedPrivateKey: data.encryptedPrivateKey,
-				encryptedPassphrase: data.encryptedPassphrase,
-			}),
-		);
+		const record = await this.storage.create({
+			name: data.name,
+			encryptedPrivateKey: data.encryptedPrivateKey,
+			encryptedPassphrase: data.encryptedPassphrase,
+		});
+		return fromStorage(record);
 	}
 
 	async update(id: number, version: number, data: SshKeyCommandPatch): Promise<SshKeyMutation> {
@@ -59,7 +58,7 @@ export class SshKeyModel {
 		if (data.encryptedPassphrase !== undefined) {
 			patch.encryptedPassphrase = data.encryptedPassphrase;
 		}
-		return mutation(await this.storage.update(id, version, patch));
+		return toApplicationMutation(await this.storage.update(id, version, patch));
 	}
 
 	delete(id: number): Promise<boolean> {

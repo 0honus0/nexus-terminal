@@ -1,24 +1,24 @@
 import assert from 'node:assert/strict';
 import {
-	connectionInput,
-	connectionPatch,
-	connectionView,
-	connectionMutation,
-	importInput,
-	importItems,
-	proxyInput,
-	proxyPatch,
-	proxyView,
-	proxyMutation,
-	tagView,
-	tagMutation,
-	sshKeyInput,
-	sshKeyPatch,
-	sshKeyView,
-	sshKeyMutation,
-	credentialInput,
-	credentialMutation,
-	trustedTargetView,
+	toConnectionInput,
+	toConnectionPatch,
+	toConnectionView,
+	toConnectionMutation,
+	toImportInput,
+	toImportItems,
+	toProxyInput,
+	toProxyPatch,
+	toProxyView,
+	toProxyMutation,
+	toTagView,
+	toTagMutation,
+	toSshKeyInput,
+	toSshKeyPatch,
+	toSshKeyView,
+	toSshKeyMutation,
+	toCredentialInput,
+	toCredentialMutation,
+	toTrustedTargetView,
 } from '../../../packages/backend-next/dist/modules/targets/public-mappers.js';
 import { createApp } from '../../../packages/backend-next/dist/bootstrap/create-app.js';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -53,7 +53,7 @@ const connection = {
 	futureInternalField: forbidden,
 	encryptedPassword: forbidden,
 };
-const view = connectionView(connection);
+const view = toConnectionView(connection);
 withoutInternal(view);
 assert.notStrictEqual(view, connection);
 assert.notStrictEqual(view.tagIds, connection.tagIds);
@@ -80,10 +80,10 @@ assert.deepEqual(
 		'jumpIds',
 	].sort(),
 );
-const input = connectionInput(connection);
+const input = toConnectionInput(connection);
 withoutInternal(input);
 assert.notStrictEqual(input.tagIds, connection.tagIds);
-const patch = connectionPatch({
+const patch = toConnectionPatch({
 	notes: 'changed',
 	jumpIds: [9],
 	encryptedPassword: forbidden,
@@ -93,7 +93,7 @@ withoutInternal(patch);
 assert.deepEqual(Object.keys(patch).sort(), ['notes', 'jumpIds', 'tagIds'].sort());
 assert.notStrictEqual(patch.tagIds, connection.tagIds);
 for (const status of ['updated', 'not_found', 'version_conflict']) {
-	const result = connectionMutation({ status, value: connection, privateField: forbidden });
+	const result = toConnectionMutation({ status, value: connection, privateField: forbidden });
 	withoutInternal(result);
 	if (status === 'updated') {
 		assert.notStrictEqual(result.value, connection);
@@ -114,14 +114,14 @@ const importCommand = {
 	tagNames: ['tag'],
 	internal: forbidden,
 };
-const mappedImport = importInput(importCommand);
+const mappedImport = toImportInput(importCommand);
 withoutInternal(mappedImport);
 assert.notStrictEqual(mappedImport.connection, connection);
 assert.notStrictEqual(mappedImport.connection.tagIds, connection.tagIds);
 assert.notStrictEqual(mappedImport.inlineProxy, importCommand.inlineProxy);
 assert.notStrictEqual(mappedImport.tagNames, importCommand.tagNames);
 assert.deepEqual(
-	importItems([
+	toImportItems([
 		{ status: 'ok', id: 8, leak: forbidden },
 		{ status: 'error', code: 'invalid_input', leak: forbidden },
 	]),
@@ -144,22 +144,22 @@ const proxy = {
 	encryptedPassword: forbidden,
 	newSecretField: forbidden,
 };
-const proxyResult = proxyView(proxy);
+const proxyResult = toProxyView(proxy);
 withoutInternal(proxyResult);
 assert.notStrictEqual(proxyResult, proxy);
-const proxyIn = proxyInput({ ...proxy, password: 'supplied', newSecretField: forbidden });
+const proxyIn = toProxyInput({ ...proxy, password: 'supplied', newSecretField: forbidden });
 withoutInternal(proxyIn);
 assert.deepEqual(Object.keys(proxyIn).sort(), ['name', 'type', 'host', 'port', 'username', 'password'].sort());
-const proxyChanges = proxyPatch({ name: 'updated', password: 'supplied', extra: forbidden });
+const proxyChanges = toProxyPatch({ name: 'updated', password: 'supplied', extra: forbidden });
 withoutInternal(proxyChanges);
 assert.deepEqual(Object.keys(proxyChanges).sort(), ['name', 'password'].sort());
-withoutInternal(proxyMutation({ status: 'updated', value: proxy, extra: forbidden }));
-withoutInternal(proxyMutation({ status: 'version_conflict', extra: forbidden }));
+withoutInternal(toProxyMutation({ status: 'updated', value: proxy, extra: forbidden }));
+withoutInternal(toProxyMutation({ status: 'version_conflict', extra: forbidden }));
 
 const tag = { id: 1, name: 'tag', version: 1, createdAt: 1, updatedAt: 2, extra: forbidden };
-withoutInternal(tagView(tag));
-withoutInternal(tagMutation({ status: 'updated', value: tag, extra: forbidden }));
-withoutInternal(tagMutation({ status: 'not_found', extra: forbidden }));
+withoutInternal(toTagView(tag));
+withoutInternal(toTagMutation({ status: 'updated', value: tag, extra: forbidden }));
+withoutInternal(toTagMutation({ status: 'not_found', extra: forbidden }));
 const key = {
 	id: 1,
 	name: 'key',
@@ -169,25 +169,28 @@ const key = {
 	encryptedPrivateKey: forbidden,
 	extra: forbidden,
 };
-withoutInternal(sshKeyView(key));
-withoutInternal(sshKeyMutation({ status: 'updated', value: key, extra: forbidden }));
-withoutInternal(sshKeyMutation({ status: 'version_conflict', extra: forbidden }));
-assert.deepEqual(sshKeyInput({ name: 'new', privateKey: 'private', passphrase: null, extra: forbidden }), {
+withoutInternal(toSshKeyView(key));
+withoutInternal(toSshKeyMutation({ status: 'updated', value: key, extra: forbidden }));
+withoutInternal(toSshKeyMutation({ status: 'version_conflict', extra: forbidden }));
+assert.deepEqual(toSshKeyInput({ name: 'new', privateKey: 'private', passphrase: null, extra: forbidden }), {
 	name: 'new',
 	privateKey: 'private',
 	passphrase: null,
 });
-assert.deepEqual(sshKeyPatch({ name: 'renamed', passphrase: null, extra: forbidden }), {
+assert.deepEqual(toSshKeyPatch({ name: 'renamed', passphrase: null, extra: forbidden }), {
 	name: 'renamed',
 	passphrase: null,
 });
-assert.deepEqual(credentialInput({ kind: 'ssh_key', sshKeyId: 1, extra: forbidden }), { kind: 'ssh_key', sshKeyId: 1 });
-assert.deepEqual(credentialInput({ kind: 'password', password: 'value', extra: forbidden }), {
+assert.deepEqual(toCredentialInput({ kind: 'ssh_key', sshKeyId: 1, extra: forbidden }), {
+	kind: 'ssh_key',
+	sshKeyId: 1,
+});
+assert.deepEqual(toCredentialInput({ kind: 'password', password: 'value', extra: forbidden }), {
 	kind: 'password',
 	password: 'value',
 });
-assert.deepEqual(credentialMutation({ status: 'updated', extra: forbidden }), { status: 'updated' });
-assert.deepEqual(credentialMutation({ status: 'not_found', extra: forbidden }), { status: 'not_found' });
+assert.deepEqual(toCredentialMutation({ status: 'updated', extra: forbidden }), { status: 'updated' });
+assert.deepEqual(toCredentialMutation({ status: 'not_found', extra: forbidden }), { status: 'not_found' });
 
 const nested = {
 	id: 1,
@@ -207,7 +210,7 @@ const nested = {
 	fingerprint: 'hash1',
 	internal: forbidden,
 };
-const trusted = trustedTargetView({
+const trusted = toTrustedTargetView({
 	id: 2,
 	host: 'dest',
 	port: 22,

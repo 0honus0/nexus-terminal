@@ -29,32 +29,39 @@ import { SshTargetService } from './resolver/service/ssh-target-service.js';
 import type { TargetsPublicApi, TrustedSshTargetResolver } from './public.js';
 import { targetsBoundary } from './target-errors.js';
 import {
-	connectionInput,
-	connectionPatch,
-	connectionView,
-	connectionMutation,
-	importInput,
-	importItems,
-	proxyInput,
-	proxyPatch,
-	proxyView,
-	proxyMutation,
-	tagView,
-	tagMutation,
-	sshKeyInput,
-	sshKeyPatch,
-	sshKeyView,
-	sshKeyMutation,
-	credentialInput,
-	credentialMutation,
-	trustedTargetView,
+	toConnectionInput,
+	toConnectionPatch,
+	toConnectionView,
+	toConnectionMutation,
+	toImportInput,
+	toImportItems,
+	toProxyInput,
+	toProxyPatch,
+	toProxyView,
+	toProxyMutation,
+	toTagView,
+	toTagMutation,
+	toSshKeyInput,
+	toSshKeyPatch,
+	toSshKeyView,
+	toSshKeyMutation,
+	toCredentialInput,
+	toCredentialMutation,
+	toTrustedTargetView,
 } from './public-mappers.js';
 
-/** Register real internal owners; expose only explicit, allowlisted projections. */
-export function registerTargets({ sqlite, secrets }: { sqlite: SqliteRuntime; secrets: SecretBox | null }): {
+interface TargetsRegistrationOptions {
+	sqlite: SqliteRuntime;
+	secrets: SecretBox | null;
+}
+
+interface TargetsRegistration {
 	publicApi: TargetsPublicApi;
 	trustedSshTargets: TrustedSshTargetResolver;
-} {
+}
+
+/** Register real internal owners; expose only explicit, allowlisted projections. */
+export function registerTargets({ sqlite, secrets }: TargetsRegistrationOptions): TargetsRegistration {
 	const model = new ConnectionModel(new ConnectionSqliteAdapter(sqlite));
 	const service = new ConnectionService(model);
 	const imports = new SqliteConnectionImportAdapter(sqlite, {
@@ -73,109 +80,102 @@ export function registerTargets({ sqlite, secrets }: { sqlite: SqliteRuntime; se
 	const resolver = new SshTargetService(new SshTargetModel(new SqliteSshTargetStorage(sqlite)), secrets);
 
 	const publicApi: TargetsPublicApi = {
-		list: () => targetsBoundary(async () => (await service.list()).map(connectionView)),
+		list: () => targetsBoundary(async () => (await service.list()).map(toConnectionView)),
 
 		get: (id) =>
 			targetsBoundary(async () => {
 				const record = await service.get(id);
-				return record === null ? null : connectionView(record);
+				return record === null ? null : toConnectionView(record);
 			}),
 
-		create: (input) => targetsBoundary(async () => connectionView(await service.create(connectionInput(input)))),
+		create: (input) =>
+			targetsBoundary(async () => toConnectionView(await service.create(toConnectionInput(input)))),
 
 		update: (id, version, changes) =>
 			targetsBoundary(async () =>
-				connectionMutation(await service.update(id, version, connectionPatch(changes))),
+				toConnectionMutation(await service.update(id, version, toConnectionPatch(changes))),
 			),
 
 		clone: (id, name) =>
 			targetsBoundary(async () => {
 				const record = await service.clone(id, name);
-				return record === null ? null : connectionView(record);
+				return record === null ? null : toConnectionView(record);
 			}),
 
 		delete: (id) => targetsBoundary(async () => Boolean(await service.delete(id))),
 
 		setTags: (id, version, tagIds) =>
-			targetsBoundary(async () =>
-				connectionMutation(
-					await service.setTags(
-						id,
-						version,
-						tagIds.map((tag) => tag),
-					),
-				),
-			),
+			targetsBoundary(async () => toConnectionMutation(await service.setTags(id, version, [...tagIds]))),
 
 		importOne: (input) =>
-			targetsBoundary(async () => connectionView(await importService.importOne(importInput(input)))),
+			targetsBoundary(async () => toConnectionView(await importService.importOne(toImportInput(input)))),
 
 		importMany: (inputs) =>
-			targetsBoundary(async () => importItems(await importService.importMany(inputs.map(importInput)))),
+			targetsBoundary(async () => toImportItems(await importService.importMany(inputs.map(toImportInput)))),
 
 		proxies: {
-			list: () => targetsBoundary(async () => (await proxies.list()).map(proxyView)),
+			list: () => targetsBoundary(async () => (await proxies.list()).map(toProxyView)),
 
 			get: (id) =>
 				targetsBoundary(async () => {
 					const record = await proxies.get(id);
-					return record === null ? null : proxyView(record);
+					return record === null ? null : toProxyView(record);
 				}),
 
-			create: (input) => targetsBoundary(async () => proxyView(await proxies.create(proxyInput(input)))),
+			create: (input) => targetsBoundary(async () => toProxyView(await proxies.create(toProxyInput(input)))),
 
 			update: (id, version, input) =>
-				targetsBoundary(async () => proxyMutation(await proxies.update(id, version, proxyPatch(input)))),
+				targetsBoundary(async () => toProxyMutation(await proxies.update(id, version, toProxyPatch(input)))),
 
 			delete: (id) => targetsBoundary(async () => Boolean(await proxies.delete(id))),
 		},
 		tags: {
-			list: () => targetsBoundary(async () => (await tags.list()).map(tagView)),
+			list: () => targetsBoundary(async () => (await tags.list()).map(toTagView)),
 
 			get: (id) =>
 				targetsBoundary(async () => {
 					const record = await tags.get(id);
-					return record === null ? null : tagView(record);
+					return record === null ? null : toTagView(record);
 				}),
 
-			create: (name) => targetsBoundary(async () => tagView(await tags.create(name))),
+			create: (name) => targetsBoundary(async () => toTagView(await tags.create(name))),
 
 			rename: (id, version, name) =>
-				targetsBoundary(async () => tagMutation(await tags.rename(id, version, name))),
+				targetsBoundary(async () => toTagMutation(await tags.rename(id, version, name))),
 
 			delete: (id) => targetsBoundary(async () => Boolean(await tags.delete(id))),
 		},
 		sshKeys: {
-			list: () => targetsBoundary(async () => (await sshKeys.list()).map(sshKeyView)),
+			list: () => targetsBoundary(async () => (await sshKeys.list()).map(toSshKeyView)),
 
 			get: (id) =>
 				targetsBoundary(async () => {
 					const record = await sshKeys.get(id);
-					return record === null ? null : sshKeyView(record);
+					return record === null ? null : toSshKeyView(record);
 				}),
 
-			create: (input) => targetsBoundary(async () => sshKeyView(await sshKeys.create(sshKeyInput(input)))),
+			create: (input) => targetsBoundary(async () => toSshKeyView(await sshKeys.create(toSshKeyInput(input)))),
 
 			update: (id, version, input) =>
-				targetsBoundary(async () => sshKeyMutation(await sshKeys.update(id, version, sshKeyPatch(input)))),
+				targetsBoundary(async () => toSshKeyMutation(await sshKeys.update(id, version, toSshKeyPatch(input)))),
 
 			delete: (id) => targetsBoundary(async () => Boolean(await sshKeys.delete(id))),
 		},
 		credentials: {
 			set: (id, version, input) =>
 				targetsBoundary(async () =>
-					credentialMutation(await credentials.set(id, version, credentialInput(input))),
+					toCredentialMutation(await credentials.set(id, version, toCredentialInput(input))),
 				),
 
 			clear: (id, version) =>
-				targetsBoundary(async () => credentialMutation(await credentials.clear(id, version))),
+				targetsBoundary(async () => toCredentialMutation(await credentials.clear(id, version))),
 		},
 	};
 
 	const trustedSshTargets: TrustedSshTargetResolver = {
 		fingerprintStored: (id) => targetsBoundary(async () => String(await resolver.fingerprintStored(id))),
 
-		resolveStored: (id) => targetsBoundary(async () => trustedTargetView(await resolver.resolveStored(id))),
+		resolveStored: (id) => targetsBoundary(async () => toTrustedTargetView(await resolver.resolveStored(id))),
 	};
 
 	return { publicApi, trustedSshTargets };

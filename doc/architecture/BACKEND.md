@@ -20,6 +20,8 @@ Targets 批量导入的内部结果以 `import/model/import-types.ts` 中的 `Im
 
 Targets 的 Service/Model 和 SQLite 存储实现明确声明返回类型，校验使用 `validateId/validateName` 等动作名称。应用补丁规范化与存储补丁投影分别由 Service 校验函数和 Model mapper 承担，均保留字段允许清单；SQL 行解码先校验再构造记录，成功写入后的必需记录通过具名读取函数确认。Resolver 的密文快照与解密应用类型集中于 `resolver/model/ssh-target-types.ts`，Model 文件只持有映射与存储调用。
 
+Targets 模块出口的转换统一使用 `toX` 命名，管理输入、视图和变更结果仍分别逐字段投影；批量导入 mapper 明确区分内部与公开结果类型。Resolver SQL 的目标加载、凭据读取与代理读取使用同一事务执行器，分别由具名函数实现，递归路径、深度及展开预算仍由一次解析共享。
+
 SSH 命令在发出 exec 请求前拒绝已取消的信号；持续命令与原始非 PTY 通道在打开之后仍监听调用方取消，通道关闭时解除订阅。一次执行的期限与取消分别形成 unknown/timeout 和 unknown/cancelled，不把取消作为远端命令未发生的证明。
 
 SSH 对外仅保留 `openRawCommand` 和收集结果的 `execute`，二者调用私有 `createCommandChannel`，以具名选项控制取消职责，不提供行为相同的 `startCommand` 别名。命令结果收集、SFTP 通道打开和连接关闭各有具名内部步骤；输出/取消订阅在结果收集的 `finally` 解除。执行选项、SFTP 读写选项与文件打开模式定义为独立技术类型；代理握手、Host Key 配置和路由期限仍属于 SSH Adapter。

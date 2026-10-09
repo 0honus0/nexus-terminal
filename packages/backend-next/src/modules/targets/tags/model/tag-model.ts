@@ -11,7 +11,7 @@ function fromStorage(record: TagRecord): TagSnapshot {
 	};
 }
 
-function mutation(result: StoredMutation): TagMutation {
+function toApplicationMutation(result: StoredMutation): TagMutation {
 	if (result.status === 'updated') {
 		return { status: 'updated', value: fromStorage(result.value) };
 	}
@@ -38,7 +38,7 @@ export class TagModel {
 	}
 
 	async rename(id: number, version: number, name: string): Promise<TagMutation> {
-		return mutation(await this.storage.rename(id, version, name));
+		return toApplicationMutation(await this.storage.rename(id, version, name));
 	}
 
 	delete(id: number): Promise<boolean> {

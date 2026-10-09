@@ -2,21 +2,74 @@ import type { SqliteRuntime, SqlExecutor } from '../../../../../platform/storage
 import type { SshTargetStorage, EncodedSshTarget } from '../../storage/ssh-target-storage.js';
 import { SSH_MAX_JUMP_EDGES, SSH_MAX_EXPANDED_TARGETS } from '../../../connections/model/ssh-graph-limits.js';
 
-function integer(value: unknown): number {
+function decodeInteger(value: unknown): number {
 	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
 		throw new Error('Corrupt target integer');
 	}
 	return value;
 }
 
-function string(value: unknown): string {
+function decodeString(value: unknown): string {
 	if (typeof value !== 'string') {
 		throw new Error('Corrupt target string');
 	}
 	return value;
 }
 
-async function load(
+async function readCredential(tx: SqlExecutor, id: number): Promise<EncodedSshTarget['credential']> {
+	const credentialRow = await tx.one(
+		'SELECT auth_method,encrypted_password,ssh_key_id FROM connection_credentials WHERE connection_id=?',
+		[id],
+	);
+	if (!credentialRow) {
+		throw new Error('SSH credentials not configured');
+	}
+	let credential: EncodedSshTarget['credential'];
+	if (
+		credentialRow.auth_method === 'password' &&
+		typeof credentialRow.encrypted_password === 'string' &&
+		credentialRow.ssh_key_id === null
+	) {
+		credential = { kind: 'password', ciphertext: credentialRow.encrypted_password };
+	} else if (credentialRow.auth_method === 'ssh_key' && credentialRow.encrypted_password === null) {
+		const keyId = decodeInteger(credentialRow.ssh_key_id);
+		const key = await tx.one('SELECT encrypted_private_key,encrypted_passphrase FROM ssh_keys WHERE id=?', [keyId]);
+		if (!key) {
+			throw new Error('SSH key not found');
+		}
+		credential = {
+			kind: 'ssh_key',
+			keyId,
+			privateKey: decodeString(key.encrypted_private_key),
+			passphrase: key.encrypted_passphrase === null ? null : decodeString(key.encrypted_passphrase),
+		};
+	} else {
+		throw new Error('Corrupt SSH authentication');
+	}
+	return credential;
+}
+
+async function readProxy(tx: SqlExecutor, proxyId: number): Promise<NonNullable<EncodedSshTarget['proxy']>> {
+	const proxyRow = await tx.one('SELECT id,type,host,port,username FROM proxies WHERE id=?', [proxyId]);
+	if (
+		!proxyRow ||
+		(proxyRow.type !== 'SOCKS5' && proxyRow.type !== 'HTTP') ||
+		!(proxyRow.username === null || typeof proxyRow.username === 'string')
+	) {
+		throw new Error('Proxy not found or corrupt');
+	}
+	const passwordRow = await tx.one('SELECT encrypted_password FROM proxy_credentials WHERE proxy_id=?', [proxyId]);
+	return {
+		id: decodeInteger(proxyRow.id),
+		type: proxyRow.type,
+		host: decodeString(proxyRow.host),
+		port: decodeInteger(proxyRow.port),
+		username: proxyRow.username,
+		ciphertext: passwordRow ? decodeString(passwordRow.encrypted_password) : null,
+	};
+}
+
+async function loadTargetSnapshot(
 	tx: SqlExecutor,
 	id: number,
 	path: Set<number>,
@@ -35,51 +88,10 @@ async function load(
 	if (row.type !== 'SSH') {
 		throw new Error('Target is not SSH');
 	}
-	const cred = await tx.one(
-		'SELECT auth_method,encrypted_password,ssh_key_id FROM connection_credentials WHERE connection_id=?',
-		[id],
-	);
-	if (!cred) {
-		throw new Error('SSH credentials not configured');
-	}
-	let credential: EncodedSshTarget['credential'];
-	if (cred.auth_method === 'password' && typeof cred.encrypted_password === 'string' && cred.ssh_key_id === null) {
-		credential = { kind: 'password', ciphertext: cred.encrypted_password };
-	} else if (cred.auth_method === 'ssh_key' && cred.encrypted_password === null) {
-		const keyId = integer(cred.ssh_key_id);
-		const key = await tx.one('SELECT encrypted_private_key,encrypted_passphrase FROM ssh_keys WHERE id=?', [keyId]);
-		if (!key) {
-			throw new Error('SSH key not found');
-		}
-		credential = {
-			kind: 'ssh_key',
-			keyId,
-			privateKey: string(key.encrypted_private_key),
-			passphrase: key.encrypted_passphrase === null ? null : string(key.encrypted_passphrase),
-		};
-	} else {
-		throw new Error('Corrupt SSH authentication');
-	}
+	const credential = await readCredential(tx, id);
 	let proxy: EncodedSshTarget['proxy'] = null;
 	if (row.route === 'proxy') {
-		const proxyId = integer(row.proxy_id);
-		const p = await tx.one('SELECT id,type,host,port,username FROM proxies WHERE id=?', [proxyId]);
-		if (
-			!p ||
-			!['SOCKS5', 'HTTP'].includes(String(p.type)) ||
-			!(p.username === null || typeof p.username === 'string')
-		) {
-			throw new Error('Proxy not found or corrupt');
-		}
-		const pass = await tx.one('SELECT encrypted_password FROM proxy_credentials WHERE proxy_id=?', [proxyId]);
-		proxy = {
-			id: integer(p.id),
-			type: p.type as 'SOCKS5' | 'HTTP',
-			host: string(p.host),
-			port: integer(p.port),
-			username: p.username,
-			ciphertext: pass ? string(pass.encrypted_password) : null,
-		};
+		proxy = await readProxy(tx, decodeInteger(row.proxy_id));
 	} else if (row.route !== 'direct' && row.route !== 'jump') {
 		throw new Error('Invalid target route');
 	}
@@ -96,14 +108,16 @@ async function load(
 			if (chain[i].position !== i) {
 				throw new Error('Invalid jump order');
 			}
-			jumps.push(await load(tx, integer(chain[i].jump_connection_id), current, depth + 1, budget));
+			jumps.push(
+				await loadTargetSnapshot(tx, decodeInteger(chain[i].jump_connection_id), current, depth + 1, budget),
+			);
 		}
 	}
 	return {
-		id: integer(row.id),
-		host: string(row.host),
-		port: integer(row.port),
-		username: string(row.username),
+		id: decodeInteger(row.id),
+		host: decodeString(row.host),
+		port: decodeInteger(row.port),
+		username: decodeString(row.username),
 		credential,
 		proxy,
 		jumps,
@@ -114,6 +128,6 @@ export class SqliteSshTargetStorage implements SshTargetStorage {
 	constructor(private readonly db: SqliteRuntime) {}
 
 	get(id: number): Promise<EncodedSshTarget> {
-		return this.db.transaction((tx) => load(tx, id, new Set(), 0, { expanded: 0 }));
+		return this.db.transaction((tx) => loadTargetSnapshot(tx, id, new Set(), 0, { expanded: 0 }));
 	}
 }

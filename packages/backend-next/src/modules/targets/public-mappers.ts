@@ -25,7 +25,10 @@ import type {
 	ConnectionMutation as InternalConnectionMutation,
 	ConnectionSnapshot as InternalSnapshot,
 } from './connections/model/connection-types.js';
-import type { ConnectionImport as InternalImport } from './import/model/import-types.js';
+import type {
+	ConnectionImport as InternalImport,
+	ImportItemResult as InternalImportItemResult,
+} from './import/model/import-types.js';
 import type {
 	SshCredentialInput as InternalCredentialInput,
 	CredentialMutation as InternalCredentialMutation,
@@ -45,7 +48,7 @@ import type {
 import type { ResolvedSshTarget } from './resolver/model/ssh-target-types.js';
 
 /** All projections are allowlists. Never spread an internal object through this boundary. */
-export function connectionInput(input: PublicMetadata): InternalMetadata {
+export function toConnectionInput(input: PublicMetadata): InternalMetadata {
 	return {
 		name: input.name,
 		type: input.type,
@@ -58,12 +61,12 @@ export function connectionInput(input: PublicMetadata): InternalMetadata {
 		rdpRemoteApp: input.rdpRemoteApp,
 		rdpRemoteAppDirectory: input.rdpRemoteAppDirectory,
 		rdpRemoteAppArguments: input.rdpRemoteAppArguments,
-		tagIds: input.tagIds.map((id) => id),
-		jumpIds: input.jumpIds.map((id) => id),
+		tagIds: [...input.tagIds],
+		jumpIds: [...input.jumpIds],
 	};
 }
 
-export function connectionPatch(input: Partial<PublicMetadata>): Partial<InternalMetadata> {
+export function toConnectionPatch(input: Partial<PublicMetadata>): Partial<InternalMetadata> {
 	const result: Partial<InternalMetadata> = {};
 	if (input.name !== undefined) {
 		result.name = input.name;
@@ -99,15 +102,15 @@ export function connectionPatch(input: Partial<PublicMetadata>): Partial<Interna
 		result.rdpRemoteAppArguments = input.rdpRemoteAppArguments;
 	}
 	if (input.tagIds !== undefined) {
-		result.tagIds = input.tagIds.map((id) => id);
+		result.tagIds = [...input.tagIds];
 	}
 	if (input.jumpIds !== undefined) {
-		result.jumpIds = input.jumpIds.map((id) => id);
+		result.jumpIds = [...input.jumpIds];
 	}
 	return result;
 }
 
-export function connectionView(record: InternalSnapshot): PublicSnapshot {
+export function toConnectionView(record: InternalSnapshot): PublicSnapshot {
 	return {
 		id: record.id,
 		version: record.version,
@@ -124,14 +127,14 @@ export function connectionView(record: InternalSnapshot): PublicSnapshot {
 		rdpRemoteApp: record.rdpRemoteApp,
 		rdpRemoteAppDirectory: record.rdpRemoteAppDirectory,
 		rdpRemoteAppArguments: record.rdpRemoteAppArguments,
-		tagIds: record.tagIds.map((id) => id),
-		jumpIds: record.jumpIds.map((id) => id),
+		tagIds: [...record.tagIds],
+		jumpIds: [...record.jumpIds],
 	};
 }
 
-export function connectionMutation(result: InternalConnectionMutation): PublicConnectionMutation {
+export function toConnectionMutation(result: InternalConnectionMutation): PublicConnectionMutation {
 	if (result.status === 'updated') {
-		return { status: 'updated', value: connectionView(result.value) };
+		return { status: 'updated', value: toConnectionView(result.value) };
 	}
 	if (result.status === 'not_found') {
 		return { status: 'not_found' };
@@ -139,8 +142,8 @@ export function connectionMutation(result: InternalConnectionMutation): PublicCo
 	return { status: 'version_conflict' };
 }
 
-export function importInput(command: PublicImport): InternalImport {
-	const result: InternalImport = { connection: connectionInput(command.connection) };
+export function toImportInput(command: PublicImport): InternalImport {
+	const result: InternalImport = { connection: toConnectionInput(command.connection) };
 	if (command.inlineProxy !== undefined) {
 		const proxy = command.inlineProxy;
 		result.inlineProxy = {
@@ -152,18 +155,18 @@ export function importInput(command: PublicImport): InternalImport {
 		};
 	}
 	if (command.tagNames !== undefined) {
-		result.tagNames = command.tagNames.map((name) => name);
+		result.tagNames = [...command.tagNames];
 	}
 	return result;
 }
 
-export function importItems(results: readonly ImportItemResult[]): ImportItemResult[] {
+export function toImportItems(results: readonly InternalImportItemResult[]): ImportItemResult[] {
 	return results.map((result) =>
 		result.status === 'ok' ? { status: 'ok', id: result.id } : { status: 'error', code: result.code },
 	);
 }
 
-export function proxyInput(input: ProxyInput): InternalProxyInput {
+export function toProxyInput(input: ProxyInput): InternalProxyInput {
 	const result: InternalProxyInput = {
 		name: input.name,
 		type: input.type,
@@ -177,7 +180,7 @@ export function proxyInput(input: ProxyInput): InternalProxyInput {
 	return result;
 }
 
-export function proxyPatch(input: ProxyUpdateInput): InternalProxyChanges {
+export function toProxyPatch(input: ProxyUpdateInput): InternalProxyChanges {
 	const result: InternalProxyChanges = {};
 	if (input.name !== undefined) {
 		result.name = input.name;
@@ -200,7 +203,7 @@ export function proxyPatch(input: ProxyUpdateInput): InternalProxyChanges {
 	return result;
 }
 
-export function proxyView(record: ProxySnapshot): ProxyView {
+export function toProxyView(record: ProxySnapshot): ProxyView {
 	return {
 		id: record.id,
 		name: record.name,
@@ -214,9 +217,9 @@ export function proxyView(record: ProxySnapshot): ProxyView {
 	};
 }
 
-export function proxyMutation(result: ProxyMutation): PublicProxyMutation {
+export function toProxyMutation(result: ProxyMutation): PublicProxyMutation {
 	if (result.status === 'updated') {
-		return { status: 'updated', value: proxyView(result.value) };
+		return { status: 'updated', value: toProxyView(result.value) };
 	}
 	if (result.status === 'not_found') {
 		return { status: 'not_found' };
@@ -224,7 +227,7 @@ export function proxyMutation(result: ProxyMutation): PublicProxyMutation {
 	return { status: 'version_conflict' };
 }
 
-export function tagView(record: TagSnapshot): TagView {
+export function toTagView(record: TagSnapshot): TagView {
 	return {
 		id: record.id,
 		name: record.name,
@@ -234,9 +237,9 @@ export function tagView(record: TagSnapshot): TagView {
 	};
 }
 
-export function tagMutation(result: TagMutation): PublicTagMutation {
+export function toTagMutation(result: TagMutation): PublicTagMutation {
 	if (result.status === 'updated') {
-		return { status: 'updated', value: tagView(result.value) };
+		return { status: 'updated', value: toTagView(result.value) };
 	}
 	if (result.status === 'not_found') {
 		return { status: 'not_found' };
@@ -244,7 +247,7 @@ export function tagMutation(result: TagMutation): PublicTagMutation {
 	return { status: 'version_conflict' };
 }
 
-export function sshKeyInput(input: PublicKeyInput): InternalKeyInput {
+export function toSshKeyInput(input: PublicKeyInput): InternalKeyInput {
 	const result: InternalKeyInput = { name: input.name, privateKey: input.privateKey };
 	if (input.passphrase !== undefined) {
 		result.passphrase = input.passphrase;
@@ -252,7 +255,7 @@ export function sshKeyInput(input: PublicKeyInput): InternalKeyInput {
 	return result;
 }
 
-export function sshKeyPatch(input: PublicKeyChanges): InternalKeyChanges {
+export function toSshKeyPatch(input: PublicKeyChanges): InternalKeyChanges {
 	const result: InternalKeyChanges = {};
 	if (input.name !== undefined) {
 		result.name = input.name;
@@ -266,7 +269,7 @@ export function sshKeyPatch(input: PublicKeyChanges): InternalKeyChanges {
 	return result;
 }
 
-export function sshKeyView(record: SshKeySnapshot): SshKeyView {
+export function toSshKeyView(record: SshKeySnapshot): SshKeyView {
 	return {
 		id: record.id,
 		name: record.name,
@@ -276,9 +279,9 @@ export function sshKeyView(record: SshKeySnapshot): SshKeyView {
 	};
 }
 
-export function sshKeyMutation(result: SshKeyMutation): PublicKeyMutation {
+export function toSshKeyMutation(result: SshKeyMutation): PublicKeyMutation {
 	if (result.status === 'updated') {
-		return { status: 'updated', value: sshKeyView(result.value) };
+		return { status: 'updated', value: toSshKeyView(result.value) };
 	}
 	if (result.status === 'not_found') {
 		return { status: 'not_found' };
@@ -286,14 +289,14 @@ export function sshKeyMutation(result: SshKeyMutation): PublicKeyMutation {
 	return { status: 'version_conflict' };
 }
 
-export function credentialInput(input: PublicCredentialInput): InternalCredentialInput {
+export function toCredentialInput(input: PublicCredentialInput): InternalCredentialInput {
 	if (input.kind === 'password') {
 		return { kind: 'password', password: input.password };
 	}
 	return { kind: 'ssh_key', sshKeyId: input.sshKeyId };
 }
 
-export function credentialMutation(result: InternalCredentialMutation): PublicCredentialMutation {
+export function toCredentialMutation(result: InternalCredentialMutation): PublicCredentialMutation {
 	if (result.status === 'updated') {
 		return { status: 'updated' };
 	}
@@ -303,7 +306,7 @@ export function credentialMutation(result: InternalCredentialMutation): PublicCr
 	return { status: 'version_conflict' };
 }
 
-export function trustedTargetView(record: ResolvedSshTarget): TrustedResolvedSshTarget {
+export function toTrustedTargetView(record: ResolvedSshTarget): TrustedResolvedSshTarget {
 	const auth = record.authentication;
 	const authentication: TrustedSshAuthentication =
 		auth.kind === 'password'
@@ -320,7 +323,7 @@ export function trustedTargetView(record: ResolvedSshTarget): TrustedResolvedSsh
 					username: proxy.username,
 					password: proxy.password,
 				};
-	const jumps = record.jumps.map((jump) => trustedTargetView(jump));
+	const jumps = record.jumps.map((jump) => toTrustedTargetView(jump));
 	return Object.freeze({
 		id: record.id,
 		host: record.host,

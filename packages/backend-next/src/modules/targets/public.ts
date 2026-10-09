@@ -1,5 +1,6 @@
 import type { ConnectionRoute, ConnectionType } from '@nexus-terminal/shared/connections/values';
 import type { ProxyType } from '@nexus-terminal/shared/proxies/values';
+import type { TargetErrorCode } from './public-errors.js';
 
 /**
  * Stable cross-module boundary. Never import storage records or internal
@@ -97,8 +98,7 @@ export interface ConnectionImport {
 	inlineProxy?: Omit<ProxyInput, 'password'>;
 	tagNames?: string[];
 }
-export type ImportItemResult =
-	{ status: 'ok'; id: number } | { status: 'error'; code: import('./target-errors.js').TargetErrorCode };
+export type ImportItemResult = { status: 'ok'; id: number } | { status: 'error'; code: TargetErrorCode };
 
 export interface ConnectionCatalog {
 	list(): Promise<ConnectionSnapshot[]>;

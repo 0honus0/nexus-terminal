@@ -2,7 +2,7 @@ import type { ConnectionStorage, MutationResult } from '../storage/connection-st
 import type { ConnectionMetadata, ConnectionSnapshot, ConnectionMutation } from './connection-types.js';
 import { fromStorage, toStorage, toStoragePatch } from './connection-mapper.js';
 
-function mutation(value: MutationResult): ConnectionMutation {
+function toApplicationMutation(value: MutationResult): ConnectionMutation {
 	if (value.status === 'updated') {
 		return { status: 'updated', value: fromStorage(value.value) };
 	}
@@ -30,7 +30,7 @@ export class ConnectionModel {
 
 	async update(id: number, version: number, changes: Partial<ConnectionMetadata>): Promise<ConnectionMutation> {
 		const patch = toStoragePatch(changes);
-		return mutation(await this.storage.update(id, version, patch));
+		return toApplicationMutation(await this.storage.update(id, version, patch));
 	}
 
 	async clone(id: number, name: string): Promise<ConnectionSnapshot | null> {
@@ -43,6 +43,6 @@ export class ConnectionModel {
 	}
 
 	async setTags(id: number, version: number, tags: number[]): Promise<ConnectionMutation> {
-		return mutation(await this.storage.setTags(id, version, [...tags]));
+		return toApplicationMutation(await this.storage.setTags(id, version, [...tags]));
 	}
 }
