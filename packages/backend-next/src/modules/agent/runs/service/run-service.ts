@@ -55,7 +55,7 @@ export class RunService {
 			appId: request.appId,
 			threadId: request.threadId,
 			id: randomUUID(),
-			inputText: request.prompt,
+			prompt: request.prompt,
 			operationKey: request.operationKey.toLowerCase(),
 			requestHash,
 			createdAt: Date.now(),
@@ -77,7 +77,7 @@ export class RunService {
 			expectedVersion: request.expectedVersion,
 			operationKey: request.operationKey.toLowerCase(),
 			requestHash,
-			now: Date.now(),
+			requestedAt: Date.now(),
 		});
 	}
 

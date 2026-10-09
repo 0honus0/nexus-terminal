@@ -1,11 +1,27 @@
-import type {
-	RunStorage,
-	StoredRun,
-	StoredRunEvent,
-	CreateRunStorageCommand,
-	CancelRunStorageCommand,
-} from '../storage/run-storage.js';
+import type { RunStorage, StoredRun, StoredRunEvent } from '../storage/run-storage.js';
 import { mayCreateRootRun, decideCancelRootRun } from './run-rules.js';
+
+/** Application command; SQLite's write record is constructed only in this Model. */
+export interface CreateRootRunCommand {
+	id: string;
+	userId: number;
+	appId: string;
+	threadId: string;
+	prompt: string;
+	operationKey: string;
+	requestHash: string;
+	createdAt: number;
+}
+
+export interface CancelRootRunCommand {
+	userId: number;
+	appId: string;
+	runId: string;
+	expectedVersion: number;
+	operationKey: string;
+	requestHash: string;
+	requestedAt: number;
+}
 
 export interface AgentRun {
 	id: string;
@@ -65,19 +81,19 @@ function toEvent(value: StoredRunEvent): AgentRunEvent {
 export class RunModel {
 	constructor(private readonly storage: RunStorage) {}
 
-	async create(command: CreateRunStorageCommand): Promise<CreateRunResult> {
+	async create(command: CreateRootRunCommand): Promise<CreateRunResult> {
 		const result = await this.storage.create(
 			{
 				id: command.id,
 				userId: command.userId,
 				appId: command.appId,
 				threadId: command.threadId,
-				inputText: command.inputText,
+				inputText: command.prompt,
 				operationKey: command.operationKey,
 				requestHash: command.requestHash,
 				createdAt: command.createdAt,
 			},
-			mayCreateRootRun,
+			(active) => mayCreateRootRun(active === null ? null : { status: active.status, version: active.version }),
 		);
 		if (result.status === 'replayed') {
 			return { status: 'replayed', originalStatus: result.originalStatus, run: toRun(result.run) };
@@ -88,7 +104,7 @@ export class RunModel {
 		return { status: result.status };
 	}
 
-	async cancel(command: CancelRunStorageCommand): Promise<CancelRunResult> {
+	async cancel(command: CancelRootRunCommand): Promise<CancelRunResult> {
 		const result = await this.storage.cancel(
 			{
 				userId: command.userId,
@@ -97,9 +113,9 @@ export class RunModel {
 				expectedVersion: command.expectedVersion,
 				operationKey: command.operationKey,
 				requestHash: command.requestHash,
-				now: command.now,
+				now: command.requestedAt,
 			},
-			(run) => decideCancelRootRun(run, command.expectedVersion),
+			(run) => decideCancelRootRun({ status: run.status, version: run.version }, command.expectedVersion),
 		);
 		if (result.status === 'replayed') {
 			return { status: 'replayed', originalStatus: result.originalStatus, run: toRun(result.run) };
