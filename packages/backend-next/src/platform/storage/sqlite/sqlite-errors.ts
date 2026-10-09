@@ -28,11 +28,20 @@ export interface WorkerSqliteError {
 	code: number | null;
 }
 
-export function sqliteError(value: WorkerSqliteError): SqliteFailure {
-	const code = value.code;
+function classifySqliteCode(code: number | null): SqliteFailureKind {
 	// node:sqlite exposes the SQLite extended result in errcode, not Error.code.
 	const primaryCode = code === null ? null : code & 0xff;
-	const kind: SqliteFailureKind =
-		primaryCode === 19 ? 'constraint' : primaryCode === 5 || primaryCode === 6 ? 'busy' : 'sql';
-	return new SqliteFailure(kind, code, { cause: new Error(value.message) });
+	switch (primaryCode) {
+		case 19:
+			return 'constraint';
+		case 5:
+		case 6:
+			return 'busy';
+		default:
+			return 'sql';
+	}
+}
+
+export function sqliteError(value: WorkerSqliteError): SqliteFailure {
+	return new SqliteFailure(classifySqliteCode(value.code), value.code, { cause: new Error(value.message) });
 }

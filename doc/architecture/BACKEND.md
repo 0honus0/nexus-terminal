@@ -14,6 +14,8 @@ SQLite Worker 传递 `node:sqlite` 的数值 `errcode`，保留扩展结果码�
 
 SQLite Runtime 的事务入口管理回调与未等待操作；私有 `rollbackAndThrow` 完成回滚后重新抛出原始失败，回滚失败时聚合两项原因并使实例不可用；私有 `commit` 在提交失败时报告 `commit_unknown` 并使实例不可用。错误原因先作为具名局部值构造，再包装技术错误，事务主流程保留明确的回滚/提交顺序。
 
+SQLite Worker 请求及各操作结果定义在技术层 `worker-types.ts`；Runtime 的 pending owner 按发起的操作解码未知结果，不使用 `any` 传递行或写入结果。事务回调结果以成功/失败联合表达，排队入口调用具名 `runTransaction`；关闭入口先保存 Promise，再执行 `closeResources`。Worker 的查询执行、错误序列化与消息响应分别为具名函数，数据库路径与 parent port 在初始化时确认。
+
 Targets 批量导入的内部结果以 `import/model/import-types.ts` 中的 `ImportItemResult` 定义成功 ID 与失败错误码的可辨识联合；Service 使用这个具名应用类型。`public.ts` 独立定义出口结果，仍由出口映射逐字段转换，不从内部类型派生。
 
 Targets 的 Service/Model 和 SQLite 存储实现明确声明返回类型，校验使用 `validateId/validateName` 等动作名称。应用补丁规范化与存储补丁投影分别由 Service 校验函数和 Model mapper 承担，均保留字段允许清单；SQL 行解码先校验再构造记录，成功写入后的必需记录通过具名读取函数确认。Resolver 的密文快照与解密应用类型集中于 `resolver/model/ssh-target-types.ts`，Model 文件只持有映射与存储调用。
