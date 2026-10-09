@@ -18,13 +18,16 @@ const SESSION_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
 class RemoteInputError extends Error {}
 
 function positive(value: unknown, max: number): number {
-	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1 || value > max)
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1 || value > max) {
 		throw new RemoteInputError();
+	}
 	return value;
 }
 
 function record(value: unknown, allowed: readonly string[], required: readonly string[]): Record<string, unknown> {
-	if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new RemoteInputError();
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+		throw new RemoteInputError();
+	}
 	const data = value as Record<string, unknown>;
 	if (Object.keys(data).some((key) => !allowed.includes(key)) || required.some((key) => !(key in data))) {
 		throw new RemoteInputError();
@@ -43,32 +46,46 @@ function toShellView(value: SessionView): RemoteShellView {
 }
 
 async function identity(access: AccessPublicApi, token: string | null): Promise<void> {
-	if (!token) throw new RemotePermissionError('unauthenticated');
+	if (!token) {
+		throw new RemotePermissionError('unauthenticated');
+	}
 	const user = await access.authenticate(token);
-	if (!user) throw new RemotePermissionError('unauthenticated');
-	if (user.userId !== 1) throw new RemotePermissionError('forbidden');
+	if (!user) {
+		throw new RemotePermissionError('unauthenticated');
+	}
+	if (user.userId !== 1) {
+		throw new RemotePermissionError('forbidden');
+	}
 }
 
 function handleError(ctx: HttpRouteContext, error: unknown): void {
-	if (error instanceof HttpInputFailure) throw error;
+	if (error instanceof HttpInputFailure) {
+		throw error;
+	}
 	if (error instanceof RemoteInputError) {
 		ctx.send(400, { code: 'invalid_input' });
 		return;
 	}
 	if (error instanceof RemotePermissionError) {
-		const status =
-			error.code === 'unauthenticated'
-				? 401
-				: error.code === 'forbidden'
-					? 403
-					: error.code === 'not_found'
-						? 404
-						: 503;
+		const status = remotePermissionStatus(error.code);
 		ctx.send(status, { code: error.code });
 		return;
 	}
 	// No machine/SSH error, private credential or destination leaks to HTTP.
 	ctx.send(503, { code: 'remote_unavailable' });
+}
+
+function remotePermissionStatus(code: RemotePermissionError['code']): number {
+	switch (code) {
+		case 'unauthenticated':
+			return 401;
+		case 'forbidden':
+			return 403;
+		case 'not_found':
+			return 404;
+		case 'remote_unavailable':
+			return 503;
+	}
 }
 
 function route(
@@ -82,7 +99,9 @@ function route(
 
 		async handle(ctx) {
 			try {
-				if (ctx.query.size) throw new RemoteInputError();
+				if (ctx.query.size) {
+					throw new RemoteInputError();
+				}
 				await handler(ctx);
 			} catch (error) {
 				handleError(ctx, error);
@@ -112,7 +131,9 @@ export function createRemoteHttpRoutes(owner: RemoteSessionOwner, access: Access
 			ctx.request.once('aborted', aborted);
 
 			const disconnected = () => {
-				if (!ctx.response.writableEnded) aborted();
+				if (!ctx.response.writableEnded) {
+					aborted();
+				}
 			};
 
 			ctx.response.once('close', disconnected);
@@ -138,14 +159,18 @@ export function createRemoteHttpRoutes(owner: RemoteSessionOwner, access: Access
 		route('GET', '/sessions/:id', async (ctx) => {
 			await identity(access, ctx.cookie('nexus_session'));
 			const id = ctx.params.id;
-			if (!id || !SESSION_PATTERN.test(id)) throw new RemoteInputError();
+			if (!id || !SESSION_PATTERN.test(id)) {
+				throw new RemoteInputError();
+			}
 			const session = await owner.get(ctx.cookie('nexus_session'), id);
 			ctx.send(session ? 200 : 404, session ? toShellView(session) : { code: 'not_found' });
 		}),
 		route('DELETE', '/sessions/:id', async (ctx) => {
 			await identity(access, ctx.cookie('nexus_session'));
 			const id = ctx.params.id;
-			if (!id || !SESSION_PATTERN.test(id)) throw new RemoteInputError();
+			if (!id || !SESSION_PATTERN.test(id)) {
+				throw new RemoteInputError();
+			}
 			const deleted = await owner.closeSession(ctx.cookie('nexus_session'), id);
 			ctx.send(deleted ? 200 : 404, deleted ? { closed: true } : { code: 'not_found' });
 		}),
@@ -179,6 +204,9 @@ function connectStream(
 		return;
 	}
 	let ended = false;
+	let eof = false;
+	let completing = false;
+	let eofDeadline: ReturnType<typeof setTimeout> | null = null;
 	let inputBlocked = false;
 	let outstanding = 0;
 	let queuedBytes = 0;
@@ -188,12 +216,15 @@ function connectStream(
 	const subscriptions: Array<() => void> = [];
 	let rechecking = false;
 	const identityTimer = setInterval(() => {
-		if (ended || rechecking) return;
+		if (ended || rechecking) {
+			return;
+		}
 		rechecking = true;
-		void owner
-			.allowed(token, id)
+		void (eof ? owner.allowedOutput(token, id) : owner.allowed(token, id))
 			.then((allowed) => {
-				if (!allowed) terminate('unauthenticated');
+				if (!allowed) {
+					terminate('unauthenticated');
+				}
 			})
 			.catch(() => terminate('unauthenticated'))
 			.finally(() => {
@@ -206,6 +237,9 @@ function connectStream(
 	channel.onClose(async () => {
 		ended = true;
 		clearInterval(identityTimer);
+		if (eofDeadline) {
+			clearTimeout(eofDeadline);
+		}
 		for (const unsubscribe of subscriptions) {
 			try {
 				unsubscribe();
@@ -217,14 +251,39 @@ function connectStream(
 	});
 
 	function terminate(code: 'unauthenticated' | 'transport_overflow' | 'remote_unavailable'): void {
-		if (ended) return;
+		if (ended) {
+			return;
+		}
 		ended = true;
 		wireEvent(channel, { type: 'error', code });
 		channel.close();
 	}
 
+	function finishEof(): void {
+		if (!eof || ended || completing || draining || queued.length || outstanding) {
+			return;
+		}
+		completing = true;
+		void owner
+			.allowedOutput(token, id)
+			.then((allowed) => {
+				if (!allowed) {
+					terminate('unauthenticated');
+					return;
+				}
+				if (!wireEvent(channel, { type: 'closed' })) {
+					terminate('transport_overflow');
+					return;
+				}
+				void channel.finish().catch(() => channel.close());
+			})
+			.catch(() => terminate('unauthenticated'));
+	}
+
 	async function flush(): Promise<void> {
-		if (ended) return;
+		if (ended) {
+			return;
+		}
 		if (draining) {
 			flushRequested = true;
 			return;
@@ -232,13 +291,15 @@ function connectStream(
 		draining = true;
 		try {
 			while (!ended && queued.length && outstanding + queued[0].bytes.length <= OUTPUT_WINDOW) {
-				const allowed = await owner.allowed(token, id);
+				const allowed = await owner.allowedOutput(token, id);
 				if (!allowed) {
 					terminate('unauthenticated');
 					return;
 				}
 				const part = queued.shift();
-				if (!part) break;
+				if (!part) {
+					break;
+				}
 				queuedBytes -= part.bytes.length;
 				const ok = wireEvent(channel, {
 					type: 'data',
@@ -251,9 +312,12 @@ function connectStream(
 				}
 				outstanding += part.bytes.length;
 			}
-			if (!ended) {
-				if (queued.length || outstanding >= OUTPUT_WINDOW) remote.pauseOutput(id);
-				else remote.resumeOutput(id);
+			if (!ended && !eof) {
+				if (queued.length || outstanding >= OUTPUT_WINDOW) {
+					remote.pauseOutput(id);
+				} else {
+					remote.resumeOutput(id);
+				}
 			}
 		} catch {
 			terminate('remote_unavailable');
@@ -263,11 +327,14 @@ function connectStream(
 				flushRequested = false;
 				void flush();
 			}
+			finishEof();
 		}
 	}
 
 	function enqueue(stream: 'stdout' | 'stderr', bytes: Uint8Array): void {
-		if (ended) return;
+		if (ended) {
+			return;
+		}
 		for (let offset = 0; offset < bytes.length; offset += 8192) {
 			const part = Uint8Array.from(bytes.subarray(offset, offset + 8192));
 			queued.push({ stream, bytes: part });
@@ -277,7 +344,9 @@ function connectStream(
 			terminate('transport_overflow');
 			return;
 		}
-		if (queuedBytes + outstanding >= OUTPUT_WINDOW) remote.pauseOutput(id);
+		if (queuedBytes + outstanding >= OUTPUT_WINDOW) {
+			remote.pauseOutput(id);
+		}
 		void flush();
 	}
 
@@ -292,19 +361,27 @@ function connectStream(
 	);
 	subscriptions.push(
 		remote.onClosed(id, () => {
-			wireEvent(channel, { type: 'closed' });
-			channel.close();
+			eof = true;
+			inputBlocked = true;
+			eofDeadline = setTimeout(() => terminate('transport_overflow'), 10000);
+			eofDeadline.unref();
+			void flush();
+			finishEof();
 		}),
 	);
 	channel.onMessage(async (message) => {
-		if (ended) return;
-		if (!(await owner.allowed(token, id))) {
+		if (ended) {
+			return;
+		}
+		if (!(await (eof ? owner.allowedOutput(token, id) : owner.allowed(token, id)))) {
 			terminate('unauthenticated');
 			return;
 		}
 		let value: RemoteClientEvent;
 		try {
-			if (Buffer.byteLength(message) > 64 * 1024) throw new RemoteInputError();
+			if (Buffer.byteLength(message) > 64 * 1024) {
+				throw new RemoteInputError();
+			}
 			const incoming: unknown = JSON.parse(message);
 			const object = record(incoming, ['type', 'data', 'columns', 'rows', 'bytes'], ['type']);
 			if (object.type === 'input') {
@@ -326,13 +403,18 @@ function connectStream(
 			} else if (object.type === 'close') {
 				record(object, ['type'], ['type']);
 				value = { type: 'close' };
-			} else throw new RemoteInputError();
+			} else {
+				throw new RemoteInputError();
+			}
 		} catch {
 			wireEvent(channel, { type: 'error', code: 'invalid_input' });
 			channel.close();
 			return;
 		}
 		try {
+			if (eof && value.type !== 'consumed') {
+				throw new RemoteInputError();
+			}
 			switch (value.type) {
 				case 'input': {
 					if (inputBlocked) {
@@ -340,7 +422,9 @@ function connectStream(
 						return;
 					}
 					const bytes = Buffer.from(value.data, 'base64');
-					if (bytes.length > 32 * 1024) throw new RemoteInputError();
+					if (bytes.length > 32 * 1024) {
+						throw new RemoteInputError();
+					}
 					if (!remote.write(id, bytes)) {
 						inputBlocked = true;
 						wireEvent(channel, { type: 'blocked' });
@@ -351,7 +435,9 @@ function connectStream(
 					remote.resize(id, value.columns, value.rows);
 					break;
 				case 'consumed':
-					if (value.bytes > outstanding) throw new RemoteInputError();
+					if (value.bytes > outstanding) {
+						throw new RemoteInputError();
+					}
 					outstanding -= value.bytes;
 					await flush();
 					break;
@@ -372,7 +458,9 @@ function connectStream(
 
 export function createRemoteWebSocketRoute(owner: RemoteSessionOwner, remote: RemoteSessions): HttpWebSocketRoute {
 	function parse(url: URL): string | null {
-		if (url.searchParams.size !== 1) return null;
+		if (url.searchParams.size !== 1) {
+			return null;
+		}
 		const id = url.searchParams.get('sessionId');
 		return id && SESSION_PATTERN.test(id) ? id : null;
 	}
