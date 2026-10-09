@@ -1,36 +1,20 @@
 import { randomUUID } from 'node:crypto';
-import type {
-	MachineConnection,
-	MachineShell,
-	MachineSshFactory,
-	MachineConnectOptions,
-} from '../../../../platform/ssh/ssh-port.js';
-import type { TrustedSshTargetResolver } from '../../../targets/public.js';
-import { toMachineTarget } from '../model/session-model.js';
-import type { RemoteSessionSnapshot } from '../model/session-types.js';
+import type { RemoteSessionModel } from '../model/session-model.js';
+import type { RemoteSessionSnapshot, RemoteSessionResource, OpenSessionRequest } from '../model/session-types.js';
 
 interface ActiveSession {
 	view: RemoteSessionSnapshot;
-	machine: MachineConnection;
-	shell: MachineShell;
+	resource: RemoteSessionResource;
 	dataListeners: Set<(bytes: Uint8Array) => void>;
 	stderrListeners: Set<(bytes: Uint8Array) => void>;
 	closedListeners: Set<() => void>;
-	offTransport: () => void;
-	offShell: () => void;
+	offResource: () => void;
+	offData: () => void;
 	offStderr: () => void;
-	onChunk: (bytes: Buffer) => void;
+	onChunk: (bytes: Uint8Array) => void;
 	closing: Promise<void> | null;
 }
 
-interface OpenRequest {
-	targetId: number;
-	columns: number;
-	rows: number;
-	term?: string;
-	timeoutMs: number;
-	signal?: AbortSignal;
-}
 const MAX_LIVE_SESSIONS = 64;
 const MAX_CONNECT_TIMEOUT = 300000;
 
@@ -43,11 +27,7 @@ export class RemoteSessionService {
 	private closing: Promise<void> | null = null;
 	private accepting = true;
 
-	constructor(
-		private readonly resolver: TrustedSshTargetResolver,
-		private readonly ssh: MachineSshFactory,
-		private readonly verifyHostKey: MachineConnectOptions['verifyHostKey'] | null,
-	) {}
+	constructor(private readonly model: RemoteSessionModel) {}
 
 	private requireSession(id: string): ActiveSession {
 		const session = this.sessions.get(id);
@@ -59,9 +39,8 @@ export class RemoteSessionService {
 		if (!this.accepting) throw new Error('Remote sessions are closing');
 	}
 
-	open(request: OpenRequest): Promise<RemoteSessionSnapshot> {
+	open(request: OpenSessionRequest): Promise<RemoteSessionSnapshot> {
 		this.admitted();
-		if (!this.verifyHostKey) throw new Error('SSH host-key verification policy is not configured');
 		if (
 			!Number.isSafeInteger(request.targetId) ||
 			request.targetId < 1 ||
@@ -95,48 +74,40 @@ export class RemoteSessionService {
 		return task;
 	}
 
-	private async openAdmitted(request: OpenRequest, controller: AbortController): Promise<RemoteSessionSnapshot> {
-		const started = Date.now();
-		let machine: MachineConnection | null = null;
+	private async openAdmitted(
+		request: OpenSessionRequest,
+		controller: AbortController,
+	): Promise<RemoteSessionSnapshot> {
+		let opened: RemoteSessionResource | null = null;
 		try {
-			const target = await this.resolver.resolveStored(request.targetId);
-			if (controller.signal.aborted || !this.accepting) throw new Error('Remote session opening cancelled');
-			const left = request.timeoutMs - (Date.now() - started);
-			if (left <= 0) throw new Error('Remote session connect deadline exceeded');
-			machine = await this.ssh.connect(toMachineTarget(target), {
-				timeoutMs: left,
+			opened = await this.model.open({
+				targetId: request.targetId,
+				columns: request.columns,
+				rows: request.rows,
+				term: request.term,
+				timeoutMs: request.timeoutMs,
 				signal: controller.signal,
-				verifyHostKey: this.verifyHostKey!,
 			});
-			if (controller.signal.aborted || !this.accepting) throw new Error('Remote session opening cancelled');
-			const shell = await machine.openShell(
-				{ columns: request.columns, rows: request.rows, term: request.term },
-				controller.signal,
-			);
-			if (controller.signal.aborted || !this.accepting) {
-				shell.close();
+			if (controller.signal.aborted || !this.accepting || !opened.isOpen)
 				throw new Error('Remote session opening cancelled');
-			}
-			shell.pause();
 			const id = randomUUID();
 			const view: RemoteSessionSnapshot = {
 				id,
-				targetId: target.id,
-				fingerprint: target.fingerprint,
+				targetId: opened.targetId,
+				fingerprint: opened.fingerprint,
 				startedAt: Date.now(),
 				status: 'open',
 			};
 			const current: ActiveSession = {
 				view,
-				machine,
-				shell,
+				resource: opened,
 				dataListeners: new Set(),
 				stderrListeners: new Set(),
 				closedListeners: new Set(),
 
-				offTransport: () => undefined,
+				offResource: () => undefined,
 
-				offShell: () => undefined,
+				offData: () => undefined,
 
 				offStderr: () => undefined,
 
@@ -144,7 +115,7 @@ export class RemoteSessionService {
 
 				closing: null,
 			};
-			current.onChunk = (bytes: Buffer) => {
+			current.onChunk = (bytes: Uint8Array) => {
 				for (const fn of current.dataListeners) {
 					try {
 						fn(Uint8Array.from(bytes));
@@ -153,13 +124,10 @@ export class RemoteSessionService {
 					}
 				}
 			};
-			current.offTransport = machine.onClose(() => {
-				void this.closeSession(id);
+			current.offResource = opened.onClose(() => {
+				void this.closeSession(id).catch(() => undefined);
 			});
-			current.offShell = shell.onClose(() => {
-				void this.closeSession(id);
-			});
-			current.offStderr = shell.onStderr((bytes) => {
+			current.offStderr = opened.onStderr((bytes) => {
 				for (const listener of current.stderrListeners) {
 					try {
 						listener(Uint8Array.from(bytes));
@@ -171,7 +139,13 @@ export class RemoteSessionService {
 			this.sessions.set(id, current);
 			return this.view(current);
 		} catch (error) {
-			if (machine) await machine.close();
+			if (opened) {
+				try {
+					await opened.close();
+				} catch (cleanup) {
+					throw new AggregateError([error, cleanup], 'Remote registration and cleanup failed');
+				}
+			}
 			throw error;
 		}
 	}
@@ -192,28 +166,29 @@ export class RemoteSessionService {
 
 	write(id: string, bytes: Uint8Array): boolean {
 		const session = this.requireSession(id);
-		if (!session.machine.isOpen || session.closing) throw new Error('Remote session closed');
-		return session.shell.writable.write(Buffer.from(bytes));
+		if (!session.resource.isOpen || session.closing) throw new Error('Remote session closed');
+		return session.resource.write(bytes);
 	}
 
 	resize(id: string, columns: number, rows: number): void {
 		const session = this.requireSession(id);
-		session.shell.resize(columns, rows);
+		session.resource.resize(columns, rows);
 	}
 
 	onData(id: string, listener: (bytes: Uint8Array) => void): () => void {
 		const session = this.requireSession(id);
-		if (session.dataListeners.size === 0) {
-			// The remote channel stays paused when no output consumer exists.
-			session.shell.readable.on('data', session.onChunk);
-			session.shell.resume();
-		}
+		const first = session.dataListeners.size === 0;
 		session.dataListeners.add(listener);
+		if (first) {
+			// The remote channel stays paused when no output consumer exists.
+			session.offData = session.resource.onData(session.onChunk);
+			session.resource.resume();
+		}
 		return () => {
 			session.dataListeners.delete(listener);
 			if (!session.dataListeners.size) {
-				session.shell.pause();
-				session.shell.readable.off('data', session.onChunk);
+				session.resource.pause();
+				session.offData();
 			}
 		};
 	}
@@ -225,7 +200,7 @@ export class RemoteSessionService {
 	}
 
 	onDrain(id: string, listener: () => void): () => void {
-		return this.requireSession(id).shell.onDrain(listener);
+		return this.requireSession(id).resource.onDrain(listener);
 	}
 
 	onClosed(id: string, listener: () => void): () => void {
@@ -242,13 +217,11 @@ export class RemoteSessionService {
 		if (session.closing) return session.closing;
 		session.closing = Promise.resolve().then(async () => {
 			this.sessions.delete(id);
-			session.offTransport();
-			session.offShell();
+			session.offResource();
 			session.offStderr();
-			session.shell.readable.off('data', session.onChunk);
-			session.shell.close();
+			session.offData();
 			try {
-				await session.machine.close();
+				await session.resource.close();
 			} finally {
 				for (const listener of session.closedListeners) {
 					try {

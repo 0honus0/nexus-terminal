@@ -1,5 +1,6 @@
 import type { MachineSshFactory, MachineConnectOptions } from '../../platform/ssh/ssh-port.js';
 import type { TrustedSshTargetResolver } from '../targets/public.js';
+import { RemoteSessionModel } from './sessions/model/session-model.js';
 import { RemoteSessionService } from './sessions/service/session-service.js';
 import type { RemoteSessions, SessionView, OpenShellRequest } from './public.js';
 
@@ -40,7 +41,9 @@ export function registerRemote(options: {
 	quiesce(): void;
 	close(): Promise<void>;
 } {
-	const service = new RemoteSessionService(options.resolver, options.ssh, options.verifyHostKey);
+	const service = new RemoteSessionService(
+		new RemoteSessionModel(options.resolver, options.ssh, options.verifyHostKey),
+	);
 	const publicApi: RemoteSessions = {
 		open: async (input) => sessionView(await service.open(openInput(input))),
 
