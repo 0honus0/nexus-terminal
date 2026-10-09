@@ -24,6 +24,9 @@ import type {
 	AgentEventPageView,
 } from './public.js';
 import { agentBoundary } from './agent-errors.js';
+import type { AccessPublicApi } from '../access/public.js';
+import type { HttpRoute } from '../../platform/http/http-server.js';
+import { createAgentHttpRoutes } from './interfaces/http/agent-http.js';
 
 function toAppView(value: AgentApp): AgentAppView {
 	return { id: value.id, name: value.name, createdAt: value.createdAt };
@@ -79,10 +82,15 @@ function toEventPage(value: RunEventPage): AgentEventPageView {
 	return { items: value.items.map(toEventView), nextCursor: value.nextCursor };
 }
 
-export function registerAgent(sqlite: SqliteRuntime): AgentStateApi {
+export interface AgentRegistration {
+	publicApi: AgentStateApi;
+	routes(access: AccessPublicApi): HttpRoute[];
+}
+
+export function registerAgent(sqlite: SqliteRuntime): AgentRegistration {
 	const scope = new ScopeService(new ScopeModel(new SqliteScopeStorage(sqlite)));
 	const runs = new RunService(new RunModel(new SqliteRunStorage(sqlite)));
-	return {
+	const publicApi: AgentStateApi = {
 		createApp: (userId, name) => agentBoundary(async () => toAppView(await scope.createApp(userId, name))),
 
 		createThread: (userId, appId, title) =>
@@ -131,5 +139,10 @@ export function registerAgent(sqlite: SqliteRuntime): AgentStateApi {
 				const result = await runs.listEvents(userId, appId, id, after, limit);
 				return result === null ? null : toEventPage(result);
 			}),
+	};
+	return {
+		publicApi,
+
+		routes: (access) => createAgentHttpRoutes(access, publicApi),
 	};
 }

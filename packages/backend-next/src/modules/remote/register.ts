@@ -4,16 +4,23 @@ import { RemoteSessionModel } from './sessions/model/session-model.js';
 import { RemoteSessionService } from './sessions/service/session-service.js';
 import type { RemoteSessions, SessionView, OpenShellRequest } from './public.js';
 import type { OpenSessionRequest, RemoteSessionSnapshot } from './sessions/model/session-types.js';
+import type { AccessPublicApi } from '../access/public.js';
+import type { HttpRoute, HttpWebSocketRoute } from '../../platform/http/http-server.js';
+import { RemoteSessionOwner } from './sessions/service/session-owner.js';
+import { createRemoteHttpRoutes, createRemoteWebSocketRoute } from './interfaces/http/remote-http.js';
 
 interface RemoteRegistrationOptions {
 	resolver: TrustedSshTargetResolver;
 	ssh: MachineSshFactory;
 	verifyHostKey: MachineConnectOptions['verifyHostKey'] | null;
 	hostKeys: Pick<HostKeyManagement, 'list'>;
+	access: AccessPublicApi;
 }
 
 interface RemoteRegistration {
 	publicApi: RemoteSessions;
+	httpRoutes(): HttpRoute[];
+	webSocketRoutes(): HttpWebSocketRoute[];
 	quiesce(): void;
 	close(): Promise<void>;
 }
@@ -76,11 +83,34 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 
 		closeSession: (id) => service.closeSession(id),
 	};
+	const owner = new RemoteSessionOwner(options.access, publicApi);
 	return {
 		publicApi,
 
-		quiesce: () => service.quiesce(),
+		httpRoutes: () => createRemoteHttpRoutes(owner, options.access),
 
-		close: () => service.close(),
+		webSocketRoutes: () => [createRemoteWebSocketRoute(owner, publicApi)],
+
+		quiesce: () => {
+			owner.quiesce();
+			service.quiesce();
+		},
+
+		close: async () => {
+			const failures: unknown[] = [];
+			try {
+				await owner.close();
+			} catch (error) {
+				failures.push(error);
+			}
+			try {
+				await service.close();
+			} catch (error) {
+				failures.push(error);
+			}
+			if (failures.length) {
+				throw new AggregateError(failures, 'Remote module shutdown failed');
+			}
+		},
 	};
 }

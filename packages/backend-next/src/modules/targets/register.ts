@@ -31,6 +31,9 @@ import { HostKeyModel } from './host-keys/model/host-key-model.js';
 import { HostKeyService } from './host-keys/service/host-key-service.js';
 import type { TargetsPublicApi, TrustedSshTargetResolver } from './public.js';
 import { targetsBoundary } from './target-errors.js';
+import type { AccessPublicApi } from '../access/public.js';
+import type { HttpRoute } from '../../platform/http/http-server.js';
+import { createTargetsRoutes } from './interfaces/http/target-http.js';
 import {
 	toConnectionInput,
 	toConnectionPatch,
@@ -61,6 +64,7 @@ interface TargetsRegistrationOptions {
 interface TargetsRegistration {
 	publicApi: TargetsPublicApi;
 	trustedSshTargets: TrustedSshTargetResolver;
+	routes(access: AccessPublicApi): HttpRoute[];
 }
 
 /** Register real internal owners; expose only explicit, allowlisted projections. */
@@ -211,5 +215,10 @@ export function registerTargets({ sqlite, secrets }: TargetsRegistrationOptions)
 		resolveStored: (id) => targetsBoundary(async () => toTrustedTargetView(await resolver.resolveStored(id))),
 	};
 
-	return { publicApi, trustedSshTargets };
+	return {
+		publicApi,
+		trustedSshTargets,
+
+		routes: (access) => createTargetsRoutes(access, publicApi),
+	};
 }
