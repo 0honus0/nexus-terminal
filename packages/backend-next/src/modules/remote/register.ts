@@ -1,5 +1,5 @@
 import type { MachineSshFactory, MachineConnectOptions } from '../../platform/ssh/ssh-port.js';
-import type { TrustedSshTargetResolver } from '../targets/public.js';
+import type { TrustedSshTargetResolver, HostKeyManagement } from '../targets/public.js';
 import { RemoteSessionModel } from './sessions/model/session-model.js';
 import { RemoteSessionService } from './sessions/service/session-service.js';
 import type { RemoteSessions, SessionView, OpenShellRequest } from './public.js';
@@ -9,6 +9,7 @@ interface RemoteRegistrationOptions {
 	resolver: TrustedSshTargetResolver;
 	ssh: MachineSshFactory;
 	verifyHostKey: MachineConnectOptions['verifyHostKey'] | null;
+	hostKeys: Pick<HostKeyManagement, 'list'>;
 }
 
 interface RemoteRegistration {
@@ -45,7 +46,7 @@ function toOpenSessionRequest(input: OpenShellRequest): OpenSessionRequest {
 
 export function registerRemote(options: RemoteRegistrationOptions): RemoteRegistration {
 	const service = new RemoteSessionService(
-		new RemoteSessionModel(options.resolver, options.ssh, options.verifyHostKey),
+		new RemoteSessionModel(options.resolver, options.ssh, options.verifyHostKey, options.hostKeys),
 	);
 	const publicApi: RemoteSessions = {
 		open: async (input) => toSessionView(await service.open(toOpenSessionRequest(input))),
@@ -68,6 +69,10 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		onDrain: (id, listener) => service.onDrain(id, listener),
 
 		onClosed: (id, listener) => service.onClosed(id, listener),
+
+		pauseOutput: (id) => service.pauseOutput(id),
+
+		resumeOutput: (id) => service.resumeOutput(id),
 
 		closeSession: (id) => service.closeSession(id),
 	};

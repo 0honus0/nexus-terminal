@@ -1,3 +1,4 @@
+import type { TargetHostKeyView } from '@nexus-terminal/shared/targets/host-keys';
 import type { ProxyType } from '@nexus-terminal/shared/proxies/values';
 import type {
 	TargetConnectionInput,
@@ -56,6 +57,16 @@ export type SshCredentialInput = TargetCredentialInput;
 
 export type CredentialMutation = TargetCredentialMutation;
 
+/** A pinned SSH host public key is NOT a Connection configuration fingerprint. */
+export type HostKeyTrustView = TargetHostKeyView;
+
+export interface HostKeyManagement {
+	list(): Promise<HostKeyTrustView[]>;
+	/** Confirmation requires the human to compare the fingerprint out of band. */
+	confirm(input: { host: string; port: number; fingerprint: string }): Promise<HostKeyTrustView>;
+	remove(host: string, port: number): Promise<boolean>;
+}
+
 export interface ConnectionCatalog {
 	list(): Promise<ConnectionSnapshot[]>;
 	get(id: number): Promise<ConnectionSnapshot | null>;
@@ -106,6 +117,7 @@ export type TargetsPublicApi = ConnectionCatalog &
 		tags: TagManagement;
 		sshKeys: SshKeyManagement;
 		credentials: ConnectionCredentialManagement;
+		hostKeys: HostKeyManagement;
 	};
 
 /** Trusted backend-only machine connection output. Never expose via management HTTP. */

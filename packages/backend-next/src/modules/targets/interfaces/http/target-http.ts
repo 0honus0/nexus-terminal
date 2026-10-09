@@ -111,6 +111,37 @@ function status(context: HttpRouteContext, result: { status: string }, value: un
 
 export function createTargetsRoutes(access: AccessPublicApi, targets: TargetsPublicApi): HttpRoute[] {
 	const routes: HttpRoute[] = [];
+	addRoute(routes, 'GET', '/host-keys', access, async (ctx) => {
+		const keys = await targets.hostKeys.list();
+		ctx.send(
+			200,
+			keys.map((key) => ({
+				host: key.host,
+				port: key.port,
+				fingerprint: key.fingerprint,
+				confirmedAt: key.confirmedAt,
+			})),
+		);
+	});
+	addRoute(routes, 'POST', '/host-keys/confirm', access, async (ctx) => {
+		const row = fields(await ctx.json(), ['host', 'port', 'fingerprint'], ['host', 'port', 'fingerprint']);
+		const confirmed = await targets.hostKeys.confirm({
+			host: stringField(row.host, 253),
+			port: numberField(row.port, 65535),
+			fingerprint: stringField(row.fingerprint, 51),
+		});
+		ctx.send(201, {
+			host: confirmed.host,
+			port: confirmed.port,
+			fingerprint: confirmed.fingerprint,
+			confirmedAt: confirmed.confirmedAt,
+		});
+	});
+	addRoute(routes, 'POST', '/host-keys/remove', access, async (ctx) => {
+		const row = fields(await ctx.json(), ['host', 'port'], ['host', 'port']);
+		const removed = await targets.hostKeys.remove(stringField(row.host, 253), numberField(row.port, 65535));
+		ctx.send(removed ? 200 : 404, removed ? { removed: true } : { code: 'not_found' });
+	});
 	addRoute(routes, 'GET', '/connections', access, async (ctx) =>
 		ctx.send(200, (await targets.list()).map(toConnectionDto)),
 	);

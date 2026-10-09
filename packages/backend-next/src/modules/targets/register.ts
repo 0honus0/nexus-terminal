@@ -26,6 +26,9 @@ import { ConnectionImportService } from './import/service/connection-import-serv
 import { SqliteSshTargetStorage } from './resolver/adapters/sqlite/ssh-target-sql.js';
 import { SshTargetModel } from './resolver/model/ssh-target-model.js';
 import { SshTargetService } from './resolver/service/ssh-target-service.js';
+import { SqliteHostKeyStorage } from './host-keys/adapters/sqlite/host-key-sql.js';
+import { HostKeyModel } from './host-keys/model/host-key-model.js';
+import { HostKeyService } from './host-keys/service/host-key-service.js';
 import type { TargetsPublicApi, TrustedSshTargetResolver } from './public.js';
 import { targetsBoundary } from './target-errors.js';
 import {
@@ -78,8 +81,38 @@ export function registerTargets({ sqlite, secrets }: TargetsRegistrationOptions)
 		secrets,
 	);
 	const resolver = new SshTargetService(new SshTargetModel(new SqliteSshTargetStorage(sqlite)), secrets);
+	const hostKeys = new HostKeyService(new HostKeyModel(new SqliteHostKeyStorage(sqlite)));
 
 	const publicApi: TargetsPublicApi = {
+		hostKeys: {
+			list: () =>
+				targetsBoundary(async () =>
+					(await hostKeys.list()).map((key) => ({
+						host: key.host,
+						port: key.port,
+						fingerprint: key.fingerprint,
+						confirmedAt: key.confirmedAt,
+					})),
+				),
+
+			confirm: (input) =>
+				targetsBoundary(async () => {
+					const key = await hostKeys.confirm({
+						host: input.host,
+						port: input.port,
+						fingerprint: input.fingerprint,
+					});
+					return {
+						host: key.host,
+						port: key.port,
+						fingerprint: key.fingerprint,
+						confirmedAt: key.confirmedAt,
+					};
+				}),
+
+			remove: (host, port) => targetsBoundary(() => hostKeys.remove(host, port)),
+		},
+
 		list: () => targetsBoundary(async () => (await service.list()).map(toConnectionView)),
 
 		get: (id) =>

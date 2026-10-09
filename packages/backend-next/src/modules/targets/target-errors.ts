@@ -30,6 +30,7 @@ const invalidInputs = new Set([
 	'Invalid SSH key name',
 	'Invalid SSH private key',
 	'Invalid SSH password',
+	'Invalid host key trust',
 	'Invalid connection metadata',
 	'Invalid type or route',
 	'Invalid RemoteApp settings',

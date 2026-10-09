@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
 import type { OpenSessionRequest, RemoteSessionResource } from './session-types.js';
 import type { TrustedResolvedSshTarget, TrustedSshTargetResolver } from '../../../targets/public.js';
+import type { HostKeyManagement } from '../../../targets/public.js';
 import type {
 	MachineEndpoint,
 	MachineRoute,
@@ -167,12 +169,10 @@ export class RemoteSessionModel {
 		private readonly resolver: TrustedSshTargetResolver,
 		private readonly ssh: MachineSshFactory,
 		private readonly verifyHostKey: MachineConnectOptions['verifyHostKey'] | null,
+		private readonly hostKeys: Pick<HostKeyManagement, 'list'>,
 	) {}
 
 	async open(request: OpenSessionRequest): Promise<RemoteSessionResource> {
-		if (!this.verifyHostKey) {
-			throw new Error('SSH host-key verification policy is not configured');
-		}
 		request.signal?.throwIfAborted();
 		const controller = new AbortController();
 
@@ -187,6 +187,22 @@ export class RemoteSessionModel {
 		let machine: MachineConnection | null = null;
 		try {
 			const target = await this.resolver.resolveStored(request.targetId);
+			// All hops and the final endpoint must have explicit operator-confirmed
+			// public-key fingerprints. No TOFU / accept-all fallback.
+			const trusts = await this.hostKeys.list();
+			const pinned = new Map(trusts.map((key) => [key.host.toLowerCase() + ':' + key.port, key.fingerprint]));
+
+			const verify: MachineConnectOptions['verifyHostKey'] = (host, port, publicKey) => {
+				const fingerprint =
+					'SHA256:' + createHash('sha256').update(publicKey).digest('base64').replace(/=+$/u, '');
+				const expected = pinned.get(host.toLowerCase() + ':' + port);
+				return (
+					expected !== undefined &&
+					expected === fingerprint &&
+					(this.verifyHostKey === null || this.verifyHostKey(host, port, publicKey))
+				);
+			};
+
 			controller.signal.throwIfAborted();
 			const remaining = deadline - Date.now();
 			if (remaining <= 0) {
@@ -195,7 +211,7 @@ export class RemoteSessionModel {
 			machine = await this.ssh.connect(toMachineTarget(target), {
 				timeoutMs: remaining,
 				signal: controller.signal,
-				verifyHostKey: this.verifyHostKey,
+				verifyHostKey: verify,
 			});
 			controller.signal.throwIfAborted();
 			const shell = await machine.openShell(
