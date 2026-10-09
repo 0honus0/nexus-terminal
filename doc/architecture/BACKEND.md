@@ -8,6 +8,8 @@
 
 Targets 的模块出口独立定义管理与可信 SSH 契约，出入对象均通过字段白名单转换，普通管理结果不含凭据。可信解析作为独立 Backend 能力注入 Remote；Remote 将其转换为与业务无关的 SSH 机器请求。Targets 安全错误码、SQLite 不可用状态和统一跳板限制均已按真实 owner 实现；整体关机先取消并关闭 Remote Session，再关闭 SQLite。具体机器通道与待验收场景见[架构重构](../架构重构.md)，后续功能施工见[下一阶段实施方案](../后端重构下一阶段实施方案.md)。本节不改变下文现行旧包的 owner。
 
+SQLite Worker 传递 `node:sqlite` 的数值 `errcode`，保留扩展结果码；Runtime 按低 8 位分类 constraint、busy/locked 与普通 SQL 失败，Targets 再按扩展外键码形成安全业务错误。Node 的通用 `ERR_SQLITE_ERROR` 字符串不作为 SQLite 类别判断依据。
+
 ## 技术基线
 
 Runner PackInstaller.runProcess复用registerManagedProcess(kind pack)覆盖mise/工具版本检查，opaque invocation ID不含command payload，登记失败kill/close收敛，exit清派生group、close后完成Promise；shutdown/startup仍由共享managed-process registry负责，无新增pack registry。

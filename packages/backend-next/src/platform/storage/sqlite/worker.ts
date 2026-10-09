@@ -24,12 +24,12 @@ parentPort!.on('message', (message: { id: number; kind: string; sql?: string; pa
 		}
 		parentPort!.postMessage({ id: message.id, value });
 	} catch (error) {
-		const err = error as Error & { code?: unknown };
+		const err = error as Error & { errcode?: unknown };
 		parentPort!.postMessage({
 			id: message.id,
 			error: {
 				message: err instanceof Error ? err.message : 'Unknown SQLite failure',
-				code: typeof err?.code === 'string' ? err.code : null,
+				code: typeof err?.errcode === 'number' && Number.isSafeInteger(err.errcode) ? err.errcode : null,
 			},
 		});
 	}

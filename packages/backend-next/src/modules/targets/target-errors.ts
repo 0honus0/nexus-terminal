@@ -1,4 +1,4 @@
-import { SqliteFailure } from '../../platform/storage/sqlite/sqlite-errors.js';
+import { SqliteFailure, SQLITE_CONSTRAINT_FOREIGNKEY } from '../../platform/storage/sqlite/sqlite-errors.js';
 
 export type TargetErrorCode =
 	| 'invalid_input'
@@ -62,7 +62,7 @@ export function targetErrorCode(error: unknown): TargetErrorCode {
 	if (error instanceof TargetOperationError) return error.code;
 	if (error instanceof SqliteFailure) {
 		if (error.kind === 'constraint') {
-			if (error.sqliteCode === 'SQLITE_CONSTRAINT_FOREIGNKEY') return 'reference_in_use';
+			if (error.sqliteCode === SQLITE_CONSTRAINT_FOREIGNKEY) return 'reference_in_use';
 			return 'conflict';
 		}
 		if (

@@ -1,3 +1,5 @@
+export const SQLITE_CONSTRAINT_FOREIGNKEY = 787;
+
 /** Stable technical error contract; business modules decide how to expose it. */
 export type SqliteFailureKind =
 	| 'closed'
@@ -13,7 +15,7 @@ export type SqliteFailureKind =
 export class SqliteFailure extends Error {
 	constructor(
 		readonly kind: SqliteFailureKind,
-		readonly sqliteCode: string | null = null,
+		readonly sqliteCode: number | null = null,
 		options?: ErrorOptions,
 	) {
 		super('SQLite ' + kind, options);
@@ -23,15 +25,14 @@ export class SqliteFailure extends Error {
 
 export interface WorkerSqliteError {
 	message: string;
-	code: string | null;
+	code: number | null;
 }
 
 export function sqliteError(value: WorkerSqliteError): SqliteFailure {
 	const code = value.code;
-	const kind: SqliteFailureKind = code?.startsWith('SQLITE_CONSTRAINT')
-		? 'constraint'
-		: code === 'SQLITE_BUSY' || code === 'SQLITE_LOCKED'
-			? 'busy'
-			: 'sql';
+	// node:sqlite exposes the SQLite extended result in errcode, not Error.code.
+	const primaryCode = code === null ? null : code & 0xff;
+	const kind: SqliteFailureKind =
+		primaryCode === 19 ? 'constraint' : primaryCode === 5 || primaryCode === 6 ? 'busy' : 'sql';
 	return new SqliteFailure(kind, code, { cause: new Error(value.message) });
 }
