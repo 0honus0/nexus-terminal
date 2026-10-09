@@ -6,6 +6,7 @@ export interface HttpRouteContext {
 	readonly method: string;
 	readonly path: string;
 	readonly query: URLSearchParams;
+	readonly params: Readonly<Record<string, string>>;
 	readonly request: IncomingMessage;
 	readonly response: ServerResponse;
 	readonly sourceIp: string;
@@ -170,12 +171,16 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 	}
 	const trust = proxyaddr.compile([...options.trustedProxies]);
 	const routes = new Map<string, HttpRoute>();
+	const parameterized: { route: HttpRoute; parts: string[] }[] = [];
 	for (const route of options.routes) {
 		const key = route.method + ' ' + route.path;
 		if (routes.has(key)) {
 			throw new Error('Duplicate HTTP route');
 		}
 		routes.set(key, route);
+		if (route.path.split('/').some((part) => part.startsWith(':'))) {
+			parameterized.push({ route, parts: route.path.split('/') });
+		}
 	}
 
 	let accepting = true;
@@ -191,7 +196,33 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 				throw new HttpInputFailure(400, 'invalid_path');
 			}
 			const method = request.method ?? '';
-			const route = routes.get(method + ' ' + url.pathname);
+			let route = routes.get(method + ' ' + url.pathname);
+			const params: Record<string, string> = {};
+			if (!route) {
+				const actualParts = url.pathname.split('/');
+				for (const entry of parameterized) {
+					if (entry.route.method !== method || entry.parts.length !== actualParts.length) {
+						continue;
+					}
+					const candidate: Record<string, string> = {};
+					const matched = entry.parts.every((part, index) => {
+						const actual = actualParts[index];
+						if (part.startsWith(':')) {
+							if (!actual || !/^[A-Za-z0-9_-]{1,64}$/u.test(actual)) {
+								return false;
+							}
+							candidate[part.slice(1)] = actual;
+							return true;
+						}
+						return part === actual;
+					});
+					if (matched) {
+						route = entry.route;
+						Object.assign(params, candidate);
+						break;
+					}
+				}
+			}
 			if (!route) {
 				sendJson(response, 404, { code: 'not_found' });
 				return;
@@ -200,6 +231,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 				method,
 				path: url.pathname,
 				query: new URLSearchParams(url.searchParams),
+				params,
 				request,
 				response,
 				sourceIp: proxyaddr(request, trust),

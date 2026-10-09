@@ -31,7 +31,7 @@ export interface BackendApplication {
 	trustedSshTargets: TrustedSshTargetResolver;
 	remote: RemoteSessions;
 	access: AccessPublicApi;
-	/** Only Access is installed until later authenticated Targets/Remote route batches. */
+	/** Access plus authenticated Targets management only; Remote remains internal. */
 	listenHttp(options: AccessHttpOptions): Promise<string>;
 	close(): Promise<void>;
 }
@@ -80,7 +80,7 @@ function createLifecycle(
 			return Promise.reject(new Error('HTTP already started or application closing'));
 		}
 		const secureCookies = new URL(options.publicOrigin).protocol === 'https:';
-		const routes = modules.accessRoutes(secureCookies);
+		const routes = modules.httpRoutes(secureCookies);
 		http = openHttpListener({
 			publicOrigin: options.publicOrigin,
 			bindHost: options.bindHost,

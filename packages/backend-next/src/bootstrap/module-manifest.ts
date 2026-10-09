@@ -9,11 +9,12 @@ import type { RemoteSessions } from '../modules/remote/public.js';
 import { registerAccess } from '../modules/access/register.js';
 import type { AccessPublicApi } from '../modules/access/public.js';
 import type { HttpRoute } from '../platform/http/http-server.js';
+import { createTargetsRoutes } from '../modules/targets/interfaces/http/target-http.js';
 import type { LoginFailurePolicyOptions } from '../modules/access/authentication/service/login-failure-policy.js';
 
 export interface RegisteredModules {
 	access: AccessPublicApi;
-	accessRoutes(secureCookies: boolean): HttpRoute[];
+	httpRoutes(secureCookies: boolean): HttpRoute[];
 	targets: TargetsPublicApi;
 	trustedSshTargets: TrustedSshTargetResolver;
 	remote: RemoteSessions;
@@ -37,7 +38,12 @@ export function registerModules(
 	});
 	return {
 		access: access.publicApi,
-		accessRoutes: access.routes,
+
+		httpRoutes: (secureCookies) => [
+			...access.routes(secureCookies),
+			...createTargetsRoutes(access.publicApi, targets.publicApi),
+		],
+
 		targets: targets.publicApi,
 		trustedSshTargets: targets.trustedSshTargets,
 		remote: remote.publicApi,
