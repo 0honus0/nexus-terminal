@@ -8,159 +8,164 @@ import type { OfficialAgentPluginSource } from './official-plugin-source';
 import type { PluginInstallService } from './plugin-install.service';
 
 export interface RecommendedAgentPluginView {
-  appId: string;
-  installed: boolean;
-  installedVersion: string | null;
-  enabled: boolean;
-  availableVersion: string;
-  displayName: string;
-  description: string;
-  catalogUrl: string;
-  publisherKeyId: string;
+	appId: string;
+	installed: boolean;
+	installedVersion: string | null;
+	enabled: boolean;
+	availableVersion: string;
+	displayName: string;
+	description: string;
+	catalogUrl: string;
+	publisherKeyId: string;
 }
 
 export interface RecommendedAgentPluginInstallResult {
-  app: AppView;
-  installedNow: boolean;
+	app: AppView;
+	installedNow: boolean;
 }
 
 export class AgentOnboardingService {
-  constructor(
-    private readonly plugins: PluginInstallService,
-    private readonly lifecycle: AppLifecycleService,
-    private readonly grants: AppGrantRepositoryPort,
-    private readonly capabilities: CapabilityRegistry,
-    private readonly source: OfficialAgentPluginSource,
-  ) {}
+	constructor(
+		private readonly plugins: PluginInstallService,
+		private readonly lifecycle: AppLifecycleService,
+		private readonly grants: AppGrantRepositoryPort,
+		private readonly capabilities: CapabilityRegistry,
+		private readonly source: OfficialAgentPluginSource,
+	) {}
 
-  async recommended(userId: number, signal?: AbortSignal): Promise<RecommendedAgentPluginView> {
-    const installation = (await this.plugins.listInstallations(userId)).find(
-      (candidate) => candidate.appId === this.source.recommendedAppId && candidate.status === 'installed',
-    );
-    if (installation) {
-      const [app, versions] = await Promise.all([
-        this.lifecycle.get({ userId, appId: this.source.recommendedAppId }),
-        this.plugins.listVersions(userId, this.source.recommendedAppId),
-      ]);
-      const installed = versions.find(
-        (candidate) => candidate.version === installation.version && candidate.status === 'installed',
-      );
-      if (!installed) throw new Error('PLUGIN_VERSION_NOT_FOUND');
-      const description =
-        installed.manifest.agents?.[0]?.description ?? `Installed Nexus plugin: ${installed.manifest.displayName}.`;
-      return {
-        appId: installed.appId,
-        installed: true,
-        installedVersion: installed.version,
-        enabled: app.desiredState === 'enabled' && ['running', 'degraded'].includes(app.observedState),
-        availableVersion: installed.version,
-        displayName: installed.manifest.displayName,
-        description,
-        catalogUrl: this.source.catalogUrl,
-        publisherKeyId: installed.publisherKeyId,
-      };
-    }
+	async recommended(userId: number, signal?: AbortSignal): Promise<RecommendedAgentPluginView> {
+		const installation = (await this.plugins.listInstallations(userId)).find(
+			(candidate) => candidate.appId === this.source.recommendedAppId && candidate.status === 'installed',
+		);
+		if (installation) {
+			const [app, versions] = await Promise.all([
+				this.lifecycle.get({ userId, appId: this.source.recommendedAppId }),
+				this.plugins.listVersions(userId, this.source.recommendedAppId),
+			]);
+			const installed = versions.find(
+				(candidate) => candidate.version === installation.version && candidate.status === 'installed',
+			);
+			if (!installed) throw new Error('PLUGIN_VERSION_NOT_FOUND');
+			const description =
+				installed.manifest.agents?.[0]?.description ??
+				`Installed Nexus plugin: ${installed.manifest.displayName}.`;
+			return {
+				appId: installed.appId,
+				installed: true,
+				installedVersion: installed.version,
+				enabled: app.desiredState === 'enabled' && ['running', 'degraded'].includes(app.observedState),
+				availableVersion: installed.version,
+				displayName: installed.manifest.displayName,
+				description,
+				catalogUrl: this.source.catalogUrl,
+				publisherKeyId: installed.publisherKeyId,
+			};
+		}
 
-    const catalog = await this.requireOfficialCatalog(signal);
-    const entry = catalog.packages
-      .filter(
-        (candidate) =>
-          candidate.appId === this.source.recommendedAppId &&
-          candidate.publisherKeyId === this.source.publisherKeyId &&
-          candidate.compatible === true,
-      )
-      .sort((left, right) => rcompare(left.version, right.version))[0];
-    if (!entry) throw new Error('OFFICIAL_RECOMMENDED_PLUGIN_UNAVAILABLE');
-    return {
-      appId: entry.appId,
-      installed: false,
-      installedVersion: null,
-      enabled: false,
-      availableVersion: entry.version,
-      displayName: entry.displayName,
-      description: entry.description,
-      catalogUrl: catalog.repositoryUrl,
-      publisherKeyId: entry.publisherKeyId,
-    };
-  }
+		const catalog = await this.requireOfficialCatalog(signal);
+		const entry = catalog.packages
+			.filter(
+				(candidate) =>
+					candidate.appId === this.source.recommendedAppId &&
+					candidate.publisherKeyId === this.source.publisherKeyId &&
+					candidate.compatible === true,
+			)
+			.sort((left, right) => rcompare(left.version, right.version))[0];
+		if (!entry) throw new Error('OFFICIAL_RECOMMENDED_PLUGIN_UNAVAILABLE');
+		return {
+			appId: entry.appId,
+			installed: false,
+			installedVersion: null,
+			enabled: false,
+			availableVersion: entry.version,
+			displayName: entry.displayName,
+			description: entry.description,
+			catalogUrl: catalog.repositoryUrl,
+			publisherKeyId: entry.publisherKeyId,
+		};
+	}
 
-  async installRecommended(userId: number, signal?: AbortSignal): Promise<RecommendedAgentPluginInstallResult> {
-    const existing = (await this.plugins.listInstallations(userId)).find(
-      (candidate) => candidate.appId === this.source.recommendedAppId && candidate.status === 'installed',
-    );
-    if (existing) {
-      const scope = { userId, appId: this.source.recommendedAppId };
-      const current = await this.lifecycle.get(scope);
-      const ready = current.desiredState === 'enabled' && ['running', 'degraded'].includes(current.observedState);
-      const app = ready ? current : await this.lifecycle.setEnabled(scope, true, current.version);
-      logger.info(
-        {
-          userId,
-          appId: app.appId,
-          appVersion: app.version,
-          installedNow: false,
-          enabled: app.desiredState === 'enabled',
-        },
-        'Agent recommended plugin onboarding completed',
-      );
-      return { app, installedNow: false };
-    }
+	async installRecommended(userId: number, signal?: AbortSignal): Promise<RecommendedAgentPluginInstallResult> {
+		const existing = (await this.plugins.listInstallations(userId)).find(
+			(candidate) => candidate.appId === this.source.recommendedAppId && candidate.status === 'installed',
+		);
+		if (existing) {
+			const scope = { userId, appId: this.source.recommendedAppId };
+			const current = await this.lifecycle.get(scope);
+			const ready = current.desiredState === 'enabled' && ['running', 'degraded'].includes(current.observedState);
+			const app = ready ? current : await this.lifecycle.setEnabled(scope, true, current.version);
+			logger.info(
+				{
+					userId,
+					appId: app.appId,
+					appVersion: app.version,
+					installedNow: false,
+					enabled: app.desiredState === 'enabled',
+				},
+				'Agent recommended plugin onboarding completed',
+			);
+			return { app, installedNow: false };
+		}
 
-    const catalog = await this.requireOfficialCatalog(signal);
-    const entry = catalog.packages
-      .filter(
-        (candidate) =>
-          candidate.appId === this.source.recommendedAppId &&
-          candidate.publisherKeyId === this.source.publisherKeyId &&
-          candidate.compatible === true,
-      )
-      .sort((left, right) => rcompare(left.version, right.version))[0];
-    if (!entry) throw new Error('OFFICIAL_RECOMMENDED_PLUGIN_UNAVAILABLE');
+		const catalog = await this.requireOfficialCatalog(signal);
+		const entry = catalog.packages
+			.filter(
+				(candidate) =>
+					candidate.appId === this.source.recommendedAppId &&
+					candidate.publisherKeyId === this.source.publisherKeyId &&
+					candidate.compatible === true,
+			)
+			.sort((left, right) => rcompare(left.version, right.version))[0];
+		if (!entry) throw new Error('OFFICIAL_RECOMMENDED_PLUGIN_UNAVAILABLE');
 
-    const stage = await this.plugins.stageOfficial(userId, this.source, entry.appId, entry.version, signal);
-    const verified = await this.plugins.verify(userId, stage.id);
-    if (
-      verified.plugin.appId !== this.source.recommendedAppId ||
-      verified.plugin.publisherKeyId !== this.source.publisherKeyId
-    ) {
-      logger.warn(
-        {
-          userId,
-          expectedAppId: this.source.recommendedAppId,
-          actualAppId: verified.plugin.appId,
-          expectedPublisherKeyId: this.source.publisherKeyId,
-          actualPublisherKeyId: verified.plugin.publisherKeyId,
-        },
-        'Agent recommended plugin identity verification failed',
-      );
-      throw new Error('OFFICIAL_RECOMMENDED_PLUGIN_IDENTITY_MISMATCH');
-    }
-    const installed = await this.plugins.install(userId, stage.id);
-    const scope = { userId, appId: installed.app.appId };
-    await this.grants.replace(
-      scope,
-      installed.app.policyRevision,
-      installed.plugin.manifest.capabilities.map((capability) =>
-        this.capabilities.grant(capability, this.capabilities.defaultScope(capability), Math.floor(Date.now() / 1000)),
-      ),
-    );
-    const afterGrants = await this.lifecycle.get(scope);
-    const app = await this.lifecycle.setEnabled(scope, true, afterGrants.version);
-    logger.info(
-      {
-        userId,
-        appId: app.appId,
-        appVersion: app.version,
-        installedVersion: installed.plugin.version,
-        grantedCapabilityCount: installed.plugin.manifest.capabilities.length,
-        installedNow: true,
-      },
-      'Agent recommended plugin onboarding completed',
-    );
-    return { app, installedNow: true };
-  }
+		const stage = await this.plugins.stageOfficial(userId, this.source, entry.appId, entry.version, signal);
+		const verified = await this.plugins.verify(userId, stage.id);
+		if (
+			verified.plugin.appId !== this.source.recommendedAppId ||
+			verified.plugin.publisherKeyId !== this.source.publisherKeyId
+		) {
+			logger.warn(
+				{
+					userId,
+					expectedAppId: this.source.recommendedAppId,
+					actualAppId: verified.plugin.appId,
+					expectedPublisherKeyId: this.source.publisherKeyId,
+					actualPublisherKeyId: verified.plugin.publisherKeyId,
+				},
+				'Agent recommended plugin identity verification failed',
+			);
+			throw new Error('OFFICIAL_RECOMMENDED_PLUGIN_IDENTITY_MISMATCH');
+		}
+		const installed = await this.plugins.install(userId, stage.id);
+		const scope = { userId, appId: installed.app.appId };
+		await this.grants.replace(
+			scope,
+			installed.app.policyRevision,
+			installed.plugin.manifest.capabilities.map((capability) =>
+				this.capabilities.grant(
+					capability,
+					this.capabilities.defaultScope(capability),
+					Math.floor(Date.now() / 1000),
+				),
+			),
+		);
+		const afterGrants = await this.lifecycle.get(scope);
+		const app = await this.lifecycle.setEnabled(scope, true, afterGrants.version);
+		logger.info(
+			{
+				userId,
+				appId: app.appId,
+				appVersion: app.version,
+				installedVersion: installed.plugin.version,
+				grantedCapabilityCount: installed.plugin.manifest.capabilities.length,
+				installedNow: true,
+			},
+			'Agent recommended plugin onboarding completed',
+		);
+		return { app, installedNow: true };
+	}
 
-  private requireOfficialCatalog(signal?: AbortSignal) {
-    return this.plugins.officialCatalog(this.source, signal);
-  }
+	private requireOfficialCatalog(signal?: AbortSignal) {
+		return this.plugins.officialCatalog(this.source, signal);
+	}
 }

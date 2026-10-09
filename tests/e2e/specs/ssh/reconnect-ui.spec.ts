@@ -3,873 +3,890 @@ import type { APIRequestContext, Locator, Page, TestInfo } from '@playwright/tes
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
-  E2E_SSH,
-  configureSshE2eSettings,
-  connectTestSshFromConnectionsPage,
-  ensureTestSshConnection,
-  resetTestSshFilesystem,
-  setTestSshOnline,
+	E2E_SSH,
+	configureSshE2eSettings,
+	connectTestSshFromConnectionsPage,
+	ensureTestSshConnection,
+	resetTestSshFilesystem,
+	setTestSshOnline,
 } from '../../support/ssh';
 import { step } from '../../support/steps';
 
 const MULTI_SESSION_NAMES = [
-  'M08 Workspace Session Alpha Long Label',
-  'M08 Workspace Session Bravo Long Label',
-  'M08 Workspace Session Charlie Long Label',
+	'M08 Workspace Session Alpha Long Label',
+	'M08 Workspace Session Bravo Long Label',
+	'M08 Workspace Session Charlie Long Label',
 ] as const;
 
 async function removeMultiSessionConnections(request: APIRequestContext): Promise<void> {
-  const response = await request.get('/api/v1/connections');
-  expect(response.ok()).toBeTruthy();
-  const connections = (await response.json()) as Array<{ id: number; name?: string | null }>;
-  for (const connection of connections.filter((item) =>
-    MULTI_SESSION_NAMES.includes(item.name as (typeof MULTI_SESSION_NAMES)[number]),
-  )) {
-    const remove = await request.delete(`/api/v1/connections/${connection.id}`);
-    expect(remove.ok()).toBeTruthy();
-  }
+	const response = await request.get('/api/v1/connections');
+	expect(response.ok()).toBeTruthy();
+	const connections = (await response.json()) as Array<{ id: number; name?: string | null }>;
+	for (const connection of connections.filter((item) =>
+		MULTI_SESSION_NAMES.includes(item.name as (typeof MULTI_SESSION_NAMES)[number]),
+	)) {
+		const remove = await request.delete(`/api/v1/connections/${connection.id}`);
+		expect(remove.ok()).toBeTruthy();
+	}
 }
 
 async function createMultiSessionConnections(request: APIRequestContext): Promise<number[]> {
-  const ids: number[] = [];
-  for (const name of MULTI_SESSION_NAMES) {
-    const response = await request.post('/api/v1/connections', {
-      data: {
-        name,
-        type: 'SSH',
-        host: E2E_SSH.host,
-        port: E2E_SSH.port,
-        username: E2E_SSH.username,
-        authMethod: 'password',
-        password: E2E_SSH.password,
-      },
-    });
-    expect(response.status()).toBe(201);
-    ids.push(((await response.json()) as { connection: { id: number } }).connection.id);
-  }
-  return ids;
+	const ids: number[] = [];
+	for (const name of MULTI_SESSION_NAMES) {
+		const response = await request.post('/api/v1/connections', {
+			data: {
+				name,
+				type: 'SSH',
+				host: E2E_SSH.host,
+				port: E2E_SSH.port,
+				username: E2E_SSH.username,
+				authMethod: 'password',
+				password: E2E_SSH.password,
+			},
+		});
+		expect(response.status()).toBe(201);
+		ids.push(((await response.json()) as { connection: { id: number } }).connection.id);
+	}
+	return ids;
 }
 
 async function openConnectionFromWorkspacePicker(page: Page, connectionId: number): Promise<void> {
-  await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
-  const picker = page.getByRole('heading', { name: 'Connections & sessions', exact: true });
-  await expect(picker).toBeVisible();
-  const row = page.locator(`.workspace-connection-list [data-connection-id="${connectionId}"]`);
-  await expect(row).toBeVisible();
-  await row.click();
-  await expect(picker).toBeHidden();
-  await expect(page.locator('.command-bar-command-input:visible')).toBeEnabled({ timeout: 20_000 });
+	await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
+	const picker = page.getByRole('heading', { name: 'Connections & sessions', exact: true });
+	await expect(picker).toBeVisible();
+	const row = page.locator(`.workspace-connection-list [data-connection-id="${connectionId}"]`);
+	await expect(row).toBeVisible();
+	await row.click();
+	await expect(picker).toBeHidden();
+	await expect(page.locator('.command-bar-command-input:visible')).toBeEnabled({ timeout: 20_000 });
 }
 
 async function xtermGeometry(terminal: Locator): Promise<{ width: string; height: string; rowCount: number }> {
-  return terminal.locator('.xterm-screen').evaluate((screen) => ({
-    width: (screen as HTMLElement).style.width,
-    height: (screen as HTMLElement).style.height,
-    rowCount: screen.querySelector('.xterm-rows')?.children.length ?? 0,
-  }));
+	return terminal.locator('.xterm-screen').evaluate((screen) => ({
+		width: (screen as HTMLElement).style.width,
+		height: (screen as HTMLElement).style.height,
+		rowCount: screen.querySelector('.xterm-rows')?.children.length ?? 0,
+	}));
 }
 
 async function captureWorkspaceEvidence(page: Page, testInfo: TestInfo, name: 'before' | 'after'): Promise<void> {
-  const metrics = await page.evaluate(() => {
-    const tabBar = document.querySelector<HTMLElement>('.terminal-tab-shell');
-    const tabScroller = tabBar?.querySelector<HTMLElement>('[class*="overflow-x-auto"]');
-    const tabs = [...(tabBar?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])];
-    const activeTab = tabs.find((tab) => tab.getAttribute('aria-selected') === 'true');
-    const rect = (element: Element | null) => {
-      if (!element) return null;
-      const box = element.getBoundingClientRect();
-      return { x: box.x, y: box.y, width: box.width, height: box.height, right: box.right, bottom: box.bottom };
-    };
-    return {
-      language: document.documentElement.lang,
-      viewport: { width: window.innerWidth, height: window.innerHeight },
-      pageScrollWidth: document.documentElement.scrollWidth,
-      bodyScrollWidth: document.body.scrollWidth,
-      tabBar: rect(tabBar),
-      tabScroller: rect(tabScroller),
-      tabScrollerClientWidth: tabScroller?.clientWidth ?? 0,
-      tabScrollerScrollWidth: tabScroller?.scrollWidth ?? 0,
-      tabScrollerScrollLeft: tabScroller?.scrollLeft ?? 0,
-      tabCount: tabs.length,
-      activeTabText: activeTab?.textContent?.trim() ?? '',
-      activeTabId: activeTab?.getAttribute('data-session-id') ?? null,
-      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--app-bg-color').trim(),
-    };
-  });
-  const screenshotPath = testInfo.outputPath(`m08-session-${name}.png`);
-  const metricsPath = testInfo.outputPath(`m08-session-${name}.metrics.json`);
-  await page.screenshot({ path: screenshotPath, fullPage: false, animations: 'disabled', caret: 'hide' });
-  await writeFile(metricsPath, `${JSON.stringify(metrics, null, 2)}\n`, 'utf8');
-  await testInfo.attach(`M08.03-a workspace ${name} screenshot`, { path: screenshotPath, contentType: 'image/png' });
-  await testInfo.attach(`M08.03-a workspace ${name} metrics`, { path: metricsPath, contentType: 'application/json' });
-  console.log(
-    `[M08.03-a workspace ${name} metrics] language=${metrics.language} viewport=${metrics.viewport.width}x${metrics.viewport.height} pageScrollWidth=${metrics.pageScrollWidth} bodyScrollWidth=${metrics.bodyScrollWidth} tabs=${metrics.tabCount} tabScroller=${metrics.tabScrollerClientWidth}/${metrics.tabScrollerScrollWidth}/${metrics.tabScrollerScrollLeft}`,
-  );
-  expect(metrics.language).toMatch(/^en(?:-US)?$/);
-  expect(metrics.viewport).toEqual({ width: 412, height: 915 });
-  expect(metrics.pageScrollWidth).toBeLessThanOrEqual(metrics.viewport.width);
-  expect(metrics.bodyScrollWidth).toBeLessThanOrEqual(metrics.viewport.width);
-  expect(metrics.tabBar?.x).toBeGreaterThanOrEqual(0);
-  expect(metrics.tabBar?.right).toBeLessThanOrEqual(metrics.viewport.width + 1);
-  expect(metrics.tabScroller?.x).toBeGreaterThanOrEqual(0);
-  expect(metrics.tabScroller?.right).toBeLessThanOrEqual(metrics.viewport.width + 1);
+	const metrics = await page.evaluate(() => {
+		const tabBar = document.querySelector<HTMLElement>('.terminal-tab-shell');
+		const tabScroller = tabBar?.querySelector<HTMLElement>('[class*="overflow-x-auto"]');
+		const tabs = [...(tabBar?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])];
+		const activeTab = tabs.find((tab) => tab.getAttribute('aria-selected') === 'true');
+
+		const rect = (element: Element | null) => {
+			if (!element) return null;
+			const box = element.getBoundingClientRect();
+			return { x: box.x, y: box.y, width: box.width, height: box.height, right: box.right, bottom: box.bottom };
+		};
+
+		return {
+			language: document.documentElement.lang,
+			viewport: { width: window.innerWidth, height: window.innerHeight },
+			pageScrollWidth: document.documentElement.scrollWidth,
+			bodyScrollWidth: document.body.scrollWidth,
+			tabBar: rect(tabBar),
+			tabScroller: rect(tabScroller),
+			tabScrollerClientWidth: tabScroller?.clientWidth ?? 0,
+			tabScrollerScrollWidth: tabScroller?.scrollWidth ?? 0,
+			tabScrollerScrollLeft: tabScroller?.scrollLeft ?? 0,
+			tabCount: tabs.length,
+			activeTabText: activeTab?.textContent?.trim() ?? '',
+			activeTabId: activeTab?.getAttribute('data-session-id') ?? null,
+			backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--app-bg-color').trim(),
+		};
+	});
+	const screenshotPath = testInfo.outputPath(`m08-session-${name}.png`);
+	const metricsPath = testInfo.outputPath(`m08-session-${name}.metrics.json`);
+	await page.screenshot({ path: screenshotPath, fullPage: false, animations: 'disabled', caret: 'hide' });
+	await writeFile(metricsPath, `${JSON.stringify(metrics, null, 2)}\n`, 'utf8');
+	await testInfo.attach(`M08.03-a workspace ${name} screenshot`, { path: screenshotPath, contentType: 'image/png' });
+	await testInfo.attach(`M08.03-a workspace ${name} metrics`, { path: metricsPath, contentType: 'application/json' });
+	console.log(
+		`[M08.03-a workspace ${name} metrics] language=${metrics.language} viewport=${metrics.viewport.width}x${metrics.viewport.height} pageScrollWidth=${metrics.pageScrollWidth} bodyScrollWidth=${metrics.bodyScrollWidth} tabs=${metrics.tabCount} tabScroller=${metrics.tabScrollerClientWidth}/${metrics.tabScrollerScrollWidth}/${metrics.tabScrollerScrollLeft}`,
+	);
+	expect(metrics.language).toMatch(/^en(?:-US)?$/);
+	expect(metrics.viewport).toEqual({ width: 412, height: 915 });
+	expect(metrics.pageScrollWidth).toBeLessThanOrEqual(metrics.viewport.width);
+	expect(metrics.bodyScrollWidth).toBeLessThanOrEqual(metrics.viewport.width);
+	expect(metrics.tabBar?.x).toBeGreaterThanOrEqual(0);
+	expect(metrics.tabBar?.right).toBeLessThanOrEqual(metrics.viewport.width + 1);
+	expect(metrics.tabScroller?.x).toBeGreaterThanOrEqual(0);
+	expect(metrics.tabScroller?.right).toBeLessThanOrEqual(metrics.viewport.width + 1);
 }
 
 test('initial SSH failure removes its connecting tab without automatic retry', async ({ page, context }) => {
-  await loginAsInitialAdmin(context.request);
-  await configureSshE2eSettings(context.request);
+	await loginAsInitialAdmin(context.request);
+	await configureSshE2eSettings(context.request);
 
-  const name = `E2E Initial Failure ${Date.now()}`;
-  const create = await context.request.post('/api/v1/connections', {
-    data: {
-      name,
-      type: 'SSH',
-      host: '127.0.0.1',
-      port: 1,
-      username: 'e2e',
-      authMethod: 'password',
-      password: 'invalid-for-unreachable-port',
-    },
-  });
-  expect(create.status()).toBe(201);
-  const connectionId = ((await create.json()) as { connection: { id: number } }).connection.id;
+	const name = `E2E Initial Failure ${Date.now()}`;
+	const create = await context.request.post('/api/v1/connections', {
+		data: {
+			name,
+			type: 'SSH',
+			host: '127.0.0.1',
+			port: 1,
+			username: 'e2e',
+			authMethod: 'password',
+			password: 'invalid-for-unreachable-port',
+		},
+	});
+	expect(create.status()).toBe(201);
+	const connectionId = ((await create.json()) as { connection: { id: number } }).connection.id;
 
-  await page.addInitScript(() => {
-    const state = window as typeof window & { __e2eMaxWorkspaceTabs?: number };
-    const sample = () => {
-      const count = document.querySelectorAll('.terminal-tab-shell [role="tab"]').length;
-      state.__e2eMaxWorkspaceTabs = Math.max(state.__e2eMaxWorkspaceTabs ?? 0, count);
-    };
-    state.__e2eMaxWorkspaceTabs = 0;
-    const observer = new MutationObserver(sample);
-    const start = () => {
-      sample();
-      observer.observe(document.documentElement, { childList: true, subtree: true });
-    };
-    if (document.documentElement) start();
-    else document.addEventListener('DOMContentLoaded', start, { once: true });
-  });
+	await page.addInitScript(() => {
+		const state = window as typeof window & { __e2eMaxWorkspaceTabs?: number };
 
-  const workspaceConnectIds: string[] = [];
-  page.on('websocket', (socket) => {
-    if (new URL(socket.url()).pathname !== '/ws/workspace') return;
-    socket.on('framesent', (event) => {
-      if (typeof event.payload !== 'string') return;
-      try {
-        const message = JSON.parse(event.payload) as { type?: string; payload?: { workspaceId?: string } };
-        if (message.type === 'workspace.connect' && message.payload?.workspaceId) {
-          workspaceConnectIds.push(message.payload.workspaceId);
-        }
-      } catch {
-        // Ignore non-JSON frames.
-      }
-    });
-  });
+		const sample = () => {
+			const count = document.querySelectorAll('.terminal-tab-shell [role="tab"]').length;
+			state.__e2eMaxWorkspaceTabs = Math.max(state.__e2eMaxWorkspaceTabs ?? 0, count);
+		};
 
-  try {
-    await page.goto(`/workspace?connectionId=${connectionId}`);
-    await expect.poll(() => workspaceConnectIds.length, { timeout: 15_000 }).toBe(1);
+		state.__e2eMaxWorkspaceTabs = 0;
+		const observer = new MutationObserver(sample);
 
-    const tabs = page.locator('.terminal-tab-shell').getByRole('tab');
-    await expect(tabs).toHaveCount(0, { timeout: 15_000 });
-    await expect(page.getByRole('heading', { name: 'Connections & sessions', exact: true })).toBeVisible();
+		const start = () => {
+			sample();
+			observer.observe(document.documentElement, { childList: true, subtree: true });
+		};
 
-    expect(
-      await page.evaluate(
-        () => (window as typeof window & { __e2eMaxWorkspaceTabs?: number }).__e2eMaxWorkspaceTabs ?? 0,
-      ),
-    ).toBe(1);
+		if (document.documentElement) start();
+		else document.addEventListener('DOMContentLoaded', start, { once: true });
+	});
 
-    const failedWorkspaceId = workspaceConnectIds[0]!;
-    await page.waitForTimeout(3_000);
-    expect(workspaceConnectIds).toEqual([failedWorkspaceId]);
-  } finally {
-    const remove = await context.request.delete(`/api/v1/connections/${connectionId}`);
-    expect([200, 204, 404]).toContain(remove.status());
-  }
+	const workspaceConnectIds: string[] = [];
+	page.on('websocket', (socket) => {
+		if (new URL(socket.url()).pathname !== '/ws/workspace') return;
+		socket.on('framesent', (event) => {
+			if (typeof event.payload !== 'string') return;
+			try {
+				const message = JSON.parse(event.payload) as { type?: string; payload?: { workspaceId?: string } };
+				if (message.type === 'workspace.connect' && message.payload?.workspaceId) {
+					workspaceConnectIds.push(message.payload.workspaceId);
+				}
+			} catch {
+				// Ignore non-JSON frames.
+			}
+		});
+	});
+
+	try {
+		await page.goto(`/workspace?connectionId=${connectionId}`);
+		await expect.poll(() => workspaceConnectIds.length, { timeout: 15_000 }).toBe(1);
+
+		const tabs = page.locator('.terminal-tab-shell').getByRole('tab');
+		await expect(tabs).toHaveCount(0, { timeout: 15_000 });
+		await expect(page.getByRole('heading', { name: 'Connections & sessions', exact: true })).toBeVisible();
+
+		expect(
+			await page.evaluate(
+				() => (window as typeof window & { __e2eMaxWorkspaceTabs?: number }).__e2eMaxWorkspaceTabs ?? 0,
+			),
+		).toBe(1);
+
+		const failedWorkspaceId = workspaceConnectIds[0]!;
+		await page.waitForTimeout(3_000);
+		expect(workspaceConnectIds).toEqual([failedWorkspaceId]);
+	} finally {
+		const remove = await context.request.delete(`/api/v1/connections/${connectionId}`);
+		expect([200, 204, 404]).toContain(remove.status());
+	}
 });
 
 test('hidden terminals consume sustained output without animation frames or reconnecting the shell', async ({
-  page,
-  context,
+	page,
+	context,
 }) => {
-  await loginAsInitialAdmin(context.request);
-  await configureSshE2eSettings(context.request);
-  await setTestSshOnline(true);
-  await resetTestSshFilesystem();
-  const connectionId = await ensureTestSshConnection(context.request);
-  let consumedBytes = 0;
-  let connectRequests = 0;
-  page.on('websocket', (socket) => {
-    socket.on('framesent', ({ payload }) => {
-      if (typeof payload !== 'string') return;
-      try {
-        const message = JSON.parse(payload);
-        if (message.type === 'terminal.flow') consumedBytes = message.payload?.consumedBytes ?? 0;
-        if (message.type === 'workspace.connect') connectRequests += 1;
-      } catch {
-        // Binary input is not a protocol request.
-      }
-    });
-  });
-  await connectTestSshFromConnectionsPage(page, connectionId);
-  const terminal = page.locator('.terminal-inner-container');
-  const command = page.locator('.command-bar-command-input');
-  await expect(command).toBeEnabled();
-  await command.fill('export NEXUS_BACKGROUND_SHELL=$$');
-  await command.press('Enter');
-  await expect.poll(() => consumedBytes).toBeGreaterThan(0);
-  const initialConsumed = consumedBytes;
-  const initialConnects = connectRequests;
-  // Model browser suspension deterministically: no animation-frame callbacks run
-  // while hidden. Timers and network remain available, as in a throttled tab.
-  await page.evaluate(() => {
-    const original = window.requestAnimationFrame;
-    const originalCancel = window.cancelAnimationFrame;
-    const suspendedFrames = new Map<number, FrameRequestCallback>();
-    let nextFrame = -1;
-    (window as typeof window & { __restoreOutputFrames?: () => void }).__restoreOutputFrames = () => {
-      window.requestAnimationFrame = original;
-      window.cancelAnimationFrame = originalCancel;
-      for (const callback of suspendedFrames.values()) original.call(window, callback);
-      suspendedFrames.clear();
-      Reflect.deleteProperty(document, 'visibilityState');
-      document.dispatchEvent(new Event('visibilitychange'));
-    };
-    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
-    window.requestAnimationFrame = (callback) => {
-      const id = nextFrame--;
-      suspendedFrames.set(id, callback);
-      return id;
-    };
-    window.cancelAnimationFrame = (id) => {
-      if (!suspendedFrames.delete(id)) originalCancel.call(window, id);
-    };
-    document.dispatchEvent(new Event('visibilitychange'));
-  });
-  try {
-    await command.fill(
-      'for ((i=0;i<6000;i++)); do printf "background-%06d %0200d\\n" "$i" 0; done; printf "BACKGROUND_OUTPUT_DONE\\n"',
-    );
-    await command.press('Enter');
-    await expect.poll(() => consumedBytes - initialConsumed, { timeout: 15_000 }).toBeGreaterThan(1_200_000);
-    expect(connectRequests).toBe(initialConnects);
-  } finally {
-    await page.evaluate(() => {
-      (window as typeof window & { __restoreOutputFrames?: () => void }).__restoreOutputFrames?.();
-    });
-  }
-  await expect(terminal.locator('.xterm-rows')).toContainText('BACKGROUND_OUTPUT_DONE');
-  await command.fill('if [[ "$NEXUS_BACKGROUND_SHELL" == "$$" ]]; then printf "%s%s\\n" BACKGROUND_SAME_ SHELL; fi');
-  await command.press('Enter');
-  await expect(terminal.locator('.xterm-rows')).toContainText('BACKGROUND_SAME_SHELL');
-  expect(connectRequests).toBe(initialConnects);
+	await loginAsInitialAdmin(context.request);
+	await configureSshE2eSettings(context.request);
+	await setTestSshOnline(true);
+	await resetTestSshFilesystem();
+	const connectionId = await ensureTestSshConnection(context.request);
+	let consumedBytes = 0;
+	let connectRequests = 0;
+	page.on('websocket', (socket) => {
+		socket.on('framesent', ({ payload }) => {
+			if (typeof payload !== 'string') return;
+			try {
+				const message = JSON.parse(payload);
+				if (message.type === 'terminal.flow') consumedBytes = message.payload?.consumedBytes ?? 0;
+				if (message.type === 'workspace.connect') connectRequests += 1;
+			} catch {
+				// Binary input is not a protocol request.
+			}
+		});
+	});
+	await connectTestSshFromConnectionsPage(page, connectionId);
+	const terminal = page.locator('.terminal-inner-container');
+	const command = page.locator('.command-bar-command-input');
+	await expect(command).toBeEnabled();
+	await command.fill('export NEXUS_BACKGROUND_SHELL=$$');
+	await command.press('Enter');
+	await expect.poll(() => consumedBytes).toBeGreaterThan(0);
+	const initialConsumed = consumedBytes;
+	const initialConnects = connectRequests;
+	// Model browser suspension deterministically: no animation-frame callbacks run
+	// while hidden. Timers and network remain available, as in a throttled tab.
+	await page.evaluate(() => {
+		const original = window.requestAnimationFrame;
+		const originalCancel = window.cancelAnimationFrame;
+		const suspendedFrames = new Map<number, FrameRequestCallback>();
+		let nextFrame = -1;
+		(window as typeof window & { __restoreOutputFrames?: () => void }).__restoreOutputFrames = () => {
+			window.requestAnimationFrame = original;
+			window.cancelAnimationFrame = originalCancel;
+			for (const callback of suspendedFrames.values()) original.call(window, callback);
+			suspendedFrames.clear();
+			Reflect.deleteProperty(document, 'visibilityState');
+			document.dispatchEvent(new Event('visibilitychange'));
+		};
+		Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+		window.requestAnimationFrame = (callback) => {
+			const id = nextFrame--;
+			suspendedFrames.set(id, callback);
+			return id;
+		};
+		window.cancelAnimationFrame = (id) => {
+			if (!suspendedFrames.delete(id)) originalCancel.call(window, id);
+		};
+		document.dispatchEvent(new Event('visibilitychange'));
+	});
+	try {
+		await command.fill(
+			'for ((i=0;i<6000;i++)); do printf "background-%06d %0200d\\n" "$i" 0; done; printf "BACKGROUND_OUTPUT_DONE\\n"',
+		);
+		await command.press('Enter');
+		await expect.poll(() => consumedBytes - initialConsumed, { timeout: 15_000 }).toBeGreaterThan(1_200_000);
+		expect(connectRequests).toBe(initialConnects);
+	} finally {
+		await page.evaluate(() => {
+			(window as typeof window & { __restoreOutputFrames?: () => void }).__restoreOutputFrames?.();
+		});
+	}
+	await expect(terminal.locator('.xterm-rows')).toContainText('BACKGROUND_OUTPUT_DONE');
+	await command.fill('if [[ "$NEXUS_BACKGROUND_SHELL" == "$$" ]]; then printf "%s%s\\n" BACKGROUND_SAME_ SHELL; fi');
+	await command.press('Enter');
+	await expect(terminal.locator('.xterm-rows')).toContainText('BACKGROUND_SAME_SHELL');
+	expect(connectRequests).toBe(initialConnects);
 });
 
 test('transport resume retains terminal output and the active SSH input line', async ({ page, context }) => {
-  test.setTimeout(60_000);
-  await loginAsInitialAdmin(context.request);
-  await configureSshE2eSettings(context.request);
-  await setTestSshOnline(true);
-  const connectionId = await ensureTestSshConnection(context.request);
-  await page.addInitScript(() => {
-    const NativeWebSocket = window.WebSocket;
-    const sockets: WebSocket[] = [];
-    Object.assign(window, { __resumeTestSockets: sockets });
-    window.WebSocket = class extends NativeWebSocket {
-      constructor(url: string | URL, protocols?: string | string[]) {
-        super(url, protocols);
-        if (new URL(String(url)).pathname === '/ws/workspace') sockets.push(this);
-      }
-    };
-  });
-  await connectTestSshFromConnectionsPage(page, connectionId);
-  const terminal = page.locator('.terminal-inner-container');
-  const rows = terminal.locator('.xterm-rows');
-  const input = terminal.locator('.xterm-helper-textarea');
-  const command = page.locator('.command-bar-command-input');
-  const tab = page.getByRole('tab', { selected: true });
-  await command.fill("printf 'RETAINED_SSH_OUTPUT\\n'");
-  await command.press('Enter');
-  await expect(rows).toContainText('RETAINED_SSH_OUTPUT');
-  await input.focus();
-  await page.keyboard.type("printf 'RESUMED_SSH_INPUT");
-  await expect(rows).toContainText("printf 'RESUMED_SSH_INPUT");
-  await page.evaluate(() => {
-    const sockets = (window as unknown as { __resumeTestSockets: WebSocket[] }).__resumeTestSockets;
-    sockets.at(-1)!.close(4000, 'E2E transport interruption');
-  });
-  await expect(tab).not.toHaveAttribute('data-session-state', 'connected');
-  await expect(tab).toHaveAttribute('data-session-state', 'connected', { timeout: 30_000 });
-  await expect(rows).toContainText('RETAINED_SSH_OUTPUT');
-  await expect(rows).toContainText("printf 'RESUMED_SSH_INPUT");
-  await input.focus();
-  await page.keyboard.type("\\n'");
-  await page.keyboard.press('Enter');
-  await expect.poll(() => rows.innerText()).toMatch(/(?:^|\n|nexus-e2e\$ )RESUMED_SSH_INPUT\s*(?:\n|$)/);
+	test.setTimeout(60_000);
+	await loginAsInitialAdmin(context.request);
+	await configureSshE2eSettings(context.request);
+	await setTestSshOnline(true);
+	const connectionId = await ensureTestSshConnection(context.request);
+	await page.addInitScript(() => {
+		const NativeWebSocket = window.WebSocket;
+		const sockets: WebSocket[] = [];
+		Object.assign(window, { __resumeTestSockets: sockets });
+		window.WebSocket = class extends NativeWebSocket {
+			constructor(url: string | URL, protocols?: string | string[]) {
+				super(url, protocols);
+				if (new URL(String(url)).pathname === '/ws/workspace') sockets.push(this);
+			}
+		};
+	});
+	await connectTestSshFromConnectionsPage(page, connectionId);
+	const terminal = page.locator('.terminal-inner-container');
+	const rows = terminal.locator('.xterm-rows');
+	const input = terminal.locator('.xterm-helper-textarea');
+	const command = page.locator('.command-bar-command-input');
+	const tab = page.getByRole('tab', { selected: true });
+	await command.fill("printf 'RETAINED_SSH_OUTPUT\\n'");
+	await command.press('Enter');
+	await expect(rows).toContainText('RETAINED_SSH_OUTPUT');
+	await input.focus();
+	await page.keyboard.type("printf 'RESUMED_SSH_INPUT");
+	await expect(rows).toContainText("printf 'RESUMED_SSH_INPUT");
+	await page.evaluate(() => {
+		const sockets = (window as unknown as { __resumeTestSockets: WebSocket[] }).__resumeTestSockets;
+		sockets.at(-1)!.close(4000, 'E2E transport interruption');
+	});
+	await expect(tab).not.toHaveAttribute('data-session-state', 'connected');
+	await expect(tab).toHaveAttribute('data-session-state', 'connected', { timeout: 30_000 });
+	await expect(rows).toContainText('RETAINED_SSH_OUTPUT');
+	await expect(rows).toContainText("printf 'RESUMED_SSH_INPUT");
+	await input.focus();
+	await page.keyboard.type("\\n'");
+	await page.keyboard.press('Enter');
+	await expect.poll(() => rows.innerText()).toMatch(/(?:^|\n|nexus-e2e\$ )RESUMED_SSH_INPUT\s*(?:\n|$)/);
 });
 
 for (const background of [false, true]) {
-  test(`SSH restart clears old terminal output and unfinished input (${background ? 'background' : 'foreground'})`, async ({
-    page,
-    context,
-  }) => {
-    test.setTimeout(60_000);
-    await loginAsInitialAdmin(context.request);
-    await configureSshE2eSettings(context.request);
-    await setTestSshOnline(true);
-    const connectionId = await ensureTestSshConnection(context.request);
-    try {
-      await connectTestSshFromConnectionsPage(page, connectionId);
-      const terminal = page.locator('.terminal-inner-container');
-      const rows = terminal.locator('.xterm-rows');
-      const input = terminal.locator('.xterm-helper-textarea');
-      const tab = page.getByRole('tab', { selected: true });
-      const command = page.locator('.command-bar-command-input');
-      await command.fill("printf 'OLD_SSH_OUTPUT\\n'");
-      await command.press('Enter');
-      await expect(rows).toContainText('OLD_SSH_OUTPUT');
-      if (background) {
-        await command.fill("printf '\\033[?1049h\\033[?1000h\\033[?1006h\\033[?2004hOLD_ALT_SCREEN\\n'");
-        await command.press('Enter');
-        await expect(rows).toContainText('OLD_ALT_SCREEN');
-        await expect(terminal.locator('.xterm')).toHaveClass(/enable-mouse-events/);
-      }
-      await input.focus();
-      await page.keyboard.type('UNFINISHED_OLD_INPUT');
-      await expect(rows).toContainText('UNFINISHED_OLD_INPUT');
-      if (background) {
-        await page.evaluate(() => {
-          Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
-          document.dispatchEvent(new Event('visibilitychange'));
-        });
-      }
-      await setTestSshOnline(false);
-      await expect(tab).not.toHaveAttribute('data-session-state', 'connected');
-      await setTestSshOnline(true);
-      await expect(tab).toHaveAttribute('data-session-state', 'connected', { timeout: 30_000 });
-      if (background) {
-        await page.evaluate(() => {
-          Reflect.deleteProperty(document, 'visibilityState');
-          document.dispatchEvent(new Event('visibilitychange'));
-        });
-      }
-      await expect(rows).toContainText('nexus-e2e$');
-      await expect(rows).not.toContainText('OLD_SSH_OUTPUT');
-      await expect(rows).not.toContainText('OLD_ALT_SCREEN');
-      await expect(rows).not.toContainText('UNFINISHED_OLD_INPUT');
-      await expect(terminal.locator('.xterm')).not.toHaveClass(/enable-mouse-events/);
-      await input.focus();
-      await page.keyboard.type("printf 'NEW_SSH_INPUT\\n'");
-      await page.keyboard.press('Enter');
-      await expect.poll(() => rows.innerText()).toMatch(/(?:^|\n|nexus-e2e\$ )NEW_SSH_INPUT\s*(?:\n|$)/);
-      await expect(rows).not.toContainText('command not found');
-      await expect(rows).not.toContainText('nexus-e2e$ nexus-e2e$');
-    } finally {
-      await setTestSshOnline(true);
-    }
-  });
+	test(`SSH restart clears old terminal output and unfinished input (${background ? 'background' : 'foreground'})`, async ({
+		page,
+		context,
+	}) => {
+		test.setTimeout(60_000);
+		await loginAsInitialAdmin(context.request);
+		await configureSshE2eSettings(context.request);
+		await setTestSshOnline(true);
+		const connectionId = await ensureTestSshConnection(context.request);
+		try {
+			await connectTestSshFromConnectionsPage(page, connectionId);
+			const terminal = page.locator('.terminal-inner-container');
+			const rows = terminal.locator('.xterm-rows');
+			const input = terminal.locator('.xterm-helper-textarea');
+			const tab = page.getByRole('tab', { selected: true });
+			const command = page.locator('.command-bar-command-input');
+			await command.fill("printf 'OLD_SSH_OUTPUT\\n'");
+			await command.press('Enter');
+			await expect(rows).toContainText('OLD_SSH_OUTPUT');
+			if (background) {
+				await command.fill("printf '\\033[?1049h\\033[?1000h\\033[?1006h\\033[?2004hOLD_ALT_SCREEN\\n'");
+				await command.press('Enter');
+				await expect(rows).toContainText('OLD_ALT_SCREEN');
+				await expect(terminal.locator('.xterm')).toHaveClass(/enable-mouse-events/);
+			}
+			await input.focus();
+			await page.keyboard.type('UNFINISHED_OLD_INPUT');
+			await expect(rows).toContainText('UNFINISHED_OLD_INPUT');
+			if (background) {
+				await page.evaluate(() => {
+					Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+					document.dispatchEvent(new Event('visibilitychange'));
+				});
+			}
+			await setTestSshOnline(false);
+			await expect(tab).not.toHaveAttribute('data-session-state', 'connected');
+			await setTestSshOnline(true);
+			await expect(tab).toHaveAttribute('data-session-state', 'connected', { timeout: 30_000 });
+			if (background) {
+				await page.evaluate(() => {
+					Reflect.deleteProperty(document, 'visibilityState');
+					document.dispatchEvent(new Event('visibilitychange'));
+				});
+			}
+			await expect(rows).toContainText('nexus-e2e$');
+			await expect(rows).not.toContainText('OLD_SSH_OUTPUT');
+			await expect(rows).not.toContainText('OLD_ALT_SCREEN');
+			await expect(rows).not.toContainText('UNFINISHED_OLD_INPUT');
+			await expect(terminal.locator('.xterm')).not.toHaveClass(/enable-mouse-events/);
+			await input.focus();
+			await page.keyboard.type("printf 'NEW_SSH_INPUT\\n'");
+			await page.keyboard.press('Enter');
+			await expect.poll(() => rows.innerText()).toMatch(/(?:^|\n|nexus-e2e\$ )NEW_SSH_INPUT\s*(?:\n|$)/);
+			await expect(rows).not.toContainText('command not found');
+			await expect(rows).not.toContainText('nexus-e2e$ nexus-e2e$');
+		} finally {
+			await setTestSshOnline(true);
+		}
+	});
 }
 
 test('disconnected SSH retries periodically and any key reconnects immediately', async ({ page, context }) => {
-  await loginAsInitialAdmin(context.request);
-  await configureSshE2eSettings(context.request);
-  const settingsResponse = await context.request.get('/api/v1/settings');
-  expect(settingsResponse.ok()).toBeTruthy();
-  const originalFrontendLogLevel =
-    ((await settingsResponse.json()) as { frontendLogLevel?: string }).frontendLogLevel ?? 'info';
-  const debugSettings = await context.request.put('/api/v1/settings', { data: { frontendLogLevel: 'debug' } });
-  expect(debugSettings.ok()).toBeTruthy();
-  await setTestSshOnline(true);
-  await resetTestSshFilesystem();
-  const connectionId = await ensureTestSshConnection(context.request);
+	await loginAsInitialAdmin(context.request);
+	await configureSshE2eSettings(context.request);
+	const settingsResponse = await context.request.get('/api/v1/settings');
+	expect(settingsResponse.ok()).toBeTruthy();
+	const originalFrontendLogLevel =
+		((await settingsResponse.json()) as { frontendLogLevel?: string }).frontendLogLevel ?? 'info';
+	const debugSettings = await context.request.put('/api/v1/settings', { data: { frontendLogLevel: 'debug' } });
+	expect(debugSettings.ok()).toBeTruthy();
+	await setTestSshOnline(true);
+	await resetTestSshFilesystem();
+	const connectionId = await ensureTestSshConnection(context.request);
 
-  const frontendDebugLogs: Array<Record<string, unknown>> = [];
-  page.on('console', (message) => {
-    if (message.type() !== 'debug' && message.type() !== 'log') return;
-    for (const argument of message.args()) {
-      void argument
-        .jsonValue()
-        .then((value) => {
-          if (value && typeof value === 'object' && typeof (value as { msg?: unknown }).msg === 'string') {
-            frontendDebugLogs.push(value as Record<string, unknown>);
-          }
-        })
-        .catch(() => undefined);
-    }
-  });
+	const frontendDebugLogs: Array<Record<string, unknown>> = [];
+	page.on('console', (message) => {
+		if (message.type() !== 'debug' && message.type() !== 'log') return;
+		for (const argument of message.args()) {
+			void argument
+				.jsonValue()
+				.then((value) => {
+					if (value && typeof value === 'object' && typeof (value as { msg?: unknown }).msg === 'string') {
+						frontendDebugLogs.push(value as Record<string, unknown>);
+					}
+				})
+				.catch(() => undefined);
+		}
+	});
 
-  let openedWebSockets = 0;
-  let workspaceConnectRequests = 0;
-  let workspaceConnectResponses = 0;
-  let latestTerminalViewport: { columns: number; rows: number } | undefined;
-  const terminalResizeViewports: Array<{ columns: number; rows: number }> = [];
-  const workspaceConnectViewports: Array<{ columns: number; rows: number } | undefined> = [];
-  const pendingWorkspaceConnectRequests = new Set<string>();
-  page.on('websocket', (socket) => {
-    if (!new URL(socket.url()).pathname.startsWith('/ws')) return;
-    openedWebSockets += 1;
-    socket.on('framesent', (event) => {
-      if (typeof event.payload !== 'string') return;
-      try {
-        const message = JSON.parse(event.payload) as {
-          type?: string;
-          requestId?: string;
-          payload?: { columns?: number; rows?: number; viewport?: { columns?: number; rows?: number } };
-        };
-        if (message.type === 'terminal.resize' && message.payload?.columns && message.payload?.rows) {
-          latestTerminalViewport = { columns: message.payload.columns, rows: message.payload.rows };
-          terminalResizeViewports.push(latestTerminalViewport);
-        }
-        if (message.type === 'workspace.connect' && message.requestId) {
-          workspaceConnectRequests += 1;
-          const viewport = message.payload?.viewport;
-          workspaceConnectViewports.push(
-            viewport?.columns && viewport?.rows ? { columns: viewport.columns, rows: viewport.rows } : undefined,
-          );
-          pendingWorkspaceConnectRequests.add(message.requestId);
-        }
-      } catch {
-        // Ignore non-JSON frames.
-      }
-    });
-    socket.on('framereceived', (event) => {
-      if (typeof event.payload !== 'string') return;
-      try {
-        const message = JSON.parse(event.payload) as {
-          type?: string;
-          requestId?: string;
-          payload?: { ok?: boolean };
-        };
-        if (
-          message.type === 'response' &&
-          message.requestId &&
-          message.payload?.ok === true &&
-          pendingWorkspaceConnectRequests.delete(message.requestId)
-        ) {
-          workspaceConnectResponses += 1;
-        }
-      } catch {
-        // Ignore non-JSON frames; terminal output is normally binary.
-      }
-    });
-  });
+	let openedWebSockets = 0;
+	let workspaceConnectRequests = 0;
+	let workspaceConnectResponses = 0;
+	let latestTerminalViewport: { columns: number; rows: number } | undefined;
+	const terminalResizeViewports: Array<{ columns: number; rows: number }> = [];
+	const workspaceConnectViewports: Array<{ columns: number; rows: number } | undefined> = [];
+	const pendingWorkspaceConnectRequests = new Set<string>();
+	page.on('websocket', (socket) => {
+		if (!new URL(socket.url()).pathname.startsWith('/ws')) return;
+		openedWebSockets += 1;
+		socket.on('framesent', (event) => {
+			if (typeof event.payload !== 'string') return;
+			try {
+				const message = JSON.parse(event.payload) as {
+					type?: string;
+					requestId?: string;
+					payload?: { columns?: number; rows?: number; viewport?: { columns?: number; rows?: number } };
+				};
+				if (message.type === 'terminal.resize' && message.payload?.columns && message.payload?.rows) {
+					latestTerminalViewport = { columns: message.payload.columns, rows: message.payload.rows };
+					terminalResizeViewports.push(latestTerminalViewport);
+				}
+				if (message.type === 'workspace.connect' && message.requestId) {
+					workspaceConnectRequests += 1;
+					const viewport = message.payload?.viewport;
+					workspaceConnectViewports.push(
+						viewport?.columns && viewport?.rows
+							? { columns: viewport.columns, rows: viewport.rows }
+							: undefined,
+					);
+					pendingWorkspaceConnectRequests.add(message.requestId);
+				}
+			} catch {
+				// Ignore non-JSON frames.
+			}
+		});
+		socket.on('framereceived', (event) => {
+			if (typeof event.payload !== 'string') return;
+			try {
+				const message = JSON.parse(event.payload) as {
+					type?: string;
+					requestId?: string;
+					payload?: { ok?: boolean };
+				};
+				if (
+					message.type === 'response' &&
+					message.requestId &&
+					message.payload?.ok === true &&
+					pendingWorkspaceConnectRequests.delete(message.requestId)
+				) {
+					workspaceConnectResponses += 1;
+				}
+			} catch {
+				// Ignore non-JSON frames; terminal output is normally binary.
+			}
+		});
+	});
 
-  try {
-    await connectTestSshFromConnectionsPage(page, connectionId);
-    const terminal = page.locator('.terminal-inner-container');
-    const xtermInput = terminal.locator('.xterm-helper-textarea');
-    const commandInput = page.locator('.command-bar-command-input');
+	try {
+		await connectTestSshFromConnectionsPage(page, connectionId);
+		const terminal = page.locator('.terminal-inner-container');
+		const xtermInput = terminal.locator('.xterm-helper-textarea');
+		const commandInput = page.locator('.command-bar-command-input');
 
-    await step('initial SSH session is connected', async () => {
-      await expect(terminal).toBeVisible({ timeout: 20_000 });
-      await expect(xtermInput).toBeAttached();
-      await expect.poll(() => openedWebSockets).toBeGreaterThanOrEqual(1);
-      await expect.poll(() => workspaceConnectResponses, { timeout: 20_000 }).toBeGreaterThanOrEqual(1);
-      await expect.poll(() => latestTerminalViewport).toBeTruthy();
-      expect(latestTerminalViewport!.columns).toBeGreaterThan(80);
-      expect(latestTerminalViewport!.rows).toBeGreaterThan(0);
-    });
+		await step('initial SSH session is connected', async () => {
+			await expect(terminal).toBeVisible({ timeout: 20_000 });
+			await expect(xtermInput).toBeAttached();
+			await expect.poll(() => openedWebSockets).toBeGreaterThanOrEqual(1);
+			await expect.poll(() => workspaceConnectResponses, { timeout: 20_000 }).toBeGreaterThanOrEqual(1);
+			await expect.poll(() => latestTerminalViewport).toBeTruthy();
+			expect(latestTerminalViewport!.columns).toBeGreaterThan(80);
+			expect(latestTerminalViewport!.rows).toBeGreaterThan(0);
+		});
 
-    const fittedViewport = { ...latestTerminalViewport! };
-    const fittedGeometry = await xtermGeometry(terminal);
-    const initialResizeCount = terminalResizeViewports.length;
-    const initialConnectRequestCount = workspaceConnectRequests;
-    const initialConnectedCount = workspaceConnectResponses;
+		const fittedViewport = { ...latestTerminalViewport! };
+		const fittedGeometry = await xtermGeometry(terminal);
+		const initialResizeCount = terminalResizeViewports.length;
+		const initialConnectRequestCount = workspaceConnectRequests;
+		const initialConnectedCount = workspaceConnectResponses;
 
-    await step('background geometry is preserved and waking up remeasures without a container resize', async () => {
-      await page.evaluate(() => {
-        Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
-        document.dispatchEvent(new Event('visibilitychange'));
-      });
-      // A positive but smaller background layout must not overwrite the cached PTY size.
-      await terminal.evaluate((element) => {
-        element.style.width = '160px';
-        element.style.height = '80px';
-      });
-      await page.evaluate(
-        () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
-      );
-      expect(latestTerminalViewport).toEqual(fittedViewport);
-      await terminal.evaluate((element) => {
-        element.style.removeProperty('width');
-        element.style.removeProperty('height');
-      });
-      await page.evaluate(
-        () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
-      );
-      const beforeWake = terminalResizeViewports.length;
-      await page.evaluate(() => {
-        Reflect.deleteProperty(document, 'visibilityState');
-        document.dispatchEvent(new Event('visibilitychange'));
-        window.dispatchEvent(new Event('pageshow'));
-      });
-      await expect.poll(() => terminalResizeViewports.length).toBeGreaterThan(beforeWake);
-      expect(latestTerminalViewport).toEqual(fittedViewport);
-    });
+		await step('background geometry is preserved and waking up remeasures without a container resize', async () => {
+			await page.evaluate(() => {
+				Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+				document.dispatchEvent(new Event('visibilitychange'));
+			});
+			// A positive but smaller background layout must not overwrite the cached PTY size.
+			await terminal.evaluate((element) => {
+				element.style.width = '160px';
+				element.style.height = '80px';
+			});
+			await page.evaluate(
+				() =>
+					new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+			);
+			expect(latestTerminalViewport).toEqual(fittedViewport);
+			await terminal.evaluate((element) => {
+				element.style.removeProperty('width');
+				element.style.removeProperty('height');
+			});
+			await page.evaluate(
+				() =>
+					new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+			);
+			const beforeWake = terminalResizeViewports.length;
+			await page.evaluate(() => {
+				Reflect.deleteProperty(document, 'visibilityState');
+				document.dispatchEvent(new Event('visibilitychange'));
+				window.dispatchEvent(new Event('pageshow'));
+			});
+			await expect.poll(() => terminalResizeViewports.length).toBeGreaterThan(beforeWake);
+			expect(latestTerminalViewport).toEqual(fittedViewport);
+		});
 
-    await step('terminal application modes are active before the SSH outage', async () => {
-      await commandInput.fill("printf '\\033[?1049h\\033[?1000h\\033[?1006h\\033[?2004h'");
-      await commandInput.press('Enter');
-      await expect(terminal.locator('.xterm')).toHaveClass(/enable-mouse-events/);
-    });
+		await step('terminal application modes are active before the SSH outage', async () => {
+			await commandInput.fill("printf '\\033[?1049h\\033[?1000h\\033[?1006h\\033[?2004h'");
+			await commandInput.press('Enter');
+			await expect(terminal.locator('.xterm')).toHaveClass(/enable-mouse-events/);
+		});
 
-    await step('SSH outage triggers more than one automatic reconnect cycle', async () => {
-      await setTestSshOnline(false);
+		await step('SSH outage triggers more than one automatic reconnect cycle', async () => {
+			await setTestSshOnline(false);
 
-      // First reconnect is scheduled after 2s and the next after 4s. The clean Workspace
-      // transport may reuse the same already-open /ws/workspace control socket after an
-      // SSH-level connect failure, so business reconnect attempts are counted by their
-      // workspace.connect requests rather than by forcing a new WebSocket per attempt.
-      await expect
-        .poll(() => workspaceConnectRequests, { timeout: 12_000 })
-        .toBeGreaterThanOrEqual(initialConnectRequestCount + 2);
-      await expect
-        .poll(() => frontendDebugLogs.some((entry) => entry.msg === 'Workspace reconnect scheduled'))
-        .toBeTruthy();
-      await expect
-        .poll(() => frontendDebugLogs.some((entry) => entry.msg === 'Workspace reconnect attempt failed'))
-        .toBeTruthy();
-    });
+			// First reconnect is scheduled after 2s and the next after 4s. The clean Workspace
+			// transport may reuse the same already-open /ws/workspace control socket after an
+			// SSH-level connect failure, so business reconnect attempts are counted by their
+			// workspace.connect requests rather than by forcing a new WebSocket per attempt.
+			await expect
+				.poll(() => workspaceConnectRequests, { timeout: 12_000 })
+				.toBeGreaterThanOrEqual(initialConnectRequestCount + 2);
+			await expect
+				.poll(() => frontendDebugLogs.some((entry) => entry.msg === 'Workspace reconnect scheduled'))
+				.toBeTruthy();
+			await expect
+				.poll(() => frontendDebugLogs.some((entry) => entry.msg === 'Workspace reconnect attempt failed'))
+				.toBeTruthy();
+		});
 
-    await step('any terminal key interrupts backoff and reconnects immediately', async () => {
-      await setTestSshOnline(true);
-      const beforeKeypress = workspaceConnectRequests;
+		await step('any terminal key interrupts backoff and reconnects immediately', async () => {
+			await setTestSshOnline(true);
+			const beforeKeypress = workspaceConnectRequests;
 
-      await xtermInput.focus();
-      await page.keyboard.press('x');
+			await xtermInput.focus();
+			await page.keyboard.press('x');
 
-      // The scheduled retry is still in backoff. A fresh workspace.connect request
-      // within 2.5s therefore comes from reconnectNow(), even when the control socket
-      // itself is intentionally reused.
-      await expect.poll(() => workspaceConnectRequests, { timeout: 2_500 }).toBeGreaterThan(beforeKeypress);
-      await expect.poll(() => workspaceConnectResponses, { timeout: 5_000 }).toBeGreaterThan(initialConnectedCount);
-      await expect.poll(() => workspaceConnectViewports.at(-1)).toEqual(fittedViewport);
-      await expect.poll(() => terminalResizeViewports.length).toBeGreaterThan(initialResizeCount);
-      expect(terminalResizeViewports.at(-1)).toEqual(fittedViewport);
-      await expect(terminal.locator('.xterm')).not.toHaveClass(/enable-mouse-events/);
+			// The scheduled retry is still in backoff. A fresh workspace.connect request
+			// within 2.5s therefore comes from reconnectNow(), even when the control socket
+			// itself is intentionally reused.
+			await expect.poll(() => workspaceConnectRequests, { timeout: 2_500 }).toBeGreaterThan(beforeKeypress);
+			await expect
+				.poll(() => workspaceConnectResponses, { timeout: 5_000 })
+				.toBeGreaterThan(initialConnectedCount);
+			await expect.poll(() => workspaceConnectViewports.at(-1)).toEqual(fittedViewport);
+			await expect.poll(() => terminalResizeViewports.length).toBeGreaterThan(initialResizeCount);
+			expect(terminalResizeViewports.at(-1)).toEqual(fittedViewport);
+			await expect(terminal.locator('.xterm')).not.toHaveClass(/enable-mouse-events/);
 
-      await expect.poll(() => xtermGeometry(terminal)).toEqual(fittedGeometry);
+			await expect.poll(() => xtermGeometry(terminal)).toEqual(fittedGeometry);
 
-      await xtermInput.focus();
-      await page.keyboard.press('ControlOrMeta+C');
-      await page.keyboard.type("printf 'NEXUS_RECONNECTED_E2E\\n'");
-      await page.keyboard.press('Enter');
-      await expect
-        .poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 10_000 })
-        .toContain('NEXUS_RECONNECTED_E2E');
-      await expect
-        .poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 10_000 })
-        .toMatch(/(?:^|\n|nexus-e2e\$ )NEXUS_RECONNECTED_E2E\s*(?:\n|$)/);
-      await expect.poll(async () => terminal.locator('.xterm-rows').innerText()).toContain('nexus-e2e$');
-      await expect
-        .poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 5_000 })
-        .not.toContain('nexus-e2e$ nexus-e2e$');
-      await expect
-        .poll(() =>
-          frontendDebugLogs.some(
-            (entry) =>
-              entry.msg === 'Workspace connection attempt succeeded' &&
-              entry.connectionId === connectionId &&
-              entry.phase === 'reconnect',
-          ),
-        )
-        .toBeTruthy();
-      expect(JSON.stringify(frontendDebugLogs)).not.toContain(E2E_SSH.password);
-    });
-  } finally {
-    await setTestSshOnline(true);
-    await loginAsInitialAdmin(context.request);
-    const restoreSettings = await context.request.put('/api/v1/settings', {
-      data: { frontendLogLevel: originalFrontendLogLevel },
-    });
-    expect(restoreSettings.ok()).toBeTruthy();
-  }
+			await xtermInput.focus();
+			await page.keyboard.press('ControlOrMeta+C');
+			await page.keyboard.type("printf 'NEXUS_RECONNECTED_E2E\\n'");
+			await page.keyboard.press('Enter');
+			await expect
+				.poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 10_000 })
+				.toContain('NEXUS_RECONNECTED_E2E');
+			await expect
+				.poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 10_000 })
+				.toMatch(/(?:^|\n|nexus-e2e\$ )NEXUS_RECONNECTED_E2E\s*(?:\n|$)/);
+			await expect.poll(async () => terminal.locator('.xterm-rows').innerText()).toContain('nexus-e2e$');
+			await expect
+				.poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 5_000 })
+				.not.toContain('nexus-e2e$ nexus-e2e$');
+			await expect
+				.poll(() =>
+					frontendDebugLogs.some(
+						(entry) =>
+							entry.msg === 'Workspace connection attempt succeeded' &&
+							entry.connectionId === connectionId &&
+							entry.phase === 'reconnect',
+					),
+				)
+				.toBeTruthy();
+			expect(JSON.stringify(frontendDebugLogs)).not.toContain(E2E_SSH.password);
+		});
+	} finally {
+		await setTestSshOnline(true);
+		await loginAsInitialAdmin(context.request);
+		const restoreSettings = await context.request.put('/api/v1/settings', {
+			data: { frontendLogLevel: originalFrontendLogLevel },
+		});
+		expect(restoreSettings.ok()).toBeTruthy();
+	}
 });
 
 test('hidden desktop terminal keeps its fitted geometry while switching sessions', async ({ page, context }) => {
-  await loginAsInitialAdmin(context.request);
-  await configureSshE2eSettings(context.request);
-  await setTestSshOnline(true);
-  await resetTestSshFilesystem();
-  await removeMultiSessionConnections(context.request);
-  const connectionIds = await createMultiSessionConnections(context.request);
+	await loginAsInitialAdmin(context.request);
+	await configureSshE2eSettings(context.request);
+	await setTestSshOnline(true);
+	await resetTestSshFilesystem();
+	await removeMultiSessionConnections(context.request);
+	const connectionIds = await createMultiSessionConnections(context.request);
 
-  try {
-    await connectTestSshFromConnectionsPage(page, connectionIds[0]!);
-    const terminals = page.locator('.terminal-inner-container');
-    await expect(terminals).toHaveCount(1);
-    const activeGeometry = await xtermGeometry(terminals.nth(0));
-    expect(activeGeometry.rowCount).toBeGreaterThan(10);
+	try {
+		await connectTestSshFromConnectionsPage(page, connectionIds[0]!);
+		const terminals = page.locator('.terminal-inner-container');
+		await expect(terminals).toHaveCount(1);
+		const activeGeometry = await xtermGeometry(terminals.nth(0));
+		expect(activeGeometry.rowCount).toBeGreaterThan(10);
 
-    await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
-    await expect(terminals).toHaveCount(2);
-    // Allow the ResizeObserver callback caused by v-show/display:none to run. A hidden terminal
-    // must retain its last valid fitted geometry instead of being refit against a zero-size ancestor.
-    await page.waitForTimeout(100);
-    const hiddenGeometry = await xtermGeometry(terminals.nth(0));
-    expect(hiddenGeometry).toEqual(activeGeometry);
+		await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
+		await expect(terminals).toHaveCount(2);
+		// Allow the ResizeObserver callback caused by v-show/display:none to run. A hidden terminal
+		// must retain its last valid fitted geometry instead of being refit against a zero-size ancestor.
+		await page.waitForTimeout(100);
+		const hiddenGeometry = await xtermGeometry(terminals.nth(0));
+		expect(hiddenGeometry).toEqual(activeGeometry);
 
-    await page.locator('.terminal-tab-shell').getByRole('tab').filter({ hasText: MULTI_SESSION_NAMES[0] }).click();
-    await expect(page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]')).toHaveText(
-      new RegExp(MULTI_SESSION_NAMES[0]),
-    );
-    expect(await xtermGeometry(terminals.nth(0))).toEqual(activeGeometry);
-  } finally {
-    await setTestSshOnline(true);
-    await removeMultiSessionConnections(context.request);
-  }
+		await page.locator('.terminal-tab-shell').getByRole('tab').filter({ hasText: MULTI_SESSION_NAMES[0] }).click();
+		await expect(page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]')).toHaveText(
+			new RegExp(MULTI_SESSION_NAMES[0]),
+		);
+		expect(await xtermGeometry(terminals.nth(0))).toEqual(activeGeometry);
+	} finally {
+		await setTestSshOnline(true);
+		await removeMultiSessionConnections(context.request);
+	}
 });
 
 test('inactive desktop terminal restores its fitted geometry after leaving and returning to Workspace', async ({
-  page,
-  context,
+	page,
+	context,
 }) => {
-  await loginAsInitialAdmin(context.request);
-  await configureSshE2eSettings(context.request);
-  await setTestSshOnline(true);
-  await resetTestSshFilesystem();
-  await removeMultiSessionConnections(context.request);
-  const connectionIds = await createMultiSessionConnections(context.request);
+	await loginAsInitialAdmin(context.request);
+	await configureSshE2eSettings(context.request);
+	await setTestSshOnline(true);
+	await resetTestSshFilesystem();
+	await removeMultiSessionConnections(context.request);
+	const connectionIds = await createMultiSessionConnections(context.request);
 
-  try {
-    await connectTestSshFromConnectionsPage(page, connectionIds[0]!);
-    const terminals = page.locator('.terminal-inner-container');
-    await expect(terminals).toHaveCount(1);
-    const firstGeometry = await xtermGeometry(terminals.nth(0));
-    expect(firstGeometry.rowCount).toBeGreaterThan(10);
+	try {
+		await connectTestSshFromConnectionsPage(page, connectionIds[0]!);
+		const terminals = page.locator('.terminal-inner-container');
+		await expect(terminals).toHaveCount(1);
+		const firstGeometry = await xtermGeometry(terminals.nth(0));
+		expect(firstGeometry.rowCount).toBeGreaterThan(10);
 
-    await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
-    await expect(terminals).toHaveCount(2);
-    await expect(page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]')).toHaveText(
-      new RegExp(MULTI_SESSION_NAMES[1]),
-    );
+		await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
+		await expect(terminals).toHaveCount(2);
+		await expect(page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]')).toHaveText(
+			new RegExp(MULTI_SESSION_NAMES[1]),
+		);
 
-    await page.locator('.app-navigation a[href="/notifications"]').click();
-    await expect(page).toHaveURL(/\/notifications$/);
-    await page.locator('.app-navigation a[href="/workspace"]').click();
-    await expect(page).toHaveURL(/\/workspace$/);
-    await expect(terminals).toHaveCount(2);
-    await expect(page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]')).toHaveText(
-      new RegExp(MULTI_SESSION_NAMES[1]),
-    );
+		await page.locator('.app-navigation a[href="/notifications"]').click();
+		await expect(page).toHaveURL(/\/notifications$/);
+		await page.locator('.app-navigation a[href="/workspace"]').click();
+		await expect(page).toHaveURL(/\/workspace$/);
+		await expect(terminals).toHaveCount(2);
+		await expect(page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]')).toHaveText(
+			new RegExp(MULTI_SESSION_NAMES[1]),
+		);
 
-    // Workspace itself is remounted after route navigation. The inactive terminal must restore
-    // its last valid xterm geometry before replaying its snapshot or consuming more output.
-    expect(await xtermGeometry(terminals.nth(0))).toEqual(firstGeometry);
+		// Workspace itself is remounted after route navigation. The inactive terminal must restore
+		// its last valid xterm geometry before replaying its snapshot or consuming more output.
+		expect(await xtermGeometry(terminals.nth(0))).toEqual(firstGeometry);
 
-    await page.locator('.terminal-tab-shell').getByRole('tab').filter({ hasText: MULTI_SESSION_NAMES[0] }).click();
-    await expect(page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]')).toHaveText(
-      new RegExp(MULTI_SESSION_NAMES[0]),
-    );
-    expect(await xtermGeometry(terminals.nth(0))).toEqual(firstGeometry);
-  } finally {
-    await setTestSshOnline(true);
-    await removeMultiSessionConnections(context.request);
-  }
+		await page.locator('.terminal-tab-shell').getByRole('tab').filter({ hasText: MULTI_SESSION_NAMES[0] }).click();
+		await expect(page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]')).toHaveText(
+			new RegExp(MULTI_SESSION_NAMES[0]),
+		);
+		expect(await xtermGeometry(terminals.nth(0))).toEqual(firstGeometry);
+	} finally {
+		await setTestSshOnline(true);
+		await removeMultiSessionConnections(context.request);
+	}
 });
 
 test('desktop Alt+Arrow cycles live Workspace sessions without reconnecting them', async ({ page, context }) => {
-  await loginAsInitialAdmin(context.request);
-  await configureSshE2eSettings(context.request);
-  await setTestSshOnline(true);
-  await resetTestSshFilesystem();
-  await removeMultiSessionConnections(context.request);
-  const connectionIds = await createMultiSessionConnections(context.request);
-  const workspaceConnectIds: string[] = [];
-  page.on('websocket', (socket) => {
-    if (!new URL(socket.url()).pathname.startsWith('/ws')) return;
-    socket.on('framesent', (event) => {
-      if (typeof event.payload !== 'string') return;
-      try {
-        const message = JSON.parse(event.payload) as {
-          type?: string;
-          payload?: { workspaceId?: string };
-        };
-        if (message.type === 'workspace.connect' && message.payload?.workspaceId)
-          workspaceConnectIds.push(message.payload.workspaceId);
-      } catch {
-        return;
-      }
-    });
-  });
+	await loginAsInitialAdmin(context.request);
+	await configureSshE2eSettings(context.request);
+	await setTestSshOnline(true);
+	await resetTestSshFilesystem();
+	await removeMultiSessionConnections(context.request);
+	const connectionIds = await createMultiSessionConnections(context.request);
+	const workspaceConnectIds: string[] = [];
+	page.on('websocket', (socket) => {
+		if (!new URL(socket.url()).pathname.startsWith('/ws')) return;
+		socket.on('framesent', (event) => {
+			if (typeof event.payload !== 'string') return;
+			try {
+				const message = JSON.parse(event.payload) as {
+					type?: string;
+					payload?: { workspaceId?: string };
+				};
+				if (message.type === 'workspace.connect' && message.payload?.workspaceId)
+					workspaceConnectIds.push(message.payload.workspaceId);
+			} catch {
+				return;
+			}
+		});
+	});
 
-  try {
-    await connectTestSshFromConnectionsPage(page, connectionIds[0]!);
-    await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
-    const activeTab = () => page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]');
-    await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[1]));
-    await expect.poll(() => new Set(workspaceConnectIds).size, { timeout: 20_000 }).toBe(2);
-    expect(workspaceConnectIds).toHaveLength(2);
+	try {
+		await connectTestSshFromConnectionsPage(page, connectionIds[0]!);
+		await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
 
-    await page.keyboard.press('Alt+ArrowUp');
-    await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[0]));
+		const activeTab = () => page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]');
 
-    await page.keyboard.press('Alt+ArrowDown');
-    await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[1]));
+		await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[1]));
+		await expect.poll(() => new Set(workspaceConnectIds).size, { timeout: 20_000 }).toBe(2);
+		expect(workspaceConnectIds).toHaveLength(2);
 
-    await page.keyboard.press('Alt+ArrowDown');
-    await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[0]));
-    expect(workspaceConnectIds).toHaveLength(2);
-  } finally {
-    await setTestSshOnline(true);
-    await removeMultiSessionConnections(context.request);
-  }
+		await page.keyboard.press('Alt+ArrowUp');
+		await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[0]));
+
+		await page.keyboard.press('Alt+ArrowDown');
+		await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[1]));
+
+		await page.keyboard.press('Alt+ArrowDown');
+		await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[0]));
+		expect(workspaceConnectIds).toHaveLength(2);
+	} finally {
+		await setTestSshOnline(true);
+		await removeMultiSessionConnections(context.request);
+	}
 });
 
 test('tab bulk-close actions release only the targeted live Workspace sessions', async ({ page, context }) => {
-  await loginAsInitialAdmin(context.request);
-  await configureSshE2eSettings(context.request);
-  await setTestSshOnline(true);
-  await resetTestSshFilesystem();
-  await removeMultiSessionConnections(context.request);
-  const connectionIds = await createMultiSessionConnections(context.request);
-  const workspaceConnectIds: string[] = [];
-  const workspaceCloseIds: string[] = [];
-  page.on('websocket', (socket) => {
-    if (!new URL(socket.url()).pathname.startsWith('/ws')) return;
-    socket.on('framesent', (event) => {
-      if (typeof event.payload !== 'string') return;
-      try {
-        const message = JSON.parse(event.payload) as {
-          type?: string;
-          payload?: { workspaceId?: string };
-        };
-        const workspaceId = message.payload?.workspaceId;
-        if (!workspaceId) return;
-        if (message.type === 'workspace.connect') workspaceConnectIds.push(workspaceId);
-        if (message.type === 'workspace.close') workspaceCloseIds.push(workspaceId);
-      } catch {
-        return;
-      }
-    });
-  });
+	await loginAsInitialAdmin(context.request);
+	await configureSshE2eSettings(context.request);
+	await setTestSshOnline(true);
+	await resetTestSshFilesystem();
+	await removeMultiSessionConnections(context.request);
+	const connectionIds = await createMultiSessionConnections(context.request);
+	const workspaceConnectIds: string[] = [];
+	const workspaceCloseIds: string[] = [];
+	page.on('websocket', (socket) => {
+		if (!new URL(socket.url()).pathname.startsWith('/ws')) return;
+		socket.on('framesent', (event) => {
+			if (typeof event.payload !== 'string') return;
+			try {
+				const message = JSON.parse(event.payload) as {
+					type?: string;
+					payload?: { workspaceId?: string };
+				};
+				const workspaceId = message.payload?.workspaceId;
+				if (!workspaceId) return;
+				if (message.type === 'workspace.connect') workspaceConnectIds.push(workspaceId);
+				if (message.type === 'workspace.close') workspaceCloseIds.push(workspaceId);
+			} catch {
+				return;
+			}
+		});
+	});
 
-  const tabs = page.locator('.terminal-tab-shell').locator('[role="tab"]');
-  const tabForName = (name: string) => tabs.filter({ hasText: name });
-  const activeTab = () => page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]');
-  const runTabContextAction = async (name: string, action: string) => {
-    await tabForName(name).click({ button: 'right' });
-    const menu = page.getByRole('menu');
-    await expect(menu).toBeVisible();
-    await menu.getByRole('button', { name: action, exact: true }).click();
-  };
+	const tabs = page.locator('.terminal-tab-shell').locator('[role="tab"]');
 
-  try {
-    await connectTestSshFromConnectionsPage(page, connectionIds[0]!);
-    await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
-    await openConnectionFromWorkspacePicker(page, connectionIds[2]!);
-    await expect.poll(() => new Set(workspaceConnectIds).size, { timeout: 20_000 }).toBe(3);
-    expect(workspaceConnectIds).toHaveLength(3);
+	const tabForName = (name: string) => tabs.filter({ hasText: name });
 
-    const [alphaWorkspaceId, bravoWorkspaceId, firstCharlieWorkspaceId] = workspaceConnectIds;
-    await runTabContextAction(MULTI_SESSION_NAMES[1], 'Close Tabs to the Right');
-    await expect(tabs).toHaveCount(2);
-    await expect(tabForName(MULTI_SESSION_NAMES[2])).toHaveCount(0);
-    await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[1]));
-    await expect.poll(() => workspaceCloseIds.includes(firstCharlieWorkspaceId!), { timeout: 10_000 }).toBe(true);
-    expect(workspaceCloseIds).not.toContain(alphaWorkspaceId);
-    expect(workspaceCloseIds).not.toContain(bravoWorkspaceId);
+	const activeTab = () => page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]');
 
-    await openConnectionFromWorkspacePicker(page, connectionIds[2]!);
-    await expect.poll(() => workspaceConnectIds.length, { timeout: 20_000 }).toBe(4);
-    const secondCharlieWorkspaceId = workspaceConnectIds[3]!;
+	const runTabContextAction = async (name: string, action: string) => {
+		await tabForName(name).click({ button: 'right' });
+		const menu = page.getByRole('menu');
+		await expect(menu).toBeVisible();
+		await menu.getByRole('button', { name: action, exact: true }).click();
+	};
 
-    await runTabContextAction(MULTI_SESSION_NAMES[1], 'Close Tabs to the Left');
-    await expect(tabs).toHaveCount(2);
-    await expect(tabForName(MULTI_SESSION_NAMES[0])).toHaveCount(0);
-    await expect.poll(() => workspaceCloseIds.includes(alphaWorkspaceId!), { timeout: 10_000 }).toBe(true);
-    expect(workspaceCloseIds).not.toContain(bravoWorkspaceId);
-    expect(workspaceCloseIds).not.toContain(secondCharlieWorkspaceId);
+	try {
+		await connectTestSshFromConnectionsPage(page, connectionIds[0]!);
+		await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
+		await openConnectionFromWorkspacePicker(page, connectionIds[2]!);
+		await expect.poll(() => new Set(workspaceConnectIds).size, { timeout: 20_000 }).toBe(3);
+		expect(workspaceConnectIds).toHaveLength(3);
 
-    await runTabContextAction(MULTI_SESSION_NAMES[1], 'Close Other Tabs');
-    await expect(tabs).toHaveCount(1);
-    await expect(tabForName(MULTI_SESSION_NAMES[1])).toHaveAttribute('aria-selected', 'true');
-    await expect.poll(() => workspaceCloseIds.includes(secondCharlieWorkspaceId), { timeout: 10_000 }).toBe(true);
-    expect(workspaceCloseIds).not.toContain(bravoWorkspaceId);
-    expect(workspaceConnectIds).toHaveLength(4);
-  } finally {
-    await setTestSshOnline(true);
-    await removeMultiSessionConnections(context.request);
-  }
+		const [alphaWorkspaceId, bravoWorkspaceId, firstCharlieWorkspaceId] = workspaceConnectIds;
+		await runTabContextAction(MULTI_SESSION_NAMES[1], 'Close Tabs to the Right');
+		await expect(tabs).toHaveCount(2);
+		await expect(tabForName(MULTI_SESSION_NAMES[2])).toHaveCount(0);
+		await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[1]));
+		await expect.poll(() => workspaceCloseIds.includes(firstCharlieWorkspaceId!), { timeout: 10_000 }).toBe(true);
+		expect(workspaceCloseIds).not.toContain(alphaWorkspaceId);
+		expect(workspaceCloseIds).not.toContain(bravoWorkspaceId);
+
+		await openConnectionFromWorkspacePicker(page, connectionIds[2]!);
+		await expect.poll(() => workspaceConnectIds.length, { timeout: 20_000 }).toBe(4);
+		const secondCharlieWorkspaceId = workspaceConnectIds[3]!;
+
+		await runTabContextAction(MULTI_SESSION_NAMES[1], 'Close Tabs to the Left');
+		await expect(tabs).toHaveCount(2);
+		await expect(tabForName(MULTI_SESSION_NAMES[0])).toHaveCount(0);
+		await expect.poll(() => workspaceCloseIds.includes(alphaWorkspaceId!), { timeout: 10_000 }).toBe(true);
+		expect(workspaceCloseIds).not.toContain(bravoWorkspaceId);
+		expect(workspaceCloseIds).not.toContain(secondCharlieWorkspaceId);
+
+		await runTabContextAction(MULTI_SESSION_NAMES[1], 'Close Other Tabs');
+		await expect(tabs).toHaveCount(1);
+		await expect(tabForName(MULTI_SESSION_NAMES[1])).toHaveAttribute('aria-selected', 'true');
+		await expect.poll(() => workspaceCloseIds.includes(secondCharlieWorkspaceId), { timeout: 10_000 }).toBe(true);
+		expect(workspaceCloseIds).not.toContain(bravoWorkspaceId);
+		expect(workspaceConnectIds).toHaveLength(4);
+	} finally {
+		await setTestSshOnline(true);
+		await removeMultiSessionConnections(context.request);
+	}
 });
 
 test('command history broadcasts a saved command to every connected SSH session', async ({ page, context }) => {
-  await loginAsInitialAdmin(context.request);
-  await configureSshE2eSettings(context.request);
-  await setTestSshOnline(true);
-  await resetTestSshFilesystem();
-  await removeMultiSessionConnections(context.request);
-  const connectionIds = await createMultiSessionConnections(context.request);
-  const marker = 'COMMAND_HISTORY_BROADCAST_E2E';
-  const command = `printf '${marker}\\n'`;
+	await loginAsInitialAdmin(context.request);
+	await configureSshE2eSettings(context.request);
+	await setTestSshOnline(true);
+	await resetTestSshFilesystem();
+	await removeMultiSessionConnections(context.request);
+	const connectionIds = await createMultiSessionConnections(context.request);
+	const marker = 'COMMAND_HISTORY_BROADCAST_E2E';
+	const command = `printf '${marker}\\n'`;
 
-  const existingHistory = await context.request.get('/api/v1/command-history');
-  expect(existingHistory.ok()).toBeTruthy();
-  for (const entry of (await existingHistory.json()) as Array<{ id: number; command: string }>) {
-    if (entry.command !== command) continue;
-    expect((await context.request.delete(`/api/v1/command-history/${entry.id}`)).ok()).toBeTruthy();
-  }
+	const existingHistory = await context.request.get('/api/v1/command-history');
+	expect(existingHistory.ok()).toBeTruthy();
+	for (const entry of (await existingHistory.json()) as Array<{ id: number; command: string }>) {
+		if (entry.command !== command) continue;
+		expect((await context.request.delete(`/api/v1/command-history/${entry.id}`)).ok()).toBeTruthy();
+	}
 
-  const createHistory = await context.request.post('/api/v1/command-history', { data: { command } });
-  expect(createHistory.status()).toBe(201);
-  const historyId = ((await createHistory.json()) as { id: number }).id;
+	const createHistory = await context.request.post('/api/v1/command-history', { data: { command } });
+	expect(createHistory.status()).toBe(201);
+	const historyId = ((await createHistory.json()) as { id: number }).id;
 
-  try {
-    await connectTestSshFromConnectionsPage(page, connectionIds[0]!);
-    await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
+	try {
+		await connectTestSshFromConnectionsPage(page, connectionIds[0]!);
+		await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
 
-    const terminals = page.locator('.terminal-inner-container');
-    await expect(terminals).toHaveCount(2);
-    const historyRow = page
-      .locator('.command-history-root:visible')
-      .first()
-      .locator(`[data-history-id="${historyId}"]`);
-    await expect(historyRow).toBeVisible({ timeout: 20_000 });
-    await historyRow.click({ button: 'right' });
-    await page.getByText('Send to All Sessions', { exact: true }).filter({ visible: true }).click();
+		const terminals = page.locator('.terminal-inner-container');
+		await expect(terminals).toHaveCount(2);
+		const historyRow = page
+			.locator('.command-history-root:visible')
+			.first()
+			.locator(`[data-history-id="${historyId}"]`);
+		await expect(historyRow).toBeVisible({ timeout: 20_000 });
+		await historyRow.click({ button: 'right' });
+		await page.getByText('Send to All Sessions', { exact: true }).filter({ visible: true }).click();
 
-    await expect
-      .poll(async () => terminals.nth(1).locator('.xterm-rows').textContent(), { timeout: 15_000 })
-      .toContain(marker);
+		await expect
+			.poll(async () => terminals.nth(1).locator('.xterm-rows').textContent(), { timeout: 15_000 })
+			.toContain(marker);
 
-    await page.locator('.terminal-tab-shell').getByRole('tab').filter({ hasText: MULTI_SESSION_NAMES[0] }).click();
-    await expect(page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]')).toHaveText(
-      new RegExp(MULTI_SESSION_NAMES[0]),
-    );
-    await expect
-      .poll(async () => terminals.nth(0).locator('.xterm-rows').textContent(), { timeout: 15_000 })
-      .toContain(marker);
-  } finally {
-    const history = await context.request.get('/api/v1/command-history');
-    expect(history.ok()).toBeTruthy();
-    for (const entry of (await history.json()) as Array<{ id: number; command: string }>) {
-      if (entry.command !== command) continue;
-      const remove = await context.request.delete(`/api/v1/command-history/${entry.id}`);
-      expect([200, 404]).toContain(remove.status());
-    }
-    await setTestSshOnline(true);
-    await removeMultiSessionConnections(context.request);
-  }
+		await page.locator('.terminal-tab-shell').getByRole('tab').filter({ hasText: MULTI_SESSION_NAMES[0] }).click();
+		await expect(page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]')).toHaveText(
+			new RegExp(MULTI_SESSION_NAMES[0]),
+		);
+		await expect
+			.poll(async () => terminals.nth(0).locator('.xterm-rows').textContent(), { timeout: 15_000 })
+			.toContain(marker);
+	} finally {
+		const history = await context.request.get('/api/v1/command-history');
+		expect(history.ok()).toBeTruthy();
+		for (const entry of (await history.json()) as Array<{ id: number; command: string }>) {
+			if (entry.command !== command) continue;
+			const remove = await context.request.delete(`/api/v1/command-history/${entry.id}`);
+			expect([200, 404]).toContain(remove.status());
+		}
+		await setTestSshOnline(true);
+		await removeMultiSessionConnections(context.request);
+	}
 });
 
 test('HTML terminal background starts with a visible viewport after session switches and page returns', async ({
-  page,
-  context,
+	page,
+	context,
 }) => {
-  test.setTimeout(60_000);
-  await loginAsInitialAdmin(context.request);
-  await configureSshE2eSettings(context.request);
-  await setTestSshOnline(true);
-  await removeMultiSessionConnections(context.request);
-  const originalResponse = await context.request.get('/api/v1/appearance');
-  expect(originalResponse.ok()).toBeTruthy();
-  const original = (await originalResponse.json()) as {
-    terminalCustomHtml: string;
-    terminalBackgroundEnabled: boolean;
-  };
-  const presetName = 'e2e-visible-viewport.html';
-  const html = `<canvas id="scene"></canvas><script>
+	test.setTimeout(60_000);
+	await loginAsInitialAdmin(context.request);
+	await configureSshE2eSettings(context.request);
+	await setTestSshOnline(true);
+	await removeMultiSessionConnections(context.request);
+	const originalResponse = await context.request.get('/api/v1/appearance');
+	expect(originalResponse.ok()).toBeTruthy();
+	const original = (await originalResponse.json()) as {
+		terminalCustomHtml: string;
+		terminalBackgroundEnabled: boolean;
+	};
+	const presetName = 'e2e-visible-viewport.html';
+	const html = `<canvas id="scene"></canvas><script>
     const canvas = document.getElementById('scene');
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -877,208 +894,228 @@ test('HTML terminal background starts with a visible viewport after session swit
     context.fillStyle = '#ff0000';
     context.fillRect(0, 0, canvas.width, canvas.height);
   </script>`;
-  const connectionIds = await createMultiSessionConnections(context.request);
-  const presetResponse = await context.request.post('/api/v1/appearance/html-presets/local', {
-    data: { name: presetName, content: html },
-  });
-  expect(presetResponse.status()).toBe(201);
+	const connectionIds = await createMultiSessionConnections(context.request);
+	const presetResponse = await context.request.post('/api/v1/appearance/html-presets/local', {
+		data: { name: presetName, content: html },
+	});
+	expect(presetResponse.status()).toBe(201);
 
-  try {
-    await connectTestSshFromConnectionsPage(page, connectionIds[0]!);
-    await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
-    await page.getByTitle('Customize Style').click();
-    const customizer = page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
-    await customizer.getByRole('button', { name: 'Background', exact: true }).click();
-    await customizer.getByPlaceholder('Search local themes...', { exact: true }).fill(presetName);
-    const row = customizer.getByRole('listitem').filter({ hasText: presetName.replace(/\.html$/, '') });
-    await expect(row).toBeVisible();
-    const apply = page.waitForResponse(
-      (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
-    );
-    await row.getByRole('button', { name: 'Apply', exact: true }).click();
-    expect((await apply).ok()).toBeTruthy();
-    await customizer.getByLabel('Close', { exact: true }).first().click();
+	try {
+		await connectTestSshFromConnectionsPage(page, connectionIds[0]!);
+		await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
+		await page.getByTitle('Customize Style').click();
+		const customizer = page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
+		await customizer.getByRole('button', { name: 'Background', exact: true }).click();
+		await customizer.getByPlaceholder('Search local themes...', { exact: true }).fill(presetName);
+		const row = customizer.getByRole('listitem').filter({ hasText: presetName.replace(/\.html$/, '') });
+		await expect(row).toBeVisible();
+		const apply = page.waitForResponse(
+			(response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
+		);
+		await row.getByRole('button', { name: 'Apply', exact: true }).click();
+		expect((await apply).ok()).toBeTruthy();
+		await customizer.getByLabel('Close', { exact: true }).first().click();
 
-    const background = page.frameLocator('[data-workspace-active="true"] .terminal-custom-html');
-    const expectPaintedBackground = async () =>
-      expect
-        .poll(() =>
-          background.locator('#scene').evaluate((element) => {
-            const canvas = element as HTMLCanvasElement;
-            if (canvas.width === 0 || canvas.height === 0) return false;
-            const pixel = canvas.getContext('2d')?.getImageData(0, 0, 1, 1).data;
-            return pixel?.[0] === 255 && pixel[3] === 255;
-          }),
-        )
-        .toBe(true);
-    await expectPaintedBackground();
-    await page.locator('.terminal-tab-shell').getByRole('tab').filter({ hasText: MULTI_SESSION_NAMES[0] }).click();
-    await expectPaintedBackground();
-    for (let cycle = 0; cycle < 3; cycle += 1) {
-      await page.locator('.app-nav-links a[href="/settings"]').click();
-      await expect(page).toHaveURL(/\/settings/);
-      await page.locator('.app-nav-links a[href="/workspace"]').click();
-      await expect(page).toHaveURL(/\/workspace/);
-      await expectPaintedBackground();
-      await page.locator('.terminal-tab-shell').getByRole('tab').filter({ hasText: MULTI_SESSION_NAMES[1] }).click();
-      await expectPaintedBackground();
-      await page.locator('.terminal-tab-shell').getByRole('tab').filter({ hasText: MULTI_SESSION_NAMES[0] }).click();
-      await expectPaintedBackground();
-    }
-  } finally {
-    await context.request.put('/api/v1/appearance', {
-      data: {
-        terminalCustomHtml: original.terminalCustomHtml,
-        terminalBackgroundEnabled: original.terminalBackgroundEnabled,
-      },
-    });
-    await context.request.delete(`/api/v1/appearance/html-presets/local/${presetName}`);
-    await removeMultiSessionConnections(context.request);
-  }
+		const background = page.frameLocator('[data-workspace-active="true"] .terminal-custom-html');
+
+		const expectPaintedBackground = async () =>
+			expect
+				.poll(() =>
+					background.locator('#scene').evaluate((element) => {
+						const canvas = element as HTMLCanvasElement;
+						if (canvas.width === 0 || canvas.height === 0) return false;
+						const pixel = canvas.getContext('2d')?.getImageData(0, 0, 1, 1).data;
+						return pixel?.[0] === 255 && pixel[3] === 255;
+					}),
+				)
+				.toBe(true);
+
+		await expectPaintedBackground();
+		await page.locator('.terminal-tab-shell').getByRole('tab').filter({ hasText: MULTI_SESSION_NAMES[0] }).click();
+		await expectPaintedBackground();
+		for (let cycle = 0; cycle < 3; cycle += 1) {
+			await page.locator('.app-nav-links a[href="/settings"]').click();
+			await expect(page).toHaveURL(/\/settings/);
+			await page.locator('.app-nav-links a[href="/workspace"]').click();
+			await expect(page).toHaveURL(/\/workspace/);
+			await expectPaintedBackground();
+			await page
+				.locator('.terminal-tab-shell')
+				.getByRole('tab')
+				.filter({ hasText: MULTI_SESSION_NAMES[1] })
+				.click();
+			await expectPaintedBackground();
+			await page
+				.locator('.terminal-tab-shell')
+				.getByRole('tab')
+				.filter({ hasText: MULTI_SESSION_NAMES[0] })
+				.click();
+			await expectPaintedBackground();
+		}
+	} finally {
+		await context.request.put('/api/v1/appearance', {
+			data: {
+				terminalCustomHtml: original.terminalCustomHtml,
+				terminalBackgroundEnabled: original.terminalBackgroundEnabled,
+			},
+		});
+		await context.request.delete(`/api/v1/appearance/html-presets/local/${presetName}`);
+		await removeMultiSessionConnections(context.request);
+	}
 });
 
 test.describe('M08.03-a mobile Workspace session lifecycle', () => {
-  test.use({ viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true });
+	test.use({ viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true });
 
-  test('opens, switches, scrolls, context-closes, and empties real Workspace sessions', async ({
-    page,
-    context,
-  }, testInfo) => {
-    await loginAsInitialAdmin(context.request);
-    await configureSshE2eSettings(context.request);
-    await setTestSshOnline(true);
-    await resetTestSshFilesystem();
-    await removeMultiSessionConnections(context.request);
-    const connectionIds = await createMultiSessionConnections(context.request);
-    const workspaceConnectIds: string[] = [];
-    page.on('websocket', (socket) => {
-      if (!new URL(socket.url()).pathname.startsWith('/ws')) return;
-      socket.on('framesent', (event) => {
-        if (typeof event.payload !== 'string') return;
-        try {
-          const message = JSON.parse(event.payload) as {
-            type?: string;
-            payload?: { workspaceId?: string };
-          };
-          if (message.type === 'workspace.connect' && message.payload?.workspaceId)
-            workspaceConnectIds.push(message.payload.workspaceId);
-        } catch {
-          return;
-        }
-      });
-    });
+	test('opens, switches, scrolls, context-closes, and empties real Workspace sessions', async ({
+		page,
+		context,
+	}, testInfo) => {
+		await loginAsInitialAdmin(context.request);
+		await configureSshE2eSettings(context.request);
+		await setTestSshOnline(true);
+		await resetTestSshFilesystem();
+		await removeMultiSessionConnections(context.request);
+		const connectionIds = await createMultiSessionConnections(context.request);
+		const workspaceConnectIds: string[] = [];
+		page.on('websocket', (socket) => {
+			if (!new URL(socket.url()).pathname.startsWith('/ws')) return;
+			socket.on('framesent', (event) => {
+				if (typeof event.payload !== 'string') return;
+				try {
+					const message = JSON.parse(event.payload) as {
+						type?: string;
+						payload?: { workspaceId?: string };
+					};
+					if (message.type === 'workspace.connect' && message.payload?.workspaceId)
+						workspaceConnectIds.push(message.payload.workspaceId);
+				} catch {
+					return;
+				}
+			});
+		});
 
-    const tabs = page.locator('.terminal-tab-shell').locator('[role="tab"]');
-    const tabForName = (name: string) => tabs.filter({ hasText: name });
-    const activeTab = () => page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]');
-    const visibleCommandInput = () => page.locator('.command-bar-command-input:visible').first();
-    const visibleTerminalRows = () => page.locator('.terminal-inner-container:visible .xterm-rows').first();
-    const visibleTerminalText = async () =>
-      (await visibleTerminalRows().locator(':scope > div').allTextContents()).join('');
-    const sendMarker = async (marker: string) => {
-      await visibleCommandInput().fill(`printf '${marker}\\n'`);
-      await visibleCommandInput().press('Enter');
-      await expect.poll(visibleTerminalText, { timeout: 15_000 }).toContain(marker);
-    };
+		const tabs = page.locator('.terminal-tab-shell').locator('[role="tab"]');
 
-    try {
-      await step('open the first real SSH session and record its terminal state', async () => {
-        await connectTestSshFromConnectionsPage(page, connectionIds[0]!);
-        await expect(tabs).toHaveCount(1);
-        await expect(tabForName(MULTI_SESSION_NAMES[0])).toHaveAttribute('aria-selected', 'true');
-        await sendMarker('M08_ALPHA_SESSION_STATE');
-        await captureWorkspaceEvidence(page, testInfo, 'before');
-      });
+		const tabForName = (name: string) => tabs.filter({ hasText: name });
 
-      await step('add two sessions through the Workspace new-tab picker', async () => {
-        await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
-        await expect(tabForName(MULTI_SESSION_NAMES[1])).toHaveAttribute('aria-selected', 'true');
-        await sendMarker('M08_BRAVO_SESSION_STATE');
+		const activeTab = () => page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]');
 
-        await openConnectionFromWorkspacePicker(page, connectionIds[2]!);
-        await expect(tabForName(MULTI_SESSION_NAMES[2])).toHaveAttribute('aria-selected', 'true');
-        await sendMarker('M08_CHARLIE_SESSION_STATE');
-        await expect(tabs).toHaveCount(3);
-        const closeButtons = page
-          .locator('.terminal-tab-shell')
-          .getByRole('button', { name: 'Close Tab', exact: true });
-        await expect(closeButtons).toHaveCount(3);
-        for (let index = 0; index < 3; index += 1) {
-          await expect(closeButtons.nth(index)).toBeVisible();
-          await expect(closeButtons.nth(index)).toHaveCSS('opacity', '1');
-          await expect(closeButtons.nth(index).locator('svg')).toBeVisible();
-        }
-        await expect.poll(() => new Set(workspaceConnectIds).size, { timeout: 20_000 }).toBe(3);
-        expect(workspaceConnectIds).toHaveLength(3);
-      });
+		const visibleCommandInput = () => page.locator('.command-bar-command-input:visible').first();
 
-      await step('switch active tabs without recreating hidden live session state', async () => {
-        await tabForName(MULTI_SESSION_NAMES[0]).click();
-        await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[0]));
-        await expect.poll(visibleTerminalText, { timeout: 10_000 }).toContain('M08_ALPHA_SESSION_STATE');
+		const visibleTerminalRows = () => page.locator('.terminal-inner-container:visible .xterm-rows').first();
 
-        await tabForName(MULTI_SESSION_NAMES[1]).click();
-        await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[1]));
-        await expect.poll(visibleTerminalText, { timeout: 10_000 }).toContain('M08_BRAVO_SESSION_STATE');
-        expect(workspaceConnectIds).toHaveLength(3);
-      });
+		const visibleTerminalText = async () =>
+			(await visibleTerminalRows().locator(':scope > div').allTextContents()).join('');
 
-      await step('scroll the overflowing tab strip and open its touch context menu', async () => {
-        const tabScroller = page.locator('.terminal-tab-shell').locator('[class*="overflow-x-auto"]');
-        await expect
-          .poll(() => tabScroller.evaluate((element) => element.scrollWidth > element.clientWidth))
-          .toBeTruthy();
-        await tabScroller.hover();
-        await page.mouse.wheel(0, 120);
-        await expect.poll(() => tabScroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
-        await tabScroller.evaluate((element) => {
-          element.scrollLeft = 0;
-        });
+		const sendMarker = async (marker: string) => {
+			await visibleCommandInput().fill(`printf '${marker}\\n'`);
+			await visibleCommandInput().press('Enter');
+			await expect.poll(visibleTerminalText, { timeout: 15_000 }).toContain(marker);
+		};
 
-        const targetTab = tabForName(MULTI_SESSION_NAMES[1]).first();
-        const box = await targetTab.boundingBox();
-        expect(box).toBeTruthy();
-        const point = { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 };
-        await targetTab.dispatchEvent('pointerdown', {
-          pointerId: 1,
-          pointerType: 'touch',
-          isPrimary: true,
-          button: 0,
-          buttons: 1,
-          clientX: point.x,
-          clientY: point.y,
-        });
-        await page.waitForTimeout(650);
-        await targetTab.dispatchEvent('pointerup', {
-          pointerId: 1,
-          pointerType: 'touch',
-          isPrimary: true,
-          button: 0,
-          buttons: 0,
-          clientX: point.x,
-          clientY: point.y,
-        });
-        const menu = page.getByRole('menu');
-        await expect(menu).toBeVisible();
-        await expect(menu.getByRole('button', { name: 'Close Other Tabs', exact: true })).toBeVisible();
-        await captureWorkspaceEvidence(page, testInfo, 'after');
-        await menu.getByRole('button', { name: 'Close Other Tabs', exact: true }).click();
-        await expect(tabs).toHaveCount(1);
-        await expect(tabForName(MULTI_SESSION_NAMES[1])).toHaveAttribute('aria-selected', 'true');
-      });
+		try {
+			await step('open the first real SSH session and record its terminal state', async () => {
+				await connectTestSshFromConnectionsPage(page, connectionIds[0]!);
+				await expect(tabs).toHaveCount(1);
+				await expect(tabForName(MULTI_SESSION_NAMES[0])).toHaveAttribute('aria-selected', 'true');
+				await sendMarker('M08_ALPHA_SESSION_STATE');
+				await captureWorkspaceEvidence(page, testInfo, 'before');
+			});
 
-      await step('close the final tab and return to the real empty Workspace state', async () => {
-        await tabForName(MULTI_SESSION_NAMES[1]).getByRole('button', { name: 'Close Tab', exact: true }).click();
-        await expect(tabs).toHaveCount(0);
-        await expect(page.getByRole('heading', { name: 'Connections & sessions', exact: true })).toBeVisible();
-        await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
-        const list = page.locator('.workspace-connection-list');
-        await expect(list).toBeVisible();
-        await expect(list.locator('[data-connection-id]').filter({ hasText: MULTI_SESSION_NAMES[0] })).toBeVisible();
-      });
-    } finally {
-      await setTestSshOnline(true);
-      await removeMultiSessionConnections(context.request);
-    }
-  });
+			await step('add two sessions through the Workspace new-tab picker', async () => {
+				await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
+				await expect(tabForName(MULTI_SESSION_NAMES[1])).toHaveAttribute('aria-selected', 'true');
+				await sendMarker('M08_BRAVO_SESSION_STATE');
+
+				await openConnectionFromWorkspacePicker(page, connectionIds[2]!);
+				await expect(tabForName(MULTI_SESSION_NAMES[2])).toHaveAttribute('aria-selected', 'true');
+				await sendMarker('M08_CHARLIE_SESSION_STATE');
+				await expect(tabs).toHaveCount(3);
+				const closeButtons = page
+					.locator('.terminal-tab-shell')
+					.getByRole('button', { name: 'Close Tab', exact: true });
+				await expect(closeButtons).toHaveCount(3);
+				for (let index = 0; index < 3; index += 1) {
+					await expect(closeButtons.nth(index)).toBeVisible();
+					await expect(closeButtons.nth(index)).toHaveCSS('opacity', '1');
+					await expect(closeButtons.nth(index).locator('svg')).toBeVisible();
+				}
+				await expect.poll(() => new Set(workspaceConnectIds).size, { timeout: 20_000 }).toBe(3);
+				expect(workspaceConnectIds).toHaveLength(3);
+			});
+
+			await step('switch active tabs without recreating hidden live session state', async () => {
+				await tabForName(MULTI_SESSION_NAMES[0]).click();
+				await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[0]));
+				await expect.poll(visibleTerminalText, { timeout: 10_000 }).toContain('M08_ALPHA_SESSION_STATE');
+
+				await tabForName(MULTI_SESSION_NAMES[1]).click();
+				await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[1]));
+				await expect.poll(visibleTerminalText, { timeout: 10_000 }).toContain('M08_BRAVO_SESSION_STATE');
+				expect(workspaceConnectIds).toHaveLength(3);
+			});
+
+			await step('scroll the overflowing tab strip and open its touch context menu', async () => {
+				const tabScroller = page.locator('.terminal-tab-shell').locator('[class*="overflow-x-auto"]');
+				await expect
+					.poll(() => tabScroller.evaluate((element) => element.scrollWidth > element.clientWidth))
+					.toBeTruthy();
+				await tabScroller.hover();
+				await page.mouse.wheel(0, 120);
+				await expect.poll(() => tabScroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+				await tabScroller.evaluate((element) => {
+					element.scrollLeft = 0;
+				});
+
+				const targetTab = tabForName(MULTI_SESSION_NAMES[1]).first();
+				const box = await targetTab.boundingBox();
+				expect(box).toBeTruthy();
+				const point = { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 };
+				await targetTab.dispatchEvent('pointerdown', {
+					pointerId: 1,
+					pointerType: 'touch',
+					isPrimary: true,
+					button: 0,
+					buttons: 1,
+					clientX: point.x,
+					clientY: point.y,
+				});
+				await page.waitForTimeout(650);
+				await targetTab.dispatchEvent('pointerup', {
+					pointerId: 1,
+					pointerType: 'touch',
+					isPrimary: true,
+					button: 0,
+					buttons: 0,
+					clientX: point.x,
+					clientY: point.y,
+				});
+				const menu = page.getByRole('menu');
+				await expect(menu).toBeVisible();
+				await expect(menu.getByRole('button', { name: 'Close Other Tabs', exact: true })).toBeVisible();
+				await captureWorkspaceEvidence(page, testInfo, 'after');
+				await menu.getByRole('button', { name: 'Close Other Tabs', exact: true }).click();
+				await expect(tabs).toHaveCount(1);
+				await expect(tabForName(MULTI_SESSION_NAMES[1])).toHaveAttribute('aria-selected', 'true');
+			});
+
+			await step('close the final tab and return to the real empty Workspace state', async () => {
+				await tabForName(MULTI_SESSION_NAMES[1])
+					.getByRole('button', { name: 'Close Tab', exact: true })
+					.click();
+				await expect(tabs).toHaveCount(0);
+				await expect(page.getByRole('heading', { name: 'Connections & sessions', exact: true })).toBeVisible();
+				await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
+				const list = page.locator('.workspace-connection-list');
+				await expect(list).toBeVisible();
+				await expect(
+					list.locator('[data-connection-id]').filter({ hasText: MULTI_SESSION_NAMES[0] }),
+				).toBeVisible();
+			});
+		} finally {
+			await setTestSshOnline(true);
+			await removeMultiSessionConnections(context.request);
+		}
+	});
 });

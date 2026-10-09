@@ -5,949 +5,1014 @@ import { captureFunctionalScreenshot } from '../../support/functional-screenshot
 import { step } from '../../support/steps';
 
 const appearanceCustomizer = (page: Page): Locator =>
-  page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
+	page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
+
 const appearanceField = (surface: Locator, label: string): Locator =>
-  surface
-    .locator('[data-ui="form-field"]')
-    .filter({ has: surface.page().locator('label').getByText(label, { exact: true }) })
-    .locator('input, textarea');
+	surface
+		.locator('[data-ui="form-field"]')
+		.filter({ has: surface.page().locator('label').getByText(label, { exact: true }) })
+		.locator('input, textarea');
 
 async function appBackground(page: Page): Promise<string> {
-  return page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--app-bg-color').trim());
+	return page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--app-bg-color').trim());
 }
 
 async function documentThemeColor(page: Page): Promise<string | null> {
-  return page.locator('meta[name="theme-color"]').getAttribute('content');
+	return page.locator('meta[name="theme-color"]').getAttribute('content');
 }
 
 const HTML_THEME_NAME = 'E2E Appearance Local HTML Theme.html';
 const HTML_THEME_RENAMED = 'E2E Appearance Local HTML Theme Renamed.html';
 const HTML_THEME_CONTENT = '<div class="e2e-appearance-theme">M06 local HTML theme</div>';
 const DEFAULT_OFFICIAL_HTML_THEME_REPOSITORY =
-  'https://github.com/0honus0/nexus-terminal/tree/main/assets/html-themes/remote';
+	'https://github.com/0honus0/nexus-terminal/tree/main/assets/html-themes/remote';
 const LEGACY_OFFICIAL_HTML_THEME_REPOSITORY =
-  'https://github.com/0honus0/nexus-terminal/tree/main/doc/custom_html_theme';
+	'https://github.com/0honus0/nexus-terminal/tree/main/doc/custom_html_theme';
 const TESTED_GIT_REF =
-  process.env.GITHUB_SHA?.trim() || execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+	process.env.GITHUB_SHA?.trim() || execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const TESTED_OFFICIAL_HTML_THEME_REPOSITORY = `https://github.com/0honus0/nexus-terminal/tree/${TESTED_GIT_REF}/assets/html-themes/remote`;
 const ONE_PIXEL_PNG = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZpmIAAAAASUVORK5CYII=',
-  'base64',
+	'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZpmIAAAAASUVORK5CYII=',
+	'base64',
 );
 const LEGACY_DARK_UI_THEME_WITHOUT_INPUT_TOKENS: Record<string, string> = {
-  '--app-bg-color': '#212529',
-  '--text-color': '#e9ecef',
-  '--text-color-secondary': '#adb5bd',
-  '--border-color': '#495057',
-  '--link-color': '#BB86FC',
-  '--link-hover-color': '#D1A9FF',
-  '--link-active-color': '#A06CD5',
-  '--link-active-bg-color': 'rgba(160, 108, 213, 0.2)',
-  '--nav-item-active-bg-color': 'var(--link-active-bg-color)',
-  '--header-bg-color': '#343a40',
-  '--footer-bg-color': '#343a40',
-  '--button-bg-color': 'var(--link-active-color)',
-  '--button-text-color': '#ffffff',
-  '--button-hover-bg-color': '#8E44AD',
-  '--icon-color': 'var(--text-color-secondary)',
-  '--icon-hover-color': 'var(--link-hover-color)',
-  '--split-line-color': 'var(--border-color)',
-  '--split-line-hover-color': 'var(--border-color)',
-  '--input-focus-border-color': 'var(--link-active-color)',
-  '--input-focus-glow': 'var(--link-active-color)',
-  '--overlay-bg-color': 'rgba(0, 0, 0, 0.8)',
-  '--font-family-sans-serif': 'sans-serif',
-  '--base-padding': '1rem',
-  '--base-margin': '0.5rem',
+	'--app-bg-color': '#212529',
+	'--text-color': '#e9ecef',
+	'--text-color-secondary': '#adb5bd',
+	'--border-color': '#495057',
+	'--link-color': '#BB86FC',
+	'--link-hover-color': '#D1A9FF',
+	'--link-active-color': '#A06CD5',
+	'--link-active-bg-color': 'rgba(160, 108, 213, 0.2)',
+	'--nav-item-active-bg-color': 'var(--link-active-bg-color)',
+	'--header-bg-color': '#343a40',
+	'--footer-bg-color': '#343a40',
+	'--button-bg-color': 'var(--link-active-color)',
+	'--button-text-color': '#ffffff',
+	'--button-hover-bg-color': '#8E44AD',
+	'--icon-color': 'var(--text-color-secondary)',
+	'--icon-hover-color': 'var(--link-hover-color)',
+	'--split-line-color': 'var(--border-color)',
+	'--split-line-hover-color': 'var(--border-color)',
+	'--input-focus-border-color': 'var(--link-active-color)',
+	'--input-focus-glow': 'var(--link-active-color)',
+	'--overlay-bg-color': 'rgba(0, 0, 0, 0.8)',
+	'--font-family-sans-serif': 'sans-serif',
+	'--base-padding': '1rem',
+	'--base-margin': '0.5rem',
 };
 
 async function appearance(request: APIRequestContext): Promise<Record<string, unknown>> {
-  const response = await request.get('/api/v1/appearance');
-  expect(response.ok()).toBeTruthy();
-  return (await response.json()) as Record<string, unknown>;
+	const response = await request.get('/api/v1/appearance');
+	expect(response.ok()).toBeTruthy();
+	return (await response.json()) as Record<string, unknown>;
 }
 
 async function cleanupHtmlThemes(request: APIRequestContext): Promise<void> {
-  const response = await request.get('/api/v1/appearance/html-presets/local');
-  expect(response.ok()).toBeTruthy();
-  const themes = (await response.json()) as Array<{ name: string; type: string }>;
-  for (const theme of themes.filter(
-    (item) => item.type === 'custom' && [HTML_THEME_NAME, HTML_THEME_RENAMED].includes(item.name),
-  )) {
-    expect(
-      (await request.delete(`/api/v1/appearance/html-presets/local/${encodeURIComponent(theme.name)}`)).ok(),
-    ).toBeTruthy();
-  }
+	const response = await request.get('/api/v1/appearance/html-presets/local');
+	expect(response.ok()).toBeTruthy();
+	const themes = (await response.json()) as Array<{ name: string; type: string }>;
+	for (const theme of themes.filter(
+		(item) => item.type === 'custom' && [HTML_THEME_NAME, HTML_THEME_RENAMED].includes(item.name),
+	)) {
+		expect(
+			(await request.delete(`/api/v1/appearance/html-presets/local/${encodeURIComponent(theme.name)}`)).ok(),
+		).toBeTruthy();
+	}
 }
 
 test.describe('fresh installation appearance defaults', () => {
-  test.use({ e2eDatabaseMode: 'empty' });
+	test.use({ e2eDatabaseMode: 'empty' });
 
-  test('official remote HTML theme repository defaults to the shipped remote asset path', async ({ request }) => {
-    await ensureInitialAdmin(request);
-    await loginAsInitialAdmin(request);
-    await expect
-      .poll(async () => (await appearance(request)).remoteHtmlPresetsUrl)
-      .toBe(DEFAULT_OFFICIAL_HTML_THEME_REPOSITORY);
-  });
+	test('official remote HTML theme repository defaults to the shipped remote asset path', async ({ request }) => {
+		await ensureInitialAdmin(request);
+		await loginAsInitialAdmin(request);
+		await expect
+			.poll(async () => (await appearance(request)).remoteHtmlPresetsUrl)
+			.toBe(DEFAULT_OFFICIAL_HTML_THEME_REPOSITORY);
+	});
 });
 
 test('current appearance settings still apply when the terminal theme catalog fails to load', async ({
-  page,
-  context,
+	page,
+	context,
 }) => {
-  await loginAsInitialAdmin(context.request);
-  expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
-  const originalResponse = await context.request.get('/api/v1/appearance');
-  expect(originalResponse.ok()).toBeTruthy();
-  const original = (await originalResponse.json()) as { windowThemeColor?: string };
-  const targetColor = '#123456';
-  expect(
-    (await context.request.put('/api/v1/appearance', { data: { windowThemeColor: targetColor } })).ok(),
-  ).toBeTruthy();
+	await loginAsInitialAdmin(context.request);
+	expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
+	const originalResponse = await context.request.get('/api/v1/appearance');
+	expect(originalResponse.ok()).toBeTruthy();
+	const original = (await originalResponse.json()) as { windowThemeColor?: string };
+	const targetColor = '#123456';
+	expect(
+		(await context.request.put('/api/v1/appearance', { data: { windowThemeColor: targetColor } })).ok(),
+	).toBeTruthy();
 
-  await page.route('**/api/v1/terminal-themes', async (route) => {
-    if (route.request().method() === 'GET') await route.abort('failed');
-    else await route.continue();
-  });
-  try {
-    await page.goto('/settings');
-    await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
-    await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
-    await expect(page.getByRole('textbox', { name: 'Title bar color', exact: true })).toHaveValue(targetColor);
-  } finally {
-    await page.unroute('**/api/v1/terminal-themes');
-    expect(
-      (
-        await context.request.put('/api/v1/appearance', {
-          data: { windowThemeColor: original.windowThemeColor ?? '#212529' },
-        })
-      ).ok(),
-    ).toBeTruthy();
-  }
+	await page.route('**/api/v1/terminal-themes', async (route) => {
+		if (route.request().method() === 'GET') await route.abort('failed');
+		else await route.continue();
+	});
+	try {
+		await page.goto('/settings');
+		await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
+		await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
+		await expect(page.getByRole('textbox', { name: 'Title bar color', exact: true })).toHaveValue(targetColor);
+	} finally {
+		await page.unroute('**/api/v1/terminal-themes');
+		expect(
+			(
+				await context.request.put('/api/v1/appearance', {
+					data: { windowThemeColor: original.windowThemeColor ?? '#212529' },
+				})
+			).ok(),
+		).toBeTruthy();
+	}
 });
 
 test('appearance settings report a main appearance load failure and keep defaults usable', async ({
-  page,
-  context,
+	page,
+	context,
 }) => {
-  await loginAsInitialAdmin(context.request);
-  expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
-  await page.route('**/api/v1/appearance', async (route) => {
-    if (route.request().method() === 'GET') await route.abort('failed');
-    else await route.continue();
-  });
+	await loginAsInitialAdmin(context.request);
+	expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
+	await page.route('**/api/v1/appearance', async (route) => {
+		if (route.request().method() === 'GET') await route.abort('failed');
+		else await route.continue();
+	});
 
-  await page.goto('/settings');
-  await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
-  await expect(
-    page.getByText('Failed to load appearance settings. Current defaults remain available.', { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByRole('textbox', { name: 'Title bar color', exact: true })).toBeVisible();
+	await page.goto('/settings');
+	await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
+	await expect(
+		page.getByText('Failed to load appearance settings. Current defaults remain available.', { exact: true }),
+	).toBeVisible();
+	await expect(page.getByRole('textbox', { name: 'Title bar color', exact: true })).toBeVisible();
 });
 
 test('PWA window title bar color updates immediately and persists across reload', async ({ page, context }) => {
-  await loginAsInitialAdmin(context.request);
-  const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
-  expect(language.ok()).toBeTruthy();
+	await loginAsInitialAdmin(context.request);
+	const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
+	expect(language.ok()).toBeTruthy();
 
-  const originalResponse = await context.request.get('/api/v1/appearance');
-  expect(originalResponse.ok()).toBeTruthy();
-  const original = (await originalResponse.json()) as { windowThemeColor?: string };
-  const targetColor = '#1F2937';
+	const originalResponse = await context.request.get('/api/v1/appearance');
+	expect(originalResponse.ok()).toBeTruthy();
+	const original = (await originalResponse.json()) as { windowThemeColor?: string };
+	const targetColor = '#1F2937';
 
-  let releaseStaleLoads: (() => void) | undefined;
-  const staleLoadsReleased = new Promise<void>((resolve) => {
-    releaseStaleLoads = resolve;
-  });
-  let markStaleLoadStarted: (() => void) | undefined;
-  const staleLoadStarted = new Promise<void>((resolve) => {
-    markStaleLoadStarted = resolve;
-  });
-  let holdAppearanceLoads = true;
-  let heldLoadCount = 0;
-  let fulfilledHeldLoadCount = 0;
+	let releaseStaleLoads: (() => void) | undefined;
+	const staleLoadsReleased = new Promise<void>((resolve) => {
+		releaseStaleLoads = resolve;
+	});
+	let markStaleLoadStarted: (() => void) | undefined;
+	const staleLoadStarted = new Promise<void>((resolve) => {
+		markStaleLoadStarted = resolve;
+	});
+	let holdAppearanceLoads = true;
+	let heldLoadCount = 0;
+	let fulfilledHeldLoadCount = 0;
 
-  await page.route('**/api/v1/appearance', async (route) => {
-    if (route.request().method() !== 'GET' || !holdAppearanceLoads) {
-      await route.continue();
-      return;
-    }
-    const backendResponse = await route.fetch();
-    heldLoadCount += 1;
-    markStaleLoadStarted?.();
-    await staleLoadsReleased;
-    await route.fulfill({ response: backendResponse });
-    fulfilledHeldLoadCount += 1;
-  });
+	await page.route('**/api/v1/appearance', async (route) => {
+		if (route.request().method() !== 'GET' || !holdAppearanceLoads) {
+			await route.continue();
+			return;
+		}
+		const backendResponse = await route.fetch();
+		heldLoadCount += 1;
+		markStaleLoadStarted?.();
+		await staleLoadsReleased;
+		await route.fulfill({ response: backendResponse });
+		fulfilledHeldLoadCount += 1;
+	});
 
-  try {
-    await page.goto('/settings');
-    await staleLoadStarted;
-    await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
+	try {
+		await page.goto('/settings');
+		await staleLoadStarted;
+		await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
 
-    const input = page.getByRole('textbox', { name: 'Title bar color', exact: true });
-    await expect(input).toBeVisible();
-    await input.fill(targetColor);
+		const input = page.getByRole('textbox', { name: 'Title bar color', exact: true });
+		await expect(input).toBeVisible();
+		await input.fill(targetColor);
 
-    const savePromise = page.waitForResponse(
-      (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
-    );
-    await page.locator('#settings-panel-appearance').getByRole('button', { name: 'Save', exact: true }).click();
-    expect((await savePromise).ok()).toBeTruthy();
-    await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
+		const savePromise = page.waitForResponse(
+			(response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
+		);
+		await page.locator('#settings-panel-appearance').getByRole('button', { name: 'Save', exact: true }).click();
+		expect((await savePromise).ok()).toBeTruthy();
+		await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
 
-    holdAppearanceLoads = false;
-    releaseStaleLoads?.();
-    await expect.poll(() => fulfilledHeldLoadCount).toBe(heldLoadCount);
-    await page.evaluate(
-      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
-    );
-    await expect(input).toHaveValue(targetColor);
-    await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
+		holdAppearanceLoads = false;
+		releaseStaleLoads?.();
+		await expect.poll(() => fulfilledHeldLoadCount).toBe(heldLoadCount);
+		await page.evaluate(
+			() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+		);
+		await expect(input).toHaveValue(targetColor);
+		await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
 
-    const persisted = await context.request.get('/api/v1/appearance');
-    expect(persisted.ok()).toBeTruthy();
-    expect(((await persisted.json()) as { windowThemeColor?: string }).windowThemeColor).toBe(targetColor);
+		const persisted = await context.request.get('/api/v1/appearance');
+		expect(persisted.ok()).toBeTruthy();
+		expect(((await persisted.json()) as { windowThemeColor?: string }).windowThemeColor).toBe(targetColor);
 
-    await page.unrouteAll({ behavior: 'wait' });
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
-    await expect(page.getByRole('textbox', { name: 'Title bar color', exact: true })).toHaveValue(targetColor);
-    await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
-  } finally {
-    holdAppearanceLoads = false;
-    releaseStaleLoads?.();
-    await page.unrouteAll({ behavior: 'wait' });
-    const restore = await context.request.put('/api/v1/appearance', {
-      data: { windowThemeColor: original.windowThemeColor ?? '#343A40' },
-    });
-    expect(restore.ok()).toBeTruthy();
-  }
+		await page.unrouteAll({ behavior: 'wait' });
+		await page.reload({ waitUntil: 'domcontentloaded' });
+		await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
+		await expect(page.getByRole('textbox', { name: 'Title bar color', exact: true })).toHaveValue(targetColor);
+		await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
+	} finally {
+		holdAppearanceLoads = false;
+		releaseStaleLoads?.();
+		await page.unrouteAll({ behavior: 'wait' });
+		const restore = await context.request.put('/api/v1/appearance', {
+			data: { windowThemeColor: original.windowThemeColor ?? '#343A40' },
+		});
+		expect(restore.ok()).toBeTruthy();
+	}
 });
 
 test('UI theme switches to dark mode, persists across reload, and resets to default', async ({ page, context }) => {
-  await loginAsInitialAdmin(context.request);
-  const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
-  expect(language.ok()).toBeTruthy();
-  await page.goto('/');
+	await loginAsInitialAdmin(context.request);
+	const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
+	expect(language.ok()).toBeTruthy();
+	await page.goto('/');
 
-  await step('Dark Mode applies immediately and is persisted by the appearance API', async () => {
-    await page.getByTitle('Customize Style').click();
-    const customizer = page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
-    await expect(customizer).toBeVisible();
-    await customizer.getByRole('button', { name: 'Dark Mode', exact: true }).click();
-    await expect.poll(() => appBackground(page)).toBe('#212529');
+	await step('Dark Mode applies immediately and is persisted by the appearance API', async () => {
+		await page.getByTitle('Customize Style').click();
+		const customizer = page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
+		await expect(customizer).toBeVisible();
+		await customizer.getByRole('button', { name: 'Dark Mode', exact: true }).click();
+		await expect.poll(() => appBackground(page)).toBe('#212529');
 
-    const originalViewport = page.viewportSize();
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await page.evaluate(
-      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
-    );
-    try {
-      const lastVisibleThemeRow = customizer.getByText('Link active bg color', { exact: true }).locator('..');
-      const footer = customizer.locator('footer');
-      await expect(lastVisibleThemeRow).toBeVisible();
-      await lastVisibleThemeRow.scrollIntoViewIfNeeded();
-      const [rowBox, footerBox] = await Promise.all([lastVisibleThemeRow.boundingBox(), footer.boundingBox()]);
-      expect(rowBox).toBeTruthy();
-      expect(footerBox).toBeTruthy();
-      expect(rowBox!.y + rowBox!.height).toBeLessThanOrEqual(footerBox!.y + 1);
+		const originalViewport = page.viewportSize();
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.evaluate(
+			() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+		);
+		try {
+			const lastVisibleThemeRow = customizer.getByText('Link active bg color', { exact: true }).locator('..');
+			const footer = customizer.locator('footer');
+			await expect(lastVisibleThemeRow).toBeVisible();
+			await lastVisibleThemeRow.scrollIntoViewIfNeeded();
+			const [rowBox, footerBox] = await Promise.all([lastVisibleThemeRow.boundingBox(), footer.boundingBox()]);
+			expect(rowBox).toBeTruthy();
+			expect(footerBox).toBeTruthy();
+			expect(rowBox!.y + rowBox!.height).toBeLessThanOrEqual(footerBox!.y + 1);
 
-      await captureFunctionalScreenshot(page, 'theme-customization.png', { viewport: { width: 1440, height: 900 } });
-    } finally {
-      if (originalViewport) await page.setViewportSize(originalViewport);
-    }
+			await captureFunctionalScreenshot(page, 'theme-customization.png', {
+				viewport: { width: 1440, height: 900 },
+			});
+		} finally {
+			if (originalViewport) await page.setViewportSize(originalViewport);
+		}
 
-    const response = await context.request.get('/api/v1/appearance');
-    expect(response.ok()).toBeTruthy();
-    const body = (await response.json()) as { customUiTheme?: string };
-    expect(JSON.parse(body.customUiTheme || '{}')['--app-bg-color']).toBe('#212529');
-  });
+		const response = await context.request.get('/api/v1/appearance');
+		expect(response.ok()).toBeTruthy();
+		const body = (await response.json()) as { customUiTheme?: string };
+		expect(JSON.parse(body.customUiTheme || '{}')['--app-bg-color']).toBe('#212529');
+	});
 
-  await step('Dark Mode survives a full page reload', async () => {
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect.poll(() => appBackground(page), { timeout: 15_000 }).toBe('#212529');
-  });
+	await step('Dark Mode survives a full page reload', async () => {
+		await page.reload({ waitUntil: 'domcontentloaded' });
+		await expect.poll(() => appBackground(page), { timeout: 15_000 }).toBe('#212529');
+	});
 
-  await step('Default Mode restores the default theme and persists the reset', async () => {
-    await page.getByTitle('Customize Style').click();
-    const customizer = page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
-    await customizer.getByRole('button', { name: 'Default Mode', exact: true }).click();
-    await expect.poll(() => appBackground(page)).toBe('#ffffff');
+	await step('Default Mode restores the default theme and persists the reset', async () => {
+		await page.getByTitle('Customize Style').click();
+		const customizer = page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
+		await customizer.getByRole('button', { name: 'Default Mode', exact: true }).click();
+		await expect.poll(() => appBackground(page)).toBe('#ffffff');
 
-    const response = await context.request.get('/api/v1/appearance');
-    expect(response.ok()).toBeTruthy();
-    const body = (await response.json()) as { customUiTheme?: string };
-    expect(JSON.parse(body.customUiTheme || '{}')['--app-bg-color']).toBe('#ffffff');
-  });
+		const response = await context.request.get('/api/v1/appearance');
+		expect(response.ok()).toBeTruthy();
+		const body = (await response.json()) as { customUiTheme?: string };
+		expect(JSON.parse(body.customUiTheme || '{}')['--app-bg-color']).toBe('#ffffff');
+	});
 });
 
 test('legacy dark UI themes without input tokens keep Dashboard controls readable and normalize on save', async ({
-  page,
-  context,
+	page,
+	context,
 }) => {
-  await loginAsInitialAdmin(context.request);
-  const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
-  expect(language.ok()).toBeTruthy();
-  const original = await appearance(context.request);
+	await loginAsInitialAdmin(context.request);
+	const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
+	expect(language.ok()).toBeTruthy();
+	const original = await appearance(context.request);
 
-  try {
-    const legacyTheme = await context.request.put('/api/v1/appearance', {
-      data: { customUiTheme: JSON.stringify(LEGACY_DARK_UI_THEME_WITHOUT_INPUT_TOKENS) },
-    });
-    expect(legacyTheme.ok()).toBeTruthy();
+	try {
+		const legacyTheme = await context.request.put('/api/v1/appearance', {
+			data: { customUiTheme: JSON.stringify(LEGACY_DARK_UI_THEME_WITHOUT_INPUT_TOKENS) },
+		});
+		expect(legacyTheme.ok()).toBeTruthy();
 
-    await page.goto('/');
-    await expect.poll(() => appBackground(page)).toBe('#212529');
+		await page.goto('/');
+		await expect.poll(() => appBackground(page)).toBe('#212529');
 
-    const search = page.getByRole('searchbox', { name: 'Search connections...', exact: true });
-    const tag = page.getByRole('combobox', { name: 'Filter by tag', exact: true });
-    const sort = page.getByRole('combobox', { name: 'Sort by', exact: true });
-    await expect(search).toBeVisible();
-    await expect(tag).toBeVisible();
-    await expect(sort).toBeVisible();
+		const search = page.getByRole('searchbox', { name: 'Search connections...', exact: true });
+		const tag = page.getByRole('combobox', { name: 'Filter by tag', exact: true });
+		const sort = page.getByRole('combobox', { name: 'Sort by', exact: true });
+		await expect(search).toBeVisible();
+		await expect(tag).toBeVisible();
+		await expect(sort).toBeVisible();
 
-    await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const style = getComputedStyle(document.documentElement);
-          return {
-            background: style.getPropertyValue('--input-bg-color').trim(),
-            text: style.getPropertyValue('--input-text-color').trim(),
-            placeholder: style.getPropertyValue('--input-placeholder-color').trim(),
-          };
-        }),
-      )
-      .toEqual({
-        background: '#1e293b',
-        text: '#f8fafc',
-        placeholder: '#94a3b8',
-      });
+		await expect
+			.poll(() =>
+				page.evaluate(() => {
+					const style = getComputedStyle(document.documentElement);
+					return {
+						background: style.getPropertyValue('--input-bg-color').trim(),
+						text: style.getPropertyValue('--input-text-color').trim(),
+						placeholder: style.getPropertyValue('--input-placeholder-color').trim(),
+					};
+				}),
+			)
+			.toEqual({
+				background: '#1e293b',
+				text: '#f8fafc',
+				placeholder: '#94a3b8',
+			});
 
-    for (const control of [tag, sort]) {
-      await expect
-        .poll(() =>
-          control.evaluate((node) => {
-            const style = getComputedStyle(node);
-            const canvas = document.createElement('canvas');
-            canvas.width = 1;
-            canvas.height = 1;
-            const context = canvas.getContext('2d');
-            if (!context) return false;
-            const channels = (color: string): [number, number, number] => {
-              context.clearRect(0, 0, 1, 1);
-              context.fillStyle = color;
-              context.fillRect(0, 0, 1, 1);
-              const data = context.getImageData(0, 0, 1, 1).data;
-              return [data[0]!, data[1]!, data[2]!];
-            };
-            const luminance = ([red, green, blue]: [number, number, number]): number => {
-              const channel = (value: number): number => {
-                const normalized = value / 255;
-                return normalized <= 0.04045 ? normalized / 12.92 : Math.pow((normalized + 0.055) / 1.055, 2.4);
-              };
-              return 0.2126 * channel(red) + 0.7152 * channel(green) + 0.0722 * channel(blue);
-            };
-            const background = luminance(channels(style.backgroundColor));
-            const foreground = luminance(channels(style.color));
-            const contrast = (Math.max(background, foreground) + 0.05) / (Math.min(background, foreground) + 0.05);
-            return contrast >= 4.5;
-          }),
-        )
-        .toBe(true);
-    }
+		for (const control of [tag, sort]) {
+			await expect
+				.poll(() =>
+					control.evaluate((node) => {
+						const style = getComputedStyle(node);
+						const canvas = document.createElement('canvas');
+						canvas.width = 1;
+						canvas.height = 1;
+						const context = canvas.getContext('2d');
+						if (!context) return false;
 
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect.poll(() => appBackground(page)).toBe('#212529');
-    await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const style = getComputedStyle(document.documentElement);
-          return [
-            style.getPropertyValue('--input-bg-color').trim(),
-            style.getPropertyValue('--input-text-color').trim(),
-          ];
-        }),
-      )
-      .toEqual(['#1e293b', '#f8fafc']);
+						const channels = (color: string): [number, number, number] => {
+							context.clearRect(0, 0, 1, 1);
+							context.fillStyle = color;
+							context.fillRect(0, 0, 1, 1);
+							const data = context.getImageData(0, 0, 1, 1).data;
+							return [data[0]!, data[1]!, data[2]!];
+						};
 
-    await page.getByTitle('Customize Style').click();
-    const customizer = page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
-    const jsonEditor = customizer.locator('textarea');
-    await expect(jsonEditor).toBeVisible();
-    const normalizedDraft = JSON.parse(await jsonEditor.inputValue()) as Record<string, string>;
-    expect(normalizedDraft['--input-bg-color']).toBe('#1e293b');
-    expect(normalizedDraft['--input-text-color']).toBe('#f8fafc');
-    expect(normalizedDraft['--input-placeholder-color']).toBe('#94a3b8');
+						const luminance = ([red, green, blue]: [number, number, number]): number => {
+							const channel = (value: number): number => {
+								const normalized = value / 255;
+								return normalized <= 0.04045
+									? normalized / 12.92
+									: Math.pow((normalized + 0.055) / 1.055, 2.4);
+							};
 
-    const save = page.waitForResponse(
-      (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
-    );
-    await customizer.getByRole('button', { name: 'Save UI Theme', exact: true }).click();
-    expect((await save).ok()).toBeTruthy();
-    const persisted = await appearance(context.request);
-    const persistedTheme = JSON.parse(String(persisted.customUiTheme ?? '{}')) as Record<string, string>;
-    expect(persistedTheme['--input-bg-color']).toBe('#1e293b');
-    expect(persistedTheme['--input-text-color']).toBe('#f8fafc');
-    expect(persistedTheme['--input-placeholder-color']).toBe('#94a3b8');
-  } finally {
-    const restore = await context.request.put('/api/v1/appearance', {
-      data: { customUiTheme: original.customUiTheme },
-    });
-    expect(restore.ok()).toBeTruthy();
-  }
+							return 0.2126 * channel(red) + 0.7152 * channel(green) + 0.0722 * channel(blue);
+						};
+
+						const background = luminance(channels(style.backgroundColor));
+						const foreground = luminance(channels(style.color));
+						const contrast =
+							(Math.max(background, foreground) + 0.05) / (Math.min(background, foreground) + 0.05);
+						return contrast >= 4.5;
+					}),
+				)
+				.toBe(true);
+		}
+
+		await page.reload({ waitUntil: 'domcontentloaded' });
+		await expect.poll(() => appBackground(page)).toBe('#212529');
+		await expect
+			.poll(() =>
+				page.evaluate(() => {
+					const style = getComputedStyle(document.documentElement);
+					return [
+						style.getPropertyValue('--input-bg-color').trim(),
+						style.getPropertyValue('--input-text-color').trim(),
+					];
+				}),
+			)
+			.toEqual(['#1e293b', '#f8fafc']);
+
+		await page.getByTitle('Customize Style').click();
+		const customizer = page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
+		const jsonEditor = customizer.locator('textarea');
+		await expect(jsonEditor).toBeVisible();
+		const normalizedDraft = JSON.parse(await jsonEditor.inputValue()) as Record<string, string>;
+		expect(normalizedDraft['--input-bg-color']).toBe('#1e293b');
+		expect(normalizedDraft['--input-text-color']).toBe('#f8fafc');
+		expect(normalizedDraft['--input-placeholder-color']).toBe('#94a3b8');
+
+		const save = page.waitForResponse(
+			(response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
+		);
+		await customizer.getByRole('button', { name: 'Save UI Theme', exact: true }).click();
+		expect((await save).ok()).toBeTruthy();
+		const persisted = await appearance(context.request);
+		const persistedTheme = JSON.parse(String(persisted.customUiTheme ?? '{}')) as Record<string, string>;
+		expect(persistedTheme['--input-bg-color']).toBe('#1e293b');
+		expect(persistedTheme['--input-text-color']).toBe('#f8fafc');
+		expect(persistedTheme['--input-placeholder-color']).toBe('#94a3b8');
+	} finally {
+		const restore = await context.request.put('/api/v1/appearance', {
+			data: { customUiTheme: original.customUiTheme },
+		});
+		expect(restore.ok()).toBeTruthy();
+	}
 });
 
 test('terminal preset themes load from the API, switch through the UI, and persist across reload', async ({
-  page,
-  context,
+	page,
+	context,
 }) => {
-  await loginAsInitialAdmin(context.request);
-  const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
-  expect(language.ok()).toBeTruthy();
+	await loginAsInitialAdmin(context.request);
+	const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
+	expect(language.ok()).toBeTruthy();
 
-  const originalAppearanceResponse = await context.request.get('/api/v1/appearance');
-  expect(originalAppearanceResponse.ok()).toBeTruthy();
-  const originalAppearance = (await originalAppearanceResponse.json()) as { activeTerminalThemeId?: number | null };
+	const originalAppearanceResponse = await context.request.get('/api/v1/appearance');
+	expect(originalAppearanceResponse.ok()).toBeTruthy();
+	const originalAppearance = (await originalAppearanceResponse.json()) as { activeTerminalThemeId?: number | null };
 
-  const themesResponse = await context.request.get('/api/v1/terminal-themes');
-  expect(themesResponse.ok()).toBeTruthy();
-  const themes = (await themesResponse.json()) as Array<{ id?: string; name: string; preset?: boolean }>;
+	const themesResponse = await context.request.get('/api/v1/terminal-themes');
+	expect(themesResponse.ok()).toBeTruthy();
+	const themes = (await themesResponse.json()) as Array<{ id?: string; name: string; preset?: boolean }>;
 
-  // Pick a preset that is intentionally not part of the compact frontend sample list.
-  // Its presence proves the UI is using the backend seed/API as the runtime source of truth.
-  const targetTheme = themes.find((theme) => theme.name === 'zenwritten_light' && theme.preset);
-  expect(targetTheme?.id).toBeTruthy();
-  const targetThemeId = Number(targetTheme!.id);
-  expect(Number.isInteger(targetThemeId) && targetThemeId > 0).toBeTruthy();
+	// Pick a preset that is intentionally not part of the compact frontend sample list.
+	// Its presence proves the UI is using the backend seed/API as the runtime source of truth.
+	const targetTheme = themes.find((theme) => theme.name === 'zenwritten_light' && theme.preset);
+	expect(targetTheme?.id).toBeTruthy();
+	const targetThemeId = Number(targetTheme!.id);
+	expect(Number.isInteger(targetThemeId) && targetThemeId > 0).toBeTruthy();
 
-  try {
-    await page.goto('/');
+	try {
+		await page.goto('/');
 
-    await step('backend-only preset is discoverable and can be applied through the style customizer', async () => {
-      await page.getByTitle('Customize Style').click();
-      const customizer = page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
-      await expect(customizer).toBeVisible();
-      await customizer.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
+		await step('backend-only preset is discoverable and can be applied through the style customizer', async () => {
+			await page.getByTitle('Customize Style').click();
+			const customizer = page
+				.getByRole('heading', { name: 'Appearance Customizer', exact: true })
+				.locator('../..');
+			await expect(customizer).toBeVisible();
+			await customizer.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
 
-      const search = customizer.getByPlaceholder('Search theme name...', { exact: true });
-      await search.fill(targetTheme!.name);
-      const themeRow = customizer
-        .getByRole('listitem')
-        .filter({ has: page.getByTitle(targetTheme!.name, { exact: true }) });
-      await expect(themeRow).toHaveCount(1);
-      await expect(themeRow).toBeVisible();
+			const search = customizer.getByPlaceholder('Search theme name...', { exact: true });
+			await search.fill(targetTheme!.name);
+			const themeRow = customizer
+				.getByRole('listitem')
+				.filter({ has: page.getByTitle(targetTheme!.name, { exact: true }) });
+			await expect(themeRow).toHaveCount(1);
+			await expect(themeRow).toBeVisible();
 
-      const savePromise = page.waitForResponse(
-        (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
-      );
-      await themeRow.getByRole('button', { name: 'Apply', exact: true }).click();
-      expect((await savePromise).ok()).toBeTruthy();
+			const savePromise = page.waitForResponse(
+				(response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
+			);
+			await themeRow.getByRole('button', { name: 'Apply', exact: true }).click();
+			expect((await savePromise).ok()).toBeTruthy();
 
-      await expect
-        .poll(async () => {
-          const response = await context.request.get('/api/v1/appearance');
-          expect(response.ok()).toBeTruthy();
-          return ((await response.json()) as { activeTerminalThemeId?: number | null }).activeTerminalThemeId;
-        })
-        .toBe(targetThemeId);
+			await expect
+				.poll(async () => {
+					const response = await context.request.get('/api/v1/appearance');
+					expect(response.ok()).toBeTruthy();
+					return ((await response.json()) as { activeTerminalThemeId?: number | null }).activeTerminalThemeId;
+				})
+				.toBe(targetThemeId);
 
-      const activeThemeName = customizer.getByRole('combobox', { name: 'Active Theme', exact: true });
-      await expect(activeThemeName).toHaveText(targetTheme!.name);
-    });
+			const activeThemeName = customizer.getByRole('combobox', { name: 'Active Theme', exact: true });
+			await expect(activeThemeName).toHaveText(targetTheme!.name);
+		});
 
-    await step('selected terminal preset survives a full page reload', async () => {
-      await page.reload({ waitUntil: 'domcontentloaded' });
-      await page.getByTitle('Customize Style').click();
-      const customizer = page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
-      await customizer.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
+		await step('selected terminal preset survives a full page reload', async () => {
+			await page.reload({ waitUntil: 'domcontentloaded' });
+			await page.getByTitle('Customize Style').click();
+			const customizer = page
+				.getByRole('heading', { name: 'Appearance Customizer', exact: true })
+				.locator('../..');
+			await customizer.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
 
-      const activeThemeName = customizer.getByRole('combobox', { name: 'Active Theme', exact: true });
-      await expect(activeThemeName).toHaveText(targetTheme!.name);
+			const activeThemeName = customizer.getByRole('combobox', { name: 'Active Theme', exact: true });
+			await expect(activeThemeName).toHaveText(targetTheme!.name);
 
-      const response = await context.request.get('/api/v1/appearance');
-      expect(response.ok()).toBeTruthy();
-      expect(((await response.json()) as { activeTerminalThemeId?: number | null }).activeTerminalThemeId).toBe(
-        targetThemeId,
-      );
-    });
-  } finally {
-    const restore = await context.request.put('/api/v1/appearance', {
-      data: { activeTerminalThemeId: originalAppearance.activeTerminalThemeId ?? null },
-    });
-    expect(restore.ok()).toBeTruthy();
-  }
+			const response = await context.request.get('/api/v1/appearance');
+			expect(response.ok()).toBeTruthy();
+			expect(((await response.json()) as { activeTerminalThemeId?: number | null }).activeTerminalThemeId).toBe(
+				targetThemeId,
+			);
+		});
+	} finally {
+		const restore = await context.request.put('/api/v1/appearance', {
+			data: { activeTerminalThemeId: originalAppearance.activeTerminalThemeId ?? null },
+		});
+		expect(restore.ok()).toBeTruthy();
+	}
 });
 
 test('style customizer keeps mobile geometry stable and persists custom UI, independent typography, and text effects', async ({
-  page,
-  context,
+	page,
+	context,
 }) => {
-  await loginAsInitialAdmin(context.request);
-  expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
-  const original = await appearance(context.request);
+	await loginAsInitialAdmin(context.request);
+	expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
+	const original = await appearance(context.request);
 
-  try {
-    await page.setViewportSize({ width: 320, height: 667 });
-    await page.goto('/');
-    await page.getByTitle('Customize Style').click();
-    const customizer = appearanceCustomizer(page);
-    const dialog = customizer;
-    await expect(dialog).toBeVisible();
-    const dialogBox = await dialog.boundingBox();
-    expect(dialogBox).not.toBeNull();
-    expect(dialogBox!.x).toBeGreaterThanOrEqual(0);
-    expect(dialogBox!.x + dialogBox!.width).toBeLessThanOrEqual(320);
-    expect(dialogBox!.y + dialogBox!.height).toBeLessThanOrEqual(668);
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
-      .toBeLessThanOrEqual(1);
+	try {
+		await page.setViewportSize({ width: 320, height: 667 });
+		await page.goto('/');
+		await page.getByTitle('Customize Style').click();
+		const customizer = appearanceCustomizer(page);
+		const dialog = customizer;
+		await expect(dialog).toBeVisible();
+		const dialogBox = await dialog.boundingBox();
+		expect(dialogBox).not.toBeNull();
+		expect(dialogBox!.x).toBeGreaterThanOrEqual(0);
+		expect(dialogBox!.x + dialogBox!.width).toBeLessThanOrEqual(320);
+		expect(dialogBox!.y + dialogBox!.height).toBeLessThanOrEqual(668);
+		await expect
+			.poll(() =>
+				page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
+			)
+			.toBeLessThanOrEqual(1);
 
-    await step('custom UI JSON persists through the one Appearance owner', async () => {
-      await customizer.locator('textarea').fill(
-        JSON.stringify(
-          {
-            '--app-bg-color': '#f1f2f3',
-            '--text-color': '#202122',
-            '--link-active-color': '#6750a4',
-          },
-          null,
-          2,
-        ),
-      );
-      const save = page.waitForResponse(
-        (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
-      );
-      await customizer.getByRole('button', { name: 'Save UI Theme', exact: true }).click();
-      expect((await save).ok()).toBeTruthy();
-      await expect.poll(() => appBackground(page)).toBe('#f1f2f3');
-      const persisted = await appearance(context.request);
-      const theme = JSON.parse(String(persisted.customUiTheme ?? '{}')) as Record<string, string>;
-      expect(theme['--app-bg-color']).toBe('#f1f2f3');
-      expect(theme['--link-active-color']).toBe('#6750a4');
-    });
+		await step('custom UI JSON persists through the one Appearance owner', async () => {
+			await customizer.locator('textarea').fill(
+				JSON.stringify(
+					{
+						'--app-bg-color': '#f1f2f3',
+						'--text-color': '#202122',
+						'--link-active-color': '#6750a4',
+					},
+					null,
+					2,
+				),
+			);
+			const save = page.waitForResponse(
+				(response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
+			);
+			await customizer.getByRole('button', { name: 'Save UI Theme', exact: true }).click();
+			expect((await save).ok()).toBeTruthy();
+			await expect.poll(() => appBackground(page)).toBe('#f1f2f3');
+			const persisted = await appearance(context.request);
+			const theme = JSON.parse(String(persisted.customUiTheme ?? '{}')) as Record<string, string>;
+			expect(theme['--app-bg-color']).toBe('#f1f2f3');
+			expect(theme['--link-active-color']).toBe('#6750a4');
+		});
 
-    await step('desktop and mobile terminal typography plus text effects persist independently', async () => {
-      await customizer.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
-      await appearanceField(customizer, 'Terminal Font').fill('E2E Terminal Mono, monospace');
-      await appearanceField(customizer, 'Terminal Font Size').fill('17');
-      await appearanceField(customizer, 'Mobile Terminal Font Size').fill('23');
-      const terminalFontSave = page.waitForResponse(
-        (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
-      );
-      await customizer
-        .locator('section')
-        .filter({ has: page.getByRole('heading', { name: 'Terminal Styles', exact: true }) })
-        .last()
-        .getByRole('button', { name: 'Save', exact: true })
-        .click();
-      expect((await terminalFontSave).ok()).toBeTruthy();
+		await step('desktop and mobile terminal typography plus text effects persist independently', async () => {
+			await customizer.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
+			await appearanceField(customizer, 'Terminal Font').fill('E2E Terminal Mono, monospace');
+			await appearanceField(customizer, 'Terminal Font Size').fill('17');
+			await appearanceField(customizer, 'Mobile Terminal Font Size').fill('23');
+			const terminalFontSave = page.waitForResponse(
+				(response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
+			);
+			await customizer
+				.locator('section')
+				.filter({ has: page.getByRole('heading', { name: 'Terminal Styles', exact: true }) })
+				.last()
+				.getByRole('button', { name: 'Save', exact: true })
+				.click();
+			expect((await terminalFontSave).ok()).toBeTruthy();
 
-      await customizer.getByRole('checkbox', { name: 'Enable Text Stroke', exact: true }).check();
-      await appearanceField(customizer, 'Stroke Width (px)').fill('1.5');
-      await appearanceField(customizer, 'Stroke Color').fill('#112233');
-      await customizer.getByRole('checkbox', { name: 'Enable Text Shadow', exact: true }).check();
-      await appearanceField(customizer, 'Shadow X Offset (px)').fill('1');
-      await appearanceField(customizer, 'Shadow Y Offset (px)').fill('2');
-      await appearanceField(customizer, 'Shadow Blur Radius (px)').fill('3');
-      await appearanceField(customizer, 'Shadow Color').fill('rgba(4,5,6,0.7)');
-      const textEffectsSave = page.waitForResponse(
-        (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
-      );
-      await customizer
-        .locator('section')
-        .filter({ has: page.getByRole('heading', { name: 'Text Stroke Settings', exact: true }) })
-        .last()
-        .getByRole('button', { name: 'Save', exact: true })
-        .click();
-      expect((await textEffectsSave).ok()).toBeTruthy();
+			await customizer.getByRole('checkbox', { name: 'Enable Text Stroke', exact: true }).check();
+			await appearanceField(customizer, 'Stroke Width (px)').fill('1.5');
+			await appearanceField(customizer, 'Stroke Color').fill('#112233');
+			await customizer.getByRole('checkbox', { name: 'Enable Text Shadow', exact: true }).check();
+			await appearanceField(customizer, 'Shadow X Offset (px)').fill('1');
+			await appearanceField(customizer, 'Shadow Y Offset (px)').fill('2');
+			await appearanceField(customizer, 'Shadow Blur Radius (px)').fill('3');
+			await appearanceField(customizer, 'Shadow Color').fill('rgba(4,5,6,0.7)');
+			const textEffectsSave = page.waitForResponse(
+				(response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
+			);
+			await customizer
+				.locator('section')
+				.filter({ has: page.getByRole('heading', { name: 'Text Stroke Settings', exact: true }) })
+				.last()
+				.getByRole('button', { name: 'Save', exact: true })
+				.click();
+			expect((await textEffectsSave).ok()).toBeTruthy();
 
-      await expect
-        .poll(async () => {
-          const value = await appearance(context.request);
-          return [
-            value.terminalFontFamily,
-            value.terminalFontSize,
-            value.terminalFontSizeMobile,
-            value.terminalTextStrokeEnabled,
-            value.terminalTextStrokeWidth,
-            value.terminalTextShadowEnabled,
-            value.terminalTextShadowBlur,
-          ];
-        })
-        .toEqual(['E2E Terminal Mono, monospace', 17, 23, true, 1.5, true, 3]);
-    });
+			await expect
+				.poll(async () => {
+					const value = await appearance(context.request);
+					return [
+						value.terminalFontFamily,
+						value.terminalFontSize,
+						value.terminalFontSizeMobile,
+						value.terminalTextStrokeEnabled,
+						value.terminalTextStrokeWidth,
+						value.terminalTextShadowEnabled,
+						value.terminalTextShadowBlur,
+					];
+				})
+				.toEqual(['E2E Terminal Mono, monospace', 17, 23, true, 1.5, true, 3]);
+		});
 
-    await step('desktop and mobile editor typography persist independently and survive reload', async () => {
-      await customizer.getByRole('button', { name: 'Other Settings', exact: true }).click();
-      await appearanceField(customizer, 'Editor Font Family').fill('E2E Editor Mono, monospace');
-      await appearanceField(customizer, 'Editor Font Size').fill('15');
-      await appearanceField(customizer, 'Mobile Editor Font Size').fill('21');
-      await customizer.getByRole('button', { name: 'Save', exact: true }).click();
-      await expect
-        .poll(async () => {
-          const value = await appearance(context.request);
-          return [value.editorFontFamily, value.editorFontSize, value.mobileEditorFontSize];
-        })
-        .toEqual(['E2E Editor Mono, monospace', 15, 21]);
+		await step('desktop and mobile editor typography persist independently and survive reload', async () => {
+			await customizer.getByRole('button', { name: 'Other Settings', exact: true }).click();
+			await appearanceField(customizer, 'Editor Font Family').fill('E2E Editor Mono, monospace');
+			await appearanceField(customizer, 'Editor Font Size').fill('15');
+			await appearanceField(customizer, 'Mobile Editor Font Size').fill('21');
+			await customizer.getByRole('button', { name: 'Save', exact: true }).click();
+			await expect
+				.poll(async () => {
+					const value = await appearance(context.request);
+					return [value.editorFontFamily, value.editorFontSize, value.mobileEditorFontSize];
+				})
+				.toEqual(['E2E Editor Mono, monospace', 15, 21]);
 
-      await page.reload({ waitUntil: 'domcontentloaded' });
-      await page.getByTitle('Customize Style').click();
-      const reloaded = appearanceCustomizer(page);
-      await reloaded.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
-      await expect(appearanceField(reloaded, 'Terminal Font Size')).toHaveValue('17');
-      await expect(appearanceField(reloaded, 'Mobile Terminal Font Size')).toHaveValue('23');
-      await reloaded.getByRole('button', { name: 'Other Settings', exact: true }).click();
-      await expect(appearanceField(reloaded, 'Editor Font Size')).toHaveValue('15');
-      await expect(appearanceField(reloaded, 'Mobile Editor Font Size')).toHaveValue('21');
-    });
-  } finally {
-    await context.request.put('/api/v1/appearance', {
-      data: {
-        customUiTheme: original.customUiTheme,
-        terminalFontFamily: original.terminalFontFamily,
-        terminalFontSize: original.terminalFontSize,
-        terminalFontSizeMobile: original.terminalFontSizeMobile,
-        editorFontFamily: original.editorFontFamily,
-        editorFontSize: original.editorFontSize,
-        mobileEditorFontSize: original.mobileEditorFontSize,
-        terminalTextStrokeEnabled: original.terminalTextStrokeEnabled,
-        terminalTextStrokeWidth: original.terminalTextStrokeWidth,
-        terminalTextStrokeColor: original.terminalTextStrokeColor,
-        terminalTextShadowEnabled: original.terminalTextShadowEnabled,
-        terminalTextShadowOffsetX: original.terminalTextShadowOffsetX,
-        terminalTextShadowOffsetY: original.terminalTextShadowOffsetY,
-        terminalTextShadowBlur: original.terminalTextShadowBlur,
-        terminalTextShadowColor: original.terminalTextShadowColor,
-      },
-    });
-  }
+			await page.reload({ waitUntil: 'domcontentloaded' });
+			await page.getByTitle('Customize Style').click();
+			const reloaded = appearanceCustomizer(page);
+			await reloaded.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
+			await expect(appearanceField(reloaded, 'Terminal Font Size')).toHaveValue('17');
+			await expect(appearanceField(reloaded, 'Mobile Terminal Font Size')).toHaveValue('23');
+			await reloaded.getByRole('button', { name: 'Other Settings', exact: true }).click();
+			await expect(appearanceField(reloaded, 'Editor Font Size')).toHaveValue('15');
+			await expect(appearanceField(reloaded, 'Mobile Editor Font Size')).toHaveValue('21');
+		});
+	} finally {
+		await context.request.put('/api/v1/appearance', {
+			data: {
+				customUiTheme: original.customUiTheme,
+				terminalFontFamily: original.terminalFontFamily,
+				terminalFontSize: original.terminalFontSize,
+				terminalFontSizeMobile: original.terminalFontSizeMobile,
+				editorFontFamily: original.editorFontFamily,
+				editorFontSize: original.editorFontSize,
+				mobileEditorFontSize: original.mobileEditorFontSize,
+				terminalTextStrokeEnabled: original.terminalTextStrokeEnabled,
+				terminalTextStrokeWidth: original.terminalTextStrokeWidth,
+				terminalTextStrokeColor: original.terminalTextStrokeColor,
+				terminalTextShadowEnabled: original.terminalTextShadowEnabled,
+				terminalTextShadowOffsetX: original.terminalTextShadowOffsetX,
+				terminalTextShadowOffsetY: original.terminalTextShadowOffsetY,
+				terminalTextShadowBlur: original.terminalTextShadowBlur,
+				terminalTextShadowColor: original.terminalTextShadowColor,
+			},
+		});
+	}
 });
 
 test('background and HTML appearance flows stay reachable on mobile and preserve the current appearance on remote failure', async ({
-  page,
-  context,
+	page,
+	context,
 }) => {
-  await loginAsInitialAdmin(context.request);
-  expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
-  await cleanupHtmlThemes(context.request);
-  const original = await appearance(context.request);
-  expect(original.pageBackgroundImage ?? null).toBeNull();
-  expect(original.terminalBackgroundImage ?? null).toBeNull();
-  expect(
-    (
-      await context.request.put('/api/v1/appearance/html-presets/remote/repository-url', {
-        data: { url: null },
-      })
-    ).ok(),
-  ).toBeTruthy();
+	await loginAsInitialAdmin(context.request);
+	expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
+	await cleanupHtmlThemes(context.request);
+	const original = await appearance(context.request);
+	expect(original.pageBackgroundImage ?? null).toBeNull();
+	expect(original.terminalBackgroundImage ?? null).toBeNull();
+	expect(
+		(
+			await context.request.put('/api/v1/appearance/html-presets/remote/repository-url', {
+				data: { url: null },
+			})
+		).ok(),
+	).toBeTruthy();
 
-  try {
-    await page.setViewportSize({ width: 320, height: 667 });
-    await page.goto('/');
-    await page.getByTitle('Customize Style').click();
-    const customizer = appearanceCustomizer(page);
-    await customizer.getByRole('button', { name: 'Background', exact: true }).click();
-    await expect(customizer.getByRole('heading', { name: 'Page Background', exact: true })).toBeVisible();
+	try {
+		await page.setViewportSize({ width: 320, height: 667 });
+		await page.goto('/');
+		await page.getByTitle('Customize Style').click();
+		const customizer = appearanceCustomizer(page);
+		await customizer.getByRole('button', { name: 'Background', exact: true }).click();
+		await expect(customizer.getByRole('heading', { name: 'Page Background', exact: true })).toBeVisible();
 
-    await step('page and terminal background uploads persist and remain inside the mobile viewport', async () => {
-      const pageUpload = page.waitForResponse(
-        (response) =>
-          response.url().endsWith('/api/v1/appearance/background/page') && response.request().method() === 'POST',
-      );
-      await customizer.locator('input[type="file"]').nth(0).setInputFiles({
-        name: 'm06-page.png',
-        mimeType: 'image/png',
-        buffer: ONE_PIXEL_PNG,
-      });
-      expect((await pageUpload).ok()).toBeTruthy();
-      await expect.poll(async () => Boolean((await appearance(context.request)).pageBackgroundImage)).toBeTruthy();
-      await expect.poll(() => page.evaluate(() => document.body.style.backgroundImage)).not.toBe('none');
+		await step('page and terminal background uploads persist and remain inside the mobile viewport', async () => {
+			const pageUpload = page.waitForResponse(
+				(response) =>
+					response.url().endsWith('/api/v1/appearance/background/page') &&
+					response.request().method() === 'POST',
+			);
+			await customizer.locator('input[type="file"]').nth(0).setInputFiles({
+				name: 'm06-page.png',
+				mimeType: 'image/png',
+				buffer: ONE_PIXEL_PNG,
+			});
+			expect((await pageUpload).ok()).toBeTruthy();
+			await expect
+				.poll(async () => Boolean((await appearance(context.request)).pageBackgroundImage))
+				.toBeTruthy();
+			await expect.poll(() => page.evaluate(() => document.body.style.backgroundImage)).not.toBe('none');
 
-      const overlay = customizer.getByRole('slider');
-      await overlay.focus();
-      await overlay.press('Home');
-      for (let index = 0; index < 37; index += 1) await overlay.press('ArrowRight');
-      await expect(overlay).toHaveAttribute('aria-valuenow', '0.37');
+			const overlay = customizer.getByRole('slider');
+			await overlay.focus();
+			await overlay.press('Home');
+			for (let index = 0; index < 37; index += 1) await overlay.press('ArrowRight');
+			await expect(overlay).toHaveAttribute('aria-valuenow', '0.37');
 
-      const terminalUpload = page.waitForResponse(
-        (response) =>
-          response.url().endsWith('/api/v1/appearance/background/terminal') && response.request().method() === 'POST',
-      );
-      await customizer.locator('input[type="file"]').nth(1).setInputFiles({
-        name: 'm06-terminal.png',
-        mimeType: 'image/png',
-        buffer: ONE_PIXEL_PNG,
-      });
-      expect((await terminalUpload).ok()).toBeTruthy();
-      await expect.poll(async () => Boolean((await appearance(context.request)).terminalBackgroundImage)).toBeTruthy();
-      await expect(overlay).toHaveAttribute('aria-valuenow', '0.37');
+			const terminalUpload = page.waitForResponse(
+				(response) =>
+					response.url().endsWith('/api/v1/appearance/background/terminal') &&
+					response.request().method() === 'POST',
+			);
+			await customizer.locator('input[type="file"]').nth(1).setInputFiles({
+				name: 'm06-terminal.png',
+				mimeType: 'image/png',
+				buffer: ONE_PIXEL_PNG,
+			});
+			expect((await terminalUpload).ok()).toBeTruthy();
+			await expect
+				.poll(async () => Boolean((await appearance(context.request)).terminalBackgroundImage))
+				.toBeTruthy();
+			await expect(overlay).toHaveAttribute('aria-valuenow', '0.37');
 
-      await overlay
-        .locator('xpath=ancestor::*[@data-ui="slider"]/..')
-        .getByRole('button', { name: 'Save', exact: true })
-        .click();
-      await expect.poll(async () => (await appearance(context.request)).terminalBackgroundOverlayOpacity).toBe(0.37);
-      await expect
-        .poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
-        .toBeLessThanOrEqual(1);
-    });
+			await overlay
+				.locator('xpath=ancestor::*[@data-ui="slider"]/..')
+				.getByRole('button', { name: 'Save', exact: true })
+				.click();
+			await expect
+				.poll(async () => (await appearance(context.request)).terminalBackgroundOverlayOpacity)
+				.toBe(0.37);
+			await expect
+				.poll(() =>
+					page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
+				)
+				.toBeLessThanOrEqual(1);
+		});
 
-    await step('local HTML preset create, duplicate conflict, apply, rename, and delete use the real API', async () => {
-      await customizer.getByRole('button', { name: 'New Theme', exact: true }).click();
-      const editor = page
-        .getByRole('dialog')
-        .filter({ has: page.getByPlaceholder('e.g., my-theme.html', { exact: true }) });
-      await expect(editor).toBeVisible();
-      await appearanceField(editor, 'Theme Name').fill(HTML_THEME_NAME.replace(/\.html$/, ''));
-      await appearanceField(editor, 'Theme Content').fill(HTML_THEME_CONTENT);
-      const create = page.waitForResponse(
-        (response) =>
-          response.url().endsWith('/api/v1/appearance/html-presets/local') && response.request().method() === 'POST',
-      );
-      await editor.getByRole('button', { name: 'Save', exact: true }).click();
-      expect((await create).status()).toBe(201);
-      await expect(editor).toBeHidden();
+		await step(
+			'local HTML preset create, duplicate conflict, apply, rename, and delete use the real API',
+			async () => {
+				await customizer.getByRole('button', { name: 'New Theme', exact: true }).click();
+				const editor = page
+					.getByRole('dialog')
+					.filter({ has: page.getByPlaceholder('e.g., my-theme.html', { exact: true }) });
+				await expect(editor).toBeVisible();
+				await appearanceField(editor, 'Theme Name').fill(HTML_THEME_NAME.replace(/\.html$/, ''));
+				await appearanceField(editor, 'Theme Content').fill(HTML_THEME_CONTENT);
+				const create = page.waitForResponse(
+					(response) =>
+						response.url().endsWith('/api/v1/appearance/html-presets/local') &&
+						response.request().method() === 'POST',
+				);
+				await editor.getByRole('button', { name: 'Save', exact: true }).click();
+				expect((await create).status()).toBe(201);
+				await expect(editor).toBeHidden();
 
-      await customizer.getByPlaceholder('Search local themes...', { exact: true }).fill('E2E Appearance Local');
-      let row = customizer.getByRole('listitem').filter({ has: page.getByTitle(HTML_THEME_NAME, { exact: true }) });
-      await expect(row).toBeVisible();
-      const apply = page.waitForResponse(
-        (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
-      );
-      await row.getByRole('button', { name: 'Apply', exact: true }).click();
-      expect((await apply).ok()).toBeTruthy();
-      await expect.poll(async () => (await appearance(context.request)).terminalCustomHtml).toBe(HTML_THEME_CONTENT);
+				await customizer
+					.getByPlaceholder('Search local themes...', { exact: true })
+					.fill('E2E Appearance Local');
+				let row = customizer
+					.getByRole('listitem')
+					.filter({ has: page.getByTitle(HTML_THEME_NAME, { exact: true }) });
+				await expect(row).toBeVisible();
+				const apply = page.waitForResponse(
+					(response) =>
+						response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
+				);
+				await row.getByRole('button', { name: 'Apply', exact: true }).click();
+				expect((await apply).ok()).toBeTruthy();
+				await expect
+					.poll(async () => (await appearance(context.request)).terminalCustomHtml)
+					.toBe(HTML_THEME_CONTENT);
 
-      await customizer.getByRole('button', { name: 'New Theme', exact: true }).click();
-      const duplicate = editor;
-      await appearanceField(duplicate, 'Theme Name').fill(HTML_THEME_NAME.replace(/\.html$/, ''));
-      await appearanceField(duplicate, 'Theme Content').fill('<div>must not overwrite</div>');
-      const conflict = page.waitForResponse(
-        (response) =>
-          response.url().endsWith('/api/v1/appearance/html-presets/local') && response.request().method() === 'POST',
-      );
-      await duplicate.getByRole('button', { name: 'Save', exact: true }).click();
-      expect((await conflict).status()).toBe(400);
-      await expect(duplicate).toBeVisible();
-      const originalContent = await context.request.get(
-        `/api/v1/appearance/html-presets/local/${encodeURIComponent(HTML_THEME_NAME)}`,
-      );
-      expect(originalContent.ok()).toBeTruthy();
-      expect(await originalContent.text()).toBe(HTML_THEME_CONTENT);
-      await duplicate.getByRole('button', { name: 'Cancel', exact: true }).click();
+				await customizer.getByRole('button', { name: 'New Theme', exact: true }).click();
+				const duplicate = editor;
+				await appearanceField(duplicate, 'Theme Name').fill(HTML_THEME_NAME.replace(/\.html$/, ''));
+				await appearanceField(duplicate, 'Theme Content').fill('<div>must not overwrite</div>');
+				const conflict = page.waitForResponse(
+					(response) =>
+						response.url().endsWith('/api/v1/appearance/html-presets/local') &&
+						response.request().method() === 'POST',
+				);
+				await duplicate.getByRole('button', { name: 'Save', exact: true }).click();
+				expect((await conflict).status()).toBe(400);
+				await expect(duplicate).toBeVisible();
+				const originalContent = await context.request.get(
+					`/api/v1/appearance/html-presets/local/${encodeURIComponent(HTML_THEME_NAME)}`,
+				);
+				expect(originalContent.ok()).toBeTruthy();
+				expect(await originalContent.text()).toBe(HTML_THEME_CONTENT);
+				await duplicate.getByRole('button', { name: 'Cancel', exact: true }).click();
 
-      row = customizer.getByRole('listitem').filter({ has: page.getByTitle(HTML_THEME_NAME, { exact: true }) });
-      await row.getByRole('button', { name: 'Edit', exact: true }).click();
-      const rename = editor;
-      await appearanceField(rename, 'Theme Name').fill(HTML_THEME_RENAMED.replace(/\.html$/, ''));
-      await rename.getByRole('button', { name: 'Save', exact: true }).click();
-      await expect(rename).toBeHidden();
-      await customizer.getByPlaceholder('Search local themes...', { exact: true }).fill('Renamed');
-      row = customizer.getByRole('listitem').filter({ has: page.getByTitle(HTML_THEME_RENAMED, { exact: true }) });
-      await expect(row).toBeVisible();
-      await row.getByRole('button', { name: 'Delete', exact: true }).click();
-      const confirm = page.getByRole('dialog', { name: 'Please confirm' });
-      await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
-      await expect(row).toHaveCount(0);
-    });
+				row = customizer
+					.getByRole('listitem')
+					.filter({ has: page.getByTitle(HTML_THEME_NAME, { exact: true }) });
+				await row.getByRole('button', { name: 'Edit', exact: true }).click();
+				const rename = editor;
+				await appearanceField(rename, 'Theme Name').fill(HTML_THEME_RENAMED.replace(/\.html$/, ''));
+				await rename.getByRole('button', { name: 'Save', exact: true }).click();
+				await expect(rename).toBeHidden();
+				await customizer.getByPlaceholder('Search local themes...', { exact: true }).fill('Renamed');
+				row = customizer
+					.getByRole('listitem')
+					.filter({ has: page.getByTitle(HTML_THEME_RENAMED, { exact: true }) });
+				await expect(row).toBeVisible();
+				await row.getByRole('button', { name: 'Delete', exact: true }).click();
+				const confirm = page.getByRole('dialog', { name: 'Please confirm' });
+				await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
+				await expect(row).toHaveCount(0);
+			},
+		);
 
-    await step(
-      'real GitHub remote preset list, search, download, and apply persist through the Appearance owner',
-      async () => {
-        const repository = TESTED_OFFICIAL_HTML_THEME_REPOSITORY;
-        await customizer.getByRole('combobox', { name: 'HTML Background Themes', exact: true }).click();
-        await page.getByRole('option', { name: 'Remote Themes', exact: true }).click();
-        await appearanceField(customizer, 'Remote HTML Themes Repository URL').fill(repository);
-        const saveRepository = page.waitForResponse(
-          (response) =>
-            response.url().endsWith('/api/v1/appearance/html-presets/remote/repository-url') &&
-            response.request().method() === 'PUT',
-        );
-        await customizer.getByRole('button', { name: 'Save', exact: true }).last().click();
-        expect((await saveRepository).ok()).toBeTruthy();
-        await expect.poll(async () => (await appearance(context.request)).remoteHtmlPresetsUrl).toBe(repository);
+		await step(
+			'real GitHub remote preset list, search, download, and apply persist through the Appearance owner',
+			async () => {
+				const repository = TESTED_OFFICIAL_HTML_THEME_REPOSITORY;
+				await customizer.getByRole('combobox', { name: 'HTML Background Themes', exact: true }).click();
+				await page.getByRole('option', { name: 'Remote Themes', exact: true }).click();
+				await appearanceField(customizer, 'Remote HTML Themes Repository URL').fill(repository);
+				const saveRepository = page.waitForResponse(
+					(response) =>
+						response.url().endsWith('/api/v1/appearance/html-presets/remote/repository-url') &&
+						response.request().method() === 'PUT',
+				);
+				await customizer.getByRole('button', { name: 'Save', exact: true }).last().click();
+				expect((await saveRepository).ok()).toBeTruthy();
+				await expect
+					.poll(async () => (await appearance(context.request)).remoteHtmlPresetsUrl)
+					.toBe(repository);
 
-        const listRemote = page.waitForResponse(
-          (response) =>
-            response.url().includes('/api/v1/appearance/html-presets/remote/list') &&
-            response.request().method() === 'GET',
-        );
-        await customizer.getByRole('button', { name: 'refresh', exact: true }).click();
-        const remoteListResponse = await listRemote;
-        expect(
-          remoteListResponse.ok(),
-          `Remote preset list HTTP ${remoteListResponse.status()}: ${await remoteListResponse.text()}`,
-        ).toBeTruthy();
-        await customizer.getByPlaceholder('Search remote themes...', { exact: true }).fill('丝带');
-        const remoteRow = customizer.getByRole('listitem').filter({ has: page.getByText('丝带', { exact: true }) });
-        await expect(remoteRow).toBeVisible();
+				const listRemote = page.waitForResponse(
+					(response) =>
+						response.url().includes('/api/v1/appearance/html-presets/remote/list') &&
+						response.request().method() === 'GET',
+				);
+				await customizer.getByRole('button', { name: 'refresh', exact: true }).click();
+				const remoteListResponse = await listRemote;
+				expect(
+					remoteListResponse.ok(),
+					`Remote preset list HTTP ${remoteListResponse.status()}: ${await remoteListResponse.text()}`,
+				).toBeTruthy();
+				await customizer.getByPlaceholder('Search remote themes...', { exact: true }).fill('丝带');
+				const remoteRow = customizer
+					.getByRole('listitem')
+					.filter({ has: page.getByText('丝带', { exact: true }) });
+				await expect(remoteRow).toBeVisible();
 
-        const remoteContent = page.waitForResponse(
-          (response) =>
-            response.url().includes('/api/v1/appearance/html-presets/remote/content') &&
-            response.request().method() === 'GET',
-        );
-        const apply = page.waitForResponse(
-          (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
-        );
-        await remoteRow.getByRole('button', { name: 'Apply', exact: true }).click();
-        const downloaded = await remoteContent;
-        expect(downloaded.ok()).toBeTruthy();
-        const downloadedHtml = await downloaded.text();
-        expect(downloadedHtml.length).toBeGreaterThan(20);
-        expect((await apply).ok()).toBeTruthy();
-        await expect.poll(async () => (await appearance(context.request)).terminalCustomHtml).toBe(downloadedHtml);
-      },
-    );
+				const remoteContent = page.waitForResponse(
+					(response) =>
+						response.url().includes('/api/v1/appearance/html-presets/remote/content') &&
+						response.request().method() === 'GET',
+				);
+				const apply = page.waitForResponse(
+					(response) =>
+						response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
+				);
+				await remoteRow.getByRole('button', { name: 'Apply', exact: true }).click();
+				const downloaded = await remoteContent;
+				expect(downloaded.ok()).toBeTruthy();
+				const downloadedHtml = await downloaded.text();
+				expect(downloadedHtml.length).toBeGreaterThan(20);
+				expect((await apply).ok()).toBeTruthy();
+				await expect
+					.poll(async () => (await appearance(context.request)).terminalCustomHtml)
+					.toBe(downloadedHtml);
+			},
+		);
 
-    await step('legacy official HTML theme repository URLs normalize and still list the current catalog', async () => {
-      const legacyList = await context.request.get('/api/v1/appearance/html-presets/remote/list', {
-        params: { repoUrl: LEGACY_OFFICIAL_HTML_THEME_REPOSITORY },
-      });
-      expect(legacyList.ok()).toBeTruthy();
-      const remoteThemes = (await legacyList.json()) as Array<{ name?: string }>;
-      expect(remoteThemes.some((theme) => theme.name === '丝带.html')).toBeTruthy();
+		await step(
+			'legacy official HTML theme repository URLs normalize and still list the current catalog',
+			async () => {
+				const legacyList = await context.request.get('/api/v1/appearance/html-presets/remote/list', {
+					params: { repoUrl: LEGACY_OFFICIAL_HTML_THEME_REPOSITORY },
+				});
+				expect(legacyList.ok()).toBeTruthy();
+				const remoteThemes = (await legacyList.json()) as Array<{ name?: string }>;
+				expect(remoteThemes.some((theme) => theme.name === '丝带.html')).toBeTruthy();
 
-      const saveLegacy = await context.request.put('/api/v1/appearance/html-presets/remote/repository-url', {
-        data: { url: LEGACY_OFFICIAL_HTML_THEME_REPOSITORY },
-      });
-      expect(saveLegacy.ok()).toBeTruthy();
-      await expect
-        .poll(async () => (await appearance(context.request)).remoteHtmlPresetsUrl)
-        .toBe(DEFAULT_OFFICIAL_HTML_THEME_REPOSITORY);
+				const saveLegacy = await context.request.put('/api/v1/appearance/html-presets/remote/repository-url', {
+					data: { url: LEGACY_OFFICIAL_HTML_THEME_REPOSITORY },
+				});
+				expect(saveLegacy.ok()).toBeTruthy();
+				await expect
+					.poll(async () => (await appearance(context.request)).remoteHtmlPresetsUrl)
+					.toBe(DEFAULT_OFFICIAL_HTML_THEME_REPOSITORY);
 
-      const restoreTestedRef = await context.request.put('/api/v1/appearance/html-presets/remote/repository-url', {
-        data: { url: TESTED_OFFICIAL_HTML_THEME_REPOSITORY },
-      });
-      expect(restoreTestedRef.ok()).toBeTruthy();
-      await expect
-        .poll(async () => (await appearance(context.request)).remoteHtmlPresetsUrl)
-        .toBe(TESTED_OFFICIAL_HTML_THEME_REPOSITORY);
-    });
+				const restoreTestedRef = await context.request.put(
+					'/api/v1/appearance/html-presets/remote/repository-url',
+					{
+						data: { url: TESTED_OFFICIAL_HTML_THEME_REPOSITORY },
+					},
+				);
+				expect(restoreTestedRef.ok()).toBeTruthy();
+				await expect
+					.poll(async () => (await appearance(context.request)).remoteHtmlPresetsUrl)
+					.toBe(TESTED_OFFICIAL_HTML_THEME_REPOSITORY);
+			},
+		);
 
-    await step(
-      'invalid remote repository loading fails without changing the applied HTML and clearing the URL disables the list',
-      async () => {
-        const repository = TESTED_OFFICIAL_HTML_THEME_REPOSITORY;
-        const before = (await appearance(context.request)).terminalCustomHtml;
-        await appearanceField(customizer, 'Remote HTML Themes Repository URL').fill(
-          'https://example.com/not-a-github-repository',
-        );
-        const invalidSave = page.waitForResponse(
-          (response) =>
-            response.url().endsWith('/api/v1/appearance/html-presets/remote/repository-url') &&
-            response.request().method() === 'PUT',
-        );
-        await customizer.getByRole('button', { name: 'Save', exact: true }).last().click();
-        expect((await invalidSave).status()).toBe(400);
-        expect((await appearance(context.request)).remoteHtmlPresetsUrl).toBe(repository);
-        const load = page.waitForResponse((response) =>
-          response.url().includes('/api/v1/appearance/html-presets/remote/list'),
-        );
-        await customizer.getByRole('button', { name: 'refresh', exact: true }).click();
-        expect((await load).status()).toBe(400);
-        expect((await appearance(context.request)).terminalCustomHtml).toBe(before);
+		await step(
+			'invalid remote repository loading fails without changing the applied HTML and clearing the URL disables the list',
+			async () => {
+				const repository = TESTED_OFFICIAL_HTML_THEME_REPOSITORY;
+				const before = (await appearance(context.request)).terminalCustomHtml;
+				await appearanceField(customizer, 'Remote HTML Themes Repository URL').fill(
+					'https://example.com/not-a-github-repository',
+				);
+				const invalidSave = page.waitForResponse(
+					(response) =>
+						response.url().endsWith('/api/v1/appearance/html-presets/remote/repository-url') &&
+						response.request().method() === 'PUT',
+				);
+				await customizer.getByRole('button', { name: 'Save', exact: true }).last().click();
+				expect((await invalidSave).status()).toBe(400);
+				expect((await appearance(context.request)).remoteHtmlPresetsUrl).toBe(repository);
+				const load = page.waitForResponse((response) =>
+					response.url().includes('/api/v1/appearance/html-presets/remote/list'),
+				);
+				await customizer.getByRole('button', { name: 'refresh', exact: true }).click();
+				expect((await load).status()).toBe(400);
+				expect((await appearance(context.request)).terminalCustomHtml).toBe(before);
 
-        await appearanceField(customizer, 'Remote HTML Themes Repository URL').fill('');
-        const clearSave = page.waitForResponse(
-          (response) =>
-            response.url().endsWith('/api/v1/appearance/html-presets/remote/repository-url') &&
-            response.request().method() === 'PUT',
-        );
-        await customizer.getByRole('button', { name: 'Save', exact: true }).last().click();
-        expect((await clearSave).ok()).toBeTruthy();
-        await expect.poll(async () => (await appearance(context.request)).remoteHtmlPresetsUrl ?? null).toBeNull();
-        await expect(customizer.getByRole('button', { name: 'refresh', exact: true })).toBeDisabled();
-        await expect
-          .poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
-          .toBeLessThanOrEqual(1);
-      },
-    );
+				await appearanceField(customizer, 'Remote HTML Themes Repository URL').fill('');
+				const clearSave = page.waitForResponse(
+					(response) =>
+						response.url().endsWith('/api/v1/appearance/html-presets/remote/repository-url') &&
+						response.request().method() === 'PUT',
+				);
+				await customizer.getByRole('button', { name: 'Save', exact: true }).last().click();
+				expect((await clearSave).ok()).toBeTruthy();
+				await expect
+					.poll(async () => (await appearance(context.request)).remoteHtmlPresetsUrl ?? null)
+					.toBeNull();
+				await expect(customizer.getByRole('button', { name: 'refresh', exact: true })).toBeDisabled();
+				await expect
+					.poll(() =>
+						page.evaluate(
+							() => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+						),
+					)
+					.toBeLessThanOrEqual(1);
+			},
+		);
 
-    await step('uploaded backgrounds are really removed and page CSS is cleared', async () => {
-      await customizer.getByRole('button', { name: 'Background', exact: true }).click();
-      const pageDelete = page.waitForResponse(
-        (response) =>
-          response.url().endsWith('/api/v1/appearance/background/page') && response.request().method() === 'DELETE',
-      );
-      await customizer.getByRole('button', { name: 'Remove Page Bg', exact: true }).click();
-      expect((await pageDelete).ok()).toBeTruthy();
-      await expect.poll(async () => Boolean((await appearance(context.request)).pageBackgroundImage)).toBeFalsy();
-      await expect.poll(() => page.evaluate(() => document.body.style.backgroundImage)).toBe('none');
+		await step('uploaded backgrounds are really removed and page CSS is cleared', async () => {
+			await customizer.getByRole('button', { name: 'Background', exact: true }).click();
+			const pageDelete = page.waitForResponse(
+				(response) =>
+					response.url().endsWith('/api/v1/appearance/background/page') &&
+					response.request().method() === 'DELETE',
+			);
+			await customizer.getByRole('button', { name: 'Remove Page Bg', exact: true }).click();
+			expect((await pageDelete).ok()).toBeTruthy();
+			await expect.poll(async () => Boolean((await appearance(context.request)).pageBackgroundImage)).toBeFalsy();
+			await expect.poll(() => page.evaluate(() => document.body.style.backgroundImage)).toBe('none');
 
-      const terminalDelete = page.waitForResponse(
-        (response) =>
-          response.url().endsWith('/api/v1/appearance/background/terminal') && response.request().method() === 'DELETE',
-      );
-      await customizer.getByRole('button', { name: 'Remove Terminal Bg', exact: true }).click();
-      expect((await terminalDelete).ok()).toBeTruthy();
-      await expect.poll(async () => Boolean((await appearance(context.request)).terminalBackgroundImage)).toBeFalsy();
-    });
-  } finally {
-    await cleanupHtmlThemes(context.request);
-    await context.request.put('/api/v1/appearance/html-presets/remote/repository-url', {
-      data: { url: original.remoteHtmlPresetsUrl ?? null },
-    });
-    await context.request.put('/api/v1/appearance', {
-      data: {
-        terminalBackgroundEnabled: original.terminalBackgroundEnabled,
-        terminalBackgroundOverlayOpacity: original.terminalBackgroundOverlayOpacity,
-        terminalCustomHtml: original.terminalCustomHtml,
-      },
-    });
-  }
+			const terminalDelete = page.waitForResponse(
+				(response) =>
+					response.url().endsWith('/api/v1/appearance/background/terminal') &&
+					response.request().method() === 'DELETE',
+			);
+			await customizer.getByRole('button', { name: 'Remove Terminal Bg', exact: true }).click();
+			expect((await terminalDelete).ok()).toBeTruthy();
+			await expect
+				.poll(async () => Boolean((await appearance(context.request)).terminalBackgroundImage))
+				.toBeFalsy();
+		});
+	} finally {
+		await cleanupHtmlThemes(context.request);
+		await context.request.put('/api/v1/appearance/html-presets/remote/repository-url', {
+			data: { url: original.remoteHtmlPresetsUrl ?? null },
+		});
+		await context.request.put('/api/v1/appearance', {
+			data: {
+				terminalBackgroundEnabled: original.terminalBackgroundEnabled,
+				terminalBackgroundOverlayOpacity: original.terminalBackgroundOverlayOpacity,
+				terminalCustomHtml: original.terminalCustomHtml,
+			},
+		});
+	}
 });
 
 test('PWA resources, favicon, manifest, and service worker bootstrap resolve from stable current URLs', async ({
-  page,
-  context,
+	page,
+	context,
 }) => {
-  await loginAsInitialAdmin(context.request);
-  await page.goto('/');
+	await loginAsInitialAdmin(context.request);
+	await page.goto('/');
 
-  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', '/manifest.json');
-  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', /^#[0-9A-Fa-f]{6}$/);
-  await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', /logo/);
+	await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', '/manifest.json');
+	await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', /^#[0-9A-Fa-f]{6}$/);
+	await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', /logo/);
 
-  const resources = await page.evaluate(async () => {
-    const urls = [
-      '/manifest.json',
-      '/sw.js',
-      '/icons/icon-144x144.png',
-      '/icons/icon-192x192.png',
-      '/icons/icon-512x512.png',
-    ];
-    return Promise.all(
-      urls.map(async (url) => {
-        const response = await fetch(url, { cache: 'no-store' });
-        return { url, status: response.status };
-      }),
-    );
-  });
-  expect(resources).toEqual([
-    { url: '/manifest.json', status: 200 },
-    { url: '/sw.js', status: 200 },
-    { url: '/icons/icon-144x144.png', status: 200 },
-    { url: '/icons/icon-192x192.png', status: 200 },
-    { url: '/icons/icon-512x512.png', status: 200 },
-  ]);
+	const resources = await page.evaluate(async () => {
+		const urls = [
+			'/manifest.json',
+			'/sw.js',
+			'/icons/icon-144x144.png',
+			'/icons/icon-192x192.png',
+			'/icons/icon-512x512.png',
+		];
+		return Promise.all(
+			urls.map(async (url) => {
+				const response = await fetch(url, { cache: 'no-store' });
+				return { url, status: response.status };
+			}),
+		);
+	});
+	expect(resources).toEqual([
+		{ url: '/manifest.json', status: 200 },
+		{ url: '/sw.js', status: 200 },
+		{ url: '/icons/icon-144x144.png', status: 200 },
+		{ url: '/icons/icon-192x192.png', status: 200 },
+		{ url: '/icons/icon-512x512.png', status: 200 },
+	]);
 
-  await expect
-    .poll(
-      () =>
-        page.evaluate(async () => {
-          if (!('serviceWorker' in navigator)) return '';
-          const registration = await navigator.serviceWorker.getRegistration();
-          return (
-            registration?.active?.scriptURL ||
-            registration?.waiting?.scriptURL ||
-            registration?.installing?.scriptURL ||
-            ''
-          );
-        }),
-      { timeout: 15_000 },
-    )
-    .toContain('/sw.js?v=4');
+	await expect
+		.poll(
+			() =>
+				page.evaluate(async () => {
+					if (!('serviceWorker' in navigator)) return '';
+					const registration = await navigator.serviceWorker.getRegistration();
+					return (
+						registration?.active?.scriptURL ||
+						registration?.waiting?.scriptURL ||
+						registration?.installing?.scriptURL ||
+						''
+					);
+				}),
+			{ timeout: 15_000 },
+		)
+		.toContain('/sw.js?v=4');
 });

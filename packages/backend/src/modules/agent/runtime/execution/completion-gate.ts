@@ -2,126 +2,131 @@ import type { CompletionEvidenceSnapshot } from '../runs/run.repository.port';
 import type { RunSnapshot } from '../runs/run.types';
 
 const EXPLICIT_VERIFICATION_REQUEST =
-  /(?:\b(?:test|tests|testing|build|compile|lint|typecheck|type-check|check|verify|verification|pytest|vitest|jest)\b|测试|构建|编译|检查|验证)/i;
+	/(?:\b(?:test|tests|testing|build|compile|lint|typecheck|type-check|check|verify|verification|pytest|vitest|jest)\b|测试|构建|编译|检查|验证)/i;
 
 export type CompletionGateDecision =
-  | { kind: 'complete'; terminalStatus: 'completed' | 'completed_unverified'; summary: string }
-  | { kind: 'continue'; reasonCode: 'COMPLETION_PLAN_INCOMPLETE' | 'COMPLETION_EVIDENCE_REQUIRED'; notice: string }
-  | { kind: 'failed'; errorCode: 'COMPLETION_GATE_UNSATISFIED'; notice: string };
+	| { kind: 'complete'; terminalStatus: 'completed' | 'completed_unverified'; summary: string }
+	| { kind: 'continue'; reasonCode: 'COMPLETION_PLAN_INCOMPLETE' | 'COMPLETION_EVIDENCE_REQUIRED'; notice: string }
+	| { kind: 'failed'; errorCode: 'COMPLETION_GATE_UNSATISFIED'; notice: string };
 
 const confirmedSuccess = (result: CompletionEvidenceSnapshot['tools'][number]['result']): boolean =>
-  result.ok && result.outcome === 'confirmed';
+	result.ok && result.outcome === 'confirmed';
 
 const verified = (result: CompletionEvidenceSnapshot['tools'][number]['result']): boolean =>
-  confirmedSuccess(result) && result.verification.status === 'verified';
+	confirmedSuccess(result) && result.verification.status === 'verified';
 
 const verifiedResourceCleanup = (item: CompletionEvidenceSnapshot['tools'][number]): boolean => {
-  const args = item.inspection.normalizedArguments;
-  if (args === null || Array.isArray(args) || typeof args !== 'object' || !verified(item.result)) return false;
-  return item.toolName === 'ssh_session_close' && item.inspection.target.kind === 'ssh' && args.force !== true;
+	const args = item.inspection.normalizedArguments;
+	if (args === null || Array.isArray(args) || typeof args !== 'object' || !verified(item.result)) return false;
+	return item.toolName === 'ssh_session_close' && item.inspection.target.kind === 'ssh' && args.force !== true;
 };
 
 const repeatedGateFailure = (
-  evidence: CompletionEvidenceSnapshot,
-  reasonCode: 'COMPLETION_PLAN_INCOMPLETE' | 'COMPLETION_EVIDENCE_REQUIRED',
-  notice: string,
+	evidence: CompletionEvidenceSnapshot,
+	reasonCode: 'COMPLETION_PLAN_INCOMPLETE' | 'COMPLETION_EVIDENCE_REQUIRED',
+	notice: string,
 ): CompletionGateDecision =>
-  evidence.gateBlocksSinceToolProgress > 0
-    ? { kind: 'failed', errorCode: 'COMPLETION_GATE_UNSATISFIED', notice }
-    : { kind: 'continue', reasonCode, notice };
+	evidence.gateBlocksSinceToolProgress > 0
+		? { kind: 'failed', errorCode: 'COMPLETION_GATE_UNSATISFIED', notice }
+		: { kind: 'continue', reasonCode, notice };
 
 export const completionGateDecision = (
-  run: RunSnapshot,
-  evidence: CompletionEvidenceSnapshot,
-  objectiveText: string,
+	run: RunSnapshot,
+	evidence: CompletionEvidenceSnapshot,
+	objectiveText: string,
 ): CompletionGateDecision => {
-  if (run.definition.executionMode === 'plan') {
-    if (evidence.tools.some((item) => item.inspection.mutation && confirmedSuccess(item.result))) {
-      return {
-        kind: 'failed',
-        errorCode: 'COMPLETION_GATE_UNSATISFIED',
-        notice: 'Plan-only Run produced mutation evidence, which violates the frozen execution mode.',
-      };
-    }
-    if (run.plan.items.length === 0) {
-      return repeatedGateFailure(
-        evidence,
-        'COMPLETION_PLAN_INCOMPLETE',
-        'Completion gate blocked: plan-only Run must produce a durable user-visible plan before completing.',
-      );
-    }
-    return {
-      kind: 'complete',
-      terminalStatus: 'completed_unverified',
-      summary: 'Plan-only Run produced a durable plan; execution remains pending user confirmation in a separate Run.',
-    };
-  }
-  const unfinishedPlanItems = run.plan.items.filter((item) =>
-    ['pending', 'in_progress', 'blocked'].includes(item.status),
-  );
-  if (unfinishedPlanItems.length > 0) {
-    const ids = unfinishedPlanItems
-      .slice(0, 8)
-      .map((item) => item.id)
-      .join(', ');
-    return repeatedGateFailure(
-      evidence,
-      'COMPLETION_PLAN_INCOMPLETE',
-      `Completion gate blocked: the durable Run plan still has unfinished item(s): ${ids}. Reconcile each item with the current user-requested deliverable: continue authorized current work; cancel only out-of-scope future work and describe it as an optional next step; or call user_input_request and suspend if current work needs user authorization or clarification. A blocked Plan item is not a pending user-input request. Do not mark unexecuted work completed, infer authorization, or cancel required work merely to pass this gate. Do not submit a final response while current work is pending.`,
-    );
-  }
+	if (run.definition.executionMode === 'plan') {
+		if (evidence.tools.some((item) => item.inspection.mutation && confirmedSuccess(item.result))) {
+			return {
+				kind: 'failed',
+				errorCode: 'COMPLETION_GATE_UNSATISFIED',
+				notice: 'Plan-only Run produced mutation evidence, which violates the frozen execution mode.',
+			};
+		}
+		if (run.plan.items.length === 0) {
+			return repeatedGateFailure(
+				evidence,
+				'COMPLETION_PLAN_INCOMPLETE',
+				'Completion gate blocked: plan-only Run must produce a durable user-visible plan before completing.',
+			);
+		}
+		return {
+			kind: 'complete',
+			terminalStatus: 'completed_unverified',
+			summary:
+				'Plan-only Run produced a durable plan; execution remains pending user confirmation in a separate Run.',
+		};
+	}
+	const unfinishedPlanItems = run.plan.items.filter((item) =>
+		['pending', 'in_progress', 'blocked'].includes(item.status),
+	);
+	if (unfinishedPlanItems.length > 0) {
+		const ids = unfinishedPlanItems
+			.slice(0, 8)
+			.map((item) => item.id)
+			.join(', ');
+		return repeatedGateFailure(
+			evidence,
+			'COMPLETION_PLAN_INCOMPLETE',
+			`Completion gate blocked: the durable Run plan still has unfinished item(s): ${ids}. Reconcile each item with the current user-requested deliverable: continue authorized current work; cancel only out-of-scope future work and describe it as an optional next step; or call user_input_request and suspend if current work needs user authorization or clarification. A blocked Plan item is not a pending user-input request. Do not mark unexecuted work completed, infer authorization, or cancel required work merely to pass this gate. Do not submit a final response while current work is pending.`,
+		);
+	}
 
-  const readyEvidence = new Set(evidence.readyEvidenceRefs);
-  const hasPlanEvidence = run.plan.items.some(
-    (item) => item.status === 'completed' && item.evidenceRefs.some((ref) => readyEvidence.has(ref)),
-  );
-  const successfulMutations = evidence.tools.filter(
-    (item) => item.inspection.mutation && confirmedSuccess(item.result),
-  );
-  if (successfulMutations.length === 0) {
-    return hasPlanEvidence
-      ? { kind: 'complete', terminalStatus: 'completed', summary: 'Completed Plan evidence is durable and available.' }
-      : {
-          kind: 'complete',
-          terminalStatus: 'completed_unverified',
-          summary: 'No external mutation evidence was required for this Run.',
-        };
-  }
+	const readyEvidence = new Set(evidence.readyEvidenceRefs);
+	const hasPlanEvidence = run.plan.items.some(
+		(item) => item.status === 'completed' && item.evidenceRefs.some((ref) => readyEvidence.has(ref)),
+	);
+	const successfulMutations = evidence.tools.filter(
+		(item) => item.inspection.mutation && confirmedSuccess(item.result),
+	);
+	if (successfulMutations.length === 0) {
+		return hasPlanEvidence
+			? {
+					kind: 'complete',
+					terminalStatus: 'completed',
+					summary: 'Completed Plan evidence is durable and available.',
+				}
+			: {
+					kind: 'complete',
+					terminalStatus: 'completed_unverified',
+					summary: 'No external mutation evidence was required for this Run.',
+				};
+	}
 
-  // Confirmed cleanup does not invalidate the test evidence obtained before cleanup.
-  const stateChangingMutations = successfulMutations.filter((item) => !verifiedResourceCleanup(item));
-  const latestMutationStep = Math.max(-1, ...stateChangingMutations.map((item) => item.stepIndex));
-  const requiresExecutionEvidence = EXPLICIT_VERIFICATION_REQUEST.test(objectiveText);
-  const verifiedAfterMutation = evidence.tools.filter(
-    (item) => item.stepIndex > latestMutationStep && verified(item.result) && item.toolName !== 'plan_update',
-  );
-  const verifiedExecution = evidence.tools.filter(
-    (item) =>
-      item.stepIndex >= latestMutationStep &&
-      item.result.semantic?.kind === 'execution' &&
-      item.result.semantic.status === 'succeeded' &&
-      verified(item.result),
-  );
-  const hasRequiredEvidence = requiresExecutionEvidence
-    ? verifiedExecution.length > 0 || hasPlanEvidence
-    : verifiedAfterMutation.length > 0 || verifiedExecution.length > 0 || hasPlanEvidence;
+	// Confirmed cleanup does not invalidate the test evidence obtained before cleanup.
+	const stateChangingMutations = successfulMutations.filter((item) => !verifiedResourceCleanup(item));
+	const latestMutationStep = Math.max(-1, ...stateChangingMutations.map((item) => item.stepIndex));
+	const requiresExecutionEvidence = EXPLICIT_VERIFICATION_REQUEST.test(objectiveText);
+	const verifiedAfterMutation = evidence.tools.filter(
+		(item) => item.stepIndex > latestMutationStep && verified(item.result) && item.toolName !== 'plan_update',
+	);
+	const verifiedExecution = evidence.tools.filter(
+		(item) =>
+			item.stepIndex >= latestMutationStep &&
+			item.result.semantic?.kind === 'execution' &&
+			item.result.semantic.status === 'succeeded' &&
+			verified(item.result),
+	);
+	const hasRequiredEvidence = requiresExecutionEvidence
+		? verifiedExecution.length > 0 || hasPlanEvidence
+		: verifiedAfterMutation.length > 0 || verifiedExecution.length > 0 || hasPlanEvidence;
 
-  if (!hasRequiredEvidence) {
-    const expectation = requiresExecutionEvidence
-      ? 'Run an appropriate test/build/check command and obtain a verified successful result.'
-      : 'Obtain verified follow-up evidence for the mutation (for example a read/check/execute result), or attach durable Plan evidence.';
-    return repeatedGateFailure(
-      evidence,
-      'COMPLETION_EVIDENCE_REQUIRED',
-      `Completion gate blocked: this Run changed external state but does not yet have sufficient durable completion evidence. ${expectation}`,
-    );
-  }
+	if (!hasRequiredEvidence) {
+		const expectation = requiresExecutionEvidence
+			? 'Run an appropriate test/build/check command and obtain a verified successful result.'
+			: 'Obtain verified follow-up evidence for the mutation (for example a read/check/execute result), or attach durable Plan evidence.';
+		return repeatedGateFailure(
+			evidence,
+			'COMPLETION_EVIDENCE_REQUIRED',
+			`Completion gate blocked: this Run changed external state but does not yet have sufficient durable completion evidence. ${expectation}`,
+		);
+	}
 
-  return {
-    kind: 'complete',
-    terminalStatus: 'completed',
-    summary: requiresExecutionEvidence
-      ? 'Verified execution evidence satisfied the requested completion check.'
-      : 'Durable verification evidence exists after the Run mutation.',
-  };
+	return {
+		kind: 'complete',
+		terminalStatus: 'completed',
+		summary: requiresExecutionEvidence
+			? 'Verified execution evidence satisfied the requested completion check.'
+			: 'Durable verification evidence exists after the Run mutation.',
+	};
 };

@@ -1,2107 +1,2265 @@
 <script setup lang="ts">
-  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-  import { useI18n } from 'vue-i18n';
-  import { UiContextMenu, UiSpinner, UiOverlayPanel } from '@/foundation/ui';
-  import { useDeviceCapabilities } from '@/foundation/browser';
-  import { writeClipboardText } from '@/foundation/browser';
-  import { createWheelScaleResolver, useLongPressGesture } from '@/foundation/interaction';
-  import { useFeedback } from '@/shared/feedback/public';
-  import { focusRegistry } from '@/shared/focus/public';
-  import FilesystemCatalogModal from './FilesystemCatalogModal.vue';
-  import PathHistoryDropdown from './PathHistoryDropdown.vue';
-  import { type FilesystemSortKey } from '../composables/useFilesystemBrowser';
-  import {
-    createFilesystemSessionState,
-    type FilesystemSessionState,
-  } from '../composables/createFilesystemSessionState';
-  import { useFilesystemCatalog } from '../composables/useFilesystemCatalog';
-  import { collectDroppedLocalFiles } from '../composables/collectDroppedLocalFiles';
-  import type { FilesystemChannel, FilesystemDownloadPort, TerminalDirectoryPort } from '../ports/filesystem-channel';
-  import type {
-    ArchiveCompressionFormat,
-    ArchiveCompressionIntent,
-    LocalUploadFile,
-    WorkspaceRemoteFileEntryDto,
-  } from '../model/filesystem';
+	import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+	import { useI18n } from 'vue-i18n';
+	import { UiContextMenu, UiSpinner, UiOverlayPanel } from '@/foundation/ui';
+	import { useDeviceCapabilities } from '@/foundation/browser';
+	import { writeClipboardText } from '@/foundation/browser';
+	import { createWheelScaleResolver, useLongPressGesture } from '@/foundation/interaction';
+	import { useFeedback } from '@/shared/feedback/public';
+	import { focusRegistry } from '@/shared/focus/public';
+	import FilesystemCatalogModal from './FilesystemCatalogModal.vue';
+	import PathHistoryDropdown from './PathHistoryDropdown.vue';
+	import { type FilesystemSortKey } from '../composables/useFilesystemBrowser';
+	import {
+		createFilesystemSessionState,
+		type FilesystemSessionState,
+	} from '../composables/createFilesystemSessionState';
+	import { useFilesystemCatalog } from '../composables/useFilesystemCatalog';
+	import { collectDroppedLocalFiles } from '../composables/collectDroppedLocalFiles';
+	import type { FilesystemChannel, FilesystemDownloadPort, TerminalDirectoryPort } from '../ports/filesystem-channel';
+	import type {
+		ArchiveCompressionFormat,
+		ArchiveCompressionIntent,
+		LocalUploadFile,
+		WorkspaceRemoteFileEntryDto,
+	} from '../model/filesystem';
 
-  const props = withDefaults(
-    defineProps<{
-      channel: FilesystemChannel;
-      beforeFileMutation?: (paths: readonly string[]) => boolean;
-      download?: FilesystemDownloadPort;
-      terminalDirectory?: TerminalDirectoryPort;
-      initialPath?: string;
-      confirmDelete?: boolean;
-      rowScale?: number;
-      columnWidths?: Record<string, number>;
-      clipboardCount?: number;
-      state?: FilesystemSessionState;
-      showEditorButton?: boolean;
-    }>(),
-    { confirmDelete: true, rowScale: 1, showEditorButton: false },
-  );
-  const emit = defineEmits<{
-    openFile: [entry: WorkspaceRemoteFileEntryDto];
-    openAsText: [entry: WorkspaceRemoteFileEntryDto];
-    openEditor: [];
-    upload: [path: string];
-    uploadFiles: [path: string, files: LocalUploadFile[], directories: string[]];
-    copyToClipboard: [entries: WorkspaceRemoteFileEntryDto[]];
-    cutToClipboard: [entries: WorkspaceRemoteFileEntryDto[]];
-    moveTo: [entries: WorkspaceRemoteFileEntryDto[], destination: string];
-    paste: [destination: string];
-    compress: [entries: WorkspaceRemoteFileEntryDto[]];
-    compressPreset: [intent: ArchiveCompressionIntent];
-    decompress: [entry: WorkspaceRemoteFileEntryDto];
-    sendFiles: [entries: WorkspaceRemoteFileEntryDto[]];
-    rowScale: [scale: number];
-    columnWidths: [widths: Record<string, number>];
-  }>();
-  const { t } = useI18n();
-  const device = useDeviceCapabilities();
-  const feedback = useFeedback();
-  const ownsFilesystemState = !props.state;
-  const filesystemState = props.state ?? createFilesystemSessionState(props.channel, props.initialPath ?? '/');
-  const browser = filesystemState.browser;
-  const catalog = useFilesystemCatalog();
-  const action = ref<'mkdir' | 'file' | 'rename' | 'chmod' | null>(null);
-  const target = ref<WorkspaceRemoteFileEntryDto | null>(null);
-  const value = ref('');
-  const catalogVisible = ref(false);
-  const searchExpanded = ref(false);
-  const pathDraft = ref(props.initialPath ?? '/');
-  const pathDraftEditing = ref(false);
-  let pathDraftRevision = 0;
-  const pathHistoryOpen = ref(false);
-  const pathHistoryIndex = ref(-1);
-  let pathHistoryCloseTimer: number | undefined;
-  const root = ref<HTMLElement | null>(null);
-  const pathInput = ref<{ focus?: () => void; select?: () => void } | null>(null);
-  const searchInput = ref<{ focus?: () => void } | null>(null);
-  const favoriteButton = ref<HTMLButtonElement | null>(null);
-  const actionInput = ref<HTMLInputElement | null>(null);
-  const listScroller = ref<HTMLElement | null>(null);
-  const keyboardCursor = ref<string | null>(null);
-  const multiSelect = ref(false);
-  const dragging = ref(false);
-  const draggedRemoteEntries = ref<WorkspaceRemoteFileEntryDto[]>([]);
-  const remoteDragTarget = ref<string | null>(null);
-  let remoteDragScrollTimer: number | undefined;
-  let remoteDragScrollDirection = 0;
-  type FileManagerContext =
-    | { scope: 'entry'; entry: WorkspaceRemoteFileEntryDto; x: number; y: number }
-    | { scope: 'current-directory' | 'parent-directory'; destination: string; x: number; y: number };
-  const context = ref<FileManagerContext | null>(null);
-  const contextDownloadLabel = computed(() => {
-    const value = context.value;
-    if (!value || value.scope !== 'entry') return t('fileManager.actions.download');
-    return value.entry.metadata.isDirectory
-      ? t('fileManager.actions.downloadFolder')
-      : t('fileManager.actions.download');
-  });
-  const shortcutHints = {
-    cut: 'Ctrl+X',
-    copy: 'Ctrl+C',
-    paste: 'Ctrl+V',
-    delete: 'Delete',
-    rename: 'F2',
-    newFolder: 'Ctrl+Shift+N',
-    refresh: 'F5',
-  } as const;
-  const actionTitle = computed(() => {
-    if (action.value === 'mkdir') return t('fileManager.modals.titles.newFolder');
-    if (action.value === 'file') return t('fileManager.modals.titles.newFile');
-    if (action.value === 'rename') return t('fileManager.modals.titles.rename', { name: target.value?.name ?? '' });
-    if (action.value === 'chmod') return t('fileManager.modals.titles.chmod', { name: target.value?.name ?? '' });
-    return '';
-  });
-  const actionLabel = computed(() => {
-    if (action.value === 'mkdir') return t('fileManager.modals.labels.folderName');
-    if (action.value === 'file') return t('fileManager.modals.labels.fileName');
-    if (action.value === 'rename') return t('fileManager.modals.labels.newName');
-    if (action.value === 'chmod') return t('fileManager.modals.labels.newPermissions');
-    return '';
-  });
-  const actionPlaceholder = computed(() => {
-    if (action.value === 'mkdir') return t('fileManager.modals.placeholders.newFolder');
-    if (action.value === 'file') return t('fileManager.modals.placeholders.newFile');
-    if (action.value === 'rename') return target.value?.name ?? t('fileManager.modals.placeholders.newName');
-    if (action.value === 'chmod') return value.value || '0755';
-    return '';
-  });
-  const actionConfirmLabel = computed(() => {
-    if (action.value === 'mkdir' || action.value === 'file') return t('fileManager.modals.buttons.create');
-    if (action.value === 'rename') return t('fileManager.modals.buttons.rename');
-    if (action.value === 'chmod') return t('fileManager.modals.buttons.changePermissions');
-    return t('fileManager.modals.buttons.confirm');
-  });
-  const createNameConflict = computed(() => {
-    if (action.value !== 'mkdir' && action.value !== 'file') return false;
-    const name = value.value.trim();
-    return Boolean(name && browser.entries.value.some((entry) => entry.name === name));
-  });
-  const actionConfirmDisabled = computed(() => {
-    const text = value.value.trim();
-    if (!text) return true;
-    if (createNameConflict.value) return true;
-    if (action.value === 'rename' && text === target.value?.name) return true;
-    if (action.value === 'chmod' && !/^[0-7]{3,4}$/.test(text)) return true;
-    return false;
-  });
-  const compressSubmenu = ref<{ x: number; y: number; side: 'left' | 'right' } | null>(null);
-  watch(context, (value) => {
-    if (!value) compressSubmenu.value = null;
-  });
-  const FILE_MANAGER_SCALE_MIN = 0.5;
-  const FILE_MANAGER_SCALE_MAX = 2;
-  const normalizeRowScale = (value: number): number =>
-    Math.min(FILE_MANAGER_SCALE_MAX, Math.max(FILE_MANAGER_SCALE_MIN, value));
-  const renderedRowScale = ref(
-    Number.isFinite(props.rowScale) ? normalizeRowScale(props.rowScale) : FILE_MANAGER_SCALE_MIN,
-  );
-  const changingTerminalPath = ref(false);
-  const syncingTerminalPath = ref(false);
-  const listScrollTop = ref(0);
-  const listViewportHeight = ref(600);
-  const listViewportWidth = ref(800);
-  const isCustomResized = ref(false);
-  const FILE_VIRTUALIZATION_THRESHOLD = 250;
-  const FILE_LIST_OVERSCAN = 12;
-  let listResizeObserver: ResizeObserver | undefined;
-  type ColumnKey = 'name' | 'permissions' | 'modified';
-  const minimumColumnWidths: Record<ColumnKey, number> = {
-    name: 80,
-    permissions: 82,
-    modified: 80,
-  };
-  const defaultColumnWidths: Record<ColumnKey, number> = {
-    name: 200,
-    permissions: 88,
-    modified: 92,
-  };
-  const initialColumnWidth = (key: ColumnKey): number => {
-    const width = props.columnWidths?.[key];
-    if (typeof width === 'number' && Number.isFinite(width)) {
-      return Math.max(minimumColumnWidths[key], width);
-    }
-    return defaultColumnWidths[key];
-  };
-  const renderedColumnWidths = ref<Record<ColumnKey, number>>({
-    name: initialColumnWidth('name'),
-    permissions: initialColumnWidth('permissions'),
-    modified: initialColumnWidth('modified'),
-  });
-  const showPermissions = computed(() => listViewportWidth.value >= 560);
-  const showModified = computed(() => listViewportWidth.value >= 400);
-  const isLarge = computed(() => showPermissions.value);
-  const isMedium = computed(() => !showPermissions.value && showModified.value);
-  const isSmall = computed(() => !showModified.value);
-  const visibleColumnCount = computed(() => 1 + (showPermissions.value ? 1 : 0) + (showModified.value ? 1 : 0));
-  const canResizeName = computed(() => !device.isMobile.value && (showPermissions.value || showModified.value));
-  const canResizePermissions = computed(() => !device.isMobile.value && showModified.value);
+	const props = withDefaults(
+		defineProps<{
+			channel: FilesystemChannel;
+			beforeFileMutation?: (paths: readonly string[]) => boolean;
+			download?: FilesystemDownloadPort;
+			terminalDirectory?: TerminalDirectoryPort;
+			initialPath?: string;
+			confirmDelete?: boolean;
+			rowScale?: number;
+			columnWidths?: Record<string, number>;
+			clipboardCount?: number;
+			state?: FilesystemSessionState;
+			showEditorButton?: boolean;
+		}>(),
+		{ confirmDelete: true, rowScale: 1, showEditorButton: false },
+	);
+	const emit = defineEmits<{
+		openFile: [entry: WorkspaceRemoteFileEntryDto];
+		openAsText: [entry: WorkspaceRemoteFileEntryDto];
+		openEditor: [];
+		upload: [path: string];
+		uploadFiles: [path: string, files: LocalUploadFile[], directories: string[]];
+		copyToClipboard: [entries: WorkspaceRemoteFileEntryDto[]];
+		cutToClipboard: [entries: WorkspaceRemoteFileEntryDto[]];
+		moveTo: [entries: WorkspaceRemoteFileEntryDto[], destination: string];
+		paste: [destination: string];
+		compress: [entries: WorkspaceRemoteFileEntryDto[]];
+		compressPreset: [intent: ArchiveCompressionIntent];
+		decompress: [entry: WorkspaceRemoteFileEntryDto];
+		sendFiles: [entries: WorkspaceRemoteFileEntryDto[]];
+		rowScale: [scale: number];
+		columnWidths: [widths: Record<string, number>];
+	}>();
+	const { t } = useI18n();
+	const device = useDeviceCapabilities();
+	const feedback = useFeedback();
+	const ownsFilesystemState = !props.state;
+	const filesystemState = props.state ?? createFilesystemSessionState(props.channel, props.initialPath ?? '/');
+	const browser = filesystemState.browser;
+	const catalog = useFilesystemCatalog();
+	const action = ref<'mkdir' | 'file' | 'rename' | 'chmod' | null>(null);
+	const target = ref<WorkspaceRemoteFileEntryDto | null>(null);
+	const value = ref('');
+	const catalogVisible = ref(false);
+	const searchExpanded = ref(false);
+	const pathDraft = ref(props.initialPath ?? '/');
+	const pathDraftEditing = ref(false);
+	let pathDraftRevision = 0;
+	const pathHistoryOpen = ref(false);
+	const pathHistoryIndex = ref(-1);
+	let pathHistoryCloseTimer: number | undefined;
+	const root = ref<HTMLElement | null>(null);
+	const pathInput = ref<{ focus?: () => void; select?: () => void } | null>(null);
+	const searchInput = ref<{ focus?: () => void } | null>(null);
+	const favoriteButton = ref<HTMLButtonElement | null>(null);
+	const actionInput = ref<HTMLInputElement | null>(null);
+	const listScroller = ref<HTMLElement | null>(null);
+	const keyboardCursor = ref<string | null>(null);
+	const multiSelect = ref(false);
+	const dragging = ref(false);
+	const draggedRemoteEntries = ref<WorkspaceRemoteFileEntryDto[]>([]);
+	const remoteDragTarget = ref<string | null>(null);
+	let remoteDragScrollTimer: number | undefined;
+	let remoteDragScrollDirection = 0;
+	type FileManagerContext =
+		| { scope: 'entry'; entry: WorkspaceRemoteFileEntryDto; x: number; y: number }
+		| { scope: 'current-directory' | 'parent-directory'; destination: string; x: number; y: number };
+	const context = ref<FileManagerContext | null>(null);
+	const contextDownloadLabel = computed(() => {
+		const value = context.value;
+		if (!value || value.scope !== 'entry') return t('fileManager.actions.download');
+		return value.entry.metadata.isDirectory
+			? t('fileManager.actions.downloadFolder')
+			: t('fileManager.actions.download');
+	});
+	const shortcutHints = {
+		cut: 'Ctrl+X',
+		copy: 'Ctrl+C',
+		paste: 'Ctrl+V',
+		delete: 'Delete',
+		rename: 'F2',
+		newFolder: 'Ctrl+Shift+N',
+		refresh: 'F5',
+	} as const;
+	const actionTitle = computed(() => {
+		if (action.value === 'mkdir') return t('fileManager.modals.titles.newFolder');
+		if (action.value === 'file') return t('fileManager.modals.titles.newFile');
+		if (action.value === 'rename') return t('fileManager.modals.titles.rename', { name: target.value?.name ?? '' });
+		if (action.value === 'chmod') return t('fileManager.modals.titles.chmod', { name: target.value?.name ?? '' });
+		return '';
+	});
+	const actionLabel = computed(() => {
+		if (action.value === 'mkdir') return t('fileManager.modals.labels.folderName');
+		if (action.value === 'file') return t('fileManager.modals.labels.fileName');
+		if (action.value === 'rename') return t('fileManager.modals.labels.newName');
+		if (action.value === 'chmod') return t('fileManager.modals.labels.newPermissions');
+		return '';
+	});
+	const actionPlaceholder = computed(() => {
+		if (action.value === 'mkdir') return t('fileManager.modals.placeholders.newFolder');
+		if (action.value === 'file') return t('fileManager.modals.placeholders.newFile');
+		if (action.value === 'rename') return target.value?.name ?? t('fileManager.modals.placeholders.newName');
+		if (action.value === 'chmod') return value.value || '0755';
+		return '';
+	});
+	const actionConfirmLabel = computed(() => {
+		if (action.value === 'mkdir' || action.value === 'file') return t('fileManager.modals.buttons.create');
+		if (action.value === 'rename') return t('fileManager.modals.buttons.rename');
+		if (action.value === 'chmod') return t('fileManager.modals.buttons.changePermissions');
+		return t('fileManager.modals.buttons.confirm');
+	});
+	const createNameConflict = computed(() => {
+		if (action.value !== 'mkdir' && action.value !== 'file') return false;
+		const name = value.value.trim();
+		return Boolean(name && browser.entries.value.some((entry) => entry.name === name));
+	});
+	const actionConfirmDisabled = computed(() => {
+		const text = value.value.trim();
+		if (!text) return true;
+		if (createNameConflict.value) return true;
+		if (action.value === 'rename' && text === target.value?.name) return true;
+		if (action.value === 'chmod' && !/^[0-7]{3,4}$/.test(text)) return true;
+		return false;
+	});
+	const compressSubmenu = ref<{ x: number; y: number; side: 'left' | 'right' } | null>(null);
+	watch(context, (value) => {
+		if (!value) compressSubmenu.value = null;
+	});
+	const FILE_MANAGER_SCALE_MIN = 0.5;
+	const FILE_MANAGER_SCALE_MAX = 2;
 
-  const totalColumnWidth = computed(() => {
-    let sum = renderedColumnWidths.value.name;
-    if (showPermissions.value) sum += renderedColumnWidths.value.permissions;
-    if (showModified.value) sum += renderedColumnWidths.value.modified;
-    return sum;
-  });
-  const isCurrentPathFavorite = computed(() =>
-    catalog.favorites.value.some((item) => item.path === browser.path.value),
-  );
-  let activeColumnResize: { key: ColumnKey; pointerId: number; startX: number; startWidth: number } | undefined;
-  let unregisterSearchFocus: (() => void) | undefined;
-  let unregisterPathFocus: (() => void) | undefined;
-  let navigationQueue: Promise<void> = Promise.resolve();
-  let queuedRefresh: { promise: Promise<void>; draftRevision: number } | undefined;
-  let clipboardPasteSerial = 0;
+	const normalizeRowScale = (value: number): number =>
+		Math.min(FILE_MANAGER_SCALE_MAX, Math.max(FILE_MANAGER_SCALE_MIN, value));
 
-  const enqueueNavigation = (operation: () => Promise<void>): Promise<void> => {
-    queuedRefresh = undefined;
-    const next = navigationQueue.then(operation, operation);
-    navigationQueue = next.catch(() => undefined);
-    return next;
-  };
-  const loadPath = async (path: string, draftRevision = pathDraftRevision): Promise<void> => {
-    const loaded = await browser.load(path);
-    if (loaded && (!pathDraftEditing.value || pathDraftRevision === draftRevision)) {
-      pathDraft.value = browser.path.value;
-    }
-  };
-  const refresh = async (): Promise<void> => {
-    if (queuedRefresh) {
-      queuedRefresh.draftRevision = pathDraftRevision;
-      await queuedRefresh.promise;
-      return;
-    }
-    const pending = { promise: Promise.resolve(), draftRevision: pathDraftRevision };
-    pending.promise = enqueueNavigation(async () => {
-      if (queuedRefresh === pending) queuedRefresh = undefined;
-      await browser.refresh();
-      if (!browser.error.value && (!pathDraftEditing.value || pathDraftRevision === pending.draftRevision)) {
-        pathDraft.value = browser.path.value;
-      }
-    });
-    queuedRefresh = pending;
-    await pending.promise;
-  };
+	const renderedRowScale = ref(
+		Number.isFinite(props.rowScale) ? normalizeRowScale(props.rowScale) : FILE_MANAGER_SCALE_MIN,
+	);
+	const changingTerminalPath = ref(false);
+	const syncingTerminalPath = ref(false);
+	const listScrollTop = ref(0);
+	const listViewportHeight = ref(600);
+	const listViewportWidth = ref(800);
+	const isCustomResized = ref(false);
+	const FILE_VIRTUALIZATION_THRESHOLD = 250;
+	const FILE_LIST_OVERSCAN = 12;
+	let listResizeObserver: ResizeObserver | undefined;
+	type ColumnKey = 'name' | 'permissions' | 'modified';
+	const minimumColumnWidths: Record<ColumnKey, number> = {
+		name: 80,
+		permissions: 82,
+		modified: 80,
+	};
+	const defaultColumnWidths: Record<ColumnKey, number> = {
+		name: 200,
+		permissions: 88,
+		modified: 92,
+	};
 
-  const resolveWheelScale = createWheelScaleResolver({
-    min: FILE_MANAGER_SCALE_MIN,
-    max: FILE_MANAGER_SCALE_MAX,
-    step: 0.08,
-    thresholdPx: 72,
-    maxStepsPerEvent: 3,
-    stopImmediatePropagation: true,
-  });
-  const rowStyle = computed(() => ({ '--file-row-scale': renderedRowScale.value }));
-  const estimatedRowHeight = computed(() => Math.max(24, 34 * renderedRowScale.value));
-  const shouldVirtualize = computed(() => browser.visible.value.length > FILE_VIRTUALIZATION_THRESHOLD);
-  const virtualStartIndex = computed(() => {
-    if (!shouldVirtualize.value) return 0;
-    return Math.max(0, Math.floor(listScrollTop.value / estimatedRowHeight.value) - FILE_LIST_OVERSCAN);
-  });
-  const virtualEndIndex = computed(() => {
-    if (!shouldVirtualize.value) return browser.visible.value.length;
-    const visibleRows = Math.ceil(listViewportHeight.value / estimatedRowHeight.value);
-    return Math.min(browser.visible.value.length, virtualStartIndex.value + visibleRows + FILE_LIST_OVERSCAN * 2);
-  });
-  const virtualEntries = computed(() => browser.visible.value.slice(virtualStartIndex.value, virtualEndIndex.value));
-  const virtualTopPadding = computed(() =>
-    shouldVirtualize.value ? virtualStartIndex.value * estimatedRowHeight.value : 0,
-  );
-  const virtualBottomPadding = computed(() =>
-    shouldVirtualize.value
-      ? Math.max(0, (browser.visible.value.length - virtualEndIndex.value) * estimatedRowHeight.value)
-      : 0,
-  );
-  const formatCompactModified = (value: string | number | Date): string => {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-    const pad = (part: number) => String(part).padStart(2, '0');
-    if (listViewportWidth.value < 360) {
-      return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-    }
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  };
-  const formatModeOctal = (mode: number): string => (mode & 0o7777).toString(8).padStart(3, '0');
-  const formatMode = (mode: number): string => {
-    const permissions = mode & 0o777;
-    return [
-      permissions & 0o400 ? 'r' : '-',
-      permissions & 0o200 ? 'w' : '-',
-      permissions & 0o100 ? 'x' : '-',
-      permissions & 0o040 ? 'r' : '-',
-      permissions & 0o020 ? 'w' : '-',
-      permissions & 0o010 ? 'x' : '-',
-      permissions & 0o004 ? 'r' : '-',
-      permissions & 0o002 ? 'w' : '-',
-      permissions & 0o001 ? 'x' : '-',
-    ].join('');
-  };
-  const getFileIconClass = (filename: string): string => {
-    const lower = filename.toLowerCase();
-    const dot = lower.lastIndexOf('.');
-    const extension = dot > 0 && dot < lower.length - 1 ? lower.slice(dot + 1) : dot === 0 ? lower.slice(1) : '';
-    if (lower === 'makefile') return 'fas fa-cogs';
-    if (lower === 'dockerfile' || lower.endsWith('docker-compose.yml') || lower.endsWith('docker-compose.yaml'))
-      return 'fab fa-docker';
-    if (lower === 'package.json' || lower === 'package-lock.json' || lower === 'pnpm-lock.yaml') return 'fab fa-npm';
-    if (lower === 'yarn.lock') return 'fab fa-yarn';
-    if (lower === 'composer.json' || lower === 'composer.lock') return 'fab fa-php';
-    if (lower === 'gemfile' || lower === 'gemfile.lock') return 'fas fa-gem';
-    if (lower.startsWith('.env')) return 'fas fa-shield-alt';
-    if (['.git', '.gitignore', '.gitattributes', '.gitmodules'].includes(lower)) return 'fab fa-git-alt';
-    if (lower === 'readme' || lower.startsWith('readme.')) return 'fas fa-book-reader';
-    if (lower === 'license' || lower.startsWith('license.')) return 'fas fa-balance-scale';
-    const iconMap: Record<string, string> = {
-      jpg: 'fas fa-file-image',
-      jpeg: 'fas fa-file-image',
-      png: 'fas fa-file-image',
-      gif: 'fas fa-file-image',
-      bmp: 'fas fa-file-image',
-      svg: 'fas fa-file-image',
-      webp: 'fas fa-file-image',
-      ico: 'fas fa-file-image',
-      tiff: 'fas fa-file-image',
-      mp4: 'fas fa-file-video',
-      mkv: 'fas fa-file-video',
-      avi: 'fas fa-file-video',
-      mov: 'fas fa-file-video',
-      webm: 'fas fa-file-video',
-      mp3: 'fas fa-file-audio',
-      wav: 'fas fa-file-audio',
-      ogg: 'fas fa-file-audio',
-      flac: 'fas fa-file-audio',
-      doc: 'fas fa-file-word',
-      docx: 'fas fa-file-word',
-      xls: 'fas fa-file-excel',
-      xlsx: 'fas fa-file-excel',
-      ppt: 'fas fa-file-powerpoint',
-      pptx: 'fas fa-file-powerpoint',
-      pdf: 'fas fa-file-pdf',
-      csv: 'fas fa-file-csv',
-      tsv: 'fas fa-file-csv',
-      zip: 'fas fa-file-archive',
-      rar: 'fas fa-file-archive',
-      tar: 'fas fa-file-archive',
-      gz: 'fas fa-file-archive',
-      '7z': 'fas fa-file-archive',
-      bz2: 'fas fa-file-archive',
-      xz: 'fas fa-file-archive',
-      iso: 'fas fa-compact-disc',
-      js: 'fab fa-js-square',
-      mjs: 'fab fa-js-square',
-      cjs: 'fab fa-js-square',
-      jsx: 'fab fa-react',
-      ts: 'fas fa-file-code',
-      tsx: 'fab fa-react',
-      vue: 'fab fa-vuejs',
-      py: 'fab fa-python',
-      java: 'fab fa-java',
-      jar: 'fab fa-java',
-      go: 'fas fa-file-code',
-      rs: 'fas fa-file-code',
-      c: 'fas fa-file-code',
-      h: 'fas fa-file-code',
-      cpp: 'fas fa-file-code',
-      rb: 'fas fa-gem',
-      php: 'fab fa-php',
-      html: 'fab fa-html5',
-      htm: 'fab fa-html5',
-      css: 'fab fa-css3-alt',
-      scss: 'fab fa-sass',
-      sass: 'fab fa-sass',
-      less: 'fab fa-less',
-      json: 'fas fa-file-code',
-      xml: 'fas fa-file-code',
-      yml: 'fas fa-cog',
-      yaml: 'fas fa-cog',
-      ini: 'fas fa-cog',
-      conf: 'fas fa-cog',
-      toml: 'fas fa-cog',
-      md: 'fab fa-markdown',
-      markdown: 'fab fa-markdown',
-      sql: 'fas fa-database',
-      db: 'fas fa-database',
-      sqlite: 'fas fa-database',
-      sqlite3: 'fas fa-database',
-      txt: 'fas fa-file-alt',
-      text: 'fas fa-file-alt',
-      log: 'fas fa-file-alt',
-      key: 'fas fa-key',
-      pem: 'fas fa-key',
-      pub: 'fas fa-key',
-      sh: 'fas fa-terminal',
-      bash: 'fas fa-terminal',
-      zsh: 'fas fa-terminal',
-      fish: 'fas fa-terminal',
-      bat: 'fas fa-terminal',
-      cmd: 'fas fa-terminal',
-      ps1: 'fas fa-terminal',
-      ttf: 'fas fa-font',
-      otf: 'fas fa-font',
-      woff: 'fas fa-font',
-      woff2: 'fas fa-font',
-      bashrc: 'fas fa-cog',
-      zshrc: 'fas fa-cog',
-      profile: 'fas fa-cog',
-      gitconfig: 'fab fa-git-alt',
-    };
-    return iconMap[extension] ?? 'far fa-file';
-  };
-  const selectedEntries = () => browser.visible.value.filter((entry) => browser.selected.value.has(entry.path));
-  const joinPath = (basePath: string, name: string) => `${basePath.replace(/\/$/, '')}/${name}`.replace(/^\/\//, '/');
-  const join = (name: string) => joinPath(browser.path.value, name);
-  const parentOf = (path: string) => {
-    const normalized = path.replace(/\/+$/, '') || '/';
-    const index = normalized.lastIndexOf('/');
-    return index <= 0 ? '/' : normalized.slice(0, index);
-  };
-  const isArchive = (entry: WorkspaceRemoteFileEntryDto) => /\.(zip|tar\.gz|tgz|tar\.bz2|tbz2)$/i.test(entry.name);
-  const canOpenAsText = (entry: WorkspaceRemoteFileEntryDto) =>
-    !entry.metadata.isDirectory && /\.(md|markdown)$/i.test(entry.name);
-  const displayEntryName = (entry: WorkspaceRemoteFileEntryDto) =>
-    browser.searchActive.value && 'relativePath' in entry && typeof entry.relativePath === 'string'
-      ? entry.relativePath
-      : entry.name;
-  const sortMark = (key: FilesystemSortKey) =>
-    browser.sortKey.value === key ? (browser.sortDirection.value === 'asc' ? ' ▲' : ' ▼') : '';
+	const initialColumnWidth = (key: ColumnKey): number => {
+		const width = props.columnWidths?.[key];
+		if (typeof width === 'number' && Number.isFinite(width)) {
+			return Math.max(minimumColumnWidths[key], width);
+		}
+		return defaultColumnWidths[key];
+	};
 
-  const handleListScroll = () => {
-    listScrollTop.value = listScroller.value?.scrollTop ?? 0;
-  };
-  const resetListScroll = () => {
-    listScrollTop.value = 0;
-    if (listScroller.value) listScroller.value.scrollTop = 0;
-  };
+	const renderedColumnWidths = ref<Record<ColumnKey, number>>({
+		name: initialColumnWidth('name'),
+		permissions: initialColumnWidth('permissions'),
+		modified: initialColumnWidth('modified'),
+	});
+	const showPermissions = computed(() => listViewportWidth.value >= 560);
+	const showModified = computed(() => listViewportWidth.value >= 400);
+	const isLarge = computed(() => showPermissions.value);
+	const isMedium = computed(() => !showPermissions.value && showModified.value);
+	const isSmall = computed(() => !showModified.value);
+	const visibleColumnCount = computed(() => 1 + (showPermissions.value ? 1 : 0) + (showModified.value ? 1 : 0));
+	const canResizeName = computed(() => !device.isMobile.value && (showPermissions.value || showModified.value));
+	const canResizePermissions = computed(() => !device.isMobile.value && showModified.value);
 
-  onMounted(async () => {
-    unregisterSearchFocus = focusRegistry.register(
-      'fileManagerSearch',
-      () => {
-        searchExpanded.value = true;
-        void nextTick(() => searchInput.value?.focus?.());
-        return true;
-      },
-      () => Boolean(root.value?.getClientRects().length),
-    );
-    unregisterPathFocus = focusRegistry.register(
-      'fileManagerPathInput',
-      () => {
-        pathInput.value?.focus?.();
-        pathInput.value?.select?.();
-        return true;
-      },
-      () => Boolean(root.value?.getClientRects().length),
-    );
-    if (ownsFilesystemState) await filesystemState.ensureLoaded();
-    pathDraft.value = browser.path.value;
-    listResizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.target === root.value) {
-          const width = entry.contentRect.width;
-          if (width > 0) listViewportWidth.value = width;
-        } else if (entry.target === listScroller.value) {
-          const height = entry.contentRect.height;
-          if (height > 0) listViewportHeight.value = height;
-        }
-      }
-    });
-    await nextTick();
-    if (root.value) {
-      listViewportWidth.value = root.value.clientWidth || listViewportWidth.value;
-      listResizeObserver.observe(root.value);
-    }
-    if (listScroller.value) {
-      listViewportHeight.value = listScroller.value.clientHeight || listViewportHeight.value;
-      listResizeObserver.observe(listScroller.value);
-    }
-    document.addEventListener('mousedown', handleOutsideHistory);
-  });
-  const stopListScrollerWatch = watch(
-    listScroller,
-    (value, previous) => {
-      if (!listResizeObserver) return;
-      if (previous) listResizeObserver.unobserve(previous);
-      if (value) {
-        listViewportHeight.value = value.clientHeight || listViewportHeight.value;
-        listResizeObserver.observe(value);
-      }
-    },
-    { flush: 'post' },
-  );
-  const stopColumnResize = (event?: PointerEvent) => {
-    if (!activeColumnResize) return;
-    if (event && event.pointerId !== activeColumnResize.pointerId) return;
-    activeColumnResize = undefined;
-    window.removeEventListener('pointermove', moveColumnResize);
-    window.removeEventListener('pointerup', stopColumnResize);
-    window.removeEventListener('pointercancel', stopColumnResize);
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-    emit('columnWidths', { ...renderedColumnWidths.value });
-  };
-  function moveColumnResize(event: PointerEvent) {
-    const current = activeColumnResize;
-    if (!current || event.pointerId !== current.pointerId) return;
-    isCustomResized.value = true;
-    const minimum = minimumColumnWidths[current.key];
-    const next = Math.max(minimum, Math.min(900, current.startWidth + event.clientX - current.startX));
-    renderedColumnWidths.value = { ...renderedColumnWidths.value, [current.key]: Math.round(next) };
-  }
-  const startColumnResize = (event: PointerEvent, key: ColumnKey) => {
-    if (!event.isPrimary || activeColumnResize) return;
-    event.preventDefault();
-    event.stopPropagation();
-    activeColumnResize = {
-      key,
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startWidth: renderedColumnWidths.value[key],
-    };
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    window.addEventListener('pointermove', moveColumnResize);
-    window.addEventListener('pointerup', stopColumnResize);
-    window.addEventListener('pointercancel', stopColumnResize);
-  };
-  const columnStyle = (key: ColumnKey) => {
-    if (key === 'name') {
-      if (!showModified.value || !isCustomResized.value) {
-        return {
-          minWidth: `${minimumColumnWidths.name}px`,
-        };
-      }
-      return {
-        width: `${renderedColumnWidths.value.name}px`,
-        minWidth: `${minimumColumnWidths.name}px`,
-      };
-    }
-    if (!isCustomResized.value) {
-      if (key === 'permissions') {
-        const w = listViewportWidth.value < 460 ? 76 : 82;
-        return { width: `${w}px`, minWidth: `${minimumColumnWidths.permissions}px` };
-      }
-      if (key === 'modified') {
-        const w = listViewportWidth.value < 360 ? 92 : 116;
-        return { width: `${w}px`, minWidth: `${minimumColumnWidths.modified}px` };
-      }
-    }
-    return {
-      width: `${renderedColumnWidths.value[key]}px`,
-      minWidth: `${minimumColumnWidths[key]}px`,
-    };
-  };
-  onBeforeUnmount(() => {
-    document.removeEventListener('mousedown', handleOutsideHistory);
-    unregisterSearchFocus?.();
-    unregisterPathFocus?.();
-    if (remoteDragScrollTimer !== undefined) {
-      window.clearInterval(remoteDragScrollTimer);
-      remoteDragScrollTimer = undefined;
-    }
-    if (pathHistoryCloseTimer !== undefined) window.clearTimeout(pathHistoryCloseTimer);
-    if (ownsFilesystemState) filesystemState.dispose();
-    stopListScrollerWatch();
-    listResizeObserver?.disconnect();
-    if (activeColumnResize) {
-      activeColumnResize = undefined;
-      window.removeEventListener('pointermove', moveColumnResize);
-      window.removeEventListener('pointerup', stopColumnResize);
-      window.removeEventListener('pointercancel', stopColumnResize);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    }
-  });
-  watch(browser.path, (path) => {
-    if (!pathDraftEditing.value) pathDraft.value = path;
-    keyboardCursor.value = null;
-    resetListScroll();
-  });
-  watch(browser.searchQuery, () => {
-    keyboardCursor.value = null;
-    resetListScroll();
-  });
-  watch([browser.sortKey, browser.sortDirection], resetListScroll);
-  watch(
-    () => props.columnWidths,
-    (value) => {
-      if (!value || activeColumnResize) return;
-      for (const key of Object.keys(minimumColumnWidths) as ColumnKey[]) {
-        const width = value[key];
-        if (Number.isFinite(width)) {
-          renderedColumnWidths.value[key] = Math.max(minimumColumnWidths[key], Number(width));
-        }
-      }
-    },
-    { deep: true },
-  );
-  watch(
-    () => props.rowScale,
-    (value) => {
-      if (Number.isFinite(value)) renderedRowScale.value = normalizeRowScale(value);
-    },
-  );
+	const totalColumnWidth = computed(() => {
+		let sum = renderedColumnWidths.value.name;
+		if (showPermissions.value) sum += renderedColumnWidths.value.permissions;
+		if (showModified.value) sum += renderedColumnWidths.value.modified;
+		return sum;
+	});
+	const isCurrentPathFavorite = computed(() =>
+		catalog.favorites.value.some((item) => item.path === browser.path.value),
+	);
+	let activeColumnResize: { key: ColumnKey; pointerId: number; startX: number; startWidth: number } | undefined;
+	let unregisterSearchFocus: (() => void) | undefined;
+	let unregisterPathFocus: (() => void) | undefined;
+	let navigationQueue: Promise<void> = Promise.resolve();
+	let queuedRefresh: { promise: Promise<void>; draftRevision: number } | undefined;
+	let clipboardPasteSerial = 0;
 
-  const activate = async (entry: WorkspaceRemoteFileEntryDto): Promise<void> => {
-    try {
-      if (entry.metadata.isSymbolicLink) {
-        const resolved = await props.channel.realpath(entry.path);
-        if (resolved.targetType === 'directory') {
-          await browser.load(resolved.path);
-          return;
-        }
-        const name = resolved.path.split('/').pop() || entry.name;
-        emit('openFile', {
-          ...entry,
-          name,
-          path: resolved.path,
-          metadata: {
-            ...entry.metadata,
-            isFile: true,
-            isDirectory: false,
-            isSymbolicLink: false,
-          },
-        });
-        return;
-      }
-      if (entry.metadata.isDirectory) await browser.open(entry);
-      else emit('openFile', entry);
-    } catch (cause) {
-      feedback.notifyError(
-        entry.metadata.isSymbolicLink
-          ? t('fileManager.errors.readFileFailed')
-          : cause instanceof Error
-            ? cause.message
-            : String(cause),
-      );
-    }
-  };
-  const openContextAt = (clientX: number, clientY: number, entry: WorkspaceRemoteFileEntryDto): void => {
-    if (!browser.selected.value.has(entry.path)) browser.select(entry, 'only');
-    context.value = { scope: 'entry', entry, x: clientX, y: clientY };
-  };
-  const contextEntries = (): WorkspaceRemoteFileEntryDto[] => {
-    const entry = context.value?.scope === 'entry' ? context.value.entry : undefined;
-    if (!entry) return [];
-    if (!browser.selected.value.has(entry.path)) return [entry];
-    const selected = selectedEntries();
-    return selected.length ? selected : [entry];
-  };
-  const longPress = useLongPressGesture<WorkspaceRemoteFileEntryDto>({
-    enabled: () => device.supportsTouchInteraction.value,
-    vibrateMs: 15,
-    onTrigger: (entry, point) => openContextAt(point.x, point.y, entry),
-  });
-  const clickEntry = (event: MouseEvent, entry: WorkspaceRemoteFileEntryDto) => {
-    if (longPress.consumeClick(event)) return;
-    keyboardCursor.value = entry.path;
-    if (device.isMobile.value || device.hasTouch.value) {
-      if (multiSelect.value) browser.select(entry, 'toggle');
-      else void activate(entry);
-      return;
-    }
-    listScroller.value?.focus({ preventScroll: true });
-    if (event.ctrlKey || event.metaKey) {
-      browser.select(entry, 'toggle');
-      return;
-    }
-    if (event.shiftKey) {
-      browser.select(entry, 'range');
-      return;
-    }
-    browser.select(entry, 'only');
-    if (entry.metadata.isDirectory) void activate(entry);
-  };
-  const doubleClickEntry = (event: MouseEvent, entry: WorkspaceRemoteFileEntryDto) => {
-    if (device.isMobile.value || device.hasTouch.value || multiSelect.value) return;
-    if (event.ctrlKey || event.metaKey || event.shiftKey || entry.metadata.isDirectory) return;
-    event.preventDefault();
-    event.stopPropagation();
-    void activate(entry);
-  };
-  const preserveListFocusOnMouseOpen = (event: MouseEvent): void => {
-    if (document.activeElement === listScroller.value) event.preventDefault();
-  };
-  const focusFileListFromPointer = (event: PointerEvent): void => {
-    const target = event.target;
-    if (target instanceof Element && target.closest('button, a, input, textarea, select, [contenteditable="true"]'))
-      return;
-    listScroller.value?.focus({ preventScroll: true });
-  };
-  const PARENT_CURSOR = '__parent__';
-  const keyboardPaths = computed(() => [
-    ...(browser.path.value === '/' ? [] : [PARENT_CURSOR]),
-    ...browser.visible.value.map((entry) => entry.path),
-  ]);
-  const focusKeyboardCursor = async () => {
-    const cursor = keyboardCursor.value;
-    if (!cursor) return;
-    if (cursor === PARENT_CURSOR) {
-      root.value?.querySelector<HTMLElement>('[data-file-parent]')?.focus({ preventScroll: true });
-      return;
-    }
-    const index = browser.visible.value.findIndex((entry) => entry.path === cursor);
-    if (shouldVirtualize.value && index >= 0 && listScroller.value) {
-      const targetTop = index * estimatedRowHeight.value;
-      const targetBottom = targetTop + estimatedRowHeight.value;
-      const viewportTop = listScroller.value.scrollTop;
-      const viewportBottom = viewportTop + listScroller.value.clientHeight;
-      if (targetTop < viewportTop || targetBottom > viewportBottom) {
-        listScroller.value.scrollTop = Math.max(0, targetTop - listScroller.value.clientHeight / 2);
-        listScrollTop.value = listScroller.value.scrollTop;
-        await nextTick();
-      }
-    }
-    const row = [...(root.value?.querySelectorAll<HTMLElement>('[data-file-path]') ?? [])].find(
-      (element) => element.dataset.filePath === cursor,
-    );
-    row?.focus({ preventScroll: true });
-    row?.closest('tr')?.scrollIntoView({ block: 'nearest' });
-  };
-  const ensureKeyboardSelection = (): WorkspaceRemoteFileEntryDto[] => {
-    const selected = selectedEntries();
-    if (selected.length) return selected;
-    const cursor = keyboardCursor.value;
-    if (!cursor || cursor === PARENT_CURSOR) return [];
-    const entry = browser.visible.value.find((item) => item.path === cursor);
-    if (!entry) return [];
-    browser.select(entry, 'only');
-    return [entry];
-  };
-  const isEditableTarget = (target: EventTarget | null): boolean =>
-    target instanceof HTMLInputElement ||
-    target instanceof HTMLTextAreaElement ||
-    target instanceof HTMLSelectElement ||
-    (target instanceof HTMLElement && target.isContentEditable);
+	const enqueueNavigation = (operation: () => Promise<void>): Promise<void> => {
+		queuedRefresh = undefined;
+		const next = navigationQueue.then(operation, operation);
+		navigationQueue = next.catch(() => undefined);
+		return next;
+	};
 
-  const clipboardImageExtension = (mimeType: string): string => {
-    const known: Record<string, string> = {
-      'image/png': 'png',
-      'image/jpeg': 'jpg',
-      'image/webp': 'webp',
-      'image/gif': 'gif',
-      'image/bmp': 'bmp',
-      'image/tiff': 'tiff',
-      'image/svg+xml': 'svg',
-      'image/avif': 'avif',
-    };
-    const exact = known[mimeType.toLowerCase()];
-    if (exact) return exact;
-    const subtype = mimeType
-      .toLowerCase()
-      .replace(/^image\//, '')
-      .split('+')[0]
-      ?.replace(/[^a-z0-9]/g, '');
-    return subtype || 'png';
-  };
+	const loadPath = async (path: string, draftRevision = pathDraftRevision): Promise<void> => {
+		const loaded = await browser.load(path);
+		if (loaded && (!pathDraftEditing.value || pathDraftRevision === draftRevision)) {
+			pathDraft.value = browser.path.value;
+		}
+	};
 
-  const clipboardScreenshotStamp = (date: Date): string => {
-    const pad = (value: number, length = 2) => String(value).padStart(length, '0');
-    return [
-      `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
-      `${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}-${pad(date.getMilliseconds(), 3)}`,
-    ].join('_');
-  };
+	const refresh = async (): Promise<void> => {
+		if (queuedRefresh) {
+			queuedRefresh.draftRevision = pathDraftRevision;
+			await queuedRefresh.promise;
+			return;
+		}
+		const pending = { promise: Promise.resolve(), draftRevision: pathDraftRevision };
+		pending.promise = enqueueNavigation(async () => {
+			if (queuedRefresh === pending) queuedRefresh = undefined;
+			await browser.refresh();
+			if (!browser.error.value && (!pathDraftEditing.value || pathDraftRevision === pending.draftRevision)) {
+				pathDraft.value = browser.path.value;
+			}
+		});
+		queuedRefresh = pending;
+		await pending.promise;
+	};
 
-  const toClipboardImageFiles = (sourceFiles: readonly Blob[]): LocalUploadFile[] => {
-    if (!sourceFiles.length) return [];
-    const stamp = clipboardScreenshotStamp(new Date());
-    return sourceFiles.map((file, index) => {
-      const suffix = sourceFiles.length > 1 ? `_${index + 1}` : '';
-      const type = file.type || 'image/png';
-      const renamed = new File([file], `Screenshot_${stamp}${suffix}.${clipboardImageExtension(type)}`, {
-        type,
-        lastModified: Date.now(),
-      });
-      return { file: renamed };
-    });
-  };
+	const resolveWheelScale = createWheelScaleResolver({
+		min: FILE_MANAGER_SCALE_MIN,
+		max: FILE_MANAGER_SCALE_MAX,
+		step: 0.08,
+		thresholdPx: 72,
+		maxStepsPerEvent: 3,
+		stopImmediatePropagation: true,
+	});
+	const rowStyle = computed(() => ({ '--file-row-scale': renderedRowScale.value }));
+	const estimatedRowHeight = computed(() => Math.max(24, 34 * renderedRowScale.value));
+	const shouldVirtualize = computed(() => browser.visible.value.length > FILE_VIRTUALIZATION_THRESHOLD);
+	const virtualStartIndex = computed(() => {
+		if (!shouldVirtualize.value) return 0;
+		return Math.max(0, Math.floor(listScrollTop.value / estimatedRowHeight.value) - FILE_LIST_OVERSCAN);
+	});
+	const virtualEndIndex = computed(() => {
+		if (!shouldVirtualize.value) return browser.visible.value.length;
+		const visibleRows = Math.ceil(listViewportHeight.value / estimatedRowHeight.value);
+		return Math.min(browser.visible.value.length, virtualStartIndex.value + visibleRows + FILE_LIST_OVERSCAN * 2);
+	});
+	const virtualEntries = computed(() => browser.visible.value.slice(virtualStartIndex.value, virtualEndIndex.value));
+	const virtualTopPadding = computed(() =>
+		shouldVirtualize.value ? virtualStartIndex.value * estimatedRowHeight.value : 0,
+	);
+	const virtualBottomPadding = computed(() =>
+		shouldVirtualize.value
+			? Math.max(0, (browser.visible.value.length - virtualEndIndex.value) * estimatedRowHeight.value)
+			: 0,
+	);
 
-  const eventClipboardImageFiles = (event: ClipboardEvent): LocalUploadFile[] => {
-    const clipboard = event.clipboardData;
-    if (!clipboard) return [];
-    const itemFiles = Array.from(clipboard.items)
-      .filter((item) => item.kind === 'file' && item.type.toLowerCase().startsWith('image/'))
-      .map((item) => item.getAsFile())
-      .filter((file): file is File => Boolean(file));
-    const sourceFiles = itemFiles.length
-      ? itemFiles
-      : Array.from(clipboard.files).filter((file) => file.type.toLowerCase().startsWith('image/'));
-    return toClipboardImageFiles(sourceFiles);
-  };
+	const formatCompactModified = (value: string | number | Date): string => {
+		const date = new Date(value);
+		if (Number.isNaN(date.getTime())) return '';
 
-  const navigatorClipboardImageFiles = async (): Promise<LocalUploadFile[]> => {
-    const clipboard = navigator.clipboard as Clipboard & { read?: () => Promise<ClipboardItem[]> };
-    if (!clipboard || typeof clipboard.read !== 'function') return [];
-    const items = await clipboard.read();
-    const images: Blob[] = [];
-    for (const item of items) {
-      const imageType = item.types.find((type) => type.toLowerCase().startsWith('image/'));
-      if (imageType) images.push(await item.getType(imageType));
-    }
-    return toClipboardImageFiles(images);
-  };
+		const pad = (part: number) => String(part).padStart(2, '0');
 
-  const handleClipboardPaste = (event: ClipboardEvent): void => {
-    if (isEditableTarget(event.target)) return;
-    clipboardPasteSerial += 1;
+		if (listViewportWidth.value < 360) {
+			return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+		}
+		return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+	};
 
-    const imageFiles = eventClipboardImageFiles(event);
-    if (imageFiles.length) {
-      event.preventDefault();
-      event.stopPropagation();
-      emit('uploadFiles', browser.path.value, imageFiles, []);
-      return;
-    }
+	const formatModeOctal = (mode: number): string => (mode & 0o7777).toString(8).padStart(3, '0');
 
-    if (props.clipboardCount) {
-      event.preventDefault();
-      event.stopPropagation();
-      emit('paste', browser.path.value);
-    }
-  };
+	const formatMode = (mode: number): string => {
+		const permissions = mode & 0o777;
+		return [
+			permissions & 0o400 ? 'r' : '-',
+			permissions & 0o200 ? 'w' : '-',
+			permissions & 0o100 ? 'x' : '-',
+			permissions & 0o040 ? 'r' : '-',
+			permissions & 0o020 ? 'w' : '-',
+			permissions & 0o010 ? 'x' : '-',
+			permissions & 0o004 ? 'r' : '-',
+			permissions & 0o002 ? 'w' : '-',
+			permissions & 0o001 ? 'x' : '-',
+		].join('');
+	};
 
-  const handleKeyboardPasteFallback = async (observedPasteSerial: number, destination: string): Promise<void> => {
-    if (clipboardPasteSerial !== observedPasteSerial) return;
-    try {
-      const imageFiles = await navigatorClipboardImageFiles();
-      if (clipboardPasteSerial !== observedPasteSerial) return;
-      if (imageFiles.length) {
-        emit('uploadFiles', destination, imageFiles, []);
-        return;
-      }
-    } catch {
-      // Native ClipboardEvent remains the preferred path; permission/API failures fall through.
-    }
-    if (clipboardPasteSerial === observedPasteSerial && props.clipboardCount) emit('paste', destination);
-  };
+	const getFileIconClass = (filename: string): string => {
+		const lower = filename.toLowerCase();
+		const dot = lower.lastIndexOf('.');
+		const extension = dot > 0 && dot < lower.length - 1 ? lower.slice(dot + 1) : dot === 0 ? lower.slice(1) : '';
+		if (lower === 'makefile') return 'fas fa-cogs';
+		if (lower === 'dockerfile' || lower.endsWith('docker-compose.yml') || lower.endsWith('docker-compose.yaml'))
+			return 'fab fa-docker';
+		if (lower === 'package.json' || lower === 'package-lock.json' || lower === 'pnpm-lock.yaml')
+			return 'fab fa-npm';
+		if (lower === 'yarn.lock') return 'fab fa-yarn';
+		if (lower === 'composer.json' || lower === 'composer.lock') return 'fab fa-php';
+		if (lower === 'gemfile' || lower === 'gemfile.lock') return 'fas fa-gem';
+		if (lower.startsWith('.env')) return 'fas fa-shield-alt';
+		if (['.git', '.gitignore', '.gitattributes', '.gitmodules'].includes(lower)) return 'fab fa-git-alt';
+		if (lower === 'readme' || lower.startsWith('readme.')) return 'fas fa-book-reader';
+		if (lower === 'license' || lower.startsWith('license.')) return 'fas fa-balance-scale';
+		const iconMap: Record<string, string> = {
+			jpg: 'fas fa-file-image',
+			jpeg: 'fas fa-file-image',
+			png: 'fas fa-file-image',
+			gif: 'fas fa-file-image',
+			bmp: 'fas fa-file-image',
+			svg: 'fas fa-file-image',
+			webp: 'fas fa-file-image',
+			ico: 'fas fa-file-image',
+			tiff: 'fas fa-file-image',
+			mp4: 'fas fa-file-video',
+			mkv: 'fas fa-file-video',
+			avi: 'fas fa-file-video',
+			mov: 'fas fa-file-video',
+			webm: 'fas fa-file-video',
+			mp3: 'fas fa-file-audio',
+			wav: 'fas fa-file-audio',
+			ogg: 'fas fa-file-audio',
+			flac: 'fas fa-file-audio',
+			doc: 'fas fa-file-word',
+			docx: 'fas fa-file-word',
+			xls: 'fas fa-file-excel',
+			xlsx: 'fas fa-file-excel',
+			ppt: 'fas fa-file-powerpoint',
+			pptx: 'fas fa-file-powerpoint',
+			pdf: 'fas fa-file-pdf',
+			csv: 'fas fa-file-csv',
+			tsv: 'fas fa-file-csv',
+			zip: 'fas fa-file-archive',
+			rar: 'fas fa-file-archive',
+			tar: 'fas fa-file-archive',
+			gz: 'fas fa-file-archive',
+			'7z': 'fas fa-file-archive',
+			bz2: 'fas fa-file-archive',
+			xz: 'fas fa-file-archive',
+			iso: 'fas fa-compact-disc',
+			js: 'fab fa-js-square',
+			mjs: 'fab fa-js-square',
+			cjs: 'fab fa-js-square',
+			jsx: 'fab fa-react',
+			ts: 'fas fa-file-code',
+			tsx: 'fab fa-react',
+			vue: 'fab fa-vuejs',
+			py: 'fab fa-python',
+			java: 'fab fa-java',
+			jar: 'fab fa-java',
+			go: 'fas fa-file-code',
+			rs: 'fas fa-file-code',
+			c: 'fas fa-file-code',
+			h: 'fas fa-file-code',
+			cpp: 'fas fa-file-code',
+			rb: 'fas fa-gem',
+			php: 'fab fa-php',
+			html: 'fab fa-html5',
+			htm: 'fab fa-html5',
+			css: 'fab fa-css3-alt',
+			scss: 'fab fa-sass',
+			sass: 'fab fa-sass',
+			less: 'fab fa-less',
+			json: 'fas fa-file-code',
+			xml: 'fas fa-file-code',
+			yml: 'fas fa-cog',
+			yaml: 'fas fa-cog',
+			ini: 'fas fa-cog',
+			conf: 'fas fa-cog',
+			toml: 'fas fa-cog',
+			md: 'fab fa-markdown',
+			markdown: 'fab fa-markdown',
+			sql: 'fas fa-database',
+			db: 'fas fa-database',
+			sqlite: 'fas fa-database',
+			sqlite3: 'fas fa-database',
+			txt: 'fas fa-file-alt',
+			text: 'fas fa-file-alt',
+			log: 'fas fa-file-alt',
+			key: 'fas fa-key',
+			pem: 'fas fa-key',
+			pub: 'fas fa-key',
+			sh: 'fas fa-terminal',
+			bash: 'fas fa-terminal',
+			zsh: 'fas fa-terminal',
+			fish: 'fas fa-terminal',
+			bat: 'fas fa-terminal',
+			cmd: 'fas fa-terminal',
+			ps1: 'fas fa-terminal',
+			ttf: 'fas fa-font',
+			otf: 'fas fa-font',
+			woff: 'fas fa-font',
+			woff2: 'fas fa-font',
+			bashrc: 'fas fa-cog',
+			zshrc: 'fas fa-cog',
+			profile: 'fas fa-cog',
+			gitconfig: 'fab fa-git-alt',
+		};
+		return iconMap[extension] ?? 'far fa-file';
+	};
 
-  const handleKeyboardNavigation = (event: KeyboardEvent) => {
-    if (isEditableTarget(event.target)) return;
+	const selectedEntries = () => browser.visible.value.filter((entry) => browser.selected.value.has(entry.path));
 
-    const key = event.key.toLowerCase();
-    const ctrlOrMeta = event.ctrlKey || event.metaKey;
-    if (ctrlOrMeta && key === 'a') {
-      event.preventDefault();
-      browser.selectAll();
-      return;
-    }
-    if (ctrlOrMeta && key === 'c') {
-      event.preventDefault();
-      const entries = ensureKeyboardSelection();
-      if (entries.length) emit('copyToClipboard', entries);
-      return;
-    }
-    if (ctrlOrMeta && key === 'x') {
-      event.preventDefault();
-      const entries = ensureKeyboardSelection();
-      if (entries.length) emit('cutToClipboard', entries);
-      return;
-    }
-    if (ctrlOrMeta && key === 'v') {
-      // Do not preventDefault: the native paste event gets first chance to expose rich clipboard data.
-      // Only if no paste event arrives do we fall back to the async Clipboard API.
-      const observedPasteSerial = clipboardPasteSerial;
-      const destination = browser.path.value;
-      window.setTimeout(() => void handleKeyboardPasteFallback(observedPasteSerial, destination), 0);
-      return;
-    }
-    if (ctrlOrMeta && event.shiftKey && key === 'n') {
-      event.preventDefault();
-      begin('mkdir');
-      return;
-    }
-    if (event.key === 'Delete') {
-      event.preventDefault();
-      const entries = ensureKeyboardSelection();
-      if (entries.length) void remove(entries);
-      return;
-    }
-    if (event.key === 'F2') {
-      event.preventDefault();
-      const entries = ensureKeyboardSelection();
-      if (entries.length === 1) begin('rename', entries[0]);
-      return;
-    }
-    if (event.key === 'F5') {
-      event.preventDefault();
-      void refresh();
-      return;
-    }
-    if (event.altKey && event.key === 'ArrowUp' && browser.path.value !== '/') {
-      event.preventDefault();
-      void browser.goParent();
-      return;
-    }
-    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown' && event.key !== 'Enter') return;
+	const joinPath = (basePath: string, name: string) => `${basePath.replace(/\/$/, '')}/${name}`.replace(/^\/\//, '/');
 
-    const paths = keyboardPaths.value;
-    if (!paths.length) return;
-    if (event.key === 'Enter') {
-      const cursor = keyboardCursor.value ?? browser.selectionAnchor.value;
-      if (!cursor) return;
-      event.preventDefault();
-      if (cursor === PARENT_CURSOR) void browser.goParent();
-      else {
-        const entry = browser.visible.value.find((item) => item.path === cursor);
-        if (entry) void activate(entry);
-      }
-      return;
-    }
+	const join = (name: string) => joinPath(browser.path.value, name);
 
-    event.preventDefault();
-    const current = keyboardCursor.value ?? browser.selectionAnchor.value;
-    const currentIndex = current ? paths.indexOf(current) : -1;
-    const delta = event.key === 'ArrowDown' ? 1 : -1;
-    const nextIndex =
-      currentIndex < 0 ? (delta > 0 ? 0 : paths.length - 1) : (currentIndex + delta + paths.length) % paths.length;
-    const next = paths[nextIndex]!;
-    keyboardCursor.value = next;
-    if (next !== PARENT_CURSOR) {
-      const entry = browser.visible.value.find((item) => item.path === next);
-      if (entry) browser.select(entry, 'only');
-    }
-    void nextTick(() => void focusKeyboardCursor());
-  };
+	const parentOf = (path: string) => {
+		const normalized = path.replace(/\/+$/, '') || '/';
+		const index = normalized.lastIndexOf('/');
+		return index <= 0 ? '/' : normalized.slice(0, index);
+	};
 
-  const stopRemoteDragScroll = () => {
-    remoteDragScrollDirection = 0;
-    if (remoteDragScrollTimer === undefined) return;
-    window.clearInterval(remoteDragScrollTimer);
-    remoteDragScrollTimer = undefined;
-  };
-  const updateRemoteDragScroll = (event: DragEvent) => {
-    const scroller = listScroller.value;
-    if (!scroller || !draggedRemoteEntries.value.length || !remoteDragTarget.value) {
-      stopRemoteDragScroll();
-      return;
-    }
-    const rect = scroller.getBoundingClientRect();
-    const edge = 48;
-    const direction = event.clientY < rect.top + edge ? -1 : event.clientY > rect.bottom - edge ? 1 : 0;
-    if (!direction) {
-      stopRemoteDragScroll();
-      return;
-    }
-    remoteDragScrollDirection = direction;
-    if (remoteDragScrollTimer !== undefined) return;
-    remoteDragScrollTimer = window.setInterval(() => {
-      const currentScroller = listScroller.value;
-      if (!currentScroller || !draggedRemoteEntries.value.length || !remoteDragTarget.value) {
-        stopRemoteDragScroll();
-        return;
-      }
-      currentScroller.scrollTop += remoteDragScrollDirection * 12;
-    }, 30);
-  };
-  const remoteDropAllowed = (destination: string) =>
-    draggedRemoteEntries.value.length > 0 &&
-    draggedRemoteEntries.value.some((entry) => {
-      if (entry.path === destination || parentOf(entry.path) === destination) return false;
-      return !(entry.metadata.isDirectory && destination.startsWith(`${entry.path}/`));
-    });
-  const startRemoteDrag = (event: DragEvent, entry: WorkspaceRemoteFileEntryDto) => {
-    if (device.isMobile.value || !event.dataTransfer) return;
-    const selection = selectedEntries();
-    draggedRemoteEntries.value = browser.selected.value.has(entry.path) && selection.length ? selection : [entry];
-    keyboardCursor.value = entry.path;
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData(
-      'application/x-nexus-remote-files',
-      draggedRemoteEntries.value.map((item) => item.path).join('\n'),
-    );
-  };
-  const endRemoteDrag = () => {
-    stopRemoteDragScroll();
-    draggedRemoteEntries.value = [];
-    remoteDragTarget.value = null;
-  };
-  const handleRemoteTargetDragOver = (event: DragEvent, destination: string) => {
-    if (!remoteDropAllowed(destination)) {
-      remoteDragTarget.value = null;
-      stopRemoteDragScroll();
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
-    remoteDragTarget.value = destination;
-    updateRemoteDragScroll(event);
-  };
-  const clearRemoteDragTarget = (destination: string) => {
-    if (remoteDragTarget.value !== destination) return;
-    remoteDragTarget.value = null;
-    stopRemoteDragScroll();
-  };
-  const dropRemote = (event: DragEvent, destination: string) => {
-    if (!remoteDropAllowed(destination)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const entries = draggedRemoteEntries.value.filter(
-      (entry) =>
-        entry.path !== destination &&
-        parentOf(entry.path) !== destination &&
-        !(entry.metadata.isDirectory && destination.startsWith(`${entry.path}/`)),
-    );
-    endRemoteDrag();
-    if (entries.length) emit('moveTo', entries, destination);
-  };
-  const handleDragEnter = (event: DragEvent) => {
-    if (draggedRemoteEntries.value.length) return;
-    if (event.dataTransfer?.types.includes('Files')) dragging.value = true;
-  };
-  const handleContainerDragOver = (event: DragEvent) => {
-    if (draggedRemoteEntries.value.length) {
-      updateRemoteDragScroll(event);
-      return;
-    }
-    if (event.dataTransfer?.types.includes('Files')) event.preventDefault();
-  };
-  const handleDragLeave = (event: DragEvent) => {
-    const container = event.currentTarget as HTMLElement;
-    const related = event.relatedTarget;
-    if (!(related instanceof Node) || !container.contains(related)) dragging.value = false;
-  };
-  const toggleMultiSelect = () => {
-    multiSelect.value = !multiSelect.value;
-    browser.clearSelection();
-  };
-  const begin = (type: typeof action.value, entry?: WorkspaceRemoteFileEntryDto) => {
-    action.value = type;
-    target.value = entry ?? null;
-    value.value =
-      type === 'rename' ? (entry?.name ?? '') : type === 'chmod' ? formatModeOctal(entry?.metadata.mode ?? 0) : '';
-    context.value = null;
-  };
-  watch(action, async (type) => {
-    if (!type) return;
-    await nextTick();
-    actionInput.value?.focus();
-    actionInput.value?.select();
-  });
-  const submit = async () => {
-    const text = value.value.trim();
-    if (!text || createNameConflict.value) return;
-    try {
-      if (action.value === 'mkdir') await props.channel.createDirectory(join(text));
-      else if (action.value === 'file') await props.channel.createFile(join(text), '');
-      else if (action.value === 'rename' && target.value) {
-        if (props.beforeFileMutation && !props.beforeFileMutation([target.value.path])) return;
-        await props.channel.rename(target.value.path, joinPath(parentOf(target.value.path), text));
-      } else if (action.value === 'chmod' && target.value) {
-        if (!/^[0-7]{3,4}$/.test(text)) throw new Error(t('fileManager.errors.invalidPermissionsFormat'));
-        await props.channel.chmod(target.value.path, Number.parseInt(text, 8));
-      }
-      action.value = null;
-      await browser.load();
-    } catch (cause) {
-      const detail = cause instanceof Error ? cause.message : String(cause);
-      feedback.notifyError(action.value === 'chmod' ? `${t('fileManager.errors.chmodFailed')}: ${detail}` : detail);
-    }
-  };
-  const remove = async (entries: WorkspaceRemoteFileEntryDto[]) => {
-    if (!entries.length) return;
-    context.value = null;
-    const key =
-      entries.length > 1
-        ? 'fileManager.prompts.confirmDeleteMultiple'
-        : entries[0]!.metadata.isDirectory
-          ? 'fileManager.prompts.confirmDeleteFolder'
-          : 'fileManager.prompts.confirmDeleteFile';
-    const params = entries.length > 1 ? { count: entries.length } : { name: entries[0]!.name };
-    if (props.confirmDelete && !(await feedback.confirm({ message: t(key, params), destructive: true }))) return;
-    if (props.beforeFileMutation && !props.beforeFileMutation(entries.map((entry) => entry.path))) return;
-    try {
-      await props.channel.remove(
-        entries.map((entry) => entry.path),
-        { forceDirectoryPaths: entries.filter((entry) => entry.metadata.isDirectory).map((entry) => entry.path) },
-      );
-      await browser.load();
-    } catch (cause) {
-      feedback.notifyError(
-        `${t('fileManager.errors.deletePartial')}: ${cause instanceof Error ? cause.message : String(cause)}`,
-      );
-      await browser.load().catch(() => undefined);
-    }
-  };
-  const changeTerminalToCurrent = async () => {
-    if (!props.terminalDirectory || changingTerminalPath.value) return;
-    changingTerminalPath.value = true;
-    try {
-      const result = await props.terminalDirectory.changeDirectory(browser.path.value, {
-        onQueued: ({ waitingForPrompt }) => {
-          if (waitingForPrompt) feedback.notifyInfo(t('fileManager.notifications.terminalPathQueued'));
-        },
-      });
-      feedback.notifySuccess(t('fileManager.notifications.terminalPathChanged', { path: result.path }));
-    } catch (cause) {
-      feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      changingTerminalPath.value = false;
-    }
-  };
-  const openPathHistory = async () => {
-    catalogVisible.value = false;
-    if (pathHistoryCloseTimer !== undefined) {
-      window.clearTimeout(pathHistoryCloseTimer);
-      pathHistoryCloseTimer = undefined;
-    }
-    pathHistoryOpen.value = true;
-    pathHistoryIndex.value = -1;
-    catalog.historySearch.value = pathDraft.value;
-    await catalog.loadHistory().catch(() => undefined);
-  };
-  const closePathHistory = (restore = false) => {
-    if (pathHistoryCloseTimer !== undefined) {
-      window.clearTimeout(pathHistoryCloseTimer);
-      pathHistoryCloseTimer = undefined;
-    }
-    pathHistoryOpen.value = false;
-    pathHistoryIndex.value = -1;
-    if (restore) pathDraft.value = browser.path.value;
-  };
-  const handleOutsideHistory = (event: MouseEvent) => {
-    if (!pathHistoryOpen.value) return;
-    const target = event.target as Node | null;
-    const pathInputEl = pathInput.value as unknown as HTMLElement | null;
-    const pathContainer = pathInputEl?.closest('.file-manager-path-input');
-    if (pathContainer && target && pathContainer.contains(target)) return;
-    closePathHistory();
-  };
-  const togglePathHistory = () => {
-    if (pathHistoryOpen.value) {
-      closePathHistory();
-    } else {
-      catalogVisible.value = false;
-      void openPathHistory();
-    }
-  };
-  const toggleCatalog = () => {
-    if (catalogVisible.value) {
-      catalogVisible.value = false;
-    } else {
-      closePathHistory();
-      catalogVisible.value = true;
-    }
-  };
-  const updatePathHistorySearch = () => {
-    pathDraftRevision += 1;
-    catalog.historySearch.value = pathDraft.value;
-    pathHistoryIndex.value = -1;
-  };
-  const beginPathEditing = () => {
-    catalogVisible.value = false;
-    pathDraftEditing.value = true;
-    void openPathHistory();
-  };
-  const endPathEditing = () => {
-    pathDraftEditing.value = false;
-    deferClosePathHistory();
-  };
-  const deferClosePathHistory = () => {
-    if (pathHistoryCloseTimer !== undefined) window.clearTimeout(pathHistoryCloseTimer);
-    pathHistoryCloseTimer = window.setTimeout(() => {
-      pathHistoryCloseTimer = undefined;
-      closePathHistory();
-    }, 120);
-  };
-  const navigatePathDraft = async (path = pathDraft.value) => {
-    if (!path.trim()) return;
-    const draftRevision = pathDraftRevision;
-    closePathHistory();
-    await enqueueNavigation(() => loadPath(path, draftRevision));
-  };
-  const handlePathInputKeydown = (event: KeyboardEvent) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      closePathHistory(true);
-      return;
-    }
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      if (!pathHistoryOpen.value) void openPathHistory();
-      const length = catalog.filteredHistory.value.length;
-      if (!length) return;
-      event.preventDefault();
-      const delta = event.key === 'ArrowDown' ? 1 : -1;
-      pathHistoryIndex.value =
-        pathHistoryIndex.value < 0 ? (delta > 0 ? 0 : length - 1) : (pathHistoryIndex.value + delta + length) % length;
-      return;
-    }
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      const selected = catalog.filteredHistory.value[pathHistoryIndex.value];
-      void navigatePathDraft(selected?.path ?? pathDraft.value);
-    }
-  };
-  const copyHistoryPath = async (path: string) => {
-    try {
-      await writeClipboardText(path);
-      feedback.notifySuccess(t('pathHistory.copiedSuccess'));
-    } catch {
-      feedback.notifyError(t('pathHistory.copiedError'));
-    }
-  };
-  const removeHistoryPath = async (id: number) => {
-    await catalog.removeHistory(id);
-    const length = catalog.filteredHistory.value.length;
-    if (!length) pathHistoryIndex.value = -1;
-    else pathHistoryIndex.value = Math.min(pathHistoryIndex.value, length - 1);
-  };
-  const closeSearch = () => {
-    browser.clearSearch();
-    searchExpanded.value = false;
-  };
-  const syncFromTerminal = async () => {
-    if (!props.terminalDirectory || syncingTerminalPath.value) return;
-    syncingTerminalPath.value = true;
-    const draftRevision = pathDraftRevision;
-    try {
-      const terminalDirectory = props.terminalDirectory;
-      await enqueueNavigation(async () => {
-        const path = await terminalDirectory.readCurrentDirectory();
-        if (path) await loadPath(path, draftRevision);
-      });
-    } catch (cause) {
-      feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      syncingTerminalPath.value = false;
-    }
-  };
-  const navigate = async (path: string) => {
-    const draftRevision = pathDraftRevision;
-    await enqueueNavigation(() => loadPath(path, draftRevision));
-  };
-  const sendPathToTerminal = async (path: string) => {
-    if (!props.terminalDirectory || changingTerminalPath.value) return;
-    changingTerminalPath.value = true;
-    try {
-      await props.terminalDirectory.changeDirectory(path, {
-        onQueued: ({ waitingForPrompt }) => {
-          if (waitingForPrompt) feedback.notifyInfo(t('fileManager.notifications.terminalPathQueued'));
-        },
-      });
-    } catch (cause) {
-      feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      changingTerminalPath.value = false;
-    }
-  };
-  const download = async (entries: WorkspaceRemoteFileEntryDto[]) => {
-    context.value = null;
-    const downloadPort = props.download;
-    if (!downloadPort || !entries.length) return;
-    await Promise.all(
-      entries.map(async (entry) => {
-        try {
-          let path = entry.path;
-          let kind: 'file' | 'directory' = entry.metadata.isDirectory ? 'directory' : 'file';
-          if (entry.metadata.isSymbolicLink) {
-            const resolved = await props.channel.realpath(entry.path);
-            path = resolved.path;
-            kind = resolved.targetType === 'directory' ? 'directory' : 'file';
-          }
-          const { url } = await downloadPort.createDownload(path, kind);
-          const anchor = document.createElement('a');
-          anchor.href = url;
-          anchor.download = '';
-          anchor.rel = 'noopener';
-          document.body.append(anchor);
-          anchor.click();
-          anchor.remove();
-        } catch (cause) {
-          feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
-        }
-      }),
-    );
-  };
-  const copyPath = async (entry: WorkspaceRemoteFileEntryDto) => {
-    context.value = null;
-    try {
-      await writeClipboardText(entry.path);
-      feedback.notifySuccess(t('fileManager.notifications.pathCopied'));
-    } catch {
-      feedback.notifyError(t('fileManager.errors.copyPathFailed'));
-    }
-  };
-  const openContext = (event: MouseEvent, entry: WorkspaceRemoteFileEntryDto) => {
-    event.preventDefault();
-    if (!browser.selected.value.has(entry.path) && !event.ctrlKey && !event.metaKey && !event.shiftKey)
-      browser.select(entry, 'only');
-    if (device.supportsTouchInteraction.value) longPress.suppressClick();
-    compressSubmenu.value = null;
-    context.value = { scope: 'entry', entry, x: event.clientX, y: event.clientY };
-  };
-  const openDirectoryContext = (
-    event: MouseEvent,
-    scope: 'current-directory' | 'parent-directory',
-    destination: string,
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-    browser.clearSelection();
-    compressSubmenu.value = null;
-    context.value = { scope, destination, x: event.clientX, y: event.clientY };
-  };
-  const openCompressSubmenu = (event: Event) => {
-    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    const width = 220;
-    const margin = 8;
-    const side = rect.right + width <= window.innerWidth - margin ? 'right' : 'left';
-    compressSubmenu.value = {
-      x: side === 'right' ? rect.right : Math.max(margin, rect.left - width),
-      y: rect.top,
-      side,
-    };
-  };
-  const compressWithPreset = (format: ArchiveCompressionFormat, passwordProtected = false) => {
-    const entries = contextEntries();
-    if (!entries.length) return;
-    emit('compressPreset', { entries, format, ...(passwordProtected ? { passwordProtected: true } : {}) });
-    compressSubmenu.value = null;
-    context.value = null;
-  };
-  const contextAction = (kind: 'open' | 'copy' | 'move' | 'compress' | 'decompress') => {
-    const entry = context.value?.scope === 'entry' ? context.value.entry : undefined;
-    const entries = contextEntries();
-    context.value = null;
-    if (!entry) return;
-    if (kind === 'open') void activate(entry);
-    else if (kind === 'copy') emit('copyToClipboard', entries);
-    else if (kind === 'move') emit('cutToClipboard', entries);
-    else if (kind === 'compress') emit('compress', entries);
-    else if (kind === 'decompress') emit('decompress', entry);
-  };
-  const dropFiles = async (event: DragEvent) => {
-    if (draggedRemoteEntries.value.length) {
-      endRemoteDrag();
-      return;
-    }
-    dragging.value = false;
-    const dataTransfer = event.dataTransfer;
-    if (!dataTransfer) return;
-    try {
-      const batch = await collectDroppedLocalFiles(dataTransfer);
-      if (batch.files.length || batch.directories.length) {
-        emit('uploadFiles', browser.path.value, batch.files, batch.directories);
-      }
-    } catch (cause) {
-      feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
-    }
-  };
-  const scaleRows = (event: WheelEvent) => {
-    const change = resolveWheelScale(event, renderedRowScale.value);
-    if (!change) return;
-    const oldEstimatedRowHeight = estimatedRowHeight.value;
-    const scroller = listScroller.value;
-    const anchoredRow = shouldVirtualize.value && scroller ? scroller.scrollTop / oldEstimatedRowHeight : null;
-    renderedRowScale.value = change.next;
-    emit('rowScale', change.next);
-    if (anchoredRow !== null && scroller) {
-      void nextTick(() => {
-        const nextScrollTop = anchoredRow * estimatedRowHeight.value;
-        scroller.scrollTop = nextScrollTop;
-        listScrollTop.value = nextScrollTop;
-      });
-    }
-  };
+	const isArchive = (entry: WorkspaceRemoteFileEntryDto) => /\.(zip|tar\.gz|tgz|tar\.bz2|tbz2)$/i.test(entry.name);
+
+	const canOpenAsText = (entry: WorkspaceRemoteFileEntryDto) =>
+		!entry.metadata.isDirectory && /\.(md|markdown)$/i.test(entry.name);
+
+	const displayEntryName = (entry: WorkspaceRemoteFileEntryDto) =>
+		browser.searchActive.value && 'relativePath' in entry && typeof entry.relativePath === 'string'
+			? entry.relativePath
+			: entry.name;
+
+	const sortMark = (key: FilesystemSortKey) =>
+		browser.sortKey.value === key ? (browser.sortDirection.value === 'asc' ? ' ▲' : ' ▼') : '';
+
+	const handleListScroll = () => {
+		listScrollTop.value = listScroller.value?.scrollTop ?? 0;
+	};
+
+	const resetListScroll = () => {
+		listScrollTop.value = 0;
+		if (listScroller.value) listScroller.value.scrollTop = 0;
+	};
+
+	onMounted(async () => {
+		unregisterSearchFocus = focusRegistry.register(
+			'fileManagerSearch',
+			() => {
+				searchExpanded.value = true;
+				void nextTick(() => searchInput.value?.focus?.());
+				return true;
+			},
+			() => Boolean(root.value?.getClientRects().length),
+		);
+		unregisterPathFocus = focusRegistry.register(
+			'fileManagerPathInput',
+			() => {
+				pathInput.value?.focus?.();
+				pathInput.value?.select?.();
+				return true;
+			},
+			() => Boolean(root.value?.getClientRects().length),
+		);
+		if (ownsFilesystemState) await filesystemState.ensureLoaded();
+		pathDraft.value = browser.path.value;
+		listResizeObserver = new ResizeObserver((entries) => {
+			for (const entry of entries) {
+				if (entry.target === root.value) {
+					const width = entry.contentRect.width;
+					if (width > 0) listViewportWidth.value = width;
+				} else if (entry.target === listScroller.value) {
+					const height = entry.contentRect.height;
+					if (height > 0) listViewportHeight.value = height;
+				}
+			}
+		});
+		await nextTick();
+		if (root.value) {
+			listViewportWidth.value = root.value.clientWidth || listViewportWidth.value;
+			listResizeObserver.observe(root.value);
+		}
+		if (listScroller.value) {
+			listViewportHeight.value = listScroller.value.clientHeight || listViewportHeight.value;
+			listResizeObserver.observe(listScroller.value);
+		}
+		document.addEventListener('mousedown', handleOutsideHistory);
+	});
+	const stopListScrollerWatch = watch(
+		listScroller,
+		(value, previous) => {
+			if (!listResizeObserver) return;
+			if (previous) listResizeObserver.unobserve(previous);
+			if (value) {
+				listViewportHeight.value = value.clientHeight || listViewportHeight.value;
+				listResizeObserver.observe(value);
+			}
+		},
+		{ flush: 'post' },
+	);
+
+	const stopColumnResize = (event?: PointerEvent) => {
+		if (!activeColumnResize) return;
+		if (event && event.pointerId !== activeColumnResize.pointerId) return;
+		activeColumnResize = undefined;
+		window.removeEventListener('pointermove', moveColumnResize);
+		window.removeEventListener('pointerup', stopColumnResize);
+		window.removeEventListener('pointercancel', stopColumnResize);
+		document.body.style.cursor = '';
+		document.body.style.userSelect = '';
+		emit('columnWidths', { ...renderedColumnWidths.value });
+	};
+
+	function moveColumnResize(event: PointerEvent) {
+		const current = activeColumnResize;
+		if (!current || event.pointerId !== current.pointerId) return;
+		isCustomResized.value = true;
+		const minimum = minimumColumnWidths[current.key];
+		const next = Math.max(minimum, Math.min(900, current.startWidth + event.clientX - current.startX));
+		renderedColumnWidths.value = { ...renderedColumnWidths.value, [current.key]: Math.round(next) };
+	}
+
+	const startColumnResize = (event: PointerEvent, key: ColumnKey) => {
+		if (!event.isPrimary || activeColumnResize) return;
+		event.preventDefault();
+		event.stopPropagation();
+		activeColumnResize = {
+			key,
+			pointerId: event.pointerId,
+			startX: event.clientX,
+			startWidth: renderedColumnWidths.value[key],
+		};
+		document.body.style.cursor = 'col-resize';
+		document.body.style.userSelect = 'none';
+		window.addEventListener('pointermove', moveColumnResize);
+		window.addEventListener('pointerup', stopColumnResize);
+		window.addEventListener('pointercancel', stopColumnResize);
+	};
+
+	const columnStyle = (key: ColumnKey) => {
+		if (key === 'name') {
+			if (!showModified.value || !isCustomResized.value) {
+				return {
+					minWidth: `${minimumColumnWidths.name}px`,
+				};
+			}
+			return {
+				width: `${renderedColumnWidths.value.name}px`,
+				minWidth: `${minimumColumnWidths.name}px`,
+			};
+		}
+		if (!isCustomResized.value) {
+			if (key === 'permissions') {
+				const w = listViewportWidth.value < 460 ? 76 : 82;
+				return { width: `${w}px`, minWidth: `${minimumColumnWidths.permissions}px` };
+			}
+			if (key === 'modified') {
+				const w = listViewportWidth.value < 360 ? 92 : 116;
+				return { width: `${w}px`, minWidth: `${minimumColumnWidths.modified}px` };
+			}
+		}
+		return {
+			width: `${renderedColumnWidths.value[key]}px`,
+			minWidth: `${minimumColumnWidths[key]}px`,
+		};
+	};
+
+	onBeforeUnmount(() => {
+		document.removeEventListener('mousedown', handleOutsideHistory);
+		unregisterSearchFocus?.();
+		unregisterPathFocus?.();
+		if (remoteDragScrollTimer !== undefined) {
+			window.clearInterval(remoteDragScrollTimer);
+			remoteDragScrollTimer = undefined;
+		}
+		if (pathHistoryCloseTimer !== undefined) window.clearTimeout(pathHistoryCloseTimer);
+		if (ownsFilesystemState) filesystemState.dispose();
+		stopListScrollerWatch();
+		listResizeObserver?.disconnect();
+		if (activeColumnResize) {
+			activeColumnResize = undefined;
+			window.removeEventListener('pointermove', moveColumnResize);
+			window.removeEventListener('pointerup', stopColumnResize);
+			window.removeEventListener('pointercancel', stopColumnResize);
+			document.body.style.cursor = '';
+			document.body.style.userSelect = '';
+		}
+	});
+	watch(browser.path, (path) => {
+		if (!pathDraftEditing.value) pathDraft.value = path;
+		keyboardCursor.value = null;
+		resetListScroll();
+	});
+	watch(browser.searchQuery, () => {
+		keyboardCursor.value = null;
+		resetListScroll();
+	});
+	watch([browser.sortKey, browser.sortDirection], resetListScroll);
+	watch(
+		() => props.columnWidths,
+		(value) => {
+			if (!value || activeColumnResize) return;
+			for (const key of Object.keys(minimumColumnWidths) as ColumnKey[]) {
+				const width = value[key];
+				if (Number.isFinite(width)) {
+					renderedColumnWidths.value[key] = Math.max(minimumColumnWidths[key], Number(width));
+				}
+			}
+		},
+		{ deep: true },
+	);
+	watch(
+		() => props.rowScale,
+		(value) => {
+			if (Number.isFinite(value)) renderedRowScale.value = normalizeRowScale(value);
+		},
+	);
+
+	const activate = async (entry: WorkspaceRemoteFileEntryDto): Promise<void> => {
+		try {
+			if (entry.metadata.isSymbolicLink) {
+				const resolved = await props.channel.realpath(entry.path);
+				if (resolved.targetType === 'directory') {
+					await browser.load(resolved.path);
+					return;
+				}
+				const name = resolved.path.split('/').pop() || entry.name;
+				emit('openFile', {
+					...entry,
+					name,
+					path: resolved.path,
+					metadata: {
+						...entry.metadata,
+						isFile: true,
+						isDirectory: false,
+						isSymbolicLink: false,
+					},
+				});
+				return;
+			}
+			if (entry.metadata.isDirectory) await browser.open(entry);
+			else emit('openFile', entry);
+		} catch (cause) {
+			feedback.notifyError(
+				entry.metadata.isSymbolicLink
+					? t('fileManager.errors.readFileFailed')
+					: cause instanceof Error
+						? cause.message
+						: String(cause),
+			);
+		}
+	};
+
+	const openContextAt = (clientX: number, clientY: number, entry: WorkspaceRemoteFileEntryDto): void => {
+		if (!browser.selected.value.has(entry.path)) browser.select(entry, 'only');
+		context.value = { scope: 'entry', entry, x: clientX, y: clientY };
+	};
+
+	const contextEntries = (): WorkspaceRemoteFileEntryDto[] => {
+		const entry = context.value?.scope === 'entry' ? context.value.entry : undefined;
+		if (!entry) return [];
+		if (!browser.selected.value.has(entry.path)) return [entry];
+		const selected = selectedEntries();
+		return selected.length ? selected : [entry];
+	};
+
+	const longPress = useLongPressGesture<WorkspaceRemoteFileEntryDto>({
+		enabled: () => device.supportsTouchInteraction.value,
+
+		vibrateMs: 15,
+
+		onTrigger: (entry, point) => openContextAt(point.x, point.y, entry),
+	});
+
+	const clickEntry = (event: MouseEvent, entry: WorkspaceRemoteFileEntryDto) => {
+		if (longPress.consumeClick(event)) return;
+		keyboardCursor.value = entry.path;
+		if (device.isMobile.value || device.hasTouch.value) {
+			if (multiSelect.value) browser.select(entry, 'toggle');
+			else void activate(entry);
+			return;
+		}
+		listScroller.value?.focus({ preventScroll: true });
+		if (event.ctrlKey || event.metaKey) {
+			browser.select(entry, 'toggle');
+			return;
+		}
+		if (event.shiftKey) {
+			browser.select(entry, 'range');
+			return;
+		}
+		browser.select(entry, 'only');
+		if (entry.metadata.isDirectory) void activate(entry);
+	};
+
+	const doubleClickEntry = (event: MouseEvent, entry: WorkspaceRemoteFileEntryDto) => {
+		if (device.isMobile.value || device.hasTouch.value || multiSelect.value) return;
+		if (event.ctrlKey || event.metaKey || event.shiftKey || entry.metadata.isDirectory) return;
+		event.preventDefault();
+		event.stopPropagation();
+		void activate(entry);
+	};
+
+	const preserveListFocusOnMouseOpen = (event: MouseEvent): void => {
+		if (document.activeElement === listScroller.value) event.preventDefault();
+	};
+
+	const focusFileListFromPointer = (event: PointerEvent): void => {
+		const target = event.target;
+		if (target instanceof Element && target.closest('button, a, input, textarea, select, [contenteditable="true"]'))
+			return;
+		listScroller.value?.focus({ preventScroll: true });
+	};
+
+	const PARENT_CURSOR = '__parent__';
+	const keyboardPaths = computed(() => [
+		...(browser.path.value === '/' ? [] : [PARENT_CURSOR]),
+		...browser.visible.value.map((entry) => entry.path),
+	]);
+
+	const focusKeyboardCursor = async () => {
+		const cursor = keyboardCursor.value;
+		if (!cursor) return;
+		if (cursor === PARENT_CURSOR) {
+			root.value?.querySelector<HTMLElement>('[data-file-parent]')?.focus({ preventScroll: true });
+			return;
+		}
+		const index = browser.visible.value.findIndex((entry) => entry.path === cursor);
+		if (shouldVirtualize.value && index >= 0 && listScroller.value) {
+			const targetTop = index * estimatedRowHeight.value;
+			const targetBottom = targetTop + estimatedRowHeight.value;
+			const viewportTop = listScroller.value.scrollTop;
+			const viewportBottom = viewportTop + listScroller.value.clientHeight;
+			if (targetTop < viewportTop || targetBottom > viewportBottom) {
+				listScroller.value.scrollTop = Math.max(0, targetTop - listScroller.value.clientHeight / 2);
+				listScrollTop.value = listScroller.value.scrollTop;
+				await nextTick();
+			}
+		}
+		const row = [...(root.value?.querySelectorAll<HTMLElement>('[data-file-path]') ?? [])].find(
+			(element) => element.dataset.filePath === cursor,
+		);
+		row?.focus({ preventScroll: true });
+		row?.closest('tr')?.scrollIntoView({ block: 'nearest' });
+	};
+
+	const ensureKeyboardSelection = (): WorkspaceRemoteFileEntryDto[] => {
+		const selected = selectedEntries();
+		if (selected.length) return selected;
+		const cursor = keyboardCursor.value;
+		if (!cursor || cursor === PARENT_CURSOR) return [];
+		const entry = browser.visible.value.find((item) => item.path === cursor);
+		if (!entry) return [];
+		browser.select(entry, 'only');
+		return [entry];
+	};
+
+	const isEditableTarget = (target: EventTarget | null): boolean =>
+		target instanceof HTMLInputElement ||
+		target instanceof HTMLTextAreaElement ||
+		target instanceof HTMLSelectElement ||
+		(target instanceof HTMLElement && target.isContentEditable);
+
+	const clipboardImageExtension = (mimeType: string): string => {
+		const known: Record<string, string> = {
+			'image/png': 'png',
+			'image/jpeg': 'jpg',
+			'image/webp': 'webp',
+			'image/gif': 'gif',
+			'image/bmp': 'bmp',
+			'image/tiff': 'tiff',
+			'image/svg+xml': 'svg',
+			'image/avif': 'avif',
+		};
+		const exact = known[mimeType.toLowerCase()];
+		if (exact) return exact;
+		const subtype = mimeType
+			.toLowerCase()
+			.replace(/^image\//, '')
+			.split('+')[0]
+			?.replace(/[^a-z0-9]/g, '');
+		return subtype || 'png';
+	};
+
+	const clipboardScreenshotStamp = (date: Date): string => {
+		const pad = (value: number, length = 2) => String(value).padStart(length, '0');
+
+		return [
+			`${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+			`${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}-${pad(date.getMilliseconds(), 3)}`,
+		].join('_');
+	};
+
+	const toClipboardImageFiles = (sourceFiles: readonly Blob[]): LocalUploadFile[] => {
+		if (!sourceFiles.length) return [];
+		const stamp = clipboardScreenshotStamp(new Date());
+		return sourceFiles.map((file, index) => {
+			const suffix = sourceFiles.length > 1 ? `_${index + 1}` : '';
+			const type = file.type || 'image/png';
+			const renamed = new File([file], `Screenshot_${stamp}${suffix}.${clipboardImageExtension(type)}`, {
+				type,
+				lastModified: Date.now(),
+			});
+			return { file: renamed };
+		});
+	};
+
+	const eventClipboardImageFiles = (event: ClipboardEvent): LocalUploadFile[] => {
+		const clipboard = event.clipboardData;
+		if (!clipboard) return [];
+		const itemFiles = Array.from(clipboard.items)
+			.filter((item) => item.kind === 'file' && item.type.toLowerCase().startsWith('image/'))
+			.map((item) => item.getAsFile())
+			.filter((file): file is File => Boolean(file));
+		const sourceFiles = itemFiles.length
+			? itemFiles
+			: Array.from(clipboard.files).filter((file) => file.type.toLowerCase().startsWith('image/'));
+		return toClipboardImageFiles(sourceFiles);
+	};
+
+	const navigatorClipboardImageFiles = async (): Promise<LocalUploadFile[]> => {
+		const clipboard = navigator.clipboard as Clipboard & { read?: () => Promise<ClipboardItem[]> };
+		if (!clipboard || typeof clipboard.read !== 'function') return [];
+		const items = await clipboard.read();
+		const images: Blob[] = [];
+		for (const item of items) {
+			const imageType = item.types.find((type) => type.toLowerCase().startsWith('image/'));
+			if (imageType) images.push(await item.getType(imageType));
+		}
+		return toClipboardImageFiles(images);
+	};
+
+	const handleClipboardPaste = (event: ClipboardEvent): void => {
+		if (isEditableTarget(event.target)) return;
+		clipboardPasteSerial += 1;
+
+		const imageFiles = eventClipboardImageFiles(event);
+		if (imageFiles.length) {
+			event.preventDefault();
+			event.stopPropagation();
+			emit('uploadFiles', browser.path.value, imageFiles, []);
+			return;
+		}
+
+		if (props.clipboardCount) {
+			event.preventDefault();
+			event.stopPropagation();
+			emit('paste', browser.path.value);
+		}
+	};
+
+	const handleKeyboardPasteFallback = async (observedPasteSerial: number, destination: string): Promise<void> => {
+		if (clipboardPasteSerial !== observedPasteSerial) return;
+		try {
+			const imageFiles = await navigatorClipboardImageFiles();
+			if (clipboardPasteSerial !== observedPasteSerial) return;
+			if (imageFiles.length) {
+				emit('uploadFiles', destination, imageFiles, []);
+				return;
+			}
+		} catch {
+			// Native ClipboardEvent remains the preferred path; permission/API failures fall through.
+		}
+		if (clipboardPasteSerial === observedPasteSerial && props.clipboardCount) emit('paste', destination);
+	};
+
+	const handleKeyboardNavigation = (event: KeyboardEvent) => {
+		if (isEditableTarget(event.target)) return;
+
+		const key = event.key.toLowerCase();
+		const ctrlOrMeta = event.ctrlKey || event.metaKey;
+		if (ctrlOrMeta && key === 'a') {
+			event.preventDefault();
+			browser.selectAll();
+			return;
+		}
+		if (ctrlOrMeta && key === 'c') {
+			event.preventDefault();
+			const entries = ensureKeyboardSelection();
+			if (entries.length) emit('copyToClipboard', entries);
+			return;
+		}
+		if (ctrlOrMeta && key === 'x') {
+			event.preventDefault();
+			const entries = ensureKeyboardSelection();
+			if (entries.length) emit('cutToClipboard', entries);
+			return;
+		}
+		if (ctrlOrMeta && key === 'v') {
+			// Do not preventDefault: the native paste event gets first chance to expose rich clipboard data.
+			// Only if no paste event arrives do we fall back to the async Clipboard API.
+			const observedPasteSerial = clipboardPasteSerial;
+			const destination = browser.path.value;
+			window.setTimeout(() => void handleKeyboardPasteFallback(observedPasteSerial, destination), 0);
+			return;
+		}
+		if (ctrlOrMeta && event.shiftKey && key === 'n') {
+			event.preventDefault();
+			begin('mkdir');
+			return;
+		}
+		if (event.key === 'Delete') {
+			event.preventDefault();
+			const entries = ensureKeyboardSelection();
+			if (entries.length) void remove(entries);
+			return;
+		}
+		if (event.key === 'F2') {
+			event.preventDefault();
+			const entries = ensureKeyboardSelection();
+			if (entries.length === 1) begin('rename', entries[0]);
+			return;
+		}
+		if (event.key === 'F5') {
+			event.preventDefault();
+			void refresh();
+			return;
+		}
+		if (event.altKey && event.key === 'ArrowUp' && browser.path.value !== '/') {
+			event.preventDefault();
+			void browser.goParent();
+			return;
+		}
+		if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown' && event.key !== 'Enter') return;
+
+		const paths = keyboardPaths.value;
+		if (!paths.length) return;
+		if (event.key === 'Enter') {
+			const cursor = keyboardCursor.value ?? browser.selectionAnchor.value;
+			if (!cursor) return;
+			event.preventDefault();
+			if (cursor === PARENT_CURSOR) void browser.goParent();
+			else {
+				const entry = browser.visible.value.find((item) => item.path === cursor);
+				if (entry) void activate(entry);
+			}
+			return;
+		}
+
+		event.preventDefault();
+		const current = keyboardCursor.value ?? browser.selectionAnchor.value;
+		const currentIndex = current ? paths.indexOf(current) : -1;
+		const delta = event.key === 'ArrowDown' ? 1 : -1;
+		const nextIndex =
+			currentIndex < 0
+				? delta > 0
+					? 0
+					: paths.length - 1
+				: (currentIndex + delta + paths.length) % paths.length;
+		const next = paths[nextIndex]!;
+		keyboardCursor.value = next;
+		if (next !== PARENT_CURSOR) {
+			const entry = browser.visible.value.find((item) => item.path === next);
+			if (entry) browser.select(entry, 'only');
+		}
+		void nextTick(() => void focusKeyboardCursor());
+	};
+
+	const stopRemoteDragScroll = () => {
+		remoteDragScrollDirection = 0;
+		if (remoteDragScrollTimer === undefined) return;
+		window.clearInterval(remoteDragScrollTimer);
+		remoteDragScrollTimer = undefined;
+	};
+
+	const updateRemoteDragScroll = (event: DragEvent) => {
+		const scroller = listScroller.value;
+		if (!scroller || !draggedRemoteEntries.value.length || !remoteDragTarget.value) {
+			stopRemoteDragScroll();
+			return;
+		}
+		const rect = scroller.getBoundingClientRect();
+		const edge = 48;
+		const direction = event.clientY < rect.top + edge ? -1 : event.clientY > rect.bottom - edge ? 1 : 0;
+		if (!direction) {
+			stopRemoteDragScroll();
+			return;
+		}
+		remoteDragScrollDirection = direction;
+		if (remoteDragScrollTimer !== undefined) return;
+		remoteDragScrollTimer = window.setInterval(() => {
+			const currentScroller = listScroller.value;
+			if (!currentScroller || !draggedRemoteEntries.value.length || !remoteDragTarget.value) {
+				stopRemoteDragScroll();
+				return;
+			}
+			currentScroller.scrollTop += remoteDragScrollDirection * 12;
+		}, 30);
+	};
+
+	const remoteDropAllowed = (destination: string) =>
+		draggedRemoteEntries.value.length > 0 &&
+		draggedRemoteEntries.value.some((entry) => {
+			if (entry.path === destination || parentOf(entry.path) === destination) return false;
+			return !(entry.metadata.isDirectory && destination.startsWith(`${entry.path}/`));
+		});
+
+	const startRemoteDrag = (event: DragEvent, entry: WorkspaceRemoteFileEntryDto) => {
+		if (device.isMobile.value || !event.dataTransfer) return;
+		const selection = selectedEntries();
+		draggedRemoteEntries.value = browser.selected.value.has(entry.path) && selection.length ? selection : [entry];
+		keyboardCursor.value = entry.path;
+		event.dataTransfer.effectAllowed = 'move';
+		event.dataTransfer.setData(
+			'application/x-nexus-remote-files',
+			draggedRemoteEntries.value.map((item) => item.path).join('\n'),
+		);
+	};
+
+	const endRemoteDrag = () => {
+		stopRemoteDragScroll();
+		draggedRemoteEntries.value = [];
+		remoteDragTarget.value = null;
+	};
+
+	const handleRemoteTargetDragOver = (event: DragEvent, destination: string) => {
+		if (!remoteDropAllowed(destination)) {
+			remoteDragTarget.value = null;
+			stopRemoteDragScroll();
+			return;
+		}
+		event.preventDefault();
+		event.stopPropagation();
+		if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+		remoteDragTarget.value = destination;
+		updateRemoteDragScroll(event);
+	};
+
+	const clearRemoteDragTarget = (destination: string) => {
+		if (remoteDragTarget.value !== destination) return;
+		remoteDragTarget.value = null;
+		stopRemoteDragScroll();
+	};
+
+	const dropRemote = (event: DragEvent, destination: string) => {
+		if (!remoteDropAllowed(destination)) return;
+		event.preventDefault();
+		event.stopPropagation();
+		const entries = draggedRemoteEntries.value.filter(
+			(entry) =>
+				entry.path !== destination &&
+				parentOf(entry.path) !== destination &&
+				!(entry.metadata.isDirectory && destination.startsWith(`${entry.path}/`)),
+		);
+		endRemoteDrag();
+		if (entries.length) emit('moveTo', entries, destination);
+	};
+
+	const handleDragEnter = (event: DragEvent) => {
+		if (draggedRemoteEntries.value.length) return;
+		if (event.dataTransfer?.types.includes('Files')) dragging.value = true;
+	};
+
+	const handleContainerDragOver = (event: DragEvent) => {
+		if (draggedRemoteEntries.value.length) {
+			updateRemoteDragScroll(event);
+			return;
+		}
+		if (event.dataTransfer?.types.includes('Files')) event.preventDefault();
+	};
+
+	const handleDragLeave = (event: DragEvent) => {
+		const container = event.currentTarget as HTMLElement;
+		const related = event.relatedTarget;
+		if (!(related instanceof Node) || !container.contains(related)) dragging.value = false;
+	};
+
+	const toggleMultiSelect = () => {
+		multiSelect.value = !multiSelect.value;
+		browser.clearSelection();
+	};
+
+	const begin = (type: typeof action.value, entry?: WorkspaceRemoteFileEntryDto) => {
+		action.value = type;
+		target.value = entry ?? null;
+		value.value =
+			type === 'rename'
+				? (entry?.name ?? '')
+				: type === 'chmod'
+					? formatModeOctal(entry?.metadata.mode ?? 0)
+					: '';
+		context.value = null;
+	};
+
+	watch(action, async (type) => {
+		if (!type) return;
+		await nextTick();
+		actionInput.value?.focus();
+		actionInput.value?.select();
+	});
+
+	const submit = async () => {
+		const text = value.value.trim();
+		if (!text || createNameConflict.value) return;
+		try {
+			if (action.value === 'mkdir') await props.channel.createDirectory(join(text));
+			else if (action.value === 'file') await props.channel.createFile(join(text), '');
+			else if (action.value === 'rename' && target.value) {
+				if (props.beforeFileMutation && !props.beforeFileMutation([target.value.path])) return;
+				await props.channel.rename(target.value.path, joinPath(parentOf(target.value.path), text));
+			} else if (action.value === 'chmod' && target.value) {
+				if (!/^[0-7]{3,4}$/.test(text)) throw new Error(t('fileManager.errors.invalidPermissionsFormat'));
+				await props.channel.chmod(target.value.path, Number.parseInt(text, 8));
+			}
+			action.value = null;
+			await browser.load();
+		} catch (cause) {
+			const detail = cause instanceof Error ? cause.message : String(cause);
+			feedback.notifyError(
+				action.value === 'chmod' ? `${t('fileManager.errors.chmodFailed')}: ${detail}` : detail,
+			);
+		}
+	};
+
+	const remove = async (entries: WorkspaceRemoteFileEntryDto[]) => {
+		if (!entries.length) return;
+		context.value = null;
+		const key =
+			entries.length > 1
+				? 'fileManager.prompts.confirmDeleteMultiple'
+				: entries[0]!.metadata.isDirectory
+					? 'fileManager.prompts.confirmDeleteFolder'
+					: 'fileManager.prompts.confirmDeleteFile';
+		const params = entries.length > 1 ? { count: entries.length } : { name: entries[0]!.name };
+		if (props.confirmDelete && !(await feedback.confirm({ message: t(key, params), destructive: true }))) return;
+		if (props.beforeFileMutation && !props.beforeFileMutation(entries.map((entry) => entry.path))) return;
+		try {
+			await props.channel.remove(
+				entries.map((entry) => entry.path),
+				{
+					forceDirectoryPaths: entries
+						.filter((entry) => entry.metadata.isDirectory)
+						.map((entry) => entry.path),
+				},
+			);
+			await browser.load();
+		} catch (cause) {
+			feedback.notifyError(
+				`${t('fileManager.errors.deletePartial')}: ${cause instanceof Error ? cause.message : String(cause)}`,
+			);
+			await browser.load().catch(() => undefined);
+		}
+	};
+
+	const changeTerminalToCurrent = async () => {
+		if (!props.terminalDirectory || changingTerminalPath.value) return;
+		changingTerminalPath.value = true;
+		try {
+			const result = await props.terminalDirectory.changeDirectory(browser.path.value, {
+				onQueued: ({ waitingForPrompt }) => {
+					if (waitingForPrompt) feedback.notifyInfo(t('fileManager.notifications.terminalPathQueued'));
+				},
+			});
+			feedback.notifySuccess(t('fileManager.notifications.terminalPathChanged', { path: result.path }));
+		} catch (cause) {
+			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+		} finally {
+			changingTerminalPath.value = false;
+		}
+	};
+
+	const openPathHistory = async () => {
+		catalogVisible.value = false;
+		if (pathHistoryCloseTimer !== undefined) {
+			window.clearTimeout(pathHistoryCloseTimer);
+			pathHistoryCloseTimer = undefined;
+		}
+		pathHistoryOpen.value = true;
+		pathHistoryIndex.value = -1;
+		catalog.historySearch.value = pathDraft.value;
+		await catalog.loadHistory().catch(() => undefined);
+	};
+
+	const closePathHistory = (restore = false) => {
+		if (pathHistoryCloseTimer !== undefined) {
+			window.clearTimeout(pathHistoryCloseTimer);
+			pathHistoryCloseTimer = undefined;
+		}
+		pathHistoryOpen.value = false;
+		pathHistoryIndex.value = -1;
+		if (restore) pathDraft.value = browser.path.value;
+	};
+
+	const handleOutsideHistory = (event: MouseEvent) => {
+		if (!pathHistoryOpen.value) return;
+		const target = event.target as Node | null;
+		const pathInputEl = pathInput.value as unknown as HTMLElement | null;
+		const pathContainer = pathInputEl?.closest('.file-manager-path-input');
+		if (pathContainer && target && pathContainer.contains(target)) return;
+		closePathHistory();
+	};
+
+	const togglePathHistory = () => {
+		if (pathHistoryOpen.value) {
+			closePathHistory();
+		} else {
+			catalogVisible.value = false;
+			void openPathHistory();
+		}
+	};
+
+	const toggleCatalog = () => {
+		if (catalogVisible.value) {
+			catalogVisible.value = false;
+		} else {
+			closePathHistory();
+			catalogVisible.value = true;
+		}
+	};
+
+	const updatePathHistorySearch = () => {
+		pathDraftRevision += 1;
+		catalog.historySearch.value = pathDraft.value;
+		pathHistoryIndex.value = -1;
+	};
+
+	const beginPathEditing = () => {
+		catalogVisible.value = false;
+		pathDraftEditing.value = true;
+		void openPathHistory();
+	};
+
+	const endPathEditing = () => {
+		pathDraftEditing.value = false;
+		deferClosePathHistory();
+	};
+
+	const deferClosePathHistory = () => {
+		if (pathHistoryCloseTimer !== undefined) window.clearTimeout(pathHistoryCloseTimer);
+		pathHistoryCloseTimer = window.setTimeout(() => {
+			pathHistoryCloseTimer = undefined;
+			closePathHistory();
+		}, 120);
+	};
+
+	const navigatePathDraft = async (path = pathDraft.value) => {
+		if (!path.trim()) return;
+		const draftRevision = pathDraftRevision;
+		closePathHistory();
+		await enqueueNavigation(() => loadPath(path, draftRevision));
+	};
+
+	const handlePathInputKeydown = (event: KeyboardEvent) => {
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			closePathHistory(true);
+			return;
+		}
+		if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+			if (!pathHistoryOpen.value) void openPathHistory();
+			const length = catalog.filteredHistory.value.length;
+			if (!length) return;
+			event.preventDefault();
+			const delta = event.key === 'ArrowDown' ? 1 : -1;
+			pathHistoryIndex.value =
+				pathHistoryIndex.value < 0
+					? delta > 0
+						? 0
+						: length - 1
+					: (pathHistoryIndex.value + delta + length) % length;
+			return;
+		}
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			const selected = catalog.filteredHistory.value[pathHistoryIndex.value];
+			void navigatePathDraft(selected?.path ?? pathDraft.value);
+		}
+	};
+
+	const copyHistoryPath = async (path: string) => {
+		try {
+			await writeClipboardText(path);
+			feedback.notifySuccess(t('pathHistory.copiedSuccess'));
+		} catch {
+			feedback.notifyError(t('pathHistory.copiedError'));
+		}
+	};
+
+	const removeHistoryPath = async (id: number) => {
+		await catalog.removeHistory(id);
+		const length = catalog.filteredHistory.value.length;
+		if (!length) pathHistoryIndex.value = -1;
+		else pathHistoryIndex.value = Math.min(pathHistoryIndex.value, length - 1);
+	};
+
+	const closeSearch = () => {
+		browser.clearSearch();
+		searchExpanded.value = false;
+	};
+
+	const syncFromTerminal = async () => {
+		if (!props.terminalDirectory || syncingTerminalPath.value) return;
+		syncingTerminalPath.value = true;
+		const draftRevision = pathDraftRevision;
+		try {
+			const terminalDirectory = props.terminalDirectory;
+			await enqueueNavigation(async () => {
+				const path = await terminalDirectory.readCurrentDirectory();
+				if (path) await loadPath(path, draftRevision);
+			});
+		} catch (cause) {
+			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+		} finally {
+			syncingTerminalPath.value = false;
+		}
+	};
+
+	const navigate = async (path: string) => {
+		const draftRevision = pathDraftRevision;
+		await enqueueNavigation(() => loadPath(path, draftRevision));
+	};
+
+	const sendPathToTerminal = async (path: string) => {
+		if (!props.terminalDirectory || changingTerminalPath.value) return;
+		changingTerminalPath.value = true;
+		try {
+			await props.terminalDirectory.changeDirectory(path, {
+				onQueued: ({ waitingForPrompt }) => {
+					if (waitingForPrompt) feedback.notifyInfo(t('fileManager.notifications.terminalPathQueued'));
+				},
+			});
+		} catch (cause) {
+			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+		} finally {
+			changingTerminalPath.value = false;
+		}
+	};
+
+	const download = async (entries: WorkspaceRemoteFileEntryDto[]) => {
+		context.value = null;
+		const downloadPort = props.download;
+		if (!downloadPort || !entries.length) return;
+		await Promise.all(
+			entries.map(async (entry) => {
+				try {
+					let path = entry.path;
+					let kind: 'file' | 'directory' = entry.metadata.isDirectory ? 'directory' : 'file';
+					if (entry.metadata.isSymbolicLink) {
+						const resolved = await props.channel.realpath(entry.path);
+						path = resolved.path;
+						kind = resolved.targetType === 'directory' ? 'directory' : 'file';
+					}
+					const { url } = await downloadPort.createDownload(path, kind);
+					const anchor = document.createElement('a');
+					anchor.href = url;
+					anchor.download = '';
+					anchor.rel = 'noopener';
+					document.body.append(anchor);
+					anchor.click();
+					anchor.remove();
+				} catch (cause) {
+					feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+				}
+			}),
+		);
+	};
+
+	const copyPath = async (entry: WorkspaceRemoteFileEntryDto) => {
+		context.value = null;
+		try {
+			await writeClipboardText(entry.path);
+			feedback.notifySuccess(t('fileManager.notifications.pathCopied'));
+		} catch {
+			feedback.notifyError(t('fileManager.errors.copyPathFailed'));
+		}
+	};
+
+	const openContext = (event: MouseEvent, entry: WorkspaceRemoteFileEntryDto) => {
+		event.preventDefault();
+		if (!browser.selected.value.has(entry.path) && !event.ctrlKey && !event.metaKey && !event.shiftKey)
+			browser.select(entry, 'only');
+		if (device.supportsTouchInteraction.value) longPress.suppressClick();
+		compressSubmenu.value = null;
+		context.value = { scope: 'entry', entry, x: event.clientX, y: event.clientY };
+	};
+
+	const openDirectoryContext = (
+		event: MouseEvent,
+		scope: 'current-directory' | 'parent-directory',
+		destination: string,
+	) => {
+		event.preventDefault();
+		event.stopPropagation();
+		browser.clearSelection();
+		compressSubmenu.value = null;
+		context.value = { scope, destination, x: event.clientX, y: event.clientY };
+	};
+
+	const openCompressSubmenu = (event: Event) => {
+		const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+		const width = 220;
+		const margin = 8;
+		const side = rect.right + width <= window.innerWidth - margin ? 'right' : 'left';
+		compressSubmenu.value = {
+			x: side === 'right' ? rect.right : Math.max(margin, rect.left - width),
+			y: rect.top,
+			side,
+		};
+	};
+
+	const compressWithPreset = (format: ArchiveCompressionFormat, passwordProtected = false) => {
+		const entries = contextEntries();
+		if (!entries.length) return;
+		emit('compressPreset', { entries, format, ...(passwordProtected ? { passwordProtected: true } : {}) });
+		compressSubmenu.value = null;
+		context.value = null;
+	};
+
+	const contextAction = (kind: 'open' | 'copy' | 'move' | 'compress' | 'decompress') => {
+		const entry = context.value?.scope === 'entry' ? context.value.entry : undefined;
+		const entries = contextEntries();
+		context.value = null;
+		if (!entry) return;
+		if (kind === 'open') void activate(entry);
+		else if (kind === 'copy') emit('copyToClipboard', entries);
+		else if (kind === 'move') emit('cutToClipboard', entries);
+		else if (kind === 'compress') emit('compress', entries);
+		else if (kind === 'decompress') emit('decompress', entry);
+	};
+
+	const dropFiles = async (event: DragEvent) => {
+		if (draggedRemoteEntries.value.length) {
+			endRemoteDrag();
+			return;
+		}
+		dragging.value = false;
+		const dataTransfer = event.dataTransfer;
+		if (!dataTransfer) return;
+		try {
+			const batch = await collectDroppedLocalFiles(dataTransfer);
+			if (batch.files.length || batch.directories.length) {
+				emit('uploadFiles', browser.path.value, batch.files, batch.directories);
+			}
+		} catch (cause) {
+			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+		}
+	};
+
+	const scaleRows = (event: WheelEvent) => {
+		const change = resolveWheelScale(event, renderedRowScale.value);
+		if (!change) return;
+		const oldEstimatedRowHeight = estimatedRowHeight.value;
+		const scroller = listScroller.value;
+		const anchoredRow = shouldVirtualize.value && scroller ? scroller.scrollTop / oldEstimatedRowHeight : null;
+		renderedRowScale.value = change.next;
+		emit('rowScale', change.next);
+		if (anchoredRow !== null && scroller) {
+			void nextTick(() => {
+				const nextScrollTop = anchoredRow * estimatedRowHeight.value;
+				scroller.scrollTop = nextScrollTop;
+				listScrollTop.value = nextScrollTop;
+			});
+		}
+	};
 </script>
 
 <template>
-  <section
-    ref="root"
-    class="file-manager-root relative flex h-full min-h-0 flex-col overflow-hidden bg-background text-sm text-foreground"
-    :class="{
-      'is-mobile': device.isMobile.value,
-      'is-size-large': isLarge,
-      'is-size-medium': isMedium,
-      'is-size-small': isSmall,
-    }"
-    @click="context = null"
-    @keydown="handleKeyboardNavigation"
-    @paste="handleClipboardPaste"
-    @dragenter="handleDragEnter"
-    @dragover="handleContainerDragOver"
-    @dragleave="handleDragLeave"
-    @drop.prevent="dropFiles"
-  >
-    <header class="file-manager-toolbar flex shrink-0 flex-col gap-1.5 bg-header p-2">
-      <div class="file-manager-actions flex min-w-0 items-center" :class="{ 'is-searching': searchExpanded }">
-        <button
-          v-if="!searchExpanded"
-          type="button"
-          class="file-manager-action-button"
-          :disabled="!props.terminalDirectory || changingTerminalPath"
-          :title="t('fileManager.actions.cdToTerminal')"
-          :aria-label="t('fileManager.actions.cdToTerminal')"
-          @click.stop="changeTerminalToCurrent"
-        >
-          <i :class="['fas', changingTerminalPath ? 'fa-spinner fa-spin' : 'fa-terminal', 'text-xs']"></i>
-        </button>
-        <button
-          v-if="!searchExpanded"
-          type="button"
-          class="file-manager-action-button"
-          :disabled="!props.terminalDirectory || syncingTerminalPath"
-          :title="t('fileManager.actions.syncFromTerminalPath')"
-          :aria-label="t('fileManager.actions.syncFromTerminalPath')"
-          @click.stop="syncFromTerminal"
-        >
-          <i :class="['fas', syncingTerminalPath ? 'fa-spinner fa-spin' : 'fa-folder-open', 'text-xs']"></i>
-        </button>
-        <button
-          v-if="!searchExpanded"
-          type="button"
-          class="file-manager-action-button"
-          :title="t('fileManager.actions.refresh')"
-          :aria-label="t('fileManager.actions.refresh')"
-          @click.stop="refresh"
-        >
-          <i :class="['fas text-xs', browser.loading.value ? 'fa-spinner fa-spin' : 'fa-sync-alt']"></i>
-        </button>
-        <div class="file-manager-search-slot flex shrink-0 items-center" :class="{ 'is-active': searchExpanded }">
-          <button
-            v-if="!searchExpanded"
-            type="button"
-            class="file-manager-action-button"
-            :title="t('fileManager.searchPlaceholder')"
-            :aria-label="t('fileManager.searchPlaceholder')"
-            @click.stop="
-              searchExpanded = true;
-              nextTick(() => searchInput?.focus?.());
-            "
-          >
-            <i class="fas fa-search text-xs"></i>
-          </button>
-          <div v-else class="file-manager-search-box relative flex w-full items-center">
-            <i
-              class="fas fa-search pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-text-secondary"
-            ></i>
-            <input
-              ref="searchInput"
-              v-model="browser.searchQuery.value"
-              data-focus-id="fileManagerSearch"
-              type="text"
-              class="h-6 w-full min-w-0 rounded-md border border-border/70 bg-input py-0.5 pl-6 pr-6 text-xs text-foreground outline-none transition-colors duration-150 focus:border-primary focus:ring-1 focus:ring-primary/40"
-              :placeholder="t('fileManager.searchPlaceholder')"
-              @keyup.enter="browser.search"
-              @keyup.esc="closeSearch"
-              @blur="!browser.searchQuery.value && (searchExpanded = false)"
-            />
-            <button
-              type="button"
-              class="absolute right-0 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-text-secondary transition-colors hover:bg-hover hover:text-foreground focus:outline-none"
-              :title="browser.searchQuery.value ? t('common.clear') : t('common.close')"
-              :aria-label="browser.searchQuery.value ? t('common.clear') : t('common.close')"
-              @mousedown.prevent
-              @click.stop="browser.searchQuery.value ? browser.clearSearch() : closeSearch()"
-            >
-              <i class="fas fa-times text-[10px]" aria-hidden="true"></i>
-            </button>
-          </div>
-        </div>
+	<section
+		ref="root"
+		class="file-manager-root relative flex h-full min-h-0 flex-col overflow-hidden bg-background text-sm text-foreground"
+		:class="{
+			'is-mobile': device.isMobile.value,
+			'is-size-large': isLarge,
+			'is-size-medium': isMedium,
+			'is-size-small': isSmall,
+		}"
+		@click="context = null"
+		@keydown="handleKeyboardNavigation"
+		@paste="handleClipboardPaste"
+		@dragenter="handleDragEnter"
+		@dragover="handleContainerDragOver"
+		@dragleave="handleDragLeave"
+		@drop.prevent="dropFiles"
+	>
+		<header class="file-manager-toolbar flex shrink-0 flex-col gap-1.5 bg-header p-2">
+			<div class="file-manager-actions flex min-w-0 items-center" :class="{ 'is-searching': searchExpanded }">
+				<button
+					v-if="!searchExpanded"
+					type="button"
+					class="file-manager-action-button"
+					:disabled="!props.terminalDirectory || changingTerminalPath"
+					:title="t('fileManager.actions.cdToTerminal')"
+					:aria-label="t('fileManager.actions.cdToTerminal')"
+					@click.stop="changeTerminalToCurrent"
+				>
+					<i :class="['fas', changingTerminalPath ? 'fa-spinner fa-spin' : 'fa-terminal', 'text-xs']"></i>
+				</button>
+				<button
+					v-if="!searchExpanded"
+					type="button"
+					class="file-manager-action-button"
+					:disabled="!props.terminalDirectory || syncingTerminalPath"
+					:title="t('fileManager.actions.syncFromTerminalPath')"
+					:aria-label="t('fileManager.actions.syncFromTerminalPath')"
+					@click.stop="syncFromTerminal"
+				>
+					<i :class="['fas', syncingTerminalPath ? 'fa-spinner fa-spin' : 'fa-folder-open', 'text-xs']"></i>
+				</button>
+				<button
+					v-if="!searchExpanded"
+					type="button"
+					class="file-manager-action-button"
+					:title="t('fileManager.actions.refresh')"
+					:aria-label="t('fileManager.actions.refresh')"
+					@click.stop="refresh"
+				>
+					<i :class="['fas text-xs', browser.loading.value ? 'fa-spinner fa-spin' : 'fa-sync-alt']"></i>
+				</button>
+				<div
+					class="file-manager-search-slot flex shrink-0 items-center"
+					:class="{ 'is-active': searchExpanded }"
+				>
+					<button
+						v-if="!searchExpanded"
+						type="button"
+						class="file-manager-action-button"
+						:title="t('fileManager.searchPlaceholder')"
+						:aria-label="t('fileManager.searchPlaceholder')"
+						@click.stop="
+							searchExpanded = true;
+							nextTick(() => searchInput?.focus?.());
+						"
+					>
+						<i class="fas fa-search text-xs"></i>
+					</button>
+					<div v-else class="file-manager-search-box relative flex w-full items-center">
+						<i
+							class="fas fa-search pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-text-secondary"
+						></i>
+						<input
+							ref="searchInput"
+							v-model="browser.searchQuery.value"
+							data-focus-id="fileManagerSearch"
+							type="text"
+							class="h-6 w-full min-w-0 rounded-md border border-border/70 bg-input py-0.5 pl-6 pr-6 text-xs text-foreground outline-none transition-colors duration-150 focus:border-primary focus:ring-1 focus:ring-primary/40"
+							:placeholder="t('fileManager.searchPlaceholder')"
+							@keyup.enter="browser.search"
+							@keyup.esc="closeSearch"
+							@blur="!browser.searchQuery.value && (searchExpanded = false)"
+						/>
+						<button
+							type="button"
+							class="absolute right-0 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-text-secondary transition-colors hover:bg-hover hover:text-foreground focus:outline-none"
+							:title="browser.searchQuery.value ? t('common.clear') : t('common.close')"
+							:aria-label="browser.searchQuery.value ? t('common.clear') : t('common.close')"
+							@mousedown.prevent
+							@click.stop="browser.searchQuery.value ? browser.clearSearch() : closeSearch()"
+						>
+							<i class="fas fa-times text-[10px]" aria-hidden="true"></i>
+						</button>
+					</div>
+				</div>
 
-        <button
-          v-if="showEditorButton && !searchExpanded"
-          type="button"
-          class="file-manager-action-button"
-          :title="t('fileManager.actions.openEditor')"
-          :aria-label="t('fileManager.actions.openEditor')"
-          @click="emit('openEditor')"
-        >
-          <i class="far fa-edit text-xs"></i>
-        </button>
-        <button
-          v-if="!searchExpanded"
-          type="button"
-          class="file-manager-action-button"
-          :title="t('fileManager.actions.uploadFile')"
-          :aria-label="t('fileManager.actions.uploadFile')"
-          @click="emit('upload', browser.path.value)"
-        >
-          <i class="fas fa-upload text-xs"></i>
-        </button>
-        <button
-          v-if="!searchExpanded"
-          type="button"
-          class="file-manager-action-button"
-          :title="t('fileManager.actions.newFolder')"
-          :aria-label="t('fileManager.actions.newFolder')"
-          @click="begin('mkdir')"
-        >
-          <i class="fas fa-folder-plus text-xs"></i>
-        </button>
-        <button
-          v-if="!searchExpanded"
-          type="button"
-          class="file-manager-action-button"
-          :title="t('fileManager.actions.newFile')"
-          :aria-label="t('fileManager.actions.newFile')"
-          @click="begin('file')"
-        >
-          <i class="far fa-file-alt text-xs"></i>
-        </button>
-        <button
-          v-if="!searchExpanded && (device.isMobile.value || device.hasTouch.value)"
-          type="button"
-          class="file-manager-action-button"
-          :class="multiSelect ? 'border-primary bg-primary text-white' : ''"
-          :title="multiSelect ? t('fileManager.actions.exitMultiSelect') : t('fileManager.actions.multiSelect')"
-          :aria-label="multiSelect ? t('fileManager.actions.exitMultiSelect') : t('fileManager.actions.multiSelect')"
-          @click="toggleMultiSelect"
-        >
-          <i class="fas fa-check-square text-xs"></i>
-        </button>
-      </div>
+				<button
+					v-if="showEditorButton && !searchExpanded"
+					type="button"
+					class="file-manager-action-button"
+					:title="t('fileManager.actions.openEditor')"
+					:aria-label="t('fileManager.actions.openEditor')"
+					@click="emit('openEditor')"
+				>
+					<i class="far fa-edit text-xs"></i>
+				</button>
+				<button
+					v-if="!searchExpanded"
+					type="button"
+					class="file-manager-action-button"
+					:title="t('fileManager.actions.uploadFile')"
+					:aria-label="t('fileManager.actions.uploadFile')"
+					@click="emit('upload', browser.path.value)"
+				>
+					<i class="fas fa-upload text-xs"></i>
+				</button>
+				<button
+					v-if="!searchExpanded"
+					type="button"
+					class="file-manager-action-button"
+					:title="t('fileManager.actions.newFolder')"
+					:aria-label="t('fileManager.actions.newFolder')"
+					@click="begin('mkdir')"
+				>
+					<i class="fas fa-folder-plus text-xs"></i>
+				</button>
+				<button
+					v-if="!searchExpanded"
+					type="button"
+					class="file-manager-action-button"
+					:title="t('fileManager.actions.newFile')"
+					:aria-label="t('fileManager.actions.newFile')"
+					@click="begin('file')"
+				>
+					<i class="far fa-file-alt text-xs"></i>
+				</button>
+				<button
+					v-if="!searchExpanded && (device.isMobile.value || device.hasTouch.value)"
+					type="button"
+					class="file-manager-action-button"
+					:class="multiSelect ? 'border-primary bg-primary text-white' : ''"
+					:title="
+						multiSelect ? t('fileManager.actions.exitMultiSelect') : t('fileManager.actions.multiSelect')
+					"
+					:aria-label="
+						multiSelect ? t('fileManager.actions.exitMultiSelect') : t('fileManager.actions.multiSelect')
+					"
+					@click="toggleMultiSelect"
+				>
+					<i class="fas fa-check-square text-xs"></i>
+				</button>
+			</div>
 
-      <div class="file-manager-path-input relative flex min-w-0 items-center">
-        <i class="fas fa-folder mr-1.5 shrink-0 text-xs text-text-secondary pointer-events-none" aria-hidden="true"></i>
-        <input
-          ref="pathInput"
-          v-model="pathDraft"
-          data-focus-id="fileManagerPathInput"
-          type="text"
-          class="min-w-0 flex-1 border-0 bg-transparent p-0 text-xs font-medium text-link outline-none"
-          :title="t('fileManager.editPathTooltip')"
-          @focus="beginPathEditing"
-          @click="openPathHistory"
-          @input="updatePathHistorySearch"
-          @keydown="handlePathInputKeydown"
-          @blur="endPathEditing"
-        />
-        <button
-          ref="favoriteButton"
-          type="button"
-          class="file-manager-path-favorite-btn flex h-6 w-6 shrink-0 items-center justify-center rounded text-text-secondary transition-colors hover:bg-hover hover:text-warning focus:outline-none"
-          :class="{ '!text-amber-500': isCurrentPathFavorite }"
-          :title="t('favoritePaths.title')"
-          :aria-label="t('favoritePaths.title')"
-          @mousedown.prevent
-          @click="toggleCatalog"
-        >
-          <i class="fas fa-star text-xs"></i>
-        </button>
-        <button
-          type="button"
-          class="path-history-toggle flex h-6 w-6 shrink-0 items-center justify-center rounded text-text-secondary transition-colors hover:bg-hover hover:text-foreground focus:outline-none"
-          :title="t('pathHistory.title')"
-          :aria-label="t('pathHistory.title')"
-          @mousedown.prevent
-          @click.stop="togglePathHistory"
-        >
-          <i
-            :class="[
-              'fas text-xs transition-transform duration-150',
-              pathHistoryOpen ? 'fa-chevron-up' : 'fa-chevron-down',
-            ]"
-            aria-hidden="true"
-          ></i>
-        </button>
-        <PathHistoryDropdown
-          :visible="pathHistoryOpen"
-          :loading="catalog.loadingHistory.value"
-          :items="catalog.filteredHistory.value"
-          :selected-index="pathHistoryIndex"
-          @select="navigatePathDraft"
-          @copy="copyHistoryPath"
-          @remove="removeHistoryPath"
-        />
-      </div>
-    </header>
+			<div class="file-manager-path-input relative flex min-w-0 items-center">
+				<i
+					class="fas fa-folder mr-1.5 shrink-0 text-xs text-text-secondary pointer-events-none"
+					aria-hidden="true"
+				></i>
+				<input
+					ref="pathInput"
+					v-model="pathDraft"
+					data-focus-id="fileManagerPathInput"
+					type="text"
+					class="min-w-0 flex-1 border-0 bg-transparent p-0 text-xs font-medium text-link outline-none"
+					:title="t('fileManager.editPathTooltip')"
+					@focus="beginPathEditing"
+					@click="openPathHistory"
+					@input="updatePathHistorySearch"
+					@keydown="handlePathInputKeydown"
+					@blur="endPathEditing"
+				/>
+				<button
+					ref="favoriteButton"
+					type="button"
+					class="file-manager-path-favorite-btn flex h-6 w-6 shrink-0 items-center justify-center rounded text-text-secondary transition-colors hover:bg-hover hover:text-warning focus:outline-none"
+					:class="{ '!text-amber-500': isCurrentPathFavorite }"
+					:title="t('favoritePaths.title')"
+					:aria-label="t('favoritePaths.title')"
+					@mousedown.prevent
+					@click="toggleCatalog"
+				>
+					<i class="fas fa-star text-xs"></i>
+				</button>
+				<button
+					type="button"
+					class="path-history-toggle flex h-6 w-6 shrink-0 items-center justify-center rounded text-text-secondary transition-colors hover:bg-hover hover:text-foreground focus:outline-none"
+					:title="t('pathHistory.title')"
+					:aria-label="t('pathHistory.title')"
+					@mousedown.prevent
+					@click.stop="togglePathHistory"
+				>
+					<i
+						:class="[
+							'fas text-xs transition-transform duration-150',
+							pathHistoryOpen ? 'fa-chevron-up' : 'fa-chevron-down',
+						]"
+						aria-hidden="true"
+					></i>
+				</button>
+				<PathHistoryDropdown
+					:visible="pathHistoryOpen"
+					:loading="catalog.loadingHistory.value"
+					:items="catalog.filteredHistory.value"
+					:selected-index="pathHistoryIndex"
+					@select="navigatePathDraft"
+					@copy="copyHistoryPath"
+					@remove="removeHistoryPath"
+				/>
+			</div>
+		</header>
 
-    <div
-      v-if="(!browser.loaded.value && !browser.error.value) || browser.loading.value || browser.searching.value"
-      class="file-manager-loading-state flex min-h-0 flex-1 items-center justify-center"
-    >
-      <UiSpinner />
-    </div>
-    <p v-else-if="browser.error.value" class="p-4 text-error">{{ browser.error.value }}</p>
-    <div
-      v-else
-      ref="listScroller"
-      tabindex="0"
-      :aria-label="t('fileManager.modalTitle')"
-      class="min-h-0 flex-1 overflow-auto outline-none"
-      :style="rowStyle"
-      :data-row-scale="renderedRowScale.toFixed(2)"
-      @wheel="scaleRows"
-      @scroll="handleListScroll"
-      @pointerdown="focusFileListFromPointer"
-      @contextmenu="openDirectoryContext($event, 'current-directory', browser.path.value)"
-    >
-      <p v-if="browser.searchError.value" class="border-b border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
-        {{ browser.searchError.value }}
-      </p>
-      <p
-        v-if="browser.searchActive.value && browser.searchTruncated.value"
-        class="sticky top-0 z-20 border-b border-warning/30 bg-warning/10 px-3 py-1.5 text-xs text-warning"
-      >
-        {{ t('fileManager.searchTruncated') }}
-      </p>
-      <table
-        class="file-table w-full table-fixed border-collapse border-border"
-        :class="{ 'is-virtualized': shouldVirtualize }"
-        :style="{ minWidth: isCustomResized && showModified ? `${totalColumnWidth}px` : '100%' }"
-      >
-        <colgroup>
-          <col class="file-col-name" :style="columnStyle('name')" />
-          <col v-if="showPermissions" class="file-col-permissions" :style="columnStyle('permissions')" />
-          <col v-if="showModified" class="file-col-modified" :style="columnStyle('modified')" />
-        </colgroup>
-        <thead class="sticky top-0 z-10 bg-header">
-          <tr>
-            <th
-              class="file-table-header file-table-header-name relative whitespace-nowrap text-left"
-              :style="columnStyle('name')"
-            >
-              <button
-                type="button"
-                class="file-table-sort-trigger inline-flex items-center gap-1 font-semibold transition-colors hover:text-foreground"
-                :class="{ '!text-primary font-bold': browser.sortKey.value === 'name' }"
-                @click="browser.setSort('name')"
-              >
-                <span>{{ t('fileManager.headers.name') }}</span>
-                <span v-if="browser.sortKey.value === 'name'" class="text-[10px]">{{ sortMark('name') }}</span>
-              </button>
-              <span
-                v-if="canResizeName"
-                class="absolute right-[-4px] top-0 z-20 h-full w-[9px] cursor-col-resize hover:bg-primary/20"
-                @pointerdown="startColumnResize($event, 'name')"
-              ></span>
-            </th>
-            <th
-              v-if="showPermissions"
-              class="file-table-header file-table-header-permissions relative whitespace-nowrap text-left"
-              :style="columnStyle('permissions')"
-            >
-              <button
-                type="button"
-                class="file-table-sort-trigger inline-flex items-center gap-1 font-semibold transition-colors hover:text-foreground"
-                :class="{ '!text-primary font-bold': browser.sortKey.value === 'permissions' }"
-                @click="browser.setSort('permissions')"
-              >
-                <span>{{ t('fileManager.headers.permissions') }}</span>
-                <span v-if="browser.sortKey.value === 'permissions'" class="text-[10px]">{{
-                  sortMark('permissions')
-                }}</span>
-              </button>
-              <span
-                v-if="canResizePermissions"
-                class="absolute right-[-4px] top-0 z-20 h-full w-[9px] cursor-col-resize hover:bg-primary/20"
-                @pointerdown="startColumnResize($event, 'permissions')"
-              ></span>
-            </th>
-            <th
-              v-if="showModified"
-              class="file-table-header file-table-header-modified relative whitespace-nowrap text-left"
-              :style="columnStyle('modified')"
-            >
-              <button
-                type="button"
-                class="file-table-sort-trigger inline-flex items-center gap-1 font-semibold transition-colors hover:text-foreground"
-                :class="{ '!text-primary font-bold': browser.sortKey.value === 'modified' }"
-                @click="browser.setSort('modified')"
-              >
-                <span>{{ t('fileManager.headers.modified') }}</span>
-                <span v-if="browser.sortKey.value === 'modified'" class="text-[10px]">{{ sortMark('modified') }}</span>
-              </button>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-if="browser.path.value !== '/'"
-            data-filename=".."
-            data-file-parent
-            tabindex="-1"
-            class="cursor-pointer select-none transition-colors duration-150 hover:bg-header/50"
-            :class="[
-              keyboardCursor === PARENT_CURSOR ? 'bg-primary/10' : '',
-              remoteDragTarget === parentOf(browser.path.value)
-                ? 'outline-dashed outline-2 outline-offset-[-1px] outline-primary'
-                : '',
-            ]"
-            @click="
-              keyboardCursor = PARENT_CURSOR;
-              browser.goParent();
-            "
-            @dragover="handleRemoteTargetDragOver($event, parentOf(browser.path.value))"
-            @dragleave="clearRemoteDragTarget(parentOf(browser.path.value))"
-            @drop="dropRemote($event, parentOf(browser.path.value))"
-            @contextmenu.stop="openDirectoryContext($event, 'parent-directory', parentOf(browser.path.value))"
-          >
-            <td class="file-row-cell file-row-name text-left">
-              <span class="file-row-parent-content inline-flex min-w-0 items-center gap-2.5">
-                <i class="file-row-icon fas fa-level-up-alt shrink-0 text-text-secondary" aria-hidden="true"></i>
-                <span class="file-row-name-label font-medium">..</span>
-              </span>
-            </td>
-            <td v-if="showPermissions" class="file-row-cell file-row-permissions font-mono text-left"></td>
-            <td v-if="showModified" class="file-row-cell file-row-modified text-left"></td>
-          </tr>
-          <tr v-if="browser.visible.value.length === 0">
-            <td :colspan="visibleColumnCount" class="px-4 py-6 text-center italic text-text-secondary">
-              {{ browser.searchQuery.value ? t('fileManager.noSearchResults') : t('fileManager.emptyDirectory') }}
-            </td>
-          </tr>
-          <tr v-if="virtualTopPadding" aria-hidden="true">
-            <td :colspan="visibleColumnCount" class="border-0 p-0" :style="{ height: `${virtualTopPadding}px` }"></td>
-          </tr>
-          <tr
-            v-for="entry in virtualEntries"
-            :key="entry.path"
-            :data-filename="entry.name"
-            :data-file-path="entry.path"
-            tabindex="-1"
-            class="file-row select-none touch-pan-y transition-colors duration-150"
-            :class="[
-              browser.selected.value.has(entry.path) ? 'bg-primary/10 text-primary' : 'hover:bg-header/50',
-              remoteDragTarget === entry.path ? 'outline-dashed outline-2 outline-offset-[-1px] outline-primary' : '',
-              entry.metadata.isDirectory || entry.metadata.isFile || entry.metadata.isSymbolicLink
-                ? 'cursor-pointer'
-                : '',
-            ]"
-            :draggable="!device.isMobile.value"
-            @dragstart="startRemoteDrag($event, entry)"
-            @dragend="endRemoteDrag"
-            @dragover="entry.metadata.isDirectory && handleRemoteTargetDragOver($event, entry.path)"
-            @dragleave="clearRemoteDragTarget(entry.path)"
-            @drop="entry.metadata.isDirectory && dropRemote($event, entry.path)"
-            @contextmenu.stop="openContext($event, entry)"
-            @mousedown="preserveListFocusOnMouseOpen"
-            @click="clickEntry($event, entry)"
-            @dblclick="doubleClickEntry($event, entry)"
-            @pointerdown="longPress.start($event, entry)"
-            @pointermove="longPress.move"
-            @pointerup="longPress.end"
-            @pointercancel="longPress.cancel"
-          >
-            <td
-              class="file-row-cell file-row-name truncate text-left"
-              :class="entry.metadata.isDirectory ? 'font-medium' : ''"
-            >
-              <div class="file-row-name-container flex min-w-0 items-center gap-2.5">
-                <i
-                  :class="[
-                    'file-row-icon shrink-0 transition-colors duration-150',
-                    entry.metadata.isDirectory
-                      ? 'fas fa-folder'
-                      : entry.metadata.isSymbolicLink
-                        ? 'fas fa-link'
-                        : getFileIconClass(entry.name),
-                    browser.selected.value.has(entry.path) ? 'text-primary' : 'text-text-secondary',
-                  ]"
-                  aria-hidden="true"
-                ></i>
-                <button
-                  type="button"
-                  class="file-row-name-button min-w-0 flex-1 text-left"
-                  :data-file-path="entry.path"
-                  @mousedown="preserveListFocusOnMouseOpen"
-                >
-                  <span class="file-row-name-label truncate">{{ displayEntryName(entry) }}</span>
-                </button>
-              </div>
-            </td>
-            <td
-              v-if="showPermissions"
-              class="file-row-cell file-row-permissions truncate font-mono text-left"
-              :class="browser.selected.value.has(entry.path) ? 'text-primary' : 'text-text-secondary'"
-            >
-              {{ formatMode(entry.metadata.mode) }}
-            </td>
-            <td
-              v-if="showModified"
-              class="file-row-cell file-row-modified truncate text-left tabular-nums"
-              :class="browser.selected.value.has(entry.path) ? 'text-primary' : 'text-text-secondary'"
-              :title="new Date(entry.metadata.modifiedAt).toLocaleString()"
-            >
-              {{ formatCompactModified(entry.metadata.modifiedAt) }}
-            </td>
-          </tr>
-          <tr v-if="virtualBottomPadding" aria-hidden="true">
-            <td
-              :colspan="visibleColumnCount"
-              class="border-0 p-0"
-              :style="{ height: `${virtualBottomPadding}px` }"
-            ></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+		<div
+			v-if="(!browser.loaded.value && !browser.error.value) || browser.loading.value || browser.searching.value"
+			class="file-manager-loading-state flex min-h-0 flex-1 items-center justify-center"
+		>
+			<UiSpinner />
+		</div>
+		<p v-else-if="browser.error.value" class="p-4 text-error">{{ browser.error.value }}</p>
+		<div
+			v-else
+			ref="listScroller"
+			tabindex="0"
+			:aria-label="t('fileManager.modalTitle')"
+			class="min-h-0 flex-1 overflow-auto outline-none"
+			:style="rowStyle"
+			:data-row-scale="renderedRowScale.toFixed(2)"
+			@wheel="scaleRows"
+			@scroll="handleListScroll"
+			@pointerdown="focusFileListFromPointer"
+			@contextmenu="openDirectoryContext($event, 'current-directory', browser.path.value)"
+		>
+			<p
+				v-if="browser.searchError.value"
+				class="border-b border-error/30 bg-error/10 px-3 py-2 text-sm text-error"
+			>
+				{{ browser.searchError.value }}
+			</p>
+			<p
+				v-if="browser.searchActive.value && browser.searchTruncated.value"
+				class="sticky top-0 z-20 border-b border-warning/30 bg-warning/10 px-3 py-1.5 text-xs text-warning"
+			>
+				{{ t('fileManager.searchTruncated') }}
+			</p>
+			<table
+				class="file-table w-full table-fixed border-collapse border-border"
+				:class="{ 'is-virtualized': shouldVirtualize }"
+				:style="{ minWidth: isCustomResized && showModified ? `${totalColumnWidth}px` : '100%' }"
+			>
+				<colgroup>
+					<col class="file-col-name" :style="columnStyle('name')" />
+					<col v-if="showPermissions" class="file-col-permissions" :style="columnStyle('permissions')" />
+					<col v-if="showModified" class="file-col-modified" :style="columnStyle('modified')" />
+				</colgroup>
+				<thead class="sticky top-0 z-10 bg-header">
+					<tr>
+						<th
+							class="file-table-header file-table-header-name relative whitespace-nowrap text-left"
+							:style="columnStyle('name')"
+						>
+							<button
+								type="button"
+								class="file-table-sort-trigger inline-flex items-center gap-1 font-semibold transition-colors hover:text-foreground"
+								:class="{ '!text-primary font-bold': browser.sortKey.value === 'name' }"
+								@click="browser.setSort('name')"
+							>
+								<span>{{ t('fileManager.headers.name') }}</span>
+								<span v-if="browser.sortKey.value === 'name'" class="text-[10px]">{{
+									sortMark('name')
+								}}</span>
+							</button>
+							<span
+								v-if="canResizeName"
+								class="absolute right-[-4px] top-0 z-20 h-full w-[9px] cursor-col-resize hover:bg-primary/20"
+								@pointerdown="startColumnResize($event, 'name')"
+							></span>
+						</th>
+						<th
+							v-if="showPermissions"
+							class="file-table-header file-table-header-permissions relative whitespace-nowrap text-left"
+							:style="columnStyle('permissions')"
+						>
+							<button
+								type="button"
+								class="file-table-sort-trigger inline-flex items-center gap-1 font-semibold transition-colors hover:text-foreground"
+								:class="{ '!text-primary font-bold': browser.sortKey.value === 'permissions' }"
+								@click="browser.setSort('permissions')"
+							>
+								<span>{{ t('fileManager.headers.permissions') }}</span>
+								<span v-if="browser.sortKey.value === 'permissions'" class="text-[10px]">{{
+									sortMark('permissions')
+								}}</span>
+							</button>
+							<span
+								v-if="canResizePermissions"
+								class="absolute right-[-4px] top-0 z-20 h-full w-[9px] cursor-col-resize hover:bg-primary/20"
+								@pointerdown="startColumnResize($event, 'permissions')"
+							></span>
+						</th>
+						<th
+							v-if="showModified"
+							class="file-table-header file-table-header-modified relative whitespace-nowrap text-left"
+							:style="columnStyle('modified')"
+						>
+							<button
+								type="button"
+								class="file-table-sort-trigger inline-flex items-center gap-1 font-semibold transition-colors hover:text-foreground"
+								:class="{ '!text-primary font-bold': browser.sortKey.value === 'modified' }"
+								@click="browser.setSort('modified')"
+							>
+								<span>{{ t('fileManager.headers.modified') }}</span>
+								<span v-if="browser.sortKey.value === 'modified'" class="text-[10px]">{{
+									sortMark('modified')
+								}}</span>
+							</button>
+						</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr
+						v-if="browser.path.value !== '/'"
+						data-filename=".."
+						data-file-parent
+						tabindex="-1"
+						class="cursor-pointer select-none transition-colors duration-150 hover:bg-header/50"
+						:class="[
+							keyboardCursor === PARENT_CURSOR ? 'bg-primary/10' : '',
+							remoteDragTarget === parentOf(browser.path.value)
+								? 'outline-dashed outline-2 outline-offset-[-1px] outline-primary'
+								: '',
+						]"
+						@click="
+							keyboardCursor = PARENT_CURSOR;
+							browser.goParent();
+						"
+						@dragover="handleRemoteTargetDragOver($event, parentOf(browser.path.value))"
+						@dragleave="clearRemoteDragTarget(parentOf(browser.path.value))"
+						@drop="dropRemote($event, parentOf(browser.path.value))"
+						@contextmenu.stop="
+							openDirectoryContext($event, 'parent-directory', parentOf(browser.path.value))
+						"
+					>
+						<td class="file-row-cell file-row-name text-left">
+							<span class="file-row-parent-content inline-flex min-w-0 items-center gap-2.5">
+								<i
+									class="file-row-icon fas fa-level-up-alt shrink-0 text-text-secondary"
+									aria-hidden="true"
+								></i>
+								<span class="file-row-name-label font-medium">..</span>
+							</span>
+						</td>
+						<td v-if="showPermissions" class="file-row-cell file-row-permissions font-mono text-left"></td>
+						<td v-if="showModified" class="file-row-cell file-row-modified text-left"></td>
+					</tr>
+					<tr v-if="browser.visible.value.length === 0">
+						<td :colspan="visibleColumnCount" class="px-4 py-6 text-center italic text-text-secondary">
+							{{
+								browser.searchQuery.value
+									? t('fileManager.noSearchResults')
+									: t('fileManager.emptyDirectory')
+							}}
+						</td>
+					</tr>
+					<tr v-if="virtualTopPadding" aria-hidden="true">
+						<td
+							:colspan="visibleColumnCount"
+							class="border-0 p-0"
+							:style="{ height: `${virtualTopPadding}px` }"
+						></td>
+					</tr>
+					<tr
+						v-for="entry in virtualEntries"
+						:key="entry.path"
+						:data-filename="entry.name"
+						:data-file-path="entry.path"
+						tabindex="-1"
+						class="file-row select-none touch-pan-y transition-colors duration-150"
+						:class="[
+							browser.selected.value.has(entry.path)
+								? 'bg-primary/10 text-primary'
+								: 'hover:bg-header/50',
+							remoteDragTarget === entry.path
+								? 'outline-dashed outline-2 outline-offset-[-1px] outline-primary'
+								: '',
+							entry.metadata.isDirectory || entry.metadata.isFile || entry.metadata.isSymbolicLink
+								? 'cursor-pointer'
+								: '',
+						]"
+						:draggable="!device.isMobile.value"
+						@dragstart="startRemoteDrag($event, entry)"
+						@dragend="endRemoteDrag"
+						@dragover="entry.metadata.isDirectory && handleRemoteTargetDragOver($event, entry.path)"
+						@dragleave="clearRemoteDragTarget(entry.path)"
+						@drop="entry.metadata.isDirectory && dropRemote($event, entry.path)"
+						@contextmenu.stop="openContext($event, entry)"
+						@mousedown="preserveListFocusOnMouseOpen"
+						@click="clickEntry($event, entry)"
+						@dblclick="doubleClickEntry($event, entry)"
+						@pointerdown="longPress.start($event, entry)"
+						@pointermove="longPress.move"
+						@pointerup="longPress.end"
+						@pointercancel="longPress.cancel"
+					>
+						<td
+							class="file-row-cell file-row-name truncate text-left"
+							:class="entry.metadata.isDirectory ? 'font-medium' : ''"
+						>
+							<div class="file-row-name-container flex min-w-0 items-center gap-2.5">
+								<i
+									:class="[
+										'file-row-icon shrink-0 transition-colors duration-150',
+										entry.metadata.isDirectory
+											? 'fas fa-folder'
+											: entry.metadata.isSymbolicLink
+												? 'fas fa-link'
+												: getFileIconClass(entry.name),
+										browser.selected.value.has(entry.path) ? 'text-primary' : 'text-text-secondary',
+									]"
+									aria-hidden="true"
+								></i>
+								<button
+									type="button"
+									class="file-row-name-button min-w-0 flex-1 text-left"
+									:data-file-path="entry.path"
+									@mousedown="preserveListFocusOnMouseOpen"
+								>
+									<span class="file-row-name-label truncate">{{ displayEntryName(entry) }}</span>
+								</button>
+							</div>
+						</td>
+						<td
+							v-if="showPermissions"
+							class="file-row-cell file-row-permissions truncate font-mono text-left"
+							:class="browser.selected.value.has(entry.path) ? 'text-primary' : 'text-text-secondary'"
+						>
+							{{ formatMode(entry.metadata.mode) }}
+						</td>
+						<td
+							v-if="showModified"
+							class="file-row-cell file-row-modified truncate text-left tabular-nums"
+							:class="browser.selected.value.has(entry.path) ? 'text-primary' : 'text-text-secondary'"
+							:title="new Date(entry.metadata.modifiedAt).toLocaleString()"
+						>
+							{{ formatCompactModified(entry.metadata.modifiedAt) }}
+						</td>
+					</tr>
+					<tr v-if="virtualBottomPadding" aria-hidden="true">
+						<td
+							:colspan="visibleColumnCount"
+							class="border-0 p-0"
+							:style="{ height: `${virtualBottomPadding}px` }"
+						></td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
 
-    <div
-      v-if="dragging"
-      class="pointer-events-none absolute inset-2 z-30 grid place-items-center rounded border-2 border-dashed border-primary bg-background/85 text-lg font-medium"
-    >
-      {{ t('fileManager.dropFilesHere') }}
-    </div>
+		<div
+			v-if="dragging"
+			class="pointer-events-none absolute inset-2 z-30 grid place-items-center rounded border-2 border-dashed border-primary bg-background/85 text-lg font-medium"
+		>
+			{{ t('fileManager.dropFilesHere') }}
+		</div>
 
-    <UiContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" auto-width @close="context = null">
-      <template v-if="context.scope === 'entry'">
-        <template v-if="device.isMobile.value || device.hasTouch.value">
-          <button v-if="download" class="context-item" @click="download(contextEntries())">
-            {{ contextDownloadLabel }}
-          </button>
-          <button class="context-item flex items-center justify-between gap-4" @click="contextAction('move')">
-            <span>{{ t('fileManager.actions.cut') }}</span
-            ><span class="text-xs text-text-secondary">{{ shortcutHints.cut }}</span>
-          </button>
-          <button class="context-item flex items-center justify-between gap-4" @click="contextAction('copy')">
-            <span>{{ t('fileManager.actions.copy') }}</span
-            ><span class="text-xs text-text-secondary">{{ shortcutHints.copy }}</span>
-          </button>
-          <button
-            v-if="props.clipboardCount"
-            class="context-item flex items-center justify-between gap-4"
-            @click="
-              emit('paste', browser.path.value);
-              context = null;
-            "
-          >
-            <span>{{ t('fileManager.actions.paste') }}</span
-            ><span class="text-xs text-text-secondary">{{ shortcutHints.paste }}</span>
-          </button>
-          <button class="context-item" @click="copyPath(context.entry)">{{ t('fileManager.actions.copyPath') }}</button>
+		<UiContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" auto-width @close="context = null">
+			<template v-if="context.scope === 'entry'">
+				<template v-if="device.isMobile.value || device.hasTouch.value">
+					<button v-if="download" class="context-item" @click="download(contextEntries())">
+						{{ contextDownloadLabel }}
+					</button>
+					<button class="context-item flex items-center justify-between gap-4" @click="contextAction('move')">
+						<span>{{ t('fileManager.actions.cut') }}</span
+						><span class="text-xs text-text-secondary">{{ shortcutHints.cut }}</span>
+					</button>
+					<button class="context-item flex items-center justify-between gap-4" @click="contextAction('copy')">
+						<span>{{ t('fileManager.actions.copy') }}</span
+						><span class="text-xs text-text-secondary">{{ shortcutHints.copy }}</span>
+					</button>
+					<button
+						v-if="props.clipboardCount"
+						class="context-item flex items-center justify-between gap-4"
+						@click="
+							emit('paste', browser.path.value);
+							context = null;
+						"
+					>
+						<span>{{ t('fileManager.actions.paste') }}</span
+						><span class="text-xs text-text-secondary">{{ shortcutHints.paste }}</span>
+					</button>
+					<button class="context-item" @click="copyPath(context.entry)">
+						{{ t('fileManager.actions.copyPath') }}
+					</button>
 
-          <div class="mx-1 my-1 border-t border-border/50" role="separator"></div>
+					<div class="mx-1 my-1 border-t border-border/50" role="separator"></div>
 
-          <button class="context-item flex items-center justify-between gap-4" @click="remove(contextEntries())">
-            <span>{{ t('fileManager.actions.delete') }}</span
-            ><span class="text-xs text-text-secondary">{{ shortcutHints.delete }}</span>
-          </button>
-          <button class="context-item flex items-center justify-between gap-4" @click="begin('rename', context.entry)">
-            <span>{{ t('fileManager.actions.rename') }}</span
-            ><span class="text-xs text-text-secondary">{{ shortcutHints.rename }}</span>
-          </button>
+					<button
+						class="context-item flex items-center justify-between gap-4"
+						@click="remove(contextEntries())"
+					>
+						<span>{{ t('fileManager.actions.delete') }}</span
+						><span class="text-xs text-text-secondary">{{ shortcutHints.delete }}</span>
+					</button>
+					<button
+						class="context-item flex items-center justify-between gap-4"
+						@click="begin('rename', context.entry)"
+					>
+						<span>{{ t('fileManager.actions.rename') }}</span
+						><span class="text-xs text-text-secondary">{{ shortcutHints.rename }}</span>
+					</button>
 
-          <div class="mx-1 my-1 border-t border-border/50" role="separator"></div>
+					<div class="mx-1 my-1 border-t border-border/50" role="separator"></div>
 
-          <button class="context-item" @click="compressWithPreset('zip')">
-            {{ t('fileManager.contextMenu.compressZip') }}
-          </button>
-          <button class="context-item" @click="compressWithPreset('zip', true)">
-            {{ t('fileManager.contextMenu.compressEncryptedZip') }}
-          </button>
-          <button class="context-item" @click="compressWithPreset('tar.gz')">
-            {{ t('fileManager.contextMenu.compressTarGz') }}
-          </button>
-          <button class="context-item" @click="compressWithPreset('tar.bz2')">
-            {{ t('fileManager.contextMenu.compressTarBz2') }}
-          </button>
-          <button
-            v-if="!context.entry.metadata.isDirectory && isArchive(context.entry)"
-            class="context-item"
-            @click="contextAction('decompress')"
-          >
-            {{ t('fileManager.contextMenu.decompress') }}
-          </button>
-          <button
-            class="context-item"
-            @click="
-              emit('sendFiles', contextEntries());
-              context = null;
-            "
-          >
-            {{ t('fileManager.contextMenu.sendTo') }}
-          </button>
+					<button class="context-item" @click="compressWithPreset('zip')">
+						{{ t('fileManager.contextMenu.compressZip') }}
+					</button>
+					<button class="context-item" @click="compressWithPreset('zip', true)">
+						{{ t('fileManager.contextMenu.compressEncryptedZip') }}
+					</button>
+					<button class="context-item" @click="compressWithPreset('tar.gz')">
+						{{ t('fileManager.contextMenu.compressTarGz') }}
+					</button>
+					<button class="context-item" @click="compressWithPreset('tar.bz2')">
+						{{ t('fileManager.contextMenu.compressTarBz2') }}
+					</button>
+					<button
+						v-if="!context.entry.metadata.isDirectory && isArchive(context.entry)"
+						class="context-item"
+						@click="contextAction('decompress')"
+					>
+						{{ t('fileManager.contextMenu.decompress') }}
+					</button>
+					<button
+						class="context-item"
+						@click="
+							emit('sendFiles', contextEntries());
+							context = null;
+						"
+					>
+						{{ t('fileManager.contextMenu.sendTo') }}
+					</button>
 
-          <div class="mx-1 my-1 border-t border-border/50" role="separator"></div>
+					<div class="mx-1 my-1 border-t border-border/50" role="separator"></div>
 
-          <button class="context-item flex items-center justify-between gap-4" @click="begin('mkdir')">
-            <span>{{ t('fileManager.actions.newFolder') }}</span
-            ><span class="text-xs text-text-secondary">{{ shortcutHints.newFolder }}</span>
-          </button>
-          <button class="context-item" @click="begin('file')">{{ t('fileManager.actions.newFile') }}</button>
-          <button
-            class="context-item"
-            @click="
-              emit('upload', browser.path.value);
-              context = null;
-            "
-          >
-            {{ t('fileManager.actions.upload') }}
-          </button>
-          <button class="context-item" @click="begin('chmod', context.entry)">
-            {{ t('fileManager.actions.changePermissions') }}
-          </button>
-          <button
-            class="context-item flex items-center justify-between gap-4"
-            @click="
-              refresh();
-              context = null;
-            "
-          >
-            <span>{{ t('fileManager.actions.refresh') }}</span
-            ><span class="text-xs text-text-secondary">{{ shortcutHints.refresh }}</span>
-          </button>
-        </template>
+					<button class="context-item flex items-center justify-between gap-4" @click="begin('mkdir')">
+						<span>{{ t('fileManager.actions.newFolder') }}</span
+						><span class="text-xs text-text-secondary">{{ shortcutHints.newFolder }}</span>
+					</button>
+					<button class="context-item" @click="begin('file')">{{ t('fileManager.actions.newFile') }}</button>
+					<button
+						class="context-item"
+						@click="
+							emit('upload', browser.path.value);
+							context = null;
+						"
+					>
+						{{ t('fileManager.actions.upload') }}
+					</button>
+					<button class="context-item" @click="begin('chmod', context.entry)">
+						{{ t('fileManager.actions.changePermissions') }}
+					</button>
+					<button
+						class="context-item flex items-center justify-between gap-4"
+						@click="
+							refresh();
+							context = null;
+						"
+					>
+						<span>{{ t('fileManager.actions.refresh') }}</span
+						><span class="text-xs text-text-secondary">{{ shortcutHints.refresh }}</span>
+					</button>
+				</template>
 
-        <template v-else>
-          <button class="context-item" @click="contextAction('open')">
-            {{ t('common.open') }}
-          </button>
-          <button
-            v-if="canOpenAsText(context.entry)"
-            class="context-item"
-            @click="
-              emit('openAsText', context.entry);
-              context = null;
-            "
-          >
-            {{ t('fileManager.actions.openAsText') }}
-          </button>
-          <button v-if="download" class="context-item" @click="download(contextEntries())">
-            {{ contextDownloadLabel }}
-          </button>
-          <button class="context-item" @click="copyPath(context.entry)">{{ t('fileManager.actions.copyPath') }}</button>
-          <button
-            v-if="props.clipboardCount"
-            class="context-item"
-            @click="
-              emit('paste', browser.path.value);
-              context = null;
-            "
-          >
-            {{ t('fileManager.actions.paste') }}
-          </button>
-          <button class="context-item" @click="contextAction('copy')">{{ t('fileManager.actions.copy') }}</button>
-          <button class="context-item" @click="contextAction('move')">{{ t('fileManager.actions.cut') }}</button>
-          <button
-            class="context-item"
-            @click="
-              emit('sendFiles', contextEntries());
-              context = null;
-            "
-          >
-            {{ t('fileManager.actions.sendFiles') }}
-          </button>
-          <button
-            class="context-item flex items-center justify-between"
-            aria-haspopup="menu"
-            :aria-expanded="Boolean(compressSubmenu)"
-            @mouseenter="openCompressSubmenu"
-            @focus="openCompressSubmenu"
-          >
-            <span>{{ t('fileManager.contextMenu.compress') }}</span
-            ><span aria-hidden="true">›</span>
-          </button>
-          <button
-            v-if="!context.entry.metadata.isDirectory && isArchive(context.entry)"
-            class="context-item"
-            @click="contextAction('decompress')"
-          >
-            {{ t('fileManager.contextMenu.decompress') }}
-          </button>
-          <button class="context-item" @click="begin('rename', context.entry)">
-            {{ t('fileManager.actions.rename') }}
-          </button>
-          <button class="context-item" @click="begin('chmod', context.entry)">
-            {{ t('fileManager.actions.changePermissions') }}
-          </button>
-          <button class="context-item text-error" @click="remove(contextEntries())">
-            {{ t('fileManager.actions.delete') }}
-          </button>
-        </template>
-      </template>
-      <template v-else>
-        <button
-          v-if="props.clipboardCount"
-          class="context-item"
-          @click="
-            emit('paste', context.destination);
-            context = null;
-          "
-        >
-          {{ t('fileManager.actions.paste') }}
-        </button>
-        <template v-if="context.scope === 'current-directory'">
-          <button class="context-item" @click="begin('mkdir')">{{ t('fileManager.actions.newFolder') }}</button>
-          <button class="context-item" @click="begin('file')">{{ t('fileManager.actions.newFile') }}</button>
-          <button
-            class="context-item"
-            @click="
-              emit('upload', browser.path.value);
-              context = null;
-            "
-          >
-            {{ t('fileManager.actions.upload') }}
-          </button>
-        </template>
-        <button
-          class="context-item"
-          @click="
-            refresh();
-            context = null;
-          "
-        >
-          {{ t('fileManager.actions.refresh') }}
-        </button>
-      </template>
-    </UiContextMenu>
+				<template v-else>
+					<button class="context-item" @click="contextAction('open')">
+						{{ t('common.open') }}
+					</button>
+					<button
+						v-if="canOpenAsText(context.entry)"
+						class="context-item"
+						@click="
+							emit('openAsText', context.entry);
+							context = null;
+						"
+					>
+						{{ t('fileManager.actions.openAsText') }}
+					</button>
+					<button v-if="download" class="context-item" @click="download(contextEntries())">
+						{{ contextDownloadLabel }}
+					</button>
+					<button class="context-item" @click="copyPath(context.entry)">
+						{{ t('fileManager.actions.copyPath') }}
+					</button>
+					<button
+						v-if="props.clipboardCount"
+						class="context-item"
+						@click="
+							emit('paste', browser.path.value);
+							context = null;
+						"
+					>
+						{{ t('fileManager.actions.paste') }}
+					</button>
+					<button class="context-item" @click="contextAction('copy')">
+						{{ t('fileManager.actions.copy') }}
+					</button>
+					<button class="context-item" @click="contextAction('move')">
+						{{ t('fileManager.actions.cut') }}
+					</button>
+					<button
+						class="context-item"
+						@click="
+							emit('sendFiles', contextEntries());
+							context = null;
+						"
+					>
+						{{ t('fileManager.actions.sendFiles') }}
+					</button>
+					<button
+						class="context-item flex items-center justify-between"
+						aria-haspopup="menu"
+						:aria-expanded="Boolean(compressSubmenu)"
+						@mouseenter="openCompressSubmenu"
+						@focus="openCompressSubmenu"
+					>
+						<span>{{ t('fileManager.contextMenu.compress') }}</span
+						><span aria-hidden="true">›</span>
+					</button>
+					<button
+						v-if="!context.entry.metadata.isDirectory && isArchive(context.entry)"
+						class="context-item"
+						@click="contextAction('decompress')"
+					>
+						{{ t('fileManager.contextMenu.decompress') }}
+					</button>
+					<button class="context-item" @click="begin('rename', context.entry)">
+						{{ t('fileManager.actions.rename') }}
+					</button>
+					<button class="context-item" @click="begin('chmod', context.entry)">
+						{{ t('fileManager.actions.changePermissions') }}
+					</button>
+					<button class="context-item text-error" @click="remove(contextEntries())">
+						{{ t('fileManager.actions.delete') }}
+					</button>
+				</template>
+			</template>
+			<template v-else>
+				<button
+					v-if="props.clipboardCount"
+					class="context-item"
+					@click="
+						emit('paste', context.destination);
+						context = null;
+					"
+				>
+					{{ t('fileManager.actions.paste') }}
+				</button>
+				<template v-if="context.scope === 'current-directory'">
+					<button class="context-item" @click="begin('mkdir')">
+						{{ t('fileManager.actions.newFolder') }}
+					</button>
+					<button class="context-item" @click="begin('file')">{{ t('fileManager.actions.newFile') }}</button>
+					<button
+						class="context-item"
+						@click="
+							emit('upload', browser.path.value);
+							context = null;
+						"
+					>
+						{{ t('fileManager.actions.upload') }}
+					</button>
+				</template>
+				<button
+					class="context-item"
+					@click="
+						refresh();
+						context = null;
+					"
+				>
+					{{ t('fileManager.actions.refresh') }}
+				</button>
+			</template>
+		</UiContextMenu>
 
-    <UiContextMenu
-      v-if="compressSubmenu"
-      :visible="true"
-      :x="compressSubmenu.x"
-      :y="compressSubmenu.y"
-      :width="220"
-      :z-index="140"
-      :blocking-layer="false"
-      @close="compressSubmenu = null"
-    >
-      <div :data-side="compressSubmenu.side" class="w-full">
-        <button class="context-item" @click="compressWithPreset('zip')">
-          {{ t('fileManager.contextMenu.compressZip') }}
-        </button>
-        <button class="context-item" @click="compressWithPreset('zip', true)">
-          {{ t('fileManager.contextMenu.compressEncryptedZip') }}
-        </button>
-        <button class="context-item" @click="compressWithPreset('tar.gz')">
-          {{ t('fileManager.contextMenu.compressTarGz') }}
-        </button>
-        <button class="context-item" @click="compressWithPreset('tar.bz2')">
-          {{ t('fileManager.contextMenu.compressTarBz2') }}
-        </button>
-      </div>
-    </UiContextMenu>
+		<UiContextMenu
+			v-if="compressSubmenu"
+			:visible="true"
+			:x="compressSubmenu.x"
+			:y="compressSubmenu.y"
+			:width="220"
+			:z-index="140"
+			:blocking-layer="false"
+			@close="compressSubmenu = null"
+		>
+			<div :data-side="compressSubmenu.side" class="w-full">
+				<button class="context-item" @click="compressWithPreset('zip')">
+					{{ t('fileManager.contextMenu.compressZip') }}
+				</button>
+				<button class="context-item" @click="compressWithPreset('zip', true)">
+					{{ t('fileManager.contextMenu.compressEncryptedZip') }}
+				</button>
+				<button class="context-item" @click="compressWithPreset('tar.gz')">
+					{{ t('fileManager.contextMenu.compressTarGz') }}
+				</button>
+				<button class="context-item" @click="compressWithPreset('tar.bz2')">
+					{{ t('fileManager.contextMenu.compressTarBz2') }}
+				</button>
+			</div>
+		</UiContextMenu>
 
-    <UiOverlayPanel
-      :visible="Boolean(action)"
-      :z-index="100"
-      :close-on-escape="true"
-      panel-class="max-w-md flex flex-col p-5"
-      :data-action-type="action || ''"
-      role="dialog"
-      :aria-modal="true"
-      :aria-label="actionTitle"
-      @close="action = null"
-    >
-      <button
-        type="button"
-        class="absolute right-3 top-3 z-10 p-1 text-text-secondary transition-colors hover:text-foreground"
-        :title="t('fileManager.modals.buttons.close')"
-        :aria-label="t('fileManager.modals.buttons.close')"
-        @click="action = null"
-      >
-        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-      <h3 class="mb-4 shrink-0 text-center text-xl font-semibold">{{ actionTitle }}</h3>
-      <form class="flex-grow" @submit.prevent="submit">
-        <label for="fileManagerActionValue" class="mb-1 block text-sm font-medium text-text-secondary">
-          {{ actionLabel }}
-        </label>
-        <input
-          id="fileManagerActionValue"
-          ref="actionInput"
-          v-model="value"
-          type="text"
-          class="w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
-          :placeholder="actionPlaceholder"
-        />
-        <p v-if="createNameConflict" class="mt-1 text-xs text-error">
-          {{ t('fileManager.errors.entryExists', { name: value.trim() }) }}
-        </p>
-        <p
-          v-else-if="action === 'chmod' && value.trim() && !/^[0-7]{3,4}$/.test(value.trim())"
-          class="mt-1 text-xs text-error"
-        >
-          {{ t('fileManager.errors.invalidPermissionsFormat') }}
-        </p>
-        <p v-else-if="action === 'chmod'" class="mt-1 text-xs text-text-secondary">
-          {{ t('fileManager.modals.chmodHelp') }}
-        </p>
-      </form>
-      <div class="mt-6 flex shrink-0 justify-end gap-3">
-        <button
-          type="button"
-          class="rounded-md border border-border/50 bg-background px-4 py-2 text-sm font-medium text-text-secondary transition-colors duration-150 hover:bg-border hover:text-foreground"
-          @click="action = null"
-        >
-          {{ t('fileManager.modals.buttons.cancel') }}
-        </button>
-        <button
-          type="button"
-          class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-button-hover disabled:cursor-not-allowed disabled:opacity-50"
-          :disabled="actionConfirmDisabled"
-          @click="submit"
-        >
-          {{ actionConfirmLabel }}
-        </button>
-      </div>
-    </UiOverlayPanel>
-    <FilesystemCatalogModal
-      :visible="catalogVisible"
-      :current-path="browser.path.value"
-      :trigger-element="favoriteButton"
-      @close="catalogVisible = false"
-      @navigate="navigate"
-      @terminal="sendPathToTerminal"
-    />
-  </section>
+		<UiOverlayPanel
+			:visible="Boolean(action)"
+			:z-index="100"
+			:close-on-escape="true"
+			panel-class="max-w-md flex flex-col p-5"
+			:data-action-type="action || ''"
+			role="dialog"
+			:aria-modal="true"
+			:aria-label="actionTitle"
+			@close="action = null"
+		>
+			<button
+				type="button"
+				class="absolute right-3 top-3 z-10 p-1 text-text-secondary transition-colors hover:text-foreground"
+				:title="t('fileManager.modals.buttons.close')"
+				:aria-label="t('fileManager.modals.buttons.close')"
+				@click="action = null"
+			>
+				<svg
+					class="h-5 w-5"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+					stroke-width="2"
+					aria-hidden="true"
+				>
+					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+				</svg>
+			</button>
+			<h3 class="mb-4 shrink-0 text-center text-xl font-semibold">{{ actionTitle }}</h3>
+			<form class="flex-grow" @submit.prevent="submit">
+				<label for="fileManagerActionValue" class="mb-1 block text-sm font-medium text-text-secondary">
+					{{ actionLabel }}
+				</label>
+				<input
+					id="fileManagerActionValue"
+					ref="actionInput"
+					v-model="value"
+					type="text"
+					class="w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
+					:placeholder="actionPlaceholder"
+				/>
+				<p v-if="createNameConflict" class="mt-1 text-xs text-error">
+					{{ t('fileManager.errors.entryExists', { name: value.trim() }) }}
+				</p>
+				<p
+					v-else-if="action === 'chmod' && value.trim() && !/^[0-7]{3,4}$/.test(value.trim())"
+					class="mt-1 text-xs text-error"
+				>
+					{{ t('fileManager.errors.invalidPermissionsFormat') }}
+				</p>
+				<p v-else-if="action === 'chmod'" class="mt-1 text-xs text-text-secondary">
+					{{ t('fileManager.modals.chmodHelp') }}
+				</p>
+			</form>
+			<div class="mt-6 flex shrink-0 justify-end gap-3">
+				<button
+					type="button"
+					class="rounded-md border border-border/50 bg-background px-4 py-2 text-sm font-medium text-text-secondary transition-colors duration-150 hover:bg-border hover:text-foreground"
+					@click="action = null"
+				>
+					{{ t('fileManager.modals.buttons.cancel') }}
+				</button>
+				<button
+					type="button"
+					class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-button-hover disabled:cursor-not-allowed disabled:opacity-50"
+					:disabled="actionConfirmDisabled"
+					@click="submit"
+				>
+					{{ actionConfirmLabel }}
+				</button>
+			</div>
+		</UiOverlayPanel>
+		<FilesystemCatalogModal
+			:visible="catalogVisible"
+			:current-path="browser.path.value"
+			:trigger-element="favoriteButton"
+			@close="catalogVisible = false"
+			@navigate="navigate"
+			@terminal="sendPathToTerminal"
+		/>
+	</section>
 </template>
 
 <style scoped src="./FileManager.css"></style>

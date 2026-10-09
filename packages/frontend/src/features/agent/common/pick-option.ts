@@ -6,4 +6,4 @@ export const optionalOptionValue = (value: unknown): string => (value === NONE_O
 
 /** Narrows an untyped select payload back to the field's literal union, ignoring anything unknown. */
 export const pickOption = <T extends string>(value: unknown, allowed: readonly T[]): T | null =>
-  typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : null;
+	typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : null;

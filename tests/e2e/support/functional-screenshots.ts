@@ -6,58 +6,58 @@ const e2eRoot = path.resolve(__dirname, '..');
 const defaultOutputDir = path.join(e2eRoot, '.tmp', 'functional-screenshots');
 
 export const functionalScreenshotsEnabled = (): boolean =>
-  /^(1|true|yes)$/i.test(process.env.E2E_CAPTURE_SCREENSHOTS ?? '');
+	/^(1|true|yes)$/i.test(process.env.E2E_CAPTURE_SCREENSHOTS ?? '');
 
 function screenshotOutputDir(): string {
-  const configured = process.env.E2E_SCREENSHOT_OUTPUT_DIR?.trim();
-  if (!configured) return defaultOutputDir;
-  return path.isAbsolute(configured) ? configured : path.resolve(e2eRoot, configured);
+	const configured = process.env.E2E_SCREENSHOT_OUTPUT_DIR?.trim();
+	if (!configured) return defaultOutputDir;
+	return path.isAbsolute(configured) ? configured : path.resolve(e2eRoot, configured);
 }
 
 export async function captureFunctionalScreenshot(
-  page: Page,
-  filename: string,
-  options: { viewport?: { width: number; height: number } } = {},
+	page: Page,
+	filename: string,
+	options: { viewport?: { width: number; height: number } } = {},
 ): Promise<boolean> {
-  if (!functionalScreenshotsEnabled()) return false;
+	if (!functionalScreenshotsEnabled()) return false;
 
-  if (path.basename(filename) !== filename || !/^[A-Za-z0-9][A-Za-z0-9._-]*\.png$/.test(filename)) {
-    throw new Error(`Functional screenshot filename must be a plain .png basename: ${filename}`);
-  }
-  if (/^m\d{2}(?:[-_.]|$)/i.test(filename)) {
-    throw new Error(`Functional screenshot filename must describe the feature, not a module id: ${filename}`);
-  }
+	if (path.basename(filename) !== filename || !/^[A-Za-z0-9][A-Za-z0-9._-]*\.png$/.test(filename)) {
+		throw new Error(`Functional screenshot filename must be a plain .png basename: ${filename}`);
+	}
+	if (/^m\d{2}(?:[-_.]|$)/i.test(filename)) {
+		throw new Error(`Functional screenshot filename must describe the feature, not a module id: ${filename}`);
+	}
 
-  const outputDir = screenshotOutputDir();
-  await mkdir(outputDir, { recursive: true });
+	const outputDir = screenshotOutputDir();
+	await mkdir(outputDir, { recursive: true });
 
-  const originalViewport = page.viewportSize();
-  const targetViewport = options.viewport;
-  const shouldRestoreViewport = Boolean(
-    targetViewport &&
-    originalViewport &&
-    (originalViewport.width !== targetViewport.width || originalViewport.height !== targetViewport.height),
-  );
+	const originalViewport = page.viewportSize();
+	const targetViewport = options.viewport;
+	const shouldRestoreViewport = Boolean(
+		targetViewport &&
+		originalViewport &&
+		(originalViewport.width !== targetViewport.width || originalViewport.height !== targetViewport.height),
+	);
 
-  if (targetViewport && shouldRestoreViewport) {
-    await page.setViewportSize(targetViewport);
-    await page.evaluate(
-      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
-    );
-  }
+	if (targetViewport && shouldRestoreViewport) {
+		await page.setViewportSize(targetViewport);
+		await page.evaluate(
+			() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+		);
+	}
 
-  try {
-    await page.screenshot({
-      path: path.join(outputDir, filename),
-      fullPage: false,
-      animations: 'disabled',
-      caret: 'hide',
-    });
-  } finally {
-    if (shouldRestoreViewport && originalViewport) {
-      await page.setViewportSize(originalViewport);
-    }
-  }
+	try {
+		await page.screenshot({
+			path: path.join(outputDir, filename),
+			fullPage: false,
+			animations: 'disabled',
+			caret: 'hide',
+		});
+	} finally {
+		if (shouldRestoreViewport && originalViewport) {
+			await page.setViewportSize(originalViewport);
+		}
+	}
 
-  return true;
+	return true;
 }

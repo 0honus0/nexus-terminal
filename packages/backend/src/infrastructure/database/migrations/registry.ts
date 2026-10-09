@@ -7,9 +7,9 @@ import type { SqliteMigration } from './migration.types';
 
 // Global IDs and historical ordering remain authoritative across definition modules.
 export const definedMigrations: SqliteMigration[] = [
-  ...coreMigrations,
-  ...agentRuntimeMigrations,
-  ...agentCapabilitiesMigrations,
-  ...agentHostMigrations,
-  ...executionBudgetMigrations,
+	...coreMigrations,
+	...agentRuntimeMigrations,
+	...agentCapabilitiesMigrations,
+	...agentHostMigrations,
+	...executionBudgetMigrations,
 ];

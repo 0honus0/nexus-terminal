@@ -1,49 +1,49 @@
 import type { AgentJsonValueDto, AgentToolRiskDto, AgentVersionedRequestDto } from './agent-common.js';
 
 export interface AgentToolPreconditionDto {
-  kind: 'fileHash' | 'metadata' | 'serviceState';
-  key: string;
-  observedValue: AgentJsonValueDto;
+	kind: 'fileHash' | 'metadata' | 'serviceState';
+	key: string;
+	observedValue: AgentJsonValueDto;
 }
 
 export interface AgentToolTargetBaseDto {
-  targetIdentity: string;
-  endpoint: string;
-  loginUser: string;
-  configurationHash: string;
-  connectionId?: number;
-  integrationId?: string;
-  schemaHash?: string;
-  browserSessionId?: string;
-  snapshotId?: string;
-  hostKeyTrust?: 'unavailable';
+	targetIdentity: string;
+	endpoint: string;
+	loginUser: string;
+	configurationHash: string;
+	connectionId?: number;
+	integrationId?: string;
+	schemaHash?: string;
+	browserSessionId?: string;
+	snapshotId?: string;
+	hostKeyTrust?: 'unavailable';
 }
 
 export interface AgentCanonicalToolTargetDto extends AgentToolTargetBaseDto {
-  kind: 'ssh';
-  target: 'ssh';
-  id: string;
+	kind: 'ssh';
+	target: 'ssh';
+	id: string;
 }
 
 export interface AgentNonTargetToolTargetDto extends AgentToolTargetBaseDto {
-  kind: 'integration' | 'browser' | 'run';
+	kind: 'integration' | 'browser' | 'run';
 }
 
 export type AgentToolTargetDto = AgentCanonicalToolTargetDto | AgentNonTargetToolTargetDto;
 
 export interface AgentToolInspectionDto {
-  toolName: string;
-  toolVersion: string;
-  normalizedArguments: AgentJsonValueDto;
-  target: AgentToolTargetDto;
-  resourceKeys: string[];
-  risk: AgentToolRiskDto;
-  mutation: boolean;
-  operationHash: string;
-  operationHashVersion: 1;
-  preconditions: AgentToolPreconditionDto[];
-  policyRevision: number;
-  inputRevision: number;
+	toolName: string;
+	toolVersion: string;
+	normalizedArguments: AgentJsonValueDto;
+	target: AgentToolTargetDto;
+	resourceKeys: string[];
+	risk: AgentToolRiskDto;
+	mutation: boolean;
+	operationHash: string;
+	operationHashVersion: 1;
+	preconditions: AgentToolPreconditionDto[];
+	policyRevision: number;
+	inputRevision: number;
 }
 
 export type AgentApprovalKindDto = 'tool' | 'acp_permission';
@@ -51,32 +51,32 @@ export type AgentApprovalStatusDto = 'requested' | 'approved' | 'denied' | 'expi
 export type AgentApprovalDecisionDto = 'approved' | 'denied';
 
 export interface AgentApprovalViewDto {
-  id: string;
-  userId: number;
-  appId: string;
-  runId: string;
-  toolCallId: string;
-  requestedByRuntimeId: string;
-  operationHash: string;
-  operationHashVersion: 1;
-  kind: AgentApprovalKindDto;
-  status: AgentApprovalStatusDto;
-  policyRevision: number;
-  inputRevision: number;
-  decidedByUserId: number | null;
-  decidedAt: number | null;
-  consumedAt: number | null;
-  requestedAt: number;
-  expiresAt: number;
-  version: number;
-  inspection: AgentToolInspectionDto;
+	id: string;
+	userId: number;
+	appId: string;
+	runId: string;
+	toolCallId: string;
+	requestedByRuntimeId: string;
+	operationHash: string;
+	operationHashVersion: 1;
+	kind: AgentApprovalKindDto;
+	status: AgentApprovalStatusDto;
+	policyRevision: number;
+	inputRevision: number;
+	decidedByUserId: number | null;
+	decidedAt: number | null;
+	consumedAt: number | null;
+	requestedAt: number;
+	expiresAt: number;
+	version: number;
+	inspection: AgentToolInspectionDto;
 }
 
 export interface AgentApprovalResolveFieldsDto {
-  decision: AgentApprovalDecisionDto;
-  operationHash: string;
-  expectedVersion: number;
-  feedback?: string;
+	decision: AgentApprovalDecisionDto;
+	operationHash: string;
+	expectedVersion: number;
+	feedback?: string;
 }
 
 export type AgentApprovalResolveRequestDto = AgentVersionedRequestDto<AgentApprovalResolveFieldsDto>;

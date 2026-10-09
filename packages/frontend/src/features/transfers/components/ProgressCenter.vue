@@ -1,639 +1,680 @@
 <script setup lang="ts">
-  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-  import { useI18n } from 'vue-i18n';
-  import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
-  import { useDraggablePosition, useResizeHandle } from '@/foundation/interaction';
-  import { UiResizeHandle } from '@/foundation/ui';
-  import type { TransferTask } from '../model/transfer';
-  import { transferTaskErrorDescriptor, transferTaskWarningDescriptor } from '../presentation-transfer-message';
+	import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+	import { useI18n } from 'vue-i18n';
+	import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
+	import { useDraggablePosition, useResizeHandle } from '@/foundation/interaction';
+	import { UiResizeHandle } from '@/foundation/ui';
+	import type { TransferTask } from '../model/transfer';
+	import { transferTaskErrorDescriptor, transferTaskWarningDescriptor } from '../presentation-transfer-message';
 
-  interface ProgressWindowGeometry {
-    width: number;
-    height: number;
-    x: number;
-    y: number;
-  }
-  const progressWindowStorage = {
-    namespace: 'transfers.progress-window',
-    version: 1,
-    codec: jsonStorageCodec<ProgressWindowGeometry>((value) => {
-      if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-      const candidate = value as Record<string, unknown>;
-      return [candidate.width, candidate.height, candidate.x, candidate.y].every(
-        (entry) => typeof entry === 'number' && Number.isFinite(entry),
-      )
-        ? {
-            width: candidate.width as number,
-            height: candidate.height as number,
-            x: candidate.x as number,
-            y: candidate.y as number,
-          }
-        : undefined;
-    }),
-    legacyKeys: ['nexus.transfer-progress-window'],
-  } as const;
-  const MIN_WIDTH = 280;
-  const MIN_HEIGHT = 130;
+	interface ProgressWindowGeometry {
+		width: number;
+		height: number;
+		x: number;
+		y: number;
+	}
+	const progressWindowStorage = {
+		namespace: 'transfers.progress-window',
+		version: 1,
+		codec: jsonStorageCodec<ProgressWindowGeometry>((value) => {
+			if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+			const candidate = value as Record<string, unknown>;
+			return [candidate.width, candidate.height, candidate.x, candidate.y].every(
+				(entry) => typeof entry === 'number' && Number.isFinite(entry),
+			)
+				? {
+						width: candidate.width as number,
+						height: candidate.height as number,
+						x: candidate.x as number,
+						y: candidate.y as number,
+					}
+				: undefined;
+		}),
+		legacyKeys: ['nexus.transfer-progress-window'],
+	} as const;
+	const MIN_WIDTH = 280;
+	const MIN_HEIGHT = 130;
 
-  const props = withDefaults(defineProps<{ tasks: TransferTask[]; sourceLabel?: string; teleport?: boolean }>(), {
-    teleport: true,
-  });
-  const emit = defineEmits<{ cancel: [id: string]; cancelAll: []; remove: [id: string]; hide: [] }>();
-  const { t } = useI18n();
-  const panel = ref<HTMLElement | null>(null);
-  const width = ref(360);
-  const height = ref(190);
-  const position = ref({ x: 16, y: 16 });
-  const initialized = ref(false);
-  const aggregateSpeed = ref(0);
-  let speedTimer: number | undefined;
-  let lastSpeedSampleAt = 0;
-  let lastBytesWritten = 0;
+	const props = withDefaults(defineProps<{ tasks: TransferTask[]; sourceLabel?: string; teleport?: boolean }>(), {
+		teleport: true,
+	});
+	const emit = defineEmits<{ cancel: [id: string]; cancelAll: []; remove: [id: string]; hide: [] }>();
+	const { t } = useI18n();
+	const panel = ref<HTMLElement | null>(null);
+	const width = ref(360);
+	const height = ref(190);
+	const position = ref({ x: 16, y: 16 });
+	const initialized = ref(false);
+	const aggregateSpeed = ref(0);
+	let speedTimer: number | undefined;
+	let lastSpeedSampleAt = 0;
+	let lastBytesWritten = 0;
 
-  const availableWidth = (): number => Math.max(1, window.innerWidth - 16);
-  const availableHeight = (): number => Math.max(1, window.innerHeight - 16);
-  const responsiveMinWidth = (): number => Math.min(MIN_WIDTH, availableWidth());
-  const responsiveMinHeight = (): number => Math.min(MIN_HEIGHT, availableHeight());
+	const availableWidth = (): number => Math.max(1, window.innerWidth - 16);
 
-  const sorted = computed(() => [...props.tasks].sort((a, b) => b.createdAt - a.createdAt));
-  const done = (status: string) => ['completed', 'cancelled', 'skipped', 'partial', 'error'].includes(status);
-  const activeTasks = computed(() => sorted.value.filter((task) => !done(task.status)));
-  const presentationMode = computed<'upload' | 'archive' | 'transfer' | 'mixed'>(() => {
-    if (sorted.value.length && sorted.value.every((task) => task.kind === 'upload')) return 'upload';
-    if (sorted.value.length && sorted.value.every((task) => task.kind === 'compress' || task.kind === 'decompress'))
-      return 'archive';
-    if (sorted.value.length && sorted.value.every((task) => ['copy', 'move', 'transfer'].includes(task.kind)))
-      return 'transfer';
-    return 'mixed';
-  });
-  const formatBytes = (bytes: number): string => {
-    const value = Math.max(0, bytes);
-    if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(1)} GB`;
-    if (value >= 1024 ** 2) return `${(value / 1024 ** 2).toFixed(1)} MB`;
-    if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
-    return `${Math.round(value)} B`;
-  };
-  const currentFilename = (task: TransferTask): string => {
-    const value = task.currentFile || task.label;
-    return value.split(/[\/]/).filter(Boolean).at(-1) || value;
-  };
-  const archiveLabel = (task: TransferTask): string => t(`progressCenter.kind.${task.kind}`);
-  const localizedTransferMessage = (descriptor: ReturnType<typeof transferTaskErrorDescriptor>): string =>
-    descriptor ? t(descriptor.key, descriptor.params ?? {}) : '';
-  const taskError = (task: TransferTask): string => localizedTransferMessage(transferTaskErrorDescriptor(task));
-  const taskWarning = (task: TransferTask): string => localizedTransferMessage(transferTaskWarningDescriptor(task));
-  const totalBytesWritten = () => props.tasks.reduce((sum, task) => sum + Math.max(0, task.bytesWritten), 0);
-  const sampleAggregateSpeed = (): void => {
-    const now = performance.now();
-    const bytes = totalBytesWritten();
-    if (!lastSpeedSampleAt) {
-      lastSpeedSampleAt = now;
-      lastBytesWritten = bytes;
-      aggregateSpeed.value = 0;
-      return;
-    }
-    const elapsedSeconds = (now - lastSpeedSampleAt) / 1000;
-    const deltaBytes = bytes - lastBytesWritten;
-    aggregateSpeed.value = elapsedSeconds > 0 && deltaBytes >= 0 ? deltaBytes / elapsedSeconds : 0;
-    lastSpeedSampleAt = now;
-    lastBytesWritten = bytes;
-  };
-  const formatSpeed = (bytesPerSecond: number): string => {
-    if (bytesPerSecond >= 1024 ** 2) return `${(bytesPerSecond / 1024 ** 2).toFixed(1)} MB/s`;
-    if (bytesPerSecond >= 1024) return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
-    return `${Math.round(bytesPerSecond)} B/s`;
-  };
+	const availableHeight = (): number => Math.max(1, window.innerHeight - 16);
 
-  const clampWindow = (): void => {
-    width.value = Math.min(Math.max(responsiveMinWidth(), width.value), availableWidth());
-    height.value = Math.min(Math.max(responsiveMinHeight(), height.value), availableHeight());
-    position.value = {
-      x: Math.max(8, Math.min(position.value.x, window.innerWidth - width.value - 8)),
-      y: Math.max(8, Math.min(position.value.y, window.innerHeight - height.value - 8)),
-    };
-  };
+	const responsiveMinWidth = (): number => Math.min(MIN_WIDTH, availableWidth());
 
-  const clampRenderedWindow = (): void => {
-    const element = panel.value;
-    if (!element) return;
-    const viewportWidth = document.documentElement.clientWidth;
-    const viewportHeight = document.documentElement.clientHeight;
-    const rect = element.getBoundingClientRect();
-    const maxWidth = Math.max(1, viewportWidth - 16);
-    const maxHeight = Math.max(1, viewportHeight - 16);
-    if (rect.width > maxWidth + 0.5) width.value = maxWidth;
-    if (rect.height > maxHeight + 0.5) height.value = maxHeight;
-    const renderedWidth = Math.min(rect.width, maxWidth);
-    const renderedHeight = Math.min(rect.height, maxHeight);
-    position.value = {
-      x: Math.max(8, Math.min(position.value.x, viewportWidth - renderedWidth - 8)),
-      y: Math.max(8, Math.min(position.value.y, viewportHeight - renderedHeight - 8)),
-    };
-  };
+	const responsiveMinHeight = (): number => Math.min(MIN_HEIGHT, availableHeight());
 
-  const clampAfterRender = (): void => {
-    clampWindow();
-    void nextTick(clampRenderedWindow);
-  };
+	const sorted = computed(() => [...props.tasks].sort((a, b) => b.createdAt - a.createdAt));
 
-  const saveWindow = (): void => {
-    writeStoredValue(progressWindowStorage, {
-      width: width.value,
-      height: height.value,
-      x: position.value.x,
-      y: position.value.y,
-    });
-  };
+	const done = (status: string) => ['completed', 'cancelled', 'skipped', 'partial', 'error'].includes(status);
 
-  const restoreWindow = (): void => {
-    let restored = false;
-    const saved = readStoredValue(progressWindowStorage);
-    if (saved) {
-      width.value = saved.width;
-      height.value = saved.height;
-      position.value = { x: saved.x, y: saved.y };
-      restored = true;
-    }
+	const activeTasks = computed(() => sorted.value.filter((task) => !done(task.status)));
+	const presentationMode = computed<'upload' | 'archive' | 'transfer' | 'mixed'>(() => {
+		if (sorted.value.length && sorted.value.every((task) => task.kind === 'upload')) return 'upload';
+		if (sorted.value.length && sorted.value.every((task) => task.kind === 'compress' || task.kind === 'decompress'))
+			return 'archive';
+		if (sorted.value.length && sorted.value.every((task) => ['copy', 'move', 'transfer'].includes(task.kind)))
+			return 'transfer';
+		return 'mixed';
+	});
 
-    if (!restored) {
-      width.value = Math.min(360, availableWidth());
-      height.value = Math.min(190, availableHeight());
-      position.value = {
-        x: Math.max(8, window.innerWidth - width.value - 16),
-        y: Math.max(8, window.innerHeight - height.value - 16),
-      };
-    }
-    clampWindow();
-    initialized.value = true;
-  };
+	const formatBytes = (bytes: number): string => {
+		const value = Math.max(0, bytes);
+		if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(1)} GB`;
+		if (value >= 1024 ** 2) return `${(value / 1024 ** 2).toFixed(1)} MB`;
+		if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
+		return `${Math.round(value)} B`;
+	};
 
-  const drag = useDraggablePosition({
-    position,
-    getElement: () => panel.value,
-    canStart: (event) => !(event.target as HTMLElement).closest('button'),
-    constrain: (candidate, element) => ({
-      x: Math.max(8, Math.min(candidate.x, window.innerWidth - element.offsetWidth - 8)),
-      y: Math.max(8, Math.min(candidate.y, window.innerHeight - element.offsetHeight - 8)),
-    }),
-    onEnd: saveWindow,
-  });
+	const currentFilename = (task: TransferTask): string => {
+		const value = task.currentFile || task.label;
+		return value.split(/[\/]/).filter(Boolean).at(-1) || value;
+	};
 
-  const resize = useResizeHandle({
-    width,
-    height,
-    minWidth: responsiveMinWidth,
-    minHeight: responsiveMinHeight,
-    maxWidth: availableWidth,
-    maxHeight: availableHeight,
-    onMove: clampWindow,
-    onEnd: saveWindow,
-  });
+	const archiveLabel = (task: TransferTask): string => t(`progressCenter.kind.${task.kind}`);
 
-  onMounted(() => {
-    restoreWindow();
-    void nextTick(clampRenderedWindow);
-    sampleAggregateSpeed();
-    speedTimer = window.setInterval(sampleAggregateSpeed, 500);
-    window.addEventListener('resize', clampAfterRender);
-  });
-  onBeforeUnmount(() => {
-    if (speedTimer !== undefined) window.clearInterval(speedTimer);
-    window.removeEventListener('resize', clampAfterRender);
-  });
-  watch(
-    () => [props.tasks.length, activeTasks.value.length, presentationMode.value],
-    () => void nextTick(clampRenderedWindow),
-  );
+	const localizedTransferMessage = (descriptor: ReturnType<typeof transferTaskErrorDescriptor>): string =>
+		descriptor ? t(descriptor.key, descriptor.params ?? {}) : '';
+
+	const taskError = (task: TransferTask): string => localizedTransferMessage(transferTaskErrorDescriptor(task));
+
+	const taskWarning = (task: TransferTask): string => localizedTransferMessage(transferTaskWarningDescriptor(task));
+
+	const totalBytesWritten = () => props.tasks.reduce((sum, task) => sum + Math.max(0, task.bytesWritten), 0);
+
+	const sampleAggregateSpeed = (): void => {
+		const now = performance.now();
+		const bytes = totalBytesWritten();
+		if (!lastSpeedSampleAt) {
+			lastSpeedSampleAt = now;
+			lastBytesWritten = bytes;
+			aggregateSpeed.value = 0;
+			return;
+		}
+		const elapsedSeconds = (now - lastSpeedSampleAt) / 1000;
+		const deltaBytes = bytes - lastBytesWritten;
+		aggregateSpeed.value = elapsedSeconds > 0 && deltaBytes >= 0 ? deltaBytes / elapsedSeconds : 0;
+		lastSpeedSampleAt = now;
+		lastBytesWritten = bytes;
+	};
+
+	const formatSpeed = (bytesPerSecond: number): string => {
+		if (bytesPerSecond >= 1024 ** 2) return `${(bytesPerSecond / 1024 ** 2).toFixed(1)} MB/s`;
+		if (bytesPerSecond >= 1024) return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
+		return `${Math.round(bytesPerSecond)} B/s`;
+	};
+
+	const clampWindow = (): void => {
+		width.value = Math.min(Math.max(responsiveMinWidth(), width.value), availableWidth());
+		height.value = Math.min(Math.max(responsiveMinHeight(), height.value), availableHeight());
+		position.value = {
+			x: Math.max(8, Math.min(position.value.x, window.innerWidth - width.value - 8)),
+			y: Math.max(8, Math.min(position.value.y, window.innerHeight - height.value - 8)),
+		};
+	};
+
+	const clampRenderedWindow = (): void => {
+		const element = panel.value;
+		if (!element) return;
+		const viewportWidth = document.documentElement.clientWidth;
+		const viewportHeight = document.documentElement.clientHeight;
+		const rect = element.getBoundingClientRect();
+		const maxWidth = Math.max(1, viewportWidth - 16);
+		const maxHeight = Math.max(1, viewportHeight - 16);
+		if (rect.width > maxWidth + 0.5) width.value = maxWidth;
+		if (rect.height > maxHeight + 0.5) height.value = maxHeight;
+		const renderedWidth = Math.min(rect.width, maxWidth);
+		const renderedHeight = Math.min(rect.height, maxHeight);
+		position.value = {
+			x: Math.max(8, Math.min(position.value.x, viewportWidth - renderedWidth - 8)),
+			y: Math.max(8, Math.min(position.value.y, viewportHeight - renderedHeight - 8)),
+		};
+	};
+
+	const clampAfterRender = (): void => {
+		clampWindow();
+		void nextTick(clampRenderedWindow);
+	};
+
+	const saveWindow = (): void => {
+		writeStoredValue(progressWindowStorage, {
+			width: width.value,
+			height: height.value,
+			x: position.value.x,
+			y: position.value.y,
+		});
+	};
+
+	const restoreWindow = (): void => {
+		let restored = false;
+		const saved = readStoredValue(progressWindowStorage);
+		if (saved) {
+			width.value = saved.width;
+			height.value = saved.height;
+			position.value = { x: saved.x, y: saved.y };
+			restored = true;
+		}
+
+		if (!restored) {
+			width.value = Math.min(360, availableWidth());
+			height.value = Math.min(190, availableHeight());
+			position.value = {
+				x: Math.max(8, window.innerWidth - width.value - 16),
+				y: Math.max(8, window.innerHeight - height.value - 16),
+			};
+		}
+		clampWindow();
+		initialized.value = true;
+	};
+
+	const drag = useDraggablePosition({
+		position,
+
+		getElement: () => panel.value,
+
+		canStart: (event) => !(event.target as HTMLElement).closest('button'),
+
+		constrain: (candidate, element) => ({
+			x: Math.max(8, Math.min(candidate.x, window.innerWidth - element.offsetWidth - 8)),
+			y: Math.max(8, Math.min(candidate.y, window.innerHeight - element.offsetHeight - 8)),
+		}),
+
+		onEnd: saveWindow,
+	});
+
+	const resize = useResizeHandle({
+		width,
+		height,
+		minWidth: responsiveMinWidth,
+		minHeight: responsiveMinHeight,
+		maxWidth: availableWidth,
+		maxHeight: availableHeight,
+		onMove: clampWindow,
+		onEnd: saveWindow,
+	});
+
+	onMounted(() => {
+		restoreWindow();
+		void nextTick(clampRenderedWindow);
+		sampleAggregateSpeed();
+		speedTimer = window.setInterval(sampleAggregateSpeed, 500);
+		window.addEventListener('resize', clampAfterRender);
+	});
+	onBeforeUnmount(() => {
+		if (speedTimer !== undefined) window.clearInterval(speedTimer);
+		window.removeEventListener('resize', clampAfterRender);
+	});
+	watch(
+		() => [props.tasks.length, activeTasks.value.length, presentationMode.value],
+		() => void nextTick(clampRenderedWindow),
+	);
 </script>
 
 <template>
-  <Teleport to="body" :disabled="!props.teleport">
-    <div
-      v-show="initialized"
-      ref="panel"
-      class="transfer-progress-window fixed z-[60] flex min-h-0 flex-col overflow-hidden border border-border bg-background text-sm shadow-xl"
-      :class="[
-        `transfer-progress-window--${presentationMode}`,
-        drag.dragging.value ? 'dragging select-none' : '',
-        resize.isResizing.value ? 'resizing select-none' : '',
-      ]"
-      :style="{ left: `${position.x}px`, top: `${position.y}px`, width: `${width}px`, height: `${height}px` }"
-    >
-      <header class="transfer-progress-header shrink-0" @pointerdown="drag.startDragging">
-        <template v-if="presentationMode === 'upload'">
-          <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            <h4 class="m-0 min-w-0 flex-1 truncate text-sm font-semibold">
-              <span v-if="sourceLabel">{{ sourceLabel }} · </span>{{ t('fileManager.uploadTasks') }}
-            </h4>
-            <span
-              v-if="activeTasks.length"
-              class="shrink-0 whitespace-nowrap rounded-md bg-black/5 px-2 py-1 text-xs tabular-nums text-text-secondary dark:bg-white/5"
-            >
-              {{ t('fileManager.uploadSpeed') }} {{ formatSpeed(aggregateSpeed) }}
-            </span>
-            <button
-              type="button"
-              class="progress-icon-button h-7 w-7"
-              :title="t('progressCenter.hide')"
-              :aria-label="t('progressCenter.hide')"
-              @click="emit('hide')"
-            >
-              <i class="fas fa-minus" aria-hidden="true"></i>
-            </button>
-            <button
-              v-if="activeTasks.length > 1"
-              type="button"
-              class="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-error transition-colors hover:bg-error/10"
-              @click="emit('cancelAll')"
-            >
-              {{ t('fileManager.actions.cancelAll') }} ({{ activeTasks.length }})
-            </button>
-          </div>
-        </template>
+	<Teleport to="body" :disabled="!props.teleport">
+		<div
+			v-show="initialized"
+			ref="panel"
+			class="transfer-progress-window fixed z-[60] flex min-h-0 flex-col overflow-hidden border border-border bg-background text-sm shadow-xl"
+			:class="[
+				`transfer-progress-window--${presentationMode}`,
+				drag.dragging.value ? 'dragging select-none' : '',
+				resize.isResizing.value ? 'resizing select-none' : '',
+			]"
+			:style="{ left: `${position.x}px`, top: `${position.y}px`, width: `${width}px`, height: `${height}px` }"
+		>
+			<header class="transfer-progress-header shrink-0" @pointerdown="drag.startDragging">
+				<template v-if="presentationMode === 'upload'">
+					<div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+						<h4 class="m-0 min-w-0 flex-1 truncate text-sm font-semibold">
+							<span v-if="sourceLabel">{{ sourceLabel }} · </span>{{ t('fileManager.uploadTasks') }}
+						</h4>
+						<span
+							v-if="activeTasks.length"
+							class="shrink-0 whitespace-nowrap rounded-md bg-black/5 px-2 py-1 text-xs tabular-nums text-text-secondary dark:bg-white/5"
+						>
+							{{ t('fileManager.uploadSpeed') }} {{ formatSpeed(aggregateSpeed) }}
+						</span>
+						<button
+							type="button"
+							class="progress-icon-button h-7 w-7"
+							:title="t('progressCenter.hide')"
+							:aria-label="t('progressCenter.hide')"
+							@click="emit('hide')"
+						>
+							<i class="fas fa-minus" aria-hidden="true"></i>
+						</button>
+						<button
+							v-if="activeTasks.length > 1"
+							type="button"
+							class="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-error transition-colors hover:bg-error/10"
+							@click="emit('cancelAll')"
+						>
+							{{ t('fileManager.actions.cancelAll') }} ({{ activeTasks.length }})
+						</button>
+					</div>
+				</template>
 
-        <template v-else-if="presentationMode === 'archive'">
-          <div class="flex min-w-0 flex-1 items-center gap-2">
-            <span class="archive-icon"><i class="fas fa-box-archive" aria-hidden="true"></i></span>
-            <div class="min-w-0 flex-1">
-              <div class="truncate text-sm font-semibold">
-                <span v-if="sourceLabel">{{ sourceLabel }} · </span
-                >{{ sorted[0] ? `${archiveLabel(sorted[0])} ${sorted[0].label}` : t('progressCenter.title') }}
-              </div>
-              <div class="text-[11px] text-text-secondary">{{ t('progressCenter.running') }}</div>
-            </div>
-            <span v-if="sorted[0]" class="archive-percent">{{ Math.round(sorted[0].progress) }}%</span>
-            <button
-              type="button"
-              class="progress-icon-button h-7 w-7"
-              :title="t('progressCenter.hide')"
-              :aria-label="t('progressCenter.hide')"
-              @click="emit('hide')"
-            >
-              <i class="fas fa-minus" aria-hidden="true"></i>
-            </button>
-          </div>
-        </template>
+				<template v-else-if="presentationMode === 'archive'">
+					<div class="flex min-w-0 flex-1 items-center gap-2">
+						<span class="archive-icon"><i class="fas fa-box-archive" aria-hidden="true"></i></span>
+						<div class="min-w-0 flex-1">
+							<div class="truncate text-sm font-semibold">
+								<span v-if="sourceLabel">{{ sourceLabel }} · </span
+								>{{
+									sorted[0]
+										? `${archiveLabel(sorted[0])} ${sorted[0].label}`
+										: t('progressCenter.title')
+								}}
+							</div>
+							<div class="text-[11px] text-text-secondary">{{ t('progressCenter.running') }}</div>
+						</div>
+						<span v-if="sorted[0]" class="archive-percent">{{ Math.round(sorted[0].progress) }}%</span>
+						<button
+							type="button"
+							class="progress-icon-button h-7 w-7"
+							:title="t('progressCenter.hide')"
+							:aria-label="t('progressCenter.hide')"
+							@click="emit('hide')"
+						>
+							<i class="fas fa-minus" aria-hidden="true"></i>
+						</button>
+					</div>
+				</template>
 
-        <template v-else>
-          <h4 class="m-0 min-w-0 flex-1 truncate text-sm font-semibold">
-            <span v-if="sourceLabel">{{ sourceLabel }} · </span
-            >{{ presentationMode === 'transfer' ? t('fileManager.transferTasks') : t('progressCenter.title') }}
-          </h4>
-          <div class="flex items-center gap-2">
-            <span v-if="activeTasks.length" class="whitespace-nowrap text-xs tabular-nums text-text-secondary">
-              {{ t('fileManager.transferSpeed') }} {{ formatSpeed(aggregateSpeed) }}
-            </span>
-            <button
-              v-if="activeTasks.length > 1"
-              type="button"
-              class="rounded px-2 py-1 text-xs text-error hover:bg-error/10"
-              @click="emit('cancelAll')"
-            >
-              {{ t('progressCenter.cancelAll') }}
-            </button>
-            <button
-              type="button"
-              class="progress-icon-button h-6 w-6"
-              :title="t('progressCenter.hide')"
-              :aria-label="t('progressCenter.hide')"
-              @click="emit('hide')"
-            >
-              <i class="fas fa-minus" aria-hidden="true"></i>
-            </button>
-          </div>
-        </template>
-      </header>
+				<template v-else>
+					<h4 class="m-0 min-w-0 flex-1 truncate text-sm font-semibold">
+						<span v-if="sourceLabel">{{ sourceLabel }} · </span
+						>{{
+							presentationMode === 'transfer' ? t('fileManager.transferTasks') : t('progressCenter.title')
+						}}
+					</h4>
+					<div class="flex items-center gap-2">
+						<span
+							v-if="activeTasks.length"
+							class="whitespace-nowrap text-xs tabular-nums text-text-secondary"
+						>
+							{{ t('fileManager.transferSpeed') }} {{ formatSpeed(aggregateSpeed) }}
+						</span>
+						<button
+							v-if="activeTasks.length > 1"
+							type="button"
+							class="rounded px-2 py-1 text-xs text-error hover:bg-error/10"
+							@click="emit('cancelAll')"
+						>
+							{{ t('progressCenter.cancelAll') }}
+						</button>
+						<button
+							type="button"
+							class="progress-icon-button h-6 w-6"
+							:title="t('progressCenter.hide')"
+							:aria-label="t('progressCenter.hide')"
+							@click="emit('hide')"
+						>
+							<i class="fas fa-minus" aria-hidden="true"></i>
+						</button>
+					</div>
+				</template>
+			</header>
 
-      <p v-if="!sorted.length" class="py-4 text-center text-sm text-text-secondary">{{ t('progressCenter.empty') }}</p>
+			<p v-if="!sorted.length" class="py-4 text-center text-sm text-text-secondary">
+				{{ t('progressCenter.empty') }}
+			</p>
 
-      <ul
-        v-else-if="presentationMode === 'upload'"
-        class="progress-scrollbar m-0 min-h-0 flex-1 list-none overflow-y-auto p-3"
-      >
-        <li
-          v-for="task in sorted"
-          :key="task.id"
-          :data-task-id="task.id"
-          :data-task-kind="task.kind"
-          :data-task-status="task.status"
-          class="upload-task-row mb-1.5 text-xs last:mb-0"
-        >
-          <div class="min-w-0">
-            <div class="truncate font-medium" :title="task.label">{{ currentFilename(task) }}</div>
-            <div class="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-text-secondary">
-              <span>{{ t(`progressCenter.status.${task.status}`) }}</span>
-              <span class="tabular-nums"
-                >{{ formatBytes(task.bytesWritten)
-                }}<template v-if="task.totalBytes > 0"> / {{ formatBytes(task.totalBytes) }}</template></span
-              >
-            </div>
-            <progress
-              v-if="!done(task.status)"
-              :value="task.progress"
-              max="100"
-              class="legacy-progress mt-2 block h-1.5 w-full"
-            ></progress>
-          </div>
-          <span v-if="!done(task.status)" class="text-right text-xs tabular-nums text-text-secondary">
-            {{ Math.round(task.progress) }}%
-          </span>
-          <span v-else aria-hidden="true"></span>
-          <button
-            v-if="!done(task.status)"
-            type="button"
-            class="justify-self-end rounded-lg px-2 py-1 text-xs text-error hover:bg-error/10"
-            @click="emit('cancel', task.id)"
-          >
-            {{ t('common.cancel') }}
-          </button>
-          <button
-            v-else
-            type="button"
-            class="justify-self-end rounded px-1.5 py-0.5 text-text-secondary hover:bg-border/60"
-            :aria-label="t('common.remove')"
-            @click="emit('remove', task.id)"
-          >
-            <i class="fas fa-times" aria-hidden="true"></i>
-          </button>
-          <span v-if="task.error || task.errorKind" class="col-span-3 break-words text-xs text-error">{{
-            taskError(task)
-          }}</span>
-          <span v-else-if="task.warning || task.warningKind" class="col-span-3 break-words text-xs text-warning">{{
-            taskWarning(task)
-          }}</span>
-        </li>
-      </ul>
+			<ul
+				v-else-if="presentationMode === 'upload'"
+				class="progress-scrollbar m-0 min-h-0 flex-1 list-none overflow-y-auto p-3"
+			>
+				<li
+					v-for="task in sorted"
+					:key="task.id"
+					:data-task-id="task.id"
+					:data-task-kind="task.kind"
+					:data-task-status="task.status"
+					class="upload-task-row mb-1.5 text-xs last:mb-0"
+				>
+					<div class="min-w-0">
+						<div class="truncate font-medium" :title="task.label">{{ currentFilename(task) }}</div>
+						<div class="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-text-secondary">
+							<span>{{ t(`progressCenter.status.${task.status}`) }}</span>
+							<span class="tabular-nums"
+								>{{ formatBytes(task.bytesWritten)
+								}}<template v-if="task.totalBytes > 0">
+									/ {{ formatBytes(task.totalBytes) }}</template
+								></span
+							>
+						</div>
+						<progress
+							v-if="!done(task.status)"
+							:value="task.progress"
+							max="100"
+							class="legacy-progress mt-2 block h-1.5 w-full"
+						></progress>
+					</div>
+					<span v-if="!done(task.status)" class="text-right text-xs tabular-nums text-text-secondary">
+						{{ Math.round(task.progress) }}%
+					</span>
+					<span v-else aria-hidden="true"></span>
+					<button
+						v-if="!done(task.status)"
+						type="button"
+						class="justify-self-end rounded-lg px-2 py-1 text-xs text-error hover:bg-error/10"
+						@click="emit('cancel', task.id)"
+					>
+						{{ t('common.cancel') }}
+					</button>
+					<button
+						v-else
+						type="button"
+						class="justify-self-end rounded px-1.5 py-0.5 text-text-secondary hover:bg-border/60"
+						:aria-label="t('common.remove')"
+						@click="emit('remove', task.id)"
+					>
+						<i class="fas fa-times" aria-hidden="true"></i>
+					</button>
+					<span v-if="task.error || task.errorKind" class="col-span-3 break-words text-xs text-error">{{
+						taskError(task)
+					}}</span>
+					<span
+						v-else-if="task.warning || task.warningKind"
+						class="col-span-3 break-words text-xs text-warning"
+						>{{ taskWarning(task) }}</span
+					>
+				</li>
+			</ul>
 
-      <ul
-        v-else-if="presentationMode === 'archive'"
-        class="progress-scrollbar m-0 min-h-0 flex-1 list-none overflow-y-auto"
-      >
-        <li
-          v-for="task in sorted"
-          :key="task.id"
-          :data-task-id="task.id"
-          :data-task-kind="task.kind"
-          :data-task-status="task.status"
-          class="archive-progress-body"
-        >
-          <div class="min-w-0 truncate text-xs font-semibold" :title="task.label">
-            {{ archiveLabel(task) }} {{ task.label }}
-          </div>
-          <div class="space-y-1.5">
-            <div class="flex items-center justify-between gap-4 text-xs">
-              <span>{{ t('fileManager.archiveProgress.filesProcessed', { count: task.completedFiles }) }}</span>
-              <span v-if="task.totalFiles !== null" class="font-mono text-text-secondary"
-                >{{ task.completedFiles }}/{{ task.totalFiles }}</span
-              >
-            </div>
-            <div
-              class="archive-progress-track"
-              role="progressbar"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              :aria-valuenow="Math.round(task.progress)"
-            >
-              <div
-                class="archive-progress-value"
-                :style="{ transform: `scaleX(${Math.max(0, Math.min(100, task.progress)) / 100})` }"
-              ></div>
-            </div>
-          </div>
-          <div v-if="task.currentFile" class="archive-current-file" :title="task.currentFile">
-            <i class="far fa-file-lines" aria-hidden="true"></i
-            ><span class="truncate">{{ currentFilename(task) }}</span>
-          </div>
-          <button
-            v-if="!done(task.status)"
-            type="button"
-            class="archive-stop-button"
-            :disabled="task.status === 'cancelling'"
-            @click="emit('cancel', task.id)"
-          >
-            <i class="fas fa-stop" aria-hidden="true"></i
-            >{{ task.status === 'cancelling' ? t('progressCenter.cancelling') : t('common.cancel') }}
-          </button>
-          <button v-else type="button" class="archive-stop-button" @click="emit('remove', task.id)">
-            <i class="fas fa-times" aria-hidden="true"></i>{{ t('common.remove') }}
-          </button>
-          <p v-if="task.error || task.errorKind" class="m-0 text-xs text-error">{{ taskError(task) }}</p>
-          <p v-if="task.warning || task.warningKind" class="m-0 text-xs text-warning">{{ taskWarning(task) }}</p>
-        </li>
-      </ul>
+			<ul
+				v-else-if="presentationMode === 'archive'"
+				class="progress-scrollbar m-0 min-h-0 flex-1 list-none overflow-y-auto"
+			>
+				<li
+					v-for="task in sorted"
+					:key="task.id"
+					:data-task-id="task.id"
+					:data-task-kind="task.kind"
+					:data-task-status="task.status"
+					class="archive-progress-body"
+				>
+					<div class="min-w-0 truncate text-xs font-semibold" :title="task.label">
+						{{ archiveLabel(task) }} {{ task.label }}
+					</div>
+					<div class="space-y-1.5">
+						<div class="flex items-center justify-between gap-4 text-xs">
+							<span>{{
+								t('fileManager.archiveProgress.filesProcessed', { count: task.completedFiles })
+							}}</span>
+							<span v-if="task.totalFiles !== null" class="font-mono text-text-secondary"
+								>{{ task.completedFiles }}/{{ task.totalFiles }}</span
+							>
+						</div>
+						<div
+							class="archive-progress-track"
+							role="progressbar"
+							aria-valuemin="0"
+							aria-valuemax="100"
+							:aria-valuenow="Math.round(task.progress)"
+						>
+							<div
+								class="archive-progress-value"
+								:style="{ transform: `scaleX(${Math.max(0, Math.min(100, task.progress)) / 100})` }"
+							></div>
+						</div>
+					</div>
+					<div v-if="task.currentFile" class="archive-current-file" :title="task.currentFile">
+						<i class="far fa-file-lines" aria-hidden="true"></i
+						><span class="truncate">{{ currentFilename(task) }}</span>
+					</div>
+					<button
+						v-if="!done(task.status)"
+						type="button"
+						class="archive-stop-button"
+						:disabled="task.status === 'cancelling'"
+						@click="emit('cancel', task.id)"
+					>
+						<i class="fas fa-stop" aria-hidden="true"></i
+						>{{ task.status === 'cancelling' ? t('progressCenter.cancelling') : t('common.cancel') }}
+					</button>
+					<button v-else type="button" class="archive-stop-button" @click="emit('remove', task.id)">
+						<i class="fas fa-times" aria-hidden="true"></i>{{ t('common.remove') }}
+					</button>
+					<p v-if="task.error || task.errorKind" class="m-0 text-xs text-error">{{ taskError(task) }}</p>
+					<p v-if="task.warning || task.warningKind" class="m-0 text-xs text-warning">
+						{{ taskWarning(task) }}
+					</p>
+				</li>
+			</ul>
 
-      <ul v-else class="progress-scrollbar m-0 min-h-0 flex-1 list-none overflow-y-auto p-3">
-        <li
-          v-for="task in sorted"
-          :key="task.id"
-          :data-task-id="task.id"
-          :data-task-kind="task.kind"
-          :data-task-status="task.status"
-          class="mb-3 last:mb-0"
-        >
-          <div class="mb-1 flex min-w-0 items-center gap-2 text-xs">
-            <span class="min-w-0 flex-1 truncate" :title="task.currentFile || task.label"
-              >{{ t(`progressCenter.kind.${task.kind}`) }} · {{ currentFilename(task) }}</span
-            >
-            <span class="shrink-0 tabular-nums">{{ Math.round(task.progress * 10) / 10 }}%</span>
-          </div>
-          <progress :value="task.progress" max="100" class="legacy-progress block h-2 w-full"></progress>
-          <div class="mt-1 flex items-center justify-between gap-2 text-[11px] text-text-secondary">
-            <span :class="task.status === 'error' ? 'text-error' : ''">{{
-              task.error || task.errorKind ? taskError(task) : t(`progressCenter.status.${task.status}`)
-            }}</span>
-            <span class="shrink-0 tabular-nums">
-              <template v-if="task.totalBytes > 0"
-                >{{ formatBytes(task.bytesWritten) }} / {{ formatBytes(task.totalBytes) }}</template
-              >
-              <template v-else-if="task.totalFiles !== null"
-                >{{ task.completedFiles }} / {{ task.totalFiles }}</template
-              >
-              <template v-else>{{ formatBytes(task.bytesWritten) }}</template>
-            </span>
-          </div>
-          <div v-if="!done(task.status)" class="mt-1 flex justify-end">
-            <button type="button" class="text-xs text-error hover:underline" @click="emit('cancel', task.id)">
-              {{ t('common.cancel') }}
-            </button>
-          </div>
-        </li>
-      </ul>
+			<ul v-else class="progress-scrollbar m-0 min-h-0 flex-1 list-none overflow-y-auto p-3">
+				<li
+					v-for="task in sorted"
+					:key="task.id"
+					:data-task-id="task.id"
+					:data-task-kind="task.kind"
+					:data-task-status="task.status"
+					class="mb-3 last:mb-0"
+				>
+					<div class="mb-1 flex min-w-0 items-center gap-2 text-xs">
+						<span class="min-w-0 flex-1 truncate" :title="task.currentFile || task.label"
+							>{{ t(`progressCenter.kind.${task.kind}`) }} · {{ currentFilename(task) }}</span
+						>
+						<span class="shrink-0 tabular-nums">{{ Math.round(task.progress * 10) / 10 }}%</span>
+					</div>
+					<progress :value="task.progress" max="100" class="legacy-progress block h-2 w-full"></progress>
+					<div class="mt-1 flex items-center justify-between gap-2 text-[11px] text-text-secondary">
+						<span :class="task.status === 'error' ? 'text-error' : ''">{{
+							task.error || task.errorKind ? taskError(task) : t(`progressCenter.status.${task.status}`)
+						}}</span>
+						<span class="shrink-0 tabular-nums">
+							<template v-if="task.totalBytes > 0"
+								>{{ formatBytes(task.bytesWritten) }} / {{ formatBytes(task.totalBytes) }}</template
+							>
+							<template v-else-if="task.totalFiles !== null"
+								>{{ task.completedFiles }} / {{ task.totalFiles }}</template
+							>
+							<template v-else>{{ formatBytes(task.bytesWritten) }}</template>
+						</span>
+					</div>
+					<div v-if="!done(task.status)" class="mt-1 flex justify-end">
+						<button
+							type="button"
+							class="text-xs text-error hover:underline"
+							@click="emit('cancel', task.id)"
+						>
+							{{ t('common.cancel') }}
+						</button>
+					</div>
+				</li>
+			</ul>
 
-      <UiResizeHandle
-        class="absolute bottom-0 right-0 z-10"
-        :title="t('progressCenter.resize')"
-        :aria-label="t('progressCenter.resize')"
-        @pointerdown.stop="resize.startResize"
-      />
-    </div>
-  </Teleport>
+			<UiResizeHandle
+				class="absolute bottom-0 right-0 z-10"
+				:title="t('progressCenter.resize')"
+				:aria-label="t('progressCenter.resize')"
+				@pointerdown.stop="resize.startResize"
+			/>
+		</div>
+	</Teleport>
 </template>
 
 <style scoped>
-  .transfer-progress-window {
-    box-sizing: border-box;
-    min-width: min(280px, calc(100vw - 16px));
-    min-height: min(130px, calc(100vh - 16px));
-    max-width: calc(100vw - 16px);
-    max-height: calc(100vh - 16px);
-    border-radius: 14px;
-    background: #fff;
-    background: rgb(from var(--card-bg-color, var(--app-bg-color)) r g b / 1);
-  }
-  .transfer-progress-window--archive {
-    border-color: var(--border-color);
-  }
-  .transfer-progress-header {
-    display: flex;
-    min-height: 45px;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    border-bottom: 1px solid var(--border-color);
-    padding: 8px 10px;
-    cursor: grab;
-    background: #fff;
-    background: rgb(from var(--header-bg-color, var(--app-bg-color)) r g b / 1);
-  }
-  .transfer-progress-window--archive .transfer-progress-header {
-    background: #fff;
-    background: rgb(from var(--header-bg-color, var(--app-bg-color)) r g b / 1);
-  }
-  .dragging .transfer-progress-header {
-    cursor: grabbing;
-  }
-  .progress-icon-button {
-    display: grid;
-    flex: 0 0 auto;
-    place-items: center;
-    border: 1px solid transparent;
-    border-radius: 7px;
-    color: var(--text-color-secondary);
-    transition: 150ms ease;
-  }
-  .progress-icon-button:hover {
-    border-color: var(--border-color);
-    background: color-mix(in srgb, var(--border-color) 55%, transparent);
-    color: var(--text-color);
-  }
-  .upload-task-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    align-items: center;
-    column-gap: 0.5rem;
-    row-gap: 0.25rem;
-    padding-block: 6px;
-  }
-  .legacy-progress {
-    appearance: none;
-    overflow: hidden;
-    border-radius: 999px;
-    background: var(--border-color);
-  }
-  .legacy-progress::-webkit-progress-bar {
-    border-radius: 999px;
-    background: var(--border-color);
-  }
-  .legacy-progress::-webkit-progress-value {
-    border-radius: 999px;
-    background: var(--link-active-color);
-  }
-  .legacy-progress::-moz-progress-bar {
-    border-radius: 999px;
-    background: var(--link-active-color);
-  }
-  .archive-icon {
-    display: grid;
-    width: 30px;
-    height: 30px;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: 9px;
-    background: color-mix(in srgb, var(--link-active-color, #007bff) 20%, transparent);
-    color: var(--link-active-color, #007bff);
-  }
-  .archive-percent {
-    border-radius: 999px;
-    padding: 2px 7px;
-    background: color-mix(in srgb, var(--link-active-color, #007bff) 17%, transparent);
-    color: var(--link-active-color, #007bff);
-    font: 600 11px var(--font-family-monospace);
-  }
-  .archive-progress-body {
-    display: grid;
-    gap: 10px;
-    padding: 11px 12px 12px;
-  }
-  .archive-progress-body + .archive-progress-body {
-    border-top: 1px solid var(--border-color);
-  }
-  .archive-progress-track {
-    height: 7px;
-    overflow: hidden;
-    border-radius: 999px;
-    background: var(--border-color);
-  }
-  .archive-progress-value {
-    width: 100%;
-    height: 100%;
-    border-radius: inherit;
-    transform-origin: left center;
-    background-image: linear-gradient(
-      90deg,
-      var(--link-active-color, #007bff),
-      color-mix(in srgb, var(--link-active-color, #007bff) 55%, white)
-    );
-    transition: transform 180ms ease;
-  }
-  .archive-current-file {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: 7px;
-    border-radius: 7px;
-    background: color-mix(in srgb, var(--border-color) 40%, transparent);
-    padding: 7px 9px;
-    font-size: 12px;
-    color: var(--text-color-secondary);
-  }
-  .archive-stop-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    border: 1px solid color-mix(in srgb, var(--color-error) 40%, transparent);
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--color-error) 12%, transparent);
-    padding: 7px 10px;
-    color: var(--color-error);
-    font-size: 12px;
-    font-weight: 600;
-  }
-  .archive-stop-button:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--color-error) 20%, transparent);
-  }
-  .archive-stop-button:disabled {
-    cursor: wait;
-    opacity: 0.65;
-  }
-  .progress-scrollbar::-webkit-scrollbar {
-    width: 6px;
-  }
-  .progress-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .progress-scrollbar::-webkit-scrollbar-thumb {
-    border-radius: 10px;
-    background-color: rgba(128, 128, 128, 0.3);
-  }
-  .progress-scrollbar {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(128, 128, 128, 0.3) transparent;
-  }
-  @media (max-width: 520px) {
-    .upload-task-row {
-      grid-template-columns: minmax(0, 1fr) auto auto;
-      column-gap: 0.35rem;
-    }
-  }
+	.transfer-progress-window {
+		box-sizing: border-box;
+		min-width: min(280px, calc(100vw - 16px));
+		min-height: min(130px, calc(100vh - 16px));
+		max-width: calc(100vw - 16px);
+		max-height: calc(100vh - 16px);
+		border-radius: 14px;
+		background: #fff;
+		background: rgb(from var(--card-bg-color, var(--app-bg-color)) r g b / 1);
+	}
+	.transfer-progress-window--archive {
+		border-color: var(--border-color);
+	}
+	.transfer-progress-header {
+		display: flex;
+		min-height: 45px;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		border-bottom: 1px solid var(--border-color);
+		padding: 8px 10px;
+		cursor: grab;
+		background: #fff;
+		background: rgb(from var(--header-bg-color, var(--app-bg-color)) r g b / 1);
+	}
+	.transfer-progress-window--archive .transfer-progress-header {
+		background: #fff;
+		background: rgb(from var(--header-bg-color, var(--app-bg-color)) r g b / 1);
+	}
+	.dragging .transfer-progress-header {
+		cursor: grabbing;
+	}
+	.progress-icon-button {
+		display: grid;
+		flex: 0 0 auto;
+		place-items: center;
+		border: 1px solid transparent;
+		border-radius: 7px;
+		color: var(--text-color-secondary);
+		transition: 150ms ease;
+	}
+	.progress-icon-button:hover {
+		border-color: var(--border-color);
+		background: color-mix(in srgb, var(--border-color) 55%, transparent);
+		color: var(--text-color);
+	}
+	.upload-task-row {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto auto;
+		align-items: center;
+		column-gap: 0.5rem;
+		row-gap: 0.25rem;
+		padding-block: 6px;
+	}
+	.legacy-progress {
+		appearance: none;
+		overflow: hidden;
+		border-radius: 999px;
+		background: var(--border-color);
+	}
+	.legacy-progress::-webkit-progress-bar {
+		border-radius: 999px;
+		background: var(--border-color);
+	}
+	.legacy-progress::-webkit-progress-value {
+		border-radius: 999px;
+		background: var(--link-active-color);
+	}
+	.legacy-progress::-moz-progress-bar {
+		border-radius: 999px;
+		background: var(--link-active-color);
+	}
+	.archive-icon {
+		display: grid;
+		width: 30px;
+		height: 30px;
+		flex: 0 0 auto;
+		place-items: center;
+		border-radius: 9px;
+		background: color-mix(in srgb, var(--link-active-color, #007bff) 20%, transparent);
+		color: var(--link-active-color, #007bff);
+	}
+	.archive-percent {
+		border-radius: 999px;
+		padding: 2px 7px;
+		background: color-mix(in srgb, var(--link-active-color, #007bff) 17%, transparent);
+		color: var(--link-active-color, #007bff);
+		font: 600 11px var(--font-family-monospace);
+	}
+	.archive-progress-body {
+		display: grid;
+		gap: 10px;
+		padding: 11px 12px 12px;
+	}
+	.archive-progress-body + .archive-progress-body {
+		border-top: 1px solid var(--border-color);
+	}
+	.archive-progress-track {
+		height: 7px;
+		overflow: hidden;
+		border-radius: 999px;
+		background: var(--border-color);
+	}
+	.archive-progress-value {
+		width: 100%;
+		height: 100%;
+		border-radius: inherit;
+		transform-origin: left center;
+		background-image: linear-gradient(
+			90deg,
+			var(--link-active-color, #007bff),
+			color-mix(in srgb, var(--link-active-color, #007bff) 55%, white)
+		);
+		transition: transform 180ms ease;
+	}
+	.archive-current-file {
+		display: flex;
+		min-width: 0;
+		align-items: center;
+		gap: 7px;
+		border-radius: 7px;
+		background: color-mix(in srgb, var(--border-color) 40%, transparent);
+		padding: 7px 9px;
+		font-size: 12px;
+		color: var(--text-color-secondary);
+	}
+	.archive-stop-button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 7px;
+		border: 1px solid color-mix(in srgb, var(--color-error) 40%, transparent);
+		border-radius: 8px;
+		background: color-mix(in srgb, var(--color-error) 12%, transparent);
+		padding: 7px 10px;
+		color: var(--color-error);
+		font-size: 12px;
+		font-weight: 600;
+	}
+	.archive-stop-button:hover:not(:disabled) {
+		background: color-mix(in srgb, var(--color-error) 20%, transparent);
+	}
+	.archive-stop-button:disabled {
+		cursor: wait;
+		opacity: 0.65;
+	}
+	.progress-scrollbar::-webkit-scrollbar {
+		width: 6px;
+	}
+	.progress-scrollbar::-webkit-scrollbar-track {
+		background: transparent;
+	}
+	.progress-scrollbar::-webkit-scrollbar-thumb {
+		border-radius: 10px;
+		background-color: rgba(128, 128, 128, 0.3);
+	}
+	.progress-scrollbar {
+		scrollbar-width: thin;
+		scrollbar-color: rgba(128, 128, 128, 0.3) transparent;
+	}
+	@media (max-width: 520px) {
+		.upload-task-row {
+			grid-template-columns: minmax(0, 1fr) auto auto;
+			column-gap: 0.35rem;
+		}
+	}
 </style>

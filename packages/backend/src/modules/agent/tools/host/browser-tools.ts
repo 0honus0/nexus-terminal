@@ -10,43 +10,43 @@ import { BrowserSessionBindingAuthority } from './browser/browser-session-bindin
 import { createBrowserTransferTools } from './browser/browser-transfer-tools';
 
 const BROWSER_TOOL_ORDER = [
-  'browser_session_open',
-  'browser_snapshot_read',
-  'browser_screenshot_capture',
-  'browser_navigate',
-  'browser_click',
-  'browser_type',
-  'browser_scroll',
-  'browser_press',
-  'browser_back',
-  'browser_select',
-  'browser_wait',
-  'browser_console_read',
-  'browser_upload',
-  'browser_download',
-  'browser_session_close',
+	'browser_session_open',
+	'browser_snapshot_read',
+	'browser_screenshot_capture',
+	'browser_navigate',
+	'browser_click',
+	'browser_type',
+	'browser_scroll',
+	'browser_press',
+	'browser_back',
+	'browser_select',
+	'browser_wait',
+	'browser_console_read',
+	'browser_upload',
+	'browser_download',
+	'browser_session_close',
 ] as const;
 
 export const createBrowserTools = (
-  settings: AgentSettingsService,
-  gateway: BrowserGatewayPort,
-  cryptoHash: CryptoHashPort,
-  artifacts?: ArtifactService,
+	settings: AgentSettingsService,
+	gateway: BrowserGatewayPort,
+	cryptoHash: CryptoHashPort,
+	artifacts?: ArtifactService,
 ): AgentTool[] => {
-  const authority = new BrowserSessionBindingAuthority(settings, gateway, cryptoHash);
-  const tools = [
-    ...createBrowserLifecycleTools(authority, gateway),
-    ...createBrowserObservationTools(authority, gateway, artifacts),
-    ...createBrowserInteractionTools(authority, gateway),
-    ...createBrowserTransferTools(authority, gateway, artifacts),
-  ];
-  const byName = new Map(tools.map((tool) => [tool.descriptor.name, tool]));
-  if (tools.length !== BROWSER_TOOL_ORDER.length || byName.size !== tools.length) {
-    throw new Error('BROWSER_TOOL_CATALOG_INVALID');
-  }
-  return BROWSER_TOOL_ORDER.map((name) => {
-    const tool = byName.get(name);
-    if (!tool) throw new Error(`BROWSER_TOOL_MISSING:${name}`);
-    return tool;
-  });
+	const authority = new BrowserSessionBindingAuthority(settings, gateway, cryptoHash);
+	const tools = [
+		...createBrowserLifecycleTools(authority, gateway),
+		...createBrowserObservationTools(authority, gateway, artifacts),
+		...createBrowserInteractionTools(authority, gateway),
+		...createBrowserTransferTools(authority, gateway, artifacts),
+	];
+	const byName = new Map(tools.map((tool) => [tool.descriptor.name, tool]));
+	if (tools.length !== BROWSER_TOOL_ORDER.length || byName.size !== tools.length) {
+		throw new Error('BROWSER_TOOL_CATALOG_INVALID');
+	}
+	return BROWSER_TOOL_ORDER.map((name) => {
+		const tool = byName.get(name);
+		if (!tool) throw new Error(`BROWSER_TOOL_MISSING:${name}`);
+		return tool;
+	});
 };

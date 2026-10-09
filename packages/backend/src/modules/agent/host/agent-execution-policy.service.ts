@@ -8,184 +8,186 @@ import { AGENT_EXECUTION_POLICY_STORAGE_KEY } from './app-storage-ownership';
 export type ContextCompactionMode = 'aggressive' | 'balanced' | 'conservative';
 
 export interface AgentExecutionPolicyOverrides {
-  maxModelRequests?: number;
-  maxAutoModelRequests?: number;
-  maxAutoActiveExecutionSeconds?: number;
-  maxActiveExecutionSeconds?: number;
-  toolTimeoutSeconds?: number;
-  maxToolOutputBytes?: number;
-  maxRecallItems?: number;
-  maxRecallBytes?: number;
-  maxSubagentMessages?: number;
-  maxSubagentMessageBytes?: number;
-  contextCompactionMode?: ContextCompactionMode;
-  contextProfile?: AgentContextProfile;
+	maxModelRequests?: number;
+	maxAutoModelRequests?: number;
+	maxAutoActiveExecutionSeconds?: number;
+	maxActiveExecutionSeconds?: number;
+	toolTimeoutSeconds?: number;
+	maxToolOutputBytes?: number;
+	maxRecallItems?: number;
+	maxRecallBytes?: number;
+	maxSubagentMessages?: number;
+	maxSubagentMessageBytes?: number;
+	contextCompactionMode?: ContextCompactionMode;
+	contextProfile?: AgentContextProfile;
 }
 
 export interface AgentExecutionPolicyEffective {
-  maxAutoModelRequests: number;
-  maxAutoActiveExecutionSeconds: number;
-  maxModelRequests: number;
-  maxActiveExecutionSeconds: number;
-  toolTimeoutSeconds: number;
-  maxToolOutputBytes: number;
-  maxRecallItems: number;
-  maxRecallBytes: number;
-  maxSubagentMessages: number;
-  maxSubagentMessageBytes: number;
-  contextCompactionMode: ContextCompactionMode;
-  contextProfile: AgentContextProfile;
+	maxAutoModelRequests: number;
+	maxAutoActiveExecutionSeconds: number;
+	maxModelRequests: number;
+	maxActiveExecutionSeconds: number;
+	toolTimeoutSeconds: number;
+	maxToolOutputBytes: number;
+	maxRecallItems: number;
+	maxRecallBytes: number;
+	maxSubagentMessages: number;
+	maxSubagentMessageBytes: number;
+	contextCompactionMode: ContextCompactionMode;
+	contextProfile: AgentContextProfile;
 }
 
 export interface AgentExecutionPolicyView {
-  overrides: AgentExecutionPolicyOverrides;
-  effective: AgentExecutionPolicyEffective;
-  version: number;
+	overrides: AgentExecutionPolicyOverrides;
+	effective: AgentExecutionPolicyEffective;
+	version: number;
 }
 
 const modes = new Set<ContextCompactionMode>(['aggressive', 'balanced', 'conservative']);
 const contextProfiles = new Set<AgentContextProfile>(['normal', 'extended']);
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
+	typeof value === 'object' && value !== null && !Array.isArray(value);
+
 const positiveInteger = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0;
 
 const defaultsFrom = (settings: AgentSettingsView): AgentExecutionPolicyEffective => ({
-  maxModelRequests: settings.effectiveSettings.budget.maxModelRequests,
-  maxAutoModelRequests: settings.hardLimits.maxModelRequests,
-  maxAutoActiveExecutionSeconds: settings.hardLimits.maxActiveExecutionSeconds,
-  maxActiveExecutionSeconds: settings.effectiveSettings.budget.maxActiveExecutionSeconds,
-  toolTimeoutSeconds: settings.effectiveSettings.budget.toolTimeoutSeconds,
-  maxToolOutputBytes: settings.effectiveSettings.budget.maxToolOutputBytes,
-  maxRecallItems: settings.effectiveSettings.budget.maxRecallItems,
-  maxRecallBytes: settings.effectiveSettings.budget.maxRecallBytes,
-  maxSubagentMessages: settings.effectiveSettings.subagents.maxSubagentMessagesPerRun,
-  maxSubagentMessageBytes: settings.effectiveSettings.subagents.maxSubagentMessageBytesPerRun,
-  contextCompactionMode: 'balanced',
-  contextProfile: 'normal',
+	maxModelRequests: settings.effectiveSettings.budget.maxModelRequests,
+	maxAutoModelRequests: settings.hardLimits.maxModelRequests,
+	maxAutoActiveExecutionSeconds: settings.hardLimits.maxActiveExecutionSeconds,
+	maxActiveExecutionSeconds: settings.effectiveSettings.budget.maxActiveExecutionSeconds,
+	toolTimeoutSeconds: settings.effectiveSettings.budget.toolTimeoutSeconds,
+	maxToolOutputBytes: settings.effectiveSettings.budget.maxToolOutputBytes,
+	maxRecallItems: settings.effectiveSettings.budget.maxRecallItems,
+	maxRecallBytes: settings.effectiveSettings.budget.maxRecallBytes,
+	maxSubagentMessages: settings.effectiveSettings.subagents.maxSubagentMessagesPerRun,
+	maxSubagentMessageBytes: settings.effectiveSettings.subagents.maxSubagentMessageBytesPerRun,
+	contextCompactionMode: 'balanced',
+	contextProfile: 'normal',
 });
 
 const parseOverrides = (raw: unknown): AgentExecutionPolicyOverrides => {
-  if (!isRecord(raw)) throw new Error('VALIDATION_FAILED');
-  const allowed = new Set([
-    'maxModelRequests',
-    'maxAutoModelRequests',
-    'maxAutoActiveExecutionSeconds',
-    'maxActiveExecutionSeconds',
-    'toolTimeoutSeconds',
-    'maxToolOutputBytes',
-    'maxRecallItems',
-    'maxRecallBytes',
-    'maxSubagentMessages',
-    'maxSubagentMessageBytes',
-    'contextCompactionMode',
-    'contextProfile',
-  ]);
-  if (Object.keys(raw).some((key) => !allowed.has(key))) throw new Error('VALIDATION_FAILED');
-  const result: AgentExecutionPolicyOverrides = {};
-  for (const key of [
-    'maxModelRequests',
-    'maxAutoModelRequests',
-    'maxAutoActiveExecutionSeconds',
-    'maxActiveExecutionSeconds',
-    'toolTimeoutSeconds',
-    'maxToolOutputBytes',
-    'maxRecallItems',
-    'maxRecallBytes',
-    'maxSubagentMessages',
-    'maxSubagentMessageBytes',
-  ] as const) {
-    if (!(key in raw)) continue;
-    if (!positiveInteger(raw[key])) throw new Error('VALIDATION_FAILED');
-    result[key] = raw[key];
-  }
-  if ('contextCompactionMode' in raw) {
-    if (
-      typeof raw.contextCompactionMode !== 'string' ||
-      !modes.has(raw.contextCompactionMode as ContextCompactionMode)
-    ) {
-      throw new Error('VALIDATION_FAILED');
-    }
-    result.contextCompactionMode = raw.contextCompactionMode as ContextCompactionMode;
-  }
-  if ('contextProfile' in raw) {
-    if (typeof raw.contextProfile !== 'string' || !contextProfiles.has(raw.contextProfile as AgentContextProfile)) {
-      throw new Error('VALIDATION_FAILED');
-    }
-    result.contextProfile = raw.contextProfile as AgentContextProfile;
-  }
-  return result;
+	if (!isRecord(raw)) throw new Error('VALIDATION_FAILED');
+	const allowed = new Set([
+		'maxModelRequests',
+		'maxAutoModelRequests',
+		'maxAutoActiveExecutionSeconds',
+		'maxActiveExecutionSeconds',
+		'toolTimeoutSeconds',
+		'maxToolOutputBytes',
+		'maxRecallItems',
+		'maxRecallBytes',
+		'maxSubagentMessages',
+		'maxSubagentMessageBytes',
+		'contextCompactionMode',
+		'contextProfile',
+	]);
+	if (Object.keys(raw).some((key) => !allowed.has(key))) throw new Error('VALIDATION_FAILED');
+	const result: AgentExecutionPolicyOverrides = {};
+	for (const key of [
+		'maxModelRequests',
+		'maxAutoModelRequests',
+		'maxAutoActiveExecutionSeconds',
+		'maxActiveExecutionSeconds',
+		'toolTimeoutSeconds',
+		'maxToolOutputBytes',
+		'maxRecallItems',
+		'maxRecallBytes',
+		'maxSubagentMessages',
+		'maxSubagentMessageBytes',
+	] as const) {
+		if (!(key in raw)) continue;
+		if (!positiveInteger(raw[key])) throw new Error('VALIDATION_FAILED');
+		result[key] = raw[key];
+	}
+	if ('contextCompactionMode' in raw) {
+		if (
+			typeof raw.contextCompactionMode !== 'string' ||
+			!modes.has(raw.contextCompactionMode as ContextCompactionMode)
+		) {
+			throw new Error('VALIDATION_FAILED');
+		}
+		result.contextCompactionMode = raw.contextCompactionMode as ContextCompactionMode;
+	}
+	if ('contextProfile' in raw) {
+		if (typeof raw.contextProfile !== 'string' || !contextProfiles.has(raw.contextProfile as AgentContextProfile)) {
+			throw new Error('VALIDATION_FAILED');
+		}
+		result.contextProfile = raw.contextProfile as AgentContextProfile;
+	}
+	return result;
 };
 
 const assertWithinHardLimits = (overrides: AgentExecutionPolicyOverrides, settings: AgentSettingsView): void => {
-  const hard = settings.hardLimits;
-  const pairs: Array<[keyof AgentExecutionPolicyOverrides, number]> = [
-    ['maxModelRequests', hard.maxModelRequests],
-    ['maxAutoModelRequests', hard.maxModelRequests],
-    ['maxAutoActiveExecutionSeconds', hard.maxActiveExecutionSeconds],
-    ['maxActiveExecutionSeconds', hard.maxActiveExecutionSeconds],
-    ['toolTimeoutSeconds', hard.toolTimeoutSeconds],
-    ['maxToolOutputBytes', hard.maxToolOutputBytes],
-    ['maxRecallItems', hard.maxRecallItems],
-    ['maxRecallBytes', hard.maxRecallBytes],
-    ['maxSubagentMessages', hard.maxSubagentMessagesPerRun],
-    ['maxSubagentMessageBytes', hard.maxSubagentMessageBytesPerRun],
-  ];
-  for (const [key, limit] of pairs) {
-    const value = overrides[key];
-    if (typeof value === 'number' && value > limit) throw new Error('BUDGET_HARD_LIMIT_EXCEEDED');
-  }
+	const hard = settings.hardLimits;
+	const pairs: Array<[keyof AgentExecutionPolicyOverrides, number]> = [
+		['maxModelRequests', hard.maxModelRequests],
+		['maxAutoModelRequests', hard.maxModelRequests],
+		['maxAutoActiveExecutionSeconds', hard.maxActiveExecutionSeconds],
+		['maxActiveExecutionSeconds', hard.maxActiveExecutionSeconds],
+		['toolTimeoutSeconds', hard.toolTimeoutSeconds],
+		['maxToolOutputBytes', hard.maxToolOutputBytes],
+		['maxRecallItems', hard.maxRecallItems],
+		['maxRecallBytes', hard.maxRecallBytes],
+		['maxSubagentMessages', hard.maxSubagentMessagesPerRun],
+		['maxSubagentMessageBytes', hard.maxSubagentMessageBytesPerRun],
+	];
+	for (const [key, limit] of pairs) {
+		const value = overrides[key];
+		if (typeof value === 'number' && value > limit) throw new Error('BUDGET_HARD_LIMIT_EXCEEDED');
+	}
 };
 
 export class AgentExecutionPolicyService {
-  constructor(
-    private readonly storage: AppStoragePort,
-    private readonly settings: AgentSettingsService,
-  ) {}
+	constructor(
+		private readonly storage: AppStoragePort,
+		private readonly settings: AgentSettingsService,
+	) {}
 
-  async get(scope: Scope): Promise<AgentExecutionPolicyView> {
-    const [stored, settings] = await Promise.all([
-      this.storage.get(scope, AGENT_EXECUTION_POLICY_STORAGE_KEY),
-      this.settings.get(scope.userId),
-    ]);
-    const rawOverrides = stored
-      ? isRecord(stored.value) && stored.value.schemaVersion === 1 && isRecord(stored.value.overrides)
-        ? stored.value.overrides
-        : (() => {
-            throw new Error('VALIDATION_FAILED');
-          })()
-      : {};
-    const overrides = parseOverrides(rawOverrides);
-    assertWithinHardLimits(overrides, settings);
-    return {
-      overrides,
-      effective: { ...defaultsFrom(settings), ...overrides },
-      version: stored?.version ?? 0,
-    };
-  }
+	async get(scope: Scope): Promise<AgentExecutionPolicyView> {
+		const [stored, settings] = await Promise.all([
+			this.storage.get(scope, AGENT_EXECUTION_POLICY_STORAGE_KEY),
+			this.settings.get(scope.userId),
+		]);
+		const rawOverrides = stored
+			? isRecord(stored.value) && stored.value.schemaVersion === 1 && isRecord(stored.value.overrides)
+				? stored.value.overrides
+				: (() => {
+						throw new Error('VALIDATION_FAILED');
+					})()
+			: {};
+		const overrides = parseOverrides(rawOverrides);
+		assertWithinHardLimits(overrides, settings);
+		return {
+			overrides,
+			effective: { ...defaultsFrom(settings), ...overrides },
+			version: stored?.version ?? 0,
+		};
+	}
 
-  async replace(scope: Scope, raw: unknown, expectedVersion: number): Promise<AgentExecutionPolicyView> {
-    if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0) throw new Error('VALIDATION_FAILED');
-    const overrides = parseOverrides(raw);
-    const settings = await this.settings.get(scope.userId);
-    assertWithinHardLimits(overrides, settings);
-    const current = await this.storage.get(scope, AGENT_EXECUTION_POLICY_STORAGE_KEY);
-    if ((current?.version ?? 0) !== expectedVersion) throw new Error('SETTINGS_VERSION_CONFLICT');
-    const stored = await this.storage.put(
-      scope,
-      AGENT_EXECUTION_POLICY_STORAGE_KEY,
-      { schemaVersion: 1, overrides: overrides as unknown as import('../agent.types').JsonValue },
-      current?.version ?? null,
-    );
-    logger.info(
-      {
-        userId: scope.userId,
-        appId: scope.appId,
-        expectedVersion,
-        version: stored.version,
-        overrideCount: Object.keys(overrides).length,
-      },
-      'Agent execution policy replaced',
-    );
-    return { overrides, effective: { ...defaultsFrom(settings), ...overrides }, version: stored.version };
-  }
+	async replace(scope: Scope, raw: unknown, expectedVersion: number): Promise<AgentExecutionPolicyView> {
+		if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0) throw new Error('VALIDATION_FAILED');
+		const overrides = parseOverrides(raw);
+		const settings = await this.settings.get(scope.userId);
+		assertWithinHardLimits(overrides, settings);
+		const current = await this.storage.get(scope, AGENT_EXECUTION_POLICY_STORAGE_KEY);
+		if ((current?.version ?? 0) !== expectedVersion) throw new Error('SETTINGS_VERSION_CONFLICT');
+		const stored = await this.storage.put(
+			scope,
+			AGENT_EXECUTION_POLICY_STORAGE_KEY,
+			{ schemaVersion: 1, overrides: overrides as unknown as import('../agent.types').JsonValue },
+			current?.version ?? null,
+		);
+		logger.info(
+			{
+				userId: scope.userId,
+				appId: scope.appId,
+				expectedVersion,
+				version: stored.version,
+				overrideCount: Object.keys(overrides).length,
+			},
+			'Agent execution policy replaced',
+		);
+		return { overrides, effective: { ...defaultsFrom(settings), ...overrides }, version: stored.version };
+	}
 }

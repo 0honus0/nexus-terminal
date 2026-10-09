@@ -3,112 +3,112 @@ import { apiErrorStatus } from '@/client/http';
 import { logger } from '@/client/logging/logger';
 import { authApi } from '../api/authApi';
 import type {
-  AuthSessionState,
-  AuthUserDto,
-  AuthLoginRequestDto,
-  AuthLoginResultViewModel,
-  AuthSetupRequestDto,
-  SetupState,
+	AuthSessionState,
+	AuthUserDto,
+	AuthLoginRequestDto,
+	AuthLoginResultViewModel,
+	AuthSetupRequestDto,
+	SetupState,
 } from '../model/auth';
 
 interface AuthStoreState {
-  setupState: SetupState;
-  sessionState: AuthSessionState;
-  user: AuthUserDto | null;
-  pendingSecondFactor: boolean;
+	setupState: SetupState;
+	sessionState: AuthSessionState;
+	user: AuthUserDto | null;
+	pendingSecondFactor: boolean;
 }
 
 export const useAuthStore = defineStore('auth', {
-  state: (): AuthStoreState => ({
-    setupState: 'unknown',
-    sessionState: 'unknown',
-    user: null,
-    pendingSecondFactor: false,
-  }),
+	state: (): AuthStoreState => ({
+		setupState: 'unknown',
+		sessionState: 'unknown',
+		user: null,
+		pendingSecondFactor: false,
+	}),
 
-  actions: {
-    async resolveSetupState(force = false): Promise<SetupState> {
-      if (!force && this.setupState !== 'unknown') return this.setupState;
-      try {
-        this.setupState = (await authApi.needsSetup()) ? 'required' : 'complete';
-      } catch {
-        logger.warn('Setup state probe failed; using compatibility fallback');
-        // Legacy bootstrap kept the application navigable when the setup probe
-        // itself was unavailable. Backend route/auth policy remains authoritative.
-        this.setupState = 'complete';
-      }
-      if (this.setupState === 'required') {
-        this.sessionState = 'anonymous';
-        this.user = null;
-        this.pendingSecondFactor = false;
-      }
-      return this.setupState;
-    },
+	actions: {
+		async resolveSetupState(force = false): Promise<SetupState> {
+			if (!force && this.setupState !== 'unknown') return this.setupState;
+			try {
+				this.setupState = (await authApi.needsSetup()) ? 'required' : 'complete';
+			} catch {
+				logger.warn('Setup state probe failed; using compatibility fallback');
+				// Legacy bootstrap kept the application navigable when the setup probe
+				// itself was unavailable. Backend route/auth policy remains authoritative.
+				this.setupState = 'complete';
+			}
+			if (this.setupState === 'required') {
+				this.sessionState = 'anonymous';
+				this.user = null;
+				this.pendingSecondFactor = false;
+			}
+			return this.setupState;
+		},
 
-    async resolveSession(force = false): Promise<AuthSessionState> {
-      if (!force && this.sessionState !== 'unknown') return this.sessionState;
-      try {
-        const user = await authApi.readSession();
-        this.user = user;
-        this.sessionState = user ? 'authenticated' : 'anonymous';
-        if (!user) this.pendingSecondFactor = false;
-      } catch {
-        logger.debug('Auth session probe failed; treating session as anonymous');
-        this.user = null;
-        this.sessionState = 'anonymous';
-        this.pendingSecondFactor = false;
-      }
-      return this.sessionState;
-    },
+		async resolveSession(force = false): Promise<AuthSessionState> {
+			if (!force && this.sessionState !== 'unknown') return this.sessionState;
+			try {
+				const user = await authApi.readSession();
+				this.user = user;
+				this.sessionState = user ? 'authenticated' : 'anonymous';
+				if (!user) this.pendingSecondFactor = false;
+			} catch {
+				logger.debug('Auth session probe failed; treating session as anonymous');
+				this.user = null;
+				this.sessionState = 'anonymous';
+				this.pendingSecondFactor = false;
+			}
+			return this.sessionState;
+		},
 
-    async setup(credentials: AuthSetupRequestDto): Promise<void> {
-      await authApi.setup(credentials);
-      this.setupState = 'complete';
-      this.sessionState = 'anonymous';
-      this.user = null;
-      this.pendingSecondFactor = false;
-    },
+		async setup(credentials: AuthSetupRequestDto): Promise<void> {
+			await authApi.setup(credentials);
+			this.setupState = 'complete';
+			this.sessionState = 'anonymous';
+			this.user = null;
+			this.pendingSecondFactor = false;
+		},
 
-    async login(credentials: AuthLoginRequestDto): Promise<AuthLoginResultViewModel> {
-      const result = await authApi.login(credentials);
-      if (result.status === 'two-factor-required') {
-        this.sessionState = 'anonymous';
-        this.user = null;
-        this.pendingSecondFactor = true;
-        logger.debug('Login requires second-factor verification');
-        return result;
-      }
+		async login(credentials: AuthLoginRequestDto): Promise<AuthLoginResultViewModel> {
+			const result = await authApi.login(credentials);
+			if (result.status === 'two-factor-required') {
+				this.sessionState = 'anonymous';
+				this.user = null;
+				this.pendingSecondFactor = true;
+				logger.debug('Login requires second-factor verification');
+				return result;
+			}
 
-      this.sessionState = 'authenticated';
-      this.user = result.user;
-      this.pendingSecondFactor = false;
-      return result;
-    },
+			this.sessionState = 'authenticated';
+			this.user = result.user;
+			this.pendingSecondFactor = false;
+			return result;
+		},
 
-    async verifyTwoFactor(token: string): Promise<AuthUserDto> {
-      if (!this.pendingSecondFactor) throw new Error('No two-factor login challenge is active.');
-      try {
-        const user = await authApi.verifyTwoFactor(token);
-        this.sessionState = 'authenticated';
-        this.user = user;
-        this.pendingSecondFactor = false;
-        return user;
-      } catch (error) {
-        if (apiErrorStatus(error) === 400) this.pendingSecondFactor = false;
-        logger.debug({ statusCode: apiErrorStatus(error) }, 'Frontend second-factor verification failed');
-        throw error;
-      }
-    },
+		async verifyTwoFactor(token: string): Promise<AuthUserDto> {
+			if (!this.pendingSecondFactor) throw new Error('No two-factor login challenge is active.');
+			try {
+				const user = await authApi.verifyTwoFactor(token);
+				this.sessionState = 'authenticated';
+				this.user = user;
+				this.pendingSecondFactor = false;
+				return user;
+			} catch (error) {
+				if (apiErrorStatus(error) === 400) this.pendingSecondFactor = false;
+				logger.debug({ statusCode: apiErrorStatus(error) }, 'Frontend second-factor verification failed');
+				throw error;
+			}
+		},
 
-    invalidateSession(): void {
-      this.sessionState = 'anonymous';
-      this.user = null;
-      this.pendingSecondFactor = false;
-    },
+		invalidateSession(): void {
+			this.sessionState = 'anonymous';
+			this.user = null;
+			this.pendingSecondFactor = false;
+		},
 
-    async logout(): Promise<void> {
-      await authApi.logout();
-      this.invalidateSession();
-    },
-  },
+		async logout(): Promise<void> {
+			await authApi.logout();
+			this.invalidateSession();
+		},
+	},
 });

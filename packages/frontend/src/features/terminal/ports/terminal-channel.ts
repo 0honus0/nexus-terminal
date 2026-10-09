@@ -1,21 +1,21 @@
 import type { TerminalOutput, WorkspaceTerminalViewportDto } from '../model/terminal';
 
 export interface TerminalHistoryPage {
-  data: Uint8Array;
-  hasMore: boolean;
+	data: Uint8Array;
+	hasMore: boolean;
 }
 
 export interface TerminalChannel {
-  sendInput(data: string): void | Promise<void>;
-  resize(viewport: WorkspaceTerminalViewportDto): void | Promise<void>;
-  onOutput(handler: (output: TerminalOutput) => void): () => void;
-  onClose(handler: (reason?: string) => void): () => void;
-  onError(handler: (message: string) => void): () => void;
-  onConnected?(handler: () => void): () => void;
-  onResumeComplete?(handler: () => void): () => void;
-  completeResume?(): void;
-  setPreviousOutputAvailable?(available: boolean): void;
-  hasPreviousOutput?(): boolean;
-  loadPreviousOutput?(maxBytes?: number): Promise<TerminalHistoryPage | null>;
-  resetPreviousOutput?(): Promise<boolean>;
+	sendInput(data: string): void | Promise<void>;
+	resize(viewport: WorkspaceTerminalViewportDto): void | Promise<void>;
+	onOutput(handler: (output: TerminalOutput) => void): () => void;
+	onClose(handler: (reason?: string) => void): () => void;
+	onError(handler: (message: string) => void): () => void;
+	onConnected?(handler: () => void): () => void;
+	onResumeComplete?(handler: () => void): () => void;
+	completeResume?(): void;
+	setPreviousOutputAvailable?(available: boolean): void;
+	hasPreviousOutput?(): boolean;
+	loadPreviousOutput?(maxBytes?: number): Promise<TerminalHistoryPage | null>;
+	resetPreviousOutput?(): Promise<boolean>;
 }

@@ -1,122 +1,137 @@
 <script setup lang="ts">
-  import { computed, onMounted, ref, watch } from 'vue';
-  import { useI18n } from 'vue-i18n';
-  import { UiButton, UiInput } from '@/foundation/ui';
-  import { defaultWindowThemeColor } from '../config/default-theme';
-  import { useAppearanceStore } from '../store/appearance.store';
+	import { computed, onMounted, ref, watch } from 'vue';
+	import { useI18n } from 'vue-i18n';
+	import { UiButton, UiInput } from '@/foundation/ui';
+	import { defaultWindowThemeColor } from '../config/default-theme';
+	import { useAppearanceStore } from '../store/appearance.store';
 
-  const emit = defineEmits<{ customize: [] }>();
-  const { t } = useI18n();
-  const store = useAppearanceStore();
-  const draft = ref(defaultWindowThemeColor);
-  const saving = ref(false);
-  const loadError = ref(false);
-  const status = ref<'saved' | 'error' | null>(null);
-  const normalize = (value: string): string | null => {
-    const trimmed = value.trim();
-    return /^#[0-9a-f]{6}$/i.test(trimmed) ? trimmed.toUpperCase() : null;
-  };
-  const valid = computed(() => normalize(draft.value) !== null);
-  const sync = (): void => {
-    draft.value = (store.settings.windowThemeColor ?? defaultWindowThemeColor).toUpperCase();
-    status.value = null;
-  };
-  watch(() => store.settings.windowThemeColor, sync);
-  onMounted(async () => {
-    try {
-      await store.load();
-    } catch {
-      loadError.value = true;
-    } finally {
-      sync();
-    }
-  });
-  const save = async (): Promise<void> => {
-    const value = normalize(draft.value);
-    if (!value || saving.value) return;
-    saving.value = true;
-    status.value = null;
-    try {
-      await store.update({ windowThemeColor: value });
-      draft.value = value;
-      status.value = 'saved';
-    } catch {
-      status.value = 'error';
-    } finally {
-      saving.value = false;
-    }
-  };
-  const reset = async (): Promise<void> => {
-    draft.value = defaultWindowThemeColor;
-    await save();
-  };
-  const pick = (event: Event): void => {
-    draft.value = (event.target as HTMLInputElement).value.toUpperCase();
-    status.value = null;
-  };
+	const emit = defineEmits<{ customize: [] }>();
+	const { t } = useI18n();
+	const store = useAppearanceStore();
+	const draft = ref(defaultWindowThemeColor);
+	const saving = ref(false);
+	const loadError = ref(false);
+	const status = ref<'saved' | 'error' | null>(null);
+
+	const normalize = (value: string): string | null => {
+		const trimmed = value.trim();
+		return /^#[0-9a-f]{6}$/i.test(trimmed) ? trimmed.toUpperCase() : null;
+	};
+
+	const valid = computed(() => normalize(draft.value) !== null);
+
+	const sync = (): void => {
+		draft.value = (store.settings.windowThemeColor ?? defaultWindowThemeColor).toUpperCase();
+		status.value = null;
+	};
+
+	watch(() => store.settings.windowThemeColor, sync);
+	onMounted(async () => {
+		try {
+			await store.load();
+		} catch {
+			loadError.value = true;
+		} finally {
+			sync();
+		}
+	});
+
+	const save = async (): Promise<void> => {
+		const value = normalize(draft.value);
+		if (!value || saving.value) return;
+		saving.value = true;
+		status.value = null;
+		try {
+			await store.update({ windowThemeColor: value });
+			draft.value = value;
+			status.value = 'saved';
+		} catch {
+			status.value = 'error';
+		} finally {
+			saving.value = false;
+		}
+	};
+
+	const reset = async (): Promise<void> => {
+		draft.value = defaultWindowThemeColor;
+		await save();
+	};
+
+	const pick = (event: Event): void => {
+		draft.value = (event.target as HTMLInputElement).value.toUpperCase();
+		status.value = null;
+	};
 </script>
 
 <template>
-  <section class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-    <h2 class="border-b border-border bg-header/60 px-6 py-4 text-lg font-semibold text-foreground">
-      {{ t('settings.category.appearance') }}
-    </h2>
-    <div class="space-y-6 p-6">
-      <p v-if="loadError" class="rounded border border-error/40 bg-error/5 p-3 text-sm text-error">
-        {{ t('settings.appearance.loadFailed') }}
-      </p>
-      <div>
-        <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.appearance.title') }}</h3>
-        <p class="mb-4 text-sm text-text-secondary">{{ t('settings.appearance.description') }}</p>
-        <UiButton appearance="solid" tone="primary" @click="emit('customize')">
-          {{ t('settings.appearance.customizeButton') }}
-        </UiButton>
-      </div>
+	<section class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+		<h2 class="border-b border-border bg-header/60 px-6 py-4 text-lg font-semibold text-foreground">
+			{{ t('settings.category.appearance') }}
+		</h2>
+		<div class="space-y-6 p-6">
+			<p v-if="loadError" class="rounded border border-error/40 bg-error/5 p-3 text-sm text-error">
+				{{ t('settings.appearance.loadFailed') }}
+			</p>
+			<div>
+				<h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.appearance.title') }}</h3>
+				<p class="mb-4 text-sm text-text-secondary">{{ t('settings.appearance.description') }}</p>
+				<UiButton appearance="solid" tone="primary" @click="emit('customize')">
+					{{ t('settings.appearance.customizeButton') }}
+				</UiButton>
+			</div>
 
-      <hr class="border-border/50" />
+			<hr class="border-border/50" />
 
-      <div>
-        <h3 class="mb-3 text-base font-semibold text-foreground">
-          {{ t('settings.appearance.windowThemeColor.title') }}
-        </h3>
-        <p class="mb-4 text-sm text-text-secondary">{{ t('settings.appearance.windowThemeColor.description') }}</p>
-        <label for="windowThemeColorInput" class="mb-2 block text-sm font-medium text-foreground">
-          {{ t('settings.appearance.windowThemeColor.label') }}
-        </label>
-        <div class="flex flex-wrap items-center gap-3">
-          <input
-            type="color"
-            :value="draft"
-            class="h-10 w-14 cursor-pointer rounded border border-border bg-background"
-            @input="pick"
-          />
-          <UiInput
-            id="windowThemeColorInput"
-            v-model="draft"
-            maxlength="7"
-            spellcheck="false"
-            autocomplete="off"
-            class="h-10 !w-32 font-mono"
-            @input="status = null"
-            @keyup.enter="save"
-          />
-          <UiButton appearance="solid" tone="primary" :disabled="saving || !valid" :loading="saving" @click="save">
-            {{ t('settings.appearance.windowThemeColor.save') }}
-          </UiButton>
-          <UiButton :disabled="saving" @click="reset">
-            {{ t('settings.appearance.windowThemeColor.reset') }}
-          </UiButton>
-        </div>
-        <p v-if="!valid" class="mt-2 text-sm text-error">
-          {{ t('settings.appearance.windowThemeColor.invalid') }}
-        </p>
-        <p v-else-if="status === 'saved'" class="mt-2 text-sm text-success">
-          {{ t('settings.appearance.windowThemeColor.saved') }}
-        </p>
-        <p v-else-if="status === 'error'" class="mt-2 text-sm text-error">
-          {{ t('settings.appearance.windowThemeColor.saveFailed') }}
-        </p>
-      </div>
-    </div>
-  </section>
+			<div>
+				<h3 class="mb-3 text-base font-semibold text-foreground">
+					{{ t('settings.appearance.windowThemeColor.title') }}
+				</h3>
+				<p class="mb-4 text-sm text-text-secondary">
+					{{ t('settings.appearance.windowThemeColor.description') }}
+				</p>
+				<label for="windowThemeColorInput" class="mb-2 block text-sm font-medium text-foreground">
+					{{ t('settings.appearance.windowThemeColor.label') }}
+				</label>
+				<div class="flex flex-wrap items-center gap-3">
+					<input
+						type="color"
+						:value="draft"
+						class="h-10 w-14 cursor-pointer rounded border border-border bg-background"
+						@input="pick"
+					/>
+					<UiInput
+						id="windowThemeColorInput"
+						v-model="draft"
+						maxlength="7"
+						spellcheck="false"
+						autocomplete="off"
+						class="h-10 !w-32 font-mono"
+						@input="status = null"
+						@keyup.enter="save"
+					/>
+					<UiButton
+						appearance="solid"
+						tone="primary"
+						:disabled="saving || !valid"
+						:loading="saving"
+						@click="save"
+					>
+						{{ t('settings.appearance.windowThemeColor.save') }}
+					</UiButton>
+					<UiButton :disabled="saving" @click="reset">
+						{{ t('settings.appearance.windowThemeColor.reset') }}
+					</UiButton>
+				</div>
+				<p v-if="!valid" class="mt-2 text-sm text-error">
+					{{ t('settings.appearance.windowThemeColor.invalid') }}
+				</p>
+				<p v-else-if="status === 'saved'" class="mt-2 text-sm text-success">
+					{{ t('settings.appearance.windowThemeColor.saved') }}
+				</p>
+				<p v-else-if="status === 'error'" class="mt-2 text-sm text-error">
+					{{ t('settings.appearance.windowThemeColor.saveFailed') }}
+				</p>
+			</div>
+		</div>
+	</section>
 </template>

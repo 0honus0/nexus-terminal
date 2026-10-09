@@ -1,154 +1,169 @@
 <script setup lang="ts">
-  import { UiButton, UiInfoHint, UiSelect } from '@/foundation/ui';
-  import { computed, ref, watch } from 'vue';
-  import type { AgentSettingsViewDto } from '../api/agent-api';
+	import { UiButton, UiInfoHint, UiSelect } from '@/foundation/ui';
+	import { computed, ref, watch } from 'vue';
+	import type { AgentSettingsViewDto } from '../api/agent-api';
 
-  const props = defineProps<{ settings: AgentSettingsViewDto; busy: boolean }>();
-  const emit = defineEmits<{ save: [patch: Record<string, unknown>] }>();
-  const baselineRuntimes = ref(props.settings.requestedSettings.performance.maxConcurrentRuntimes);
-  const baselineModelCalls = ref(String(props.settings.requestedSettings.performance.maxConcurrentModelCalls));
-  const runtimes = ref(baselineRuntimes.value);
-  const modelCalls = ref<string>(baselineModelCalls.value);
+	const props = defineProps<{ settings: AgentSettingsViewDto; busy: boolean }>();
+	const emit = defineEmits<{ save: [patch: Record<string, unknown>] }>();
+	const baselineRuntimes = ref(props.settings.requestedSettings.performance.maxConcurrentRuntimes);
+	const baselineModelCalls = ref(String(props.settings.requestedSettings.performance.maxConcurrentModelCalls));
+	const runtimes = ref(baselineRuntimes.value);
+	const modelCalls = ref<string>(baselineModelCalls.value);
 
-  const syncFromProps = (): void => {
-    baselineRuntimes.value = props.settings.requestedSettings.performance.maxConcurrentRuntimes;
-    baselineModelCalls.value = String(props.settings.requestedSettings.performance.maxConcurrentModelCalls);
-    runtimes.value = baselineRuntimes.value;
-    modelCalls.value = baselineModelCalls.value;
-  };
+	const syncFromProps = (): void => {
+		baselineRuntimes.value = props.settings.requestedSettings.performance.maxConcurrentRuntimes;
+		baselineModelCalls.value = String(props.settings.requestedSettings.performance.maxConcurrentModelCalls);
+		runtimes.value = baselineRuntimes.value;
+		modelCalls.value = baselineModelCalls.value;
+	};
 
-  const modelCallOptions = computed(() =>
-    Array.from({ length: props.settings.hardLimits.maxConcurrentModelCalls }, (_, index) => ({
-      value: String(index + 1),
-      label: String(index + 1),
-    })),
-  );
+	const modelCallOptions = computed(() =>
+		Array.from({ length: props.settings.hardLimits.maxConcurrentModelCalls }, (_, index) => ({
+			value: String(index + 1),
+			label: String(index + 1),
+		})),
+	);
 
-  const isDirty = computed(
-    () => runtimes.value !== baselineRuntimes.value || modelCalls.value !== baselineModelCalls.value,
-  );
-  const remoteMatchesDraft = computed(
-    () =>
-      runtimes.value === props.settings.requestedSettings.performance.maxConcurrentRuntimes &&
-      modelCalls.value === String(props.settings.requestedSettings.performance.maxConcurrentModelCalls),
-  );
+	const isDirty = computed(
+		() => runtimes.value !== baselineRuntimes.value || modelCalls.value !== baselineModelCalls.value,
+	);
+	const remoteMatchesDraft = computed(
+		() =>
+			runtimes.value === props.settings.requestedSettings.performance.maxConcurrentRuntimes &&
+			modelCalls.value === String(props.settings.requestedSettings.performance.maxConcurrentModelCalls),
+	);
 
-  watch(
-    () => props.settings.revision,
-    () => {
-      if (!isDirty.value || remoteMatchesDraft.value) syncFromProps();
-    },
-    { immediate: true },
-  );
+	watch(
+		() => props.settings.revision,
+		() => {
+			if (!isDirty.value || remoteMatchesDraft.value) syncFromProps();
+		},
+		{ immediate: true },
+	);
 
-  const invalid = computed(() => {
-    if (
-      !Number.isSafeInteger(runtimes.value) ||
-      runtimes.value < 1 ||
-      runtimes.value > props.settings.hardLimits.maxConcurrentRuntimes
-    ) {
-      return true;
-    }
-    if (modelCalls.value === 'auto') return false;
-    const parsed = Number(modelCalls.value);
-    return !Number.isSafeInteger(parsed) || parsed < 1 || parsed > props.settings.hardLimits.maxConcurrentModelCalls;
-  });
+	const invalid = computed(() => {
+		if (
+			!Number.isSafeInteger(runtimes.value) ||
+			runtimes.value < 1 ||
+			runtimes.value > props.settings.hardLimits.maxConcurrentRuntimes
+		) {
+			return true;
+		}
+		if (modelCalls.value === 'auto') return false;
+		const parsed = Number(modelCalls.value);
+		return (
+			!Number.isSafeInteger(parsed) || parsed < 1 || parsed > props.settings.hardLimits.maxConcurrentModelCalls
+		);
+	});
 
-  const save = () => {
-    if (invalid.value) return;
-    const parsedModel = modelCalls.value === 'auto' ? 'auto' : Number(modelCalls.value);
-    emit('save', {
-      maxConcurrentRuntimes: runtimes.value,
-      maxConcurrentModelCalls: parsedModel,
-    });
-  };
+	const save = () => {
+		if (invalid.value) return;
+		const parsedModel = modelCalls.value === 'auto' ? 'auto' : Number(modelCalls.value);
+		emit('save', {
+			maxConcurrentRuntimes: runtimes.value,
+			maxConcurrentModelCalls: parsedModel,
+		});
+	};
 </script>
 
 <template>
-  <section class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
-    <div
-      class="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3 sm:px-5 sm:py-3.5 agent-settings-head"
-    >
-      <div class="flex items-center gap-1.5">
-        <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.performance.title') }}</h3>
-        <UiInfoHint :text="$t('agent.settings.performance.description')" />
-      </div>
-      <div class="flex items-center gap-2">
-        <span
-          class="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-[11px] text-text-secondary"
-        >
-          <i class="fa-solid fa-code-branch text-[9px] text-primary/75" aria-hidden="true"></i>
-          {{ $t('agent.settings.performance.sharedSlots') }}
-        </span>
-      </div>
-    </div>
+	<section class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
+		<div
+			class="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3 sm:px-5 sm:py-3.5 agent-settings-head"
+		>
+			<div class="flex items-center gap-1.5">
+				<h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.performance.title') }}</h3>
+				<UiInfoHint :text="$t('agent.settings.performance.description')" />
+			</div>
+			<div class="flex items-center gap-2">
+				<span
+					class="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-[11px] text-text-secondary"
+				>
+					<i class="fa-solid fa-code-branch text-[9px] text-primary/75" aria-hidden="true"></i>
+					{{ $t('agent.settings.performance.sharedSlots') }}
+				</span>
+			</div>
+		</div>
 
-    <div class="grid gap-4 p-4 sm:p-5 md:grid-cols-2">
-      <div class="rounded-lg bg-header/25 p-4">
-        <label class="block">
-          <span class="text-xs font-semibold text-foreground">{{ $t('agent.settings.performance.runtimes') }}</span>
-          <p class="mt-0.5 mb-2 text-[11px] text-text-secondary">{{ $t('agent.settings.performance.runtimesHint') }}</p>
-          <input
-            v-model.number="runtimes"
-            type="number"
-            min="1"
-            :max="settings.hardLimits.maxConcurrentRuntimes"
-            class="h-9 w-full rounded-lg border border-border bg-card px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
-          />
-          <span class="mt-1.5 block text-[11px] text-text-secondary">
-            {{
-              $t('agent.settings.performance.limit', {
-                effective: settings.effectiveSettings.performance.maxConcurrentRuntimes,
-                hard: settings.hardLimits.maxConcurrentRuntimes,
-              })
-            }}
-          </span>
-        </label>
-      </div>
+		<div class="grid gap-4 p-4 sm:p-5 md:grid-cols-2">
+			<div class="rounded-lg bg-header/25 p-4">
+				<label class="block">
+					<span class="text-xs font-semibold text-foreground">{{
+						$t('agent.settings.performance.runtimes')
+					}}</span>
+					<p class="mt-0.5 mb-2 text-[11px] text-text-secondary">
+						{{ $t('agent.settings.performance.runtimesHint') }}
+					</p>
+					<input
+						v-model.number="runtimes"
+						type="number"
+						min="1"
+						:max="settings.hardLimits.maxConcurrentRuntimes"
+						class="h-9 w-full rounded-lg border border-border bg-card px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
+					/>
+					<span class="mt-1.5 block text-[11px] text-text-secondary">
+						{{
+							$t('agent.settings.performance.limit', {
+								effective: settings.effectiveSettings.performance.maxConcurrentRuntimes,
+								hard: settings.hardLimits.maxConcurrentRuntimes,
+							})
+						}}
+					</span>
+				</label>
+			</div>
 
-      <div class="rounded-lg bg-header/25 p-4">
-        <label class="block">
-          <span class="text-xs font-semibold text-foreground">{{ $t('agent.settings.performance.modelCalls') }}</span>
-          <p class="mt-0.5 mb-2 text-[11px] text-text-secondary">
-            {{ $t('agent.settings.performance.modelCallsHint') }}
-          </p>
-          <UiSelect
-            v-model="modelCalls"
-            class="w-full"
-            :aria-label="$t('agent.settings.performance.modelCalls')"
-            :options="[{ value: 'auto', label: $t('agent.settings.performance.auto') }, ...modelCallOptions]"
-          />
-          <span class="mt-1.5 block text-[11px] text-text-secondary">
-            {{
-              $t('agent.settings.performance.limit', {
-                effective: settings.effectiveSettings.performance.maxConcurrentModelCalls,
-                hard: settings.hardLimits.maxConcurrentModelCalls,
-              })
-            }}
-          </span>
-        </label>
-      </div>
-    </div>
+			<div class="rounded-lg bg-header/25 p-4">
+				<label class="block">
+					<span class="text-xs font-semibold text-foreground">{{
+						$t('agent.settings.performance.modelCalls')
+					}}</span>
+					<p class="mt-0.5 mb-2 text-[11px] text-text-secondary">
+						{{ $t('agent.settings.performance.modelCallsHint') }}
+					</p>
+					<UiSelect
+						v-model="modelCalls"
+						class="w-full"
+						:aria-label="$t('agent.settings.performance.modelCalls')"
+						:options="[
+							{ value: 'auto', label: $t('agent.settings.performance.auto') },
+							...modelCallOptions,
+						]"
+					/>
+					<span class="mt-1.5 block text-[11px] text-text-secondary">
+						{{
+							$t('agent.settings.performance.limit', {
+								effective: settings.effectiveSettings.performance.maxConcurrentModelCalls,
+								hard: settings.hardLimits.maxConcurrentModelCalls,
+							})
+						}}
+					</span>
+				</label>
+			</div>
+		</div>
 
-    <div
-      class="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-header/20 px-4 py-3 sm:px-5"
-    >
-      <span class="text-xs text-text-secondary">
-        {{ isDirty ? $t('agent.settings.performance.unsavedChanges') : $t('agent.settings.performance.activeNotice') }}
-      </span>
-      <div class="flex items-center gap-2">
-        <UiInfoHint v-if="!isDirty" :text="$t('agent.settings.disabledReason.noChanges')" />
-        <UiButton
-          :appearance="isDirty ? 'solid' : 'soft'"
-          :tone="isDirty ? 'primary' : 'neutral'"
-          type="button"
-          :disabled="busy || !isDirty || invalid"
-          @click="save"
-        >
-          <i v-if="busy" class="fa-solid fa-spinner fa-spin text-xs" aria-hidden="true"></i>
-          <span>{{ busy ? $t('agent.ui.working') : $t('common.save') }}</span>
-        </UiButton>
-      </div>
-    </div>
-  </section>
+		<div
+			class="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-header/20 px-4 py-3 sm:px-5"
+		>
+			<span class="text-xs text-text-secondary">
+				{{
+					isDirty
+						? $t('agent.settings.performance.unsavedChanges')
+						: $t('agent.settings.performance.activeNotice')
+				}}
+			</span>
+			<div class="flex items-center gap-2">
+				<UiInfoHint v-if="!isDirty" :text="$t('agent.settings.disabledReason.noChanges')" />
+				<UiButton
+					:appearance="isDirty ? 'solid' : 'soft'"
+					:tone="isDirty ? 'primary' : 'neutral'"
+					type="button"
+					:disabled="busy || !isDirty || invalid"
+					@click="save"
+				>
+					<i v-if="busy" class="fa-solid fa-spinner fa-spin text-xs" aria-hidden="true"></i>
+					<span>{{ busy ? $t('agent.ui.working') : $t('common.save') }}</span>
+				</UiButton>
+			</div>
+		</div>
+	</section>
 </template>

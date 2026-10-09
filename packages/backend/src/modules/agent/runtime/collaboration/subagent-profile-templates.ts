@@ -1,62 +1,62 @@
 import type { SubagentProfileTemplate } from './subagent.types';
 
 const templates: readonly SubagentProfileTemplate[] = [
-  {
-    id: 'explore',
-    role: 'Repository explorer focused on bounded read-only codebase discovery.',
-    delegationHint: 'Use for substantial repository exploration that can be isolated from the Root context.',
-    capabilities: ['file.read', 'artifacts.read'],
-    peerMessaging: 'parent-child',
-    mutationMode: 'read-only',
-    maxModelRequests: 12,
-    failureMode: 'isolate',
-  },
-  {
-    id: 'scout',
-    role: 'Research scout focused on external, integration, and browser evidence.',
-    delegationHint: 'Use for substantial independent research or evidence gathering that can run in parallel.',
-    capabilities: ['integration.mcp.read', 'browser.read', 'artifacts.read'],
-    peerMessaging: 'parent-child',
-    mutationMode: 'read-only',
-    maxModelRequests: 12,
-    failureMode: 'isolate',
-  },
-  {
-    id: 'review',
-    role: 'Read-only reviewer focused on diffs, tests, risks, and verification evidence.',
-    delegationHint: 'Use for an independent review pass after enough implementation or evidence exists to inspect.',
-    capabilities: ['file.read', 'artifacts.read'],
-    peerMessaging: 'parent-child',
-    mutationMode: 'read-only',
-    maxModelRequests: 12,
-    failureMode: 'isolate',
-  },
-  {
-    id: 'general',
-    role: 'General bounded child for substantial parallelizable analysis.',
-    delegationHint: 'Use only when work is large enough to justify context isolation or parallel execution.',
-    capabilities: ['file.read', 'integration.mcp.read', 'artifacts.read'],
-    peerMessaging: 'parent-child',
-    mutationMode: 'read-only',
-    maxModelRequests: 16,
-    failureMode: 'isolate',
-  },
-  {
-    id: 'worker',
-    role: 'Governed coding worker for an explicitly bounded implementation assignment on an authorized SSH target.',
-    delegationHint:
-      'Use only for substantial implementation work with an explicit file/task boundary. Use delegated SSH targets, run focused verification, and return durable evidence.',
-    capabilities: ['file.read', 'file.write', 'file.delete', 'shell.execute', 'artifacts.read'],
-    peerMessaging: 'parent-child',
-    mutationMode: 'governed',
-    maxModelRequests: 24,
-    failureMode: 'isolate',
-  },
+	{
+		id: 'explore',
+		role: 'Repository explorer focused on bounded read-only codebase discovery.',
+		delegationHint: 'Use for substantial repository exploration that can be isolated from the Root context.',
+		capabilities: ['file.read', 'artifacts.read'],
+		peerMessaging: 'parent-child',
+		mutationMode: 'read-only',
+		maxModelRequests: 12,
+		failureMode: 'isolate',
+	},
+	{
+		id: 'scout',
+		role: 'Research scout focused on external, integration, and browser evidence.',
+		delegationHint: 'Use for substantial independent research or evidence gathering that can run in parallel.',
+		capabilities: ['integration.mcp.read', 'browser.read', 'artifacts.read'],
+		peerMessaging: 'parent-child',
+		mutationMode: 'read-only',
+		maxModelRequests: 12,
+		failureMode: 'isolate',
+	},
+	{
+		id: 'review',
+		role: 'Read-only reviewer focused on diffs, tests, risks, and verification evidence.',
+		delegationHint: 'Use for an independent review pass after enough implementation or evidence exists to inspect.',
+		capabilities: ['file.read', 'artifacts.read'],
+		peerMessaging: 'parent-child',
+		mutationMode: 'read-only',
+		maxModelRequests: 12,
+		failureMode: 'isolate',
+	},
+	{
+		id: 'general',
+		role: 'General bounded child for substantial parallelizable analysis.',
+		delegationHint: 'Use only when work is large enough to justify context isolation or parallel execution.',
+		capabilities: ['file.read', 'integration.mcp.read', 'artifacts.read'],
+		peerMessaging: 'parent-child',
+		mutationMode: 'read-only',
+		maxModelRequests: 16,
+		failureMode: 'isolate',
+	},
+	{
+		id: 'worker',
+		role: 'Governed coding worker for an explicitly bounded implementation assignment on an authorized SSH target.',
+		delegationHint:
+			'Use only for substantial implementation work with an explicit file/task boundary. Use delegated SSH targets, run focused verification, and return durable evidence.',
+		capabilities: ['file.read', 'file.write', 'file.delete', 'shell.execute', 'artifacts.read'],
+		peerMessaging: 'parent-child',
+		mutationMode: 'governed',
+		maxModelRequests: 24,
+		failureMode: 'isolate',
+	},
 ] as const;
 
 export const builtInSubagentProfileTemplates = (maxModelRequests: number): SubagentProfileTemplate[] =>
-  templates.map((template) => ({
-    ...template,
-    capabilities: [...template.capabilities],
-    maxModelRequests: Math.min(template.maxModelRequests, maxModelRequests),
-  }));
+	templates.map((template) => ({
+		...template,
+		capabilities: [...template.capabilities],
+		maxModelRequests: Math.min(template.maxModelRequests, maxModelRequests),
+	}));

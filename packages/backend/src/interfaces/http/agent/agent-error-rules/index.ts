@@ -9,18 +9,18 @@ import { runErrorRules } from './runs';
 import { AgentRequestError } from '../agent-route-input';
 
 const agentErrorRules: readonly AgentErrorRule[] = [
-  ...providerErrorRules,
-  ...artifactErrorRules,
-  ...integrationErrorRules,
-  ...collaborationErrorRules,
-  ...pluginErrorRules,
-  ...runErrorRules,
-  ...commonErrorRules,
+	...providerErrorRules,
+	...artifactErrorRules,
+	...integrationErrorRules,
+	...collaborationErrorRules,
+	...pluginErrorRules,
+	...runErrorRules,
+	...commonErrorRules,
 ];
 
 export const mapAgentError = (error: unknown): AgentErrorMapping => {
-  const raw = error instanceof Error ? error.message : String(error);
-  const rule = agentErrorRules.find((candidate) => candidate.matches(raw));
-  const mapped = rule?.mapping(raw) ?? { status: 500, code: 'INTERNAL_ERROR', message: 'Agent request failed.' };
-  return error instanceof AgentRequestError ? { ...mapped, details: error.details } : mapped;
+	const raw = error instanceof Error ? error.message : String(error);
+	const rule = agentErrorRules.find((candidate) => candidate.matches(raw));
+	const mapped = rule?.mapping(raw) ?? { status: 500, code: 'INTERNAL_ERROR', message: 'Agent request failed.' };
+	return error instanceof AgentRequestError ? { ...mapped, details: error.details } : mapped;
 };

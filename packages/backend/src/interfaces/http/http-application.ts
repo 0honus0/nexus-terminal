@@ -34,17 +34,17 @@ import type { PasskeyService } from '../../modules/passkey/passkey.service';
 import type { SettingsService } from '../../modules/settings/settings.service';
 import type { SystemHealthService } from '../../modules/system/system-health.service';
 import type {
-  AgentArtifactFacade,
-  AgentApprovalFacade,
-  AgentConversationFacade,
-  AgentEventFacade,
-  AgentHostFacade,
-  AgentPluginFacade,
-  AgentProviderFacade,
-  AgentModelRegistryFacade,
-  AgentRunFacade,
-  AgentCollaborationFacade,
-  AgentMemoryFacade,
+	AgentArtifactFacade,
+	AgentApprovalFacade,
+	AgentConversationFacade,
+	AgentEventFacade,
+	AgentHostFacade,
+	AgentPluginFacade,
+	AgentProviderFacade,
+	AgentModelRegistryFacade,
+	AgentRunFacade,
+	AgentCollaborationFacade,
+	AgentMemoryFacade,
 } from '../../modules/agent/public';
 import type { UserService } from '../../modules/user/user.service';
 import type { AgentIntegrationFacade } from '../../modules/agent/public';
@@ -80,330 +80,335 @@ import { createSettingsRouter } from './settings/settings.routes';
 import { errorMessage } from './shared/http-utils';
 
 export interface HttpApplicationDependencies {
-  revokeUserSockets(userId: number): Promise<void>;
-  revokeSessionSockets(sessionId: string): Promise<void>;
-  sessionMiddleware: RequestHandler;
-  trustProxy: string;
-  sessionCookieName: string;
-  nodeEnv: string;
-  agentPublicOrigin?: string;
-  agentCsrfSecret: string;
-  agent: AgentHostFacade;
-  agentPlugins: AgentPluginFacade;
-  agentProviders: AgentProviderFacade;
-  agentModelRegistry: AgentModelRegistryFacade;
-  agentIntegrations: AgentIntegrationFacade;
-  agentArtifacts: AgentArtifactFacade;
-  agentApprovals: AgentApprovalFacade;
-  agentConversations: AgentConversationFacade;
-  agentRuns: AgentRunFacade;
-  agentCollaboration: AgentCollaborationFacade;
-  agentMemories: AgentMemoryFacade;
-  agentEvents: AgentEventFacade;
-  e2eResetEnabled: boolean;
-  resetForE2E(mode: 'seed' | 'empty'): Promise<void>;
-  systemHealth: SystemHealthService;
-  auth: AuthService;
-  twoFactor: TwoFactorService;
-  captcha: CaptchaService;
-  ipBlacklist: IpBlacklistService;
-  ipWhitelist: IpWhitelistService;
-  passkeys: PasskeyService;
-  backup: BackupService;
-  settings: SettingsService;
-  users: UserService;
-  appearance: AppearanceSettingsService;
-  audit: AuditLogService;
-  notifications: NotificationService;
-  connections: ConnectionService;
-  connectionImport: ConnectionImportService;
-  sshConnectionTest: SshConnectionTestService;
-  remoteDesktop: RemoteDesktopSessionService;
-  proxies: ProxyService;
-  sshKeys: SshKeyService;
-  tags: TagService;
-  quickCommandTags: QuickCommandTagService;
-  quickCommands: QuickCommandService;
-  commandHistory: CommandHistoryService;
-  pathHistory: PathHistoryService;
-  favoritePaths: FavoritePathService;
-  notificationSettings: NotificationSettingsService;
-  terminalThemes: TerminalThemeService;
-  backgroundAssets: BackgroundAssetService;
-  htmlThemes: HtmlThemeService;
-  transfers: TransfersService;
-  sshSuspend: SshSuspendService;
-  systemStatus: SystemStatusService;
-  sshResourceStatus: SshResourceStatusService;
-  passkeyRelyingParties: readonly { rpId: string; origin: string }[];
-  workspaceFilesystem: import('../../modules/workspace/services/workspace-filesystem.service').WorkspaceFilesystemService;
+	revokeUserSockets(userId: number): Promise<void>;
+	revokeSessionSockets(sessionId: string): Promise<void>;
+	sessionMiddleware: RequestHandler;
+	trustProxy: string;
+	sessionCookieName: string;
+	nodeEnv: string;
+	agentPublicOrigin?: string;
+	agentCsrfSecret: string;
+	agent: AgentHostFacade;
+	agentPlugins: AgentPluginFacade;
+	agentProviders: AgentProviderFacade;
+	agentModelRegistry: AgentModelRegistryFacade;
+	agentIntegrations: AgentIntegrationFacade;
+	agentArtifacts: AgentArtifactFacade;
+	agentApprovals: AgentApprovalFacade;
+	agentConversations: AgentConversationFacade;
+	agentRuns: AgentRunFacade;
+	agentCollaboration: AgentCollaborationFacade;
+	agentMemories: AgentMemoryFacade;
+	agentEvents: AgentEventFacade;
+	e2eResetEnabled: boolean;
+	resetForE2E(mode: 'seed' | 'empty'): Promise<void>;
+	systemHealth: SystemHealthService;
+	auth: AuthService;
+	twoFactor: TwoFactorService;
+	captcha: CaptchaService;
+	ipBlacklist: IpBlacklistService;
+	ipWhitelist: IpWhitelistService;
+	passkeys: PasskeyService;
+	backup: BackupService;
+	settings: SettingsService;
+	users: UserService;
+	appearance: AppearanceSettingsService;
+	audit: AuditLogService;
+	notifications: NotificationService;
+	connections: ConnectionService;
+	connectionImport: ConnectionImportService;
+	sshConnectionTest: SshConnectionTestService;
+	remoteDesktop: RemoteDesktopSessionService;
+	proxies: ProxyService;
+	sshKeys: SshKeyService;
+	tags: TagService;
+	quickCommandTags: QuickCommandTagService;
+	quickCommands: QuickCommandService;
+	commandHistory: CommandHistoryService;
+	pathHistory: PathHistoryService;
+	favoritePaths: FavoritePathService;
+	notificationSettings: NotificationSettingsService;
+	terminalThemes: TerminalThemeService;
+	backgroundAssets: BackgroundAssetService;
+	htmlThemes: HtmlThemeService;
+	transfers: TransfersService;
+	sshSuspend: SshSuspendService;
+	systemStatus: SystemStatusService;
+	sshResourceStatus: SshResourceStatusService;
+	passkeyRelyingParties: readonly { rpId: string; origin: string }[];
+	workspaceFilesystem: import('../../modules/workspace/services/workspace-filesystem.service').WorkspaceFilesystemService;
 }
 
 export const createHttpApplication = (dependencies: HttpApplicationDependencies): Express => {
-  const app = express();
-  app.set('trust proxy', compileProxyTrust(dependencies.trustProxy));
-  app.disable('x-powered-by');
+	const app = express();
+	app.set('trust proxy', compileProxyTrust(dependencies.trustProxy));
+	app.disable('x-powered-by');
 
-  app.use((request, response, next) => {
-    const measurePerformance = runtimePerformanceMetrics.enabled;
-    const diagnosticRequest = logger.isLevelEnabled('debug');
-    if (!measurePerformance && !diagnosticRequest) {
-      next();
-      return;
-    }
+	app.use((request, response, next) => {
+		const measurePerformance = runtimePerformanceMetrics.enabled;
+		const diagnosticRequest = logger.isLevelEnabled('debug');
+		if (!measurePerformance && !diagnosticRequest) {
+			next();
+			return;
+		}
 
-    let performanceStartedAt = 0n;
-    if (measurePerformance) {
-      const connection = String(request.headers.connection ?? '').toLowerCase();
-      const contentLength = Number.parseInt(String(request.headers['content-length'] ?? '0'), 10);
-      performanceStartedAt = runtimePerformanceMetrics.httpRequestStarted({
-        persistentEligible:
-          request.httpVersionMajor === 1 && request.httpVersionMinor >= 1 && !connection.includes('close'),
-        connectionClose: connection.includes('close'),
-        upgradeHeader: Boolean(request.headers.upgrade) || connection.includes('upgrade'),
-        requestBodyBytes: Number.isFinite(contentLength) && contentLength > 0 ? contentLength : 0,
-      });
-    }
-    const diagnosticStartedAt = diagnosticRequest ? process.hrtime.bigint() : 0n;
-    let finished = false;
-    const finish = () => {
-      if (finished) return;
-      finished = true;
-      if (measurePerformance) {
-        const header = response.getHeader('content-length');
-        const responseBytes =
-          typeof header === 'number' ? header : typeof header === 'string' ? Number.parseInt(header, 10) : 0;
-        runtimePerformanceMetrics.httpRequestFinished(
-          performanceStartedAt,
-          response.statusCode,
-          Number.isFinite(responseBytes) && responseBytes > 0 ? responseBytes : 0,
-        );
-      }
-      if (diagnosticStartedAt !== 0n) {
-        const context = {
-          method: request.method,
-          path: request.path,
-          statusCode: response.statusCode,
-          completed: response.writableFinished,
-          durationMs: Number((Number(process.hrtime.bigint() - diagnosticStartedAt) / 1_000_000).toFixed(3)),
-        };
-        if (response.statusCode >= 400) logger.debug(context, 'HTTP request failed');
-        else if (logger.isLevelEnabled('trace')) logger.trace(context, 'HTTP request completed');
-      }
-    };
-    response.once('finish', finish);
-    response.once('close', finish);
-    next();
-  });
+		let performanceStartedAt = 0n;
+		if (measurePerformance) {
+			const connection = String(request.headers.connection ?? '').toLowerCase();
+			const contentLength = Number.parseInt(String(request.headers['content-length'] ?? '0'), 10);
+			performanceStartedAt = runtimePerformanceMetrics.httpRequestStarted({
+				persistentEligible:
+					request.httpVersionMajor === 1 && request.httpVersionMinor >= 1 && !connection.includes('close'),
+				connectionClose: connection.includes('close'),
+				upgradeHeader: Boolean(request.headers.upgrade) || connection.includes('upgrade'),
+				requestBodyBytes: Number.isFinite(contentLength) && contentLength > 0 ? contentLength : 0,
+			});
+		}
+		const diagnosticStartedAt = diagnosticRequest ? process.hrtime.bigint() : 0n;
+		let finished = false;
 
-  app.use(createIpWhitelistMiddleware(dependencies.ipWhitelist));
+		const finish = () => {
+			if (finished) return;
+			finished = true;
+			if (measurePerformance) {
+				const header = response.getHeader('content-length');
+				const responseBytes =
+					typeof header === 'number' ? header : typeof header === 'string' ? Number.parseInt(header, 10) : 0;
+				runtimePerformanceMetrics.httpRequestFinished(
+					performanceStartedAt,
+					response.statusCode,
+					Number.isFinite(responseBytes) && responseBytes > 0 ? responseBytes : 0,
+				);
+			}
+			if (diagnosticStartedAt !== 0n) {
+				const context = {
+					method: request.method,
+					path: request.path,
+					statusCode: response.statusCode,
+					completed: response.writableFinished,
+					durationMs: Number((Number(process.hrtime.bigint() - diagnosticStartedAt) / 1_000_000).toFixed(3)),
+				};
+				if (response.statusCode >= 400) logger.debug(context, 'HTTP request failed');
+				else if (logger.isLevelEnabled('trace')) logger.trace(context, 'HTTP request completed');
+			}
+		};
 
-  app.use((request, response, next) => {
-    response.setHeader('X-Content-Type-Options', 'nosniff');
-    response.setHeader('X-Frame-Options', 'DENY');
-    response.setHeader('Referrer-Policy', 'same-origin');
-    response.setHeader('Permissions-Policy', 'camera=(), geolocation=(), microphone=()');
-    next();
-  });
-  app.use(express.json({ limit: '1mb' }));
-  app.use(mutationOriginSecurity);
+		response.once('finish', finish);
+		response.once('close', finish);
+		next();
+	});
 
-  if (dependencies.e2eResetEnabled) {
-    app.post('/api/v1/__e2e/reset', async (request, response) => {
-      const mode = request.body?.mode;
-      if (mode !== 'seed' && mode !== 'empty') {
-        response.status(400).json({ message: 'mode must be "seed" or "empty".' });
-        return;
-      }
-      try {
-        await dependencies.resetForE2E(mode);
-        response.status(204).end();
-      } catch (error) {
-        response.status(500).json({ message: errorMessage(error) || 'E2E reset failed.' });
-      }
-    });
-  }
+	app.use(createIpWhitelistMiddleware(dependencies.ipWhitelist));
 
-  app.use(dependencies.sessionMiddleware);
+	app.use((request, response, next) => {
+		response.setHeader('X-Content-Type-Options', 'nosniff');
+		response.setHeader('X-Frame-Options', 'DENY');
+		response.setHeader('Referrer-Policy', 'same-origin');
+		response.setHeader('Permissions-Policy', 'camera=(), geolocation=(), microphone=()');
+		next();
+	});
+	app.use(express.json({ limit: '1mb' }));
+	app.use(mutationOriginSecurity);
 
-  app.get('/.well-known/webauthn', (request, response) => {
-    const forwardedHost = request.headers['x-forwarded-host'];
-    const rawHost = (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost) || request.headers.host;
-    const hostname = rawHost?.split(',')[0]?.trim().replace(/:\d+$/, '').toLowerCase();
-    if (!hostname) {
-      response.status(404).json({ origins: [] });
-      return;
-    }
-    const matched =
-      dependencies.passkeyRelyingParties.find((item) => item.rpId.toLowerCase() === hostname) ??
-      dependencies.passkeyRelyingParties.find((item) => {
-        try {
-          return new URL(item.origin).hostname.toLowerCase() === hostname;
-        } catch {
-          return false;
-        }
-      });
-    if (!matched) {
-      response.status(404).json({ origins: [] });
-      return;
-    }
-    const rpId = matched.rpId.toLowerCase();
-    const origins = dependencies.passkeyRelyingParties
-      .filter((item) => item.rpId.toLowerCase() === rpId)
-      .map((item) => item.origin)
-      .filter((origin) => {
-        try {
-          const originHost = new URL(origin).hostname.toLowerCase();
-          return originHost !== rpId && !originHost.endsWith(`.${rpId}`);
-        } catch {
-          return false;
-        }
-      });
-    response.setHeader('Cache-Control', 'public, max-age=300');
-    response.json({ origins: [...new Set(origins)] });
-  });
+	if (dependencies.e2eResetEnabled) {
+		app.post('/api/v1/__e2e/reset', async (request, response) => {
+			const mode = request.body?.mode;
+			if (mode !== 'seed' && mode !== 'empty') {
+				response.status(400).json({ message: 'mode must be "seed" or "empty".' });
+				return;
+			}
+			try {
+				await dependencies.resetForE2E(mode);
+				response.status(204).end();
+			} catch (error) {
+				response.status(500).json({ message: errorMessage(error) || 'E2E reset failed.' });
+			}
+		});
+	}
 
-  app.use(
-    '/api/v1/auth',
-    createAuthRouter({
-      auth: dependencies.auth,
-      twoFactor: dependencies.twoFactor,
-      captcha: dependencies.captcha,
-      ipBlacklist: dependencies.ipBlacklist,
-      passkeys: dependencies.passkeys,
-      settings: dependencies.settings,
-      users: dependencies.users,
-      sessionCookieName: dependencies.sessionCookieName,
-      revokeSessionSockets: dependencies.revokeSessionSockets,
-      revokeUserSockets: dependencies.revokeUserSockets,
-    }),
-  );
-  app.use(
-    '/api/v1/agent',
-    createAgentRouter({
-      host: dependencies.agent,
-      plugins: dependencies.agentPlugins,
-      providers: dependencies.agentProviders,
-      modelRegistry: dependencies.agentModelRegistry,
-      artifacts: dependencies.agentArtifacts,
-      events: dependencies.agentEvents,
-      nodeEnv: dependencies.nodeEnv,
-      publicOrigin: dependencies.agentPublicOrigin,
-      csrfSecret: dependencies.agentCsrfSecret,
-    }),
-  );
-  app.use(
-    '/api/v1/apps/:appId/integrations',
-    createAppIntegrationsRouter({
-      integrations: dependencies.agentIntegrations,
-      nodeEnv: dependencies.nodeEnv,
-      publicOrigin: dependencies.agentPublicOrigin,
-      csrfSecret: dependencies.agentCsrfSecret,
-    }),
-  );
-  app.use(
-    '/api/v1/apps/:appId/artifacts',
-    createAppArtifactsRouter({
-      artifacts: dependencies.agentArtifacts,
-      nodeEnv: dependencies.nodeEnv,
-      publicOrigin: dependencies.agentPublicOrigin,
-      csrfSecret: dependencies.agentCsrfSecret,
-    }),
-  );
-  app.use(
-    '/api/v1/apps/:appId/approvals',
-    createAppApprovalsRouter({
-      approvals: dependencies.agentApprovals,
-      nodeEnv: dependencies.nodeEnv,
-      publicOrigin: dependencies.agentPublicOrigin,
-      csrfSecret: dependencies.agentCsrfSecret,
-    }),
-  );
-  app.use(
-    '/api/v1/apps/:appId/threads',
-    createAppThreadsRouter({
-      conversations: dependencies.agentConversations,
-      nodeEnv: dependencies.nodeEnv,
-      publicOrigin: dependencies.agentPublicOrigin,
-      csrfSecret: dependencies.agentCsrfSecret,
-    }),
-  );
-  app.use(
-    '/api/v1/apps/:appId',
-    createAppCollaborationRouter({
-      collaboration: dependencies.agentCollaboration,
-      memories: dependencies.agentMemories,
-      nodeEnv: dependencies.nodeEnv,
-      publicOrigin: dependencies.agentPublicOrigin,
-      csrfSecret: dependencies.agentCsrfSecret,
-    }),
-  );
-  app.use(
-    '/api/v1/apps/:appId',
-    createAppRuntimeRouter({
-      runs: dependencies.agentRuns,
-      approvals: dependencies.agentApprovals,
-      nodeEnv: dependencies.nodeEnv,
-      publicOrigin: dependencies.agentPublicOrigin,
-      csrfSecret: dependencies.agentCsrfSecret,
-    }),
-  );
-  app.use(
-    '/api/v1/settings',
-    createSettingsRouter({
-      backup: dependencies.backup,
-      settings: dependencies.settings,
-      ipBlacklist: dependencies.ipBlacklist,
-      audit: dependencies.audit,
-      notifications: dependencies.notifications,
-    }),
-  );
-  app.use(
-    '/api/v1/connections',
-    createConnectionsRouter({
-      connections: dependencies.connections,
-      connectionImport: dependencies.connectionImport,
-      sshConnectionTest: dependencies.sshConnectionTest,
-      remoteDesktop: dependencies.remoteDesktop,
-    }),
-  );
+	app.use(dependencies.sessionMiddleware);
 
-  app.use('/api/v1/proxies', createProxiesRouter({ proxies: dependencies.proxies, audit: dependencies.audit }));
-  app.use('/api/v1/ssh-keys', createSshKeysRouter(dependencies.sshKeys, dependencies.audit));
-  app.use('/api/v1/tags', createTagsRouter({ tags: dependencies.tags, audit: dependencies.audit }));
-  app.use('/api/v1/quick-command-tags', createQuickCommandTagsRouter(dependencies.quickCommandTags));
-  app.use('/api/v1/quick-commands', createQuickCommandsRouter(dependencies.quickCommands));
-  app.use('/api/v1/command-history', createCommandHistoryRouter(dependencies.commandHistory));
-  app.use('/api/v1/path-history', createPathHistoryRouter(dependencies.pathHistory));
-  app.use('/api/v1/favorite-paths', createFavoritePathsRouter(dependencies.favoritePaths));
-  app.use('/api/v1/notifications', createNotificationsRouter(dependencies.notificationSettings));
-  app.use('/api/v1/audit-logs', createAuditRouter(dependencies.audit));
-  app.use('/api/v1/terminal-themes', createTerminalThemesRouter(dependencies.terminalThemes));
-  app.use(
-    '/api/v1/appearance',
-    createAppearanceRouter({
-      appearance: dependencies.appearance,
-      backgrounds: dependencies.backgroundAssets,
-      htmlThemes: dependencies.htmlThemes,
-    }),
-  );
-  app.use('/api/v1/sftp', createSftpRouter(dependencies.workspaceFilesystem));
-  app.use('/api/v1/ssh-suspend', createSshSuspendRouter(dependencies.sshSuspend));
-  app.use('/api/v1/transfers', createTransfersRouter(dependencies.transfers));
-  app.use(
-    '/api/v1/system',
-    createSystemRouter({ systemStatus: dependencies.systemStatus, sshResourceStatus: dependencies.sshResourceStatus }),
-  );
+	app.get('/.well-known/webauthn', (request, response) => {
+		const forwardedHost = request.headers['x-forwarded-host'];
+		const rawHost = (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost) || request.headers.host;
+		const hostname = rawHost?.split(',')[0]?.trim().replace(/:\d+$/, '').toLowerCase();
+		if (!hostname) {
+			response.status(404).json({ origins: [] });
+			return;
+		}
+		const matched =
+			dependencies.passkeyRelyingParties.find((item) => item.rpId.toLowerCase() === hostname) ??
+			dependencies.passkeyRelyingParties.find((item) => {
+				try {
+					return new URL(item.origin).hostname.toLowerCase() === hostname;
+				} catch {
+					return false;
+				}
+			});
+		if (!matched) {
+			response.status(404).json({ origins: [] });
+			return;
+		}
+		const rpId = matched.rpId.toLowerCase();
+		const origins = dependencies.passkeyRelyingParties
+			.filter((item) => item.rpId.toLowerCase() === rpId)
+			.map((item) => item.origin)
+			.filter((origin) => {
+				try {
+					const originHost = new URL(origin).hostname.toLowerCase();
+					return originHost !== rpId && !originHost.endsWith(`.${rpId}`);
+				} catch {
+					return false;
+				}
+			});
+		response.setHeader('Cache-Control', 'public, max-age=300');
+		response.json({ origins: [...new Set(origins)] });
+	});
 
-  app.get('/api/v1/status', (_request, response) => {
-    response.json(dependencies.systemHealth.get());
-  });
+	app.use(
+		'/api/v1/auth',
+		createAuthRouter({
+			auth: dependencies.auth,
+			twoFactor: dependencies.twoFactor,
+			captcha: dependencies.captcha,
+			ipBlacklist: dependencies.ipBlacklist,
+			passkeys: dependencies.passkeys,
+			settings: dependencies.settings,
+			users: dependencies.users,
+			sessionCookieName: dependencies.sessionCookieName,
+			revokeSessionSockets: dependencies.revokeSessionSockets,
+			revokeUserSockets: dependencies.revokeUserSockets,
+		}),
+	);
+	app.use(
+		'/api/v1/agent',
+		createAgentRouter({
+			host: dependencies.agent,
+			plugins: dependencies.agentPlugins,
+			providers: dependencies.agentProviders,
+			modelRegistry: dependencies.agentModelRegistry,
+			artifacts: dependencies.agentArtifacts,
+			events: dependencies.agentEvents,
+			nodeEnv: dependencies.nodeEnv,
+			publicOrigin: dependencies.agentPublicOrigin,
+			csrfSecret: dependencies.agentCsrfSecret,
+		}),
+	);
+	app.use(
+		'/api/v1/apps/:appId/integrations',
+		createAppIntegrationsRouter({
+			integrations: dependencies.agentIntegrations,
+			nodeEnv: dependencies.nodeEnv,
+			publicOrigin: dependencies.agentPublicOrigin,
+			csrfSecret: dependencies.agentCsrfSecret,
+		}),
+	);
+	app.use(
+		'/api/v1/apps/:appId/artifacts',
+		createAppArtifactsRouter({
+			artifacts: dependencies.agentArtifacts,
+			nodeEnv: dependencies.nodeEnv,
+			publicOrigin: dependencies.agentPublicOrigin,
+			csrfSecret: dependencies.agentCsrfSecret,
+		}),
+	);
+	app.use(
+		'/api/v1/apps/:appId/approvals',
+		createAppApprovalsRouter({
+			approvals: dependencies.agentApprovals,
+			nodeEnv: dependencies.nodeEnv,
+			publicOrigin: dependencies.agentPublicOrigin,
+			csrfSecret: dependencies.agentCsrfSecret,
+		}),
+	);
+	app.use(
+		'/api/v1/apps/:appId/threads',
+		createAppThreadsRouter({
+			conversations: dependencies.agentConversations,
+			nodeEnv: dependencies.nodeEnv,
+			publicOrigin: dependencies.agentPublicOrigin,
+			csrfSecret: dependencies.agentCsrfSecret,
+		}),
+	);
+	app.use(
+		'/api/v1/apps/:appId',
+		createAppCollaborationRouter({
+			collaboration: dependencies.agentCollaboration,
+			memories: dependencies.agentMemories,
+			nodeEnv: dependencies.nodeEnv,
+			publicOrigin: dependencies.agentPublicOrigin,
+			csrfSecret: dependencies.agentCsrfSecret,
+		}),
+	);
+	app.use(
+		'/api/v1/apps/:appId',
+		createAppRuntimeRouter({
+			runs: dependencies.agentRuns,
+			approvals: dependencies.agentApprovals,
+			nodeEnv: dependencies.nodeEnv,
+			publicOrigin: dependencies.agentPublicOrigin,
+			csrfSecret: dependencies.agentCsrfSecret,
+		}),
+	);
+	app.use(
+		'/api/v1/settings',
+		createSettingsRouter({
+			backup: dependencies.backup,
+			settings: dependencies.settings,
+			ipBlacklist: dependencies.ipBlacklist,
+			audit: dependencies.audit,
+			notifications: dependencies.notifications,
+		}),
+	);
+	app.use(
+		'/api/v1/connections',
+		createConnectionsRouter({
+			connections: dependencies.connections,
+			connectionImport: dependencies.connectionImport,
+			sshConnectionTest: dependencies.sshConnectionTest,
+			remoteDesktop: dependencies.remoteDesktop,
+		}),
+	);
 
-  app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
-    if (response.headersSent) return;
-    logger.error({ err: error }, 'Unhandled HTTP route error');
-    response.status(500).json({ message: 'Internal server error.', error: errorMessage(error) });
-  });
+	app.use('/api/v1/proxies', createProxiesRouter({ proxies: dependencies.proxies, audit: dependencies.audit }));
+	app.use('/api/v1/ssh-keys', createSshKeysRouter(dependencies.sshKeys, dependencies.audit));
+	app.use('/api/v1/tags', createTagsRouter({ tags: dependencies.tags, audit: dependencies.audit }));
+	app.use('/api/v1/quick-command-tags', createQuickCommandTagsRouter(dependencies.quickCommandTags));
+	app.use('/api/v1/quick-commands', createQuickCommandsRouter(dependencies.quickCommands));
+	app.use('/api/v1/command-history', createCommandHistoryRouter(dependencies.commandHistory));
+	app.use('/api/v1/path-history', createPathHistoryRouter(dependencies.pathHistory));
+	app.use('/api/v1/favorite-paths', createFavoritePathsRouter(dependencies.favoritePaths));
+	app.use('/api/v1/notifications', createNotificationsRouter(dependencies.notificationSettings));
+	app.use('/api/v1/audit-logs', createAuditRouter(dependencies.audit));
+	app.use('/api/v1/terminal-themes', createTerminalThemesRouter(dependencies.terminalThemes));
+	app.use(
+		'/api/v1/appearance',
+		createAppearanceRouter({
+			appearance: dependencies.appearance,
+			backgrounds: dependencies.backgroundAssets,
+			htmlThemes: dependencies.htmlThemes,
+		}),
+	);
+	app.use('/api/v1/sftp', createSftpRouter(dependencies.workspaceFilesystem));
+	app.use('/api/v1/ssh-suspend', createSshSuspendRouter(dependencies.sshSuspend));
+	app.use('/api/v1/transfers', createTransfersRouter(dependencies.transfers));
+	app.use(
+		'/api/v1/system',
+		createSystemRouter({
+			systemStatus: dependencies.systemStatus,
+			sshResourceStatus: dependencies.sshResourceStatus,
+		}),
+	);
 
-  return app;
+	app.get('/api/v1/status', (_request, response) => {
+		response.json(dependencies.systemHealth.get());
+	});
+
+	app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
+		if (response.headersSent) return;
+		logger.error({ err: error }, 'Unhandled HTTP route error');
+		response.status(500).json({ message: 'Internal server error.', error: errorMessage(error) });
+	});
+
+	return app;
 };

@@ -15,303 +15,311 @@ const ERROR_POLL_MS = 10_000;
 const HANDOFF_REFRESH_DELAYS_MS = [0, 120, 300, 650, 1_200] as const;
 
 export type SuspendedAutoTerminationViewModel = WorkspaceSuspendAutoTerminatedEventDto & {
-  name?: string;
+	name?: string;
 };
 
 export interface SuspendedSessionsLoadOptions {
-  silent?: boolean;
-  force?: boolean;
+	silent?: boolean;
+	force?: boolean;
 }
 
 export interface SuspendedSessionsLoadResult {
-  ok: boolean;
-  status?: number;
+	ok: boolean;
+	status?: number;
 }
 
 export interface SuspendedSessionsController {
-  sessions: Ref<SuspendedSessionDto[]>;
-  search: Ref<string>;
-  loading: Ref<boolean>;
-  error: Ref<string | null>;
-  filtered: ComputedRef<SuspendedSessionDto[]>;
-  load(options?: SuspendedSessionsLoadOptions): Promise<SuspendedSessionsLoadResult>;
-  startPolling(): void;
-  stopPolling(): void;
-  rename(session: SuspendedSessionDto, name: string): Promise<string>;
-  remove(session: SuspendedSessionDto): Promise<void>;
-  exportLog(id: string): Promise<string>;
+	sessions: Ref<SuspendedSessionDto[]>;
+	search: Ref<string>;
+	loading: Ref<boolean>;
+	error: Ref<string | null>;
+	filtered: ComputedRef<SuspendedSessionDto[]>;
+	load(options?: SuspendedSessionsLoadOptions): Promise<SuspendedSessionsLoadResult>;
+	startPolling(): void;
+	stopPolling(): void;
+	rename(session: SuspendedSessionDto, name: string): Promise<string>;
+	remove(session: SuspendedSessionDto): Promise<void>;
+	exportLog(id: string): Promise<string>;
 }
 
 export const useSuspendedSessionsStore = defineStore('suspended-sessions', () => {
-  const sessions = ref<SuspendedSessionDto[]>([]);
-  const loading = ref(false);
-  const error = ref<string | null>(null);
-  let loaded = false;
-  let catalogGeneration = 0;
-  let loadPromise: Promise<{ ok: boolean; status?: number }> | null = null;
-  let pollTimer: number | undefined;
-  let pollIntervalMs = BASE_POLL_MS;
-  let pollConsumers = 0;
-  let handoffRefreshSequence = 0;
-  const handoffRefreshes = new Map<string, number>();
+	const sessions = ref<SuspendedSessionDto[]>([]);
+	const loading = ref(false);
+	const error = ref<string | null>(null);
+	let loaded = false;
+	let catalogGeneration = 0;
+	let loadPromise: Promise<{ ok: boolean; status?: number }> | null = null;
+	let pollTimer: number | undefined;
+	let pollIntervalMs = BASE_POLL_MS;
+	let pollConsumers = 0;
+	let handoffRefreshSequence = 0;
+	const handoffRefreshes = new Map<string, number>();
 
-  const handledAutoTerminations = new Set<string>();
-  const handledAutoTerminationOrder: string[] = [];
+	const handledAutoTerminations = new Set<string>();
+	const handledAutoTerminationOrder: string[] = [];
 
-  function applySuspendedAutoTermination(
-    event: WorkspaceSuspendAutoTerminatedEventDto,
-  ): SuspendedAutoTerminationViewModel | null {
-    const id = event.suspendedSessionId.trim();
-    if (!id || handledAutoTerminations.has(id)) return null;
-    handledAutoTerminations.add(id);
-    handledAutoTerminationOrder.push(id);
-    while (handledAutoTerminationOrder.length > 128) {
-      const oldest = handledAutoTerminationOrder.shift();
-      if (oldest) handledAutoTerminations.delete(oldest);
-    }
-    const session = sessions.value.find((item) => item.id === id);
-    if (!session) {
-      logger.debug(
-        { suspendedSessionId: id, reason: event.reason, failureKind: 'suspended_session_not_found_in_catalog' },
-        'Suspended Workspace auto-termination referenced an unknown catalog session',
-      );
-    }
-    return {
-      suspendedSessionId: id,
-      reason: event.reason,
-      ...(session ? { name: session.customName ?? session.connectionName } : {}),
-    };
-  }
+	function applySuspendedAutoTermination(
+		event: WorkspaceSuspendAutoTerminatedEventDto,
+	): SuspendedAutoTerminationViewModel | null {
+		const id = event.suspendedSessionId.trim();
+		if (!id || handledAutoTerminations.has(id)) return null;
+		handledAutoTerminations.add(id);
+		handledAutoTerminationOrder.push(id);
+		while (handledAutoTerminationOrder.length > 128) {
+			const oldest = handledAutoTerminationOrder.shift();
+			if (oldest) handledAutoTerminations.delete(oldest);
+		}
+		const session = sessions.value.find((item) => item.id === id);
+		if (!session) {
+			logger.debug(
+				{ suspendedSessionId: id, reason: event.reason, failureKind: 'suspended_session_not_found_in_catalog' },
+				'Suspended Workspace auto-termination referenced an unknown catalog session',
+			);
+		}
+		return {
+			suspendedSessionId: id,
+			reason: event.reason,
+			...(session ? { name: session.customName ?? session.connectionName } : {}),
+		};
+	}
 
-  const load = async (options: SuspendedSessionsLoadOptions = {}): Promise<SuspendedSessionsLoadResult> => {
-    if (loaded && !options.force && !options.silent) return { ok: true };
-    if (loadPromise) {
-      const pending = loadPromise;
-      if (!options.force) return pending;
-      await pending;
-      if (loadPromise) return loadPromise;
-    }
+	const load = async (options: SuspendedSessionsLoadOptions = {}): Promise<SuspendedSessionsLoadResult> => {
+		if (loaded && !options.force && !options.silent) return { ok: true };
+		if (loadPromise) {
+			const pending = loadPromise;
+			if (!options.force) return pending;
+			await pending;
+			if (loadPromise) return loadPromise;
+		}
 
-    const generation = catalogGeneration;
-    loadPromise = (async () => {
-      if (!options.silent) {
-        // Refreshing a shared, already-loaded catalog must not replace its cards
-        // with a loading placeholder when another layout mounts the panel.
-        loading.value = !loaded;
-        error.value = null;
-      }
-      try {
-        const incoming = await sshSuspendApi.list();
-        if (generation !== catalogGeneration) return { ok: true };
-        sessions.value = incoming;
-        loaded = true;
-        if (!options.silent) error.value = null;
-        return { ok: true };
-      } catch (cause) {
-        const status = apiErrorStatus(cause);
-        logger.debug(
-          {
-            err: cause,
-            status,
-            silent: Boolean(options.silent),
-            force: Boolean(options.force),
-            failureKind: status === 404 ? 'suspended_catalog_not_found' : 'suspended_catalog_load_failed',
-          },
-          'Suspended Workspace catalog load failed',
-        );
-        if (generation === catalogGeneration && !options.silent)
-          error.value = apiErrorMessage(cause, 'Failed to load suspended SSH sessions.');
-        return { ok: false, status };
-      } finally {
-        if (generation === catalogGeneration && !options.silent) loading.value = false;
-        if (generation === catalogGeneration) loadPromise = null;
-      }
-    })();
+		const generation = catalogGeneration;
+		loadPromise = (async () => {
+			if (!options.silent) {
+				// Refreshing a shared, already-loaded catalog must not replace its cards
+				// with a loading placeholder when another layout mounts the panel.
+				loading.value = !loaded;
+				error.value = null;
+			}
+			try {
+				const incoming = await sshSuspendApi.list();
+				if (generation !== catalogGeneration) return { ok: true };
+				sessions.value = incoming;
+				loaded = true;
+				if (!options.silent) error.value = null;
+				return { ok: true };
+			} catch (cause) {
+				const status = apiErrorStatus(cause);
+				logger.debug(
+					{
+						err: cause,
+						status,
+						silent: Boolean(options.silent),
+						force: Boolean(options.force),
+						failureKind: status === 404 ? 'suspended_catalog_not_found' : 'suspended_catalog_load_failed',
+					},
+					'Suspended Workspace catalog load failed',
+				);
+				if (generation === catalogGeneration && !options.silent)
+					error.value = apiErrorMessage(cause, 'Failed to load suspended SSH sessions.');
+				return { ok: false, status };
+			} finally {
+				if (generation === catalogGeneration && !options.silent) loading.value = false;
+				if (generation === catalogGeneration) loadPromise = null;
+			}
+		})();
 
-    return loadPromise;
-  };
+		return loadPromise;
+	};
 
-  const resetSuspendedSessionsCatalog = (): void => {
-    catalogGeneration += 1;
-    handoffRefreshSequence += 1;
-    handoffRefreshes.clear();
-    if (pollTimer !== undefined) window.clearTimeout(pollTimer);
-    pollTimer = undefined;
-    pollConsumers = 0;
-    pollIntervalMs = BASE_POLL_MS;
-    loaded = false;
-    loadPromise = null;
-    sessions.value = [];
-    loading.value = false;
-    error.value = null;
-    handledAutoTerminations.clear();
-    handledAutoTerminationOrder.length = 0;
-  };
+	const resetSuspendedSessionsCatalog = (): void => {
+		catalogGeneration += 1;
+		handoffRefreshSequence += 1;
+		handoffRefreshes.clear();
+		if (pollTimer !== undefined) window.clearTimeout(pollTimer);
+		pollTimer = undefined;
+		pollConsumers = 0;
+		pollIntervalMs = BASE_POLL_MS;
+		loaded = false;
+		loadPromise = null;
+		sessions.value = [];
+		loading.value = false;
+		error.value = null;
+		handledAutoTerminations.clear();
+		handledAutoTerminationOrder.length = 0;
+	};
 
-  const refreshSuspendedSessionsCatalog = (): Promise<{ ok: boolean; status?: number }> =>
-    load({ silent: true, force: true });
+	const refreshSuspendedSessionsCatalog = (): Promise<{ ok: boolean; status?: number }> =>
+		load({ silent: true, force: true });
 
-  const removeSuspendedSessionFromCatalog = (id: string): void => {
-    sessions.value = sessions.value.filter((session) => session.id !== id);
-  };
+	const removeSuspendedSessionFromCatalog = (id: string): void => {
+		sessions.value = sessions.value.filter((session) => session.id !== id);
+	};
 
-  const refreshSuspendedSessionsAfterHandoff = (workspaceId: string): void => {
-    const normalizedWorkspaceId = workspaceId.trim();
-    if (!normalizedWorkspaceId) return;
-    const sequence = ++handoffRefreshSequence;
-    handoffRefreshes.set(normalizedWorkspaceId, sequence);
+	const refreshSuspendedSessionsAfterHandoff = (workspaceId: string): void => {
+		const normalizedWorkspaceId = workspaceId.trim();
+		if (!normalizedWorkspaceId) return;
+		const sequence = ++handoffRefreshSequence;
+		handoffRefreshes.set(normalizedWorkspaceId, sequence);
 
-    void (async () => {
-      let previousDelay = 0;
-      for (const delay of HANDOFF_REFRESH_DELAYS_MS) {
-        if (handoffRefreshes.get(normalizedWorkspaceId) !== sequence) return;
-        const waitMs = delay - previousDelay;
-        previousDelay = delay;
-        if (waitMs > 0) await new Promise((resolve) => window.setTimeout(resolve, waitMs));
-        if (handoffRefreshes.get(normalizedWorkspaceId) !== sequence) return;
+		void (async () => {
+			let previousDelay = 0;
+			for (const delay of HANDOFF_REFRESH_DELAYS_MS) {
+				if (handoffRefreshes.get(normalizedWorkspaceId) !== sequence) return;
+				const waitMs = delay - previousDelay;
+				previousDelay = delay;
+				if (waitMs > 0) await new Promise((resolve) => window.setTimeout(resolve, waitMs));
+				if (handoffRefreshes.get(normalizedWorkspaceId) !== sequence) return;
 
-        const result = await load({ silent: true, force: true });
-        if (
-          result.ok &&
-          sessions.value.some(
-            (session) => session.status === 'active' && session.originalWorkspaceId === normalizedWorkspaceId,
-          )
-        )
-          break;
-      }
-      if (handoffRefreshes.get(normalizedWorkspaceId) === sequence) handoffRefreshes.delete(normalizedWorkspaceId);
-    })();
-  };
+				const result = await load({ silent: true, force: true });
+				if (
+					result.ok &&
+					sessions.value.some(
+						(session) =>
+							session.status === 'active' && session.originalWorkspaceId === normalizedWorkspaceId,
+					)
+				)
+					break;
+			}
+			if (handoffRefreshes.get(normalizedWorkspaceId) === sequence)
+				handoffRefreshes.delete(normalizedWorkspaceId);
+		})();
+	};
 
-  const findSuspendedSessionByOriginalWorkspace = (workspaceId: string): SuspendedSessionDto | undefined =>
-    sessions.value.find((session) => session.status === 'active' && session.originalWorkspaceId === workspaceId);
+	const findSuspendedSessionByOriginalWorkspace = (workspaceId: string): SuspendedSessionDto | undefined =>
+		sessions.value.find((session) => session.status === 'active' && session.originalWorkspaceId === workspaceId);
 
-  const schedulePoll = (): void => {
-    if (pollConsumers <= 0 || pollTimer !== undefined) return;
-    pollTimer = window.setTimeout(async () => {
-      pollTimer = undefined;
-      if (pollConsumers <= 0) return;
-      const result = await load({ silent: true, force: true });
-      pollIntervalMs =
-        result.status === 429
-          ? Math.min(pollIntervalMs * 2, MAX_POLL_MS)
-          : result.ok
-            ? sessions.value.some((session) => session.status === 'active')
-              ? BASE_POLL_MS
-              : IDLE_POLL_MS
-            : Math.min(Math.max(pollIntervalMs, ERROR_POLL_MS), MAX_POLL_MS);
-      schedulePoll();
-    }, pollIntervalMs);
-  };
+	const schedulePoll = (): void => {
+		if (pollConsumers <= 0 || pollTimer !== undefined) return;
+		pollTimer = window.setTimeout(async () => {
+			pollTimer = undefined;
+			if (pollConsumers <= 0) return;
+			const result = await load({ silent: true, force: true });
+			pollIntervalMs =
+				result.status === 429
+					? Math.min(pollIntervalMs * 2, MAX_POLL_MS)
+					: result.ok
+						? sessions.value.some((session) => session.status === 'active')
+							? BASE_POLL_MS
+							: IDLE_POLL_MS
+						: Math.min(Math.max(pollIntervalMs, ERROR_POLL_MS), MAX_POLL_MS);
+			schedulePoll();
+		}, pollIntervalMs);
+	};
 
-  const startPolling = (): void => {
-    pollConsumers += 1;
-    schedulePoll();
-  };
+	const startPolling = (): void => {
+		pollConsumers += 1;
+		schedulePoll();
+	};
 
-  const stopPolling = (): void => {
-    pollConsumers = Math.max(0, pollConsumers - 1);
-    if (pollConsumers > 0) return;
-    if (pollTimer !== undefined) window.clearTimeout(pollTimer);
-    pollTimer = undefined;
-    pollIntervalMs = BASE_POLL_MS;
-  };
+	const stopPolling = (): void => {
+		pollConsumers = Math.max(0, pollConsumers - 1);
+		if (pollConsumers > 0) return;
+		if (pollTimer !== undefined) window.clearTimeout(pollTimer);
+		pollTimer = undefined;
+		pollIntervalMs = BASE_POLL_MS;
+	};
 
-  return {
-    sessions,
-    loading,
-    error,
-    load,
-    startPolling,
-    stopPolling,
-    applySuspendedAutoTermination,
-    resetSuspendedSessionsCatalog,
-    refreshSuspendedSessionsCatalog,
-    removeSuspendedSessionFromCatalog,
-    refreshSuspendedSessionsAfterHandoff,
-    findSuspendedSessionByOriginalWorkspace,
-  };
+	return {
+		sessions,
+		loading,
+		error,
+		load,
+		startPolling,
+		stopPolling,
+		applySuspendedAutoTermination,
+		resetSuspendedSessionsCatalog,
+		refreshSuspendedSessionsCatalog,
+		removeSuspendedSessionFromCatalog,
+		refreshSuspendedSessionsAfterHandoff,
+		findSuspendedSessionByOriginalWorkspace,
+	};
 });
 
 export const applySuspendedAutoTermination = (
-  event: WorkspaceSuspendAutoTerminatedEventDto,
+	event: WorkspaceSuspendAutoTerminatedEventDto,
 ): SuspendedAutoTerminationViewModel | null => useSuspendedSessionsStore().applySuspendedAutoTermination(event);
+
 export const resetSuspendedSessionsCatalog = (): void => useSuspendedSessionsStore().resetSuspendedSessionsCatalog();
+
 registerAuthenticatedSessionReset('suspended-sessions-cache', resetSuspendedSessionsCatalog);
+
 export const refreshSuspendedSessionsCatalog = (): Promise<SuspendedSessionsLoadResult> =>
-  useSuspendedSessionsStore().refreshSuspendedSessionsCatalog();
+	useSuspendedSessionsStore().refreshSuspendedSessionsCatalog();
+
 export const removeSuspendedSessionFromCatalog = (id: string): void =>
-  useSuspendedSessionsStore().removeSuspendedSessionFromCatalog(id);
+	useSuspendedSessionsStore().removeSuspendedSessionFromCatalog(id);
+
 export const refreshSuspendedSessionsAfterHandoff = (workspaceId: string): void =>
-  useSuspendedSessionsStore().refreshSuspendedSessionsAfterHandoff(workspaceId);
+	useSuspendedSessionsStore().refreshSuspendedSessionsAfterHandoff(workspaceId);
+
 export const findSuspendedSessionByOriginalWorkspace = (workspaceId: string): SuspendedSessionDto | undefined =>
-  useSuspendedSessionsStore().findSuspendedSessionByOriginalWorkspace(workspaceId);
+	useSuspendedSessionsStore().findSuspendedSessionByOriginalWorkspace(workspaceId);
 
 export function useSuspendedSessions(): SuspendedSessionsController {
-  const store = useSuspendedSessionsStore();
-  const { sessions, loading, error } = storeToRefs(store);
-  const { load, startPolling, stopPolling } = store;
-  const search = ref('');
-  const filtered = computed(() => {
-    const term = search.value.trim().toLowerCase();
-    if (!term) return sessions.value;
-    return sessions.value.filter((session) =>
-      `${session.customName ?? ''} ${session.connectionName}`.toLowerCase().includes(term),
-    );
-  });
+	const store = useSuspendedSessionsStore();
+	const { sessions, loading, error } = storeToRefs(store);
+	const { load, startPolling, stopPolling } = store;
+	const search = ref('');
+	const filtered = computed(() => {
+		const term = search.value.trim().toLowerCase();
+		if (!term) return sessions.value;
+		return sessions.value.filter((session) =>
+			`${session.customName ?? ''} ${session.connectionName}`.toLowerCase().includes(term),
+		);
+	});
 
-  async function rename(session: SuspendedSessionDto, name: string): Promise<string> {
-    try {
-      const authoritativeName = await sshSuspendApi.rename(session.id, name);
-      session.customName = authoritativeName.trim() || undefined;
-      return authoritativeName;
-    } catch (cause) {
-      logger.debug(
-        {
-          err: cause,
-          suspendedSessionId: session.id,
-          originalWorkspaceId: session.originalWorkspaceId,
-          status: apiErrorStatus(cause),
-          failureKind: 'suspended_session_rename_failed',
-        },
-        'Suspended Workspace rename failed',
-      );
-      throw cause;
-    }
-  }
+	async function rename(session: SuspendedSessionDto, name: string): Promise<string> {
+		try {
+			const authoritativeName = await sshSuspendApi.rename(session.id, name);
+			session.customName = authoritativeName.trim() || undefined;
+			return authoritativeName;
+		} catch (cause) {
+			logger.debug(
+				{
+					err: cause,
+					suspendedSessionId: session.id,
+					originalWorkspaceId: session.originalWorkspaceId,
+					status: apiErrorStatus(cause),
+					failureKind: 'suspended_session_rename_failed',
+				},
+				'Suspended Workspace rename failed',
+			);
+			throw cause;
+		}
+	}
 
-  async function remove(session: SuspendedSessionDto): Promise<void> {
-    try {
-      if (session.status === 'active') await sshSuspendApi.terminate(session.id);
-      else await sshSuspendApi.removeDisconnected(session.id);
-      removeSuspendedSessionFromCatalog(session.id);
-    } catch (cause) {
-      logger.debug(
-        {
-          err: cause,
-          suspendedSessionId: session.id,
-          originalWorkspaceId: session.originalWorkspaceId,
-          sessionStatus: session.status,
-          status: apiErrorStatus(cause),
-          failureKind: 'suspended_session_remove_failed',
-        },
-        'Suspended Workspace removal failed',
-      );
-      throw cause;
-    }
-  }
+	async function remove(session: SuspendedSessionDto): Promise<void> {
+		try {
+			if (session.status === 'active') await sshSuspendApi.terminate(session.id);
+			else await sshSuspendApi.removeDisconnected(session.id);
+			removeSuspendedSessionFromCatalog(session.id);
+		} catch (cause) {
+			logger.debug(
+				{
+					err: cause,
+					suspendedSessionId: session.id,
+					originalWorkspaceId: session.originalWorkspaceId,
+					sessionStatus: session.status,
+					status: apiErrorStatus(cause),
+					failureKind: 'suspended_session_remove_failed',
+				},
+				'Suspended Workspace removal failed',
+			);
+			throw cause;
+		}
+	}
 
-  return {
-    sessions,
-    search,
-    loading,
-    error,
-    filtered,
-    load,
-    startPolling,
-    stopPolling,
-    rename,
-    remove,
-    exportLog: sshSuspendApi.exportLog,
-  };
+	return {
+		sessions,
+		search,
+		loading,
+		error,
+		filtered,
+		load,
+		startPolling,
+		stopPolling,
+		rename,
+		remove,
+		exportLog: sshSuspendApi.exportLog,
+	};
 }

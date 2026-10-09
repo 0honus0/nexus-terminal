@@ -15,127 +15,129 @@ const SERVER_QUEUE_LOW_WATER_BYTES = 2 * 1024 * 1024;
  * final chunk. Payloads are raw ordered file bytes; the declared size defines completion.
  */
 export const bindUploadStream = (
-  socket: WebSocket,
-  userId: number,
-  request: WorkspaceUploadStreamQueryDto,
-  dependencies: { workspace: WorkspaceService; operations: WorkspaceOperationsService },
+	socket: WebSocket,
+	userId: number,
+	request: WorkspaceUploadStreamQueryDto,
+	dependencies: { workspace: WorkspaceService; operations: WorkspaceOperationsService },
 ): boolean => {
-  const workspace = dependencies.workspace.getSession(request.workspaceId);
-  if (!workspace || workspace.userId !== userId) {
-    socket.close(1008, 'Invalid workspace');
-    return false;
-  }
-  if (!request.uploadId || request.uploadId.length > 512 || !Number.isSafeInteger(request.size) || request.size < 0) {
-    socket.close(1008, 'Invalid upload request');
-    return false;
-  }
+	const workspace = dependencies.workspace.getSession(request.workspaceId);
+	if (!workspace || workspace.userId !== userId) {
+		socket.close(1008, 'Invalid workspace');
+		return false;
+	}
+	if (!request.uploadId || request.uploadId.length > 512 || !Number.isSafeInteger(request.size) || request.size < 0) {
+		socket.close(1008, 'Invalid upload request');
+		return false;
+	}
 
-  let chunkIndex = 0;
-  let bytesReceived = 0;
-  let closed = false;
-  let uploadCompleted = false;
-  let cleanupStarted = false;
-  let queuedBytes = 0;
-  let paused = false;
+	let chunkIndex = 0;
+	let bytesReceived = 0;
+	let closed = false;
+	let uploadCompleted = false;
+	let cleanupStarted = false;
+	let queuedBytes = 0;
+	let paused = false;
 
-  const cleanupIncompleteUpload = (): void => {
-    if (paused) {
-      paused = false;
-      runtimePerformanceMetrics.uploadBackpressureChanged(false);
-    }
-    if (uploadCompleted || cleanupStarted) return;
-    cleanupStarted = true;
-    void dependencies.operations
-      .abortUpload(request.workspaceId, request.uploadId, 'Upload data transport closed before completion.')
-      .catch((error) => {
-        logger.error(
-          { err: error, workspaceId: request.workspaceId, uploadId: request.uploadId },
-          'Unable to clean incomplete WebSocket upload',
-        );
-      });
-  };
+	const cleanupIncompleteUpload = (): void => {
+		if (paused) {
+			paused = false;
+			runtimePerformanceMetrics.uploadBackpressureChanged(false);
+		}
+		if (uploadCompleted || cleanupStarted) return;
+		cleanupStarted = true;
+		void dependencies.operations
+			.abortUpload(request.workspaceId, request.uploadId, 'Upload data transport closed before completion.')
+			.catch((error) => {
+				logger.error(
+					{ err: error, workspaceId: request.workspaceId, uploadId: request.uploadId },
+					'Unable to clean incomplete WebSocket upload',
+				);
+			});
+	};
 
-  socket.once('close', cleanupIncompleteUpload);
-  socket.once('error', cleanupIncompleteUpload);
+	socket.once('close', cleanupIncompleteUpload);
+	socket.once('error', cleanupIncompleteUpload);
 
-  const updateReceiveBackpressure = (): void => {
-    if (closed || socket.readyState !== WebSocket.OPEN) return;
-    if (!paused && queuedBytes >= SERVER_QUEUE_HIGH_WATER_BYTES) {
-      socket.pause();
-      paused = true;
-      runtimePerformanceMetrics.uploadBackpressureChanged(true);
-      return;
-    }
-    if (paused && queuedBytes <= SERVER_QUEUE_LOW_WATER_BYTES) {
-      socket.resume();
-      paused = false;
-      runtimePerformanceMetrics.uploadBackpressureChanged(false);
-    }
-  };
+	const updateReceiveBackpressure = (): void => {
+		if (closed || socket.readyState !== WebSocket.OPEN) return;
+		if (!paused && queuedBytes >= SERVER_QUEUE_HIGH_WATER_BYTES) {
+			socket.pause();
+			paused = true;
+			runtimePerformanceMetrics.uploadBackpressureChanged(true);
+			return;
+		}
+		if (paused && queuedBytes <= SERVER_QUEUE_LOW_WATER_BYTES) {
+			socket.resume();
+			paused = false;
+			runtimePerformanceMetrics.uploadBackpressureChanged(false);
+		}
+	};
 
-  if (request.size === 0) {
-    void Promise.resolve()
-      .then(() => dependencies.operations.appendUpload(request.workspaceId, request.uploadId, 0, Buffer.alloc(0), true))
-      .then(() => {
-        uploadCompleted = true;
-        if (socket.readyState === WebSocket.OPEN) socket.close(1000, 'Upload complete');
-      })
-      .catch(() => {
-        if (socket.readyState === WebSocket.OPEN) socket.close(1011, 'Upload append failed');
-      });
-  }
+	if (request.size === 0) {
+		void Promise.resolve()
+			.then(() =>
+				dependencies.operations.appendUpload(request.workspaceId, request.uploadId, 0, Buffer.alloc(0), true),
+			)
+			.then(() => {
+				uploadCompleted = true;
+				if (socket.readyState === WebSocket.OPEN) socket.close(1000, 'Upload complete');
+			})
+			.catch(() => {
+				if (socket.readyState === WebSocket.OPEN) socket.close(1011, 'Upload append failed');
+			});
+	}
 
-  socket.on('message', (raw: RawData, isBinary: boolean) => {
-    if (closed) return;
-    if (!isBinary) {
-      socket.close(1003, 'Upload stream accepts binary messages only');
-      closed = true;
-      return;
-    }
-    const data = Buffer.isBuffer(raw) ? raw : Array.isArray(raw) ? Buffer.concat(raw) : Buffer.from(raw);
-    if (data.byteLength > MAX_UPLOAD_CHUNK_BYTES) {
-      socket.close(1009, 'Upload chunk too large');
-      closed = true;
-      return;
-    }
-    const nextBytes = bytesReceived + data.byteLength;
-    if (nextBytes > request.size) {
-      socket.close(1009, 'Upload exceeds declared size');
-      closed = true;
-      return;
-    }
-    const isLast = nextBytes === request.size;
-    const currentIndex = chunkIndex++;
-    bytesReceived = nextBytes;
-    queuedBytes += data.byteLength;
-    runtimePerformanceMetrics.recordUploadChunk(data.byteLength, queuedBytes);
-    updateReceiveBackpressure();
-    // Workspace teardown can race an already-upgraded upload socket. Always enter the
-    // promise chain before calling the operation so a synchronous ownership/session error
-    // is contained to this WebSocket instead of escaping the event emitter as uncaughtException.
-    void Promise.resolve()
-      .then(() =>
-        dependencies.operations.appendUpload(request.workspaceId, request.uploadId, currentIndex, data, isLast),
-      )
-      .then(() => {
-        queuedBytes = Math.max(0, queuedBytes - data.byteLength);
-        updateReceiveBackpressure();
-        if (isLast && socket.readyState === WebSocket.OPEN) {
-          uploadCompleted = true;
-          closed = true;
-          socket.close(1000, 'Upload complete');
-        }
-      })
-      .catch((error) => {
-        queuedBytes = Math.max(0, queuedBytes - data.byteLength);
-        logger.error(
-          { err: error, workspaceId: request.workspaceId, uploadId: request.uploadId },
-          'WebSocket upload append failed',
-        );
-        if (socket.readyState === WebSocket.OPEN) socket.close(1011, 'Upload append failed');
-        closed = true;
-      });
-  });
+	socket.on('message', (raw: RawData, isBinary: boolean) => {
+		if (closed) return;
+		if (!isBinary) {
+			socket.close(1003, 'Upload stream accepts binary messages only');
+			closed = true;
+			return;
+		}
+		const data = Buffer.isBuffer(raw) ? raw : Array.isArray(raw) ? Buffer.concat(raw) : Buffer.from(raw);
+		if (data.byteLength > MAX_UPLOAD_CHUNK_BYTES) {
+			socket.close(1009, 'Upload chunk too large');
+			closed = true;
+			return;
+		}
+		const nextBytes = bytesReceived + data.byteLength;
+		if (nextBytes > request.size) {
+			socket.close(1009, 'Upload exceeds declared size');
+			closed = true;
+			return;
+		}
+		const isLast = nextBytes === request.size;
+		const currentIndex = chunkIndex++;
+		bytesReceived = nextBytes;
+		queuedBytes += data.byteLength;
+		runtimePerformanceMetrics.recordUploadChunk(data.byteLength, queuedBytes);
+		updateReceiveBackpressure();
+		// Workspace teardown can race an already-upgraded upload socket. Always enter the
+		// promise chain before calling the operation so a synchronous ownership/session error
+		// is contained to this WebSocket instead of escaping the event emitter as uncaughtException.
+		void Promise.resolve()
+			.then(() =>
+				dependencies.operations.appendUpload(request.workspaceId, request.uploadId, currentIndex, data, isLast),
+			)
+			.then(() => {
+				queuedBytes = Math.max(0, queuedBytes - data.byteLength);
+				updateReceiveBackpressure();
+				if (isLast && socket.readyState === WebSocket.OPEN) {
+					uploadCompleted = true;
+					closed = true;
+					socket.close(1000, 'Upload complete');
+				}
+			})
+			.catch((error) => {
+				queuedBytes = Math.max(0, queuedBytes - data.byteLength);
+				logger.error(
+					{ err: error, workspaceId: request.workspaceId, uploadId: request.uploadId },
+					'WebSocket upload append failed',
+				);
+				if (socket.readyState === WebSocket.OPEN) socket.close(1011, 'Upload append failed');
+				closed = true;
+			});
+	});
 
-  return true;
+	return true;
 };

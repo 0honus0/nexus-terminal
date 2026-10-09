@@ -4,71 +4,75 @@ import type { TransientRunEvent } from './event.types';
 type Listener<T> = (event: T) => void;
 
 export class AgentEventHub {
-  private readonly runWakeListeners = new Map<string, Set<Listener<number>>>();
-  private readonly hostWakeListeners = new Map<number, Set<Listener<number>>>();
-  private readonly transientListeners = new Map<string, Set<Listener<TransientRunEvent>>>();
+	private readonly runWakeListeners = new Map<string, Set<Listener<number>>>();
+	private readonly hostWakeListeners = new Map<number, Set<Listener<number>>>();
+	private readonly transientListeners = new Map<string, Set<Listener<TransientRunEvent>>>();
 
-  publishRunWake(runId: string, cursor: number): void {
-    this.publish(this.runWakeListeners.get(runId), cursor, { channel: 'run_wake', runId, cursor });
-  }
+	publishRunWake(runId: string, cursor: number): void {
+		this.publish(this.runWakeListeners.get(runId), cursor, { channel: 'run_wake', runId, cursor });
+	}
 
-  publishHostWake(userId: number, cursor: number): void {
-    this.publish(this.hostWakeListeners.get(userId), cursor, { channel: 'host_wake', userId, cursor });
-  }
+	publishHostWake(userId: number, cursor: number): void {
+		this.publish(this.hostWakeListeners.get(userId), cursor, { channel: 'host_wake', userId, cursor });
+	}
 
-  publishTransient(event: TransientRunEvent): void {
-    this.publish(this.transientListeners.get(event.runId), event, {
-      channel: 'transient',
-      runId: event.runId,
-      eventType: event.type,
-    });
-  }
+	publishTransient(event: TransientRunEvent): void {
+		this.publish(this.transientListeners.get(event.runId), event, {
+			channel: 'transient',
+			runId: event.runId,
+			eventType: event.type,
+		});
+	}
 
-  onRunWake(runId: string, listener: Listener<number>): () => void {
-    return this.add(this.runWakeListeners, runId, listener);
-  }
+	onRunWake(runId: string, listener: Listener<number>): () => void {
+		return this.add(this.runWakeListeners, runId, listener);
+	}
 
-  onHostWake(userId: number, listener: Listener<number>): () => void {
-    return this.add(this.hostWakeListeners, userId, listener);
-  }
+	onHostWake(userId: number, listener: Listener<number>): () => void {
+		return this.add(this.hostWakeListeners, userId, listener);
+	}
 
-  onTransient(runId: string, listener: Listener<TransientRunEvent>): () => void {
-    return this.add(this.transientListeners, runId, listener);
-  }
+	onTransient(runId: string, listener: Listener<TransientRunEvent>): () => void {
+		return this.add(this.transientListeners, runId, listener);
+	}
 
-  clear(): void {
-    this.runWakeListeners.clear();
-    this.hostWakeListeners.clear();
-    this.transientListeners.clear();
-  }
+	clear(): void {
+		this.runWakeListeners.clear();
+		this.hostWakeListeners.clear();
+		this.transientListeners.clear();
+	}
 
-  private publish<TEvent>(
-    listeners: Set<Listener<TEvent>> | undefined,
-    event: TEvent,
-    context: Record<string, string | number>,
-  ): void {
-    for (const listener of [...(listeners ?? [])]) {
-      try {
-        listener(event);
-      } catch (error) {
-        logger.error(
-          { ...context, errorCode: logErrorCode(error, 'AGENT_EVENT_LISTENER_FAILED') },
-          'Agent EventHub listener failed',
-        );
-      }
-    }
-  }
+	private publish<TEvent>(
+		listeners: Set<Listener<TEvent>> | undefined,
+		event: TEvent,
+		context: Record<string, string | number>,
+	): void {
+		for (const listener of [...(listeners ?? [])]) {
+			try {
+				listener(event);
+			} catch (error) {
+				logger.error(
+					{ ...context, errorCode: logErrorCode(error, 'AGENT_EVENT_LISTENER_FAILED') },
+					'Agent EventHub listener failed',
+				);
+			}
+		}
+	}
 
-  private add<TKey, TEvent>(map: Map<TKey, Set<Listener<TEvent>>>, key: TKey, listener: Listener<TEvent>): () => void {
-    let listeners = map.get(key);
-    if (!listeners) {
-      listeners = new Set();
-      map.set(key, listeners);
-    }
-    listeners.add(listener);
-    return () => {
-      listeners?.delete(listener);
-      if (listeners?.size === 0) map.delete(key);
-    };
-  }
+	private add<TKey, TEvent>(
+		map: Map<TKey, Set<Listener<TEvent>>>,
+		key: TKey,
+		listener: Listener<TEvent>,
+	): () => void {
+		let listeners = map.get(key);
+		if (!listeners) {
+			listeners = new Set();
+			map.set(key, listeners);
+		}
+		listeners.add(listener);
+		return () => {
+			listeners?.delete(listener);
+			if (listeners?.size === 0) map.delete(key);
+		};
+	}
 }

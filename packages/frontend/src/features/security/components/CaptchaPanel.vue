@@ -1,129 +1,143 @@
 <script setup lang="ts">
-  import { onMounted, reactive, ref } from 'vue';
-  import { useI18n } from 'vue-i18n';
-  import { apiErrorMessage } from '@/client/http';
-  import { UiButton, UiCheckbox, UiFormField, UiInput, UiSelect } from '@/foundation/ui';
-  import { useFeedback } from '@/shared/feedback/public';
-  import { securityApi } from '../api/securityApi';
-  import type { CaptchaConfigUpdateDto } from '../model/security';
+	import { onMounted, reactive, ref } from 'vue';
+	import { useI18n } from 'vue-i18n';
+	import { apiErrorMessage } from '@/client/http';
+	import { UiButton, UiCheckbox, UiFormField, UiInput, UiSelect } from '@/foundation/ui';
+	import { useFeedback } from '@/shared/feedback/public';
+	import { securityApi } from '../api/securityApi';
+	import type { CaptchaConfigUpdateDto } from '../model/security';
 
-  const { t } = useI18n();
-  const feedback = useFeedback();
-  const form = reactive<CaptchaConfigUpdateDto>({
-    enabled: false,
-    provider: 'none',
-    hcaptchaSiteKey: '',
-    recaptchaSiteKey: '',
-    hcaptchaSecretKey: '',
-    recaptchaSecretKey: '',
-  });
-  const loading = ref(false);
-  const message = ref('');
-  const success = ref(false);
-  const handleEnabledChange = (enabled: boolean) => {
-    if (!enabled) form.provider = 'none';
-  };
-  const load = async () => {
-    loading.value = true;
-    try {
-      Object.assign(form, await securityApi.getCaptchaConfig(), { hcaptchaSecretKey: '', recaptchaSecretKey: '' });
-      if (!form.enabled) form.provider = 'none';
-    } catch (cause) {
-      message.value = apiErrorMessage(cause, t('settings.captcha.error.loadFailed'));
-    } finally {
-      loading.value = false;
-    }
-  };
-  const save = async () => {
-    loading.value = true;
-    message.value = '';
-    success.value = false;
-    try {
-      await securityApi.updateCaptchaConfig({
-        ...form,
-        provider: form.enabled ? form.provider : 'none',
-        hcaptchaSecretKey: form.hcaptchaSecretKey || undefined,
-        recaptchaSecretKey: form.recaptchaSecretKey || undefined,
-      });
-      form.hcaptchaSecretKey = '';
-      form.recaptchaSecretKey = '';
-      message.value = t('settings.captcha.success.saved');
-      success.value = true;
-      feedback.notifySuccess(message.value);
-    } catch (cause) {
-      message.value = apiErrorMessage(cause, t('settings.captcha.error.saveFailed'));
-      feedback.notifyError(message.value);
-    } finally {
-      loading.value = false;
-    }
-  };
-  onMounted(load);
+	const { t } = useI18n();
+	const feedback = useFeedback();
+	const form = reactive<CaptchaConfigUpdateDto>({
+		enabled: false,
+		provider: 'none',
+		hcaptchaSiteKey: '',
+		recaptchaSiteKey: '',
+		hcaptchaSecretKey: '',
+		recaptchaSecretKey: '',
+	});
+	const loading = ref(false);
+	const message = ref('');
+	const success = ref(false);
+
+	const handleEnabledChange = (enabled: boolean) => {
+		if (!enabled) form.provider = 'none';
+	};
+
+	const load = async () => {
+		loading.value = true;
+		try {
+			Object.assign(form, await securityApi.getCaptchaConfig(), {
+				hcaptchaSecretKey: '',
+				recaptchaSecretKey: '',
+			});
+			if (!form.enabled) form.provider = 'none';
+		} catch (cause) {
+			message.value = apiErrorMessage(cause, t('settings.captcha.error.loadFailed'));
+		} finally {
+			loading.value = false;
+		}
+	};
+
+	const save = async () => {
+		loading.value = true;
+		message.value = '';
+		success.value = false;
+		try {
+			await securityApi.updateCaptchaConfig({
+				...form,
+				provider: form.enabled ? form.provider : 'none',
+				hcaptchaSecretKey: form.hcaptchaSecretKey || undefined,
+				recaptchaSecretKey: form.recaptchaSecretKey || undefined,
+			});
+			form.hcaptchaSecretKey = '';
+			form.recaptchaSecretKey = '';
+			message.value = t('settings.captcha.success.saved');
+			success.value = true;
+			feedback.notifySuccess(message.value);
+		} catch (cause) {
+			message.value = apiErrorMessage(cause, t('settings.captcha.error.saveFailed'));
+			feedback.notifyError(message.value);
+		} finally {
+			loading.value = false;
+		}
+	};
+
+	onMounted(load);
 </script>
 
 <template>
-  <section>
-    <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.captcha.title') }}</h3>
-    <p class="mb-4 text-sm text-text-secondary">{{ t('settings.captcha.description') }}</p>
-    <form class="space-y-4" @submit.prevent="save">
-      <label class="flex items-center text-sm">
-        <UiCheckbox id="captchaEnabled" v-model="form.enabled" class="mr-2" @update:model-value="handleEnabledChange" />
-        <span>{{ t('settings.captcha.enableLabel') }}</span>
-      </label>
-      <UiFormField :label="t('settings.captcha.providerLabel')" for-id="captchaProvider">
-        <UiSelect id="captchaProvider" v-model="form.provider">
-          <option value="none">{{ t('settings.captcha.providerNone') }}</option>
-          <option value="hcaptcha">hCaptcha</option>
-          <option value="recaptcha">reCAPTCHA</option>
-        </UiSelect>
-      </UiFormField>
-      <div
-        v-if="form.enabled && form.provider === 'hcaptcha'"
-        class="ml-1 space-y-4 border-l-2 border-border/50 pl-4 pt-2"
-      >
-        <p class="text-xs text-text-secondary">
-          {{ t('settings.captcha.hcaptchaHint') }}
-          <a
-            href="https://www.hcaptcha.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-primary hover:underline"
-            >{{ t('settings.captcha.hcaptchaProviderName') }}</a
-          >
-        </p>
-        <UiFormField :label="t('settings.captcha.siteKeyLabel')" for-id="hcaptchaSiteKey"
-          ><UiInput id="hcaptchaSiteKey" v-model="form.hcaptchaSiteKey"
-        /></UiFormField>
-        <UiFormField :label="t('settings.captcha.secretKeyLabel')" for-id="hcaptchaSecretKey">
-          <UiInput id="hcaptchaSecretKey" v-model="form.hcaptchaSecretKey" type="password" />
-          <p class="mt-1 text-xs text-text-secondary">{{ t('settings.captcha.secretKeyHint') }}</p>
-        </UiFormField>
-      </div>
-      <div
-        v-if="form.enabled && form.provider === 'recaptcha'"
-        class="ml-1 space-y-4 border-l-2 border-border/50 pl-4 pt-2"
-      >
-        <p class="text-xs text-text-secondary">
-          {{ t('settings.captcha.recaptchaHint') }}
-          <a
-            href="https://www.google.com/recaptcha/"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-primary hover:underline"
-            >{{ t('settings.captcha.recaptchaProviderName') }}</a
-          >
-        </p>
-        <UiFormField :label="t('settings.captcha.siteKeyLabel')" for-id="recaptchaSiteKey"
-          ><UiInput id="recaptchaSiteKey" v-model="form.recaptchaSiteKey"
-        /></UiFormField>
-        <UiFormField :label="t('settings.captcha.secretKeyLabel')" for-id="recaptchaSecretKey">
-          <UiInput id="recaptchaSecretKey" v-model="form.recaptchaSecretKey" type="password" />
-          <p class="mt-1 text-xs text-text-secondary">{{ t('settings.captcha.secretKeyHint') }}</p>
-        </UiFormField>
-      </div>
-      <div class="flex items-center justify-between gap-4 pt-2">
-        <UiButton type="submit" appearance="solid" tone="primary" :loading="loading">{{ t('common.save') }}</UiButton>
-        <p v-if="message" :class="success ? 'text-success' : 'text-error'" class="text-sm">{{ message }}</p>
-      </div>
-    </form>
-  </section>
+	<section>
+		<h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.captcha.title') }}</h3>
+		<p class="mb-4 text-sm text-text-secondary">{{ t('settings.captcha.description') }}</p>
+		<form class="space-y-4" @submit.prevent="save">
+			<label class="flex items-center text-sm">
+				<UiCheckbox
+					id="captchaEnabled"
+					v-model="form.enabled"
+					class="mr-2"
+					@update:model-value="handleEnabledChange"
+				/>
+				<span>{{ t('settings.captcha.enableLabel') }}</span>
+			</label>
+			<UiFormField :label="t('settings.captcha.providerLabel')" for-id="captchaProvider">
+				<UiSelect id="captchaProvider" v-model="form.provider">
+					<option value="none">{{ t('settings.captcha.providerNone') }}</option>
+					<option value="hcaptcha">hCaptcha</option>
+					<option value="recaptcha">reCAPTCHA</option>
+				</UiSelect>
+			</UiFormField>
+			<div
+				v-if="form.enabled && form.provider === 'hcaptcha'"
+				class="ml-1 space-y-4 border-l-2 border-border/50 pl-4 pt-2"
+			>
+				<p class="text-xs text-text-secondary">
+					{{ t('settings.captcha.hcaptchaHint') }}
+					<a
+						href="https://www.hcaptcha.com/"
+						target="_blank"
+						rel="noopener noreferrer"
+						class="text-primary hover:underline"
+						>{{ t('settings.captcha.hcaptchaProviderName') }}</a
+					>
+				</p>
+				<UiFormField :label="t('settings.captcha.siteKeyLabel')" for-id="hcaptchaSiteKey"
+					><UiInput id="hcaptchaSiteKey" v-model="form.hcaptchaSiteKey"
+				/></UiFormField>
+				<UiFormField :label="t('settings.captcha.secretKeyLabel')" for-id="hcaptchaSecretKey">
+					<UiInput id="hcaptchaSecretKey" v-model="form.hcaptchaSecretKey" type="password" />
+					<p class="mt-1 text-xs text-text-secondary">{{ t('settings.captcha.secretKeyHint') }}</p>
+				</UiFormField>
+			</div>
+			<div
+				v-if="form.enabled && form.provider === 'recaptcha'"
+				class="ml-1 space-y-4 border-l-2 border-border/50 pl-4 pt-2"
+			>
+				<p class="text-xs text-text-secondary">
+					{{ t('settings.captcha.recaptchaHint') }}
+					<a
+						href="https://www.google.com/recaptcha/"
+						target="_blank"
+						rel="noopener noreferrer"
+						class="text-primary hover:underline"
+						>{{ t('settings.captcha.recaptchaProviderName') }}</a
+					>
+				</p>
+				<UiFormField :label="t('settings.captcha.siteKeyLabel')" for-id="recaptchaSiteKey"
+					><UiInput id="recaptchaSiteKey" v-model="form.recaptchaSiteKey"
+				/></UiFormField>
+				<UiFormField :label="t('settings.captcha.secretKeyLabel')" for-id="recaptchaSecretKey">
+					<UiInput id="recaptchaSecretKey" v-model="form.recaptchaSecretKey" type="password" />
+					<p class="mt-1 text-xs text-text-secondary">{{ t('settings.captcha.secretKeyHint') }}</p>
+				</UiFormField>
+			</div>
+			<div class="flex items-center justify-between gap-4 pt-2">
+				<UiButton type="submit" appearance="solid" tone="primary" :loading="loading">{{
+					t('common.save')
+				}}</UiButton>
+				<p v-if="message" :class="success ? 'text-success' : 'text-error'" class="text-sm">{{ message }}</p>
+			</div>
+		</form>
+	</section>
 </template>

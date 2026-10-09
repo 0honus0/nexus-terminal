@@ -3,14 +3,14 @@ import type { WorkspaceShellIntegrationService } from './workspace-shell-integra
 
 /** User-visible command-like Workspace actions that are safe to expose independently of terminal input. */
 export class WorkspaceCommandService {
-  constructor(
-    private readonly sessions: WorkspaceSessionRegistry,
-    private readonly shellIntegration: WorkspaceShellIntegrationService,
-  ) {}
+	constructor(
+		private readonly sessions: WorkspaceSessionRegistry,
+		private readonly shellIntegration: WorkspaceShellIntegrationService,
+	) {}
 
-  async readCurrentDirectory(workspaceId: string, userId: number): Promise<string> {
-    const session = this.sessions.require(workspaceId);
-    if (session.userId !== userId) throw new Error('无权访问此 Workspace。');
-    return this.shellIntegration.readCurrentPath(workspaceId);
-  }
+	async readCurrentDirectory(workspaceId: string, userId: number): Promise<string> {
+		const session = this.sessions.require(workspaceId);
+		if (session.userId !== userId) throw new Error('无权访问此 Workspace。');
+		return this.shellIntegration.readCurrentPath(workspaceId);
+	}
 }

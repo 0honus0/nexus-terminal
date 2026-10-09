@@ -1,652 +1,723 @@
 <script setup lang="ts">
-  import { structurallyEqual } from '@/foundation/data';
-  import { UiButton, UiCheckbox, UiEmptyState, UiInfoHint, UiSelect } from '@/foundation/ui';
-  import { computed, onBeforeUnmount, ref, watch } from 'vue';
-  import { useI18n } from 'vue-i18n';
-  import { useOperationFeedback } from '@/shared/feedback/public';
-  import QuantityInput from './QuantityInput.vue';
-  import { pickOption } from '../common/pick-option';
-  import {
-    agentApi,
-    formatAgentApiError,
-    type AgentAppSummaryDto,
-    type AgentProviderViewDto,
-    type AgentSettingsViewDto,
-    type AgentSubagentProfileDto,
-    type AgentSubagentProfileTemplateDto,
-    type AgentSubagentSettingsViewDto,
-  } from '../api/agent-api';
-  import { agentHostEvents, type AgentConfigurationChangedEvent } from '../events/agent-host-events';
+	import { structurallyEqual } from '@/foundation/data';
+	import { UiButton, UiCheckbox, UiEmptyState, UiInfoHint, UiSelect } from '@/foundation/ui';
+	import { computed, onBeforeUnmount, ref, watch } from 'vue';
+	import { useI18n } from 'vue-i18n';
+	import { useOperationFeedback } from '@/shared/feedback/public';
+	import QuantityInput from './QuantityInput.vue';
+	import { pickOption } from '../common/pick-option';
+	import {
+		agentApi,
+		formatAgentApiError,
+		type AgentAppSummaryDto,
+		type AgentProviderViewDto,
+		type AgentSettingsViewDto,
+		type AgentSubagentProfileDto,
+		type AgentSubagentProfileTemplateDto,
+		type AgentSubagentSettingsViewDto,
+	} from '../api/agent-api';
+	import { agentHostEvents, type AgentConfigurationChangedEvent } from '../events/agent-host-events';
 
-  const { t } = useI18n();
-  const operationFeedback = useOperationFeedback('agent.settings.subagents');
-  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'), t);
+	const { t } = useI18n();
+	const operationFeedback = useOperationFeedback('agent.settings.subagents');
 
-  const props = defineProps<{
-    settings: AgentSettingsViewDto;
-    apps: AgentAppSummaryDto[];
-    providers: AgentProviderViewDto[];
-    busy: boolean;
-  }>();
-  const emit = defineEmits<{ save: [patch: Record<string, unknown>] }>();
-  const globalLimitsBaseline = ref<Record<string, number | null>>({
-    ...props.settings.requestedSettings.subagents,
-  });
-  const draft = ref<Record<string, number | null>>({ ...globalLimitsBaseline.value });
-  const selectedAppId = ref('');
-  const profileSettings = ref<AgentSubagentSettingsViewDto | null>(null);
-  const profileBaseline = ref<AgentSubagentProfileDto[]>([]);
-  const profileBusy = ref(false);
-  const profileAppId = ref('');
-  let profileLoadGeneration = 0;
-  const selectedTemplateId = ref<AgentSubagentProfileTemplateDto['id']>('explore');
+	const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.operations.requestFailed'), t);
 
-  type CapabilityId = AgentSubagentProfileDto['capabilities'][number];
-  const capabilityOptions = ref<CapabilityId[]>([]);
+	const props = defineProps<{
+		settings: AgentSettingsViewDto;
+		apps: AgentAppSummaryDto[];
+		providers: AgentProviderViewDto[];
+		busy: boolean;
+	}>();
+	const emit = defineEmits<{ save: [patch: Record<string, unknown>] }>();
+	const globalLimitsBaseline = ref<Record<string, number | null>>({
+		...props.settings.requestedSettings.subagents,
+	});
+	const draft = ref<Record<string, number | null>>({ ...globalLimitsBaseline.value });
+	const selectedAppId = ref('');
+	const profileSettings = ref<AgentSubagentSettingsViewDto | null>(null);
+	const profileBaseline = ref<AgentSubagentProfileDto[]>([]);
+	const profileBusy = ref(false);
+	const profileAppId = ref('');
+	let profileLoadGeneration = 0;
+	const selectedTemplateId = ref<AgentSubagentProfileTemplateDto['id']>('explore');
 
-  const modelOptions = computed(() =>
-    props.providers
-      .filter((provider) => provider.enabled)
-      .flatMap((provider) =>
-        provider.models.map((model) => ({
-          key: `${provider.id}\u0000${model.id}\u0000${provider.version}`,
-          label: `${provider.displayName} · ${model.id}`,
-          ref: { providerId: provider.id, modelId: model.id, configurationVersion: provider.version },
-        })),
-      ),
-  );
+	type CapabilityId = AgentSubagentProfileDto['capabilities'][number];
+	const capabilityOptions = ref<CapabilityId[]>([]);
 
-  const modelKey = (model: AgentSubagentProfileDto['defaultModel']): string =>
-    model ? `${model.providerId}\u0000${model.modelId}\u0000${model.configurationVersion}` : '';
-  type ModelRef = NonNullable<AgentSubagentProfileDto['defaultModel']>;
-  const modelFamilyKey = (model: ModelRef): string => `${model.providerId}\u0000${model.modelId}`;
-  const currentModelOption = (model: ModelRef) =>
-    modelOptions.value.find(
-      (candidate) => candidate.ref.providerId === model.providerId && candidate.ref.modelId === model.modelId,
-    );
-  const staleModelRefs = (profile: AgentSubagentProfileDto): ModelRef[] => {
-    const refs = [...profile.allowedModels, ...(profile.defaultModel ? [profile.defaultModel] : [])];
-    const stale = new Map<string, ModelRef>();
-    for (const model of refs) {
-      if (modelOptions.value.some((candidate) => candidate.key === modelKey(model))) continue;
-      stale.set(modelKey(model), model);
-    }
-    return [...stale.values()];
-  };
-  const replaceModelFamily = (profile: AgentSubagentProfileDto, next: ModelRef): void => {
-    const family = modelFamilyKey(next);
-    profile.allowedModels = [...profile.allowedModels.filter((model) => modelFamilyKey(model) !== family), { ...next }];
-    if (profile.defaultModel && modelFamilyKey(profile.defaultModel) === family) {
-      profile.defaultModel = { ...next };
-    }
-  };
-  const rebindModelRef = (profile: AgentSubagentProfileDto, stale: ModelRef): void => {
-    const current = currentModelOption(stale);
-    if (!current) return;
-    replaceModelFamily(profile, current.ref);
-  };
-  const canRemoveStaleModelRef = (profile: AgentSubagentProfileDto, stale: ModelRef): boolean =>
-    modelKey(profile.defaultModel) !== modelKey(stale) && profile.allowedModels.length > 1;
-  const removeStaleModelRef = (profile: AgentSubagentProfileDto, stale: ModelRef): void => {
-    if (!canRemoveStaleModelRef(profile, stale)) return;
-    profile.allowedModels = profile.allowedModels.filter((model) => modelKey(model) !== modelKey(stale));
-  };
-  const preferredModel = computed(() => {
-    const requested = props.settings.requestedSettings.model;
-    return (
-      modelOptions.value.find(
-        (candidate) =>
-          candidate.ref.providerId === requested.defaultProviderId &&
-          candidate.ref.modelId === requested.defaultModelId,
-      ) ?? modelOptions.value[0]
-    );
-  });
+	const modelOptions = computed(() =>
+		props.providers
+			.filter((provider) => provider.enabled)
+			.flatMap((provider) =>
+				provider.models.map((model) => ({
+					key: `${provider.id}\u0000${model.id}\u0000${provider.version}`,
+					label: `${provider.displayName} · ${model.id}`,
+					ref: { providerId: provider.id, modelId: model.id, configurationVersion: provider.version },
+				})),
+			),
+	);
 
-  const cloneProfiles = (profiles: AgentSubagentProfileDto[]): AgentSubagentProfileDto[] =>
-    JSON.parse(JSON.stringify(profiles)) as AgentSubagentProfileDto[];
+	const modelKey = (model: AgentSubagentProfileDto['defaultModel']): string =>
+		model ? `${model.providerId}\u0000${model.modelId}\u0000${model.configurationVersion}` : '';
 
-  const profilesAreDirty = (): boolean =>
-    Boolean(profileSettings.value) &&
-    !structurallyEqual(profileSettings.value?.policy.profiles ?? [], profileBaseline.value);
+	type ModelRef = NonNullable<AgentSubagentProfileDto['defaultModel']>;
 
-  const loadProfiles = async (options: { preserveDirty?: boolean } = {}): Promise<void> => {
-    const requestGeneration = ++profileLoadGeneration;
-    const appId = selectedAppId.value;
-    if (!appId) {
-      profileAppId.value = '';
-      profileSettings.value = null;
-      profileBaseline.value = [];
-      capabilityOptions.value = [];
-      profileBusy.value = false;
-      return;
-    }
-    if (profileAppId.value !== appId) {
-      profileAppId.value = '';
-      profileSettings.value = null;
-      profileBaseline.value = [];
-      capabilityOptions.value = [];
-    }
-    profileBusy.value = true;
-    try {
-      const [loaded, grantView] = await Promise.all([agentApi.subagentSettings(appId), agentApi.appGrants(appId)]);
-      if (requestGeneration !== profileLoadGeneration || selectedAppId.value !== appId) return;
-      capabilityOptions.value = grantView.grants.map((grant) => grant.capability);
-      const remoteProfiles = cloneProfiles(loaded.policy.profiles);
-      const preserveDraft = options.preserveDirty === true && profileAppId.value === appId && profilesAreDirty();
-      const draftProfiles = preserveDraft
-        ? cloneProfiles(profileSettings.value?.policy.profiles ?? [])
-        : cloneProfiles(remoteProfiles);
-      profileSettings.value = {
-        ...loaded,
-        policy: { ...loaded.policy, profiles: draftProfiles },
-      };
-      profileAppId.value = appId;
-      profileBaseline.value = remoteProfiles;
-    } catch (cause) {
-      if (requestGeneration !== profileLoadGeneration || selectedAppId.value !== appId) return;
-      const message = explain(cause);
-      operationFeedback.notifyError({ operation: 'load-profiles', message, cause });
-    } finally {
-      if (requestGeneration === profileLoadGeneration && selectedAppId.value === appId) profileBusy.value = false;
-    }
-  };
+	const modelFamilyKey = (model: ModelRef): string => `${model.providerId}\u0000${model.modelId}`;
 
-  const addProfile = (): void => {
-    if (!profileSettings.value || !preferredModel.value) return;
-    const first = preferredModel.value;
-    const nextIndex = profileSettings.value.policy.profiles.length + 1;
-    profileSettings.value.policy.profiles.push({
-      id: `worker-${nextIndex}`,
-      role: 'Bounded child agent',
-      defaultModel: { ...first.ref },
-      allowedModels: [{ ...first.ref }],
-      capabilities: [],
-      peerMessaging: 'parent-child',
-      mutationMode: 'read-only',
-      maxModelRequests: Math.min(12, props.settings.hardLimits.maxModelRequests),
-      failureMode: 'isolate',
-    });
-  };
+	const currentModelOption = (model: ModelRef) =>
+		modelOptions.value.find(
+			(candidate) => candidate.ref.providerId === model.providerId && candidate.ref.modelId === model.modelId,
+		);
 
-  const availableProfileId = (base: string): string => {
-    const used = new Set(profileSettings.value?.policy.profiles.map((profile) => profile.id) ?? []);
-    if (!used.has(base)) return base;
-    for (let suffix = 2; suffix <= 99; suffix += 1) {
-      const candidate = `${base}-${suffix}`;
-      if (!used.has(candidate)) return candidate;
-    }
-    return `${base}-copy`;
-  };
+	const staleModelRefs = (profile: AgentSubagentProfileDto): ModelRef[] => {
+		const refs = [...profile.allowedModels, ...(profile.defaultModel ? [profile.defaultModel] : [])];
+		const stale = new Map<string, ModelRef>();
+		for (const model of refs) {
+			if (modelOptions.value.some((candidate) => candidate.key === modelKey(model))) continue;
+			stale.set(modelKey(model), model);
+		}
+		return [...stale.values()];
+	};
 
-  const addTemplateProfile = (): void => {
-    if (!profileSettings.value || !preferredModel.value) return;
-    const template = profileSettings.value.templates.find((candidate) => candidate.id === selectedTemplateId.value);
-    if (!template) return;
-    const model = preferredModel.value.ref;
-    profileSettings.value.policy.profiles.push({
-      id: availableProfileId(template.id),
-      role: template.role,
-      defaultModel: { ...model },
-      allowedModels: [{ ...model }],
-      capabilities: [...template.capabilities],
-      peerMessaging: template.peerMessaging,
-      mutationMode: template.mutationMode,
-      maxModelRequests: Math.min(template.maxModelRequests, props.settings.hardLimits.maxModelRequests),
-      failureMode: template.failureMode,
-    });
-  };
+	const replaceModelFamily = (profile: AgentSubagentProfileDto, next: ModelRef): void => {
+		const family = modelFamilyKey(next);
+		profile.allowedModels = [
+			...profile.allowedModels.filter((model) => modelFamilyKey(model) !== family),
+			{ ...next },
+		];
+		if (profile.defaultModel && modelFamilyKey(profile.defaultModel) === family) {
+			profile.defaultModel = { ...next };
+		}
+	};
 
-  const removeProfile = (index: number): void => {
-    profileSettings.value?.policy.profiles.splice(index, 1);
-  };
+	const rebindModelRef = (profile: AgentSubagentProfileDto, stale: ModelRef): void => {
+		const current = currentModelOption(stale);
+		if (!current) return;
+		replaceModelFamily(profile, current.ref);
+	};
 
-  const setDefaultModel = (profile: AgentSubagentProfileDto, key: string): void => {
-    const selected = modelOptions.value.find((candidate) => candidate.key === key);
-    if (!selected) return;
-    const family = modelFamilyKey(selected.ref);
-    profile.allowedModels = profile.allowedModels.filter((model) => modelFamilyKey(model) !== family);
-    profile.allowedModels.push({ ...selected.ref });
-    profile.defaultModel = { ...selected.ref };
-  };
+	const canRemoveStaleModelRef = (profile: AgentSubagentProfileDto, stale: ModelRef): boolean =>
+		modelKey(profile.defaultModel) !== modelKey(stale) && profile.allowedModels.length > 1;
 
-  const toggleAllowedModel = (profile: AgentSubagentProfileDto, key: string, checked: boolean): void => {
-    const selected = modelOptions.value.find((candidate) => candidate.key === key);
-    if (!selected) return;
-    const family = modelFamilyKey(selected.ref);
-    if (checked) {
-      replaceModelFamily(profile, selected.ref);
-      if (!profile.defaultModel) profile.defaultModel = { ...selected.ref };
-      return;
-    }
-    const familyModels = profile.allowedModels.filter((model) => modelFamilyKey(model) === family);
-    if (
-      profile.allowedModels.length - familyModels.length < 1 ||
-      (profile.defaultModel && modelFamilyKey(profile.defaultModel) === family)
-    )
-      return;
-    profile.allowedModels = profile.allowedModels.filter((model) => modelFamilyKey(model) !== family);
-  };
+	const removeStaleModelRef = (profile: AgentSubagentProfileDto, stale: ModelRef): void => {
+		if (!canRemoveStaleModelRef(profile, stale)) return;
+		profile.allowedModels = profile.allowedModels.filter((model) => modelKey(model) !== modelKey(stale));
+	};
 
-  const toggleCapability = (profile: AgentSubagentProfileDto, capability: CapabilityId, checked: boolean): void => {
-    if (checked) {
-      if (!profile.capabilities.includes(capability)) profile.capabilities.push(capability);
-    } else {
-      profile.capabilities = profile.capabilities.filter((item) => item !== capability);
-    }
-  };
+	const preferredModel = computed(() => {
+		const requested = props.settings.requestedSettings.model;
+		return (
+			modelOptions.value.find(
+				(candidate) =>
+					candidate.ref.providerId === requested.defaultProviderId &&
+					candidate.ref.modelId === requested.defaultModelId,
+			) ?? modelOptions.value[0]
+		);
+	});
 
-  const hasStaleModelRefs = computed(() =>
-    Boolean(profileSettings.value?.policy.profiles.some((profile) => staleModelRefs(profile).length > 0)),
-  );
+	const cloneProfiles = (profiles: AgentSubagentProfileDto[]): AgentSubagentProfileDto[] =>
+		JSON.parse(JSON.stringify(profiles)) as AgentSubagentProfileDto[];
 
-  const saveProfiles = async (): Promise<void> => {
-    const appId = profileAppId.value;
-    if (
-      !profileSettings.value ||
-      !appId ||
-      selectedAppId.value !== appId ||
-      profileBusy.value ||
-      invalidProfileLimits.value ||
-      hasStaleModelRefs.value
-    )
-      return;
-    const requestGeneration = profileLoadGeneration;
-    const profiles = cloneProfiles(profileSettings.value.policy.profiles);
-    const expectedVersion = profileSettings.value.version;
-    profileBusy.value = true;
-    try {
-      const updated = await agentApi.replaceSubagentProfiles(appId, profiles, expectedVersion);
-      if (requestGeneration !== profileLoadGeneration || selectedAppId.value !== appId || profileAppId.value !== appId)
-        return;
-      profileSettings.value = {
-        ...updated,
-        policy: { ...updated.policy, profiles: cloneProfiles(updated.policy.profiles) },
-      };
-      profileBaseline.value = cloneProfiles(profileSettings.value.policy.profiles);
-      operationFeedback.notifySuccess(t('agent.ui.saved'));
-      agentHostEvents.emit('configuration-changed', { origin: 'local' });
-    } catch (cause) {
-      if (requestGeneration !== profileLoadGeneration || selectedAppId.value !== appId || profileAppId.value !== appId)
-        return;
-      const message = explain(cause);
-      operationFeedback.notifyError({ operation: 'save-profiles', message, cause });
-    } finally {
-      if (requestGeneration === profileLoadGeneration && selectedAppId.value === appId) profileBusy.value = false;
-    }
-  };
+	const profilesAreDirty = (): boolean =>
+		Boolean(profileSettings.value) &&
+		!structurallyEqual(profileSettings.value?.policy.profiles ?? [], profileBaseline.value);
 
-  watch(
-    () => props.apps.map((app) => app.id).join('\u0000'),
-    () => {
-      if (!props.apps.some((app) => app.id === selectedAppId.value)) selectedAppId.value = props.apps[0]?.id ?? '';
-    },
-    { immediate: true },
-  );
-  watch(selectedAppId, () => void loadProfiles(), { immediate: true });
+	const loadProfiles = async (options: { preserveDirty?: boolean } = {}): Promise<void> => {
+		const requestGeneration = ++profileLoadGeneration;
+		const appId = selectedAppId.value;
+		if (!appId) {
+			profileAppId.value = '';
+			profileSettings.value = null;
+			profileBaseline.value = [];
+			capabilityOptions.value = [];
+			profileBusy.value = false;
+			return;
+		}
+		if (profileAppId.value !== appId) {
+			profileAppId.value = '';
+			profileSettings.value = null;
+			profileBaseline.value = [];
+			capabilityOptions.value = [];
+		}
+		profileBusy.value = true;
+		try {
+			const [loaded, grantView] = await Promise.all([
+				agentApi.subagentSettings(appId),
+				agentApi.appGrants(appId),
+			]);
+			if (requestGeneration !== profileLoadGeneration || selectedAppId.value !== appId) return;
+			capabilityOptions.value = grantView.grants.map((grant) => grant.capability);
+			const remoteProfiles = cloneProfiles(loaded.policy.profiles);
+			const preserveDraft = options.preserveDirty === true && profileAppId.value === appId && profilesAreDirty();
+			const draftProfiles = preserveDraft
+				? cloneProfiles(profileSettings.value?.policy.profiles ?? [])
+				: cloneProfiles(remoteProfiles);
+			profileSettings.value = {
+				...loaded,
+				policy: { ...loaded.policy, profiles: draftProfiles },
+			};
+			profileAppId.value = appId;
+			profileBaseline.value = remoteProfiles;
+		} catch (cause) {
+			if (requestGeneration !== profileLoadGeneration || selectedAppId.value !== appId) return;
+			const message = explain(cause);
+			operationFeedback.notifyError({ operation: 'load-profiles', message, cause });
+		} finally {
+			if (requestGeneration === profileLoadGeneration && selectedAppId.value === appId) profileBusy.value = false;
+		}
+	};
 
-  const invalidGlobalLimits = computed(() => Object.values(draft.value).some((value) => value === null || value < 1));
-  const invalidProfileLimits = computed(() =>
-    Boolean(
-      profileSettings.value?.policy.profiles.some(
-        (profile) => !Number.isSafeInteger(profile.maxModelRequests) || profile.maxModelRequests < 1,
-      ),
-    ),
-  );
+	const addProfile = (): void => {
+		if (!profileSettings.value || !preferredModel.value) return;
+		const first = preferredModel.value;
+		const nextIndex = profileSettings.value.policy.profiles.length + 1;
+		profileSettings.value.policy.profiles.push({
+			id: `worker-${nextIndex}`,
+			role: 'Bounded child agent',
+			defaultModel: { ...first.ref },
+			allowedModels: [{ ...first.ref }],
+			capabilities: [],
+			peerMessaging: 'parent-child',
+			mutationMode: 'read-only',
+			maxModelRequests: Math.min(12, props.settings.hardLimits.maxModelRequests),
+			failureMode: 'isolate',
+		});
+	};
 
-  const appOptions = computed(() => props.apps.map((app) => ({ value: app.id, label: app.displayName })));
-  const templateOptions = computed(() =>
-    (profileSettings.value?.templates ?? []).map((template) => ({
-      value: template.id,
-      label: t(`agent.settings.subagents.template${template.id[0]!.toUpperCase()}${template.id.slice(1)}`),
-    })),
-  );
-  const modelSelectOptions = computed(() =>
-    modelOptions.value.map((model) => ({ value: model.key, label: model.label })),
-  );
+	const availableProfileId = (base: string): string => {
+		const used = new Set(profileSettings.value?.policy.profiles.map((profile) => profile.id) ?? []);
+		if (!used.has(base)) return base;
+		for (let suffix = 2; suffix <= 99; suffix += 1) {
+			const candidate = `${base}-${suffix}`;
+			if (!used.has(candidate)) return candidate;
+		}
+		return `${base}-copy`;
+	};
 
-  const setSelectedTemplateId = (value: unknown): void => {
-    const matched = templateOptions.value.find((option) => option.value === value);
-    if (matched) selectedTemplateId.value = matched.value;
-  };
-  const setPeerMessaging = (profile: AgentSubagentProfileDto, value: unknown): void => {
-    const next = pickOption(value, ['parent-child', 'same-run'] as const);
-    if (next) profile.peerMessaging = next;
-  };
-  const setMutationMode = (profile: AgentSubagentProfileDto, value: unknown): void => {
-    const next = pickOption(value, ['read-only', 'governed'] as const);
-    if (next) profile.mutationMode = next;
-  };
-  const setFailureMode = (profile: AgentSubagentProfileDto, value: unknown): void => {
-    const next = pickOption(value, ['isolate', 'failFast'] as const);
-    if (next) profile.failureMode = next;
-  };
+	const addTemplateProfile = (): void => {
+		if (!profileSettings.value || !preferredModel.value) return;
+		const template = profileSettings.value.templates.find((candidate) => candidate.id === selectedTemplateId.value);
+		if (!template) return;
+		const model = preferredModel.value.ref;
+		profileSettings.value.policy.profiles.push({
+			id: availableProfileId(template.id),
+			role: template.role,
+			defaultModel: { ...model },
+			allowedModels: [{ ...model }],
+			capabilities: [...template.capabilities],
+			peerMessaging: template.peerMessaging,
+			mutationMode: template.mutationMode,
+			maxModelRequests: Math.min(template.maxModelRequests, props.settings.hardLimits.maxModelRequests),
+			failureMode: template.failureMode,
+		});
+	};
 
-  const saveGlobalLimits = (): void => {
-    if (invalidGlobalLimits.value) return;
-    emit('save', draft.value);
-  };
+	const removeProfile = (index: number): void => {
+		profileSettings.value?.policy.profiles.splice(index, 1);
+	};
 
-  const isGlobalLimitsDirty = computed(() => !structurallyEqual(draft.value, globalLimitsBaseline.value));
-  const remoteMatchesGlobalLimits = computed(() =>
-    structurallyEqual(draft.value, props.settings.requestedSettings.subagents),
-  );
+	const setDefaultModel = (profile: AgentSubagentProfileDto, key: string): void => {
+		const selected = modelOptions.value.find((candidate) => candidate.key === key);
+		if (!selected) return;
+		const family = modelFamilyKey(selected.ref);
+		profile.allowedModels = profile.allowedModels.filter((model) => modelFamilyKey(model) !== family);
+		profile.allowedModels.push({ ...selected.ref });
+		profile.defaultModel = { ...selected.ref };
+	};
 
-  watch(
-    () => props.settings.revision,
-    () => {
-      if (!isGlobalLimitsDirty.value || remoteMatchesGlobalLimits.value) {
-        globalLimitsBaseline.value = { ...props.settings.requestedSettings.subagents };
-        draft.value = { ...globalLimitsBaseline.value };
-      }
-    },
-    { immediate: true },
-  );
-  const isProfilesDirty = computed(profilesAreDirty);
+	const toggleAllowedModel = (profile: AgentSubagentProfileDto, key: string, checked: boolean): void => {
+		const selected = modelOptions.value.find((candidate) => candidate.key === key);
+		if (!selected) return;
+		const family = modelFamilyKey(selected.ref);
+		if (checked) {
+			replaceModelFamily(profile, selected.ref);
+			if (!profile.defaultModel) profile.defaultModel = { ...selected.ref };
+			return;
+		}
+		const familyModels = profile.allowedModels.filter((model) => modelFamilyKey(model) === family);
+		if (
+			profile.allowedModels.length - familyModels.length < 1 ||
+			(profile.defaultModel && modelFamilyKey(profile.defaultModel) === family)
+		)
+			return;
+		profile.allowedModels = profile.allowedModels.filter((model) => modelFamilyKey(model) !== family);
+	};
 
-  const onConfigurationChanged = (event: AgentConfigurationChangedEvent): void => {
-    if (event.origin === 'external') void loadProfiles({ preserveDirty: true });
-  };
-  const stopConfigurationChanged = agentHostEvents.on('configuration-changed', onConfigurationChanged);
-  onBeforeUnmount(stopConfigurationChanged);
+	const toggleCapability = (profile: AgentSubagentProfileDto, capability: CapabilityId, checked: boolean): void => {
+		if (checked) {
+			if (!profile.capabilities.includes(capability)) profile.capabilities.push(capability);
+		} else {
+			profile.capabilities = profile.capabilities.filter((item) => item !== capability);
+		}
+	};
 
-  const subagentLabels = computed<Record<string, string>>(() => ({
-    maxDelegationDepth: t('agent.settings.subagents.labels.maxDelegationDepth'),
-    maxSubagentMessagesPerRun: t('agent.settings.subagents.labels.maxSubagentMessagesPerRun'),
-    maxSubagentMessageBytesPerRun: t('agent.settings.subagents.labels.maxSubagentMessageBytesPerRun'),
-  }));
+	const hasStaleModelRefs = computed(() =>
+		Boolean(profileSettings.value?.policy.profiles.some((profile) => staleModelRefs(profile).length > 0)),
+	);
+
+	const saveProfiles = async (): Promise<void> => {
+		const appId = profileAppId.value;
+		if (
+			!profileSettings.value ||
+			!appId ||
+			selectedAppId.value !== appId ||
+			profileBusy.value ||
+			invalidProfileLimits.value ||
+			hasStaleModelRefs.value
+		)
+			return;
+		const requestGeneration = profileLoadGeneration;
+		const profiles = cloneProfiles(profileSettings.value.policy.profiles);
+		const expectedVersion = profileSettings.value.version;
+		profileBusy.value = true;
+		try {
+			const updated = await agentApi.replaceSubagentProfiles(appId, profiles, expectedVersion);
+			if (
+				requestGeneration !== profileLoadGeneration ||
+				selectedAppId.value !== appId ||
+				profileAppId.value !== appId
+			)
+				return;
+			profileSettings.value = {
+				...updated,
+				policy: { ...updated.policy, profiles: cloneProfiles(updated.policy.profiles) },
+			};
+			profileBaseline.value = cloneProfiles(profileSettings.value.policy.profiles);
+			operationFeedback.notifySuccess(t('agent.ui.saved'));
+			agentHostEvents.emit('configuration-changed', { origin: 'local' });
+		} catch (cause) {
+			if (
+				requestGeneration !== profileLoadGeneration ||
+				selectedAppId.value !== appId ||
+				profileAppId.value !== appId
+			)
+				return;
+			const message = explain(cause);
+			operationFeedback.notifyError({ operation: 'save-profiles', message, cause });
+		} finally {
+			if (requestGeneration === profileLoadGeneration && selectedAppId.value === appId) profileBusy.value = false;
+		}
+	};
+
+	watch(
+		() => props.apps.map((app) => app.id).join('\u0000'),
+		() => {
+			if (!props.apps.some((app) => app.id === selectedAppId.value))
+				selectedAppId.value = props.apps[0]?.id ?? '';
+		},
+		{ immediate: true },
+	);
+	watch(selectedAppId, () => void loadProfiles(), { immediate: true });
+
+	const invalidGlobalLimits = computed(() => Object.values(draft.value).some((value) => value === null || value < 1));
+	const invalidProfileLimits = computed(() =>
+		Boolean(
+			profileSettings.value?.policy.profiles.some(
+				(profile) => !Number.isSafeInteger(profile.maxModelRequests) || profile.maxModelRequests < 1,
+			),
+		),
+	);
+
+	const appOptions = computed(() => props.apps.map((app) => ({ value: app.id, label: app.displayName })));
+	const templateOptions = computed(() =>
+		(profileSettings.value?.templates ?? []).map((template) => ({
+			value: template.id,
+			label: t(`agent.settings.subagents.template${template.id[0]!.toUpperCase()}${template.id.slice(1)}`),
+		})),
+	);
+	const modelSelectOptions = computed(() =>
+		modelOptions.value.map((model) => ({ value: model.key, label: model.label })),
+	);
+
+	const setSelectedTemplateId = (value: unknown): void => {
+		const matched = templateOptions.value.find((option) => option.value === value);
+		if (matched) selectedTemplateId.value = matched.value;
+	};
+
+	const setPeerMessaging = (profile: AgentSubagentProfileDto, value: unknown): void => {
+		const next = pickOption(value, ['parent-child', 'same-run'] as const);
+		if (next) profile.peerMessaging = next;
+	};
+
+	const setMutationMode = (profile: AgentSubagentProfileDto, value: unknown): void => {
+		const next = pickOption(value, ['read-only', 'governed'] as const);
+		if (next) profile.mutationMode = next;
+	};
+
+	const setFailureMode = (profile: AgentSubagentProfileDto, value: unknown): void => {
+		const next = pickOption(value, ['isolate', 'failFast'] as const);
+		if (next) profile.failureMode = next;
+	};
+
+	const saveGlobalLimits = (): void => {
+		if (invalidGlobalLimits.value) return;
+		emit('save', draft.value);
+	};
+
+	const isGlobalLimitsDirty = computed(() => !structurallyEqual(draft.value, globalLimitsBaseline.value));
+	const remoteMatchesGlobalLimits = computed(() =>
+		structurallyEqual(draft.value, props.settings.requestedSettings.subagents),
+	);
+
+	watch(
+		() => props.settings.revision,
+		() => {
+			if (!isGlobalLimitsDirty.value || remoteMatchesGlobalLimits.value) {
+				globalLimitsBaseline.value = { ...props.settings.requestedSettings.subagents };
+				draft.value = { ...globalLimitsBaseline.value };
+			}
+		},
+		{ immediate: true },
+	);
+	const isProfilesDirty = computed(profilesAreDirty);
+
+	const onConfigurationChanged = (event: AgentConfigurationChangedEvent): void => {
+		if (event.origin === 'external') void loadProfiles({ preserveDirty: true });
+	};
+
+	const stopConfigurationChanged = agentHostEvents.on('configuration-changed', onConfigurationChanged);
+	onBeforeUnmount(stopConfigurationChanged);
+
+	const subagentLabels = computed<Record<string, string>>(() => ({
+		maxDelegationDepth: t('agent.settings.subagents.labels.maxDelegationDepth'),
+		maxSubagentMessagesPerRun: t('agent.settings.subagents.labels.maxSubagentMessagesPerRun'),
+		maxSubagentMessageBytesPerRun: t('agent.settings.subagents.labels.maxSubagentMessageBytesPerRun'),
+	}));
 </script>
 
 <template>
-  <section class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
-    <div
-      class="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3 sm:px-5 sm:py-3.5 agent-settings-head"
-    >
-      <div class="flex items-center gap-1.5">
-        <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.subagents.title') }}</h3>
-        <UiInfoHint :text="$t('agent.settings.subagents.description')" />
-      </div>
-      <span class="rounded-full border border-border/80 bg-background px-2.5 py-0.5 text-xs text-text-secondary">
-        {{ $t('agent.settings.subagents.phase') }}
-      </span>
-    </div>
-    <div class="space-y-4 p-4 sm:p-5">
-      <div
-        class="flex items-start gap-2.5 rounded-lg bg-header/30 px-3 py-2.5 text-[11px] leading-relaxed text-text-secondary"
-      >
-        <i class="fa-solid fa-diagram-project mt-0.5 shrink-0 text-[10px] text-primary/75" aria-hidden="true"></i>
-        <span>{{ $t('agent.settings.subagents.concurrencyHint') }}</span>
-      </div>
-      <div class="grid gap-3 md:grid-cols-3">
-        <label v-for="(_, key) in settings.requestedSettings.subagents" :key="key" class="block">
-          <span class="mb-1 block text-xs font-medium text-foreground">{{ subagentLabels[key] || key }}</span>
-          <QuantityInput
-            v-model="draft[String(key)]"
-            :type="key === 'maxSubagentMessageBytesPerRun' ? 'bytes' : 'number'"
-            :placeholder="
-              key === 'maxSubagentMessageBytesPerRun'
-                ? $t('agent.settings.subagents.messageBytesPlaceholder')
-                : $t('agent.settings.quantity.placeholderNumber')
-            "
-            :min="1"
-            :disabled="busy"
-          />
-        </label>
-      </div>
-      <div class="mt-4 flex items-center justify-end gap-2">
-        <UiInfoHint v-if="!isGlobalLimitsDirty" :text="$t('agent.settings.disabledReason.noChanges')" />
-        <UiButton
-          :appearance="isGlobalLimitsDirty ? 'solid' : 'soft'"
-          :tone="isGlobalLimitsDirty ? 'primary' : 'neutral'"
-          type="button"
-          :disabled="busy || invalidGlobalLimits || !isGlobalLimitsDirty"
-          @click="saveGlobalLimits"
-        >
-          {{ $t('common.save') }}
-        </UiButton>
-      </div>
+	<section class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
+		<div
+			class="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3 sm:px-5 sm:py-3.5 agent-settings-head"
+		>
+			<div class="flex items-center gap-1.5">
+				<h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.subagents.title') }}</h3>
+				<UiInfoHint :text="$t('agent.settings.subagents.description')" />
+			</div>
+			<span class="rounded-full border border-border/80 bg-background px-2.5 py-0.5 text-xs text-text-secondary">
+				{{ $t('agent.settings.subagents.phase') }}
+			</span>
+		</div>
+		<div class="space-y-4 p-4 sm:p-5">
+			<div
+				class="flex items-start gap-2.5 rounded-lg bg-header/30 px-3 py-2.5 text-[11px] leading-relaxed text-text-secondary"
+			>
+				<i
+					class="fa-solid fa-diagram-project mt-0.5 shrink-0 text-[10px] text-primary/75"
+					aria-hidden="true"
+				></i>
+				<span>{{ $t('agent.settings.subagents.concurrencyHint') }}</span>
+			</div>
+			<div class="grid gap-3 md:grid-cols-3">
+				<label v-for="(_, key) in settings.requestedSettings.subagents" :key="key" class="block">
+					<span class="mb-1 block text-xs font-medium text-foreground">{{ subagentLabels[key] || key }}</span>
+					<QuantityInput
+						v-model="draft[String(key)]"
+						:type="key === 'maxSubagentMessageBytesPerRun' ? 'bytes' : 'number'"
+						:placeholder="
+							key === 'maxSubagentMessageBytesPerRun'
+								? $t('agent.settings.subagents.messageBytesPlaceholder')
+								: $t('agent.settings.quantity.placeholderNumber')
+						"
+						:min="1"
+						:disabled="busy"
+					/>
+				</label>
+			</div>
+			<div class="mt-4 flex items-center justify-end gap-2">
+				<UiInfoHint v-if="!isGlobalLimitsDirty" :text="$t('agent.settings.disabledReason.noChanges')" />
+				<UiButton
+					:appearance="isGlobalLimitsDirty ? 'solid' : 'soft'"
+					:tone="isGlobalLimitsDirty ? 'primary' : 'neutral'"
+					type="button"
+					:disabled="busy || invalidGlobalLimits || !isGlobalLimitsDirty"
+					@click="saveGlobalLimits"
+				>
+					{{ $t('common.save') }}
+				</UiButton>
+			</div>
 
-      <div class="mt-5 border-t border-border pt-5">
-        <div class="flex flex-wrap items-end justify-between gap-3">
-          <label class="min-w-52">
-            <span class="mb-1 block text-xs font-medium text-text-secondary">{{
-              $t('agent.settings.subagents.appProfiles')
-            }}</span>
-            <UiSelect
-              v-model="selectedAppId"
-              class="w-full"
-              :options="appOptions"
-              :aria-label="$t('agent.settings.subagents.appProfiles')"
-            />
-          </label>
-          <div class="flex flex-wrap items-end gap-2">
-            <label v-if="profileSettings?.templates.length" class="min-w-40">
-              <span class="mb-1 block text-xs font-medium text-text-secondary">{{
-                $t('agent.settings.subagents.templatePreset')
-              }}</span>
-              <UiSelect
-                class="w-full"
-                :disabled="profileBusy"
-                :model-value="selectedTemplateId"
-                :options="templateOptions"
-                :aria-label="$t('agent.settings.subagents.templatePreset')"
-                @update:model-value="(value: unknown) => setSelectedTemplateId(value)"
-              />
-            </label>
-            <UiButton
-              appearance="soft"
-              tone="neutral"
-              v-if="profileSettings?.templates.length"
-              type="button"
-              :disabled="profileBusy || !preferredModel"
-              @click="addTemplateProfile"
-            >
-              {{ $t('agent.settings.subagents.addTemplate') }}
-            </UiButton>
-            <UiButton
-              appearance="soft"
-              tone="neutral"
-              type="button"
-              :disabled="profileBusy || !preferredModel"
-              @click="addProfile"
-            >
-              {{ $t('agent.settings.subagents.addProfile') }}
-            </UiButton>
-          </div>
-        </div>
-        <p class="mt-2 text-xs text-text-secondary">{{ $t('agent.settings.subagents.profileHint') }}</p>
-        <p v-if="profileSettings?.templates.length" class="mt-1 text-xs text-text-secondary">
-          {{ $t('agent.settings.subagents.templateHint') }}
-        </p>
+			<div class="mt-5 border-t border-border pt-5">
+				<div class="flex flex-wrap items-end justify-between gap-3">
+					<label class="min-w-52">
+						<span class="mb-1 block text-xs font-medium text-text-secondary">{{
+							$t('agent.settings.subagents.appProfiles')
+						}}</span>
+						<UiSelect
+							v-model="selectedAppId"
+							class="w-full"
+							:options="appOptions"
+							:aria-label="$t('agent.settings.subagents.appProfiles')"
+						/>
+					</label>
+					<div class="flex flex-wrap items-end gap-2">
+						<label v-if="profileSettings?.templates.length" class="min-w-40">
+							<span class="mb-1 block text-xs font-medium text-text-secondary">{{
+								$t('agent.settings.subagents.templatePreset')
+							}}</span>
+							<UiSelect
+								class="w-full"
+								:disabled="profileBusy"
+								:model-value="selectedTemplateId"
+								:options="templateOptions"
+								:aria-label="$t('agent.settings.subagents.templatePreset')"
+								@update:model-value="(value: unknown) => setSelectedTemplateId(value)"
+							/>
+						</label>
+						<UiButton
+							appearance="soft"
+							tone="neutral"
+							v-if="profileSettings?.templates.length"
+							type="button"
+							:disabled="profileBusy || !preferredModel"
+							@click="addTemplateProfile"
+						>
+							{{ $t('agent.settings.subagents.addTemplate') }}
+						</UiButton>
+						<UiButton
+							appearance="soft"
+							tone="neutral"
+							type="button"
+							:disabled="profileBusy || !preferredModel"
+							@click="addProfile"
+						>
+							{{ $t('agent.settings.subagents.addProfile') }}
+						</UiButton>
+					</div>
+				</div>
+				<p class="mt-2 text-xs text-text-secondary">{{ $t('agent.settings.subagents.profileHint') }}</p>
+				<p v-if="profileSettings?.templates.length" class="mt-1 text-xs text-text-secondary">
+					{{ $t('agent.settings.subagents.templateHint') }}
+				</p>
 
-        <div v-if="profileSettings" class="mt-3 space-y-3">
-          <article
-            v-for="(profile, index) in profileSettings.policy.profiles"
-            :key="`${profile.id}:${index}`"
-            class="rounded-lg bg-header/25 p-4"
-          >
-            <div
-              v-for="stale in staleModelRefs(profile)"
-              :key="`stale:${modelKey(stale)}`"
-              class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs"
-            >
-              <span class="text-text-secondary">
-                {{
-                  $t('agent.settings.subagents.staleModel', {
-                    model: `${stale.providerId} · ${stale.modelId}`,
-                    version: stale.configurationVersion,
-                  })
-                }}
-              </span>
-              <UiButton
-                v-if="currentModelOption(stale)"
-                appearance="soft"
-                tone="neutral"
-                density="compact"
-                type="button"
-                :disabled="profileBusy"
-                @click="rebindModelRef(profile, stale)"
-              >
-                {{ $t('agent.settings.subagents.rebindModel') }}
-              </UiButton>
-              <div v-else class="flex items-center gap-2">
-                <span class="font-medium text-warning">
-                  {{ $t('agent.settings.subagents.modelUnavailable') }}
-                </span>
-                <UiButton
-                  v-if="canRemoveStaleModelRef(profile, stale)"
-                  appearance="soft"
-                  tone="neutral"
-                  density="compact"
-                  type="button"
-                  :disabled="profileBusy"
-                  @click="removeStaleModelRef(profile, stale)"
-                >
-                  {{ $t('agent.settings.subagents.removeStaleModel') }}
-                </UiButton>
-              </div>
-            </div>
-            <div class="grid gap-3 lg:grid-cols-3">
-              <label>
-                <span class="mb-1 block text-xs text-text-secondary">{{
-                  $t('agent.settings.subagents.profileId')
-                }}</span>
-                <input v-model="profile.id" class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm" />
-              </label>
-              <label class="lg:col-span-2">
-                <span class="mb-1 block text-xs text-text-secondary">{{ $t('agent.settings.subagents.role') }}</span>
-                <input v-model="profile.role" class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm" />
-              </label>
-              <label>
-                <span class="mb-1 block text-xs text-text-secondary">{{
-                  $t('agent.settings.subagents.defaultModel')
-                }}</span>
-                <UiSelect
-                  class="w-full"
-                  density="compact"
-                  :model-value="modelKey(profile.defaultModel)"
-                  :options="modelSelectOptions"
-                  @update:model-value="(value: unknown) => setDefaultModel(profile, String(value))"
-                />
-              </label>
-              <label>
-                <span class="mb-1 block text-xs text-text-secondary">{{
-                  $t('agent.settings.subagents.maxModelRequests')
-                }}</span>
-                <input
-                  v-model.number="profile.maxModelRequests"
-                  type="number"
-                  min="1"
-                  class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm"
-                />
-              </label>
-              <label>
-                <span class="mb-1 block text-xs text-text-secondary">{{
-                  $t('agent.settings.subagents.peerMessaging')
-                }}</span>
-                <UiSelect
-                  class="w-full"
-                  density="compact"
-                  :model-value="profile.peerMessaging"
-                  :options="[
-                    { value: 'parent-child', label: $t('agent.settings.subagents.peerParentChild') },
-                    { value: 'same-run', label: $t('agent.settings.subagents.peerSameRun') },
-                  ]"
-                  @update:model-value="(value: unknown) => setPeerMessaging(profile, value)"
-                />
-              </label>
-              <label>
-                <span class="mb-1 block text-xs text-text-secondary">{{
-                  $t('agent.settings.subagents.mutationMode')
-                }}</span>
-                <UiSelect
-                  class="w-full"
-                  density="compact"
-                  :model-value="profile.mutationMode"
-                  :options="[
-                    { value: 'read-only', label: $t('agent.settings.subagents.mutationReadOnly') },
-                    { value: 'governed', label: $t('agent.settings.subagents.mutationGoverned') },
-                  ]"
-                  @update:model-value="(value: unknown) => setMutationMode(profile, value)"
-                />
-              </label>
-              <label>
-                <span class="mb-1 block text-xs text-text-secondary">{{
-                  $t('agent.settings.subagents.failureMode')
-                }}</span>
-                <UiSelect
-                  class="w-full"
-                  density="compact"
-                  :model-value="profile.failureMode"
-                  :options="[
-                    { value: 'isolate', label: $t('agent.settings.subagents.failureIsolate') },
-                    { value: 'failFast', label: $t('agent.settings.subagents.failureFailFast') },
-                  ]"
-                  @update:model-value="(value: unknown) => setFailureMode(profile, value)"
-                />
-              </label>
-            </div>
-            <p v-if="profile.mutationMode === 'governed'" class="mt-2 text-[11px] leading-relaxed text-text-secondary">
-              {{ $t('agent.settings.subagents.mutationHint') }}
-            </p>
+				<div v-if="profileSettings" class="mt-3 space-y-3">
+					<article
+						v-for="(profile, index) in profileSettings.policy.profiles"
+						:key="`${profile.id}:${index}`"
+						class="rounded-lg bg-header/25 p-4"
+					>
+						<div
+							v-for="stale in staleModelRefs(profile)"
+							:key="`stale:${modelKey(stale)}`"
+							class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs"
+						>
+							<span class="text-text-secondary">
+								{{
+									$t('agent.settings.subagents.staleModel', {
+										model: `${stale.providerId} · ${stale.modelId}`,
+										version: stale.configurationVersion,
+									})
+								}}
+							</span>
+							<UiButton
+								v-if="currentModelOption(stale)"
+								appearance="soft"
+								tone="neutral"
+								density="compact"
+								type="button"
+								:disabled="profileBusy"
+								@click="rebindModelRef(profile, stale)"
+							>
+								{{ $t('agent.settings.subagents.rebindModel') }}
+							</UiButton>
+							<div v-else class="flex items-center gap-2">
+								<span class="font-medium text-warning">
+									{{ $t('agent.settings.subagents.modelUnavailable') }}
+								</span>
+								<UiButton
+									v-if="canRemoveStaleModelRef(profile, stale)"
+									appearance="soft"
+									tone="neutral"
+									density="compact"
+									type="button"
+									:disabled="profileBusy"
+									@click="removeStaleModelRef(profile, stale)"
+								>
+									{{ $t('agent.settings.subagents.removeStaleModel') }}
+								</UiButton>
+							</div>
+						</div>
+						<div class="grid gap-3 lg:grid-cols-3">
+							<label>
+								<span class="mb-1 block text-xs text-text-secondary">{{
+									$t('agent.settings.subagents.profileId')
+								}}</span>
+								<input
+									v-model="profile.id"
+									class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm"
+								/>
+							</label>
+							<label class="lg:col-span-2">
+								<span class="mb-1 block text-xs text-text-secondary">{{
+									$t('agent.settings.subagents.role')
+								}}</span>
+								<input
+									v-model="profile.role"
+									class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm"
+								/>
+							</label>
+							<label>
+								<span class="mb-1 block text-xs text-text-secondary">{{
+									$t('agent.settings.subagents.defaultModel')
+								}}</span>
+								<UiSelect
+									class="w-full"
+									density="compact"
+									:model-value="modelKey(profile.defaultModel)"
+									:options="modelSelectOptions"
+									@update:model-value="(value: unknown) => setDefaultModel(profile, String(value))"
+								/>
+							</label>
+							<label>
+								<span class="mb-1 block text-xs text-text-secondary">{{
+									$t('agent.settings.subagents.maxModelRequests')
+								}}</span>
+								<input
+									v-model.number="profile.maxModelRequests"
+									type="number"
+									min="1"
+									class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm"
+								/>
+							</label>
+							<label>
+								<span class="mb-1 block text-xs text-text-secondary">{{
+									$t('agent.settings.subagents.peerMessaging')
+								}}</span>
+								<UiSelect
+									class="w-full"
+									density="compact"
+									:model-value="profile.peerMessaging"
+									:options="[
+										{
+											value: 'parent-child',
+											label: $t('agent.settings.subagents.peerParentChild'),
+										},
+										{ value: 'same-run', label: $t('agent.settings.subagents.peerSameRun') },
+									]"
+									@update:model-value="(value: unknown) => setPeerMessaging(profile, value)"
+								/>
+							</label>
+							<label>
+								<span class="mb-1 block text-xs text-text-secondary">{{
+									$t('agent.settings.subagents.mutationMode')
+								}}</span>
+								<UiSelect
+									class="w-full"
+									density="compact"
+									:model-value="profile.mutationMode"
+									:options="[
+										{ value: 'read-only', label: $t('agent.settings.subagents.mutationReadOnly') },
+										{ value: 'governed', label: $t('agent.settings.subagents.mutationGoverned') },
+									]"
+									@update:model-value="(value: unknown) => setMutationMode(profile, value)"
+								/>
+							</label>
+							<label>
+								<span class="mb-1 block text-xs text-text-secondary">{{
+									$t('agent.settings.subagents.failureMode')
+								}}</span>
+								<UiSelect
+									class="w-full"
+									density="compact"
+									:model-value="profile.failureMode"
+									:options="[
+										{ value: 'isolate', label: $t('agent.settings.subagents.failureIsolate') },
+										{ value: 'failFast', label: $t('agent.settings.subagents.failureFailFast') },
+									]"
+									@update:model-value="(value: unknown) => setFailureMode(profile, value)"
+								/>
+							</label>
+						</div>
+						<p
+							v-if="profile.mutationMode === 'governed'"
+							class="mt-2 text-[11px] leading-relaxed text-text-secondary"
+						>
+							{{ $t('agent.settings.subagents.mutationHint') }}
+						</p>
 
-            <div class="mt-3">
-              <div class="text-xs text-text-secondary">{{ $t('agent.settings.subagents.allowedModels') }}</div>
-              <div class="mt-1 flex flex-wrap gap-2">
-                <label v-for="model in modelOptions" :key="model.key" class="flex items-center gap-1 text-xs">
-                  <UiCheckbox
-                    :model-value="profile.allowedModels.some((item) => modelKey(item) === model.key)"
-                    @update:model-value="(value: boolean) => toggleAllowedModel(profile, model.key, value)"
-                  />
-                  <span>{{ model.label }}</span>
-                </label>
-              </div>
-            </div>
+						<div class="mt-3">
+							<div class="text-xs text-text-secondary">
+								{{ $t('agent.settings.subagents.allowedModels') }}
+							</div>
+							<div class="mt-1 flex flex-wrap gap-2">
+								<label
+									v-for="model in modelOptions"
+									:key="model.key"
+									class="flex items-center gap-1 text-xs"
+								>
+									<UiCheckbox
+										:model-value="
+											profile.allowedModels.some((item) => modelKey(item) === model.key)
+										"
+										@update:model-value="
+											(value: boolean) => toggleAllowedModel(profile, model.key, value)
+										"
+									/>
+									<span>{{ model.label }}</span>
+								</label>
+							</div>
+						</div>
 
-            <div class="mt-3">
-              <div class="text-xs text-text-secondary">{{ $t('agent.settings.subagents.capabilities') }}</div>
-              <div class="mt-1 flex flex-wrap gap-2">
-                <label
-                  v-for="capability in capabilityOptions"
-                  :key="capability"
-                  class="flex items-center gap-1 text-xs"
-                >
-                  <UiCheckbox
-                    :model-value="profile.capabilities.includes(capability)"
-                    @update:model-value="(value: boolean) => toggleCapability(profile, capability, value)"
-                  />
-                  <span>{{ capability }}</span>
-                </label>
-              </div>
-            </div>
+						<div class="mt-3">
+							<div class="text-xs text-text-secondary">
+								{{ $t('agent.settings.subagents.capabilities') }}
+							</div>
+							<div class="mt-1 flex flex-wrap gap-2">
+								<label
+									v-for="capability in capabilityOptions"
+									:key="capability"
+									class="flex items-center gap-1 text-xs"
+								>
+									<UiCheckbox
+										:model-value="profile.capabilities.includes(capability)"
+										@update:model-value="
+											(value: boolean) => toggleCapability(profile, capability, value)
+										"
+									/>
+									<span>{{ capability }}</span>
+								</label>
+							</div>
+						</div>
 
-            <div class="mt-3 flex justify-end">
-              <button type="button" class="text-xs text-error" :disabled="profileBusy" @click="removeProfile(index)">
-                {{ $t('agent.settings.subagents.removeProfile') }}
-              </button>
-            </div>
-          </article>
-          <UiEmptyState
-            v-if="profileSettings.policy.profiles.length === 0"
-            dense
-            icon="fa-solid fa-diagram-project"
-            :title="$t('agent.settings.subagents.noProfiles')"
-          />
-        </div>
+						<div class="mt-3 flex justify-end">
+							<button
+								type="button"
+								class="text-xs text-error"
+								:disabled="profileBusy"
+								@click="removeProfile(index)"
+							>
+								{{ $t('agent.settings.subagents.removeProfile') }}
+							</button>
+						</div>
+					</article>
+					<UiEmptyState
+						v-if="profileSettings.policy.profiles.length === 0"
+						dense
+						icon="fa-solid fa-diagram-project"
+						:title="$t('agent.settings.subagents.noProfiles')"
+					/>
+				</div>
 
-        <div class="mt-4 flex items-center justify-end gap-2">
-          <UiInfoHint v-if="hasStaleModelRefs" :text="$t('agent.settings.subagents.rebindBeforeSave')" />
-          <UiInfoHint v-if="!isProfilesDirty" :text="$t('agent.settings.disabledReason.noChanges')" />
-          <UiButton
-            :appearance="isProfilesDirty ? 'solid' : 'soft'"
-            :tone="isProfilesDirty ? 'primary' : 'neutral'"
-            type="button"
-            :disabled="profileBusy || !profileSettings || invalidProfileLimits || hasStaleModelRefs || !isProfilesDirty"
-            @click="saveProfiles"
-          >
-            {{ $t('agent.settings.subagents.saveProfiles') }}
-          </UiButton>
-        </div>
-      </div>
-    </div>
-  </section>
+				<div class="mt-4 flex items-center justify-end gap-2">
+					<UiInfoHint v-if="hasStaleModelRefs" :text="$t('agent.settings.subagents.rebindBeforeSave')" />
+					<UiInfoHint v-if="!isProfilesDirty" :text="$t('agent.settings.disabledReason.noChanges')" />
+					<UiButton
+						:appearance="isProfilesDirty ? 'solid' : 'soft'"
+						:tone="isProfilesDirty ? 'primary' : 'neutral'"
+						type="button"
+						:disabled="
+							profileBusy ||
+							!profileSettings ||
+							invalidProfileLimits ||
+							hasStaleModelRefs ||
+							!isProfilesDirty
+						"
+						@click="saveProfiles"
+					>
+						{{ $t('agent.settings.subagents.saveProfiles') }}
+					</UiButton>
+				</div>
+			</div>
+		</div>
+	</section>
 </template>

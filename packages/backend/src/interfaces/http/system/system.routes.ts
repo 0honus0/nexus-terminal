@@ -10,68 +10,68 @@ import { route } from '../shared/route-handler';
 const remoteResourceStatusDto = (status: ServerStatus): RemoteResourceStatusDto => ({ ...status });
 
 const sshResourceStatusDto = (
-  resource: Awaited<ReturnType<SshResourceStatusService['getSshResourceStatuses']>>[number],
+	resource: Awaited<ReturnType<SshResourceStatusService['getSshResourceStatuses']>>[number],
 ): SshResourceStatusDto => ({
-  key: resource.key,
-  connectionId: resource.connectionId,
-  name: resource.name,
-  username: resource.username,
-  host: resource.host,
-  port: resource.port,
-  ...(resource.status ? { status: remoteResourceStatusDto(resource.status) } : {}),
-  ...(resource.error === undefined ? {} : { error: resource.error }),
-  checkedAt: resource.checkedAt,
+	key: resource.key,
+	connectionId: resource.connectionId,
+	name: resource.name,
+	username: resource.username,
+	host: resource.host,
+	port: resource.port,
+	...(resource.status ? { status: remoteResourceStatusDto(resource.status) } : {}),
+	...(resource.error === undefined ? {} : { error: resource.error }),
+	checkedAt: resource.checkedAt,
 });
 
 export const createSystemRouter = (dependencies: {
-  systemStatus: SystemStatusService;
-  sshResourceStatus: SshResourceStatusService;
+	systemStatus: SystemStatusService;
+	sshResourceStatus: SshResourceStatusService;
 }): Router => {
-  const r = Router();
-  r.use(requireAuthenticated);
-  r.get(
-    '/status',
-    route(async (_q, s) => {
-      try {
-        const payload: ResourceStatusDto = await dependencies.systemStatus.getLocalSystemStatus();
-        s.json(payload);
-      } catch (error) {
-        s.status(500).json({ message: errorMessage(error) });
-      }
-    }),
-  );
-  r.get(
-    '/ssh-resources',
-    route(async (_q, s) => {
-      try {
-        const payload: SshResourceStatusDto[] = (await dependencies.sshResourceStatus.getSshResourceStatuses()).map(
-          sshResourceStatusDto,
-        );
-        s.json(payload);
-      } catch (error) {
-        s.status(500).json({ message: errorMessage(error) });
-      }
-    }),
-  );
-  r.get(
-    '/ssh-resources/:connectionId',
-    route(async (request, response) => {
-      const connectionId = parsePositiveId(String(request.params.connectionId));
-      if (!connectionId) {
-        response.status(400).json({ message: 'Invalid connection ID.' });
-        return;
-      }
-      try {
-        const resource = await dependencies.sshResourceStatus.getSshResourceStatus(connectionId);
-        if (!resource) {
-          response.status(404).json({ message: 'SSH connection not found.' });
-          return;
-        }
-        response.json(sshResourceStatusDto(resource));
-      } catch (error) {
-        response.status(500).json({ message: errorMessage(error) });
-      }
-    }),
-  );
-  return r;
+	const r = Router();
+	r.use(requireAuthenticated);
+	r.get(
+		'/status',
+		route(async (_q, s) => {
+			try {
+				const payload: ResourceStatusDto = await dependencies.systemStatus.getLocalSystemStatus();
+				s.json(payload);
+			} catch (error) {
+				s.status(500).json({ message: errorMessage(error) });
+			}
+		}),
+	);
+	r.get(
+		'/ssh-resources',
+		route(async (_q, s) => {
+			try {
+				const payload: SshResourceStatusDto[] = (
+					await dependencies.sshResourceStatus.getSshResourceStatuses()
+				).map(sshResourceStatusDto);
+				s.json(payload);
+			} catch (error) {
+				s.status(500).json({ message: errorMessage(error) });
+			}
+		}),
+	);
+	r.get(
+		'/ssh-resources/:connectionId',
+		route(async (request, response) => {
+			const connectionId = parsePositiveId(String(request.params.connectionId));
+			if (!connectionId) {
+				response.status(400).json({ message: 'Invalid connection ID.' });
+				return;
+			}
+			try {
+				const resource = await dependencies.sshResourceStatus.getSshResourceStatus(connectionId);
+				if (!resource) {
+					response.status(404).json({ message: 'SSH connection not found.' });
+					return;
+				}
+				response.json(sshResourceStatusDto(resource));
+			} catch (error) {
+				response.status(500).json({ message: errorMessage(error) });
+			}
+		}),
+	);
+	return r;
 };

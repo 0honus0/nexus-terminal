@@ -1,19 +1,19 @@
 import type { MessageResponseDto } from './common.js';
 
 export interface CommandHistoryEntryDto {
-  id: number;
-  command: string;
-  timestamp: number;
+	id: number;
+	command: string;
+	timestamp: number;
 }
 
 export interface CommandHistoryAddRequestDto {
-  command: string;
+	command: string;
 }
 
 export interface CommandHistoryAddResponseDto extends MessageResponseDto {
-  id: number;
+	id: number;
 }
 
 export interface CommandHistoryClearResponseDto extends MessageResponseDto {
-  count: number;
+	count: number;
 }

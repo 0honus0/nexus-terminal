@@ -2,272 +2,272 @@ import type { JsonValue, Scope } from '../../agent.types';
 import type { ModelCapabilitySnapshot, ModelRef } from '../../ai/model.types';
 import type { ToolInspection, ToolResult } from '../../capabilities/tool.types';
 import type {
-  AgentMessage,
-  AgentMessageKind,
-  DelegationView,
-  DependencyMode,
-  DelegatedCapabilityGrant,
-  MessageReceipt,
-  PeerMessaging,
-  ScheduleState,
-  SchedulerWorkKind,
-  SchedulerWorkView,
-  SubagentFailureMode,
-  SubagentMutationMode,
+	AgentMessage,
+	AgentMessageKind,
+	DelegationView,
+	DependencyMode,
+	DelegatedCapabilityGrant,
+	MessageReceipt,
+	PeerMessaging,
+	ScheduleState,
+	SchedulerWorkKind,
+	SchedulerWorkView,
+	SubagentFailureMode,
+	SubagentMutationMode,
 } from './subagent.types';
 
 export interface RuntimeParticipantView {
-  id: string;
-  runId: string;
-  participantId: string;
-  backendKind: 'native' | 'acp';
-  modelRef: ModelRef;
-  status: 'created' | 'running' | 'stopping' | 'stopped' | 'failed' | 'interrupted';
-  scheduleState: ScheduleState;
-  consumedMailboxSequence: number;
+	id: string;
+	runId: string;
+	participantId: string;
+	backendKind: 'native' | 'acp';
+	modelRef: ModelRef;
+	status: 'created' | 'running' | 'stopping' | 'stopped' | 'failed' | 'interrupted';
+	scheduleState: ScheduleState;
+	consumedMailboxSequence: number;
 }
 
 export interface CreateDelegationRecord {
-  scope: Scope;
-  id: string;
-  runId: string;
-  parentRuntimeId: string;
-  childRuntimeId: string;
-  participantId: string;
-  profileId: string;
-  grants: DelegatedCapabilityGrant[];
-  peerMessaging: PeerMessaging;
-  mutationMode: SubagentMutationMode;
-  modelRef: ModelRef;
-  modelCapabilities: ModelCapabilitySnapshot;
-  objective: string;
-  constraints: string[];
-  inputArtifactRefs: string[];
-  completionCriteria: string[];
-  dependencyMode: DependencyMode;
-  dependsOn: string[];
-  depth: number;
-  failureMode: SubagentFailureMode;
-  maxModelRequests: number;
-  idempotencyKey: string;
-  requestHash: string;
-  deadlineAt: number;
-  now: number;
+	scope: Scope;
+	id: string;
+	runId: string;
+	parentRuntimeId: string;
+	childRuntimeId: string;
+	participantId: string;
+	profileId: string;
+	grants: DelegatedCapabilityGrant[];
+	peerMessaging: PeerMessaging;
+	mutationMode: SubagentMutationMode;
+	modelRef: ModelRef;
+	modelCapabilities: ModelCapabilitySnapshot;
+	objective: string;
+	constraints: string[];
+	inputArtifactRefs: string[];
+	completionCriteria: string[];
+	dependencyMode: DependencyMode;
+	dependsOn: string[];
+	depth: number;
+	failureMode: SubagentFailureMode;
+	maxModelRequests: number;
+	idempotencyKey: string;
+	requestHash: string;
+	deadlineAt: number;
+	now: number;
 }
 
 export interface CreateDelegationResult {
-  delegation: DelegationView;
-  replayed: boolean;
+	delegation: DelegationView;
+	replayed: boolean;
 }
 
 export interface EnqueueWorkRecord {
-  id: string;
-  runId: string;
-  runtimeId: string;
-  kind: SchedulerWorkKind;
-  payload: JsonValue;
-  notBefore: number;
-  deadlineAt: number;
-  now: number;
+	id: string;
+	runId: string;
+	runtimeId: string;
+	kind: SchedulerWorkKind;
+	payload: JsonValue;
+	notBefore: number;
+	deadlineAt: number;
+	now: number;
 }
 
 export interface SendMessageRecord {
-  scope: Scope;
-  id: string;
-  runId: string;
-  senderRuntimeId: string;
-  recipientRuntimeId: string;
-  delegationId: string;
-  kind: AgentMessageKind;
-  idempotencyKey: string;
-  payloadHash: string;
-  correlationId: string;
-  replyTo: string | null;
-  causationId: string | null;
-  taskRevision: number;
-  body: JsonValue;
-  artifactRefs: string[];
-  sizeBytes: number;
-  expiresAt: number;
-  now: number;
-  maxPending: number;
-  maxHardRunMessages: number;
-  maxHardRunBytes: number;
+	scope: Scope;
+	id: string;
+	runId: string;
+	senderRuntimeId: string;
+	recipientRuntimeId: string;
+	delegationId: string;
+	kind: AgentMessageKind;
+	idempotencyKey: string;
+	payloadHash: string;
+	correlationId: string;
+	replyTo: string | null;
+	causationId: string | null;
+	taskRevision: number;
+	body: JsonValue;
+	artifactRefs: string[];
+	sizeBytes: number;
+	expiresAt: number;
+	now: number;
+	maxPending: number;
+	maxHardRunMessages: number;
+	maxHardRunBytes: number;
 }
 
 export interface RuntimeToolExchangeView {
-  toolCallId?: string;
-  sourceModelStepId: string;
-  batchIndex: number;
-  batchSize: number;
-  providerCallId: string;
-  toolName: string;
-  arguments: JsonValue;
-  result: ToolResult | null;
-  status: string;
+	toolCallId?: string;
+	sourceModelStepId: string;
+	batchIndex: number;
+	batchSize: number;
+	providerCallId: string;
+	toolName: string;
+	arguments: JsonValue;
+	result: ToolResult | null;
+	status: string;
 }
 
 export interface RuntimeToolWorkView {
-  toolStepId: string;
-  toolCallId: string;
-  providerCallId: string;
-  status: string;
-  approvalId: string | null;
-  inspection: ToolInspection;
+	toolStepId: string;
+	toolCallId: string;
+	providerCallId: string;
+	status: string;
+	approvalId: string | null;
+	inspection: ToolInspection;
 }
 
 export interface RuntimeModelWorkView {
-  stepId: string;
-  attemptId: string;
+	stepId: string;
+	attemptId: string;
 }
 
 export interface SharedFactView {
-  runId: string;
-  key: string;
-  value: JsonValue;
-  bytes: number;
-  version: number;
-  updatedByRuntimeId: string;
-  updatedAt: number;
+	runId: string;
+	key: string;
+	value: JsonValue;
+	bytes: number;
+	version: number;
+	updatedByRuntimeId: string;
+	updatedAt: number;
 }
 
 export interface RunScopeRepositoryPort {
-  scopeForRun(runId: string): Promise<Scope | null>;
+	scopeForRun(runId: string): Promise<Scope | null>;
 }
 
 export interface RuntimeParticipantRepositoryPort {
-  contextHistory(
-    scope: Scope,
-    runId: string,
-    runtimeId: string,
-  ): Promise<import('./subagent-context-history').SubagentContextHistory>;
-  runtime(scope: Scope, runId: string, runtimeId: string): Promise<RuntimeParticipantView | null>;
-  recentRuntimeToolExchanges(
-    scope: Scope,
-    runId: string,
-    runtimeId: string,
-    limit: number,
-  ): Promise<RuntimeToolExchangeView[]>;
-  runtimeToolWork(
-    scope: Scope,
-    runId: string,
-    runtimeId: string,
-    toolStepId: string,
-    toolCallId: string,
-  ): Promise<RuntimeToolWorkView | null>;
-  activeRuntimeModelWork(scope: Scope, runId: string, runtimeId: string): Promise<RuntimeModelWorkView | null>;
+	contextHistory(
+		scope: Scope,
+		runId: string,
+		runtimeId: string,
+	): Promise<import('./subagent-context-history').SubagentContextHistory>;
+	runtime(scope: Scope, runId: string, runtimeId: string): Promise<RuntimeParticipantView | null>;
+	recentRuntimeToolExchanges(
+		scope: Scope,
+		runId: string,
+		runtimeId: string,
+		limit: number,
+	): Promise<RuntimeToolExchangeView[]>;
+	runtimeToolWork(
+		scope: Scope,
+		runId: string,
+		runtimeId: string,
+		toolStepId: string,
+		toolCallId: string,
+	): Promise<RuntimeToolWorkView | null>;
+	activeRuntimeModelWork(scope: Scope, runId: string, runtimeId: string): Promise<RuntimeModelWorkView | null>;
 }
 
 export interface DelegationReaderPort {
-  delegation(scope: Scope, runId: string, delegationId: string): Promise<DelegationView | null>;
-  listDelegations(
-    scope: Scope,
-    runId: string,
-    parentRuntimeId?: string,
-    limit?: number,
-    before?: { createdAt: number; id: string },
-  ): Promise<DelegationView[]>;
-  descendants(scope: Scope, runId: string, runtimeId: string): Promise<DelegationView[]>;
+	delegation(scope: Scope, runId: string, delegationId: string): Promise<DelegationView | null>;
+	listDelegations(
+		scope: Scope,
+		runId: string,
+		parentRuntimeId?: string,
+		limit?: number,
+		before?: { createdAt: number; id: string },
+	): Promise<DelegationView[]>;
+	descendants(scope: Scope, runId: string, runtimeId: string): Promise<DelegationView[]>;
 }
 
 export interface DelegationCancellationPort extends DelegationReaderPort {
-  cancelDelegation(
-    scope: Scope,
-    runId: string,
-    delegationId: string,
-    expectedVersion: number,
-    now: number,
-  ): Promise<DelegationView>;
+	cancelDelegation(
+		scope: Scope,
+		runId: string,
+		delegationId: string,
+		expectedVersion: number,
+		now: number,
+	): Promise<DelegationView>;
 }
 
 export interface DelegationRepositoryPort extends DelegationCancellationPort {
-  createDelegation(record: CreateDelegationRecord): Promise<CreateDelegationResult>;
+	createDelegation(record: CreateDelegationRecord): Promise<CreateDelegationResult>;
 }
 
 export interface MailboxReaderPort {
-  readMessages(
-    scope: Scope,
-    runId: string,
-    runtimeId: string,
-    after: number,
-    limit: number,
-    now: number,
-  ): Promise<AgentMessage[]>;
-  listDelegationMessages(
-    scope: Scope,
-    runId: string,
-    delegationId: string,
-    limit: number,
-    before?: { createdAt: number; id: string },
-  ): Promise<AgentMessage[]>;
+	readMessages(
+		scope: Scope,
+		runId: string,
+		runtimeId: string,
+		after: number,
+		limit: number,
+		now: number,
+	): Promise<AgentMessage[]>;
+	listDelegationMessages(
+		scope: Scope,
+		runId: string,
+		delegationId: string,
+		limit: number,
+		before?: { createdAt: number; id: string },
+	): Promise<AgentMessage[]>;
 }
 
 export interface MailboxConsumerPort {
-  consumeMessages(
-    scope: Scope,
-    runId: string,
-    runtimeId: string,
-    through: number,
-    expectedConsumedSequence: number,
-    now: number,
-  ): Promise<number>;
+	consumeMessages(
+		scope: Scope,
+		runId: string,
+		runtimeId: string,
+		through: number,
+		expectedConsumedSequence: number,
+		now: number,
+	): Promise<number>;
 }
 
 export interface MailboxRepositoryPort extends MailboxReaderPort, MailboxConsumerPort {
-  sendMessage(record: SendMessageRecord): Promise<MessageReceipt>;
-  expireMessages(now: number, limit: number): Promise<number>;
+	sendMessage(record: SendMessageRecord): Promise<MessageReceipt>;
+	expireMessages(now: number, limit: number): Promise<number>;
 }
 
 export interface SchedulerWorkSettlementPort {
-  settleWork(
-    workId: string,
-    ownerEpoch: number,
-    status: 'completed' | 'waiting' | 'cancelled',
-    now: number,
-  ): Promise<void>;
+	settleWork(
+		workId: string,
+		ownerEpoch: number,
+		status: 'completed' | 'waiting' | 'cancelled',
+		now: number,
+	): Promise<void>;
 }
 
 export interface SchedulerWorkClaimPort extends SchedulerWorkSettlementPort {
-  readyWork(now: number, limit: number, excludedRunIds?: readonly string[]): Promise<SchedulerWorkView[]>;
-  terminalWork(now: number, limit: number): Promise<SchedulerWorkView[]>;
-  claimWork(
-    workId: string,
-    expectedVersion: number,
-    ownerEpoch: number,
-    now: number,
-  ): Promise<SchedulerWorkView | null>;
-  resetClaimedWork(ownerEpoch: number, now: number): Promise<number>;
-  recoverOrphanedClaimedWork(
-    ownerEpoch: number,
-    activeWorkIds: readonly string[],
-    staleBefore: number,
-    now: number,
-  ): Promise<number>;
+	readyWork(now: number, limit: number, excludedRunIds?: readonly string[]): Promise<SchedulerWorkView[]>;
+	terminalWork(now: number, limit: number): Promise<SchedulerWorkView[]>;
+	claimWork(
+		workId: string,
+		expectedVersion: number,
+		ownerEpoch: number,
+		now: number,
+	): Promise<SchedulerWorkView | null>;
+	resetClaimedWork(ownerEpoch: number, now: number): Promise<number>;
+	recoverOrphanedClaimedWork(
+		ownerEpoch: number,
+		activeWorkIds: readonly string[],
+		staleBefore: number,
+		now: number,
+	): Promise<number>;
 }
 
 export interface SchedulerWorkExecutionPort extends SchedulerWorkSettlementPort {
-  enqueueWork(record: EnqueueWorkRecord): Promise<SchedulerWorkView>;
-  completeJoinResume(
-    workId: string,
-    ownerEpoch: number,
-    runId: string,
-    runtimeId: string,
-    parentDelegationId: string | null,
-    ready: boolean,
-    now: number,
-  ): Promise<boolean>;
+	enqueueWork(record: EnqueueWorkRecord): Promise<SchedulerWorkView>;
+	completeJoinResume(
+		workId: string,
+		ownerEpoch: number,
+		runId: string,
+		runtimeId: string,
+		parentDelegationId: string | null,
+		ready: boolean,
+		now: number,
+	): Promise<boolean>;
 }
 
 export interface SharedFactRepositoryPort {
-  getFact(scope: Scope, runId: string, key: string): Promise<SharedFactView | null>;
-  compareAndSetFact(
-    scope: Scope,
-    runId: string,
-    runtimeId: string,
-    key: string,
-    value: JsonValue,
-    expectedVersion: number | null,
-    maxRunBytes: number,
-    now: number,
-  ): Promise<SharedFactView>;
+	getFact(scope: Scope, runId: string, key: string): Promise<SharedFactView | null>;
+	compareAndSetFact(
+		scope: Scope,
+		runId: string,
+		runtimeId: string,
+		key: string,
+		value: JsonValue,
+		expectedVersion: number | null,
+		maxRunBytes: number,
+		now: number,
+	): Promise<SharedFactView>;
 }

@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import type {
-  SshKeyCreateRequestDto,
-  SshKeyMutationResponseDto,
-  SshKeySummaryDto,
-  SshKeyUpdateRequestDto,
+	SshKeyCreateRequestDto,
+	SshKeyMutationResponseDto,
+	SshKeySummaryDto,
+	SshKeyUpdateRequestDto,
 } from '@nexus-terminal/protocol/connections';
 import type { SshKeyService } from '../../../modules/ssh-keys/ssh-key.service';
 import type { AuditLogService } from '../../../modules/audit/audit.service';
@@ -16,113 +16,127 @@ import { route } from '../shared/route-handler';
 const sshKeySummaryDto = (key: SshKeySummary): SshKeySummaryDto => ({ id: key.id, name: key.name });
 
 const readOptionalSecret = (value: unknown, field: string): string | null | undefined => {
-  if (value === undefined || value === null) return value;
-  if (typeof value !== 'string') throw new Error(`${field} 必须是字符串。`);
-  return value;
+	if (value === undefined || value === null) return value;
+	if (typeof value !== 'string') throw new Error(`${field} 必须是字符串。`);
+	return value;
 };
 
 const sshKeyCreateInput = (body: unknown): SshKeyCreateRequestDto => {
-  if (!isRecord(body)) throw new Error('请求体必须是对象。');
-  if (typeof body.name !== 'string') throw new Error('name 必须是字符串。');
-  if (typeof body.privateKey !== 'string') throw new Error('privateKey 必须是字符串。');
-  return {
-    name: body.name,
-    privateKey: body.privateKey,
-    passphrase: readOptionalSecret(body.passphrase, 'passphrase'),
-  };
+	if (!isRecord(body)) throw new Error('请求体必须是对象。');
+	if (typeof body.name !== 'string') throw new Error('name 必须是字符串。');
+	if (typeof body.privateKey !== 'string') throw new Error('privateKey 必须是字符串。');
+	return {
+		name: body.name,
+		privateKey: body.privateKey,
+		passphrase: readOptionalSecret(body.passphrase, 'passphrase'),
+	};
 };
 
 const sshKeyUpdateInput = (body: unknown): SshKeyUpdateRequestDto => {
-  if (!isRecord(body)) throw new Error('请求体必须是对象。');
-  const input: SshKeyUpdateRequestDto = {};
-  if (body.name !== undefined) {
-    if (typeof body.name !== 'string') throw new Error('name 必须是字符串。');
-    input.name = body.name;
-  }
-  if (body.privateKey !== undefined) {
-    if (typeof body.privateKey !== 'string') throw new Error('privateKey 必须是字符串。');
-    input.privateKey = body.privateKey;
-  }
-  if (body.passphrase !== undefined) input.passphrase = readOptionalSecret(body.passphrase, 'passphrase');
-  return input;
+	if (!isRecord(body)) throw new Error('请求体必须是对象。');
+	const input: SshKeyUpdateRequestDto = {};
+	if (body.name !== undefined) {
+		if (typeof body.name !== 'string') throw new Error('name 必须是字符串。');
+		input.name = body.name;
+	}
+	if (body.privateKey !== undefined) {
+		if (typeof body.privateKey !== 'string') throw new Error('privateKey 必须是字符串。');
+		input.privateKey = body.privateKey;
+	}
+	if (body.passphrase !== undefined) input.passphrase = readOptionalSecret(body.passphrase, 'passphrase');
+	return input;
 };
 
 export const createSshKeysRouter = (sshKeys: SshKeyService, audit: AuditLogService): Router => {
-  const router = Router();
-  router.use(requireAuthenticated);
+	const router = Router();
+	router.use(requireAuthenticated);
 
-  router.get(
-    '/',
-    route(async (_request, response) => {
-      response.json((await sshKeys.list()).map(sshKeySummaryDto));
-    }),
-  );
-  router.post(
-    '/',
-    route(async (request, response) => {
-      try {
-        const key = await sshKeys.create(sshKeyCreateInput(request.body));
-        await audit.logAction('SSH_KEY_CREATED', {
-          keyId: key.id,
-          userId: request.session.userId,
-          ip: requestIp(request),
-        });
-        const payload: SshKeyMutationResponseDto = { message: 'SSH 密钥创建成功。', key: sshKeySummaryDto(key) };
-        response.status(201).json(payload);
-      } catch (error) {
-        const message = errorMessage(error);
-        response.status(message.includes('已存在') || message.includes('必须提供') ? 400 : 500).json({ message });
-      }
-    }),
-  );
-  router.put(
-    '/:id',
-    route(async (request, response) => {
-      const id = parsePositiveId(String(request.params.id));
-      if (!id) {
-        response.status(400).json({ message: '无效的密钥 ID。' });
-        return;
-      }
-      if (!request.body || typeof request.body !== 'object' || !Object.keys(request.body).length) {
-        response.status(400).json({ message: '请求体不能为空。' });
-        return;
-      }
-      try {
-        const input = sshKeyUpdateInput(request.body);
-        const key = await sshKeys.update(id, input);
-        if (!key) {
-          response.status(404).json({ message: 'SSH 密钥未找到。' });
-          return;
-        }
-        const payload: SshKeyMutationResponseDto = { message: 'SSH 密钥更新成功。', key: sshKeySummaryDto(key) };
-        await audit.logAction('SSH_KEY_UPDATED', {
-          keyId: id,
-          userId: request.session.userId,
-          ip: requestIp(request),
-          updatedFields: Object.keys(input),
-        });
-        response.json(payload);
-      } catch (error) {
-        const message = errorMessage(error);
-        response.status(message.includes('已存在') || message.includes('不能为空') ? 400 : 500).json({ message });
-      }
-    }),
-  );
-  router.delete(
-    '/:id',
-    route(async (request, response) => {
-      const id = parsePositiveId(String(request.params.id));
-      if (!id) {
-        response.status(400).json({ message: '无效的密钥 ID。' });
-        return;
-      }
-      if (!(await sshKeys.delete(id))) {
-        response.status(404).json({ message: 'SSH 密钥未找到。' });
-        return;
-      }
-      await audit.logAction('SSH_KEY_DELETED', { keyId: id, userId: request.session.userId, ip: requestIp(request) });
-      response.json({ message: 'SSH 密钥删除成功。' });
-    }),
-  );
-  return router;
+	router.get(
+		'/',
+		route(async (_request, response) => {
+			response.json((await sshKeys.list()).map(sshKeySummaryDto));
+		}),
+	);
+	router.post(
+		'/',
+		route(async (request, response) => {
+			try {
+				const key = await sshKeys.create(sshKeyCreateInput(request.body));
+				await audit.logAction('SSH_KEY_CREATED', {
+					keyId: key.id,
+					userId: request.session.userId,
+					ip: requestIp(request),
+				});
+				const payload: SshKeyMutationResponseDto = {
+					message: 'SSH 密钥创建成功。',
+					key: sshKeySummaryDto(key),
+				};
+				response.status(201).json(payload);
+			} catch (error) {
+				const message = errorMessage(error);
+				response
+					.status(message.includes('已存在') || message.includes('必须提供') ? 400 : 500)
+					.json({ message });
+			}
+		}),
+	);
+	router.put(
+		'/:id',
+		route(async (request, response) => {
+			const id = parsePositiveId(String(request.params.id));
+			if (!id) {
+				response.status(400).json({ message: '无效的密钥 ID。' });
+				return;
+			}
+			if (!request.body || typeof request.body !== 'object' || !Object.keys(request.body).length) {
+				response.status(400).json({ message: '请求体不能为空。' });
+				return;
+			}
+			try {
+				const input = sshKeyUpdateInput(request.body);
+				const key = await sshKeys.update(id, input);
+				if (!key) {
+					response.status(404).json({ message: 'SSH 密钥未找到。' });
+					return;
+				}
+				const payload: SshKeyMutationResponseDto = {
+					message: 'SSH 密钥更新成功。',
+					key: sshKeySummaryDto(key),
+				};
+				await audit.logAction('SSH_KEY_UPDATED', {
+					keyId: id,
+					userId: request.session.userId,
+					ip: requestIp(request),
+					updatedFields: Object.keys(input),
+				});
+				response.json(payload);
+			} catch (error) {
+				const message = errorMessage(error);
+				response
+					.status(message.includes('已存在') || message.includes('不能为空') ? 400 : 500)
+					.json({ message });
+			}
+		}),
+	);
+	router.delete(
+		'/:id',
+		route(async (request, response) => {
+			const id = parsePositiveId(String(request.params.id));
+			if (!id) {
+				response.status(400).json({ message: '无效的密钥 ID。' });
+				return;
+			}
+			if (!(await sshKeys.delete(id))) {
+				response.status(404).json({ message: 'SSH 密钥未找到。' });
+				return;
+			}
+			await audit.logAction('SSH_KEY_DELETED', {
+				keyId: id,
+				userId: request.session.userId,
+				ip: requestIp(request),
+			});
+			response.json({ message: 'SSH 密钥删除成功。' });
+		}),
+	);
+	return router;
 };

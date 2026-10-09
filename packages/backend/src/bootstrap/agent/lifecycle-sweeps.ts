@@ -8,128 +8,130 @@ import type { AgentScheduler } from '../../modules/agent/runtime/scheduling/sche
 type SchedulerRun = Parameters<AgentScheduler['enqueue']>[0];
 
 export interface AgentLifecycleSweeps {
-  start(): void;
-  stop(): Promise<void>;
+	start(): void;
+	stop(): Promise<void>;
 }
 
 export interface CreateAgentLifecycleSweepsOptions {
-  stateCommit: ApprovalSweepCommitPort;
-  artifactMaintenance: ArtifactMaintenancePort;
-  mailbox: Pick<MailboxService, 'sweepExpired'>;
-  scheduler: AgentScheduler;
-  clock: ClockPort;
-  notifyCommitted(run: SchedulerRun): void;
-  retryMcpIntegrations?: () => Promise<number>;
+	stateCommit: ApprovalSweepCommitPort;
+	artifactMaintenance: ArtifactMaintenancePort;
+	mailbox: Pick<MailboxService, 'sweepExpired'>;
+	scheduler: AgentScheduler;
+	clock: ClockPort;
+	notifyCommitted(run: SchedulerRun): void;
+	retryMcpIntegrations?: () => Promise<number>;
 }
 
 export const createAgentLifecycleSweeps = ({
-  stateCommit,
-  artifactMaintenance,
-  mailbox,
-  scheduler,
-  clock,
-  notifyCommitted,
-  retryMcpIntegrations,
+	stateCommit,
+	artifactMaintenance,
+	mailbox,
+	scheduler,
+	clock,
+	notifyCommitted,
+	retryMcpIntegrations,
 }: CreateAgentLifecycleSweepsOptions): AgentLifecycleSweeps => {
-  let approvalExpiryTimer: NodeJS.Timeout | null = null;
-  let approvalExpirySweep = Promise.resolve();
-  let artifactReconcileTimer: NodeJS.Timeout | null = null;
-  let artifactReconcileSweep = Promise.resolve();
-  let mailboxExpiryTimer: NodeJS.Timeout | null = null;
-  let mailboxExpirySweep = Promise.resolve();
-  let integrationRetryTimer: NodeJS.Timeout | null = null;
-  let integrationRetrySweep = Promise.resolve();
+	let approvalExpiryTimer: NodeJS.Timeout | null = null;
+	let approvalExpirySweep = Promise.resolve();
+	let artifactReconcileTimer: NodeJS.Timeout | null = null;
+	let artifactReconcileSweep = Promise.resolve();
+	let mailboxExpiryTimer: NodeJS.Timeout | null = null;
+	let mailboxExpirySweep = Promise.resolve();
+	let integrationRetryTimer: NodeJS.Timeout | null = null;
+	let integrationRetrySweep = Promise.resolve();
 
-  const sweepExpiredApprovals = (): void => {
-    approvalExpirySweep = approvalExpirySweep
-      .then(async () => {
-        const now = clock.nowUnixSeconds();
-        const resumed = await stateCommit.expireToolApprovals(now);
-        for (const run of resumed) {
-          notifyCommitted(run);
-          scheduler.enqueue(run);
-        }
-        if (resumed.length > 0)
-          logger.debug({ resumedRuns: resumed.length }, 'Agent approval expiry sweep resumed Runs');
-        const cleanedCommands = await stateCommit.cleanupExpiredCommands(now, 200);
-        if (cleanedCommands > 0)
-          logger.debug({ cleanedCommands }, 'Agent idempotency TTL sweep removed expired committed commands');
-      })
-      .catch((error) => logger.warn({ err: error }, 'Agent approval expiry sweep failed'));
-  };
+	const sweepExpiredApprovals = (): void => {
+		approvalExpirySweep = approvalExpirySweep
+			.then(async () => {
+				const now = clock.nowUnixSeconds();
+				const resumed = await stateCommit.expireToolApprovals(now);
+				for (const run of resumed) {
+					notifyCommitted(run);
+					scheduler.enqueue(run);
+				}
+				if (resumed.length > 0)
+					logger.debug({ resumedRuns: resumed.length }, 'Agent approval expiry sweep resumed Runs');
+				const cleanedCommands = await stateCommit.cleanupExpiredCommands(now, 200);
+				if (cleanedCommands > 0)
+					logger.debug({ cleanedCommands }, 'Agent idempotency TTL sweep removed expired committed commands');
+			})
+			.catch((error) => logger.warn({ err: error }, 'Agent approval expiry sweep failed'));
+	};
 
-  const sweepArtifactReconciliation = (): void => {
-    artifactReconcileSweep = artifactReconcileSweep
-      .then(async () => {
-        const repaired = await artifactMaintenance.reconcile();
-        const expired = await artifactMaintenance.sweepExpired();
-        if (repaired > 0) {
-          logger.debug({ repairedArtifacts: repaired }, 'Agent Artifact reconciliation sweep repaired rows');
-        }
-        if (expired > 0) {
-          logger.debug({ expiredArtifacts: expired }, 'Agent Artifact retention sweep reclaimed rows');
-        }
-      })
-      .catch((error) => logger.warn({ err: error }, 'Agent Artifact reconciliation sweep failed'));
-  };
+	const sweepArtifactReconciliation = (): void => {
+		artifactReconcileSweep = artifactReconcileSweep
+			.then(async () => {
+				const repaired = await artifactMaintenance.reconcile();
+				const expired = await artifactMaintenance.sweepExpired();
+				if (repaired > 0) {
+					logger.debug({ repairedArtifacts: repaired }, 'Agent Artifact reconciliation sweep repaired rows');
+				}
+				if (expired > 0) {
+					logger.debug({ expiredArtifacts: expired }, 'Agent Artifact retention sweep reclaimed rows');
+				}
+			})
+			.catch((error) => logger.warn({ err: error }, 'Agent Artifact reconciliation sweep failed'));
+	};
 
-  const sweepExpiredMailbox = (): void => {
-    mailboxExpirySweep = mailboxExpirySweep
-      .then(async () => {
-        const expired = await mailbox.sweepExpired();
-        if (expired > 0) {
-          logger.debug({ expiredMessages: expired }, 'Agent Subagent mailbox TTL sweep expired messages');
-        }
-      })
-      .catch((error) => logger.warn({ err: error }, 'Agent Subagent mailbox TTL sweep failed'));
-  };
+	const sweepExpiredMailbox = (): void => {
+		mailboxExpirySweep = mailboxExpirySweep
+			.then(async () => {
+				const expired = await mailbox.sweepExpired();
+				if (expired > 0) {
+					logger.debug({ expiredMessages: expired }, 'Agent Subagent mailbox TTL sweep expired messages');
+				}
+			})
+			.catch((error) => logger.warn({ err: error }, 'Agent Subagent mailbox TTL sweep failed'));
+	};
 
-  const sweepIntegrationRetry = (): void => {
-    if (!retryMcpIntegrations) return;
-    integrationRetrySweep = integrationRetrySweep
-      .then(async () => {
-        const retried = await retryMcpIntegrations();
-        if (retried > 0) logger.debug({ retriedIntegrations: retried }, 'Agent MCP integration retry sweep ran');
-      })
-      .catch((error) => logger.warn({ err: error }, 'Agent MCP integration retry sweep failed'));
-  };
+	const sweepIntegrationRetry = (): void => {
+		if (!retryMcpIntegrations) return;
+		integrationRetrySweep = integrationRetrySweep
+			.then(async () => {
+				const retried = await retryMcpIntegrations();
+				if (retried > 0)
+					logger.debug({ retriedIntegrations: retried }, 'Agent MCP integration retry sweep ran');
+			})
+			.catch((error) => logger.warn({ err: error }, 'Agent MCP integration retry sweep failed'));
+	};
 
-  return {
-    start: () => {
-      logger.debug('Agent lifecycle sweeps starting');
-      if (approvalExpiryTimer) clearInterval(approvalExpiryTimer);
-      if (artifactReconcileTimer) clearInterval(artifactReconcileTimer);
-      if (mailboxExpiryTimer) clearInterval(mailboxExpiryTimer);
-      if (integrationRetryTimer) clearInterval(integrationRetryTimer);
-      sweepExpiredApprovals();
-      sweepArtifactReconciliation();
-      sweepExpiredMailbox();
-      sweepIntegrationRetry();
-      approvalExpiryTimer = setInterval(sweepExpiredApprovals, 15_000);
-      artifactReconcileTimer = setInterval(sweepArtifactReconciliation, 15_000);
-      mailboxExpiryTimer = setInterval(sweepExpiredMailbox, 15_000);
-      integrationRetryTimer = setInterval(sweepIntegrationRetry, 15_000);
-      approvalExpiryTimer.unref?.();
-      artifactReconcileTimer.unref?.();
-      mailboxExpiryTimer.unref?.();
-      integrationRetryTimer.unref?.();
-    },
-    stop: async () => {
-      logger.debug('Agent lifecycle sweeps stopping');
-      if (approvalExpiryTimer) clearInterval(approvalExpiryTimer);
-      if (artifactReconcileTimer) clearInterval(artifactReconcileTimer);
-      if (mailboxExpiryTimer) clearInterval(mailboxExpiryTimer);
-      if (integrationRetryTimer) clearInterval(integrationRetryTimer);
-      approvalExpiryTimer = null;
-      artifactReconcileTimer = null;
-      mailboxExpiryTimer = null;
-      integrationRetryTimer = null;
-      await Promise.all([
-        approvalExpirySweep.catch(() => undefined),
-        artifactReconcileSweep.catch(() => undefined),
-        mailboxExpirySweep.catch(() => undefined),
-        integrationRetrySweep.catch(() => undefined),
-      ]);
-    },
-  };
+	return {
+		start: () => {
+			logger.debug('Agent lifecycle sweeps starting');
+			if (approvalExpiryTimer) clearInterval(approvalExpiryTimer);
+			if (artifactReconcileTimer) clearInterval(artifactReconcileTimer);
+			if (mailboxExpiryTimer) clearInterval(mailboxExpiryTimer);
+			if (integrationRetryTimer) clearInterval(integrationRetryTimer);
+			sweepExpiredApprovals();
+			sweepArtifactReconciliation();
+			sweepExpiredMailbox();
+			sweepIntegrationRetry();
+			approvalExpiryTimer = setInterval(sweepExpiredApprovals, 15_000);
+			artifactReconcileTimer = setInterval(sweepArtifactReconciliation, 15_000);
+			mailboxExpiryTimer = setInterval(sweepExpiredMailbox, 15_000);
+			integrationRetryTimer = setInterval(sweepIntegrationRetry, 15_000);
+			approvalExpiryTimer.unref?.();
+			artifactReconcileTimer.unref?.();
+			mailboxExpiryTimer.unref?.();
+			integrationRetryTimer.unref?.();
+		},
+
+		stop: async () => {
+			logger.debug('Agent lifecycle sweeps stopping');
+			if (approvalExpiryTimer) clearInterval(approvalExpiryTimer);
+			if (artifactReconcileTimer) clearInterval(artifactReconcileTimer);
+			if (mailboxExpiryTimer) clearInterval(mailboxExpiryTimer);
+			if (integrationRetryTimer) clearInterval(integrationRetryTimer);
+			approvalExpiryTimer = null;
+			artifactReconcileTimer = null;
+			mailboxExpiryTimer = null;
+			integrationRetryTimer = null;
+			await Promise.all([
+				approvalExpirySweep.catch(() => undefined),
+				artifactReconcileSweep.catch(() => undefined),
+				mailboxExpirySweep.catch(() => undefined),
+				integrationRetrySweep.catch(() => undefined),
+			]);
+		},
+	};
 };

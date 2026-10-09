@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import {
-  AGENT_RUN_INPUT_ACCEPTING_STATUSES,
-  AGENT_RUN_NON_TERMINAL_STATUSES,
+	AGENT_RUN_INPUT_ACCEPTING_STATUSES,
+	AGENT_RUN_NON_TERMINAL_STATUSES,
 } from '@nexus-terminal/protocol/agent-runs';
 import type { JsonValue } from '../../../../modules/agent/agent.types';
 import type {
-  DurableEventInput,
-  LedgerAppendInput,
-  RunProjectionPatch,
+	DurableEventInput,
+	LedgerAppendInput,
+	RunProjectionPatch,
 } from '../../../../modules/agent/runtime/runs/state-commit.port';
 import type { RunEvent, RunStatus, RunUsage, RunView } from '../../../../modules/agent/runtime/runs/run.types';
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
@@ -18,11 +18,11 @@ import { parseRunUsage } from '../durable-state-decoders';
 export const NON_TERMINAL = new Set<RunStatus>(AGENT_RUN_NON_TERMINAL_STATUSES);
 export const ACCEPTS_INPUT = new Set<RunStatus>(AGENT_RUN_INPUT_ACCEPTING_STATUSES);
 export const COUNTED_LIVE = new Set<RunStatus>([
-  'running',
-  'awaiting_approval',
-  'awaiting_budget',
-  'awaiting_input',
-  'cancelling',
+	'running',
+	'awaiting_approval',
+	'awaiting_budget',
+	'awaiting_input',
+	'cancelling',
 ]);
 export const CREATED_QUEUE_LIMIT = 20;
 export const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60;
@@ -30,107 +30,107 @@ const MAX_EVENTS_PER_COMMIT = 64;
 const MAX_EVENT_BYTES_PER_COMMIT = 256 * 1024;
 
 interface ThreadRow {
-  next_sequence: number;
-  version: number;
+	next_sequence: number;
+	version: number;
 }
 
 interface ArtifactRow {
-  status: string;
-  app_id: string;
+	status: string;
+	app_id: string;
 }
 
 const eventBytes = (events: readonly DurableEventInput[]): number =>
-  events.reduce(
-    (total, event) =>
-      total + Buffer.byteLength(event.type, 'utf8') + Buffer.byteLength(JSON.stringify(event.payload), 'utf8'),
-    0,
-  );
+	events.reduce(
+		(total, event) =>
+			total + Buffer.byteLength(event.type, 'utf8') + Buffer.byteLength(JSON.stringify(event.payload), 'utf8'),
+		0,
+	);
 
 export const validateEvents = (events: readonly DurableEventInput[]): void => {
-  if (events.length > MAX_EVENTS_PER_COMMIT || eventBytes(events) > MAX_EVENT_BYTES_PER_COMMIT) {
-    throw new Error('AGENT_COMMIT_BATCH_TOO_LARGE');
-  }
+	if (events.length > MAX_EVENTS_PER_COMMIT || eventBytes(events) > MAX_EVENT_BYTES_PER_COMMIT) {
+		throw new Error('AGENT_COMMIT_BATCH_TOO_LARGE');
+	}
 };
 
 export const emptyUsage = (): RunUsage => ({
-  inputTokens: 0,
-  outputTokens: 0,
-  cachedInputTokens: 0,
-  modelRequests: 0,
-  toolExecutions: 0,
-  subagentMessages: 0,
-  subagentMessageBytes: 0,
+	inputTokens: 0,
+	outputTokens: 0,
+	cachedInputTokens: 0,
+	modelRequests: 0,
+	toolExecutions: 0,
+	subagentMessages: 0,
+	subagentMessageBytes: 0,
 });
 
 export const usageWithDelta = (
-  row: RunRow,
-  delta: {
-    inputTokens?: number | null;
-    outputTokens?: number | null;
-    cachedInputTokens?: number | null;
-    modelRequests?: number;
-    toolExecutions?: number;
-  },
+	row: RunRow,
+	delta: {
+		inputTokens?: number | null;
+		outputTokens?: number | null;
+		cachedInputTokens?: number | null;
+		modelRequests?: number;
+		toolExecutions?: number;
+	},
 ): RunUsage => {
-  const current = parseRunUsage(row.usage_json);
-  return {
-    ...current,
-    inputTokens: current.inputTokens + (delta.inputTokens ?? 0),
-    outputTokens: current.outputTokens + (delta.outputTokens ?? 0),
-    cachedInputTokens: current.cachedInputTokens + (delta.cachedInputTokens ?? 0),
-    modelRequests: current.modelRequests + (delta.modelRequests ?? 0),
-    toolExecutions: current.toolExecutions + (delta.toolExecutions ?? 0),
-    subagentMessages: current.subagentMessages ?? 0,
-    subagentMessageBytes: current.subagentMessageBytes ?? 0,
-  };
+	const current = parseRunUsage(row.usage_json);
+	return {
+		...current,
+		inputTokens: current.inputTokens + (delta.inputTokens ?? 0),
+		outputTokens: current.outputTokens + (delta.outputTokens ?? 0),
+		cachedInputTokens: current.cachedInputTokens + (delta.cachedInputTokens ?? 0),
+		modelRequests: current.modelRequests + (delta.modelRequests ?? 0),
+		toolExecutions: current.toolExecutions + (delta.toolExecutions ?? 0),
+		subagentMessages: current.subagentMessages ?? 0,
+		subagentMessageBytes: current.subagentMessageBytes ?? 0,
+	};
 };
 
 export const usageWithProviderContext = (
-  usage: RunUsage,
-  inputTokens: number | null | undefined,
-  estimatedUsage: boolean | undefined,
-  now: number,
+	usage: RunUsage,
+	inputTokens: number | null | undefined,
+	estimatedUsage: boolean | undefined,
+	now: number,
 ): RunUsage => {
-  if (!usage.context || inputTokens === undefined || inputTokens === null || estimatedUsage !== false) return usage;
-  return {
-    ...usage,
-    context: {
-      ...usage.context,
-      inputTokens,
-      source: 'provider',
-      updatedAt: now,
-    },
-  };
+	if (!usage.context || inputTokens === undefined || inputTokens === null || estimatedUsage !== false) return usage;
+	return {
+		...usage,
+		context: {
+			...usage.context,
+			inputTokens,
+			source: 'provider',
+			updatedAt: now,
+		},
+	};
 };
 
 export const summaryPayload = (run: RunView): JsonValue => ({
-  appId: run.appId,
-  runId: run.id,
-  threadId: run.threadId,
-  status: run.status,
-  goalStatus: run.goalStatus,
-  verificationStatus: run.verificationStatus,
-  needsReconciliation: run.needsReconciliation,
-  version: run.version,
-  updatedAt: run.updatedAt,
+	appId: run.appId,
+	runId: run.id,
+	threadId: run.threadId,
+	status: run.status,
+	goalStatus: run.goalStatus,
+	verificationStatus: run.verificationStatus,
+	needsReconciliation: run.needsReconciliation,
+	version: run.version,
+	updatedAt: run.updatedAt,
 });
 
 export const allocateHostEvent = appendHostEvent;
 
 export const cancelRunSubagentWork = async (
-  tx: RelationalDatabase,
-  runId: string,
-  now: number,
-  includeClaimed: boolean,
+	tx: RelationalDatabase,
+	runId: string,
+	now: number,
+	includeClaimed: boolean,
 ): Promise<void> => {
-  const cancellableWork = includeClaimed ? "('queued','waiting','claimed')" : "('queued','waiting')";
-  await tx.execute(
-    `UPDATE agent_scheduler_work SET status = 'cancelled', version = version + 1, updated_at = ?
+	const cancellableWork = includeClaimed ? "('queued','waiting','claimed')" : "('queued','waiting')";
+	await tx.execute(
+		`UPDATE agent_scheduler_work SET status = 'cancelled', version = version + 1, updated_at = ?
      WHERE run_id = ? AND status IN ${cancellableWork}`,
-    [now, runId],
-  );
-  await tx.execute(
-    `UPDATE agent_delegations SET status = 'cancelled', version = version + 1, updated_at = ?, completed_at = ?
+		[now, runId],
+	);
+	await tx.execute(
+		`UPDATE agent_delegations SET status = 'cancelled', version = version + 1, updated_at = ?, completed_at = ?
      WHERE run_id = ? AND status IN ('queued','running','waiting')
        AND NOT EXISTS (
          SELECT 1 FROM agent_scheduler_work w
@@ -138,190 +138,194 @@ export const cancelRunSubagentWork = async (
            AND w.agent_runtime_id = agent_delegations.child_runtime_id
            AND w.status = 'claimed'
        )`,
-    [now, now, runId],
-  );
-  await tx.execute(
-    `UPDATE agent_runtimes SET status = 'stopped', schedule_state = 'finished', updated_at = ?
+		[now, now, runId],
+	);
+	await tx.execute(
+		`UPDATE agent_runtimes SET status = 'stopped', schedule_state = 'finished', updated_at = ?
      WHERE run_id = ? AND participant_id <> 'root'
        AND id IN (
          SELECT child_runtime_id FROM agent_delegations
          WHERE run_id = ? AND status = 'cancelled'
        )
        AND status IN ('created','running','stopping','interrupted')`,
-    [now, runId, runId],
-  );
+		[now, runId, runId],
+	);
 };
 
 export const updateAppLiveCount = async (
-  tx: RelationalDatabase,
-  userId: number,
-  appId: string,
-  delta: number,
-  now: number,
+	tx: RelationalDatabase,
+	userId: number,
+	appId: string,
+	delta: number,
+	now: number,
 ): Promise<void> => {
-  if (delta === 0) return;
-  const result =
-    delta > 0
-      ? await tx.execute(
-          `UPDATE agent_apps SET running_count = running_count + ?, version = version + 1, updated_at = ?
+	if (delta === 0) return;
+	const result =
+		delta > 0
+			? await tx.execute(
+					`UPDATE agent_apps SET running_count = running_count + ?, version = version + 1, updated_at = ?
            WHERE user_id = ? AND app_id = ? AND desired_state = 'enabled'`,
-          [delta, now, userId, appId],
-        )
-      : await tx.execute(
-          `UPDATE agent_apps SET running_count = running_count + ?, version = version + 1, updated_at = ?
+					[delta, now, userId, appId],
+				)
+			: await tx.execute(
+					`UPDATE agent_apps SET running_count = running_count + ?, version = version + 1, updated_at = ?
            WHERE user_id = ? AND app_id = ? AND running_count >= ?`,
-          [delta, now, userId, appId, -delta],
-        );
-  if (result.changes !== 1) throw new Error('APP_RUN_COUNT_CONFLICT');
+					[delta, now, userId, appId, -delta],
+				);
+	if (result.changes !== 1) throw new Error('APP_RUN_COUNT_CONFLICT');
 };
 
 export const appendEvents = async (
-  tx: RelationalDatabase,
-  row: RunRow,
-  events: readonly DurableEventInput[],
-  now: number,
+	tx: RelationalDatabase,
+	row: RunRow,
+	events: readonly DurableEventInput[],
+	now: number,
 ): Promise<RunEvent[]> => {
-  validateEvents(events);
-  const committed: RunEvent[] = [];
-  let sequence = row.next_event_sequence;
-  for (const event of events) {
-    const eventId = randomUUID();
-    await tx.execute(
-      `INSERT INTO agent_events (event_id, run_id, sequence, schema_version, type, payload_json, occurred_at)
+	validateEvents(events);
+	const committed: RunEvent[] = [];
+	let sequence = row.next_event_sequence;
+	for (const event of events) {
+		const eventId = randomUUID();
+		await tx.execute(
+			`INSERT INTO agent_events (event_id, run_id, sequence, schema_version, type, payload_json, occurred_at)
        VALUES (?, ?, ?, 1, ?, ?, ?)`,
-      [eventId, row.id, sequence, event.type, JSON.stringify(event.payload), now],
-    );
-    committed.push({
-      eventId,
-      runId: row.id,
-      sequence,
-      schemaVersion: 1,
-      type: event.type,
-      payload: event.payload,
-      occurredAt: now,
-    });
-    sequence += 1;
-  }
-  return committed;
+			[eventId, row.id, sequence, event.type, JSON.stringify(event.payload), now],
+		);
+		committed.push({
+			eventId,
+			runId: row.id,
+			sequence,
+			schemaVersion: 1,
+			type: event.type,
+			payload: event.payload,
+			occurredAt: now,
+		});
+		sequence += 1;
+	}
+	return committed;
 };
 
 export const appendLedger = async (
-  tx: RelationalDatabase,
-  row: RunRow,
-  entries: readonly LedgerAppendInput[],
-  now: number,
+	tx: RelationalDatabase,
+	row: RunRow,
+	entries: readonly LedgerAppendInput[],
+	now: number,
 ): Promise<number> => {
-  if (entries.length === 0) return 0;
-  const thread = await tx.queryOne<ThreadRow>(
-    'SELECT next_sequence, version FROM ai_threads WHERE id = ? AND user_id = ? AND app_id = ?',
-    [row.thread_id, row.user_id, row.app_id],
-  );
-  if (!thread) throw new Error('NOT_FOUND');
-  let sequence = thread.next_sequence;
-  for (const entry of entries) {
-    await tx.execute(
-      `INSERT INTO ai_thread_entries
+	if (entries.length === 0) return 0;
+	const thread = await tx.queryOne<ThreadRow>(
+		'SELECT next_sequence, version FROM ai_threads WHERE id = ? AND user_id = ? AND app_id = ?',
+		[row.thread_id, row.user_id, row.app_id],
+	);
+	if (!thread) throw new Error('NOT_FOUND');
+	let sequence = thread.next_sequence;
+	for (const entry of entries) {
+		await tx.execute(
+			`INSERT INTO ai_thread_entries
         (id, thread_id, user_id, app_id, run_id, sequence, kind, payload_json, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        entry.id,
-        row.thread_id,
-        row.user_id,
-        row.app_id,
-        entry.runId ?? row.id,
-        sequence,
-        entry.kind,
-        JSON.stringify(entry.payload),
-        now,
-      ],
-    );
-    sequence += 1;
-  }
-  const updated = await tx.execute(
-    `UPDATE ai_threads SET next_sequence = ?, version = version + 1, updated_at = ?
+			[
+				entry.id,
+				row.thread_id,
+				row.user_id,
+				row.app_id,
+				entry.runId ?? row.id,
+				sequence,
+				entry.kind,
+				JSON.stringify(entry.payload),
+				now,
+			],
+		);
+		sequence += 1;
+	}
+	const updated = await tx.execute(
+		`UPDATE ai_threads SET next_sequence = ?, version = version + 1, updated_at = ?
      WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?`,
-    [sequence, now, row.thread_id, row.user_id, row.app_id, thread.version],
-  );
-  if (updated.changes !== 1) throw new Error('STATE_CONFLICT');
-  return sequence - 1;
+		[sequence, now, row.thread_id, row.user_id, row.app_id, thread.version],
+	);
+	if (updated.changes !== 1) throw new Error('STATE_CONFLICT');
+	return sequence - 1;
 };
 
 export const patchRun = async (
-  tx: RelationalDatabase,
-  row: RunRow,
-  patch: RunProjectionPatch,
-  eventCount: number,
-  now: number,
+	tx: RelationalDatabase,
+	row: RunRow,
+	patch: RunProjectionPatch,
+	eventCount: number,
+	now: number,
 ): Promise<RunRow> => {
-  const assignments = ['version = version + 1', 'updated_at = ?', 'next_event_sequence = next_event_sequence + ?'];
-  const parameters: unknown[] = [now, eventCount];
-  const add = (sql: string, value: unknown): void => {
-    assignments.push(sql);
-    parameters.push(value);
-  };
-  if (patch.status !== undefined) add('status = ?', patch.status);
-  if (
-    (row.status === 'running' || row.status === 'cancelling') &&
-    patch.status !== undefined &&
-    patch.status !== 'running' &&
-    patch.status !== 'cancelling'
-  ) {
-    const active = await tx.queryOne<{ active_execution_started_at: number | null }>(
-      'SELECT active_execution_started_at FROM agent_runs WHERE id = ?',
-      [row.id],
-    );
-    const activeDelta = active?.active_execution_started_at ? Math.max(0, now - active.active_execution_started_at) : 0;
-    assignments.push('active_execution_seconds = active_execution_seconds + ?');
-    parameters.push(activeDelta);
-    assignments.push('active_execution_started_at = NULL', 'executing_runtime_count = 0');
-  }
-  if (patch.goalStatus !== undefined) add('goal_status = ?', patch.goalStatus);
-  if (patch.verificationStatus !== undefined) add('verification_status = ?', patch.verificationStatus);
-  if (patch.needsReconciliation !== undefined) add('needs_reconciliation = ?', patch.needsReconciliation ? 1 : 0);
-  if (patch.budget !== undefined) add('budget_json = ?', JSON.stringify(patch.budget));
-  if (patch.usage !== undefined) add('usage_json = ?', JSON.stringify(patch.usage));
-  if (patch.plan !== undefined) add('plan_json = ?', JSON.stringify(patch.plan));
-  if (patch.consumedInputSequence !== undefined) add('consumed_input_sequence = ?', patch.consumedInputSequence);
-  if (patch.inputRevision !== undefined) add('input_revision = ?', patch.inputRevision);
-  if (patch.startedAt !== undefined) add('started_at = ?', patch.startedAt);
-  if (patch.completedAt !== undefined) add('completed_at = ?', patch.completedAt);
-  parameters.push(row.id, row.user_id, row.app_id, row.version);
-  const updated = await tx.execute(
-    `UPDATE agent_runs SET ${assignments.join(', ')} WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?`,
-    parameters,
-  );
-  if (updated.changes !== 1) throw new Error('STATE_CONFLICT');
-  const result = await tx.queryOne<RunRow>(
-    `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
-    [row.id, row.user_id, row.app_id],
-  );
-  if (!result) throw new Error('NOT_FOUND');
-  return result;
+	const assignments = ['version = version + 1', 'updated_at = ?', 'next_event_sequence = next_event_sequence + ?'];
+	const parameters: unknown[] = [now, eventCount];
+
+	const add = (sql: string, value: unknown): void => {
+		assignments.push(sql);
+		parameters.push(value);
+	};
+
+	if (patch.status !== undefined) add('status = ?', patch.status);
+	if (
+		(row.status === 'running' || row.status === 'cancelling') &&
+		patch.status !== undefined &&
+		patch.status !== 'running' &&
+		patch.status !== 'cancelling'
+	) {
+		const active = await tx.queryOne<{ active_execution_started_at: number | null }>(
+			'SELECT active_execution_started_at FROM agent_runs WHERE id = ?',
+			[row.id],
+		);
+		const activeDelta = active?.active_execution_started_at
+			? Math.max(0, now - active.active_execution_started_at)
+			: 0;
+		assignments.push('active_execution_seconds = active_execution_seconds + ?');
+		parameters.push(activeDelta);
+		assignments.push('active_execution_started_at = NULL', 'executing_runtime_count = 0');
+	}
+	if (patch.goalStatus !== undefined) add('goal_status = ?', patch.goalStatus);
+	if (patch.verificationStatus !== undefined) add('verification_status = ?', patch.verificationStatus);
+	if (patch.needsReconciliation !== undefined) add('needs_reconciliation = ?', patch.needsReconciliation ? 1 : 0);
+	if (patch.budget !== undefined) add('budget_json = ?', JSON.stringify(patch.budget));
+	if (patch.usage !== undefined) add('usage_json = ?', JSON.stringify(patch.usage));
+	if (patch.plan !== undefined) add('plan_json = ?', JSON.stringify(patch.plan));
+	if (patch.consumedInputSequence !== undefined) add('consumed_input_sequence = ?', patch.consumedInputSequence);
+	if (patch.inputRevision !== undefined) add('input_revision = ?', patch.inputRevision);
+	if (patch.startedAt !== undefined) add('started_at = ?', patch.startedAt);
+	if (patch.completedAt !== undefined) add('completed_at = ?', patch.completedAt);
+	parameters.push(row.id, row.user_id, row.app_id, row.version);
+	const updated = await tx.execute(
+		`UPDATE agent_runs SET ${assignments.join(', ')} WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?`,
+		parameters,
+	);
+	if (updated.changes !== 1) throw new Error('STATE_CONFLICT');
+	const result = await tx.queryOne<RunRow>(
+		`SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
+		[row.id, row.user_id, row.app_id],
+	);
+	if (!result) throw new Error('NOT_FOUND');
+	return result;
 };
 
 export const artifactForInput = async (
-  tx: RelationalDatabase,
-  userId: number,
-  appId: string,
-  threadId: string,
-  runId: string,
-  artifactId: string,
-  now: number,
+	tx: RelationalDatabase,
+	userId: number,
+	appId: string,
+	threadId: string,
+	runId: string,
+	artifactId: string,
+	now: number,
 ): Promise<void> => {
-  const artifact = await tx.queryOne<ArtifactRow>(
-    `SELECT status, app_id FROM ai_artifacts WHERE id = ? AND user_id = ? AND status <> 'deleted'`,
-    [artifactId, userId],
-  );
-  if (!artifact || artifact.status !== 'ready') throw new Error('ARTIFACT_UNAVAILABLE');
-  if (artifact.app_id === appId) return;
-  const grant = await tx.queryOne<{ id: string }>(
-    `SELECT id FROM agent_artifact_grants
+	const artifact = await tx.queryOne<ArtifactRow>(
+		`SELECT status, app_id FROM ai_artifacts WHERE id = ? AND user_id = ? AND status <> 'deleted'`,
+		[artifactId, userId],
+	);
+	if (!artifact || artifact.status !== 'ready') throw new Error('ARTIFACT_UNAVAILABLE');
+	if (artifact.app_id === appId) return;
+	const grant = await tx.queryOne<{ id: string }>(
+		`SELECT id FROM agent_artifact_grants
      WHERE artifact_id = ? AND receiver_user_id = ? AND receiver_app_id = ?
        AND receiver_thread_id = ? AND role = 'input' AND revoked_at IS NULL
        AND (receiver_run_id IS NULL OR receiver_run_id = ?)
        AND (expires_at IS NULL OR expires_at > ?)
      LIMIT 1`,
-    [artifactId, userId, appId, threadId, runId, now],
-  );
-  if (!grant) throw new Error('ARTIFACT_CROSS_APP_ATTACH_REQUIRED');
+		[artifactId, userId, appId, threadId, runId, now],
+	);
+	if (!grant) throw new Error('ARTIFACT_CROSS_APP_ATTACH_REQUIRED');
 };

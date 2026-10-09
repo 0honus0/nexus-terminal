@@ -8,133 +8,140 @@ import { loadAuditLogView } from '@/features/audit/public';
 import { clearDynamicImportRecoveryMarker, recoverStaleDynamicImport } from '@/app/bootstrap/pwa';
 
 const loadDashboard = () => import('../pages/dashboard/DashboardPage.vue');
+
 const loadLogin = () => import('../pages/login/LoginPage.vue');
+
 const loadSettings = () => import('../pages/settings/SettingsPage.vue');
+
 const loadWorkspacePage = () => import('../pages/workspace/WorkspacePage.vue');
 
 let authenticatedPreloadScheduled = false;
+
 export const preloadAuthenticatedRoutes = (): void => {
-  if (authenticatedPreloadScheduled || typeof window === 'undefined') return;
-  const connection = (
-    navigator as Navigator & {
-      connection?: { saveData?: boolean; effectiveType?: string };
-    }
-  ).connection;
-  if (connection?.saveData || connection?.effectiveType === 'slow-2g' || connection?.effectiveType === '2g') return;
-  authenticatedPreloadScheduled = true;
-  const preload = async () => {
-    // Warm the common connection/terminal path only. Settings and administrative
-    // pages stay lazy instead of competing with the current page's requests.
-    for (const loader of [loadConnectionsView, loadWorkspacePage]) {
-      await loader().catch(() => undefined);
-    }
-  };
-  const requestIdle = (
-    window as Window & {
-      requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
-    }
-  ).requestIdleCallback;
-  if (requestIdle) requestIdle(() => void preload(), { timeout: 2_500 });
-  else window.setTimeout(() => void preload(), 800);
+	if (authenticatedPreloadScheduled || typeof window === 'undefined') return;
+	const connection = (
+		navigator as Navigator & {
+			connection?: { saveData?: boolean; effectiveType?: string };
+		}
+	).connection;
+	if (connection?.saveData || connection?.effectiveType === 'slow-2g' || connection?.effectiveType === '2g') return;
+	authenticatedPreloadScheduled = true;
+
+	const preload = async () => {
+		// Warm the common connection/terminal path only. Settings and administrative
+		// pages stay lazy instead of competing with the current page's requests.
+		for (const loader of [loadConnectionsView, loadWorkspacePage]) {
+			await loader().catch(() => undefined);
+		}
+	};
+
+	const requestIdle = (
+		window as Window & {
+			requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
+		}
+	).requestIdleCallback;
+	if (requestIdle) requestIdle(() => void preload(), { timeout: 2_500 });
+	else window.setTimeout(() => void preload(), 800);
 };
 
 const routes: RouteRecordRaw[] = [
-  {
-    path: '/',
-    name: 'Dashboard',
-    meta: { keepAlive: true },
-    component: loadDashboard,
-  },
-  {
-    path: '/login',
-    name: 'Login',
-    component: loadLogin,
-  },
-  {
-    path: '/setup',
-    name: 'Setup',
-    component: loadSetupView,
-  },
-  { path: '/workspace', name: 'Workspace', component: loadWorkspacePage, meta: { keepAlive: true } },
-  {
-    path: '/connections',
-    name: 'Connections',
-    meta: { keepAlive: true },
-    component: loadConnectionsView,
-  },
-  {
-    path: '/proxies',
-    name: 'Proxies',
-    meta: { keepAlive: true },
-    component: loadProxiesView,
-  },
-  {
-    path: '/notifications',
-    name: 'Notifications',
-    meta: { keepAlive: true },
-    component: loadNotificationsView,
-  },
-  {
-    path: '/audit-logs',
-    name: 'AuditLogs',
-    meta: { keepAlive: true },
-    component: loadAuditLogView,
-  },
-  {
-    path: '/settings',
-    name: 'Settings',
-    meta: { keepAlive: true },
-    component: loadSettings,
-  },
-  {
-    path: '/:pathMatch(.*)*',
-    redirect: '/',
-  },
+	{
+		path: '/',
+		name: 'Dashboard',
+		meta: { keepAlive: true },
+		component: loadDashboard,
+	},
+	{
+		path: '/login',
+		name: 'Login',
+		component: loadLogin,
+	},
+	{
+		path: '/setup',
+		name: 'Setup',
+		component: loadSetupView,
+	},
+	{ path: '/workspace', name: 'Workspace', component: loadWorkspacePage, meta: { keepAlive: true } },
+	{
+		path: '/connections',
+		name: 'Connections',
+		meta: { keepAlive: true },
+		component: loadConnectionsView,
+	},
+	{
+		path: '/proxies',
+		name: 'Proxies',
+		meta: { keepAlive: true },
+		component: loadProxiesView,
+	},
+	{
+		path: '/notifications',
+		name: 'Notifications',
+		meta: { keepAlive: true },
+		component: loadNotificationsView,
+	},
+	{
+		path: '/audit-logs',
+		name: 'AuditLogs',
+		meta: { keepAlive: true },
+		component: loadAuditLogView,
+	},
+	{
+		path: '/settings',
+		name: 'Settings',
+		meta: { keepAlive: true },
+		component: loadSettings,
+	},
+	{
+		path: '/:pathMatch(.*)*',
+		redirect: '/',
+	},
 ];
 
 if (import.meta.env.DEV) {
-  const catchAllIndex = routes.findIndex((route) => route.path === '/:pathMatch(.*)*');
-  routes.splice(catchAllIndex < 0 ? routes.length : catchAllIndex, 0, {
-    path: '/__ui',
-    name: 'UiGallery',
-    component: () => import('../pages/ui/UiGalleryPage.vue'),
-  });
+	const catchAllIndex = routes.findIndex((route) => route.path === '/:pathMatch(.*)*');
+	routes.splice(catchAllIndex < 0 ? routes.length : catchAllIndex, 0, {
+		path: '/__ui',
+		name: 'UiGallery',
+
+		component: () => import('../pages/ui/UiGalleryPage.vue'),
+	});
 }
 
 export const createAppRouter = (pinia: Pinia) => {
-  const router = createRouter({
-    history: createWebHistory(import.meta.env.BASE_URL),
-    routes,
-  });
-  const auth = createAuthNavigationFacade(pinia);
-  const publicRoutes = new Set(['Login', 'Setup']);
+	const router = createRouter({
+		history: createWebHistory(import.meta.env.BASE_URL),
+		routes,
+	});
+	const auth = createAuthNavigationFacade(pinia);
+	const publicRoutes = new Set(['Login', 'Setup']);
 
-  router.onError(async (error, to) => {
-    const reloadTarget = to.fullPath || window.location.pathname;
-    await recoverStaleDynamicImport(error, reloadTarget);
-  });
+	router.onError(async (error, to) => {
+		const reloadTarget = to.fullPath || window.location.pathname;
+		await recoverStaleDynamicImport(error, reloadTarget);
+	});
 
-  router.afterEach((to) => {
-    clearDynamicImportRecoveryMarker(to.fullPath);
-  });
+	router.afterEach((to) => {
+		clearDynamicImportRecoveryMarker(to.fullPath);
+	});
 
-  router.beforeEach(async (to) => {
-    await auth.resolveSetupState();
+	router.beforeEach(async (to) => {
+		await auth.resolveSetupState();
 
-    if (auth.setupRequired && to.name !== 'Setup') return { name: 'Setup' };
+		if (auth.setupRequired && to.name !== 'Setup') return { name: 'Setup' };
 
-    if (!auth.setupRequired && to.name === 'Setup') {
-      await auth.resolveSession();
-      return auth.authenticated ? { name: 'Dashboard' } : { name: 'Login' };
-    }
+		if (!auth.setupRequired && to.name === 'Setup') {
+			await auth.resolveSession();
+			return auth.authenticated ? { name: 'Dashboard' } : { name: 'Login' };
+		}
 
-    await auth.resolveSession();
-    const isPublic = publicRoutes.has(String(to.name));
+		await auth.resolveSession();
+		const isPublic = publicRoutes.has(String(to.name));
 
-    if (!isPublic && !auth.authenticated) return { name: 'Login' };
-    if (to.name === 'Login' && auth.authenticated) return { name: 'Dashboard' };
-    return true;
-  });
+		if (!isPublic && !auth.authenticated) return { name: 'Login' };
+		if (to.name === 'Login' && auth.authenticated) return { name: 'Dashboard' };
+		return true;
+	});
 
-  return router;
+	return router;
 };

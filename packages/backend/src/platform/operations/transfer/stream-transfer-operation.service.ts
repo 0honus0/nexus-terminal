@@ -10,22 +10,22 @@ import { runtimePerformanceMetrics } from '../../../shared/observability/runtime
 import { OperationOutcomeUnknownError, SettledOperationFailure } from '../operation-outcome';
 
 interface ActiveTransfer {
-  requestId: string;
-  ownerId?: string;
-  controller: AbortController;
-  emit: (event: TransferEvent) => void;
+	requestId: string;
+	ownerId?: string;
+	controller: AbortController;
+	emit: (event: TransferEvent) => void;
 }
 
 interface TransferTracker {
-  requestId: string;
-  transferredBytes: number;
-  totalBytes: number;
-  completedFiles: number;
-  totalFiles: number;
-  totalKnown: boolean;
-  currentFile?: string;
-  lastEmittedAt: number;
-  emit: (event: TransferEvent) => void;
+	requestId: string;
+	transferredBytes: number;
+	totalBytes: number;
+	completedFiles: number;
+	totalFiles: number;
+	totalKnown: boolean;
+	currentFile?: string;
+	lastEmittedAt: number;
+	emit: (event: TransferEvent) => void;
 }
 
 const PROGRESS_INTERVAL_MS = 150;
@@ -33,418 +33,431 @@ const DEFAULT_POSITIONED_COPY_CHUNK_BYTES = 32 * 1024;
 const DEFAULT_POSITIONED_COPY_CONCURRENCY = 32;
 
 export interface StreamTransferOperationOptions {
-  positionedCopyChunkBytes?: number;
-  positionedCopyConcurrency?: number;
+	positionedCopyChunkBytes?: number;
+	positionedCopyConcurrency?: number;
 }
 
 export class StreamTransferOperationService implements TransferOperation {
-  private readonly active = new Map<string, ActiveTransfer>();
-  private readonly positionedCopyChunkBytes: number;
-  private readonly positionedCopyConcurrency: number;
+	private readonly active = new Map<string, ActiveTransfer>();
+	private readonly positionedCopyChunkBytes: number;
+	private readonly positionedCopyConcurrency: number;
 
-  private key(ownerId: string | undefined, requestId: string): string {
-    return `${ownerId ?? ''}\u0000${requestId}`;
-  }
+	private key(ownerId: string | undefined, requestId: string): string {
+		return `${ownerId ?? ''}\u0000${requestId}`;
+	}
 
-  constructor(
-    private readonly sessions: Pick<ExecutionSessionManager, 'require'>,
-    options: StreamTransferOperationOptions = {},
-  ) {
-    this.positionedCopyChunkBytes = Math.max(
-      1,
-      Math.floor(options.positionedCopyChunkBytes ?? DEFAULT_POSITIONED_COPY_CHUNK_BYTES),
-    );
-    this.positionedCopyConcurrency = Math.max(
-      1,
-      Math.floor(options.positionedCopyConcurrency ?? DEFAULT_POSITIONED_COPY_CONCURRENCY),
-    );
-  }
+	constructor(
+		private readonly sessions: Pick<ExecutionSessionManager, 'require'>,
+		options: StreamTransferOperationOptions = {},
+	) {
+		this.positionedCopyChunkBytes = Math.max(
+			1,
+			Math.floor(options.positionedCopyChunkBytes ?? DEFAULT_POSITIONED_COPY_CHUNK_BYTES),
+		);
+		this.positionedCopyConcurrency = Math.max(
+			1,
+			Math.floor(options.positionedCopyConcurrency ?? DEFAULT_POSITIONED_COPY_CONCURRENCY),
+		);
+	}
 
-  async run(request: TransferRequest, emit: (event: TransferEvent) => void): Promise<void> {
-    const activeKey = this.key(request.ownerId, request.requestId);
-    if (this.active.has(activeKey)) throw new Error(`Transfer ${request.requestId} already exists for this owner.`);
-    const controller = new AbortController();
-    const onAbort = () => controller.abort(request.signal?.reason);
-    if (request.signal?.aborted) onAbort();
-    else request.signal?.addEventListener('abort', onAbort, { once: true });
-    const active: ActiveTransfer = { requestId: request.requestId, ownerId: request.ownerId, controller, emit };
-    this.active.set(activeKey, active);
-    logger.debug(
-      {
-        requestId: request.requestId,
-        mode: request.mode,
-        sourceCount: request.sourcePaths.length,
-        crossSession: request.sourceSessionId !== request.destinationSessionId,
-        activeTransfers: this.active.size,
-      },
-      'Workspace transfer started',
-    );
+	async run(request: TransferRequest, emit: (event: TransferEvent) => void): Promise<void> {
+		const activeKey = this.key(request.ownerId, request.requestId);
+		if (this.active.has(activeKey)) throw new Error(`Transfer ${request.requestId} already exists for this owner.`);
+		const controller = new AbortController();
 
-    try {
-      const sourceSession = this.sessions.require(request.sourceSessionId);
-      const destinationSession = this.sessions.require(request.destinationSessionId);
-      const [sourceFs, destinationFs] = await Promise.all([
-        sourceSession.fileSystem('control'),
-        destinationSession.fileSystem('control'),
-      ]);
-      await destinationFs.ensureDirectory(request.destinationPath);
+		const onAbort = () => controller.abort(request.signal?.reason);
 
-      const tracker: TransferTracker = {
-        requestId: request.requestId,
-        transferredBytes: 0,
-        totalBytes: 0,
-        completedFiles: 0,
-        totalFiles: 0,
-        totalKnown: false,
-        lastEmittedAt: 0,
-        emit,
-      };
-      this.emitProgress(tracker, true);
-      const results: RemoteFileEntry[] = [];
-      const sameSession = request.sourceSessionId === request.destinationSessionId;
+		if (request.signal?.aborted) onAbort();
+		else request.signal?.addEventListener('abort', onAbort, { once: true });
+		const active: ActiveTransfer = { requestId: request.requestId, ownerId: request.ownerId, controller, emit };
+		this.active.set(activeKey, active);
+		logger.debug(
+			{
+				requestId: request.requestId,
+				mode: request.mode,
+				sourceCount: request.sourcePaths.length,
+				crossSession: request.sourceSessionId !== request.destinationSessionId,
+				activeTransfers: this.active.size,
+			},
+			'Workspace transfer started',
+		);
 
-      for (const sourcePath of request.sourcePaths) {
-        this.throwIfAborted(controller.signal);
-        const normalizedSource = this.requireAbsolutePath(sourcePath, 'source');
-        const targetPath = path.posix.join(
-          this.requireAbsolutePath(request.destinationPath, 'destination'),
-          path.posix.basename(normalizedSource),
-        );
-        if (sameSession && normalizedSource === targetPath) continue;
+		try {
+			const sourceSession = this.sessions.require(request.sourceSessionId);
+			const destinationSession = this.sessions.require(request.destinationSessionId);
+			const [sourceFs, destinationFs] = await Promise.all([
+				sourceSession.fileSystem('control'),
+				destinationSession.fileSystem('control'),
+			]);
+			await destinationFs.ensureDirectory(request.destinationPath);
 
-        if (request.mode === 'move' && sameSession) {
-          if (await destinationFs.exists(targetPath)) throw new Error(`Destination already exists: ${targetPath}`);
-          tracker.currentFile = normalizedSource;
-          tracker.totalFiles += 1;
-          tracker.totalKnown = true;
-          this.emitProgress(tracker, true);
-          await sourceFs.rename(normalizedSource, targetPath);
-          tracker.completedFiles += 1;
-          this.emitProgress(tracker, true);
-          results.push(toRemoteFileEntry(targetPath, await destinationFs.metadata(targetPath)));
-          continue;
-        }
+			const tracker: TransferTracker = {
+				requestId: request.requestId,
+				transferredBytes: 0,
+				totalBytes: 0,
+				completedFiles: 0,
+				totalFiles: 0,
+				totalKnown: false,
+				lastEmittedAt: 0,
+				emit,
+			};
+			this.emitProgress(tracker, true);
+			const results: RemoteFileEntry[] = [];
+			const sameSession = request.sourceSessionId === request.destinationSessionId;
 
-        await this.copyEntry(
-          sourceFs,
-          destinationFs,
-          normalizedSource,
-          targetPath,
-          tracker,
-          controller.signal,
-          new Set(),
-        );
-        const metadata = await destinationFs.metadata(targetPath);
-        results.push(toRemoteFileEntry(targetPath, metadata));
-        if (request.mode === 'move') await this.removeSource(sourceFs, normalizedSource, new Set(), controller.signal);
-      }
+			for (const sourcePath of request.sourcePaths) {
+				this.throwIfAborted(controller.signal);
+				const normalizedSource = this.requireAbsolutePath(sourcePath, 'source');
+				const targetPath = path.posix.join(
+					this.requireAbsolutePath(request.destinationPath, 'destination'),
+					path.posix.basename(normalizedSource),
+				);
+				if (sameSession && normalizedSource === targetPath) continue;
 
-      this.throwIfAborted(controller.signal);
-      tracker.currentFile = undefined;
-      tracker.totalKnown = true;
-      this.emitProgress(tracker, true);
-      logger.debug(
-        { requestId: request.requestId, mode: request.mode, itemCount: results.length },
-        'Workspace transfer completed',
-      );
-      emit({
-        type: 'completed',
-        requestId: request.requestId,
-        mode: request.mode,
-        sourcePaths: request.sourcePaths,
-        destinationPath: request.destinationPath,
-        items: results,
-        crossSession: !sameSession,
-        ...(request.sourceOwnerId ? { sourceOwnerId: request.sourceOwnerId } : {}),
-      });
-    } catch (error) {
-      if (
-        !(error instanceof SettledOperationFailure) &&
-        !(error instanceof DOMException && error.name === 'AbortError')
-      )
-        throw new OperationOutcomeUnknownError();
-      if (controller.signal.aborted) {
-        emit({ type: 'cancelled', requestId: request.requestId });
-      } else {
-        logger.warn({ err: error, requestId: request.requestId, mode: request.mode }, 'Workspace transfer failed');
-        emit({
-          type: 'failed',
-          requestId: request.requestId,
-          mode: request.mode,
-          message: error instanceof Error ? error.message : String(error),
-        });
-      }
-    } finally {
-      this.active.delete(activeKey);
-      request.signal?.removeEventListener('abort', onAbort);
-    }
-  }
+				if (request.mode === 'move' && sameSession) {
+					if (await destinationFs.exists(targetPath))
+						throw new Error(`Destination already exists: ${targetPath}`);
+					tracker.currentFile = normalizedSource;
+					tracker.totalFiles += 1;
+					tracker.totalKnown = true;
+					this.emitProgress(tracker, true);
+					await sourceFs.rename(normalizedSource, targetPath);
+					tracker.completedFiles += 1;
+					this.emitProgress(tracker, true);
+					results.push(toRemoteFileEntry(targetPath, await destinationFs.metadata(targetPath)));
+					continue;
+				}
 
-  async cancel(ownerId: string, requestId: string): Promise<boolean> {
-    const active = this.active.get(this.key(ownerId, requestId));
-    if (!active) return false;
-    logger.debug({ requestId, ownerId }, 'Workspace transfer cancellation requested');
-    active.emit({ type: 'cancelling', requestId });
-    active.controller.abort();
-    return true;
-  }
+				await this.copyEntry(
+					sourceFs,
+					destinationFs,
+					normalizedSource,
+					targetPath,
+					tracker,
+					controller.signal,
+					new Set(),
+				);
+				const metadata = await destinationFs.metadata(targetPath);
+				results.push(toRemoteFileEntry(targetPath, metadata));
+				if (request.mode === 'move')
+					await this.removeSource(sourceFs, normalizedSource, new Set(), controller.signal);
+			}
 
-  async cancelOwner(ownerId: string): Promise<void> {
-    for (const active of this.active.values()) {
-      if (active.ownerId === ownerId) await this.cancel(ownerId, active.requestId);
-    }
-  }
+			this.throwIfAborted(controller.signal);
+			tracker.currentFile = undefined;
+			tracker.totalKnown = true;
+			this.emitProgress(tracker, true);
+			logger.debug(
+				{ requestId: request.requestId, mode: request.mode, itemCount: results.length },
+				'Workspace transfer completed',
+			);
+			emit({
+				type: 'completed',
+				requestId: request.requestId,
+				mode: request.mode,
+				sourcePaths: request.sourcePaths,
+				destinationPath: request.destinationPath,
+				items: results,
+				crossSession: !sameSession,
+				...(request.sourceOwnerId ? { sourceOwnerId: request.sourceOwnerId } : {}),
+			});
+		} catch (error) {
+			if (
+				!(error instanceof SettledOperationFailure) &&
+				!(error instanceof DOMException && error.name === 'AbortError')
+			)
+				throw new OperationOutcomeUnknownError();
+			if (controller.signal.aborted) {
+				emit({ type: 'cancelled', requestId: request.requestId });
+			} else {
+				logger.warn(
+					{ err: error, requestId: request.requestId, mode: request.mode },
+					'Workspace transfer failed',
+				);
+				emit({
+					type: 'failed',
+					requestId: request.requestId,
+					mode: request.mode,
+					message: error instanceof Error ? error.message : String(error),
+				});
+			}
+		} finally {
+			this.active.delete(activeKey);
+			request.signal?.removeEventListener('abort', onAbort);
+		}
+	}
 
-  private async copyEntry(
-    sourceFs: RemoteFileSystem,
-    destinationFs: RemoteFileSystem,
-    sourcePath: string,
-    destinationPath: string,
-    tracker: TransferTracker,
-    signal: AbortSignal,
-    ancestorRealPaths: ReadonlySet<string>,
-    metadataOverride?: RemoteFileMetadata,
-  ): Promise<void> {
-    this.throwIfAborted(signal);
-    // Directory listings already carry authoritative attrs for each child. Reuse
-    // them instead of issuing an extra LSTAT per entry: some SFTP servers allow
-    // READDIR but reject or mishandle child LSTAT calls, which made recursive
-    // cross-session copies fail after the initial progress event.
-    const metadata = metadataOverride ?? (await sourceFs.metadata(sourcePath));
-    if (metadata.isSymbolicLink) {
-      const followed = await sourceFs.metadata(sourcePath, { followSymbolicLinks: true });
-      if (followed.isDirectory) {
-        await this.copyDirectory(
-          sourceFs,
-          destinationFs,
-          sourcePath,
-          destinationPath,
-          tracker,
-          signal,
-          ancestorRealPaths,
-        );
-      } else if (followed.isFile) {
-        await this.copyFile(sourceFs, destinationFs, sourcePath, destinationPath, followed, tracker, signal);
-      }
-      return;
-    }
-    if (metadata.isDirectory) {
-      await this.copyDirectory(
-        sourceFs,
-        destinationFs,
-        sourcePath,
-        destinationPath,
-        tracker,
-        signal,
-        ancestorRealPaths,
-      );
-    } else if (metadata.isFile) {
-      await this.copyFile(sourceFs, destinationFs, sourcePath, destinationPath, metadata, tracker, signal);
-    }
-  }
+	async cancel(ownerId: string, requestId: string): Promise<boolean> {
+		const active = this.active.get(this.key(ownerId, requestId));
+		if (!active) return false;
+		logger.debug({ requestId, ownerId }, 'Workspace transfer cancellation requested');
+		active.emit({ type: 'cancelling', requestId });
+		active.controller.abort();
+		return true;
+	}
 
-  private async copyDirectory(
-    sourceFs: RemoteFileSystem,
-    destinationFs: RemoteFileSystem,
-    sourcePath: string,
-    destinationPath: string,
-    tracker: TransferTracker,
-    signal: AbortSignal,
-    ancestorRealPaths: ReadonlySet<string>,
-  ): Promise<void> {
-    const realPath = await sourceFs.resolvePath(sourcePath);
-    if (ancestorRealPaths.has(realPath)) return;
-    const nextAncestors = new Set(ancestorRealPaths);
-    nextAncestors.add(realPath);
-    await destinationFs.ensureDirectory(destinationPath);
-    for (const entry of await sourceFs.readDirectory(sourcePath)) {
-      this.throwIfAborted(signal);
-      if (entry.name === '.' || entry.name === '..') continue;
-      await this.copyEntry(
-        sourceFs,
-        destinationFs,
-        path.posix.join(sourcePath, entry.name),
-        path.posix.join(destinationPath, entry.name),
-        tracker,
-        signal,
-        nextAncestors,
-        entry.metadata,
-      );
-    }
-  }
+	async cancelOwner(ownerId: string): Promise<void> {
+		for (const active of this.active.values()) {
+			if (active.ownerId === ownerId) await this.cancel(ownerId, active.requestId);
+		}
+	}
 
-  private async copyFile(
-    sourceFs: RemoteFileSystem,
-    destinationFs: RemoteFileSystem,
-    sourcePath: string,
-    destinationPath: string,
-    metadata: RemoteFileMetadata,
-    tracker: TransferTracker,
-    signal: AbortSignal,
-  ): Promise<void> {
-    const perfFileStartedAt = runtimePerformanceMetrics.transferFileStarted();
-    let perfCompleted = false;
-    try {
-      tracker.totalFiles += 1;
-      tracker.totalBytes += Math.max(0, metadata.size);
-      tracker.currentFile = sourcePath;
-      this.emitProgress(tracker, true);
-      await destinationFs.ensureDirectory(path.posix.dirname(destinationPath));
-      const temporaryPath = `${destinationPath}.nexus-transfer-${tracker.requestId}.part`;
-      await destinationFs.removeFile(temporaryPath, { ignoreMissing: true });
+	private async copyEntry(
+		sourceFs: RemoteFileSystem,
+		destinationFs: RemoteFileSystem,
+		sourcePath: string,
+		destinationPath: string,
+		tracker: TransferTracker,
+		signal: AbortSignal,
+		ancestorRealPaths: ReadonlySet<string>,
+		metadataOverride?: RemoteFileMetadata,
+	): Promise<void> {
+		this.throwIfAborted(signal);
+		// Directory listings already carry authoritative attrs for each child. Reuse
+		// them instead of issuing an extra LSTAT per entry: some SFTP servers allow
+		// READDIR but reject or mishandle child LSTAT calls, which made recursive
+		// cross-session copies fail after the initial progress event.
+		const metadata = metadataOverride ?? (await sourceFs.metadata(sourcePath));
+		if (metadata.isSymbolicLink) {
+			const followed = await sourceFs.metadata(sourcePath, { followSymbolicLinks: true });
+			if (followed.isDirectory) {
+				await this.copyDirectory(
+					sourceFs,
+					destinationFs,
+					sourcePath,
+					destinationPath,
+					tracker,
+					signal,
+					ancestorRealPaths,
+				);
+			} else if (followed.isFile) {
+				await this.copyFile(sourceFs, destinationFs, sourcePath, destinationPath, followed, tracker, signal);
+			}
+			return;
+		}
+		if (metadata.isDirectory) {
+			await this.copyDirectory(
+				sourceFs,
+				destinationFs,
+				sourcePath,
+				destinationPath,
+				tracker,
+				signal,
+				ancestorRealPaths,
+			);
+		} else if (metadata.isFile) {
+			await this.copyFile(sourceFs, destinationFs, sourcePath, destinationPath, metadata, tracker, signal);
+		}
+	}
 
-      const reader = await sourceFs.openPositionedReader(sourcePath);
-      let writer: RemotePositionedWriter;
-      try {
-        writer = await destinationFs.openPositionedWriter(temporaryPath, { mode: metadata.mode });
-      } catch (error) {
-        await reader.close().catch(() => undefined);
-        throw error;
-      }
-      let closing: Promise<PromiseSettledResult<void>[]> | undefined;
-      const closeHandles = () => (closing ??= Promise.allSettled([reader.close(), writer.close()]));
-      const abortOpenHandles = () => {
-        void closeHandles();
-      };
-      signal.addEventListener('abort', abortOpenHandles, { once: true });
-      if (signal.aborted) abortOpenHandles();
-      let copyFailure: unknown;
-      const workersAbort = new AbortController();
-      try {
-        const fileSize = Math.max(0, metadata.size);
-        let nextPosition = 0;
-        const workerCount =
-          fileSize === 0
-            ? 0
-            : Math.min(this.positionedCopyConcurrency, Math.ceil(fileSize / this.positionedCopyChunkBytes));
-        const worker = async () => {
-          const buffer = Buffer.allocUnsafe(Math.min(this.positionedCopyChunkBytes, fileSize));
-          runtimePerformanceMetrics.recordSftpPositionedReadAllocation(buffer.byteLength);
-          while (true) {
-            if (workersAbort.signal.aborted) return;
-            this.throwIfAborted(signal);
-            const position = nextPosition;
-            if (position >= fileSize) return;
-            const blockLength = Math.min(this.positionedCopyChunkBytes, fileSize - position);
-            nextPosition += blockLength;
+	private async copyDirectory(
+		sourceFs: RemoteFileSystem,
+		destinationFs: RemoteFileSystem,
+		sourcePath: string,
+		destinationPath: string,
+		tracker: TransferTracker,
+		signal: AbortSignal,
+		ancestorRealPaths: ReadonlySet<string>,
+	): Promise<void> {
+		const realPath = await sourceFs.resolvePath(sourcePath);
+		if (ancestorRealPaths.has(realPath)) return;
+		const nextAncestors = new Set(ancestorRealPaths);
+		nextAncestors.add(realPath);
+		await destinationFs.ensureDirectory(destinationPath);
+		for (const entry of await sourceFs.readDirectory(sourcePath)) {
+			this.throwIfAborted(signal);
+			if (entry.name === '.' || entry.name === '..') continue;
+			await this.copyEntry(
+				sourceFs,
+				destinationFs,
+				path.posix.join(sourcePath, entry.name),
+				path.posix.join(destinationPath, entry.name),
+				tracker,
+				signal,
+				nextAncestors,
+				entry.metadata,
+			);
+		}
+	}
 
-            const perfBlockStartedAt = runtimePerformanceMetrics.transferBlockStarted();
-            let blockCopiedBytes = 0;
-            try {
-              let blockOffset = 0;
-              while (blockOffset < blockLength) {
-                this.throwIfAborted(signal);
-                const target = buffer.subarray(0, blockLength - blockOffset);
-                const bytesRead = await reader.readInto(position + blockOffset, target);
-                if (bytesRead === 0) throw new Error(`Unexpected end of file while reading ${sourcePath}.`);
-                this.throwIfAborted(signal);
-                if (workersAbort.signal.aborted) return;
-                await writer.write(position + blockOffset, target.subarray(0, bytesRead));
-                blockOffset += bytesRead;
-                blockCopiedBytes += bytesRead;
-                tracker.transferredBytes += bytesRead;
-                this.emitProgress(tracker);
-              }
-            } finally {
-              runtimePerformanceMetrics.transferBlockFinished(perfBlockStartedAt, blockCopiedBytes);
-            }
-          }
-        };
-        const results = await Promise.allSettled(
-          Array.from({ length: workerCount }, async () => {
-            try {
-              await worker();
-            } catch (error) {
-              workersAbort.abort();
-              throw error;
-            }
-          }),
-        );
-        const failed = results.find((result) => result.status === 'rejected');
-        if (failed?.status === 'rejected') throw failed.reason;
-        this.throwIfAborted(signal);
-      } catch (error) {
-        copyFailure = error;
-      } finally {
-        signal.removeEventListener('abort', abortOpenHandles);
-        const closed = await closeHandles();
-        if (closed.some((result) => result.status === 'rejected')) throw new OperationOutcomeUnknownError();
-      }
+	private async copyFile(
+		sourceFs: RemoteFileSystem,
+		destinationFs: RemoteFileSystem,
+		sourcePath: string,
+		destinationPath: string,
+		metadata: RemoteFileMetadata,
+		tracker: TransferTracker,
+		signal: AbortSignal,
+	): Promise<void> {
+		const perfFileStartedAt = runtimePerformanceMetrics.transferFileStarted();
+		let perfCompleted = false;
+		try {
+			tracker.totalFiles += 1;
+			tracker.totalBytes += Math.max(0, metadata.size);
+			tracker.currentFile = sourcePath;
+			this.emitProgress(tracker, true);
+			await destinationFs.ensureDirectory(path.posix.dirname(destinationPath));
+			const temporaryPath = `${destinationPath}.nexus-transfer-${tracker.requestId}.part`;
+			await destinationFs.removeFile(temporaryPath, { ignoreMissing: true });
 
-      if (copyFailure !== undefined) {
-        try {
-          await destinationFs.removeFile(temporaryPath, { ignoreMissing: true });
-        } catch {
-          throw new OperationOutcomeUnknownError();
-        }
-        throw new SettledOperationFailure(copyFailure);
-      }
+			const reader = await sourceFs.openPositionedReader(sourcePath);
+			let writer: RemotePositionedWriter;
+			try {
+				writer = await destinationFs.openPositionedWriter(temporaryPath, { mode: metadata.mode });
+			} catch (error) {
+				await reader.close().catch(() => undefined);
+				throw error;
+			}
+			let closing: Promise<PromiseSettledResult<void>[]> | undefined;
 
-      try {
-        this.throwIfAborted(signal);
-        await destinationFs.replaceFile(temporaryPath, destinationPath);
-      } catch (error) {
-        try {
-          await destinationFs.removeFile(temporaryPath, { ignoreMissing: true });
-        } catch {
-          throw new OperationOutcomeUnknownError();
-        }
-        if (signal.aborted && error instanceof DOMException && error.name === 'AbortError')
-          throw new SettledOperationFailure(error);
-        throw new OperationOutcomeUnknownError();
-      }
-      tracker.completedFiles += 1;
-      perfCompleted = true;
-      this.emitProgress(tracker, true);
-    } finally {
-      runtimePerformanceMetrics.transferFileFinished(perfFileStartedAt, perfCompleted);
-    }
-  }
+			const closeHandles = () => (closing ??= Promise.allSettled([reader.close(), writer.close()]));
 
-  private async removeSource(
-    filesystem: RemoteFileSystem,
-    remotePath: string,
-    ancestorRealPaths: ReadonlySet<string>,
-    signal: AbortSignal,
-  ): Promise<void> {
-    this.throwIfAborted(signal);
-    const metadata = await filesystem.metadata(remotePath);
-    if (!metadata.isDirectory || metadata.isSymbolicLink) {
-      await filesystem.removeFile(remotePath, { ignoreMissing: true });
-      return;
-    }
-    const realPath = await filesystem.resolvePath(remotePath);
-    if (ancestorRealPaths.has(realPath)) return;
-    const nextAncestors = new Set(ancestorRealPaths);
-    nextAncestors.add(realPath);
-    for (const entry of await filesystem.readDirectory(remotePath)) {
-      if (entry.name === '.' || entry.name === '..') continue;
-      await this.removeSource(filesystem, path.posix.join(remotePath, entry.name), nextAncestors, signal);
-    }
-    await filesystem.removeDirectory(remotePath);
-  }
+			const abortOpenHandles = () => {
+				void closeHandles();
+			};
 
-  private emitProgress(tracker: TransferTracker, force = false): void {
-    const now = Date.now();
-    if (!force && now - tracker.lastEmittedAt < PROGRESS_INTERVAL_MS) return;
-    tracker.lastEmittedAt = now;
-    tracker.emit({
-      type: 'progress',
-      requestId: tracker.requestId,
-      transferredBytes: tracker.transferredBytes,
-      totalBytes: tracker.totalBytes,
-      completedFiles: tracker.completedFiles,
-      totalFiles: tracker.totalFiles,
-      totalKnown: tracker.totalKnown,
-      ...(tracker.currentFile ? { currentFile: tracker.currentFile } : {}),
-    });
-  }
+			signal.addEventListener('abort', abortOpenHandles, { once: true });
+			if (signal.aborted) abortOpenHandles();
+			let copyFailure: unknown;
+			const workersAbort = new AbortController();
+			try {
+				const fileSize = Math.max(0, metadata.size);
+				let nextPosition = 0;
+				const workerCount =
+					fileSize === 0
+						? 0
+						: Math.min(this.positionedCopyConcurrency, Math.ceil(fileSize / this.positionedCopyChunkBytes));
 
-  private requireAbsolutePath(value: string, label: string): string {
-    return normalizeAbsoluteRemotePath(value, `${label} path`);
-  }
+				const worker = async () => {
+					const buffer = Buffer.allocUnsafe(Math.min(this.positionedCopyChunkBytes, fileSize));
+					runtimePerformanceMetrics.recordSftpPositionedReadAllocation(buffer.byteLength);
+					while (true) {
+						if (workersAbort.signal.aborted) return;
+						this.throwIfAborted(signal);
+						const position = nextPosition;
+						if (position >= fileSize) return;
+						const blockLength = Math.min(this.positionedCopyChunkBytes, fileSize - position);
+						nextPosition += blockLength;
 
-  private throwIfAborted(signal: AbortSignal): void {
-    if (signal.aborted) throw new DOMException('Transfer cancelled.', 'AbortError');
-  }
+						const perfBlockStartedAt = runtimePerformanceMetrics.transferBlockStarted();
+						let blockCopiedBytes = 0;
+						try {
+							let blockOffset = 0;
+							while (blockOffset < blockLength) {
+								this.throwIfAborted(signal);
+								const target = buffer.subarray(0, blockLength - blockOffset);
+								const bytesRead = await reader.readInto(position + blockOffset, target);
+								if (bytesRead === 0)
+									throw new Error(`Unexpected end of file while reading ${sourcePath}.`);
+								this.throwIfAborted(signal);
+								if (workersAbort.signal.aborted) return;
+								await writer.write(position + blockOffset, target.subarray(0, bytesRead));
+								blockOffset += bytesRead;
+								blockCopiedBytes += bytesRead;
+								tracker.transferredBytes += bytesRead;
+								this.emitProgress(tracker);
+							}
+						} finally {
+							runtimePerformanceMetrics.transferBlockFinished(perfBlockStartedAt, blockCopiedBytes);
+						}
+					}
+				};
+
+				const results = await Promise.allSettled(
+					Array.from({ length: workerCount }, async () => {
+						try {
+							await worker();
+						} catch (error) {
+							workersAbort.abort();
+							throw error;
+						}
+					}),
+				);
+				const failed = results.find((result) => result.status === 'rejected');
+				if (failed?.status === 'rejected') throw failed.reason;
+				this.throwIfAborted(signal);
+			} catch (error) {
+				copyFailure = error;
+			} finally {
+				signal.removeEventListener('abort', abortOpenHandles);
+				const closed = await closeHandles();
+				if (closed.some((result) => result.status === 'rejected')) throw new OperationOutcomeUnknownError();
+			}
+
+			if (copyFailure !== undefined) {
+				try {
+					await destinationFs.removeFile(temporaryPath, { ignoreMissing: true });
+				} catch {
+					throw new OperationOutcomeUnknownError();
+				}
+				throw new SettledOperationFailure(copyFailure);
+			}
+
+			try {
+				this.throwIfAborted(signal);
+				await destinationFs.replaceFile(temporaryPath, destinationPath);
+			} catch (error) {
+				try {
+					await destinationFs.removeFile(temporaryPath, { ignoreMissing: true });
+				} catch {
+					throw new OperationOutcomeUnknownError();
+				}
+				if (signal.aborted && error instanceof DOMException && error.name === 'AbortError')
+					throw new SettledOperationFailure(error);
+				throw new OperationOutcomeUnknownError();
+			}
+			tracker.completedFiles += 1;
+			perfCompleted = true;
+			this.emitProgress(tracker, true);
+		} finally {
+			runtimePerformanceMetrics.transferFileFinished(perfFileStartedAt, perfCompleted);
+		}
+	}
+
+	private async removeSource(
+		filesystem: RemoteFileSystem,
+		remotePath: string,
+		ancestorRealPaths: ReadonlySet<string>,
+		signal: AbortSignal,
+	): Promise<void> {
+		this.throwIfAborted(signal);
+		const metadata = await filesystem.metadata(remotePath);
+		if (!metadata.isDirectory || metadata.isSymbolicLink) {
+			await filesystem.removeFile(remotePath, { ignoreMissing: true });
+			return;
+		}
+		const realPath = await filesystem.resolvePath(remotePath);
+		if (ancestorRealPaths.has(realPath)) return;
+		const nextAncestors = new Set(ancestorRealPaths);
+		nextAncestors.add(realPath);
+		for (const entry of await filesystem.readDirectory(remotePath)) {
+			if (entry.name === '.' || entry.name === '..') continue;
+			await this.removeSource(filesystem, path.posix.join(remotePath, entry.name), nextAncestors, signal);
+		}
+		await filesystem.removeDirectory(remotePath);
+	}
+
+	private emitProgress(tracker: TransferTracker, force = false): void {
+		const now = Date.now();
+		if (!force && now - tracker.lastEmittedAt < PROGRESS_INTERVAL_MS) return;
+		tracker.lastEmittedAt = now;
+		tracker.emit({
+			type: 'progress',
+			requestId: tracker.requestId,
+			transferredBytes: tracker.transferredBytes,
+			totalBytes: tracker.totalBytes,
+			completedFiles: tracker.completedFiles,
+			totalFiles: tracker.totalFiles,
+			totalKnown: tracker.totalKnown,
+			...(tracker.currentFile ? { currentFile: tracker.currentFile } : {}),
+		});
+	}
+
+	private requireAbsolutePath(value: string, label: string): string {
+		return normalizeAbsoluteRemotePath(value, `${label} path`);
+	}
+
+	private throwIfAborted(signal: AbortSignal): void {
+		if (signal.aborted) throw new DOMException('Transfer cancelled.', 'AbortError');
+	}
 }

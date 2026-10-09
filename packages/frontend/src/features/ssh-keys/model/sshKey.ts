@@ -2,5 +2,5 @@ import type { SshKeySummaryDto, SshKeyUpdateRequestDto } from '@nexus-terminal/p
 export type { SshKeySummaryDto };
 
 export type SshKeyFormInput = Omit<SshKeyUpdateRequestDto, 'name'> & {
-  name: string;
+	name: string;
 };

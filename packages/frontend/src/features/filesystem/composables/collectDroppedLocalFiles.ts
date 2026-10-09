@@ -1,41 +1,41 @@
 import type { LocalUploadBatch, LocalUploadFile } from '../model/filesystem';
 
 interface DroppedItemSnapshot {
-  entry?: FileSystemEntry;
-  file?: File;
+	entry?: FileSystemEntry;
+	file?: File;
 }
 
 const readFileEntry = (entry: FileSystemFileEntry): Promise<File> =>
-  new Promise((resolve, reject) => entry.file(resolve, reject));
+	new Promise((resolve, reject) => entry.file(resolve, reject));
 
 const readAllDirectoryEntries = async (reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> => {
-  const entries: FileSystemEntry[] = [];
-  while (true) {
-    const batch = await new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
-    if (!batch.length) return entries;
-    entries.push(...batch);
-  }
+	const entries: FileSystemEntry[] = [];
+	while (true) {
+		const batch = await new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
+		if (!batch.length) return entries;
+		entries.push(...batch);
+	}
 };
 
 const collectEntry = async (
-  entry: FileSystemEntry,
-  parentDirectory: string,
-  files: LocalUploadFile[],
-  directories: string[],
+	entry: FileSystemEntry,
+	parentDirectory: string,
+	files: LocalUploadFile[],
+	directories: string[],
 ): Promise<void> => {
-  if (entry.isFile) {
-    files.push({
-      file: await readFileEntry(entry as FileSystemFileEntry),
-      ...(parentDirectory ? { relativeDirectory: parentDirectory } : {}),
-    });
-    return;
-  }
-  if (!entry.isDirectory) return;
+	if (entry.isFile) {
+		files.push({
+			file: await readFileEntry(entry as FileSystemFileEntry),
+			...(parentDirectory ? { relativeDirectory: parentDirectory } : {}),
+		});
+		return;
+	}
+	if (!entry.isDirectory) return;
 
-  const relativeDirectory = parentDirectory ? `${parentDirectory}/${entry.name}` : entry.name;
-  directories.push(relativeDirectory);
-  const children = await readAllDirectoryEntries((entry as FileSystemDirectoryEntry).createReader());
-  for (const child of children) await collectEntry(child, relativeDirectory, files, directories);
+	const relativeDirectory = parentDirectory ? `${parentDirectory}/${entry.name}` : entry.name;
+	directories.push(relativeDirectory);
+	const children = await readAllDirectoryEntries((entry as FileSystemDirectoryEntry).createReader());
+	for (const child of children) await collectEntry(child, relativeDirectory, files, directories);
 };
 
 /**
@@ -43,42 +43,42 @@ const collectEntry = async (
  * Chromium/Windows can invalidate later DataTransferItem entries once the drop callback yields.
  */
 const snapshotDroppedItems = (dataTransfer: DataTransfer): DroppedItemSnapshot[] => {
-  const snapshots: DroppedItemSnapshot[] = [];
-  const representedRootEntries = new Set<string>();
+	const snapshots: DroppedItemSnapshot[] = [];
+	const representedRootEntries = new Set<string>();
 
-  for (const item of Array.from(dataTransfer.items)) {
-    if (item.kind !== 'file') continue;
-    const entry = typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null;
-    if (entry) {
-      snapshots.push({ entry });
-      representedRootEntries.add(entry.name);
-      continue;
-    }
-    const file = item.getAsFile();
-    if (file) {
-      snapshots.push({ file });
-      representedRootEntries.add(file.name);
-    }
-  }
+	for (const item of Array.from(dataTransfer.items)) {
+		if (item.kind !== 'file') continue;
+		const entry = typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null;
+		if (entry) {
+			snapshots.push({ entry });
+			representedRootEntries.add(entry.name);
+			continue;
+		}
+		const file = item.getAsFile();
+		if (file) {
+			snapshots.push({ file });
+			representedRootEntries.add(file.name);
+		}
+	}
 
-  // Chromium can expose a dragged directory both as a FileSystemDirectoryEntry and as a
-  // zero-byte File in DataTransfer.files. Treat every top-level entry name (file or directory)
-  // as represented so that fallback enumeration never uploads the directory itself as a file.
-  for (const file of Array.from(dataTransfer.files)) {
-    if (representedRootEntries.has(file.name)) continue;
-    snapshots.push({ file });
-    representedRootEntries.add(file.name);
-  }
-  return snapshots;
+	// Chromium can expose a dragged directory both as a FileSystemDirectoryEntry and as a
+	// zero-byte File in DataTransfer.files. Treat every top-level entry name (file or directory)
+	// as represented so that fallback enumeration never uploads the directory itself as a file.
+	for (const file of Array.from(dataTransfer.files)) {
+		if (representedRootEntries.has(file.name)) continue;
+		snapshots.push({ file });
+		representedRootEntries.add(file.name);
+	}
+	return snapshots;
 };
 
 export const collectDroppedLocalFiles = async (dataTransfer: DataTransfer): Promise<LocalUploadBatch> => {
-  const snapshots = snapshotDroppedItems(dataTransfer);
-  const files: LocalUploadFile[] = [];
-  const directories: string[] = [];
-  for (const snapshot of snapshots) {
-    if (snapshot.entry) await collectEntry(snapshot.entry, '', files, directories);
-    else if (snapshot.file) files.push({ file: snapshot.file });
-  }
-  return { files, directories: [...new Set(directories)] };
+	const snapshots = snapshotDroppedItems(dataTransfer);
+	const files: LocalUploadFile[] = [];
+	const directories: string[] = [];
+	for (const snapshot of snapshots) {
+		if (snapshot.entry) await collectEntry(snapshot.entry, '', files, directories);
+		else if (snapshot.file) files.push({ file: snapshot.file });
+	}
+	return { files, directories: [...new Set(directories)] };
 };

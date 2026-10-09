@@ -5,156 +5,156 @@ import type { AgentCapability, CapabilityGrantScope } from '../../host/capabilit
 
 export type SubagentStatus = 'queued' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled';
 export type ScheduleState =
-  | 'queued'
-  | 'runnable'
-  | 'executing'
-  | 'waiting_message'
-  | 'waiting_approval'
-  | 'waiting_budget'
-  | 'joining'
-  | 'finished';
+	| 'queued'
+	| 'runnable'
+	| 'executing'
+	| 'waiting_message'
+	| 'waiting_approval'
+	| 'waiting_budget'
+	| 'joining'
+	| 'finished';
 export type DependencyMode = 'success' | 'settled';
 export type SubagentFailureMode = 'isolate' | 'failFast';
 export type PeerMessaging = 'parent-child' | 'same-run';
 export type SubagentMutationMode = 'read-only' | 'governed';
 
 export interface DelegatedCapabilityGrant {
-  capability: AgentCapability;
-  schemaVersion: 2;
-  scope: CapabilityGrantScope;
+	capability: AgentCapability;
+	schemaVersion: 2;
+	scope: CapabilityGrantScope;
 }
 
 export interface SubagentProfile {
-  id: string;
-  role: string;
-  defaultModel: ModelRef | null;
-  allowedModels: ModelRef[];
-  capabilities: AgentCapability[];
-  peerMessaging: PeerMessaging;
-  mutationMode: SubagentMutationMode;
-  maxModelRequests: number;
-  failureMode: SubagentFailureMode;
+	id: string;
+	role: string;
+	defaultModel: ModelRef | null;
+	allowedModels: ModelRef[];
+	capabilities: AgentCapability[];
+	peerMessaging: PeerMessaging;
+	mutationMode: SubagentMutationMode;
+	maxModelRequests: number;
+	failureMode: SubagentFailureMode;
 }
 
 export interface SubagentProfileTemplate {
-  id: 'explore' | 'scout' | 'review' | 'general' | 'worker';
-  role: string;
-  delegationHint: string;
-  capabilities: AgentCapability[];
-  peerMessaging: PeerMessaging;
-  mutationMode: SubagentMutationMode;
-  maxModelRequests: number;
-  failureMode: SubagentFailureMode;
+	id: 'explore' | 'scout' | 'review' | 'general' | 'worker';
+	role: string;
+	delegationHint: string;
+	capabilities: AgentCapability[];
+	peerMessaging: PeerMessaging;
+	mutationMode: SubagentMutationMode;
+	maxModelRequests: number;
+	failureMode: SubagentFailureMode;
 }
 
 export interface SubagentPolicy {
-  maxDelegationDepth: number;
-  maxMessagesPerRun: number;
-  maxMessageBytesPerRun: number;
-  profiles: SubagentProfile[];
+	maxDelegationDepth: number;
+	maxMessagesPerRun: number;
+	maxMessageBytesPerRun: number;
+	profiles: SubagentProfile[];
 }
 
 export interface SubagentSettingsView {
-  policy: SubagentPolicy;
-  templates: SubagentProfileTemplate[];
-  version: number;
+	policy: SubagentPolicy;
+	templates: SubagentProfileTemplate[];
+	version: number;
 }
 
 export interface SubagentRequest {
-  profileId: string;
-  objective: string;
-  constraints: string[];
-  inputArtifactRefs: string[];
-  maxModelRequests: number;
-  deadlineAt: number;
-  completionCriteria: string[];
-  dependsOn: string[];
-  dependencyMode: DependencyMode;
-  command: CommandIdentity;
+	profileId: string;
+	objective: string;
+	constraints: string[];
+	inputArtifactRefs: string[];
+	maxModelRequests: number;
+	deadlineAt: number;
+	completionCriteria: string[];
+	dependsOn: string[];
+	dependencyMode: DependencyMode;
+	command: CommandIdentity;
 }
 
 export interface DelegationView extends Scope {
-  id: string;
-  runId: string;
-  parentRuntimeId: string;
-  childRuntimeId: string;
-  profileId: string;
-  grants: DelegatedCapabilityGrant[];
-  peerMessaging: PeerMessaging;
-  mutationMode: SubagentMutationMode;
-  modelRef: ModelRef;
-  modelCapabilities: ModelCapabilitySnapshot;
-  objective: string;
-  constraints: string[];
-  inputArtifactRefs: string[];
-  completionCriteria: string[];
-  dependencyMode: DependencyMode;
-  status: SubagentStatus;
-  depth: number;
-  failureMode: SubagentFailureMode;
-  budget: {
-    maxModelRequests: number;
-  };
-  usage: { tokens: number; modelRequests: number };
-  result: JsonValue | null;
-  evidenceRefs: string[];
-  deadlineAt: number;
-  version: number;
-  createdAt: number;
-  updatedAt: number;
-  completedAt: number | null;
+	id: string;
+	runId: string;
+	parentRuntimeId: string;
+	childRuntimeId: string;
+	profileId: string;
+	grants: DelegatedCapabilityGrant[];
+	peerMessaging: PeerMessaging;
+	mutationMode: SubagentMutationMode;
+	modelRef: ModelRef;
+	modelCapabilities: ModelCapabilitySnapshot;
+	objective: string;
+	constraints: string[];
+	inputArtifactRefs: string[];
+	completionCriteria: string[];
+	dependencyMode: DependencyMode;
+	status: SubagentStatus;
+	depth: number;
+	failureMode: SubagentFailureMode;
+	budget: {
+		maxModelRequests: number;
+	};
+	usage: { tokens: number; modelRequests: number };
+	result: JsonValue | null;
+	evidenceRefs: string[];
+	deadlineAt: number;
+	version: number;
+	createdAt: number;
+	updatedAt: number;
+	completedAt: number | null;
 }
 
 export type AgentMessageKind = 'request' | 'reply' | 'progress' | 'evidence' | 'completion';
 export type AgentMessageStatus = 'accepted' | 'delivered' | 'consumed' | 'expired' | 'rejected';
 
 export interface AgentMessage {
-  id: string;
-  runId: string;
-  senderRuntimeId: string;
-  recipientRuntimeId: string;
-  delegationId: string;
-  recipientSequence: number;
-  kind: AgentMessageKind;
-  correlationId: string;
-  replyTo: string | null;
-  causationId: string | null;
-  taskRevision: number;
-  body: JsonValue;
-  artifactRefs: string[];
-  status: AgentMessageStatus;
-  createdAt: number;
-  expiresAt: number;
-  consumedAt: number | null;
+	id: string;
+	runId: string;
+	senderRuntimeId: string;
+	recipientRuntimeId: string;
+	delegationId: string;
+	recipientSequence: number;
+	kind: AgentMessageKind;
+	correlationId: string;
+	replyTo: string | null;
+	causationId: string | null;
+	taskRevision: number;
+	body: JsonValue;
+	artifactRefs: string[];
+	status: AgentMessageStatus;
+	createdAt: number;
+	expiresAt: number;
+	consumedAt: number | null;
 }
 
 export interface MessageReceipt {
-  messageId: string;
-  recipientSequence: number;
-  replayed: boolean;
+	messageId: string;
+	recipientSequence: number;
+	replayed: boolean;
 }
 
 export type SchedulerWorkKind = 'model_step' | 'tool_step' | 'consume_inbox' | 'verify' | 'join_resume';
 export type SchedulerWorkStatus = 'queued' | 'claimed' | 'waiting' | 'completed' | 'cancelled';
 
 export interface SchedulerWorkView {
-  id: string;
-  enqueueSequence: number;
-  runId: string;
-  agentRuntimeId: string;
-  kind: SchedulerWorkKind;
-  status: SchedulerWorkStatus;
-  payload: JsonValue;
-  ownerEpoch: number | null;
-  notBefore: number;
-  deadlineAt: number;
-  createdAt: number;
-  updatedAt: number;
-  version: number;
+	id: string;
+	enqueueSequence: number;
+	runId: string;
+	agentRuntimeId: string;
+	kind: SchedulerWorkKind;
+	status: SchedulerWorkStatus;
+	payload: JsonValue;
+	ownerEpoch: number | null;
+	notBefore: number;
+	deadlineAt: number;
+	createdAt: number;
+	updatedAt: number;
+	version: number;
 }
 
 export interface JoinResult {
-  settled: DelegationView[];
-  running: DelegationView[];
-  timedOut: boolean;
+	settled: DelegationView[];
+	running: DelegationView[];
+	timedOut: boolean;
 }

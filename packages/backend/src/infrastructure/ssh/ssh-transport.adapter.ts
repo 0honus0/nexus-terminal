@@ -3,8 +3,8 @@ import type { ResolvedSshConnection, SshConnectOptions } from '../../platform/co
 import { logger } from '../../shared/logging/logger';
 import { runtimePerformanceMetrics } from '../../shared/observability/runtime-performance';
 import type {
-  RemoteExecutionTransport,
-  RemoteExecutionTransportFactory,
+	RemoteExecutionTransport,
+	RemoteExecutionTransportFactory,
 } from '../../platform/execution/remote-execution.port';
 import { connectSshClient, createConnectConfig, SshClientRoute } from './connection/ssh-client.connector';
 import { connectViaJumpChain } from './connection/ssh-jump.connector';
@@ -14,72 +14,78 @@ import { SshExecutionTransportAdapter } from './execution/ssh-execution-transpor
 const DEFAULT_CONNECT_TIMEOUT_MS = 20_000;
 
 export interface SshTransportAdapterOptions {
-  onConnected?: (connection: ResolvedSshConnection) => void | Promise<void>;
+	onConnected?: (connection: ResolvedSshConnection) => void | Promise<void>;
 }
 
 export class SshTransportAdapter implements RemoteExecutionTransportFactory {
-  constructor(private readonly options: SshTransportAdapterOptions = {}) {}
+	constructor(private readonly options: SshTransportAdapterOptions = {}) {}
 
-  async connect(connection: ResolvedSshConnection, options: SshConnectOptions = {}): Promise<RemoteExecutionTransport> {
-    const connectStartedAt = runtimePerformanceMetrics.operationStarted();
-    let route: SshClientRoute | undefined;
-    try {
-      const timeoutMs = options.timeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
-      const signal = options.signal;
+	async connect(
+		connection: ResolvedSshConnection,
+		options: SshConnectOptions = {},
+	): Promise<RemoteExecutionTransport> {
+		const connectStartedAt = runtimePerformanceMetrics.operationStarted();
+		let route: SshClientRoute | undefined;
+		try {
+			const timeoutMs = options.timeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
+			const signal = options.signal;
 
-      if (connection.route === 'jump' && connection.jumpChain?.length) {
-        route = await connectViaJumpChain(connection, timeoutMs, signal);
-      } else if (connection.route === 'proxy' && connection.proxy) {
-        route = await connectViaProxy(connection, timeoutMs, signal);
-      } else {
-        if (connection.route === 'jump') {
-          logger.warn(
-            { connectionId: connection.connectionId, displayName: connection.displayName },
-            'SSH jump route has no jump hosts; falling back to direct connection',
-          );
-        } else if (connection.route === 'proxy') {
-          logger.warn(
-            { connectionId: connection.connectionId, displayName: connection.displayName },
-            'SSH proxy route has no proxy details; falling back to direct connection',
-          );
-        }
+			if (connection.route === 'jump' && connection.jumpChain?.length) {
+				route = await connectViaJumpChain(connection, timeoutMs, signal);
+			} else if (connection.route === 'proxy' && connection.proxy) {
+				route = await connectViaProxy(connection, timeoutMs, signal);
+			} else {
+				if (connection.route === 'jump') {
+					logger.warn(
+						{ connectionId: connection.connectionId, displayName: connection.displayName },
+						'SSH jump route has no jump hosts; falling back to direct connection',
+					);
+				} else if (connection.route === 'proxy') {
+					logger.warn(
+						{ connectionId: connection.connectionId, displayName: connection.displayName },
+						'SSH proxy route has no proxy details; falling back to direct connection',
+					);
+				}
 
-        route = new SshClientRoute(`SSH ${connection.displayName} (${connection.connectionId}, direct)`);
-        const connected = await connectSshClient(new Client(), {
-          config: createConnectConfig(connection, timeoutMs),
-          label: `SSH ${connection.displayName} (${connection.connectionId}, direct)`,
-          signal,
-        });
-        route.setPrimary(connected);
-        route.assertOpen();
-      }
+				route = new SshClientRoute(`SSH ${connection.displayName} (${connection.connectionId}, direct)`);
+				const connected = await connectSshClient(new Client(), {
+					config: createConnectConfig(connection, timeoutMs),
+					label: `SSH ${connection.displayName} (${connection.connectionId}, direct)`,
+					signal,
+				});
+				route.setPrimary(connected);
+				route.assertOpen();
+			}
 
-      const transport = new SshExecutionTransportAdapter(connection.connectionId, route);
-      if (!transport.isOpen) {
-        throw route.failure ?? new Error(`SSH route for ${connection.displayName} closed during transport handoff.`);
-      }
-      if (connectStartedAt !== 0n) {
-        runtimePerformanceMetrics.recordSshConnect(connectStartedAt, true);
-      }
+			const transport = new SshExecutionTransportAdapter(connection.connectionId, route);
+			if (!transport.isOpen) {
+				throw (
+					route.failure ??
+					new Error(`SSH route for ${connection.displayName} closed during transport handoff.`)
+				);
+			}
+			if (connectStartedAt !== 0n) {
+				runtimePerformanceMetrics.recordSshConnect(connectStartedAt, true);
+			}
 
-      if (connection.connectionId > 0 && this.options.onConnected && !options.suppressConnectedHook) {
-        setImmediate(() => {
-          void Promise.resolve(this.options.onConnected?.(connection)).catch((error) => {
-            logger.error(
-              { err: error, connectionId: connection.connectionId, displayName: connection.displayName },
-              'SSH onConnected hook failed',
-            );
-          });
-        });
-      }
+			if (connection.connectionId > 0 && this.options.onConnected && !options.suppressConnectedHook) {
+				setImmediate(() => {
+					void Promise.resolve(this.options.onConnected?.(connection)).catch((error) => {
+						logger.error(
+							{ err: error, connectionId: connection.connectionId, displayName: connection.displayName },
+							'SSH onConnected hook failed',
+						);
+					});
+				});
+			}
 
-      return transport;
-    } catch (error) {
-      await route?.close().catch(() => undefined);
-      if (connectStartedAt !== 0n) {
-        runtimePerformanceMetrics.recordSshConnect(connectStartedAt, false);
-      }
-      throw error;
-    }
-  }
+			return transport;
+		} catch (error) {
+			await route?.close().catch(() => undefined);
+			if (connectStartedAt !== 0n) {
+				runtimePerformanceMetrics.recordSshConnect(connectStartedAt, false);
+			}
+			throw error;
+		}
+	}
 }

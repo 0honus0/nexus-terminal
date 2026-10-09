@@ -5,10 +5,10 @@ import { pressureAdjustedToolOutputBytes } from '../../../../modules/agent/runti
 import { mapRunRow, type RunRow } from '../../repositories/sqlite-run.mapper';
 
 export const modelToolResultJson = (row: RunRow, result: ToolResult, toolCallId: string): string => {
-  const run = mapRunRow(row);
-  return JSON.stringify(
-    projectToolResult(result, pressureAdjustedToolOutputBytes(run.budget, run.usage.context), toolCallId),
-  );
+	const run = mapRunRow(row);
+	return JSON.stringify(
+		projectToolResult(result, pressureAdjustedToolOutputBytes(run.budget, run.usage.context), toolCallId),
+	);
 };
 
 /**
@@ -17,23 +17,23 @@ export const modelToolResultJson = (row: RunRow, result: ToolResult, toolCallId:
  * model reads (and without adding the key to the model-facing JSON).
  */
 export const toolResultLedgerPayloadFromEvidence = (
-  toolCallId: string,
-  text: string,
-  userSummary?: ToolUserSummary,
+	toolCallId: string,
+	text: string,
+	userSummary?: ToolUserSummary,
 ): Record<string, JsonValue> => ({
-  toolCallId,
-  text,
-  ...(userSummary ? { userSummary: userSummary as unknown as JsonValue } : {}),
+	toolCallId,
+	text,
+	...(userSummary ? { userSummary: userSummary as unknown as JsonValue } : {}),
 });
 
 export const toolResultLedgerPayload = (
-  row: RunRow,
-  result: ToolResult,
-  toolCallId: string,
-  durableToolCallId: string,
+	row: RunRow,
+	result: ToolResult,
+	toolCallId: string,
+	durableToolCallId: string,
 ): Record<string, JsonValue> =>
-  toolResultLedgerPayloadFromEvidence(
-    toolCallId,
-    modelToolResultJson(row, result, durableToolCallId),
-    result.userSummary,
-  );
+	toolResultLedgerPayloadFromEvidence(
+		toolCallId,
+		modelToolResultJson(row, result, durableToolCallId),
+		result.userSummary,
+	);

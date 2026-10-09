@@ -1,31 +1,31 @@
 import type {
-  DiagnosticContext,
-  DiagnosticProbe,
-  DiagnosticScope,
+	DiagnosticContext,
+	DiagnosticProbe,
+	DiagnosticScope,
 } from '../../../platform/diagnostics/diagnostic-probe';
 
 export interface DiagnosticAccessPolicy {
-  canRun(context: DiagnosticContext, probe: Pick<DiagnosticProbe, 'id' | 'scope'>): boolean;
+	canRun(context: DiagnosticContext, probe: Pick<DiagnosticProbe, 'id' | 'scope'>): boolean;
 }
 
 const AGENT_SCOPES = new Set<DiagnosticScope>([
-  'foundation',
-  'runtime',
-  'storage',
-  'connection',
-  'execution',
-  'filesystem',
-  'workspace',
-  'transfer',
-  'notification',
+	'foundation',
+	'runtime',
+	'storage',
+	'connection',
+	'execution',
+	'filesystem',
+	'workspace',
+	'transfer',
+	'notification',
 ]);
 
 const USER_SUBJECT_SCOPES = new Set<DiagnosticScope>([
-  'connection',
-  'execution',
-  'filesystem',
-  'workspace',
-  'transfer',
+	'connection',
+	'execution',
+	'filesystem',
+	'workspace',
+	'transfer',
 ]);
 
 /**
@@ -38,9 +38,9 @@ const USER_SUBJECT_SCOPES = new Set<DiagnosticScope>([
  * Interfaces may enforce stricter authorization before calling this service; this policy is the final module-level gate.
  */
 export class DefaultDiagnosticAccessPolicy implements DiagnosticAccessPolicy {
-  canRun(context: DiagnosticContext, probe: Pick<DiagnosticProbe, 'id' | 'scope'>): boolean {
-    if (context.actorType === 'system') return true;
-    if (context.actorType === 'agent') return Boolean(context.actorId) && AGENT_SCOPES.has(probe.scope);
-    return Boolean(context.actorId && context.subject) && USER_SUBJECT_SCOPES.has(probe.scope);
-  }
+	canRun(context: DiagnosticContext, probe: Pick<DiagnosticProbe, 'id' | 'scope'>): boolean {
+		if (context.actorType === 'system') return true;
+		if (context.actorType === 'agent') return Boolean(context.actorId) && AGENT_SCOPES.has(probe.scope);
+		return Boolean(context.actorId && context.subject) && USER_SUBJECT_SCOPES.has(probe.scope);
+	}
 }

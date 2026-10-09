@@ -10,11 +10,11 @@ const current = path.dirname(fileURLToPath(import.meta.url));
 const host = process.env.NEXUS_E2E_PLUGIN_REPOSITORY_HOST?.trim() || '127.0.0.1';
 const port = Number(process.env.NEXUS_E2E_PLUGIN_REPOSITORY_PORT ?? '29092');
 const publicBaseUrl = (
-  process.env.NEXUS_E2E_PLUGIN_REPOSITORY_PUBLIC_BASE_URL?.trim() || `http://${host}:${port}`
+	process.env.NEXUS_E2E_PLUGIN_REPOSITORY_PUBLIC_BASE_URL?.trim() || `http://${host}:${port}`
 ).replace(/\/$/, '');
 const hangOpenAiRequests = process.env.NEXUS_E2E_PLUGIN_REPOSITORY_HANG_OPENAI === '1';
 if (!Number.isSafeInteger(port) || port < 1 || port > 65535) {
-  throw new Error('NEXUS_E2E_PLUGIN_REPOSITORY_PORT_INVALID');
+	throw new Error('NEXUS_E2E_PLUGIN_REPOSITORY_PORT_INVALID');
 }
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-e2e-plugin-repo-'));
@@ -22,41 +22,50 @@ const keyPath = path.join(temp, 'publisher.pem');
 const configuredSigningKey = process.env.NEXUS_E2E_PLUGIN_SIGNING_KEY_PEM?.trim();
 if (configuredSigningKey) fs.writeFileSync(keyPath, `${configuredSigningKey}\n`);
 else {
-  const { privateKey } = generateKeyPairSync('ed25519');
-  fs.writeFileSync(keyPath, privateKey.export({ type: 'pkcs8', format: 'pem' }));
+	const { privateKey } = generateKeyPairSync('ed25519');
+	fs.writeFileSync(keyPath, privateKey.export({ type: 'pkcs8', format: 'pem' }));
 }
 
 const buildPackage = (appId, version, sourceAppId = appId) => {
-  const packageName = `${appId}-${version}.tar`;
-  const packagePath = path.join(temp, packageName);
-  const metadata = JSON.parse(
-    execFileSync(
-      process.execPath,
-      [
-        path.join(current, 'build-plugin-package.mjs'),
-        path.join(current, `plugin-source/${sourceAppId}`),
-        packagePath,
-        keyPath,
-      ],
-      { cwd: current, encoding: 'utf8' },
-    ),
-  );
-  return { metadata, packageName, bytes: fs.readFileSync(packagePath) };
+	const packageName = `${appId}-${version}.tar`;
+	const packagePath = path.join(temp, packageName);
+	const metadata = JSON.parse(
+		execFileSync(
+			process.execPath,
+			[
+				path.join(current, 'build-plugin-package.mjs'),
+				path.join(current, `plugin-source/${sourceAppId}`),
+				packagePath,
+				keyPath,
+			],
+			{ cwd: current, encoding: 'utf8' },
+		),
+	);
+	return { metadata, packageName, bytes: fs.readFileSync(packagePath) };
 };
 
 const packages = [
-  {
-    ...buildPackage('nexus.agent', '1.0.0'),
-    description: 'Signed E2E Nexus Agent fixture with Operations and Developer Skills.',
-  },
-  {
-    ...buildPackage('nexus.fullstack', '1.0.0'),
-    description: 'Signed E2E first-party frontend/backend/runner target fixture.',
-  },
-  { ...buildPackage('nexus.custom-surface', '1.0.0'), description: 'E2E-only focused Custom App Surface SDK fixture.' },
-  { ...buildPackage('nexus.intent-peer', '1.0.0'), description: 'E2E-only AppIntent receiver fixture.' },
-  { ...buildPackage('nexus.upgrade', '1.0.0', 'nexus.upgrade-v1'), description: 'E2E-only Plugin upgrade v1 fixture.' },
-  { ...buildPackage('nexus.upgrade', '2.0.0', 'nexus.upgrade-v2'), description: 'E2E-only Plugin upgrade v2 fixture.' },
+	{
+		...buildPackage('nexus.agent', '1.0.0'),
+		description: 'Signed E2E Nexus Agent fixture with Operations and Developer Skills.',
+	},
+	{
+		...buildPackage('nexus.fullstack', '1.0.0'),
+		description: 'Signed E2E first-party frontend/backend/runner target fixture.',
+	},
+	{
+		...buildPackage('nexus.custom-surface', '1.0.0'),
+		description: 'E2E-only focused Custom App Surface SDK fixture.',
+	},
+	{ ...buildPackage('nexus.intent-peer', '1.0.0'), description: 'E2E-only AppIntent receiver fixture.' },
+	{
+		...buildPackage('nexus.upgrade', '1.0.0', 'nexus.upgrade-v1'),
+		description: 'E2E-only Plugin upgrade v1 fixture.',
+	},
+	{
+		...buildPackage('nexus.upgrade', '2.0.0', 'nexus.upgrade-v2'),
+		description: 'E2E-only Plugin upgrade v2 fixture.',
+	},
 ];
 const publisher = packages[0].metadata;
 
@@ -70,189 +79,196 @@ const unsafePackageBytes = fs.readFileSync(unsafePackagePath);
 const unsafePackageHash = createHash('sha256').update(unsafePackageBytes).digest('hex');
 
 const catalog = {
-  schemaVersion: 1,
-  publishers: [
-    {
-      keyId: publisher.publisherKeyId,
-      label: 'Nexus E2E Preset Publisher',
-      publicKeyPem: publisher.publicKeyPem,
-    },
-  ],
-  packages: [
-    ...packages.map(({ metadata, packageName, description }) => ({
-      appId: metadata.appId,
-      version: metadata.version,
-      sdkVersion: metadata.sdkVersion,
-      nexus: metadata.nexus,
-      displayName: metadata.displayName,
-      description,
-      packageUrl: `${publicBaseUrl}/packages/${packageName}`,
-      sha256: metadata.sha256,
-      sizeBytes: metadata.sizeBytes,
-      publisherKeyId: metadata.publisherKeyId,
-    })),
-    {
-      appId: 'nexus.unsafe',
-      version: '1.0.0',
-      sdkVersion: '1.0.0',
-      nexus: { minVersion: '1.0.0', maxVersion: '1.99.99' },
-      displayName: 'Unsafe Archive Fixture',
-      description: 'E2E-only package containing a symbolic link and no trusted payload.',
-      packageUrl: `${publicBaseUrl}/packages/${unsafePackageName}`,
-      sha256: unsafePackageHash,
-      sizeBytes: unsafePackageBytes.byteLength,
-      publisherKeyId: publisher.publisherKeyId,
-    },
-    {
-      appId: 'nexus.agent',
-      version: '1.0.4',
-      sdkVersion: '1.0.0',
-      nexus: { minVersion: '1.0.4', maxVersion: '1.0.99' },
-      displayName: 'Nexus Agent',
-      description: 'E2E-only compatibility fixture that requires a newer Nexus 1.0.x host.',
-      packageUrl: `${publicBaseUrl}/packages/nexus.agent-1.0.4-incompatible.tar`,
-      sha256: '0'.repeat(64),
-      sizeBytes: 1,
-      publisherKeyId: publisher.publisherKeyId,
-    },
-  ],
+	schemaVersion: 1,
+	publishers: [
+		{
+			keyId: publisher.publisherKeyId,
+			label: 'Nexus E2E Preset Publisher',
+			publicKeyPem: publisher.publicKeyPem,
+		},
+	],
+	packages: [
+		...packages.map(({ metadata, packageName, description }) => ({
+			appId: metadata.appId,
+			version: metadata.version,
+			sdkVersion: metadata.sdkVersion,
+			nexus: metadata.nexus,
+			displayName: metadata.displayName,
+			description,
+			packageUrl: `${publicBaseUrl}/packages/${packageName}`,
+			sha256: metadata.sha256,
+			sizeBytes: metadata.sizeBytes,
+			publisherKeyId: metadata.publisherKeyId,
+		})),
+		{
+			appId: 'nexus.unsafe',
+			version: '1.0.0',
+			sdkVersion: '1.0.0',
+			nexus: { minVersion: '1.0.0', maxVersion: '1.99.99' },
+			displayName: 'Unsafe Archive Fixture',
+			description: 'E2E-only package containing a symbolic link and no trusted payload.',
+			packageUrl: `${publicBaseUrl}/packages/${unsafePackageName}`,
+			sha256: unsafePackageHash,
+			sizeBytes: unsafePackageBytes.byteLength,
+			publisherKeyId: publisher.publisherKeyId,
+		},
+		{
+			appId: 'nexus.agent',
+			version: '1.0.4',
+			sdkVersion: '1.0.0',
+			nexus: { minVersion: '1.0.4', maxVersion: '1.0.99' },
+			displayName: 'Nexus Agent',
+			description: 'E2E-only compatibility fixture that requires a newer Nexus 1.0.x host.',
+			packageUrl: `${publicBaseUrl}/packages/nexus.agent-1.0.4-incompatible.tar`,
+			sha256: '0'.repeat(64),
+			sizeBytes: 1,
+			publisherKeyId: publisher.publisherKeyId,
+		},
+	],
 };
 const catalogBytes = Buffer.from(`${JSON.stringify(catalog, null, 2)}\n`, 'utf8');
 const officialCatalog = {
-  schemaVersion: 1,
-  publishers: catalog.publishers,
-  packages: catalog.packages.filter((candidate) => ['nexus.agent', 'nexus.fullstack'].includes(candidate.appId)),
+	schemaVersion: 1,
+	publishers: catalog.publishers,
+	packages: catalog.packages.filter((candidate) => ['nexus.agent', 'nexus.fullstack'].includes(candidate.appId)),
 };
 const officialCatalogBytes = Buffer.from(`${JSON.stringify(officialCatalog, null, 2)}\n`, 'utf8');
 let officialCatalogEnabled = true;
 const hangingProviderResponses = new Set();
 const packageByUrl = new Map([
-  ...packages.map((candidate) => [`/packages/${candidate.packageName}`, candidate.bytes]),
-  [`/packages/${unsafePackageName}`, unsafePackageBytes],
+	...packages.map((candidate) => [`/packages/${candidate.packageName}`, candidate.bytes]),
+	[`/packages/${unsafePackageName}`, unsafePackageBytes],
 ]);
 
 const server = http.createServer((request, response) => {
-  if (hangOpenAiRequests && request.method === 'POST' && request.url === '/v1/chat/completions') {
-    let body = '';
-    request.on('data', (chunk) => {
-      body += chunk;
-    });
-    request.on('end', () => {
-      const messages = JSON.parse(body).messages ?? [];
-      const latestInput = messages.filter((message) => message.role === 'user').at(-1)?.content;
-      if (latestInput === 'Docker pending-input hold') {
-        const resultFor = (id) => {
-          const message = messages.find((candidate) => candidate.role === 'tool' && candidate.tool_call_id === id);
-          return message ? JSON.parse(message.content) : null;
-        };
-        const workspaceId = resultFor('queue_create')?.data?.workspaceId;
-        const started = resultFor('queue_start')?.ok;
-        const name = !workspaceId ? 'workspace_create' : !started ? 'workspace_control' : 'shell_execute';
-        const args = !workspaceId
-          ? {}
-          : !started
-            ? { workspaceId, action: 'start' }
-            : {
-                target: 'workspace',
-                id: workspaceId,
-                command: { kind: 'argv', argv: ['/bin/sh', '-c', 'printf ready > .queue-ready; sleep 60'] },
-                timeoutSeconds: 90,
-                mode: 'foreground',
-              };
-        response.writeHead(200, { 'Content-Type': 'text/event-stream' });
-        response.end(
-          `data: ${JSON.stringify({
-            id: 'docker-pending-input-hold',
-            object: 'chat.completion.chunk',
-            choices: [
-              {
-                index: 0,
-                delta: {
-                  tool_calls: [
-                    {
-                      index: 0,
-                      id: !workspaceId ? 'queue_create' : !started ? 'queue_start' : 'queue_hold',
-                      type: 'function',
-                      function: {
-                        name,
-                        arguments: JSON.stringify(args),
-                      },
-                    },
-                  ],
-                },
-                finish_reason: 'tool_calls',
-              },
-            ],
-          })}\n\ndata: [DONE]\n\n`,
-        );
-        return;
-      }
-      hangingProviderResponses.add(response);
-      response.on('close', () => hangingProviderResponses.delete(response));
-    });
-    return;
-  }
-  if (request.method === 'POST' && request.url === '/control/official-catalog/disable') {
-    officialCatalogEnabled = false;
-    response.writeHead(204).end();
-    return;
-  }
-  if (request.method === 'POST' && request.url === '/control/official-catalog/enable') {
-    officialCatalogEnabled = true;
-    response.writeHead(204).end();
-    return;
-  }
-  if (request.method === 'GET' && request.url === '/health') {
-    response.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-    response.end(JSON.stringify({ ok: true }));
-    return;
-  }
-  if (request.method === 'GET' && request.url === '/catalog.json') {
-    response.writeHead(200, {
-      'Content-Type': 'application/json',
-      'Content-Length': String(catalogBytes.byteLength),
-      'Cache-Control': 'no-store',
-    });
-    response.end(catalogBytes);
-    return;
-  }
-  if (request.method === 'GET' && request.url === '/official-catalog.json') {
-    if (!officialCatalogEnabled) {
-      response.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-      response.end(JSON.stringify({ error: 'official catalog disabled for E2E' }));
-      return;
-    }
-    response.writeHead(200, {
-      'Content-Type': 'application/json',
-      'Content-Length': String(officialCatalogBytes.byteLength),
-      'Cache-Control': 'no-store',
-    });
-    response.end(officialCatalogBytes);
-    return;
-  }
-  const packageBytes = request.method === 'GET' ? packageByUrl.get(request.url ?? '') : undefined;
-  if (packageBytes) {
-    response.writeHead(200, {
-      'Content-Type': 'application/octet-stream',
-      'Content-Length': String(packageBytes.byteLength),
-      'Cache-Control': 'no-store',
-    });
-    response.end(packageBytes);
-    return;
-  }
-  response.writeHead(404).end();
+	if (hangOpenAiRequests && request.method === 'POST' && request.url === '/v1/chat/completions') {
+		let body = '';
+		request.on('data', (chunk) => {
+			body += chunk;
+		});
+		request.on('end', () => {
+			const messages = JSON.parse(body).messages ?? [];
+			const latestInput = messages.filter((message) => message.role === 'user').at(-1)?.content;
+			if (latestInput === 'Docker pending-input hold') {
+				const resultFor = (id) => {
+					const message = messages.find(
+						(candidate) => candidate.role === 'tool' && candidate.tool_call_id === id,
+					);
+					return message ? JSON.parse(message.content) : null;
+				};
+
+				const workspaceId = resultFor('queue_create')?.data?.workspaceId;
+				const started = resultFor('queue_start')?.ok;
+				const name = !workspaceId ? 'workspace_create' : !started ? 'workspace_control' : 'shell_execute';
+				const args = !workspaceId
+					? {}
+					: !started
+						? { workspaceId, action: 'start' }
+						: {
+								target: 'workspace',
+								id: workspaceId,
+								command: {
+									kind: 'argv',
+									argv: ['/bin/sh', '-c', 'printf ready > .queue-ready; sleep 60'],
+								},
+								timeoutSeconds: 90,
+								mode: 'foreground',
+							};
+				response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+				response.end(
+					`data: ${JSON.stringify({
+						id: 'docker-pending-input-hold',
+						object: 'chat.completion.chunk',
+						choices: [
+							{
+								index: 0,
+								delta: {
+									tool_calls: [
+										{
+											index: 0,
+											id: !workspaceId ? 'queue_create' : !started ? 'queue_start' : 'queue_hold',
+											type: 'function',
+											function: {
+												name,
+												arguments: JSON.stringify(args),
+											},
+										},
+									],
+								},
+								finish_reason: 'tool_calls',
+							},
+						],
+					})}\n\ndata: [DONE]\n\n`,
+				);
+				return;
+			}
+			hangingProviderResponses.add(response);
+			response.on('close', () => hangingProviderResponses.delete(response));
+		});
+		return;
+	}
+	if (request.method === 'POST' && request.url === '/control/official-catalog/disable') {
+		officialCatalogEnabled = false;
+		response.writeHead(204).end();
+		return;
+	}
+	if (request.method === 'POST' && request.url === '/control/official-catalog/enable') {
+		officialCatalogEnabled = true;
+		response.writeHead(204).end();
+		return;
+	}
+	if (request.method === 'GET' && request.url === '/health') {
+		response.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+		response.end(JSON.stringify({ ok: true }));
+		return;
+	}
+	if (request.method === 'GET' && request.url === '/catalog.json') {
+		response.writeHead(200, {
+			'Content-Type': 'application/json',
+			'Content-Length': String(catalogBytes.byteLength),
+			'Cache-Control': 'no-store',
+		});
+		response.end(catalogBytes);
+		return;
+	}
+	if (request.method === 'GET' && request.url === '/official-catalog.json') {
+		if (!officialCatalogEnabled) {
+			response.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+			response.end(JSON.stringify({ error: 'official catalog disabled for E2E' }));
+			return;
+		}
+		response.writeHead(200, {
+			'Content-Type': 'application/json',
+			'Content-Length': String(officialCatalogBytes.byteLength),
+			'Cache-Control': 'no-store',
+		});
+		response.end(officialCatalogBytes);
+		return;
+	}
+	const packageBytes = request.method === 'GET' ? packageByUrl.get(request.url ?? '') : undefined;
+	if (packageBytes) {
+		response.writeHead(200, {
+			'Content-Type': 'application/octet-stream',
+			'Content-Length': String(packageBytes.byteLength),
+			'Cache-Control': 'no-store',
+		});
+		response.end(packageBytes);
+		return;
+	}
+	response.writeHead(404).end();
 });
 
 server.listen(port, host, () => {
-  console.log(`[E2E Agent Plugin Repository] listening on http://${host}:${port}`);
+	console.log(`[E2E Agent Plugin Repository] listening on http://${host}:${port}`);
 });
 
 const shutdown = () => {
-  for (const response of hangingProviderResponses) response.destroy();
-  server.close(() => {
-    fs.rmSync(temp, { recursive: true, force: true });
-    process.exit(0);
-  });
+	for (const response of hangingProviderResponses) response.destroy();
+	server.close(() => {
+		fs.rmSync(temp, { recursive: true, force: true });
+		process.exit(0);
+	});
 };
+
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);

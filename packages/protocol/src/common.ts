@@ -1,9 +1,9 @@
 export interface MessageResponseDto {
-  message: string;
-  error?: string;
-  code?: string;
+	message: string;
+	error?: string;
+	code?: string;
 }
 
 export interface IdResponseDto {
-  id: number;
+	id: number;
 }

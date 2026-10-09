@@ -1,69 +1,70 @@
 <script setup lang="ts">
-  import type { AgentSubagentViewDto } from '../api/agent-api';
+	import type { AgentSubagentViewDto } from '../api/agent-api';
 
-  const props = defineProps<{
-    delegation: AgentSubagentViewDto;
-    selected: boolean;
-    busy: boolean;
-  }>();
+	const props = defineProps<{
+		delegation: AgentSubagentViewDto;
+		selected: boolean;
+		busy: boolean;
+	}>();
 
-  defineEmits<{
-    select: [delegation: AgentSubagentViewDto];
-    cancel: [delegation: AgentSubagentViewDto];
-  }>();
+	defineEmits<{
+		select: [delegation: AgentSubagentViewDto];
+		cancel: [delegation: AgentSubagentViewDto];
+	}>();
 
-  const terminal = new Set(['completed', 'failed', 'cancelled']);
-  const percent = (): number => {
-    const max = Math.max(1, props.delegation.budget.maxModelRequests);
-    return Math.min(100, Math.round((props.delegation.usage.modelRequests / max) * 100));
-  };
+	const terminal = new Set(['completed', 'failed', 'cancelled']);
+
+	const percent = (): number => {
+		const max = Math.max(1, props.delegation.budget.maxModelRequests);
+		return Math.min(100, Math.round((props.delegation.usage.modelRequests / max) * 100));
+	};
 </script>
 
 <template>
-  <article
-    class="rounded border p-3 transition-colors"
-    :class="selected ? 'border-border-hover bg-card shadow-xs' : 'border-border/70 bg-background'"
-  >
-    <button type="button" class="w-full text-left" @click="$emit('select', delegation)">
-      <div class="flex items-start justify-between gap-2">
-        <div class="min-w-0">
-          <div class="truncate text-xs font-medium">{{ delegation.objective }}</div>
-          <div class="mt-0.5 truncate font-mono text-[11px] text-text-secondary">
-            {{ delegation.modelRef.providerId }}/{{ delegation.modelRef.modelId }}
-          </div>
-        </div>
-        <span class="shrink-0 rounded bg-header px-1.5 py-0.5 text-[11px]">{{
-          $t(`agent.subagents.status.${delegation.status}`)
-        }}</span>
-      </div>
-      <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-text-secondary">
-        <span>{{ $t('agent.subagents.depth', { value: delegation.depth }) }}</span>
-        <span>{{
-          $t('agent.subagents.modelRequests', {
-            used: delegation.usage.modelRequests,
-            max: delegation.budget.maxModelRequests,
-          })
-        }}</span>
-        <span>{{ delegation.usage.tokens }} tok</span>
-      </div>
-      <div class="mt-2 h-1 overflow-hidden rounded bg-header">
-        <div class="h-full bg-primary" :style="{ width: `${percent()}%` }"></div>
-      </div>
-    </button>
-    <div class="mt-2 flex items-center justify-between gap-2">
-      <span class="truncate text-[11px] text-text-secondary"
-        >{{ $t('agent.subagents.profileLabel', { id: delegation.profileId }) }} ·
-        {{ $t(`agent.subagents.failureMode.${delegation.failureMode}`) }}</span
-      >
-      <button
-        v-if="!terminal.has(delegation.status)"
-        type="button"
-        class="rounded border border-border px-2 py-1 text-[11px] hover:bg-header disabled:opacity-50"
-        :disabled="busy"
-        @click.stop="$emit('cancel', delegation)"
-      >
-        {{ $t('agent.subagents.cancel') }}
-      </button>
-    </div>
-  </article>
+	<article
+		class="rounded border p-3 transition-colors"
+		:class="selected ? 'border-border-hover bg-card shadow-xs' : 'border-border/70 bg-background'"
+	>
+		<button type="button" class="w-full text-left" @click="$emit('select', delegation)">
+			<div class="flex items-start justify-between gap-2">
+				<div class="min-w-0">
+					<div class="truncate text-xs font-medium">{{ delegation.objective }}</div>
+					<div class="mt-0.5 truncate font-mono text-[11px] text-text-secondary">
+						{{ delegation.modelRef.providerId }}/{{ delegation.modelRef.modelId }}
+					</div>
+				</div>
+				<span class="shrink-0 rounded bg-header px-1.5 py-0.5 text-[11px]">{{
+					$t(`agent.subagents.status.${delegation.status}`)
+				}}</span>
+			</div>
+			<div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-text-secondary">
+				<span>{{ $t('agent.subagents.depth', { value: delegation.depth }) }}</span>
+				<span>{{
+					$t('agent.subagents.modelRequests', {
+						used: delegation.usage.modelRequests,
+						max: delegation.budget.maxModelRequests,
+					})
+				}}</span>
+				<span>{{ delegation.usage.tokens }} tok</span>
+			</div>
+			<div class="mt-2 h-1 overflow-hidden rounded bg-header">
+				<div class="h-full bg-primary" :style="{ width: `${percent()}%` }"></div>
+			</div>
+		</button>
+		<div class="mt-2 flex items-center justify-between gap-2">
+			<span class="truncate text-[11px] text-text-secondary"
+				>{{ $t('agent.subagents.profileLabel', { id: delegation.profileId }) }} ·
+				{{ $t(`agent.subagents.failureMode.${delegation.failureMode}`) }}</span
+			>
+			<button
+				v-if="!terminal.has(delegation.status)"
+				type="button"
+				class="rounded border border-border px-2 py-1 text-[11px] hover:bg-header disabled:opacity-50"
+				:disabled="busy"
+				@click.stop="$emit('cancel', delegation)"
+			>
+				{{ $t('agent.subagents.cancel') }}
+			</button>
+		</div>
+	</article>
 </template>

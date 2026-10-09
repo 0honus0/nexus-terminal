@@ -18,19 +18,21 @@ const archiveExecHoldPath = path.join(e2eRoot, '.tmp', 'archive-exec-hold.flag')
 const archivePreflightHoldPath = path.join(e2eRoot, '.tmp', 'archive-preflight-hold.flag');
 const requireFromBackend = createRequire(path.join(repoRoot, 'packages', 'backend', 'package.json'));
 const {
-  Server,
-  utils: {
-    sftp: { OPEN_MODE, STATUS_CODE },
-  },
+	Server,
+	utils: {
+		sftp: { OPEN_MODE, STATUS_CODE },
+	},
 } = requireFromBackend('ssh2');
 const { ZipArchive } = requireFromBackend('archiver');
 
 const SSH_HOST = '127.0.0.1';
+
 const envPort = (name, fallback) => {
-  const value = Number(process.env[name] ?? fallback);
-  if (!Number.isInteger(value) || value < 1 || value > 65_535) throw new Error(`${name} must be a valid TCP port.`);
-  return value;
+	const value = Number(process.env[name] ?? fallback);
+	if (!Number.isInteger(value) || value < 1 || value > 65_535) throw new Error(`${name} must be a valid TCP port.`);
+	return value;
 };
+
 const SSH_PORT = envPort('NEXUS_E2E_SSH_PORT', 22222);
 const CONTROL_PORT = envPort('NEXUS_E2E_SSH_CONTROL_PORT', 22223);
 const SMTP_PORT = envPort('NEXUS_E2E_SMTP_PORT', 22224);
@@ -128,409 +130,412 @@ const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const hostKey = privateKey.export({ type: 'pkcs1', format: 'pem' });
 
 function normalizeRemotePath(remotePath = '.') {
-  let raw = String(remotePath || '.');
-  const normalizedRoot = rootDir.replace(/\\/g, '/');
-  if (raw === normalizedRoot) raw = '/';
-  else if (raw.startsWith(`${normalizedRoot}/`)) raw = raw.slice(normalizedRoot.length);
-  if (raw === '.' || raw === './') return '';
-  const normalized = path.posix.normalize(raw.startsWith('/') ? raw : `/${raw}`);
-  return normalized === '/' ? '' : normalized.slice(1);
+	let raw = String(remotePath || '.');
+	const normalizedRoot = rootDir.replace(/\\/g, '/');
+	if (raw === normalizedRoot) raw = '/';
+	else if (raw.startsWith(`${normalizedRoot}/`)) raw = raw.slice(normalizedRoot.length);
+	if (raw === '.' || raw === './') return '';
+	const normalized = path.posix.normalize(raw.startsWith('/') ? raw : `/${raw}`);
+	return normalized === '/' ? '' : normalized.slice(1);
 }
 
 function resolveRemotePath(remotePath = '.') {
-  const relativePath = normalizeRemotePath(remotePath);
-  const resolved = path.resolve(rootDir, relativePath);
-  const rootWithSeparator = `${path.resolve(rootDir)}${path.sep}`;
-  if (resolved !== path.resolve(rootDir) && !resolved.startsWith(rootWithSeparator)) {
-    throw new Error(`Path escapes test SSH root: ${remotePath}`);
-  }
-  return resolved;
+	const relativePath = normalizeRemotePath(remotePath);
+	const resolved = path.resolve(rootDir, relativePath);
+	const rootWithSeparator = `${path.resolve(rootDir)}${path.sep}`;
+	if (resolved !== path.resolve(rootDir) && !resolved.startsWith(rootWithSeparator)) {
+		throw new Error(`Path escapes test SSH root: ${remotePath}`);
+	}
+	return resolved;
 }
 
 function virtualPath(remotePath = '.') {
-  const relativePath = normalizeRemotePath(remotePath);
-  return relativePath ? `/${relativePath.split(path.sep).join('/')}` : '/';
+	const relativePath = normalizeRemotePath(remotePath);
+	return relativePath ? `/${relativePath.split(path.sep).join('/')}` : '/';
 }
 
 function isForceDeleteFixturePath(remotePath) {
-  const normalized = path.posix.normalize(String(remotePath || '').replace(/\\/g, '/'));
-  return normalized === '/force-delete-e2e' || normalized.startsWith('/force-delete-e2e/');
+	const normalized = path.posix.normalize(String(remotePath || '').replace(/\\/g, '/'));
+	return normalized === '/force-delete-e2e' || normalized.startsWith('/force-delete-e2e/');
 }
 
 function remapRemovalExecPath(command) {
-  return command.replace(/^(sudo\s+)?rm\s+-rf\s+--\s+'([^']+)'/, (_match, sudoPrefix = '', remotePath) => {
-    if (!isForceDeleteFixturePath(remotePath)) return _match;
-    if (!sudoPrefix) return `printf 'permission denied\n' >&2; false`;
-    return `rm -rf -- ${JSON.stringify(resolveRemotePath(remotePath))}`;
-  });
+	return command.replace(/^(sudo\s+)?rm\s+-rf\s+--\s+'([^']+)'/, (_match, sudoPrefix = '', remotePath) => {
+		if (!isForceDeleteFixturePath(remotePath)) return _match;
+		if (!sudoPrefix) return `printf 'permission denied\n' >&2; false`;
+		return `rm -rf -- ${JSON.stringify(resolveRemotePath(remotePath))}`;
+	});
 }
 
 function remapArchiveExecWorkingDirectory(command) {
-  if (!command.includes('__NEXUS_ARCHIVE_TOTAL__:')) return command;
+	if (!command.includes('__NEXUS_ARCHIVE_TOTAL__:')) return command;
 
-  return command.replace(
-    /^cd\s+'([^']*)'(?=\s*(?:\|\||&&))/,
-    (_match, remoteDirectory) => `cd ${JSON.stringify(resolveRemotePath(remoteDirectory))}`,
-  );
+	return command.replace(
+		/^cd\s+'([^']*)'(?=\s*(?:\|\||&&))/,
+		(_match, remoteDirectory) => `cd ${JSON.stringify(resolveRemotePath(remoteDirectory))}`,
+	);
 }
 
 function remapTransferExecPaths(command) {
-  if (!/(?:^|[\s/])(scp|rsync)(?:[\s']|$)/.test(command)) return command;
-  return command.replace(/'((?:\/)[^']*)'/g, (match, remotePath) => {
-    if (remotePath.startsWith(rootDir) || existsSync(remotePath)) return match;
-    const mapped = resolveRemotePath(remotePath);
-    return existsSync(mapped) ? JSON.stringify(mapped) : match;
-  });
+	if (!/(?:^|[\s/])(scp|rsync)(?:[\s']|$)/.test(command)) return command;
+	return command.replace(/'((?:\/)[^']*)'/g, (match, remotePath) => {
+		if (remotePath.startsWith(rootDir) || existsSync(remotePath)) return match;
+		const mapped = resolveRemotePath(remotePath);
+		return existsSync(mapped) ? JSON.stringify(mapped) : match;
+	});
 }
 
 function attrsFromStats(stats) {
-  return {
-    mode: stats.mode,
-    uid: stats.uid ?? 1000,
-    gid: stats.gid ?? 1000,
-    size: stats.size,
-    atime: Math.floor(stats.atimeMs / 1000),
-    mtime: Math.floor(stats.mtimeMs / 1000),
-  };
+	return {
+		mode: stats.mode,
+		uid: stats.uid ?? 1000,
+		gid: stats.gid ?? 1000,
+		size: stats.size,
+		atime: Math.floor(stats.atimeMs / 1000),
+		mtime: Math.floor(stats.mtimeMs / 1000),
+	};
 }
 
 function statusForError(error) {
-  if (error?.code === 'ENOENT') return STATUS_CODE.NO_SUCH_FILE;
-  if (error?.code === 'EACCES' || error?.code === 'EPERM') return STATUS_CODE.PERMISSION_DENIED;
-  return STATUS_CODE.FAILURE;
+	if (error?.code === 'ENOENT') return STATUS_CODE.NO_SUCH_FILE;
+	if (error?.code === 'EACCES' || error?.code === 'EPERM') return STATUS_CODE.PERMISSION_DENIED;
+	return STATUS_CODE.FAILURE;
 }
 
 async function writeXlsxFixture(destination, variant = 'default') {
-  const columnName = (index) => {
-    let value = index + 1;
-    let result = '';
-    while (value > 0) {
-      value -= 1;
-      result = String.fromCharCode(65 + (value % 26)) + result;
-      value = Math.floor(value / 26);
-    }
-    return result;
-  };
-  const buildWorksheetXml = (sheetLabel, rows = 40, columns = 16) => {
-    const rowXml = [];
-    for (let row = 1; row <= rows; row += 1) {
-      const cells = [];
-      for (let column = 0; column < columns; column += 1) {
-        const ref = `${columnName(column)}${row}`;
-        let value = `${sheetLabel}-${ref}`;
-        if (sheetLabel === 'E2E' && ref === 'A2')
-          value = variant === 'refresh' ? 'Nexus XLSX Refreshed' : 'Nexus XLSX E2E';
-        if (sheetLabel === 'E2E' && ref === 'B2') {
-          cells.push(`<c r="${ref}"><v>2026</v></c>`);
-          continue;
-        }
-        if (sheetLabel === 'Second' && ref === 'A1')
-          value = variant === 'refresh' ? 'Second Sheet Refreshed' : 'Second Sheet E2E';
-        cells.push(`<c r="${ref}" t="inlineStr"><is><t>${value}</t></is></c>`);
-      }
-      rowXml.push(`<row r="${row}">${cells.join('')}</row>`);
-    }
-    return (
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-      `<dimension ref="A1:${columnName(columns - 1)}${rows}"/><sheetData>` +
-      rowXml.join('') +
-      '</sheetData></worksheet>'
-    );
-  };
+	const columnName = (index) => {
+		let value = index + 1;
+		let result = '';
+		while (value > 0) {
+			value -= 1;
+			result = String.fromCharCode(65 + (value % 26)) + result;
+			value = Math.floor(value / 26);
+		}
+		return result;
+	};
 
-  await new Promise((resolve, reject) => {
-    const output = createWriteStream(destination);
-    const archive = new ZipArchive({ zlib: { level: 9 } });
-    output.on('close', resolve);
-    output.on('error', reject);
-    archive.on('error', reject);
-    archive.pipe(output);
-    archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
-        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
-        '<Default Extension="xml" ContentType="application/xml"/>' +
-        '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
-        '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
-        '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
-        '</Types>',
-      { name: '[Content_Types].xml' },
-    );
-    archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
-        '</Relationships>',
-      { name: '_rels/.rels' },
-    );
-    archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
-        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
-        '<sheets><sheet name="E2E" sheetId="1" r:id="rId1"/>' +
-        '<sheet name="Second" sheetId="2" r:id="rId2"/></sheets></workbook>',
-      { name: 'xl/workbook.xml' },
-    );
-    archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
-        '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>' +
-        '</Relationships>',
-      { name: 'xl/_rels/workbook.xml.rels' },
-    );
-    archive.append(buildWorksheetXml('E2E'), { name: 'xl/worksheets/sheet1.xml' });
-    archive.append(buildWorksheetXml('Second'), { name: 'xl/worksheets/sheet2.xml' });
-    void archive.finalize();
-  });
+	const buildWorksheetXml = (sheetLabel, rows = 40, columns = 16) => {
+		const rowXml = [];
+		for (let row = 1; row <= rows; row += 1) {
+			const cells = [];
+			for (let column = 0; column < columns; column += 1) {
+				const ref = `${columnName(column)}${row}`;
+				let value = `${sheetLabel}-${ref}`;
+				if (sheetLabel === 'E2E' && ref === 'A2')
+					value = variant === 'refresh' ? 'Nexus XLSX Refreshed' : 'Nexus XLSX E2E';
+				if (sheetLabel === 'E2E' && ref === 'B2') {
+					cells.push(`<c r="${ref}"><v>2026</v></c>`);
+					continue;
+				}
+				if (sheetLabel === 'Second' && ref === 'A1')
+					value = variant === 'refresh' ? 'Second Sheet Refreshed' : 'Second Sheet E2E';
+				cells.push(`<c r="${ref}" t="inlineStr"><is><t>${value}</t></is></c>`);
+			}
+			rowXml.push(`<row r="${row}">${cells.join('')}</row>`);
+		}
+		return (
+			'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+			'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+			`<dimension ref="A1:${columnName(columns - 1)}${rows}"/><sheetData>` +
+			rowXml.join('') +
+			'</sheetData></worksheet>'
+		);
+	};
+
+	await new Promise((resolve, reject) => {
+		const output = createWriteStream(destination);
+		const archive = new ZipArchive({ zlib: { level: 9 } });
+		output.on('close', resolve);
+		output.on('error', reject);
+		archive.on('error', reject);
+		archive.pipe(output);
+		archive.append(
+			'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+				'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+				'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+				'<Default Extension="xml" ContentType="application/xml"/>' +
+				'<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+				'<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+				'<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+				'</Types>',
+			{ name: '[Content_Types].xml' },
+		);
+		archive.append(
+			'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+				'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+				'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+				'</Relationships>',
+			{ name: '_rels/.rels' },
+		);
+		archive.append(
+			'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+				'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
+				'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+				'<sheets><sheet name="E2E" sheetId="1" r:id="rId1"/>' +
+				'<sheet name="Second" sheetId="2" r:id="rId2"/></sheets></workbook>',
+			{ name: 'xl/workbook.xml' },
+		);
+		archive.append(
+			'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+				'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+				'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+				'<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>' +
+				'</Relationships>',
+			{ name: 'xl/_rels/workbook.xml.rels' },
+		);
+		archive.append(buildWorksheetXml('E2E'), { name: 'xl/worksheets/sheet1.xml' });
+		archive.append(buildWorksheetXml('Second'), { name: 'xl/worksheets/sheet2.xml' });
+		void archive.finalize();
+	});
 }
 
 async function writeCompactXlsxFixture(destination) {
-  const worksheetXml =
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-    '<dimension ref="A1:B2"/><sheetData>' +
-    '<row r="1"><c r="A1" t="inlineStr"><is><t>Compact A1</t></is></c><c r="B1" t="inlineStr"><is><t>Compact B1</t></is></c></row>' +
-    '<row r="2"><c r="A2" t="inlineStr"><is><t>Compact A2</t></is></c><c r="B2" t="inlineStr"><is><t>Compact B2</t></is></c></row>' +
-    '</sheetData></worksheet>';
+	const worksheetXml =
+		'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+		'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+		'<dimension ref="A1:B2"/><sheetData>' +
+		'<row r="1"><c r="A1" t="inlineStr"><is><t>Compact A1</t></is></c><c r="B1" t="inlineStr"><is><t>Compact B1</t></is></c></row>' +
+		'<row r="2"><c r="A2" t="inlineStr"><is><t>Compact A2</t></is></c><c r="B2" t="inlineStr"><is><t>Compact B2</t></is></c></row>' +
+		'</sheetData></worksheet>';
 
-  await new Promise((resolve, reject) => {
-    const output = createWriteStream(destination);
-    const archive = new ZipArchive({ zlib: { level: 9 } });
-    output.on('close', resolve);
-    output.on('error', reject);
-    archive.on('error', reject);
-    archive.pipe(output);
-    archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
-        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
-        '<Default Extension="xml" ContentType="application/xml"/>' +
-        '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
-        '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
-        '</Types>',
-      { name: '[Content_Types].xml' },
-    );
-    archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
-        '</Relationships>',
-      { name: '_rels/.rels' },
-    );
-    archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
-        '<sheets><sheet name="Only" sheetId="1" r:id="rId1"/></sheets></workbook>',
-      { name: 'xl/workbook.xml' },
-    );
-    archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
-        '</Relationships>',
-      { name: 'xl/_rels/workbook.xml.rels' },
-    );
-    archive.append(worksheetXml, { name: 'xl/worksheets/sheet1.xml' });
-    void archive.finalize();
-  });
+	await new Promise((resolve, reject) => {
+		const output = createWriteStream(destination);
+		const archive = new ZipArchive({ zlib: { level: 9 } });
+		output.on('close', resolve);
+		output.on('error', reject);
+		archive.on('error', reject);
+		archive.pipe(output);
+		archive.append(
+			'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+				'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+				'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+				'<Default Extension="xml" ContentType="application/xml"/>' +
+				'<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+				'<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+				'</Types>',
+			{ name: '[Content_Types].xml' },
+		);
+		archive.append(
+			'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+				'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+				'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+				'</Relationships>',
+			{ name: '_rels/.rels' },
+		);
+		archive.append(
+			'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+				'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+				'<sheets><sheet name="Only" sheetId="1" r:id="rId1"/></sheets></workbook>',
+			{ name: 'xl/workbook.xml' },
+		);
+		archive.append(
+			'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+				'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+				'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+				'</Relationships>',
+			{ name: 'xl/_rels/workbook.xml.rels' },
+		);
+		archive.append(worksheetXml, { name: 'xl/worksheets/sheet1.xml' });
+		void archive.finalize();
+	});
 }
 
 async function writeDocxFixture(destination, variant = 'default') {
-  await new Promise((resolve, reject) => {
-    const output = createWriteStream(destination);
-    const archive = new ZipArchive({ zlib: { level: 9 } });
-    output.on('close', resolve);
-    output.on('error', reject);
-    archive.on('error', reject);
-    archive.pipe(output);
-    archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
-        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
-        '<Default Extension="xml" ContentType="application/xml"/>' +
-        '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
-        '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
-        '</Types>',
-      { name: '[Content_Types].xml' },
-    );
-    archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
-        '</Relationships>',
-      { name: '_rels/.rels' },
-    );
-    archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
-        '<w:body>' +
-        `<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>${variant === 'refresh' ? 'Nexus DOCX Refreshed' : 'Nexus DOCX E2E'}</w:t></w:r></w:p>` +
-        `<w:p><w:r><w:t>${variant === 'refresh' ? 'DOCX force refresh loaded the external update.' : 'DOCX preview tabs preserve document content.'}</w:t></w:r></w:p>` +
-        '<w:tbl><w:tblPr><w:tblW w:w="16500" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr>' +
-        '<w:tblGrid><w:gridCol w:w="5500"/><w:gridCol w:w="5500"/><w:gridCol w:w="5500"/></w:tblGrid>' +
-        '<w:tr>' +
-        '<w:tc><w:tcPr><w:tcW w:w="5500" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Wide DOCX Column A</w:t></w:r></w:p></w:tc>' +
-        '<w:tc><w:tcPr><w:tcW w:w="5500" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Wide DOCX Column B</w:t></w:r></w:p></w:tc>' +
-        '<w:tc><w:tcPr><w:tcW w:w="5500" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Wide DOCX Column C</w:t></w:r></w:p></w:tc>' +
-        '</w:tr></w:tbl>' +
-        '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>' +
-        '</w:body></w:document>',
-      { name: 'word/document.xml' },
-    );
-    archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-        '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
-        '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>' +
-        '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/>' +
-        '<w:rPr><w:b/><w:sz w:val="36"/></w:rPr></w:style>' +
-        '</w:styles>',
-      { name: 'word/styles.xml' },
-    );
-    archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
-        '</Relationships>',
-      { name: 'word/_rels/document.xml.rels' },
-    );
-    void archive.finalize();
-  });
+	await new Promise((resolve, reject) => {
+		const output = createWriteStream(destination);
+		const archive = new ZipArchive({ zlib: { level: 9 } });
+		output.on('close', resolve);
+		output.on('error', reject);
+		archive.on('error', reject);
+		archive.pipe(output);
+		archive.append(
+			'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+				'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+				'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+				'<Default Extension="xml" ContentType="application/xml"/>' +
+				'<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+				'<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
+				'</Types>',
+			{ name: '[Content_Types].xml' },
+		);
+		archive.append(
+			'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+				'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+				'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+				'</Relationships>',
+			{ name: '_rels/.rels' },
+		);
+		archive.append(
+			'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+				'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+				'<w:body>' +
+				`<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>${variant === 'refresh' ? 'Nexus DOCX Refreshed' : 'Nexus DOCX E2E'}</w:t></w:r></w:p>` +
+				`<w:p><w:r><w:t>${variant === 'refresh' ? 'DOCX force refresh loaded the external update.' : 'DOCX preview tabs preserve document content.'}</w:t></w:r></w:p>` +
+				'<w:tbl><w:tblPr><w:tblW w:w="16500" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr>' +
+				'<w:tblGrid><w:gridCol w:w="5500"/><w:gridCol w:w="5500"/><w:gridCol w:w="5500"/></w:tblGrid>' +
+				'<w:tr>' +
+				'<w:tc><w:tcPr><w:tcW w:w="5500" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Wide DOCX Column A</w:t></w:r></w:p></w:tc>' +
+				'<w:tc><w:tcPr><w:tcW w:w="5500" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Wide DOCX Column B</w:t></w:r></w:p></w:tc>' +
+				'<w:tc><w:tcPr><w:tcW w:w="5500" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Wide DOCX Column C</w:t></w:r></w:p></w:tc>' +
+				'</w:tr></w:tbl>' +
+				'<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>' +
+				'</w:body></w:document>',
+			{ name: 'word/document.xml' },
+		);
+		archive.append(
+			'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+				'<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+				'<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>' +
+				'<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/>' +
+				'<w:rPr><w:b/><w:sz w:val="36"/></w:rPr></w:style>' +
+				'</w:styles>',
+			{ name: 'word/styles.xml' },
+		);
+		archive.append(
+			'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+				'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+				'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+				'</Relationships>',
+			{ name: 'word/_rels/document.xml.rels' },
+		);
+		void archive.finalize();
+	});
 }
 
 async function writePdfFixture(destination, variant = 'default') {
-  const escapePdfText = (value) => value.replace(/([\\()])/g, '\\$1');
-  const streamObject = (content) => {
-    const length = Buffer.byteLength(content, 'latin1');
-    return `<< /Length ${length} >>\nstream\n${content}\nendstream`;
-  };
-  const pageStream = (title, body) =>
-    streamObject(
-      'BT\n' +
-        '/F1 26 Tf\n' +
-        `72 700 Td (${escapePdfText(title)}) Tj\n` +
-        '/F1 14 Tf\n' +
-        `0 -44 Td (${escapePdfText(body)}) Tj\n` +
-        'ET',
-    );
+	const escapePdfText = (value) => value.replace(/([\\()])/g, '\\$1');
 
-  const objects = [
-    '<< /Type /Catalog /Pages 2 0 R /Outlines 10 0 R /PageMode /UseOutlines >>',
-    '<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 6 0 R >> >> /Contents 7 0 R >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 6 0 R >> >> /Contents 8 0 R >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 6 0 R >> >> /Contents 9 0 R >>',
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-    pageStream(variant === 'refresh' ? 'Nexus PDF Refreshed' : 'Nexus PDF E2E', 'Introduction page'),
-    pageStream(variant === 'refresh' ? 'Second Chapter Refreshed' : 'Second Chapter', 'Outline navigation target'),
-    pageStream(variant === 'refresh' ? 'Details Refreshed' : 'Details', 'Nested outline target'),
-    '<< /Type /Outlines /First 11 0 R /Last 12 0 R /Count 3 >>',
-    `<< /Title (${variant === 'refresh' ? 'Introduction Refreshed' : 'Introduction'}) /Parent 10 0 R /Next 12 0 R /Dest [3 0 R /Fit] >>`,
-    `<< /Title (${variant === 'refresh' ? 'Second Chapter Refreshed' : 'Second Chapter'}) /Parent 10 0 R /Prev 11 0 R /First 13 0 R /Last 13 0 R /Count 1 /Dest [4 0 R /Fit] >>`,
-    `<< /Title (${variant === 'refresh' ? 'Details Refreshed' : 'Details'}) /Parent 12 0 R /Dest [5 0 R /Fit] >>`,
-  ];
+	const streamObject = (content) => {
+		const length = Buffer.byteLength(content, 'latin1');
+		return `<< /Length ${length} >>\nstream\n${content}\nendstream`;
+	};
 
-  let pdf = '%PDF-1.7\n%âãÏÓ\n';
-  const offsets = [0];
-  for (let index = 0; index < objects.length; index += 1) {
-    offsets.push(Buffer.byteLength(pdf, 'latin1'));
-    pdf += `${index + 1} 0 obj\n${objects[index]}\nendobj\n`;
-  }
+	const pageStream = (title, body) =>
+		streamObject(
+			'BT\n' +
+				'/F1 26 Tf\n' +
+				`72 700 Td (${escapePdfText(title)}) Tj\n` +
+				'/F1 14 Tf\n' +
+				`0 -44 Td (${escapePdfText(body)}) Tj\n` +
+				'ET',
+		);
 
-  const xrefOffset = Buffer.byteLength(pdf, 'latin1');
-  pdf += `xref\n0 ${objects.length + 1}\n`;
-  pdf += '0000000000 65535 f \n';
-  for (let index = 1; index <= objects.length; index += 1) {
-    pdf += `${String(offsets[index]).padStart(10, '0')} 00000 n \n`;
-  }
-  pdf += 'trailer\n';
-  pdf += `<< /Size ${objects.length + 1} /Root 1 0 R >>\n`;
-  pdf += `startxref\n${xrefOffset}\n%%EOF\n`;
+	const objects = [
+		'<< /Type /Catalog /Pages 2 0 R /Outlines 10 0 R /PageMode /UseOutlines >>',
+		'<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>',
+		'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 6 0 R >> >> /Contents 7 0 R >>',
+		'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 6 0 R >> >> /Contents 8 0 R >>',
+		'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 6 0 R >> >> /Contents 9 0 R >>',
+		'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+		pageStream(variant === 'refresh' ? 'Nexus PDF Refreshed' : 'Nexus PDF E2E', 'Introduction page'),
+		pageStream(variant === 'refresh' ? 'Second Chapter Refreshed' : 'Second Chapter', 'Outline navigation target'),
+		pageStream(variant === 'refresh' ? 'Details Refreshed' : 'Details', 'Nested outline target'),
+		'<< /Type /Outlines /First 11 0 R /Last 12 0 R /Count 3 >>',
+		`<< /Title (${variant === 'refresh' ? 'Introduction Refreshed' : 'Introduction'}) /Parent 10 0 R /Next 12 0 R /Dest [3 0 R /Fit] >>`,
+		`<< /Title (${variant === 'refresh' ? 'Second Chapter Refreshed' : 'Second Chapter'}) /Parent 10 0 R /Prev 11 0 R /First 13 0 R /Last 13 0 R /Count 1 /Dest [4 0 R /Fit] >>`,
+		`<< /Title (${variant === 'refresh' ? 'Details Refreshed' : 'Details'}) /Parent 12 0 R /Dest [5 0 R /Fit] >>`,
+	];
 
-  await fsp.writeFile(destination, Buffer.from(pdf, 'latin1'));
+	let pdf = '%PDF-1.7\n%âãÏÓ\n';
+	const offsets = [0];
+	for (let index = 0; index < objects.length; index += 1) {
+		offsets.push(Buffer.byteLength(pdf, 'latin1'));
+		pdf += `${index + 1} 0 obj\n${objects[index]}\nendobj\n`;
+	}
+
+	const xrefOffset = Buffer.byteLength(pdf, 'latin1');
+	pdf += `xref\n0 ${objects.length + 1}\n`;
+	pdf += '0000000000 65535 f \n';
+	for (let index = 1; index <= objects.length; index += 1) {
+		pdf += `${String(offsets[index]).padStart(10, '0')} 00000 n \n`;
+	}
+	pdf += 'trailer\n';
+	pdf += `<< /Size ${objects.length + 1} /Root 1 0 R >>\n`;
+	pdf += `startxref\n${xrefOffset}\n%%EOF\n`;
+
+	await fsp.writeFile(destination, Buffer.from(pdf, 'latin1'));
 }
 
 function crc32(buffer) {
-  let crc = 0xffffffff;
-  for (const byte of buffer) {
-    crc ^= byte;
-    for (let bit = 0; bit < 8; bit += 1) {
-      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
-    }
-  }
-  return (crc ^ 0xffffffff) >>> 0;
+	let crc = 0xffffffff;
+	for (const byte of buffer) {
+		crc ^= byte;
+		for (let bit = 0; bit < 8; bit += 1) {
+			crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+		}
+	}
+	return (crc ^ 0xffffffff) >>> 0;
 }
 
 async function writeUnicodePathZipFixture(destination, unicodeName) {
-  const legacyName = Buffer.from('legacy-name', 'ascii');
-  const unicodeNameBytes = Buffer.from(unicodeName, 'utf8');
-  const content = Buffer.from('unicode-path-e2e\n', 'utf8');
+	const legacyName = Buffer.from('legacy-name', 'ascii');
+	const unicodeNameBytes = Buffer.from(unicodeName, 'utf8');
+	const content = Buffer.from('unicode-path-e2e\n', 'utf8');
 
-  // Info-ZIP Unicode Path extra field (0x7075): version + CRC32 of the
-  // legacy filename + the authoritative UTF-8 filename. With LC_ALL=C,
-  // unzip 6.00 renders this filename as #Uxxxx; UTF-8 locales restore it.
-  const unicodePathData = Buffer.alloc(1 + 4 + unicodeNameBytes.length);
-  unicodePathData[0] = 1;
-  unicodePathData.writeUInt32LE(crc32(legacyName), 1);
-  unicodeNameBytes.copy(unicodePathData, 5);
-  const unicodePathExtra = Buffer.alloc(4 + unicodePathData.length);
-  unicodePathExtra.writeUInt16LE(0x7075, 0);
-  unicodePathExtra.writeUInt16LE(unicodePathData.length, 2);
-  unicodePathData.copy(unicodePathExtra, 4);
+	// Info-ZIP Unicode Path extra field (0x7075): version + CRC32 of the
+	// legacy filename + the authoritative UTF-8 filename. With LC_ALL=C,
+	// unzip 6.00 renders this filename as #Uxxxx; UTF-8 locales restore it.
+	const unicodePathData = Buffer.alloc(1 + 4 + unicodeNameBytes.length);
+	unicodePathData[0] = 1;
+	unicodePathData.writeUInt32LE(crc32(legacyName), 1);
+	unicodeNameBytes.copy(unicodePathData, 5);
+	const unicodePathExtra = Buffer.alloc(4 + unicodePathData.length);
+	unicodePathExtra.writeUInt16LE(0x7075, 0);
+	unicodePathExtra.writeUInt16LE(unicodePathData.length, 2);
+	unicodePathData.copy(unicodePathExtra, 4);
 
-  const contentCrc = crc32(content);
-  const localHeader = Buffer.alloc(30);
-  localHeader.writeUInt32LE(0x04034b50, 0);
-  localHeader.writeUInt16LE(20, 4);
-  localHeader.writeUInt16LE(0, 6);
-  localHeader.writeUInt16LE(0, 8);
-  localHeader.writeUInt16LE(0, 10);
-  localHeader.writeUInt16LE(0, 12);
-  localHeader.writeUInt32LE(contentCrc, 14);
-  localHeader.writeUInt32LE(content.length, 18);
-  localHeader.writeUInt32LE(content.length, 22);
-  localHeader.writeUInt16LE(legacyName.length, 26);
-  localHeader.writeUInt16LE(unicodePathExtra.length, 28);
+	const contentCrc = crc32(content);
+	const localHeader = Buffer.alloc(30);
+	localHeader.writeUInt32LE(0x04034b50, 0);
+	localHeader.writeUInt16LE(20, 4);
+	localHeader.writeUInt16LE(0, 6);
+	localHeader.writeUInt16LE(0, 8);
+	localHeader.writeUInt16LE(0, 10);
+	localHeader.writeUInt16LE(0, 12);
+	localHeader.writeUInt32LE(contentCrc, 14);
+	localHeader.writeUInt32LE(content.length, 18);
+	localHeader.writeUInt32LE(content.length, 22);
+	localHeader.writeUInt16LE(legacyName.length, 26);
+	localHeader.writeUInt16LE(unicodePathExtra.length, 28);
 
-  const centralHeader = Buffer.alloc(46);
-  centralHeader.writeUInt32LE(0x02014b50, 0);
-  centralHeader.writeUInt16LE(20, 4);
-  centralHeader.writeUInt16LE(20, 6);
-  centralHeader.writeUInt16LE(0, 8);
-  centralHeader.writeUInt16LE(0, 10);
-  centralHeader.writeUInt16LE(0, 12);
-  centralHeader.writeUInt16LE(0, 14);
-  centralHeader.writeUInt32LE(contentCrc, 16);
-  centralHeader.writeUInt32LE(content.length, 20);
-  centralHeader.writeUInt32LE(content.length, 24);
-  centralHeader.writeUInt16LE(legacyName.length, 28);
-  centralHeader.writeUInt16LE(unicodePathExtra.length, 30);
-  centralHeader.writeUInt16LE(0, 32);
-  centralHeader.writeUInt16LE(0, 34);
-  centralHeader.writeUInt16LE(0, 36);
-  centralHeader.writeUInt32LE(0, 38);
-  centralHeader.writeUInt32LE(0, 42);
+	const centralHeader = Buffer.alloc(46);
+	centralHeader.writeUInt32LE(0x02014b50, 0);
+	centralHeader.writeUInt16LE(20, 4);
+	centralHeader.writeUInt16LE(20, 6);
+	centralHeader.writeUInt16LE(0, 8);
+	centralHeader.writeUInt16LE(0, 10);
+	centralHeader.writeUInt16LE(0, 12);
+	centralHeader.writeUInt16LE(0, 14);
+	centralHeader.writeUInt32LE(contentCrc, 16);
+	centralHeader.writeUInt32LE(content.length, 20);
+	centralHeader.writeUInt32LE(content.length, 24);
+	centralHeader.writeUInt16LE(legacyName.length, 28);
+	centralHeader.writeUInt16LE(unicodePathExtra.length, 30);
+	centralHeader.writeUInt16LE(0, 32);
+	centralHeader.writeUInt16LE(0, 34);
+	centralHeader.writeUInt16LE(0, 36);
+	centralHeader.writeUInt32LE(0, 38);
+	centralHeader.writeUInt32LE(0, 42);
 
-  const localRecord = Buffer.concat([localHeader, legacyName, unicodePathExtra, content]);
-  const centralRecord = Buffer.concat([centralHeader, legacyName, unicodePathExtra]);
-  const endOfCentralDirectory = Buffer.alloc(22);
-  endOfCentralDirectory.writeUInt32LE(0x06054b50, 0);
-  endOfCentralDirectory.writeUInt16LE(0, 4);
-  endOfCentralDirectory.writeUInt16LE(0, 6);
-  endOfCentralDirectory.writeUInt16LE(1, 8);
-  endOfCentralDirectory.writeUInt16LE(1, 10);
-  endOfCentralDirectory.writeUInt32LE(centralRecord.length, 12);
-  endOfCentralDirectory.writeUInt32LE(localRecord.length, 16);
-  endOfCentralDirectory.writeUInt16LE(0, 20);
+	const localRecord = Buffer.concat([localHeader, legacyName, unicodePathExtra, content]);
+	const centralRecord = Buffer.concat([centralHeader, legacyName, unicodePathExtra]);
+	const endOfCentralDirectory = Buffer.alloc(22);
+	endOfCentralDirectory.writeUInt32LE(0x06054b50, 0);
+	endOfCentralDirectory.writeUInt16LE(0, 4);
+	endOfCentralDirectory.writeUInt16LE(0, 6);
+	endOfCentralDirectory.writeUInt16LE(1, 8);
+	endOfCentralDirectory.writeUInt16LE(1, 10);
+	endOfCentralDirectory.writeUInt32LE(centralRecord.length, 12);
+	endOfCentralDirectory.writeUInt32LE(localRecord.length, 16);
+	endOfCentralDirectory.writeUInt16LE(0, 20);
 
-  await fsp.writeFile(destination, Buffer.concat([localRecord, centralRecord, endOfCentralDirectory]));
+	await fsp.writeFile(destination, Buffer.concat([localRecord, centralRecord, endOfCentralDirectory]));
 }
 
 function writeSqlitePreviewFixture(destination) {
-  const database = new DatabaseSync(destination);
-  try {
-    database.exec(`
+	const database = new DatabaseSync(destination);
+	try {
+		database.exec(`
       CREATE TABLE users (
         id INTEGER PRIMARY KEY,
         name TEXT NOT NULL,
@@ -554,1212 +559,1248 @@ function writeSqlitePreviewFixture(destination) {
         (2, 'update', 'Carol changed profile'),
         (3, 'logout', 'Bob signed out');
     `);
-  } finally {
-    database.close();
-  }
+	} finally {
+		database.close();
+	}
 }
 
 async function resetRoot() {
-  dockerContainerPresent = true;
-  dockerContainerState = 'running';
-  await fsp.rm(archiveExecHoldPath, { force: true });
-  await fsp.rm(rootDir, { recursive: true, force: true });
-  await fsp.mkdir(path.join(rootDir, 'folder-seed'), { recursive: true });
-  await fsp.mkdir(path.join(rootDir, 'force-delete-e2e', 'nested'), { recursive: true });
-  await fsp.writeFile(path.join(rootDir, 'force-delete-e2e', 'nested', 'blocked.txt'), 'force-delete-e2e\n', 'utf8');
-  await fsp.writeFile(shellRcPath, `${virtualShellPrelude}\nPS1='nexus-e2e$ '\nPROMPT_COMMAND=''\n`, 'utf8');
-  await fsp.writeFile(path.join(rootDir, 'seed.txt'), 'nexus-e2e-seed\n', 'utf8');
-  await fsp.writeFile(path.join(rootDir, 'plainfile'), 'plain-no-extension\n', 'utf8');
-  await fsp.writeFile(path.join(rootDir, 'refresh-e2e.txt'), 'refresh-original\n', 'utf8');
-  await fsp.writeFile(
-    path.join(rootDir, 'utf16-crlf.txt'),
-    Buffer.from('\uFEFFENCODING_E2E\r\nSECOND_LINE\r\n', 'utf16le'),
-  );
-  await fsp.writeFile(path.join(rootDir, 'gb18030-low-confidence.txt'), Buffer.from('d6d0cec4b2e2cad4', 'hex'));
-  await fsp.writeFile(
-    path.join(rootDir, 'README-e2e.md'),
-    '# Nexus Markdown E2E\n\n**preview-ok**\n\n[Open linked Markdown](./linked-e2e.md)\n\n[External docs](https://example.com/docs.md)\n',
-    'utf8',
-  );
-  await fsp.writeFile(path.join(rootDir, 'linked-e2e.md'), '# Linked Markdown E2E\n\nlinked-preview-ok\n', 'utf8');
-  await fsp.writeFile(path.join(rootDir, 'copy-source.txt'), 'copy-me\n', 'utf8');
-  await fsp.writeFile(path.join(rootDir, 'move-source.txt'), 'move-me\n', 'utf8');
-  await fsp.writeFile(path.join(rootDir, 'archive-source.txt'), 'archive-me\n', 'utf8');
-  await fsp.writeFile(path.join(rootDir, '{{.Destination}}\\n{{end}}"'), 'backslash-delete-e2e\n', 'utf8');
-  await fsp.writeFile(path.join(rootDir, 'line\nbreak\'"$;[]{}.txt'), 'newline-delete-e2e\n', 'utf8');
-  await writeUnicodePathZipFixture(path.join(rootDir, '中文解压测试.zip'), '中文解压测试');
-  await fsp.mkdir(path.join(rootDir, 'deleted-cwd'), { recursive: true });
-  await fsp.writeFile(path.join(rootDir, 'deleted-cwd', 'inside.txt'), 'deleted-cwd-e2e\n', 'utf8');
-  await fsp.mkdir(path.join(rootDir, '  特殊 空格\'"$#`()[]{}!&;=,+测试  '), { recursive: true });
-  await fsp.writeFile(
-    path.join(rootDir, '  特殊 空格\'"$#`()[]{}!&;=,+测试  ', 'inside.txt'),
-    'special-path-e2e\n',
-    'utf8',
-  );
-  await fsp.writeFile(path.join(rootDir, 'folder-seed', 'nested.txt'), 'nested\n', 'utf8');
-  await fsp.mkdir(path.join(rootDir, 'cross-target'), { recursive: true });
-  await fsp.writeFile(path.join(rootDir, 'cross-copy.txt'), 'cross-copy-body\n', 'utf8');
-  await fsp.writeFile(path.join(rootDir, 'cross-move.txt'), 'cross-move-body\n', 'utf8');
-  await fsp.writeFile(
-    path.join(rootDir, '预览-测试.png'),
-    Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n+8AAAAASUVORK5CYII=',
-      'base64',
-    ),
-  );
-  await writeXlsxFixture(path.join(rootDir, 'preview.xlsx'));
-  await writeCompactXlsxFixture(path.join(rootDir, 'compact-preview.xlsx'));
-  await writeDocxFixture(path.join(rootDir, 'preview.docx'));
-  await writePdfFixture(path.join(rootDir, 'preview.pdf'));
-  await writePdfFixture(path.join(rootDir, 'folder-seed', 'second-preview.pdf'));
-  writeSqlitePreviewFixture(path.join(rootDir, 'preview.db'));
-  await fsp.symlink('预览-测试.png', path.join(rootDir, 'image-link.png'));
-  await fsp.symlink('missing-target.png', path.join(rootDir, 'stale-image-link.png'));
-  await fsp.chmod(path.join(rootDir, 'seed.txt'), 0o644);
-  statusSample = 0;
-  sftpWriteDelayMs = 0;
-  sftpStatDelayMs = 0;
-  sftpLstatDenyPrefix = '';
-  sftpReadDirDelayMs = 0;
-  sftpDelayedDirectoryOpens = 0;
-  sftpReadDelayMs = 0;
-  sftpDelayedReadCount = 0;
-  sftpOpenDelayMs = 0;
-  sftpDelayedOpenCount = 0;
-  sftpReadHandlesOpened = 0;
-  sftpReadHandlesClosed = 0;
-  archiveExecDelayMs = 0;
-  archiveCommandsStarted = 0;
-  archiveCommandsExited = 0;
+	dockerContainerPresent = true;
+	dockerContainerState = 'running';
+	await fsp.rm(archiveExecHoldPath, { force: true });
+	await fsp.rm(rootDir, { recursive: true, force: true });
+	await fsp.mkdir(path.join(rootDir, 'folder-seed'), { recursive: true });
+	await fsp.mkdir(path.join(rootDir, 'force-delete-e2e', 'nested'), { recursive: true });
+	await fsp.writeFile(path.join(rootDir, 'force-delete-e2e', 'nested', 'blocked.txt'), 'force-delete-e2e\n', 'utf8');
+	await fsp.writeFile(shellRcPath, `${virtualShellPrelude}\nPS1='nexus-e2e$ '\nPROMPT_COMMAND=''\n`, 'utf8');
+	await fsp.writeFile(path.join(rootDir, 'seed.txt'), 'nexus-e2e-seed\n', 'utf8');
+	await fsp.writeFile(path.join(rootDir, 'plainfile'), 'plain-no-extension\n', 'utf8');
+	await fsp.writeFile(path.join(rootDir, 'refresh-e2e.txt'), 'refresh-original\n', 'utf8');
+	await fsp.writeFile(
+		path.join(rootDir, 'utf16-crlf.txt'),
+		Buffer.from('\uFEFFENCODING_E2E\r\nSECOND_LINE\r\n', 'utf16le'),
+	);
+	await fsp.writeFile(path.join(rootDir, 'gb18030-low-confidence.txt'), Buffer.from('d6d0cec4b2e2cad4', 'hex'));
+	await fsp.writeFile(
+		path.join(rootDir, 'README-e2e.md'),
+		'# Nexus Markdown E2E\n\n**preview-ok**\n\n[Open linked Markdown](./linked-e2e.md)\n\n[External docs](https://example.com/docs.md)\n',
+		'utf8',
+	);
+	await fsp.writeFile(path.join(rootDir, 'linked-e2e.md'), '# Linked Markdown E2E\n\nlinked-preview-ok\n', 'utf8');
+	await fsp.writeFile(path.join(rootDir, 'copy-source.txt'), 'copy-me\n', 'utf8');
+	await fsp.writeFile(path.join(rootDir, 'move-source.txt'), 'move-me\n', 'utf8');
+	await fsp.writeFile(path.join(rootDir, 'archive-source.txt'), 'archive-me\n', 'utf8');
+	await fsp.writeFile(path.join(rootDir, '{{.Destination}}\\n{{end}}"'), 'backslash-delete-e2e\n', 'utf8');
+	await fsp.writeFile(path.join(rootDir, 'line\nbreak\'"$;[]{}.txt'), 'newline-delete-e2e\n', 'utf8');
+	await writeUnicodePathZipFixture(path.join(rootDir, '中文解压测试.zip'), '中文解压测试');
+	await fsp.mkdir(path.join(rootDir, 'deleted-cwd'), { recursive: true });
+	await fsp.writeFile(path.join(rootDir, 'deleted-cwd', 'inside.txt'), 'deleted-cwd-e2e\n', 'utf8');
+	await fsp.mkdir(path.join(rootDir, '  特殊 空格\'"$#`()[]{}!&;=,+测试  '), { recursive: true });
+	await fsp.writeFile(
+		path.join(rootDir, '  特殊 空格\'"$#`()[]{}!&;=,+测试  ', 'inside.txt'),
+		'special-path-e2e\n',
+		'utf8',
+	);
+	await fsp.writeFile(path.join(rootDir, 'folder-seed', 'nested.txt'), 'nested\n', 'utf8');
+	await fsp.mkdir(path.join(rootDir, 'cross-target'), { recursive: true });
+	await fsp.writeFile(path.join(rootDir, 'cross-copy.txt'), 'cross-copy-body\n', 'utf8');
+	await fsp.writeFile(path.join(rootDir, 'cross-move.txt'), 'cross-move-body\n', 'utf8');
+	await fsp.writeFile(
+		path.join(rootDir, '预览-测试.png'),
+		Buffer.from(
+			'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n+8AAAAASUVORK5CYII=',
+			'base64',
+		),
+	);
+	await writeXlsxFixture(path.join(rootDir, 'preview.xlsx'));
+	await writeCompactXlsxFixture(path.join(rootDir, 'compact-preview.xlsx'));
+	await writeDocxFixture(path.join(rootDir, 'preview.docx'));
+	await writePdfFixture(path.join(rootDir, 'preview.pdf'));
+	await writePdfFixture(path.join(rootDir, 'folder-seed', 'second-preview.pdf'));
+	writeSqlitePreviewFixture(path.join(rootDir, 'preview.db'));
+	await fsp.symlink('预览-测试.png', path.join(rootDir, 'image-link.png'));
+	await fsp.symlink('missing-target.png', path.join(rootDir, 'stale-image-link.png'));
+	await fsp.chmod(path.join(rootDir, 'seed.txt'), 0o644);
+	statusSample = 0;
+	sftpWriteDelayMs = 0;
+	sftpStatDelayMs = 0;
+	sftpLstatDenyPrefix = '';
+	sftpReadDirDelayMs = 0;
+	sftpDelayedDirectoryOpens = 0;
+	sftpReadDelayMs = 0;
+	sftpDelayedReadCount = 0;
+	sftpOpenDelayMs = 0;
+	sftpDelayedOpenCount = 0;
+	sftpReadHandlesOpened = 0;
+	sftpReadHandlesClosed = 0;
+	archiveExecDelayMs = 0;
+	archiveCommandsStarted = 0;
+	archiveCommandsExited = 0;
 }
 
 function openModeToFsFlags(flags) {
-  const canRead = Boolean(flags & OPEN_MODE.READ);
-  const canWrite = Boolean(flags & OPEN_MODE.WRITE);
-  const append = Boolean(flags & OPEN_MODE.APPEND);
-  const create = Boolean(flags & OPEN_MODE.CREAT);
-  const truncate = Boolean(flags & OPEN_MODE.TRUNC);
-  const exclusive = Boolean(flags & OPEN_MODE.EXCL);
+	const canRead = Boolean(flags & OPEN_MODE.READ);
+	const canWrite = Boolean(flags & OPEN_MODE.WRITE);
+	const append = Boolean(flags & OPEN_MODE.APPEND);
+	const create = Boolean(flags & OPEN_MODE.CREAT);
+	const truncate = Boolean(flags & OPEN_MODE.TRUNC);
+	const exclusive = Boolean(flags & OPEN_MODE.EXCL);
 
-  if (append) return canRead ? (exclusive ? 'ax+' : 'a+') : exclusive ? 'ax' : 'a';
-  if (canWrite && canRead) {
-    if (create || truncate) return exclusive ? 'wx+' : 'w+';
-    return 'r+';
-  }
-  if (canWrite) {
-    if (create || truncate) return exclusive ? 'wx' : 'w';
-    return 'r+';
-  }
-  return 'r';
+	if (append) return canRead ? (exclusive ? 'ax+' : 'a+') : exclusive ? 'ax' : 'a';
+	if (canWrite && canRead) {
+		if (create || truncate) return exclusive ? 'wx+' : 'w+';
+		return 'r+';
+	}
+	if (canWrite) {
+		if (create || truncate) return exclusive ? 'wx' : 'w';
+		return 'r+';
+	}
+	return 'r';
 }
 
 function createHandleRegistry() {
-  let nextHandleId = 1;
-  const handles = new Map();
+	let nextHandleId = 1;
+	const handles = new Map();
 
-  return {
-    add(value) {
-      const id = nextHandleId++;
-      handles.set(id, value);
-      const buffer = Buffer.alloc(4);
-      buffer.writeUInt32BE(id, 0);
-      return buffer;
-    },
-    get(handle) {
-      if (!Buffer.isBuffer(handle) || handle.length !== 4) return null;
-      return handles.get(handle.readUInt32BE(0)) ?? null;
-    },
-    delete(handle) {
-      if (!Buffer.isBuffer(handle) || handle.length !== 4) return null;
-      const id = handle.readUInt32BE(0);
-      const value = handles.get(id) ?? null;
-      handles.delete(id);
-      return value;
-    },
-    drain() {
-      const values = [...handles.values()];
-      handles.clear();
-      return values;
-    },
-  };
+	return {
+		add(value) {
+			const id = nextHandleId++;
+			handles.set(id, value);
+			const buffer = Buffer.alloc(4);
+			buffer.writeUInt32BE(id, 0);
+			return buffer;
+		},
+
+		get(handle) {
+			if (!Buffer.isBuffer(handle) || handle.length !== 4) return null;
+			return handles.get(handle.readUInt32BE(0)) ?? null;
+		},
+
+		delete(handle) {
+			if (!Buffer.isBuffer(handle) || handle.length !== 4) return null;
+			const id = handle.readUInt32BE(0);
+			const value = handles.get(id) ?? null;
+			handles.delete(id);
+			return value;
+		},
+
+		drain() {
+			const values = [...handles.values()];
+			handles.clear();
+			return values;
+		},
+	};
 }
 
 function attachSftp(session, accept) {
-  const sftp = accept();
-  const registry = createHandleRegistry();
-  const channelToken = Symbol('sftp-channel');
-  activeSftpChannels.add(channelToken);
-  openedSftpChannels += 1;
-  let channelClosed = false;
-  const closeFile = async (state) => {
-    await state.fileHandle.close();
-    if (state.readOnly) sftpReadHandlesClosed += 1;
-  };
-  const detachChannel = () => {
-    if (channelClosed) return;
-    channelClosed = true;
-    activeSftpChannels.delete(channelToken);
-    for (const state of registry.drain()) {
-      if (state.type !== 'file') continue;
-      void closeFile(state).catch(() => undefined);
-    }
-  };
-  sftp.once('end', detachChannel);
-  sftp.once('close', detachChannel);
+	const sftp = accept();
+	const registry = createHandleRegistry();
+	const channelToken = Symbol('sftp-channel');
+	activeSftpChannels.add(channelToken);
+	openedSftpChannels += 1;
+	let channelClosed = false;
 
-  const respondError = (reqid, error) => {
-    if (channelClosed) return;
-    sftp.status(reqid, statusForError(error), error?.message || 'SFTP test server failure');
-  };
+	const closeFile = async (state) => {
+		await state.fileHandle.close();
+		if (state.readOnly) sftpReadHandlesClosed += 1;
+	};
 
-  const statRequest = async (reqid, remotePath, useLstat = false) => {
-    try {
-      if (remotePath.startsWith('/prepare-profile-')) {
-        prepareStatRequests++;
-        if (prepareOperationDelayMs) await new Promise((resolve) => setTimeout(resolve, prepareOperationDelayMs));
-      }
-      if (
-        sftpStatDelayMs > 0 &&
-        (sftpStatDelayPrefix ? remotePath.startsWith(sftpStatDelayPrefix) : remotePath === '/pending-start-cancel.bin')
-      ) {
-        sftpDelayedStatCount++;
-        await new Promise((resolve) => setTimeout(resolve, sftpStatDelayMs));
-      }
-      if (useLstat && sftpLstatDenyPrefix && remotePath.startsWith(sftpLstatDenyPrefix)) {
-        const error = new Error(`LSTAT denied for ${remotePath}`);
-        error.code = 'EACCES';
-        throw error;
-      }
-      const fullPath = resolveRemotePath(remotePath);
-      const stats = useLstat ? await fsp.lstat(fullPath) : await fsp.stat(fullPath);
-      sftp.attrs(reqid, attrsFromStats(stats));
-    } catch (error) {
-      respondError(reqid, error);
-    }
-  };
+	const detachChannel = () => {
+		if (channelClosed) return;
+		channelClosed = true;
+		activeSftpChannels.delete(channelToken);
+		for (const state of registry.drain()) {
+			if (state.type !== 'file') continue;
+			void closeFile(state).catch(() => undefined);
+		}
+	};
 
-  sftp.on('REALPATH', async (reqid, remotePath) => {
-    try {
-      const deny = sftpRealpathDeny;
-      if (sftpRealpathBlocked) {
-        await new Promise((resolve) => sftpRealpathWaiters.add(resolve));
-      }
-      if (deny) {
-        sftp.status(reqid, STATUS_CODE.PERMISSION_DENIED);
-        return;
-      }
-      const fullPath = resolveRemotePath(remotePath);
-      await fsp.stat(fullPath);
-      sftp.name(reqid, [{ filename: virtualPath(remotePath), longname: virtualPath(remotePath), attrs: {} }]);
-    } catch (error) {
-      respondError(reqid, error);
-    }
-  });
+	sftp.once('end', detachChannel);
+	sftp.once('close', detachChannel);
 
-  sftp.on('STAT', (reqid, remotePath) => void statRequest(reqid, remotePath, false));
-  sftp.on('LSTAT', (reqid, remotePath) => void statRequest(reqid, remotePath, true));
+	const respondError = (reqid, error) => {
+		if (channelClosed) return;
+		sftp.status(reqid, statusForError(error), error?.message || 'SFTP test server failure');
+	};
 
-  sftp.on('OPENDIR', async (reqid, remotePath) => {
-    try {
-      if (remotePath === sftpSlowDirectory && sftpSlowDirectoryDelayMs > 0) {
-        await new Promise((resolve) => setTimeout(resolve, sftpSlowDirectoryDelayMs));
-      }
-      if (sftpReadDirDelayMs > 0) {
-        sftpDelayedDirectoryOpens++;
-        await new Promise((resolve) => setTimeout(resolve, sftpReadDirDelayMs));
-      }
-      const fullPath = resolveRemotePath(remotePath);
-      const entries = await fsp.readdir(fullPath, { withFileTypes: true });
-      const names = [];
-      for (const entry of entries) {
-        const entryPath = path.join(fullPath, entry.name);
-        const stats = await fsp.lstat(entryPath);
-        names.push({
-          filename: entry.name,
-          longname: entry.name,
-          attrs: attrsFromStats(stats),
-        });
-      }
-      const handle = registry.add({ type: 'dir', entries: names, offset: 0 });
-      sftp.handle(reqid, handle);
-    } catch (error) {
-      respondError(reqid, error);
-    }
-  });
+	const statRequest = async (reqid, remotePath, useLstat = false) => {
+		try {
+			if (remotePath.startsWith('/prepare-profile-')) {
+				prepareStatRequests++;
+				if (prepareOperationDelayMs)
+					await new Promise((resolve) => setTimeout(resolve, prepareOperationDelayMs));
+			}
+			if (
+				sftpStatDelayMs > 0 &&
+				(sftpStatDelayPrefix
+					? remotePath.startsWith(sftpStatDelayPrefix)
+					: remotePath === '/pending-start-cancel.bin')
+			) {
+				sftpDelayedStatCount++;
+				await new Promise((resolve) => setTimeout(resolve, sftpStatDelayMs));
+			}
+			if (useLstat && sftpLstatDenyPrefix && remotePath.startsWith(sftpLstatDenyPrefix)) {
+				const error = new Error(`LSTAT denied for ${remotePath}`);
+				error.code = 'EACCES';
+				throw error;
+			}
+			const fullPath = resolveRemotePath(remotePath);
+			const stats = useLstat ? await fsp.lstat(fullPath) : await fsp.stat(fullPath);
+			sftp.attrs(reqid, attrsFromStats(stats));
+		} catch (error) {
+			respondError(reqid, error);
+		}
+	};
 
-  sftp.on('READDIR', (reqid, handle) => {
-    const state = registry.get(handle);
-    if (!state || state.type !== 'dir') {
-      sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid directory handle');
-      return;
-    }
-    if (state.offset >= state.entries.length) {
-      sftp.status(reqid, STATUS_CODE.EOF);
-      return;
-    }
-    // Real servers split directory listings across NAME packets. Sending the
-    // whole fixture in one packet can exceed the client's 256 KiB packet limit.
-    const entries = state.entries.slice(state.offset, state.offset + 128);
-    state.offset += entries.length;
-    sftp.name(reqid, entries);
-  });
+	sftp.on('REALPATH', async (reqid, remotePath) => {
+		try {
+			const deny = sftpRealpathDeny;
+			if (sftpRealpathBlocked) {
+				await new Promise((resolve) => sftpRealpathWaiters.add(resolve));
+			}
+			if (deny) {
+				sftp.status(reqid, STATUS_CODE.PERMISSION_DENIED);
+				return;
+			}
+			const fullPath = resolveRemotePath(remotePath);
+			await fsp.stat(fullPath);
+			sftp.name(reqid, [{ filename: virtualPath(remotePath), longname: virtualPath(remotePath), attrs: {} }]);
+		} catch (error) {
+			respondError(reqid, error);
+		}
+	});
 
-  sftp.on('OPEN', async (reqid, remotePath, flags, attrs) => {
-    try {
-      if (sftpOpenDelayMs > 0 && flags & OPEN_MODE.READ) {
-        sftpDelayedOpenCount += 1;
-        await new Promise((resolve) => setTimeout(resolve, sftpOpenDelayMs));
-      }
-      const fullPath = resolveRemotePath(remotePath);
-      await fsp.mkdir(path.dirname(fullPath), { recursive: true });
-      const fileHandle = await fsp.open(fullPath, openModeToFsFlags(flags), attrs?.mode ? attrs.mode & 0o7777 : 0o644);
-      const readOnly = Boolean(flags & OPEN_MODE.READ) && !(flags & OPEN_MODE.WRITE);
-      if (readOnly) sftpReadHandlesOpened += 1;
-      const state = { type: 'file', fileHandle, path: fullPath, readOnly };
-      // OPEN can finish after cancellation has already drained the channel.
-      if (channelClosed) {
-        await closeFile(state);
-        return;
-      }
-      const handle = registry.add(state);
-      sftp.handle(reqid, handle);
-    } catch (error) {
-      respondError(reqid, error);
-    }
-  });
+	sftp.on('STAT', (reqid, remotePath) => void statRequest(reqid, remotePath, false));
+	sftp.on('LSTAT', (reqid, remotePath) => void statRequest(reqid, remotePath, true));
 
-  sftp.on('READ', async (reqid, handle, offset, length) => {
-    const state = registry.get(handle);
-    if (!state || state.type !== 'file') {
-      sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid file handle');
-      return;
-    }
-    sftpReadRequests += 1;
-    sftpReadPending += 1;
-    sftpReadPeakPending = Math.max(sftpReadPeakPending, sftpReadPending);
-    try {
-      if (sftpReadBlocked) {
-        await new Promise((resolve) => {
-          const release = () => {
-            sftpReadWaiters.delete(release);
-            sftp.off('close', release);
-            resolve();
-          };
-          sftpReadWaiters.add(release);
-          sftp.once('close', release);
-        });
-        if (channelClosed) return;
-      }
-      if (sftpReadDelayMs > 0) {
-        sftpDelayedReadCount += 1;
-        await new Promise((resolve) => setTimeout(resolve, sftpReadDelayMs));
-      }
-      if (channelClosed) return;
-      const buffer = Buffer.alloc(length);
-      const { bytesRead } = await state.fileHandle.read(buffer, 0, length, Number(offset));
-      if (bytesRead > 0 && sftpReadBytesPerSecond > 0) {
-        const deliveryAt =
-          Math.max(performance.now(), sftpReadNextDeliveryAt) + (bytesRead * 1000) / sftpReadBytesPerSecond;
-        sftpReadNextDeliveryAt = deliveryAt;
-        await new Promise((resolve) => setTimeout(resolve, Math.max(0, deliveryAt - performance.now())));
-      }
-      if (channelClosed) return;
-      sftpReadResponseBytes += bytesRead;
-      if (bytesRead === 0) sftp.status(reqid, STATUS_CODE.EOF);
-      else sftp.data(reqid, buffer.subarray(0, bytesRead));
-    } catch (error) {
-      respondError(reqid, error);
-    } finally {
-      sftpReadPending -= 1;
-    }
-  });
+	sftp.on('OPENDIR', async (reqid, remotePath) => {
+		try {
+			if (remotePath === sftpSlowDirectory && sftpSlowDirectoryDelayMs > 0) {
+				await new Promise((resolve) => setTimeout(resolve, sftpSlowDirectoryDelayMs));
+			}
+			if (sftpReadDirDelayMs > 0) {
+				sftpDelayedDirectoryOpens++;
+				await new Promise((resolve) => setTimeout(resolve, sftpReadDirDelayMs));
+			}
+			const fullPath = resolveRemotePath(remotePath);
+			const entries = await fsp.readdir(fullPath, { withFileTypes: true });
+			const names = [];
+			for (const entry of entries) {
+				const entryPath = path.join(fullPath, entry.name);
+				const stats = await fsp.lstat(entryPath);
+				names.push({
+					filename: entry.name,
+					longname: entry.name,
+					attrs: attrsFromStats(stats),
+				});
+			}
+			const handle = registry.add({ type: 'dir', entries: names, offset: 0 });
+			sftp.handle(reqid, handle);
+		} catch (error) {
+			respondError(reqid, error);
+		}
+	});
 
-  sftp.on('WRITE', async (reqid, handle, offset, data) => {
-    const state = registry.get(handle);
-    if (!state || state.type !== 'file') {
-      sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid file handle');
-      return;
-    }
-    sftpPendingWrites += 1;
-    sftpWriteRequests += 1;
-    sftpWriteBytes += data.length;
-    sftpPeakPendingWrites = Math.max(sftpPeakPendingWrites, sftpPendingWrites);
-    try {
-      if (sftpWriteDelayMs > 0) {
-        await new Promise((resolve) => setTimeout(resolve, sftpWriteDelayMs));
-      }
-      await state.fileHandle.write(data, 0, data.length, Number(offset));
-      sftp.status(reqid, STATUS_CODE.OK);
-    } catch (error) {
-      respondError(reqid, error);
-    } finally {
-      sftpPendingWrites -= 1;
-    }
-  });
+	sftp.on('READDIR', (reqid, handle) => {
+		const state = registry.get(handle);
+		if (!state || state.type !== 'dir') {
+			sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid directory handle');
+			return;
+		}
+		if (state.offset >= state.entries.length) {
+			sftp.status(reqid, STATUS_CODE.EOF);
+			return;
+		}
+		// Real servers split directory listings across NAME packets. Sending the
+		// whole fixture in one packet can exceed the client's 256 KiB packet limit.
+		const entries = state.entries.slice(state.offset, state.offset + 128);
+		state.offset += entries.length;
+		sftp.name(reqid, entries);
+	});
 
-  sftp.on('FSTAT', async (reqid, handle) => {
-    const state = registry.get(handle);
-    if (!state || state.type !== 'file') {
-      sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid file handle');
-      return;
-    }
-    try {
-      sftp.attrs(reqid, attrsFromStats(await state.fileHandle.stat()));
-    } catch (error) {
-      respondError(reqid, error);
-    }
-  });
+	sftp.on('OPEN', async (reqid, remotePath, flags, attrs) => {
+		try {
+			if (sftpOpenDelayMs > 0 && flags & OPEN_MODE.READ) {
+				sftpDelayedOpenCount += 1;
+				await new Promise((resolve) => setTimeout(resolve, sftpOpenDelayMs));
+			}
+			const fullPath = resolveRemotePath(remotePath);
+			await fsp.mkdir(path.dirname(fullPath), { recursive: true });
+			const fileHandle = await fsp.open(
+				fullPath,
+				openModeToFsFlags(flags),
+				attrs?.mode ? attrs.mode & 0o7777 : 0o644,
+			);
+			const readOnly = Boolean(flags & OPEN_MODE.READ) && !(flags & OPEN_MODE.WRITE);
+			if (readOnly) sftpReadHandlesOpened += 1;
+			const state = { type: 'file', fileHandle, path: fullPath, readOnly };
+			// OPEN can finish after cancellation has already drained the channel.
+			if (channelClosed) {
+				await closeFile(state);
+				return;
+			}
+			const handle = registry.add(state);
+			sftp.handle(reqid, handle);
+		} catch (error) {
+			respondError(reqid, error);
+		}
+	});
 
-  sftp.on('FSETSTAT', async (reqid, handle, attrs) => {
-    const state = registry.get(handle);
-    if (!state || state.type !== 'file') {
-      sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid file handle');
-      return;
-    }
-    try {
-      if (typeof attrs?.mode === 'number') await state.fileHandle.chmod(attrs.mode & 0o7777);
-      if (typeof attrs?.size === 'number') await state.fileHandle.truncate(attrs.size);
-      sftp.status(reqid, STATUS_CODE.OK);
-    } catch (error) {
-      respondError(reqid, error);
-    }
-  });
+	sftp.on('READ', async (reqid, handle, offset, length) => {
+		const state = registry.get(handle);
+		if (!state || state.type !== 'file') {
+			sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid file handle');
+			return;
+		}
+		sftpReadRequests += 1;
+		sftpReadPending += 1;
+		sftpReadPeakPending = Math.max(sftpReadPeakPending, sftpReadPending);
+		try {
+			if (sftpReadBlocked) {
+				await new Promise((resolve) => {
+					const release = () => {
+						sftpReadWaiters.delete(release);
+						sftp.off('close', release);
+						resolve();
+					};
 
-  sftp.on('CLOSE', async (reqid, handle) => {
-    const state = registry.delete(handle);
-    if (!state) {
-      sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid handle');
-      return;
-    }
-    try {
-      if (state.type === 'file') await closeFile(state);
-      sftp.status(reqid, STATUS_CODE.OK);
-    } catch (error) {
-      respondError(reqid, error);
-    }
-  });
+					sftpReadWaiters.add(release);
+					sftp.once('close', release);
+				});
+				if (channelClosed) return;
+			}
+			if (sftpReadDelayMs > 0) {
+				sftpDelayedReadCount += 1;
+				await new Promise((resolve) => setTimeout(resolve, sftpReadDelayMs));
+			}
+			if (channelClosed) return;
+			const buffer = Buffer.alloc(length);
+			const { bytesRead } = await state.fileHandle.read(buffer, 0, length, Number(offset));
+			if (bytesRead > 0 && sftpReadBytesPerSecond > 0) {
+				const deliveryAt =
+					Math.max(performance.now(), sftpReadNextDeliveryAt) + (bytesRead * 1000) / sftpReadBytesPerSecond;
+				sftpReadNextDeliveryAt = deliveryAt;
+				await new Promise((resolve) => setTimeout(resolve, Math.max(0, deliveryAt - performance.now())));
+			}
+			if (channelClosed) return;
+			sftpReadResponseBytes += bytesRead;
+			if (bytesRead === 0) sftp.status(reqid, STATUS_CODE.EOF);
+			else sftp.data(reqid, buffer.subarray(0, bytesRead));
+		} catch (error) {
+			respondError(reqid, error);
+		} finally {
+			sftpReadPending -= 1;
+		}
+	});
 
-  sftp.on('MKDIR', async (reqid, remotePath, attrs) => {
-    try {
-      if (remotePath.startsWith('/prepare-profile-')) {
-        prepareMkdirRequests++;
-        if (prepareOperationDelayMs) await new Promise((resolve) => setTimeout(resolve, prepareOperationDelayMs));
-      }
-      await fsp.mkdir(resolveRemotePath(remotePath), { mode: attrs?.mode ? attrs.mode & 0o7777 : 0o755 });
-      sftp.status(reqid, STATUS_CODE.OK);
-    } catch (error) {
-      respondError(reqid, error);
-    }
-  });
+	sftp.on('WRITE', async (reqid, handle, offset, data) => {
+		const state = registry.get(handle);
+		if (!state || state.type !== 'file') {
+			sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid file handle');
+			return;
+		}
+		sftpPendingWrites += 1;
+		sftpWriteRequests += 1;
+		sftpWriteBytes += data.length;
+		sftpPeakPendingWrites = Math.max(sftpPeakPendingWrites, sftpPendingWrites);
+		try {
+			if (sftpWriteDelayMs > 0) {
+				await new Promise((resolve) => setTimeout(resolve, sftpWriteDelayMs));
+			}
+			await state.fileHandle.write(data, 0, data.length, Number(offset));
+			sftp.status(reqid, STATUS_CODE.OK);
+		} catch (error) {
+			respondError(reqid, error);
+		} finally {
+			sftpPendingWrites -= 1;
+		}
+	});
 
-  sftp.on('RMDIR', async (reqid, remotePath) => {
-    if (isForceDeleteFixturePath(remotePath)) {
-      sftp.status(reqid, STATUS_CODE.PERMISSION_DENIED, 'Force-delete fixture requires SSH command fallback');
-      return;
-    }
-    try {
-      await fsp.rmdir(resolveRemotePath(remotePath));
-      sftp.status(reqid, STATUS_CODE.OK);
-    } catch (error) {
-      respondError(reqid, error);
-    }
-  });
+	sftp.on('FSTAT', async (reqid, handle) => {
+		const state = registry.get(handle);
+		if (!state || state.type !== 'file') {
+			sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid file handle');
+			return;
+		}
+		try {
+			sftp.attrs(reqid, attrsFromStats(await state.fileHandle.stat()));
+		} catch (error) {
+			respondError(reqid, error);
+		}
+	});
 
-  sftp.on('REMOVE', async (reqid, remotePath) => {
-    if (isForceDeleteFixturePath(remotePath)) {
-      sftp.status(reqid, STATUS_CODE.PERMISSION_DENIED, 'Force-delete fixture requires SSH command fallback');
-      return;
-    }
-    try {
-      await fsp.unlink(resolveRemotePath(remotePath));
-      sftp.status(reqid, STATUS_CODE.OK);
-    } catch (error) {
-      respondError(reqid, error);
-    }
-  });
+	sftp.on('FSETSTAT', async (reqid, handle, attrs) => {
+		const state = registry.get(handle);
+		if (!state || state.type !== 'file') {
+			sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid file handle');
+			return;
+		}
+		try {
+			if (typeof attrs?.mode === 'number') await state.fileHandle.chmod(attrs.mode & 0o7777);
+			if (typeof attrs?.size === 'number') await state.fileHandle.truncate(attrs.size);
+			sftp.status(reqid, STATUS_CODE.OK);
+		} catch (error) {
+			respondError(reqid, error);
+		}
+	});
 
-  sftp.on('RENAME', async (reqid, oldRemotePath, newRemotePath) => {
-    try {
-      const destination = resolveRemotePath(newRemotePath);
-      await fsp.mkdir(path.dirname(destination), { recursive: true });
-      await fsp.rename(resolveRemotePath(oldRemotePath), destination);
-      sftp.status(reqid, STATUS_CODE.OK);
-    } catch (error) {
-      respondError(reqid, error);
-    }
-  });
+	sftp.on('CLOSE', async (reqid, handle) => {
+		const state = registry.delete(handle);
+		if (!state) {
+			sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid handle');
+			return;
+		}
+		try {
+			if (state.type === 'file') await closeFile(state);
+			sftp.status(reqid, STATUS_CODE.OK);
+		} catch (error) {
+			respondError(reqid, error);
+		}
+	});
 
-  sftp.on('SETSTAT', async (reqid, remotePath, attrs) => {
-    try {
-      const fullPath = resolveRemotePath(remotePath);
-      if (typeof attrs?.mode === 'number') await fsp.chmod(fullPath, attrs.mode & 0o7777);
-      if (typeof attrs?.size === 'number') await fsp.truncate(fullPath, attrs.size);
-      sftp.status(reqid, STATUS_CODE.OK);
-    } catch (error) {
-      respondError(reqid, error);
-    }
-  });
+	sftp.on('MKDIR', async (reqid, remotePath, attrs) => {
+		try {
+			if (remotePath.startsWith('/prepare-profile-')) {
+				prepareMkdirRequests++;
+				if (prepareOperationDelayMs)
+					await new Promise((resolve) => setTimeout(resolve, prepareOperationDelayMs));
+			}
+			await fsp.mkdir(resolveRemotePath(remotePath), { mode: attrs?.mode ? attrs.mode & 0o7777 : 0o755 });
+			sftp.status(reqid, STATUS_CODE.OK);
+		} catch (error) {
+			respondError(reqid, error);
+		}
+	});
+
+	sftp.on('RMDIR', async (reqid, remotePath) => {
+		if (isForceDeleteFixturePath(remotePath)) {
+			sftp.status(reqid, STATUS_CODE.PERMISSION_DENIED, 'Force-delete fixture requires SSH command fallback');
+			return;
+		}
+		try {
+			await fsp.rmdir(resolveRemotePath(remotePath));
+			sftp.status(reqid, STATUS_CODE.OK);
+		} catch (error) {
+			respondError(reqid, error);
+		}
+	});
+
+	sftp.on('REMOVE', async (reqid, remotePath) => {
+		if (isForceDeleteFixturePath(remotePath)) {
+			sftp.status(reqid, STATUS_CODE.PERMISSION_DENIED, 'Force-delete fixture requires SSH command fallback');
+			return;
+		}
+		try {
+			await fsp.unlink(resolveRemotePath(remotePath));
+			sftp.status(reqid, STATUS_CODE.OK);
+		} catch (error) {
+			respondError(reqid, error);
+		}
+	});
+
+	sftp.on('RENAME', async (reqid, oldRemotePath, newRemotePath) => {
+		try {
+			const destination = resolveRemotePath(newRemotePath);
+			await fsp.mkdir(path.dirname(destination), { recursive: true });
+			await fsp.rename(resolveRemotePath(oldRemotePath), destination);
+			sftp.status(reqid, STATUS_CODE.OK);
+		} catch (error) {
+			respondError(reqid, error);
+		}
+	});
+
+	sftp.on('SETSTAT', async (reqid, remotePath, attrs) => {
+		try {
+			const fullPath = resolveRemotePath(remotePath);
+			if (typeof attrs?.mode === 'number') await fsp.chmod(fullPath, attrs.mode & 0o7777);
+			if (typeof attrs?.size === 'number') await fsp.truncate(fullPath, attrs.size);
+			sftp.status(reqid, STATUS_CODE.OK);
+		} catch (error) {
+			respondError(reqid, error);
+		}
+	});
 }
 
 function finishExec(stream, stdout = '', stderr = '', code = 0) {
-  if (stdout) stream.write(stdout);
-  if (stderr) stream.stderr.write(stderr);
-  stream.exit(code);
-  stream.end();
+	if (stdout) stream.write(stdout);
+	if (stderr) stream.stderr.write(stderr);
+	stream.exit(code);
+	stream.end();
 }
 
 function buildStatusFixture() {
-  statusSample += 1;
-  const user = 1000 + statusSample * 80;
-  const system = 500 + statusSample * 20;
-  const idle = 8000 + statusSample * 100;
-  const rx = 1_000_000 + statusSample * 3_000_000;
-  const tx = 2_000_000 + statusSample * 2_000_000;
-  return [
-    '__NEXUS_STATUS_OS_RELEASE__',
-    'PRETTY_NAME="Nexus E2E Linux"',
-    '__NEXUS_STATUS_CPU_MODEL__',
-    'Nexus Virtual CPU',
-    '__NEXUS_STATUS_NET_ROUTE__',
-    'Iface Destination Gateway Flags RefCnt Use Metric Mask MTU Window IRTT',
-    'eth0 00000000 0100007F 0003 0 0 0 00000000 0 0 0',
-    '__NEXUS_STATUS_MEMINFO__',
-    'MemTotal:        2097152 kB',
-    'MemFree:          524288 kB',
-    'MemAvailable:    1048576 kB',
-    'Buffers:           65536 kB',
-    'Cached:           262144 kB',
-    'SwapTotal:       1048576 kB',
-    'SwapFree:         786432 kB',
-    '__NEXUS_STATUS_DISK__',
-    'Filesystem 1024-blocks Used Available Capacity Mounted on',
-    '/dev/e2e 10485760 3145728 7340032 30% /',
-    '__NEXUS_STATUS_PROC_STAT__',
-    `cpu ${user} 0 ${system} ${idle} 0 0 0 0 0 0`,
-    '__NEXUS_STATUS_LOADAVG__',
-    '0.12 0.34 0.56 1/100 1234',
-    '__NEXUS_STATUS_NET_DEV__',
-    'Inter-|   Receive                                                |  Transmit',
-    ' face |bytes packets errs drop fifo frame compressed multicast|bytes packets errs drop fifo colls carrier compressed',
-    `  eth0: ${rx} 100 0 0 0 0 0 0 ${tx} 100 0 0 0 0 0 0`,
-    '',
-  ].join('\n');
+	statusSample += 1;
+	const user = 1000 + statusSample * 80;
+	const system = 500 + statusSample * 20;
+	const idle = 8000 + statusSample * 100;
+	const rx = 1_000_000 + statusSample * 3_000_000;
+	const tx = 2_000_000 + statusSample * 2_000_000;
+	return [
+		'__NEXUS_STATUS_OS_RELEASE__',
+		'PRETTY_NAME="Nexus E2E Linux"',
+		'__NEXUS_STATUS_CPU_MODEL__',
+		'Nexus Virtual CPU',
+		'__NEXUS_STATUS_NET_ROUTE__',
+		'Iface Destination Gateway Flags RefCnt Use Metric Mask MTU Window IRTT',
+		'eth0 00000000 0100007F 0003 0 0 0 00000000 0 0 0',
+		'__NEXUS_STATUS_MEMINFO__',
+		'MemTotal:        2097152 kB',
+		'MemFree:          524288 kB',
+		'MemAvailable:    1048576 kB',
+		'Buffers:           65536 kB',
+		'Cached:           262144 kB',
+		'SwapTotal:       1048576 kB',
+		'SwapFree:         786432 kB',
+		'__NEXUS_STATUS_DISK__',
+		'Filesystem 1024-blocks Used Available Capacity Mounted on',
+		'/dev/e2e 10485760 3145728 7340032 30% /',
+		'__NEXUS_STATUS_PROC_STAT__',
+		`cpu ${user} 0 ${system} ${idle} 0 0 0 0 0 0`,
+		'__NEXUS_STATUS_LOADAVG__',
+		'0.12 0.34 0.56 1/100 1234',
+		'__NEXUS_STATUS_NET_DEV__',
+		'Inter-|   Receive                                                |  Transmit',
+		' face |bytes packets errs drop fifo frame compressed multicast|bytes packets errs drop fifo colls carrier compressed',
+		`  eth0: ${rx} 100 0 0 0 0 0 0 ${tx} 100 0 0 0 0 0 0`,
+		'',
+	].join('\n');
 }
 
 function runRemoteCommand(command, stream, session) {
-  if (command.includes('__NEXUS_STATUS_')) {
-    finishExec(stream, buildStatusFixture());
-    return;
-  }
-  if (command === "docker version --format '{{.Server.Version}}'") {
-    finishExec(stream, '27.0.0\n');
-    return;
-  }
-  if (command === "docker ps -a --no-trunc --format '{{json .}}'") {
-    if (!dockerContainerPresent) {
-      finishExec(stream, '');
-      return;
-    }
-    const running = dockerContainerState === 'running';
-    finishExec(
-      stream,
-      `${JSON.stringify({
-        ID: DOCKER_CONTAINER_ID,
-        Names: 'nexus-e2e-container',
-        Image: 'alpine:latest',
-        ImageID: 'sha256:e2e',
-        Command: 'sleep 3600',
-        CreatedAt: 1_700_000_000,
-        State: dockerContainerState,
-        Status: running ? 'Up 10 minutes' : 'Exited (0) 1 second ago',
-        Ports: '127.0.0.1:8080->80/tcp',
-        Labels: 'suite=e2e',
-      })}\n`,
-    );
-    return;
-  }
-  if (command.startsWith('docker stats ')) {
-    if (!dockerContainerPresent || dockerContainerState !== 'running') {
-      finishExec(stream, '');
-      return;
-    }
-    finishExec(
-      stream,
-      `${JSON.stringify({
-        ID: '0123456789ab',
-        Name: 'nexus-e2e-container',
-        CPUPerc: '12.34%',
-        MemUsage: '32MiB / 2GiB',
-        MemPerc: '1.56%',
-        NetIO: '1.2MB / 800kB',
-        BlockIO: '0B / 0B',
-        PIDs: '3',
-      })}\n`,
-    );
-    return;
-  }
-  const dockerAction = command.match(/^docker\s+(start|stop|restart|pause|unpause|rm(?:\s+-f)?)\s+([a-f0-9]+)\s*$/);
-  if (dockerAction) {
-    const action = dockerAction[1];
-    const containerId = dockerAction[2];
-    if (!dockerContainerPresent || containerId !== DOCKER_CONTAINER_ID) {
-      finishExec(stream, '', `Error: No such container: ${containerId}\n`, 1);
-      return;
-    }
-    if (action === 'start' || action === 'restart' || action === 'unpause') dockerContainerState = 'running';
-    else if (action === 'stop') dockerContainerState = 'exited';
-    else if (action === 'pause') dockerContainerState = 'paused';
-    else if (action.startsWith('rm')) dockerContainerPresent = false;
-    finishExec(stream, 'nexus-e2e-container\n');
-    return;
-  }
+	if (command.includes('__NEXUS_STATUS_')) {
+		finishExec(stream, buildStatusFixture());
+		return;
+	}
+	if (command === "docker version --format '{{.Server.Version}}'") {
+		finishExec(stream, '27.0.0\n');
+		return;
+	}
+	if (command === "docker ps -a --no-trunc --format '{{json .}}'") {
+		if (!dockerContainerPresent) {
+			finishExec(stream, '');
+			return;
+		}
+		const running = dockerContainerState === 'running';
+		finishExec(
+			stream,
+			`${JSON.stringify({
+				ID: DOCKER_CONTAINER_ID,
+				Names: 'nexus-e2e-container',
+				Image: 'alpine:latest',
+				ImageID: 'sha256:e2e',
+				Command: 'sleep 3600',
+				CreatedAt: 1_700_000_000,
+				State: dockerContainerState,
+				Status: running ? 'Up 10 minutes' : 'Exited (0) 1 second ago',
+				Ports: '127.0.0.1:8080->80/tcp',
+				Labels: 'suite=e2e',
+			})}\n`,
+		);
+		return;
+	}
+	if (command.startsWith('docker stats ')) {
+		if (!dockerContainerPresent || dockerContainerState !== 'running') {
+			finishExec(stream, '');
+			return;
+		}
+		finishExec(
+			stream,
+			`${JSON.stringify({
+				ID: '0123456789ab',
+				Name: 'nexus-e2e-container',
+				CPUPerc: '12.34%',
+				MemUsage: '32MiB / 2GiB',
+				MemPerc: '1.56%',
+				NetIO: '1.2MB / 800kB',
+				BlockIO: '0B / 0B',
+				PIDs: '3',
+			})}\n`,
+		);
+		return;
+	}
+	const dockerAction = command.match(/^docker\s+(start|stop|restart|pause|unpause|rm(?:\s+-f)?)\s+([a-f0-9]+)\s*$/);
+	if (dockerAction) {
+		const action = dockerAction[1];
+		const containerId = dockerAction[2];
+		if (!dockerContainerPresent || containerId !== DOCKER_CONTAINER_ID) {
+			finishExec(stream, '', `Error: No such container: ${containerId}\n`, 1);
+			return;
+		}
+		if (action === 'start' || action === 'restart' || action === 'unpause') dockerContainerState = 'running';
+		else if (action === 'stop') dockerContainerState = 'exited';
+		else if (action === 'pause') dockerContainerState = 'paused';
+		else if (action.startsWith('rm')) dockerContainerPresent = false;
+		finishExec(stream, 'nexus-e2e-container\n');
+		return;
+	}
 
-  const executableCommand = remapTransferExecPaths(remapArchiveExecWorkingDirectory(remapRemovalExecPath(command)));
-  const isArchiveCommand = command.includes('__NEXUS_ARCHIVE_TOTAL__:');
-  const normalizedArchivePreflight = String(command)
-    .trim()
-    .replace(/\s+>\s*\/dev\/null\s+2>&1\s*$/, '')
-    .replace(/["']/g, '')
-    .trim();
-  const isArchivePreflightCommand = /^(?:command -v|which)\s+(?:zip|tar|unzip)\s*$/.test(normalizedArchivePreflight);
-  const preflightHoldPrefix = isArchivePreflightCommand
-    ? `while [ -f ${JSON.stringify(archivePreflightHoldPath)} ]; do sleep 0.05; done; `
-    : '';
-  const holdPrefix = isArchiveCommand
-    ? `while [ -f ${JSON.stringify(archiveExecHoldPath)} ]; do sleep 0.05; done; `
-    : '';
-  const delayPrefix = archiveExecDelayMs > 0 && isArchiveCommand ? `sleep ${archiveExecDelayMs / 1000}; ` : '';
-  const delayedCommand = `${preflightHoldPrefix}${holdPrefix}${delayPrefix}${executableCommand}`;
-  const child = spawn('/bin/bash', ['-lc', `${virtualShellPrelude}\n${delayedCommand}`], {
-    cwd: rootDir,
-    env: { ...process.env, HOME: rootDir, TERM: 'xterm-256color', NEXUS_E2E_ROOT: rootDir },
-    stdio: ['pipe', 'pipe', 'pipe'],
-    detached: true,
-  });
-  const onSignal = (accept, reject, info) => {
-    if (!['TERM', 'KILL', 'INT', 'HUP'].includes(info.name)) return reject?.();
-    try {
-      process.kill(-child.pid, `SIG${info.name}`);
-      accept?.();
-    } catch {
-      reject?.();
-    }
-  };
-  if (isArchiveCommand) archiveCommandsStarted += 1;
-  session.on('signal', onSignal);
-  child.stdout.on('data', (chunk) => stream.write(chunk));
-  child.stderr.on('data', (chunk) => stream.stderr.write(chunk));
-  stream.on('data', (chunk) => child.stdin.write(chunk));
-  stream.on('close', () => child.kill('SIGTERM'));
-  child.on('close', (code, signal) => {
-    if (isArchiveCommand) archiveCommandsExited += 1;
-    session.off('signal', onSignal);
-    stream.exit(signal ? signal.replace(/^SIG/, '') : (code ?? 0));
-    stream.end();
-  });
+	const executableCommand = remapTransferExecPaths(remapArchiveExecWorkingDirectory(remapRemovalExecPath(command)));
+	const isArchiveCommand = command.includes('__NEXUS_ARCHIVE_TOTAL__:');
+	const normalizedArchivePreflight = String(command)
+		.trim()
+		.replace(/\s+>\s*\/dev\/null\s+2>&1\s*$/, '')
+		.replace(/["']/g, '')
+		.trim();
+	const isArchivePreflightCommand = /^(?:command -v|which)\s+(?:zip|tar|unzip)\s*$/.test(normalizedArchivePreflight);
+	const preflightHoldPrefix = isArchivePreflightCommand
+		? `while [ -f ${JSON.stringify(archivePreflightHoldPath)} ]; do sleep 0.05; done; `
+		: '';
+	const holdPrefix = isArchiveCommand
+		? `while [ -f ${JSON.stringify(archiveExecHoldPath)} ]; do sleep 0.05; done; `
+		: '';
+	const delayPrefix = archiveExecDelayMs > 0 && isArchiveCommand ? `sleep ${archiveExecDelayMs / 1000}; ` : '';
+	const delayedCommand = `${preflightHoldPrefix}${holdPrefix}${delayPrefix}${executableCommand}`;
+	const child = spawn('/bin/bash', ['-lc', `${virtualShellPrelude}\n${delayedCommand}`], {
+		cwd: rootDir,
+		env: { ...process.env, HOME: rootDir, TERM: 'xterm-256color', NEXUS_E2E_ROOT: rootDir },
+		stdio: ['pipe', 'pipe', 'pipe'],
+		detached: true,
+	});
+
+	const onSignal = (accept, reject, info) => {
+		if (!['TERM', 'KILL', 'INT', 'HUP'].includes(info.name)) return reject?.();
+		try {
+			process.kill(-child.pid, `SIG${info.name}`);
+			accept?.();
+		} catch {
+			reject?.();
+		}
+	};
+
+	if (isArchiveCommand) archiveCommandsStarted += 1;
+	session.on('signal', onSignal);
+	child.stdout.on('data', (chunk) => stream.write(chunk));
+	child.stderr.on('data', (chunk) => stream.stderr.write(chunk));
+	stream.on('data', (chunk) => child.stdin.write(chunk));
+	stream.on('close', () => child.kill('SIGTERM'));
+	child.on('close', (code, signal) => {
+		if (isArchiveCommand) archiveCommandsExited += 1;
+		session.off('signal', onSignal);
+		stream.exit(signal ? signal.replace(/^SIG/, '') : (code ?? 0));
+		stream.end();
+	});
 }
 
 function attachShell(session, accept) {
-  const stream = accept();
-  const child = spawn('/bin/bash', ['--noprofile', '--rcfile', shellRcPath, '-i'], {
-    cwd: rootDir,
-    env: {
-      ...process.env,
-      HOME: rootDir,
-      TERM: 'xterm-256color',
-      NEXUS_E2E_ROOT: rootDir,
-      PS1: 'nexus-e2e$ ',
-      PROMPT_COMMAND: '',
-    },
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
-  child.stdout.on('data', (data) => stream.write(data));
-  child.stderr.on('data', (data) => stream.stderr.write(data));
-  stream.on('data', (data) => child.stdin.write(data));
-  stream.on('close', () => child.kill('SIGTERM'));
-  child.on('close', (code) => {
-    stream.exit(code ?? 0);
-    stream.end();
-  });
+	const stream = accept();
+	const child = spawn('/bin/bash', ['--noprofile', '--rcfile', shellRcPath, '-i'], {
+		cwd: rootDir,
+		env: {
+			...process.env,
+			HOME: rootDir,
+			TERM: 'xterm-256color',
+			NEXUS_E2E_ROOT: rootDir,
+			PS1: 'nexus-e2e$ ',
+			PROMPT_COMMAND: '',
+		},
+		stdio: ['pipe', 'pipe', 'pipe'],
+	});
+	child.stdout.on('data', (data) => stream.write(data));
+	child.stderr.on('data', (data) => stream.stderr.write(data));
+	stream.on('data', (data) => child.stdin.write(data));
+	stream.on('close', () => child.kill('SIGTERM'));
+	child.on('close', (code) => {
+		stream.exit(code ?? 0);
+		stream.end();
+	});
 }
 
 await resetRoot();
 
 const sshServer = new Server({ hostKeys: [hostKey] }, (client) => {
-  client.setNoDelay(true);
-  activeSshClients.add(client);
-  client.once('close', () => activeSshClients.delete(client));
+	client.setNoDelay(true);
+	activeSshClients.add(client);
+	client.once('close', () => activeSshClients.delete(client));
 
-  client.on('authentication', (ctx) => {
-    if (ctx.method === 'password' && ctx.username === USERNAME && ctx.password === PASSWORD) ctx.accept();
-    else if (ctx.method === 'publickey' && ctx.username === USERNAME) ctx.accept();
-    else ctx.reject();
-  });
+	client.on('authentication', (ctx) => {
+		if (ctx.method === 'password' && ctx.username === USERNAME && ctx.password === PASSWORD) ctx.accept();
+		else if (ctx.method === 'publickey' && ctx.username === USERNAME) ctx.accept();
+		else ctx.reject();
+	});
 
-  client.on('ready', () => {
-    client.on('session', (accept) => {
-      const session = accept();
-      session.on('pty', (acceptPty) => acceptPty());
-      session.on('window-change', (acceptWindowChange) => acceptWindowChange?.());
-      session.on('shell', (acceptShell) => attachShell(session, acceptShell));
-      session.on('exec', (acceptExec, _rejectExec, info) => runRemoteCommand(info.command, acceptExec(), session));
-      session.on('sftp', (acceptSftp) => attachSftp(session, acceptSftp));
-    });
+	client.on('ready', () => {
+		client.on('session', (accept) => {
+			const session = accept();
+			session.on('pty', (acceptPty) => acceptPty());
+			session.on('window-change', (acceptWindowChange) => acceptWindowChange?.());
+			session.on('shell', (acceptShell) => attachShell(session, acceptShell));
+			session.on('exec', (acceptExec, _rejectExec, info) =>
+				runRemoteCommand(info.command, acceptExec(), session),
+			);
+			session.on('sftp', (acceptSftp) => attachSftp(session, acceptSftp));
+		});
 
-    // Support ssh2 Client.forwardOut so this same E2E server can act as a jump host.
-    client.on('tcpip', (accept, reject, info) => {
-      const upstream = net.connect(info.destPort, info.destIP);
-      upstream.once('connect', () => {
-        const channel = accept();
-        channel.once('close', () => upstream.destroy());
-        upstream.once('close', () => {
-          try {
-            channel.end();
-          } catch {
-            /* already closed */
-          }
-        });
-        channel.pipe(upstream).pipe(channel);
-      });
-      upstream.once('error', () => {
-        try {
-          reject();
-        } catch {
-          /* request may already have ended */
-        }
-      });
-    });
-  });
+		// Support ssh2 Client.forwardOut so this same E2E server can act as a jump host.
+		client.on('tcpip', (accept, reject, info) => {
+			const upstream = net.connect(info.destPort, info.destIP);
+			upstream.once('connect', () => {
+				const channel = accept();
+				channel.once('close', () => upstream.destroy());
+				upstream.once('close', () => {
+					try {
+						channel.end();
+					} catch {
+						/* already closed */
+					}
+				});
+				channel.pipe(upstream).pipe(channel);
+			});
+			upstream.once('error', () => {
+				try {
+					reject();
+				} catch {
+					/* request may already have ended */
+				}
+			});
+		});
+	});
 
-  client.on('error', (error) => {
-    console.error('[E2E SSH] client error:', error.message);
-  });
+	client.on('error', (error) => {
+		console.error('[E2E SSH] client error:', error.message);
+	});
 });
 
 sshServer.on('error', (error) => {
-  console.error('[E2E SSH] server error:', error);
-  process.exitCode = 1;
+	console.error('[E2E SSH] server error:', error);
+	process.exitCode = 1;
 });
 
 async function startSshServer() {
-  if (sshServerOnline) return;
-  await new Promise((resolve, reject) => {
-    const onError = (error) => reject(error);
-    sshServer.once('error', onError);
-    sshServer.listen(SSH_PORT, SSH_HOST, () => {
-      sshServer.off('error', onError);
-      sshServerOnline = true;
-      resolve();
-    });
-  });
+	if (sshServerOnline) return;
+	await new Promise((resolve, reject) => {
+		const onError = (error) => reject(error);
+
+		sshServer.once('error', onError);
+		sshServer.listen(SSH_PORT, SSH_HOST, () => {
+			sshServer.off('error', onError);
+			sshServerOnline = true;
+			resolve();
+		});
+	});
 }
 
 async function stopSshServer() {
-  for (const client of [...activeSshClients]) {
-    try {
-      client.end();
-    } catch {
-      /* already closed */
-    }
-  }
-  if (!sshServerOnline) return;
-  await new Promise((resolve, reject) => {
-    sshServer.close((error) => {
-      if (error) reject(error);
-      else resolve();
-    });
-  });
-  sshServerOnline = false;
+	for (const client of [...activeSshClients]) {
+		try {
+			client.end();
+		} catch {
+			/* already closed */
+		}
+	}
+	if (!sshServerOnline) return;
+	await new Promise((resolve, reject) => {
+		sshServer.close((error) => {
+			if (error) reject(error);
+			else resolve();
+		});
+	});
+	sshServerOnline = false;
 }
 
 const smtpServer = net.createServer((socket) => {
-  socket.setEncoding('utf8');
-  socket.write('220 nexus-e2e SMTP ready\r\n');
-  let buffer = '';
-  let dataMode = false;
-  let data = '';
+	socket.setEncoding('utf8');
+	socket.write('220 nexus-e2e SMTP ready\r\n');
+	let buffer = '';
+	let dataMode = false;
+	let data = '';
 
-  const reply = (line) => socket.write(`${line}\r\n`);
-  socket.on('data', (chunk) => {
-    buffer += chunk;
-    while (true) {
-      if (dataMode) {
-        const end = buffer.indexOf('\r\n.\r\n');
-        if (end < 0) {
-          data += buffer;
-          buffer = '';
-          return;
-        }
-        data += buffer.slice(0, end);
-        buffer = buffer.slice(end + 5);
-        const valid = /content-type:\s*text\/html\b/i.test(data) && data.includes('NEXUS-E2E-HTML');
-        reply(valid ? '250 2.0.0 accepted' : '550 5.6.0 expected HTML notification body');
-        data = '';
-        dataMode = false;
-        continue;
-      }
+	const reply = (line) => socket.write(`${line}\r\n`);
 
-      const end = buffer.indexOf('\r\n');
-      if (end < 0) return;
-      const line = buffer.slice(0, end);
-      buffer = buffer.slice(end + 2);
-      const command = line.trim();
-      if (/^(?:EHLO|HELO)\b/i.test(command)) {
-        socket.write('250-nexus-e2e\r\n250 PIPELINING\r\n');
-      } else if (/^(?:MAIL FROM|RCPT TO):/i.test(command) || /^RSET$/i.test(command)) {
-        reply('250 2.1.0 ok');
-      } else if (/^DATA$/i.test(command)) {
-        dataMode = true;
-        reply('354 End data with <CR><LF>.<CR><LF>');
-      } else if (/^QUIT$/i.test(command)) {
-        reply('221 2.0.0 bye');
-        socket.end();
-        return;
-      } else if (/^NOOP$/i.test(command)) {
-        reply('250 2.0.0 ok');
-      } else {
-        reply('502 5.5.2 command not implemented');
-      }
-    }
-  });
-  socket.on('error', () => undefined);
+	socket.on('data', (chunk) => {
+		buffer += chunk;
+		while (true) {
+			if (dataMode) {
+				const end = buffer.indexOf('\r\n.\r\n');
+				if (end < 0) {
+					data += buffer;
+					buffer = '';
+					return;
+				}
+				data += buffer.slice(0, end);
+				buffer = buffer.slice(end + 5);
+				const valid = /content-type:\s*text\/html\b/i.test(data) && data.includes('NEXUS-E2E-HTML');
+				reply(valid ? '250 2.0.0 accepted' : '550 5.6.0 expected HTML notification body');
+				data = '';
+				dataMode = false;
+				continue;
+			}
+
+			const end = buffer.indexOf('\r\n');
+			if (end < 0) return;
+			const line = buffer.slice(0, end);
+			buffer = buffer.slice(end + 2);
+			const command = line.trim();
+			if (/^(?:EHLO|HELO)\b/i.test(command)) {
+				socket.write('250-nexus-e2e\r\n250 PIPELINING\r\n');
+			} else if (/^(?:MAIL FROM|RCPT TO):/i.test(command) || /^RSET$/i.test(command)) {
+				reply('250 2.1.0 ok');
+			} else if (/^DATA$/i.test(command)) {
+				dataMode = true;
+				reply('354 End data with <CR><LF>.<CR><LF>');
+			} else if (/^QUIT$/i.test(command)) {
+				reply('221 2.0.0 bye');
+				socket.end();
+				return;
+			} else if (/^NOOP$/i.test(command)) {
+				reply('250 2.0.0 ok');
+			} else {
+				reply('502 5.5.2 command not implemented');
+			}
+		}
+	});
+	socket.on('error', () => undefined);
 });
 
 smtpServer.on('error', (error) => {
-  console.error('[E2E SMTP] server error:', error);
-  process.exitCode = 1;
+	console.error('[E2E SMTP] server error:', error);
+	process.exitCode = 1;
 });
 
 const controlServer = http.createServer(async (req, res) => {
-  try {
-    const requestUrl = new URL(req.url || '/', `http://${SSH_HOST}:${CONTROL_PORT}`);
-    if (req.method === 'GET' && requestUrl.pathname === '/health') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, sshPort: SSH_PORT, rootDir }));
-      return;
-    }
-    if (requestUrl.pathname === '/sftp/read-hold' && (req.method === 'POST' || req.method === 'GET')) {
-      if (req.method === 'POST') {
-        sftpReadBlocked = requestUrl.searchParams.get('blocked') === '1';
-        if (!sftpReadBlocked) for (const release of [...sftpReadWaiters]) release();
-      }
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ blocked: sftpReadBlocked, pending: sftpReadWaiters.size }));
-      return;
-    }
-    if (req.method === 'POST' && requestUrl.pathname === '/reset') {
-      sftpReadBlocked = false;
-      for (const release of [...sftpReadWaiters]) release();
-      sftpRealpathBlocked = false;
-      sftpRealpathDeny = false;
-      for (const resolve of sftpRealpathWaiters) resolve();
-      sftpRealpathWaiters.clear();
-      await stopSshServer();
-      sftpWriteDelayMs = 0;
-      sftpWriteRequests = 0;
-      sftpWriteBytes = 0;
-      sftpPeakPendingWrites = 0;
-      sftpStatDelayMs = 0;
-      sftpStatDelayPrefix = '';
-      sftpDelayedStatCount = 0;
-      sftpLstatDenyPrefix = '';
-      sftpReadDirDelayMs = 0;
-      sftpDelayedDirectoryOpens = 0;
-      sftpReadDelayMs = 0;
-      sftpDelayedReadCount = 0;
-      sftpOpenDelayMs = 0;
-      sftpDelayedOpenCount = 0;
-      sftpReadHandlesOpened = 0;
-      sftpReadHandlesClosed = 0;
-      archiveExecDelayMs = 0;
-      archiveCommandsStarted = 0;
-      archiveCommandsExited = 0;
-      activeSftpChannels.clear();
-      openedSftpChannels = 0;
-      await fsp.rm(archiveExecHoldPath, { force: true });
-      await fsp.rm(archivePreflightHoldPath, { force: true });
-      await resetRoot();
-      await startSshServer();
-      res.writeHead(204);
-      res.end();
-      return;
-    }
-    if (req.method === 'POST' && requestUrl.pathname === '/ssh/offline') {
-      await stopSshServer();
-      res.writeHead(204);
-      res.end();
-      return;
-    }
-    if (req.method === 'POST' && requestUrl.pathname === '/ssh/online') {
-      await startSshServer();
-      res.writeHead(204);
-      res.end();
-      return;
-    }
-    if ((req.method === 'POST' || req.method === 'GET') && requestUrl.pathname === '/sftp/realpath-gate') {
-      if (req.method === 'POST') {
-        sftpRealpathBlocked = requestUrl.searchParams.get('blocked') === '1';
-        sftpRealpathDeny = requestUrl.searchParams.get('deny') === '1';
-        if (!sftpRealpathBlocked) {
-          for (const resolve of sftpRealpathWaiters) resolve();
-          sftpRealpathWaiters.clear();
-        }
-      }
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ blocked: sftpRealpathBlocked, pending: sftpRealpathWaiters.size }));
-      return;
-    }
-    if ((req.method === 'POST' || req.method === 'GET') && requestUrl.pathname === '/sftp/write-delay') {
-      if (req.method === 'POST') {
-        const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
-        sftpWriteDelayMs = Number.isFinite(requestedDelay)
-          ? Math.max(0, Math.min(35_000, Math.round(requestedDelay)))
-          : 0;
-      }
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(
-        JSON.stringify({
-          sftpWriteDelayMs,
-          sftpPendingWrites,
-          sftpWriteRequests,
-          sftpWriteBytes,
-          sftpPeakPendingWrites,
-        }),
-      );
-      return;
-    }
-    if ((req.method === 'POST' || req.method === 'GET') && requestUrl.pathname === '/sftp/stat-delay') {
-      if (req.method === 'POST') {
-        const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
-        sftpStatDelayMs = Number.isFinite(requestedDelay)
-          ? Math.max(0, Math.min(10_000, Math.round(requestedDelay)))
-          : 0;
-        sftpStatDelayPrefix = requestUrl.searchParams.get('prefix') || '';
-        sftpDelayedStatCount = 0;
-      }
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ sftpStatDelayMs, sftpStatDelayPrefix, sftpDelayedStatCount }));
-      return;
-    }
-    if (req.method === 'POST' && requestUrl.pathname === '/sftp/lstat-deny-prefix') {
-      sftpLstatDenyPrefix = requestUrl.searchParams.get('path') || '';
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ sftpLstatDenyPrefix }));
-      return;
-    }
-    if (requestUrl.pathname === '/sftp/prepare-profile' && (req.method === 'POST' || req.method === 'GET')) {
-      if (req.method === 'POST') {
-        const delay = Number(requestUrl.searchParams.get('ms') || '0');
-        if (!Number.isFinite(delay) || delay < 0 || delay > 1000) {
-          res.writeHead(400);
-          res.end('Invalid prepare delay');
-          return;
-        }
-        prepareOperationDelayMs = Math.round(delay);
-        prepareStatRequests = 0;
-        prepareMkdirRequests = 0;
-      }
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ prepareOperationDelayMs, prepareStatRequests, prepareMkdirRequests }));
-      return;
-    }
-    if ((req.method === 'POST' || req.method === 'GET') && requestUrl.pathname === '/sftp/readdir-delay') {
-      if (req.method === 'POST') {
-        const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
-        sftpReadDirDelayMs = Number.isFinite(requestedDelay)
-          ? Math.max(0, Math.min(10_000, Math.round(requestedDelay)))
-          : 0;
-        sftpDelayedDirectoryOpens = 0;
-      }
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ sftpReadDirDelayMs, sftpDelayedDirectoryOpens }));
-      return;
-    }
-    if (requestUrl.pathname === '/sftp/slow-directory' && req.method === 'POST') {
-      const delay = Number(requestUrl.searchParams.get('ms') || '0');
-      if (!Number.isFinite(delay) || delay < 0 || delay > 10000) {
-        res.writeHead(400);
-        res.end('Invalid directory delay');
-        return;
-      }
-      sftpSlowDirectory = requestUrl.searchParams.get('path') || '';
-      sftpSlowDirectoryDelayMs = Math.round(delay);
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ sftpSlowDirectory, sftpSlowDirectoryDelayMs }));
-      return;
-    }
-    if (requestUrl.pathname === '/sftp/read-network' && (req.method === 'POST' || req.method === 'GET')) {
-      if (req.method === 'POST') {
-        if (sftpReadPending > 0) {
-          res.writeHead(409);
-          res.end('Remote reads are still pending');
-          return;
-        }
-        const delay = Number(requestUrl.searchParams.get('ms') || '0');
-        const rate = Number(requestUrl.searchParams.get('bytesPerSecond') || '0');
-        if (!Number.isFinite(delay) || delay < 0 || delay > 10000 || !Number.isFinite(rate) || rate < 0) {
-          res.writeHead(400);
-          res.end('Invalid read network profile');
-          return;
-        }
-        sftpReadDelayMs = Math.round(delay);
-        sftpReadBytesPerSecond = Math.floor(rate);
-        sftpReadNextDeliveryAt = 0;
-        sftpReadRequests = 0;
-        sftpReadResponseBytes = 0;
-        sftpReadPeakPending = 0;
-      }
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(
-        JSON.stringify({
-          sftpReadDelayMs,
-          sftpReadBytesPerSecond,
-          sftpReadRequests,
-          sftpReadResponseBytes,
-          sftpReadPending,
-          sftpReadPeakPending,
-        }),
-      );
-      return;
-    }
-    if (requestUrl.pathname === '/sftp/read-delay' && (req.method === 'POST' || req.method === 'GET')) {
-      if (req.method === 'POST') {
-        const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
-        sftpReadDelayMs = Number.isFinite(requestedDelay)
-          ? Math.max(0, Math.min(10_000, Math.round(requestedDelay)))
-          : 0;
-        sftpDelayedReadCount = 0;
-      }
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ sftpReadDelayMs, sftpDelayedReadCount }));
-      return;
-    }
-    if (requestUrl.pathname === '/sftp/open-delay' && (req.method === 'POST' || req.method === 'GET')) {
-      if (req.method === 'POST') {
-        const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
-        sftpOpenDelayMs = Number.isFinite(requestedDelay)
-          ? Math.max(0, Math.min(10_000, Math.round(requestedDelay)))
-          : 0;
-        sftpDelayedOpenCount = 0;
-      }
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ sftpOpenDelayMs, sftpDelayedOpenCount }));
-      return;
-    }
-    if (req.method === 'GET' && requestUrl.pathname === '/sftp/read-handles') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ opened: sftpReadHandlesOpened, closed: sftpReadHandlesClosed }));
-      return;
-    }
-    if (req.method === 'POST' && requestUrl.pathname === '/sftp/grow-binary-fixture') {
-      const name = requestUrl.searchParams.get('name') || '';
-      if (!/^growing-[0-9a-f-]{36}\.txt$/.test(name)) {
-        res.writeHead(400);
-        res.end('Invalid binary growth fixture name');
-        return;
-      }
-      await fsp.appendFile(resolveRemotePath(`/${name}`), 'g'.repeat(8192));
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ appendedBytes: 8192 }));
-      return;
-    }
-    if (req.method === 'POST' && requestUrl.pathname === '/archive/exec-delay') {
-      const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
-      archiveExecDelayMs = Number.isFinite(requestedDelay)
-        ? Math.max(0, Math.min(5000, Math.round(requestedDelay)))
-        : 0;
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ archiveExecDelayMs }));
-      return;
-    }
-    if (req.method === 'GET' && requestUrl.pathname === '/archive/processes') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ started: archiveCommandsStarted, exited: archiveCommandsExited }));
-      return;
-    }
-    if (req.method === 'POST' && requestUrl.pathname === '/archive/preflight-hold') {
-      const enabled = ['1', 'true', 'yes'].includes(String(requestUrl.searchParams.get('enabled') || '').toLowerCase());
-      await fsp.mkdir(path.dirname(archivePreflightHoldPath), { recursive: true });
-      if (enabled) await fsp.writeFile(archivePreflightHoldPath, 'hold\n', 'utf8');
-      else await fsp.rm(archivePreflightHoldPath, { force: true });
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ enabled }));
-      return;
-    }
-    if (req.method === 'POST' && requestUrl.pathname === '/archive/exec-hold') {
-      const enabled = ['1', 'true', 'yes'].includes(String(requestUrl.searchParams.get('enabled') || '').toLowerCase());
-      await fsp.mkdir(path.dirname(archiveExecHoldPath), { recursive: true });
-      if (enabled) await fsp.writeFile(archiveExecHoldPath, 'hold\n', 'utf8');
-      else await fsp.rm(archiveExecHoldPath, { force: true });
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ enabled }));
-      return;
-    }
-    if (req.method === 'POST' && requestUrl.pathname === '/fixture') {
-      const name = path.basename(requestUrl.searchParams.get('name') || 'external-refresh.txt');
-      const variant = String(requestUrl.searchParams.get('variant') || '');
-      const requestedSize = Number(requestUrl.searchParams.get('size') || '0');
-      const size = Number.isFinite(requestedSize)
-        ? Math.max(0, Math.min(32 * 1024 * 1024, Math.round(requestedSize)))
-        : 0;
-      if (variant === 'refresh' && name === 'README-e2e.md') {
-        await fsp.writeFile(path.join(rootDir, name), '# Nexus Markdown Refreshed\n\n**force-refresh-ok**\n', 'utf8');
-      } else if (variant === 'refresh' && name === 'preview.xlsx') {
-        await writeXlsxFixture(path.join(rootDir, name), 'refresh');
-      } else if (variant === 'refresh' && name === 'preview.docx') {
-        await writeDocxFixture(path.join(rootDir, name), 'refresh');
-      } else if (variant === 'refresh' && name === 'preview.pdf') {
-        await writePdfFixture(path.join(rootDir, name), 'refresh');
-      } else if (variant === 'refresh' && name === '预览-测试.png') {
-        await fsp.writeFile(
-          path.join(rootDir, name),
-          Buffer.from(
-            'iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAAD0lEQVR4nGP4z8DA8J8BAAf/Af8Bf4mnAAAAAElFTkSuQmCC',
-            'base64',
-          ),
-        );
-      } else if (variant === 'zoom-lines') {
-        const requestedLines = Number(requestUrl.searchParams.get('lines') || '1200');
-        const lineCount = Number.isFinite(requestedLines)
-          ? Math.max(1, Math.min(5000, Math.round(requestedLines)))
-          : 1200;
-        await fsp.writeFile(
-          path.join(rootDir, name),
-          `${Array.from({ length: lineCount }, (_, index) => `zoom-line-${index + 1}`).join('\n')}\n`,
-          'utf8',
-        );
-      } else if (variant === 'large-text') {
-        const targetSize = size || 3 * 1024 * 1024;
-        const line = 'large-file-performance-line-0123456789-abcdefghijklmnopqrstuvwxyz\n';
-        const content = line.repeat(Math.ceil(targetSize / line.length)).slice(0, targetSize);
-        await fsp.writeFile(path.join(rootDir, name), content, 'utf8');
-      } else if (size > 0) {
-        await fsp.writeFile(path.join(rootDir, name), Buffer.alloc(size, 0x5a));
-      } else {
-        await fsp.writeFile(path.join(rootDir, name), 'created outside Nexus for refresh verification\n', 'utf8');
-      }
-      res.writeHead(204);
-      res.end();
-      return;
-    }
-    if (req.method === 'POST' && requestUrl.pathname === '/fixture-directory') {
-      const name = path.basename(requestUrl.searchParams.get('name') || 'copy-cancel-dir');
-      const requestedSize = Number(requestUrl.searchParams.get('size') || `${32 * 1024}`);
-      const size = Number.isFinite(requestedSize)
-        ? Math.max(1, Math.min(1024 * 1024, Math.round(requestedSize)))
-        : 32 * 1024;
-      const targetDir = path.join(rootDir, name);
-      await fsp.rm(targetDir, { recursive: true, force: true });
-      await fsp.mkdir(targetDir, { recursive: true });
-      await fsp.writeFile(path.join(targetDir, '01-first.bin'), Buffer.alloc(size, 0x61));
-      await fsp.writeFile(path.join(targetDir, '02-second.bin'), Buffer.alloc(size, 0x62));
-      res.writeHead(204);
-      res.end();
-      return;
-    }
-    if (req.method === 'POST' && requestUrl.pathname === '/remove-path') {
-      const requestedPath = String(requestUrl.searchParams.get('path') || '');
-      const targetPath = resolveRemotePath(requestedPath);
-      if (targetPath === path.resolve(rootDir)) {
-        res.writeHead(400, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Refusing to remove the E2E root directory' }));
-        return;
-      }
-      await fsp.rm(targetPath, { recursive: true, force: true });
-      res.writeHead(204);
-      res.end();
-      return;
-    }
-    if (req.method === 'POST' && requestUrl.pathname === '/e2e-notification-webhook-strict') {
-      const chunks = [];
-      for await (const chunk of req) chunks.push(Buffer.from(chunk));
-      const body = Buffer.concat(chunks).toString('utf8');
-      let parsed = null;
-      try {
-        parsed = JSON.parse(body);
-      } catch {
-        // Invalid JSON is handled by the strict validation below.
-      }
-      const locale = requestUrl.searchParams.get('locale') || 'en-US';
-      const expected =
-        locale === 'zh-CN'
-          ? {
-              eventDisplay: '设置已更新',
-              message: '这是来自 Nexus Terminal 的测试通知（Webhook），事件为“设置已更新”。',
-            }
-          : {
-              eventDisplay: undefined,
-              message: "This is a test notification from Nexus Terminal (Webhook - i18n) for event 'Settings Updated'.",
-            };
-      const valid =
-        req.headers['x-e2e-webhook'] === 'delivery' &&
-        parsed?.source === 'nexus-e2e' &&
-        parsed?.event === 'SETTINGS_UPDATED' &&
-        (expected.eventDisplay === undefined || parsed?.eventDisplay === expected.eventDisplay) &&
-        parsed?.details?.message === expected.message &&
-        parsed?.details?.test === true;
-      res.writeHead(valid ? 204 : 422, { 'content-type': 'application/json' });
-      res.end(valid ? undefined : JSON.stringify({ error: 'invalid E2E webhook request' }));
-      return;
-    }
-    if (req.method === 'POST' && requestUrl.pathname === '/e2e-notification-webhook-secrets') {
-      for await (const _chunk of req) {
-        // Drain without persisting credentials in fixture diagnostics.
-      }
-      const phase = requestUrl.searchParams.get('phase');
-      const valid =
-        phase === 'removed'
-          ? req.headers.authorization === undefined && req.headers['x-e2e-private'] === undefined
-          : req.headers.authorization === `Bearer e2e-${phase}` && req.headers['x-e2e-private'] === `private-${phase}`;
-      res.writeHead(valid ? 204 : 422);
-      res.end();
-      return;
-    }
-    if (req.method === 'POST' && requestUrl.pathname === '/e2e-notification-webhook') {
-      for await (const _chunk of req) {
-        // Drain the request body; this endpoint is only a deterministic external integration target.
-      }
-      res.writeHead(204);
-      res.end();
-      return;
-    }
-    res.writeHead(404);
-    res.end();
-  } catch (error) {
-    res.writeHead(500, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
-  }
+	try {
+		const requestUrl = new URL(req.url || '/', `http://${SSH_HOST}:${CONTROL_PORT}`);
+		if (req.method === 'GET' && requestUrl.pathname === '/health') {
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ ok: true, sshPort: SSH_PORT, rootDir }));
+			return;
+		}
+		if (requestUrl.pathname === '/sftp/read-hold' && (req.method === 'POST' || req.method === 'GET')) {
+			if (req.method === 'POST') {
+				sftpReadBlocked = requestUrl.searchParams.get('blocked') === '1';
+				if (!sftpReadBlocked) for (const release of [...sftpReadWaiters]) release();
+			}
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ blocked: sftpReadBlocked, pending: sftpReadWaiters.size }));
+			return;
+		}
+		if (req.method === 'POST' && requestUrl.pathname === '/reset') {
+			sftpReadBlocked = false;
+			for (const release of [...sftpReadWaiters]) release();
+			sftpRealpathBlocked = false;
+			sftpRealpathDeny = false;
+			for (const resolve of sftpRealpathWaiters) resolve();
+			sftpRealpathWaiters.clear();
+			await stopSshServer();
+			sftpWriteDelayMs = 0;
+			sftpWriteRequests = 0;
+			sftpWriteBytes = 0;
+			sftpPeakPendingWrites = 0;
+			sftpStatDelayMs = 0;
+			sftpStatDelayPrefix = '';
+			sftpDelayedStatCount = 0;
+			sftpLstatDenyPrefix = '';
+			sftpReadDirDelayMs = 0;
+			sftpDelayedDirectoryOpens = 0;
+			sftpReadDelayMs = 0;
+			sftpDelayedReadCount = 0;
+			sftpOpenDelayMs = 0;
+			sftpDelayedOpenCount = 0;
+			sftpReadHandlesOpened = 0;
+			sftpReadHandlesClosed = 0;
+			archiveExecDelayMs = 0;
+			archiveCommandsStarted = 0;
+			archiveCommandsExited = 0;
+			activeSftpChannels.clear();
+			openedSftpChannels = 0;
+			await fsp.rm(archiveExecHoldPath, { force: true });
+			await fsp.rm(archivePreflightHoldPath, { force: true });
+			await resetRoot();
+			await startSshServer();
+			res.writeHead(204);
+			res.end();
+			return;
+		}
+		if (req.method === 'POST' && requestUrl.pathname === '/ssh/offline') {
+			await stopSshServer();
+			res.writeHead(204);
+			res.end();
+			return;
+		}
+		if (req.method === 'POST' && requestUrl.pathname === '/ssh/online') {
+			await startSshServer();
+			res.writeHead(204);
+			res.end();
+			return;
+		}
+		if ((req.method === 'POST' || req.method === 'GET') && requestUrl.pathname === '/sftp/realpath-gate') {
+			if (req.method === 'POST') {
+				sftpRealpathBlocked = requestUrl.searchParams.get('blocked') === '1';
+				sftpRealpathDeny = requestUrl.searchParams.get('deny') === '1';
+				if (!sftpRealpathBlocked) {
+					for (const resolve of sftpRealpathWaiters) resolve();
+					sftpRealpathWaiters.clear();
+				}
+			}
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ blocked: sftpRealpathBlocked, pending: sftpRealpathWaiters.size }));
+			return;
+		}
+		if ((req.method === 'POST' || req.method === 'GET') && requestUrl.pathname === '/sftp/write-delay') {
+			if (req.method === 'POST') {
+				const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
+				sftpWriteDelayMs = Number.isFinite(requestedDelay)
+					? Math.max(0, Math.min(35_000, Math.round(requestedDelay)))
+					: 0;
+			}
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(
+				JSON.stringify({
+					sftpWriteDelayMs,
+					sftpPendingWrites,
+					sftpWriteRequests,
+					sftpWriteBytes,
+					sftpPeakPendingWrites,
+				}),
+			);
+			return;
+		}
+		if ((req.method === 'POST' || req.method === 'GET') && requestUrl.pathname === '/sftp/stat-delay') {
+			if (req.method === 'POST') {
+				const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
+				sftpStatDelayMs = Number.isFinite(requestedDelay)
+					? Math.max(0, Math.min(10_000, Math.round(requestedDelay)))
+					: 0;
+				sftpStatDelayPrefix = requestUrl.searchParams.get('prefix') || '';
+				sftpDelayedStatCount = 0;
+			}
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ sftpStatDelayMs, sftpStatDelayPrefix, sftpDelayedStatCount }));
+			return;
+		}
+		if (req.method === 'POST' && requestUrl.pathname === '/sftp/lstat-deny-prefix') {
+			sftpLstatDenyPrefix = requestUrl.searchParams.get('path') || '';
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ sftpLstatDenyPrefix }));
+			return;
+		}
+		if (requestUrl.pathname === '/sftp/prepare-profile' && (req.method === 'POST' || req.method === 'GET')) {
+			if (req.method === 'POST') {
+				const delay = Number(requestUrl.searchParams.get('ms') || '0');
+				if (!Number.isFinite(delay) || delay < 0 || delay > 1000) {
+					res.writeHead(400);
+					res.end('Invalid prepare delay');
+					return;
+				}
+				prepareOperationDelayMs = Math.round(delay);
+				prepareStatRequests = 0;
+				prepareMkdirRequests = 0;
+			}
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ prepareOperationDelayMs, prepareStatRequests, prepareMkdirRequests }));
+			return;
+		}
+		if ((req.method === 'POST' || req.method === 'GET') && requestUrl.pathname === '/sftp/readdir-delay') {
+			if (req.method === 'POST') {
+				const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
+				sftpReadDirDelayMs = Number.isFinite(requestedDelay)
+					? Math.max(0, Math.min(10_000, Math.round(requestedDelay)))
+					: 0;
+				sftpDelayedDirectoryOpens = 0;
+			}
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ sftpReadDirDelayMs, sftpDelayedDirectoryOpens }));
+			return;
+		}
+		if (requestUrl.pathname === '/sftp/slow-directory' && req.method === 'POST') {
+			const delay = Number(requestUrl.searchParams.get('ms') || '0');
+			if (!Number.isFinite(delay) || delay < 0 || delay > 10000) {
+				res.writeHead(400);
+				res.end('Invalid directory delay');
+				return;
+			}
+			sftpSlowDirectory = requestUrl.searchParams.get('path') || '';
+			sftpSlowDirectoryDelayMs = Math.round(delay);
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ sftpSlowDirectory, sftpSlowDirectoryDelayMs }));
+			return;
+		}
+		if (requestUrl.pathname === '/sftp/read-network' && (req.method === 'POST' || req.method === 'GET')) {
+			if (req.method === 'POST') {
+				if (sftpReadPending > 0) {
+					res.writeHead(409);
+					res.end('Remote reads are still pending');
+					return;
+				}
+				const delay = Number(requestUrl.searchParams.get('ms') || '0');
+				const rate = Number(requestUrl.searchParams.get('bytesPerSecond') || '0');
+				if (!Number.isFinite(delay) || delay < 0 || delay > 10000 || !Number.isFinite(rate) || rate < 0) {
+					res.writeHead(400);
+					res.end('Invalid read network profile');
+					return;
+				}
+				sftpReadDelayMs = Math.round(delay);
+				sftpReadBytesPerSecond = Math.floor(rate);
+				sftpReadNextDeliveryAt = 0;
+				sftpReadRequests = 0;
+				sftpReadResponseBytes = 0;
+				sftpReadPeakPending = 0;
+			}
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(
+				JSON.stringify({
+					sftpReadDelayMs,
+					sftpReadBytesPerSecond,
+					sftpReadRequests,
+					sftpReadResponseBytes,
+					sftpReadPending,
+					sftpReadPeakPending,
+				}),
+			);
+			return;
+		}
+		if (requestUrl.pathname === '/sftp/read-delay' && (req.method === 'POST' || req.method === 'GET')) {
+			if (req.method === 'POST') {
+				const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
+				sftpReadDelayMs = Number.isFinite(requestedDelay)
+					? Math.max(0, Math.min(10_000, Math.round(requestedDelay)))
+					: 0;
+				sftpDelayedReadCount = 0;
+			}
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ sftpReadDelayMs, sftpDelayedReadCount }));
+			return;
+		}
+		if (requestUrl.pathname === '/sftp/open-delay' && (req.method === 'POST' || req.method === 'GET')) {
+			if (req.method === 'POST') {
+				const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
+				sftpOpenDelayMs = Number.isFinite(requestedDelay)
+					? Math.max(0, Math.min(10_000, Math.round(requestedDelay)))
+					: 0;
+				sftpDelayedOpenCount = 0;
+			}
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ sftpOpenDelayMs, sftpDelayedOpenCount }));
+			return;
+		}
+		if (req.method === 'GET' && requestUrl.pathname === '/sftp/read-handles') {
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ opened: sftpReadHandlesOpened, closed: sftpReadHandlesClosed }));
+			return;
+		}
+		if (req.method === 'POST' && requestUrl.pathname === '/sftp/grow-binary-fixture') {
+			const name = requestUrl.searchParams.get('name') || '';
+			if (!/^growing-[0-9a-f-]{36}\.txt$/.test(name)) {
+				res.writeHead(400);
+				res.end('Invalid binary growth fixture name');
+				return;
+			}
+			await fsp.appendFile(resolveRemotePath(`/${name}`), 'g'.repeat(8192));
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ appendedBytes: 8192 }));
+			return;
+		}
+		if (req.method === 'POST' && requestUrl.pathname === '/archive/exec-delay') {
+			const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
+			archiveExecDelayMs = Number.isFinite(requestedDelay)
+				? Math.max(0, Math.min(5000, Math.round(requestedDelay)))
+				: 0;
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ archiveExecDelayMs }));
+			return;
+		}
+		if (req.method === 'GET' && requestUrl.pathname === '/archive/processes') {
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ started: archiveCommandsStarted, exited: archiveCommandsExited }));
+			return;
+		}
+		if (req.method === 'POST' && requestUrl.pathname === '/archive/preflight-hold') {
+			const enabled = ['1', 'true', 'yes'].includes(
+				String(requestUrl.searchParams.get('enabled') || '').toLowerCase(),
+			);
+			await fsp.mkdir(path.dirname(archivePreflightHoldPath), { recursive: true });
+			if (enabled) await fsp.writeFile(archivePreflightHoldPath, 'hold\n', 'utf8');
+			else await fsp.rm(archivePreflightHoldPath, { force: true });
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ enabled }));
+			return;
+		}
+		if (req.method === 'POST' && requestUrl.pathname === '/archive/exec-hold') {
+			const enabled = ['1', 'true', 'yes'].includes(
+				String(requestUrl.searchParams.get('enabled') || '').toLowerCase(),
+			);
+			await fsp.mkdir(path.dirname(archiveExecHoldPath), { recursive: true });
+			if (enabled) await fsp.writeFile(archiveExecHoldPath, 'hold\n', 'utf8');
+			else await fsp.rm(archiveExecHoldPath, { force: true });
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ enabled }));
+			return;
+		}
+		if (req.method === 'POST' && requestUrl.pathname === '/fixture') {
+			const name = path.basename(requestUrl.searchParams.get('name') || 'external-refresh.txt');
+			const variant = String(requestUrl.searchParams.get('variant') || '');
+			const requestedSize = Number(requestUrl.searchParams.get('size') || '0');
+			const size = Number.isFinite(requestedSize)
+				? Math.max(0, Math.min(32 * 1024 * 1024, Math.round(requestedSize)))
+				: 0;
+			if (variant === 'refresh' && name === 'README-e2e.md') {
+				await fsp.writeFile(
+					path.join(rootDir, name),
+					'# Nexus Markdown Refreshed\n\n**force-refresh-ok**\n',
+					'utf8',
+				);
+			} else if (variant === 'refresh' && name === 'preview.xlsx') {
+				await writeXlsxFixture(path.join(rootDir, name), 'refresh');
+			} else if (variant === 'refresh' && name === 'preview.docx') {
+				await writeDocxFixture(path.join(rootDir, name), 'refresh');
+			} else if (variant === 'refresh' && name === 'preview.pdf') {
+				await writePdfFixture(path.join(rootDir, name), 'refresh');
+			} else if (variant === 'refresh' && name === '预览-测试.png') {
+				await fsp.writeFile(
+					path.join(rootDir, name),
+					Buffer.from(
+						'iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAAD0lEQVR4nGP4z8DA8J8BAAf/Af8Bf4mnAAAAAElFTkSuQmCC',
+						'base64',
+					),
+				);
+			} else if (variant === 'zoom-lines') {
+				const requestedLines = Number(requestUrl.searchParams.get('lines') || '1200');
+				const lineCount = Number.isFinite(requestedLines)
+					? Math.max(1, Math.min(5000, Math.round(requestedLines)))
+					: 1200;
+				await fsp.writeFile(
+					path.join(rootDir, name),
+					`${Array.from({ length: lineCount }, (_, index) => `zoom-line-${index + 1}`).join('\n')}\n`,
+					'utf8',
+				);
+			} else if (variant === 'large-text') {
+				const targetSize = size || 3 * 1024 * 1024;
+				const line = 'large-file-performance-line-0123456789-abcdefghijklmnopqrstuvwxyz\n';
+				const content = line.repeat(Math.ceil(targetSize / line.length)).slice(0, targetSize);
+				await fsp.writeFile(path.join(rootDir, name), content, 'utf8');
+			} else if (size > 0) {
+				await fsp.writeFile(path.join(rootDir, name), Buffer.alloc(size, 0x5a));
+			} else {
+				await fsp.writeFile(
+					path.join(rootDir, name),
+					'created outside Nexus for refresh verification\n',
+					'utf8',
+				);
+			}
+			res.writeHead(204);
+			res.end();
+			return;
+		}
+		if (req.method === 'POST' && requestUrl.pathname === '/fixture-directory') {
+			const name = path.basename(requestUrl.searchParams.get('name') || 'copy-cancel-dir');
+			const requestedSize = Number(requestUrl.searchParams.get('size') || `${32 * 1024}`);
+			const size = Number.isFinite(requestedSize)
+				? Math.max(1, Math.min(1024 * 1024, Math.round(requestedSize)))
+				: 32 * 1024;
+			const targetDir = path.join(rootDir, name);
+			await fsp.rm(targetDir, { recursive: true, force: true });
+			await fsp.mkdir(targetDir, { recursive: true });
+			await fsp.writeFile(path.join(targetDir, '01-first.bin'), Buffer.alloc(size, 0x61));
+			await fsp.writeFile(path.join(targetDir, '02-second.bin'), Buffer.alloc(size, 0x62));
+			res.writeHead(204);
+			res.end();
+			return;
+		}
+		if (req.method === 'POST' && requestUrl.pathname === '/remove-path') {
+			const requestedPath = String(requestUrl.searchParams.get('path') || '');
+			const targetPath = resolveRemotePath(requestedPath);
+			if (targetPath === path.resolve(rootDir)) {
+				res.writeHead(400, { 'content-type': 'application/json' });
+				res.end(JSON.stringify({ error: 'Refusing to remove the E2E root directory' }));
+				return;
+			}
+			await fsp.rm(targetPath, { recursive: true, force: true });
+			res.writeHead(204);
+			res.end();
+			return;
+		}
+		if (req.method === 'POST' && requestUrl.pathname === '/e2e-notification-webhook-strict') {
+			const chunks = [];
+			for await (const chunk of req) chunks.push(Buffer.from(chunk));
+			const body = Buffer.concat(chunks).toString('utf8');
+			let parsed = null;
+			try {
+				parsed = JSON.parse(body);
+			} catch {
+				// Invalid JSON is handled by the strict validation below.
+			}
+			const locale = requestUrl.searchParams.get('locale') || 'en-US';
+			const expected =
+				locale === 'zh-CN'
+					? {
+							eventDisplay: '设置已更新',
+							message: '这是来自 Nexus Terminal 的测试通知（Webhook），事件为“设置已更新”。',
+						}
+					: {
+							eventDisplay: undefined,
+							message:
+								"This is a test notification from Nexus Terminal (Webhook - i18n) for event 'Settings Updated'.",
+						};
+			const valid =
+				req.headers['x-e2e-webhook'] === 'delivery' &&
+				parsed?.source === 'nexus-e2e' &&
+				parsed?.event === 'SETTINGS_UPDATED' &&
+				(expected.eventDisplay === undefined || parsed?.eventDisplay === expected.eventDisplay) &&
+				parsed?.details?.message === expected.message &&
+				parsed?.details?.test === true;
+			res.writeHead(valid ? 204 : 422, { 'content-type': 'application/json' });
+			res.end(valid ? undefined : JSON.stringify({ error: 'invalid E2E webhook request' }));
+			return;
+		}
+		if (req.method === 'POST' && requestUrl.pathname === '/e2e-notification-webhook-secrets') {
+			for await (const _chunk of req) {
+				// Drain without persisting credentials in fixture diagnostics.
+			}
+			const phase = requestUrl.searchParams.get('phase');
+			const valid =
+				phase === 'removed'
+					? req.headers.authorization === undefined && req.headers['x-e2e-private'] === undefined
+					: req.headers.authorization === `Bearer e2e-${phase}` &&
+						req.headers['x-e2e-private'] === `private-${phase}`;
+			res.writeHead(valid ? 204 : 422);
+			res.end();
+			return;
+		}
+		if (req.method === 'POST' && requestUrl.pathname === '/e2e-notification-webhook') {
+			for await (const _chunk of req) {
+				// Drain the request body; this endpoint is only a deterministic external integration target.
+			}
+			res.writeHead(204);
+			res.end();
+			return;
+		}
+		res.writeHead(404);
+		res.end();
+	} catch (error) {
+		res.writeHead(500, { 'content-type': 'application/json' });
+		res.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
+	}
 });
 
 // The control HTTP server also doubles as a minimal HTTP CONNECT proxy for SSH transport E2E.
 controlServer.on('connect', (req, clientSocket, head) => {
-  const [host, rawPort] = String(req.url || '').split(':');
-  const port = Number(rawPort);
-  if (!host || !Number.isInteger(port) || port < 1 || port > 65535) {
-    clientSocket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
-    return;
-  }
+	const [host, rawPort] = String(req.url || '').split(':');
+	const port = Number(rawPort);
+	if (!host || !Number.isInteger(port) || port < 1 || port > 65535) {
+		clientSocket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+		return;
+	}
 
-  const upstream = net.connect(port, host, () => {
-    clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
-    if (head.length > 0) upstream.write(head);
-    clientSocket.pipe(upstream).pipe(clientSocket);
-  });
-  upstream.once('error', () => clientSocket.destroy());
-  clientSocket.once('error', () => upstream.destroy());
+	const upstream = net.connect(port, host, () => {
+		clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+		if (head.length > 0) upstream.write(head);
+		clientSocket.pipe(upstream).pipe(clientSocket);
+	});
+	upstream.once('error', () => clientSocket.destroy());
+	clientSocket.once('error', () => upstream.destroy());
 });
 
 await startSshServer();
 await new Promise((resolve) => controlServer.listen(CONTROL_PORT, SSH_HOST, resolve));
 await new Promise((resolve) => smtpServer.listen(SMTP_PORT, SSH_HOST, resolve));
 console.log(
-  `[E2E SSH] listening on ${SSH_HOST}:${SSH_PORT}, control ${CONTROL_PORT}, smtp ${SMTP_PORT}, root ${rootDir}`,
+	`[E2E SSH] listening on ${SSH_HOST}:${SSH_PORT}, control ${CONTROL_PORT}, smtp ${SMTP_PORT}, root ${rootDir}`,
 );
 
 const shutdown = () => {
-  controlServer.close();
-  smtpServer.close();
-  sshServer.close();
+	controlServer.close();
+	smtpServer.close();
+	sshServer.close();
 };
+
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);

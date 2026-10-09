@@ -3,1050 +3,1086 @@ import path from 'node:path';
 import { expect, test, type Locator, type Page } from '../../support/fixtures';
 import { dragLocalFiles, openFileManager, uploadProgressTask } from '../../support/file-upload';
 import {
-  activeFileManagerList,
-  closeConnectedFileManager,
-  fileManagerRow,
-  openDesktopProgressDisplay,
-  reopenConnectedFileManager,
-  E2E_SSH,
+	activeFileManagerList,
+	closeConnectedFileManager,
+	fileManagerRow,
+	openDesktopProgressDisplay,
+	reopenConnectedFileManager,
+	E2E_SSH,
 } from '../../support/ssh';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { slowStep, step } from '../../support/steps';
 
 const M11_03E_EVIDENCE_DIR = process.env.M11_03E_EVIDENCE_DIR || '/tmp/nexus-m11-03e';
 const CLIPBOARD_SCREENSHOT_PNG =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+	'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
 async function dragLocalFolder(
-  page: Page,
-  folderName: string,
-  files: Array<{ name: string; text: string }>,
+	page: Page,
+	folderName: string,
+	files: Array<{ name: string; text: string }>,
 ): Promise<void> {
-  const dataTransfer = await page.evaluateHandle(
-    ({ rootName, entries }) => {
-      const transfer = new DataTransfer();
-      const children = entries.map(({ name, text }) => {
-        const file = new File([text], name, { type: 'text/plain' });
-        return {
-          isFile: true,
-          isDirectory: false,
-          name,
-          fullPath: `/${rootName}/${name}`,
-          file: (resolve: (value: File) => void) => resolve(file),
-        };
-      });
-      const directoryEntry = {
-        isFile: false,
-        isDirectory: true,
-        name: rootName,
-        fullPath: `/${rootName}`,
-        createReader: () => {
-          let emitted = false;
-          return {
-            readEntries: (resolve: (value: typeof children) => void) => {
-              if (emitted) resolve([]);
-              else {
-                emitted = true;
-                resolve(children);
-              }
-            },
-          };
-        },
-      };
+	const dataTransfer = await page.evaluateHandle(
+		({ rootName, entries }) => {
+			const transfer = new DataTransfer();
+			const children = entries.map(({ name, text }) => {
+				const file = new File([text], name, { type: 'text/plain' });
+				return {
+					isFile: true,
+					isDirectory: false,
+					name,
+					fullPath: `/${rootName}/${name}`,
 
-      // Chromium can expose a directory both through webkitGetAsEntry() and as a
-      // zero-byte File fallback. Patch the prototype for this synthetic drop because
-      // DataTransferItem is a browser host object and an own-property override on one
-      // item does not survive DragEvent dispatch reliably.
-      const prototype = DataTransferItem.prototype;
-      const originalDescriptor = Object.getOwnPropertyDescriptor(prototype, 'webkitGetAsEntry');
-      const original = prototype.webkitGetAsEntry;
-      Object.defineProperty(prototype, 'webkitGetAsEntry', {
-        configurable: true,
-        writable: true,
-        value(this: DataTransferItem) {
-          const file = this.getAsFile();
-          if (file?.name === rootName) return directoryEntry;
-          return typeof original === 'function' ? original.call(this) : null;
-        },
-      });
-      (window as unknown as { __restoreFolderDropEntry?: () => void }).__restoreFolderDropEntry = () => {
-        if (originalDescriptor) Object.defineProperty(prototype, 'webkitGetAsEntry', originalDescriptor);
-        else delete (prototype as unknown as { webkitGetAsEntry?: unknown }).webkitGetAsEntry;
-        delete (window as unknown as { __restoreFolderDropEntry?: () => void }).__restoreFolderDropEntry;
-      };
+					file: (resolve: (value: File) => void) => resolve(file),
+				};
+			});
+			const directoryEntry = {
+				isFile: false,
+				isDirectory: true,
+				name: rootName,
+				fullPath: `/${rootName}`,
 
-      // Keep the fallback File in DataTransfer.files so this test catches duplicate
-      // root-directory handling while webkitGetAsEntry() remains authoritative.
-      transfer.items.add(new File([], rootName, { type: 'application/x-directory' }));
-      return transfer;
-    },
-    { rootName: folderName, entries: files },
-  );
+				createReader: () => {
+					let emitted = false;
+					return {
+						readEntries: (resolve: (value: typeof children) => void) => {
+							if (emitted) resolve([]);
+							else {
+								emitted = true;
+								resolve(children);
+							}
+						},
+					};
+				},
+			};
 
-  try {
-    const list = activeFileManagerList(page);
-    await list.dispatchEvent('dragenter', { dataTransfer });
-    const overlay = page.getByText('Drop files here to upload', { exact: true });
-    await expect(overlay).toBeVisible();
-    await overlay.dispatchEvent('drop', { dataTransfer });
-    await expect(overlay).toBeHidden();
-  } finally {
-    await page
-      .evaluate(() => {
-        (window as unknown as { __restoreFolderDropEntry?: () => void }).__restoreFolderDropEntry?.();
-      })
-      .catch(() => undefined);
-    await dataTransfer.dispose();
-  }
+			// Chromium can expose a directory both through webkitGetAsEntry() and as a
+			// zero-byte File fallback. Patch the prototype for this synthetic drop because
+			// DataTransferItem is a browser host object and an own-property override on one
+			// item does not survive DragEvent dispatch reliably.
+			const prototype = DataTransferItem.prototype;
+			const originalDescriptor = Object.getOwnPropertyDescriptor(prototype, 'webkitGetAsEntry');
+			const original = prototype.webkitGetAsEntry;
+			Object.defineProperty(prototype, 'webkitGetAsEntry', {
+				configurable: true,
+				writable: true,
+
+				value(this: DataTransferItem) {
+					const file = this.getAsFile();
+					if (file?.name === rootName) return directoryEntry;
+					return typeof original === 'function' ? original.call(this) : null;
+				},
+			});
+			(window as unknown as { __restoreFolderDropEntry?: () => void }).__restoreFolderDropEntry = () => {
+				if (originalDescriptor) Object.defineProperty(prototype, 'webkitGetAsEntry', originalDescriptor);
+				else delete (prototype as unknown as { webkitGetAsEntry?: unknown }).webkitGetAsEntry;
+				delete (window as unknown as { __restoreFolderDropEntry?: () => void }).__restoreFolderDropEntry;
+			};
+
+			// Keep the fallback File in DataTransfer.files so this test catches duplicate
+			// root-directory handling while webkitGetAsEntry() remains authoritative.
+			transfer.items.add(new File([], rootName, { type: 'application/x-directory' }));
+			return transfer;
+		},
+		{ rootName: folderName, entries: files },
+	);
+
+	try {
+		const list = activeFileManagerList(page);
+		await list.dispatchEvent('dragenter', { dataTransfer });
+		const overlay = page.getByText('Drop files here to upload', { exact: true });
+		await expect(overlay).toBeVisible();
+		await overlay.dispatchEvent('drop', { dataTransfer });
+		await expect(overlay).toBeHidden();
+	} finally {
+		await page
+			.evaluate(() => {
+				(window as unknown as { __restoreFolderDropEntry?: () => void }).__restoreFolderDropEntry?.();
+			})
+			.catch(() => undefined);
+		await dataTransfer.dispose();
+	}
 }
 
 async function waitForVisibleFiles(page: Page, names: string[], timeout = 45_000): Promise<void> {
-  await expect
-    .poll(
-      async () => {
-        const visible: string[] = [];
-        for (const name of names) {
-          if (
-            await fileManagerRow(page, name)
-              .isVisible()
-              .catch(() => false)
-          )
-            visible.push(name);
-        }
-        return visible;
-      },
-      { timeout },
-    )
-    .toEqual(names);
+	await expect
+		.poll(
+			async () => {
+				const visible: string[] = [];
+				for (const name of names) {
+					if (
+						await fileManagerRow(page, name)
+							.isVisible()
+							.catch(() => false)
+					)
+						visible.push(name);
+				}
+				return visible;
+			},
+			{ timeout },
+		)
+		.toEqual(names);
 }
 
 async function downloadRemoteFile(page: Page, name: string): Promise<Buffer> {
-  const target = fileManagerRow(page, name);
-  await expect(target).toBeVisible();
-  await target.click({ button: 'right' });
-  const contextMenu = page.getByRole('menu');
-  await expect(contextMenu).toBeVisible();
-  const downloadPromise = page.waitForEvent('download');
-  await contextMenu.getByText('Download', { exact: true }).first().click();
-  const download = await downloadPromise;
-  const downloadPath = await download.path();
-  expect(downloadPath).toBeTruthy();
-  return readFile(downloadPath!);
+	const target = fileManagerRow(page, name);
+	await expect(target).toBeVisible();
+	await target.click({ button: 'right' });
+	const contextMenu = page.getByRole('menu');
+	await expect(contextMenu).toBeVisible();
+	const downloadPromise = page.waitForEvent('download');
+	await contextMenu.getByText('Download', { exact: true }).first().click();
+	const download = await downloadPromise;
+	const downloadPath = await download.path();
+	expect(downloadPath).toBeTruthy();
+	return readFile(downloadPath!);
 }
 
 async function readRemoteText(page: Page, name: string): Promise<string> {
-  return (await downloadRemoteFile(page, name)).toString('utf8');
+	return (await downloadRemoteFile(page, name)).toString('utf8');
 }
 
 function visibleProgressCenter(page: Page) {
-  return page.locator('.transfer-progress-window:visible').first();
+	return page.locator('.transfer-progress-window:visible').first();
 }
 
 async function fileManagerMetrics(page: Page): Promise<Record<string, number>> {
-  return activeFileManagerList(page).evaluate((element) => ({
-    clientWidth: element.clientWidth,
-    scrollWidth: element.scrollWidth,
-    clientHeight: element.clientHeight,
-    scrollHeight: element.scrollHeight,
-  }));
+	return activeFileManagerList(page).evaluate((element) => ({
+		clientWidth: element.clientWidth,
+		scrollWidth: element.scrollWidth,
+		clientHeight: element.clientHeight,
+		scrollHeight: element.scrollHeight,
+	}));
 }
 
 async function openFileManagerSearch(page: Page): Promise<Locator> {
-  const fileManager = page.getByRole('dialog', { name: 'File Manager', exact: true });
-  const input = fileManager.getByPlaceholder('Search files...', { exact: true });
-  if (!(await input.isVisible())) {
-    await fileManager.getByRole('button', { name: 'Search files...', exact: true }).click();
-  }
-  await expect(input).toBeVisible();
-  return input;
+	const fileManager = page.getByRole('dialog', { name: 'File Manager', exact: true });
+	const input = fileManager.getByPlaceholder('Search files...', { exact: true });
+	if (!(await input.isVisible())) {
+		await fileManager.getByRole('button', { name: 'Search files...', exact: true }).click();
+	}
+	await expect(input).toBeVisible();
+	return input;
 }
 
 async function writeClipboardPng(page: Page, base64: string): Promise<string> {
-  return page.evaluate(async (encoded) => {
-    const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
-    const blob = new Blob([bytes], { type: 'image/png' });
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+	return page.evaluate(async (encoded) => {
+		const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
+		const blob = new Blob([bytes], { type: 'image/png' });
+		await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
 
-    const clipboardItems = await navigator.clipboard.read();
-    const pngItem = clipboardItems.find((item) => item.types.includes('image/png'));
-    if (!pngItem) throw new Error('Clipboard did not retain image/png after write.');
-    const roundTripped = new Uint8Array(await (await pngItem.getType('image/png')).arrayBuffer());
-    let binary = '';
-    for (const byte of roundTripped) binary += String.fromCharCode(byte);
-    return btoa(binary);
-  }, base64);
+		const clipboardItems = await navigator.clipboard.read();
+		const pngItem = clipboardItems.find((item) => item.types.includes('image/png'));
+		if (!pngItem) throw new Error('Clipboard did not retain image/png after write.');
+		const roundTripped = new Uint8Array(await (await pngItem.getType('image/png')).arrayBuffer());
+		let binary = '';
+		for (const byte of roundTripped) binary += String.fromCharCode(byte);
+		return btoa(binary);
+	}, base64);
 }
 
 test('desktop Ctrl+V uploads a screenshot from the system clipboard into the current File Manager directory', async ({
-  page,
-  context,
+	page,
+	context,
 }) => {
-  await openFileManager(page, context);
+	await openFileManager(page, context);
 
-  await step('an image clipboard becomes a timestamped PNG upload', async () => {
-    await fileManagerRow(page, 'copy-source.txt').click();
-    await expect(activeFileManagerList(page)).toBeFocused();
-    const clipboardPng = await writeClipboardPng(page, CLIPBOARD_SCREENSHOT_PNG);
-    await page.keyboard.press('Control+V');
+	await step('an image clipboard becomes a timestamped PNG upload', async () => {
+		await fileManagerRow(page, 'copy-source.txt').click();
+		await expect(activeFileManagerList(page)).toBeFocused();
+		const clipboardPng = await writeClipboardPng(page, CLIPBOARD_SCREENSHOT_PNG);
+		await page.keyboard.press('Control+V');
 
-    const screenshotRow = activeFileManagerList(page)
-      .locator('tr[data-filename^="Screenshot_"][data-filename$=".png"]')
-      .first();
-    await expect(screenshotRow).toBeVisible({ timeout: 30_000 });
-    const screenshotName = await screenshotRow.getAttribute('data-filename');
-    expect(screenshotName).toMatch(/^Screenshot_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}\.png$/);
-    expect(await downloadRemoteFile(page, screenshotName!)).toEqual(Buffer.from(clipboardPng, 'base64'));
-  });
+		const screenshotRow = activeFileManagerList(page)
+			.locator('tr[data-filename^="Screenshot_"][data-filename$=".png"]')
+			.first();
+		await expect(screenshotRow).toBeVisible({ timeout: 30_000 });
+		const screenshotName = await screenshotRow.getAttribute('data-filename');
+		expect(screenshotName).toMatch(/^Screenshot_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}\.png$/);
+		expect(await downloadRemoteFile(page, screenshotName!)).toEqual(Buffer.from(clipboardPng, 'base64'));
+	});
 
-  await step('a non-image clipboard still falls back to the existing remote-file clipboard paste', async () => {
-    await fileManagerRow(page, 'copy-source.txt').click({ button: 'right' });
-    const contextMenu = page.getByRole('menu');
-    await expect(contextMenu).toBeVisible();
-    await contextMenu.getByText('Copy', { exact: true }).first().click();
+	await step('a non-image clipboard still falls back to the existing remote-file clipboard paste', async () => {
+		await fileManagerRow(page, 'copy-source.txt').click({ button: 'right' });
+		const contextMenu = page.getByRole('menu');
+		await expect(contextMenu).toBeVisible();
+		await contextMenu.getByText('Copy', { exact: true }).first().click();
 
-    await fileManagerRow(page, 'folder-seed').dblclick();
-    await expect(fileManagerRow(page, 'nested.txt')).toBeVisible();
-    await activeFileManagerList(page).focus();
-    await page.evaluate(() => navigator.clipboard.writeText('plain clipboard text'));
-    await page.keyboard.press('Control+V');
+		await fileManagerRow(page, 'folder-seed').dblclick();
+		await expect(fileManagerRow(page, 'nested.txt')).toBeVisible();
+		await activeFileManagerList(page).focus();
+		await page.evaluate(() => navigator.clipboard.writeText('plain clipboard text'));
+		await page.keyboard.press('Control+V');
 
-    await expect(fileManagerRow(page, 'copy-source.txt')).toBeVisible({ timeout: 20_000 });
-  });
+		await expect(fileManagerRow(page, 'copy-source.txt')).toBeVisible({ timeout: 20_000 });
+	});
 
-  await step('editable File Manager controls keep native text paste behavior', async () => {
-    const search = await openFileManagerSearch(page);
-    await search.fill('');
-    await search.focus();
-    await page.evaluate(() => navigator.clipboard.writeText('clipboard-search-text'));
-    await page.keyboard.press('Control+V');
-    await expect(search).toHaveValue('clipboard-search-text');
-  });
+	await step('editable File Manager controls keep native text paste behavior', async () => {
+		const search = await openFileManagerSearch(page);
+		await search.fill('');
+		await search.focus();
+		await page.evaluate(() => navigator.clipboard.writeText('clipboard-search-text'));
+		await page.keyboard.press('Control+V');
+		await expect(search).toHaveValue('clipboard-search-text');
+	});
 });
 
 test('file browsing and recursive search remain responsive while upload writes are delayed', async ({
-  page,
-  context,
+	page,
+	context,
 }) => {
-  await openFileManager(page, context);
+	await openFileManager(page, context);
 
-  const fileName = 'concurrent-file-operations.bin';
-  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=1500`, { method: 'POST' });
-  try {
-    await slowStep('File Manager stays usable while an upload is waiting on remote writes', async () => {
-      await dragLocalFiles(page, [{ name: fileName, size: 256 * 1024, fill: 0x6e }]);
-      const progressPopup = visibleProgressCenter(page);
-      await expect(progressPopup).toBeVisible({ timeout: 10_000 });
-      await expect(uploadProgressTask(page, fileName)).toBeVisible();
+	const fileName = 'concurrent-file-operations.bin';
+	await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=1500`, { method: 'POST' });
+	try {
+		await slowStep('File Manager stays usable while an upload is waiting on remote writes', async () => {
+			await dragLocalFiles(page, [{ name: fileName, size: 256 * 1024, fill: 0x6e }]);
+			const progressPopup = visibleProgressCenter(page);
+			await expect(progressPopup).toBeVisible({ timeout: 10_000 });
+			await expect(uploadProgressTask(page, fileName)).toBeVisible();
 
-      await fileManagerRow(page, 'folder-seed').dblclick();
-      await expect(fileManagerRow(page, 'nested.txt')).toBeVisible({ timeout: 5_000 });
-    });
-  } finally {
-    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
-  }
+			await fileManagerRow(page, 'folder-seed').dblclick();
+			await expect(fileManagerRow(page, 'nested.txt')).toBeVisible({ timeout: 5_000 });
+		});
+	} finally {
+		await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+	}
 
-  await page.getByRole('dialog', { name: 'File Manager', exact: true }).locator('[data-file-parent]').click();
-  await expect(fileManagerRow(page, fileName)).toBeVisible({ timeout: 30_000 });
+	await page.getByRole('dialog', { name: 'File Manager', exact: true }).locator('[data-file-parent]').click();
+	await expect(fileManagerRow(page, fileName)).toBeVisible({ timeout: 30_000 });
 
-  await step('recursive search returns the real nested remote file after the concurrent upload', async () => {
-    const search = await openFileManagerSearch(page);
-    await search.fill('nested');
-    await expect(activeFileManagerList(page).locator('tr[data-file-path="/folder-seed/nested.txt"]')).toBeVisible({
-      timeout: 10_000,
-    });
-  });
+	await step('recursive search returns the real nested remote file after the concurrent upload', async () => {
+		const search = await openFileManagerSearch(page);
+		await search.fill('nested');
+		await expect(activeFileManagerList(page).locator('tr[data-file-path="/folder-seed/nested.txt"]')).toBeVisible({
+			timeout: 10_000,
+		});
+	});
 
-  await page.goto('/connections');
-  await expect(page.getByRole('button', { name: 'Add New Connection', exact: true })).toBeVisible({ timeout: 10_000 });
+	await page.goto('/connections');
+	await expect(page.getByRole('button', { name: 'Add New Connection', exact: true })).toBeVisible({
+		timeout: 10_000,
+	});
 });
 
 test('Windows-style multi-file drag uploads every file and applies one conflict choice to the remaining batch', async ({
-  page,
-  context,
+	page,
+	context,
 }) => {
-  await openFileManager(page, context);
+	await openFileManager(page, context);
 
-  const firstSeed = 'seed-overwritten-by-multi-drag\n';
-  const firstCopy = 'copy-overwritten-by-multi-drag\n';
-  const freshNames = Array.from({ length: 8 }, (_, index) => `windows-drag-${index + 1}.txt`);
-  const tenFiles: DragFileDescriptor[] = [
-    { name: 'seed.txt', text: firstSeed },
-    { name: 'copy-source.txt', text: firstCopy },
-    ...freshNames.map((name, index) => ({ name, text: `windows-drag-body-${index + 1}\n` })),
-  ];
+	const firstSeed = 'seed-overwritten-by-multi-drag\n';
+	const firstCopy = 'copy-overwritten-by-multi-drag\n';
+	const freshNames = Array.from({ length: 8 }, (_, index) => `windows-drag-${index + 1}.txt`);
+	const tenFiles: DragFileDescriptor[] = [
+		{ name: 'seed.txt', text: firstSeed },
+		{ name: 'copy-source.txt', text: firstCopy },
+		...freshNames.map((name, index) => ({ name, text: `windows-drag-body-${index + 1}\n` })),
+	];
 
-  await slowStep('dragging ten Windows-style files snapshots and uploads all DataTransfer items', async () => {
-    await dragLocalFiles(page, tenFiles);
+	await slowStep('dragging ten Windows-style files snapshots and uploads all DataTransfer items', async () => {
+		await dragLocalFiles(page, tenFiles);
 
-    const conflictModal = page.getByRole('dialog', { name: 'File already exists', exact: true });
-    await expect(conflictModal).toBeVisible({ timeout: 20_000 });
-    await conflictModal
-      .getByRole('checkbox', { name: 'Use this choice for all remaining conflicts in this upload', exact: true })
-      .check();
-    await conflictModal.getByRole('button', { name: 'Overwrite', exact: true }).click();
-    await expect(conflictModal).toBeHidden();
+		const conflictModal = page.getByRole('dialog', { name: 'File already exists', exact: true });
+		await expect(conflictModal).toBeVisible({ timeout: 20_000 });
+		await conflictModal
+			.getByRole('checkbox', { name: 'Use this choice for all remaining conflicts in this upload', exact: true })
+			.check();
+		await conflictModal.getByRole('button', { name: 'Overwrite', exact: true }).click();
+		await expect(conflictModal).toBeHidden();
 
-    await waitForVisibleFiles(page, freshNames);
-    await expect(fileManagerRow(page, freshNames.at(-1)!)).toBeVisible({ timeout: 30_000 });
-    await expect.poll(() => readRemoteText(page, 'seed.txt')).toBe(firstSeed);
-    await expect.poll(() => readRemoteText(page, 'copy-source.txt')).toBe(firstCopy);
-  });
+		await waitForVisibleFiles(page, freshNames);
+		await expect(fileManagerRow(page, freshNames.at(-1)!)).toBeVisible({ timeout: 30_000 });
+		await expect.poll(() => readRemoteText(page, 'seed.txt')).toBe(firstSeed);
+		await expect.poll(() => readRemoteText(page, 'copy-source.txt')).toBe(firstCopy);
+	});
 
-  await slowStep(
-    'skip plus apply-to-all aborts only later conflicting files while new files still upload',
-    async () => {
-      const skippedSeedBody = 'this-must-not-replace-seed\n';
-      const skippedCopyBody = 'this-must-not-replace-copy\n';
-      const nonConflictName = 'skip-policy-new-file.txt';
+	await slowStep(
+		'skip plus apply-to-all aborts only later conflicting files while new files still upload',
+		async () => {
+			const skippedSeedBody = 'this-must-not-replace-seed\n';
+			const skippedCopyBody = 'this-must-not-replace-copy\n';
+			const nonConflictName = 'skip-policy-new-file.txt';
 
-      await dragLocalFiles(page, [
-        { name: 'seed.txt', text: skippedSeedBody },
-        { name: 'copy-source.txt', text: skippedCopyBody },
-        { name: nonConflictName, text: 'new-file-still-uploads\n' },
-      ]);
+			await dragLocalFiles(page, [
+				{ name: 'seed.txt', text: skippedSeedBody },
+				{ name: 'copy-source.txt', text: skippedCopyBody },
+				{ name: nonConflictName, text: 'new-file-still-uploads\n' },
+			]);
 
-      const conflictModal = page.getByRole('dialog', { name: 'File already exists', exact: true });
-      await expect(conflictModal).toBeVisible({ timeout: 20_000 });
-      await conflictModal
-        .getByRole('checkbox', { name: 'Use this choice for all remaining conflicts in this upload', exact: true })
-        .check();
-      await conflictModal.getByRole('button', { name: 'Skip this file', exact: true }).click();
-      await expect(conflictModal).toBeHidden();
+			const conflictModal = page.getByRole('dialog', { name: 'File already exists', exact: true });
+			await expect(conflictModal).toBeVisible({ timeout: 20_000 });
+			await conflictModal
+				.getByRole('checkbox', {
+					name: 'Use this choice for all remaining conflicts in this upload',
+					exact: true,
+				})
+				.check();
+			await conflictModal.getByRole('button', { name: 'Skip this file', exact: true }).click();
+			await expect(conflictModal).toBeHidden();
 
-      await waitForVisibleFiles(page, [nonConflictName]);
-      await expect.poll(() => readRemoteText(page, 'seed.txt')).toBe(firstSeed);
-      await expect.poll(() => readRemoteText(page, 'copy-source.txt')).toBe(firstCopy);
-      await expect.poll(() => readRemoteText(page, nonConflictName)).toBe('new-file-still-uploads\n');
-    },
-  );
+			await waitForVisibleFiles(page, [nonConflictName]);
+			await expect.poll(() => readRemoteText(page, 'seed.txt')).toBe(firstSeed);
+			await expect.poll(() => readRemoteText(page, 'copy-source.txt')).toBe(firstCopy);
+			await expect.poll(() => readRemoteText(page, nonConflictName)).toBe('new-file-still-uploads\n');
+		},
+	);
 });
 
 test('folder upload into an existing directory overwrites only conflicting files and preserves the directory', async ({
-  page,
-  context,
+	page,
+	context,
 }) => {
-  await openFileManager(page, context);
-  const folderName = 'folder-overwrite-existing';
-  const replacement = 'replacement-from-folder-upload\n';
-  const fresh = 'new-file-from-folder-upload\n';
-  const fixture = await fetch(
-    `${E2E_SSH.controlUrl}/fixture-directory?name=${encodeURIComponent(folderName)}&size=4096`,
-    {
-      method: 'POST',
-    },
-  );
-  expect(fixture.ok).toBeTruthy();
-  await page
-    .getByRole('dialog', { name: 'File Manager', exact: true })
-    .getByRole('button', { name: 'Refresh', exact: true })
-    .click();
-  await expect(fileManagerRow(page, folderName)).toBeVisible();
+	await openFileManager(page, context);
+	const folderName = 'folder-overwrite-existing';
+	const replacement = 'replacement-from-folder-upload\n';
+	const fresh = 'new-file-from-folder-upload\n';
+	const fixture = await fetch(
+		`${E2E_SSH.controlUrl}/fixture-directory?name=${encodeURIComponent(folderName)}&size=4096`,
+		{
+			method: 'POST',
+		},
+	);
+	expect(fixture.ok).toBeTruthy();
+	await page
+		.getByRole('dialog', { name: 'File Manager', exact: true })
+		.getByRole('button', { name: 'Refresh', exact: true })
+		.click();
+	await expect(fileManagerRow(page, folderName)).toBeVisible();
 
-  await dragLocalFolder(page, folderName, [
-    { name: '01-first.bin', text: replacement },
-    { name: 'new-from-local.txt', text: fresh },
-  ]);
+	await dragLocalFolder(page, folderName, [
+		{ name: '01-first.bin', text: replacement },
+		{ name: 'new-from-local.txt', text: fresh },
+	]);
 
-  const conflictModal = page.getByRole('dialog', { name: 'File already exists', exact: true });
-  await expect(conflictModal).toBeVisible({ timeout: 20_000 });
-  await expect(conflictModal.getByTitle('01-first.bin', { exact: true })).toHaveText('01-first.bin');
-  await conflictModal
-    .getByRole('checkbox', { name: 'Use this choice for all remaining conflicts in this upload', exact: true })
-    .check();
-  await conflictModal.getByRole('button', { name: 'Overwrite', exact: true }).click();
-  await expect(conflictModal).toBeHidden();
+	const conflictModal = page.getByRole('dialog', { name: 'File already exists', exact: true });
+	await expect(conflictModal).toBeVisible({ timeout: 20_000 });
+	await expect(conflictModal.getByTitle('01-first.bin', { exact: true })).toHaveText('01-first.bin');
+	await conflictModal
+		.getByRole('checkbox', { name: 'Use this choice for all remaining conflicts in this upload', exact: true })
+		.check();
+	await conflictModal.getByRole('button', { name: 'Overwrite', exact: true }).click();
+	await expect(conflictModal).toBeHidden();
 
-  await expect(fileManagerRow(page, folderName)).toBeVisible({ timeout: 30_000 });
-  await expect(fileManagerRow(page, folderName).locator('.file-row-icon.fa-folder').first()).toBeVisible();
-  await fileManagerRow(page, folderName).dblclick();
-  await expect(fileManagerRow(page, 'new-from-local.txt')).toBeVisible({ timeout: 30_000 });
-  await expect.poll(() => readRemoteText(page, '01-first.bin'), { timeout: 30_000 }).toBe(replacement);
-  await expect.poll(() => readRemoteText(page, 'new-from-local.txt'), { timeout: 30_000 }).toBe(fresh);
+	await expect(fileManagerRow(page, folderName)).toBeVisible({ timeout: 30_000 });
+	await expect(fileManagerRow(page, folderName).locator('.file-row-icon.fa-folder').first()).toBeVisible();
+	await fileManagerRow(page, folderName).dblclick();
+	await expect(fileManagerRow(page, 'new-from-local.txt')).toBeVisible({ timeout: 30_000 });
+	await expect.poll(() => readRemoteText(page, '01-first.bin'), { timeout: 30_000 }).toBe(replacement);
+	await expect.poll(() => readRemoteText(page, 'new-from-local.txt'), { timeout: 30_000 }).toBe(fresh);
 });
 
 test('multi-file upload remains usable and byte-complete on moderate-latency links', async ({ page, context }) => {
-  await openFileManager(page, context);
+	await openFileManager(page, context);
 
-  const largeWriteProfile = process.env.NEXUS_E2E_UPLOAD_MULTI_LARGE_WRITE_PROFILE === '1';
-  const largeFiles = Array.from({ length: 4 }, (_, index) => ({
-    name: `moderate-latency-${index + 1}.bin`,
-    size: (largeWriteProfile ? 10 : 3) * 1024 * 1024,
-    fill: 0x20 + index,
-  }));
+	const largeWriteProfile = process.env.NEXUS_E2E_UPLOAD_MULTI_LARGE_WRITE_PROFILE === '1';
+	const largeFiles = Array.from({ length: 4 }, (_, index) => ({
+		name: `moderate-latency-${index + 1}.bin`,
+		size: (largeWriteProfile ? 10 : 3) * 1024 * 1024,
+		fill: 0x20 + index,
+	}));
 
-  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=50`, { method: 'POST' });
-  try {
-    await slowStep('progress can hide and restore while several real files upload', async () => {
-      await dragLocalFiles(page, largeFiles);
+	await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=50`, { method: 'POST' });
+	try {
+		await slowStep('progress can hide and restore while several real files upload', async () => {
+			await dragLocalFiles(page, largeFiles);
 
-      const progressPopup = visibleProgressCenter(page);
-      await expect(progressPopup).toBeVisible({ timeout: 10_000 });
-      const uploadTasks = progressPopup.locator('[data-task-kind="upload"]');
-      await expect(uploadTasks).toHaveCount(largeFiles.length);
-      const progressBody = progressPopup.locator('ul');
-      await expect(progressBody).toBeVisible();
-      await expect(page.getByRole('dialog', { name: 'File Manager', exact: true })).toBeVisible();
-      await progressPopup.getByRole('button', { name: 'Hide progress', exact: true }).click();
-      await expect(progressPopup).toBeHidden();
+			const progressPopup = visibleProgressCenter(page);
+			await expect(progressPopup).toBeVisible({ timeout: 10_000 });
+			const uploadTasks = progressPopup.locator('[data-task-kind="upload"]');
+			await expect(uploadTasks).toHaveCount(largeFiles.length);
+			const progressBody = progressPopup.locator('ul');
+			await expect(progressBody).toBeVisible();
+			await expect(page.getByRole('dialog', { name: 'File Manager', exact: true })).toBeVisible();
+			await progressPopup.getByRole('button', { name: 'Hide progress', exact: true }).click();
+			await expect(progressPopup).toBeHidden();
 
-      const progressModal = await openDesktopProgressDisplay(page);
-      const hiddenSource = progressModal.locator('.hidden-progress-source-card').first();
-      const hiddenTask = hiddenSource.locator('.hidden-progress-task-row').first();
-      await expect(hiddenSource).toBeVisible();
-      await expect(hiddenTask).toBeVisible();
-      await expect(hiddenTask.getByRole('progressbar')).toBeVisible();
-      await hiddenSource.getByRole('button', { name: 'Restore', exact: true }).click();
-      await expect(progressModal).toBeHidden();
-      await expect(progressPopup).toBeVisible();
-      await expect(progressBody).toBeVisible();
-      await progressPopup.getByRole('button', { name: 'Hide progress', exact: true }).click();
-      await expect(progressPopup).toBeHidden();
-      await reopenConnectedFileManager(page);
-    });
+			const progressModal = await openDesktopProgressDisplay(page);
+			const hiddenSource = progressModal.locator('.hidden-progress-source-card').first();
+			const hiddenTask = hiddenSource.locator('.hidden-progress-task-row').first();
+			await expect(hiddenSource).toBeVisible();
+			await expect(hiddenTask).toBeVisible();
+			await expect(hiddenTask.getByRole('progressbar')).toBeVisible();
+			await hiddenSource.getByRole('button', { name: 'Restore', exact: true }).click();
+			await expect(progressModal).toBeHidden();
+			await expect(progressPopup).toBeVisible();
+			await expect(progressBody).toBeVisible();
+			await progressPopup.getByRole('button', { name: 'Hide progress', exact: true }).click();
+			await expect(progressPopup).toBeHidden();
+			await reopenConnectedFileManager(page);
+		});
 
-    await slowStep('all uploaded files arrive with their declared byte sizes', async () => {
-      await waitForVisibleFiles(
-        page,
-        largeFiles.map((file) => file.name),
-        60_000,
-      );
-      for (const file of largeFiles) {
-        const content = await downloadRemoteFile(page, file.name);
-        expect(content.byteLength).toBe(file.size);
-        expect(content.equals(Buffer.alloc(file.size, file.fill))).toBe(true);
-      }
-    });
-  } finally {
-    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
-  }
+		await slowStep('all uploaded files arrive with their declared byte sizes', async () => {
+			await waitForVisibleFiles(
+				page,
+				largeFiles.map((file) => file.name),
+				60_000,
+			);
+			for (const file of largeFiles) {
+				const content = await downloadRemoteFile(page, file.name);
+				expect(content.byteLength).toBe(file.size);
+				expect(content.equals(Buffer.alloc(file.size, file.fill))).toBe(true);
+			}
+		});
+	} finally {
+		await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+	}
 });
 
 test('multi-file upload uses all configured streams instead of size-capacity throttling', async ({ page, context }) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, 'hardwareConcurrency', { configurable: true, get: () => 4 });
-  });
-  await openFileManager(page, context);
+	await page.addInitScript(() => {
+		Object.defineProperty(navigator, 'hardwareConcurrency', {
+			configurable: true,
 
-  const files = Array.from({ length: 6 }, (_, index) => ({
-    name: `scheduler-throughput-${index + 1}.bin`,
-    size: 2 * 1024 * 1024,
-    fill: 0x30 + index,
-  }));
+			get: () => 4,
+		});
+	});
+	await openFileManager(page, context);
 
-  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=900`, { method: 'POST' });
-  let openUploadStreams = 0;
-  let maxOpenUploadStreams = 0;
-  page.on('websocket', (socket) => {
-    if (!socket.url().includes('/ws/uploads?')) return;
-    openUploadStreams += 1;
-    maxOpenUploadStreams = Math.max(maxOpenUploadStreams, openUploadStreams);
-    socket.on('close', () => {
-      openUploadStreams = Math.max(0, openUploadStreams - 1);
-    });
-  });
+	const files = Array.from({ length: 6 }, (_, index) => ({
+		name: `scheduler-throughput-${index + 1}.bin`,
+		size: 2 * 1024 * 1024,
+		fill: 0x30 + index,
+	}));
 
-  try {
-    await dragLocalFiles(page, files);
-    const progressPopup = visibleProgressCenter(page);
-    await expect(progressPopup).toBeVisible({ timeout: 10_000 });
-    const uploadTasks = progressPopup.locator('[data-task-kind="upload"]');
-    await expect(uploadTasks).toHaveCount(files.length);
+	await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=900`, { method: 'POST' });
+	let openUploadStreams = 0;
+	let maxOpenUploadStreams = 0;
+	page.on('websocket', (socket) => {
+		if (!socket.url().includes('/ws/uploads?')) return;
+		openUploadStreams += 1;
+		maxOpenUploadStreams = Math.max(maxOpenUploadStreams, openUploadStreams);
+		socket.on('close', () => {
+			openUploadStreams = Math.max(0, openUploadStreams - 1);
+		});
+	});
 
-    // Each file needs four delayed SFTP WRITE acknowledgements, so no first-wave stream can
-    // complete for ~3.6s. Observe the first wave directly at the browser transport boundary.
-    await expect.poll(() => maxOpenUploadStreams, { timeout: 2_500 }).toBeGreaterThanOrEqual(4);
-    await page.waitForTimeout(400);
-  } finally {
-    const progressPopup = visibleProgressCenter(page);
-    if (await progressPopup.isVisible().catch(() => false)) {
-      await progressPopup
-        .getByRole('button', { name: /^Cancel all \(\d+\)$/ })
-        .click()
-        .catch(() => undefined);
-    }
-    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
-  }
+	try {
+		await dragLocalFiles(page, files);
+		const progressPopup = visibleProgressCenter(page);
+		await expect(progressPopup).toBeVisible({ timeout: 10_000 });
+		const uploadTasks = progressPopup.locator('[data-task-kind="upload"]');
+		await expect(uploadTasks).toHaveCount(files.length);
 
-  expect(maxOpenUploadStreams, 'all six configured upload streams should be active in the first wave').toBe(
-    files.length,
-  );
+		// Each file needs four delayed SFTP WRITE acknowledgements, so no first-wave stream can
+		// complete for ~3.6s. Observe the first wave directly at the browser transport boundary.
+		await expect.poll(() => maxOpenUploadStreams, { timeout: 2_500 }).toBeGreaterThanOrEqual(4);
+		await page.waitForTimeout(400);
+	} finally {
+		const progressPopup = visibleProgressCenter(page);
+		if (await progressPopup.isVisible().catch(() => false)) {
+			await progressPopup
+				.getByRole('button', { name: /^Cancel all \(\d+\)$/ })
+				.click()
+				.catch(() => undefined);
+		}
+		await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+	}
+
+	expect(maxOpenUploadStreams, 'all six configured upload streams should be active in the first wave').toBe(
+		files.length,
+	);
 });
 
 test('batch upload completes every file under slow SFTP acknowledgements', async ({ page, context }) => {
-  const profileCores = Number(process.env.NEXUS_E2E_UPLOAD_BATCH_CORES || 0);
-  if (profileCores) {
-    expect([1, 4, 8]).toContain(profileCores);
-    await page.addInitScript((cores) => {
-      Object.defineProperty(navigator, 'hardwareConcurrency', { configurable: true, get: () => cores });
-    }, profileCores);
-  }
-  await openFileManager(page, context);
+	const profileCores = Number(process.env.NEXUS_E2E_UPLOAD_BATCH_CORES || 0);
+	if (profileCores) {
+		expect([1, 4, 8]).toContain(profileCores);
+		await page.addInitScript((cores) => {
+			Object.defineProperty(navigator, 'hardwareConcurrency', {
+				configurable: true,
 
-  const weakFiles = Array.from({ length: 10 }, (_, index) => ({
-    name: `weak-network-${index + 1}.bin`,
-    size: 64 * 1024,
-    fill: 0x40 + index,
-  }));
+				get: () => cores,
+			});
+		}, profileCores);
+	}
+	await openFileManager(page, context);
 
-  let activeStreams = 0;
-  let peakStreams = 0;
-  let started = 0;
-  const uploadIds = new Set<string>();
-  const completedIds = new Set<string>();
-  let completedMs: number | undefined;
-  const cdp = await context.newCDPSession(page);
-  await cdp.send('Network.enable');
-  cdp.on('Network.webSocketCreated', ({ url }) => {
-    if (new URL(url).pathname !== '/ws/uploads') return;
-    const id = new URL(url).searchParams.get('uploadId');
-    if (id) uploadIds.add(id);
-  });
-  cdp.on('Network.webSocketFrameReceived', ({ response }) => {
-    if (response.opcode !== 1) return;
-    const message = JSON.parse(response.payloadData);
-    if (
-      message.type !== 'transfer.upload' ||
-      message.payload?.type !== 'completed' ||
-      !uploadIds.has(message.payload.uploadId)
-    )
-      return;
-    completedIds.add(message.payload.uploadId);
-    if (completedIds.size === weakFiles.length) completedMs = performance.now() - started;
-  });
-  const trackSocket = (socket: import('@playwright/test').WebSocket) => {
-    if (new URL(socket.url()).pathname !== '/ws/uploads') return;
-    activeStreams++;
-    peakStreams = Math.max(peakStreams, activeStreams);
-    socket.on('close', () => {
-      activeStreams--;
-    });
-  };
-  page.on('websocket', trackSocket);
-  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=750`, { method: 'POST' });
-  try {
-    await slowStep('the user-visible upload batch completes despite slow remote acknowledgements', async () => {
-      started = performance.now();
-      await dragLocalFiles(page, weakFiles);
-      const progressPopup = visibleProgressCenter(page);
-      await expect(progressPopup).toBeVisible({ timeout: 10_000 });
-      await expect(progressPopup.locator('[data-task-kind="upload"]')).toHaveCount(weakFiles.length);
-      await waitForVisibleFiles(
-        page,
-        weakFiles.map((file) => file.name),
-        60_000,
-      );
-    });
+	const weakFiles = Array.from({ length: 10 }, (_, index) => ({
+		name: `weak-network-${index + 1}.bin`,
+		size: 64 * 1024,
+		fill: 0x40 + index,
+	}));
 
-    await step('all uploaded files download with their declared byte sizes', async () => {
-      for (const file of weakFiles) {
-        expect(await downloadRemoteFile(page, file.name)).toEqual(Buffer.alloc(file.size, file.fill));
-      }
-    });
-    expect(completedIds.size).toBe(weakFiles.length);
-    expect(completedMs).toBeDefined();
-    await expect.poll(() => activeStreams).toBe(0);
-    console.log(
-      '[batch upload profile]',
-      JSON.stringify({
-        profileCores,
-        files: weakFiles.length,
-        bytes: weakFiles.reduce((total, file) => total + file.size, 0),
-        peakStreams,
-        completedMs,
-      }),
-    );
-  } finally {
-    try {
-      await cdp.detach();
-    } finally {
-      page.off('websocket', trackSocket);
-      await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
-    }
-  }
+	let activeStreams = 0;
+	let peakStreams = 0;
+	let started = 0;
+	const uploadIds = new Set<string>();
+	const completedIds = new Set<string>();
+	let completedMs: number | undefined;
+	const cdp = await context.newCDPSession(page);
+	await cdp.send('Network.enable');
+	cdp.on('Network.webSocketCreated', ({ url }) => {
+		if (new URL(url).pathname !== '/ws/uploads') return;
+		const id = new URL(url).searchParams.get('uploadId');
+		if (id) uploadIds.add(id);
+	});
+	cdp.on('Network.webSocketFrameReceived', ({ response }) => {
+		if (response.opcode !== 1) return;
+		const message = JSON.parse(response.payloadData);
+		if (
+			message.type !== 'transfer.upload' ||
+			message.payload?.type !== 'completed' ||
+			!uploadIds.has(message.payload.uploadId)
+		)
+			return;
+		completedIds.add(message.payload.uploadId);
+		if (completedIds.size === weakFiles.length) completedMs = performance.now() - started;
+	});
+
+	const trackSocket = (socket: import('@playwright/test').WebSocket) => {
+		if (new URL(socket.url()).pathname !== '/ws/uploads') return;
+		activeStreams++;
+		peakStreams = Math.max(peakStreams, activeStreams);
+		socket.on('close', () => {
+			activeStreams--;
+		});
+	};
+
+	page.on('websocket', trackSocket);
+	await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=750`, { method: 'POST' });
+	try {
+		await slowStep('the user-visible upload batch completes despite slow remote acknowledgements', async () => {
+			started = performance.now();
+			await dragLocalFiles(page, weakFiles);
+			const progressPopup = visibleProgressCenter(page);
+			await expect(progressPopup).toBeVisible({ timeout: 10_000 });
+			await expect(progressPopup.locator('[data-task-kind="upload"]')).toHaveCount(weakFiles.length);
+			await waitForVisibleFiles(
+				page,
+				weakFiles.map((file) => file.name),
+				60_000,
+			);
+		});
+
+		await step('all uploaded files download with their declared byte sizes', async () => {
+			for (const file of weakFiles) {
+				expect(await downloadRemoteFile(page, file.name)).toEqual(Buffer.alloc(file.size, file.fill));
+			}
+		});
+		expect(completedIds.size).toBe(weakFiles.length);
+		expect(completedMs).toBeDefined();
+		await expect.poll(() => activeStreams).toBe(0);
+		console.log(
+			'[batch upload profile]',
+			JSON.stringify({
+				profileCores,
+				files: weakFiles.length,
+				bytes: weakFiles.reduce((total, file) => total + file.size, 0),
+				peakStreams,
+				completedMs,
+			}),
+		);
+	} finally {
+		try {
+			await cdp.detach();
+		} finally {
+			page.off('websocket', trackSocket);
+			await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+		}
+	}
 });
 
 test('upload popup resizes and a hidden batch becomes one scrollable source card', async ({ page, context }) => {
-  await openFileManager(page, context);
+	await openFileManager(page, context);
 
-  const files = Array.from({ length: 8 }, (_, index) => ({
-    name: `hide-button-${index + 1}.bin`,
-    size: 4 * 1024 * 1024,
-    fill: 0x60 + index,
-  }));
+	const files = Array.from({ length: 8 }, (_, index) => ({
+		name: `hide-button-${index + 1}.bin`,
+		size: 4 * 1024 * 1024,
+		fill: 0x60 + index,
+	}));
 
-  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=900`, { method: 'POST' });
-  try {
-    await dragLocalFiles(page, files);
+	await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=900`, { method: 'POST' });
+	try {
+		await dragLocalFiles(page, files);
 
-    const popup = visibleProgressCenter(page);
-    const uploadSpeed = popup.getByText(/^Total speed /);
-    const cancelAll = popup.getByRole('button', { name: /^Cancel all \(\d+\)$/ });
-    const hideButton = popup.getByRole('button', { name: 'Hide progress', exact: true });
-    await expect(popup).toBeVisible({ timeout: 10_000 });
-    await expect(popup).toContainText('E2E SSH · Upload Tasks');
-    await expect(cancelAll).toBeVisible();
-    await expect(uploadSpeed).toBeVisible();
-    await expect(hideButton).toBeVisible();
+		const popup = visibleProgressCenter(page);
+		const uploadSpeed = popup.getByText(/^Total speed /);
+		const cancelAll = popup.getByRole('button', { name: /^Cancel all \(\d+\)$/ });
+		const hideButton = popup.getByRole('button', { name: 'Hide progress', exact: true });
+		await expect(popup).toBeVisible({ timeout: 10_000 });
+		await expect(popup).toContainText('E2E SSH · Upload Tasks');
+		await expect(cancelAll).toBeVisible();
+		await expect(uploadSpeed).toBeVisible();
+		await expect(hideButton).toBeVisible();
 
-    const [popupBox, speedBox, cancelAllBox, hideBox, speedMetrics] = await Promise.all([
-      popup.boundingBox(),
-      uploadSpeed.boundingBox(),
-      cancelAll.boundingBox(),
-      hideButton.boundingBox(),
-      uploadSpeed.evaluate((element) => ({
-        clientWidth: element.clientWidth,
-        scrollWidth: element.scrollWidth,
-        clientHeight: element.clientHeight,
-        scrollHeight: element.scrollHeight,
-      })),
-    ]);
-    expect(popupBox).not.toBeNull();
-    expect(speedBox).not.toBeNull();
-    expect(cancelAllBox).not.toBeNull();
-    expect(hideBox).not.toBeNull();
-    expect(speedMetrics.scrollWidth).toBeLessThanOrEqual(speedMetrics.clientWidth + 1);
-    expect(speedMetrics.scrollHeight).toBeLessThanOrEqual(speedMetrics.clientHeight + 1);
-    expect(speedBox!.x).toBeGreaterThanOrEqual(popupBox!.x - 1);
-    expect(speedBox!.x + speedBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);
-    expect(hideBox!.width).toBeGreaterThanOrEqual(20);
-    expect(hideBox!.x).toBeGreaterThanOrEqual(speedBox!.x + speedBox!.width - 1);
-    expect(cancelAllBox!.x).toBeGreaterThanOrEqual(hideBox!.x + hideBox!.width - 1);
-    expect(cancelAllBox!.x + cancelAllBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);
-    const headerCenterY = speedBox!.y + speedBox!.height / 2;
-    expect(Math.abs(hideBox!.y + hideBox!.height / 2 - headerCenterY)).toBeLessThanOrEqual(2);
-    expect(Math.abs(cancelAllBox!.y + cancelAllBox!.height / 2 - headerCenterY)).toBeLessThanOrEqual(2);
-    await captureFunctionalScreenshot(page, 'upload-progress.png', { viewport: { width: 1440, height: 900 } });
-    const progressBars = popup.getByRole('progressbar');
-    await expect(progressBars.first()).toBeVisible();
-    const progressBarBoxes = await progressBars.evaluateAll((elements) =>
-      elements.map((element) => {
-        const rect = element.getBoundingClientRect();
-        return { x: rect.x, width: rect.width };
-      }),
-    );
-    expect(progressBarBoxes.length).toBeGreaterThan(1);
-    expect(
-      Math.max(...progressBarBoxes.map((box) => box.x)) - Math.min(...progressBarBoxes.map((box) => box.x)),
-    ).toBeLessThanOrEqual(1);
-    expect(
-      Math.max(...progressBarBoxes.map((box) => box.width)) - Math.min(...progressBarBoxes.map((box) => box.width)),
-    ).toBeLessThanOrEqual(1);
+		const [popupBox, speedBox, cancelAllBox, hideBox, speedMetrics] = await Promise.all([
+			popup.boundingBox(),
+			uploadSpeed.boundingBox(),
+			cancelAll.boundingBox(),
+			hideButton.boundingBox(),
+			uploadSpeed.evaluate((element) => ({
+				clientWidth: element.clientWidth,
+				scrollWidth: element.scrollWidth,
+				clientHeight: element.clientHeight,
+				scrollHeight: element.scrollHeight,
+			})),
+		]);
+		expect(popupBox).not.toBeNull();
+		expect(speedBox).not.toBeNull();
+		expect(cancelAllBox).not.toBeNull();
+		expect(hideBox).not.toBeNull();
+		expect(speedMetrics.scrollWidth).toBeLessThanOrEqual(speedMetrics.clientWidth + 1);
+		expect(speedMetrics.scrollHeight).toBeLessThanOrEqual(speedMetrics.clientHeight + 1);
+		expect(speedBox!.x).toBeGreaterThanOrEqual(popupBox!.x - 1);
+		expect(speedBox!.x + speedBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);
+		expect(hideBox!.width).toBeGreaterThanOrEqual(20);
+		expect(hideBox!.x).toBeGreaterThanOrEqual(speedBox!.x + speedBox!.width - 1);
+		expect(cancelAllBox!.x).toBeGreaterThanOrEqual(hideBox!.x + hideBox!.width - 1);
+		expect(cancelAllBox!.x + cancelAllBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);
+		const headerCenterY = speedBox!.y + speedBox!.height / 2;
+		expect(Math.abs(hideBox!.y + hideBox!.height / 2 - headerCenterY)).toBeLessThanOrEqual(2);
+		expect(Math.abs(cancelAllBox!.y + cancelAllBox!.height / 2 - headerCenterY)).toBeLessThanOrEqual(2);
+		await captureFunctionalScreenshot(page, 'upload-progress.png', { viewport: { width: 1440, height: 900 } });
+		const progressBars = popup.getByRole('progressbar');
+		await expect(progressBars.first()).toBeVisible();
+		const progressBarBoxes = await progressBars.evaluateAll((elements) =>
+			elements.map((element) => {
+				const rect = element.getBoundingClientRect();
+				return { x: rect.x, width: rect.width };
+			}),
+		);
+		expect(progressBarBoxes.length).toBeGreaterThan(1);
+		expect(
+			Math.max(...progressBarBoxes.map((box) => box.x)) - Math.min(...progressBarBoxes.map((box) => box.x)),
+		).toBeLessThanOrEqual(1);
+		expect(
+			Math.max(...progressBarBoxes.map((box) => box.width)) -
+				Math.min(...progressBarBoxes.map((box) => box.width)),
+		).toBeLessThanOrEqual(1);
 
-    await closeConnectedFileManager(page);
-    const resizeHandle = popup.getByLabel('Resize progress window', { exact: true });
-    await expect(resizeHandle).toBeVisible();
-    const resizeBox = await resizeHandle.boundingBox();
-    expect(resizeBox).not.toBeNull();
-    await page.mouse.move(resizeBox!.x + resizeBox!.width / 2, resizeBox!.y + resizeBox!.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(resizeBox!.x + 90, resizeBox!.y + 70, { steps: 5 });
-    await page.mouse.up();
-    const resizedPopupBox = await popup.boundingBox();
-    expect(resizedPopupBox).not.toBeNull();
-    expect(resizedPopupBox!.width).toBeGreaterThan(popupBox!.width + 40);
-    expect(resizedPopupBox!.height).toBeGreaterThan(popupBox!.height + 30);
+		await closeConnectedFileManager(page);
+		const resizeHandle = popup.getByLabel('Resize progress window', { exact: true });
+		await expect(resizeHandle).toBeVisible();
+		const resizeBox = await resizeHandle.boundingBox();
+		expect(resizeBox).not.toBeNull();
+		await page.mouse.move(resizeBox!.x + resizeBox!.width / 2, resizeBox!.y + resizeBox!.height / 2);
+		await page.mouse.down();
+		await page.mouse.move(resizeBox!.x + 90, resizeBox!.y + 70, { steps: 5 });
+		await page.mouse.up();
+		const resizedPopupBox = await popup.boundingBox();
+		expect(resizedPopupBox).not.toBeNull();
+		expect(resizedPopupBox!.width).toBeGreaterThan(popupBox!.width + 40);
+		expect(resizedPopupBox!.height).toBeGreaterThan(popupBox!.height + 30);
 
-    await hideButton.click();
-    await expect(popup).toBeHidden();
+		await hideButton.click();
+		await expect(popup).toBeHidden();
 
-    const modal = await openDesktopProgressDisplay(page);
-    const hiddenSources = modal.locator('.hidden-progress-source-card');
-    await expect(hiddenSources).toHaveCount(1);
-    const sourceCard = hiddenSources.first();
-    await expect(sourceCard).toContainText('E2E SSH · Upload Tasks');
-    const hiddenList = modal.locator('.hidden-progress-source-grid');
-    const [sourceCardBox, hiddenListBox, hiddenListPaddingRight] = await Promise.all([
-      sourceCard.boundingBox(),
-      hiddenList.boundingBox(),
-      hiddenList.evaluate((element) => Number.parseFloat(getComputedStyle(element).paddingRight) || 0),
-    ]);
-    expect(sourceCardBox).not.toBeNull();
-    expect(hiddenListBox).not.toBeNull();
-    expect(sourceCardBox!.width).toBeGreaterThanOrEqual(hiddenListBox!.width - hiddenListPaddingRight - 1);
-    const sourceTasks = sourceCard.locator('.hidden-progress-task-row');
-    await expect(sourceTasks.first()).toBeVisible();
-    expect(await sourceTasks.count()).toBeGreaterThan(1);
-    const listMetrics = await sourceCard.locator('.hidden-progress-source-list').evaluate((element) => ({
-      clientHeight: element.clientHeight,
-      scrollHeight: element.scrollHeight,
-    }));
-    expect(listMetrics.scrollHeight).toBeGreaterThan(listMetrics.clientHeight);
-    const cancelAllHidden = sourceCard.getByRole('button', { name: /^Cancel all \(\d+\)$/ });
-    await expect(cancelAllHidden).toBeVisible();
-    await expect(
-      modal.getByText('Each card represents a hidden task; scroll within the card to view details.', { exact: true }),
-    ).toHaveText('Each card represents a hidden task; scroll within the card to view details.');
-    await captureFunctionalScreenshot(page, 'hidden-upload-progress.png', { viewport: { width: 1440, height: 900 } });
-    await cancelAllHidden.click();
-    await expect
-      .poll(
-        async () =>
-          (await sourceCard.isVisible()) ? sourceCard.getByRole('button', { name: 'Cancel', exact: true }).count() : 0,
-        {
-          timeout: 10_000,
-        },
-      )
-      .toBe(0);
-    await expect
-      .poll(
-        async () => {
-          if (await modal.getByText('There are no hidden progress tasks.', { exact: true }).isVisible()) return true;
-          const rows = await sourceTasks.allTextContents();
-          return rows.length > 0 && rows.every((text) => /Completed|Failed|Partially completed|Cancelled/.test(text));
-        },
-        { timeout: 10_000 },
-      )
-      .toBe(true);
-    await modal.getByRole('button', { name: 'Hide progress', exact: true }).click();
-  } finally {
-    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
-  }
+		const modal = await openDesktopProgressDisplay(page);
+		const hiddenSources = modal.locator('.hidden-progress-source-card');
+		await expect(hiddenSources).toHaveCount(1);
+		const sourceCard = hiddenSources.first();
+		await expect(sourceCard).toContainText('E2E SSH · Upload Tasks');
+		const hiddenList = modal.locator('.hidden-progress-source-grid');
+		const [sourceCardBox, hiddenListBox, hiddenListPaddingRight] = await Promise.all([
+			sourceCard.boundingBox(),
+			hiddenList.boundingBox(),
+			hiddenList.evaluate((element) => Number.parseFloat(getComputedStyle(element).paddingRight) || 0),
+		]);
+		expect(sourceCardBox).not.toBeNull();
+		expect(hiddenListBox).not.toBeNull();
+		expect(sourceCardBox!.width).toBeGreaterThanOrEqual(hiddenListBox!.width - hiddenListPaddingRight - 1);
+		const sourceTasks = sourceCard.locator('.hidden-progress-task-row');
+		await expect(sourceTasks.first()).toBeVisible();
+		expect(await sourceTasks.count()).toBeGreaterThan(1);
+		const listMetrics = await sourceCard.locator('.hidden-progress-source-list').evaluate((element) => ({
+			clientHeight: element.clientHeight,
+			scrollHeight: element.scrollHeight,
+		}));
+		expect(listMetrics.scrollHeight).toBeGreaterThan(listMetrics.clientHeight);
+		const cancelAllHidden = sourceCard.getByRole('button', { name: /^Cancel all \(\d+\)$/ });
+		await expect(cancelAllHidden).toBeVisible();
+		await expect(
+			modal.getByText('Each card represents a hidden task; scroll within the card to view details.', {
+				exact: true,
+			}),
+		).toHaveText('Each card represents a hidden task; scroll within the card to view details.');
+		await captureFunctionalScreenshot(page, 'hidden-upload-progress.png', {
+			viewport: { width: 1440, height: 900 },
+		});
+		await cancelAllHidden.click();
+		await expect
+			.poll(
+				async () =>
+					(await sourceCard.isVisible())
+						? sourceCard.getByRole('button', { name: 'Cancel', exact: true }).count()
+						: 0,
+				{
+					timeout: 10_000,
+				},
+			)
+			.toBe(0);
+		await expect
+			.poll(
+				async () => {
+					if (await modal.getByText('There are no hidden progress tasks.', { exact: true }).isVisible())
+						return true;
+					const rows = await sourceTasks.allTextContents();
+					return (
+						rows.length > 0 &&
+						rows.every((text) => /Completed|Failed|Partially completed|Cancelled/.test(text))
+					);
+				},
+				{ timeout: 10_000 },
+			)
+			.toBe(true);
+		await modal.getByRole('button', { name: 'Hide progress', exact: true }).click();
+	} finally {
+		await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+	}
 });
 
 test('Progress Display cancel all keeps immediate file-manager refresh responsive', async ({ page, context }) => {
-  await openFileManager(page, context);
+	await openFileManager(page, context);
 
-  const refreshMarker = 'refresh-after-progress-cancel-all.txt';
-  const fixtureResponse = await fetch(
-    `${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(refreshMarker)}&size=32`,
-    { method: 'POST' },
-  );
-  expect(fixtureResponse.ok).toBeTruthy();
-  await expect(fileManagerRow(page, refreshMarker)).toBeHidden();
+	const refreshMarker = 'refresh-after-progress-cancel-all.txt';
+	const fixtureResponse = await fetch(
+		`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(refreshMarker)}&size=32`,
+		{ method: 'POST' },
+	);
+	expect(fixtureResponse.ok).toBeTruthy();
+	await expect(fileManagerRow(page, refreshMarker)).toBeHidden();
 
-  const cdp = await context.newCDPSession(page);
-  await cdp.send('Network.enable');
-  await cdp.send('Network.emulateNetworkConditions', {
-    offline: false,
-    latency: 0,
-    downloadThroughput: -1,
-    uploadThroughput: 256 * 1024,
-  });
-  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=900`, { method: 'POST' });
+	const cdp = await context.newCDPSession(page);
+	await cdp.send('Network.enable');
+	await cdp.send('Network.emulateNetworkConditions', {
+		offline: false,
+		latency: 0,
+		downloadThroughput: -1,
+		uploadThroughput: 256 * 1024,
+	});
+	await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=900`, { method: 'POST' });
 
-  const uploadNames = Array.from({ length: 4 }, (_, index) => `progress-cancel-all-refresh-${index + 1}.bin`);
-  try {
-    await dragLocalFiles(
-      page,
-      uploadNames.map((name, index) => ({
-        name,
-        size: 8 * 1024 * 1024,
-        fill: 0x50 + index,
-      })),
-    );
+	const uploadNames = Array.from({ length: 4 }, (_, index) => `progress-cancel-all-refresh-${index + 1}.bin`);
+	try {
+		await dragLocalFiles(
+			page,
+			uploadNames.map((name, index) => ({
+				name,
+				size: 8 * 1024 * 1024,
+				fill: 0x50 + index,
+			})),
+		);
 
-    const popup = visibleProgressCenter(page);
-    await expect(popup).toBeVisible({ timeout: 10_000 });
-    await closeConnectedFileManager(page);
-    await popup.getByRole('button', { name: 'Hide progress', exact: true }).click();
-    await expect(popup).toBeHidden();
+		const popup = visibleProgressCenter(page);
+		await expect(popup).toBeVisible({ timeout: 10_000 });
+		await closeConnectedFileManager(page);
+		await popup.getByRole('button', { name: 'Hide progress', exact: true }).click();
+		await expect(popup).toBeHidden();
 
-    const modal = await openDesktopProgressDisplay(page);
-    const sourceCard = modal.locator('.hidden-progress-source-card').filter({ hasText: 'Upload Tasks' }).first();
-    await expect(sourceCard).toBeVisible();
-    await expect(sourceCard.locator('.hidden-progress-task-row').first()).toBeVisible();
+		const modal = await openDesktopProgressDisplay(page);
+		const sourceCard = modal.locator('.hidden-progress-source-card').filter({ hasText: 'Upload Tasks' }).first();
+		await expect(sourceCard).toBeVisible();
+		await expect(sourceCard.locator('.hidden-progress-task-row').first()).toBeVisible();
 
-    await sourceCard.getByRole('button', { name: /^Cancel all \(\d+\)$/ }).click();
-    await expect(sourceCard).toBeHidden({ timeout: 2_000 });
-    await modal.getByRole('button', { name: 'Hide progress', exact: true }).click();
-    await reopenConnectedFileManager(page);
+		await sourceCard.getByRole('button', { name: /^Cancel all \(\d+\)$/ }).click();
+		await expect(sourceCard).toBeHidden({ timeout: 2_000 });
+		await modal.getByRole('button', { name: 'Hide progress', exact: true }).click();
+		await reopenConnectedFileManager(page);
 
-    const refreshStartedAt = Date.now();
-    await page
-      .getByRole('dialog', { name: 'File Manager', exact: true })
-      .getByRole('button', { name: 'Refresh', exact: true })
-      .click();
-    await expect(fileManagerRow(page, refreshMarker)).toBeVisible({ timeout: 2_000 });
-    expect(Date.now() - refreshStartedAt).toBeLessThan(2_000);
-    for (const name of uploadNames) {
-      await expect(fileManagerRow(page, name)).toHaveCount(0);
-    }
-  } finally {
-    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
-    await cdp.send('Network.emulateNetworkConditions', {
-      offline: false,
-      latency: 0,
-      downloadThroughput: -1,
-      uploadThroughput: -1,
-    });
-    await cdp.detach();
-  }
+		const refreshStartedAt = Date.now();
+		await page
+			.getByRole('dialog', { name: 'File Manager', exact: true })
+			.getByRole('button', { name: 'Refresh', exact: true })
+			.click();
+		await expect(fileManagerRow(page, refreshMarker)).toBeVisible({ timeout: 2_000 });
+		expect(Date.now() - refreshStartedAt).toBeLessThan(2_000);
+		for (const name of uploadNames) {
+			await expect(fileManagerRow(page, name)).toHaveCount(0);
+		}
+	} finally {
+		await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+		await cdp.send('Network.emulateNetworkConditions', {
+			offline: false,
+			latency: 0,
+			downloadThroughput: -1,
+			uploadThroughput: -1,
+		});
+		await cdp.detach();
+	}
 });
 
 test('file picker uploads a delayed file into a remote directory and refreshes the target', async ({
-  page,
-  context,
+	page,
+	context,
 }) => {
-  await mkdir(M11_03E_EVIDENCE_DIR, { recursive: true });
-  await openFileManager(page, context);
+	await mkdir(M11_03E_EVIDENCE_DIR, { recursive: true });
+	await openFileManager(page, context);
 
-  const fileManager = page.getByRole('dialog', { name: 'File Manager', exact: true });
-  const folder = fileManagerRow(page, 'folder-seed');
-  const folderPath = await folder.getAttribute('data-file-path');
-  expect(folderPath).toBeTruthy();
-  await folder.click();
-  await expect(fileManager.locator('.file-manager-path-input input')).toHaveValue(folderPath!);
+	const fileManager = page.getByRole('dialog', { name: 'File Manager', exact: true });
+	const folder = fileManagerRow(page, 'folder-seed');
+	const folderPath = await folder.getAttribute('data-file-path');
+	expect(folderPath).toBeTruthy();
+	await folder.click();
+	await expect(fileManager.locator('.file-manager-path-input input')).toHaveValue(folderPath!);
 
-  const filename = 'm11-03e-picker-upload.bin';
-  const largeReadProfile = process.env.NEXUS_E2E_LARGE_UPLOAD_READ_PROFILE === '1';
-  let uploadProfilePageDestroyed = false;
-  const markUploadProfilePageDestroyed = () => {
-    uploadProfilePageDestroyed = true;
-  };
-  page.on('crash', markUploadProfilePageDestroyed);
-  page.on('close', markUploadProfilePageDestroyed);
-  const payload = Buffer.alloc((largeReadProfile ? 16 * 1024 * 1024 : 768 * 1024) + 123, 0x6d);
-  const useFileReader = process.env.NEXUS_E2E_UPLOAD_FILE_READER === '1';
-  const profileWriteDelay = process.env.NEXUS_E2E_UPLOAD_BACKPRESSURE_PROFILE === '1' ? 30 : largeReadProfile ? 0 : 300;
-  const writeDelayOverride = process.env.NEXUS_E2E_UPLOAD_WRITE_DELAY_MS;
-  const measuredWriteDelay = writeDelayOverride === undefined ? profileWriteDelay : Number(writeDelayOverride);
-  expect(Number.isInteger(measuredWriteDelay) && measuredWriteDelay >= 0 && measuredWriteDelay <= 750).toBe(true);
-  await page.evaluate(() => {
-    const originalSend = WebSocket.prototype.send;
-    const sockets = new Set<WebSocket>();
-    const stats = { maxBufferedBytes: 0, highWaterSamples: 0, observedDrainMs: 0, drainIntervals: 0 };
-    const draining = new Map<WebSocket, number>();
-    const sample = () => {
-      for (const socket of sockets) {
-        stats.maxBufferedBytes = Math.max(stats.maxBufferedBytes, socket.bufferedAmount);
-        if (socket.bufferedAmount >= 8 * 1024 * 1024) stats.highWaterSamples++;
-        if (socket.bufferedAmount >= 8 * 1024 * 1024 && !draining.has(socket)) {
-          draining.set(socket, performance.now());
-          stats.drainIntervals++;
-        }
-        const started = draining.get(socket);
-        if (
-          started !== undefined &&
-          (socket.bufferedAmount <= 2 * 1024 * 1024 || socket.readyState !== WebSocket.OPEN)
-        ) {
-          stats.observedDrainMs += performance.now() - started;
-          draining.delete(socket);
-        }
-      }
-    };
-    WebSocket.prototype.send = function (data) {
-      originalSend.call(this, data);
-      if (new URL(this.url).pathname === '/ws/uploads') {
-        sockets.add(this);
-        sample();
-      }
-    };
-    const timer = window.setInterval(sample, 4);
-    Object.assign(window, {
-      __uploadBufferProfile: {
-        stats,
-        restore() {
-          clearInterval(timer);
-          sockets.clear();
-          WebSocket.prototype.send = originalSend;
-        },
-      },
-    });
-  });
-  await page.evaluate(
-    ({ filename, useFileReader }) => {
-      const originalSlice = Blob.prototype.slice;
-      const originalRead = Blob.prototype.arrayBuffer;
-      const chunks = new WeakSet<Blob>();
-      const reads: Array<{ bytes: number; ms: number }> = [];
-      Blob.prototype.slice = function (...args) {
-        const chunk = originalSlice.apply(this, args);
-        if (this instanceof File && this.name === filename) chunks.add(chunk);
-        return chunk;
-      };
-      Blob.prototype.arrayBuffer = async function () {
-        if (!chunks.has(this)) return originalRead.call(this);
-        const started = performance.now();
-        const result = useFileReader
-          ? await new Promise<ArrayBuffer>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result as ArrayBuffer);
-              reader.onerror = () => reject(reader.error);
-              reader.onabort = () => reject(new Error('Profile file read aborted'));
-              reader.readAsArrayBuffer(this);
-            })
-          : await originalRead.call(this);
-        reads.push({ bytes: result.byteLength, ms: performance.now() - started });
-        return result;
-      };
-      Object.assign(window, {
-        __uploadReadProfile: {
-          reads,
-          restore() {
-            Blob.prototype.slice = originalSlice;
-            Blob.prototype.arrayBuffer = originalRead;
-          },
-        },
-      });
-    },
-    { filename, useFileReader },
-  );
-  const cdp = await context.newCDPSession(page);
-  await cdp.send('Network.enable');
-  const uploadSockets = new Set<string>();
-  const uploadIds = new Set<string>();
-  const dataFrames: Array<{ ms: number; bytes: number }> = [];
-  let uploadStarted = 0;
-  let completedMs: number | undefined;
-  cdp.on('Network.webSocketCreated', ({ requestId, url }) => {
-    if (url.includes('/ws/uploads?')) {
-      uploadSockets.add(requestId);
-      const uploadId = new URL(url).searchParams.get('uploadId');
-      if (uploadId) uploadIds.add(uploadId);
-    }
-  });
-  cdp.on('Network.webSocketFrameSent', ({ requestId, response }) => {
-    if (!largeReadProfile && uploadSockets.has(requestId) && response.opcode === 2)
-      dataFrames.push({
-        ms: performance.now() - uploadStarted,
-        bytes: Buffer.from(response.payloadData, 'base64').length,
-      });
-  });
-  cdp.on('Network.webSocketFrameReceived', ({ response }) => {
-    if (response.opcode !== 1) return;
-    const message = JSON.parse(response.payloadData);
-    if (
-      message.type === 'transfer.upload' &&
-      message.payload?.type === 'completed' &&
-      uploadIds.has(message.payload.uploadId)
-    )
-      completedMs = performance.now() - uploadStarted;
-  });
-  const beforeMetrics = await fileManagerMetrics(page);
-  const viewport = page.viewportSize();
-  const modalBox = await fileManager.boundingBox();
-  const listBox = await activeFileManagerList(page).boundingBox();
-  expect(viewport).toBeTruthy();
-  expect(modalBox).toBeTruthy();
-  expect(listBox).toBeTruthy();
-  await page.screenshot({ path: path.join(M11_03E_EVIDENCE_DIR, 'm11-03e-before-upload.png') });
+	const filename = 'm11-03e-picker-upload.bin';
+	const largeReadProfile = process.env.NEXUS_E2E_LARGE_UPLOAD_READ_PROFILE === '1';
+	let uploadProfilePageDestroyed = false;
 
-  const delayResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=${measuredWriteDelay}`, {
-    method: 'POST',
-  });
-  expect(delayResponse.ok).toBeTruthy();
-  const observedStatuses = new Set<string>();
-  try {
-    const fileChooserPromise = page.waitForEvent('filechooser');
-    await fileManager.getByRole('button', { name: 'Upload File', exact: true }).click();
-    const fileChooser = await fileChooserPromise;
-    uploadStarted = performance.now();
-    if (largeReadProfile) {
-      const localPath = path.join(M11_03E_EVIDENCE_DIR, filename);
-      await writeFile(localPath, payload);
-      await fileChooser.setFiles(localPath);
-    } else {
-      await fileChooser.setFiles({ name: filename, mimeType: 'application/octet-stream', buffer: payload });
-    }
+	const markUploadProfilePageDestroyed = () => {
+		uploadProfilePageDestroyed = true;
+	};
 
-    const progressPopup = visibleProgressCenter(page);
-    await expect(progressPopup).toBeVisible({ timeout: 10_000 });
-    const progressBox = await progressPopup.boundingBox();
-    expect(progressBox).toBeTruthy();
-    expect(progressBox!.x).toBeGreaterThanOrEqual(0);
-    expect(progressBox!.y).toBeGreaterThanOrEqual(0);
-    expect(progressBox!.x + progressBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
-    expect(progressBox!.y + progressBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
-    const task = uploadProgressTask(page, filename);
-    await expect(task).toBeVisible({ timeout: 10_000 });
-    const initialStatus = await task.getAttribute('data-task-status');
-    if (initialStatus) observedStatuses.add(initialStatus);
+	page.on('crash', markUploadProfilePageDestroyed);
+	page.on('close', markUploadProfilePageDestroyed);
+	const payload = Buffer.alloc((largeReadProfile ? 16 * 1024 * 1024 : 768 * 1024) + 123, 0x6d);
+	const useFileReader = process.env.NEXUS_E2E_UPLOAD_FILE_READER === '1';
+	const profileWriteDelay =
+		process.env.NEXUS_E2E_UPLOAD_BACKPRESSURE_PROFILE === '1' ? 30 : largeReadProfile ? 0 : 300;
+	const writeDelayOverride = process.env.NEXUS_E2E_UPLOAD_WRITE_DELAY_MS;
+	const measuredWriteDelay = writeDelayOverride === undefined ? profileWriteDelay : Number(writeDelayOverride);
+	expect(Number.isInteger(measuredWriteDelay) && measuredWriteDelay >= 0 && measuredWriteDelay <= 750).toBe(true);
+	await page.evaluate(() => {
+		const originalSend = WebSocket.prototype.send;
+		const sockets = new Set<WebSocket>();
+		const stats = { maxBufferedBytes: 0, highWaterSamples: 0, observedDrainMs: 0, drainIntervals: 0 };
+		const draining = new Map<WebSocket, number>();
 
-    // Successful terminal tasks now auto-clear about 800 ms after completion. Do not poll
-    // innerText() on a locator that is expected to disappear: one poll racing cleanup would
-    // otherwise wait the locator timeout and turn a successful upload into a flaky E2E.
-    await expect(task).toBeHidden({ timeout: 60_000 });
+		const sample = () => {
+			for (const socket of sockets) {
+				stats.maxBufferedBytes = Math.max(stats.maxBufferedBytes, socket.bufferedAmount);
+				if (socket.bufferedAmount >= 8 * 1024 * 1024) stats.highWaterSamples++;
+				if (socket.bufferedAmount >= 8 * 1024 * 1024 && !draining.has(socket)) {
+					draining.set(socket, performance.now());
+					stats.drainIntervals++;
+				}
+				const started = draining.get(socket);
+				if (
+					started !== undefined &&
+					(socket.bufferedAmount <= 2 * 1024 * 1024 || socket.readyState !== WebSocket.OPEN)
+				) {
+					stats.observedDrainMs += performance.now() - started;
+					draining.delete(socket);
+				}
+			}
+		};
 
-    await fileManager.getByTitle('Refresh', { exact: true }).click();
-    await expect(fileManagerRow(page, filename)).toBeVisible({ timeout: 20_000 });
-    if (largeReadProfile) {
-      expect(await readFile(path.join(process.cwd(), '.tmp/ssh-root', folderPath!, filename))).toEqual(payload);
-    } else {
-      expect(await downloadRemoteFile(page, filename)).toEqual(payload);
-      expect(dataFrames.reduce((sum, frame) => sum + frame.bytes, 0)).toBe(payload.length);
-    }
-    expect(completedMs).toBeDefined();
-    const reads = await page.evaluate(
-      () =>
-        (window as typeof window & { __uploadReadProfile: { reads: Array<{ bytes: number; ms: number }> } })
-          .__uploadReadProfile.reads,
-    );
-    expect(reads.reduce((sum, read) => sum + read.bytes, 0)).toBe(payload.length);
-    const bufferStats = await page.evaluate(
-      () =>
-        (
-          window as typeof window & {
-            __uploadBufferProfile: { stats: { maxBufferedBytes: number; highWaterSamples: number } };
-          }
-        ).__uploadBufferProfile.stats,
-    );
-    console.log(
-      '[upload bufferedAmount profile]',
-      JSON.stringify({ profileWriteDelay: measuredWriteDelay, ...bufferStats }),
-    );
-    const writeStats = await (await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay`)).json();
-    expect(writeStats.sftpWriteBytes).toBe(payload.length);
-    expect(writeStats.sftpPendingWrites).toBe(0);
-    console.log('[SFTP upload write profile]', JSON.stringify(writeStats));
-    console.log(
-      '[browser upload profile]',
-      JSON.stringify({ useFileReader, bytes: payload.length, dataFrames, completedMs, reads }),
-    );
+		WebSocket.prototype.send = function (data) {
+			originalSend.call(this, data);
+			if (new URL(this.url).pathname === '/ws/uploads') {
+				sockets.add(this);
+				sample();
+			}
+		};
+		const timer = window.setInterval(sample, 4);
+		Object.assign(window, {
+			__uploadBufferProfile: {
+				stats,
 
-    const afterMetrics = await fileManagerMetrics(page);
-    await expect(progressPopup).toBeHidden({ timeout: 4_000 });
-    await page.screenshot({ path: path.join(M11_03E_EVIDENCE_DIR, 'm11-03e-after-upload.png') });
-    expect(afterMetrics.scrollWidth).toBeLessThanOrEqual(afterMetrics.clientWidth + 1);
-    expect(beforeMetrics.scrollWidth).toBeLessThanOrEqual(beforeMetrics.clientWidth + 1);
-    expect(modalBox!.x).toBeGreaterThanOrEqual(0);
-    expect(modalBox!.y).toBeGreaterThanOrEqual(0);
-    expect(modalBox!.x + modalBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
-    expect(modalBox!.y + modalBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
-    await writeFile(
-      path.join(M11_03E_EVIDENCE_DIR, 'm11-03e-metrics.json'),
-      JSON.stringify(
-        {
-          viewport,
-          modal: modalBox,
-          list: listBox,
-          progress: progressBox,
-          before: beforeMetrics,
-          after: afterMetrics,
-          statuses: [...observedStatuses],
-          filename,
-          payloadBytes: payload.byteLength,
-        },
-        null,
-        2,
-      ),
-      'utf8',
-    );
-  } finally {
-    await page
-      .evaluate(() => {
-        const state = window as typeof window & {
-          __uploadReadProfile?: { restore(): void };
-          __uploadBufferProfile?: { restore(): void };
-        };
-        state.__uploadReadProfile?.restore();
-        state.__uploadBufferProfile?.restore();
-        delete state.__uploadReadProfile;
-        delete state.__uploadBufferProfile;
-      })
-      .catch((error) => {
-        // A crashed/closed page no longer retains patched Blob methods. Preserve the
-        // original test failure, but do not conceal cleanup errors on a live page.
-        if (!uploadProfilePageDestroyed && !page.isClosed()) throw error;
-      })
-      .finally(async () => {
-        try {
-          if (!uploadProfilePageDestroyed && !page.isClosed()) await cdp.detach();
-        } finally {
-          await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
-          page.off('crash', markUploadProfilePageDestroyed);
-          page.off('close', markUploadProfilePageDestroyed);
-        }
-      });
-  }
+				restore() {
+					clearInterval(timer);
+					sockets.clear();
+					WebSocket.prototype.send = originalSend;
+				},
+			},
+		});
+	});
+	await page.evaluate(
+		({ filename, useFileReader }) => {
+			const originalSlice = Blob.prototype.slice;
+			const originalRead = Blob.prototype.arrayBuffer;
+			const chunks = new WeakSet<Blob>();
+			const reads: Array<{ bytes: number; ms: number }> = [];
+			Blob.prototype.slice = function (...args) {
+				const chunk = originalSlice.apply(this, args);
+				if (this instanceof File && this.name === filename) chunks.add(chunk);
+				return chunk;
+			};
+			Blob.prototype.arrayBuffer = async function () {
+				if (!chunks.has(this)) return originalRead.call(this);
+				const started = performance.now();
+				const result = useFileReader
+					? await new Promise<ArrayBuffer>((resolve, reject) => {
+							const reader = new FileReader();
+							reader.onload = () => resolve(reader.result as ArrayBuffer);
+							reader.onerror = () => reject(reader.error);
+							reader.onabort = () => reject(new Error('Profile file read aborted'));
+							reader.readAsArrayBuffer(this);
+						})
+					: await originalRead.call(this);
+				reads.push({ bytes: result.byteLength, ms: performance.now() - started });
+				return result;
+			};
+			Object.assign(window, {
+				__uploadReadProfile: {
+					reads,
+
+					restore() {
+						Blob.prototype.slice = originalSlice;
+						Blob.prototype.arrayBuffer = originalRead;
+					},
+				},
+			});
+		},
+		{ filename, useFileReader },
+	);
+	const cdp = await context.newCDPSession(page);
+	await cdp.send('Network.enable');
+	const uploadSockets = new Set<string>();
+	const uploadIds = new Set<string>();
+	const dataFrames: Array<{ ms: number; bytes: number }> = [];
+	let uploadStarted = 0;
+	let completedMs: number | undefined;
+	cdp.on('Network.webSocketCreated', ({ requestId, url }) => {
+		if (url.includes('/ws/uploads?')) {
+			uploadSockets.add(requestId);
+			const uploadId = new URL(url).searchParams.get('uploadId');
+			if (uploadId) uploadIds.add(uploadId);
+		}
+	});
+	cdp.on('Network.webSocketFrameSent', ({ requestId, response }) => {
+		if (!largeReadProfile && uploadSockets.has(requestId) && response.opcode === 2)
+			dataFrames.push({
+				ms: performance.now() - uploadStarted,
+				bytes: Buffer.from(response.payloadData, 'base64').length,
+			});
+	});
+	cdp.on('Network.webSocketFrameReceived', ({ response }) => {
+		if (response.opcode !== 1) return;
+		const message = JSON.parse(response.payloadData);
+		if (
+			message.type === 'transfer.upload' &&
+			message.payload?.type === 'completed' &&
+			uploadIds.has(message.payload.uploadId)
+		)
+			completedMs = performance.now() - uploadStarted;
+	});
+	const beforeMetrics = await fileManagerMetrics(page);
+	const viewport = page.viewportSize();
+	const modalBox = await fileManager.boundingBox();
+	const listBox = await activeFileManagerList(page).boundingBox();
+	expect(viewport).toBeTruthy();
+	expect(modalBox).toBeTruthy();
+	expect(listBox).toBeTruthy();
+	await page.screenshot({ path: path.join(M11_03E_EVIDENCE_DIR, 'm11-03e-before-upload.png') });
+
+	const delayResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=${measuredWriteDelay}`, {
+		method: 'POST',
+	});
+	expect(delayResponse.ok).toBeTruthy();
+	const observedStatuses = new Set<string>();
+	try {
+		const fileChooserPromise = page.waitForEvent('filechooser');
+		await fileManager.getByRole('button', { name: 'Upload File', exact: true }).click();
+		const fileChooser = await fileChooserPromise;
+		uploadStarted = performance.now();
+		if (largeReadProfile) {
+			const localPath = path.join(M11_03E_EVIDENCE_DIR, filename);
+			await writeFile(localPath, payload);
+			await fileChooser.setFiles(localPath);
+		} else {
+			await fileChooser.setFiles({ name: filename, mimeType: 'application/octet-stream', buffer: payload });
+		}
+
+		const progressPopup = visibleProgressCenter(page);
+		await expect(progressPopup).toBeVisible({ timeout: 10_000 });
+		const progressBox = await progressPopup.boundingBox();
+		expect(progressBox).toBeTruthy();
+		expect(progressBox!.x).toBeGreaterThanOrEqual(0);
+		expect(progressBox!.y).toBeGreaterThanOrEqual(0);
+		expect(progressBox!.x + progressBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
+		expect(progressBox!.y + progressBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
+		const task = uploadProgressTask(page, filename);
+		await expect(task).toBeVisible({ timeout: 10_000 });
+		const initialStatus = await task.getAttribute('data-task-status');
+		if (initialStatus) observedStatuses.add(initialStatus);
+
+		// Successful terminal tasks now auto-clear about 800 ms after completion. Do not poll
+		// innerText() on a locator that is expected to disappear: one poll racing cleanup would
+		// otherwise wait the locator timeout and turn a successful upload into a flaky E2E.
+		await expect(task).toBeHidden({ timeout: 60_000 });
+
+		await fileManager.getByTitle('Refresh', { exact: true }).click();
+		await expect(fileManagerRow(page, filename)).toBeVisible({ timeout: 20_000 });
+		if (largeReadProfile) {
+			expect(await readFile(path.join(process.cwd(), '.tmp/ssh-root', folderPath!, filename))).toEqual(payload);
+		} else {
+			expect(await downloadRemoteFile(page, filename)).toEqual(payload);
+			expect(dataFrames.reduce((sum, frame) => sum + frame.bytes, 0)).toBe(payload.length);
+		}
+		expect(completedMs).toBeDefined();
+		const reads = await page.evaluate(
+			() =>
+				(window as typeof window & { __uploadReadProfile: { reads: Array<{ bytes: number; ms: number }> } })
+					.__uploadReadProfile.reads,
+		);
+		expect(reads.reduce((sum, read) => sum + read.bytes, 0)).toBe(payload.length);
+		const bufferStats = await page.evaluate(
+			() =>
+				(
+					window as typeof window & {
+						__uploadBufferProfile: { stats: { maxBufferedBytes: number; highWaterSamples: number } };
+					}
+				).__uploadBufferProfile.stats,
+		);
+		console.log(
+			'[upload bufferedAmount profile]',
+			JSON.stringify({ profileWriteDelay: measuredWriteDelay, ...bufferStats }),
+		);
+		const writeStats = await (await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay`)).json();
+		expect(writeStats.sftpWriteBytes).toBe(payload.length);
+		expect(writeStats.sftpPendingWrites).toBe(0);
+		console.log('[SFTP upload write profile]', JSON.stringify(writeStats));
+		console.log(
+			'[browser upload profile]',
+			JSON.stringify({ useFileReader, bytes: payload.length, dataFrames, completedMs, reads }),
+		);
+
+		const afterMetrics = await fileManagerMetrics(page);
+		await expect(progressPopup).toBeHidden({ timeout: 4_000 });
+		await page.screenshot({ path: path.join(M11_03E_EVIDENCE_DIR, 'm11-03e-after-upload.png') });
+		expect(afterMetrics.scrollWidth).toBeLessThanOrEqual(afterMetrics.clientWidth + 1);
+		expect(beforeMetrics.scrollWidth).toBeLessThanOrEqual(beforeMetrics.clientWidth + 1);
+		expect(modalBox!.x).toBeGreaterThanOrEqual(0);
+		expect(modalBox!.y).toBeGreaterThanOrEqual(0);
+		expect(modalBox!.x + modalBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
+		expect(modalBox!.y + modalBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
+		await writeFile(
+			path.join(M11_03E_EVIDENCE_DIR, 'm11-03e-metrics.json'),
+			JSON.stringify(
+				{
+					viewport,
+					modal: modalBox,
+					list: listBox,
+					progress: progressBox,
+					before: beforeMetrics,
+					after: afterMetrics,
+					statuses: [...observedStatuses],
+					filename,
+					payloadBytes: payload.byteLength,
+				},
+				null,
+				2,
+			),
+			'utf8',
+		);
+	} finally {
+		await page
+			.evaluate(() => {
+				const state = window as typeof window & {
+					__uploadReadProfile?: { restore(): void };
+					__uploadBufferProfile?: { restore(): void };
+				};
+				state.__uploadReadProfile?.restore();
+				state.__uploadBufferProfile?.restore();
+				delete state.__uploadReadProfile;
+				delete state.__uploadBufferProfile;
+			})
+			.catch((error) => {
+				// A crashed/closed page no longer retains patched Blob methods. Preserve the
+				// original test failure, but do not conceal cleanup errors on a live page.
+				if (!uploadProfilePageDestroyed && !page.isClosed()) throw error;
+			})
+			.finally(async () => {
+				try {
+					if (!uploadProfilePageDestroyed && !page.isClosed()) await cdp.detach();
+				} finally {
+					await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+					page.off('crash', markUploadProfilePageDestroyed);
+					page.off('close', markUploadProfilePageDestroyed);
+				}
+			});
+	}
 });

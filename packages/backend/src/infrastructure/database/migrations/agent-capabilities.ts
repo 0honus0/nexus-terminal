@@ -3,11 +3,13 @@ import type { SqliteMigration } from './migration.types';
 import { tableExists, columnExists } from './schema-inspection';
 
 export const agentCapabilitiesMigrations: SqliteMigration[] = [
-  {
-    id: 35,
-    name: 'Replace legacy Agent grant scopes and remove superseded file capabilities',
-    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_app_grants'),
-    sql: `
+	{
+		id: 35,
+		name: 'Replace legacy Agent grant scopes and remove superseded file capabilities',
+
+		check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_app_grants'),
+
+		sql: `
             CREATE TEMP TABLE agent_app_grants_v2 AS
             SELECT
               user_id,
@@ -62,14 +64,16 @@ export const agentCapabilitiesMigrations: SqliteMigration[] = [
 
             DROP TABLE agent_app_grants_v2;
         `,
-  },
-  {
-    id: 36,
-    name: 'Replace Subagent capability strings with scoped delegated grants',
-    check: async (db: Database): Promise<boolean> =>
-      (await tableExists(db, 'agent_delegations')) &&
-      (await columnExists(db, 'agent_delegations', 'capabilities_json')),
-    sql: `
+	},
+	{
+		id: 36,
+		name: 'Replace Subagent capability strings with scoped delegated grants',
+
+		check: async (db: Database): Promise<boolean> =>
+			(await tableExists(db, 'agent_delegations')) &&
+			(await columnExists(db, 'agent_delegations', 'capabilities_json')),
+
+		sql: `
             ALTER TABLE agent_delegations RENAME COLUMN capabilities_json TO grants_json;
 
             UPDATE agent_delegations AS delegation
@@ -101,12 +105,14 @@ export const agentCapabilitiesMigrations: SqliteMigration[] = [
               '[]'
             );
         `,
-  },
-  {
-    id: 37,
-    name: 'Rewrite persisted Plugin version manifests to canonical file capabilities',
-    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_plugin_versions'),
-    sql: `
+	},
+	{
+		id: 37,
+		name: 'Rewrite persisted Plugin version manifests to canonical file capabilities',
+
+		check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_plugin_versions'),
+
+		sql: `
             UPDATE agent_plugin_versions
             SET manifest_json = json_set(
               manifest_json,
@@ -127,12 +133,14 @@ export const agentCapabilitiesMigrations: SqliteMigration[] = [
               ), '[]'))
             );
         `,
-  },
-  {
-    id: 38,
-    name: 'Rewrite staged Plugin manifests to canonical file capabilities',
-    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_plugin_stages'),
-    sql: `
+	},
+	{
+		id: 38,
+		name: 'Rewrite staged Plugin manifests to canonical file capabilities',
+
+		check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_plugin_stages'),
+
+		sql: `
             UPDATE agent_plugin_stages
             SET manifest_json = json_set(
               manifest_json,
@@ -154,12 +162,14 @@ export const agentCapabilitiesMigrations: SqliteMigration[] = [
             )
             WHERE manifest_json IS NOT NULL;
         `,
-  },
-  {
-    id: 39,
-    name: 'Replace split Workspace and SSH shell grants with canonical target-scoped shell authority',
-    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_app_grants'),
-    sql: `
+	},
+	{
+		id: 39,
+		name: 'Replace split Workspace and SSH shell grants with canonical target-scoped shell authority',
+
+		check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_app_grants'),
+
+		sql: `
             CREATE TEMP TABLE agent_shell_grants_v2 AS
             SELECT
               user_id,
@@ -195,13 +205,16 @@ export const agentCapabilitiesMigrations: SqliteMigration[] = [
 
             DROP TABLE agent_shell_grants_v2;
         `,
-  },
-  {
-    id: 40,
-    name: 'Replace split Subagent shell capabilities with scoped shell grants',
-    check: async (db: Database): Promise<boolean> =>
-      (await tableExists(db, 'agent_delegations')) && (await columnExists(db, 'agent_delegations', 'grants_json')),
-    sql: `
+	},
+	{
+		id: 40,
+		name: 'Replace split Subagent shell capabilities with scoped shell grants',
+
+		check: async (db: Database): Promise<boolean> =>
+			(await tableExists(db, 'agent_delegations')) &&
+			(await columnExists(db, 'agent_delegations', 'grants_json')),
+
+		sql: `
             UPDATE agent_delegations AS delegation
             SET grants_json = COALESCE(
               (
@@ -249,12 +262,14 @@ export const agentCapabilitiesMigrations: SqliteMigration[] = [
                 IN ('workspace.execute','machine.shell.execute')
             );
         `,
-  },
-  {
-    id: 41,
-    name: 'Rewrite persisted Plugin version manifests to canonical shell capability',
-    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_plugin_versions'),
-    sql: `
+	},
+	{
+		id: 41,
+		name: 'Rewrite persisted Plugin version manifests to canonical shell capability',
+
+		check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_plugin_versions'),
+
+		sql: `
             UPDATE agent_plugin_versions
             SET manifest_json = json_set(
               manifest_json,
@@ -273,12 +288,14 @@ export const agentCapabilitiesMigrations: SqliteMigration[] = [
               ), '[]'))
             );
         `,
-  },
-  {
-    id: 42,
-    name: 'Rewrite staged Plugin manifests to canonical shell capability',
-    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_plugin_stages'),
-    sql: `
+	},
+	{
+		id: 42,
+		name: 'Rewrite staged Plugin manifests to canonical shell capability',
+
+		check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_plugin_stages'),
+
+		sql: `
             UPDATE agent_plugin_stages
             SET manifest_json = json_set(
               manifest_json,
@@ -298,12 +315,14 @@ export const agentCapabilitiesMigrations: SqliteMigration[] = [
             )
             WHERE manifest_json IS NOT NULL;
         `,
-  },
-  {
-    id: 43,
-    name: 'Project legacy Workspace shell results into typed execution semantics',
-    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_tool_calls'),
-    sql: `
+	},
+	{
+		id: 43,
+		name: 'Project legacy Workspace shell results into typed execution semantics',
+
+		check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_tool_calls'),
+
+		sql: `
             UPDATE agent_tool_calls
             SET result_json = json_set(
               result_json,
@@ -337,12 +356,14 @@ export const agentCapabilitiesMigrations: SqliteMigration[] = [
               AND json_type(inspection_json, '$.normalizedArguments.workspaceId') = 'text'
               AND json_type(inspection_json, '$.normalizedArguments.generation') = 'integer';
         `,
-  },
-  {
-    id: 44,
-    name: 'Project legacy SSH shell results into typed execution semantics',
-    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_tool_calls'),
-    sql: `
+	},
+	{
+		id: 44,
+		name: 'Project legacy SSH shell results into typed execution semantics',
+
+		check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_tool_calls'),
+
+		sql: `
             UPDATE agent_tool_calls
             SET result_json = json_set(
               result_json,
@@ -368,13 +389,15 @@ export const agentCapabilitiesMigrations: SqliteMigration[] = [
               AND result_json IS NOT NULL
               AND json_extract(result_json, '$.semantic') IS NULL;
         `,
-  },
-  {
-    id: 45,
-    name: 'Canonicalize legacy machine inspection targets as SSH',
-    check: async (db: Database): Promise<boolean> =>
-      (await tableExists(db, 'agent_tool_calls')) && (await tableExists(db, 'agent_approvals')),
-    sql: `
+	},
+	{
+		id: 45,
+		name: 'Canonicalize legacy machine inspection targets as SSH',
+
+		check: async (db: Database): Promise<boolean> =>
+			(await tableExists(db, 'agent_tool_calls')) && (await tableExists(db, 'agent_approvals')),
+
+		sql: `
             UPDATE agent_tool_calls
             SET inspection_json = json_set(
               inspection_json,
@@ -408,5 +431,5 @@ export const agentCapabilitiesMigrations: SqliteMigration[] = [
                 CAST(json_extract(inspection_json, '$.normalizedArguments.connectionId') AS TEXT)
               ) IS NOT NULL;
         `,
-  },
+	},
 ];

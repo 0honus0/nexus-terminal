@@ -82,188 +82,188 @@ import { providerFallbackChainScenario } from './provider-fallback-chain.scenari
 import { providerLiveCapabilityAuthorityScenario } from './provider-live-capability-authority.scenario';
 
 interface ScenarioMetric {
-  name: string;
-  value: number;
-  unit: string;
+	name: string;
+	value: number;
+	unit: string;
 }
 
 interface ScenarioResult {
-  name: string;
-  durationMs: number;
-  metrics: ScenarioMetric[];
+	name: string;
+	durationMs: number;
+	metrics: ScenarioMetric[];
 }
 
 type Scenario = () => Promise<ScenarioMetric[]>;
 
 const scenarios = new Map<string, Scenario>([
-  ['context/tool-exchange-atomicity', contextToolExchangeScenario],
-  ['context/durable-compaction-checkpoint', durableContextCheckpointScenario],
-  ['context/token-accounting', contextTokenAccountingScenario],
-  ['context/project-instructions', projectInstructionsContextScenario],
-  ['file/unified-targets', unifiedFileCapabilityScenario],
-  ['shell/unified-targets', unifiedShellCapabilityScenario],
-  ['ssh/session-jobs', sshSessionJobsScenario],
-  ['context/tool-result-projection', toolResultProjectionScenario],
-  ['context/tool-surface-progressive-disclosure', toolSurfaceProgressiveDisclosureScenario],
-  ['runtime/mcp-protocol-surface', mcpProtocolSurfaceScenario],
-  ['runtime/mcp-input-required-durable-lifecycle', mcpInputRequiredDurableLifecycleScenario],
-  ['provider/prompt-cache-hint', providerPromptCacheHintScenario],
-  ['context/artifact-model-input', artifactModelInputScenario],
-  ['context/skill-progressive-disclosure', skillProgressiveDisclosureScenario],
-  ['context/indexed-recall', indexedRecallScenario],
-  ['benchmark/scripted-agent-trajectories', scriptedAgentBenchmarkScenario],
-  ['boundary/durable-runtime-decode', durableBoundaryDecodeScenario],
-  ['boundary/current-durable-schema', currentDurableSchemaScenario],
-  ['model/capability-registry-sync', modelCapabilityRegistrySyncScenario],
-  ['model/provider-live-capability-authority', providerLiveCapabilityAuthorityScenario],
-  ['model/stream-retry-attempt-identity', modelStreamRetryAttemptIdentityScenario],
-  ['runtime/agent-lifecycle-notifications', agentLifecycleNotificationScenario],
-  ['model/plan-execution-mode', planExecutionModeScenario],
-  ['runtime/default-policy-authority', defaultPolicyAuthorityScenario],
-  ['runtime/log-error-code-safety', logErrorCodeSafetyScenario],
-  ['runtime/budget-settings-dead-fields', budgetSettingsDeadFieldScenario],
-  ['model/provider-settings-dead-field', providerSettingsDeadFieldScenario],
-  ['model/provider-fallback-chain', providerFallbackChainScenario],
-  ['model/agent-definition-capability-contract', agentDefinitionCapabilityContractScenario],
-  ['model/completion-gate', completionGateScenario],
-  ['model/finish-reason-state-machine', modelFinishReasonStateMachineScenario],
-  ['model/provider-continuation-roundtrip', providerContinuationRoundTripScenario],
-  ['runtime/user-input-clarification', userInputClarificationScenario],
-  ['runtime/restart-recovery-closure', restartRecoveryScenario],
-  ['runtime/app-disable-scope-closure', appDisableScopeScenario],
-  ['runtime/read-tool-batch-authority', readToolBatchAuthorityScenario],
-  ['runtime/adaptive-execution-budget', adaptiveExecutionBudgetScenario],
-  ['runtime/subagent-claimed-cancellation', subagentClaimedCancellationScenario],
-  ['runtime/subagent-fail-fast-cancellation', failFastSiblingCancellationScenario],
-  ['runtime/nested-join-durable-wake', nestedJoinDurableWakeScenario],
-  ['runtime/subagent-mailbox-ttl', subagentMailboxTtlScenario],
-  ['runtime/subagent-profile-strategy', subagentProfileStrategyScenario],
-  ['runtime/subagent-governed-mutation', subagentGovernedMutationScenario],
-  ['runtime/confirmed-mutation-lease-finalization', confirmedMutationLeaseFinalizationScenario],
-  ['runtime/cancel-running-tool-settle', cancelRunningToolSettleScenario],
-  ['runtime/mutation-output-projection', mutationOutputProjectionScenario],
-  ['storage/artifact-lifecycle-settings', artifactLifecycleSettingsScenario],
-  ['runtime/artifact-crash-reconciliation', artifactCrashReconciliationScenario],
-  ['runtime/integration-cas-before-runtime', integrationCasBeforeRuntimeScenario],
-  ['runtime/integration-refresh-generation', integrationRefreshGenerationScenario],
-  ['runtime/integration-health-retry', integrationHealthRetryScenario],
-  ['runtime/acp-inner-permission', acpInnerPermissionScenario],
-  ['runtime/ssh-acp-protocol', sshAcpProtocolScenario],
-  ['runtime/acp-inner-permission-abort-race', acpInnerPermissionAbortRaceScenario],
-  ['runtime/acp-inner-permission-replay', acpInnerPermissionReplayScenario],
-  ['runtime/acp-inner-permission-durable', acpInnerPermissionDurabilityScenario],
-  ['runtime/idempotency-ttl', idempotencyTtlScenario],
-  ['runtime/model-aware-context-budget', modelAwareContextBudgetScenario],
-  ['runtime/cumulative-token-ceiling-removed', cumulativeTokenCeilingRemovedScenario],
-  ['runtime/progress-aware-loop-guard', progressAwareLoopGuardScenario],
-  ['http/public-agent-error-taxonomy', publicAgentErrorTaxonomyScenario],
-  ['runtime/plugin-app-intent-sdk', pluginAppIntentSdkScenario],
-  ['runtime/plugin-install-serialization', pluginInstallSerializationScenario],
-  ['runtime/terminal-theme-reference-integrity', terminalThemeReferenceIntegrityScenario],
-  ['runtime/server-transfer-admission', serverTransferAdmissionScenario],
-  ['workspace/upload-prepare-cache-lifecycle', uploadPrepareCacheLifecycleScenario],
-  ['workspace/upload-idle-timeout', uploadIdleTimeoutScenario],
-  ['workspace/operation-admission', workspaceOperationAdmissionScenario],
-  ['workspace/sftp-download-admission', sftpDownloadAdmissionScenario],
-  ['runtime/memory-product-closure', memoryProductClosureScenario],
-  ['workspace/suspended-session-ownership', suspendedSessionOwnershipScenario],
-  ['workspace/suspended-log-reconciliation', suspendedLogReconciliationScenario],
-  ['browser/target-scoped-revision', browserTargetScopedRevisionScenario],
-  ['browser/interaction-primitives', browserInteractionPrimitivesScenario],
-  ['browser/screenshot-artifact-vision', browserScreenshotVisionScenario],
-  ['machine/route-dependency-approval', machineRouteDependencyApprovalScenario],
-  ['runtime/artifact-single-delete-product', artifactSingleDeleteProductScenario],
+	['context/tool-exchange-atomicity', contextToolExchangeScenario],
+	['context/durable-compaction-checkpoint', durableContextCheckpointScenario],
+	['context/token-accounting', contextTokenAccountingScenario],
+	['context/project-instructions', projectInstructionsContextScenario],
+	['file/unified-targets', unifiedFileCapabilityScenario],
+	['shell/unified-targets', unifiedShellCapabilityScenario],
+	['ssh/session-jobs', sshSessionJobsScenario],
+	['context/tool-result-projection', toolResultProjectionScenario],
+	['context/tool-surface-progressive-disclosure', toolSurfaceProgressiveDisclosureScenario],
+	['runtime/mcp-protocol-surface', mcpProtocolSurfaceScenario],
+	['runtime/mcp-input-required-durable-lifecycle', mcpInputRequiredDurableLifecycleScenario],
+	['provider/prompt-cache-hint', providerPromptCacheHintScenario],
+	['context/artifact-model-input', artifactModelInputScenario],
+	['context/skill-progressive-disclosure', skillProgressiveDisclosureScenario],
+	['context/indexed-recall', indexedRecallScenario],
+	['benchmark/scripted-agent-trajectories', scriptedAgentBenchmarkScenario],
+	['boundary/durable-runtime-decode', durableBoundaryDecodeScenario],
+	['boundary/current-durable-schema', currentDurableSchemaScenario],
+	['model/capability-registry-sync', modelCapabilityRegistrySyncScenario],
+	['model/provider-live-capability-authority', providerLiveCapabilityAuthorityScenario],
+	['model/stream-retry-attempt-identity', modelStreamRetryAttemptIdentityScenario],
+	['runtime/agent-lifecycle-notifications', agentLifecycleNotificationScenario],
+	['model/plan-execution-mode', planExecutionModeScenario],
+	['runtime/default-policy-authority', defaultPolicyAuthorityScenario],
+	['runtime/log-error-code-safety', logErrorCodeSafetyScenario],
+	['runtime/budget-settings-dead-fields', budgetSettingsDeadFieldScenario],
+	['model/provider-settings-dead-field', providerSettingsDeadFieldScenario],
+	['model/provider-fallback-chain', providerFallbackChainScenario],
+	['model/agent-definition-capability-contract', agentDefinitionCapabilityContractScenario],
+	['model/completion-gate', completionGateScenario],
+	['model/finish-reason-state-machine', modelFinishReasonStateMachineScenario],
+	['model/provider-continuation-roundtrip', providerContinuationRoundTripScenario],
+	['runtime/user-input-clarification', userInputClarificationScenario],
+	['runtime/restart-recovery-closure', restartRecoveryScenario],
+	['runtime/app-disable-scope-closure', appDisableScopeScenario],
+	['runtime/read-tool-batch-authority', readToolBatchAuthorityScenario],
+	['runtime/adaptive-execution-budget', adaptiveExecutionBudgetScenario],
+	['runtime/subagent-claimed-cancellation', subagentClaimedCancellationScenario],
+	['runtime/subagent-fail-fast-cancellation', failFastSiblingCancellationScenario],
+	['runtime/nested-join-durable-wake', nestedJoinDurableWakeScenario],
+	['runtime/subagent-mailbox-ttl', subagentMailboxTtlScenario],
+	['runtime/subagent-profile-strategy', subagentProfileStrategyScenario],
+	['runtime/subagent-governed-mutation', subagentGovernedMutationScenario],
+	['runtime/confirmed-mutation-lease-finalization', confirmedMutationLeaseFinalizationScenario],
+	['runtime/cancel-running-tool-settle', cancelRunningToolSettleScenario],
+	['runtime/mutation-output-projection', mutationOutputProjectionScenario],
+	['storage/artifact-lifecycle-settings', artifactLifecycleSettingsScenario],
+	['runtime/artifact-crash-reconciliation', artifactCrashReconciliationScenario],
+	['runtime/integration-cas-before-runtime', integrationCasBeforeRuntimeScenario],
+	['runtime/integration-refresh-generation', integrationRefreshGenerationScenario],
+	['runtime/integration-health-retry', integrationHealthRetryScenario],
+	['runtime/acp-inner-permission', acpInnerPermissionScenario],
+	['runtime/ssh-acp-protocol', sshAcpProtocolScenario],
+	['runtime/acp-inner-permission-abort-race', acpInnerPermissionAbortRaceScenario],
+	['runtime/acp-inner-permission-replay', acpInnerPermissionReplayScenario],
+	['runtime/acp-inner-permission-durable', acpInnerPermissionDurabilityScenario],
+	['runtime/idempotency-ttl', idempotencyTtlScenario],
+	['runtime/model-aware-context-budget', modelAwareContextBudgetScenario],
+	['runtime/cumulative-token-ceiling-removed', cumulativeTokenCeilingRemovedScenario],
+	['runtime/progress-aware-loop-guard', progressAwareLoopGuardScenario],
+	['http/public-agent-error-taxonomy', publicAgentErrorTaxonomyScenario],
+	['runtime/plugin-app-intent-sdk', pluginAppIntentSdkScenario],
+	['runtime/plugin-install-serialization', pluginInstallSerializationScenario],
+	['runtime/terminal-theme-reference-integrity', terminalThemeReferenceIntegrityScenario],
+	['runtime/server-transfer-admission', serverTransferAdmissionScenario],
+	['workspace/upload-prepare-cache-lifecycle', uploadPrepareCacheLifecycleScenario],
+	['workspace/upload-idle-timeout', uploadIdleTimeoutScenario],
+	['workspace/operation-admission', workspaceOperationAdmissionScenario],
+	['workspace/sftp-download-admission', sftpDownloadAdmissionScenario],
+	['runtime/memory-product-closure', memoryProductClosureScenario],
+	['workspace/suspended-session-ownership', suspendedSessionOwnershipScenario],
+	['workspace/suspended-log-reconciliation', suspendedLogReconciliationScenario],
+	['browser/target-scoped-revision', browserTargetScopedRevisionScenario],
+	['browser/interaction-primitives', browserInteractionPrimitivesScenario],
+	['browser/screenshot-artifact-vision', browserScreenshotVisionScenario],
+	['machine/route-dependency-approval', machineRouteDependencyApprovalScenario],
+	['runtime/artifact-single-delete-product', artifactSingleDeleteProductScenario],
 ]);
 
 const SERIAL_SCENARIOS = new Set([
-  'provider/prompt-cache-hint',
-  'model/capability-registry-sync',
-  'model/provider-live-capability-authority',
+	'provider/prompt-cache-hint',
+	'model/capability-registry-sync',
+	'model/provider-live-capability-authority',
 ]);
 
 const SCENARIO_CONCURRENCY = 4;
 
 interface ScenarioOutcome {
-  result: ScenarioResult | null;
-  failure: { name: string; error: unknown } | null;
+	result: ScenarioResult | null;
+	failure: { name: string; error: unknown } | null;
 }
 
 const executeScenario = async ([name, run]: [string, Scenario]): Promise<ScenarioOutcome> => {
-  const started = performance.now();
-  try {
-    const metrics = await run();
-    return {
-      result: { name, durationMs: performance.now() - started, metrics },
-      failure: null,
-    };
-  } catch (error) {
-    return {
-      result: null,
-      failure: { name, error },
-    };
-  }
+	const started = performance.now();
+	try {
+		const metrics = await run();
+		return {
+			result: { name, durationMs: performance.now() - started, metrics },
+			failure: null,
+		};
+	} catch (error) {
+		return {
+			result: null,
+			failure: { name, error },
+		};
+	}
 };
 
 const main = async (): Promise<void> => {
-  const results: ScenarioResult[] = [];
-  const failures: Array<{ name: string; error: unknown }> = [];
+	const results: ScenarioResult[] = [];
+	const failures: Array<{ name: string; error: unknown }> = [];
 
-  const recordOutcome = (outcome: ScenarioOutcome): void => {
-    if (outcome.result) {
-      results.push(outcome.result);
-      console.log(`PASS ${outcome.result.name}`);
-      return;
-    }
-    if (outcome.failure) {
-      failures.push(outcome.failure);
-      console.error(`FAIL ${outcome.failure.name}`);
-    }
-  };
+	const recordOutcome = (outcome: ScenarioOutcome): void => {
+		if (outcome.result) {
+			results.push(outcome.result);
+			console.log(`PASS ${outcome.result.name}`);
+			return;
+		}
+		if (outcome.failure) {
+			failures.push(outcome.failure);
+			console.error(`FAIL ${outcome.failure.name}`);
+		}
+	};
 
-  const runConcurrentBatch = async (entries: Array<[string, Scenario]>): Promise<void> => {
-    for (let index = 0; index < entries.length; index += SCENARIO_CONCURRENCY) {
-      const outcomes = await Promise.all(entries.slice(index, index + SCENARIO_CONCURRENCY).map(executeScenario));
-      for (const outcome of outcomes) recordOutcome(outcome);
-    }
-  };
+	const runConcurrentBatch = async (entries: Array<[string, Scenario]>): Promise<void> => {
+		for (let index = 0; index < entries.length; index += SCENARIO_CONCURRENCY) {
+			const outcomes = await Promise.all(entries.slice(index, index + SCENARIO_CONCURRENCY).map(executeScenario));
+			for (const outcome of outcomes) recordOutcome(outcome);
+		}
+	};
 
-  let concurrentBatch: Array<[string, Scenario]> = [];
-  for (const entry of scenarios.entries()) {
-    if (!SERIAL_SCENARIOS.has(entry[0])) {
-      concurrentBatch.push(entry);
-      continue;
-    }
+	let concurrentBatch: Array<[string, Scenario]> = [];
+	for (const entry of scenarios.entries()) {
+		if (!SERIAL_SCENARIOS.has(entry[0])) {
+			concurrentBatch.push(entry);
+			continue;
+		}
 
-    await runConcurrentBatch(concurrentBatch);
-    concurrentBatch = [];
-    recordOutcome(await executeScenario(entry));
-  }
-  await runConcurrentBatch(concurrentBatch);
+		await runConcurrentBatch(concurrentBatch);
+		concurrentBatch = [];
+		recordOutcome(await executeScenario(entry));
+	}
+	await runConcurrentBatch(concurrentBatch);
 
-  console.log(
-    JSON.stringify(
-      {
-        schemaVersion: 1,
-        scenarios: results.map((result) => ({
-          ...result,
-          durationMs: Math.round(result.durationMs * 100) / 100,
-        })),
-      },
-      null,
-      2,
-    ),
-  );
+	console.log(
+		JSON.stringify(
+			{
+				schemaVersion: 1,
+				scenarios: results.map((result) => ({
+					...result,
+					durationMs: Math.round(result.durationMs * 100) / 100,
+				})),
+			},
+			null,
+			2,
+		),
+	);
 
-  if (failures.length > 0) {
-    for (const failure of failures) console.error(`FAILURE ${failure.name}`, failure.error);
-    throw new AggregateError(
-      failures.map((failure) => failure.error),
-      `${failures.length} Agent scenario(s) failed`,
-    );
-  }
+	if (failures.length > 0) {
+		for (const failure of failures) console.error(`FAILURE ${failure.name}`, failure.error);
+		throw new AggregateError(
+			failures.map((failure) => failure.error),
+			`${failures.length} Agent scenario(s) failed`,
+		);
+	}
 };
 
 void main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
+	console.error(error);
+	process.exitCode = 1;
 });

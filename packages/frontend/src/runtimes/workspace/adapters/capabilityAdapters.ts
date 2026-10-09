@@ -1,25 +1,25 @@
 import type {
-  WorkspaceSuspendMarkRequestDto,
-  WorkspaceSuspendUnmarkRequestDto,
-  WorkspaceUploadStreamQueryDto,
+	WorkspaceSuspendMarkRequestDto,
+	WorkspaceSuspendUnmarkRequestDto,
+	WorkspaceUploadStreamQueryDto,
 } from '@nexus-terminal/protocol/workspace';
 import { apiErrorStatus, httpClient } from '@/client/http';
 import { logger } from '@/client/logging/logger';
 import { createWebSocketUrl } from '@/client/websocket';
 import type {
-  DockerChannel,
-  WorkspaceDockerCommandDto,
-  WorkspaceDockerStatsDto,
-  WorkspaceDockerStatusDto,
+	DockerChannel,
+	WorkspaceDockerCommandDto,
+	WorkspaceDockerStatsDto,
+	WorkspaceDockerStatusDto,
 } from '@/features/docker/public';
 import type {
-  WorkspaceFilesystemListResponseDto,
-  WorkspaceFilesystemSearchResponseDto,
-  FilesystemChannel,
-  FilesystemDownloadPort,
-  WorkspaceRemoteFileEntryDto,
-  ResolvedRemotePath,
-  TerminalDirectoryPort,
+	WorkspaceFilesystemListResponseDto,
+	WorkspaceFilesystemSearchResponseDto,
+	FilesystemChannel,
+	FilesystemDownloadPort,
+	WorkspaceRemoteFileEntryDto,
+	ResolvedRemotePath,
+	TerminalDirectoryPort,
 } from '@/features/filesystem/public';
 import { decodeEditorDocument, type FileDocumentPort, type LoadedEditorDocument } from '@/features/file-editor/public';
 import type { FilePreviewSource } from '@/features/file-preview/public';
@@ -27,1046 +27,1114 @@ import type { StatusChannel } from '@/features/status-monitor/public';
 import type { SshSuspendChannel } from '@/features/ssh-suspend/public';
 import type { TerminalChannel, TerminalOutput, WorkspaceTerminalViewportDto } from '@/features/terminal/public';
 import type {
-  ArchiveCommand,
-  CopyMoveCommand,
-  TransferChannel,
-  TransferErrorContext,
-  TransferErrorKind,
-  TransferEvent,
-  UploadPrepareCommand,
-  UploadCommand,
+	ArchiveCommand,
+	CopyMoveCommand,
+	TransferChannel,
+	TransferErrorContext,
+	TransferErrorKind,
+	TransferEvent,
+	UploadPrepareCommand,
+	UploadCommand,
 } from '@/features/transfers/public';
 import { WorkspaceSocket } from '../protocol/workspaceSocket';
 
 interface WorkspaceTerminalGate {
-  canSend(): boolean;
-  rememberResize(viewport: WorkspaceTerminalViewportDto): void;
-  onConnected(handler: () => void): () => void;
+	canSend(): boolean;
+	rememberResize(viewport: WorkspaceTerminalViewportDto): void;
+	onConnected(handler: () => void): () => void;
 }
 
 export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceTerminalGate): TerminalChannel => {
-  const outputHandlers = new Set<(output: TerminalOutput) => void>();
-  const inputErrorHandlers = new Set<(message: string) => void>();
-  const notifyInputError = (): void => {
-    for (const handler of inputErrorHandlers) handler('TERMINAL_INPUT_REJECTED');
-  };
-  socket.on('protocol.error', ({ operation }) => {
-    if (operation === 'terminal.input') {
-      logger.warn({ failureKind: 'terminal_input_server_rejected' }, 'Terminal input rejected by server');
-      notifyInputError();
-    }
-  });
-  const buffered: TerminalOutput[] = [];
-  let previousOutputAvailable = false;
-  let resumeCompletePending = false;
-  const resumeCompleteHandlers = new Set<() => void>();
-  let historyLoad: Promise<{ data: Uint8Array; hasMore: boolean } | null> | null = null;
-  let remoteOutputGeneration = 0;
-  const discardRemoteOutput = (): void => {
-    remoteOutputGeneration += 1;
-    for (const output of buffered.splice(0)) output.consumed?.();
-    previousOutputAvailable = false;
-    resumeCompletePending = false;
-    historyLoad = null;
-  };
-  socket.on('terminal.closed', discardRemoteOutput);
-  socket.on('terminal.error', discardRemoteOutput);
+	const outputHandlers = new Set<(output: TerminalOutput) => void>();
+	const inputErrorHandlers = new Set<(message: string) => void>();
 
-  socket.onBinary((data, consumed) => {
-    if (outputHandlers.size) {
-      for (const handler of outputHandlers) handler({ data, consumed });
-      return;
-    }
-    const copy = data.slice();
-    buffered.push({ data: copy, consumed });
-    // The negotiated consumer window bounds pre-mount buffering. Never drop bytes:
-    // reconnect offsets already include received frames.
-  });
+	const notifyInputError = (): void => {
+		for (const handler of inputErrorHandlers) handler('TERMINAL_INPUT_REJECTED');
+	};
 
-  return {
-    sendInput: (data) => {
-      const inputBytes = new TextEncoder().encode(data).byteLength;
-      if ((gate && !gate.canSend()) || inputBytes > 256 * 1024) {
-        logger.warn(
-          {
-            inputBytes,
-            transportConnected: socket.connected,
-            failureKind: inputBytes > 256 * 1024 ? 'terminal_input_too_large' : 'terminal_input_workspace_not_ready',
-          },
-          'Terminal input rejected before transport send',
-        );
-        notifyInputError();
-        return;
-      }
-      if (!socket.sendConnected('terminal.input', { data })) notifyInputError();
-    },
-    resize: (viewport: WorkspaceTerminalViewportDto) => {
-      gate?.rememberResize(viewport);
-      if (gate && !gate.canSend()) return;
-      socket.sendConnected('terminal.resize', { columns: viewport.columns, rows: viewport.rows });
-    },
-    onOutput(handler) {
-      outputHandlers.add(handler);
-      for (const output of buffered.splice(0)) handler(output);
-      return () => outputHandlers.delete(handler);
-    },
-    onConnected: (handler) => gate?.onConnected(handler) ?? (() => undefined),
-    onResumeComplete(handler) {
-      resumeCompleteHandlers.add(handler);
-      if (resumeCompletePending) {
-        resumeCompletePending = false;
-        handler();
-      }
-      return () => resumeCompleteHandlers.delete(handler);
-    },
-    completeResume() {
-      if (!resumeCompleteHandlers.size) {
-        resumeCompletePending = true;
-        return;
-      }
-      for (const handler of resumeCompleteHandlers) handler();
-    },
-    onClose(handler) {
-      const stopTransport = socket.onClose(handler);
-      const stopTerminal = socket.on('terminal.closed', () => handler());
-      return () => {
-        stopTransport();
-        stopTerminal();
-      };
-    },
-    onError(handler) {
-      inputErrorHandlers.add(handler);
-      const stopTransport = socket.onError(handler);
-      const stopTerminal = socket.on('terminal.error', (payload) => handler(payload.message));
-      return () => {
-        inputErrorHandlers.delete(handler);
-        stopTransport();
-        stopTerminal();
-      };
-    },
-    setPreviousOutputAvailable(available) {
-      previousOutputAvailable = available;
-    },
-    hasPreviousOutput() {
-      return previousOutputAvailable;
-    },
-    async loadPreviousOutput(maxBytes) {
-      if (!previousOutputAvailable || !socket.connected) return null;
-      if (historyLoad) return historyLoad;
-      const generation = remoteOutputGeneration;
-      const task = socket
-        .requestBinary('suspend.history.previous', maxBytes ? { maxBytes } : {})
-        .then(({ data: page, bytes }) => {
-          if (generation !== remoteOutputGeneration) return null;
-          previousOutputAvailable = page.hasMore;
-          return {
-            data: bytes,
-            hasMore: page.hasMore,
-          };
-        })
-        .finally(() => {
-          if (historyLoad === task) historyLoad = null;
-        });
-      historyLoad = task;
-      return task;
-    },
-    async resetPreviousOutput() {
-      const generation = remoteOutputGeneration;
-      if (historyLoad) await historyLoad.catch(() => null);
-      if (generation !== remoteOutputGeneration || !socket.connected) return false;
-      const result = await socket.request('suspend.history.reset', {});
-      if (generation !== remoteOutputGeneration) return false;
-      previousOutputAvailable = result.available;
-      return result.available;
-    },
-  };
+	socket.on('protocol.error', ({ operation }) => {
+		if (operation === 'terminal.input') {
+			logger.warn({ failureKind: 'terminal_input_server_rejected' }, 'Terminal input rejected by server');
+			notifyInputError();
+		}
+	});
+	const buffered: TerminalOutput[] = [];
+	let previousOutputAvailable = false;
+	let resumeCompletePending = false;
+	const resumeCompleteHandlers = new Set<() => void>();
+	let historyLoad: Promise<{ data: Uint8Array; hasMore: boolean } | null> | null = null;
+	let remoteOutputGeneration = 0;
+
+	const discardRemoteOutput = (): void => {
+		remoteOutputGeneration += 1;
+		for (const output of buffered.splice(0)) output.consumed?.();
+		previousOutputAvailable = false;
+		resumeCompletePending = false;
+		historyLoad = null;
+	};
+
+	socket.on('terminal.closed', discardRemoteOutput);
+	socket.on('terminal.error', discardRemoteOutput);
+
+	socket.onBinary((data, consumed) => {
+		if (outputHandlers.size) {
+			for (const handler of outputHandlers) handler({ data, consumed });
+			return;
+		}
+		const copy = data.slice();
+		buffered.push({ data: copy, consumed });
+		// The negotiated consumer window bounds pre-mount buffering. Never drop bytes:
+		// reconnect offsets already include received frames.
+	});
+
+	return {
+		sendInput: (data) => {
+			const inputBytes = new TextEncoder().encode(data).byteLength;
+			if ((gate && !gate.canSend()) || inputBytes > 256 * 1024) {
+				logger.warn(
+					{
+						inputBytes,
+						transportConnected: socket.connected,
+						failureKind:
+							inputBytes > 256 * 1024 ? 'terminal_input_too_large' : 'terminal_input_workspace_not_ready',
+					},
+					'Terminal input rejected before transport send',
+				);
+				notifyInputError();
+				return;
+			}
+			if (!socket.sendConnected('terminal.input', { data })) notifyInputError();
+		},
+
+		resize: (viewport: WorkspaceTerminalViewportDto) => {
+			gate?.rememberResize(viewport);
+			if (gate && !gate.canSend()) return;
+			socket.sendConnected('terminal.resize', { columns: viewport.columns, rows: viewport.rows });
+		},
+
+		onOutput(handler) {
+			outputHandlers.add(handler);
+			for (const output of buffered.splice(0)) handler(output);
+			return () => outputHandlers.delete(handler);
+		},
+
+		onConnected: (handler) => gate?.onConnected(handler) ?? (() => undefined),
+
+		onResumeComplete(handler) {
+			resumeCompleteHandlers.add(handler);
+			if (resumeCompletePending) {
+				resumeCompletePending = false;
+				handler();
+			}
+			return () => resumeCompleteHandlers.delete(handler);
+		},
+
+		completeResume() {
+			if (!resumeCompleteHandlers.size) {
+				resumeCompletePending = true;
+				return;
+			}
+			for (const handler of resumeCompleteHandlers) handler();
+		},
+
+		onClose(handler) {
+			const stopTransport = socket.onClose(handler);
+			const stopTerminal = socket.on('terminal.closed', () => handler());
+			return () => {
+				stopTransport();
+				stopTerminal();
+			};
+		},
+
+		onError(handler) {
+			inputErrorHandlers.add(handler);
+			const stopTransport = socket.onError(handler);
+			const stopTerminal = socket.on('terminal.error', (payload) => handler(payload.message));
+			return () => {
+				inputErrorHandlers.delete(handler);
+				stopTransport();
+				stopTerminal();
+			};
+		},
+
+		setPreviousOutputAvailable(available) {
+			previousOutputAvailable = available;
+		},
+
+		hasPreviousOutput() {
+			return previousOutputAvailable;
+		},
+
+		async loadPreviousOutput(maxBytes) {
+			if (!previousOutputAvailable || !socket.connected) return null;
+			if (historyLoad) return historyLoad;
+			const generation = remoteOutputGeneration;
+			const task = socket
+				.requestBinary('suspend.history.previous', maxBytes ? { maxBytes } : {})
+				.then(({ data: page, bytes }) => {
+					if (generation !== remoteOutputGeneration) return null;
+					previousOutputAvailable = page.hasMore;
+					return {
+						data: bytes,
+						hasMore: page.hasMore,
+					};
+				})
+				.finally(() => {
+					if (historyLoad === task) historyLoad = null;
+				});
+			historyLoad = task;
+			return task;
+		},
+
+		async resetPreviousOutput() {
+			const generation = remoteOutputGeneration;
+			if (historyLoad) await historyLoad.catch(() => null);
+			if (generation !== remoteOutputGeneration || !socket.connected) return false;
+			const result = await socket.request('suspend.history.reset', {});
+			if (generation !== remoteOutputGeneration) return false;
+			previousOutputAvailable = result.available;
+			return result.available;
+		},
+	};
 };
 
 export const createFilesystemChannel = (socket: WorkspaceSocket): FilesystemChannel => ({
-  listDirectory: (path): Promise<WorkspaceFilesystemListResponseDto> => socket.request('filesystem.list', { path }),
-  search: (path, query): Promise<WorkspaceFilesystemSearchResponseDto> =>
-    socket.request('filesystem.search', { path, query }),
-  stat: (path): Promise<WorkspaceRemoteFileEntryDto> => socket.request('filesystem.stat', { path }),
-  async readBinary(path, maxBytes) {
-    const { data, bytes } = await socket.requestBinary('filesystem.readBinary', { path, maxBytes });
-    return { path: data.path, bytes };
-  },
-  async writeText(path, content, encoding) {
-    await socket.request('filesystem.writeText', { path, content, ...(encoding ? { encoding } : {}) });
-  },
-  async createDirectory(path) {
-    await socket.request('filesystem.createDirectory', { path });
-  },
-  async createFile(path, content = '') {
-    await socket.request('filesystem.createFile', { path, content });
-  },
-  async remove(paths, options) {
-    await socket.request('filesystem.remove', {
-      paths,
-      ...(options?.forceDirectoryPaths?.length ? { forceDirectoryPaths: options.forceDirectoryPaths } : {}),
-    });
-  },
-  async rename(from, to) {
-    await socket.request('filesystem.rename', { from, to });
-  },
-  async chmod(path, mode) {
-    await socket.request('filesystem.chmod', { path, mode });
-  },
-  async realpath(path): Promise<ResolvedRemotePath> {
-    const resolved = await socket.request('filesystem.realpath', { path });
-    return { requestedPath: resolved.requestedPath, path: resolved.absolutePath, targetType: resolved.targetType };
-  },
+	listDirectory: (path): Promise<WorkspaceFilesystemListResponseDto> => socket.request('filesystem.list', { path }),
+
+	search: (path, query): Promise<WorkspaceFilesystemSearchResponseDto> =>
+		socket.request('filesystem.search', { path, query }),
+
+	stat: (path): Promise<WorkspaceRemoteFileEntryDto> => socket.request('filesystem.stat', { path }),
+
+	async readBinary(path, maxBytes) {
+		const { data, bytes } = await socket.requestBinary('filesystem.readBinary', { path, maxBytes });
+		return { path: data.path, bytes };
+	},
+
+	async writeText(path, content, encoding) {
+		await socket.request('filesystem.writeText', { path, content, ...(encoding ? { encoding } : {}) });
+	},
+
+	async createDirectory(path) {
+		await socket.request('filesystem.createDirectory', { path });
+	},
+
+	async createFile(path, content = '') {
+		await socket.request('filesystem.createFile', { path, content });
+	},
+
+	async remove(paths, options) {
+		await socket.request('filesystem.remove', {
+			paths,
+			...(options?.forceDirectoryPaths?.length ? { forceDirectoryPaths: options.forceDirectoryPaths } : {}),
+		});
+	},
+
+	async rename(from, to) {
+		await socket.request('filesystem.rename', { from, to });
+	},
+
+	async chmod(path, mode) {
+		await socket.request('filesystem.chmod', { path, mode });
+	},
+
+	async realpath(path): Promise<ResolvedRemotePath> {
+		const resolved = await socket.request('filesystem.realpath', { path });
+		return { requestedPath: resolved.requestedPath, path: resolved.absolutePath, targetType: resolved.targetType };
+	},
 });
 
 const DIRECTORY_CHANGE_COMPLETION_TIMEOUT_MS = 10 * 60 * 1000 + 5_000;
 
 export const createTerminalDirectoryPort = (
-  socket: WorkspaceSocket,
-  workspaceId?: string,
-  connectionId?: number,
+	socket: WorkspaceSocket,
+	workspaceId?: string,
+	connectionId?: number,
 ): TerminalDirectoryPort => ({
-  readCurrentDirectory: () => socket.request('terminal.currentDirectory', {}),
-  changeDirectory(path, options) {
-    const requestId = crypto.randomUUID();
-    return new Promise<{ path: string }>((resolve, reject) => {
-      let settled = false;
-      let stopQueued: () => void = () => {};
-      let stopChanged: () => void = () => {};
-      let stopFailed: () => void = () => {};
-      let stopClose: () => void = () => {};
-      let timer = 0;
-      const cleanup = () => {
-        stopQueued();
-        stopChanged();
-        stopFailed();
-        stopClose();
-        if (timer) window.clearTimeout(timer);
-      };
-      const succeed = (result: { path: string }) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        resolve(result);
-      };
-      const fail = (cause: unknown) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        reject(cause instanceof Error ? cause : new Error(String(cause)));
-      };
+	readCurrentDirectory: () => socket.request('terminal.currentDirectory', {}),
 
-      stopQueued = socket.on('terminal.directoryChangeQueued', (event) => {
-        if (event.requestId !== requestId) return;
-        options?.onQueued?.({ path: event.path, waitingForPrompt: event.waitingForPrompt });
-      });
-      stopChanged = socket.on('terminal.directoryChanged', (event) => {
-        if (event.requestId === requestId) succeed({ path: event.path });
-      });
-      stopFailed = socket.on('terminal.directoryChangeFailed', (event) => {
-        if (event.requestId !== requestId) return;
-        logger.debug(
-          {
-            workspaceId,
-            connectionId,
-            requestId,
-            reason: event.message,
-            failureKind: 'terminal_directory_change_failed',
-          },
-          'Workspace terminal directory change failed',
-        );
-        fail(new Error(event.message));
-      });
-      stopClose = socket.onClose((reason) => fail(new Error(reason || 'Workspace connection closed.')));
-      timer = window.setTimeout(
-        () => fail(new Error('Terminal directory change timed out.')),
-        DIRECTORY_CHANGE_COMPLETION_TIMEOUT_MS,
-      );
-      void socket.requestWithId('terminal.changeDirectory', requestId, { path }).catch((cause) => fail(cause));
-    });
-  },
+	changeDirectory(path, options) {
+		const requestId = crypto.randomUUID();
+		return new Promise<{ path: string }>((resolve, reject) => {
+			let settled = false;
+
+			let stopQueued: () => void = () => {};
+
+			let stopChanged: () => void = () => {};
+
+			let stopFailed: () => void = () => {};
+
+			let stopClose: () => void = () => {};
+
+			let timer = 0;
+
+			const cleanup = () => {
+				stopQueued();
+				stopChanged();
+				stopFailed();
+				stopClose();
+				if (timer) window.clearTimeout(timer);
+			};
+
+			const succeed = (result: { path: string }) => {
+				if (settled) return;
+				settled = true;
+				cleanup();
+				resolve(result);
+			};
+
+			const fail = (cause: unknown) => {
+				if (settled) return;
+				settled = true;
+				cleanup();
+				reject(cause instanceof Error ? cause : new Error(String(cause)));
+			};
+
+			stopQueued = socket.on('terminal.directoryChangeQueued', (event) => {
+				if (event.requestId !== requestId) return;
+				options?.onQueued?.({ path: event.path, waitingForPrompt: event.waitingForPrompt });
+			});
+			stopChanged = socket.on('terminal.directoryChanged', (event) => {
+				if (event.requestId === requestId) succeed({ path: event.path });
+			});
+			stopFailed = socket.on('terminal.directoryChangeFailed', (event) => {
+				if (event.requestId !== requestId) return;
+				logger.debug(
+					{
+						workspaceId,
+						connectionId,
+						requestId,
+						reason: event.message,
+						failureKind: 'terminal_directory_change_failed',
+					},
+					'Workspace terminal directory change failed',
+				);
+				fail(new Error(event.message));
+			});
+			stopClose = socket.onClose((reason) => fail(new Error(reason || 'Workspace connection closed.')));
+			timer = window.setTimeout(
+				() => fail(new Error('Terminal directory change timed out.')),
+				DIRECTORY_CHANGE_COMPLETION_TIMEOUT_MS,
+			);
+			void socket.requestWithId('terminal.changeDirectory', requestId, { path }).catch((cause) => fail(cause));
+		});
+	},
 });
 
 export const createFilesystemDownloadPort = (workspaceId: string, connectionId: number): FilesystemDownloadPort => ({
-  async createDownload(path, kind) {
-    if (kind === 'directory') {
-      const query = new URLSearchParams({
-        connectionId: String(connectionId),
-        sessionId: workspaceId,
-        remotePath: path,
-      });
-      return { url: `/api/v1/sftp/download-directory?${query}` };
-    }
-    try {
-      const { data } = await httpClient.post<{ url: string }>('/sftp/download-ticket', {
-        connectionId,
-        sessionId: workspaceId,
-        remotePath: path,
-      });
-      return data;
-    } catch (cause) {
-      const status = apiErrorStatus(cause);
-      logger.debug(
-        {
-          err: cause,
-          workspaceId,
-          connectionId,
-          downloadKind: kind,
-          status,
-          failureKind: status === 404 ? 'workspace_or_file_not_found' : 'filesystem_download_ticket_failed',
-        },
-        'Workspace filesystem download ticket failed',
-      );
-      throw cause;
-    }
-  },
+	async createDownload(path, kind) {
+		if (kind === 'directory') {
+			const query = new URLSearchParams({
+				connectionId: String(connectionId),
+				sessionId: workspaceId,
+				remotePath: path,
+			});
+			return { url: `/api/v1/sftp/download-directory?${query}` };
+		}
+		try {
+			const { data } = await httpClient.post<{ url: string }>('/sftp/download-ticket', {
+				connectionId,
+				sessionId: workspaceId,
+				remotePath: path,
+			});
+			return data;
+		} catch (cause) {
+			const status = apiErrorStatus(cause);
+			logger.debug(
+				{
+					err: cause,
+					workspaceId,
+					connectionId,
+					downloadKind: kind,
+					status,
+					failureKind: status === 404 ? 'workspace_or_file_not_found' : 'filesystem_download_ticket_failed',
+				},
+				'Workspace filesystem download ticket failed',
+			);
+			throw cause;
+		}
+	},
 });
 
 export const createFileDocumentPort = (filesystem: FilesystemChannel): FileDocumentPort => ({
-  async load(path, encoding): Promise<LoadedEditorDocument> {
-    const file = await filesystem.readBinary(path, 16 * 1024 * 1024);
-    const decoded = await decodeEditorDocument(file.bytes, encoding);
-    return {
-      path: file.path,
-      content: decoded.content,
-      encoding: decoded.encoding,
-    };
-  },
-  save: (path, content, encoding) => filesystem.writeText(path, content, encoding),
+	async load(path, encoding): Promise<LoadedEditorDocument> {
+		const file = await filesystem.readBinary(path, 16 * 1024 * 1024);
+		const decoded = await decodeEditorDocument(file.bytes, encoding);
+		return {
+			path: file.path,
+			content: decoded.content,
+			encoding: decoded.encoding,
+		};
+	},
+
+	save: (path, content, encoding) => filesystem.writeText(path, content, encoding),
 });
 
 const racePreviewAbort = <T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> => {
-  if (!signal) return promise;
-  if (signal.aborted) return Promise.reject(new DOMException('Preview read aborted.', 'AbortError'));
-  return new Promise<T>((resolve, reject) => {
-    const abort = () => reject(new DOMException('Preview read aborted.', 'AbortError'));
-    signal.addEventListener('abort', abort, { once: true });
-    promise.then(
-      (value) => {
-        signal.removeEventListener('abort', abort);
-        resolve(value);
-      },
-      (cause) => {
-        signal.removeEventListener('abort', abort);
-        reject(cause);
-      },
-    );
-  });
+	if (!signal) return promise;
+	if (signal.aborted) return Promise.reject(new DOMException('Preview read aborted.', 'AbortError'));
+	return new Promise<T>((resolve, reject) => {
+		const abort = () => reject(new DOMException('Preview read aborted.', 'AbortError'));
+
+		signal.addEventListener('abort', abort, { once: true });
+		promise.then(
+			(value) => {
+				signal.removeEventListener('abort', abort);
+				resolve(value);
+			},
+			(cause) => {
+				signal.removeEventListener('abort', abort);
+				reject(cause);
+			},
+		);
+	});
 };
 
 export const createFilePreviewSource = (socket: WorkspaceSocket): FilePreviewSource => ({
-  async read(path, options) {
-    const signal = options?.signal;
-    if (options?.maxBytes !== undefined) {
-      const entry = await racePreviewAbort(socket.request('filesystem.stat', { path }), signal);
-      if (entry.metadata.size > options.maxBytes) {
-        return { tooLarge: true, actualBytes: entry.metadata.size, maxBytes: options.maxBytes };
-      }
-    }
-    const result = await socket.requestBinary(
-      'filesystem.readBinary',
-      { path, maxBytes: options?.maxBytes ?? 64 * 1024 * 1024 },
-      signal,
-    );
-    const bytes = result.bytes;
-    return { bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer };
-  },
+	async read(path, options) {
+		const signal = options?.signal;
+		if (options?.maxBytes !== undefined) {
+			const entry = await racePreviewAbort(socket.request('filesystem.stat', { path }), signal);
+			if (entry.metadata.size > options.maxBytes) {
+				return { tooLarge: true, actualBytes: entry.metadata.size, maxBytes: options.maxBytes };
+			}
+		}
+		const result = await socket.requestBinary(
+			'filesystem.readBinary',
+			{ path, maxBytes: options?.maxBytes ?? 64 * 1024 * 1024 },
+			signal,
+		);
+		const bytes = result.bytes;
+		return { bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer };
+	},
 });
 
 const transferProgress = (
-  id: string,
-  progress: number,
-  extras: Partial<Extract<TransferEvent, { type: 'progress' }>> = {},
+	id: string,
+	progress: number,
+	extras: Partial<Extract<TransferEvent, { type: 'progress' }>> = {},
 ): TransferEvent => ({ type: 'progress', id, progress, ...extras });
 
 const uploadDestinationPath = (request: UploadCommand): string => {
-  const base = request.destination.path === '/' ? '' : request.destination.path.replace(/\/+$/, '');
-  const relative = request.relativeDirectory ? `${request.relativeDirectory.replace(/^\/+|\/+$/g, '')}/` : '';
-  return `${base}/${relative}${request.file.name}`.replace(/\/{2,}/g, '/');
+	const base = request.destination.path === '/' ? '' : request.destination.path.replace(/\/+$/, '');
+	const relative = request.relativeDirectory ? `${request.relativeDirectory.replace(/^\/+|\/+$/g, '')}/` : '';
+	return `${base}/${relative}${request.file.name}`.replace(/\/{2,}/g, '/');
 };
 
 interface TransferChannelAdapter extends TransferChannel {
-  workspaceConnected(): Promise<void>;
-  workspaceDisconnected(): void;
-  dispose(): void;
+	workspaceConnected(): Promise<void>;
+	workspaceDisconnected(): void;
+	dispose(): void;
 }
 
 const UPLOAD_SCHEDULER_MIN_STREAMS = 6;
 const UPLOAD_SCHEDULER_STREAM_CEILING = 12;
 
 const uploadSchedulerStreamLimit = (): number => {
-  const detected = typeof navigator === 'undefined' ? 4 : Number(navigator.hardwareConcurrency || 4);
-  const hardwareConcurrency = Number.isFinite(detected) ? Math.max(1, Math.min(16, Math.round(detected))) : 4;
-  return Math.max(
-    UPLOAD_SCHEDULER_MIN_STREAMS,
-    Math.min(UPLOAD_SCHEDULER_STREAM_CEILING, Math.ceil(hardwareConcurrency * 1.5)),
-  );
+	const detected = typeof navigator === 'undefined' ? 4 : Number(navigator.hardwareConcurrency || 4);
+	const hardwareConcurrency = Number.isFinite(detected) ? Math.max(1, Math.min(16, Math.round(detected))) : 4;
+	return Math.max(
+		UPLOAD_SCHEDULER_MIN_STREAMS,
+		Math.min(UPLOAD_SCHEDULER_STREAM_CEILING, Math.ceil(hardwareConcurrency * 1.5)),
+	);
 };
 
 export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: string): TransferChannelAdapter => {
-  const handlers = new Set<(event: TransferEvent) => void>();
-  const uploads = new Map<string, UploadCommand>();
-  const uploadSockets = new Map<string, WebSocket>();
-  const queuedUploads: UploadCommand[] = [];
-  const activeUploads = new Set<string>();
-  const prepareRequests = new Map<string, UploadPrepareCommand>();
-  const activeRemoteOperations = new Map<string, 'copy' | 'move' | 'compress' | 'decompress'>();
-  let workspaceAvailable = false;
-  let recoveryPending = false;
-  let recovering = false;
-  const emit = (event: TransferEvent) => {
-    for (const handler of handlers) handler(event);
-  };
+	const handlers = new Set<(event: TransferEvent) => void>();
+	const uploads = new Map<string, UploadCommand>();
+	const uploadSockets = new Map<string, WebSocket>();
+	const queuedUploads: UploadCommand[] = [];
+	const activeUploads = new Set<string>();
+	const prepareRequests = new Map<string, UploadPrepareCommand>();
+	const activeRemoteOperations = new Map<string, 'copy' | 'move' | 'compress' | 'decompress'>();
+	let workspaceAvailable = false;
+	let recoveryPending = false;
+	let recovering = false;
 
-  const closeUploadStream = (id: string, reason = 'Upload stream closed'): void => {
-    const uploadSocket = uploadSockets.get(id);
-    uploadSockets.delete(id);
-    if (uploadSocket && uploadSocket.readyState < WebSocket.CLOSING) uploadSocket.close(1000, reason);
-  };
+	const emit = (event: TransferEvent) => {
+		for (const handler of handlers) handler(event);
+	};
 
-  const removeQueuedUpload = (id: string): void => {
-    for (let index = queuedUploads.length - 1; index >= 0; index -= 1) {
-      if (queuedUploads[index]?.id === id) queuedUploads.splice(index, 1);
-    }
-  };
+	const closeUploadStream = (id: string, reason = 'Upload stream closed'): void => {
+		const uploadSocket = uploadSockets.get(id);
+		uploadSockets.delete(id);
+		if (uploadSocket && uploadSocket.readyState < WebSocket.CLOSING) uploadSocket.close(1000, reason);
+	};
 
-  const enqueueUpload = (request: UploadCommand): void => {
-    removeQueuedUpload(request.id);
-    queuedUploads.push(request);
-  };
+	const removeQueuedUpload = (id: string): void => {
+		for (let index = queuedUploads.length - 1; index >= 0; index -= 1) {
+			if (queuedUploads[index]?.id === id) queuedUploads.splice(index, 1);
+		}
+	};
 
-  const forgetUpload = (id: string): UploadCommand | undefined => {
-    const request = uploads.get(id);
-    uploads.delete(id);
-    removeQueuedUpload(id);
-    activeUploads.delete(id);
-    if (request?.prepareId && ![...uploads.values()].some((item) => item.prepareId === request.prepareId)) {
-      prepareRequests.delete(request.prepareId);
-    }
-    return request;
-  };
+	const enqueueUpload = (request: UploadCommand): void => {
+		removeQueuedUpload(request.id);
+		queuedUploads.push(request);
+	};
 
-  const failUploadStream = (
-    request: UploadCommand,
-    message: string,
-    errorKind: TransferErrorKind = 'upload_failed',
-    errorContext?: TransferErrorContext,
-  ): void => {
-    if (uploads.get(request.id) !== request) return;
-    logger.debug(
-      {
-        workspaceId,
-        uploadId: request.id,
-        workspaceAvailable,
-        workspaceSocketConnected: socket.connected,
-        reason: message,
-      },
-      'Workspace upload stream failed',
-    );
-    forgetUpload(request.id);
-    closeUploadStream(request.id, 'Upload stream failed');
-    emit({
-      type: 'error',
-      id: request.id,
-      ...(message ? { message } : {}),
-      errorKind,
-      ...(errorContext ? { errorContext } : {}),
-    });
-    pumpUploadQueue();
-    if (workspaceAvailable && socket.connected) {
-      void socket
-        .request('upload.abort', { uploadId: request.id, message: message || errorKind })
-        .catch(() => undefined);
-    }
-  };
+	const forgetUpload = (id: string): UploadCommand | undefined => {
+		const request = uploads.get(id);
+		uploads.delete(id);
+		removeQueuedUpload(id);
+		activeUploads.delete(id);
+		if (request?.prepareId && ![...uploads.values()].some((item) => item.prepareId === request.prepareId)) {
+			prepareRequests.delete(request.prepareId);
+		}
+		return request;
+	};
 
-  const startUploadRequest = async (request: UploadCommand): Promise<void> => {
-    await socket.request('upload.start', {
-      uploadId: request.id,
-      destinationPath: uploadDestinationPath(request),
-      size: request.file.size,
-      ...(request.prepareId ? { prepareId: request.prepareId } : {}),
-      conflictPolicy: request.conflictStrategy ?? 'ask',
-    });
-  };
+	const failUploadStream = (
+		request: UploadCommand,
+		message: string,
+		errorKind: TransferErrorKind = 'upload_failed',
+		errorContext?: TransferErrorContext,
+	): void => {
+		if (uploads.get(request.id) !== request) return;
+		logger.debug(
+			{
+				workspaceId,
+				uploadId: request.id,
+				workspaceAvailable,
+				workspaceSocketConnected: socket.connected,
+				reason: message,
+			},
+			'Workspace upload stream failed',
+		);
+		forgetUpload(request.id);
+		closeUploadStream(request.id, 'Upload stream failed');
+		emit({
+			type: 'error',
+			id: request.id,
+			...(message ? { message } : {}),
+			errorKind,
+			...(errorContext ? { errorContext } : {}),
+		});
+		pumpUploadQueue();
+		if (workspaceAvailable && socket.connected) {
+			void socket
+				.request('upload.abort', { uploadId: request.id, message: message || errorKind })
+				.catch(() => undefined);
+		}
+	};
 
-  const sendPrepareRequest = async (request: UploadPrepareCommand): Promise<void> => {
-    await socket.request('upload.prepare', {
-      prepareId: request.id,
-      basePath: request.destination.path,
-      directories: [...request.directories],
-    });
-  };
+	const startUploadRequest = async (request: UploadCommand): Promise<void> => {
+		await socket.request('upload.start', {
+			uploadId: request.id,
+			destinationPath: uploadDestinationPath(request),
+			size: request.file.size,
+			...(request.prepareId ? { prepareId: request.prepareId } : {}),
+			conflictPolicy: request.conflictStrategy ?? 'ask',
+		});
+	};
 
-  const recoverUploads = async (): Promise<void> => {
-    if (!workspaceAvailable || !recoveryPending || recovering || !uploads.size) return;
-    recovering = true;
-    recoveryPending = false;
-    logger.debug(
-      { workspaceId, uploadCount: uploads.size, prepareCount: prepareRequests.size },
-      'Workspace upload recovery started',
-    );
-    try {
-      const snapshot = [...uploads.values()];
-      const prepareIds = [
-        ...new Set(snapshot.map((request) => request.prepareId).filter((id): id is string => Boolean(id))),
-      ];
-      for (const prepareId of prepareIds) {
-        const prepare = prepareRequests.get(prepareId);
-        if (!prepare) {
-          for (const request of snapshot.filter((item) => item.prepareId === prepareId)) {
-            if (uploads.get(request.id) !== request) continue;
-            forgetUpload(request.id);
-            emit({ type: 'error', id: request.id, errorKind: 'upload_directory_state_lost' });
-          }
-          continue;
-        }
-        try {
-          await sendPrepareRequest(prepare);
-        } catch (cause) {
-          if (!workspaceAvailable) {
-            logger.debug(
-              { workspaceId, prepareId, uploadCount: uploads.size },
-              'Workspace upload recovery paused because workspace disconnected',
-            );
-            recoveryPending = true;
-            return;
-          }
-          const message = cause instanceof Error ? cause.message : String(cause);
-          logger.debug(
-            { err: cause, workspaceId, prepareId },
-            'Workspace upload directory preparation recovery failed',
-          );
-          for (const request of snapshot.filter((item) => item.prepareId === prepareId)) {
-            if (uploads.get(request.id) !== request) continue;
-            forgetUpload(request.id);
-            emit({ type: 'error', id: request.id, message, errorKind: 'upload_failed' });
-          }
-        }
-      }
+	const sendPrepareRequest = async (request: UploadPrepareCommand): Promise<void> => {
+		await socket.request('upload.prepare', {
+			prepareId: request.id,
+			basePath: request.destination.path,
+			directories: [...request.directories],
+		});
+	};
 
-      if (!workspaceAvailable) {
-        recoveryPending = true;
-        return;
-      }
-      queuedUploads.splice(0);
-      activeUploads.clear();
-      for (const request of [...uploads.values()]) {
-        emit({ type: 'resumed', id: request.id });
-        enqueueUpload(request);
-      }
-      pumpUploadQueue();
-      logger.debug({ workspaceId, uploadCount: uploads.size }, 'Workspace upload recovery queued');
-    } finally {
-      recovering = false;
-    }
-  };
+	const recoverUploads = async (): Promise<void> => {
+		if (!workspaceAvailable || !recoveryPending || recovering || !uploads.size) return;
+		recovering = true;
+		recoveryPending = false;
+		logger.debug(
+			{ workspaceId, uploadCount: uploads.size, prepareCount: prepareRequests.size },
+			'Workspace upload recovery started',
+		);
+		try {
+			const snapshot = [...uploads.values()];
+			const prepareIds = [
+				...new Set(snapshot.map((request) => request.prepareId).filter((id): id is string => Boolean(id))),
+			];
+			for (const prepareId of prepareIds) {
+				const prepare = prepareRequests.get(prepareId);
+				if (!prepare) {
+					for (const request of snapshot.filter((item) => item.prepareId === prepareId)) {
+						if (uploads.get(request.id) !== request) continue;
+						forgetUpload(request.id);
+						emit({ type: 'error', id: request.id, errorKind: 'upload_directory_state_lost' });
+					}
+					continue;
+				}
+				try {
+					await sendPrepareRequest(prepare);
+				} catch (cause) {
+					if (!workspaceAvailable) {
+						logger.debug(
+							{ workspaceId, prepareId, uploadCount: uploads.size },
+							'Workspace upload recovery paused because workspace disconnected',
+						);
+						recoveryPending = true;
+						return;
+					}
+					const message = cause instanceof Error ? cause.message : String(cause);
+					logger.debug(
+						{ err: cause, workspaceId, prepareId },
+						'Workspace upload directory preparation recovery failed',
+					);
+					for (const request of snapshot.filter((item) => item.prepareId === prepareId)) {
+						if (uploads.get(request.id) !== request) continue;
+						forgetUpload(request.id);
+						emit({ type: 'error', id: request.id, message, errorKind: 'upload_failed' });
+					}
+				}
+			}
 
-  function pumpUploadQueue(): void {
-    if (!workspaceAvailable) return;
-    const streamLimit = uploadSchedulerStreamLimit();
+			if (!workspaceAvailable) {
+				recoveryPending = true;
+				return;
+			}
+			queuedUploads.splice(0);
+			activeUploads.clear();
+			for (const request of [...uploads.values()]) {
+				emit({ type: 'resumed', id: request.id });
+				enqueueUpload(request);
+			}
+			pumpUploadQueue();
+			logger.debug({ workspaceId, uploadCount: uploads.size }, 'Workspace upload recovery queued');
+		} finally {
+			recovering = false;
+		}
+	};
 
-    while (queuedUploads.length > 0 && activeUploads.size < streamLimit) {
-      for (let index = queuedUploads.length - 1; index >= 0; index -= 1) {
-        const queued = queuedUploads[index]!;
-        if (uploads.get(queued.id) !== queued) queuedUploads.splice(index, 1);
-      }
-      if (!queuedUploads.length) return;
+	function pumpUploadQueue(): void {
+		if (!workspaceAvailable) return;
+		const streamLimit = uploadSchedulerStreamLimit();
 
-      // File size is not a useful proxy for transport pressure: every upload stream already
-      // has bounded browser/server WebSocket buffering and SFTP backpressure. Charging large
-      // files extra "capacity units" reduced a nominal six-stream scheduler to only one or
-      // two streams for common large-file batches, leaving bandwidth idle. Keep FIFO fairness
-      // and let the explicit stream limit be the single concurrency control.
-      const request = queuedUploads.shift();
-      if (!request) return;
-      activeUploads.add(request.id);
-      void startUploadRequest(request).catch((cause) => {
-        if (uploads.get(request.id) !== request) return;
-        if (!workspaceAvailable) return;
-        logger.debug({ err: cause, workspaceId, uploadId: request.id }, 'Workspace upload start request failed');
-        forgetUpload(request.id);
-        closeUploadStream(request.id, 'Upload start failed');
-        pumpUploadQueue();
-        emit({
-          type: 'error',
-          id: request.id,
-          message: cause instanceof Error ? cause.message : String(cause),
-          errorKind: 'upload_failed',
-        });
-      });
-    }
-  }
+		while (queuedUploads.length > 0 && activeUploads.size < streamLimit) {
+			for (let index = queuedUploads.length - 1; index >= 0; index -= 1) {
+				const queued = queuedUploads[index]!;
+				if (uploads.get(queued.id) !== queued) queuedUploads.splice(index, 1);
+			}
+			if (!queuedUploads.length) return;
 
-  const streamUpload = async (request: UploadCommand): Promise<void> => {
-    const streamRequest: WorkspaceUploadStreamQueryDto = {
-      workspaceId,
-      uploadId: request.id,
-      size: request.file.size,
-    };
-    const params = new URLSearchParams({
-      workspaceId: streamRequest.workspaceId,
-      uploadId: streamRequest.uploadId,
-      size: String(streamRequest.size),
-    });
-    const uploadSocket = new WebSocket(createWebSocketUrl(`/ws/uploads?${params}`));
-    logger.debug({ workspaceId, uploadId: request.id, size: request.file.size }, 'Workspace upload WebSocket opening');
-    uploadSockets.set(request.id, uploadSocket);
-    uploadSocket.binaryType = 'arraybuffer';
-    uploadSocket.onclose = (event) => {
-      if (uploadSockets.get(request.id) === uploadSocket) uploadSockets.delete(request.id);
-      logger.debug(
-        {
-          workspaceId,
-          uploadId: request.id,
-          closeCode: event.code,
-          reason: event.reason || undefined,
-          wasClean: event.wasClean,
-          workspaceAvailable,
-          failureKind:
-            event.reason === 'Invalid workspace'
-              ? 'workspace_not_found_or_forbidden'
-              : event.code === 1000
-                ? undefined
-                : 'upload_transport_closed',
-        },
-        'Workspace upload WebSocket closed',
-      );
-      if (event.code !== 1000 && workspaceAvailable && uploads.get(request.id) === request) {
-        failUploadStream(request, event.reason || '', 'upload_stream_closed', { closeCode: event.code });
-      }
-    };
-    await new Promise<void>((resolve, reject) => {
-      uploadSocket.onopen = () => {
-        logger.debug({ workspaceId, uploadId: request.id }, 'Workspace upload WebSocket opened');
-        resolve();
-      };
-      uploadSocket.onerror = () => {
-        logger.debug(
-          { workspaceId, uploadId: request.id, readyState: uploadSocket.readyState },
-          'Workspace upload WebSocket error event',
-        );
-        failUploadStream(request, '', 'upload_stream_open_failed', { fileName: request.file.name });
-        reject(new Error('UPLOAD_STREAM_OPEN_FAILED'));
-      };
-    });
-    if (request.file.size === 0) return;
-    const chunkSize = 512 * 1024;
-    const highWater = 8 * 1024 * 1024;
-    const lowWater = 2 * 1024 * 1024;
-    for (let offset = 0; offset < request.file.size; offset += chunkSize) {
-      if (!uploads.has(request.id) || uploadSocket.readyState !== WebSocket.OPEN) return;
-      if (uploadSocket.bufferedAmount >= highWater) {
-        while (uploadSocket.bufferedAmount > lowWater) {
-          if (!uploads.has(request.id) || uploadSocket.readyState !== WebSocket.OPEN) return;
-          await new Promise((resolve) => window.setTimeout(resolve, 8));
-        }
-      }
-      const chunk = await request.file.slice(offset, Math.min(request.file.size, offset + chunkSize)).arrayBuffer();
-      if (!uploads.has(request.id) || uploadSocket.readyState !== WebSocket.OPEN) return;
-      uploadSocket.send(chunk);
-    }
-  };
+			// File size is not a useful proxy for transport pressure: every upload stream already
+			// has bounded browser/server WebSocket buffering and SFTP backpressure. Charging large
+			// files extra "capacity units" reduced a nominal six-stream scheduler to only one or
+			// two streams for common large-file batches, leaving bandwidth idle. Keep FIFO fairness
+			// and let the explicit stream limit be the single concurrency control.
+			const request = queuedUploads.shift();
+			if (!request) return;
+			activeUploads.add(request.id);
+			void startUploadRequest(request).catch((cause) => {
+				if (uploads.get(request.id) !== request) return;
+				if (!workspaceAvailable) return;
+				logger.debug(
+					{ err: cause, workspaceId, uploadId: request.id },
+					'Workspace upload start request failed',
+				);
+				forgetUpload(request.id);
+				closeUploadStream(request.id, 'Upload start failed');
+				pumpUploadQueue();
+				emit({
+					type: 'error',
+					id: request.id,
+					message: cause instanceof Error ? cause.message : String(cause),
+					errorKind: 'upload_failed',
+				});
+			});
+		}
+	}
 
-  const stopUpload = socket.on('transfer.upload', (event) => {
-    const id = event.uploadId;
-    if (!id) return;
-    if (event.type === 'ready') {
-      const request = uploads.get(id);
-      if (request)
-        void streamUpload(request).catch((cause) => {
-          if (uploads.get(id) !== request) return;
-          failUploadStream(request, cause instanceof Error ? cause.message : String(cause));
-        });
-      return;
-    }
-    if (event.type === 'conflict') {
-      activeUploads.delete(id);
-      pumpUploadQueue();
-      emit({ type: 'conflict', id, path: event.destinationPath ?? event.filename ?? '' });
-      return;
-    }
-    if (event.type === 'progress') {
-      emit(
-        transferProgress(id, event.progress ?? 0, {
-          bytesWritten: event.bytesWritten,
-          totalBytes: event.totalSize,
-          completedFiles: event.progress === 100 ? 1 : 0,
-          totalFiles: 1,
-        }),
-      );
-      return;
-    }
-    if (event.type === 'completed' || event.type === 'skipped') {
-      forgetUpload(id);
-      closeUploadStream(id, 'Upload finished');
-      pumpUploadQueue();
-      emit({ type: event.type === 'skipped' ? 'skipped' : 'completed', id });
-      return;
-    }
-    if (event.type === 'cancelled') {
-      forgetUpload(id);
-      closeUploadStream(id, 'Upload cancelled');
-      pumpUploadQueue();
-      emit({ type: 'cancelled', id });
-      return;
-    }
-    if (event.type === 'failed') {
-      logger.debug(
-        { workspaceId, uploadId: id, reason: event.message, failureKind: 'upload_operation_failed' },
-        'Workspace upload operation failed',
-      );
-      forgetUpload(id);
-      closeUploadStream(id, 'Upload failed');
-      pumpUploadQueue();
-      emit({ type: 'error', id, message: event.message, errorKind: 'upload_failed' });
-    }
-  });
+	const streamUpload = async (request: UploadCommand): Promise<void> => {
+		const streamRequest: WorkspaceUploadStreamQueryDto = {
+			workspaceId,
+			uploadId: request.id,
+			size: request.file.size,
+		};
+		const params = new URLSearchParams({
+			workspaceId: streamRequest.workspaceId,
+			uploadId: streamRequest.uploadId,
+			size: String(streamRequest.size),
+		});
+		const uploadSocket = new WebSocket(createWebSocketUrl(`/ws/uploads?${params}`));
+		logger.debug(
+			{ workspaceId, uploadId: request.id, size: request.file.size },
+			'Workspace upload WebSocket opening',
+		);
+		uploadSockets.set(request.id, uploadSocket);
+		uploadSocket.binaryType = 'arraybuffer';
+		uploadSocket.onclose = (event) => {
+			if (uploadSockets.get(request.id) === uploadSocket) uploadSockets.delete(request.id);
+			logger.debug(
+				{
+					workspaceId,
+					uploadId: request.id,
+					closeCode: event.code,
+					reason: event.reason || undefined,
+					wasClean: event.wasClean,
+					workspaceAvailable,
+					failureKind:
+						event.reason === 'Invalid workspace'
+							? 'workspace_not_found_or_forbidden'
+							: event.code === 1000
+								? undefined
+								: 'upload_transport_closed',
+				},
+				'Workspace upload WebSocket closed',
+			);
+			if (event.code !== 1000 && workspaceAvailable && uploads.get(request.id) === request) {
+				failUploadStream(request, event.reason || '', 'upload_stream_closed', { closeCode: event.code });
+			}
+		};
+		await new Promise<void>((resolve, reject) => {
+			uploadSocket.onopen = () => {
+				logger.debug({ workspaceId, uploadId: request.id }, 'Workspace upload WebSocket opened');
+				resolve();
+			};
+			uploadSocket.onerror = () => {
+				logger.debug(
+					{ workspaceId, uploadId: request.id, readyState: uploadSocket.readyState },
+					'Workspace upload WebSocket error event',
+				);
+				failUploadStream(request, '', 'upload_stream_open_failed', { fileName: request.file.name });
+				reject(new Error('UPLOAD_STREAM_OPEN_FAILED'));
+			};
+		});
+		if (request.file.size === 0) return;
+		const chunkSize = 512 * 1024;
+		const highWater = 8 * 1024 * 1024;
+		const lowWater = 2 * 1024 * 1024;
+		for (let offset = 0; offset < request.file.size; offset += chunkSize) {
+			if (!uploads.has(request.id) || uploadSocket.readyState !== WebSocket.OPEN) return;
+			if (uploadSocket.bufferedAmount >= highWater) {
+				while (uploadSocket.bufferedAmount > lowWater) {
+					if (!uploads.has(request.id) || uploadSocket.readyState !== WebSocket.OPEN) return;
+					await new Promise((resolve) => window.setTimeout(resolve, 8));
+				}
+			}
+			const chunk = await request.file
+				.slice(offset, Math.min(request.file.size, offset + chunkSize))
+				.arrayBuffer();
+			if (!uploads.has(request.id) || uploadSocket.readyState !== WebSocket.OPEN) return;
+			uploadSocket.send(chunk);
+		}
+	};
 
-  const stopCopyMove = socket.on('transfer.copyMove', (event) => {
-    const id = event.requestId;
-    if (event.type === 'progress') {
-      const progress =
-        event.totalKnown && event.totalBytes
-          ? Math.min(100, Math.round(((event.transferredBytes ?? 0) / event.totalBytes) * 100))
-          : event.totalFiles
-            ? Math.min(100, Math.round(((event.completedFiles ?? 0) / event.totalFiles) * 100))
-            : 0;
-      emit(
-        transferProgress(id, progress, {
-          bytesWritten: event.transferredBytes,
-          totalBytes: event.totalBytes,
-          completedFiles: event.completedFiles,
-          totalFiles: event.totalFiles,
-          currentFile: event.currentFile,
-        }),
-      );
-    } else if (event.type === 'completed') {
-      activeRemoteOperations.delete(id);
-      emit({ type: 'completed', id });
-    } else if (event.type === 'cancelled') {
-      activeRemoteOperations.delete(id);
-      emit({ type: 'cancelled', id });
-    } else if (event.type === 'failed') {
-      logger.debug(
-        {
-          workspaceId,
-          requestId: id,
-          operation: event.mode ?? activeRemoteOperations.get(id),
-          reason: event.message,
-          failureKind: 'copy_move_operation_failed',
-        },
-        'Workspace copy/move operation failed',
-      );
-      activeRemoteOperations.delete(id);
-      emit({ type: 'error', id, message: event.message, errorKind: 'transfer_failed' });
-    }
-  });
+	const stopUpload = socket.on('transfer.upload', (event) => {
+		const id = event.uploadId;
+		if (!id) return;
+		if (event.type === 'ready') {
+			const request = uploads.get(id);
+			if (request)
+				void streamUpload(request).catch((cause) => {
+					if (uploads.get(id) !== request) return;
+					failUploadStream(request, cause instanceof Error ? cause.message : String(cause));
+				});
+			return;
+		}
+		if (event.type === 'conflict') {
+			activeUploads.delete(id);
+			pumpUploadQueue();
+			emit({ type: 'conflict', id, path: event.destinationPath ?? event.filename ?? '' });
+			return;
+		}
+		if (event.type === 'progress') {
+			emit(
+				transferProgress(id, event.progress ?? 0, {
+					bytesWritten: event.bytesWritten,
+					totalBytes: event.totalSize,
+					completedFiles: event.progress === 100 ? 1 : 0,
+					totalFiles: 1,
+				}),
+			);
+			return;
+		}
+		if (event.type === 'completed' || event.type === 'skipped') {
+			forgetUpload(id);
+			closeUploadStream(id, 'Upload finished');
+			pumpUploadQueue();
+			emit({ type: event.type === 'skipped' ? 'skipped' : 'completed', id });
+			return;
+		}
+		if (event.type === 'cancelled') {
+			forgetUpload(id);
+			closeUploadStream(id, 'Upload cancelled');
+			pumpUploadQueue();
+			emit({ type: 'cancelled', id });
+			return;
+		}
+		if (event.type === 'failed') {
+			logger.debug(
+				{ workspaceId, uploadId: id, reason: event.message, failureKind: 'upload_operation_failed' },
+				'Workspace upload operation failed',
+			);
+			forgetUpload(id);
+			closeUploadStream(id, 'Upload failed');
+			pumpUploadQueue();
+			emit({ type: 'error', id, message: event.message, errorKind: 'upload_failed' });
+		}
+	});
 
-  const stopArchive = socket.on('transfer.archive', (event) => {
-    const id = event.requestId;
-    if (event.type === 'progress') {
-      const progress =
-        event.percent ?? (event.totalFiles ? Math.round(((event.fileCount ?? 0) / event.totalFiles) * 100) : 0);
-      emit(
-        transferProgress(id, progress, {
-          completedFiles: event.fileCount,
-          totalFiles: event.totalFiles ?? null,
-          currentFile: event.currentFile,
-        }),
-      );
-    } else if (event.type === 'completed') {
-      activeRemoteOperations.delete(id);
-      emit({
-        type: 'completed',
-        id,
-        ...(event.warning ? { warning: event.warning, warningKind: 'archive_completed_with_warning' as const } : {}),
-      });
-    } else if (event.type === 'cancelled') {
-      activeRemoteOperations.delete(id);
-      emit({ type: 'cancelled', id });
-    } else if (event.type === 'failed') {
-      logger.debug(
-        {
-          workspaceId,
-          requestId: id,
-          operation: event.operation,
-          code: event.code,
-          reason: event.message,
-          failureKind: 'archive_operation_failed',
-        },
-        'Workspace archive operation failed',
-      );
-      activeRemoteOperations.delete(id);
-      emit({
-        type: 'error',
-        id,
-        message: event.message,
-        errorKind: 'archive_failed',
-        ...(event.code ? { code: event.code } : {}),
-      });
-    }
-  });
+	const stopCopyMove = socket.on('transfer.copyMove', (event) => {
+		const id = event.requestId;
+		if (event.type === 'progress') {
+			const progress =
+				event.totalKnown && event.totalBytes
+					? Math.min(100, Math.round(((event.transferredBytes ?? 0) / event.totalBytes) * 100))
+					: event.totalFiles
+						? Math.min(100, Math.round(((event.completedFiles ?? 0) / event.totalFiles) * 100))
+						: 0;
+			emit(
+				transferProgress(id, progress, {
+					bytesWritten: event.transferredBytes,
+					totalBytes: event.totalBytes,
+					completedFiles: event.completedFiles,
+					totalFiles: event.totalFiles,
+					currentFile: event.currentFile,
+				}),
+			);
+		} else if (event.type === 'completed') {
+			activeRemoteOperations.delete(id);
+			emit({ type: 'completed', id });
+		} else if (event.type === 'cancelled') {
+			activeRemoteOperations.delete(id);
+			emit({ type: 'cancelled', id });
+		} else if (event.type === 'failed') {
+			logger.debug(
+				{
+					workspaceId,
+					requestId: id,
+					operation: event.mode ?? activeRemoteOperations.get(id),
+					reason: event.message,
+					failureKind: 'copy_move_operation_failed',
+				},
+				'Workspace copy/move operation failed',
+			);
+			activeRemoteOperations.delete(id);
+			emit({ type: 'error', id, message: event.message, errorKind: 'transfer_failed' });
+		}
+	});
 
-  return {
-    async prepareUpload(request) {
-      prepareRequests.set(request.id, request);
-      try {
-        await sendPrepareRequest(request);
-      } catch (cause) {
-        prepareRequests.delete(request.id);
-        throw cause;
-      }
-    },
-    async upload(request) {
-      uploads.set(request.id, request);
-      enqueueUpload(request);
-      if (!workspaceAvailable) {
-        recoveryPending = true;
-        emit({ type: 'paused', id: request.id });
-        return;
-      }
-      pumpUploadQueue();
-    },
-    async copyMove(request: CopyMoveCommand) {
-      const sourceWorkspaceId = request.sources[0]?.scopeId;
-      activeRemoteOperations.set(request.id, request.kind);
-      try {
-        await socket.requestWithId('transfer.copyMove', request.id, {
-          mode: request.kind,
-          sources: request.sources.map((source) => source.path),
-          destination: request.destination.path,
-          ...(sourceWorkspaceId && sourceWorkspaceId !== workspaceId ? { sourceWorkspaceId } : {}),
-        });
-      } catch (cause) {
-        activeRemoteOperations.delete(request.id);
-        throw cause;
-      }
-    },
-    async archive(request: ArchiveCommand) {
-      activeRemoteOperations.set(request.id, request.kind);
-      if (request.kind === 'compress') {
-        try {
-          await socket.requestWithId('transfer.compress', request.id, {
-            sources: request.sources.map((source) => source.path),
-            destination: request.destination.path,
-            format: request.format ?? 'zip',
-            ...(request.password ? { password: request.password } : {}),
-          });
-        } catch (cause) {
-          activeRemoteOperations.delete(request.id);
-          throw cause;
-        }
-      } else {
-        try {
-          await socket.requestWithId('transfer.decompress', request.id, {
-            source: request.sources[0]?.path,
-            ...(request.password ? { password: request.password } : {}),
-          });
-        } catch (cause) {
-          activeRemoteOperations.delete(request.id);
-          throw cause;
-        }
-      }
-    },
-    async cancel(id) {
-      const hadUpload = Boolean(forgetUpload(id));
-      const remoteOperation = activeRemoteOperations.get(id);
-      closeUploadStream(id, 'Upload cancelled');
-      pumpUploadQueue();
-      if (!workspaceAvailable || !socket.connected) return hadUpload;
-      if (hadUpload) {
-        const accepted = await socket.request('upload.cancel', { uploadId: id }).catch(() => false);
-        return hadUpload || accepted;
-      }
-      if (remoteOperation === 'copy' || remoteOperation === 'move') {
-        return socket.request('transfer.cancel', { taskId: id }).catch(() => false);
-      }
-      if (remoteOperation === 'compress' || remoteOperation === 'decompress') {
-        return socket.request('transfer.cancelArchive', { taskId: id }).catch(() => false);
-      }
-      return false;
-    },
-    async resolveConflict(id, strategy) {
-      const request = uploads.get(id);
-      if (!request) return;
-      const retry = { ...request, conflictStrategy: strategy };
-      uploads.set(id, retry);
-      enqueueUpload(retry);
-      pumpUploadQueue();
-    },
-    onEvent(handler) {
-      handlers.add(handler);
-      return () => handlers.delete(handler);
-    },
-    async workspaceConnected() {
-      workspaceAvailable = true;
-      logger.debug(
-        { workspaceId, uploadCount: uploads.size, recoveryPending },
-        'Workspace transfer channel marked connected',
-      );
-      await recoverUploads();
-      pumpUploadQueue();
-    },
-    workspaceDisconnected() {
-      if (!workspaceAvailable && recoveryPending) return;
-      logger.debug(
-        {
-          workspaceId,
-          uploadCount: uploads.size,
-          activeRemoteOperationCount: activeRemoteOperations.size,
-        },
-        'Workspace transfer channel marked disconnected',
-      );
-      workspaceAvailable = false;
-      if (!uploads.size) return;
-      recoveryPending = true;
-      queuedUploads.splice(0);
-      activeUploads.clear();
-      for (const request of uploads.values()) {
-        emit({ type: 'paused', id: request.id });
-        closeUploadStream(request.id, 'Workspace connection closed');
-      }
-    },
-    dispose() {
-      workspaceAvailable = false;
-      recoveryPending = false;
-      handlers.clear();
-      uploads.clear();
-      prepareRequests.clear();
-      activeRemoteOperations.clear();
-      queuedUploads.splice(0);
-      activeUploads.clear();
-      for (const id of [...uploadSockets.keys()]) closeUploadStream(id);
-      stopUpload();
-      stopCopyMove();
-      stopArchive();
-    },
-  };
+	const stopArchive = socket.on('transfer.archive', (event) => {
+		const id = event.requestId;
+		if (event.type === 'progress') {
+			const progress =
+				event.percent ?? (event.totalFiles ? Math.round(((event.fileCount ?? 0) / event.totalFiles) * 100) : 0);
+			emit(
+				transferProgress(id, progress, {
+					completedFiles: event.fileCount,
+					totalFiles: event.totalFiles ?? null,
+					currentFile: event.currentFile,
+				}),
+			);
+		} else if (event.type === 'completed') {
+			activeRemoteOperations.delete(id);
+			emit({
+				type: 'completed',
+				id,
+				...(event.warning
+					? { warning: event.warning, warningKind: 'archive_completed_with_warning' as const }
+					: {}),
+			});
+		} else if (event.type === 'cancelled') {
+			activeRemoteOperations.delete(id);
+			emit({ type: 'cancelled', id });
+		} else if (event.type === 'failed') {
+			logger.debug(
+				{
+					workspaceId,
+					requestId: id,
+					operation: event.operation,
+					code: event.code,
+					reason: event.message,
+					failureKind: 'archive_operation_failed',
+				},
+				'Workspace archive operation failed',
+			);
+			activeRemoteOperations.delete(id);
+			emit({
+				type: 'error',
+				id,
+				message: event.message,
+				errorKind: 'archive_failed',
+				...(event.code ? { code: event.code } : {}),
+			});
+		}
+	});
+
+	return {
+		async prepareUpload(request) {
+			prepareRequests.set(request.id, request);
+			try {
+				await sendPrepareRequest(request);
+			} catch (cause) {
+				prepareRequests.delete(request.id);
+				throw cause;
+			}
+		},
+
+		async upload(request) {
+			uploads.set(request.id, request);
+			enqueueUpload(request);
+			if (!workspaceAvailable) {
+				recoveryPending = true;
+				emit({ type: 'paused', id: request.id });
+				return;
+			}
+			pumpUploadQueue();
+		},
+
+		async copyMove(request: CopyMoveCommand) {
+			const sourceWorkspaceId = request.sources[0]?.scopeId;
+			activeRemoteOperations.set(request.id, request.kind);
+			try {
+				await socket.requestWithId('transfer.copyMove', request.id, {
+					mode: request.kind,
+					sources: request.sources.map((source) => source.path),
+					destination: request.destination.path,
+					...(sourceWorkspaceId && sourceWorkspaceId !== workspaceId ? { sourceWorkspaceId } : {}),
+				});
+			} catch (cause) {
+				activeRemoteOperations.delete(request.id);
+				throw cause;
+			}
+		},
+
+		async archive(request: ArchiveCommand) {
+			activeRemoteOperations.set(request.id, request.kind);
+			if (request.kind === 'compress') {
+				try {
+					await socket.requestWithId('transfer.compress', request.id, {
+						sources: request.sources.map((source) => source.path),
+						destination: request.destination.path,
+						format: request.format ?? 'zip',
+						...(request.password ? { password: request.password } : {}),
+					});
+				} catch (cause) {
+					activeRemoteOperations.delete(request.id);
+					throw cause;
+				}
+			} else {
+				try {
+					await socket.requestWithId('transfer.decompress', request.id, {
+						source: request.sources[0]?.path,
+						...(request.password ? { password: request.password } : {}),
+					});
+				} catch (cause) {
+					activeRemoteOperations.delete(request.id);
+					throw cause;
+				}
+			}
+		},
+
+		async cancel(id) {
+			const hadUpload = Boolean(forgetUpload(id));
+			const remoteOperation = activeRemoteOperations.get(id);
+			closeUploadStream(id, 'Upload cancelled');
+			pumpUploadQueue();
+			if (!workspaceAvailable || !socket.connected) return hadUpload;
+			if (hadUpload) {
+				const accepted = await socket.request('upload.cancel', { uploadId: id }).catch(() => false);
+				return hadUpload || accepted;
+			}
+			if (remoteOperation === 'copy' || remoteOperation === 'move') {
+				return socket.request('transfer.cancel', { taskId: id }).catch(() => false);
+			}
+			if (remoteOperation === 'compress' || remoteOperation === 'decompress') {
+				return socket.request('transfer.cancelArchive', { taskId: id }).catch(() => false);
+			}
+			return false;
+		},
+
+		async resolveConflict(id, strategy) {
+			const request = uploads.get(id);
+			if (!request) return;
+			const retry = { ...request, conflictStrategy: strategy };
+			uploads.set(id, retry);
+			enqueueUpload(retry);
+			pumpUploadQueue();
+		},
+
+		onEvent(handler) {
+			handlers.add(handler);
+			return () => handlers.delete(handler);
+		},
+
+		async workspaceConnected() {
+			workspaceAvailable = true;
+			logger.debug(
+				{ workspaceId, uploadCount: uploads.size, recoveryPending },
+				'Workspace transfer channel marked connected',
+			);
+			await recoverUploads();
+			pumpUploadQueue();
+		},
+
+		workspaceDisconnected() {
+			if (!workspaceAvailable && recoveryPending) return;
+			logger.debug(
+				{
+					workspaceId,
+					uploadCount: uploads.size,
+					activeRemoteOperationCount: activeRemoteOperations.size,
+				},
+				'Workspace transfer channel marked disconnected',
+			);
+			workspaceAvailable = false;
+			if (!uploads.size) return;
+			recoveryPending = true;
+			queuedUploads.splice(0);
+			activeUploads.clear();
+			for (const request of uploads.values()) {
+				emit({ type: 'paused', id: request.id });
+				closeUploadStream(request.id, 'Workspace connection closed');
+			}
+		},
+
+		dispose() {
+			workspaceAvailable = false;
+			recoveryPending = false;
+			handlers.clear();
+			uploads.clear();
+			prepareRequests.clear();
+			activeRemoteOperations.clear();
+			queuedUploads.splice(0);
+			activeUploads.clear();
+			for (const id of [...uploadSockets.keys()]) closeUploadStream(id);
+			stopUpload();
+			stopCopyMove();
+			stopArchive();
+		},
+	};
 };
 
 export const createStatusChannel = (
-  socket: WorkspaceSocket,
-  workspaceId?: string,
-  connectionId?: number,
+	socket: WorkspaceSocket,
+	workspaceId?: string,
+	connectionId?: number,
 ): StatusChannel => ({
-  subscribe(handler, error) {
-    const stopSample = socket.on('status.sample', handler);
-    const stopError = socket.on('status.error', (payload) => {
-      logger.debug(
-        { workspaceId, connectionId, reason: payload.message, failureKind: 'status_monitor_failed' },
-        'Workspace status monitor error event',
-      );
-      error?.(payload.message);
-    });
-    return () => {
-      stopSample();
-      stopError();
-    };
-  },
-  async start() {
-    await socket.request('status.start', {});
-  },
-  async stop() {
-    await socket.request('status.stop', {});
-  },
+	subscribe(handler, error) {
+		const stopSample = socket.on('status.sample', handler);
+		const stopError = socket.on('status.error', (payload) => {
+			logger.debug(
+				{ workspaceId, connectionId, reason: payload.message, failureKind: 'status_monitor_failed' },
+				'Workspace status monitor error event',
+			);
+			error?.(payload.message);
+		});
+		return () => {
+			stopSample();
+			stopError();
+		};
+	},
+
+	async start() {
+		await socket.request('status.start', {});
+	},
+
+	async stop() {
+		await socket.request('status.stop', {});
+	},
 });
 
 export const createDockerChannel = (socket: WorkspaceSocket): DockerChannel => ({
-  getStatus: (): Promise<WorkspaceDockerStatusDto> => socket.request('docker.status', {}),
-  async command(containerId: string, command: WorkspaceDockerCommandDto) {
-    await socket.request('docker.command', { containerId, command });
-  },
-  getStats: (containerId: string): Promise<WorkspaceDockerStatsDto | null> =>
-    socket.request('docker.stats', { containerId }),
+	getStatus: (): Promise<WorkspaceDockerStatusDto> => socket.request('docker.status', {}),
+
+	async command(containerId: string, command: WorkspaceDockerCommandDto) {
+		await socket.request('docker.command', { containerId, command });
+	},
+
+	getStats: (containerId: string): Promise<WorkspaceDockerStatsDto | null> =>
+		socket.request('docker.stats', { containerId }),
 });
 
 export const createSshSuspendChannel = (socket: WorkspaceSocket): SshSuspendChannel => ({
-  async mark(_workspaceId, terminalSnapshot) {
-    const initialSnapshot = await terminalSnapshot();
-    const prepare: WorkspaceSuspendMarkRequestDto = initialSnapshot ? { terminalSnapshot: initialSnapshot } : {};
-    try {
-      await socket.request('suspend.prepare', prepare);
-      const finalSnapshot = await terminalSnapshot();
-      const commit: WorkspaceSuspendMarkRequestDto = finalSnapshot ? { terminalSnapshot: finalSnapshot } : {};
-      return await socket.request('suspend.commit', commit);
-    } catch (error) {
-      await socket.request('suspend.unmark', {}).catch(() => null);
-      throw error;
-    }
-  },
-  async unmark(_workspaceId) {
-    const request: WorkspaceSuspendUnmarkRequestDto = {};
-    await socket.request('suspend.unmark', request);
-  },
+	async mark(_workspaceId, terminalSnapshot) {
+		const initialSnapshot = await terminalSnapshot();
+		const prepare: WorkspaceSuspendMarkRequestDto = initialSnapshot ? { terminalSnapshot: initialSnapshot } : {};
+		try {
+			await socket.request('suspend.prepare', prepare);
+			const finalSnapshot = await terminalSnapshot();
+			const commit: WorkspaceSuspendMarkRequestDto = finalSnapshot ? { terminalSnapshot: finalSnapshot } : {};
+			return await socket.request('suspend.commit', commit);
+		} catch (error) {
+			await socket.request('suspend.unmark', {}).catch(() => null);
+			throw error;
+		}
+	},
+
+	async unmark(_workspaceId) {
+		const request: WorkspaceSuspendUnmarkRequestDto = {};
+		await socket.request('suspend.unmark', request);
+	},
 });
 
 export interface WorkspaceCapabilityAdapters {
-  terminal: TerminalChannel;
-  filesystem: FilesystemChannel;
-  terminalDirectory: TerminalDirectoryPort;
-  download: FilesystemDownloadPort;
-  documents: FileDocumentPort;
-  preview: FilePreviewSource;
-  transfers: TransferChannel;
-  status: StatusChannel;
-  docker: DockerChannel;
-  suspend: SshSuspendChannel;
-  terminalViewport(): WorkspaceTerminalViewportDto | undefined;
-  workspaceConnected(): Promise<void>;
-  workspaceDisconnected(): void;
-  dispose(): void;
+	terminal: TerminalChannel;
+	filesystem: FilesystemChannel;
+	terminalDirectory: TerminalDirectoryPort;
+	download: FilesystemDownloadPort;
+	documents: FileDocumentPort;
+	preview: FilePreviewSource;
+	transfers: TransferChannel;
+	status: StatusChannel;
+	docker: DockerChannel;
+	suspend: SshSuspendChannel;
+	terminalViewport(): WorkspaceTerminalViewportDto | undefined;
+	workspaceConnected(): Promise<void>;
+	workspaceDisconnected(): void;
+	dispose(): void;
 }
 
 export const createWorkspaceCapabilityAdapters = (
-  socket: WorkspaceSocket,
-  workspaceId: string,
-  connectionId: number,
+	socket: WorkspaceSocket,
+	workspaceId: string,
+	connectionId: number,
 ): WorkspaceCapabilityAdapters => {
-  let workspaceBound = false;
-  let lastTerminalViewport: WorkspaceTerminalViewportDto | undefined;
-  const connectedHandlers = new Set<() => void>();
-  const filesystem = createFilesystemChannel(socket);
-  const transfers = createTransferChannel(socket, workspaceId);
-  const terminal = createTerminalChannel(socket, {
-    canSend: () => workspaceBound && socket.connected,
-    rememberResize: (viewport) => {
-      lastTerminalViewport = { ...viewport };
-    },
-    onConnected: (handler) => {
-      connectedHandlers.add(handler);
-      return () => connectedHandlers.delete(handler);
-    },
-  });
-  return {
-    terminal,
-    filesystem,
-    terminalDirectory: createTerminalDirectoryPort(socket, workspaceId, connectionId),
-    download: createFilesystemDownloadPort(workspaceId, connectionId),
-    documents: createFileDocumentPort(filesystem),
-    preview: createFilePreviewSource(socket),
-    transfers,
-    status: createStatusChannel(socket, workspaceId, connectionId),
-    docker: createDockerChannel(socket),
-    suspend: createSshSuspendChannel(socket),
-    terminalViewport: () => lastTerminalViewport,
-    async workspaceConnected() {
-      workspaceBound = true;
-      // A reconnect/resume can create a fresh remote PTY even though the mounted xterm keeps
-      // the same rows/columns. Reapply the latest fitted viewport so the remote PTY cannot fall
-      // back to its 80x24 default merely because no local ResizeObserver event fired.
-      if (lastTerminalViewport) await terminal.resize(lastTerminalViewport);
-      for (const handler of connectedHandlers) handler();
-      void transfers.workspaceConnected().catch(() => undefined);
-    },
-    workspaceDisconnected() {
-      workspaceBound = false;
-      transfers.workspaceDisconnected();
-    },
-    dispose() {
-      workspaceBound = false;
-      lastTerminalViewport = undefined;
-      connectedHandlers.clear();
-      transfers.dispose();
-    },
-  };
+	let workspaceBound = false;
+	let lastTerminalViewport: WorkspaceTerminalViewportDto | undefined;
+	const connectedHandlers = new Set<() => void>();
+	const filesystem = createFilesystemChannel(socket);
+	const transfers = createTransferChannel(socket, workspaceId);
+	const terminal = createTerminalChannel(socket, {
+		canSend: () => workspaceBound && socket.connected,
+
+		rememberResize: (viewport) => {
+			lastTerminalViewport = { ...viewport };
+		},
+
+		onConnected: (handler) => {
+			connectedHandlers.add(handler);
+			return () => connectedHandlers.delete(handler);
+		},
+	});
+	return {
+		terminal,
+		filesystem,
+		terminalDirectory: createTerminalDirectoryPort(socket, workspaceId, connectionId),
+		download: createFilesystemDownloadPort(workspaceId, connectionId),
+		documents: createFileDocumentPort(filesystem),
+		preview: createFilePreviewSource(socket),
+		transfers,
+		status: createStatusChannel(socket, workspaceId, connectionId),
+		docker: createDockerChannel(socket),
+		suspend: createSshSuspendChannel(socket),
+
+		terminalViewport: () => lastTerminalViewport,
+
+		async workspaceConnected() {
+			workspaceBound = true;
+			// A reconnect/resume can create a fresh remote PTY even though the mounted xterm keeps
+			// the same rows/columns. Reapply the latest fitted viewport so the remote PTY cannot fall
+			// back to its 80x24 default merely because no local ResizeObserver event fired.
+			if (lastTerminalViewport) await terminal.resize(lastTerminalViewport);
+			for (const handler of connectedHandlers) handler();
+			void transfers.workspaceConnected().catch(() => undefined);
+		},
+
+		workspaceDisconnected() {
+			workspaceBound = false;
+			transfers.workspaceDisconnected();
+		},
+
+		dispose() {
+			workspaceBound = false;
+			lastTerminalViewport = undefined;
+			connectedHandlers.clear();
+			transfers.dispose();
+		},
+	};
 };

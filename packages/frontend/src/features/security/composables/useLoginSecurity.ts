@@ -6,12 +6,12 @@ import type { CaptchaConfigDto } from '../model/security';
 export type CaptchaStatus = 'loading' | 'ready' | 'error' | 'invalid';
 
 export interface LoginSecurityController {
-  captchaConfig: ComputedRef<CaptchaConfigDto>;
-  captchaStatus: ComputedRef<CaptchaStatus>;
-  hasPasskeys: ComputedRef<boolean>;
-  loading: ComputedRef<boolean>;
-  refresh(username?: string): Promise<void>;
-  loginWithPasskey(username?: string): Promise<void>;
+	captchaConfig: ComputedRef<CaptchaConfigDto>;
+	captchaStatus: ComputedRef<CaptchaStatus>;
+	hasPasskeys: ComputedRef<boolean>;
+	loading: ComputedRef<boolean>;
+	refresh(username?: string): Promise<void>;
+	loginWithPasskey(username?: string): Promise<void>;
 }
 
 const DEFAULT_CAPTCHA_CONFIG: CaptchaConfigDto = { enabled: false, provider: 'none' };
@@ -19,61 +19,61 @@ const DEFAULT_CAPTCHA_CONFIG: CaptchaConfigDto = { enabled: false, provider: 'no
 const hasValue = (value: unknown): boolean => typeof value === 'string' && value.trim().length > 0;
 
 const hasConfiguredCaptchaWidget = (config: CaptchaConfigDto): boolean => {
-  if (!config.enabled) return true;
-  if (config.provider === 'hcaptcha') return hasValue(config.hcaptchaSiteKey);
-  if (config.provider === 'recaptcha') return hasValue(config.recaptchaSiteKey);
-  return false;
+	if (!config.enabled) return true;
+	if (config.provider === 'hcaptcha') return hasValue(config.hcaptchaSiteKey);
+	if (config.provider === 'recaptcha') return hasValue(config.recaptchaSiteKey);
+	return false;
 };
 
 export function useLoginSecurity(): LoginSecurityController {
-  const captchaConfig = ref<CaptchaConfigDto>(DEFAULT_CAPTCHA_CONFIG);
-  const captchaLoading = ref(true);
-  const captchaLoadError = ref(false);
-  const hasPasskeys = ref(false);
-  const loading = ref(false);
+	const captchaConfig = ref<CaptchaConfigDto>(DEFAULT_CAPTCHA_CONFIG);
+	const captchaLoading = ref(true);
+	const captchaLoadError = ref(false);
+	const hasPasskeys = ref(false);
+	const loading = ref(false);
 
-  const refresh = async (username?: string): Promise<void> => {
-    captchaLoading.value = true;
-    captchaLoadError.value = false;
-    const captcha = securityApi
-      .getCaptchaConfig()
-      .then((config) => {
-        captchaConfig.value = config;
-      })
-      .catch(() => {
-        captchaConfig.value = DEFAULT_CAPTCHA_CONFIG;
-        captchaLoadError.value = true;
-      })
-      .finally(() => {
-        captchaLoading.value = false;
-      });
-    const passkeys = securityApi.hasPasskeys(username).catch(() => false);
-    const [, passkeyAvailable] = await Promise.all([captcha, passkeys]);
-    hasPasskeys.value = passkeyAvailable;
-  };
+	const refresh = async (username?: string): Promise<void> => {
+		captchaLoading.value = true;
+		captchaLoadError.value = false;
+		const captcha = securityApi
+			.getCaptchaConfig()
+			.then((config) => {
+				captchaConfig.value = config;
+			})
+			.catch(() => {
+				captchaConfig.value = DEFAULT_CAPTCHA_CONFIG;
+				captchaLoadError.value = true;
+			})
+			.finally(() => {
+				captchaLoading.value = false;
+			});
+		const passkeys = securityApi.hasPasskeys(username).catch(() => false);
+		const [, passkeyAvailable] = await Promise.all([captcha, passkeys]);
+		hasPasskeys.value = passkeyAvailable;
+	};
 
-  const loginWithPasskey = async (username?: string): Promise<void> => {
-    loading.value = true;
-    try {
-      const optionsJSON = await securityApi.getPasskeyAuthenticationOptions(username);
-      const assertionResponse = await startAuthentication({ optionsJSON });
-      await securityApi.authenticatePasskey(username, assertionResponse);
-    } finally {
-      loading.value = false;
-    }
-  };
+	const loginWithPasskey = async (username?: string): Promise<void> => {
+		loading.value = true;
+		try {
+			const optionsJSON = await securityApi.getPasskeyAuthenticationOptions(username);
+			const assertionResponse = await startAuthentication({ optionsJSON });
+			await securityApi.authenticatePasskey(username, assertionResponse);
+		} finally {
+			loading.value = false;
+		}
+	};
 
-  return {
-    captchaConfig: computed(() => captchaConfig.value),
-    captchaStatus: computed<CaptchaStatus>(() => {
-      if (captchaLoading.value) return 'loading';
-      if (captchaLoadError.value) return 'error';
-      if (!hasConfiguredCaptchaWidget(captchaConfig.value)) return 'invalid';
-      return 'ready';
-    }),
-    hasPasskeys: computed(() => hasPasskeys.value),
-    loading: computed(() => loading.value),
-    refresh,
-    loginWithPasskey,
-  };
+	return {
+		captchaConfig: computed(() => captchaConfig.value),
+		captchaStatus: computed<CaptchaStatus>(() => {
+			if (captchaLoading.value) return 'loading';
+			if (captchaLoadError.value) return 'error';
+			if (!hasConfiguredCaptchaWidget(captchaConfig.value)) return 'invalid';
+			return 'ready';
+		}),
+		hasPasskeys: computed(() => hasPasskeys.value),
+		loading: computed(() => loading.value),
+		refresh,
+		loginWithPasskey,
+	};
 }

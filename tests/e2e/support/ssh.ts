@@ -2,191 +2,192 @@ import { expect, type APIRequestContext, type Locator, type Page } from '@playwr
 import { E2E_PORTS, E2E_URLS } from './test-env';
 
 export const E2E_SSH = {
-  name: 'E2E SSH',
-  host: '127.0.0.1',
-  port: E2E_PORTS.ssh,
-  username: 'e2e',
-  password: 'e2e-password',
-  controlPort: E2E_PORTS.sshControl,
-  controlUrl: E2E_URLS.sshControlOrigin,
+	name: 'E2E SSH',
+	host: '127.0.0.1',
+	port: E2E_PORTS.ssh,
+	username: 'e2e',
+	password: 'e2e-password',
+	controlPort: E2E_PORTS.sshControl,
+	controlUrl: E2E_URLS.sshControlOrigin,
 } as const;
 
 export async function configureSshE2eSettings(request: APIRequestContext): Promise<void> {
-  const response = await request.put('/api/v1/settings', {
-    data: {
-      language: 'en-US',
-      showPopupFileManager: true,
-      showPopupFileEditor: true,
-      fileManagerShowDeleteConfirmation: true,
-      workspaceSidebarPersistent: false,
-      showStatusMonitorIpAddress: false,
-    },
-  });
-  expect(response.ok()).toBeTruthy();
+	const response = await request.put('/api/v1/settings', {
+		data: {
+			language: 'en-US',
+			showPopupFileManager: true,
+			showPopupFileEditor: true,
+			fileManagerShowDeleteConfirmation: true,
+			workspaceSidebarPersistent: false,
+			showStatusMonitorIpAddress: false,
+		},
+	});
+	expect(response.ok()).toBeTruthy();
 }
 
 export async function resetTestSshFilesystem(): Promise<void> {
-  const response = await fetch(`${E2E_SSH.controlUrl}/reset`, { method: 'POST' });
-  expect(response.ok).toBeTruthy();
+	const response = await fetch(`${E2E_SSH.controlUrl}/reset`, { method: 'POST' });
+	expect(response.ok).toBeTruthy();
 }
 
 export async function setTestSshOnline(online: boolean): Promise<void> {
-  const response = await fetch(`${E2E_SSH.controlUrl}/ssh/${online ? 'online' : 'offline'}`, { method: 'POST' });
-  expect(response.ok).toBeTruthy();
+	const response = await fetch(`${E2E_SSH.controlUrl}/ssh/${online ? 'online' : 'offline'}`, { method: 'POST' });
+	expect(response.ok).toBeTruthy();
 }
 
 export async function setTestSshLstatDenyPrefix(prefix: string): Promise<void> {
-  const response = await fetch(`${E2E_SSH.controlUrl}/sftp/lstat-deny-prefix?path=${encodeURIComponent(prefix)}`, {
-    method: 'POST',
-  });
-  expect(response.ok).toBeTruthy();
+	const response = await fetch(`${E2E_SSH.controlUrl}/sftp/lstat-deny-prefix?path=${encodeURIComponent(prefix)}`, {
+		method: 'POST',
+	});
+	expect(response.ok).toBeTruthy();
 }
 
 export async function removeNamedSshConnections(request: APIRequestContext): Promise<void> {
-  const response = await request.get('/api/v1/connections');
-  expect(response.ok()).toBeTruthy();
-  const connections = (await response.json()) as Array<{ id: number; name?: string }>;
-  for (const connection of connections.filter((item) => item.name === E2E_SSH.name)) {
-    const deleteResponse = await request.delete(`/api/v1/connections/${connection.id}`);
-    expect(deleteResponse.ok()).toBeTruthy();
-  }
+	const response = await request.get('/api/v1/connections');
+	expect(response.ok()).toBeTruthy();
+	const connections = (await response.json()) as Array<{ id: number; name?: string }>;
+	for (const connection of connections.filter((item) => item.name === E2E_SSH.name)) {
+		const deleteResponse = await request.delete(`/api/v1/connections/${connection.id}`);
+		expect(deleteResponse.ok()).toBeTruthy();
+	}
 }
 
 export async function ensureTestSshConnection(request: APIRequestContext): Promise<number> {
-  const listResponse = await request.get('/api/v1/connections');
-  expect(listResponse.ok()).toBeTruthy();
-  const existing = ((await listResponse.json()) as Array<{ id: number; name?: string }>).find(
-    (item) => item.name === E2E_SSH.name,
-  );
-  if (existing) return existing.id;
+	const listResponse = await request.get('/api/v1/connections');
+	expect(listResponse.ok()).toBeTruthy();
+	const existing = ((await listResponse.json()) as Array<{ id: number; name?: string }>).find(
+		(item) => item.name === E2E_SSH.name,
+	);
+	if (existing) return existing.id;
 
-  const createResponse = await request.post('/api/v1/connections', {
-    data: {
-      name: E2E_SSH.name,
-      type: 'SSH',
-      host: E2E_SSH.host,
-      port: E2E_SSH.port,
-      username: E2E_SSH.username,
-      authMethod: 'password',
-      password: E2E_SSH.password,
-    },
-  });
-  expect(createResponse.status()).toBe(201);
-  const body = (await createResponse.json()) as { connection: { id: number } };
-  return body.connection.id;
+	const createResponse = await request.post('/api/v1/connections', {
+		data: {
+			name: E2E_SSH.name,
+			type: 'SSH',
+			host: E2E_SSH.host,
+			port: E2E_SSH.port,
+			username: E2E_SSH.username,
+			authMethod: 'password',
+			password: E2E_SSH.password,
+		},
+	});
+	expect(createResponse.status()).toBe(201);
+	const body = (await createResponse.json()) as { connection: { id: number } };
+	return body.connection.id;
 }
 
 export async function connectTestSshFromConnectionsPage(page: Page, connectionId: number): Promise<void> {
-  await page.goto('/connections');
-  const response = await page.request.get('/api/v1/connections');
-  expect(response.ok()).toBeTruthy();
-  const connection = ((await response.json()) as Array<{ id: number; name: string; host: string }>).find(
-    (item) => item.id === connectionId,
-  );
-  expect(connection).toBeTruthy();
-  if (!connection) throw new Error(`SSH connection ${connectionId} is missing from the connection directory.`);
-  const row = page.locator('.connection-card').filter({
-    has: page.getByText(connection.name || connection.host, { exact: true }),
-  });
-  await expect(row).toBeVisible();
-  await row.getByRole('button', { name: 'Connect', exact: true }).click();
-  await expect(page).toHaveURL(/\/workspace$/);
-  // Reaching the workspace route only means the session UI was created. Observe the product's
-  // actual Workspace lifecycle rather than racing a test-only timeout against the SSH 20s ready
-  // timeout / 30s protocol timeout. The outer bound is only a deadlock guard; failures report the
-  // last real state/message so transport regressions stay diagnosable instead of looking flaky.
-  const activeTab = page.getByRole('tab', { selected: true });
-  await expect(activeTab).toBeVisible();
-  try {
-    await expect(activeTab).toHaveAttribute('data-session-state', 'connected', { timeout: 35_000 });
-  } catch (error) {
-    const state = (await activeTab.getAttribute('data-session-state')) ?? 'missing';
-    const status = (await activeTab.getAttribute('data-session-status')) ?? '';
-    throw new Error(
-      `Workspace SSH did not reach connected state (state=${state}${status ? `, status=${status}` : ''}). ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-  }
-  await expect(page.locator('.command-bar-command-input:visible')).toBeEnabled();
+	await page.goto('/connections');
+	const response = await page.request.get('/api/v1/connections');
+	expect(response.ok()).toBeTruthy();
+	const connection = ((await response.json()) as Array<{ id: number; name: string; host: string }>).find(
+		(item) => item.id === connectionId,
+	);
+	expect(connection).toBeTruthy();
+	if (!connection) throw new Error(`SSH connection ${connectionId} is missing from the connection directory.`);
+	const row = page.locator('.connection-card').filter({
+		has: page.getByText(connection.name || connection.host, { exact: true }),
+	});
+	await expect(row).toBeVisible();
+	await row.getByRole('button', { name: 'Connect', exact: true }).click();
+	await expect(page).toHaveURL(/\/workspace$/);
+	// Reaching the workspace route only means the session UI was created. Observe the product's
+	// actual Workspace lifecycle rather than racing a test-only timeout against the SSH 20s ready
+	// timeout / 30s protocol timeout. The outer bound is only a deadlock guard; failures report the
+	// last real state/message so transport regressions stay diagnosable instead of looking flaky.
+	const activeTab = page.getByRole('tab', { selected: true });
+	await expect(activeTab).toBeVisible();
+	try {
+		await expect(activeTab).toHaveAttribute('data-session-state', 'connected', { timeout: 35_000 });
+	} catch (error) {
+		const state = (await activeTab.getAttribute('data-session-state')) ?? 'missing';
+		const status = (await activeTab.getAttribute('data-session-status')) ?? '';
+		throw new Error(
+			`Workspace SSH did not reach connected state (state=${state}${status ? `, status=${status}` : ''}). ${
+				error instanceof Error ? error.message : String(error)
+			}`,
+		);
+	}
+	await expect(page.locator('.command-bar-command-input:visible')).toBeEnabled();
 }
 
 const visibleFileManagerModal = (page: Page): Locator =>
-  page.getByRole('dialog', { name: 'File Manager', exact: true }).filter({ visible: true }).first();
+	page.getByRole('dialog', { name: 'File Manager', exact: true }).filter({ visible: true }).first();
+
 const visibleFileManagerOpenButton = (page: Page): Locator =>
-  page
-    .locator('[data-workspace-surface][data-workspace-active="true"]')
-    .getByRole('button', { name: 'File Manager', exact: true })
-    .first();
+	page
+		.locator('[data-workspace-surface][data-workspace-active="true"]')
+		.getByRole('button', { name: 'File Manager', exact: true })
+		.first();
 
 export function activeFileManagerList(page: Page): Locator {
-  return visibleFileManagerModal(page).locator('.file-manager-root table').locator('..');
+	return visibleFileManagerModal(page).locator('.file-manager-root table').locator('..');
 }
 
 export function fileManagerRow(page: Page, filename: string): Locator {
-  return activeFileManagerList(page).locator(`tr[data-filename="${filename}"]`);
+	return activeFileManagerList(page).locator(`tr[data-filename="${filename}"]`);
 }
 
 export async function openConnectedFileManager(page: Page): Promise<void> {
-  const openButton = visibleFileManagerOpenButton(page);
-  await expect(openButton).toBeVisible({ timeout: 20_000 });
-  await openButton.click();
-  await expect(page.getByText('File Manager', { exact: false }).first()).toBeVisible();
-  await expect(fileManagerRow(page, 'seed.txt')).toBeVisible({ timeout: 20_000 });
+	const openButton = visibleFileManagerOpenButton(page);
+	await expect(openButton).toBeVisible({ timeout: 20_000 });
+	await openButton.click();
+	await expect(page.getByText('File Manager', { exact: false }).first()).toBeVisible();
+	await expect(fileManagerRow(page, 'seed.txt')).toBeVisible({ timeout: 20_000 });
 }
 
 export async function closeConnectedFileManager(page: Page): Promise<void> {
-  const modal = visibleFileManagerModal(page);
-  await expect(modal).toBeVisible();
-  await modal.getByRole('button', { name: 'Close', exact: true }).click();
-  await expect(modal).toBeHidden();
+	const modal = visibleFileManagerModal(page);
+	await expect(modal).toBeVisible();
+	await modal.getByRole('button', { name: 'Close', exact: true }).click();
+	await expect(modal).toBeHidden();
 }
 
 export async function reopenConnectedFileManager(page: Page): Promise<void> {
-  let modal = visibleFileManagerModal(page);
-  if (!(await modal.isVisible().catch(() => false))) {
-    const openButton = visibleFileManagerOpenButton(page);
-    await expect(openButton).toBeVisible({ timeout: 20_000 });
-    await openButton.click();
-    modal = visibleFileManagerModal(page);
-  }
-  await expect(modal).toBeVisible();
-  await expect(activeFileManagerList(page)).toBeVisible({ timeout: 20_000 });
+	let modal = visibleFileManagerModal(page);
+	if (!(await modal.isVisible().catch(() => false))) {
+		const openButton = visibleFileManagerOpenButton(page);
+		await expect(openButton).toBeVisible({ timeout: 20_000 });
+		await openButton.click();
+		modal = visibleFileManagerModal(page);
+	}
+	await expect(modal).toBeVisible();
+	await expect(activeFileManagerList(page)).toBeVisible({ timeout: 20_000 });
 }
 
 async function openProgressDisplay(page: Page): Promise<Locator> {
-  const fileManagerModal = page.getByRole('dialog', { name: 'File Manager', exact: true });
-  if (await fileManagerModal.isVisible()) {
-    await closeConnectedFileManager(page);
-  }
+	const fileManagerModal = page.getByRole('dialog', { name: 'File Manager', exact: true });
+	if (await fileManagerModal.isVisible()) {
+		await closeConnectedFileManager(page);
+	}
 
-  const toggle = page.getByRole('button', { name: 'Progress Display', exact: true });
-  await expect(toggle).toBeVisible();
-  await toggle.click();
+	const toggle = page.getByRole('button', { name: 'Progress Display', exact: true });
+	await expect(toggle).toBeVisible();
+	await toggle.click();
 
-  const display = page.getByRole('dialog', { name: 'Progress Display', exact: true });
-  await expect(display).toBeVisible();
-  await expect(display.locator('[data-progress-display-placement]')).toHaveAttribute(
-    'data-progress-display-placement',
-    'overlay',
-  );
-  await expect
-    .poll(() =>
-      display.evaluate((element) => {
-        const overlay = element.closest('[data-ui="overlay"]');
-        if (!overlay) throw new Error('Progress Display overlay is missing');
-        const style = window.getComputedStyle(overlay);
-        return { position: style.position, zIndex: style.zIndex };
-      }),
-    )
-    .toEqual({ position: 'fixed', zIndex: '1100' });
-  return display;
+	const display = page.getByRole('dialog', { name: 'Progress Display', exact: true });
+	await expect(display).toBeVisible();
+	await expect(display.locator('[data-progress-display-placement]')).toHaveAttribute(
+		'data-progress-display-placement',
+		'overlay',
+	);
+	await expect
+		.poll(() =>
+			display.evaluate((element) => {
+				const overlay = element.closest('[data-ui="overlay"]');
+				if (!overlay) throw new Error('Progress Display overlay is missing');
+				const style = window.getComputedStyle(overlay);
+				return { position: style.position, zIndex: style.zIndex };
+			}),
+		)
+		.toEqual({ position: 'fixed', zIndex: '1100' });
+	return display;
 }
 
 export async function openDesktopProgressDisplay(page: Page): Promise<Locator> {
-  return openProgressDisplay(page);
+	return openProgressDisplay(page);
 }
 
 export async function openMobileProgressDisplay(page: Page): Promise<Locator> {
-  return openProgressDisplay(page);
+	return openProgressDisplay(page);
 }

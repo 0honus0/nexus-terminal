@@ -2,34 +2,34 @@ import type { AgentSettingsDocument } from './agent-defaults';
 import type { JsonValue, Scope } from './agent.types';
 export type { JsonValue } from './agent.types';
 import type {
-  ArtifactAttachResult,
-  ArtifactCleanupPreview,
-  ArtifactCleanupResult,
-  ArtifactLibraryPage,
-  ArtifactLibraryQuery,
-  ArtifactReadRange,
-  ArtifactRef,
-  ArtifactStorageSummary,
-  UploadReservation,
+	ArtifactAttachResult,
+	ArtifactCleanupPreview,
+	ArtifactCleanupResult,
+	ArtifactLibraryPage,
+	ArtifactLibraryQuery,
+	ArtifactReadRange,
+	ArtifactRef,
+	ArtifactStorageSummary,
+	UploadReservation,
 } from './ai/artifact.port';
 import type {
-  LedgerEntryKind,
-  LedgerEntryView,
-  LedgerPage,
-  ThreadDeleteAllResult,
-  ThreadDeleteResult,
-  ThreadPage,
-  ThreadView,
+	LedgerEntryKind,
+	LedgerEntryView,
+	LedgerPage,
+	ThreadDeleteAllResult,
+	ThreadDeleteResult,
+	ThreadPage,
+	ThreadView,
 } from './ai/conversation.repository.port';
 import type { ContextPlan, ContextRequest } from './ai/context.types';
 import type { LanguageModelPort } from './ai/language-model.port';
 import type { IntegrationKind, IntegrationManagementView, IntegrationRefreshView } from './ai/integrations.types';
 export type { IntegrationKind } from './ai/integrations.types';
 import type {
-  DiscoveredProviderModel,
-  ModelCapabilityDefaults,
-  ProviderTestResult,
-  ProviderView,
+	DiscoveredProviderModel,
+	ModelCapabilityDefaults,
+	ProviderTestResult,
+	ProviderView,
 } from './ai/model.types';
 export type { ReasoningEffort } from './ai/model.types';
 import type { ModelCapabilityRegistryStatus } from './ai/model-capability-registry.service';
@@ -43,26 +43,26 @@ import type { AgentDefinitionSelectionView } from './runtime/definitions/agent-d
 import type { TransientRunEvent } from './runtime/events/event.types';
 import type { RunPage } from './runtime/runs/run.repository.port';
 import type {
-  CreateRunCommand,
-  HostCursorWindow,
-  HostEvent,
-  PendingRunInputPage,
-  RunBudgetIncrease,
-  RunEvent,
-  RunReconciliationView,
-  RunSnapshot,
-  RunView,
-  UserInputData,
+	CreateRunCommand,
+	HostCursorWindow,
+	HostEvent,
+	PendingRunInputPage,
+	RunBudgetIncrease,
+	RunEvent,
+	RunReconciliationView,
+	RunSnapshot,
+	RunView,
+	UserInputData,
 } from './runtime/runs/run.types';
 export type { RunApprovalMode, RunBudgetIncrease, RunExecutionMode, UserInputData } from './runtime/runs/run.types';
 import type { GrantDecision } from './host/app-capability-broker';
 import type { AppView } from './host/app.types';
 import type {
-  AgentCapability,
-  CapabilityDefinitionView,
-  CapabilityGrant,
-  CapabilityGrantInput,
-  CapabilityResource,
+	AgentCapability,
+	CapabilityDefinitionView,
+	CapabilityGrant,
+	CapabilityGrantInput,
+	CapabilityResource,
 } from './host/capability.types';
 export { AGENT_CAPABILITIES } from './host/capability.types';
 
@@ -74,355 +74,366 @@ import type { RecommendedAgentPluginInstallResult, RecommendedAgentPluginView } 
 import type { TargetDenylistSnapshot } from './host/target-denylist.repository.port';
 import type { SharedFactView } from './runtime/collaboration/subagent.repository.port';
 import type {
-  PluginStageRecord,
-  PluginVersionRecord,
-  TrustedPublisherKey,
+	PluginStageRecord,
+	PluginVersionRecord,
+	TrustedPublisherKey,
 } from './host/plugin-install.repository.port';
 import type {
-  PluginInstallResult,
-  PluginPendingUpgradeView,
-  PluginInstallationView,
-  PluginStageInput,
-  RemotePluginStageInput,
-  PluginFrontendDescriptor,
-  PluginFrontendRpcRequest,
-  PluginUninstallResult,
-  PluginUpgradeResult,
+	PluginInstallResult,
+	PluginPendingUpgradeView,
+	PluginInstallationView,
+	PluginStageInput,
+	RemotePluginStageInput,
+	PluginFrontendDescriptor,
+	PluginFrontendRpcRequest,
+	PluginUninstallResult,
+	PluginUpgradeResult,
 } from './host/plugin-install.service';
 import type { RemotePluginCatalog } from './host/remote-plugin-repository.port';
 import type {
-  AgentMessage,
-  DelegationView,
-  JoinResult,
-  SubagentSettingsView,
+	AgentMessage,
+	DelegationView,
+	JoinResult,
+	SubagentSettingsView,
 } from './runtime/collaboration/subagent.types';
 
 export interface AgentPluginFacade {
-  listPublisherKeys(userId: number): Promise<TrustedPublisherKey[]>;
-  trustPublisherKey(userId: number, publicKeyPem: string, label: string): Promise<TrustedPublisherKey>;
-  revokePublisherKey(userId: number, keyId: string): Promise<void>;
-  stage(userId: number, input: PluginStageInput): Promise<PluginStageRecord>;
-  officialCatalog(signal?: AbortSignal): Promise<RemotePluginCatalog>;
-  stageOfficial(userId: number, appId: string, version: string, signal?: AbortSignal): Promise<PluginStageRecord>;
-  remoteCatalog(userId: number, repositoryUrl: string, signal?: AbortSignal): Promise<RemotePluginCatalog>;
-  stageRemote(userId: number, input: RemotePluginStageInput, signal?: AbortSignal): Promise<PluginStageRecord>;
-  verify(userId: number, stageId: string): Promise<{ stage: PluginStageRecord; plugin: PluginVersionRecord }>;
-  install(userId: number, stageId: string): Promise<PluginInstallResult>;
-  listPendingUpgrades(userId: number): Promise<PluginPendingUpgradeView[]>;
-  cancelPendingUpgrade(userId: number, appId: string, expectedVersion: number): Promise<AppView>;
-  upgrade(userId: number, appId: string, stageId: string, expectedVersion: number): Promise<PluginUpgradeResult>;
-  uninstall(userId: number, appId: string, expectedVersion: number): Promise<PluginUninstallResult>;
-  deleteData(userId: number, appId: string): Promise<void>;
-  frontendDescriptor(userId: number, appId: string): Promise<PluginFrontendDescriptor | null>;
-  frontendRpc(userId: number, appId: string, request: PluginFrontendRpcRequest): Promise<JsonValue>;
-  listVersions(userId: number, appId?: string): Promise<PluginVersionRecord[]>;
-  listInstallations(userId: number): Promise<PluginInstallationView[]>;
+	listPublisherKeys(userId: number): Promise<TrustedPublisherKey[]>;
+	trustPublisherKey(userId: number, publicKeyPem: string, label: string): Promise<TrustedPublisherKey>;
+	revokePublisherKey(userId: number, keyId: string): Promise<void>;
+	stage(userId: number, input: PluginStageInput): Promise<PluginStageRecord>;
+	officialCatalog(signal?: AbortSignal): Promise<RemotePluginCatalog>;
+	stageOfficial(userId: number, appId: string, version: string, signal?: AbortSignal): Promise<PluginStageRecord>;
+	remoteCatalog(userId: number, repositoryUrl: string, signal?: AbortSignal): Promise<RemotePluginCatalog>;
+	stageRemote(userId: number, input: RemotePluginStageInput, signal?: AbortSignal): Promise<PluginStageRecord>;
+	verify(userId: number, stageId: string): Promise<{ stage: PluginStageRecord; plugin: PluginVersionRecord }>;
+	install(userId: number, stageId: string): Promise<PluginInstallResult>;
+	listPendingUpgrades(userId: number): Promise<PluginPendingUpgradeView[]>;
+	cancelPendingUpgrade(userId: number, appId: string, expectedVersion: number): Promise<AppView>;
+	upgrade(userId: number, appId: string, stageId: string, expectedVersion: number): Promise<PluginUpgradeResult>;
+	uninstall(userId: number, appId: string, expectedVersion: number): Promise<PluginUninstallResult>;
+	deleteData(userId: number, appId: string): Promise<void>;
+	frontendDescriptor(userId: number, appId: string): Promise<PluginFrontendDescriptor | null>;
+	frontendRpc(userId: number, appId: string, request: PluginFrontendRpcRequest): Promise<JsonValue>;
+	listVersions(userId: number, appId?: string): Promise<PluginVersionRecord[]>;
+	listInstallations(userId: number): Promise<PluginInstallationView[]>;
 }
 
 export interface AgentHostFacade {
-  listApps(userId: number): Promise<AppView[]>;
-  getApp(userId: number, appId: string): Promise<AppView>;
-  setAppEnabled(userId: number, appId: string, enabled: boolean, expectedVersion: number): Promise<AppView>;
-  listCapabilityDefinitions(): CapabilityDefinitionView[];
-  listAppGrants(userId: number, appId: string): Promise<CapabilityGrant[]>;
-  replaceAppGrants(
-    userId: number,
-    appId: string,
-    grants: readonly CapabilityGrantInput[],
-    expectedPolicyRevision: number,
-  ): Promise<{ app: AppView; grants: CapabilityGrant[] }>;
-  getAppExecutionPolicy(scope: Scope): Promise<AgentExecutionPolicyView>;
-  replaceAppExecutionPolicy(
-    scope: Scope,
-    overrides: unknown,
-    expectedVersion: number,
-  ): Promise<AgentExecutionPolicyView>;
-  createAppIntent(scope: Scope, input: CreateAppIntentInput, idempotencyKey: string): Promise<AppIntentReceipt>;
-  listReceivedAppIntents(scope: Scope, limit?: number): Promise<AppIntentReceipt[]>;
-  revokeAppIntent(scope: Scope, receiptId: string): Promise<void>;
-  getReceivedAppIntentArtifact(scope: Scope, receiptId: string, artifactId: string): Promise<AppIntentArtifactView>;
-  readReceivedAppIntentArtifact(
-    scope: Scope,
-    receiptId: string,
-    artifactId: string,
-    range: AppIntentArtifactReadRange,
-  ): Promise<{ artifact: AppIntentArtifactView; source: AsyncIterable<Uint8Array> }>;
-  authorize(
-    scope: Scope,
-    capability: AgentCapability | undefined,
-    resource?: CapabilityResource,
-  ): Promise<GrantDecision>;
-  getSettings(userId: number): Promise<AgentSettingsView>;
-  getRecommendedPlugin(userId: number, signal?: AbortSignal): Promise<RecommendedAgentPluginView>;
-  installRecommendedPlugin(userId: number, signal?: AbortSignal): Promise<RecommendedAgentPluginInstallResult>;
-  patchSettings(userId: number, patch: unknown, expectedRevision: number): Promise<AgentSettingsView>;
-  previewHardLimits(userId: number, proposed: unknown, expectedRevision: number): Promise<HardLimitPreview>;
-  confirmHardLimits(userId: number, confirmationId: string, expectedRevision: number): Promise<AgentSettingsView>;
-  getTargetDenylist(): Promise<TargetDenylistSnapshot>;
-  replaceTargetDenylist(
-    userId: number,
-    connectionIds: readonly number[],
-    reason: string,
-    expectedRevision: number,
-  ): Promise<TargetDenylistSnapshot>;
+	listApps(userId: number): Promise<AppView[]>;
+	getApp(userId: number, appId: string): Promise<AppView>;
+	setAppEnabled(userId: number, appId: string, enabled: boolean, expectedVersion: number): Promise<AppView>;
+	listCapabilityDefinitions(): CapabilityDefinitionView[];
+	listAppGrants(userId: number, appId: string): Promise<CapabilityGrant[]>;
+	replaceAppGrants(
+		userId: number,
+		appId: string,
+		grants: readonly CapabilityGrantInput[],
+		expectedPolicyRevision: number,
+	): Promise<{ app: AppView; grants: CapabilityGrant[] }>;
+	getAppExecutionPolicy(scope: Scope): Promise<AgentExecutionPolicyView>;
+	replaceAppExecutionPolicy(
+		scope: Scope,
+		overrides: unknown,
+		expectedVersion: number,
+	): Promise<AgentExecutionPolicyView>;
+	createAppIntent(scope: Scope, input: CreateAppIntentInput, idempotencyKey: string): Promise<AppIntentReceipt>;
+	listReceivedAppIntents(scope: Scope, limit?: number): Promise<AppIntentReceipt[]>;
+	revokeAppIntent(scope: Scope, receiptId: string): Promise<void>;
+	getReceivedAppIntentArtifact(scope: Scope, receiptId: string, artifactId: string): Promise<AppIntentArtifactView>;
+	readReceivedAppIntentArtifact(
+		scope: Scope,
+		receiptId: string,
+		artifactId: string,
+		range: AppIntentArtifactReadRange,
+	): Promise<{ artifact: AppIntentArtifactView; source: AsyncIterable<Uint8Array> }>;
+	authorize(
+		scope: Scope,
+		capability: AgentCapability | undefined,
+		resource?: CapabilityResource,
+	): Promise<GrantDecision>;
+	getSettings(userId: number): Promise<AgentSettingsView>;
+	getRecommendedPlugin(userId: number, signal?: AbortSignal): Promise<RecommendedAgentPluginView>;
+	installRecommendedPlugin(userId: number, signal?: AbortSignal): Promise<RecommendedAgentPluginInstallResult>;
+	patchSettings(userId: number, patch: unknown, expectedRevision: number): Promise<AgentSettingsView>;
+	previewHardLimits(userId: number, proposed: unknown, expectedRevision: number): Promise<HardLimitPreview>;
+	confirmHardLimits(userId: number, confirmationId: string, expectedRevision: number): Promise<AgentSettingsView>;
+	getTargetDenylist(): Promise<TargetDenylistSnapshot>;
+	replaceTargetDenylist(
+		userId: number,
+		connectionIds: readonly number[],
+		reason: string,
+		expectedRevision: number,
+	): Promise<TargetDenylistSnapshot>;
 }
 
 export interface AgentIntegrationFacade {
-  list(scope: Scope, kind?: IntegrationKind): Promise<IntegrationManagementView[]>;
-  get(scope: Scope, integrationId: string): Promise<IntegrationManagementView>;
-  create(scope: Scope, input: unknown, idempotencyKey: string): Promise<IntegrationManagementView>;
-  update(
-    scope: Scope,
-    integrationId: string,
-    expectedVersion: number,
-    input: unknown,
-  ): Promise<IntegrationManagementView>;
-  remove(scope: Scope, integrationId: string, expectedVersion: number): Promise<void>;
-  refresh(scope: Scope, integrationId: string, signal?: AbortSignal): Promise<IntegrationRefreshView>;
+	list(scope: Scope, kind?: IntegrationKind): Promise<IntegrationManagementView[]>;
+	get(scope: Scope, integrationId: string): Promise<IntegrationManagementView>;
+	create(scope: Scope, input: unknown, idempotencyKey: string): Promise<IntegrationManagementView>;
+	update(
+		scope: Scope,
+		integrationId: string,
+		expectedVersion: number,
+		input: unknown,
+	): Promise<IntegrationManagementView>;
+	remove(scope: Scope, integrationId: string, expectedVersion: number): Promise<void>;
+	refresh(scope: Scope, integrationId: string, signal?: AbortSignal): Promise<IntegrationRefreshView>;
 }
 
 export interface AgentProviderFacade {
-  list(userId: number): Promise<ProviderView[]>;
-  get(userId: number, providerId: string): Promise<ProviderView>;
-  create(userId: number, input: unknown): Promise<ProviderView>;
-  update(userId: number, providerId: string, expectedVersion: number, input: unknown): Promise<ProviderView>;
-  remove(userId: number, providerId: string, expectedVersion: number): Promise<void>;
-  discoverModels(userId: number, providerId: string): Promise<DiscoveredProviderModel[]>;
-  discoverEndpointModels(baseUrl: string, credential?: string): Promise<DiscoveredProviderModel[]>;
-  test(userId: number, providerId: string, modelId: string): Promise<ProviderTestResult>;
+	list(userId: number): Promise<ProviderView[]>;
+	get(userId: number, providerId: string): Promise<ProviderView>;
+	create(userId: number, input: unknown): Promise<ProviderView>;
+	update(userId: number, providerId: string, expectedVersion: number, input: unknown): Promise<ProviderView>;
+	remove(userId: number, providerId: string, expectedVersion: number): Promise<void>;
+	discoverModels(userId: number, providerId: string): Promise<DiscoveredProviderModel[]>;
+	discoverEndpointModels(baseUrl: string, credential?: string): Promise<DiscoveredProviderModel[]>;
+	test(userId: number, providerId: string, modelId: string): Promise<ProviderTestResult>;
 }
 
 export interface AgentModelRegistryFacade {
-  resolve(modelId: string): ModelCapabilityDefaults | null;
-  status(): ModelCapabilityRegistryStatus;
-  refresh(): Promise<ModelCapabilityRegistryStatus>;
+	resolve(modelId: string): ModelCapabilityDefaults | null;
+	status(): ModelCapabilityRegistryStatus;
+	refresh(): Promise<ModelCapabilityRegistryStatus>;
 }
 
 export interface AgentArtifactFacade {
-  begin(scope: Scope, input: unknown): Promise<UploadReservation>;
-  get(scope: Scope, artifactId: string): Promise<ArtifactRef | null>;
-  write(scope: Scope, artifactId: string, source: AsyncIterable<Uint8Array>, signal: AbortSignal): Promise<ArtifactRef>;
-  read(scope: Scope, artifactId: string, range: ArtifactReadRange): AsyncIterable<Uint8Array>;
-  retain(scope: Scope, artifactId: string, retained: boolean, expectedVersion: number): Promise<ArtifactRef>;
-  delete(scope: Scope, artifactId: string, expectedVersion: number): Promise<void>;
-  listLibrary(userId: number, query: ArtifactLibraryQuery): Promise<ArtifactLibraryPage>;
-  storageSummary(userId: number): Promise<ArtifactStorageSummary>;
-  cleanupPreview(userId: number): Promise<ArtifactCleanupPreview>;
-  cleanupConfirm(userId: number, confirmationId: string): Promise<ArtifactCleanupResult>;
-  attach(userId: number, artifactId: string, input: unknown): Promise<ArtifactAttachResult>;
+	begin(scope: Scope, input: unknown): Promise<UploadReservation>;
+	get(scope: Scope, artifactId: string): Promise<ArtifactRef | null>;
+	write(
+		scope: Scope,
+		artifactId: string,
+		source: AsyncIterable<Uint8Array>,
+		signal: AbortSignal,
+	): Promise<ArtifactRef>;
+	read(scope: Scope, artifactId: string, range: ArtifactReadRange): AsyncIterable<Uint8Array>;
+	retain(scope: Scope, artifactId: string, retained: boolean, expectedVersion: number): Promise<ArtifactRef>;
+	delete(scope: Scope, artifactId: string, expectedVersion: number): Promise<void>;
+	listLibrary(userId: number, query: ArtifactLibraryQuery): Promise<ArtifactLibraryPage>;
+	storageSummary(userId: number): Promise<ArtifactStorageSummary>;
+	cleanupPreview(userId: number): Promise<ArtifactCleanupPreview>;
+	cleanupConfirm(userId: number, confirmationId: string): Promise<ArtifactCleanupResult>;
+	attach(userId: number, artifactId: string, input: unknown): Promise<ArtifactAttachResult>;
 }
 
 export interface AgentConversationFacade {
-  createThread(scope: Scope, title?: unknown, idempotencyKey?: string): Promise<ThreadView>;
-  renameThread(scope: Scope, threadId: string, title: unknown, expectedVersion: unknown): Promise<ThreadView>;
-  getThread(scope: Scope, threadId: string): Promise<ThreadView>;
-  listThreads(scope: Scope, limit?: number, before?: string): Promise<ThreadPage>;
-  deleteThread(scope: Scope, threadId: string, expectedVersion: unknown): Promise<ThreadDeleteResult>;
-  deleteAllThreads(scope: Scope, confirmation: unknown): Promise<ThreadDeleteAllResult>;
-  readPage(scope: Scope, threadId: string, limit?: number, before?: string): Promise<LedgerPage>;
-  append(
-    scope: Scope,
-    threadId: string,
-    kind: LedgerEntryKind,
-    payload: JsonValue,
-    runId?: string,
-  ): Promise<LedgerEntryView>;
+	createThread(scope: Scope, title?: unknown, idempotencyKey?: string): Promise<ThreadView>;
+	renameThread(scope: Scope, threadId: string, title: unknown, expectedVersion: unknown): Promise<ThreadView>;
+	getThread(scope: Scope, threadId: string): Promise<ThreadView>;
+	listThreads(scope: Scope, limit?: number, before?: string): Promise<ThreadPage>;
+	deleteThread(scope: Scope, threadId: string, expectedVersion: unknown): Promise<ThreadDeleteResult>;
+	deleteAllThreads(scope: Scope, confirmation: unknown): Promise<ThreadDeleteAllResult>;
+	readPage(scope: Scope, threadId: string, limit?: number, before?: string): Promise<LedgerPage>;
+	append(
+		scope: Scope,
+		threadId: string,
+		kind: LedgerEntryKind,
+		payload: JsonValue,
+		runId?: string,
+	): Promise<LedgerEntryView>;
 }
 
 export interface AgentContextFacade {
-  compose(input: ContextRequest): Promise<ContextPlan>;
+	compose(input: ContextRequest): Promise<ContextPlan>;
 }
 
 export interface AgentMemoryFacade {
-  list(
-    scope: Scope,
-    status?: MemoryStatus | 'all',
-    limit?: number,
-    before?: { createdAt: number; id: string },
-  ): Promise<MemoryView[]>;
-  propose(scope: Scope, input: unknown, provenance?: { runId: string; runtimeId: string }): Promise<MemoryView>;
-  review(scope: Scope, memoryId: string, input: unknown): Promise<MemoryView>;
-  previewImport(scope: Scope, sourceAppId: string, sourceMemoryId: string): Promise<MemoryImportConfirmation>;
-  confirmImport(scope: Scope, confirmationId: string): Promise<MemoryView>;
+	list(
+		scope: Scope,
+		status?: MemoryStatus | 'all',
+		limit?: number,
+		before?: { createdAt: number; id: string },
+	): Promise<MemoryView[]>;
+	propose(scope: Scope, input: unknown, provenance?: { runId: string; runtimeId: string }): Promise<MemoryView>;
+	review(scope: Scope, memoryId: string, input: unknown): Promise<MemoryView>;
+	previewImport(scope: Scope, sourceAppId: string, sourceMemoryId: string): Promise<MemoryImportConfirmation>;
+	confirmImport(scope: Scope, confirmationId: string): Promise<MemoryView>;
 }
 
 export interface AgentCollaborationFacade {
-  getSettings(scope: Scope): Promise<SubagentSettingsView>;
-  replaceProfiles(scope: Scope, input: unknown, expectedVersion: number): Promise<SubagentSettingsView>;
-  createSubagent(
-    scope: Scope,
-    runId: string,
-    parentRuntimeId: string,
-    input: unknown,
-    idempotencyKey: string,
-  ): Promise<DelegationView>;
-  listSubagents(
-    scope: Scope,
-    runId: string,
-    parentRuntimeId?: string,
-    limit?: number,
-    before?: { createdAt: number; id: string },
-  ): Promise<DelegationView[]>;
-  cancelSubagent(scope: Scope, runId: string, delegationId: string, expectedVersion: number): Promise<DelegationView>;
-  joinSubagents(
-    scope: Scope,
-    runId: string,
-    callerRuntimeId: string,
-    delegationIds: readonly string[],
-    mode: 'all' | 'any',
-    deadlineAt: number,
-    signal: AbortSignal,
-  ): Promise<JoinResult>;
-  sendMessage(
-    scope: Scope,
-    runId: string,
-    senderRuntimeId: string,
-    input: unknown,
-    idempotencyKey: string,
-  ): Promise<{ messageId: string; recipientSequence: number; replayed: boolean }>;
-  readMessages(scope: Scope, runId: string, runtimeId: string, after: number, limit: number): Promise<AgentMessage[]>;
-  listSubagentMessages(
-    scope: Scope,
-    runId: string,
-    delegationId: string,
-    limit: number,
-    before?: { createdAt: number; id: string },
-  ): Promise<AgentMessage[]>;
-  consumeMessages(
-    scope: Scope,
-    runId: string,
-    runtimeId: string,
-    through: number,
-    expectedConsumedSequence: number,
-  ): Promise<number>;
-  getFact(scope: Scope, runId: string, key: string): Promise<SharedFactView | null>;
-  compareAndSetFact(
-    scope: Scope,
-    runId: string,
-    runtimeId: string,
-    key: string,
-    value: unknown,
-    expectedVersion: number | null,
-  ): Promise<SharedFactView>;
+	getSettings(scope: Scope): Promise<SubagentSettingsView>;
+	replaceProfiles(scope: Scope, input: unknown, expectedVersion: number): Promise<SubagentSettingsView>;
+	createSubagent(
+		scope: Scope,
+		runId: string,
+		parentRuntimeId: string,
+		input: unknown,
+		idempotencyKey: string,
+	): Promise<DelegationView>;
+	listSubagents(
+		scope: Scope,
+		runId: string,
+		parentRuntimeId?: string,
+		limit?: number,
+		before?: { createdAt: number; id: string },
+	): Promise<DelegationView[]>;
+	cancelSubagent(scope: Scope, runId: string, delegationId: string, expectedVersion: number): Promise<DelegationView>;
+	joinSubagents(
+		scope: Scope,
+		runId: string,
+		callerRuntimeId: string,
+		delegationIds: readonly string[],
+		mode: 'all' | 'any',
+		deadlineAt: number,
+		signal: AbortSignal,
+	): Promise<JoinResult>;
+	sendMessage(
+		scope: Scope,
+		runId: string,
+		senderRuntimeId: string,
+		input: unknown,
+		idempotencyKey: string,
+	): Promise<{ messageId: string; recipientSequence: number; replayed: boolean }>;
+	readMessages(scope: Scope, runId: string, runtimeId: string, after: number, limit: number): Promise<AgentMessage[]>;
+	listSubagentMessages(
+		scope: Scope,
+		runId: string,
+		delegationId: string,
+		limit: number,
+		before?: { createdAt: number; id: string },
+	): Promise<AgentMessage[]>;
+	consumeMessages(
+		scope: Scope,
+		runId: string,
+		runtimeId: string,
+		through: number,
+		expectedConsumedSequence: number,
+	): Promise<number>;
+	getFact(scope: Scope, runId: string, key: string): Promise<SharedFactView | null>;
+	compareAndSetFact(
+		scope: Scope,
+		runId: string,
+		runtimeId: string,
+		key: string,
+		value: unknown,
+		expectedVersion: number | null,
+	): Promise<SharedFactView>;
 }
 
 export interface AgentRunFacade {
-  definitions(scope: Scope): Promise<readonly AgentDefinitionSelectionView[]>;
-  create(scope: Scope, command: CreateRunCommand): Promise<RunView>;
-  get(scope: Scope, runId: string): Promise<RunSnapshot>;
-  rootRuntimeId(scope: Scope, runId: string): Promise<string>;
-  list(scope: Scope, threadId: string | undefined, limit?: number, before?: string): Promise<RunPage>;
-  appendInput(
-    scope: Scope,
-    runId: string,
-    input: UserInputData,
-    expectedVersion: number,
-    idempotencyKey: string,
-  ): Promise<{ inputId: string; sequence: number; runVersion: number }>;
-  interrupt(
-    scope: Scope,
-    runId: string,
-    input: UserInputData,
-    expectedVersion: number,
-    idempotencyKey: string,
-  ): Promise<{ inputId: string; sequence: number; runVersion: number }>;
-  setGoal(scope: Scope, runId: string, text: string, expectedVersion: number, idempotencyKey: string): Promise<RunView>;
-  pendingInputs(scope: Scope, runId: string): Promise<PendingRunInputPage>;
-  mutatePendingInput(
-    scope: Scope,
-    runId: string,
-    action: 'remove' | 'move',
-    inputId: string,
-    beforeInputId: string | null,
-    expectedVersion: number,
-    idempotencyKey: string,
-  ): Promise<RunView>;
-  increaseBudget(
-    scope: Scope,
-    runId: string,
-    increase: RunBudgetIncrease,
-    expectedVersion: number,
-    idempotencyKey: string,
-  ): Promise<RunView>;
-  cancel(scope: Scope, runId: string, expectedVersion: number, idempotencyKey: string): Promise<RunView>;
-  reconciliation(scope: Scope, runId: string): Promise<RunReconciliationView>;
-  resolveReconciliation(
-    scope: Scope,
-    runId: string,
-    expectedVersion: number,
-    note: string,
-    resources: readonly { resourceKey: string; version: number }[],
-  ): Promise<RunView>;
-  listCheckpoints(scope: Scope, runId: string): Promise<CheckpointView[]>;
-  saveCheckpoint(scope: Scope, runId: string, expectedVersion: number): Promise<CheckpointView>;
-  deleteCheckpoint(scope: Scope, runId: string, checkpointId: string): Promise<void>;
-  resume(
-    scope: Scope,
-    runId: string,
-    checkpointId: string,
-    expectedVersion: number,
-    idempotencyKey: string,
-  ): Promise<RunView>;
-  delete(scope: Scope, runId: string, expectedVersion: number, idempotencyKey: string): Promise<void>;
+	definitions(scope: Scope): Promise<readonly AgentDefinitionSelectionView[]>;
+	create(scope: Scope, command: CreateRunCommand): Promise<RunView>;
+	get(scope: Scope, runId: string): Promise<RunSnapshot>;
+	rootRuntimeId(scope: Scope, runId: string): Promise<string>;
+	list(scope: Scope, threadId: string | undefined, limit?: number, before?: string): Promise<RunPage>;
+	appendInput(
+		scope: Scope,
+		runId: string,
+		input: UserInputData,
+		expectedVersion: number,
+		idempotencyKey: string,
+	): Promise<{ inputId: string; sequence: number; runVersion: number }>;
+	interrupt(
+		scope: Scope,
+		runId: string,
+		input: UserInputData,
+		expectedVersion: number,
+		idempotencyKey: string,
+	): Promise<{ inputId: string; sequence: number; runVersion: number }>;
+	setGoal(
+		scope: Scope,
+		runId: string,
+		text: string,
+		expectedVersion: number,
+		idempotencyKey: string,
+	): Promise<RunView>;
+	pendingInputs(scope: Scope, runId: string): Promise<PendingRunInputPage>;
+	mutatePendingInput(
+		scope: Scope,
+		runId: string,
+		action: 'remove' | 'move',
+		inputId: string,
+		beforeInputId: string | null,
+		expectedVersion: number,
+		idempotencyKey: string,
+	): Promise<RunView>;
+	increaseBudget(
+		scope: Scope,
+		runId: string,
+		increase: RunBudgetIncrease,
+		expectedVersion: number,
+		idempotencyKey: string,
+	): Promise<RunView>;
+	cancel(scope: Scope, runId: string, expectedVersion: number, idempotencyKey: string): Promise<RunView>;
+	reconciliation(scope: Scope, runId: string): Promise<RunReconciliationView>;
+	resolveReconciliation(
+		scope: Scope,
+		runId: string,
+		expectedVersion: number,
+		note: string,
+		resources: readonly { resourceKey: string; version: number }[],
+	): Promise<RunView>;
+	listCheckpoints(scope: Scope, runId: string): Promise<CheckpointView[]>;
+	saveCheckpoint(scope: Scope, runId: string, expectedVersion: number): Promise<CheckpointView>;
+	deleteCheckpoint(scope: Scope, runId: string, checkpointId: string): Promise<void>;
+	resume(
+		scope: Scope,
+		runId: string,
+		checkpointId: string,
+		expectedVersion: number,
+		idempotencyKey: string,
+	): Promise<RunView>;
+	delete(scope: Scope, runId: string, expectedVersion: number, idempotencyKey: string): Promise<void>;
 }
 
 export interface AgentEventFacade {
-  readRun(scope: Scope, runId: string, after: number, limit: number): Promise<RunEvent[]>;
-  readHost(userId: number, after: number, limit: number): Promise<HostEvent[]>;
-  hostCursor(userId: number): Promise<number>;
-  hostCursorWindow(userId: number): Promise<HostCursorWindow>;
-  onRunWake(runId: string, listener: (cursor: number) => void): () => void;
-  onHostWake(userId: number, listener: (cursor: number) => void): () => void;
-  onTransient(runId: string, listener: (event: TransientRunEvent) => void): () => void;
+	readRun(scope: Scope, runId: string, after: number, limit: number): Promise<RunEvent[]>;
+	readHost(userId: number, after: number, limit: number): Promise<HostEvent[]>;
+	hostCursor(userId: number): Promise<number>;
+	hostCursorWindow(userId: number): Promise<HostCursorWindow>;
+	onRunWake(runId: string, listener: (cursor: number) => void): () => void;
+	onHostWake(userId: number, listener: (cursor: number) => void): () => void;
+	onTransient(runId: string, listener: (event: TransientRunEvent) => void): () => void;
 }
 
 export interface AgentApprovalFacade {
-  get(scope: Scope, approvalId: string): Promise<ApprovalView>;
-  list(scope: Scope, runId: string): Promise<ApprovalView[]>;
-  resolve(
-    scope: Scope,
-    approvalId: string,
-    decision: 'approved' | 'denied',
-    operationHash: string,
-    expectedVersion: number,
-    actorUserId: number,
-    idempotencyKey: string,
-    feedback?: string,
-  ): Promise<ApprovalView>;
+	get(scope: Scope, approvalId: string): Promise<ApprovalView>;
+	list(scope: Scope, runId: string): Promise<ApprovalView[]>;
+	resolve(
+		scope: Scope,
+		approvalId: string,
+		decision: 'approved' | 'denied',
+		operationHash: string,
+		expectedVersion: number,
+		actorUserId: number,
+		idempotencyKey: string,
+		feedback?: string,
+	): Promise<ApprovalView>;
 }
 
 export interface AgentServices {
-  host: AgentHostFacade;
-  plugins: AgentPluginFacade;
-  ai: {
-    providers: AgentProviderFacade;
-    modelRegistry: AgentModelRegistryFacade;
-    integrations: AgentIntegrationFacade;
-    artifacts: AgentArtifactFacade;
-    conversations: AgentConversationFacade;
-    context: AgentContextFacade;
-    memories: AgentMemoryFacade;
-    languageModel: LanguageModelPort;
-  };
-  runtime: {
-    runs: AgentRunFacade;
-    collaboration: AgentCollaborationFacade;
-    events: AgentEventFacade;
-    approvals: AgentApprovalFacade;
-  };
-  initialize(): Promise<void>;
-  initializeForUser(userId: number): Promise<void>;
-  quiesce(deadlineUnixSeconds: number): Promise<void>;
-  prepareRestore(deadlineUnixSeconds: number): Promise<void>;
-  dispose(): Promise<void>;
+	host: AgentHostFacade;
+	plugins: AgentPluginFacade;
+	ai: {
+		providers: AgentProviderFacade;
+		modelRegistry: AgentModelRegistryFacade;
+		integrations: AgentIntegrationFacade;
+		artifacts: AgentArtifactFacade;
+		conversations: AgentConversationFacade;
+		context: AgentContextFacade;
+		memories: AgentMemoryFacade;
+		languageModel: LanguageModelPort;
+	};
+	runtime: {
+		runs: AgentRunFacade;
+		collaboration: AgentCollaborationFacade;
+		events: AgentEventFacade;
+		approvals: AgentApprovalFacade;
+	};
+	initialize(): Promise<void>;
+	initializeForUser(userId: number): Promise<void>;
+	quiesce(deadlineUnixSeconds: number): Promise<void>;
+	prepareRestore(deadlineUnixSeconds: number): Promise<void>;
+	dispose(): Promise<void>;
 }
 
 export type {
-  AgentCapability,
-  AgentSettingsDocument,
-  AgentSettingsView,
-  AppView,
-  CapabilityDefinitionView,
-  CapabilityGrant,
-  CapabilityGrantInput,
+	AgentCapability,
+	AgentSettingsDocument,
+	AgentSettingsView,
+	AppView,
+	CapabilityDefinitionView,
+	CapabilityGrant,
+	CapabilityGrantInput,
 };

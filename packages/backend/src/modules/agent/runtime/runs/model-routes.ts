@@ -2,14 +2,14 @@ import type { ModelRef } from '../../ai/model.types';
 import type { RunDefinitionSnapshot, RunModelRouteSnapshot } from './run.types';
 
 export const sameModelRef = (left: ModelRef, right: ModelRef): boolean =>
-  left.providerId === right.providerId &&
-  left.modelId === right.modelId &&
-  left.configurationVersion === right.configurationVersion;
+	left.providerId === right.providerId &&
+	left.modelId === right.modelId &&
+	left.configurationVersion === right.configurationVersion;
 
 export const runModelRoutes = (definition: RunDefinitionSnapshot): RunModelRouteSnapshot[] => [
-  { model: definition.model, modelCapabilities: definition.modelCapabilities },
-  ...definition.rootModelRoutes,
+	{ model: definition.model, modelCapabilities: definition.modelCapabilities },
+	...definition.rootModelRoutes,
 ];
 
 export const runModelRouteIndex = (definition: RunDefinitionSnapshot, model: ModelRef): number =>
-  runModelRoutes(definition).findIndex((route) => sameModelRef(route.model, model));
+	runModelRoutes(definition).findIndex((route) => sameModelRef(route.model, model));

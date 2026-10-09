@@ -6,9 +6,9 @@ export type UiSurfaceKind = 'plain' | 'raised' | 'inset' | 'glass';
 export type UiSelectValue = string | number | null;
 
 export interface UiSelectOption {
-  value: UiSelectValue;
-  label: string;
-  triggerLabel?: string;
-  description?: string;
-  disabled?: boolean;
+	value: UiSelectValue;
+	label: string;
+	triggerLabel?: string;
+	description?: string;
+	disabled?: boolean;
 }

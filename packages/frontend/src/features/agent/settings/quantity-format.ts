@@ -7,16 +7,16 @@ export type QuantityType = 'bytes' | 'tokens' | 'seconds' | 'number';
  * 这样同一个函数在 zh-CN / en-US / ja-JP 下都能输出本地化结果。
  */
 export interface QuantityLabels {
-  locale: string;
-  unlimited: string;
-  seconds: (value: string) => string;
-  minutes: (value: string) => string;
-  hours: (value: string) => string;
-  days: (value: string) => string;
-  invalidFormat: string;
-  exactBytes: (value: string) => string;
-  exactTokens: (value: string) => string;
-  exactSeconds: (value: string) => string;
+	locale: string;
+	unlimited: string;
+	seconds: (value: string) => string;
+	minutes: (value: string) => string;
+	hours: (value: string) => string;
+	days: (value: string) => string;
+	invalidFormat: string;
+	exactBytes: (value: string) => string;
+	exactTokens: (value: string) => string;
+	exactSeconds: (value: string) => string;
 }
 
 /**
@@ -42,138 +42,138 @@ export interface QuantityLabels {
  *   1m -> 1,000,000
  */
 export function parseQuantity(raw: string | number | null | undefined, type: QuantityType = 'bytes'): number | null {
-  if (raw === null || raw === undefined) return null;
-  if (typeof raw === 'number') {
-    if (Number.isNaN(raw)) return null;
-    return Number.isFinite(raw) ? Math.round(raw) : null;
-  }
+	if (raw === null || raw === undefined) return null;
+	if (typeof raw === 'number') {
+		if (Number.isNaN(raw)) return null;
+		return Number.isFinite(raw) ? Math.round(raw) : null;
+	}
 
-  const trimmed = raw.trim().toLowerCase().replace(/,/g, '');
-  if (!trimmed) return null;
+	const trimmed = raw.trim().toLowerCase().replace(/,/g, '');
+	if (!trimmed) return null;
 
-  // 匹配数值部分与单位部分，支持小数，如 "1.5m", "100kb", "32000"
-  const match = trimmed.match(/^([+-]?\d+(?:\.\d+)?)\s*([a-z]*)$/i);
-  if (!match) return null;
+	// 匹配数值部分与单位部分，支持小数，如 "1.5m", "100kb", "32000"
+	const match = trimmed.match(/^([+-]?\d+(?:\.\d+)?)\s*([a-z]*)$/i);
+	if (!match) return null;
 
-  const numeric = match[1];
-  if (!numeric) return null;
-  const num = parseFloat(numeric);
-  if (!Number.isFinite(num)) return null;
+	const numeric = match[1];
+	if (!numeric) return null;
+	const num = parseFloat(numeric);
+	if (!Number.isFinite(num)) return null;
 
-  const unit = match[2] ?? '';
+	const unit = match[2] ?? '';
 
-  if (type === 'bytes') {
-    let multiplier = 1;
-    if (unit === 'k' || unit === 'kb' || unit === 'kib') {
-      multiplier = 1024;
-    } else if (unit === 'm' || unit === 'mb' || unit === 'mib') {
-      multiplier = 1024 * 1024;
-    } else if (unit === 'g' || unit === 'gb' || unit === 'gib') {
-      multiplier = 1024 * 1024 * 1024;
-    } else if (unit === 't' || unit === 'tb' || unit === 'tib') {
-      multiplier = 1024 * 1024 * 1024 * 1024;
-    } else if (unit === 'b' || unit === 'byte' || unit === 'bytes' || unit === '') {
-      multiplier = 1;
-    } else {
-      return null;
-    }
-    return Math.round(num * multiplier);
-  }
+	if (type === 'bytes') {
+		let multiplier = 1;
+		if (unit === 'k' || unit === 'kb' || unit === 'kib') {
+			multiplier = 1024;
+		} else if (unit === 'm' || unit === 'mb' || unit === 'mib') {
+			multiplier = 1024 * 1024;
+		} else if (unit === 'g' || unit === 'gb' || unit === 'gib') {
+			multiplier = 1024 * 1024 * 1024;
+		} else if (unit === 't' || unit === 'tb' || unit === 'tib') {
+			multiplier = 1024 * 1024 * 1024 * 1024;
+		} else if (unit === 'b' || unit === 'byte' || unit === 'bytes' || unit === '') {
+			multiplier = 1;
+		} else {
+			return null;
+		}
+		return Math.round(num * multiplier);
+	}
 
-  if (type === 'tokens') {
-    let multiplier = 1;
-    if (unit === 'k' || unit === 'kt' || unit === 'ktoken' || unit === 'ktokens') {
-      multiplier = 1000;
-    } else if (unit === 'm' || unit === 'mt' || unit === 'mtoken' || unit === 'mtokens') {
-      multiplier = 1000000;
-    } else if (unit === 'g' || unit === 'b') {
-      // 1b tokens / 1g
-      multiplier = 1000000000;
-    } else if (unit === 't' || unit === 'token' || unit === 'tokens' || unit === '') {
-      multiplier = 1;
-    } else {
-      return null;
-    }
-    return Math.round(num * multiplier);
-  }
+	if (type === 'tokens') {
+		let multiplier = 1;
+		if (unit === 'k' || unit === 'kt' || unit === 'ktoken' || unit === 'ktokens') {
+			multiplier = 1000;
+		} else if (unit === 'm' || unit === 'mt' || unit === 'mtoken' || unit === 'mtokens') {
+			multiplier = 1000000;
+		} else if (unit === 'g' || unit === 'b') {
+			// 1b tokens / 1g
+			multiplier = 1000000000;
+		} else if (unit === 't' || unit === 'token' || unit === 'tokens' || unit === '') {
+			multiplier = 1;
+		} else {
+			return null;
+		}
+		return Math.round(num * multiplier);
+	}
 
-  if (type === 'seconds') {
-    let multiplier = 1;
-    if (unit === 's' || unit === 'sec' || unit === 'second' || unit === 'seconds' || unit === '') {
-      multiplier = 1;
-    } else if (unit === 'm' || unit === 'min' || unit === 'minute' || unit === 'minutes') {
-      multiplier = 60;
-    } else if (unit === 'h' || unit === 'hr' || unit === 'hour' || unit === 'hours') {
-      multiplier = 3600;
-    } else if (unit === 'd' || unit === 'day' || unit === 'days') {
-      multiplier = 86400;
-    } else {
-      return null;
-    }
-    return Math.round(num * multiplier);
-  }
+	if (type === 'seconds') {
+		let multiplier = 1;
+		if (unit === 's' || unit === 'sec' || unit === 'second' || unit === 'seconds' || unit === '') {
+			multiplier = 1;
+		} else if (unit === 'm' || unit === 'min' || unit === 'minute' || unit === 'minutes') {
+			multiplier = 60;
+		} else if (unit === 'h' || unit === 'hr' || unit === 'hour' || unit === 'hours') {
+			multiplier = 3600;
+		} else if (unit === 'd' || unit === 'day' || unit === 'days') {
+			multiplier = 86400;
+		} else {
+			return null;
+		}
+		return Math.round(num * multiplier);
+	}
 
-  // Generic number
-  let multiplier = 1;
-  if (unit === 'k') multiplier = 1000;
-  else if (unit === 'm') multiplier = 1000000;
-  else if (unit === 'g') multiplier = 1000000000;
-  else if (unit !== '') return null;
+	// Generic number
+	let multiplier = 1;
+	if (unit === 'k') multiplier = 1000;
+	else if (unit === 'm') multiplier = 1000000;
+	else if (unit === 'g') multiplier = 1000000000;
+	else if (unit !== '') return null;
 
-  return Math.round(num * multiplier);
+	return Math.round(num * multiplier);
 }
 
 /**
  * 格式化数值为友好的人类可读简写（如 "10 MiB", "128k Tokens", "30 分钟"）
  */
 export function formatQuantity(value: number | null | undefined, type: QuantityType, labels: QuantityLabels): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return labels.unlimited;
-  if (value === 0) return type === 'bytes' ? '0 B' : formatAgentNumber(labels.locale, 0);
+	if (value === null || value === undefined || !Number.isFinite(value)) return labels.unlimited;
+	if (value === 0) return type === 'bytes' ? '0 B' : formatAgentNumber(labels.locale, 0);
 
-  if (type === 'bytes') {
-    const absVal = Math.abs(value);
-    if (absVal < 1024) return `${formatAgentNumber(labels.locale, value)} B`;
-    const units = ['KiB', 'MiB', 'GiB', 'TiB'];
-    let amount = absVal;
-    let unitIdx = -1;
-    while (amount >= 1024 && unitIdx < units.length - 1) {
-      amount /= 1024;
-      unitIdx++;
-    }
-    const formatted = amount >= 100 ? Math.round(amount) : Number(amount.toFixed(1));
-    return `${formatAgentNumber(labels.locale, formatted, { maximumFractionDigits: 1 })} ${units[unitIdx]}`;
-  }
+	if (type === 'bytes') {
+		const absVal = Math.abs(value);
+		if (absVal < 1024) return `${formatAgentNumber(labels.locale, value)} B`;
+		const units = ['KiB', 'MiB', 'GiB', 'TiB'];
+		let amount = absVal;
+		let unitIdx = -1;
+		while (amount >= 1024 && unitIdx < units.length - 1) {
+			amount /= 1024;
+			unitIdx++;
+		}
+		const formatted = amount >= 100 ? Math.round(amount) : Number(amount.toFixed(1));
+		return `${formatAgentNumber(labels.locale, formatted, { maximumFractionDigits: 1 })} ${units[unitIdx]}`;
+	}
 
-  if (type === 'tokens') {
-    const absVal = Math.abs(value);
-    if (absVal < 1000) return formatAgentNumber(labels.locale, value);
-    if (absVal < 1000000 && absVal % 1024 === 0 && absVal <= 131072) {
-      return `${formatAgentNumber(labels.locale, absVal / 1024)}k`;
-    }
-    if (absVal < 1000000) {
-      const k = absVal / 1000;
-      const formatted = k >= 100 ? Math.round(k) : Number(k.toFixed(1));
-      return `${formatAgentNumber(labels.locale, formatted, { maximumFractionDigits: 1 })}k`;
-    }
-    const m = absVal / 1000000;
-    const formatted = m >= 100 ? Math.round(m) : Number(m.toFixed(1));
-    return `${formatAgentNumber(labels.locale, formatted, { maximumFractionDigits: 1 })}M`;
-  }
+	if (type === 'tokens') {
+		const absVal = Math.abs(value);
+		if (absVal < 1000) return formatAgentNumber(labels.locale, value);
+		if (absVal < 1000000 && absVal % 1024 === 0 && absVal <= 131072) {
+			return `${formatAgentNumber(labels.locale, absVal / 1024)}k`;
+		}
+		if (absVal < 1000000) {
+			const k = absVal / 1000;
+			const formatted = k >= 100 ? Math.round(k) : Number(k.toFixed(1));
+			return `${formatAgentNumber(labels.locale, formatted, { maximumFractionDigits: 1 })}k`;
+		}
+		const m = absVal / 1000000;
+		const formatted = m >= 100 ? Math.round(m) : Number(m.toFixed(1));
+		return `${formatAgentNumber(labels.locale, formatted, { maximumFractionDigits: 1 })}M`;
+	}
 
-  if (type === 'seconds') {
-    if (value < 60) return labels.seconds(formatAgentNumber(labels.locale, value));
-    if (value < 3600) return labels.minutes(formatAgentNumber(labels.locale, Math.round(value / 60)));
-    if (value < 86400) {
-      return labels.hours(
-        formatAgentNumber(labels.locale, Number((value / 3600).toFixed(1)), { maximumFractionDigits: 1 }),
-      );
-    }
-    return labels.days(
-      formatAgentNumber(labels.locale, Number((value / 86400).toFixed(1)), { maximumFractionDigits: 1 }),
-    );
-  }
+	if (type === 'seconds') {
+		if (value < 60) return labels.seconds(formatAgentNumber(labels.locale, value));
+		if (value < 3600) return labels.minutes(formatAgentNumber(labels.locale, Math.round(value / 60)));
+		if (value < 86400) {
+			return labels.hours(
+				formatAgentNumber(labels.locale, Number((value / 3600).toFixed(1)), { maximumFractionDigits: 1 }),
+			);
+		}
+		return labels.days(
+			formatAgentNumber(labels.locale, Number((value / 86400).toFixed(1)), { maximumFractionDigits: 1 }),
+		);
+	}
 
-  return formatAgentNumber(labels.locale, value);
+	return formatAgentNumber(labels.locale, value);
 }
 
 /**
@@ -182,44 +182,44 @@ export function formatQuantity(value: number | null | undefined, type: QuantityT
  * parseQuantityDescription("100k", "tokens") -> "100k Tokens (100,000)"
  */
 export function getQuantityFeedback(
-  raw: string | number,
-  type: QuantityType,
-  labels: QuantityLabels,
+	raw: string | number,
+	type: QuantityType,
+	labels: QuantityLabels,
 ): {
-  valid: boolean;
-  value: number | null;
-  readable: string;
-  exact: string;
+	valid: boolean;
+	value: number | null;
+	readable: string;
+	exact: string;
 } {
-  const parsed = parseQuantity(raw, type);
-  if (parsed === null) {
-    return {
-      valid: false,
-      value: null,
-      readable: labels.invalidFormat,
-      exact: '',
-    };
-  }
+	const parsed = parseQuantity(raw, type);
+	if (parsed === null) {
+		return {
+			valid: false,
+			value: null,
+			readable: labels.invalidFormat,
+			exact: '',
+		};
+	}
 
-  const readable = formatQuantity(parsed, type, labels);
-  const formattedExact = formatAgentNumber(labels.locale, parsed);
-  let exact = '';
-  if (type === 'bytes') {
-    exact = labels.exactBytes(formattedExact);
-  } else if (type === 'tokens') {
-    exact = labels.exactTokens(formattedExact);
-  } else if (type === 'seconds') {
-    exact = labels.exactSeconds(formattedExact);
-  } else {
-    exact = formattedExact;
-  }
+	const readable = formatQuantity(parsed, type, labels);
+	const formattedExact = formatAgentNumber(labels.locale, parsed);
+	let exact = '';
+	if (type === 'bytes') {
+		exact = labels.exactBytes(formattedExact);
+	} else if (type === 'tokens') {
+		exact = labels.exactTokens(formattedExact);
+	} else if (type === 'seconds') {
+		exact = labels.exactSeconds(formattedExact);
+	} else {
+		exact = formattedExact;
+	}
 
-  return {
-    valid: true,
-    value: parsed,
-    readable,
-    exact,
-  };
+	return {
+		valid: true,
+		value: parsed,
+		readable,
+		exact,
+	};
 }
 
 /**
@@ -232,73 +232,73 @@ export function getQuantityFeedback(
  * - number 纯计数值保持纯数字（例如 80、5）。
  */
 export function toCompactQuantityString(
-  value: number | string | null | undefined,
-  type: QuantityType = 'bytes',
+	value: number | string | null | undefined,
+	type: QuantityType = 'bytes',
 ): string {
-  if (value === null || value === undefined || value === '') return '';
-  const num = typeof value === 'number' ? value : parseFloat(String(value));
-  if (!Number.isFinite(num)) return String(value);
-  if (num === 0) return '0';
+	if (value === null || value === undefined || value === '') return '';
+	const num = typeof value === 'number' ? value : parseFloat(String(value));
+	if (!Number.isFinite(num)) return String(value);
+	if (num === 0) return '0';
 
-  if (type === 'tokens') {
-    const absVal = Math.abs(num);
-    if (absVal >= 1_000_000 && absVal % 1_000_000 === 0) return `${num / 1_000_000}M`;
-    if (absVal >= 1000 && absVal % 1000 === 0) return `${num / 1000}k`;
-    // Token suffixes are decimal in parseQuantity. Preserve exact values such as 4096
-    // instead of rendering a lossy shorthand that would parse back as 4000.
-    return String(num);
-  }
+	if (type === 'tokens') {
+		const absVal = Math.abs(num);
+		if (absVal >= 1_000_000 && absVal % 1_000_000 === 0) return `${num / 1_000_000}M`;
+		if (absVal >= 1000 && absVal % 1000 === 0) return `${num / 1000}k`;
+		// Token suffixes are decimal in parseQuantity. Preserve exact values such as 4096
+		// instead of rendering a lossy shorthand that would parse back as 4000.
+		return String(num);
+	}
 
-  if (type === 'bytes') {
-    const absVal = Math.abs(num);
-    const sign = num < 0 ? '-' : '';
-    if (absVal >= 1024 * 1024 * 1024) {
-      const g = absVal / (1024 * 1024 * 1024);
-      return `${sign}${Number.isInteger(g) ? g : Number(g.toFixed(1))}G`;
-    }
-    if (absVal >= 1024 * 1024) {
-      const m = absVal / (1024 * 1024);
-      return `${sign}${Number.isInteger(m) ? m : Number(m.toFixed(1))}M`;
-    }
-    if (absVal >= 1024) {
-      const k = absVal / 1024;
-      return `${sign}${Number.isInteger(k) ? k : Number(k.toFixed(1))}K`;
-    }
-    return String(num);
-  }
+	if (type === 'bytes') {
+		const absVal = Math.abs(num);
+		const sign = num < 0 ? '-' : '';
+		if (absVal >= 1024 * 1024 * 1024) {
+			const g = absVal / (1024 * 1024 * 1024);
+			return `${sign}${Number.isInteger(g) ? g : Number(g.toFixed(1))}G`;
+		}
+		if (absVal >= 1024 * 1024) {
+			const m = absVal / (1024 * 1024);
+			return `${sign}${Number.isInteger(m) ? m : Number(m.toFixed(1))}M`;
+		}
+		if (absVal >= 1024) {
+			const k = absVal / 1024;
+			return `${sign}${Number.isInteger(k) ? k : Number(k.toFixed(1))}K`;
+		}
+		return String(num);
+	}
 
-  if (type === 'seconds') {
-    const absVal = Math.abs(num);
-    const sign = num < 0 ? '-' : '';
-    if (absVal >= 3600 && absVal % 3600 === 0) {
-      return `${sign}${absVal / 3600}h`;
-    }
-    if (absVal >= 60 && absVal % 60 === 0) {
-      return `${sign}${absVal / 60}m`;
-    }
-    return String(num);
-  }
+	if (type === 'seconds') {
+		const absVal = Math.abs(num);
+		const sign = num < 0 ? '-' : '';
+		if (absVal >= 3600 && absVal % 3600 === 0) {
+			return `${sign}${absVal / 3600}h`;
+		}
+		if (absVal >= 60 && absVal % 60 === 0) {
+			return `${sign}${absVal / 60}m`;
+		}
+		return String(num);
+	}
 
-  return String(num);
+	return String(num);
 }
 
 /**
  * 语义等价比对：用于判断两个输入（数字、字符串或带单位表达式）在业务数值上是否实质等价。
  */
 export function areQuantitiesEquivalent(
-  a: number | string | null | undefined,
-  b: number | string | null | undefined,
-  type: QuantityType = 'bytes',
+	a: number | string | null | undefined,
+	b: number | string | null | undefined,
+	type: QuantityType = 'bytes',
 ): boolean {
-  if (a === b) return true;
-  const isEmptyA = a === null || a === undefined || a === '';
-  const isEmptyB = b === null || b === undefined || b === '';
-  if (isEmptyA && isEmptyB) return true;
-  if (isEmptyA || isEmptyB) return false;
+	if (a === b) return true;
+	const isEmptyA = a === null || a === undefined || a === '';
+	const isEmptyB = b === null || b === undefined || b === '';
+	if (isEmptyA && isEmptyB) return true;
+	if (isEmptyA || isEmptyB) return false;
 
-  const parsedA = typeof a === 'number' ? a : parseQuantity(a, type);
-  const parsedB = typeof b === 'number' ? b : parseQuantity(b, type);
+	const parsedA = typeof a === 'number' ? a : parseQuantity(a, type);
+	const parsedB = typeof b === 'number' ? b : parseQuantity(b, type);
 
-  if (parsedA === null || parsedB === null) return false;
-  return parsedA === parsedB;
+	if (parsedA === null || parsedB === null) return false;
+	return parsedA === parsedB;
 }

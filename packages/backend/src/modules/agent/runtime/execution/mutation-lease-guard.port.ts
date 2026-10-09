@@ -1,31 +1,31 @@
 import type { JsonValue } from '../../agent.types';
 
 export interface MutationLeaseGuardRequest {
-  runtimeId: string;
-  operationId: string;
-  resourceKeys: readonly string[];
-  ttlSeconds: number;
-  signal: AbortSignal;
-  deadlineAt: number;
+	runtimeId: string;
+	operationId: string;
+	resourceKeys: readonly string[];
+	ttlSeconds: number;
+	signal: AbortSignal;
+	deadlineAt: number;
 }
 
 export type MutationLeaseFinalizationResult =
-  | { ok: true }
-  | {
-      ok: false;
-      reason: 'LEASE_STATE_UNCERTAIN_AFTER_MUTATION';
-      errorCode: string;
-      toolCallId: string;
-      resourceKeys: string[];
-    };
+	| { ok: true }
+	| {
+			ok: false;
+			reason: 'LEASE_STATE_UNCERTAIN_AFTER_MUTATION';
+			errorCode: string;
+			toolCallId: string;
+			resourceKeys: string[];
+	  };
 
 export interface MutationLeaseGuardHandle {
-  readonly signal: AbortSignal;
-  stopRenewal(): Promise<unknown | null>;
-  activate(): Promise<void>;
-  quarantine(reason: string, evidence: JsonValue): Promise<void>;
-  confirm(): Promise<MutationLeaseFinalizationResult>;
-  releaseIfInactive(): Promise<void>;
+	readonly signal: AbortSignal;
+	stopRenewal(): Promise<unknown | null>;
+	activate(): Promise<void>;
+	quarantine(reason: string, evidence: JsonValue): Promise<void>;
+	confirm(): Promise<MutationLeaseFinalizationResult>;
+	releaseIfInactive(): Promise<void>;
 }
 
 /**
@@ -36,5 +36,5 @@ export interface MutationLeaseGuardHandle {
  * mutation marker -> side effect -> durable settle -> lease settle/release or quarantine.
  */
 export interface MutationLeaseGuardPort {
-  acquire(request: MutationLeaseGuardRequest): Promise<MutationLeaseGuardHandle>;
+	acquire(request: MutationLeaseGuardRequest): Promise<MutationLeaseGuardHandle>;
 }

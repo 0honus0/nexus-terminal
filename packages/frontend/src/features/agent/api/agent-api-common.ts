@@ -9,14 +9,14 @@ export { httpClient };
 export const unwrap = <T>(envelope: AgentEnvelopeDto<T>): T => envelope.data;
 
 const csrf = async (): Promise<string> => {
-  if (csrfToken) return csrfToken;
-  const response = await httpClient.get<AgentEnvelopeDto<AgentCsrfResponseDto>>('/agent/security/csrf');
-  csrfToken = response.data.data.token;
-  return csrfToken;
+	if (csrfToken) return csrfToken;
+	const response = await httpClient.get<AgentEnvelopeDto<AgentCsrfResponseDto>>('/agent/security/csrf');
+	csrfToken = response.data.data.token;
+	return csrfToken;
 };
 
 export const mutationHeaders = async (): Promise<Record<string, string>> => ({ 'X-Nexus-CSRF': await csrf() });
 
 export const resetAgentCsrf = (): void => {
-  csrfToken = null;
+	csrfToken = null;
 };

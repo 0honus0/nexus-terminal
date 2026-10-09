@@ -17,100 +17,104 @@ import { PluginInstallService } from '../../modules/agent/host/plugin-install.se
 import type { AgentDefinitionRegistry } from '../../modules/agent/runtime/definitions/agent-definition.registry';
 
 export interface ComposePluginsOptions {
-  database: RelationalDatabase;
-  dataDirectory: string;
-  nexusVersion: string;
-  publicOrigin?: string;
-  registry: AppRegistryService;
-  appStates: SqliteAppStateRepository;
-  capabilityBroker: AppCapabilityBroker;
-  appIntents: AppIntentService;
-  artifactStore: LocalArtifactStore;
-  settings: AgentSettingsService;
-  definitions: AgentDefinitionRegistry;
-  clock: ClockPort;
-  onHostStateCommitted: (userId: number) => void;
+	database: RelationalDatabase;
+	dataDirectory: string;
+	nexusVersion: string;
+	publicOrigin?: string;
+	registry: AppRegistryService;
+	appStates: SqliteAppStateRepository;
+	capabilityBroker: AppCapabilityBroker;
+	appIntents: AppIntentService;
+	artifactStore: LocalArtifactStore;
+	settings: AgentSettingsService;
+	definitions: AgentDefinitionRegistry;
+	clock: ClockPort;
+	onHostStateCommitted: (userId: number) => void;
 }
 
 export interface ComposedPlugins {
-  appStorage: SqliteAppStorageRepository;
-  plugins: PluginInstallService;
-  resetRuntime(): Promise<void>;
+	appStorage: SqliteAppStorageRepository;
+	plugins: PluginInstallService;
+	resetRuntime(): Promise<void>;
 }
 
 export const composePlugins = ({
-  database,
-  dataDirectory,
-  nexusVersion,
-  publicOrigin,
-  registry,
-  appStates,
-  capabilityBroker,
-  appIntents,
-  artifactStore,
-  settings,
-  definitions,
-  clock,
-  onHostStateCommitted,
+	database,
+	dataDirectory,
+	nexusVersion,
+	publicOrigin,
+	registry,
+	appStates,
+	capabilityBroker,
+	appIntents,
+	artifactStore,
+	settings,
+	definitions,
+	clock,
+	onHostStateCommitted,
 }: ComposePluginsOptions): ComposedPlugins => {
-  const appStorage = new SqliteAppStorageRepository(database);
-  const pluginSdkStorage: AppStoragePort = {
-    get: async (scope, key) => {
-      const decision = await capabilityBroker.authorizeBackendStorage(scope);
-      if (!decision.allowed) throw new Error(decision.code);
-      return appStorage.get(scope, key);
-    },
-    put: async (scope, key, value, expectedVersion) => {
-      const decision = await capabilityBroker.authorizeBackendStorage(scope);
-      if (!decision.allowed) throw new Error(decision.code);
-      return appStorage.put(scope, key, value, expectedVersion);
-    },
-    delete: async (scope, key, expectedVersion) => {
-      const decision = await capabilityBroker.authorizeBackendStorage(scope);
-      if (!decision.allowed) throw new Error(decision.code);
-      return appStorage.delete(scope, key, expectedVersion);
-    },
-  };
-  const pluginBackendRuntime = new LocalPluginBackendRuntimeAdapter(dataDirectory, pluginSdkStorage, appIntents);
-  const pluginRepository = new SqlitePluginInstallRepository(database);
-  const plugins = new PluginInstallService(
-    pluginRepository,
-    new TarPackageVerifierAdapter(dataDirectory),
-    new ArtifactPluginPackageSourceAdapter(artifactStore),
-    new HttpRemotePluginRepositoryAdapter(),
-    settings,
-    registry,
-    appStates,
-    appStorage,
-    appIntents,
-    pluginBackendRuntime,
-    clock,
-    nexusVersion,
-    {
-      versionInstalled: (plugin) =>
-        definitions.replaceVersion(
-          plugin.appId,
-          plugin.version,
-          (plugin.manifest.agents ?? []).map((definition) => ({
-            ...definition,
-            requiredModelCapabilities: [...definition.requiredModelCapabilities],
-          })),
-        ),
-      versionRemoved: (appId, version) => definitions.removeVersion(appId, version),
-    },
-    onHostStateCommitted,
-    publicOrigin,
-  );
+	const appStorage = new SqliteAppStorageRepository(database);
+	const pluginSdkStorage: AppStoragePort = {
+		get: async (scope, key) => {
+			const decision = await capabilityBroker.authorizeBackendStorage(scope);
+			if (!decision.allowed) throw new Error(decision.code);
+			return appStorage.get(scope, key);
+		},
 
-  return {
-    appStorage,
-    plugins,
-    resetRuntime: async () => {
-      await pluginBackendRuntime.closeAll();
-      for (const { appId, version } of registry.pluginVersions()) {
-        registry.removeVersion(appId, version);
-        definitions.removeVersion(appId, version);
-      }
-    },
-  };
+		put: async (scope, key, value, expectedVersion) => {
+			const decision = await capabilityBroker.authorizeBackendStorage(scope);
+			if (!decision.allowed) throw new Error(decision.code);
+			return appStorage.put(scope, key, value, expectedVersion);
+		},
+
+		delete: async (scope, key, expectedVersion) => {
+			const decision = await capabilityBroker.authorizeBackendStorage(scope);
+			if (!decision.allowed) throw new Error(decision.code);
+			return appStorage.delete(scope, key, expectedVersion);
+		},
+	};
+	const pluginBackendRuntime = new LocalPluginBackendRuntimeAdapter(dataDirectory, pluginSdkStorage, appIntents);
+	const pluginRepository = new SqlitePluginInstallRepository(database);
+	const plugins = new PluginInstallService(
+		pluginRepository,
+		new TarPackageVerifierAdapter(dataDirectory),
+		new ArtifactPluginPackageSourceAdapter(artifactStore),
+		new HttpRemotePluginRepositoryAdapter(),
+		settings,
+		registry,
+		appStates,
+		appStorage,
+		appIntents,
+		pluginBackendRuntime,
+		clock,
+		nexusVersion,
+		{
+			versionInstalled: (plugin) =>
+				definitions.replaceVersion(
+					plugin.appId,
+					plugin.version,
+					(plugin.manifest.agents ?? []).map((definition) => ({
+						...definition,
+						requiredModelCapabilities: [...definition.requiredModelCapabilities],
+					})),
+				),
+
+			versionRemoved: (appId, version) => definitions.removeVersion(appId, version),
+		},
+		onHostStateCommitted,
+		publicOrigin,
+	);
+
+	return {
+		appStorage,
+		plugins,
+
+		resetRuntime: async () => {
+			await pluginBackendRuntime.closeAll();
+			for (const { appId, version } of registry.pluginVersions()) {
+				registry.removeVersion(appId, version);
+				definitions.removeVersion(appId, version);
+			}
+		},
+	};
 };

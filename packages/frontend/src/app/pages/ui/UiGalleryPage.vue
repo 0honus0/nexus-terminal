@@ -1,427 +1,461 @@
 <script setup lang="ts">
-  import { ref } from 'vue';
-  import {
-    UiBadge,
-    UiButton,
-    UiCheckbox,
-    UiContextMenu,
-    UiDialog,
-    UiEmptyState,
-    UiFormField,
-    UiInfoHint,
-    UiInput,
-    UiPopover,
-    UiSelect,
-    UiSlider,
-    UiSpinner,
-    UiSurface,
-    UiSwitch,
-    UiTable,
-    UiTextarea,
-    UiTokenInput,
-    type UiAppearance,
-    type UiDensity,
-    type UiSelectOption,
-    type UiTokenOption,
-    type UiTone,
-  } from '@/foundation/ui';
+	import { ref } from 'vue';
+	import {
+		UiBadge,
+		UiButton,
+		UiCheckbox,
+		UiContextMenu,
+		UiDialog,
+		UiEmptyState,
+		UiFormField,
+		UiInfoHint,
+		UiInput,
+		UiPopover,
+		UiSelect,
+		UiSlider,
+		UiSpinner,
+		UiSurface,
+		UiSwitch,
+		UiTable,
+		UiTextarea,
+		UiTokenInput,
+		type UiAppearance,
+		type UiDensity,
+		type UiSelectOption,
+		type UiTokenOption,
+		type UiTone,
+	} from '@/foundation/ui';
 
-  const densities: UiDensity[] = ['compact', 'default', 'comfortable'];
-  const tones: UiTone[] = ['neutral', 'primary', 'success', 'warning', 'danger'];
-  const appearances: UiAppearance[] = ['solid', 'soft', 'ghost', 'glass'];
-  const inputValue = ref('Nexus Terminal');
-  const bioValue = ref('');
-  const switchValue = ref(true);
-  const sliderValue = ref(68);
-  const popoverOpen = ref(false);
-  const checkboxValue = ref(true);
-  const checkboxOff = ref(false);
-  const selectValue = ref<string | number | null>('balanced');
-  const slotSelectValue = ref<string | number | null>('balanced');
-  const tokenValues = ref<Array<string | number>>(['glass']);
-  const dialogOpen = ref(false);
-  const contextMenu = ref({ visible: false, x: 0, y: 0 });
+	const densities: UiDensity[] = ['compact', 'default', 'comfortable'];
+	const tones: UiTone[] = ['neutral', 'primary', 'success', 'warning', 'danger'];
+	const appearances: UiAppearance[] = ['solid', 'soft', 'ghost', 'glass'];
+	const inputValue = ref('Nexus Terminal');
+	const bioValue = ref('');
+	const switchValue = ref(true);
+	const sliderValue = ref(68);
+	const popoverOpen = ref(false);
+	const checkboxValue = ref(true);
+	const checkboxOff = ref(false);
+	const selectValue = ref<string | number | null>('balanced');
+	const slotSelectValue = ref<string | number | null>('balanced');
+	const tokenValues = ref<Array<string | number>>(['glass']);
+	const dialogOpen = ref(false);
+	const contextMenu = ref({ visible: false, x: 0, y: 0 });
 
-  const selectOptions: UiSelectOption[] = [
-    { value: 'balanced', label: 'Balanced', description: 'Even split between speed and depth.' },
-    { value: 'precise', label: 'Precise', description: 'Slower, more deliberate responses.' },
-    { value: 'fast', label: 'Fast', description: 'Lowest latency, lighter reasoning.' },
-    { value: 'legacy', label: 'Legacy engine', description: 'Retired in this build.', disabled: true },
-  ];
-  const tokenOptions: UiTokenOption[] = [
-    { value: 'glass', label: 'Glass' },
-    { value: 'keyboard', label: 'Keyboard' },
-    { value: 'mobile', label: 'Mobile' },
-  ];
+	const selectOptions: UiSelectOption[] = [
+		{ value: 'balanced', label: 'Balanced', description: 'Even split between speed and depth.' },
+		{ value: 'precise', label: 'Precise', description: 'Slower, more deliberate responses.' },
+		{ value: 'fast', label: 'Fast', description: 'Lowest latency, lighter reasoning.' },
+		{ value: 'legacy', label: 'Legacy engine', description: 'Retired in this build.', disabled: true },
+	];
+	const tokenOptions: UiTokenOption[] = [
+		{ value: 'glass', label: 'Glass' },
+		{ value: 'keyboard', label: 'Keyboard' },
+		{ value: 'mobile', label: 'Mobile' },
+	];
 
-  const openContextMenu = (event: MouseEvent): void => {
-    contextMenu.value = { visible: true, x: event.clientX, y: event.clientY };
-  };
+	const openContextMenu = (event: MouseEvent): void => {
+		contextMenu.value = { visible: true, x: event.clientX, y: event.clientY };
+	};
 </script>
 
 <template>
-  <main class="ui-gallery-page min-h-full px-5 py-8 text-foreground sm:px-8">
-    <div class="mx-auto flex w-full max-w-6xl flex-col gap-6">
-      <header class="flex flex-col gap-2">
-        <UiBadge tone="primary" appearance="soft">Foundation UI · Gen 2</UiBadge>
-        <h1 class="text-2xl font-semibold tracking-tight">UI system gallery</h1>
-        <p class="max-w-3xl text-sm leading-6 text-text-secondary">
-          Runtime marker: <code class="font-mono text-[12px]">data-ui-gen="2"</code>. This page exercises the supported
-          states of the shared UI components.
-        </p>
-      </header>
+	<main class="ui-gallery-page min-h-full px-5 py-8 text-foreground sm:px-8">
+		<div class="mx-auto flex w-full max-w-6xl flex-col gap-6">
+			<header class="flex flex-col gap-2">
+				<UiBadge tone="primary" appearance="soft">Foundation UI · Gen 2</UiBadge>
+				<h1 class="text-2xl font-semibold tracking-tight">UI system gallery</h1>
+				<p class="max-w-3xl text-sm leading-6 text-text-secondary">
+					Runtime marker: <code class="font-mono text-[12px]">data-ui-gen="2"</code>. This page exercises the
+					supported states of the shared UI components.
+				</p>
+			</header>
 
-      <UiSurface class="p-5">
-        <div class="mb-4 flex items-end justify-between gap-3">
-          <div>
-            <h2 class="text-sm font-semibold">Buttons</h2>
-            <p class="mt-1 text-xs text-text-secondary">Appearance × tone, unified by translucent glass and motion.</p>
-          </div>
-          <UiButton appearance="ghost" tone="neutral" density="compact" :loading="true">Loading</UiButton>
-        </div>
-        <div class="ui-gallery-glass-stage grid gap-4 rounded-xl p-4 sm:p-5">
-          <div v-for="appearance in appearances" :key="appearance" class="flex flex-wrap items-center gap-2.5">
-            <span class="w-14 shrink-0 text-[11px] font-medium text-text-secondary">{{ appearance }}</span>
-            <UiButton v-for="tone in tones" :key="tone" :appearance="appearance" :tone="tone">
-              {{ tone }}
-            </UiButton>
-          </div>
-          <div class="flex flex-wrap items-center gap-2.5 border-t border-border/50 pt-4">
-            <span class="w-14 shrink-0 text-[11px] font-medium text-text-secondary">density</span>
-            <UiButton v-for="density in densities" :key="density" tone="primary" :density="density">
-              {{ density }}
-            </UiButton>
-            <UiButton tone="primary" disabled>Disabled</UiButton>
-            <UiButton tone="primary" icon-only aria-label="Add">+</UiButton>
-          </div>
-        </div>
-      </UiSurface>
+			<UiSurface class="p-5">
+				<div class="mb-4 flex items-end justify-between gap-3">
+					<div>
+						<h2 class="text-sm font-semibold">Buttons</h2>
+						<p class="mt-1 text-xs text-text-secondary">
+							Appearance × tone, unified by translucent glass and motion.
+						</p>
+					</div>
+					<UiButton appearance="ghost" tone="neutral" density="compact" :loading="true">Loading</UiButton>
+				</div>
+				<div class="ui-gallery-glass-stage grid gap-4 rounded-xl p-4 sm:p-5">
+					<div
+						v-for="appearance in appearances"
+						:key="appearance"
+						class="flex flex-wrap items-center gap-2.5"
+					>
+						<span class="w-14 shrink-0 text-[11px] font-medium text-text-secondary">{{ appearance }}</span>
+						<UiButton v-for="tone in tones" :key="tone" :appearance="appearance" :tone="tone">
+							{{ tone }}
+						</UiButton>
+					</div>
+					<div class="flex flex-wrap items-center gap-2.5 border-t border-border/50 pt-4">
+						<span class="w-14 shrink-0 text-[11px] font-medium text-text-secondary">density</span>
+						<UiButton v-for="density in densities" :key="density" tone="primary" :density="density">
+							{{ density }}
+						</UiButton>
+						<UiButton tone="primary" disabled>Disabled</UiButton>
+						<UiButton tone="primary" icon-only aria-label="Add">+</UiButton>
+					</div>
+				</div>
+			</UiSurface>
 
-      <div class="grid gap-6 lg:grid-cols-2">
-        <UiSurface class="p-5">
-          <h2 class="text-sm font-semibold">Textarea</h2>
-          <p class="mt-1 text-xs text-text-secondary">Multi-line glass control sharing the inset input language.</p>
-          <div class="mt-4 grid gap-3">
-            <UiTextarea v-model="bioValue" placeholder="Default textarea" />
-            <UiTextarea v-model="bioValue" density="compact" placeholder="Compact textarea" />
-            <UiTextarea model-value="Invalid multi-line value" invalid aria-label="Invalid textarea example" />
-            <UiTextarea model-value="Disabled but legible" disabled />
-          </div>
-        </UiSurface>
+			<div class="grid gap-6 lg:grid-cols-2">
+				<UiSurface class="p-5">
+					<h2 class="text-sm font-semibold">Textarea</h2>
+					<p class="mt-1 text-xs text-text-secondary">
+						Multi-line glass control sharing the inset input language.
+					</p>
+					<div class="mt-4 grid gap-3">
+						<UiTextarea v-model="bioValue" placeholder="Default textarea" />
+						<UiTextarea v-model="bioValue" density="compact" placeholder="Compact textarea" />
+						<UiTextarea
+							model-value="Invalid multi-line value"
+							invalid
+							aria-label="Invalid textarea example"
+						/>
+						<UiTextarea model-value="Disabled but legible" disabled />
+					</div>
+				</UiSurface>
 
-        <UiSurface class="p-5">
-          <h2 class="text-sm font-semibold">Form field &amp; spinner</h2>
-          <p class="mt-1 text-xs text-text-secondary">Compact labels, helper text, and a calm loading ring.</p>
-          <div class="mt-4 grid gap-5">
-            <UiFormField
-              label="Workspace name"
-              description="Shown in the terminal title bar."
-              for-id="gallery-workspace"
-            >
-              <UiInput v-model="inputValue" />
-            </UiFormField>
-            <UiFormField label="API key" required error="This field is required." for-id="gallery-api-key">
-              <UiInput v-model="inputValue" invalid />
-            </UiFormField>
-          </div>
-          <div class="mt-5 flex flex-wrap items-center gap-4 border-t border-border/50 pt-4">
-            <span v-for="density in densities" :key="density" class="flex items-center gap-2 text-xs">
-              <UiSpinner :density="density" :label="`${density} spinner`" />
-              <span>{{ density }}</span>
-            </span>
-          </div>
-          <div class="mt-3 flex flex-wrap items-center gap-4">
-            <span v-for="tone in tones" :key="tone" class="flex items-center gap-2 text-xs">
-              <UiSpinner :tone="tone" :label="`${tone} spinner`" />
-              <span>{{ tone }}</span>
-            </span>
-          </div>
-        </UiSurface>
-      </div>
+				<UiSurface class="p-5">
+					<h2 class="text-sm font-semibold">Form field &amp; spinner</h2>
+					<p class="mt-1 text-xs text-text-secondary">
+						Compact labels, helper text, and a calm loading ring.
+					</p>
+					<div class="mt-4 grid gap-5">
+						<UiFormField
+							label="Workspace name"
+							description="Shown in the terminal title bar."
+							for-id="gallery-workspace"
+						>
+							<UiInput v-model="inputValue" />
+						</UiFormField>
+						<UiFormField label="API key" required error="This field is required." for-id="gallery-api-key">
+							<UiInput v-model="inputValue" invalid />
+						</UiFormField>
+					</div>
+					<div class="mt-5 flex flex-wrap items-center gap-4 border-t border-border/50 pt-4">
+						<span v-for="density in densities" :key="density" class="flex items-center gap-2 text-xs">
+							<UiSpinner :density="density" :label="`${density} spinner`" />
+							<span>{{ density }}</span>
+						</span>
+					</div>
+					<div class="mt-3 flex flex-wrap items-center gap-4">
+						<span v-for="tone in tones" :key="tone" class="flex items-center gap-2 text-xs">
+							<UiSpinner :tone="tone" :label="`${tone} spinner`" />
+							<span>{{ tone }}</span>
+						</span>
+					</div>
+				</UiSurface>
+			</div>
 
-      <div class="grid gap-6 lg:grid-cols-2">
-        <UiSurface class="p-5">
-          <h2 class="text-sm font-semibold">Inputs</h2>
-          <p class="mt-1 text-xs text-text-secondary">Inset glass controls with wrapper-owned focus and validation.</p>
-          <div class="mt-4 grid gap-3">
-            <UiInput v-model="inputValue" placeholder="Default input">
-              <template #leading><span class="text-[11px]">⌕</span></template>
-            </UiInput>
-            <UiInput v-model="inputValue" density="compact" placeholder="Compact input" />
-            <UiInput v-model="inputValue" invalid aria-label="Invalid example" />
-            <UiInput model-value="Disabled but legible" disabled />
-          </div>
-        </UiSurface>
+			<div class="grid gap-6 lg:grid-cols-2">
+				<UiSurface class="p-5">
+					<h2 class="text-sm font-semibold">Inputs</h2>
+					<p class="mt-1 text-xs text-text-secondary">
+						Inset glass controls with wrapper-owned focus and validation.
+					</p>
+					<div class="mt-4 grid gap-3">
+						<UiInput v-model="inputValue" placeholder="Default input">
+							<template #leading><span class="text-[11px]">⌕</span></template>
+						</UiInput>
+						<UiInput v-model="inputValue" density="compact" placeholder="Compact input" />
+						<UiInput v-model="inputValue" invalid aria-label="Invalid example" />
+						<UiInput model-value="Disabled but legible" disabled />
+					</div>
+				</UiSurface>
 
-        <UiSurface class="p-5">
-          <h2 class="text-sm font-semibold">Badges</h2>
-          <p class="mt-1 text-xs text-text-secondary">
-            Translucent semantic markers that do not overpower nearby content.
-          </p>
-          <div class="mt-4 flex flex-wrap gap-2">
-            <UiBadge v-for="tone in tones" :key="tone" :tone="tone">{{ tone }}</UiBadge>
-          </div>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <UiBadge v-for="tone in tones" :key="tone" :tone="tone" appearance="ghost" density="compact">
-              {{ tone }}
-            </UiBadge>
-          </div>
-        </UiSurface>
-      </div>
+				<UiSurface class="p-5">
+					<h2 class="text-sm font-semibold">Badges</h2>
+					<p class="mt-1 text-xs text-text-secondary">
+						Translucent semantic markers that do not overpower nearby content.
+					</p>
+					<div class="mt-4 flex flex-wrap gap-2">
+						<UiBadge v-for="tone in tones" :key="tone" :tone="tone">{{ tone }}</UiBadge>
+					</div>
+					<div class="mt-3 flex flex-wrap gap-2">
+						<UiBadge v-for="tone in tones" :key="tone" :tone="tone" appearance="ghost" density="compact">
+							{{ tone }}
+						</UiBadge>
+					</div>
+				</UiSurface>
+			</div>
 
-      <div class="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
-        <UiSurface class="p-5">
-          <h2 class="text-sm font-semibold">Switches</h2>
-          <p class="mt-1 text-xs text-text-secondary">
-            Native button semantics with a translucent track and glass thumb.
-          </p>
-          <div class="mt-5 flex flex-wrap items-center gap-5">
-            <label v-for="density in densities" :key="density" class="flex items-center gap-2.5 text-xs">
-              <UiSwitch v-model="switchValue" :density="density" />
-              <span>{{ density }}</span>
-            </label>
-            <UiSwitch :model-value="false" disabled aria-label="Disabled switch" />
-          </div>
-        </UiSurface>
+			<div class="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
+				<UiSurface class="p-5">
+					<h2 class="text-sm font-semibold">Switches</h2>
+					<p class="mt-1 text-xs text-text-secondary">
+						Native button semantics with a translucent track and glass thumb.
+					</p>
+					<div class="mt-5 flex flex-wrap items-center gap-5">
+						<label v-for="density in densities" :key="density" class="flex items-center gap-2.5 text-xs">
+							<UiSwitch v-model="switchValue" :density="density" />
+							<span>{{ density }}</span>
+						</label>
+						<UiSwitch :model-value="false" disabled aria-label="Disabled switch" />
+					</div>
+				</UiSurface>
 
-        <UiSurface class="p-5">
-          <h2 class="text-sm font-semibold">Slider</h2>
-          <p class="mt-1 text-xs text-text-secondary">Glass track and thumb with responsive pointer interaction.</p>
-          <div class="mt-5 grid gap-5">
-            <UiSlider v-model="sliderValue" :min="0" :max="100">
-              <template #label>Reasoning budget</template>
-              <template #value="{ value }">{{ value }}%</template>
-            </UiSlider>
-            <UiSlider v-model="sliderValue" density="compact" tone="success" aria-label="Compact success slider" />
-            <UiSlider :model-value="35" disabled aria-label="Disabled slider example" />
-          </div>
-        </UiSurface>
-      </div>
+				<UiSurface class="p-5">
+					<h2 class="text-sm font-semibold">Slider</h2>
+					<p class="mt-1 text-xs text-text-secondary">
+						Glass track and thumb with responsive pointer interaction.
+					</p>
+					<div class="mt-5 grid gap-5">
+						<UiSlider v-model="sliderValue" :min="0" :max="100">
+							<template #label>Reasoning budget</template>
+							<template #value="{ value }">{{ value }}%</template>
+						</UiSlider>
+						<UiSlider
+							v-model="sliderValue"
+							density="compact"
+							tone="success"
+							aria-label="Compact success slider"
+						/>
+						<UiSlider :model-value="35" disabled aria-label="Disabled slider example" />
+					</div>
+				</UiSurface>
+			</div>
 
-      <div class="grid gap-6 lg:grid-cols-2">
-        <UiSurface class="p-5">
-          <h2 class="text-sm font-semibold">Checkbox</h2>
-          <p class="mt-1 text-xs text-text-secondary">Reka-owned keyboard behaviour with translucent state fills.</p>
-          <div class="mt-5 flex flex-wrap items-center gap-5 text-xs">
-            <label class="flex items-center gap-2.5">
-              <UiCheckbox v-model="checkboxValue" aria-label="Checked checkbox example" />
-              <span>Checked</span>
-            </label>
-            <label class="flex items-center gap-2.5">
-              <UiCheckbox v-model="checkboxOff" tone="success" aria-label="Unchecked checkbox example" />
-              <span>Unchecked</span>
-            </label>
-            <label class="flex items-center gap-2.5">
-              <UiCheckbox :model-value="true" disabled aria-label="Disabled checked checkbox" />
-              <span>Disabled</span>
-            </label>
-          </div>
-        </UiSurface>
+			<div class="grid gap-6 lg:grid-cols-2">
+				<UiSurface class="p-5">
+					<h2 class="text-sm font-semibold">Checkbox</h2>
+					<p class="mt-1 text-xs text-text-secondary">
+						Reka-owned keyboard behaviour with translucent state fills.
+					</p>
+					<div class="mt-5 flex flex-wrap items-center gap-5 text-xs">
+						<label class="flex items-center gap-2.5">
+							<UiCheckbox v-model="checkboxValue" aria-label="Checked checkbox example" />
+							<span>Checked</span>
+						</label>
+						<label class="flex items-center gap-2.5">
+							<UiCheckbox v-model="checkboxOff" tone="success" aria-label="Unchecked checkbox example" />
+							<span>Unchecked</span>
+						</label>
+						<label class="flex items-center gap-2.5">
+							<UiCheckbox :model-value="true" disabled aria-label="Disabled checked checkbox" />
+							<span>Disabled</span>
+						</label>
+					</div>
+				</UiSurface>
 
-        <UiSurface class="p-5">
-          <h2 class="text-sm font-semibold">Select</h2>
-          <p class="mt-1 text-xs text-text-secondary">Glass panel, typeahead, and disabled options via Reka.</p>
-          <div class="mt-4 grid gap-3">
-            <UiSelect
-              v-model="selectValue"
-              :options="selectOptions"
-              placeholder="Choose a reasoning profile"
-              aria-label="Reasoning profile"
-            />
-            <UiSelect
-              :options="selectOptions"
-              :model-value="null"
-              density="compact"
-              placeholder="Compact select"
-              aria-label="Compact select example"
-            />
-          </div>
-        </UiSurface>
-      </div>
+				<UiSurface class="p-5">
+					<h2 class="text-sm font-semibold">Select</h2>
+					<p class="mt-1 text-xs text-text-secondary">
+						Glass panel, typeahead, and disabled options via Reka.
+					</p>
+					<div class="mt-4 grid gap-3">
+						<UiSelect
+							v-model="selectValue"
+							:options="selectOptions"
+							placeholder="Choose a reasoning profile"
+							aria-label="Reasoning profile"
+						/>
+						<UiSelect
+							:options="selectOptions"
+							:model-value="null"
+							density="compact"
+							placeholder="Compact select"
+							aria-label="Compact select example"
+						/>
+					</div>
+				</UiSurface>
+			</div>
 
-      <UiSurface class="p-5">
-        <h2 class="text-sm font-semibold">Dialog</h2>
-        <p class="mt-1 text-xs text-text-secondary">
-          Focus-trapped, Escape-aware panel with a header, scrollable body, and footer slot.
-        </p>
-        <div class="mt-4">
-          <UiButton tone="primary" @click="dialogOpen = true">Open dialog</UiButton>
-        </div>
-        <UiDialog
-          v-model:open="dialogOpen"
-          title="Confirm workspace action"
-          description="Dialogs keep Reka's focus trap and restore while the panel stays on Gen 2 tokens."
-        >
-          <p class="text-xs leading-6 text-text-secondary">
-            The body region scrolls independently, so long content never pushes the header or footer out of view.
-          </p>
-          <template #footer="{ close }">
-            <UiButton appearance="ghost" density="compact" @click="close()">Cancel</UiButton>
-            <UiButton tone="primary" density="compact" @click="close()">Confirm</UiButton>
-          </template>
-        </UiDialog>
-      </UiSurface>
+			<UiSurface class="p-5">
+				<h2 class="text-sm font-semibold">Dialog</h2>
+				<p class="mt-1 text-xs text-text-secondary">
+					Focus-trapped, Escape-aware panel with a header, scrollable body, and footer slot.
+				</p>
+				<div class="mt-4">
+					<UiButton tone="primary" @click="dialogOpen = true">Open dialog</UiButton>
+				</div>
+				<UiDialog
+					v-model:open="dialogOpen"
+					title="Confirm workspace action"
+					description="Dialogs keep Reka's focus trap and restore while the panel stays on Gen 2 tokens."
+				>
+					<p class="text-xs leading-6 text-text-secondary">
+						The body region scrolls independently, so long content never pushes the header or footer out of
+						view.
+					</p>
+					<template #footer="{ close }">
+						<UiButton appearance="ghost" density="compact" @click="close()">Cancel</UiButton>
+						<UiButton tone="primary" density="compact" @click="close()">Confirm</UiButton>
+					</template>
+				</UiDialog>
+			</UiSurface>
 
-      <div class="grid gap-6 lg:grid-cols-2">
-        <UiSurface class="p-5">
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <h2 class="text-sm font-semibold">Slot select &amp; token input</h2>
-              <p class="mt-1 text-xs text-text-secondary">
-                Declarative options and composed inputs share the same inset glass depth.
-              </p>
-            </div>
-            <UiInfoHint text="Tooltips use the same floating glass material." label="Glass tooltip example" />
-          </div>
-          <div class="mt-4 grid gap-3">
-            <UiSelect v-model="slotSelectValue" aria-label="Reasoning profile">
-              <option value="balanced">Balanced</option>
-              <option value="precise">Precise</option>
-              <option value="fast">Fast</option>
-            </UiSelect>
-            <UiTokenInput
-              v-model="tokenValues"
-              :options="tokenOptions"
-              placeholder="Add a capability"
-              remove-token-label="Remove capability"
-            />
-          </div>
-        </UiSurface>
+			<div class="grid gap-6 lg:grid-cols-2">
+				<UiSurface class="p-5">
+					<div class="flex items-start justify-between gap-3">
+						<div>
+							<h2 class="text-sm font-semibold">Slot select &amp; token input</h2>
+							<p class="mt-1 text-xs text-text-secondary">
+								Declarative options and composed inputs share the same inset glass depth.
+							</p>
+						</div>
+						<UiInfoHint
+							text="Tooltips use the same floating glass material."
+							label="Glass tooltip example"
+						/>
+					</div>
+					<div class="mt-4 grid gap-3">
+						<UiSelect v-model="slotSelectValue" aria-label="Reasoning profile">
+							<option value="balanced">Balanced</option>
+							<option value="precise">Precise</option>
+							<option value="fast">Fast</option>
+						</UiSelect>
+						<UiTokenInput
+							v-model="tokenValues"
+							:options="tokenOptions"
+							placeholder="Add a capability"
+							remove-token-label="Remove capability"
+						/>
+					</div>
+				</UiSurface>
 
-        <UiSurface class="p-5">
-          <h2 class="text-sm font-semibold">Empty state &amp; context menu</h2>
-          <p class="mt-1 text-xs text-text-secondary">
-            Feedback and transient menus keep the same glass edge treatment.
-          </p>
-          <div class="mt-4 grid gap-4">
-            <UiEmptyState
-              dense
-              icon="fa-solid fa-layer-group"
-              title="No saved layouts"
-              description="Create a layout to see it here."
-            >
-              <template #action>
-                <UiButton density="compact">Create</UiButton>
-              </template>
-            </UiEmptyState>
-            <UiButton appearance="ghost" @click="openContextMenu" @contextmenu.prevent="openContextMenu">
-              Open glass context menu
-            </UiButton>
-          </div>
-          <UiContextMenu
-            :visible="contextMenu.visible"
-            :x="contextMenu.x"
-            :y="contextMenu.y"
-            auto-width
-            @close="contextMenu.visible = false"
-          >
-            <button
-              type="button"
-              role="menuitem"
-              class="block w-full rounded px-3 py-2 text-left hover:bg-hover"
-              @click="contextMenu.visible = false"
-            >
-              Open workspace
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              class="block w-full rounded px-3 py-2 text-left hover:bg-hover"
-              @click="contextMenu.visible = false"
-            >
-              Duplicate
-            </button>
-          </UiContextMenu>
-        </UiSurface>
-      </div>
+				<UiSurface class="p-5">
+					<h2 class="text-sm font-semibold">Empty state &amp; context menu</h2>
+					<p class="mt-1 text-xs text-text-secondary">
+						Feedback and transient menus keep the same glass edge treatment.
+					</p>
+					<div class="mt-4 grid gap-4">
+						<UiEmptyState
+							dense
+							icon="fa-solid fa-layer-group"
+							title="No saved layouts"
+							description="Create a layout to see it here."
+						>
+							<template #action>
+								<UiButton density="compact">Create</UiButton>
+							</template>
+						</UiEmptyState>
+						<UiButton appearance="ghost" @click="openContextMenu" @contextmenu.prevent="openContextMenu">
+							Open glass context menu
+						</UiButton>
+					</div>
+					<UiContextMenu
+						:visible="contextMenu.visible"
+						:x="contextMenu.x"
+						:y="contextMenu.y"
+						auto-width
+						@close="contextMenu.visible = false"
+					>
+						<button
+							type="button"
+							role="menuitem"
+							class="block w-full rounded px-3 py-2 text-left hover:bg-hover"
+							@click="contextMenu.visible = false"
+						>
+							Open workspace
+						</button>
+						<button
+							type="button"
+							role="menuitem"
+							class="block w-full rounded px-3 py-2 text-left hover:bg-hover"
+							@click="contextMenu.visible = false"
+						>
+							Duplicate
+						</button>
+					</UiContextMenu>
+				</UiSurface>
+			</div>
 
-      <UiSurface class="p-5">
-        <h2 class="text-sm font-semibold">Table</h2>
-        <p class="mt-1 text-xs text-text-secondary">
-          Header, rows, and container retain transparency without losing hierarchy.
-        </p>
-        <UiTable class="mt-4">
-          <template #head>
-            <tr>
-              <th class="px-4 py-3 font-medium">Component</th>
-              <th class="px-4 py-3 font-medium">Material</th>
-              <th class="px-4 py-3 font-medium">State</th>
-            </tr>
-          </template>
-          <tr>
-            <td class="px-4 py-3">Input</td>
-            <td class="px-4 py-3">Inset glass</td>
-            <td class="px-4 py-3"><UiBadge tone="success">Ready</UiBadge></td>
-          </tr>
-          <tr>
-            <td class="px-4 py-3">Overlay</td>
-            <td class="px-4 py-3">Raised glass</td>
-            <td class="px-4 py-3"><UiBadge tone="success">Ready</UiBadge></td>
-          </tr>
-        </UiTable>
-      </UiSurface>
+			<UiSurface class="p-5">
+				<h2 class="text-sm font-semibold">Table</h2>
+				<p class="mt-1 text-xs text-text-secondary">
+					Header, rows, and container retain transparency without losing hierarchy.
+				</p>
+				<UiTable class="mt-4">
+					<template #head>
+						<tr>
+							<th class="px-4 py-3 font-medium">Component</th>
+							<th class="px-4 py-3 font-medium">Material</th>
+							<th class="px-4 py-3 font-medium">State</th>
+						</tr>
+					</template>
+					<tr>
+						<td class="px-4 py-3">Input</td>
+						<td class="px-4 py-3">Inset glass</td>
+						<td class="px-4 py-3"><UiBadge tone="success">Ready</UiBadge></td>
+					</tr>
+					<tr>
+						<td class="px-4 py-3">Overlay</td>
+						<td class="px-4 py-3">Raised glass</td>
+						<td class="px-4 py-3"><UiBadge tone="success">Ready</UiBadge></td>
+					</tr>
+				</UiTable>
+			</UiSurface>
 
-      <UiSurface class="p-5">
-        <h2 class="text-sm font-semibold">Surfaces & popover</h2>
-        <p class="mt-1 text-xs text-text-secondary">
-          Every Gen 2 surface uses the same transparent glass system with distinct raised and inset depth.
-        </p>
-        <div class="mt-4 grid gap-3 sm:grid-cols-3">
-          <UiSurface surface="plain" class="border border-dashed border-border p-4">
-            <div class="text-xs font-medium">Plain</div>
-            <div class="mt-1 text-[11px] text-text-secondary">No decorative surface.</div>
-          </UiSurface>
-          <UiSurface surface="raised" radius="control" class="p-4">
-            <div class="text-xs font-medium">Raised</div>
-            <div class="mt-1 text-[11px] text-text-secondary">Raised glass with panel elevation.</div>
-          </UiSurface>
-          <UiSurface surface="inset" radius="control" class="p-4">
-            <div class="text-xs font-medium">Inset</div>
-            <div class="mt-1 text-[11px] text-text-secondary">Inset glass for controls and compact wells.</div>
-          </UiSurface>
-        </div>
-        <div class="mt-5">
-          <UiPopover v-model:open="popoverOpen" :ariaLabel="'Gallery popover'" trigger-tone="primary">
-            <template #trigger>Open glass popover</template>
-            <template #panel="{ close }">
-              <div class="w-[300px] max-w-full">
-                <div class="flex items-start justify-between gap-3">
-                  <div>
-                    <div class="text-xs font-semibold">Floating controls</div>
-                    <p class="mt-1 text-[11px] leading-5 text-text-secondary">
-                      Boundary-safe, focusable, Escape-aware, and aligned with the shared glass system.
-                    </p>
-                  </div>
-                  <UiBadge tone="primary" density="compact">glass</UiBadge>
-                </div>
-                <div class="mt-4 grid gap-3">
-                  <UiSlider v-model="sliderValue" density="compact" />
-                  <UiInput v-model="inputValue" density="compact" />
-                </div>
-                <div class="mt-4 flex justify-end">
-                  <UiButton density="compact" appearance="ghost" @click="close()">Close</UiButton>
-                </div>
-              </div>
-            </template>
-          </UiPopover>
-        </div>
-      </UiSurface>
-    </div>
-  </main>
+			<UiSurface class="p-5">
+				<h2 class="text-sm font-semibold">Surfaces & popover</h2>
+				<p class="mt-1 text-xs text-text-secondary">
+					Every Gen 2 surface uses the same transparent glass system with distinct raised and inset depth.
+				</p>
+				<div class="mt-4 grid gap-3 sm:grid-cols-3">
+					<UiSurface surface="plain" class="border border-dashed border-border p-4">
+						<div class="text-xs font-medium">Plain</div>
+						<div class="mt-1 text-[11px] text-text-secondary">No decorative surface.</div>
+					</UiSurface>
+					<UiSurface surface="raised" radius="control" class="p-4">
+						<div class="text-xs font-medium">Raised</div>
+						<div class="mt-1 text-[11px] text-text-secondary">Raised glass with panel elevation.</div>
+					</UiSurface>
+					<UiSurface surface="inset" radius="control" class="p-4">
+						<div class="text-xs font-medium">Inset</div>
+						<div class="mt-1 text-[11px] text-text-secondary">
+							Inset glass for controls and compact wells.
+						</div>
+					</UiSurface>
+				</div>
+				<div class="mt-5">
+					<UiPopover v-model:open="popoverOpen" :ariaLabel="'Gallery popover'" trigger-tone="primary">
+						<template #trigger>Open glass popover</template>
+						<template #panel="{ close }">
+							<div class="w-[300px] max-w-full">
+								<div class="flex items-start justify-between gap-3">
+									<div>
+										<div class="text-xs font-semibold">Floating controls</div>
+										<p class="mt-1 text-[11px] leading-5 text-text-secondary">
+											Boundary-safe, focusable, Escape-aware, and aligned with the shared glass
+											system.
+										</p>
+									</div>
+									<UiBadge tone="primary" density="compact">glass</UiBadge>
+								</div>
+								<div class="mt-4 grid gap-3">
+									<UiSlider v-model="sliderValue" density="compact" />
+									<UiInput v-model="inputValue" density="compact" />
+								</div>
+								<div class="mt-4 flex justify-end">
+									<UiButton density="compact" appearance="ghost" @click="close()">Close</UiButton>
+								</div>
+							</div>
+						</template>
+					</UiPopover>
+				</div>
+			</UiSurface>
+		</div>
+	</main>
 </template>
 
 <style scoped>
-  .ui-gallery-page {
-    background:
-      radial-gradient(circle at 8% 18%, rgb(65 160 205 / 16%), transparent 32rem),
-      radial-gradient(circle at 92% 62%, rgb(218 142 109 / 14%), transparent 38rem),
-      linear-gradient(var(--app-bg-color), var(--app-bg-color));
-  }
+	.ui-gallery-page {
+		background:
+			radial-gradient(circle at 8% 18%, rgb(65 160 205 / 16%), transparent 32rem),
+			radial-gradient(circle at 92% 62%, rgb(218 142 109 / 14%), transparent 38rem),
+			linear-gradient(var(--app-bg-color), var(--app-bg-color));
+	}
 
-  .ui-gallery-glass-stage {
-    background:
-      radial-gradient(circle at 14% 25%, rgb(110 190 222 / 65%), transparent 37%),
-      radial-gradient(circle at 83% 78%, rgb(226 172 133 / 60%), transparent 43%),
-      linear-gradient(120deg, #dfe9f2, #f4e8e0);
-  }
+	.ui-gallery-glass-stage {
+		background:
+			radial-gradient(circle at 14% 25%, rgb(110 190 222 / 65%), transparent 37%),
+			radial-gradient(circle at 83% 78%, rgb(226 172 133 / 60%), transparent 43%),
+			linear-gradient(120deg, #dfe9f2, #f4e8e0);
+	}
 </style>

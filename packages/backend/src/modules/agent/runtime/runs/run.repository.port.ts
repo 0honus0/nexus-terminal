@@ -1,93 +1,93 @@
 import type { JsonValue, Scope } from '../../agent.types';
 import type { ToolInspection, ToolResult } from '../../capabilities/tool.types';
 import type {
-  HostCursorWindow,
-  HostEvent,
-  PendingRunInputPage,
-  RunEvent,
-  RunInputProjection,
-  RunReconciliationView,
-  RunSnapshot,
-  RunView,
+	HostCursorWindow,
+	HostEvent,
+	PendingRunInputPage,
+	RunEvent,
+	RunInputProjection,
+	RunReconciliationView,
+	RunSnapshot,
+	RunView,
 } from './run.types';
 
 export interface RunPage {
-  items: RunView[];
-  nextCursor: string | null;
+	items: RunView[];
+	nextCursor: string | null;
 }
 
 export interface PendingRootTool {
-  toolCallId: string;
-  stepId: string;
-  runtimeId: string;
-  providerCallId: string;
-  status: 'proposed' | 'ready';
-  approvalId: string | null;
-  approvalVersion: number | null;
-  inspection: ToolInspection;
+	toolCallId: string;
+	stepId: string;
+	runtimeId: string;
+	providerCallId: string;
+	status: 'proposed' | 'ready';
+	approvalId: string | null;
+	approvalVersion: number | null;
+	inspection: ToolInspection;
 }
 
 export interface PendingToolInputContinuation {
-  requestId: string;
-  continuation: JsonValue;
-  answerText: string;
+	requestId: string;
+	continuation: JsonValue;
+	answerText: string;
 }
 
 export interface CompletionToolEvidence {
-  toolCallId: string;
-  stepIndex: number;
-  toolName: string;
-  inspection: ToolInspection;
-  result: ToolResult;
+	toolCallId: string;
+	stepIndex: number;
+	toolName: string;
+	inspection: ToolInspection;
+	result: ToolResult;
 }
 
 export interface CompletionEvidenceSnapshot {
-  tools: CompletionToolEvidence[];
-  readyEvidenceRefs: string[];
-  gateBlocksSinceToolProgress: number;
+	tools: CompletionToolEvidence[];
+	readyEvidenceRefs: string[];
+	gateBlocksSinceToolProgress: number;
 }
 
 export interface RunSnapshotReaderPort {
-  snapshot(scope: Scope, runId: string): Promise<RunSnapshot | null>;
+	snapshot(scope: Scope, runId: string): Promise<RunSnapshot | null>;
 }
 
 export interface ToolResultReaderPort {
-  toolResult(scope: Scope, runId: string, runtimeId: string, toolCallId: string): Promise<string | null>;
+	toolResult(scope: Scope, runId: string, runtimeId: string, toolCallId: string): Promise<string | null>;
 }
 
 export interface RunListReaderPort {
-  list(scope: Scope, threadId: string | undefined, limit: number, before?: string): Promise<RunPage>;
+	list(scope: Scope, threadId: string | undefined, limit: number, before?: string): Promise<RunPage>;
 }
 
 export interface RunInputReaderPort {
-  inputProjection(scope: Scope, runId: string): Promise<RunInputProjection>;
+	inputProjection(scope: Scope, runId: string): Promise<RunInputProjection>;
 }
 
 export interface RunQueryPort extends RunSnapshotReaderPort, RunListReaderPort, RunInputReaderPort {
-  pendingInputs(scope: Scope, runId: string, limit: number): Promise<PendingRunInputPage>;
-  reconciliation(scope: Scope, runId: string): Promise<RunReconciliationView>;
+	pendingInputs(scope: Scope, runId: string, limit: number): Promise<PendingRunInputPage>;
+	reconciliation(scope: Scope, runId: string): Promise<RunReconciliationView>;
 }
 
 export interface RunEventReaderPort {
-  readEvents(scope: Scope, runId: string, after: number, limit: number): Promise<RunEvent[]>;
-  readHostEvents(userId: number, after: number, limit: number): Promise<HostEvent[]>;
+	readEvents(scope: Scope, runId: string, after: number, limit: number): Promise<RunEvent[]>;
+	readHostEvents(userId: number, after: number, limit: number): Promise<HostEvent[]>;
 }
 
 export interface HostCursorReaderPort {
-  hostCursor(userId: number): Promise<number>;
-  hostCursorWindow(userId: number): Promise<HostCursorWindow>;
+	hostCursor(userId: number): Promise<number>;
+	hostCursorWindow(userId: number): Promise<HostCursorWindow>;
 }
 
 export interface RunExecutionReaderPort extends RunSnapshotReaderPort, RunInputReaderPort {
-  rootRuntimeId(scope: Scope, runId: string): Promise<string>;
-  rootRuntimeModel(scope: Scope, runId: string): Promise<import('../../ai/model.types').ModelRef>;
-  pendingTools(scope: Scope, runId: string): Promise<PendingRootTool[]>;
-  inputContinuationForTool(
-    scope: Scope,
-    runId: string,
-    toolCallId: string,
-  ): Promise<PendingToolInputContinuation | null>;
-  completionEvidence(scope: Scope, runId: string): Promise<CompletionEvidenceSnapshot>;
+	rootRuntimeId(scope: Scope, runId: string): Promise<string>;
+	rootRuntimeModel(scope: Scope, runId: string): Promise<import('../../ai/model.types').ModelRef>;
+	pendingTools(scope: Scope, runId: string): Promise<PendingRootTool[]>;
+	inputContinuationForTool(
+		scope: Scope,
+		runId: string,
+		toolCallId: string,
+	): Promise<PendingToolInputContinuation | null>;
+	completionEvidence(scope: Scope, runId: string): Promise<CompletionEvidenceSnapshot>;
 }
 
 export type { Scope } from '../../agent.types';

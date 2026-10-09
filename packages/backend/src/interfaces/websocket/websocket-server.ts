@@ -20,513 +20,532 @@ const MAX_MISSED_HEARTBEATS = 2;
 const MAX_AGENT_SOCKETS_PER_SESSION = 3;
 
 interface SessionRequest extends Request {
-  session: Request['session'];
+	session: Request['session'];
 }
 
 interface ClientRecord {
-  userId?: number;
-  sessionId?: string;
-  socket: WebSocket;
-  kind: 'workspace' | 'upload' | 'remote-desktop' | 'agent';
-  protocol?: { close(): Promise<void> | void; touchOwnership?(): void };
-  agentProtocol?: AgentProtocolSession;
-  agentSessionKey?: string;
-  isAlive: boolean;
-  missed: number;
+	userId?: number;
+	sessionId?: string;
+	socket: WebSocket;
+	kind: 'workspace' | 'upload' | 'remote-desktop' | 'agent';
+	protocol?: { close(): Promise<void> | void; touchOwnership?(): void };
+	agentProtocol?: AgentProtocolSession;
+	agentSessionKey?: string;
+	isAlive: boolean;
+	missed: number;
 }
 
 export interface RemoteDesktopWebSocketAcceptor {
-  accept(socket: WebSocket, request: http.IncomingMessage, ticket: string, userId: number): boolean;
+	accept(socket: WebSocket, request: http.IncomingMessage, ticket: string, userId: number): boolean;
 }
 
 export interface WebSocketServerDependencies extends WorkspaceProtocolDependencies {
-  ipWhitelist: IpWhitelistService;
-  remoteDesktop: RemoteDesktopWebSocketAcceptor;
-  agentEvents: AgentEventFacade;
-  agentRuns: AgentRunFacade;
+	ipWhitelist: IpWhitelistService;
+	remoteDesktop: RemoteDesktopWebSocketAcceptor;
+	agentEvents: AgentEventFacade;
+	agentRuns: AgentRunFacade;
 }
 
 export interface WebSocketRuntimeOptions {
-  trustProxy: string;
-  allowOriginlessWebSockets: boolean;
-  passkeyRelyingParties: readonly { origin: string }[];
+	trustProxy: string;
+	allowOriginlessWebSockets: boolean;
+	passkeyRelyingParties: readonly { origin: string }[];
 }
 
 export interface WebSocketServerOptions {
-  server: http.Server;
-  sessionMiddleware: RequestHandler;
-  config: WebSocketRuntimeOptions;
-  dependencies: WebSocketServerDependencies;
+	server: http.Server;
+	sessionMiddleware: RequestHandler;
+	config: WebSocketRuntimeOptions;
+	dependencies: WebSocketServerDependencies;
 }
 
 export interface BackendWebSocketServer {
-  revokeUser(userId: number): Promise<void>;
-  revokeSession(sessionId: string): Promise<void>;
-  metrics(): {
-    total: number;
-    workspace: number;
-    upload: number;
-    remoteDesktop: number;
-    agent: number;
-    agentSubscriptions: number;
-    agentMaxReplayLag: number;
-    agentProtocolErrors: number;
-    agentSlowConsumerCloses: number;
-    agentConnectionLimitRejections: number;
-    bufferedAmountBytes: number;
-    maxBufferedAmountBytes: number;
-  };
-  /** Pause new upgrades, fully drain current clients, run an exclusive lifecycle operation, then resume upgrades. */
-  quiesce<T>(operation: () => Promise<T>): Promise<T>;
-  close(): Promise<void>;
+	revokeUser(userId: number): Promise<void>;
+	revokeSession(sessionId: string): Promise<void>;
+	metrics(): {
+		total: number;
+		workspace: number;
+		upload: number;
+		remoteDesktop: number;
+		agent: number;
+		agentSubscriptions: number;
+		agentMaxReplayLag: number;
+		agentProtocolErrors: number;
+		agentSlowConsumerCloses: number;
+		agentConnectionLimitRejections: number;
+		bufferedAmountBytes: number;
+		maxBufferedAmountBytes: number;
+	};
+	/** Pause new upgrades, fully drain current clients, run an exclusive lifecycle operation, then resume upgrades. */
+	quiesce<T>(operation: () => Promise<T>): Promise<T>;
+	close(): Promise<void>;
 }
 
 const firstHeaderValue = (value: string | string[] | undefined): string | undefined => {
-  const raw = Array.isArray(value) ? value[0] : value;
-  return raw
-    ?.split(',')
-    .map((item) => item.trim())
-    .find(Boolean);
+	const raw = Array.isArray(value) ? value[0] : value;
+	return raw
+		?.split(',')
+		.map((item) => item.trim())
+		.find(Boolean);
 };
 
 const allowedOrigin = (
-  request: http.IncomingMessage,
-  config: WebSocketRuntimeOptions,
-  trust: (address: string, index: number) => boolean,
+	request: http.IncomingMessage,
+	config: WebSocketRuntimeOptions,
+	trust: (address: string, index: number) => boolean,
 ): boolean => {
-  const origin = firstHeaderValue(request.headers.origin);
-  if (!origin) return config.allowOriginlessWebSockets;
-  try {
-    const allowed = new Set(config.passkeyRelyingParties.map((entry) => new URL(entry.origin).origin));
-    const trustedProxy = !!request.socket.remoteAddress && trust(request.socket.remoteAddress, 0);
-    const host =
-      (trustedProxy ? firstHeaderValue(request.headers['x-forwarded-host']) : undefined) ||
-      firstHeaderValue(request.headers.host);
-    const protocol =
-      (trustedProxy ? firstHeaderValue(request.headers['x-forwarded-proto']) : undefined) ||
-      ((request.socket as typeof request.socket & { encrypted?: boolean }).encrypted ? 'https' : 'http');
-    if (host) allowed.add(new URL(`${protocol}://${host}`).origin);
-    return allowed.has(new URL(origin).origin);
-  } catch {
-    return false;
-  }
+	const origin = firstHeaderValue(request.headers.origin);
+	if (!origin) return config.allowOriginlessWebSockets;
+	try {
+		const allowed = new Set(config.passkeyRelyingParties.map((entry) => new URL(entry.origin).origin));
+		const trustedProxy = !!request.socket.remoteAddress && trust(request.socket.remoteAddress, 0);
+		const host =
+			(trustedProxy ? firstHeaderValue(request.headers['x-forwarded-host']) : undefined) ||
+			firstHeaderValue(request.headers.host);
+		const protocol =
+			(trustedProxy ? firstHeaderValue(request.headers['x-forwarded-proto']) : undefined) ||
+			((request.socket as typeof request.socket & { encrypted?: boolean }).encrypted ? 'https' : 'http');
+		if (host) allowed.add(new URL(`${protocol}://${host}`).origin);
+		return allowed.has(new URL(origin).origin);
+	} catch {
+		return false;
+	}
 };
 
 const rejectUpgrade = (socket: Socket, status: number, text: string): void => {
-  runtimePerformanceMetrics.webSocketUpgradeRejected();
-  if (!socket.destroyed) socket.write(`HTTP/1.1 ${status} ${text}\r\nConnection: close\r\n\r\n`);
-  socket.destroy();
+	runtimePerformanceMetrics.webSocketUpgradeRejected();
+	if (!socket.destroyed) socket.write(`HTTP/1.1 ${status} ${text}\r\nConnection: close\r\n\r\n`);
+	socket.destroy();
 };
 
 const rawDataByteLength = (data: RawData): number => {
-  if (Buffer.isBuffer(data)) return data.byteLength;
-  if (Array.isArray(data)) return data.reduce((total, item) => total + item.byteLength, 0);
-  return data.byteLength;
+	if (Buffer.isBuffer(data)) return data.byteLength;
+	if (Array.isArray(data)) return data.reduce((total, item) => total + item.byteLength, 0);
+	return data.byteLength;
 };
 
 const parseNonNegativeInteger = (value: string | null): number | null => {
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+	const parsed = Number(value);
+	return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 };
 
 /** HTTP-server WebSocket boundary: upgrade/auth/origin/IP/heartbeat and clean transport selection only. */
 export const attachWebSocketServer = (options: WebSocketServerOptions): BackendWebSocketServer => {
-  const { server, sessionMiddleware, config, dependencies } = options;
-  const trustProxy = compileProxyTrust(config.trustProxy);
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024 });
-  const clients = new Set<ClientRecord>();
-  const socketSessions = new WeakMap<WebSocket, string>();
-  const socketUsers = new WeakMap<WebSocket, number>();
-  let revocationEpoch = 0;
-  let closing = false;
-  let quiesceDepth = 0;
-  let agentMaxReplayLag = 0;
-  let agentProtocolErrors = 0;
-  let agentSlowConsumerCloses = 0;
-  let agentConnectionLimitRejections = 0;
-  let quiesceTail: Promise<void> = Promise.resolve();
+	const { server, sessionMiddleware, config, dependencies } = options;
+	const trustProxy = compileProxyTrust(config.trustProxy);
+	const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024 });
+	const clients = new Set<ClientRecord>();
+	const socketSessions = new WeakMap<WebSocket, string>();
+	const socketUsers = new WeakMap<WebSocket, number>();
+	let revocationEpoch = 0;
+	let closing = false;
+	let quiesceDepth = 0;
+	let agentMaxReplayLag = 0;
+	let agentProtocolErrors = 0;
+	let agentSlowConsumerCloses = 0;
+	let agentConnectionLimitRejections = 0;
+	let quiesceTail: Promise<void> = Promise.resolve();
 
-  const trackClient = (record: ClientRecord): void => {
-    record.sessionId = socketSessions.get(record.socket);
-    record.userId = socketUsers.get(record.socket);
-    clients.add(record);
-    logger.debug({ websocketKind: record.kind, activeClients: clients.size }, 'WebSocket client attached');
-    const alive = () => {
-      record.isAlive = true;
-      record.missed = 0;
-      record.protocol?.touchOwnership?.();
-    };
-    record.socket.on('pong', alive);
-    record.socket.on('message', alive);
-    record.socket.on('message', (data) => runtimePerformanceMetrics.recordWebSocketInbound(rawDataByteLength(data)));
-    record.socket.once('close', (code, reason) => {
-      clients.delete(record);
-      logger.debug(
-        {
-          websocketKind: record.kind,
-          closeCode: code,
-          closeReason: reason.length > 0 ? reason.toString() : undefined,
-          activeClients: clients.size,
-        },
-        'WebSocket client detached',
-      );
-    });
-  };
+	const trackClient = (record: ClientRecord): void => {
+		record.sessionId = socketSessions.get(record.socket);
+		record.userId = socketUsers.get(record.socket);
+		clients.add(record);
+		logger.debug({ websocketKind: record.kind, activeClients: clients.size }, 'WebSocket client attached');
 
-  const onWorkspaceConnection = (socket: WebSocket, userId: number, username: string, clientIp: string): void => {
-    const protocol = new WorkspaceProtocolSession(socket, { userId, username, clientIp }, dependencies);
-    const record: ClientRecord = { socket, kind: 'workspace', protocol, isAlive: true, missed: 0 };
-    trackClient(record);
-    socket.on('message', (data, isBinary) => void protocol.handleMessage(data, isBinary));
-    socket.once(
-      'close',
-      (code, reason) =>
-        void protocol.close({
-          source: 'socket.close',
-          closeCode: code,
-          closeReason: reason.length > 0 ? reason.toString() : undefined,
-        }),
-    );
-    socket.once(
-      'error',
-      (error) =>
-        void protocol.close({
-          source: 'socket.error',
-          errorMessage: error.message,
-        }),
-    );
-  };
+		const alive = () => {
+			record.isAlive = true;
+			record.missed = 0;
+			record.protocol?.touchOwnership?.();
+		};
 
-  const onUploadConnection = (
-    socket: WebSocket,
-    userId: number,
-    request: { workspaceId: string; uploadId: string; size: number },
-  ): void => {
-    if (!bindUploadStream(socket, userId, request, dependencies)) return;
-    trackClient({ socket, kind: 'upload', isAlive: true, missed: 0 });
-  };
+		record.socket.on('pong', alive);
+		record.socket.on('message', alive);
+		record.socket.on('message', (data) =>
+			runtimePerformanceMetrics.recordWebSocketInbound(rawDataByteLength(data)),
+		);
+		record.socket.once('close', (code, reason) => {
+			clients.delete(record);
+			logger.debug(
+				{
+					websocketKind: record.kind,
+					closeCode: code,
+					closeReason: reason.length > 0 ? reason.toString() : undefined,
+					activeClients: clients.size,
+				},
+				'WebSocket client detached',
+			);
+		});
+	};
 
-  const onRemoteDesktopConnection = (
-    socket: WebSocket,
-    request: http.IncomingMessage,
-    ticket: string,
-    userId: number,
-  ): void => {
-    if (!dependencies.remoteDesktop.accept(socket, request, ticket, userId)) {
-      socket.close(1008, 'Remote desktop ticket invalid or expired');
-      return;
-    }
-    trackClient({ socket, kind: 'remote-desktop', isAlive: true, missed: 0 });
-  };
+	const onWorkspaceConnection = (socket: WebSocket, userId: number, username: string, clientIp: string): void => {
+		const protocol = new WorkspaceProtocolSession(socket, { userId, username, clientIp }, dependencies);
+		const record: ClientRecord = { socket, kind: 'workspace', protocol, isAlive: true, missed: 0 };
+		trackClient(record);
+		socket.on('message', (data, isBinary) => void protocol.handleMessage(data, isBinary));
+		socket.once(
+			'close',
+			(code, reason) =>
+				void protocol.close({
+					source: 'socket.close',
+					closeCode: code,
+					closeReason: reason.length > 0 ? reason.toString() : undefined,
+				}),
+		);
+		socket.once(
+			'error',
+			(error) =>
+				void protocol.close({
+					source: 'socket.error',
+					errorMessage: error.message,
+				}),
+		);
+	};
 
-  const onAgentConnection = (socket: WebSocket, userId: number, sessionKey: string): void => {
-    const protocol = new AgentProtocolSession(
-      socket,
-      { userId },
-      {
-        events: dependencies.agentEvents,
-        runs: dependencies.agentRuns,
-        telemetry: {
-          replayLag: (lag) => {
-            agentMaxReplayLag = Math.max(agentMaxReplayLag, lag);
-          },
-          protocolError: () => {
-            agentProtocolErrors += 1;
-          },
-          slowConsumerClose: () => {
-            agentSlowConsumerCloses += 1;
-          },
-        },
-      },
-    );
-    const record: ClientRecord = {
-      socket,
-      kind: 'agent',
-      protocol,
-      agentProtocol: protocol,
-      agentSessionKey: sessionKey,
-      isAlive: true,
-      missed: 0,
-    };
-    trackClient(record);
-    socket.on('message', (data, isBinary) => void protocol.handleMessage(data, isBinary));
-    socket.once('close', () => void protocol.close());
-    socket.once('error', () => void protocol.close());
-  };
+	const onUploadConnection = (
+		socket: WebSocket,
+		userId: number,
+		request: { workspaceId: string; uploadId: string; size: number },
+	): void => {
+		if (!bindUploadStream(socket, userId, request, dependencies)) return;
+		trackClient({ socket, kind: 'upload', isAlive: true, missed: 0 });
+	};
 
-  const handleAuthenticatedUpgrade = (
-    request: SessionRequest,
-    socket: Socket,
-    head: Buffer,
-    url: URL,
-    pathname: string,
-    userId: number,
-    username: string,
-    clientIp: string,
-  ): void => {
-    const upgrade = (accept: (ws: WebSocket) => void): void => {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        socketSessions.set(ws, request.sessionID);
-        socketUsers.set(ws, userId);
-        accept(ws);
-      });
-    };
-    if (pathname === '/ws/uploads') {
-      const workspaceId = url.searchParams.get('workspaceId')?.trim() || '';
-      const uploadId = url.searchParams.get('uploadId')?.trim() || '';
-      const size = parseNonNegativeInteger(url.searchParams.get('size'));
-      if (!SAFE_WORKSPACE_ID.test(workspaceId) || !uploadId || uploadId.length > 512 || size === null) {
-        rejectUpgrade(socket, 400, 'Bad Request');
-        return;
-      }
-      const uploadRequest: WorkspaceUploadStreamQueryDto = { workspaceId, uploadId, size };
-      upgrade((ws) => {
-        runtimePerformanceMetrics.webSocketUpgradeAccepted();
-        onUploadConnection(ws, userId, uploadRequest);
-      });
-      return;
-    }
+	const onRemoteDesktopConnection = (
+		socket: WebSocket,
+		request: http.IncomingMessage,
+		ticket: string,
+		userId: number,
+	): void => {
+		if (!dependencies.remoteDesktop.accept(socket, request, ticket, userId)) {
+			socket.close(1008, 'Remote desktop ticket invalid or expired');
+			return;
+		}
+		trackClient({ socket, kind: 'remote-desktop', isAlive: true, missed: 0 });
+	};
 
-    if (pathname === '/ws/remote-desktop') {
-      const ticket = url.searchParams.get('ticket')?.trim() || '';
-      if (!ticket || ticket.length > 256) {
-        rejectUpgrade(socket, 400, 'Bad Request');
-        return;
-      }
-      upgrade((ws) => {
-        runtimePerformanceMetrics.webSocketUpgradeAccepted();
-        onRemoteDesktopConnection(ws, request, ticket, userId);
-      });
-      return;
-    }
+	const onAgentConnection = (socket: WebSocket, userId: number, sessionKey: string): void => {
+		const protocol = new AgentProtocolSession(
+			socket,
+			{ userId },
+			{
+				events: dependencies.agentEvents,
+				runs: dependencies.agentRuns,
+				telemetry: {
+					replayLag: (lag) => {
+						agentMaxReplayLag = Math.max(agentMaxReplayLag, lag);
+					},
 
-    if (pathname === '/ws/agent') {
-      const sessionKey = request.sessionID || `user:${userId}`;
-      const activeForSession = [...clients].filter(
-        (record) => record.kind === 'agent' && record.agentSessionKey === sessionKey,
-      ).length;
-      if (activeForSession >= MAX_AGENT_SOCKETS_PER_SESSION) {
-        agentConnectionLimitRejections += 1;
-        logger.warn(
-          {
-            sessionKey,
-            userId,
-            activeForSession,
-            maxSocketsPerSession: MAX_AGENT_SOCKETS_PER_SESSION,
-            activeAgentClients: [...clients].filter((record) => record.kind === 'agent').length,
-          },
-          'Rejected Agent WebSocket upgrade because the session socket limit is already reached',
-        );
-        rejectUpgrade(socket, 429, 'Too Many Requests');
-        return;
-      }
-      upgrade((ws) => {
-        runtimePerformanceMetrics.webSocketUpgradeAccepted();
-        onAgentConnection(ws, userId, sessionKey);
-      });
-      return;
-    }
+					protocolError: () => {
+						agentProtocolErrors += 1;
+					},
 
-    upgrade((ws) => {
-      runtimePerformanceMetrics.webSocketUpgradeAccepted();
-      onWorkspaceConnection(ws, userId, username, clientIp);
-    });
-  };
+					slowConsumerClose: () => {
+						agentSlowConsumerCloses += 1;
+					},
+				},
+			},
+		);
+		const record: ClientRecord = {
+			socket,
+			kind: 'agent',
+			protocol,
+			agentProtocol: protocol,
+			agentSessionKey: sessionKey,
+			isAlive: true,
+			missed: 0,
+		};
+		trackClient(record);
+		socket.on('message', (data, isBinary) => void protocol.handleMessage(data, isBinary));
+		socket.once('close', () => void protocol.close());
+		socket.once('error', () => void protocol.close());
+	};
 
-  const upgradeHandler = (request: http.IncomingMessage, socket: Socket, head: Buffer): void => {
-    const epoch = revocationEpoch;
-    runtimePerformanceMetrics.webSocketUpgradeAttempt();
-    if (closing || quiesceDepth > 0) {
-      rejectUpgrade(socket, 503, 'Service Unavailable');
-      return;
-    }
+	const handleAuthenticatedUpgrade = (
+		request: SessionRequest,
+		socket: Socket,
+		head: Buffer,
+		url: URL,
+		pathname: string,
+		userId: number,
+		username: string,
+		clientIp: string,
+	): void => {
+		const upgrade = (accept: (ws: WebSocket) => void): void => {
+			wss.handleUpgrade(request, socket, head, (ws) => {
+				socketSessions.set(ws, request.sessionID);
+				socketUsers.set(ws, userId);
+				accept(ws);
+			});
+		};
 
-    let url: URL;
-    try {
-      url = new URL(request.url || '/', 'http://nexus.local');
-    } catch {
-      rejectUpgrade(socket, 400, 'Bad Request');
-      return;
-    }
-    const pathname = url.pathname;
-    logger.trace({ path: pathname }, 'WebSocket upgrade dispatch');
-    if (!ALLOWED_PATHS.has(pathname)) {
-      rejectUpgrade(socket, 404, 'Not Found');
-      return;
-    }
-    if (!allowedOrigin(request, config, trustProxy)) {
-      logger.debug({ path: pathname }, 'WebSocket upgrade rejected by origin policy');
-      rejectUpgrade(socket, 403, 'Forbidden');
-      return;
-    }
+		if (pathname === '/ws/uploads') {
+			const workspaceId = url.searchParams.get('workspaceId')?.trim() || '';
+			const uploadId = url.searchParams.get('uploadId')?.trim() || '';
+			const size = parseNonNegativeInteger(url.searchParams.get('size'));
+			if (!SAFE_WORKSPACE_ID.test(workspaceId) || !uploadId || uploadId.length > 512 || size === null) {
+				rejectUpgrade(socket, 400, 'Bad Request');
+				return;
+			}
+			const uploadRequest: WorkspaceUploadStreamQueryDto = { workspaceId, uploadId, size };
+			upgrade((ws) => {
+				runtimePerformanceMetrics.webSocketUpgradeAccepted();
+				onUploadConnection(ws, userId, uploadRequest);
+			});
+			return;
+		}
 
-    const clientIp = proxyaddr(request, trustProxy);
-    void dependencies.ipWhitelist
-      .check(clientIp)
-      .then((decision) => {
-        if (!decision.allowed) {
-          logger.debug({ path: pathname, statusCode: decision.statusCode }, 'WebSocket upgrade rejected by IP policy');
-          rejectUpgrade(
-            socket,
-            decision.statusCode,
-            decision.statusCode === 500 ? 'Internal Server Error' : 'Forbidden',
-          );
-          return;
-        }
+		if (pathname === '/ws/remote-desktop') {
+			const ticket = url.searchParams.get('ticket')?.trim() || '';
+			if (!ticket || ticket.length > 256) {
+				rejectUpgrade(socket, 400, 'Bad Request');
+				return;
+			}
+			upgrade((ws) => {
+				runtimePerformanceMetrics.webSocketUpgradeAccepted();
+				onRemoteDesktopConnection(ws, request, ticket, userId);
+			});
+			return;
+		}
 
-        const sessionResponse: Response = Object.setPrototypeOf(new http.ServerResponse(request), express.response);
-        sessionMiddleware(request as SessionRequest, sessionResponse, () => {
-          if (epoch !== revocationEpoch || closing || quiesceDepth > 0 || socket.destroyed) {
-            rejectUpgrade(socket, 401, 'Unauthorized');
-            return;
-          }
-          const sessionRequest = request as SessionRequest;
-          const userId = sessionRequest.session?.userId;
-          const username = sessionRequest.session?.username;
-          if (!userId || !username || sessionRequest.session.requiresTwoFactor === true) {
-            logger.debug({ path: pathname }, 'WebSocket upgrade rejected by session policy');
-            rejectUpgrade(socket, 401, 'Unauthorized');
-            return;
-          }
-          handleAuthenticatedUpgrade(sessionRequest, socket, head, url, pathname, userId, username, clientIp);
-        });
-      })
-      .catch((error) => {
-        logger.error({ err: error, path: pathname }, 'WebSocket IP policy check failed');
-        rejectUpgrade(socket, 500, 'Internal Server Error');
-      });
-  };
+		if (pathname === '/ws/agent') {
+			const sessionKey = request.sessionID || `user:${userId}`;
+			const activeForSession = [...clients].filter(
+				(record) => record.kind === 'agent' && record.agentSessionKey === sessionKey,
+			).length;
+			if (activeForSession >= MAX_AGENT_SOCKETS_PER_SESSION) {
+				agentConnectionLimitRejections += 1;
+				logger.warn(
+					{
+						sessionKey,
+						userId,
+						activeForSession,
+						maxSocketsPerSession: MAX_AGENT_SOCKETS_PER_SESSION,
+						activeAgentClients: [...clients].filter((record) => record.kind === 'agent').length,
+					},
+					'Rejected Agent WebSocket upgrade because the session socket limit is already reached',
+				);
+				rejectUpgrade(socket, 429, 'Too Many Requests');
+				return;
+			}
+			upgrade((ws) => {
+				runtimePerformanceMetrics.webSocketUpgradeAccepted();
+				onAgentConnection(ws, userId, sessionKey);
+			});
+			return;
+		}
 
-  server.on('upgrade', upgradeHandler);
+		upgrade((ws) => {
+			runtimePerformanceMetrics.webSocketUpgradeAccepted();
+			onWorkspaceConnection(ws, userId, username, clientIp);
+		});
+	};
 
-  const heartbeat = setInterval(() => {
-    for (const record of clients) {
-      if (record.isAlive) {
-        record.isAlive = false;
-        record.missed = 0;
-      } else {
-        record.missed += 1;
-        if (record.missed >= MAX_MISSED_HEARTBEATS) {
-          logger.warn(
-            { websocketKind: record.kind, missedHeartbeats: record.missed },
-            'WebSocket client heartbeat expired',
-          );
-          void record.protocol?.close();
-          record.socket.terminate();
-          continue;
-        }
-      }
-      if (record.socket.readyState === WebSocket.OPEN) record.socket.ping();
-    }
-  }, HEARTBEAT_INTERVAL_MS);
-  heartbeat.unref?.();
+	const upgradeHandler = (request: http.IncomingMessage, socket: Socket, head: Buffer): void => {
+		const epoch = revocationEpoch;
+		runtimePerformanceMetrics.webSocketUpgradeAttempt();
+		if (closing || quiesceDepth > 0) {
+			rejectUpgrade(socket, 503, 'Service Unavailable');
+			return;
+		}
 
-  const waitForSocketClose = (socket: WebSocket): Promise<void> => {
-    if (socket.readyState === WebSocket.CLOSED) return Promise.resolve();
-    return new Promise((resolve) => {
-      let settled = false;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        socket.removeListener('close', finish);
-        resolve();
-      };
-      const timer = setTimeout(finish, 1_000);
-      timer.unref?.();
-      socket.once('close', finish);
-    });
-  };
+		let url: URL;
+		try {
+			url = new URL(request.url || '/', 'http://nexus.local');
+		} catch {
+			rejectUpgrade(socket, 400, 'Bad Request');
+			return;
+		}
+		const pathname = url.pathname;
+		logger.trace({ path: pathname }, 'WebSocket upgrade dispatch');
+		if (!ALLOWED_PATHS.has(pathname)) {
+			rejectUpgrade(socket, 404, 'Not Found');
+			return;
+		}
+		if (!allowedOrigin(request, config, trustProxy)) {
+			logger.debug({ path: pathname }, 'WebSocket upgrade rejected by origin policy');
+			rejectUpgrade(socket, 403, 'Forbidden');
+			return;
+		}
 
-  const drainClients = async (): Promise<void> => {
-    const snapshot = [...clients];
-    if (!snapshot.length) return;
+		const clientIp = proxyaddr(request, trustProxy);
+		void dependencies.ipWhitelist
+			.check(clientIp)
+			.then((decision) => {
+				if (!decision.allowed) {
+					logger.debug(
+						{ path: pathname, statusCode: decision.statusCode },
+						'WebSocket upgrade rejected by IP policy',
+					);
+					rejectUpgrade(
+						socket,
+						decision.statusCode,
+						decision.statusCode === 500 ? 'Internal Server Error' : 'Forbidden',
+					);
+					return;
+				}
 
-    // Workspace protocol teardown owns the application-level cleanup (uploads, transfers,
-    // terminal, filesystem and SSH session). Finish that before terminating the raw sockets so a
-    // reset cannot return while old workspace work is still mutating the freshly restored state.
-    await Promise.allSettled(snapshot.map((record) => record.protocol?.close() ?? Promise.resolve()));
+				const sessionResponse: Response = Object.setPrototypeOf(
+					new http.ServerResponse(request),
+					express.response,
+				);
+				sessionMiddleware(request as SessionRequest, sessionResponse, () => {
+					if (epoch !== revocationEpoch || closing || quiesceDepth > 0 || socket.destroyed) {
+						rejectUpgrade(socket, 401, 'Unauthorized');
+						return;
+					}
+					const sessionRequest = request as SessionRequest;
+					const userId = sessionRequest.session?.userId;
+					const username = sessionRequest.session?.username;
+					if (!userId || !username || sessionRequest.session.requiresTwoFactor === true) {
+						logger.debug({ path: pathname }, 'WebSocket upgrade rejected by session policy');
+						rejectUpgrade(socket, 401, 'Unauthorized');
+						return;
+					}
+					handleAuthenticatedUpgrade(sessionRequest, socket, head, url, pathname, userId, username, clientIp);
+				});
+			})
+			.catch((error) => {
+				logger.error({ err: error, path: pathname }, 'WebSocket IP policy check failed');
+				rejectUpgrade(socket, 500, 'Internal Server Error');
+			});
+	};
 
-    const closeWaiters = snapshot.map((record) => waitForSocketClose(record.socket));
-    for (const record of snapshot) {
-      if (record.socket.readyState !== WebSocket.CLOSED) record.socket.terminate();
-    }
-    await Promise.allSettled(closeWaiters);
-    for (const record of snapshot) clients.delete(record);
-  };
+	server.on('upgrade', upgradeHandler);
 
-  return {
-    metrics: () => {
-      let workspace = 0;
-      let upload = 0;
-      let remoteDesktop = 0;
-      let agent = 0;
-      let agentSubscriptions = 0;
-      let bufferedAmountBytes = 0;
-      let maxBufferedAmountBytes = 0;
-      for (const record of clients) {
-        if (record.kind === 'workspace') workspace += 1;
-        else if (record.kind === 'upload') upload += 1;
-        else if (record.kind === 'remote-desktop') remoteDesktop += 1;
-        else if (record.kind === 'agent') {
-          agent += 1;
-          agentSubscriptions += record.agentProtocol?.subscriptionCount() ?? 0;
-        }
-        bufferedAmountBytes += record.socket.bufferedAmount;
-        maxBufferedAmountBytes = Math.max(maxBufferedAmountBytes, record.socket.bufferedAmount);
-      }
-      return {
-        total: clients.size,
-        workspace,
-        upload,
-        remoteDesktop,
-        agent,
-        agentSubscriptions,
-        agentMaxReplayLag,
-        agentProtocolErrors,
-        agentSlowConsumerCloses,
-        agentConnectionLimitRejections,
-        bufferedAmountBytes,
-        maxBufferedAmountBytes,
-      };
-    },
-    revokeSession: async (sessionId: string): Promise<void> => {
-      revocationEpoch += 1;
-      const revoked = [...clients].filter((record) => record.sessionId === sessionId);
-      for (const record of revoked) record.socket.terminate();
-      await Promise.allSettled(revoked.map((record) => Promise.resolve().then(() => record.protocol?.close())));
-    },
-    revokeUser: async (userId: number): Promise<void> => {
-      revocationEpoch += 1;
-      const revoked = [...clients].filter((record) => record.userId === userId);
-      for (const record of revoked) record.socket.terminate();
-      await Promise.allSettled(revoked.map((record) => Promise.resolve().then(() => record.protocol?.close())));
-    },
-    quiesce: <T>(operation: () => Promise<T>): Promise<T> => {
-      quiesceDepth += 1;
-      const previous = quiesceTail;
-      let release!: () => void;
-      quiesceTail = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      return previous
-        .then(async () => {
-          await drainClients();
-          return operation();
-        })
-        .finally(() => {
-          quiesceDepth = Math.max(0, quiesceDepth - 1);
-          release();
-        });
-    },
-    close: async () => {
-      if (closing) return;
-      closing = true;
-      server.off('upgrade', upgradeHandler);
-      clearInterval(heartbeat);
-      await quiesceTail;
-      await drainClients();
-      await new Promise<void>((resolve) => wss.close(() => resolve()));
-    },
-  };
+	const heartbeat = setInterval(() => {
+		for (const record of clients) {
+			if (record.isAlive) {
+				record.isAlive = false;
+				record.missed = 0;
+			} else {
+				record.missed += 1;
+				if (record.missed >= MAX_MISSED_HEARTBEATS) {
+					logger.warn(
+						{ websocketKind: record.kind, missedHeartbeats: record.missed },
+						'WebSocket client heartbeat expired',
+					);
+					void record.protocol?.close();
+					record.socket.terminate();
+					continue;
+				}
+			}
+			if (record.socket.readyState === WebSocket.OPEN) record.socket.ping();
+		}
+	}, HEARTBEAT_INTERVAL_MS);
+	heartbeat.unref?.();
+
+	const waitForSocketClose = (socket: WebSocket): Promise<void> => {
+		if (socket.readyState === WebSocket.CLOSED) return Promise.resolve();
+		return new Promise((resolve) => {
+			let settled = false;
+
+			const finish = () => {
+				if (settled) return;
+				settled = true;
+				clearTimeout(timer);
+				socket.removeListener('close', finish);
+				resolve();
+			};
+
+			const timer = setTimeout(finish, 1_000);
+			timer.unref?.();
+			socket.once('close', finish);
+		});
+	};
+
+	const drainClients = async (): Promise<void> => {
+		const snapshot = [...clients];
+		if (!snapshot.length) return;
+
+		// Workspace protocol teardown owns the application-level cleanup (uploads, transfers,
+		// terminal, filesystem and SSH session). Finish that before terminating the raw sockets so a
+		// reset cannot return while old workspace work is still mutating the freshly restored state.
+		await Promise.allSettled(snapshot.map((record) => record.protocol?.close() ?? Promise.resolve()));
+
+		const closeWaiters = snapshot.map((record) => waitForSocketClose(record.socket));
+		for (const record of snapshot) {
+			if (record.socket.readyState !== WebSocket.CLOSED) record.socket.terminate();
+		}
+		await Promise.allSettled(closeWaiters);
+		for (const record of snapshot) clients.delete(record);
+	};
+
+	return {
+		metrics: () => {
+			let workspace = 0;
+			let upload = 0;
+			let remoteDesktop = 0;
+			let agent = 0;
+			let agentSubscriptions = 0;
+			let bufferedAmountBytes = 0;
+			let maxBufferedAmountBytes = 0;
+			for (const record of clients) {
+				if (record.kind === 'workspace') workspace += 1;
+				else if (record.kind === 'upload') upload += 1;
+				else if (record.kind === 'remote-desktop') remoteDesktop += 1;
+				else if (record.kind === 'agent') {
+					agent += 1;
+					agentSubscriptions += record.agentProtocol?.subscriptionCount() ?? 0;
+				}
+				bufferedAmountBytes += record.socket.bufferedAmount;
+				maxBufferedAmountBytes = Math.max(maxBufferedAmountBytes, record.socket.bufferedAmount);
+			}
+			return {
+				total: clients.size,
+				workspace,
+				upload,
+				remoteDesktop,
+				agent,
+				agentSubscriptions,
+				agentMaxReplayLag,
+				agentProtocolErrors,
+				agentSlowConsumerCloses,
+				agentConnectionLimitRejections,
+				bufferedAmountBytes,
+				maxBufferedAmountBytes,
+			};
+		},
+
+		revokeSession: async (sessionId: string): Promise<void> => {
+			revocationEpoch += 1;
+			const revoked = [...clients].filter((record) => record.sessionId === sessionId);
+			for (const record of revoked) record.socket.terminate();
+			await Promise.allSettled(revoked.map((record) => Promise.resolve().then(() => record.protocol?.close())));
+		},
+
+		revokeUser: async (userId: number): Promise<void> => {
+			revocationEpoch += 1;
+			const revoked = [...clients].filter((record) => record.userId === userId);
+			for (const record of revoked) record.socket.terminate();
+			await Promise.allSettled(revoked.map((record) => Promise.resolve().then(() => record.protocol?.close())));
+		},
+
+		quiesce: <T>(operation: () => Promise<T>): Promise<T> => {
+			quiesceDepth += 1;
+			const previous = quiesceTail;
+			let release!: () => void;
+			quiesceTail = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			return previous
+				.then(async () => {
+					await drainClients();
+					return operation();
+				})
+				.finally(() => {
+					quiesceDepth = Math.max(0, quiesceDepth - 1);
+					release();
+				});
+		},
+
+		close: async () => {
+			if (closing) return;
+			closing = true;
+			server.off('upgrade', upgradeHandler);
+			clearInterval(heartbeat);
+			await quiesceTail;
+			await drainClients();
+			await new Promise<void>((resolve) => wss.close(() => resolve()));
+		},
+	};
 };

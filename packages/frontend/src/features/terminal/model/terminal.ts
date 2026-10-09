@@ -3,18 +3,18 @@ export type { WorkspaceTerminalViewportDto };
 
 export type TerminalConnectionState = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error';
 export interface TerminalOutput {
-  data: string | Uint8Array;
-  consumed?: () => void;
+	data: string | Uint8Array;
+	consumed?: () => void;
 }
 export interface TerminalSnapshot {
-  text: string;
+	text: string;
 }
 
 export interface TerminalVisualOptions {
-  backgroundEnabled?: boolean;
-  backgroundImageUrl?: string;
-  backgroundOverlayOpacity?: number;
-  customHtml?: string | null;
-  textStroke?: { enabled: boolean; width: number; color: string };
-  textShadow?: { enabled: boolean; offsetX: number; offsetY: number; blur: number; color: string };
+	backgroundEnabled?: boolean;
+	backgroundImageUrl?: string;
+	backgroundOverlayOpacity?: number;
+	customHtml?: string | null;
+	textStroke?: { enabled: boolean; width: number; color: string };
+	textShadow?: { enabled: boolean; offsetX: number; offsetY: number; blur: number; color: string };
 }

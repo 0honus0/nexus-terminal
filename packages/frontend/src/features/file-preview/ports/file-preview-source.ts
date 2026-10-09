@@ -1,11 +1,11 @@
 export interface FilePreviewReadOptions {
-  maxBytes?: number;
-  signal?: AbortSignal;
+	maxBytes?: number;
+	signal?: AbortSignal;
 }
 
 export type FilePreviewReadResult =
-  { bytes: ArrayBuffer; mimeType?: string } | { tooLarge: true; actualBytes: number; maxBytes: number };
+	{ bytes: ArrayBuffer; mimeType?: string } | { tooLarge: true; actualBytes: number; maxBytes: number };
 
 export interface FilePreviewSource {
-  read(path: string, options?: FilePreviewReadOptions): Promise<FilePreviewReadResult>;
+	read(path: string, options?: FilePreviewReadOptions): Promise<FilePreviewReadResult>;
 }

@@ -1,124 +1,124 @@
 <script setup lang="ts">
-  import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
-  import { useI18n } from 'vue-i18n';
-  import { Terminal } from '@xterm/xterm';
-  import { FitAddon } from '@xterm/addon-fit';
-  import { SearchAddon } from '@xterm/addon-search';
-  import { SerializeAddon } from '@xterm/addon-serialize';
-  import { WebLinksAddon } from '@xterm/addon-web-links';
-  import { useDeviceCapabilities } from '@/foundation/browser';
-  import { writeClipboardText } from '@/foundation/browser';
-  import { createWheelScaleResolver } from '@/foundation/interaction';
-  import '@xterm/xterm/css/xterm.css';
-  import type { TerminalChannel } from '../ports/terminal-channel';
-  import type { TerminalVisualOptions } from '../model/terminal';
-  import { desktopBackgroundRuntime, mobileBackgroundRuntime } from '../model/mobileBackgroundRuntime';
-  import { trackTerminalRuntimeModes, type TerminalRuntimeModeTracker } from '../model/terminalRuntimeModes';
-  import { serializeTerminalSnapshot } from '../model/terminalSnapshot';
-  import { createTerminalOutputWriter } from '../model/terminalOutputWriter';
-  import {
-    createTerminalSessionState,
-    RESET_REMOTE_PTY_DISPLAY,
-    type TerminalSessionState,
-  } from '../state/terminalSessionState';
+	import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
+	import { useI18n } from 'vue-i18n';
+	import { Terminal } from '@xterm/xterm';
+	import { FitAddon } from '@xterm/addon-fit';
+	import { SearchAddon } from '@xterm/addon-search';
+	import { SerializeAddon } from '@xterm/addon-serialize';
+	import { WebLinksAddon } from '@xterm/addon-web-links';
+	import { useDeviceCapabilities } from '@/foundation/browser';
+	import { writeClipboardText } from '@/foundation/browser';
+	import { createWheelScaleResolver } from '@/foundation/interaction';
+	import '@xterm/xterm/css/xterm.css';
+	import type { TerminalChannel } from '../ports/terminal-channel';
+	import type { TerminalVisualOptions } from '../model/terminal';
+	import { desktopBackgroundRuntime, mobileBackgroundRuntime } from '../model/mobileBackgroundRuntime';
+	import { trackTerminalRuntimeModes, type TerminalRuntimeModeTracker } from '../model/terminalRuntimeModes';
+	import { serializeTerminalSnapshot } from '../model/terminalSnapshot';
+	import { createTerminalOutputWriter } from '../model/terminalOutputWriter';
+	import {
+		createTerminalSessionState,
+		RESET_REMOTE_PTY_DISPLAY,
+		type TerminalSessionState,
+	} from '../state/terminalSessionState';
 
-  const props = withDefaults(
-    defineProps<{
-      channel: TerminalChannel;
-      active?: boolean;
-      inputEnabled?: boolean;
-      fontFamily?: string;
-      fontSize?: number;
-      theme?: Record<string, string>;
-      scrollback?: number;
-      rightClickCopyPaste?: boolean;
-      visual?: TerminalVisualOptions;
-      state?: TerminalSessionState;
-    }>(),
-    { active: true, inputEnabled: true, fontSize: 14, scrollback: 5000, rightClickCopyPaste: true },
-  );
-  const emit = defineEmits<{
-    ready: [];
-    error: [message: string];
-    closed: [reason?: string];
-    fontSizeChange: [size: number];
-    interaction: [];
-  }>();
-  const { t } = useI18n();
-  const device = useDeviceCapabilities();
-  const terminalState = props.state ?? createTerminalSessionState();
-  const wrapper = ref<HTMLElement | null>(null);
-  const root = ref<HTMLElement | null>(null);
-  const searchOpen = terminalState.searchOpen;
-  const searchTerm = terminalState.searchTerm;
-  const renderedFontSize = ref(props.fontSize);
-  const backgroundReady = ref(false);
-  const backgroundFrame = ref<HTMLIFrameElement | null>(null);
-  let terminal: Terminal | undefined;
-  let fit: FitAddon | undefined;
-  let searchAddon: SearchAddon | undefined;
-  let serializeAddon: SerializeAddon | undefined;
-  let runtimeModes: TerminalRuntimeModeTracker | undefined;
-  let resizeObserver: ResizeObserver | undefined;
-  let disposed = false;
-  let viewActive = true;
-  let interactionGeneration = 0;
-  let stopOutput: (() => void) | undefined;
-  const cleanup: Array<() => void> = [];
-  const HISTORY_LIVE_SCROLLBACK_LINES = 20_000;
-  const HISTORY_WINDOW_SCROLLBACK_LINES = 20_000;
-  const HISTORY_WINDOW_MAX_BYTES = 768 * 1024;
-  const HISTORY_CONTINUATION_ROWS = 3000;
-  const HISTORY_LIVE_SNAPSHOT_MAX_BYTES = 512 * 1024;
-  const HISTORY_DEFERRED_OUTPUT_MAX_BYTES = 384 * 1024;
-  const historyEncoder = new TextEncoder();
-  let historyLoading = false;
-  let historyRebuilding = false;
-  let historyBrowsing = false;
-  let pagedHistorySession = false;
-  let historyLastViewportY = 0;
-  let historyLiveSnapshot = '';
-  let historyWindowChunks: Uint8Array[] = [];
-  let deferredTerminalOutputBytes = 0;
-  let historyRestoreTask: Promise<void> | null = null;
-  let historyEntryTask: Promise<void> | null = null;
-  let historyCursorResetTask: Promise<boolean> | null = null;
-  let historyViewGeneration = 0;
-  let mobileSelectionSyncFrame: number | null = null;
-  const deferredTerminalOutput: Array<string | Uint8Array> = [];
-  let historyReplayingOutput: Array<string | Uint8Array> = [];
-  const deferredOutputConsumers: Array<() => void> = [];
-  const hasVisualBackground = computed(() =>
-    Boolean(props.visual?.backgroundEnabled && (props.visual.backgroundImageUrl || props.visual.customHtml)),
-  );
-  const resolvedTheme = computed(() => ({
-    ...(props.theme ?? {}),
-    ...(hasVisualBackground.value ? { background: 'rgba(0,0,0,0)' } : {}),
-    cursor: '#ffffff',
-    cursorAccent: '#000000',
-  }));
-  const backgroundStyle = computed(() =>
-    props.visual?.backgroundImageUrl ? { backgroundImage: `url(${props.visual.backgroundImageUrl})` } : {},
-  );
-  const terminalStyle = computed(() => ({
-    backgroundColor: hasVisualBackground.value ? 'transparent' : props.theme?.background,
-    '--terminal-stroke-width': `${props.visual?.textStroke?.width ?? 0}px`,
-    '--terminal-stroke-color': props.visual?.textStroke?.color ?? 'transparent',
-    '--terminal-shadow': `${props.visual?.textShadow?.offsetX ?? 0}px ${props.visual?.textShadow?.offsetY ?? 0}px ${props.visual?.textShadow?.blur ?? 0}px ${props.visual?.textShadow?.color ?? 'transparent'}`,
-  }));
-  const customHtmlCsp = [
-    "default-src 'none'",
-    "script-src 'unsafe-inline'",
-    "style-src 'unsafe-inline'",
-    'img-src data: blob:',
-    'font-src data:',
-    "connect-src 'none'",
-    'media-src data: blob:',
-  ].join('; ');
-  const customHtmlBaseStyle = 'html,body{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}';
-  // Notify resize-aware themes inside the opaque-origin sandbox, without
-  // changing their canvas attributes or reloading their animation state.
-  const customHtmlResizeBridge = `<script>(() => {
+	const props = withDefaults(
+		defineProps<{
+			channel: TerminalChannel;
+			active?: boolean;
+			inputEnabled?: boolean;
+			fontFamily?: string;
+			fontSize?: number;
+			theme?: Record<string, string>;
+			scrollback?: number;
+			rightClickCopyPaste?: boolean;
+			visual?: TerminalVisualOptions;
+			state?: TerminalSessionState;
+		}>(),
+		{ active: true, inputEnabled: true, fontSize: 14, scrollback: 5000, rightClickCopyPaste: true },
+	);
+	const emit = defineEmits<{
+		ready: [];
+		error: [message: string];
+		closed: [reason?: string];
+		fontSizeChange: [size: number];
+		interaction: [];
+	}>();
+	const { t } = useI18n();
+	const device = useDeviceCapabilities();
+	const terminalState = props.state ?? createTerminalSessionState();
+	const wrapper = ref<HTMLElement | null>(null);
+	const root = ref<HTMLElement | null>(null);
+	const searchOpen = terminalState.searchOpen;
+	const searchTerm = terminalState.searchTerm;
+	const renderedFontSize = ref(props.fontSize);
+	const backgroundReady = ref(false);
+	const backgroundFrame = ref<HTMLIFrameElement | null>(null);
+	let terminal: Terminal | undefined;
+	let fit: FitAddon | undefined;
+	let searchAddon: SearchAddon | undefined;
+	let serializeAddon: SerializeAddon | undefined;
+	let runtimeModes: TerminalRuntimeModeTracker | undefined;
+	let resizeObserver: ResizeObserver | undefined;
+	let disposed = false;
+	let viewActive = true;
+	let interactionGeneration = 0;
+	let stopOutput: (() => void) | undefined;
+	const cleanup: Array<() => void> = [];
+	const HISTORY_LIVE_SCROLLBACK_LINES = 20_000;
+	const HISTORY_WINDOW_SCROLLBACK_LINES = 20_000;
+	const HISTORY_WINDOW_MAX_BYTES = 768 * 1024;
+	const HISTORY_CONTINUATION_ROWS = 3000;
+	const HISTORY_LIVE_SNAPSHOT_MAX_BYTES = 512 * 1024;
+	const HISTORY_DEFERRED_OUTPUT_MAX_BYTES = 384 * 1024;
+	const historyEncoder = new TextEncoder();
+	let historyLoading = false;
+	let historyRebuilding = false;
+	let historyBrowsing = false;
+	let pagedHistorySession = false;
+	let historyLastViewportY = 0;
+	let historyLiveSnapshot = '';
+	let historyWindowChunks: Uint8Array[] = [];
+	let deferredTerminalOutputBytes = 0;
+	let historyRestoreTask: Promise<void> | null = null;
+	let historyEntryTask: Promise<void> | null = null;
+	let historyCursorResetTask: Promise<boolean> | null = null;
+	let historyViewGeneration = 0;
+	let mobileSelectionSyncFrame: number | null = null;
+	const deferredTerminalOutput: Array<string | Uint8Array> = [];
+	let historyReplayingOutput: Array<string | Uint8Array> = [];
+	const deferredOutputConsumers: Array<() => void> = [];
+	const hasVisualBackground = computed(() =>
+		Boolean(props.visual?.backgroundEnabled && (props.visual.backgroundImageUrl || props.visual.customHtml)),
+	);
+	const resolvedTheme = computed(() => ({
+		...(props.theme ?? {}),
+		...(hasVisualBackground.value ? { background: 'rgba(0,0,0,0)' } : {}),
+		cursor: '#ffffff',
+		cursorAccent: '#000000',
+	}));
+	const backgroundStyle = computed(() =>
+		props.visual?.backgroundImageUrl ? { backgroundImage: `url(${props.visual.backgroundImageUrl})` } : {},
+	);
+	const terminalStyle = computed(() => ({
+		backgroundColor: hasVisualBackground.value ? 'transparent' : props.theme?.background,
+		'--terminal-stroke-width': `${props.visual?.textStroke?.width ?? 0}px`,
+		'--terminal-stroke-color': props.visual?.textStroke?.color ?? 'transparent',
+		'--terminal-shadow': `${props.visual?.textShadow?.offsetX ?? 0}px ${props.visual?.textShadow?.offsetY ?? 0}px ${props.visual?.textShadow?.blur ?? 0}px ${props.visual?.textShadow?.color ?? 'transparent'}`,
+	}));
+	const customHtmlCsp = [
+		"default-src 'none'",
+		"script-src 'unsafe-inline'",
+		"style-src 'unsafe-inline'",
+		'img-src data: blob:',
+		'font-src data:',
+		"connect-src 'none'",
+		'media-src data: blob:',
+	].join('; ');
+	const customHtmlBaseStyle = 'html,body{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}';
+	// Notify resize-aware themes inside the opaque-origin sandbox, without
+	// changing their canvas attributes or reloading their animation state.
+	const customHtmlResizeBridge = `<script>(() => {
     let width = -1, height = -1;
     const sync = () => {
       const nextWidth = document.documentElement.clientWidth;
@@ -142,1551 +142,1614 @@
     sync();
   })();<\/script>`;
 
-  const sandboxedCustomHtml = computed(() => {
-    const html = props.visual?.customHtml;
-    if (!html || !props.visual?.backgroundEnabled) return '';
-    const imageOverride = props.visual.backgroundImageUrl
-      ? 'html,body{background:transparent!important}body>:not(style):not(script){background-color:transparent!important}'
-      : '';
-    return [
-      `<meta http-equiv="Content-Security-Policy" content="${customHtmlCsp}">`,
-      `<style>${customHtmlBaseStyle}${imageOverride}</style>`,
-      device.isMobile.value || device.hasCoarsePointer.value ? mobileBackgroundRuntime : desktopBackgroundRuntime,
-      html,
-      customHtmlResizeBridge,
-    ].join('');
-  });
-  let lastColumns = 0;
-  let lastRows = 0;
-  let geometryFrame: number | undefined;
-  let geometryResizeTimer: ReturnType<typeof setTimeout> | undefined;
-  let forceGeometrySync = false;
-  const revealBackgroundWhenSized = () => {
-    const element = root.value;
-    if (
-      disposed ||
-      !viewActive ||
-      !props.active ||
-      !element?.isConnected ||
-      element.clientWidth <= 0 ||
-      element.clientHeight <= 0
-    )
-      return;
-    backgroundReady.value = true;
-  };
-  watch(
-    [backgroundFrame, sandboxedCustomHtml],
-    ([frame, html], _previous, onCleanup) => {
-      if (!frame || !html) return;
-      const loadWhenSized = () => {
-        if (
-          props.active &&
-          frame.isConnected &&
-          frame.clientWidth > 0 &&
-          frame.clientHeight > 0 &&
-          frame.getAttribute('srcdoc') !== html
-        )
-          frame.srcdoc = html;
-        // Hidden iframes may retain a nonzero internal viewport. The parent
-        // observer supplies the missing visibility transition to the bridge.
-        frame.contentWindow?.postMessage(
-          { type: 'nexus-background-geometry', visible: frame.clientWidth > 0 && frame.clientHeight > 0 },
-          '*',
-        );
-      };
-      const observer = new ResizeObserver(loadWhenSized);
-      observer.observe(frame);
-      frame.addEventListener('load', loadWhenSized);
-      loadWhenSized();
-      onCleanup(() => {
-        observer.disconnect();
-        frame.removeEventListener('load', loadWhenSized);
-      });
-    },
-    { flush: 'post' },
-  );
-  const fitAndResize = (allowInactive = false) => {
-    clearTimeout(geometryResizeTimer);
-    geometryResizeTimer = undefined;
-    const element = root.value;
-    if (disposed || !viewActive || !terminal || !fit || !element?.isConnected) return;
-    // Hidden ancestors trigger ResizeObserver with zero-size geometry. Keep the last
-    // valid viewport while hidden to avoid collapsing and reflowing the prompt on tab restore.
-    if (
-      (!props.active && !allowInactive) ||
-      document.visibilityState === 'hidden' ||
-      element.clientWidth <= 0 ||
-      element.clientHeight <= 0
-    )
-      return;
-    const dimensions = fit.proposeDimensions();
-    if (!dimensions || !Number.isFinite(dimensions.cols) || !Number.isFinite(dimensions.rows)) return;
-    revealBackgroundWhenSized();
-    // Resize through the public API without FitAddon clearing the renderer first.
-    // This keeps the current prompt visible while xterm reflows and the PTY redraws.
-    if (terminal.cols !== dimensions.cols || terminal.rows !== dimensions.rows) {
-      terminal.resize(dimensions.cols, dimensions.rows);
-    }
-    terminalState.replaceGeometry(terminal.cols, terminal.rows);
-    if (wrapper.value && wrapper.value.scrollLeft !== 0) wrapper.value.scrollLeft = 0;
-    if (element.scrollLeft !== 0) element.scrollLeft = 0;
-    if (forceGeometrySync || terminal.cols !== lastColumns || terminal.rows !== lastRows) {
-      forceGeometrySync = false;
-      lastColumns = terminal.cols;
-      lastRows = terminal.rows;
-      void props.channel.resize({ columns: terminal.cols, rows: terminal.rows });
-    }
-    if (device.supportsTouchInteraction.value && mobileTouchSelectionActive) syncMobileSelectionHandles();
-  };
-  // Splitter drags and pane transitions can produce a new size every frame. Fit
-  // once they settle so interactive TUIs do not receive a stream of SIGWINCH redraws.
-  const scheduleContainerResize = () => {
-    if (disposed) return;
-    clearTimeout(geometryResizeTimer);
-    geometryResizeTimer = setTimeout(() => {
-      geometryResizeTimer = undefined;
-      fitAndResize();
-    }, 100);
-  };
-  const scheduleGeometryFit = () => {
-    if (disposed || geometryFrame !== undefined) return;
-    geometryFrame = window.requestAnimationFrame(() => {
-      geometryFrame = undefined;
-      fitAndResize();
-    });
-  };
-  onActivated(() => {
-    viewActive = true;
-    outputWriter.flush();
-    scheduleGeometryFit();
-  });
-  onDeactivated(() => {
-    viewActive = false;
-    resetInteractions();
-    backgroundReady.value = false;
-  });
-  // Browser wakeups and transport recovery need a fresh PTY sync. Ordinary tab switches
-  // only need a measurement, so unchanged geometry does not produce another resize frame.
-  const scheduleGeometrySync = () => {
-    if (disposed) return;
-    forceGeometrySync = true;
-    scheduleGeometryFit();
-  };
-  const onVisibilityChange = () => {
-    outputWriter.flush();
-    if (document.visibilityState === 'visible') scheduleGeometrySync();
-  };
-  const openSearch = () => {
-    if (!canInteract()) return;
-    searchOpen.value = true;
-  };
-  const closeSearch = () => {
-    searchOpen.value = false;
-    searchTerm.value = '';
-    searchAddon?.clearDecorations();
-    terminal?.focus();
-  };
-  const findNext = () => Boolean(searchTerm.value && searchAddon?.findNext(searchTerm.value, { incremental: true }));
-  const findPrevious = () =>
-    Boolean(searchTerm.value && searchAddon?.findPrevious(searchTerm.value, { incremental: true }));
+	const sandboxedCustomHtml = computed(() => {
+		const html = props.visual?.customHtml;
+		if (!html || !props.visual?.backgroundEnabled) return '';
+		const imageOverride = props.visual.backgroundImageUrl
+			? 'html,body{background:transparent!important}body>:not(style):not(script){background-color:transparent!important}'
+			: '';
+		return [
+			`<meta http-equiv="Content-Security-Policy" content="${customHtmlCsp}">`,
+			`<style>${customHtmlBaseStyle}${imageOverride}</style>`,
+			device.isMobile.value || device.hasCoarsePointer.value ? mobileBackgroundRuntime : desktopBackgroundRuntime,
+			html,
+			customHtmlResizeBridge,
+		].join('');
+	});
+	let lastColumns = 0;
+	let lastRows = 0;
+	let geometryFrame: number | undefined;
+	let geometryResizeTimer: ReturnType<typeof setTimeout> | undefined;
+	let forceGeometrySync = false;
 
-  const writeTerminal = (data: string | Uint8Array): Promise<void> =>
-    new Promise((resolve) => {
-      if (!terminal) {
-        resolve();
-        return;
-      }
-      terminal.write(data, resolve);
-    });
+	const revealBackgroundWhenSized = () => {
+		const element = root.value;
+		if (
+			disposed ||
+			!viewActive ||
+			!props.active ||
+			!element?.isConnected ||
+			element.clientWidth <= 0 ||
+			element.clientHeight <= 0
+		)
+			return;
+		backgroundReady.value = true;
+	};
 
-  const outputByteLength = (data: string | Uint8Array): number =>
-    typeof data === 'string' ? historyEncoder.encode(data).byteLength : data.byteLength;
+	watch(
+		[backgroundFrame, sandboxedCustomHtml],
+		([frame, html], _previous, onCleanup) => {
+			if (!frame || !html) return;
 
-  const liveScrollbackLimit = (): number =>
-    pagedHistorySession ? Math.min(props.scrollback, HISTORY_LIVE_SCROLLBACK_LINES) : props.scrollback;
+			const loadWhenSized = () => {
+				if (
+					props.active &&
+					frame.isConnected &&
+					frame.clientWidth > 0 &&
+					frame.clientHeight > 0 &&
+					frame.getAttribute('srcdoc') !== html
+				)
+					frame.srcdoc = html;
+				// Hidden iframes may retain a nonzero internal viewport. The parent
+				// observer supplies the missing visibility transition to the bridge.
+				frame.contentWindow?.postMessage(
+					{ type: 'nexus-background-geometry', visible: frame.clientWidth > 0 && frame.clientHeight > 0 },
+					'*',
+				);
+			};
 
-  const activatePagedHistoryMode = (): boolean => {
-    if (!pagedHistorySession && props.channel.hasPreviousOutput?.()) pagedHistorySession = true;
-    if (pagedHistorySession && terminal && !historyBrowsing && !historyRebuilding) {
-      const limit = liveScrollbackLimit();
-      if (terminal.options.scrollback !== limit) terminal.options.scrollback = limit;
-    }
-    return pagedHistorySession;
-  };
+			const observer = new ResizeObserver(loadWhenSized);
+			observer.observe(frame);
+			frame.addEventListener('load', loadWhenSized);
+			loadWhenSized();
+			onCleanup(() => {
+				observer.disconnect();
+				frame.removeEventListener('load', loadWhenSized);
+			});
+		},
+		{ flush: 'post' },
+	);
 
-  const appendDeferredTerminalOutput = (data: string | Uint8Array): boolean => {
-    const copy = typeof data === 'string' ? data : data.slice();
-    deferredTerminalOutput.push(copy);
-    deferredTerminalOutputBytes += outputByteLength(copy);
-    return deferredTerminalOutputBytes >= HISTORY_DEFERRED_OUTPUT_MAX_BYTES;
-  };
+	const fitAndResize = (allowInactive = false) => {
+		clearTimeout(geometryResizeTimer);
+		geometryResizeTimer = undefined;
+		const element = root.value;
+		if (disposed || !viewActive || !terminal || !fit || !element?.isConnected) return;
+		// Hidden ancestors trigger ResizeObserver with zero-size geometry. Keep the last
+		// valid viewport while hidden to avoid collapsing and reflowing the prompt on tab restore.
+		if (
+			(!props.active && !allowInactive) ||
+			document.visibilityState === 'hidden' ||
+			element.clientWidth <= 0 ||
+			element.clientHeight <= 0
+		)
+			return;
+		const dimensions = fit.proposeDimensions();
+		if (!dimensions || !Number.isFinite(dimensions.cols) || !Number.isFinite(dimensions.rows)) return;
+		revealBackgroundWhenSized();
+		// Resize through the public API without FitAddon clearing the renderer first.
+		// This keeps the current prompt visible while xterm reflows and the PTY redraws.
+		if (terminal.cols !== dimensions.cols || terminal.rows !== dimensions.rows) {
+			terminal.resize(dimensions.cols, dimensions.rows);
+		}
+		terminalState.replaceGeometry(terminal.cols, terminal.rows);
+		if (wrapper.value && wrapper.value.scrollLeft !== 0) wrapper.value.scrollLeft = 0;
+		if (element.scrollLeft !== 0) element.scrollLeft = 0;
+		if (forceGeometrySync || terminal.cols !== lastColumns || terminal.rows !== lastRows) {
+			forceGeometrySync = false;
+			lastColumns = terminal.cols;
+			lastRows = terminal.rows;
+			void props.channel.resize({ columns: terminal.cols, rows: terminal.rows });
+		}
+		if (device.supportsTouchInteraction.value && mobileTouchSelectionActive) syncMobileSelectionHandles();
+	};
 
-  const deferredTerminalOutputReplay = (): string => {
-    const chunks = [...historyReplayingOutput, ...deferredTerminalOutput];
-    if (!chunks.length) return '';
-    const decoder = new TextDecoder();
-    let replay = '';
-    for (const chunk of chunks) {
-      if (typeof chunk === 'string') replay += chunk;
-      else replay += decoder.decode(chunk, { stream: true });
-    }
-    replay += decoder.decode();
-    return replay;
-  };
+	// Splitter drags and pane transitions can produce a new size every frame. Fit
+	// once they settle so interactive TUIs do not receive a stream of SIGWINCH redraws.
+	const scheduleContainerResize = () => {
+		if (disposed) return;
+		clearTimeout(geometryResizeTimer);
+		geometryResizeTimer = setTimeout(() => {
+			geometryResizeTimer = undefined;
+			fitAndResize();
+		}, 100);
+	};
 
-  const liveReplaySnapshot = (): string => {
-    if (!historyBrowsing) {
-      return `${terminal && serializeAddon ? serializeTerminalSnapshot(terminal, serializeAddon) : ''}${runtimeModes?.restoreSuffix() ?? ''}${historyRebuilding ? deferredTerminalOutputReplay() : ''}`;
-    }
-    return `${historyLiveSnapshot}${deferredTerminalOutputReplay()}`;
-  };
+	const scheduleGeometryFit = () => {
+		if (disposed || geometryFrame !== undefined) return;
+		geometryFrame = window.requestAnimationFrame(() => {
+			geometryFrame = undefined;
+			fitAndResize();
+		});
+	};
 
-  const currentHistoryContinuation = (): Uint8Array => {
-    if (!terminal || !serializeAddon) return new Uint8Array();
-    try {
-      const start = terminal.buffer.active.viewportY;
-      const end = Math.min(terminal.buffer.active.length - 1, start + HISTORY_CONTINUATION_ROWS - 1);
-      if (end < start) return new Uint8Array();
-      return historyEncoder.encode(serializeAddon.serialize({ range: { start, end } }));
-    } catch {
-      return new Uint8Array();
-    }
-  };
+	onActivated(() => {
+		viewActive = true;
+		outputWriter.flush();
+		scheduleGeometryFit();
+	});
+	onDeactivated(() => {
+		viewActive = false;
+		resetInteractions();
+		backgroundReady.value = false;
+	});
 
-  const trimHistoryWindowChunks = (chunks: Uint8Array[]): Uint8Array[] => {
-    const result: Uint8Array[] = [];
-    let remaining = HISTORY_WINDOW_MAX_BYTES;
-    for (const chunk of chunks) {
-      if (remaining <= 0 || chunk.byteLength === 0) break;
-      if (chunk.byteLength <= remaining) {
-        result.push(chunk);
-        remaining -= chunk.byteLength;
-        continue;
-      }
-      let end = remaining;
-      const searchStart = Math.max(0, end - 4096);
-      for (let index = end - 1; index >= searchStart; index -= 1) {
-        if (chunk[index] === 0x0a) {
-          end = index + 1;
-          break;
-        }
-      }
-      if (end > 0) result.push(chunk.subarray(0, end));
-      break;
-    }
-    return result;
-  };
+	// Browser wakeups and transport recovery need a fresh PTY sync. Ordinary tab switches
+	// only need a measurement, so unchanged geometry does not produce another resize frame.
+	const scheduleGeometrySync = () => {
+		if (disposed) return;
+		forceGeometrySync = true;
+		scheduleGeometryFit();
+	};
 
-  const rebuildHistoryWindow = async (newPage: Uint8Array): Promise<void> => {
-    if (!terminal || !serializeAddon || newPage.byteLength === 0 || historyRebuilding) return;
-    const generation = historyViewGeneration;
-    const enteringHistory = !historyBrowsing;
-    historyRebuilding = true;
-    try {
-      if (enteringHistory) {
-        // Divert new output while draining xterm's async write queue.
-        // Otherwise a late live write lands in the history buffer.
-        historyEntryTask = outputWriter.drain();
-        await historyEntryTask;
-        if (!terminal || generation !== historyViewGeneration) return;
-        historyLiveSnapshot = `${serializeTerminalSnapshot(
-          terminal,
-          serializeAddon,
-          HISTORY_LIVE_SNAPSHOT_MAX_BYTES,
-        )}${runtimeModes?.restoreSuffix() ?? ''}`;
-        const continuation = currentHistoryContinuation();
-        historyWindowChunks = continuation.byteLength ? [continuation] : [];
-        historyBrowsing = true;
-        pagedHistorySession = true;
-        historyEntryTask = null;
-      }
+	const onVisibilityChange = () => {
+		outputWriter.flush();
+		if (document.visibilityState === 'visible') scheduleGeometrySync();
+	};
 
-      historyWindowChunks = trimHistoryWindowChunks([newPage.slice(), ...historyWindowChunks]);
-      terminal.options.scrollback = HISTORY_WINDOW_SCROLLBACK_LINES;
-      terminal.reset();
-      runtimeModes?.reset();
-      const [pageChunk, ...continuation] = historyWindowChunks;
-      if (pageChunk) await writeTerminal(pageChunk);
-      if (!terminal || generation !== historyViewGeneration) return;
-      const continuationStart = Math.max(0, terminal.buffer.active.baseY + terminal.buffer.active.cursorY);
-      for (const chunk of continuation) {
-        if (generation !== historyViewGeneration) return;
-        await writeTerminal(chunk);
-      }
-      if (!terminal || generation !== historyViewGeneration) return;
-      const anchoredViewportY = Math.max(0, Math.min(terminal.buffer.active.baseY, continuationStart - terminal.rows));
-      terminal.scrollToLine(anchoredViewportY);
-      historyLastViewportY = anchoredViewportY;
-      syncSearchDecorations();
-    } finally {
-      if (generation === historyViewGeneration) {
-        historyEntryTask = null;
-        historyRebuilding = false;
-        if (historyBrowsing && deferredTerminalOutputBytes >= HISTORY_DEFERRED_OUTPUT_MAX_BYTES) {
-          void restoreLatestOutput();
-        }
-      }
-    }
-  };
+	const openSearch = () => {
+		if (!canInteract()) return;
+		searchOpen.value = true;
+	};
 
-  const restoreLatestOutput = (): Promise<void> => {
-    if (disposed) return Promise.resolve();
-    if (historyRestoreTask) return historyRestoreTask;
-    if (historyEntryTask) {
-      const generation = historyViewGeneration;
-      return historyEntryTask.then(() => {
-        if (generation === historyViewGeneration) return restoreLatestOutput();
-      });
-    }
-    if (!historyBrowsing) {
-      cancelPendingHistoryLoad();
-      terminal?.scrollToBottom();
-      return Promise.resolve();
-    }
-    const generation = ++historyViewGeneration;
-    const task = (async () => {
-      if (!terminal) return;
-      historyRebuilding = true;
-      try {
-        // An old history write may still be parsing when scrolling back or typing.
-        // Let it finish before resetting so it cannot contaminate the live snapshot.
-        await writeTerminal('');
-        if (!terminal || generation !== historyViewGeneration) return;
-        const snapshot = historyLiveSnapshot;
-        historyBrowsing = false;
-        historyWindowChunks = [];
-        terminal.options.scrollback = liveScrollbackLimit();
-        terminal.reset();
-        runtimeModes?.reset();
-        if (snapshot) await writeTerminal(snapshot);
-        if (generation !== historyViewGeneration) return;
-        // Reset paging independently; a slow network must not block live output or input.
-        void resetHistoryCursor();
-        while (deferredTerminalOutput.length) {
-          const queued = deferredTerminalOutput.splice(0);
-          historyReplayingOutput = queued;
-          const consumers = deferredOutputConsumers.splice(0);
-          deferredTerminalOutputBytes = 0;
-          while (queued.length) {
-            if (generation !== historyViewGeneration) break;
-            await writeTerminal(queued[0]!);
-            queued.shift();
-          }
-          for (const consumed of consumers) consumed();
-          if (generation !== historyViewGeneration) return;
-        }
-        historyLiveSnapshot = '';
-        if (generation === historyViewGeneration) {
-          terminal.scrollToBottom();
-          historyLastViewportY = terminal.buffer.active.viewportY;
-          syncSearchDecorations();
-        }
-      } finally {
-        if (generation === historyViewGeneration) historyRebuilding = false;
-      }
-    })().finally(() => {
-      if (historyRestoreTask === task) historyRestoreTask = null;
-    });
-    historyRestoreTask = task;
-    return task;
-  };
+	const closeSearch = () => {
+		searchOpen.value = false;
+		searchTerm.value = '';
+		searchAddon?.clearDecorations();
+		terminal?.focus();
+	};
 
-  const resetHistoryCursor = (): Promise<boolean> => {
-    if (historyCursorResetTask) return historyCursorResetTask;
-    const task = (props.channel.resetPreviousOutput?.() ?? Promise.resolve(false))
-      .catch(() => false)
-      .finally(() => {
-        if (historyCursorResetTask === task) historyCursorResetTask = null;
-      });
-    historyCursorResetTask = task;
-    return task;
-  };
-  const cancelPendingHistoryLoad = (): void => {
-    if (!historyLoading || historyBrowsing || historyRebuilding) return;
-    historyViewGeneration += 1;
-    void resetHistoryCursor();
-  };
+	const findNext = () => Boolean(searchTerm.value && searchAddon?.findNext(searchTerm.value, { incremental: true }));
 
-  const loadPreviousOutput = async (): Promise<void> => {
-    if (disposed || historyLoading || historyRebuilding || !props.channel.loadPreviousOutput) return;
-    activatePagedHistoryMode();
-    const generation = historyViewGeneration;
-    const remotePtyGeneration = terminalState.remotePtyGeneration.value;
-    historyLoading = true;
-    try {
-      if (historyCursorResetTask) await historyCursorResetTask;
-      if (generation !== historyViewGeneration || !props.channel.hasPreviousOutput?.()) return;
-      const pageBytes = Math.max(16 * 1024, Math.min(64 * 1024, (terminal?.cols ?? 80) * (terminal?.rows ?? 24) * 8));
-      const page = await props.channel.loadPreviousOutput(pageBytes);
-      if (generation !== historyViewGeneration) return;
-      if (page?.data.byteLength) await rebuildHistoryWindow(page.data);
-    } catch {
-      // Lazy history is auxiliary. A failed historical-page fetch must never tear down an
-      // otherwise healthy resumed terminal.
-    } finally {
-      if (remotePtyGeneration === terminalState.remotePtyGeneration.value) historyLoading = false;
-    }
-  };
+	const findPrevious = () =>
+		Boolean(searchTerm.value && searchAddon?.findPrevious(searchTerm.value, { incremental: true }));
 
-  const historyLoadThreshold = (): number => Math.max(4, Math.ceil((terminal?.rows ?? 24) * 0.2));
-  const remoteMouseReportingActive = (): boolean => terminal?.modes.mouseTrackingMode !== 'none';
-  let clipboardGestureAt = -Infinity;
-  const canInteract = (): boolean => !disposed && viewActive && props.active && Boolean(root.value?.isConnected);
-  const isCurrentInteraction = (generation: number, target: Terminal | undefined): boolean =>
-    canInteract() && generation === interactionGeneration && Boolean(target) && terminal === target;
-  const recordClipboardGesture = (): void => {
-    if (canInteract() && props.inputEnabled) clipboardGestureAt = performance.now();
-  };
-  const copySelection = async () => {
-    if (terminal?.hasSelection()) await writeClipboardText(terminal.getSelection());
-  };
-  const localClipboardGesture = (event: MouseEvent): boolean => event.shiftKey || Boolean(terminal?.hasSelection());
-  const handleLocalSelectionMouseMove = (event: MouseEvent): void => {
-    // xterm bypasses reporting for Shift + mousedown, but not hover/move.
-    if (!event.buttons && remoteMouseReportingActive() && localClipboardGesture(event)) event.stopPropagation();
-  };
-  const paste = async () => {
-    if (!canInteract() || !props.inputEnabled) return false;
-    const generation = interactionGeneration;
-    const target = terminal;
-    const text = await navigator.clipboard.readText();
-    if (!text || !props.inputEnabled || !isCurrentInteraction(generation, target)) return false;
-    target?.paste(text.replace(/\r\n?/g, '\n'));
-    return true;
-  };
-  const selectAll = () => terminal?.selectAll();
-  const clearTerminal = () => {
-    if (disposed) return;
-    const generation = interactionGeneration;
-    const target = terminal;
-    // Clear xterm's local buffer without injecting ANSI erase/cursor sequences. The remote PTY/readline
-    // does not observe locally-written control codes, so moving the local cursor independently can corrupt later redraws.
-    if (historyBrowsing || historyRebuilding) {
-      void restoreLatestOutput().then(() => {
-        if (isCurrentInteraction(generation, target)) target?.clear();
-      });
-      return;
-    }
-    cancelPendingHistoryLoad();
-    terminal?.clear();
-  };
+	const writeTerminal = (data: string | Uint8Array): Promise<void> =>
+		new Promise((resolve) => {
+			if (!terminal) {
+				resolve();
+				return;
+			}
+			terminal.write(data, resolve);
+		});
 
-  watch(
-    terminalState.remotePtyGeneration,
-    () => {
-      resetInteractions();
-      outputWriter.discard();
-      deferredTerminalOutput.length = 0;
-      historyReplayingOutput = [];
-      deferredTerminalOutputBytes = 0;
-      historyViewGeneration += 1;
-      historyLoading = false;
-      historyRebuilding = false;
-      historyBrowsing = false;
-      pagedHistorySession = false;
-      historyLiveSnapshot = '';
-      historyWindowChunks = [];
-      historyRestoreTask = null;
-      historyEntryTask = null;
-      historyCursorResetTask = null;
-      historyLastViewportY = 0;
-      for (const consumed of deferredOutputConsumers.splice(0)) consumed();
-      if (terminal) {
-        terminal.options.scrollback = props.scrollback;
-        terminal.write(RESET_REMOTE_PTY_DISPLAY, () => {
-          runtimeModes?.reset();
-          syncSearchDecorations();
-        });
-      }
-    },
-    { flush: 'sync' },
-  );
+	const outputByteLength = (data: string | Uint8Array): number =>
+		typeof data === 'string' ? historyEncoder.encode(data).byteLength : data.byteLength;
 
-  const MOBILE_LONG_PRESS_DELAY = 520;
-  const MOBILE_LONG_PRESS_MOVE_TOLERANCE = 12;
-  const mobileClipboardMenu = ref({ visible: false, x: 0, y: 0, hasSelection: false });
-  const mobileSelectionHandles = ref({
-    visible: false,
-    startVisible: false,
-    endVisible: false,
-    start: { x: 0, y: 0 },
-    end: { x: 0, y: 0 },
-  });
-  let mobileLongPressTimer: number | null = null;
-  let mobileLongPressStart: { x: number; y: number } | null = null;
-  let mobileLongPressTriggered = false;
-  let mobileTouchMoved = false;
-  let mobileGestureHadMultipleTouches = false;
-  let mobileTouchScrollActive = false;
-  let mobileTouchScrollLastY: number | null = null;
-  let mobileTouchScrollRemainder = 0;
-  let mobileSelectionLastPoint: { x: number; y: number } | null = null;
-  let mobileTouchSelectionActive = false;
-  let mobileKeyboardRestoreState: { readOnly: boolean; inputMode: string | null } | null = null;
-  let suppressMobileContextMenuUntil = 0;
-  let mobileSelectionBaseRange: { startColumn: number; startRow: number; endColumn: number; endRow: number } | null =
-    null;
-  let mobileSelectionHandleDrag: {
-    pointerId: number;
-    anchorBoundary: number;
-    lastClientX: number;
-    lastClientY: number;
-  } | null = null;
+	const liveScrollbackLimit = (): number =>
+		pagedHistorySession ? Math.min(props.scrollback, HISTORY_LIVE_SCROLLBACK_LINES) : props.scrollback;
 
-  const clearMobileLongPressTimer = (): void => {
-    if (mobileLongPressTimer === null) return;
-    window.clearTimeout(mobileLongPressTimer);
-    mobileLongPressTimer = null;
-  };
+	const activatePagedHistoryMode = (): boolean => {
+		if (!pagedHistorySession && props.channel.hasPreviousOutput?.()) pagedHistorySession = true;
+		if (pagedHistorySession && terminal && !historyBrowsing && !historyRebuilding) {
+			const limit = liveScrollbackLimit();
+			if (terminal.options.scrollback !== limit) terminal.options.scrollback = limit;
+		}
+		return pagedHistorySession;
+	};
 
-  const resetMobileTouchScroll = (): void => {
-    mobileTouchScrollActive = false;
-    mobileTouchScrollLastY = null;
-    mobileTouchScrollRemainder = 0;
-  };
+	const appendDeferredTerminalOutput = (data: string | Uint8Array): boolean => {
+		const copy = typeof data === 'string' ? data : data.slice();
+		deferredTerminalOutput.push(copy);
+		deferredTerminalOutputBytes += outputByteLength(copy);
+		return deferredTerminalOutputBytes >= HISTORY_DEFERRED_OUTPUT_MAX_BYTES;
+	};
 
-  const terminalTouchRowHeight = (): number => {
-    const rows = Math.max(1, terminal?.rows ?? 24);
-    const screenHeight = root.value?.querySelector<HTMLElement>('.xterm-screen')?.getBoundingClientRect().height ?? 0;
-    const fallbackHeight = root.value?.getBoundingClientRect().height ?? 0;
-    return Math.max(1, (screenHeight || fallbackHeight || rows * 16) / rows);
-  };
+	const deferredTerminalOutputReplay = (): string => {
+		const chunks = [...historyReplayingOutput, ...deferredTerminalOutput];
+		if (!chunks.length) return '';
+		const decoder = new TextDecoder();
+		let replay = '';
+		for (const chunk of chunks) {
+			if (typeof chunk === 'string') replay += chunk;
+			else replay += decoder.decode(chunk, { stream: true });
+		}
+		replay += decoder.decode();
+		return replay;
+	};
 
-  const scrollTerminalFromMobileDrag = (deltaPixels: number, clientX: number, clientY: number): void => {
-    if (!terminal || !Number.isFinite(deltaPixels) || deltaPixels === 0) return;
-    mobileTouchScrollRemainder += deltaPixels;
-    const rowHeight = terminalTouchRowHeight();
-    const lines =
-      mobileTouchScrollRemainder > 0
-        ? Math.floor(mobileTouchScrollRemainder / rowHeight)
-        : Math.ceil(mobileTouchScrollRemainder / rowHeight);
-    if (lines === 0) return;
-    mobileTouchScrollRemainder -= lines * rowHeight;
-    if (terminal.buffer.active.type === 'alternate' || terminal.element?.classList.contains('enable-mouse-events')) {
-      for (let index = 0; index < Math.abs(lines); index += 1) {
-        terminal.element?.dispatchEvent(
-          new WheelEvent('wheel', {
-            bubbles: true,
-            cancelable: true,
-            clientX,
-            clientY,
-            deltaMode: WheelEvent.DOM_DELTA_LINE,
-            deltaY: Math.sign(lines),
-          }),
-        );
-      }
-      return;
-    }
-    terminal.scrollLines(lines);
-    if (lines < 0 && terminal.buffer.active.viewportY <= historyLoadThreshold()) void loadPreviousOutput();
-  };
+	const liveReplaySnapshot = (): string => {
+		if (!historyBrowsing) {
+			return `${terminal && serializeAddon ? serializeTerminalSnapshot(terminal, serializeAddon) : ''}${runtimeModes?.restoreSuffix() ?? ''}${historyRebuilding ? deferredTerminalOutputReplay() : ''}`;
+		}
+		return `${historyLiveSnapshot}${deferredTerminalOutputReplay()}`;
+	};
 
-  const suppressMobileSoftKeyboard = (): void => {
-    if (!device.supportsTouchInteraction.value || !terminal?.textarea) return;
-    const textarea = terminal.textarea;
-    if (!mobileKeyboardRestoreState) {
-      mobileKeyboardRestoreState = {
-        readOnly: textarea.readOnly,
-        inputMode: textarea.getAttribute('inputmode'),
-      };
-    }
-    textarea.readOnly = true;
-    textarea.setAttribute('inputmode', 'none');
-    terminal.blur();
-    textarea.blur();
-  };
+	const currentHistoryContinuation = (): Uint8Array => {
+		if (!terminal || !serializeAddon) return new Uint8Array();
+		try {
+			const start = terminal.buffer.active.viewportY;
+			const end = Math.min(terminal.buffer.active.length - 1, start + HISTORY_CONTINUATION_ROWS - 1);
+			if (end < start) return new Uint8Array();
+			return historyEncoder.encode(serializeAddon.serialize({ range: { start, end } }));
+		} catch {
+			return new Uint8Array();
+		}
+	};
 
-  const restoreMobileSoftKeyboard = (focus = false): void => {
-    const textarea = terminal?.textarea;
-    const restore = mobileKeyboardRestoreState;
-    if (textarea && restore) {
-      terminal?.blur();
-      textarea.blur();
-      textarea.readOnly = restore.readOnly;
-      if (restore.inputMode === null) textarea.removeAttribute('inputmode');
-      else textarea.setAttribute('inputmode', restore.inputMode);
-    }
-    mobileKeyboardRestoreState = null;
-    if (focus) terminal?.focus();
-  };
+	const trimHistoryWindowChunks = (chunks: Uint8Array[]): Uint8Array[] => {
+		const result: Uint8Array[] = [];
+		let remaining = HISTORY_WINDOW_MAX_BYTES;
+		for (const chunk of chunks) {
+			if (remaining <= 0 || chunk.byteLength === 0) break;
+			if (chunk.byteLength <= remaining) {
+				result.push(chunk);
+				remaining -= chunk.byteLength;
+				continue;
+			}
+			let end = remaining;
+			const searchStart = Math.max(0, end - 4096);
+			for (let index = end - 1; index >= searchStart; index -= 1) {
+				if (chunk[index] === 0x0a) {
+					end = index + 1;
+					break;
+				}
+			}
+			if (end > 0) result.push(chunk.subarray(0, end));
+			break;
+		}
+		return result;
+	};
 
-  const hideMobileSelectionHandles = (): void => {
-    mobileSelectionHandles.value.visible = false;
-    mobileSelectionHandles.value.startVisible = false;
-    mobileSelectionHandles.value.endVisible = false;
-    mobileSelectionHandleDrag = null;
-  };
+	const rebuildHistoryWindow = async (newPage: Uint8Array): Promise<void> => {
+		if (!terminal || !serializeAddon || newPage.byteLength === 0 || historyRebuilding) return;
+		const generation = historyViewGeneration;
+		const enteringHistory = !historyBrowsing;
+		historyRebuilding = true;
+		try {
+			if (enteringHistory) {
+				// Divert new output while draining xterm's async write queue.
+				// Otherwise a late live write lands in the history buffer.
+				historyEntryTask = outputWriter.drain();
+				await historyEntryTask;
+				if (!terminal || generation !== historyViewGeneration) return;
+				historyLiveSnapshot = `${serializeTerminalSnapshot(
+					terminal,
+					serializeAddon,
+					HISTORY_LIVE_SNAPSHOT_MAX_BYTES,
+				)}${runtimeModes?.restoreSuffix() ?? ''}`;
+				const continuation = currentHistoryContinuation();
+				historyWindowChunks = continuation.byteLength ? [continuation] : [];
+				historyBrowsing = true;
+				pagedHistorySession = true;
+				historyEntryTask = null;
+			}
 
-  const closeMobileClipboardMenu = (clearSelection = false): void => {
-    mobileClipboardMenu.value.visible = false;
-    if (!clearSelection) return;
-    terminal?.clearSelection();
-    mobileSelectionBaseRange = null;
-    mobileTouchSelectionActive = false;
-    hideMobileSelectionHandles();
-  };
+			historyWindowChunks = trimHistoryWindowChunks([newPage.slice(), ...historyWindowChunks]);
+			terminal.options.scrollback = HISTORY_WINDOW_SCROLLBACK_LINES;
+			terminal.reset();
+			runtimeModes?.reset();
+			const [pageChunk, ...continuation] = historyWindowChunks;
+			if (pageChunk) await writeTerminal(pageChunk);
+			if (!terminal || generation !== historyViewGeneration) return;
+			const continuationStart = Math.max(0, terminal.buffer.active.baseY + terminal.buffer.active.cursorY);
+			for (const chunk of continuation) {
+				if (generation !== historyViewGeneration) return;
+				await writeTerminal(chunk);
+			}
+			if (!terminal || generation !== historyViewGeneration) return;
+			const anchoredViewportY = Math.max(
+				0,
+				Math.min(terminal.buffer.active.baseY, continuationStart - terminal.rows),
+			);
+			terminal.scrollToLine(anchoredViewportY);
+			historyLastViewportY = anchoredViewportY;
+			syncSearchDecorations();
+		} finally {
+			if (generation === historyViewGeneration) {
+				historyEntryTask = null;
+				historyRebuilding = false;
+				if (historyBrowsing && deferredTerminalOutputBytes >= HISTORY_DEFERRED_OUTPUT_MAX_BYTES) {
+					void restoreLatestOutput();
+				}
+			}
+		}
+	};
 
-  const getTerminalCellAtPoint = (clientX: number, clientY: number) => {
-    if (!terminal?.element) return null;
-    const screen = terminal.element.querySelector<HTMLElement>('.xterm-screen');
-    if (!screen) return null;
-    const rect = screen.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0 || terminal.cols <= 0 || terminal.rows <= 0) return null;
-    const column = Math.max(
-      0,
-      Math.min(terminal.cols - 1, Math.floor((clientX - rect.left) / (rect.width / terminal.cols))),
-    );
-    const viewportRow = Math.max(
-      0,
-      Math.min(terminal.rows - 1, Math.floor((clientY - rect.top) / (rect.height / terminal.rows))),
-    );
-    return { column, bufferRow: terminal.buffer.active.viewportY + viewportRow };
-  };
+	const restoreLatestOutput = (): Promise<void> => {
+		if (disposed) return Promise.resolve();
+		if (historyRestoreTask) return historyRestoreTask;
+		if (historyEntryTask) {
+			const generation = historyViewGeneration;
+			return historyEntryTask.then(() => {
+				if (generation === historyViewGeneration) return restoreLatestOutput();
+			});
+		}
+		if (!historyBrowsing) {
+			cancelPendingHistoryLoad();
+			terminal?.scrollToBottom();
+			return Promise.resolve();
+		}
+		const generation = ++historyViewGeneration;
+		const task = (async () => {
+			if (!terminal) return;
+			historyRebuilding = true;
+			try {
+				// An old history write may still be parsing when scrolling back or typing.
+				// Let it finish before resetting so it cannot contaminate the live snapshot.
+				await writeTerminal('');
+				if (!terminal || generation !== historyViewGeneration) return;
+				const snapshot = historyLiveSnapshot;
+				historyBrowsing = false;
+				historyWindowChunks = [];
+				terminal.options.scrollback = liveScrollbackLimit();
+				terminal.reset();
+				runtimeModes?.reset();
+				if (snapshot) await writeTerminal(snapshot);
+				if (generation !== historyViewGeneration) return;
+				// Reset paging independently; a slow network must not block live output or input.
+				void resetHistoryCursor();
+				while (deferredTerminalOutput.length) {
+					const queued = deferredTerminalOutput.splice(0);
+					historyReplayingOutput = queued;
+					const consumers = deferredOutputConsumers.splice(0);
+					deferredTerminalOutputBytes = 0;
+					while (queued.length) {
+						if (generation !== historyViewGeneration) break;
+						await writeTerminal(queued[0]!);
+						queued.shift();
+					}
+					for (const consumed of consumers) consumed();
+					if (generation !== historyViewGeneration) return;
+				}
+				historyLiveSnapshot = '';
+				if (generation === historyViewGeneration) {
+					terminal.scrollToBottom();
+					historyLastViewportY = terminal.buffer.active.viewportY;
+					syncSearchDecorations();
+				}
+			} finally {
+				if (generation === historyViewGeneration) historyRebuilding = false;
+			}
+		})().finally(() => {
+			if (historyRestoreTask === task) historyRestoreTask = null;
+		});
+		historyRestoreTask = task;
+		return task;
+	};
 
-  const selectTerminalWordAtPoint = (clientX: number, clientY: number): boolean => {
-    if (!terminal) return false;
-    const position = getTerminalCellAtPoint(clientX, clientY);
-    if (!position) return false;
-    const line = terminal.buffer.active.getLine(position.bufferRow);
-    if (!line) return false;
-    const hasText = (column: number): boolean => {
-      const chars = line.getCell(column)?.getChars() ?? '';
-      return chars.length > 0 && !/^\s+$/u.test(chars);
-    };
-    let selectedColumn = position.column;
-    while (selectedColumn > 0 && !hasText(selectedColumn) && line.getCell(selectedColumn)?.getWidth() === 0) {
-      selectedColumn -= 1;
-    }
-    if (!hasText(selectedColumn)) {
-      terminal.selectLines(position.bufferRow, position.bufferRow);
-      return terminal.hasSelection();
-    }
-    let startColumn = selectedColumn;
-    let endColumn = selectedColumn;
-    while (startColumn > 0 && hasText(startColumn - 1)) startColumn -= 1;
-    while (endColumn + 1 < terminal.cols && hasText(endColumn + 1)) endColumn += 1;
-    terminal.select(startColumn, position.bufferRow, endColumn - startColumn + 1);
-    return terminal.hasSelection();
-  };
+	const resetHistoryCursor = (): Promise<boolean> => {
+		if (historyCursorResetTask) return historyCursorResetTask;
+		const task = (props.channel.resetPreviousOutput?.() ?? Promise.resolve(false))
+			.catch(() => false)
+			.finally(() => {
+				if (historyCursorResetTask === task) historyCursorResetTask = null;
+			});
+		historyCursorResetTask = task;
+		return task;
+	};
 
-  const captureMobileSelectionBaseRange = (): void => {
-    const range = terminal?.getSelectionPosition();
-    mobileSelectionBaseRange = range
-      ? {
-          startColumn: range.start.x,
-          startRow: range.start.y,
-          endColumn: range.end.x,
-          endRow: range.end.y,
-        }
-      : null;
-  };
+	const cancelPendingHistoryLoad = (): void => {
+		if (!historyLoading || historyBrowsing || historyRebuilding) return;
+		historyViewGeneration += 1;
+		void resetHistoryCursor();
+	};
 
-  const syncMobileSelectionHandles = (): void => {
-    if (!device.supportsTouchInteraction.value) return;
-    if (!terminal || !wrapper.value || !mobileTouchSelectionActive || !terminal.hasSelection()) {
-      hideMobileSelectionHandles();
-      return;
-    }
-    const range = terminal.getSelectionPosition();
-    const screen = terminal.element?.querySelector<HTMLElement>('.xterm-screen');
-    if (!range || !screen) {
-      hideMobileSelectionHandles();
-      return;
-    }
-    const screenRect = screen.getBoundingClientRect();
-    const wrapperRect = wrapper.value.getBoundingClientRect();
-    if (screenRect.width <= 0 || screenRect.height <= 0 || terminal.cols <= 0 || terminal.rows <= 0) {
-      hideMobileSelectionHandles();
-      return;
-    }
-    const cellWidth = screenRect.width / terminal.cols;
-    const cellHeight = screenRect.height / terminal.rows;
-    const viewportY = terminal.buffer.active.viewportY;
-    const startViewportRow = range.start.y - viewportY;
-    const endViewportRow = range.end.y - viewportY;
-    const radius = 15;
-    const point = (column: number, row: number) => ({
-      x: Math.max(
-        radius,
-        Math.min(wrapperRect.width - radius, screenRect.left - wrapperRect.left + column * cellWidth),
-      ),
-      y: Math.max(
-        radius,
-        Math.min(wrapperRect.height - radius, screenRect.top - wrapperRect.top + (row + 1) * cellHeight),
-      ),
-    });
-    mobileSelectionHandles.value = {
-      visible: true,
-      startVisible: startViewportRow >= 0 && startViewportRow < terminal.rows,
-      endVisible: endViewportRow >= 0 && endViewportRow < terminal.rows,
-      start: point(range.start.x, startViewportRow),
-      end: point(range.end.x, endViewportRow),
-    };
-  };
+	const loadPreviousOutput = async (): Promise<void> => {
+		if (disposed || historyLoading || historyRebuilding || !props.channel.loadPreviousOutput) return;
+		activatePagedHistoryMode();
+		const generation = historyViewGeneration;
+		const remotePtyGeneration = terminalState.remotePtyGeneration.value;
+		historyLoading = true;
+		try {
+			if (historyCursorResetTask) await historyCursorResetTask;
+			if (generation !== historyViewGeneration || !props.channel.hasPreviousOutput?.()) return;
+			const pageBytes = Math.max(
+				16 * 1024,
+				Math.min(64 * 1024, (terminal?.cols ?? 80) * (terminal?.rows ?? 24) * 8),
+			);
+			const page = await props.channel.loadPreviousOutput(pageBytes);
+			if (generation !== historyViewGeneration) return;
+			if (page?.data.byteLength) await rebuildHistoryWindow(page.data);
+		} catch {
+			// Lazy history is auxiliary. A failed historical-page fetch must never tear down an
+			// otherwise healthy resumed terminal.
+		} finally {
+			if (remotePtyGeneration === terminalState.remotePtyGeneration.value) historyLoading = false;
+		}
+	};
 
-  const scheduleMobileSelectionSync = (): void => {
-    if (!device.supportsTouchInteraction.value || !mobileTouchSelectionActive || mobileSelectionSyncFrame !== null)
-      return;
-    mobileSelectionSyncFrame = window.requestAnimationFrame(() => {
-      mobileSelectionSyncFrame = null;
-      syncMobileSelectionHandles();
-    });
-  };
+	const historyLoadThreshold = (): number => Math.max(4, Math.ceil((terminal?.rows ?? 24) * 0.2));
 
-  const selectMobileRange = (startBoundary: number, endBoundary: number): void => {
-    if (!terminal) return;
-    const columns = terminal.cols;
-    const startRow = Math.floor(startBoundary / columns);
-    const startColumn = startBoundary % columns;
-    terminal.select(startColumn, startRow, Math.max(1, endBoundary - startBoundary));
-    captureMobileSelectionBaseRange();
-    mobileClipboardMenu.value.hasSelection = terminal.hasSelection();
-    syncMobileSelectionHandles();
-  };
+	const remoteMouseReportingActive = (): boolean => terminal?.modes.mouseTrackingMode !== 'none';
 
-  const updateMobileSelectionToPoint = (clientX: number, clientY: number): void => {
-    if (!terminal || !mobileSelectionBaseRange) return;
-    const position = getTerminalCellAtPoint(clientX, clientY);
-    if (!position) return;
-    let targetColumn = position.column;
-    const line = terminal.buffer.active.getLine(position.bufferRow);
-    while (targetColumn > 0 && line?.getCell(targetColumn)?.getWidth() === 0) targetColumn -= 1;
-    const columns = terminal.cols;
-    const baseStart = mobileSelectionBaseRange.startRow * columns + mobileSelectionBaseRange.startColumn;
-    const baseEnd = mobileSelectionBaseRange.endRow * columns + mobileSelectionBaseRange.endColumn;
-    const target = position.bufferRow * columns + targetColumn;
-    const selectionStart = target < baseStart ? target : baseStart;
-    const selectionEnd = target < baseStart ? baseEnd : Math.max(baseEnd, target + 1);
-    terminal.select(
-      selectionStart % columns,
-      Math.floor(selectionStart / columns),
-      Math.max(1, selectionEnd - selectionStart),
-    );
-    mobileClipboardMenu.value.hasSelection = terminal.hasSelection();
-    syncMobileSelectionHandles();
-  };
+	let clipboardGestureAt = -Infinity;
 
-  const openMobileClipboardMenu = (clientX: number, clientY: number): void => {
-    if (!wrapper.value || !terminal) return;
-    const rect = wrapper.value.getBoundingClientRect();
-    const width = 190;
-    mobileClipboardMenu.value = {
-      visible: true,
-      x: Math.max(8, Math.min(rect.width - width - 8, clientX - rect.left - width / 2)),
-      y: Math.max(8, Math.min(rect.height - 52, clientY - rect.top - 58)),
-      hasSelection: terminal.hasSelection(),
-    };
-  };
+	const canInteract = (): boolean => !disposed && viewActive && props.active && Boolean(root.value?.isConnected);
 
-  const triggerMobileLongPress = (clientX: number, clientY: number): void => {
-    if (!terminal || !device.supportsTouchInteraction.value) return;
-    resetMobileTouchScroll();
-    mobileLongPressTriggered = true;
-    mobileTouchSelectionActive = true;
-    suppressMobileContextMenuUntil = Date.now() + 1200;
-    suppressMobileSoftKeyboard();
-    selectTerminalWordAtPoint(clientX, clientY);
-    captureMobileSelectionBaseRange();
-    syncMobileSelectionHandles();
-    mobileSelectionLastPoint = { x: clientX, y: clientY };
-    mobileClipboardMenu.value.visible = false;
-    navigator.vibrate?.(12);
-  };
+	const isCurrentInteraction = (generation: number, target: Terminal | undefined): boolean =>
+		canInteract() && generation === interactionGeneration && Boolean(target) && terminal === target;
 
-  const handleSelectionHandlePointerDown = (handle: 'start' | 'end', event: PointerEvent): void => {
-    if (!terminal?.hasSelection()) return;
-    const range = terminal.getSelectionPosition();
-    if (!range) return;
-    event.preventDefault();
-    event.stopPropagation();
-    suppressMobileContextMenuUntil = Date.now() + 1200;
-    mobileClipboardMenu.value.visible = false;
-    suppressMobileSoftKeyboard();
-    const columns = terminal.cols;
-    mobileSelectionHandleDrag = {
-      pointerId: event.pointerId,
-      anchorBoundary:
-        handle === 'start' ? range.end.y * columns + range.end.x : range.start.y * columns + range.start.x,
-      lastClientX: event.clientX,
-      lastClientY: event.clientY,
-    };
-    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
-  };
+	const recordClipboardGesture = (): void => {
+		if (canInteract() && props.inputEnabled) clipboardGestureAt = performance.now();
+	};
 
-  const handleSelectionHandlePointerMove = (event: PointerEvent): void => {
-    if (!terminal || !mobileSelectionHandleDrag || mobileSelectionHandleDrag.pointerId !== event.pointerId) return;
-    const position = getTerminalCellAtPoint(event.clientX, event.clientY);
-    if (!position) return;
-    event.preventDefault();
-    event.stopPropagation();
-    let targetColumn = position.column;
-    const line = terminal.buffer.active.getLine(position.bufferRow);
-    while (targetColumn > 0 && line?.getCell(targetColumn)?.getWidth() === 0) targetColumn -= 1;
-    const target = position.bufferRow * terminal.cols + targetColumn;
-    const anchor = mobileSelectionHandleDrag.anchorBoundary;
-    mobileSelectionHandleDrag.lastClientX = event.clientX;
-    mobileSelectionHandleDrag.lastClientY = event.clientY;
-    if (target < anchor) selectMobileRange(target, anchor);
-    else selectMobileRange(anchor, target + 1);
-  };
+	const copySelection = async () => {
+		if (terminal?.hasSelection()) await writeClipboardText(terminal.getSelection());
+	};
 
-  const finishSelectionHandleDrag = (event: PointerEvent): void => {
-    const drag = mobileSelectionHandleDrag;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const element = event.currentTarget as HTMLElement;
-    if (element.hasPointerCapture?.(event.pointerId)) element.releasePointerCapture(event.pointerId);
-    const point =
-      event.type === 'pointerup'
-        ? { x: event.clientX, y: event.clientY }
-        : { x: drag.lastClientX, y: drag.lastClientY };
-    mobileSelectionHandleDrag = null;
-    suppressMobileContextMenuUntil = Date.now() + 800;
-    syncMobileSelectionHandles();
-    openMobileClipboardMenu(point.x, point.y);
-  };
+	const localClipboardGesture = (event: MouseEvent): boolean => event.shiftKey || Boolean(terminal?.hasSelection());
 
-  const copyMobileSelection = async (): Promise<void> => {
-    await copySelection();
-    mobileTouchSelectionActive = false;
-    hideMobileSelectionHandles();
-    mobileClipboardMenu.value.visible = false;
-    restoreMobileSoftKeyboard(false);
-  };
+	const handleLocalSelectionMouseMove = (event: MouseEvent): void => {
+		// xterm bypasses reporting for Shift + mousedown, but not hover/move.
+		if (!event.buttons && remoteMouseReportingActive() && localClipboardGesture(event)) event.stopPropagation();
+	};
 
-  const pasteMobileClipboard = async (): Promise<void> => {
-    if (!(await paste())) return;
-    terminal?.clearSelection();
-    mobileTouchSelectionActive = false;
-    hideMobileSelectionHandles();
-    mobileClipboardMenu.value.visible = false;
-    restoreMobileSoftKeyboard(true);
-  };
+	const paste = async () => {
+		if (!canInteract() || !props.inputEnabled) return false;
+		const generation = interactionGeneration;
+		const target = terminal;
+		const text = await navigator.clipboard.readText();
+		if (!text || !props.inputEnabled || !isCurrentInteraction(generation, target)) return false;
+		target?.paste(text.replace(/\r\n?/g, '\n'));
+		return true;
+	};
 
-  const selectAllMobile = (): void => {
-    terminal?.selectAll();
-    mobileTouchSelectionActive = true;
-    captureMobileSelectionBaseRange();
-    mobileClipboardMenu.value.hasSelection = terminal?.hasSelection() ?? false;
-    syncMobileSelectionHandles();
-  };
+	const selectAll = () => terminal?.selectAll();
 
-  const handleDocumentPointerDown = (event: PointerEvent): void => {
-    if (!mobileClipboardMenu.value.visible) return;
-    const target = event.target;
-    if (
-      target instanceof Element &&
-      target.closest('.mobile-terminal-clipboard-menu, .mobile-terminal-selection-handle')
-    )
-      return;
-    closeMobileClipboardMenu(true);
-    restoreMobileSoftKeyboard(false);
-  };
+	const clearTerminal = () => {
+		if (disposed) return;
+		const generation = interactionGeneration;
+		const target = terminal;
+		// Clear xterm's local buffer without injecting ANSI erase/cursor sequences. The remote PTY/readline
+		// does not observe locally-written control codes, so moving the local cursor independently can corrupt later redraws.
+		if (historyBrowsing || historyRebuilding) {
+			void restoreLatestOutput().then(() => {
+				if (isCurrentInteraction(generation, target)) target?.clear();
+			});
+			return;
+		}
+		cancelPendingHistoryLoad();
+		terminal?.clear();
+	};
 
-  const handleContextMenu = async (event: MouseEvent): Promise<void> => {
-    if (device.supportsTouchInteraction.value) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (Date.now() < suppressMobileContextMenuUntil || mobileClipboardMenu.value.visible) return;
-      mobileTouchSelectionActive = true;
-      suppressMobileSoftKeyboard();
-      selectTerminalWordAtPoint(event.clientX, event.clientY);
-      captureMobileSelectionBaseRange();
-      syncMobileSelectionHandles();
-      openMobileClipboardMenu(event.clientX, event.clientY);
-      return;
-    }
-    if (remoteMouseReportingActive() && !event.shiftKey) {
-      // Preserve the application's right-button input without a browser menu overlay.
-      event.preventDefault();
-      return;
-    }
-    if (!props.rightClickCopyPaste) return;
-    event.preventDefault();
-    if (terminal?.hasSelection()) {
-      const generation = interactionGeneration;
-      const target = terminal;
-      try {
-        await copySelection();
-        if (isCurrentInteraction(generation, target)) {
-          target?.clearSelection();
-          target?.focus();
-        }
-      } catch {
-        // Clipboard availability is browser-controlled.
-      }
-      return;
-    }
-    try {
-      if (await paste()) terminal?.focus();
-    } catch {
-      // Clipboard permissions are browser-controlled.
-    }
-  };
+	watch(
+		terminalState.remotePtyGeneration,
+		() => {
+			resetInteractions();
+			outputWriter.discard();
+			deferredTerminalOutput.length = 0;
+			historyReplayingOutput = [];
+			deferredTerminalOutputBytes = 0;
+			historyViewGeneration += 1;
+			historyLoading = false;
+			historyRebuilding = false;
+			historyBrowsing = false;
+			pagedHistorySession = false;
+			historyLiveSnapshot = '';
+			historyWindowChunks = [];
+			historyRestoreTask = null;
+			historyEntryTask = null;
+			historyCursorResetTask = null;
+			historyLastViewportY = 0;
+			for (const consumed of deferredOutputConsumers.splice(0)) consumed();
+			if (terminal) {
+				terminal.options.scrollback = props.scrollback;
+				terminal.write(RESET_REMOTE_PTY_DISPLAY, () => {
+					runtimeModes?.reset();
+					syncSearchDecorations();
+				});
+			}
+		},
+		{ flush: 'sync' },
+	);
 
-  const handleRightMouseDown = (event: MouseEvent): void => {
-    if (
-      device.supportsTouchInteraction.value ||
-      !props.rightClickCopyPaste ||
-      (remoteMouseReportingActive() && !event.shiftKey) ||
-      event.button !== 2
-    )
-      return;
-    event.preventDefault();
-    event.stopPropagation();
-  };
+	const MOBILE_LONG_PRESS_DELAY = 520;
+	const MOBILE_LONG_PRESS_MOVE_TOLERANCE = 12;
+	const mobileClipboardMenu = ref({ visible: false, x: 0, y: 0, hasSelection: false });
+	const mobileSelectionHandles = ref({
+		visible: false,
+		startVisible: false,
+		endVisible: false,
+		start: { x: 0, y: 0 },
+		end: { x: 0, y: 0 },
+	});
+	let mobileLongPressTimer: number | null = null;
+	let mobileLongPressStart: { x: number; y: number } | null = null;
+	let mobileLongPressTriggered = false;
+	let mobileTouchMoved = false;
+	let mobileGestureHadMultipleTouches = false;
+	let mobileTouchScrollActive = false;
+	let mobileTouchScrollLastY: number | null = null;
+	let mobileTouchScrollRemainder = 0;
+	let mobileSelectionLastPoint: { x: number; y: number } | null = null;
+	let mobileTouchSelectionActive = false;
+	let mobileKeyboardRestoreState: { readOnly: boolean; inputMode: string | null } | null = null;
+	let suppressMobileContextMenuUntil = 0;
+	let mobileSelectionBaseRange: { startColumn: number; startRow: number; endColumn: number; endRow: number } | null =
+		null;
+	let mobileSelectionHandleDrag: {
+		pointerId: number;
+		anchorBoundary: number;
+		lastClientX: number;
+		lastClientY: number;
+	} | null = null;
 
-  const resolveWheelScale = createWheelScaleResolver({
-    min: 8,
-    max: 40,
-    step: 1,
-    thresholdPx: 72,
-    maxStepsPerEvent: 3,
-    stopImmediatePropagation: true,
-  });
-  let pinchStartDistance = 0;
-  let pinchStartFontSize = renderedFontSize.value;
-  const touchDistance = (touches: TouchList) => {
-    if (touches.length < 2) return 0;
-    const first = touches[0]!;
-    const second = touches[1]!;
-    return Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
-  };
-  const applyFontSize = (size: number) => {
-    const next = Math.min(40, Math.max(8, Math.round(size)));
-    if (next === renderedFontSize.value) return;
-    renderedFontSize.value = next;
-    if (terminal) {
-      terminal.options.fontSize = next;
-      fitAndResize();
-    }
-    emit('fontSizeChange', next);
-  };
-  const handleWheelScale = (event: WheelEvent) => {
-    if (historyRebuilding) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      return;
-    }
-    const change = resolveWheelScale(event, renderedFontSize.value);
-    if (change) {
-      applyFontSize(change.next);
-      return;
-    }
-    if (event.ctrlKey) return;
-    if (event.deltaY > 0) cancelPendingHistoryLoad();
-    if (
-      !remoteMouseReportingActive() &&
-      event.deltaY < 0 &&
-      (terminal?.buffer.active.viewportY ?? Number.POSITIVE_INFINITY) <= historyLoadThreshold()
-    ) {
-      void loadPreviousOutput();
-    }
-  };
-  const handleTouchStart = (event: TouchEvent) => {
-    if (!canInteract()) return;
-    clearMobileLongPressTimer();
-    if (event.touches.length === 1 && device.supportsTouchInteraction.value) {
-      const touch = event.touches[0]!;
-      mobileTouchScrollActive = false;
-      mobileTouchScrollLastY = touch.clientY;
-      mobileTouchScrollRemainder = 0;
-      suppressMobileSoftKeyboard();
-      closeMobileClipboardMenu(true);
-      mobileLongPressTriggered = false;
-      mobileTouchMoved = false;
-      mobileGestureHadMultipleTouches = false;
-      mobileSelectionBaseRange = null;
-      mobileSelectionLastPoint = { x: touch.clientX, y: touch.clientY };
-      mobileLongPressStart = { x: touch.clientX, y: touch.clientY };
-      mobileLongPressTimer = window.setTimeout(() => {
-        mobileLongPressTimer = null;
-        if (mobileLongPressStart) triggerMobileLongPress(mobileLongPressStart.x, mobileLongPressStart.y);
-      }, MOBILE_LONG_PRESS_DELAY);
-      return;
-    }
-    mobileLongPressStart = null;
-    resetMobileTouchScroll();
-    if (event.touches.length !== 2) return;
-    if (device.supportsTouchInteraction.value) {
-      mobileGestureHadMultipleTouches = true;
-      suppressMobileSoftKeyboard();
-    }
-    event.preventDefault();
-    pinchStartDistance = touchDistance(event.touches);
-    pinchStartFontSize = renderedFontSize.value;
-  };
-  const handleTouchMove = (event: TouchEvent) => {
-    if (event.touches.length === 1 && device.supportsTouchInteraction.value) {
-      const touch = event.touches[0]!;
-      if (mobileLongPressStart) {
-        const moved = Math.hypot(touch.clientX - mobileLongPressStart.x, touch.clientY - mobileLongPressStart.y);
-        if (moved > MOBILE_LONG_PRESS_MOVE_TOLERANCE) mobileTouchMoved = true;
-        if (mobileLongPressTriggered) {
-          event.preventDefault();
-          updateMobileSelectionToPoint(touch.clientX, touch.clientY);
-          mobileSelectionLastPoint = { x: touch.clientX, y: touch.clientY };
-          return;
-        }
-        if (!mobileTouchMoved) return;
-        clearMobileLongPressTimer();
-        mobileLongPressStart = null;
-        mobileTouchScrollActive = true;
-      }
-      if (mobileTouchScrollActive && mobileTouchScrollLastY !== null) {
-        event.preventDefault();
-        // Match native touch scrolling: the viewport moves opposite the finger delta so
-        // terminal content tracks the finger on iOS and Android. xterm 6 no longer wires
-        // touch gestures into its custom scrollable element, so keep this behavior explicit here.
-        const deltaPixels = mobileTouchScrollLastY - touch.clientY;
-        mobileTouchScrollLastY = touch.clientY;
-        scrollTerminalFromMobileDrag(deltaPixels, touch.clientX, touch.clientY);
-      }
-      return;
-    }
-    if (event.touches.length !== 2 || pinchStartDistance <= 0) return;
-    mobileGestureHadMultipleTouches = true;
-    const distance = touchDistance(event.touches);
-    if (!distance) return;
-    event.preventDefault();
-    applyFontSize(pinchStartFontSize * (distance / pinchStartDistance));
-  };
-  const handleTouchEnd = (event: TouchEvent) => {
-    clearMobileLongPressTimer();
-    mobileLongPressStart = null;
-    if (mobileLongPressTriggered) {
-      event.preventDefault();
-      if (event.type === 'touchcancel') {
-        closeMobileClipboardMenu(true);
-        restoreMobileSoftKeyboard(false);
-      } else {
-        const touch = event.changedTouches[0];
-        const point = touch ? { x: touch.clientX, y: touch.clientY } : mobileSelectionLastPoint;
-        if (point) openMobileClipboardMenu(point.x, point.y);
-        syncMobileSelectionHandles();
-      }
-      mobileLongPressTriggered = false;
-    } else if (device.supportsTouchInteraction.value && event.touches.length === 0) {
-      const shouldFocus = event.type !== 'touchcancel' && !mobileTouchMoved && !mobileGestureHadMultipleTouches;
-      restoreMobileSoftKeyboard(shouldFocus);
-    }
-    mobileSelectionLastPoint = null;
-    if (event.touches.length < 2) pinchStartDistance = 0;
-    if (event.touches.length === 0) {
-      mobileTouchMoved = false;
-      mobileGestureHadMultipleTouches = false;
-      resetMobileTouchScroll();
-    }
-  };
+	const clearMobileLongPressTimer = (): void => {
+		if (mobileLongPressTimer === null) return;
+		window.clearTimeout(mobileLongPressTimer);
+		mobileLongPressTimer = null;
+	};
 
-  const resetInteractions = (): void => {
-    interactionGeneration += 1;
-    clipboardGestureAt = -Infinity;
-    clearMobileLongPressTimer();
-    mobileLongPressStart = null;
-    mobileSelectionLastPoint = null;
-    mobileSelectionBaseRange = null;
-    mobileLongPressTriggered = false;
-    mobileTouchMoved = false;
-    mobileGestureHadMultipleTouches = false;
-    mobileClipboardMenu.value.visible = false;
-    if (mobileTouchSelectionActive) terminal?.clearSelection();
-    mobileTouchSelectionActive = false;
-    hideMobileSelectionHandles();
-    restoreMobileSoftKeyboard(false);
-    resetMobileTouchScroll();
-    pinchStartDistance = 0;
-    if (mobileSelectionSyncFrame !== null) {
-      window.cancelAnimationFrame(mobileSelectionSyncFrame);
-      mobileSelectionSyncFrame = null;
-    }
-    if (disposed || !viewActive || !props.active) terminal?.blur();
-  };
+	const resetMobileTouchScroll = (): void => {
+		mobileTouchScrollActive = false;
+		mobileTouchScrollLastY = null;
+		mobileTouchScrollRemainder = 0;
+	};
 
-  const syncSearchDecorations = (): void => {
-    if (!searchOpen.value || !searchAddon) return;
-    if (!searchTerm.value) searchAddon.clearDecorations();
-    else searchAddon.findNext(searchTerm.value, { incremental: true });
-  };
-  watch(searchTerm, syncSearchDecorations);
-  watch(searchOpen, (open) => {
-    if (!open) searchAddon?.clearDecorations();
-    else syncSearchDecorations();
-  });
+	const terminalTouchRowHeight = (): number => {
+		const rows = Math.max(1, terminal?.rows ?? 24);
+		const screenHeight =
+			root.value?.querySelector<HTMLElement>('.xterm-screen')?.getBoundingClientRect().height ?? 0;
+		const fallbackHeight = root.value?.getBoundingClientRect().height ?? 0;
+		return Math.max(1, (screenHeight || fallbackHeight || rows * 16) / rows);
+	};
 
-  const outputWriter = createTerminalOutputWriter((data, consumed) => terminal!.write(data, consumed));
-  const serializeAfterDrain = async (): Promise<string> => {
-    if (disposed || !terminal) return terminalState.restoreSnapshot();
-    await outputWriter.drain();
-    return liveReplaySnapshot();
-  };
-  const handleTerminalOutput = ({ data, consumed }: { data: string | Uint8Array; consumed?: () => void }): void => {
-    const decoded = terminalState.decodeOutput(data);
-    activatePagedHistoryMode();
-    if (historyBrowsing || historyRebuilding) {
-      const shouldRestore = appendDeferredTerminalOutput(decoded);
-      if (consumed) deferredOutputConsumers.push(consumed);
-      if (shouldRestore && historyBrowsing && !historyRebuilding) void restoreLatestOutput();
-      return;
-    }
-    outputWriter.enqueue(
-      decoded,
-      typeof data === 'string' ? outputByteLength(data) : data.byteLength,
-      !viewActive || !props.active || document.visibilityState === 'hidden',
-      consumed,
-    );
-  };
-  watch(
-    () => props.active,
-    (active) => {
-      if (!active) resetInteractions();
-      if (active) scheduleGeometryFit();
-      if (active) outputWriter.flush();
-    },
-    { flush: 'post' },
-  );
+	const scrollTerminalFromMobileDrag = (deltaPixels: number, clientX: number, clientY: number): void => {
+		if (!terminal || !Number.isFinite(deltaPixels) || deltaPixels === 0) return;
+		mobileTouchScrollRemainder += deltaPixels;
+		const rowHeight = terminalTouchRowHeight();
+		const lines =
+			mobileTouchScrollRemainder > 0
+				? Math.floor(mobileTouchScrollRemainder / rowHeight)
+				: Math.ceil(mobileTouchScrollRemainder / rowHeight);
+		if (lines === 0) return;
+		mobileTouchScrollRemainder -= lines * rowHeight;
+		if (
+			terminal.buffer.active.type === 'alternate' ||
+			terminal.element?.classList.contains('enable-mouse-events')
+		) {
+			for (let index = 0; index < Math.abs(lines); index += 1) {
+				terminal.element?.dispatchEvent(
+					new WheelEvent('wheel', {
+						bubbles: true,
+						cancelable: true,
+						clientX,
+						clientY,
+						deltaMode: WheelEvent.DOM_DELTA_LINE,
+						deltaY: Math.sign(lines),
+					}),
+				);
+			}
+			return;
+		}
+		terminal.scrollLines(lines);
+		if (lines < 0 && terminal.buffer.active.viewportY <= historyLoadThreshold()) void loadPreviousOutput();
+	};
 
-  const setupImeCompositionBoundsProtection = (): (() => void) => {
-    const textarea = terminal?.textarea;
-    const compView = root.value?.querySelector<HTMLElement>('.composition-view');
-    const xtermEl = root.value?.querySelector<HTMLElement>('.xterm');
-    if (!textarea || !compView || !xtermEl) return () => undefined;
+	const suppressMobileSoftKeyboard = (): void => {
+		if (!device.supportsTouchInteraction.value || !terminal?.textarea) return;
+		const textarea = terminal.textarea;
+		if (!mobileKeyboardRestoreState) {
+			mobileKeyboardRestoreState = {
+				readOnly: textarea.readOnly,
+				inputMode: textarea.getAttribute('inputmode'),
+			};
+		}
+		textarea.readOnly = true;
+		textarea.setAttribute('inputmode', 'none');
+		terminal.blur();
+		textarea.blur();
+	};
 
-    let isClamping = false;
-    let compositionDisposed = false;
-    let compositionTimer: number | undefined;
-    const clampBounds = () => {
-      if (compositionDisposed || isClamping || !compView.classList.contains('active')) return;
-      isClamping = true;
-      try {
-        const termWidth = xtermEl.clientWidth;
-        if (termWidth <= 0) return;
-        const compRect = compView.getBoundingClientRect();
-        const compWidth = compRect.width || compView.scrollWidth || compView.offsetWidth;
-        if (compWidth <= 0) return;
-        const rawLeft = parseFloat(compView.style.left) || 0;
-        if (rawLeft + compWidth > termWidth) {
-          const maxLeft = Math.max(0, termWidth - compWidth - 4);
-          const newLeft = Math.min(rawLeft, maxLeft);
-          const newLeftPx = `${newLeft}px`;
-          if (compView.style.left !== newLeftPx) compView.style.left = newLeftPx;
-          if (textarea.style.left !== newLeftPx) textarea.style.left = newLeftPx;
-          const maxTaWidth = Math.max(1, termWidth - newLeft);
-          const newWidthPx = `${Math.min(compWidth, maxTaWidth)}px`;
-          if (textarea.style.width !== newWidthPx) textarea.style.width = newWidthPx;
-        }
-        if (wrapper.value && wrapper.value.scrollLeft !== 0) wrapper.value.scrollLeft = 0;
-        if (root.value && root.value.scrollLeft !== 0) root.value.scrollLeft = 0;
-      } finally {
-        isClamping = false;
-      }
-    };
+	const restoreMobileSoftKeyboard = (focus = false): void => {
+		const textarea = terminal?.textarea;
+		const restore = mobileKeyboardRestoreState;
+		if (textarea && restore) {
+			terminal?.blur();
+			textarea.blur();
+			textarea.readOnly = restore.readOnly;
+			if (restore.inputMode === null) textarea.removeAttribute('inputmode');
+			else textarea.setAttribute('inputmode', restore.inputMode);
+		}
+		mobileKeyboardRestoreState = null;
+		if (focus) terminal?.focus();
+	};
 
-    const observer = new MutationObserver(() => clampBounds());
-    observer.observe(compView, { attributes: true, attributeFilter: ['style', 'class'] });
+	const hideMobileSelectionHandles = (): void => {
+		mobileSelectionHandles.value.visible = false;
+		mobileSelectionHandles.value.startVisible = false;
+		mobileSelectionHandles.value.endVisible = false;
+		mobileSelectionHandleDrag = null;
+	};
 
-    const onCompUpdate = () => {
-      clampBounds();
-      queueMicrotask(clampBounds);
-      window.clearTimeout(compositionTimer);
-      compositionTimer = window.setTimeout(() => {
-        compositionTimer = undefined;
-        clampBounds();
-      }, 0);
-    };
+	const closeMobileClipboardMenu = (clearSelection = false): void => {
+		mobileClipboardMenu.value.visible = false;
+		if (!clearSelection) return;
+		terminal?.clearSelection();
+		mobileSelectionBaseRange = null;
+		mobileTouchSelectionActive = false;
+		hideMobileSelectionHandles();
+	};
 
-    const onCompEnd = () => {
-      if (wrapper.value && wrapper.value.scrollLeft !== 0) wrapper.value.scrollLeft = 0;
-      if (root.value && root.value.scrollLeft !== 0) root.value.scrollLeft = 0;
-    };
+	const getTerminalCellAtPoint = (clientX: number, clientY: number) => {
+		if (!terminal?.element) return null;
+		const screen = terminal.element.querySelector<HTMLElement>('.xterm-screen');
+		if (!screen) return null;
+		const rect = screen.getBoundingClientRect();
+		if (rect.width <= 0 || rect.height <= 0 || terminal.cols <= 0 || terminal.rows <= 0) return null;
+		const column = Math.max(
+			0,
+			Math.min(terminal.cols - 1, Math.floor((clientX - rect.left) / (rect.width / terminal.cols))),
+		);
+		const viewportRow = Math.max(
+			0,
+			Math.min(terminal.rows - 1, Math.floor((clientY - rect.top) / (rect.height / terminal.rows))),
+		);
+		return { column, bufferRow: terminal.buffer.active.viewportY + viewportRow };
+	};
 
-    const onScrollReset = () => {
-      if (wrapper.value && wrapper.value.scrollLeft !== 0) wrapper.value.scrollLeft = 0;
-      if (root.value && root.value.scrollLeft !== 0) root.value.scrollLeft = 0;
-    };
+	const selectTerminalWordAtPoint = (clientX: number, clientY: number): boolean => {
+		if (!terminal) return false;
+		const position = getTerminalCellAtPoint(clientX, clientY);
+		if (!position) return false;
+		const line = terminal.buffer.active.getLine(position.bufferRow);
+		if (!line) return false;
 
-    textarea.addEventListener('compositionstart', onCompUpdate);
-    textarea.addEventListener('compositionupdate', onCompUpdate);
-    textarea.addEventListener('compositionend', onCompEnd);
-    wrapper.value?.addEventListener('scroll', onScrollReset, { passive: true });
-    root.value?.addEventListener('scroll', onScrollReset, { passive: true });
+		const hasText = (column: number): boolean => {
+			const chars = line.getCell(column)?.getChars() ?? '';
+			return chars.length > 0 && !/^\s+$/u.test(chars);
+		};
 
-    return () => {
-      compositionDisposed = true;
-      window.clearTimeout(compositionTimer);
-      observer.disconnect();
-      textarea.removeEventListener('compositionstart', onCompUpdate);
-      textarea.removeEventListener('compositionupdate', onCompUpdate);
-      textarea.removeEventListener('compositionend', onCompEnd);
-      wrapper.value?.removeEventListener('scroll', onScrollReset);
-      root.value?.removeEventListener('scroll', onScrollReset);
-    };
-  };
+		let selectedColumn = position.column;
+		while (selectedColumn > 0 && !hasText(selectedColumn) && line.getCell(selectedColumn)?.getWidth() === 0) {
+			selectedColumn -= 1;
+		}
+		if (!hasText(selectedColumn)) {
+			terminal.selectLines(position.bufferRow, position.bufferRow);
+			return terminal.hasSelection();
+		}
+		let startColumn = selectedColumn;
+		let endColumn = selectedColumn;
+		while (startColumn > 0 && hasText(startColumn - 1)) startColumn -= 1;
+		while (endColumn + 1 < terminal.cols && hasText(endColumn + 1)) endColumn += 1;
+		terminal.select(startColumn, position.bufferRow, endColumn - startColumn + 1);
+		return terminal.hasSelection();
+	};
 
-  onMounted(async () => {
-    const snapshot = await terminalState.restoreSnapshot();
-    if (disposed) return;
-    // Start the sandboxed background while xterm initializes; its own script can draw in parallel.
-    revealBackgroundWhenSized();
-    terminal = new Terminal({
-      convertEol: true,
-      scrollOnUserInput: true,
-      cursorBlink: false,
-      cursorStyle: 'block',
-      cursorInactiveStyle: 'block',
-      allowTransparency: true,
-      disableStdin: !props.inputEnabled,
-      fontFamily: props.fontFamily,
-      fontSize: renderedFontSize.value,
-      scrollback: props.scrollback,
-      theme: resolvedTheme.value,
-    });
-    fit = new FitAddon();
-    searchAddon = new SearchAddon();
-    serializeAddon = new SerializeAddon();
-    terminal.loadAddon(fit);
-    terminal.loadAddon(searchAddon);
-    terminal.loadAddon(serializeAddon);
-    terminal.loadAddon(new WebLinksAddon());
-    terminal.open(root.value!);
-    const savedGeometry = terminalState.geometry.value;
-    if (savedGeometry) terminal.resize(savedGeometry.columns, savedGeometry.rows);
-    const clipboardOsc = terminal.parser.registerOscHandler(52, (data) => {
-      // OSC 52 is application-independent. Only accept writes shortly after a
-      // deliberate interaction in the active terminal; never disclose local clipboard data.
-      const separator = data.indexOf(';');
-      const target = data.slice(0, separator);
-      const encoded = data.slice(separator + 1);
-      if (
-        separator < 0 ||
-        !/^[cp0-7]*$/.test(target) ||
-        encoded === '?' ||
-        encoded.length > 1024 * 1024 ||
-        !props.active ||
-        !props.inputEnabled ||
-        !terminal?.element?.contains(document.activeElement) ||
-        performance.now() - clipboardGestureAt > 2000
-      )
-        return true;
-      try {
-        const text = new TextDecoder('utf-8', { fatal: true }).decode(
-          Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0)),
-        );
-        // Avoid the DOM selection fallback: asynchronous remote output must not
-        // steal terminal focus or alter the user's local selection.
-        void navigator.clipboard?.writeText(text).catch(() => undefined);
-      } catch {
-        // Invalid or oversized clipboard data is ignored; no reply is sent.
-      }
-      return true;
-    });
-    cleanup.push(() => clipboardOsc.dispose());
-    runtimeModes = trackTerminalRuntimeModes(terminal);
-    cleanup.push(setupImeCompositionBoundsProtection());
-    historyLastViewportY = terminal.buffer.active.viewportY;
-    const backgroundOsc = terminal.parser.registerOscHandler(11, (data) =>
-      hasVisualBackground.value && data.trim() !== '?' ? true : false,
-    );
-    const backgroundResetOsc = terminal.parser.registerOscHandler(111, () => hasVisualBackground.value);
-    cleanup.push(
-      () => backgroundOsc.dispose(),
-      () => backgroundResetOsc.dispose(),
-    );
-    if (snapshot) terminal.write(snapshot, syncSearchDecorations);
-    else syncSearchDecorations();
-    root.value!.addEventListener('wheel', handleWheelScale, { capture: true, passive: false });
-    root.value!.addEventListener('touchstart', handleTouchStart, { capture: true, passive: false });
-    root.value!.addEventListener('touchmove', handleTouchMove, { passive: false });
-    root.value!.addEventListener('touchend', handleTouchEnd, { passive: false });
-    root.value!.addEventListener('touchcancel', handleTouchEnd, { passive: false });
-    terminal.attachCustomKeyEventHandler((event) => {
-      if (!canInteract()) return false;
-      // Keep an explicit key press able to kick reconnect without forwarding
-      // that key to a transport whose current attachment is not ready.
-      if (!props.inputEnabled && event.type === 'keydown') emit('interaction');
-      if (event.type === 'keydown' && !['Shift', 'Control', 'Alt', 'Meta'].includes(event.key))
-        recordClipboardGesture();
-      if (event.type === 'keydown' && (event.ctrlKey || event.metaKey) && !event.altKey) {
-        const key = event.key.toLowerCase();
-        const clipboardShortcut = event.ctrlKey && event.shiftKey && !event.metaKey;
-        if (key === 'c') {
-          event.preventDefault();
-          if (clipboardShortcut) void copySelection();
-          else if (event.ctrlKey && !event.shiftKey && !event.metaKey) {
-            void props.channel.sendInput('\x03');
-            if (historyBrowsing || historyRebuilding || historyLoading) void restoreLatestOutput();
-          }
-          return false;
-        }
-        if (key === 'v') {
-          event.preventDefault();
-          if (clipboardShortcut) void paste().catch(() => undefined);
-          return false;
-        }
-      }
-      if (event.type === 'keydown' && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
-        event.preventDefault();
-        openSearch();
-        return false;
-      }
-      if (event.type === 'keydown' && event.key === 'Escape' && searchOpen.value) {
-        closeSearch();
-        return false;
-      }
-      return true;
-    });
-    fitAndResize();
-    stopOutput = props.channel.onOutput(handleTerminalOutput);
-    cleanup.push(
-      terminal.onData((data) => {
-        if (disposed || !props.inputEnabled) return;
-        emit('interaction');
-        if (data === '\x03') {
-          void props.channel.sendInput(data);
-          if (historyBrowsing || historyRebuilding || historyLoading) void restoreLatestOutput();
-          return;
-        }
-        if (historyBrowsing || historyRebuilding || historyLoading) {
-          const generation = terminalState.remotePtyGeneration.value;
-          const presentationGeneration = interactionGeneration;
-          void restoreLatestOutput().then(() => {
-            if (
-              !disposed &&
-              canInteract() &&
-              props.inputEnabled &&
-              presentationGeneration === interactionGeneration &&
-              generation === terminalState.remotePtyGeneration.value
-            )
-              return props.channel.sendInput(data);
-          });
-          return;
-        }
-        void props.channel.sendInput(data);
-      }).dispose,
-      props.channel.onConnected?.(scheduleGeometrySync) ?? (() => undefined),
-      props.channel.onResumeComplete?.(() => {
-        const target = terminal;
-        const generation = terminalState.remotePtyGeneration.value;
-        outputWriter.flush();
-        target?.write('', () => {
-          if (
-            !disposed &&
-            terminal === target &&
-            generation === terminalState.remotePtyGeneration.value &&
-            !historyBrowsing &&
-            !historyRebuilding
-          )
-            target.scrollToBottom();
-        });
-      }) ?? (() => undefined),
-      props.channel.onClose((reason) => {
-        emit('closed', reason);
-      }),
-      props.channel.onError((message) => emit('error', message)),
-    );
-    cleanup.push(
-      terminal.onSelectionChange(() => {
-        if (device.supportsTouchInteraction.value && mobileTouchSelectionActive) syncMobileSelectionHandles();
-      }).dispose,
-      terminal.onScroll((viewportY) => {
-        const movedUp = viewportY < historyLastViewportY;
-        const movedDown = viewportY > historyLastViewportY;
-        historyLastViewportY = viewportY;
-        if (!historyRebuilding) {
-          activatePagedHistoryMode();
-          if (historyBrowsing && movedDown && viewportY >= terminal!.buffer.active.baseY - historyLoadThreshold()) {
-            void restoreLatestOutput();
-          } else if (historyBrowsing && movedUp && viewportY <= historyLoadThreshold()) {
-            void loadPreviousOutput();
-          }
-        }
-        scheduleMobileSelectionSync();
-      }).dispose,
-    );
-    root.value?.addEventListener('contextmenu', handleContextMenu);
-    root.value?.addEventListener('mousedown', handleRightMouseDown, true);
-    root.value?.addEventListener('mousemove', handleLocalSelectionMouseMove, true);
-    root.value?.addEventListener('mouseup', recordClipboardGesture, true);
-    document.addEventListener('pointerdown', handleDocumentPointerDown, true);
-    resizeObserver = new ResizeObserver(scheduleContainerResize);
-    resizeObserver.observe(root.value!);
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    window.addEventListener('pageshow', scheduleGeometrySync);
-    window.addEventListener('focus', scheduleGeometrySync);
-    document.fonts.addEventListener('loadingdone', scheduleGeometrySync);
-    void document.fonts.ready.then(() => {
-      if (terminal && root.value?.isConnected) scheduleGeometrySync();
-    });
-    emit('ready');
-  });
+	const captureMobileSelectionBaseRange = (): void => {
+		const range = terminal?.getSelectionPosition();
+		mobileSelectionBaseRange = range
+			? {
+					startColumn: range.start.x,
+					startRow: range.start.y,
+					endColumn: range.end.x,
+					endRow: range.end.y,
+				}
+			: null;
+	};
 
-  watch(
-    () => props.inputEnabled,
-    (enabled) => {
-      if (!enabled) resetInteractions();
-      if (terminal) terminal.options.disableStdin = !enabled;
-    },
-  );
+	const syncMobileSelectionHandles = (): void => {
+		if (!device.supportsTouchInteraction.value) return;
+		if (!terminal || !wrapper.value || !mobileTouchSelectionActive || !terminal.hasSelection()) {
+			hideMobileSelectionHandles();
+			return;
+		}
+		const range = terminal.getSelectionPosition();
+		const screen = terminal.element?.querySelector<HTMLElement>('.xterm-screen');
+		if (!range || !screen) {
+			hideMobileSelectionHandles();
+			return;
+		}
+		const screenRect = screen.getBoundingClientRect();
+		const wrapperRect = wrapper.value.getBoundingClientRect();
+		if (screenRect.width <= 0 || screenRect.height <= 0 || terminal.cols <= 0 || terminal.rows <= 0) {
+			hideMobileSelectionHandles();
+			return;
+		}
+		const cellWidth = screenRect.width / terminal.cols;
+		const cellHeight = screenRect.height / terminal.rows;
+		const viewportY = terminal.buffer.active.viewportY;
+		const startViewportRow = range.start.y - viewportY;
+		const endViewportRow = range.end.y - viewportY;
+		const radius = 15;
 
-  watch(
-    () => [props.fontFamily, props.fontSize, resolvedTheme.value, props.scrollback] as const,
-    () => {
-      if (!terminal) return;
-      terminal.options.fontFamily = props.fontFamily;
-      if (props.fontSize !== renderedFontSize.value) renderedFontSize.value = props.fontSize;
-      terminal.options.fontSize = renderedFontSize.value;
-      terminal.options.theme = resolvedTheme.value;
-      terminal.options.scrollback = historyBrowsing ? HISTORY_WINDOW_SCROLLBACK_LINES : liveScrollbackLimit();
-      fitAndResize();
-    },
-    { deep: true },
-  );
+		const point = (column: number, row: number) => ({
+			x: Math.max(
+				radius,
+				Math.min(wrapperRect.width - radius, screenRect.left - wrapperRect.left + column * cellWidth),
+			),
+			y: Math.max(
+				radius,
+				Math.min(wrapperRect.height - radius, screenRect.top - wrapperRect.top + (row + 1) * cellHeight),
+			),
+		});
 
-  onBeforeUnmount(() => {
-    disposed = true;
-    historyViewGeneration += 1;
-    resetInteractions();
-    stopOutput?.();
-    const closingTerminal = terminal;
-    const closingRuntimeModes = runtimeModes;
-    if (closingTerminal && serializeAddon) {
-      terminalState.captureSnapshot(
-        outputWriter
-          .drain()
-          .then(() => {
-            const snapshot = liveReplaySnapshot();
-            for (const consumed of deferredOutputConsumers.splice(0)) consumed();
-            return snapshot;
-          })
-          .finally(() => {
-            closingRuntimeModes?.dispose();
-            closingTerminal.dispose();
-            terminal = undefined;
-          }),
-      );
-    }
-    if (!closingTerminal || !serializeAddon) outputWriter.discard();
-    if (historyBrowsing || historyLoading) void resetHistoryCursor();
-    if (root.value) {
-      root.value.removeEventListener('wheel', handleWheelScale, true);
-      root.value.removeEventListener('touchstart', handleTouchStart, true);
-      root.value.removeEventListener('touchmove', handleTouchMove);
-      root.value.removeEventListener('touchend', handleTouchEnd);
-      root.value.removeEventListener('touchcancel', handleTouchEnd);
-      root.value.removeEventListener('contextmenu', handleContextMenu);
-      root.value.removeEventListener('mousedown', handleRightMouseDown, true);
-      root.value.removeEventListener('mousemove', handleLocalSelectionMouseMove, true);
-      root.value.removeEventListener('mouseup', recordClipboardGesture, true);
-    }
-    document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
-    document.removeEventListener('visibilitychange', onVisibilityChange);
-    window.removeEventListener('pageshow', scheduleGeometrySync);
-    window.removeEventListener('focus', scheduleGeometrySync);
-    document.fonts.removeEventListener('loadingdone', scheduleGeometrySync);
-    if (geometryFrame !== undefined) window.cancelAnimationFrame(geometryFrame);
-    clearTimeout(geometryResizeTimer);
-    resizeObserver?.disconnect();
-    for (const stop of cleanup) stop();
-  });
+		mobileSelectionHandles.value = {
+			visible: true,
+			startVisible: startViewportRow >= 0 && startViewportRow < terminal.rows,
+			endVisible: endViewportRow >= 0 && endViewportRow < terminal.rows,
+			start: point(range.start.x, startViewportRow),
+			end: point(range.end.x, endViewportRow),
+		};
+	};
 
-  defineExpose({
-    focus: () => {
-      if (canInteract()) terminal?.focus();
-    },
-    fit: fitAndResize,
-    fitVisible: () => fitAndResize(true),
-    clear: clearTerminal,
-    serialize: serializeAfterDrain,
-    openSearch,
-    findNext,
-    findPrevious,
-    copySelection,
-    paste,
-    selectAll,
-    scrollToBottom: () => void restoreLatestOutput(),
-    applicationCursorKeys: () => terminal?.modes.applicationCursorKeysMode ?? false,
-  });
+	const scheduleMobileSelectionSync = (): void => {
+		if (!device.supportsTouchInteraction.value || !mobileTouchSelectionActive || mobileSelectionSyncFrame !== null)
+			return;
+		mobileSelectionSyncFrame = window.requestAnimationFrame(() => {
+			mobileSelectionSyncFrame = null;
+			syncMobileSelectionHandles();
+		});
+	};
+
+	const selectMobileRange = (startBoundary: number, endBoundary: number): void => {
+		if (!terminal) return;
+		const columns = terminal.cols;
+		const startRow = Math.floor(startBoundary / columns);
+		const startColumn = startBoundary % columns;
+		terminal.select(startColumn, startRow, Math.max(1, endBoundary - startBoundary));
+		captureMobileSelectionBaseRange();
+		mobileClipboardMenu.value.hasSelection = terminal.hasSelection();
+		syncMobileSelectionHandles();
+	};
+
+	const updateMobileSelectionToPoint = (clientX: number, clientY: number): void => {
+		if (!terminal || !mobileSelectionBaseRange) return;
+		const position = getTerminalCellAtPoint(clientX, clientY);
+		if (!position) return;
+		let targetColumn = position.column;
+		const line = terminal.buffer.active.getLine(position.bufferRow);
+		while (targetColumn > 0 && line?.getCell(targetColumn)?.getWidth() === 0) targetColumn -= 1;
+		const columns = terminal.cols;
+		const baseStart = mobileSelectionBaseRange.startRow * columns + mobileSelectionBaseRange.startColumn;
+		const baseEnd = mobileSelectionBaseRange.endRow * columns + mobileSelectionBaseRange.endColumn;
+		const target = position.bufferRow * columns + targetColumn;
+		const selectionStart = target < baseStart ? target : baseStart;
+		const selectionEnd = target < baseStart ? baseEnd : Math.max(baseEnd, target + 1);
+		terminal.select(
+			selectionStart % columns,
+			Math.floor(selectionStart / columns),
+			Math.max(1, selectionEnd - selectionStart),
+		);
+		mobileClipboardMenu.value.hasSelection = terminal.hasSelection();
+		syncMobileSelectionHandles();
+	};
+
+	const openMobileClipboardMenu = (clientX: number, clientY: number): void => {
+		if (!wrapper.value || !terminal) return;
+		const rect = wrapper.value.getBoundingClientRect();
+		const width = 190;
+		mobileClipboardMenu.value = {
+			visible: true,
+			x: Math.max(8, Math.min(rect.width - width - 8, clientX - rect.left - width / 2)),
+			y: Math.max(8, Math.min(rect.height - 52, clientY - rect.top - 58)),
+			hasSelection: terminal.hasSelection(),
+		};
+	};
+
+	const triggerMobileLongPress = (clientX: number, clientY: number): void => {
+		if (!terminal || !device.supportsTouchInteraction.value) return;
+		resetMobileTouchScroll();
+		mobileLongPressTriggered = true;
+		mobileTouchSelectionActive = true;
+		suppressMobileContextMenuUntil = Date.now() + 1200;
+		suppressMobileSoftKeyboard();
+		selectTerminalWordAtPoint(clientX, clientY);
+		captureMobileSelectionBaseRange();
+		syncMobileSelectionHandles();
+		mobileSelectionLastPoint = { x: clientX, y: clientY };
+		mobileClipboardMenu.value.visible = false;
+		navigator.vibrate?.(12);
+	};
+
+	const handleSelectionHandlePointerDown = (handle: 'start' | 'end', event: PointerEvent): void => {
+		if (!terminal?.hasSelection()) return;
+		const range = terminal.getSelectionPosition();
+		if (!range) return;
+		event.preventDefault();
+		event.stopPropagation();
+		suppressMobileContextMenuUntil = Date.now() + 1200;
+		mobileClipboardMenu.value.visible = false;
+		suppressMobileSoftKeyboard();
+		const columns = terminal.cols;
+		mobileSelectionHandleDrag = {
+			pointerId: event.pointerId,
+			anchorBoundary:
+				handle === 'start' ? range.end.y * columns + range.end.x : range.start.y * columns + range.start.x,
+			lastClientX: event.clientX,
+			lastClientY: event.clientY,
+		};
+		(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+	};
+
+	const handleSelectionHandlePointerMove = (event: PointerEvent): void => {
+		if (!terminal || !mobileSelectionHandleDrag || mobileSelectionHandleDrag.pointerId !== event.pointerId) return;
+		const position = getTerminalCellAtPoint(event.clientX, event.clientY);
+		if (!position) return;
+		event.preventDefault();
+		event.stopPropagation();
+		let targetColumn = position.column;
+		const line = terminal.buffer.active.getLine(position.bufferRow);
+		while (targetColumn > 0 && line?.getCell(targetColumn)?.getWidth() === 0) targetColumn -= 1;
+		const target = position.bufferRow * terminal.cols + targetColumn;
+		const anchor = mobileSelectionHandleDrag.anchorBoundary;
+		mobileSelectionHandleDrag.lastClientX = event.clientX;
+		mobileSelectionHandleDrag.lastClientY = event.clientY;
+		if (target < anchor) selectMobileRange(target, anchor);
+		else selectMobileRange(anchor, target + 1);
+	};
+
+	const finishSelectionHandleDrag = (event: PointerEvent): void => {
+		const drag = mobileSelectionHandleDrag;
+		if (!drag || drag.pointerId !== event.pointerId) return;
+		event.preventDefault();
+		event.stopPropagation();
+		const element = event.currentTarget as HTMLElement;
+		if (element.hasPointerCapture?.(event.pointerId)) element.releasePointerCapture(event.pointerId);
+		const point =
+			event.type === 'pointerup'
+				? { x: event.clientX, y: event.clientY }
+				: { x: drag.lastClientX, y: drag.lastClientY };
+		mobileSelectionHandleDrag = null;
+		suppressMobileContextMenuUntil = Date.now() + 800;
+		syncMobileSelectionHandles();
+		openMobileClipboardMenu(point.x, point.y);
+	};
+
+	const copyMobileSelection = async (): Promise<void> => {
+		await copySelection();
+		mobileTouchSelectionActive = false;
+		hideMobileSelectionHandles();
+		mobileClipboardMenu.value.visible = false;
+		restoreMobileSoftKeyboard(false);
+	};
+
+	const pasteMobileClipboard = async (): Promise<void> => {
+		if (!(await paste())) return;
+		terminal?.clearSelection();
+		mobileTouchSelectionActive = false;
+		hideMobileSelectionHandles();
+		mobileClipboardMenu.value.visible = false;
+		restoreMobileSoftKeyboard(true);
+	};
+
+	const selectAllMobile = (): void => {
+		terminal?.selectAll();
+		mobileTouchSelectionActive = true;
+		captureMobileSelectionBaseRange();
+		mobileClipboardMenu.value.hasSelection = terminal?.hasSelection() ?? false;
+		syncMobileSelectionHandles();
+	};
+
+	const handleDocumentPointerDown = (event: PointerEvent): void => {
+		if (!mobileClipboardMenu.value.visible) return;
+		const target = event.target;
+		if (
+			target instanceof Element &&
+			target.closest('.mobile-terminal-clipboard-menu, .mobile-terminal-selection-handle')
+		)
+			return;
+		closeMobileClipboardMenu(true);
+		restoreMobileSoftKeyboard(false);
+	};
+
+	const handleContextMenu = async (event: MouseEvent): Promise<void> => {
+		if (device.supportsTouchInteraction.value) {
+			event.preventDefault();
+			event.stopPropagation();
+			if (Date.now() < suppressMobileContextMenuUntil || mobileClipboardMenu.value.visible) return;
+			mobileTouchSelectionActive = true;
+			suppressMobileSoftKeyboard();
+			selectTerminalWordAtPoint(event.clientX, event.clientY);
+			captureMobileSelectionBaseRange();
+			syncMobileSelectionHandles();
+			openMobileClipboardMenu(event.clientX, event.clientY);
+			return;
+		}
+		if (remoteMouseReportingActive() && !event.shiftKey) {
+			// Preserve the application's right-button input without a browser menu overlay.
+			event.preventDefault();
+			return;
+		}
+		if (!props.rightClickCopyPaste) return;
+		event.preventDefault();
+		if (terminal?.hasSelection()) {
+			const generation = interactionGeneration;
+			const target = terminal;
+			try {
+				await copySelection();
+				if (isCurrentInteraction(generation, target)) {
+					target?.clearSelection();
+					target?.focus();
+				}
+			} catch {
+				// Clipboard availability is browser-controlled.
+			}
+			return;
+		}
+		try {
+			if (await paste()) terminal?.focus();
+		} catch {
+			// Clipboard permissions are browser-controlled.
+		}
+	};
+
+	const handleRightMouseDown = (event: MouseEvent): void => {
+		if (
+			device.supportsTouchInteraction.value ||
+			!props.rightClickCopyPaste ||
+			(remoteMouseReportingActive() && !event.shiftKey) ||
+			event.button !== 2
+		)
+			return;
+		event.preventDefault();
+		event.stopPropagation();
+	};
+
+	const resolveWheelScale = createWheelScaleResolver({
+		min: 8,
+		max: 40,
+		step: 1,
+		thresholdPx: 72,
+		maxStepsPerEvent: 3,
+		stopImmediatePropagation: true,
+	});
+	let pinchStartDistance = 0;
+	let pinchStartFontSize = renderedFontSize.value;
+
+	const touchDistance = (touches: TouchList) => {
+		if (touches.length < 2) return 0;
+		const first = touches[0]!;
+		const second = touches[1]!;
+		return Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
+	};
+
+	const applyFontSize = (size: number) => {
+		const next = Math.min(40, Math.max(8, Math.round(size)));
+		if (next === renderedFontSize.value) return;
+		renderedFontSize.value = next;
+		if (terminal) {
+			terminal.options.fontSize = next;
+			fitAndResize();
+		}
+		emit('fontSizeChange', next);
+	};
+
+	const handleWheelScale = (event: WheelEvent) => {
+		if (historyRebuilding) {
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			return;
+		}
+		const change = resolveWheelScale(event, renderedFontSize.value);
+		if (change) {
+			applyFontSize(change.next);
+			return;
+		}
+		if (event.ctrlKey) return;
+		if (event.deltaY > 0) cancelPendingHistoryLoad();
+		if (
+			!remoteMouseReportingActive() &&
+			event.deltaY < 0 &&
+			(terminal?.buffer.active.viewportY ?? Number.POSITIVE_INFINITY) <= historyLoadThreshold()
+		) {
+			void loadPreviousOutput();
+		}
+	};
+
+	const handleTouchStart = (event: TouchEvent) => {
+		if (!canInteract()) return;
+		clearMobileLongPressTimer();
+		if (event.touches.length === 1 && device.supportsTouchInteraction.value) {
+			const touch = event.touches[0]!;
+			mobileTouchScrollActive = false;
+			mobileTouchScrollLastY = touch.clientY;
+			mobileTouchScrollRemainder = 0;
+			suppressMobileSoftKeyboard();
+			closeMobileClipboardMenu(true);
+			mobileLongPressTriggered = false;
+			mobileTouchMoved = false;
+			mobileGestureHadMultipleTouches = false;
+			mobileSelectionBaseRange = null;
+			mobileSelectionLastPoint = { x: touch.clientX, y: touch.clientY };
+			mobileLongPressStart = { x: touch.clientX, y: touch.clientY };
+			mobileLongPressTimer = window.setTimeout(() => {
+				mobileLongPressTimer = null;
+				if (mobileLongPressStart) triggerMobileLongPress(mobileLongPressStart.x, mobileLongPressStart.y);
+			}, MOBILE_LONG_PRESS_DELAY);
+			return;
+		}
+		mobileLongPressStart = null;
+		resetMobileTouchScroll();
+		if (event.touches.length !== 2) return;
+		if (device.supportsTouchInteraction.value) {
+			mobileGestureHadMultipleTouches = true;
+			suppressMobileSoftKeyboard();
+		}
+		event.preventDefault();
+		pinchStartDistance = touchDistance(event.touches);
+		pinchStartFontSize = renderedFontSize.value;
+	};
+
+	const handleTouchMove = (event: TouchEvent) => {
+		if (event.touches.length === 1 && device.supportsTouchInteraction.value) {
+			const touch = event.touches[0]!;
+			if (mobileLongPressStart) {
+				const moved = Math.hypot(
+					touch.clientX - mobileLongPressStart.x,
+					touch.clientY - mobileLongPressStart.y,
+				);
+				if (moved > MOBILE_LONG_PRESS_MOVE_TOLERANCE) mobileTouchMoved = true;
+				if (mobileLongPressTriggered) {
+					event.preventDefault();
+					updateMobileSelectionToPoint(touch.clientX, touch.clientY);
+					mobileSelectionLastPoint = { x: touch.clientX, y: touch.clientY };
+					return;
+				}
+				if (!mobileTouchMoved) return;
+				clearMobileLongPressTimer();
+				mobileLongPressStart = null;
+				mobileTouchScrollActive = true;
+			}
+			if (mobileTouchScrollActive && mobileTouchScrollLastY !== null) {
+				event.preventDefault();
+				// Match native touch scrolling: the viewport moves opposite the finger delta so
+				// terminal content tracks the finger on iOS and Android. xterm 6 no longer wires
+				// touch gestures into its custom scrollable element, so keep this behavior explicit here.
+				const deltaPixels = mobileTouchScrollLastY - touch.clientY;
+				mobileTouchScrollLastY = touch.clientY;
+				scrollTerminalFromMobileDrag(deltaPixels, touch.clientX, touch.clientY);
+			}
+			return;
+		}
+		if (event.touches.length !== 2 || pinchStartDistance <= 0) return;
+		mobileGestureHadMultipleTouches = true;
+		const distance = touchDistance(event.touches);
+		if (!distance) return;
+		event.preventDefault();
+		applyFontSize(pinchStartFontSize * (distance / pinchStartDistance));
+	};
+
+	const handleTouchEnd = (event: TouchEvent) => {
+		clearMobileLongPressTimer();
+		mobileLongPressStart = null;
+		if (mobileLongPressTriggered) {
+			event.preventDefault();
+			if (event.type === 'touchcancel') {
+				closeMobileClipboardMenu(true);
+				restoreMobileSoftKeyboard(false);
+			} else {
+				const touch = event.changedTouches[0];
+				const point = touch ? { x: touch.clientX, y: touch.clientY } : mobileSelectionLastPoint;
+				if (point) openMobileClipboardMenu(point.x, point.y);
+				syncMobileSelectionHandles();
+			}
+			mobileLongPressTriggered = false;
+		} else if (device.supportsTouchInteraction.value && event.touches.length === 0) {
+			const shouldFocus = event.type !== 'touchcancel' && !mobileTouchMoved && !mobileGestureHadMultipleTouches;
+			restoreMobileSoftKeyboard(shouldFocus);
+		}
+		mobileSelectionLastPoint = null;
+		if (event.touches.length < 2) pinchStartDistance = 0;
+		if (event.touches.length === 0) {
+			mobileTouchMoved = false;
+			mobileGestureHadMultipleTouches = false;
+			resetMobileTouchScroll();
+		}
+	};
+
+	const resetInteractions = (): void => {
+		interactionGeneration += 1;
+		clipboardGestureAt = -Infinity;
+		clearMobileLongPressTimer();
+		mobileLongPressStart = null;
+		mobileSelectionLastPoint = null;
+		mobileSelectionBaseRange = null;
+		mobileLongPressTriggered = false;
+		mobileTouchMoved = false;
+		mobileGestureHadMultipleTouches = false;
+		mobileClipboardMenu.value.visible = false;
+		if (mobileTouchSelectionActive) terminal?.clearSelection();
+		mobileTouchSelectionActive = false;
+		hideMobileSelectionHandles();
+		restoreMobileSoftKeyboard(false);
+		resetMobileTouchScroll();
+		pinchStartDistance = 0;
+		if (mobileSelectionSyncFrame !== null) {
+			window.cancelAnimationFrame(mobileSelectionSyncFrame);
+			mobileSelectionSyncFrame = null;
+		}
+		if (disposed || !viewActive || !props.active) terminal?.blur();
+	};
+
+	const syncSearchDecorations = (): void => {
+		if (!searchOpen.value || !searchAddon) return;
+		if (!searchTerm.value) searchAddon.clearDecorations();
+		else searchAddon.findNext(searchTerm.value, { incremental: true });
+	};
+
+	watch(searchTerm, syncSearchDecorations);
+	watch(searchOpen, (open) => {
+		if (!open) searchAddon?.clearDecorations();
+		else syncSearchDecorations();
+	});
+
+	const outputWriter = createTerminalOutputWriter((data, consumed) => terminal!.write(data, consumed));
+
+	const serializeAfterDrain = async (): Promise<string> => {
+		if (disposed || !terminal) return terminalState.restoreSnapshot();
+		await outputWriter.drain();
+		return liveReplaySnapshot();
+	};
+
+	const handleTerminalOutput = ({ data, consumed }: { data: string | Uint8Array; consumed?: () => void }): void => {
+		const decoded = terminalState.decodeOutput(data);
+		activatePagedHistoryMode();
+		if (historyBrowsing || historyRebuilding) {
+			const shouldRestore = appendDeferredTerminalOutput(decoded);
+			if (consumed) deferredOutputConsumers.push(consumed);
+			if (shouldRestore && historyBrowsing && !historyRebuilding) void restoreLatestOutput();
+			return;
+		}
+		outputWriter.enqueue(
+			decoded,
+			typeof data === 'string' ? outputByteLength(data) : data.byteLength,
+			!viewActive || !props.active || document.visibilityState === 'hidden',
+			consumed,
+		);
+	};
+
+	watch(
+		() => props.active,
+		(active) => {
+			if (!active) resetInteractions();
+			if (active) scheduleGeometryFit();
+			if (active) outputWriter.flush();
+		},
+		{ flush: 'post' },
+	);
+
+	const setupImeCompositionBoundsProtection = (): (() => void) => {
+		const textarea = terminal?.textarea;
+		const compView = root.value?.querySelector<HTMLElement>('.composition-view');
+		const xtermEl = root.value?.querySelector<HTMLElement>('.xterm');
+		if (!textarea || !compView || !xtermEl) return () => undefined;
+
+		let isClamping = false;
+		let compositionDisposed = false;
+		let compositionTimer: number | undefined;
+
+		const clampBounds = () => {
+			if (compositionDisposed || isClamping || !compView.classList.contains('active')) return;
+			isClamping = true;
+			try {
+				const termWidth = xtermEl.clientWidth;
+				if (termWidth <= 0) return;
+				const compRect = compView.getBoundingClientRect();
+				const compWidth = compRect.width || compView.scrollWidth || compView.offsetWidth;
+				if (compWidth <= 0) return;
+				const rawLeft = parseFloat(compView.style.left) || 0;
+				if (rawLeft + compWidth > termWidth) {
+					const maxLeft = Math.max(0, termWidth - compWidth - 4);
+					const newLeft = Math.min(rawLeft, maxLeft);
+					const newLeftPx = `${newLeft}px`;
+					if (compView.style.left !== newLeftPx) compView.style.left = newLeftPx;
+					if (textarea.style.left !== newLeftPx) textarea.style.left = newLeftPx;
+					const maxTaWidth = Math.max(1, termWidth - newLeft);
+					const newWidthPx = `${Math.min(compWidth, maxTaWidth)}px`;
+					if (textarea.style.width !== newWidthPx) textarea.style.width = newWidthPx;
+				}
+				if (wrapper.value && wrapper.value.scrollLeft !== 0) wrapper.value.scrollLeft = 0;
+				if (root.value && root.value.scrollLeft !== 0) root.value.scrollLeft = 0;
+			} finally {
+				isClamping = false;
+			}
+		};
+
+		const observer = new MutationObserver(() => clampBounds());
+		observer.observe(compView, { attributes: true, attributeFilter: ['style', 'class'] });
+
+		const onCompUpdate = () => {
+			clampBounds();
+			queueMicrotask(clampBounds);
+			window.clearTimeout(compositionTimer);
+			compositionTimer = window.setTimeout(() => {
+				compositionTimer = undefined;
+				clampBounds();
+			}, 0);
+		};
+
+		const onCompEnd = () => {
+			if (wrapper.value && wrapper.value.scrollLeft !== 0) wrapper.value.scrollLeft = 0;
+			if (root.value && root.value.scrollLeft !== 0) root.value.scrollLeft = 0;
+		};
+
+		const onScrollReset = () => {
+			if (wrapper.value && wrapper.value.scrollLeft !== 0) wrapper.value.scrollLeft = 0;
+			if (root.value && root.value.scrollLeft !== 0) root.value.scrollLeft = 0;
+		};
+
+		textarea.addEventListener('compositionstart', onCompUpdate);
+		textarea.addEventListener('compositionupdate', onCompUpdate);
+		textarea.addEventListener('compositionend', onCompEnd);
+		wrapper.value?.addEventListener('scroll', onScrollReset, { passive: true });
+		root.value?.addEventListener('scroll', onScrollReset, { passive: true });
+
+		return () => {
+			compositionDisposed = true;
+			window.clearTimeout(compositionTimer);
+			observer.disconnect();
+			textarea.removeEventListener('compositionstart', onCompUpdate);
+			textarea.removeEventListener('compositionupdate', onCompUpdate);
+			textarea.removeEventListener('compositionend', onCompEnd);
+			wrapper.value?.removeEventListener('scroll', onScrollReset);
+			root.value?.removeEventListener('scroll', onScrollReset);
+		};
+	};
+
+	onMounted(async () => {
+		const snapshot = await terminalState.restoreSnapshot();
+		if (disposed) return;
+		// Start the sandboxed background while xterm initializes; its own script can draw in parallel.
+		revealBackgroundWhenSized();
+		terminal = new Terminal({
+			convertEol: true,
+			scrollOnUserInput: true,
+			cursorBlink: false,
+			cursorStyle: 'block',
+			cursorInactiveStyle: 'block',
+			allowTransparency: true,
+			disableStdin: !props.inputEnabled,
+			fontFamily: props.fontFamily,
+			fontSize: renderedFontSize.value,
+			scrollback: props.scrollback,
+			theme: resolvedTheme.value,
+		});
+		fit = new FitAddon();
+		searchAddon = new SearchAddon();
+		serializeAddon = new SerializeAddon();
+		terminal.loadAddon(fit);
+		terminal.loadAddon(searchAddon);
+		terminal.loadAddon(serializeAddon);
+		terminal.loadAddon(new WebLinksAddon());
+		terminal.open(root.value!);
+		const savedGeometry = terminalState.geometry.value;
+		if (savedGeometry) terminal.resize(savedGeometry.columns, savedGeometry.rows);
+		const clipboardOsc = terminal.parser.registerOscHandler(52, (data) => {
+			// OSC 52 is application-independent. Only accept writes shortly after a
+			// deliberate interaction in the active terminal; never disclose local clipboard data.
+			const separator = data.indexOf(';');
+			const target = data.slice(0, separator);
+			const encoded = data.slice(separator + 1);
+			if (
+				separator < 0 ||
+				!/^[cp0-7]*$/.test(target) ||
+				encoded === '?' ||
+				encoded.length > 1024 * 1024 ||
+				!props.active ||
+				!props.inputEnabled ||
+				!terminal?.element?.contains(document.activeElement) ||
+				performance.now() - clipboardGestureAt > 2000
+			)
+				return true;
+			try {
+				const text = new TextDecoder('utf-8', { fatal: true }).decode(
+					Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0)),
+				);
+				// Avoid the DOM selection fallback: asynchronous remote output must not
+				// steal terminal focus or alter the user's local selection.
+				void navigator.clipboard?.writeText(text).catch(() => undefined);
+			} catch {
+				// Invalid or oversized clipboard data is ignored; no reply is sent.
+			}
+			return true;
+		});
+		cleanup.push(() => clipboardOsc.dispose());
+		runtimeModes = trackTerminalRuntimeModes(terminal);
+		cleanup.push(setupImeCompositionBoundsProtection());
+		historyLastViewportY = terminal.buffer.active.viewportY;
+		const backgroundOsc = terminal.parser.registerOscHandler(11, (data) =>
+			hasVisualBackground.value && data.trim() !== '?' ? true : false,
+		);
+		const backgroundResetOsc = terminal.parser.registerOscHandler(111, () => hasVisualBackground.value);
+		cleanup.push(
+			() => backgroundOsc.dispose(),
+			() => backgroundResetOsc.dispose(),
+		);
+		if (snapshot) terminal.write(snapshot, syncSearchDecorations);
+		else syncSearchDecorations();
+		root.value!.addEventListener('wheel', handleWheelScale, { capture: true, passive: false });
+		root.value!.addEventListener('touchstart', handleTouchStart, { capture: true, passive: false });
+		root.value!.addEventListener('touchmove', handleTouchMove, { passive: false });
+		root.value!.addEventListener('touchend', handleTouchEnd, { passive: false });
+		root.value!.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+		terminal.attachCustomKeyEventHandler((event) => {
+			if (!canInteract()) return false;
+			// Keep an explicit key press able to kick reconnect without forwarding
+			// that key to a transport whose current attachment is not ready.
+			if (!props.inputEnabled && event.type === 'keydown') emit('interaction');
+			if (event.type === 'keydown' && !['Shift', 'Control', 'Alt', 'Meta'].includes(event.key))
+				recordClipboardGesture();
+			if (event.type === 'keydown' && (event.ctrlKey || event.metaKey) && !event.altKey) {
+				const key = event.key.toLowerCase();
+				const clipboardShortcut = event.ctrlKey && event.shiftKey && !event.metaKey;
+				if (key === 'c') {
+					event.preventDefault();
+					if (clipboardShortcut) void copySelection();
+					else if (event.ctrlKey && !event.shiftKey && !event.metaKey) {
+						void props.channel.sendInput('\x03');
+						if (historyBrowsing || historyRebuilding || historyLoading) void restoreLatestOutput();
+					}
+					return false;
+				}
+				if (key === 'v') {
+					event.preventDefault();
+					if (clipboardShortcut) void paste().catch(() => undefined);
+					return false;
+				}
+			}
+			if (event.type === 'keydown' && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+				event.preventDefault();
+				openSearch();
+				return false;
+			}
+			if (event.type === 'keydown' && event.key === 'Escape' && searchOpen.value) {
+				closeSearch();
+				return false;
+			}
+			return true;
+		});
+		fitAndResize();
+		stopOutput = props.channel.onOutput(handleTerminalOutput);
+		cleanup.push(
+			terminal.onData((data) => {
+				if (disposed || !props.inputEnabled) return;
+				emit('interaction');
+				if (data === '\x03') {
+					void props.channel.sendInput(data);
+					if (historyBrowsing || historyRebuilding || historyLoading) void restoreLatestOutput();
+					return;
+				}
+				if (historyBrowsing || historyRebuilding || historyLoading) {
+					const generation = terminalState.remotePtyGeneration.value;
+					const presentationGeneration = interactionGeneration;
+					void restoreLatestOutput().then(() => {
+						if (
+							!disposed &&
+							canInteract() &&
+							props.inputEnabled &&
+							presentationGeneration === interactionGeneration &&
+							generation === terminalState.remotePtyGeneration.value
+						)
+							return props.channel.sendInput(data);
+					});
+					return;
+				}
+				void props.channel.sendInput(data);
+			}).dispose,
+			props.channel.onConnected?.(scheduleGeometrySync) ?? (() => undefined),
+			props.channel.onResumeComplete?.(() => {
+				const target = terminal;
+				const generation = terminalState.remotePtyGeneration.value;
+				outputWriter.flush();
+				target?.write('', () => {
+					if (
+						!disposed &&
+						terminal === target &&
+						generation === terminalState.remotePtyGeneration.value &&
+						!historyBrowsing &&
+						!historyRebuilding
+					)
+						target.scrollToBottom();
+				});
+			}) ?? (() => undefined),
+			props.channel.onClose((reason) => {
+				emit('closed', reason);
+			}),
+			props.channel.onError((message) => emit('error', message)),
+		);
+		cleanup.push(
+			terminal.onSelectionChange(() => {
+				if (device.supportsTouchInteraction.value && mobileTouchSelectionActive) syncMobileSelectionHandles();
+			}).dispose,
+			terminal.onScroll((viewportY) => {
+				const movedUp = viewportY < historyLastViewportY;
+				const movedDown = viewportY > historyLastViewportY;
+				historyLastViewportY = viewportY;
+				if (!historyRebuilding) {
+					activatePagedHistoryMode();
+					if (
+						historyBrowsing &&
+						movedDown &&
+						viewportY >= terminal!.buffer.active.baseY - historyLoadThreshold()
+					) {
+						void restoreLatestOutput();
+					} else if (historyBrowsing && movedUp && viewportY <= historyLoadThreshold()) {
+						void loadPreviousOutput();
+					}
+				}
+				scheduleMobileSelectionSync();
+			}).dispose,
+		);
+		root.value?.addEventListener('contextmenu', handleContextMenu);
+		root.value?.addEventListener('mousedown', handleRightMouseDown, true);
+		root.value?.addEventListener('mousemove', handleLocalSelectionMouseMove, true);
+		root.value?.addEventListener('mouseup', recordClipboardGesture, true);
+		document.addEventListener('pointerdown', handleDocumentPointerDown, true);
+		resizeObserver = new ResizeObserver(scheduleContainerResize);
+		resizeObserver.observe(root.value!);
+		document.addEventListener('visibilitychange', onVisibilityChange);
+		window.addEventListener('pageshow', scheduleGeometrySync);
+		window.addEventListener('focus', scheduleGeometrySync);
+		document.fonts.addEventListener('loadingdone', scheduleGeometrySync);
+		void document.fonts.ready.then(() => {
+			if (terminal && root.value?.isConnected) scheduleGeometrySync();
+		});
+		emit('ready');
+	});
+
+	watch(
+		() => props.inputEnabled,
+		(enabled) => {
+			if (!enabled) resetInteractions();
+			if (terminal) terminal.options.disableStdin = !enabled;
+		},
+	);
+
+	watch(
+		() => [props.fontFamily, props.fontSize, resolvedTheme.value, props.scrollback] as const,
+		() => {
+			if (!terminal) return;
+			terminal.options.fontFamily = props.fontFamily;
+			if (props.fontSize !== renderedFontSize.value) renderedFontSize.value = props.fontSize;
+			terminal.options.fontSize = renderedFontSize.value;
+			terminal.options.theme = resolvedTheme.value;
+			terminal.options.scrollback = historyBrowsing ? HISTORY_WINDOW_SCROLLBACK_LINES : liveScrollbackLimit();
+			fitAndResize();
+		},
+		{ deep: true },
+	);
+
+	onBeforeUnmount(() => {
+		disposed = true;
+		historyViewGeneration += 1;
+		resetInteractions();
+		stopOutput?.();
+		const closingTerminal = terminal;
+		const closingRuntimeModes = runtimeModes;
+		if (closingTerminal && serializeAddon) {
+			terminalState.captureSnapshot(
+				outputWriter
+					.drain()
+					.then(() => {
+						const snapshot = liveReplaySnapshot();
+						for (const consumed of deferredOutputConsumers.splice(0)) consumed();
+						return snapshot;
+					})
+					.finally(() => {
+						closingRuntimeModes?.dispose();
+						closingTerminal.dispose();
+						terminal = undefined;
+					}),
+			);
+		}
+		if (!closingTerminal || !serializeAddon) outputWriter.discard();
+		if (historyBrowsing || historyLoading) void resetHistoryCursor();
+		if (root.value) {
+			root.value.removeEventListener('wheel', handleWheelScale, true);
+			root.value.removeEventListener('touchstart', handleTouchStart, true);
+			root.value.removeEventListener('touchmove', handleTouchMove);
+			root.value.removeEventListener('touchend', handleTouchEnd);
+			root.value.removeEventListener('touchcancel', handleTouchEnd);
+			root.value.removeEventListener('contextmenu', handleContextMenu);
+			root.value.removeEventListener('mousedown', handleRightMouseDown, true);
+			root.value.removeEventListener('mousemove', handleLocalSelectionMouseMove, true);
+			root.value.removeEventListener('mouseup', recordClipboardGesture, true);
+		}
+		document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
+		document.removeEventListener('visibilitychange', onVisibilityChange);
+		window.removeEventListener('pageshow', scheduleGeometrySync);
+		window.removeEventListener('focus', scheduleGeometrySync);
+		document.fonts.removeEventListener('loadingdone', scheduleGeometrySync);
+		if (geometryFrame !== undefined) window.cancelAnimationFrame(geometryFrame);
+		clearTimeout(geometryResizeTimer);
+		resizeObserver?.disconnect();
+		for (const stop of cleanup) stop();
+	});
+
+	defineExpose({
+		focus: () => {
+			if (canInteract()) terminal?.focus();
+		},
+
+		fit: fitAndResize,
+
+		fitVisible: () => fitAndResize(true),
+
+		clear: clearTerminal,
+		serialize: serializeAfterDrain,
+		openSearch,
+		findNext,
+		findPrevious,
+		copySelection,
+		paste,
+		selectAll,
+
+		scrollToBottom: () => void restoreLatestOutput(),
+
+		applicationCursorKeys: () => terminal?.modes.applicationCursorKeysMode ?? false,
+	});
 </script>
 
 <template>
-  <div
-    ref="wrapper"
-    class="relative h-full min-h-0 w-full overflow-hidden"
-    :class="{ 'has-text-stroke': visual?.textStroke?.enabled, 'has-text-shadow': visual?.textShadow?.enabled }"
-    :style="terminalStyle"
-    :data-font-size="renderedFontSize"
-  >
-    <div
-      v-if="visual?.backgroundEnabled && visual.backgroundImageUrl"
-      class="terminal-background-image"
-      :style="backgroundStyle"
-    ></div>
-    <div
-      v-if="visual?.backgroundEnabled && visual.backgroundImageUrl"
-      class="terminal-background-overlay"
-      :style="{ backgroundColor: `rgba(0,0,0,${visual.backgroundOverlayOpacity ?? 0})` }"
-    ></div>
-    <!-- Custom backgrounds may size themselves only once, so start them after the session is visible. -->
-    <iframe
-      v-if="backgroundReady && sandboxedCustomHtml"
-      v-show="active"
-      ref="backgroundFrame"
-      class="terminal-custom-html"
-      sandbox="allow-scripts"
-      tabindex="-1"
-      aria-hidden="true"
-    ></iframe>
-    <div
-      ref="root"
-      class="terminal-inner-container relative z-10 h-full min-h-0 w-full"
-      :class="{
-        'terminal-transparent': hasVisualBackground,
-        'terminal-mobile-touch': device.supportsTouchInteraction.value,
-      }"
-      role="application"
-      :aria-label="t('terminal.ariaLabel')"
-    ></div>
-    <template v-if="device.supportsTouchInteraction.value && mobileSelectionHandles.visible">
-      <button
-        v-show="mobileSelectionHandles.startVisible"
-        type="button"
-        class="mobile-terminal-selection-handle"
-        :style="{ left: `${mobileSelectionHandles.start.x}px`, top: `${mobileSelectionHandles.start.y}px` }"
-        :aria-label="t('terminal.mobile.adjustSelectionStart')"
-        @pointerdown="handleSelectionHandlePointerDown('start', $event)"
-        @pointermove="handleSelectionHandlePointerMove"
-        @pointerup="finishSelectionHandleDrag"
-        @pointercancel="finishSelectionHandleDrag"
-        @contextmenu.prevent
-      ></button>
-      <button
-        v-show="mobileSelectionHandles.endVisible"
-        type="button"
-        class="mobile-terminal-selection-handle"
-        :style="{ left: `${mobileSelectionHandles.end.x}px`, top: `${mobileSelectionHandles.end.y}px` }"
-        :aria-label="t('terminal.mobile.adjustSelectionEnd')"
-        @pointerdown="handleSelectionHandlePointerDown('end', $event)"
-        @pointermove="handleSelectionHandlePointerMove"
-        @pointerup="finishSelectionHandleDrag"
-        @pointercancel="finishSelectionHandleDrag"
-        @contextmenu.prevent
-      ></button>
-    </template>
-    <div
-      v-if="device.supportsTouchInteraction.value && mobileClipboardMenu.visible"
-      class="mobile-terminal-clipboard-menu"
-      :style="{ left: `${mobileClipboardMenu.x}px`, top: `${mobileClipboardMenu.y}px` }"
-      @pointerdown.stop
-      @click.stop
-    >
-      <button type="button" :disabled="!mobileClipboardMenu.hasSelection" @click="copyMobileSelection">
-        {{ t('terminal.mobile.copy') }}
-      </button>
-      <button type="button" @click="pasteMobileClipboard">{{ t('terminal.mobile.paste') }}</button>
-      <button type="button" @click="selectAllMobile">{{ t('terminal.mobile.selectAll') }}</button>
-    </div>
-  </div>
+	<div
+		ref="wrapper"
+		class="relative h-full min-h-0 w-full overflow-hidden"
+		:class="{ 'has-text-stroke': visual?.textStroke?.enabled, 'has-text-shadow': visual?.textShadow?.enabled }"
+		:style="terminalStyle"
+		:data-font-size="renderedFontSize"
+	>
+		<div
+			v-if="visual?.backgroundEnabled && visual.backgroundImageUrl"
+			class="terminal-background-image"
+			:style="backgroundStyle"
+		></div>
+		<div
+			v-if="visual?.backgroundEnabled && visual.backgroundImageUrl"
+			class="terminal-background-overlay"
+			:style="{ backgroundColor: `rgba(0,0,0,${visual.backgroundOverlayOpacity ?? 0})` }"
+		></div>
+		<!-- Custom backgrounds may size themselves only once, so start them after the session is visible. -->
+		<iframe
+			v-if="backgroundReady && sandboxedCustomHtml"
+			v-show="active"
+			ref="backgroundFrame"
+			class="terminal-custom-html"
+			sandbox="allow-scripts"
+			tabindex="-1"
+			aria-hidden="true"
+		></iframe>
+		<div
+			ref="root"
+			class="terminal-inner-container relative z-10 h-full min-h-0 w-full"
+			:class="{
+				'terminal-transparent': hasVisualBackground,
+				'terminal-mobile-touch': device.supportsTouchInteraction.value,
+			}"
+			role="application"
+			:aria-label="t('terminal.ariaLabel')"
+		></div>
+		<template v-if="device.supportsTouchInteraction.value && mobileSelectionHandles.visible">
+			<button
+				v-show="mobileSelectionHandles.startVisible"
+				type="button"
+				class="mobile-terminal-selection-handle"
+				:style="{ left: `${mobileSelectionHandles.start.x}px`, top: `${mobileSelectionHandles.start.y}px` }"
+				:aria-label="t('terminal.mobile.adjustSelectionStart')"
+				@pointerdown="handleSelectionHandlePointerDown('start', $event)"
+				@pointermove="handleSelectionHandlePointerMove"
+				@pointerup="finishSelectionHandleDrag"
+				@pointercancel="finishSelectionHandleDrag"
+				@contextmenu.prevent
+			></button>
+			<button
+				v-show="mobileSelectionHandles.endVisible"
+				type="button"
+				class="mobile-terminal-selection-handle"
+				:style="{ left: `${mobileSelectionHandles.end.x}px`, top: `${mobileSelectionHandles.end.y}px` }"
+				:aria-label="t('terminal.mobile.adjustSelectionEnd')"
+				@pointerdown="handleSelectionHandlePointerDown('end', $event)"
+				@pointermove="handleSelectionHandlePointerMove"
+				@pointerup="finishSelectionHandleDrag"
+				@pointercancel="finishSelectionHandleDrag"
+				@contextmenu.prevent
+			></button>
+		</template>
+		<div
+			v-if="device.supportsTouchInteraction.value && mobileClipboardMenu.visible"
+			class="mobile-terminal-clipboard-menu"
+			:style="{ left: `${mobileClipboardMenu.x}px`, top: `${mobileClipboardMenu.y}px` }"
+			@pointerdown.stop
+			@click.stop
+		>
+			<button type="button" :disabled="!mobileClipboardMenu.hasSelection" @click="copyMobileSelection">
+				{{ t('terminal.mobile.copy') }}
+			</button>
+			<button type="button" @click="pasteMobileClipboard">{{ t('terminal.mobile.paste') }}</button>
+			<button type="button" @click="selectAllMobile">{{ t('terminal.mobile.selectAll') }}</button>
+		</div>
+	</div>
 </template>
 
 <style scoped src="./TerminalView.css"></style>

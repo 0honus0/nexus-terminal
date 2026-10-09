@@ -1,23 +1,23 @@
 import { pipeline } from 'node:stream/promises';
 import type {
-  AppearanceBackgroundUploadResponseDto,
-  AppearanceSettingsDto,
-  AppearanceUpdateRequestDto,
-  HtmlThemeCreateRequestDto,
-  HtmlThemeUpdateRequestDto,
-  LocalHtmlThemeDto,
-  RemoteHtmlRepositoryResponseDto,
-  RemoteHtmlRepositoryUpdateRequestDto,
-  RemoteHtmlThemeDto,
+	AppearanceBackgroundUploadResponseDto,
+	AppearanceSettingsDto,
+	AppearanceUpdateRequestDto,
+	HtmlThemeCreateRequestDto,
+	HtmlThemeUpdateRequestDto,
+	LocalHtmlThemeDto,
+	RemoteHtmlRepositoryResponseDto,
+	RemoteHtmlRepositoryUpdateRequestDto,
+	RemoteHtmlThemeDto,
 } from '@nexus-terminal/protocol/appearance';
 import { Router } from 'express';
 import multer from 'multer';
 import type { AppearanceSettingsService } from '../../../modules/appearance/appearance-settings.service';
 import type {
-  AppearanceSettings,
-  HtmlThemeSummary,
-  RemoteHtmlThemeSummary,
-  UpdateAppearanceInput,
+	AppearanceSettings,
+	HtmlThemeSummary,
+	RemoteHtmlThemeSummary,
+	UpdateAppearanceInput,
 } from '../../../modules/appearance/appearance.types';
 import type { BackgroundAssetService } from '../../../modules/appearance/background-asset.service';
 import type { HtmlThemeService } from '../../../modules/appearance/html-theme.service';
@@ -28,259 +28,272 @@ import { route } from '../shared/route-handler';
 const backgroundUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 const appearanceSettingsDto = (settings: AppearanceSettings): AppearanceSettingsDto => ({ ...settings });
+
 const localHtmlThemeDto = (theme: HtmlThemeSummary): LocalHtmlThemeDto => ({ ...theme });
+
 const remoteHtmlThemeDto = (theme: RemoteHtmlThemeSummary): RemoteHtmlThemeDto => ({ ...theme });
 
 const appearanceKeys = new Set<keyof UpdateAppearanceInput>([
-  'customUiTheme',
-  'activeTerminalThemeId',
-  'terminalFontFamily',
-  'terminalFontSize',
-  'terminalFontSizeMobile',
-  'editorFontSize',
-  'editorFontFamily',
-  'mobileEditorFontSize',
-  'terminalBackgroundImage',
-  'pageBackgroundImage',
-  'terminalBackgroundEnabled',
-  'terminalBackgroundOverlayOpacity',
-  'terminalCustomHtml',
-  'remoteHtmlPresetsUrl',
-  'windowThemeColor',
-  'terminalTextStrokeEnabled',
-  'terminalTextStrokeWidth',
-  'terminalTextStrokeColor',
-  'terminalTextShadowEnabled',
-  'terminalTextShadowOffsetX',
-  'terminalTextShadowOffsetY',
-  'terminalTextShadowBlur',
-  'terminalTextShadowColor',
+	'customUiTheme',
+	'activeTerminalThemeId',
+	'terminalFontFamily',
+	'terminalFontSize',
+	'terminalFontSizeMobile',
+	'editorFontSize',
+	'editorFontFamily',
+	'mobileEditorFontSize',
+	'terminalBackgroundImage',
+	'pageBackgroundImage',
+	'terminalBackgroundEnabled',
+	'terminalBackgroundOverlayOpacity',
+	'terminalCustomHtml',
+	'remoteHtmlPresetsUrl',
+	'windowThemeColor',
+	'terminalTextStrokeEnabled',
+	'terminalTextStrokeWidth',
+	'terminalTextStrokeColor',
+	'terminalTextShadowEnabled',
+	'terminalTextShadowOffsetX',
+	'terminalTextShadowOffsetY',
+	'terminalTextShadowBlur',
+	'terminalTextShadowColor',
 ]);
 
 const appearanceUpdateInput = (body: unknown): UpdateAppearanceInput => {
-  if (!isRecord(body)) throw new Error('请求体必须是对象。');
-  const dto = Object.fromEntries(
-    Object.entries(body).filter(([key]) => appearanceKeys.has(key as keyof UpdateAppearanceInput)),
-  ) as AppearanceUpdateRequestDto;
-  const { terminalCustomHtml: _terminalCustomHtml, ...otherSettings } = dto;
-  const input: UpdateAppearanceInput = { ...otherSettings };
-  if (body.terminalCustomHtml !== undefined) {
-    if (body.terminalCustomHtml !== null && typeof body.terminalCustomHtml !== 'string')
-      throw new Error('terminalCustomHtml 必须是字符串或 null。');
-    input.terminalCustomHtml = body.terminalCustomHtml ?? '';
-  }
-  return input;
+	if (!isRecord(body)) throw new Error('请求体必须是对象。');
+	const dto = Object.fromEntries(
+		Object.entries(body).filter(([key]) => appearanceKeys.has(key as keyof UpdateAppearanceInput)),
+	) as AppearanceUpdateRequestDto;
+	const { terminalCustomHtml: _terminalCustomHtml, ...otherSettings } = dto;
+	const input: UpdateAppearanceInput = { ...otherSettings };
+	if (body.terminalCustomHtml !== undefined) {
+		if (body.terminalCustomHtml !== null && typeof body.terminalCustomHtml !== 'string')
+			throw new Error('terminalCustomHtml 必须是字符串或 null。');
+		input.terminalCustomHtml = body.terminalCustomHtml ?? '';
+	}
+	return input;
 };
 
 export const createAppearanceRouter = (dependencies: {
-  appearance: AppearanceSettingsService;
-  backgrounds: BackgroundAssetService;
-  htmlThemes: HtmlThemeService;
+	appearance: AppearanceSettingsService;
+	backgrounds: BackgroundAssetService;
+	htmlThemes: HtmlThemeService;
 }): Router => {
-  const router = Router();
-  router.use(requireAuthenticated);
-  router.get(
-    '/',
-    route(async (_request, response) => {
-      response.json(appearanceSettingsDto(await dependencies.appearance.get()));
-    }),
-  );
-  router.put(
-    '/',
-    route(async (request, response) => {
-      try {
-        response.json(appearanceSettingsDto(await dependencies.appearance.update(appearanceUpdateInput(request.body))));
-      } catch (error) {
-        response.status(400).json({ message: '更新外观设置失败', error: errorMessage(error) });
-      }
-    }),
-  );
-  const uploadBackground = (kind: 'page' | 'terminal', field: string) =>
-    [
-      backgroundUpload.single(field),
-      route(async (request, response) => {
-        if (!request.file) {
-          response.status(400).json({ message: '没有上传文件' });
-          return;
-        }
-        try {
-          const result = await dependencies.backgrounds.upload(kind, request.file.buffer, request.file.mimetype);
-          const payload: AppearanceBackgroundUploadResponseDto = {
-            message: kind === 'page' ? '页面背景上传成功' : '终端背景上传成功',
-            ...result,
-          };
-          response.json(payload);
-        } catch (error) {
-          response.status(400).json({ message: errorMessage(error) });
-        }
-      }),
-    ] as const;
-  router.post('/background/page', ...uploadBackground('page', 'pageBackgroundFile'));
-  router.post('/background/terminal', ...uploadBackground('terminal', 'terminalBackgroundFile'));
-  router.get(
-    '/background/file/:filename',
-    route(async (request, response) => {
-      try {
-        const content = await dependencies.backgrounds.read(String(request.params.filename));
-        if (!content) {
-          response.status(404).json({ message: '文件未找到' });
-          return;
-        }
-        response.setHeader(
-          'Content-Security-Policy',
-          "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:",
-        );
-        response.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
-        response.setHeader('X-Content-Type-Options', 'nosniff');
-        response.setHeader('Content-Type', content.contentType);
-        response.setHeader('Content-Length', String(content.size));
-        await pipeline(content.stream, response);
-      } catch (error) {
-        if (!response.headersSent)
-          response
-            .status(errorMessage(error).includes('无效的文件名') ? 400 : 500)
-            .json({ message: errorMessage(error) });
-        else response.destroy(error instanceof Error ? error : new Error(String(error)));
-      }
-    }),
-  );
-  router.delete(
-    '/background/page',
-    route(async (_request, response) => {
-      await dependencies.backgrounds.remove('page');
-      response.json({ message: '页面背景已移除' });
-    }),
-  );
-  router.delete(
-    '/background/terminal',
-    route(async (_request, response) => {
-      await dependencies.backgrounds.remove('terminal');
-      response.json({ message: '终端背景已移除' });
-    }),
-  );
-  router.get(
-    '/html-presets/local',
-    route(async (_request, response) => {
-      response.json((await dependencies.htmlThemes.listLocal()).map(localHtmlThemeDto));
-    }),
-  );
-  router.get(
-    '/html-presets/local/:themeName',
-    route(async (request, response) => {
-      const content = await dependencies.htmlThemes.readLocal(String(request.params.themeName));
-      if (content === null) {
-        response.status(404).json({ message: `主题 '${String(request.params.themeName)}' 未找到` });
-        return;
-      }
-      response.setHeader('Content-Security-Policy', "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'");
-      response.type('text/plain; charset=utf-8').send(content);
-    }),
-  );
-  router.post(
-    '/html-presets/local',
-    route(async (request, response) => {
-      const { name, content } = (request.body ?? {}) as Partial<HtmlThemeCreateRequestDto>;
-      if (typeof name !== 'string' || typeof content !== 'string' || !name || !content) {
-        response.status(400).json({ message: '主题名称和内容不能为空' });
-        return;
-      }
-      try {
-        await dependencies.htmlThemes.createCustom(name, content);
-        response.status(201).json({ message: '用户自定义 HTML 主题创建成功' });
-      } catch (error) {
-        response.status(400).json({ message: errorMessage(error) });
-      }
-    }),
-  );
-  router.put(
-    '/html-presets/local/:themeName',
-    route(async (request, response) => {
-      const body = (request.body ?? {}) as Partial<HtmlThemeUpdateRequestDto>;
-      if (typeof body.content !== 'string') {
-        response.status(400).json({ message: '主题内容不能为空' });
-        return;
-      }
-      try {
-        await dependencies.htmlThemes.updateCustom(String(request.params.themeName), body.content);
-        response.json({ message: '用户自定义 HTML 主题更新成功' });
-      } catch (error) {
-        const message = errorMessage(error);
-        response.status(message.includes('未找到') ? 404 : 400).json({ message });
-      }
-    }),
-  );
-  router.delete(
-    '/html-presets/local/:themeName',
-    route(async (request, response) => {
-      try {
-        await dependencies.htmlThemes.deleteCustom(String(request.params.themeName));
-        response.json({ message: '用户自定义 HTML 主题删除成功' });
-      } catch (error) {
-        const message = errorMessage(error);
-        response.status(message.includes('未找到') ? 404 : 400).json({ message });
-      }
-    }),
-  );
-  router.get(
-    '/html-presets/remote/repository-url',
-    route(async (_request, response) => {
-      const payload: RemoteHtmlRepositoryResponseDto = {
-        url: await dependencies.htmlThemes.getRemoteRepositoryUrl(),
-      };
-      response.json(payload);
-    }),
-  );
-  router.put(
-    '/html-presets/remote/repository-url',
-    route(async (request, response) => {
-      const body = (request.body ?? {}) as Partial<RemoteHtmlRepositoryUpdateRequestDto>;
-      if (body.url === undefined) {
-        response.status(400).json({ message: 'URL 不能为空或 undefined' });
-        return;
-      }
-      try {
-        await dependencies.htmlThemes.setRemoteRepositoryUrl(body.url || null);
-        response.json({ message: '远程 HTML 主题仓库链接更新成功' });
-      } catch (error) {
-        response.status(400).json({ message: errorMessage(error) });
-      }
-    }),
-  );
-  router.get(
-    '/html-presets/remote/list',
-    route(async (request, response) => {
-      try {
-        response.json(
-          (
-            await dependencies.htmlThemes.listRemote(
-              typeof request.query.repoUrl === 'string' ? request.query.repoUrl : undefined,
-            )
-          ).map(remoteHtmlThemeDto),
-        );
-      } catch (error) {
-        response.status(400).json({ message: errorMessage(error) });
-      }
-    }),
-  );
-  router.get(
-    '/html-presets/remote/content',
-    route(async (request, response) => {
-      const fileUrl = typeof request.query.fileUrl === 'string' ? request.query.fileUrl : '';
-      if (!fileUrl) {
-        response.status(400).json({ message: 'fileUrl 查询参数不能为空' });
-        return;
-      }
-      try {
-        const content = await dependencies.htmlThemes.readRemote(fileUrl);
-        response.setHeader(
-          'Content-Security-Policy',
-          "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'",
-        );
-        response.type('text/plain; charset=utf-8').send(content);
-      } catch (error) {
-        response.status(400).json({ message: errorMessage(error) });
-      }
-    }),
-  );
-  return router;
+	const router = Router();
+	router.use(requireAuthenticated);
+	router.get(
+		'/',
+		route(async (_request, response) => {
+			response.json(appearanceSettingsDto(await dependencies.appearance.get()));
+		}),
+	);
+	router.put(
+		'/',
+		route(async (request, response) => {
+			try {
+				response.json(
+					appearanceSettingsDto(await dependencies.appearance.update(appearanceUpdateInput(request.body))),
+				);
+			} catch (error) {
+				response.status(400).json({ message: '更新外观设置失败', error: errorMessage(error) });
+			}
+		}),
+	);
+
+	const uploadBackground = (kind: 'page' | 'terminal', field: string) =>
+		[
+			backgroundUpload.single(field),
+			route(async (request, response) => {
+				if (!request.file) {
+					response.status(400).json({ message: '没有上传文件' });
+					return;
+				}
+				try {
+					const result = await dependencies.backgrounds.upload(
+						kind,
+						request.file.buffer,
+						request.file.mimetype,
+					);
+					const payload: AppearanceBackgroundUploadResponseDto = {
+						message: kind === 'page' ? '页面背景上传成功' : '终端背景上传成功',
+						...result,
+					};
+					response.json(payload);
+				} catch (error) {
+					response.status(400).json({ message: errorMessage(error) });
+				}
+			}),
+		] as const;
+
+	router.post('/background/page', ...uploadBackground('page', 'pageBackgroundFile'));
+	router.post('/background/terminal', ...uploadBackground('terminal', 'terminalBackgroundFile'));
+	router.get(
+		'/background/file/:filename',
+		route(async (request, response) => {
+			try {
+				const content = await dependencies.backgrounds.read(String(request.params.filename));
+				if (!content) {
+					response.status(404).json({ message: '文件未找到' });
+					return;
+				}
+				response.setHeader(
+					'Content-Security-Policy',
+					"sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:",
+				);
+				response.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+				response.setHeader('X-Content-Type-Options', 'nosniff');
+				response.setHeader('Content-Type', content.contentType);
+				response.setHeader('Content-Length', String(content.size));
+				await pipeline(content.stream, response);
+			} catch (error) {
+				if (!response.headersSent)
+					response
+						.status(errorMessage(error).includes('无效的文件名') ? 400 : 500)
+						.json({ message: errorMessage(error) });
+				else response.destroy(error instanceof Error ? error : new Error(String(error)));
+			}
+		}),
+	);
+	router.delete(
+		'/background/page',
+		route(async (_request, response) => {
+			await dependencies.backgrounds.remove('page');
+			response.json({ message: '页面背景已移除' });
+		}),
+	);
+	router.delete(
+		'/background/terminal',
+		route(async (_request, response) => {
+			await dependencies.backgrounds.remove('terminal');
+			response.json({ message: '终端背景已移除' });
+		}),
+	);
+	router.get(
+		'/html-presets/local',
+		route(async (_request, response) => {
+			response.json((await dependencies.htmlThemes.listLocal()).map(localHtmlThemeDto));
+		}),
+	);
+	router.get(
+		'/html-presets/local/:themeName',
+		route(async (request, response) => {
+			const content = await dependencies.htmlThemes.readLocal(String(request.params.themeName));
+			if (content === null) {
+				response.status(404).json({ message: `主题 '${String(request.params.themeName)}' 未找到` });
+				return;
+			}
+			response.setHeader(
+				'Content-Security-Policy',
+				"sandbox; default-src 'none'; base-uri 'none'; form-action 'none'",
+			);
+			response.type('text/plain; charset=utf-8').send(content);
+		}),
+	);
+	router.post(
+		'/html-presets/local',
+		route(async (request, response) => {
+			const { name, content } = (request.body ?? {}) as Partial<HtmlThemeCreateRequestDto>;
+			if (typeof name !== 'string' || typeof content !== 'string' || !name || !content) {
+				response.status(400).json({ message: '主题名称和内容不能为空' });
+				return;
+			}
+			try {
+				await dependencies.htmlThemes.createCustom(name, content);
+				response.status(201).json({ message: '用户自定义 HTML 主题创建成功' });
+			} catch (error) {
+				response.status(400).json({ message: errorMessage(error) });
+			}
+		}),
+	);
+	router.put(
+		'/html-presets/local/:themeName',
+		route(async (request, response) => {
+			const body = (request.body ?? {}) as Partial<HtmlThemeUpdateRequestDto>;
+			if (typeof body.content !== 'string') {
+				response.status(400).json({ message: '主题内容不能为空' });
+				return;
+			}
+			try {
+				await dependencies.htmlThemes.updateCustom(String(request.params.themeName), body.content);
+				response.json({ message: '用户自定义 HTML 主题更新成功' });
+			} catch (error) {
+				const message = errorMessage(error);
+				response.status(message.includes('未找到') ? 404 : 400).json({ message });
+			}
+		}),
+	);
+	router.delete(
+		'/html-presets/local/:themeName',
+		route(async (request, response) => {
+			try {
+				await dependencies.htmlThemes.deleteCustom(String(request.params.themeName));
+				response.json({ message: '用户自定义 HTML 主题删除成功' });
+			} catch (error) {
+				const message = errorMessage(error);
+				response.status(message.includes('未找到') ? 404 : 400).json({ message });
+			}
+		}),
+	);
+	router.get(
+		'/html-presets/remote/repository-url',
+		route(async (_request, response) => {
+			const payload: RemoteHtmlRepositoryResponseDto = {
+				url: await dependencies.htmlThemes.getRemoteRepositoryUrl(),
+			};
+			response.json(payload);
+		}),
+	);
+	router.put(
+		'/html-presets/remote/repository-url',
+		route(async (request, response) => {
+			const body = (request.body ?? {}) as Partial<RemoteHtmlRepositoryUpdateRequestDto>;
+			if (body.url === undefined) {
+				response.status(400).json({ message: 'URL 不能为空或 undefined' });
+				return;
+			}
+			try {
+				await dependencies.htmlThemes.setRemoteRepositoryUrl(body.url || null);
+				response.json({ message: '远程 HTML 主题仓库链接更新成功' });
+			} catch (error) {
+				response.status(400).json({ message: errorMessage(error) });
+			}
+		}),
+	);
+	router.get(
+		'/html-presets/remote/list',
+		route(async (request, response) => {
+			try {
+				response.json(
+					(
+						await dependencies.htmlThemes.listRemote(
+							typeof request.query.repoUrl === 'string' ? request.query.repoUrl : undefined,
+						)
+					).map(remoteHtmlThemeDto),
+				);
+			} catch (error) {
+				response.status(400).json({ message: errorMessage(error) });
+			}
+		}),
+	);
+	router.get(
+		'/html-presets/remote/content',
+		route(async (request, response) => {
+			const fileUrl = typeof request.query.fileUrl === 'string' ? request.query.fileUrl : '';
+			if (!fileUrl) {
+				response.status(400).json({ message: 'fileUrl 查询参数不能为空' });
+				return;
+			}
+			try {
+				const content = await dependencies.htmlThemes.readRemote(fileUrl);
+				response.setHeader(
+					'Content-Security-Policy',
+					"sandbox; default-src 'none'; base-uri 'none'; form-action 'none'",
+				);
+				response.type('text/plain; charset=utf-8').send(content);
+			} catch (error) {
+				response.status(400).json({ message: errorMessage(error) });
+			}
+		}),
+	);
+	return router;
 };

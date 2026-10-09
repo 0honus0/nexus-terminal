@@ -1,231 +1,234 @@
 import type { AgentApprovalResolveFieldsDto } from '@nexus-terminal/protocol/agent-approvals';
 import type { AgentReasoningEffortDto } from '@nexus-terminal/protocol/agent-providers';
 import type {
-  AgentCreateRunFieldsDto,
-  AgentRunBudgetIncreaseDto,
-  AgentRunBudgetIncreaseFieldsDto,
-  AgentRunPendingInputMutationFieldsDto,
-  AgentRunReconciliationResolveFieldsDto,
-  AgentRunResumeFieldsDto,
-  AgentRunSetGoalFieldsDto,
-  AgentUserInputDataDto,
+	AgentCreateRunFieldsDto,
+	AgentRunBudgetIncreaseDto,
+	AgentRunBudgetIncreaseFieldsDto,
+	AgentRunPendingInputMutationFieldsDto,
+	AgentRunReconciliationResolveFieldsDto,
+	AgentRunResumeFieldsDto,
+	AgentRunSetGoalFieldsDto,
+	AgentUserInputDataDto,
 } from '@nexus-terminal/protocol/agent-runs';
 import { hasOnlyKeys, isRecord, positiveInteger, versionedRecord } from './agent-route-input';
 
 export const AGENT_RUNTIME_REQUEST_SCHEMA_VERSION = 1 as const;
 const reasoningEfforts = new Set<AgentReasoningEffortDto>(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+
 const isReasoningEffort = (value: unknown): value is AgentReasoningEffortDto =>
-  typeof value === 'string' && reasoningEfforts.has(value as AgentReasoningEffortDto);
+	typeof value === 'string' && reasoningEfforts.has(value as AgentReasoningEffortDto);
 
 const parseUserInput = (value: unknown): AgentUserInputDataDto => {
-  if (!isRecord(value) || !hasOnlyKeys(value, ['text', 'artifactRefs'])) throw new Error('VALIDATION_FAILED');
-  if (
-    typeof value.text !== 'string' ||
-    Buffer.byteLength(value.text, 'utf8') > 32 * 1024 ||
-    !Array.isArray(value.artifactRefs) ||
-    value.artifactRefs.length > 10
-  ) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  if (value.artifactRefs.some((item) => typeof item !== 'string')) throw new Error('VALIDATION_FAILED');
-  return { text: value.text, artifactRefs: value.artifactRefs as string[] };
+	if (!isRecord(value) || !hasOnlyKeys(value, ['text', 'artifactRefs'])) throw new Error('VALIDATION_FAILED');
+	if (
+		typeof value.text !== 'string' ||
+		Buffer.byteLength(value.text, 'utf8') > 32 * 1024 ||
+		!Array.isArray(value.artifactRefs) ||
+		value.artifactRefs.length > 10
+	) {
+		throw new Error('VALIDATION_FAILED');
+	}
+	if (value.artifactRefs.some((item) => typeof item !== 'string')) throw new Error('VALIDATION_FAILED');
+	return { text: value.text, artifactRefs: value.artifactRefs as string[] };
 };
 
 export const parseCreateRunRequest = (body: unknown): AgentCreateRunFieldsDto => {
-  const value = versionedRecord(body, [
-    'threadId',
-    'input',
-    'agentDefinitionId',
-    'model',
-    'reasoningEffort',
-    'approvalMode',
-    'executionMode',
-    'plannedFromRunId',
-    'connectionIds',
-    'initialGoal',
-  ]);
-  const model = value.model;
-  if (!isRecord(model) || !hasOnlyKeys(model, ['providerId', 'modelId', 'configurationVersion'])) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  if (
-    typeof value.threadId !== 'string' ||
-    typeof value.agentDefinitionId !== 'string' ||
-    typeof model.providerId !== 'string' ||
-    typeof model.modelId !== 'string' ||
-    !positiveInteger(model.configurationVersion) ||
-    (value.reasoningEffort !== undefined && !isReasoningEffort(value.reasoningEffort)) ||
-    (value.approvalMode !== 'ask' && value.approvalMode !== 'full_access') ||
-    (value.executionMode !== 'execute' && value.executionMode !== 'plan') ||
-    (value.plannedFromRunId !== undefined && typeof value.plannedFromRunId !== 'string') ||
-    !Array.isArray(value.connectionIds) ||
-    value.connectionIds.length > 50 ||
-    value.connectionIds.some((connectionId) => !positiveInteger(connectionId)) ||
-    (value.initialGoal !== undefined &&
-      (typeof value.initialGoal !== 'string' ||
-        !value.initialGoal.trim() ||
-        Buffer.byteLength(value.initialGoal.trim(), 'utf8') > 4096))
-  ) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  return {
-    threadId: value.threadId,
-    input: parseUserInput(value.input),
-    agentDefinitionId: value.agentDefinitionId,
-    model: {
-      providerId: model.providerId,
-      modelId: model.modelId,
-      configurationVersion: model.configurationVersion,
-    },
-    ...(value.reasoningEffort === undefined
-      ? {}
-      : { reasoningEffort: value.reasoningEffort as AgentReasoningEffortDto }),
-    approvalMode: value.approvalMode as AgentCreateRunFieldsDto['approvalMode'],
-    executionMode: value.executionMode as AgentCreateRunFieldsDto['executionMode'],
-    ...(typeof value.plannedFromRunId === 'string' ? { plannedFromRunId: value.plannedFromRunId } : {}),
-    connectionIds: value.connectionIds as number[],
-    ...(typeof value.initialGoal === 'string' && value.initialGoal.trim()
-      ? { initialGoal: value.initialGoal.trim() }
-      : {}),
-  };
+	const value = versionedRecord(body, [
+		'threadId',
+		'input',
+		'agentDefinitionId',
+		'model',
+		'reasoningEffort',
+		'approvalMode',
+		'executionMode',
+		'plannedFromRunId',
+		'connectionIds',
+		'initialGoal',
+	]);
+	const model = value.model;
+	if (!isRecord(model) || !hasOnlyKeys(model, ['providerId', 'modelId', 'configurationVersion'])) {
+		throw new Error('VALIDATION_FAILED');
+	}
+	if (
+		typeof value.threadId !== 'string' ||
+		typeof value.agentDefinitionId !== 'string' ||
+		typeof model.providerId !== 'string' ||
+		typeof model.modelId !== 'string' ||
+		!positiveInteger(model.configurationVersion) ||
+		(value.reasoningEffort !== undefined && !isReasoningEffort(value.reasoningEffort)) ||
+		(value.approvalMode !== 'ask' && value.approvalMode !== 'full_access') ||
+		(value.executionMode !== 'execute' && value.executionMode !== 'plan') ||
+		(value.plannedFromRunId !== undefined && typeof value.plannedFromRunId !== 'string') ||
+		!Array.isArray(value.connectionIds) ||
+		value.connectionIds.length > 50 ||
+		value.connectionIds.some((connectionId) => !positiveInteger(connectionId)) ||
+		(value.initialGoal !== undefined &&
+			(typeof value.initialGoal !== 'string' ||
+				!value.initialGoal.trim() ||
+				Buffer.byteLength(value.initialGoal.trim(), 'utf8') > 4096))
+	) {
+		throw new Error('VALIDATION_FAILED');
+	}
+	return {
+		threadId: value.threadId,
+		input: parseUserInput(value.input),
+		agentDefinitionId: value.agentDefinitionId,
+		model: {
+			providerId: model.providerId,
+			modelId: model.modelId,
+			configurationVersion: model.configurationVersion,
+		},
+		...(value.reasoningEffort === undefined
+			? {}
+			: { reasoningEffort: value.reasoningEffort as AgentReasoningEffortDto }),
+		approvalMode: value.approvalMode as AgentCreateRunFieldsDto['approvalMode'],
+		executionMode: value.executionMode as AgentCreateRunFieldsDto['executionMode'],
+		...(typeof value.plannedFromRunId === 'string' ? { plannedFromRunId: value.plannedFromRunId } : {}),
+		connectionIds: value.connectionIds as number[],
+		...(typeof value.initialGoal === 'string' && value.initialGoal.trim()
+			? { initialGoal: value.initialGoal.trim() }
+			: {}),
+	};
 };
 
 export const parseExpectedVersionRequest = (body: unknown): number => {
-  const value = versionedRecord(body, ['expectedVersion']);
-  if (!positiveInteger(value.expectedVersion)) throw new Error('VALIDATION_FAILED');
-  return value.expectedVersion;
+	const value = versionedRecord(body, ['expectedVersion']);
+	if (!positiveInteger(value.expectedVersion)) throw new Error('VALIDATION_FAILED');
+	return value.expectedVersion;
 };
 
 export const parseReconciliationResolveRequest = (body: unknown): AgentRunReconciliationResolveFieldsDto => {
-  const value = versionedRecord(body, ['expectedVersion', 'note', 'resources']);
-  if (
-    !positiveInteger(value.expectedVersion) ||
-    typeof value.note !== 'string' ||
-    !value.note.trim() ||
-    Buffer.byteLength(value.note.trim(), 'utf8') > 2_000 ||
-    !Array.isArray(value.resources) ||
-    value.resources.length < 1 ||
-    value.resources.length > 64
-  ) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  const resources = value.resources.map((entry) => {
-    if (
-      !isRecord(entry) ||
-      !hasOnlyKeys(entry, ['resourceKey', 'version']) ||
-      typeof entry.resourceKey !== 'string' ||
-      entry.resourceKey.length < 1 ||
-      Buffer.byteLength(entry.resourceKey, 'utf8') > 512 ||
-      !positiveInteger(entry.version)
-    ) {
-      throw new Error('VALIDATION_FAILED');
-    }
-    return { resourceKey: entry.resourceKey, version: entry.version };
-  });
-  if (new Set(resources.map((resource) => resource.resourceKey)).size !== resources.length) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  return { expectedVersion: value.expectedVersion, note: value.note.trim(), resources };
+	const value = versionedRecord(body, ['expectedVersion', 'note', 'resources']);
+	if (
+		!positiveInteger(value.expectedVersion) ||
+		typeof value.note !== 'string' ||
+		!value.note.trim() ||
+		Buffer.byteLength(value.note.trim(), 'utf8') > 2_000 ||
+		!Array.isArray(value.resources) ||
+		value.resources.length < 1 ||
+		value.resources.length > 64
+	) {
+		throw new Error('VALIDATION_FAILED');
+	}
+	const resources = value.resources.map((entry) => {
+		if (
+			!isRecord(entry) ||
+			!hasOnlyKeys(entry, ['resourceKey', 'version']) ||
+			typeof entry.resourceKey !== 'string' ||
+			entry.resourceKey.length < 1 ||
+			Buffer.byteLength(entry.resourceKey, 'utf8') > 512 ||
+			!positiveInteger(entry.version)
+		) {
+			throw new Error('VALIDATION_FAILED');
+		}
+		return { resourceKey: entry.resourceKey, version: entry.version };
+	});
+	if (new Set(resources.map((resource) => resource.resourceKey)).size !== resources.length) {
+		throw new Error('VALIDATION_FAILED');
+	}
+	return { expectedVersion: value.expectedVersion, note: value.note.trim(), resources };
 };
 
 export const parseAppendInputRequest = (body: unknown): { input: AgentUserInputDataDto; expectedVersion: number } => {
-  const value = versionedRecord(body, ['text', 'artifactRefs', 'expectedVersion']);
-  if (!positiveInteger(value.expectedVersion)) throw new Error('VALIDATION_FAILED');
-  return {
-    input: parseUserInput({ text: value.text, artifactRefs: value.artifactRefs }),
-    expectedVersion: value.expectedVersion,
-  };
+	const value = versionedRecord(body, ['text', 'artifactRefs', 'expectedVersion']);
+	if (!positiveInteger(value.expectedVersion)) throw new Error('VALIDATION_FAILED');
+	return {
+		input: parseUserInput({ text: value.text, artifactRefs: value.artifactRefs }),
+		expectedVersion: value.expectedVersion,
+	};
 };
 
 export const parsePendingInputMutationRequest = (body: unknown): AgentRunPendingInputMutationFieldsDto => {
-  const value = versionedRecord(body, ['action', 'inputId', 'beforeInputId', 'expectedVersion']);
-  if (
-    !['remove', 'move'].includes(String(value.action)) ||
-    typeof value.inputId !== 'string' ||
-    value.inputId.length < 1 ||
-    value.inputId.length > 128 ||
-    (value.beforeInputId !== undefined && value.beforeInputId !== null && typeof value.beforeInputId !== 'string') ||
-    !positiveInteger(value.expectedVersion)
-  ) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  const action = value.action as 'remove' | 'move';
-  const beforeInputId = typeof value.beforeInputId === 'string' ? value.beforeInputId : null;
-  if ((action === 'remove' && beforeInputId !== null) || (action === 'move' && beforeInputId === value.inputId)) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  return { action, inputId: value.inputId, beforeInputId, expectedVersion: value.expectedVersion };
+	const value = versionedRecord(body, ['action', 'inputId', 'beforeInputId', 'expectedVersion']);
+	if (
+		!['remove', 'move'].includes(String(value.action)) ||
+		typeof value.inputId !== 'string' ||
+		value.inputId.length < 1 ||
+		value.inputId.length > 128 ||
+		(value.beforeInputId !== undefined &&
+			value.beforeInputId !== null &&
+			typeof value.beforeInputId !== 'string') ||
+		!positiveInteger(value.expectedVersion)
+	) {
+		throw new Error('VALIDATION_FAILED');
+	}
+	const action = value.action as 'remove' | 'move';
+	const beforeInputId = typeof value.beforeInputId === 'string' ? value.beforeInputId : null;
+	if ((action === 'remove' && beforeInputId !== null) || (action === 'move' && beforeInputId === value.inputId)) {
+		throw new Error('VALIDATION_FAILED');
+	}
+	return { action, inputId: value.inputId, beforeInputId, expectedVersion: value.expectedVersion };
 };
 
 export const parseSetGoalRequest = (body: unknown): AgentRunSetGoalFieldsDto => {
-  const value = versionedRecord(body, ['text', 'expectedVersion']);
-  if (
-    typeof value.text !== 'string' ||
-    !value.text.trim() ||
-    Buffer.byteLength(value.text.trim(), 'utf8') > 4096 ||
-    !positiveInteger(value.expectedVersion)
-  ) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  return { text: value.text.trim(), expectedVersion: value.expectedVersion };
+	const value = versionedRecord(body, ['text', 'expectedVersion']);
+	if (
+		typeof value.text !== 'string' ||
+		!value.text.trim() ||
+		Buffer.byteLength(value.text.trim(), 'utf8') > 4096 ||
+		!positiveInteger(value.expectedVersion)
+	) {
+		throw new Error('VALIDATION_FAILED');
+	}
+	return { text: value.text.trim(), expectedVersion: value.expectedVersion };
 };
 
 export const parseResumeRunRequest = (body: unknown): AgentRunResumeFieldsDto => {
-  const value = versionedRecord(body, ['checkpointId', 'expectedVersion']);
-  if (
-    typeof value.checkpointId !== 'string' ||
-    value.checkpointId.length < 1 ||
-    value.checkpointId.length > 256 ||
-    !positiveInteger(value.expectedVersion)
-  ) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  return { checkpointId: value.checkpointId, expectedVersion: value.expectedVersion };
+	const value = versionedRecord(body, ['checkpointId', 'expectedVersion']);
+	if (
+		typeof value.checkpointId !== 'string' ||
+		value.checkpointId.length < 1 ||
+		value.checkpointId.length > 256 ||
+		!positiveInteger(value.expectedVersion)
+	) {
+		throw new Error('VALIDATION_FAILED');
+	}
+	return { checkpointId: value.checkpointId, expectedVersion: value.expectedVersion };
 };
 
 const parseBudgetIncrease = (value: unknown): AgentRunBudgetIncreaseDto => {
-  if (
-    !isRecord(value) ||
-    !hasOnlyKeys(value, [
-      'maxModelRequests',
-      'maxActiveExecutionSeconds',
-      'maxSubagentMessages',
-      'maxSubagentMessageBytes',
-    ])
-  ) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  for (const entry of Object.values(value)) {
-    if (!positiveInteger(entry)) throw new Error('VALIDATION_FAILED');
-  }
-  if (Object.keys(value).length === 0) throw new Error('VALIDATION_FAILED');
-  return value as AgentRunBudgetIncreaseDto;
+	if (
+		!isRecord(value) ||
+		!hasOnlyKeys(value, [
+			'maxModelRequests',
+			'maxActiveExecutionSeconds',
+			'maxSubagentMessages',
+			'maxSubagentMessageBytes',
+		])
+	) {
+		throw new Error('VALIDATION_FAILED');
+	}
+	for (const entry of Object.values(value)) {
+		if (!positiveInteger(entry)) throw new Error('VALIDATION_FAILED');
+	}
+	if (Object.keys(value).length === 0) throw new Error('VALIDATION_FAILED');
+	return value as AgentRunBudgetIncreaseDto;
 };
 
 export const parseBudgetIncreaseRequest = (body: unknown): AgentRunBudgetIncreaseFieldsDto => {
-  const value = versionedRecord(body, ['increase', 'expectedVersion']);
-  if (!positiveInteger(value.expectedVersion)) throw new Error('VALIDATION_FAILED');
-  return { increase: parseBudgetIncrease(value.increase), expectedVersion: value.expectedVersion };
+	const value = versionedRecord(body, ['increase', 'expectedVersion']);
+	if (!positiveInteger(value.expectedVersion)) throw new Error('VALIDATION_FAILED');
+	return { increase: parseBudgetIncrease(value.increase), expectedVersion: value.expectedVersion };
 };
 
 export const parseApprovalResolveRequest = (body: unknown): AgentApprovalResolveFieldsDto => {
-  const value = versionedRecord(body, ['decision', 'operationHash', 'expectedVersion', 'feedback']);
-  const feedback = typeof value.feedback === 'string' ? value.feedback.trim() : undefined;
-  if (
-    (value.decision !== 'approved' && value.decision !== 'denied') ||
-    typeof value.operationHash !== 'string' ||
-    !/^v1:[a-f0-9]{64}$/.test(value.operationHash) ||
-    !positiveInteger(value.expectedVersion) ||
-    (value.feedback !== undefined && typeof value.feedback !== 'string') ||
-    (feedback !== undefined && Buffer.byteLength(feedback, 'utf8') > 2000) ||
-    (value.decision === 'approved' && feedback)
-  ) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  return {
-    decision: value.decision,
-    operationHash: value.operationHash,
-    expectedVersion: value.expectedVersion,
-    ...(feedback ? { feedback } : {}),
-  };
+	const value = versionedRecord(body, ['decision', 'operationHash', 'expectedVersion', 'feedback']);
+	const feedback = typeof value.feedback === 'string' ? value.feedback.trim() : undefined;
+	if (
+		(value.decision !== 'approved' && value.decision !== 'denied') ||
+		typeof value.operationHash !== 'string' ||
+		!/^v1:[a-f0-9]{64}$/.test(value.operationHash) ||
+		!positiveInteger(value.expectedVersion) ||
+		(value.feedback !== undefined && typeof value.feedback !== 'string') ||
+		(feedback !== undefined && Buffer.byteLength(feedback, 'utf8') > 2000) ||
+		(value.decision === 'approved' && feedback)
+	) {
+		throw new Error('VALIDATION_FAILED');
+	}
+	return {
+		decision: value.decision,
+		operationHash: value.operationHash,
+		expectedVersion: value.expectedVersion,
+		...(feedback ? { feedback } : {}),
+	};
 };

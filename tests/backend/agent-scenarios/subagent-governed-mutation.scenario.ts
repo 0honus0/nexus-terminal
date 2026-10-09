@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
-  resolveToolApprovalTransition,
-  expireToolApprovalsTransition,
+	resolveToolApprovalTransition,
+	expireToolApprovalsTransition,
 } from '../../../packages/backend/src/infrastructure/agent/runtime/state-commit/approval-transitions';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -14,10 +14,10 @@ import { ToolCatalog } from '../../../packages/backend/src/modules/agent/capabil
 import { PolicyService } from '../../../packages/backend/src/modules/agent/capabilities/policy.service';
 import { ToolExecutor } from '../../../packages/backend/src/modules/agent/capabilities/tool-executor';
 import type {
-  AgentTool,
-  ToolContext,
-  ToolInspection,
-  ToolResult,
+	AgentTool,
+	ToolContext,
+	ToolInspection,
+	ToolResult,
 } from '../../../packages/backend/src/modules/agent/capabilities/tool.types';
 import { CapabilityRegistry } from '../../../packages/backend/src/modules/agent/host/capability-registry';
 import { ToolCallRunner } from '../../../packages/backend/src/modules/agent/runtime/execution/tool-call-runner';
@@ -28,8 +28,8 @@ import { SubagentToolStepExecutor } from '../../../packages/backend/src/modules/
 import { builtInSubagentProfileTemplates } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent-profile-templates';
 import { governedSubagentSshMutation } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent-mutation-policy';
 import type {
-  DelegationView,
-  SchedulerWorkView,
+	DelegationView,
+	SchedulerWorkView,
 } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent.types';
 import { freezeRunContextPolicy } from '../../../packages/backend/src/modules/agent/runtime/runs/run-budget-policy';
 import { requestHash } from '../../../packages/backend/src/modules/agent/runtime/runs/idempotency';
@@ -37,892 +37,923 @@ import type { RunView } from '../../../packages/backend/src/modules/agent/runtim
 import { emptyModelContinuations, scenarioDelegationModel, SCENARIO_MODEL_CAPABILITIES } from './scenario-fixtures';
 
 const sshFingerprint = (connectionId: number, configurationHash = 'scenario-ssh-config') => {
-  const endpoint = 'ssh.example.invalid:22';
-  const loginUser = 'worker';
-  return {
-    kind: 'ssh' as const,
-    target: 'ssh' as const,
-    id: String(connectionId),
-    connectionId,
-    endpoint,
-    loginUser,
-    configurationHash,
-    hostKeyTrust: 'unavailable' as const,
-    targetIdentity: createHash('sha256').update(`${endpoint}\n${loginUser}\n${configurationHash}`).digest('hex'),
-  };
+	const endpoint = 'ssh.example.invalid:22';
+	const loginUser = 'worker';
+	return {
+		kind: 'ssh' as const,
+		target: 'ssh' as const,
+		id: String(connectionId),
+		connectionId,
+		endpoint,
+		loginUser,
+		configurationHash,
+		hostKeyTrust: 'unavailable' as const,
+		targetIdentity: createHash('sha256').update(`${endpoint}\n${loginUser}\n${configurationHash}`).digest('hex'),
+	};
 };
 
 export const subagentGovernedMutationScenario = async () => {
-  const scenarioScope: Scope = { userId: 1, appId: 'subagent-governed-mutation-app' };
-  const executionOrder: string[] = [];
-  let scenarioMutationExecutions = 0;
-  const catalog = new ToolCatalog();
-  const mutationTool: AgentTool = {
-    descriptor: {
-      name: 'file_write',
-      version: '1',
-      description: 'Scenario-only governed SSH mutation.',
-      inputSchema: { type: 'object', additionalProperties: false },
-      riskClass: 'mutate',
-      capability: 'file.write',
-    },
-    inspect: async (_input, context, policyRevision) => ({
-      toolName: 'file_write',
-      toolVersion: '1',
-      normalizedArguments: { target: 'ssh', id: '42', path: 'src/example.ts', content: 'updated' },
-      target: sshFingerprint(42),
-      resourceKeys: ['connection:42:file:src/example.ts'],
-      risk: 'mutate',
-      mutation: true,
-      operationHash: 'scenario-subagent-mutation-operation',
-      operationHashVersion: 1,
-      preconditions: [],
-      policyRevision,
-      inputRevision: context.inputRevision,
-    }),
-    execute: async () => {
-      executionOrder.push('tool.execute');
-      scenarioMutationExecutions += 1;
-      return {
-        ok: true,
-        summary: 'Scenario mutation completed.',
-        data: null,
-        artifactRefs: ['artifact:scenario-diff', 'artifact:scenario-test'],
-        truncated: false,
-        outcome: 'confirmed',
-        verification: {
-          status: 'verified',
-          summary: 'Scenario verification.',
-          evidenceRefs: ['artifact:scenario-diff', 'artifact:scenario-test'],
-        },
-      };
-    },
-  };
-  catalog.registerContribution({
-    schemaVersion: 1,
-    id: 'scenario.subagent-governed-mutation',
-    tools: [mutationTool],
-  });
-  const machineMutationTool: AgentTool = {
-    ...mutationTool,
-    descriptor: {
-      ...mutationTool.descriptor,
-      name: 'scenario_machine_mutate',
-      capability: 'file.write',
-    },
-  };
-  catalog.registerContribution({
-    schemaVersion: 1,
-    id: 'scenario.subagent-machine-mutation',
-    tools: [machineMutationTool],
-  });
-  let forbiddenTargetExecutions = 0;
-  const misdeclaredWorkspaceMutationTool: AgentTool = {
-    ...mutationTool,
-    descriptor: {
-      ...mutationTool.descriptor,
-      name: 'scenario_misdeclared_workspace_mutate',
-      capability: 'file.write',
-    },
-    inspect: async (_input, context, policyRevision) => ({
-      ...(await mutationTool.inspect({}, context, policyRevision)),
-      toolName: 'scenario_misdeclared_workspace_mutate',
-      target: {
-        kind: 'ssh',
-        target: 'ssh',
-        id: '42',
-        connectionId: 42,
-        targetIdentity: 'machine:42',
-        endpoint: 'ssh://example.invalid',
-        loginUser: 'root',
-        configurationHash: 'misdeclared-workspace-target',
-        hostKeyTrust: 'unavailable',
-      },
-      resourceKeys: ['connection:42:path:/tmp/not-a-workspace'],
-      operationHash: 'scenario-misdeclared-workspace-operation',
-    }),
-    execute: async () => {
-      forbiddenTargetExecutions += 1;
-      return {
-        ok: true,
-        summary: 'forbidden target executed',
-        data: null,
-        artifactRefs: [],
-        truncated: false,
-        outcome: 'confirmed',
-        verification: { status: 'verified', summary: 'unexpected', evidenceRefs: [] },
-      };
-    },
-  };
-  catalog.registerContribution({
-    schemaVersion: 1,
-    id: 'scenario.subagent-misdeclared-workspace-mutation',
-    tools: [misdeclaredWorkspaceMutationTool],
-  });
-  const builder = new SubagentContextBuilder(
-    null!,
-    null!,
-    catalog,
-    new CapabilityRegistry(),
-    emptyModelContinuations,
-    null!,
-    {
-      nowUnixSeconds: () => 1_800_570_000,
-    } as ClockPort,
-  );
-  const baseDelegation = {
-    userId: 1,
-    appId: scenarioScope.appId,
-    id: 'scenario-governed-delegation',
-    runId: 'scenario-governed-run',
-    parentRuntimeId: 'scenario-root-runtime',
-    childRuntimeId: 'scenario-child-runtime',
-    profileId: 'scenario-worker',
-    grants: [
-      {
-        capability: 'file.write',
-        schemaVersion: 2,
-        scope: { kind: 'targets', targets: { ssh: { mode: 'ids', ids: ['42'] } } },
-      },
-    ],
-    peerMessaging: 'parent-child',
-    mutationMode: 'read-only',
-    modelRef: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
-    objective: 'Modify only src/example.ts and run the focused test.',
-    constraints: ['Use only the delegated SSH connection 42.'],
-    inputArtifactRefs: [],
-    completionCriteria: ['Return verified mutation evidence.'],
-    dependencyMode: 'settled',
-    status: 'running',
-    depth: 1,
-    failureMode: 'isolate',
-    budget: { maxModelRequests: 12 },
-    usage: { tokens: 0, modelRequests: 0 },
-    result: null,
-    evidenceRefs: [],
-    deadlineAt: 1_900_000_000,
-    version: 1,
-    createdAt: 1_800_570_000,
-    updatedAt: 1_800_570_000,
-    completedAt: null,
-  } satisfies DelegationView;
-  assert.equal(
-    builder.allowsTool(scenarioScope, baseDelegation, mutationTool.descriptor.name),
-    false,
-    'read-only Subagents must continue rejecting mutation Tools even when the capability is present',
-  );
-  const governedDelegation = {
-    ...baseDelegation,
-    mutationMode: 'governed',
-  } as unknown as DelegationView;
-  assert.equal(
-    builder.allowsTool(scenarioScope, governedDelegation, mutationTool.descriptor.name),
-    true,
-    'explicit governed workers must expose mutation Tools through the existing capability-filtered surface',
-  );
-  assert.equal(
-    builder.allowsProposal(scenarioScope, governedDelegation, {
-      providerCallId: 'scenario-ssh-write',
-      name: machineMutationTool.descriptor.name,
-      argumentsJson: JSON.stringify({ target: 'ssh', id: '43' }),
-    }),
-    false,
-    'governed workers must stay confined to the SSH target scope carried by their delegated file.write grant',
-  );
-  assert.deepEqual(
-    builtInSubagentProfileTemplates(64).map((template) => template.id),
-    ['explore', 'scout', 'review', 'general', 'worker'],
-    'the built-in catalog must expose an explicit governed worker preset without mutating read-only templates',
-  );
-  const toolSchemas = (
-    builder as unknown as {
-      toolSchemas(
-        scope: Scope,
-        delegation: DelegationView,
-        model: { supportsTools: boolean },
-        run: RunView,
-      ): Array<{ name: string }>;
-    }
-  ).toolSchemas.bind(builder);
-  const runForMode = (approvalMode: 'ask' | 'full_access') =>
-    ({
-      id: baseDelegation.runId,
-      userId: 1,
-      appId: scenarioScope.appId,
-      definition: { approvalMode, executionMode: 'execute', connectionIds: [42] },
-    }) as unknown as RunView;
-  assert.equal(
-    toolSchemas(scenarioScope, governedDelegation, { supportsTools: true }, runForMode('ask')).some(
-      (schema) => schema.name === mutationTool.descriptor.name,
-    ),
-    true,
-    'ask-mode Runs expose governed mutation Tools with durable user approval',
-  );
-  assert.equal(
-    toolSchemas(scenarioScope, governedDelegation, { supportsTools: true }, runForMode('full_access')).some(
-      (schema) => schema.name === mutationTool.descriptor.name,
-    ),
-    true,
-    'governed workers on explicit Full Access Runs may expose delegated SSH mutation Tools',
-  );
-  assert.equal(
-    toolSchemas(scenarioScope, baseDelegation, { supportsTools: true }, runForMode('full_access')).some(
-      (schema) => schema.name === mutationTool.descriptor.name,
-    ),
-    false,
-    'Full Access must not override a read-only Subagent profile',
-  );
-  const planRun = runForMode('full_access');
-  planRun.definition = { ...planRun.definition, executionMode: 'plan' };
-  assert.equal(
-    toolSchemas(scenarioScope, governedDelegation, { supportsTools: true }, planRun).some(
-      (schema) => schema.name === mutationTool.descriptor.name,
-    ),
-    false,
-    'Plan Run must not expose Child mutation Tools even with full access',
-  );
+	const scenarioScope: Scope = { userId: 1, appId: 'subagent-governed-mutation-app' };
+	const executionOrder: string[] = [];
+	let scenarioMutationExecutions = 0;
+	const catalog = new ToolCatalog();
+	const mutationTool: AgentTool = {
+		descriptor: {
+			name: 'file_write',
+			version: '1',
+			description: 'Scenario-only governed SSH mutation.',
+			inputSchema: { type: 'object', additionalProperties: false },
+			riskClass: 'mutate',
+			capability: 'file.write',
+		},
 
-  const fullAccessRun = {
-    id: baseDelegation.runId,
-    userId: scenarioScope.userId,
-    appId: scenarioScope.appId,
-    status: 'running',
-    needsReconciliation: false,
-    version: 1,
-    inputRevision: 1,
-    definition: {
-      approvalMode: 'full_access',
-      connectionIds: [42],
-      policyRevision: 1,
-    },
-    budget: { toolTimeoutSeconds: 120, maxToolOutputBytes: 1_048_576 },
-    usage: {
-      inputTokens: 0,
-      outputTokens: 0,
-      cachedInputTokens: 0,
-      toolExecutions: 0,
-      modelRequests: 0,
-      subagentMessages: 0,
-      subagentMessageBytes: 0,
-    },
-  } as unknown as RunView;
-  const toolStepId = 'scenario-governed-tool-step';
-  const toolCallId = 'scenario-governed-tool-call';
-  const work: SchedulerWorkView = {
-    id: 'scenario-governed-tool-work',
-    enqueueSequence: 1,
-    runId: fullAccessRun.id,
-    agentRuntimeId: baseDelegation.childRuntimeId,
-    kind: 'tool_step',
-    status: 'claimed',
-    payload: { delegationId: baseDelegation.id, toolStepId, toolCallId },
-    ownerEpoch: 7,
-    notBefore: 1_800_570_000,
-    deadlineAt: 1_900_000_000,
-    createdAt: 1_800_570_000,
-    updatedAt: 1_800_570_000,
-    version: 2,
-  };
-  const signal = new AbortController().signal;
-  const mutationContext: ToolContext = {
-    userId: scenarioScope.userId,
-    appId: scenarioScope.appId,
-    actor: {
-      kind: 'agent',
-      userId: scenarioScope.userId,
-      appId: scenarioScope.appId,
-      runId: fullAccessRun.id,
-      agentRuntimeId: baseDelegation.childRuntimeId,
-    },
-    runId: fullAccessRun.id,
-    agentRuntimeId: baseDelegation.childRuntimeId,
-    connectionIds: [42],
-    stepId: toolStepId,
-    signal,
-    deadlineAt: work.deadlineAt,
-    maxOutputBytes: 1_048_576,
-    inputRevision: 1,
-  };
-  const persistedInspection = await mutationTool.inspect({}, mutationContext, 1);
-  assert.equal(
-    governedSubagentSshMutation(persistedInspection, fullAccessRun.definition.connectionIds, governedDelegation.grants),
-    true,
-    'governed SSH inspection must be selected and delegated',
-  );
-  for (const tampered of [
-    { ...persistedInspection, target: { ...persistedInspection.target, configurationHash: 'tampered' } },
-    { ...persistedInspection, normalizedArguments: { target: 'ssh', id: '43' } },
-    { ...persistedInspection, resourceKeys: ['connection:43:file:src/example.ts'] },
-  ]) {
-    assert.equal(governedSubagentSshMutation(tampered as ToolInspection, [42], governedDelegation.grants), false);
-  }
-  assert.equal(governedSubagentSshMutation(persistedInspection, [43], governedDelegation.grants), false);
-  assert.equal(governedSubagentSshMutation(persistedInspection, [42], []), false);
-  assert.equal(
-    governedSubagentSshMutation(
-      persistedInspection,
-      [42],
-      [
-        {
-          capability: 'file.write',
-          schemaVersion: 2,
-          scope: {
-            kind: 'targets',
-            targets: {
-              workspace: { mode: 'all' },
-              ssh: { mode: 'all' },
-            },
-          },
-        },
-      ],
-    ),
-    false,
-  );
-  for (const toolName of ['file_write', 'file_patch', 'file_move', 'file_delete', 'shell_execute'] as const) {
-    const capability =
-      toolName === 'file_delete' ? 'file.delete' : toolName === 'shell_execute' ? 'shell.execute' : 'file.write';
-    const inspection: ToolInspection = { ...persistedInspection, toolName };
-    const grants = [
-      {
-        capability,
-        schemaVersion: 2,
-        scope: { kind: 'targets', targets: { ssh: { mode: 'ids', ids: ['42'] } } },
-      },
-    ];
-    assert.equal(
-      governedSubagentSshMutation(inspection, [42], grants),
-      true,
-      `${toolName} must use its own delegated capability on the selected SSH connection`,
-    );
-    assert.equal(
-      governedSubagentSshMutation(inspection, [42], governedDelegation.grants),
-      capability === 'file.write',
-      `${toolName} must not borrow a different mutation capability`,
-    );
-  }
-  assert.equal(
-    governedSubagentSshMutation(
-      { ...persistedInspection, toolName: 'scenario_machine_mutate' },
-      [42],
-      governedDelegation.grants,
-    ),
-    false,
-    'Unrecognized mutation tools must not gain authority from a broadly granted capability',
-  );
-  let mutationLeaseAcquisitions = 0;
-  const mutationLeasePort = {
-    acquire: async () => {
-      mutationLeaseAcquisitions += 1;
-      executionOrder.push('lease.acquire');
-      let active = false;
-      return {
-        signal,
-        stopRenewal: async () => null,
-        activate: async () => {
-          active = true;
-          executionOrder.push('lease.activate');
-        },
-        quarantine: async () => {
-          executionOrder.push('lease.quarantine');
-        },
-        confirm: async () => {
-          assert.equal(active, true, 'mutation lease must be active before it is confirmed');
-          active = false;
-          executionOrder.push('lease.confirm');
-          return { ok: true as const };
-        },
-        releaseIfInactive: async () => {
-          assert.equal(active, false, 'cleanup must not release an active mutation lease');
-          executionOrder.push('lease.release');
-        },
-      };
-    },
-  };
-  const toolRunner = new ToolCallRunner(
-    catalog,
-    new ToolExecutor(catalog, {
-      authorize: async () => ({ allowed: true, policyRevision: 1 }),
-    } as never),
-    new PolicyService(),
-    null!,
-    mutationLeasePort as never,
-  );
-  let lastSettledMutation: { result: ToolResult; needsReconciliation?: boolean } | undefined;
-  const runAt = (version: number, status: RunView['status'] = 'running'): RunView =>
-    ({ ...fullAccessRun, version, status }) as RunView;
-  const stateCommit = {
-    beginSubagentTool: async () => {
-      executionOrder.push('state.begin-read');
-      return { run: runAt(2), eventCursor: 2, ledgerCursor: 0, committedEvents: [] };
-    },
-    requestToolApproval: async () => {
-      executionOrder.push('approval.request');
-      return { run: runAt(2, 'awaiting_approval'), eventCursor: 2, ledgerCursor: 0, committedEvents: [] };
-    },
-    resolveToolApproval: async () => {
-      executionOrder.push('approval.approve');
-      return { run: runAt(3), eventCursor: 3, ledgerCursor: 0, committedEvents: [] };
-    },
-    beginSubagentMutationTool: async () => {
-      executionOrder.push('state.begin');
-      return { run: runAt(4), eventCursor: 4, ledgerCursor: 0, committedEvents: [] };
-    },
-    settleSubagentTool: async (command: { result: ToolResult; needsReconciliation?: boolean }) => {
-      executionOrder.push('state.settle');
-      lastSettledMutation = {
-        result: command.result,
-        ...(command.needsReconciliation ? { needsReconciliation: true } : {}),
-      };
-      return {
-        run:
-          command.result.outcome === 'unknown'
-            ? ({ ...runAt(5, 'interrupted'), needsReconciliation: true } as RunView)
-            : runAt(5),
-        eventCursor: 5,
-        ledgerCursor: 0,
-        committedEvents: [],
-      };
-    },
-    evaluateToolLoopGuard: async () => {
-      executionOrder.push('loop.guard');
-      return { run: runAt(6), eventCursor: 6, ledgerCursor: 0, committedEvents: [] };
-    },
-    refreshProposedTool: async () => {
-      throw new Error('SCENARIO_UNEXPECTED_REFRESH');
-    },
-    commit: async () => {
-      throw new Error('SCENARIO_UNEXPECTED_RECONCILIATION_COMMIT');
-    },
-  };
-  const completion = new SubagentCompletionCoordinator(
-    null!,
-    null!,
-    {
-      contextHistory: async () => ({
-        units: [
-          {
-            exchanges: [
-              {
-                sourceModelStepId: 'scenario-mutation-model-step',
-                batchIndex: 0,
-                batchSize: 2,
-                providerCallId: 'scenario-verified-call',
-                toolName: mutationTool.descriptor.name,
-                arguments: {},
-                status: 'succeeded',
-                result: {
-                  ok: true,
-                  summary: 'Verified worker evidence.',
-                  data: null,
-                  artifactRefs: ['artifact:scenario-diff'],
-                  truncated: false,
-                  outcome: 'confirmed',
-                  verification: {
-                    status: 'verified',
-                    summary: 'Focused test passed.',
-                    evidenceRefs: ['artifact:scenario-test'],
-                  },
-                },
-              },
-              {
-                sourceModelStepId: 'scenario-mutation-model-step',
-                batchIndex: 1,
-                batchSize: 2,
-                providerCallId: 'scenario-unverified-call',
-                toolName: 'scenario_unverified_claim',
-                arguments: {},
-                status: 'failed',
-                result: {
-                  ok: false,
-                  summary: 'Model-visible but unverified claim.',
-                  data: null,
-                  artifactRefs: ['artifact:must-not-propagate'],
-                  truncated: false,
-                  outcome: 'confirmed',
-                  verification: {
-                    status: 'unverified',
-                    summary: 'No durable verification.',
-                    evidenceRefs: ['artifact:also-must-not-propagate'],
-                  },
-                },
-              },
-            ],
-          },
-        ],
-      }),
-    } as never,
-    stateCommit as never,
-    { send: async () => undefined } as never,
-    new AgentEventHub(),
-    {
-      enqueueRootRun: async () => undefined,
-      wakeChildScheduler: () => undefined,
-      cancelChildRuntime: () => undefined,
-    },
-    { nowUnixSeconds: () => 1_800_570_000 } as ClockPort,
-  );
-  const mutationExecutor = new SubagentToolStepExecutor(
-    null!,
-    null!,
-    null!,
-    {} as never,
-    stateCommit as never,
-    null!,
-    toolRunner,
-    completion,
-    new AgentEventHub(),
-    { nowUnixSeconds: () => 1_800_570_000 } as ClockPort,
-    async (_run, reason) => {
-      assert.equal(reason, 'mutation_confirmed');
-      executionOrder.push('recovery.checkpoint');
-    },
-  );
-  const forbiddenInspection = await misdeclaredWorkspaceMutationTool.inspect({}, mutationContext, 1);
-  const longEvidence = new SubagentCompletionCoordinator(
-    null!,
-    null!,
-    {
-      contextHistory: async () => ({
-        units: Array.from({ length: 65 }, (_, index) => ({
-          exchanges: [
-            {
-              toolName: 'scenario_verified',
-              result: {
-                ok: true,
-                summary: `Evidence ${index}`,
-                artifactRefs: [index === 0 ? 'early-evidence' : `evidence-${index}`],
-                outcome: 'confirmed',
-                verification: { status: 'verified', summary: 'Verified.', evidenceRefs: [] },
-              },
-            },
-          ],
-        })),
-      }),
-    } as never,
-    null!,
-    null!,
-    null!,
-    null!,
-    null!,
-  );
-  await assert.rejects(
-    longEvidence.verifiedRuntimeEvidence(scenarioScope, fullAccessRun.id, baseDelegation.childRuntimeId),
-    /SUBAGENT_EVIDENCE_TOO_LARGE/,
-    'handoff reference overflow must not silently discard early evidence',
-  );
-  const earlyEvidence = new SubagentCompletionCoordinator(
-    null!,
-    null!,
-    {
-      contextHistory: async () => ({
-        units: Array.from({ length: 40 }, (_, index) => ({
-          exchanges: [
-            {
-              toolName: 'scenario_verified',
-              result: {
-                ok: true,
-                summary: `Evidence ${index}`,
-                artifactRefs: index === 0 ? ['early-evidence'] : [],
-                outcome: 'confirmed',
-                verification: { status: 'verified', summary: 'Verified.', evidenceRefs: [] },
-              },
-            },
-          ],
-        })),
-      }),
-    } as never,
-    null!,
-    null!,
-    null!,
-    null!,
-    null!,
-  );
-  assert.deepEqual(
-    (await earlyEvidence.verifiedRuntimeEvidence(scenarioScope, fullAccessRun.id, baseDelegation.childRuntimeId))
-      .artifactRefs,
-    ['early-evidence'],
-    'verified reference beyond the previous 32-batch window must survive',
-  );
-  executionOrder.length = 0;
-  await (
-    mutationExecutor as unknown as {
-      executeChildMutation(
-        scope: Scope,
-        work: SchedulerWorkView,
-        ownerEpoch: number,
-        signal: AbortSignal,
-        delegation: DelegationView,
-        run: RunView,
-        toolWork: {
-          toolStepId: string;
-          toolCallId: string;
-          providerCallId: string;
-          status: string;
-          approvalId: string | null;
-          inspection: ToolInspection;
-        },
-      ): Promise<void>;
-    }
-  ).executeChildMutation(scenarioScope, work, 7, signal, governedDelegation, fullAccessRun, {
-    toolStepId,
-    toolCallId,
-    providerCallId: 'scenario-forbidden-target-call',
-    status: 'proposed',
-    approvalId: null,
-    inspection: forbiddenInspection,
-  });
-  assert.equal(
-    forbiddenTargetExecutions,
-    0,
-    'governed Child must never execute a nondelegated or misdeclared SSH mutation target',
-  );
-  assert.equal(mutationLeaseAcquisitions, 0, 'unauthorized SSH targets must be rejected before any mutation lease');
-  assert.deepEqual(
-    executionOrder,
-    ['state.begin-read', 'state.settle'],
-    'misdeclared SSH-capability mutations must settle as failed without approval or side effects',
-  );
+		inspect: async (_input, context, policyRevision) => ({
+			toolName: 'file_write',
+			toolVersion: '1',
+			normalizedArguments: { target: 'ssh', id: '42', path: 'src/example.ts', content: 'updated' },
+			target: sshFingerprint(42),
+			resourceKeys: ['connection:42:file:src/example.ts'],
+			risk: 'mutate',
+			mutation: true,
+			operationHash: 'scenario-subagent-mutation-operation',
+			operationHashVersion: 1,
+			preconditions: [],
+			policyRevision,
+			inputRevision: context.inputRevision,
+		}),
 
-  executionOrder.length = 0;
-  await (
-    mutationExecutor as unknown as {
-      executeChildMutation(
-        scope: Scope,
-        work: SchedulerWorkView,
-        ownerEpoch: number,
-        signal: AbortSignal,
-        delegation: DelegationView,
-        run: RunView,
-        toolWork: {
-          toolStepId: string;
-          toolCallId: string;
-          providerCallId: string;
-          status: string;
-          approvalId: string | null;
-          inspection: ToolInspection;
-        },
-      ): Promise<void>;
-    }
-  ).executeChildMutation(scenarioScope, work, 7, signal, governedDelegation, fullAccessRun, {
-    toolStepId,
-    toolCallId,
-    providerCallId: 'scenario-provider-call',
-    status: 'proposed',
-    approvalId: null,
-    inspection: persistedInspection,
-  });
-  assert.deepEqual(
-    executionOrder,
-    [
-      'approval.request',
-      'approval.approve',
-      'lease.acquire',
-      'state.begin',
-      'lease.activate',
-      'tool.execute',
-      'state.settle',
-      'lease.confirm',
-      'loop.guard',
-      'recovery.checkpoint',
-      'lease.release',
-    ],
-    'fresh governed mutation must preserve the existing approval/lease/StateCommit/verification/recovery authority order',
-  );
-  assert.equal(scenarioMutationExecutions, 1);
-  assert.deepEqual(lastSettledMutation?.result.verification.evidenceRefs, [
-    'artifact:scenario-diff',
-    'artifact:scenario-test',
-  ]);
-  const workerEvidence = await (
-    completion as unknown as {
-      verifiedRuntimeEvidenceRefs(scope: Scope, runId: string, runtimeId: string): Promise<string[]>;
-    }
-  ).verifiedRuntimeEvidenceRefs(scenarioScope, fullAccessRun.id, baseDelegation.childRuntimeId);
-  assert.deepEqual(
-    workerEvidence,
-    ['artifact:scenario-diff', 'artifact:scenario-test'],
-    'Worker completion evidence must come only from confirmed + verified Tool results, never unverified model claims',
-  );
-  const workerEvidenceProjection = await (
-    completion as unknown as {
-      verifiedRuntimeEvidence(
-        scope: Scope,
-        runId: string,
-        runtimeId: string,
-      ): Promise<{
-        artifactRefs: string[];
-        tools: Array<{ toolName: string; summary: string; verificationSummary: string; evidenceRefs: string[] }>;
-      }>;
-    }
-  ).verifiedRuntimeEvidence(scenarioScope, fullAccessRun.id, baseDelegation.childRuntimeId);
-  assert.deepEqual(
-    workerEvidenceProjection.tools.map((tool) => tool.toolName),
-    [mutationTool.descriptor.name],
-    'durable Worker result must summarize only confirmed + verified Tool facts, not unverified natural-language claims',
-  );
+		execute: async () => {
+			executionOrder.push('tool.execute');
+			scenarioMutationExecutions += 1;
+			return {
+				ok: true,
+				summary: 'Scenario mutation completed.',
+				data: null,
+				artifactRefs: ['artifact:scenario-diff', 'artifact:scenario-test'],
+				truncated: false,
+				outcome: 'confirmed',
+				verification: {
+					status: 'verified',
+					summary: 'Scenario verification.',
+					evidenceRefs: ['artifact:scenario-diff', 'artifact:scenario-test'],
+				},
+			};
+		},
+	};
+	catalog.registerContribution({
+		schemaVersion: 1,
+		id: 'scenario.subagent-governed-mutation',
+		tools: [mutationTool],
+	});
+	const machineMutationTool: AgentTool = {
+		...mutationTool,
+		descriptor: {
+			...mutationTool.descriptor,
+			name: 'scenario_machine_mutate',
+			capability: 'file.write',
+		},
+	};
+	catalog.registerContribution({
+		schemaVersion: 1,
+		id: 'scenario.subagent-machine-mutation',
+		tools: [machineMutationTool],
+	});
+	let forbiddenTargetExecutions = 0;
+	const misdeclaredWorkspaceMutationTool: AgentTool = {
+		...mutationTool,
+		descriptor: {
+			...mutationTool.descriptor,
+			name: 'scenario_misdeclared_workspace_mutate',
+			capability: 'file.write',
+		},
 
-  executionOrder.length = 0;
-  lastSettledMutation = undefined;
-  await (
-    mutationExecutor as unknown as {
-      executeChildMutation(
-        scope: Scope,
-        work: SchedulerWorkView,
-        ownerEpoch: number,
-        signal: AbortSignal,
-        delegation: DelegationView,
-        run: RunView,
-        toolWork: {
-          toolStepId: string;
-          toolCallId: string;
-          providerCallId: string;
-          status: string;
-          approvalId: string | null;
-          inspection: ToolInspection;
-        },
-      ): Promise<void>;
-    }
-  ).executeChildMutation(scenarioScope, work, 7, signal, governedDelegation, fullAccessRun, {
-    toolStepId,
-    toolCallId,
-    providerCallId: 'scenario-provider-call',
-    status: 'running',
-    approvalId: null,
-    inspection: persistedInspection,
-  });
-  assert.equal(
-    scenarioMutationExecutions,
-    1,
-    'a reclaimed Child mutation already in durable running state must never replay its side effect',
-  );
-  assert.equal(lastSettledMutation?.result.outcome, 'unknown');
-  assert.equal(lastSettledMutation?.needsReconciliation, true);
-  assert.deepEqual(
-    executionOrder,
-    ['state.settle'],
-    'restart recovery must go directly to reconciliation without approval, lease acquisition, or mutation execution',
-  );
+		inspect: async (_input, context, policyRevision) => ({
+			...(await mutationTool.inspect({}, context, policyRevision)),
+			toolName: 'scenario_misdeclared_workspace_mutate',
+			target: {
+				kind: 'ssh',
+				target: 'ssh',
+				id: '42',
+				connectionId: 42,
+				targetIdentity: 'machine:42',
+				endpoint: 'ssh://example.invalid',
+				loginUser: 'root',
+				configurationHash: 'misdeclared-workspace-target',
+				hostKeyTrust: 'unavailable',
+			},
+			resourceKeys: ['connection:42:path:/tmp/not-a-workspace'],
+			operationHash: 'scenario-misdeclared-workspace-operation',
+		}),
 
-  const durableDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-subagent-governed-mutation-'));
-  const durableDb = new DatabaseAdapter({
-    dataDirectory: durableDirectory,
-    filename: 'governed-mutation.sqlite',
-    nodeEnv: 'test',
-  });
-  try {
-    await durableDb.initialize();
-    const durableCommit = new SqliteStateCommitAdapter(durableDb);
-    const durableNow = 1_800_570_000;
-    const durableRunId = 'governed-mutation-run';
-    const durableRootRuntimeId = 'governed-mutation-root';
-    const durableChildRuntimeId = 'governed-mutation-child';
-    const durableDelegationId = 'governed-mutation-delegation';
-    const durableModelStepId = 'governed-mutation-model-step';
-    const durableToolStepId = 'governed-mutation-tool-step';
-    const durableToolCallId = 'governed-mutation-tool-call';
-    const durableWorkId = 'governed-mutation-work';
-    const durableApprovalId = 'governed-mutation-approval';
-    const durableOperationHash = 'governed-mutation-operation-hash';
-    const durableModelRef = JSON.stringify({
-      providerId: 'scenario-provider',
-      modelId: 'scenario-model',
-      configurationVersion: 1,
-    });
-    await durableDb.execute(
-      "INSERT INTO users (id, username, hashed_password) VALUES (1, 'governed-mutation-user', 'not-used')",
-    );
-    await durableDb.execute(
-      `INSERT INTO agent_apps
+		execute: async () => {
+			forbiddenTargetExecutions += 1;
+			return {
+				ok: true,
+				summary: 'forbidden target executed',
+				data: null,
+				artifactRefs: [],
+				truncated: false,
+				outcome: 'confirmed',
+				verification: { status: 'verified', summary: 'unexpected', evidenceRefs: [] },
+			};
+		},
+	};
+	catalog.registerContribution({
+		schemaVersion: 1,
+		id: 'scenario.subagent-misdeclared-workspace-mutation',
+		tools: [misdeclaredWorkspaceMutationTool],
+	});
+	const builder = new SubagentContextBuilder(
+		null!,
+		null!,
+		catalog,
+		new CapabilityRegistry(),
+		emptyModelContinuations,
+		null!,
+		{
+			nowUnixSeconds: () => 1_800_570_000,
+		} as ClockPort,
+	);
+	const baseDelegation = {
+		userId: 1,
+		appId: scenarioScope.appId,
+		id: 'scenario-governed-delegation',
+		runId: 'scenario-governed-run',
+		parentRuntimeId: 'scenario-root-runtime',
+		childRuntimeId: 'scenario-child-runtime',
+		profileId: 'scenario-worker',
+		grants: [
+			{
+				capability: 'file.write',
+				schemaVersion: 2,
+				scope: { kind: 'targets', targets: { ssh: { mode: 'ids', ids: ['42'] } } },
+			},
+		],
+		peerMessaging: 'parent-child',
+		mutationMode: 'read-only',
+		modelRef: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+		objective: 'Modify only src/example.ts and run the focused test.',
+		constraints: ['Use only the delegated SSH connection 42.'],
+		inputArtifactRefs: [],
+		completionCriteria: ['Return verified mutation evidence.'],
+		dependencyMode: 'settled',
+		status: 'running',
+		depth: 1,
+		failureMode: 'isolate',
+		budget: { maxModelRequests: 12 },
+		usage: { tokens: 0, modelRequests: 0 },
+		result: null,
+		evidenceRefs: [],
+		deadlineAt: 1_900_000_000,
+		version: 1,
+		createdAt: 1_800_570_000,
+		updatedAt: 1_800_570_000,
+		completedAt: null,
+	} satisfies DelegationView;
+	assert.equal(
+		builder.allowsTool(scenarioScope, baseDelegation, mutationTool.descriptor.name),
+		false,
+		'read-only Subagents must continue rejecting mutation Tools even when the capability is present',
+	);
+	const governedDelegation = {
+		...baseDelegation,
+		mutationMode: 'governed',
+	} as unknown as DelegationView;
+	assert.equal(
+		builder.allowsTool(scenarioScope, governedDelegation, mutationTool.descriptor.name),
+		true,
+		'explicit governed workers must expose mutation Tools through the existing capability-filtered surface',
+	);
+	assert.equal(
+		builder.allowsProposal(scenarioScope, governedDelegation, {
+			providerCallId: 'scenario-ssh-write',
+			name: machineMutationTool.descriptor.name,
+			argumentsJson: JSON.stringify({ target: 'ssh', id: '43' }),
+		}),
+		false,
+		'governed workers must stay confined to the SSH target scope carried by their delegated file.write grant',
+	);
+	assert.deepEqual(
+		builtInSubagentProfileTemplates(64).map((template) => template.id),
+		['explore', 'scout', 'review', 'general', 'worker'],
+		'the built-in catalog must expose an explicit governed worker preset without mutating read-only templates',
+	);
+	const toolSchemas = (
+		builder as unknown as {
+			toolSchemas(
+				scope: Scope,
+				delegation: DelegationView,
+				model: { supportsTools: boolean },
+				run: RunView,
+			): Array<{ name: string }>;
+		}
+	).toolSchemas.bind(builder);
+
+	const runForMode = (approvalMode: 'ask' | 'full_access') =>
+		({
+			id: baseDelegation.runId,
+			userId: 1,
+			appId: scenarioScope.appId,
+			definition: { approvalMode, executionMode: 'execute', connectionIds: [42] },
+		}) as unknown as RunView;
+
+	assert.equal(
+		toolSchemas(scenarioScope, governedDelegation, { supportsTools: true }, runForMode('ask')).some(
+			(schema) => schema.name === mutationTool.descriptor.name,
+		),
+		true,
+		'ask-mode Runs expose governed mutation Tools with durable user approval',
+	);
+	assert.equal(
+		toolSchemas(scenarioScope, governedDelegation, { supportsTools: true }, runForMode('full_access')).some(
+			(schema) => schema.name === mutationTool.descriptor.name,
+		),
+		true,
+		'governed workers on explicit Full Access Runs may expose delegated SSH mutation Tools',
+	);
+	assert.equal(
+		toolSchemas(scenarioScope, baseDelegation, { supportsTools: true }, runForMode('full_access')).some(
+			(schema) => schema.name === mutationTool.descriptor.name,
+		),
+		false,
+		'Full Access must not override a read-only Subagent profile',
+	);
+	const planRun = runForMode('full_access');
+	planRun.definition = { ...planRun.definition, executionMode: 'plan' };
+	assert.equal(
+		toolSchemas(scenarioScope, governedDelegation, { supportsTools: true }, planRun).some(
+			(schema) => schema.name === mutationTool.descriptor.name,
+		),
+		false,
+		'Plan Run must not expose Child mutation Tools even with full access',
+	);
+
+	const fullAccessRun = {
+		id: baseDelegation.runId,
+		userId: scenarioScope.userId,
+		appId: scenarioScope.appId,
+		status: 'running',
+		needsReconciliation: false,
+		version: 1,
+		inputRevision: 1,
+		definition: {
+			approvalMode: 'full_access',
+			connectionIds: [42],
+			policyRevision: 1,
+		},
+		budget: { toolTimeoutSeconds: 120, maxToolOutputBytes: 1_048_576 },
+		usage: {
+			inputTokens: 0,
+			outputTokens: 0,
+			cachedInputTokens: 0,
+			toolExecutions: 0,
+			modelRequests: 0,
+			subagentMessages: 0,
+			subagentMessageBytes: 0,
+		},
+	} as unknown as RunView;
+	const toolStepId = 'scenario-governed-tool-step';
+	const toolCallId = 'scenario-governed-tool-call';
+	const work: SchedulerWorkView = {
+		id: 'scenario-governed-tool-work',
+		enqueueSequence: 1,
+		runId: fullAccessRun.id,
+		agentRuntimeId: baseDelegation.childRuntimeId,
+		kind: 'tool_step',
+		status: 'claimed',
+		payload: { delegationId: baseDelegation.id, toolStepId, toolCallId },
+		ownerEpoch: 7,
+		notBefore: 1_800_570_000,
+		deadlineAt: 1_900_000_000,
+		createdAt: 1_800_570_000,
+		updatedAt: 1_800_570_000,
+		version: 2,
+	};
+	const signal = new AbortController().signal;
+	const mutationContext: ToolContext = {
+		userId: scenarioScope.userId,
+		appId: scenarioScope.appId,
+		actor: {
+			kind: 'agent',
+			userId: scenarioScope.userId,
+			appId: scenarioScope.appId,
+			runId: fullAccessRun.id,
+			agentRuntimeId: baseDelegation.childRuntimeId,
+		},
+		runId: fullAccessRun.id,
+		agentRuntimeId: baseDelegation.childRuntimeId,
+		connectionIds: [42],
+		stepId: toolStepId,
+		signal,
+		deadlineAt: work.deadlineAt,
+		maxOutputBytes: 1_048_576,
+		inputRevision: 1,
+	};
+	const persistedInspection = await mutationTool.inspect({}, mutationContext, 1);
+	assert.equal(
+		governedSubagentSshMutation(
+			persistedInspection,
+			fullAccessRun.definition.connectionIds,
+			governedDelegation.grants,
+		),
+		true,
+		'governed SSH inspection must be selected and delegated',
+	);
+	for (const tampered of [
+		{ ...persistedInspection, target: { ...persistedInspection.target, configurationHash: 'tampered' } },
+		{ ...persistedInspection, normalizedArguments: { target: 'ssh', id: '43' } },
+		{ ...persistedInspection, resourceKeys: ['connection:43:file:src/example.ts'] },
+	]) {
+		assert.equal(governedSubagentSshMutation(tampered as ToolInspection, [42], governedDelegation.grants), false);
+	}
+	assert.equal(governedSubagentSshMutation(persistedInspection, [43], governedDelegation.grants), false);
+	assert.equal(governedSubagentSshMutation(persistedInspection, [42], []), false);
+	assert.equal(
+		governedSubagentSshMutation(
+			persistedInspection,
+			[42],
+			[
+				{
+					capability: 'file.write',
+					schemaVersion: 2,
+					scope: {
+						kind: 'targets',
+						targets: {
+							workspace: { mode: 'all' },
+							ssh: { mode: 'all' },
+						},
+					},
+				},
+			],
+		),
+		false,
+	);
+	for (const toolName of ['file_write', 'file_patch', 'file_move', 'file_delete', 'shell_execute'] as const) {
+		const capability =
+			toolName === 'file_delete' ? 'file.delete' : toolName === 'shell_execute' ? 'shell.execute' : 'file.write';
+		const inspection: ToolInspection = { ...persistedInspection, toolName };
+		const grants = [
+			{
+				capability,
+				schemaVersion: 2,
+				scope: { kind: 'targets', targets: { ssh: { mode: 'ids', ids: ['42'] } } },
+			},
+		];
+		assert.equal(
+			governedSubagentSshMutation(inspection, [42], grants),
+			true,
+			`${toolName} must use its own delegated capability on the selected SSH connection`,
+		);
+		assert.equal(
+			governedSubagentSshMutation(inspection, [42], governedDelegation.grants),
+			capability === 'file.write',
+			`${toolName} must not borrow a different mutation capability`,
+		);
+	}
+	assert.equal(
+		governedSubagentSshMutation(
+			{ ...persistedInspection, toolName: 'scenario_machine_mutate' },
+			[42],
+			governedDelegation.grants,
+		),
+		false,
+		'Unrecognized mutation tools must not gain authority from a broadly granted capability',
+	);
+	let mutationLeaseAcquisitions = 0;
+	const mutationLeasePort = {
+		acquire: async () => {
+			mutationLeaseAcquisitions += 1;
+			executionOrder.push('lease.acquire');
+			let active = false;
+			return {
+				signal,
+
+				stopRenewal: async () => null,
+
+				activate: async () => {
+					active = true;
+					executionOrder.push('lease.activate');
+				},
+
+				quarantine: async () => {
+					executionOrder.push('lease.quarantine');
+				},
+
+				confirm: async () => {
+					assert.equal(active, true, 'mutation lease must be active before it is confirmed');
+					active = false;
+					executionOrder.push('lease.confirm');
+					return { ok: true as const };
+				},
+
+				releaseIfInactive: async () => {
+					assert.equal(active, false, 'cleanup must not release an active mutation lease');
+					executionOrder.push('lease.release');
+				},
+			};
+		},
+	};
+	const toolRunner = new ToolCallRunner(
+		catalog,
+		new ToolExecutor(catalog, {
+			authorize: async () => ({ allowed: true, policyRevision: 1 }),
+		} as never),
+		new PolicyService(),
+		null!,
+		mutationLeasePort as never,
+	);
+	let lastSettledMutation: { result: ToolResult; needsReconciliation?: boolean } | undefined;
+
+	const runAt = (version: number, status: RunView['status'] = 'running'): RunView =>
+		({ ...fullAccessRun, version, status }) as RunView;
+
+	const stateCommit = {
+		beginSubagentTool: async () => {
+			executionOrder.push('state.begin-read');
+			return { run: runAt(2), eventCursor: 2, ledgerCursor: 0, committedEvents: [] };
+		},
+
+		requestToolApproval: async () => {
+			executionOrder.push('approval.request');
+			return { run: runAt(2, 'awaiting_approval'), eventCursor: 2, ledgerCursor: 0, committedEvents: [] };
+		},
+
+		resolveToolApproval: async () => {
+			executionOrder.push('approval.approve');
+			return { run: runAt(3), eventCursor: 3, ledgerCursor: 0, committedEvents: [] };
+		},
+
+		beginSubagentMutationTool: async () => {
+			executionOrder.push('state.begin');
+			return { run: runAt(4), eventCursor: 4, ledgerCursor: 0, committedEvents: [] };
+		},
+
+		settleSubagentTool: async (command: { result: ToolResult; needsReconciliation?: boolean }) => {
+			executionOrder.push('state.settle');
+			lastSettledMutation = {
+				result: command.result,
+				...(command.needsReconciliation ? { needsReconciliation: true } : {}),
+			};
+			return {
+				run:
+					command.result.outcome === 'unknown'
+						? ({ ...runAt(5, 'interrupted'), needsReconciliation: true } as RunView)
+						: runAt(5),
+				eventCursor: 5,
+				ledgerCursor: 0,
+				committedEvents: [],
+			};
+		},
+
+		evaluateToolLoopGuard: async () => {
+			executionOrder.push('loop.guard');
+			return { run: runAt(6), eventCursor: 6, ledgerCursor: 0, committedEvents: [] };
+		},
+
+		refreshProposedTool: async () => {
+			throw new Error('SCENARIO_UNEXPECTED_REFRESH');
+		},
+
+		commit: async () => {
+			throw new Error('SCENARIO_UNEXPECTED_RECONCILIATION_COMMIT');
+		},
+	};
+	const completion = new SubagentCompletionCoordinator(
+		null!,
+		null!,
+		{
+			contextHistory: async () => ({
+				units: [
+					{
+						exchanges: [
+							{
+								sourceModelStepId: 'scenario-mutation-model-step',
+								batchIndex: 0,
+								batchSize: 2,
+								providerCallId: 'scenario-verified-call',
+								toolName: mutationTool.descriptor.name,
+								arguments: {},
+								status: 'succeeded',
+								result: {
+									ok: true,
+									summary: 'Verified worker evidence.',
+									data: null,
+									artifactRefs: ['artifact:scenario-diff'],
+									truncated: false,
+									outcome: 'confirmed',
+									verification: {
+										status: 'verified',
+										summary: 'Focused test passed.',
+										evidenceRefs: ['artifact:scenario-test'],
+									},
+								},
+							},
+							{
+								sourceModelStepId: 'scenario-mutation-model-step',
+								batchIndex: 1,
+								batchSize: 2,
+								providerCallId: 'scenario-unverified-call',
+								toolName: 'scenario_unverified_claim',
+								arguments: {},
+								status: 'failed',
+								result: {
+									ok: false,
+									summary: 'Model-visible but unverified claim.',
+									data: null,
+									artifactRefs: ['artifact:must-not-propagate'],
+									truncated: false,
+									outcome: 'confirmed',
+									verification: {
+										status: 'unverified',
+										summary: 'No durable verification.',
+										evidenceRefs: ['artifact:also-must-not-propagate'],
+									},
+								},
+							},
+						],
+					},
+				],
+			}),
+		} as never,
+		stateCommit as never,
+		{ send: async () => undefined } as never,
+		new AgentEventHub(),
+		{
+			enqueueRootRun: async () => undefined,
+
+			wakeChildScheduler: () => undefined,
+
+			cancelChildRuntime: () => undefined,
+		},
+		{ nowUnixSeconds: () => 1_800_570_000 } as ClockPort,
+	);
+	const mutationExecutor = new SubagentToolStepExecutor(
+		null!,
+		null!,
+		null!,
+		{} as never,
+		stateCommit as never,
+		null!,
+		toolRunner,
+		completion,
+		new AgentEventHub(),
+		{ nowUnixSeconds: () => 1_800_570_000 } as ClockPort,
+		async (_run, reason) => {
+			assert.equal(reason, 'mutation_confirmed');
+			executionOrder.push('recovery.checkpoint');
+		},
+	);
+	const forbiddenInspection = await misdeclaredWorkspaceMutationTool.inspect({}, mutationContext, 1);
+	const longEvidence = new SubagentCompletionCoordinator(
+		null!,
+		null!,
+		{
+			contextHistory: async () => ({
+				units: Array.from({ length: 65 }, (_, index) => ({
+					exchanges: [
+						{
+							toolName: 'scenario_verified',
+							result: {
+								ok: true,
+								summary: `Evidence ${index}`,
+								artifactRefs: [index === 0 ? 'early-evidence' : `evidence-${index}`],
+								outcome: 'confirmed',
+								verification: { status: 'verified', summary: 'Verified.', evidenceRefs: [] },
+							},
+						},
+					],
+				})),
+			}),
+		} as never,
+		null!,
+		null!,
+		null!,
+		null!,
+		null!,
+	);
+	await assert.rejects(
+		longEvidence.verifiedRuntimeEvidence(scenarioScope, fullAccessRun.id, baseDelegation.childRuntimeId),
+		/SUBAGENT_EVIDENCE_TOO_LARGE/,
+		'handoff reference overflow must not silently discard early evidence',
+	);
+	const earlyEvidence = new SubagentCompletionCoordinator(
+		null!,
+		null!,
+		{
+			contextHistory: async () => ({
+				units: Array.from({ length: 40 }, (_, index) => ({
+					exchanges: [
+						{
+							toolName: 'scenario_verified',
+							result: {
+								ok: true,
+								summary: `Evidence ${index}`,
+								artifactRefs: index === 0 ? ['early-evidence'] : [],
+								outcome: 'confirmed',
+								verification: { status: 'verified', summary: 'Verified.', evidenceRefs: [] },
+							},
+						},
+					],
+				})),
+			}),
+		} as never,
+		null!,
+		null!,
+		null!,
+		null!,
+		null!,
+	);
+	assert.deepEqual(
+		(await earlyEvidence.verifiedRuntimeEvidence(scenarioScope, fullAccessRun.id, baseDelegation.childRuntimeId))
+			.artifactRefs,
+		['early-evidence'],
+		'verified reference beyond the previous 32-batch window must survive',
+	);
+	executionOrder.length = 0;
+	await (
+		mutationExecutor as unknown as {
+			executeChildMutation(
+				scope: Scope,
+				work: SchedulerWorkView,
+				ownerEpoch: number,
+				signal: AbortSignal,
+				delegation: DelegationView,
+				run: RunView,
+				toolWork: {
+					toolStepId: string;
+					toolCallId: string;
+					providerCallId: string;
+					status: string;
+					approvalId: string | null;
+					inspection: ToolInspection;
+				},
+			): Promise<void>;
+		}
+	).executeChildMutation(scenarioScope, work, 7, signal, governedDelegation, fullAccessRun, {
+		toolStepId,
+		toolCallId,
+		providerCallId: 'scenario-forbidden-target-call',
+		status: 'proposed',
+		approvalId: null,
+		inspection: forbiddenInspection,
+	});
+	assert.equal(
+		forbiddenTargetExecutions,
+		0,
+		'governed Child must never execute a nondelegated or misdeclared SSH mutation target',
+	);
+	assert.equal(mutationLeaseAcquisitions, 0, 'unauthorized SSH targets must be rejected before any mutation lease');
+	assert.deepEqual(
+		executionOrder,
+		['state.begin-read', 'state.settle'],
+		'misdeclared SSH-capability mutations must settle as failed without approval or side effects',
+	);
+
+	executionOrder.length = 0;
+	await (
+		mutationExecutor as unknown as {
+			executeChildMutation(
+				scope: Scope,
+				work: SchedulerWorkView,
+				ownerEpoch: number,
+				signal: AbortSignal,
+				delegation: DelegationView,
+				run: RunView,
+				toolWork: {
+					toolStepId: string;
+					toolCallId: string;
+					providerCallId: string;
+					status: string;
+					approvalId: string | null;
+					inspection: ToolInspection;
+				},
+			): Promise<void>;
+		}
+	).executeChildMutation(scenarioScope, work, 7, signal, governedDelegation, fullAccessRun, {
+		toolStepId,
+		toolCallId,
+		providerCallId: 'scenario-provider-call',
+		status: 'proposed',
+		approvalId: null,
+		inspection: persistedInspection,
+	});
+	assert.deepEqual(
+		executionOrder,
+		[
+			'approval.request',
+			'approval.approve',
+			'lease.acquire',
+			'state.begin',
+			'lease.activate',
+			'tool.execute',
+			'state.settle',
+			'lease.confirm',
+			'loop.guard',
+			'recovery.checkpoint',
+			'lease.release',
+		],
+		'fresh governed mutation must preserve the existing approval/lease/StateCommit/verification/recovery authority order',
+	);
+	assert.equal(scenarioMutationExecutions, 1);
+	assert.deepEqual(lastSettledMutation?.result.verification.evidenceRefs, [
+		'artifact:scenario-diff',
+		'artifact:scenario-test',
+	]);
+	const workerEvidence = await (
+		completion as unknown as {
+			verifiedRuntimeEvidenceRefs(scope: Scope, runId: string, runtimeId: string): Promise<string[]>;
+		}
+	).verifiedRuntimeEvidenceRefs(scenarioScope, fullAccessRun.id, baseDelegation.childRuntimeId);
+	assert.deepEqual(
+		workerEvidence,
+		['artifact:scenario-diff', 'artifact:scenario-test'],
+		'Worker completion evidence must come only from confirmed + verified Tool results, never unverified model claims',
+	);
+	const workerEvidenceProjection = await (
+		completion as unknown as {
+			verifiedRuntimeEvidence(
+				scope: Scope,
+				runId: string,
+				runtimeId: string,
+			): Promise<{
+				artifactRefs: string[];
+				tools: Array<{
+					toolName: string;
+					summary: string;
+					verificationSummary: string;
+					evidenceRefs: string[];
+				}>;
+			}>;
+		}
+	).verifiedRuntimeEvidence(scenarioScope, fullAccessRun.id, baseDelegation.childRuntimeId);
+	assert.deepEqual(
+		workerEvidenceProjection.tools.map((tool) => tool.toolName),
+		[mutationTool.descriptor.name],
+		'durable Worker result must summarize only confirmed + verified Tool facts, not unverified natural-language claims',
+	);
+
+	executionOrder.length = 0;
+	lastSettledMutation = undefined;
+	await (
+		mutationExecutor as unknown as {
+			executeChildMutation(
+				scope: Scope,
+				work: SchedulerWorkView,
+				ownerEpoch: number,
+				signal: AbortSignal,
+				delegation: DelegationView,
+				run: RunView,
+				toolWork: {
+					toolStepId: string;
+					toolCallId: string;
+					providerCallId: string;
+					status: string;
+					approvalId: string | null;
+					inspection: ToolInspection;
+				},
+			): Promise<void>;
+		}
+	).executeChildMutation(scenarioScope, work, 7, signal, governedDelegation, fullAccessRun, {
+		toolStepId,
+		toolCallId,
+		providerCallId: 'scenario-provider-call',
+		status: 'running',
+		approvalId: null,
+		inspection: persistedInspection,
+	});
+	assert.equal(
+		scenarioMutationExecutions,
+		1,
+		'a reclaimed Child mutation already in durable running state must never replay its side effect',
+	);
+	assert.equal(lastSettledMutation?.result.outcome, 'unknown');
+	assert.equal(lastSettledMutation?.needsReconciliation, true);
+	assert.deepEqual(
+		executionOrder,
+		['state.settle'],
+		'restart recovery must go directly to reconciliation without approval, lease acquisition, or mutation execution',
+	);
+
+	const durableDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-subagent-governed-mutation-'));
+	const durableDb = new DatabaseAdapter({
+		dataDirectory: durableDirectory,
+		filename: 'governed-mutation.sqlite',
+		nodeEnv: 'test',
+	});
+	try {
+		await durableDb.initialize();
+		const durableCommit = new SqliteStateCommitAdapter(durableDb);
+		const durableNow = 1_800_570_000;
+		const durableRunId = 'governed-mutation-run';
+		const durableRootRuntimeId = 'governed-mutation-root';
+		const durableChildRuntimeId = 'governed-mutation-child';
+		const durableDelegationId = 'governed-mutation-delegation';
+		const durableModelStepId = 'governed-mutation-model-step';
+		const durableToolStepId = 'governed-mutation-tool-step';
+		const durableToolCallId = 'governed-mutation-tool-call';
+		const durableWorkId = 'governed-mutation-work';
+		const durableApprovalId = 'governed-mutation-approval';
+		const durableOperationHash = 'governed-mutation-operation-hash';
+		const durableModelRef = JSON.stringify({
+			providerId: 'scenario-provider',
+			modelId: 'scenario-model',
+			configurationVersion: 1,
+		});
+		await durableDb.execute(
+			"INSERT INTO users (id, username, hashed_password) VALUES (1, 'governed-mutation-user', 'not-used')",
+		);
+		await durableDb.execute(
+			`INSERT INTO agent_apps
         (user_id, app_id, active_version, desired_state, observed_state, running_count, policy_revision, created_at, updated_at)
        VALUES (1, ?, '1.0.0', 'enabled', 'running', 1, 1, ?, ?)`,
-      [scenarioScope.appId, durableNow, durableNow],
-    );
-    await durableDb.execute(
-      `INSERT INTO ai_threads (id, user_id, app_id, title, title_source, created_at, updated_at)
+			[scenarioScope.appId, durableNow, durableNow],
+		);
+		await durableDb.execute(
+			`INSERT INTO ai_threads (id, user_id, app_id, title, title_source, created_at, updated_at)
        VALUES ('governed-mutation-thread', 1, ?, 'governed mutation', 'manual', ?, ?)`,
-      [scenarioScope.appId, durableNow, durableNow],
-    );
-    await durableDb.execute(
-      `INSERT INTO agent_runs
+			[scenarioScope.appId, durableNow, durableNow],
+		);
+		await durableDb.execute(
+			`INSERT INTO agent_runs
         (id, user_id, app_id, thread_id, status, goal_status, verification_status,
          budget_json, definition_json, plan_json, usage_json, executing_runtime_count,
          input_revision, created_at, started_at, updated_at)
        VALUES (?, 1, ?, 'governed-mutation-thread', 'running', 'in_progress', 'not_started',
                ?, ?, ?, ?, 0, 1, ?, ?, ?)`,
-      [
-        durableRunId,
-        scenarioScope.appId,
-        JSON.stringify({
-          modelRequestCeiling: 100,
-          activeExecutionCeilingSeconds: 7200,
-          maxToolExecutions: 4000,
-          phase: 'executing',
-          stopReason: null,
-          extensionCount: 0,
-          progressSequence: 0,
+			[
+				durableRunId,
+				scenarioScope.appId,
+				JSON.stringify({
+					modelRequestCeiling: 100,
+					activeExecutionCeilingSeconds: 7200,
+					maxToolExecutions: 4000,
+					phase: 'executing',
+					stopReason: null,
+					extensionCount: 0,
+					progressSequence: 0,
 
-          maxModelRequests: 100,
-          maxActiveExecutionSeconds: 3_600,
-          toolTimeoutSeconds: 120,
-          maxToolOutputBytes: 1_048_576,
-          maxRecallItems: 5,
-          maxRecallBytes: 8_192,
-          maxSubagentMessages: 100,
-          maxSubagentMessageBytes: 1_048_576,
-          contextPolicy: freezeRunContextPolicy('normal'),
-          contextCompactionMode: 'balanced',
-          revision: 1,
-        }),
-        JSON.stringify({
-          schemaVersion: 1,
-          agentDefinitionId: 'scenario-agent',
-          requiredModelCapabilities: [],
-          model: JSON.parse(durableModelRef),
-          modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
-          rootModelRoutes: [],
-          approvalMode: 'full_access',
-          executionMode: 'execute',
-          connectionIds: [42],
-          policyRevision: 1,
-          settingsRevision: 1,
-        }),
-        JSON.stringify({ schemaVersion: 1, revision: 0, items: [] }),
-        JSON.stringify({
-          inputTokens: 0,
-          outputTokens: 0,
-          cachedInputTokens: 0,
-          toolExecutions: 0,
-          modelRequests: 0,
-          subagentMessages: 0,
-          subagentMessageBytes: 0,
-        }),
-        durableNow,
-        durableNow,
-        durableNow,
-      ],
-    );
-    await durableDb.execute(
-      `INSERT INTO agent_runtimes
+					maxModelRequests: 100,
+					maxActiveExecutionSeconds: 3_600,
+					toolTimeoutSeconds: 120,
+					maxToolOutputBytes: 1_048_576,
+					maxRecallItems: 5,
+					maxRecallBytes: 8_192,
+					maxSubagentMessages: 100,
+					maxSubagentMessageBytes: 1_048_576,
+					contextPolicy: freezeRunContextPolicy('normal'),
+					contextCompactionMode: 'balanced',
+					revision: 1,
+				}),
+				JSON.stringify({
+					schemaVersion: 1,
+					agentDefinitionId: 'scenario-agent',
+					requiredModelCapabilities: [],
+					model: JSON.parse(durableModelRef),
+					modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+					rootModelRoutes: [],
+					approvalMode: 'full_access',
+					executionMode: 'execute',
+					connectionIds: [42],
+					policyRevision: 1,
+					settingsRevision: 1,
+				}),
+				JSON.stringify({ schemaVersion: 1, revision: 0, items: [] }),
+				JSON.stringify({
+					inputTokens: 0,
+					outputTokens: 0,
+					cachedInputTokens: 0,
+					toolExecutions: 0,
+					modelRequests: 0,
+					subagentMessages: 0,
+					subagentMessageBytes: 0,
+				}),
+				durableNow,
+				durableNow,
+				durableNow,
+			],
+		);
+		await durableDb.execute(
+			`INSERT INTO agent_runtimes
         (id, run_id, participant_id, backend_kind, model_ref_json, status, schedule_state,
          consumed_mailbox_sequence, execution_owner_id, created_at, updated_at)
        VALUES
         (?, ?, 'root', 'native', ?, 'running', 'runnable', 0, 'owner-governed-root', ?, ?),
         (?, ?, 'subagent:governed', 'native', ?, 'running', 'runnable', 0, 'owner-governed-child', ?, ?)`,
-      [
-        durableRootRuntimeId,
-        durableRunId,
-        durableModelRef,
-        durableNow,
-        durableNow,
-        durableChildRuntimeId,
-        durableRunId,
-        durableModelRef,
-        durableNow,
-        durableNow,
-      ],
-    );
-    await durableDb.execute(
-      `INSERT INTO agent_delegations
+			[
+				durableRootRuntimeId,
+				durableRunId,
+				durableModelRef,
+				durableNow,
+				durableNow,
+				durableChildRuntimeId,
+				durableRunId,
+				durableModelRef,
+				durableNow,
+				durableNow,
+			],
+		);
+		await durableDb.execute(
+			`INSERT INTO agent_delegations
         (id, run_id, parent_runtime_id, child_runtime_id, profile_id, grants_json, peer_messaging,
          mutation_mode, model_ref_json, objective, constraints_json, input_artifact_refs_json, completion_criteria_json,
          dependency_mode, status, depth, failure_mode, max_model_requests, idempotency_key, request_hash,
@@ -930,488 +961,494 @@ export const subagentGovernedMutationScenario = async () => {
        VALUES (?, ?, ?, ?, 'worker', ?, 'parent-child', 'governed', ?, 'Edit via delegated SSH',
                '[]', '[]', '[]', 'settled', 'running', 1, 'isolate', 12, 'governed-key',
                'governed-request-hash', ?, 1, ?, ?)`,
-      [
-        durableDelegationId,
-        durableRunId,
-        durableRootRuntimeId,
-        durableChildRuntimeId,
-        JSON.stringify([
-          {
-            capability: 'file.write',
-            schemaVersion: 2,
-            scope: { kind: 'targets', targets: { ssh: { mode: 'ids', ids: ['42'] } } },
-          },
-        ]),
-        scenarioDelegationModel(durableModelRef),
-        durableNow + 600,
-        durableNow,
-        durableNow,
-      ],
-    );
-    await durableDb.execute(
-      `INSERT INTO agent_steps
+			[
+				durableDelegationId,
+				durableRunId,
+				durableRootRuntimeId,
+				durableChildRuntimeId,
+				JSON.stringify([
+					{
+						capability: 'file.write',
+						schemaVersion: 2,
+						scope: { kind: 'targets', targets: { ssh: { mode: 'ids', ids: ['42'] } } },
+					},
+				]),
+				scenarioDelegationModel(durableModelRef),
+				durableNow + 600,
+				durableNow,
+				durableNow,
+			],
+		);
+		await durableDb.execute(
+			`INSERT INTO agent_steps
         (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
          input_refs_json, output_refs_json, created_at, completed_at)
        VALUES
         (?, ?, ?, 1, 'model', 'completed', 1, '[]', '[]', ?, ?),
         (?, ?, ?, 2, 'tool', 'created', 1, '[]', '[]', ?, NULL)`,
-      [
-        durableModelStepId,
-        durableRunId,
-        durableChildRuntimeId,
-        durableNow,
-        durableNow,
-        durableToolStepId,
-        durableRunId,
-        durableChildRuntimeId,
-        durableNow,
-      ],
-    );
-    const durableInspection: ToolInspection = {
-      toolName: 'file_write',
-      toolVersion: '1',
-      normalizedArguments: { target: 'ssh', id: '42', path: 'src/example.ts', content: 'updated' },
-      target: sshFingerprint(42, 'durable-ssh-config'),
-      resourceKeys: ['connection:42:file:src/example.ts'],
-      risk: 'mutate',
-      mutation: true,
-      operationHash: durableOperationHash,
-      operationHashVersion: 1,
-      preconditions: [],
-      policyRevision: 1,
-      inputRevision: 1,
-    };
-    await durableDb.execute(
-      `INSERT INTO agent_tool_calls
+			[
+				durableModelStepId,
+				durableRunId,
+				durableChildRuntimeId,
+				durableNow,
+				durableNow,
+				durableToolStepId,
+				durableRunId,
+				durableChildRuntimeId,
+				durableNow,
+			],
+		);
+		const durableInspection: ToolInspection = {
+			toolName: 'file_write',
+			toolVersion: '1',
+			normalizedArguments: { target: 'ssh', id: '42', path: 'src/example.ts', content: 'updated' },
+			target: sshFingerprint(42, 'durable-ssh-config'),
+			resourceKeys: ['connection:42:file:src/example.ts'],
+			risk: 'mutate',
+			mutation: true,
+			operationHash: durableOperationHash,
+			operationHashVersion: 1,
+			preconditions: [],
+			policyRevision: 1,
+			inputRevision: 1,
+		};
+		await durableDb.execute(
+			`INSERT INTO agent_tool_calls
         (id, run_id, agent_runtime_id, step_id, source_model_step_id, batch_index, batch_size,
          provider_call_id, tool_name, tool_version, inspection_json, operation_hash,
          operation_hash_version, risk, status, created_at)
        VALUES (?, ?, ?, ?, ?, 0, 1, 'provider-governed-mutation', 'file_write', '1',
                ?, ?, 1, 'mutate', 'proposed', ?)`,
-      [
-        durableToolCallId,
-        durableRunId,
-        durableChildRuntimeId,
-        durableToolStepId,
-        durableModelStepId,
-        JSON.stringify(durableInspection),
-        durableOperationHash,
-        durableNow,
-      ],
-    );
-    await durableDb.execute(
-      `INSERT INTO agent_scheduler_work
+			[
+				durableToolCallId,
+				durableRunId,
+				durableChildRuntimeId,
+				durableToolStepId,
+				durableModelStepId,
+				JSON.stringify(durableInspection),
+				durableOperationHash,
+				durableNow,
+			],
+		);
+		await durableDb.execute(
+			`INSERT INTO agent_scheduler_work
         (id, run_id, agent_runtime_id, kind, status, payload_json, owner_epoch, not_before,
          deadline_at, created_at, updated_at, version)
        VALUES (?, ?, ?, 'tool_step', 'claimed', ?, 7, ?, ?, ?, ?, 1)`,
-      [
-        durableWorkId,
-        durableRunId,
-        durableChildRuntimeId,
-        JSON.stringify({
-          delegationId: durableDelegationId,
-          toolStepId: durableToolStepId,
-          toolCallId: durableToolCallId,
-        }),
-        durableNow,
-        durableNow + 600,
-        durableNow,
-        durableNow,
-      ],
-    );
+			[
+				durableWorkId,
+				durableRunId,
+				durableChildRuntimeId,
+				JSON.stringify({
+					delegationId: durableDelegationId,
+					toolStepId: durableToolStepId,
+					toolCallId: durableToolCallId,
+				}),
+				durableNow,
+				durableNow + 600,
+				durableNow,
+				durableNow,
+			],
+		);
 
-    const definitionRow = await durableDb.queryOne<{ definition_json: string }>(
-      'SELECT definition_json FROM agent_runs WHERE id = ?',
-      [durableRunId],
-    );
-    assert.ok(definitionRow);
-    await durableDb.execute('UPDATE agent_runs SET definition_json = ? WHERE id = ?', [
-      JSON.stringify({ ...JSON.parse(definitionRow.definition_json), approvalMode: 'ask' }),
-      durableRunId,
-    ]);
-    const requested = await durableCommit.requestToolApproval({
-      scope: scenarioScope,
-      runId: durableRunId,
-      runtimeId: durableChildRuntimeId,
-      toolStepId: durableToolStepId,
-      toolCallId: durableToolCallId,
-      approvalId: durableApprovalId,
-      expectedRunVersion: 1,
-      inspection: durableInspection,
-      expiresAt: durableNow + 300,
-      now: durableNow,
-    });
-    assert.equal(requested.run.status, 'awaiting_approval');
-    assert.equal(
-      (
-        await durableDb.queryOne<{ status: string }>('SELECT status FROM agent_scheduler_work WHERE id = ?', [
-          durableWorkId,
-        ])
-      )?.status,
-      'waiting',
-    );
-    for (const rejection of ['denied', 'expired'] as const) {
-      await assert.rejects(
-        durableDb.transaction(async (tx) => {
-          if (rejection === 'denied') {
-            await resolveToolApprovalTransition(tx, {
-              scope: scenarioScope,
-              runId: durableRunId,
-              approvalId: durableApprovalId,
-              decision: 'denied',
-              operationHash: durableOperationHash,
-              expectedApprovalVersion: 1,
-              expectedRunVersion: requested.run.version,
-              expectedPolicyRevision: 1,
-              expectedInputRevision: 1,
-              decidedByUserId: scenarioScope.userId,
-              idempotencyKey: 'denied-child',
-              requestHash: 'denied-child',
-              feedback: 'Use a read-only approach.',
-              now: durableNow,
-            });
-          } else {
-            await expireToolApprovalsTransition(tx, durableNow + 301);
-          }
-          const rejected = await tx.queryOne<{ status: string; result_json: string }>(
-            'SELECT status, result_json FROM agent_tool_calls WHERE id = ?',
-            [durableToolCallId],
-          );
-          assert.equal(rejected?.status, 'failed');
-          assert.equal(
-            JSON.parse(rejected!.result_json).errorCode,
-            rejection === 'denied' ? 'APPROVAL_DENIED' : 'APPROVAL_EXPIRED',
-          );
-          assert.equal(
-            (
-              await tx.queryOne<{ status: string }>('SELECT status FROM agent_scheduler_work WHERE id = ?', [
-                durableWorkId,
-              ])
-            )?.status,
-            'completed',
-          );
-          assert.equal(
-            (
-              await tx.queryOne<{ status: string }>(
-                "SELECT status FROM agent_scheduler_work WHERE run_id = ? AND agent_runtime_id = ? AND kind = 'model_step'",
-                [durableRunId, durableChildRuntimeId],
-              )
-            )?.status,
-            'queued',
-          );
-          assert.equal(
-            (
-              await tx.queryOne<{ executing_runtime_count: number }>(
-                'SELECT executing_runtime_count FROM agent_runs WHERE id = ?',
-                [durableRunId],
-              )
-            )?.executing_runtime_count,
-            requested.run.executingRuntimeCount,
-          );
-          throw new Error('SCENARIO_ROLLBACK');
-        }),
-        /SCENARIO_ROLLBACK/,
-      );
-    }
-    const resolved = await durableCommit.resolveToolApproval({
-      scope: scenarioScope,
-      runId: durableRunId,
-      approvalId: durableApprovalId,
-      decision: 'approved',
-      operationHash: durableOperationHash,
-      expectedApprovalVersion: 1,
-      expectedRunVersion: requested.run.version,
-      expectedPolicyRevision: 1,
-      expectedInputRevision: 1,
-      decidedByUserId: scenarioScope.userId,
-      resolutionSource: 'user',
-      idempotencyKey: 'governed-mutation-approval-resolution',
-      requestHash: requestHash(1, {
-        approvalId: durableApprovalId,
-        runId: durableRunId,
-        decision: 'approved',
-        operationHash: durableOperationHash,
-        expectedVersion: 1,
-      }),
-      now: durableNow,
-    });
-    assert.equal(resolved.run.status, 'running');
-    assert.equal(
-      (
-        await durableDb.queryOne<{ status: string }>('SELECT status FROM agent_scheduler_work WHERE id = ?', [
-          durableWorkId,
-        ])
-      )?.status,
-      'queued',
-    );
-    await durableDb.execute("UPDATE agent_scheduler_work SET status = 'claimed', owner_epoch = 7 WHERE id = ?", [
-      durableWorkId,
-    ]);
-    const beginDurableMutation = () =>
-      durableCommit.beginSubagentMutationTool({
-        scope: scenarioScope,
-        runId: durableRunId,
-        runtimeId: durableChildRuntimeId,
-        delegationId: durableDelegationId,
-        workId: durableWorkId,
-        ownerEpoch: 7,
-        toolStepId: durableToolStepId,
-        toolCallId: durableToolCallId,
-        approvalId: durableApprovalId,
-        operationHash: durableOperationHash,
-        expectedPolicyRevision: 1,
-        expectedInputRevision: 1,
-        now: durableNow + 1,
-      });
+		const definitionRow = await durableDb.queryOne<{ definition_json: string }>(
+			'SELECT definition_json FROM agent_runs WHERE id = ?',
+			[durableRunId],
+		);
+		assert.ok(definitionRow);
+		await durableDb.execute('UPDATE agent_runs SET definition_json = ? WHERE id = ?', [
+			JSON.stringify({ ...JSON.parse(definitionRow.definition_json), approvalMode: 'ask' }),
+			durableRunId,
+		]);
+		const requested = await durableCommit.requestToolApproval({
+			scope: scenarioScope,
+			runId: durableRunId,
+			runtimeId: durableChildRuntimeId,
+			toolStepId: durableToolStepId,
+			toolCallId: durableToolCallId,
+			approvalId: durableApprovalId,
+			expectedRunVersion: 1,
+			inspection: durableInspection,
+			expiresAt: durableNow + 300,
+			now: durableNow,
+		});
+		assert.equal(requested.run.status, 'awaiting_approval');
+		assert.equal(
+			(
+				await durableDb.queryOne<{ status: string }>('SELECT status FROM agent_scheduler_work WHERE id = ?', [
+					durableWorkId,
+				])
+			)?.status,
+			'waiting',
+		);
+		for (const rejection of ['denied', 'expired'] as const) {
+			await assert.rejects(
+				durableDb.transaction(async (tx) => {
+					if (rejection === 'denied') {
+						await resolveToolApprovalTransition(tx, {
+							scope: scenarioScope,
+							runId: durableRunId,
+							approvalId: durableApprovalId,
+							decision: 'denied',
+							operationHash: durableOperationHash,
+							expectedApprovalVersion: 1,
+							expectedRunVersion: requested.run.version,
+							expectedPolicyRevision: 1,
+							expectedInputRevision: 1,
+							decidedByUserId: scenarioScope.userId,
+							idempotencyKey: 'denied-child',
+							requestHash: 'denied-child',
+							feedback: 'Use a read-only approach.',
+							now: durableNow,
+						});
+					} else {
+						await expireToolApprovalsTransition(tx, durableNow + 301);
+					}
+					const rejected = await tx.queryOne<{ status: string; result_json: string }>(
+						'SELECT status, result_json FROM agent_tool_calls WHERE id = ?',
+						[durableToolCallId],
+					);
+					assert.equal(rejected?.status, 'failed');
+					assert.equal(
+						JSON.parse(rejected!.result_json).errorCode,
+						rejection === 'denied' ? 'APPROVAL_DENIED' : 'APPROVAL_EXPIRED',
+					);
+					assert.equal(
+						(
+							await tx.queryOne<{ status: string }>(
+								'SELECT status FROM agent_scheduler_work WHERE id = ?',
+								[durableWorkId],
+							)
+						)?.status,
+						'completed',
+					);
+					assert.equal(
+						(
+							await tx.queryOne<{ status: string }>(
+								"SELECT status FROM agent_scheduler_work WHERE run_id = ? AND agent_runtime_id = ? AND kind = 'model_step'",
+								[durableRunId, durableChildRuntimeId],
+							)
+						)?.status,
+						'queued',
+					);
+					assert.equal(
+						(
+							await tx.queryOne<{ executing_runtime_count: number }>(
+								'SELECT executing_runtime_count FROM agent_runs WHERE id = ?',
+								[durableRunId],
+							)
+						)?.executing_runtime_count,
+						requested.run.executingRuntimeCount,
+					);
+					throw new Error('SCENARIO_ROLLBACK');
+				}),
+				/SCENARIO_ROLLBACK/,
+			);
+		}
+		const resolved = await durableCommit.resolveToolApproval({
+			scope: scenarioScope,
+			runId: durableRunId,
+			approvalId: durableApprovalId,
+			decision: 'approved',
+			operationHash: durableOperationHash,
+			expectedApprovalVersion: 1,
+			expectedRunVersion: requested.run.version,
+			expectedPolicyRevision: 1,
+			expectedInputRevision: 1,
+			decidedByUserId: scenarioScope.userId,
+			resolutionSource: 'user',
+			idempotencyKey: 'governed-mutation-approval-resolution',
+			requestHash: requestHash(1, {
+				approvalId: durableApprovalId,
+				runId: durableRunId,
+				decision: 'approved',
+				operationHash: durableOperationHash,
+				expectedVersion: 1,
+			}),
+			now: durableNow,
+		});
+		assert.equal(resolved.run.status, 'running');
+		assert.equal(
+			(
+				await durableDb.queryOne<{ status: string }>('SELECT status FROM agent_scheduler_work WHERE id = ?', [
+					durableWorkId,
+				])
+			)?.status,
+			'queued',
+		);
+		await durableDb.execute("UPDATE agent_scheduler_work SET status = 'claimed', owner_epoch = 7 WHERE id = ?", [
+			durableWorkId,
+		]);
 
-    await durableDb.execute("UPDATE agent_delegations SET mutation_mode = 'read-only' WHERE id = ?", [
-      durableDelegationId,
-    ]);
-    await assert.rejects(
-      beginDurableMutation,
-      (error: unknown) => error instanceof Error && error.message === 'SUBAGENT_MUTATION_NOT_GOVERNED',
-      'StateCommit must reject a durable Child mutation when the frozen delegation is read-only',
-    );
-    await durableDb.execute("UPDATE agent_delegations SET mutation_mode = 'governed' WHERE id = ?", [
-      durableDelegationId,
-    ]);
+		const beginDurableMutation = () =>
+			durableCommit.beginSubagentMutationTool({
+				scope: scenarioScope,
+				runId: durableRunId,
+				runtimeId: durableChildRuntimeId,
+				delegationId: durableDelegationId,
+				workId: durableWorkId,
+				ownerEpoch: 7,
+				toolStepId: durableToolStepId,
+				toolCallId: durableToolCallId,
+				approvalId: durableApprovalId,
+				operationHash: durableOperationHash,
+				expectedPolicyRevision: 1,
+				expectedInputRevision: 1,
+				now: durableNow + 1,
+			});
 
-    const forbiddenDurableInspection: ToolInspection = {
-      ...durableInspection,
-      target: {
-        kind: 'ssh',
-        target: 'ssh',
-        id: '42',
-        connectionId: 42,
-        targetIdentity: 'machine:42',
-        endpoint: 'ssh://example.invalid',
-        loginUser: 'root',
-        configurationHash: 'forbidden-durable-target',
-        hostKeyTrust: 'unavailable',
-      },
-      resourceKeys: ['connection:42:path:/tmp/not-a-workspace'],
-    };
-    await durableDb.execute('UPDATE agent_tool_calls SET inspection_json = ? WHERE id = ?', [
-      JSON.stringify(forbiddenDurableInspection),
-      durableToolCallId,
-    ]);
-    await assert.rejects(
-      beginDurableMutation,
-      (error: unknown) => error instanceof Error && error.message === 'SUBAGENT_MUTATION_TARGET_FORBIDDEN',
-      'StateCommit must independently reject forged SSH targets before consuming approval',
-    );
-    await durableDb.execute('UPDATE agent_tool_calls SET inspection_json = ? WHERE id = ?', [
-      JSON.stringify(durableInspection),
-      durableToolCallId,
-    ]);
-    for (const invalidInspection of [
-      { ...durableInspection, target: { ...durableInspection.target, configurationHash: 'changed-after-inspection' } },
-      { ...durableInspection, normalizedArguments: { target: 'ssh', id: '43' } },
-      { ...durableInspection, resourceKeys: ['connection:43:file:src/example.ts'] },
-      { ...durableInspection, toolName: 'workspace_control' },
-    ]) {
-      await durableDb.execute('UPDATE agent_tool_calls SET inspection_json = ? WHERE id = ?', [
-        JSON.stringify(invalidInspection),
-        durableToolCallId,
-      ]);
-      await assert.rejects(beginDurableMutation, /SUBAGENT_MUTATION_TARGET_FORBIDDEN/);
-    }
-    await durableDb.execute('UPDATE agent_tool_calls SET inspection_json = ? WHERE id = ?', [
-      JSON.stringify(durableInspection),
-      durableToolCallId,
-    ]);
-    const persistedRunDefinition = (await durableDb.queryOne<{ definition_json: string }>(
-      'SELECT definition_json FROM agent_runs WHERE id = ?',
-      [durableRunId],
-    ))!;
-    await durableDb.execute('UPDATE agent_runs SET definition_json = ? WHERE id = ?', [
-      JSON.stringify({ ...JSON.parse(persistedRunDefinition.definition_json), connectionIds: [43] }),
-      durableRunId,
-    ]);
-    await assert.rejects(beginDurableMutation, /SUBAGENT_MUTATION_TARGET_FORBIDDEN/);
-    await durableDb.execute('UPDATE agent_runs SET definition_json = ? WHERE id = ?', [
-      persistedRunDefinition.definition_json,
-      durableRunId,
-    ]);
-    const originalGrantRow = (await durableDb.queryOne<{ grants_json: string }>(
-      'SELECT grants_json FROM agent_delegations WHERE id = ?',
-      [durableDelegationId],
-    ))!;
-    for (const forbiddenScope of [
-      { ssh: { mode: 'ids', ids: ['43'] } },
-      { workspace: { mode: 'all' }, ssh: { mode: 'all' } },
-    ]) {
-      await durableDb.execute('UPDATE agent_delegations SET grants_json = ? WHERE id = ?', [
-        JSON.stringify([
-          { capability: 'file.write', schemaVersion: 2, scope: { kind: 'targets', targets: forbiddenScope } },
-        ]),
-        durableDelegationId,
-      ]);
-      await assert.rejects(beginDurableMutation, /SUBAGENT_MUTATION_TARGET_FORBIDDEN/);
-    }
-    await durableDb.execute('UPDATE agent_delegations SET grants_json = ? WHERE id = ?', [
-      originalGrantRow.grants_json,
-      durableDelegationId,
-    ]);
-    assert.equal(
-      (
-        await durableDb.queryOne<{ consumed_at: number | null }>(
-          'SELECT consumed_at FROM agent_approvals WHERE id = ?',
-          [durableApprovalId],
-        )
-      )?.consumed_at,
-      null,
-      'rejected durable governance checks must not consume the approved mutation',
-    );
-    assert.equal(
-      (
-        await durableDb.queryOne<{ status: string }>('SELECT status FROM agent_tool_calls WHERE id = ?', [
-          durableToolCallId,
-        ])
-      )?.status,
-      'ready',
-      'rejected durable governance checks must not advance the Tool state',
-    );
+		await durableDb.execute("UPDATE agent_delegations SET mutation_mode = 'read-only' WHERE id = ?", [
+			durableDelegationId,
+		]);
+		await assert.rejects(
+			beginDurableMutation,
+			(error: unknown) => error instanceof Error && error.message === 'SUBAGENT_MUTATION_NOT_GOVERNED',
+			'StateCommit must reject a durable Child mutation when the frozen delegation is read-only',
+		);
+		await durableDb.execute("UPDATE agent_delegations SET mutation_mode = 'governed' WHERE id = ?", [
+			durableDelegationId,
+		]);
 
-    const executeDefinition = (await durableDb.queryOne<{ definition_json: string }>(
-      'SELECT definition_json FROM agent_runs WHERE id = ?',
-      [durableRunId],
-    ))!;
-    await durableDb.execute('UPDATE agent_runs SET definition_json = ? WHERE id = ?', [
-      JSON.stringify({ ...JSON.parse(executeDefinition.definition_json), executionMode: 'plan' }),
-      durableRunId,
-    ]);
-    await assert.rejects(
-      beginDurableMutation,
-      /PLAN_MODE_TOOL_FORBIDDEN/,
-      'durable begin must reject a forged ready Child mutation in Plan mode without consuming approval',
-    );
-    assert.equal(
-      (
-        await durableDb.queryOne<{ consumed_at: number | null }>(
-          'SELECT consumed_at FROM agent_approvals WHERE id = ?',
-          [durableApprovalId],
-        )
-      )?.consumed_at,
-      null,
-    );
-    await durableDb.execute('UPDATE agent_runs SET definition_json = ? WHERE id = ?', [
-      executeDefinition.definition_json,
-      durableRunId,
-    ]);
-    const begun = await beginDurableMutation();
-    assert.equal(begun.run.executingRuntimeCount, 1);
-    assert.equal(
-      (
-        await durableDb.queryOne<{ consumed_at: number | null }>(
-          'SELECT consumed_at FROM agent_approvals WHERE id = ?',
-          [durableApprovalId],
-        )
-      )?.consumed_at,
-      durableNow + 1,
-      'approved Child mutation must consume its approval in the same durable begin transition',
-    );
-    assert.equal(
-      (
-        await durableDb.queryOne<{ status: string }>('SELECT status FROM agent_tool_calls WHERE id = ?', [
-          durableToolCallId,
-        ])
-      )?.status,
-      'running',
-    );
-    assert.equal(
-      (
-        await durableDb.queryOne<{ schedule_state: string }>('SELECT schedule_state FROM agent_runtimes WHERE id = ?', [
-          durableChildRuntimeId,
-        ])
-      )?.schedule_state,
-      'executing',
-    );
-    const approvalEvents = await durableDb.queryAll<{ type: string }>(
-      `SELECT type FROM agent_events WHERE run_id = ?
+		const forbiddenDurableInspection: ToolInspection = {
+			...durableInspection,
+			target: {
+				kind: 'ssh',
+				target: 'ssh',
+				id: '42',
+				connectionId: 42,
+				targetIdentity: 'machine:42',
+				endpoint: 'ssh://example.invalid',
+				loginUser: 'root',
+				configurationHash: 'forbidden-durable-target',
+				hostKeyTrust: 'unavailable',
+			},
+			resourceKeys: ['connection:42:path:/tmp/not-a-workspace'],
+		};
+		await durableDb.execute('UPDATE agent_tool_calls SET inspection_json = ? WHERE id = ?', [
+			JSON.stringify(forbiddenDurableInspection),
+			durableToolCallId,
+		]);
+		await assert.rejects(
+			beginDurableMutation,
+			(error: unknown) => error instanceof Error && error.message === 'SUBAGENT_MUTATION_TARGET_FORBIDDEN',
+			'StateCommit must independently reject forged SSH targets before consuming approval',
+		);
+		await durableDb.execute('UPDATE agent_tool_calls SET inspection_json = ? WHERE id = ?', [
+			JSON.stringify(durableInspection),
+			durableToolCallId,
+		]);
+		for (const invalidInspection of [
+			{
+				...durableInspection,
+				target: { ...durableInspection.target, configurationHash: 'changed-after-inspection' },
+			},
+			{ ...durableInspection, normalizedArguments: { target: 'ssh', id: '43' } },
+			{ ...durableInspection, resourceKeys: ['connection:43:file:src/example.ts'] },
+			{ ...durableInspection, toolName: 'workspace_control' },
+		]) {
+			await durableDb.execute('UPDATE agent_tool_calls SET inspection_json = ? WHERE id = ?', [
+				JSON.stringify(invalidInspection),
+				durableToolCallId,
+			]);
+			await assert.rejects(beginDurableMutation, /SUBAGENT_MUTATION_TARGET_FORBIDDEN/);
+		}
+		await durableDb.execute('UPDATE agent_tool_calls SET inspection_json = ? WHERE id = ?', [
+			JSON.stringify(durableInspection),
+			durableToolCallId,
+		]);
+		const persistedRunDefinition = (await durableDb.queryOne<{ definition_json: string }>(
+			'SELECT definition_json FROM agent_runs WHERE id = ?',
+			[durableRunId],
+		))!;
+		await durableDb.execute('UPDATE agent_runs SET definition_json = ? WHERE id = ?', [
+			JSON.stringify({ ...JSON.parse(persistedRunDefinition.definition_json), connectionIds: [43] }),
+			durableRunId,
+		]);
+		await assert.rejects(beginDurableMutation, /SUBAGENT_MUTATION_TARGET_FORBIDDEN/);
+		await durableDb.execute('UPDATE agent_runs SET definition_json = ? WHERE id = ?', [
+			persistedRunDefinition.definition_json,
+			durableRunId,
+		]);
+		const originalGrantRow = (await durableDb.queryOne<{ grants_json: string }>(
+			'SELECT grants_json FROM agent_delegations WHERE id = ?',
+			[durableDelegationId],
+		))!;
+		for (const forbiddenScope of [
+			{ ssh: { mode: 'ids', ids: ['43'] } },
+			{ workspace: { mode: 'all' }, ssh: { mode: 'all' } },
+		]) {
+			await durableDb.execute('UPDATE agent_delegations SET grants_json = ? WHERE id = ?', [
+				JSON.stringify([
+					{ capability: 'file.write', schemaVersion: 2, scope: { kind: 'targets', targets: forbiddenScope } },
+				]),
+				durableDelegationId,
+			]);
+			await assert.rejects(beginDurableMutation, /SUBAGENT_MUTATION_TARGET_FORBIDDEN/);
+		}
+		await durableDb.execute('UPDATE agent_delegations SET grants_json = ? WHERE id = ?', [
+			originalGrantRow.grants_json,
+			durableDelegationId,
+		]);
+		assert.equal(
+			(
+				await durableDb.queryOne<{ consumed_at: number | null }>(
+					'SELECT consumed_at FROM agent_approvals WHERE id = ?',
+					[durableApprovalId],
+				)
+			)?.consumed_at,
+			null,
+			'rejected durable governance checks must not consume the approved mutation',
+		);
+		assert.equal(
+			(
+				await durableDb.queryOne<{ status: string }>('SELECT status FROM agent_tool_calls WHERE id = ?', [
+					durableToolCallId,
+				])
+			)?.status,
+			'ready',
+			'rejected durable governance checks must not advance the Tool state',
+		);
+
+		const executeDefinition = (await durableDb.queryOne<{ definition_json: string }>(
+			'SELECT definition_json FROM agent_runs WHERE id = ?',
+			[durableRunId],
+		))!;
+		await durableDb.execute('UPDATE agent_runs SET definition_json = ? WHERE id = ?', [
+			JSON.stringify({ ...JSON.parse(executeDefinition.definition_json), executionMode: 'plan' }),
+			durableRunId,
+		]);
+		await assert.rejects(
+			beginDurableMutation,
+			/PLAN_MODE_TOOL_FORBIDDEN/,
+			'durable begin must reject a forged ready Child mutation in Plan mode without consuming approval',
+		);
+		assert.equal(
+			(
+				await durableDb.queryOne<{ consumed_at: number | null }>(
+					'SELECT consumed_at FROM agent_approvals WHERE id = ?',
+					[durableApprovalId],
+				)
+			)?.consumed_at,
+			null,
+		);
+		await durableDb.execute('UPDATE agent_runs SET definition_json = ? WHERE id = ?', [
+			executeDefinition.definition_json,
+			durableRunId,
+		]);
+		const begun = await beginDurableMutation();
+		assert.equal(begun.run.executingRuntimeCount, 1);
+		assert.equal(
+			(
+				await durableDb.queryOne<{ consumed_at: number | null }>(
+					'SELECT consumed_at FROM agent_approvals WHERE id = ?',
+					[durableApprovalId],
+				)
+			)?.consumed_at,
+			durableNow + 1,
+			'approved Child mutation must consume its approval in the same durable begin transition',
+		);
+		assert.equal(
+			(
+				await durableDb.queryOne<{ status: string }>('SELECT status FROM agent_tool_calls WHERE id = ?', [
+					durableToolCallId,
+				])
+			)?.status,
+			'running',
+		);
+		assert.equal(
+			(
+				await durableDb.queryOne<{ schedule_state: string }>(
+					'SELECT schedule_state FROM agent_runtimes WHERE id = ?',
+					[durableChildRuntimeId],
+				)
+			)?.schedule_state,
+			'executing',
+		);
+		const approvalEvents = await durableDb.queryAll<{ type: string }>(
+			`SELECT type FROM agent_events WHERE run_id = ?
        AND type IN ('approval.requested','approval.approved','approval.consumed')
        ORDER BY sequence`,
-      [durableRunId],
-    );
-    assert.deepEqual(
-      approvalEvents.map((event) => event.type),
-      ['approval.requested', 'approval.approved', 'approval.consumed'],
-      'Child mutation approval must use the same durable requested/approved/consumed audit events as Root mutation',
-    );
+			[durableRunId],
+		);
+		assert.deepEqual(
+			approvalEvents.map((event) => event.type),
+			['approval.requested', 'approval.approved', 'approval.consumed'],
+			'Child mutation approval must use the same durable requested/approved/consumed audit events as Root mutation',
+		);
 
-    const unknownResult: ToolResult = {
-      ok: false,
-      summary: 'Scenario mutation outcome unknown.',
-      data: { error: { code: 'SCENARIO_MUTATION_UNKNOWN' } },
-      artifactRefs: [],
-      truncated: false,
-      outcome: 'unknown',
-      errorCode: 'SCENARIO_MUTATION_UNKNOWN',
-      verification: { status: 'unverified', summary: 'Reconciliation required.', evidenceRefs: [] },
-    };
-    const interrupted = await durableCommit.settleSubagentTool({
-      scope: scenarioScope,
-      runId: durableRunId,
-      runtimeId: durableChildRuntimeId,
-      delegationId: durableDelegationId,
-      workId: durableWorkId,
-      ownerEpoch: 7,
-      toolStepId: durableToolStepId,
-      toolCallId: durableToolCallId,
-      result: unknownResult,
-      needsReconciliation: true,
-      continuation: 'runnable',
-      now: durableNow + 2,
-    });
-    assert.equal(interrupted.run.status, 'interrupted');
-    assert.equal(interrupted.run.needsReconciliation, true);
-    assert.equal(
-      (
-        await durableDb.queryOne<{ status: string }>('SELECT status FROM agent_tool_calls WHERE id = ?', [
-          durableToolCallId,
-        ])
-      )?.status,
-      'reconciling',
-    );
-    assert.equal(
-      (
-        await durableDb.queryOne<{ status: string; mutation_mode: string }>(
-          'SELECT status, mutation_mode FROM agent_delegations WHERE id = ?',
-          [durableDelegationId],
-        )
-      )?.status,
-      'failed',
-    );
-    assert.equal(
-      (
-        await durableDb.queryOne<{ mutation_mode: string }>(
-          'SELECT mutation_mode FROM agent_delegations WHERE id = ?',
-          [durableDelegationId],
-        )
-      )?.mutation_mode,
-      'governed',
-      'delegation must durably freeze the mutation governance mode',
-    );
-  } finally {
-    await durableDb.close().catch(() => undefined);
-    fs.rmSync(durableDirectory, { recursive: true, force: true });
-  }
+		const unknownResult: ToolResult = {
+			ok: false,
+			summary: 'Scenario mutation outcome unknown.',
+			data: { error: { code: 'SCENARIO_MUTATION_UNKNOWN' } },
+			artifactRefs: [],
+			truncated: false,
+			outcome: 'unknown',
+			errorCode: 'SCENARIO_MUTATION_UNKNOWN',
+			verification: { status: 'unverified', summary: 'Reconciliation required.', evidenceRefs: [] },
+		};
+		const interrupted = await durableCommit.settleSubagentTool({
+			scope: scenarioScope,
+			runId: durableRunId,
+			runtimeId: durableChildRuntimeId,
+			delegationId: durableDelegationId,
+			workId: durableWorkId,
+			ownerEpoch: 7,
+			toolStepId: durableToolStepId,
+			toolCallId: durableToolCallId,
+			result: unknownResult,
+			needsReconciliation: true,
+			continuation: 'runnable',
+			now: durableNow + 2,
+		});
+		assert.equal(interrupted.run.status, 'interrupted');
+		assert.equal(interrupted.run.needsReconciliation, true);
+		assert.equal(
+			(
+				await durableDb.queryOne<{ status: string }>('SELECT status FROM agent_tool_calls WHERE id = ?', [
+					durableToolCallId,
+				])
+			)?.status,
+			'reconciling',
+		);
+		assert.equal(
+			(
+				await durableDb.queryOne<{ status: string; mutation_mode: string }>(
+					'SELECT status, mutation_mode FROM agent_delegations WHERE id = ?',
+					[durableDelegationId],
+				)
+			)?.status,
+			'failed',
+		);
+		assert.equal(
+			(
+				await durableDb.queryOne<{ mutation_mode: string }>(
+					'SELECT mutation_mode FROM agent_delegations WHERE id = ?',
+					[durableDelegationId],
+				)
+			)?.mutation_mode,
+			'governed',
+			'delegation must durably freeze the mutation governance mode',
+		);
+	} finally {
+		await durableDb.close().catch(() => undefined);
+		fs.rmSync(durableDirectory, { recursive: true, force: true });
+	}
 
-  return [
-    { name: 'read_only_mutation_tools', value: 0, unit: 'tools' },
-    { name: 'governed_worker_mutation_tools', value: 1, unit: 'tools' },
-    { name: 'raw_machine_mutation_tools', value: 0, unit: 'tools' },
-    {
-      name: 'governed_subagent_unauthorized_ssh_target_rejections',
-      value: forbiddenTargetExecutions === 0 ? 1 : 0,
-      unit: 'cases',
-    },
-    { name: 'durable_unauthorized_ssh_target_rejections', value: 1, unit: 'cases' },
-    { name: 'governed_worker_templates', value: 1, unit: 'templates' },
-    { name: 'fresh_mutation_executions', value: scenarioMutationExecutions, unit: 'mutations' },
-    { name: 'restart_mutation_replays', value: 0, unit: 'mutations' },
-    { name: 'verified_worker_evidence_refs', value: workerEvidence.length, unit: 'artifacts' },
-    { name: 'verified_worker_tool_facts', value: workerEvidenceProjection.tools.length, unit: 'tools' },
-    { name: 'durable_unknown_reconciliations', value: 1, unit: 'runs' },
-  ];
+	return [
+		{ name: 'read_only_mutation_tools', value: 0, unit: 'tools' },
+		{ name: 'governed_worker_mutation_tools', value: 1, unit: 'tools' },
+		{ name: 'raw_machine_mutation_tools', value: 0, unit: 'tools' },
+		{
+			name: 'governed_subagent_unauthorized_ssh_target_rejections',
+			value: forbiddenTargetExecutions === 0 ? 1 : 0,
+			unit: 'cases',
+		},
+		{ name: 'durable_unauthorized_ssh_target_rejections', value: 1, unit: 'cases' },
+		{ name: 'governed_worker_templates', value: 1, unit: 'templates' },
+		{ name: 'fresh_mutation_executions', value: scenarioMutationExecutions, unit: 'mutations' },
+		{ name: 'restart_mutation_replays', value: 0, unit: 'mutations' },
+		{ name: 'verified_worker_evidence_refs', value: workerEvidence.length, unit: 'artifacts' },
+		{ name: 'verified_worker_tool_facts', value: workerEvidenceProjection.tools.length, unit: 'tools' },
+		{ name: 'durable_unknown_reconciliations', value: 1, unit: 'runs' },
+	];
 };

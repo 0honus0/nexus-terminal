@@ -1,288 +1,307 @@
 <script setup lang="ts">
-  import { UiButton, UiInfoHint } from '@/foundation/ui';
-  import { computed, ref, watch } from 'vue';
-  import type { AgentHardLimitsDto, AgentSettingsViewDto, AgentHardLimitPreviewDto } from '../api/agent-api';
-  import QuantityInput from './QuantityInput.vue';
-  import {
-    areQuantitiesEquivalent,
-    formatQuantity,
-    parseQuantity,
-    toCompactQuantityString,
-    type QuantityType,
-  } from './quantity-format';
-  import { useQuantityLabels } from './use-quantity-labels';
+	import { UiButton, UiInfoHint } from '@/foundation/ui';
+	import { computed, ref, watch } from 'vue';
+	import type { AgentHardLimitsDto, AgentSettingsViewDto, AgentHardLimitPreviewDto } from '../api/agent-api';
+	import QuantityInput from './QuantityInput.vue';
+	import {
+		areQuantitiesEquivalent,
+		formatQuantity,
+		parseQuantity,
+		toCompactQuantityString,
+		type QuantityType,
+	} from './quantity-format';
+	import { useQuantityLabels } from './use-quantity-labels';
 
-  const quantityLabels = useQuantityLabels();
+	const quantityLabels = useQuantityLabels();
 
-  const props = defineProps<{
-    settings: AgentSettingsViewDto;
-    preview: AgentHardLimitPreviewDto | null;
-    busy: boolean;
-  }>();
-  const emit = defineEmits<{
-    preview: [proposed: Partial<AgentHardLimitsDto>];
-    confirm: [confirmationId: string, expectedVersion: number];
-    dismiss: [];
-  }>();
+	const props = defineProps<{
+		settings: AgentSettingsViewDto;
+		preview: AgentHardLimitPreviewDto | null;
+		busy: boolean;
+	}>();
+	const emit = defineEmits<{
+		preview: [proposed: Partial<AgentHardLimitsDto>];
+		confirm: [confirmationId: string, expectedVersion: number];
+		dismiss: [];
+	}>();
 
-  type HardLimitKey = keyof AgentHardLimitsDto;
+	type HardLimitKey = keyof AgentHardLimitsDto;
 
-  const getFieldType = (key: HardLimitKey): QuantityType => {
-    if (
-      [
-        'maxToolOutputBytes',
-        'maxArtifactBytes',
-        'maxSingleArtifactBytes',
-        'maxGlobalArtifactBytes',
-        'maxRecallBytes',
-        'maxSubagentMessageBytesPerRun',
-      ].includes(key)
-    )
-      return 'bytes';
-    if (['maxActiveExecutionSeconds', 'toolTimeoutSeconds', 'unretainedArtifactTtlSeconds'].includes(key))
-      return 'seconds';
-    return 'number';
-  };
+	const getFieldType = (key: HardLimitKey): QuantityType => {
+		if (
+			[
+				'maxToolOutputBytes',
+				'maxArtifactBytes',
+				'maxSingleArtifactBytes',
+				'maxGlobalArtifactBytes',
+				'maxRecallBytes',
+				'maxSubagentMessageBytesPerRun',
+			].includes(key)
+		)
+			return 'bytes';
+		if (['maxActiveExecutionSeconds', 'toolTimeoutSeconds', 'unretainedArtifactTtlSeconds'].includes(key))
+			return 'seconds';
+		return 'number';
+	};
 
-  const fieldGroups: Array<{ id: string; keys: HardLimitKey[] }> = [
-    {
-      id: 'execution',
-      keys: ['maxModelRequests', 'maxToolExecutions'],
-    },
-    {
-      id: 'timeouts',
-      keys: ['maxActiveExecutionSeconds', 'toolTimeoutSeconds', 'unretainedArtifactTtlSeconds'],
-    },
-    {
-      id: 'storage',
-      keys: [
-        'maxToolOutputBytes',
-        'maxArtifactBytes',
-        'maxSingleArtifactBytes',
-        'maxGlobalArtifactBytes',
-        'maxRecallBytes',
-        'maxSubagentMessageBytesPerRun',
-      ],
-    },
-    {
-      id: 'concurrency',
-      keys: [
-        'maxRecallItems',
-        'maxConcurrentRuntimes',
-        'maxConcurrentModelCalls',
-        'maxDelegationDepth',
-        'maxSubagentMessagesPerRun',
-      ],
-    },
-  ];
+	const fieldGroups: Array<{ id: string; keys: HardLimitKey[] }> = [
+		{
+			id: 'execution',
+			keys: ['maxModelRequests', 'maxToolExecutions'],
+		},
+		{
+			id: 'timeouts',
+			keys: ['maxActiveExecutionSeconds', 'toolTimeoutSeconds', 'unretainedArtifactTtlSeconds'],
+		},
+		{
+			id: 'storage',
+			keys: [
+				'maxToolOutputBytes',
+				'maxArtifactBytes',
+				'maxSingleArtifactBytes',
+				'maxGlobalArtifactBytes',
+				'maxRecallBytes',
+				'maxSubagentMessageBytesPerRun',
+			],
+		},
+		{
+			id: 'concurrency',
+			keys: [
+				'maxRecallItems',
+				'maxConcurrentRuntimes',
+				'maxConcurrentModelCalls',
+				'maxDelegationDepth',
+				'maxSubagentMessagesPerRun',
+			],
+		},
+	];
 
-  const draftFromLimits = (limits: AgentHardLimitsDto): Record<string, string | number | null> =>
-    Object.fromEntries(
-      Object.entries(limits).map(([rawKey, value]) => {
-        const key = rawKey as HardLimitKey;
-        return [key, value === null ? '' : toCompactQuantityString(value, getFieldType(key))];
-      }),
-    );
+	const draftFromLimits = (limits: AgentHardLimitsDto): Record<string, string | number | null> =>
+		Object.fromEntries(
+			Object.entries(limits).map(([rawKey, value]) => {
+				const key = rawKey as HardLimitKey;
+				return [key, value === null ? '' : toCompactQuantityString(value, getFieldType(key))];
+			}),
+		);
 
-  const baseline = ref<AgentHardLimitsDto>({ ...props.settings.hardLimits });
-  const draft = ref<Record<string, string | number | null>>(draftFromLimits(baseline.value));
-  const reset = (): void => {
-    baseline.value = { ...props.settings.hardLimits };
-    draft.value = draftFromLimits(baseline.value);
-  };
+	const baseline = ref<AgentHardLimitsDto>({ ...props.settings.hardLimits });
+	const draft = ref<Record<string, string | number | null>>(draftFromLimits(baseline.value));
 
-  const parsedDraftValue = (key: HardLimitKey): number | null => {
-    const raw = draft.value[key] ?? '';
-    return parseQuantity(raw, getFieldType(key));
-  };
+	const reset = (): void => {
+		baseline.value = { ...props.settings.hardLimits };
+		draft.value = draftFromLimits(baseline.value);
+	};
 
-  const hasInvalidDraft = computed(() =>
-    fieldGroups.some((group) =>
-      group.keys.some((key) => {
-        const parsed = parsedDraftValue(key);
-        return parsed === null || parsed < 1;
-      }),
-    ),
-  );
+	const parsedDraftValue = (key: HardLimitKey): number | null => {
+		const raw = draft.value[key] ?? '';
+		return parseQuantity(raw, getFieldType(key));
+	};
 
-  const proposedChanges = computed<Partial<AgentHardLimitsDto>>(() => {
-    if (hasInvalidDraft.value) return {};
-    const result: Partial<AgentHardLimitsDto> = {};
-    for (const group of fieldGroups) {
-      for (const key of group.keys) {
-        const current = props.settings.hardLimits[key];
-        const next = parsedDraftValue(key);
-        if (!areQuantitiesEquivalent(current, next, getFieldType(key))) {
-          (result as Record<string, number | null>)[key] = next;
-        }
-      }
-    }
-    return result;
-  });
+	const hasInvalidDraft = computed(() =>
+		fieldGroups.some((group) =>
+			group.keys.some((key) => {
+				const parsed = parsedDraftValue(key);
+				return parsed === null || parsed < 1;
+			}),
+		),
+	);
 
-  const isDirty = computed(() =>
-    fieldGroups.some((group) =>
-      group.keys.some((key) => !areQuantitiesEquivalent(baseline.value[key], parsedDraftValue(key), getFieldType(key))),
-    ),
-  );
-  const remoteMatchesDraft = computed(() =>
-    fieldGroups.every((group) =>
-      group.keys.every((key) =>
-        areQuantitiesEquivalent(props.settings.hardLimits[key], parsedDraftValue(key), getFieldType(key)),
-      ),
-    ),
-  );
+	const proposedChanges = computed<Partial<AgentHardLimitsDto>>(() => {
+		if (hasInvalidDraft.value) return {};
+		const result: Partial<AgentHardLimitsDto> = {};
+		for (const group of fieldGroups) {
+			for (const key of group.keys) {
+				const current = props.settings.hardLimits[key];
+				const next = parsedDraftValue(key);
+				if (!areQuantitiesEquivalent(current, next, getFieldType(key))) {
+					(result as Record<string, number | null>)[key] = next;
+				}
+			}
+		}
+		return result;
+	});
 
-  watch(
-    () => props.settings.revision,
-    () => {
-      if (!isDirty.value || remoteMatchesDraft.value) reset();
-    },
-    { immediate: true },
-  );
+	const isDirty = computed(() =>
+		fieldGroups.some((group) =>
+			group.keys.some(
+				(key) => !areQuantitiesEquivalent(baseline.value[key], parsedDraftValue(key), getFieldType(key)),
+			),
+		),
+	);
+	const remoteMatchesDraft = computed(() =>
+		fieldGroups.every((group) =>
+			group.keys.every((key) =>
+				areQuantitiesEquivalent(props.settings.hardLimits[key], parsedDraftValue(key), getFieldType(key)),
+			),
+		),
+	);
 
-  const canPreview = computed(
-    () => !hasInvalidDraft.value && Object.keys(proposedChanges.value).length > 0 && !props.busy,
-  );
+	watch(
+		() => props.settings.revision,
+		() => {
+			if (!isDirty.value || remoteMatchesDraft.value) reset();
+		},
+		{ immediate: true },
+	);
 
-  const formatHardLimitValue = (key: string, value: number | null): string =>
-    formatQuantity(value, getFieldType(key as HardLimitKey), quantityLabels.value);
+	const canPreview = computed(
+		() => !hasInvalidDraft.value && Object.keys(proposedChanges.value).length > 0 && !props.busy,
+	);
 
-  const artifactUsage = computed(() =>
-    props.preview
-      ? formatQuantity(
-          props.preview.impact.usage.artifactUsedBytes + props.preview.impact.usage.artifactReservedBytes,
-          'bytes',
-          quantityLabels.value,
-        )
-      : '',
-  );
+	const formatHardLimitValue = (key: string, value: number | null): string =>
+		formatQuantity(value, getFieldType(key as HardLimitKey), quantityLabels.value);
+
+	const artifactUsage = computed(() =>
+		props.preview
+			? formatQuantity(
+					props.preview.impact.usage.artifactUsedBytes + props.preview.impact.usage.artifactReservedBytes,
+					'bytes',
+					quantityLabels.value,
+				)
+			: '',
+	);
 </script>
 
 <template>
-  <section class="px-3 py-3 sm:px-4 sm:py-4">
-    <div class="flex flex-wrap items-start justify-between gap-3 px-1">
-      <p class="max-w-3xl text-xs leading-5 text-text-secondary">
-        {{ $t('agent.settings.hardLimits.description') }}
-      </p>
-      <div class="flex items-center gap-2">
-        <UiInfoHint v-if="!canPreview" :text="$t('agent.settings.disabledReason.noPreviewChanges')" />
-        <UiButton
-          appearance="solid"
-          tone="primary"
-          type="button"
-          :disabled="!canPreview"
-          @click="emit('preview', proposedChanges)"
-        >
-          <i class="fa-solid fa-shield-halved text-[10px]" aria-hidden="true"></i>
-          {{ $t('agent.settings.hardLimits.review') }}
-        </UiButton>
-      </div>
-    </div>
+	<section class="px-3 py-3 sm:px-4 sm:py-4">
+		<div class="flex flex-wrap items-start justify-between gap-3 px-1">
+			<p class="max-w-3xl text-xs leading-5 text-text-secondary">
+				{{ $t('agent.settings.hardLimits.description') }}
+			</p>
+			<div class="flex items-center gap-2">
+				<UiInfoHint v-if="!canPreview" :text="$t('agent.settings.disabledReason.noPreviewChanges')" />
+				<UiButton
+					appearance="solid"
+					tone="primary"
+					type="button"
+					:disabled="!canPreview"
+					@click="emit('preview', proposedChanges)"
+				>
+					<i class="fa-solid fa-shield-halved text-[10px]" aria-hidden="true"></i>
+					{{ $t('agent.settings.hardLimits.review') }}
+				</UiButton>
+			</div>
+		</div>
 
-    <div class="mt-4 space-y-3">
-      <section
-        v-for="group in fieldGroups"
-        :key="group.id"
-        class="rounded-xl border border-border/80 bg-background/60 p-4 shadow-2xs"
-      >
-        <div v-if="group.id !== 'execution'" class="mb-3">
-          <h4 class="text-xs font-semibold text-foreground">
-            {{ $t(`agent.settings.hardLimits.groups.${group.id}`) }}
-          </h4>
-          <p class="mt-0.5 text-[11px] leading-4 text-text-secondary">
-            {{ $t(`agent.settings.hardLimits.groups.${group.id}Desc`) }}
-          </p>
-        </div>
+		<div class="mt-4 space-y-3">
+			<section
+				v-for="group in fieldGroups"
+				:key="group.id"
+				class="rounded-xl border border-border/80 bg-background/60 p-4 shadow-2xs"
+			>
+				<div v-if="group.id !== 'execution'" class="mb-3">
+					<h4 class="text-xs font-semibold text-foreground">
+						{{ $t(`agent.settings.hardLimits.groups.${group.id}`) }}
+					</h4>
+					<p class="mt-0.5 text-[11px] leading-4 text-text-secondary">
+						{{ $t(`agent.settings.hardLimits.groups.${group.id}Desc`) }}
+					</p>
+				</div>
 
-        <div
-          class="grid gap-x-3 gap-y-3"
-          :class="group.id === 'execution' ? 'grid-cols-2' : 'sm:grid-cols-2 xl:grid-cols-3'"
-        >
-          <label v-for="key in group.keys" :key="key" class="flex min-w-0 flex-col">
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0">
-                <span class="block text-xs font-medium text-foreground">
-                  {{ $t(`agent.settings.hardLimits.fields.${key}.label`) }}
-                </span>
-                <span class="mt-0.5 block text-[11px] leading-4 text-text-secondary">
-                  {{ $t(`agent.settings.hardLimits.fields.${key}.hint`) }}
-                </span>
-              </div>
-              <span
-                v-if="settings.requestedSettings.hardLimits[key] !== settings.effectiveSettings.hardLimits[key]"
-                class="shrink-0 text-[11px] leading-4 text-warning"
-                :title="
-                  $t('agent.settings.hardLimits.effective', { value: settings.effectiveSettings.hardLimits[key] })
-                "
-              >
-                {{ formatHardLimitValue(key, settings.effectiveSettings.hardLimits[key]) }}
-              </span>
-            </div>
-            <div class="mt-auto pt-1.5">
-              <QuantityInput v-model="draft[key]" :type="getFieldType(key)" :min="1" :disabled="busy" compact />
-            </div>
-          </label>
-        </div>
-      </section>
-    </div>
+				<div
+					class="grid gap-x-3 gap-y-3"
+					:class="group.id === 'execution' ? 'grid-cols-2' : 'sm:grid-cols-2 xl:grid-cols-3'"
+				>
+					<label v-for="key in group.keys" :key="key" class="flex min-w-0 flex-col">
+						<div class="flex items-start justify-between gap-2">
+							<div class="min-w-0">
+								<span class="block text-xs font-medium text-foreground">
+									{{ $t(`agent.settings.hardLimits.fields.${key}.label`) }}
+								</span>
+								<span class="mt-0.5 block text-[11px] leading-4 text-text-secondary">
+									{{ $t(`agent.settings.hardLimits.fields.${key}.hint`) }}
+								</span>
+							</div>
+							<span
+								v-if="
+									settings.requestedSettings.hardLimits[key] !==
+									settings.effectiveSettings.hardLimits[key]
+								"
+								class="shrink-0 text-[11px] leading-4 text-warning"
+								:title="
+									$t('agent.settings.hardLimits.effective', {
+										value: settings.effectiveSettings.hardLimits[key],
+									})
+								"
+							>
+								{{ formatHardLimitValue(key, settings.effectiveSettings.hardLimits[key]) }}
+							</span>
+						</div>
+						<div class="mt-auto pt-1.5">
+							<QuantityInput
+								v-model="draft[key]"
+								:type="getFieldType(key)"
+								:min="1"
+								:disabled="busy"
+								compact
+							/>
+						</div>
+					</label>
+				</div>
+			</section>
+		</div>
 
-    <div v-if="preview" class="mt-4 rounded-xl border border-primary/50 bg-primary/5 p-4 shadow-2xs">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 class="text-xs font-semibold text-foreground">
-            {{ $t('agent.settings.hardLimits.confirmTitle') }}
-          </h3>
-          <p class="mt-1 text-[11px] leading-5 text-text-secondary">
-            {{
-              $t('agent.settings.hardLimits.confirmDescription', {
-                count: preview.impact.changes.length,
-                runtimes: preview.impact.usage.executingRuntimes,
-              })
-            }}
-          </p>
-        </div>
-        <span v-if="preview.impact.hasIncrease" class="rounded-md bg-warning/12 px-2 py-1 text-[11px] text-warning">
-          {{ $t('agent.settings.hardLimits.increaseWarning') }}
-        </span>
-      </div>
+		<div v-if="preview" class="mt-4 rounded-xl border border-primary/50 bg-primary/5 p-4 shadow-2xs">
+			<div class="flex flex-wrap items-start justify-between gap-3">
+				<div>
+					<h3 class="text-xs font-semibold text-foreground">
+						{{ $t('agent.settings.hardLimits.confirmTitle') }}
+					</h3>
+					<p class="mt-1 text-[11px] leading-5 text-text-secondary">
+						{{
+							$t('agent.settings.hardLimits.confirmDescription', {
+								count: preview.impact.changes.length,
+								runtimes: preview.impact.usage.executingRuntimes,
+							})
+						}}
+					</p>
+				</div>
+				<span
+					v-if="preview.impact.hasIncrease"
+					class="rounded-md bg-warning/12 px-2 py-1 text-[11px] text-warning"
+				>
+					{{ $t('agent.settings.hardLimits.increaseWarning') }}
+				</span>
+			</div>
 
-      <div class="mt-3 max-h-60 space-y-1.5 overflow-y-auto">
-        <div
-          v-for="change in preview.impact.changes"
-          :key="change.key"
-          class="flex items-center justify-between gap-3 rounded-lg bg-background/80 px-3 py-2 text-xs"
-        >
-          <span class="min-w-0 truncate">{{ $t(`agent.settings.hardLimits.fields.${change.key}.label`) }}</span>
-          <span class="shrink-0 font-mono text-[11px] text-text-secondary">
-            {{ formatHardLimitValue(change.key, change.current) }} →
-            {{ formatHardLimitValue(change.key, change.proposed) }}
-          </span>
-        </div>
-      </div>
+			<div class="mt-3 max-h-60 space-y-1.5 overflow-y-auto">
+				<div
+					v-for="change in preview.impact.changes"
+					:key="change.key"
+					class="flex items-center justify-between gap-3 rounded-lg bg-background/80 px-3 py-2 text-xs"
+				>
+					<span class="min-w-0 truncate">{{
+						$t(`agent.settings.hardLimits.fields.${change.key}.label`)
+					}}</span>
+					<span class="shrink-0 font-mono text-[11px] text-text-secondary">
+						{{ formatHardLimitValue(change.key, change.current) }} →
+						{{ formatHardLimitValue(change.key, change.proposed) }}
+					</span>
+				</div>
+			</div>
 
-      <p class="mt-3 text-[11px] text-text-secondary">
-        {{ $t('agent.settings.hardLimits.usage', { bytes: artifactUsage }) }}
-      </p>
-      <div class="mt-3 flex justify-end gap-2">
-        <button
-          type="button"
-          class="rounded-lg px-3 py-1.5 text-xs text-text-secondary hover:bg-header hover:text-foreground"
-          :disabled="busy"
-          @click="emit('dismiss')"
-        >
-          {{ $t('common.cancel') }}
-        </button>
-        <UiButton
-          appearance="solid"
-          tone="primary"
-          type="button"
-          :disabled="busy"
-          @click="emit('confirm', preview.confirmationId, preview.expectedVersion)"
-        >
-          {{ $t('agent.settings.hardLimits.confirm') }}
-        </UiButton>
-      </div>
-    </div>
-  </section>
+			<p class="mt-3 text-[11px] text-text-secondary">
+				{{ $t('agent.settings.hardLimits.usage', { bytes: artifactUsage }) }}
+			</p>
+			<div class="mt-3 flex justify-end gap-2">
+				<button
+					type="button"
+					class="rounded-lg px-3 py-1.5 text-xs text-text-secondary hover:bg-header hover:text-foreground"
+					:disabled="busy"
+					@click="emit('dismiss')"
+				>
+					{{ $t('common.cancel') }}
+				</button>
+				<UiButton
+					appearance="solid"
+					tone="primary"
+					type="button"
+					:disabled="busy"
+					@click="emit('confirm', preview.confirmationId, preview.expectedVersion)"
+				>
+					{{ $t('agent.settings.hardLimits.confirm') }}
+				</UiButton>
+			</div>
+		</div>
+	</section>
 </template>

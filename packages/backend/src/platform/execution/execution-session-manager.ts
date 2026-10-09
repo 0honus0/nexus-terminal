@@ -5,170 +5,179 @@ import { ExecutionSession, type ExecutionSessionIdentity, type ExecutionSessionO
 import type { RemoteExecutionTransport, RemoteExecutionTransportFactory } from './remote-execution.port';
 
 export interface ConnectExecutionSessionRequest {
-  id?: string;
-  ownerType: ExecutionSessionOwnerType;
-  ownerId?: string;
-  connection: ResolvedSshConnection;
-  connect?: SshConnectOptions;
+	id?: string;
+	ownerType: ExecutionSessionOwnerType;
+	ownerId?: string;
+	connection: ResolvedSshConnection;
+	connect?: SshConnectOptions;
 }
 
 export interface AttachExecutionSessionRequest {
-  id?: string;
-  connectionId: number;
-  ownerType: ExecutionSessionOwnerType;
-  ownerId?: string;
-  transport: RemoteExecutionTransport;
+	id?: string;
+	connectionId: number;
+	ownerType: ExecutionSessionOwnerType;
+	ownerId?: string;
+	transport: RemoteExecutionTransport;
 }
 
 export class ExecutionSessionManager {
-  private readonly sessions = new Map<string, ExecutionSession>();
-  private readonly closeSubscriptions = new Map<string, () => void>();
-  private unsubscribe(id: string): void {
-    this.closeSubscriptions.get(id)?.();
-    this.closeSubscriptions.delete(id);
-  }
+	private readonly sessions = new Map<string, ExecutionSession>();
+	private readonly closeSubscriptions = new Map<string, () => void>();
 
-  constructor(private readonly transportFactory: RemoteExecutionTransportFactory) {}
+	private unsubscribe(id: string): void {
+		this.closeSubscriptions.get(id)?.();
+		this.closeSubscriptions.delete(id);
+	}
 
-  async connect(request: ConnectExecutionSessionRequest): Promise<ExecutionSession> {
-    const id = request.id ?? randomUUID();
-    this.assertAvailable(id);
-    logger.debug(
-      { executionSessionId: id, connectionId: request.connection.connectionId, ownerType: request.ownerType },
-      'Execution session connect dispatch',
-    );
-    let transport: RemoteExecutionTransport;
-    try {
-      transport = await this.transportFactory.connect(request.connection, request.connect);
-    } catch (error) {
-      logger.warn(
-        {
-          err: error,
-          executionSessionId: id,
-          connectionId: request.connection.connectionId,
-          ownerType: request.ownerType,
-        },
-        'Execution transport connect failed',
-      );
-      throw error;
-    }
-    try {
-      return this.attach({
-        id,
-        connectionId: request.connection.connectionId,
-        ownerType: request.ownerType,
-        ownerId: request.ownerId,
-        transport,
-      });
-    } catch (error) {
-      await transport.close().catch(() => undefined);
-      throw error;
-    }
-  }
+	constructor(private readonly transportFactory: RemoteExecutionTransportFactory) {}
 
-  attach(request: AttachExecutionSessionRequest): ExecutionSession {
-    const id = request.id ?? randomUUID();
-    this.assertAvailable(id);
-    if (!request.transport.isOpen) throw new Error('Cannot attach a closed execution transport.');
-    const identity: ExecutionSessionIdentity = {
-      id,
-      connectionId: request.connectionId,
-      ownerType: request.ownerType,
-      ownerId: request.ownerId,
-    };
-    const session = new ExecutionSession(identity, request.transport);
-    this.sessions.set(id, session);
-    this.closeSubscriptions.set(
-      id,
-      session.onTransportClose(() => {
-        if (this.sessions.get(id) === session) void this.close(id).catch(() => undefined);
-      }),
-    );
-    if (!request.transport.isOpen) {
-      void this.close(id);
-      throw new Error('Execution transport closed during attach.');
-    }
-    return session;
-  }
+	async connect(request: ConnectExecutionSessionRequest): Promise<ExecutionSession> {
+		const id = request.id ?? randomUUID();
+		this.assertAvailable(id);
+		logger.debug(
+			{ executionSessionId: id, connectionId: request.connection.connectionId, ownerType: request.ownerType },
+			'Execution session connect dispatch',
+		);
+		let transport: RemoteExecutionTransport;
+		try {
+			transport = await this.transportFactory.connect(request.connection, request.connect);
+		} catch (error) {
+			logger.warn(
+				{
+					err: error,
+					executionSessionId: id,
+					connectionId: request.connection.connectionId,
+					ownerType: request.ownerType,
+				},
+				'Execution transport connect failed',
+			);
+			throw error;
+		}
+		try {
+			return this.attach({
+				id,
+				connectionId: request.connection.connectionId,
+				ownerType: request.ownerType,
+				ownerId: request.ownerId,
+				transport,
+			});
+		} catch (error) {
+			await transport.close().catch(() => undefined);
+			throw error;
+		}
+	}
 
-  get(id: string): ExecutionSession | undefined {
-    return this.sessions.get(id);
-  }
+	attach(request: AttachExecutionSessionRequest): ExecutionSession {
+		const id = request.id ?? randomUUID();
+		this.assertAvailable(id);
+		if (!request.transport.isOpen) throw new Error('Cannot attach a closed execution transport.');
+		const identity: ExecutionSessionIdentity = {
+			id,
+			connectionId: request.connectionId,
+			ownerType: request.ownerType,
+			ownerId: request.ownerId,
+		};
+		const session = new ExecutionSession(identity, request.transport);
+		this.sessions.set(id, session);
+		this.closeSubscriptions.set(
+			id,
+			session.onTransportClose(() => {
+				if (this.sessions.get(id) === session) void this.close(id).catch(() => undefined);
+			}),
+		);
+		if (!request.transport.isOpen) {
+			void this.close(id);
+			throw new Error('Execution transport closed during attach.');
+		}
+		return session;
+	}
 
-  require(id: string): ExecutionSession {
-    const session = this.sessions.get(id);
-    if (!session) throw new Error(`Execution session ${id} was not found.`);
-    return session;
-  }
+	get(id: string): ExecutionSession | undefined {
+		return this.sessions.get(id);
+	}
 
-  detach(id: string): RemoteExecutionTransport {
-    const session = this.require(id);
-    this.unsubscribe(id);
-    const transport = session.detachTransport();
-    this.sessions.delete(id);
-    return transport;
-  }
+	require(id: string): ExecutionSession {
+		const session = this.sessions.get(id);
+		if (!session) throw new Error(`Execution session ${id} was not found.`);
+		return session;
+	}
 
-  async close(id: string): Promise<void> {
-    const session = this.sessions.get(id);
-    if (!session) return;
-    this.sessions.delete(id);
-    try {
-      this.unsubscribe(id);
-      await session.close();
-    } catch (error) {
-      logger.warn(
-        { err: error, executionSessionId: id, connectionId: session.connectionId, ownerType: session.ownerType },
-        'Execution session close failed',
-      );
-      throw error;
-    }
-  }
+	detach(id: string): RemoteExecutionTransport {
+		const session = this.require(id);
+		this.unsubscribe(id);
+		const transport = session.detachTransport();
+		this.sessions.delete(id);
+		return transport;
+	}
 
-  async closeByOwner(ownerType: ExecutionSessionOwnerType, ownerId?: string): Promise<void> {
-    const matching = [...this.sessions.entries()].filter(
-      ([, session]) => session.ownerType === ownerType && (ownerId === undefined || session.ownerId === ownerId),
-    );
-    for (const [id] of matching) {
-      this.unsubscribe(id);
-      this.sessions.delete(id);
-    }
-    if (matching.length)
-      logger.debug({ ownerType, ownerId, sessionCount: matching.length }, 'Execution sessions closing by owner');
-    await Promise.all(
-      matching.map(([id, session]) =>
-        session
-          .close()
-          .catch((error) =>
-            logger.warn({ err: error, executionSessionId: id, ownerType }, 'Execution session close failed'),
-          ),
-      ),
-    );
-  }
+	async close(id: string): Promise<void> {
+		const session = this.sessions.get(id);
+		if (!session) return;
+		this.sessions.delete(id);
+		try {
+			this.unsubscribe(id);
+			await session.close();
+		} catch (error) {
+			logger.warn(
+				{
+					err: error,
+					executionSessionId: id,
+					connectionId: session.connectionId,
+					ownerType: session.ownerType,
+				},
+				'Execution session close failed',
+			);
+			throw error;
+		}
+	}
 
-  async closeAll(): Promise<void> {
-    for (const id of this.closeSubscriptions.keys()) this.unsubscribe(id);
-    const sessions = [...this.sessions.values()];
-    this.sessions.clear();
-    await Promise.all(
-      sessions.map((session) =>
-        session
-          .close()
-          .catch((error) =>
-            logger.warn({ err: error, executionSessionId: session.id }, 'Execution session close failed'),
-          ),
-      ),
-    );
-  }
+	async closeByOwner(ownerType: ExecutionSessionOwnerType, ownerId?: string): Promise<void> {
+		const matching = [...this.sessions.entries()].filter(
+			([, session]) => session.ownerType === ownerType && (ownerId === undefined || session.ownerId === ownerId),
+		);
+		for (const [id] of matching) {
+			this.unsubscribe(id);
+			this.sessions.delete(id);
+		}
+		if (matching.length)
+			logger.debug({ ownerType, ownerId, sessionCount: matching.length }, 'Execution sessions closing by owner');
+		await Promise.all(
+			matching.map(([id, session]) =>
+				session
+					.close()
+					.catch((error) =>
+						logger.warn(
+							{ err: error, executionSessionId: id, ownerType },
+							'Execution session close failed',
+						),
+					),
+			),
+		);
+	}
 
-  snapshot(): readonly (ExecutionSessionIdentity & { status: string })[] {
-    return [...this.sessions.values()].map((session) => ({
-      ...session.identity,
-      status: session.status,
-    }));
-  }
+	async closeAll(): Promise<void> {
+		for (const id of this.closeSubscriptions.keys()) this.unsubscribe(id);
+		const sessions = [...this.sessions.values()];
+		this.sessions.clear();
+		await Promise.all(
+			sessions.map((session) =>
+				session
+					.close()
+					.catch((error) =>
+						logger.warn({ err: error, executionSessionId: session.id }, 'Execution session close failed'),
+					),
+			),
+		);
+	}
 
-  private assertAvailable(id: string): void {
-    if (this.sessions.has(id)) throw new Error(`Execution session ${id} already exists.`);
-  }
+	snapshot(): readonly (ExecutionSessionIdentity & { status: string })[] {
+		return [...this.sessions.values()].map((session) => ({
+			...session.identity,
+			status: session.status,
+		}));
+	}
+
+	private assertAvailable(id: string): void {
+		if (this.sessions.has(id)) throw new Error(`Execution session ${id} already exists.`);
+	}
 }

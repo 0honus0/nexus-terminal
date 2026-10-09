@@ -11,45 +11,45 @@ import type { ExecutionSessionManager } from '../../platform/execution/execution
 import type { RelationalDatabase } from '../../platform/storage/relational-database.port';
 
 interface ComposeSshCapabilitiesOptions {
-  database: RelationalDatabase;
-  connectionResolver: AgentConnectionResolverPort;
-  executionSessions: ExecutionSessionManager;
-  targetDenylist: SqliteTargetDenylistRepository;
-  conversationRepository: SqliteConversationRepository;
-  capabilityBroker: AppCapabilityBroker;
+	database: RelationalDatabase;
+	connectionResolver: AgentConnectionResolverPort;
+	executionSessions: ExecutionSessionManager;
+	targetDenylist: SqliteTargetDenylistRepository;
+	conversationRepository: SqliteConversationRepository;
+	capabilityBroker: AppCapabilityBroker;
 }
 
 /** Construction only; the root retains session initialization, quiesce and disposal ordering. */
 export const composeSshCapabilities = ({
-  database,
-  connectionResolver,
-  executionSessions,
-  targetDenylist,
-  conversationRepository,
-  capabilityBroker,
+	database,
+	connectionResolver,
+	executionSessions,
+	targetDenylist,
+	conversationRepository,
+	capabilityBroker,
 }: ComposeSshCapabilitiesOptions) => {
-  const sshTargets = new SshTargetAdapter(connectionResolver, targetDenylist);
-  const sshSessions = new AgentSshSessions(
-    connectionResolver,
-    executionSessions,
-    database,
-    async (scope, threadId, connectionId) => {
-      const thread = await conversationRepository.getThread(scope, threadId);
-      const decision = await capabilityBroker.authorize(scope, 'shell.execute', {
-        target: { target: 'ssh', id: String(connectionId) },
-      });
-      return Boolean(thread && decision.allowed);
-    },
-  );
-  const sshFiles = new SshFileTargetAdapter(connectionResolver, sshSessions);
-  const projectDirectories = new AgentProjectDirectories(database, sshFiles, async (context, connectionId) => {
-    await sshTargets.target(context, connectionId);
-    const thread = context.threadId ? await conversationRepository.getThread(context, context.threadId) : null;
-    const decision = await capabilityBroker.authorize(context, 'file.read', {
-      target: { target: 'ssh', id: String(connectionId) },
-    });
-    return Boolean(thread && decision.allowed);
-  });
-  const sshShell = new SshShellTargetAdapter(connectionResolver, sshSessions);
-  return { sshTargets, sshSessions, sshFiles, projectDirectories, sshShell };
+	const sshTargets = new SshTargetAdapter(connectionResolver, targetDenylist);
+	const sshSessions = new AgentSshSessions(
+		connectionResolver,
+		executionSessions,
+		database,
+		async (scope, threadId, connectionId) => {
+			const thread = await conversationRepository.getThread(scope, threadId);
+			const decision = await capabilityBroker.authorize(scope, 'shell.execute', {
+				target: { target: 'ssh', id: String(connectionId) },
+			});
+			return Boolean(thread && decision.allowed);
+		},
+	);
+	const sshFiles = new SshFileTargetAdapter(connectionResolver, sshSessions);
+	const projectDirectories = new AgentProjectDirectories(database, sshFiles, async (context, connectionId) => {
+		await sshTargets.target(context, connectionId);
+		const thread = context.threadId ? await conversationRepository.getThread(context, context.threadId) : null;
+		const decision = await capabilityBroker.authorize(context, 'file.read', {
+			target: { target: 'ssh', id: String(connectionId) },
+		});
+		return Boolean(thread && decision.allowed);
+	});
+	const sshShell = new SshShellTargetAdapter(connectionResolver, sshSessions);
+	return { sshTargets, sshSessions, sshFiles, projectDirectories, sshShell };
 };

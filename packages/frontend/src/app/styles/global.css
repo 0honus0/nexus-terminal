@@ -3,143 +3,143 @@
 @import '../../foundation/ui/uiGen2.css';
 
 html {
-  scrollbar-gutter: stable;
+	scrollbar-gutter: stable;
 }
 
 html,
 body,
 #app {
-  min-height: 100%;
+	min-height: 100%;
 }
 
 body {
-  margin: 0;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
-  font-family: var(--font-family-sans-serif);
-  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
-  background-color: var(--app-bg-color);
-  color: var(--text-color);
-  line-height: 1.6;
-  caret-color: transparent;
+	margin: 0;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	text-rendering: optimizeLegibility;
+	font-family: var(--font-family-sans-serif);
+	font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+	background-color: var(--app-bg-color);
+	color: var(--text-color);
+	line-height: 1.6;
+	caret-color: transparent;
 }
 
 a {
-  text-decoration: none;
+	text-decoration: none;
 }
 
 @layer base {
-  input,
-  textarea,
-  [contenteditable]:not([contenteditable='false']) {
-    caret-color: auto;
-  }
+	input,
+	textarea,
+	[contenteditable]:not([contenteditable='false']) {
+		caret-color: auto;
+	}
 
-  button,
-  [role='button'],
-  [role='tab'],
-  nav {
-    user-select: none;
-  }
+	button,
+	[role='button'],
+	[role='tab'],
+	nav {
+		user-select: none;
+	}
 
-  button,
-  input,
-  textarea,
-  select {
-    font: inherit;
-    font-family: inherit;
-    font-feature-settings: inherit;
-  }
+	button,
+	input,
+	textarea,
+	select {
+		font: inherit;
+		font-family: inherit;
+		font-feature-settings: inherit;
+	}
 
-  /*
+	/*
    * Keep this inside @layer base. As an unlayered rule it beat every Tailwind
    * `cursor-*` utility (e.g. `cursor-nwse-resize` on the window resize
    * handles), because unlayered declarations win over any layer regardless of
    * specificity — the same trap the font reset above was moved here for.
    */
-  /* Physical pointer-target floor for native actions. Visual glyphs may stay smaller. */
-  button {
-    min-inline-size: 1.5rem;
-    min-block-size: 1.5rem;
-  }
+	/* Physical pointer-target floor for native actions. Visual glyphs may stay smaller. */
+	button {
+		min-inline-size: 1.5rem;
+		min-block-size: 1.5rem;
+	}
 
-  button:not(:disabled) {
-    cursor: pointer;
-  }
+	button:not(:disabled) {
+		cursor: pointer;
+	}
 
-  /*
+	/*
    * Same trap as the resets above: unlayered, these rules beat every Tailwind
    * `text-*` utility on `<i>`/`.fa*` (e.g. `text-primary`, `text-warning`), so
    * icon colors silently fell back to `--icon-color`. Inside `@layer base` the
    * default color still applies, but an explicit utility now wins.
    */
-  i,
-  .fas,
-  .far,
-  .fab {
-    color: var(--icon-color);
-    transition: color 0.2s ease;
-  }
+	i,
+	.fas,
+	.far,
+	.fab {
+		color: var(--icon-color);
+		transition: color 0.2s ease;
+	}
 
-  a:hover i,
-  a:hover .fas,
-  a:hover .far,
-  a:hover .fab,
-  .icon-interactive:hover i,
-  .icon-interactive:hover .fas,
-  .icon-interactive:hover .far,
-  .icon-interactive:hover .fab {
-    color: var(--icon-hover-color);
-  }
+	a:hover i,
+	a:hover .fas,
+	a:hover .far,
+	a:hover .fab,
+	.icon-interactive:hover i,
+	.icon-interactive:hover .fas,
+	.icon-interactive:hover .far,
+	.icon-interactive:hover .fab {
+		color: var(--icon-hover-color);
+	}
 
-  button i,
-  button .fas,
-  button .far,
-  button .fab {
-    color: currentColor;
-  }
+	button i,
+	button .fas,
+	button .far,
+	button .fab {
+		color: currentColor;
+	}
 
-  input::placeholder,
-  textarea::placeholder {
-    color: var(--input-placeholder-color);
-    opacity: 1;
-  }
+	input::placeholder,
+	textarea::placeholder {
+		color: var(--input-placeholder-color);
+		opacity: 1;
+	}
 
-  input:not(.ui-input__control):not(.ui-token-input__input):not([type='checkbox']):not([type='radio']):not(
-      [type='range']
-    ):not([type='color']),
-  textarea:not(.ui-textarea__control) {
-    background-color: var(--glass-inset-fill);
-    color: var(--input-text-color);
-    -webkit-backdrop-filter: var(--glass-control-filter);
-    backdrop-filter: var(--glass-control-filter);
-  }
+	input:not(.ui-input__control):not(.ui-token-input__input):not([type='checkbox']):not([type='radio']):not(
+			[type='range']
+		):not([type='color']),
+	textarea:not(.ui-textarea__control) {
+		background-color: var(--glass-inset-fill);
+		color: var(--input-text-color);
+		-webkit-backdrop-filter: var(--glass-control-filter);
+		backdrop-filter: var(--glass-control-filter);
+	}
 
-  input:not(.ui-input__control):not(.ui-token-input__input):not([type='checkbox']):not([type='radio']):not(
-      [type='range']
-    ):not([type='color']):disabled,
-  textarea:not(.ui-textarea__control):disabled {
-    background-color: color-mix(in srgb, var(--input-disabled-bg-color) 58%, transparent);
-    color: var(--input-disabled-text-color);
-    -webkit-text-fill-color: var(--input-disabled-text-color);
-    border-color: var(--input-disabled-border-color);
-    opacity: 1;
-  }
+	input:not(.ui-input__control):not(.ui-token-input__input):not([type='checkbox']):not([type='radio']):not(
+			[type='range']
+		):not([type='color']):disabled,
+	textarea:not(.ui-textarea__control):disabled {
+		background-color: color-mix(in srgb, var(--input-disabled-bg-color) 58%, transparent);
+		color: var(--input-disabled-text-color);
+		-webkit-text-fill-color: var(--input-disabled-text-color);
+		border-color: var(--input-disabled-border-color);
+		opacity: 1;
+	}
 
-  input:focus:not([data-no-highlight]):not(.no-highlight),
-  textarea:focus:not([data-no-highlight]):not(.no-highlight) {
-    border-color: var(--input-focus-border-color);
-    outline: 0;
-    box-shadow: 0 0 0 2px var(--input-focus-glow);
-  }
+	input:focus:not([data-no-highlight]):not(.no-highlight),
+	textarea:focus:not([data-no-highlight]):not(.no-highlight) {
+		border-color: var(--input-focus-border-color);
+		outline: 0;
+		box-shadow: 0 0 0 2px var(--input-focus-glow);
+	}
 }
 
 code,
 kbd,
 samp,
 pre {
-  font-family: var(--font-family-monospace);
+	font-family: var(--font-family-monospace);
 }
 
 .font-mono,
@@ -147,28 +147,28 @@ code,
 kbd,
 samp,
 pre {
-  font-variant-numeric: tabular-nums;
+	font-variant-numeric: tabular-nums;
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+	width: 8px;
+	height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 4px;
+	background: transparent;
+	border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: var(--border-color);
-  background-clip: content-box;
-  border: 2px solid transparent;
-  border-radius: 4px;
+	background-color: var(--border-color);
+	background-clip: content-box;
+	border: 2px solid transparent;
+	border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background-color: var(--text-color-secondary);
+	background-color: var(--text-color-secondary);
 }
 
 /*
@@ -184,14 +184,14 @@ pre {
  * （没有动画过程），这正是 reduced-motion 想要的结果。
  */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-delay: 0ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    transition-delay: 0ms !important;
-    scroll-behavior: auto !important;
-  }
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-delay: 0ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		transition-delay: 0ms !important;
+		scroll-behavior: auto !important;
+	}
 }

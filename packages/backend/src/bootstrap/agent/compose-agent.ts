@@ -85,17 +85,17 @@ import { SubagentScheduler } from '../../modules/agent/runtime/collaboration/sub
 import { MailboxService } from '../../modules/agent/runtime/collaboration/mailbox.service';
 import { SharedFactsService } from '../../modules/agent/runtime/collaboration/shared-facts.service';
 import type {
-  DelegationCancellationPort,
-  DelegationReaderPort,
-  DelegationRepositoryPort,
-  MailboxConsumerPort,
-  MailboxReaderPort,
-  MailboxRepositoryPort,
-  RunScopeRepositoryPort,
-  RuntimeParticipantRepositoryPort,
-  SchedulerWorkClaimPort,
-  SchedulerWorkExecutionPort,
-  SharedFactRepositoryPort,
+	DelegationCancellationPort,
+	DelegationReaderPort,
+	DelegationRepositoryPort,
+	MailboxConsumerPort,
+	MailboxReaderPort,
+	MailboxRepositoryPort,
+	RunScopeRepositoryPort,
+	RuntimeParticipantRepositoryPort,
+	SchedulerWorkClaimPort,
+	SchedulerWorkExecutionPort,
+	SharedFactRepositoryPort,
 } from '../../modules/agent/runtime/collaboration/subagent.repository.port';
 import { PlanService } from '../../modules/agent/runtime/planning/plan.service';
 import { AgentExecutionPolicyService } from '../../modules/agent/host/agent-execution-policy.service';
@@ -112,854 +112,1010 @@ import { composeProviders } from './compose-providers';
 import { composeSshCapabilities } from './compose-ssh-capabilities';
 import { createAgentLifecycleSweeps } from './lifecycle-sweeps';
 import {
-  createMcpToolContributionHooks,
-  registerFileToolContributions,
-  registerMachineToolContributions,
-  registerShellToolContributions,
-  registerAcpToolContribution,
-  registerBrowserToolContribution,
-  registerRuntimeToolContributions,
+	createMcpToolContributionHooks,
+	registerFileToolContributions,
+	registerMachineToolContributions,
+	registerShellToolContributions,
+	registerAcpToolContribution,
+	registerBrowserToolContribution,
+	registerRuntimeToolContributions,
 } from './tool-contributions';
 
 export interface ComposeAgentOptions {
-  database: RelationalDatabase;
-  cipher: SecretCipher;
-  dataDirectory: string;
-  nexusVersion: string;
-  nodeEnv: string;
-  e2eResetEnabled: boolean;
-  publicOrigin?: string;
-  officialPluginSource: OfficialAgentPluginSource;
-  connectionResolver: AgentConnectionResolverPort;
-  diagnostics: AgentDiagnosticsPort;
-  executionSessions: ExecutionSessionManager;
-  docker: RemoteDockerService;
-  leases: LeasePort;
-  browserGateway: BrowserGatewayPort;
-  audit: AuditLogService;
-  notifications: NotificationService;
+	database: RelationalDatabase;
+	cipher: SecretCipher;
+	dataDirectory: string;
+	nexusVersion: string;
+	nodeEnv: string;
+	e2eResetEnabled: boolean;
+	publicOrigin?: string;
+	officialPluginSource: OfficialAgentPluginSource;
+	connectionResolver: AgentConnectionResolverPort;
+	diagnostics: AgentDiagnosticsPort;
+	executionSessions: ExecutionSessionManager;
+	docker: RemoteDockerService;
+	leases: LeasePort;
+	browserGateway: BrowserGatewayPort;
+	audit: AuditLogService;
+	notifications: NotificationService;
 }
 
 export const composeAgent = ({
-  database,
-  cipher,
-  dataDirectory,
-  nexusVersion,
-  nodeEnv,
-  e2eResetEnabled,
-  publicOrigin,
-  officialPluginSource,
-  connectionResolver,
-  diagnostics,
-  executionSessions,
-  docker,
-  leases,
-  browserGateway,
-  audit,
-  notifications,
+	database,
+	cipher,
+	dataDirectory,
+	nexusVersion,
+	nodeEnv,
+	e2eResetEnabled,
+	publicOrigin,
+	officialPluginSource,
+	connectionResolver,
+	diagnostics,
+	executionSessions,
+	docker,
+	leases,
+	browserGateway,
+	audit,
+	notifications,
 }: ComposeAgentOptions): AgentServices => {
-  const registry = new AppRegistryService();
-  const runRepository = new SqliteRunRepository(database);
-  const eventHub = new AgentEventHub();
-  const publishHostWake = (userId: number): void => {
-    void runRepository
-      .hostCursor(userId)
-      .then((cursor) => eventHub.publishHostWake(userId, cursor))
-      .catch((error) => logger.warn({ err: error, userId }, 'Agent Host wake publication failed'));
-  };
-  const appStates = new SqliteAppStateRepository(database);
-  const capabilityRegistry = new CapabilityRegistry();
-  const appGrants = new SqliteAppGrantRepository(database, capabilityRegistry);
-  const targetDenylist = new SqliteTargetDenylistRepository(database);
-  const settingsRepository = new SqliteAgentSettingsRepository(database);
-  const hardLimitConfirmations = new SqliteHardLimitConfirmationRepository(database);
-  const hardLimitUsage = new SqliteHardLimitUsageAdapter(database);
-  let quiesceHostExecution: (scope: Scope, deadlineUnixSeconds: number) => Promise<void> = async () => {
-    throw new Error('AGENT_HOST_NOT_READY');
-  };
-  const lifecycle = new AppLifecycleService(
-    registry,
-    appStates,
-    appGrants,
-    systemClock,
-    publishHostWake,
-    (scope, deadlineUnixSeconds) => quiesceHostExecution(scope, deadlineUnixSeconds),
-  );
-  const settings = new AgentSettingsService(settingsRepository, hardLimitConfirmations, hardLimitUsage, systemClock);
-  const capabilityBroker = new AppCapabilityBroker(registry, appStates, appGrants, targetDenylist, capabilityRegistry);
-  const { providers, languageModel, modelRegistry } = composeProviders({
-    database,
-    cipher,
-    dataDirectory,
-    refreshHealth: (userId) => lifecycle.refreshHealth(userId),
-  });
-  const outboundPolicy = new OutboundPolicyAdapter(nodeEnv, e2eResetEnabled);
-  const integrationRepository = new SqliteIntegrationRepository(database, cipher);
-  const mcpRuntime = new McpAdapter(integrationRepository, outboundPolicy);
-  const artifactLimits: ArtifactLimitPolicyPort = {
-    forUser: async (userId) => {
-      const view = await settings.get(userId);
-      return {
-        maxSingleArtifactBytes: view.effectiveSettings.storage.maxSingleArtifactBytes,
-        maxGlobalArtifactBytes: view.effectiveSettings.storage.maxGlobalArtifactBytes,
-        unretainedArtifactTtlSeconds: view.effectiveSettings.storage.unretainedArtifactTtlSeconds,
-        minFreeDiskBytes: AGENT_DEFAULTS.minFreeDiskBytes,
-      };
-    },
-  };
-  const artifactStore = new LocalArtifactStore(database, artifactLimits, { dataDirectory });
-  const artifacts = new ArtifactService(artifactStore);
-  const appIntents = new AppIntentService(
-    new SqliteAppIntentRepository(database),
-    registry,
-    appStates,
-    appGrants,
-    new AppIntentArtifactAdapter(artifactStore),
-    systemClock,
-  );
-  const definitions = new AgentDefinitionRegistry();
-  const { appStorage, plugins, resetRuntime } = composePlugins({
-    database,
-    dataDirectory,
-    nexusVersion,
-    publicOrigin,
-    registry,
-    appStates,
-    capabilityBroker,
-    appIntents,
-    artifactStore,
-    settings,
-    definitions,
-    clock: systemClock,
-    onHostStateCommitted: publishHostWake,
-  });
-  const onboarding = new AgentOnboardingService(
-    plugins,
-    lifecycle,
-    appGrants,
-    capabilityRegistry,
-    officialPluginSource,
-  );
-  const executionPolicies = new AgentExecutionPolicyService(appStorage, settings);
-  const conversationRepository = new SqliteConversationRepository(database);
-  const conversations = new ConversationService(
-    conversationRepository,
-    systemClock,
-    settings,
-    lifecycle,
-    async (scope, threadId) => {
-      await sshSessions.closeScope(scope, threadId);
-      await projectDirectories.clearScope(scope, threadId);
-    },
-  );
-  const recall = new RecallService(new SqliteRecallRepository(database), systemClock);
-  const skills = new SkillRegistry(new InstalledPluginSkillSourceAdapter(database, dataDirectory));
-  const modelContinuations = new SqliteModelContinuationRepository(database);
-  const contextCheckpoints = new ContextCheckpointService(
-    new SqliteContextCheckpointRepository(database),
-    conversations,
-    systemClock,
-  );
-  const context = new ContextService(conversations, recall, skills, modelContinuations, artifacts, contextCheckpoints);
-  const notificationBridge = new AgentNotificationBridge(notifications, conversationRepository);
-  let subagentScheduler: SubagentScheduler | null = null;
-  const stateCommit = new SqliteStateCommitAdapter(database, (run, events) => {
-    if (TERMINAL_RUN_STATUSES.has(run.status)) {
-      subagentScheduler?.cancel(run.id);
-      void browserGateway
-        .closeRun(run.id)
-        .catch((error) => logger.warn({ err: error, runId: run.id }, 'Terminal Run browser cleanup failed'));
-    }
-    void notificationBridge
-      .project(run, events)
-      .catch((error) =>
-        logger.warn({ err: error, runId: run.id, appId: run.appId }, 'Agent notification projection failed'),
-      );
-  });
-  const subagentRepository = new SqliteSubagentRepository(database);
-  const runScopes: RunScopeRepositoryPort = subagentRepository;
-  const runtimeParticipants: RuntimeParticipantRepositoryPort = subagentRepository;
-  const delegationReader: DelegationReaderPort = subagentRepository;
-  const delegationCancellation: DelegationCancellationPort = subagentRepository;
-  const delegationRepository: DelegationRepositoryPort = subagentRepository;
-  const mailboxReader: MailboxReaderPort = subagentRepository;
-  const mailboxConsumer: MailboxConsumerPort = subagentRepository;
-  const mailboxRepository: MailboxRepositoryPort = subagentRepository;
-  const schedulerClaims: SchedulerWorkClaimPort = subagentRepository;
-  const schedulerExecution: SchedulerWorkExecutionPort = subagentRepository;
-  const sharedFactRepository: SharedFactRepositoryPort = subagentRepository;
-  const subagentPolicy = new SubagentPolicyService(appStorage, settings, providers);
-  const mailbox = new MailboxService(
-    mailboxRepository,
-    runtimeParticipants,
-    delegationReader,
-    settings,
-    systemClock,
-    () => subagentScheduler?.wake(),
-  );
-  const sharedFacts = new SharedFactsService(sharedFactRepository, systemClock);
-  const memories = new MemoryService(
-    new SqliteMemoryRepository(database),
-    registry,
-    new SqliteMemoryProvenanceAdapter(database),
-    audit,
-    systemClock,
-    {
-      memoryChanged: (memory, action, provenance) => {
-        publishHostWake(memory.userId);
-        if (action !== 'proposed' || !provenance) return;
-        void notificationBridge.projectMemoryCandidate(memory, provenance);
-      },
-    },
-  );
-  const subagents = new SubagentService(
-    delegationRepository,
-    runtimeParticipants,
-    runRepository,
-    subagentPolicy,
-    providers,
-    appGrants,
-    capabilityRegistry,
-    eventHub,
-    systemClock,
-    () => subagentScheduler?.wake(),
-    (runId, runtimeId) => {
-      subagentScheduler?.cancelRuntime(runId, runtimeId);
-    },
-  );
-  const machine = new MachineCapabilityAdapter(
-    connectionResolver,
-    diagnostics,
-    executionSessions,
-    docker,
-    targetDenylist,
-  );
-  const { sshTargets, sshSessions, sshFiles, projectDirectories, sshShell } = composeSshCapabilities({
-    database,
-    connectionResolver,
-    executionSessions,
-    targetDenylist,
-    conversationRepository,
-    capabilityBroker,
-  });
-  const cryptoHash = new NodeCryptoHashAdapter();
-  const acpPermissions = new AcpPermissionBroker(stateCommit, cryptoHash, systemClock, (runId, approvalId) => {
-    eventHub.publishTransient({
-      runId,
-      type: 'approval.changed',
-      payload: { approvalId },
-      occurredAt: systemClock.nowUnixSeconds(),
-    });
-  });
-  const plans = new PlanService(runRepository, stateCommit, () => systemClock.nowUnixSeconds());
-  const files = new FileCapabilityService(sshTargets, sshFiles);
-  const shell = new ShellCapabilityService(sshTargets, sshShell, sshSessions);
-  const acpRuntime = new AcpAdapter();
-  const toolCatalog = new ToolCatalog();
-  toolCatalog.registerContribution({
-    schemaVersion: 1,
-    id: 'project.directories',
-    tools: createProjectDirectoryTools(projectDirectories, sshTargets, cryptoHash),
-  });
-  toolCatalog.registerContribution({
-    schemaVersion: 1,
-    id: 'ssh.sessions',
-    tools: createSshSessionTools(sshSessions, sshTargets, cryptoHash),
-  });
-  registerFileToolContributions({ catalog: toolCatalog, files, cryptoHash });
-  registerShellToolContributions({ catalog: toolCatalog, shell, cryptoHash });
-  registerMachineToolContributions({ catalog: toolCatalog, machine, sshTargets, cryptoHash });
-  registerAcpToolContribution({
-    catalog: toolCatalog,
-    repository: integrationRepository,
-    runtime: acpRuntime,
-    cryptoHash,
-    permissionRequests: acpPermissions,
-    ssh: {
-      targets: sshTargets,
-      open: (context, connectionId, hash, argv, cwd) =>
-        new SshAcpTransport(connectionResolver, executionSessions).open(context, connectionId, hash, argv, cwd),
-    },
-  });
-  registerBrowserToolContribution({
-    catalog: toolCatalog,
-    settings,
-    gateway: browserGateway,
-    cryptoHash,
-    artifacts,
-  });
-  registerRuntimeToolContributions({
-    catalog: toolCatalog,
-    artifacts,
-    plans,
-    runs: runRepository,
-    subagents,
-    mailbox,
-    facts: sharedFacts,
-    memories,
-    skills,
-    cryptoHash,
-  });
-  const integrations = new IntegrationService(
-    integrationRepository,
-    outboundPolicy,
-    mcpRuntime,
-    lifecycle,
-    cryptoHash,
-    systemClock,
-    createMcpToolContributionHooks({
-      catalog: toolCatalog,
-      repository: integrationRepository,
-      runtime: mcpRuntime,
-      artifacts,
-      cryptoHash,
-    }),
-  );
-  const toolExecutor = new ToolExecutor(toolCatalog, capabilityBroker);
-  const policy = new PolicyService();
-  const modelCalls = new ModelCallLimiter(settings);
-  const leaseCoordinator = new LeaseCoordinator(leases, systemClock);
-  const mutationLeaseGuard = new AgentMutationLeaseGuardAdapter(leases, systemClock);
-  const projectInstructionSource = {
-    load: async (
-      ...args: Parameters<
-        import('../../modules/agent/ai/project-instruction-source.port').ProjectInstructionSourcePort['load']
-      >
-    ) => {
-      const [, runId, runtimeId, targetDirectories, , toolContext] = args;
-      const remote = toolContext
-        ? await projectDirectories.instructions(toolContext, targetDirectories).catch(() => {
-            logger.warn({ runId, runtimeId }, 'SSH project instructions unavailable; no remote rules synthesized');
-            return [];
-          })
-        : [];
-      if (!remote.length) return null;
-      return {
-        targetDirectories: [...targetDirectories],
-        instructions: remote,
-        omitted: [],
-      };
-    },
-  };
-  const modelSteps = new ModelStepRunner(
-    providers,
-    context,
-    languageModel,
-    modelCalls,
-    systemClock,
-    projectInstructionSource,
-  );
-  const toolCalls = new ToolCallRunner(toolCatalog, toolExecutor, policy, leaseCoordinator, mutationLeaseGuard);
-  let recordRecoverySafePoint: (
-    run: Parameters<AgentScheduler['enqueue']>[0],
-    reason: 'model_boundary' | 'read_batch' | 'mutation_confirmed' | 'execution_limit',
-  ) => Promise<void> = async () => undefined;
-  const nativeBackend = new NativeAgentBackend(
-    runRepository,
-    delegationReader,
-    stateCommit,
-    modelSteps,
-    toolCalls,
-    systemClock,
-    (run, reason) => recordRecoverySafePoint(run, reason),
-    subagentPolicy,
-  );
-  const scheduler = new AgentScheduler(
-    settings,
-    nativeBackend,
-    eventHub,
-    systemClock,
-    (userId) => runRepository.hostCursor(userId),
-    (userId) => subagentScheduler?.activeCountForUser(userId) ?? 0,
-    (runId) => subagentScheduler?.hasActiveRun(runId) ?? false,
-    async (run) => {
-      const latest = await runRepository.snapshot({ userId: run.userId, appId: run.appId }, run.id);
-      if (latest && TERMINAL_RUN_STATUSES.has(latest.status)) await browserGateway.closeRun(run.id);
-    },
-  );
-  const subagentContext = new SubagentContextBuilder(
-    runtimeParticipants,
-    mailboxReader,
-    toolCatalog,
-    capabilityRegistry,
-    modelContinuations,
-    artifacts,
-    systemClock,
-    projectInstructionSource,
-  );
-  const subagentHost: SubagentExecutionHost = {
-    enqueueRootRun: async (runId, scope) => {
-      const run = await runRepository.snapshot(scope, runId);
-      if (run && ['created', 'running'].includes(run.status)) scheduler.enqueue(run);
-    },
-    wakeChildScheduler: () => subagentScheduler?.wake(),
-    cancelChildRuntime: (runId, runtimeId) => {
-      subagentScheduler?.cancelRuntime(runId, runtimeId);
-    },
-  };
-  const subagentCompletion = new SubagentCompletionCoordinator(
-    schedulerExecution,
-    delegationCancellation,
-    runtimeParticipants,
-    stateCommit,
-    mailbox,
-    eventHub,
-    subagentHost,
-    systemClock,
-  );
-  const subagentTools = new SubagentToolStepExecutor(
-    schedulerExecution,
-    delegationCancellation,
-    runtimeParticipants,
-    runRepository,
-    stateCommit,
-    subagentContext,
-    toolCalls,
-    subagentCompletion,
-    eventHub,
-    systemClock,
-    (run, reason) => recordRecoverySafePoint(run, reason),
-  );
-  const subagentModels = new SubagentModelStepExecutor(
-    schedulerExecution,
-    delegationCancellation,
-    runtimeParticipants,
-    mailboxConsumer,
-    runRepository,
-    providers,
-    languageModel,
-    modelCalls,
-    stateCommit,
-    subagentContext,
-    toolExecutor,
-    subagentCompletion,
-    eventHub,
-    systemClock,
-  );
-  const subagentParticipant = new SubagentParticipantExecutor(
-    schedulerExecution,
-    delegationCancellation,
-    subagentCompletion,
-    subagentTools,
-    subagentModels,
-    subagentHost,
-    systemClock,
-  );
-  subagentScheduler = new SubagentScheduler(
-    settings,
-    runScopes,
-    schedulerClaims,
-    subagentParticipant,
-    {
-      activeCountForUser: (userId) => scheduler.activeCountForUser(userId),
-      hasActiveRun: (runId) => scheduler.hasActiveRun(runId),
-      activeRunIds: () => scheduler.activeRunIds(),
-      enqueueRun: async (runId, scope) => {
-        const run = await runRepository.snapshot(scope, runId);
-        if (run && ['created', 'running'].includes(run.status)) scheduler.enqueue(run);
-      },
-      wake: () => scheduler.wake(),
-    },
-    systemClock,
-  );
-  quiesceHostExecution = async (scope, deadlineUnixSeconds) => {
-    const stopped = await Promise.allSettled([
-      scheduler.quiesceScope(scope, deadlineUnixSeconds),
-      subagentScheduler!.quiesceScope(scope, deadlineUnixSeconds),
-    ]);
-    await stateCommit.quiesceApp(scope, systemClock.nowUnixSeconds());
-    publishHostWake(scope.userId);
-    const failure = stopped.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-    if (failure) throw failure.reason;
-  };
-  const notifyCommitted = (run: Parameters<AgentScheduler['enqueue']>[0]) => {
-    eventHub.publishRunWake(run.id, run.eventCursor);
-    publishHostWake(run.userId);
-  };
-  const runs = new RunService(
-    settings,
-    lifecycle,
-    providers,
-    executionPolicies,
-    definitions,
-    stateCommit,
-    runRepository,
-    systemClock,
-    (run) => scheduler.enqueue(run),
-    (run) => notifyCommitted(run),
-    (run) => scheduler.signalInput(run),
-    (run) => scheduler.signalInput(run, 'GOAL_UPDATED'),
-    (runId) => {
-      scheduler.cancel(runId);
-      subagentScheduler?.cancel(runId);
-    },
-    (userId, cursor) => eventHub.publishHostWake(userId, cursor),
-  );
-  const checkpointRepository = new SqliteCheckpointRepository(database);
-  let recoveringStartup = false;
-  const startupRecoveredRuns: Parameters<AgentScheduler['enqueue']>[0][] = [];
-  const checkpoints = new CheckpointService(
-    checkpointRepository,
-    runRepository,
-    settings,
-    lifecycle,
-    providers,
-    definitions,
-    targetDenylist,
-    stateCommit,
-    systemClock,
-    (run) => {
-      if (recoveringStartup) startupRecoveredRuns.push(run);
-      else scheduler.enqueue(run);
-    },
-    (run) => notifyCommitted(run),
-  );
-  recordRecoverySafePoint = async (run, reason) => {
-    await checkpoints.recordSafePoint(run, reason);
-  };
-  const lifecycleSweeps = createAgentLifecycleSweeps({
-    stateCommit,
-    artifactMaintenance: artifactStore,
-    mailbox,
-    scheduler,
-    clock: systemClock,
-    notifyCommitted,
-    retryMcpIntegrations: () => integrations.retryDue(),
-  });
+	const registry = new AppRegistryService();
+	const runRepository = new SqliteRunRepository(database);
+	const eventHub = new AgentEventHub();
 
-  const approvalRepository = new SqliteApprovalRepository(database);
-  const approvals = new ApprovalService(
-    approvalRepository,
-    runRepository,
-    stateCommit,
-    systemClock,
-    (run) => {
-      notifyCommitted(run);
-      scheduler.enqueue(run);
-    },
-    acpPermissions,
-  );
+	const publishHostWake = (userId: number): void => {
+		void runRepository
+			.hostCursor(userId)
+			.then((cursor) => eventHub.publishHostWake(userId, cursor))
+			.catch((error) => logger.warn({ err: error, userId }, 'Agent Host wake publication failed'));
+	};
 
-  return {
-    host: {
-      listApps: (userId) => lifecycle.list(userId),
-      getApp: (userId, appId) => lifecycle.get({ userId, appId }),
-      setAppEnabled: async (userId, appId, enabled, expectedVersion) => {
-        const scope = { userId, appId };
-        const updated = await lifecycle.setEnabled(scope, enabled, expectedVersion);
-        if (enabled) {
-          try {
-            scheduler.resumeScope(scope);
-            subagentScheduler?.resumeScope(scope);
-            scheduler.resume();
-            subagentScheduler?.resume();
-            await integrations.syncEnabled(scope);
-          } catch (error) {
-            logger.warn({ err: error, ...scope }, 'Agent app enable post-commit runtime sync failed');
-          }
-        } else {
-          await sshSessions.closeScope(scope);
-          await projectDirectories.clearScope(scope);
-          try {
-            await integrations.deactivate(scope);
-          } catch (error) {
-            logger.warn({ err: error, ...scope }, 'Agent app disable post-commit integration deactivation failed');
-          }
-        }
-        return updated;
-      },
-      listCapabilityDefinitions: () => capabilityRegistry.list(),
-      listAppGrants: async (userId, appId) => {
-        await lifecycle.initializeDefaults(userId);
-        return appGrants.list({ userId, appId });
-      },
-      getAppExecutionPolicy: (scope) => executionPolicies.get(scope),
-      replaceAppExecutionPolicy: (scope, overrides, expectedVersion) =>
-        executionPolicies.replace(scope, overrides, expectedVersion),
-      replaceAppGrants: async (userId, appId, requestedGrants, expectedPolicyRevision) => {
-        await lifecycle.initializeDefaults(userId);
-        const scope = { userId, appId };
-        const app = await lifecycle.get(scope);
-        const declared = new Set(registry.get(appId, app.activeVersion).manifest.capabilities);
-        if (new Set(requestedGrants.map((grant) => grant.capability)).size !== requestedGrants.length) {
-          throw new Error('APP_GRANT_SCOPE_INVALID');
-        }
-        const now = systemClock.nowUnixSeconds();
-        const normalized = requestedGrants.map((grant) => {
-          if (!declared.has(grant.capability)) throw new Error('APP_CAPABILITY_UNDECLARED');
-          return capabilityRegistry.grant(grant.capability, grant.scope, now);
-        });
-        await appGrants.replace(scope, expectedPolicyRevision, normalized);
-        publishHostWake(userId);
-        return { app: await lifecycle.get(scope), grants: await appGrants.list(scope) };
-      },
-      createAppIntent: (scope, input, idempotencyKey) => appIntents.createConfirmed(scope, input, idempotencyKey),
-      listReceivedAppIntents: (scope, limit) => appIntents.listReceived(scope, limit),
-      revokeAppIntent: (scope, receiptId) => appIntents.revoke(scope, receiptId),
-      getReceivedAppIntentArtifact: (scope, receiptId, artifactId) =>
-        appIntents.getReceivedArtifact(scope, receiptId, artifactId),
-      readReceivedAppIntentArtifact: (scope, receiptId, artifactId, range) =>
-        appIntents.readReceivedArtifact(scope, receiptId, artifactId, range),
-      authorize: async (scope, capability, resource) => {
-        await lifecycle.initializeDefaults(scope.userId);
-        return capabilityBroker.authorize(scope, capability, resource);
-      },
-      getSettings: (userId) => settings.get(userId),
-      getRecommendedPlugin: (userId, signal) => onboarding.recommended(userId, signal),
-      installRecommendedPlugin: (userId, signal) => onboarding.installRecommended(userId, signal),
-      patchSettings: async (userId, patch, expectedRevision) => {
-        const before = await settings.get(userId);
-        const updated = await settings.patch(userId, patch, expectedRevision);
-        const featureChanged = before.effectiveSettings.feature.enabled !== updated.effectiveSettings.feature.enabled;
-        if (featureChanged) publishHostWake(userId);
-        const featureAppIds = featureChanged
-          ? [
-              ...new Set([
-                ...registry.list().map((definition) => definition.manifest.id),
-                ...(await plugins.listInstallations(userId)).map((installation) => installation.appId),
-              ]),
-            ]
-          : [];
-        if (before.effectiveSettings.feature.enabled && !updated.effectiveSettings.feature.enabled) {
-          const deadline = systemClock.nowUnixSeconds() + 10;
-          for (const appId of featureAppIds) {
-            try {
-              await lifecycle.quiesceScope({ userId, appId }, deadline);
-            } catch (error) {
-              logger.warn({ err: error, userId, appId }, 'Agent feature disable post-commit quiesce failed');
-            }
-          }
-        } else if (!before.effectiveSettings.feature.enabled && updated.effectiveSettings.feature.enabled) {
-          for (const appId of featureAppIds) {
-            const scope = { userId, appId };
-            try {
-              await lifecycle.resumeScope(scope);
-              scheduler.resumeScope(scope);
-              subagentScheduler?.resumeScope(scope);
-            } catch (error) {
-              logger.warn({ err: error, ...scope }, 'Agent feature enable post-commit resume failed');
-            }
-          }
-          try {
-            scheduler.resume();
-            subagentScheduler?.resume();
-          } catch (error) {
-            logger.warn({ err: error, userId }, 'Agent feature enable post-commit scheduler resume failed');
-          }
-        }
-        return updated;
-      },
-      previewHardLimits: (userId, proposed, expectedRevision) =>
-        settings.previewHardLimits(userId, proposed, expectedRevision),
-      confirmHardLimits: (userId, confirmationId, expectedRevision) =>
-        settings.confirmHardLimits(userId, confirmationId, expectedRevision),
-      getTargetDenylist: () => targetDenylist.snapshot(),
-      replaceTargetDenylist: async (userId, connectionIds, reason, expectedRevision) => {
-        const updated = await targetDenylist.replace(
-          expectedRevision,
-          connectionIds,
-          reason,
-          userId,
-          systemClock.nowUnixSeconds(),
-        );
-        if (updated.eventCursor !== undefined) eventHub.publishHostWake(userId, updated.eventCursor);
-        return updated;
-      },
-    },
-    plugins: {
-      listPublisherKeys: (userId) => plugins.listPublisherKeys(userId),
-      trustPublisherKey: (userId, publicKeyPem, label) => plugins.trustPublisherKey(userId, publicKeyPem, label),
-      revokePublisherKey: (userId, keyId) => plugins.revokePublisherKey(userId, keyId),
-      stage: (userId, input) => plugins.stage(userId, input),
-      officialCatalog: (signal) => plugins.officialCatalog(officialPluginSource, signal),
-      stageOfficial: (userId, appId, version, signal) =>
-        plugins.stageOfficial(userId, officialPluginSource, appId, version, signal),
-      remoteCatalog: (userId, repositoryUrl, signal) => plugins.remoteCatalog(userId, repositoryUrl, signal),
-      stageRemote: (userId, input, signal) => plugins.stageRemote(userId, input, signal),
-      verify: (userId, stageId) => plugins.verify(userId, stageId),
-      install: (userId, stageId) => plugins.install(userId, stageId),
-      listPendingUpgrades: (userId) => plugins.listPendingUpgrades(userId),
-      cancelPendingUpgrade: (userId, appId, expectedVersion) =>
-        plugins.cancelPendingUpgrade(userId, appId, expectedVersion),
-      upgrade: (userId, appId, stageId, expectedVersion) => plugins.upgrade(userId, appId, stageId, expectedVersion),
-      uninstall: (userId, appId, expectedVersion) => plugins.uninstall(userId, appId, expectedVersion),
-      deleteData: (userId, appId) => plugins.deleteData(userId, appId),
-      frontendDescriptor: (userId, appId) => plugins.frontendDescriptor(userId, appId),
-      frontendRpc: (userId, appId, request) => plugins.frontendRpc(userId, appId, request),
-      listVersions: (userId, appId) => plugins.listVersions(userId, appId),
-      listInstallations: (userId) => plugins.listInstallations(userId),
-    },
-    ai: {
-      providers,
-      modelRegistry,
-      integrations: {
-        list: (scope, kind) => integrations.list(scope, kind),
-        get: (scope, integrationId) => integrations.get(scope, integrationId),
-        create: (scope, input, idempotencyKey) => integrations.create(scope, input, idempotencyKey),
-        update: (scope, integrationId, expectedVersion, input) =>
-          integrations.update(scope, integrationId, expectedVersion, input),
-        remove: (scope, integrationId, expectedVersion) => integrations.remove(scope, integrationId, expectedVersion),
-        refresh: (scope, integrationId, signal) => integrations.refresh(scope, integrationId, signal),
-      },
-      artifacts,
-      conversations,
-      context,
-      memories: {
-        list: (scope, status, limit, before) => memories.list(scope, status, limit, before),
-        propose: (scope, input, provenance) => memories.propose(scope, input, provenance),
-        review: (scope, memoryId, input) => memories.review(scope, memoryId, input),
-        previewImport: (scope, sourceAppId, sourceMemoryId) =>
-          memories.previewImport(scope, sourceAppId, sourceMemoryId),
-        confirmImport: (scope, confirmationId) => memories.confirmImport(scope, confirmationId),
-      },
-      languageModel,
-    },
-    runtime: {
-      runs: {
-        definitions: async (scope) => {
-          const [app, providerViews] = await Promise.all([lifecycle.get(scope), providers.list(scope.userId)]);
-          return definitions.list(scope.appId, app.activeVersion).map((definition) => ({
-            ...definition,
-            modelCompatibility: providerViews.flatMap((provider) =>
-              provider.models.map((model) => {
-                const missingCapabilities = missingRequiredModelCapabilities(
-                  definition.requiredModelCapabilities,
-                  snapshotProviderModelCapabilities(model),
-                );
-                return {
-                  providerId: provider.id,
-                  modelId: model.id,
-                  configurationVersion: provider.version,
-                  compatible: missingCapabilities.length === 0,
-                  missingCapabilities,
-                };
-              }),
-            ),
-          }));
-        },
-        create: (scope, command) => runs.create(scope, command),
-        get: (scope, runId) => runs.get(scope, runId),
-        rootRuntimeId: (scope, runId) => runRepository.rootRuntimeId(scope, runId),
-        list: (scope, threadId, limit, before) => runs.list(scope, threadId, limit, before),
-        appendInput: (scope, runId, input, expectedVersion, idempotencyKey) =>
-          runs.appendInput(scope, runId, input, expectedVersion, idempotencyKey),
-        interrupt: (scope, runId, input, expectedVersion, idempotencyKey) =>
-          runs.interrupt(scope, runId, input, expectedVersion, idempotencyKey),
-        setGoal: (scope, runId, text, expectedVersion, idempotencyKey) =>
-          runs.setGoal(scope, runId, text, expectedVersion, idempotencyKey),
-        pendingInputs: (scope, runId) => runs.pendingInputs(scope, runId),
-        mutatePendingInput: (scope, runId, action, inputId, beforeInputId, expectedVersion, idempotencyKey) =>
-          runs.mutatePendingInput(scope, runId, action, inputId, beforeInputId, expectedVersion, idempotencyKey),
-        increaseBudget: (scope, runId, increase, expectedVersion, idempotencyKey) =>
-          runs.increaseBudget(scope, runId, increase, expectedVersion, idempotencyKey),
-        cancel: (scope, runId, expectedVersion, idempotencyKey) =>
-          runs.cancel(scope, runId, expectedVersion, idempotencyKey),
-        reconciliation: (scope, runId) => runs.reconciliation(scope, runId),
-        resolveReconciliation: (scope, runId, expectedVersion, note, resources) =>
-          runs.resolveReconciliation(scope, runId, expectedVersion, note, resources),
-        listCheckpoints: (scope, runId) => checkpoints.list(scope, runId),
-        saveCheckpoint: (scope, runId, expectedVersion) => checkpoints.save(scope, runId, expectedVersion),
-        deleteCheckpoint: (scope, runId, checkpointId) => checkpoints.deleteUser(scope, runId, checkpointId),
-        resume: (scope, runId, checkpointId, expectedVersion, idempotencyKey) =>
-          checkpoints.resume(scope, runId, checkpointId, expectedVersion, idempotencyKey),
-        delete: (scope, runId, expectedVersion, idempotencyKey) =>
-          runs.delete(scope, runId, expectedVersion, idempotencyKey),
-      },
-      collaboration: {
-        getSettings: (scope) => subagentPolicy.get(scope),
-        replaceProfiles: (scope, input, expectedVersion) =>
-          subagentPolicy.replaceProfiles(scope, input, expectedVersion),
-        createSubagent: (scope, runId, parentRuntimeId, input, idempotencyKey) =>
-          subagents.create(scope, runId, parentRuntimeId, input, idempotencyKey),
-        listSubagents: (scope, runId, parentRuntimeId, limit, before) =>
-          subagents.list(scope, runId, parentRuntimeId, limit, before),
-        cancelSubagent: (scope, runId, delegationId, expectedVersion) =>
-          subagents.cancelTree(scope, runId, delegationId, expectedVersion),
-        joinSubagents: (scope, runId, callerRuntimeId, delegationIds, mode, deadlineAt, signal) =>
-          subagents.join(scope, runId, callerRuntimeId, delegationIds, mode, deadlineAt, signal),
-        sendMessage: (scope, runId, senderRuntimeId, input, idempotencyKey) =>
-          mailbox.send(scope, runId, senderRuntimeId, input, idempotencyKey),
-        readMessages: (scope, runId, runtimeId, after, limit) => mailbox.read(scope, runId, runtimeId, after, limit),
-        listSubagentMessages: (scope, runId, delegationId, limit, before) =>
-          mailboxRepository.listDelegationMessages(scope, runId, delegationId, limit, before),
-        consumeMessages: (scope, runId, runtimeId, through, expectedConsumedSequence) =>
-          mailbox.consume(scope, runId, runtimeId, through, expectedConsumedSequence),
-        getFact: (scope, runId, key) => sharedFacts.get(scope, runId, key),
-        compareAndSetFact: (scope, runId, runtimeId, key, value, expectedVersion) =>
-          sharedFacts.compareAndSet(scope, runId, runtimeId, key, value, expectedVersion),
-      },
-      events: {
-        readRun: (scope, runId, after, limit) => runRepository.readEvents(scope, runId, after, limit),
-        readHost: (userId, after, limit) => runRepository.readHostEvents(userId, after, limit),
-        hostCursor: (userId) => runRepository.hostCursor(userId),
-        hostCursorWindow: (userId) => runRepository.hostCursorWindow(userId),
-        onRunWake: (runId, listener) => eventHub.onRunWake(runId, listener),
-        onHostWake: (userId, listener) => eventHub.onHostWake(userId, listener),
-        onTransient: (runId, listener) => eventHub.onTransient(runId, listener),
-      },
-      approvals: {
-        get: (scope, approvalId) => approvals.get(scope, approvalId),
-        list: (scope, runId) => approvals.list(scope, runId),
-        resolve: (scope, approvalId, decision, operationHash, expectedVersion, actorUserId, idempotencyKey) =>
-          approvals.resolve(scope, approvalId, decision, operationHash, expectedVersion, actorUserId, idempotencyKey),
-      },
-    },
-    initialize: async () => {
-      await sshSessions.initialize();
-      await modelRegistry.initialize();
-      await plugins.initializeInstalledVersions();
-      const interrupted = await stateCommit.interruptNonTerminalRuns(systemClock.nowUnixSeconds());
-      recoveringStartup = true;
-      try {
-        await checkpoints.recoverInterrupted(interrupted);
-        await subagentScheduler?.initialize();
-      } finally {
-        recoveringStartup = false;
-      }
-      scheduler.resume();
-      for (const run of startupRecoveredRuns.splice(0)) scheduler.enqueue(run);
-      lifecycleSweeps.start();
-    },
-    initializeForUser: async (userId) => {
-      await settings.get(userId);
-      await lifecycle.initializeDefaults(userId);
-      await plugins.reconcileUserRuntime(userId);
-      const appIds = new Set([
-        ...registry.list().map((definition) => definition.manifest.id),
-        ...(await plugins.listInstallations(userId)).map((installation) => installation.appId),
-      ]);
-      for (const appId of appIds) {
-        await integrations.syncEnabled({ userId, appId });
-      }
-    },
-    quiesce: async (deadlineUnixSeconds) => {
-      await lifecycleSweeps.stop();
-      await Promise.all([
-        scheduler.quiesce(deadlineUnixSeconds),
-        subagentScheduler?.quiesce(deadlineUnixSeconds) ?? Promise.resolve(),
-      ]);
-      for (const definition of registry.list()) await lifecycle.quiesce(definition.manifest.id, deadlineUnixSeconds);
-    },
-    prepareRestore: async (deadlineUnixSeconds) => {
-      await lifecycleSweeps.stop();
-      await Promise.all([scheduler.quiesce(deadlineUnixSeconds), subagentScheduler?.quiesce(deadlineUnixSeconds)]);
-      await Promise.all([mcpRuntime.closeAll(), sshSessions.dispose(), browserGateway.closeAll()]);
-      await resetRuntime();
-      modelRegistry.dispose();
-      startupRecoveredRuns.length = 0;
-    },
-    dispose: async () => {
-      modelRegistry.dispose();
-      await sshSessions.dispose();
-      await Promise.all([
-        lifecycleSweeps.stop(),
-        subagentScheduler?.dispose() ?? Promise.resolve(),
-        mcpRuntime.closeAll(),
-        browserGateway.closeAll(),
-        resetRuntime(),
-      ]);
-      eventHub.clear();
-      await lifecycle.dispose();
-    },
-  };
+	const appStates = new SqliteAppStateRepository(database);
+	const capabilityRegistry = new CapabilityRegistry();
+	const appGrants = new SqliteAppGrantRepository(database, capabilityRegistry);
+	const targetDenylist = new SqliteTargetDenylistRepository(database);
+	const settingsRepository = new SqliteAgentSettingsRepository(database);
+	const hardLimitConfirmations = new SqliteHardLimitConfirmationRepository(database);
+	const hardLimitUsage = new SqliteHardLimitUsageAdapter(database);
+
+	let quiesceHostExecution: (scope: Scope, deadlineUnixSeconds: number) => Promise<void> = async () => {
+		throw new Error('AGENT_HOST_NOT_READY');
+	};
+
+	const lifecycle = new AppLifecycleService(
+		registry,
+		appStates,
+		appGrants,
+		systemClock,
+		publishHostWake,
+		(scope, deadlineUnixSeconds) => quiesceHostExecution(scope, deadlineUnixSeconds),
+	);
+	const settings = new AgentSettingsService(settingsRepository, hardLimitConfirmations, hardLimitUsage, systemClock);
+	const capabilityBroker = new AppCapabilityBroker(
+		registry,
+		appStates,
+		appGrants,
+		targetDenylist,
+		capabilityRegistry,
+	);
+	const { providers, languageModel, modelRegistry } = composeProviders({
+		database,
+		cipher,
+		dataDirectory,
+
+		refreshHealth: (userId) => lifecycle.refreshHealth(userId),
+	});
+	const outboundPolicy = new OutboundPolicyAdapter(nodeEnv, e2eResetEnabled);
+	const integrationRepository = new SqliteIntegrationRepository(database, cipher);
+	const mcpRuntime = new McpAdapter(integrationRepository, outboundPolicy);
+	const artifactLimits: ArtifactLimitPolicyPort = {
+		forUser: async (userId) => {
+			const view = await settings.get(userId);
+			return {
+				maxSingleArtifactBytes: view.effectiveSettings.storage.maxSingleArtifactBytes,
+				maxGlobalArtifactBytes: view.effectiveSettings.storage.maxGlobalArtifactBytes,
+				unretainedArtifactTtlSeconds: view.effectiveSettings.storage.unretainedArtifactTtlSeconds,
+				minFreeDiskBytes: AGENT_DEFAULTS.minFreeDiskBytes,
+			};
+		},
+	};
+	const artifactStore = new LocalArtifactStore(database, artifactLimits, { dataDirectory });
+	const artifacts = new ArtifactService(artifactStore);
+	const appIntents = new AppIntentService(
+		new SqliteAppIntentRepository(database),
+		registry,
+		appStates,
+		appGrants,
+		new AppIntentArtifactAdapter(artifactStore),
+		systemClock,
+	);
+	const definitions = new AgentDefinitionRegistry();
+	const { appStorage, plugins, resetRuntime } = composePlugins({
+		database,
+		dataDirectory,
+		nexusVersion,
+		publicOrigin,
+		registry,
+		appStates,
+		capabilityBroker,
+		appIntents,
+		artifactStore,
+		settings,
+		definitions,
+		clock: systemClock,
+		onHostStateCommitted: publishHostWake,
+	});
+	const onboarding = new AgentOnboardingService(
+		plugins,
+		lifecycle,
+		appGrants,
+		capabilityRegistry,
+		officialPluginSource,
+	);
+	const executionPolicies = new AgentExecutionPolicyService(appStorage, settings);
+	const conversationRepository = new SqliteConversationRepository(database);
+	const conversations = new ConversationService(
+		conversationRepository,
+		systemClock,
+		settings,
+		lifecycle,
+		async (scope, threadId) => {
+			await sshSessions.closeScope(scope, threadId);
+			await projectDirectories.clearScope(scope, threadId);
+		},
+	);
+	const recall = new RecallService(new SqliteRecallRepository(database), systemClock);
+	const skills = new SkillRegistry(new InstalledPluginSkillSourceAdapter(database, dataDirectory));
+	const modelContinuations = new SqliteModelContinuationRepository(database);
+	const contextCheckpoints = new ContextCheckpointService(
+		new SqliteContextCheckpointRepository(database),
+		conversations,
+		systemClock,
+	);
+	const context = new ContextService(
+		conversations,
+		recall,
+		skills,
+		modelContinuations,
+		artifacts,
+		contextCheckpoints,
+	);
+	const notificationBridge = new AgentNotificationBridge(notifications, conversationRepository);
+	let subagentScheduler: SubagentScheduler | null = null;
+	const stateCommit = new SqliteStateCommitAdapter(database, (run, events) => {
+		if (TERMINAL_RUN_STATUSES.has(run.status)) {
+			subagentScheduler?.cancel(run.id);
+			void browserGateway
+				.closeRun(run.id)
+				.catch((error) => logger.warn({ err: error, runId: run.id }, 'Terminal Run browser cleanup failed'));
+		}
+		void notificationBridge
+			.project(run, events)
+			.catch((error) =>
+				logger.warn({ err: error, runId: run.id, appId: run.appId }, 'Agent notification projection failed'),
+			);
+	});
+	const subagentRepository = new SqliteSubagentRepository(database);
+	const runScopes: RunScopeRepositoryPort = subagentRepository;
+	const runtimeParticipants: RuntimeParticipantRepositoryPort = subagentRepository;
+	const delegationReader: DelegationReaderPort = subagentRepository;
+	const delegationCancellation: DelegationCancellationPort = subagentRepository;
+	const delegationRepository: DelegationRepositoryPort = subagentRepository;
+	const mailboxReader: MailboxReaderPort = subagentRepository;
+	const mailboxConsumer: MailboxConsumerPort = subagentRepository;
+	const mailboxRepository: MailboxRepositoryPort = subagentRepository;
+	const schedulerClaims: SchedulerWorkClaimPort = subagentRepository;
+	const schedulerExecution: SchedulerWorkExecutionPort = subagentRepository;
+	const sharedFactRepository: SharedFactRepositoryPort = subagentRepository;
+	const subagentPolicy = new SubagentPolicyService(appStorage, settings, providers);
+	const mailbox = new MailboxService(
+		mailboxRepository,
+		runtimeParticipants,
+		delegationReader,
+		settings,
+		systemClock,
+		() => subagentScheduler?.wake(),
+	);
+	const sharedFacts = new SharedFactsService(sharedFactRepository, systemClock);
+	const memories = new MemoryService(
+		new SqliteMemoryRepository(database),
+		registry,
+		new SqliteMemoryProvenanceAdapter(database),
+		audit,
+		systemClock,
+		{
+			memoryChanged: (memory, action, provenance) => {
+				publishHostWake(memory.userId);
+				if (action !== 'proposed' || !provenance) return;
+				void notificationBridge.projectMemoryCandidate(memory, provenance);
+			},
+		},
+	);
+	const subagents = new SubagentService(
+		delegationRepository,
+		runtimeParticipants,
+		runRepository,
+		subagentPolicy,
+		providers,
+		appGrants,
+		capabilityRegistry,
+		eventHub,
+		systemClock,
+		() => subagentScheduler?.wake(),
+		(runId, runtimeId) => {
+			subagentScheduler?.cancelRuntime(runId, runtimeId);
+		},
+	);
+	const machine = new MachineCapabilityAdapter(
+		connectionResolver,
+		diagnostics,
+		executionSessions,
+		docker,
+		targetDenylist,
+	);
+	const { sshTargets, sshSessions, sshFiles, projectDirectories, sshShell } = composeSshCapabilities({
+		database,
+		connectionResolver,
+		executionSessions,
+		targetDenylist,
+		conversationRepository,
+		capabilityBroker,
+	});
+	const cryptoHash = new NodeCryptoHashAdapter();
+	const acpPermissions = new AcpPermissionBroker(stateCommit, cryptoHash, systemClock, (runId, approvalId) => {
+		eventHub.publishTransient({
+			runId,
+			type: 'approval.changed',
+			payload: { approvalId },
+			occurredAt: systemClock.nowUnixSeconds(),
+		});
+	});
+	const plans = new PlanService(runRepository, stateCommit, () => systemClock.nowUnixSeconds());
+	const files = new FileCapabilityService(sshTargets, sshFiles);
+	const shell = new ShellCapabilityService(sshTargets, sshShell, sshSessions);
+	const acpRuntime = new AcpAdapter();
+	const toolCatalog = new ToolCatalog();
+	toolCatalog.registerContribution({
+		schemaVersion: 1,
+		id: 'project.directories',
+		tools: createProjectDirectoryTools(projectDirectories, sshTargets, cryptoHash),
+	});
+	toolCatalog.registerContribution({
+		schemaVersion: 1,
+		id: 'ssh.sessions',
+		tools: createSshSessionTools(sshSessions, sshTargets, cryptoHash),
+	});
+	registerFileToolContributions({ catalog: toolCatalog, files, cryptoHash });
+	registerShellToolContributions({ catalog: toolCatalog, shell, cryptoHash });
+	registerMachineToolContributions({ catalog: toolCatalog, machine, sshTargets, cryptoHash });
+	registerAcpToolContribution({
+		catalog: toolCatalog,
+		repository: integrationRepository,
+		runtime: acpRuntime,
+		cryptoHash,
+		permissionRequests: acpPermissions,
+		ssh: {
+			targets: sshTargets,
+
+			open: (context, connectionId, hash, argv, cwd) =>
+				new SshAcpTransport(connectionResolver, executionSessions).open(context, connectionId, hash, argv, cwd),
+		},
+	});
+	registerBrowserToolContribution({
+		catalog: toolCatalog,
+		settings,
+		gateway: browserGateway,
+		cryptoHash,
+		artifacts,
+	});
+	registerRuntimeToolContributions({
+		catalog: toolCatalog,
+		artifacts,
+		plans,
+		runs: runRepository,
+		subagents,
+		mailbox,
+		facts: sharedFacts,
+		memories,
+		skills,
+		cryptoHash,
+	});
+	const integrations = new IntegrationService(
+		integrationRepository,
+		outboundPolicy,
+		mcpRuntime,
+		lifecycle,
+		cryptoHash,
+		systemClock,
+		createMcpToolContributionHooks({
+			catalog: toolCatalog,
+			repository: integrationRepository,
+			runtime: mcpRuntime,
+			artifacts,
+			cryptoHash,
+		}),
+	);
+	const toolExecutor = new ToolExecutor(toolCatalog, capabilityBroker);
+	const policy = new PolicyService();
+	const modelCalls = new ModelCallLimiter(settings);
+	const leaseCoordinator = new LeaseCoordinator(leases, systemClock);
+	const mutationLeaseGuard = new AgentMutationLeaseGuardAdapter(leases, systemClock);
+	const projectInstructionSource = {
+		load: async (
+			...args: Parameters<
+				import('../../modules/agent/ai/project-instruction-source.port').ProjectInstructionSourcePort['load']
+			>
+		) => {
+			const [, runId, runtimeId, targetDirectories, , toolContext] = args;
+			const remote = toolContext
+				? await projectDirectories.instructions(toolContext, targetDirectories).catch(() => {
+						logger.warn(
+							{ runId, runtimeId },
+							'SSH project instructions unavailable; no remote rules synthesized',
+						);
+						return [];
+					})
+				: [];
+			if (!remote.length) return null;
+			return {
+				targetDirectories: [...targetDirectories],
+				instructions: remote,
+				omitted: [],
+			};
+		},
+	};
+	const modelSteps = new ModelStepRunner(
+		providers,
+		context,
+		languageModel,
+		modelCalls,
+		systemClock,
+		projectInstructionSource,
+	);
+	const toolCalls = new ToolCallRunner(toolCatalog, toolExecutor, policy, leaseCoordinator, mutationLeaseGuard);
+
+	let recordRecoverySafePoint: (
+		run: Parameters<AgentScheduler['enqueue']>[0],
+		reason: 'model_boundary' | 'read_batch' | 'mutation_confirmed' | 'execution_limit',
+	) => Promise<void> = async () => undefined;
+
+	const nativeBackend = new NativeAgentBackend(
+		runRepository,
+		delegationReader,
+		stateCommit,
+		modelSteps,
+		toolCalls,
+		systemClock,
+		(run, reason) => recordRecoverySafePoint(run, reason),
+		subagentPolicy,
+	);
+	const scheduler = new AgentScheduler(
+		settings,
+		nativeBackend,
+		eventHub,
+		systemClock,
+		(userId) => runRepository.hostCursor(userId),
+		(userId) => subagentScheduler?.activeCountForUser(userId) ?? 0,
+		(runId) => subagentScheduler?.hasActiveRun(runId) ?? false,
+		async (run) => {
+			const latest = await runRepository.snapshot({ userId: run.userId, appId: run.appId }, run.id);
+			if (latest && TERMINAL_RUN_STATUSES.has(latest.status)) await browserGateway.closeRun(run.id);
+		},
+	);
+	const subagentContext = new SubagentContextBuilder(
+		runtimeParticipants,
+		mailboxReader,
+		toolCatalog,
+		capabilityRegistry,
+		modelContinuations,
+		artifacts,
+		systemClock,
+		projectInstructionSource,
+	);
+	const subagentHost: SubagentExecutionHost = {
+		enqueueRootRun: async (runId, scope) => {
+			const run = await runRepository.snapshot(scope, runId);
+			if (run && ['created', 'running'].includes(run.status)) scheduler.enqueue(run);
+		},
+
+		wakeChildScheduler: () => subagentScheduler?.wake(),
+
+		cancelChildRuntime: (runId, runtimeId) => {
+			subagentScheduler?.cancelRuntime(runId, runtimeId);
+		},
+	};
+	const subagentCompletion = new SubagentCompletionCoordinator(
+		schedulerExecution,
+		delegationCancellation,
+		runtimeParticipants,
+		stateCommit,
+		mailbox,
+		eventHub,
+		subagentHost,
+		systemClock,
+	);
+	const subagentTools = new SubagentToolStepExecutor(
+		schedulerExecution,
+		delegationCancellation,
+		runtimeParticipants,
+		runRepository,
+		stateCommit,
+		subagentContext,
+		toolCalls,
+		subagentCompletion,
+		eventHub,
+		systemClock,
+		(run, reason) => recordRecoverySafePoint(run, reason),
+	);
+	const subagentModels = new SubagentModelStepExecutor(
+		schedulerExecution,
+		delegationCancellation,
+		runtimeParticipants,
+		mailboxConsumer,
+		runRepository,
+		providers,
+		languageModel,
+		modelCalls,
+		stateCommit,
+		subagentContext,
+		toolExecutor,
+		subagentCompletion,
+		eventHub,
+		systemClock,
+	);
+	const subagentParticipant = new SubagentParticipantExecutor(
+		schedulerExecution,
+		delegationCancellation,
+		subagentCompletion,
+		subagentTools,
+		subagentModels,
+		subagentHost,
+		systemClock,
+	);
+	subagentScheduler = new SubagentScheduler(
+		settings,
+		runScopes,
+		schedulerClaims,
+		subagentParticipant,
+		{
+			activeCountForUser: (userId) => scheduler.activeCountForUser(userId),
+
+			hasActiveRun: (runId) => scheduler.hasActiveRun(runId),
+
+			activeRunIds: () => scheduler.activeRunIds(),
+
+			enqueueRun: async (runId, scope) => {
+				const run = await runRepository.snapshot(scope, runId);
+				if (run && ['created', 'running'].includes(run.status)) scheduler.enqueue(run);
+			},
+
+			wake: () => scheduler.wake(),
+		},
+		systemClock,
+	);
+	quiesceHostExecution = async (scope, deadlineUnixSeconds) => {
+		const stopped = await Promise.allSettled([
+			scheduler.quiesceScope(scope, deadlineUnixSeconds),
+			subagentScheduler!.quiesceScope(scope, deadlineUnixSeconds),
+		]);
+		await stateCommit.quiesceApp(scope, systemClock.nowUnixSeconds());
+		publishHostWake(scope.userId);
+		const failure = stopped.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+		if (failure) throw failure.reason;
+	};
+
+	const notifyCommitted = (run: Parameters<AgentScheduler['enqueue']>[0]) => {
+		eventHub.publishRunWake(run.id, run.eventCursor);
+		publishHostWake(run.userId);
+	};
+
+	const runs = new RunService(
+		settings,
+		lifecycle,
+		providers,
+		executionPolicies,
+		definitions,
+		stateCommit,
+		runRepository,
+		systemClock,
+		(run) => scheduler.enqueue(run),
+		(run) => notifyCommitted(run),
+		(run) => scheduler.signalInput(run),
+		(run) => scheduler.signalInput(run, 'GOAL_UPDATED'),
+		(runId) => {
+			scheduler.cancel(runId);
+			subagentScheduler?.cancel(runId);
+		},
+		(userId, cursor) => eventHub.publishHostWake(userId, cursor),
+	);
+	const checkpointRepository = new SqliteCheckpointRepository(database);
+	let recoveringStartup = false;
+	const startupRecoveredRuns: Parameters<AgentScheduler['enqueue']>[0][] = [];
+	const checkpoints = new CheckpointService(
+		checkpointRepository,
+		runRepository,
+		settings,
+		lifecycle,
+		providers,
+		definitions,
+		targetDenylist,
+		stateCommit,
+		systemClock,
+		(run) => {
+			if (recoveringStartup) startupRecoveredRuns.push(run);
+			else scheduler.enqueue(run);
+		},
+		(run) => notifyCommitted(run),
+	);
+	recordRecoverySafePoint = async (run, reason) => {
+		await checkpoints.recordSafePoint(run, reason);
+	};
+	const lifecycleSweeps = createAgentLifecycleSweeps({
+		stateCommit,
+		artifactMaintenance: artifactStore,
+		mailbox,
+		scheduler,
+		clock: systemClock,
+		notifyCommitted,
+
+		retryMcpIntegrations: () => integrations.retryDue(),
+	});
+
+	const approvalRepository = new SqliteApprovalRepository(database);
+	const approvals = new ApprovalService(
+		approvalRepository,
+		runRepository,
+		stateCommit,
+		systemClock,
+		(run) => {
+			notifyCommitted(run);
+			scheduler.enqueue(run);
+		},
+		acpPermissions,
+	);
+
+	return {
+		host: {
+			listApps: (userId) => lifecycle.list(userId),
+
+			getApp: (userId, appId) => lifecycle.get({ userId, appId }),
+
+			setAppEnabled: async (userId, appId, enabled, expectedVersion) => {
+				const scope = { userId, appId };
+				const updated = await lifecycle.setEnabled(scope, enabled, expectedVersion);
+				if (enabled) {
+					try {
+						scheduler.resumeScope(scope);
+						subagentScheduler?.resumeScope(scope);
+						scheduler.resume();
+						subagentScheduler?.resume();
+						await integrations.syncEnabled(scope);
+					} catch (error) {
+						logger.warn({ err: error, ...scope }, 'Agent app enable post-commit runtime sync failed');
+					}
+				} else {
+					await sshSessions.closeScope(scope);
+					await projectDirectories.clearScope(scope);
+					try {
+						await integrations.deactivate(scope);
+					} catch (error) {
+						logger.warn(
+							{ err: error, ...scope },
+							'Agent app disable post-commit integration deactivation failed',
+						);
+					}
+				}
+				return updated;
+			},
+
+			listCapabilityDefinitions: () => capabilityRegistry.list(),
+
+			listAppGrants: async (userId, appId) => {
+				await lifecycle.initializeDefaults(userId);
+				return appGrants.list({ userId, appId });
+			},
+
+			getAppExecutionPolicy: (scope) => executionPolicies.get(scope),
+
+			replaceAppExecutionPolicy: (scope, overrides, expectedVersion) =>
+				executionPolicies.replace(scope, overrides, expectedVersion),
+
+			replaceAppGrants: async (userId, appId, requestedGrants, expectedPolicyRevision) => {
+				await lifecycle.initializeDefaults(userId);
+				const scope = { userId, appId };
+				const app = await lifecycle.get(scope);
+				const declared = new Set(registry.get(appId, app.activeVersion).manifest.capabilities);
+				if (new Set(requestedGrants.map((grant) => grant.capability)).size !== requestedGrants.length) {
+					throw new Error('APP_GRANT_SCOPE_INVALID');
+				}
+				const now = systemClock.nowUnixSeconds();
+				const normalized = requestedGrants.map((grant) => {
+					if (!declared.has(grant.capability)) throw new Error('APP_CAPABILITY_UNDECLARED');
+					return capabilityRegistry.grant(grant.capability, grant.scope, now);
+				});
+				await appGrants.replace(scope, expectedPolicyRevision, normalized);
+				publishHostWake(userId);
+				return { app: await lifecycle.get(scope), grants: await appGrants.list(scope) };
+			},
+
+			createAppIntent: (scope, input, idempotencyKey) => appIntents.createConfirmed(scope, input, idempotencyKey),
+
+			listReceivedAppIntents: (scope, limit) => appIntents.listReceived(scope, limit),
+
+			revokeAppIntent: (scope, receiptId) => appIntents.revoke(scope, receiptId),
+
+			getReceivedAppIntentArtifact: (scope, receiptId, artifactId) =>
+				appIntents.getReceivedArtifact(scope, receiptId, artifactId),
+
+			readReceivedAppIntentArtifact: (scope, receiptId, artifactId, range) =>
+				appIntents.readReceivedArtifact(scope, receiptId, artifactId, range),
+
+			authorize: async (scope, capability, resource) => {
+				await lifecycle.initializeDefaults(scope.userId);
+				return capabilityBroker.authorize(scope, capability, resource);
+			},
+
+			getSettings: (userId) => settings.get(userId),
+
+			getRecommendedPlugin: (userId, signal) => onboarding.recommended(userId, signal),
+
+			installRecommendedPlugin: (userId, signal) => onboarding.installRecommended(userId, signal),
+
+			patchSettings: async (userId, patch, expectedRevision) => {
+				const before = await settings.get(userId);
+				const updated = await settings.patch(userId, patch, expectedRevision);
+				const featureChanged =
+					before.effectiveSettings.feature.enabled !== updated.effectiveSettings.feature.enabled;
+				if (featureChanged) publishHostWake(userId);
+				const featureAppIds = featureChanged
+					? [
+							...new Set([
+								...registry.list().map((definition) => definition.manifest.id),
+								...(await plugins.listInstallations(userId)).map((installation) => installation.appId),
+							]),
+						]
+					: [];
+				if (before.effectiveSettings.feature.enabled && !updated.effectiveSettings.feature.enabled) {
+					const deadline = systemClock.nowUnixSeconds() + 10;
+					for (const appId of featureAppIds) {
+						try {
+							await lifecycle.quiesceScope({ userId, appId }, deadline);
+						} catch (error) {
+							logger.warn(
+								{ err: error, userId, appId },
+								'Agent feature disable post-commit quiesce failed',
+							);
+						}
+					}
+				} else if (!before.effectiveSettings.feature.enabled && updated.effectiveSettings.feature.enabled) {
+					for (const appId of featureAppIds) {
+						const scope = { userId, appId };
+						try {
+							await lifecycle.resumeScope(scope);
+							scheduler.resumeScope(scope);
+							subagentScheduler?.resumeScope(scope);
+						} catch (error) {
+							logger.warn({ err: error, ...scope }, 'Agent feature enable post-commit resume failed');
+						}
+					}
+					try {
+						scheduler.resume();
+						subagentScheduler?.resume();
+					} catch (error) {
+						logger.warn({ err: error, userId }, 'Agent feature enable post-commit scheduler resume failed');
+					}
+				}
+				return updated;
+			},
+
+			previewHardLimits: (userId, proposed, expectedRevision) =>
+				settings.previewHardLimits(userId, proposed, expectedRevision),
+
+			confirmHardLimits: (userId, confirmationId, expectedRevision) =>
+				settings.confirmHardLimits(userId, confirmationId, expectedRevision),
+
+			getTargetDenylist: () => targetDenylist.snapshot(),
+
+			replaceTargetDenylist: async (userId, connectionIds, reason, expectedRevision) => {
+				const updated = await targetDenylist.replace(
+					expectedRevision,
+					connectionIds,
+					reason,
+					userId,
+					systemClock.nowUnixSeconds(),
+				);
+				if (updated.eventCursor !== undefined) eventHub.publishHostWake(userId, updated.eventCursor);
+				return updated;
+			},
+		},
+		plugins: {
+			listPublisherKeys: (userId) => plugins.listPublisherKeys(userId),
+
+			trustPublisherKey: (userId, publicKeyPem, label) => plugins.trustPublisherKey(userId, publicKeyPem, label),
+
+			revokePublisherKey: (userId, keyId) => plugins.revokePublisherKey(userId, keyId),
+
+			stage: (userId, input) => plugins.stage(userId, input),
+
+			officialCatalog: (signal) => plugins.officialCatalog(officialPluginSource, signal),
+
+			stageOfficial: (userId, appId, version, signal) =>
+				plugins.stageOfficial(userId, officialPluginSource, appId, version, signal),
+
+			remoteCatalog: (userId, repositoryUrl, signal) => plugins.remoteCatalog(userId, repositoryUrl, signal),
+
+			stageRemote: (userId, input, signal) => plugins.stageRemote(userId, input, signal),
+
+			verify: (userId, stageId) => plugins.verify(userId, stageId),
+
+			install: (userId, stageId) => plugins.install(userId, stageId),
+
+			listPendingUpgrades: (userId) => plugins.listPendingUpgrades(userId),
+
+			cancelPendingUpgrade: (userId, appId, expectedVersion) =>
+				plugins.cancelPendingUpgrade(userId, appId, expectedVersion),
+
+			upgrade: (userId, appId, stageId, expectedVersion) =>
+				plugins.upgrade(userId, appId, stageId, expectedVersion),
+
+			uninstall: (userId, appId, expectedVersion) => plugins.uninstall(userId, appId, expectedVersion),
+
+			deleteData: (userId, appId) => plugins.deleteData(userId, appId),
+
+			frontendDescriptor: (userId, appId) => plugins.frontendDescriptor(userId, appId),
+
+			frontendRpc: (userId, appId, request) => plugins.frontendRpc(userId, appId, request),
+
+			listVersions: (userId, appId) => plugins.listVersions(userId, appId),
+
+			listInstallations: (userId) => plugins.listInstallations(userId),
+		},
+		ai: {
+			providers,
+			modelRegistry,
+			integrations: {
+				list: (scope, kind) => integrations.list(scope, kind),
+
+				get: (scope, integrationId) => integrations.get(scope, integrationId),
+
+				create: (scope, input, idempotencyKey) => integrations.create(scope, input, idempotencyKey),
+
+				update: (scope, integrationId, expectedVersion, input) =>
+					integrations.update(scope, integrationId, expectedVersion, input),
+
+				remove: (scope, integrationId, expectedVersion) =>
+					integrations.remove(scope, integrationId, expectedVersion),
+
+				refresh: (scope, integrationId, signal) => integrations.refresh(scope, integrationId, signal),
+			},
+			artifacts,
+			conversations,
+			context,
+			memories: {
+				list: (scope, status, limit, before) => memories.list(scope, status, limit, before),
+
+				propose: (scope, input, provenance) => memories.propose(scope, input, provenance),
+
+				review: (scope, memoryId, input) => memories.review(scope, memoryId, input),
+
+				previewImport: (scope, sourceAppId, sourceMemoryId) =>
+					memories.previewImport(scope, sourceAppId, sourceMemoryId),
+
+				confirmImport: (scope, confirmationId) => memories.confirmImport(scope, confirmationId),
+			},
+			languageModel,
+		},
+		runtime: {
+			runs: {
+				definitions: async (scope) => {
+					const [app, providerViews] = await Promise.all([
+						lifecycle.get(scope),
+						providers.list(scope.userId),
+					]);
+					return definitions.list(scope.appId, app.activeVersion).map((definition) => ({
+						...definition,
+						modelCompatibility: providerViews.flatMap((provider) =>
+							provider.models.map((model) => {
+								const missingCapabilities = missingRequiredModelCapabilities(
+									definition.requiredModelCapabilities,
+									snapshotProviderModelCapabilities(model),
+								);
+								return {
+									providerId: provider.id,
+									modelId: model.id,
+									configurationVersion: provider.version,
+									compatible: missingCapabilities.length === 0,
+									missingCapabilities,
+								};
+							}),
+						),
+					}));
+				},
+
+				create: (scope, command) => runs.create(scope, command),
+
+				get: (scope, runId) => runs.get(scope, runId),
+
+				rootRuntimeId: (scope, runId) => runRepository.rootRuntimeId(scope, runId),
+
+				list: (scope, threadId, limit, before) => runs.list(scope, threadId, limit, before),
+
+				appendInput: (scope, runId, input, expectedVersion, idempotencyKey) =>
+					runs.appendInput(scope, runId, input, expectedVersion, idempotencyKey),
+
+				interrupt: (scope, runId, input, expectedVersion, idempotencyKey) =>
+					runs.interrupt(scope, runId, input, expectedVersion, idempotencyKey),
+
+				setGoal: (scope, runId, text, expectedVersion, idempotencyKey) =>
+					runs.setGoal(scope, runId, text, expectedVersion, idempotencyKey),
+
+				pendingInputs: (scope, runId) => runs.pendingInputs(scope, runId),
+
+				mutatePendingInput: (scope, runId, action, inputId, beforeInputId, expectedVersion, idempotencyKey) =>
+					runs.mutatePendingInput(
+						scope,
+						runId,
+						action,
+						inputId,
+						beforeInputId,
+						expectedVersion,
+						idempotencyKey,
+					),
+
+				increaseBudget: (scope, runId, increase, expectedVersion, idempotencyKey) =>
+					runs.increaseBudget(scope, runId, increase, expectedVersion, idempotencyKey),
+
+				cancel: (scope, runId, expectedVersion, idempotencyKey) =>
+					runs.cancel(scope, runId, expectedVersion, idempotencyKey),
+
+				reconciliation: (scope, runId) => runs.reconciliation(scope, runId),
+
+				resolveReconciliation: (scope, runId, expectedVersion, note, resources) =>
+					runs.resolveReconciliation(scope, runId, expectedVersion, note, resources),
+
+				listCheckpoints: (scope, runId) => checkpoints.list(scope, runId),
+
+				saveCheckpoint: (scope, runId, expectedVersion) => checkpoints.save(scope, runId, expectedVersion),
+
+				deleteCheckpoint: (scope, runId, checkpointId) => checkpoints.deleteUser(scope, runId, checkpointId),
+
+				resume: (scope, runId, checkpointId, expectedVersion, idempotencyKey) =>
+					checkpoints.resume(scope, runId, checkpointId, expectedVersion, idempotencyKey),
+
+				delete: (scope, runId, expectedVersion, idempotencyKey) =>
+					runs.delete(scope, runId, expectedVersion, idempotencyKey),
+			},
+			collaboration: {
+				getSettings: (scope) => subagentPolicy.get(scope),
+
+				replaceProfiles: (scope, input, expectedVersion) =>
+					subagentPolicy.replaceProfiles(scope, input, expectedVersion),
+
+				createSubagent: (scope, runId, parentRuntimeId, input, idempotencyKey) =>
+					subagents.create(scope, runId, parentRuntimeId, input, idempotencyKey),
+
+				listSubagents: (scope, runId, parentRuntimeId, limit, before) =>
+					subagents.list(scope, runId, parentRuntimeId, limit, before),
+
+				cancelSubagent: (scope, runId, delegationId, expectedVersion) =>
+					subagents.cancelTree(scope, runId, delegationId, expectedVersion),
+
+				joinSubagents: (scope, runId, callerRuntimeId, delegationIds, mode, deadlineAt, signal) =>
+					subagents.join(scope, runId, callerRuntimeId, delegationIds, mode, deadlineAt, signal),
+
+				sendMessage: (scope, runId, senderRuntimeId, input, idempotencyKey) =>
+					mailbox.send(scope, runId, senderRuntimeId, input, idempotencyKey),
+
+				readMessages: (scope, runId, runtimeId, after, limit) =>
+					mailbox.read(scope, runId, runtimeId, after, limit),
+
+				listSubagentMessages: (scope, runId, delegationId, limit, before) =>
+					mailboxRepository.listDelegationMessages(scope, runId, delegationId, limit, before),
+
+				consumeMessages: (scope, runId, runtimeId, through, expectedConsumedSequence) =>
+					mailbox.consume(scope, runId, runtimeId, through, expectedConsumedSequence),
+
+				getFact: (scope, runId, key) => sharedFacts.get(scope, runId, key),
+
+				compareAndSetFact: (scope, runId, runtimeId, key, value, expectedVersion) =>
+					sharedFacts.compareAndSet(scope, runId, runtimeId, key, value, expectedVersion),
+			},
+			events: {
+				readRun: (scope, runId, after, limit) => runRepository.readEvents(scope, runId, after, limit),
+
+				readHost: (userId, after, limit) => runRepository.readHostEvents(userId, after, limit),
+
+				hostCursor: (userId) => runRepository.hostCursor(userId),
+
+				hostCursorWindow: (userId) => runRepository.hostCursorWindow(userId),
+
+				onRunWake: (runId, listener) => eventHub.onRunWake(runId, listener),
+
+				onHostWake: (userId, listener) => eventHub.onHostWake(userId, listener),
+
+				onTransient: (runId, listener) => eventHub.onTransient(runId, listener),
+			},
+			approvals: {
+				get: (scope, approvalId) => approvals.get(scope, approvalId),
+
+				list: (scope, runId) => approvals.list(scope, runId),
+
+				resolve: (scope, approvalId, decision, operationHash, expectedVersion, actorUserId, idempotencyKey) =>
+					approvals.resolve(
+						scope,
+						approvalId,
+						decision,
+						operationHash,
+						expectedVersion,
+						actorUserId,
+						idempotencyKey,
+					),
+			},
+		},
+
+		initialize: async () => {
+			await sshSessions.initialize();
+			await modelRegistry.initialize();
+			await plugins.initializeInstalledVersions();
+			const interrupted = await stateCommit.interruptNonTerminalRuns(systemClock.nowUnixSeconds());
+			recoveringStartup = true;
+			try {
+				await checkpoints.recoverInterrupted(interrupted);
+				await subagentScheduler?.initialize();
+			} finally {
+				recoveringStartup = false;
+			}
+			scheduler.resume();
+			for (const run of startupRecoveredRuns.splice(0)) scheduler.enqueue(run);
+			lifecycleSweeps.start();
+		},
+
+		initializeForUser: async (userId) => {
+			await settings.get(userId);
+			await lifecycle.initializeDefaults(userId);
+			await plugins.reconcileUserRuntime(userId);
+			const appIds = new Set([
+				...registry.list().map((definition) => definition.manifest.id),
+				...(await plugins.listInstallations(userId)).map((installation) => installation.appId),
+			]);
+			for (const appId of appIds) {
+				await integrations.syncEnabled({ userId, appId });
+			}
+		},
+
+		quiesce: async (deadlineUnixSeconds) => {
+			await lifecycleSweeps.stop();
+			await Promise.all([
+				scheduler.quiesce(deadlineUnixSeconds),
+				subagentScheduler?.quiesce(deadlineUnixSeconds) ?? Promise.resolve(),
+			]);
+			for (const definition of registry.list())
+				await lifecycle.quiesce(definition.manifest.id, deadlineUnixSeconds);
+		},
+
+		prepareRestore: async (deadlineUnixSeconds) => {
+			await lifecycleSweeps.stop();
+			await Promise.all([
+				scheduler.quiesce(deadlineUnixSeconds),
+				subagentScheduler?.quiesce(deadlineUnixSeconds),
+			]);
+			await Promise.all([mcpRuntime.closeAll(), sshSessions.dispose(), browserGateway.closeAll()]);
+			await resetRuntime();
+			modelRegistry.dispose();
+			startupRecoveredRuns.length = 0;
+		},
+
+		dispose: async () => {
+			modelRegistry.dispose();
+			await sshSessions.dispose();
+			await Promise.all([
+				lifecycleSweeps.stop(),
+				subagentScheduler?.dispose() ?? Promise.resolve(),
+				mcpRuntime.closeAll(),
+				browserGateway.closeAll(),
+				resetRuntime(),
+			]);
+			eventHub.clear();
+			await lifecycle.dispose();
+		},
+	};
 };

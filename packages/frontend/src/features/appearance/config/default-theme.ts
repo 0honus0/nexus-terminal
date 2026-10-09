@@ -1,133 +1,134 @@
 export const DEFAULT_FONT_FAMILY_SANS =
-  '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"';
+	'-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"';
 
 export const DEFAULT_FONT_FAMILY_MONO =
-  'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace';
+	'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace';
 
 export const defaultTerminalTheme: Record<string, string> = {
-  background: '#1e1e1e',
-  foreground: '#d4d4d4',
-  cursor: '#d4d4d4',
-  selectionBackground: '#264f78',
-  black: '#000000',
-  red: '#cd3131',
-  green: '#0dbc79',
-  yellow: '#e5e510',
-  blue: '#2472c8',
-  magenta: '#bc3fbc',
-  cyan: '#11a8cd',
-  white: '#e5e5e5',
-  brightBlack: '#666666',
-  brightRed: '#f14c4c',
-  brightGreen: '#23d18b',
-  brightYellow: '#f5f543',
-  brightBlue: '#3b8eea',
-  brightMagenta: '#d670d6',
-  brightCyan: '#29b8db',
-  brightWhite: '#e5e5e5',
+	background: '#1e1e1e',
+	foreground: '#d4d4d4',
+	cursor: '#d4d4d4',
+	selectionBackground: '#264f78',
+	black: '#000000',
+	red: '#cd3131',
+	green: '#0dbc79',
+	yellow: '#e5e510',
+	blue: '#2472c8',
+	magenta: '#bc3fbc',
+	cyan: '#11a8cd',
+	white: '#e5e5e5',
+	brightBlack: '#666666',
+	brightRed: '#f14c4c',
+	brightGreen: '#23d18b',
+	brightYellow: '#f5f543',
+	brightBlue: '#3b8eea',
+	brightMagenta: '#d670d6',
+	brightCyan: '#29b8db',
+	brightWhite: '#e5e5e5',
 };
 
 export const defaultUiTheme: Record<string, string> = {
-  '--app-bg-color': '#ffffff',
-  '--text-color': '#333333',
-  '--text-color-secondary': '#666666',
-  '--border-color': '#cccccc',
-  '--border-hover-color': 'color-mix(in srgb, var(--link-active-color) 45%, var(--border-color))',
-  '--card-bg-color': 'rgb(246 247 249 / 92%)',
-  '--link-color': '#8e44ad',
-  '--link-hover-color': '#b180e0',
-  '--link-active-color': '#a06cd5',
-  '--link-active-bg-color': '#f3ebfb',
-  '--nav-item-active-bg-color': 'var(--link-active-bg-color)',
-  '--header-bg-color': '#f0f0f0',
-  '--footer-bg-color': '#f0f0f0',
-  '--button-bg-color': '#a06cd5',
-  '--button-text-color': '#ffffff',
-  '--button-hover-bg-color': '#8e44ad',
-  '--icon-color': 'var(--text-color-secondary)',
-  '--icon-hover-color': 'var(--link-hover-color)',
-  '--split-line-color': 'var(--border-color)',
-  '--split-line-hover-color': 'var(--border-color)',
-  '--input-bg-color': '#ffffff',
-  '--input-text-color': 'var(--text-color)',
-  '--input-placeholder-color': 'var(--text-color-secondary)',
-  '--input-disabled-bg-color': '#f3f4f6',
-  '--input-disabled-text-color': '#6b7280',
-  '--input-disabled-border-color': '#d1d5db',
-  '--input-focus-border-color': 'var(--link-active-color)',
-  '--input-focus-glow': 'color-mix(in srgb, var(--link-active-color) 20%, transparent)',
-  '--overlay-bg-color': 'rgb(0 0 0 / 60%)',
-  '--status-success-color': '#28a745',
-  '--status-warning-color': '#ffc107',
-  '--status-error-color': '#dc3545',
-  '--status-info-color': '#0ea5e9',
-  '--status-success-text-color': '#ffffff',
-  '--status-warning-text-color': '#212529',
-  '--status-error-text-color': '#ffffff',
-  '--status-info-text-color': '#ffffff',
-  '--font-family-sans-serif': DEFAULT_FONT_FAMILY_SANS,
-  '--font-family-monospace': DEFAULT_FONT_FAMILY_MONO,
-  '--base-padding': '1rem',
-  '--base-margin': '0.5rem',
+	'--app-bg-color': '#ffffff',
+	'--text-color': '#333333',
+	'--text-color-secondary': '#666666',
+	'--border-color': '#cccccc',
+	'--border-hover-color': 'color-mix(in srgb, var(--link-active-color) 45%, var(--border-color))',
+	'--card-bg-color': 'rgb(246 247 249 / 92%)',
+	'--link-color': '#8e44ad',
+	'--link-hover-color': '#b180e0',
+	'--link-active-color': '#a06cd5',
+	'--link-active-bg-color': '#f3ebfb',
+	'--nav-item-active-bg-color': 'var(--link-active-bg-color)',
+	'--header-bg-color': '#f0f0f0',
+	'--footer-bg-color': '#f0f0f0',
+	'--button-bg-color': '#a06cd5',
+	'--button-text-color': '#ffffff',
+	'--button-hover-bg-color': '#8e44ad',
+	'--icon-color': 'var(--text-color-secondary)',
+	'--icon-hover-color': 'var(--link-hover-color)',
+	'--split-line-color': 'var(--border-color)',
+	'--split-line-hover-color': 'var(--border-color)',
+	'--input-bg-color': '#ffffff',
+	'--input-text-color': 'var(--text-color)',
+	'--input-placeholder-color': 'var(--text-color-secondary)',
+	'--input-disabled-bg-color': '#f3f4f6',
+	'--input-disabled-text-color': '#6b7280',
+	'--input-disabled-border-color': '#d1d5db',
+	'--input-focus-border-color': 'var(--link-active-color)',
+	'--input-focus-glow': 'color-mix(in srgb, var(--link-active-color) 20%, transparent)',
+	'--overlay-bg-color': 'rgb(0 0 0 / 60%)',
+	'--status-success-color': '#28a745',
+	'--status-warning-color': '#ffc107',
+	'--status-error-color': '#dc3545',
+	'--status-info-color': '#0ea5e9',
+	'--status-success-text-color': '#ffffff',
+	'--status-warning-text-color': '#212529',
+	'--status-error-text-color': '#ffffff',
+	'--status-info-text-color': '#ffffff',
+	'--font-family-sans-serif': DEFAULT_FONT_FAMILY_SANS,
+	'--font-family-monospace': DEFAULT_FONT_FAMILY_MONO,
+	'--base-padding': '1rem',
+	'--base-margin': '0.5rem',
 };
 
 export const darkUiTheme: Record<string, string> = {
-  ...defaultUiTheme,
-  '--app-bg-color': '#212529',
-  '--text-color': '#e9ecef',
-  '--text-color-secondary': '#adb5bd',
-  '--border-color': '#495057',
-  '--card-bg-color': 'rgb(43 48 53 / 90%)',
-  '--link-color': '#bb86fc',
-  '--link-hover-color': '#d1a9ff',
-  '--link-active-color': '#a06cd5',
-  '--link-active-bg-color': 'rgb(160 108 213 / 20%)',
-  '--header-bg-color': '#343a40',
-  '--footer-bg-color': '#343a40',
-  '--button-bg-color': '#a06cd5',
-  '--button-hover-bg-color': '#8e44ad',
-  // Lifted for legibility on the dark surface, mirroring how the success /
-  // warning / error status colors are expected to be re-tinted per theme.
-  '--status-info-color': '#38bdf8',
-  '--input-bg-color': '#2b3035',
-  '--input-disabled-bg-color': '#343a40',
-  '--input-disabled-text-color': '#adb5bd',
-  '--input-disabled-border-color': '#495057',
-  '--overlay-bg-color': 'rgb(0 0 0 / 80%)',
+	...defaultUiTheme,
+	'--app-bg-color': '#212529',
+	'--text-color': '#e9ecef',
+	'--text-color-secondary': '#adb5bd',
+	'--border-color': '#495057',
+	'--card-bg-color': 'rgb(43 48 53 / 90%)',
+	'--link-color': '#bb86fc',
+	'--link-hover-color': '#d1a9ff',
+	'--link-active-color': '#a06cd5',
+	'--link-active-bg-color': 'rgb(160 108 213 / 20%)',
+	'--header-bg-color': '#343a40',
+	'--footer-bg-color': '#343a40',
+	'--button-bg-color': '#a06cd5',
+	'--button-hover-bg-color': '#8e44ad',
+	// Lifted for legibility on the dark surface, mirroring how the success /
+	// warning / error status colors are expected to be re-tinted per theme.
+	'--status-info-color': '#38bdf8',
+	'--input-bg-color': '#2b3035',
+	'--input-disabled-bg-color': '#343a40',
+	'--input-disabled-text-color': '#adb5bd',
+	'--input-disabled-border-color': '#495057',
+	'--overlay-bg-color': 'rgb(0 0 0 / 80%)',
 };
 
 const isDarkColor = (color: string): boolean => {
-  const match = color.trim().match(/^#([0-9a-f]{6})$/i);
-  const hex = match?.[1];
-  if (!hex) return false;
-  const value = Number.parseInt(hex, 16);
-  const red = (value >> 16) & 0xff;
-  const green = (value >> 8) & 0xff;
-  const blue = value & 0xff;
-  return (red * 299 + green * 587 + blue * 114) / 1000 < 128;
+	const match = color.trim().match(/^#([0-9a-f]{6})$/i);
+	const hex = match?.[1];
+	if (!hex) return false;
+	const value = Number.parseInt(hex, 16);
+	const red = (value >> 16) & 0xff;
+	const green = (value >> 8) & 0xff;
+	const blue = value & 0xff;
+	return (red * 299 + green * 587 + blue * 114) / 1000 < 128;
 };
 
 export const normalizeUiTheme = (theme: Record<string, string>): Record<string, string> => {
-  const normalized = { ...defaultUiTheme, ...theme };
-  if (!normalized['--font-family-sans-serif'] || normalized['--font-family-sans-serif'] === 'sans-serif') {
-    normalized['--font-family-sans-serif'] = DEFAULT_FONT_FAMILY_SANS;
-  }
-  if (!normalized['--font-family-monospace'] || normalized['--font-family-monospace'] === 'monospace') {
-    normalized['--font-family-monospace'] = DEFAULT_FONT_FAMILY_MONO;
-  }
-  const dark = isDarkColor(normalized['--app-bg-color'] || '#ffffff');
-  const fallback = (key: string, value: string): void => {
-    if (!Object.prototype.hasOwnProperty.call(theme, key)) normalized[key] = value;
-  };
+	const normalized = { ...defaultUiTheme, ...theme };
+	if (!normalized['--font-family-sans-serif'] || normalized['--font-family-sans-serif'] === 'sans-serif') {
+		normalized['--font-family-sans-serif'] = DEFAULT_FONT_FAMILY_SANS;
+	}
+	if (!normalized['--font-family-monospace'] || normalized['--font-family-monospace'] === 'monospace') {
+		normalized['--font-family-monospace'] = DEFAULT_FONT_FAMILY_MONO;
+	}
+	const dark = isDarkColor(normalized['--app-bg-color'] || '#ffffff');
 
-  fallback('--card-bg-color', dark ? 'rgb(43 48 53 / 90%)' : 'rgb(246 247 249 / 92%)');
-  fallback('--input-bg-color', dark ? '#1e293b' : '#ffffff');
-  fallback('--input-text-color', dark ? '#f8fafc' : (normalized['--text-color'] ?? '#212529'));
-  fallback('--input-placeholder-color', dark ? '#94a3b8' : (normalized['--text-color-secondary'] ?? '#6c757d'));
-  fallback('--input-disabled-bg-color', dark ? '#0b1220' : '#f3f4f6');
-  fallback('--input-disabled-text-color', dark ? '#64748b' : '#6b7280');
-  fallback('--input-disabled-border-color', dark ? '#334155' : '#d1d5db');
-  return normalized;
+	const fallback = (key: string, value: string): void => {
+		if (!Object.prototype.hasOwnProperty.call(theme, key)) normalized[key] = value;
+	};
+
+	fallback('--card-bg-color', dark ? 'rgb(43 48 53 / 90%)' : 'rgb(246 247 249 / 92%)');
+	fallback('--input-bg-color', dark ? '#1e293b' : '#ffffff');
+	fallback('--input-text-color', dark ? '#f8fafc' : (normalized['--text-color'] ?? '#212529'));
+	fallback('--input-placeholder-color', dark ? '#94a3b8' : (normalized['--text-color-secondary'] ?? '#6c757d'));
+	fallback('--input-disabled-bg-color', dark ? '#0b1220' : '#f3f4f6');
+	fallback('--input-disabled-text-color', dark ? '#64748b' : '#6b7280');
+	fallback('--input-disabled-border-color', dark ? '#334155' : '#d1d5db');
+	return normalized;
 };
 
 export const defaultWindowThemeColor = '#343A40';

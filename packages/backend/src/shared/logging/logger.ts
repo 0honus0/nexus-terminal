@@ -6,69 +6,69 @@ const levelListeners = new Set<(level: LogLevel) => void>();
 const LOG_ERROR_CODE = /^[A-Z][A-Z0-9_]{1,127}$/;
 
 const stableLogErrorCode = (value: unknown): string | null =>
-  typeof value === 'string' && LOG_ERROR_CODE.test(value) ? value : null;
+	typeof value === 'string' && LOG_ERROR_CODE.test(value) ? value : null;
 
 export const logErrorCode = (error: unknown, fallbackCode = 'UNEXPECTED_ERROR'): string => {
-  if (error instanceof Error) {
-    if (error.name === 'AbortError') return 'ABORTED';
-    const messageCode = stableLogErrorCode(error.message);
-    if (messageCode) return messageCode;
-    const coded = 'code' in error ? stableLogErrorCode(error.code) : null;
-    if (coded) return coded;
-  }
-  return stableLogErrorCode(fallbackCode) ?? 'UNEXPECTED_ERROR';
+	if (error instanceof Error) {
+		if (error.name === 'AbortError') return 'ABORTED';
+		const messageCode = stableLogErrorCode(error.message);
+		if (messageCode) return messageCode;
+		const coded = 'code' in error ? stableLogErrorCode(error.code) : null;
+		if (coded) return coded;
+	}
+	return stableLogErrorCode(fallbackCode) ?? 'UNEXPECTED_ERROR';
 };
 
 export const logger = pino({
-  level: 'info',
-  base: { service: 'nexus-backend' },
-  timestamp: pino.stdTimeFunctions.isoTime,
-  serializers: { err: pino.stdSerializers.err },
-  redact: {
-    paths: [
-      'password',
-      'passphrase',
-      'secret',
-      'token',
-      'authorization',
-      'cookie',
-      '*.password',
-      '*.passphrase',
-      '*.secret',
-      '*.token',
-      '*.authorization',
-      '*.cookie',
-      'req.headers.authorization',
-      'req.headers.cookie',
-    ],
-    censor: '[REDACTED]',
-  },
+	level: 'info',
+	base: { service: 'nexus-backend' },
+	timestamp: pino.stdTimeFunctions.isoTime,
+	serializers: { err: pino.stdSerializers.err },
+	redact: {
+		paths: [
+			'password',
+			'passphrase',
+			'secret',
+			'token',
+			'authorization',
+			'cookie',
+			'*.password',
+			'*.passphrase',
+			'*.secret',
+			'*.token',
+			'*.authorization',
+			'*.cookie',
+			'req.headers.authorization',
+			'req.headers.cookie',
+		],
+		censor: '[REDACTED]',
+	},
 });
 
 const logLevelChanged = (previousLevel: LogLevel, level: LogLevel): void => {
-  const context = { previousLevel, logLevel: level };
-  if (logger.isLevelEnabled('info')) logger.info(context, 'Backend log level changed');
-  else if (logger.isLevelEnabled('warn')) logger.warn(context, 'Backend log level changed');
-  else if (logger.isLevelEnabled('error')) logger.error(context, 'Backend log level changed');
+	const context = { previousLevel, logLevel: level };
+	if (logger.isLevelEnabled('info')) logger.info(context, 'Backend log level changed');
+	else if (logger.isLevelEnabled('warn')) logger.warn(context, 'Backend log level changed');
+	else if (logger.isLevelEnabled('error')) logger.error(context, 'Backend log level changed');
 };
 
 export const setBackendLogLevel = (value: unknown, announceChange = false): LogLevel => {
-  const level = normalizeLogLevel(value);
-  const previousLevel = getBackendLogLevel();
-  if (level === previousLevel) return level;
+	const level = normalizeLogLevel(value);
+	const previousLevel = getBackendLogLevel();
+	if (level === previousLevel) return level;
 
-  // A transition to silent must be announced before muting the logger. The call is synchronous,
-  // so no unrelated log can slip through between this notice and the level assignment.
-  if (announceChange && level === 'silent') logLevelChanged(previousLevel, level);
-  logger.level = level;
-  for (const listener of levelListeners) listener(level);
-  if (announceChange && level !== 'silent') logLevelChanged(previousLevel, level);
-  return level;
+	// A transition to silent must be announced before muting the logger. The call is synchronous,
+	// so no unrelated log can slip through between this notice and the level assignment.
+	if (announceChange && level === 'silent') logLevelChanged(previousLevel, level);
+	logger.level = level;
+	for (const listener of levelListeners) listener(level);
+	if (announceChange && level !== 'silent') logLevelChanged(previousLevel, level);
+	return level;
 };
 
 export const getBackendLogLevel = (): LogLevel => normalizeLogLevel(logger.level);
 
 export const onBackendLogLevelChange = (listener: (level: LogLevel) => void): (() => void) => {
-  levelListeners.add(listener);
-  return () => levelListeners.delete(listener);
+	levelListeners.add(listener);
+	return () => levelListeners.delete(listener);
 };

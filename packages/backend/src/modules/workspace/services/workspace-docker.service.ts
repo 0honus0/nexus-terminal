@@ -6,41 +6,41 @@ import type { MutationGuardPort } from '../../../platform/operations/mutation-gu
 import type { WorkspaceSessionRegistry } from '../workspace-session-registry';
 
 export class WorkspaceDockerService {
-  constructor(
-    private readonly sessions: WorkspaceSessionRegistry,
-    private readonly executions: ExecutionSessionManager,
-    private readonly docker: RemoteDockerService,
-    private readonly mutationGuard: MutationGuardPort,
-  ) {}
+	constructor(
+		private readonly sessions: WorkspaceSessionRegistry,
+		private readonly executions: ExecutionSessionManager,
+		private readonly docker: RemoteDockerService,
+		private readonly mutationGuard: MutationGuardPort,
+	) {}
 
-  getStatus(workspaceId: string) {
-    return this.docker.getStatus(this.execution(workspaceId));
-  }
+	getStatus(workspaceId: string) {
+		return this.docker.getStatus(this.execution(workspaceId));
+	}
 
-  command(workspaceId: string, containerId: string, command: DockerCommand) {
-    const workspace = this.sessions.require(workspaceId);
-    return this.mutationGuard.withMutation(
-      {
-        ownerType: 'workspace',
-        ownerId: workspaceId,
-        leaseOwnerId: `${workspaceId}:${randomUUID()}`,
-        operationId: `docker.${command}:${randomUUID()}`,
-        resourceKeys: [
-          `connection:${workspace.connectionId}`,
-          `connection:${workspace.connectionId}:docker:${containerId}`,
-        ],
-        timeoutSeconds: command === 'stop' ? 45 : 30,
-      },
-      async () => this.docker.executeCommand(this.execution(workspaceId), containerId, command),
-    );
-  }
+	command(workspaceId: string, containerId: string, command: DockerCommand) {
+		const workspace = this.sessions.require(workspaceId);
+		return this.mutationGuard.withMutation(
+			{
+				ownerType: 'workspace',
+				ownerId: workspaceId,
+				leaseOwnerId: `${workspaceId}:${randomUUID()}`,
+				operationId: `docker.${command}:${randomUUID()}`,
+				resourceKeys: [
+					`connection:${workspace.connectionId}`,
+					`connection:${workspace.connectionId}:docker:${containerId}`,
+				],
+				timeoutSeconds: command === 'stop' ? 45 : 30,
+			},
+			async () => this.docker.executeCommand(this.execution(workspaceId), containerId, command),
+		);
+	}
 
-  getStats(workspaceId: string, containerId: string) {
-    return this.docker.getStats(this.execution(workspaceId), containerId);
-  }
+	getStats(workspaceId: string, containerId: string) {
+		return this.docker.getStats(this.execution(workspaceId), containerId);
+	}
 
-  private execution(id: string) {
-    const workspace = this.sessions.require(id);
-    return this.executions.require(workspace.executionSessionId);
-  }
+	private execution(id: string) {
+		const workspace = this.sessions.require(id);
+		return this.executions.require(workspace.executionSessionId);
+	}
 }

@@ -5,63 +5,64 @@ import dotenv from 'dotenv';
 import { logger } from '../shared/logging/logger';
 
 export interface InitializedEnvironment {
-  dataDirectory: string;
+	dataDirectory: string;
 }
 
 const loadEnvFile = (filePath: string): void => {
-  const result = dotenv.config({ path: filePath });
-  if (result.error && (result.error as NodeJS.ErrnoException).code !== 'ENOENT') {
-    logger.warn({ filePath, err: result.error }, 'Unable to load environment file');
-  }
+	const result = dotenv.config({ path: filePath });
+	if (result.error && (result.error as NodeJS.ErrnoException).code !== 'ENOENT') {
+		logger.warn({ filePath, err: result.error }, 'Unable to load environment file');
+	}
 };
 
 const findRootEnvPath = (): string => {
-  const candidates = [
-    path.resolve(process.cwd(), '.env'),
-    path.resolve(__dirname, '../../../.env'),
-    path.resolve(__dirname, '../../../../.env'),
-  ];
-  return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0];
+	const candidates = [
+		path.resolve(process.cwd(), '.env'),
+		path.resolve(__dirname, '../../../.env'),
+		path.resolve(__dirname, '../../../../.env'),
+	];
+	return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0];
 };
 
 const persistGeneratedSecrets = (dataEnvPath: string, entries: readonly [string, string][]): void => {
-  if (entries.length === 0) return;
-  fs.mkdirSync(path.dirname(dataEnvPath), { recursive: true, mode: 0o700 });
-  const existing = fs.existsSync(dataEnvPath) ? fs.readFileSync(dataEnvPath, 'utf8') : '';
-  const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
-  const text = entries.map(([key, value]) => `${key}=${value}`).join('\n');
-  fs.appendFileSync(dataEnvPath, `${prefix}${text}\n`, { mode: 0o600 });
-  fs.chmodSync(dataEnvPath, 0o600);
+	if (entries.length === 0) return;
+	fs.mkdirSync(path.dirname(dataEnvPath), { recursive: true, mode: 0o700 });
+	const existing = fs.existsSync(dataEnvPath) ? fs.readFileSync(dataEnvPath, 'utf8') : '';
+	const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
+	const text = entries.map(([key, value]) => `${key}=${value}`).join('\n');
+	fs.appendFileSync(dataEnvPath, `${prefix}${text}\n`, { mode: 0o600 });
+	fs.chmodSync(dataEnvPath, 0o600);
 };
 
 export const initializeEnvironment = async (): Promise<InitializedEnvironment> => {
-  loadEnvFile(findRootEnvPath());
+	loadEnvFile(findRootEnvPath());
 
-  const dataDirectory = process.env.NEXUS_DATA_DIR
-    ? path.resolve(process.env.NEXUS_DATA_DIR)
-    : path.resolve(__dirname, '../../data');
-  const dataEnvPath = path.join(dataDirectory, '.env');
-  loadEnvFile(dataEnvPath);
+	const dataDirectory = process.env.NEXUS_DATA_DIR
+		? path.resolve(process.env.NEXUS_DATA_DIR)
+		: path.resolve(__dirname, '../../data');
+	const dataEnvPath = path.join(dataDirectory, '.env');
+	loadEnvFile(dataEnvPath);
 
-  const generated: Array<[string, string]> = [];
-  const ensureSecret = (name: string, byteLength: number): string => {
-    const existing = process.env[name]?.trim();
-    if (existing) return existing;
-    const value = crypto.randomBytes(byteLength).toString('hex');
-    process.env[name] = value;
-    generated.push([name, value]);
-    return value;
-  };
+	const generated: Array<[string, string]> = [];
 
-  ensureSecret('ENCRYPTION_KEY', 32);
-  ensureSecret('SESSION_SECRET', 64);
-  process.env.GUACD_HOST ||= 'localhost';
-  process.env.GUACD_PORT ||= '4822';
+	const ensureSecret = (name: string, byteLength: number): string => {
+		const existing = process.env[name]?.trim();
+		if (existing) return existing;
+		const value = crypto.randomBytes(byteLength).toString('hex');
+		process.env[name] = value;
+		generated.push([name, value]);
+		return value;
+	};
 
-  persistGeneratedSecrets(dataEnvPath, generated);
-  if (generated.length > 0) {
-    logger.warn({ dataEnvPath }, 'Generated missing secrets; back up the environment file securely');
-  }
+	ensureSecret('ENCRYPTION_KEY', 32);
+	ensureSecret('SESSION_SECRET', 64);
+	process.env.GUACD_HOST ||= 'localhost';
+	process.env.GUACD_PORT ||= '4822';
 
-  return { dataDirectory };
+	persistGeneratedSecrets(dataEnvPath, generated);
+	if (generated.length > 0) {
+		logger.warn({ dataEnvPath }, 'Generated missing secrets; back up the environment file securely');
+	}
+
+	return { dataDirectory };
 };

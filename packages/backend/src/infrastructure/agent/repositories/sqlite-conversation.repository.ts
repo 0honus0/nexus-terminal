@@ -1,90 +1,90 @@
 import type {
-  AppendLedgerEntry,
-  ConversationRepositoryPort,
-  LedgerEntryKind,
-  LedgerEntryView,
-  LedgerPage,
-  Scope,
-  ThreadDeleteAllResult,
-  ThreadDeleteResult,
-  ThreadPage,
-  ThreadTitleSource,
-  ThreadView,
+	AppendLedgerEntry,
+	ConversationRepositoryPort,
+	LedgerEntryKind,
+	LedgerEntryView,
+	LedgerPage,
+	Scope,
+	ThreadDeleteAllResult,
+	ThreadDeleteResult,
+	ThreadPage,
+	ThreadTitleSource,
+	ThreadView,
 } from '../../../modules/agent/ai/conversation.repository.port';
 import type { ContextHistoryBoundary } from '../../../modules/agent/ai/context.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
 import { sqliteSearchMatchQuery } from '../../database/sqlite-search-index';
 import { appendHostEvent } from '../events/host-event-outbox';
 import {
-  durableInteger,
-  durableRecord,
-  durableString,
-  parseDurableJson,
-  parseDurableJsonValue,
+	durableInteger,
+	durableRecord,
+	durableString,
+	parseDurableJson,
+	parseDurableJsonValue,
 } from '../runtime/durable-state-decoders';
 
 interface ThreadRow {
-  id: string;
-  app_id: string;
-  title: string;
-  title_source: ThreadTitleSource;
-  version: number;
-  created_at: number;
-  updated_at: number;
-  latest_run_id: string | null;
+	id: string;
+	app_id: string;
+	title: string;
+	title_source: ThreadTitleSource;
+	version: number;
+	created_at: number;
+	updated_at: number;
+	latest_run_id: string | null;
 }
 
 interface EntryRow {
-  id: string;
-  thread_id: string;
-  run_id: string | null;
-  sequence: number;
-  kind: LedgerEntryKind;
-  payload_json: string;
-  created_at: number;
+	id: string;
+	thread_id: string;
+	run_id: string | null;
+	sequence: number;
+	kind: LedgerEntryKind;
+	payload_json: string;
+	created_at: number;
 }
 
 const mapThread = (row: ThreadRow): ThreadView => ({
-  id: row.id,
-  appId: row.app_id,
-  title: row.title,
-  titleSource: row.title_source,
-  version: row.version,
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-  latestRunId: row.latest_run_id,
+	id: row.id,
+	appId: row.app_id,
+	title: row.title,
+	titleSource: row.title_source,
+	version: row.version,
+	createdAt: row.created_at,
+	updatedAt: row.updated_at,
+	latestRunId: row.latest_run_id,
 });
 
 const mapEntry = (row: EntryRow): LedgerEntryView => ({
-  id: row.id,
-  threadId: row.thread_id,
-  runId: row.run_id,
-  sequence: row.sequence,
-  kind: row.kind,
-  payload: parseDurableJsonValue(row.payload_json),
-  createdAt: row.created_at,
+	id: row.id,
+	threadId: row.thread_id,
+	runId: row.run_id,
+	sequence: row.sequence,
+	kind: row.kind,
+	payload: parseDurableJsonValue(row.payload_json),
+	createdAt: row.created_at,
 });
 
 const encodeThreadCursor = (updatedAt: number, id: string): string =>
-  Buffer.from(JSON.stringify({ updatedAt, id }), 'utf8').toString('base64url');
+	Buffer.from(JSON.stringify({ updatedAt, id }), 'utf8').toString('base64url');
 
 const decodeThreadCursor = (cursor: string): { updatedAt: number; id: string } => {
-  try {
-    const value = durableRecord(parseDurableJson(Buffer.from(cursor, 'base64url').toString('utf8')));
-    const id = durableString(value.id) as string;
-    if (!id) throw new Error('invalid');
-    return { updatedAt: durableInteger(value.updatedAt), id };
-  } catch {
-    throw new Error('CURSOR_INVALID');
-  }
+	try {
+		const value = durableRecord(parseDurableJson(Buffer.from(cursor, 'base64url').toString('utf8')));
+		const id = durableString(value.id) as string;
+		if (!id) throw new Error('invalid');
+		return { updatedAt: durableInteger(value.updatedAt), id };
+	} catch {
+		throw new Error('CURSOR_INVALID');
+	}
 };
 
 const encodeEntryCursor = (sequence: number): string => Buffer.from(String(sequence), 'utf8').toString('base64url');
 
 const decodeEntryCursor = (cursor: string): number => {
-  const value = Number(Buffer.from(cursor, 'base64url').toString('utf8'));
-  if (!Number.isSafeInteger(value) || value < 1) throw new Error('CURSOR_INVALID');
-  return value;
+	const value = Number(Buffer.from(cursor, 'base64url').toString('utf8'));
+	if (!Number.isSafeInteger(value) || value < 1) throw new Error('CURSOR_INVALID');
+	return value;
 };
 
 const threadSelect = `
@@ -97,273 +97,283 @@ const threadSelect = `
 const nonTerminalRunSql = "'created','running','awaiting_approval','awaiting_budget','awaiting_input','cancelling'";
 
 const assertThreadDeleteSafe = async (db: RelationalDatabase, scope: Scope, threadId?: string): Promise<void> => {
-  const threadFilter = threadId ? ' AND r.thread_id = ?' : '';
-  const params: unknown[] = [scope.userId, scope.appId, ...(threadId ? [threadId] : [])];
-  const active = await db.queryOne<{ id: string }>(
-    `SELECT r.id FROM agent_runs r
+	const threadFilter = threadId ? ' AND r.thread_id = ?' : '';
+	const params: unknown[] = [scope.userId, scope.appId, ...(threadId ? [threadId] : [])];
+	const active = await db.queryOne<{ id: string }>(
+		`SELECT r.id FROM agent_runs r
      WHERE r.user_id = ? AND r.app_id = ?${threadFilter} AND r.status IN (${nonTerminalRunSql}) LIMIT 1`,
-    params,
-  );
-  if (active) throw new Error('THREAD_DELETE_ACTIVE');
+		params,
+	);
+	if (active) throw new Error('THREAD_DELETE_ACTIVE');
 
-  const reconciliation = await db.queryOne<{ id: string }>(
-    `SELECT r.id FROM agent_runs r
+	const reconciliation = await db.queryOne<{ id: string }>(
+		`SELECT r.id FROM agent_runs r
      WHERE r.user_id = ? AND r.app_id = ?${threadFilter} AND r.needs_reconciliation = 1 LIMIT 1`,
-    params,
-  );
-  if (reconciliation) throw new Error('THREAD_DELETE_RECONCILIATION_REQUIRED');
+		params,
+	);
+	if (reconciliation) throw new Error('THREAD_DELETE_RECONCILIATION_REQUIRED');
 
-  if (threadId) {
-    const externallyReferenced = await db.queryOne<{ id: string }>(
-      `SELECT child.id
+	if (threadId) {
+		const externallyReferenced = await db.queryOne<{ id: string }>(
+			`SELECT child.id
        FROM agent_runs child
        INNER JOIN agent_runs parent
          ON parent.id = child.parent_run_id AND parent.user_id = child.user_id AND parent.app_id = child.app_id
        WHERE parent.user_id = ? AND parent.app_id = ? AND parent.thread_id = ? AND child.thread_id <> ? LIMIT 1`,
-      [scope.userId, scope.appId, threadId, threadId],
-    );
-    if (externallyReferenced) throw new Error('THREAD_DELETE_REFERENCED');
-  }
+			[scope.userId, scope.appId, threadId, threadId],
+		);
+		if (externallyReferenced) throw new Error('THREAD_DELETE_REFERENCED');
+	}
 };
 
 const cleanupThreadRunReferences = async (db: RelationalDatabase, scope: Scope, threadId?: string): Promise<void> => {
-  const threadFilter = threadId ? ' AND thread_id = ?' : '';
-  const params: unknown[] = [scope.userId, scope.appId, ...(threadId ? [threadId] : [])];
-  await db.execute(
-    `DELETE FROM agent_artifact_links
+	const threadFilter = threadId ? ' AND thread_id = ?' : '';
+	const params: unknown[] = [scope.userId, scope.appId, ...(threadId ? [threadId] : [])];
+	await db.execute(
+		`DELETE FROM agent_artifact_links
      WHERE run_id IN (SELECT id FROM agent_runs WHERE user_id = ? AND app_id = ?${threadFilter})`,
-    params,
-  );
-  if (threadId) {
-    await db.execute(
-      'DELETE FROM agent_artifact_grants WHERE receiver_user_id = ? AND receiver_app_id = ? AND receiver_thread_id = ?',
-      [scope.userId, scope.appId, threadId],
-    );
-    await db.execute('DELETE FROM ai_thread_entries WHERE user_id = ? AND app_id = ? AND thread_id = ?', [
-      scope.userId,
-      scope.appId,
-      threadId,
-    ]);
-    await db.execute('UPDATE agent_runs SET parent_run_id = NULL WHERE user_id = ? AND app_id = ? AND thread_id = ?', [
-      scope.userId,
-      scope.appId,
-      threadId,
-    ]);
-    return;
-  }
+		params,
+	);
+	if (threadId) {
+		await db.execute(
+			'DELETE FROM agent_artifact_grants WHERE receiver_user_id = ? AND receiver_app_id = ? AND receiver_thread_id = ?',
+			[scope.userId, scope.appId, threadId],
+		);
+		await db.execute('DELETE FROM ai_thread_entries WHERE user_id = ? AND app_id = ? AND thread_id = ?', [
+			scope.userId,
+			scope.appId,
+			threadId,
+		]);
+		await db.execute(
+			'UPDATE agent_runs SET parent_run_id = NULL WHERE user_id = ? AND app_id = ? AND thread_id = ?',
+			[scope.userId, scope.appId, threadId],
+		);
+		return;
+	}
 
-  await db.execute('DELETE FROM agent_artifact_grants WHERE receiver_user_id = ? AND receiver_app_id = ?', [
-    scope.userId,
-    scope.appId,
-  ]);
-  await db.execute('DELETE FROM ai_thread_entries WHERE user_id = ? AND app_id = ?', [scope.userId, scope.appId]);
-  await db.execute('UPDATE agent_runs SET parent_run_id = NULL WHERE user_id = ? AND app_id = ?', [
-    scope.userId,
-    scope.appId,
-  ]);
+	await db.execute('DELETE FROM agent_artifact_grants WHERE receiver_user_id = ? AND receiver_app_id = ?', [
+		scope.userId,
+		scope.appId,
+	]);
+	await db.execute('DELETE FROM ai_thread_entries WHERE user_id = ? AND app_id = ?', [scope.userId, scope.appId]);
+	await db.execute('UPDATE agent_runs SET parent_run_id = NULL WHERE user_id = ? AND app_id = ?', [
+		scope.userId,
+		scope.appId,
+	]);
 };
 
 export class SqliteConversationRepository implements ConversationRepositoryPort {
-  constructor(private readonly db: RelationalDatabase) {}
+	constructor(private readonly db: RelationalDatabase) {}
 
-  async createThread(
-    scope: Scope,
-    id: string,
-    title: string,
-    titleSource: ThreadTitleSource,
-    now: number,
-  ): Promise<ThreadView> {
-    const inserted = await this.db.transaction(async (tx) => {
-      const result = await tx.execute(
-        `INSERT OR IGNORE INTO ai_threads (id, user_id, app_id, title, title_source, next_sequence, version, created_at, updated_at)
+	async createThread(
+		scope: Scope,
+		id: string,
+		title: string,
+		titleSource: ThreadTitleSource,
+		now: number,
+	): Promise<ThreadView> {
+		const inserted = await this.db.transaction(async (tx) => {
+			const result = await tx.execute(
+				`INSERT OR IGNORE INTO ai_threads (id, user_id, app_id, title, title_source, next_sequence, version, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)`,
-        [id, scope.userId, scope.appId, title, titleSource, now, now],
-      );
-      if (result.changes === 1) {
-        await appendHostEvent(
-          tx,
-          scope.userId,
-          'thread.changed',
-          {
-            appId: scope.appId,
-            threadId: id,
-            title,
-            titleSource,
-            version: 1,
-            updatedAt: now,
-          },
-          now,
-        );
-      }
-      return result;
-    });
-    const created = await this.getThread(scope, id);
-    if (!created) throw new Error('NOT_FOUND');
-    if (inserted.changes === 0 && (created.title !== title || created.titleSource !== titleSource)) {
-      throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
-    }
-    return created;
-  }
+				[id, scope.userId, scope.appId, title, titleSource, now, now],
+			);
+			if (result.changes === 1) {
+				await appendHostEvent(
+					tx,
+					scope.userId,
+					'thread.changed',
+					{
+						appId: scope.appId,
+						threadId: id,
+						title,
+						titleSource,
+						version: 1,
+						updatedAt: now,
+					},
+					now,
+				);
+			}
+			return result;
+		});
+		const created = await this.getThread(scope, id);
+		if (!created) throw new Error('NOT_FOUND');
+		if (inserted.changes === 0 && (created.title !== title || created.titleSource !== titleSource)) {
+			throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
+		}
+		return created;
+	}
 
-  async renameThread(
-    scope: Scope,
-    threadId: string,
-    title: string,
-    expectedVersion: number,
-    now: number,
-  ): Promise<ThreadView> {
-    await this.db.transaction(async (tx) => {
-      const current = await tx.queryOne<{ version: number }>(
-        'SELECT version FROM ai_threads WHERE id = ? AND user_id = ? AND app_id = ?',
-        [threadId, scope.userId, scope.appId],
-      );
-      if (!current) throw new Error('NOT_FOUND');
-      if (current.version !== expectedVersion) throw new Error('STATE_CONFLICT');
-      const updated = await tx.execute(
-        `UPDATE ai_threads SET title = ?, title_source = 'manual', version = version + 1, updated_at = ?
+	async renameThread(
+		scope: Scope,
+		threadId: string,
+		title: string,
+		expectedVersion: number,
+		now: number,
+	): Promise<ThreadView> {
+		await this.db.transaction(async (tx) => {
+			const current = await tx.queryOne<{ version: number }>(
+				'SELECT version FROM ai_threads WHERE id = ? AND user_id = ? AND app_id = ?',
+				[threadId, scope.userId, scope.appId],
+			);
+			if (!current) throw new Error('NOT_FOUND');
+			if (current.version !== expectedVersion) throw new Error('STATE_CONFLICT');
+			const updated = await tx.execute(
+				`UPDATE ai_threads SET title = ?, title_source = 'manual', version = version + 1, updated_at = ?
          WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?`,
-        [title, now, threadId, scope.userId, scope.appId, expectedVersion],
-      );
-      if (updated.changes !== 1) throw new Error('STATE_CONFLICT');
-      await appendHostEvent(
-        tx,
-        scope.userId,
-        'thread.changed',
-        {
-          appId: scope.appId,
-          threadId,
-          title,
-          titleSource: 'manual',
-          version: expectedVersion + 1,
-          updatedAt: now,
-        },
-        now,
-      );
-    });
-    const renamed = await this.getThread(scope, threadId);
-    if (!renamed) throw new Error('NOT_FOUND');
-    return renamed;
-  }
+				[title, now, threadId, scope.userId, scope.appId, expectedVersion],
+			);
+			if (updated.changes !== 1) throw new Error('STATE_CONFLICT');
+			await appendHostEvent(
+				tx,
+				scope.userId,
+				'thread.changed',
+				{
+					appId: scope.appId,
+					threadId,
+					title,
+					titleSource: 'manual',
+					version: expectedVersion + 1,
+					updatedAt: now,
+				},
+				now,
+			);
+		});
+		const renamed = await this.getThread(scope, threadId);
+		if (!renamed) throw new Error('NOT_FOUND');
+		return renamed;
+	}
 
-  async getThread(scope: Scope, threadId: string): Promise<ThreadView | null> {
-    const row = await this.db.queryOne<ThreadRow>(`${threadSelect} WHERE t.id = ? AND t.user_id = ? AND t.app_id = ?`, [
-      threadId,
-      scope.userId,
-      scope.appId,
-    ]);
-    return row ? mapThread(row) : null;
-  }
+	async getThread(scope: Scope, threadId: string): Promise<ThreadView | null> {
+		const row = await this.db.queryOne<ThreadRow>(
+			`${threadSelect} WHERE t.id = ? AND t.user_id = ? AND t.app_id = ?`,
+			[threadId, scope.userId, scope.appId],
+		);
+		return row ? mapThread(row) : null;
+	}
 
-  async listThreads(scope: Scope, limit: number, before?: string): Promise<ThreadPage> {
-    const clauses = ['t.user_id = ?', 't.app_id = ?'];
-    const parameters: unknown[] = [scope.userId, scope.appId];
-    if (before) {
-      const cursor = decodeThreadCursor(before);
-      clauses.push('(t.updated_at < ? OR (t.updated_at = ? AND t.id < ?))');
-      parameters.push(cursor.updatedAt, cursor.updatedAt, cursor.id);
-    }
-    parameters.push(limit + 1);
-    const rows = await this.db.queryAll<ThreadRow>(
-      `${threadSelect} WHERE ${clauses.join(' AND ')} ORDER BY t.updated_at DESC, t.id DESC LIMIT ?`,
-      parameters,
-    );
-    const page = rows.slice(0, limit);
-    const last = page.at(-1);
-    return {
-      items: page.map(mapThread),
-      nextCursor: rows.length > limit && last ? encodeThreadCursor(last.updated_at, last.id) : null,
-    };
-  }
+	async listThreads(scope: Scope, limit: number, before?: string): Promise<ThreadPage> {
+		const clauses = ['t.user_id = ?', 't.app_id = ?'];
+		const parameters: unknown[] = [scope.userId, scope.appId];
+		if (before) {
+			const cursor = decodeThreadCursor(before);
+			clauses.push('(t.updated_at < ? OR (t.updated_at = ? AND t.id < ?))');
+			parameters.push(cursor.updatedAt, cursor.updatedAt, cursor.id);
+		}
+		parameters.push(limit + 1);
+		const rows = await this.db.queryAll<ThreadRow>(
+			`${threadSelect} WHERE ${clauses.join(' AND ')} ORDER BY t.updated_at DESC, t.id DESC LIMIT ?`,
+			parameters,
+		);
+		const page = rows.slice(0, limit);
+		const last = page.at(-1);
+		return {
+			items: page.map(mapThread),
+			nextCursor: rows.length > limit && last ? encodeThreadCursor(last.updated_at, last.id) : null,
+		};
+	}
 
-  async deleteThread(
-    scope: Scope,
-    threadId: string,
-    expectedVersion: number,
-    now: number,
-  ): Promise<ThreadDeleteResult> {
-    await this.db.transaction(async (tx) => {
-      const thread = await tx.queryOne<{ version: number }>(
-        'SELECT version FROM ai_threads WHERE id = ? AND user_id = ? AND app_id = ?',
-        [threadId, scope.userId, scope.appId],
-      );
-      if (!thread) throw new Error('NOT_FOUND');
-      if (thread.version !== expectedVersion) throw new Error('STATE_CONFLICT');
-      await assertThreadDeleteSafe(tx, scope, threadId);
-      await cleanupThreadRunReferences(tx, scope, threadId);
-      const deleted = await tx.execute(
-        'DELETE FROM ai_threads WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?',
-        [threadId, scope.userId, scope.appId, expectedVersion],
-      );
-      if (deleted.changes !== 1) throw new Error('STATE_CONFLICT');
-      await appendHostEvent(tx, scope.userId, 'thread.changed', { appId: scope.appId, threadId, deleted: true }, now);
-      await appendHostEvent(tx, scope.userId, 'summary.changed', { appId: scope.appId, threadId, deleted: true }, now);
-    });
-    return { threadId, deleted: true };
-  }
+	async deleteThread(
+		scope: Scope,
+		threadId: string,
+		expectedVersion: number,
+		now: number,
+	): Promise<ThreadDeleteResult> {
+		await this.db.transaction(async (tx) => {
+			const thread = await tx.queryOne<{ version: number }>(
+				'SELECT version FROM ai_threads WHERE id = ? AND user_id = ? AND app_id = ?',
+				[threadId, scope.userId, scope.appId],
+			);
+			if (!thread) throw new Error('NOT_FOUND');
+			if (thread.version !== expectedVersion) throw new Error('STATE_CONFLICT');
+			await assertThreadDeleteSafe(tx, scope, threadId);
+			await cleanupThreadRunReferences(tx, scope, threadId);
+			const deleted = await tx.execute(
+				'DELETE FROM ai_threads WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?',
+				[threadId, scope.userId, scope.appId, expectedVersion],
+			);
+			if (deleted.changes !== 1) throw new Error('STATE_CONFLICT');
+			await appendHostEvent(
+				tx,
+				scope.userId,
+				'thread.changed',
+				{ appId: scope.appId, threadId, deleted: true },
+				now,
+			);
+			await appendHostEvent(
+				tx,
+				scope.userId,
+				'summary.changed',
+				{ appId: scope.appId, threadId, deleted: true },
+				now,
+			);
+		});
+		return { threadId, deleted: true };
+	}
 
-  async deleteAllThreads(scope: Scope, now: number): Promise<ThreadDeleteAllResult> {
-    let deletedCount = 0;
-    await this.db.transaction(async (tx) => {
-      const count = await tx.queryOne<{ count: number }>(
-        'SELECT COUNT(*) AS count FROM ai_threads WHERE user_id = ? AND app_id = ?',
-        [scope.userId, scope.appId],
-      );
-      deletedCount = count?.count ?? 0;
-      if (deletedCount === 0) return;
-      await assertThreadDeleteSafe(tx, scope);
-      await cleanupThreadRunReferences(tx, scope);
-      const deleted = await tx.execute('DELETE FROM ai_threads WHERE user_id = ? AND app_id = ?', [
-        scope.userId,
-        scope.appId,
-      ]);
-      if (deleted.changes !== deletedCount) throw new Error('STATE_CONFLICT');
-      await appendHostEvent(
-        tx,
-        scope.userId,
-        'thread.changed',
-        { appId: scope.appId, allDeleted: true, deletedCount },
-        now,
-      );
-      await appendHostEvent(tx, scope.userId, 'summary.changed', { appId: scope.appId, allDeleted: true }, now);
-    });
-    return { deletedCount };
-  }
+	async deleteAllThreads(scope: Scope, now: number): Promise<ThreadDeleteAllResult> {
+		let deletedCount = 0;
+		await this.db.transaction(async (tx) => {
+			const count = await tx.queryOne<{ count: number }>(
+				'SELECT COUNT(*) AS count FROM ai_threads WHERE user_id = ? AND app_id = ?',
+				[scope.userId, scope.appId],
+			);
+			deletedCount = count?.count ?? 0;
+			if (deletedCount === 0) return;
+			await assertThreadDeleteSafe(tx, scope);
+			await cleanupThreadRunReferences(tx, scope);
+			const deleted = await tx.execute('DELETE FROM ai_threads WHERE user_id = ? AND app_id = ?', [
+				scope.userId,
+				scope.appId,
+			]);
+			if (deleted.changes !== deletedCount) throw new Error('STATE_CONFLICT');
+			await appendHostEvent(
+				tx,
+				scope.userId,
+				'thread.changed',
+				{ appId: scope.appId, allDeleted: true, deletedCount },
+				now,
+			);
+			await appendHostEvent(tx, scope.userId, 'summary.changed', { appId: scope.appId, allDeleted: true }, now);
+		});
+		return { deletedCount };
+	}
 
-  async readEntries(scope: Scope, threadId: string, limit: number, before?: string): Promise<LedgerPage> {
-    if (!(await this.getThread(scope, threadId))) throw new Error('NOT_FOUND');
-    const parameters: unknown[] = [threadId, scope.userId, scope.appId];
-    let cursorClause = '';
-    if (before) {
-      cursorClause = ' AND sequence < ?';
-      parameters.push(decodeEntryCursor(before));
-    }
-    parameters.push(limit + 1);
-    const rows = await this.db.queryAll<EntryRow>(
-      `SELECT id, thread_id, run_id, sequence, kind, payload_json, created_at
+	async readEntries(scope: Scope, threadId: string, limit: number, before?: string): Promise<LedgerPage> {
+		if (!(await this.getThread(scope, threadId))) throw new Error('NOT_FOUND');
+		const parameters: unknown[] = [threadId, scope.userId, scope.appId];
+		let cursorClause = '';
+		if (before) {
+			cursorClause = ' AND sequence < ?';
+			parameters.push(decodeEntryCursor(before));
+		}
+		parameters.push(limit + 1);
+		const rows = await this.db.queryAll<EntryRow>(
+			`SELECT id, thread_id, run_id, sequence, kind, payload_json, created_at
        FROM ai_thread_entries
        WHERE thread_id = ? AND user_id = ? AND app_id = ?${cursorClause}
        ORDER BY sequence DESC LIMIT ?`,
-      parameters,
-    );
-    const page = rows.slice(0, limit);
-    const last = page.at(-1);
-    return {
-      items: page.map(mapEntry).reverse(),
-      nextCursor: rows.length > limit && last ? encodeEntryCursor(last.sequence) : null,
-    };
-  }
+			parameters,
+		);
+		const page = rows.slice(0, limit);
+		const last = page.at(-1);
+		return {
+			items: page.map(mapEntry).reverse(),
+			nextCursor: rows.length > limit && last ? encodeEntryCursor(last.sequence) : null,
+		};
+	}
 
-  async searchEarlierEntries(
-    scope: Scope,
-    threadId: string,
-    queryTerms: readonly string[],
-    beforeSequence: number,
-    limit: number,
-  ): Promise<LedgerEntryView[]> {
-    const matchQuery = sqliteSearchMatchQuery(queryTerms);
-    if (!matchQuery) return [];
-    const rows = await this.db.queryAll<EntryRow>(
-      `SELECT e.id, e.thread_id, e.run_id, e.sequence, e.kind, e.payload_json, e.created_at
+	async searchEarlierEntries(
+		scope: Scope,
+		threadId: string,
+		queryTerms: readonly string[],
+		beforeSequence: number,
+		limit: number,
+	): Promise<LedgerEntryView[]> {
+		const matchQuery = sqliteSearchMatchQuery(queryTerms);
+		if (!matchQuery) return [];
+		const rows = await this.db.queryAll<EntryRow>(
+			`SELECT e.id, e.thread_id, e.run_id, e.sequence, e.kind, e.payload_json, e.created_at
        FROM ai_thread_entries_search
        JOIN ai_thread_entries e ON e.rowid = ai_thread_entries_search.rowid
        WHERE ai_thread_entries_search MATCH ?
@@ -372,139 +382,139 @@ export class SqliteConversationRepository implements ConversationRepositoryPort 
          AND e.kind IN ('user_input','assistant_message')
        ORDER BY bm25(ai_thread_entries_search), e.sequence DESC, e.id ASC
        LIMIT ?`,
-      [matchQuery, threadId, scope.userId, scope.appId, beforeSequence, limit],
-    );
-    return rows.map(mapEntry);
-  }
+			[matchQuery, threadId, scope.userId, scope.appId, beforeSequence, limit],
+		);
+		return rows.map(mapEntry);
+	}
 
-  async readOldestEntries(scope: Scope, threadId: string, limit: number): Promise<LedgerPage> {
-    if (!(await this.getThread(scope, threadId))) throw new Error('NOT_FOUND');
-    const rows = await this.db.queryAll<EntryRow>(
-      `SELECT id, thread_id, run_id, sequence, kind, payload_json, created_at
+	async readOldestEntries(scope: Scope, threadId: string, limit: number): Promise<LedgerPage> {
+		if (!(await this.getThread(scope, threadId))) throw new Error('NOT_FOUND');
+		const rows = await this.db.queryAll<EntryRow>(
+			`SELECT id, thread_id, run_id, sequence, kind, payload_json, created_at
        FROM ai_thread_entries
        WHERE thread_id = ? AND user_id = ? AND app_id = ?
        ORDER BY sequence ASC LIMIT ?`,
-      [threadId, scope.userId, scope.appId, limit],
-    );
-    return { items: rows.map(mapEntry), nextCursor: null };
-  }
+			[threadId, scope.userId, scope.appId, limit],
+		);
+		return { items: rows.map(mapEntry), nextCursor: null };
+	}
 
-  async readContextEntries(
-    scope: Scope,
-    threadId: string,
-    runId: string,
-    historyBoundary: ContextHistoryBoundary,
-    limit: number,
-  ): Promise<LedgerPage> {
-    if (!(await this.getThread(scope, threadId))) throw new Error('NOT_FOUND');
-    const inherited = Object.entries(historyBoundary.runThrough);
-    const clauses = ['sequence <= ?', 'run_id = ?', ...inherited.map(() => '(run_id = ? AND sequence <= ?)')];
-    const parameters: unknown[] = [
-      threadId,
-      scope.userId,
-      scope.appId,
-      historyBoundary.baseThrough,
-      runId,
-      ...inherited.flatMap(([historyRunId, through]) => [historyRunId, through]),
-      limit + 1,
-    ];
-    const rows = await this.db.queryAll<EntryRow>(
-      `SELECT id, thread_id, run_id, sequence, kind, payload_json, created_at
+	async readContextEntries(
+		scope: Scope,
+		threadId: string,
+		runId: string,
+		historyBoundary: ContextHistoryBoundary,
+		limit: number,
+	): Promise<LedgerPage> {
+		if (!(await this.getThread(scope, threadId))) throw new Error('NOT_FOUND');
+		const inherited = Object.entries(historyBoundary.runThrough);
+		const clauses = ['sequence <= ?', 'run_id = ?', ...inherited.map(() => '(run_id = ? AND sequence <= ?)')];
+		const parameters: unknown[] = [
+			threadId,
+			scope.userId,
+			scope.appId,
+			historyBoundary.baseThrough,
+			runId,
+			...inherited.flatMap(([historyRunId, through]) => [historyRunId, through]),
+			limit + 1,
+		];
+		const rows = await this.db.queryAll<EntryRow>(
+			`SELECT id, thread_id, run_id, sequence, kind, payload_json, created_at
        FROM ai_thread_entries
        WHERE thread_id = ? AND user_id = ? AND app_id = ?
          AND (${clauses.join(' OR ')})
        ORDER BY sequence DESC LIMIT ?`,
-      parameters,
-    );
-    const page = rows.slice(0, limit);
-    const last = page.at(-1);
-    return {
-      items: page.map(mapEntry).reverse(),
-      nextCursor: rows.length > limit && last ? encodeEntryCursor(last.sequence) : null,
-    };
-  }
+			parameters,
+		);
+		const page = rows.slice(0, limit);
+		const last = page.at(-1);
+		return {
+			items: page.map(mapEntry).reverse(),
+			nextCursor: rows.length > limit && last ? encodeEntryCursor(last.sequence) : null,
+		};
+	}
 
-  async readVisibleEntriesThrough(
-    scope: Scope,
-    threadId: string,
-    throughSequence: number,
-    runId?: string,
-    historyBoundary?: ContextHistoryBoundary,
-  ): Promise<LedgerEntryView[]> {
-    if (!(await this.getThread(scope, threadId))) throw new Error('NOT_FOUND');
-    if (historyBoundary === undefined) {
-      const rows = await this.db.queryAll<EntryRow>(
-        `SELECT id, thread_id, run_id, sequence, kind, payload_json, created_at
+	async readVisibleEntriesThrough(
+		scope: Scope,
+		threadId: string,
+		throughSequence: number,
+		runId?: string,
+		historyBoundary?: ContextHistoryBoundary,
+	): Promise<LedgerEntryView[]> {
+		if (!(await this.getThread(scope, threadId))) throw new Error('NOT_FOUND');
+		if (historyBoundary === undefined) {
+			const rows = await this.db.queryAll<EntryRow>(
+				`SELECT id, thread_id, run_id, sequence, kind, payload_json, created_at
          FROM ai_thread_entries
          WHERE thread_id = ? AND user_id = ? AND app_id = ? AND sequence <= ?
          ORDER BY sequence ASC`,
-        [threadId, scope.userId, scope.appId, throughSequence],
-      );
-      return rows.map(mapEntry);
-    }
-    if (!runId) throw new Error('VALIDATION_FAILED');
-    const inherited = Object.entries(historyBoundary.runThrough);
-    const clauses = ['sequence <= ?', 'run_id = ?', ...inherited.map(() => '(run_id = ? AND sequence <= ?)')];
-    const parameters: unknown[] = [
-      threadId,
-      scope.userId,
-      scope.appId,
-      throughSequence,
-      historyBoundary.baseThrough,
-      runId,
-      ...inherited.flatMap(([historyRunId, through]) => [historyRunId, through]),
-    ];
-    const rows = await this.db.queryAll<EntryRow>(
-      `SELECT id, thread_id, run_id, sequence, kind, payload_json, created_at
+				[threadId, scope.userId, scope.appId, throughSequence],
+			);
+			return rows.map(mapEntry);
+		}
+		if (!runId) throw new Error('VALIDATION_FAILED');
+		const inherited = Object.entries(historyBoundary.runThrough);
+		const clauses = ['sequence <= ?', 'run_id = ?', ...inherited.map(() => '(run_id = ? AND sequence <= ?)')];
+		const parameters: unknown[] = [
+			threadId,
+			scope.userId,
+			scope.appId,
+			throughSequence,
+			historyBoundary.baseThrough,
+			runId,
+			...inherited.flatMap(([historyRunId, through]) => [historyRunId, through]),
+		];
+		const rows = await this.db.queryAll<EntryRow>(
+			`SELECT id, thread_id, run_id, sequence, kind, payload_json, created_at
        FROM ai_thread_entries
        WHERE thread_id = ? AND user_id = ? AND app_id = ? AND sequence <= ?
          AND (${clauses.join(' OR ')})
        ORDER BY sequence ASC`,
-      parameters,
-    );
-    return rows.map(mapEntry);
-  }
+			parameters,
+		);
+		return rows.map(mapEntry);
+	}
 
-  async appendEntry(scope: Scope, threadId: string, entry: AppendLedgerEntry): Promise<LedgerEntryView> {
-    let sequence = 0;
-    await this.db.transaction(async (tx) => {
-      const thread = await tx.queryOne<{ next_sequence: number; version: number }>(
-        'SELECT next_sequence, version FROM ai_threads WHERE id = ? AND user_id = ? AND app_id = ?',
-        [threadId, scope.userId, scope.appId],
-      );
-      if (!thread) throw new Error('NOT_FOUND');
-      sequence = thread.next_sequence;
-      const updated = await tx.execute(
-        `UPDATE ai_threads SET next_sequence = next_sequence + 1, version = version + 1, updated_at = ?
+	async appendEntry(scope: Scope, threadId: string, entry: AppendLedgerEntry): Promise<LedgerEntryView> {
+		let sequence = 0;
+		await this.db.transaction(async (tx) => {
+			const thread = await tx.queryOne<{ next_sequence: number; version: number }>(
+				'SELECT next_sequence, version FROM ai_threads WHERE id = ? AND user_id = ? AND app_id = ?',
+				[threadId, scope.userId, scope.appId],
+			);
+			if (!thread) throw new Error('NOT_FOUND');
+			sequence = thread.next_sequence;
+			const updated = await tx.execute(
+				`UPDATE ai_threads SET next_sequence = next_sequence + 1, version = version + 1, updated_at = ?
          WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?`,
-        [entry.createdAt, threadId, scope.userId, scope.appId, thread.version],
-      );
-      if (updated.changes !== 1) throw new Error('STATE_CONFLICT');
-      await tx.execute(
-        `INSERT INTO ai_thread_entries
+				[entry.createdAt, threadId, scope.userId, scope.appId, thread.version],
+			);
+			if (updated.changes !== 1) throw new Error('STATE_CONFLICT');
+			await tx.execute(
+				`INSERT INTO ai_thread_entries
           (id, thread_id, user_id, app_id, run_id, sequence, kind, payload_json, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          entry.id,
-          threadId,
-          scope.userId,
-          scope.appId,
-          entry.runId ?? null,
-          sequence,
-          entry.kind,
-          JSON.stringify(entry.payload),
-          entry.createdAt,
-        ],
-      );
-    });
-    return {
-      id: entry.id,
-      threadId,
-      runId: entry.runId ?? null,
-      sequence,
-      kind: entry.kind,
-      payload: entry.payload,
-      createdAt: entry.createdAt,
-    };
-  }
+				[
+					entry.id,
+					threadId,
+					scope.userId,
+					scope.appId,
+					entry.runId ?? null,
+					sequence,
+					entry.kind,
+					JSON.stringify(entry.payload),
+					entry.createdAt,
+				],
+			);
+		});
+		return {
+			id: entry.id,
+			threadId,
+			runId: entry.runId ?? null,
+			sequence,
+			kind: entry.kind,
+			payload: entry.payload,
+			createdAt: entry.createdAt,
+		};
+	}
 }

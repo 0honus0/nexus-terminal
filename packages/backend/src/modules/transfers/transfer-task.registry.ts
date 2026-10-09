@@ -3,246 +3,279 @@ import { logger } from '../../shared/logging/logger';
 import type { InitiateTransferPayload, TransferSubTask, TransferTask, TransferTaskStatus } from './transfers.types';
 
 export interface CreatedTransferTask {
-  task: TransferTask;
-  signal: AbortSignal;
+	task: TransferTask;
+	signal: AbortSignal;
 }
 const FINAL = new Set<TransferTaskStatus>(['completed', 'failed', 'partially-completed', 'cancelled']);
 
 /** In-process task state and cancellation ownership. It never owns network transports. */
 export class TransferTaskRegistry {
-  private readonly tasks = new Map<string, TransferTask>();
-  private readonly controllers = new Map<string, AbortController>();
+	private readonly tasks = new Map<string, TransferTask>();
+	private readonly controllers = new Map<string, AbortController>();
 
-  create(payload: InitiateTransferPayload, userId: string | number): CreatedTransferTask {
-    this.prune();
-    if (
-      [...this.tasks.values()].filter((task) => !FINAL.has(task.status) || this.controllers.has(task.taskId)).length >=
-      32
-    )
-      throw new Error('TRANSFER_ACTIVE_TASK_LIMIT_EXCEEDED');
-    if (
-      !payload.connectionIds.length ||
-      payload.connectionIds.length > 64 ||
-      !payload.sourceItems.length ||
-      payload.sourceItems.length > 256 ||
-      payload.connectionIds.length * payload.sourceItems.length > 1024
-    )
-      throw new Error('TRANSFER_REQUEST_LIMIT_EXCEEDED');
-    if (
-      new Set(payload.connectionIds).size !== payload.connectionIds.length ||
-      new Set(payload.sourceItems.map((item) => item.path)).size !== payload.sourceItems.length
-    )
-      throw new Error('TRANSFER_REQUEST_DUPLICATE_ITEMS');
-    const taskId = randomUUID();
-    const now = new Date();
-    const subTasks: TransferSubTask[] = [];
-    for (const connectionId of payload.connectionIds)
-      for (const [sourceItemIndex, item] of payload.sourceItems.entries())
-        subTasks.push({
-          subTaskId: randomUUID(),
-          connectionId,
-          sourceItemName: item.name,
-          sourceItemIndex,
-          status: 'queued',
-          startTime: now,
-        });
-    const task: TransferTask = { taskId, status: 'queued', userId, createdAt: now, updatedAt: now, subTasks, payload };
-    const controller = new AbortController();
-    this.tasks.set(taskId, task);
-    this.controllers.set(taskId, controller);
-    logger.debug(
-      {
-        taskId,
-        sourceConnectionId: payload.sourceConnectionId,
-        targetCount: payload.connectionIds.length,
-        sourceItemCount: payload.sourceItems.length,
-        subTaskCount: subTasks.length,
-        transferMethod: payload.transferMethod,
-      },
-      'Server transfer task queued',
-    );
-    return { task: this.cloneWithConvenience(task), signal: controller.signal };
-  }
-  get(id: string) {
-    return this.tasks.get(id);
-  }
-  getOwned(id: string, userId: string | number) {
-    const t = this.tasks.get(id);
-    return t?.userId === userId ? t : undefined;
-  }
-  details(id: string, userId: string | number) {
-    const t = this.getOwned(id, userId);
-    return t ? this.cloneWithConvenience(t) : null;
-  }
-  list(userId: string | number) {
-    this.prune();
-    return [...this.tasks.values()].filter((t) => t.userId === userId).map((t) => this.cloneWithConvenience(t));
-  }
-  metrics(): { activeTasks: number; queuedSubTasks: number; activeSubTasks: number } {
-    let activeTasks = 0;
-    let queuedSubTasks = 0;
-    let activeSubTasks = 0;
-    for (const task of this.tasks.values()) {
-      if (!FINAL.has(task.status)) activeTasks += 1;
-      for (const subTask of task.subTasks) {
-        if (subTask.status === 'queued') queuedSubTasks += 1;
-        else if (['connecting', 'transferring', 'cancelling'].includes(subTask.status)) activeSubTasks += 1;
-      }
-    }
-    return { activeTasks, queuedSubTasks, activeSubTasks };
-  }
-  remove(id: string, userId: string | number): 'removed' | 'not-found' | 'active' {
-    const t = this.getOwned(id, userId);
-    if (!t) return 'not-found';
-    if (!FINAL.has(t.status) || this.controllers.has(id)) return 'active';
-    this.tasks.delete(id);
-    return 'removed';
-  }
-  cancel(id: string, userId: string | number): boolean {
-    const t = this.getOwned(id, userId);
-    if (!t || FINAL.has(t.status)) return false;
-    const c = this.controllers.get(id);
-    if (!c) return false;
-    if (!c.signal.aborted) {
-      logger.debug({ taskId: id }, 'Server transfer task cancellation requested');
-      this.setOverallStatus(id, 'cancelling');
-      for (const s of t.subTasks)
-        if (!['completed', 'failed', 'cancelled'].includes(s.status))
-          this.setSubTask(id, s.subTaskId, 'cancelled', s.progress, 'Cancelled due to parent task cancellation.');
-      c.abort();
-    }
-    return true;
-  }
-  cancelAll(): void {
-    for (const [id, controller] of this.controllers) {
-      const task = this.tasks.get(id);
-      if (task && !FINAL.has(task.status)) this.setOverallStatus(id, 'cancelling');
-      if (!controller.signal.aborted) controller.abort();
-    }
-  }
-  releaseCancellation(id: string) {
-    this.controllers.delete(id);
-    this.prune();
-  }
-  private prune(): void {
-    const settled = [...this.tasks.values()]
-      .filter((task) => FINAL.has(task.status) && !this.controllers.has(task.taskId))
-      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || b.taskId.localeCompare(a.taskId));
-    for (const task of settled.slice(100)) this.tasks.delete(task.taskId);
-  }
-  setOverallStatus(id: string, status: TransferTaskStatus) {
-    const t = this.tasks.get(id);
-    if (!t) return;
-    if (t.status === 'cancelled' && status !== 'cancelled') return;
-    if (FINAL.has(t.status) && ['queued', 'in-progress'].includes(status)) return;
-    const previousStatus = t.status;
-    t.status = status;
-    t.updatedAt = new Date();
-    this.logStatusChange(t, previousStatus);
-  }
-  setSubTask(id: string, subTaskId: string, status: TransferSubTask['status'], progress?: number, message?: string) {
-    const t = this.tasks.get(id);
-    const s = t?.subTasks.find((v) => v.subTaskId === subTaskId);
-    if (!t || !s) return;
-    if (['completed', 'failed', 'cancelled'].includes(s.status) && s.status !== status) return;
-    s.status = status;
-    if (progress !== undefined) s.progress = Math.min(100, Math.max(0, progress));
-    if (message !== undefined) s.message = message;
-    if (['completed', 'failed', 'cancelled'].includes(status) && !s.endTime) s.endTime = new Date();
-    t.updatedAt = new Date();
-    this.recalculate(id);
-  }
-  setMethod(id: string, subTaskId: string, method: 'rsync' | 'scp') {
-    const t = this.tasks.get(id);
-    const s = t?.subTasks.find((v) => v.subTaskId === subTaskId);
-    if (s) s.transferMethodUsed = method;
-  }
-  finalize(id: string) {
-    this.recalculate(id);
-  }
-  private recalculate(id: string) {
-    const t = this.tasks.get(id);
-    if (!t) return;
-    const previousStatus = t.status;
-    const count = t.subTasks.length;
-    if (!count) {
-      t.overallProgress = 0;
-      t.updatedAt = new Date();
-      return;
-    }
-    let completed = 0,
-      failed = 0,
-      cancelled = 0,
-      active = 0,
-      queued = 0,
-      total = 0;
-    for (const s of t.subTasks) {
-      switch (s.status) {
-        case 'completed':
-          completed++;
-          total += 100;
-          break;
-        case 'failed':
-          failed++;
-          total += s.progress ?? 0;
-          break;
-        case 'cancelled':
-          cancelled++;
-          total += s.progress ?? 0;
-          break;
-        case 'connecting':
-        case 'transferring':
-        case 'cancelling':
-          active++;
-          total += s.progress ?? (s.status === 'connecting' ? 5 : 0);
-          break;
-        case 'queued':
-          queued++;
-          break;
-      }
-    }
-    t.overallProgress = Math.round(total / count);
-    const terminal = completed + failed + cancelled;
-    if (t.status === 'cancelled') {
-    } else if (t.status === 'cancelling' || cancelled > 0) t.status = terminal === count ? 'cancelled' : 'cancelling';
-    else if (failed === count) t.status = 'failed';
-    else if (completed === count) t.status = 'completed';
-    else if (failed > 0 && completed + failed === count) t.status = 'partially-completed';
-    else if (active > 0 || (queued > 0 && (failed > 0 || completed > 0))) t.status = 'in-progress';
-    else if (queued === count) t.status = 'queued';
-    else t.status = 'in-progress';
-    t.updatedAt = new Date();
-    this.logStatusChange(t, previousStatus);
-  }
-  private logStatusChange(task: TransferTask, previousStatus: TransferTaskStatus): void {
-    if (task.status === previousStatus) return;
-    logger.debug(
-      { taskId: task.taskId, previousStatus, status: task.status, overallProgress: task.overallProgress },
-      'Server transfer task status changed',
-    );
-  }
-  private clone(t: TransferTask): TransferTask {
-    return {
-      ...t,
-      createdAt: new Date(t.createdAt),
-      updatedAt: new Date(t.updatedAt),
-      subTasks: t.subTasks.map((s) => ({
-        ...s,
-        startTime: s.startTime ? new Date(s.startTime) : undefined,
-        endTime: s.endTime ? new Date(s.endTime) : undefined,
-      })),
-      payload: {
-        ...t.payload,
-        connectionIds: [...t.payload.connectionIds],
-        sourceItems: t.payload.sourceItems.map((i) => ({ ...i })),
-      },
-    };
-  }
-  private cloneWithConvenience(t: TransferTask): TransferTask {
-    return {
-      ...this.clone(t),
-      sourceConnectionId: t.payload.sourceConnectionId,
-      remoteTargetPath: t.payload.remoteTargetPath,
-    };
-  }
+	create(payload: InitiateTransferPayload, userId: string | number): CreatedTransferTask {
+		this.prune();
+		if (
+			[...this.tasks.values()].filter((task) => !FINAL.has(task.status) || this.controllers.has(task.taskId))
+				.length >= 32
+		)
+			throw new Error('TRANSFER_ACTIVE_TASK_LIMIT_EXCEEDED');
+		if (
+			!payload.connectionIds.length ||
+			payload.connectionIds.length > 64 ||
+			!payload.sourceItems.length ||
+			payload.sourceItems.length > 256 ||
+			payload.connectionIds.length * payload.sourceItems.length > 1024
+		)
+			throw new Error('TRANSFER_REQUEST_LIMIT_EXCEEDED');
+		if (
+			new Set(payload.connectionIds).size !== payload.connectionIds.length ||
+			new Set(payload.sourceItems.map((item) => item.path)).size !== payload.sourceItems.length
+		)
+			throw new Error('TRANSFER_REQUEST_DUPLICATE_ITEMS');
+		const taskId = randomUUID();
+		const now = new Date();
+		const subTasks: TransferSubTask[] = [];
+		for (const connectionId of payload.connectionIds)
+			for (const [sourceItemIndex, item] of payload.sourceItems.entries())
+				subTasks.push({
+					subTaskId: randomUUID(),
+					connectionId,
+					sourceItemName: item.name,
+					sourceItemIndex,
+					status: 'queued',
+					startTime: now,
+				});
+		const task: TransferTask = {
+			taskId,
+			status: 'queued',
+			userId,
+			createdAt: now,
+			updatedAt: now,
+			subTasks,
+			payload,
+		};
+		const controller = new AbortController();
+		this.tasks.set(taskId, task);
+		this.controllers.set(taskId, controller);
+		logger.debug(
+			{
+				taskId,
+				sourceConnectionId: payload.sourceConnectionId,
+				targetCount: payload.connectionIds.length,
+				sourceItemCount: payload.sourceItems.length,
+				subTaskCount: subTasks.length,
+				transferMethod: payload.transferMethod,
+			},
+			'Server transfer task queued',
+		);
+		return { task: this.cloneWithConvenience(task), signal: controller.signal };
+	}
+
+	get(id: string) {
+		return this.tasks.get(id);
+	}
+
+	getOwned(id: string, userId: string | number) {
+		const t = this.tasks.get(id);
+		return t?.userId === userId ? t : undefined;
+	}
+
+	details(id: string, userId: string | number) {
+		const t = this.getOwned(id, userId);
+		return t ? this.cloneWithConvenience(t) : null;
+	}
+
+	list(userId: string | number) {
+		this.prune();
+		return [...this.tasks.values()].filter((t) => t.userId === userId).map((t) => this.cloneWithConvenience(t));
+	}
+
+	metrics(): { activeTasks: number; queuedSubTasks: number; activeSubTasks: number } {
+		let activeTasks = 0;
+		let queuedSubTasks = 0;
+		let activeSubTasks = 0;
+		for (const task of this.tasks.values()) {
+			if (!FINAL.has(task.status)) activeTasks += 1;
+			for (const subTask of task.subTasks) {
+				if (subTask.status === 'queued') queuedSubTasks += 1;
+				else if (['connecting', 'transferring', 'cancelling'].includes(subTask.status)) activeSubTasks += 1;
+			}
+		}
+		return { activeTasks, queuedSubTasks, activeSubTasks };
+	}
+
+	remove(id: string, userId: string | number): 'removed' | 'not-found' | 'active' {
+		const t = this.getOwned(id, userId);
+		if (!t) return 'not-found';
+		if (!FINAL.has(t.status) || this.controllers.has(id)) return 'active';
+		this.tasks.delete(id);
+		return 'removed';
+	}
+
+	cancel(id: string, userId: string | number): boolean {
+		const t = this.getOwned(id, userId);
+		if (!t || FINAL.has(t.status)) return false;
+		const c = this.controllers.get(id);
+		if (!c) return false;
+		if (!c.signal.aborted) {
+			logger.debug({ taskId: id }, 'Server transfer task cancellation requested');
+			this.setOverallStatus(id, 'cancelling');
+			for (const s of t.subTasks)
+				if (!['completed', 'failed', 'cancelled'].includes(s.status))
+					this.setSubTask(
+						id,
+						s.subTaskId,
+						'cancelled',
+						s.progress,
+						'Cancelled due to parent task cancellation.',
+					);
+			c.abort();
+		}
+		return true;
+	}
+
+	cancelAll(): void {
+		for (const [id, controller] of this.controllers) {
+			const task = this.tasks.get(id);
+			if (task && !FINAL.has(task.status)) this.setOverallStatus(id, 'cancelling');
+			if (!controller.signal.aborted) controller.abort();
+		}
+	}
+
+	releaseCancellation(id: string) {
+		this.controllers.delete(id);
+		this.prune();
+	}
+
+	private prune(): void {
+		const settled = [...this.tasks.values()]
+			.filter((task) => FINAL.has(task.status) && !this.controllers.has(task.taskId))
+			.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || b.taskId.localeCompare(a.taskId));
+		for (const task of settled.slice(100)) this.tasks.delete(task.taskId);
+	}
+
+	setOverallStatus(id: string, status: TransferTaskStatus) {
+		const t = this.tasks.get(id);
+		if (!t) return;
+		if (t.status === 'cancelled' && status !== 'cancelled') return;
+		if (FINAL.has(t.status) && ['queued', 'in-progress'].includes(status)) return;
+		const previousStatus = t.status;
+		t.status = status;
+		t.updatedAt = new Date();
+		this.logStatusChange(t, previousStatus);
+	}
+
+	setSubTask(id: string, subTaskId: string, status: TransferSubTask['status'], progress?: number, message?: string) {
+		const t = this.tasks.get(id);
+		const s = t?.subTasks.find((v) => v.subTaskId === subTaskId);
+		if (!t || !s) return;
+		if (['completed', 'failed', 'cancelled'].includes(s.status) && s.status !== status) return;
+		s.status = status;
+		if (progress !== undefined) s.progress = Math.min(100, Math.max(0, progress));
+		if (message !== undefined) s.message = message;
+		if (['completed', 'failed', 'cancelled'].includes(status) && !s.endTime) s.endTime = new Date();
+		t.updatedAt = new Date();
+		this.recalculate(id);
+	}
+
+	setMethod(id: string, subTaskId: string, method: 'rsync' | 'scp') {
+		const t = this.tasks.get(id);
+		const s = t?.subTasks.find((v) => v.subTaskId === subTaskId);
+		if (s) s.transferMethodUsed = method;
+	}
+
+	finalize(id: string) {
+		this.recalculate(id);
+	}
+
+	private recalculate(id: string) {
+		const t = this.tasks.get(id);
+		if (!t) return;
+		const previousStatus = t.status;
+		const count = t.subTasks.length;
+		if (!count) {
+			t.overallProgress = 0;
+			t.updatedAt = new Date();
+			return;
+		}
+		let completed = 0,
+			failed = 0,
+			cancelled = 0,
+			active = 0,
+			queued = 0,
+			total = 0;
+		for (const s of t.subTasks) {
+			switch (s.status) {
+				case 'completed':
+					completed++;
+					total += 100;
+					break;
+				case 'failed':
+					failed++;
+					total += s.progress ?? 0;
+					break;
+				case 'cancelled':
+					cancelled++;
+					total += s.progress ?? 0;
+					break;
+				case 'connecting':
+				case 'transferring':
+				case 'cancelling':
+					active++;
+					total += s.progress ?? (s.status === 'connecting' ? 5 : 0);
+					break;
+				case 'queued':
+					queued++;
+					break;
+			}
+		}
+		t.overallProgress = Math.round(total / count);
+		const terminal = completed + failed + cancelled;
+		if (t.status === 'cancelled') {
+		} else if (t.status === 'cancelling' || cancelled > 0)
+			t.status = terminal === count ? 'cancelled' : 'cancelling';
+		else if (failed === count) t.status = 'failed';
+		else if (completed === count) t.status = 'completed';
+		else if (failed > 0 && completed + failed === count) t.status = 'partially-completed';
+		else if (active > 0 || (queued > 0 && (failed > 0 || completed > 0))) t.status = 'in-progress';
+		else if (queued === count) t.status = 'queued';
+		else t.status = 'in-progress';
+		t.updatedAt = new Date();
+		this.logStatusChange(t, previousStatus);
+	}
+
+	private logStatusChange(task: TransferTask, previousStatus: TransferTaskStatus): void {
+		if (task.status === previousStatus) return;
+		logger.debug(
+			{ taskId: task.taskId, previousStatus, status: task.status, overallProgress: task.overallProgress },
+			'Server transfer task status changed',
+		);
+	}
+
+	private clone(t: TransferTask): TransferTask {
+		return {
+			...t,
+			createdAt: new Date(t.createdAt),
+			updatedAt: new Date(t.updatedAt),
+			subTasks: t.subTasks.map((s) => ({
+				...s,
+				startTime: s.startTime ? new Date(s.startTime) : undefined,
+				endTime: s.endTime ? new Date(s.endTime) : undefined,
+			})),
+			payload: {
+				...t.payload,
+				connectionIds: [...t.payload.connectionIds],
+				sourceItems: t.payload.sourceItems.map((i) => ({ ...i })),
+			},
+		};
+	}
+
+	private cloneWithConvenience(t: TransferTask): TransferTask {
+		return {
+			...this.clone(t),
+			sourceConnectionId: t.payload.sourceConnectionId,
+			remoteTargetPath: t.payload.remoteTargetPath,
+		};
+	}
 }

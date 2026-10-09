@@ -2,6 +2,6 @@ import type { CommandHistoryEntryDto } from '@nexus-terminal/protocol/command-hi
 export type { CommandHistoryEntryDto };
 
 export interface ExecuteHistoryIntent {
-  command: string;
-  allSessions?: boolean;
+	command: string;
+	allSessions?: boolean;
 }

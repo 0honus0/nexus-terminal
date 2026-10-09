@@ -1,386 +1,412 @@
 import type {
-  AgentRunAppendInputResponseDto,
-  AgentRunDeleteQueryDto,
-  AgentRunDeleteResponseDto,
-  AgentRunListQueryDto,
+	AgentRunAppendInputResponseDto,
+	AgentRunDeleteQueryDto,
+	AgentRunDeleteResponseDto,
+	AgentRunListQueryDto,
 } from '@nexus-terminal/protocol/agent-runs';
 import { Router, type Request } from 'express';
 import type { AgentApprovalFacade, AgentRunFacade } from '../../../modules/agent/public';
 import { approvalDto } from './approval-dto';
 import {
-  checkpointDto,
-  definitionDto,
-  pendingInputsDto,
-  reconciliationDto,
-  runDto,
-  runPageDto,
-  runSnapshotDto,
+	checkpointDto,
+	definitionDto,
+	pendingInputsDto,
+	reconciliationDto,
+	runDto,
+	runPageDto,
+	runSnapshotDto,
 } from './run-dto';
 import { agentData, agentError, agentRequestId, agentRoute } from './agent-http';
 import { pathParam, positiveInteger, withVersionConflictDetails } from './agent-route-input';
 import { agentUserId, createAgentMutationSecurity, requireAgentAuthenticated } from './agent-security';
 import {
-  parseAppendInputRequest,
-  parseBudgetIncreaseRequest,
-  parseCreateRunRequest,
-  parseExpectedVersionRequest,
-  parsePendingInputMutationRequest,
-  parseReconciliationResolveRequest,
-  parseResumeRunRequest,
-  parseSetGoalRequest,
+	parseAppendInputRequest,
+	parseBudgetIncreaseRequest,
+	parseCreateRunRequest,
+	parseExpectedVersionRequest,
+	parsePendingInputMutationRequest,
+	parseReconciliationResolveRequest,
+	parseResumeRunRequest,
+	parseSetGoalRequest,
 } from './agent-runtime-route-input';
 
 export interface AppRuntimeRouterDependencies {
-  runs: AgentRunFacade;
-  approvals: AgentApprovalFacade;
-  nodeEnv: string;
-  publicOrigin?: string;
-  csrfSecret: string;
+	runs: AgentRunFacade;
+	approvals: AgentApprovalFacade;
+	nodeEnv: string;
+	publicOrigin?: string;
+	csrfSecret: string;
 }
 
 const queryString = (value: unknown): string | undefined => {
-  if (value === undefined) return undefined;
-  if (Array.isArray(value) || typeof value !== 'string' || value.length === 0) throw new Error('VALIDATION_FAILED');
-  return value;
+	if (value === undefined) return undefined;
+	if (Array.isArray(value) || typeof value !== 'string' || value.length === 0) throw new Error('VALIDATION_FAILED');
+	return value;
 };
 
 const idempotencyKey = (request: Request): string => {
-  const value = request.header('idempotency-key');
-  if (!value) throw new Error('IDEMPOTENCY_KEY_INVALID');
-  return value;
+	const value = request.header('idempotency-key');
+	if (!value) throw new Error('IDEMPOTENCY_KEY_INVALID');
+	return value;
 };
 
 export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencies): Router => {
-  const router = Router({ mergeParams: true });
-  const mutationSecurity = createAgentMutationSecurity({
-    nodeEnv: dependencies.nodeEnv,
-    publicOrigin: dependencies.publicOrigin,
-    csrfSecret: dependencies.csrfSecret,
-  });
+	const router = Router({ mergeParams: true });
+	const mutationSecurity = createAgentMutationSecurity({
+		nodeEnv: dependencies.nodeEnv,
+		publicOrigin: dependencies.publicOrigin,
+		csrfSecret: dependencies.csrfSecret,
+	});
 
-  router.use(requireAgentAuthenticated);
+	router.use(requireAgentAuthenticated);
 
-  router.get(
-    '/agent-definitions',
-    agentRoute(async (request, response) => {
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(request, response, (await dependencies.runs.definitions(scope)).map(definitionDto));
-    }),
-  );
+	router.get(
+		'/agent-definitions',
+		agentRoute(async (request, response) => {
+			const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+			agentData(request, response, (await dependencies.runs.definitions(scope)).map(definitionDto));
+		}),
+	);
 
-  router.get(
-    '/runs',
-    agentRoute(async (request, response) => {
-      const rawLimit = queryString(request.query.limit);
-      const limit = rawLimit === undefined ? 50 : Number(rawLimit);
-      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('VALIDATION_FAILED');
-      const threadId = queryString(request.query.threadId);
-      const before = queryString(request.query.before);
-      const query: AgentRunListQueryDto = {
-        limit,
-        ...(threadId === undefined ? {} : { threadId }),
-        ...(before === undefined ? {} : { before }),
-      };
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(
-        request,
-        response,
-        runPageDto(await dependencies.runs.list(scope, query.threadId, query.limit, query.before)),
-      );
-    }),
-  );
+	router.get(
+		'/runs',
+		agentRoute(async (request, response) => {
+			const rawLimit = queryString(request.query.limit);
+			const limit = rawLimit === undefined ? 50 : Number(rawLimit);
+			if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('VALIDATION_FAILED');
+			const threadId = queryString(request.query.threadId);
+			const before = queryString(request.query.before);
+			const query: AgentRunListQueryDto = {
+				limit,
+				...(threadId === undefined ? {} : { threadId }),
+				...(before === undefined ? {} : { before }),
+			};
+			const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+			agentData(
+				request,
+				response,
+				runPageDto(await dependencies.runs.list(scope, query.threadId, query.limit, query.before)),
+			);
+		}),
+	);
 
-  router.post(
-    '/runs',
-    mutationSecurity,
-    agentRoute(async (request, response) => {
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const input = parseCreateRunRequest(request.body);
-      const run = await dependencies.runs.create(scope, {
-        ...input,
-        command: { key: idempotencyKey(request), requestId: agentRequestId(request, response) },
-      });
-      response.setHeader('Location', `/api/v1/apps/${encodeURIComponent(scope.appId)}/runs/${run.id}`);
-      agentData(request, response, runDto(run), 201);
-    }),
-  );
+	router.post(
+		'/runs',
+		mutationSecurity,
+		agentRoute(async (request, response) => {
+			const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+			const input = parseCreateRunRequest(request.body);
+			const run = await dependencies.runs.create(scope, {
+				...input,
+				command: { key: idempotencyKey(request), requestId: agentRequestId(request, response) },
+			});
+			response.setHeader('Location', `/api/v1/apps/${encodeURIComponent(scope.appId)}/runs/${run.id}`);
+			agentData(request, response, runDto(run), 201);
+		}),
+	);
 
-  router.get(
-    '/runs/:runId',
-    agentRoute(async (request, response) => {
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(request, response, runSnapshotDto(await dependencies.runs.get(scope, pathParam(request.params.runId))));
-    }),
-  );
+	router.get(
+		'/runs/:runId',
+		agentRoute(async (request, response) => {
+			const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+			agentData(
+				request,
+				response,
+				runSnapshotDto(await dependencies.runs.get(scope, pathParam(request.params.runId))),
+			);
+		}),
+	);
 
-  router.get(
-    '/runs/:runId/reconciliation',
-    agentRoute(async (request, response) => {
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(
-        request,
-        response,
-        reconciliationDto(await dependencies.runs.reconciliation(scope, pathParam(request.params.runId))),
-      );
-    }),
-  );
+	router.get(
+		'/runs/:runId/reconciliation',
+		agentRoute(async (request, response) => {
+			const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+			agentData(
+				request,
+				response,
+				reconciliationDto(await dependencies.runs.reconciliation(scope, pathParam(request.params.runId))),
+			);
+		}),
+	);
 
-  router.post(
-    '/runs/:runId/reconciliation/resolve',
-    mutationSecurity,
-    agentRoute(async (request, response) => {
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const input = parseReconciliationResolveRequest(request.body);
-      agentData(
-        request,
-        response,
-        runDto(
-          await dependencies.runs.resolveReconciliation(
-            scope,
-            pathParam(request.params.runId),
-            input.expectedVersion,
-            input.note,
-            input.resources,
-          ),
-        ),
-      );
-    }),
-  );
+	router.post(
+		'/runs/:runId/reconciliation/resolve',
+		mutationSecurity,
+		agentRoute(async (request, response) => {
+			const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+			const input = parseReconciliationResolveRequest(request.body);
+			agentData(
+				request,
+				response,
+				runDto(
+					await dependencies.runs.resolveReconciliation(
+						scope,
+						pathParam(request.params.runId),
+						input.expectedVersion,
+						input.note,
+						input.resources,
+					),
+				),
+			);
+		}),
+	);
 
-  router.get(
-    '/runs/:runId/approvals',
-    agentRoute(async (request, response) => {
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(
-        request,
-        response,
-        (await dependencies.approvals.list(scope, pathParam(request.params.runId))).map(approvalDto),
-      );
-    }),
-  );
+	router.get(
+		'/runs/:runId/approvals',
+		agentRoute(async (request, response) => {
+			const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+			agentData(
+				request,
+				response,
+				(await dependencies.approvals.list(scope, pathParam(request.params.runId))).map(approvalDto),
+			);
+		}),
+	);
 
-  router.get(
-    '/runs/:runId/checkpoints',
-    agentRoute(async (request, response) => {
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(
-        request,
-        response,
-        (await dependencies.runs.listCheckpoints(scope, pathParam(request.params.runId))).map(checkpointDto),
-      );
-    }),
-  );
+	router.get(
+		'/runs/:runId/checkpoints',
+		agentRoute(async (request, response) => {
+			const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+			agentData(
+				request,
+				response,
+				(await dependencies.runs.listCheckpoints(scope, pathParam(request.params.runId))).map(checkpointDto),
+			);
+		}),
+	);
 
-  router.get('/runs/:runId/events', (request, response) => {
-    agentError(
-      request,
-      response,
-      410,
-      'AGENT_STREAM_PROTOCOL_REPLACED',
-      'Agent Run event streaming moved to the /ws/agent WebSocket protocol.',
-    );
-  });
+	router.get('/runs/:runId/events', (request, response) => {
+		agentError(
+			request,
+			response,
+			410,
+			'AGENT_STREAM_PROTOCOL_REPLACED',
+			'Agent Run event streaming moved to the /ws/agent WebSocket protocol.',
+		);
+	});
 
-  router.post(
-    '/runs/:runId/checkpoints',
-    mutationSecurity,
-    agentRoute(async (request, response) => {
-      const expectedVersion = parseExpectedVersionRequest(request.body);
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const runId = pathParam(request.params.runId);
-      const checkpoint = await withVersionConflictDetails(
-        expectedVersion,
-        async () => (await dependencies.runs.get(scope, runId)).version,
-        () => dependencies.runs.saveCheckpoint(scope, runId, expectedVersion),
-      );
-      response.setHeader(
-        'Location',
-        `/api/v1/apps/${encodeURIComponent(scope.appId)}/runs/${encodeURIComponent(checkpoint.runId)}`,
-      );
-      agentData(request, response, checkpointDto(checkpoint), 201);
-    }),
-  );
+	router.post(
+		'/runs/:runId/checkpoints',
+		mutationSecurity,
+		agentRoute(async (request, response) => {
+			const expectedVersion = parseExpectedVersionRequest(request.body);
+			const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+			const runId = pathParam(request.params.runId);
+			const checkpoint = await withVersionConflictDetails(
+				expectedVersion,
+				async () => (await dependencies.runs.get(scope, runId)).version,
+				() => dependencies.runs.saveCheckpoint(scope, runId, expectedVersion),
+			);
+			response.setHeader(
+				'Location',
+				`/api/v1/apps/${encodeURIComponent(scope.appId)}/runs/${encodeURIComponent(checkpoint.runId)}`,
+			);
+			agentData(request, response, checkpointDto(checkpoint), 201);
+		}),
+	);
 
-  router.delete(
-    '/runs/:runId/checkpoints/:checkpointId',
-    mutationSecurity,
-    agentRoute(async (request, response) => {
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const runId = pathParam(request.params.runId);
-      const checkpointId = pathParam(request.params.checkpointId);
-      await dependencies.runs.deleteCheckpoint(scope, runId, checkpointId);
-      agentData(request, response, { checkpointId, deleted: true });
-    }),
-  );
+	router.delete(
+		'/runs/:runId/checkpoints/:checkpointId',
+		mutationSecurity,
+		agentRoute(async (request, response) => {
+			const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+			const runId = pathParam(request.params.runId);
+			const checkpointId = pathParam(request.params.checkpointId);
+			await dependencies.runs.deleteCheckpoint(scope, runId, checkpointId);
+			agentData(request, response, { checkpointId, deleted: true });
+		}),
+	);
 
-  router.post(
-    '/runs/:runId/resume',
-    mutationSecurity,
-    agentRoute(async (request, response) => {
-      const input = parseResumeRunRequest(request.body);
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const runId = pathParam(request.params.runId);
-      const run = await withVersionConflictDetails(
-        input.expectedVersion,
-        async () => (await dependencies.runs.get(scope, runId)).version,
-        () =>
-          dependencies.runs.resume(scope, runId, input.checkpointId, input.expectedVersion, idempotencyKey(request)),
-      );
-      response.setHeader(
-        'Location',
-        `/api/v1/apps/${encodeURIComponent(scope.appId)}/runs/${encodeURIComponent(run.id)}`,
-      );
-      agentData(request, response, runDto(run), 201);
-    }),
-  );
+	router.post(
+		'/runs/:runId/resume',
+		mutationSecurity,
+		agentRoute(async (request, response) => {
+			const input = parseResumeRunRequest(request.body);
+			const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+			const runId = pathParam(request.params.runId);
+			const run = await withVersionConflictDetails(
+				input.expectedVersion,
+				async () => (await dependencies.runs.get(scope, runId)).version,
+				() =>
+					dependencies.runs.resume(
+						scope,
+						runId,
+						input.checkpointId,
+						input.expectedVersion,
+						idempotencyKey(request),
+					),
+			);
+			response.setHeader(
+				'Location',
+				`/api/v1/apps/${encodeURIComponent(scope.appId)}/runs/${encodeURIComponent(run.id)}`,
+			);
+			agentData(request, response, runDto(run), 201);
+		}),
+	);
 
-  router.post(
-    '/runs/:runId/inputs',
-    mutationSecurity,
-    agentRoute(async (request, response) => {
-      const input = parseAppendInputRequest(request.body);
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const runId = pathParam(request.params.runId);
-      const result = await withVersionConflictDetails(
-        input.expectedVersion,
-        async () => (await dependencies.runs.get(scope, runId)).version,
-        () => dependencies.runs.appendInput(scope, runId, input.input, input.expectedVersion, idempotencyKey(request)),
-      );
-      const payload: AgentRunAppendInputResponseDto = {
-        inputId: result.inputId,
-        sequence: result.sequence,
-        runVersion: result.runVersion,
-      };
-      agentData(request, response, payload, 202);
-    }),
-  );
+	router.post(
+		'/runs/:runId/inputs',
+		mutationSecurity,
+		agentRoute(async (request, response) => {
+			const input = parseAppendInputRequest(request.body);
+			const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+			const runId = pathParam(request.params.runId);
+			const result = await withVersionConflictDetails(
+				input.expectedVersion,
+				async () => (await dependencies.runs.get(scope, runId)).version,
+				() =>
+					dependencies.runs.appendInput(
+						scope,
+						runId,
+						input.input,
+						input.expectedVersion,
+						idempotencyKey(request),
+					),
+			);
+			const payload: AgentRunAppendInputResponseDto = {
+				inputId: result.inputId,
+				sequence: result.sequence,
+				runVersion: result.runVersion,
+			};
+			agentData(request, response, payload, 202);
+		}),
+	);
 
-  router.post(
-    '/runs/:runId/interrupt',
-    mutationSecurity,
-    agentRoute(async (request, response) => {
-      const input = parseAppendInputRequest(request.body);
-      if (input.input.artifactRefs.length > 0) throw new Error('VALIDATION_FAILED');
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const runId = pathParam(request.params.runId);
-      const result = await withVersionConflictDetails(
-        input.expectedVersion,
-        async () => (await dependencies.runs.get(scope, runId)).version,
-        () => dependencies.runs.interrupt(scope, runId, input.input, input.expectedVersion, idempotencyKey(request)),
-      );
-      const payload: AgentRunAppendInputResponseDto = {
-        inputId: result.inputId,
-        sequence: result.sequence,
-        runVersion: result.runVersion,
-      };
-      agentData(request, response, payload, 202);
-    }),
-  );
+	router.post(
+		'/runs/:runId/interrupt',
+		mutationSecurity,
+		agentRoute(async (request, response) => {
+			const input = parseAppendInputRequest(request.body);
+			if (input.input.artifactRefs.length > 0) throw new Error('VALIDATION_FAILED');
+			const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+			const runId = pathParam(request.params.runId);
+			const result = await withVersionConflictDetails(
+				input.expectedVersion,
+				async () => (await dependencies.runs.get(scope, runId)).version,
+				() =>
+					dependencies.runs.interrupt(
+						scope,
+						runId,
+						input.input,
+						input.expectedVersion,
+						idempotencyKey(request),
+					),
+			);
+			const payload: AgentRunAppendInputResponseDto = {
+				inputId: result.inputId,
+				sequence: result.sequence,
+				runVersion: result.runVersion,
+			};
+			agentData(request, response, payload, 202);
+		}),
+	);
 
-  router.get(
-    '/runs/:runId/pending-inputs',
-    agentRoute(async (request, response) => {
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(
-        request,
-        response,
-        pendingInputsDto(await dependencies.runs.pendingInputs(scope, pathParam(request.params.runId))),
-      );
-    }),
-  );
+	router.get(
+		'/runs/:runId/pending-inputs',
+		agentRoute(async (request, response) => {
+			const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+			agentData(
+				request,
+				response,
+				pendingInputsDto(await dependencies.runs.pendingInputs(scope, pathParam(request.params.runId))),
+			);
+		}),
+	);
 
-  router.patch(
-    '/runs/:runId/pending-inputs',
-    mutationSecurity,
-    agentRoute(async (request, response) => {
-      const input = parsePendingInputMutationRequest(request.body);
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const runId = pathParam(request.params.runId);
-      const run = await withVersionConflictDetails(
-        input.expectedVersion,
-        async () => (await dependencies.runs.get(scope, runId)).version,
-        () =>
-          dependencies.runs.mutatePendingInput(
-            scope,
-            runId,
-            input.action,
-            input.inputId,
-            input.beforeInputId,
-            input.expectedVersion,
-            idempotencyKey(request),
-          ),
-      );
-      agentData(request, response, runDto(run));
-    }),
-  );
+	router.patch(
+		'/runs/:runId/pending-inputs',
+		mutationSecurity,
+		agentRoute(async (request, response) => {
+			const input = parsePendingInputMutationRequest(request.body);
+			const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+			const runId = pathParam(request.params.runId);
+			const run = await withVersionConflictDetails(
+				input.expectedVersion,
+				async () => (await dependencies.runs.get(scope, runId)).version,
+				() =>
+					dependencies.runs.mutatePendingInput(
+						scope,
+						runId,
+						input.action,
+						input.inputId,
+						input.beforeInputId,
+						input.expectedVersion,
+						idempotencyKey(request),
+					),
+			);
+			agentData(request, response, runDto(run));
+		}),
+	);
 
-  router.post(
-    '/runs/:runId/goal',
-    mutationSecurity,
-    agentRoute(async (request, response) => {
-      const input = parseSetGoalRequest(request.body);
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const runId = pathParam(request.params.runId);
-      const run = await withVersionConflictDetails(
-        input.expectedVersion,
-        async () => (await dependencies.runs.get(scope, runId)).version,
-        () => dependencies.runs.setGoal(scope, runId, input.text, input.expectedVersion, idempotencyKey(request)),
-      );
-      agentData(request, response, runDto(run));
-    }),
-  );
+	router.post(
+		'/runs/:runId/goal',
+		mutationSecurity,
+		agentRoute(async (request, response) => {
+			const input = parseSetGoalRequest(request.body);
+			const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+			const runId = pathParam(request.params.runId);
+			const run = await withVersionConflictDetails(
+				input.expectedVersion,
+				async () => (await dependencies.runs.get(scope, runId)).version,
+				() =>
+					dependencies.runs.setGoal(scope, runId, input.text, input.expectedVersion, idempotencyKey(request)),
+			);
+			agentData(request, response, runDto(run));
+		}),
+	);
 
-  router.post(
-    '/runs/:runId/budget',
-    mutationSecurity,
-    agentRoute(async (request, response) => {
-      const { increase, expectedVersion } = parseBudgetIncreaseRequest(request.body);
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const runId = pathParam(request.params.runId);
-      const run = await withVersionConflictDetails(
-        expectedVersion,
-        async () => (await dependencies.runs.get(scope, runId)).version,
-        () => dependencies.runs.increaseBudget(scope, runId, increase, expectedVersion, idempotencyKey(request)),
-      );
-      agentData(request, response, runDto(run));
-    }),
-  );
+	router.post(
+		'/runs/:runId/budget',
+		mutationSecurity,
+		agentRoute(async (request, response) => {
+			const { increase, expectedVersion } = parseBudgetIncreaseRequest(request.body);
+			const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+			const runId = pathParam(request.params.runId);
+			const run = await withVersionConflictDetails(
+				expectedVersion,
+				async () => (await dependencies.runs.get(scope, runId)).version,
+				() =>
+					dependencies.runs.increaseBudget(scope, runId, increase, expectedVersion, idempotencyKey(request)),
+			);
+			agentData(request, response, runDto(run));
+		}),
+	);
 
-  router.post(
-    '/runs/:runId/cancel',
-    mutationSecurity,
-    agentRoute(async (request, response) => {
-      const expectedVersion = parseExpectedVersionRequest(request.body);
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const runId = pathParam(request.params.runId);
-      const run = await withVersionConflictDetails(
-        expectedVersion,
-        async () => (await dependencies.runs.get(scope, runId)).version,
-        () => dependencies.runs.cancel(scope, runId, expectedVersion, idempotencyKey(request)),
-      );
-      agentData(request, response, runDto(run), run.status === 'cancelled' ? 200 : 202);
-    }),
-  );
+	router.post(
+		'/runs/:runId/cancel',
+		mutationSecurity,
+		agentRoute(async (request, response) => {
+			const expectedVersion = parseExpectedVersionRequest(request.body);
+			const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+			const runId = pathParam(request.params.runId);
+			const run = await withVersionConflictDetails(
+				expectedVersion,
+				async () => (await dependencies.runs.get(scope, runId)).version,
+				() => dependencies.runs.cancel(scope, runId, expectedVersion, idempotencyKey(request)),
+			);
+			agentData(request, response, runDto(run), run.status === 'cancelled' ? 200 : 202);
+		}),
+	);
 
-  router.delete(
-    '/runs/:runId',
-    mutationSecurity,
-    agentRoute(async (request, response) => {
-      const rawVersion = queryString(request.query.expectedVersion);
-      const expectedVersion = rawVersion === undefined ? Number.NaN : Number(rawVersion);
-      if (!positiveInteger(expectedVersion)) throw new Error('VALIDATION_FAILED');
-      const query: AgentRunDeleteQueryDto = { expectedVersion };
-      const runId = pathParam(request.params.runId);
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      await withVersionConflictDetails(
-        query.expectedVersion,
-        async () => (await dependencies.runs.get(scope, runId)).version,
-        () => dependencies.runs.delete(scope, runId, query.expectedVersion, idempotencyKey(request)),
-      );
-      const payload: AgentRunDeleteResponseDto = { runId, deleted: true };
-      agentData(request, response, payload, 202);
-    }),
-  );
+	router.delete(
+		'/runs/:runId',
+		mutationSecurity,
+		agentRoute(async (request, response) => {
+			const rawVersion = queryString(request.query.expectedVersion);
+			const expectedVersion = rawVersion === undefined ? Number.NaN : Number(rawVersion);
+			if (!positiveInteger(expectedVersion)) throw new Error('VALIDATION_FAILED');
+			const query: AgentRunDeleteQueryDto = { expectedVersion };
+			const runId = pathParam(request.params.runId);
+			const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+			await withVersionConflictDetails(
+				query.expectedVersion,
+				async () => (await dependencies.runs.get(scope, runId)).version,
+				() => dependencies.runs.delete(scope, runId, query.expectedVersion, idempotencyKey(request)),
+			);
+			const payload: AgentRunDeleteResponseDto = { runId, deleted: true };
+			agentData(request, response, payload, 202);
+		}),
+	);
 
-  return router;
+	return router;
 };

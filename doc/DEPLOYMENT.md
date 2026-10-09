@@ -137,9 +137,9 @@ Compose 网络默认启用 IPv6，并使用 `.env` 中的 `NEXUS_IPV6_SUBNET` / 
 
 ```json
 {
-  "ipv6": true,
-  "fixed-cidr-v6": "fd00::/80",
-  "ip6tables": true
+	"ipv6": true,
+	"fixed-cidr-v6": "fd00::/80",
+	"ip6tables": true
 }
 ```
 

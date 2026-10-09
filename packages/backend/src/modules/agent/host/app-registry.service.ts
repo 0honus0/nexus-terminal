@@ -3,98 +3,99 @@ import { compare } from 'semver';
 import type { AgentAppDefinition } from './app.types';
 
 export class AppRegistryService {
-  private readonly builtinDefinitions = new Map<string, AgentAppDefinition>();
-  private readonly versions = new Map<string, Map<string, AgentAppDefinition>>();
-  private readonly intentOwners = new Map<string, string>();
+	private readonly builtinDefinitions = new Map<string, AgentAppDefinition>();
+	private readonly versions = new Map<string, Map<string, AgentAppDefinition>>();
+	private readonly intentOwners = new Map<string, string>();
 
-  register(definition: AgentAppDefinition): void {
-    const { id } = definition.manifest;
-    if (this.builtinDefinitions.has(id)) throw new Error(`Duplicate Agent App id: ${id}`);
-    this.assertIntentsAvailable(definition, id);
-    this.builtinDefinitions.set(id, definition);
-    this.putVersion(definition);
-  }
+	register(definition: AgentAppDefinition): void {
+		const { id } = definition.manifest;
+		if (this.builtinDefinitions.has(id)) throw new Error(`Duplicate Agent App id: ${id}`);
+		this.assertIntentsAvailable(definition, id);
+		this.builtinDefinitions.set(id, definition);
+		this.putVersion(definition);
+	}
 
-  registerVersion(definition: AgentAppDefinition): void {
-    const { id, version } = definition.manifest;
-    const existing = this.versions.get(id)?.get(version);
-    if (existing) {
-      if (!isDeepStrictEqual(existing.manifest, definition.manifest)) {
-        throw new Error(`Conflicting Agent App version: ${id}@${version}`);
-      }
-      return;
-    }
-    this.assertIntentsAvailable(definition, id);
-    this.putVersion(definition);
-  }
+	registerVersion(definition: AgentAppDefinition): void {
+		const { id, version } = definition.manifest;
+		const existing = this.versions.get(id)?.get(version);
+		if (existing) {
+			if (!isDeepStrictEqual(existing.manifest, definition.manifest)) {
+				throw new Error(`Conflicting Agent App version: ${id}@${version}`);
+			}
+			return;
+		}
+		this.assertIntentsAvailable(definition, id);
+		this.putVersion(definition);
+	}
 
-  removeVersion(appId: string, version: string): void {
-    if (this.builtinDefinitions.get(appId)?.manifest.version === version) return;
-    const versions = this.versions.get(appId);
-    const removed = versions?.get(version);
-    if (!versions || !removed) return;
-    versions.delete(version);
-    if (versions.size === 0) this.versions.delete(appId);
-    const retainedIntentIds = new Set(
-      [
-        ...(this.builtinDefinitions.get(appId) ? [this.builtinDefinitions.get(appId)!] : []),
-        ...[...(this.versions.get(appId)?.values() ?? [])],
-      ].flatMap((definition) => definition.manifest.intents.map((intent) => intent.id)),
-    );
-    for (const intent of removed.manifest.intents) {
-      if (!retainedIntentIds.has(intent.id) && this.intentOwners.get(intent.id) === appId) {
-        this.intentOwners.delete(intent.id);
-      }
-    }
-  }
+	removeVersion(appId: string, version: string): void {
+		if (this.builtinDefinitions.get(appId)?.manifest.version === version) return;
+		const versions = this.versions.get(appId);
+		const removed = versions?.get(version);
+		if (!versions || !removed) return;
+		versions.delete(version);
+		if (versions.size === 0) this.versions.delete(appId);
+		const retainedIntentIds = new Set(
+			[
+				...(this.builtinDefinitions.get(appId) ? [this.builtinDefinitions.get(appId)!] : []),
+				...[...(this.versions.get(appId)?.values() ?? [])],
+			].flatMap((definition) => definition.manifest.intents.map((intent) => intent.id)),
+		);
+		for (const intent of removed.manifest.intents) {
+			if (!retainedIntentIds.has(intent.id) && this.intentOwners.get(intent.id) === appId) {
+				this.intentOwners.delete(intent.id);
+			}
+		}
+	}
 
-  get(appId: string, version?: string): AgentAppDefinition {
-    const definition = version
-      ? this.versions.get(appId)?.get(version)
-      : (this.builtinDefinitions.get(appId) ?? this.latestVersion(appId));
-    if (!definition) throw new Error(`Agent App not registered: ${appId}${version ? `@${version}` : ''}`);
-    return definition;
-  }
+	get(appId: string, version?: string): AgentAppDefinition {
+		const definition = version
+			? this.versions.get(appId)?.get(version)
+			: (this.builtinDefinitions.get(appId) ?? this.latestVersion(appId));
+		if (!definition) throw new Error(`Agent App not registered: ${appId}${version ? `@${version}` : ''}`);
+		return definition;
+	}
 
-  has(appId: string, version?: string): boolean {
-    return version ? Boolean(this.versions.get(appId)?.has(version)) : Boolean(this.versions.get(appId)?.size);
-  }
+	has(appId: string, version?: string): boolean {
+		return version ? Boolean(this.versions.get(appId)?.has(version)) : Boolean(this.versions.get(appId)?.size);
+	}
 
-  isBuiltin(appId: string): boolean {
-    return this.builtinDefinitions.has(appId);
-  }
+	isBuiltin(appId: string): boolean {
+		return this.builtinDefinitions.has(appId);
+	}
 
-  pluginVersions(): Array<{ appId: string; version: string }> {
-    return [...this.versions].flatMap(([appId, versions]) =>
-      [...versions.keys()]
-        .filter((version) => this.builtinDefinitions.get(appId)?.manifest.version !== version)
-        .map((version) => ({ appId, version })),
-    );
-  }
+	pluginVersions(): Array<{ appId: string; version: string }> {
+		return [...this.versions].flatMap(([appId, versions]) =>
+			[...versions.keys()]
+				.filter((version) => this.builtinDefinitions.get(appId)?.manifest.version !== version)
+				.map((version) => ({ appId, version })),
+		);
+	}
 
-  list(): AgentAppDefinition[] {
-    return [...this.builtinDefinitions.values()].sort((left, right) =>
-      left.manifest.id.localeCompare(right.manifest.id),
-    );
-  }
+	list(): AgentAppDefinition[] {
+		return [...this.builtinDefinitions.values()].sort((left, right) =>
+			left.manifest.id.localeCompare(right.manifest.id),
+		);
+	}
 
-  private putVersion(definition: AgentAppDefinition): void {
-    const { id, version, intents } = definition.manifest;
-    const versions = this.versions.get(id) ?? new Map<string, AgentAppDefinition>();
-    versions.set(version, definition);
-    this.versions.set(id, versions);
-    for (const intent of intents) this.intentOwners.set(intent.id, id);
-  }
+	private putVersion(definition: AgentAppDefinition): void {
+		const { id, version, intents } = definition.manifest;
+		const versions = this.versions.get(id) ?? new Map<string, AgentAppDefinition>();
+		versions.set(version, definition);
+		this.versions.set(id, versions);
+		for (const intent of intents) this.intentOwners.set(intent.id, id);
+	}
 
-  private latestVersion(appId: string): AgentAppDefinition | undefined {
-    const versions = [...(this.versions.get(appId)?.values() ?? [])];
-    return versions.sort((left, right) => compare(right.manifest.version, left.manifest.version))[0];
-  }
+	private latestVersion(appId: string): AgentAppDefinition | undefined {
+		const versions = [...(this.versions.get(appId)?.values() ?? [])];
+		return versions.sort((left, right) => compare(right.manifest.version, left.manifest.version))[0];
+	}
 
-  private assertIntentsAvailable(definition: AgentAppDefinition, appId: string): void {
-    for (const intent of definition.manifest.intents) {
-      const owner = this.intentOwners.get(intent.id);
-      if (owner && owner !== appId) throw new Error(`Duplicate Agent intent ${intent.id}: already owned by ${owner}`);
-    }
-  }
+	private assertIntentsAvailable(definition: AgentAppDefinition, appId: string): void {
+		for (const intent of definition.manifest.intents) {
+			const owner = this.intentOwners.get(intent.id);
+			if (owner && owner !== appId)
+				throw new Error(`Duplicate Agent intent ${intent.id}: already owned by ${owner}`);
+		}
+	}
 }

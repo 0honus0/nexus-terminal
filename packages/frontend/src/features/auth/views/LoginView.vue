@@ -1,230 +1,233 @@
 <script setup lang="ts">
-  import { computed, reactive, ref, watch } from 'vue';
-  import { useRouter } from 'vue-router';
-  import { useI18n } from 'vue-i18n';
-  import { apiErrorMessage } from '@/client/http';
-  import { UiButton, UiCheckbox, UiFormField, UiInput } from '@/foundation/ui';
-  import { useAuthSession } from '../public';
+	import { computed, reactive, ref, watch } from 'vue';
+	import { useRouter } from 'vue-router';
+	import { useI18n } from 'vue-i18n';
+	import { apiErrorMessage } from '@/client/http';
+	import { UiButton, UiCheckbox, UiFormField, UiInput } from '@/foundation/ui';
+	import { useAuthSession } from '../public';
 
-  type CaptchaStatus = 'loading' | 'ready' | 'error' | 'invalid';
+	type CaptchaStatus = 'loading' | 'ready' | 'error' | 'invalid';
 
-  const props = withDefaults(
-    defineProps<{
-      captchaRequired?: boolean;
-      captchaToken?: string | null;
-      captchaStatus?: CaptchaStatus;
-      passkeyAvailable?: boolean;
-      passkeyLoading?: boolean;
-    }>(),
-    {
-      captchaRequired: false,
-      captchaToken: null,
-      captchaStatus: 'ready',
-      passkeyAvailable: false,
-      passkeyLoading: false,
-    },
-  );
-  const emit = defineEmits<{
-    passkey: [username: string];
-    loginAttempted: [];
-    securityChallengeFeedback: [message: string | null];
-    securityChallengeConsumed: [];
-  }>();
+	const props = withDefaults(
+		defineProps<{
+			captchaRequired?: boolean;
+			captchaToken?: string | null;
+			captchaStatus?: CaptchaStatus;
+			passkeyAvailable?: boolean;
+			passkeyLoading?: boolean;
+		}>(),
+		{
+			captchaRequired: false,
+			captchaToken: null,
+			captchaStatus: 'ready',
+			passkeyAvailable: false,
+			passkeyLoading: false,
+		},
+	);
+	const emit = defineEmits<{
+		passkey: [username: string];
+		loginAttempted: [];
+		securityChallengeFeedback: [message: string | null];
+		securityChallengeConsumed: [];
+	}>();
 
-  const router = useRouter();
-  const { t } = useI18n();
-  const auth = useAuthSession();
+	const router = useRouter();
+	const { t } = useI18n();
+	const auth = useAuthSession();
 
-  const credentials = reactive({ username: '', password: '' });
-  const rememberMe = ref(false);
-  const twoFactorToken = ref('');
-  const isLoading = ref(false);
-  const error = ref<string | null>(null);
-  const isBusy = computed(() => isLoading.value || props.passkeyLoading);
-  const captchaBlocked = computed(() => !auth.pendingSecondFactor.value && props.captchaStatus !== 'ready');
+	const credentials = reactive({ username: '', password: '' });
+	const rememberMe = ref(false);
+	const twoFactorToken = ref('');
+	const isLoading = ref(false);
+	const error = ref<string | null>(null);
+	const isBusy = computed(() => isLoading.value || props.passkeyLoading);
+	const captchaBlocked = computed(() => !auth.pendingSecondFactor.value && props.captchaStatus !== 'ready');
 
-  watch(
-    () => auth.pendingSecondFactor.value,
-    (pending) => {
-      if (!pending) twoFactorToken.value = '';
-    },
-  );
+	watch(
+		() => auth.pendingSecondFactor.value,
+		(pending) => {
+			if (!pending) twoFactorToken.value = '';
+		},
+	);
 
-  const submit = async (): Promise<void> => {
-    if (isBusy.value) return;
-    const submittingSecondFactor = auth.pendingSecondFactor.value;
-    error.value = null;
-    if (!submittingSecondFactor) {
-      emit('loginAttempted');
-      emit('securityChallengeFeedback', null);
-    }
-    isLoading.value = true;
+	const submit = async (): Promise<void> => {
+		if (isBusy.value) return;
+		const submittingSecondFactor = auth.pendingSecondFactor.value;
+		error.value = null;
+		if (!submittingSecondFactor) {
+			emit('loginAttempted');
+			emit('securityChallengeFeedback', null);
+		}
+		isLoading.value = true;
 
-    try {
-      if (submittingSecondFactor) {
-        await auth.verifyTwoFactor(twoFactorToken.value);
-        await router.push({ name: 'Dashboard' });
-        return;
-      }
+		try {
+			if (submittingSecondFactor) {
+				await auth.verifyTwoFactor(twoFactorToken.value);
+				await router.push({ name: 'Dashboard' });
+				return;
+			}
 
-      if (props.captchaStatus !== 'ready') {
-        return;
-      }
-      if (props.captchaRequired && !props.captchaToken) {
-        emit('securityChallengeFeedback', t('auth.login.error.captchaRequired'));
-        return;
-      }
-      try {
-        const result = await auth.login({
-          username: credentials.username,
-          password: credentials.password,
-          rememberMe: rememberMe.value,
-          captchaToken: props.captchaToken ?? undefined,
-        });
+			if (props.captchaStatus !== 'ready') {
+				return;
+			}
+			if (props.captchaRequired && !props.captchaToken) {
+				emit('securityChallengeFeedback', t('auth.login.error.captchaRequired'));
+				return;
+			}
+			try {
+				const result = await auth.login({
+					username: credentials.username,
+					password: credentials.password,
+					rememberMe: rememberMe.value,
+					captchaToken: props.captchaToken ?? undefined,
+				});
 
-        if (result.status === 'authenticated') await router.push({ name: 'Dashboard' });
-      } finally {
-        if (props.captchaRequired) emit('securityChallengeConsumed');
-      }
-    } catch (cause) {
-      error.value = apiErrorMessage(
-        cause,
-        t(submittingSecondFactor ? 'auth.login.error.twoFactorGeneric' : 'auth.login.error.generic'),
-      );
-    } finally {
-      isLoading.value = false;
-    }
-  };
+				if (result.status === 'authenticated') await router.push({ name: 'Dashboard' });
+			} finally {
+				if (props.captchaRequired) emit('securityChallengeConsumed');
+			}
+		} catch (cause) {
+			error.value = apiErrorMessage(
+				cause,
+				t(submittingSecondFactor ? 'auth.login.error.twoFactorGeneric' : 'auth.login.error.generic'),
+			);
+		} finally {
+			isLoading.value = false;
+		}
+	};
 
-  const startPasskey = (): void => {
-    error.value = null;
-    emit('passkey', credentials.username);
-  };
+	const startPasskey = (): void => {
+		error.value = null;
+		emit('passkey', credentials.username);
+	};
 </script>
 
 <template>
-  <div class="auth-page flex min-h-dvh items-center justify-center overflow-y-auto p-4">
-    <div
-      class="auth-login-panel ui-glass-panel flex min-h-[440px] w-full max-w-4xl overflow-hidden rounded-2xl sm:min-h-[480px]"
-    >
-      <section class="auth-brand-pane hidden w-2/5 flex-col items-center justify-center p-10 text-white md:flex">
-        <img src="@/assets/logo-small.png" :alt="t('projectName')" class="mb-5 h-20 w-auto" />
-        <h1 class="mb-2 text-3xl font-bold">{{ t('projectName') }}</h1>
-        <p class="text-center text-base opacity-80">{{ t('slogan') }}</p>
-      </section>
+	<div class="auth-page flex min-h-dvh items-center justify-center overflow-y-auto p-4">
+		<div
+			class="auth-login-panel ui-glass-panel flex min-h-[440px] w-full max-w-4xl overflow-hidden rounded-2xl sm:min-h-[480px]"
+		>
+			<section class="auth-brand-pane hidden w-2/5 flex-col items-center justify-center p-10 text-white md:flex">
+				<img src="@/assets/logo-small.png" :alt="t('projectName')" class="mb-5 h-20 w-auto" />
+				<h1 class="mb-2 text-3xl font-bold">{{ t('projectName') }}</h1>
+				<p class="text-center text-base opacity-80">{{ t('slogan') }}</p>
+			</section>
 
-      <section class="flex w-full flex-col justify-center p-8 sm:p-12 md:w-3/5">
-        <div class="mb-6 flex justify-center md:hidden">
-          <img src="@/assets/logo-small.png" :alt="t('projectName')" class="h-16 w-auto" />
-        </div>
+			<section class="flex w-full flex-col justify-center p-8 sm:p-12 md:w-3/5">
+				<div class="mb-6 flex justify-center md:hidden">
+					<img src="@/assets/logo-small.png" :alt="t('projectName')" class="h-16 w-auto" />
+				</div>
 
-        <h2 class="mb-6 text-center text-2xl font-semibold text-foreground">{{ t('auth.login.title') }}</h2>
+				<h2 class="mb-6 text-center text-2xl font-semibold text-foreground">{{ t('auth.login.title') }}</h2>
 
-        <form class="space-y-5" @submit.prevent="submit">
-          <div v-if="!auth.pendingSecondFactor.value" class="space-y-6">
-            <UiFormField :label="t('auth.login.username')" for-id="username">
-              <UiInput
-                id="username"
-                v-model="credentials.username"
-                name="username"
-                autocomplete="username"
-                required
-                density="touch"
-                :disabled="isBusy"
-              />
-            </UiFormField>
+				<form class="space-y-5" @submit.prevent="submit">
+					<div v-if="!auth.pendingSecondFactor.value" class="space-y-6">
+						<UiFormField :label="t('auth.login.username')" for-id="username">
+							<UiInput
+								id="username"
+								v-model="credentials.username"
+								name="username"
+								autocomplete="username"
+								required
+								density="touch"
+								:disabled="isBusy"
+							/>
+						</UiFormField>
 
-            <UiFormField :label="t('auth.login.password')" for-id="password">
-              <UiInput
-                id="password"
-                v-model="credentials.password"
-                name="password"
-                type="password"
-                autocomplete="current-password"
-                required
-                density="touch"
-                :disabled="isBusy"
-              />
-            </UiFormField>
+						<UiFormField :label="t('auth.login.password')" for-id="password">
+							<UiInput
+								id="password"
+								v-model="credentials.password"
+								name="password"
+								type="password"
+								autocomplete="current-password"
+								required
+								density="touch"
+								:disabled="isBusy"
+							/>
+						</UiFormField>
 
-            <label class="flex cursor-pointer items-center gap-2 text-sm text-text-secondary" for="rememberMe">
-              <UiCheckbox id="rememberMe" v-model="rememberMe" :disabled="isBusy" />
-              <span>{{ t('auth.login.rememberMe') }}</span>
-            </label>
-          </div>
+						<label
+							class="flex cursor-pointer items-center gap-2 text-sm text-text-secondary"
+							for="rememberMe"
+						>
+							<UiCheckbox id="rememberMe" v-model="rememberMe" :disabled="isBusy" />
+							<span>{{ t('auth.login.rememberMe') }}</span>
+						</label>
+					</div>
 
-          <UiFormField v-else :label="t('auth.login.twoFactorPrompt')" for-id="twoFactorToken">
-            <UiInput
-              id="twoFactorToken"
-              v-model="twoFactorToken"
-              name="twoFactorToken"
-              inputmode="numeric"
-              autocomplete="one-time-code"
-              pattern="[0-9]{6}"
-              required
-              density="touch"
-              :disabled="isBusy"
-            />
-          </UiFormField>
+					<UiFormField v-else :label="t('auth.login.twoFactorPrompt')" for-id="twoFactorToken">
+						<UiInput
+							id="twoFactorToken"
+							v-model="twoFactorToken"
+							name="twoFactorToken"
+							inputmode="numeric"
+							autocomplete="one-time-code"
+							pattern="[0-9]{6}"
+							required
+							density="touch"
+							:disabled="isBusy"
+						/>
+					</UiFormField>
 
-          <slot v-if="!auth.pendingSecondFactor.value" name="security" />
+					<slot v-if="!auth.pendingSecondFactor.value" name="security" />
 
-          <p v-if="error" class="text-error text-center text-sm -mt-2 mb-2" role="alert">{{ error }}</p>
+					<p v-if="error" class="text-error text-center text-sm -mt-2 mb-2" role="alert">{{ error }}</p>
 
-          <UiButton
-            type="submit"
-            appearance="solid"
-            tone="primary"
-            density="touch"
-            block
-            :disabled="captchaBlocked"
-            :loading="isBusy"
-          >
-            {{
-              isBusy
-                ? t('auth.login.loggingIn')
-                : auth.pendingSecondFactor.value
-                  ? t('auth.login.verifyButton')
-                  : t('auth.login.loginButton')
-            }}
-          </UiButton>
+					<UiButton
+						type="submit"
+						appearance="solid"
+						tone="primary"
+						density="touch"
+						block
+						:disabled="captchaBlocked"
+						:loading="isBusy"
+					>
+						{{
+							isBusy
+								? t('auth.login.loggingIn')
+								: auth.pendingSecondFactor.value
+									? t('auth.login.verifyButton')
+									: t('auth.login.loginButton')
+						}}
+					</UiButton>
 
-          <UiButton
-            v-if="props.passkeyAvailable && !auth.pendingSecondFactor.value"
-            type="button"
-            density="touch"
-            block
-            :loading="isBusy"
-            @click="startPasskey"
-          >
-            <template #leading><i class="fas fa-key" aria-hidden="true"></i></template>
-            {{ isBusy ? t('auth.login.loggingIn') : t('auth.login.loginWithPasskey') }}
-          </UiButton>
-        </form>
-      </section>
-    </div>
-  </div>
+					<UiButton
+						v-if="props.passkeyAvailable && !auth.pendingSecondFactor.value"
+						type="button"
+						density="touch"
+						block
+						:loading="isBusy"
+						@click="startPasskey"
+					>
+						<template #leading><i class="fas fa-key" aria-hidden="true"></i></template>
+						{{ isBusy ? t('auth.login.loggingIn') : t('auth.login.loginWithPasskey') }}
+					</UiButton>
+				</form>
+			</section>
+		</div>
+	</div>
 </template>
 
 <style scoped>
-  .auth-page {
-    background:
-      radial-gradient(circle at 12% 24%, rgb(57 153 210 / 18%), transparent 34rem),
-      radial-gradient(circle at 88% 76%, rgb(171 102 205 / 14%), transparent 38rem), var(--app-bg-color);
-  }
+	.auth-page {
+		background:
+			radial-gradient(circle at 12% 24%, rgb(57 153 210 / 18%), transparent 34rem),
+			radial-gradient(circle at 88% 76%, rgb(171 102 205 / 14%), transparent 38rem), var(--app-bg-color);
+	}
 
-  .auth-brand-pane {
-    background:
-      linear-gradient(145deg, color-mix(in srgb, var(--link-active-color) 82%, transparent), transparent),
-      color-mix(in srgb, var(--link-color) 72%, transparent);
-    border-right: 1px solid rgb(255 255 255 / 20%);
-    box-shadow: inset -1px 0 0 rgb(0 0 0 / 8%);
-  }
+	.auth-brand-pane {
+		background:
+			linear-gradient(145deg, color-mix(in srgb, var(--link-active-color) 82%, transparent), transparent),
+			color-mix(in srgb, var(--link-color) 72%, transparent);
+		border-right: 1px solid rgb(255 255 255 / 20%);
+		box-shadow: inset -1px 0 0 rgb(0 0 0 / 8%);
+	}
 
-  .auth-login-panel {
-    border-color: color-mix(in srgb, var(--border-color) 82%, var(--glass-rim));
-    box-shadow:
-      inset 0 0 0 1px color-mix(in srgb, var(--glass-rim) 24%, transparent),
-      var(--glass-shadow);
-  }
+	.auth-login-panel {
+		border-color: color-mix(in srgb, var(--border-color) 82%, var(--glass-rim));
+		box-shadow:
+			inset 0 0 0 1px color-mix(in srgb, var(--glass-rim) 24%, transparent),
+			var(--glass-shadow);
+	}
 </style>

@@ -78,8 +78,8 @@ import { SshKeyService } from '../modules/ssh-keys/ssh-key.service';
 import { SshSuspendService } from '../modules/ssh-suspend/ssh-suspend.service';
 import { SshResourceStatusService } from '../modules/system/ssh-resource-status.service';
 import {
-  SystemDiagnosticsService,
-  type DiagnosticsService,
+	SystemDiagnosticsService,
+	type DiagnosticsService,
 } from '../modules/system/diagnostics/system-diagnostics.service';
 import { SystemHealthService } from '../modules/system/system-health.service';
 import { SystemStatusService } from '../modules/system/system-status.service';
@@ -121,420 +121,428 @@ import { PosixServerStatusCollector } from '../platform/system/posix-server-stat
 import type { ServerStatusCollector } from '../platform/system/server-status.port';
 
 export interface PlatformServices {
-  executionSessions: ExecutionSessionManager;
-  textWriter: RemoteTextWriterService;
-  fileSearch: RemoteFileSearchService;
-  fileRemoval: FileRemovalService;
-  uploads: UploadOperation;
-  transfers: TransferOperation;
-  archives: ArchiveOperation;
-  directoryArchives: DirectoryArchivePort;
-  serverTransfers: ServerTransferExecutor;
-  serverStatus: ServerStatusCollector;
-  docker: RemoteDockerService;
-  mutationGuard: MutationGuardPort;
+	executionSessions: ExecutionSessionManager;
+	textWriter: RemoteTextWriterService;
+	fileSearch: RemoteFileSearchService;
+	fileRemoval: FileRemovalService;
+	uploads: UploadOperation;
+	transfers: TransferOperation;
+	archives: ArchiveOperation;
+	directoryArchives: DirectoryArchivePort;
+	serverTransfers: ServerTransferExecutor;
+	serverStatus: ServerStatusCollector;
+	docker: RemoteDockerService;
+	mutationGuard: MutationGuardPort;
 }
 
 export interface ModuleServices {
-  backup: BackupService;
-  settings: SettingsService;
-  audit: AuditLogService;
-  notifications: NotificationService;
-  notificationSettings: NotificationSettingsService;
-  user: UserService;
-  auth: AuthService;
-  twoFactor: TwoFactorService;
-  captcha: CaptchaService;
-  ipBlacklist: IpBlacklistService;
-  ipWhitelist: IpWhitelistService;
-  passkeys: PasskeyService;
-  sshKeys: SshKeyService;
-  proxies: ProxyService;
-  connections: ConnectionService;
-  connectionImport: ConnectionImportService;
-  sshResolver: SshConnectionResolver;
-  sshConnectionTest: SshConnectionTestService;
-  remoteDesktop: RemoteDesktopSessionService;
-  tags: TagService;
-  quickCommandTags: QuickCommandTagService;
-  quickCommands: QuickCommandService;
-  commandHistory: CommandHistoryService;
-  pathHistory: PathHistoryService;
-  favoritePaths: FavoritePathService;
-  terminalThemes: TerminalThemeService;
-  appearance: AppearanceSettingsService;
-  backgroundAssets: BackgroundAssetService;
-  htmlThemes: HtmlThemeService;
-  transfers: TransfersService;
-  transferTasks: TransferTaskRegistry;
-  sshSuspend: SshSuspendService;
-  systemHealth: SystemHealthService;
-  systemStatus: SystemStatusService;
-  sshResourceStatus: SshResourceStatusService;
-  diagnostics: DiagnosticsService;
-  workspace: WorkspaceService;
-  workspaceSessions: WorkspaceSessionRegistry;
-  workspaceEvents: WorkspaceEventHub;
-  workspaceCommand: WorkspaceCommandService;
-  workspaceTerminal: WorkspaceTerminalService;
-  workspaceShell: WorkspaceShellIntegrationService;
-  workspaceFilesystem: WorkspaceFilesystemService;
-  workspaceOperations: WorkspaceOperationsService;
-  workspaceStatus: WorkspaceStatusMonitorService;
-  workspaceDocker: WorkspaceDockerService;
-  workspaceSuspend: WorkspaceSuspendCoordinatorService;
+	backup: BackupService;
+	settings: SettingsService;
+	audit: AuditLogService;
+	notifications: NotificationService;
+	notificationSettings: NotificationSettingsService;
+	user: UserService;
+	auth: AuthService;
+	twoFactor: TwoFactorService;
+	captcha: CaptchaService;
+	ipBlacklist: IpBlacklistService;
+	ipWhitelist: IpWhitelistService;
+	passkeys: PasskeyService;
+	sshKeys: SshKeyService;
+	proxies: ProxyService;
+	connections: ConnectionService;
+	connectionImport: ConnectionImportService;
+	sshResolver: SshConnectionResolver;
+	sshConnectionTest: SshConnectionTestService;
+	remoteDesktop: RemoteDesktopSessionService;
+	tags: TagService;
+	quickCommandTags: QuickCommandTagService;
+	quickCommands: QuickCommandService;
+	commandHistory: CommandHistoryService;
+	pathHistory: PathHistoryService;
+	favoritePaths: FavoritePathService;
+	terminalThemes: TerminalThemeService;
+	appearance: AppearanceSettingsService;
+	backgroundAssets: BackgroundAssetService;
+	htmlThemes: HtmlThemeService;
+	transfers: TransfersService;
+	transferTasks: TransferTaskRegistry;
+	sshSuspend: SshSuspendService;
+	systemHealth: SystemHealthService;
+	systemStatus: SystemStatusService;
+	sshResourceStatus: SshResourceStatusService;
+	diagnostics: DiagnosticsService;
+	workspace: WorkspaceService;
+	workspaceSessions: WorkspaceSessionRegistry;
+	workspaceEvents: WorkspaceEventHub;
+	workspaceCommand: WorkspaceCommandService;
+	workspaceTerminal: WorkspaceTerminalService;
+	workspaceShell: WorkspaceShellIntegrationService;
+	workspaceFilesystem: WorkspaceFilesystemService;
+	workspaceOperations: WorkspaceOperationsService;
+	workspaceStatus: WorkspaceStatusMonitorService;
+	workspaceDocker: WorkspaceDockerService;
+	workspaceSuspend: WorkspaceSuspendCoordinatorService;
 }
 
 export interface CompositionRoot {
-  platform: PlatformServices;
-  modules: ModuleServices;
-  agent: AgentServices;
-  initialize(): Promise<void>;
-  resetForE2E(mode: 'seed' | 'empty'): Promise<void>;
-  dispose(): Promise<void>;
+	platform: PlatformServices;
+	modules: ModuleServices;
+	agent: AgentServices;
+	initialize(): Promise<void>;
+	resetForE2E(mode: 'seed' | 'empty'): Promise<void>;
+	dispose(): Promise<void>;
 }
 
 /** Explicit application graph. Concrete Infrastructure objects never escape this factory. */
 export interface CompositionRootDependencies {
-  remoteDesktopSessionIssuer: RemoteDesktopSessionIssuer;
+	remoteDesktopSessionIssuer: RemoteDesktopSessionIssuer;
 }
 
 export const createCompositionRoot = (
-  config: RuntimeConfig,
-  dependencies: CompositionRootDependencies,
+	config: RuntimeConfig,
+	dependencies: CompositionRootDependencies,
 ): CompositionRoot => {
-  const database = new DatabaseAdapter({
-    dataDirectory: config.dataDirectory,
-    nodeEnv: config.nodeEnv,
-    e2eResetEnabled: config.e2eResetEnabled,
-  });
-  const cipher = new AesGcmSecretCipher(config.encryptionKeyHex);
-  const passwordHasher = new BcryptPasswordHasher();
-  const agentLeases = new SqliteLeaseRepository(database);
-  const mutationGuard = new LeaseMutationGuardAdapter(agentLeases);
+	const database = new DatabaseAdapter({
+		dataDirectory: config.dataDirectory,
+		nodeEnv: config.nodeEnv,
+		e2eResetEnabled: config.e2eResetEnabled,
+	});
+	const cipher = new AesGcmSecretCipher(config.encryptionKeyHex);
+	const passwordHasher = new BcryptPasswordHasher();
+	const agentLeases = new SqliteLeaseRepository(database);
+	const mutationGuard = new LeaseMutationGuardAdapter(agentLeases);
 
-  const settingsRepository = new SqliteSettingsRepository(database, cipher);
-  const settingsMigrationRepository = new SqliteSettingsMigrationRepository(database);
-  const auditRepository = new SqliteAuditLogRepository(database);
-  const userRepository = new SqliteUserRepository(database, cipher);
-  const sshKeyRepository = new SqliteSshKeyRepository(database);
-  const proxyRepository = new SqliteProxyRepository(database);
-  const connectionRepository = new SqliteConnectionRepository(database);
-  const tagRepository = new SqliteTagRepository(database);
-  const quickCommandTagRepository = new SqliteQuickCommandTagRepository(database);
-  const quickCommandRepository = new SqliteQuickCommandRepository(database);
-  const commandHistoryRepository = new SqliteCommandHistoryRepository(database);
-  const pathHistoryRepository = new SqlitePathHistoryRepository(database);
-  const favoritePathRepository = new SqliteFavoritePathRepository(database);
-  const notificationRepository = new SqliteNotificationRepository(database, cipher);
-  const passkeyRepository = new SqlitePasskeyRepository(database);
-  const terminalThemeRepository = new SqliteTerminalThemeRepository(database);
-  const appearanceRepository = new SqliteAppearanceSettingsRepository(database);
-  const blacklistRepository = new SqliteIpBlacklistRepository(database);
+	const settingsRepository = new SqliteSettingsRepository(database, cipher);
+	const settingsMigrationRepository = new SqliteSettingsMigrationRepository(database);
+	const auditRepository = new SqliteAuditLogRepository(database);
+	const userRepository = new SqliteUserRepository(database, cipher);
+	const sshKeyRepository = new SqliteSshKeyRepository(database);
+	const proxyRepository = new SqliteProxyRepository(database);
+	const connectionRepository = new SqliteConnectionRepository(database);
+	const tagRepository = new SqliteTagRepository(database);
+	const quickCommandTagRepository = new SqliteQuickCommandTagRepository(database);
+	const quickCommandRepository = new SqliteQuickCommandRepository(database);
+	const commandHistoryRepository = new SqliteCommandHistoryRepository(database);
+	const pathHistoryRepository = new SqlitePathHistoryRepository(database);
+	const favoritePathRepository = new SqliteFavoritePathRepository(database);
+	const notificationRepository = new SqliteNotificationRepository(database, cipher);
+	const passkeyRepository = new SqlitePasskeyRepository(database);
+	const terminalThemeRepository = new SqliteTerminalThemeRepository(database);
+	const appearanceRepository = new SqliteAppearanceSettingsRepository(database);
+	const blacklistRepository = new SqliteIpBlacklistRepository(database);
 
-  const settings = new SettingsService(settingsRepository, settingsMigrationRepository);
-  const audit = new AuditLogService(auditRepository);
-  const notificationChannels = new NetworkNotificationChannelAdapter();
-  const notificationLocalizer = new I18nextNotificationLocalizer();
-  const notificationFormatter = new NotificationFormatter(notificationLocalizer);
-  const notifications = new NotificationService(
-    notificationRepository,
-    notificationChannels,
-    notificationFormatter,
-    notificationLocalizer,
-    settings,
-  );
-  const notificationSettings = new NotificationSettingsService(notificationRepository, audit, notifications);
-  const user = new UserService(userRepository);
-  const sshKeys = new SshKeyService(sshKeyRepository, cipher);
-  const proxies = new ProxyService(proxyRepository, cipher);
-  const credentials = new ConnectionCredentialService(cipher, sshKeys);
-  const connections = new ConnectionService(connectionRepository, credentials, audit);
+	const settings = new SettingsService(settingsRepository, settingsMigrationRepository);
+	const audit = new AuditLogService(auditRepository);
+	const notificationChannels = new NetworkNotificationChannelAdapter();
+	const notificationLocalizer = new I18nextNotificationLocalizer();
+	const notificationFormatter = new NotificationFormatter(notificationLocalizer);
+	const notifications = new NotificationService(
+		notificationRepository,
+		notificationChannels,
+		notificationFormatter,
+		notificationLocalizer,
+		settings,
+	);
+	const notificationSettings = new NotificationSettingsService(notificationRepository, audit, notifications);
+	const user = new UserService(userRepository);
+	const sshKeys = new SshKeyService(sshKeyRepository, cipher);
+	const proxies = new ProxyService(proxyRepository, cipher);
+	const credentials = new ConnectionCredentialService(cipher, sshKeys);
+	const connections = new ConnectionService(connectionRepository, credentials, audit);
 
-  const sshTransport = new SshTransportAdapter();
-  const executionSessions = new ExecutionSessionManager(sshTransport);
-  const sshResolver = new SshConnectionResolver(connectionRepository, credentials, proxies);
-  const sshConnectionTest = new SshConnectionTestService(sshResolver, sshTransport);
-  const remoteDesktop = new RemoteDesktopSessionService(connections, dependencies.remoteDesktopSessionIssuer);
+	const sshTransport = new SshTransportAdapter();
+	const executionSessions = new ExecutionSessionManager(sshTransport);
+	const sshResolver = new SshConnectionResolver(connectionRepository, credentials, proxies);
+	const sshConnectionTest = new SshConnectionTestService(sshResolver, sshTransport);
+	const remoteDesktop = new RemoteDesktopSessionService(connections, dependencies.remoteDesktopSessionIssuer);
 
-  const auth = new AuthService(user, passwordHasher, audit, notifications);
-  const twoFactor = new TwoFactorService(
-    user,
-    new SpeakeasyTwoFactorAdapter(),
-    passwordHasher,
-    auth,
-    audit,
-    notifications,
-  );
-  const captcha = new CaptchaService(settings, new NetworkCaptchaVerifierAdapter());
-  const ipBlacklist = new IpBlacklistService(blacklistRepository, settings, notifications);
-  const ipWhitelist = new IpWhitelistService(settings);
-  const webauthn = new SimpleWebAuthnAdapter({ appName: config.appName, relyingParties: config.passkeyRelyingParties });
-  const passkeys = new PasskeyService(passkeyRepository, user, webauthn, audit, notifications);
+	const auth = new AuthService(user, passwordHasher, audit, notifications);
+	const twoFactor = new TwoFactorService(
+		user,
+		new SpeakeasyTwoFactorAdapter(),
+		passwordHasher,
+		auth,
+		audit,
+		notifications,
+	);
+	const captcha = new CaptchaService(settings, new NetworkCaptchaVerifierAdapter());
+	const ipBlacklist = new IpBlacklistService(blacklistRepository, settings, notifications);
+	const ipWhitelist = new IpWhitelistService(settings);
+	const webauthn = new SimpleWebAuthnAdapter({
+		appName: config.appName,
+		relyingParties: config.passkeyRelyingParties,
+	});
+	const passkeys = new PasskeyService(passkeyRepository, user, webauthn, audit, notifications);
 
-  const tags = new TagService(tagRepository);
-  const connectionImport = new ConnectionImportService(new SqliteConnectionImportAdapter(database, cipher), cipher);
-  const quickCommandTags = new QuickCommandTagService(quickCommandTagRepository);
-  const quickCommands = new QuickCommandService(quickCommandRepository, quickCommandTagRepository);
-  const commandHistory = new CommandHistoryService(commandHistoryRepository);
-  const pathHistory = new PathHistoryService(pathHistoryRepository);
-  const favoritePaths = new FavoritePathService(favoritePathRepository);
+	const tags = new TagService(tagRepository);
+	const connectionImport = new ConnectionImportService(new SqliteConnectionImportAdapter(database, cipher), cipher);
+	const quickCommandTags = new QuickCommandTagService(quickCommandTagRepository);
+	const quickCommands = new QuickCommandService(quickCommandRepository, quickCommandTagRepository);
+	const commandHistory = new CommandHistoryService(commandHistoryRepository);
+	const pathHistory = new PathHistoryService(pathHistoryRepository);
+	const favoritePaths = new FavoritePathService(favoritePathRepository);
 
-  const terminalThemes = new TerminalThemeService(terminalThemeRepository);
-  const backgroundStore = new LocalBackgroundAssetAdapter(config.dataDirectory);
-  const appearance = new AppearanceSettingsService(appearanceRepository, terminalThemes, backgroundStore);
-  const backgroundAssets = new BackgroundAssetService(backgroundStore, appearance);
-  const htmlStore = new LocalHtmlThemeStoreAdapter({
-    presetDirectory: config.htmlThemeAssetDirectory,
-    dataDirectory: config.dataDirectory,
-  });
-  const htmlThemes = new HtmlThemeService(htmlStore, new GitHubHtmlThemeCatalogAdapter(), appearance);
+	const terminalThemes = new TerminalThemeService(terminalThemeRepository);
+	const backgroundStore = new LocalBackgroundAssetAdapter(config.dataDirectory);
+	const appearance = new AppearanceSettingsService(appearanceRepository, terminalThemes, backgroundStore);
+	const backgroundAssets = new BackgroundAssetService(backgroundStore, appearance);
+	const htmlStore = new LocalHtmlThemeStoreAdapter({
+		presetDirectory: config.htmlThemeAssetDirectory,
+		dataDirectory: config.dataDirectory,
+	});
+	const htmlThemes = new HtmlThemeService(htmlStore, new GitHubHtmlThemeCatalogAdapter(), appearance);
 
-  const textWriter = new RemoteTextWriterService();
-  const fileSearch = new RemoteFileSearchService();
-  const fileRemoval = new FileRemovalService();
-  const uploads = new StreamUploadOperationService(executionSessions);
-  const fileTransfers = new StreamTransferOperationService(executionSessions, {
-    positionedCopyChunkBytes: config.transferPositionedChunkBytes,
-    positionedCopyConcurrency: config.transferPositionedConcurrency,
-  });
-  const archives = new RemoteArchiveOperationService(executionSessions);
-  const directoryArchives = new ZipDirectoryArchiveAdapter();
-  const serverTransfers = new ServerTransferExecutor(sshTransport);
-  const serverStatus = new PosixServerStatusCollector();
-  const docker = new RemoteDockerService();
+	const textWriter = new RemoteTextWriterService();
+	const fileSearch = new RemoteFileSearchService();
+	const fileRemoval = new FileRemovalService();
+	const uploads = new StreamUploadOperationService(executionSessions);
+	const fileTransfers = new StreamTransferOperationService(executionSessions, {
+		positionedCopyChunkBytes: config.transferPositionedChunkBytes,
+		positionedCopyConcurrency: config.transferPositionedConcurrency,
+	});
+	const archives = new RemoteArchiveOperationService(executionSessions);
+	const directoryArchives = new ZipDirectoryArchiveAdapter();
+	const serverTransfers = new ServerTransferExecutor(sshTransport);
+	const serverStatus = new PosixServerStatusCollector();
+	const docker = new RemoteDockerService();
 
-  const transferTasks = new TransferTaskRegistry();
-  const transferOrchestrator = new TransferOrchestratorService(
-    transferTasks,
-    sshResolver,
-    executionSessions,
-    serverTransfers,
-  );
-  const transfers = new TransfersService(transferTasks, transferOrchestrator);
+	const transferTasks = new TransferTaskRegistry();
+	const transferOrchestrator = new TransferOrchestratorService(
+		transferTasks,
+		sshResolver,
+		executionSessions,
+		serverTransfers,
+	);
+	const transfers = new TransfersService(transferTasks, transferOrchestrator);
 
-  const suspendedLogs = new LocalSuspendedSessionLogAdapter(config.dataDirectory);
-  const suspendedTerminalCheckpoints = new XtermSuspendedTerminalCheckpointFactory();
-  const suspendedTerminalLogExporter = new XtermSuspendedTerminalLogExportAdapter();
-  const sshSuspend = new SshSuspendService(suspendedLogs, suspendedTerminalLogExporter);
+	const suspendedLogs = new LocalSuspendedSessionLogAdapter(config.dataDirectory);
+	const suspendedTerminalCheckpoints = new XtermSuspendedTerminalCheckpointFactory();
+	const suspendedTerminalLogExporter = new XtermSuspendedTerminalLogExportAdapter();
+	const sshSuspend = new SshSuspendService(suspendedLogs, suspendedTerminalLogExporter);
 
-  const workspaceSessions = new WorkspaceSessionRegistry();
-  const workspaceEvents = new WorkspaceEventHub();
-  const workspace = new WorkspaceService(
-    workspaceSessions,
-    executionSessions,
-    sshResolver,
-    connections,
-    audit,
-    notifications,
-  );
-  const workspaceShell = new WorkspaceShellIntegrationService(workspaceSessions, executionSessions, workspaceEvents);
-  const workspaceTerminal = new WorkspaceTerminalService(workspaceSessions, workspaceShell, workspaceEvents);
-  const workspaceCommand = new WorkspaceCommandService(workspaceSessions, workspaceShell);
-  const workspaceFilesystem = new WorkspaceFilesystemService(
-    workspaceSessions,
-    executionSessions,
-    textWriter,
-    fileSearch,
-    fileRemoval,
-    directoryArchives,
-    workspaceEvents,
-    mutationGuard,
-  );
-  const workspaceOperations = new WorkspaceOperationsService(
-    workspaceSessions,
-    uploads,
-    fileTransfers,
-    archives,
-    workspaceEvents,
-    mutationGuard,
-  );
-  const workspaceStatus = new WorkspaceStatusMonitorService(
-    workspaceSessions,
-    executionSessions,
-    settings,
-    serverStatus,
-    workspaceEvents,
-  );
-  const workspaceDocker = new WorkspaceDockerService(workspaceSessions, executionSessions, docker, mutationGuard);
-  const workspaceSuspend = new WorkspaceSuspendCoordinatorService(
-    workspace,
-    workspaceTerminal,
-    workspaceShell,
-    workspaceStatus,
-    workspaceOperations,
-    workspaceFilesystem,
-    sshSuspend,
-    suspendedLogs,
-    suspendedTerminalCheckpoints,
-    workspaceEvents,
-  );
+	const workspaceSessions = new WorkspaceSessionRegistry();
+	const workspaceEvents = new WorkspaceEventHub();
+	const workspace = new WorkspaceService(
+		workspaceSessions,
+		executionSessions,
+		sshResolver,
+		connections,
+		audit,
+		notifications,
+	);
+	const workspaceShell = new WorkspaceShellIntegrationService(workspaceSessions, executionSessions, workspaceEvents);
+	const workspaceTerminal = new WorkspaceTerminalService(workspaceSessions, workspaceShell, workspaceEvents);
+	const workspaceCommand = new WorkspaceCommandService(workspaceSessions, workspaceShell);
+	const workspaceFilesystem = new WorkspaceFilesystemService(
+		workspaceSessions,
+		executionSessions,
+		textWriter,
+		fileSearch,
+		fileRemoval,
+		directoryArchives,
+		workspaceEvents,
+		mutationGuard,
+	);
+	const workspaceOperations = new WorkspaceOperationsService(
+		workspaceSessions,
+		uploads,
+		fileTransfers,
+		archives,
+		workspaceEvents,
+		mutationGuard,
+	);
+	const workspaceStatus = new WorkspaceStatusMonitorService(
+		workspaceSessions,
+		executionSessions,
+		settings,
+		serverStatus,
+		workspaceEvents,
+	);
+	const workspaceDocker = new WorkspaceDockerService(workspaceSessions, executionSessions, docker, mutationGuard);
+	const workspaceSuspend = new WorkspaceSuspendCoordinatorService(
+		workspace,
+		workspaceTerminal,
+		workspaceShell,
+		workspaceStatus,
+		workspaceOperations,
+		workspaceFilesystem,
+		sshSuspend,
+		suspendedLogs,
+		suspendedTerminalCheckpoints,
+		workspaceEvents,
+	);
 
-  const systemHealth = new SystemHealthService();
-  const systemStatus = new SystemStatusService(new NodeLocalSystemStatusAdapter());
-  const sshResourceStatus = new SshResourceStatusService(
-    connections,
-    sshResolver,
-    executionSessions,
-    serverStatus,
-    settings,
-  );
-  const backupSnapshots = new SqliteBackupSnapshotAdapter(database, cipher, config.dataDirectory);
-  const backup = new BackupService(
-    backupSnapshots,
-    new NexusBackupCodecAdapter(config.encryptionKeyHex),
-    user,
-    passwordHasher,
-    {
-      beforeRestore: async () => {
-        await agent.prepareRestore(Math.floor(Date.now() / 1000) + 10);
-        transferTasks.cancelAll();
-        await workspaceSuspend.reset();
-        await sshSuspend.reset();
-        await executionSessions.closeAll();
-      },
-      afterRestore: async () => {
-        await settings.ensureDefaults();
-        await terminalThemes.initialize(presetTerminalThemes);
-        await appearance.initialize();
-        sshResourceStatus.clearCache();
-        await agent.initialize();
-      },
-    },
-  );
+	const systemHealth = new SystemHealthService();
+	const systemStatus = new SystemStatusService(new NodeLocalSystemStatusAdapter());
+	const sshResourceStatus = new SshResourceStatusService(
+		connections,
+		sshResolver,
+		executionSessions,
+		serverStatus,
+		settings,
+	);
+	const backupSnapshots = new SqliteBackupSnapshotAdapter(database, cipher, config.dataDirectory);
+	const backup = new BackupService(
+		backupSnapshots,
+		new NexusBackupCodecAdapter(config.encryptionKeyHex),
+		user,
+		passwordHasher,
+		{
+			beforeRestore: async () => {
+				await agent.prepareRestore(Math.floor(Date.now() / 1000) + 10);
+				transferTasks.cancelAll();
+				await workspaceSuspend.reset();
+				await sshSuspend.reset();
+				await executionSessions.closeAll();
+			},
 
-  const browserRuntime = new BrowserRuntimeAdapter();
+			afterRestore: async () => {
+				await settings.ensureDefaults();
+				await terminalThemes.initialize(presetTerminalThemes);
+				await appearance.initialize();
+				sshResourceStatus.clearCache();
+				await agent.initialize();
+			},
+		},
+	);
 
-  const diagnostics = new SystemDiagnosticsService([
-    new ProcessDiagnosticProbe(),
-    new DatabaseDiagnosticProbe(database),
-    new ExecutionSessionDiagnosticProbe(executionSessions),
-  ]);
-  const officialPluginSource = {
-    ...DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE,
-    catalogUrl: config.agentOfficialPluginCatalogUrl ?? DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE.catalogUrl,
-    publisherKeyId: config.agentOfficialPluginPublisherKeyId ?? DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE.publisherKeyId,
-    publisherPublicKeyPem:
-      config.agentOfficialPluginPublisherPublicKeyPem ?? DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE.publisherPublicKeyPem,
-  };
-  const agent = composeAgent({
-    database,
-    cipher,
-    dataDirectory: config.dataDirectory,
-    nexusVersion: config.appVersion,
-    nodeEnv: config.nodeEnv,
-    e2eResetEnabled: config.e2eResetEnabled,
-    publicOrigin: config.agentPublicOrigin,
-    officialPluginSource,
-    connectionResolver: createAgentConnectionResolver(connections, sshResolver),
-    diagnostics: createAgentDiagnostics(diagnostics),
-    executionSessions,
-    docker,
-    leases: agentLeases,
-    browserGateway: browserRuntime,
-    audit,
-    notifications,
-  });
+	const browserRuntime = new BrowserRuntimeAdapter();
 
-  const modules: ModuleServices = {
-    backup,
-    settings,
-    audit,
-    notifications,
-    notificationSettings,
-    user,
-    auth,
-    twoFactor,
-    captcha,
-    ipBlacklist,
-    ipWhitelist,
-    passkeys,
-    sshKeys,
-    proxies,
-    connections,
-    connectionImport,
-    sshResolver,
-    sshConnectionTest,
-    remoteDesktop,
-    tags,
-    quickCommandTags,
-    quickCommands,
-    commandHistory,
-    pathHistory,
-    favoritePaths,
-    terminalThemes,
-    appearance,
-    backgroundAssets,
-    htmlThemes,
-    transfers,
-    transferTasks,
-    sshSuspend,
-    systemHealth,
-    systemStatus,
-    sshResourceStatus,
-    diagnostics,
-    workspace,
-    workspaceSessions,
-    workspaceEvents,
-    workspaceCommand,
-    workspaceTerminal,
-    workspaceShell,
-    workspaceFilesystem,
-    workspaceOperations,
-    workspaceStatus,
-    workspaceDocker,
-    workspaceSuspend,
-  };
-  const platform: PlatformServices = {
-    executionSessions,
-    textWriter,
-    fileSearch,
-    fileRemoval,
-    uploads,
-    transfers: fileTransfers,
-    archives,
-    directoryArchives,
-    serverTransfers,
-    serverStatus,
-    docker,
-    mutationGuard,
-  };
+	const diagnostics = new SystemDiagnosticsService([
+		new ProcessDiagnosticProbe(),
+		new DatabaseDiagnosticProbe(database),
+		new ExecutionSessionDiagnosticProbe(executionSessions),
+	]);
+	const officialPluginSource = {
+		...DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE,
+		catalogUrl: config.agentOfficialPluginCatalogUrl ?? DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE.catalogUrl,
+		publisherKeyId: config.agentOfficialPluginPublisherKeyId ?? DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE.publisherKeyId,
+		publisherPublicKeyPem:
+			config.agentOfficialPluginPublisherPublicKeyPem ??
+			DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE.publisherPublicKeyPem,
+	};
+	const agent = composeAgent({
+		database,
+		cipher,
+		dataDirectory: config.dataDirectory,
+		nexusVersion: config.appVersion,
+		nodeEnv: config.nodeEnv,
+		e2eResetEnabled: config.e2eResetEnabled,
+		publicOrigin: config.agentPublicOrigin,
+		officialPluginSource,
+		connectionResolver: createAgentConnectionResolver(connections, sshResolver),
+		diagnostics: createAgentDiagnostics(diagnostics),
+		executionSessions,
+		docker,
+		leases: agentLeases,
+		browserGateway: browserRuntime,
+		audit,
+		notifications,
+	});
 
-  return {
-    platform,
-    modules,
-    agent,
-    initialize: async () => {
-      await database.initialize();
-      await backupSnapshots.recoverInterruptedRestore();
-      await migrateOperationalSecrets(database, cipher);
-      await sshSuspend.initialize();
-      await agent.initialize();
-      await settings.ensureDefaults();
-      await terminalThemes.initialize(presetTerminalThemes);
-      await appearance.initialize();
-    },
-    resetForE2E: async (mode) => {
-      await agent.quiesce(Math.floor(Date.now() / 1000) + 10).catch(() => undefined);
-      transferTasks.cancelAll();
-      await workspaceSuspend.reset();
-      await sshSuspend.reset();
-      await executionSessions.closeAll();
-      await database.resetForE2E(mode, config.e2eSeedDatabase);
-      await agent.initialize();
-      await settings.ensureDefaults();
-      await terminalThemes.initialize(presetTerminalThemes);
-      await appearance.initialize();
-      sshResourceStatus.clearCache();
-    },
-    dispose: async () => {
-      await agent.quiesce(Math.floor(Date.now() / 1000) + 10).catch(() => undefined);
-      await agent.dispose().catch(() => undefined);
-      transferTasks.cancelAll();
-      await workspaceSuspend.dispose().catch(() => undefined);
-      await sshSuspend.dispose().catch(() => undefined);
-      await executionSessions.closeAll();
-      await database.close();
-    },
-  };
+	const modules: ModuleServices = {
+		backup,
+		settings,
+		audit,
+		notifications,
+		notificationSettings,
+		user,
+		auth,
+		twoFactor,
+		captcha,
+		ipBlacklist,
+		ipWhitelist,
+		passkeys,
+		sshKeys,
+		proxies,
+		connections,
+		connectionImport,
+		sshResolver,
+		sshConnectionTest,
+		remoteDesktop,
+		tags,
+		quickCommandTags,
+		quickCommands,
+		commandHistory,
+		pathHistory,
+		favoritePaths,
+		terminalThemes,
+		appearance,
+		backgroundAssets,
+		htmlThemes,
+		transfers,
+		transferTasks,
+		sshSuspend,
+		systemHealth,
+		systemStatus,
+		sshResourceStatus,
+		diagnostics,
+		workspace,
+		workspaceSessions,
+		workspaceEvents,
+		workspaceCommand,
+		workspaceTerminal,
+		workspaceShell,
+		workspaceFilesystem,
+		workspaceOperations,
+		workspaceStatus,
+		workspaceDocker,
+		workspaceSuspend,
+	};
+	const platform: PlatformServices = {
+		executionSessions,
+		textWriter,
+		fileSearch,
+		fileRemoval,
+		uploads,
+		transfers: fileTransfers,
+		archives,
+		directoryArchives,
+		serverTransfers,
+		serverStatus,
+		docker,
+		mutationGuard,
+	};
+
+	return {
+		platform,
+		modules,
+		agent,
+
+		initialize: async () => {
+			await database.initialize();
+			await backupSnapshots.recoverInterruptedRestore();
+			await migrateOperationalSecrets(database, cipher);
+			await sshSuspend.initialize();
+			await agent.initialize();
+			await settings.ensureDefaults();
+			await terminalThemes.initialize(presetTerminalThemes);
+			await appearance.initialize();
+		},
+
+		resetForE2E: async (mode) => {
+			await agent.quiesce(Math.floor(Date.now() / 1000) + 10).catch(() => undefined);
+			transferTasks.cancelAll();
+			await workspaceSuspend.reset();
+			await sshSuspend.reset();
+			await executionSessions.closeAll();
+			await database.resetForE2E(mode, config.e2eSeedDatabase);
+			await agent.initialize();
+			await settings.ensureDefaults();
+			await terminalThemes.initialize(presetTerminalThemes);
+			await appearance.initialize();
+			sshResourceStatus.clearCache();
+		},
+
+		dispose: async () => {
+			await agent.quiesce(Math.floor(Date.now() / 1000) + 10).catch(() => undefined);
+			await agent.dispose().catch(() => undefined);
+			transferTasks.cancelAll();
+			await workspaceSuspend.dispose().catch(() => undefined);
+			await sshSuspend.dispose().catch(() => undefined);
+			await executionSessions.closeAll();
+			await database.close();
+		},
+	};
 };

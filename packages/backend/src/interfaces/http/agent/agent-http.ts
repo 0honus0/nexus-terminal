@@ -9,59 +9,59 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 export type AgentAsyncRoute = (request: Request, response: Response, next: NextFunction) => void | Promise<void>;
 
 export const agentRequestId = (request: Request, response: Response): string => {
-  const existing = response.locals.agentRequestId;
-  if (typeof existing === 'string') return existing;
-  const supplied = request.header('x-request-id');
-  const requestId = supplied && UUID.test(supplied) ? supplied : randomUUID();
-  response.locals.agentRequestId = requestId;
-  response.setHeader('X-Request-Id', requestId);
-  return requestId;
+	const existing = response.locals.agentRequestId;
+	if (typeof existing === 'string') return existing;
+	const supplied = request.header('x-request-id');
+	const requestId = supplied && UUID.test(supplied) ? supplied : randomUUID();
+	response.locals.agentRequestId = requestId;
+	response.setHeader('X-Request-Id', requestId);
+	return requestId;
 };
 
 const stampAgentServerTime = (response: Response): void => {
-  response.setHeader('X-Agent-Server-Time-Ms', String(Date.now()));
+	response.setHeader('X-Agent-Server-Time-Ms', String(Date.now()));
 };
 
 export const agentData = <T>(request: Request, response: Response, data: T, status = 200): void => {
-  stampAgentServerTime(response);
-  const payload: AgentEnvelopeDto<T> = { data, requestId: agentRequestId(request, response) };
-  response.status(status).json(payload);
+	stampAgentServerTime(response);
+	const payload: AgentEnvelopeDto<T> = { data, requestId: agentRequestId(request, response) };
+	response.status(status).json(payload);
 };
 
 export const agentError = (
-  request: Request,
-  response: Response,
-  status: number,
-  code: string,
-  message: string,
-  details?: unknown,
+	request: Request,
+	response: Response,
+	status: number,
+	code: string,
+	message: string,
+	details?: unknown,
 ): void => {
-  stampAgentServerTime(response);
-  const payload: AgentErrorEnvelopeDto = {
-    error: { code, message, ...(details === undefined ? {} : { details }) },
-    requestId: agentRequestId(request, response),
-  };
-  response.status(status).json(payload);
+	stampAgentServerTime(response);
+	const payload: AgentErrorEnvelopeDto = {
+		error: { code, message, ...(details === undefined ? {} : { details }) },
+		requestId: agentRequestId(request, response),
+	};
+	response.status(status).json(payload);
 };
 
 export const agentRoute =
-  (handler: AgentAsyncRoute): RequestHandler =>
-  (request, response, next) => {
-    agentRequestId(request, response);
-    void Promise.resolve(handler(request, response, next)).catch((error) => {
-      const mapped = mapAgentError(error);
-      if (mapped.status === 500) {
-        logger.error(
-          {
-            requestId: agentRequestId(request, response),
-            method: request.method,
-            status: mapped.status,
-            errorCode: logErrorCode(error, mapped.code),
-          },
-          'Agent HTTP route failed unexpectedly',
-        );
-      }
-      if (!response.headersSent)
-        agentError(request, response, mapped.status, mapped.code, mapped.message, mapped.details);
-    });
-  };
+	(handler: AgentAsyncRoute): RequestHandler =>
+	(request, response, next) => {
+		agentRequestId(request, response);
+		void Promise.resolve(handler(request, response, next)).catch((error) => {
+			const mapped = mapAgentError(error);
+			if (mapped.status === 500) {
+				logger.error(
+					{
+						requestId: agentRequestId(request, response),
+						method: request.method,
+						status: mapped.status,
+						errorCode: logErrorCode(error, mapped.code),
+					},
+					'Agent HTTP route failed unexpectedly',
+				);
+			}
+			if (!response.headersSent)
+				agentError(request, response, mapped.status, mapped.code, mapped.message, mapped.details);
+		});
+	};

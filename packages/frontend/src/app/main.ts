@@ -19,9 +19,9 @@ const router = createAppRouter(pinia);
 const auth = createAuthNavigationFacade(pinia);
 
 setUnauthorizedHandler(async () => {
-  if (!auth.authenticated) return;
-  auth.invalidateSession();
-  if (router.currentRoute.value.name !== 'Login') await router.replace({ name: 'Login' });
+	if (!auth.authenticated) return;
+	auth.invalidateSession();
+	if (router.currentRoute.value.name !== 'Login') await router.replace({ name: 'Login' });
 });
 
 app.use(pinia);

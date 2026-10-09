@@ -8,28 +8,28 @@ export type ApprovalStatus = 'requested' | 'approved' | 'denied' | 'expired' | '
 export type ApprovalKind = 'tool' | 'acp_permission';
 
 export interface ApprovalView {
-  id: string;
-  userId: number;
-  appId: string;
-  runId: string;
-  toolCallId: string;
-  requestedByRuntimeId: string;
-  operationHash: string;
-  operationHashVersion: 1;
-  kind: ApprovalKind;
-  status: ApprovalStatus;
-  policyRevision: number;
-  inputRevision: number;
-  decidedByUserId: number | null;
-  decidedAt: number | null;
-  consumedAt: number | null;
-  requestedAt: number;
-  expiresAt: number;
-  version: number;
-  inspection: ToolInspection;
+	id: string;
+	userId: number;
+	appId: string;
+	runId: string;
+	toolCallId: string;
+	requestedByRuntimeId: string;
+	operationHash: string;
+	operationHashVersion: 1;
+	kind: ApprovalKind;
+	status: ApprovalStatus;
+	policyRevision: number;
+	inputRevision: number;
+	decidedByUserId: number | null;
+	decidedAt: number | null;
+	consumedAt: number | null;
+	requestedAt: number;
+	expiresAt: number;
+	version: number;
+	inspection: ToolInspection;
 }
 
 export interface ApprovalRepositoryPort {
-  get(scope: Scope, approvalId: string): Promise<ApprovalView | null>;
-  list(scope: Scope, runId: string): Promise<ApprovalView[]>;
+	get(scope: Scope, approvalId: string): Promise<ApprovalView | null>;
+	list(scope: Scope, runId: string): Promise<ApprovalView[]>;
 }

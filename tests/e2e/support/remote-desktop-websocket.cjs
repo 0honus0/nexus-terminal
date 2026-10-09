@@ -8,74 +8,78 @@ const targetOrigin = `http://127.0.0.1:${backendPort}`;
 const targetWebSocketOrigin = `ws://127.0.0.1:${backendPort}`;
 
 const createSocket = (ticket, cookie) =>
-  new WebSocket(`${targetWebSocketOrigin}/ws/remote-desktop?ticket=${encodeURIComponent(ticket)}`, 'guacamole', {
-    headers: {
-      Cookie: cookie,
-      Origin: targetOrigin,
-    },
-  });
+	new WebSocket(`${targetWebSocketOrigin}/ws/remote-desktop?ticket=${encodeURIComponent(ticket)}`, 'guacamole', {
+		headers: {
+			Cookie: cookie,
+			Origin: targetOrigin,
+		},
+	});
 
 const openRemoteDesktopWebSocket = (ticket, cookie) =>
-  new Promise((resolve, reject) => {
-    const socket = createSocket(ticket, cookie);
-    const timer = setTimeout(() => {
-      socket.terminate();
-      reject(new Error('Timed out waiting for Guacamole data from backend.'));
-    }, 10_000);
-    socket.on('message', (message) => {
-      const text = message.toString();
-      if (!/(?:size|sync|name)/.test(text)) return;
-      clearTimeout(timer);
-      resolve({ firstMessage: text, close: () => socket.close() });
-    });
-    socket.once('error', (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-  });
+	new Promise((resolve, reject) => {
+		const socket = createSocket(ticket, cookie);
+		const timer = setTimeout(() => {
+			socket.terminate();
+			reject(new Error('Timed out waiting for Guacamole data from backend.'));
+		}, 10_000);
+		socket.on('message', (message) => {
+			const text = message.toString();
+			if (!/(?:size|sync|name)/.test(text)) return;
+			clearTimeout(timer);
+			resolve({
+				firstMessage: text,
+
+				close: () => socket.close(),
+			});
+		});
+		socket.once('error', (error) => {
+			clearTimeout(timer);
+			reject(error);
+		});
+	});
 
 const waitForRemoteDesktopTicketRejection = (ticket, cookie) =>
-  new Promise((resolve, reject) => {
-    const socket = createSocket(ticket, cookie);
-    const timer = setTimeout(() => {
-      socket.terminate();
-      reject(new Error('Timed out waiting for remote desktop ticket rejection.'));
-    }, 5_000);
-    socket.once('close', (code, reason) => {
-      clearTimeout(timer);
-      resolve({ code, reason: reason.toString() });
-    });
-    socket.once('unexpected-response', (_request, response) => {
-      clearTimeout(timer);
-      response.resume();
-      reject(new Error(`Expected WebSocket close but received HTTP ${response.statusCode}.`));
-    });
-    socket.once('error', () => {});
-  });
+	new Promise((resolve, reject) => {
+		const socket = createSocket(ticket, cookie);
+		const timer = setTimeout(() => {
+			socket.terminate();
+			reject(new Error('Timed out waiting for remote desktop ticket rejection.'));
+		}, 5_000);
+		socket.once('close', (code, reason) => {
+			clearTimeout(timer);
+			resolve({ code, reason: reason.toString() });
+		});
+		socket.once('unexpected-response', (_request, response) => {
+			clearTimeout(timer);
+			response.resume();
+			reject(new Error(`Expected WebSocket close but received HTTP ${response.statusCode}.`));
+		});
+		socket.once('error', () => {});
+	});
 
 const waitForRemoteDesktopUpgradeRejection = (ticket, cookie) =>
-  new Promise((resolve, reject) => {
-    const socket = createSocket(ticket, cookie);
-    const timer = setTimeout(() => {
-      socket.terminate();
-      reject(new Error('Timed out waiting for remote desktop HTTP upgrade rejection.'));
-    }, 5_000);
-    socket.once('unexpected-response', (_request, response) => {
-      clearTimeout(timer);
-      const statusCode = response.statusCode;
-      response.resume();
-      resolve({ statusCode });
-    });
-    socket.once('open', () => {
-      clearTimeout(timer);
-      socket.terminate();
-      reject(new Error('Remote desktop WebSocket unexpectedly opened.'));
-    });
-    socket.once('error', () => {});
-  });
+	new Promise((resolve, reject) => {
+		const socket = createSocket(ticket, cookie);
+		const timer = setTimeout(() => {
+			socket.terminate();
+			reject(new Error('Timed out waiting for remote desktop HTTP upgrade rejection.'));
+		}, 5_000);
+		socket.once('unexpected-response', (_request, response) => {
+			clearTimeout(timer);
+			const statusCode = response.statusCode;
+			response.resume();
+			resolve({ statusCode });
+		});
+		socket.once('open', () => {
+			clearTimeout(timer);
+			socket.terminate();
+			reject(new Error('Remote desktop WebSocket unexpectedly opened.'));
+		});
+		socket.once('error', () => {});
+	});
 
 module.exports = {
-  openRemoteDesktopWebSocket,
-  waitForRemoteDesktopTicketRejection,
-  waitForRemoteDesktopUpgradeRejection,
+	openRemoteDesktopWebSocket,
+	waitForRemoteDesktopTicketRejection,
+	waitForRemoteDesktopUpgradeRejection,
 };

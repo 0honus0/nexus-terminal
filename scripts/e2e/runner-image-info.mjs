@@ -14,24 +14,24 @@ const playwrightVersion = e2ePackage.devDependencies?.['@playwright/test'];
 
 if (!pnpmVersion) throw new Error(`Invalid root packageManager: ${rootPackage.packageManager}`);
 if (!/^\d+\.\d+\.\d+$/.test(String(playwrightVersion))) {
-  throw new Error(`Invalid Playwright version: ${playwrightVersion}`);
+	throw new Error(`Invalid Playwright version: ${playwrightVersion}`);
 }
 
 const definitionFiles = [
-  'package.json',
-  'pnpm-lock.yaml',
-  'pnpm-workspace.yaml',
-  'packages/backend/package.json',
-  'packages/frontend/package.json',
-  'packages/protocol/package.json',
-  'tests/e2e/package.json',
-  'tests/e2e/Dockerfile.runner',
-  'scripts/e2e/build-runner-image.sh',
-  'scripts/e2e/runner-image-info.mjs',
-  ...fs
-    .readdirSync(path.join(repoRoot, 'scripts/patches'))
-    .sort()
-    .map((name) => `scripts/patches/${name}`),
+	'package.json',
+	'pnpm-lock.yaml',
+	'pnpm-workspace.yaml',
+	'packages/backend/package.json',
+	'packages/frontend/package.json',
+	'packages/protocol/package.json',
+	'tests/e2e/package.json',
+	'tests/e2e/Dockerfile.runner',
+	'scripts/e2e/build-runner-image.sh',
+	'scripts/e2e/runner-image-info.mjs',
+	...fs
+		.readdirSync(path.join(repoRoot, 'scripts/patches'))
+		.sort()
+		.map((name) => `scripts/patches/${name}`),
 ];
 const hash = crypto.createHash('sha256');
 hash.update(`node=${nodeVersion}\nplaywright=${playwrightVersion}\npnpm=${pnpmVersion}\n`);
@@ -39,27 +39,27 @@ hash.update(`node=${nodeVersion}\nplaywright=${playwrightVersion}\npnpm=${pnpmVe
 // when CI runs, even if the workspace dependency files have not changed.
 hash.update(`refreshWeek=${Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000))}\n`);
 for (const relativePath of definitionFiles) {
-  hash.update(`file=${relativePath}\n`);
-  hash.update(fs.readFileSync(path.join(repoRoot, relativePath)));
-  hash.update('\n');
+	hash.update(`file=${relativePath}\n`);
+	hash.update(fs.readFileSync(path.join(repoRoot, relativePath)));
+	hash.update('\n');
 }
 
 const info = {
-  node: nodeVersion,
-  playwright: playwrightVersion,
-  pnpm: pnpmVersion,
-  fingerprint: hash.digest('hex'),
+	node: nodeVersion,
+	playwright: playwrightVersion,
+	pnpm: pnpmVersion,
+	fingerprint: hash.digest('hex'),
 };
 
 const field = process.argv[2];
 if (!field || field === 'json') {
-  process.stdout.write(`${JSON.stringify(info, null, 2)}\n`);
+	process.stdout.write(`${JSON.stringify(info, null, 2)}\n`);
 } else if (Object.hasOwn(info, field)) {
-  process.stdout.write(`${info[field]}\n`);
+	process.stdout.write(`${info[field]}\n`);
 } else {
-  throw new Error(`Unknown runner image info field: ${field}`);
+	throw new Error(`Unknown runner image info field: ${field}`);
 }
 
 function readJson(relativePath) {
-  return JSON.parse(fs.readFileSync(path.join(repoRoot, relativePath), 'utf8'));
+	return JSON.parse(fs.readFileSync(path.join(repoRoot, relativePath), 'utf8'));
 }
