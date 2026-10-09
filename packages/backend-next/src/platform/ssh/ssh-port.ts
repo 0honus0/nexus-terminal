@@ -74,6 +74,12 @@ export interface MachineCommandResult {
 	readonly truncated: boolean;
 }
 
+export interface MachineExecuteOptions {
+	readonly timeoutMs: number;
+	readonly maxOutputBytes: number;
+	readonly signal?: AbortSignal;
+}
+
 export interface MachineFileInfo {
 	readonly size: number;
 	readonly mode: number;
@@ -93,6 +99,19 @@ export interface MachineOperationOptions {
 	readonly timeoutMs?: number;
 }
 
+export interface MachineSftpReadOptions extends MachineOperationOptions {
+	readonly start?: number;
+	readonly end?: number;
+}
+
+export type MachineFileOpenMode =
+	'r' | 'r+' | 'w' | 'wx' | 'xw' | 'w+' | 'xw+' | 'a' | 'ax' | 'xa' | 'a+' | 'ax+' | 'xa+';
+
+export interface MachineSftpWriteOptions extends MachineOperationOptions {
+	readonly flags?: MachineFileOpenMode;
+	readonly mode?: number;
+}
+
 /** Local failure never proves that an already dispatched remote mutation was rolled back. */
 export class MachineSftpFailure extends Error {
 	constructor(
@@ -109,8 +128,8 @@ export interface MachineSftpLease {
 	stat(path: string, options?: MachineOperationOptions): Promise<MachineFileInfo>;
 	lstat(path: string, options?: MachineOperationOptions): Promise<MachineFileInfo>;
 	list(path: string, options?: MachineOperationOptions): Promise<MachineDirectoryEntry[]>;
-	read(path: string, options?: MachineOperationOptions & { start?: number; end?: number }): Readable;
-	write(path: string, options?: MachineOperationOptions & { flags?: string; mode?: number }): Writable;
+	read(path: string, options?: MachineSftpReadOptions): Readable;
+	write(path: string, options?: MachineSftpWriteOptions): Writable;
 	rename(from: string, to: string, options?: MachineOperationOptions): Promise<void>;
 	remove(path: string, options?: MachineOperationOptions): Promise<void>;
 	mkdir(path: string, options?: MachineOperationOptions): Promise<void>;
@@ -122,11 +141,7 @@ export interface MachineConnection {
 	readonly isOpen: boolean;
 	openShell(pty: MachinePty, signal?: AbortSignal): Promise<MachineShell>;
 	openRawCommand(command: string, signal?: AbortSignal): Promise<MachineCommand>;
-	startCommand(command: string, signal?: AbortSignal): Promise<MachineCommand>;
-	execute(
-		command: string,
-		options: { timeoutMs: number; maxOutputBytes: number; signal?: AbortSignal },
-	): Promise<MachineCommandResult>;
+	execute(command: string, options: MachineExecuteOptions): Promise<MachineCommandResult>;
 	openSftp(signal?: AbortSignal): Promise<MachineSftpLease>;
 	onClose(listener: () => void): () => void;
 	close(): Promise<void>;

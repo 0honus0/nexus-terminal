@@ -3,21 +3,28 @@ import type { Readable, Writable } from 'node:stream';
 import {
 	MachineSftpFailure,
 	type MachineOperationOptions,
+	type MachineSftpReadOptions,
+	type MachineSftpWriteOptions,
 	type MachineSftpLease,
 	type MachineFileInfo,
 	type MachineDirectoryEntry,
 } from '../../ssh-port.js';
 
-const info = (stats: Stats): MachineFileInfo => ({
-	size: stats.size,
-	mode: stats.mode,
-	modifiedAt: stats.mtime,
-	isDirectory: stats.isDirectory(),
-	isFile: stats.isFile(),
-	isSymbolicLink: stats.isSymbolicLink(),
-});
+function toFileInfo(stats: Stats): MachineFileInfo {
+	return {
+		size: stats.size,
+		mode: stats.mode,
+		modifiedAt: stats.mtime,
+		isDirectory: stats.isDirectory(),
+		isFile: stats.isFile(),
+		isSymbolicLink: stats.isSymbolicLink(),
+	};
+}
 
-function timeout(options?: MachineOperationOptions, fallback?: number): number | undefined {
+function operationTimeout(options: MachineOperationOptions | undefined, fallback: number): number;
+function operationTimeout(options?: MachineOperationOptions): number | undefined;
+
+function operationTimeout(options?: MachineOperationOptions, fallback?: number): number | undefined {
 	const value = options?.timeoutMs ?? fallback;
 	if (value !== undefined && (!Number.isSafeInteger(value) || value < 1 || value > 300000)) {
 		throw new RangeError('Invalid SFTP operation timeout');
@@ -93,7 +100,7 @@ export class SshSftpLease implements MachineSftpLease {
 		options?: MachineOperationOptions,
 	): Promise<T> {
 		this.ensure(options);
-		const limit = timeout(options, 30000)!;
+		const limit = operationTimeout(options, 30000);
 		return new Promise<T>((resolve, reject) => {
 			let settled = false;
 
@@ -133,23 +140,23 @@ export class SshSftpLease implements MachineSftpLease {
 	}
 
 	stat(path: string, options?: MachineOperationOptions): Promise<MachineFileInfo> {
-		return this.call<Stats>((finish) => this.sftp.stat(path, finish), options).then(info);
+		return this.call<Stats>((finish) => this.sftp.stat(path, finish), options).then(toFileInfo);
 	}
 
 	lstat(path: string, options?: MachineOperationOptions): Promise<MachineFileInfo> {
-		return this.call<Stats>((finish) => this.sftp.lstat(path, finish), options).then(info);
+		return this.call<Stats>((finish) => this.sftp.lstat(path, finish), options).then(toFileInfo);
 	}
 
 	list(path: string, options?: MachineOperationOptions): Promise<MachineDirectoryEntry[]> {
 		return this.call<Array<{ filename: string; attrs: Stats }>>(
 			(finish) => this.sftp.readdir(path, finish),
 			options,
-		).then((entries) => entries.map(({ filename, attrs }) => ({ name: filename, info: info(attrs) })));
+		).then((entries) => entries.map(({ filename, attrs }) => ({ name: filename, info: toFileInfo(attrs) })));
 	}
 
 	private track<T extends Readable | Writable>(stream: T, options?: MachineOperationOptions): T {
 		this.streams.add(stream);
-		const limit = timeout(options);
+		const limit = operationTimeout(options);
 
 		const aborted = () => stream.destroy(new MachineSftpFailure('cancelled', 'unknown'));
 
@@ -177,9 +184,9 @@ export class SshSftpLease implements MachineSftpLease {
 		return stream;
 	}
 
-	read(path: string, options?: MachineOperationOptions & { start?: number; end?: number }): Readable {
+	read(path: string, options?: MachineSftpReadOptions): Readable {
 		this.ensure(options);
-		timeout(options);
+		operationTimeout(options);
 		return this.track(
 			this.sftp.createReadStream(path, {
 				...(options?.start === undefined ? {} : { start: options.start }),
@@ -189,12 +196,12 @@ export class SshSftpLease implements MachineSftpLease {
 		);
 	}
 
-	write(path: string, options?: MachineOperationOptions & { flags?: string; mode?: number }): Writable {
+	write(path: string, options?: MachineSftpWriteOptions): Writable {
 		this.ensure(options);
-		timeout(options);
+		operationTimeout(options);
 		return this.track(
 			this.sftp.createWriteStream(path, {
-				flags: (options?.flags ?? 'w') as 'w',
+				flags: options?.flags ?? 'w',
 				...(options?.mode === undefined ? {} : { mode: options.mode }),
 			}),
 			options,

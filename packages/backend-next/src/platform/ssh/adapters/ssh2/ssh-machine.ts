@@ -10,11 +10,33 @@ import type {
 	MachineCommand,
 	MachineCommandResult,
 	MachineSftpLease,
-	MachineCommandOutcome,
+	MachineExecuteOptions,
 } from '../../ssh-port.js';
 import { openSshRoute, type ConnectedRoute } from './ssh-route.js';
 import { SshShellChannel, SshCommandChannel } from './ssh-channels.js';
 import { SshSftpLease } from './ssh-sftp.js';
+
+interface CommandChannelOptions {
+	signal?: AbortSignal;
+	cancelWhenAborted?: boolean;
+}
+
+const CHANNEL_OPEN_TIMEOUT_MS = 30000;
+const CLIENT_CLOSE_TIMEOUT_MS = 2000;
+
+function closeClient(client: Client): Promise<void> {
+	return new Promise((resolve) => {
+		const timer = setTimeout(() => {
+			client.destroy();
+			resolve();
+		}, CLIENT_CLOSE_TIMEOUT_MS);
+		client.once('close', () => {
+			clearTimeout(timer);
+			resolve();
+		});
+		client.end();
+	});
+}
 
 function timeoutError(): Error {
 	return new Error('SSH channel request timed out');
@@ -72,7 +94,7 @@ class ConnectedMachine implements MachineConnection {
 		return () => this.closeListeners.delete(listener);
 	}
 
-	private ensure(): Client {
+	private requireClient(): Client {
 		if (!this.isOpen) {
 			throw new Error('SSH machine connection closed');
 		}
@@ -83,7 +105,7 @@ class ConnectedMachine implements MachineConnection {
 		create: (client: Client, callback: (error: Error | undefined, channel: ClientChannel) => void) => void,
 		signal?: AbortSignal,
 	): Promise<ClientChannel> {
-		const client = this.ensure();
+		const client = this.requireClient();
 		return new Promise((resolve, reject) => {
 			let settled = false;
 
@@ -119,7 +141,7 @@ class ConnectedMachine implements MachineConnection {
 
 			const aborted = () => finish(new DOMException('SSH channel aborted', 'AbortError'));
 
-			const timeout = setTimeout(() => finish(timeoutError()), 30000);
+			const timeout = setTimeout(() => finish(timeoutError()), CHANNEL_OPEN_TIMEOUT_MS);
 			client.once('close', disconnected);
 			client.once('error', failed);
 			signal?.addEventListener('abort', aborted, { once: true });
@@ -149,11 +171,10 @@ class ConnectedMachine implements MachineConnection {
 		return shell;
 	}
 
-	private async openCommand(
+	private async createCommandChannel(
 		command: string,
-		signal?: AbortSignal,
-		cancelWhenAborted = true,
-	): Promise<MachineCommand> {
+		{ signal, cancelWhenAborted = true }: CommandChannelOptions,
+	): Promise<SshCommandChannel> {
 		if (!command) {
 			throw new Error('Empty SSH command');
 		}
@@ -179,17 +200,10 @@ class ConnectedMachine implements MachineConnection {
 	}
 
 	openRawCommand(command: string, signal?: AbortSignal): Promise<MachineCommand> {
-		return this.openCommand(command, signal);
+		return this.createCommandChannel(command, { signal });
 	}
 
-	startCommand(command: string, signal?: AbortSignal): Promise<MachineCommand> {
-		return this.openRawCommand(command, signal);
-	}
-
-	async execute(
-		command: string,
-		options: { timeoutMs: number; maxOutputBytes: number; signal?: AbortSignal },
-	): Promise<MachineCommandResult> {
+	async execute(command: string, options: MachineExecuteOptions): Promise<MachineCommandResult> {
 		if (
 			!Number.isSafeInteger(options.maxOutputBytes) ||
 			options.maxOutputBytes < 1 ||
@@ -207,46 +221,13 @@ class ConnectedMachine implements MachineConnection {
 
 		options.signal?.addEventListener('abort', abort, { once: true });
 		const timeout = setTimeout(() => controller.abort(new Error('SSH command timeout')), options.timeoutMs);
-		let commandChannel: MachineCommand | null = null;
+		let commandChannel: SshCommandChannel | null = null;
 		try {
-			commandChannel = await this.openCommand(command, controller.signal, false);
-			const channel = commandChannel;
-			const outputs: Buffer[][] = [[], []];
-			let size = 0;
-			let truncated = false;
-
-			const collect = (index: number, data: Buffer | string) => {
-				const bytes = Buffer.isBuffer(data) ? data : Buffer.from(data);
-				const available = options.maxOutputBytes - size;
-				if (bytes.length > available) {
-					truncated = true;
-				}
-				if (available > 0) {
-					const item = bytes.subarray(0, Math.min(bytes.length, available));
-					outputs[index].push(item);
-					size += item.length;
-				}
-			};
-
-			channel.readable.on('data', (data: Buffer | string) => collect(0, data));
-			const unsubscribe = channel.onStderr((bytes) => collect(1, Buffer.from(bytes)));
-
-			const abortCommand = () =>
-				(channel as SshCommandChannel).cancel(options.signal?.aborted ? 'cancelled' : 'timeout');
-
-			controller.signal.addEventListener('abort', abortCommand, { once: true });
-			if (controller.signal.aborted) {
-				abortCommand();
-			}
-			const outcome: MachineCommandOutcome = await channel.outcome;
-			controller.signal.removeEventListener('abort', abortCommand);
-			unsubscribe();
-			return {
-				outcome,
-				stdout: Buffer.concat(outputs[0]).toString('utf8'),
-				stderr: Buffer.concat(outputs[1]).toString('utf8'),
-				truncated,
-			};
+			commandChannel = await this.createCommandChannel(command, {
+				signal: controller.signal,
+				cancelWhenAborted: false,
+			});
+			return await this.collectCommandResult(commandChannel, options, controller.signal);
 		} finally {
 			clearTimeout(timeout);
 			options.signal?.removeEventListener('abort', abort);
@@ -254,9 +235,68 @@ class ConnectedMachine implements MachineConnection {
 		}
 	}
 
+	private async collectCommandResult(
+		channel: SshCommandChannel,
+		options: MachineExecuteOptions,
+		signal: AbortSignal,
+	): Promise<MachineCommandResult> {
+		const outputs: Buffer[][] = [[], []];
+		let size = 0;
+		let truncated = false;
+
+		const collect = (index: number, data: Buffer | string) => {
+			const bytes = Buffer.isBuffer(data) ? data : Buffer.from(data);
+			const available = options.maxOutputBytes - size;
+			if (bytes.length > available) {
+				truncated = true;
+			}
+			if (available > 0) {
+				const item = bytes.subarray(0, Math.min(bytes.length, available));
+				outputs[index].push(item);
+				size += item.length;
+			}
+		};
+
+		const onData = (data: Buffer | string) => collect(0, data);
+
+		channel.readable.on('data', onData);
+		const unsubscribe = channel.onStderr((bytes) => collect(1, Buffer.from(bytes)));
+
+		const abortCommand = () => channel.cancel(options.signal?.aborted ? 'cancelled' : 'timeout');
+
+		signal.addEventListener('abort', abortCommand, { once: true });
+		if (signal.aborted) {
+			abortCommand();
+		}
+		try {
+			const outcome = await channel.outcome;
+			return {
+				outcome,
+				stdout: Buffer.concat(outputs[0]).toString('utf8'),
+				stderr: Buffer.concat(outputs[1]).toString('utf8'),
+				truncated,
+			};
+		} finally {
+			signal.removeEventListener('abort', abortCommand);
+			unsubscribe();
+			channel.readable.off('data', onData);
+		}
+	}
+
 	async openSftp(signal?: AbortSignal): Promise<MachineSftpLease> {
-		const client = this.ensure();
-		const sftp = await new Promise<SFTPWrapper>((resolve, reject) => {
+		const sftp = await this.openSftpChannel(signal);
+		const lease = new SshSftpLease(sftp, () => queueMicrotask(() => this.leases.delete(lease)), signal);
+		this.leases.add(lease);
+		if (signal?.aborted || !this.isOpen) {
+			await lease.close();
+			throw new DOMException('SFTP lease no longer owned', 'AbortError');
+		}
+		return lease;
+	}
+
+	private openSftpChannel(signal?: AbortSignal): Promise<SFTPWrapper> {
+		const client = this.requireClient();
+		return new Promise<SFTPWrapper>((resolve, reject) => {
 			let settled = false;
 
 			const cleanup = () => {
@@ -288,7 +328,7 @@ class ConnectedMachine implements MachineConnection {
 
 			const failed = (error: Error) => finish(error);
 
-			const timer = setTimeout(() => finish(new Error('SFTP opening timed out')), 30000);
+			const timer = setTimeout(() => finish(new Error('SFTP opening timed out')), CHANNEL_OPEN_TIMEOUT_MS);
 			signal?.addEventListener('abort', aborted, { once: true });
 			this.stop.signal.addEventListener('abort', aborted, { once: true });
 			client.once('close', lost);
@@ -302,63 +342,42 @@ class ConnectedMachine implements MachineConnection {
 				finish(error instanceof Error ? error : new Error('SFTP request rejected'));
 			}
 		});
-		const lease = new SshSftpLease(sftp, () => queueMicrotask(() => this.leases.delete(lease)), signal);
-		this.leases.add(lease);
-		if (signal?.aborted || !this.isOpen) {
-			await lease.close();
-			throw new DOMException('SFTP lease no longer owned', 'AbortError');
-		}
-		return lease;
 	}
 
 	close(): Promise<void> {
 		if (this.closePromise) {
 			return this.closePromise;
 		}
-		this.closePromise = Promise.resolve().then(async () => {
-			this.disconnected = true;
-			this.stop.abort(new Error('SSH connection closing'));
-			for (const listener of [...this.closeListeners]) {
-				try {
-					listener();
-				} catch {
-					/* preserve owner */
-				}
-			}
-			this.closeListeners.clear();
-			for (const channel of [...this.channels]) {
-				channel.close();
-			}
-			const leaseResults = await Promise.allSettled([...this.leases].map((lease) => lease.close()));
-			const closings = this.route.clients.map(
-				(client) =>
-					new Promise<void>((resolve) => {
-						const timer = setTimeout(() => {
-							client.destroy();
-							resolve();
-						}, 2000);
-						client.once('close', () => {
-							clearTimeout(timer);
-							resolve();
-						});
-						client.end();
-					}),
-			);
-			await Promise.all(closings);
-			for (const socket of this.route.sockets) {
-				socket.destroy();
-			}
-			const failures = leaseResults.filter(
-				(result): result is PromiseRejectedResult => result.status === 'rejected',
-			);
-			if (failures.length) {
-				throw new AggregateError(
-					failures.map((result) => result.reason),
-					'SFTP leases failed to close',
-				);
-			}
-		});
+		this.closePromise = Promise.resolve().then(() => this.closeResources());
 		return this.closePromise;
+	}
+
+	private async closeResources(): Promise<void> {
+		this.disconnected = true;
+		this.stop.abort(new Error('SSH connection closing'));
+		for (const listener of [...this.closeListeners]) {
+			try {
+				listener();
+			} catch {
+				/* preserve owner */
+			}
+		}
+		this.closeListeners.clear();
+		for (const channel of [...this.channels]) {
+			channel.close();
+		}
+		const leaseResults = await Promise.allSettled([...this.leases].map((lease) => lease.close()));
+		await Promise.all(this.route.clients.map(closeClient));
+		for (const socket of this.route.sockets) {
+			socket.destroy();
+		}
+		const failures = leaseResults.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+		if (failures.length) {
+			throw new AggregateError(
+				failures.map((result) => result.reason),
+				'SFTP leases failed to close',
+			);
+		}
 	}
 }
 

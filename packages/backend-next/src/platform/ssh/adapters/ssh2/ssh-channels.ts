@@ -1,7 +1,7 @@
 import type { ClientChannel } from 'ssh2';
 import type { MachineByteChannel, MachineShell, MachineCommand, MachineCommandOutcome } from '../../ssh-port.js';
 
-const notify = <T extends unknown[]>(listeners: Set<(...args: T) => void>, ...args: T) => {
+function notify<T extends unknown[]>(listeners: Set<(...args: T) => void>, ...args: T): void {
 	for (const listener of listeners) {
 		try {
 			listener(...args);
@@ -9,7 +9,7 @@ const notify = <T extends unknown[]>(listeners: Set<(...args: T) => void>, ...ar
 			/* listeners cannot break transport state */
 		}
 	}
-};
+}
 
 class ByteChannel implements MachineByteChannel {
 	readonly readable: ClientChannel;
@@ -81,10 +81,6 @@ class ByteChannel implements MachineByteChannel {
 }
 
 export class SshShellChannel extends ByteChannel implements MachineShell {
-	constructor(channel: ClientChannel, onEnded: () => void) {
-		super(channel, onEnded);
-	}
-
 	resize(columns: number, rows: number): void {
 		if (!Number.isInteger(columns) || !Number.isInteger(rows) || columns < 1 || rows < 1) {
 			throw new Error('Invalid PTY size');
@@ -95,6 +91,7 @@ export class SshShellChannel extends ByteChannel implements MachineShell {
 
 export class SshCommandChannel extends ByteChannel implements MachineCommand {
 	readonly outcome: Promise<MachineCommandOutcome>;
+	// The Promise constructor runs its executor synchronously before any channel event.
 	private settle!: (value: MachineCommandOutcome) => void;
 	private settled = false;
 

@@ -22,7 +22,7 @@ function abortCause(signal: AbortSignal): Error {
 	return signal.reason instanceof Error ? signal.reason : new DOMException('SSH connection cancelled', 'AbortError');
 }
 
-function makeDeadline(options: MachineConnectOptions): Deadline {
+function createConnectDeadline(options: MachineConnectOptions): Deadline {
 	if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs <= 0 || options.timeoutMs > 300000) {
 		throw new Error('SSH connection timeout out of range');
 	}
@@ -62,7 +62,7 @@ function makeDeadline(options: MachineConnectOptions): Deadline {
 	};
 }
 
-function flatten(endpoint: MachineEndpoint): MachineEndpoint[] {
+function expandRoute(endpoint: MachineEndpoint): MachineEndpoint[] {
 	const result: MachineEndpoint[] = [];
 
 	const visit = (current: MachineEndpoint, depth: number) => {
@@ -87,10 +87,10 @@ function flatten(endpoint: MachineEndpoint): MachineEndpoint[] {
 async function connectTcp(
 	host: string,
 	port: number,
-	ctx: Deadline,
+	deadline: Deadline,
 	ownSocket: (socket: Duplex) => void,
 ): Promise<Duplex> {
-	ctx.remaining();
+	deadline.remaining();
 	const socket = net.connect({ host, port });
 	ownSocket(socket);
 	return new Promise((resolve, reject) => {
@@ -104,7 +104,7 @@ async function connectTcp(
 			socket.off('connect', ready);
 			socket.off('error', fail);
 			socket.off('close', closed);
-			ctx.signal.removeEventListener('abort', aborted);
+			deadline.signal.removeEventListener('abort', aborted);
 			if (error) {
 				socket.destroy();
 				reject(error);
@@ -119,26 +119,26 @@ async function connectTcp(
 
 		const closed = () => finish(new Error('TCP socket closed during SSH routing'));
 
-		const aborted = () => finish(abortCause(ctx.signal));
+		const aborted = () => finish(abortCause(deadline.signal));
 
 		socket.once('connect', ready);
 		socket.once('error', fail);
 		socket.once('close', closed);
-		ctx.signal.addEventListener('abort', aborted, { once: true });
-		if (ctx.signal.aborted) {
+		deadline.signal.addEventListener('abort', aborted, { once: true });
+		if (deadline.signal.aborted) {
 			aborted();
 		}
 	});
 }
 
-async function forward(
+async function openForwardChannel(
 	client: Client,
 	host: string,
 	port: number,
-	ctx: Deadline,
+	deadline: Deadline,
 	ownSocket: (socket: Duplex) => void,
 ): Promise<ClientChannel> {
-	ctx.remaining();
+	deadline.remaining();
 	return new Promise((resolve, reject) => {
 		let settled = false;
 
@@ -150,7 +150,7 @@ async function forward(
 			settled = true;
 			client.off('close', closed);
 			client.off('error', failed);
-			ctx.signal.removeEventListener('abort', aborted);
+			deadline.signal.removeEventListener('abort', aborted);
 			if (error) {
 				reject(error);
 			} else {
@@ -162,12 +162,12 @@ async function forward(
 
 		const failed = (error: Error) => finish(error);
 
-		const aborted = () => finish(abortCause(ctx.signal));
+		const aborted = () => finish(abortCause(deadline.signal));
 
 		client.once('close', closed);
 		client.once('error', failed);
-		ctx.signal.addEventListener('abort', aborted, { once: true });
-		if (ctx.signal.aborted) {
+		deadline.signal.addEventListener('abort', aborted, { once: true });
+		if (deadline.signal.aborted) {
 			return aborted();
 		}
 		try {
@@ -184,8 +184,8 @@ async function forward(
 }
 
 /** Exact protocol read; never leave handshake listeners attached to an SSH socket. */
-async function readBytes(socket: Duplex, bytes: number, ctx: Deadline): Promise<Buffer> {
-	ctx.remaining();
+async function readBytes(socket: Duplex, bytes: number, deadline: Deadline): Promise<Buffer> {
+	deadline.remaining();
 	return new Promise((resolve, reject) => {
 		const collected: Buffer[] = [];
 		let received = 0;
@@ -196,7 +196,7 @@ async function readBytes(socket: Duplex, bytes: number, ctx: Deadline): Promise<
 			socket.off('error', fail);
 			socket.off('end', ended);
 			socket.off('close', ended);
-			ctx.signal.removeEventListener('abort', aborted);
+			deadline.signal.removeEventListener('abort', aborted);
 		};
 
 		const data = (chunk: Buffer) => {
@@ -219,14 +219,14 @@ async function readBytes(socket: Duplex, bytes: number, ctx: Deadline): Promise<
 
 		const ended = () => fail(new Error('Proxy closed during handshake'));
 
-		const aborted = () => fail(abortCause(ctx.signal));
+		const aborted = () => fail(abortCause(deadline.signal));
 
 		socket.on('data', data);
 		socket.once('error', fail);
 		socket.once('end', ended);
 		socket.once('close', ended);
-		ctx.signal.addEventListener('abort', aborted, { once: true });
-		if (ctx.signal.aborted) {
+		deadline.signal.addEventListener('abort', aborted, { once: true });
+		if (deadline.signal.aborted) {
 			aborted();
 		} else {
 			socket.resume();
@@ -234,14 +234,19 @@ async function readBytes(socket: Duplex, bytes: number, ctx: Deadline): Promise<
 	});
 }
 
-async function socks5(socket: Duplex, target: MachineEndpoint, proxy: MachineProxy, ctx: Deadline): Promise<void> {
+async function openSocks5Tunnel(
+	socket: Duplex,
+	target: MachineEndpoint,
+	proxy: MachineProxy,
+	deadline: Deadline,
+): Promise<void> {
 	const username = proxy.username === null ? null : Buffer.from(proxy.username);
 	const password = Buffer.from(proxy.password ?? '');
 	if (username && (username.length > 255 || password.length > 255)) {
 		throw new Error('Proxy credentials too long');
 	}
 	socket.write(Buffer.from([5, 1, username ? 2 : 0]));
-	const greeting = await readBytes(socket, 2, ctx);
+	const greeting = await readBytes(socket, 2, deadline);
 	if (greeting[0] !== 5 || greeting[1] === 255) {
 		throw new Error('SOCKS5 proxy authentication rejected');
 	}
@@ -252,7 +257,7 @@ async function socks5(socket: Duplex, target: MachineEndpoint, proxy: MachinePro
 		socket.write(
 			Buffer.concat([Buffer.from([1, username.length]), username, Buffer.from([password.length]), password]),
 		);
-		const response = await readBytes(socket, 2, ctx);
+		const response = await readBytes(socket, 2, deadline);
 		if (response[1] !== 0) {
 			throw new Error('SOCKS5 credential rejected');
 		}
@@ -271,21 +276,33 @@ async function socks5(socket: Duplex, target: MachineEndpoint, proxy: MachinePro
 			Buffer.from([target.port >> 8, target.port & 255]),
 		]),
 	);
-	const reply = await readBytes(socket, 4, ctx);
+	const reply = await readBytes(socket, 4, deadline);
 	if (reply[0] !== 5 || reply[1] !== 0) {
 		throw new Error('SOCKS5 proxy route rejected');
 	}
-	let remaining = reply[3] === 1 ? 4 : reply[3] === 4 ? 16 : -1;
-	if (reply[3] === 3) {
-		remaining = (await readBytes(socket, 1, ctx))[0];
+	let addressBytes: number;
+	switch (reply[3]) {
+		case 1:
+			addressBytes = 4;
+			break;
+		case 4:
+			addressBytes = 16;
+			break;
+		case 3:
+			addressBytes = (await readBytes(socket, 1, deadline))[0];
+			break;
+		default:
+			throw new Error('Invalid SOCKS5 reply');
 	}
-	if (remaining < 0) {
-		throw new Error('Invalid SOCKS5 reply');
-	}
-	await readBytes(socket, remaining + 2, ctx);
+	await readBytes(socket, addressBytes + 2, deadline);
 }
 
-async function httpConnect(socket: Duplex, target: MachineEndpoint, proxy: MachineProxy, ctx: Deadline): Promise<void> {
+async function openHttpTunnel(
+	socket: Duplex,
+	target: MachineEndpoint,
+	proxy: MachineProxy,
+	deadline: Deadline,
+): Promise<void> {
 	const authority = target.host.includes(':')
 		? '[' + target.host + ']:' + target.port
 		: target.host + ':' + target.port;
@@ -297,28 +314,28 @@ async function httpConnect(socket: Duplex, target: MachineEndpoint, proxy: Machi
 	socket.write(headers.join('\r\n') + '\r\n\r\n');
 	let text = '';
 	while (!text.endsWith('\r\n\r\n') && text.length < 8192) {
-		text += (await readBytes(socket, 1, ctx)).toString('latin1');
+		text += (await readBytes(socket, 1, deadline)).toString('latin1');
 	}
 	if (!text.endsWith('\r\n\r\n') || !/^HTTP\/1\.[01] 200(?: |\r)/.test(text)) {
 		throw new Error('HTTP CONNECT route rejected');
 	}
 }
 
-async function proxyTunnel(
+async function openProxyTunnel(
 	target: MachineEndpoint,
 	proxy: MachineProxy,
 	previous: Client | null,
-	ctx: Deadline,
+	deadline: Deadline,
 	ownSocket: (socket: Duplex) => void,
 ): Promise<Duplex> {
 	const socket = previous
-		? await forward(previous, proxy.host, proxy.port, ctx, ownSocket)
-		: await connectTcp(proxy.host, proxy.port, ctx, ownSocket);
+		? await openForwardChannel(previous, proxy.host, proxy.port, deadline, ownSocket)
+		: await connectTcp(proxy.host, proxy.port, deadline, ownSocket);
 	try {
 		if (proxy.type === 'HTTP') {
-			await httpConnect(socket, target, proxy, ctx);
+			await openHttpTunnel(socket, target, proxy, deadline);
 		} else if (proxy.type === 'SOCKS5') {
-			await socks5(socket, target, proxy, ctx);
+			await openSocks5Tunnel(socket, target, proxy, deadline);
 		} else {
 			throw new Error('Unsupported proxy kind');
 		}
@@ -329,30 +346,46 @@ async function proxyTunnel(
 	}
 }
 
-async function connectClient(
+function createConnectConfig(
 	endpoint: MachineEndpoint,
-	sock: Duplex | null,
-	ctx: Deadline,
-	verify: MachineConnectOptions['verifyHostKey'],
-	ownClient: (client: Client) => void,
-): Promise<Client> {
-	ctx.remaining();
-	const auth = endpoint.authentication;
+	socket: Duplex | null,
+	deadline: Deadline,
+	verifyHostKey: MachineConnectOptions['verifyHostKey'],
+): ConnectConfig {
+	const authentication = endpoint.authentication;
 	const config: ConnectConfig = {
 		host: endpoint.host,
 		port: endpoint.port,
 		username: endpoint.username,
-		readyTimeout: ctx.remaining(),
+		readyTimeout: deadline.remaining(),
 		keepaliveInterval: 10000,
 
 		hostVerifier: (key: Buffer) =>
-			verify(endpoint.host, endpoint.port, Buffer.isBuffer(key) ? key : Buffer.from(key)),
-
-		...(auth.kind === 'password'
-			? { password: auth.password }
-			: { privateKey: auth.privateKey, ...(auth.passphrase === null ? {} : { passphrase: auth.passphrase }) }),
-		...(sock ? { sock } : {}),
+			verifyHostKey(endpoint.host, endpoint.port, Buffer.isBuffer(key) ? key : Buffer.from(key)),
 	};
+	if (authentication.kind === 'password') {
+		config.password = authentication.password;
+	} else {
+		config.privateKey = authentication.privateKey;
+		if (authentication.passphrase !== null) {
+			config.passphrase = authentication.passphrase;
+		}
+	}
+	if (socket !== null) {
+		config.sock = socket;
+	}
+	return config;
+}
+
+async function connectClient(
+	endpoint: MachineEndpoint,
+	socket: Duplex | null,
+	deadline: Deadline,
+	verifyHostKey: MachineConnectOptions['verifyHostKey'],
+	ownClient: (client: Client) => void,
+): Promise<Client> {
+	deadline.remaining();
+	const config = createConnectConfig(endpoint, socket, deadline, verifyHostKey);
 	const client = new Client();
 	ownClient(client);
 	try {
@@ -363,7 +396,7 @@ async function connectClient(
 				client.off('ready', ready);
 				client.off('error', failed);
 				client.off('close', closed);
-				ctx.signal.removeEventListener('abort', aborted);
+				deadline.signal.removeEventListener('abort', aborted);
 			};
 
 			const finish = (error?: Error) => {
@@ -385,13 +418,13 @@ async function connectClient(
 
 			const closed = () => finish(new Error('SSH client closed before ready'));
 
-			const aborted = () => finish(abortCause(ctx.signal));
+			const aborted = () => finish(abortCause(deadline.signal));
 
 			client.once('ready', ready);
 			client.once('error', failed);
 			client.once('close', closed);
-			ctx.signal.addEventListener('abort', aborted, { once: true });
-			if (ctx.signal.aborted) {
+			deadline.signal.addEventListener('abort', aborted, { once: true });
+			if (deadline.signal.aborted) {
 				return aborted();
 			}
 			try {
@@ -408,17 +441,17 @@ async function connectClient(
 }
 
 export async function openSshRoute(endpoint: MachineEndpoint, options: MachineConnectOptions): Promise<ConnectedRoute> {
-	const stages = flatten(endpoint);
-	const ctx = makeDeadline(options);
+	const stages = expandRoute(endpoint);
+	const deadline = createConnectDeadline(options);
 	const clients: Client[] = [];
 	const sockets: Duplex[] = [];
 	const monitors = new Set<() => void>();
 
 	const monitor = (resource: EventEmitter) => {
-		const failed = (error: Error) => ctx.fail(error);
+		const failed = (error: Error) => deadline.fail(error);
 
 		const closed = () => {
-			ctx.fail(new Error('SSH route resource closed'));
+			deadline.fail(new Error('SSH route resource closed'));
 			release();
 		};
 
@@ -448,15 +481,15 @@ export async function openSshRoute(endpoint: MachineEndpoint, options: MachineCo
 			const previous = clients.length ? clients[clients.length - 1] : null;
 			let socket: Duplex | null = null;
 			if (stage.route.kind === 'proxy') {
-				socket = await proxyTunnel(stage, stage.route.proxy, previous, ctx, ownSocket);
+				socket = await openProxyTunnel(stage, stage.route.proxy, previous, deadline, ownSocket);
 			} else if (previous) {
-				socket = await forward(previous, stage.host, stage.port, ctx, ownSocket);
+				socket = await openForwardChannel(previous, stage.host, stage.port, deadline, ownSocket);
 			}
-			await connectClient(stage, socket, ctx, options.verifyHostKey, ownClient);
-			ctx.remaining();
+			await connectClient(stage, socket, deadline, options.verifyHostKey, ownClient);
+			deadline.remaining();
 		}
-		if (ctx.signal.aborted) {
-			throw abortCause(ctx.signal);
+		if (deadline.signal.aborted) {
+			throw abortCause(deadline.signal);
 		}
 		return {
 			clients,
@@ -464,8 +497,8 @@ export async function openSshRoute(endpoint: MachineEndpoint, options: MachineCo
 			primary: clients[clients.length - 1],
 
 			assertOpen() {
-				if (ctx.signal.aborted) {
-					throw abortCause(ctx.signal);
+				if (deadline.signal.aborted) {
+					throw abortCause(deadline.signal);
 				}
 			},
 
@@ -484,6 +517,6 @@ export async function openSshRoute(endpoint: MachineEndpoint, options: MachineCo
 		}
 		throw error;
 	} finally {
-		ctx.finish();
+		deadline.finish();
 	}
 }
