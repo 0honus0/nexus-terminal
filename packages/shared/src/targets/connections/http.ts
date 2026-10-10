@@ -46,14 +46,13 @@ export interface TargetConnectionCloneRequest {
 	name: string;
 }
 
+/** A batch is also bounded by the complete connections HTTP body budget. */
+export const TARGET_CONNECTION_IMPORT_MAX_ITEMS = 50;
+
 export interface TargetConnectionImportRequest {
 	items: TargetImportInput[];
 }
 
 export interface TargetConnectionImportResponse {
 	items: TargetImportItem[];
-}
-
-export interface TargetDeleteResponse {
-	deleted: true;
 }

@@ -3,6 +3,13 @@ import type { AccessService } from '../../authentication/service/access-service.
 import { AccessOperationError, accessBoundary } from '../../authentication/model/access-errors.js';
 import type { AuthenticatedIdentity } from '../../authentication/model/access-types.js';
 import {
+	type AccessNeedsSetupResponse,
+	type AccessSetupResponse,
+	type AccessLoginResponse,
+	type AccessStatusResponse,
+	type AccessLogoutResponse,
+	type AccessPasswordResponse,
+	type AccessHttpErrorResponse,
 	InvalidAccessPayload,
 	readAccessSetupRequest,
 	readAccessLoginRequest,
@@ -44,7 +51,7 @@ async function requireIdentity(
 ): Promise<AuthenticatedIdentity | null> {
 	const identity = await accessBoundary(() => access.authenticate(readSession(context)));
 	if (identity === null) {
-		context.send(401, { code: 'unauthenticated' });
+		context.send(401, { code: 'unauthenticated' } satisfies AccessHttpErrorResponse);
 		return null;
 	}
 	return identity;
@@ -52,7 +59,7 @@ async function requireIdentity(
 
 function errorResponse(context: HttpRouteContext, error: unknown): void {
 	if (!(error instanceof AccessOperationError)) {
-		context.send(500, { code: 'internal_failure' });
+		context.send(500, { code: 'internal_failure' } satisfies AccessHttpErrorResponse);
 		return;
 	}
 	const code = error.code;
@@ -74,7 +81,7 @@ function errorResponse(context: HttpRouteContext, error: unknown): void {
 		default:
 			status = 500;
 	}
-	context.send(status, { code });
+	context.send(status, { code } satisfies AccessHttpErrorResponse);
 }
 
 async function handle(context: HttpRouteContext, action: () => Promise<void>): Promise<void> {
@@ -107,7 +114,7 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 			handle: (context) =>
 				handle(context, async () => {
 					const needsSetup = await accessBoundary(() => access.needsSetup());
-					context.send(200, { needsSetup: Boolean(needsSetup) });
+					context.send(200, { needsSetup: Boolean(needsSetup) } satisfies AccessNeedsSetupResponse);
 				}),
 		},
 		{
@@ -118,7 +125,7 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 				handle(context, async () => {
 					const data = readAccessSetupRequest(await context.json());
 					const identity = await accessBoundary(() => access.setupAdmin(data.username, data.password));
-					context.send(201, { user: toUser(identity) });
+					context.send(201, { user: toUser(identity) } satisfies AccessSetupResponse);
 				}),
 		},
 		{
@@ -146,7 +153,7 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 					}
 					context.send(
 						200,
-						{ user: toUser(result.identity), requiresTwoFactor: false },
+						{ user: toUser(result.identity), requiresTwoFactor: false } satisfies AccessLoginResponse,
 						{ 'Set-Cookie': cookieHeader(result.token, result.rememberMe, secureCookies) },
 					);
 				}),
@@ -159,7 +166,10 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 				handle(context, async () => {
 					const identity = await requireIdentity(context, access);
 					if (identity !== null) {
-						context.send(200, { isAuthenticated: true, user: toUser(identity) });
+						context.send(200, {
+							isAuthenticated: true,
+							user: toUser(identity),
+						} satisfies AccessStatusResponse);
 					}
 				}),
 		},
@@ -173,7 +183,9 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 					const identity = await requireIdentity(context, access);
 					if (identity !== null) {
 						await accessBoundary(() => access.logout(token));
-						context.send(200, { loggedOut: true }, { 'Set-Cookie': clearedCookie(secureCookies) });
+						context.send(200, { loggedOut: true } satisfies AccessLogoutResponse, {
+							'Set-Cookie': clearedCookie(secureCookies),
+						});
 					}
 				}),
 		},
@@ -191,7 +203,9 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 					await accessBoundary(() =>
 						access.changePassword(readSession(context), data.currentPassword, data.newPassword),
 					);
-					context.send(200, { passwordChanged: true }, { 'Set-Cookie': clearedCookie(secureCookies) });
+					context.send(200, { passwordChanged: true } satisfies AccessPasswordResponse, {
+						'Set-Cookie': clearedCookie(secureCookies),
+					});
 				}),
 		},
 	];

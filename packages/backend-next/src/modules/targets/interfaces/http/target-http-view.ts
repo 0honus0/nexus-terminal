@@ -1,3 +1,4 @@
+import type { TargetHostKeyView } from '@nexus-terminal/shared/targets/host-keys/model';
 import type {
 	ConnectionSnapshot,
 	ConnectionMutation,
@@ -9,6 +10,7 @@ import type {
 	TagMutation,
 	SshKeyView,
 	SshKeyMutation,
+	HostKeyTrustView,
 } from '../../public.js';
 import type { TargetConnectionView } from '@nexus-terminal/shared/targets/connections/model';
 import type { TargetConnectionMutation } from '@nexus-terminal/shared/targets/connections/model';
@@ -105,4 +107,13 @@ export function toImportItems(items: readonly ImportItemResult[]): TargetImportI
 	return items.map((item) =>
 		item.status === 'ok' ? { status: 'ok', id: item.id } : { status: 'error', code: item.code },
 	);
+}
+
+export function toHostKeyDto(value: HostKeyTrustView): TargetHostKeyView {
+	return {
+		host: value.host,
+		port: value.port,
+		fingerprint: value.fingerprint,
+		confirmedAt: value.confirmedAt,
+	};
 }

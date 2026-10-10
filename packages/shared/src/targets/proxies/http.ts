@@ -15,7 +15,3 @@ export interface TargetProxyUpdateRequest {
 	version: number;
 	changes: TargetProxyChanges;
 }
-
-export interface TargetProxyDeleteResponse {
-	deleted: true;
-}

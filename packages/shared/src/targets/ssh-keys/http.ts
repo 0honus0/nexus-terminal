@@ -10,7 +10,3 @@ export interface TargetSshKeyUpdateRequest {
 	version: number;
 	changes: TargetSshKeyChanges;
 }
-
-export interface TargetSshKeyDeleteResponse {
-	deleted: true;
-}

@@ -10,31 +10,18 @@ import type { AccessPublicApi } from '../../../access/public.js';
 import type { RemoteSessions, SessionView } from '../../public.js';
 import { isRemoteSessionId } from '@nexus-terminal/shared/remote/sessions/model';
 import { RemotePermissionError, RemoteSessionOwner } from '../../sessions/service/session-owner.js';
-import { readRemoteOpenShell, InvalidRemotePayload } from '@nexus-terminal/shared/remote/sessions/http';
+import {
+	type RemoteCloseSessionResponse,
+	type RemoteFailureResponse,
+	readRemoteOpenShell,
+	InvalidRemotePayload,
+} from '@nexus-terminal/shared/remote/sessions/http';
 import { type RemoteShellView } from '@nexus-terminal/shared/remote/sessions/model';
 import { readRemoteClientEvent, type RemoteServerEvent } from '@nexus-terminal/shared/remote/sessions/events';
 
 const ROOT = '/api/v1/remote';
 
 class RemoteInputError extends Error {}
-
-function positive(value: unknown, max: number): number {
-	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1 || value > max) {
-		throw new RemoteInputError();
-	}
-	return value;
-}
-
-function record(value: unknown, allowed: readonly string[], required: readonly string[]): Record<string, unknown> {
-	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-		throw new RemoteInputError();
-	}
-	const data = value as Record<string, unknown>;
-	if (Object.keys(data).some((key) => !allowed.includes(key)) || required.some((key) => !Object.hasOwn(data, key))) {
-		throw new RemoteInputError();
-	}
-	return data;
-}
 
 function toShellView(value: SessionView): RemoteShellView {
 	return {
@@ -64,16 +51,16 @@ function handleError(ctx: HttpRouteContext, error: unknown): void {
 		throw error;
 	}
 	if (error instanceof RemoteInputError || error instanceof InvalidRemotePayload) {
-		ctx.send(400, { code: 'invalid_input' });
+		ctx.send(400, { code: 'invalid_input' } satisfies RemoteFailureResponse);
 		return;
 	}
 	if (error instanceof RemotePermissionError) {
 		const status = remotePermissionStatus(error.code);
-		ctx.send(status, { code: error.code });
+		ctx.send(status, { code: error.code } satisfies RemoteFailureResponse);
 		return;
 	}
 	// No machine/SSH error, private credential or destination leaks to HTTP.
-	ctx.send(503, { code: 'remote_unavailable' });
+	ctx.send(503, { code: 'remote_unavailable' } satisfies RemoteFailureResponse);
 }
 
 function remotePermissionStatus(code: RemotePermissionError['code']): number {
@@ -156,7 +143,10 @@ export function createRemoteHttpRoutes(owner: RemoteSessionOwner, access: Access
 				throw new RemoteInputError();
 			}
 			const session = await owner.get(ctx.cookie('nexus_session'), id);
-			ctx.send(session ? 200 : 404, session ? toShellView(session) : { code: 'not_found' });
+			ctx.send(
+				session ? 200 : 404,
+				session ? toShellView(session) : ({ code: 'not_found' } satisfies RemoteFailureResponse),
+			);
 		}),
 		route('DELETE', '/sessions/:id', async (ctx) => {
 			await identity(access, ctx.cookie('nexus_session'));
@@ -165,7 +155,12 @@ export function createRemoteHttpRoutes(owner: RemoteSessionOwner, access: Access
 				throw new RemoteInputError();
 			}
 			const deleted = await owner.closeSession(ctx.cookie('nexus_session'), id);
-			ctx.send(deleted ? 200 : 404, deleted ? { closed: true } : { code: 'not_found' });
+			ctx.send(
+				deleted ? 200 : 404,
+				deleted
+					? ({ closed: true } satisfies RemoteCloseSessionResponse)
+					: ({ code: 'not_found' } satisfies RemoteFailureResponse),
+			);
 		}),
 	];
 }

@@ -7,10 +7,50 @@ export class InvalidTargetPayload extends Error {
 	}
 }
 
-export type TargetHttpErrorCode = TargetErrorCode | 'unauthenticated' | 'forbidden' | 'not_found' | 'version_conflict';
+export type TargetHttpErrorCode =
+	TargetErrorCode | 'unauthenticated' | 'forbidden' | 'not_found' | 'version_conflict' | 'body_too_large';
 
 export interface TargetErrorResponse {
 	code: TargetHttpErrorCode;
+}
+
+/** Complete UTF-8 JSON budgets, including envelopes and escaped field contents. */
+export const TARGET_HTTP_BODY_LIMITS = {
+	connections: 128 * 1024,
+	proxies: 64 * 1024,
+	'ssh-keys': 128 * 1024,
+	tags: 16 * 1024,
+	'host-keys': 16 * 1024,
+} as const;
+
+/** Paths are relative to /api/v1/targets on both server and client. */
+export function targetHttpBodyLimit(path: string): number {
+	const resource = path.split('/')[1];
+	switch (resource) {
+		case 'connections':
+		case 'proxies':
+		case 'ssh-keys':
+		case 'tags':
+		case 'host-keys':
+			return TARGET_HTTP_BODY_LIMITS[resource];
+		default:
+			throw new InvalidTargetPayload();
+	}
+}
+
+export function encodeTargetRequest(path: string, input: unknown): string {
+	const body = JSON.stringify(input);
+	if (body === undefined) {
+		throw new InvalidTargetPayload();
+	}
+	if (new TextEncoder().encode(body).byteLength > targetHttpBodyLimit(path)) {
+		throw new Error('body_too_large');
+	}
+	return body;
+}
+
+export interface TargetDeleteResponse {
+	deleted: true;
 }
 
 export function targetObject(
@@ -83,7 +123,7 @@ export function readTargetMutation<T>(
 	}
 }
 
-export function readTargetDeleted(input: unknown): { deleted: true } {
+export function readTargetDeleted(input: unknown): TargetDeleteResponse {
 	const row = targetObject(input, ['deleted']);
 	if (row.deleted !== true) throw new InvalidTargetPayload();
 	return { deleted: true };
@@ -91,6 +131,13 @@ export function readTargetDeleted(input: unknown): { deleted: true } {
 
 export function readTargetError(input: unknown): TargetErrorResponse {
 	const row = targetObject(input, ['code']);
-	const stable = [...TARGET_ERROR_CODES, 'unauthenticated', 'forbidden', 'not_found', 'version_conflict'] as const;
+	const stable = [
+		...TARGET_ERROR_CODES,
+		'unauthenticated',
+		'forbidden',
+		'not_found',
+		'version_conflict',
+		'body_too_large',
+	] as const;
 	return { code: targetOption(row.code, stable) };
 }

@@ -1,4 +1,9 @@
-import { targetArray, readTargetDeleted, readTargetError } from '@nexus-terminal/shared/targets/http';
+import {
+	targetArray,
+	readTargetDeleted,
+	readTargetError,
+	encodeTargetRequest,
+} from '@nexus-terminal/shared/targets/http';
 import {
 	readConnectionView,
 	readConnectionMutation,
@@ -32,7 +37,7 @@ import {
 	readConnectionTagsRequest,
 	readCredentialSetRequest,
 	readCredentialClearRequest,
-	readConnectionImportBatch,
+	readConnectionImportRequest,
 } from '@nexus-terminal/shared/targets/connections/http-codec';
 import { readProxyInput, readProxyUpdateRequest } from '@nexus-terminal/shared/targets/proxies/http-codec';
 import { readSshKeyInput, readSshKeyUpdateRequest } from '@nexus-terminal/shared/targets/ssh-keys/http-codec';
@@ -48,6 +53,7 @@ export function createTargetsNextApi(baseUrl: string) {
 	const base = origin.origin + '/__next/api/v1/targets';
 
 	async function call(method: string, path: string, body?: unknown): Promise<unknown> {
+		const encodedBody = body === undefined ? undefined : encodeTargetRequest(path, body);
 		let response: Response;
 		try {
 			response = await fetch(base + path, {
@@ -55,7 +61,7 @@ export function createTargetsNextApi(baseUrl: string) {
 				credentials: 'same-origin',
 				cache: 'no-store',
 				headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
-				...(body === undefined ? {} : { body: JSON.stringify(body) }),
+				...(body === undefined ? {} : { body: encodedBody }),
 			});
 		} catch {
 			throw new Error('request_failed');
@@ -148,7 +154,7 @@ export function createTargetsNextApi(baseUrl: string) {
 
 			importMany: async (items: TargetImportInput[]): Promise<TargetImportItem[]> =>
 				readConnectionImportResponse(
-					await call('POST', '/connections/import', { items: readConnectionImportBatch({ items }) }),
+					await call('POST', '/connections/import', readConnectionImportRequest({ items })),
 				).items,
 		},
 		proxies: {

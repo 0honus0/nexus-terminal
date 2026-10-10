@@ -1,3 +1,4 @@
+import { TARGET_CONNECTION_IMPORT_MAX_ITEMS } from './http.js';
 import { CONNECTION_ROUTES, CONNECTION_TYPES } from './values.js';
 import type { TargetConnectionView, TargetConnectionMutation } from './model.js';
 import type {
@@ -13,6 +14,7 @@ import type {
 	TargetCredentialClearRequest,
 	TargetConnectionCloneRequest,
 	TargetConnectionImportResponse,
+	TargetConnectionImportRequest,
 } from './http.js';
 import {
 	targetObject,
@@ -199,13 +201,13 @@ export function readConnectionImportInput(input: unknown): TargetImportInput {
 	return value;
 }
 
-export function readConnectionImportBatch(input: unknown): TargetImportInput[] {
+export function readConnectionImportRequest(input: unknown): TargetConnectionImportRequest {
 	const row = targetObject(input, ['items']);
-	const items = targetArray(row.items, readConnectionImportInput, 50);
+	const items = targetArray(row.items, readConnectionImportInput, TARGET_CONNECTION_IMPORT_MAX_ITEMS);
 	if (items.length === 0) {
 		throw new InvalidTargetPayload();
 	}
-	return items;
+	return { items };
 }
 
 export function readConnectionImportResponse(input: unknown): TargetConnectionImportResponse {
@@ -225,7 +227,7 @@ export function readConnectionImportResponse(input: unknown): TargetConnectionIm
 				}
 				throw new InvalidTargetPayload();
 			},
-			50,
+			TARGET_CONNECTION_IMPORT_MAX_ITEMS,
 		),
 	};
 }

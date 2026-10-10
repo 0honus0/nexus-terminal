@@ -46,7 +46,7 @@ Access 账号与会话模型属于 `modules/access`，加密的 password verifie
 
 ## backend-next Targets 受认证 HTTP 切片
 
-`modules/targets/interfaces/http` 是唯一 Targets 管理 HTTP 入口，使用 Access 公开的身份恢复契约；当前数据库仅由首次管理员初始化，因此明确只允许管理员 ID 1 的会话请求，其余身份拒绝。Platform HTTP 只持有通用路由和参数位置（精确静态匹配优先，其后参数段），不包含 Targets 业务对象和授权语义。Targets 的 decoder 从 `unknown` 严格验证字段、类型、长度、输入数组和关系，再创建独立 Service 输入；更新要求 `version` 及补丁，省略保留、null 仅在可空字段上有效，导入每批不超过 50 个并按条提交。模块出口错误仅映射稳定码与 HTTP 状态。
+`modules/targets/interfaces/http` 是唯一 Targets 管理 HTTP 入口，使用 Access 公开的身份恢复契约；当前数据库仅由首次管理员初始化，因此明确只允许管理员 ID 1 的会话请求，其余身份拒绝。Platform HTTP 只持有通用路由和参数位置（精确静态匹配优先，其后参数段），不包含 Targets 业务对象和授权语义。Targets 的 decoder 从 `unknown` 严格验证字段、类型、长度、输入数组和关系，再创建独立 Service 输入；更新要求 `version` 及补丁，省略保留、null 仅在可空字段上有效，导入每批不超过 50 个并按条提交，完整 JSON 同时不超过 128 KiB，超限整批在进入业务层前拒绝。Targets 的完整 UTF-8 JSON body 预算由 Shared targets/http.ts 定义，Connections/SSH Keys 128 KiB、Proxies 64 KiB、Tags/Host Keys 16 KiB；Frontend 编码后预检，模块路由将同一限额交给 Platform，超限返回 413 body_too_large。预算包含 JSON 外壳与转义，不等同于字段长度。删除响应与基础错误码只引用 Shared 唯一定义，HTTP 响应外壳显式绑定 Shared 类型，所有白名单投影保留。模块出口错误仅映射稳定码与 HTTP 状态。
 
 管理视图的 Connection/Proxy/Tag/SSH Key、变更结果、Credential 状态和导入结果均经 `interfaces/http/target-http-view.ts` 逐字段投影到 Shared wire，不从内部对象展开，也不公开 trusted SSH Resolver。Shared 现已按 `targets/{connections,proxies,ssh-keys,tags,host-keys}/{model,http}`、`targets/{values,http}` 精确子路径导出；确需较复杂的严格 JSON 解码才使用同子域 `http-codec.ts`，不保留旧平铺路径；旧 Protocol 只继续用于不同形态的旧产品 wire，不被新包引用。新 `/__targets-next` Frontend 开发入口使用同一个新实例和 Access Cookie，旧 Pinia/Workspace 不混用该数据；未提供真实连接测试或完整 Remote 产品运行期；独立 Remote 最小 SSH PTY 已在开发入口开放。
 

@@ -41,6 +41,7 @@
       "unauthenticated": "登录状态已失效，请重新登录。",
       "not_found": "请求的项目已不存在。",
       "invalid_input": "终端数据格式无效。",
+      "body_too_large": "请求内容超过容量上限，请缩小内容或拆分导入批次。",
       "request_failed": "管理请求失败，请重试。",
       "version_conflict": "项目已被其他操作修改，请刷新后重试。",
       "reference_not_found": "引用的项目已不存在。",

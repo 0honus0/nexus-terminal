@@ -1,13 +1,8 @@
 import { SqliteFailure, SQLITE_CONSTRAINT_FOREIGNKEY } from '../../platform/storage/sqlite/sqlite-errors.js';
 
-export type TargetErrorCode =
-	| 'invalid_input'
-	| 'reference_not_found'
-	| 'reference_in_use'
-	| 'conflict'
-	| 'unresolvable'
-	| 'storage_unavailable'
-	| 'internal_failure';
+import type { TargetErrorCode } from '@nexus-terminal/shared/targets/values';
+
+export type { TargetErrorCode } from '@nexus-terminal/shared/targets/values';
 
 /** Safe cross-module failure: never contains SQL, worker text or credential input. */
 export class TargetOperationError extends Error {

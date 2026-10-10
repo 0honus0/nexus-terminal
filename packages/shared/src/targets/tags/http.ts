@@ -6,7 +6,3 @@ export interface TargetTagRenameRequest {
 	version: number;
 	name: string;
 }
-
-export interface TargetTagDeleteResponse {
-	deleted: true;
-}
