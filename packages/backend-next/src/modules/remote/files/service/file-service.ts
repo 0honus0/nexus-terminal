@@ -127,6 +127,7 @@ export class RemoteFileService {
 		const timer = setTimeout(abort, REMOTE_FILE_OPERATION_MS);
 		this.authorizing.add(controller);
 		let resource: FileResource | null = null;
+		let lateOpeningCleanup: Promise<void> | null = null;
 		try {
 			const userId = await this.untilAbort(this.identity(token), controller.signal);
 			this.authorizing.delete(controller);
@@ -145,17 +146,19 @@ export class RemoteFileService {
 			try {
 				resource = await this.untilAbort(opening, controller.signal);
 			} catch (error) {
-				// If a non-cancellable dependency resolves after our deadline, reclaim
-				// any late resource instead of abandoning an unowned machine/lease.
-				void opening.then(
-					async (late) => {
-						try {
-							await this.model.close(late);
-						} catch (cleanup) {
-							this.cleanupFailures.record(cleanup);
-						}
-					},
-					() => undefined,
+				// Keep the quota slot reserved and make shutdown wait for late
+				// non-cancellable success to be closed by its actual resource owner.
+				lateOpeningCleanup = this.track(
+					opening.then(
+						async (late) => {
+							try {
+								await this.model.close(late);
+							} catch (cleanup) {
+								this.cleanupFailures.record(cleanup);
+							}
+						},
+						() => undefined,
+					).finally(() => this.opening.delete(controller)),
 				);
 				throw error;
 			}
@@ -189,7 +192,9 @@ export class RemoteFileService {
 			throw error;
 		} finally {
 			this.authorizing.delete(controller);
-			this.opening.delete(controller);
+			if (lateOpeningCleanup === null) {
+				this.opening.delete(controller);
+			}
 			clearTimeout(timer);
 			signal?.removeEventListener('abort', abort);
 		}

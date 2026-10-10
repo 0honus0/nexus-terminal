@@ -47,6 +47,8 @@ Remote Files 建立普通用户独立的 Machine/SFTP lease 资源，不依赖 P
 
 Remote Files HTTP 在 `interfaces/http/file-http.ts` 独立安装 `/api/v1/remote/files/resources`（POST 创建、DELETE 资源）和该资源的 `list`、`stat`、`lstat`、`read-text` POST 路由；每个端点只接受精确 Shared 请求及同源 Access Cookie，资源 UUID 不替代 Access 认证。路由级请求 body 沿用普通 JSON 16 KiB 技术预算，响应最大 128 KiB；资源最多 8 个、闲置有效期 2 分钟，单个操作期限 30 秒。列表完整成功最多 200 条、目录 metadata 预算 48 KiB，文本最多 16 KiB UTF-8；超限拒绝而不返回伪造完整数据；stat 跟随链接而 lstat 返回链接自身类型。失败只返回 Shared 安全码；Service 每次操作前后复核身份、目标指纹及 owner，创建、退出和停机关闭文件专属 lease 和 machine。无文件写入、传输、分页快照保证或会话恢复。
 
+Remote Files 源码复审补充：HTTP JSON 输入帧的 400/413/415 在 File HTTP 边界映射为 Shared `invalid_input/limit_exceeded`，DELETE 无 body，不能让 Platform 私有错误码意外进入独立文件消费者。用户鉴权后申请 Machine 的准入名额在连接真正结束前保留；即使 HTTP 30 秒期限先结束，晚到成功的非取消型解析/连接结果也由同一 Files owner 追踪清理，并纳入关闭排空，不能提前释放名额或让停机成功越过仍存活的 Machine。关闭失败记录有界，重复释放短时复用同一结果。依赖若永久无响应，关闭仍可能被已准入清理阻塞；真正的耗时保证与远端资源退出仍需专项故障注入，而非仅凭源码视为行为验收完成。
+
 ## 目录与一级模块
 
 ```text
