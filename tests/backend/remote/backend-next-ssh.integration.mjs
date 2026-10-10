@@ -9,7 +9,7 @@ import WebSocket from '../../../packages/backend-next/node_modules/ws/index.js';
 import { createApp } from '../../../packages/backend-next/dist/bootstrap/create-app.js';
 import { openHttpListener } from '../../../packages/backend-next/dist/platform/http/http-server.js';
 import { RemoteSessionOwner } from '../../../packages/backend-next/dist/modules/remote/sessions/service/session-owner.js';
-import { createRemoteWebSocketRoute } from '../../../packages/backend-next/dist/modules/remote/interfaces/http/remote-http.js';
+import { createRemoteWebSocketRoute } from '../../../packages/backend-next/dist/modules/remote/interfaces/http/pty-stream.js';
 
 const requireBackendNext = createRequire(new URL('../../../packages/backend-next/package.json', import.meta.url));
 const { Server, utils } = requireBackendNext('ssh2');
