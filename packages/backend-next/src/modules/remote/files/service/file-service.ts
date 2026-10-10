@@ -90,7 +90,7 @@ export class RemoteFileService {
 			void task.catch(() => undefined);
 			throw new RemoteFileFailure('remote_unavailable');
 		}
-		let listener: (() => void) | null = null;
+		let listener: () => void = () => undefined;
 		const cancellation = new Promise<never>((_, reject) => {
 			listener = () => reject(new RemoteFileFailure('remote_unavailable'));
 			signal.addEventListener('abort', listener, { once: true });
@@ -98,9 +98,7 @@ export class RemoteFileService {
 		try {
 			return await Promise.race([task, cancellation]);
 		} finally {
-			if (listener) {
-				signal.removeEventListener('abort', listener);
-			}
+			signal.removeEventListener('abort', listener);
 		}
 	}
 
@@ -139,11 +137,28 @@ export class RemoteFileService {
 				throw new RemoteFileFailure('limit_exceeded');
 			}
 			this.opening.add(controller);
-			resource = await this.untilAbort(this.model.open(
+			const opening = this.model.open(
 				targetId,
 				Math.max(1, REMOTE_FILE_OPERATION_MS - (Date.now() - started)),
 				controller.signal,
-			), controller.signal);
+			);
+			try {
+				resource = await this.untilAbort(opening, controller.signal);
+			} catch (error) {
+				// If a non-cancellable dependency resolves after our deadline, reclaim
+				// any late resource instead of abandoning an unowned machine/lease.
+				void opening.then(
+					async (late) => {
+						try {
+							await this.model.close(late);
+						} catch (cleanup) {
+							this.cleanupFailures.record(cleanup);
+						}
+					},
+					() => undefined,
+				);
+				throw error;
+			}
 			if (!token || (await this.untilAbort(this.identity(token), controller.signal)) !== userId ||
 				!this.accepting || controller.signal.aborted) {
 				throw new RemoteFileFailure('unauthenticated');
