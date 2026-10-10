@@ -158,6 +158,10 @@ export class SshSftpLease implements MachineSftpLease {
 			const timer = setTimeout(() => finish(new MachineSftpFailure('timeout', 'unknown')), limit);
 			this.pending.add(failed);
 			options?.signal?.addEventListener('abort', aborted, { once: true });
+			if (options?.signal?.aborted) {
+				aborted();
+				return;
+			}
 			try {
 				invoke((error, value) =>
 					finish(
@@ -195,7 +199,8 @@ export class SshSftpLease implements MachineSftpLease {
 			return { timeoutMs, ...(options.signal === undefined ? {} : { signal: options.signal }) };
 		};
 		const entries: MachineDirectoryEntry[] = [];
-		let metadataBytes = 0;
+		// Count JSON array punctuation as part of the wire metadata budget.
+		let metadataBytes = 2;
 		let handle: Buffer;
 		try {
 			handle = await this.call<Buffer>((finish) => this.sftp.opendir(path, finish), remaining());
@@ -230,10 +235,10 @@ export class SshSftpLease implements MachineSftpLease {
 					if (
 						!row || typeof row.filename !== 'string' || !row.filename ||
 						row.filename === '.' || row.filename === '..' || /[/\u0000]/u.test(row.filename) ||
-						row.filename.includes('\ufffd') || Buffer.byteLength(row.filename, 'utf8') > 255
+						/[\u0000-\u001f\u007f\ufffd]/u.test(row.filename) || Buffer.byteLength(row.filename, 'utf8') > 255
 					) throw new MachineSftpFailure('invalid_metadata', 'unknown');
 					const entry: MachineDirectoryEntry = { name: row.filename, info: toFileInfo(row.attrs) };
-					metadataBytes += Buffer.byteLength(JSON.stringify(entry), 'utf8');
+					metadataBytes += (entries.length === 0 ? 0 : 1) + Buffer.byteLength(JSON.stringify(entry), 'utf8');
 					if (entries.length >= options.maxEntries || metadataBytes > options.maxMetadataBytes) {
 						throw new MachineSftpFailure('limit_exceeded', 'unknown');
 					}
@@ -257,6 +262,16 @@ export class SshSftpLease implements MachineSftpLease {
 			throw failures.length === 1
 				? cleanup
 				: new AggregateError(failures, 'SFTP listing/handle cleanup failed');
+		}
+		// A timed-out/cancelled READDIR can still complete asynchronously.
+		// Retire the lease rather than accepting future operations on that handle.
+		if (failure instanceof MachineSftpFailure &&
+			(failure.reason === 'timeout' || failure.reason === 'cancelled')) {
+			try {
+				await this.shutdown(new MachineSftpFailure('closed', 'unknown'));
+			} catch (cleanup) {
+				throw new AggregateError([failure, cleanup], 'SFTP interrupted listing cleanup failed');
+			}
 		}
 		if (failure !== null) throw failure;
 		return entries;

@@ -26,7 +26,7 @@
 | ------------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------- |
 | Access       | 初始管理员、密码认证、持久会话、登录失败策略、认证 HTTP                         | 完整角色、Passkey/TOTP/CAPTCHA 及策略管理未迁移             |
 | Targets      | SSH/RDP/VNC 配置、Proxy、SSH Key、Tag、导入、凭据、可信 SSH 解析、Host Key 信任 | RDP/VNC 是连接定义；完整连接测试及旧正式前端未迁移          |
-| Remote       | SSH PTY、会话准入和释放、受认证 HTTP/WS、背压与正常 EOF 收敛                    | 没有挂起/接管/恢复、文件/Transfer、远程桌面                 |
+| Remote       | SSH PTY/WS 及独立只读 SFTP 文件资源、受认证 HTTP、背压/EOF 与有界读取          | 没有挂起/恢复、文件写入/Transfer、远程桌面                  |
 | Agent        | App/Thread、Root Run 创建/取消、幂等、事件分页及同事务存储                      | 仅 pending/cancelled；没有 Provider/调度/Tool/审批/执行恢复 |
 
 Platform 当前提供 SQLite Runtime/Worker/迁移执行、HTTP/WS、SecretBox/密码散列和通用 SSH/SFTP/命令能力。具有这些技术接口不等于已经迁移对应产品功能；静态通过不等于异常路径和浏览器行为已经验收。
@@ -182,6 +182,7 @@ packages/shared/src/
     tags/{model,http,http-codec}.ts
     host-keys/{model,http,http-codec}.ts
   remote/sessions/{values,model,http,events}.ts
+  remote/files/{values,model,http,http-codec}.ts
 ```
 
 Shared 顶层按大业务模块，子域按功能。`values` 不依赖业务对象或协议；`model` 不依赖 HTTP/事件；`http-codec → http/model/values` 单向依赖，http 不反向重导出 codec。父文件只承载本域真正共用的内容，不汇总全部子域。Shared 无 Node、Vue、数据库、框架或后端应用依赖，exports 只列实际精确路径，不保留旧路径别名和根 barrel。
@@ -212,7 +213,7 @@ Agent 的应用纯状态规则可由 Adapter 在事务内通过显式回调/事�
 
 Runtime 持有 Worker、串行事务、事务租约与关闭。Worker 保留 SQLite 数值扩展 errcode；Runtime 分类技术失败，模块映射安全业务码。回调失败正常回滚并保留原原因；回滚失败、commit_unknown 使实例不可用，不能重试未知提交。未等待操作不能逃逸事务；重复关闭共享同一结果。Schema/备份/恢复属于明确管理能力，无应用对象时不增加空 Model。
 
-当前 Worker 只有操作结果 payload 解码，message 请求/响应外壳仍使用参数类型注解；`run` 数值也未完整验证安全整数。这是现有技术边界缺口，不满足本文 unknown 解码要求；完整外壳验证、损坏消息下 pending 收敛和实例不可用处理列入[下一阶段 N0.1](../后端重构下一阶段实施方案.md)，不能把现状当作允许例外。
+当前 Worker 在接收 unknown 消息后逐分支严格解码请求/响应外壳和结果 payload；无效响应使 Runtime fail-closed 并拒绝所有 pending，run 结果检查安全整数。事务提交未知与回滚失败仍按 Runtime 状态分类；这些是源码约束，真实故障注入验收仍待完成。
 
 ## SSH、Remote 与 Agent 的共用边界
 
@@ -222,13 +223,13 @@ Host Key 是实际 SSH 公钥 SHA256，配置指纹是业务配置快照 hash，
 
 SSH Adapter 持有 Socket/Client/channel/SFTP 租约，业务模块持有资源使用和释放责任。原始 non-PTY 通道和收集式执行具有不同结果/取消语义，不保留行为完全相同的别名。退出零、非零、未派发失败、派发后 unknown、截断与关闭原因区别明确；取消、超时或 socket 关闭不能证明远端没有副作用。SFTP 请求/流按实际 dispatch 区分 not_started/unknown，关闭等待必要清理，已关闭 lease 的晚回调不能发布可用资源。
 
-当前 SFTP list 使用全量 readdir，尚无读取过程中的条目/metadata 预算；read 的 start/end 与第三方 metadata 也未完整验证。文件应用接入前按[下一阶段 N2.1](../后端重构下一阶段实施方案.md)实现真正有界读取；应用层在全量返回后 slice 不能补足技术边界。强制 destroy 后的本地 lease 释放不证明远端操作成功或已停止。
+当前 SFTP list 使用 opendir/分批 readdir(handle)/close(handle) 和读取过程中条目及 JSON metadata 预算；第三方 stat/lstat、文件名和字节范围进行严格检查，异常与资源关闭结果显式处理。取消与超时后仍必须退役不再可信的 lease；本地释放不证明远端操作已停止，真实 SSH2 故障路径仍待验收。
 
 Remote Service 通过本模块应用资源契约管理会话，不使用 SSH2/Node Stream；Model 封装实际机器连接与 Shell。RemoteSessionOwner 持有 Access token 摘要绑定、单 Socket attach、授权复查及已释放清理结果；协议 owner 管输入/输出流控。当前字节 ACK 表示终端渲染完成，正常 EOF 先 drain 尾帧，异常断线/主动关闭分别收敛，不把断开自动解释为可恢复挂起。
 
 当前 Remote 输出窗口及排队各 128 KiB；Shared input/data 单帧解码最大 32 KiB；通用 WS 入站帧 64 KiB、累计 64 条/256 KiB、发送缓冲 1 MiB。业务预算与传输预算分开，新增协议按真实 payload 核对并使用受硬上限约束的通用配置，不无限排队。
 
-Agent 后续执行复用 SSH/SQL/密码学技术实例，保留自有 grant、inspection、approval、lease、冻结目标与 Job 状态。执行前需要同一可信快照校验 expectedFingerprint；当前分开的 fingerprintStored/resolveStored 不能证明两次读取间配置未变。持久事件使用 sequence/cursor/replay，不能用 Remote 字节 ACK 代替。新 Agent 未接入执行前，不宣称已有完整恢复或工具授权。
+Agent 后续执行复用 SSH/SQL/密码学技术实例，保留自有 grant、inspection、approval、lease、冻结目标与 Job 状态。Targets 已提供 resolveStored({targetId,expectedFingerprint?}) 同快照核对；未来 Agent 必须在实际执行解析时传入冻结指纹，不能用分开的 fingerprintStored 和 resolveStored 调用替代。持久事件使用 sequence/cursor/replay，不能用 Remote 字节 ACK 代替。新 Agent 未接入执行前，不宣称已有完整恢复或工具授权。
 
 ## 资源与应用生命周期
 
@@ -301,7 +302,7 @@ Agent 后续执行复用 SSH/SQL/密码学技术实例，保留自有 grant、in
 
 Access 的 `register.ts` 明确定义 `AccessRegistrationOptions`，Bootstrap 仅引用此安装契约并传递应用实例的 sqlite 和登录失败策略选项；register 逐字段转换为内部应用策略输入。`authentication/model/login-failure-types.ts` 持有 LoginFailurePolicyInput 与 LoginFailureLimits，Service 和 Session Model 同向引用；不从策略 Service 导入类型，也不让内部代码反向引用 register。
 
-仍待收口的内部类型是 SessionModel.issue 的内联应用输入，以及 register 身份 mapper 重复的匿名结构。RemoteSessionOwner 当前使用本模块 public 请求/结果及安全包装；后续改为内部应用类型和窄用例依赖，在真正出口才映射安全错误。具体任务列入[下一阶段 N0.2](../后端重构下一阶段实施方案.md)，人工规则不因此放宽。
+Access SessionModel.issue 的应用输入已移至 sessions Model 类型文件，register 身份转换直接接收内部身份类型；RemoteSessionOwner 依赖本模块 Session Service 的窄内部应用契约，真正跨模块公开出口仍由 register 映射安全类型。后续新增内部类型继续按人工规则 4–7 放置。
 
 Access 的内部业务失败由 `authentication/model/access-failure.ts` 持有，Service 引用该独立错误 owner。模块根 `access-errors.ts` 负责业务/技术失败到安全出口错误的映射，`public-errors.ts` 只明确导出安全类；Model 不反向依赖 Service，也不持有模块出口错误映射。
 
