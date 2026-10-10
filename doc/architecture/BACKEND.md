@@ -45,6 +45,8 @@ Platform SSH SFTP 的 list 接收条目与元数据字节预算，使用 opendir
 
 Remote Files 建立普通用户独立的 Machine/SFTP lease 资源，不依赖 PTY Session 的可变状态。Remote 模块共用 Machine Model 唯一转换可信 Targets 结果为通用 SSH 目标与 Host Key 验证策略；Files Model 持有真实 SFTP/Node 流处理、严格 UTF-8 文本与元数据投影，Files Service 持有 Access 会话绑定、资源名额、操作取消、期限与关闭 drain。Agent 以后可复用 Platform SSH/SFTP 而不得调用普通用户 File Service 的授权或资源。
 
+Remote Files HTTP 在 `interfaces/http/file-http.ts` 独立安装 `/api/v1/remote/files/resources`（POST 创建、DELETE 资源）和该资源的 `list`、`stat`、`lstat`、`read-text` POST 路由；每个端点只接受精确 Shared 请求及同源 Access Cookie，资源 UUID 不替代 Access 认证。路由级请求 body 沿用普通 JSON 16 KiB 技术预算，响应最大 128 KiB；资源最多 8 个、闲置有效期 2 分钟，单个操作期限 30 秒。列表完整成功最多 200 条、目录 metadata 预算 48 KiB，文本最多 16 KiB UTF-8；超限拒绝而不返回伪造完整数据；stat 跟随链接而 lstat 返回链接自身类型。失败只返回 Shared 安全码；Service 每次操作前后复核身份、目标指纹及 owner，创建、退出和停机关闭文件专属 lease 和 machine。无文件写入、传输、分页快照保证或会话恢复。
+
 ## 目录与一级模块
 
 ```text

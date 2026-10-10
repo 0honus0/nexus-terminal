@@ -13,6 +13,7 @@ import type { HttpRoute, HttpWebSocketRoute } from '../../platform/http/http-typ
 import { RemoteSessionOwner } from './sessions/service/session-owner.js';
 import { createRemoteHttpRoutes } from './interfaces/http/remote-http.js';
 import { createRemoteWebSocketRoute } from './interfaces/http/pty-stream.js';
+import { createRemoteFileHttpRoutes } from './interfaces/http/file-http.js';
 
 interface RemoteRegistrationOptions {
 	resolver: TrustedSshTargetResolver;
@@ -95,7 +96,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 	return {
 		publicApi,
 
-		httpRoutes: () => createRemoteHttpRoutes(owner, options.access),
+		httpRoutes: () => [...createRemoteHttpRoutes(owner, options.access), ...createRemoteFileHttpRoutes(files)],
 
 		webSocketRoutes: () => [createRemoteWebSocketRoute(owner, service)],
 

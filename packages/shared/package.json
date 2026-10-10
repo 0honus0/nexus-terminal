@@ -111,6 +111,22 @@
     "./access/values": {
       "types": "./dist/access/values.d.ts",
       "default": "./dist/access/values.js"
+    },
+    "./remote/files/values": {
+      "types": "./dist/remote/files/values.d.ts",
+      "default": "./dist/remote/files/values.js"
+    },
+    "./remote/files/model": {
+      "types": "./dist/remote/files/model.d.ts",
+      "default": "./dist/remote/files/model.js"
+    },
+    "./remote/files/http": {
+      "types": "./dist/remote/files/http.d.ts",
+      "default": "./dist/remote/files/http.js"
+    },
+    "./remote/files/http-codec": {
+      "types": "./dist/remote/files/http-codec.d.ts",
+      "default": "./dist/remote/files/http-codec.js"
     }
   },
   "devDependencies": {

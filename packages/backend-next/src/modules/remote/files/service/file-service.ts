@@ -65,6 +65,7 @@ export class RemoteFileService {
   const abort = () => controller.abort();
   signal?.addEventListener('abort', abort, { once: true });
   if (signal?.aborted) abort();
+  const started = Date.now();
   const timer = setTimeout(abort, OPERATION_MS);
   this.opening.add(controller);
   let resource: FileResource | null = null;
@@ -72,7 +73,6 @@ export class RemoteFileService {
    const userId = await this.identity(token);
    if (!this.accepting || controller.signal.aborted || this.owners.size + this.opening.size > MAX_RESOURCES)
     throw new RemoteFileFailure('limit_exceeded');
-   const started = Date.now();
    resource = await this.model.open(targetId, Math.max(1, OPERATION_MS - (Date.now()-started)), controller.signal);
    if (!token || (await this.identity(token)) !== userId || !this.accepting || controller.signal.aborted)
     throw new RemoteFileFailure('unauthenticated');
@@ -158,16 +158,17 @@ export class RemoteFileService {
   if (record.closePromise) return record.closePromise;
   this.owners.delete(record.id);
   record.active?.abort();
-  record.closePromise = (async () => {
+  const completion = (async () => {
    if (record.inFlight) await Promise.allSettled([record.inFlight]);
    await this.model.close(record.resource);
   })();
-  this.cleanup.add(record.closePromise);
-  void record.closePromise.then(
-   () => this.cleanup.delete(record.closePromise!),
-   (error) => { this.cleanupErrors.push(error); this.cleanup.delete(record.closePromise!); },
+  record.closePromise = completion;
+  this.cleanup.add(completion);
+  void completion.then(
+   () => this.cleanup.delete(completion),
+   (error) => { this.cleanupErrors.push(error); this.cleanup.delete(completion); },
   );
-  return record.closePromise;
+  return completion;
  }
 
  quiesce(): void {

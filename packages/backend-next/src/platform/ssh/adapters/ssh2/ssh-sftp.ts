@@ -207,7 +207,7 @@ export class SshSftpLease implements MachineSftpLease {
 					if (
 						!row || typeof row.filename !== 'string' || !row.filename ||
 						row.filename === '.' || row.filename === '..' || /[/\u0000]/u.test(row.filename) ||
-						row.filename.includes('\ufffd')
+						row.filename.includes('\ufffd') || Buffer.byteLength(row.filename, 'utf8') > 255
 					) throw new MachineSftpFailure('invalid_metadata', 'unknown');
 					const entry: MachineDirectoryEntry = { name: row.filename, info: toFileInfo(row.attrs) };
 					metadataBytes += Buffer.byteLength(JSON.stringify(entry), 'utf8');

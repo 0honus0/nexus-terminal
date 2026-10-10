@@ -1,4 +1,4 @@
-import type { MachineFileInfo } from '../../../../platform/ssh/ssh-port.js';
+import type { MachineFileInfo, MachineSftpLease } from '../../../../platform/ssh/ssh-port.js';
 import type { TrustedSshTargetResolver } from '../../../targets/public.js';
 import type { RemoteMachineModel } from '../../model/machine-model.js';
 import { RemoteFileFailure, type FileResource, type FileInfo, type FileEntry, type TextRead } from './file-types.js';
@@ -8,7 +8,7 @@ export class RemoteFileModel {
 
  async open(targetId: number, timeoutMs: number, signal: AbortSignal): Promise<FileResource> {
   const opened = await this.machines.open({ targetId, timeoutMs, signal });
-  let lease;
+  let lease: MachineSftpLease | null = null;
   try {
    signal.throwIfAborted();
    lease = await opened.machine.openSftp(signal);
@@ -35,7 +35,10 @@ export class RemoteFileModel {
  async list(resource: FileResource, path: string, timeoutMs: number, signal: AbortSignal,
   maxEntries: number, maxMetadataBytes: number): Promise<FileEntry[]> {
   const items = await resource.lease.list(path, { signal, timeoutMs, maxEntries, maxMetadataBytes });
-  return items.map((row) => ({ name: row.name, info: this.info(row.info) }));
+  const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
+  return items.map((row) => ({ name: row.name, info: this.info(row.info) }))
+   .sort((a,b) => Number(b.info.kind === 'directory') - Number(a.info.kind === 'directory') ||
+    collator.compare(a.name,b.name) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
  }
 
  async stat(resource: FileResource, path: string, follow: boolean, timeoutMs: number, signal: AbortSignal): Promise<FileInfo> {
