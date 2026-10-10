@@ -1,7 +1,22 @@
-import type { TargetConnectionView } from './model.js';
+import type { ConnectionType, ConnectionRoute } from './values.js';
 import type { TargetErrorCode } from '../values.js';
 
-export type TargetConnectionInput = Omit<TargetConnectionView, 'id' | 'version' | 'createdAt' | 'updatedAt'>;
+/** Writable connection facts; intentionally independent from the public read view. */
+export interface TargetConnectionInput {
+	name: string;
+	type: ConnectionType;
+	host: string;
+	port: number;
+	username: string;
+	route: ConnectionRoute;
+	proxyId: number | null;
+	notes: string | null;
+	rdpRemoteApp: string | null;
+	rdpRemoteAppDirectory: string | null;
+	rdpRemoteAppArguments: string | null;
+	tagIds: number[];
+	jumpIds: number[];
+}
 
 export type TargetConnectionChanges = Partial<TargetConnectionInput>;
 
@@ -47,8 +62,6 @@ export interface TargetConnectionCloneRequest {
 }
 
 /** A batch is also bounded by the complete connections HTTP body budget. */
-export const TARGET_CONNECTION_IMPORT_MAX_ITEMS = 50;
-
 export interface TargetConnectionImportRequest {
 	items: TargetImportInput[];
 }

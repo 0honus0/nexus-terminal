@@ -33,11 +33,19 @@ export function readSshKeyView(input: unknown): TargetSshKeyView {
 
 export function readSshKeyChanges(input: unknown): TargetSshKeyChanges {
 	const row = targetObject(input, KEY_FIELDS, []);
-	if (!Object.keys(row).length) throw new InvalidTargetPayload();
+	if (!Object.keys(row).length) {
+		throw new InvalidTargetPayload();
+	}
 	const changes: TargetSshKeyChanges = {};
-	if (Object.hasOwn(row, 'name')) changes.name = targetText(row.name, 128, false);
-	if (Object.hasOwn(row, 'privateKey')) changes.privateKey = targetText(row.privateKey, 10000, false);
-	if (Object.hasOwn(row, 'passphrase')) changes.passphrase = targetNullable(row.passphrase, 8192);
+	if (Object.hasOwn(row, 'name')) {
+		changes.name = targetText(row.name, 128, false);
+	}
+	if (Object.hasOwn(row, 'privateKey')) {
+		changes.privateKey = targetText(row.privateKey, 10000, false);
+	}
+	if (Object.hasOwn(row, 'passphrase')) {
+		changes.passphrase = targetNullable(row.passphrase, 8192);
+	}
 	return changes;
 }
 

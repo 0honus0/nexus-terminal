@@ -1,3 +1,12 @@
+export type AgentErrorCode =
+	| 'invalid_input'
+	| 'not_found'
+	| 'active_run_conflict'
+	| 'idempotency_conflict'
+	| 'version_conflict'
+	| 'storage_unavailable'
+	| 'internal_failure';
+
 /** Deliberately limited Agent state API. Execution/Provider/tools are not exposed. */
 export interface AgentAppView {
 	id: string;

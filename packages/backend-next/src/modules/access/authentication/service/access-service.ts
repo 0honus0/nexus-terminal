@@ -2,7 +2,7 @@ import type { PasswordHasher } from '../../../../platform/security/password-hash
 import { AccountModel } from '../../accounts/model/account-model.js';
 import { SessionModel } from '../../sessions/model/session-model.js';
 import type { AuthenticatedIdentity, LoginAttempt, PasswordLogin } from '../model/access-types.js';
-import { toIdentity } from '../model/access-types.js';
+import type { Account } from '../../accounts/model/account-types.js';
 import { LoginFailurePolicy } from './login-failure-policy.js';
 import type { LoginFailurePolicyInput } from '../model/login-failure-types.js';
 import { AccessFailure } from '../model/access-failure.js';
@@ -10,6 +10,10 @@ import { AccessFailure } from '../model/access-failure.js';
 // Browser cookie is session-only; the old persistent server-side store retains data for 30 days.
 const STANDARD_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 const REMEMBERED_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
+
+function toIdentity(account: Account): AuthenticatedIdentity {
+	return { userId: account.id, username: account.username, twoFactorEnabled: account.twoFactorEnabled };
+}
 
 function validateUsername(value: string): string {
 	if (

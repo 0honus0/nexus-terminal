@@ -1,8 +1,8 @@
+import { TargetFailure } from './target-failure.js';
+import { SecretBoxFailure } from '../../platform/security/secret-box.js';
 import { SqliteFailure, SQLITE_CONSTRAINT_FOREIGNKEY } from '../../platform/storage/sqlite/sqlite-errors.js';
 
 import type { TargetErrorCode } from '@nexus-terminal/shared/targets/values';
-
-export type { TargetErrorCode } from '@nexus-terminal/shared/targets/values';
 
 /** Safe cross-module failure: never contains SQL, worker text or credential input. */
 export class TargetOperationError extends Error {
@@ -12,51 +12,12 @@ export class TargetOperationError extends Error {
 	}
 }
 
-const invalidInputs = new Set([
-	'Invalid ID',
-	'Invalid ID/version',
-	'Invalid target ID',
-	'Invalid SSH key ID',
-	'Invalid tag name',
-	'Invalid inline proxy',
-	'Invalid proxy route',
-	'Invalid proxy metadata',
-	'Invalid proxy username',
-	'Invalid SSH key name',
-	'Invalid SSH private key',
-	'Invalid SSH password',
-	'Invalid host key trust',
-	'Invalid connection metadata',
-	'Invalid type or route',
-	'Invalid RemoteApp settings',
-	'RemoteApp options are only valid on RDP connections with an application',
-	'Empty name',
-	'Empty proxy password',
-	'Unexpected jump chain',
-	'Jump requires SSH chain',
-	'Duplicate relations',
-	'Invalid SSH jump reference',
-	'Invalid SSH jump chain',
-]);
-const unavailableTarget = new Set([
-	'SSH credentials not configured',
-	'Target is not SSH',
-	'Invalid target route',
-	'SSH jump chain empty',
-	'Invalid jump order',
-	'SSH jump chain cycle or excessive depth',
-	'SSH jump chain contains a cycle or exceeds 16 hops',
-]);
-const inUse = new Set([
-	'Tag is in use',
-	'Connection is referenced as SSH jump',
-	'Remove SSH credentials before changing connection type',
-]);
-const missing = new Set(['SSH target not found', 'SSH key not found']);
-
 export function targetErrorCode(error: unknown): TargetErrorCode {
-	if (error instanceof TargetOperationError) {
+	if (error instanceof TargetOperationError || error instanceof TargetFailure) {
 		return error.code;
+	}
+	if (error instanceof SecretBoxFailure) {
+		return 'unresolvable';
 	}
 	if (error instanceof SqliteFailure) {
 		if (error.kind === 'constraint') {
@@ -76,25 +37,6 @@ export function targetErrorCode(error: unknown): TargetErrorCode {
 			return 'storage_unavailable';
 		}
 		return 'internal_failure';
-	}
-	// Legacy domain code currently throws Error with constant messages. Recognize only
-	// these exact, non-sensitive messages; everything else fails closed.
-	if (error instanceof Error) {
-		if (invalidInputs.has(error.message)) {
-			return 'invalid_input';
-		}
-		if (missing.has(error.message)) {
-			return 'reference_not_found';
-		}
-		if (inUse.has(error.message)) {
-			return 'reference_in_use';
-		}
-		if (unavailableTarget.has(error.message)) {
-			return 'unresolvable';
-		}
-		if (error.message === 'Encryption key required' || error.message === 'Credential authentication failed') {
-			return 'unresolvable';
-		}
 	}
 	return 'internal_failure';
 }

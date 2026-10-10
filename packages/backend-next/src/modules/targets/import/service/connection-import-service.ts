@@ -1,8 +1,8 @@
-import type { ConnectionImport, ImportItemResult } from '../model/import-types.js';
+import { TargetFailure } from '../../target-failure.js';
+import type { ConnectionImport } from '../model/import-types.js';
 import type { ConnectionSnapshot } from '../../connections/model/connection-types.js';
 import type { ConnectionImportModel } from '../model/import-model.js';
-import { validateConnection } from '../../connections/service/connection-validation.js';
-import { targetErrorCode } from '../../target-errors.js';
+import { validateConnection } from '../../connections/model/connection-validation.js';
 
 export class ConnectionImportService {
 	constructor(private readonly model: ConnectionImportModel) {}
@@ -18,26 +18,13 @@ export class ConnectionImportService {
 				proxy.port < 1 ||
 				proxy.port > 65535
 			) {
-				throw new Error('Invalid inline proxy');
+				throw new TargetFailure('invalid_input');
 			}
 		}
 		if (command.tagNames?.some((name) => !name.trim())) {
-			throw new Error('Invalid tag name');
+			throw new TargetFailure('invalid_input');
 		}
 		return this.model.importOne({ ...command, connection: validateConnection(command.connection) });
-	}
-
-	async importMany(commands: ConnectionImport[]): Promise<ImportItemResult[]> {
-		const results: ImportItemResult[] = [];
-		for (const command of commands) {
-			try {
-				const result = await this.importOne(command);
-				results.push({ status: 'ok', id: result.id });
-			} catch (error) {
-				results.push({ status: 'error', code: targetErrorCode(error) });
-			}
-		}
-		return results;
 	}
 
 	// TODO: upload parsing, credential protection and post-commit audit.

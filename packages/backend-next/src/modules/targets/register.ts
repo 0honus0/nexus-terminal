@@ -1,3 +1,4 @@
+import { importConnections } from './import/connection-import-batch.js';
 import type { SqliteRuntime } from '../../platform/storage/sqlite/sqlite-runtime.js';
 import type { SecretBox } from '../../platform/security/secret-box.js';
 import {
@@ -32,7 +33,7 @@ import { HostKeyService } from './host-keys/service/host-key-service.js';
 import type { TargetsPublicApi, TrustedSshTargetResolver } from './public.js';
 import { targetsBoundary } from './target-errors.js';
 import type { AccessPublicApi } from '../access/public.js';
-import type { HttpRoute } from '../../platform/http/http-server.js';
+import type { HttpRoute } from '../../platform/http/http-types.js';
 import { createTargetsRoutes } from './interfaces/http/target-http.js';
 import {
 	toConnectionInput,
@@ -148,7 +149,11 @@ export function registerTargets({ sqlite, secrets }: TargetsRegistrationOptions)
 			targetsBoundary(async () => toConnectionView(await importService.importOne(toImportInput(input)))),
 
 		importMany: (inputs) =>
-			targetsBoundary(async () => toImportItems(await importService.importMany(inputs.map(toImportInput)))),
+			targetsBoundary(async () =>
+				toImportItems(
+					await importConnections(inputs.map(toImportInput), (command) => importService.importOne(command)),
+				),
+			),
 
 		proxies: {
 			list: () => targetsBoundary(async () => (await proxies.list()).map(toProxyView)),

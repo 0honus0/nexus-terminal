@@ -1,17 +1,6 @@
 import type { AgentScopeStorage } from '../storage/scope-storage.js';
 
-export interface AgentApp {
-	id: string;
-	name: string;
-	createdAt: number;
-}
-
-export interface AgentThread {
-	id: string;
-	appId: string;
-	title: string;
-	createdAt: number;
-}
+import type { AgentApp, AgentThread } from './scope-types.js';
 
 export class ScopeModel {
 	constructor(private readonly storage: AgentScopeStorage) {}

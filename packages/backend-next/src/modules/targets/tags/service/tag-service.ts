@@ -1,15 +1,16 @@
+import { TargetFailure } from '../../target-failure.js';
 import type { TagModel } from '../model/tag-model.js';
 import type { TagSnapshot, TagMutation } from '../model/tag-types.js';
 
 function validateId(value: number): void {
 	if (!Number.isSafeInteger(value) || value <= 0) {
-		throw new Error('Invalid ID');
+		throw new TargetFailure('invalid_input');
 	}
 }
 
 function validateName(value: string): string {
 	if (typeof value !== 'string' || !value.trim()) {
-		throw new Error('Invalid tag name');
+		throw new TargetFailure('invalid_input');
 	}
 	return value.trim();
 }

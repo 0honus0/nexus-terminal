@@ -1,5 +1,6 @@
+import { TargetFailure } from '../../../target-failure.js';
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
-import { SSH_MAX_EXPANDED_TARGETS, SSH_MAX_JUMP_EDGES } from '../../model/ssh-graph-limits.js';
+import { SSH_MAX_EXPANDED_TARGETS, SSH_MAX_JUMP_EDGES } from '../../../ssh-graph-limits.js';
 
 interface SshGraphNode {
 	type: string;
@@ -9,7 +10,7 @@ interface SshGraphNode {
 
 function positiveId(value: unknown): number {
 	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
-		throw new Error('Invalid SSH jump chain');
+		throw new TargetFailure('invalid_input');
 	}
 	return value;
 }
@@ -38,10 +39,10 @@ export async function validateAffectedSshGraph(tx: SqlExecutor, changedId: numbe
 		const target = positiveId(row.jump_connection_id);
 		const node = graph.get(parent);
 		if (!node || !graph.has(target) || node.jumps.length !== row.position) {
-			throw new Error('Invalid SSH jump chain');
+			throw new TargetFailure('invalid_input');
 		}
 		if (node.jumps.includes(target)) {
-			throw new Error('Invalid SSH jump chain');
+			throw new TargetFailure('invalid_input');
 		}
 		node.jumps.push(target);
 		const ancestors = reverse.get(target) ?? new Set<number>();
@@ -67,23 +68,23 @@ export async function validateAffectedSshGraph(tx: SqlExecutor, changedId: numbe
 
 		const walk = (id: number, depth: number): void => {
 			if (depth > SSH_MAX_JUMP_EDGES || path.has(id) || ++expanded > SSH_MAX_EXPANDED_TARGETS) {
-				throw new Error('Invalid SSH jump chain');
+				throw new TargetFailure('invalid_input');
 			}
 			const node = graph.get(id);
 			if (!node) {
-				throw new Error('Invalid SSH jump chain');
+				throw new TargetFailure('invalid_input');
 			}
 			if (node.route === 'jump') {
 				if (node.type !== 'SSH' || node.jumps.length === 0) {
-					throw new Error('Invalid SSH jump chain');
+					throw new TargetFailure('invalid_input');
 				}
 			} else if (node.jumps.length) {
-				throw new Error('Invalid SSH jump chain');
+				throw new TargetFailure('invalid_input');
 			}
 			path.add(id);
 			for (const child of node.jumps) {
 				if (graph.get(child)?.type !== 'SSH') {
-					throw new Error('Invalid SSH jump chain');
+					throw new TargetFailure('invalid_input');
 				}
 				walk(child, depth + 1);
 			}

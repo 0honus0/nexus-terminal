@@ -1,5 +1,5 @@
 import type { SqliteRuntime } from '../../platform/storage/sqlite/sqlite-runtime.js';
-import type { HttpRoute } from '../../platform/http/http-server.js';
+import type { HttpRoute } from '../../platform/http/http-types.js';
 import { ScryptPasswordHasher } from '../../platform/security/password-hasher.js';
 import { SqliteAccountStorage } from './accounts/adapters/sqlite/account-sql.js';
 import { AccountModel } from './accounts/model/account-model.js';

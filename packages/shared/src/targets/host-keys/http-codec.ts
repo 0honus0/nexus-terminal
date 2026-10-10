@@ -28,6 +28,8 @@ export function readHostKeyView(input: unknown): TargetHostKeyView {
 
 export function readHostKeyRemoveResponse(input: unknown): TargetHostKeyRemoveResponse {
 	const row = targetObject(input, ['removed']);
-	if (row.removed !== true) throw new InvalidTargetPayload();
+	if (row.removed !== true) {
+		throw new InvalidTargetPayload();
+	}
 	return { removed: true };
 }

@@ -8,7 +8,7 @@ import type { TargetsPublicApi, TrustedSshTargetResolver } from '../modules/targ
 import type { RemoteSessions } from '../modules/remote/public.js';
 import { registerAccess } from '../modules/access/register.js';
 import type { AccessPublicApi } from '../modules/access/public.js';
-import type { HttpRoute, HttpWebSocketRoute } from '../platform/http/http-server.js';
+import type { HttpRoute, HttpWebSocketRoute } from '../platform/http/http-types.js';
 import { registerAgent } from '../modules/agent/register.js';
 import type { AgentStateApi } from '../modules/agent/public.js';
 import type { AccessRegistrationOptions } from '../modules/access/register.js';

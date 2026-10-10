@@ -1,17 +1,6 @@
 import type { HostKeyStorage, HostKeyRecord } from '../storage/host-key-storage.js';
 
-export interface HostKeyTrust {
-	host: string;
-	port: number;
-	fingerprint: string;
-	confirmedAt: number;
-}
-
-export interface ConfirmHostKey {
-	host: string;
-	port: number;
-	fingerprint: string;
-}
+import type { HostKeyTrust, ConfirmHostKey } from './host-key-types.js';
 
 export class HostKeyModel {
 	constructor(private readonly storage: HostKeyStorage) {}

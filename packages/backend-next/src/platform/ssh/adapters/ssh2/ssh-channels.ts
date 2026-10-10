@@ -68,10 +68,14 @@ class ByteChannel implements MachineByteChannel {
 
 	onStderr(listener: (bytes: Uint8Array) => void): () => void {
 		this.stderr.add(listener);
-		if (!this.paused) this.channel.stderr.resume();
+		if (!this.paused) {
+			this.channel.stderr.resume();
+		}
 		return () => {
 			this.stderr.delete(listener);
-			if (!this.stderr.size) this.channel.stderr.pause();
+			if (!this.stderr.size) {
+				this.channel.stderr.pause();
+			}
 		};
 	}
 
@@ -98,7 +102,9 @@ class ByteChannel implements MachineByteChannel {
 	resume(): void {
 		this.paused = false;
 		this.channel.resume();
-		if (this.stderr.size) this.channel.stderr.resume();
+		if (this.stderr.size) {
+			this.channel.stderr.resume();
+		}
 	}
 
 	close(): void {

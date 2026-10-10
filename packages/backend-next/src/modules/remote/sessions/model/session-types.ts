@@ -1,3 +1,10 @@
+import type { RemoteHttpErrorCode } from '@nexus-terminal/shared/remote/sessions/values';
+
+export type RemotePermissionCode = Extract<
+	RemoteHttpErrorCode,
+	'unauthenticated' | 'forbidden' | 'not_found' | 'remote_unavailable'
+>;
+
 /** Remote-owned session identity and user-facing metadata. */
 export interface RemoteSessionSnapshot {
 	readonly id: string;

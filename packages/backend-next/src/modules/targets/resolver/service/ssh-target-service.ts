@@ -1,3 +1,4 @@
+import { TargetFailure } from '../../target-failure.js';
 import type { SecretBox } from '../../../../platform/security/secret-box.js';
 import type { SshTargetModel } from '../model/ssh-target-model.js';
 import type { ResolvedSshTarget, ResolvedAuthentication, SshTargetSnapshot } from '../model/ssh-target-types.js';
@@ -47,7 +48,7 @@ export class SshTargetService {
 
 	private validateId(value: number): void {
 		if (!Number.isSafeInteger(value) || value <= 0) {
-			throw new Error('Invalid target ID');
+			throw new TargetFailure('invalid_input');
 		}
 	}
 
@@ -60,7 +61,7 @@ export class SshTargetService {
 	async resolveStored(value: number): Promise<ResolvedSshTarget> {
 		this.validateId(value);
 		if (!this.secrets) {
-			throw new Error('Encryption key required');
+			throw new TargetFailure('unresolvable');
 		}
 		return decrypt(await this.model.resolveStored(value), this.secrets);
 	}

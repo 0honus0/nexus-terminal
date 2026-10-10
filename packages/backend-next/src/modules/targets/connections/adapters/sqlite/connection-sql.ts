@@ -1,3 +1,4 @@
+import { TargetFailure } from '../../../target-failure.js';
 import type { SqliteRuntime, SqlExecutor } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type {
 	ConnectionData,
@@ -134,21 +135,21 @@ async function readRequiredConnection(tx: SqlExecutor, id: number): Promise<Stor
 
 async function writeRelationships(tx: SqlExecutor, id: number, data: ConnectionData): Promise<void> {
 	if (data.route === 'jump' && (data.type !== 'SSH' || data.jumpIds.length === 0)) {
-		throw new Error('Jump requires SSH chain');
+		throw new TargetFailure('invalid_input');
 	}
 	if (data.route !== 'jump' && data.jumpIds.length) {
-		throw new Error('Unexpected jump chain');
+		throw new TargetFailure('invalid_input');
 	}
 	if ((data.route === 'proxy' && data.proxyId === null) || (data.route !== 'proxy' && data.proxyId !== null)) {
-		throw new Error('Invalid proxy route');
+		throw new TargetFailure('invalid_input');
 	}
 	if (new Set(data.jumpIds).size !== data.jumpIds.length || new Set(data.tagIds).size !== data.tagIds.length) {
-		throw new Error('Duplicate relations');
+		throw new TargetFailure('invalid_input');
 	}
 	for (const target of data.jumpIds) {
 		const row = await tx.one('SELECT type FROM connections WHERE id=?', [target]);
 		if (!row || row.type !== 'SSH' || target === id) {
-			throw new Error('Invalid SSH jump reference');
+			throw new TargetFailure('invalid_input');
 		}
 	}
 	await tx.run('DELETE FROM connection_jumps WHERE connection_id=?', [id]);
@@ -213,14 +214,14 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 			}
 			if (old.type === 'SSH' && changes.type && changes.type !== 'SSH') {
 				if (await tx.one('SELECT 1 AS present FROM connection_credentials WHERE connection_id=?', [id])) {
-					throw new Error('Remove SSH credentials before changing connection type');
+					throw new TargetFailure('reference_in_use');
 				}
 				const refs = await tx.one(
 					'SELECT 1 AS present FROM connection_jumps WHERE jump_connection_id=? LIMIT 1',
 					[id],
 				);
 				if (refs) {
-					throw new Error('Connection is referenced as SSH jump');
+					throw new TargetFailure('reference_in_use');
 				}
 			}
 			const merged: ConnectionData = { ...old, ...changes };
@@ -261,7 +262,7 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 				id,
 			]);
 			if (refs) {
-				throw new Error('Connection is referenced as SSH jump');
+				throw new TargetFailure('reference_in_use');
 			}
 			return (await tx.run('DELETE FROM connections WHERE id=?', [id])).changes > 0;
 		});

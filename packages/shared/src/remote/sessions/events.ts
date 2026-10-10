@@ -1,3 +1,10 @@
+import {
+	REMOTE_FRAME_DATA_BYTES,
+	REMOTE_OUTPUT_WINDOW_BYTES,
+	REMOTE_TERMINAL_MAX_COLUMNS,
+	REMOTE_TERMINAL_MAX_ROWS,
+	type RemoteWireErrorCode,
+} from './values.js';
 import { isRemoteSessionId } from './model.js';
 
 /** Text websocket protocol; data bytes encoded as canonical base64. */
@@ -15,7 +22,7 @@ export type RemoteServerEvent =
 	| { type: 'closed' }
 	| {
 			type: 'error';
-			code: 'invalid_input' | 'unauthenticated' | 'not_found' | 'transport_overflow' | 'remote_unavailable';
+			code: RemoteWireErrorCode;
 	  };
 
 /** Both sides must reject unknown fields and malformed frame variants. */
@@ -63,15 +70,19 @@ export function readRemoteClientEvent(value: unknown): RemoteClientEvent {
 	switch (header.type) {
 		case 'input': {
 			const row = frame(value, ['type', 'data']);
-			return { type: 'input', data: base64(row.data, 32 * 1024) };
+			return { type: 'input', data: base64(row.data, REMOTE_FRAME_DATA_BYTES) };
 		}
 		case 'resize': {
 			const row = frame(value, ['type', 'columns', 'rows']);
-			return { type: 'resize', columns: integer(row.columns, 500), rows: integer(row.rows, 300) };
+			return {
+				type: 'resize',
+				columns: integer(row.columns, REMOTE_TERMINAL_MAX_COLUMNS),
+				rows: integer(row.rows, REMOTE_TERMINAL_MAX_ROWS),
+			};
 		}
 		case 'consumed': {
 			const row = frame(value, ['type', 'bytes']);
-			return { type: 'consumed', bytes: integer(row.bytes, 128 * 1024) };
+			return { type: 'consumed', bytes: integer(row.bytes, REMOTE_OUTPUT_WINDOW_BYTES) };
 		}
 		case 'close':
 			frame(value, ['type']);
@@ -103,7 +114,7 @@ export function readRemoteServerEvent(value: unknown): RemoteServerEvent {
 			if (row.stream !== 'stdout' && row.stream !== 'stderr') {
 				throw new InvalidRemoteFrame();
 			}
-			return { type: 'data', data: base64(row.data, 32 * 1024), stream: row.stream };
+			return { type: 'data', data: base64(row.data, REMOTE_FRAME_DATA_BYTES), stream: row.stream };
 		}
 		case 'drain':
 		case 'blocked':

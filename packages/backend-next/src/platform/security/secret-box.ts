@@ -1,5 +1,16 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
+/** Technical encrypted-value failure; callers own its business meaning. */
+export class SecretBoxFailure extends Error {
+	constructor(
+		readonly kind: 'invalid_value' | 'authentication_failed',
+		options?: ErrorOptions,
+	) {
+		super('Encrypted value failed: ' + kind, options);
+		this.name = 'SecretBoxFailure';
+	}
+}
+
 /** Encryption-only technical capability; no business fields or database access. */
 export class SecretBox {
 	private readonly key: Buffer;
@@ -30,12 +41,12 @@ export class SecretBox {
 	decrypt(value: string, scope: string): string {
 		const parts = value.split('.');
 		if (parts.length !== 4 || parts[0] !== 'v1' || !scope) {
-			throw new Error('Invalid encrypted credential');
+			throw new SecretBoxFailure('invalid_value');
 		}
 		const nonce = Buffer.from(parts[1], 'base64url');
 		const tag = Buffer.from(parts[2], 'base64url');
 		if (nonce.length !== 12 || tag.length !== 16) {
-			throw new Error('Invalid encrypted credential');
+			throw new SecretBoxFailure('invalid_value');
 		}
 		const decipher = createDecipheriv('aes-256-gcm', this.key, nonce);
 		decipher.setAAD(Buffer.from(scope));
@@ -45,7 +56,7 @@ export class SecretBox {
 				'utf8',
 			);
 		} catch (cause) {
-			throw new Error('Credential authentication failed', { cause });
+			throw new SecretBoxFailure('authentication_failed', { cause });
 		}
 	}
 }

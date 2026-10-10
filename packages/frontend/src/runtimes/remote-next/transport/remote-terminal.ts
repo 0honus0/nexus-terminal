@@ -1,3 +1,4 @@
+import { REMOTE_FRAME_DATA_BYTES } from '@nexus-terminal/shared/remote/sessions/values';
 import {
 	readRemoteShellView,
 	readRemoteCloseSession,
@@ -169,7 +170,7 @@ export async function openRemoteTerminal(
 				throw new Error('transport_overflow');
 			}
 			const bytes = new TextEncoder().encode(value);
-			if (bytes.length > 32 * 1024) {
+			if (bytes.length > REMOTE_FRAME_DATA_BYTES) {
 				throw new Error('invalid_input');
 			}
 			send({ type: 'input', data: bytesToBase64(bytes) });

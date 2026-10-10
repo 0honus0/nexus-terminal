@@ -1,3 +1,4 @@
+import { TargetFailure } from '../../../target-failure.js';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type {
 	ConnectionCredentialStorage,
@@ -26,13 +27,13 @@ export class SqliteConnectionCredentialStorage implements ConnectionCredentialSt
 				return { status: 'version_conflict' };
 			}
 			if (row.type !== 'SSH') {
-				throw new Error('Credentials require an SSH connection');
+				throw new TargetFailure('invalid_input');
 			}
 			if (
 				value?.kind === 'ssh_key' &&
 				!(await tx.one('SELECT 1 AS present FROM ssh_keys WHERE id=?', [value.sshKeyId]))
 			) {
-				throw new Error('SSH key not found');
+				throw new TargetFailure('reference_not_found');
 			}
 			if (value === null) {
 				await tx.run('DELETE FROM connection_credentials WHERE connection_id=?', [id]);

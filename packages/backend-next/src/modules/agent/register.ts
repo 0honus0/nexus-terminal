@@ -5,14 +5,14 @@ import { ScopeService } from './scope/service/scope-service.js';
 import { SqliteRunStorage } from './runs/adapters/sqlite/run-sql.js';
 import { RunModel } from './runs/model/run-model.js';
 import { RunService } from './runs/service/run-service.js';
-import type { AgentApp, AgentThread } from './scope/model/scope-model.js';
+import type { AgentApp, AgentThread } from './scope/model/scope-types.js';
 import type {
 	AgentRun,
 	AgentRunEvent,
 	CreateRunResult,
 	CancelRunResult,
 	RunEventPage,
-} from './runs/model/run-model.js';
+} from './runs/model/run-types.js';
 import type {
 	AgentStateApi,
 	AgentAppView,
@@ -25,7 +25,7 @@ import type {
 } from './public.js';
 import { agentBoundary } from './agent-errors.js';
 import type { AccessPublicApi } from '../access/public.js';
-import type { HttpRoute } from '../../platform/http/http-server.js';
+import type { HttpRoute } from '../../platform/http/http-types.js';
 import { createAgentHttpRoutes } from './interfaces/http/agent-http.js';
 
 function toAppView(value: AgentApp): AgentAppView {

@@ -46,7 +46,9 @@ export function toConnectionDto(value: ConnectionSnapshot): TargetConnectionView
 }
 
 export function toConnectionMutation(value: ConnectionMutation): TargetConnectionMutation {
-	if (value.status === 'updated') return { status: 'updated', value: toConnectionDto(value.value) };
+	if (value.status === 'updated') {
+		return { status: 'updated', value: toConnectionDto(value.value) };
+	}
 	return { status: value.status };
 }
 
@@ -65,7 +67,9 @@ export function toProxyDto(value: ProxyView): TargetProxyView {
 }
 
 export function toProxyMutation(value: ProxyMutation): TargetProxyMutation {
-	if (value.status === 'updated') return { status: 'updated', value: toProxyDto(value.value) };
+	if (value.status === 'updated') {
+		return { status: 'updated', value: toProxyDto(value.value) };
+	}
 	return { status: value.status };
 }
 
@@ -80,7 +84,9 @@ export function toTagDto(value: TagView): TargetTagView {
 }
 
 export function toTagMutation(value: TagMutation): TargetTagMutation {
-	if (value.status === 'updated') return { status: 'updated', value: toTagDto(value.value) };
+	if (value.status === 'updated') {
+		return { status: 'updated', value: toTagDto(value.value) };
+	}
 	return { status: value.status };
 }
 
@@ -95,7 +101,9 @@ export function toSshKeyDto(value: SshKeyView): TargetSshKeyView {
 }
 
 export function toSshKeyMutation(value: SshKeyMutation): TargetSshKeyMutation {
-	if (value.status === 'updated') return { status: 'updated', value: toSshKeyDto(value.value) };
+	if (value.status === 'updated') {
+		return { status: 'updated', value: toSshKeyDto(value.value) };
+	}
 	return { status: value.status };
 }
 

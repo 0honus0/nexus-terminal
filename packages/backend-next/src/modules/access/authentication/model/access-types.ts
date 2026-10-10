@@ -1,5 +1,3 @@
-import type { Account } from '../../accounts/model/account-types.js';
-
 export interface AuthenticatedIdentity {
 	userId: number;
 	username: string;
@@ -25,7 +23,3 @@ export type LoginAttempt =
 	| { status: 'invalid_credentials' }
 	| { status: 'rate_limited' }
 	| { status: 'factor_unavailable' };
-
-export function toIdentity(account: Account): AuthenticatedIdentity {
-	return { userId: account.id, username: account.username, twoFactorEnabled: account.twoFactorEnabled };
-}

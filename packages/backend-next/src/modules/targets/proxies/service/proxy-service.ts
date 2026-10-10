@@ -1,3 +1,4 @@
+import { TargetFailure } from '../../target-failure.js';
 import type {
 	ProxyMetadata,
 	ProxyInput,
@@ -18,10 +19,10 @@ function validateProxy(data: ProxyMetadata): ProxyMetadata {
 		data.port < 1 ||
 		data.port > 65535
 	) {
-		throw new Error('Invalid proxy metadata');
+		throw new TargetFailure('invalid_input');
 	}
 	if (data.username !== null && typeof data.username !== 'string') {
-		throw new Error('Invalid proxy username');
+		throw new TargetFailure('invalid_input');
 	}
 	return { ...data, name: data.name.trim(), host: data.host.trim() };
 }
@@ -49,7 +50,7 @@ function normalizeProxyChanges(current: ProxyMetadata, fields: Partial<ProxyMeta
 
 function validateId(value: number): void {
 	if (!Number.isSafeInteger(value) || value <= 0) {
-		throw new Error('Invalid ID');
+		throw new TargetFailure('invalid_input');
 	}
 }
 
@@ -72,7 +73,7 @@ export class ProxyService {
 		const { password, ...metadata } = data;
 		const result = validateProxy(metadata);
 		if (password !== undefined && password !== null && !password) {
-			throw new Error('Empty proxy password');
+			throw new TargetFailure('invalid_input');
 		}
 		return this.model.create({
 			...result,
@@ -89,7 +90,7 @@ export class ProxyService {
 		}
 		const { password, ...fields } = patch;
 		if (password === '') {
-			throw new Error('Empty proxy password');
+			throw new TargetFailure('invalid_input');
 		}
 		const changes = normalizeProxyChanges(old, fields);
 		if (password !== undefined) {
@@ -106,7 +107,7 @@ export class ProxyService {
 
 	private requireSecrets(): SecretBox {
 		if (!this.secrets) {
-			throw new Error('Encryption key required');
+			throw new TargetFailure('unresolvable');
 		}
 		return this.secrets;
 	}

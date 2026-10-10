@@ -44,7 +44,9 @@ export class SqliteHostKeyStorage implements HostKeyStorage {
 				'SELECT host,port,fingerprint,confirmed_at FROM target_host_keys WHERE host=? AND port=?',
 				[command.host, command.port],
 			);
-			if (!row) throw new Error('Missing confirmed host key');
+			if (!row) {
+				throw new Error('Missing confirmed host key');
+			}
 			return decode(row);
 		});
 	}

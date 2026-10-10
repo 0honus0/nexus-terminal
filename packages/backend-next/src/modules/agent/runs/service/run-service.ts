@@ -1,6 +1,15 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { RunModel, AgentRun, CreateRunResult, CancelRunResult, RunEventPage } from '../model/run-model.js';
-import { AgentOperationError, validateAgentId, validateOperationKey, validateUserId } from '../../agent-errors.js';
+import type { RunModel } from '../model/run-model.js';
+import type {
+	AgentRun,
+	CreateRunResult,
+	CancelRunResult,
+	RunEventPage,
+	CreateRunRequest,
+	CancelRunRequest,
+} from '../model/run-types.js';
+import { AgentFailure } from '../../agent-failure.js';
+import { validateAgentId, validateOperationKey, validateUserId } from '../../agent-validation.js';
 
 function validateScope(userId: number, appId: string): void {
 	validateUserId(userId);
@@ -9,13 +18,13 @@ function validateScope(userId: number, appId: string): void {
 
 function validatePrompt(prompt: string): void {
 	if (typeof prompt !== 'string' || !prompt.trim() || Buffer.byteLength(prompt, 'utf8') > 16384) {
-		throw new AgentOperationError('invalid_input');
+		throw new AgentFailure('invalid_input');
 	}
 }
 
 function validateCursor(value: number): void {
 	if (!Number.isSafeInteger(value) || value < 0) {
-		throw new AgentOperationError('invalid_input');
+		throw new AgentFailure('invalid_input');
 	}
 }
 
@@ -25,22 +34,6 @@ function hashCommand(name: 'create_run' | 'cancel_run', value: readonly (string 
 	return createHash('sha256')
 		.update(JSON.stringify([1, name, ...value]), 'utf8')
 		.digest('hex');
-}
-
-export interface CreateRunRequest {
-	userId: number;
-	appId: string;
-	threadId: string;
-	prompt: string;
-	operationKey: string;
-}
-
-export interface CancelRunRequest {
-	userId: number;
-	appId: string;
-	runId: string;
-	expectedVersion: number;
-	operationKey: string;
 }
 
 export class RunService {
@@ -69,7 +62,7 @@ export class RunService {
 		validateAgentId(request.runId);
 		validateOperationKey(request.operationKey);
 		if (!Number.isSafeInteger(request.expectedVersion) || request.expectedVersion < 1) {
-			throw new AgentOperationError('invalid_input');
+			throw new AgentFailure('invalid_input');
 		}
 		const requestHash = hashCommand('cancel_run', [request.appId, request.runId, request.expectedVersion]);
 		return this.model.cancel({
@@ -100,7 +93,7 @@ export class RunService {
 		validateAgentId(runId);
 		validateCursor(after);
 		if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
-			throw new AgentOperationError('invalid_input');
+			throw new AgentFailure('invalid_input');
 		}
 		return this.model.listEvents(userId, appId, runId, after, limit);
 	}

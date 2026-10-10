@@ -1,4 +1,4 @@
-import { TARGET_ERROR_CODES, type TargetErrorCode } from './values.js';
+import { TARGET_ERROR_CODES, TARGET_HTTP_BODY_LIMITS, type TargetHttpErrorCode } from './values.js';
 
 /** Target wire input is deliberately strict and framework independent. */
 export class InvalidTargetPayload extends Error {
@@ -7,21 +7,9 @@ export class InvalidTargetPayload extends Error {
 	}
 }
 
-export type TargetHttpErrorCode =
-	TargetErrorCode | 'unauthenticated' | 'forbidden' | 'not_found' | 'version_conflict' | 'body_too_large';
-
 export interface TargetErrorResponse {
 	code: TargetHttpErrorCode;
 }
-
-/** Complete UTF-8 JSON budgets, including envelopes and escaped field contents. */
-export const TARGET_HTTP_BODY_LIMITS = {
-	connections: 128 * 1024,
-	proxies: 64 * 1024,
-	'ssh-keys': 128 * 1024,
-	tags: 16 * 1024,
-	'host-keys': 16 * 1024,
-} as const;
 
 /** Paths are relative to /api/v1/targets on both server and client. */
 export function targetHttpBodyLimit(path: string): number {
@@ -58,7 +46,9 @@ export function targetObject(
 	allowed: readonly string[],
 	required: readonly string[] = allowed,
 ): Record<string, unknown> {
-	if (input === null || typeof input !== 'object' || Array.isArray(input)) throw new InvalidTargetPayload();
+	if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+		throw new InvalidTargetPayload();
+	}
 	const row = input as Record<string, unknown>;
 	if (Object.keys(row).some((key) => !allowed.includes(key)) || required.some((key) => !Object.hasOwn(row, key))) {
 		throw new InvalidTargetPayload();
@@ -82,25 +72,32 @@ export function targetNullable(input: unknown, max = 512): string | null {
 }
 
 export function targetNumber(input: unknown, max = Number.MAX_SAFE_INTEGER, min = 1): number {
-	if (typeof input !== 'number' || !Number.isSafeInteger(input) || input < min || input > max)
+	if (typeof input !== 'number' || !Number.isSafeInteger(input) || input < min || input > max) {
 		throw new InvalidTargetPayload();
+	}
 	return input;
 }
 
 export function targetArray<T>(value: unknown, decode: (v: unknown) => T, max = 10_000): T[] {
-	if (!Array.isArray(value) || value.length > max) throw new InvalidTargetPayload();
+	if (!Array.isArray(value) || value.length > max) {
+		throw new InvalidTargetPayload();
+	}
 	return value.map((item: unknown) => decode(item));
 }
 
 export function targetIds(value: unknown, max = 64): number[] {
 	const ids = targetArray(value, (item) => targetNumber(item), max);
-	if (new Set(ids).size !== ids.length) throw new InvalidTargetPayload();
+	if (new Set(ids).size !== ids.length) {
+		throw new InvalidTargetPayload();
+	}
 	return ids;
 }
 
 export function targetOption<T extends string>(value: unknown, options: readonly T[]): T {
 	const match = options.find((candidate) => candidate === value);
-	if (match === undefined) throw new InvalidTargetPayload();
+	if (match === undefined) {
+		throw new InvalidTargetPayload();
+	}
 	return match;
 }
 
@@ -125,7 +122,9 @@ export function readTargetMutation<T>(
 
 export function readTargetDeleted(input: unknown): TargetDeleteResponse {
 	const row = targetObject(input, ['deleted']);
-	if (row.deleted !== true) throw new InvalidTargetPayload();
+	if (row.deleted !== true) {
+		throw new InvalidTargetPayload();
+	}
 	return { deleted: true };
 }
 

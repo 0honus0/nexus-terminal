@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import type { ScopeModel, AgentApp, AgentThread } from '../model/scope-model.js';
-import { AgentOperationError, validateAgentId, validateUserId } from '../../agent-errors.js';
+import type { ScopeModel } from '../model/scope-model.js';
+import type { AgentApp, AgentThread } from '../model/scope-types.js';
+import { AgentFailure } from '../../agent-failure.js';
+import { validateAgentId, validateUserId } from '../../agent-validation.js';
 
 function validateName(value: string): string {
 	if (typeof value !== 'string' || !value.trim() || Buffer.byteLength(value, 'utf8') > 128) {
-		throw new AgentOperationError('invalid_input');
+		throw new AgentFailure('invalid_input');
 	}
 	return value.trim();
 }

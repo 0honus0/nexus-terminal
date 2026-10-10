@@ -1,219 +1,29 @@
-import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
+import { closeHttpResources } from './http-lifecycle.js';
+import { MAX_WEBSOCKET_FRAME_BYTES } from './http-limits.js';
+import { createServer, type Server } from 'node:http';
+import type { IncomingMessage } from 'node:http';
+import type { Duplex } from 'node:stream';
 import { isIP } from 'node:net';
 import proxyaddr from 'proxy-addr';
-import { WebSocketServer, WebSocket } from 'ws';
-import type { Duplex } from 'node:stream';
-
-export interface HttpRouteContext {
-	readonly method: string;
-	readonly path: string;
-	readonly query: URLSearchParams;
-	readonly params: Readonly<Record<string, string>>;
-	readonly request: IncomingMessage;
-	readonly response: ServerResponse;
-	readonly sourceIp: string;
-	json(): Promise<unknown>;
-	cookie(name: string): string | null;
-	send(status: number, body: unknown, headers?: Readonly<Record<string, string>>): void;
-}
-
-export interface HttpRoute {
-	readonly method: 'GET' | 'POST' | 'PUT' | 'DELETE';
-	readonly path: string;
-	/** Transport-only JSON body budget. Default 16 KiB, hard ceiling 128 KiB. */
-	readonly maxBodyBytes?: number;
-	handle(context: HttpRouteContext): Promise<void>;
-}
-
-export interface HttpServerOptions {
-	/** Explicit external URL prevents Host/X-Forwarded-Host origin spoofing. */
-	publicOrigin: string;
-	bindHost: string;
-	port: number;
-	trustedProxies: readonly string[];
-	routes: readonly HttpRoute[];
-	webSockets?: readonly HttpWebSocketRoute[];
-}
-
-/** Technology-only channel. Message parsing, authorization and sessions belong to modules. */
-export interface HttpWebSocketChannel {
-	send(value: string): boolean;
-	onMessage(listener: (value: string) => Promise<void>): void;
-	onClose(listener: () => Promise<void>): void;
-	/** Flush ordered frames and finish the close handshake within a bounded deadline. */
-	finish(): Promise<void>;
-	/** Reject further traffic immediately; intended for revoke/error/shutdown. */
-	close(): void;
-}
-
-export interface HttpWebSocketRoute {
-	path: string;
-	authorize(request: IncomingMessage, url: URL): Promise<boolean>;
-	connected(channel: HttpWebSocketChannel, request: IncomingMessage, url: URL): void;
-}
-
-export interface HttpListener {
-	readonly address: string;
-	close(): Promise<void>;
-}
-
-export class HttpInputFailure extends Error {
-	constructor(
-		readonly status: number,
-		readonly code: string,
-	) {
-		super(code);
-	}
-}
-
-function firstHeader(request: IncomingMessage, key: string): string | null {
-	const raw = request.headers[key];
-	if (Array.isArray(raw)) {
-		return raw[0] ?? null;
-	}
-	return raw ?? null;
-}
-
-export function readRequestCookie(request: IncomingMessage, name: string): string | null {
-	const raw = firstHeader(request, 'cookie');
-	if (!raw || raw.length > 8192) {
-		return null;
-	}
-	const parts = raw.split(';');
-	const values = parts.map((item) => item.trim()).filter((item) => item.startsWith(name + '='));
-	if (values.length !== 1) {
-		return null;
-	}
-	return values[0].slice(name.length + 1);
-}
-
-const DEFAULT_JSON_BODY_BYTES = 16 * 1024;
-const MAX_JSON_BODY_BYTES = 128 * 1024;
-
-async function readJson(request: IncomingMessage, maxBodyBytes: number): Promise<unknown> {
-	const contentType = firstHeader(request, 'content-type');
-	if (!contentType || !/^application\/json(?:\s*;\s*charset=utf-8)?$/iu.test(contentType.trim())) {
-		throw new HttpInputFailure(415, 'unsupported_media_type');
-	}
-	if (Number(request.headers['content-length'] ?? 0) > maxBodyBytes) {
-		throw new HttpInputFailure(413, 'body_too_large');
-	}
-	let received = 0;
-	const chunks: Buffer[] = [];
-	for await (const raw of request) {
-		const chunk = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
-		received += chunk.length;
-		if (received > maxBodyBytes) {
-			throw new HttpInputFailure(413, 'body_too_large');
-		}
-		chunks.push(chunk);
-	}
-	try {
-		return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
-	} catch {
-		throw new HttpInputFailure(400, 'invalid_json');
-	}
-}
-
-function sendJson(
-	response: ServerResponse,
-	status: number,
-	body: unknown,
-	headers: Readonly<Record<string, string>> = {},
-): void {
-	if (response.writableEnded || response.destroyed) {
-		return;
-	}
-	if (response.headersSent) {
-		// A handler has already started its response. Never attempt a second
-		// status/header block after an asynchronous failure.
-		response.destroy();
-		return;
-	}
-	const payload = JSON.stringify(body);
-	if (payload === undefined) {
-		throw new Error('HTTP JSON response body must be defined');
-	}
-	response.writeHead(status, {
-		'Content-Type': 'application/json; charset=utf-8',
-		'Cache-Control': 'no-store',
-		'X-Content-Type-Options': 'nosniff',
-		...headers,
-	});
-	response.end(payload);
-}
-
-function requestHost(request: IncomingMessage, trustedPeer: boolean): string | null {
-	const forwardedHost = trustedPeer ? firstHeader(request, 'x-forwarded-host') : null;
-	if (forwardedHost) {
-		// This deployment accepts exactly one external origin. Multiple proxy
-		// assertions are ambiguous; do not guess which hop supplied the truth.
-		return forwardedHost.includes(',') ? null : forwardedHost.trim();
-	}
-	return firstHeader(request, 'host');
-}
-
-function requestProtocol(request: IncomingMessage, trustedPeer: boolean): string {
-	const forwardedProto = trustedPeer ? firstHeader(request, 'x-forwarded-proto') : null;
-	if (forwardedProto) {
-		return forwardedProto.includes(',') ? '' : forwardedProto.trim();
-	}
-	return 'encrypted' in request.socket && request.socket.encrypted === true ? 'https' : 'http';
-}
-
-function validateOrigin(request: IncomingMessage, expectedOrigin: URL, trustedPeer: boolean): void {
-	const host = requestHost(request, trustedPeer);
-	const protocol = requestProtocol(request, trustedPeer);
-	if (host !== expectedOrigin.host || protocol !== expectedOrigin.protocol.slice(0, -1)) {
-		throw new HttpInputFailure(403, 'invalid_host');
-	}
-	if (request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS') {
-		return;
-	}
-	const site = firstHeader(request, 'sec-fetch-site');
-	const rawOrigin = firstHeader(request, 'origin');
-	if (site === 'same-site' || site === 'cross-site' || site === 'none') {
-		throw new HttpInputFailure(403, 'csrf_rejected');
-	}
-	if (rawOrigin) {
-		try {
-			const origin = new URL(rawOrigin);
-			if (origin.origin !== expectedOrigin.origin || rawOrigin !== origin.origin) {
-				throw new HttpInputFailure(403, 'csrf_rejected');
-			}
-		} catch {
-			throw new HttpInputFailure(403, 'csrf_rejected');
-		}
-	} else if (site !== 'same-origin') {
-		// No origin and no positive browser same-origin metadata cannot prove
-		// cookie-bearing mutation provenance.
-		throw new HttpInputFailure(403, 'csrf_rejected');
-	}
-}
+import { WebSocket, WebSocketServer } from 'ws';
+import type { HttpServerOptions, HttpListener, HttpWebSocketRoute } from './http-types.js';
+import { firstHeader, validateOrigin, sendJson, createHttpRequestHandler } from './http-request.js';
+import { compileHttpRoutes } from './http-router.js';
+import { createWebSocketChannel } from './websocket-channel.js';
+import { FailureSummary } from '../lifecycle/failure-summary.js';
 
 export async function openHttpListener(options: HttpServerOptions): Promise<HttpListener> {
-	const origin = new URL(options.publicOrigin);
-	if (
-		!['http:', 'https:'].includes(origin.protocol) ||
-		origin.pathname !== '/' ||
-		origin.search ||
-		origin.hash ||
-		origin.username ||
-		origin.password ||
-		!Number.isInteger(options.port) ||
-		options.port < 0 ||
-		options.port > 65535 ||
-		!options.bindHost ||
-		!(isIP(options.bindHost) || options.bindHost === 'localhost')
-	) {
-		throw new Error('Invalid HTTP listen or external origin');
-	}
+	const origin = validateHttpOptions(options);
 	const trust = proxyaddr.compile([...options.trustedProxies]);
-	const websocketServer = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024, perMessageDeflate: false });
+	const websocketServer = new WebSocketServer({
+		noServer: true,
+		maxPayload: MAX_WEBSOCKET_FRAME_BYTES,
+		perMessageDeflate: false,
+	});
 	const activeSockets = new Set<WebSocket>();
 	const pendingUpgrades = new Set<Duplex>();
 	const websocketTasks = new Set<Promise<unknown>>();
-	const websocketFailures: unknown[] = [];
+	const websocketFailures = new FailureSummary();
 	const webSocketRoutes = new Map<string, HttpWebSocketRoute>();
 	for (const route of options.webSockets ?? []) {
 		if (webSocketRoutes.has(route.path)) {
@@ -221,144 +31,12 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 		}
 		webSocketRoutes.set(route.path, route);
 	}
-	const routes = new Map<string, HttpRoute>();
-	const routeShapes = new Set<string>();
-	const routePatterns: Array<{ method: string; segments: string[] }> = [];
-	const parameterized: { route: HttpRoute; parts: string[] }[] = [];
-	for (const route of options.routes) {
-		const key = route.method + ' ' + route.path;
-		if (
-			route.maxBodyBytes !== undefined &&
-			(!Number.isSafeInteger(route.maxBodyBytes) ||
-				route.maxBodyBytes < 1 ||
-				route.maxBodyBytes > MAX_JSON_BODY_BYTES)
-		) {
-			throw new Error('Invalid HTTP route body budget');
-		}
-		const shape =
-			route.method +
-			' ' +
-			route.path
-				.split('/')
-				.map((part) => (part.startsWith(':') ? ':' : part))
-				.join('/');
-		const segments = route.path.split('/');
-		const overlaps = routePatterns.some((previous) => {
-			if (previous.method !== route.method || previous.segments.length !== segments.length) {
-				return false;
-			}
-			let previousMoreSpecific = false;
-			let nextMoreSpecific = false;
-			for (let index = 0; index < segments.length; index += 1) {
-				const before = previous.segments[index];
-				const next = segments[index];
-				if (before === next) {
-					continue;
-				}
-				const beforeParam = before.startsWith(':');
-				const nextParam = next.startsWith(':');
-				if (!beforeParam && !nextParam) {
-					return false;
-				}
-				if (beforeParam && !nextParam) {
-					nextMoreSpecific = true;
-				}
-				if (!beforeParam && nextParam) {
-					previousMoreSpecific = true;
-				}
-			}
-			return previousMoreSpecific && nextMoreSpecific;
-		});
-		if (routes.has(key) || routeShapes.has(shape) || overlaps) {
-			throw new Error('Duplicate or ambiguous HTTP route');
-		}
-		routes.set(key, route);
-		routeShapes.add(shape);
-		routePatterns.push({ method: route.method, segments });
-		if (route.path.split('/').some((part) => part.startsWith(':'))) {
-			parameterized.push({ route, parts: route.path.split('/') });
-		}
-	}
+	const router = compileHttpRoutes(options.routes);
 
 	let accepting = true;
 	const activeRequests = new Set<Promise<void>>();
 
-	async function handleRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
-		try {
-			const directIp = request.socket.remoteAddress ?? '';
-			const trustedPeer = trust(directIp, 0);
-			validateOrigin(request, origin, trustedPeer);
-			const url = new URL(request.url ?? '/', origin);
-			if (url.origin !== origin.origin) {
-				throw new HttpInputFailure(400, 'invalid_path');
-			}
-			const method = request.method ?? '';
-			let route = routes.get(method + ' ' + url.pathname);
-			const params: Record<string, string> = {};
-			if (!route) {
-				const actualParts = url.pathname.split('/');
-				for (const entry of parameterized) {
-					if (entry.route.method !== method || entry.parts.length !== actualParts.length) {
-						continue;
-					}
-					const candidate: Record<string, string> = {};
-					const matched = entry.parts.every((part, index) => {
-						const actual = actualParts[index];
-						if (part.startsWith(':')) {
-							if (!actual || !/^[A-Za-z0-9_-]{1,64}$/u.test(actual)) {
-								return false;
-							}
-							candidate[part.slice(1)] = actual;
-							return true;
-						}
-						return part === actual;
-					});
-					if (matched) {
-						route = entry.route;
-						Object.assign(params, candidate);
-						break;
-					}
-				}
-			}
-			if (!route) {
-				sendJson(response, 404, { code: 'not_found' });
-				return;
-			}
-			const context: HttpRouteContext = {
-				method,
-				path: url.pathname,
-				query: new URLSearchParams(url.searchParams),
-				params,
-				request,
-				response,
-				sourceIp: proxyaddr(request, trust),
-
-				json: () => readJson(request, route.maxBodyBytes ?? DEFAULT_JSON_BODY_BYTES),
-
-				cookie: (name) => readRequestCookie(request, name),
-
-				send: (status, body, headers) => sendJson(response, status, body, headers),
-			};
-			await route.handle(context);
-			if (!response.writableEnded && !response.destroyed) {
-				// Incomplete handlers cannot leave an authorized HTTP request hanging.
-				// A handler that already wrote headers cannot receive new JSON.
-				if (response.headersSent) {
-					response.destroy();
-				} else {
-					sendJson(response, 500, { code: 'internal_failure' });
-				}
-			}
-		} catch (error) {
-			if (response.headersSent) {
-				// No second JSON envelope is valid after the first headers/body.
-				response.destroy();
-				return;
-			}
-			const failure = error instanceof HttpInputFailure ? error : new HttpInputFailure(500, 'internal_failure');
-			sendJson(response, failure.status, { code: failure.code });
-		}
-	}
+	const handleRequest = createHttpRequestHandler({ origin, trust, router });
 
 	const server: Server = createServer((request, response) => {
 		if (!accepting) {
@@ -373,7 +51,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 	function trackWebSocketTask(task: Promise<unknown>, observeFailure = false): void {
 		websocketTasks.add(task);
 		if (observeFailure) {
-			void task.catch((error: unknown) => websocketFailures.push(error));
+			void task.catch((error: unknown) => websocketFailures.record(error));
 		}
 		void task.finally(() => websocketTasks.delete(task)).catch(() => undefined);
 	}
@@ -420,103 +98,13 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 			}
 			websocketServer.handleUpgrade(request, socket, head, (ws) => {
 				activeSockets.add(ws);
-				let listener: ((value: string) => Promise<void>) | null = null;
-				let closing: (() => Promise<void>) | null = null;
-				let incoming = Promise.resolve();
-				let queuedMessages = 0;
-				let queuedBytes = 0;
-				let finishing: Promise<void> | null = null;
-				const MAX_INPUT_MESSAGES = 64;
-				const MAX_INPUT_BYTES = 256 * 1024;
-				ws.on('message', (data, isBinary) => {
-					if (isBinary || !listener || finishing || !accepting) {
-						ws.terminate();
-						return;
-					}
-					const message = data.toString();
-					const bytes = Buffer.byteLength(message);
-					if (queuedMessages >= MAX_INPUT_MESSAGES || queuedBytes + bytes > MAX_INPUT_BYTES) {
-						ws.terminate();
-						return;
-					}
-					queuedMessages += 1;
-					queuedBytes += bytes;
-					const current = incoming.then(async () => {
-						try {
-							if (ws.readyState === WebSocket.OPEN && listener) {
-								await listener(message);
-							}
-						} finally {
-							queuedMessages -= 1;
-							queuedBytes -= bytes;
-						}
-					});
-					incoming = current.catch(() => ws.terminate());
-					// One chain per socket, rather than tracking every ancestor Promise.
-					trackWebSocketTask(current.catch(() => undefined));
+				const channel = createWebSocketChannel(ws, {
+					isAccepting: () => accepting,
+
+					trackTask: trackWebSocketTask,
+
+					onClosed: () => activeSockets.delete(ws),
 				});
-				ws.on('close', () => {
-					activeSockets.delete(ws);
-					if (closing) {
-						trackWebSocketTask(Promise.resolve().then(closing), true);
-					}
-				});
-				const channel: HttpWebSocketChannel = {
-					send(value) {
-						if (
-							ws.readyState !== WebSocket.OPEN ||
-							ws.bufferedAmount + Buffer.byteLength(value) > 1024 * 1024
-						) {
-							return false;
-						}
-						ws.send(value, (error) => {
-							if (error) ws.terminate();
-						});
-						return true;
-					},
-
-					onMessage(callback) {
-						listener = callback;
-					},
-
-					onClose(callback) {
-						closing = callback;
-					},
-
-					finish() {
-						if (finishing) return finishing;
-						finishing = new Promise<void>((resolve, reject) => {
-							if (ws.readyState === WebSocket.CLOSED) {
-								resolve();
-								return;
-							}
-							let timedOut = false;
-							const deadline = setTimeout(() => {
-								timedOut = true;
-								ws.terminate();
-							}, 5000);
-							deadline.unref();
-							ws.once('close', (code) => {
-								clearTimeout(deadline);
-								if (timedOut || code !== 1000) {
-									reject(new Error('WebSocket graceful close not confirmed'));
-								} else {
-									resolve();
-								}
-							});
-							if (ws.readyState === WebSocket.OPEN) {
-								ws.close(1000);
-							} else {
-								ws.terminate();
-							}
-						});
-						return finishing;
-					},
-
-					close() {
-						ws.terminate();
-					},
-				};
 				try {
 					route.connected(channel, request, url);
 				} catch {
@@ -540,15 +128,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 			true,
 		);
 	});
-	server.requestTimeout = 15000;
-	server.headersTimeout = 10000;
-	await new Promise<void>((resolve, reject) => {
-		server.once('error', reject);
-		server.listen(options.port, options.bindHost, () => {
-			server.off('error', reject);
-			resolve();
-		});
-	});
+	await listen(server, options);
 	const address = server.address();
 	const boundAddress = address && typeof address !== 'string' ? address.address + ':' + address.port : '';
 
@@ -562,52 +142,51 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 			}
 			// Admission closes synchronously, before the returned Promise is published.
 			accepting = false;
-			for (const socket of pendingUpgrades) {
-				socket.destroy();
-			}
-			for (const socket of activeSockets) {
-				socket.terminate();
-			}
-			// Resolve with the failure so a shutdown error cannot reject before
-			// already-admitted business handlers have finished draining.
-			const serverClosed = new Promise<Error | null>((resolve) => {
-				server.close((error) => resolve(error ?? null));
-			});
-			// Cancel incomplete HTTP transport, not its already-started business operation.
-			server.closeAllConnections();
-			closePromise = (async () => {
-				const results = await Promise.allSettled([...activeRequests]);
-				// Upgrade auth and websocket handlers can still have Access/SQLite work.
-				// Closing an upgrade can enqueue its onClose cleanup after the first
-				// snapshot. Drain until no owned WebSocket task remains.
-				while (websocketTasks.size > 0) {
-					await Promise.allSettled([...websocketTasks]);
-				}
-				const webSocketServerClosed = new Promise<Error | null>((resolve) => {
-					websocketServer.close((error) => resolve(error ?? null));
-				});
-				const serverFailure = await serverClosed;
-				// Closing the HTTP server may deliver the final upgrade/socket close
-				// callbacks and register additional business cleanup tasks.
-				while (websocketTasks.size > 0) {
-					await Promise.allSettled([...websocketTasks]);
-				}
-				const webSocketFailure = await webSocketServerClosed;
-				const failures = results
-					.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-					.map((result) => result.reason);
-				if (serverFailure !== null) {
-					failures.push(serverFailure);
-				}
-				if (webSocketFailure !== null) {
-					failures.push(webSocketFailure);
-				}
-				failures.push(...websocketFailures);
-				if (failures.length > 0) {
-					throw new AggregateError(failures, 'HTTP request drain or listener close failed');
-				}
-			})();
+			closePromise = Promise.resolve().then(() =>
+				closeHttpResources({
+					server,
+					websocketServer,
+					activeSockets,
+					pendingUpgrades,
+					activeRequests,
+					websocketTasks,
+					websocketFailures,
+				}),
+			);
 			return closePromise;
 		},
 	};
+}
+
+function validateHttpOptions(options: HttpServerOptions): URL {
+	const origin = new URL(options.publicOrigin);
+	if (
+		!['http:', 'https:'].includes(origin.protocol) ||
+		origin.pathname !== '/' ||
+		origin.search ||
+		origin.hash ||
+		origin.username ||
+		origin.password ||
+		!Number.isInteger(options.port) ||
+		options.port < 0 ||
+		options.port > 65535 ||
+		!options.bindHost ||
+		!(isIP(options.bindHost) || options.bindHost === 'localhost')
+	) {
+		throw new Error('Invalid HTTP listen or external origin');
+	}
+
+	return origin;
+}
+
+async function listen(server: Server, options: HttpServerOptions): Promise<void> {
+	server.requestTimeout = 15000;
+	server.headersTimeout = 10000;
+	await new Promise<void>((resolve, reject) => {
+		server.once('error', reject);
+		server.listen(options.port, options.bindHost, () => {
+			server.off('error', reject);
+			resolve();
+		});
+	});
 }

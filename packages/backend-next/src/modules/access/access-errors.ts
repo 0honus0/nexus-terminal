@@ -1,13 +1,7 @@
 import { SqliteFailure } from '../../platform/storage/sqlite/sqlite-errors.js';
 import { AccessFailure } from './authentication/model/access-failure.js';
 
-export type AccessErrorCode =
-	| 'invalid_input'
-	| 'already_initialized'
-	| 'invalid_credentials'
-	| 'conflict'
-	| 'storage_unavailable'
-	| 'internal_failure';
+import type { AccessErrorCode } from './public.js';
 
 export class AccessOperationError extends Error {
 	constructor(

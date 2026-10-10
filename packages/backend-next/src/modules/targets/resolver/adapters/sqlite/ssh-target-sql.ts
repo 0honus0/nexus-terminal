@@ -1,6 +1,7 @@
+import { TargetFailure } from '../../../target-failure.js';
 import type { SqliteRuntime, SqlExecutor } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type { SshTargetStorage, EncodedSshTarget } from '../../storage/ssh-target-storage.js';
-import { SSH_MAX_JUMP_EDGES, SSH_MAX_EXPANDED_TARGETS } from '../../../connections/model/ssh-graph-limits.js';
+import { SSH_MAX_JUMP_EDGES, SSH_MAX_EXPANDED_TARGETS } from '../../../ssh-graph-limits.js';
 
 function decodeInteger(value: unknown): number {
 	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
@@ -22,7 +23,7 @@ async function readCredential(tx: SqlExecutor, id: number): Promise<EncodedSshTa
 		[id],
 	);
 	if (!credentialRow) {
-		throw new Error('SSH credentials not configured');
+		throw new TargetFailure('unresolvable');
 	}
 	let credential: EncodedSshTarget['credential'];
 	if (
@@ -35,7 +36,7 @@ async function readCredential(tx: SqlExecutor, id: number): Promise<EncodedSshTa
 		const keyId = decodeInteger(credentialRow.ssh_key_id);
 		const key = await tx.one('SELECT encrypted_private_key,encrypted_passphrase FROM ssh_keys WHERE id=?', [keyId]);
 		if (!key) {
-			throw new Error('SSH key not found');
+			throw new TargetFailure('reference_not_found');
 		}
 		credential = {
 			kind: 'ssh_key',
@@ -77,23 +78,23 @@ async function loadTargetSnapshot(
 	budget: { expanded: number },
 ): Promise<EncodedSshTarget> {
 	if (path.has(id) || depth > SSH_MAX_JUMP_EDGES || ++budget.expanded > SSH_MAX_EXPANDED_TARGETS) {
-		throw new Error('Invalid SSH jump chain');
+		throw new TargetFailure('invalid_input');
 	}
 	const current = new Set(path);
 	current.add(id);
 	const row = await tx.one('SELECT id,type,host,port,username,route,proxy_id FROM connections WHERE id=?', [id]);
 	if (!row) {
-		throw new Error('SSH target not found');
+		throw new TargetFailure('reference_not_found');
 	}
 	if (row.type !== 'SSH') {
-		throw new Error('Target is not SSH');
+		throw new TargetFailure('unresolvable');
 	}
 	const credential = await readCredential(tx, id);
 	let proxy: EncodedSshTarget['proxy'] = null;
 	if (row.route === 'proxy') {
 		proxy = await readProxy(tx, decodeInteger(row.proxy_id));
 	} else if (row.route !== 'direct' && row.route !== 'jump') {
-		throw new Error('Invalid target route');
+		throw new TargetFailure('unresolvable');
 	}
 	const jumps: EncodedSshTarget[] = [];
 	if (row.route === 'jump') {
@@ -102,11 +103,11 @@ async function loadTargetSnapshot(
 			[id],
 		);
 		if (!chain.length) {
-			throw new Error('SSH jump chain empty');
+			throw new TargetFailure('unresolvable');
 		}
 		for (let i = 0; i < chain.length; i++) {
 			if (chain[i].position !== i) {
-				throw new Error('Invalid jump order');
+				throw new TargetFailure('unresolvable');
 			}
 			jumps.push(
 				await loadTargetSnapshot(tx, decodeInteger(chain[i].jump_connection_id), current, depth + 1, budget),

@@ -1,8 +1,10 @@
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-server.js';
-import { HttpInputFailure } from '../../../../platform/http/http-server.js';
+import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
+import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
-import { AgentOperationError, validateAgentId, validateOperationKey } from '../../agent-errors.js';
+import { AgentOperationError } from '../../agent-errors.js';
+import { AgentFailure } from '../../agent-failure.js';
+import { validateAgentId, validateOperationKey } from '../../agent-validation.js';
 import type {
 	AgentStateApi,
 	AgentRunView,
@@ -97,7 +99,7 @@ function failure(context: HttpRouteContext, error: unknown): void {
 	if (error instanceof HttpInputFailure) {
 		throw error;
 	}
-	if (error instanceof AgentOperationError) {
+	if (error instanceof AgentOperationError || error instanceof AgentFailure) {
 		const status = agentErrorStatus(error.code);
 		context.send(status, { code: error.code });
 		return;

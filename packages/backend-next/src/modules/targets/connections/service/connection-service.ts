@@ -1,6 +1,7 @@
+import { TargetFailure } from '../../target-failure.js';
 import type { ConnectionMetadata, ConnectionSnapshot, ConnectionMutation } from '../model/connection-types.js';
 import type { ConnectionModel } from '../model/connection-model.js';
-import { validateId, validateConnection, normalizeConnectionChanges } from './connection-validation.js';
+import { validateId, validateConnection, normalizeConnectionChanges } from '../model/connection-validation.js';
 
 export class ConnectionService {
 	constructor(private readonly model: ConnectionModel) {}
@@ -32,7 +33,7 @@ export class ConnectionService {
 	clone(id: number, name: string): Promise<ConnectionSnapshot | null> {
 		validateId(id);
 		if (!name.trim()) {
-			throw new Error('Empty name');
+			throw new TargetFailure('invalid_input');
 		}
 		return this.model.clone(id, name.trim());
 	}

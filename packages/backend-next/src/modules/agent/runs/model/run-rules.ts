@@ -1,8 +1,5 @@
 /** State rules operate on application facts, not SQLite/storage records. */
-export interface RootRunState {
-	status: 'pending' | 'cancelled';
-	version: number;
-}
+import type { RootRunState } from './run-types.js';
 
 /** Business state decisions run after the SQLite participant rereads current facts. */
 export function mayCreateRootRun(active: RootRunState | null): boolean {

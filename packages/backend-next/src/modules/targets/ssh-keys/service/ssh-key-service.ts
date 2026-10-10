@@ -1,3 +1,4 @@
+import { TargetFailure } from '../../target-failure.js';
 import type {
 	SshKeyInput,
 	SshKeyChanges,
@@ -10,13 +11,13 @@ import type { SecretBox } from '../../../../platform/security/secret-box.js';
 
 function validateId(value: number): void {
 	if (!Number.isSafeInteger(value) || value <= 0) {
-		throw new Error('Invalid ID');
+		throw new TargetFailure('invalid_input');
 	}
 }
 
 function validateName(value: string): string {
 	if (typeof value !== 'string' || !value.trim()) {
-		throw new Error('Invalid SSH key name');
+		throw new TargetFailure('invalid_input');
 	}
 	return value.trim();
 }
@@ -29,7 +30,7 @@ export class SshKeyService {
 
 	private requireSecrets(): SecretBox {
 		if (!this.secrets) {
-			throw new Error('Encryption key required');
+			throw new TargetFailure('unresolvable');
 		}
 		return this.secrets;
 	}
@@ -45,7 +46,7 @@ export class SshKeyService {
 
 	create(data: SshKeyInput): Promise<SshKeySnapshot> {
 		if (typeof data.privateKey !== 'string' || !data.privateKey.trim()) {
-			throw new Error('Invalid SSH private key');
+			throw new TargetFailure('invalid_input');
 		}
 		const secret = this.requireSecrets();
 		return this.model.create({
@@ -64,7 +65,7 @@ export class SshKeyService {
 		}
 		if (data.privateKey !== undefined) {
 			if (!data.privateKey.trim()) {
-				throw new Error('Invalid SSH private key');
+				throw new TargetFailure('invalid_input');
 			}
 			patch.encryptedPrivateKey = this.requireSecrets().encrypt(data.privateKey, 'ssh-key:private');
 		}

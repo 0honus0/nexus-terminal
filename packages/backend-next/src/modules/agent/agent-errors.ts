@@ -1,13 +1,7 @@
+import { AgentFailure } from './agent-failure.js';
 import { SqliteFailure } from '../../platform/storage/sqlite/sqlite-errors.js';
 
-export type AgentErrorCode =
-	| 'invalid_input'
-	| 'not_found'
-	| 'active_run_conflict'
-	| 'idempotency_conflict'
-	| 'version_conflict'
-	| 'storage_unavailable'
-	| 'internal_failure';
+import type { AgentErrorCode } from './public.js';
 
 export class AgentOperationError extends Error {
 	constructor(readonly code: AgentErrorCode) {
@@ -16,31 +10,15 @@ export class AgentOperationError extends Error {
 	}
 }
 
-export function validateUserId(id: number): void {
-	if (!Number.isSafeInteger(id) || id < 1) {
-		throw new AgentOperationError('invalid_input');
-	}
-}
-
-export function validateAgentId(id: string): void {
-	if (
-		typeof id !== 'string' ||
-		!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(id)
-	) {
-		throw new AgentOperationError('invalid_input');
-	}
-}
-
-export function validateOperationKey(key: string): void {
-	validateAgentId(key);
-}
-
 export async function agentBoundary<T>(action: () => Promise<T>): Promise<T> {
 	try {
 		return await action();
 	} catch (error) {
 		if (error instanceof AgentOperationError) {
 			throw error;
+		}
+		if (error instanceof AgentFailure) {
+			throw new AgentOperationError(error.code);
 		}
 		if (error instanceof SqliteFailure) {
 			if (

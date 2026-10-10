@@ -52,3 +52,24 @@ export interface RunEventPage {
 	items: AgentRunEvent[];
 	nextCursor: number;
 }
+
+export interface CreateRunRequest {
+	userId: number;
+	appId: string;
+	threadId: string;
+	prompt: string;
+	operationKey: string;
+}
+
+export interface CancelRunRequest {
+	userId: number;
+	appId: string;
+	runId: string;
+	expectedVersion: number;
+	operationKey: string;
+}
+
+export interface RootRunState {
+	status: 'pending' | 'cancelled';
+	version: number;
+}

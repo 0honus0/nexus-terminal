@@ -11,16 +11,6 @@ import type {
 	RunEventPage,
 } from './run-types.js';
 
-export type {
-	CreateRootRunCommand,
-	CancelRootRunCommand,
-	AgentRun,
-	AgentRunEvent,
-	CreateRunResult,
-	CancelRunResult,
-	RunEventPage,
-} from './run-types.js';
-
 function toRun(value: StoredRun): AgentRun {
 	return {
 		id: value.id,

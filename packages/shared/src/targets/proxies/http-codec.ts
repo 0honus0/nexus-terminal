@@ -52,14 +52,28 @@ export function readProxyView(input: unknown): TargetProxyView {
 
 export function readProxyChanges(input: unknown): TargetProxyChanges {
 	const row = targetObject(input, PROXY_FIELDS, []);
-	if (!Object.keys(row).length) throw new InvalidTargetPayload();
+	if (!Object.keys(row).length) {
+		throw new InvalidTargetPayload();
+	}
 	const changes: TargetProxyChanges = {};
-	if (Object.hasOwn(row, 'name')) changes.name = targetText(row.name, 128, false);
-	if (Object.hasOwn(row, 'type')) changes.type = targetOption(row.type, PROXY_TYPES);
-	if (Object.hasOwn(row, 'host')) changes.host = targetText(row.host, 512, false);
-	if (Object.hasOwn(row, 'port')) changes.port = targetNumber(row.port, 65535);
-	if (Object.hasOwn(row, 'username')) changes.username = targetNullable(row.username, 256);
-	if (Object.hasOwn(row, 'password')) changes.password = targetNullable(row.password, 8192);
+	if (Object.hasOwn(row, 'name')) {
+		changes.name = targetText(row.name, 128, false);
+	}
+	if (Object.hasOwn(row, 'type')) {
+		changes.type = targetOption(row.type, PROXY_TYPES);
+	}
+	if (Object.hasOwn(row, 'host')) {
+		changes.host = targetText(row.host, 512, false);
+	}
+	if (Object.hasOwn(row, 'port')) {
+		changes.port = targetNumber(row.port, 65535);
+	}
+	if (Object.hasOwn(row, 'username')) {
+		changes.username = targetNullable(row.username, 256);
+	}
+	if (Object.hasOwn(row, 'password')) {
+		changes.password = targetNullable(row.password, 8192);
+	}
 	return changes;
 }
 

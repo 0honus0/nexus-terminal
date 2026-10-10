@@ -1,4 +1,4 @@
-import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-server.js';
+import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
 import type { TargetsPublicApi } from '../../public.js';
@@ -81,7 +81,9 @@ function addRoute(routes: HttpRoute[], method: Method, suffix: string, access: A
 					context.send(403, { code: 'forbidden' } satisfies TargetErrorResponse);
 					return;
 				}
-				if (context.query.size !== 0) throw new InvalidTargetPayload();
+				if (context.query.size !== 0) {
+					throw new InvalidTargetPayload();
+				}
 				await action(context);
 			} catch (error) {
 				if (error instanceof InvalidTargetPayload) {

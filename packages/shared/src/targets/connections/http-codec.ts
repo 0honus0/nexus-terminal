@@ -1,4 +1,4 @@
-import { TARGET_CONNECTION_IMPORT_MAX_ITEMS } from './http.js';
+import { TARGET_CONNECTION_IMPORT_MAX_ITEMS } from './values.js';
 import { CONNECTION_ROUTES, CONNECTION_TYPES } from './values.js';
 import type { TargetConnectionView, TargetConnectionMutation } from './model.js';
 import type {
@@ -81,7 +81,9 @@ export function readConnectionView(input: unknown): TargetConnectionView {
 
 export function readConnectionChanges(input: unknown): TargetConnectionChanges {
 	const row = targetObject(input, CONNECTION_FIELDS, []);
-	if (Object.keys(row).length === 0) throw new InvalidTargetPayload();
+	if (Object.keys(row).length === 0) {
+		throw new InvalidTargetPayload();
+	}
 	const full: Partial<TargetConnectionInput> = {};
 	for (const key of Object.keys(row) as (keyof TargetConnectionInput)[]) {
 		const value = row[key];
@@ -174,8 +176,9 @@ export function readCredentialInput(input: unknown): TargetCredentialInput {
 
 export function readCredentialMutation(input: unknown): TargetCredentialMutation {
 	const row = targetObject(input, ['status']);
-	if (row.status === 'updated' || row.status === 'not_found' || row.status === 'version_conflict')
+	if (row.status === 'updated' || row.status === 'not_found' || row.status === 'version_conflict') {
 		return { status: row.status };
+	}
 	throw new InvalidTargetPayload();
 }
 
@@ -184,7 +187,9 @@ export function readConnectionImportInput(input: unknown): TargetImportInput {
 	const value: TargetImportInput = { connection: readConnectionInput(row.connection) };
 	if (row.inlineProxy !== undefined) {
 		const proxy = readProxyInput(row.inlineProxy);
-		if (proxy.password !== undefined) throw new InvalidTargetPayload();
+		if (proxy.password !== undefined) {
+			throw new InvalidTargetPayload();
+		}
 		value.inlineProxy = {
 			name: proxy.name,
 			type: proxy.type,
@@ -195,7 +200,9 @@ export function readConnectionImportInput(input: unknown): TargetImportInput {
 	}
 	if (row.tagNames !== undefined) {
 		const names = targetArray(row.tagNames, (v) => targetText(v, 128, false));
-		if (new Set(names).size !== names.length) throw new InvalidTargetPayload();
+		if (new Set(names).size !== names.length) {
+			throw new InvalidTargetPayload();
+		}
 		value.tagNames = names;
 	}
 	return value;

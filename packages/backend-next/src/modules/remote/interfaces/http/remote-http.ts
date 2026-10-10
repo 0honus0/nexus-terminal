@@ -1,15 +1,23 @@
+import {
+	REMOTE_FRAME_DATA_BYTES,
+	REMOTE_OUTPUT_WINDOW_BYTES,
+	type RemoteHttpErrorCode,
+} from '@nexus-terminal/shared/remote/sessions/values';
 import type { IncomingMessage } from 'node:http';
 import type {
 	HttpRoute,
 	HttpRouteContext,
 	HttpWebSocketRoute,
 	HttpWebSocketChannel,
-} from '../../../../platform/http/http-server.js';
-import { readRequestCookie, HttpInputFailure } from '../../../../platform/http/http-server.js';
+} from '../../../../platform/http/http-types.js';
+import { readRequestCookie } from '../../../../platform/http/http-request.js';
+import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import type { RemoteSessions, SessionView } from '../../public.js';
 import { isRemoteSessionId } from '@nexus-terminal/shared/remote/sessions/model';
-import { RemotePermissionError, RemoteSessionOwner } from '../../sessions/service/session-owner.js';
+import { RemoteSessionOwner } from '../../sessions/service/session-owner.js';
+import { RemotePermissionError } from '../../sessions/model/session-permission-failure.js';
+import { RemoteOperationError } from '../../public-errors.js';
 import {
 	type RemoteCloseSessionResponse,
 	type RemoteFailureResponse,
@@ -55,7 +63,12 @@ function handleError(ctx: HttpRouteContext, error: unknown): void {
 		return;
 	}
 	if (error instanceof RemotePermissionError) {
-		const status = remotePermissionStatus(error.code);
+		const status = remoteErrorStatus(error.code);
+		ctx.send(status, { code: error.code } satisfies RemoteFailureResponse);
+		return;
+	}
+	if (error instanceof RemoteOperationError) {
+		const status = remoteErrorStatus(error.code);
 		ctx.send(status, { code: error.code } satisfies RemoteFailureResponse);
 		return;
 	}
@@ -63,8 +76,12 @@ function handleError(ctx: HttpRouteContext, error: unknown): void {
 	ctx.send(503, { code: 'remote_unavailable' } satisfies RemoteFailureResponse);
 }
 
-function remotePermissionStatus(code: RemotePermissionError['code']): number {
+function remoteErrorStatus(code: RemoteHttpErrorCode): number {
 	switch (code) {
+		case 'invalid_input':
+			return 400;
+		case 'host_key_untrusted':
+			return 422;
 		case 'unauthenticated':
 			return 401;
 		case 'forbidden':
@@ -169,7 +186,6 @@ interface Chunk {
 	stream: 'stdout' | 'stderr';
 	bytes: Uint8Array;
 }
-const OUTPUT_WINDOW = 128 * 1024;
 const MAX_QUEUED = 128 * 1024;
 
 function wireEvent(channel: HttpWebSocketChannel, event: RemoteServerEvent): boolean {
@@ -278,7 +294,7 @@ function connectStream(
 		}
 		draining = true;
 		try {
-			while (!ended && queued.length && outstanding + queued[0].bytes.length <= OUTPUT_WINDOW) {
+			while (!ended && queued.length && outstanding + queued[0].bytes.length <= REMOTE_OUTPUT_WINDOW_BYTES) {
 				const allowed = await owner.allowedOutput(token, id);
 				if (!allowed) {
 					terminate('unauthenticated');
@@ -305,7 +321,7 @@ function connectStream(
 			// Its buffered output is still deliverable, but the SSH flow-control
 			// methods must never be invoked on that retired session.
 			if (!ended && !eof && remote.get(id) !== null) {
-				if (queued.length || outstanding >= OUTPUT_WINDOW) {
+				if (queued.length || outstanding >= REMOTE_OUTPUT_WINDOW_BYTES) {
 					remote.pauseOutput(id);
 				} else {
 					remote.resumeOutput(id);
@@ -336,7 +352,7 @@ function connectStream(
 			terminate('transport_overflow');
 			return;
 		}
-		if (!eof && remote.get(id) !== null && queuedBytes + outstanding >= OUTPUT_WINDOW) {
+		if (!eof && remote.get(id) !== null && queuedBytes + outstanding >= REMOTE_OUTPUT_WINDOW_BYTES) {
 			remote.pauseOutput(id);
 		}
 		void flush();
@@ -408,7 +424,7 @@ function connectStream(
 						return;
 					}
 					const bytes = Buffer.from(value.data, 'base64');
-					if (bytes.length > 32 * 1024) {
+					if (bytes.length > REMOTE_FRAME_DATA_BYTES) {
 						throw new RemoteInputError();
 					}
 					if (!remote.write(id, bytes)) {

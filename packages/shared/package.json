@@ -103,6 +103,14 @@
     "./targets/values": {
       "types": "./dist/targets/values.d.ts",
       "default": "./dist/targets/values.js"
+    },
+    "./remote/sessions/values": {
+      "types": "./dist/remote/sessions/values.d.ts",
+      "default": "./dist/remote/sessions/values.js"
+    },
+    "./access/values": {
+      "types": "./dist/access/values.d.ts",
+      "default": "./dist/access/values.js"
     }
   },
   "devDependencies": {

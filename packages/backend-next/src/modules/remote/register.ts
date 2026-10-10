@@ -1,3 +1,4 @@
+import { remoteBoundary, remoteSyncBoundary, remoteSubscription } from './remote-errors.js';
 import type { MachineSshFactory, MachineConnectOptions } from '../../platform/ssh/ssh-port.js';
 import type { TrustedSshTargetResolver, HostKeyManagement } from '../targets/public.js';
 import { RemoteSessionModel } from './sessions/model/session-model.js';
@@ -5,7 +6,7 @@ import { RemoteSessionService } from './sessions/service/session-service.js';
 import type { RemoteSessions, SessionView, OpenShellRequest } from './public.js';
 import type { OpenSessionRequest, RemoteSessionSnapshot } from './sessions/model/session-types.js';
 import type { AccessPublicApi } from '../access/public.js';
-import type { HttpRoute, HttpWebSocketRoute } from '../../platform/http/http-server.js';
+import type { HttpRoute, HttpWebSocketRoute } from '../../platform/http/http-types.js';
 import { RemoteSessionOwner } from './sessions/service/session-owner.js';
 import { createRemoteHttpRoutes, createRemoteWebSocketRoute } from './interfaces/http/remote-http.js';
 
@@ -56,32 +57,35 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		new RemoteSessionModel(options.resolver, options.ssh, options.verifyHostKey, options.hostKeys),
 	);
 	const publicApi: RemoteSessions = {
-		open: async (input) => toSessionView(await service.open(toOpenSessionRequest(input))),
+		open: (input) => remoteBoundary(async () => toSessionView(await service.open(toOpenSessionRequest(input)))),
 
-		get: (id) => {
-			const view = service.get(id);
-			return view === null ? null : toSessionView(view);
-		},
+		get: (id) =>
+			remoteSyncBoundary(() => {
+				const view = service.get(id);
+				return view === null ? null : toSessionView(view);
+			}),
 
-		list: () => service.list().map(toSessionView),
+		list: () => remoteSyncBoundary(() => service.list().map(toSessionView)),
 
-		write: (id, bytes) => service.write(id, Uint8Array.from(bytes)),
+		write: (id, bytes) => remoteSyncBoundary(() => service.write(id, Uint8Array.from(bytes))),
 
-		resize: (id, columns, rows) => service.resize(id, columns, rows),
+		resize: (id, columns, rows) => remoteSyncBoundary(() => service.resize(id, columns, rows)),
 
-		onData: (id, listener) => service.onData(id, (bytes) => listener(Uint8Array.from(bytes))),
+		onData: (id, listener) =>
+			remoteSubscription(() => service.onData(id, (bytes) => listener(Uint8Array.from(bytes)))),
 
-		onStderr: (id, listener) => service.onStderr(id, (bytes) => listener(Uint8Array.from(bytes))),
+		onStderr: (id, listener) =>
+			remoteSubscription(() => service.onStderr(id, (bytes) => listener(Uint8Array.from(bytes)))),
 
-		onDrain: (id, listener) => service.onDrain(id, listener),
+		onDrain: (id, listener) => remoteSubscription(() => service.onDrain(id, listener)),
 
-		onClosed: (id, listener) => service.onClosed(id, listener),
+		onClosed: (id, listener) => remoteSubscription(() => service.onClosed(id, listener)),
 
-		pauseOutput: (id) => service.pauseOutput(id),
+		pauseOutput: (id) => remoteSyncBoundary(() => service.pauseOutput(id)),
 
-		resumeOutput: (id) => service.resumeOutput(id),
+		resumeOutput: (id) => remoteSyncBoundary(() => service.resumeOutput(id)),
 
-		closeSession: (id) => service.closeSession(id),
+		closeSession: (id) => remoteBoundary(() => service.closeSession(id)),
 	};
 	const owner = new RemoteSessionOwner(options.access, publicApi);
 	return {

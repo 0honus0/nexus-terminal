@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { RemoteHostKeyUntrustedError } from './session-errors.js';
 import type { OpenSessionRequest, RemoteSessionResource } from './session-types.js';
 import type { TrustedResolvedSshTarget, TrustedSshTargetResolver } from '../../../targets/public.js';
 import type { HostKeyManagement } from '../../../targets/public.js';
@@ -186,6 +187,7 @@ export class RemoteSessionModel {
 			request.timeoutMs,
 		);
 		let machine: MachineConnection | null = null;
+		let hostKeyRejected = false;
 		try {
 			const target = await this.resolver.resolveStored(request.targetId);
 			// All hops and the final endpoint must have explicit operator-confirmed
@@ -197,11 +199,15 @@ export class RemoteSessionModel {
 				const fingerprint =
 					'SHA256:' + createHash('sha256').update(publicKey).digest('base64').replace(/=+$/u, '');
 				const expected = pinned.get(host.toLowerCase() + ':' + port);
-				return (
-					expected !== undefined &&
+				const trusted =
 					expected === fingerprint &&
-					(this.verifyHostKey === null || this.verifyHostKey(host, port, publicKey))
-				);
+					(this.verifyHostKey === null || this.verifyHostKey(host, port, publicKey));
+				if (!trusted) {
+					// An actual verifier rejection is evidence of failed trust; a
+					// connection/credential failure alone is not.
+					hostKeyRejected = true;
+				}
+				return trusted;
 			};
 
 			controller.signal.throwIfAborted();
@@ -209,11 +215,20 @@ export class RemoteSessionModel {
 			if (remaining <= 0) {
 				throw new Error('Remote session opening deadline exceeded');
 			}
-			machine = await this.ssh.connect(toMachineTarget(target), {
-				timeoutMs: remaining,
-				signal: controller.signal,
-				verifyHostKey: verify,
-			});
+			try {
+				machine = await this.ssh.connect(toMachineTarget(target), {
+					timeoutMs: remaining,
+					signal: controller.signal,
+					verifyHostKey: verify,
+				});
+			} catch (error) {
+				// The SSH2 error message alone cannot prove why the handshake failed.
+				// Preserve explicit cancellation and the private original cause.
+				if (hostKeyRejected && !controller.signal.aborted) {
+					throw new RemoteHostKeyUntrustedError(error);
+				}
+				throw error;
+			}
 			controller.signal.throwIfAborted();
 			const shell = await machine.openShell(
 				{ columns: request.columns, rows: request.rows, term: request.term },

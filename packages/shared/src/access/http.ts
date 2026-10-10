@@ -1,3 +1,4 @@
+import type { AccessHttpErrorCode } from './values.js';
 import type { AccessUserView } from './model.js';
 
 /** The initial Access HTTP surface shared by the isolated backend and development client. */
@@ -44,16 +45,6 @@ export interface AccessPasswordResponse {
 	passwordChanged: true;
 }
 
-export type AccessHttpErrorCode =
-	| 'invalid_input'
-	| 'already_initialized'
-	| 'invalid_credentials'
-	| 'conflict'
-	| 'storage_unavailable'
-	| 'internal_failure'
-	| 'unauthenticated'
-	| 'forbidden';
-
 export interface AccessHttpErrorResponse {
 	code: AccessHttpErrorCode;
 }
@@ -99,6 +90,8 @@ export function readAccessHttpError(value: unknown): AccessHttpErrorResponse {
 		case 'invalid_input':
 		case 'already_initialized':
 		case 'invalid_credentials':
+		case 'rate_limited':
+		case 'factor_unavailable':
 		case 'conflict':
 		case 'storage_unavailable':
 		case 'internal_failure':

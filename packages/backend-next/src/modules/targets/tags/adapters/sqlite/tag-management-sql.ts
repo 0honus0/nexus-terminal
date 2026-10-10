@@ -1,3 +1,4 @@
+import { TargetFailure } from '../../../target-failure.js';
 import type { SqlExecutor, SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type { TagStorage, TagRecord, TagMutation } from '../../storage/tag-storage.js';
 
@@ -78,7 +79,7 @@ export class SqliteTagStorage implements TagStorage {
 	delete(id: number): Promise<boolean> {
 		return this.db.transaction(async (tx) => {
 			if (await tx.one('SELECT 1 AS used FROM connection_tags WHERE tag_id=? LIMIT 1', [id])) {
-				throw new Error('Tag is in use');
+				throw new TargetFailure('reference_in_use');
 			}
 			return (await tx.run('DELETE FROM tags WHERE id=?', [id])).changes > 0;
 		});

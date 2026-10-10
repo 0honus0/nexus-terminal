@@ -19,6 +19,7 @@ export interface OpenShellRequest {
 	signal?: AbortSignal;
 }
 
+/** Methods and unsubscribe callbacks throw only the safe RemoteOperationError from public-errors. */
 export interface RemoteSessions {
 	open(request: OpenShellRequest): Promise<SessionView>;
 	get(id: string): SessionView | null;

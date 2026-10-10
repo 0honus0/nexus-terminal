@@ -1,3 +1,12 @@
+import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.js';
+import { RecentResults } from '../../../../platform/lifecycle/recent-results.js';
+import { CLOSED_SESSION_TTL_MS, MAX_RECENTLY_RELEASED } from '../session-limits.js';
+import { RemoteSessionFailure } from '../model/session-failure.js';
+import {
+	REMOTE_TERMINAL_MAX_COLUMNS,
+	REMOTE_TERMINAL_MAX_ROWS,
+	REMOTE_TERMINAL_MAX_TERM_LENGTH,
+} from '@nexus-terminal/shared/remote/sessions/values';
 import type { RemoteSessionCloseReason } from '../../public.js';
 import { randomUUID } from 'node:crypto';
 import type { RemoteSessionModel } from '../model/session-model.js';
@@ -37,6 +46,11 @@ export class RemoteSessionService {
 	private readonly openingTasks = new Set<Promise<unknown>>();
 	private readonly closingTasks = new Set<Promise<void>>();
 	private readonly sessionClosePromises = new Map<string, Promise<void>>();
+	private readonly recentlyClosed = new RecentResults<string, Promise<void>>(
+		MAX_RECENTLY_RELEASED,
+		CLOSED_SESSION_TTL_MS,
+	);
+	private readonly cleanupFailures = new FailureSummary();
 	private closePromise: Promise<void> | null = null;
 	private accepting = true;
 
@@ -45,34 +59,44 @@ export class RemoteSessionService {
 	private requireSession(id: string): ActiveSession {
 		const session = this.sessions.get(id);
 		if (!session) {
-			throw new Error('Remote session not found');
+			throw new RemoteSessionFailure('not_found');
 		}
 		return session;
 	}
 
 	private assertAccepting(): void {
 		if (!this.accepting) {
-			throw new Error('Remote sessions are closing');
+			throw new RemoteSessionFailure('remote_unavailable');
 		}
 	}
 
 	open(request: OpenSessionRequest): Promise<RemoteSessionSnapshot> {
 		this.assertAccepting();
 		if (
+			request.term !== undefined &&
+			(typeof request.term !== 'string' ||
+				request.term.length > REMOTE_TERMINAL_MAX_TERM_LENGTH ||
+				!/^[-\w.]+$/u.test(request.term))
+		) {
+			throw new RemoteSessionFailure('invalid_input');
+		}
+		if (
 			!Number.isSafeInteger(request.targetId) ||
 			request.targetId < 1 ||
 			!Number.isSafeInteger(request.columns) ||
 			request.columns < 1 ||
+			request.columns > REMOTE_TERMINAL_MAX_COLUMNS ||
 			!Number.isSafeInteger(request.rows) ||
 			request.rows < 1 ||
+			request.rows > REMOTE_TERMINAL_MAX_ROWS ||
 			!Number.isSafeInteger(request.timeoutMs) ||
 			request.timeoutMs < 1 ||
 			request.timeoutMs > MAX_CONNECT_TIMEOUT
 		) {
-			throw new Error('Invalid remote session request');
+			throw new RemoteSessionFailure('invalid_input');
 		}
 		if (this.sessions.size + this.opening.size >= MAX_LIVE_SESSIONS) {
-			throw new Error('Remote session capacity exceeded');
+			throw new RemoteSessionFailure('remote_unavailable');
 		}
 		const controller = new AbortController();
 
@@ -110,7 +134,7 @@ export class RemoteSessionService {
 				signal: controller.signal,
 			});
 			if (controller.signal.aborted || !this.accepting || !opened.isOpen) {
-				throw new Error('Remote session opening cancelled');
+				throw new RemoteSessionFailure('remote_unavailable');
 			}
 			return this.registerSession(opened);
 		} catch (error) {
@@ -178,12 +202,22 @@ export class RemoteSessionService {
 	write(id: string, bytes: Uint8Array): boolean {
 		const session = this.requireSession(id);
 		if (!session.resource.isOpen || session.closePromise) {
-			throw new Error('Remote session closed');
+			throw new RemoteSessionFailure('remote_unavailable');
 		}
 		return session.resource.write(bytes);
 	}
 
 	resize(id: string, columns: number, rows: number): void {
+		if (
+			!Number.isSafeInteger(columns) ||
+			columns < 1 ||
+			columns > REMOTE_TERMINAL_MAX_COLUMNS ||
+			!Number.isSafeInteger(rows) ||
+			rows < 1 ||
+			rows > REMOTE_TERMINAL_MAX_ROWS
+		) {
+			throw new RemoteSessionFailure('invalid_input');
+		}
 		const session = this.requireSession(id);
 		session.resource.resize(columns, rows);
 	}
@@ -258,7 +292,7 @@ export class RemoteSessionService {
 				session.closeReason = reason;
 			}
 		}
-		const pending = this.sessionClosePromises.get(id);
+		const pending = this.sessionClosePromises.get(id) ?? this.recentlyClosed.get(id);
 		if (pending) {
 			return pending;
 		}
@@ -276,11 +310,13 @@ export class RemoteSessionService {
 			() => {
 				this.closingTasks.delete(task);
 				this.sessionClosePromises.delete(id);
+				this.recentlyClosed.set(id, task);
 			},
-			() => {
+			(error) => {
 				this.closingTasks.delete(task);
-				// Keep the rejected promise available to the Remote owner even when
-				// SSH itself initiated closure before the owner began releasing it.
+				this.sessionClosePromises.delete(id);
+				this.recentlyClosed.set(id, task);
+				this.cleanupFailures.record(error);
 			},
 		);
 		return task;
@@ -336,12 +372,12 @@ export class RemoteSessionService {
 			...this.sessionClosePromises.values(),
 			...[...this.sessions.keys()].map((id) => this.closeSession(id)),
 		]);
-		const failures = completions.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+		const failures = completions
+			.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+			.map((item) => item.reason);
+		failures.push(...this.cleanupFailures.errors());
 		if (failures.length) {
-			throw new AggregateError(
-				failures.map((item) => item.reason),
-				'Remote sessions failed to close',
-			);
+			throw new AggregateError([...new Set(failures)], 'Remote sessions failed to close');
 		}
 	}
 }

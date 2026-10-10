@@ -1,14 +1,11 @@
+import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.js';
+import { RecentResults } from '../../../../platform/lifecycle/recent-results.js';
+import { CLOSED_SESSION_TTL_MS, MAX_RECENTLY_RELEASED } from '../session-limits.js';
 import { createHash } from 'node:crypto';
 import type { AccessPublicApi } from '../../../access/public.js';
 import type { RemoteSessions, OpenShellRequest, SessionView } from '../../public.js';
 
-export type RemotePermissionCode = 'unauthenticated' | 'forbidden' | 'not_found' | 'remote_unavailable';
-
-export class RemotePermissionError extends Error {
-	constructor(readonly code: RemotePermissionCode) {
-		super('Remote: ' + code);
-	}
-}
+import { RemotePermissionError } from '../model/session-permission-failure.js';
 
 interface Owner {
 	userId: number;
@@ -21,11 +18,7 @@ interface ReleasedSession {
 	userId: number;
 	tokenDigest: string;
 	completion: Promise<void>;
-	expiresAt: number;
 }
-
-const CLOSED_SESSION_TTL_MS = 120_000;
-const MAX_RECENTLY_RELEASED = 128;
 
 function digest(token: string): string {
 	return createHash('sha256').update(token).digest('hex');
@@ -39,8 +32,12 @@ export class RemoteSessionOwner {
 	private readonly owners = new Map<string, Owner>();
 	private readonly pending = new Set<Promise<unknown>>();
 	private readonly releasing = new Map<string, Promise<void>>();
-	private readonly recentlyReleased = new Map<string, ReleasedSession>();
-	private readonly cleanupFailures: unknown[] = [];
+	private readonly releaseOwners = new Map<string, ReleasedSession>();
+	private readonly recentlyReleased = new RecentResults<string, ReleasedSession>(
+		MAX_RECENTLY_RELEASED,
+		CLOSED_SESSION_TTL_MS,
+	);
+	private readonly cleanupFailures = new FailureSummary();
 	private accepting = true;
 	private closePromise: Promise<void> | null = null;
 
@@ -165,9 +162,8 @@ export class RemoteSessionOwner {
 		if (!token) {
 			return false;
 		}
-		this.pruneRecentlyReleased();
 		const owner = this.owners.get(id);
-		const completed = this.recentlyReleased.get(id);
+		const completed = this.releaseOwners.get(id) ?? this.recentlyReleased.get(id);
 		const record = owner ?? completed;
 		if (!record || record.tokenDigest !== digest(token)) {
 			return false;
@@ -225,40 +221,24 @@ export class RemoteSessionOwner {
 		}
 		const task = Promise.resolve().then(() => this.remote.closeSession(id));
 		this.releasing.set(id, task);
-		this.pruneRecentlyReleased();
-		this.recentlyReleased.set(id, {
-			userId: owner.userId,
-			tokenDigest: owner.tokenDigest,
-			completion: task,
-			expiresAt: Date.now() + CLOSED_SESSION_TTL_MS,
-		});
-		// Only insertion may evict an unexpired entry to enforce capacity.
-		while (this.recentlyReleased.size > MAX_RECENTLY_RELEASED) {
-			const oldest = this.recentlyReleased.keys().next().value;
-			if (oldest === undefined) {
-				break;
-			}
-			this.recentlyReleased.delete(oldest);
-		}
+		this.releaseOwners.set(id, { userId: owner.userId, tokenDigest: owner.tokenDigest, completion: task });
 		this.track(task);
-		void task.then(
-			() => this.releasing.delete(id),
-			(error) => {
-				this.cleanupFailures.push(error);
-				// Preserve the failed Promise for a repeat release as well as shutdown.
-				// A second caller must not mistake failed cleanup for success.
-			},
-		);
-		return task;
-	}
 
-	private pruneRecentlyReleased(): void {
-		const now = Date.now();
-		for (const [id, record] of this.recentlyReleased) {
-			if (record.expiresAt <= now) {
-				this.recentlyReleased.delete(id);
-			}
-		}
+		const remember = (): void => {
+			this.releasing.delete(id);
+			this.releaseOwners.delete(id);
+			this.recentlyReleased.set(id, {
+				userId: owner.userId,
+				tokenDigest: owner.tokenDigest,
+				completion: task,
+			});
+		};
+
+		void task.then(remember, (error) => {
+			remember();
+			this.cleanupFailures.record(error);
+		});
+		return task;
 	}
 
 	quiesce(): void {
@@ -278,7 +258,7 @@ export class RemoteSessionOwner {
 			const errors = failures
 				.filter((item): item is PromiseRejectedResult => item.status === 'rejected')
 				.map((item) => item.reason);
-			errors.push(...this.cleanupFailures);
+			errors.push(...this.cleanupFailures.errors());
 			if (errors.length) {
 				throw new AggregateError([...new Set(errors)], 'Remote owner shutdown failed');
 			}

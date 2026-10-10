@@ -212,4 +212,13 @@ export default [
 		plugins: { 'nexus-style': functionSpacingPlugin },
 		rules: { 'nexus-style/function-spacing': 'error' },
 	},
+	{
+		name: 'nexus/refactor-control-flow',
+		files: [
+			'packages/backend-next/src/**/*.ts',
+			'packages/shared/src/**/*.ts',
+			'packages/frontend/src/runtimes/remote-next/**/*.ts',
+		],
+		rules: { curly: ['error', 'all'] },
+	},
 ];

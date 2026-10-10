@@ -1,3 +1,9 @@
+import {
+	REMOTE_TERMINAL_MAX_COLUMNS,
+	REMOTE_TERMINAL_MAX_ROWS,
+	REMOTE_TERMINAL_MAX_TERM_LENGTH,
+	type RemoteHttpErrorCode,
+} from './values.js';
 import { isRemoteSessionId, type RemoteShellView } from './model.js';
 
 export interface RemoteOpenShell {
@@ -38,14 +44,16 @@ export function readRemoteOpenShell(value: unknown): RemoteOpenShell {
 	const row = remoteObject(value, ['targetId', 'columns', 'rows', 'term'], ['targetId', 'columns', 'rows']);
 	if (
 		row.term !== undefined &&
-		(typeof row.term !== 'string' || row.term.length > 48 || !/^[-\w.]+$/u.test(row.term))
+		(typeof row.term !== 'string' ||
+			row.term.length > REMOTE_TERMINAL_MAX_TERM_LENGTH ||
+			!/^[-\w.]+$/u.test(row.term))
 	) {
 		throw new InvalidRemotePayload();
 	}
 	return {
 		targetId: positiveRemoteNumber(row.targetId, Number.MAX_SAFE_INTEGER),
-		columns: positiveRemoteNumber(row.columns, 500),
-		rows: positiveRemoteNumber(row.rows, 300),
+		columns: positiveRemoteNumber(row.columns, REMOTE_TERMINAL_MAX_COLUMNS),
+		rows: positiveRemoteNumber(row.rows, REMOTE_TERMINAL_MAX_ROWS),
 		...(row.term === undefined ? {} : { term: row.term }),
 	};
 }
@@ -74,7 +82,7 @@ export function readRemoteShellView(value: unknown): RemoteShellView {
 }
 
 export interface RemoteFailureResponse {
-	code: 'unauthenticated' | 'forbidden' | 'invalid_input' | 'not_found' | 'host_key_untrusted' | 'remote_unavailable';
+	code: RemoteHttpErrorCode;
 }
 
 export function readRemoteFailureResponse(value: unknown): RemoteFailureResponse {

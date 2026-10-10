@@ -7,6 +7,10 @@
 1. 人工规则区域只能通过人工输入更新。
 2. 如果人工规则相互冲突，人工核对后解决，变更到同一条上。
 3. 人工规则与其余规则冲突以人工为准。
+4. 内部应用类型统一定义在所属模块子功能的 `model/*-types.ts`，Service、Model 和模块内协作直接引用该唯一 owner；仅单文件使用的局部实现类型留在原文件。跨子功能共用的内部基础取值、纯校验与错误类放在所属一级模块的独立 owner，不依赖 Service、register、出口错误映射或具体技术实现。存储命令/记录/任务契约只在所属 `storage`，技术类型只在 Platform；SQLite Adapter 不引入应用 Model/Service 类型。
+5. 外部类型按消费者唯一归属：前后端共同消费的基础取值、业务对象、完整请求/响应、错误码和协议容量统一放入 `packages/shared/src/<域>/<子域>/{values,model,http,events}.ts`，基础取值与对象/协议隔离，复杂纯解码可拆 `http-codec.ts`；仅后端跨模块消费的安全契约定义在模块 `public.ts`，安全错误类由 `public-errors.ts` 明确导出，安装配置定义在 `register.ts`。不把后端秘密、存储行、Service/Model 类或无人消费的预留类型放进 Shared/公开契约，Bootstrap 不深层引用私有类型。
+6. 所有外部输入先在协议边界以 `unknown` 严格解码，再在模块入口 mapper 逐字段转换成内部应用类型；内部结果也逐字段转换成公开/Shared 类型。即使字段完全一致也保留这一转换，数组和嵌套对象同样采用白名单；禁止对象展开、断言、继承存储记录或直接透传代替边界隔离。应用与存储的转换由 Model 持有，HTTP/WS 投影归 interfaces；同一边界只有一个转换 owner，不复制 mapper、不保留旧路径转导出。公开写入类型不能从只读 View 自动派生。
+7. 共享类型及字段迁移必须同时检查后端、前端、模块出口、编解码、脚本和测试的真实消费者并同步迁移；双端同义同表示只保留 Shared 一份定义，内部表示/用途不同则保留独立类型并显式转换。模块失败按具名类型/错误码映射，禁止靠错误文本判定业务结果，技术异常及 cause 不越过安全出口。
 
 ## 规则维护方式
 
@@ -80,7 +84,7 @@ modules/<module>/
     adapters/sqlite/          SQL、行解码、事务及 DDL
 ```
 
-这是职责示例，不要求每个子功能拥有所有目录。无持久化的 Remote Session 不增加 storage；简单 Model 的类型和转换可留同文件；只被一个文件使用的 helper 不公开。子功能之间需要共同规则时置于模块内明确 owner，不通过 Shared 共享后端私有细节。
+这是职责示例，不要求每个子功能拥有所有目录。无持久化的 Remote Session 不增加 storage；复用的应用类型独立放在 `model/*-types.ts`，单文件局部类型与 helper 留本文件；只被一个文件使用的 helper 不公开。子功能之间需要共同规则时置于模块内明确 owner，不通过 Shared 共享后端私有细节。
 
 模块 register 返回明确的管理公开能力、独立可信能力及路由安装方法；拥有后台资源的模块同时提供 quiesce/close。Bootstrap 只安装这些入口和公开注册选项。模块内部 HTTP 可以直接调用本模块明确的 Service 用例并完成出口投影，不必再绕一层无意义 public 包装；其他一级模块不能据此导入该 Service。模块注册是装配入口，不是可在运行期随意读取内部对象的 registry。
 
@@ -133,9 +137,9 @@ flowchart TD
 | ---------------------------------------- | ----------------------------------------------------- |
 | 双端同义同表示的有限业务取值             | Shared 所属域 `values.ts`                             |
 | 双端业务对象及业务结果                   | Shared 所属子域 `model.ts`                            |
-| 完整 HTTP 请求/响应/公开错误/容量        | Shared 所属 `http.ts`，复杂纯解码可拆 `http-codec.ts` |
+| 完整 HTTP 请求/响应                      | Shared 所属 `http.ts`，复杂纯解码可拆 `http-codec.ts` |
 | WS 消息与纯解码                          | Shared 所属 `events.ts`                               |
-| 后端应用命令、资源、可信秘密及状态上下文 | 本模块 `model/*-types.ts` 或明确内部类型 owner        |
+| 后端应用命令、资源、可信秘密及状态上下文 | 本模块 `model/*-types.ts`（单文件局部实现类型除外）   |
 | 数据库命令、密文记录、存储任务结果       | 本子功能 `storage`                                    |
 | 模块公开的后端专用能力                   | 模块 `public.ts`，与内部实现独立                      |
 | 技术请求、技术结果、错误及 Worker 消息   | 对应 Platform 技术 owner                              |
@@ -153,7 +157,7 @@ flowchart TD
 
 ```text
 packages/shared/src/
-  access/{model,http}.ts
+  access/{values,model,http}.ts
   targets/
     {values,http}.ts
     connections/{values,model,http,http-codec}.ts
@@ -161,16 +165,20 @@ packages/shared/src/
     ssh-keys/{model,http,http-codec}.ts
     tags/{model,http,http-codec}.ts
     host-keys/{model,http,http-codec}.ts
-  remote/sessions/{model,http,events}.ts
+  remote/sessions/{values,model,http,events}.ts
 ```
 
 Shared 顶层按大业务模块，子域按功能。`values` 不依赖业务对象或协议；`model` 不依赖 HTTP/事件；`http-codec → http/model/values` 单向依赖，http 不反向重导出 codec。父文件只承载本域真正共用的内容，不汇总全部子域。Shared 无 Node、Vue、数据库、框架或后端应用依赖，exports 只列实际精确路径，不保留旧路径别名和根 barrel。
 
 请求必须定义完整外壳，例如 `{version, changes}`、`{items}`；响应与业务对象相同直接引用 model，共用删除响应不在每个子域复制。后端响应构造使用具名 Shared 返回类型或 satisfies，运行时仍采用严格解码与白名单序列化。外部 JSON、URL/query/header、WS、SQL 行及 Worker 结果以 unknown 解码，必填/可选/未知字段、数值、字节数及联合分支明确。
 
-完整 JSON 的 UTF-8 容量预算属于 Shared HTTP 契约，两端消费同一定义；字段上限与完整 body 上限分开，后者包含转义及外壳。Frontend 在发送前检查实际编码大小，模块路由将预算传给 Platform，Platform 只执行通用默认值及实例硬上限。Targets Connections/SSH Keys 为 128 KiB，Proxies 为 64 KiB，Tags/Host Keys 为 16 KiB；导入最多 50 项且总量不超过 128 KiB，超限整批拒绝并提示拆批。
+完整 JSON 的 UTF-8 容量预算属于 Shared HTTP 契约，基础值放在所属 `values.ts`，两端消费同一定义；字段上限与完整 body 上限分开，后者包含转义及外壳。Frontend 在发送前检查实际编码大小，模块路由将预算传给 Platform，Platform 只执行通用默认值及实例硬上限。Targets Connections/SSH Keys 为 128 KiB，Proxies 为 64 KiB，Tags/Host Keys 为 16 KiB；导入最多 50 项且总量不超过 128 KiB，超限整批拒绝并提示拆批。
 
 当前新 Agent 无同表示前端消费者，HTTP 契约保持后端私有；Agent 创建 Run 的路由预算为 128 KiB、prompt 为 16 KiB。真实前端接入时迁移完整双端契约和预算，不预建 Shared Agent 空域，也不直接复用表示不同的旧 Protocol。双端迁移需同时检查新后端、前端、旧正式包相同基础取值和真实测试/脚本消费者。
+
+Platform HTTP 的契约在 `http-types.ts`，技术输入错误在 `http-errors.ts`，技术预算在 `http-limits.ts`；`http-router.ts` 编译/匹配路由，`http-request.ts` 处理来源/JSON/响应，`websocket-channel.ts` 持有单 Socket 队列和关闭握手，`http-lifecycle.ts` 排空与释放，`http-server.ts` 负责安装和监听。消费者直接引用实际 owner，不从 server 兼容转导出类型。
+
+Remote 双端帧容量（32 KiB）、输出 ACK 窗口（128 KiB）、PTY 最大尺寸（500×300）和协议错误取值统一在 Shared `remote/sessions/values.ts`；后端私有排队预算不因此成为双端契约。Targets 图深度/展开限制在模块根 `ssh-graph-limits.ts`，存储实现不引用 Model 文件。
 
 HTTP 技术层负责固定 Public Origin、受信代理、来源/Fetch Metadata、JSON 内容类型与限额、cookie 和连接生命周期。模块负责业务身份、权限、资源范围及错误映射；不接受客户端自报 owner。非法 JSON/过大请求/不支持内容类型保留 400/413/415，不能吞成通用业务失败。WS 消息和 ACK/replay 归协议 owner；Platform 不按 Agent/Targets 名称分支。
 
@@ -207,6 +215,8 @@ Agent 后续执行复用 SSH/SQL/密码学技术实例，保留自有 grant、in
 资源只有一个真实 owner：打开者明确把关闭责任交给谁；借用者不任意关闭共享实例。Session、Run、事务、lease 和请求状态不进入进程全局单例。Promise、timer、listener、stream、channel 与待完成回调都需有准入、追踪、失败收敛和清理路径。
 
 应用关闭顺序：停止模块新准入/调度 → 关闭 HTTP/WS 并等待已接纳业务任务 → 取消并等待业务运行时/资源，完成必要持久收敛 → 关闭 SQLite。当前动态生命周期只注册 Remote；Agent 调度、Provider 等接入时必须提供自己的 quiesce/close，不由 Bootstrap 假设所有模块无后台工作。
+
+进行中的关闭任务独立追踪且不因缓存满而淘汰；已完成 Remote 关闭结果最多保留 128 项、120 秒，成功和失败都遵守同一有效期。同 token 的有效期内重复释放共享原结果，超出保留窗口不承诺重放。私有清理失败证据保留最近 16 项并累计额外失败计数，停机仍报告已发生的失败，不永久保存所有错误与 Promise。
 
 关闭先发布共享 Promise，再开始可能重入的清理；并发调用看到同一完成与失败。前一步失败仍继续必要释放，多项错误聚合；客户端断开不证明密码散列、已派发 SSH 或事务已经取消。恢复数据库前先停止使用旧状态的长期 owner，恢复/回滚之后按新的持久状态重建，不能只替换文件。
 
@@ -264,7 +274,7 @@ Agent 后续执行复用 SSH/SQL/密码学技术实例，保留自有 grant、in
 ### 注释、格式与交付
 
 - **注释解释约束与原因。** 公共契约及存在特殊不变量的实现按需要使用 JSDoc，说明授权、取消、未知结果、事务和资源所有权。注释不重复显而易见的语句；TODO 写清缺失能力与所属 owner，不以 TODO 代替当前批次必需的基础实现。
-- **格式使用现有工具。** TypeScript 保持 Tab 缩进、单引号、分号、120 列；函数/方法及所有独立 `export` 声明前后保留一行空行（含 interface、type、const、默认导出和重新导出），注释与所属声明保持相邻，连续 import 不强制分隔，具体由 `.prettierrc` 与 ESLint 配置执行。不要手工对齐空格、用 `prettier-ignore` 掩盖复杂表达式或在局部引入另一套格式；复杂代码先调整结构再格式化。
+- **格式使用现有工具。** TypeScript 保持 Tab 缩进、单引号、分号、120 列；函数/方法及所有独立 `export` 声明前后保留一行空行（含 interface、type、const、默认导出和重新导出），注释与所属声明保持相邻，连续 import 不强制分隔，具体由 `.prettierrc` 与 ESLint 配置执行；重构 Backend、Shared 和 Remote 开发 Transport 的控制语句花括号由 ESLint `curly: all` 执行。不要手工对齐空格、用 `prettier-ignore` 掩盖复杂表达式或在局部引入另一套格式；复杂代码先调整结构再格式化。
 - **按真实边界审核。** 修改后检查调用方向、类型 owner、模块出口、失败与取消路径、资源释放及所有消费者。执行适用的静态检查、格式检查和构建，行为验证按当前用户授权与项目规则进行；编译通过不能替代行为证据。不新增源码文本扫描测试或自定义架构门禁来强制本节约定。
 
 ## 注册、内部类型与公开取值的实际归属
@@ -274,6 +284,10 @@ Access 的 `register.ts` 明确定义 `AccessRegistrationOptions`，Bootstrap �
 Access 的内部业务失败由 `authentication/model/access-failure.ts` 持有，Service 引用该独立错误 owner。模块根 `access-errors.ts` 负责业务/技术失败到安全出口错误的映射，`public-errors.ts` 只明确导出安全类；Model 不反向依赖 Service，也不持有模块出口错误映射。
 
 Remote 的 `public.ts` 定义后端消费者实际使用的 RemoteSessionCloseReason，Session Service 直接引用此稳定契约，内部 Model 不再声明同名关闭原因。其 normal/disconnected/cleanup_failed/closed_by_owner 语义与 Platform 技术原因、Shared wire 仍分别映射，不新增兼容重导出。
+
+Agent 的 App/Thread、Run 用例输入及纯状态事实分别由 `scope/model/scope-types.ts` 与 `runs/model/run-types.ts` 持有；Service 和 register 直接引用类型 owner，Model 不做兼容转导出。`agent-validation.ts`/`agent-failure.ts` 是不加载 SQLite 的内部校验/失败，`agent-errors.ts` 只承担安全出口映射。Host Key 应用类型由 `host-keys/model/host-key-types.ts` 持有。
+
+Targets `TargetFailure` 明确携带 Shared 基础错误码，出口不匹配 message；SecretBoxFailure 是技术类别，由业务出口映射。批量导入逐项安全错误投影由模块的 `import/connection-import-batch.ts` 持有，Service 不加载 SQLite 错误映射。Remote public 的调用及取消订阅经过安全错误边界，HTTP 消费安全 RemoteOperationError，不依赖私有 SSH 异常类。
 
 Bootstrap 只引用模块公开能力及注册、迁移等明确安装契约。模块公开签名不依赖私有 Model/Service 类型；应用底层类型不导入上层实现。迁移 schema 的全库组合是明确安装能力，Bootstrap 可以引用模块迁移入口；这与消费私有状态不同。Targets import 的跨子功能 tx 参与者属于同一一级模块内部协作，不能据此允许跨模块读表。
 
