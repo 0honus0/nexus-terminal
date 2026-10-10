@@ -17,7 +17,10 @@ type Data = Record<string, unknown>;
 export function fields(input: unknown, allowed: readonly string[], required: readonly string[] = []): Data {
 	if (input === null || typeof input !== 'object' || Array.isArray(input)) throw new InvalidTargetsInput();
 	const value = input as Data;
-	if (Object.keys(value).some((key) => !allowed.includes(key)) || required.some((key) => !(key in value))) {
+	if (
+		Object.keys(value).some((key) => !allowed.includes(key)) ||
+		required.some((key) => !Object.hasOwn(value, key))
+	) {
 		throw new InvalidTargetsInput();
 	}
 	return value;

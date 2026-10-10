@@ -23,11 +23,18 @@ import type { TargetHostKeyView } from '@nexus-terminal/shared/targets/host-keys
 
 type Json = Record<string, unknown>;
 
-function object(value: unknown): Json {
+function object(value: unknown, fields?: readonly string[]): Json {
 	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
 		throw new Error('Invalid Targets response');
 	}
-	return value as Json;
+	const row = value as Json;
+	if (
+		fields &&
+		(Object.keys(row).some((key) => !fields.includes(key)) || fields.some((key) => !Object.hasOwn(row, key)))
+	) {
+		throw new Error('Invalid Targets response');
+	}
+	return row;
 }
 
 function string(value: unknown): string {
@@ -64,7 +71,25 @@ function option<T extends string>(value: unknown, choices: readonly T[]): T {
 }
 
 function connectionView(input: unknown): TargetConnectionView {
-	const v = object(input);
+	const v = object(input, [
+		'id',
+		'version',
+		'createdAt',
+		'updatedAt',
+		'name',
+		'type',
+		'host',
+		'port',
+		'username',
+		'route',
+		'proxyId',
+		'notes',
+		'rdpRemoteApp',
+		'rdpRemoteAppDirectory',
+		'rdpRemoteAppArguments',
+		'tagIds',
+		'jumpIds',
+	]);
 	return {
 		id: number(v.id),
 		version: number(v.version),
@@ -87,7 +112,7 @@ function connectionView(input: unknown): TargetConnectionView {
 }
 
 function proxyView(input: unknown): TargetProxyView {
-	const v = object(input);
+	const v = object(input, ['id', 'name', 'type', 'host', 'port', 'username', 'version', 'createdAt', 'updatedAt']);
 	return {
 		id: number(v.id),
 		name: string(v.name),
@@ -102,7 +127,7 @@ function proxyView(input: unknown): TargetProxyView {
 }
 
 function tagView(input: unknown): TargetTagView {
-	const v = object(input);
+	const v = object(input, ['id', 'name', 'version', 'createdAt', 'updatedAt']);
 	return {
 		id: number(v.id),
 		name: string(v.name),
@@ -113,7 +138,7 @@ function tagView(input: unknown): TargetTagView {
 }
 
 function keyView(input: unknown): TargetSshKeyView {
-	const v = object(input);
+	const v = object(input, ['id', 'name', 'version', 'createdAt', 'updatedAt']);
 	return {
 		id: number(v.id),
 		name: string(v.name),
@@ -124,7 +149,7 @@ function keyView(input: unknown): TargetSshKeyView {
 }
 
 function hostKeyView(input: unknown): TargetHostKeyView {
-	const value = object(input);
+	const value = object(input, ['host', 'port', 'fingerprint', 'confirmedAt']);
 	return {
 		host: string(value.host),
 		port: number(value.port),
@@ -139,16 +164,18 @@ function mutation<T>(
 ): { status: 'updated'; value: T } | { status: 'not_found' } | { status: 'version_conflict' } {
 	const v = object(input);
 	if (v.status === 'updated') {
+		object(input, ['status', 'value']);
 		return { status: 'updated', value: decode(v.value) };
 	}
 	if (v.status === 'not_found' || v.status === 'version_conflict') {
+		object(input, ['status']);
 		return { status: v.status };
 	}
 	throw new Error('Invalid Targets mutation response');
 }
 
 function credentialMutation(input: unknown): TargetCredentialMutation {
-	const v = object(input);
+	const v = object(input, ['status']);
 	if (v.status === 'updated' || v.status === 'not_found' || v.status === 'version_conflict') {
 		return { status: v.status };
 	}
@@ -156,13 +183,15 @@ function credentialMutation(input: unknown): TargetCredentialMutation {
 }
 
 function imports(input: unknown): TargetImportItem[] {
-	const v = object(input);
+	const v = object(input, ['items']);
 	return array(v.items, (item) => {
 		const row = object(item);
 		if (row.status === 'ok') {
+			object(item, ['status', 'id']);
 			return { status: 'ok', id: number(row.id) };
 		}
 		if (row.status === 'error' && typeof row.code === 'string') {
+			object(item, ['status', 'code']);
 			const allowed: readonly TargetErrorCode[] = [
 				'invalid_input',
 				'reference_not_found',
@@ -196,17 +225,43 @@ export function createTargetsNextApi(baseUrl: string) {
 	const base = origin.origin + (origin.pathname === '/__next/' ? '/__next' : '') + '/api/v1/targets';
 
 	async function call(method: string, path: string, body?: unknown): Promise<unknown> {
-		const response = await fetch(base + path, {
-			method,
-			credentials: 'same-origin',
-			cache: 'no-store',
-			headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
-			...(body === undefined ? {} : { body: JSON.stringify(body) }),
-		});
-		const parsed: unknown = await response.json();
+		let response: Response;
+		try {
+			response = await fetch(base + path, {
+				method,
+				credentials: 'same-origin',
+				cache: 'no-store',
+				headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+				...(body === undefined ? {} : { body: JSON.stringify(body) }),
+			});
+		} catch {
+			throw new Error('request_failed');
+		}
+		let parsed: unknown;
+		try {
+			parsed = (await response.json()) as unknown;
+		} catch {
+			throw new Error('request_failed');
+		}
 		if (!response.ok) {
-			const error = object(parsed);
-			throw new Error(typeof error.code === 'string' ? error.code : 'targets_request_failed');
+			if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) && 'code' in parsed) {
+				const code = parsed.code;
+				if (
+					code === 'unauthenticated' ||
+					code === 'forbidden' ||
+					code === 'not_found' ||
+					code === 'version_conflict' ||
+					code === 'invalid_input' ||
+					code === 'reference_not_found' ||
+					code === 'reference_in_use' ||
+					code === 'conflict' ||
+					code === 'unresolvable' ||
+					code === 'storage_unavailable'
+				) {
+					throw new Error(code);
+				}
+			}
+			throw new Error('request_failed');
 		}
 		return parsed;
 	}

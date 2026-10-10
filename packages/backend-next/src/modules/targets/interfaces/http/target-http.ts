@@ -99,13 +99,21 @@ function id(context: HttpRouteContext): number {
 	return urlId(context.params.id);
 }
 
-function status(context: HttpRouteContext, result: { status: string }, value: unknown): void {
-	if (result.status === 'not_found') {
-		context.send(404, { code: 'not_found' });
-	} else if (result.status === 'version_conflict') {
-		context.send(409, { code: 'version_conflict' });
-	} else {
-		context.send(200, value);
+function status(
+	context: HttpRouteContext,
+	result: { status: 'updated' | 'not_found' | 'version_conflict' },
+	value: unknown,
+): void {
+	switch (result.status) {
+		case 'not_found':
+			context.send(404, { code: 'not_found' });
+			return;
+		case 'version_conflict':
+			context.send(409, { code: 'version_conflict' });
+			return;
+		case 'updated':
+			context.send(200, value);
+			return;
 	}
 }
 
