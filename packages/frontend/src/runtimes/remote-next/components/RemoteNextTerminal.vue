@@ -25,12 +25,19 @@
 		issue.value = te(key) ? t(key) : t('targetsNext.errors.remote_unavailable');
 	}
 
+	function failureFor(current: number, error: unknown): void {
+		if (generation === current && !destroyed) {
+			failure(error);
+		}
+	}
+
 	/** Releases only this generation's transport, terminal and observers. */
 	function dispose(current: number): void {
 		if (generation !== current) {
 			return;
 		}
 		generation += 1;
+		const afterDisposal = generation;
 		openingAbort?.abort();
 		openingAbort = null;
 		const previous = handle;
@@ -47,7 +54,7 @@
 		terminal?.dispose();
 		terminal = null;
 		if (previous) {
-			void previous.close().catch(failure);
+			void previous.close().catch((error) => failureFor(afterDisposal, error));
 		}
 	}
 
@@ -78,7 +85,7 @@
 				try {
 					handle.input(data);
 				} catch (error) {
-					failure(error);
+					failureFor(current, error);
 				}
 			});
 			const observer = new ResizeObserver(() => {
@@ -128,12 +135,14 @@
 						dispose(current);
 					},
 
-					failure,
+					failure(error) {
+						failureFor(current, error);
+					},
 				},
 				abort.signal,
 			);
 			if (generation !== current || destroyed) {
-				await opened.close().catch(failure);
+				await opened.close().catch((error) => failureFor(current, error));
 				return;
 			}
 			handle = opened;
@@ -141,7 +150,7 @@
 			term.focus();
 		} catch (error) {
 			if (generation === current && !destroyed) {
-				failure(error);
+				failureFor(current, error);
 			}
 			dispose(current);
 		} finally {
