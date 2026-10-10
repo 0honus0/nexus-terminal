@@ -48,11 +48,13 @@ export type MachineCommandOutcome =
 	| { status: 'nonzero'; exitCode: number; signal: string | null }
 	| { status: 'unknown'; reason: 'disconnect' | 'timeout' | 'cancelled' | 'channel_error' };
 
+export type MachineChannelCloseReason = 'normal' | 'disconnected' | 'channel_error';
+
 export interface MachineByteChannel {
 	readonly readable: Readable;
 	readonly writable: Writable;
 	onStderr(listener: (bytes: Uint8Array) => void): () => void;
-	onClose(listener: () => void): () => void;
+	onClose(listener: (reason: MachineChannelCloseReason) => void): () => void;
 	onDrain(listener: () => void): () => void;
 	pause(): void;
 	resume(): void;
@@ -144,7 +146,7 @@ export interface MachineConnection {
 	openRawCommand(command: string, signal?: AbortSignal): Promise<MachineCommand>;
 	execute(command: string, options: MachineExecuteOptions): Promise<MachineCommandResult>;
 	openSftp(signal?: AbortSignal): Promise<MachineSftpLease>;
-	onClose(listener: () => void): () => void;
+	onClose(listener: (reason: 'disconnected') => void): () => void;
 	close(): Promise<void>;
 }
 

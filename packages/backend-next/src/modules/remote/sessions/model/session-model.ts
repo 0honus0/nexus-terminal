@@ -135,19 +135,20 @@ function createSessionResource(
 		},
 
 		onClose(listener) {
-			let notified = false;
+			let lastReason: 'normal' | 'disconnected' | null = null;
 
-			const notify = () => {
-				if (!notified) {
-					notified = true;
-					listener();
+			const notify = (reason: 'normal' | 'disconnected') => {
+				if (lastReason === 'disconnected' || lastReason === reason) {
+					return;
 				}
+				lastReason = reason;
+				listener(reason);
 			};
 
-			const offTransport = machine.onClose(notify);
-			const offChannel = shell.onClose(notify);
+			const offTransport = machine.onClose(() => notify('disconnected'));
+			const offChannel = shell.onClose((reason) => notify(reason === 'normal' ? 'normal' : 'disconnected'));
 			return () => {
-				notified = true;
+				lastReason = 'disconnected';
 				offTransport();
 				offChannel();
 			};

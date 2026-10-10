@@ -43,8 +43,10 @@ const privateKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKe
 });
 const hostPublicKey = utils.parseKey(privateKey).getPublicSSH();
 const fingerprint = 'SHA256:' + createHash('sha256').update(hostPublicKey).digest('base64').replace(/=+$/u, '');
-const shellReady = deferred();
+let shellReady = deferred();
+let lastServerConnection;
 const server = new Server({ hostKeys: [privateKey] }, (client) => {
+	lastServerConnection = client;
 	client.on('error', () => undefined);
 	client.on('authentication', (auth) => {
 		if (auth.method === 'password' && auth.username === 'operator' && auth.password === 'secret') {
@@ -164,6 +166,55 @@ try {
 		['ready', 'data', 'closed'],
 	);
 	console.log('Real SSH2 PTY → Remote owner → WebSocket → consumed → normal EOF PASS');
+
+	// A live SSH transport disappearing is not a Shell EOF. The Remote client
+	// must receive a safe error rather than a successful closed event.
+	shellReady = deferred();
+	const interruptedSession = await within(
+		owner.open('good', {
+			targetId: target.id,
+			columns: 80,
+			rows: 24,
+			timeoutMs: 5000,
+		}),
+		'SSH PTY opened for disconnect',
+	);
+	await within(shellReady.promise, 'interrupted SSH shell');
+	const interruptedSocket = new WebSocket(
+		'ws://' + listener.address + '/api/v1/remote/stream?sessionId=' + interruptedSession.id,
+		{
+			origin: 'http://127.0.0.1:0',
+			headers: {
+				Host: '127.0.0.1:0',
+				'Sec-Fetch-Site': 'same-origin',
+				Cookie: 'nexus_session=good',
+			},
+		},
+	);
+	socket = interruptedSocket;
+	const interruptedReady = deferred();
+	const interruptedEvents = [];
+	const interruptedClosed = once(interruptedSocket, 'close');
+	interruptedSocket.on('message', (value) => {
+		const event = JSON.parse(value.toString());
+		interruptedEvents.push(event);
+		if (event.type === 'ready') {
+			interruptedReady.resolve();
+		}
+	});
+	await within(once(interruptedSocket, 'open'), 'interrupted WS opened');
+	await within(interruptedReady.promise, 'interrupted WS ready');
+	lastServerConnection.end();
+	await within(interruptedClosed, 'unexpected SSH disconnect WS close');
+	assert.equal(
+		interruptedEvents.some((event) => event.type === 'closed'),
+		false,
+	);
+	assert.equal(
+		interruptedEvents.some((event) => event.type === 'error' && event.code === 'remote_unavailable'),
+		true,
+	);
+	console.log('Real SSH2 transport disconnect → Remote error (no successful EOF) PASS');
 } finally {
 	socket?.terminate();
 	if (listener) await within(listener.close(), 'listener close');

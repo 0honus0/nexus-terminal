@@ -1,3 +1,5 @@
+import type { RemoteSessionCloseReason } from './sessions/model/session-types.js';
+
 /** Internal-only Remote module public contract; not an HTTP/WS DTO. */
 export interface SessionView {
 	id: string;
@@ -26,7 +28,7 @@ export interface RemoteSessions {
 	onData(id: string, listener: (bytes: Uint8Array) => void): () => void;
 	onStderr(id: string, listener: (bytes: Uint8Array) => void): () => void;
 	onDrain(id: string, listener: () => void): () => void;
-	onClosed(id: string, listener: () => void): () => void;
+	onClosed(id: string, listener: (reason: RemoteSessionCloseReason) => void): () => void;
 	pauseOutput(id: string): void;
 	resumeOutput(id: string): void;
 	closeSession(id: string): Promise<void>;

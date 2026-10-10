@@ -1,13 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import type { RemoteSessionModel } from '../model/session-model.js';
-import type { RemoteSessionSnapshot, RemoteSessionResource, OpenSessionRequest } from '../model/session-types.js';
+import type {
+	RemoteSessionSnapshot,
+	RemoteSessionResource,
+	OpenSessionRequest,
+	RemoteSessionCloseReason,
+} from '../model/session-types.js';
 
 interface ActiveSession {
 	view: RemoteSessionSnapshot;
 	resource: RemoteSessionResource;
 	dataListeners: Set<(bytes: Uint8Array) => void>;
 	stderrListeners: Set<(bytes: Uint8Array) => void>;
-	closedListeners: Set<() => void>;
+	closedListeners: Set<(reason: RemoteSessionCloseReason) => void>;
+	closeReason: RemoteSessionCloseReason;
 	offResource: () => void;
 	offData: () => void;
 	offStderr: () => void;
@@ -138,6 +144,7 @@ export class RemoteSessionService {
 			dataListeners: new Set(),
 			stderrListeners: new Set(),
 			closedListeners: new Set(),
+			closeReason: 'closed_by_owner',
 
 			offResource: () => undefined,
 
@@ -151,8 +158,8 @@ export class RemoteSessionService {
 			transportPaused: false,
 		};
 		current.onChunk = (bytes) => notifyDataListeners(current.dataListeners, bytes);
-		current.offResource = resource.onClose(() => {
-			void this.closeSession(id).catch(() => undefined);
+		current.offResource = resource.onClose((reason) => {
+			void this.closeSession(id, reason).catch(() => undefined);
 		});
 		this.sessions.set(id, current);
 		return this.toSnapshot(current);
@@ -240,18 +247,25 @@ export class RemoteSessionService {
 		return this.requireSession(id).resource.onDrain(listener);
 	}
 
-	onClosed(id: string, listener: () => void): () => void {
+	onClosed(id: string, listener: (reason: RemoteSessionCloseReason) => void): () => void {
 		const session = this.requireSession(id);
 		session.closedListeners.add(listener);
 		return () => session.closedListeners.delete(listener);
 	}
 
-	closeSession(id: string): Promise<void> {
+	closeSession(id: string, reason: RemoteSessionCloseReason = 'closed_by_owner'): Promise<void> {
+		const session = this.sessions.get(id);
+		if (session) {
+			// A transport failure must upgrade a previously observed Shell EOF,
+			// never convert an actual failure into a normal termination.
+			if (reason === 'disconnected' || session.closeReason === 'closed_by_owner') {
+				session.closeReason = reason;
+			}
+		}
 		const pending = this.sessionClosePromises.get(id);
 		if (pending) {
 			return pending;
 		}
-		const session = this.sessions.get(id);
 		if (!session) {
 			return Promise.resolve();
 		}
@@ -283,10 +297,13 @@ export class RemoteSessionService {
 		session.offData();
 		try {
 			await session.resource.close();
+		} catch (error) {
+			session.closeReason = 'cleanup_failed';
+			throw error;
 		} finally {
 			for (const listener of session.closedListeners) {
 				try {
-					listener();
+					listener(session.closeReason);
 				} catch {
 					/* lifecycle is already closed */
 				}

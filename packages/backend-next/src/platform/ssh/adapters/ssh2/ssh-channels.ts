@@ -1,5 +1,11 @@
 import type { ClientChannel } from 'ssh2';
-import type { MachineByteChannel, MachineShell, MachineCommand, MachineCommandOutcome } from '../../ssh-port.js';
+import type {
+	MachineByteChannel,
+	MachineShell,
+	MachineCommand,
+	MachineCommandOutcome,
+	MachineChannelCloseReason,
+} from '../../ssh-port.js';
 
 function notify<T extends unknown[]>(listeners: Set<(...args: T) => void>, ...args: T): void {
 	for (const listener of listeners) {
@@ -16,9 +22,10 @@ class ByteChannel implements MachineByteChannel {
 	readonly writable: ClientChannel;
 	private readonly stderr = new Set<(bytes: Uint8Array) => void>();
 	private readonly drains = new Set<() => void>();
-	private readonly closes = new Set<() => void>();
+	private readonly closes = new Set<(reason: MachineChannelCloseReason) => void>();
 	private ended = false;
 	private paused = false;
+	private closeReason: MachineChannelCloseReason = 'disconnected';
 
 	constructor(
 		protected readonly channel: ClientChannel,
@@ -32,19 +39,31 @@ class ByteChannel implements MachineByteChannel {
 		// Do not consume extended data until a real stderr subscriber exists.
 		channel.stderr.pause();
 		channel.on('drain', () => notify(this.drains));
-		channel.on('close', () => {
+		let readableEnded = false;
+		let channelFailed = false;
+		channel.on('end', () => {
+			readableEnded = true;
+		});
+		channel.on('close', (code: number | null) => {
 			if (this.ended) {
 				return;
 			}
 			this.ended = true;
-			notify(this.closes);
+			this.closeReason = channelFailed
+				? 'channel_error'
+				: readableEnded || typeof code === 'number'
+					? 'normal'
+					: 'disconnected';
+			notify(this.closes, this.closeReason);
 			this.drains.clear();
 			this.stderr.clear();
 			this.closes.clear();
 			onEnded();
 		});
 		// SSH channel errors may precede close. They must not be unhandled events.
-		channel.on('error', () => undefined);
+		channel.on('error', () => {
+			channelFailed = true;
+		});
 	}
 
 	onStderr(listener: (bytes: Uint8Array) => void): () => void {
@@ -56,9 +75,9 @@ class ByteChannel implements MachineByteChannel {
 		};
 	}
 
-	onClose(listener: () => void): () => void {
+	onClose(listener: (reason: MachineChannelCloseReason) => void): () => void {
 		if (this.ended) {
-			queueMicrotask(listener);
+			queueMicrotask(() => listener(this.closeReason));
 			return () => undefined;
 		}
 		this.closes.add(listener);

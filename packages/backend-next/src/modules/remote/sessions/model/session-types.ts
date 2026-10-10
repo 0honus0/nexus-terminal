@@ -17,6 +17,9 @@ export interface OpenSessionRequest {
 	signal?: AbortSignal;
 }
 
+/** Remote's decision about session ending; never expose machine internals. */
+export type RemoteSessionCloseReason = 'normal' | 'disconnected' | 'cleanup_failed' | 'closed_by_owner';
+
 export interface RemoteSessionResource {
 	readonly targetId: number;
 	readonly fingerprint: string;
@@ -28,6 +31,6 @@ export interface RemoteSessionResource {
 	onData(listener: (bytes: Uint8Array) => void): () => void;
 	onStderr(listener: (bytes: Uint8Array) => void): () => void;
 	onDrain(listener: () => void): () => void;
-	onClose(listener: () => void): () => void;
+	onClose(listener: (reason: 'normal' | 'disconnected') => void): () => void;
 	close(): Promise<void>;
 }

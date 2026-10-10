@@ -364,7 +364,16 @@ function connectStream(
 		}),
 	);
 	subscriptions.push(
-		remote.onClosed(id, () => {
+		remote.onClosed(id, (reason) => {
+			if (reason !== 'normal') {
+				if (reason === 'closed_by_owner') {
+					ended = true;
+					channel.close();
+				} else {
+					terminate('remote_unavailable');
+				}
+				return;
+			}
 			eof = true;
 			inputBlocked = true;
 			eofDeadline = setTimeout(() => terminate('transport_overflow'), 10000);

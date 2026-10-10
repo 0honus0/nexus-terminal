@@ -60,6 +60,12 @@ Targets 的 `host-keys` 子功能持有已确认 SSH 服务端公钥指纹及 v2
 
 A–D 审核指出的六处基础缺口已做源码修正：Platform 每个 WS 输入队列限定 64 条/256 KiB（包含正在处理的消息），超过上限立即终止；正常 PTY EOF 不再直接 terminate，Remote 允许仍有效的原持有人完成队列与 `consumed` 收尾，EOF 等待最多 10 秒，Platform `finish()` 有界等待正常 close 握手（最多 5 秒）；主动断线/撤销/停机仍强制释放。SessionOwner 保存按 ID 共享的 release Promise，底层 SessionService 保留失败的关闭结果，模块 shutdown 聚合错误。Targets/Agent/Remote 的 register 返回各自的 HTTP/WS 安装能力，Remote 在模块内拥有 owner/Service 的 quiesce 与 close，Bootstrap 不再深层导入业务 HTTP 工厂。前端 Transport 的 close 共用 Promise、组件以 generation/AbortSignal 清理 xterm 与 ResizeObserver，错误码转成现有三语言文案。2026-10-10 已通过真实 WebSocket 小消息积压、有序正常关闭、按 ID 共享清理失败的专项集成验证；真实 `ssh2.Server` 实机路径还复现并修正了两个 EOF 并发失效窗口：排空中不得再对已移出活动集合的会话调用流控，且客户端 `consumed` 必须允许使用不依赖 live PTY 的原 owner 授权（新增输入仍需活动会话）。同一脚本在修复后证明最终 SSH 字节完整、ACK 后发送 `closed` 并以 WS close 1000 结束。前端 Transport 异常断开无需等待已经不可推进的渲染，组件卸载会解除 pending render，以免阻塞 DELETE；真实浏览器验收仍**未通过**，本环境 Chromium 因 `/proc` 沙箱权限无法启动。剩余高压吞吐、ACL 撤销、超时、实浏览器重试/自然关闭均按[实施方案的审核验收记录](../后端重构下一阶段实施方案.md)保留，不能把专项 PASS 当作全部 Remote 产品验收。
 
+### Remote 关闭原因与同会话释放确认（2026-10-10 收口）
+
+SSH Adapter 的 Machine Shell 区分正常 EOF、通道错误与无正常结束证据的连接关闭；Machine 传输断线独立上报。Remote Model 将技术事件投影为 `normal/disconnected`，Service 在关闭事务外等待资源清理后才通知 `onClosed`，若清理失败则升级为 `cleanup_failed`，显式业务释放标识为 `closed_by_owner`。因此仅 `normal` 允许 PTY 尾帧 `consumed` drain 和 WebSocket `closed`/1000；`disconnected`、`cleanup_failed` 都向客户端返回安全 `remote_unavailable`，主动释放只关闭 WS，不伪造成 SSH 正常退出。真实 SSH2 正常结束与强制断线两种路径均已专项验证；权限撤销/长时间网络故障仍需实测。
+
+`RemoteSessionOwner` 限量保存 128 项、120 秒的已释放会话摘要及**原清理 Promise**（无明文 token），相同 Access 会话的 DELETE 即使晚于 WS 自动回收仍等待并返回原清理成功/失败；不认识的 Session ID 和其他 Access 会话不能据此取得资源信息。Frontend 的关闭 Promise 仍负责完成 WS 及 DELETE，组件仅在回调所属 generation 未过期时展示错误；断开后尚无新连接时的真实清理失败仍可展示。浏览器重连与卸载的 E2E 仍因 Chromium 环境权限未验收，不把静态修正当作实际 UI PASS。
+
 ## backend-next Agent 首个持久 Run 状态切片
 
 `modules/agent` 为独立顶层 owner：`scope` 持有真实的 user/App/Thread 关系，`runs` 持有单个 Root Run 的创建、幂等、取消和持久事件；App/Thread 的新建经 Access 服务端身份授权。Run Service 构造独立的 `CreateRootRunCommand`、`CancelRootRunCommand` 应用命令；Run Model 把 `prompt`、`requestedAt` 逐字段转成存储命令的 `inputText`、`now`，事务内状态规则只接收显式映射的应用事实 `status/version`。SQLite Adapter 在排他事务里重新读取当前存储记录并调用注入的状态决策。Platform SQLite 不知 Agent、App、Thread、Run、幂等或事件。所有出口对象在 `registerAgent` 逐字段构造，Run 冻结 `input_text`、SQL 记录及幂等请求 hash 不进入公开视图。

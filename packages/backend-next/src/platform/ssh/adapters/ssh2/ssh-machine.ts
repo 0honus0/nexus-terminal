@@ -43,7 +43,7 @@ function timeoutError(): Error {
 }
 
 class ConnectedMachine implements MachineConnection {
-	private readonly closeListeners = new Set<() => void>();
+	private readonly closeListeners = new Set<(reason: 'disconnected') => void>();
 	private readonly channels = new Set<MachineShell | SshCommandChannel>();
 	private readonly leases = new Set<SshSftpLease>();
 	private readonly stop = new AbortController();
@@ -76,7 +76,7 @@ class ConnectedMachine implements MachineConnection {
 		this.stop.abort(new Error('SSH transport disconnected'));
 		for (const listener of [...this.closeListeners]) {
 			try {
-				listener();
+				listener('disconnected');
 			} catch {
 				/* callbacks do not change resource owner */
 			}
@@ -85,9 +85,9 @@ class ConnectedMachine implements MachineConnection {
 		void this.close().catch(() => undefined);
 	}
 
-	onClose(listener: () => void): () => void {
+	onClose(listener: (reason: 'disconnected') => void): () => void {
 		if (!this.isOpen) {
-			queueMicrotask(listener);
+			queueMicrotask(() => listener('disconnected'));
 			return () => undefined;
 		}
 		this.closeListeners.add(listener);
@@ -357,7 +357,7 @@ class ConnectedMachine implements MachineConnection {
 		this.stop.abort(new Error('SSH connection closing'));
 		for (const listener of [...this.closeListeners]) {
 			try {
-				listener();
+				listener('disconnected');
 			} catch {
 				/* preserve owner */
 			}
