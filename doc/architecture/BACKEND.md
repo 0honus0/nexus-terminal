@@ -58,6 +58,8 @@ Targets 的 `host-keys` 子功能持有已确认 SSH 服务端公钥指纹及 v2
 
 `platform/http/http-server.ts` 持有通用 WS Upgrade、和 HTTP 一致的 Host/Proto 与固定 Origin 检验、64 KiB 单帧及 1 MiB 待发送上限、监听器/业务 Promise/Socket 的停机释放；不导入 Remote 业务类型。Remote WS 文本事件以 base64 传递真实 PTY 字节，未确认输出窗口和本地待发送队列分别限制为 128 KiB，按客户端 terminal.write 完成后的 `consumed` 确认补充额度，远端 Shell 的 `pause/resume` 跟随该额度。SSH 写入返回背压时通过 `blocked/drain` 拒绝后续输入，不自动重放写入。Remote 服务的 Model/Service/Platform 负责关闭 PTY/Client/Socket。
 
+新后端 HTTP 路由注册同时拒绝完全重复和仅参数名称不同的歧义模板；固定路径优先于参数路径。技术层在路由完成后核实响应已结束，未响应时返回安全 500，已开始写响应时不尝试二次写 JSON/HTTP 状态而关闭该传输。业务返回仍经对应模块编码，非法 JSON/媒体类型/体积限制分别保持 400/415/413，Platform 不得把这些输入失败转换为业务 500。WS 入站有序队列/上限、来源与 upgrade 鉴权、退出后 drain 和资源责任继续留在 Platform，不能把 Remote 关闭状态下沉到通用服务器。
+
 A–D 审核指出的六处基础缺口已做源码修正：Platform 每个 WS 输入队列限定 64 条/256 KiB（包含正在处理的消息），超过上限立即终止；正常 PTY EOF 不再直接 terminate，Remote 允许仍有效的原持有人完成队列与 `consumed` 收尾，EOF 等待最多 10 秒，Platform `finish()` 有界等待正常 close 握手（最多 5 秒）；主动断线/撤销/停机仍强制释放。SessionOwner 保存按 ID 共享的 release Promise，底层 SessionService 保留失败的关闭结果，模块 shutdown 聚合错误。Targets/Agent/Remote 的 register 返回各自的 HTTP/WS 安装能力，Remote 在模块内拥有 owner/Service 的 quiesce 与 close，Bootstrap 不再深层导入业务 HTTP 工厂。前端 Transport 的 close 共用 Promise、组件以 generation/AbortSignal 清理 xterm 与 ResizeObserver，错误码转成现有三语言文案。2026-10-10 已通过真实 WebSocket 小消息积压、有序正常关闭、按 ID 共享清理失败的专项集成验证；真实 `ssh2.Server` 实机路径还复现并修正了两个 EOF 并发失效窗口：排空中不得再对已移出活动集合的会话调用流控，且客户端 `consumed` 必须允许使用不依赖 live PTY 的原 owner 授权（新增输入仍需活动会话）。同一脚本在修复后证明最终 SSH 字节完整、ACK 后发送 `closed` 并以 WS close 1000 结束。前端 Transport 异常断开无需等待已经不可推进的渲染，组件卸载会解除 pending render，以免阻塞 DELETE；真实浏览器验收仍**未通过**，本环境 Chromium 因 `/proc` 沙箱权限无法启动。剩余高压吞吐、ACL 撤销、超时、实浏览器重试/自然关闭均按[验收文档](../testing/E2E.md)保留，不能把专项 PASS 当作全部 Remote 产品验收。
 
 ### Remote 关闭原因与同会话释放确认（2026-10-10 收口）

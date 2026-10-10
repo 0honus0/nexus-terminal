@@ -119,13 +119,23 @@ function sendJson(
 	if (response.writableEnded || response.destroyed) {
 		return;
 	}
+	if (response.headersSent) {
+		// A handler has already started its response. Never attempt a second
+		// status/header block after an asynchronous failure.
+		response.destroy();
+		return;
+	}
+	const payload = JSON.stringify(body);
+	if (payload === undefined) {
+		throw new Error('HTTP JSON response body must be defined');
+	}
 	response.writeHead(status, {
 		'Content-Type': 'application/json; charset=utf-8',
 		'Cache-Control': 'no-store',
 		'X-Content-Type-Options': 'nosniff',
 		...headers,
 	});
-	response.end(JSON.stringify(body));
+	response.end(payload);
 }
 
 function requestHost(request: IncomingMessage, trustedPeer: boolean): string | null {
@@ -201,13 +211,22 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 		webSocketRoutes.set(route.path, route);
 	}
 	const routes = new Map<string, HttpRoute>();
+	const routeShapes = new Set<string>();
 	const parameterized: { route: HttpRoute; parts: string[] }[] = [];
 	for (const route of options.routes) {
 		const key = route.method + ' ' + route.path;
-		if (routes.has(key)) {
-			throw new Error('Duplicate HTTP route');
+		const shape =
+			route.method +
+			' ' +
+			route.path
+				.split('/')
+				.map((part) => (part.startsWith(':') ? ':' : part))
+				.join('/');
+		if (routes.has(key) || routeShapes.has(shape)) {
+			throw new Error('Duplicate or ambiguous HTTP route');
 		}
 		routes.set(key, route);
+		routeShapes.add(shape);
 		if (route.path.split('/').some((part) => part.startsWith(':'))) {
 			parameterized.push({ route, parts: route.path.split('/') });
 		}
@@ -273,7 +292,21 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 				send: (status, body, headers) => sendJson(response, status, body, headers),
 			};
 			await route.handle(context);
+			if (!response.writableEnded && !response.destroyed) {
+				// Incomplete handlers cannot leave an authorized HTTP request hanging.
+				// A handler that already wrote headers cannot receive new JSON.
+				if (response.headersSent) {
+					response.destroy();
+				} else {
+					sendJson(response, 500, { code: 'internal_failure' });
+				}
+			}
 		} catch (error) {
+			if (response.headersSent) {
+				// No second JSON envelope is valid after the first headers/body.
+				response.destroy();
+				return;
+			}
 			const failure = error instanceof HttpInputFailure ? error : new HttpInputFailure(500, 'internal_failure');
 			sendJson(response, failure.status, { code: failure.code });
 		}
