@@ -205,7 +205,13 @@ export function registerTargets({ sqlite, secrets }: TargetsRegistrationOptions)
 	const trustedSshTargets: TrustedSshTargetResolver = {
 		fingerprintStored: (id) => targetsBoundary(async () => String(await resolver.fingerprintStored(id))),
 
-		resolveStored: (id) => targetsBoundary(async () => toTrustedTargetView(await resolver.resolveStored(id))),
+		resolveStored: (request) =>
+			targetsBoundary(async () =>
+				toTrustedTargetView(await resolver.resolveStored({
+					targetId: request.targetId,
+					...(request.expectedFingerprint === undefined ? {} : { expectedFingerprint: request.expectedFingerprint }),
+				})),
+			),
 	};
 
 	return {

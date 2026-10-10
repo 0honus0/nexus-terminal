@@ -189,7 +189,7 @@ export class RemoteSessionModel {
 		let machine: MachineConnection | null = null;
 		let hostKeyRejected = false;
 		try {
-			const target = await this.resolver.resolveStored(request.targetId);
+			const target = await this.resolver.resolveStored({ targetId: request.targetId });
 			// All hops and the final endpoint must have explicit operator-confirmed
 			// public-key fingerprints. No TOFU / accept-all fallback.
 			const trusts = await this.hostKeys.list();

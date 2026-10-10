@@ -2,6 +2,8 @@ import { TargetFailure } from '../../target-failure.js';
 import type { SecretBox } from '../../../../platform/security/secret-box.js';
 import type { SshTargetModel } from '../model/ssh-target-model.js';
 import type { ResolvedSshTarget, ResolvedAuthentication, SshTargetSnapshot } from '../model/ssh-target-types.js';
+import type { ResolveSshTargetRequest } from '../model/ssh-target-types.js';
+import { validateTargetId } from '../../target-validation.js';
 
 function decrypt(source: SshTargetSnapshot, secrets: SecretBox): ResolvedSshTarget {
 	const credential = source.credential;
@@ -46,23 +48,23 @@ export class SshTargetService {
 		private readonly secrets: SecretBox | null,
 	) {}
 
-	private validateId(value: number): void {
-		if (!Number.isSafeInteger(value) || value <= 0) {
-			throw new TargetFailure('invalid_input');
-		}
-	}
-
 	fingerprintStored(value: number): Promise<string> {
-		this.validateId(value);
+		validateTargetId(value);
 		return this.model.fingerprintStored(value);
 	}
 
 	/** Trusted backend call only. No HTTP route or serialized response. */
-	async resolveStored(value: number): Promise<ResolvedSshTarget> {
-		this.validateId(value);
+	async resolveStored(request: ResolveSshTargetRequest): Promise<ResolvedSshTarget> {
+		validateTargetId(request.targetId);
+		if (request.expectedFingerprint !== undefined && !/^[a-f0-9]{64}$/u.test(request.expectedFingerprint)) {
+			throw new TargetFailure('invalid_input');
+		}
 		if (!this.secrets) {
 			throw new TargetFailure('unresolvable');
 		}
-		return decrypt(await this.model.resolveStored(value), this.secrets);
+		return decrypt(await this.model.resolveStored({
+			targetId: request.targetId,
+			...(request.expectedFingerprint === undefined ? {} : { expectedFingerprint: request.expectedFingerprint }),
+		}), this.secrets);
 	}
 }

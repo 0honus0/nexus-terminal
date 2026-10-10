@@ -144,5 +144,11 @@ export interface TrustedResolvedSshTarget {
 
 export interface TrustedSshTargetResolver {
 	fingerprintStored(id: number): Promise<string>;
-	resolveStored(id: number): Promise<TrustedResolvedSshTarget>;
+	/** Returns a single snapshot only when the requested fingerprint matches it. */
+	resolveStored(request: TrustedSshResolveRequest): Promise<TrustedResolvedSshTarget>;
+}
+
+export interface TrustedSshResolveRequest {
+	targetId: number;
+	expectedFingerprint?: string;
 }

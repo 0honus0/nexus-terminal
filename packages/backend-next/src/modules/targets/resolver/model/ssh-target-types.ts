@@ -43,3 +43,9 @@ export interface SshTargetSnapshot {
 	fingerprint: string;
 	jumps: SshTargetSnapshot[];
 }
+
+/** One storage snapshot; the expected fingerprint is checked before decrypt. */
+export interface ResolveSshTargetRequest {
+	targetId: number;
+	expectedFingerprint?: string;
+}

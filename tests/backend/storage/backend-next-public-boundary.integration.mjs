@@ -277,7 +277,7 @@ try {
 		...(await app.targets.sshKeys.list()),
 	])
 		withoutInternal(result);
-	const resolved = await app.trustedSshTargets.resolveStored(host.id);
+	const resolved = await app.trustedSshTargets.resolveStored({ targetId: host.id });
 	assert.equal(resolved.authentication.privateKey, 'private');
 	assert.equal(Object.isFrozen(resolved), true);
 	assert.ok(!('encryptedPrivateKey' in resolved.authentication));

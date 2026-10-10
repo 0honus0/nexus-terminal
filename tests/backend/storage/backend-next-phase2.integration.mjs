@@ -62,7 +62,7 @@ try {
 		(await app.targets.credentials.set(host.id, host.version, { kind: 'ssh_key', sshKeyId: sshKey.id })).status,
 		'updated',
 	);
-	const initial = await app.trustedSshTargets.resolveStored(host.id);
+	const initial = await app.trustedSshTargets.resolveStored({ targetId: host.id });
 	assert.equal(initial.authentication.privateKey, 'SECRET_PRIVATE_KEY');
 	assert.equal(initial.proxy.password, 'SECRET_PROXY');
 	assert.equal(initial.jumps.length, 0);
@@ -97,11 +97,11 @@ try {
 	assert.equal(await app.trustedSshTargets.fingerprintStored(host.id), afterPassword);
 	const jump = await app.targets.create(metadata('jump', 'jump', null, [host.id]));
 	await app.targets.credentials.set(jump.id, jump.version, { kind: 'password', password: 'SECRET_CONNECTION' });
-	const resolved = await app.trustedSshTargets.resolveStored(jump.id);
+	const resolved = await app.trustedSshTargets.resolveStored({ targetId: jump.id });
 	assert.equal(resolved.jumps.length, 1);
 	assert.equal(resolved.authentication.password, 'SECRET_CONNECTION');
 	const copy = await app.targets.clone(jump.id, 'jump-copy');
-	assert.equal((await app.trustedSshTargets.resolveStored(copy.id)).authentication.password, 'SECRET_CONNECTION');
+	assert.equal((await app.trustedSshTargets.resolveStored({ targetId: copy.id })).authentication.password, 'SECRET_CONNECTION');
 	assert.equal((await app.targets.tags.rename(tag.id, tag.version, 'ops-next')).status, 'updated');
 	await assert.rejects(
 		() => app.targets.tags.delete(tag.id),

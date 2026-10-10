@@ -39,6 +39,8 @@ Targets 的 Proxy name/host 规范化及输入规则由 Proxy Model 纯规则统
 
 Remote 的 PTY HTTP 与 WebSocket Stream 分设协议 owner：`interfaces/http/remote-http.ts` 保留 Session HTTP 鉴权、请求/结果和公开错误映射，`interfaces/http/pty-stream.ts` 处理 WS 安装、ACK 信用、输入背压、输出队列、EOF/关闭终态和订阅清理。Stream 调用 Remote 内部窄会话能力，不能把 PTY 或未来 Files 状态放进 Platform。
 
+Targets 可信 SSH 解析接收具名 `{targetId,expectedFingerprint?}` 后端请求，复用已有的 SQLite 单事务目标/凭据/Proxy/Jump 快照，Model 从该快照计算 SHA-256 配置指纹并在解密之前核对预期，冲突返回安全 `conflict`。独立 fingerprint 查询仍供现有消费者做展示/变化检测，不能以先读指纹后再次解析替代同快照核验。指纹仅证明解析返回值与本次配置快照一致；SSH 建连、配置后续变化和 Host Key 信任另有边界。
+
 ## 目录与一级模块
 
 ```text

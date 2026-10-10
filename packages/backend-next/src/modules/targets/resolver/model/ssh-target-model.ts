@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import type { SshTargetSnapshot } from './ssh-target-types.js';
+import type { SshTargetSnapshot, ResolveSshTargetRequest } from './ssh-target-types.js';
+import { TargetFailure } from '../../target-failure.js';
 import type { EncodedSshTarget, SshTargetStorage } from '../storage/ssh-target-storage.js';
 
 function fingerprint(encoded: EncodedSshTarget): string {
@@ -47,7 +48,11 @@ export class SshTargetModel {
 		return fingerprint(await this.storage.get(id));
 	}
 
-	async resolveStored(id: number): Promise<SshTargetSnapshot> {
-		return snapshot(await this.storage.get(id));
+	async resolveStored(request: ResolveSshTargetRequest): Promise<SshTargetSnapshot> {
+		const current = snapshot(await this.storage.get(request.targetId));
+		if (request.expectedFingerprint !== undefined && current.fingerprint !== request.expectedFingerprint) {
+			throw new TargetFailure('conflict');
+		}
+		return current;
 	}
 }
