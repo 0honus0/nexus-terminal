@@ -32,22 +32,45 @@ export interface RemoteTerminalListener {
 }
 
 async function request(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<unknown> {
-	const response = await fetch(ROOT + path, {
-		method,
-		credentials: 'same-origin',
-		cache: 'no-store',
-		signal,
-		...(body === undefined
-			? {}
-			: {
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify(body),
-				}),
-	});
-	const content: unknown = await response.json();
+	let response: Response;
+	try {
+		response = await fetch(ROOT + path, {
+			method,
+			credentials: 'same-origin',
+			cache: 'no-store',
+			signal,
+			...(body === undefined
+				? {}
+				: {
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify(body),
+					}),
+		});
+	} catch (error) {
+		if (signal?.aborted) {
+			throw error;
+		}
+		throw new Error('remote_unavailable');
+	}
+	let content: unknown;
+	try {
+		content = (await response.json()) as unknown;
+	} catch {
+		throw new Error('remote_unavailable');
+	}
 	if (!response.ok) {
-		if (content && typeof content === 'object' && 'code' in content && typeof content.code === 'string') {
-			throw new Error(content.code);
+		if (content && typeof content === 'object' && 'code' in content) {
+			const code = content.code;
+			if (
+				code === 'unauthenticated' ||
+				code === 'forbidden' ||
+				code === 'not_found' ||
+				code === 'invalid_input' ||
+				code === 'host_key_untrusted' ||
+				code === 'remote_unavailable'
+			) {
+				throw new Error(code);
+			}
 		}
 		throw new Error('remote_unavailable');
 	}
