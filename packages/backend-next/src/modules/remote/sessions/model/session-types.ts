@@ -1,4 +1,5 @@
 import type { RemoteHttpErrorCode } from '@nexus-terminal/shared/remote/sessions/values';
+import type { RemoteSessionCloseReason } from '../../public.js';
 
 export type RemotePermissionCode = Extract<
 	RemoteHttpErrorCode,
@@ -22,6 +23,21 @@ export interface OpenSessionRequest {
 	term?: string;
 	timeoutMs: number;
 	signal?: AbortSignal;
+}
+
+/** Same-module session use cases consumed by authenticated PTY owners. */
+export interface RemoteSessionOperations {
+	open(request: OpenSessionRequest): Promise<RemoteSessionSnapshot>;
+	get(id: string): RemoteSessionSnapshot | null;
+	closeSession(id: string): Promise<void>;
+	write(id: string, bytes: Uint8Array): boolean;
+	resize(id: string, columns: number, rows: number): void;
+	onData(id: string, listener: (bytes: Uint8Array) => void): () => void;
+	onStderr(id: string, listener: (bytes: Uint8Array) => void): () => void;
+	onDrain(id: string, listener: () => void): () => void;
+	onClosed(id: string, listener: (reason: RemoteSessionCloseReason) => void): () => void;
+	pauseOutput(id: string): void;
+	resumeOutput(id: string): void;
 }
 
 export interface RemoteSessionResource {

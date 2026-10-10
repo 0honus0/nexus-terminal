@@ -18,6 +18,7 @@ import { isRemoteSessionId } from '@nexus-terminal/shared/remote/sessions/model'
 import { RemoteSessionOwner } from '../../sessions/service/session-owner.js';
 import { RemotePermissionError } from '../../sessions/model/session-permission-failure.js';
 import { RemoteOperationError } from '../../public-errors.js';
+import { RemoteHostKeyUntrustedError } from '../../sessions/model/session-errors.js';
 import {
 	type RemoteCloseSessionResponse,
 	type RemoteFailureResponse,
@@ -70,6 +71,10 @@ function handleError(ctx: HttpRouteContext, error: unknown): void {
 	if (error instanceof RemoteOperationError) {
 		const status = remoteErrorStatus(error.code);
 		ctx.send(status, { code: error.code } satisfies RemoteFailureResponse);
+		return;
+	}
+	if (error instanceof RemoteHostKeyUntrustedError) {
+		ctx.send(422, { code: 'host_key_untrusted' } satisfies RemoteFailureResponse);
 		return;
 	}
 	// No machine/SSH error, private credential or destination leaks to HTTP.

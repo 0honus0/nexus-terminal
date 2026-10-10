@@ -87,7 +87,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 
 		closeSession: (id) => remoteBoundary(() => service.closeSession(id)),
 	};
-	const owner = new RemoteSessionOwner(options.access, publicApi);
+	const owner = new RemoteSessionOwner(options.access, service);
 	return {
 		publicApi,
 

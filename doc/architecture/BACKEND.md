@@ -33,6 +33,8 @@ Platform 当前提供 SQLite Runtime/Worker/迁移执行、HTTP/WS、SecretBox/�
 
 SQLite Worker 请求与响应均由 Platform 在接收 `unknown` 消息后验证完整操作外壳及分支，成功写结果必须是安全整数，错误结构不得含未知字段。损坏或不可关联的响应将整实例置为不可用并拒绝全部待完成调用；事务失败仍由 Runtime 区分 `commit_unknown`、`rollback_failed` 等结果。
 
+Access 会话签发输入由 sessions Model 独立应用类型持有，身份公开映射直接接收 Access 内部身份类型。RemoteSessionOwner 使用同模块 SessionService 的窄内部应用契约，不再通过对外安全包装调用同模块会话；完整 open/第二次身份复核及资源登记纳入停机 drain，晚到或撤销的会话须释放，公开错误仍只在 HTTP/模块出口映射。
+
 ## 目录与一级模块
 
 ```text

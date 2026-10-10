@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { SessionStorage } from '../storage/session-storage.js';
-import type { SessionIdentity } from './session-types.js';
+import type { IssueSessionRequest, SessionIdentity } from './session-types.js';
 import type { LoginFailureLimits } from '../../authentication/model/login-failure-types.js';
 
 export class SessionModel {
@@ -14,15 +14,7 @@ export class SessionModel {
 		return randomBytes(32).toString('base64url');
 	}
 
-	async issue(input: {
-		accountId: number;
-		passwordHash: string;
-		previousToken: string | null;
-		rememberMe: boolean;
-		expiresAt: number;
-		source: string;
-		clearLoginAttempts: boolean;
-	}): Promise<string | null> {
+	async issue(input: IssueSessionRequest): Promise<string | null> {
 		const token = SessionModel.newToken();
 		const success = await this.storage.issue({
 			accountId: input.accountId,

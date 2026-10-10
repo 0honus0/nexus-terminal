@@ -3,7 +3,7 @@ import { RecentResults } from '../../../../platform/lifecycle/recent-results.js'
 import { CLOSED_SESSION_TTL_MS, MAX_RECENTLY_RELEASED } from '../session-limits.js';
 import { createHash } from 'node:crypto';
 import type { AccessPublicApi } from '../../../access/public.js';
-import type { RemoteSessions, OpenShellRequest, SessionView } from '../../public.js';
+import type { OpenSessionRequest, RemoteSessionOperations, RemoteSessionSnapshot } from '../model/session-types.js';
 
 import { RemotePermissionError } from '../model/session-permission-failure.js';
 
@@ -43,7 +43,7 @@ export class RemoteSessionOwner {
 
 	constructor(
 		private readonly access: AccessPublicApi,
-		private readonly remote: RemoteSessions,
+		private readonly remote: RemoteSessionOperations,
 	) {}
 
 	private async identity(token: string | null): Promise<number> {
@@ -66,7 +66,11 @@ export class RemoteSessionOwner {
 		return task;
 	}
 
-	async open(token: string | null, request: OpenShellRequest): Promise<SessionView> {
+	open(token: string | null, request: OpenSessionRequest): Promise<RemoteSessionSnapshot> {
+		return this.track(this.openAdmitted(token, request));
+	}
+
+	private async openAdmitted(token: string | null, request: OpenSessionRequest): Promise<RemoteSessionSnapshot> {
 		if (!this.accepting) {
 			throw new RemotePermissionError('remote_unavailable');
 		}
@@ -82,9 +86,9 @@ export class RemoteSessionOwner {
 			term: request.term,
 			signal: request.signal,
 		});
-		const view = await this.track(task);
+		const view = await task;
 		try {
-			if (!this.accepting || !token || (await this.identity(token)) !== userId) {
+			if (!token || (await this.identity(token)) !== userId || !this.accepting || request.signal?.aborted) {
 				throw new RemotePermissionError('unauthenticated');
 			}
 			const record: Owner = {
@@ -136,13 +140,14 @@ export class RemoteSessionOwner {
 			return false;
 		}
 		try {
-			return (await this.identity(token)) === owner.userId && this.owners.get(id) === owner;
+			return (await this.identity(token)) === owner.userId && this.accepting &&
+				this.owners.get(id) === owner && (!active || this.remote.get(id) !== null);
 		} catch {
 			return false;
 		}
 	}
 
-	async get(token: string | null, id: string): Promise<SessionView | null> {
+	async get(token: string | null, id: string): Promise<RemoteSessionSnapshot | null> {
 		if (!(await this.allowed(token, id))) {
 			return null;
 		}
@@ -173,6 +178,10 @@ export class RemoteSessionOwner {
 				return false;
 			}
 		} catch {
+			return false;
+		}
+		if (owner ? this.owners.get(id) !== owner : this.releaseOwners.get(id) !== completed &&
+			this.recentlyReleased.get(id) !== completed) {
 			return false;
 		}
 		// A valid same-session DELETE must see the original cleanup outcome even

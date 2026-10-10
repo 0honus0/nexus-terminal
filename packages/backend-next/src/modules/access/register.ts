@@ -10,6 +10,7 @@ import { accessBoundary } from './access-errors.js';
 import { createAccessRoutes } from './interfaces/http/access-http.js';
 import type { AccessPublicApi, AccessIdentity } from './public.js';
 import type { LoginFailurePolicyInput } from './authentication/model/login-failure-types.js';
+import type { AuthenticatedIdentity } from './authentication/model/access-types.js';
 
 /** Installation contract; Bootstrap does not depend on private Access types. */
 export interface AccessRegistrationOptions {
@@ -34,7 +35,7 @@ function toLoginFailurePolicy(
 	};
 }
 
-function toAccessIdentity(identity: { userId: number; username: string; twoFactorEnabled: boolean }): AccessIdentity {
+function toAccessIdentity(identity: AuthenticatedIdentity): AccessIdentity {
 	return {
 		userId: identity.userId,
 		username: identity.username,
