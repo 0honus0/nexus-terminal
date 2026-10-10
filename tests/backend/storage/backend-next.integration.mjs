@@ -24,7 +24,10 @@ const make = (name, { route = 'direct', proxyId = null, tagIds = [], jumpIds = [
 let app;
 try {
 	app = await createApp(join(root, 'one.db'));
-	await assert.rejects(() => createApp(join(root, 'one.db')), /already open/);
+	await assert.rejects(
+		() => createApp(join(root, 'one.db')),
+		(error) => error.kind === 'unavailable',
+	);
 	const second = await createApp(join(root, 'two.db'));
 	assert.equal((await second.targets.list()).length, 0);
 	await second.close();
@@ -50,8 +53,14 @@ try {
 	assert.ok(firstImport.proxyId > 0);
 	assert.equal(firstImport.tagIds.length, 1);
 	const jump = await app.targets.create(make('jump', { route: 'jump', jumpIds: [a.id] }));
-	await assert.rejects(() => app.targets.delete(a.id), /referenced/);
-	await assert.rejects(() => app.targets.update(a.id, 2, { type: 'RDP' }), /referenced/);
+	await assert.rejects(
+		() => app.targets.delete(a.id),
+		(error) => error.code === 'reference_in_use',
+	);
+	await assert.rejects(
+		() => app.targets.update(a.id, 2, { type: 'RDP' }),
+		(error) => error.code === 'reference_in_use',
+	);
 	await assert.rejects(() =>
 		app.targets.importOne({
 			connection: make('invalid', { route: 'proxy', tagIds: [999999] }),

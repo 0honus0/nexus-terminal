@@ -7,6 +7,7 @@ import { createApp } from '../../../packages/backend-next/dist/bootstrap/create-
 import { SqliteRuntime } from '../../../packages/backend-next/dist/platform/storage/sqlite/sqlite-runtime.js';
 import { initializeSchema } from '../../../packages/backend-next/dist/platform/storage/sqlite/schema.js';
 import { targetMigrations } from '../../../packages/backend-next/dist/modules/targets/migrations.js';
+import { applicationMigrations } from '../../../packages/backend-next/dist/bootstrap/schema.js';
 const root = await mkdtemp(join(tmpdir(), 'nexus-phase2-'));
 const key = randomBytes(32);
 
@@ -33,7 +34,7 @@ try {
 	const dbPath = join(root, 'initial-v1.db');
 	let db = SqliteRuntime.open(dbPath);
 	assert.equal(targetMigrations.length, 1, 'unreleased schema must be a single v1 initial install');
-	await initializeSchema(db, targetMigrations);
+	await initializeSchema(db, applicationMigrations.slice(0, 1));
 	assert.deepEqual(
 		(await db.all('SELECT version FROM schema_version')).map((r) => r.version),
 		[1],
@@ -75,7 +76,10 @@ try {
 	const retagged = await app.targets.setTags(host.id, edited.value.version, [tag.id, extraTag.id]);
 	assert.equal(retagged.status, 'updated');
 	assert.equal(await app.trustedSshTargets.fingerprintStored(host.id), f1);
-	assert.throws(() => app.targets.create({ ...metadata('invalid-ssh'), rdpRemoteApp: 'notepad' }), /RemoteApp/);
+	await assert.rejects(
+		() => app.targets.create({ ...metadata('invalid-ssh'), rdpRemoteApp: 'notepad' }),
+		(error) => error.code === 'invalid_input',
+	);
 	await assert.rejects(() => app.targets.sshKeys.delete(sshKey.id));
 	await assert.rejects(() => app.targets.proxies.delete(proxy.id));
 	const changedKey = await app.targets.sshKeys.update(sshKey.id, sshKey.version, {
@@ -99,25 +103,28 @@ try {
 	const copy = await app.targets.clone(jump.id, 'jump-copy');
 	assert.equal((await app.trustedSshTargets.resolveStored(copy.id)).authentication.password, 'SECRET_CONNECTION');
 	assert.equal((await app.targets.tags.rename(tag.id, tag.version, 'ops-next')).status, 'updated');
-	await assert.rejects(() => app.targets.tags.delete(tag.id), /in use/);
+	await assert.rejects(
+		() => app.targets.tags.delete(tag.id),
+		(error) => error.code === 'reference_in_use',
+	);
 	await app.close();
 	app = undefined;
 	db = SqliteRuntime.open(dbPath);
 	const versions = (await db.all('SELECT version FROM schema_version ORDER BY version')).map((r) => r.version);
-	assert.deepEqual(versions, [1]);
+	assert.deepEqual(versions, [1, 2, 3]);
 	const creds = await db.all('SELECT encrypted_password FROM proxy_credentials');
 	assert.ok(creds[0].encrypted_password.startsWith('v1.'));
 	assert.equal(creds[0].encrypted_password.includes('SECRET_PROXY'), false);
 	const keyRows = await db.all('SELECT encrypted_private_key FROM ssh_keys');
 	assert.equal(keyRows[0].encrypted_private_key.includes('SECRET_PRIVATE_KEY'), false);
 	await db.close();
-	// Test-only synthetic v2: prove rollback without shipping an actual v2.
+	// A failing synthetic v2 must roll back while preserving the published v1.
 	const failPath = join(root, 'failure.db');
 	db = SqliteRuntime.open(failPath);
 	await assert.rejects(
 		() =>
 			initializeSchema(db, [
-				targetMigrations[0],
+				applicationMigrations[0],
 				{
 					version: 2,
 					signature: 'test-only-failing-migration',
@@ -141,7 +148,7 @@ try {
 	db = SqliteRuntime.open(failPath);
 	assert.deepEqual(
 		(await db.all('SELECT version FROM schema_version ORDER BY version')).map((r) => r.version),
-		[1],
+		[1, 2, 3],
 	);
 	await db.close();
 	// Reject the first batch's incompatible pre-release v1 instead of silently
