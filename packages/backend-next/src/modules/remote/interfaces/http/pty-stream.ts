@@ -44,16 +44,21 @@ function connectStream(
 	let flushRequested = false;
 	const subscriptions: Array<() => void> = [];
 	let rechecking = false;
+
+	function isEnded(): boolean {
+		return state === 'ended';
+	}
+
 	const identityTimer = setInterval(() => {
-		if (state === 'ended' || rechecking) {
+		if (isEnded() || rechecking) {
 			return;
 		}
 		rechecking = true;
-		void ((state === 'eof' || state === 'finishing') ? owner.allowedOutput(token, id) : owner.allowed(token, id))
+		void (state === 'eof' || state === 'finishing' ? owner.allowedOutput(token, id) : owner.allowed(token, id))
 			.then((allowed) => {
-				if (state === 'ended') {
-						return;
-					}
+				if (isEnded()) {
+					return;
+				}
 				if (!allowed) {
 					terminate('unauthenticated');
 				}
@@ -83,7 +88,7 @@ function connectStream(
 	});
 
 	function terminate(code: 'unauthenticated' | 'transport_overflow' | 'remote_unavailable'): void {
-		if (state === 'ended') {
+		if (isEnded()) {
 			return;
 		}
 		state = 'ended';
@@ -99,9 +104,9 @@ function connectStream(
 		void owner
 			.allowedOutput(token, id)
 			.then((allowed) => {
-				if (state === 'ended') {
-						return;
-					}
+				if (isEnded()) {
+					return;
+				}
 				if (!allowed) {
 					terminate('unauthenticated');
 					return;
@@ -116,7 +121,7 @@ function connectStream(
 	}
 
 	async function flush(): Promise<void> {
-		if (state === 'ended') {
+		if (isEnded()) {
 			return;
 		}
 		if (draining) {
@@ -125,11 +130,11 @@ function connectStream(
 		}
 		draining = true;
 		try {
-			while (state !== 'ended' && queued.length && outstanding + queued[0].bytes.length <= REMOTE_OUTPUT_WINDOW_BYTES) {
+			while (!isEnded() && queued.length && outstanding + queued[0].bytes.length <= REMOTE_OUTPUT_WINDOW_BYTES) {
 				const allowed = await owner.allowedOutput(token, id);
-				if (state === 'ended') {
-						return;
-					}
+				if (isEnded()) {
+					return;
+				}
 				if (!allowed) {
 					terminate('unauthenticated');
 					return;
@@ -165,7 +170,7 @@ function connectStream(
 			terminate('remote_unavailable');
 		} finally {
 			draining = false;
-			if (flushRequested && state !== 'ended') {
+			if (flushRequested && !isEnded()) {
 				flushRequested = false;
 				void flush();
 			}
@@ -174,7 +179,7 @@ function connectStream(
 	}
 
 	function enqueue(stream: 'stdout' | 'stderr', bytes: Uint8Array): void {
-		if (state === 'ended') {
+		if (isEnded()) {
 			return;
 		}
 		for (let offset = 0; offset < bytes.length; offset += 8192) {
@@ -197,7 +202,7 @@ function connectStream(
 	subscriptions.push(remote.onStderr(id, (bytes) => enqueue('stderr', bytes)));
 	subscriptions.push(
 		remote.onDrain(id, () => {
-			if (state === 'ended') {
+			if (isEnded()) {
 				return;
 			}
 			inputBlocked = false;
@@ -206,7 +211,7 @@ function connectStream(
 	);
 	subscriptions.push(
 		remote.onClosed(id, (reason) => {
-			if (state === 'ended') {
+			if (isEnded()) {
 				return;
 			}
 			if (reason !== 'normal') {
@@ -227,7 +232,7 @@ function connectStream(
 		}),
 	);
 	channel.onMessage(async (message) => {
-		if (state === 'ended') {
+		if (isEnded()) {
 			return;
 		}
 		// A terminal-rendered ACK may arrive after the session left the live
@@ -237,9 +242,9 @@ function connectStream(
 			terminate('unauthenticated');
 			return;
 		}
-		if (state === 'ended') {
-						return;
-					}
+		if (isEnded()) {
+			return;
+		}
 		let value;
 		try {
 			if (Buffer.byteLength(message) > 64 * 1024) {
@@ -258,9 +263,9 @@ function connectStream(
 				terminate('unauthenticated');
 				return;
 			}
-			if (state === 'ended') {
-						return;
-					}
+			if (isEnded()) {
+				return;
+			}
 			if (state !== 'active' && value.type !== 'consumed') {
 				throw new RemoteStreamInputError();
 			}
@@ -305,7 +310,10 @@ function connectStream(
 	remote.resumeOutput(id);
 }
 
-export function createRemoteWebSocketRoute(owner: RemoteSessionOwner, remote: RemoteSessionOperations): HttpWebSocketRoute {
+export function createRemoteWebSocketRoute(
+	owner: RemoteSessionOwner,
+	remote: RemoteSessionOperations,
+): HttpWebSocketRoute {
 	function parse(url: URL): string | null {
 		if (url.searchParams.size !== 1) {
 			return null;
