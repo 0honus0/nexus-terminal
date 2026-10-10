@@ -197,6 +197,9 @@ function connectStream(
 	subscriptions.push(remote.onStderr(id, (bytes) => enqueue('stderr', bytes)));
 	subscriptions.push(
 		remote.onDrain(id, () => {
+			if (state === 'ended') {
+				return;
+			}
 			inputBlocked = false;
 			wireEvent(channel, { type: 'drain' });
 		}),
@@ -244,6 +247,7 @@ function connectStream(
 			}
 			value = readRemoteClientEvent(JSON.parse(message) as unknown);
 		} catch {
+			state = 'ended';
 			wireEvent(channel, { type: 'error', code: 'invalid_input' });
 			channel.close();
 			return;
