@@ -68,6 +68,12 @@ The current Docker smoke validates the unified Frontend/Backend/Guacd production
 
 以下脚本位于根 `tests/backend/`，只对独立的 `backend-next` 临时数据库和环回服务运行，不依赖正式生产 Backend 或部署入口。先执行：
 
+**交付约定：本节脚本仅为本轮临时验收材料，最终正式提交不包含这些专项验收用例。** 当前工作分支中已经有相应测试提交，不能将其误认为最终应保留的产品测试；在最终提交/合并前应单独执行清理：
+
+- 本轮新增的 `tests/backend/remote/backend-next-transport.integration.mjs`、`backend-next-ssh.integration.mjs`、`backend-next-frontend.integration.mjs` 从最终变更中排除。
+- `tests/backend/storage/backend-next.integration.mjs`、`backend-next-phase2.integration.mjs` 属于**原有仓库测试文件**，不得整文件删除；只清理本轮为了专项验收临时修改的断言。原有 `backend-next-public-boundary.integration.mjs` 也保留原文件，不作为本轮新增交付。
+- **保留本文和实施方案中的验收结论、失败复现、修复依据与未通过项**。下面的命令是清理前的历史复现入口；清理后文件可能不再存在，不能据此宣称最终提交仍包含这组测试。已在 Git 历史中的测试提交需通过后续独立清理提交或最终变更整理处理，不能仅在文档标注后就声称文件已移除。
+
 ```bash
 pnpm --filter @nexus-terminal/backend-next build
 node tests/backend/storage/backend-next.integration.mjs
