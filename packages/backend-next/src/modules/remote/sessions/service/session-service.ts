@@ -1,3 +1,4 @@
+import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.js';
 import { RecentResults } from '../../../../platform/lifecycle/recent-results.js';
 import { CLOSED_SESSION_TTL_MS, MAX_RECENTLY_RELEASED } from '../session-limits.js';
@@ -142,8 +143,13 @@ export class RemoteSessionService {
 				try {
 					await opened.close();
 				} catch (cleanup) {
-					throw new AggregateError([error, cleanup], 'Remote registration and cleanup failed');
+					const failure = new RemoteResourceCleanupFailure([error, cleanup]);
+					this.cleanupFailures.record(failure);
+					throw failure;
 				}
+			}
+			if (error instanceof RemoteResourceCleanupFailure) {
+				this.cleanupFailures.record(error);
 			}
 			throw error;
 		}

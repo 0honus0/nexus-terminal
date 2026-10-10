@@ -1,3 +1,4 @@
+import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import type { MachineFileInfo, MachineSftpLease } from '../../../../platform/ssh/ssh-port.js';
 import type { TrustedSshTargetResolver } from '../../../targets/public.js';
 import type { RemoteMachineModel } from '../../model/machine-model.js';
@@ -45,7 +46,7 @@ export class RemoteFileModel {
 			} catch (closeError) {
 				failures.push(closeError);
 			}
-			throw failures.length === 1 ? error : new AggregateError(failures, 'Remote file opening failed');
+			throw failures.length === 1 ? error : new RemoteResourceCleanupFailure(failures);
 		}
 	}
 
@@ -83,10 +84,11 @@ export class RemoteFileModel {
 		const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
 		return items
 			.map((row) => ({ name: row.name, info: this.info(row.info) }))
-			.sort((a, b) =>
-				Number(b.info.kind === 'directory') - Number(a.info.kind === 'directory') ||
-				collator.compare(a.name, b.name) ||
-				(a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
+			.sort(
+				(a, b) =>
+					Number(b.info.kind === 'directory') - Number(a.info.kind === 'directory') ||
+					collator.compare(a.name, b.name) ||
+					(a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
 			);
 	}
 
@@ -100,6 +102,7 @@ export class RemoteFileModel {
 
 	async readText(resource: FileResource, request: FileTextRequest): Promise<TextRead> {
 		const deadline = Date.now() + request.timeoutMs;
+
 		const remaining = (): number => {
 			request.signal.throwIfAborted();
 			const ms = deadline - Date.now();
@@ -108,6 +111,7 @@ export class RemoteFileModel {
 			}
 			return ms;
 		};
+
 		const info = await this.stat(resource, {
 			path: request.path,
 			followLinks: false,

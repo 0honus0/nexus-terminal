@@ -1,3 +1,4 @@
+import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.js';
 import { RecentResults } from '../../../../platform/lifecycle/recent-results.js';
@@ -8,7 +9,13 @@ import {
 	REMOTE_FILE_MAX_RESOURCES,
 	REMOTE_FILE_OPERATION_MS,
 } from '@nexus-terminal/shared/remote/files/values';
-import { RemoteFileFailure, type FileEntry, type FileInfo, type FileResource, type TextRead } from '../model/file-types.js';
+import {
+	RemoteFileFailure,
+	type FileEntry,
+	type FileInfo,
+	type FileResource,
+	type TextRead,
+} from '../model/file-types.js';
 import type { RemoteFileModel } from '../model/file-model.js';
 
 interface OwnedResource {
@@ -52,7 +59,10 @@ export class RemoteFileService {
 	private closePromise: Promise<void> | null = null;
 	private readonly expiryTimer: ReturnType<typeof setInterval>;
 
-	constructor(private readonly access: AccessPublicApi, private readonly model: RemoteFileModel) {
+	constructor(
+		private readonly access: AccessPublicApi,
+		private readonly model: RemoteFileModel,
+	) {
 		this.expiryTimer = setInterval(() => {
 			for (const record of this.owners.values()) {
 				if (record.expiresAt <= Date.now()) {
@@ -90,7 +100,9 @@ export class RemoteFileService {
 			void task.catch(() => undefined);
 			throw new RemoteFileFailure('remote_unavailable');
 		}
+
 		let listener: () => void = () => undefined;
+
 		const cancellation = new Promise<never>((_, reject) => {
 			listener = () => reject(new RemoteFileFailure('remote_unavailable'));
 			signal.addEventListener('abort', listener, { once: true });
@@ -102,7 +114,11 @@ export class RemoteFileService {
 		}
 	}
 
-	open(token: string | null, targetId: number, signal?: AbortSignal): Promise<{ id: string; targetId: number; fingerprint: string }> {
+	open(
+		token: string | null,
+		targetId: number,
+		signal?: AbortSignal,
+	): Promise<{ id: string; targetId: number; fingerprint: string }> {
 		return this.track(this.openAdmitted(token, targetId, signal));
 	}
 
@@ -118,7 +134,9 @@ export class RemoteFileService {
 			throw new RemoteFileFailure('invalid_input');
 		}
 		const controller = new AbortController();
+
 		const abort = () => controller.abort();
+
 		signal?.addEventListener('abort', abort, { once: true });
 		if (signal?.aborted) {
 			abort();
@@ -149,21 +167,31 @@ export class RemoteFileService {
 				// Keep the quota slot reserved and make shutdown wait for late
 				// non-cancellable success to be closed by its actual resource owner.
 				lateOpeningCleanup = this.track(
-					opening.then(
-						async (late) => {
-							try {
-								await this.model.close(late);
-							} catch (cleanup) {
-								this.cleanupFailures.record(cleanup);
-							}
-						},
-						() => undefined,
-					).finally(() => this.opening.delete(controller)),
+					opening
+						.then(
+							async (late) => {
+								try {
+									await this.model.close(late);
+								} catch (cleanup) {
+									this.cleanupFailures.record(cleanup);
+								}
+							},
+							(error: unknown) => {
+								if (error instanceof RemoteResourceCleanupFailure) {
+									this.cleanupFailures.record(error);
+								}
+							},
+						)
+						.finally(() => this.opening.delete(controller)),
 				);
 				throw error;
 			}
-			if (!token || (await this.untilAbort(this.identity(token), controller.signal)) !== userId ||
-				!this.accepting || controller.signal.aborted) {
+			if (
+				!token ||
+				(await this.untilAbort(this.identity(token), controller.signal)) !== userId ||
+				!this.accepting ||
+				controller.signal.aborted
+			) {
 				throw new RemoteFileFailure('unauthenticated');
 			}
 			const id = randomUUID();
@@ -186,7 +214,9 @@ export class RemoteFileService {
 				try {
 					await this.model.close(resource);
 				} catch (cleanup) {
-					throw new AggregateError([error, cleanup], 'Remote file admission cleanup failed');
+					const failure = new RemoteResourceCleanupFailure([error, cleanup]);
+					this.cleanupFailures.record(failure);
+					throw failure;
 				}
 			}
 			throw error;
@@ -206,8 +236,15 @@ export class RemoteFileService {
 		}
 		const userId = await this.identity(token);
 		const record = this.owners.get(id);
-		if (!record || !token || record.userId !== userId || record.tokenHash !== hash(token) ||
-			record.closePromise || record.expiresAt <= Date.now() || !this.accepting) {
+		if (
+			!record ||
+			!token ||
+			record.userId !== userId ||
+			record.tokenHash !== hash(token) ||
+			record.closePromise ||
+			record.expiresAt <= Date.now() ||
+			!this.accepting
+		) {
 			throw new RemoteFileFailure('not_found');
 		}
 		return record;
@@ -229,7 +266,9 @@ export class RemoteFileService {
 		requestSignal?: AbortSignal,
 	): Promise<T> {
 		const controller = new AbortController();
+
 		const abort = () => controller.abort();
+
 		requestSignal?.addEventListener('abort', abort, { once: true });
 		if (requestSignal?.aborted) {
 			abort();
@@ -239,8 +278,12 @@ export class RemoteFileService {
 		let record: OwnedResource | null = null;
 		try {
 			record = await this.untilAbort(this.owned(token, id), controller.signal);
-			if (!this.accepting || record.closePromise || this.owners.get(id) !== record ||
-				record.expiresAt <= Date.now()) {
+			if (
+				!this.accepting ||
+				record.closePromise ||
+				this.owners.get(id) !== record ||
+				record.expiresAt <= Date.now()
+			) {
 				throw new RemoteFileFailure('not_found');
 			}
 			if (record.busy) {
@@ -272,15 +315,23 @@ export class RemoteFileService {
 	): Promise<T> {
 		await this.untilAbort(this.model.checkFingerprint(record.resource), signal);
 		signal.throwIfAborted();
-		const result = await action(record.resource, Math.max(1, REMOTE_FILE_OPERATION_MS - (Date.now() - started)), signal);
+		const result = await action(
+			record.resource,
+			Math.max(1, REMOTE_FILE_OPERATION_MS - (Date.now() - started)),
+			signal,
+		);
 		signal.throwIfAborted();
 		await this.untilAbort(this.model.checkFingerprint(record.resource), signal);
 		signal.throwIfAborted();
 		if (!this.accepting || record.closePromise || this.owners.get(id) !== record) {
 			throw new RemoteFileFailure('not_found');
 		}
-		if ((await this.untilAbort(this.identity(token), signal)) !== record.userId ||
-			!this.accepting || record.closePromise || this.owners.get(id) !== record) {
+		if (
+			(await this.untilAbort(this.identity(token), signal)) !== record.userId ||
+			!this.accepting ||
+			record.closePromise ||
+			this.owners.get(id) !== record
+		) {
 			throw new RemoteFileFailure('unauthenticated');
 		}
 		record.expiresAt = Date.now() + REMOTE_FILE_IDLE_MS;
@@ -295,18 +346,38 @@ export class RemoteFileService {
 		maxMetadataBytes: number,
 		signal?: AbortSignal,
 	): Promise<FileEntry[]> {
-		return this.run(token, id, (resource, ms, abort) =>
-			this.model.list(resource, { path, timeoutMs: ms, signal: abort, maxEntries, maxMetadataBytes }), signal);
+		return this.run(
+			token,
+			id,
+			(resource, ms, abort) =>
+				this.model.list(resource, { path, timeoutMs: ms, signal: abort, maxEntries, maxMetadataBytes }),
+			signal,
+		);
 	}
 
 	stat(token: string | null, id: string, path: string, follow: boolean, signal?: AbortSignal): Promise<FileInfo> {
-		return this.run(token, id, (resource, ms, abort) =>
-			this.model.stat(resource, { path, followLinks: follow, timeoutMs: ms, signal: abort }), signal);
+		return this.run(
+			token,
+			id,
+			(resource, ms, abort) =>
+				this.model.stat(resource, { path, followLinks: follow, timeoutMs: ms, signal: abort }),
+			signal,
+		);
 	}
 
-	readText(token: string | null, id: string, path: string, maxBytes: number, signal?: AbortSignal): Promise<TextRead> {
-		return this.run(token, id, (resource, ms, abort) =>
-			this.model.readText(resource, { path, maxBytes, timeoutMs: ms, signal: abort }), signal);
+	readText(
+		token: string | null,
+		id: string,
+		path: string,
+		maxBytes: number,
+		signal?: AbortSignal,
+	): Promise<TextRead> {
+		return this.run(
+			token,
+			id,
+			(resource, ms, abort) => this.model.readText(resource, { path, maxBytes, timeoutMs: ms, signal: abort }),
+			signal,
+		);
 	}
 
 	release(token: string | null, id: string, signal?: AbortSignal): Promise<void> {
@@ -315,7 +386,9 @@ export class RemoteFileService {
 
 	private async releaseAdmitted(token: string | null, id: string, signal?: AbortSignal): Promise<void> {
 		const controller = new AbortController();
+
 		const abort = () => controller.abort();
+
 		signal?.addEventListener('abort', abort, { once: true });
 		if (signal?.aborted) {
 			abort();
@@ -412,7 +485,9 @@ export class RemoteFileService {
 		this.quiesce();
 		clearInterval(this.expiryTimer);
 		this.closePromise = (async () => {
-			const results = await Promise.allSettled([...this.owners.values()].map((record) => this.closeOwned(record)));
+			const results = await Promise.allSettled(
+				[...this.owners.values()].map((record) => this.closeOwned(record)),
+			);
 			while (this.pending.size || this.closing.size) {
 				await Promise.allSettled([
 					...this.pending,

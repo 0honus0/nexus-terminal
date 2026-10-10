@@ -1,3 +1,4 @@
+import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import type { OpenSessionRequest, RemoteSessionResource } from './session-types.js';
 import type { TrustedResolvedSshTarget } from '../../../targets/public.js';
 import type { MachineConnection, MachineShell } from '../../../../platform/ssh/ssh-port.js';
@@ -123,28 +124,45 @@ export class RemoteSessionModel {
 	async open(request: OpenSessionRequest): Promise<RemoteSessionResource> {
 		request.signal?.throwIfAborted();
 		const controller = new AbortController();
+
 		const abort = () => controller.abort(request.signal?.reason);
+
 		request.signal?.addEventListener('abort', abort, { once: true });
-		if (request.signal?.aborted) abort();
+		if (request.signal?.aborted) {
+			abort();
+		}
 		const deadline = Date.now() + request.timeoutMs;
-		const timer = setTimeout(() => controller.abort(new Error('Remote opening deadline exceeded')), request.timeoutMs);
+		const timer = setTimeout(
+			() => controller.abort(new Error('Remote opening deadline exceeded')),
+			request.timeoutMs,
+		);
 		let machine: MachineConnection | null = null;
 		try {
 			const remaining = deadline - Date.now();
-			if (remaining < 1) throw new Error('Remote opening deadline exceeded');
+			if (remaining < 1) {
+				throw new Error('Remote opening deadline exceeded');
+			}
 			const opened = await this.machines.open({
-				targetId: request.targetId, timeoutMs: remaining, signal: controller.signal,
+				targetId: request.targetId,
+				timeoutMs: remaining,
+				signal: controller.signal,
 			});
 			machine = opened.machine;
 			controller.signal.throwIfAborted();
-			const shell = await machine.openShell({columns: request.columns, rows: request.rows, term: request.term}, controller.signal);
+			const shell = await machine.openShell(
+				{ columns: request.columns, rows: request.rows, term: request.term },
+				controller.signal,
+			);
 			controller.signal.throwIfAborted();
 			shell.pause();
 			return createSessionResource(opened.target, machine, shell);
 		} catch (error) {
 			if (machine) {
-				try { await machine.close(); }
-				catch (cleanup) { throw new AggregateError([error,cleanup],'Remote opening and cleanup failed'); }
+				try {
+					await machine.close();
+				} catch (cleanup) {
+					throw new RemoteResourceCleanupFailure([error, cleanup]);
+				}
 			}
 			throw error;
 		} finally {

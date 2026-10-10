@@ -1,8 +1,21 @@
+import { RemoteResourceCleanupFailure } from '../resource-errors.js';
 import { createHash } from 'node:crypto';
 import { RemoteHostKeyUntrustedError } from './machine-errors.js';
 import type { RemoteMachineOpenRequest, OpenedRemoteMachine } from './machine-types.js';
-import type { TrustedResolvedSshTarget, TrustedSshTargetResolver, TrustedSshResolveRequest, HostKeyManagement } from '../../targets/public.js';
-import type { MachineEndpoint, MachineRoute, MachineAuthentication, MachineProxy, MachineSshFactory, MachineConnectOptions } from '../../../platform/ssh/ssh-port.js';
+import type {
+	TrustedResolvedSshTarget,
+	TrustedSshTargetResolver,
+	TrustedSshResolveRequest,
+	HostKeyManagement,
+} from '../../targets/public.js';
+import type {
+	MachineEndpoint,
+	MachineRoute,
+	MachineAuthentication,
+	MachineProxy,
+	MachineSshFactory,
+	MachineConnectOptions,
+} from '../../../platform/ssh/ssh-port.js';
 
 /** Remote owns business target → generic machine contract transformation. */
 function toMachineTarget(target: TrustedResolvedSshTarget): MachineEndpoint {
@@ -63,16 +76,18 @@ export class RemoteMachineModel {
 		request.signal.throwIfAborted();
 		const pinned = new Map(trusts.map((key) => [key.host.toLowerCase() + ':' + key.port, key.fingerprint]));
 		let hostKeyRejected = false;
+
 		const verify: MachineConnectOptions['verifyHostKey'] = (host, port, publicKey) => {
 			const fingerprint = 'SHA256:' + createHash('sha256').update(publicKey).digest('base64').replace(/=+$/u, '');
 			const expected = pinned.get(host.toLowerCase() + ':' + port);
-			const trusted = expected === fingerprint &&
-				(this.verifyHostKey === null || this.verifyHostKey(host, port, publicKey));
+			const trusted =
+				expected === fingerprint && (this.verifyHostKey === null || this.verifyHostKey(host, port, publicKey));
 			if (!trusted) {
 				hostKeyRejected = true;
 			}
 			return trusted;
 		};
+
 		try {
 			const remaining = deadline - Date.now();
 			if (remaining < 1) {
@@ -87,13 +102,13 @@ export class RemoteMachineModel {
 				try {
 					await machine.close();
 				} catch (cleanup) {
-					throw new AggregateError([new Error('Remote opening expired'), cleanup], 'Machine opening cleanup failed');
+					throw new RemoteResourceCleanupFailure([new Error('Remote opening expired'), cleanup]);
 				}
 				throw new Error('Remote opening expired');
 			}
 			return { target, machine };
 		} catch (error) {
-			if (hostKeyRejected && !request.signal.aborted) {
+			if (hostKeyRejected && !request.signal.aborted && !(error instanceof RemoteResourceCleanupFailure)) {
 				throw new RemoteHostKeyUntrustedError(error);
 			}
 			throw error;
