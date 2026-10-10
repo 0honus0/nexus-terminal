@@ -2,29 +2,16 @@ import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http
 import type { AccessService } from '../../authentication/service/access-service.js';
 import { AccessOperationError, accessBoundary } from '../../authentication/model/access-errors.js';
 import type { AuthenticatedIdentity } from '../../authentication/model/access-types.js';
+import {
+	InvalidAccessPayload,
+	readAccessSetupRequest,
+	readAccessLoginRequest,
+	readAccessPasswordRequest,
+	type AccessUserView,
+} from '@nexus-terminal/shared/access/api';
 
 const COOKIE_NAME = 'nexus_session';
 const REMEMBER_SECONDS = 30 * 24 * 60 * 60;
-
-type StrictObject = Record<string, unknown>;
-
-function strictBody(value: unknown, fields: readonly string[]): StrictObject {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) {
-		throw new AccessOperationError('invalid_input');
-	}
-	const data = value as Record<string, unknown>;
-	if (Object.keys(data).some((key) => !fields.includes(key))) {
-		throw new AccessOperationError('invalid_input');
-	}
-	return data;
-}
-
-function validateText(value: unknown, minimum: number, maximum: number): string {
-	if (typeof value !== 'string' || value.length < minimum || Buffer.byteLength(value, 'utf8') > maximum) {
-		throw new AccessOperationError('invalid_input');
-	}
-	return value;
-}
 
 function readSession(context: HttpRouteContext): string | null {
 	return context.cookie(COOKIE_NAME);
@@ -47,11 +34,7 @@ function clearedCookie(secure: boolean): string {
 	);
 }
 
-function toUser(identity: AuthenticatedIdentity): {
-	id: number;
-	username: string;
-	twoFactorEnabled: boolean;
-} {
+function toUser(identity: AuthenticatedIdentity): AccessUserView {
 	return { id: identity.userId, username: identity.username, twoFactorEnabled: identity.twoFactorEnabled };
 }
 
@@ -73,16 +56,24 @@ function errorResponse(context: HttpRouteContext, error: unknown): void {
 		return;
 	}
 	const code = error.code;
-	const status =
-		code === 'invalid_input'
-			? 400
-			: code === 'already_initialized' || code === 'conflict'
-				? 409
-				: code === 'invalid_credentials'
-					? 401
-					: code === 'storage_unavailable'
-						? 503
-						: 500;
+	let status: number;
+	switch (code) {
+		case 'invalid_input':
+			status = 400;
+			break;
+		case 'already_initialized':
+		case 'conflict':
+			status = 409;
+			break;
+		case 'invalid_credentials':
+			status = 401;
+			break;
+		case 'storage_unavailable':
+			status = 503;
+			break;
+		default:
+			status = 500;
+	}
 	context.send(status, { code });
 }
 
@@ -94,8 +85,11 @@ async function handle(context: HttpRouteContext, action: () => Promise<void>): P
 		}
 		await action();
 	} catch (error) {
-		if (error instanceof AccessOperationError) {
-			errorResponse(context, error);
+		if (error instanceof InvalidAccessPayload || error instanceof AccessOperationError) {
+			errorResponse(
+				context,
+				error instanceof InvalidAccessPayload ? new AccessOperationError('invalid_input') : error,
+			);
 			return;
 		}
 		// HTTP parsing/size/content-type failures belong to the HTTP runtime.
@@ -122,14 +116,8 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 
 			handle: (context) =>
 				handle(context, async () => {
-					const data = strictBody(await context.json(), ['username', 'password', 'confirmPassword']);
-					const username = validateText(data.username, 1, 256);
-					const password = validateText(data.password, 8, 1024);
-					const confirmation = validateText(data.confirmPassword, 8, 1024);
-					if (password !== confirmation) {
-						throw new AccessOperationError('invalid_input');
-					}
-					const identity = await accessBoundary(() => access.setupAdmin(username, password));
+					const data = readAccessSetupRequest(await context.json());
+					const identity = await accessBoundary(() => access.setupAdmin(data.username, data.password));
 					context.send(201, { user: toUser(identity) });
 				}),
 		},
@@ -139,16 +127,11 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 
 			handle: (context) =>
 				handle(context, async () => {
-					const data = strictBody(await context.json(), ['username', 'password', 'rememberMe']);
-					const username = validateText(data.username, 1, 256);
-					const password = validateText(data.password, 1, 1024);
-					if (data.rememberMe !== undefined && typeof data.rememberMe !== 'boolean') {
-						throw new AccessOperationError('invalid_input');
-					}
+					const data = readAccessLoginRequest(await context.json());
 					const result = await accessBoundary(() =>
 						access.login({
-							username,
-							password,
+							username: data.username,
+							password: data.password,
 							rememberMe: data.rememberMe === true,
 							source: context.sourceIp,
 							previousToken: readSession(context),
@@ -204,13 +187,9 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 					if (!identity) {
 						return;
 					}
-					const data = strictBody(await context.json(), ['currentPassword', 'newPassword']);
+					const data = readAccessPasswordRequest(await context.json());
 					await accessBoundary(() =>
-						access.changePassword(
-							readSession(context),
-							validateText(data.currentPassword, 1, 1024),
-							validateText(data.newPassword, 8, 1024),
-						),
+						access.changePassword(readSession(context), data.currentPassword, data.newPassword),
 					);
 					context.send(200, { passwordChanged: true }, { 'Set-Cookie': clearedCookie(secureCookies) });
 				}),

@@ -8,6 +8,10 @@
     "check": "tsc --noEmit"
   },
   "exports": {
+    "./access/api": {
+      "types": "./dist/access/api.d.ts",
+      "default": "./dist/access/api.js"
+    },
     "./connections/values": {
       "types": "./dist/connections/values.d.ts",
       "default": "./dist/connections/values.js"

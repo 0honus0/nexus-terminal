@@ -235,6 +235,8 @@ Workspace WebSocket 由 runtime protocol/session owner 处理：
 
 `features/targets-next` 是独立于正式连接管理和运行期的开发功能。路由只在 `import.meta.env.DEV` 出现，地址为 `/__targets-next`；需配置 `NEXUS_VITE_BACKEND_NEXT_ORIGIN` 才在 Vite 建立 `/__next` 单独代理，绝不覆盖旧 `/api` 和旧 WebSocket。新 `backend-next` 的外部 `NEXUS_NEXT_PUBLIC_ORIGIN` 必须是访问该 Vite 页面使用的 Origin。页面的 Access 登录、管理 API、最小 Remote PTY 与 cookie 都走同一 `/__next`，不得使用旧 auth Store、连接 Store 或 Workspace 能力。会话数据由当前页面内独立状态持有，关闭/刷新失效；新客户端对 Connection/Proxy/SSH Key/Tag/Import 的 wire 结果执行明确字段解码，类型来源于 Shared 精确子路径。
 
+开发页的 Access 请求由 `features/targets-next/api/access-next-api.ts` 独立拥有，`needsSetup/setup/login/status/logout` 不再在 View 内直接 fetch 或把任意 HTTP 200 当成已登录。该客户端与 `backend-next` 认证 HTTP 同时消费 `@nexus-terminal/shared/access/api` 的严格输入/公开响应契约；收到 401 status 明确归为未认证，JSON 解析失败、非预期响应和网络异常不能伪装成成功。Shared 只包含必要的凭据写入命令和公开用户字段，不包含 Session token、密码摘要、内部鉴权上下文。密码变更端点已在独立客户端准备真实 API 能力，但当前开发页未提供改密 UI，不能因此宣称其拥有前端界面。
+
 旧生产表单中的 `ConnectionTypeDto` 和 `ProxyTypeDto` 与新包有限取值相同，已在所属前端 model 改从 Shared 引用；但旧 `ConnectionDto` 的 nullable route、authMethod、jumpChain、lastConnectedAt，旧 Proxy authMethod 以及其它业务 View 与新管理 contract 表示不同，旧 feature API/Store/表单仍继续使用 Protocol 并访问正式 Backend。不能直接替换这些类型，必须待终端和相关消费同步迁移后再重构。
 
 ## 新后端独立 SSH 终端

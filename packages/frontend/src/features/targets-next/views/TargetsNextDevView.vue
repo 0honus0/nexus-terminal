@@ -3,6 +3,7 @@
 	import { useI18n } from 'vue-i18n';
 	import { loadRemoteNextTerminal } from '@/runtimes/remote-next/public';
 	import { createTargetsNextApi } from '../api/targets-next-api';
+	import { createAccessNextApi } from '../api/access-next-api';
 	import type {
 		TargetConnectionInput,
 		TargetConnectionView,
@@ -17,6 +18,7 @@
 	const { t, te } = useI18n();
 	const base = new URL('/__next/', window.location.href);
 	const api = createTargetsNextApi(base.toString());
+	const auth = createAccessNextApi(base.toString());
 	const username = ref('');
 	const password = ref('');
 	const loggedIn = ref(false);
@@ -49,25 +51,6 @@
 		return te(key) ? t(key) : t('targetsNext.errors.request_failed');
 	}
 
-	async function access(path: string, body?: unknown): Promise<unknown> {
-		const response = await fetch('/__next/api/v1/auth/' + path, {
-			method: body === undefined ? 'GET' : 'POST',
-			credentials: 'same-origin',
-			cache: 'no-store',
-			headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
-			...(body === undefined ? {} : { body: JSON.stringify(body) }),
-		});
-		const value: unknown = await response.json();
-		if (!response.ok) {
-			throw new Error(
-				typeof value === 'object' && value !== null && 'code' in value && typeof value.code === 'string'
-					? value.code
-					: 'request_failed',
-			);
-		}
-		return value;
-	}
-
 	async function run(job: () => Promise<void>): Promise<void> {
 		busy.value = true;
 		error.value = '';
@@ -98,12 +81,8 @@
 
 	async function checkSession(): Promise<void> {
 		await run(async () => {
-			const result = await access('needs-setup');
-			if (result && typeof result === 'object' && 'needsSetup' in result) {
-				setupNeeded.value = result.needsSetup === true;
-			}
-			const status = await fetch('/__next/api/v1/auth/status', { credentials: 'same-origin', cache: 'no-store' });
-			loggedIn.value = status.ok;
+			setupNeeded.value = await auth.needsSetup();
+			loggedIn.value = (await auth.status()) !== null;
 			if (loggedIn.value) {
 				await refresh();
 			}
@@ -113,13 +92,13 @@
 	function login(): void {
 		void run(async () => {
 			if (setupNeeded.value) {
-				await access('setup', {
+				await auth.setup({
 					username: username.value,
 					password: password.value,
 					confirmPassword: password.value,
 				});
 			}
-			await access('login', { username: username.value, password: password.value, rememberMe: false });
+			await auth.login({ username: username.value, password: password.value, rememberMe: false });
 			password.value = '';
 			loggedIn.value = true;
 			setupNeeded.value = false;
@@ -129,7 +108,7 @@
 
 	function logout(): void {
 		void run(async () => {
-			await access('logout', {});
+			await auth.logout();
 			loggedIn.value = false;
 			connections.value = [];
 			proxies.value = [];
