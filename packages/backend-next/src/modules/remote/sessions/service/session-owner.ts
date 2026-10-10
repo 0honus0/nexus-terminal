@@ -232,6 +232,14 @@ export class RemoteSessionOwner {
 			completion: task,
 			expiresAt: Date.now() + CLOSED_SESSION_TTL_MS,
 		});
+		// Only insertion may evict an unexpired entry to enforce capacity.
+		while (this.recentlyReleased.size > MAX_RECENTLY_RELEASED) {
+			const oldest = this.recentlyReleased.keys().next().value;
+			if (oldest === undefined) {
+				break;
+			}
+			this.recentlyReleased.delete(oldest);
+		}
 		this.track(task);
 		void task.then(
 			() => this.releasing.delete(id),
@@ -250,13 +258,6 @@ export class RemoteSessionOwner {
 			if (record.expiresAt <= now) {
 				this.recentlyReleased.delete(id);
 			}
-		}
-		while (this.recentlyReleased.size >= MAX_RECENTLY_RELEASED) {
-			const oldest = this.recentlyReleased.keys().next().value;
-			if (oldest === undefined) {
-				break;
-			}
-			this.recentlyReleased.delete(oldest);
 		}
 	}
 

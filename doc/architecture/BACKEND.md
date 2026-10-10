@@ -64,7 +64,7 @@ A–D 审核指出的六处基础缺口已做源码修正：Platform 每个 WS �
 
 SSH Adapter 的 Machine Shell 区分正常 EOF、通道错误与无正常结束证据的连接关闭；Machine 传输断线独立上报。Remote Model 将技术事件投影为 `normal/disconnected`，Service 在关闭事务外等待资源清理后才通知 `onClosed`，若清理失败则升级为 `cleanup_failed`，显式业务释放标识为 `closed_by_owner`。因此仅 `normal` 允许 PTY 尾帧 `consumed` drain 和 WebSocket `closed`/1000；`disconnected`、`cleanup_failed` 都向客户端返回安全 `remote_unavailable`，主动释放只关闭 WS，不伪造成 SSH 正常退出。真实 SSH2 正常结束与强制断线两种路径均已专项验证；权限撤销/长时间网络故障仍需实测。
 
-`RemoteSessionOwner` 限量保存 128 项、120 秒的已释放会话摘要及**原清理 Promise**（无明文 token），相同 Access 会话的 DELETE 即使晚于 WS 自动回收仍等待并返回原清理成功/失败；不认识的 Session ID 和其他 Access 会话不能据此取得资源信息。受控专项已验证重复 DELETE 的成功/失败传播以及错误 token、未知 ID 拒绝，但未覆盖所有真实 HTTP 竞争和缓存过期窗口。Frontend 的关闭 Promise 仍负责完成 WS 及 DELETE，组件仅在回调所属 generation 未过期时展示错误；断开后尚无新连接时的真实清理失败仍可展示。浏览器重连与卸载的 E2E 仍因 Chromium 环境权限未验收，不把静态修正当作实际 UI PASS。专项用例按约定保留至**整个 Backend 重构完成、切换旧版 E2E 验证之前**才清理，原有 Storage 测试对安全错误码及 v1–v3 Schema 的必要适配不得撤回；详见[验收文档](../testing/E2E.md)。
+`RemoteSessionOwner` 限量保存 128 项、120 秒的已释放会话摘要及**原清理 Promise**（无明文 token）；读取仅移除过期记录，只有新增后超过容量才淘汰最旧记录，缓存恰好满额时查询不会提前丢失未过期的释放结果。相同 Access 会话的 DELETE 即使晚于 WS 自动回收仍等待并返回原清理成功/失败；不认识的 Session ID 和其他 Access 会话不能据此取得资源信息。受控专项已验证重复 DELETE 的成功/失败传播以及错误 token、未知 ID 拒绝，但未覆盖所有真实 HTTP 竞争和缓存过期窗口。Frontend 的关闭 Promise 仍负责完成 WS 及 DELETE，组件仅在回调所属 generation 未过期时展示错误；断开后尚无新连接时的真实清理失败仍可展示。浏览器重连与卸载的 E2E 仍因 Chromium 环境权限未验收，不把静态修正当作实际 UI PASS。专项用例按约定保留至**整个 Backend 重构完成、切换旧版 E2E 验证之前**才清理，原有 Storage 测试对安全错误码及 v1–v3 Schema 的必要适配不得撤回；详见[验收文档](../testing/E2E.md)。
 
 ## backend-next Agent 首个持久 Run 状态切片
 
