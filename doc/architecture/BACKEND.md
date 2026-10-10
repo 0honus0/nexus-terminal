@@ -37,6 +37,8 @@ Access 会话签发输入由 sessions Model 独立应用类型持有，身份公
 
 Targets 的 Proxy name/host 规范化及输入规则由 Proxy Model 纯规则统一提供，管理和导入在进入存储前应用同一规则；正整数 ID/version 的应用级检验由 Targets 单一 owner 提供，SQL 外部行另行严格解码。Host Key 内部到公开管理视图的投影在 public mapper 中复用，HTTP 到 wire 仍保留独立投影。
 
+Remote 的 PTY HTTP 与 WebSocket Stream 分设协议 owner：`interfaces/http/remote-http.ts` 保留 Session HTTP 鉴权、请求/结果和公开错误映射，`interfaces/http/pty-stream.ts` 处理 WS 安装、ACK 信用、输入背压、输出队列、EOF/关闭终态和订阅清理。Stream 调用 Remote 内部窄会话能力，不能把 PTY 或未来 Files 状态放进 Platform。
+
 ## 目录与一级模块
 
 ```text

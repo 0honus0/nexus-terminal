@@ -8,7 +8,8 @@ import type { OpenSessionRequest, RemoteSessionSnapshot } from './sessions/model
 import type { AccessPublicApi } from '../access/public.js';
 import type { HttpRoute, HttpWebSocketRoute } from '../../platform/http/http-types.js';
 import { RemoteSessionOwner } from './sessions/service/session-owner.js';
-import { createRemoteHttpRoutes, createRemoteWebSocketRoute } from './interfaces/http/remote-http.js';
+import { createRemoteHttpRoutes } from './interfaces/http/remote-http.js';
+import { createRemoteWebSocketRoute } from './interfaces/http/pty-stream.js';
 
 interface RemoteRegistrationOptions {
 	resolver: TrustedSshTargetResolver;
@@ -93,7 +94,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 
 		httpRoutes: () => createRemoteHttpRoutes(owner, options.access),
 
-		webSocketRoutes: () => [createRemoteWebSocketRoute(owner, publicApi)],
+		webSocketRoutes: () => [createRemoteWebSocketRoute(owner, service)],
 
 		quiesce: () => {
 			owner.quiesce();

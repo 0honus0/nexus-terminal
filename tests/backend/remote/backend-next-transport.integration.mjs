@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import WebSocket from '../../../packages/backend-next/node_modules/ws/index.js';
 import { openHttpListener } from '../../../packages/backend-next/dist/platform/http/http-server.js';
 import { RemoteSessionOwner } from '../../../packages/backend-next/dist/modules/remote/sessions/service/session-owner.js';
-import { createRemoteWebSocketRoute } from '../../../packages/backend-next/dist/modules/remote/interfaces/http/remote-http.js';
+import { createRemoteWebSocketRoute } from '../../../packages/backend-next/dist/modules/remote/interfaces/http/pty-stream.js';
 
 function deferred() {
 	let resolve;
