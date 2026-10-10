@@ -1,6 +1,10 @@
 import type { TargetHostKeyView } from '@nexus-terminal/shared/targets/host-keys/model';
 import type { ProxyType } from '@nexus-terminal/shared/targets/proxies/values';
-import type { TargetConnectionInput, TargetImportInput, TargetCredentialInput } from '@nexus-terminal/shared/targets/connections/http';
+import type {
+	TargetConnectionInput,
+	TargetImportInput,
+	TargetCredentialInput,
+} from '@nexus-terminal/shared/targets/connections/http';
 import type { TargetConnectionView } from '@nexus-terminal/shared/targets/connections/model';
 import type { TargetConnectionMutation } from '@nexus-terminal/shared/targets/connections/model';
 import type { TargetImportItem, TargetCredentialMutation } from '@nexus-terminal/shared/targets/connections/http';

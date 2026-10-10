@@ -2,7 +2,12 @@ import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http
 import type { AccessService } from '../../authentication/service/access-service.js';
 import { AccessOperationError, accessBoundary } from '../../authentication/model/access-errors.js';
 import type { AuthenticatedIdentity } from '../../authentication/model/access-types.js';
-import { InvalidAccessPayload, readAccessSetupRequest, readAccessLoginRequest, readAccessPasswordRequest } from '@nexus-terminal/shared/access/http';
+import {
+	InvalidAccessPayload,
+	readAccessSetupRequest,
+	readAccessLoginRequest,
+	readAccessPasswordRequest,
+} from '@nexus-terminal/shared/access/http';
 import { type AccessUserView } from '@nexus-terminal/shared/access/model';
 
 const COOKIE_NAME = 'nexus_session';

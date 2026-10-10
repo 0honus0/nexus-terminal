@@ -8,7 +8,6 @@
     "password": "密码",
     "continue": "继续",
     "logout": "退出登录",
-    "noRemote": "此开发管理页面暂不提供连接测试和远程会话。",
     "connections": "连接",
     "proxies": "代理",
     "tags": "标签",

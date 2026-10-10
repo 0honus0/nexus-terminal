@@ -8,4 +8,5 @@ export const TARGET_ERROR_CODES = [
 	'storage_unavailable',
 	'internal_failure',
 ] as const;
+
 export type TargetErrorCode = (typeof TARGET_ERROR_CODES)[number];

@@ -8,6 +8,7 @@ export class InvalidTargetPayload extends Error {
 }
 
 export type TargetHttpErrorCode = TargetErrorCode | 'unauthenticated' | 'forbidden' | 'not_found' | 'version_conflict';
+
 export interface TargetErrorResponse {
 	code: TargetHttpErrorCode;
 }

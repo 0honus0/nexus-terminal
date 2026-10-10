@@ -8,7 +8,6 @@
     "password": "Password",
     "continue": "Continue",
     "logout": "Sign out",
-    "noRemote": "Connection tests and remote sessions are unavailable on this development management screen.",
     "connections": "Connections",
     "proxies": "Proxies",
     "tags": "Tags",

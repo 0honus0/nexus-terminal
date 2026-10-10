@@ -8,7 +8,6 @@
     "password": "パスワード",
     "continue": "続行",
     "logout": "ログアウト",
-    "noRemote": "この開発用管理画面では接続テストとリモートセッションを利用できません。",
     "connections": "接続",
     "proxies": "プロキシ",
     "tags": "タグ",

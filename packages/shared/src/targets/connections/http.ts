@@ -2,7 +2,9 @@ import type { TargetConnectionView } from './model.js';
 import type { TargetErrorCode } from '../values.js';
 
 export type TargetConnectionInput = Omit<TargetConnectionView, 'id' | 'version' | 'createdAt' | 'updatedAt'>;
+
 export type TargetConnectionChanges = Partial<TargetConnectionInput>;
+
 export type TargetCredentialInput = { kind: 'password'; password: string } | { kind: 'ssh_key'; sshKeyId: number };
 
 export interface TargetImportInput {
@@ -18,31 +20,40 @@ export interface TargetImportInput {
 }
 
 export type TargetCredentialMutation = { status: 'updated' } | { status: 'not_found' } | { status: 'version_conflict' };
+
 export type TargetImportItem = { status: 'ok'; id: number } | { status: 'error'; code: TargetErrorCode };
+
 export interface TargetConnectionUpdateRequest {
 	version: number;
 	changes: TargetConnectionChanges;
 }
+
 export interface TargetConnectionTagsRequest {
 	version: number;
 	tagIds: number[];
 }
+
 export interface TargetCredentialSetRequest {
 	version: number;
 	credential: TargetCredentialInput;
 }
+
 export interface TargetCredentialClearRequest {
 	version: number;
 }
+
 export interface TargetConnectionCloneRequest {
 	name: string;
 }
+
 export interface TargetConnectionImportRequest {
 	items: TargetImportInput[];
 }
+
 export interface TargetConnectionImportResponse {
 	items: TargetImportItem[];
 }
+
 export interface TargetDeleteResponse {
 	deleted: true;
 }
