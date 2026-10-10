@@ -68,11 +68,11 @@ The current Docker smoke validates the unified Frontend/Backend/Guacd production
 
 以下脚本位于根 `tests/backend/`，只对独立的 `backend-next` 临时数据库和环回服务运行，不依赖正式生产 Backend 或部署入口。先执行：
 
-**清理时点：整个 Backend 重构完成后、切换到旧版 E2E 验证前。** 在这两个条件同时满足以前，所有临时专项测试继续保留、运行和更新；不因为阶段性通过、日常提交或 E1 开始就提前删除。当前工作分支已经有相关测试提交，未来切换前再单独清理：
+**清理时点：整个 Backend 重构完成后、切换到旧版 E2E 验证前。** 在这两个条件同时满足以前，所有临时专项测试继续保留、运行和更新；不因为阶段性通过、日常提交或协议阶段开始就提前删除。当前工作分支已经有相关测试提交，未来切换前再单独清理：
 
 - 到约定时点再移除本轮新增的 `tests/backend/remote/backend-next-transport.integration.mjs`、`backend-next-ssh.integration.mjs`、`backend-next-frontend.integration.mjs`，并同步整理复现命令；这些文件**目前仍属于有效的临时验收资产**。
 - `tests/backend/storage/backend-next.integration.mjs`、`backend-next-phase2.integration.mjs` 属于**原有仓库测试文件**，不得整文件删除；**必须保留适配现行安全错误码（如 `reference_in_use`、`unavailable`）和全库 v1–v3 Schema 的必要断言**。仅清除真正不再被旧 E2E 切换流程使用的临时验收辅助内容，不允许将上述适配回滚成已失效的旧断言。`backend-next-public-boundary.integration.mjs` 同样保留。
-- **保留本文和实施方案中的验收结论、失败复现、修复依据与未通过项**。下面的命令在 Backend 重构结束前保持可执行；未来清理新增专项文件后，需同步更新此处入口。历史测试提交届时用独立清理提交或最终变更整理处理，不能仅在文档标注后声称已移除。
+- **保留本文中的验收结论、失败复现、修复依据与未通过项**。下面的命令在 Backend 重构结束前保持可执行；未来清理新增专项文件后，需同步更新此处入口。历史测试提交届时用独立清理提交或最终变更整理处理，不能仅在文档标注后声称已移除。
 
 ```bash
 pnpm --filter @nexus-terminal/backend-next build
@@ -95,7 +95,7 @@ node tests/backend/remote/backend-next-frontend.integration.mjs
 
 该脚本将使用隔离的 backend-next、Vite 开发入口与 Playwright Chromium 验证 SSH 连接失败后重复打开、xterm/ResizeObserver 回收及错误文案；还需覆盖旧 generation 的异步错误不覆盖新连接，以及主动关闭后 DELETE 的成功/失败展示。**2026-10-10 当前环境 Chromium 无法访问 `/proc` 相关内核路径且 GPU 进程被沙箱阻断，在浏览器启动阶段失败，页面断言未执行，不算 PASS**。待有合适权限的 runner 执行，不能通过忽略错误、修改断言或仅凭 TypeScript 构建代替验收。
 
-这些测试覆盖的是明确列出的专项故障窗口，不证明多级 Proxy/Jump、大输出、权限撤销、长时间断线或全部 E2E 产品功能；余项记录在[后端重构下一阶段实施方案](../后端重构下一阶段实施方案.md)。源代码结构或字符串出现与否不是本组测试的判断依据。
+这些测试覆盖的是明确列出的专项故障窗口，不证明多级 Proxy/Jump、大输出、权限撤销、长时间断线或全部 E2E 产品功能；整体余项记录在[架构重构](../架构重构.md#迁移边界验收与当前施工)，协议阶段待办见[下一阶段实施方案](../后端重构下一阶段实施方案.md)。源代码结构或字符串出现与否不是本组测试的判断依据。
 
 ## Structure
 
