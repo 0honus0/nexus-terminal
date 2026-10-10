@@ -68,11 +68,11 @@ The current Docker smoke validates the unified Frontend/Backend/Guacd production
 
 以下脚本位于根 `tests/backend/`，只对独立的 `backend-next` 临时数据库和环回服务运行，不依赖正式生产 Backend 或部署入口。先执行：
 
-**交付约定：本节脚本仅为本轮临时验收材料，最终正式提交不包含这些专项验收用例。** 当前工作分支中已经有相应测试提交，不能将其误认为最终应保留的产品测试；在最终提交/合并前应单独执行清理：
+**清理时点：必须等整个 Backend 重构完成，且准备切换到旧版 E2E 验证之前，才执行专项测试清理。当前阶段保留并继续使用所有专项脚本；不在日常提交时提前删除。** 当前工作分支已经有相关测试提交，最终切换前应单独清理：
 
 - 本轮新增的 `tests/backend/remote/backend-next-transport.integration.mjs`、`backend-next-ssh.integration.mjs`、`backend-next-frontend.integration.mjs` 从最终变更中排除。
-- `tests/backend/storage/backend-next.integration.mjs`、`backend-next-phase2.integration.mjs` 属于**原有仓库测试文件**，不得整文件删除；只清理本轮为了专项验收临时修改的断言。原有 `backend-next-public-boundary.integration.mjs` 也保留原文件，不作为本轮新增交付。
-- **保留本文和实施方案中的验收结论、失败复现、修复依据与未通过项**。下面的命令是清理前的历史复现入口；清理后文件可能不再存在，不能据此宣称最终提交仍包含这组测试。已在 Git 历史中的测试提交需通过后续独立清理提交或最终变更整理处理，不能仅在文档标注后就声称文件已移除。
+- `tests/backend/storage/backend-next.integration.mjs`、`backend-next-phase2.integration.mjs` 属于**原有仓库测试文件**，不得整文件删除；**必须保留适配现行安全错误码（如 `reference_in_use`、`unavailable`）和全库 v1–v3 Schema 的必要断言**。仅清除真正不再被旧 E2E 切换流程使用的临时验收辅助内容，不允许将上述适配回滚成已失效的旧断言。`backend-next-public-boundary.integration.mjs` 同样保留。
+- **保留本文和实施方案中的验收结论、失败复现、修复依据与未通过项**。下面的命令在 Backend 重构结束前保持可执行；未来清理新增专项文件后，需同步更新此处入口。历史测试提交届时用独立清理提交或最终变更整理处理，不能仅在文档标注后声称已移除。
 
 ```bash
 pnpm --filter @nexus-terminal/backend-next build
