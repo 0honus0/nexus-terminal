@@ -1,7 +1,16 @@
 import { createHash, randomBytes } from 'node:crypto';
-import type { SessionStorage } from '../storage/session-storage.js';
-import type { IssueSessionRequest, SessionIdentity } from './session-types.js';
+import type { SessionStorage, LoginFailureRecord } from '../storage/session-storage.js';
+import type { IssueSessionRequest, SessionIdentity, LoginFailureState } from './session-types.js';
 import type { LoginFailureLimits } from '../../authentication/model/login-failure-types.js';
+import { mayAttemptLogin, nextLoginFailure } from '../login-failure-rules.js';
+
+function fromLoginFailureRecord(record: LoginFailureRecord): LoginFailureState {
+	return {
+		attempts: record.attempts,
+		windowStartedAt: record.windowStartedAt,
+		blockedUntil: record.blockedUntil,
+	};
+}
 
 export class SessionModel {
 	constructor(private readonly storage: Readonly<SessionStorage>) {}
@@ -51,17 +60,21 @@ export class SessionModel {
 		return this.storage.revoke(SessionModel.digest(token));
 	}
 
-	checkLoginAdmission(source: string): Promise<boolean> {
-		return this.storage.checkLoginAdmission(source, Date.now());
+	async checkLoginAdmission(source: string): Promise<boolean> {
+		const now = Date.now();
+		const record = await this.storage.getLoginFailure(source);
+		return mayAttemptLogin(record === null ? null : fromLoginFailureRecord(record), now);
 	}
 
 	recordFailedPassword(source: string, limits: LoginFailureLimits): Promise<void> {
-		return this.storage.recordFailedPassword({
-			source,
-			now: Date.now(),
-			maxAttempts: limits.maxAttempts,
-			banMs: limits.banMs,
-			windowMs: limits.windowMs,
+		const now = Date.now();
+		return this.storage.recordFailedPassword(source, (record) => {
+			const state = nextLoginFailure(record === null ? null : fromLoginFailureRecord(record), now, limits);
+			return {
+				attempts: state.attempts,
+				windowStartedAt: state.windowStartedAt,
+				blockedUntil: state.blockedUntil,
+			};
 		});
 	}
 }

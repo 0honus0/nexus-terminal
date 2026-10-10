@@ -1,17 +1,27 @@
 import { createHash } from 'node:crypto';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
-import type {
-	SessionStorage,
-	SessionWrite,
-	SessionRecord,
-	FailureCounterCommand,
-} from '../../storage/session-storage.js';
+import type { SessionStorage, SessionWrite, SessionRecord, LoginFailureRecord } from '../../storage/session-storage.js';
 
 // TODO(Access later network-policy batch): configurable IP allow/deny policies
 // and CAPTCHA require their own stored settings and real enforcement paths.
 
 function credentialRevision(passwordHash: string): string {
 	return createHash('sha256').update(passwordHash).digest('hex');
+}
+
+function decodeLoginFailure(row: Record<string, unknown>): LoginFailureRecord {
+	function integer(value: unknown): number {
+		if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+			throw new Error('Corrupt login failure counter');
+		}
+		return value;
+	}
+
+	return {
+		attempts: integer(row.attempts),
+		windowStartedAt: integer(row.window_started_at),
+		blockedUntil: integer(row.blocked_until),
+	};
 }
 
 export class SqliteSessionStorage implements SessionStorage {
@@ -103,44 +113,30 @@ export class SqliteSessionStorage implements SessionStorage {
 		await this.db.run('DELETE FROM access_sessions WHERE token_digest=?', [tokenDigest]);
 	}
 
-	async checkLoginAdmission(source: string, now: number): Promise<boolean> {
+	async getLoginFailure(source: string): Promise<LoginFailureRecord | null> {
 		const row = await this.db.one(
 			'SELECT attempts,window_started_at,blocked_until FROM access_login_attempts WHERE source=?',
 			[source],
 		);
-		if (!row) {
-			return true;
-		}
-		return typeof row.blocked_until === 'number' && row.blocked_until <= now;
+		return row === null ? null : decodeLoginFailure(row);
 	}
 
-	async recordFailedPassword(command: FailureCounterCommand): Promise<void> {
-		await this.db.transaction(async (tx) => {
+	recordFailedPassword(
+		source: string,
+		decide: (current: LoginFailureRecord | null) => LoginFailureRecord,
+	): Promise<void> {
+		return this.db.transaction(async (tx) => {
 			const previous = await tx.one(
 				'SELECT attempts,window_started_at,blocked_until FROM access_login_attempts WHERE source=?',
-				[command.source],
+				[source],
 			);
-			const existingBlock = typeof previous?.blocked_until === 'number' ? previous.blocked_until : 0;
-			const activeBlock = existingBlock > command.now;
-			const expiredBlock = existingBlock > 0 && existingBlock <= command.now;
-			const currentWindow =
-				previous &&
-				typeof previous.window_started_at === 'number' &&
-				!expiredBlock &&
-				command.now - previous.window_started_at < command.windowMs;
-			const attempts = currentWindow && typeof previous.attempts === 'number' ? previous.attempts + 1 : 1;
-			const windowStart = currentWindow ? (previous.window_started_at as number) : command.now;
-			const blockedUntil = activeBlock
-				? existingBlock
-				: attempts >= command.maxAttempts
-					? command.now + command.banMs
-					: 0;
+			const next = decide(previous === null ? null : decodeLoginFailure(previous));
 			await tx.run(
 				`INSERT INTO access_login_attempts(source,attempts,window_started_at,blocked_until)
          VALUES(?,?,?,?)
          ON CONFLICT(source) DO UPDATE SET attempts=excluded.attempts,
            window_started_at=excluded.window_started_at,blocked_until=excluded.blocked_until`,
-				[command.source, attempts, windowStart, blockedUntil],
+				[source, next.attempts, next.windowStartedAt, next.blockedUntil],
 			);
 		});
 	}

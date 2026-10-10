@@ -8,7 +8,7 @@
 	} from '@/runtimes/remote-next/public';
 	import type { RemoteFileResourceView } from '@nexus-terminal/shared/remote/files/model';
 	import { createTargetsNextApi } from '../api/targets-next-api';
-	import { createAccessNextApi } from '../api/access-next-api';
+	import { createAccessNextApi } from '@/features/auth/public';
 	import type { TargetConnectionInput, TargetImportInput } from '@nexus-terminal/shared/targets/connections/http';
 	import type { TargetConnectionView } from '@nexus-terminal/shared/targets/connections/model';
 	import type { TargetProxyView } from '@nexus-terminal/shared/targets/proxies/model';

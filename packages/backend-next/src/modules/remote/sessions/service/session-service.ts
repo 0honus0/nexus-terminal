@@ -8,18 +8,22 @@ import {
 	REMOTE_TERMINAL_MAX_ROWS,
 	REMOTE_TERMINAL_MAX_TERM_LENGTH,
 } from '@nexus-terminal/shared/remote/sessions/values';
-import type { RemoteSessionCloseReason } from '../../public.js';
 import { randomUUID } from 'node:crypto';
 import type { RemoteSessionModel } from '../model/session-model.js';
-import type { RemoteSessionSnapshot, RemoteSessionResource, OpenSessionRequest } from '../model/session-types.js';
+import type {
+	RemoteSessionSnapshot,
+	RemoteSessionResource,
+	OpenSessionRequest,
+	SessionCloseReason,
+} from '../model/session-types.js';
 
 interface ActiveSession {
 	view: RemoteSessionSnapshot;
 	resource: RemoteSessionResource;
 	dataListeners: Set<(bytes: Uint8Array) => void>;
 	stderrListeners: Set<(bytes: Uint8Array) => void>;
-	closedListeners: Set<(reason: RemoteSessionCloseReason) => void>;
-	closeReason: RemoteSessionCloseReason;
+	closedListeners: Set<(reason: SessionCloseReason) => void>;
+	closeReason: SessionCloseReason;
 	offResource: () => void;
 	offData: () => void;
 	offStderr: () => void;
@@ -283,13 +287,13 @@ export class RemoteSessionService {
 		return this.requireSession(id).resource.onDrain(listener);
 	}
 
-	onClosed(id: string, listener: (reason: RemoteSessionCloseReason) => void): () => void {
+	onClosed(id: string, listener: (reason: SessionCloseReason) => void): () => void {
 		const session = this.requireSession(id);
 		session.closedListeners.add(listener);
 		return () => session.closedListeners.delete(listener);
 	}
 
-	closeSession(id: string, reason: RemoteSessionCloseReason = 'closed_by_owner'): Promise<void> {
+	closeSession(id: string, reason: SessionCloseReason = 'closed_by_owner'): Promise<void> {
 		const session = this.sessions.get(id);
 		if (session) {
 			// A transport failure must upgrade a previously observed Shell EOF,
@@ -330,15 +334,22 @@ export class RemoteSessionService {
 
 	private async closeActiveSession(id: string, session: ActiveSession): Promise<void> {
 		this.sessions.delete(id);
-		session.offResource();
-		session.offStderr();
-		session.offData();
+		const failures: unknown[] = [];
+		for (const unsubscribe of [session.offResource, session.offStderr, session.offData]) {
+			try {
+				unsubscribe();
+			} catch (error) {
+				failures.push(error);
+			}
+		}
 		try {
 			await session.resource.close();
 		} catch (error) {
-			session.closeReason = 'cleanup_failed';
-			throw error;
+			failures.push(error);
 		} finally {
+			if (failures.length) {
+				session.closeReason = 'cleanup_failed';
+			}
 			for (const listener of session.closedListeners) {
 				try {
 					listener(session.closeReason);
@@ -349,6 +360,9 @@ export class RemoteSessionService {
 			session.dataListeners.clear();
 			session.stderrListeners.clear();
 			session.closedListeners.clear();
+		}
+		if (failures.length) {
+			throw new AggregateError(failures, 'Remote session cleanup failed');
 		}
 	}
 

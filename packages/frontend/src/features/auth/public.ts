@@ -3,6 +3,10 @@ import type { AuthSessionState, SetupState } from './model/auth';
 import { useAuthSession } from './composables/useAuthSession';
 import { useAuthStore } from './store/auth.store';
 
+export { createAccessNextApi } from './next/public';
+
+export type { AccessNextApi } from './next/public';
+
 export { default as LoginView } from './views/LoginView.vue';
 
 export const loadSetupView = () => import('./views/SetupView.vue');

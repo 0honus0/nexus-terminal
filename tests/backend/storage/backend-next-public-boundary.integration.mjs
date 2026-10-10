@@ -21,12 +21,18 @@ import {
 	toTrustedTargetView,
 } from '../../../packages/backend-next/dist/modules/targets/public-mappers.js';
 import { createApp } from '../../../packages/backend-next/dist/bootstrap/create-app.js';
+import { InvalidAccessPayload, readAccessHttpError } from '../../../packages/shared/dist/access/http.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const forbidden = 'NEVER_EXPOSE_INTERNAL_FIELD';
+
+// Every login error emitted by Access must survive the shared client decoder.
+assert.deepEqual(readAccessHttpError({ code: 'rate_limited' }), { code: 'rate_limited' });
+assert.deepEqual(readAccessHttpError({ code: 'factor_unavailable' }), { code: 'factor_unavailable' });
+assert.throws(() => readAccessHttpError({ code: 'not_a_public_error' }), InvalidAccessPayload);
 
 function withoutInternal(value) {
 	assert.equal(JSON.stringify(value).includes(forbidden), false, 'internal fields must never escape');

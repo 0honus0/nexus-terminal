@@ -4,6 +4,7 @@ import { createAuthNavigationFacade, loadSetupView } from '@/features/auth/publi
 import { loadConnectionsView } from '@/features/connections/public';
 import { loadProxiesView } from '@/features/proxies/public';
 import { loadTargetsNextDevView } from '@/features/targets-next/public';
+import { loadAgentNextDevView } from '@/features/agent/public';
 import { loadNotificationsView } from '@/features/notifications/public';
 import { loadAuditLogView } from '@/features/audit/public';
 import { clearDynamicImportRecoveryMarker, recoverStaleDynamicImport } from '@/app/bootstrap/pwa';
@@ -112,6 +113,11 @@ if (import.meta.env.DEV) {
 		name: 'TargetsNextDev',
 		component: loadTargetsNextDevView,
 	});
+	routes.splice(catchAllIndex < 0 ? routes.length : catchAllIndex, 0, {
+		path: '/__agent-next',
+		name: 'AgentNextDev',
+		component: loadAgentNextDevView,
+	});
 }
 
 export const createAppRouter = (pinia: Pinia) => {
@@ -133,7 +139,7 @@ export const createAppRouter = (pinia: Pinia) => {
 
 	router.beforeEach(async (to) => {
 		// Separate backend-next session; never share legacy auth or Workspace state.
-		if (import.meta.env.DEV && to.name === 'TargetsNextDev') return true;
+		if (import.meta.env.DEV && (to.name === 'TargetsNextDev' || to.name === 'AgentNextDev')) return true;
 		await auth.resolveSetupState();
 
 		if (auth.setupRequired && to.name !== 'Setup') return { name: 'Setup' };

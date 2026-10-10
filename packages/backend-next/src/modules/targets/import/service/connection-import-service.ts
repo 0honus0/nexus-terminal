@@ -2,8 +2,8 @@ import { TargetFailure } from '../../target-failure.js';
 import type { ConnectionImport } from '../model/import-types.js';
 import type { ConnectionSnapshot } from '../../connections/model/connection-types.js';
 import type { ConnectionImportModel } from '../model/import-model.js';
-import { validateConnection } from '../../connections/model/connection-validation.js';
-import { validateProxyMetadata } from '../../proxies/model/proxy-validation.js';
+import { validateConnection } from '../../connections/connection-rules.js';
+import { validateProxyMetadata } from '../../proxies/proxy-rules.js';
 
 export class ConnectionImportService {
 	constructor(private readonly model: ConnectionImportModel) {}
@@ -24,6 +24,9 @@ export class ConnectionImportService {
 		}
 		const normalized: ConnectionImport = { connection: validateConnection(command.connection) };
 		if (proxy !== undefined) {
+			if (normalized.connection.route !== 'proxy' || normalized.connection.proxyId !== null) {
+				throw new TargetFailure('invalid_input');
+			}
 			normalized.inlineProxy = proxy;
 		}
 		if (command.tagNames !== undefined) {

@@ -1,3 +1,4 @@
+import { AGENT_RUN_MAX_PROMPT_BYTES, AGENT_RUN_EVENT_MAX_LIMIT } from '@nexus-terminal/shared/agent/runs/values';
 import { createHash, randomUUID } from 'node:crypto';
 import type { RunModel } from '../model/run-model.js';
 import type {
@@ -17,7 +18,11 @@ function validateScope(userId: number, appId: string): void {
 }
 
 function validatePrompt(prompt: string): void {
-	if (typeof prompt !== 'string' || !prompt.trim() || Buffer.byteLength(prompt, 'utf8') > 16384) {
+	if (
+		typeof prompt !== 'string' ||
+		!prompt.trim() ||
+		Buffer.byteLength(prompt, 'utf8') > AGENT_RUN_MAX_PROMPT_BYTES
+	) {
 		throw new AgentFailure('invalid_input');
 	}
 }
@@ -92,7 +97,7 @@ export class RunService {
 		validateScope(userId, appId);
 		validateAgentId(runId);
 		validateCursor(after);
-		if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+		if (!Number.isSafeInteger(limit) || limit < 1 || limit > AGENT_RUN_EVENT_MAX_LIMIT) {
 			throw new AgentFailure('invalid_input');
 		}
 		return this.model.listEvents(userId, appId, runId, after, limit);

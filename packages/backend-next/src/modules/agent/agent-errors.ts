@@ -1,14 +1,6 @@
 import { AgentFailure } from './agent-failure.js';
 import { SqliteFailure } from '../../platform/storage/sqlite/sqlite-errors.js';
-
-import type { AgentErrorCode } from './public.js';
-
-export class AgentOperationError extends Error {
-	constructor(readonly code: AgentErrorCode) {
-		super('Agent operation failed: ' + code);
-		this.name = 'AgentOperationError';
-	}
-}
+import { AgentOperationError } from './public-errors.js';
 
 export async function agentBoundary<T>(action: () => Promise<T>): Promise<T> {
 	try {

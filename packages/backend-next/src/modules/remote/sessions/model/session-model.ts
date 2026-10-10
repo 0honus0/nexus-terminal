@@ -4,6 +4,18 @@ import type { TrustedResolvedSshTarget } from '../../../targets/public.js';
 import type { MachineConnection, MachineShell } from '../../../../platform/ssh/ssh-port.js';
 import type { RemoteMachineModel } from '../../model/machine-model.js';
 
+function unsubscribeAll(subscriptions: readonly (() => void)[]): unknown[] {
+	const failures: unknown[] = [];
+	for (const unsubscribe of subscriptions) {
+		try {
+			unsubscribe();
+		} catch (error) {
+			failures.push(error);
+		}
+	}
+	return failures;
+}
+
 function createSessionResource(
 	target: TrustedResolvedSshTarget,
 	machine: MachineConnection,
@@ -26,9 +38,7 @@ function createSessionResource(
 
 	async function closeResources(): Promise<void> {
 		closed = true;
-		offMachine();
-		offShell();
-		const failures: unknown[] = [];
+		const failures = unsubscribeAll([offMachine, offShell]);
 		try {
 			shell.close();
 		} catch (error) {
@@ -102,8 +112,10 @@ function createSessionResource(
 			const offChannel = shell.onClose((reason) => notify(reason === 'normal' ? 'normal' : 'disconnected'));
 			return () => {
 				lastReason = 'disconnected';
-				offTransport();
-				offChannel();
+				const failures = unsubscribeAll([offTransport, offChannel]);
+				if (failures.length) {
+					throw new AggregateError(failures, 'Remote close subscriptions failed');
+				}
 			};
 		},
 

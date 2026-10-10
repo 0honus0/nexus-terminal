@@ -1,3 +1,10 @@
+import type {
+	AgentRunStatus,
+	AgentRunEventType,
+	AgentCreateRunOutcome,
+	AgentCancelRunOutcome,
+} from '@nexus-terminal/shared/agent/runs/values';
+
 /** Application command; SQLite's write record is constructed only in this Model. */
 export interface CreateRootRunCommand {
 	id: string;
@@ -24,7 +31,7 @@ export interface AgentRun {
 	id: string;
 	appId: string;
 	threadId: string;
-	status: 'pending' | 'cancelled';
+	status: AgentRunStatus;
 	version: number;
 	createdAt: number;
 	updatedAt: number;
@@ -33,19 +40,19 @@ export interface AgentRun {
 export interface AgentRunEvent {
 	runId: string;
 	sequence: number;
-	type: 'run.created' | 'run.cancelled';
+	type: AgentRunEventType;
 	runVersion: number;
 	createdAt: number;
 }
 
 export type CreateRunResult =
-	| { status: 'created'; run: AgentRun }
-	| { status: 'replayed'; originalStatus: 'created'; run: AgentRun }
+	| { status: AgentCreateRunOutcome; run: AgentRun }
+	| { status: 'replayed'; originalStatus: AgentCreateRunOutcome; run: AgentRun }
 	| { status: 'scope_not_found' | 'active_run_conflict' | 'idempotency_conflict' };
 
 export type CancelRunResult =
-	| { status: 'cancelled' | 'already_cancelled'; run: AgentRun }
-	| { status: 'replayed'; originalStatus: 'cancelled' | 'already_cancelled'; run: AgentRun }
+	| { status: AgentCancelRunOutcome; run: AgentRun }
+	| { status: 'replayed'; originalStatus: AgentCancelRunOutcome; run: AgentRun }
 	| { status: 'not_found' | 'version_conflict' | 'idempotency_conflict' };
 
 export interface RunEventPage {
@@ -70,6 +77,8 @@ export interface CancelRunRequest {
 }
 
 export interface RootRunState {
-	status: 'pending' | 'cancelled';
+	status: AgentRunStatus;
 	version: number;
 }
+
+export type CancelRootRunDecision = 'cancel' | 'already_cancelled' | 'version_conflict';

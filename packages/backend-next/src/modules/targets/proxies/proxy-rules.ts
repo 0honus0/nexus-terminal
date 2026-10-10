@@ -1,5 +1,5 @@
-import { TargetFailure } from '../../target-failure.js';
-import type { ProxyMetadata, ProxyCommandPatch } from './proxy-types.js';
+import { TargetFailure } from '../target-failure.js';
+import type { ProxyMetadata, ProxyCommandPatch } from './model/proxy-types.js';
 
 /** Shared normalization for management and transaction-local import. */
 export function validateProxyMetadata(data: ProxyMetadata): ProxyMetadata {

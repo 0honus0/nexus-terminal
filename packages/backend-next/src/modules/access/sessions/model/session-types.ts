@@ -1,5 +1,11 @@
 import type { Account } from '../../accounts/model/account-types.js';
 
+export interface LoginFailureState {
+	attempts: number;
+	windowStartedAt: number;
+	blockedUntil: number;
+}
+
 export interface SessionIdentity {
 	account: Account;
 	expiresAt: number;

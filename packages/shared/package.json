@@ -8,6 +8,42 @@
     "check": "tsc --noEmit"
   },
   "exports": {
+    "./agent/http": {
+      "types": "./dist/agent/http.d.ts",
+      "default": "./dist/agent/http.js"
+    },
+    "./agent/scope/values": {
+      "types": "./dist/agent/scope/values.d.ts",
+      "default": "./dist/agent/scope/values.js"
+    },
+    "./agent/scope/model": {
+      "types": "./dist/agent/scope/model.d.ts",
+      "default": "./dist/agent/scope/model.js"
+    },
+    "./agent/scope/http": {
+      "types": "./dist/agent/scope/http.d.ts",
+      "default": "./dist/agent/scope/http.js"
+    },
+    "./agent/scope/http-codec": {
+      "types": "./dist/agent/scope/http-codec.d.ts",
+      "default": "./dist/agent/scope/http-codec.js"
+    },
+    "./agent/runs/values": {
+      "types": "./dist/agent/runs/values.d.ts",
+      "default": "./dist/agent/runs/values.js"
+    },
+    "./agent/runs/model": {
+      "types": "./dist/agent/runs/model.d.ts",
+      "default": "./dist/agent/runs/model.js"
+    },
+    "./agent/runs/http": {
+      "types": "./dist/agent/runs/http.d.ts",
+      "default": "./dist/agent/runs/http.js"
+    },
+    "./agent/runs/http-codec": {
+      "types": "./dist/agent/runs/http-codec.d.ts",
+      "default": "./dist/agent/runs/http-codec.js"
+    },
     "./access/http": {
       "types": "./dist/access/http.d.ts",
       "default": "./dist/access/http.js"
@@ -127,6 +163,14 @@
     "./remote/files/http-codec": {
       "types": "./dist/remote/files/http-codec.d.ts",
       "default": "./dist/remote/files/http-codec.js"
+    },
+    "./agent/http-codec": {
+      "types": "./dist/agent/http-codec.d.ts",
+      "default": "./dist/agent/http-codec.js"
+    },
+    "./agent/values": {
+      "types": "./dist/agent/values.d.ts",
+      "default": "./dist/agent/values.js"
     }
   },
   "devDependencies": {

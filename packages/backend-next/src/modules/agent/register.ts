@@ -1,3 +1,6 @@
+import type { AgentAppView, AgentThreadView } from '@nexus-terminal/shared/agent/scope/model';
+import type { AgentRunView, AgentRunEventView } from '@nexus-terminal/shared/agent/runs/model';
+import type { AgentRunEventsResponse } from '@nexus-terminal/shared/agent/runs/http';
 import type { SqliteRuntime } from '../../platform/storage/sqlite/sqlite-runtime.js';
 import { SqliteScopeStorage } from './scope/adapters/sqlite/scope-sql.js';
 import { ScopeModel } from './scope/model/scope-model.js';
@@ -13,16 +16,7 @@ import type {
 	CancelRunResult,
 	RunEventPage,
 } from './runs/model/run-types.js';
-import type {
-	AgentStateApi,
-	AgentAppView,
-	AgentThreadView,
-	AgentRunView,
-	AgentRunEventView,
-	AgentCreateRunResult,
-	AgentCancelRunResult,
-	AgentEventPageView,
-} from './public.js';
+import type { AgentStateApi, AgentCreateRunResult, AgentCancelRunResult } from './public.js';
 import { agentBoundary } from './agent-errors.js';
 import type { AccessPublicApi } from '../access/public.js';
 import type { HttpRoute } from '../../platform/http/http-types.js';
@@ -78,7 +72,7 @@ function toCancelResult(value: CancelRunResult): AgentCancelRunResult {
 	return { status: value.status };
 }
 
-function toEventPage(value: RunEventPage): AgentEventPageView {
+function toEventPage(value: RunEventPage): AgentRunEventsResponse {
 	return { items: value.items.map(toEventView), nextCursor: value.nextCursor };
 }
 

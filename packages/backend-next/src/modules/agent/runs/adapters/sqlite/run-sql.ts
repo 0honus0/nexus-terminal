@@ -1,3 +1,4 @@
+import type { AgentRunStatus, AgentRunCommandOutcome } from '@nexus-terminal/shared/agent/runs/values';
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type {
@@ -8,6 +9,7 @@ import type {
 	CancelRunStorageCommand,
 	StoredCreateResult,
 	StoredCancelResult,
+	StoredCancelRunDecision,
 	RunEventPageRecord,
 } from '../../storage/run-storage.js';
 
@@ -27,7 +29,7 @@ function integer(value: unknown, min = 0): number {
 	return value;
 }
 
-function runStatus(value: unknown): 'pending' | 'cancelled' {
+function runStatus(value: unknown): AgentRunStatus {
 	if (value === 'pending' || value === 'cancelled') {
 		return value;
 	}
@@ -63,7 +65,7 @@ function decodeEvent(row: Row): StoredRunEvent {
 
 function decodeReplay(row: Row): {
 	hash: string;
-	outcome: 'created' | 'cancelled' | 'already_cancelled';
+	outcome: AgentRunCommandOutcome;
 	run: StoredRun;
 } {
 	const outcome = row.result_outcome;
@@ -110,7 +112,7 @@ async function saveReplay(
 	command: { userId: number; appId: string; operationKey: string; requestHash: string },
 	name: 'create_run' | 'cancel_run',
 	run: StoredRun,
-	outcome: 'created' | 'cancelled' | 'already_cancelled',
+	outcome: AgentRunCommandOutcome,
 ): Promise<void> {
 	await tx.run(
 		`
@@ -208,7 +210,7 @@ export class SqliteRunStorage implements RunStorage {
 
 	cancel(
 		command: CancelRunStorageCommand,
-		decide: (run: StoredRun) => 'cancel' | 'already_cancelled' | 'version_conflict',
+		decide: (run: StoredRun) => StoredCancelRunDecision,
 	): Promise<StoredCancelResult> {
 		return this.db.transaction(async (tx) => {
 			const previous = await replay(tx, command.userId, command.appId, 'cancel_run', command.operationKey);

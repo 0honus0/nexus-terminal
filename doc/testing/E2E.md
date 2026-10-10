@@ -4,6 +4,8 @@
 
 Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end coverage.
 
+**Scope and evidence:** Formal product tests target `packages/backend`; independent `backend-next` checks are identified separately below. PASS statements apply only to their recorded version and executed cases. Historical Runner/Workspace evidence does not define current development tasks or acceptance of the new backend. Current work is owned by the [implementation plan](../后端重构下一阶段实施方案.md); this documentation review adds no new code-check or behavior PASS.
+
 SSH search cancellation checks both temporary and persistent SFTP sessions: held reads must settle, open read handles must return to zero, the fixture must stay healthy, and a new search must succeed. The SSH fixture closes remaining file handles when a channel ends, including OPEN operations that finish after cancellation.
 
 CI `scripts/e2e/docker-core-no-runner-smoke.sh` verifies the unified Frontend/Backend/Guacd Compose deployment starts without a production Agent Runner, remains healthy, and does not ship retired Workspace execution modules. The former Runner Job/full deployment smoke depended on deleted production code and has been retired; this lighter core smoke does not cover every authenticated Docker workflow.
@@ -95,7 +97,11 @@ node tests/backend/remote/backend-next-frontend.integration.mjs
 
 该脚本将使用隔离的 backend-next、Vite 开发入口与 Playwright Chromium 验证 SSH 连接失败后重复打开、xterm/ResizeObserver 回收及错误文案；还需覆盖旧 generation 的异步错误不覆盖新连接，以及主动关闭后 DELETE 的成功/失败展示。**2026-10-10 当前环境 Chromium 无法访问 `/proc` 相关内核路径且 GPU 进程被沙箱阻断，在浏览器启动阶段失败，页面断言未执行，不算 PASS**。待有合适权限的 runner 执行，不能通过忽略错误、修改断言或仅凭 TypeScript 构建代替验收。
 
-这些测试覆盖的是明确列出的专项故障窗口，不证明多级 Proxy/Jump、大输出、权限撤销、长时间断线或全部 E2E 产品功能；整体余项记录在[架构重构](../架构重构.md#迁移边界验收与当前施工)，协议阶段待办见[下一阶段实施方案](../后端重构下一阶段实施方案.md)。源代码结构或字符串出现与否不是本组测试的判断依据。
+这些测试覆盖的是明确列出的专项故障窗口，不证明多级 Proxy/Jump、大输出、权限撤销、长时间断线或全部 E2E 产品功能；整体余项记录在[后端架构当前能力与验收](../architecture/BACKEND.md#8-当前能力与验收)，协议阶段待办见[下一阶段实施方案](../后端重构下一阶段实施方案.md)。源代码结构或字符串出现与否不是本组测试的判断依据。
+
+**2026-10-10 协议迁移复审补充（非测试 PASS）**：本次核对本地最新 13 个 HTTP/WS、Shared 与前端消费者相关提交，发现 Access 登录 `rate_limited` / `factor_unavailable` 响应与 Shared 错误解码列表不一致，以及 Remote 的 `host_key_untrusted` 声明尚无对应的专用 HTTP 映射；具体 owner 与收口要求见[当前专项验收任务](../后端重构下一阶段实施方案.md#s2-当前切片真实行为验收)。后续专项须增加真实 429/403 登录错误显示、Host Key 不受信任时的公开错误语义核对，且继续保留 Origin/代理、HTTP 4xx、ACL/断线、浏览器重试等剩余验收。首次尝试的 pnpm 检查/构建因存储操作锁无权限、本地 Node 可执行因权限拒绝均未启动；**没有本轮新增的静态 PASS、构建 PASS 或行为 PASS**。此段不推翻上文有明确历史执行记录的专项结果，也不将 Chromium 阻塞误记为已解决。
+
+**同日源码修复后新增的既有专项断言（尚未运行）**：`tests/backend/storage/backend-next-public-boundary.integration.mjs` 对 Access 两个真实登录失败码作 Shared 严格解码与未知码拒绝断言；`tests/backend/remote/backend-next-ssh.integration.mjs` 利用真实 SSH2 服务与受认证 Remote HTTP，要求未确认或错误 SHA256 Host Key 返回 422 `host_key_untrusted`，在恢复正确指纹后密码错误仅返回 503 `remote_unavailable`。此前这些脚本的历史 PASS **不覆盖刚加的断言**。执行前先构建 backend-next/Shared，保持既有入口与原有覆盖；429/403 的真实登录策略触发、开发页实际本地化以及 Host Key 跳板、并发断连仍需要单独真实验收。受当前执行环境限制未能得到新 PASS，不能将代码修改等同于测试通过。
 
 ## Structure
 
@@ -477,7 +483,40 @@ Vite also uses an E2E-specific cache directory so local dependency-cache permiss
 
 Runtime databases, reports, traces, screenshots, videos, logs, PID files, caches, and test-installed `node_modules` are ignored by Git.
 
+## 阶段逻辑回归
+
+每个涉及行为的代码阶段按改动范围规划并执行逻辑回归，覆盖实际实现及消费者；格式、类型和 build 通过不能替代业务断言。内部重构也核对原有结果与失败语义，不只确认接口仍可调用。
+
+- 正常与边界：核对输入/输出、状态转换、容量临界值、分页和资源归属等受影响行为。
+- 失败与副作用：核对拒绝、冲突、异常、回滚/未知结果，既检查返回结果，也检查持久数据或资源是否符合预期。
+- 并发与生命周期：改动涉及幂等、版本、generation、取消或关闭时，验证重复调用、晚返回及清理路径；不只测顺序成功。
+- 消费者一致性：契约、错误或共享类型改变时覆盖实际双端与跨模块消费者；旧 Backend 的通过不能证明 backend-next，新 transport 的单测也不等于真实浏览器验收。
+
+优先选择既有单元、集成或专项用例，以能验证该风险的最小范围执行；必要时在现有测试结构补充缺失场景，不新建镜像实现或只读取源码文本的测试。外部服务可在适用技术边界使用隔离 fixture；真实 SSH/浏览器及故障注入专项保持单独验收，不把模拟结果扩写成实机保证。
+
+每阶段记录场景、被验代码/消费者、实际命令、分支/SHA/工作区、退出结果及未覆盖项。已知失败本阶段修复，修复后重跑受影响用例；仅文档/纯格式且无行为变化可记不适用并说明依据。用户明确限定测试范围或环境阻断时保留未验证状态，不宣称逻辑回归通过。本要求不自动启动全量 E2E 或改写历史证据。
+
 ## Engineering constraints
+
+### 2026-10-10 重构检查点
+
+核验范围为 `refactor/backend-storage-v1`、基线 `d3c1f28c3da2af52cf919b5e7d68c72971613e15` 加本次提交前工作区。实际工具为 `/usr/local/bin/node` v22.23.1、`/usr/local/bin/pnpm` 11.26.0；`.node-version` 的滚动 `node` 不等于固定安装版本。
+
+以下静态检查实际退出 0：Shared check、Backend-next check/build（包含 Shared build）、Frontend build、根 `pnpm run check`（包含前端类型检查）、`pnpm run format:all:check`、`git diff --check`。本机原始输出在 `/tmp/nexus-release-{check,build,format}.log`，临时日志不作为长期可用附件。
+
+以下命令实际退出 0，均使用临时数据库或本机隔离 fixture：
+
+```bash
+node tests/backend/storage/backend-next.integration.mjs
+node tests/backend/storage/backend-next-phase2.integration.mjs
+node tests/backend/storage/backend-next-public-boundary.integration.mjs
+node tests/backend/remote/backend-next-transport.integration.mjs
+node tests/backend/remote/backend-next-ssh.integration.mjs
+```
+
+覆盖 SQLite 事务/迁移、凭据及公开投影、跳板成环拒绝后的元数据/版本回滚、登录失败并发计数与封禁边界、Agent 状态幂等/冲突/权限/分页，以及 WS 队列/EOF/ACK/关闭失败和隔离 SSH Host Key/凭据失败映射。新增 phase2 场景通过记录在 `/tmp/nexus-release-phase2-expanded.log`；其余输出对应 `/tmp/<测试文件名>.log`。测试 fixture 初始化及 UUID 输入已修正后重跑通过。
+
+没有执行浏览器、外部 SSH/SFTP、全链路 E2E、环境故障注入或未知提交专项；前端已记录的错误契约与上下文验证缺口仍未关闭，静态通过不代表前端行为验收。
 
 When adding, moving, grouping, or optimizing tests, follow [AGENTS.md](../AGENTS.md) and verify observable behavior described in [USAGE](../USAGE.md).
 

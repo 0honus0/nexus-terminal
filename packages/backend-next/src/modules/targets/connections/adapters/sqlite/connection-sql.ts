@@ -6,8 +6,9 @@ import type {
 	StoredConnection,
 	ConnectionStorage,
 	MutationResult,
+	ConnectionGraphValidator,
 } from '../../storage/connection-storage.js';
-import { validateAffectedSshGraph } from './ssh-graph-sql.js';
+import { readSshGraph } from './ssh-graph-sql.js';
 
 const columnNames = [
 	'name',
@@ -134,25 +135,13 @@ async function readRequiredConnection(tx: SqlExecutor, id: number): Promise<Stor
 	return connection;
 }
 
-async function writeRelationships(tx: SqlExecutor, id: number, data: ConnectionData): Promise<void> {
-	if (data.route === 'jump' && (data.type !== 'SSH' || data.jumpIds.length === 0)) {
-		throw new TargetFailure('invalid_input');
-	}
-	if (data.route !== 'jump' && data.jumpIds.length) {
-		throw new TargetFailure('invalid_input');
-	}
-	if ((data.route === 'proxy' && data.proxyId === null) || (data.route !== 'proxy' && data.proxyId !== null)) {
-		throw new TargetFailure('invalid_input');
-	}
-	if (new Set(data.jumpIds).size !== data.jumpIds.length || new Set(data.tagIds).size !== data.tagIds.length) {
-		throw new TargetFailure('invalid_input');
-	}
-	for (const target of data.jumpIds) {
-		const row = await tx.one('SELECT type FROM connections WHERE id=?', [target]);
-		if (!row || row.type !== 'SSH' || target === id) {
-			throw new TargetFailure('invalid_input');
-		}
-	}
+async function writeRelationships(
+	tx: SqlExecutor,
+	id: number,
+	data: ConnectionData,
+	validateGraph: ConnectionGraphValidator,
+): Promise<void> {
+	validateGraph(data, await readSshGraph(tx), id);
 	await tx.run('DELETE FROM connection_jumps WHERE connection_id=?', [id]);
 	for (let i = 0; i < data.jumpIds.length; i++) {
 		await tx.run('INSERT INTO connection_jumps(connection_id,position,jump_connection_id) VALUES(?,?,?)', [
@@ -161,26 +150,32 @@ async function writeRelationships(tx: SqlExecutor, id: number, data: ConnectionD
 			data.jumpIds[i],
 		]);
 	}
-	await validateAffectedSshGraph(tx, id);
 	await tx.run('DELETE FROM connection_tags WHERE connection_id=?', [id]);
 	for (const tag of data.tagIds) {
 		await tx.run('INSERT INTO connection_tags(connection_id,tag_id) VALUES(?,?)', [id, tag]);
 	}
 }
 
-export async function insertConnectionInTransaction(tx: SqlExecutor, data: ConnectionData): Promise<StoredConnection> {
+export async function insertConnectionInTransaction(
+	tx: SqlExecutor,
+	data: ConnectionData,
+	validateGraph: ConnectionGraphValidator,
+): Promise<StoredConnection> {
 	const { columns, parameters } = buildColumnValues(data);
 	const now = Date.now();
 	const result = await tx.run(
 		`INSERT INTO connections(${columns.join(',')},version,created_at,updated_at) VALUES(${columns.map(() => '?').join(',')},1,?,?)`,
 		[...parameters, now, now],
 	);
-	await writeRelationships(tx, result.lastId, data);
+	await writeRelationships(tx, result.lastId, data, validateGraph);
 	return readRequiredConnection(tx, result.lastId);
 }
 
 export class ConnectionSqliteAdapter implements ConnectionStorage {
-	constructor(private readonly db: SqliteRuntime) {}
+	constructor(
+		private readonly db: SqliteRuntime,
+		private readonly validateGraph: ConnectionGraphValidator,
+	) {}
 
 	list(): Promise<StoredConnection[]> {
 		return this.db.transaction(async (tx) => {
@@ -201,7 +196,7 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 	}
 
 	create(data: ConnectionData): Promise<StoredConnection> {
-		return this.db.transaction((tx) => insertConnectionInTransaction(tx, data));
+		return this.db.transaction((tx) => insertConnectionInTransaction(tx, data, this.validateGraph));
 	}
 
 	update(id: number, expectedVersion: number, changes: Partial<ConnectionData>): Promise<MutationResult> {
@@ -235,7 +230,7 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 			if (!update.changes) {
 				return { status: 'version_conflict' };
 			}
-			await writeRelationships(tx, id, merged);
+			await writeRelationships(tx, id, merged, this.validateGraph);
 			return { status: 'updated', value: await readRequiredConnection(tx, id) };
 		});
 	}
@@ -246,7 +241,7 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 			if (!old) {
 				return null;
 			}
-			const copy = await insertConnectionInTransaction(tx, { ...old, name });
+			const copy = await insertConnectionInTransaction(tx, { ...old, name }, this.validateGraph);
 			// Cloning must preserve authentication as well as visible metadata.
 			// All three statements participate in the same transaction.
 			await tx.run(

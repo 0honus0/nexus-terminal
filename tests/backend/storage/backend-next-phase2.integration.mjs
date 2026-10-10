@@ -2,12 +2,19 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { createApp } from '../../../packages/backend-next/dist/bootstrap/create-app.js';
 import { SqliteRuntime } from '../../../packages/backend-next/dist/platform/storage/sqlite/sqlite-runtime.js';
 import { initializeSchema } from '../../../packages/backend-next/dist/platform/storage/sqlite/schema.js';
 import { targetMigrations } from '../../../packages/backend-next/dist/modules/targets/migrations.js';
 import { applicationMigrations } from '../../../packages/backend-next/dist/bootstrap/schema.js';
+import { SqliteAccountStorage } from '../../../packages/backend-next/dist/modules/access/accounts/adapters/sqlite/account-sql.js';
+import { SqliteSessionStorage } from '../../../packages/backend-next/dist/modules/access/sessions/adapters/sqlite/session-sql.js';
+import { SessionModel } from '../../../packages/backend-next/dist/modules/access/sessions/model/session-model.js';
+import {
+	nextLoginFailure,
+	mayAttemptLogin,
+} from '../../../packages/backend-next/dist/modules/access/sessions/login-failure-rules.js';
 const root = await mkdtemp(join(tmpdir(), 'nexus-phase2-'));
 const key = randomBytes(32);
 
@@ -39,6 +46,8 @@ try {
 		(await db.all('SELECT version FROM schema_version')).map((r) => r.version),
 		[1],
 	);
+	await initializeSchema(db, applicationMigrations);
+	await new SqliteAccountStorage(db).createInitialAdmin({ username: 'regression', passwordHash: 'fixture-hash' });
 	await db.close();
 	app = await createApp(dbPath, { encryptionKey: key });
 	const proxy = await app.targets.proxies.create({
@@ -100,6 +109,41 @@ try {
 	const resolved = await app.trustedSshTargets.resolveStored({ targetId: jump.id });
 	assert.equal(resolved.jumps.length, 1);
 	assert.equal(resolved.authentication.password, 'SECRET_CONNECTION');
+	const beforeCycle = await app.targets.get(host.id);
+	await assert.rejects(
+		() => app.targets.update(host.id, beforeCycle.version, { route: 'jump', proxyId: null, jumpIds: [jump.id] }),
+		(error) => error.code === 'invalid_input',
+	);
+	assert.deepEqual(
+		await app.targets.get(host.id),
+		beforeCycle,
+		'graph rejection must roll back metadata and version',
+	);
+	const agentApp = await app.agent.createApp(1, 'regression');
+	const thread = await app.agent.createThread(1, agentApp.id, 'state');
+	const intent = { userId: 1, appId: agentApp.id, threadId: thread.id, prompt: 'hello', operationKey: randomUUID() };
+	const createdRun = await app.agent.createRun(intent);
+	assert.equal(createdRun.status, 'created');
+	assert.equal((await app.agent.createRun(intent)).status, 'replayed');
+	assert.equal((await app.agent.createRun({ ...intent, prompt: 'different' })).status, 'idempotency_conflict');
+	assert.equal((await app.agent.createRun({ ...intent, operationKey: randomUUID() })).status, 'active_run_conflict');
+	const cancelIntent = {
+		userId: 1,
+		appId: agentApp.id,
+		runId: createdRun.run.id,
+		expectedVersion: createdRun.run.version,
+		operationKey: randomUUID(),
+	};
+	assert.equal((await app.agent.cancelRun({ ...cancelIntent, expectedVersion: 99 })).status, 'version_conflict');
+	assert.equal((await app.agent.cancelRun(cancelIntent)).status, 'cancelled');
+	assert.equal((await app.agent.cancelRun(cancelIntent)).status, 'replayed');
+	assert.equal((await app.agent.getRun(1, agentApp.id, createdRun.run.id)).status, 'cancelled');
+	assert.equal(await app.agent.getRun(2, agentApp.id, createdRun.run.id), null);
+	const firstPage = await app.agent.listEvents(1, agentApp.id, createdRun.run.id, 0, 1);
+	assert.equal(firstPage.items.length, 1);
+	const nextPage = await app.agent.listEvents(1, agentApp.id, createdRun.run.id, firstPage.nextCursor, 1);
+	assert.equal(nextPage.items.length, 1);
+	assert.ok(nextPage.items[0].sequence > firstPage.nextCursor);
 	const copy = await app.targets.clone(jump.id, 'jump-copy');
 	assert.equal(
 		(await app.trustedSshTargets.resolveStored({ targetId: copy.id })).authentication.password,
@@ -113,6 +157,24 @@ try {
 	await app.close();
 	app = undefined;
 	db = SqliteRuntime.open(dbPath);
+	const sessions = new SqliteSessionStorage(db);
+	const sessionModel = new SessionModel(sessions);
+	const limits = { maxAttempts: 3, windowMs: 10000, banMs: 20000 };
+	await Promise.all(Array.from({ length: 3 }, () => sessionModel.recordFailedPassword('regression-source', limits)));
+	assert.equal(
+		(await sessions.getLoginFailure('regression-source')).attempts,
+		3,
+		'concurrent failures must not lose increments',
+	);
+	assert.equal(await sessionModel.checkLoginAdmission('regression-source'), false);
+	const blocked = { attempts: 3, windowStartedAt: 0, blockedUntil: 20000 };
+	assert.equal(nextLoginFailure(blocked, 15000, limits).blockedUntil, 20000, 'active ban must not extend');
+	assert.equal(mayAttemptLogin(blocked, 20000), true);
+	assert.deepEqual(nextLoginFailure(blocked, 20000, limits), {
+		attempts: 1,
+		windowStartedAt: 20000,
+		blockedUntil: 0,
+	});
 	const versions = (await db.all('SELECT version FROM schema_version ORDER BY version')).map((r) => r.version);
 	assert.deepEqual(versions, [1, 2, 3]);
 	const creds = await db.all('SELECT encrypted_password FROM proxy_credentials');

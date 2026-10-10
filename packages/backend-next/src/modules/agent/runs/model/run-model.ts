@@ -1,5 +1,5 @@
 import type { RunStorage, StoredRun, StoredRunEvent } from '../storage/run-storage.js';
-import { mayCreateRootRun, decideCancelRootRun } from './run-rules.js';
+import { mayCreateRootRun, decideCancelRootRun } from '../run-rules.js';
 
 import type {
 	CreateRootRunCommand,

@@ -66,6 +66,8 @@
       "forbidden": "この操作を実行する権限がありません。",
       "host_key_untrusted": "SSH ホスト鍵が未確認です。信頼できる別経路で SHA256 指紋を照合してください。",
       "invalid_credentials": "ユーザー名またはパスワードが正しくありません。",
+      "rate_limited": "ログイン試行回数が多すぎます。しばらくしてから再試行してください。",
+      "factor_unavailable": "このアカウントに必要な追加認証方式はまだ利用できません。",
       "already_initialized": "初期管理者はすでに設定されています。",
       "unresolvable": "この接続経路を安全に解決できません。",
       "internal_failure": "リクエストを完了できませんでした。再試行してください。"

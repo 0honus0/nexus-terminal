@@ -5,10 +5,12 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
+import { request as httpRequest } from 'node:http';
 import WebSocket from '../../../packages/backend-next/node_modules/ws/index.js';
 import { createApp } from '../../../packages/backend-next/dist/bootstrap/create-app.js';
 import { openHttpListener } from '../../../packages/backend-next/dist/platform/http/http-server.js';
 import { RemoteSessionOwner } from '../../../packages/backend-next/dist/modules/remote/sessions/service/session-owner.js';
+import { createRemoteHttpRoutes } from '../../../packages/backend-next/dist/modules/remote/interfaces/http/remote-http.js';
 import { createRemoteWebSocketRoute } from '../../../packages/backend-next/dist/modules/remote/interfaces/http/pty-stream.js';
 
 const requireBackendNext = createRequire(new URL('../../../packages/backend-next/package.json', import.meta.url));
@@ -34,6 +36,45 @@ async function within(value, name, timeout = 8000) {
 	} finally {
 		clearTimeout(timer);
 	}
+}
+
+/** Exercise the real authenticated HTTP boundary with an explicit public Origin. */
+async function openSessionHttp(listener, targetId) {
+	const port = Number(listener.address.split(':').at(-1));
+	const input = JSON.stringify({ targetId, columns: 80, rows: 24 });
+	return new Promise((resolve, reject) => {
+		const request = httpRequest(
+			{
+				hostname: '127.0.0.1',
+				port,
+				method: 'POST',
+				path: '/api/v1/remote/sessions',
+				headers: {
+					Host: '127.0.0.1:0',
+					Origin: 'http://127.0.0.1:0',
+					Cookie: 'nexus_session=good',
+					'Content-Type': 'application/json',
+				},
+			},
+			(response) => {
+				const body = [];
+				response.on('data', (chunk) => body.push(chunk));
+				response.on('error', reject);
+				response.on('end', () => {
+					try {
+						resolve({
+							status: response.statusCode,
+							body: JSON.parse(Buffer.concat(body).toString('utf8')),
+						});
+					} catch (error) {
+						reject(error);
+					}
+				});
+			},
+		);
+		request.on('error', reject);
+		request.end(input);
+	});
 }
 
 const directory = await mkdtemp(join(tmpdir(), 'nexus-next-real-ssh-'));
@@ -114,7 +155,7 @@ try {
 		bindHost: '127.0.0.1',
 		publicOrigin: 'http://127.0.0.1:0',
 		trustedProxies: [],
-		routes: [],
+		routes: createRemoteHttpRoutes(owner, access),
 		webSockets: [createRemoteWebSocketRoute(owner, app.remote)],
 	});
 
@@ -215,6 +256,33 @@ try {
 		true,
 	);
 	console.log('Real SSH2 transport disconnect → Remote error (no successful EOF) PASS');
+
+	// Missing and mismatched pins are rejected by the actual SSH2 hostVerifier.
+	// This must not be confused with network or credential failures.
+	assert.equal(await app.targets.hostKeys.remove('127.0.0.1', port), true);
+	assert.deepEqual(await within(openSessionHttp(listener, target.id), 'missing Host Key HTTP result'), {
+		status: 422,
+		body: { code: 'host_key_untrusted' },
+	});
+	const wrongFingerprint =
+		'SHA256:' + createHash('sha256').update('not-the-fixture-public-key').digest('base64').replace(/=+$/u, '');
+	await app.targets.hostKeys.confirm({ host: '127.0.0.1', port, fingerprint: wrongFingerprint });
+	assert.deepEqual(await within(openSessionHttp(listener, target.id), 'mismatched Host Key HTTP result'), {
+		status: 422,
+		body: { code: 'host_key_untrusted' },
+	});
+	await app.targets.hostKeys.confirm({ host: '127.0.0.1', port, fingerprint });
+	const updated = await app.targets.get(target.id);
+	const changedCredential = await app.targets.credentials.set(target.id, updated.version, {
+		kind: 'password',
+		password: 'incorrect-credential',
+	});
+	assert.equal(changedCredential.status, 'updated');
+	assert.deepEqual(await within(openSessionHttp(listener, target.id), 'credential failure HTTP result'), {
+		status: 503,
+		body: { code: 'remote_unavailable' },
+	});
+	console.log('Real SSH2 Host Key trust failure / credential failure HTTP taxonomy PASS');
 } finally {
 	socket?.terminate();
 	if (listener) await within(listener.close(), 'listener close');

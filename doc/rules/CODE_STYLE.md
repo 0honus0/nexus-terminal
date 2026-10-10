@@ -34,3 +34,5 @@ catch 只用于安全映射、补充因果、清理或明确恢复，不能吞�
 ## 阶段检查
 
 按 [AGENTS 开发与收口流程](../AGENTS.md#开发与收口流程) 及实施方案执行适用的类型、ESLint、Prettier、构建和验证。静态工具只能证明其覆盖范围，不能证明架构、资源收敛或真实行为正确。检查失败在当前阶段解决，未知工作区变更不覆盖或代为提交。
+
+代码阶段执行 `pnpm run check`、`pnpm run format:all:check`、`git diff --check` 和适用包 build；涉及新后端单独执行 Backend-next check，根 check 不替代它。Shared 改变同步 Shared check/build 和双端消费者检查。逻辑回归按 [阶段逻辑回归](../testing/E2E.md#阶段逻辑回归) 及 E-10 执行；文档任务核对格式、链接和 diff。

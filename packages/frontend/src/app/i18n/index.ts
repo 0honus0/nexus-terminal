@@ -22,6 +22,7 @@ const messageModules = {
 	...import.meta.glob<MessageTree>('../pages/*/i18n/*.json', { eager: true, import: 'default' }),
 	...import.meta.glob<MessageTree>('../../shared/*/i18n/*.json', { eager: true, import: 'default' }),
 	...import.meta.glob<MessageTree>('../../features/*/i18n/*.json', { eager: true, import: 'default' }),
+	...import.meta.glob<MessageTree>('../../features/*/next/i18n/*.json', { eager: true, import: 'default' }),
 	...import.meta.glob<MessageTree>('../../runtimes/*/i18n/*.json', { eager: true, import: 'default' }),
 };
 

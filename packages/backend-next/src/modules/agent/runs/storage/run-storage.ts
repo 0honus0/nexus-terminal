@@ -1,12 +1,17 @@
-/** Storage contracts: no HTTP DTO or SQLite row escapes. */
-export type StoredRunStatus = 'pending' | 'cancelled';
+import type {
+	AgentRunStatus,
+	AgentRunEventType,
+	AgentCreateRunOutcome,
+	AgentCancelRunOutcome,
+} from '@nexus-terminal/shared/agent/runs/values';
 
+/** Storage contracts: no HTTP DTO or SQLite row escapes. */
 export interface StoredRun {
 	id: string;
 	userId: number;
 	appId: string;
 	threadId: string;
-	status: StoredRunStatus;
+	status: AgentRunStatus;
 	version: number;
 	createdAt: number;
 	updatedAt: number;
@@ -34,19 +39,19 @@ export interface CancelRunStorageCommand {
 }
 
 export type StoredCreateResult =
-	| { status: 'created'; run: StoredRun }
-	| { status: 'replayed'; originalStatus: 'created'; run: StoredRun }
+	| { status: AgentCreateRunOutcome; run: StoredRun }
+	| { status: 'replayed'; originalStatus: AgentCreateRunOutcome; run: StoredRun }
 	| { status: 'scope_not_found' | 'active_run_conflict' | 'idempotency_conflict' };
 
 export type StoredCancelResult =
-	| { status: 'cancelled' | 'already_cancelled'; run: StoredRun }
-	| { status: 'replayed'; originalStatus: 'cancelled' | 'already_cancelled'; run: StoredRun }
+	| { status: AgentCancelRunOutcome; run: StoredRun }
+	| { status: 'replayed'; originalStatus: AgentCancelRunOutcome; run: StoredRun }
 	| { status: 'not_found' | 'version_conflict' | 'idempotency_conflict' };
 
 export interface StoredRunEvent {
 	runId: string;
 	sequence: number;
-	type: 'run.created' | 'run.cancelled';
+	type: AgentRunEventType;
 	runVersion: number;
 	createdAt: number;
 }
@@ -56,6 +61,8 @@ export interface RunEventPageRecord {
 	nextCursor: number;
 }
 
+export type StoredCancelRunDecision = 'cancel' | 'already_cancelled' | 'version_conflict';
+
 export interface RunStorage {
 	create(
 		command: CreateRunStorageCommand,
@@ -63,7 +70,7 @@ export interface RunStorage {
 	): Promise<StoredCreateResult>;
 	cancel(
 		command: CancelRunStorageCommand,
-		decide: (run: StoredRun) => 'cancel' | 'already_cancelled' | 'version_conflict',
+		decide: (run: StoredRun) => StoredCancelRunDecision,
 	): Promise<StoredCancelResult>;
 	get(userId: number, appId: string, runId: string): Promise<StoredRun | null>;
 	listEvents(

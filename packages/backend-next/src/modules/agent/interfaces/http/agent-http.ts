@@ -1,76 +1,63 @@
+import { InvalidAgentPayload, encodeAgentJson } from '@nexus-terminal/shared/agent/http-codec';
+import { AGENT_MAX_JSON_BODY_BYTES, AGENT_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/values';
+import { AGENT_RUN_MAX_JSON_BODY_BYTES, AGENT_RUN_IDEMPOTENCY_HEADER } from '@nexus-terminal/shared/agent/runs/values';
+import {
+	readAgentAppPath,
+	readAgentCreateAppRequest,
+	readAgentCreateThreadRequest,
+} from '@nexus-terminal/shared/agent/scope/http-codec';
+import {
+	readAgentCreateRunRequest,
+	readAgentCancelRunRequest,
+	readAgentRunCommandHeaders,
+	readAgentRunEventsQuery,
+	readAgentCreateRunPath,
+	readAgentRunPath,
+} from '@nexus-terminal/shared/agent/runs/http-codec';
+import type { AgentAppView, AgentThreadView } from '@nexus-terminal/shared/agent/scope/model';
+import type { AgentRunView, AgentRunEventView } from '@nexus-terminal/shared/agent/runs/model';
+import type {
+	AgentCreateRunResponse,
+	AgentCancelRunResponse,
+	AgentRunEventsResponse,
+	AgentRunPath,
+} from '@nexus-terminal/shared/agent/runs/http';
+import type { AgentErrorResponse } from '@nexus-terminal/shared/agent/http';
 import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
-import { AgentOperationError } from '../../agent-errors.js';
-import { AgentFailure } from '../../agent-failure.js';
-import { validateAgentId, validateOperationKey } from '../../agent-validation.js';
-import type {
-	AgentStateApi,
-	AgentRunView,
-	AgentRunEventView,
-	AgentCreateRunResult,
-	AgentCancelRunResult,
-} from '../../public.js';
+import { AgentOperationError } from '../../public-errors.js';
+import type { AgentStateApi, AgentCreateRunResult, AgentCancelRunResult } from '../../public.js';
 
 const ROOT = '/api/v1/agent';
 type Handler = (context: HttpRouteContext, userId: number) => Promise<void>;
 
-function strictBody(value: unknown, keys: readonly string[]): Record<string, unknown> {
-	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-		throw new AgentOperationError('invalid_input');
-	}
-	const object = value as Record<string, unknown>;
-	if (Object.keys(object).some((key) => !keys.includes(key)) || keys.some((key) => !Object.hasOwn(object, key))) {
-		throw new AgentOperationError('invalid_input');
-	}
-	return object;
-}
+type AgentHttpResponse =
+	| AgentAppView
+	| AgentThreadView
+	| AgentRunView
+	| AgentCreateRunResponse
+	| AgentCancelRunResponse
+	| AgentRunEventsResponse
+	| AgentErrorResponse;
 
-function name(value: unknown, max = 128): string {
-	if (typeof value !== 'string' || !value.trim() || Buffer.byteLength(value, 'utf8') > max) {
-		throw new AgentOperationError('invalid_input');
+function sendAgent(context: HttpRouteContext, status: number, value: AgentHttpResponse): void {
+	try {
+		encodeAgentJson(value, AGENT_MAX_RESPONSE_BYTES);
+	} catch {
+		// A producer exceeding its contract is a server failure, not invalid user input.
+		throw new AgentOperationError('internal_failure');
 	}
-	return value;
-}
-
-function id(value: string | undefined): string {
-	if (!value) {
-		throw new AgentOperationError('invalid_input');
-	}
-	validateAgentId(value);
-	return value.toLowerCase();
+	context.send(status, value);
 }
 
 function operationKey(context: HttpRouteContext): string {
-	const raw = context.request.headers['idempotency-key'];
-	if (typeof raw !== 'string') {
-		throw new AgentOperationError('invalid_input');
-	}
-	validateOperationKey(raw);
-	return raw.toLowerCase();
+	return readAgentRunCommandHeaders(context.request.headers[AGENT_RUN_IDEMPOTENCY_HEADER.toLowerCase()]).operationKey;
 }
 
-function integer(value: unknown, min: number, max: number): number {
-	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < min || value > max) {
-		throw new AgentOperationError('invalid_input');
-	}
-	return value;
-}
-
-function queryNumber(context: HttpRouteContext, key: string, fallback: number, max: number): number {
-	const values = context.query.getAll(key);
-	if (values.length > 1) {
-		throw new AgentOperationError('invalid_input');
-	}
-	if (!values.length) {
-		return fallback;
-	}
-	const raw = values[0];
-	if (!/^(0|[1-9][0-9]{0,14})$/u.test(raw)) {
-		throw new AgentOperationError('invalid_input');
-	}
-	return integer(Number(raw), key === 'limit' ? 1 : 0, max);
+function runPath(context: HttpRouteContext): AgentRunPath {
+	return readAgentRunPath({ appId: context.params.appId, runId: context.params.id });
 }
 
 function toRun(value: AgentRunView): AgentRunView {
@@ -99,18 +86,22 @@ function failure(context: HttpRouteContext, error: unknown): void {
 	if (error instanceof HttpInputFailure) {
 		throw error;
 	}
-	if (error instanceof AgentOperationError || error instanceof AgentFailure) {
+	if (error instanceof InvalidAgentPayload) {
+		sendAgent(context, 400, { code: 'invalid_input' });
+		return;
+	}
+	if (error instanceof AgentOperationError) {
 		const status = agentErrorStatus(error.code);
-		context.send(status, { code: error.code });
+		sendAgent(context, status, { code: error.code });
 		return;
 	}
 	if (error instanceof AccessOperationError) {
-		context.send(error.code === 'storage_unavailable' ? 503 : 500, {
+		sendAgent(context, error.code === 'storage_unavailable' ? 503 : 500, {
 			code: error.code === 'storage_unavailable' ? 'storage_unavailable' : 'internal_failure',
 		});
 		return;
 	}
-	context.send(500, { code: 'internal_failure' });
+	sendAgent(context, 500, { code: 'internal_failure' });
 }
 
 function agentErrorStatus(code: AgentOperationError['code']): number {
@@ -137,12 +128,12 @@ function add(
 	access: AccessPublicApi,
 	action: Handler,
 	queryKeys: readonly string[] = [],
-	maxBodyBytes?: number,
+	maxBodyBytes = AGENT_MAX_JSON_BODY_BYTES,
 ): void {
 	routes.push({
 		method,
 		path: ROOT + path,
-		...(maxBodyBytes === undefined ? {} : { maxBodyBytes }),
+		maxBodyBytes,
 
 		async handle(context) {
 			try {
@@ -152,11 +143,11 @@ function add(
 				const token = context.cookie('nexus_session');
 				const identity = await access.authenticate(token);
 				if (identity === null) {
-					context.send(401, { code: 'unauthenticated' });
+					sendAgent(context, 401, { code: 'unauthenticated' });
 					return;
 				}
 				if (identity.userId !== 1) {
-					context.send(403, { code: 'forbidden' });
+					sendAgent(context, 403, { code: 'forbidden' });
 					return;
 				}
 				await action(context, identity.userId);
@@ -169,7 +160,7 @@ function add(
 
 function statusResult(context: HttpRouteContext, value: AgentCreateRunResult | AgentCancelRunResult): void {
 	if (value.status === 'scope_not_found' || value.status === 'not_found') {
-		context.send(404, { code: 'not_found' });
+		sendAgent(context, 404, { code: 'not_found' });
 		return;
 	}
 	if (
@@ -177,19 +168,23 @@ function statusResult(context: HttpRouteContext, value: AgentCreateRunResult | A
 		value.status === 'idempotency_conflict' ||
 		value.status === 'version_conflict'
 	) {
-		context.send(409, { code: value.status });
+		sendAgent(context, 409, { code: value.status });
 		return;
 	}
 	if (value.status === 'replayed') {
-		context.send(200, {
+		sendAgent(context, 200, {
 			status: 'replayed',
 			originalStatus: value.originalStatus,
 			run: toRun(value.run),
 		});
 		return;
 	}
-	if (value.status === 'created' || value.status === 'cancelled' || value.status === 'already_cancelled') {
-		context.send(value.status === 'created' ? 201 : 200, { status: value.status, run: toRun(value.run) });
+	if (value.status === 'created') {
+		sendAgent(context, 201, { status: 'created', run: toRun(value.run) });
+		return;
+	}
+	if (value.status === 'cancelled' || value.status === 'already_cancelled') {
+		sendAgent(context, 200, { status: value.status, run: toRun(value.run) });
 		return;
 	}
 	// Never silently treat a newly introduced result as a successful HTTP call.
@@ -199,14 +194,16 @@ function statusResult(context: HttpRouteContext, value: AgentCreateRunResult | A
 export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentStateApi): HttpRoute[] {
 	const routes: HttpRoute[] = [];
 	add(routes, 'POST', '/apps', access, async (ctx, userId) => {
-		const body = strictBody(await ctx.json(), ['name']);
-		const view = await agent.createApp(userId, name(body.name));
-		ctx.send(201, { id: view.id, name: view.name, createdAt: view.createdAt });
+		const body = readAgentCreateAppRequest(await ctx.json());
+		const view = await agent.createApp(userId, body.name);
+		sendAgent(ctx, 201, { id: view.id, name: view.name, createdAt: view.createdAt });
 	});
 	add(routes, 'POST', '/apps/:appId/threads', access, async (ctx, userId) => {
-		const body = strictBody(await ctx.json(), ['title']);
-		const result = await agent.createThread(userId, id(ctx.params.appId), name(body.title));
-		ctx.send(
+		const body = readAgentCreateThreadRequest(await ctx.json());
+		const path = readAgentAppPath(ctx.params);
+		const result = await agent.createThread(userId, path.appId, body.title);
+		sendAgent(
+			ctx,
 			result === null ? 404 : 201,
 			result === null
 				? { code: 'not_found' }
@@ -220,34 +217,37 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 		access,
 		async (ctx, userId) => {
 			const key = operationKey(ctx);
-			const body = strictBody(await ctx.json(), ['prompt']);
+			const body = readAgentCreateRunRequest(await ctx.json());
+			const path = readAgentCreateRunPath(ctx.params);
 			const value = await agent.createRun({
 				userId,
-				appId: id(ctx.params.appId),
-				threadId: id(ctx.params.threadId),
-				prompt: name(body.prompt, 16384),
+				appId: path.appId,
+				threadId: path.threadId,
+				prompt: body.prompt,
 				operationKey: key,
 			});
 			statusResult(ctx, value);
 		},
 		[],
-		128 * 1024,
+		AGENT_RUN_MAX_JSON_BODY_BYTES,
 	);
 	add(routes, 'POST', '/apps/:appId/runs/:id/cancel', access, async (ctx, userId) => {
 		const key = operationKey(ctx);
-		const body = strictBody(await ctx.json(), ['expectedVersion']);
+		const body = readAgentCancelRunRequest(await ctx.json());
+		const path = runPath(ctx);
 		const value = await agent.cancelRun({
 			userId,
-			appId: id(ctx.params.appId),
-			runId: id(ctx.params.id),
-			expectedVersion: integer(body.expectedVersion, 1, Number.MAX_SAFE_INTEGER),
+			appId: path.appId,
+			runId: path.runId,
+			expectedVersion: body.expectedVersion,
 			operationKey: key,
 		});
 		statusResult(ctx, value);
 	});
 	add(routes, 'GET', '/apps/:appId/runs/:id', access, async (ctx, userId) => {
-		const result = await agent.getRun(userId, id(ctx.params.appId), id(ctx.params.id));
-		ctx.send(result === null ? 404 : 200, result === null ? { code: 'not_found' } : toRun(result));
+		const path = runPath(ctx);
+		const result = await agent.getRun(userId, path.appId, path.runId);
+		sendAgent(ctx, result === null ? 404 : 200, result === null ? { code: 'not_found' } : toRun(result));
 	});
 	add(
 		routes,
@@ -255,10 +255,11 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 		'/apps/:appId/runs/:id/events',
 		access,
 		async (ctx, userId) => {
-			const after = queryNumber(ctx, 'after', 0, Number.MAX_SAFE_INTEGER);
-			const limit = queryNumber(ctx, 'limit', 50, 100);
-			const result = await agent.listEvents(userId, id(ctx.params.appId), id(ctx.params.id), after, limit);
-			ctx.send(
+			const query = readAgentRunEventsQuery(ctx.query);
+			const path = runPath(ctx);
+			const result = await agent.listEvents(userId, path.appId, path.runId, query.after, query.limit);
+			sendAgent(
+				ctx,
 				result === null ? 404 : 200,
 				result === null
 					? { code: 'not_found' }

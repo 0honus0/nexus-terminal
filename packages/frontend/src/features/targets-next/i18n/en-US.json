@@ -66,6 +66,8 @@
       "forbidden": "You do not have permission to perform this action.",
       "host_key_untrusted": "The SSH host key has not been verified. Confirm its SHA256 fingerprint through a trusted channel.",
       "invalid_credentials": "Incorrect username or password.",
+      "rate_limited": "Too many sign-in attempts. Please try again later.",
+      "factor_unavailable": "This account requires a sign-in factor that is not yet supported.",
       "already_initialized": "The initial administrator has already been configured.",
       "unresolvable": "This connection route cannot be resolved securely.",
       "internal_failure": "The request could not be completed. Please retry."

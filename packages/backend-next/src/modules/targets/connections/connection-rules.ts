@@ -1,6 +1,6 @@
-import { TargetFailure } from '../../target-failure.js';
-import type { ConnectionMetadata } from './connection-types.js';
-import { validateTargetId } from '../../target-validation.js';
+import { TargetFailure } from '../target-failure.js';
+import type { ConnectionMetadata } from './model/connection-types.js';
+import { validateTargetId } from '../target-validation.js';
 
 export function validateConnection(data: ConnectionMetadata): ConnectionMetadata {
 	if (!data.name.trim() || !data.host.trim() || !Number.isInteger(data.port) || data.port < 1 || data.port > 65535) {

@@ -1,5 +1,6 @@
 import type { RemoteHttpErrorCode } from '@nexus-terminal/shared/remote/sessions/values';
-import type { RemoteSessionCloseReason } from '../../public.js';
+
+export type SessionCloseReason = 'normal' | 'disconnected' | 'cleanup_failed' | 'closed_by_owner';
 
 export type RemotePermissionCode = Extract<
 	RemoteHttpErrorCode,
@@ -35,7 +36,7 @@ export interface RemoteSessionOperations {
 	onData(id: string, listener: (bytes: Uint8Array) => void): () => void;
 	onStderr(id: string, listener: (bytes: Uint8Array) => void): () => void;
 	onDrain(id: string, listener: () => void): () => void;
-	onClosed(id: string, listener: (reason: RemoteSessionCloseReason) => void): () => void;
+	onClosed(id: string, listener: (reason: SessionCloseReason) => void): () => void;
 	pauseOutput(id: string): void;
 	resumeOutput(id: string): void;
 }

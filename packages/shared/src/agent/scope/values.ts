@@ -1,0 +1,1 @@
+export const AGENT_SCOPE_MAX_NAME_BYTES = 128;

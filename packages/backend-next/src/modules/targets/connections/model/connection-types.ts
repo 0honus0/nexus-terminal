@@ -25,3 +25,28 @@ export interface ConnectionSnapshot extends ConnectionMetadata {
 
 export type ConnectionMutation =
 	{ status: 'updated'; value: ConnectionSnapshot } | { status: 'not_found' } | { status: 'version_conflict' };
+
+export interface ConnectionRelationshipFacts {
+	type: ConnectionType;
+	route: ConnectionRoute;
+	proxyId: number | null;
+	jumpIds: number[];
+	tagIds: number[];
+}
+
+export interface SshGraphNode {
+	id: number;
+	type: ConnectionType;
+	route: ConnectionRoute;
+}
+
+export interface SshGraphEdge {
+	connectionId: number;
+	position: number;
+	jumpConnectionId: number;
+}
+
+export interface SshGraphSnapshot {
+	nodes: SshGraphNode[];
+	edges: SshGraphEdge[];
+}

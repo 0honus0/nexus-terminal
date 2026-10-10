@@ -8,7 +8,7 @@ import {
 import { SqliteConnectionCredentialStorage } from './connections/adapters/sqlite/connection-credential-sql.js';
 import { ConnectionCredentialModel } from './connections/model/connection-credential-model.js';
 import { ConnectionCredentialService } from './connections/service/connection-credential-service.js';
-import { ConnectionModel } from './connections/model/connection-model.js';
+import { ConnectionModel, validateStoredConnectionGraph } from './connections/model/connection-model.js';
 import { ConnectionService } from './connections/service/connection-service.js';
 import { findOrCreateProxy } from './proxies/adapters/sqlite/proxy-sql.js';
 import { SqliteProxyStorage } from './proxies/adapters/sqlite/proxy-management-sql.js';
@@ -71,10 +71,12 @@ interface TargetsRegistration {
 
 /** Register real internal owners; expose only explicit, allowlisted projections. */
 export function registerTargets({ sqlite, secrets }: TargetsRegistrationOptions): TargetsRegistration {
-	const model = new ConnectionModel(new ConnectionSqliteAdapter(sqlite));
+	const model = new ConnectionModel(new ConnectionSqliteAdapter(sqlite, validateStoredConnectionGraph));
 	const service = new ConnectionService(model);
 	const imports = new SqliteConnectionImportAdapter(sqlite, {
-		connections: { insert: insertConnectionInTransaction },
+		connections: {
+			insert: (tx, data) => insertConnectionInTransaction(tx, data, validateStoredConnectionGraph),
+		},
 		proxies: { findOrCreate: findOrCreateProxy },
 		tags: { findOrCreate: findOrCreateTag },
 	});

@@ -35,3 +35,27 @@ export interface ConnectionStorage {
 	delete(id: number): Promise<boolean>;
 	setTags(id: number, expectedVersion: number, tagIds: number[]): Promise<MutationResult>;
 }
+
+/** Facts read under the same write transaction; no application objects cross this boundary. */
+export interface StoredSshGraphNode {
+	id: number;
+	type: ConnectionType;
+	route: ConnectionRoute;
+}
+
+export interface StoredSshGraphEdge {
+	connectionId: number;
+	position: number;
+	jumpConnectionId: number;
+}
+
+export interface StoredSshGraphSnapshot {
+	nodes: StoredSshGraphNode[];
+	edges: StoredSshGraphEdge[];
+}
+
+export type ConnectionGraphValidator = (
+	connection: ConnectionData,
+	graph: StoredSshGraphSnapshot,
+	changedId: number,
+) => void;
