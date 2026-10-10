@@ -10,7 +10,7 @@ import { isRemoteSessionId } from '@nexus-terminal/shared/remote/sessions/model'
 import { RemoteSessionOwner } from '../../sessions/service/session-owner.js';
 import { RemotePermissionError } from '../../sessions/model/session-permission-failure.js';
 import { RemoteOperationError } from '../../public-errors.js';
-import { RemoteHostKeyUntrustedError } from '../../sessions/model/session-errors.js';
+import { RemoteHostKeyUntrustedError } from '../../model/machine-errors.js';
 import {
 	type RemoteCloseSessionResponse,
 	type RemoteFailureResponse,

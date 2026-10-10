@@ -103,7 +103,19 @@ function decodeRow(value: unknown): SqlRow {
 	if (typeof value !== 'object' || value === null || Array.isArray(value)) {
 		throw new Error('Invalid SQLite worker row');
 	}
-	return Object.fromEntries(Object.entries(value));
+	const result: SqlRow = Object.create(null) as SqlRow;
+	for (const [name, cell] of Object.entries(value)) {
+		if (
+			cell !== null &&
+			typeof cell !== 'string' &&
+			!(typeof cell === 'number' && Number.isFinite(cell)) &&
+			!(cell instanceof Uint8Array)
+		) {
+			throw new Error('Invalid SQLite worker cell');
+		}
+		result[name] = cell instanceof Uint8Array ? Uint8Array.from(cell) : cell;
+	}
+	return result;
 }
 
 const resultDecoders: { [K in WorkerOperation]: (value: unknown) => WorkerResults[K] } = {
@@ -129,7 +141,7 @@ const resultDecoders: { [K in WorkerOperation]: (value: unknown) => WorkerResult
 		if (
 			Object.keys(row).length !== 2 ||
 			typeof row.changes !== 'number' || !Number.isSafeInteger(row.changes) || row.changes < 0 ||
-			typeof row.lastId !== 'number' || !Number.isSafeInteger(row.lastId) || row.lastId < 0
+			typeof row.lastId !== 'number' || !Number.isSafeInteger(row.lastId)
 		) {
 			throw new Error('Invalid SQLite worker write result');
 		}

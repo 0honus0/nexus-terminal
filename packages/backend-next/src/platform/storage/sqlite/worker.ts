@@ -33,7 +33,7 @@ function executeQuery(db: DatabaseSync, request: Exclude<WorkerRequest, { kind: 
 			const result = statement.run(...request.params);
 			const changes = Number(result.changes);
 			const lastId = Number(result.lastInsertRowid);
-			if (!Number.isSafeInteger(changes) || changes < 0 || !Number.isSafeInteger(lastId) || lastId < 0) {
+			if (!Number.isSafeInteger(changes) || changes < 0 || !Number.isSafeInteger(lastId)) {
 				throw new Error('SQLite result outside safe integer range');
 			}
 			return { changes, lastId };

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { RemoteHostKeyUntrustedError } from '../sessions/model/session-errors.js';
+import { RemoteHostKeyUntrustedError } from './machine-errors.js';
 import type { RemoteMachineOpenRequest, OpenedRemoteMachine } from './machine-types.js';
 import type { TrustedResolvedSshTarget, TrustedSshTargetResolver, HostKeyManagement } from '../../targets/public.js';
 import type { MachineEndpoint, MachineRoute, MachineAuthentication, MachineProxy, MachineSshFactory, MachineConnectOptions } from '../../../platform/ssh/ssh-port.js';
@@ -44,49 +44,49 @@ function toMachineRoute(jumps: readonly TrustedResolvedSshTarget[], proxy: Machi
 
 /** Shared Remote model owner; ordinary PTY and file resources do not share live machines. */
 export class RemoteMachineModel {
- constructor(
-  private readonly resolver: TrustedSshTargetResolver,
-  private readonly ssh: MachineSshFactory,
-  private readonly verifyHostKey: MachineConnectOptions['verifyHostKey'] | null,
-  private readonly hostKeys: Pick<HostKeyManagement, 'list'>,
- ) {}
+	constructor(
+		private readonly resolver: TrustedSshTargetResolver,
+		private readonly ssh: MachineSshFactory,
+		private readonly verifyHostKey: MachineConnectOptions['verifyHostKey'] | null,
+		private readonly hostKeys: Pick<HostKeyManagement, 'list'>,
+	) {}
 
- async open(request: RemoteMachineOpenRequest): Promise<OpenedRemoteMachine> {
-  const deadline = Date.now() + request.timeoutMs;
-  const target = await this.resolver.resolveStored({
-   targetId: request.targetId,
-   ...(request.expectedFingerprint === undefined ? {} : {expectedFingerprint: request.expectedFingerprint}),
-  });
-  request.signal.throwIfAborted();
-  const trusts = await this.hostKeys.list();
-  request.signal.throwIfAborted();
-  const pinned = new Map(trusts.map((key) => [key.host.toLowerCase() + ':' + key.port, key.fingerprint]));
-  let hostKeyRejected = false;
-  const verify: MachineConnectOptions['verifyHostKey'] = (host, port, publicKey) => {
-   const fingerprint = 'SHA256:' + createHash('sha256').update(publicKey).digest('base64').replace(/=+$/u, '');
-   const expected = pinned.get(host.toLowerCase() + ':' + port);
-   const trusted = expected === fingerprint &&
-    (this.verifyHostKey === null || this.verifyHostKey(host, port, publicKey));
-   if (!trusted) hostKeyRejected = true;
-   return trusted;
-  };
-  try {
-   const remaining = deadline - Date.now();
-   if (remaining < 1) throw new Error('Remote machine opening deadline exceeded');
-   const machine = await this.ssh.connect(toMachineTarget(target), {
-    timeoutMs: remaining,
-    signal: request.signal,
-    verifyHostKey: verify,
-   });
-   if (request.signal.aborted || Date.now() >= deadline) {
-    try { await machine.close(); }
-    catch (cleanup) { throw new AggregateError([new Error('Remote opening expired'), cleanup], 'Machine opening cleanup failed'); }
-    throw new Error('Remote opening expired');
-   }
-   return { target, machine };
-  } catch (error) {
-   if (hostKeyRejected && !request.signal.aborted) throw new RemoteHostKeyUntrustedError(error);
-   throw error;
-  }
- }
+	async open(request: RemoteMachineOpenRequest): Promise<OpenedRemoteMachine> {
+		const deadline = Date.now() + request.timeoutMs;
+		const target = await this.resolver.resolveStored({
+			targetId: request.targetId,
+			...(request.expectedFingerprint === undefined ? {} : {expectedFingerprint: request.expectedFingerprint}),
+		});
+		request.signal.throwIfAborted();
+		const trusts = await this.hostKeys.list();
+		request.signal.throwIfAborted();
+		const pinned = new Map(trusts.map((key) => [key.host.toLowerCase() + ':' + key.port, key.fingerprint]));
+		let hostKeyRejected = false;
+		const verify: MachineConnectOptions['verifyHostKey'] = (host, port, publicKey) => {
+			const fingerprint = 'SHA256:' + createHash('sha256').update(publicKey).digest('base64').replace(/=+$/u, '');
+			const expected = pinned.get(host.toLowerCase() + ':' + port);
+			const trusted = expected === fingerprint &&
+				(this.verifyHostKey === null || this.verifyHostKey(host, port, publicKey));
+			if (!trusted) hostKeyRejected = true;
+			return trusted;
+		};
+		try {
+			const remaining = deadline - Date.now();
+			if (remaining < 1) throw new Error('Remote machine opening deadline exceeded');
+			const machine = await this.ssh.connect(toMachineTarget(target), {
+				timeoutMs: remaining,
+				signal: request.signal,
+				verifyHostKey: verify,
+			});
+			if (request.signal.aborted || Date.now() >= deadline) {
+				try { await machine.close(); }
+				catch (cleanup) { throw new AggregateError([new Error('Remote opening expired'), cleanup], 'Machine opening cleanup failed'); }
+				throw new Error('Remote opening expired');
+			}
+			return { target, machine };
+		} catch (error) {
+			if (hostKeyRejected && !request.signal.aborted) throw new RemoteHostKeyUntrustedError(error);
+			throw error;
+		}
+	}
 }

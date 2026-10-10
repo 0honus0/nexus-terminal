@@ -1,5 +1,6 @@
 import type { RemoteOperationErrorCode } from '@nexus-terminal/shared/remote/sessions/values';
 import { RemoteSessionFailure } from './sessions/model/session-failure.js';
+import { RemoteHostKeyUntrustedError } from './model/machine-errors.js';
 
 /** Safe module error. No technical cause, destination or credential is exposed. */
 export class RemoteOperationError extends Error {
@@ -13,7 +14,10 @@ function publicError(error: unknown): RemoteOperationError {
 	if (error instanceof RemoteOperationError) {
 		return error;
 	}
-	return new RemoteOperationError(error instanceof RemoteSessionFailure ? error.code : 'remote_unavailable');
+	return new RemoteOperationError(
+		error instanceof RemoteHostKeyUntrustedError ? 'host_key_untrusted' :
+			error instanceof RemoteSessionFailure ? error.code : 'remote_unavailable',
+	);
 }
 
 export function remoteSyncBoundary<T>(work: () => T): T {

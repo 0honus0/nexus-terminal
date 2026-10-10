@@ -23,9 +23,16 @@ function toFileInfo(stats: Stats): MachineFileInfo {
 	) {
 		throw new MachineSftpFailure('invalid_metadata', 'unknown');
 	}
-	const isDirectory = stats.isDirectory();
-	const isFile = stats.isFile();
-	const isSymbolicLink = stats.isSymbolicLink();
+	let isDirectory: boolean;
+	let isFile: boolean;
+	let isSymbolicLink: boolean;
+	try {
+		isDirectory = stats.isDirectory();
+		isFile = stats.isFile();
+		isSymbolicLink = stats.isSymbolicLink();
+	} catch (cause) {
+		throw new MachineSftpFailure('invalid_metadata', 'unknown', { cause });
+	}
 	if ([isDirectory, isFile, isSymbolicLink].some((kind) => typeof kind !== 'boolean') ||
 		Number(isDirectory) + Number(isFile) + Number(isSymbolicLink) > 1) {
 		throw new MachineSftpFailure('invalid_metadata', 'unknown');
@@ -189,7 +196,23 @@ export class SshSftpLease implements MachineSftpLease {
 		};
 		const entries: MachineDirectoryEntry[] = [];
 		let metadataBytes = 0;
-		const handle = await this.call<Buffer>((finish) => this.sftp.opendir(path, finish), remaining());
+		let handle: Buffer;
+		try {
+			handle = await this.call<Buffer>((finish) => this.sftp.opendir(path, finish), remaining());
+			if (!Buffer.isBuffer(handle) || handle.length === 0) {
+				throw new MachineSftpFailure('invalid_metadata', 'unknown');
+			}
+		} catch (error) {
+			// An OPEN may succeed remotely after this operation's callback was
+			// already cancelled or timed out. Retire the whole lease rather than
+			// retaining an unclosable unknown directory handle.
+			try {
+				await this.shutdown(new MachineSftpFailure('closed', 'unknown'));
+			} catch (cleanup) {
+				throw new AggregateError([error, cleanup], 'SFTP open and cleanup failed');
+			}
+			throw error;
+		}
 		let failure: unknown = null;
 		try {
 			while (true) {
@@ -224,8 +247,16 @@ export class SshSftpLease implements MachineSftpLease {
 			await this.voidCall((finish) => this.sftp.close(handle, finish), { timeoutMs: 2000 });
 		} catch (cleanup) {
 			// A handle that cannot be closed must not be left on an apparently reusable lease.
-			await this.shutdown(new MachineSftpFailure('closed', 'unknown')).catch(() => undefined);
-			throw failure === null ? cleanup : new AggregateError([failure, cleanup], 'SFTP listing/handle cleanup failed');
+			let closing: unknown = null;
+			try {
+				await this.shutdown(new MachineSftpFailure('closed', 'unknown'));
+			} catch (error) {
+				closing = error;
+			}
+			const failures = [failure, cleanup, closing].filter((item) => item !== null);
+			throw failures.length === 1
+				? cleanup
+				: new AggregateError(failures, 'SFTP listing/handle cleanup failed');
 		}
 		if (failure !== null) throw failure;
 		return entries;
