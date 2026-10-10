@@ -2,6 +2,9 @@ import { remoteBoundary, remoteSyncBoundary, remoteSubscription } from './remote
 import type { MachineSshFactory, MachineConnectOptions } from '../../platform/ssh/ssh-port.js';
 import type { TrustedSshTargetResolver, HostKeyManagement } from '../targets/public.js';
 import { RemoteSessionModel } from './sessions/model/session-model.js';
+import { RemoteMachineModel } from './model/machine-model.js';
+import { RemoteFileModel } from './files/model/file-model.js';
+import { RemoteFileService } from './files/service/file-service.js';
 import { RemoteSessionService } from './sessions/service/session-service.js';
 import type { RemoteSessions, SessionView, OpenShellRequest } from './public.js';
 import type { OpenSessionRequest, RemoteSessionSnapshot } from './sessions/model/session-types.js';
@@ -54,9 +57,9 @@ function toOpenSessionRequest(input: OpenShellRequest): OpenSessionRequest {
 }
 
 export function registerRemote(options: RemoteRegistrationOptions): RemoteRegistration {
-	const service = new RemoteSessionService(
-		new RemoteSessionModel(options.resolver, options.ssh, options.verifyHostKey, options.hostKeys),
-	);
+	const machines = new RemoteMachineModel(options.resolver, options.ssh, options.verifyHostKey, options.hostKeys);
+	const service = new RemoteSessionService(new RemoteSessionModel(machines));
+	const files = new RemoteFileService(options.access, new RemoteFileModel(machines, options.resolver));
 	const publicApi: RemoteSessions = {
 		open: (input) => remoteBoundary(async () => toSessionView(await service.open(toOpenSessionRequest(input)))),
 
@@ -99,6 +102,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		quiesce: () => {
 			owner.quiesce();
 			service.quiesce();
+			files.quiesce();
 		},
 
 		close: async () => {
@@ -110,6 +114,11 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 			}
 			try {
 				await service.close();
+			} catch (error) {
+				failures.push(error);
+			}
+			try {
+				await files.close();
 			} catch (error) {
 				failures.push(error);
 			}

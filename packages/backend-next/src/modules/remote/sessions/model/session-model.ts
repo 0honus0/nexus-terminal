@@ -1,56 +1,7 @@
-import { createHash } from 'node:crypto';
-import { RemoteHostKeyUntrustedError } from './session-errors.js';
 import type { OpenSessionRequest, RemoteSessionResource } from './session-types.js';
-import type { TrustedResolvedSshTarget, TrustedSshTargetResolver } from '../../../targets/public.js';
-import type { HostKeyManagement } from '../../../targets/public.js';
-import type {
-	MachineEndpoint,
-	MachineRoute,
-	MachineAuthentication,
-	MachineProxy,
-	MachineSshFactory,
-	MachineConnectOptions,
-	MachineConnection,
-	MachineShell,
-} from '../../../../platform/ssh/ssh-port.js';
-
-/** Remote owns business target → generic machine contract transformation. */
-function toMachineTarget(target: TrustedResolvedSshTarget): MachineEndpoint {
-	const credentials = target.authentication;
-	const authentication: MachineAuthentication =
-		credentials.kind === 'password'
-			? { kind: 'password', password: credentials.password }
-			: { kind: 'private_key', privateKey: credentials.privateKey, passphrase: credentials.passphrase };
-	const proxy = target.proxy;
-	const proxyInput: MachineProxy | null =
-		proxy === null
-			? null
-			: {
-					type: proxy.type,
-					host: proxy.host,
-					port: proxy.port,
-					username: proxy.username,
-					password: proxy.password,
-				};
-	const route = toMachineRoute(target.jumps, proxyInput);
-	return {
-		host: target.host,
-		port: target.port,
-		username: target.username,
-		authentication,
-		route,
-	};
-}
-
-function toMachineRoute(jumps: readonly TrustedResolvedSshTarget[], proxy: MachineProxy | null): MachineRoute {
-	if (jumps.length > 0) {
-		return { kind: 'jump', hops: jumps.map(toMachineTarget) };
-	}
-	if (proxy === null) {
-		return { kind: 'direct' };
-	}
-	return { kind: 'proxy', proxy };
-}
+import type { TrustedResolvedSshTarget } from '../../../targets/public.js';
+import type { MachineConnection, MachineShell } from '../../../../platform/ssh/ssh-port.js';
+import type { RemoteMachineModel } from '../../model/machine-model.js';
 
 function createSessionResource(
 	target: TrustedResolvedSshTarget,
@@ -167,88 +118,38 @@ function createSessionResource(
 
 /** All cross-module target resolution and generic machine calls enter through Model. */
 export class RemoteSessionModel {
-	constructor(
-		private readonly resolver: TrustedSshTargetResolver,
-		private readonly ssh: MachineSshFactory,
-		private readonly verifyHostKey: MachineConnectOptions['verifyHostKey'] | null,
-		private readonly hostKeys: Pick<HostKeyManagement, 'list'>,
-	) {}
+ constructor(private readonly machines: RemoteMachineModel) {}
 
-	async open(request: OpenSessionRequest): Promise<RemoteSessionResource> {
-		request.signal?.throwIfAborted();
-		const controller = new AbortController();
-
-		const abort = () => controller.abort(request.signal?.reason);
-
-		request.signal?.addEventListener('abort', abort, { once: true });
-		const deadline = Date.now() + request.timeoutMs;
-		const timer = setTimeout(
-			() => controller.abort(new Error('Remote session opening deadline exceeded')),
-			request.timeoutMs,
-		);
-		let machine: MachineConnection | null = null;
-		let hostKeyRejected = false;
-		try {
-			const target = await this.resolver.resolveStored({ targetId: request.targetId });
-			// All hops and the final endpoint must have explicit operator-confirmed
-			// public-key fingerprints. No TOFU / accept-all fallback.
-			const trusts = await this.hostKeys.list();
-			const pinned = new Map(trusts.map((key) => [key.host.toLowerCase() + ':' + key.port, key.fingerprint]));
-
-			const verify: MachineConnectOptions['verifyHostKey'] = (host, port, publicKey) => {
-				const fingerprint =
-					'SHA256:' + createHash('sha256').update(publicKey).digest('base64').replace(/=+$/u, '');
-				const expected = pinned.get(host.toLowerCase() + ':' + port);
-				const trusted =
-					expected === fingerprint &&
-					(this.verifyHostKey === null || this.verifyHostKey(host, port, publicKey));
-				if (!trusted) {
-					// An actual verifier rejection is evidence of failed trust; a
-					// connection/credential failure alone is not.
-					hostKeyRejected = true;
-				}
-				return trusted;
-			};
-
-			controller.signal.throwIfAborted();
-			const remaining = deadline - Date.now();
-			if (remaining <= 0) {
-				throw new Error('Remote session opening deadline exceeded');
-			}
-			try {
-				machine = await this.ssh.connect(toMachineTarget(target), {
-					timeoutMs: remaining,
-					signal: controller.signal,
-					verifyHostKey: verify,
-				});
-			} catch (error) {
-				// The SSH2 error message alone cannot prove why the handshake failed.
-				// Preserve explicit cancellation and the private original cause.
-				if (hostKeyRejected && !controller.signal.aborted) {
-					throw new RemoteHostKeyUntrustedError(error);
-				}
-				throw error;
-			}
-			controller.signal.throwIfAborted();
-			const shell = await machine.openShell(
-				{ columns: request.columns, rows: request.rows, term: request.term },
-				controller.signal,
-			);
-			controller.signal.throwIfAborted();
-			shell.pause();
-			return createSessionResource(target, machine, shell);
-		} catch (error) {
-			if (machine) {
-				try {
-					await machine.close();
-				} catch (cleanup) {
-					throw new AggregateError([error, cleanup], 'Remote opening and cleanup failed');
-				}
-			}
-			throw error;
-		} finally {
-			clearTimeout(timer);
-			request.signal?.removeEventListener('abort', abort);
-		}
-	}
+ async open(request: OpenSessionRequest): Promise<RemoteSessionResource> {
+  request.signal?.throwIfAborted();
+  const controller = new AbortController();
+  const abort = () => controller.abort(request.signal?.reason);
+  request.signal?.addEventListener('abort', abort, { once: true });
+  if (request.signal?.aborted) abort();
+  const deadline = Date.now() + request.timeoutMs;
+  const timer = setTimeout(() => controller.abort(new Error('Remote opening deadline exceeded')), request.timeoutMs);
+  let machine: MachineConnection | null = null;
+  try {
+   const remaining = deadline - Date.now();
+   if (remaining < 1) throw new Error('Remote opening deadline exceeded');
+   const opened = await this.machines.open({
+    targetId: request.targetId, timeoutMs: remaining, signal: controller.signal,
+   });
+   machine = opened.machine;
+   controller.signal.throwIfAborted();
+   const shell = await machine.openShell({columns: request.columns, rows: request.rows, term: request.term}, controller.signal);
+   controller.signal.throwIfAborted();
+   shell.pause();
+   return createSessionResource(opened.target, machine, shell);
+  } catch (error) {
+   if (machine) {
+    try { await machine.close(); }
+    catch (cleanup) { throw new AggregateError([error,cleanup],'Remote opening and cleanup failed'); }
+   }
+   throw error;
+  } finally {
+   clearTimeout(timer);
+   request.signal?.removeEventListener('abort', abort);
+  }
+ }
 }

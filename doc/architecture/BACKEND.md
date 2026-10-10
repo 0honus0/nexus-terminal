@@ -43,6 +43,8 @@ Targets 可信 SSH 解析接收具名 `{targetId,expectedFingerprint?}` 后端�
 
 Platform SSH SFTP 的 list 接收条目与元数据字节预算，使用 opendir → 分批 readdir(handle) → close(handle) 逐批核验并在超限时拒绝整份目录，不先全量聚合、不伪造 cursor。stat/lstat 结果和目录项需验证第三方数值、文件种类与文件名；read 使用非负安全整数的字节范围，end 为包含末字节的偏移，单次操作期限不随分批重置。租约负责操作取消、超时和流/句柄收尾，用户文件和后续 Agent 调用者分别负责自身授权与完整连接的关闭。
 
+Remote Files 建立普通用户独立的 Machine/SFTP lease 资源，不依赖 PTY Session 的可变状态。Remote 模块共用 Machine Model 唯一转换可信 Targets 结果为通用 SSH 目标与 Host Key 验证策略；Files Model 持有真实 SFTP/Node 流处理、严格 UTF-8 文本与元数据投影，Files Service 持有 Access 会话绑定、资源名额、操作取消、期限与关闭 drain。Agent 以后可复用 Platform SSH/SFTP 而不得调用普通用户 File Service 的授权或资源。
+
 ## 目录与一级模块
 
 ```text
