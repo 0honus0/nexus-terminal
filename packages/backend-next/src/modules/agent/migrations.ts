@@ -1,4 +1,4 @@
-import type { SqlExecutor } from '../../platform/storage/sqlite/sqlite-runtime.js';
+import type { SqlExecutor } from '../../platform/storage/sqlite/sql-types.js';
 import { initializeAgentScopeSchema } from './scope/adapters/sqlite/scope-schema.js';
 import { initializeAgentRunSchema } from './runs/adapters/sqlite/run-schema.js';
 

@@ -1,4 +1,4 @@
-import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
+import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 
 /** Credentials are encrypted before reaching storage; no public plaintext column. */
 export async function initializeSshKeySchema(db: SqlExecutor): Promise<void> {

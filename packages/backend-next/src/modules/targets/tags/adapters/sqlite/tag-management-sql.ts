@@ -1,5 +1,6 @@
 import { TargetFailure } from '../../../target-failure.js';
-import type { SqlExecutor, SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
+import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
+import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type { TagStorage, TagRecord, TagMutation } from '../../storage/tag-storage.js';
 
 function decodeInteger(value: unknown): number {

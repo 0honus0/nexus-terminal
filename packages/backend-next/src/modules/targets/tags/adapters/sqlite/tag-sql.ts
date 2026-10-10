@@ -1,4 +1,4 @@
-import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
+import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 
 /** Called only with the import transaction's explicit executor. */
 export async function findOrCreateTag(tx: SqlExecutor, name: string): Promise<number> {

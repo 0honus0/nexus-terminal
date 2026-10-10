@@ -1,4 +1,4 @@
-import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
+import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 
 /** Connection auth is orthogonal to target metadata and references an SSH key. */
 export async function initializeConnectionCredentialSchema(db: SqlExecutor): Promise<void> {

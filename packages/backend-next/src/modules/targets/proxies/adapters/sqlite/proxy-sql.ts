@@ -1,4 +1,4 @@
-import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
+import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type { ProxyData } from '../../storage/proxy-storage.js';
 
 /** Called only with the import transaction's explicit executor. */

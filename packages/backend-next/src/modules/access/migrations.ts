@@ -1,4 +1,4 @@
-import type { SqlExecutor } from '../../platform/storage/sqlite/sqlite-runtime.js';
+import type { SqlExecutor } from '../../platform/storage/sqlite/sql-types.js';
 import { initializeAccountSchema } from './accounts/adapters/sqlite/account-schema.js';
 import { initializeSessionSchema } from './sessions/adapters/sqlite/session-schema.js';
 

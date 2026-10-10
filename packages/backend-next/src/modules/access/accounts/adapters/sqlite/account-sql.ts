@@ -1,4 +1,5 @@
-import type { SqliteRuntime, SqlExecutor } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
+import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
+import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type { AccountStorage, AccountRecord, CreateInitialAdminRecord } from '../../storage/account-storage.js';
 
 function decodeAccount(row: Record<string, unknown>): AccountRecord {

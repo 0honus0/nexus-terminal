@@ -1,5 +1,6 @@
 import { TargetFailure } from '../../../target-failure.js';
-import type { SqliteRuntime, SqlExecutor } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
+import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
+import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type { SshTargetStorage, EncodedSshTarget } from '../../storage/ssh-target-storage.js';
 import { SSH_MAX_JUMP_EDGES, SSH_MAX_EXPANDED_TARGETS } from '../../../ssh-graph-limits.js';
 

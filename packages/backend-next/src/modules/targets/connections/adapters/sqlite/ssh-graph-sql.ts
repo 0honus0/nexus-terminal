@@ -1,5 +1,5 @@
 import { TargetFailure } from '../../../target-failure.js';
-import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
+import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 import { SSH_MAX_EXPANDED_TARGETS, SSH_MAX_JUMP_EDGES } from '../../../ssh-graph-limits.js';
 
 interface SshGraphNode {

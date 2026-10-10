@@ -1,4 +1,4 @@
-import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
+import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 
 /** Current fresh-install Tag schema (v1). */
 export async function initializeTagsSchema(db: SqlExecutor): Promise<void> {

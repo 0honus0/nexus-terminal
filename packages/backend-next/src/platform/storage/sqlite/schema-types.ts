@@ -1,4 +1,4 @@
-import type { SqlExecutor } from './sqlite-runtime.js';
+import type { SqlExecutor } from './sql-types.js';
 
 export interface SchemaMigration {
 	readonly version: number;

@@ -1,4 +1,4 @@
-import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
+import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 
 /** Connections and their relations; Proxy/Tag tables belong to their sibling features. */
 export async function initializeConnectionsSchema(db: SqlExecutor): Promise<void> {

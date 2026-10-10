@@ -1,4 +1,4 @@
-import type { SqlExecutor } from '../../../../platform/storage/sqlite/sqlite-runtime.js';
+import type { SqlExecutor } from '../../../../platform/storage/sqlite/sql-types.js';
 import type { ConnectionData, StoredConnection } from '../../connections/storage/connection-storage.js';
 import type { ProxyTransactionStorage } from '../../proxies/storage/proxy-storage.js';
 import type { TagTransactionStorage } from '../../tags/storage/tag-storage.js';

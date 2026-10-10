@@ -1,4 +1,4 @@
-import type { SqlExecutor } from '../sqlite-runtime.js';
+import type { SqlExecutor } from '../sql-types.js';
 import type { SchemaVersion } from '../schema-types.js';
 
 /** Technical migration metadata only; never owns a module's business tables. */

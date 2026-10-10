@@ -1,4 +1,4 @@
-import type { SqlExecutor } from '../sqlite-runtime.js';
+import type { SqlExecutor } from '../sql-types.js';
 
 /** SQLite transaction dialect; Runtime owns sequencing and failure semantics. */
 export class SqliteTransactionAdapter {

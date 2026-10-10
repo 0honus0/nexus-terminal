@@ -1,3 +1,4 @@
+import type { SqlExecutor } from './sql-types.js';
 import { SqliteTransactionAdapter } from './adapters/transaction-sql.js';
 import { Worker } from 'node:worker_threads';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -20,13 +21,6 @@ interface PendingCall {
 }
 
 type TransactionOutcome<T> = { status: 'ok'; value: T } | { status: 'error'; error: unknown };
-
-export interface SqlExecutor {
-	exec(sql: string): Promise<void>;
-	all(sql: string, params?: SqlParameter[]): Promise<SqlRow[]>;
-	one(sql: string, params?: SqlParameter[]): Promise<SqlRow | null>;
-	run(sql: string, params?: SqlParameter[]): Promise<SqlRunResult>;
-}
 
 const openDatabasePaths = new Set<string>();
 

@@ -1,4 +1,4 @@
-import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
+import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 
 export async function initializeSessionSchema(tx: SqlExecutor): Promise<void> {
 	await tx.exec(`

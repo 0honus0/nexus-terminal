@@ -1,4 +1,4 @@
-import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
+import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 
 /** Current fresh-install Proxy schema (v1); password ciphertext stays separate. */
 export async function initializeProxiesSchema(db: SqlExecutor): Promise<void> {

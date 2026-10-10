@@ -4,7 +4,7 @@
 
 ## 人工规则区域
 
-当前共 **8 条**人工规则；编号固定，修改原条目时保留编号，独立的新规则追加编号。
+当前共 **8 条**人工规则。
 
 | 编号 | 人工约束                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -50,7 +50,7 @@ Platform SSH SFTP 的 list 接收条目与元数据字节预算，使用 opendir
 
 Remote Files 建立普通用户独立的 Machine/SFTP lease 资源，不依赖 PTY Session 的可变状态。Remote 模块共用 Machine Model 唯一转换可信 Targets 结果为通用 SSH 目标与 Host Key 验证策略；Files Model 持有真实 SFTP/Node 流处理、严格 UTF-8 文本与元数据投影，Files Service 持有 Access 会话绑定、资源名额、操作取消、期限与关闭 drain。Agent 以后可复用 Platform SSH/SFTP 而不得调用普通用户 File Service 的授权或资源。
 
-Files Model 的 `SftpFileResource` 私有持有 Machine/SFTP lease 和 Node 流；Service 只消费 `FileResource` 的身份、可用状态、只读操作和幂等关闭能力，不取得技术句柄。操作取消或检测到退役后应用资源不可复用，Service 发起关闭并保留失败汇总。Files 与 PTY 使用各自资源 owner，不共享活跃连接。Files 创建结果由 Model 的 `OpenedFile` 持有，HTTP 另行白名单投影；文件种类复用 Shared `remote/files/values.ts` 的 `RemoteFileKind`。服务端资源准入/闲置/操作期限/关闭重放策略由 File Service 私有持有，双端路径、列表、文本及 HTTP 字节预算仍归 Shared。
+Files Model 的 `SftpFileResource` 私有持有 Machine/SFTP lease 和 Node 流；Service 只消费 `FileResource` 的身份、可用状态、只读操作和幂等关闭能力，不取得技术句柄。操作取消或检测到退役后应用资源不可复用，Service 发起关闭并保留失败汇总。SFTP 操作失败在 Model 转为应用失败，技术 cause 保留在内部；File HTTP 不依赖 SFTP 技术失败类型。Files 与 PTY 使用各自资源 owner，不共享活跃连接。Files 创建结果由 Model 的 `OpenedFile` 持有，HTTP 另行白名单投影；文件种类复用 Shared `remote/files/values.ts` 的 `RemoteFileKind`。服务端资源准入/闲置/操作期限/关闭重放策略由 File Service 私有持有，双端路径、列表、文本及 HTTP 字节预算仍归 Shared。
 
 Remote Files HTTP 在 `interfaces/http/file-http.ts` 独立安装 `/api/v1/remote/files/resources`（POST 创建、DELETE 资源）和该资源的 `list`、`stat`、`lstat`、`read-text` POST 路由；每个端点只接受精确 Shared 请求及同源 Access Cookie，资源 UUID 不替代 Access 认证。路由级请求 body 沿用普通 JSON 16 KiB 技术预算，响应最大 128 KiB；资源最多 8 个、闲置有效期 2 分钟，单个操作期限 30 秒。列表完整成功最多 200 条、目录 metadata 预算 48 KiB，文本最多 16 KiB UTF-8；超限拒绝而不返回伪造完整数据；stat 跟随链接而 lstat 返回链接自身类型。失败只返回 Shared 安全码；Service 每次操作前后复核身份、目标指纹及 owner，创建、退出和停机关闭文件专属 lease 和 machine。无文件写入、传输、分页快照保证或会话恢复。
 
@@ -211,7 +211,7 @@ HTTP 技术层负责固定 Public Origin、受信代理、来源/Fetch Metadata�
 
 ## SQL、事务与迁移
 
-实际 SQL（业务 DML、DDL、迁移、事务控制、PRAGMA）仅位于对应 Adapter。模块 `migrations.ts`/`schema.ts` 通过具名初始化接口编排各子功能 Adapter；Bootstrap 只依赖这些明确安装入口，不深层导入子功能 DDL。通用 SQL Executor 接收或派发 Adapter 提供的 SQL，不在运行时/安装编排层定义 SQL 字符串。
+实际 SQL（业务 DML、DDL、迁移、事务控制、PRAGMA）仅位于对应 Adapter。模块 `migrations.ts`/`schema.ts` 通过具名初始化接口编排各子功能 Adapter；Bootstrap 只依赖这些明确安装入口，不深层导入子功能 DDL。通用 `SqlExecutor` 契约由 `platform/storage/sqlite/sql-types.ts` 持有，Runtime 与 Adapter 直接依赖这一契约；Executor 接收或派发 Adapter 提供的 SQL，不在运行时/安装编排层定义 SQL 字符串。
 
 Agent 的 scope 与 runs DDL 分别由各自 `adapters/sqlite/*-schema.ts` 持有；Targets Host Key DDL 在 `host-keys/adapters/sqlite/host-key-schema.ts`，经 Targets schema 安装入口调用。Platform 的 `adapters/schema-sql.ts` 只负责技术版本表与行解码，迁移 runner 通过接口验证顺序与签名；`adapters/transaction-sql.ts` 持有 BEGIN/COMMIT/ROLLBACK 方言，Runtime 保留排队与未知提交/回滚失败语义；真实数据库 Worker 在 `adapters/worker.ts`，只处理技术消息与数据库执行。
 
