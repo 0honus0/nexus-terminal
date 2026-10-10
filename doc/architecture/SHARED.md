@@ -49,4 +49,4 @@ Shared 只表达对外版本、游标、幂等结果等契约，不执行事务�
 
 核对范围从所有实际功能和端点开始，不仅扫描 Shared 现有目录。每个切片证明 values/model/http/events 的适用归属、实际消费者、编解码和边界投影完整；没有事件协议不预建 events。
 
-Shared check/build、Backend-next check/build、Frontend 类型/build 及对应格式检查均通过后才收口源码阶段，真实行为仍独立验收。Agent 实际消费者与具体收口见 [实施方案](../后端重构下一阶段实施方案.md#s1-agent-共享协议与真实消费者)。
+Shared check/build、Backend-next check/build、Frontend 类型/build 及对应格式检查均通过后才收口源码阶段，真实行为仍独立验收。Agent 实际消费者与具体收口见 [实施方案](../后端重构下一阶段实施方案.md#延后的前端事项未验收不删除)。

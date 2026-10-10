@@ -99,7 +99,7 @@ node tests/backend/remote/backend-next-frontend.integration.mjs
 
 这些测试覆盖的是明确列出的专项故障窗口，不证明多级 Proxy/Jump、大输出、权限撤销、长时间断线或全部 E2E 产品功能；整体余项记录在[后端架构当前能力与验收](../architecture/BACKEND.md#8-当前能力与验收)，协议阶段待办见[下一阶段实施方案](../后端重构下一阶段实施方案.md)。源代码结构或字符串出现与否不是本组测试的判断依据。
 
-**2026-10-10 协议迁移复审补充（非测试 PASS）**：本次核对本地最新 13 个 HTTP/WS、Shared 与前端消费者相关提交，发现 Access 登录 `rate_limited` / `factor_unavailable` 响应与 Shared 错误解码列表不一致，以及 Remote 的 `host_key_untrusted` 声明尚无对应的专用 HTTP 映射；具体 owner 与收口要求见[当前专项验收任务](../后端重构下一阶段实施方案.md#s2-当前切片真实行为验收)。后续专项须增加真实 429/403 登录错误显示、Host Key 不受信任时的公开错误语义核对，且继续保留 Origin/代理、HTTP 4xx、ACL/断线、浏览器重试等剩余验收。首次尝试的 pnpm 检查/构建因存储操作锁无权限、本地 Node 可执行因权限拒绝均未启动；**没有本轮新增的静态 PASS、构建 PASS 或行为 PASS**。此段不推翻上文有明确历史执行记录的专项结果，也不将 Chromium 阻塞误记为已解决。
+**2026-10-10 协议迁移复审补充（非测试 PASS）**：本次核对本地最新 13 个 HTTP/WS、Shared 与前端消费者相关提交，发现 Access 登录 `rate_limited` / `factor_unavailable` 响应与 Shared 错误解码列表不一致，以及 Remote 的 `host_key_untrusted` 声明尚无对应的专用 HTTP 映射；具体 owner 与收口要求见[专项验证清单](后端重构待实机验证.md)。后续专项须增加真实 429/403 登录错误显示、Host Key 不受信任时的公开错误语义核对，且继续保留 Origin/代理、HTTP 4xx、ACL/断线、浏览器重试等剩余验收。首次尝试的 pnpm 检查/构建因存储操作锁无权限、本地 Node 可执行因权限拒绝均未启动；**没有本轮新增的静态 PASS、构建 PASS 或行为 PASS**。此段不推翻上文有明确历史执行记录的专项结果，也不将 Chromium 阻塞误记为已解决。
 
 **同日源码修复后新增的既有专项断言（尚未运行）**：`tests/backend/storage/backend-next-public-boundary.integration.mjs` 对 Access 两个真实登录失败码作 Shared 严格解码与未知码拒绝断言；`tests/backend/remote/backend-next-ssh.integration.mjs` 利用真实 SSH2 服务与受认证 Remote HTTP，要求未确认或错误 SHA256 Host Key 返回 422 `host_key_untrusted`，在恢复正确指纹后密码错误仅返回 503 `remote_unavailable`。此前这些脚本的历史 PASS **不覆盖刚加的断言**。执行前先构建 backend-next/Shared，保持既有入口与原有覆盖；429/403 的真实登录策略触发、开发页实际本地化以及 Host Key 跳板、并发断连仍需要单独真实验收。受当前执行环境限制未能得到新 PASS，不能将代码修改等同于测试通过。
 
