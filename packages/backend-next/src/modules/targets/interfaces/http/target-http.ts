@@ -3,24 +3,7 @@ import type { AccessPublicApi } from '../../../access/public.js';
 import { AccessOperationError } from '../../../access/public-errors.js';
 import type { TargetsPublicApi } from '../../public.js';
 import { TargetOperationError } from '../../public-errors.js';
-import {
-	InvalidTargetsInput,
-	connection,
-	connectionChanges,
-	credential,
-	fields,
-	ids,
-	importBatch,
-	keyChanges,
-	named,
-	numberField,
-	proxy,
-	proxyChanges,
-	sshKey,
-	stringField,
-	urlId,
-	versioned,
-} from './target-http-codec.js';
+import { InvalidTargetsInput, connection, proxy, sshKey, importBatch, urlId } from './target-http-codec.js';
 import {
 	toConnectionDto,
 	toConnectionMutation,
@@ -33,6 +16,18 @@ import {
 	toTagDto,
 	toTagMutation,
 } from './target-http-view.js';
+
+import {
+	readConnectionUpdateRequest,
+	readConnectionTagsRequest,
+	readConnectionCloneRequest,
+	readCredentialSetRequest,
+	readCredentialClearRequest,
+} from '@nexus-terminal/shared/targets/connections/http-codec';
+import { readProxyUpdateRequest } from '@nexus-terminal/shared/targets/proxies/http-codec';
+import { readSshKeyUpdateRequest } from '@nexus-terminal/shared/targets/ssh-keys/http-codec';
+import { readTagCreateRequest, readTagRenameRequest } from '@nexus-terminal/shared/targets/tags/http-codec';
+import { readHostKeyConfirmRequest, readHostKeyRequest } from '@nexus-terminal/shared/targets/host-keys/http-codec';
 
 type Method = HttpRoute['method'];
 type Handler = (context: HttpRouteContext) => Promise<void>;
@@ -132,12 +127,7 @@ export function createTargetsRoutes(access: AccessPublicApi, targets: TargetsPub
 		);
 	});
 	addRoute(routes, 'POST', '/host-keys/confirm', access, async (ctx) => {
-		const row = fields(await ctx.json(), ['host', 'port', 'fingerprint'], ['host', 'port', 'fingerprint']);
-		const confirmed = await targets.hostKeys.confirm({
-			host: stringField(row.host, 253),
-			port: numberField(row.port, 65535),
-			fingerprint: stringField(row.fingerprint, 51),
-		});
+		const confirmed = await targets.hostKeys.confirm(readHostKeyConfirmRequest(await ctx.json()));
 		ctx.send(201, {
 			host: confirmed.host,
 			port: confirmed.port,
@@ -146,8 +136,8 @@ export function createTargetsRoutes(access: AccessPublicApi, targets: TargetsPub
 		});
 	});
 	addRoute(routes, 'POST', '/host-keys/remove', access, async (ctx) => {
-		const row = fields(await ctx.json(), ['host', 'port'], ['host', 'port']);
-		const removed = await targets.hostKeys.remove(stringField(row.host, 253), numberField(row.port, 65535));
+		const row = readHostKeyRequest(await ctx.json());
+		const removed = await targets.hostKeys.remove(row.host, row.port);
 		ctx.send(removed ? 200 : 404, removed ? { removed: true } : { code: 'not_found' });
 	});
 	addRoute(routes, 'GET', '/connections', access, async (ctx) =>
@@ -162,8 +152,8 @@ export function createTargetsRoutes(access: AccessPublicApi, targets: TargetsPub
 		ctx.send(201, toConnectionDto(await targets.create(command)));
 	});
 	addRoute(routes, 'PUT', '/connections/:id', access, async (ctx) => {
-		const row = versioned(await ctx.json(), 'changes');
-		const result = await targets.update(id(ctx), row.version, connectionChanges(row.payload));
+		const row = readConnectionUpdateRequest(await ctx.json());
+		const result = await targets.update(id(ctx), row.version, row.changes);
 		status(ctx, result, toConnectionMutation(result));
 	});
 	addRoute(routes, 'DELETE', '/connections/:id', access, async (ctx) => {
@@ -171,13 +161,13 @@ export function createTargetsRoutes(access: AccessPublicApi, targets: TargetsPub
 		ctx.send(deleted ? 200 : 404, deleted ? { deleted: true } : { code: 'not_found' });
 	});
 	addRoute(routes, 'POST', '/connections/:id/clone', access, async (ctx) => {
-		const name = named(await ctx.json());
-		const result = await targets.clone(id(ctx), name);
+		const input = readConnectionCloneRequest(await ctx.json());
+		const result = await targets.clone(id(ctx), input.name);
 		ctx.send(result === null ? 404 : 201, result === null ? { code: 'not_found' } : toConnectionDto(result));
 	});
 	addRoute(routes, 'PUT', '/connections/:id/tags', access, async (ctx) => {
-		const row = versioned(await ctx.json(), 'tagIds');
-		const result = await targets.setTags(id(ctx), row.version, ids(row.payload));
+		const row = readConnectionTagsRequest(await ctx.json());
+		const result = await targets.setTags(id(ctx), row.version, row.tagIds);
 		status(ctx, result, toConnectionMutation(result));
 	});
 	addRoute(routes, 'POST', '/connections/import', access, async (ctx) => {
@@ -185,13 +175,13 @@ export function createTargetsRoutes(access: AccessPublicApi, targets: TargetsPub
 		ctx.send(200, { items: toImportItems(await targets.importMany(items)) });
 	});
 	addRoute(routes, 'PUT', '/connections/:id/credential', access, async (ctx) => {
-		const row = versioned(await ctx.json(), 'credential');
-		const result = await targets.credentials.set(id(ctx), row.version, credential(row.payload));
+		const row = readCredentialSetRequest(await ctx.json());
+		const result = await targets.credentials.set(id(ctx), row.version, row.credential);
 		status(ctx, result, toCredentialMutation(result));
 	});
 	addRoute(routes, 'DELETE', '/connections/:id/credential', access, async (ctx) => {
-		const row = fields(await ctx.json(), ['version'], ['version']);
-		const result = await targets.credentials.clear(id(ctx), numberField(row.version));
+		const row = readCredentialClearRequest(await ctx.json());
+		const result = await targets.credentials.clear(id(ctx), row.version);
 		status(ctx, result, toCredentialMutation(result));
 	});
 
@@ -206,8 +196,8 @@ export function createTargetsRoutes(access: AccessPublicApi, targets: TargetsPub
 		ctx.send(201, toProxyDto(await targets.proxies.create(proxy(await ctx.json())))),
 	);
 	addRoute(routes, 'PUT', '/proxies/:id', access, async (ctx) => {
-		const row = versioned(await ctx.json(), 'changes');
-		const result = await targets.proxies.update(id(ctx), row.version, proxyChanges(row.payload));
+		const row = readProxyUpdateRequest(await ctx.json());
+		const result = await targets.proxies.update(id(ctx), row.version, row.changes);
 		status(ctx, result, toProxyMutation(result));
 	});
 	addRoute(routes, 'DELETE', '/proxies/:id', access, async (ctx) => {
@@ -221,11 +211,11 @@ export function createTargetsRoutes(access: AccessPublicApi, targets: TargetsPub
 		ctx.send(result === null ? 404 : 200, result === null ? { code: 'not_found' } : toTagDto(result));
 	});
 	addRoute(routes, 'POST', '/tags', access, async (ctx) =>
-		ctx.send(201, toTagDto(await targets.tags.create(named(await ctx.json())))),
+		ctx.send(201, toTagDto(await targets.tags.create(readTagCreateRequest(await ctx.json()).name))),
 	);
 	addRoute(routes, 'PUT', '/tags/:id', access, async (ctx) => {
-		const row = versioned(await ctx.json(), 'name');
-		const result = await targets.tags.rename(id(ctx), row.version, stringField(row.payload, 128));
+		const row = readTagRenameRequest(await ctx.json());
+		const result = await targets.tags.rename(id(ctx), row.version, row.name);
 		status(ctx, result, toTagMutation(result));
 	});
 	addRoute(routes, 'DELETE', '/tags/:id', access, async (ctx) => {
@@ -244,8 +234,8 @@ export function createTargetsRoutes(access: AccessPublicApi, targets: TargetsPub
 		ctx.send(201, toSshKeyDto(await targets.sshKeys.create(sshKey(await ctx.json())))),
 	);
 	addRoute(routes, 'PUT', '/ssh-keys/:id', access, async (ctx) => {
-		const row = versioned(await ctx.json(), 'changes');
-		const result = await targets.sshKeys.update(id(ctx), row.version, keyChanges(row.payload));
+		const row = readSshKeyUpdateRequest(await ctx.json());
+		const result = await targets.sshKeys.update(id(ctx), row.version, row.changes);
 		status(ctx, result, toSshKeyMutation(result));
 	});
 	addRoute(routes, 'DELETE', '/ssh-keys/:id', access, async (ctx) => {

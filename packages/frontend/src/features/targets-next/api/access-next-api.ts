@@ -6,11 +6,15 @@ import {
 	readAccessSetup,
 	readAccessStatus,
 	readAccessPassword,
+	readAccessHttpError,
+	readAccessSetupRequest,
+	readAccessLoginRequest,
+	readAccessPasswordRequest,
 	type AccessLoginRequest,
 	type AccessPasswordRequest,
 	type AccessSetupRequest,
 	type AccessStatusResponse,
-} from '@nexus-terminal/shared/access/api';
+} from '@nexus-terminal/shared/access/http';
 
 /** Authentication is a separate client owner, not part of Targets CRUD. */
 export function createAccessNextApi(baseUrl: string) {
@@ -49,10 +53,15 @@ export function createAccessNextApi(baseUrl: string) {
 			throw new Error('request_failed');
 		}
 		if (!response.ok) {
-			if (value && typeof value === 'object' && 'code' in value && typeof value.code === 'string') {
-				throw new Error(value.code);
+			try {
+				const failure = readAccessHttpError(value);
+				throw new Error(failure.code);
+			} catch (error) {
+				if (error instanceof InvalidAccessPayload) {
+					throw new Error('request_failed');
+				}
+				throw error;
 			}
-			throw new Error('request_failed');
 		}
 		return value;
 	}
@@ -73,11 +82,11 @@ export function createAccessNextApi(baseUrl: string) {
 			decoded(await request('GET', '/needs-setup', undefined, signal), readAccessNeedsSetup).needsSetup,
 
 		setup: async (input: AccessSetupRequest): Promise<void> => {
-			decoded(await request('POST', '/setup', input), readAccessSetup);
+			decoded(await request('POST', '/setup', readAccessSetupRequest(input)), readAccessSetup);
 		},
 
 		login: async (input: AccessLoginRequest): Promise<void> => {
-			decoded(await request('POST', '/login', input), readAccessLogin);
+			decoded(await request('POST', '/login', readAccessLoginRequest(input)), readAccessLogin);
 		},
 
 		status: async (signal?: AbortSignal): Promise<AccessStatusResponse | null> => {
@@ -96,7 +105,7 @@ export function createAccessNextApi(baseUrl: string) {
 		},
 
 		changePassword: async (input: AccessPasswordRequest): Promise<void> => {
-			decoded(await request('PUT', '/password', input), readAccessPassword);
+			decoded(await request('PUT', '/password', readAccessPasswordRequest(input)), readAccessPassword);
 		},
 	};
 }

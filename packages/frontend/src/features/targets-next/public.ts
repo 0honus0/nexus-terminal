@@ -3,16 +3,13 @@ export { createTargetsNextApi } from './api/targets-next-api';
 
 export const loadTargetsNextDevView = () => import('./views/TargetsNextDevView.vue');
 
-export type {
-	TargetConnectionInput,
-	TargetConnectionView,
-	TargetConnectionChanges,
-	TargetCredentialInput,
-	TargetImportInput,
-} from '@nexus-terminal/shared/connections/model';
+export type { TargetConnectionInput, TargetConnectionChanges, TargetCredentialInput, TargetImportInput } from '@nexus-terminal/shared/targets/connections/http';
+export type { TargetConnectionView } from '@nexus-terminal/shared/targets/connections/model';
 
-export type { TargetProxyInput, TargetProxyView, TargetProxyChanges } from '@nexus-terminal/shared/proxies/model';
+export type { TargetProxyInput, TargetProxyChanges } from '@nexus-terminal/shared/targets/proxies/http';
+export type { TargetProxyView } from '@nexus-terminal/shared/targets/proxies/model';
 
-export type { TargetTagView } from '@nexus-terminal/shared/tags/model';
+export type { TargetTagView } from '@nexus-terminal/shared/targets/tags/model';
 
-export type { TargetSshKeyView, TargetSshKeyInput, TargetSshKeyChanges } from '@nexus-terminal/shared/ssh-keys/model';
+export type { TargetSshKeyView } from '@nexus-terminal/shared/targets/ssh-keys/model';
+export type { TargetSshKeyInput, TargetSshKeyChanges } from '@nexus-terminal/shared/targets/ssh-keys/http';

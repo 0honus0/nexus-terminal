@@ -1,4 +1,4 @@
-import type { ProxyType } from '@nexus-terminal/shared/proxies/values';
+import type { ProxyType } from '@nexus-terminal/shared/targets/proxies/values';
 import type { SqlExecutor } from '../../../../platform/storage/sqlite/sqlite-runtime.js';
 
 export interface ProxyData {

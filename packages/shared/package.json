@@ -8,69 +8,101 @@
     "check": "tsc --noEmit"
   },
   "exports": {
-    "./access/api": {
-      "types": "./dist/access/api.d.ts",
-      "default": "./dist/access/api.js"
+    "./access/http": {
+      "types": "./dist/access/http.d.ts",
+      "default": "./dist/access/http.js"
     },
-    "./connections/values": {
-      "types": "./dist/connections/values.d.ts",
-      "default": "./dist/connections/values.js"
+    "./access/model": {
+      "types": "./dist/access/model.d.ts",
+      "default": "./dist/access/model.js"
     },
-    "./proxies/values": {
-      "types": "./dist/proxies/values.d.ts",
-      "default": "./dist/proxies/values.js"
+    "./remote/sessions/events": {
+      "types": "./dist/remote/sessions/events.d.ts",
+      "default": "./dist/remote/sessions/events.js"
     },
-    "./connections/model": {
-      "types": "./dist/connections/model.d.ts",
-      "default": "./dist/connections/model.js"
+    "./remote/sessions/http": {
+      "types": "./dist/remote/sessions/http.d.ts",
+      "default": "./dist/remote/sessions/http.js"
     },
-    "./connections/api": {
-      "types": "./dist/connections/api.d.ts",
-      "default": "./dist/connections/api.js"
+    "./remote/sessions/model": {
+      "types": "./dist/remote/sessions/model.d.ts",
+      "default": "./dist/remote/sessions/model.js"
     },
-    "./proxies/model": {
-      "types": "./dist/proxies/model.d.ts",
-      "default": "./dist/proxies/model.js"
+    "./targets/connections/http-codec": {
+      "types": "./dist/targets/connections/http-codec.d.ts",
+      "default": "./dist/targets/connections/http-codec.js"
     },
-    "./proxies/api": {
-      "types": "./dist/proxies/api.d.ts",
-      "default": "./dist/proxies/api.js"
+    "./targets/connections/http": {
+      "types": "./dist/targets/connections/http.d.ts",
+      "default": "./dist/targets/connections/http.js"
     },
-    "./ssh-keys/model": {
-      "types": "./dist/ssh-keys/model.d.ts",
-      "default": "./dist/ssh-keys/model.js"
+    "./targets/connections/model": {
+      "types": "./dist/targets/connections/model.d.ts",
+      "default": "./dist/targets/connections/model.js"
     },
-    "./ssh-keys/api": {
-      "types": "./dist/ssh-keys/api.d.ts",
-      "default": "./dist/ssh-keys/api.js"
+    "./targets/connections/values": {
+      "types": "./dist/targets/connections/values.d.ts",
+      "default": "./dist/targets/connections/values.js"
     },
-    "./tags/model": {
-      "types": "./dist/tags/model.d.ts",
-      "default": "./dist/tags/model.js"
+    "./targets/host-keys/http-codec": {
+      "types": "./dist/targets/host-keys/http-codec.d.ts",
+      "default": "./dist/targets/host-keys/http-codec.js"
     },
-    "./tags/api": {
-      "types": "./dist/tags/api.d.ts",
-      "default": "./dist/tags/api.js"
+    "./targets/host-keys/http": {
+      "types": "./dist/targets/host-keys/http.d.ts",
+      "default": "./dist/targets/host-keys/http.js"
     },
-    "./targets/api": {
-      "types": "./dist/targets/api.d.ts",
-      "default": "./dist/targets/api.js"
+    "./targets/host-keys/model": {
+      "types": "./dist/targets/host-keys/model.d.ts",
+      "default": "./dist/targets/host-keys/model.js"
     },
-    "./remote/model": {
-      "types": "./dist/remote/model.d.ts",
-      "default": "./dist/remote/model.js"
+    "./targets/http": {
+      "types": "./dist/targets/http.d.ts",
+      "default": "./dist/targets/http.js"
     },
-    "./remote/events": {
-      "types": "./dist/remote/events.d.ts",
-      "default": "./dist/remote/events.js"
+    "./targets/proxies/http-codec": {
+      "types": "./dist/targets/proxies/http-codec.d.ts",
+      "default": "./dist/targets/proxies/http-codec.js"
     },
-    "./remote/api": {
-      "types": "./dist/remote/api.d.ts",
-      "default": "./dist/remote/api.js"
+    "./targets/proxies/http": {
+      "types": "./dist/targets/proxies/http.d.ts",
+      "default": "./dist/targets/proxies/http.js"
     },
-    "./targets/host-keys": {
-      "types": "./dist/targets/host-keys.d.ts",
-      "default": "./dist/targets/host-keys.js"
+    "./targets/proxies/model": {
+      "types": "./dist/targets/proxies/model.d.ts",
+      "default": "./dist/targets/proxies/model.js"
+    },
+    "./targets/proxies/values": {
+      "types": "./dist/targets/proxies/values.d.ts",
+      "default": "./dist/targets/proxies/values.js"
+    },
+    "./targets/ssh-keys/http-codec": {
+      "types": "./dist/targets/ssh-keys/http-codec.d.ts",
+      "default": "./dist/targets/ssh-keys/http-codec.js"
+    },
+    "./targets/ssh-keys/http": {
+      "types": "./dist/targets/ssh-keys/http.d.ts",
+      "default": "./dist/targets/ssh-keys/http.js"
+    },
+    "./targets/ssh-keys/model": {
+      "types": "./dist/targets/ssh-keys/model.d.ts",
+      "default": "./dist/targets/ssh-keys/model.js"
+    },
+    "./targets/tags/http-codec": {
+      "types": "./dist/targets/tags/http-codec.d.ts",
+      "default": "./dist/targets/tags/http-codec.js"
+    },
+    "./targets/tags/http": {
+      "types": "./dist/targets/tags/http.d.ts",
+      "default": "./dist/targets/tags/http.js"
+    },
+    "./targets/tags/model": {
+      "types": "./dist/targets/tags/model.d.ts",
+      "default": "./dist/targets/tags/model.js"
+    },
+    "./targets/values": {
+      "types": "./dist/targets/values.d.ts",
+      "default": "./dist/targets/values.js"
     }
   },
   "devDependencies": {

@@ -10,18 +10,15 @@ import type {
 	SshKeyView,
 	SshKeyMutation,
 } from '../../public.js';
-import type { TargetConnectionView } from '@nexus-terminal/shared/connections/model';
-import type {
-	TargetConnectionMutation,
-	TargetCredentialMutation,
-	TargetImportItem,
-} from '@nexus-terminal/shared/connections/api';
-import type { TargetProxyView } from '@nexus-terminal/shared/proxies/model';
-import type { TargetProxyMutation } from '@nexus-terminal/shared/proxies/api';
-import type { TargetTagView } from '@nexus-terminal/shared/tags/model';
-import type { TargetTagMutation } from '@nexus-terminal/shared/tags/api';
-import type { TargetSshKeyView } from '@nexus-terminal/shared/ssh-keys/model';
-import type { TargetSshKeyMutation } from '@nexus-terminal/shared/ssh-keys/api';
+import type { TargetConnectionView } from '@nexus-terminal/shared/targets/connections/model';
+import type { TargetConnectionMutation } from '@nexus-terminal/shared/targets/connections/model';
+import type { TargetCredentialMutation, TargetImportItem } from '@nexus-terminal/shared/targets/connections/http';
+import type { TargetProxyView } from '@nexus-terminal/shared/targets/proxies/model';
+import type { TargetProxyMutation } from '@nexus-terminal/shared/targets/proxies/model';
+import type { TargetTagView } from '@nexus-terminal/shared/targets/tags/model';
+import type { TargetTagMutation } from '@nexus-terminal/shared/targets/tags/model';
+import type { TargetSshKeyView } from '@nexus-terminal/shared/targets/ssh-keys/model';
+import type { TargetSshKeyMutation } from '@nexus-terminal/shared/targets/ssh-keys/model';
 
 /** Explicit wire allowlists: no Service, Storage, or trusted SSH object escapes. */
 export function toConnectionDto(value: ConnectionSnapshot): TargetConnectionView {

@@ -188,7 +188,10 @@ function statusResult(context: HttpRouteContext, value: AgentCreateRunResult | A
 	}
 	if (value.status === 'created' || value.status === 'cancelled' || value.status === 'already_cancelled') {
 		context.send(value.status === 'created' ? 201 : 200, { status: value.status, run: toRun(value.run) });
+		return;
 	}
+	// Never silently treat a newly introduced result as a successful HTTP call.
+	throw new AgentOperationError('internal_failure');
 }
 
 export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentStateApi): HttpRoute[] {

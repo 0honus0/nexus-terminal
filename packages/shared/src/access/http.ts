@@ -1,10 +1,6 @@
-/** The initial Access HTTP surface shared by the isolated backend and development client. */
-export interface AccessUserView {
-	id: number;
-	username: string;
-	twoFactorEnabled: boolean;
-}
+import type { AccessUserView } from './model.js';
 
+/** The initial Access HTTP surface shared by the isolated backend and development client. */
 export interface AccessSetupRequest {
 	username: string;
 	password: string;
@@ -48,6 +44,20 @@ export interface AccessPasswordResponse {
 	passwordChanged: true;
 }
 
+export type AccessHttpErrorCode =
+	| 'invalid_input'
+	| 'already_initialized'
+	| 'invalid_credentials'
+	| 'conflict'
+	| 'storage_unavailable'
+	| 'internal_failure'
+	| 'unauthenticated'
+	| 'forbidden';
+
+export interface AccessHttpErrorResponse {
+	code: AccessHttpErrorCode;
+}
+
 export class InvalidAccessPayload extends Error {
 	constructor() {
 		super('invalid_access_payload');
@@ -81,6 +91,23 @@ function bool(value: unknown): boolean {
 		throw new InvalidAccessPayload();
 	}
 	return value;
+}
+
+export function readAccessHttpError(value: unknown): AccessHttpErrorResponse {
+	const row = record(value, ['code']);
+	switch (row.code) {
+		case 'invalid_input':
+		case 'already_initialized':
+		case 'invalid_credentials':
+		case 'conflict':
+		case 'storage_unavailable':
+		case 'internal_failure':
+		case 'unauthenticated':
+		case 'forbidden':
+			return { code: row.code };
+		default:
+			throw new InvalidAccessPayload();
+	}
 }
 
 export function readAccessSetupRequest(value: unknown): AccessSetupRequest {

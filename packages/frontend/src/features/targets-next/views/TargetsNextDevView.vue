@@ -4,15 +4,12 @@
 	import { loadRemoteNextTerminal } from '@/runtimes/remote-next/public';
 	import { createTargetsNextApi } from '../api/targets-next-api';
 	import { createAccessNextApi } from '../api/access-next-api';
-	import type {
-		TargetConnectionInput,
-		TargetConnectionView,
-		TargetImportInput,
-	} from '@nexus-terminal/shared/connections/model';
-	import type { TargetProxyView } from '@nexus-terminal/shared/proxies/model';
-	import type { TargetTagView } from '@nexus-terminal/shared/tags/model';
-	import type { TargetSshKeyView } from '@nexus-terminal/shared/ssh-keys/model';
-	import type { TargetHostKeyView } from '@nexus-terminal/shared/targets/host-keys';
+	import type { TargetConnectionInput, TargetImportInput } from '@nexus-terminal/shared/targets/connections/http';
+import type { TargetConnectionView } from '@nexus-terminal/shared/targets/connections/model';
+	import type { TargetProxyView } from '@nexus-terminal/shared/targets/proxies/model';
+	import type { TargetTagView } from '@nexus-terminal/shared/targets/tags/model';
+	import type { TargetSshKeyView } from '@nexus-terminal/shared/targets/ssh-keys/model';
+	import type { TargetHostKeyView } from '@nexus-terminal/shared/targets/host-keys/model';
 
 	const RemoteNextTerminal = defineAsyncComponent(loadRemoteNextTerminal);
 	const { t, te } = useI18n();

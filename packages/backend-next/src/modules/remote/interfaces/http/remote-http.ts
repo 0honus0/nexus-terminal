@@ -8,12 +8,13 @@ import type {
 import { readRequestCookie, HttpInputFailure } from '../../../../platform/http/http-server.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import type { RemoteSessions, SessionView } from '../../public.js';
+import { isRemoteSessionId } from '@nexus-terminal/shared/remote/sessions/model';
 import { RemotePermissionError, RemoteSessionOwner } from '../../sessions/service/session-owner.js';
-import { readRemoteOpenShell, InvalidRemotePayload, type RemoteShellView } from '@nexus-terminal/shared/remote/model';
-import { readRemoteClientEvent, type RemoteServerEvent } from '@nexus-terminal/shared/remote/events';
+import { readRemoteOpenShell, InvalidRemotePayload } from '@nexus-terminal/shared/remote/sessions/http';
+import { type RemoteShellView } from '@nexus-terminal/shared/remote/sessions/model';
+import { readRemoteClientEvent, type RemoteServerEvent } from '@nexus-terminal/shared/remote/sessions/events';
 
 const ROOT = '/api/v1/remote';
-const SESSION_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
 class RemoteInputError extends Error {}
 
@@ -29,7 +30,7 @@ function record(value: unknown, allowed: readonly string[], required: readonly s
 		throw new RemoteInputError();
 	}
 	const data = value as Record<string, unknown>;
-	if (Object.keys(data).some((key) => !allowed.includes(key)) || required.some((key) => !(key in data))) {
+	if (Object.keys(data).some((key) => !allowed.includes(key)) || required.some((key) => !Object.hasOwn(data, key))) {
 		throw new RemoteInputError();
 	}
 	return data;
@@ -151,7 +152,7 @@ export function createRemoteHttpRoutes(owner: RemoteSessionOwner, access: Access
 		route('GET', '/sessions/:id', async (ctx) => {
 			await identity(access, ctx.cookie('nexus_session'));
 			const id = ctx.params.id;
-			if (!id || !SESSION_PATTERN.test(id)) {
+			if (!id || !isRemoteSessionId(id)) {
 				throw new RemoteInputError();
 			}
 			const session = await owner.get(ctx.cookie('nexus_session'), id);
@@ -160,7 +161,7 @@ export function createRemoteHttpRoutes(owner: RemoteSessionOwner, access: Access
 		route('DELETE', '/sessions/:id', async (ctx) => {
 			await identity(access, ctx.cookie('nexus_session'));
 			const id = ctx.params.id;
-			if (!id || !SESSION_PATTERN.test(id)) {
+			if (!id || !isRemoteSessionId(id)) {
 				throw new RemoteInputError();
 			}
 			const deleted = await owner.closeSession(ctx.cookie('nexus_session'), id);
@@ -452,7 +453,7 @@ export function createRemoteWebSocketRoute(owner: RemoteSessionOwner, remote: Re
 			return null;
 		}
 		const id = url.searchParams.get('sessionId');
-		return id && SESSION_PATTERN.test(id) ? id : null;
+		return id && isRemoteSessionId(id) ? id : null;
 	}
 
 	function token(req: IncomingMessage): string | null {

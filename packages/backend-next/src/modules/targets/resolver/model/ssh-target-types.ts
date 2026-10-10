@@ -1,4 +1,4 @@
-import type { ProxyType } from '@nexus-terminal/shared/proxies/values';
+import type { ProxyType } from '@nexus-terminal/shared/targets/proxies/values';
 
 /** Trusted backend-only machine configuration; must never be serialized to an HTTP response. */
 export type ResolvedAuthentication =

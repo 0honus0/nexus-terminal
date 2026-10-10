@@ -1,4 +1,4 @@
-import type { ConnectionType, ConnectionRoute } from '@nexus-terminal/shared/connections/values';
+import type { ConnectionType, ConnectionRoute } from '@nexus-terminal/shared/targets/connections/values';
 
 export interface ConnectionMetadata {
 	name: string;

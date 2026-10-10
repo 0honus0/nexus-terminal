@@ -1,4 +1,4 @@
-import type { ProxyType } from '@nexus-terminal/shared/proxies/values';
+import type { ProxyType } from '@nexus-terminal/shared/targets/proxies/values';
 
 export interface ProxyMetadata {
 	name: string;

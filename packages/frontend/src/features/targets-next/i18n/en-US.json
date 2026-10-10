@@ -48,8 +48,13 @@
       "reference_in_use": "This item is in use and cannot be removed.",
       "conflict": "The item conflicts with existing data.",
       "storage_unavailable": "Storage is temporarily unavailable.",
-      "already_cancelled": "The operation has already completed.",
-      "import_failed": "The import could not be completed."
+      "import_failed": "The import could not be completed.",
+      "forbidden": "You do not have permission to perform this action.",
+      "host_key_untrusted": "The SSH host key has not been verified. Confirm its SHA256 fingerprint through a trusted channel.",
+      "invalid_credentials": "Incorrect username or password.",
+      "already_initialized": "The initial administrator has already been configured.",
+      "unresolvable": "This connection route cannot be resolved securely.",
+      "internal_failure": "The request could not be completed. Please retry."
     }
   }
 }

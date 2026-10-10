@@ -1,5 +1,12 @@
-import { readRemoteShellView, type RemoteShellView, type RemoteOpenShell } from '@nexus-terminal/shared/remote/model';
-import { readRemoteServerEvent, type RemoteClientEvent } from '@nexus-terminal/shared/remote/events';
+import {
+	readRemoteShellView,
+	readRemoteCloseSession,
+	readRemoteFailureResponse,
+	readRemoteOpenShell,
+	type RemoteOpenShell,
+} from '@nexus-terminal/shared/remote/sessions/http';
+import { type RemoteShellView } from '@nexus-terminal/shared/remote/sessions/model';
+import { readRemoteServerEvent, type RemoteClientEvent } from '@nexus-terminal/shared/remote/sessions/events';
 
 const ROOT = '/__next/api/v1/remote';
 
@@ -59,20 +66,15 @@ async function request(method: string, path: string, body?: unknown, signal?: Ab
 		throw new Error('remote_unavailable');
 	}
 	if (!response.ok) {
-		if (content && typeof content === 'object' && 'code' in content) {
-			const code = content.code;
-			if (
-				code === 'unauthenticated' ||
-				code === 'forbidden' ||
-				code === 'not_found' ||
-				code === 'invalid_input' ||
-				code === 'host_key_untrusted' ||
-				code === 'remote_unavailable'
-			) {
-				throw new Error(code);
+		try {
+			const failure = readRemoteFailureResponse(content);
+			throw new Error(failure.code);
+		} catch (error) {
+			if (error instanceof Error && error.message === 'invalid_remote_payload') {
+				throw new Error('remote_unavailable');
 			}
+			throw error;
 		}
-		throw new Error('remote_unavailable');
 	}
 	return content;
 }
@@ -86,7 +88,7 @@ export async function openRemoteTerminal(
 	if (signal?.aborted) {
 		throw new Error('remote_unavailable');
 	}
-	const session = readRemoteShellView(await request('POST', '/sessions', input, signal));
+	const session = readRemoteShellView(await request('POST', '/sessions', readRemoteOpenShell(input), signal));
 	const wsUrl = new URL(ROOT + '/stream?sessionId=' + encodeURIComponent(session.id), window.location.href);
 	wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:';
 	let socket: WebSocket;
@@ -97,7 +99,7 @@ export async function openRemoteTerminal(
 		socket = new WebSocket(wsUrl);
 	} catch (error) {
 		try {
-			await request('DELETE', '/sessions/' + encodeURIComponent(session.id));
+			readRemoteCloseSession(await request('DELETE', '/sessions/' + encodeURIComponent(session.id)));
 		} catch (cleanupError) {
 			throw new AggregateError([error, cleanupError], 'remote_unavailable');
 		}
@@ -145,7 +147,7 @@ export async function openRemoteTerminal(
 			}
 			try {
 				if (!normalEof) {
-					await request('DELETE', '/sessions/' + encodeURIComponent(session.id));
+					readRemoteCloseSession(await request('DELETE', '/sessions/' + encodeURIComponent(session.id)));
 				}
 			} finally {
 				listener.closed();

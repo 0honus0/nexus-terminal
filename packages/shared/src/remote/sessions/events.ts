@@ -1,3 +1,5 @@
+import { isRemoteSessionId } from './model.js';
+
 /** Text websocket protocol; data bytes encoded as canonical base64. */
 export type RemoteClientEvent =
 	| { type: 'input'; data: string }
@@ -91,10 +93,7 @@ export function readRemoteServerEvent(value: unknown): RemoteServerEvent {
 	switch (header.type) {
 		case 'ready': {
 			const row = frame(value, ['type', 'sessionId']);
-			if (
-				typeof row.sessionId !== 'string' ||
-				!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/iu.test(row.sessionId)
-			) {
+			if (!isRemoteSessionId(row.sessionId)) {
 				throw new InvalidRemoteFrame();
 			}
 			return { type: 'ready', sessionId: row.sessionId };

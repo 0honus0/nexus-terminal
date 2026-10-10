@@ -1,228 +1,51 @@
+import { targetArray, readTargetDeleted, readTargetError } from '@nexus-terminal/shared/targets/http';
+import {
+	readConnectionView,
+	readConnectionMutation,
+	readCredentialMutation,
+	readConnectionImportResponse,
+} from '@nexus-terminal/shared/targets/connections/http-codec';
+import { readProxyView, readProxyMutation } from '@nexus-terminal/shared/targets/proxies/http-codec';
+import { readTagView, readTagMutation } from '@nexus-terminal/shared/targets/tags/http-codec';
+import { readSshKeyView, readSshKeyMutation } from '@nexus-terminal/shared/targets/ssh-keys/http-codec';
+import { readHostKeyView, readHostKeyRemoveResponse } from '@nexus-terminal/shared/targets/host-keys/http-codec';
+import type { TargetConnectionView, TargetConnectionMutation } from '@nexus-terminal/shared/targets/connections/model';
 import type {
 	TargetConnectionInput,
 	TargetConnectionChanges,
-	TargetConnectionView,
 	TargetCredentialInput,
-	TargetImportInput,
-} from '@nexus-terminal/shared/connections/model';
-import type {
-	TargetConnectionMutation,
 	TargetCredentialMutation,
+	TargetImportInput,
 	TargetImportItem,
-} from '@nexus-terminal/shared/connections/api';
-import type { TargetProxyInput, TargetProxyChanges, TargetProxyView } from '@nexus-terminal/shared/proxies/model';
-import type { TargetProxyMutation } from '@nexus-terminal/shared/proxies/api';
-import type { TargetTagView } from '@nexus-terminal/shared/tags/model';
-import type { TargetTagMutation } from '@nexus-terminal/shared/tags/api';
-import type { TargetSshKeyInput, TargetSshKeyChanges, TargetSshKeyView } from '@nexus-terminal/shared/ssh-keys/model';
-import type { TargetSshKeyMutation } from '@nexus-terminal/shared/ssh-keys/api';
-import { CONNECTION_ROUTES, CONNECTION_TYPES } from '@nexus-terminal/shared/connections/values';
-import { PROXY_TYPES } from '@nexus-terminal/shared/proxies/values';
-import type { TargetErrorCode } from '@nexus-terminal/shared/targets/api';
-import type { TargetHostKeyView } from '@nexus-terminal/shared/targets/host-keys';
+} from '@nexus-terminal/shared/targets/connections/http';
+import type { TargetProxyView, TargetProxyMutation } from '@nexus-terminal/shared/targets/proxies/model';
+import type { TargetProxyInput, TargetProxyChanges } from '@nexus-terminal/shared/targets/proxies/http';
+import type { TargetTagView, TargetTagMutation } from '@nexus-terminal/shared/targets/tags/model';
+import type { TargetSshKeyView, TargetSshKeyMutation } from '@nexus-terminal/shared/targets/ssh-keys/model';
+import type { TargetSshKeyInput, TargetSshKeyChanges } from '@nexus-terminal/shared/targets/ssh-keys/http';
+import type { TargetHostKeyView } from '@nexus-terminal/shared/targets/host-keys/model';
 
-type Json = Record<string, unknown>;
-
-function object(value: unknown, fields?: readonly string[]): Json {
-	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-		throw new Error('Invalid Targets response');
-	}
-	const row = value as Json;
-	if (
-		fields &&
-		(Object.keys(row).some((key) => !fields.includes(key)) || fields.some((key) => !Object.hasOwn(row, key)))
-	) {
-		throw new Error('Invalid Targets response');
-	}
-	return row;
-}
-
-function string(value: unknown): string {
-	if (typeof value !== 'string') {
-		throw new Error('Invalid Targets response');
-	}
-	return value;
-}
-
-function nullable(value: unknown): string | null {
-	return value === null ? null : string(value);
-}
-
-function number(value: unknown): number {
-	if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
-		throw new Error('Invalid Targets response');
-	}
-	return value;
-}
-
-function array<T>(input: unknown, decode: (value: unknown) => T): T[] {
-	if (!Array.isArray(input)) {
-		throw new Error('Invalid Targets response');
-	}
-	return input.map((value: unknown) => decode(value));
-}
-
-function option<T extends string>(value: unknown, choices: readonly T[]): T {
-	const accepted = choices.find((candidate) => candidate === value);
-	if (accepted === undefined) {
-		throw new Error('Invalid Targets response');
-	}
-	return accepted;
-}
-
-function connectionView(input: unknown): TargetConnectionView {
-	const v = object(input, [
-		'id',
-		'version',
-		'createdAt',
-		'updatedAt',
-		'name',
-		'type',
-		'host',
-		'port',
-		'username',
-		'route',
-		'proxyId',
-		'notes',
-		'rdpRemoteApp',
-		'rdpRemoteAppDirectory',
-		'rdpRemoteAppArguments',
-		'tagIds',
-		'jumpIds',
-	]);
-	return {
-		id: number(v.id),
-		version: number(v.version),
-		createdAt: number(v.createdAt),
-		updatedAt: number(v.updatedAt),
-		name: string(v.name),
-		type: option(v.type, CONNECTION_TYPES),
-		host: string(v.host),
-		port: number(v.port),
-		username: string(v.username),
-		route: option(v.route, CONNECTION_ROUTES),
-		proxyId: v.proxyId === null ? null : number(v.proxyId),
-		notes: nullable(v.notes),
-		rdpRemoteApp: nullable(v.rdpRemoteApp),
-		rdpRemoteAppDirectory: nullable(v.rdpRemoteAppDirectory),
-		rdpRemoteAppArguments: nullable(v.rdpRemoteAppArguments),
-		tagIds: array(v.tagIds, number),
-		jumpIds: array(v.jumpIds, number),
-	};
-}
-
-function proxyView(input: unknown): TargetProxyView {
-	const v = object(input, ['id', 'name', 'type', 'host', 'port', 'username', 'version', 'createdAt', 'updatedAt']);
-	return {
-		id: number(v.id),
-		name: string(v.name),
-		type: option(v.type, PROXY_TYPES),
-		host: string(v.host),
-		port: number(v.port),
-		username: nullable(v.username),
-		version: number(v.version),
-		createdAt: number(v.createdAt),
-		updatedAt: number(v.updatedAt),
-	};
-}
-
-function tagView(input: unknown): TargetTagView {
-	const v = object(input, ['id', 'name', 'version', 'createdAt', 'updatedAt']);
-	return {
-		id: number(v.id),
-		name: string(v.name),
-		version: number(v.version),
-		createdAt: number(v.createdAt),
-		updatedAt: number(v.updatedAt),
-	};
-}
-
-function keyView(input: unknown): TargetSshKeyView {
-	const v = object(input, ['id', 'name', 'version', 'createdAt', 'updatedAt']);
-	return {
-		id: number(v.id),
-		name: string(v.name),
-		version: number(v.version),
-		createdAt: number(v.createdAt),
-		updatedAt: number(v.updatedAt),
-	};
-}
-
-function hostKeyView(input: unknown): TargetHostKeyView {
-	const value = object(input, ['host', 'port', 'fingerprint', 'confirmedAt']);
-	return {
-		host: string(value.host),
-		port: number(value.port),
-		fingerprint: string(value.fingerprint),
-		confirmedAt: number(value.confirmedAt),
-	};
-}
-
-function mutation<T>(
-	input: unknown,
-	decode: (value: unknown) => T,
-): { status: 'updated'; value: T } | { status: 'not_found' } | { status: 'version_conflict' } {
-	const v = object(input);
-	if (v.status === 'updated') {
-		object(input, ['status', 'value']);
-		return { status: 'updated', value: decode(v.value) };
-	}
-	if (v.status === 'not_found' || v.status === 'version_conflict') {
-		object(input, ['status']);
-		return { status: v.status };
-	}
-	throw new Error('Invalid Targets mutation response');
-}
-
-function credentialMutation(input: unknown): TargetCredentialMutation {
-	const v = object(input, ['status']);
-	if (v.status === 'updated' || v.status === 'not_found' || v.status === 'version_conflict') {
-		return { status: v.status };
-	}
-	throw new Error('Invalid Targets credentials response');
-}
-
-function imports(input: unknown): TargetImportItem[] {
-	const v = object(input, ['items']);
-	return array(v.items, (item) => {
-		const row = object(item);
-		if (row.status === 'ok') {
-			object(item, ['status', 'id']);
-			return { status: 'ok', id: number(row.id) };
-		}
-		if (row.status === 'error' && typeof row.code === 'string') {
-			object(item, ['status', 'code']);
-			const allowed: readonly TargetErrorCode[] = [
-				'invalid_input',
-				'reference_not_found',
-				'reference_in_use',
-				'conflict',
-				'unresolvable',
-				'storage_unavailable',
-				'internal_failure',
-			];
-			const code = allowed.find((candidate) => candidate === row.code);
-			if (code === undefined) {
-				throw new Error('Invalid Targets import result');
-			}
-			return { status: 'error', code };
-		}
-		throw new Error('Invalid Targets import result');
-	});
-}
+import {
+	readConnectionInput,
+	readConnectionUpdateRequest,
+	readConnectionCloneRequest,
+	readConnectionTagsRequest,
+	readCredentialSetRequest,
+	readCredentialClearRequest,
+	readConnectionImportBatch,
+} from '@nexus-terminal/shared/targets/connections/http-codec';
+import { readProxyInput, readProxyUpdateRequest } from '@nexus-terminal/shared/targets/proxies/http-codec';
+import { readSshKeyInput, readSshKeyUpdateRequest } from '@nexus-terminal/shared/targets/ssh-keys/http-codec';
+import { readTagCreateRequest, readTagRenameRequest } from '@nexus-terminal/shared/targets/tags/http-codec';
+import { readHostKeyConfirmRequest, readHostKeyRequest } from '@nexus-terminal/shared/targets/host-keys/http-codec';
 
 /** All calls use one explicit same-origin backend and its session cookie. */
 export function createTargetsNextApi(baseUrl: string) {
 	const origin = new URL(baseUrl, window.location.href);
-	if (
-		origin.origin !== window.location.origin ||
-		!['/', '/__next/'].includes(origin.pathname) ||
-		origin.search ||
-		origin.hash
-	) {
+	if (origin.origin !== window.location.origin || origin.pathname !== '/__next/' || origin.search || origin.hash) {
 		throw new Error('Targets management requires an explicit same-origin backend');
 	}
-	const base = origin.origin + (origin.pathname === '/__next/' ? '/__next' : '') + '/api/v1/targets';
+	const base = origin.origin + '/__next/api/v1/targets';
 
 	async function call(method: string, path: string, body?: unknown): Promise<unknown> {
 		let response: Response;
@@ -244,23 +67,14 @@ export function createTargetsNextApi(baseUrl: string) {
 			throw new Error('request_failed');
 		}
 		if (!response.ok) {
-			if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) && 'code' in parsed) {
-				const code = parsed.code;
-				if (
-					code === 'unauthenticated' ||
-					code === 'forbidden' ||
-					code === 'not_found' ||
-					code === 'version_conflict' ||
-					code === 'invalid_input' ||
-					code === 'reference_not_found' ||
-					code === 'reference_in_use' ||
-					code === 'conflict' ||
-					code === 'unresolvable' ||
-					code === 'storage_unavailable'
-				) {
-					throw new Error(code);
+			const code = (() => {
+				try {
+					return readTargetError(parsed).code;
+				} catch {
+					return null;
 				}
-			}
+			})();
+			if (code !== null) throw new Error(code);
 			throw new Error('request_failed');
 		}
 		return parsed;
@@ -268,97 +82,118 @@ export function createTargetsNextApi(baseUrl: string) {
 
 	return {
 		hostKeys: {
-			list: async (): Promise<TargetHostKeyView[]> => array(await call('GET', '/host-keys'), hostKeyView),
+			list: async (): Promise<TargetHostKeyView[]> =>
+				targetArray(await call('GET', '/host-keys'), readHostKeyView),
 
 			confirm: async (host: string, port: number, fingerprint: string): Promise<TargetHostKeyView> =>
-				hostKeyView(await call('POST', '/host-keys/confirm', { host, port, fingerprint })),
+				readHostKeyView(
+					await call('POST', '/host-keys/confirm', readHostKeyConfirmRequest({ host, port, fingerprint })),
+				),
 
 			remove: async (host: string, port: number): Promise<void> => {
-				await call('POST', '/host-keys/remove', { host, port });
+				readHostKeyRemoveResponse(await call('POST', '/host-keys/remove', readHostKeyRequest({ host, port })));
 			},
 		},
 
 		connections: {
-			list: async (): Promise<TargetConnectionView[]> => array(await call('GET', '/connections'), connectionView),
+			list: async (): Promise<TargetConnectionView[]> =>
+				targetArray(await call('GET', '/connections'), readConnectionView),
 
 			get: async (id: number): Promise<TargetConnectionView> =>
-				connectionView(await call('GET', `/connections/${id}`)),
+				readConnectionView(await call('GET', `/connections/${id}`)),
 
 			create: async (input: TargetConnectionInput): Promise<TargetConnectionView> =>
-				connectionView(await call('POST', '/connections', input)),
+				readConnectionView(await call('POST', '/connections', readConnectionInput(input))),
 
 			update: async (
 				id: number,
 				version: number,
 				changes: TargetConnectionChanges,
 			): Promise<TargetConnectionMutation> =>
-				mutation(await call('PUT', `/connections/${id}`, { version, changes }), connectionView),
+				readConnectionMutation(
+					await call('PUT', `/connections/${id}`, readConnectionUpdateRequest({ version, changes })),
+				),
 
 			clone: async (id: number, name: string): Promise<TargetConnectionView> =>
-				connectionView(await call('POST', `/connections/${id}/clone`, { name })),
+				readConnectionView(
+					await call('POST', `/connections/${id}/clone`, readConnectionCloneRequest({ name })),
+				),
 
 			remove: async (id: number): Promise<void> => {
-				await call('DELETE', `/connections/${id}`);
+				readTargetDeleted(await call('DELETE', `/connections/${id}`));
 			},
 
 			tags: async (id: number, version: number, tagIds: number[]): Promise<TargetConnectionMutation> =>
-				mutation(await call('PUT', `/connections/${id}/tags`, { version, tagIds }), connectionView),
+				readConnectionMutation(
+					await call('PUT', `/connections/${id}/tags`, readConnectionTagsRequest({ version, tagIds })),
+				),
 
 			credential: async (
 				id: number,
 				version: number,
 				value: TargetCredentialInput,
 			): Promise<TargetCredentialMutation> =>
-				credentialMutation(await call('PUT', `/connections/${id}/credential`, { version, credential: value })),
+				readCredentialMutation(
+					await call(
+						'PUT',
+						`/connections/${id}/credential`,
+						readCredentialSetRequest({ version, credential: value }),
+					),
+				),
 
 			clearCredential: async (id: number, version: number): Promise<TargetCredentialMutation> =>
-				credentialMutation(await call('DELETE', `/connections/${id}/credential`, { version })),
+				readCredentialMutation(
+					await call('DELETE', `/connections/${id}/credential`, readCredentialClearRequest({ version })),
+				),
 
 			importMany: async (items: TargetImportInput[]): Promise<TargetImportItem[]> =>
-				imports(await call('POST', '/connections/import', { items })),
+				readConnectionImportResponse(
+					await call('POST', '/connections/import', { items: readConnectionImportBatch({ items }) }),
+				).items,
 		},
 		proxies: {
-			list: async (): Promise<TargetProxyView[]> => array(await call('GET', '/proxies'), proxyView),
+			list: async (): Promise<TargetProxyView[]> => targetArray(await call('GET', '/proxies'), readProxyView),
 
-			get: async (id: number): Promise<TargetProxyView> => proxyView(await call('GET', `/proxies/${id}`)),
+			get: async (id: number): Promise<TargetProxyView> => readProxyView(await call('GET', `/proxies/${id}`)),
 
 			create: async (input: TargetProxyInput): Promise<TargetProxyView> =>
-				proxyView(await call('POST', '/proxies', input)),
+				readProxyView(await call('POST', '/proxies', readProxyInput(input))),
 
 			update: async (id: number, version: number, changes: TargetProxyChanges): Promise<TargetProxyMutation> =>
-				mutation(await call('PUT', `/proxies/${id}`, { version, changes }), proxyView),
+				readProxyMutation(await call('PUT', `/proxies/${id}`, readProxyUpdateRequest({ version, changes }))),
 
 			remove: async (id: number): Promise<void> => {
-				await call('DELETE', `/proxies/${id}`);
+				readTargetDeleted(await call('DELETE', `/proxies/${id}`));
 			},
 		},
 		tags: {
-			list: async (): Promise<TargetTagView[]> => array(await call('GET', '/tags'), tagView),
+			list: async (): Promise<TargetTagView[]> => targetArray(await call('GET', '/tags'), readTagView),
 
-			get: async (id: number): Promise<TargetTagView> => tagView(await call('GET', `/tags/${id}`)),
+			get: async (id: number): Promise<TargetTagView> => readTagView(await call('GET', `/tags/${id}`)),
 
-			create: async (name: string): Promise<TargetTagView> => tagView(await call('POST', '/tags', { name })),
+			create: async (name: string): Promise<TargetTagView> =>
+				readTagView(await call('POST', '/tags', readTagCreateRequest({ name }))),
 
 			rename: async (id: number, version: number, name: string): Promise<TargetTagMutation> =>
-				mutation(await call('PUT', `/tags/${id}`, { version, name }), tagView),
+				readTagMutation(await call('PUT', `/tags/${id}`, readTagRenameRequest({ version, name }))),
 
 			remove: async (id: number): Promise<void> => {
-				await call('DELETE', `/tags/${id}`);
+				readTargetDeleted(await call('DELETE', `/tags/${id}`));
 			},
 		},
 		sshKeys: {
-			list: async (): Promise<TargetSshKeyView[]> => array(await call('GET', '/ssh-keys'), keyView),
+			list: async (): Promise<TargetSshKeyView[]> => targetArray(await call('GET', '/ssh-keys'), readSshKeyView),
 
-			get: async (id: number): Promise<TargetSshKeyView> => keyView(await call('GET', `/ssh-keys/${id}`)),
+			get: async (id: number): Promise<TargetSshKeyView> => readSshKeyView(await call('GET', `/ssh-keys/${id}`)),
 
 			create: async (input: TargetSshKeyInput): Promise<TargetSshKeyView> =>
-				keyView(await call('POST', '/ssh-keys', input)),
+				readSshKeyView(await call('POST', '/ssh-keys', readSshKeyInput(input))),
 
 			update: async (id: number, version: number, changes: TargetSshKeyChanges): Promise<TargetSshKeyMutation> =>
-				mutation(await call('PUT', `/ssh-keys/${id}`, { version, changes }), keyView),
+				readSshKeyMutation(await call('PUT', `/ssh-keys/${id}`, readSshKeyUpdateRequest({ version, changes }))),
 
 			remove: async (id: number): Promise<void> => {
-				await call('DELETE', `/ssh-keys/${id}`);
+				readTargetDeleted(await call('DELETE', `/ssh-keys/${id}`));
 			},
 		},
 	};

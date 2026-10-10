@@ -1,16 +1,5 @@
 import type { ProxyType } from './values.js';
 
-export interface TargetProxyInput {
-	name: string;
-	type: ProxyType;
-	host: string;
-	port: number;
-	username: string | null;
-	password?: string | null;
-}
-
-export type TargetProxyChanges = Partial<TargetProxyInput>;
-
 export interface TargetProxyView {
 	id: number;
 	name: string;
@@ -22,3 +11,6 @@ export interface TargetProxyView {
 	createdAt: number;
 	updatedAt: number;
 }
+
+export type TargetProxyMutation =
+	{ status: 'updated'; value: TargetProxyView } | { status: 'not_found' } | { status: 'version_conflict' };

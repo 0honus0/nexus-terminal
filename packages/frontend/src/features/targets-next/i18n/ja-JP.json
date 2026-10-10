@@ -48,8 +48,13 @@
       "reference_in_use": "この項目は使用中のため削除できません。",
       "conflict": "既存データと競合しています。",
       "storage_unavailable": "ストレージを一時的に利用できません。",
-      "already_cancelled": "この操作はすでに終了しています。",
-      "import_failed": "インポートに失敗しました。"
+      "import_failed": "インポートに失敗しました。",
+      "forbidden": "この操作を実行する権限がありません。",
+      "host_key_untrusted": "SSH ホスト鍵が未確認です。信頼できる別経路で SHA256 指紋を照合してください。",
+      "invalid_credentials": "ユーザー名またはパスワードが正しくありません。",
+      "already_initialized": "初期管理者はすでに設定されています。",
+      "unresolvable": "この接続経路を安全に解決できません。",
+      "internal_failure": "リクエストを完了できませんでした。再試行してください。"
     }
   }
 }

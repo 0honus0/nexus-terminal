@@ -1,22 +1,17 @@
-import type { TargetHostKeyView } from '@nexus-terminal/shared/targets/host-keys';
-import type { ProxyType } from '@nexus-terminal/shared/proxies/values';
-import type {
-	TargetConnectionInput,
-	TargetConnectionView,
-	TargetImportInput,
-	TargetCredentialInput,
-} from '@nexus-terminal/shared/connections/model';
-import type {
-	TargetConnectionMutation,
-	TargetImportItem,
-	TargetCredentialMutation,
-} from '@nexus-terminal/shared/connections/api';
-import type { TargetProxyInput, TargetProxyChanges, TargetProxyView } from '@nexus-terminal/shared/proxies/model';
-import type { TargetProxyMutation } from '@nexus-terminal/shared/proxies/api';
-import type { TargetTagView } from '@nexus-terminal/shared/tags/model';
-import type { TargetTagMutation } from '@nexus-terminal/shared/tags/api';
-import type { TargetSshKeyInput, TargetSshKeyChanges, TargetSshKeyView } from '@nexus-terminal/shared/ssh-keys/model';
-import type { TargetSshKeyMutation } from '@nexus-terminal/shared/ssh-keys/api';
+import type { TargetHostKeyView } from '@nexus-terminal/shared/targets/host-keys/model';
+import type { ProxyType } from '@nexus-terminal/shared/targets/proxies/values';
+import type { TargetConnectionInput, TargetImportInput, TargetCredentialInput } from '@nexus-terminal/shared/targets/connections/http';
+import type { TargetConnectionView } from '@nexus-terminal/shared/targets/connections/model';
+import type { TargetConnectionMutation } from '@nexus-terminal/shared/targets/connections/model';
+import type { TargetImportItem, TargetCredentialMutation } from '@nexus-terminal/shared/targets/connections/http';
+import type { TargetProxyInput, TargetProxyChanges } from '@nexus-terminal/shared/targets/proxies/http';
+import type { TargetProxyView } from '@nexus-terminal/shared/targets/proxies/model';
+import type { TargetProxyMutation } from '@nexus-terminal/shared/targets/proxies/model';
+import type { TargetTagView } from '@nexus-terminal/shared/targets/tags/model';
+import type { TargetTagMutation } from '@nexus-terminal/shared/targets/tags/model';
+import type { TargetSshKeyInput, TargetSshKeyChanges } from '@nexus-terminal/shared/targets/ssh-keys/http';
+import type { TargetSshKeyView } from '@nexus-terminal/shared/targets/ssh-keys/model';
+import type { TargetSshKeyMutation } from '@nexus-terminal/shared/targets/ssh-keys/model';
 
 /**
  * Management types are the exact Shared contract consumed by Frontend.

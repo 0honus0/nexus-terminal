@@ -1,11 +1,4 @@
-/** New backend-only SSH PTY session. Not a legacy Workspace session/ticket. */
-export interface RemoteShellView {
-	id: string;
-	targetId: number;
-	configurationFingerprint: string;
-	startedAt: number;
-	status: 'open';
-}
+import { isRemoteSessionId, type RemoteShellView } from './model.js';
 
 export interface RemoteOpenShell {
 	targetId: number;
@@ -45,7 +38,7 @@ export function readRemoteOpenShell(value: unknown): RemoteOpenShell {
 	const row = remoteObject(value, ['targetId', 'columns', 'rows', 'term'], ['targetId', 'columns', 'rows']);
 	if (
 		row.term !== undefined &&
-		(typeof row.term !== 'string' || row.term.length > 48 || !/^[-\\w.]+$/u.test(row.term))
+		(typeof row.term !== 'string' || row.term.length > 48 || !/^[-\w.]+$/u.test(row.term))
 	) {
 		throw new InvalidRemotePayload();
 	}
@@ -60,8 +53,7 @@ export function readRemoteOpenShell(value: unknown): RemoteOpenShell {
 export function readRemoteShellView(value: unknown): RemoteShellView {
 	const row = remoteObject(value, ['id', 'targetId', 'configurationFingerprint', 'startedAt', 'status']);
 	if (
-		typeof row.id !== 'string' ||
-		!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/iu.test(row.id) ||
+		!isRemoteSessionId(row.id) ||
 		typeof row.configurationFingerprint !== 'string' ||
 		row.configurationFingerprint.length < 1 ||
 		row.configurationFingerprint.length > 256 ||
@@ -79,4 +71,35 @@ export function readRemoteShellView(value: unknown): RemoteShellView {
 		startedAt: row.startedAt,
 		status: 'open',
 	};
+}
+
+export interface RemoteFailureResponse {
+	code: 'unauthenticated' | 'forbidden' | 'invalid_input' | 'not_found' | 'host_key_untrusted' | 'remote_unavailable';
+}
+
+export function readRemoteFailureResponse(value: unknown): RemoteFailureResponse {
+	const row = remoteObject(value, ['code']);
+	switch (row.code) {
+		case 'unauthenticated':
+		case 'forbidden':
+		case 'invalid_input':
+		case 'not_found':
+		case 'host_key_untrusted':
+		case 'remote_unavailable':
+			return { code: row.code };
+		default:
+			throw new InvalidRemotePayload();
+	}
+}
+
+export interface RemoteCloseSessionResponse {
+	closed: true;
+}
+
+export function readRemoteCloseSession(value: unknown): RemoteCloseSessionResponse {
+	const row = remoteObject(value, ['closed']);
+	if (row.closed !== true) {
+		throw new InvalidRemotePayload();
+	}
+	return { closed: true };
 }

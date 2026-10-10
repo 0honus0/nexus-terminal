@@ -3,13 +3,11 @@ export interface TargetSshKeyInput {
 	privateKey: string;
 	passphrase?: string | null;
 }
-
 export type TargetSshKeyChanges = Partial<TargetSshKeyInput>;
-
-export interface TargetSshKeyView {
-	id: number;
-	name: string;
+export interface TargetSshKeyUpdateRequest {
 	version: number;
-	createdAt: number;
-	updatedAt: number;
+	changes: TargetSshKeyChanges;
+}
+export interface TargetSshKeyDeleteResponse {
+	deleted: true;
 }
