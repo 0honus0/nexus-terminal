@@ -24,14 +24,17 @@ export class InvalidRemoteFilePayload extends Error {
 	}
 }
 
-function record(input: unknown, allowed: readonly string[], required: readonly string[] = allowed): Record<string, unknown> {
+function record(
+	input: unknown,
+	allowed: readonly string[],
+	required: readonly string[] = allowed,
+): Record<string, unknown> {
 	if (input === null || typeof input !== 'object' || Array.isArray(input)) {
 		throw new InvalidRemoteFilePayload();
 	}
 	// Object shape is inspected before any field is used; do not return it as a business object.
 	const row = input as Record<string, unknown>;
-	if (Object.keys(row).some((key) => !allowed.includes(key)) ||
-		required.some((key) => !Object.hasOwn(row, key))) {
+	if (Object.keys(row).some((key) => !allowed.includes(key)) || required.some((key) => !Object.hasOwn(row, key))) {
 		throw new InvalidRemoteFilePayload();
 	}
 	return row;
@@ -45,8 +48,11 @@ function integer(input: unknown, min: number, max: number): number {
 }
 
 function string(input: unknown, maxBytes: number): string {
-	if (typeof input !== 'string' || new TextEncoder().encode(input).byteLength > maxBytes ||
-		/[\uD800-\uDFFF]/u.test(input)) {
+	if (
+		typeof input !== 'string' ||
+		new TextEncoder().encode(input).byteLength > maxBytes ||
+		/[\uD800-\uDFFF]/u.test(input)
+	) {
 		throw new InvalidRemoteFilePayload();
 	}
 	return input;
@@ -119,8 +125,10 @@ export function readRemoteFileListResponse(input: unknown): RemoteFileListRespon
 		throw new InvalidRemoteFilePayload();
 	}
 	const encoder = new TextEncoder();
-	if (encoder.encode(JSON.stringify(input)).byteLength > REMOTE_FILE_MAX_RESPONSE_BYTES ||
-		encoder.encode(JSON.stringify(row.entries)).byteLength > REMOTE_FILE_MAX_METADATA_BYTES) {
+	if (
+		encoder.encode(JSON.stringify(input)).byteLength > REMOTE_FILE_MAX_RESPONSE_BYTES ||
+		encoder.encode(JSON.stringify(row.entries)).byteLength > REMOTE_FILE_MAX_METADATA_BYTES
+	) {
 		throw new InvalidRemoteFilePayload();
 	}
 	return { entries: row.entries.map(readRemoteFileEntry), complete: true };
@@ -134,8 +142,10 @@ export function readRemoteFileTextResponse(input: unknown): RemoteFileTextRespon
 	const row = record(input, ['info', 'bytes', 'text']);
 	const bytes = integer(row.bytes, 0, REMOTE_FILE_MAX_TEXT_BYTES);
 	const text = string(row.text, REMOTE_FILE_MAX_TEXT_BYTES);
-	if (new TextEncoder().encode(text).byteLength !== bytes ||
-		new TextEncoder().encode(JSON.stringify(input)).byteLength > REMOTE_FILE_MAX_RESPONSE_BYTES) {
+	if (
+		new TextEncoder().encode(text).byteLength !== bytes ||
+		new TextEncoder().encode(JSON.stringify(input)).byteLength > REMOTE_FILE_MAX_RESPONSE_BYTES
+	) {
 		throw new InvalidRemoteFilePayload();
 	}
 	return { info: readRemoteFileInfo(row.info), bytes, text };

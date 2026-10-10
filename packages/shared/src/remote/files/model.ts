@@ -1,4 +1,4 @@
-export type RemoteFileKind = 'file' | 'directory' | 'symlink' | 'other';
+import type { RemoteFileKind } from './values.js';
 
 export interface RemoteFileInfo {
 	size: number;
@@ -7,7 +7,10 @@ export interface RemoteFileInfo {
 	kind: RemoteFileKind;
 }
 
-export interface RemoteFileEntry { name: string; info: RemoteFileInfo }
+export interface RemoteFileEntry {
+	name: string;
+	info: RemoteFileInfo;
+}
 
 export interface RemoteFileResourceView {
 	id: string;

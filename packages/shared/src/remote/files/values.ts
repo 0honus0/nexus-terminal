@@ -1,14 +1,15 @@
 /** User-visible budgets shared by the Remote Files HTTP producer and consumer. */
 export const REMOTE_FILE_MAX_PATH_BYTES = 4096;
+
 export const REMOTE_FILE_MAX_REQUEST_BYTES = 16 * 1024;
+
 export const REMOTE_FILE_MAX_LIST_ENTRIES = 200;
+
 export const REMOTE_FILE_MAX_METADATA_BYTES = 48 * 1024;
+
 export const REMOTE_FILE_MAX_TEXT_BYTES = 16 * 1024;
+
 export const REMOTE_FILE_MAX_RESPONSE_BYTES = 128 * 1024;
-export const REMOTE_FILE_MAX_RESOURCES = 8;
-export const REMOTE_FILE_IDLE_MS = 2 * 60 * 1000;
-export const REMOTE_FILE_OPERATION_MS = 30 * 1000;
-export const REMOTE_FILE_CLOSE_REPLAY_MS = 2 * 60 * 1000;
 
 export const REMOTE_FILE_ERROR_CODES = [
 	'unauthenticated',
@@ -23,3 +24,5 @@ export const REMOTE_FILE_ERROR_CODES = [
 ] as const;
 
 export type RemoteFileErrorCode = (typeof REMOTE_FILE_ERROR_CODES)[number];
+
+export type RemoteFileKind = 'file' | 'directory' | 'symlink' | 'other';

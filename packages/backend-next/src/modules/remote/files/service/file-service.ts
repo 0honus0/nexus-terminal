@@ -3,17 +3,13 @@ import { createHash, randomUUID } from 'node:crypto';
 import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.js';
 import { RecentResults } from '../../../../platform/lifecycle/recent-results.js';
 import type { AccessPublicApi } from '../../../access/public.js';
-import {
-	REMOTE_FILE_IDLE_MS,
-	REMOTE_FILE_CLOSE_REPLAY_MS,
-	REMOTE_FILE_MAX_RESOURCES,
-	REMOTE_FILE_OPERATION_MS,
-} from '@nexus-terminal/shared/remote/files/values';
+
 import {
 	RemoteFileFailure,
 	type FileEntry,
 	type FileInfo,
 	type FileResource,
+	type OpenedFile,
 	type TextRead,
 } from '../model/file-types.js';
 import type { RemoteFileModel } from '../model/file-model.js';
@@ -29,6 +25,12 @@ interface OwnedResource {
 	inFlight: Promise<unknown> | null;
 	closePromise: Promise<void> | null;
 }
+
+/** Server-owned admission and lifecycle policy; these values are not wire budgets. */
+const MAX_FILE_RESOURCES = 8;
+const FILE_IDLE_MS = 2 * 60 * 1000;
+const FILE_OPERATION_MS = 30 * 1000;
+const FILE_CLOSE_REPLAY_MS = 2 * 60 * 1000;
 
 /** Private completed-close cache capacity, independent of PTY sessions. */
 const MAX_RECENTLY_CLOSED_FILES = 128;
@@ -52,7 +54,7 @@ export class RemoteFileService {
 	private readonly closing = new Map<string, ReleasedFile>();
 	private readonly recentlyClosed = new RecentResults<string, ReleasedFile>(
 		MAX_RECENTLY_CLOSED_FILES,
-		REMOTE_FILE_CLOSE_REPLAY_MS,
+		FILE_CLOSE_REPLAY_MS,
 	);
 	private readonly cleanupFailures = new FailureSummary();
 	private accepting = true;
@@ -114,19 +116,11 @@ export class RemoteFileService {
 		}
 	}
 
-	open(
-		token: string | null,
-		targetId: number,
-		signal?: AbortSignal,
-	): Promise<{ id: string; targetId: number; fingerprint: string }> {
+	open(token: string | null, targetId: number, signal?: AbortSignal): Promise<OpenedFile> {
 		return this.track(this.openAdmitted(token, targetId, signal));
 	}
 
-	private async openAdmitted(
-		token: string | null,
-		targetId: number,
-		signal?: AbortSignal,
-	): Promise<{ id: string; targetId: number; fingerprint: string }> {
+	private async openAdmitted(token: string | null, targetId: number, signal?: AbortSignal): Promise<OpenedFile> {
 		if (!this.accepting) {
 			throw new RemoteFileFailure('remote_unavailable');
 		}
@@ -142,7 +136,7 @@ export class RemoteFileService {
 			abort();
 		}
 		const started = Date.now();
-		const timer = setTimeout(abort, REMOTE_FILE_OPERATION_MS);
+		const timer = setTimeout(abort, FILE_OPERATION_MS);
 		this.authorizing.add(controller);
 		let resource: FileResource | null = null;
 		let lateOpeningCleanup: Promise<void> | null = null;
@@ -152,13 +146,13 @@ export class RemoteFileService {
 			if (!this.accepting || controller.signal.aborted) {
 				throw new RemoteFileFailure('remote_unavailable');
 			}
-			if (this.owners.size + this.opening.size + this.closing.size >= REMOTE_FILE_MAX_RESOURCES) {
+			if (this.owners.size + this.opening.size + this.closing.size >= MAX_FILE_RESOURCES) {
 				throw new RemoteFileFailure('limit_exceeded');
 			}
 			this.opening.add(controller);
 			const opening = this.model.open(
 				targetId,
-				Math.max(1, REMOTE_FILE_OPERATION_MS - (Date.now() - started)),
+				Math.max(1, FILE_OPERATION_MS - (Date.now() - started)),
 				controller.signal,
 			);
 			try {
@@ -203,7 +197,7 @@ export class RemoteFileService {
 				tokenHash: hash(token),
 				userId,
 				resource,
-				expiresAt: Date.now() + REMOTE_FILE_IDLE_MS,
+				expiresAt: Date.now() + FILE_IDLE_MS,
 				busy: false,
 				active: null,
 				inFlight: null,
@@ -278,7 +272,7 @@ export class RemoteFileService {
 			abort();
 		}
 		const started = Date.now();
-		const timer = setTimeout(abort, REMOTE_FILE_OPERATION_MS);
+		const timer = setTimeout(abort, FILE_OPERATION_MS);
 		let record: OwnedResource | null = null;
 		try {
 			record = await this.untilAbort(this.owned(token, id), controller.signal);
@@ -322,11 +316,7 @@ export class RemoteFileService {
 	): Promise<T> {
 		await this.untilAbort(this.model.checkFingerprint(record.resource), signal);
 		signal.throwIfAborted();
-		const result = await action(
-			record.resource,
-			Math.max(1, REMOTE_FILE_OPERATION_MS - (Date.now() - started)),
-			signal,
-		);
+		const result = await action(record.resource, Math.max(1, FILE_OPERATION_MS - (Date.now() - started)), signal);
 		signal.throwIfAborted();
 		await this.untilAbort(this.model.checkFingerprint(record.resource), signal);
 		signal.throwIfAborted();
@@ -342,7 +332,7 @@ export class RemoteFileService {
 			throw new RemoteFileFailure('unauthenticated');
 		}
 		signal.throwIfAborted();
-		record.expiresAt = Date.now() + REMOTE_FILE_IDLE_MS;
+		record.expiresAt = Date.now() + FILE_IDLE_MS;
 		return result;
 	}
 
@@ -400,7 +390,7 @@ export class RemoteFileService {
 		if (signal?.aborted) {
 			abort();
 		}
-		const timer = setTimeout(abort, REMOTE_FILE_OPERATION_MS);
+		const timer = setTimeout(abort, FILE_OPERATION_MS);
 		this.releasingRequests.add(controller);
 		try {
 			await this.releaseIdentified(token, id, controller.signal);

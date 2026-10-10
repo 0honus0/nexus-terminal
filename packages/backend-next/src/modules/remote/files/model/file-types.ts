@@ -1,4 +1,4 @@
-import type { RemoteFileErrorCode } from '@nexus-terminal/shared/remote/files/values';
+import type { RemoteFileErrorCode, RemoteFileKind } from '@nexus-terminal/shared/remote/files/values';
 
 export class RemoteFileFailure extends Error {
 	constructor(readonly code: RemoteFileErrorCode) {
@@ -39,7 +39,7 @@ export interface FileInfo {
 	size: number;
 	mode: number;
 	modifiedAt: number;
-	kind: 'file' | 'directory' | 'symlink' | 'other';
+	kind: RemoteFileKind;
 }
 
 export interface FileEntry {
@@ -51,4 +51,11 @@ export interface TextRead {
 	text: string;
 	bytes: number;
 	info: FileInfo;
+}
+
+/** Files application result consumed by the HTTP projection. */
+export interface OpenedFile {
+	id: string;
+	targetId: number;
+	fingerprint: string;
 }
