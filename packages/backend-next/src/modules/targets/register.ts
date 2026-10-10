@@ -55,6 +55,7 @@ import {
 	toCredentialInput,
 	toCredentialMutation,
 	toTrustedTargetView,
+	toHostKeyView,
 } from './public-mappers.js';
 
 interface TargetsRegistrationOptions {
@@ -90,15 +91,7 @@ export function registerTargets({ sqlite, secrets }: TargetsRegistrationOptions)
 
 	const publicApi: TargetsPublicApi = {
 		hostKeys: {
-			list: () =>
-				targetsBoundary(async () =>
-					(await hostKeys.list()).map((key) => ({
-						host: key.host,
-						port: key.port,
-						fingerprint: key.fingerprint,
-						confirmedAt: key.confirmedAt,
-					})),
-				),
+			list: () => targetsBoundary(async () => (await hostKeys.list()).map(toHostKeyView)),
 
 			confirm: (input) =>
 				targetsBoundary(async () => {
@@ -107,12 +100,7 @@ export function registerTargets({ sqlite, secrets }: TargetsRegistrationOptions)
 						port: input.port,
 						fingerprint: input.fingerprint,
 					});
-					return {
-						host: key.host,
-						port: key.port,
-						fingerprint: key.fingerprint,
-						confirmedAt: key.confirmedAt,
-					};
+					return toHostKeyView(key);
 				}),
 
 			remove: (host, port) => targetsBoundary(() => hostKeys.remove(host, port)),

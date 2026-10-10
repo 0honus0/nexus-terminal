@@ -1,11 +1,6 @@
 import { TargetFailure } from '../../target-failure.js';
 import type { ConnectionMetadata } from './connection-types.js';
-
-export function validateId(value: number): void {
-	if (!Number.isSafeInteger(value) || value <= 0) {
-		throw new TargetFailure('invalid_input');
-	}
-}
+import { validateTargetId } from '../../target-validation.js';
 
 export function validateConnection(data: ConnectionMetadata): ConnectionMetadata {
 	if (!data.name.trim() || !data.host.trim() || !Number.isInteger(data.port) || data.port < 1 || data.port > 65535) {
@@ -33,10 +28,10 @@ export function validateConnection(data: ConnectionMetadata): ConnectionMetadata
 		throw new TargetFailure('invalid_input');
 	}
 	for (const id of [...data.tagIds, ...data.jumpIds]) {
-		validateId(id);
+		validateTargetId(id);
 	}
 	if (data.proxyId !== null) {
-		validateId(data.proxyId);
+		validateTargetId(data.proxyId);
 	}
 	return {
 		...data,

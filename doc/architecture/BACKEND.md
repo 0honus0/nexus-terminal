@@ -35,6 +35,8 @@ SQLite Worker 请求与响应均由 Platform 在接收 `unknown` 消息后验证
 
 Access 会话签发输入由 sessions Model 独立应用类型持有，身份公开映射直接接收 Access 内部身份类型。RemoteSessionOwner 使用同模块 SessionService 的窄内部应用契约，不再通过对外安全包装调用同模块会话；完整 open/第二次身份复核及资源登记纳入停机 drain，晚到或撤销的会话须释放，公开错误仍只在 HTTP/模块出口映射。
 
+Targets 的 Proxy name/host 规范化及输入规则由 Proxy Model 纯规则统一提供，管理和导入在进入存储前应用同一规则；正整数 ID/version 的应用级检验由 Targets 单一 owner 提供，SQL 外部行另行严格解码。Host Key 内部到公开管理视图的投影在 public mapper 中复用，HTTP 到 wire 仍保留独立投影。
+
 ## 目录与一级模块
 
 ```text

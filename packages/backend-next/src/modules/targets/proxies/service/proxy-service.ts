@@ -1,58 +1,14 @@
 import { TargetFailure } from '../../target-failure.js';
+import { validateTargetId } from '../../target-validation.js';
+import { normalizeProxyChanges, validateProxyMetadata } from '../model/proxy-validation.js';
 import type {
-	ProxyMetadata,
 	ProxyInput,
 	ProxyChanges,
-	ProxyCommandPatch,
 	ProxySnapshot,
 	ProxyMutation,
 } from '../model/proxy-types.js';
 import type { ProxyModel } from '../model/proxy-model.js';
 import type { SecretBox } from '../../../../platform/security/secret-box.js';
-
-function validateProxy(data: ProxyMetadata): ProxyMetadata {
-	if (
-		!data.name.trim() ||
-		!data.host.trim() ||
-		!['HTTP', 'SOCKS5'].includes(data.type) ||
-		!Number.isInteger(data.port) ||
-		data.port < 1 ||
-		data.port > 65535
-	) {
-		throw new TargetFailure('invalid_input');
-	}
-	if (data.username !== null && typeof data.username !== 'string') {
-		throw new TargetFailure('invalid_input');
-	}
-	return { ...data, name: data.name.trim(), host: data.host.trim() };
-}
-
-function normalizeProxyChanges(current: ProxyMetadata, fields: Partial<ProxyMetadata>): ProxyCommandPatch {
-	const normalized = validateProxy({ ...current, ...fields });
-	const patch: ProxyCommandPatch = {};
-	if (fields.name !== undefined) {
-		patch.name = normalized.name;
-	}
-	if (fields.type !== undefined) {
-		patch.type = normalized.type;
-	}
-	if (fields.host !== undefined) {
-		patch.host = normalized.host;
-	}
-	if (fields.port !== undefined) {
-		patch.port = normalized.port;
-	}
-	if (fields.username !== undefined) {
-		patch.username = normalized.username;
-	}
-	return patch;
-}
-
-function validateId(value: number): void {
-	if (!Number.isSafeInteger(value) || value <= 0) {
-		throw new TargetFailure('invalid_input');
-	}
-}
 
 export class ProxyService {
 	constructor(
@@ -65,13 +21,13 @@ export class ProxyService {
 	}
 
 	get(id: number): Promise<ProxySnapshot | null> {
-		validateId(id);
+		validateTargetId(id);
 		return this.model.get(id);
 	}
 
 	create(data: ProxyInput): Promise<ProxySnapshot> {
 		const { password, ...metadata } = data;
-		const result = validateProxy(metadata);
+		const result = validateProxyMetadata(metadata);
 		if (password !== undefined && password !== null && !password) {
 			throw new TargetFailure('invalid_input');
 		}
@@ -82,8 +38,8 @@ export class ProxyService {
 	}
 
 	async update(id: number, version: number, patch: ProxyChanges): Promise<ProxyMutation> {
-		validateId(id);
-		validateId(version);
+		validateTargetId(id);
+		validateTargetId(version);
 		const old = await this.model.get(id);
 		if (!old) {
 			return { status: 'not_found' };
@@ -101,7 +57,7 @@ export class ProxyService {
 	}
 
 	delete(id: number): Promise<boolean> {
-		validateId(id);
+		validateTargetId(id);
 		return this.model.delete(id);
 	}
 

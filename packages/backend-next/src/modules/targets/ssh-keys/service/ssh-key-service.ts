@@ -1,4 +1,5 @@
 import { TargetFailure } from '../../target-failure.js';
+import { validateTargetId as validateId } from '../../target-validation.js';
 import type {
 	SshKeyInput,
 	SshKeyChanges,
@@ -8,12 +9,6 @@ import type {
 } from '../model/ssh-key-types.js';
 import type { SshKeyModel } from '../model/ssh-key-model.js';
 import type { SecretBox } from '../../../../platform/security/secret-box.js';
-
-function validateId(value: number): void {
-	if (!Number.isSafeInteger(value) || value <= 0) {
-		throw new TargetFailure('invalid_input');
-	}
-}
 
 function validateName(value: string): string {
 	if (typeof value !== 'string' || !value.trim()) {

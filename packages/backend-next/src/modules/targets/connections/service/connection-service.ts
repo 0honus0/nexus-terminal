@@ -1,7 +1,8 @@
 import { TargetFailure } from '../../target-failure.js';
 import type { ConnectionMetadata, ConnectionSnapshot, ConnectionMutation } from '../model/connection-types.js';
 import type { ConnectionModel } from '../model/connection-model.js';
-import { validateId, validateConnection, normalizeConnectionChanges } from '../model/connection-validation.js';
+import { validateConnection, normalizeConnectionChanges } from '../model/connection-validation.js';
+import { validateTargetId as validateId } from '../../target-validation.js';
 
 export class ConnectionService {
 	constructor(private readonly model: ConnectionModel) {}

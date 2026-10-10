@@ -19,7 +19,18 @@ import type {
 	TrustedResolvedSshTarget,
 	TrustedSshAuthentication,
 	TrustedSshProxy,
+	HostKeyTrustView,
 } from './public.js';
+import type { HostKeyTrust } from './host-keys/model/host-key-types.js';
+
+export function toHostKeyView(value: HostKeyTrust): HostKeyTrustView {
+	return {
+		host: value.host,
+		port: value.port,
+		fingerprint: value.fingerprint,
+		confirmedAt: value.confirmedAt,
+	};
+}
 import type {
 	ConnectionMetadata as InternalMetadata,
 	ConnectionMutation as InternalConnectionMutation,

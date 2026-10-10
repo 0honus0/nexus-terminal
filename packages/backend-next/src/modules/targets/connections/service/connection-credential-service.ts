@@ -1,4 +1,5 @@
 import { TargetFailure } from '../../target-failure.js';
+import { validateTargetId } from '../../target-validation.js';
 import type { SecretBox } from '../../../../platform/security/secret-box.js';
 import type { SshCredentialInput, CredentialMutation } from '../model/connection-credential-types.js';
 import type { ConnectionCredentialModel } from '../model/connection-credential-model.js';
@@ -10,13 +11,10 @@ export class ConnectionCredentialService {
 	) {}
 
 	async set(id: number, version: number, input: SshCredentialInput): Promise<CredentialMutation> {
-		if (!Number.isSafeInteger(id) || id <= 0 || !Number.isSafeInteger(version) || version <= 0) {
-			throw new TargetFailure('invalid_input');
-		}
+		validateTargetId(id);
+		validateTargetId(version);
 		if (input.kind === 'ssh_key') {
-			if (!Number.isSafeInteger(input.sshKeyId) || input.sshKeyId <= 0) {
-				throw new TargetFailure('invalid_input');
-			}
+			validateTargetId(input.sshKeyId);
 			return this.model.set(id, version, { kind: 'ssh_key', sshKeyId: input.sshKeyId });
 		}
 		if (input.kind !== 'password' || !input.password) {
@@ -32,9 +30,8 @@ export class ConnectionCredentialService {
 	}
 
 	clear(id: number, version: number): Promise<CredentialMutation> {
-		if (!Number.isSafeInteger(id) || id <= 0 || !Number.isSafeInteger(version) || version <= 0) {
-			throw new TargetFailure('invalid_input');
-		}
+		validateTargetId(id);
+		validateTargetId(version);
 		return this.model.clear(id, version);
 	}
 }
