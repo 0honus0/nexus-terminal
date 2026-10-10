@@ -1,4 +1,2 @@
-import { targetMigrations } from './migrations.js';
-
-/** Targets owns its schema content; Platform owns the transactional migration runner. */
-export { targetMigrations };
+/** Targets schema installation entry; concrete SQL remains in its adapters. */
+export { targetMigrations, initializeHostKeySchema } from './migrations.js';

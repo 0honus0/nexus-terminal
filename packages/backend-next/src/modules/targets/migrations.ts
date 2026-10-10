@@ -1,4 +1,4 @@
-import type { SchemaMigration } from '../../platform/storage/sqlite/schema.js';
+import type { SchemaMigration } from '../../platform/storage/sqlite/schema-types.js';
 import { initializeConnectionsSchema } from './connections/adapters/sqlite/connection-schema.js';
 import { initializeConnectionCredentialSchema } from './connections/adapters/sqlite/connection-credential-schema.js';
 import { initializeProxiesSchema } from './proxies/adapters/sqlite/proxy-schema.js';
@@ -24,3 +24,6 @@ export const targetMigrations: readonly SchemaMigration[] = [
 		},
 	},
 ];
+
+/** Explicit Host Key migration installation entry. */
+export { initializeHostKeySchema } from './host-keys/adapters/sqlite/host-key-schema.js';

@@ -74,6 +74,8 @@
 
 后端类型归属与转换必须遵守 [Backend 人工规则 4–7](architecture/BACKEND.md#人工规则区域)：复用内部应用类型在所属 Model 类型文件，存储与技术类型保持独立；双端契约/基础值/容量唯一归属 Shared，后端公开能力与安装契约分别归 public/register。入口、出口和应用/存储三个边界逐字段转换，禁止通过私有实现类型、对象透传或兼容转导出绕过。错误分类不依赖文本。
 
+后端 SQL 放置遵守 [Backend 人工规则 8](architecture/BACKEND.md#人工规则区域)：SQL 指令、DDL 与迁移方言只在 Adapter，模块迁移和 Bootstrap 通过安装接口编排；每阶段类型、ESLint、格式和构建失败必须收口，具体执行与完成判据见 Backend 的审核与交付。
+
 ### 2.2 分层与依赖
 
 本节现行 Backend/Protocol 规则描述旧生产包。独立重构中的 `packages/backend-next` 按[架构重构](架构重构.md)施工：Platform 不持有业务类型或业务注册槽位；模块 Service 使用应用类型，Model 显式转换内部存储契约；加解密归 Service，模块所有对象出口均逐字段转换。新包不调用旧 Backend/Protocol，Shared 按真实双端消费者增量迁移，正式流量切换前保留双包参考结构。后续代码放置和允许依赖以 [Backend 架构与开发约束](architecture/BACKEND.md#职责与依赖边界)为准，本文的旧包说明不作为新包分层模板。

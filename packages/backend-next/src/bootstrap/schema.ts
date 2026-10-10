@@ -1,7 +1,6 @@
-import type { SchemaMigration } from '../platform/storage/sqlite/schema.js';
-import { targetMigrations } from '../modules/targets/schema.js';
+import type { SchemaMigration } from '../platform/storage/sqlite/schema-types.js';
+import { targetMigrations, initializeHostKeySchema } from '../modules/targets/schema.js';
 import { initializeAccessSchema } from '../modules/access/migrations.js';
-import { initializeHostKeySchema } from '../modules/targets/host-keys/schema.js';
 import { initializeAgentSchema } from '../modules/agent/migrations.js';
 
 /** Application owns the only ordered migration registry; modules own DDL. */

@@ -1,3 +1,4 @@
+import { SqliteTransactionAdapter } from './adapters/transaction-sql.js';
 import { Worker } from 'node:worker_threads';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { realpathSync, mkdirSync } from 'node:fs';
@@ -38,9 +39,12 @@ export class SqliteRuntime implements SqlExecutor {
 	private unavailable: SqliteFailure | null = null;
 	private closed = false;
 	private readonly transactionScope = new AsyncLocalStorage<boolean>();
+	private readonly transactions = new SqliteTransactionAdapter({
+		exec: (sql) => this.call('exec', sql),
+	});
 
 	private constructor(readonly path: string) {
-		this.worker = new Worker(new URL('./worker.js', import.meta.url), { workerData: { path } });
+		this.worker = new Worker(new URL('./adapters/worker.js', import.meta.url), { workerData: { path } });
 		this.worker.on('message', (message: unknown) => this.handleWorkerResponse(message));
 		this.worker.on('error', (error) =>
 			this.markUnavailable(new SqliteFailure('worker_exit', null, { cause: error })),
@@ -62,9 +66,11 @@ export class SqliteRuntime implements SqlExecutor {
 		}
 		const pending = this.pending.get(message.id);
 		if (!pending) {
-			this.markUnavailable(new SqliteFailure('worker_exit', null, {
-				cause: new Error('Unexpected SQLite worker response'),
-			}));
+			this.markUnavailable(
+				new SqliteFailure('worker_exit', null, {
+					cause: new Error('Unexpected SQLite worker response'),
+				}),
+			);
 			return;
 		}
 		this.pending.delete(message.id);
@@ -115,7 +121,9 @@ export class SqliteRuntime implements SqlExecutor {
 			}
 			const id = ++this.nextId;
 			if (!Number.isSafeInteger(id)) {
-				const failure = new SqliteFailure('worker_exit', null, { cause: new Error('SQLite request ID exhausted') });
+				const failure = new SqliteFailure('worker_exit', null, {
+					cause: new Error('SQLite request ID exhausted'),
+				});
 				this.markUnavailable(failure);
 				return reject(failure);
 			}
@@ -134,9 +142,7 @@ export class SqliteRuntime implements SqlExecutor {
 			});
 			try {
 				const request =
-					kind === 'close' ? { id, kind } :
-					kind === 'exec' ? { id, kind, sql } :
-					{ id, kind, sql, params };
+					kind === 'close' ? { id, kind } : kind === 'exec' ? { id, kind, sql } : { id, kind, sql, params };
 				this.worker.postMessage(request);
 			} catch (error) {
 				this.pending.delete(id);
@@ -185,7 +191,7 @@ export class SqliteRuntime implements SqlExecutor {
 	}
 
 	private async runTransaction<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> {
-		await this.call('exec', 'BEGIN IMMEDIATE');
+		await this.transactions.begin();
 		let active = true;
 		const operations = new Set<Promise<unknown>>();
 
@@ -240,7 +246,7 @@ export class SqliteRuntime implements SqlExecutor {
 
 	private async rollbackAndThrow(callbackError: unknown): Promise<never> {
 		try {
-			await this.call('exec', 'ROLLBACK');
+			await this.transactions.rollback();
 		} catch (rollbackError) {
 			const cause = new AggregateError([callbackError, rollbackError], 'Transaction and rollback both failed');
 			const failure = new SqliteFailure('rollback_failed', null, { cause });
@@ -252,7 +258,7 @@ export class SqliteRuntime implements SqlExecutor {
 
 	private async commit(): Promise<void> {
 		try {
-			await this.call('exec', 'COMMIT');
+			await this.transactions.commit();
 		} catch (error) {
 			const failure = new SqliteFailure('commit_unknown', null, { cause: error });
 			this.markUnavailable(failure);

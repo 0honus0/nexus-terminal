@@ -1,7 +1,7 @@
 import { parentPort, workerData, type MessagePort } from 'node:worker_threads';
 import { DatabaseSync } from 'node:sqlite';
-import type { WorkerSqliteError } from './sqlite-errors.js';
-import { decodeWorkerRequest, type WorkerRequest } from './worker-types.js';
+import type { WorkerSqliteError } from '../sqlite-errors.js';
+import { decodeWorkerRequest, type WorkerRequest } from '../worker-types.js';
 
 function databasePath(value: unknown): string {
 	if (typeof value !== 'object' || value === null || !('path' in value) || typeof value.path !== 'string') {

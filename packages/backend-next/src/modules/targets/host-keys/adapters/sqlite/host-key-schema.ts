@@ -1,4 +1,4 @@
-import type { SqlExecutor } from '../../../platform/storage/sqlite/sqlite-runtime.js';
+import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 
 /** Targets owns persistent verified SSH public keys; Bootstrap only orders migrations. */
 export async function initializeHostKeySchema(tx: SqlExecutor): Promise<void> {
