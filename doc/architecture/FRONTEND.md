@@ -251,6 +251,12 @@ Transport 为显式关闭共享单一 Promise，先断开 WS，再发送同一 A
 
 开发管理页通过单独的 Host Key 表格让操作者手动录入**独立已核实**的 SHA256 公钥指纹，并明确区分配置指纹和公钥信任。前端不从未知 SSH Server 的首次握手直接自动信任。旧 Workspace 的挂起/恢复、文件和桌面连接链路均不迁移到此最小入口。
 
+### 新后端独立只读文件开发消费者
+
+`runtimes/remote-next/transport/remote-files-api.ts` 是独立 SFTP 文件客户端 owner，使用 `@nexus-terminal/shared/remote/files/{values,model,http,http-codec}` 的真实请求、结果与严格解码，不访问旧 Workspace/Pinia/FileManager，不缓存远程二进制内容。开发页与终端共用目标选择和 Access Cookie，但文件资源是单独的、仅含 UUID/targetId/配置指纹的后端会话；更换目标、退出或卸载会失效 generation、取消旧读取并请求释放文件资源，旧异步结果不覆盖当前文件展示。HTTP 非 JSON、未知错误码及网络失败不会被当作读取成功。
+
+开发入口仅提供创建/关闭文件资源、绝对路径完整 list、stat（跟随链接）、lstat（链接自身）和最长 16 KiB 严格 UTF-8 文本读取；目录超过 200 项或 metadata/响应预算会失败而非返回冒充完整的截断列表。此处尚无上传、下载、写入、完整在线编辑、文件持久化、分页或断线恢复。旧正式文件管理器仍使用自己的独立控制器；开发页的读取能力不能解释为产品正式切换或浏览器验收通过。
+
 ## Agent frontend
 
 `backend-next` 的 Agent v3 App/Thread/Root Run 持久状态和有限 HTTP 仅有后端消费者，**没有 Agent-next 前端接口、Store、路由或 Run 执行 UI**。本节其余内容属于当前正式 `packages/backend` 的 Agent 前端。不能把旧 Agent 的完整状态、Socket、审批 UI 直接连接到新状态切片，也不能将它理解成 Provider/调度已经迁移。

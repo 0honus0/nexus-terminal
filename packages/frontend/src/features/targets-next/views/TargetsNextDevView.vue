@@ -1,7 +1,8 @@
 <script setup lang="ts">
-	import { defineAsyncComponent, onMounted, ref } from 'vue';
+	import { defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { loadRemoteNextTerminal } from '@/runtimes/remote-next/public';
+	import { loadRemoteNextTerminal, createRemoteFilesApi } from '@/runtimes/remote-next/public';
+	import type { RemoteFileResourceView } from '@nexus-terminal/shared/remote/files/model';
 	import { createTargetsNextApi } from '../api/targets-next-api';
 	import { createAccessNextApi } from '../api/access-next-api';
 	import type { TargetConnectionInput, TargetImportInput } from '@nexus-terminal/shared/targets/connections/http';
@@ -15,6 +16,12 @@
 	const { t, te } = useI18n();
 	const base = new URL('/__next/', window.location.href);
 	const api = createTargetsNextApi(base.toString());
+	const fileApi = createRemoteFilesApi();
+	const fileResource = ref<RemoteFileResourceView | null>(null);
+	const filePath = ref('/');
+	const fileResult = ref('');
+	let fileGeneration = 0;
+	let fileController: AbortController | null = null;
 	const auth = createAccessNextApi(base.toString());
 	const username = ref('');
 	const password = ref('');
@@ -41,6 +48,73 @@
 	const passwordField = ref('');
 	const secretKey = ref('');
 	const tagNames = ref('');
+
+	function closeFileResource(): void {
+		fileGeneration += 1;
+		fileController?.abort();
+		fileController = null;
+		const previous = fileResource.value;
+		fileResource.value = null;
+		fileResult.value = '';
+		if (previous !== null) {
+			const generation = fileGeneration;
+			void fileApi.close(previous.id).catch((cause) => {
+				if (generation === fileGeneration && loggedIn.value) error.value = localizedError(cause);
+			});
+		}
+	}
+
+	function openFileResource(): void {
+		if (selectedRemoteId.value === null) return;
+		closeFileResource();
+		const generation = fileGeneration;
+		const targetId = selectedRemoteId.value;
+		const controller = new AbortController();
+		fileController = controller;
+		void run(async () => {
+			try {
+				const opened = await fileApi.open(targetId, controller.signal);
+				if (controller.signal.aborted || generation !== fileGeneration) {
+					await fileApi.close(opened.id);
+					return;
+				}
+				fileResource.value = opened;
+			} catch (cause) {
+				if (controller.signal.aborted || generation !== fileGeneration) return;
+				throw cause;
+			}
+		});
+	}
+
+	function fileAction(action: 'list' | 'stat' | 'lstat' | 'readText'): void {
+		const resource = fileResource.value;
+		if (resource === null) return;
+		const generation = fileGeneration;
+		const controller = new AbortController();
+		fileController?.abort();
+		fileController = controller;
+		void run(async () => {
+			try {
+				const path = filePath.value;
+				const result =
+					action === 'readText'
+						? (await fileApi.readText(resource.id, path, controller.signal)).text
+						: action === 'list'
+							? JSON.stringify(await fileApi.list(resource.id, path, controller.signal), null, 2)
+							: action === 'stat'
+								? JSON.stringify(await fileApi.stat(resource.id, path, controller.signal), null, 2)
+								: JSON.stringify(await fileApi.lstat(resource.id, path, controller.signal), null, 2);
+				if (!controller.signal.aborted && generation === fileGeneration)
+					fileResult.value = result;
+			} catch (cause) {
+				if (controller.signal.aborted || generation !== fileGeneration) return;
+				throw cause;
+			}
+		});
+	}
+
+	watch(selectedRemoteId, () => closeFileResource());
+	onUnmounted(() => closeFileResource());
 
 	function localizedError(cause: unknown): string {
 		const code = cause instanceof Error ? cause.message : 'request_failed';
@@ -104,6 +178,7 @@
 	}
 
 	function logout(): void {
+		closeFileResource();
 		void run(async () => {
 			await auth.logout();
 			loggedIn.value = false;
@@ -434,6 +509,29 @@
 					:target-id="selectedRemoteId"
 				/>
 			</section>
+			<section class="space-y-2 rounded border p-3">
+				<h2 class="font-semibold">{{ t('targetsNext.fileTitle') }}</h2>
+				<p class="text-sm">{{ t('targetsNext.fileScope') }}</p>
+				<div class="flex flex-wrap gap-2">
+					<button class="rounded border px-3 py-2" :disabled="busy || selectedRemoteId === null || fileResource !== null" @click="openFileResource">
+						{{ t('targetsNext.fileOpen') }}
+					</button>
+					<button class="rounded border px-3 py-2" :disabled="fileResource === null" @click="closeFileResource">
+						{{ t('targetsNext.fileClose') }}
+					</button>
+				</div>
+				<label class="block">{{ t('targetsNext.filePath') }}
+					<input v-model="filePath" class="block w-full rounded border p-2" autocomplete="off" />
+				</label>
+				<div class="flex flex-wrap gap-2">
+					<button v-for="action in ['list', 'stat', 'lstat', 'readText'] as const" :key="action"
+						class="rounded border px-3 py-2" :disabled="busy || fileResource === null" @click="fileAction(action)">
+						{{ t('targetsNext.fileAction.' + action) }}
+					</button>
+				</div>
+				<pre v-if="fileResult" class="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded border p-2" aria-live="polite">{{ fileResult }}</pre>
+			</section>
+
 		</template>
 	</main>
 </template>
