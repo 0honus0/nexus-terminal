@@ -135,10 +135,12 @@ function add(
 	access: AccessPublicApi,
 	action: Handler,
 	queryKeys: readonly string[] = [],
+	maxBodyBytes?: number,
 ): void {
 	routes.push({
 		method,
 		path: ROOT + path,
+		...(maxBodyBytes === undefined ? {} : { maxBodyBytes }),
 
 		async handle(context) {
 			try {
@@ -206,18 +208,26 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 				: { id: result.id, appId: result.appId, title: result.title, createdAt: result.createdAt },
 		);
 	});
-	add(routes, 'POST', '/apps/:appId/threads/:threadId/runs', access, async (ctx, userId) => {
-		const key = operationKey(ctx);
-		const body = strictBody(await ctx.json(), ['prompt']);
-		const value = await agent.createRun({
-			userId,
-			appId: id(ctx.params.appId),
-			threadId: id(ctx.params.threadId),
-			prompt: name(body.prompt, 16384),
-			operationKey: key,
-		});
-		statusResult(ctx, value);
-	});
+	add(
+		routes,
+		'POST',
+		'/apps/:appId/threads/:threadId/runs',
+		access,
+		async (ctx, userId) => {
+			const key = operationKey(ctx);
+			const body = strictBody(await ctx.json(), ['prompt']);
+			const value = await agent.createRun({
+				userId,
+				appId: id(ctx.params.appId),
+				threadId: id(ctx.params.threadId),
+				prompt: name(body.prompt, 16384),
+				operationKey: key,
+			});
+			statusResult(ctx, value);
+		},
+		[],
+		128 * 1024,
+	);
 	add(routes, 'POST', '/apps/:appId/runs/:id/cancel', access, async (ctx, userId) => {
 		const key = operationKey(ctx);
 		const body = strictBody(await ctx.json(), ['expectedVersion']);

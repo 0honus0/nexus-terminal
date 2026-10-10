@@ -60,6 +60,8 @@ Targets 的 `host-keys` 子功能持有已确认 SSH 服务端公钥指纹及 v2
 
 新后端 HTTP 路由注册同时拒绝完全重复和仅参数名称不同的歧义模板；固定路径优先于参数路径。技术层在路由完成后核实响应已结束，未响应时返回安全 500，已开始写响应时不尝试二次写 JSON/HTTP 状态而关闭该传输。业务返回仍经对应模块编码，非法 JSON/媒体类型/体积限制分别保持 400/415/413，Platform 不得把这些输入失败转换为业务 500。WS 入站有序队列/上限、来源与 upgrade 鉴权、退出后 drain 和资源责任继续留在 Platform，不能把 Remote 关闭状态下沉到通用服务器。
 
+普通 JSON 请求的技术 body 上限仍为 16 KiB；仅 Agent `POST /apps/:appId/threads/:threadId/runs` 声明独立的 128 KiB body 容量，以允许 16 KiB prompt 的 JSON 转义开销。技术层对任一路由配置强制 128 KiB 硬上限，仍校验 Content-Length 与实际累计接收字节并返回 413；业务层继续限制 prompt 最大 16 KiB、必填字段和幂等键，不因更大的传输预算扩大允许的模型输入。这个限制属于技术配置，不以 Agent 名称在 Platform 写分支。
+
 Access 的六类认证端点使用 `@nexus-terminal/shared/access/api` 解释 setup/login/change-password 的严格 JSON 输入（含 UTF-8 大小与可选 rememberMe）、以及公开身份 `AccessUserView`。Access HTTP 将共享解码失败转换为模块 `invalid_input`；通用非法 JSON、媒体类型和超额 body 仍原样进入 Platform 4xx，不经过 Access 业务异常映射。公开成功响应的结构由独立前端 Access API 逐字段解码，Session Cookie、scrypt 与内部身份上下文仍留在 Access Backend。
 
 Remote HTTP 的 `POST /sessions` 输入及公开 `RemoteShellView` 由 Shared `remote/model` 两端逐字段解码；PTY WS 入站命令、出站事件由 Shared `remote/events` 纯函数逐变体校验字段、数字界限、base64 与已知错误码。实际 `consumed` 未确认字节数、SessionOwner 身份、断线语义和背压仍由 Remote 负责。静态通过不替代真实断线与浏览器验收。

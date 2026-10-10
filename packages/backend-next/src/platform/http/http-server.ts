@@ -20,6 +20,8 @@ export interface HttpRouteContext {
 export interface HttpRoute {
 	readonly method: 'GET' | 'POST' | 'PUT' | 'DELETE';
 	readonly path: string;
+	/** Transport-only JSON body budget. Default 16 KiB, hard ceiling 128 KiB. */
+	readonly maxBodyBytes?: number;
 	handle(context: HttpRouteContext): Promise<void>;
 }
 
@@ -85,12 +87,15 @@ export function readRequestCookie(request: IncomingMessage, name: string): strin
 	return values[0].slice(name.length + 1);
 }
 
-async function readJson(request: IncomingMessage): Promise<unknown> {
+const DEFAULT_JSON_BODY_BYTES = 16 * 1024;
+const MAX_JSON_BODY_BYTES = 128 * 1024;
+
+async function readJson(request: IncomingMessage, maxBodyBytes: number): Promise<unknown> {
 	const contentType = firstHeader(request, 'content-type');
 	if (!contentType || !/^application\/json(?:\s*;\s*charset=utf-8)?$/iu.test(contentType.trim())) {
 		throw new HttpInputFailure(415, 'unsupported_media_type');
 	}
-	if (Number(request.headers['content-length'] ?? 0) > 16384) {
+	if (Number(request.headers['content-length'] ?? 0) > maxBodyBytes) {
 		throw new HttpInputFailure(413, 'body_too_large');
 	}
 	let received = 0;
@@ -98,7 +103,7 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
 	for await (const raw of request) {
 		const chunk = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
 		received += chunk.length;
-		if (received > 16384) {
+		if (received > maxBodyBytes) {
 			throw new HttpInputFailure(413, 'body_too_large');
 		}
 		chunks.push(chunk);
@@ -215,6 +220,14 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 	const parameterized: { route: HttpRoute; parts: string[] }[] = [];
 	for (const route of options.routes) {
 		const key = route.method + ' ' + route.path;
+		if (
+			route.maxBodyBytes !== undefined &&
+			(!Number.isSafeInteger(route.maxBodyBytes) ||
+				route.maxBodyBytes < 1 ||
+				route.maxBodyBytes > MAX_JSON_BODY_BYTES)
+		) {
+			throw new Error('Invalid HTTP route body budget');
+		}
 		const shape =
 			route.method +
 			' ' +
@@ -285,7 +298,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 				response,
 				sourceIp: proxyaddr(request, trust),
 
-				json: () => readJson(request),
+				json: () => readJson(request, route.maxBodyBytes ?? DEFAULT_JSON_BODY_BYTES),
 
 				cookie: (name) => readRequestCookie(request, name),
 
