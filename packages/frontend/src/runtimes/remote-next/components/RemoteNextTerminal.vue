@@ -15,6 +15,7 @@
 	let terminal: Terminal | null = null;
 	let handle: RemoteTerminalHandle | null = null;
 	let resizeObserver: ResizeObserver | null = null;
+	const pendingRenders = new Set<() => void>();
 	let openingAbort: AbortController | null = null;
 	let destroyed = false;
 
@@ -38,6 +39,11 @@
 		connecting.value = false;
 		resizeObserver?.disconnect();
 		resizeObserver = null;
+		// xterm is permitted to discard pending write callbacks on dispose.
+		// Resolve transport-owned render work first so EOF cleanup cannot hang.
+		for (const release of pendingRenders) {
+			release();
+		}
 		terminal?.dispose();
 		terminal = null;
 		if (previous) {
@@ -98,7 +104,23 @@
 								resolve();
 								return;
 							}
-							term.write(bytes, resolve);
+							let settled = false;
+
+							const complete = () => {
+								if (settled) {
+									return;
+								}
+								settled = true;
+								pendingRenders.delete(complete);
+								resolve();
+							};
+
+							pendingRenders.add(complete);
+							try {
+								term.write(bytes, complete);
+							} catch {
+								complete();
+							}
 						});
 					},
 

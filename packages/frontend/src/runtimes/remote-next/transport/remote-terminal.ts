@@ -166,10 +166,12 @@ export async function openRemoteTerminal(
 			return closePromise;
 		}
 		closePromise = (async () => {
-			// Output that has already arrived must finish terminal.write before
-			// notifying the component, including a normal server EOF.
+			// A normal EOF must wait for rendered output. An abort/transport error
+			// must close immediately, even if a renderer can no longer make progress.
 			try {
-				await pending.catch(() => listener.failure('remote_unavailable'));
+				if (normalEof) {
+					await pending.catch(() => listener.failure('remote_unavailable'));
+				}
 			} finally {
 				finished = true;
 				if (onAbort && signal) {
