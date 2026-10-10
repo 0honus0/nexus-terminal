@@ -146,7 +146,9 @@ function sendJson(
 function requestHost(request: IncomingMessage, trustedPeer: boolean): string | null {
 	const forwardedHost = trustedPeer ? firstHeader(request, 'x-forwarded-host') : null;
 	if (forwardedHost) {
-		return forwardedHost.split(',').at(-1)?.trim() ?? null;
+		// This deployment accepts exactly one external origin. Multiple proxy
+		// assertions are ambiguous; do not guess which hop supplied the truth.
+		return forwardedHost.includes(',') ? null : forwardedHost.trim();
 	}
 	return firstHeader(request, 'host');
 }
@@ -154,7 +156,7 @@ function requestHost(request: IncomingMessage, trustedPeer: boolean): string | n
 function requestProtocol(request: IncomingMessage, trustedPeer: boolean): string {
 	const forwardedProto = trustedPeer ? firstHeader(request, 'x-forwarded-proto') : null;
 	if (forwardedProto) {
-		return forwardedProto.split(',').at(-1)?.trim() ?? '';
+		return forwardedProto.includes(',') ? '' : forwardedProto.trim();
 	}
 	return 'encrypted' in request.socket && request.socket.encrypted === true ? 'https' : 'http';
 }
@@ -182,7 +184,9 @@ function validateOrigin(request: IncomingMessage, expectedOrigin: URL, trustedPe
 		} catch {
 			throw new HttpInputFailure(403, 'csrf_rejected');
 		}
-	} else if (site && site !== 'same-origin') {
+	} else if (site !== 'same-origin') {
+		// No origin and no positive browser same-origin metadata cannot prove
+		// cookie-bearing mutation provenance.
 		throw new HttpInputFailure(403, 'csrf_rejected');
 	}
 }
@@ -207,7 +211,9 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 	const trust = proxyaddr.compile([...options.trustedProxies]);
 	const websocketServer = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024, perMessageDeflate: false });
 	const activeSockets = new Set<WebSocket>();
+	const pendingUpgrades = new Set<Duplex>();
 	const websocketTasks = new Set<Promise<unknown>>();
+	const websocketFailures: unknown[] = [];
 	const webSocketRoutes = new Map<string, HttpWebSocketRoute>();
 	for (const route of options.webSockets ?? []) {
 		if (webSocketRoutes.has(route.path)) {
@@ -217,6 +223,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 	}
 	const routes = new Map<string, HttpRoute>();
 	const routeShapes = new Set<string>();
+	const routePatterns: Array<{ method: string; segments: string[] }> = [];
 	const parameterized: { route: HttpRoute; parts: string[] }[] = [];
 	for (const route of options.routes) {
 		const key = route.method + ' ' + route.path;
@@ -235,11 +242,39 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 				.split('/')
 				.map((part) => (part.startsWith(':') ? ':' : part))
 				.join('/');
-		if (routes.has(key) || routeShapes.has(shape)) {
+		const segments = route.path.split('/');
+		const overlaps = routePatterns.some((previous) => {
+			if (previous.method !== route.method || previous.segments.length !== segments.length) {
+				return false;
+			}
+			let previousMoreSpecific = false;
+			let nextMoreSpecific = false;
+			for (let index = 0; index < segments.length; index += 1) {
+				const before = previous.segments[index];
+				const next = segments[index];
+				if (before === next) {
+					continue;
+				}
+				const beforeParam = before.startsWith(':');
+				const nextParam = next.startsWith(':');
+				if (!beforeParam && !nextParam) {
+					return false;
+				}
+				if (beforeParam && !nextParam) {
+					nextMoreSpecific = true;
+				}
+				if (!beforeParam && nextParam) {
+					previousMoreSpecific = true;
+				}
+			}
+			return previousMoreSpecific && nextMoreSpecific;
+		});
+		if (routes.has(key) || routeShapes.has(shape) || overlaps) {
 			throw new Error('Duplicate or ambiguous HTTP route');
 		}
 		routes.set(key, route);
 		routeShapes.add(shape);
+		routePatterns.push({ method: route.method, segments });
 		if (route.path.split('/').some((part) => part.startsWith(':'))) {
 			parameterized.push({ route, parts: route.path.split('/') });
 		}
@@ -335,8 +370,11 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 		void task.finally(() => activeRequests.delete(task)).catch(() => undefined);
 	});
 
-	function trackWebSocketTask(task: Promise<unknown>): void {
+	function trackWebSocketTask(task: Promise<unknown>, observeFailure = false): void {
 		websocketTasks.add(task);
+		if (observeFailure) {
+			void task.catch((error: unknown) => websocketFailures.push(error));
+		}
 		void task.finally(() => websocketTasks.delete(task)).catch(() => undefined);
 	}
 
@@ -365,7 +403,14 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 				reject(404);
 				return;
 			}
-			if (!(await route.authorize(request, url))) {
+			let authorized: boolean;
+			try {
+				authorized = await route.authorize(request, url);
+			} catch {
+				reject(503);
+				return;
+			}
+			if (!authorized) {
 				reject(401);
 				return;
 			}
@@ -413,7 +458,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 				ws.on('close', () => {
 					activeSockets.delete(ws);
 					if (closing) {
-						trackWebSocketTask(Promise.resolve().then(closing));
+						trackWebSocketTask(Promise.resolve().then(closing), true);
 					}
 				});
 				const channel: HttpWebSocketChannel = {
@@ -488,7 +533,12 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 			socket.destroy();
 			return;
 		}
-		trackWebSocketTask(upgrade(request, socket, head));
+		pendingUpgrades.add(socket);
+		const task = upgrade(request, socket, head);
+		trackWebSocketTask(
+			task.finally(() => pendingUpgrades.delete(socket)),
+			true,
+		);
 	});
 	server.requestTimeout = 15000;
 	server.headersTimeout = 10000;
@@ -512,6 +562,9 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 			}
 			// Admission closes synchronously, before the returned Promise is published.
 			accepting = false;
+			for (const socket of pendingUpgrades) {
+				socket.destroy();
+			}
 			for (const socket of activeSockets) {
 				socket.terminate();
 			}
@@ -549,6 +602,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 				if (webSocketFailure !== null) {
 					failures.push(webSocketFailure);
 				}
+				failures.push(...websocketFailures);
 				if (failures.length > 0) {
 					throw new AggregateError(failures, 'HTTP request drain or listener close failed');
 				}
