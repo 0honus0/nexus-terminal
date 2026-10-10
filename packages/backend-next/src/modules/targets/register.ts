@@ -207,10 +207,7 @@ export function registerTargets({ sqlite, secrets }: TargetsRegistrationOptions)
 
 		resolveStored: (request) =>
 			targetsBoundary(async () =>
-				toTrustedTargetView(await resolver.resolveStored({
-					targetId: request.targetId,
-					...(request.expectedFingerprint === undefined ? {} : { expectedFingerprint: request.expectedFingerprint }),
-				})),
+				toTrustedTargetView(await resolver.resolveStored(request)),
 			),
 	};
 

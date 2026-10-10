@@ -62,9 +62,10 @@ export class SshTargetService {
 		if (!this.secrets) {
 			throw new TargetFailure('unresolvable');
 		}
-		return decrypt(await this.model.resolveStored({
-			targetId: request.targetId,
-			...(request.expectedFingerprint === undefined ? {} : { expectedFingerprint: request.expectedFingerprint }),
-		}), this.secrets);
+		const resolvedRequest: ResolveSshTargetRequest = { targetId: request.targetId };
+		if (request.expectedFingerprint !== undefined) {
+			resolvedRequest.expectedFingerprint = request.expectedFingerprint;
+		}
+		return decrypt(await this.model.resolveStored(resolvedRequest), this.secrets);
 	}
 }

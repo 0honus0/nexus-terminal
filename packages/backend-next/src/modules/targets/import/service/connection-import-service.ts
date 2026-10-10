@@ -19,11 +19,14 @@ export class ConnectionImportService {
 		if (command.tagNames?.some((name) => !name.trim())) {
 			throw new TargetFailure('invalid_input');
 		}
-		return this.model.importOne({
-			connection: validateConnection(command.connection),
-			...(proxy === undefined ? {} : { inlineProxy: proxy }),
-			...(command.tagNames === undefined ? {} : { tagNames: [...command.tagNames] }),
-		});
+		const normalized: ConnectionImport = { connection: validateConnection(command.connection) };
+		if (proxy !== undefined) {
+			normalized.inlineProxy = proxy;
+		}
+		if (command.tagNames !== undefined) {
+			normalized.tagNames = [...command.tagNames];
+		}
+		return this.model.importOne(normalized);
 	}
 
 	// TODO: upload parsing, credential protection and post-commit audit.
