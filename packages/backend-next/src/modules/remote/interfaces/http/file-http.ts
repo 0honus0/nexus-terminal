@@ -125,10 +125,23 @@ function route(
 				if (ctx.query.size) {
 					throw new RemoteFileFailure('invalid_input');
 				}
+				if (method === 'DELETE' &&
+					(ctx.request.headers['transfer-encoding'] !== undefined ||
+						(ctx.request.headers['content-length'] !== undefined &&
+							ctx.request.headers['content-length'] !== '0'))) {
+					throw new RemoteFileFailure('invalid_input');
+				}
 				await action(ctx, controller.signal);
 			} catch (error) {
 				if (error instanceof HttpInputFailure) {
-					throw error;
+					if (error.status !== 400 && error.status !== 413 && error.status !== 415) {
+						throw error;
+					}
+					// Keep the file route's entire HTTP error surface within the same
+					// Shared error union, including Platform JSON framing failures.
+					const code: RemoteFileErrorCode = error.status === 413 ? 'limit_exceeded' : 'invalid_input';
+					send(ctx, status(code), { code } satisfies RemoteFileErrorResponse);
+					return;
 				}
 				const code = error instanceof InvalidRemoteFilePayload ? 'invalid_input' : errorCode(error);
 				send(ctx, status(code), { code } satisfies RemoteFileErrorResponse);
