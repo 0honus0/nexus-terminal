@@ -312,7 +312,11 @@ function connectStream(
 				}
 				outstanding += part.bytes.length;
 			}
-			if (!ended && !eof) {
+			// The PTY may leave the active map while an earlier authorization
+			// await is in flight, before its onClosed callback sets eof.
+			// Its buffered output is still deliverable, but the SSH flow-control
+			// methods must never be invoked on that retired session.
+			if (!ended && !eof && remote.get(id) !== null) {
 				if (queued.length || outstanding >= OUTPUT_WINDOW) {
 					remote.pauseOutput(id);
 				} else {
@@ -344,7 +348,7 @@ function connectStream(
 			terminate('transport_overflow');
 			return;
 		}
-		if (queuedBytes + outstanding >= OUTPUT_WINDOW) {
+		if (!eof && remote.get(id) !== null && queuedBytes + outstanding >= OUTPUT_WINDOW) {
 			remote.pauseOutput(id);
 		}
 		void flush();
@@ -373,7 +377,10 @@ function connectStream(
 		if (ended) {
 			return;
 		}
-		if (!(await (eof ? owner.allowedOutput(token, id) : owner.allowed(token, id)))) {
+		// A terminal-rendered ACK may arrive after the session left the live
+		// map but before onClosed has published EOF. Check ownership independently
+		// of liveness, then require a live PTY for commands that change it.
+		if (!(await owner.allowedOutput(token, id))) {
 			terminate('unauthenticated');
 			return;
 		}
@@ -412,6 +419,10 @@ function connectStream(
 			return;
 		}
 		try {
+			if (value.type !== 'consumed' && !(await owner.allowed(token, id))) {
+				terminate('unauthenticated');
+				return;
+			}
 			if (eof && value.type !== 'consumed') {
 				throw new RemoteInputError();
 			}
