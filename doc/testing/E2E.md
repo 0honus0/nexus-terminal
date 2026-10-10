@@ -64,6 +64,31 @@ The canonical GitHub workflow is `.github/workflows/e2e.yml`. It runs standard l
 
 The current Docker smoke validates the unified Frontend/Backend/Guacd production image, health status, and absence of retired Agent Workspace code; it does not exercise the deleted production Runner Browser page fixture or standalone deployment.
 
+## backend-next A–D 专项集成验收（2026-10-10）
+
+以下脚本位于根 `tests/backend/`，只对独立的 `backend-next` 临时数据库和环回服务运行，不依赖正式生产 Backend 或部署入口。先执行：
+
+```bash
+pnpm --filter @nexus-terminal/backend-next build
+node tests/backend/storage/backend-next.integration.mjs
+node tests/backend/storage/backend-next-phase2.integration.mjs
+node tests/backend/storage/backend-next-public-boundary.integration.mjs
+node tests/backend/remote/backend-next-transport.integration.mjs
+node tests/backend/remote/backend-next-ssh.integration.mjs
+```
+
+2026-10-10 上述五个脚本全部通过：存储版本与原子回滚、Targets 公开视图，真实 WebSocket 队列洪泛/按序 Close，受控 PTY EOF/ACK，重复 release 失败聚合，以及真实 `ssh2.Server` 的 SSH Host Key/凭据/PTY 尾字节经 WS 确认后正常关闭。真实 SSH 测试曾复现会话从 live map 移除期间两种尾帧竞态，已修正并使用相同场景复验。
+
+额外浏览器脚本运行命令：
+
+```bash
+node tests/backend/remote/backend-next-frontend.integration.mjs
+```
+
+该脚本将使用隔离的 backend-next、Vite 开发入口与 Playwright Chromium 验证 SSH 连接失败后重复打开、xterm/ResizeObserver 回收及错误文案。但 **2026-10-10 当前执行环境 Chromium 无法访问 `/proc` 相关内核路径且 GPU 进程被沙箱阻断，在浏览器启动阶段失败，前端断言未执行，不算 PASS**。须在正式具备 Chromium 运行权限的 E2E runner 再运行，不能通过忽略浏览器错误或弱化断言替代验收。
+
+这些测试覆盖的是明确列出的专项故障窗口，不证明多级 Proxy/Jump、大输出、权限撤销、长时间断线或全部 E2E 产品功能；余项记录在[后端重构下一阶段实施方案](../后端重构下一阶段实施方案.md)。源代码结构或字符串出现与否不是本组测试的判断依据。
+
 ## Structure
 
 - `tests/e2e/specs/auth/` — first-run setup, administrator creation, login, and session establishment.
