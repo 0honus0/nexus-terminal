@@ -1,5 +1,5 @@
-import { SqliteFailure } from '../../../../platform/storage/sqlite/sqlite-errors.js';
-import { AccessFailure } from '../service/access-service.js';
+import { SqliteFailure } from '../../platform/storage/sqlite/sqlite-errors.js';
+import { AccessFailure } from './authentication/model/access-failure.js';
 
 export type AccessErrorCode =
 	| 'invalid_input'

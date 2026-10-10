@@ -1,4 +1,5 @@
-import type { RemoteSessionCloseReason } from './sessions/model/session-types.js';
+/** Stable backend session-ending contract; independent of internal resources and wire frames. */
+export type RemoteSessionCloseReason = 'normal' | 'disconnected' | 'cleanup_failed' | 'closed_by_owner';
 
 /** Internal-only Remote module public contract; not an HTTP/WS DTO. */
 export interface SessionView {

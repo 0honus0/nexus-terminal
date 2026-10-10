@@ -6,10 +6,33 @@ import { AccountModel } from './accounts/model/account-model.js';
 import { SqliteSessionStorage } from './sessions/adapters/sqlite/session-sql.js';
 import { SessionModel } from './sessions/model/session-model.js';
 import { AccessService } from './authentication/service/access-service.js';
-import { accessBoundary } from './authentication/model/access-errors.js';
+import { accessBoundary } from './access-errors.js';
 import { createAccessRoutes } from './interfaces/http/access-http.js';
 import type { AccessPublicApi, AccessIdentity } from './public.js';
-import type { LoginFailurePolicyOptions } from './authentication/service/login-failure-policy.js';
+import type { LoginFailurePolicyInput } from './authentication/model/login-failure-types.js';
+
+/** Installation contract; Bootstrap does not depend on private Access types. */
+export interface AccessRegistrationOptions {
+	sqlite: SqliteRuntime;
+	loginFailurePolicy?: {
+		enabled: boolean;
+		maxAttempts?: number;
+		banSeconds?: number;
+	};
+}
+
+function toLoginFailurePolicy(
+	options: AccessRegistrationOptions['loginFailurePolicy'],
+): LoginFailurePolicyInput | undefined {
+	if (options === undefined) {
+		return undefined;
+	}
+	return {
+		enabled: options.enabled,
+		maxAttempts: options.maxAttempts,
+		banSeconds: options.banSeconds,
+	};
+}
 
 function toAccessIdentity(identity: { userId: number; username: string; twoFactorEnabled: boolean }): AccessIdentity {
 	return {
@@ -25,10 +48,15 @@ export interface RegisteredAccess {
 	routes(secureCookies: boolean): HttpRoute[];
 }
 
-export function registerAccess(db: SqliteRuntime, loginFailureOptions?: LoginFailurePolicyOptions): RegisteredAccess {
-	const accounts = new AccountModel(new SqliteAccountStorage(db));
-	const sessions = new SessionModel(new SqliteSessionStorage(db));
-	const service = new AccessService(accounts, sessions, new ScryptPasswordHasher(), loginFailureOptions);
+export function registerAccess({ sqlite, loginFailurePolicy }: AccessRegistrationOptions): RegisteredAccess {
+	const accounts = new AccountModel(new SqliteAccountStorage(sqlite));
+	const sessions = new SessionModel(new SqliteSessionStorage(sqlite));
+	const service = new AccessService(
+		accounts,
+		sessions,
+		new ScryptPasswordHasher(),
+		toLoginFailurePolicy(loginFailurePolicy),
+	);
 	const publicApi: AccessPublicApi = {
 		needsSetup: () => accessBoundary(() => service.needsSetup()),
 

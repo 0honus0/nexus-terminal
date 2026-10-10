@@ -1,553 +1,304 @@
-# Nexus Backend Architecture
+# 后端架构与开发约束
 
-本文描述当前 Backend 的分层、owner 与运行时边界，不重复维护功能需求。实际产品需求见 [USAGE](../USAGE.md)，Agent 关键边界与开发规则见 [AGENTS.md](../AGENTS.md)。owner、contract、事务或调用关系变化时，在同一提交更新对应章节。
+本文是后续后端开发的长期架构规则入口，统一维护职责边界、类型归属、代码放置、编码规范和当前实现限制。开发及审核前同时阅读 [AGENTS.md](../AGENTS.md)；用户行为以 [USAGE.md](../USAGE.md) 为准，验证命令与证据见 [E2E.md](../testing/E2E.md)。[架构重构](../架构重构.md)维护迁移设计，[下一阶段实施方案](../后端重构下一阶段实施方案.md)维护当前施工任务，均引用本文，不另立一套后端开发规范。
 
-## 独立重构包边界
+## 人工规则区域
 
-新包遵守[全局编码约定](../架构重构.md#全局编码约定)：控制语句使用花括号，函数/方法及独立 export 声明前后保留一行空行，注释贴近所属声明，格式由仓库现有 ESLint/Prettier 执行；封装、命名及类型 owner 在代码审核时一并检查。SecretBox/SSH Adapter 捕获并包装失败时保留 `cause`，Targets 的安全出口仍只传递稳定错误码，不传出原始异常。
+1. 人工规则区域只能通过人工输入更新。
+2. 如果人工规则相互冲突，人工核对后解决，变更到同一条上。
+3. 人工规则与其余规则冲突以人工为准。
 
-正式产品仍由 `packages/backend` 服务；`packages/backend-next` 是独立重构包，不调用旧 Backend/Protocol、不接收正式流量，当前装配 Access、Targets、Remote 和 Agent 的首个持久状态切片；Access、Targets 管理、基础 SSH PTY HTTP/WS 与 Agent 的有限 Run 状态 HTTP 在独立实例提供受保护入口。新包的 Platform 只持有通用 SQLite 事务/迁移/生命周期、HTTP/WS、SecretBox 与通用 SSH 技术能力；Targets、Access 和 Agent 分别持有自身业务 Schema、存储契约及 SQLite Adapter，由 Bootstrap 的全库 v1/v2/v3 清单编排迁移，不在 Platform 添加业务表或业务类型。Service 使用应用类型，Model 逐字段转换存储命令与读取结果；凭据加解密由对应 Service 调用通用 SecretBox 完成。
+## 规则维护方式
 
-Targets 的模块出口从 Shared 精确引用双端同义同表示的管理输入、视图和状态契约；含明文凭据的可信 SSH 解析契约只在 backend-next 的 `public.ts` 定义。管理与可信结果均通过字段白名单转换，不从内部存储类型派生，普通管理结果不含凭据。可信解析作为独立 Backend 能力注入 Remote；Remote 将其转换为与业务无关的 SSH 机器请求。Targets 安全错误码、SQLite 不可用状态和统一跳板限制均已按真实 owner 实现；整体关机先停止 HTTP/WS 并等待已接纳任务，随后取消并关闭 Remote Session，最后关闭 SQLite。具体机器通道与待验收场景见[架构重构](../架构重构.md)，后续功能施工见[下一阶段实施方案](../后端重构下一阶段实施方案.md)。本节不改变下文现行旧包的 owner。
+人工规则区域只接收项目所有者明确输入的规则。AI 可以按该输入落文，但不得根据代码、审查结论、外部规范或一般开发要求自行增加、删除、改写人工规则；普通的“更新架构文档”不授权改变该区域。遇到人工规则相互冲突，列明相关条目并暂停受影响的决策，等待人工核对；核对后的变更更新原条目，不追加相反条目。人工规则与本文其他章节、迁移方案或其他仓库文档冲突时，后端开发以人工规则为准，并同步修正受影响的普通说明。
 
-SQLite Worker 传递 `node:sqlite` 的数值 `errcode`，保留扩展结果码；Runtime 按低 8 位分类 constraint、busy/locked 与普通 SQL 失败，Targets 再按扩展外键码形成安全业务错误。Node 的通用 `ERR_SQLITE_ERROR` 字符串不作为 SQLite 类别判断依据。
+其余章节可随已授权的实现和架构决策更新。维护时分别说明当前事实、长期约束和未完成能力，不能把计划写成现有能力，也不能用现有越界依赖反推允许规则。新增例外需明确调用者、用途、数据和生命周期边界，不能只写“特殊情况可以”。本文不保存逐次审查历史或完成报告；施工进度归实施方案，行为证据归验收文档。
 
-SQLite Runtime 的事务入口管理回调与未等待操作；私有 `rollbackAndThrow` 完成回滚后重新抛出原始失败，回滚失败时聚合两项原因并使实例不可用；私有 `commit` 在提交失败时报告 `commit_unknown` 并使实例不可用。错误原因先作为具名局部值构造，再包装技术错误，事务主流程保留明确的回滚/提交顺序。
+## 适用范围与当前实现
 
-SQLite Worker 请求及各操作结果定义在技术层 `worker-types.ts`；Runtime 的 pending owner 按发起的操作解码未知结果，不使用 `any` 传递行或写入结果。事务回调结果以成功/失败联合表达，排队入口调用具名 `runTransaction`；关闭入口先保存 Promise，再执行 `closeResources`。Worker 的查询执行、错误序列化与消息响应分别为具名函数，数据库路径与 parent port 在初始化时确认。
+正式服务仍在 `packages/backend`，新架构施工包在 `packages/backend-next`。本文以下放置和依赖规则用于新包及后续迁移；修复旧正式包仍遵守其当前 owner，不在零散补丁中提前替换正式入口。新包不运行时导入旧 Backend/Protocol，不默认兼容旧数据或旧 wire，切换正式流量需要完整迁移及行为验收。
 
-Targets 批量导入的内部结果以 `import/model/import-types.ts` 中的 `ImportItemResult` 定义成功 ID 与失败错误码的可辨识联合；Service 使用这个具名应用类型。`public.ts` 对双端一致的管理结果引用 Shared 的出口定义，仍由出口映射逐字段转换，不从内部 Storage/Service 类型派生。
+| 当前一级模块 | 已实现 owner                                                                    | 当前限制                                                    |
+| ------------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Access       | 初始管理员、密码认证、持久会话、登录失败策略、认证 HTTP                         | 完整角色、Passkey/TOTP/CAPTCHA 及策略管理未迁移             |
+| Targets      | SSH/RDP/VNC 配置、Proxy、SSH Key、Tag、导入、凭据、可信 SSH 解析、Host Key 信任 | RDP/VNC 是连接定义；完整连接测试及旧正式前端未迁移          |
+| Remote       | SSH PTY、会话准入和释放、受认证 HTTP/WS、背压与正常 EOF 收敛                    | 没有挂起/接管/恢复、文件/Transfer、远程桌面                 |
+| Agent        | App/Thread、Root Run 创建/取消、幂等、事件分页及同事务存储                      | 仅 pending/cancelled；没有 Provider/调度/Tool/审批/执行恢复 |
 
-Targets 的 Service/Model 和 SQLite 存储实现明确声明返回类型，校验使用 `validateId/validateName` 等动作名称。应用补丁规范化与存储补丁投影分别由 Service 校验函数和 Model mapper 承担，均保留字段允许清单；SQL 行解码先校验再构造记录，成功写入后的必需记录通过具名读取函数确认。Resolver 的密文快照与解密应用类型集中于 `resolver/model/ssh-target-types.ts`，Model 文件只持有映射与存储调用。
+Platform 当前提供 SQLite Runtime/Worker/迁移执行、HTTP/WS、SecretBox/密码散列和通用 SSH/SFTP/命令能力。具有这些技术接口不等于已经迁移对应产品功能；静态通过不等于异常路径和浏览器行为已经验收。
 
-Targets 模块出口的转换统一使用 `toX` 命名，管理输入、视图和变更结果仍分别逐字段投影；批量导入 mapper 明确区分内部与公开结果类型。Resolver SQL 的目标加载、凭据读取与代理读取使用同一事务执行器，分别由具名函数实现，递归路径、深度及展开预算仍由一次解析共享。
-
-SSH 命令在发出 exec 请求前拒绝已取消的信号；持续命令与原始非 PTY 通道在打开之后仍监听调用方取消，通道关闭时解除订阅。一次执行的期限与取消分别形成 unknown/timeout 和 unknown/cancelled，不把取消作为远端命令未发生的证明。
-
-SSH 对外仅保留 `openRawCommand` 和收集结果的 `execute`，二者调用私有 `createCommandChannel`，以具名选项控制取消职责，不提供行为相同的 `startCommand` 别名。命令结果收集、SFTP 通道打开和连接关闭各有具名内部步骤；输出/取消订阅在结果收集的 `finally` 解除。执行选项、SFTP 读写选项与文件打开模式定义为独立技术类型；代理握手、Host Key 配置和路由期限仍属于 SSH Adapter。
-
-SSH 路由从 Socket/Client 创建起持续监控 error/close，任何一跳失败都终止共同建连期限并清理半建连资源；完整机器连接安装运行期监听后才交接并解除建连监听，消除各跳 ready 到整条路由就绪之间的错误监听空档。
-
-SFTP Lease 的打开信号贯穿整个租约；各请求/流可带独立 AbortSignal 和期限，回调请求默认 30 秒，流使用调用方显式期限。关闭立即拒绝待完成请求并销毁流，等待通道关闭，超时强制 destroy；重复关闭共享 Promise。取消前未派发的请求标记 not_started，已派发请求的取消、期限或断线只标记 unknown，不能视为远端副作用回滚。
-
-Remote 按会话 ID 保存进行中的关闭 Promise，先发布关闭等待再清理资源；会话从活动表移除之后，并发关闭仍取得相同 Promise 和相同失败结果。关闭完成后清除等待表，实例停机统一等待进行中的会话关闭。
-
-Bootstrap 的 `createApp` 负责初始化与装配；同文件的 `createLifecycle` 持有实例关闭 Promise 并同步停止模块准入，`closeResources` 先关闭 HTTP 并等待全部已接纳的业务 Promise 收敛，再按 Remote 模块、SQLite 的顺序释放资源。模块关闭失败仍继续关闭数据库；单个错误保留原值，多个错误聚合，不将关闭编排嵌入公开对象的大型匿名函数。
-
-Remote Service 只接收本模块 Model，使用独立的 `OpenSessionRequest`、`RemoteSessionResource` 和会话快照；不直接调用 Targets Resolver 或 Platform SSH 工厂。Model 解析可信目标、逐字段转换机器请求、执行建连与 Shell 打开，统一传递打开期限及取消，并在失败时等待底层资源清理。机器连接、Shell 与 Node Stream 封装在 Model 内，Service 通过应用资源契约管理准入、订阅、背压和会话生命周期；模块出口继续逐字段投影公开快照及请求，字节数据复制后传递。
-
-Remote Service 的会话注册、单会话释放和实例停机分别由私有 `registerSession/closeActiveSession/closeSessions` 承担，关闭入口只发布共享完成 Promise。Model 的机器目标与路由映射留在文件内，不导出给其他消费者；应用资源工厂内的具名关闭流程释放 Shell 与机器连接。Bootstrap 显式声明 `RegisteredModules` 和 `BackendApplication` 返回契约，组装与公开类型转换保持原有边界。
-
-## backend-next Access 最小认证切片
-
-Access 账号与会话模型属于 `modules/access`，加密的 password verifier 使用 `platform/security/password-hasher.ts` 的 scrypt；Accounts/Session Model 将应用命令与存储命令逐字段转换，Account Storage 不引用 Model 类型，Session Model 显式转换应用/存储结果，SQL 行解码与事务只在模块内的 SQLite Adapter。初始管理员创建在排他事务中检查空库，单一全库 v1 由 `bootstrap/schema.ts` 合成 Targets+Access 的 schema，不能另立 Access 版本号。密码变更事务更新散列并删除该账号全部持久会话，登录会话只存 SHA-256 摘要、版本和期限，前端不能提供身份 owner。
-
-新 `platform/http` 只接收通用路由，固定 Origin、明确可信代理、严格 body 限制、无旁路 CORS；非法 JSON/Content-Type/大小错误在传输层分别保留 400/415/413，业务错误只在 Access 路由映射。平台保留 query 参数交由业务端点严格验证，Access 端点当前均拒绝未知 query；`modules/access/interfaces/http` 负责 Login、Setup、Status、Logout、Password 并构造安全码和公开 DTO。登录成功更换 token，普通 cookie 只在浏览器会话内、持久 cookie 最多 30 天；浏览器会话 Cookie 不设置 Max-Age，记住我 Cookie 的 Max-Age 为 30 天；两者服务端均按签发起最长 30 天的有效期拒绝过期认证。未访问的过期记录目前没有全量清扫，因此失效不等于数据库物理删除。TOTP/Passkey 尚未实施，有启用标志时拒绝密码登录；失败封禁策略由 Access Service 持有并显式配置，默认未启用；loopback、RFC1918、IPv6 ULA/link-local（含映射地址）跳过封禁。启用时由 Access 提供阈值与时长，SQLite Adapter 仅在显式事务中原子更新计数。验证码和完整的持久策略配置/管理 API 后续补齐。独立入口从 `packages/backend-next` 启动且默认监听 127.0.0.1，必须先完成受控初始化。启动变量为 `NEXUS_NEXT_DB_PATH`、`NEXUS_NEXT_ENCRYPTION_KEY`（32 字节 base64）、`NEXUS_NEXT_PUBLIC_ORIGIN`，可选 `NEXUS_NEXT_HOST/NEXUS_NEXT_PORT/NEXUS_NEXT_TRUSTED_PROXIES`。Access、Targets 管理、Remote 最小终端以及 Agent 初始状态 HTTP 已注册；Agent 执行/事件实时推送/审批等仍需后续授权装配。
-
-## backend-next Targets 受认证 HTTP 切片
-
-`modules/targets/interfaces/http` 是唯一 Targets 管理 HTTP 入口，使用 Access 公开的身份恢复契约；当前数据库仅由首次管理员初始化，因此明确只允许管理员 ID 1 的会话请求，其余身份拒绝。Platform HTTP 只持有通用路由和参数位置（精确静态匹配优先，其后参数段），不包含 Targets 业务对象和授权语义。Targets 的 decoder 从 `unknown` 严格验证字段、类型、长度、输入数组和关系，再创建独立 Service 输入；更新要求 `version` 及补丁，省略保留、null 仅在可空字段上有效，导入每批不超过 50 个并按条提交，完整 JSON 同时不超过 128 KiB，超限整批在进入业务层前拒绝。Targets 的完整 UTF-8 JSON body 预算由 Shared targets/http.ts 定义，Connections/SSH Keys 128 KiB、Proxies 64 KiB、Tags/Host Keys 16 KiB；Frontend 编码后预检，模块路由将同一限额交给 Platform，超限返回 413 body_too_large。预算包含 JSON 外壳与转义，不等同于字段长度。删除响应与基础错误码只引用 Shared 唯一定义，HTTP 响应外壳显式绑定 Shared 类型，所有白名单投影保留。模块出口错误仅映射稳定码与 HTTP 状态。
-
-管理视图的 Connection/Proxy/Tag/SSH Key、变更结果、Credential 状态和导入结果均经 `interfaces/http/target-http-view.ts` 逐字段投影到 Shared wire，不从内部对象展开，也不公开 trusted SSH Resolver。Shared 现已按 `targets/{connections,proxies,ssh-keys,tags,host-keys}/{model,http}`、`targets/{values,http}` 精确子路径导出；确需较复杂的严格 JSON 解码才使用同子域 `http-codec.ts`，不保留旧平铺路径；旧 Protocol 只继续用于不同形态的旧产品 wire，不被新包引用。新 `/__targets-next` Frontend 开发入口使用同一个新实例和 Access Cookie，旧 Pinia/Workspace 不混用该数据；未提供真实连接测试或完整 Remote 产品运行期；独立 Remote 最小 SSH PTY 已在开发入口开放。
-
-## backend-next Remote HTTP/WS 与 SSH Host Key 信任
-
-Targets 的 `host-keys` 子功能持有已确认 SSH 服务端公钥指纹及 v2 数据迁移（`target_host_keys`）；Bootstrap 只编排签名迁移顺序，Platform 无 Targets DDL。管理路由向已认证管理员提供列表、明确确认和删除，私钥与原始公钥不写入信任表；操作员需从**独立可信渠道**核对真实 SHA256 指纹后再确认。Remote Model 先取得 Targets 信任快照，对每个最终 SSH 目标和跳板按照 SSH wire 主机公钥 SHA256 精确比较；不接受 TOFU、未知密钥或 `verifyHostKey: true` 形式的绕过。Targets 的配置指纹只表示连接配置变更，绝不是 Host Key 证明。信任删除/轮换影响新建连接，当前会话不强制回收。
-
-`modules/remote/sessions/service/session-owner.ts` 绑定初始管理员身份和登录令牌摘要，且在 HTTP 打开/查询/关闭、WS 握手与消息、输出发送/周期校验时重新认证。会话最多一个接入的 WebSocket；没有恢复协议，浏览器断开或超出初次接入限期就关闭 PTY，不允许两个设备或两个 Access 登录令牌接管。独立 Remote HTTP/WS 模块只使用公开 RemoteSessions 与 AccessPublicApi，向 Shared 公开仅允许的快照、事件和安全错误，不解密 Targets 明文。
-
-`platform/http/http-server.ts` 持有通用 WS Upgrade、和 HTTP 一致的 Host/Proto 与固定 Origin 检验、64 KiB 单帧及 1 MiB 待发送上限、监听器/业务 Promise/Socket 的停机释放；不导入 Remote 业务类型。Remote WS 文本事件以 base64 传递真实 PTY 字节，未确认输出窗口和本地待发送队列分别限制为 128 KiB，按客户端 terminal.write 完成后的 `consumed` 确认补充额度，远端 Shell 的 `pause/resume` 跟随该额度。SSH 写入返回背压时通过 `blocked/drain` 拒绝后续输入，不自动重放写入。Remote 服务的 Model/Service/Platform 负责关闭 PTY/Client/Socket。
-
-新后端 HTTP 路由注册同时拒绝完全重复和仅参数名称不同的歧义模板；固定路径优先于参数路径。技术层在路由完成后核实响应已结束，未响应时返回安全 500，已开始写响应时不尝试二次写 JSON/HTTP 状态而关闭该传输。业务返回仍经对应模块编码，非法 JSON/媒体类型/体积限制分别保持 400/415/413，Platform 不得把这些输入失败转换为业务 500。WS 入站有序队列/上限、来源与 upgrade 鉴权、退出后 drain 和资源责任继续留在 Platform，不能把 Remote 关闭状态下沉到通用服务器。
-
-HTTP 固定路由仍优先于参数路由，但同一方法下交叉重叠且无法定义单一明确优先级的模板在启动时拒绝。经可信代理的 `X-Forwarded-Host/Proto` 各只接受单一值，不从多跳逗号列表推断外部来源；Cookie 非安全方法必须有精确同源的 Origin 或明确的 `Sec-Fetch-Site: same-origin`，缺少两类来源证据时同样拒绝，CLI/服务端调用也应显式提供可信 Origin。WS 升级先记录待鉴权 Socket，停机同步销毁待升级及已升级 Socket，并等待业务和 upgrade 任务耗尽；关闭回调失败汇入停机结果，不能被无提示吞掉。上述属于代码约束，仍需独立验证真实代理与关机交错。
-
-普通 JSON 请求的技术 body 上限仍为 16 KiB；仅 Agent `POST /apps/:appId/threads/:threadId/runs` 声明独立的 128 KiB body 容量，以允许 16 KiB prompt 的 JSON 转义开销。技术层对任一路由配置强制 128 KiB 硬上限，仍校验 Content-Length 与实际累计接收字节并返回 413；业务层继续限制 prompt 最大 16 KiB、必填字段和幂等键，不因更大的传输预算扩大允许的模型输入。这个限制属于技术配置，不以 Agent 名称在 Platform 写分支。
-
-Access 的六类认证端点使用 `@nexus-terminal/shared/access/http` 及 `access/model` 解释 setup/login/change-password 的严格 JSON 输入（含 UTF-8 大小与可选 rememberMe）、以及公开身份 `AccessUserView`。Access HTTP 将共享解码失败转换为模块 `invalid_input`；通用非法 JSON、媒体类型和超额 body 仍原样进入 Platform 4xx，不经过 Access 业务异常映射。公开成功响应的结构由独立前端 Access API 逐字段解码，Session Cookie、scrypt 与内部身份上下文仍留在 Access Backend。
-
-Remote HTTP 的 `POST /sessions` 输入及公开 `RemoteShellView` 由 Shared `remote/sessions/{model,http}` 两端逐字段解码；PTY WS 入站命令、出站事件由 Shared `remote/sessions/events` 纯函数逐变体校验字段、数字界限、base64 与已知错误码。实际 `consumed` 未确认字节数、SessionOwner 身份、断线语义和背压仍由 Remote 负责。静态通过不替代真实断线与浏览器验收。
-
-Targets 管理 HTTP 变更只接受 `updated/not_found/version_conflict` 的已知状态并逐分支响应 200/404/409，不再用“其它即成功”的兜底；Targets 和 Agent 的 required JSON keys 均使用自身属性检验，不能以继承属性满足必填输入。权限、CAS、Host Key 信任、导入按条事务和公开 DTO allowlist 仍由原 owner 负责。
-
-A–D 审核指出的六处基础缺口已做源码修正：Platform 每个 WS 输入队列限定 64 条/256 KiB（包含正在处理的消息），超过上限立即终止；正常 PTY EOF 不再直接 terminate，Remote 允许仍有效的原持有人完成队列与 `consumed` 收尾，EOF 等待最多 10 秒，Platform `finish()` 有界等待正常 close 握手（最多 5 秒）；主动断线/撤销/停机仍强制释放。SessionOwner 保存按 ID 共享的 release Promise，底层 SessionService 保留失败的关闭结果，模块 shutdown 聚合错误。Targets/Agent/Remote 的 register 返回各自的 HTTP/WS 安装能力，Remote 在模块内拥有 owner/Service 的 quiesce 与 close，Bootstrap 不再深层导入业务 HTTP 工厂。前端 Transport 的 close 共用 Promise、组件以 generation/AbortSignal 清理 xterm 与 ResizeObserver，错误码转成现有三语言文案。2026-10-10 已通过真实 WebSocket 小消息积压、有序正常关闭、按 ID 共享清理失败的专项集成验证；真实 `ssh2.Server` 实机路径还复现并修正了两个 EOF 并发失效窗口：排空中不得再对已移出活动集合的会话调用流控，且客户端 `consumed` 必须允许使用不依赖 live PTY 的原 owner 授权（新增输入仍需活动会话）。同一脚本在修复后证明最终 SSH 字节完整、ACK 后发送 `closed` 并以 WS close 1000 结束。前端 Transport 异常断开无需等待已经不可推进的渲染，组件卸载会解除 pending render，以免阻塞 DELETE；真实浏览器验收仍**未通过**，本环境 Chromium 因 `/proc` 沙箱权限无法启动。剩余高压吞吐、ACL 撤销、超时、实浏览器重试/自然关闭均按[验收文档](../testing/E2E.md)保留，不能把专项 PASS 当作全部 Remote 产品验收。
-
-### Shared 目标目录与完整 HTTP 契约（2026-10-10 源码收口）
-
-Shared 现由 Access 的 `access/{model,http}`、Targets 的 `targets/values`、`targets/http`、`targets/{connections,proxies,ssh-keys,tags,host-keys}/{model,http}`，以及 `remote/sessions/{model,http,events}` 构成。连接/代理基础枚举在所属 Targets 子域的 `values.ts` 中只有一份；完整写入请求、CAS 外壳、删除/确认响应、业务状态联合、逐条导入结果和安全错误均在 Shared 定义。各子域独立 `http-codec.ts` 在确实由双端使用时进行不依赖框架的严格 `unknown` 解码。旧 `connections/*`、`proxies/*`、`ssh-keys/*`、`tags/*`、`access/api`、`remote/{model,api,events}`、`targets/api` 出口已删除，没有兼容重导出。
-
-Targets HTTP 消费同一份 Connection/Proxy/Tag/SSH Key/Host Key 创建、更新、删除、导入与凭据命令解析；前端管理 API 消费同一份响应 View、Mutation、导入/删除及错误解码，同时在发送命令前校验 Shared 请求外壳。Agent 仍只有后端状态消费者，不因目录重组产生 Shared Agent 假契约。业务公开出口继续由模块 `public.ts` 和独立的 `target-http-view.ts` allowlist 逐字段投影；SQLite 行、SSH 明文、私钥仅可作为授权写入输入，不出现在管理响应或事件里。
-
-此处完成的是**协议源码和静态构建边界**。Origin/可信代理安全分支、迁移后完整真实 HTTP 断言、WS 异常关闭、浏览器资源回收和登录竞争的行为验收另见[验收文档](../testing/E2E.md)；没有把静态检查写作真实验收通过。
-
-### Remote 关闭原因与同会话释放确认（2026-10-10 收口）
-
-SSH Adapter 的 Machine Shell 区分正常 EOF、通道错误与无正常结束证据的连接关闭；Machine 传输断线独立上报。Remote Model 将技术事件投影为 `normal/disconnected`，Service 在关闭事务外等待资源清理后才通知 `onClosed`，若清理失败则升级为 `cleanup_failed`，显式业务释放标识为 `closed_by_owner`。因此仅 `normal` 允许 PTY 尾帧 `consumed` drain 和 WebSocket `closed`/1000；`disconnected`、`cleanup_failed` 都向客户端返回安全 `remote_unavailable`，主动释放只关闭 WS，不伪造成 SSH 正常退出。真实 SSH2 正常结束与强制断线两种路径均已专项验证；权限撤销/长时间网络故障仍需实测。
-
-`RemoteSessionOwner` 限量保存 128 项、120 秒的已释放会话摘要及**原清理 Promise**（无明文 token）；读取仅移除过期记录，只有新增后超过容量才淘汰最旧记录，缓存恰好满额时查询不会提前丢失未过期的释放结果。相同 Access 会话的 DELETE 即使晚于 WS 自动回收仍等待并返回原清理成功/失败；不认识的 Session ID 和其他 Access 会话不能据此取得资源信息。受控专项已验证重复 DELETE 的成功/失败传播以及错误 token、未知 ID 拒绝，但未覆盖所有真实 HTTP 竞争和缓存过期窗口。Frontend 的关闭 Promise 仍负责完成 WS 及 DELETE，组件仅在回调所属 generation 未过期时展示错误；断开后尚无新连接时的真实清理失败仍可展示。浏览器重连与卸载的 E2E 仍因 Chromium 环境权限未验收，不把静态修正当作实际 UI PASS。专项用例按约定保留至**整个 Backend 重构完成、切换旧版 E2E 验证之前**才清理，原有 Storage 测试对安全错误码及 v1–v3 Schema 的必要适配不得撤回；详见[验收文档](../testing/E2E.md)。
-
-## backend-next Agent 首个持久 Run 状态切片
-
-`modules/agent` 为独立顶层 owner：`scope` 持有真实的 user/App/Thread 关系，`runs` 持有单个 Root Run 的创建、幂等、取消和持久事件；App/Thread 的新建经 Access 服务端身份授权。Run Service 构造独立的 `CreateRootRunCommand`、`CancelRootRunCommand` 应用命令；Run Model 把 `prompt`、`requestedAt` 逐字段转成存储命令的 `inputText`、`now`，事务内状态规则只接收显式映射的应用事实 `status/version`。SQLite Adapter 在排他事务里重新读取当前存储记录并调用注入的状态决策。Platform SQLite 不知 Agent、App、Thread、Run、幂等或事件。所有出口对象在 `registerAgent` 逐字段构造，Run 冻结 `input_text`、SQL 记录及幂等请求 hash 不进入公开视图。
-
-Bootstrap 的单一迁移序列按 **v1 = Targets + Access、v2 = Targets SSH Host Key、v3 = Agent 首个状态切片** 依次安装并记录签名；v3 增加 `agent_apps` / `agent_threads` / `agent_runs` / `agent_run_events` / `agent_command_idempotency`，不重写原有版本。这里的 v2 Host Key 迁移不是早期未发布、已撤回的字段合并迁移试验。Composite FK 在数据库约束 App/Thread/Run 用户归属；只有 `root` Run，可持久 `pending` 或 `cancelled`，Thread 在 `status='pending'` 下有唯一 Root Run 索引。创建采用 `(user_id,app_id,'create_run',Idempotency-Key)`+请求哈希，取消采用同样域的 `cancel_run` 命令与 `expectedVersion`；哈希不含令牌。SQLite Runtime 通过 BEGIN IMMEDIATE 排他串行化写事务：创建核实 Thread 归属、幂等键和活动 Run，首个 `run.created` 事件固定写序号 `1`；只有真正执行取消时才读取该 Run 的事件最大序号并追加 `max+1`。两种写操作均原子提交状态、事件和幂等结果快照。已提交结果存独立状态快照以保证重放返回初次结果，即使 Run 之后改变；不同 payload 复用 key 返回冲突，取消版本不匹配不会追加事件，重复终态取消有明确无副作用结果。事件由 `(run_id,sequence)` 唯一约束，查询每次用 `userId/appId/runId` 授权后只读最多 100 条。事务回滚没有对外事件，commit_unknown 不自动重试。
-
-`modules/agent/interfaces/http/agent-http.ts` 安装 `/api/v1/agent/apps`、其 Thread 创建与 Run 创建/查询/取消/事件读取，带服务端 Access 身份恢复、严格无多余字段解码、Idempotency-Key 和安全错误码，当前仅允许已初始化管理员。Root Run **没有调度器或 Provider**，被接纳后的持久状态是 `pending` 而非假 `running`；后续 Agent runtime/scheduling owner 必须在事务提交确认后只处理新创建/新取消的事件，不能对 replay 或回滚发布和二次执行。SSH grant/审批/lease/Job 属 Agent 后续独立扩展，不继承普通 Remote 终端访问权；现行生产旧 Agent 完全不受这一独立 dev API 影响。暂无新前端公共消费者，Agent 私有管理类型不提前搬到 Shared。
-
-## 技术基线
-
-Runner PackInstaller.runProcess复用registerManagedProcess(kind pack)覆盖mise/工具版本检查，opaque invocation ID不含command payload，登记失败kill/close收敛，exit清派生group、close后完成Promise；shutdown/startup仍由共享managed-process registry负责，无新增pack registry。
-
-Provider baseUrl保持HTTP(S)及loopback/private模型用途，OpenAI adapter/SDK transport不新增MCP-style地址policy、redirect逐跳验证或DNS pinning；discovery已有timeout/body约束，可信管理员egress与部署隔离分开。
-
-HTTP application在session/routes前应用mutationOriginSecurity，安全方法跳过，非安全方法按Express可信host/protocol比对Origin并拒绝same-site/cross-site metadata；无Origin浏览器仅same-origin可用，非浏览器仍须各route认证。Agent额外HMAC owner不变，无第二token协议。
-
-Appearance local/remote content route统一text/plain+document CSP sandbox/default-src none，全局nosniff保留；Frontend获取字符串后既有opaque-origin iframe/srcdoc负责展示隔离，API不再提供同源HTML document execution surface。
-
-FileHttpSessionAdapter拥有sessions目录0700及文件0600权限收紧，启动lstat拒绝symlink目录/非普通entry，save成功后chmod，错误传给调用者；write-file-atomic继承已有文件mode，初始临时写依靠0700目录隔离。保留明文与既有session decode，不引入加密双轨。
-
-Backup import沿用authenticated HTTP boundary与codec envelope验证、instance/password wrapped key及exclusive restore；同实例免密码不表示任意session可构造合法包。无新增recent-auth/confirmation/audit owner，auth表不参与restore。
-
-Webhook secret header分类共用模块规则及case-insensitive secretHeaderNames；HTTP DTO redacts为null，更新解析只允许null引用已存在secret，持久/网络owner仅收到string map，Frontend支持标记与保留。secret marker不可通过null保留同时撤销，无旧包迁移或普通header整体隐藏。
-
-SSH Key HTTP mutation接入共享AuditLogService，SSH_KEY_CREATED/UPDATED/DELETED只记录标识和字段名，不将credential内容送入audit；业务与audit非原子，内部service调用不自动产生HTTP审计。
-
-Initial admin setup保留空users bootstrap Web流程，createInitialAdmin原子空库条件负责并发互斥，不引入deployment token；受控首次初始化属于部署安全前提，不是session授权或公网抢占防护。
-
-HTTP Express与WS proxy-addr共享RuntimeConfig.trustProxy CIDR配置，默认loopback；WS按可信链右向左找首个不可信hop，Host/Proto仅trusted TCP peer可转发。Auth requestOrigin fallback使用Express protocol/host，独立X-Real-IP和private-range trust已移除。
-
-接口共享compileProxyTrust，支持CIDR/IP及数字hop；standalone默认loopback，Compose动态网络使用1-hop并不发布Backend端口，Frontend保持所有网卡发布，可信转发路径由部署防火墙保护。Frontend可信宿主/私网peer real_ip取XFF最后地址（非递归），协议只接受http/https再传给Backend；部署要求宿主/容器网络可信。Auth共享isInternalIp策略，内网跳过whitelist/blacklist，公网仍使用现有计数；来源trust与用户内网豁免是不同owner。
-
-Passkey/TOTP enrollment采用完整authenticated session授权与新factor verification，无recent-auth timestamp/统一step-up owner；改密与disable 2FA既有密码检查不变，不将新factor proof视为旧credential proof。
-
-ProxyService.update在写repository前合并current/credential patch，校验最终encryptedPassword/encryptedPrivateKey不变量；create/切换需新credential，未修改credential保留，passphrase仍optional，无旧非法row自动迁移。
-
-Notification配置／unsaved test由完整认证route保护，NetworkNotificationChannelAdapter保留SMTP及axios HTTP出站与timeout；不新增address-class deny/每跳allowlist，管理员egress权限与部署网络策略分开。
-
-pending 2FA由auth route写绝对deadline/cookie5分钟，FileHttpSessionAdapter set串行检查64 live pending及deadline，store TTL按剩余时间保存；middleware过期destroy，成功regenerate退出partial owner。session-file-store reaper负责expired物理文件，未建立跨进程lease或完整session quota。
-
-TwoFactorService失败分支复用AuthService.recordLoginFailure（audit+notification），静态second-factor reason区分密码失败；HTTP adapter仍持有blacklist计数与401响应，不建立第二审计owner。
-
-Passkey discovery保留匿名配置查询及username-based allowCredentials公开标识，authentication仍由WebAuthn challenge/signature owner验证；不是账号存在性oracle的完整保证，不新增privacy masking／专用discovery limiter。
-
-TwoFactorService.activate更新secret及审计／通知，不触发session撤销；Auth credentialRevision来自hashedPassword，2FA配置变化不使旧完整认证session失效。
-
-PluginPackageInstallCoordinator.withStageAdmission统一串行local/remote/official stage创建，await retention cleanup后按retained rows检查8槽，gate覆盖source open/verifier/createStage/failure cleanup；每Stage已有50/200MiB界限形成保守payload预算。无跨进程lease或orphan accounting。
-
-Publisher repository按user/key保存当前trust row，revoke只标记revokedAt，put显式retrust清marker，不构成永久revocation tombstone；list全量，未实现pagination/自动purge。保留当前记录不代替独立audit历史。
-
-HttpRemotePluginRepositoryAdapter保留undici redirect=follow、HTTP(S)及可信管理员private endpoint访问；fetch有大小/调用signal约束，无每跳地址policy或DNS pinning。签名trust归Package verifier，不替代部署egress边界。
-
-Plugin frontend static handler独立公开GET/HEAD code surface，路径/marker/realpath校验与CSP、CORS、public immutable缓存不提供身份授权；descriptor/Host RPC另行授权，静态代码保密不在当前contract。
-
-Plugin version owner使用全局appId/version immutable key，packageHash冲突拒绝，publisherKeyId用于签名trust而非namespace；Stage/installation仍保持既有scope授权。verify登记version不等于installed source，verified-only metadata无常规GC。
-
-Memory repository按created_at/id keyset枚举，service有界limit+1，HTTP返回items/nextCursor，Frontend管理及import source手动翻页；Recall过滤与历史retention不变。分页cursor不作为授权，scope/status仍每页校验；无自动purge或aggregate quota。
-
-单用户Scheduler满runtime预算requeueFront并结束pump；Root/Child共享user runtime count，换App不能绕过预算。App轮转是选队策略，不是优先级或多用户公平调度contract。
-
-RunnerJournal 唯一持有 Runner command/job/workspace 持久化：Node.js 内建 `node:sqlite`，`journal_records(kind,id,payload)` 按记录 UPSERT、`DELETE`，SQLite DELETE rollback journal + synchronous FULL，提交后发布内存变更。普通transition不复制／序列化全历史；compact仅事务删除裁剪记录。恢复校验SQLite及逐记录decode，格式／损坏fail closed保留原库；无旧JSON导入或双轨写入。同步单记录commit仍可能等待磁盘，未承诺event loop完全无阻塞或commit严格O(1)。
-
-剩余生产 Runner 的 Workspace Job 执行期限与并发边界仍由 `protocol/runner.ts` 的 `WORKSPACE_JOB_LIMITS` 持有；RunnerCommandExecutor 在 Journal 接纳边界统计同 generation 的 pending/running Job，满额拒绝、不排队。**Backend Agent Shell 工具已移除 WorkspaceShellTargetAdapter/port 及 Workspace Job 控制和容量投影**，不能再调用此路径；尚存 Runner 自身 Journal/控制 API 将在 P6 物理退出。旧持久设置随 Workspace Runtime 设置清理阶段退出。
-
-Model stream cardinality fence：OpenAI adapter indexFor先检查64再分配，多组状态只在admission后写入；Root/Child model owner分别在toolCalls Map新增前检查64/32；Responses collector新part前检查512、tools64，终态batch校验保留。
-
-McpAdapter按integration/version拥有session，配置owner负责disable/remove/closeAll；无aggregate session quota，单连接schema/transport deadline不构成总连接预算。
-
-Backend Plugin instances registry拥有按scope/package的进程生命周期，不承担aggregate process admission；受信管理员enable与部署资源预算是当前总量策略，单实例writer/ready/drain限制不替代总进程配额。
-
-GuacamoleRuntimeAdapter 在票据消费前检查共享16槽，activeSockets覆盖建连与连接，newConnection settle+socket CLOSED释放；bridge settings持socket以拒绝晚到的失效配置，shutdown终止受管socket，guacamole-lite继续持有guacd teardown。
-
-WorkspaceRuntimeTerminalService 持有 terminal admission（每 Workspace 8、合计64），在Runner open前reserve；managed持有幂等release，detach保留，reattach复用，自然close或显式close完成释放，pending open失败释放。
-
-WorkspaceService owns cap64：pendingConnections在connect/attach前同步reserve，registry+pending admission，finally释放准备名额；同ID禁止并发，resume复用，detach转移owner。不设per-user双层配额。
-
-AppIntent operationId 的 durable replay 生命周期与 receipt 相同，无独立永久 tombstone；10 分钟到期清理后不能保证该 ID 不再次创建。SDK requestId 与 operationId 分离，当前授权仍在 replay 前重检。
-
-Backend Plugin AppIntent create 的 UUID operationId 经 SDK/worker/有界 IPC decode 传给 AppIntentService.createConfirmed，receipt repository 持有 durable 幂等；requestId 只负责单进程响应关联，不代替业务身份。
-
-Backend Plugin Host→child 协议 writer 对 callback/drain 持有硬 deadline；超时销毁 stdin writer 并触发 protocol failure。关闭 runtime 时 active Host RPC 只做有界 drain，随后仍进入 SIGTERM→SIGKILL 收敛，不能让不消费 stdin 的 Plugin 永久阻塞 uninstall／upgrade。
-
-PluginPackageInstallCoordinator 在 package verify 得到规范 appId 后，对同一 `userId + appId` 的首次 install 串行执行；进入串行区后重新读取并校验 stage，再读取 App state／Installation，并把 package install、Version 注册、App/Installation 提交与 stage finalization 保持在同一 install 生命周期内。不同版本的并发首次安装只能有一个进入提交路径，后到请求基于最新 installation 收敛为 upgrade-required，不能制造持久 activeVersion/version 分叉。
-
-Terminal Theme 删除由 SQLite repository 在单一事务中删除 user theme，并仅在删除实际成功时清理值等于该 theme id 的 `appearance_settings.activeTerminalThemeId`；不存在／preset 删除不会清理引用。Theme 生命周期和 Appearance 当前引用因此不会提交为悬挂状态。
-
-Workspace deleted 成功投影在同一 status CAS 清 retained，Runner journal 同步释放；persistent root 仍属 preview/confirm runtimeCleanup，legacy deleted+retained 不阻止候选，cleanup projection 清 retention。
-
-Plugin installation 与 Backend 子进程 lifecycle 分离，App uninstall/drain 仅作用于所属 App Run 和 Plugin Backend；不再向 Workspace generation 提供 Plugin Runner 执行入口。
-
-Plugin package cleanup 对无 installation 引用的版本进行受控回收；版本记录和备份校验仅包含 Frontend、Backend 入口和 Skills，不为旧 Runner Plugin 源码提供保留例外。SQLite 的增量迁移 #55 删除 `agent_plugin_versions.runner_entry`；旧带 Runner target 的 Manifest 在解析阶段拒绝。
-
-BackgroundAssetService 单 mutationTail 串行 upload/remove 的读引用、save、setReference、旧文件 cleanup；失败 tail 转 fulfilled 保证后续继续，settings.get(false) 不启动额外引用修复；不是多进程锁或 crash reconciliation。
-
-Agent dispose 与 restore 共用 Plugin resetRuntime owner；closeAll allSettled 等待全部 child，退出成功按实例身份移除，失败保留实例并 AggregateError，不依赖 builtin lifecycle.dispose 枚举 Plugin。
-
-Backend Plugin ready timer 复用 CONTROL_TIMEOUT_MS；超时经 protocolFailure/failAll 拒绝并 kill，晚到 ready 不复活失败实例，ready/error/exit 解除 timer，close 仍负责退出证据。
-
-用户初始化先 reconcile Plugin runtime，再对 builtin 与用户安装的 Plugin App 去重执行 MCP syncEnabled；工具 contribution 仍由 refresh 的配置版本／schema CAS 发布，registry.list 保持 builtin-only。
-
-Feature patch lifecycle枚举builtin registry.list+user Plugin installations dedup IDs，disable/enable对称scope调用；保留list builtin-only API，不以新Run feature gate替代旧execution quiesce，不声称跨runtime原子commit。
-
-Integration refreshEpoch仅存于存在refreshTail期间，invalidate无tail delete，有tail increment；final tail identity match后清所有对应UUID scope epochs，避免active epoch重置ABA。
-
-ExecutionManager transport-close subscription identity-fenced close，detach/close/byOwner/all unsubscribe；Workspace shell-close同实例closeSession，避免旧close按复用ID误删，非远端process退出证明。
-
-Resource status collector unique sampleKey/finally clear，bootstrap仅同次采样；host cache/inFlight按current connection keys惰性prune，全局reset丢弃inFlight identity避免旧publish，非取消底层I/O。
-
-RunnerPluginProcess constructor ready timer30s，timeout protocolFailure/failAll+managed SIGKILL，ready/error/exit clear；批激活补偿复用既有owner，不将其描述为所有command总deadline。
-
-BrowserGateway.closeRun由StateCommit提交终态后的Bootstrap回调触发，Root scheduler finally按最新durable status补查；wait/input supersede不释放，terminal释放整个Run owned sessions（含Child）。Child单独结束不closeRun，run/runtime authority保留，global cleanup仍有效；提交与外部资源关闭非原子，不把disconnect等同远端browser process退出。
-
-Jump connector总deadline remaining覆盖handshake/forward；forward single-settle timer/abort/close/error和late destroy，catch route owner统一close，不以readyTimeout覆盖channel-open。
-
-Artifact cleanupPreview SQL LIMIT1000按created_at/id；confirm保留历史10000 decoder兼容，selection为批次快照且重检保护，不全量加载候选。
-
-Tag setConnections事务前bounded/positive/dedup，事务内先查tag和connections再delete/insert；HTTP非法400、不存在404，空数组不绕过target存在校验。
-
-Blacklist repository lazy single-flight sweep5min，inactive7d AND ban expired/null，page<=200；不引入timer，不将retention误称cardinality admission。
-
-BackendPluginProcess close single-flight，dispose/activeHostOperations drain后TERM2s->KILL5s，以exit/exitCode/signalCode为证据，无证据reject保持上层owner，非process-tree kill；kill()或child.killed不等同OS exit。
-
-SshSuspendService takeOver pre-await Registry reservation/user32/global64，既有sweep availableSince24h terminate，attached排除TTL，releaseToAvailable重置时间；不等同普通Workspace admission或OS即时退出证明。
-
-QuickCommandTagRepository bulk admission事务前原length<=1000、安全正整数，再Set去重；有界串行SQL同事务，不先去重后接纳任意大输入。
-
-Backup V1 snapshot admission64MiB：tables逐行UTF8 JSON计量，inventory按base64长度+路径开销预算后read；codec逐条二次计量再全量stringify。不是streaming/任意合法quota roundtrip，单行DB物化与全量表heap仍存在。
-
-Workspace readBinary required maxBytes<=64MiB/cap4，requestId owner在open前注册，cancelRead/close销毁read stream，send循环累计限量；Preview透传类型maxBytes和signal，client pending累计限量/timeout取消，不仅stat检查。
-
-FileHttpSessionAdapter HTTP/WS共用 middleware 对userId逐请求验证credentialRevision=SHA256(persistent password hash)，无revision fail-closed。密码认证冻结验证时revision，2FA继承，Passkey新认证绑定当前revision；改密interface revokeUser sockets/destroy current session，不扫描session文件，不回滚已接受操作。
-
-Transfer Registry global active cap32（含 FINAL但controller未释放），settled history100 按updatedAt/id裁剪，create/list/release驱动；不裁剪仍owned记录，不新增timer。
-
-TransferTaskRegistry.create 在 UUID/subtask 分配前校验64 targets/256 sources/1024 product，拒绝重复 target/path，维持 sourceItemIndex；非 HTTP 消费者同样受 admission。
-
-Backup capture 先 transaction capture tables，释放 scheduler barrier 后 captureStableFiles/validateFileReferences；captured table view 为引用权威，不加 live-table recapture 或 writer freeze，不承诺 physical point-in-time。DB barrier 仍覆盖表读取/解密，不覆盖整树文件读取/重试/hash 校验。
-
-Full Backup MAX_FULL_BACKUP_BYTES=100MiB 共享 export envelope post-encode admission/import pre-decode/multer；解决 successful-export/import-limit mismatch，不是 streaming 或 pre-capture heap admission。
-
-Theme ensurePresets 同事务遵守全局 UNIQUE(name)，冲突 user 更名且保留 ID/data/references，候选排除已存在及全部待装 preset 名；existing preset 幂等，不 overwrite user，也不跳过必需 preset。
-
-Passkey HTTP session 为单 ceremony currentChallenge/passkeyOrigin owner，register/auth 共享 slot；新 challenge 使旧验证 fail-closed，不提供多 Tab 并行 ceremony contract，不将失效拒绝视作认证绕过。
-
-Command/Path history upsert+prune 同排他事务（10000/2000，timestamp DESC/touched/id），list recent bounded window 再按升序返回；兼容旧重复/超额导入，不加 UNIQUE，超额物理收缩发生在 next write。
-
-NotificationService publish 为 bounded in-memory admission（4 active/128 pending），event 顺序投递最多64个匹配 setting，test 共用同一 owner；repository create 排他 cap64，legacy 不删除。认证不 await 网络；无 durable replay/退出交付承诺，SMTP timeout 为阶段/空闲边界而非总 deadline。
-
-Audit repository add 在排他事务内 insert/count/prune 至 50,000，以 timestamp/id 选最旧；事务失败整体 rollback，service 继续持有审计失败不逆转业务的 best-effort 契约。
-
-Remote Archive extraction 为直接输出、可部分成功契约，不是 staged-tree transaction；known failed/cancelled 不表示零副作用，unknown 维持 mutation quarantine。只有数值 exit evidence 证明 command 退出，不新增 partial inventory／自动 rollback。
-
-SshExecutionTransportAdapter 的 exec/shell callback 在发布 session 前重检 open，晚到 channel destroy/reject；teardown 后不加入 owned sets。此为本地 lifecycle fence，不等同已复现 ssh2 OS 泄漏或远端退出证明。
-
-WebSocket allowedOrigin 的 forwarded host/proto 共用 isTrustedProxyAddress peer gate，与 client IP 边界一致；非受信直连用 Host/TLS，静态 origin/originless 保留。既有 private-range proxy trust 不是专用代理 allowlist。
-
-WebSocket owner track sessionId 并提供 revokeSession，HTTP logout destroySession 后通过 Bootstrap port 撤销对应 socket/protocol。revocation epoch 防异步 auth admission 跨 logout 发布，所有 transport kind 共用身份绑定；不是全用户 revoke 或副作用 rollback。
-
-SshResourceStatus freshness 为 startedAt + refresh，inFlight 按 host/config fingerprint 合并，批量最多两 worker；慢完成可以立即过期，不延长旧采样 freshness。未建立基准测试结论。
-
-SSH jump transport 消费显式有序 ResolvedJumpHost（host/credential），不递归执行引用 Connection 独立 route；Resolver 仍保留现有缺失/type/cycle fail-closed。完整路由递归不是当前公开契约。
-
-ServerTransferExecutor.commandPath 透传任务 signal，probe 前后与 catch 重检取消，普通缺失命令可 fallback，abort 不转成 null 后继续串行探测。
-
-Server Transfer 的 source executor 使用目标 credential 从源端认证目标，信任源 OS 管理员是公开前提；UI 提交确认不构成源端隔离机制。临时 key finally cleanup 保留，不将直传等同 Backend relay。
-
-Bounded SSH close 缺少有限数值 exit status 时保留 result(-1) 并 reject CommandExecutionError；exit signal 同样禁止 success，只有证据明确的零退出成功。
-
-Runner applyWorkspacePatch 的集合契约为完整 prevalidation + per-file replacement，并非多文件事务；applied=true 仅全量成功，错误不证明零副作用。重新读取目标 hash 才能重新规划，不新增平行文件 journal 或崩溃 rollback 声明。
-
-PluginRunnerRuntime.activateWorkspace 的批级失败补偿由 runtime owner disposeWorkspace 持有，统一覆盖 start/restart/reconciler；失败时不遗留前序激活实例。
-
-Runner lifecycle drain 与 checkpointCaptures 双向同步 admission 互斥；capture/restore 持有期间不能新增 lifecycle drain，既有 lifecycle drain 也阻止 checkpoint，不改变主动 job drain。
-
-Root NativeAgentBackend 循环 safe-boundary 按 abort reason 区分 recoverable interruption 与 durable cancel；NEW_INPUT/GOAL_UPDATED/AGENT_QUIESCE 不写 run.cancelled，已结算 step 不重开。
-
-SSH/Workspace Suspend reset 清理会话与待恢复资源，不清除长期 sweep/subscription；Backup restore 和 resetForE2E 使用 reset，shutdown dispose 才 teardown 长期 owner。
-
-Workspace setup/uninstall 使用 confirmationId 作为稳定 admin attempt identity；先等 Runner succeeded，再 CAS settings、删除 confirmation。非成功保留配置/确认，重复确认命令 replay 不重放副作用。远端与 settings 不构成原子事务，CAS 冲突需用户检查/re-preview；不实施盲目补偿。
-
-Workspace admin dispatch 使用 attemptId 派生命令 hash，repository transaction 对相同 request JSON 的 pending/running/unknown 做 active-only replay，终态允许新的主动请求。Workspace lifecycle hash 去重仍保持，不修改历史命令或将 unknown 自动重试。
-
-Workspace repository create transaction 在 replay 后检查 run/runtime 与 user-wide active quota，再写 command/Workspace；CreateWorkspaceRecord 携带 effective maxActiveWorkspaces，Service 不保留事务外 count admission。配额不按 App 分裂，配置快照未新增 settings CAS。
-
-Workspace create 在授权/hash 后、admission/profile 解析前执行 repository replay；SQLite create transaction 再使用同一 replay helper 防并发，既有 command retention/hash/pending/unknown 契约不变。成功后重试不重新提交 Runner provision。
-
-BackgroundAssetService.remove 先持久化空引用，再清理旧文件；后置 cleanup 异常只写安全诊断。Appearance missing-reference 自愈仍保留，不将数据库失败窗口描述成永久悬挂。
-
-PasskeyRepository.commitAuthentication 用 expectedCounter CAS 同一 statement 更新 counter/last-used；Service 验证成功后必须成功 commit 才发登录成功。非零计数保持递增，0→0 允许，不保留分离 touch/updateCounter。
-
-RemoteTextWriter.write 以随机同目录 wx temporary file 写入，finished 后 replaceFile，失败 destroy/drain 后 cleanup；不直接 openWrite 最终路径。保存前读取原文件 mode；write 返回 void，不额外 STAT 最终文件或构造无人消费的文件条目，WebSocket 保存成功响应仍为 null。create 仍返回文件条目。编码/mode 保持原契约，transport 决定 strongest available replacement atomicity。`tests/e2e/specs/ssh/editor-save-profile.spec.ts` 经真实 WebSocket/SSH 保存检查精确 UTF-8 字节和临时文件清理；不覆盖故障注入或完整编辑器 UI 延迟。
-
-Operational secret storage 复用 SecretCipher，版本前缀 envelope 持有 TOTP/captchaConfig/notification config；repository 边界解密／加密，启动前以事务迁移 Legacy plaintext 并验证 ciphertext。Backup adapter 对配置解密 capture、目标密钥加密 restore；不将源部署 ciphertext 带到目标部署，不迁移 auth 表进入 Full Backup。
-
-Command/Path History repository 的 upsert 在排他事务内读取最小 ID、合并同值重复项和更新时间或插入；避免异步 UPDATE/INSERT 交错，不添加破坏旧备份导入的 UNIQUE 约束。
-
-Server Transfer subtask 的源身份由 payload 内 sourceItemIndex 持有，sourceItemName 仅供显示，不参与源对象解析；wire DTO 不暴露内部索引。
-
-UserRepository.createInitialAdmin 持有一次性 bootstrap 的空表检查与插入事务；AuthService 在事务外做密码校验/hash，needsSetup 仅为 UI 查询，不作为 admission authority。
-
-Connection repository 在 create/update/delete 的排他事务内维护 jumpChain 引用 invariant：hop 必须存在且为 SSH、不能引用自身；被引用 hop 禁止删除或改型。JSON 引用仍按原格式存储，反向检查使用 json_each，不在 service 的异步预检查上建立并发保证。
-
-Transfer/Archive 的 fulfilled operation 表示 known settlement，不表示业务成功。Transfer allSettled drains positioned workers，关闭句柄共享一个 Promise，close/cleanup 失败拒绝并隔离；Archive channel error 后 best-effort terminate，仅数值 exit status 作为 remote exit 证据，无证据保留 temporary file 并 reject。WorkspaceOperationsService 透传 mutation guard AbortSignal，终态事件在 guard settlement 后发布。
-
-QuickCommandRepository 持有 command row 与 tag association 的统一 create/update transaction；Tag repository 保留标签管理和批量追加，不再提供独立替换关联的写入口。
-
-IpBlacklistRepository.recordFailure 持有失败计数与封禁 transition 的排他事务，返回 entry/newlyBlocked；Service 仅解析 settings 与发布通知，不在多个独立请求间读改写状态。
-
-AuditLogService.logAction 是共享非阻断审计边界：持久化异常只输出 actionType/safe errorCode，不传播为业务失败，不输出 details。业务事务成功与审计可用性分离；无可靠 outbox 或必达声明。
-
-ConnectionImportService 仅规范化当前／Legacy record，交给 ConnectionImportCommitPort。SQLite adapter 持有每条 record 的事务，scope-bound repositories 的 aggregate work 加入已有事务，复用领域校验和 cipher，不在 HTTP 边界写 SQL或用删除补偿模拟原子性。
-
-Proxy/SSH Key repository 删除在排他事务内检查 Connection 外键引用，存在引用即拒绝删除；不依赖 ON DELETE SET NULL 修复业务 invariant，不让引用检查与删除分为两个异步请求。
-
-Backup restore lifecycle 由 composition-root hooks 接入 compose-agent.prepareRestore：stop sweeps、quiesce dispatchers、close external runtime handles、reset dynamic Plugin/definition registry、deferred recovery 和 model registry。BackupService 在 restore 返回或 rollback 抛错后执行 afterRestore initialize，避免长期 owner 继续使用恢复前内存状态；prepare 失败不允许替换 durable state。
-
-Backup snapshot adapter 在数据库排他 capture transaction 中读取表，释放事务后读取稳定文件 inventory，并校验 ready Artifact size/hash、active Plugin marker/entry/file-list 内容。跨存储发布／删除窗口产生缺失引用时 fail closed，而不是将 inventory 稳定等同于引用完整；staging/deleting 仍由 Artifact 两阶段 reconcile 处理。表集合包含 `agent_runtime_context_checkpoints`。
-
-Child Model executor 将 `AGENT_QUIESCE` 与业务取消分离：在执行入口、模型返回／异常及摘要、工具 proposal、terminal settlement 边界检查生命周期信号，退出后保留遗留 durable attempt/work 供 StateCommit recovery 关闭，不创建 completion mailbox 或 retry。重启仍遵循旧 Run interrupted → 安全 checkpoint 新执行的契约，不恢复旧 Child stack。
-
-### Agent SSH 会话和任务 owner
-
-SSH 项目目录由 `AgentProjectDirectories` 与 `agent_project_directories` 持有 user/App/Thread/connection-scoped durable binding，`project_directory_bind/read/clear` 经工具治理管理，不改变 shell cwd 或用户终端。绑定目录及连接配置 hash 冻结远端规则读取边界；每次模型调用通过统一 `ProjectInstructionSourcePort` 合并 Workspace 与 SSH transient rules，SSH 使用既有文件 capability adapter 并再次授权 file.read，子 Agent 仅加载 delegation grants 允许的连接。对话删除和应用停用清理 binding；规则读取不可用不生成虚假规则，不写入长期 Memory。
-
-`AgentSshSessionPort` 暴露会话 open/list/close 和后台 Job start/control；`AgentSshSessions` Infrastructure 组合 `ExecutionSessionManager`，唯一持有 Agent 专用 SSH transport、活动借用、任务 channel、限额和清理计时器。命令和文件 adapter 共用 withSession，不复用 Workspace 用户终端。
-
-会话按 user/App/Thread 隔离，Root/Subagent 工具上下文由 Run 注入可信 threadId。文件工具的 sessionId composition 将会话绑定进入规范化参数和 operation hash，检查与执行共享同一选择。后台 Job 使用独立 exec channel，SQLite `agent_ssh_jobs` 保存作用域、operation identity、有界输出和状态；启动时将遗留 running 收敛为 unknown，不保存 live handle 或重放命令。Runner 继续独立持有 Workspace Job Journal，不承担 SSH 连接。
-
-- Node.js Current，ES2025，TypeScript 7；生产镜像构建与运行使用 `alpine:latest` 软件源的最新 `nodejs-current`，CI 跟随最新 Current，项目不声明 Node 24 最低版本。
-- Express 5 HTTP application 与单一 WebSocket upgrade owner。
-- SQLite 持久化，数据库访问由 Infrastructure adapter 实现。
-- SSH/SFTP、Guacamole、通知、认证和 Agent Runner 通过明确 port/adapter 接入。
-- 对外 HTTP contract 使用 camelCase；数据库列名只存在于 repository/infrastructure 边界。
-- `packages/protocol/src` 持有跨 Frontend、Backend 与 Runner 的公共 wire DTO；输入在 Interface decode/validation，输出在边界映射，不在网络 adapter 复制协议类型。
-
-## 源码布局
+## 目录与一级模块
 
 ```text
-packages/backend/src/
-├── bootstrap/        composition root、启动、关闭和生命周期任务
-├── config/           环境变量与 runtime config
-├── infrastructure/   数据库、网络、密码学和第三方技术 adapter
-├── interfaces/       HTTP/WebSocket 输入输出协议
-├── locales/          Backend 用户可见文案
-├── modules/          Nexus 产品用例、领域服务和 module-owned ports
-├── platform/         可复用的机器能力与技术无关服务
-└── shared/           错误、事件、日志、观测与安全基础 contract
+packages/backend-next/src/
+  main.ts                     进程配置与启动
+  bootstrap/                  应用实例、模块安装、全库迁移和停机编排
+  platform/                   通用技术契约、运行时与技术 Adapter
+    storage/sqlite/
+    http/
+    security/
+    ssh/adapters/ssh2/
+  modules/
+    access/
+    targets/
+    remote/
+    agent/
+packages/shared/src/          真实双端共用的取值、业务对象与通信契约
 ```
 
-## 层级职责
+一级模块按业务数据所有权、用例和运行生命周期划分，不按表、路由、Service 数量或注册函数数量划分。Connections、Proxies、SSH Keys、Tags、Host Keys 是 Targets 的子功能。同一模块内子功能可协作；跨一级模块只能使用明确公开契约。
 
-### `shared/`
+后续模块按以下 owner 归属；未实施的目录不创建占位：
 
-Shared 提供无产品模块依赖的基础 contract，例如结构化日志、受控事件分发、运行时性能观测和密码学 port。它只依赖自身。
+| 一级模块        | 新功能归属                                                                                                 |
+| --------------- | ---------------------------------------------------------------------------------------------------------- |
+| `access`        | 账号、认证因素、会话、角色、登录来源策略                                                                   |
+| `targets`       | 连接配置、凭据、标签、代理、SSH Key、目标解析与配置指纹、Host Key 信任                                     |
+| `remote`        | 普通用户的 sessions/files/transfers/operations/history；终端、文件、任务、远程桌面各自持有资源             |
+| `agent`         | Run/StateCommit、Provider、调度、grant/审批/lease、Tool、Memory、Artifact、Plugin/MCP/ACP 和 Agent SSH/Job |
+| `preferences`   | 用户设置、布局、外观、背景与主题，不拥有运行中会话                                                         |
+| `notifications` | 接收人、通知格式、渠道配置、投递策略和队列                                                                 |
+| `audit`         | 审计写入与查询；审计失败不自动逆转已成功的业务                                                             |
+| `system`        | 健康诊断、备份恢复、全系统管理协调                                                                         |
 
-### `config/`
+Remote 是功能容器，不是所有远程操作共用的巨型 Service。Agent 的 SSH Session/Job 不使用普通用户 PTY 的权限和状态；双方共用技术能力，不共用业务生命周期。
 
-Config 解析和验证环境变量，输出稳定 runtime configuration。业务模块不直接读取 `process.env`。
+### 子功能的文件组织
 
-### `platform/`
+```text
+modules/<module>/
+  public.ts                   跨模块安全契约
+  public-errors.ts            安全错误出口，确有需要时创建
+  public-mappers.ts           模块进出投影，复杂或多处消费时拆出
+  register.ts                 内部装配、安装能力及生命周期出口
+  migrations.ts / schema.ts   模块明确的迁移安装入口
+  interfaces/http/            协议入口、URL 解码与 HTTP 投影
+  <feature>/
+    service/                  用例与规则
+    model/                    应用类型、存储/技术转换与纯决策
+    storage/                  内部存储任务契约
+    adapters/sqlite/          SQL、行解码、事务及 DDL
+```
 
-Platform 表达可复用的机器能力：远程连接、执行 session、POSIX shell、远程文件系统、路径、搜索、删除、Docker、系统状态和 mutation guard。Platform 不认识 HTTP、SQLite 或具体页面。
+这是职责示例，不要求每个子功能拥有所有目录。无持久化的 Remote Session 不增加 storage；简单 Model 的类型和转换可留同文件；只被一个文件使用的 helper 不公开。子功能之间需要共同规则时置于模块内明确 owner，不通过 Shared 共享后端私有细节。
 
-### `modules/`
+模块 register 返回明确的管理公开能力、独立可信能力及路由安装方法；拥有后台资源的模块同时提供 quiesce/close。Bootstrap 只安装这些入口和公开注册选项。模块内部 HTTP 可以直接调用本模块明确的 Service 用例并完成出口投影，不必再绕一层无意义 public 包装；其他一级模块不能据此导入该 Service。模块注册是装配入口，不是可在运行期随意读取内部对象的 registry。
 
-Modules 持有 Nexus 产品行为和用例，例如认证、连接、设置、Workspace、传输、备份、通知、Remote Desktop session、SSH suspend 与 Agent。
-
-Module 可以定义自己需要的 repository/adapter port。它依赖 `platform` 和 `shared`，不依赖 Infrastructure 或 Interfaces。跨模块调用必须通过明确服务或公开 contract，不能直接读取另一个模块的数据库实现。
-
-### `infrastructure/`
-
-Infrastructure 实现具体技术：
-
-- SQLite schema、migration、worker 与 repositories；
-- SSH transport、SFTP 和 suspend checkpoint/log；
-- Guacamole runtime；
-- WebAuthn、TOTP、captcha、密码散列与 secret cipher；
-- 通知渠道、HTML theme catalog、备份 codec；
-- Agent provider、plugin、Runner 和外部集成 adapter。
-
-Infrastructure 可以实现 Module-owned port，但不拥有产品流程。
-
-### `interfaces/`
-
-Interfaces 是外部协议边界：
-
-- HTTP route/controller 负责认证、输入 decode/validation、调用 use case 和响应映射；
-- WebSocket server 统一处理 upgrade、Origin/IP/session/2FA 校验与协议分发；
-- terminal/upload/workspace/agent/remote desktop session 负责 frame decode、backpressure、关闭和错误映射。
-
-Interface 不直接访问数据库，不把 transport DTO 作为 Module domain model，也不在 route 中实现业务事务。
-
-### `bootstrap/`
-
-Bootstrap 是唯一 composition root。它创建 config、database、repositories、adapters、services、HTTP/WebSocket interfaces、Agent/Plugin/Runner wiring 和 lifecycle sweeps，并控制启动失败与有序关闭。
-
-Agent root `bootstrap/agent/compose-agent.ts` 通过 `compose-providers.ts`、`compose-ssh-capabilities.ts` 及 Plugin／Workspace 工厂组装独立子图。Provider 工厂保留 adapter→service 延迟引用；SSH 工厂注入原 conversation repository、capability broker 和 target denylist，创建单份 session/file/shell/project-directory 实例。工厂只构造对象，initialize、Host quiesce、跨子图回调及 dispose 顺序仍由 root 持有，不引入 service locator 或第二生命周期 owner。
-
-## Child Context 持续历史
-
-Completion evidence 复用 `contextHistory` 全量 durable Child tool batches，只接受 ok／confirmed／verified，去重引用；64 refs 上限超出显式失败，16 条有界工具事实只作 handoff 摘要。Model executor 不再把证据读取异常当作成功的空证据；不新增 evidence ledger 或存储 owner。沿用成熟 Agent 的 bounded handoff 原则，完整来源与传输上限分离。
-
-`ToolExecutor.executeAuthorized` 在 await authorize 前比较 descriptor.version／inspection.toolVersion，await 后再 require 并检查 implementation identity 与版本，立即进入 execute；统一覆盖 Root／Child read、control 与 mutation，动态 contribution 替换 fail closed，不将名称当版本 authority。
-
-Input／Goal／pending-input transition 的 streaming 检测以 `agent_runtimes.participant_id=root` 限定真实 Root，与 composition 的 Root scheduler.signalInput owner 一致；不因 Child-only streaming 错发 Root abort，不隐式调用 Child cancel。
-
-Root／Child 共用 `model-retry-policy` 的瞬态分类、次数与退避。Child 失败 Model attempt settle 同事务计 usage、结束旧 work、保持 delegation runnable 并 enqueue versioned retry work（notBefore／原 deadline／retryAttemptIndex）；下一次调用仍冻结模型、limiter 与预算。StateCommit 验证 retry 次数、错误与剩余预算，取消优先，失败 partial output 不提交 proposal／checkpoint、不消费 inbox。重启沿用 interrupted 收敛，不重放遗留请求。
-
-Root Tool model surface 以 `ToolCatalog` 为唯一 authoritative catalog，并复用既有 `modelExposure=deferred` 机制做 progressive disclosure。execute 时低频原生 Tool 与 MCP Tool 从直接 schema 集移除，Host `tool_search` 对当前 scope/availability 搜索 deferred descriptors，并生成绑定 name/version 的 `tool1.*` handle；`tool_invoke` 只负责解析该 handle，解析出的实际 descriptor 随后继续进入 `ToolCallRunner` 的 capability、policy、approval、stale/version 检查，不建立第二执行或授权 owner。Root plan 不开放 discovery mutation router，而是直接保留当前可用的原生 read/control deferred Tool，避免工具面优化削弱非变更调查路径。
-
-Child tool surface 复用 `modelFacingToolSchemas`，以 grants／risk 过滤 direct 与 deferred router；模型 proposal 在 `SubagentContextBuilder.resolveProposal` 复用 `resolveDeferredToolProposal`，随后按解析出的实际 Tool 校验 delegation grants 再 inspect。没有第二 handle、catalog 或授权 owner。Governed coding worker 只允许经 `file_write/patch/move/delete` 或 `shell_execute` 在**Run 已选中、Delegation 已授权的 SSH 连接**上变更。执行 Owner 与 StateCommit 分别验证规范化 Tool 参数、SSH connection ID、规范 SHA256 target identity、configurationHash、connection resource key、能力 scope、Run connectionIds 和 mutation 风险；后者从持久 Run/Delegation 重新读取授权，在校验完成前不得消费审批或开始副作用。实际执行仍由 ToolCallRunner 重检 SSH 当前连接和原有 policy/approval/lease。旧 Workspace generation 或 pending Workspace creation 不再是 Child 写入准入理由，MCP mutation 不因 router 开放而越过 SSH-only policy。
-
-Child plan-mode guard 分布在 schema（只读／control）、model proposal inspection（mutation 拒绝结果）、Tool executor 与 StateCommit mutation begin（副作用和审批消费前 fail closed）；Run executionMode 不因 delegation grants 或 full_access 被放宽。
-
-Child governed mutation 与 Root 共用 `GovernedMutationExecutor` 和 durable Approval。`ask` request 在审批事务将该 Tool work 转 waiting；resolve approved 将 work 重新入队，denied／expired／input superseded 通过 `child-approval-work` 调用已有 Child tool settle owner，同事务保存自身失败结果并恢复 batch continuation。内部结算平衡 execution slot，不递减其他正在执行 runtime 的计数；无外部 mutation、无第二审批 owner。`full_access` 保持 claimed work 的即时自动批准流程。
-
-Root `ModelStepRunner` 的 project target discovery 只收集近期已观察的 SSH File/Shell Tool 目标绝对路径，不从 Goal、用户文本或 Plan 推断 Workspace；最多 8 个 target，沿用 `ProjectInstructionSourcePort` 的 SSH 授权、configurationHash 和字节边界。参考 [OpenCode V2 按目标 scope 发现](https://opencode.ai/v2/docs/instructions/)，不移植代码、不全仓扫描、不将文本路径解析作为授权机制。
-
-Root Ledger 与 Child 工具 projection 在截断时写入 durable Tool Call id／sha256；`tool_result_read` 经 `ToolResultReaderPort` 由 `SqliteRunRepository` 按 user／App／Run／Runtime 查询终态 captured result，保留原始 JSON 顺序并排除 UI userSummary，使 hash 与 projection 一致。Host Tool 返回当前 output budget 内的 Unicode 字符分页；不新增文件存储、执行重放或 evidence authority。参考 OpenCode V2 的有界输出／read 分页 contract，未移植其代码。
-
-`SubagentContextBuilder` 经 runtime repository port 读取当前 Child 的完整工具批次、已消费 mailbox 和派生 checkpoint，不读 Root Ledger／Recall。原始历史始终持久化；按时间及 step index／recipient sequence 稳定排序，hash 校验摘要覆盖前缀，失效时重新使用原历史。项目规则仍独立按 delegation grants 读取，不写入摘要。容量压力复用冻结 context policy 和 tool projection；摘要规划复用结构化交接章节，按完整历史单位顺序分批合并并保留近期原始交互。
-
-`SubagentModelStepExecutor` 在原 scheduler claim 内迭代执行独立摘要步骤，再刷新 Context；冻结模型、limiter、取消、deadline、Run active time 与 Run／delegation step/usage 治理不建立第二 owner。摘要禁止 Tools、不发布回复 delta、不消费新 inbox，异常仍走 Child 的既有失败策略，不新增自动重试。`StateCommit` 原子提交 `agent_runtime_context_checkpoints`、attempt、usage、事件和 runtime projection，校验 owner epoch、完整结束及来源 hash；失败或取消保留旧摘要和全部原历史。SQLite schema 与迁移 #52 持有摘要表定义；摘要是低权威 derived state，不授予权限，也不取代 delegation 或 Tool evidence。
-
-## 依赖方向
+## 职责与依赖边界
 
 ```mermaid
 flowchart TD
-  Bootstrap[bootstrap] --> Interfaces[interfaces]
-  Bootstrap --> Infrastructure[infrastructure]
-  Bootstrap --> Modules[modules]
-  Bootstrap --> Platform[platform]
-  Interfaces --> Modules
-  Interfaces --> Platform
-  Infrastructure --> Platform
-  Infrastructure -. implements module port .-> Modules
-  Modules --> Platform
-  Modules --> Shared[shared]
-  Platform --> Shared
-  Config[config] --> Shared
+    B[Bootstrap 装配与生命周期] --> R[模块 register]
+    B --> P[Platform 技术实例]
+    I[模块 HTTP/WS Interface] --> U[模块入口与出口白名单]
+    U --> S[Service 用例与权限]
+    S --> M[Model 应用转换]
+    M --> C[模块存储契约]
+    C -.实现.-> A[模块 SQLite Adapter]
+    A --> P
+    M --> P
+    I --> H[Shared HTTP/事件契约]
+    U --> V[Shared 双端业务契约]
 ```
 
-允许的静态依赖以 [AGENTS.md](../AGENTS.md) 为准。Infrastructure 对 Module 的依赖只允许用于实现 Module-owned `*.port` / `*.types` contract，并优先使用 type-only import。
+图中的存储契约表示调用约束；具体实现由 `register` 安装，不由 Model 自行定位。入口/出口映射是边界职责，可以在 register、专用 mapper 或接口文件实现，不要求额外创建一个层级。
 
-## Workspace 与远程能力
+| 位置                                  | 允许负责                                                     | 不应承担                                               |
+| ------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------ |
+| `main.ts`                             | 读取环境、解析进程配置、启动/信号处理                        | 业务授权、SQL、运行中请求状态                          |
+| `bootstrap`                           | 创建共享技术实例、全库迁移顺序、跨模块装配、应用关闭         | 逐个构造所有业务 Repository、业务转换和用例            |
+| 模块 `register.ts`                    | 装配内部 Service/Model/Adapter、公开映射、路由与生命周期安装 | 长期持有散落的业务决策、对外输出内部 Service           |
+| 模块 `public.ts` / `public-errors.ts` | 消费者需要的窄能力、安全输入/结果/错误                       | Storage 类型、内部 Model/Service 类、无消费者别名      |
+| 模块 `interfaces`                     | 协议解码、身份取得、调用用例、响应投影、协议流控             | SQL、多表事务、代替 Service 做业务授权                 |
+| 子功能 `service`                      | 用例顺序、业务权限、规则、凭据保护和应用资源所有权           | SQL 执行器、具体 SSH2/数据库 Adapter                   |
+| 子功能 `model`                        | 应用命令与存储/技术命令转换、结果映射、必要的原子状态决策    | 拼接 SQL、定位具体 Adapter、导入上层 Service           |
+| 子功能 `storage`                      | 内部存储输入、结果和完整任务契约                             | Shared DTO、应用对象、Service、网络响应                |
+| 子功能 `adapters/sqlite`              | SQL 方言、行解码、引用约束、事务、实际数据读写               | 应用/公开 DTO、网络响应、外部副作用                    |
+| `platform`                            | 技术能力、技术命令/结果/失败、流控与生命周期                 | Connection/Run/User 对象、业务表、授权状态、业务注册槽 |
+| Platform 技术 `adapters`              | SSH2 等具体库和协议实现                                      | 业务对象、持久 Run/Session 状态机                      |
 
-`workspace.ping` 在已绑定的 Workspace 协议 session 上返回空响应，已关闭或所有权撤销的协议 session 不处理请求；不调用 SSH 命令、不创建新会话，也不执行挂起接管。浏览器存活探测失败使用异常 transport close，继续遵循既有普通续接和挂起保留边界。
+依赖规则按职责执行，不为形式创建空 `sqlAdapter`、空接口或空包装。当前 `storage/*-storage.ts` 是业务存储契约，`adapters/sqlite/*-sql.ts` 是具体 SQL 实现，`platform/storage/sqlite` 是全应用共享数据库运行时。
 
-`modules/workspace` 持有 Workspace session registry、session 生命周期、事件 hub 和用户可见用例。`platform/execution`、`platform/filesystem` 与 SSH Infrastructure 提供执行和文件能力。
+模块内向下调用不绕行全局 dispatcher/service locator。应用实例级依赖由 Bootstrap 安装技术实例、模块 register 安装内部依赖；禁止进程级数据库单例或为了隐藏初始化而引入可变全局对象。Service 可按用例协调本模块多个 Model；跨模块协作只注入完成用例所需的公开能力。
 
-关键 owner：
+凭据保护是已确认的例外：Service 调用通用 SecretBox 或 PasswordHasher，Model 转换已保护命令。Node 的纯散列、随机 ID 和业务来源分类可留在真实 owner，不机械包装成 Platform；连接、SQL、外部网络和第三方运行时仍有明确技术边界。
 
-- Workspace registry：活动 session 与生命周期；
-- SSH transport：连接、channel 和 SFTP 技术状态；
-- execution session：命令执行与 shell 语义；
-- filesystem：路径和文件操作；
-- transfer module：跨 session 传输、任务状态与取消；
-- upload operation：批量上传目录 prepare cache 的 admission、TTL、复用与 Workspace teardown 回收；单 Workspace 最多 64 个 batch、合计 100,000 个目录，batch 采用 30 分钟滑动 TTL；active upload 由同一 owner 持有 5 分钟 idle/stall timer，合法 chunk 刷新，terminal/cancel 清理，超时销毁 stream、等待 append queue 并删除临时文件；
-- Workspace operations：上传 prepare／active upload／copy-move／archive 共用每 Workspace 16 个 file-operation admission slot；从等待 mutation lease 开始计数，到 terminal/cancel/failure/cleanup 释放；
-- SSH suspend module：挂起 catalog 与恢复事务；
-- Interfaces：HTTP/WebSocket streaming、认证和 backpressure。
+平台契约与实现可以同目录或同文件，单一实现不强制拆空 port；实现文件不反向引入业务。Platform 和业务 SQLite Adapter 只允许从 Shared 精确 `values` 路径引入确需共用的基础取值，不允许 Shared model/http/events 或应用模块类型。
 
-Workspace WebSocket control session 最多同时处理 64 个 request；超过容量返回 `WORKSPACE_REQUEST_CAPACITY_EXCEEDED`，防止 socket message callback 的并发 dispatch 绕过 Module 层资源边界。
+## 类型与模块出口
 
-SFTP HTTP 下载的 workload 由 `interfaces/http/sftp/download-admission.registry.ts` 统一 admission：单用户部署的 ticket GET、认证 GET 和目录 ZIP 共用 8 个槽，不建立额外按用户配额 Map。handler finally 归还名额，HTTP 提前关闭不提前释放等待中的 open；晚到 stream 销毁，HEAD 不创建 read/ZIP。ticket registry 继续负责 capability、owner lock 与 retention。远端 I/O 不收敛时保守占槽，不承诺 OS 资源即时退出。下载 E2E 的累计句柄基线必须在远端 CLOSE 收敛后记录；收到 Content-Length 对应 body 不代表句柄已关闭，也不代表 admission 已归还。
+类型由语义和消费者决定，不能把全部对象放入一个大集合后任意 Pick：
 
-终端 shell 的暂停由 `WorkspaceTerminalService` 统一根据消费者背压与恢复暂停两个原因计算；任何原因仍存在时不得 resume。输入队列不提供未接通的 sequence/ACK 机制，网络提交不等于远端命令执行确认。
+| 类型                                     | 唯一归属                                              |
+| ---------------------------------------- | ----------------------------------------------------- |
+| 双端同义同表示的有限业务取值             | Shared 所属域 `values.ts`                             |
+| 双端业务对象及业务结果                   | Shared 所属子域 `model.ts`                            |
+| 完整 HTTP 请求/响应/公开错误/容量        | Shared 所属 `http.ts`，复杂纯解码可拆 `http-codec.ts` |
+| WS 消息与纯解码                          | Shared 所属 `events.ts`                               |
+| 后端应用命令、资源、可信秘密及状态上下文 | 本模块 `model/*-types.ts` 或明确内部类型 owner        |
+| 数据库命令、密文记录、存储任务结果       | 本子功能 `storage`                                    |
+| 模块公开的后端专用能力                   | 模块 `public.ts`，与内部实现独立                      |
+| 技术请求、技术结果、错误及 Worker 消息   | 对应 Platform 技术 owner                              |
+| UI 草稿与展示状态                        | Frontend 所属功能，不放入 Shared                      |
 
-SSH `TerminalStreamTransport` 支持 `terminal.flow` 消费窗口；客户端在连接后用 consumedBytes=0 启用，随后只允许安全整数、单调且不超过已发送字节的确认。计数属于当前 WebSocket，不是 journal offset。窗口为 1 MiB，单帧最多 256 KiB；窗口耗尽暂停实时 shell 和发送，确认释放容量后继续。恢复日志按帧等待窗口容量，不把整个 replay 一次塞入发送队列。未启用窗口的协议客户端保留网络背压。
+实际表示不同的内部类型保持独立；公开类型不继承存储记录。模块 public 对相同双端契约直接引用 Shared，不手写第二份；内部格式转换仍经过 Model。文件中的 TypeScript export 只是文件间可引用，不表示它已获准成为跨模块 API。
 
-挂起标记不关闭活动 Workspace。`workspace-suspend-coordinator.service.ts` 管理标记、终端输出日志与 checkpoint；标签关闭或连接断开后由 Backend 接管原 SSH/PTY。普通弱网续接校验原发起端恢复凭据，挂起会话恢复或确认接管则校验会话访问权限，不要求原设备凭据。恢复时 Backend 负责 prepare、有限尾部回放、transport 交接、commit/rollback 与更早历史分页；Frontend 只负责 Runtime tab 的创建、替换与展示。终端恢复响应等待基线发送与 ownership commit，但不等待可选 SFTP 初始化；filesystem owner 独立发布 ready/error，异步初始化结束时重检 registry 中的 session identity，忽略已关闭或替换 session 的晚到结果。取消标记涉及输出队列排空与存储清理，请求超时不能作为确定取消失败的证据。
+所有对象出入模块边界逐字段构造，包括目前字段完全一致的对象。数组及嵌套目标/Proxy/Jump/凭据同样按白名单投影；不能用类型注解、Readonly、freeze、结构赋值或对象展开代替运行时字段隔离。共享类型和纯 decoder 都不能替代模块出口投影。
 
-挂起原始日志由 `local-suspended-session-log.adapter.ts` 串行写入。可读取历史、分页 offset 和导出最多覆盖最近 100MiB；物理文件允许额外 32MiB 压缩缓冲，超过阈值才裁剪回 100MiB，不按每个 PTY chunk 重写完整保留文件。压缩通过临时文件和 rename 提交；恢复先暂停 shell、解绑输出 listener，再排空既有输出队列，不能用延长 owner lease 掩盖日志写入积压。
-SshSuspend catalog 只存在于进程内，因此日志文件不能跨重启成为可恢复状态：service initialize 清理上次异常退出遗留目录，reset/dispose 在 transport/output drain 后删除当前日志，再做目录级 orphan cleanup。
+转换分别保护不同边界：`model/connection-mapper.ts` 转换应用与存储；`public-mappers.ts` 转换内部应用与模块出口；`interfaces/http/*-view.ts` 转换模块结果与 wire。三个边界各自必要，不能合并成读取 SQL 行的万能 public mapper。同一边界的重复转换提取到该 owner，单处使用的 mapper 可留在原文件。
 
-## Remote Desktop
+管理出口与可信出口分开。Targets 管理不包含密码、私钥、密文或解析运行时；`TrustedSshTargetResolver` 只供明确后端消费者使用，明文结果有用途和生命周期，不挂载 HTTP。其他模块只取得所需方法，例如 Host Key 读取只使用 list 能力。公开签名中的后端专用基础取值由公开 owner 定义或引用独立共享取值，不从私有实现文件派生。
 
-`RemoteDesktopSessionService` 读取连接并签发一次性 opaque ticket。`GuacamoleRuntimeAdapter` 在 Backend 内存中持有短生命周期的具体连接请求。浏览器经 `/ws/remote-desktop` 连接 Backend，Backend 再连接独立 `guacd` 服务；凭据不返回浏览器。详见 [Remote Desktop Architecture](REMOTE_DESKTOP.md)。
+## Shared 与通信边界
 
-## Agent 与 Plugin Platform
+```text
+packages/shared/src/
+  access/{model,http}.ts
+  targets/
+    {values,http}.ts
+    connections/{values,model,http,http-codec}.ts
+    proxies/{values,model,http,http-codec}.ts
+    ssh-keys/{model,http,http-codec}.ts
+    tags/{model,http,http-codec}.ts
+    host-keys/{model,http,http-codec}.ts
+  remote/sessions/{model,http,events}.ts
+```
 
-Agent Core 位于 `modules/agent`，具体 provider、plugin、SSH/Browser 与存储实现位于 `infrastructure/agent`，HTTP/WebSocket surface 位于 `interfaces`，composition 位于 `bootstrap/agent`。
+Shared 顶层按大业务模块，子域按功能。`values` 不依赖业务对象或协议；`model` 不依赖 HTTP/事件；`http-codec → http/model/values` 单向依赖，http 不反向重导出 codec。父文件只承载本域真正共用的内容，不汇总全部子域。Shared 无 Node、Vue、数据库、框架或后端应用依赖，exports 只列实际精确路径，不保留旧路径别名和根 barrel。
 
-Backend 持有用户、App、Thread、Run、Ledger、Plan、approval、lease、artifact、memory、checkpoint、policy 与 durable mutation authority。Agent File/Shell/ACP 通过已授权的 SSH target adapter 执行，Browser 使用独立 Backend CDP；不存在第二套 Runner Workspace execution owner。
+请求必须定义完整外壳，例如 `{version, changes}`、`{items}`；响应与业务对象相同直接引用 model，共用删除响应不在每个子域复制。后端响应构造使用具名 Shared 返回类型或 satisfies，运行时仍采用严格解码与白名单序列化。外部 JSON、URL/query/header、WS、SQL 行及 Worker 结果以 unknown 解码，必填/可选/未知字段、数值、字节数及联合分支明确。
 
-Context checkpoint 由 `modules/agent/ai/context-checkpoint.service.ts` 规划可见 Ledger prefix 和模型输入，采用 `context-checkpoint-v2`／`semantic-handoff-v1`。已验证旧摘要与新增历史按窗口分批合并，历史序列以 JSON 数据送入模型，不投影为可执行 Tool call，不按关键词、首尾样本或固定字符截断。Context 保留有界近期完整 causal groups，并以低权威 user 历史交接数据投影有效摘要；content 和 generator 纳入 context lineage。
+完整 JSON 的 UTF-8 容量预算属于 Shared HTTP 契约，两端消费同一定义；字段上限与完整 body 上限分开，后者包含转义及外壳。Frontend 在发送前检查实际编码大小，模块路由将预算传给 Platform，Platform 只执行通用默认值及实例硬上限。Targets Connections/SSH Keys 为 128 KiB，Proxies 为 64 KiB，Tags/Host Keys 为 16 KiB；导入最多 50 项且总量不超过 128 KiB，超限整批拒绝并提示拆批。
 
-`NativeAgentBackend` 在正式推理前执行独立 compaction model step，`ModelStepRunner` 复用冻结 route、ModelCallLimiter、取消、重试和 Run model-request/time 预算；摘要没有 Tool、普通回复 delta 或助手 Ledger。`state-commit/compaction-transitions.ts` 在 Adapter 事务内重新校验 source hash、visibility、输入／Goal revision，原子更新 checkpoint、attempt、usage、执行时间与事件，不消费输入，不覆盖主推理 context usage。每批重新 compose 后继续压缩；空／截断／超预算／来源变化与取消不发布摘要。若模型生成的摘要没有实际缩小历史，或既有 checkpoint 与必须保留的最新完整 causal group 无法同时落入规划后的摘要预留，Root 只允许重新 compose 一次完整原始 Ledger：完整历史能落入当前硬 context budget 时直接继续，放不下时仍明确失败，不允许以 drop-only 历史掩盖压缩失败。超过单批窗口的单条记录明确报错；原始 Ledger 保留。迁移 #51 清理旧策略派生摘要，不改原始历史。
+当前新 Agent 无同表示前端消费者，HTTP 契约保持后端私有；Agent 创建 Run 的路由预算为 128 KiB、prompt 为 16 KiB。真实前端接入时迁移完整双端契约和预算，不预建 Shared Agent 空域，也不直接复用表示不同的旧 Protocol。双端迁移需同时检查新后端、前端、旧正式包相同基础取值和真实测试/脚本消费者。
 
-`SqliteStateCommitAdapter` 持有事务入口与提交后观察；恢复／App 禁用的 durable 转换位于 `infrastructure/agent/runtime/state-commit/recovery-transitions.ts`，与其他 transition 一样接收当前事务。Quarantine、子状态、审批、Run、事件与 Host summary 必须同事务收敛，不将 SQL 拆到事务外的 Recovery service。历史 restart 候选查询保持在提交和通知之后，不复用旧执行 stack。
+HTTP 技术层负责固定 Public Origin、受信代理、来源/Fetch Metadata、JSON 内容类型与限额、cookie 和连接生命周期。模块负责业务身份、权限、资源范围及错误映射；不接受客户端自报 owner。非法 JSON/过大请求/不支持内容类型保留 400/413/415，不能吞成通用业务失败。WS 消息和 ACK/replay 归协议 owner；Platform 不按 Agent/Targets 名称分支。
 
-SQLite schema authority 位于 `infrastructure/database/`：`schema/` 按 core 与 Agent host/AI/execution/collaboration/plugins/ssh 分组定义当前 SQL，`sqlite-schema.registry.ts` 唯一持有初始化及 post-migration 定义顺序。`migrations/` 按 core/runtime/capabilities/host 分组保存升级定义与共用 schema inspection，`migrations/registry.ts` 汇总全局 ID，`sqlite-migrations.ts` 唯一执行事务、检查及版本记录。分组不建立独立版本号，不调整已发布 SQL 或全局执行顺序；Worker 和迁移直接消费真实定义模块。
+## SQL、事务与迁移
 
-Agent Host Capability 注册表仅声明现行有效的 SSH File/Shell、Machine、Browser、Integration、Artifact、AppIntent 能力；旧 `workspace.manage` 已从 Backend、Protocol、Frontend 类别/授权 UI 与新签名插件 fixture 物理删除。Manifest 验证对未知旧能力直接拒绝，不提供旧 Workspace grant 解码或默认授权。Subagent governed mutation 保留现有 SSH scope/approval/lease/fence/verification 约束。
+Model 接收应用命令，显式构造 storage 命令；SQLite Adapter 解码 snake_case 行并返回内部记录，Model 再构造应用结果。数据表示、密文与业务有限取值各有明确 owner。Adapter 可以执行与存储任务不可分离的约束和状态决策，不持有独立授权体系。
 
-当前可安装的 Plugin manifest 只支持 `frontend` 和 `backend` target，声明 `targets.runner` 会在 Host manifest 验证时直接拒绝（不执行旧字段转换）。Frontend target 在隔离 surface 中运行；Backend target 通过受控子进程和版本化 SDK/IPC 运行。Plugin package、immutable installed version、AppStorage、Artifact 分别维护生命周期，Plugin 不能把 Host authority function 注入 Tool catalog。Agent Workspace/生产 Runner 已完全退出当前实现。
+需要原子性就提供完整存储任务。连接和关系写入、每项导入及引用检查/删除在同一事务中执行；Service 的预检查不能构成并发保证。Targets 同模块多子功能协作通过明确事务参与者复用当前 tx，Model/Service 不取得 SQL 执行器，不连续调用独立事务来模拟整体原子性。存储参与者可在 storage 声明技术 tx 契约，仅供 Adapter/注册使用，不向应用层或模块出口传播。
 
-Agent Model Tool Catalog 不再注册 Workspace 生命周期工具 `workspace_create`、`workspace_control` 和 `workspace_toolchain_switch`。这些旧模型工具的生产实现及专属 Runner 场景均已移除；SSH 文件、Shell、Job、ACP 分别由现行 SSH/Agent owner 负责，不因此改变它们的授权或生命周期语义。完成门禁只将不强制的 SSH session close 视为已验证资源回收，不再特殊认可已删除的 `workspace_control` 操作。
+Agent 的应用纯状态规则可由 Adapter 在事务内通过显式回调/事实转换执行，以同一快照决定状态并原子写入 Run、version、event 和幂等记录。不能在事务外算好结论后无条件写入。当前 v3 保证 user/App/Thread 归属、单 Thread 一个活动 Root、创建/取消原子性和幂等参数 hash；提交后才通知或调度，幂等重放不重复派发工作。
 
-Agent 文件工具已收敛为 **SSH-only**：`file-tools.ts` 的工具 schema、`FileCapabilityService` 与 `compose-agent.ts` 不再提供 Workspace 文件 adapter/port；冻结的 SSH connection ID/configuration hash、SFTP 结果 SHA 和元数据 preconditions 仍由原 owner 复核。旧 `target:'workspace'` 被 schema/运行时拒绝，不自动映射到本地或任一 SSH Connection。Shell、ACP 和 Browser 已分别迁移为 SSH-only 或独立 target，用户 Workspace 管理 API 仍处于独立迁移阶段；不能把当前 File 切口当作完整 P3。
+事务回调不得等待网络、SSH、Provider、文件或用户操作。外部副作用无法由 SQL rollback 撤销，持久执行身份、unknown 隔离和恢复由业务 owner 设计；不另造第二 journal 或事件队列作为事实 authority。
 
-Agent Shell/Job 工具也已收敛为 **SSH-only**：`shell-tools.ts` 与 `ShellCapabilityService` 仅连接 `SshShellTargetPort`、`AgentSshSessionPort` 和目标解析器，不再消费 Workspace Shell adapter/port 或产出 Runner Job 投影。Foreground 逐参数安全引用，Background 按 Thread/connection 和带 configurationHash 的持久 SSH session 执行。Job inspect/execute 间及 listActiveJobs 再核实 SSH 配置 fingerprint，拒绝旧 Snapshot 后自动重绑。旧 Agent Workspace ACL 和用户 API 已删除；普通终端 Workspace 的 owner 独立保留。
+全库只有 Bootstrap 的有序迁移清单：当前 v1 Targets+Access、v2 Host Key、v3 Agent。DDL 由模块所有，执行/签名验证/事务由 Platform 所有；Bootstrap 引用模块明确迁移入口。后续新增版本，不重写已存在版本的 DDL 或签名，不以 dev 可重建为理由破坏已发布数据迁移。
 
-ACP Host Tool、HTTP/Protocol/SQLite integration config 与 Agent App 集成创建 UI 仅接受 **SSH transport**。旧 `workspace-profile` 配置在 HTTP 输入层拒绝，持久解码 fail closed，无 Runtime fallback。`createAcpExecuteTool` 只在冻结 Run connection ID 上复核 SSH 配置 hash/target identity 和集成版本；`AcpAdapter` 仅经 SSH openTransport 执行 ACP v1。已移除 Host Runner ACP port/byte bridge，**生产 Agent Runner 的 AcpProcessRuntime、ACP WebSocket route、profile validation/launch/process close** 也全部退出。Runner/Host Protocol Provision/Environment/AgentSettings 的 ACP Profile 字段、Frontend Workspace Profile 编辑/选择器以及 SQLite Workspace `acp_profiles_json` 列一并移除；迁移 #56 直接 DROP 旧列并移除持久 AgentSettings 的 `workspaceRuntime.acpProfiles`。旧 Workspace profile 请求 fail closed，无兼容转换。普通终端 Workspace 由独立终端 Runtime 继续管理，生产 Runner Job 与 Browser tunnel 已退出；ACP 内层 Approval、abort/disconnect/unknown 流程保留在 SSH channel。
+Runtime 持有 Worker、串行事务、事务租约与关闭。Worker 保留 SQLite 数值扩展 errcode；Runtime 分类技术失败，模块映射安全业务码。回调失败正常回滚并保留原原因；回滚失败、commit_unknown 使实例不可用，不能重试未知提交。未等待操作不能逃逸事务；重复关闭共享同一结果。Schema/备份/恢复属于明确管理能力，无应用对象时不增加空 Model。
 
-File/Shell 的授权 contract 也已收敛：`CapabilityRegistry` 四个目标 capability 只声明 `supportedTargets=['ssh']`，默认和 ID 范围授权仅能指向 SSH connection；`parseScope/parseGrant` 拒绝包含 `workspace` 的旧范围，`allows` 对旧 Workspace 目标明确返回 false。HTTP grant 解码和 `@nexus-terminal/protocol/agent-host` 的 `AgentTargetKindDto` 只接受 `ssh`；Agent App 授权 UI 只显示 SSH 配置，旧 Workspace grant UI 翻译项退出。此更改不创建兼容分支，也不扩大老 Workspace grant 的网络能力。`AgentTargetResolver`（原本仅转发 SSH 的中间 facade）现已**物理删除**。`compose-agent` 将 `SshTargetResolverPort` 直接注入 File/Shell/ACP，`ssh-target-resolver.port.ts` 只定义边界，`ssh-target-binding.ts` 的纯函数集中完成规范 connection ID 校验、SSH 连接快照 resourceKey 和 inspection target 恢复，避免重复判断或再次引入万能目标 owner。Browser Session 的 Workspace binding 已移除，剩余用户 Workspace HTTP API 尚待物理移除。
+## SSH、Remote 与 Agent 的共用边界
 
-Browser 已从 Workspace/Runner transport 分离：Host `browser_session_open` 仅接受明确配置的 `targetId`；`BrowserSessionBindingAuthority` 根据有效 Browser 配置内容计算 `configurationHash` 和 target-specific revision，inspection 与 execute 复核 hash/Run scope。目标更新/删除时旧 Session 先关闭再报 `BROWSER_TARGET_STALE`，无关 Agent Settings revision 不造成失效。`BrowserRuntimeAdapter` 仅以 Backend 直连 CDP，保留 endpoint 协议/TLS、`allowedUrlPatterns`、Puppeteer request interception、Artifact capture 和 Run 终态 `closeRun`；新 Agent Browser 设置/Protocol 与持久 Run decoder 拒绝旧 `via=runner`。生产 Runner 的 `/v1/browser/tunnel` upgrade、`BrowserTunnelRuntime`、Backend Runner WS tunnel adapter 均已删除，未知 Runner upgrade 路由返回 404。旧 Workspace Provision/Profile 与 Runner Browser tunnel 子图已完全退出生产代码，不能被重新用作独立 Browser target。
+Targets 负责配置、引用、可信目标解析、配置指纹和人工确认的 Host Key。Remote/Agent 将可信应用目标转换为 Platform MachineEndpoint；Platform 只看到 host/port/authentication/route/期限/信任回调，不看到 connectionId、Run、审批、权限或业务配置指纹。
 
-Agent Workspace 用户 HTTP/WS、Backend Workspace Runtime/Repository/Runner Controller/Checkpoint Archive capture/restore 均已破坏式删除。进一步移除 `RunDefinitionSnapshot.environment`、HTTP/Protocol RunEnvironment DTO、Checkpoint `workspaceArtifactManifestRefs` / `workspaceArtifactRefs` / `backgroundJobs` 字段、SQLite writer/strict decoder、Agent Tool target/Inspection/Approval 中的 Workspace fingerprint/generation、Runner semantic job 与 Subagent legacy target。Run 创建只持久化 AgentDefinition/模型/SSH connectionIds；Checkpoint 仍验证 Tool Side Effects/Quarantine、Provider/Model、Plan/Goal、Artifact/Context 和输入版本，但不再读取旧 Workspace metadata。Project Instructions 使用现有 SSH Project Directory 的 scope/configurationHash 且只从已观察 SSH Tool 中导出目标绝对目录，不再猜测 `/workspace/work` 或从用户文本推断本地 Workspace。正常终端 Workspace 不属于 Agent Runtime。
+Host Key 是实际 SSH 公钥 SHA256，配置指纹是业务配置快照 hash，不能混用。当前 Remote 每跳及终点要求显式 pin，无 TOFU 或接受全部回退；只有信任回调实际拒绝才能产生 host_key_untrusted，普通密码/网络失败不冒充信任失败。全路由期限与取消共享，任何半建连失败及晚到成功都释放资源。
 
-后续 SQLite/部署切口：当前 schema 已删除 `agent_workspaces` / `agent_workspace_runtime_commands`，保留的 `agent_ssh_jobs` / `agent_project_directories` 移到 `schema/agent-ssh.ts`。#58 不兼容旧状态、不对未完成命令留等待/保护，按 FK 逆序直接 DROP 两表并通过 json_remove 去掉 Agent Settings 的过期字段。Run/Thread 删除路径已去除与旧 Workspace 相关的守卫；普通 Run 保护仍在。Backup 白名单剔除旧 Workspace/commands/confirmations。生产 `agent-runner` package、Toolchain assets、宿主准备脚本、Root 构建/类型检查、Compose 和发布任务已同步物理删除。E2E 测试 Runner 镜像与普通 SSH、终端 Workspace、Artifact/Memory 保留；Runner-only Playwright fixture / Docker smoke 已删除，现行 71 个 Agent Playwright 用例均在官方容器按文件通过，生产 Docker no-Runner smoke 通过。
+SSH Adapter 持有 Socket/Client/channel/SFTP 租约，业务模块持有资源使用和释放责任。原始 non-PTY 通道和收集式执行具有不同结果/取消语义，不保留行为完全相同的别名。退出零、非零、未派发失败、派发后 unknown、截断与关闭原因区别明确；取消、超时或 socket 关闭不能证明远端没有副作用。SFTP 请求/流按实际 dispatch 区分 not_started/unknown，关闭等待必要清理，已关闭 lease 的晚回调不能发布可用资源。
 
-## 数据、事务与并发
+Remote Service 通过本模块应用资源契约管理会话，不使用 SSH2/Node Stream；Model 封装实际机器连接与 Shell。RemoteSessionOwner 持有 Access token 摘要绑定、单 Socket attach、授权复查及已释放清理结果；协议 owner 管输入/输出流控。当前字节 ACK 表示终端渲染完成，正常 EOF 先 drain 尾帧，异常断线/主动关闭分别收敛，不把断开自动解释为可恢复挂起。
 
-- SQLite schema 描述新数据库结构，migration 负责已发布结构升级。
-- 写操作由真实状态 owner 建立事务和幂等边界。
-- 外部副作用使用 operation identity、lease、outcome 与 reconcile 处理未知结果。
-- destructive operation 先 preview/freeze/confirm，再在提交前重检前置条件。
-- async callback 和 event listener 必须隔离单个消费者失败，且在 owner 关闭时解除注册。
-- 日志使用结构化 logger，过滤凭据、token、cookie、私钥、文件正文和模型敏感内容。
+当前 Remote 输出窗口及排队各 128 KiB；Shared input/data 单帧解码最大 32 KiB；通用 WS 入站帧 64 KiB、累计 64 条/256 KiB、发送缓冲 1 MiB。业务预算与传输预算分开，新增协议按真实 payload 核对并使用受硬上限约束的通用配置，不无限排队。
 
-## 诊断与关闭
+Agent 后续执行复用 SSH/SQL/密码学技术实例，保留自有 grant、inspection、approval、lease、冻结目标与 Job 状态。执行前需要同一可信快照校验 expectedFingerprint；当前分开的 fingerprintStored/resolveStored 不能证明两次读取间配置未变。持久事件使用 sequence/cursor/replay，不能用 Remote 字节 ACK 代替。新 Agent 未接入执行前，不宣称已有完整恢复或工具授权。
 
-Bootstrap 注册 process、database、provider、plugin 和 transport 诊断。诊断是可观测证据，不替代真实 API/UI 行为验证。
+## 资源与应用生命周期
 
-关闭顺序由 composition root 控制：停止接收新请求，停止 scheduler/sweeps，drain 或终止受管工作，关闭 WebSocket/HTTP，再关闭数据库和底层资源。各 adapter 的临时进程、listener、timer 和文件句柄由创建它们的 owner 清理。
+资源只有一个真实 owner：打开者明确把关闭责任交给谁；借用者不任意关闭共享实例。Session、Run、事务、lease 和请求状态不进入进程全局单例。Promise、timer、listener、stream、channel 与待完成回调都需有准入、追踪、失败收敛和清理路径。
 
-## 放置指南
+应用关闭顺序：停止模块新准入/调度 → 关闭 HTTP/WS 并等待已接纳业务任务 → 取消并等待业务运行时/资源，完成必要持久收敛 → 关闭 SQLite。当前动态生命周期只注册 Remote；Agent 调度、Provider 等接入时必须提供自己的 quiesce/close，不由 Bootstrap 假设所有模块无后台工作。
 
-| 新代码                                 | 放置位置                       |
-| -------------------------------------- | ------------------------------ |
-| 新产品用例或业务规则                   | `modules/<capability>/`        |
-| 新机器能力抽象                         | `platform/<capability>/`       |
-| 数据库或第三方实现                     | `infrastructure/<capability>/` |
-| HTTP/WebSocket decode 与响应映射       | `interfaces/`                  |
-| 环境变量解析                           | `config/`                      |
-| service/adapter wiring 与 lifecycle    | `bootstrap/`                   |
-| 无领域依赖的日志、事件、安全 primitive | `shared/`                      |
+关闭先发布共享 Promise，再开始可能重入的清理；并发调用看到同一完成与失败。前一步失败仍继续必要释放，多项错误聚合；客户端断开不证明密码散列、已派发 SSH 或事务已经取消。恢复数据库前先停止使用旧状态的长期 owner，恢复/回滚之后按新的持久状态重建，不能只替换文件。
 
-## 验证
+## 新功能放置指南
 
-- `pnpm run check` 执行 Frontend/Agent ESLint 与 Frontend type check。
-- 架构和生命周期规则由 [AGENTS.md](../AGENTS.md) 约束 AI 开发与审查，不使用源码文本扫描测试。
-- `pnpm run build:backend` 执行 Backend TypeScript build 并复制 locale/Plugin SDK runtime asset。
-- 根 `pnpm run build` 覆盖 Backend、Frontend；根 `check` 覆盖 Frontend／Agent ESLint 与两个生产包类型检查。CI 使用完整构建入口；独立 Playwright E2E Runner 镜像只包含测试环境。
-- Agent deterministic scenarios 位于 `tests/backend/agent-scenarios/`。
-- 用户可达 HTTP/WebSocket/SSH/Agent 行为由 `tests/e2e/` 验证。
-- Canonical workflow 保留 production-style Docker smoke。
+| 要增加的内容              | 放置位置与接入步骤                                                                                                                            |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| 新连接字段                | 双端取值/对象/请求在 Shared；应用类型在 Targets Model；存储命令/行在 storage；SQLite 变更新增迁移；同步两端 decoder、所有 mapper 和前端消费者 |
+| 新 Proxy/Tag/SSH Key 用例 | Targets 现有子功能 Service；Model 转换；完整存储任务及本模块 Adapter；不新建一级模块                                                          |
+| SSH/SFTP 通用技术操作     | Platform SSH 契约与 SSH2 Adapter；不加入 connectionId/Run；调用者在 Model 转换应用目标和使用技术结果                                          |
+| 普通远程文件或传输        | Remote 对应 files/transfers 子功能；独立 Service/Model/资源 owner；复用 Platform，按真实前端契约增量 Shared                                   |
+| Agent Tool/后台 Job       | Agent 内部能力/执行 owner及授权/持久结果；复用共用 Platform，不调用用户 PTY 或另读 Targets 私有表                                             |
+| HTTP/WS 端点              | 模块 interfaces；Shared 完整契约/解码/限额；模块 register 安装；身份来自 Access，范围权限来自用例 owner                                       |
+| 多表写入                  | 所属 storage 的完整语义化任务；Adapter 单事务；同模块参与者共用 tx，不用 Service 删除补偿                                                     |
+| 公开类型/方法             | 先确认真实消费者；public 明确安全契约和 mapper；同表示双端类型引用 Shared，敏感能力独立出口                                                   |
+| 技术配置或生命周期        | main/Bootstrap 解析传入模块注册选项；模块私有运行参数不被 Bootstrap 深层引用；后台 owner 提供准入停止与 close                                 |
+| 共享 helper               | 先确认多个真实消费者、相同语义/失败/生命周期；优先原 owner，单处用函数留文件内                                                                |
+| 用户可见文案              | 所属 i18n owner；新结构使用 i18n 命名，中英日同步；不顺带重命名旧正式目录                                                                     |
 
-### 自适应执行预算与当前进度
+按需创建目录：默认用例入口、应用类型/转换、存储契约、具体 Adapter、协议入口和公开契约分别归位；单一文件即可表达职责时不再拆 interfaces/types/utils 空目录。不因两层字段相同删除安全转换，也不因追求统一为每个函数增加类、port 或 dispatcher。
 
-`runtime/execution/runtime-progress.ts` 从最新 Run／Delegation 构造必需控制上下文，投影 Goal／Plan revision、项目状态／证据、验证与 reconciliation、计数和剩余额度，数据不提升为授权。Root prepare 与 Child context 每次重建都注入；有限窗口仍由 Context owner 规划，不能用可选历史截断悄悄丢失资源指令。
+施工顺序为 owner/调用者 → 类型与完整任务 → 技术保证及生命周期 → 内部实现 → 出口/协议 → 全部消费者 → 文档与验证。发现暂未迁移的业务能力可标记带 owner 的 TODO；当前切片依赖的 SQL 拼接/事务、严格解码、基础流控和失败清理必须真实实现，不用 TODO 或假成功替代。
 
-`state-commit/execution-budget-transitions.ts` 在同一 SQLite transaction 内校验并预留全 Run 模型请求和工具执行。每个新 attempt（包括摘要、retry、route fallback）在开始时计数，settle 只累加 token；实际开始的工具计独立 `toolExecutions`。Child 保留本地请求上限，并为 Root 留最多两个请求。各模型／工具 deadline 按尚在进行的活动时间扣减，不等待 settle 才发现时间耗尽。
+## 全局编码约定
 
-Native 在既有工具 proposal batch 结算后、下次模型 admission 前评估额度；Child model work 在请求前刷新同一预算。进展读取上次扩展 event cursor 后最多 32 条工具终态，要求新成功数据或证据，排除相同 operation／data／verification 的旧记录、连续三次失败及 loop warning。仅增长受压维度，1.5 倍且冻结 ceiling 截断，revision／cursor／事件／Host projection 同事务提交；该有界启发式不是成功证明，hard ceiling 是最终资源边界。
+本节统一约束所有重构模块的职责、封装、命名、类型、控制流、错误处理、异步资源及格式。新增与修改代码必须遵守；已有代码在逐模块审核和迁移时同步调整。代码审核需要检查这些设计约定，不能只以格式化、类型检查或构建通过判定实现完成。
 
-finishing 禁止新工具／委派。安全 checkpoint callback 使用 `execution_limit` 强制保存；最终 model summary 或确定性 partial report 与终态持久化，子 work 取消、活动 attempt 收敛，未确认 mutation／lease 隔离继续保留。Post-commit observer 中止 Child scheduler 与回收 Run-owned Browser。CheckpointService 拒绝 finishing／耗尽源，合法 continuation 在 createRun transaction 继承父级 usage 和 active seconds，不能重置保险丝。
+规范参考 [VS Code Coding Guidelines](https://github.com/microsoft/vscode/wiki/Coding-Guidelines)、[Google TypeScript Style Guide](https://google.github.io/styleguide/tsguide.html) 与 [Prettier Rationale](https://prettier.io/docs/rationale)。采用 VS Code 的命名、局部封装、具名顶层函数和控制语句花括号约定，参考 Google 的 TypeScript 类型及接口表达习惯；以下规则是本项目最终编码约定，服从本文人工规则区域。具体空白与换行由仓库现有 Prettier/ESLint 配置决定，例如箭头函数参数统一保留括号，不照搬外部规范的不同格式。
 
-迁移 #53 将设置、应用策略、委派和旧 Run 数据一次性转换为当前字段；模型请求数从持久 attempt 重建，工具数从实际 started Tool 重建。历史 Run 的旧限额作为保守冻结 ceiling，启动恢复仍由既有 recovery owner 收敛非终态，不在 migration 伪造完成事件或重放工作。公开 API 和 decoder 不接受旧字段。
+### 职责与封装
 
-工具预检查失败由 Root 与子 Agent 的合成 forbidden inspection 保存 rejectionCode，持久 decoder 校验其只能用于未执行的拒绝项。PolicyService 保持 deny 并传递该码，使回放后的 ledger 与模型结果仍能区分参数、授权和资源错误。
+- **按独立职责组织。** 文件围绕一个明确能力或 owner，函数完成一个可以描述的操作。业务决策、类型转换、SQL 方言、协议实现和生命周期编排遵守本文分层，不能为缩短调用代码把它们混进一个工具函数。
+- **主流程表达步骤。** 初始化、事务、导入和停机等入口应能直接读出执行顺序。内部出现完整的验证、转换、资源释放或错误收敛流程时，提取为有业务或技术含义的具名函数/方法；长对象方法与异步匿名函数同样适用。简单回调可以内联，不按固定行数机械拆分。
+- **复杂表达式分步命名。** 嵌套构造错误、复合条件和多层转换难以辨认时，先用局部变量表达中间含义，再调用或返回；一次使用的简单表达式可以保留。仅拆出一个表达式时优先局部变量，独立操作再提取函数，避免大量无意义的一行包装。
+- **保持封装局部。** 单个文件使用的辅助函数留在该文件且不导出；只有职责可以独立演进或需要多处消费时才拆文件。工具函数提升为共用能力前先确认语义、错误和生命周期一致，不建立收纳杂项的巨型 `utils` 文件。
+- **出口提供明确能力。** 公开包装可以隐藏内部参数、转换类型、约束权限或明确操作语义；参数、结果和行为完全相同的公开别名应合并。Bootstrap 安装实例并编排生命周期；业务模块只能暴露消费者确实需要的窄契约，内部实现保持私有。
 
-Agent mutation execution 使用 durable ToolCall 而非 approval operation hash 区分一次执行。GovernedMutationExecutor 只负责复核、审批、lease、执行和结算，不查询相同参数的历史调用来拒绝新调用。ShellCapabilityService 根据 Run／Runtime／ToolCall 和冻结的 SSH target 执行，使用现有持久 SSH Job 与 scope/identity 检查；已删除 Workspace executionId、RunnerHttpAdapter 与 Runner Journal。StateCommit 的进度循环检测与共享 RunBudget 负责无进展和绝对上限，unknown outcome 仍须 reconciliation。
+### 命名与类型
+
+- **名称表达对象和动作。** 类型、接口、类使用 PascalCase；函数、方法、参数和变量使用 camelCase；文件延续现有小写连字符命名。使用完整且明确的词，协议通用缩写如 SSH、SQL、ID 可以保留；避免无上下文的 `data`、`handler`、`manager` 或自造缩写作为核心能力名称。
+- **操作名称体现语义。** `get/list` 表达读取，`create/update/delete` 表达变更，`resolve` 表达解析，`toX` 表达转换，`validate` 表达校验。会抛出失败、消费资源或产生外部副作用的辅助操作，其名称及必要注释应使调用方知道结果；布尔状态按含义使用 `is/has/can/should` 等前缀，生命周期采用明确的 `open/quiesce/close`。
+- **稳定结果使用具名类型。** 模块用例输入/输出、复用的记录、变更结果和较复杂的联合类型放在对应模块的类型文件，公共方法明确返回类型；简单局部对象允许推断。成功/失败或不同操作状态用可辨识联合保持状态与字段对应，例如 `{ status: 'ok'; id: number } | { status: 'error'; code: ErrorCode }`，不能改成一个宽泛状态类型加多个可选字段。
+- **类型有明确 owner。** 内部应用类型、存储契约、公开出口与前后端共享契约按各自语义独立归属。前后端确实共同消费的契约迁入 Shared；有限业务取值放在独立 `values.ts`。不能把所有状态、对象或转换集中成一个全局类型集合；字段相同仍遵守下文明确的转换边界。
+- **类型断言不替代验证。** 外部 JSON、Worker/IPC、数据库及第三方结果在真实边界解码和校验。不用 `as`、非空断言或 `any` 掩盖未知输入与缺失分支；确有第三方类型限制时，将必要断言局限在技术边界并说明依据。方法避免多个含义不明的位置布尔参数，复杂选项使用具名对象。
+
+### 控制流、错误与异步资源
+
+- **控制流保持直接。** 验证失败和不可用状态优先提前返回或抛错，减少多层嵌套；`if/else`、循环均使用花括号。三元表达式用于简单取值，不承载多层状态决策、异步流程或副作用。以清晰的不变量为依据简化分支，不能为减少代码省略安全校验。
+- **捕获错误必须有目的。** `catch` 用于边界映射、补充因果、资源清理或已定义的恢复，不吞掉未知失败并假装成功。保留原始错误作为 `cause`；原操作与清理同时失败时使用 AggregateError 保留全部原因，构造复杂原因时先命名局部值。错误不能只为方便格式化而丢失类别或底层证据。
+- **失败路径同样有 owner。** 事务明确区分回调失败、回滚失败与提交结果未知；提交或回滚失败后的数据库不可用语义保留。停机保持依赖顺序，前一步失败仍完成必要的后续释放；单一失败保留原错误，多项失败聚合。错误消息和明文凭据不得越过不允许的模块出口。
+- **每个 Promise 有等待责任。** 正常操作必须等待；有意后台执行时明确 owner、追踪方式和拒绝处理。不会由其他 owner 处理的 fire-and-forget 拒绝必须收敛，不能仅加 `void`。关闭 Promise 在启动可能重入的异步清理前保存，并发调用共享同一次完成和失败结果。
+- **资源由创建者管理。** Socket、channel、stream、timer、listener 与 lease 的创建、取消、解除订阅和关闭成对设计；失败与晚到成功也必须清理。期限按完整操作传递，不能每一步重置。取消前未派发与派发后结果未知分开，取消不表示远端副作用已回滚，未知操作不得自动重试。
+- **状态只保留一份权威。** 避免多个布尔值表达相互矛盾的生命周期；复杂状态采用明确的状态类型。异步结果通过请求身份、版本或 generation 防止过期覆盖；不复制另一个模块的可变状态，也不引入未设计的进程级全局对象。
+
+### 注释、格式与交付
+
+- **注释解释约束与原因。** 公共契约及存在特殊不变量的实现按需要使用 JSDoc，说明授权、取消、未知结果、事务和资源所有权。注释不重复显而易见的语句；TODO 写清缺失能力与所属 owner，不以 TODO 代替当前批次必需的基础实现。
+- **格式使用现有工具。** TypeScript 保持 Tab 缩进、单引号、分号、120 列；函数/方法及所有独立 `export` 声明前后保留一行空行（含 interface、type、const、默认导出和重新导出），注释与所属声明保持相邻，连续 import 不强制分隔，具体由 `.prettierrc` 与 ESLint 配置执行。不要手工对齐空格、用 `prettier-ignore` 掩盖复杂表达式或在局部引入另一套格式；复杂代码先调整结构再格式化。
+- **按真实边界审核。** 修改后检查调用方向、类型 owner、模块出口、失败与取消路径、资源释放及所有消费者。执行适用的静态检查、格式检查和构建，行为验证按当前用户授权与项目规则进行；编译通过不能替代行为证据。不新增源码文本扫描测试或自定义架构门禁来强制本节约定。
+
+## 注册、内部类型与公开取值的实际归属
+
+Access 的 `register.ts` 明确定义 `AccessRegistrationOptions`，Bootstrap 仅引用此安装契约并传递应用实例的 sqlite 和登录失败策略选项；register 逐字段转换为内部应用策略输入。`authentication/model/login-failure-types.ts` 持有 LoginFailurePolicyInput 与 LoginFailureLimits，Service 和 Session Model 同向引用；不从策略 Service 导入类型，也不让内部代码反向引用 register。
+
+Access 的内部业务失败由 `authentication/model/access-failure.ts` 持有，Service 引用该独立错误 owner。模块根 `access-errors.ts` 负责业务/技术失败到安全出口错误的映射，`public-errors.ts` 只明确导出安全类；Model 不反向依赖 Service，也不持有模块出口错误映射。
+
+Remote 的 `public.ts` 定义后端消费者实际使用的 RemoteSessionCloseReason，Session Service 直接引用此稳定契约，内部 Model 不再声明同名关闭原因。其 normal/disconnected/cleanup_failed/closed_by_owner 语义与 Platform 技术原因、Shared wire 仍分别映射，不新增兼容重导出。
+
+Bootstrap 只引用模块公开能力及注册、迁移等明确安装契约。模块公开签名不依赖私有 Model/Service 类型；应用底层类型不导入上层实现。迁移 schema 的全库组合是明确安装能力，Bootstrap 可以引用模块迁移入口；这与消费私有状态不同。Targets import 的跨子功能 tx 参与者属于同一一级模块内部协作，不能据此允许跨模块读表。
+
+## 旧正式包与迁移核对
+
+`packages/backend` 当前仍使用 `bootstrap/config/infrastructure/interfaces/modules/platform/shared/locales` 布局，HTTP 为 Express，公共旧 wire 由 `packages/protocol` 持有；该目录布局是运行事实，不是新功能照搬模板。旧的本包 shared 基础能力与 workspace Shared 双端契约不是同一职责。
+
+迁移前核对旧调用链与 [USAGE](../USAGE.md)，保留正常产品结果、真实授权和状态 owner，不机械保留未发布兼容分支或偶然错误文案。不同格式的旧 route/jumpChain/wire 不强行别名到 Shared。正式入口切换前保留双包参考；当前新开发不运行时调用旧实现。
+
+旧正式 Agent 的 owner、SSH-only 治理、Child Context、模型预算、Plugin/MCP/ACP、Artifact/Memory 及恢复不变量以 [AGENTS.md 第 3–10 节](../AGENTS.md#3-agent-定位与源码职责)为准。生产 Agent Runner 已退出，旧文档中的 Runner/Workspace Agent 执行描述不能成为新增功能依据；普通 SSH Workspace/终端仍保留独立 owner。
+
+迁移普通远程能力时至少核对以下已有保证：
+
+- 用户认证、会话撤销、因素验证及来源策略由 Access owner 保证；旧 WS revocation 与异步准入 fence 不可因新接口调整而丢失。
+- SSH 跳板/凭据/配置变化、远程写入的临时文件替换与 hash、SFTP 有界读写、Transfer/Archive 取消/unknown、远程桌面票据与资源配额保留各自 owner；关闭 socket 不是远端成功证据。
+- Agent 的 SSH 连接、项目目录及后台 Job 按 user/App/Thread 隔离，持久冻结目标、授权、审批、幂等及恢复与普通终端会话分离。
+- Artifact 文件发布与数据库 metadata、Plugin 安装与运行、备份 capture/restore 是跨资源任务；保留两阶段清理、内容校验、准入停止和恢复收敛，不因共用 SQLite 声称文件/网络具有数据库原子性。
+- 通知和审计的持久性、投递/失败语义按现行需求保留；当前 best-effort 不升级成可靠 outbox 声明。历史写入/裁剪、连接/标签引用和配额检查的并发约束仍在真实存储事务中执行。
+
+## 审核与交付
+
+修改前确认真实 owner、所有输入输出及消费者；检查职责方向、私有类型泄露、重复契约、事务权威、授权、限额、取消/晚到结果和关闭责任。为遵守架构而新增的包装必须说明实际边界价值，字段转换必须有允许清单。
+
+使用现有 ESLint、TypeScript、Prettier 和行为验证入口，不新增用于强制 AI 规则的源码扫描门禁，不使用源码字符串/目录形状测试作为架构证据。文档调整只做链接、事实、格式和 diff 检查；代码变更执行相应包 check/build及仓库检查，验收范围按用户授权和项目规则，不新增单元测试。
+
+新包必须单独执行 `pnpm --filter @nexus-terminal/backend-next check`；根 check 只覆盖正式 Backend/Frontend 及既有 ESLint，不能替代新包类型检查。共享契约变化同步 Shared build/check 和 Frontend 类型/构建。提交前执行 `pnpm run check`、`pnpm run format:all:check`、`git diff --check`；测试及远程 workflow 的证据归 [E2E.md](../testing/E2E.md)，未执行项明确保留待验收。
+
+人工规则的遵守依靠开发前阅读、owner 审核和人工确认，不创建重复自动门禁。提交/推送遵循 AGENTS.md 与当前用户指令，未知工作区修改不覆盖、不代为提交。

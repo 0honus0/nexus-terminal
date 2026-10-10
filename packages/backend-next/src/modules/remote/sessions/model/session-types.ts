@@ -17,9 +17,6 @@ export interface OpenSessionRequest {
 	signal?: AbortSignal;
 }
 
-/** Remote's decision about session ending; never expose machine internals. */
-export type RemoteSessionCloseReason = 'normal' | 'disconnected' | 'cleanup_failed' | 'closed_by_owner';
-
 export interface RemoteSessionResource {
 	readonly targetId: number;
 	readonly fingerprint: string;

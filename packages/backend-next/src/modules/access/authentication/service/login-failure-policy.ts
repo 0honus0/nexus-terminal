@@ -1,20 +1,5 @@
 import ipaddr from 'ipaddr.js';
-
-/**
- * IP admission is Access business policy. An unset/disabled configuration
- * never silently activates a fixed ban for public clients.
- */
-export interface LoginFailurePolicyOptions {
-	enabled: boolean;
-	maxAttempts?: number;
-	banSeconds?: number;
-}
-
-export interface LoginFailureLimits {
-	maxAttempts: number;
-	banMs: number;
-	windowMs: number;
-}
+import type { LoginFailurePolicyInput, LoginFailureLimits } from '../model/login-failure-types.js';
 
 function isInternalSource(source: string): boolean {
 	if (source === 'localhost') {
@@ -37,11 +22,15 @@ function bounded(value: number | undefined, fallback: number, min: number, max: 
 	return chosen;
 }
 
+/**
+ * IP admission is Access business policy. An unset/disabled configuration
+ * never silently activates a fixed ban for public clients.
+ */
 export class LoginFailurePolicy {
 	readonly limits: LoginFailureLimits;
 	private readonly enabled: boolean;
 
-	constructor(options: LoginFailurePolicyOptions = { enabled: false }) {
+	constructor(options: LoginFailurePolicyInput = { enabled: false }) {
 		this.enabled = options.enabled;
 		this.limits = {
 			maxAttempts: bounded(options.maxAttempts, 5, 1, 1000),

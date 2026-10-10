@@ -1,6 +1,6 @@
 import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-server.js';
 import type { AccessService } from '../../authentication/service/access-service.js';
-import { AccessOperationError, accessBoundary } from '../../authentication/model/access-errors.js';
+import { AccessOperationError, accessBoundary } from '../../access-errors.js';
 import type { AuthenticatedIdentity } from '../../authentication/model/access-types.js';
 import {
 	type AccessNeedsSetupResponse,

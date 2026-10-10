@@ -18,7 +18,7 @@
 
 ## 1. 项目所有者规则
 
-本节优先于后续规范。每条规则独立生效，不通过改写其他条目改变原意；规则冲突时停止受影响的工作并询问项目所有者，不自行选择或合并。
+本节优先于后续规范；后端人工规则另按 [Backend 人工规则区域](architecture/BACKEND.md#人工规则区域)的优先关系处理。每条规则独立生效，不通过改写其他条目改变原意；规则冲突时停止受影响的工作并询问项目所有者，不自行选择或合并。
 
 1. 每次开发都必须遵守本文件的全部内容。
 2. 项目所有者提出的新规则若更新或取代已有规则，应直接修改原条目，以最新明确要求为准，不保留重复或冲突条目；仅独立的新要求另行追加。
@@ -66,7 +66,7 @@
 
 ### 2.1 修改与文档
 
-- 独立重构代码遵守[架构重构的全局编码约定](架构重构.md#全局编码约定)，统一职责拆分、封装、命名、类型、控制流、错误、异步资源、注释及格式（含函数/方法与独立 export 声明之间的空行）；开发与审查均执行，不以格式检查通过代替设计审查。
+- 后端开发前完整阅读 [Backend 架构与开发约束](architecture/BACKEND.md)。长期职责边界、代码放置、类型/出口及[全局编码约定](architecture/BACKEND.md#全局编码约定)统一维护在那里；开发与审查均执行，不以静态检查通过代替设计审查。该文档[人工规则区域](architecture/BACKEND.md#人工规则区域)只按项目所有者明确输入更新，人工规则与其他后端规则冲突时优先，人工条目间的冲突由人工核对后更新原条目。架构重构和实施方案引用该入口，不另立重复后端规范。
 - 修改前查看 `git status`、源码、公开 contract、测试与文档，确认真实 owner 和调用链；未知改动视为潜在用户工作，不覆盖或删除。
 - 修复产生问题的 owner/边界，不放宽断言、复制状态或增加兼容分支掩盖问题。相邻独立缺陷先记录证据，不扩大当前任务。
 - 删除或替换能力时核对代码、导出、package script、workflow、文档和测试消费者，同步清理失效引用。
@@ -74,9 +74,10 @@
 
 ### 2.2 分层与依赖
 
-本节现行 Backend/Protocol 规则描述旧生产包。独立重构中的 `packages/backend-next` 按[架构重构](架构重构.md)施工：Platform 不持有业务类型或业务注册槽位；模块 Service 使用应用类型，Model 显式转换内部存储契约；加解密归 Service，模块所有对象出口均逐字段转换。新包不调用旧 Backend/Protocol，Shared 按真实双端消费者增量迁移，正式流量切换前保留双包参考结构。
+本节现行 Backend/Protocol 规则描述旧生产包。独立重构中的 `packages/backend-next` 按[架构重构](架构重构.md)施工：Platform 不持有业务类型或业务注册槽位；模块 Service 使用应用类型，Model 显式转换内部存储契约；加解密归 Service，模块所有对象出口均逐字段转换。新包不调用旧 Backend/Protocol，Shared 按真实双端消费者增量迁移，正式流量切换前保留双包参考结构。后续代码放置和允许依赖以 [Backend 架构与开发约束](architecture/BACKEND.md#职责与依赖边界)为准，本文的旧包说明不作为新包分层模板。
 
 - `packages/protocol` 唯一持有现行 HTTP、WebSocket 公共 DTO；Agent Runner wire 已删除，adapter 不复制协议类型或恢复旧导出。
+- 新后端 Bootstrap 仅通过模块 `register` 的明确安装契约传递配置，不深层导入私有 Service/Model 类型；应用底层类型与错误 owner 不依赖上层 Service。跨模块签名使用公开 owner 的稳定契约，内部关闭原因等公开取值只保留一份定义，不从私有 Model 派生或兼容重导出。Access 登录策略由 register 逐字段转为内部应用输入，Remote 公开关闭原因由模块 public 持有。
 - Backend 按 `shared -> platform -> modules -> interfaces/infrastructure -> bootstrap` 分工：Module 持有用例与 port，Infrastructure 实现 adapter，Interface 仅转换协议，Bootstrap 组装。Interface 不访问数据库或持有产品事务；业务模块不读 `process.env` 或依赖具体 Infrastructure。
 - Frontend 分为 `app/features/runtimes/foundation/shared`；跨模块通过 `public.ts` 或 foundation `index.ts`，不深层导入私有实现。共享能力提升到已有公共 owner。
 - Workspace 路由页面的跨 Feature 组合位于 `app/pages/workspace`，只通过 Feature 与 Runtime 的公开入口消费能力；Runtime 保留会话、布局、组件与 transport owner，不反向加载 App 页面。

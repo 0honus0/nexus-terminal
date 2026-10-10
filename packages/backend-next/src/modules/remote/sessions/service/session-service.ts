@@ -1,11 +1,7 @@
+import type { RemoteSessionCloseReason } from '../../public.js';
 import { randomUUID } from 'node:crypto';
 import type { RemoteSessionModel } from '../model/session-model.js';
-import type {
-	RemoteSessionSnapshot,
-	RemoteSessionResource,
-	OpenSessionRequest,
-	RemoteSessionCloseReason,
-} from '../model/session-types.js';
+import type { RemoteSessionSnapshot, RemoteSessionResource, OpenSessionRequest } from '../model/session-types.js';
 
 interface ActiveSession {
 	view: RemoteSessionSnapshot;

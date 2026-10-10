@@ -11,7 +11,7 @@ import type { AccessPublicApi } from '../modules/access/public.js';
 import type { HttpRoute, HttpWebSocketRoute } from '../platform/http/http-server.js';
 import { registerAgent } from '../modules/agent/register.js';
 import type { AgentStateApi } from '../modules/agent/public.js';
-import type { LoginFailurePolicyOptions } from '../modules/access/authentication/service/login-failure-policy.js';
+import type { AccessRegistrationOptions } from '../modules/access/register.js';
 
 export interface RegisteredModules {
 	access: AccessPublicApi;
@@ -30,9 +30,9 @@ export function registerModules(
 	sqlite: SqliteRuntime,
 	secrets: SecretBox | null,
 	verifyHostKey: MachineConnectOptions['verifyHostKey'] | null,
-	loginFailureOptions?: LoginFailurePolicyOptions,
+	loginFailureOptions?: AccessRegistrationOptions['loginFailurePolicy'],
 ): RegisteredModules {
-	const access = registerAccess(sqlite, loginFailureOptions);
+	const access = registerAccess({ sqlite, loginFailurePolicy: loginFailureOptions });
 	const targets = registerTargets({ sqlite, secrets });
 	const remote = registerRemote({
 		resolver: targets.trustedSshTargets,

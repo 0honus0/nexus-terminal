@@ -9,7 +9,7 @@ import type { TargetsPublicApi, TrustedSshTargetResolver } from '../modules/targ
 import type { RemoteSessions } from '../modules/remote/public.js';
 import type { AccessPublicApi } from '../modules/access/public.js';
 import type { AgentStateApi } from '../modules/agent/public.js';
-import type { LoginFailurePolicyOptions } from '../modules/access/authentication/service/login-failure-policy.js';
+import type { AccessRegistrationOptions } from '../modules/access/register.js';
 
 export interface AppOptions {
 	/** 32-byte application-managed key. Required for storing or resolving credentials. */
@@ -17,7 +17,7 @@ export interface AppOptions {
 	/** Explicit host-key trust owner for internal Remote SSH. Missing policy denies SSH opens. */
 	verifyHostKey?: MachineConnectOptions['verifyHostKey'];
 	/** Disabled unless explicitly enabled. Internal IPs are always exempt. */
-	loginFailurePolicy?: LoginFailurePolicyOptions;
+	loginFailurePolicy?: AccessRegistrationOptions['loginFailurePolicy'];
 }
 
 export interface AccessHttpOptions {

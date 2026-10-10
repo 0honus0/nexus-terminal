@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { SessionStorage } from '../storage/session-storage.js';
 import type { SessionIdentity } from './session-types.js';
-import type { LoginFailureLimits } from '../../authentication/service/login-failure-policy.js';
+import type { LoginFailureLimits } from '../../authentication/model/login-failure-types.js';
 
 export class SessionModel {
 	constructor(private readonly storage: Readonly<SessionStorage>) {}
