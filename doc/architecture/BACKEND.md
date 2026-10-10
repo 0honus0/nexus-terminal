@@ -26,7 +26,7 @@
 | ------------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------- |
 | Access       | 初始管理员、密码认证、持久会话、登录失败策略、认证 HTTP                         | 完整角色、Passkey/TOTP/CAPTCHA 及策略管理未迁移             |
 | Targets      | SSH/RDP/VNC 配置、Proxy、SSH Key、Tag、导入、凭据、可信 SSH 解析、Host Key 信任 | RDP/VNC 是连接定义；完整连接测试及旧正式前端未迁移          |
-| Remote       | SSH PTY/WS 及独立只读 SFTP 文件资源、受认证 HTTP、背压/EOF 与有界读取          | 没有挂起/恢复、文件写入/Transfer、远程桌面                  |
+| Remote       | SSH PTY/WS 及独立只读 SFTP 文件资源、受认证 HTTP、背压/EOF 与有界读取           | 没有挂起/恢复、文件写入/Transfer、远程桌面                  |
 | Agent        | App/Thread、Root Run 创建/取消、幂等、事件分页及同事务存储                      | 仅 pending/cancelled；没有 Provider/调度/Tool/审批/执行恢复 |
 
 Platform 当前提供 SQLite Runtime/Worker/迁移执行、HTTP/WS、SecretBox/密码散列和通用 SSH/SFTP/命令能力。具有这些技术接口不等于已经迁移对应产品功能；静态通过不等于异常路径和浏览器行为已经验收。
@@ -45,9 +45,11 @@ Platform SSH SFTP 的 list 接收条目与元数据字节预算，使用 opendir
 
 Remote Files 建立普通用户独立的 Machine/SFTP lease 资源，不依赖 PTY Session 的可变状态。Remote 模块共用 Machine Model 唯一转换可信 Targets 结果为通用 SSH 目标与 Host Key 验证策略；Files Model 持有真实 SFTP/Node 流处理、严格 UTF-8 文本与元数据投影，Files Service 持有 Access 会话绑定、资源名额、操作取消、期限与关闭 drain。Agent 以后可复用 Platform SSH/SFTP 而不得调用普通用户 File Service 的授权或资源。
 
+当前 Files 的应用资源边界尚未收口：`files/model/file-types.ts` 的 `FileResource` 仍公开 `MachineConnection` 和 `MachineSftpLease` 给 Service。这些技术句柄应封装在 Model 实现中，应用资源契约仅提供本用例需要的应用操作、身份和关闭能力；不能因为 Service 暂时只透传就认定符合隔离约束。收口任务见 [下一阶段实施方案](../后端重构下一阶段实施方案.md)。
+
 Remote Files HTTP 在 `interfaces/http/file-http.ts` 独立安装 `/api/v1/remote/files/resources`（POST 创建、DELETE 资源）和该资源的 `list`、`stat`、`lstat`、`read-text` POST 路由；每个端点只接受精确 Shared 请求及同源 Access Cookie，资源 UUID 不替代 Access 认证。路由级请求 body 沿用普通 JSON 16 KiB 技术预算，响应最大 128 KiB；资源最多 8 个、闲置有效期 2 分钟，单个操作期限 30 秒。列表完整成功最多 200 条、目录 metadata 预算 48 KiB，文本最多 16 KiB UTF-8；超限拒绝而不返回伪造完整数据；stat 跟随链接而 lstat 返回链接自身类型。失败只返回 Shared 安全码；Service 每次操作前后复核身份、目标指纹及 owner，创建、退出和停机关闭文件专属 lease 和 machine。无文件写入、传输、分页快照保证或会话恢复。
 
-Remote Files 源码复审补充：HTTP JSON 输入帧的 400/413/415 在 File HTTP 边界映射为 Shared `invalid_input/limit_exceeded`，DELETE 无 body，不能让 Platform 私有错误码意外进入独立文件消费者。用户鉴权后申请 Machine 的准入名额在连接真正结束前保留；即使 HTTP 30 秒期限先结束，晚到成功的非取消型解析/连接结果也由同一 Files owner 追踪清理，并纳入关闭排空，不能提前释放名额或让停机成功越过仍存活的 Machine。关闭失败记录有界，重复释放短时复用同一结果。依赖若永久无响应，关闭仍可能被已准入清理阻塞；真正的耗时保证与远端资源退出仍需专项故障注入，而非仅凭源码视为行为验收完成。
+Remote Files 源码复审补充：HTTP JSON 输入帧的 400/413/415 在 File HTTP 边界映射为 Shared `invalid_input/limit_exceeded`，DELETE 无 body，不能让 Platform 私有错误码意外进入独立文件消费者。用户鉴权后申请 Machine 的准入名额在连接真正结束前保留；即使 HTTP 30 秒期限先结束，晚到成功的非取消型解析/连接结果也由同一 Files owner 追踪清理，并纳入关闭排空。当前晚到拒绝分支仍忽略拒绝原因，Model 在半开资源清理失败时抛出的聚合异常可能因此丢失；成功路径已有追踪不等于全部失败路径已收敛。名额回收与停机结果须同时反映实际资源及清理失败，不能提前释放名额或让停机成功越过仍存活的 Machine。关闭失败记录有界，重复释放短时复用同一结果。依赖若永久无响应，关闭仍可能被已准入清理阻塞；真正的耗时保证与远端资源退出仍需专项故障注入，而非仅凭源码视为行为验收完成。
 
 ## 目录与一级模块
 
@@ -331,6 +333,18 @@ Bootstrap 只引用模块公开能力及注册、迁移等明确安装契约。�
 - Agent 的 SSH 连接、项目目录及后台 Job 按 user/App/Thread 隔离，持久冻结目标、授权、审批、幂等及恢复与普通终端会话分离。
 - Artifact 文件发布与数据库 metadata、Plugin 安装与运行、备份 capture/restore 是跨资源任务；保留两阶段清理、内容校验、准入停止和恢复收敛，不因共用 SQLite 声称文件/网络具有数据库原子性。
 - 通知和审计的持久性、投递/失败语义按现行需求保留；当前 best-effort 不升级成可靠 outbox 声明。历史写入/裁剪、连接/标签引用和配额检查的并发约束仍在真实存储事务中执行。
+
+## 边界与异步资源排查点
+
+以下是普通架构审核规则，不属于人工规则区域。每次扩展或审查切片时，沿真实调用链核对，不用类型文件所在目录或一次正常请求代替边界证明。
+
+- **检查应用资源可取得的能力。** Service 使用的应用资源不能含 Machine、SFTP lease、SSH2 channel 或 Node Stream；即使当前调用仅透传，契约也已使技术能力越过 Model。Model 内部协作可使用技术对象，前提是不把它们交给应用层。封装应承载真实资源操作与关闭责任，不能用断言或空包装隐藏句柄。
+- **核对类型语义和真实消费者。** Service 与 Interface 复用的应用输入/输出由所属 Model 类型文件命名持有；双端同义的基础取值放 Shared `values.ts`，对象和完整请求/响应分别保留各自 owner。Shared 容量应有真实双端契约用途，后端私有重放缓存、内部排队和清理策略不因使用了数值常量就成为协议。跨边界逐字段转换仍保留，同一边界不复制 mapper。
+- **区分等待结束与任务结束。** `Promise.race`、HTTP 超时和客户端取消只结束调用者等待，不证明实际连接、I/O 或事务已结束。逐一审核晚到 resolve 和 reject：成功资源由原 owner 关闭；拒绝中的清理失败也需进入有界诊断及停机汇总，不能用空 rejection handler 吞掉。正常业务拒绝与清理完整性失败使用具名分类，不靠错误文本或将所有拒绝都当作停机失败。
+- **核对准入名额与真实资源终态。** 半开、晚到和正在关闭的资源均在 owner 追踪范围；仅在真实任务收敛后回收名额，关闭失败保留证据，不把 Promise 已 settled 当作资源已释放。取消后退役的 lease 不再用于后续操作，应用资源可用状态同步收敛。
+- **检查每个 await 后的终态保护。** 授权、读取和关闭等待期间状态可能被其他回调改变；恢复执行前读取当前 owner 状态，终态禁止输出和操作旧资源。TypeScript 的局部控制流缩窄不能证明跨 await 状态不变；通过合理的状态 owner/读取方法表达变化，不用断言、删除保护或放宽检查绕过类型错误。
+- **区别本地清理与远端保证。** 本地 deadline、流 destroy、lease 退役和关闭请求不等于远端操作停止；分别说明当前能保证的资源状态、未知副作用及整体停机是否有界。路径预检查不等于原子 nofollow，单次读写成功不等于目录或文件快照一致。
+- **按真实执行结果判断完成。** 检查证据标注提交 SHA、范围和退出结果；执行环境恢复后更新实际失败或通过状态，不继续沿用历史环境阻断说明。源码已提交、静态通过和真实行为验收分别记录，不据其中一项关闭其余缺口。
 
 ## 审核与交付
 
