@@ -1,30 +1,7 @@
-import type { RemoteShellView, RemoteOpenShell } from '@nexus-terminal/shared/remote/model';
-import type { RemoteClientEvent, RemoteServerEvent } from '@nexus-terminal/shared/remote/events';
+import { readRemoteShellView, type RemoteShellView, type RemoteOpenShell } from '@nexus-terminal/shared/remote/model';
+import { readRemoteServerEvent, type RemoteClientEvent } from '@nexus-terminal/shared/remote/events';
 
 const ROOT = '/__next/api/v1/remote';
-
-function parseView(input: unknown): RemoteShellView {
-	if (!input || typeof input !== 'object' || Array.isArray(input)) {
-		throw new Error('Invalid Remote response');
-	}
-	const row = input as Record<string, unknown>;
-	if (
-		typeof row.id !== 'string' ||
-		typeof row.targetId !== 'number' ||
-		typeof row.configurationFingerprint !== 'string' ||
-		typeof row.startedAt !== 'number' ||
-		row.status !== 'open'
-	) {
-		throw new Error('Invalid Remote response');
-	}
-	return {
-		id: row.id,
-		targetId: row.targetId,
-		configurationFingerprint: row.configurationFingerprint,
-		startedAt: row.startedAt,
-		status: 'open',
-	};
-}
 
 function bytesFromBase64(data: string): Uint8Array {
 	if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(data)) {
@@ -77,45 +54,6 @@ async function request(method: string, path: string, body?: unknown, signal?: Ab
 	return content;
 }
 
-function decodeEvent(input: unknown): RemoteServerEvent {
-	if (!input || typeof input !== 'object' || Array.isArray(input)) {
-		throw new Error('Invalid Remote event');
-	}
-	const row = input as Record<string, unknown>;
-	switch (row.type) {
-		case 'ready':
-			if (typeof row.sessionId === 'string') {
-				return { type: 'ready', sessionId: row.sessionId };
-			}
-			break;
-		case 'data':
-			if (typeof row.data === 'string' && (row.stream === 'stdout' || row.stream === 'stderr')) {
-				return { type: 'data', data: row.data, stream: row.stream };
-			}
-			break;
-		case 'drain':
-			return { type: 'drain' };
-		case 'blocked':
-			return { type: 'blocked' };
-		case 'closed':
-			return { type: 'closed' };
-		case 'error':
-			if (
-				typeof row.code === 'string' &&
-				['invalid_input', 'unauthenticated', 'not_found', 'transport_overflow', 'remote_unavailable'].includes(
-					row.code,
-				)
-			) {
-				return {
-					type: 'error',
-					code: row.code as
-						'invalid_input' | 'unauthenticated' | 'not_found' | 'transport_overflow' | 'remote_unavailable',
-				};
-			}
-	}
-	throw new Error('Invalid Remote event');
-}
-
 /** Owns a single ephemeral websocket; all close paths share one cleanup promise. */
 export async function openRemoteTerminal(
 	input: RemoteOpenShell,
@@ -125,7 +63,7 @@ export async function openRemoteTerminal(
 	if (signal?.aborted) {
 		throw new Error('remote_unavailable');
 	}
-	const session = parseView(await request('POST', '/sessions', input, signal));
+	const session = readRemoteShellView(await request('POST', '/sessions', input, signal));
 	const wsUrl = new URL(ROOT + '/stream?sessionId=' + encodeURIComponent(session.id), window.location.href);
 	wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:';
 	let socket: WebSocket;
@@ -257,7 +195,7 @@ export async function openRemoteTerminal(
 					if (typeof event.data !== 'string') {
 						throw new Error('invalid_input');
 					}
-					const message = decodeEvent(JSON.parse(event.data) as unknown);
+					const message = readRemoteServerEvent(JSON.parse(event.data) as unknown);
 					if (message.type === 'ready') {
 						if (connected || message.sessionId !== session.id) {
 							throw new Error('invalid_input');

@@ -9,8 +9,8 @@ import { readRequestCookie, HttpInputFailure } from '../../../../platform/http/h
 import type { AccessPublicApi } from '../../../access/public.js';
 import type { RemoteSessions, SessionView } from '../../public.js';
 import { RemotePermissionError, RemoteSessionOwner } from '../../sessions/service/session-owner.js';
-import type { RemoteShellView } from '@nexus-terminal/shared/remote/model';
-import type { RemoteServerEvent, RemoteClientEvent } from '@nexus-terminal/shared/remote/events';
+import { readRemoteOpenShell, InvalidRemotePayload, type RemoteShellView } from '@nexus-terminal/shared/remote/model';
+import { readRemoteClientEvent, type RemoteServerEvent } from '@nexus-terminal/shared/remote/events';
 
 const ROOT = '/api/v1/remote';
 const SESSION_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
@@ -62,7 +62,7 @@ function handleError(ctx: HttpRouteContext, error: unknown): void {
 	if (error instanceof HttpInputFailure) {
 		throw error;
 	}
-	if (error instanceof RemoteInputError) {
+	if (error instanceof RemoteInputError || error instanceof InvalidRemotePayload) {
 		ctx.send(400, { code: 'invalid_input' });
 		return;
 	}
@@ -115,15 +115,7 @@ export function createRemoteHttpRoutes(owner: RemoteSessionOwner, access: Access
 		route('POST', '/sessions', async (ctx) => {
 			const token = ctx.cookie('nexus_session');
 			await identity(access, token);
-			const v = record(
-				await ctx.json(),
-				['targetId', 'columns', 'rows', 'term'],
-				['targetId', 'columns', 'rows'],
-			);
-			const term = v.term === undefined ? undefined : v.term;
-			if (term !== undefined && (typeof term !== 'string' || term.length > 48 || !/^[-\w.]+$/u.test(term))) {
-				throw new RemoteInputError();
-			}
+			const v = readRemoteOpenShell(await ctx.json());
 			const controller = new AbortController();
 
 			const aborted = () => controller.abort(new Error('HTTP client disconnected'));
@@ -139,10 +131,10 @@ export function createRemoteHttpRoutes(owner: RemoteSessionOwner, access: Access
 			ctx.response.once('close', disconnected);
 			try {
 				const opened = await owner.open(token, {
-					targetId: positive(v.targetId, Number.MAX_SAFE_INTEGER),
-					columns: positive(v.columns, 500),
-					rows: positive(v.rows, 300),
-					term,
+					targetId: v.targetId,
+					columns: v.columns,
+					rows: v.rows,
+					term: v.term,
 					timeoutMs: 20000,
 					signal: controller.signal,
 				});
@@ -393,40 +385,18 @@ function connectStream(
 			terminate('unauthenticated');
 			return;
 		}
-		let value: RemoteClientEvent;
+		let value;
 		try {
 			if (Buffer.byteLength(message) > 64 * 1024) {
 				throw new RemoteInputError();
 			}
-			const incoming: unknown = JSON.parse(message);
-			const object = record(incoming, ['type', 'data', 'columns', 'rows', 'bytes'], ['type']);
-			if (object.type === 'input') {
-				record(object, ['type', 'data'], ['type', 'data']);
-				if (
-					typeof object.data !== 'string' ||
-					object.data.length > 48 * 1024 ||
-					!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(object.data)
-				) {
-					throw new RemoteInputError();
-				}
-				value = { type: 'input', data: object.data };
-			} else if (object.type === 'resize') {
-				record(object, ['type', 'columns', 'rows'], ['type', 'columns', 'rows']);
-				value = { type: 'resize', columns: positive(object.columns, 500), rows: positive(object.rows, 300) };
-			} else if (object.type === 'consumed') {
-				record(object, ['type', 'bytes'], ['type', 'bytes']);
-				value = { type: 'consumed', bytes: positive(object.bytes, OUTPUT_WINDOW) };
-			} else if (object.type === 'close') {
-				record(object, ['type'], ['type']);
-				value = { type: 'close' };
-			} else {
-				throw new RemoteInputError();
-			}
+			value = readRemoteClientEvent(JSON.parse(message) as unknown);
 		} catch {
 			wireEvent(channel, { type: 'error', code: 'invalid_input' });
 			channel.close();
 			return;
 		}
+
 		try {
 			if (value.type !== 'consumed' && !(await owner.allowed(token, id))) {
 				terminate('unauthenticated');
