@@ -235,7 +235,7 @@ Workspace WebSocket 由 runtime protocol/session owner 处理：
 
 `features/targets-next` 是独立于正式连接管理和运行期的开发功能。路由只在 `import.meta.env.DEV` 出现，地址为 `/__targets-next`；需配置 `NEXUS_VITE_BACKEND_NEXT_ORIGIN` 才在 Vite 建立 `/__next` 单独代理，绝不覆盖旧 `/api` 和旧 WebSocket。新 `backend-next` 的外部 `NEXUS_NEXT_PUBLIC_ORIGIN` 必须是访问该 Vite 页面使用的 Origin。页面的 Access 登录、管理 API、最小 Remote PTY 与 cookie 都走同一 `/__next`，不得使用旧 auth Store、连接 Store 或 Workspace 能力。会话数据由当前页面内独立状态持有，关闭/刷新失效；新客户端对 Connection/Proxy/SSH Key/Tag/Import 的 wire 结果执行明确字段解码，类型来源于 Shared 精确子路径。
 
-开发页的 Access 请求由 `features/targets-next/api/access-next-api.ts` 独立拥有，`needsSetup/setup/login/status/logout` 不再在 View 内直接 fetch 或把任意 HTTP 200 当成已登录。该客户端与 `backend-next` 认证 HTTP 同时消费 `@nexus-terminal/shared/access/api` 的严格输入/公开响应契约；收到 401 status 明确归为未认证，JSON 解析失败、非预期响应和网络异常不能伪装成成功。Shared 只包含必要的凭据写入命令和公开用户字段，不包含 Session token、密码摘要、内部鉴权上下文。密码变更端点已在独立客户端准备真实 API 能力，但当前开发页未提供改密 UI，不能因此宣称其拥有前端界面。
+开发页的 Access 请求由 `features/targets-next/api/access-next-api.ts` 独立拥有，`needsSetup/setup/login/status/logout` 不再在 View 内直接 fetch 或把任意 HTTP 200 当成已登录。该客户端与 `backend-next` 认证 HTTP 同时消费 `@nexus-terminal/shared/access/{model,http}` 的严格输入/公开响应契约；收到 401 status 明确归为未认证，JSON 解析失败、非预期响应和网络异常不能伪装成成功。Shared 只包含必要的凭据写入命令和公开用户字段，不包含 Session token、密码摘要、内部鉴权上下文。密码变更端点已在独立客户端准备真实 API 能力，但当前开发页未提供改密 UI，不能因此宣称其拥有前端界面。
 
 `targets-next/api/targets-next-api.ts` 仍是 Targets 管理 wire 响应解析的唯一前端 owner：Connection、Proxy、Tag、SSH Key、Host Key View 和 Mutation/Import 状态联合执行严格字段检查，拒绝额外字段或未知结果；非 JSON、网络异常、未知错误码统一映射为安全的 `request_failed`，不直接展示解析异常。没有为尚无第二个运行时消费者的解析器增加 Shared 空文件，正式旧前端继续保持原 Protocol 客户端。
 
@@ -245,7 +245,7 @@ Workspace WebSocket 由 runtime protocol/session owner 处理：
 
 `runtimes/remote-next/transport` 是新实例 WS 连接与消息状态 owner，使用 `@nexus-terminal/shared/remote/model,events` 的窄契约及同一个 `/__next` 代理；一次显式 PTY open 后才升级独立 `/remote/stream`，不会复用旧 Workspace WebSocket 或 Store。Transport 对发出的字节长度/浏览器缓冲及返回事件做有界校验，收到远端 data 后等待 xterm.write 完成才发送 `consumed` 确认，不自动重连、不重放终端输入。正常 SSH EOF 由服务端排空尾字节、等到客户端确认后发布 `closed`；异常 SSH 断线或底层清理失败返回安全 `remote_unavailable`，不能呈现为正常终止。
 
-Remote HTTP Session View 和 WS 事件现在由 Shared `remote/model,events` 严格解码；非预期字段、非法枚举、越界整数和不合规的 base64 不会被当作有效终端事件。渲染完成后的 `consumed` 确认仍归 Transport，网络授权与 outstanding 窗口仍在 Backend。
+Remote HTTP Session View 和 WS 事件现在由 Shared `remote/sessions/{model,http,events}` 严格解码；非预期字段、非法枚举、越界整数和不合规的 base64 不会被当作有效终端事件。渲染完成后的 `consumed` 确认仍归 Transport，网络授权与 outstanding 窗口仍在 Backend。
 
 Transport 为显式关闭共享单一 Promise，先断开 WS，再发送同一 Access 会话的 DELETE；Backend 为已由 WS 抢先回收的会话短期保存原清理结果，因此重复 DELETE 不应被误判为未知会话。组件用 generation 隔离所有来自旧终端的 `failure`、迟到 close、open 失败和命令错误回调；关闭、连接失败及卸载释放 xterm、ResizeObserver 和待完成的终端写入回调，旧连接的异步结果不能覆盖新连接提示。清理失败若属于当前仍有效的连接可展示，但不得因旧连接回调污染新一轮。**上述是已施工并通过静态检查的设计边界；真实 Chromium 的重连、断线、卸载及多语言提示仍未验收通过**，详情见[专项验收记录](../testing/E2E.md)。
 

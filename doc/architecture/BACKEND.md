@@ -48,7 +48,7 @@ Access 账号与会话模型属于 `modules/access`，加密的 password verifie
 
 `modules/targets/interfaces/http` 是唯一 Targets 管理 HTTP 入口，使用 Access 公开的身份恢复契约；当前数据库仅由首次管理员初始化，因此明确只允许管理员 ID 1 的会话请求，其余身份拒绝。Platform HTTP 只持有通用路由和参数位置（精确静态匹配优先，其后参数段），不包含 Targets 业务对象和授权语义。Targets 的 decoder 从 `unknown` 严格验证字段、类型、长度、输入数组和关系，再创建独立 Service 输入；更新要求 `version` 及补丁，省略保留、null 仅在可空字段上有效，导入每批不超过 50 个并按条提交。模块出口错误仅映射稳定码与 HTTP 状态。
 
-管理视图的 Connection/Proxy/Tag/SSH Key、变更结果、Credential 状态和导入结果均经 `interfaces/http/target-http-view.ts` 逐字段投影到 Shared wire，不从内部对象展开，也不公开 trusted SSH Resolver。Shared 新 contract 按 `connections/proxies/ssh-keys/tags` 的 `model/api`、`targets/api` 精确子路径导出；旧 Protocol 只继续用于不同形态的旧产品 wire，不被新包引用。新 `/__targets-next` Frontend 开发入口使用同一个新实例和 Access Cookie，旧 Pinia/Workspace 不混用该数据；未提供真实连接测试或完整 Remote 产品运行期；独立 Remote 最小 SSH PTY 已在开发入口开放。
+管理视图的 Connection/Proxy/Tag/SSH Key、变更结果、Credential 状态和导入结果均经 `interfaces/http/target-http-view.ts` 逐字段投影到 Shared wire，不从内部对象展开，也不公开 trusted SSH Resolver。Shared 现已按 `targets/{connections,proxies,ssh-keys,tags,host-keys}/{model,http}`、`targets/{values,http}` 精确子路径导出；确需较复杂的严格 JSON 解码才使用同子域 `http-codec.ts`，不保留旧平铺路径；旧 Protocol 只继续用于不同形态的旧产品 wire，不被新包引用。新 `/__targets-next` Frontend 开发入口使用同一个新实例和 Access Cookie，旧 Pinia/Workspace 不混用该数据；未提供真实连接测试或完整 Remote 产品运行期；独立 Remote 最小 SSH PTY 已在开发入口开放。
 
 ## backend-next Remote HTTP/WS 与 SSH Host Key 信任
 
@@ -60,17 +60,25 @@ Targets 的 `host-keys` 子功能持有已确认 SSH 服务端公钥指纹及 v2
 
 新后端 HTTP 路由注册同时拒绝完全重复和仅参数名称不同的歧义模板；固定路径优先于参数路径。技术层在路由完成后核实响应已结束，未响应时返回安全 500，已开始写响应时不尝试二次写 JSON/HTTP 状态而关闭该传输。业务返回仍经对应模块编码，非法 JSON/媒体类型/体积限制分别保持 400/415/413，Platform 不得把这些输入失败转换为业务 500。WS 入站有序队列/上限、来源与 upgrade 鉴权、退出后 drain 和资源责任继续留在 Platform，不能把 Remote 关闭状态下沉到通用服务器。
 
-HTTP 固定路由仍优先于参数路由，但同一方法下交叉重叠且无法定义单一明确优先级的模板在启动时拒绝。经可信代理的 `X-Forwarded-Host/Proto` 各只接受单一值，不从多跳逗号列表推断外部来源；Cookie 携带的非安全方法必须有精确 Origin 或明确的 `Sec-Fetch-Site: same-origin`，缺失两种证明时拒绝。WS 升级先记录待鉴权 Socket，停机同步销毁待升级及已升级 Socket，并等待业务和 upgrade 任务耗尽；关闭回调失败汇入停机结果，不能被无提示吞掉。上述属于代码约束，仍需独立验证真实代理与关机交错。
+HTTP 固定路由仍优先于参数路由，但同一方法下交叉重叠且无法定义单一明确优先级的模板在启动时拒绝。经可信代理的 `X-Forwarded-Host/Proto` 各只接受单一值，不从多跳逗号列表推断外部来源；Cookie 非安全方法必须有精确同源的 Origin 或明确的 `Sec-Fetch-Site: same-origin`，缺少两类来源证据时同样拒绝，CLI/服务端调用也应显式提供可信 Origin。WS 升级先记录待鉴权 Socket，停机同步销毁待升级及已升级 Socket，并等待业务和 upgrade 任务耗尽；关闭回调失败汇入停机结果，不能被无提示吞掉。上述属于代码约束，仍需独立验证真实代理与关机交错。
 
 普通 JSON 请求的技术 body 上限仍为 16 KiB；仅 Agent `POST /apps/:appId/threads/:threadId/runs` 声明独立的 128 KiB body 容量，以允许 16 KiB prompt 的 JSON 转义开销。技术层对任一路由配置强制 128 KiB 硬上限，仍校验 Content-Length 与实际累计接收字节并返回 413；业务层继续限制 prompt 最大 16 KiB、必填字段和幂等键，不因更大的传输预算扩大允许的模型输入。这个限制属于技术配置，不以 Agent 名称在 Platform 写分支。
 
-Access 的六类认证端点使用 `@nexus-terminal/shared/access/api` 解释 setup/login/change-password 的严格 JSON 输入（含 UTF-8 大小与可选 rememberMe）、以及公开身份 `AccessUserView`。Access HTTP 将共享解码失败转换为模块 `invalid_input`；通用非法 JSON、媒体类型和超额 body 仍原样进入 Platform 4xx，不经过 Access 业务异常映射。公开成功响应的结构由独立前端 Access API 逐字段解码，Session Cookie、scrypt 与内部身份上下文仍留在 Access Backend。
+Access 的六类认证端点使用 `@nexus-terminal/shared/access/http` 及 `access/model` 解释 setup/login/change-password 的严格 JSON 输入（含 UTF-8 大小与可选 rememberMe）、以及公开身份 `AccessUserView`。Access HTTP 将共享解码失败转换为模块 `invalid_input`；通用非法 JSON、媒体类型和超额 body 仍原样进入 Platform 4xx，不经过 Access 业务异常映射。公开成功响应的结构由独立前端 Access API 逐字段解码，Session Cookie、scrypt 与内部身份上下文仍留在 Access Backend。
 
-Remote HTTP 的 `POST /sessions` 输入及公开 `RemoteShellView` 由 Shared `remote/model` 两端逐字段解码；PTY WS 入站命令、出站事件由 Shared `remote/events` 纯函数逐变体校验字段、数字界限、base64 与已知错误码。实际 `consumed` 未确认字节数、SessionOwner 身份、断线语义和背压仍由 Remote 负责。静态通过不替代真实断线与浏览器验收。
+Remote HTTP 的 `POST /sessions` 输入及公开 `RemoteShellView` 由 Shared `remote/sessions/{model,http}` 两端逐字段解码；PTY WS 入站命令、出站事件由 Shared `remote/sessions/events` 纯函数逐变体校验字段、数字界限、base64 与已知错误码。实际 `consumed` 未确认字节数、SessionOwner 身份、断线语义和背压仍由 Remote 负责。静态通过不替代真实断线与浏览器验收。
 
 Targets 管理 HTTP 变更只接受 `updated/not_found/version_conflict` 的已知状态并逐分支响应 200/404/409，不再用“其它即成功”的兜底；Targets 和 Agent 的 required JSON keys 均使用自身属性检验，不能以继承属性满足必填输入。权限、CAS、Host Key 信任、导入按条事务和公开 DTO allowlist 仍由原 owner 负责。
 
 A–D 审核指出的六处基础缺口已做源码修正：Platform 每个 WS 输入队列限定 64 条/256 KiB（包含正在处理的消息），超过上限立即终止；正常 PTY EOF 不再直接 terminate，Remote 允许仍有效的原持有人完成队列与 `consumed` 收尾，EOF 等待最多 10 秒，Platform `finish()` 有界等待正常 close 握手（最多 5 秒）；主动断线/撤销/停机仍强制释放。SessionOwner 保存按 ID 共享的 release Promise，底层 SessionService 保留失败的关闭结果，模块 shutdown 聚合错误。Targets/Agent/Remote 的 register 返回各自的 HTTP/WS 安装能力，Remote 在模块内拥有 owner/Service 的 quiesce 与 close，Bootstrap 不再深层导入业务 HTTP 工厂。前端 Transport 的 close 共用 Promise、组件以 generation/AbortSignal 清理 xterm 与 ResizeObserver，错误码转成现有三语言文案。2026-10-10 已通过真实 WebSocket 小消息积压、有序正常关闭、按 ID 共享清理失败的专项集成验证；真实 `ssh2.Server` 实机路径还复现并修正了两个 EOF 并发失效窗口：排空中不得再对已移出活动集合的会话调用流控，且客户端 `consumed` 必须允许使用不依赖 live PTY 的原 owner 授权（新增输入仍需活动会话）。同一脚本在修复后证明最终 SSH 字节完整、ACK 后发送 `closed` 并以 WS close 1000 结束。前端 Transport 异常断开无需等待已经不可推进的渲染，组件卸载会解除 pending render，以免阻塞 DELETE；真实浏览器验收仍**未通过**，本环境 Chromium 因 `/proc` 沙箱权限无法启动。剩余高压吞吐、ACL 撤销、超时、实浏览器重试/自然关闭均按[验收文档](../testing/E2E.md)保留，不能把专项 PASS 当作全部 Remote 产品验收。
+
+### Shared 目标目录与完整 HTTP 契约（2026-10-10 源码收口）
+
+Shared 现由 Access 的 `access/{model,http}`、Targets 的 `targets/values`、`targets/http`、`targets/{connections,proxies,ssh-keys,tags,host-keys}/{model,http}`，以及 `remote/sessions/{model,http,events}` 构成。连接/代理基础枚举在所属 Targets 子域的 `values.ts` 中只有一份；完整写入请求、CAS 外壳、删除/确认响应、业务状态联合、逐条导入结果和安全错误均在 Shared 定义。各子域独立 `http-codec.ts` 在确实由双端使用时进行不依赖框架的严格 `unknown` 解码。旧 `connections/*`、`proxies/*`、`ssh-keys/*`、`tags/*`、`access/api`、`remote/{model,api,events}`、`targets/api` 出口已删除，没有兼容重导出。
+
+Targets HTTP 消费同一份 Connection/Proxy/Tag/SSH Key/Host Key 创建、更新、删除、导入与凭据命令解析；前端管理 API 消费同一份响应 View、Mutation、导入/删除及错误解码，同时在发送命令前校验 Shared 请求外壳。Agent 仍只有后端状态消费者，不因目录重组产生 Shared Agent 假契约。业务公开出口继续由模块 `public.ts` 和独立的 `target-http-view.ts` allowlist 逐字段投影；SQLite 行、SSH 明文、私钥仅可作为授权写入输入，不出现在管理响应或事件里。
+
+此处完成的是**协议源码和静态构建边界**。Origin/可信代理安全分支、迁移后完整真实 HTTP 断言、WS 异常关闭、浏览器资源回收和登录竞争的行为验收另见[验收文档](../testing/E2E.md)；没有把静态检查写作真实验收通过。
 
 ### Remote 关闭原因与同会话释放确认（2026-10-10 收口）
 
