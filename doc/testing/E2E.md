@@ -68,9 +68,9 @@ The current Docker smoke validates the unified Frontend/Backend/Guacd production
 
 以下脚本位于根 `tests/backend/`，只对独立的 `backend-next` 临时数据库和环回服务运行，不依赖正式生产 Backend 或部署入口。先执行：
 
-**清理时点：必须等整个 Backend 重构完成，且准备切换到旧版 E2E 验证之前，才执行专项测试清理。当前阶段保留并继续使用所有专项脚本；不在日常提交时提前删除。** 当前工作分支已经有相关测试提交，最终切换前应单独清理：
+**清理时点：整个 Backend 重构完成后、切换到旧版 E2E 验证前。** 在这两个条件同时满足以前，所有临时专项测试继续保留、运行和更新；不因为阶段性通过、日常提交或 E1 开始就提前删除。当前工作分支已经有相关测试提交，未来切换前再单独清理：
 
-- 本轮新增的 `tests/backend/remote/backend-next-transport.integration.mjs`、`backend-next-ssh.integration.mjs`、`backend-next-frontend.integration.mjs` 从最终变更中排除。
+- 到约定时点再移除本轮新增的 `tests/backend/remote/backend-next-transport.integration.mjs`、`backend-next-ssh.integration.mjs`、`backend-next-frontend.integration.mjs`，并同步整理复现命令；这些文件**目前仍属于有效的临时验收资产**。
 - `tests/backend/storage/backend-next.integration.mjs`、`backend-next-phase2.integration.mjs` 属于**原有仓库测试文件**，不得整文件删除；**必须保留适配现行安全错误码（如 `reference_in_use`、`unavailable`）和全库 v1–v3 Schema 的必要断言**。仅清除真正不再被旧 E2E 切换流程使用的临时验收辅助内容，不允许将上述适配回滚成已失效的旧断言。`backend-next-public-boundary.integration.mjs` 同样保留。
 - **保留本文和实施方案中的验收结论、失败复现、修复依据与未通过项**。下面的命令在 Backend 重构结束前保持可执行；未来清理新增专项文件后，需同步更新此处入口。历史测试提交届时用独立清理提交或最终变更整理处理，不能仅在文档标注后声称已移除。
 
@@ -85,13 +85,15 @@ node tests/backend/remote/backend-next-ssh.integration.mjs
 
 2026-10-10 上述五个脚本全部通过：存储版本与原子回滚、Targets 公开视图，真实 WebSocket 队列洪泛/按序 Close，受控 PTY EOF/ACK，重复 release 失败聚合，以及真实 `ssh2.Server` 的 SSH Host Key/凭据/PTY 尾字节经 WS 确认后正常关闭。真实 SSH 测试曾复现会话从 live map 移除期间两种尾帧竞态，已修正并使用相同场景复验。
 
+**随后追加的关闭语义专项复验（2026-10-10，同一批临时脚本）**：`backend-next-ssh.integration.mjs` 又用真实 SSH2 连接中断验证客户端收到 `remote_unavailable` 而非成功 `closed`；`backend-next-transport.integration.mjs` 通过真实 WebSocket 验证 `disconnected` 与 `cleanup_failed` 不走正常 EOF，以及 SessionOwner 在 WS 已释放后对相同 Access 会话的重复 DELETE 返回原成功/失败、对其他 token 和未知 ID 拒绝。上述专项均 PASS，但**不等于**真实 HTTP 断线竞争、访问权限中途撤销或长时间压力场景已通过。
+
 额外浏览器脚本运行命令：
 
 ```bash
 node tests/backend/remote/backend-next-frontend.integration.mjs
 ```
 
-该脚本将使用隔离的 backend-next、Vite 开发入口与 Playwright Chromium 验证 SSH 连接失败后重复打开、xterm/ResizeObserver 回收及错误文案。但 **2026-10-10 当前执行环境 Chromium 无法访问 `/proc` 相关内核路径且 GPU 进程被沙箱阻断，在浏览器启动阶段失败，前端断言未执行，不算 PASS**。须在正式具备 Chromium 运行权限的 E2E runner 再运行，不能通过忽略浏览器错误或弱化断言替代验收。
+该脚本将使用隔离的 backend-next、Vite 开发入口与 Playwright Chromium 验证 SSH 连接失败后重复打开、xterm/ResizeObserver 回收及错误文案；还需覆盖旧 generation 的异步错误不覆盖新连接，以及主动关闭后 DELETE 的成功/失败展示。**2026-10-10 当前环境 Chromium 无法访问 `/proc` 相关内核路径且 GPU 进程被沙箱阻断，在浏览器启动阶段失败，页面断言未执行，不算 PASS**。待有合适权限的 runner 执行，不能通过忽略错误、修改断言或仅凭 TypeScript 构建代替验收。
 
 这些测试覆盖的是明确列出的专项故障窗口，不证明多级 Proxy/Jump、大输出、权限撤销、长时间断线或全部 E2E 产品功能；余项记录在[后端重构下一阶段实施方案](../后端重构下一阶段实施方案.md)。源代码结构或字符串出现与否不是本组测试的判断依据。
 

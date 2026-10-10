@@ -239,7 +239,11 @@ Workspace WebSocket 由 runtime protocol/session owner 处理：
 
 ## 新后端独立 SSH 终端
 
-`runtimes/remote-next/transport` 是新实例 WS 连接与消息状态 owner，使用 `@nexus-terminal/shared/remote/model,events` 的窄契约及同一个 `/__next` 代理；一次显式 PTY open 后才升级独立 `/remote/stream`，不会复用旧 Workspace WebSocket 或 Store。Transport 对发出的字节长度/浏览器缓冲及返回事件做有界校验，收到远端 data 后等待 xterm.write 完成才发送 `consumed` 确认，不自动重连、不重放终端输入。组件在卸载时释放句柄，服务端也在 WS 断开时关闭本次 PTY。开发管理页通过单独的 Host Key 表格让操作者手动录入**独立已核实**的 SHA256 公钥指纹，并明确区分配置指纹和公钥信任。前端不从未知 SSH Server 的首次握手直接自动信任。旧 Workspace 的挂起/恢复、文件和桌面连接链路均不迁移到此最小入口。
+`runtimes/remote-next/transport` 是新实例 WS 连接与消息状态 owner，使用 `@nexus-terminal/shared/remote/model,events` 的窄契约及同一个 `/__next` 代理；一次显式 PTY open 后才升级独立 `/remote/stream`，不会复用旧 Workspace WebSocket 或 Store。Transport 对发出的字节长度/浏览器缓冲及返回事件做有界校验，收到远端 data 后等待 xterm.write 完成才发送 `consumed` 确认，不自动重连、不重放终端输入。正常 SSH EOF 由服务端排空尾字节、等到客户端确认后发布 `closed`；异常 SSH 断线或底层清理失败返回安全 `remote_unavailable`，不能呈现为正常终止。
+
+Transport 为显式关闭共享单一 Promise，先断开 WS，再发送同一 Access 会话的 DELETE；Backend 为已由 WS 抢先回收的会话短期保存原清理结果，因此重复 DELETE 不应被误判为未知会话。组件用 generation 隔离所有来自旧终端的 `failure`、迟到 close、open 失败和命令错误回调；关闭、连接失败及卸载释放 xterm、ResizeObserver 和待完成的终端写入回调，旧连接的异步结果不能覆盖新连接提示。清理失败若属于当前仍有效的连接可展示，但不得因旧连接回调污染新一轮。**上述是已施工并通过静态检查的设计边界；真实 Chromium 的重连、断线、卸载及多语言提示仍未验收通过**，详情见[专项验收记录](../testing/E2E.md)。
+
+开发管理页通过单独的 Host Key 表格让操作者手动录入**独立已核实**的 SHA256 公钥指纹，并明确区分配置指纹和公钥信任。前端不从未知 SSH Server 的首次握手直接自动信任。旧 Workspace 的挂起/恢复、文件和桌面连接链路均不迁移到此最小入口。
 
 ## Agent frontend
 
