@@ -19,7 +19,7 @@ function strictBody(value: unknown, keys: readonly string[]): Record<string, unk
 		throw new AgentOperationError('invalid_input');
 	}
 	const object = value as Record<string, unknown>;
-	if (Object.keys(object).some((key) => !keys.includes(key)) || keys.some((key) => !(key in object))) {
+	if (Object.keys(object).some((key) => !keys.includes(key)) || keys.some((key) => !Object.hasOwn(object, key))) {
 		throw new AgentOperationError('invalid_input');
 	}
 	return object;
