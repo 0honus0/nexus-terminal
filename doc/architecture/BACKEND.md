@@ -196,6 +196,8 @@ Agent 的应用纯状态规则可由 Adapter 在事务内通过显式回调/事�
 
 Runtime 持有 Worker、串行事务、事务租约与关闭。Worker 保留 SQLite 数值扩展 errcode；Runtime 分类技术失败，模块映射安全业务码。回调失败正常回滚并保留原原因；回滚失败、commit_unknown 使实例不可用，不能重试未知提交。未等待操作不能逃逸事务；重复关闭共享同一结果。Schema/备份/恢复属于明确管理能力，无应用对象时不增加空 Model。
 
+当前 Worker 只有操作结果 payload 解码，message 请求/响应外壳仍使用参数类型注解；`run` 数值也未完整验证安全整数。这是现有技术边界缺口，不满足本文 unknown 解码要求；完整外壳验证、损坏消息下 pending 收敛和实例不可用处理列入[下一阶段 N0.1](../后端重构下一阶段实施方案.md)，不能把现状当作允许例外。
+
 ## SSH、Remote 与 Agent 的共用边界
 
 Targets 负责配置、引用、可信目标解析、配置指纹和人工确认的 Host Key。Remote/Agent 将可信应用目标转换为 Platform MachineEndpoint；Platform 只看到 host/port/authentication/route/期限/信任回调，不看到 connectionId、Run、审批、权限或业务配置指纹。
@@ -203,6 +205,8 @@ Targets 负责配置、引用、可信目标解析、配置指纹和人工确认
 Host Key 是实际 SSH 公钥 SHA256，配置指纹是业务配置快照 hash，不能混用。当前 Remote 每跳及终点要求显式 pin，无 TOFU 或接受全部回退；只有信任回调实际拒绝才能产生 host_key_untrusted，普通密码/网络失败不冒充信任失败。全路由期限与取消共享，任何半建连失败及晚到成功都释放资源。
 
 SSH Adapter 持有 Socket/Client/channel/SFTP 租约，业务模块持有资源使用和释放责任。原始 non-PTY 通道和收集式执行具有不同结果/取消语义，不保留行为完全相同的别名。退出零、非零、未派发失败、派发后 unknown、截断与关闭原因区别明确；取消、超时或 socket 关闭不能证明远端没有副作用。SFTP 请求/流按实际 dispatch 区分 not_started/unknown，关闭等待必要清理，已关闭 lease 的晚回调不能发布可用资源。
+
+当前 SFTP list 使用全量 readdir，尚无读取过程中的条目/metadata 预算；read 的 start/end 与第三方 metadata 也未完整验证。文件应用接入前按[下一阶段 N2.1](../后端重构下一阶段实施方案.md)实现真正有界读取；应用层在全量返回后 slice 不能补足技术边界。强制 destroy 后的本地 lease 释放不证明远端操作成功或已停止。
 
 Remote Service 通过本模块应用资源契约管理会话，不使用 SSH2/Node Stream；Model 封装实际机器连接与 Shell。RemoteSessionOwner 持有 Access token 摘要绑定、单 Socket attach、授权复查及已释放清理结果；协议 owner 管输入/输出流控。当前字节 ACK 表示终端渲染完成，正常 EOF 先 drain 尾帧，异常断线/主动关闭分别收敛，不把断开自动解释为可恢复挂起。
 
@@ -280,6 +284,8 @@ Agent 后续执行复用 SSH/SQL/密码学技术实例，保留自有 grant、in
 ## 注册、内部类型与公开取值的实际归属
 
 Access 的 `register.ts` 明确定义 `AccessRegistrationOptions`，Bootstrap 仅引用此安装契约并传递应用实例的 sqlite 和登录失败策略选项；register 逐字段转换为内部应用策略输入。`authentication/model/login-failure-types.ts` 持有 LoginFailurePolicyInput 与 LoginFailureLimits，Service 和 Session Model 同向引用；不从策略 Service 导入类型，也不让内部代码反向引用 register。
+
+仍待收口的内部类型是 SessionModel.issue 的内联应用输入，以及 register 身份 mapper 重复的匿名结构。RemoteSessionOwner 当前使用本模块 public 请求/结果及安全包装；后续改为内部应用类型和窄用例依赖，在真正出口才映射安全错误。具体任务列入[下一阶段 N0.2](../后端重构下一阶段实施方案.md)，人工规则不因此放宽。
 
 Access 的内部业务失败由 `authentication/model/access-failure.ts` 持有，Service 引用该独立错误 owner。模块根 `access-errors.ts` 负责业务/技术失败到安全出口错误的映射，`public-errors.ts` 只明确导出安全类；Model 不反向依赖 Service，也不持有模块出口错误映射。
 
