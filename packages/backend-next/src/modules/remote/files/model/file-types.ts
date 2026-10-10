@@ -1,4 +1,3 @@
-import type { MachineConnection, MachineSftpLease } from '../../../../platform/ssh/ssh-port.js';
 import type { RemoteFileErrorCode } from '@nexus-terminal/shared/remote/files/values';
 
 export class RemoteFileFailure extends Error {
@@ -10,8 +9,11 @@ export class RemoteFileFailure extends Error {
 export interface FileResource {
 	readonly targetId: number;
 	readonly fingerprint: string;
-	readonly machine: MachineConnection;
-	readonly lease: MachineSftpLease;
+	readonly isOpen: boolean;
+	list(request: FileListRequest): Promise<FileEntry[]>;
+	stat(request: FileStatRequest): Promise<FileInfo>;
+	readText(request: FileTextRequest): Promise<TextRead>;
+	close(): Promise<void>;
 }
 
 export interface FileOperationRequest {

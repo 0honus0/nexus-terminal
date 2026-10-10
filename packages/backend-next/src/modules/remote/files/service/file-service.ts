@@ -171,7 +171,7 @@ export class RemoteFileService {
 						.then(
 							async (late) => {
 								try {
-									await this.model.close(late);
+									await late.close();
 								} catch (cleanup) {
 									this.cleanupFailures.record(cleanup);
 								}
@@ -194,6 +194,9 @@ export class RemoteFileService {
 			) {
 				throw new RemoteFileFailure('unauthenticated');
 			}
+			if (!resource.isOpen) {
+				throw new RemoteFileFailure('remote_unavailable');
+			}
 			const id = randomUUID();
 			const record: OwnedResource = {
 				id,
@@ -212,7 +215,7 @@ export class RemoteFileService {
 		} catch (error) {
 			if (resource) {
 				try {
-					await this.model.close(resource);
+					await resource.close();
 				} catch (cleanup) {
 					const failure = new RemoteResourceCleanupFailure([error, cleanup]);
 					this.cleanupFailures.record(failure);
@@ -242,6 +245,7 @@ export class RemoteFileService {
 			record.userId !== userId ||
 			record.tokenHash !== hash(token) ||
 			record.closePromise ||
+			!record.resource.isOpen ||
 			record.expiresAt <= Date.now() ||
 			!this.accepting
 		) {
@@ -299,6 +303,9 @@ export class RemoteFileService {
 				record.inFlight = null;
 				record.active = null;
 				record.busy = false;
+				if (controller.signal.aborted || !record.resource.isOpen) {
+					void this.closeOwned(record).catch(() => undefined);
+				}
 			}
 			clearTimeout(timer);
 			requestSignal?.removeEventListener('abort', abort);
@@ -334,6 +341,7 @@ export class RemoteFileService {
 		) {
 			throw new RemoteFileFailure('unauthenticated');
 		}
+		signal.throwIfAborted();
 		record.expiresAt = Date.now() + REMOTE_FILE_IDLE_MS;
 		return result;
 	}
@@ -350,7 +358,7 @@ export class RemoteFileService {
 			token,
 			id,
 			(resource, ms, abort) =>
-				this.model.list(resource, { path, timeoutMs: ms, signal: abort, maxEntries, maxMetadataBytes }),
+				resource.list({ path, timeoutMs: ms, signal: abort, maxEntries, maxMetadataBytes }),
 			signal,
 		);
 	}
@@ -359,8 +367,7 @@ export class RemoteFileService {
 		return this.run(
 			token,
 			id,
-			(resource, ms, abort) =>
-				this.model.stat(resource, { path, followLinks: follow, timeoutMs: ms, signal: abort }),
+			(resource, ms, abort) => resource.stat({ path, followLinks: follow, timeoutMs: ms, signal: abort }),
 			signal,
 		);
 	}
@@ -375,7 +382,7 @@ export class RemoteFileService {
 		return this.run(
 			token,
 			id,
-			(resource, ms, abort) => this.model.readText(resource, { path, maxBytes, timeoutMs: ms, signal: abort }),
+			(resource, ms, abort) => resource.readText({ path, maxBytes, timeoutMs: ms, signal: abort }),
 			signal,
 		);
 	}
@@ -434,7 +441,7 @@ export class RemoteFileService {
 			if (record.inFlight) {
 				await Promise.allSettled([record.inFlight]);
 			}
-			await this.model.close(record.resource);
+			await record.resource.close();
 		});
 		record.closePromise = completion;
 		this.closing.set(record.id, {
