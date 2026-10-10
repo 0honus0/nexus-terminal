@@ -38,6 +38,7 @@ function hash(token: string): string {
 
 export class RemoteFileService {
 	private readonly owners = new Map<string, OwnedResource>();
+	private readonly authorizing = new Set<AbortController>();
 	private readonly opening = new Set<AbortController>();
 	private readonly releasingRequests = new Set<AbortController>();
 	private readonly pending = new Set<Promise<unknown>>();
@@ -126,18 +127,18 @@ export class RemoteFileService {
 		}
 		const started = Date.now();
 		const timer = setTimeout(abort, REMOTE_FILE_OPERATION_MS);
-		if (this.owners.size + this.opening.size + this.closing.size >= REMOTE_FILE_MAX_RESOURCES) {
-			clearTimeout(timer);
-			signal?.removeEventListener('abort', abort);
-			throw new RemoteFileFailure('limit_exceeded');
-		}
-		this.opening.add(controller);
+		this.authorizing.add(controller);
 		let resource: FileResource | null = null;
 		try {
 			const userId = await this.untilAbort(this.identity(token), controller.signal);
+			this.authorizing.delete(controller);
 			if (!this.accepting || controller.signal.aborted) {
+				throw new RemoteFileFailure('remote_unavailable');
+			}
+			if (this.owners.size + this.opening.size + this.closing.size >= REMOTE_FILE_MAX_RESOURCES) {
 				throw new RemoteFileFailure('limit_exceeded');
 			}
+			this.opening.add(controller);
 			resource = await this.untilAbort(this.model.open(
 				targetId,
 				Math.max(1, REMOTE_FILE_OPERATION_MS - (Date.now() - started)),
@@ -172,6 +173,7 @@ export class RemoteFileService {
 			}
 			throw error;
 		} finally {
+			this.authorizing.delete(controller);
 			this.opening.delete(controller);
 			clearTimeout(timer);
 			signal?.removeEventListener('abort', abort);
@@ -369,6 +371,9 @@ export class RemoteFileService {
 
 	quiesce(): void {
 		this.accepting = false;
+		for (const controller of this.authorizing) {
+			controller.abort();
+		}
 		for (const controller of this.opening) {
 			controller.abort();
 		}
