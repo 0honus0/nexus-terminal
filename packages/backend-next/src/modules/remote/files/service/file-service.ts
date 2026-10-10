@@ -1,10 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.js';
 import { RecentResults } from '../../../../platform/lifecycle/recent-results.js';
-import { CLOSED_SESSION_TTL_MS, MAX_RECENTLY_RELEASED } from '../../sessions/session-limits.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import {
 	REMOTE_FILE_IDLE_MS,
+	REMOTE_FILE_CLOSE_REPLAY_MS,
 	REMOTE_FILE_MAX_RESOURCES,
 	REMOTE_FILE_OPERATION_MS,
 } from '@nexus-terminal/shared/remote/files/values';
@@ -23,6 +23,9 @@ interface OwnedResource {
 	closePromise: Promise<void> | null;
 }
 
+/** Private completed-close cache capacity, independent of PTY sessions. */
+const MAX_RECENTLY_CLOSED_FILES = 128;
+
 interface ReleasedFile {
 	userId: number;
 	tokenHash: string;
@@ -39,7 +42,10 @@ export class RemoteFileService {
 	private readonly releasingRequests = new Set<AbortController>();
 	private readonly pending = new Set<Promise<unknown>>();
 	private readonly closing = new Map<string, ReleasedFile>();
-	private readonly recentlyClosed = new RecentResults<string, ReleasedFile>(MAX_RECENTLY_RELEASED, CLOSED_SESSION_TTL_MS);
+	private readonly recentlyClosed = new RecentResults<string, ReleasedFile>(
+		MAX_RECENTLY_CLOSED_FILES,
+		REMOTE_FILE_CLOSE_REPLAY_MS,
+	);
 	private readonly cleanupFailures = new FailureSummary();
 	private accepting = true;
 	private closePromise: Promise<void> | null = null;

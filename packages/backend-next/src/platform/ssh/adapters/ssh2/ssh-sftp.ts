@@ -146,16 +146,29 @@ export class SshSftpLease implements MachineSftpLease {
 				this.pending.delete(failed);
 				if (error) {
 					reject(error);
+				} else if (value === undefined) {
+					reject(new MachineSftpFailure('invalid_metadata', 'unknown'));
 				} else {
-					resolve(value!);
+					resolve(value);
 				}
 			};
 
 			const failed = (error: Error) => finish(error);
 
-			const aborted = () => finish(new MachineSftpFailure('cancelled', 'unknown'));
+			const retire = (): void => {
+				// An already dispatched SFTP request may complete after local cancellation.
+				// shutdown owns the cached close Promise for later cleanup consumers.
+				void this.shutdown(new MachineSftpFailure('closed', 'unknown')).catch(() => undefined);
+			};
+			const aborted = () => {
+				finish(new MachineSftpFailure('cancelled', 'unknown'));
+				retire();
+			};
 
-			const timer = setTimeout(() => finish(new MachineSftpFailure('timeout', 'unknown')), limit);
+			const timer = setTimeout(() => {
+				finish(new MachineSftpFailure('timeout', 'unknown'));
+				retire();
+			}, limit);
 			this.pending.add(failed);
 			options?.signal?.addEventListener('abort', aborted, { once: true });
 			if (options?.signal?.aborted) {
@@ -281,12 +294,16 @@ export class SshSftpLease implements MachineSftpLease {
 		this.streams.add(stream);
 		const limit = operationTimeout(options, 30000);
 
-		const aborted = () => stream.destroy(new MachineSftpFailure('cancelled', 'unknown'));
+		const abortStream = (reason: 'cancelled' | 'timeout'): void => {
+			stream.destroy(new MachineSftpFailure(reason, 'unknown'));
+			void this.shutdown(new MachineSftpFailure('closed', 'unknown')).catch(() => undefined);
+		};
+		const aborted = () => abortStream('cancelled');
 
 		const timer =
 			limit === undefined
 				? undefined
-				: setTimeout(() => stream.destroy(new MachineSftpFailure('timeout', 'unknown')), limit);
+				: setTimeout(() => abortStream('timeout'), limit);
 
 		const cleanup = () => {
 			clearTimeout(timer);
@@ -341,7 +358,7 @@ export class SshSftpLease implements MachineSftpLease {
 		invoke: (finish: (error?: Error | null) => void) => void,
 		options?: MachineOperationOptions,
 	): Promise<void> {
-		return this.call<void>((finish) => invoke((error) => finish(error, undefined)), options);
+		return this.call<true>((finish) => invoke((error) => finish(error, true)), options).then(() => undefined);
 	}
 
 	rename(from: string, to: string, options?: MachineOperationOptions): Promise<void> {

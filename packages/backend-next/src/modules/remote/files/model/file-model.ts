@@ -57,11 +57,19 @@ export class RemoteFileModel {
 	}
 
 	private info(value: MachineFileInfo): FileInfo {
+		let kind: FileInfo['kind'] = 'other';
+		if (value.isSymbolicLink) {
+			kind = 'symlink';
+		} else if (value.isDirectory) {
+			kind = 'directory';
+		} else if (value.isFile) {
+			kind = 'file';
+		}
 		return {
 			size: value.size,
 			mode: value.mode,
 			modifiedAt: value.modifiedAt * 1000,
-			kind: value.isSymbolicLink ? 'symlink' : value.isDirectory ? 'directory' : value.isFile ? 'file' : 'other',
+			kind,
 		};
 	}
 
@@ -132,7 +140,8 @@ export class RemoteFileModel {
 		const source = Buffer.concat(chunks);
 		let text: string;
 		try {
-			text = new TextDecoder('utf-8', { fatal: true }).decode(source);
+			// Preserve a UTF-8 BOM so bytes remains identical to the encoded wire text.
+			text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(source);
 		} catch {
 			throw new RemoteFileFailure('not_text');
 		}
