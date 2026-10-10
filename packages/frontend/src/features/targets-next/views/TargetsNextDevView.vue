@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { loadRemoteNextTerminal, createRemoteFilesApi } from '@/runtimes/remote-next/public';
+	import { loadRemoteNextTerminal, createRemoteFilesApi, RemoteFilesRequestFailure } from '@/runtimes/remote-next/public';
 	import type { RemoteFileResourceView } from '@nexus-terminal/shared/remote/files/model';
 	import { createTargetsNextApi } from '../api/targets-next-api';
 	import { createAccessNextApi } from '../api/access-next-api';
@@ -20,6 +20,10 @@
 	const fileResource = ref<RemoteFileResourceView | null>(null);
 	const filePath = ref('/');
 	const fileResult = ref('');
+	const fileBusy = ref(false);
+	const fileError = ref('');
+	let fileRequestGeneration = 0;
+	let fileMounted = true;
 	let fileGeneration = 0;
 	let fileController: AbortController | null = null;
 	const auth = createAccessNextApi(base.toString());
@@ -51,70 +55,124 @@
 
 	function closeFileResource(): void {
 		fileGeneration += 1;
+		fileRequestGeneration += 1;
 		fileController?.abort();
 		fileController = null;
+		fileBusy.value = false;
+		fileError.value = '';
+		fileResult.value = '';
 		const previous = fileResource.value;
 		fileResource.value = null;
-		fileResult.value = '';
-		if (previous !== null) {
+		if (previous) {
 			const generation = fileGeneration;
-			void fileApi.close(previous.id).catch((cause) => {
-				if (generation === fileGeneration && loggedIn.value) error.value = localizedError(cause);
+			const requestGeneration = fileRequestGeneration;
+			void fileApi.close(previous.id).catch((cause: unknown) => {
+				if (fileMounted && generation === fileGeneration &&
+					requestGeneration === fileRequestGeneration && loggedIn.value) {
+					fileError.value = fileLocalizedError(cause);
+				}
 			});
 		}
 	}
 
+	function runFile(controller: AbortController, job: () => Promise<void>): void {
+		const generation = fileGeneration;
+		const requestGeneration = ++fileRequestGeneration;
+		fileController?.abort();
+		fileController = controller;
+		fileBusy.value = true;
+		fileError.value = '';
+		void (async () => {
+			try {
+				await job();
+			} catch (cause) {
+				if (!controller.signal.aborted && generation === fileGeneration &&
+					requestGeneration === fileRequestGeneration && fileMounted) {
+					fileError.value = fileLocalizedError(cause);
+				}
+			} finally {
+				if (generation === fileGeneration && requestGeneration === fileRequestGeneration && fileMounted) {
+					fileBusy.value = false;
+					fileController = null;
+				}
+			}
+		})();
+	}
+
 	function openFileResource(): void {
-		if (selectedRemoteId.value === null) return;
+		if (selectedRemoteId.value === null) {
+			return;
+		}
 		closeFileResource();
 		const generation = fileGeneration;
 		const targetId = selectedRemoteId.value;
 		const controller = new AbortController();
-		fileController = controller;
-		void run(async () => {
-			try {
-				const opened = await fileApi.open(targetId, controller.signal);
-				if (controller.signal.aborted || generation !== fileGeneration) {
-					await fileApi.close(opened.id);
-					return;
-				}
-				fileResource.value = opened;
-			} catch (cause) {
-				if (controller.signal.aborted || generation !== fileGeneration) return;
-				throw cause;
+		runFile(controller, async () => {
+			const opened = await fileApi.open(targetId, controller.signal);
+			if (controller.signal.aborted || generation !== fileGeneration || !fileMounted) {
+				await fileApi.close(opened.id);
+				return;
 			}
+			fileResource.value = opened;
 		});
 	}
 
 	function fileAction(action: 'list' | 'stat' | 'lstat' | 'readText'): void {
 		const resource = fileResource.value;
-		if (resource === null) return;
+		if (resource === null) {
+			return;
+		}
 		const generation = fileGeneration;
+		const requestGeneration = fileRequestGeneration + 1;
+		const path = filePath.value;
 		const controller = new AbortController();
-		fileController?.abort();
-		fileController = controller;
-		void run(async () => {
-			try {
-				const path = filePath.value;
-				const result =
-					action === 'readText'
-						? (await fileApi.readText(resource.id, path, controller.signal)).text
-						: action === 'list'
-							? JSON.stringify(await fileApi.list(resource.id, path, controller.signal), null, 2)
-							: action === 'stat'
-								? JSON.stringify(await fileApi.stat(resource.id, path, controller.signal), null, 2)
-								: JSON.stringify(await fileApi.lstat(resource.id, path, controller.signal), null, 2);
-				if (!controller.signal.aborted && generation === fileGeneration)
-					fileResult.value = result;
-			} catch (cause) {
-				if (controller.signal.aborted || generation !== fileGeneration) return;
-				throw cause;
+		runFile(controller, async () => {
+			let result: string;
+			switch (action) {
+				case 'list':
+					result = JSON.stringify(await fileApi.list(resource.id, path, controller.signal), null, 2);
+					break;
+				case 'stat':
+					result = JSON.stringify(await fileApi.stat(resource.id, path, controller.signal), null, 2);
+					break;
+				case 'lstat':
+					result = JSON.stringify(await fileApi.lstat(resource.id, path, controller.signal), null, 2);
+					break;
+				case 'readText':
+					result = (await fileApi.readText(resource.id, path, controller.signal)).text;
+					break;
+			}
+			if (!controller.signal.aborted && generation === fileGeneration &&
+				requestGeneration === fileRequestGeneration && fileMounted) {
+				fileResult.value = result;
 			}
 		});
 	}
 
-	watch(selectedRemoteId, () => closeFileResource());
-	onUnmounted(() => closeFileResource());
+	watch(selectedRemoteId, closeFileResource);
+	watch(filePath, () => {
+		if (fileResource.value === null) {
+			return;
+		}
+		fileRequestGeneration += 1;
+		fileController?.abort();
+		fileController = null;
+		fileBusy.value = false;
+		fileError.value = '';
+		fileResult.value = '';
+	});
+	onUnmounted(() => {
+		fileMounted = false;
+		closeFileResource();
+	});
+
+	function fileLocalizedError(cause: unknown): string {
+		if (!(cause instanceof RemoteFilesRequestFailure)) {
+			return t('targetsNext.errors.request_failed');
+		}
+		const key = 'targetsNext.errors.' + cause.code;
+		return te(key) ? t(key) : t('targetsNext.errors.request_failed');
+	}
 
 	function localizedError(cause: unknown): string {
 		const code = cause instanceof Error ? cause.message : 'request_failed';
@@ -513,7 +571,7 @@
 				<h2 class="font-semibold">{{ t('targetsNext.fileTitle') }}</h2>
 				<p class="text-sm">{{ t('targetsNext.fileScope') }}</p>
 				<div class="flex flex-wrap gap-2">
-					<button class="rounded border px-3 py-2" :disabled="busy || selectedRemoteId === null || fileResource !== null" @click="openFileResource">
+					<button class="rounded border px-3 py-2" :disabled="busy || fileBusy || selectedRemoteId === null || fileResource !== null" @click="openFileResource">
 						{{ t('targetsNext.fileOpen') }}
 					</button>
 					<button class="rounded border px-3 py-2" :disabled="fileResource === null" @click="closeFileResource">
@@ -525,10 +583,11 @@
 				</label>
 				<div class="flex flex-wrap gap-2">
 					<button v-for="action in ['list', 'stat', 'lstat', 'readText'] as const" :key="action"
-						class="rounded border px-3 py-2" :disabled="busy || fileResource === null" @click="fileAction(action)">
+						class="rounded border px-3 py-2" :disabled="busy || fileBusy || fileResource === null" @click="fileAction(action)">
 						{{ t('targetsNext.fileAction.' + action) }}
 					</button>
 				</div>
+				<p v-if="fileError" role="alert">{{ fileError }}</p>
 				<pre v-if="fileResult" class="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded border p-2" aria-live="polite">{{ fileResult }}</pre>
 			</section>
 

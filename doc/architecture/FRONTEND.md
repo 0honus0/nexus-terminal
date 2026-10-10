@@ -253,7 +253,9 @@ Transport 为显式关闭共享单一 Promise，先断开 WS，再发送同一 A
 
 ### 新后端独立只读文件开发消费者
 
-`runtimes/remote-next/transport/remote-files-api.ts` 是独立 SFTP 文件客户端 owner，使用 `@nexus-terminal/shared/remote/files/{values,model,http,http-codec}` 的真实请求、结果与严格解码，不访问旧 Workspace/Pinia/FileManager，不缓存远程二进制内容。开发页与终端共用目标选择和 Access Cookie，但文件资源是单独的、仅含 UUID/targetId/配置指纹的后端会话；更换目标、退出或卸载会失效 generation、取消旧读取并请求释放文件资源，旧异步结果不覆盖当前文件展示。HTTP 非 JSON、未知错误码及网络失败不会被当作读取成功。
+`runtimes/remote-next/transport/remote-files-api.ts` 是独立 SFTP 文件客户端 owner，使用 `@nexus-terminal/shared/remote/files/{values,model,http,http-codec}` 的真实请求、结果与严格解码，不访问旧 Workspace/Pinia/FileManager，不缓存远程二进制内容。请求按 Shared 完整 JSON 字节上限编码；响应逐块读取，超过 Shared 128 KiB 限制立即拒绝而非先全量进入内存。协议失败通过 `RemoteFilesRequestFailure.code` 具名分类，不根据异常 message 猜测错误类型。
+
+开发页与终端共用目标选择和 Access Cookie，但文件资源是单独的、仅含 UUID/targetId/配置指纹的后端会话。文件操作使用独立于页面管理操作的 busy/error 状态和请求 generation；更换目标、输入新路径、关闭、退出或卸载会取消旧读取并使旧结果失效，旧请求不能清除新请求的提示或 loading。文件关闭使用独立 HTTP 请求，不随旧读取的 AbortSignal 一起取消；关闭失败只有仍属当前资源代次时才显示。HTTP 非 JSON、未知错误码及网络失败不会被当作读取成功。
 
 开发入口仅提供创建/关闭文件资源、绝对路径完整 list、stat（跟随链接）、lstat（链接自身）和最长 16 KiB 严格 UTF-8 文本读取；目录超过 200 项或 metadata/响应预算会失败而非返回冒充完整的截断列表。此处尚无上传、下载、写入、完整在线编辑、文件持久化、分页或断线恢复。旧正式文件管理器仍使用自己的独立控制器；开发页的读取能力不能解释为产品正式切换或浏览器验收通过。
 
