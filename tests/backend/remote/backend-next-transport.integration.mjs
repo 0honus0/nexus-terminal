@@ -137,10 +137,10 @@ function remoteFixture(closeSession) {
 			}
 		},
 
-		emitEof() {
+		emitEof(reason = 'normal') {
 			active = false;
 			for (const listener of closedListeners) {
-				listener();
+				listener(reason);
 			}
 		},
 
@@ -250,6 +250,46 @@ async function terminalEofAndConsumerAck() {
 	assert.equal(closures, 1);
 }
 
+async function abnormalTermination(reason) {
+	const fixture = remoteFixture(async () => undefined);
+	const owner = new RemoteSessionOwner(access, fixture.remote);
+	const session = await owner.open('good', { targetId: 7, columns: 80, rows: 25, timeoutMs: 1000 });
+	const server = await listen([createRemoteWebSocketRoute(owner, fixture.remote)]);
+	let socket;
+	try {
+		socket = new WebSocket('ws://' + server.address + '/api/v1/remote/stream?sessionId=' + session.id, {
+			origin: 'http://127.0.0.1:0',
+			headers: { Host: '127.0.0.1:0', 'Sec-Fetch-Site': 'same-origin', Cookie: 'nexus_session=good' },
+		});
+		const events = [];
+		const ready = deferred();
+		const closed = once(socket, 'close');
+		socket.on('message', (value) => {
+			const event = JSON.parse(value.toString());
+			events.push(event);
+			if (event.type === 'ready') {
+				ready.resolve();
+			}
+		});
+		await within(once(socket, 'open'), 'abnormal terminal WebSocket opened');
+		await within(ready.promise, 'abnormal terminal ready');
+		fixture.emitEof(reason);
+		await within(closed, 'abnormal terminal disconnected');
+		assert.equal(
+			events.some((event) => event.type === 'closed'),
+			false,
+		);
+		assert.equal(
+			events.some((event) => event.type === 'error' && event.code === 'remote_unavailable'),
+			true,
+		);
+	} finally {
+		socket?.terminate();
+		await within(server.close(), 'abnormal terminal listener close');
+		await within(owner.close(), 'abnormal terminal owner close');
+	}
+}
+
 async function sharedCleanupFailure() {
 	const release = deferred();
 	let closeCount = 0;
@@ -281,6 +321,22 @@ async function sharedCleanupFailure() {
 	);
 	assert.equal(closeCount, 1);
 	await assert.rejects(owner.release(session.id), (error) => error === reason);
+	await assert.rejects(owner.closeSession('good', session.id), (error) => error === reason);
+}
+
+async function deleteAfterWebSocketRelease() {
+	let count = 0;
+	const fixture = remoteFixture(async () => {
+		count += 1;
+	});
+	const owner = new RemoteSessionOwner(access, fixture.remote);
+	const session = await owner.open('good', { targetId: 7, columns: 80, rows: 25, timeoutMs: 1000 });
+	await owner.release(session.id);
+	assert.equal(await owner.closeSession('good', session.id), true);
+	assert.equal(await owner.closeSession('bad', session.id), false);
+	assert.equal(await owner.closeSession('good', randomUUID()), false);
+	assert.equal(count, 1);
+	await owner.close();
 }
 
 await inboundQueueBudget();
@@ -289,5 +345,10 @@ await gracefulSendOrder();
 console.log('WS ordered graceful close PASS');
 await terminalEofAndConsumerAck();
 console.log('Remote PTY EOF/ACK over real WebSocket PASS');
+await abnormalTermination('disconnected');
+await abnormalTermination('cleanup_failed');
+console.log('Remote disconnected/cleanup-failed are not normal EOF PASS');
 await sharedCleanupFailure();
 console.log('Remote concurrent release/shutdown error propagation PASS');
+await deleteAfterWebSocketRelease();
+console.log('Remote DELETE after WS release preserves authenticated cleanup result PASS');

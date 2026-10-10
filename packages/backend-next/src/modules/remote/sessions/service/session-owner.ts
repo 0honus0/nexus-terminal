@@ -17,6 +17,16 @@ interface Owner {
 	attachDeadline: ReturnType<typeof setTimeout> | null;
 }
 
+interface ReleasedSession {
+	userId: number;
+	tokenDigest: string;
+	completion: Promise<void>;
+	expiresAt: number;
+}
+
+const CLOSED_SESSION_TTL_MS = 120_000;
+const MAX_RECENTLY_RELEASED = 128;
+
 function digest(token: string): string {
 	return createHash('sha256').update(token).digest('hex');
 }
@@ -29,6 +39,7 @@ export class RemoteSessionOwner {
 	private readonly owners = new Map<string, Owner>();
 	private readonly pending = new Set<Promise<unknown>>();
 	private readonly releasing = new Map<string, Promise<void>>();
+	private readonly recentlyReleased = new Map<string, ReleasedSession>();
 	private readonly cleanupFailures: unknown[] = [];
 	private accepting = true;
 	private closePromise: Promise<void> | null = null;
@@ -151,10 +162,30 @@ export class RemoteSessionOwner {
 	}
 
 	async closeSession(token: string | null, id: string): Promise<boolean> {
-		if (!(await this.allowed(token, id))) {
+		if (!token) {
 			return false;
 		}
-		await this.release(id);
+		this.pruneRecentlyReleased();
+		const owner = this.owners.get(id);
+		const completed = this.recentlyReleased.get(id);
+		const record = owner ?? completed;
+		if (!record || record.tokenDigest !== digest(token)) {
+			return false;
+		}
+		try {
+			if ((await this.identity(token)) !== record.userId) {
+				return false;
+			}
+		} catch {
+			return false;
+		}
+		// A valid same-session DELETE must see the original cleanup outcome even
+		// if the WebSocket already released the underlying PTY.
+		if (owner) {
+			await this.release(id);
+		} else if (completed) {
+			await completed.completion;
+		}
 		return true;
 	}
 
@@ -180,6 +211,10 @@ export class RemoteSessionOwner {
 		if (existing) {
 			return existing;
 		}
+		const completed = this.recentlyReleased.get(id);
+		if (completed) {
+			return completed.completion;
+		}
 		const owner = this.owners.get(id);
 		if (!owner) {
 			return Promise.resolve();
@@ -190,6 +225,13 @@ export class RemoteSessionOwner {
 		}
 		const task = Promise.resolve().then(() => this.remote.closeSession(id));
 		this.releasing.set(id, task);
+		this.pruneRecentlyReleased();
+		this.recentlyReleased.set(id, {
+			userId: owner.userId,
+			tokenDigest: owner.tokenDigest,
+			completion: task,
+			expiresAt: Date.now() + CLOSED_SESSION_TTL_MS,
+		});
 		this.track(task);
 		void task.then(
 			() => this.releasing.delete(id),
@@ -200,6 +242,22 @@ export class RemoteSessionOwner {
 			},
 		);
 		return task;
+	}
+
+	private pruneRecentlyReleased(): void {
+		const now = Date.now();
+		for (const [id, record] of this.recentlyReleased) {
+			if (record.expiresAt <= now) {
+				this.recentlyReleased.delete(id);
+			}
+		}
+		while (this.recentlyReleased.size >= MAX_RECENTLY_RELEASED) {
+			const oldest = this.recentlyReleased.keys().next().value;
+			if (oldest === undefined) {
+				break;
+			}
+			this.recentlyReleased.delete(oldest);
+		}
 	}
 
 	quiesce(): void {
