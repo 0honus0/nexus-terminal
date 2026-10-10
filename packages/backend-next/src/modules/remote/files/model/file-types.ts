@@ -1,8 +1,12 @@
 import type { RemoteFileErrorCode, RemoteFileKind } from '@nexus-terminal/shared/remote/files/values';
 
 export class RemoteFileFailure extends Error {
-	constructor(readonly code: RemoteFileErrorCode) {
-		super('Remote file operation: ' + code);
+	constructor(
+		readonly code: RemoteFileErrorCode,
+		options?: ErrorOptions,
+	) {
+		super('Remote file operation: ' + code, options);
+		this.name = 'RemoteFileFailure';
 	}
 }
 

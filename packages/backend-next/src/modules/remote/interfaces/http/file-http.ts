@@ -1,6 +1,5 @@
 import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
-import { MachineSftpFailure } from '../../../../platform/ssh/ssh-port.js';
 import { TargetOperationError } from '../../../targets/public-errors.js';
 import { RemoteHostKeyUntrustedError } from '../../model/machine-errors.js';
 import { RemoteFileFailure, type FileEntry, type FileInfo } from '../../files/model/file-types.js';
@@ -66,9 +65,6 @@ function errorCode(error: unknown): RemoteFileErrorCode {
 			return 'not_found';
 		}
 	}
-	if (error instanceof MachineSftpFailure && error.reason === 'limit_exceeded') {
-		return 'limit_exceeded';
-	}
 	return 'remote_unavailable';
 }
 
@@ -111,24 +107,30 @@ function route(
 		method,
 		path: ROOT + path,
 		maxBodyBytes: REMOTE_FILE_MAX_REQUEST_BYTES,
+
 		async handle(ctx) {
 			const controller = new AbortController();
+
 			const aborted = () => controller.abort();
+
 			const disconnected = () => {
 				if (!ctx.response.writableEnded) {
 					controller.abort();
 				}
 			};
+
 			ctx.request.once('aborted', aborted);
 			ctx.response.once('close', disconnected);
 			try {
 				if (ctx.query.size) {
 					throw new RemoteFileFailure('invalid_input');
 				}
-				if (method === 'DELETE' &&
+				if (
+					method === 'DELETE' &&
 					(ctx.request.headers['transfer-encoding'] !== undefined ||
 						(ctx.request.headers['content-length'] !== undefined &&
-							ctx.request.headers['content-length'] !== '0'))) {
+							ctx.request.headers['content-length'] !== '0'))
+				) {
 					throw new RemoteFileFailure('invalid_input');
 				}
 				await action(ctx, controller.signal);

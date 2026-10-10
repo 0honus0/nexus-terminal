@@ -57,7 +57,14 @@ export class SftpFileResource implements FileResource {
 			) {
 				this.usable = false;
 			}
-			throw error;
+			if (error instanceof RemoteFileFailure) {
+				throw error;
+			}
+			const code =
+				error instanceof MachineSftpFailure && error.reason === 'limit_exceeded'
+					? 'limit_exceeded'
+					: 'remote_unavailable';
+			throw new RemoteFileFailure(code, { cause: error });
 		}
 	}
 
