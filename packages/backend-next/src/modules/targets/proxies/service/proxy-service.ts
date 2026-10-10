@@ -1,12 +1,7 @@
 import { TargetFailure } from '../../target-failure.js';
 import { validateTargetId } from '../../target-validation.js';
 import { normalizeProxyChanges, validateProxyMetadata } from '../model/proxy-validation.js';
-import type {
-	ProxyInput,
-	ProxyChanges,
-	ProxySnapshot,
-	ProxyMutation,
-} from '../model/proxy-types.js';
+import type { ProxyInput, ProxyChanges, ProxySnapshot, ProxyMutation } from '../model/proxy-types.js';
 import type { ProxyModel } from '../model/proxy-model.js';
 import type { SecretBox } from '../../../../platform/security/secret-box.js';
 

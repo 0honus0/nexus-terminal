@@ -31,6 +31,7 @@ export function toHostKeyView(value: HostKeyTrust): HostKeyTrustView {
 		confirmedAt: value.confirmedAt,
 	};
 }
+
 import type {
 	ConnectionMetadata as InternalMetadata,
 	ConnectionMutation as InternalConnectionMutation,

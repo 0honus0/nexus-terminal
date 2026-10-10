@@ -9,13 +9,16 @@ export class ConnectionImportService {
 	constructor(private readonly model: ConnectionImportModel) {}
 
 	importOne(command: ConnectionImport): Promise<ConnectionSnapshot> {
-		const proxy = command.inlineProxy === undefined ? undefined : validateProxyMetadata({
-			name: command.inlineProxy.name,
-			type: command.inlineProxy.type,
-			host: command.inlineProxy.host,
-			port: command.inlineProxy.port,
-			username: command.inlineProxy.username,
-		});
+		const proxy =
+			command.inlineProxy === undefined
+				? undefined
+				: validateProxyMetadata({
+						name: command.inlineProxy.name,
+						type: command.inlineProxy.type,
+						host: command.inlineProxy.host,
+						port: command.inlineProxy.port,
+						username: command.inlineProxy.username,
+					});
 		if (command.tagNames?.some((name) => !name.trim())) {
 			throw new TargetFailure('invalid_input');
 		}

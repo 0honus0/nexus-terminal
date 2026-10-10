@@ -38,7 +38,10 @@ function object(value: unknown): Record<string, unknown> {
 }
 
 function fields(value: Record<string, unknown>, allowed: readonly string[], required: readonly string[]): void {
-	if (Object.keys(value).some((key) => !allowed.includes(key)) || required.some((key) => !Object.hasOwn(value, key))) {
+	if (
+		Object.keys(value).some((key) => !allowed.includes(key)) ||
+		required.some((key) => !Object.hasOwn(value, key))
+	) {
 		throw new Error('Invalid SQLite worker fields');
 	}
 }
@@ -60,8 +63,8 @@ export function decodeWorkerRequest(value: unknown): WorkerRequest {
 		case 'exec':
 			fields(row, ['id', 'kind', 'sql'], ['id', 'kind', 'sql']);
 			if (typeof row.sql !== 'string' || !row.sql.trim()) {
-					throw new Error('Invalid SQLite SQL');
-				}
+				throw new Error('Invalid SQLite SQL');
+			}
 			return { id: requestId, kind: 'exec', sql: row.sql };
 		case 'all':
 		case 'one':
@@ -91,7 +94,10 @@ export function decodeWorkerResponse(value: unknown): WorkerResponse {
 		fields(error, ['message', 'code'], ['message', 'code']);
 		if (
 			typeof error.message !== 'string' ||
-			!(error.code === null || (typeof error.code === 'number' && Number.isSafeInteger(error.code) && error.code >= 0))
+			!(
+				error.code === null ||
+				(typeof error.code === 'number' && Number.isSafeInteger(error.code) && error.code >= 0)
+			)
 		) {
 			throw new Error('Invalid SQLite worker error');
 		}
@@ -146,8 +152,11 @@ const resultDecoders: { [K in WorkerOperation]: (value: unknown) => WorkerResult
 		const row = decodeRow(value);
 		if (
 			Object.keys(row).length !== 2 ||
-			typeof row.changes !== 'number' || !Number.isSafeInteger(row.changes) || row.changes < 0 ||
-			typeof row.lastId !== 'number' || !Number.isSafeInteger(row.lastId)
+			typeof row.changes !== 'number' ||
+			!Number.isSafeInteger(row.changes) ||
+			row.changes < 0 ||
+			typeof row.lastId !== 'number' ||
+			!Number.isSafeInteger(row.lastId)
 		) {
 			throw new Error('Invalid SQLite worker write result');
 		}

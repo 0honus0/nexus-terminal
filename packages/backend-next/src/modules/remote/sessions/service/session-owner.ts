@@ -140,8 +140,12 @@ export class RemoteSessionOwner {
 			return false;
 		}
 		try {
-			return (await this.identity(token)) === owner.userId && this.accepting &&
-				this.owners.get(id) === owner && (!active || this.remote.get(id) !== null);
+			return (
+				(await this.identity(token)) === owner.userId &&
+				this.accepting &&
+				this.owners.get(id) === owner &&
+				(!active || this.remote.get(id) !== null)
+			);
 		} catch {
 			return false;
 		}
@@ -180,8 +184,11 @@ export class RemoteSessionOwner {
 		} catch {
 			return false;
 		}
-		if (owner ? this.owners.get(id) !== owner : this.releaseOwners.get(id) !== completed &&
-			this.recentlyReleased.get(id) !== completed) {
+		if (
+			owner
+				? this.owners.get(id) !== owner
+				: this.releaseOwners.get(id) !== completed && this.recentlyReleased.get(id) !== completed
+		) {
 			return false;
 		}
 		// A valid same-session DELETE must see the original cleanup outcome even

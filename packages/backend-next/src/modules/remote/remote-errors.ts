@@ -15,8 +15,11 @@ function publicError(error: unknown): RemoteOperationError {
 		return error;
 	}
 	return new RemoteOperationError(
-		error instanceof RemoteHostKeyUntrustedError ? 'host_key_untrusted' :
-			error instanceof RemoteSessionFailure ? error.code : 'remote_unavailable',
+		error instanceof RemoteHostKeyUntrustedError
+			? 'host_key_untrusted'
+			: error instanceof RemoteSessionFailure
+				? error.code
+				: 'remote_unavailable',
 	);
 }
 

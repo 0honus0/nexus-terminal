@@ -125,7 +125,8 @@ export interface MachineSftpWriteOptions extends MachineOperationOptions {
 /** Local failure never proves that an already dispatched remote mutation was rolled back. */
 export class MachineSftpFailure extends Error {
 	constructor(
-		readonly reason: 'cancelled' | 'timeout' | 'closed' | 'operation_failed' | 'limit_exceeded' | 'invalid_metadata',
+		readonly reason:
+			'cancelled' | 'timeout' | 'closed' | 'operation_failed' | 'limit_exceeded' | 'invalid_metadata',
 		readonly outcome: 'not_started' | 'unknown',
 		options?: ErrorOptions,
 	) {

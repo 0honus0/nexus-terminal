@@ -1,8 +1,5 @@
 import type { RemoteHttpErrorCode } from '@nexus-terminal/shared/remote/sessions/values';
-import type {
-	HttpRoute,
-	HttpRouteContext,
-} from '../../../../platform/http/http-types.js';
+import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
 import type { AccessPublicApi } from '../../../access/public.js';
 import type { SessionView } from '../../public.js';

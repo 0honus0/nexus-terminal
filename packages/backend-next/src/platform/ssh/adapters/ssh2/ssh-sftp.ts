@@ -13,10 +13,16 @@ import {
 
 function toFileInfo(stats: Stats): MachineFileInfo {
 	if (
-		stats === null || typeof stats !== 'object' ||
-		!Number.isSafeInteger(stats.size) || stats.size < 0 ||
-		!Number.isSafeInteger(stats.mode) || stats.mode < 0 || stats.mode > 0xffff_ffff ||
-		!Number.isSafeInteger(stats.mtime) || stats.mtime < 0 || stats.mtime > Number.MAX_SAFE_INTEGER / 1000 ||
+		stats === null ||
+		typeof stats !== 'object' ||
+		!Number.isSafeInteger(stats.size) ||
+		stats.size < 0 ||
+		!Number.isSafeInteger(stats.mode) ||
+		stats.mode < 0 ||
+		stats.mode > 0xffff_ffff ||
+		!Number.isSafeInteger(stats.mtime) ||
+		stats.mtime < 0 ||
+		stats.mtime > Number.MAX_SAFE_INTEGER / 1000 ||
 		typeof stats.isDirectory !== 'function' ||
 		typeof stats.isFile !== 'function' ||
 		typeof stats.isSymbolicLink !== 'function'
@@ -33,8 +39,10 @@ function toFileInfo(stats: Stats): MachineFileInfo {
 	} catch (cause) {
 		throw new MachineSftpFailure('invalid_metadata', 'unknown', { cause });
 	}
-	if ([isDirectory, isFile, isSymbolicLink].some((kind) => typeof kind !== 'boolean') ||
-		Number(isDirectory) + Number(isFile) + Number(isSymbolicLink) > 1) {
+	if (
+		[isDirectory, isFile, isSymbolicLink].some((kind) => typeof kind !== 'boolean') ||
+		Number(isDirectory) + Number(isFile) + Number(isSymbolicLink) > 1
+	) {
 		throw new MachineSftpFailure('invalid_metadata', 'unknown');
 	}
 	return {
@@ -158,11 +166,13 @@ export class SshSftpLease implements MachineSftpLease {
 			const failed = (error: Error) => finish(error);
 
 			let dispatched = false;
+
 			const retire = (): void => {
 				// An already dispatched SFTP request may complete after local cancellation.
 				// shutdown owns the cached close Promise for later cleanup consumers.
 				void this.shutdown(new MachineSftpFailure('closed', 'unknown')).catch(() => undefined);
 			};
+
 			const aborted = () => {
 				finish(new MachineSftpFailure('cancelled', dispatched ? 'unknown' : 'not_started'));
 				if (dispatched) {
@@ -205,13 +215,17 @@ export class SshSftpLease implements MachineSftpLease {
 	async list(path: string, options: MachineSftpListOptions): Promise<MachineDirectoryEntry[]> {
 		this.ensure(options);
 		if (
-			!Number.isSafeInteger(options.maxEntries) || options.maxEntries < 1 || options.maxEntries > 10000 ||
+			!Number.isSafeInteger(options.maxEntries) ||
+			options.maxEntries < 1 ||
+			options.maxEntries > 10000 ||
 			!Number.isSafeInteger(options.maxMetadataBytes) ||
-			options.maxMetadataBytes < 1 || options.maxMetadataBytes > 2 * 1024 * 1024
+			options.maxMetadataBytes < 1 ||
+			options.maxMetadataBytes > 2 * 1024 * 1024
 		) {
 			throw new RangeError('Invalid SFTP directory budget');
 		}
 		const deadline = Date.now() + operationTimeout(options, 30000);
+
 		const remaining = (): MachineOperationOptions => {
 			const timeoutMs = deadline - Date.now();
 			if (timeoutMs < 1) {
@@ -219,6 +233,7 @@ export class SshSftpLease implements MachineSftpLease {
 			}
 			return options.signal === undefined ? { timeoutMs } : { timeoutMs, signal: options.signal };
 		};
+
 		const entries: MachineDirectoryEntry[] = [];
 		// Count JSON array punctuation as part of the wire metadata budget.
 		let metadataBytes = 2;
@@ -260,9 +275,13 @@ export class SshSftpLease implements MachineSftpLease {
 				}
 				for (const row of rows) {
 					if (
-						!row || typeof row.filename !== 'string' || !row.filename ||
-						row.filename === '.' || row.filename === '..' ||
-						/[/\u0000-\u001f\u007f\ufffd]/u.test(row.filename) || Buffer.byteLength(row.filename, 'utf8') > 255
+						!row ||
+						typeof row.filename !== 'string' ||
+						!row.filename ||
+						row.filename === '.' ||
+						row.filename === '..' ||
+						/[/\u0000-\u001f\u007f\ufffd]/u.test(row.filename) ||
+						Buffer.byteLength(row.filename, 'utf8') > 255
 					) {
 						throw new MachineSftpFailure('invalid_metadata', 'unknown');
 					}
@@ -288,14 +307,11 @@ export class SshSftpLease implements MachineSftpLease {
 				closing = error;
 			}
 			const failures = [failure, cleanup, closing].filter((item) => item !== null);
-			throw failures.length === 1
-				? cleanup
-				: new AggregateError(failures, 'SFTP listing/handle cleanup failed');
+			throw failures.length === 1 ? cleanup : new AggregateError(failures, 'SFTP listing/handle cleanup failed');
 		}
 		// A timed-out/cancelled READDIR can still complete asynchronously.
 		// Retire the lease rather than accepting future operations on that handle.
-		if (failure instanceof MachineSftpFailure &&
-			(failure.reason === 'timeout' || failure.reason === 'cancelled')) {
+		if (failure instanceof MachineSftpFailure && (failure.reason === 'timeout' || failure.reason === 'cancelled')) {
 			try {
 				await this.shutdown(new MachineSftpFailure('closed', 'unknown'));
 			} catch (cleanup) {
@@ -316,12 +332,10 @@ export class SshSftpLease implements MachineSftpLease {
 			stream.destroy(new MachineSftpFailure(reason, 'unknown'));
 			void this.shutdown(new MachineSftpFailure('closed', 'unknown')).catch(() => undefined);
 		};
+
 		const aborted = () => abortStream('cancelled');
 
-		const timer =
-			limit === undefined
-				? undefined
-				: setTimeout(() => abortStream('timeout'), limit);
+		const timer = limit === undefined ? undefined : setTimeout(() => abortStream('timeout'), limit);
 
 		const cleanup = () => {
 			clearTimeout(timer);
@@ -347,8 +361,10 @@ export class SshSftpLease implements MachineSftpLease {
 		operationTimeout(options);
 		const start = options?.start;
 		const end = options?.end;
-		if ((start !== undefined && (!Number.isSafeInteger(start) || start < 0)) ||
-			(end !== undefined && (!Number.isSafeInteger(end) || end < 0 || end < (start ?? 0)))) {
+		if (
+			(start !== undefined && (!Number.isSafeInteger(start) || start < 0)) ||
+			(end !== undefined && (!Number.isSafeInteger(end) || end < 0 || end < (start ?? 0)))
+		) {
 			throw new RangeError('Invalid inclusive SFTP read byte range');
 		}
 		return this.track(

@@ -1,7 +1,11 @@
 <script setup lang="ts">
 	import { defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { loadRemoteNextTerminal, createRemoteFilesApi, RemoteFilesRequestFailure } from '@/runtimes/remote-next/public';
+	import {
+		loadRemoteNextTerminal,
+		createRemoteFilesApi,
+		RemoteFilesRequestFailure,
+	} from '@/runtimes/remote-next/public';
 	import type { RemoteFileResourceView } from '@nexus-terminal/shared/remote/files/model';
 	import { createTargetsNextApi } from '../api/targets-next-api';
 	import { createAccessNextApi } from '../api/access-next-api';
@@ -67,8 +71,12 @@
 			const generation = fileGeneration;
 			const requestGeneration = fileRequestGeneration;
 			void fileApi.close(previous.id).catch((cause: unknown) => {
-				if (fileMounted && generation === fileGeneration &&
-					requestGeneration === fileRequestGeneration && loggedIn.value) {
+				if (
+					fileMounted &&
+					generation === fileGeneration &&
+					requestGeneration === fileRequestGeneration &&
+					loggedIn.value
+				) {
 					fileError.value = fileLocalizedError(cause);
 				}
 			});
@@ -86,8 +94,12 @@
 			try {
 				await job();
 			} catch (cause) {
-				if (!controller.signal.aborted && generation === fileGeneration &&
-					requestGeneration === fileRequestGeneration && fileMounted) {
+				if (
+					!controller.signal.aborted &&
+					generation === fileGeneration &&
+					requestGeneration === fileRequestGeneration &&
+					fileMounted
+				) {
 					fileError.value = fileLocalizedError(cause);
 				}
 			} finally {
@@ -142,8 +154,12 @@
 					result = (await fileApi.readText(resource.id, path, controller.signal)).text;
 					break;
 			}
-			if (!controller.signal.aborted && generation === fileGeneration &&
-				requestGeneration === fileRequestGeneration && fileMounted) {
+			if (
+				!controller.signal.aborted &&
+				generation === fileGeneration &&
+				requestGeneration === fileRequestGeneration &&
+				fileMounted
+			) {
 				fileResult.value = result;
 			}
 		});
@@ -571,26 +587,43 @@
 				<h2 class="font-semibold">{{ t('targetsNext.fileTitle') }}</h2>
 				<p class="text-sm">{{ t('targetsNext.fileScope') }}</p>
 				<div class="flex flex-wrap gap-2">
-					<button class="rounded border px-3 py-2" :disabled="busy || fileBusy || selectedRemoteId === null || fileResource !== null" @click="openFileResource">
+					<button
+						class="rounded border px-3 py-2"
+						:disabled="busy || fileBusy || selectedRemoteId === null || fileResource !== null"
+						@click="openFileResource"
+					>
 						{{ t('targetsNext.fileOpen') }}
 					</button>
-					<button class="rounded border px-3 py-2" :disabled="fileResource === null" @click="closeFileResource">
+					<button
+						class="rounded border px-3 py-2"
+						:disabled="fileResource === null"
+						@click="closeFileResource"
+					>
 						{{ t('targetsNext.fileClose') }}
 					</button>
 				</div>
-				<label class="block">{{ t('targetsNext.filePath') }}
+				<label class="block"
+					>{{ t('targetsNext.filePath') }}
 					<input v-model="filePath" class="block w-full rounded border p-2" autocomplete="off" />
 				</label>
 				<div class="flex flex-wrap gap-2">
-					<button v-for="action in ['list', 'stat', 'lstat', 'readText'] as const" :key="action"
-						class="rounded border px-3 py-2" :disabled="busy || fileBusy || fileResource === null" @click="fileAction(action)">
+					<button
+						v-for="action in ['list', 'stat', 'lstat', 'readText'] as const"
+						:key="action"
+						class="rounded border px-3 py-2"
+						:disabled="busy || fileBusy || fileResource === null"
+						@click="fileAction(action)"
+					>
 						{{ t('targetsNext.fileAction.' + action) }}
 					</button>
 				</div>
 				<p v-if="fileError" role="alert">{{ fileError }}</p>
-				<pre v-if="fileResult" class="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded border p-2" aria-live="polite">{{ fileResult }}</pre>
+				<pre
+					v-if="fileResult"
+					class="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded border p-2"
+					aria-live="polite"
+					>{{ fileResult }}</pre>
 			</section>
-
 		</template>
 	</main>
 </template>

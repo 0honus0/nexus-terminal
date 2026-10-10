@@ -101,7 +101,10 @@ try {
 	assert.equal(resolved.jumps.length, 1);
 	assert.equal(resolved.authentication.password, 'SECRET_CONNECTION');
 	const copy = await app.targets.clone(jump.id, 'jump-copy');
-	assert.equal((await app.trustedSshTargets.resolveStored({ targetId: copy.id })).authentication.password, 'SECRET_CONNECTION');
+	assert.equal(
+		(await app.trustedSshTargets.resolveStored({ targetId: copy.id })).authentication.password,
+		'SECRET_CONNECTION',
+	);
 	assert.equal((await app.targets.tags.rename(tag.id, tag.version, 'ops-next')).status, 'updated');
 	await assert.rejects(
 		() => app.targets.tags.delete(tag.id),

@@ -19,7 +19,10 @@ import {
 const ROOT = '/__next/api/v1/remote/files';
 
 export class RemoteFilesRequestFailure extends Error {
-	constructor(readonly code: RemoteFileErrorCode, options?: ErrorOptions) {
+	constructor(
+		readonly code: RemoteFileErrorCode,
+		options?: ErrorOptions,
+	) {
 		super(code, options);
 	}
 }
@@ -106,7 +109,9 @@ async function call(method: 'POST' | 'DELETE', path: string, input?: unknown, si
 export function createRemoteFilesApi() {
 	return {
 		open: async (targetId: number, signal?: AbortSignal): Promise<RemoteFileResourceView> =>
-			readRemoteFileOpenResponse(await call('POST', '/resources', readRemoteFileOpenRequest({ targetId }), signal)),
+			readRemoteFileOpenResponse(
+				await call('POST', '/resources', readRemoteFileOpenRequest({ targetId }), signal),
+			),
 
 		close: async (id: string): Promise<void> => {
 			readRemoteFileCloseResponse(await call('DELETE', '/resources/' + encodeURIComponent(id)));
@@ -114,22 +119,42 @@ export function createRemoteFilesApi() {
 
 		list: async (id: string, path: string, signal?: AbortSignal) =>
 			readRemoteFileListResponse(
-				await call('POST', '/resources/' + encodeURIComponent(id) + '/list', readRemoteFilePathRequest({ path }), signal),
+				await call(
+					'POST',
+					'/resources/' + encodeURIComponent(id) + '/list',
+					readRemoteFilePathRequest({ path }),
+					signal,
+				),
 			),
 
 		stat: async (id: string, path: string, signal?: AbortSignal): Promise<RemoteFileInfo> =>
 			readRemoteFileStatResponse(
-				await call('POST', '/resources/' + encodeURIComponent(id) + '/stat', readRemoteFilePathRequest({ path }), signal),
+				await call(
+					'POST',
+					'/resources/' + encodeURIComponent(id) + '/stat',
+					readRemoteFilePathRequest({ path }),
+					signal,
+				),
 			).info,
 
 		lstat: async (id: string, path: string, signal?: AbortSignal): Promise<RemoteFileInfo> =>
 			readRemoteFileStatResponse(
-				await call('POST', '/resources/' + encodeURIComponent(id) + '/lstat', readRemoteFilePathRequest({ path }), signal),
+				await call(
+					'POST',
+					'/resources/' + encodeURIComponent(id) + '/lstat',
+					readRemoteFilePathRequest({ path }),
+					signal,
+				),
 			).info,
 
 		readText: async (id: string, path: string, signal?: AbortSignal) =>
 			readRemoteFileTextResponse(
-				await call('POST', '/resources/' + encodeURIComponent(id) + '/read-text', readRemoteFilePathRequest({ path }), signal),
+				await call(
+					'POST',
+					'/resources/' + encodeURIComponent(id) + '/read-text',
+					readRemoteFilePathRequest({ path }),
+					signal,
+				),
 			),
 	};
 }
