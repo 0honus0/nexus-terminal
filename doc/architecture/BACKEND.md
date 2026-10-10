@@ -64,6 +64,8 @@ Access 的六类认证端点使用 `@nexus-terminal/shared/access/api` 解释 se
 
 Remote HTTP 的 `POST /sessions` 输入及公开 `RemoteShellView` 由 Shared `remote/model` 两端逐字段解码；PTY WS 入站命令、出站事件由 Shared `remote/events` 纯函数逐变体校验字段、数字界限、base64 与已知错误码。实际 `consumed` 未确认字节数、SessionOwner 身份、断线语义和背压仍由 Remote 负责。静态通过不替代真实断线与浏览器验收。
 
+Targets 管理 HTTP 变更只接受 `updated/not_found/version_conflict` 的已知状态并逐分支响应 200/404/409，不再用“其它即成功”的兜底；Targets 和 Agent 的 required JSON keys 均使用自身属性检验，不能以继承属性满足必填输入。权限、CAS、Host Key 信任、导入按条事务和公开 DTO allowlist 仍由原 owner 负责。
+
 A–D 审核指出的六处基础缺口已做源码修正：Platform 每个 WS 输入队列限定 64 条/256 KiB（包含正在处理的消息），超过上限立即终止；正常 PTY EOF 不再直接 terminate，Remote 允许仍有效的原持有人完成队列与 `consumed` 收尾，EOF 等待最多 10 秒，Platform `finish()` 有界等待正常 close 握手（最多 5 秒）；主动断线/撤销/停机仍强制释放。SessionOwner 保存按 ID 共享的 release Promise，底层 SessionService 保留失败的关闭结果，模块 shutdown 聚合错误。Targets/Agent/Remote 的 register 返回各自的 HTTP/WS 安装能力，Remote 在模块内拥有 owner/Service 的 quiesce 与 close，Bootstrap 不再深层导入业务 HTTP 工厂。前端 Transport 的 close 共用 Promise、组件以 generation/AbortSignal 清理 xterm 与 ResizeObserver，错误码转成现有三语言文案。2026-10-10 已通过真实 WebSocket 小消息积压、有序正常关闭、按 ID 共享清理失败的专项集成验证；真实 `ssh2.Server` 实机路径还复现并修正了两个 EOF 并发失效窗口：排空中不得再对已移出活动集合的会话调用流控，且客户端 `consumed` 必须允许使用不依赖 live PTY 的原 owner 授权（新增输入仍需活动会话）。同一脚本在修复后证明最终 SSH 字节完整、ACK 后发送 `closed` 并以 WS close 1000 结束。前端 Transport 异常断开无需等待已经不可推进的渲染，组件卸载会解除 pending render，以免阻塞 DELETE；真实浏览器验收仍**未通过**，本环境 Chromium 因 `/proc` 沙箱权限无法启动。剩余高压吞吐、ACL 撤销、超时、实浏览器重试/自然关闭均按[验收文档](../testing/E2E.md)保留，不能把专项 PASS 当作全部 Remote 产品验收。
 
 ### Remote 关闭原因与同会话释放确认（2026-10-10 收口）

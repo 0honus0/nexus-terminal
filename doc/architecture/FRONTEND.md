@@ -237,6 +237,8 @@ Workspace WebSocket 由 runtime protocol/session owner 处理：
 
 开发页的 Access 请求由 `features/targets-next/api/access-next-api.ts` 独立拥有，`needsSetup/setup/login/status/logout` 不再在 View 内直接 fetch 或把任意 HTTP 200 当成已登录。该客户端与 `backend-next` 认证 HTTP 同时消费 `@nexus-terminal/shared/access/api` 的严格输入/公开响应契约；收到 401 status 明确归为未认证，JSON 解析失败、非预期响应和网络异常不能伪装成成功。Shared 只包含必要的凭据写入命令和公开用户字段，不包含 Session token、密码摘要、内部鉴权上下文。密码变更端点已在独立客户端准备真实 API 能力，但当前开发页未提供改密 UI，不能因此宣称其拥有前端界面。
 
+`targets-next/api/targets-next-api.ts` 仍是 Targets 管理 wire 响应解析的唯一前端 owner：Connection、Proxy、Tag、SSH Key、Host Key View 和 Mutation/Import 状态联合执行严格字段检查，拒绝额外字段或未知结果；非 JSON、网络异常、未知错误码统一映射为安全的 `request_failed`，不直接展示解析异常。没有为尚无第二个运行时消费者的解析器增加 Shared 空文件，正式旧前端继续保持原 Protocol 客户端。
+
 旧生产表单中的 `ConnectionTypeDto` 和 `ProxyTypeDto` 与新包有限取值相同，已在所属前端 model 改从 Shared 引用；但旧 `ConnectionDto` 的 nullable route、authMethod、jumpChain、lastConnectedAt，旧 Proxy authMethod 以及其它业务 View 与新管理 contract 表示不同，旧 feature API/Store/表单仍继续使用 Protocol 并访问正式 Backend。不能直接替换这些类型，必须待终端和相关消费同步迁移后再重构。
 
 ## 新后端独立 SSH 终端
