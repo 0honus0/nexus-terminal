@@ -41,6 +41,8 @@ Remote 的 PTY HTTP 与 WebSocket Stream 分设协议 owner：`interfaces/http/r
 
 Targets 可信 SSH 解析接收具名 `{targetId,expectedFingerprint?}` 后端请求，复用已有的 SQLite 单事务目标/凭据/Proxy/Jump 快照，Model 从该快照计算 SHA-256 配置指纹并在解密之前核对预期，冲突返回安全 `conflict`。独立 fingerprint 查询仍供现有消费者做展示/变化检测，不能以先读指纹后再次解析替代同快照核验。指纹仅证明解析返回值与本次配置快照一致；SSH 建连、配置后续变化和 Host Key 信任另有边界。
 
+Platform SSH SFTP 的 list 接收条目与元数据字节预算，使用 opendir → 分批 readdir(handle) → close(handle) 逐批核验并在超限时拒绝整份目录，不先全量聚合、不伪造 cursor。stat/lstat 结果和目录项需验证第三方数值、文件种类与文件名；read 使用非负安全整数的字节范围，end 为包含末字节的偏移，单次操作期限不随分批重置。租约负责操作取消、超时和流/句柄收尾，用户文件和后续 Agent 调用者分别负责自身授权与完整连接的关闭。
+
 ## 目录与一级模块
 
 ```text

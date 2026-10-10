@@ -102,7 +102,14 @@ export interface MachineOperationOptions {
 	readonly timeoutMs?: number;
 }
 
+/** A complete listing or explicit failure; neither limit is a pagination hint. */
+export interface MachineSftpListOptions extends MachineOperationOptions {
+	readonly maxEntries: number;
+	readonly maxMetadataBytes: number;
+}
+
 export interface MachineSftpReadOptions extends MachineOperationOptions {
+	/** Zero-based byte offset. End, when given, includes the final byte. */
 	readonly start?: number;
 	readonly end?: number;
 }
@@ -118,7 +125,7 @@ export interface MachineSftpWriteOptions extends MachineOperationOptions {
 /** Local failure never proves that an already dispatched remote mutation was rolled back. */
 export class MachineSftpFailure extends Error {
 	constructor(
-		readonly reason: 'cancelled' | 'timeout' | 'closed' | 'operation_failed',
+		readonly reason: 'cancelled' | 'timeout' | 'closed' | 'operation_failed' | 'limit_exceeded' | 'invalid_metadata',
 		readonly outcome: 'not_started' | 'unknown',
 		options?: ErrorOptions,
 	) {
@@ -130,7 +137,7 @@ export class MachineSftpFailure extends Error {
 export interface MachineSftpLease {
 	stat(path: string, options?: MachineOperationOptions): Promise<MachineFileInfo>;
 	lstat(path: string, options?: MachineOperationOptions): Promise<MachineFileInfo>;
-	list(path: string, options?: MachineOperationOptions): Promise<MachineDirectoryEntry[]>;
+	list(path: string, options: MachineSftpListOptions): Promise<MachineDirectoryEntry[]>;
 	read(path: string, options?: MachineSftpReadOptions): Readable;
 	write(path: string, options?: MachineSftpWriteOptions): Writable;
 	rename(from: string, to: string, options?: MachineOperationOptions): Promise<void>;
