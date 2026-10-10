@@ -48,7 +48,9 @@ function toFileInfo(stats: Stats): MachineFileInfo {
 }
 
 function isSftpEof(error: unknown): boolean {
-	if (!(error instanceof MachineSftpFailure) || error.reason !== 'operation_failed') return false;
+	if (!(error instanceof MachineSftpFailure) || error.reason !== 'operation_failed') {
+		return false;
+	}
 	const cause: unknown = error.cause;
 	return cause !== null && typeof cause === 'object' && 'code' in cause && cause.code === 1;
 }
@@ -155,14 +157,17 @@ export class SshSftpLease implements MachineSftpLease {
 
 			const failed = (error: Error) => finish(error);
 
+			let dispatched = false;
 			const retire = (): void => {
 				// An already dispatched SFTP request may complete after local cancellation.
 				// shutdown owns the cached close Promise for later cleanup consumers.
 				void this.shutdown(new MachineSftpFailure('closed', 'unknown')).catch(() => undefined);
 			};
 			const aborted = () => {
-				finish(new MachineSftpFailure('cancelled', 'unknown'));
-				retire();
+				finish(new MachineSftpFailure('cancelled', dispatched ? 'unknown' : 'not_started'));
+				if (dispatched) {
+					retire();
+				}
 			};
 
 			const timer = setTimeout(() => {
@@ -176,6 +181,7 @@ export class SshSftpLease implements MachineSftpLease {
 				return;
 			}
 			try {
+				dispatched = true;
 				invoke((error, value) =>
 					finish(
 						error ? new MachineSftpFailure('operation_failed', 'unknown', { cause: error }) : null,
@@ -208,8 +214,10 @@ export class SshSftpLease implements MachineSftpLease {
 		const deadline = Date.now() + operationTimeout(options, 30000);
 		const remaining = (): MachineOperationOptions => {
 			const timeoutMs = deadline - Date.now();
-			if (timeoutMs < 1) throw new MachineSftpFailure('timeout', 'unknown');
-			return { timeoutMs, ...(options.signal === undefined ? {} : { signal: options.signal }) };
+			if (timeoutMs < 1) {
+				throw new MachineSftpFailure('timeout', 'unknown');
+			}
+			return options.signal === undefined ? { timeoutMs } : { timeoutMs, signal: options.signal };
 		};
 		const entries: MachineDirectoryEntry[] = [];
 		// Count JSON array punctuation as part of the wire metadata budget.
@@ -239,17 +247,25 @@ export class SshSftpLease implements MachineSftpLease {
 					remaining(),
 				).catch((error: unknown) => {
 					// SSH_FX_EOF is the end of this directory handle, not a read failure.
-					if (isSftpEof(error)) return null;
+					if (isSftpEof(error)) {
+						return null;
+					}
 					throw error;
 				});
-				if (rows === null) break;
-				if (!Array.isArray(rows)) throw new MachineSftpFailure('invalid_metadata', 'unknown');
+				if (rows === null) {
+					break;
+				}
+				if (!Array.isArray(rows)) {
+					throw new MachineSftpFailure('invalid_metadata', 'unknown');
+				}
 				for (const row of rows) {
 					if (
 						!row || typeof row.filename !== 'string' || !row.filename ||
-						row.filename === '.' || row.filename === '..' || /[/\u0000]/u.test(row.filename) ||
-						/[\u0000-\u001f\u007f\ufffd]/u.test(row.filename) || Buffer.byteLength(row.filename, 'utf8') > 255
-					) throw new MachineSftpFailure('invalid_metadata', 'unknown');
+						row.filename === '.' || row.filename === '..' ||
+						/[/\u0000-\u001f\u007f\ufffd]/u.test(row.filename) || Buffer.byteLength(row.filename, 'utf8') > 255
+					) {
+						throw new MachineSftpFailure('invalid_metadata', 'unknown');
+					}
 					const entry: MachineDirectoryEntry = { name: row.filename, info: toFileInfo(row.attrs) };
 					metadataBytes += (entries.length === 0 ? 0 : 1) + Buffer.byteLength(JSON.stringify(entry), 'utf8');
 					if (entries.length >= options.maxEntries || metadataBytes > options.maxMetadataBytes) {
@@ -286,7 +302,9 @@ export class SshSftpLease implements MachineSftpLease {
 				throw new AggregateError([failure, cleanup], 'SFTP interrupted listing cleanup failed');
 			}
 		}
-		if (failure !== null) throw failure;
+		if (failure !== null) {
+			throw failure;
+		}
 		return entries;
 	}
 
