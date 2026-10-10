@@ -71,12 +71,15 @@ export function createAccessNextApi(baseUrl: string) {
 	return {
 		needsSetup: async (signal?: AbortSignal): Promise<boolean> =>
 			decoded(await request('GET', '/needs-setup', undefined, signal), readAccessNeedsSetup).needsSetup,
+
 		setup: async (input: AccessSetupRequest): Promise<void> => {
 			decoded(await request('POST', '/setup', input), readAccessSetup);
 		},
+
 		login: async (input: AccessLoginRequest): Promise<void> => {
 			decoded(await request('POST', '/login', input), readAccessLogin);
 		},
+
 		status: async (signal?: AbortSignal): Promise<AccessStatusResponse | null> => {
 			try {
 				return decoded(await request('GET', '/status', undefined, signal), readAccessStatus);
@@ -87,9 +90,11 @@ export function createAccessNextApi(baseUrl: string) {
 				throw error;
 			}
 		},
+
 		logout: async (): Promise<void> => {
 			decoded(await request('POST', '/logout', {}), readAccessLogout);
 		},
+
 		changePassword: async (input: AccessPasswordRequest): Promise<void> => {
 			decoded(await request('PUT', '/password', input), readAccessPassword);
 		},
