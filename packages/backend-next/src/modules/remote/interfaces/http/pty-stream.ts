@@ -197,6 +197,9 @@ function connectStream(
 	);
 	subscriptions.push(
 		remote.onClosed(id, (reason) => {
+			if (state === 'ended') {
+				return;
+			}
 			if (reason !== 'normal') {
 				if (reason === 'closed_by_owner') {
 					state = 'ended';
