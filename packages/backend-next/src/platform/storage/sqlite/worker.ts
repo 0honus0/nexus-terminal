@@ -1,7 +1,7 @@
 import { parentPort, workerData, type MessagePort } from 'node:worker_threads';
 import { DatabaseSync } from 'node:sqlite';
 import type { WorkerSqliteError } from './sqlite-errors.js';
-import type { WorkerRequest } from './worker-types.js';
+import { decodeWorkerRequest, type WorkerRequest } from './worker-types.js';
 
 function databasePath(value: unknown): string {
 	if (typeof value !== 'object' || value === null || !('path' in value) || typeof value.path !== 'string') {
@@ -31,7 +31,12 @@ function executeQuery(db: DatabaseSync, request: Exclude<WorkerRequest, { kind: 
 			return statement.get(...request.params) ?? null;
 		case 'run': {
 			const result = statement.run(...request.params);
-			return { changes: Number(result.changes), lastId: Number(result.lastInsertRowid) };
+			const changes = Number(result.changes);
+			const lastId = Number(result.lastInsertRowid);
+			if (!Number.isSafeInteger(changes) || changes < 0 || !Number.isSafeInteger(lastId) || lastId < 0) {
+				throw new Error('SQLite result outside safe integer range');
+			}
+			return { changes, lastId };
 		}
 		default:
 			throw new Error('Unsupported SQLite worker operation');
@@ -59,4 +64,12 @@ if (port === null) {
 }
 const db = new DatabaseSync(databasePath(workerData));
 db.exec('PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000');
-port.on('message', (request: WorkerRequest) => handleRequest(port, db, request));
+port.on('message', (value: unknown) => {
+	try {
+		handleRequest(port, db, decodeWorkerRequest(value));
+	} catch {
+		// The request cannot be reliably correlated; never guess its transaction.
+		port.close();
+		process.exitCode = 1;
+	}
+});

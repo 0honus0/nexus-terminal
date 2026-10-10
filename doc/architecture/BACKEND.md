@@ -31,6 +31,8 @@
 
 Platform 当前提供 SQLite Runtime/Worker/迁移执行、HTTP/WS、SecretBox/密码散列和通用 SSH/SFTP/命令能力。具有这些技术接口不等于已经迁移对应产品功能；静态通过不等于异常路径和浏览器行为已经验收。
 
+SQLite Worker 请求与响应均由 Platform 在接收 `unknown` 消息后验证完整操作外壳及分支，成功写结果必须是安全整数，错误结构不得含未知字段。损坏或不可关联的响应将整实例置为不可用并拒绝全部待完成调用；事务失败仍由 Runtime 区分 `commit_unknown`、`rollback_failed` 等结果。
+
 ## 目录与一级模块
 
 ```text

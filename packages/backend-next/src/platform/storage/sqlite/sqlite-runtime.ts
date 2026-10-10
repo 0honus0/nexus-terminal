@@ -5,12 +5,12 @@ import { dirname, resolve } from 'node:path';
 import { SqliteFailure, sqliteError } from './sqlite-errors.js';
 import {
 	decodeWorkerResult,
+	decodeWorkerResponse,
 	type SqlParameter,
 	type SqlRow,
 	type SqlRunResult,
 	type WorkerOperation,
 	type WorkerResults,
-	type WorkerResponse,
 } from './worker-types.js';
 
 interface PendingCall {
@@ -41,7 +41,7 @@ export class SqliteRuntime implements SqlExecutor {
 
 	private constructor(readonly path: string) {
 		this.worker = new Worker(new URL('./worker.js', import.meta.url), { workerData: { path } });
-		this.worker.on('message', (message: WorkerResponse) => this.handleWorkerResponse(message));
+		this.worker.on('message', (message: unknown) => this.handleWorkerResponse(message));
 		this.worker.on('error', (error) =>
 			this.markUnavailable(new SqliteFailure('worker_exit', null, { cause: error })),
 		);
@@ -52,13 +52,23 @@ export class SqliteRuntime implements SqlExecutor {
 		});
 	}
 
-	private handleWorkerResponse(message: WorkerResponse): void {
+	private handleWorkerResponse(raw: unknown): void {
+		let message: ReturnType<typeof decodeWorkerResponse>;
+		try {
+			message = decodeWorkerResponse(raw);
+		} catch (cause) {
+			this.markUnavailable(new SqliteFailure('worker_exit', null, { cause }));
+			return;
+		}
 		const pending = this.pending.get(message.id);
 		if (!pending) {
+			this.markUnavailable(new SqliteFailure('worker_exit', null, {
+				cause: new Error('Unexpected SQLite worker response'),
+			}));
 			return;
 		}
 		this.pending.delete(message.id);
-		if (message.error) {
+		if (message.error !== undefined) {
 			pending.reject(sqliteError(message.error));
 		} else {
 			pending.resolve(message.value);
@@ -104,19 +114,30 @@ export class SqliteRuntime implements SqlExecutor {
 				return reject(new SqliteFailure('closed'));
 			}
 			const id = ++this.nextId;
+			if (!Number.isSafeInteger(id)) {
+				const failure = new SqliteFailure('worker_exit', null, { cause: new Error('SQLite request ID exhausted') });
+				this.markUnavailable(failure);
+				return reject(failure);
+			}
 			this.pending.set(id, {
 				resolve: (value) => {
 					try {
 						resolve(decodeWorkerResult(kind, value));
 					} catch (cause) {
-						reject(new SqliteFailure('sql', null, { cause }));
+						const failure = new SqliteFailure('worker_exit', null, { cause });
+						this.markUnavailable(failure);
+						reject(failure);
 					}
 				},
 
 				reject,
 			});
 			try {
-				this.worker.postMessage({ id, kind, sql, params });
+				const request =
+					kind === 'close' ? { id, kind } :
+					kind === 'exec' ? { id, kind, sql } :
+					{ id, kind, sql, params };
+				this.worker.postMessage(request);
 			} catch (error) {
 				this.pending.delete(id);
 				reject(new SqliteFailure('sql', null, { cause: error }));
