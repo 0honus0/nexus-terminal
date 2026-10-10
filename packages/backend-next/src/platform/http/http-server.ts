@@ -394,16 +394,24 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 
 					finish() {
 						if (finishing) return finishing;
-						finishing = new Promise<void>((resolve) => {
+						finishing = new Promise<void>((resolve, reject) => {
 							if (ws.readyState === WebSocket.CLOSED) {
 								resolve();
 								return;
 							}
-							const deadline = setTimeout(() => ws.terminate(), 5000);
+							let timedOut = false;
+							const deadline = setTimeout(() => {
+								timedOut = true;
+								ws.terminate();
+							}, 5000);
 							deadline.unref();
-							ws.once('close', () => {
+							ws.once('close', (code) => {
 								clearTimeout(deadline);
-								resolve();
+								if (timedOut || code !== 1000) {
+									reject(new Error('WebSocket graceful close not confirmed'));
+								} else {
+									resolve();
+								}
 							});
 							if (ws.readyState === WebSocket.OPEN) {
 								ws.close(1000);
