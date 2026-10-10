@@ -59,7 +59,9 @@ export function decodeWorkerRequest(value: unknown): WorkerRequest {
 			return { id: requestId, kind: 'close' };
 		case 'exec':
 			fields(row, ['id', 'kind', 'sql'], ['id', 'kind', 'sql']);
-			if (typeof row.sql !== 'string' || !row.sql.trim()) throw new Error('Invalid SQLite SQL');
+			if (typeof row.sql !== 'string' || !row.sql.trim()) {
+					throw new Error('Invalid SQLite SQL');
+				}
 			return { id: requestId, kind: 'exec', sql: row.sql };
 		case 'all':
 		case 'one':
@@ -120,11 +122,15 @@ function decodeRow(value: unknown): SqlRow {
 
 const resultDecoders: { [K in WorkerOperation]: (value: unknown) => WorkerResults[K] } = {
 	exec: (value) => {
-		if (value !== null) throw new Error('Invalid SQLite exec acknowledgment');
+		if (value !== null) {
+			throw new Error('Invalid SQLite exec acknowledgment');
+		}
 	},
 
 	close: (value) => {
-		if (value !== null) throw new Error('Invalid SQLite close acknowledgment');
+		if (value !== null) {
+			throw new Error('Invalid SQLite close acknowledgment');
+		}
 	},
 
 	all: (value) => {

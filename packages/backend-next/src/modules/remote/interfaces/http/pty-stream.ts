@@ -51,7 +51,9 @@ function connectStream(
 		rechecking = true;
 		void ((state === 'eof' || state === 'finishing') ? owner.allowedOutput(token, id) : owner.allowed(token, id))
 			.then((allowed) => {
-				if (state === 'ended') return;
+				if (state === 'ended') {
+						return;
+					}
 				if (!allowed) {
 					terminate('unauthenticated');
 				}
@@ -97,7 +99,9 @@ function connectStream(
 		void owner
 			.allowedOutput(token, id)
 			.then((allowed) => {
-				if (state === 'ended') return;
+				if (state === 'ended') {
+						return;
+					}
 				if (!allowed) {
 					terminate('unauthenticated');
 					return;
@@ -123,7 +127,9 @@ function connectStream(
 		try {
 			while (state !== 'ended' && queued.length && outstanding + queued[0].bytes.length <= REMOTE_OUTPUT_WINDOW_BYTES) {
 				const allowed = await owner.allowedOutput(token, id);
-				if (state === 'ended') return;
+				if (state === 'ended') {
+						return;
+					}
 				if (!allowed) {
 					terminate('unauthenticated');
 					return;
@@ -228,7 +234,9 @@ function connectStream(
 			terminate('unauthenticated');
 			return;
 		}
-		if (state === 'ended') return;
+		if (state === 'ended') {
+						return;
+					}
 		let value;
 		try {
 			if (Buffer.byteLength(message) > 64 * 1024) {
@@ -246,7 +254,9 @@ function connectStream(
 				terminate('unauthenticated');
 				return;
 			}
-			if (state === 'ended') return;
+			if (state === 'ended') {
+						return;
+					}
 			if (state !== 'active' && value.type !== 'consumed') {
 				throw new RemoteStreamInputError();
 			}
