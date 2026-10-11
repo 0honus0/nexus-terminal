@@ -20,5 +20,6 @@ export function nextLoginFailure(
 		attempts,
 		windowStartedAt: currentWindow ? state.windowStartedAt : now,
 		blockedUntil,
+		lastAttemptAt: now,
 	};
 }

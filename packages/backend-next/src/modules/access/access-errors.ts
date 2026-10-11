@@ -1,4 +1,3 @@
-import { SqliteFailure } from '../../platform/storage/sqlite/sqlite-errors.js';
 import { AccessFailure } from './authentication/model/access-failure.js';
 
 import type { AccessErrorCode } from './public.js';
@@ -21,18 +20,8 @@ export async function accessBoundary<T>(work: () => Promise<T>): Promise<T> {
 			throw error;
 		}
 		if (error instanceof AccessFailure) {
-			throw new AccessOperationError(error.code);
+			throw new AccessOperationError(error.code, { cause: error });
 		}
-		if (error instanceof SqliteFailure) {
-			const code = ['unavailable', 'worker_exit', 'closed', 'busy', 'rollback_failed', 'commit_unknown'].includes(
-				error.kind,
-			)
-				? 'storage_unavailable'
-				: error.kind === 'constraint'
-					? 'conflict'
-					: 'internal_failure';
-			throw new AccessOperationError(code);
-		}
-		throw new AccessOperationError('internal_failure');
+		throw new AccessOperationError('internal_failure', { cause: error });
 	}
 }

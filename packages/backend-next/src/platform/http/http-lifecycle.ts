@@ -1,6 +1,6 @@
 import type { Server } from 'node:http';
 import type { Duplex } from 'node:stream';
-import type { WebSocket, WebSocketServer } from 'ws';
+import { WebSocket, type WebSocketServer } from 'ws';
 import type { FailureSummary } from '../lifecycle/failure-summary.js';
 
 interface HttpCloseResources {
@@ -56,6 +56,14 @@ export async function closeHttpResources(resources: HttpCloseResources): Promise
 		failures.push(webSocketFailure);
 	}
 	failures.push(...resources.websocketFailures.errors());
+	// The vendor can delete HTTP's socket-close listener. A raw route may
+	// have returned operation_unknown while its underlying WS is still alive.
+	// Do not claim HTTP shutdown succeeded just because the raw task ended.
+	for (const socket of resources.activeSockets) {
+		if (socket.readyState !== WebSocket.CLOSED) {
+			failures.push(new Error('WebSocket close confirmation unknown'));
+		}
+	}
 	if (failures.length > 0) {
 		throw new AggregateError(failures, 'HTTP request drain or listener close failed');
 	}

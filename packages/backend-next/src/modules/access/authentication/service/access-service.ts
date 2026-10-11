@@ -1,15 +1,17 @@
-import type { PasswordHasher } from '../../../../platform/security/password-hasher.js';
+import { ACCESS_IP_BLACKLIST_MAX_PAGE_SIZE } from '@nexus-terminal/shared/access/values';
 import { AccountModel } from '../../accounts/model/account-model.js';
 import { SessionModel } from '../../sessions/model/session-model.js';
 import type { AuthenticatedIdentity, LoginAttempt, PasswordLogin } from '../model/access-types.js';
 import type { Account } from '../../accounts/model/account-types.js';
-import { LoginFailurePolicy } from './login-failure-policy.js';
-import type { LoginFailurePolicyInput } from '../model/login-failure-types.js';
+import type { LoginFailurePolicy } from './login-failure-policy.js';
 import { AccessFailure } from '../model/access-failure.js';
+import type { CaptchaService } from '../../captcha/service/captcha-service.js';
+import type { SourceAddressModel } from '../../admission/model/source-address-model.js';
+import type { CaptchaPublicConfiguration } from '../../captcha/model/captcha-types.js';
+import type { LoginFailurePage } from '../../sessions/model/session-types.js';
 
 // Browser cookie is session-only; the old persistent server-side store retains data for 30 days.
-const STANDARD_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
-const REMEMBERED_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
+const SESSION_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
 
 function toIdentity(account: Account): AuthenticatedIdentity {
 	return { userId: account.id, username: account.username, twoFactorEnabled: account.twoFactorEnabled };
@@ -34,18 +36,13 @@ function validatePassword(value: string): void {
 }
 
 export class AccessService {
-	private readonly dummyHash: Promise<string>;
-	private readonly loginFailurePolicy: LoginFailurePolicy;
-
 	constructor(
 		private readonly accounts: AccountModel,
 		private readonly sessions: SessionModel,
-		private readonly hasher: PasswordHasher,
-		loginFailureOptions: LoginFailurePolicyInput = { enabled: false },
-	) {
-		this.dummyHash = hasher.hash('never-used-unknown-account');
-		this.loginFailurePolicy = new LoginFailurePolicy(loginFailureOptions);
-	}
+		private readonly captcha: CaptchaService,
+		private readonly loginFailurePolicy: LoginFailurePolicy,
+		private readonly addresses: SourceAddressModel,
+	) {}
 
 	needsSetup(): Promise<boolean> {
 		return this.accounts.needsSetup();
@@ -54,7 +51,7 @@ export class AccessService {
 	async setupAdmin(username: string, password: string): Promise<AuthenticatedIdentity> {
 		const validUsername = validateUsername(username);
 		validatePassword(password);
-		const passwordHash = await this.hasher.hash(password);
+		const passwordHash = await this.accounts.hashPassword(password);
 		const created = await this.accounts.createInitialAdmin({ username: validUsername, passwordHash });
 		if (created === null) {
 			throw new AccessFailure('already_initialized');
@@ -63,6 +60,9 @@ export class AccessService {
 	}
 
 	async login(command: PasswordLogin): Promise<LoginAttempt> {
+		if (command.signal?.aborted) {
+			throw new AccessFailure('operation_unknown');
+		}
 		const username = validateUsername(command.username);
 		if (
 			typeof command.password !== 'string' ||
@@ -73,16 +73,39 @@ export class AccessService {
 		) {
 			throw new AccessFailure('invalid_input');
 		}
-		const enforceFailurePolicy = this.loginFailurePolicy.shouldEnforce(command.source);
-		if (enforceFailurePolicy && !(await this.sessions.checkLoginAdmission(command.source))) {
+		const address = this.addresses.resolve(command.source);
+		if (address === null) {
+			throw new AccessFailure('invalid_input');
+		}
+		const source = address.ip;
+		const enforceFailurePolicy = this.loginFailurePolicy.shouldEnforce(address.isInternal);
+		if (enforceFailurePolicy && !(await this.sessions.checkLoginAdmission(source))) {
+			return { status: 'rate_limited' };
+		}
+		if (command.signal?.aborted) {
+			throw new AccessFailure('operation_unknown');
+		}
+		const captchaValid = await this.captcha.verify(command.captchaToken, source, command.signal);
+		if (command.signal?.aborted) {
+			throw new AccessFailure('operation_unknown');
+		}
+		if (!captchaValid) {
+			if (enforceFailurePolicy) {
+				await this.sessions.recordFailedPassword(source, this.loginFailurePolicy.limits);
+			}
+			return { status: 'captcha_invalid' };
+		}
+		if (enforceFailurePolicy && !(await this.sessions.checkLoginAdmission(source))) {
 			return { status: 'rate_limited' };
 		}
 		const account = await this.accounts.getByUsername(username);
-		const verifier = account?.passwordHash ?? (await this.dummyHash);
-		const valid = await this.hasher.verify(command.password, verifier);
+		const valid = await this.accounts.verifyPassword(command.password, account);
+		if (command.signal?.aborted) {
+			throw new AccessFailure('operation_unknown');
+		}
 		if (!valid || account === null) {
 			if (enforceFailurePolicy) {
-				await this.sessions.recordFailedPassword(command.source, this.loginFailurePolicy.limits);
+				await this.sessions.recordFailedPassword(source, this.loginFailurePolicy.limits);
 			}
 			return { status: 'invalid_credentials' };
 		}
@@ -92,26 +115,63 @@ export class AccessService {
 		if (account.twoFactorEnabled || account.passkeyRequired) {
 			return { status: 'factor_unavailable' };
 		}
-		const expiresAt = Date.now() + (command.rememberMe ? REMEMBERED_SESSION_MS : STANDARD_SESSION_MS);
-		const token = await this.sessions.issue({
+		const expiresAt = Date.now() + SESSION_LIFETIME_MS;
+		const issued = await this.sessions.issue({
 			accountId: account.id,
 			passwordHash: account.passwordHash,
-			previousToken: command.previousToken,
 			rememberMe: command.rememberMe,
 			expiresAt,
-			source: command.source,
+			source,
 			clearLoginAttempts: enforceFailurePolicy,
+			signal: command.signal,
 		});
-		if (token === null) {
+		if (issued.status === 'cancelled') {
+			throw new AccessFailure('operation_unknown');
+		}
+		if (issued.status === 'rate_limited') {
+			return { status: 'rate_limited' };
+		}
+		if (issued.status === 'credentials_changed') {
 			return { status: 'invalid_credentials' };
 		}
 		return {
 			status: 'authenticated',
-			token,
+			token: issued.token,
 			identity: toIdentity(account),
 			expiresAt,
 			rememberMe: command.rememberMe,
 		};
+	}
+
+	captchaConfig(): CaptchaPublicConfiguration {
+		return this.captcha.publicConfig();
+	}
+
+	listLoginFailures(actorId: number, limit: number, offset: number): Promise<LoginFailurePage> {
+		if (actorId !== 1) {
+			throw new AccessFailure('forbidden');
+		}
+		if (
+			!Number.isSafeInteger(limit) ||
+			limit < 1 ||
+			limit > ACCESS_IP_BLACKLIST_MAX_PAGE_SIZE ||
+			!Number.isSafeInteger(offset) ||
+			offset < 0
+		) {
+			throw new AccessFailure('invalid_input');
+		}
+		return this.sessions.listLoginFailures(limit, offset);
+	}
+
+	clearLoginFailure(actorId: number, source: string): Promise<boolean> {
+		if (actorId !== 1) {
+			throw new AccessFailure('forbidden');
+		}
+		const address = this.addresses.resolve(source);
+		if (address === null) {
+			throw new AccessFailure('invalid_input');
+		}
+		return this.sessions.clearLoginFailure(address.ip);
 	}
 
 	async authenticate(token: string | null): Promise<AuthenticatedIdentity | null> {
@@ -119,6 +179,15 @@ export class AccessService {
 			return null;
 		}
 		const identity = await this.sessions.validate(token, Date.now());
+		return identity === null ? null : toIdentity(identity.account);
+	}
+
+	/** Internal owner check for a preexisting session digest, never a bearer. */
+	async authenticateDigest(digest: string): Promise<AuthenticatedIdentity | null> {
+		if (!/^[a-f0-9]{64}$/u.test(digest)) {
+			return null;
+		}
+		const identity = await this.sessions.validateDigest(digest, Date.now());
 		return identity === null ? null : toIdentity(identity.account);
 	}
 
@@ -130,19 +199,31 @@ export class AccessService {
 
 	async changePassword(token: string | null, currentPassword: string, nextPassword: string): Promise<void> {
 		const identity = await this.authenticate(token);
-		if (!identity) {
-			throw new AccessFailure('invalid_credentials');
+		if (!identity || token === null) {
+			throw new AccessFailure('unauthenticated');
+		}
+		if (
+			typeof currentPassword !== 'string' ||
+			currentPassword.length === 0 ||
+			Buffer.byteLength(currentPassword, 'utf8') > 1024
+		) {
+			throw new AccessFailure('invalid_input');
 		}
 		validatePassword(nextPassword);
 		if (currentPassword === nextPassword) {
 			throw new AccessFailure('invalid_input');
 		}
 		const account = await this.accounts.getById(identity.userId);
-		if (!account || !(await this.hasher.verify(currentPassword, account.passwordHash))) {
+		if (!account || !(await this.accounts.verifyPassword(currentPassword, account))) {
 			throw new AccessFailure('invalid_credentials');
 		}
-		const hashed = await this.hasher.hash(nextPassword);
-		const updated = await this.accounts.changePassword(account.id, account.passwordHash, hashed);
+		const hashed = await this.accounts.hashPassword(nextPassword);
+		const updated = await this.accounts.changePassword({
+			accountId: account.id,
+			expectedHash: account.passwordHash,
+			newHash: hashed,
+			sessionToken: token,
+		});
 		if (!updated) {
 			throw new AccessFailure('conflict');
 		}

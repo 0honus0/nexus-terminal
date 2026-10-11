@@ -63,7 +63,7 @@ function connectStream(
 					terminate('unauthenticated');
 				}
 			})
-			.catch(() => terminate('unauthenticated'))
+			.catch(() => terminate('remote_unavailable'))
 			.finally(() => {
 				rechecking = false;
 			});
@@ -77,14 +77,22 @@ function connectStream(
 		if (eofDeadline) {
 			clearTimeout(eofDeadline);
 		}
+		const failures: unknown[] = [];
 		for (const unsubscribe of subscriptions) {
 			try {
 				unsubscribe();
-			} catch {
-				/* PTY release still owns the final cleanup */
+			} catch (error) {
+				failures.push(error);
 			}
 		}
-		await owner.release(id);
+		try {
+			await owner.release(id);
+		} catch (error) {
+			failures.push(error);
+		}
+		if (failures.length) {
+			throw new AggregateError(failures, 'PTY subscription and resource cleanup failed');
+		}
 	});
 
 	function terminate(code: 'unauthenticated' | 'transport_overflow' | 'remote_unavailable'): void {
@@ -117,7 +125,7 @@ function connectStream(
 				}
 				void channel.finish().catch(() => channel.close());
 			})
-			.catch(() => terminate('unauthenticated'));
+			.catch(() => terminate('remote_unavailable'));
 	}
 
 	async function flush(): Promise<void> {
@@ -238,7 +246,14 @@ function connectStream(
 		// A terminal-rendered ACK may arrive after the session left the live
 		// map but before onClosed has published EOF. Check ownership independently
 		// of liveness, then require a live PTY for commands that change it.
-		if (!(await owner.allowedOutput(token, id))) {
+		let allowedOutput: boolean;
+		try {
+			allowedOutput = await owner.allowedOutput(token, id);
+		} catch {
+			terminate('remote_unavailable');
+			return;
+		}
+		if (!allowedOutput) {
 			terminate('unauthenticated');
 			return;
 		}

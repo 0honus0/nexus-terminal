@@ -1,16 +1,17 @@
 import { Client, type ClientChannel, type SFTPWrapper } from 'ssh2';
 import type { EventEmitter } from 'node:events';
-import type {
-	MachineConnection,
-	MachineConnectOptions,
-	MachineEndpoint,
-	MachineSshFactory,
-	MachinePty,
-	MachineShell,
-	MachineCommand,
-	MachineCommandResult,
-	MachineSftpLease,
-	MachineExecuteOptions,
+import {
+	MachineDispatchFailure,
+	type MachineConnection,
+	type MachineConnectOptions,
+	type MachineEndpoint,
+	type MachineSshFactory,
+	type MachinePty,
+	type MachineShell,
+	type MachineCommand,
+	type MachineCommandResult,
+	type MachineSftpLease,
+	type MachineExecuteOptions,
 } from '../../ssh-port.js';
 import { openSshRoute, type ConnectedRoute } from './ssh-route.js';
 import { SshShellChannel, SshCommandChannel } from './ssh-channels.js';
@@ -105,9 +106,15 @@ class ConnectedMachine implements MachineConnection {
 		create: (client: Client, callback: (error: Error | undefined, channel: ClientChannel) => void) => void,
 		signal?: AbortSignal,
 	): Promise<ClientChannel> {
-		const client = this.requireClient();
+		let client: Client;
+		try {
+			client = this.requireClient();
+		} catch (cause) {
+			throw new MachineDispatchFailure('not_started', { cause });
+		}
 		return new Promise((resolve, reject) => {
 			let settled = false;
+			let dispatched = false;
 
 			const cleanup = () => {
 				clearTimeout(timeout);
@@ -117,7 +124,11 @@ class ConnectedMachine implements MachineConnection {
 				this.stop.signal.removeEventListener('abort', aborted);
 			};
 
-			const finish = (error?: Error, channel?: ClientChannel) => {
+			const finish = (
+				error?: Error,
+				channel?: ClientChannel,
+				outcome: MachineDispatchFailure['outcome'] = dispatched ? 'unknown' : 'not_started',
+			) => {
 				if (settled) {
 					channel?.destroy();
 					return;
@@ -126,22 +137,34 @@ class ConnectedMachine implements MachineConnection {
 				cleanup();
 				if (error) {
 					channel?.destroy();
-					reject(error);
+					reject(
+						error instanceof MachineDispatchFailure
+							? error
+							: new MachineDispatchFailure(outcome, { cause: error }),
+					);
 				} else if (!this.isOpen || signal?.aborted) {
 					channel?.destroy();
-					reject(new Error('SSH channel no longer owned'));
+					reject(new MachineDispatchFailure(dispatched ? 'unknown' : 'not_started'));
 				} else {
 					resolve(channel!);
 				}
 			};
 
-			const disconnected = () => finish(new Error('SSH transport disconnected'));
+			const disconnected = () => finish(new Error('SSH transport disconnected'), undefined, 'unknown');
 
-			const failed = (error: Error) => finish(error);
+			const failed = (error: Error) => finish(error, undefined, dispatched ? 'unknown' : 'not_started');
 
-			const aborted = () => finish(new DOMException('SSH channel aborted', 'AbortError'));
+			const aborted = () =>
+				finish(
+					new DOMException('SSH channel aborted', 'AbortError'),
+					undefined,
+					dispatched ? 'unknown' : 'not_started',
+				);
 
-			const timeout = setTimeout(() => finish(timeoutError()), CHANNEL_OPEN_TIMEOUT_MS);
+			const timeout = setTimeout(
+				() => finish(timeoutError(), undefined, dispatched ? 'unknown' : 'not_started'),
+				CHANNEL_OPEN_TIMEOUT_MS,
+			);
 			client.once('close', disconnected);
 			client.once('error', failed);
 			signal?.addEventListener('abort', aborted, { once: true });
@@ -150,9 +173,14 @@ class ConnectedMachine implements MachineConnection {
 				return aborted();
 			}
 			try {
-				create(client, (error, channel) => finish(error, channel));
+				dispatched = true;
+				create(client, (error, channel) => finish(error, channel, error ? 'failed' : 'unknown'));
 			} catch (error) {
-				finish(error instanceof Error ? error : new Error('SSH channel rejected', { cause: error }));
+				finish(
+					error instanceof Error ? error : new Error('SSH channel rejected', { cause: error }),
+					undefined,
+					'unknown',
+				);
 			}
 		});
 	}
@@ -214,7 +242,9 @@ class ConnectedMachine implements MachineConnection {
 		if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1 || options.timeoutMs > 300000) {
 			throw new Error('Invalid command timeout');
 		}
-		options.signal?.throwIfAborted();
+		if (options.signal?.aborted) {
+			throw new MachineDispatchFailure('not_started', { cause: options.signal.reason });
+		}
 		const controller = new AbortController();
 
 		const abort = () => controller.abort(options.signal?.reason);

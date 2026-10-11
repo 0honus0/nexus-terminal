@@ -10,6 +10,10 @@ import { ConnectionCredentialModel } from './connections/model/connection-creden
 import { ConnectionCredentialService } from './connections/service/connection-credential-service.js';
 import { ConnectionModel, validateStoredConnectionGraph } from './connections/model/connection-model.js';
 import { ConnectionService } from './connections/service/connection-service.js';
+import { SqliteDesktopTargetAdapter } from './connections/adapters/sqlite/desktop-target-sql.js';
+import { DesktopTargetModel } from './connections/model/desktop-target-model.js';
+import { DesktopTargetService } from './connections/service/desktop-target-service.js';
+import { toTrustedDesktopTarget } from './public-mappers.js';
 import { findOrCreateProxy } from './proxies/adapters/sqlite/proxy-sql.js';
 import { SqliteProxyStorage } from './proxies/adapters/sqlite/proxy-management-sql.js';
 import { ProxyModel } from './proxies/model/proxy-model.js';
@@ -73,6 +77,9 @@ interface TargetsRegistration {
 export function registerTargets({ sqlite, secrets }: TargetsRegistrationOptions): TargetsRegistration {
 	const model = new ConnectionModel(new ConnectionSqliteAdapter(sqlite, validateStoredConnectionGraph));
 	const service = new ConnectionService(model);
+	const desktopTargets = new DesktopTargetService(
+		new DesktopTargetModel(new SqliteDesktopTargetAdapter(sqlite), secrets),
+	);
 	const imports = new SqliteConnectionImportAdapter(sqlite, {
 		connections: {
 			insert: (tx, data) => insertConnectionInTransaction(tx, data, validateStoredConnectionGraph),
@@ -92,6 +99,16 @@ export function registerTargets({ sqlite, secrets }: TargetsRegistrationOptions)
 	const hostKeys = new HostKeyService(new HostKeyModel(new SqliteHostKeyStorage(sqlite)));
 
 	const publicApi: TargetsPublicApi = {
+		desktopTargets: {
+			get: (id) =>
+				targetsBoundary(async () => {
+					const value = await desktopTargets.get(id);
+					return value === null ? null : toTrustedDesktopTarget(value);
+				}),
+
+			markAttempt: (id, version, timestamp) =>
+				targetsBoundary(() => desktopTargets.markAttempt(id, version, timestamp)),
+		},
 		hostKeys: {
 			list: () => targetsBoundary(async () => (await hostKeys.list()).map(toHostKeyView)),
 
@@ -134,9 +151,6 @@ export function registerTargets({ sqlite, secrets }: TargetsRegistrationOptions)
 
 		setTags: (id, version, tagIds) =>
 			targetsBoundary(async () => toConnectionMutation(await service.setTags(id, version, [...tagIds]))),
-
-		importOne: (input) =>
-			targetsBoundary(async () => toConnectionView(await importService.importOne(toImportInput(input)))),
 
 		importMany: (inputs) =>
 			targetsBoundary(async () =>

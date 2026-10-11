@@ -4,6 +4,8 @@ import type { HttpWebSocketChannel } from './http-types.js';
 
 interface WebSocketChannelOptions {
 	isAccepting(): boolean;
+	maxBinaryMessageBytes?: number;
+	maxTextMessageBytes?: number;
 	trackTask(task: Promise<unknown>, observeFailure?: boolean): void;
 	onClosed(): void;
 }
@@ -11,32 +13,65 @@ interface WebSocketChannelOptions {
 /** One socket owns its queue, callbacks, flow control and graceful completion. */
 export function createWebSocketChannel(ws: WebSocket, options: WebSocketChannelOptions): HttpWebSocketChannel {
 	let listener: ((value: string) => Promise<void>) | null = null;
+	let binaryListener: ((value: Uint8Array) => Promise<void>) | null = null;
 	let closing: (() => Promise<void>) | null = null;
 	let incoming = Promise.resolve();
 	let queuedMessages = 0;
 	let queuedBytes = 0;
 	let finishing: Promise<void> | null = null;
 	ws.on('message', (data, isBinary) => {
-		if (isBinary || !listener || finishing || !options.isAccepting()) {
+		if (
+			finishing ||
+			!options.isAccepting() ||
+			(isBinary ? !binaryListener || options.maxBinaryMessageBytes === undefined : !listener)
+		) {
 			ws.terminate();
 			return;
 		}
-		const message = data.toString();
-		const bytes = Buffer.byteLength(message);
-		if (queuedMessages >= MAX_WEBSOCKET_INPUT_MESSAGES || queuedBytes + bytes > MAX_WEBSOCKET_INPUT_BYTES) {
+		const binary = isBinary
+			? Buffer.isBuffer(data)
+				? data
+				: Array.isArray(data)
+					? Buffer.concat(data)
+					: Buffer.from(data)
+			: null;
+		const bytes = binary?.byteLength ?? Buffer.byteLength(data.toString());
+		if (isBinary && bytes > options.maxBinaryMessageBytes!) {
+			ws.close(1009, 'Binary frame exceeds route limit');
+			return;
+		}
+		if (!isBinary && options.maxTextMessageBytes !== undefined && bytes > options.maxTextMessageBytes) {
+			ws.close(1009, 'Text frame exceeds route limit');
+			return;
+		}
+		const inputBudget = Math.max(MAX_WEBSOCKET_INPUT_BYTES, options.maxTextMessageBytes ?? 0);
+		if (queuedMessages >= MAX_WEBSOCKET_INPUT_MESSAGES || queuedBytes + bytes > inputBudget) {
 			ws.terminate();
 			return;
 		}
 		queuedMessages += 1;
 		queuedBytes += bytes;
+		// Old upload transport started each append independently. Serialize binary
+		// receives and pause the socket at high water so final-chunk ACK cannot
+		// overtake an earlier write or accumulate unbounded queued chunks.
+		if (binaryListener && queuedBytes >= MAX_WEBSOCKET_INPUT_BYTES / 2) {
+			ws.pause();
+		}
 		const current = incoming.then(async () => {
 			try {
-				if (ws.readyState === WebSocket.OPEN && listener) {
-					await listener(message);
+				if (ws.readyState === WebSocket.OPEN) {
+					if (isBinary) {
+						await binaryListener?.(Uint8Array.from(binary!));
+					} else {
+						await listener?.(data.toString());
+					}
 				}
 			} finally {
 				queuedMessages -= 1;
 				queuedBytes -= bytes;
+				if (binaryListener && queuedBytes < MAX_WEBSOCKET_INPUT_BYTES / 4 && ws.readyState === WebSocket.OPEN) {
+					ws.resume();
+				}
 			}
 		});
 		incoming = current.catch(() => ws.terminate());
@@ -65,8 +100,27 @@ export function createWebSocketChannel(ws: WebSocket, options: WebSocketChannelO
 			return true;
 		},
 
+		sendBinary(value) {
+			if (ws.readyState !== WebSocket.OPEN || ws.bufferedAmount + value.byteLength > MAX_WEBSOCKET_BUFFER_BYTES) {
+				return false;
+			}
+			ws.send(value, { binary: true }, (error) => {
+				if (error) {
+					ws.terminate();
+				}
+			});
+			return true;
+		},
+
 		onMessage(callback) {
 			listener = callback;
+		},
+
+		onBinary(callback) {
+			if (options.maxBinaryMessageBytes === undefined) {
+				throw new Error('Binary ingress is not enabled for this WebSocket route');
+			}
+			binaryListener = callback;
 		},
 
 		onClose(callback) {
@@ -105,7 +159,11 @@ export function createWebSocketChannel(ws: WebSocket, options: WebSocketChannelO
 			return finishing;
 		},
 
-		close() {
+		close(code, reason) {
+			if (code !== undefined && ws.readyState === WebSocket.OPEN) {
+				ws.close(code, reason);
+				return;
+			}
 			ws.terminate();
 		},
 	};

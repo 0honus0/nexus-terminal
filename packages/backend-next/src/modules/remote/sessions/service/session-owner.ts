@@ -1,4 +1,5 @@
 import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.js';
+import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import { RecentResults } from '../../../../platform/lifecycle/recent-results.js';
 import { CLOSED_SESSION_TTL_MS, MAX_RECENTLY_RELEASED } from '../session-limits.js';
 import { createHash } from 'node:crypto';
@@ -116,7 +117,7 @@ export class RemoteSessionOwner {
 			try {
 				await this.remote.closeSession(view.id);
 			} catch (cleanup) {
-				throw new AggregateError([error, cleanup], 'Remote open cleanup failed');
+				throw new RemoteResourceCleanupFailure([error, cleanup]);
 			}
 			throw error;
 		}
@@ -151,8 +152,14 @@ export class RemoteSessionOwner {
 		}
 	}
 
-	async get(token: string | null, id: string): Promise<RemoteSessionSnapshot | null> {
-		if (!(await this.allowed(token, id))) {
+	get(token: string | null, id: string): Promise<RemoteSessionSnapshot | null> {
+		return this.track(this.getAdmitted(token, id));
+	}
+
+	private async getAdmitted(token: string | null, id: string): Promise<RemoteSessionSnapshot | null> {
+		const userId = await this.identity(token);
+		const owner = this.owners.get(id);
+		if (!this.accepting || !token || !owner || owner.userId !== userId || owner.tokenDigest !== digest(token)) {
 			return null;
 		}
 		const view = this.remote.get(id);
@@ -169,26 +176,13 @@ export class RemoteSessionOwner {
 
 	async closeSession(token: string | null, id: string): Promise<boolean> {
 		if (!token) {
-			return false;
+			throw new RemotePermissionError('unauthenticated');
 		}
+		const userId = await this.identity(token);
 		const owner = this.owners.get(id);
 		const completed = this.releaseOwners.get(id) ?? this.recentlyReleased.get(id);
 		const record = owner ?? completed;
-		if (!record || record.tokenDigest !== digest(token)) {
-			return false;
-		}
-		try {
-			if ((await this.identity(token)) !== record.userId) {
-				return false;
-			}
-		} catch {
-			return false;
-		}
-		if (
-			owner
-				? this.owners.get(id) !== owner
-				: this.releaseOwners.get(id) !== completed && this.recentlyReleased.get(id) !== completed
-		) {
+		if (!record || record.userId !== userId || record.tokenDigest !== digest(token)) {
 			return false;
 		}
 		// A valid same-session DELETE must see the original cleanup outcome even
@@ -276,7 +270,7 @@ export class RemoteSessionOwner {
 				.map((item) => item.reason);
 			errors.push(...this.cleanupFailures.errors());
 			if (errors.length) {
-				throw new AggregateError([...new Set(errors)], 'Remote owner shutdown failed');
+				throw new RemoteResourceCleanupFailure([...new Set(errors)]);
 			}
 		})();
 		return this.closePromise;

@@ -1,4 +1,4 @@
-import { RemoteResourceCleanupFailure } from '../resource-errors.js';
+import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import { createHash } from 'node:crypto';
 import { RemoteHostKeyUntrustedError } from './machine-errors.js';
 import type { RemoteMachineOpenRequest, OpenedRemoteMachine } from './machine-types.js';
@@ -7,7 +7,7 @@ import type {
 	TrustedSshTargetResolver,
 	TrustedSshResolveRequest,
 	HostKeyManagement,
-} from '../../targets/public.js';
+} from '../../../targets/public.js';
 import type {
 	MachineEndpoint,
 	MachineRoute,
@@ -15,7 +15,7 @@ import type {
 	MachineProxy,
 	MachineSshFactory,
 	MachineConnectOptions,
-} from '../../../platform/ssh/ssh-port.js';
+} from '../../../../platform/ssh/ssh-port.js';
 
 /** Remote owns business target → generic machine contract transformation. */
 function toMachineTarget(target: TrustedResolvedSshTarget): MachineEndpoint {

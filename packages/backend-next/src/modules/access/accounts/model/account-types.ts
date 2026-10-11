@@ -15,3 +15,10 @@ export interface InitialAdminCommand {
 	username: string;
 	passwordHash: string;
 }
+
+export interface ChangePasswordCommand {
+	accountId: number;
+	expectedHash: string;
+	newHash: string;
+	sessionToken: string;
+}

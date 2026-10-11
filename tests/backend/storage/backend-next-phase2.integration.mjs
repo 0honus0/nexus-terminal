@@ -11,6 +11,7 @@ import { applicationMigrations } from '../../../packages/backend-next/dist/boots
 import { SqliteAccountStorage } from '../../../packages/backend-next/dist/modules/access/accounts/adapters/sqlite/account-sql.js';
 import { SqliteSessionStorage } from '../../../packages/backend-next/dist/modules/access/sessions/adapters/sqlite/session-sql.js';
 import { SessionModel } from '../../../packages/backend-next/dist/modules/access/sessions/model/session-model.js';
+import { SecureSessionTokens } from '../../../packages/backend-next/dist/platform/security/adapters/secure-session-tokens.js';
 import {
 	nextLoginFailure,
 	mayAttemptLogin,
@@ -158,7 +159,7 @@ try {
 	app = undefined;
 	db = SqliteRuntime.open(dbPath);
 	const sessions = new SqliteSessionStorage(db);
-	const sessionModel = new SessionModel(sessions);
+	const sessionModel = new SessionModel(sessions, new SecureSessionTokens());
 	const limits = { maxAttempts: 3, windowMs: 10000, banMs: 20000 };
 	await Promise.all(Array.from({ length: 3 }, () => sessionModel.recordFailedPassword('regression-source', limits)));
 	assert.equal(
@@ -167,16 +168,17 @@ try {
 		'concurrent failures must not lose increments',
 	);
 	assert.equal(await sessionModel.checkLoginAdmission('regression-source'), false);
-	const blocked = { attempts: 3, windowStartedAt: 0, blockedUntil: 20000 };
+	const blocked = { attempts: 3, windowStartedAt: 0, blockedUntil: 20000, lastAttemptAt: 0 };
 	assert.equal(nextLoginFailure(blocked, 15000, limits).blockedUntil, 20000, 'active ban must not extend');
 	assert.equal(mayAttemptLogin(blocked, 20000), true);
 	assert.deepEqual(nextLoginFailure(blocked, 20000, limits), {
 		attempts: 1,
 		windowStartedAt: 20000,
 		blockedUntil: 0,
+		lastAttemptAt: 20000,
 	});
 	const versions = (await db.all('SELECT version FROM schema_version ORDER BY version')).map((r) => r.version);
-	assert.deepEqual(versions, [1, 2, 3]);
+	assert.deepEqual(versions, [1, 2, 3, 4, 5]);
 	const creds = await db.all('SELECT encrypted_password FROM proxy_credentials');
 	assert.ok(creds[0].encrypted_password.startsWith('v1.'));
 	assert.equal(creds[0].encrypted_password.includes('SECRET_PROXY'), false);
@@ -213,7 +215,7 @@ try {
 	db = SqliteRuntime.open(failPath);
 	assert.deepEqual(
 		(await db.all('SELECT version FROM schema_version ORDER BY version')).map((r) => r.version),
-		[1, 2, 3],
+		[1, 2, 3, 4, 5],
 	);
 	await db.close();
 	// Reject the first batch's incompatible pre-release v1 instead of silently

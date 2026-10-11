@@ -48,6 +48,16 @@ export type MachineCommandOutcome =
 	| { status: 'nonzero'; exitCode: number; signal: string | null }
 	| { status: 'unknown'; reason: 'disconnect' | 'timeout' | 'cancelled' | 'channel_error' };
 
+export class MachineDispatchFailure extends Error {
+	constructor(
+		readonly outcome: 'not_started' | 'failed' | 'unknown',
+		options?: ErrorOptions,
+	) {
+		super('SSH dispatch ' + outcome, options);
+		this.name = 'MachineDispatchFailure';
+	}
+}
+
 export type MachineChannelCloseReason = 'normal' | 'disconnected' | 'channel_error';
 
 export interface MachineByteChannel {
@@ -85,7 +95,10 @@ export interface MachineExecuteOptions {
 
 export interface MachineFileInfo {
 	readonly size: number;
+	readonly uid: number;
+	readonly gid: number;
 	readonly mode: number;
+	readonly accessedAt: number;
 	readonly modifiedAt: number;
 	readonly isDirectory: boolean;
 	readonly isFile: boolean;
@@ -94,6 +107,7 @@ export interface MachineFileInfo {
 
 export interface MachineDirectoryEntry {
 	readonly name: string;
+	readonly longName?: string;
 	readonly info: MachineFileInfo;
 }
 
@@ -122,16 +136,22 @@ export interface MachineSftpWriteOptions extends MachineOperationOptions {
 	readonly mode?: number;
 }
 
+/** ssh2/SFTP status normalized at the Adapter boundary; business code never reads raw cause.code. */
+export type MachineSftpRemoteStatus = 'eof' | 'not_found' | 'permission_denied' | 'unsupported' | 'failure';
+
 /** Local failure never proves that an already dispatched remote mutation was rolled back. */
 export class MachineSftpFailure extends Error {
+	readonly remoteStatus: MachineSftpRemoteStatus | null;
+
 	constructor(
 		readonly reason:
 			'cancelled' | 'timeout' | 'closed' | 'operation_failed' | 'limit_exceeded' | 'invalid_metadata',
-		readonly outcome: 'not_started' | 'unknown',
-		options?: ErrorOptions,
+		readonly outcome: 'not_started' | 'failed' | 'unknown',
+		options?: ErrorOptions & { remoteStatus?: MachineSftpRemoteStatus },
 	) {
 		super('SFTP ' + reason, options);
 		this.name = 'MachineSftpFailure';
+		this.remoteStatus = options?.remoteStatus ?? null;
 	}
 }
 
@@ -139,9 +159,19 @@ export interface MachineSftpLease {
 	stat(path: string, options?: MachineOperationOptions): Promise<MachineFileInfo>;
 	lstat(path: string, options?: MachineOperationOptions): Promise<MachineFileInfo>;
 	list(path: string, options: MachineSftpListOptions): Promise<MachineDirectoryEntry[]>;
+	scan(path: string, options?: MachineOperationOptions): AsyncIterable<MachineDirectoryEntry>;
 	read(path: string, options?: MachineSftpReadOptions): Readable;
+	readChunks(path: string, options?: MachineSftpReadOptions): AsyncIterable<Uint8Array>;
 	write(path: string, options?: MachineSftpWriteOptions): Writable;
+	writeFile(path: string, bytes: Uint8Array, options?: MachineSftpWriteOptions): Promise<void>;
+	realpath(path: string, options?: MachineOperationOptions): Promise<string>;
+	readlink(path: string, options?: MachineOperationOptions): Promise<string>;
+	symlink(targetPath: string, linkPath: string, options?: MachineOperationOptions): Promise<void>;
+	chmod(path: string, mode: number, options?: MachineOperationOptions): Promise<void>;
+	utimes(path: string, accessedAt: number, modifiedAt: number, options?: MachineOperationOptions): Promise<void>;
 	rename(from: string, to: string, options?: MachineOperationOptions): Promise<void>;
+	/** Replace a file without exposing server-specific rename extensions to business code. */
+	replace(from: string, to: string, options?: MachineOperationOptions): Promise<void>;
 	remove(path: string, options?: MachineOperationOptions): Promise<void>;
 	mkdir(path: string, options?: MachineOperationOptions): Promise<void>;
 	rmdir(path: string, options?: MachineOperationOptions): Promise<void>;
@@ -161,3 +191,6 @@ export interface MachineConnection {
 export interface MachineSshFactory {
 	connect(endpoint: MachineEndpoint, options: MachineConnectOptions): Promise<MachineConnection>;
 }
+
+/** Native capabilities consume commands without acquiring application target identities. */
+export type MachineCommandExecutor = (command: string, options: MachineExecuteOptions) => Promise<MachineCommandResult>;

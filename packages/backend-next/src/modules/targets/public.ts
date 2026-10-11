@@ -52,7 +52,7 @@ export type SshKeyView = TargetSshKeyView;
 
 export type SshKeyMutation = TargetSshKeyMutation;
 
-export type SshCredentialInput = TargetCredentialInput;
+export type ConnectionCredentialInput = TargetCredentialInput;
 
 export type CredentialMutation = TargetCredentialMutation;
 
@@ -71,13 +71,32 @@ export interface ConnectionCatalog {
 	get(id: number): Promise<ConnectionSnapshot | null>;
 }
 
+/** Trusted backend-only decrypted desktop snapshot. Never serialize this type. */
+export interface TrustedDesktopTarget {
+	id: number;
+	version: number;
+	protocol: import('@nexus-terminal/shared/remote/desktop/values').RemoteDesktopProtocol;
+	host: string;
+	port: number;
+	username: string;
+	/** Null when the target has no password credential; no plaintext is stored. */
+	password: string | null;
+	rdpRemoteApp: string | null;
+	rdpRemoteAppDirectory: string | null;
+	rdpRemoteAppArguments: string | null;
+}
+
+export interface TrustedDesktopTargets {
+	get(id: number): Promise<TrustedDesktopTarget | null>;
+	markAttempt(id: number, version: number, timestamp: number): Promise<boolean>;
+}
+
 export interface ConnectionMutations {
 	create(data: ConnectionMetadata): Promise<ConnectionSnapshot>;
 	update(id: number, version: number, changes: Partial<ConnectionMetadata>): Promise<ConnectionMutation>;
 	clone(id: number, name: string): Promise<ConnectionSnapshot | null>;
 	delete(id: number): Promise<boolean>;
 	setTags(id: number, version: number, tags: number[]): Promise<ConnectionMutation>;
-	importOne(command: ConnectionImport): Promise<ConnectionSnapshot>;
 	importMany(commands: ConnectionImport[]): Promise<ImportItemResult[]>;
 }
 
@@ -106,12 +125,14 @@ export interface SshKeyManagement {
 }
 
 export interface ConnectionCredentialManagement {
-	set(id: number, version: number, input: SshCredentialInput): Promise<CredentialMutation>;
+	set(id: number, version: number, input: ConnectionCredentialInput): Promise<CredentialMutation>;
 	clear(id: number, version: number): Promise<CredentialMutation>;
 }
 
 export type TargetsPublicApi = ConnectionCatalog &
 	ConnectionMutations & {
+		/** Private to trusted backend modules; never exposed on Targets HTTP. */
+		desktopTargets: TrustedDesktopTargets;
 		proxies: ProxyManagement;
 		tags: TagManagement;
 		sshKeys: SshKeyManagement;

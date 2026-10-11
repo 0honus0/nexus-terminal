@@ -1,7 +1,8 @@
 import type { SchemaMigration } from '../platform/storage/sqlite/schema-types.js';
 import { targetMigrations, initializeHostKeySchema } from '../modules/targets/schema.js';
-import { initializeAccessSchema } from '../modules/access/migrations.js';
+import { initializeAccessSchema, migrateAccessLoginFailureHistory } from '../modules/access/migrations.js';
 import { initializeAgentSchema } from '../modules/agent/migrations.js';
+import { initializeDesktopConnectionHistory } from '../modules/targets/migrations.js';
 
 /** Application owns the only ordered migration registry; modules own DDL. */
 export const applicationMigrations: readonly SchemaMigration[] = [
@@ -28,6 +29,22 @@ export const applicationMigrations: readonly SchemaMigration[] = [
 
 		async apply(tx) {
 			await initializeAgentSchema(tx);
+		},
+	},
+	{
+		version: 4,
+		signature: 'backend-next-v4-desktop-last-connected-20261011',
+
+		async apply(tx) {
+			await initializeDesktopConnectionHistory(tx);
+		},
+	},
+	{
+		version: 5,
+		signature: 'backend-next-v5-access-login-history-20261011',
+
+		async apply(tx) {
+			await migrateAccessLoginFailureHistory(tx);
 		},
 	},
 ];

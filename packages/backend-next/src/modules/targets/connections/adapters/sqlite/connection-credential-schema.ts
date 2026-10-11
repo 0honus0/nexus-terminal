@@ -1,6 +1,6 @@
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 
-/** Connection auth is orthogonal to target metadata and references an SSH key. */
+/** Password authentication serves SSH/RDP/VNC; key references are SSH-only. */
 export async function initializeConnectionCredentialSchema(db: SqlExecutor): Promise<void> {
 	await db.exec(`
     CREATE TABLE connection_credentials(

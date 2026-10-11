@@ -48,6 +48,9 @@ const MAX_CONNECT_TIMEOUT = 300000;
 export class RemoteSessionService {
 	private readonly sessions = new Map<string, ActiveSession>();
 	private readonly opening = new Set<AbortController>();
+	/** Failed resource cleanup cannot prove the corresponding slot was released. */
+	private readonly unconfirmedOpenings = new Set<AbortController>();
+	private readonly unconfirmedClosures = new Set<string>();
 	private readonly openingTasks = new Set<Promise<unknown>>();
 	private readonly closingTasks = new Set<Promise<void>>();
 	private readonly sessionClosePromises = new Map<string, Promise<void>>();
@@ -59,7 +62,13 @@ export class RemoteSessionService {
 	private closePromise: Promise<void> | null = null;
 	private accepting = true;
 
-	constructor(private readonly model: RemoteSessionModel) {}
+	constructor(
+		private readonly model: RemoteSessionModel,
+		private readonly viewportLimits: { readonly columns: number; readonly rows: number } = {
+			columns: REMOTE_TERMINAL_MAX_COLUMNS,
+			rows: REMOTE_TERMINAL_MAX_ROWS,
+		},
+	) {}
 
 	private requireSession(id: string): ActiveSession {
 		const session = this.sessions.get(id);
@@ -90,17 +99,22 @@ export class RemoteSessionService {
 			request.targetId < 1 ||
 			!Number.isSafeInteger(request.columns) ||
 			request.columns < 1 ||
-			request.columns > REMOTE_TERMINAL_MAX_COLUMNS ||
+			request.columns > this.viewportLimits.columns ||
 			!Number.isSafeInteger(request.rows) ||
 			request.rows < 1 ||
-			request.rows > REMOTE_TERMINAL_MAX_ROWS ||
+			request.rows > this.viewportLimits.rows ||
 			!Number.isSafeInteger(request.timeoutMs) ||
 			request.timeoutMs < 1 ||
 			request.timeoutMs > MAX_CONNECT_TIMEOUT
 		) {
 			throw new RemoteSessionFailure('invalid_input');
 		}
-		if (this.sessions.size + this.opening.size >= MAX_LIVE_SESSIONS) {
+		const occupiedIds = new Set([
+			...this.sessions.keys(),
+			...this.sessionClosePromises.keys(),
+			...this.unconfirmedClosures,
+		]);
+		if (occupiedIds.size + this.opening.size >= MAX_LIVE_SESSIONS) {
 			throw new RemoteSessionFailure('remote_unavailable');
 		}
 		const controller = new AbortController();
@@ -115,9 +129,19 @@ export class RemoteSessionService {
 		const task = this.openAdmitted(request, controller);
 		this.openingTasks.add(task);
 		void task
+			.then(
+				() => undefined,
+				(error: unknown) => {
+					if (error instanceof RemoteResourceCleanupFailure) {
+						this.unconfirmedOpenings.add(controller);
+					}
+				},
+			)
 			.finally(() => {
 				request.signal?.removeEventListener('abort', abort);
-				this.opening.delete(controller);
+				if (!this.unconfirmedOpenings.has(controller)) {
+					this.opening.delete(controller);
+				}
 				this.openingTasks.delete(task);
 			})
 			.catch(() => undefined);
@@ -221,10 +245,10 @@ export class RemoteSessionService {
 		if (
 			!Number.isSafeInteger(columns) ||
 			columns < 1 ||
-			columns > REMOTE_TERMINAL_MAX_COLUMNS ||
+			columns > this.viewportLimits.columns ||
 			!Number.isSafeInteger(rows) ||
 			rows < 1 ||
-			rows > REMOTE_TERMINAL_MAX_ROWS
+			rows > this.viewportLimits.rows
 		) {
 			throw new RemoteSessionFailure('invalid_input');
 		}
@@ -318,11 +342,13 @@ export class RemoteSessionService {
 		this.closingTasks.add(task);
 		void task.then(
 			() => {
+				this.unconfirmedClosures.delete(id);
 				this.closingTasks.delete(task);
 				this.sessionClosePromises.delete(id);
 				this.recentlyClosed.set(id, task);
 			},
 			(error) => {
+				this.unconfirmedClosures.add(id);
 				this.closingTasks.delete(task);
 				this.sessionClosePromises.delete(id);
 				this.recentlyClosed.set(id, task);
@@ -362,7 +388,7 @@ export class RemoteSessionService {
 			session.closedListeners.clear();
 		}
 		if (failures.length) {
-			throw new AggregateError(failures, 'Remote session cleanup failed');
+			throw new RemoteResourceCleanupFailure(failures);
 		}
 	}
 

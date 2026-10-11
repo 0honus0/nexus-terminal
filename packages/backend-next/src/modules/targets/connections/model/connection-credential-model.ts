@@ -1,9 +1,9 @@
 import type {
 	ConnectionCredentialStorage,
-	SshCredentialWrite,
+	ConnectionCredentialWrite,
 	CredentialMutation as StoredMutation,
 } from '../storage/connection-credential-storage.js';
-import type { SshCredentialCommand, CredentialMutation } from './connection-credential-types.js';
+import type { ConnectionCredentialCommand, CredentialMutation } from './connection-credential-types.js';
 
 function toApplicationMutation(result: StoredMutation): CredentialMutation {
 	if (result.status === 'updated') {
@@ -18,8 +18,8 @@ function toApplicationMutation(result: StoredMutation): CredentialMutation {
 export class ConnectionCredentialModel {
 	constructor(private readonly storage: Readonly<ConnectionCredentialStorage>) {}
 
-	async set(id: number, version: number, value: SshCredentialCommand): Promise<CredentialMutation> {
-		const command: SshCredentialWrite =
+	async set(id: number, version: number, value: ConnectionCredentialCommand): Promise<CredentialMutation> {
+		const command: ConnectionCredentialWrite =
 			value.kind === 'password'
 				? { kind: 'password', encryptedPassword: value.encryptedPassword }
 				: { kind: 'ssh_key', sshKeyId: value.sshKeyId };

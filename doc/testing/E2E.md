@@ -6,6 +6,38 @@ Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end
 
 **Scope and evidence:** Formal product tests target `packages/backend`; independent `backend-next` checks are identified separately below. PASS statements apply only to their recorded version and executed cases. Historical Runner/Workspace evidence does not define current development tasks or acceptance of the new backend. Current work is owned by the [implementation plan](../后端重构下一阶段实施方案.md); this documentation review adds no new code-check or behavior PASS.
 
+### B10 重构后端执行入口（待启动）
+
+**B3.3 远程桌面待验清单**：新 `backend-next` 已接入 RDP/VNC 两个原有 POST 入口、Guacamole raw WS、Targets 密码读取/迁移、Shared desktop 和 Guacamole/guacd 技术 Adapter。真实 RDP/VNC 连接与异常行为全部保留 [B3.3-V01–V12](后端重构待实机验证.md) 至 B10；必须核对新后端监听、guacd 服务端口、真实目标、浏览器 Guacamole 协议，绝不复用旧正式 Backend 的通过结果。B4 IP/2FA 和 F-R12 正式前端迁移单独承接。**本批没有运行任何桌面行为测试。** 本轮复审后的源码/架构与真实静态证据见待实机清单 B3.3 最终收口；历史 store-lock 拒绝不代表当前环境。
+
+**B3.2 新增待验清单**：待实机文档 B3.2-V01–V12 覆盖 Workspace 状态/Docker、Dashboard 采样、三 system HTTP、指纹/授权/缓存竞态、容量、关闭与 unknown。源码阶段不运行，统一 B10；B7/B6/F1 的独立依赖分别核验。
+
+**B3.1 新增待验清单**：`后端重构待实机验证.md` 的 B3.1-V01–V65，覆盖 Workspace 真 shell 准入与晚开、终端背压/cwd、普通续接、挂起两阶段交付/显式 ACK、owner lease/撤销、100 MiB 历史/4 MiB checkpoint 与管理 HTTP、Files/transfer 双端关闭、并发 pending takeover、长时间日志/取消、独立 Agent/PTY 隔离。当前 B3.1 源码已收口，最终静态证据见待实机清单的“B3.1 源码阶段最终收口”，**没有运行任何上述行为用例**；不能从旧 Backend Playwright、旧 suspend 恢复流程或 R1 Files-only WS 推出通过。按 D2 只能在 B10 且执行入口已指向 backend-next 后运行，并分别保留真实资源清理、传输交付、关联响应的证据。
+
+**本节是后续 B10 运行与证据落点，不是已运行报告。** 按 [实施方案 B2 至 B10 交付安排](../后端重构下一阶段实施方案.md#b2-至-b10-验证交付安排) 和 D2，须先完成 B1–B9 后端源码及静态准入，才统一运行逻辑回归与重构后端全链路。专项编号与准入/失败回退以 [B10 验证清单](后端重构待实机验证.md#b10-执行交付包与准入) 为准，至少包含 B2-V01–V66、R2-V01–V08；下方旧 backend 的历史 PASS 不纳入本轮计数。
+
+B10 的实际启动配置必须将测试流量、旧正常 HTTP/WS 接口及可核对的消费者**明确指向正在构建的 `packages/backend-next`**。运行前核实测试启动脚本、环境变量、监听端口及依赖/迁移安装目标；若现有 Playwright 或 Docker 脚本默认仍启动 `packages/backend`，必须先调整 B10 专属测试入口和 fixture，不允许只重命名旧 backend 的测试结果。正式前端 Shared 迁移和生产切换仍分别遵循 F1/B9 的阶段边界。
+
+运行顺序及留档约定：先冻结完整 SHA + 未提交 diff、Node/pnpm 版本、数据库隔离根目录、SSH/SFTP/zip/unzip/zipinfo/GNU tar 工具版本与网络形态，运行对应版本的 Shared/backend-next/Frontend 静态检查和构建；再运行单元、集成及隔离 fixture；再跑实际 backend-next 的 HTTP/WS/SSH/SFTP 全链路、旧正常消费者和传输/归档专项；最后注入断线、取消、竞争、恶意归档、权限及资源清理故障并复跑受影响场景。记录每项原始命令、退出码、日志/trace 路径、断言、文件/数据库前后状态和敏感信息脱敏结果，不能仅填写“通过”。未建立对应 backend-next 执行入口或未运行的项目状态仍为「待验证」，权限/工具故障为「环境阻断」。
+
+现有静态检查命令是未来准入时的起点（**此处未执行**）；必须在 B1–B9 源码完成后针对同一版本逐项运行并记录退出码，不能复用历史日志：
+
+```sh
+pnpm --filter @nexus-terminal/shared check
+pnpm --filter @nexus-terminal/shared build
+pnpm --filter @nexus-terminal/backend-next check
+pnpm --filter @nexus-terminal/backend-next build
+pnpm --filter @nexus-terminal/frontend exec vue-tsc --noEmit
+pnpm --filter @nexus-terminal/frontend build
+pnpm run check
+pnpm run format:all:check
+git diff --check
+```
+
+行为测试命令须在 B10 核对 runner 真正启动/连接 backend-next 后填入本文件的执行记录；目前尚无该新后端完整 B10 E2E 的执行证据，不凭旧脚本名称假定覆盖。
+
+当 B10 发现缺陷，将用例、被测版本、复现证据交回实际 Service/Model/Adapter/Interface/Shared owner 修改，修改后的版本重新执行对应静态和行为范围；禁止用吞错、无依据增大超时、自动重放 unknown 或指向旧后端替代修复。最终 B10 总结应给出逐项编号结论、运行版本、未关闭风险、经过批准的兼容性取舍及是否满足后端完成判据。该总结不自动批准部署、提交或进入 P1/F1。
+
 SSH search cancellation checks both temporary and persistent SFTP sessions: held reads must settle, open read handles must return to zero, the fixture must stay healthy, and a new search must succeed. The SSH fixture closes remaining file handles when a channel ends, including OPEN operations that finish after cancellation.
 
 CI `scripts/e2e/docker-core-no-runner-smoke.sh` verifies the unified Frontend/Backend/Guacd Compose deployment starts without a production Agent Runner, remains healthy, and does not ship retired Workspace execution modules. The former Runner Job/full deployment smoke depended on deleted production code and has been retired; this lighter core smoke does not cover every authenticated Docker workflow.
@@ -73,7 +105,7 @@ The current Docker smoke validates the unified Frontend/Backend/Guacd production
 **清理时点：整个 Backend 重构完成后、切换到旧版 E2E 验证前。** 在这两个条件同时满足以前，所有临时专项测试继续保留、运行和更新；不因为阶段性通过、日常提交或协议阶段开始就提前删除。当前工作分支已经有相关测试提交，未来切换前再单独清理：
 
 - 到约定时点再移除本轮新增的 `tests/backend/remote/backend-next-transport.integration.mjs`、`backend-next-ssh.integration.mjs`、`backend-next-frontend.integration.mjs`，并同步整理复现命令；这些文件**目前仍属于有效的临时验收资产**。
-- `tests/backend/storage/backend-next.integration.mjs`、`backend-next-phase2.integration.mjs` 属于**原有仓库测试文件**，不得整文件删除；**必须保留适配现行安全错误码（如 `reference_in_use`、`unavailable`）和全库 v1–v3 Schema 的必要断言**。仅清除真正不再被旧 E2E 切换流程使用的临时验收辅助内容，不允许将上述适配回滚成已失效的旧断言。`backend-next-public-boundary.integration.mjs` 同样保留。
+- `tests/backend/storage/backend-next.integration.mjs`、`backend-next-phase2.integration.mjs` 属于**原有仓库测试文件**，不得整文件删除；**必须保留适配现行安全错误码（如 `reference_in_use`、`unavailable`）和全库当前 Schema（现为 v1–v4）的必要断言**。仅清除真正不再被旧 E2E 切换流程使用的临时验收辅助内容，不允许将上述适配回滚成已失效的旧断言。`backend-next-public-boundary.integration.mjs` 同样保留。
 - **保留本文中的验收结论、失败复现、修复依据与未通过项**。下面的命令在 Backend 重构结束前保持可执行；未来清理新增专项文件后，需同步更新此处入口。历史测试提交届时用独立清理提交或最终变更整理处理，不能仅在文档标注后声称已移除。
 
 ```bash

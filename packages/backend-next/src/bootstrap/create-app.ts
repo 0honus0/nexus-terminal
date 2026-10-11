@@ -13,12 +13,15 @@ import type { AgentStateApi } from '../modules/agent/public.js';
 import type { AccessRegistrationOptions } from '../modules/access/register.js';
 
 export interface AppOptions {
+	guacd?: { host: string; port: number };
 	/** 32-byte application-managed key. Required for storing or resolving credentials. */
 	encryptionKey?: Uint8Array;
 	/** Explicit host-key trust owner for internal Remote SSH. Missing policy denies SSH opens. */
 	verifyHostKey?: MachineConnectOptions['verifyHostKey'];
 	/** Disabled unless explicitly enabled. Internal IPs are always exempt. */
 	loginFailurePolicy?: AccessRegistrationOptions['loginFailurePolicy'];
+	ipWhitelist?: AccessRegistrationOptions['ipWhitelist'];
+	captcha?: AccessRegistrationOptions['captcha'];
 }
 
 export interface AccessHttpOptions {
@@ -45,18 +48,21 @@ async function closeResources(
 	http: Promise<HttpListener> | null,
 ): Promise<void> {
 	const failures: unknown[] = [];
-	if (http) {
-		try {
-			const listener = await http;
-			await listener.close();
-		} catch (error) {
-			failures.push(error);
+	// The HTTP and module owners start closing independently; SQLite stays
+	// open until both have settled because active use cases may still need it.
+	const outcomes = await Promise.allSettled([
+		Promise.resolve().then(async () => {
+			if (http) {
+				const listener = await http;
+				await listener.close();
+			}
+		}),
+		Promise.resolve().then(() => modules.close()),
+	]);
+	for (const outcome of outcomes) {
+		if (outcome.status === 'rejected') {
+			failures.push(outcome.reason);
 		}
-	}
-	try {
-		await modules.close();
-	} catch (error) {
-		failures.push(error);
 	}
 	try {
 		await db.close();
@@ -67,7 +73,7 @@ async function closeResources(
 		throw failures[0];
 	}
 	if (failures.length > 1) {
-		throw new AggregateError(failures, 'HTTP, Remote or SQLite shutdown failed');
+		throw new AggregateError(failures, 'HTTP, modules or SQLite shutdown failed');
 	}
 }
 
@@ -89,6 +95,7 @@ function createLifecycle(
 			bindHost: options.bindHost,
 			port: options.port,
 			trustedProxies: options.trustedProxies ?? ['loopback'],
+			admitUnmatched: modules.admitUnmatchedHttp,
 			routes,
 			webSockets: modules.webSocketRoutes(),
 		});
@@ -99,8 +106,25 @@ function createLifecycle(
 		if (closePromise) {
 			return closePromise;
 		}
-		modules.quiesce();
-		closePromise = Promise.resolve().then(() => closeResources(modules, db, http));
+		closePromise = Promise.resolve().then(async () => {
+			const failures: unknown[] = [];
+			try {
+				modules.quiesce();
+			} catch (error) {
+				failures.push(error);
+			}
+			try {
+				await closeResources(modules, db, http);
+			} catch (error) {
+				failures.push(error);
+			}
+			if (failures.length === 1) {
+				throw failures[0];
+			}
+			if (failures.length > 1) {
+				throw new AggregateError(failures, 'Application quiesce and close both failed');
+			}
+		});
 		return closePromise;
 	}
 
@@ -109,10 +133,22 @@ function createLifecycle(
 
 export async function createApp(dbPath: string, options: AppOptions = {}): Promise<BackendApplication> {
 	const db = SqliteRuntime.open(dbPath);
+	let modules: RegisteredModules | null = null;
 	try {
 		await initializeSchema(db, applicationMigrations);
 		const secrets = options.encryptionKey ? new SecretBox(options.encryptionKey) : null;
-		const modules = registerModules(db, secrets, options.verifyHostKey ?? null, options.loginFailurePolicy);
+		modules = registerModules({
+			sqlite: db,
+			secrets,
+			verifyHostKey: options.verifyHostKey ?? null,
+			loginFailureOptions: options.loginFailurePolicy,
+			guacd: options.guacd,
+			ipWhitelist: options.ipWhitelist,
+			captcha: options.captcha,
+		});
+		// Transient suspended SSH logs are not persistent SSH sessions.
+		// Clear stale files before HTTP/WS endpoints can accept a new mark.
+		await modules.initialize();
 		const lifecycle = createLifecycle(modules, db);
 		return {
 			targets: modules.targets,
@@ -125,10 +161,26 @@ export async function createApp(dbPath: string, options: AppOptions = {}): Promi
 			close: lifecycle.close,
 		};
 	} catch (error) {
+		const failures: unknown[] = [error];
+		if (modules) {
+			try {
+				modules.quiesce();
+			} catch (cleanupError) {
+				failures.push(cleanupError);
+			}
+			try {
+				await modules.close();
+			} catch (cleanupError) {
+				failures.push(cleanupError);
+			}
+		}
 		try {
 			await db.close();
 		} catch (cleanupError) {
-			throw new AggregateError([error, cleanupError], 'Backend startup and cleanup both failed');
+			failures.push(cleanupError);
+		}
+		if (failures.length > 1) {
+			throw new AggregateError(failures, 'Backend startup and cleanup both failed');
 		}
 		throw error;
 	}

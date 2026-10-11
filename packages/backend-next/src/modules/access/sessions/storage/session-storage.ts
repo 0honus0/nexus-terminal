@@ -1,18 +1,19 @@
 export interface SessionWrite {
 	accountId: number;
 	expectedPasswordHash: string;
-	previousTokenDigest: string | null;
 	newTokenDigest: string;
 	expiresAt: number;
 	rememberMe: boolean;
 	source: string;
 	clearLoginAttempts: boolean;
+	signal?: AbortSignal;
 }
 
 export interface LoginFailureRecord {
 	attempts: number;
 	windowStartedAt: number;
 	blockedUntil: number;
+	lastAttemptAt: number;
 }
 
 export interface SessionRecord {
@@ -25,8 +26,10 @@ export interface SessionRecord {
 	expiresAt: number;
 }
 
+export type SessionIssueResult = 'issued' | 'credentials_changed' | 'rate_limited' | 'cancelled';
+
 export interface SessionStorage {
-	issue(command: SessionWrite): Promise<boolean>;
+	issue(command: SessionWrite): Promise<SessionIssueResult>;
 	validate(tokenDigest: string, now: number): Promise<SessionRecord | null>;
 	revoke(tokenDigest: string): Promise<void>;
 	recordFailedPassword(
@@ -34,4 +37,9 @@ export interface SessionStorage {
 		decide: (current: LoginFailureRecord | null) => LoginFailureRecord,
 	): Promise<void>;
 	getLoginFailure(source: string): Promise<LoginFailureRecord | null>;
+	listLoginFailures(
+		limit: number,
+		offset: number,
+	): Promise<{ entries: Array<{ source: string; record: LoginFailureRecord }>; total: number }>;
+	clearLoginFailure(source: string): Promise<boolean>;
 }

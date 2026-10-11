@@ -1,6 +1,6 @@
 import type { RemoteOperationErrorCode } from '@nexus-terminal/shared/remote/sessions/values';
 import { RemoteSessionFailure } from './sessions/model/session-failure.js';
-import { RemoteHostKeyUntrustedError } from './model/machine-errors.js';
+import { RemoteHostKeyUntrustedError } from './machines/model/machine-errors.js';
 
 /** Safe module error. No technical cause, destination or credential is exposed. */
 export class RemoteOperationError extends Error {

@@ -10,16 +10,22 @@
   },
   "dependencies": {
     "@nexus-terminal/shared": "workspace:*",
-    "ssh2": "^1.17.0",
-    "proxy-addr": "^2.0.7",
+    "@xterm/addon-serialize": "^0.14.0",
+    "@xterm/headless": "^6.0.0",
+    "archiver": "^8.0.0",
+    "iconv-lite": "^0.7.3",
+    "guacamole-lite": "1.2.0",
     "ipaddr.js": "^2.5.0",
+    "proxy-addr": "^2.0.7",
+    "ssh2": "^1.17.0",
     "ws": "^8.22.0"
   },
   "devDependencies": {
-    "typescript": "catalog:node-build",
+    "@types/archiver": "^8.0.0",
     "@types/node": "catalog:",
-    "@types/ssh2": "^1.15.6",
     "@types/proxy-addr": "^2.0.3",
-    "@types/ws": "^8.18.2"
+    "@types/ssh2": "^1.15.6",
+    "@types/ws": "^8.18.2",
+    "typescript": "catalog:node-build"
   }
 }

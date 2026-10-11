@@ -64,6 +64,22 @@
       "types": "./dist/remote/sessions/model.d.ts",
       "default": "./dist/remote/sessions/model.js"
     },
+    "./remote/transfers/workspace": {
+      "types": "./dist/remote/transfers/workspace.d.ts",
+      "default": "./dist/remote/transfers/workspace.js"
+    },
+    "./remote/transfers/workspace-codec": {
+      "types": "./dist/remote/transfers/workspace-codec.d.ts",
+      "default": "./dist/remote/transfers/workspace-codec.js"
+    },
+    "./remote/transfers/http": {
+      "types": "./dist/remote/transfers/http.d.ts",
+      "default": "./dist/remote/transfers/http.js"
+    },
+    "./remote/transfers/http-codec": {
+      "types": "./dist/remote/transfers/http-codec.d.ts",
+      "default": "./dist/remote/transfers/http-codec.js"
+    },
     "./targets/connections/http-codec": {
       "types": "./dist/targets/connections/http-codec.d.ts",
       "default": "./dist/targets/connections/http-codec.js"
@@ -164,6 +180,50 @@
       "types": "./dist/remote/files/http-codec.d.ts",
       "default": "./dist/remote/files/http-codec.js"
     },
+    "./remote/files/workspace": {
+      "types": "./dist/remote/files/workspace.d.ts",
+      "default": "./dist/remote/files/workspace.js"
+    },
+    "./remote/files/workspace-codec": {
+      "types": "./dist/remote/files/workspace-codec.d.ts",
+      "default": "./dist/remote/files/workspace-codec.js"
+    },
+    "./remote/workspace/workspace": {
+      "types": "./dist/remote/workspace/workspace.d.ts",
+      "default": "./dist/remote/workspace/workspace.js"
+    },
+    "./remote/workspace/workspace-codec": {
+      "types": "./dist/remote/workspace/workspace-codec.d.ts",
+      "default": "./dist/remote/workspace/workspace-codec.js"
+    },
+    "./remote/workspace/workspace-binary": {
+      "types": "./dist/remote/workspace/workspace-binary.d.ts",
+      "default": "./dist/remote/workspace/workspace-binary.js"
+    },
+    "./remote/workspace/values": {
+      "types": "./dist/remote/workspace/values.d.ts",
+      "default": "./dist/remote/workspace/values.js"
+    },
+    "./remote/terminal/workspace": {
+      "types": "./dist/remote/terminal/workspace.d.ts",
+      "default": "./dist/remote/terminal/workspace.js"
+    },
+    "./remote/terminal/workspace-codec": {
+      "types": "./dist/remote/terminal/workspace-codec.d.ts",
+      "default": "./dist/remote/terminal/workspace-codec.js"
+    },
+    "./remote/suspend/workspace": {
+      "types": "./dist/remote/suspend/workspace.d.ts",
+      "default": "./dist/remote/suspend/workspace.js"
+    },
+    "./remote/suspend/workspace-codec": {
+      "types": "./dist/remote/suspend/workspace-codec.d.ts",
+      "default": "./dist/remote/suspend/workspace-codec.js"
+    },
+    "./remote/suspend/http": {
+      "types": "./dist/remote/suspend/http.d.ts",
+      "default": "./dist/remote/suspend/http.js"
+    },
     "./agent/http-codec": {
       "types": "./dist/agent/http-codec.d.ts",
       "default": "./dist/agent/http-codec.js"
@@ -171,6 +231,78 @@
     "./agent/values": {
       "types": "./dist/agent/values.d.ts",
       "default": "./dist/agent/values.js"
+    },
+    "./remote/transfers/values": {
+      "types": "./dist/remote/transfers/values.d.ts",
+      "default": "./dist/remote/transfers/values.js"
+    },
+    "./remote/files/text-codec": {
+      "types": "./dist/remote/files/text-codec.d.ts",
+      "default": "./dist/remote/files/text-codec.js"
+    },
+    "./remote/suspend/values": {
+      "types": "./dist/remote/suspend/values.d.ts",
+      "default": "./dist/remote/suspend/values.js"
+    },
+    "./remote/monitoring/values": {
+      "types": "./dist/remote/monitoring/values.d.ts",
+      "default": "./dist/remote/monitoring/values.js"
+    },
+    "./remote/monitoring/model": {
+      "types": "./dist/remote/monitoring/model.d.ts",
+      "default": "./dist/remote/monitoring/model.js"
+    },
+    "./remote/monitoring/http": {
+      "types": "./dist/remote/monitoring/http.d.ts",
+      "default": "./dist/remote/monitoring/http.js"
+    },
+    "./remote/monitoring/events": {
+      "types": "./dist/remote/monitoring/events.d.ts",
+      "default": "./dist/remote/monitoring/events.js"
+    },
+    "./remote/docker/values": {
+      "types": "./dist/remote/docker/values.d.ts",
+      "default": "./dist/remote/docker/values.js"
+    },
+    "./remote/docker/workspace": {
+      "types": "./dist/remote/docker/workspace.d.ts",
+      "default": "./dist/remote/docker/workspace.js"
+    },
+    "./remote/docker/workspace-codec": {
+      "types": "./dist/remote/docker/workspace-codec.d.ts",
+      "default": "./dist/remote/docker/workspace-codec.js"
+    },
+    "./system/status/model": {
+      "types": "./dist/system/status/model.d.ts",
+      "default": "./dist/system/status/model.js"
+    },
+    "./system/status/http": {
+      "types": "./dist/system/status/http.d.ts",
+      "default": "./dist/system/status/http.js"
+    },
+    "./system/status/values": {
+      "types": "./dist/system/status/values.d.ts",
+      "default": "./dist/system/status/values.js"
+    },
+    "./remote/monitoring/http-codec": {
+      "types": "./dist/remote/monitoring/http-codec.d.ts",
+      "default": "./dist/remote/monitoring/http-codec.js"
+    },
+    "./remote/desktop/values": {
+      "types": "./dist/remote/desktop/values.d.ts",
+      "default": "./dist/remote/desktop/values.js"
+    },
+    "./remote/desktop/http": {
+      "types": "./dist/remote/desktop/http.d.ts",
+      "default": "./dist/remote/desktop/http.js"
+    },
+    "./remote/desktop/http-codec": {
+      "types": "./dist/remote/desktop/http-codec.d.ts",
+      "default": "./dist/remote/desktop/http-codec.js"
+    },
+    "./system/status/http-codec": {
+      "types": "./dist/system/status/http-codec.d.ts",
+      "default": "./dist/system/status/http-codec.js"
     }
   },
   "devDependencies": {

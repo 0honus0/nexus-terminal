@@ -10,35 +10,43 @@ import {
 	type AccessLogoutResponse,
 	type AccessPasswordResponse,
 	type AccessHttpErrorResponse,
+	type AccessCaptchaConfigResponse,
+	type AccessIpBlacklistResponse,
+	type AccessIpBlacklistRemoveResponse,
 	InvalidAccessPayload,
 	readAccessSetupRequest,
 	readAccessLoginRequest,
 	readAccessPasswordRequest,
+	readAccessIpBlacklistQuery,
+	readAccessIpBlacklistRemoveRequest,
 } from '@nexus-terminal/shared/access/http';
 import { type AccessUserView } from '@nexus-terminal/shared/access/model';
-
-const COOKIE_NAME = 'nexus_session';
-const REMEMBER_SECONDS = 30 * 24 * 60 * 60;
+import { ACCESS_SESSION_COOKIE_NAME, ACCESS_REMEMBER_SECONDS } from '@nexus-terminal/shared/access/values';
 
 function readSession(context: HttpRouteContext): string | null {
-	return context.cookie(COOKIE_NAME);
+	return context.cookie(ACCESS_SESSION_COOKIE_NAME);
 }
 
 function cookieHeader(token: string, rememberMe: boolean, secure: boolean): string {
-	const attributes = [COOKIE_NAME + '=' + token, 'Path=/', 'HttpOnly', 'SameSite=Lax'];
+	const attributes = [ACCESS_SESSION_COOKIE_NAME + '=' + token, 'Path=/', 'HttpOnly', 'SameSite=Lax'];
 	if (secure) {
 		attributes.push('Secure');
 	}
 	if (rememberMe) {
-		attributes.push('Max-Age=' + REMEMBER_SECONDS);
+		attributes.push('Max-Age=' + ACCESS_REMEMBER_SECONDS);
 	}
 	return attributes.join('; ');
 }
 
 function clearedCookie(secure: boolean): string {
-	return [COOKIE_NAME + '=', 'Path=/', 'HttpOnly', 'SameSite=Lax', 'Max-Age=0', ...(secure ? ['Secure'] : [])].join(
-		'; ',
-	);
+	return [
+		ACCESS_SESSION_COOKIE_NAME + '=',
+		'Path=/',
+		'HttpOnly',
+		'SameSite=Lax',
+		'Max-Age=0',
+		...(secure ? ['Secure'] : []),
+	].join('; ');
 }
 
 function toUser(identity: AuthenticatedIdentity): AccessUserView {
@@ -72,9 +80,15 @@ function errorResponse(context: HttpRouteContext, error: unknown): void {
 		case 'conflict':
 			status = 409;
 			break;
+		case 'unauthenticated':
 		case 'invalid_credentials':
 			status = 401;
 			break;
+		case 'forbidden':
+			status = 403;
+			break;
+		case 'captcha_unavailable':
+		case 'operation_unknown':
 		case 'storage_unavailable':
 			status = 503;
 			break;
@@ -84,10 +98,10 @@ function errorResponse(context: HttpRouteContext, error: unknown): void {
 	context.send(status, { code } satisfies AccessHttpErrorResponse);
 }
 
-async function handle(context: HttpRouteContext, action: () => Promise<void>): Promise<void> {
+async function handle(context: HttpRouteContext, action: () => Promise<void>, acceptsQuery = false): Promise<void> {
 	try {
-		// No Access route accepts query parameters. Other modules validate their own.
-		if (context.query.size > 0) {
+		// Only the blacklist list endpoint accepts query parameters.
+		if (!acceptsQuery && context.query.size > 0) {
 			throw new AccessOperationError('invalid_input');
 		}
 		await action();
@@ -107,6 +121,21 @@ async function handle(context: HttpRouteContext, action: () => Promise<void>): P
 /** Access owns its own endpoints; HTTP runtime never receives Access storage or SQL ports. */
 export function createAccessRoutes(access: AccessService, secureCookies: boolean): HttpRoute[] {
 	return [
+		{
+			method: 'GET',
+			path: '/api/v1/auth/captcha/config',
+
+			handle: (context) =>
+				handle(context, async () => {
+					const config = access.captchaConfig();
+					context.send(200, {
+						enabled: config.enabled,
+						provider: config.provider,
+						hcaptchaSiteKey: config.hcaptchaSiteKey,
+						recaptchaSiteKey: config.recaptchaSiteKey,
+					} satisfies AccessCaptchaConfigResponse);
+				}),
+		},
 		{
 			method: 'GET',
 			path: '/api/v1/auth/needs-setup',
@@ -135,27 +164,50 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 			handle: (context) =>
 				handle(context, async () => {
 					const data = readAccessLoginRequest(await context.json());
-					const result = await accessBoundary(() =>
-						access.login({
-							username: data.username,
-							password: data.password,
-							rememberMe: data.rememberMe === true,
-							source: context.sourceIp,
-							previousToken: readSession(context),
-						}),
-					);
-					if (result.status !== 'authenticated') {
-						const code = result.status;
-						context.send(code === 'rate_limited' ? 429 : code === 'factor_unavailable' ? 403 : 401, {
-							code,
-						});
-						return;
+					const cancelled = new AbortController();
+
+					const onClose = () => {
+						if (!context.response.writableFinished) {
+							cancelled.abort();
+						}
+					};
+
+					context.response.once('close', onClose);
+					if (context.response.destroyed || context.request.aborted) {
+						cancelled.abort();
 					}
-					context.send(
-						200,
-						{ user: toUser(result.identity), requiresTwoFactor: false } satisfies AccessLoginResponse,
-						{ 'Set-Cookie': cookieHeader(result.token, result.rememberMe, secureCookies) },
-					);
+					try {
+						const result = await accessBoundary(() =>
+							access.login({
+								username: data.username,
+								password: data.password,
+								rememberMe: data.rememberMe === true,
+								source: context.sourceIp,
+								captchaToken: data.captchaToken,
+								signal: cancelled.signal,
+							}),
+						);
+						if (cancelled.signal.aborted) {
+							if (result.status === 'authenticated') {
+								await accessBoundary(() => access.logout(result.token));
+							}
+							return;
+						}
+						if (result.status !== 'authenticated') {
+							const code = result.status;
+							context.send(code === 'rate_limited' ? 429 : code === 'factor_unavailable' ? 403 : 401, {
+								code,
+							} satisfies AccessHttpErrorResponse);
+							return;
+						}
+						context.send(
+							200,
+							{ user: toUser(result.identity), requiresTwoFactor: false } satisfies AccessLoginResponse,
+							{ 'Set-Cookie': cookieHeader(result.token, result.rememberMe, secureCookies) },
+						);
+					} finally {
+						context.response.off('close', onClose);
+					}
 				}),
 		},
 		{
@@ -164,8 +216,10 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 
 			handle: (context) =>
 				handle(context, async () => {
-					const identity = await requireIdentity(context, access);
-					if (identity !== null) {
+					const identity = await accessBoundary(() => access.authenticate(readSession(context)));
+					if (identity === null) {
+						context.send(401, { code: 'unauthenticated' } satisfies AccessHttpErrorResponse);
+					} else {
 						context.send(200, {
 							isAuthenticated: true,
 							user: toUser(identity),
@@ -180,13 +234,10 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 			handle: (context) =>
 				handle(context, async () => {
 					const token = readSession(context);
-					const identity = await requireIdentity(context, access);
-					if (identity !== null) {
-						await accessBoundary(() => access.logout(token));
-						context.send(200, { loggedOut: true } satisfies AccessLogoutResponse, {
-							'Set-Cookie': clearedCookie(secureCookies),
-						});
-					}
+					await accessBoundary(() => access.logout(token));
+					context.send(200, { loggedOut: true } satisfies AccessLogoutResponse, {
+						'Set-Cookie': clearedCookie(secureCookies),
+					});
 				}),
 		},
 		{
@@ -195,10 +246,6 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 
 			handle: (context) =>
 				handle(context, async () => {
-					const identity = await requireIdentity(context, access);
-					if (!identity) {
-						return;
-					}
 					const data = readAccessPasswordRequest(await context.json());
 					await accessBoundary(() =>
 						access.changePassword(readSession(context), data.currentPassword, data.newPassword),
@@ -206,6 +253,51 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 					context.send(200, { passwordChanged: true } satisfies AccessPasswordResponse, {
 						'Set-Cookie': clearedCookie(secureCookies),
 					});
+				}),
+		},
+		{
+			method: 'GET',
+			path: '/api/v1/settings/ip-blacklist',
+
+			handle: (context) =>
+				handle(
+					context,
+					async () => {
+						const identity = await requireIdentity(context, access);
+						if (!identity) {
+							return;
+						}
+						const { limit, offset } = readAccessIpBlacklistQuery(context.query);
+						const page = await accessBoundary(() =>
+							access.listLoginFailures(identity.userId, limit, offset),
+						);
+						context.send(200, {
+							entries: page.entries.map((entry) => ({
+								ip: entry.sourceIp,
+								attempts: entry.attempts,
+								lastAttemptAt: Math.floor(entry.lastAttemptAt / 1000),
+								blockedUntil:
+									entry.blockedUntil === null ? null : Math.floor(entry.blockedUntil / 1000),
+							})),
+							total: page.total,
+						} satisfies AccessIpBlacklistResponse);
+					},
+					true,
+				),
+		},
+		{
+			method: 'DELETE',
+			path: '/api/v1/settings/ip-blacklist',
+
+			handle: (context) =>
+				handle(context, async () => {
+					const identity = await requireIdentity(context, access);
+					if (!identity) {
+						return;
+					}
+					const input = readAccessIpBlacklistRemoveRequest(await context.json());
+					const removed = await accessBoundary(() => access.clearLoginFailure(identity.userId, input.ip));
+					context.send(200, { removed } satisfies AccessIpBlacklistRemoveResponse);
 				}),
 		},
 	];

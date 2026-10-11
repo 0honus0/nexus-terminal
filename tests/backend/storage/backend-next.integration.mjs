@@ -44,11 +44,15 @@ try {
 	assert.notEqual(clone.id, a.id);
 	const injection = await app.targets.create(make("Robert'); DROP TABLE connections;--"));
 	assert.equal((await app.targets.get(injection.id)).name, "Robert'); DROP TABLE connections;--");
-	const firstImport = await app.targets.importOne({
-		connection: make('imported', { route: 'proxy' }),
-		inlineProxy: { name: 'shared-proxy', type: 'SOCKS5', host: '127.0.0.1', port: 1080, username: null },
-		tagNames: ['production'],
-	});
+	const [firstImportResult] = await app.targets.importMany([
+		{
+			connection: make('imported', { route: 'proxy' }),
+			inlineProxy: { name: 'shared-proxy', type: 'SOCKS5', host: '127.0.0.1', port: 1080, username: null },
+			tagNames: ['production'],
+		},
+	]);
+	assert.equal(firstImportResult.status, 'ok');
+	const firstImport = await app.targets.get(firstImportResult.id);
 	assert.equal(firstImport.route, 'proxy');
 	assert.ok(firstImport.proxyId > 0);
 	assert.equal(firstImport.tagIds.length, 1);
@@ -61,12 +65,13 @@ try {
 		() => app.targets.update(a.id, 2, { type: 'RDP' }),
 		(error) => error.code === 'reference_in_use',
 	);
-	await assert.rejects(() =>
-		app.targets.importOne({
+	const [invalidImport] = await app.targets.importMany([
+		{
 			connection: make('invalid', { route: 'proxy', tagIds: [999999] }),
 			inlineProxy: { name: 'orphan-proxy', type: 'HTTP', host: '127.0.0.1', port: 8888, username: null },
-		}),
-	);
+		},
+	]);
+	assert.equal(invalidImport.status, 'error');
 	assert.equal((await app.targets.list()).filter((c) => c.name === 'invalid').length, 0);
 	const outcomes = await app.targets.importMany([
 		{ connection: make('batch-okay') },

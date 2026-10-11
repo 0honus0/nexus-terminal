@@ -17,6 +17,10 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 	const trust = proxyaddr.compile([...options.trustedProxies]);
 	const websocketServer = new WebSocketServer({
 		noServer: true,
+		// Raw third-party protocols may remove their socket 'close' listeners.
+		// The HTTP owner tracks sockets/tasks itself rather than relying on
+		// ws's internal clientTracking registry for graceful listener close.
+		clientTracking: false,
 		maxPayload: MAX_WEBSOCKET_FRAME_BYTES,
 		perMessageDeflate: false,
 	});
@@ -26,7 +30,18 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 	const websocketFailures = new FailureSummary();
 	const webSocketRoutes = new Map<string, HttpWebSocketRoute>();
 	for (const route of options.webSockets ?? []) {
-		if (webSocketRoutes.has(route.path)) {
+		if (
+			webSocketRoutes.has(route.path) ||
+			!!route.connected === !!route.connectedRaw ||
+			(route.maxTextMessageBytes !== undefined &&
+				(!Number.isSafeInteger(route.maxTextMessageBytes) ||
+					route.maxTextMessageBytes < 1 ||
+					route.maxTextMessageBytes > MAX_WEBSOCKET_FRAME_BYTES)) ||
+			(route.maxBinaryMessageBytes !== undefined &&
+				(!Number.isSafeInteger(route.maxBinaryMessageBytes) ||
+					route.maxBinaryMessageBytes < 1 ||
+					route.maxBinaryMessageBytes > MAX_WEBSOCKET_FRAME_BYTES))
+		) {
 			throw new Error('Duplicate websocket route');
 		}
 		webSocketRoutes.set(route.path, route);
@@ -36,7 +51,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 	let accepting = true;
 	const activeRequests = new Set<Promise<void>>();
 
-	const handleRequest = createHttpRequestHandler({ origin, trust, router });
+	const handleRequest = createHttpRequestHandler({ origin, trust, router, admitUnmatched: options.admitUnmatched });
 
 	const server: Server = createServer((request, response) => {
 		if (!accepting) {
@@ -83,7 +98,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 			}
 			let authorized: boolean;
 			try {
-				authorized = await route.authorize(request, url);
+				authorized = await route.authorize(request, url, proxyaddr(request, trust));
 			} catch {
 				reject(503);
 				return;
@@ -98,15 +113,41 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 			}
 			websocketServer.handleUpgrade(request, socket, head, (ws) => {
 				activeSockets.add(ws);
+				if (route.connectedRaw) {
+					ws.once('close', () => activeSockets.delete(ws));
+					try {
+						// The raw owner's task includes the entire session
+						// lifetime, not just its handshake.
+						trackWebSocketTask(
+							Promise.resolve(route.connectedRaw(ws, request, url)).finally(() => {
+								// guacamole-lite may remove HTTP's close listener.
+								// An unresolved technical close must retain the
+								// socket for another shutdown attempt rather than
+								// treating a rejected raw task as closed.
+								if (ws.readyState === WebSocket.CLOSED) {
+									activeSockets.delete(ws);
+								}
+							}),
+							true,
+						);
+					} catch (error) {
+						websocketFailures.record(error);
+						ws.terminate();
+					}
+					return;
+				}
 				const channel = createWebSocketChannel(ws, {
 					isAccepting: () => accepting,
+
+					maxBinaryMessageBytes: route.maxBinaryMessageBytes,
+					maxTextMessageBytes: route.maxTextMessageBytes,
 
 					trackTask: trackWebSocketTask,
 
 					onClosed: () => activeSockets.delete(ws),
 				});
 				try {
-					route.connected(channel, request, url);
+					route.connected?.(channel, request, url);
 				} catch {
 					ws.terminate();
 				}

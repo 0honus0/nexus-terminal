@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import WebSocket from '../../../packages/backend-next/node_modules/ws/index.js';
 import { openHttpListener } from '../../../packages/backend-next/dist/platform/http/http-server.js';
 import { RemoteSessionOwner } from '../../../packages/backend-next/dist/modules/remote/sessions/service/session-owner.js';
-import { createRemoteWebSocketRoute } from '../../../packages/backend-next/dist/modules/remote/interfaces/http/pty-stream.js';
+import { createRemoteWebSocketRoute } from '../../../packages/backend-next/dist/modules/remote/interfaces/ws/pty-stream.js';
 
 function deferred() {
 	let resolve;
@@ -333,7 +333,7 @@ async function deleteAfterWebSocketRelease() {
 	const session = await owner.open('good', { targetId: 7, columns: 80, rows: 25, timeoutMs: 1000 });
 	await owner.release(session.id);
 	assert.equal(await owner.closeSession('good', session.id), true);
-	assert.equal(await owner.closeSession('bad', session.id), false);
+	await assert.rejects(owner.closeSession('bad', session.id), (error) => error.code === 'unauthenticated');
 	assert.equal(await owner.closeSession('good', randomUUID()), false);
 	assert.equal(count, 1);
 	await owner.close();

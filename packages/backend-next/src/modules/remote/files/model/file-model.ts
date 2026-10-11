@@ -1,7 +1,7 @@
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import type { MachineSftpLease } from '../../../../platform/ssh/ssh-port.js';
 import type { TrustedSshTargetResolver } from '../../../targets/public.js';
-import type { RemoteMachineModel } from '../../model/machine-model.js';
+import type { RemoteMachineModel } from '../../machines/model/machine-model.js';
 import { RemoteFileFailure, type FileResource } from './file-types.js';
 import { SftpFileResource } from './file-resource.js';
 

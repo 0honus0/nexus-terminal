@@ -1,6 +1,11 @@
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
-import type { AccountStorage, AccountRecord, CreateInitialAdminRecord } from '../../storage/account-storage.js';
+import type {
+	AccountStorage,
+	AccountRecord,
+	CreateInitialAdminRecord,
+	PasswordUpdateRecord,
+} from '../../storage/account-storage.js';
 
 function decodeAccount(row: Record<string, unknown>): AccountRecord {
 	const numeric = (value: unknown): number => {
@@ -64,16 +69,18 @@ export class SqliteAccountStorage implements AccountStorage {
 		});
 	}
 
-	updatePasswordAndRevoke(userId: number, expectedHash: string, newHash: string): Promise<boolean> {
+	updatePasswordAndRevoke(command: PasswordUpdateRecord): Promise<boolean> {
 		return this.db.transaction(async (tx) => {
 			const update = await tx.run(
-				'UPDATE access_accounts SET password_hash=?,updated_at=? WHERE id=? AND password_hash=?',
-				[newHash, Date.now(), userId, expectedHash],
+				`UPDATE access_accounts SET password_hash=?,updated_at=? WHERE id=? AND password_hash=?
+ AND EXISTS (SELECT 1 FROM access_sessions WHERE token_digest=?
+  AND user_id=access_accounts.id AND expires_at>?)`,
+				[command.newHash, Date.now(), command.userId, command.expectedHash, command.sessionDigest, Date.now()],
 			);
 			if (update.changes !== 1) {
 				return false;
 			}
-			await tx.run('DELETE FROM access_sessions WHERE user_id=?', [userId]);
+			await tx.run('DELETE FROM access_sessions WHERE user_id=?', [command.userId]);
 			return true;
 		});
 	}

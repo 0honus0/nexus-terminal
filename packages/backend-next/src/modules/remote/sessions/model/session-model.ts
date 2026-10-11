@@ -2,7 +2,7 @@ import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import type { OpenSessionRequest, RemoteSessionResource } from './session-types.js';
 import type { TrustedResolvedSshTarget } from '../../../targets/public.js';
 import type { MachineConnection, MachineShell } from '../../../../platform/ssh/ssh-port.js';
-import type { RemoteMachineModel } from '../../model/machine-model.js';
+import type { RemoteMachineModel } from '../../machines/model/machine-model.js';
 
 function unsubscribeAll(subscriptions: readonly (() => void)[]): unknown[] {
 	const failures: unknown[] = [];

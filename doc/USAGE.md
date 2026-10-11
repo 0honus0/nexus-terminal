@@ -106,7 +106,21 @@
 
 ### 新后端开发终端
 
+独立 `backend-next` 的 Remote HTTP/PTY 有独立 SessionOwner，不等于普通 SSH Workspace。当前 `/ws/workspace` 已承载真实终端、Files/transfer 和挂起恢复的源码；B3.1 源码与静态收口不代替实际验收。上文多标签终端、完整挂起恢复及管理 HTTP 仍以正式旧 Backend 的产品行为为基线；B3.1 源码完成并于 B10 验证前不得宣称新后端已具备全套能力。正式前端的 Protocol/客户端差异登记在固定 F-R10，不在此批修改。
+
+**B3.1 后端源码状态（非行为验收）**：`backend-next` 已将 `/ws/workspace` 对接真实 SSH shell/关联 Files lease：终端输出、8 MiB 普通断线 journal、120 秒宽限期、generation/offset 与明确 `workspace.resumeAck`。Shell 先交付，SFTP 后台异步初始化；cwd/PID、Bash/Zsh prompt/queued cd 有源码。C4 已继续安装 `suspend.mark/prepare/commit/unmark/list/resume/resumeAck/owner.renew/history.previous/history.reset/terminate/remove/rename`，同一 SSH shell 在后台挂起 24 小时、日志最多可见 100 MiB、1000 行/4 MiB headless VT checkpoint、256 KiB 历史分页和异常断线 catalog；`/api/v1/ssh-suspend` 五管理 HTTP 与本地文本导出已接线。挂起恢复同样**必须客户端显式发送 `suspend.resumeAck`**，完整 baseline 已发送不代表 owner 已提交；失败/超时退回原挂起 owner，不在新 Workspace 创建 SSH shell。两个 ACK、管理响应及模式事件正式前端均未迁移（F-R10），静态类型/构建结论见 testing，实际行为尚未验收，故不可将此描述当作产品验收。
+
+挂起历史只保留**最新 100 MiB**，不承诺无限向前翻页：当更早内容已被压缩窗口裁剪，前页查询必须停止，不能重复已显示内容。历史分页发送失败时不得跳过未送达的数据；关闭若仍有未经确认的远端 SSH/SFTP/本地日志清理，报告资源结果未知，而不是显示已释放成功。此为当前新后端源码设计，真实消费与故障行为仍未通过 B10。
+
+终端已经接收过用户输入、但还未完成 Shell PID 或提示符探测时，新的后端将拒绝迟到的 Shell 内部探测/Hook 安装，避免在可能运行编辑器或全屏程序的 PTY 内注入命令；这时目录读取/切换可能不可用，不能展示虚构目录。挂起自动终止事件与日志导出需要有效的当前登录身份；无效或被撤销的 Cookie 不能继续利用先前 WS 升级结果获取管理事件。本段为待验源码行为，非正式前端承诺。
+
+挂起恢复时，即使服务器发送完终端基线并收到 `suspend.resumeAck`，也必须继续尊重浏览器 `terminal.flow` 的已消费字节：用户尚未确认消费的输出不能被“恢复已完成”事件绕过背压。所有权租约超过 45 秒且未续期时旧附件应立即失去写入/管理权限，不能依赖周期性定时器出现短暂授权窗口。一般 `workspace.close` 也只允许当前有效附件发起；旧 generation、旧 socket 不能关闭正在接管的会话。上述新后端源码仍待 B10 实际消费验证。
+
+同一 WS 连接内重开其他 Workspace 时，终端已消费/已发送计数必须以新附件重新计量；旧恢复请求的迟到二进制输出或失败清理不能影响新标签。挂起标记与准备/提交请求在等待磁盘或身份授权期间若已被取消、断开或替换，不得再报告标记成功；45 秒 owner 租约已过期时新设备无需等待周期扫描即可尝试恢复。此为新后端待验源码语义，正式前端 F-R10 尚未适配。
+
 仅原 Access 会话可操作；WS 断开关闭 PTY，无挂起恢复/命令重放。正常退出等待尾部渲染，异常断线或清理失败报不可用，主动关闭不冒充正常退出。退订失败仍继续关闭底层资源；所有清理失败保留到停机汇总，不能报告清理成功。
+
+打开、读取和关闭终端要求有效管理员会话：未认证返回 401，无权限返回 403；认证有效但资源不存在或不属于当前会话返回 404。建连完成后复查登录会话，期间失效则关闭新建资源，不交付终端。
 
 | 范围              | 限制                                                |
 | ----------------- | --------------------------------------------------- |
@@ -114,6 +128,10 @@
 | 输入/输出数据单帧 | 32 KiB                                              |
 | 待渲染确认输出    | 128 KiB                                             |
 | 已完成释放结果    | 同会话最多保留 128 条、120 秒，窗口内复用成功或失败 |
+
+挂起初始快照最多 4 MiB UTF-8，mark/prepare/commit 的完整 JSON 消息预算为 24 MiB + 16 KiB（包含转义与外壳）；普通控制消息仍最多 1 MiB，历史前页最多 256 KiB。正式前端对接时须消费 Shared 容量，不能把原文上限当成实际发送字节上限。
+
+新后端全 Remote 最多同时导出 2 项日志，单项完整期限 60 秒，包含渲染、响应交付与收尾；超过返回 limit_exceeded。输出每块最多 64 KiB，并在交付每块前重新检查登录身份和原资源是否仍有效；已交付内容无法撤回。终止/删除/取消会中止关联导出并等待真实资源收敛，清理无法确认时报告 operation_unknown，保留名额，不自动重放。临时日志删除失败即使 SSH 已关闭也不算清理成功。
 
 ## 命令输入框
 
@@ -205,21 +223,94 @@
 
 探测 sshpass/rsync/scp 可取消；不同路径的同名源保留原路径，目标重名按覆盖策略，不自动改名。直传含 auto 会把目标密码/私钥/口令交给源端，须信任源服务器并逐次确认，0600/清理不隔离源端管理员；不是 Backend relay。
 
-### 新后端独立开发入口的只读文件功能
+### 新后端独立文件资源
 
-`/__targets-next` 确认 Host Key、保存凭据后打开独立 SFTP 资源，不借 PTY 或 Agent 项目授权。使用绝对路径，支持完整目录、stat/lstat、只读 UTF-8；按自然顺序且目录在前。
+`/__targets-next` 确认 Host Key、保存凭据后打开独立 SFTP 资源，不借 PTY 或 Agent 项目授权。当前开发页面仍只提供目录、stat/lstat 和 UTF-8 读取；backend-next 的 B1 文件接口已补文本保存、新建、重命名、删除、mkdir/rmdir，前端写入入口延期到 F1，不等于正式文件界面已切换。
 
-| 范围      | 限制                                                                 |
-| --------- | -------------------------------------------------------------------- |
-| 完整目录  | 200 项、48 KiB metadata，超限失败，不返回截断快照                    |
-| 文本      | 16 KiB，按实际接收字节限制，拒绝无效 UTF-8、明显二进制和链接文件内容 |
-| 资源/期限 | 单实例 8 个，闲置约 2 分钟；打开/读取含认证约 30 秒                  |
+| 范围      | 限制与行为                                                                                                                                                                                                             |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 路径      | 远端绝对路径 UTF-8 ≤4096 bytes；本批 mutation 拒绝根路径 `/`，不使用 Backend 本机 realpath 解释远端路径                                                                                                                |
+| 完整目录  | 200 项、48 KiB metadata，超限失败，不返回截断快照                                                                                                                                                                      |
+| 文本      | 有效 UTF-8 原文 ≤16 MiB；拒绝 NUL/明显控制字符；读取/保存普通文件，不把现有符号链接当文本目标。完整 JSON 请求/响应另按转义后的 Shared wire 预算约束                                                                    |
+| 保存      | 同目录独占临时文件；预期新建时用标准 SFTP rename，目标已存在则失败，新文件默认 0600；覆盖已有文件才走 replace，并保留原 mode。客户端提交 `expectedSha256=null` 表示预期不存在，或提交读取所得 SHA-256 表示预期现有版本 |
+| 基础操作  | rename 要求目标预检不存在且不主动覆盖；remove 删除单个文件或符号链接自身；mkdir 只建单层目录；rmdir 只删空目录，不递归                                                                                                 |
+| 资源/期限 | 单实例 8 个，闲置约 2 分钟；JSON body 接收仍受 Platform 约 15 秒 request timeout，完整解码后单次打开/读写/基础操作的认证、指纹复查和多步文件流程约 30 秒                                                               |
 
-绑定当前会话、目标及配置指纹，读取前后复查；切目标/离页取消并尝试释放，同会话短期重复关闭共用结果。取消/超时/退役后资源不可复用，须重开。无写入、上传、下载流、编辑、传输、分页快照或恢复；与正式文件容量不同，真实浏览器验收仍待完成。
+绑定当前会话、目标及配置指纹，敏感操作前后复查。hash/metadata 预检只能尽力发现冲突，SSH/SFTP 不提供本批所需的原子 CAS；普通 rename 也不宣称跨所有服务器的原子 no-overwrite。覆盖已有文件优先使用服务器的 OpenSSH POSIX rename 替换；不支持时使用 backup→rename→cleanup 回退，其恢复/清理也不保证跨断线原子完成。
+
+派发前已取消可确定没有该次文件副作用；请求已派发后若超时、断线、取消或无法确认收尾，返回 `operation_unknown`，资源退役且不自动重试。写入已生效后的读取或结果校验失败同样保持未知结果，不能按普通未写入失败处理。unknown 可能表示远端操作已经成功，也可能留下私有临时/backup 项，须重新打开资源并核对实际路径。确定失败会尽力清理临时文件；清理失败不覆盖原失败。上传/下载流与批量传输已有 B2 源码入口，见下节；挂起恢复和前端写入界面仍未迁移；真实 SSH/SFTP 与浏览器环境验收留 B10/F1。
+
+### backend-next 的旧 Workspace Files 子协议
+
+当前仍是源码开发入口，R2 已将 Workspace 文件 attachment 的 64 个含 pending/closing 准入名额与独立 HTTP Files 的 8 个名额分开。名额由 Files Service 持有，资源关闭真正完成后才归还，清理无法确认时不提前释放；两个入口不复用活跃 SFTP lease。有效的 `workspace.ping` 会重新核对登录会话、文件资源/目标指纹并续期，失效则拒绝并开始清理。二进制数据与 0-byte final 帧的背压等待均受同一文件操作的取消和约 30 秒期限约束，不在 Service 返回后再作无限等待。这些是源码判据，真实并发、撤销与故障行为仍留 B10，不能把 Files-only 接口当完整正式 Workspace。
+
+为保持正式 Files 消费者的现有通信入口，backend-next 已安装 `/ws/workspace` 的 Files 子协议源码：fresh `workspace.connect`、`workspace.ping`、`filesystem.list/search/stat/readBinary/cancelRead/writeText/createDirectory/createFile/remove/rename/chmod/realpath`，以及 `filesystem.ready/error`。请求/响应继续使用旧 `{type,requestId?,payload?}` / `type=response + payload.ok/data/error` 外壳；控制消息上限 1 MiB、最多 64 个在途请求。binary read 单请求最多 64 MiB、同 socket 最多 4 个，NXW1 response frame 每帧最多 256 KiB；数据结束后先发 0-byte final frame，再发 JSON success。取消只停止当前读取 owner，不证明远端瞬时停止。读取范围固定为开始时的文件大小，后续追加不扩大本次读取；空文件只发送 final，短读报失败，固定范围不代表内容快照。断开后的资源释放绑定原 owner，不要求失效会话重新认证。
+
+二次审核进一步把 `workspace.connect` 的 Targets 名称查询放进 Files Service 的同一 30 秒入场预算；Workspace 的 64 槽在**首次认证/目标查询之前**就预留，取消或关闭 socket 只中断本次请求，实际 SSH 清理继续由原 Service 追踪。失效心跳不再同步等待远端 close 才返回失败；无法确认的清理不提前释放名额。底层 Targets 查询没有可取消接口时，期限只保证调用方及时失败，不能声称底层数据库查询已撤销。上述均是源码事实，B10 仍需验证慢查询、失败清理及 64/65 并发。
+
+旧事件面复查确认只有 `filesystem.ready/error`：保存、新建、删除、重命名、chmod 等 mutation 的完成由对应 request/response 表达，旧 Backend/Protocol 没有独立 `filesystem.changed` / file-modified 事件。R1 不为“修改通知”臆造新 WS 消息；界面在 mutation 响应后的刷新/失效仍由前端用例负责。
+
+旧 Workspace Files 路径按 POSIX 绝对路径及 NUL 拒绝规则规范化，不套用上表新 HTTP 的 4096-byte 路径产品限制。list/stat 继续返回旧 metadata（含 uid/gid/atime/mtime 与 file/directory/symlink 标识）；search 保留 500 结果、5000 目录、8 并发及子目录消失时跳过并标明截断，root 或其他目录读取故障明确失败。普通 remove 对目录做 symlink-safe 递归删除且缺失路径视为 no-op；批量按输入顺序执行；明确 force 的目录依次尝试 `rm -rf`、`sudo rm -rf`。write/create 保留已知 iconv 编码、未知编码回退 UTF-8、输入 BOM 处理和 UTF-16LE/BE BOM。
+
+旧 `RemoteTextWriter` 的“已有目标 metadata 读取失败也静默继续保存”**不再由后端兼容**：目标不存在仍是正常新文件情况，但目标存在时 stat/metadata 失败直接返回真实失败。正式前端在 F1 联调时须显式刷新/重新载入并由用户决定再次保存，不依赖后端吞错或自动重放未知写入。
+
+R1/R2 只补齐 Files 子协议的 fresh attachment、受认证存活续期与有界读/发送；不表示整个旧 Workspace 已可在正式页面运行。异常重连的 `workspace.resume`、Terminal/status/docker/suspend 生命周期归 B3；download ticket、HEAD/Range、二进制 upload、copy/move、archive 等传输任务归 B2；旧完整 IP/2FA/会话策略归 B4。正式前端仍使用旧 `WorkspaceSocket`/capability adapters 与原 Protocol；新后端按 Shared 还原旧正常通信，尚未迁移正式前端类型或运行时。旧包原样作为参考，F1 再迁移实际消费者并删除旧定义，不增加旧路径兼容桥接。浏览器验收仍留 F1/B10。
+
+### backend-next B2 传输开发入口（源码已收口、行为待验）
+
+B2 源码阶段已收口，行为验收统一留 B10；当前 `/ws/workspace` 只具备 Files 子协议，不表示完整终端、重附着和挂起恢复已经迁移，正式前端对接仍后置。已有源码入口：POST /api/v1/sftp/download-ticket、GET/HEAD /api/v1/sftp/download、GET /api/v1/sftp/download-directory、独立 /ws/uploads 与 Workspace 的 upload.prepare/start/cancel/abort、transfer.copyMove/cancel。短期下载票据绑定原会话摘要、原活动文件资源实例、Workspace、目标、路径、大小/修改时间及来源 IP；直接下载接受单段 Range 或 suffix Range，206 返回 Content-Range，无法满足范围返回 416；HEAD 不读取正文，响应以流式背压和客户端关闭取消收敛。ZIP 目录下载使用有界递归、真实路径祖先去环和流式压缩，不预先缓冲整个压缩包；消费者断开或失败后，生产者和源读取者一起停止并收尾。
+
+对照旧 `sftp.routes.ts` 再核实：非票据 GET `/download` 遇目录时也应直接流式 ZIP，HEAD `/download` 遇目录只返回 ZIP 类型头；inline 预览超出大小限制须明确返回 413 而非并发配额 429。旧版本未实现 ETag、If-Range、Last-Modified 条件下载，不为这些不存在的旧契约增加猜测性兼容。B2 已补上述源码路径，但响应流、断线和实际浏览器行为仍需 B10。
+
+下载票据在认证、资源和指纹复查成功后才登记；HEAD/GET（含空文件、Range）只有完成响应收尾后才续期，最终 flush 失败不按成功续期。Workspace 的下载操作及票据 claim 覆盖整个交付，显式关闭或取消也覆盖 final 等待。服务器完成响应收尾不替代客户端确认文件完整；断流后核对结果，不以 headers 或进度 100% 判成功。HTTP inline 预览最多 20 MiB，按 Shared 容量定义；前端各格式可以采用更低预算。
+
+B2 每个 Workspace 的准备、上传、copy/move 与归档共用 16 个活跃任务名额，排队任务及清理失败的保留任务也占用名额；满载返回 limit_exceeded。相同 prepareId 正在执行时返回 conflict，准备完成后 allowlist 不继续占用活跃任务名额。
+
+上传使用独立 SFTP lease、同目录随机私有 staged 文件，按 WS binary 顺序写入，完成最后一块后提交、校验并发送 transfer.upload 终态；零字节文件不要求前端另开上传 socket。upload.prepare 单批最多 20,000 个目录，建立限定根目录的相对路径 allowlist；cancel/abort、超时、断线不能证明已派发写入回滚，未知完成保留 operation_unknown 而不自动重试。SFTP copy/move 使用文件/目录遍历、独立读写 lease、copy 后确认，move 在全部目标确认后删除源；中途可能已有副作用时按 unknown 对待。
+
+上传 start 即使携带 prepareId，也重新检查实际父目录；prepare 创建部分目录后失败按 operation_unknown 反馈。传输路径及 prepare 拼接后的完整路径均不超过 4096 UTF-8 bytes，超限在派发前拒绝；旧 Workspace 基础文件路径政策不变。独立上传、copy/move 和归档取消只收尾自己的资源，健康 Workspace 可继续使用；显式关闭 Workspace 仍中止关联任务，包括正在排队的写操作；尚未执行的排队请求取消不会关闭健康 Workspace。跨 Workspace copy/move 任一端关闭都会中止任务，双端均追踪关联清理失败。上传临时文件、copy/move staged 文件、归档输出/stage/snapshot 清理失败，或独立资源在打开或关闭阶段无法确认清理时，安全出口返回 operation_unknown，任务 ID、任务名额及所属 Workspace 预约名额继续保留，关闭不得虚报成功；终态任务拒绝晚追加或再次取消，不自动重试。旧 attachment 的迟到传输事件不进入新 attachment。
+
+同一已存目标与配置指纹的 copy/move 在写入前检查整批计划：父目录链接别名先规范化，源链接叶节点仍保留本体；目标与任一源相等或互为祖先/后代时拒绝，原始同路径 move 仍不做修改。冲突时重新选择目标或拆分意图，不自动换入口重试。跨目标 move 删除源前，源权限改变也停止并保留整项 unknown；删除子项造成的目录大小/mtime 变化不算外部改写。不同目标 ID 的同主机别名、bind mount 及并发路径交换不构成已解决的原子快照保证。
+
+B2 归档执行器采用远端原生 `zip`、`unzip`/`zipinfo`、GNU `tar`，不依赖远端 Python/`pyzipper`；执行主机需要 POSIX shell、对应格式的归档工具、GNU `cp`、`od` 和基本文件管理工具。TAR 硬链接恢复另需支持 `-P` 的 `ln`。普通文件内容留在远端；ZIP 链接目标只按每项最多 4096 bytes 读取到后端。支持 ZIP、tar.gz、tar.bz2。
+
+归档列表的名称和 metadata 分别按最多 8 MiB 解码；远端 shell 必须能设置文件大小限制，两个列表临时文件各受 8–16 MiB 上限约束（取决于 shell 的单位）。列表工具或编码读取失败直接拒绝，不接受部分列表；收尾清理失败保留 unknown。此限制只保护列表临时文件，不能当作解压任务的总磁盘硬配额。
+
+压缩在同目录写带正确格式后缀的私有 `.part`，完成检查后 rename/replace；仅无密码 ZIP 的非零退出可在独立 `zip -T` 校验成功后携带 warning 提交，加密 ZIP 和其他失败不发布。压缩源可包含输出目录，命令按字面量排除临时归档和旧目标，路径含 `*`、`?`、`[]` 或反斜线也不作为排除通配符；源树先做有界 SFTP 扫描，拒绝控制字符、超过 20,000 项或 64 层的树。只有远端命令确定结束才尝试清理临时输出。
+
+解压先用 GNU `cp --reflink=auto --no-dereference` 创建同目录私有快照，核对类型/大小；成员预检与提取使用同一份快照。预检交叉核对名称、类型、大小，拒绝绝对/越界、重复名称和非目录祖先，预算包含隐式目录、硬链接逻辑大小，最多 20,000 项、64 GiB 与 64 层。原生工具只提取普通文件和目录；符号链接与 TAR 硬链接排除后单独创建，再经 SFTP 核对完整 stage 后合并发布。只有链接的归档也有实际恢复路径。
+
+符号链接仅允许归档根内的相对目标，保留原 target 字符串；支持有界的叶节点链接链和根内悬空链接，拒绝循环、越界、将链接作目录以及经过现有特殊节点的目标。路径中的 `..` 逐段检查，不以字符串规范化代替实际路径前提。TAR 硬链接必须最终指向归档内声明的普通文件，真实创建硬链接，不静默复制；不一致权限、循环及非文件目标拒绝。设备及 setuid/setgid 成员仍以 `UNSUPPORTED_ENTRY` 拒绝。不同对象类型不互相覆盖；归档内的链接、目录及文件都计入进度。
+
+密码 ZIP 使用原生 `zip/unzip -P` 的 ZipCrypto，与旧正式方案一致：密码经 shell 转义后直接作为命令参数，**会出现在 SSH 命令字符串及远端 zip/unzip 子进程 argv 中**，此方式已明确保留。不会额外通过环境变量传递密码，不记录完整命令或回传原始诊断；不需要 Python、Expect 或交互 PTY，不提供 AES 兼容承诺。私有 stage/SFTP 检查不提供 `dir_fd/O_NOFOLLOW` 原子隔离；同 SSH 权限的并发替换仍可能产生竞态。取消、断线或超时不等于回滚，未知结果不自动重放，也不冒险清理仍可能在使用的快照。真实工具格式、权限与终态行为全部待 B10。
+
+跨 Workspace copy/move 也已增加对源会话原 token 摘要的 Access 复验，允许当前请求会话与源 Workspace 是同用户的不同有效登录会话，无需保存原始 token；源会话撤销后应拒绝。SFTP 技术层支持 readlink/symlink，复制保留链接对象而不静默跟随目标，目录复制后尝试恢复 mode。旧版本在符号链接上隐式跟随可能改变对象类型或陷入目录循环，新实现明确纠正。
+
+copy/move 还原旧行为：目标为普通文件时以 staged replace 覆盖，已有普通目录递归合并，同目标移动优先 SFTP rename（同路径不重复复制）；复制后恢复来源 mode 与访问/修改时间，并校验类型、大小、mode、mtime。应用时间戳用毫秒，Model 转换为 SFTP 所需 Unix 秒，不能将毫秒直接提交远端。批量请求如果包含同名目标冲突、重复源或父子源路径，**在首次远端创建前明确拒绝**，避免旧循环先部分覆盖或移动后再失败。符号链接目标已存在仍明确拒绝，避免偷偷跟随或覆盖其他文件类型；复制成功的符号链接也计入 completedFiles 并产生逐项进度事件。**能力范围已确定**：保持现有 SSH/SFTP 与原生工具部署要求，不新增远端 helper 或文件系统配额；不提供并发发布原子隔离或解压过程总磁盘硬配额。20,000 项、64 层、64 GiB 是成员预检及事后结果预算，不能防止解压期间磁盘先超量；保留结果检查和失败反馈。各格式属性、故障与终态行为仍待验收。B2 路由存在不代表全部旧功能已还原，正式前端运行时仍未迁移。真实 SSH/SFTP、ZIP、Range、WS 字节背压、晚到 cleanup、部分 move 与归档任务终态全部转 B10；源码阶段不运行行为测试。
+
+解压现在逐项检查并发布所有成员，目标目录不存在也不整树移动；发布前复查 stage 根/父目录、普通文件大小/mtime/mode 和链接目标。新建目录先允许 owner 遍历，再恢复归档属性；隐式目录仅在本次新建时恢复属性，已有隐式目录保持原属性。发现变化会停止并保留 unknown，不自动重试；原生列表临时文件删除无法确认时同样报告 unknown；逐项 SFTP 检查仍不提供原子隔离。下载 GET（含目录 ZIP）从准入到最终响应 flush 共用 1 小时期限，HEAD 为 30 秒，超时终止未完成响应并归还名额；排队写入在开始执行前复查当前权限，撤销后不沿用排队前的授权。
+
+GNU tar 提取使用 `--no-overwrite-dir` 防止归档中的 `./` 根条目改变私有 stage 权限。Stage 目录先临时保持 owner 可遍历；明确成员的 mode/mtime 在发布后从深到浅恢复并确认，链接确认在收紧目录权限之前执行，绝不对符号链接调用会跟随目标的 chmod/utimes。已有隐式目录没有归档属性声明时不重写属性。目标路径与链接目标在发布前复查，发现变化不虚报成功；SFTP 逐项检查仍不能隔离远端同权限并发写入。
+
+Workspace 文件操作及传输路径、文本和密码现在同样拒绝孤立 Unicode 代理字符，避免 UTF-8 编码替换后访问不同文件名或改变内容；有效 Unicode 字符不受影响。
+
+归档属性已补源码恢复：Unix 归档成员的普通 mode 与原生提取后的 mtime 在发布后逐项恢复并校验，目录按从深到浅的顺序处理，已有目录合并也恢复明确声明的目录属性；隐式父目录没有归档属性声明时不重写其已有属性。私有 staging 内临时保持目录 owner 可遍历，最终恢复原 mode，包括只读目录。DOS/Windows ZIP 不再按 Unix mode 误判，不宣称其携带 POSIX 权限。mtime 精度及 ZIP 本地时区以原生工具/文件格式为准，不保证 ACL、所有者或纳秒保真。
+
+设备及 setuid/setgid 成员使用 Shared `UNSUPPORTED_ENTRY`；危险链接在派发前使用 `invalid_input`，已有目标类型冲突明确拒绝；已派发后的不确定副作用保留 `operation_unknown`，不把已发生的远端工作误报为未执行。正式前端专用提示在 F1 对接。链接恢复已经有源码，不代表实机兼容和安全验收通过；密码 argv 可见是已接受的执行方式；并发发布限制仍保留。旧正式版没有 AES 支持。
+
+下载票据过期后拒绝新的 GET/HEAD 准入，已经接纳的慢下载可继续；成功完成续期，重复释放不会影响其他请求。目录 ZIP 长读在输出时按 5 秒间隔复查身份，撤销后停止继续交付。上传流绑定具体任务实例，同 ID 新任务不能接收旧流数据；准备配额在串行操作内判断。跨目标 move 在开始删除前复查所有源的类型、大小、mode、mtime 与链接目标，逐项删除前再次复查（目录删除子项后的大小/mtime 不比较）；观测到源变化时停止删除并报告 unknown，保留已复制的目标，不自动重试。这些检查不能识别同大小/mtime 的内容替换，也不能消除检查与删除间的 SFTP 竞争窗口。
+
+B2 传输任务的请求标识现在由同一 Workspace 内的 upload、copy/move、archive **统一拒绝同时活跃的重名标识**；上传追加和各类取消在 await 身份验证后复查活跃任务仍是同一实例，防止晚到身份结果作用于已经结束或同 ID 新建的任务。SSH 归档 stdout 与 stderr 分别处理：仅白名单协议行进入进度/终态，stderr 在 Model 层排空，不收集或传给客户端，以免远端错误输出堵塞技术通道。上述真实取消、错帧、符号链接交换及大规模解压行为仍须 B10 检验。
 
 ## 远程桌面
 
 支持 RDP/VNC，经 Backend Guacamole runtime 与 guacd 在浏览器访问；单 Backend 最多 16 个建连/活跃会话，满载拒绝新建，不踢旧会话。票据配额独立，任务/socket 收敛后归还名额。
+
+新 `backend-next` 的 B3.3 开发入口已编码独立 RDP/VNC ticket 与 Guacamole bridge：使用当前认证 Cookie 调用 `POST /api/v1/connections/:id/rdp-session` 或 `vnc-session`，查询选项 width/height 为 200–8192、dpi 为 48–480；不填时 Guacamole 使用 1024×768、RDP 96 dpi。成功仅返回 `ticket` 与 `lastConnectedAt`，不泄露主机或密码；浏览器用同一个有效登录的 Cookie 在 30 秒内连接 `/ws/remote-desktop?ticket=...`，ticket 仅可消费一次。待签发最多 1,024 项（含正在查询配置的申请），连接中/活跃最多 16 个；满额拒绝，不踢旧连接。连接目标/版本已变化、密码未解密、登录撤销、ticket 重复或过期均不得继续接管旧桌面，必须重新发起签发。签发等待15秒，整个桌面初始化等待30秒，技术握手20秒；超时后原任务仍被追踪，不提前归还名额。技术握手与关闭结果不确定时，不能把 socket terminate 解释为远端成功清理。
+
+RDP/VNC 的密码使用 Targets 中加密存储的版本化 `credentials.set`；旧新后端凭据提交接口不同，正式前端的保存/更新/错误反馈和 Guacamole 客户端对接归 F-R12，当前不保证旧前端直接访问新后端。RDP 的 RemoteApp、证书忽略、显示动态更新及 VNC 鼠标/键盘行为保持设计语义，尚未取得新后端真实 guacd 或 B10 浏览器/远端实测。新的 HTTP 错误使用 `{code}` 安全类别，不再返回第三方错误文字；B4 完整 IP/2FA/认证策略未完成前不得称权限等价于旧正式包。
+
+当前新 RDP/VNC 技术连接只接受 `direct` route：旧 Guacamole 入口也未真正实现桌面 Proxy/Jump 转发，不能将带 Proxy 标记的目标静默直连并声称已走代理。声明为其他 route 的桌面目标会被拒绝，前端明确解释留 F-R12。Guacamole 连接建立只以 guacd ready 判定；本地 WebSocket 终止、Guacamole `close` 和底层 guacd TCP 真正关闭是不同事实，只有确认全部所属技术资源、初始化和授权轮询结束才释放会话名额。本段仍是未运行 B10 的新后端行为设计，不是实际通过记录。
 
 手机点按只操作鼠标；选输入区域后用右上“键盘”按钮开关软键盘，全屏可用，最小化/断开释放焦点。设计见 [远程桌面架构](architecture/REMOTE_DESKTOP.md)。
 
@@ -432,6 +523,21 @@ Run completed/completed_unverified/failed/cancelled/interrupted 回收 Browser S
 - 指标提示支持悬停/键盘聚焦并原位更新，不重启原生 title。
 - Docker 宽栏表格/窄栏卡片；Start/Stop/Restart/Remove 管容器，Enter/Logs 进入当前 Workspace。
 
+### 新后端开发入口（源码已接线，行为待 B10）
+
+同一 Workspace WS 支持 status.start/stop、status.sample/error 与 docker.status/stats/command；Docker 控制仍为 Start/Stop/Restart/Remove，Enter/Logs 继续走交互终端，不新增任意命令接口。三个 HTTP 保留为 GET /api/v1/system/status、/api/v1/system/ssh-resources、/api/v1/system/ssh-resources/:connectionId。只接受新 Access 管理员会话；正式前端对接留 F1。
+
+| 项目     | 新后端当前语义                                                                                                                                                                                        |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 采样     | 独立临时 SSH，不在交互式 PTY 注入命令、不刷新最近连接时间；首轮间隔 500ms 采两次，之后每次完成再等待默认 3 秒，不重叠。                                                                               |
+| 后台     | 同主机/配置共享在途采样，默认 TTL 60 秒从开始算；每个请求最多并行 2 个主机、最多 4 个后台请求；单个请求等待最多 120 秒。当前不复用 Workspace 活跃 SSH。                                               |
+| 配置     | 新后端安装选项可设置状态间隔/资源 TTL；旧 Settings 的持久化值接线留 B7，目前使用上述默认值，不代表已迁移设置。                                                                                        |
+| 容量     | Remote 观测操作合计最多 8 项、单项完整期限 45 秒；Docker identifier 最多 128 ASCII 字符、列表最多 4096 个容器；完整观测 HTTP/WS JSON（含外壳）最多 512 KiB，本机状态 JSON 最多 16 KiB。超限明确失败。 |
+| Docker   | 非零控制退出返回 command_failed；已派发但缺少退出证据或后续确认失败为 operation_unknown。容器中途停止/确定 stats 读取失败可返回 stats=null，不当成零值。                                              |
+| 恢复     | 同一连接配置的控制动作互斥，unknown 或清理失败保留控制阻断；先只读核对，不自动重试。当前阻断限于本进程和该连接配置，尚无 B6 的持久/跨 Agent 治理或自动解除功能。                                      |
+| 取消     | stop、附件断开/接管、Workspace 终止及停机取消原实例的观测任务；真实收尾前仍占名额，清理失败不冒充成功。HTTP 请求取消只结束其等待，其他请求共享的采样由原 owner 继续追踪。                             |
+| 安全失败 | HTTP 返回 code；WS response.error/status.error.message 和资源 error 使用 Shared 安全码，不回传技术 stderr、cause 或凭据。                                                                             |
+
 ### 资源采集与缓存
 
 每次采样重读机器信息，不跨采样复用；同主机/配置在途采集共用，TTL 从开始计算，慢结果可能已过期。删/改地址清旧缓存，reset 不允许旧结果回填；TTL 内可能短暂显示旧状态。
@@ -468,11 +574,17 @@ Run completed/completed_unverified/failed/cancelled/interrupted 回收 Browser S
 
 - loopback/RFC1918/IPv6 ULA/link-local（含 IPv4 映射）豁免 IP 白名单/失败封禁，不免密码/2FA/Origin；旧内网黑名单行可保留但不阻断。
 - 公网按配置阈值/封禁；到期后下次失败开启新周期，未到期不追加延长。并发失败原子累计，仅首次进入封禁触发通知。
-- 7 天无新失败且封禁结束可惰性清记录，每 5 分钟至多清一次，不删活跃封禁；分页最多 200，无保留期来源总量配额。
+- 7 天无新失败且封禁结束可惰性清记录，每 5 分钟至多清一次，不删活跃封禁；分页最多 200，时间戳对外为 Unix 秒、内部存储毫秒，无保留期来源总量配额。
 
 ### 独立重构入口认证
 
-失败策略默认关闭，显式安装启用；内部地址豁免、未知地址不豁免。限流 429 rate_limited，未实现的必需因素 403 factor_unavailable，不降级密码。普通/记住我服务端最多 30 天，仅记住我 Cookie 持久。
+新的 `backend-next` 入口不复用正式旧 Backend 的 Express session/cookie。空库管理员 setup 成功一次，密码长度至少 8、最多 1024 UTF-8 bytes，用户名去空白后不超过 64 字符；普通密码登录的返回身份不含密码 hash 或秘密。会话 Cookie 名 `nexus_session`，HttpOnly/SameSite=Lax，同外部 HTTPS origin 时 Secure；服务端仅存随机 token 摘要和 30 天期限，普通 Cookie 仅本次浏览器会话，rememberMe 才设置 30 天 Max-Age。再次登录创建独立新会话，不提前撤销浏览器原有 token；断连或响应丢失不废止原会话；登出清除当前 cookie 并撤销当前 token，改密提交时会复核原会话仍有效与密码版本，计算期间登出、过期或并发改密可返回冲突且不写入；成功则原子撤销该账号所有会话。状态 200 带 `isAuthenticated:true/user`，无效/过期返回 401 `{code:'unauthenticated'}`（当前开发客户端据此返回未登录）；成功结果仍保留 `isAuthenticated:true`；未迁移已启用因素 403 `factor_unavailable`，不能退回密码登录或宣称完整 2FA 已通过。
+
+启动安装读取 `NEXUS_NEXT_IP_WHITELIST` 的逗号/换行分隔 IP/CIDR（最多 256 项、16 KiB），空值放行全部已知来源；非法条目在监听前拒绝启动。HTTP/WS 入口统一使用直接 TCP/受信代理链提供的真实 IP；未知来源拒绝，loopback、RFC1918、link-local 和 ULA 豁免白名单与封禁，但**不**豁免密码、CAPTCHA、Origin。独立入口 `NEXUS_NEXT_IP_BLACKLIST_ENABLED` 默认 true、最多 5 次失败、封禁 300 秒，可通过 `NEXUS_NEXT_MAX_LOGIN_ATTEMPTS` 与 `NEXUS_NEXT_LOGIN_BAN_SECONDS` 设置有效范围；`createApp` 的可选安装参数仍可显式关闭。其他业务的公网封禁入场返回 403 `forbidden`；登录路由由 Access Service 返回 429 `rate_limited`，状态、登出与黑名单管理员恢复路由仅执行来源白名单检查；未知 HTTP 路径也先做来源准入；管理员凭有效 Cookie 可读 `GET /api/v1/settings/ip-blacklist?limit=50&offset=0`（最大 200）及使用 `DELETE /api/v1/settings/ip-blacklist` JSON `{ip}` 解除，保留明确 `removed` 结果。登录错误/CAPTCHA 明确拒绝按来源原子计数，正常成功才清对应失败记录；第三方校验期间出现并发封禁，签发事务仍拒绝并返回 429 rate_limited。
+
+CAPTCHA 默认关闭；启用需配置 `NEXUS_NEXT_CAPTCHA_ENABLED=true`、`NEXUS_NEXT_CAPTCHA_PROVIDER=hcaptcha|recaptcha`、`NEXUS_NEXT_CAPTCHA_SITE_KEY` 与 `NEXUS_NEXT_CAPTCHA_SECRET_KEY`。配置缺失在启动时报错，`GET /api/v1/auth/captcha/config` 公开 provider 与适用 site key、不公开 secret；登录 `captchaToken` 必填且最多 4096 UTF-8 bytes。后端向 hCaptcha/Google 验证接口发真实 POST、十秒截止且不重试；启用时必须绑定 `NEXUS_NEXT_PUBLIC_ORIGIN` 的准确 hostname，成功响应需要 hostname 一致；Google 仅支持 reCAPTCHA v2 checkbox，不接受 v3 score/action 响应，非 2xx 响应体即时关闭；供应商明确失败返回 `captcha_invalid`，网络/格式/超时异常返回 503 `captcha_unavailable`，不固定成功或故障静默关闭。密码与 CAPTCHA 均通过后才签发会话；客户端断连会取消待执行的网络校验/写入意图，已提交的新 token 若未交付则尽力撤销，原 Cookie 不因此失效；SQLite 提交未知仍按未知结果处理。HTTPS/Host/Origin/Fetch Metadata 检查在 Platform 的统一 HTTP/WS 边界实施。此安装快照并非 B7 的持久 Settings 管理，当前不能在正式设置页动态更新；审计/通知的完整迁移和 TOTP/Passkey 挑战分别待 B7/B4.2，前端同步留 F1，源码不等于 B10 行为验收。
+
+独立入口数据库升级通过应用统一迁移 v5 为旧登录失败行补最后失败时间和索引；成功登录/会话验证等存储访问至多每五分钟惰性清理过期会话与已结束且七天无新失败的黑名单行，不清除活跃封禁。SQLite 提交或回滚状态不确定返回 `operation_unknown`（503），可能已有副作用，客户端不得假定失败并重放密码修改或设置写入；重登/重新查状态由当前身份和持久事实决定。
 
 ### 审计日志
 

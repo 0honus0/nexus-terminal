@@ -14,10 +14,17 @@ export interface AccountRecord {
 	updatedAt: number;
 }
 
+export interface PasswordUpdateRecord {
+	userId: number;
+	expectedHash: string;
+	newHash: string;
+	sessionDigest: string;
+}
+
 export interface AccountStorage {
 	needsSetup(): Promise<boolean>;
 	findByUsername(username: string): Promise<AccountRecord | null>;
 	findById(id: number): Promise<AccountRecord | null>;
 	createInitialAdmin(command: CreateInitialAdminRecord): Promise<AccountRecord | null>;
-	updatePasswordAndRevoke(userId: number, expectedHash: string, newHash: string): Promise<boolean>;
+	updatePasswordAndRevoke(command: PasswordUpdateRecord): Promise<boolean>;
 }

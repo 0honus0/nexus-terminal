@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import type { SFTPWrapper, Stats } from 'ssh2';
 import type { Readable, Writable } from 'node:stream';
+import { finished } from 'node:stream/promises';
 import {
 	MachineSftpFailure,
 	type MachineOperationOptions,
@@ -17,9 +19,16 @@ function toFileInfo(stats: Stats): MachineFileInfo {
 		typeof stats !== 'object' ||
 		!Number.isSafeInteger(stats.size) ||
 		stats.size < 0 ||
+		!Number.isSafeInteger(stats.uid) ||
+		stats.uid < 0 ||
+		!Number.isSafeInteger(stats.gid) ||
+		stats.gid < 0 ||
 		!Number.isSafeInteger(stats.mode) ||
 		stats.mode < 0 ||
 		stats.mode > 0xffff_ffff ||
+		!Number.isSafeInteger(stats.atime) ||
+		stats.atime < 0 ||
+		stats.atime > Number.MAX_SAFE_INTEGER / 1000 ||
 		!Number.isSafeInteger(stats.mtime) ||
 		stats.mtime < 0 ||
 		stats.mtime > Number.MAX_SAFE_INTEGER / 1000 ||
@@ -47,7 +56,10 @@ function toFileInfo(stats: Stats): MachineFileInfo {
 	}
 	return {
 		size: stats.size,
+		uid: stats.uid,
+		gid: stats.gid,
 		mode: stats.mode,
+		accessedAt: stats.atime,
 		modifiedAt: stats.mtime,
 		isDirectory,
 		isFile,
@@ -55,20 +67,70 @@ function toFileInfo(stats: Stats): MachineFileInfo {
 	};
 }
 
-function isSftpEof(error: unknown): boolean {
-	if (!(error instanceof MachineSftpFailure) || error.reason !== 'operation_failed') {
-		return false;
+function remoteStatus(error: unknown): 'eof' | 'not_found' | 'permission_denied' | 'unsupported' | 'failure' {
+	const code =
+		error !== null && typeof error === 'object' && 'code' in error && typeof error.code === 'number'
+			? error.code
+			: null;
+	switch (code) {
+		case 1:
+			return 'eof';
+		case 2:
+			return 'not_found';
+		case 3:
+			return 'permission_denied';
+		case 8:
+			return 'unsupported';
+		default:
+			return 'failure';
 	}
-	const cause: unknown = error.cause;
-	return cause !== null && typeof cause === 'object' && 'code' in cause && cause.code === 1;
 }
 
-function operationTimeout(options: MachineOperationOptions | undefined, fallback: number): number;
-function operationTimeout(options?: MachineOperationOptions): number | undefined;
+function remoteFailure(error: unknown, outcome: 'failed' | 'unknown'): MachineSftpFailure {
+	return new MachineSftpFailure('operation_failed', outcome, {
+		cause: error,
+		remoteStatus: remoteStatus(error),
+	});
+}
 
-function operationTimeout(options?: MachineOperationOptions, fallback?: number): number | undefined {
+function directoryEntry(row: { filename: string; longname?: string; attrs: Stats }): MachineDirectoryEntry {
+	if (
+		!row ||
+		typeof row.filename !== 'string' ||
+		!row.filename ||
+		row.filename === '.' ||
+		row.filename === '..' ||
+		/[/\u0000-\u001f\u007f\ufffd]/u.test(row.filename) ||
+		Buffer.byteLength(row.filename, 'utf8') > 255 ||
+		(row.longname !== undefined && typeof row.longname !== 'string')
+	) {
+		throw new MachineSftpFailure('invalid_metadata', 'unknown');
+	}
+	return {
+		name: row.filename,
+		...(row.longname ? { longName: row.longname } : {}),
+		info: toFileInfo(row.attrs),
+	};
+}
+
+function isSftpEof(error: unknown): boolean {
+	return error instanceof MachineSftpFailure && error.remoteStatus === 'eof';
+}
+
+function operationTimeout(options: MachineOperationOptions | undefined, fallback: number, ceilingMs?: number): number;
+function operationTimeout(
+	options?: MachineOperationOptions,
+	fallback?: undefined,
+	ceilingMs?: number,
+): number | undefined;
+
+function operationTimeout(
+	options?: MachineOperationOptions,
+	fallback?: number,
+	ceilingMs = 300000,
+): number | undefined {
 	const value = options?.timeoutMs ?? fallback;
-	if (value !== undefined && (!Number.isSafeInteger(value) || value < 1 || value > 300000)) {
+	if (value !== undefined && (!Number.isSafeInteger(value) || value < 1 || value > ceilingMs)) {
 		throw new RangeError('Invalid SFTP operation timeout');
 	}
 	return value;
@@ -192,14 +254,10 @@ export class SshSftpLease implements MachineSftpLease {
 			}
 			try {
 				dispatched = true;
-				invoke((error, value) =>
-					finish(
-						error ? new MachineSftpFailure('operation_failed', 'unknown', { cause: error }) : null,
-						value,
-					),
-				);
+				invoke((error, value) => finish(error ? remoteFailure(error, 'failed') : null, value));
 			} catch (cause) {
-				finish(new MachineSftpFailure('operation_failed', 'unknown', { cause }));
+				finish(remoteFailure(cause, 'unknown'));
+				retire();
 			}
 		});
 	}
@@ -274,18 +332,7 @@ export class SshSftpLease implements MachineSftpLease {
 					throw new MachineSftpFailure('invalid_metadata', 'unknown');
 				}
 				for (const row of rows) {
-					if (
-						!row ||
-						typeof row.filename !== 'string' ||
-						!row.filename ||
-						row.filename === '.' ||
-						row.filename === '..' ||
-						/[/\u0000-\u001f\u007f\ufffd]/u.test(row.filename) ||
-						Buffer.byteLength(row.filename, 'utf8') > 255
-					) {
-						throw new MachineSftpFailure('invalid_metadata', 'unknown');
-					}
-					const entry: MachineDirectoryEntry = { name: row.filename, info: toFileInfo(row.attrs) };
+					const entry = directoryEntry(row);
 					metadataBytes += (entries.length === 0 ? 0 : 1) + Buffer.byteLength(JSON.stringify(entry), 'utf8');
 					if (entries.length >= options.maxEntries || metadataBytes > options.maxMetadataBytes) {
 						throw new MachineSftpFailure('limit_exceeded', 'unknown');
@@ -324,9 +371,104 @@ export class SshSftpLease implements MachineSftpLease {
 		return entries;
 	}
 
+	async *scan(path: string, options?: MachineOperationOptions): AsyncIterable<MachineDirectoryEntry> {
+		this.ensure(options);
+		const deadline = Date.now() + operationTimeout(options, 30000);
+
+		const remaining = (): MachineOperationOptions => {
+			const timeoutMs = deadline - Date.now();
+			if (timeoutMs < 1) {
+				throw new MachineSftpFailure('timeout', 'unknown');
+			}
+			return options?.signal === undefined ? { timeoutMs } : { timeoutMs, signal: options.signal };
+		};
+
+		let handle: Buffer;
+		try {
+			handle = await this.call<Buffer>((finish) => this.sftp.opendir(path, finish), remaining());
+			if (!Buffer.isBuffer(handle) || handle.length === 0) {
+				throw new MachineSftpFailure('invalid_metadata', 'unknown');
+			}
+		} catch (error) {
+			if (error instanceof MachineSftpFailure && error.outcome !== 'unknown') {
+				throw error;
+			}
+			try {
+				await this.shutdown(new MachineSftpFailure('closed', 'unknown'));
+			} catch (cleanup) {
+				throw new AggregateError([error, cleanup], 'SFTP scan open and cleanup failed');
+			}
+			throw error;
+		}
+		let failure: unknown = null;
+		try {
+			try {
+				while (true) {
+					const rows = await this.call<Array<{ filename: string; longname?: string; attrs: Stats }>>(
+						(finish) => this.sftp.readdir(handle, finish),
+						remaining(),
+					).catch((error: unknown) => {
+						if (isSftpEof(error)) {
+							return null;
+						}
+						throw error;
+					});
+					if (rows === null) {
+						break;
+					}
+					if (!Array.isArray(rows)) {
+						throw new MachineSftpFailure('invalid_metadata', 'unknown');
+					}
+					for (const row of rows) {
+						yield directoryEntry(row);
+					}
+				}
+			} catch (error) {
+				failure = error;
+			}
+		} finally {
+			let cleanupFailure: unknown = null;
+			try {
+				await this.voidCall((finish) => this.sftp.close(handle, finish), { timeoutMs: 2000 });
+			} catch (cleanup) {
+				cleanupFailure = cleanup;
+				try {
+					await this.shutdown(new MachineSftpFailure('closed', 'unknown'));
+				} catch (closing) {
+					cleanupFailure = new AggregateError([cleanup, closing], 'SFTP scan handle cleanup failed');
+				}
+			}
+			if (
+				failure instanceof MachineSftpFailure &&
+				(failure.reason === 'timeout' || failure.reason === 'cancelled')
+			) {
+				try {
+					await this.shutdown(new MachineSftpFailure('closed', 'unknown'));
+				} catch (cleanup) {
+					cleanupFailure =
+						cleanupFailure === null
+							? cleanup
+							: new AggregateError([cleanupFailure, cleanup], 'SFTP interrupted scan cleanup failed');
+				}
+			}
+			if (failure !== null && cleanupFailure !== null) {
+				throw new AggregateError([failure, cleanupFailure], 'SFTP scan failed and cleanup failed');
+			}
+			if (failure !== null) {
+				throw failure;
+			}
+			if (cleanupFailure !== null) {
+				throw cleanupFailure;
+			}
+		}
+	}
+
 	private track<T extends Readable | Writable>(stream: T, options?: MachineOperationOptions): T {
 		this.streams.add(stream);
-		const limit = operationTimeout(options, 30000);
+		// B2 long-lived byte streams have a distinct bounded lifetime; the old
+		// per-request 5-minute SFTP RPC cap must not terminate legitimate large
+		// transfers. Control RPCs still retain their separate 5-minute ceiling.
+		const limit = operationTimeout(options, 30000, 60 * 60 * 1000);
 
 		const abortStream = (reason: 'cancelled' | 'timeout'): void => {
 			stream.destroy(new MachineSftpFailure(reason, 'unknown'));
@@ -358,7 +500,7 @@ export class SshSftpLease implements MachineSftpLease {
 
 	read(path: string, options?: MachineSftpReadOptions): Readable {
 		this.ensure(options);
-		operationTimeout(options);
+		operationTimeout(options, undefined, 60 * 60 * 1000);
 		const start = options?.start;
 		const end = options?.end;
 		if (
@@ -376,16 +518,88 @@ export class SshSftpLease implements MachineSftpLease {
 		);
 	}
 
+	async *readChunks(path: string, options?: MachineSftpReadOptions): AsyncIterable<Uint8Array> {
+		const stream = this.read(path, options);
+		try {
+			for await (const value of stream) {
+				const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
+				yield Uint8Array.from(chunk);
+			}
+		} catch (cause) {
+			if (cause instanceof MachineSftpFailure) {
+				throw cause;
+			}
+			throw remoteFailure(cause, 'failed');
+		} finally {
+			if (!stream.destroyed && !stream.readableEnded) {
+				stream.destroy();
+			}
+		}
+	}
+
 	write(path: string, options?: MachineSftpWriteOptions): Writable {
 		this.ensure(options);
-		operationTimeout(options);
-		return this.track(
-			this.sftp.createWriteStream(path, {
-				flags: options?.flags ?? 'w',
-				...(options?.mode === undefined ? {} : { mode: options.mode }),
-			}),
-			options,
-		);
+		operationTimeout(options, undefined, 60 * 60 * 1000);
+		try {
+			return this.track(
+				this.sftp.createWriteStream(path, {
+					flags: options?.flags ?? 'w',
+					...(options?.mode === undefined ? {} : { mode: options.mode }),
+				}),
+				options,
+			);
+		} catch (cause) {
+			throw new MachineSftpFailure('operation_failed', 'not_started', { cause });
+		}
+	}
+
+	async writeFile(path: string, bytes: Uint8Array, options?: MachineSftpWriteOptions): Promise<void> {
+		const stream = this.write(path, options);
+		stream.end(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength));
+		try {
+			await finished(stream);
+		} catch (cause) {
+			if (cause instanceof MachineSftpFailure) {
+				throw cause;
+			}
+			throw remoteFailure(cause, 'unknown');
+		}
+	}
+
+	realpath(path: string, options?: MachineOperationOptions): Promise<string> {
+		return this.call<string>((finish) => this.sftp.realpath(path, finish), options).then((value) => {
+			if (!value || /[\u0000-\u001f\u007f\ufffd]/u.test(value)) {
+				throw new MachineSftpFailure('invalid_metadata', 'unknown');
+			}
+			return value;
+		});
+	}
+
+	readlink(path: string, options?: MachineOperationOptions): Promise<string> {
+		return this.call<string>((finish) => this.sftp.readlink(path, finish), options).then((value) => {
+			if (!value || value.includes('\0') || Buffer.byteLength(value, 'utf8') > 4096) {
+				throw new MachineSftpFailure('invalid_metadata', 'unknown');
+			}
+			return value;
+		});
+	}
+
+	symlink(targetPath: string, linkPath: string, options?: MachineOperationOptions): Promise<void> {
+		return this.voidCall((finish) => this.sftp.symlink(targetPath, linkPath, finish), options);
+	}
+
+	chmod(path: string, mode: number, options?: MachineOperationOptions): Promise<void> {
+		if (!Number.isSafeInteger(mode) || mode < 0 || mode > 0o7777) {
+			throw new RangeError('Invalid SFTP chmod mode');
+		}
+		return this.voidCall((finish) => this.sftp.chmod(path, mode, finish), options);
+	}
+
+	utimes(path: string, accessedAt: number, modifiedAt: number, options?: MachineOperationOptions): Promise<void> {
+		if (![accessedAt, modifiedAt].every((value) => Number.isSafeInteger(value) && value >= 0)) {
+			throw new RangeError('Invalid SFTP timestamps');
+		}
+		return this.voidCall((finish) => this.sftp.utimes(path, accessedAt, modifiedAt, finish), options);
 	}
 
 	private voidCall(
@@ -397,6 +611,59 @@ export class SshSftpLease implements MachineSftpLease {
 
 	rename(from: string, to: string, options?: MachineOperationOptions): Promise<void> {
 		return this.voidCall((finish) => this.sftp.rename(from, to, finish), options);
+	}
+
+	async replace(from: string, to: string, options?: MachineOperationOptions): Promise<void> {
+		try {
+			await this.voidCall((finish) => this.sftp.ext_openssh_rename(from, to, finish), options);
+			return;
+		} catch (error) {
+			// Only an explicit SSH_FX_OP_UNSUPPORTED permits the weaker fallback.
+			if (!(error instanceof MachineSftpFailure) || error.remoteStatus !== 'unsupported') {
+				throw error;
+			}
+		}
+
+		let destinationExists = true;
+		try {
+			await this.lstat(to, options);
+		} catch (error) {
+			if (error instanceof MachineSftpFailure && error.remoteStatus === 'not_found') {
+				destinationExists = false;
+			} else {
+				throw error;
+			}
+		}
+		if (!destinationExists) {
+			await this.rename(from, to, options);
+			return;
+		}
+
+		const backup = from + '.previous-' + randomUUID();
+		await this.rename(to, backup, options);
+		try {
+			await this.rename(from, to, options);
+		} catch (error) {
+			// A callback failure proves the second rename did not happen, so the
+			// backup can be restored. Unknown delivery must not race a late rename.
+			if (error instanceof MachineSftpFailure && error.outcome !== 'unknown') {
+				try {
+					await this.rename(backup, to, { timeoutMs: 2000 });
+				} catch (restore) {
+					throw new MachineSftpFailure('operation_failed', 'unknown', {
+						cause: new AggregateError([error, restore], 'SFTP replacement restore failed'),
+					});
+				}
+			}
+			throw new MachineSftpFailure('operation_failed', 'unknown', { cause: error });
+		}
+		try {
+			await this.remove(backup, { timeoutMs: 2000 });
+		} catch (cleanup) {
+			// Destination replacement is known to have happened, but the remote
+			// filesystem is not fully converged while the backup remains.
+			throw new MachineSftpFailure('operation_failed', 'unknown', { cause: cleanup });
+		}
 	}
 
 	remove(path: string, options?: MachineOperationOptions): Promise<void> {

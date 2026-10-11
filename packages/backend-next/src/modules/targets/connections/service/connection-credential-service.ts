@@ -1,7 +1,7 @@
 import { TargetFailure } from '../../target-failure.js';
 import { validateTargetId } from '../../target-validation.js';
 import type { SecretBox } from '../../../../platform/security/secret-box.js';
-import type { SshCredentialInput, CredentialMutation } from '../model/connection-credential-types.js';
+import type { ConnectionCredentialInput, CredentialMutation } from '../model/connection-credential-types.js';
 import type { ConnectionCredentialModel } from '../model/connection-credential-model.js';
 
 export class ConnectionCredentialService {
@@ -10,7 +10,7 @@ export class ConnectionCredentialService {
 		private readonly secrets: SecretBox | null,
 	) {}
 
-	async set(id: number, version: number, input: SshCredentialInput): Promise<CredentialMutation> {
+	async set(id: number, version: number, input: ConnectionCredentialInput): Promise<CredentialMutation> {
 		validateTargetId(id);
 		validateTargetId(version);
 		if (input.kind === 'ssh_key') {

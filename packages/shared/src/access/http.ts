@@ -1,4 +1,9 @@
-import type { AccessHttpErrorCode } from './values.js';
+import {
+	type AccessHttpErrorCode,
+	type AccessCaptchaProvider,
+	ACCESS_CAPTCHA_TOKEN_MAX_BYTES,
+	ACCESS_IP_BLACKLIST_MAX_PAGE_SIZE,
+} from './values.js';
 import type { AccessUserView } from './model.js';
 
 /** The initial Access HTTP surface shared by the isolated backend and development client. */
@@ -12,6 +17,34 @@ export interface AccessLoginRequest {
 	username: string;
 	password: string;
 	rememberMe?: boolean;
+	captchaToken?: string;
+}
+
+export interface AccessCaptchaConfigResponse {
+	enabled: boolean;
+	provider: AccessCaptchaProvider;
+	hcaptchaSiteKey: string;
+	recaptchaSiteKey: string;
+}
+
+export interface AccessIpBlacklistEntry {
+	ip: string;
+	attempts: number;
+	lastAttemptAt: number;
+	blockedUntil: number | null;
+}
+
+export interface AccessIpBlacklistResponse {
+	entries: AccessIpBlacklistEntry[];
+	total: number;
+}
+
+export interface AccessIpBlacklistRemoveRequest {
+	ip: string;
+}
+
+export interface AccessIpBlacklistRemoveResponse {
+	removed: boolean;
 }
 
 export interface AccessPasswordRequest {
@@ -55,11 +88,15 @@ export class InvalidAccessPayload extends Error {
 	}
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 function record(value: unknown, fields: readonly string[], required = fields): Record<string, unknown> {
-	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+	if (!isRecord(value)) {
 		throw new InvalidAccessPayload();
 	}
-	const row = value as Record<string, unknown>;
+	const row = value;
 	if (Object.keys(row).some((key) => !fields.includes(key)) || required.some((key) => !Object.hasOwn(row, key))) {
 		throw new InvalidAccessPayload();
 	}
@@ -91,6 +128,9 @@ export function readAccessHttpError(value: unknown): AccessHttpErrorResponse {
 		case 'already_initialized':
 		case 'invalid_credentials':
 		case 'rate_limited':
+		case 'captcha_invalid':
+		case 'captcha_unavailable':
+		case 'operation_unknown':
 		case 'factor_unavailable':
 		case 'conflict':
 		case 'storage_unavailable':
@@ -115,12 +155,111 @@ export function readAccessSetupRequest(value: unknown): AccessSetupRequest {
 }
 
 export function readAccessLoginRequest(value: unknown): AccessLoginRequest {
-	const row = record(value, ['username', 'password', 'rememberMe'], ['username', 'password']);
+	const row = record(value, ['username', 'password', 'rememberMe', 'captchaToken'], ['username', 'password']);
+	const captchaToken =
+		row.captchaToken === undefined ? undefined : text(row.captchaToken, 1, ACCESS_CAPTCHA_TOKEN_MAX_BYTES);
 	return {
 		username: text(row.username, 1, 256),
 		password: text(row.password, 1, 1024),
-		...(row.rememberMe === undefined ? {} : { rememberMe: bool(row.rememberMe) }),
+		rememberMe: row.rememberMe === undefined ? undefined : bool(row.rememberMe),
+		captchaToken,
 	};
+}
+
+export function readAccessIpBlacklistQuery(query: URLSearchParams): { limit: number; offset: number } {
+	if (
+		[...query.keys()].some((key) => key !== 'limit' && key !== 'offset') ||
+		query.getAll('limit').length > 1 ||
+		query.getAll('offset').length > 1
+	) {
+		throw new InvalidAccessPayload();
+	}
+
+	const decode = (value: string | null, fallback: number): number => {
+		if (value === null) {
+			return fallback;
+		}
+		if (!/^(0|[1-9][0-9]*)$/u.test(value)) {
+			throw new InvalidAccessPayload();
+		}
+		const number = Number(value);
+		if (!Number.isSafeInteger(number)) {
+			throw new InvalidAccessPayload();
+		}
+		return number;
+	};
+
+	const limit = decode(query.get('limit'), 50);
+	const offset = decode(query.get('offset'), 0);
+	if (limit < 1 || limit > ACCESS_IP_BLACKLIST_MAX_PAGE_SIZE) {
+		throw new InvalidAccessPayload();
+	}
+	return { limit, offset };
+}
+
+export function readAccessIpBlacklistRemoveRequest(value: unknown): AccessIpBlacklistRemoveRequest {
+	const row = record(value, ['ip']);
+	return { ip: text(row.ip, 1, 128) };
+}
+
+export function readAccessCaptchaConfig(value: unknown): AccessCaptchaConfigResponse {
+	const row = record(value, ['enabled', 'provider', 'hcaptchaSiteKey', 'recaptchaSiteKey']);
+	if (row.provider !== 'none' && row.provider !== 'hcaptcha' && row.provider !== 'recaptcha') {
+		throw new InvalidAccessPayload();
+	}
+	return {
+		enabled: bool(row.enabled),
+		provider: row.provider,
+		hcaptchaSiteKey: text(row.hcaptchaSiteKey, 0, 1024),
+		recaptchaSiteKey: text(row.recaptchaSiteKey, 0, 1024),
+	};
+}
+
+export function readAccessIpBlacklist(value: unknown): AccessIpBlacklistResponse {
+	const row = record(value, ['entries', 'total']);
+	if (
+		!Array.isArray(row.entries) ||
+		row.entries.length > ACCESS_IP_BLACKLIST_MAX_PAGE_SIZE ||
+		typeof row.total !== 'number' ||
+		!Number.isSafeInteger(row.total) ||
+		row.total < 0
+	) {
+		throw new InvalidAccessPayload();
+	}
+	const entries = row.entries.map((item: unknown): AccessIpBlacklistEntry => {
+		const entry = record(item, ['ip', 'attempts', 'lastAttemptAt', 'blockedUntil']);
+		const attempts = entry.attempts;
+		const lastAttemptAt = entry.lastAttemptAt;
+		const blockedUntil = entry.blockedUntil;
+		if (
+			typeof attempts !== 'number' ||
+			!Number.isSafeInteger(attempts) ||
+			attempts < 0 ||
+			typeof lastAttemptAt !== 'number' ||
+			!Number.isSafeInteger(lastAttemptAt) ||
+			lastAttemptAt < 0
+		) {
+			throw new InvalidAccessPayload();
+		}
+		if (
+			blockedUntil !== null &&
+			(typeof blockedUntil !== 'number' || !Number.isSafeInteger(blockedUntil) || blockedUntil < 0)
+		) {
+			throw new InvalidAccessPayload();
+		}
+		return {
+			ip: text(entry.ip, 1, 128),
+			attempts,
+			lastAttemptAt,
+			blockedUntil,
+		};
+	});
+	return { entries, total: row.total };
+}
+
+export function readAccessIpBlacklistRemove(value: unknown): AccessIpBlacklistRemoveResponse {
+	const row = record(value, ['removed']);
+	return { removed: bool(row.removed) };
 }
 
 export function readAccessPasswordRequest(value: unknown): AccessPasswordRequest {

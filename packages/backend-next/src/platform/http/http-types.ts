@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type WebSocket from 'ws';
 
 export interface HttpRouteContext {
 	readonly method: string;
@@ -14,9 +15,9 @@ export interface HttpRouteContext {
 }
 
 export interface HttpRoute {
-	readonly method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+	readonly method: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'DELETE';
 	readonly path: string;
-	/** Transport-only JSON body budget. Default 16 KiB, hard ceiling 128 KiB. */
+	/** Transport-only JSON body budget. Default 16 KiB; large routes must opt in explicitly. */
 	readonly maxBodyBytes?: number;
 	handle(context: HttpRouteContext): Promise<void>;
 }
@@ -27,6 +28,8 @@ export interface HttpServerOptions {
 	bindHost: string;
 	port: number;
 	trustedProxies: readonly string[];
+	/** Optional application admission for paths without an installed route. */
+	admitUnmatched?: (sourceIp: string) => Promise<boolean>;
 	routes: readonly HttpRoute[];
 	webSockets?: readonly HttpWebSocketRoute[];
 }
@@ -34,18 +37,28 @@ export interface HttpServerOptions {
 /** Technology-only channel. Message parsing, authorization and sessions belong to modules. */
 export interface HttpWebSocketChannel {
 	send(value: string): boolean;
+	sendBinary(value: Uint8Array): boolean;
 	onMessage(listener: (value: string) => Promise<void>): void;
+	/** Optional, route-selected binary ingress. Default channels reject binary input. */
+	onBinary(listener: (value: Uint8Array) => Promise<void>): void;
 	onClose(listener: () => Promise<void>): void;
 	/** Flush ordered frames and finish the close handshake within a bounded deadline. */
 	finish(): Promise<void>;
 	/** Reject further traffic immediately; intended for revoke/error/shutdown. */
-	close(): void;
+	close(code?: number, reason?: string): void;
 }
 
 export interface HttpWebSocketRoute {
 	path: string;
-	authorize(request: IncomingMessage, url: URL): Promise<boolean>;
-	connected(channel: HttpWebSocketChannel, request: IncomingMessage, url: URL): void;
+	/** Opt-in technical per-message ceiling; absent means binary input is rejected. */
+	maxBinaryMessageBytes?: number;
+	maxTextMessageBytes?: number;
+	/** Source address has been resolved by the trusted proxy chain, never a client header. */
+	authorize(request: IncomingMessage, url: URL, sourceIp: string): Promise<boolean>;
+	/** Ordinary application WS routes use a bounded channel. */
+	connected?(channel: HttpWebSocketChannel, request: IncomingMessage, url: URL): void;
+	/** Third-party raw WebSocket protocol (e.g. Guacamole), not a business registry. */
+	connectedRaw?(socket: WebSocket, request: IncomingMessage, url: URL): Promise<void> | void;
 }
 
 export interface HttpListener {

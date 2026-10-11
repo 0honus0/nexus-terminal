@@ -1,18 +1,4 @@
-import ipaddr from 'ipaddr.js';
 import type { LoginFailurePolicyInput, LoginFailureLimits } from '../model/login-failure-types.js';
-
-function isInternalSource(source: string): boolean {
-	if (source === 'localhost') {
-		return true;
-	}
-	try {
-		const range = ipaddr.process(source).range();
-		return ['loopback', 'private', 'linkLocal', 'uniqueLocal'].includes(range);
-	} catch {
-		// Unrecognized addresses must not receive an internal-source exemption.
-		return false;
-	}
-}
 
 function bounded(value: number | undefined, fallback: number, min: number, max: number): number {
 	const chosen = value ?? fallback;
@@ -31,6 +17,9 @@ export class LoginFailurePolicy {
 	private readonly enabled: boolean;
 
 	constructor(options: LoginFailurePolicyInput = { enabled: false }) {
+		if (typeof options.enabled !== 'boolean') {
+			throw new Error('Invalid Access login failure policy');
+		}
 		this.enabled = options.enabled;
 		this.limits = {
 			maxAttempts: bounded(options.maxAttempts, 5, 1, 1000),
@@ -39,7 +28,7 @@ export class LoginFailurePolicy {
 		};
 	}
 
-	shouldEnforce(source: string): boolean {
-		return this.enabled && !isInternalSource(source);
+	shouldEnforce(isInternal: boolean): boolean {
+		return this.enabled && !isInternal;
 	}
 }

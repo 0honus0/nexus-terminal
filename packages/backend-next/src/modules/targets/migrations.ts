@@ -27,3 +27,5 @@ export const targetMigrations: readonly SchemaMigration[] = [
 
 /** Explicit Host Key migration installation entry. */
 export { initializeHostKeySchema } from './host-keys/adapters/sqlite/host-key-schema.js';
+
+export { initializeDesktopConnectionHistory } from './connections/adapters/sqlite/desktop-history-schema.js';

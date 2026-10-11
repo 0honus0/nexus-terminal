@@ -9,7 +9,7 @@ import type {
 	ProxyMutation as PublicProxyMutation,
 	ProxyUpdateInput,
 	ProxyView,
-	SshCredentialInput as PublicCredentialInput,
+	ConnectionCredentialInput as PublicCredentialInput,
 	SshKeyChanges as PublicKeyChanges,
 	SshKeyInput as PublicKeyInput,
 	SshKeyMutation as PublicKeyMutation,
@@ -20,7 +20,25 @@ import type {
 	TrustedSshAuthentication,
 	TrustedSshProxy,
 	HostKeyTrustView,
+	TrustedDesktopTarget,
 } from './public.js';
+import type { ResolvedDesktopTarget } from './connections/model/desktop-target-types.js';
+
+export function toTrustedDesktopTarget(value: ResolvedDesktopTarget): TrustedDesktopTarget {
+	return {
+		id: value.id,
+		version: value.version,
+		protocol: value.protocol,
+		host: value.host,
+		port: value.port,
+		username: value.username,
+		password: value.password,
+		rdpRemoteApp: value.rdpRemoteApp,
+		rdpRemoteAppDirectory: value.rdpRemoteAppDirectory,
+		rdpRemoteAppArguments: value.rdpRemoteAppArguments,
+	};
+}
+
 import type { HostKeyTrust } from './host-keys/model/host-key-types.js';
 
 export function toHostKeyView(value: HostKeyTrust): HostKeyTrustView {
@@ -42,7 +60,7 @@ import type {
 	ImportItemResult as InternalImportItemResult,
 } from './import/model/import-types.js';
 import type {
-	SshCredentialInput as InternalCredentialInput,
+	ConnectionCredentialInput as InternalCredentialInput,
 	CredentialMutation as InternalCredentialMutation,
 } from './connections/model/connection-credential-types.js';
 import type {

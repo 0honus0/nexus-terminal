@@ -45,7 +45,8 @@ export async function readJson(request: IncomingMessage, maxBodyBytes: number): 
 		chunks.push(chunk);
 	}
 	try {
-		return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+		const source = new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks));
+		return JSON.parse(source) as unknown;
 	} catch {
 		throw new HttpInputFailure(400, 'invalid_json');
 	}
@@ -131,6 +132,7 @@ interface HttpRequestOptions {
 	origin: URL;
 	trust(address: string, index: number): boolean;
 	router: HttpRouter;
+	admitUnmatched?: (sourceIp: string) => Promise<boolean>;
 }
 
 export function createHttpRequestHandler(
@@ -148,6 +150,19 @@ export function createHttpRequestHandler(
 			const method = request.method ?? '';
 			const matched = options.router.match(method, url.pathname);
 			if (!matched) {
+				if (options.admitUnmatched) {
+					let allowed: boolean;
+					try {
+						allowed = await options.admitUnmatched(proxyaddr(request, options.trust));
+					} catch {
+						sendJson(response, 503, { code: 'internal_failure' });
+						return;
+					}
+					if (!allowed) {
+						sendJson(response, 403, { code: 'forbidden' });
+						return;
+					}
+				}
 				sendJson(response, 404, { code: 'not_found' });
 				return;
 			}

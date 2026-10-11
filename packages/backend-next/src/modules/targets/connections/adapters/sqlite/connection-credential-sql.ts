@@ -2,14 +2,14 @@ import { TargetFailure } from '../../../target-failure.js';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type {
 	ConnectionCredentialStorage,
-	SshCredentialWrite,
+	ConnectionCredentialWrite,
 	CredentialMutation,
 } from '../../storage/connection-credential-storage.js';
 
 export class SqliteConnectionCredentialStorage implements ConnectionCredentialStorage {
 	constructor(private readonly db: SqliteRuntime) {}
 
-	set(id: number, version: number, value: SshCredentialWrite): Promise<CredentialMutation> {
+	set(id: number, version: number, value: ConnectionCredentialWrite): Promise<CredentialMutation> {
 		return this.commit(id, version, value);
 	}
 
@@ -17,7 +17,7 @@ export class SqliteConnectionCredentialStorage implements ConnectionCredentialSt
 		return this.commit(id, version, null);
 	}
 
-	private commit(id: number, version: number, value: SshCredentialWrite | null): Promise<CredentialMutation> {
+	private commit(id: number, version: number, value: ConnectionCredentialWrite | null): Promise<CredentialMutation> {
 		return this.db.transaction(async (tx) => {
 			const row = await tx.one('SELECT version,type FROM connections WHERE id=?', [id]);
 			if (!row) {
@@ -26,7 +26,7 @@ export class SqliteConnectionCredentialStorage implements ConnectionCredentialSt
 			if (row.version !== version) {
 				return { status: 'version_conflict' };
 			}
-			if (row.type !== 'SSH') {
+			if (row.type !== 'SSH' && value?.kind === 'ssh_key') {
 				throw new TargetFailure('invalid_input');
 			}
 			if (

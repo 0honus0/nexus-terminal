@@ -11,7 +11,7 @@ import { createApp } from '../../../packages/backend-next/dist/bootstrap/create-
 import { openHttpListener } from '../../../packages/backend-next/dist/platform/http/http-server.js';
 import { RemoteSessionOwner } from '../../../packages/backend-next/dist/modules/remote/sessions/service/session-owner.js';
 import { createRemoteHttpRoutes } from '../../../packages/backend-next/dist/modules/remote/interfaces/http/remote-http.js';
-import { createRemoteWebSocketRoute } from '../../../packages/backend-next/dist/modules/remote/interfaces/http/pty-stream.js';
+import { createRemoteWebSocketRoute } from '../../../packages/backend-next/dist/modules/remote/interfaces/ws/pty-stream.js';
 
 const requireBackendNext = createRequire(new URL('../../../packages/backend-next/package.json', import.meta.url));
 const { Server, utils } = requireBackendNext('ssh2');
@@ -155,7 +155,7 @@ try {
 		bindHost: '127.0.0.1',
 		publicOrigin: 'http://127.0.0.1:0',
 		trustedProxies: [],
-		routes: createRemoteHttpRoutes(owner, access),
+		routes: createRemoteHttpRoutes(owner),
 		webSockets: [createRemoteWebSocketRoute(owner, app.remote)],
 	});
 

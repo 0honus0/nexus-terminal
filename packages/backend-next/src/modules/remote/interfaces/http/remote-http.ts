@@ -1,13 +1,12 @@
 import type { RemoteHttpErrorCode } from '@nexus-terminal/shared/remote/sessions/values';
 import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
 import { HttpInputFailure } from '../../../../platform/http/http-errors.js';
-import type { AccessPublicApi } from '../../../access/public.js';
 import type { SessionView } from '../../public.js';
 import { isRemoteSessionId } from '@nexus-terminal/shared/remote/sessions/model';
 import { RemoteSessionOwner } from '../../sessions/service/session-owner.js';
 import { RemotePermissionError } from '../../sessions/model/session-permission-failure.js';
 import { RemoteOperationError } from '../../public-errors.js';
-import { RemoteHostKeyUntrustedError } from '../../model/machine-errors.js';
+import { RemoteHostKeyUntrustedError } from '../../machines/model/machine-errors.js';
 import {
 	type RemoteCloseSessionResponse,
 	type RemoteFailureResponse,
@@ -28,19 +27,6 @@ function toShellView(value: SessionView): RemoteShellView {
 		startedAt: value.startedAt,
 		status: 'open',
 	};
-}
-
-async function identity(access: AccessPublicApi, token: string | null): Promise<void> {
-	if (!token) {
-		throw new RemotePermissionError('unauthenticated');
-	}
-	const user = await access.authenticate(token);
-	if (!user) {
-		throw new RemotePermissionError('unauthenticated');
-	}
-	if (user.userId !== 1) {
-		throw new RemotePermissionError('forbidden');
-	}
 }
 
 function handleError(ctx: HttpRouteContext, error: unknown): void {
@@ -108,11 +94,10 @@ function route(
 	};
 }
 
-export function createRemoteHttpRoutes(owner: RemoteSessionOwner, access: AccessPublicApi): HttpRoute[] {
+export function createRemoteHttpRoutes(owner: RemoteSessionOwner): HttpRoute[] {
 	return [
 		route('POST', '/sessions', async (ctx) => {
 			const token = ctx.cookie('nexus_session');
-			await identity(access, token);
 			const v = readRemoteOpenShell(await ctx.json());
 			const controller = new AbortController();
 
@@ -147,7 +132,6 @@ export function createRemoteHttpRoutes(owner: RemoteSessionOwner, access: Access
 			}
 		}),
 		route('GET', '/sessions/:id', async (ctx) => {
-			await identity(access, ctx.cookie('nexus_session'));
 			const id = ctx.params.id;
 			if (!id || !isRemoteSessionId(id)) {
 				throw new RemoteInputError();
@@ -159,7 +143,6 @@ export function createRemoteHttpRoutes(owner: RemoteSessionOwner, access: Access
 			);
 		}),
 		route('DELETE', '/sessions/:id', async (ctx) => {
-			await identity(access, ctx.cookie('nexus_session'));
 			const id = ctx.params.id;
 			if (!id || !isRemoteSessionId(id)) {
 				throw new RemoteInputError();
