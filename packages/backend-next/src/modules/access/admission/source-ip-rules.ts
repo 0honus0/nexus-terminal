@@ -1,4 +1,4 @@
-import { AccessFailure } from '../authentication/model/access-failure.js';
+import { AccessFailure } from '../access-failure.js';
 
 export function isInternalRange(range: string): boolean {
 	return ['loopback', 'private', 'linkLocal', 'uniqueLocal'].includes(range);

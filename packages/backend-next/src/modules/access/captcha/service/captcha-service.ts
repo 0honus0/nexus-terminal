@@ -1,6 +1,6 @@
 import type { CaptchaConfiguration, CaptchaPublicConfiguration } from '../model/captcha-types.js';
 import type { CaptchaModel } from '../model/captcha-model.js';
-import { AccessFailure } from '../../authentication/model/access-failure.js';
+import { AccessFailure } from '../../access-failure.js';
 import { ACCESS_CAPTCHA_TOKEN_MAX_BYTES } from '@nexus-terminal/shared/access/values';
 
 export class CaptchaService {

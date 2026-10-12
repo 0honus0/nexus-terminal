@@ -226,6 +226,9 @@ importers:
       '@nexus-terminal/shared':
         specifier: workspace:*
         version: link:../shared
+      '@simplewebauthn/server':
+        specifier: ^14.0.3
+        version: 14.0.3
       '@xterm/addon-serialize':
         specifier: ^0.14.0
         version: 0.14.0
@@ -247,6 +250,9 @@ importers:
       proxy-addr:
         specifier: ^2.0.7
         version: 2.0.8
+      qrcode:
+        specifier: ^1.5.4
+        version: 1.5.4
       ssh2:
         specifier: ^1.17.0
         version: 1.17.0
@@ -263,6 +269,9 @@ importers:
       '@types/proxy-addr':
         specifier: ^2.0.3
         version: 2.0.3
+      '@types/qrcode':
+        specifier: ^1.5.6
+        version: 1.5.6
       '@types/ssh2':
         specifier: ^1.15.6
         version: 1.15.6

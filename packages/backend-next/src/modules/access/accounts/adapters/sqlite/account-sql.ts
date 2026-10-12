@@ -80,6 +80,7 @@ export class SqliteAccountStorage implements AccountStorage {
 			if (update.changes !== 1) {
 				return false;
 			}
+			await tx.run('UPDATE access_password_epoch SET revision=revision+1 WHERE id=1');
 			await tx.run('DELETE FROM access_sessions WHERE user_id=?', [command.userId]);
 			return true;
 		});

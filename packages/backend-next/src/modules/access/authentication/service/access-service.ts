@@ -3,12 +3,13 @@ import { AccountModel } from '../../accounts/model/account-model.js';
 import { SessionModel } from '../../sessions/model/session-model.js';
 import type { AuthenticatedIdentity, LoginAttempt, PasswordLogin } from '../model/access-types.js';
 import type { Account } from '../../accounts/model/account-types.js';
-import type { LoginFailurePolicy } from './login-failure-policy.js';
-import { AccessFailure } from '../model/access-failure.js';
+import type { LoginFailurePolicy } from '../../login-failure-policy.js';
+import { AccessFailure } from '../../access-failure.js';
 import type { CaptchaService } from '../../captcha/service/captcha-service.js';
 import type { SourceAddressModel } from '../../admission/model/source-address-model.js';
 import type { CaptchaPublicConfiguration } from '../../captcha/model/captcha-types.js';
 import type { LoginFailurePage } from '../../sessions/model/session-types.js';
+import type { FactorService } from '../../factors/service/factor-service.js';
 
 // Browser cookie is session-only; the old persistent server-side store retains data for 30 days.
 const SESSION_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
@@ -42,6 +43,7 @@ export class AccessService {
 		private readonly captcha: CaptchaService,
 		private readonly loginFailurePolicy: LoginFailurePolicy,
 		private readonly addresses: SourceAddressModel,
+		private readonly factors: FactorService,
 	) {}
 
 	needsSetup(): Promise<boolean> {
@@ -109,11 +111,32 @@ export class AccessService {
 			}
 			return { status: 'invalid_credentials' };
 		}
-		// TODO(Access later authentication-factors batch): implement real TOTP and
-		// Passkey challenge verification before accepting accounts with these flags.
-		// Do not downgrade enabled-but-unimplemented factors to password-only login.
-		if (account.twoFactorEnabled || account.passkeyRequired) {
+		if (account.passkeyRequired) {
 			return { status: 'factor_unavailable' };
+		}
+		if (account.twoFactorEnabled) {
+			const pending = await this.factors.startPartial({
+				accountId: account.id,
+				passwordHash: account.passwordHash,
+				rememberMe: command.rememberMe,
+				source,
+				enforceFailurePolicy,
+				previousPartial: command.previousPartialToken ?? null,
+				signal: command.signal,
+			});
+			if (pending.status === 'rate_limited') {
+				return { status: 'rate_limited' };
+			}
+			if (pending.status === 'limit_exceeded') {
+				return { status: 'limit_exceeded' };
+			}
+			if (pending.status === 'cancelled') {
+				throw new AccessFailure('operation_unknown');
+			}
+			if (pending.status !== 'stored') {
+				return { status: 'invalid_credentials' };
+			}
+			return { status: 'requires_two_factor', token: pending.token, expiresAt: pending.expiresAt };
 		}
 		const expiresAt = Date.now() + SESSION_LIFETIME_MS;
 		const issued = await this.sessions.issue({

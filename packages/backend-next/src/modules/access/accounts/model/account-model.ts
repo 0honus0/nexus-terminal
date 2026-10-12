@@ -4,7 +4,7 @@ import type { SessionTokens } from '../../../../platform/security/session-tokens
 import type { PasswordHasher } from '../../../../platform/security/password-hasher.js';
 
 import { accessStorageBoundary } from '../../access-storage-boundary.js';
-import { AccessFailure } from '../../authentication/model/access-failure.js';
+import { AccessFailure } from '../../access-failure.js';
 
 export class AccountModel {
 	private dummyHash: Promise<string> | null = null;

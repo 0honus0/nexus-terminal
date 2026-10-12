@@ -10,6 +10,8 @@ export interface PasswordLogin {
 	rememberMe: boolean;
 	source: string;
 	captchaToken?: string;
+	/** Existing browser partial bearer, only for replacement after valid credentials. */
+	previousPartialToken?: string | null;
 	/** Response delivery cancelled; a dispatched DB write still needs unknown-outcome handling. */
 	signal?: AbortSignal;
 }
@@ -22,7 +24,9 @@ export type LoginAttempt =
 			expiresAt: number;
 			rememberMe: boolean;
 	  }
+	| { status: 'requires_two_factor'; token: string; expiresAt: number }
 	| { status: 'invalid_credentials' }
 	| { status: 'rate_limited' }
+	| { status: 'limit_exceeded' }
 	| { status: 'factor_unavailable' }
 	| { status: 'captcha_invalid' };

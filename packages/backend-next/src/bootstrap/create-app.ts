@@ -22,6 +22,7 @@ export interface AppOptions {
 	loginFailurePolicy?: AccessRegistrationOptions['loginFailurePolicy'];
 	ipWhitelist?: AccessRegistrationOptions['ipWhitelist'];
 	captcha?: AccessRegistrationOptions['captcha'];
+	passkeys?: AccessRegistrationOptions['passkeys'];
 }
 
 export interface AccessHttpOptions {
@@ -145,6 +146,7 @@ export async function createApp(dbPath: string, options: AppOptions = {}): Promi
 			guacd: options.guacd,
 			ipWhitelist: options.ipWhitelist,
 			captcha: options.captcha,
+			passkeys: options.passkeys,
 		});
 		// Transient suspended SSH logs are not persistent SSH sessions.
 		// Clear stale files before HTTP/WS endpoints can accept a new mark.

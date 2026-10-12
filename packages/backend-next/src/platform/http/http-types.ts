@@ -11,7 +11,7 @@ export interface HttpRouteContext {
 	readonly sourceIp: string;
 	json(): Promise<unknown>;
 	cookie(name: string): string | null;
-	send(status: number, body: unknown, headers?: Readonly<Record<string, string>>): void;
+	send(status: number, body: unknown, headers?: Readonly<Record<string, string | string[]>>): void;
 }
 
 export interface HttpRoute {
@@ -19,6 +19,8 @@ export interface HttpRoute {
 	readonly path: string;
 	/** Transport-only JSON body budget. Default 16 KiB; large routes must opt in explicitly. */
 	readonly maxBodyBytes?: number;
+	/** Optional route-owned bound for opaque URL path parameters; default 64 bytes. */
+	readonly maxPathParameterBytes?: number;
 	handle(context: HttpRouteContext): Promise<void>;
 }
 

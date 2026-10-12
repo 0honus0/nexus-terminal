@@ -1,5 +1,5 @@
 import { SqliteFailure } from '../../platform/storage/sqlite/sqlite-errors.js';
-import { AccessFailure } from './authentication/model/access-failure.js';
+import { AccessFailure } from './access-failure.js';
 
 /** Called by Access Models; the public boundary only sees application failures. */
 export async function accessStorageBoundary<T>(work: () => Promise<T>): Promise<T> {

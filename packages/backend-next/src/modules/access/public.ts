@@ -1,6 +1,6 @@
 import type { AccessHttpErrorCode } from '@nexus-terminal/shared/access/values';
 
-export type AccessErrorCode = Exclude<AccessHttpErrorCode, 'rate_limited' | 'factor_unavailable'>;
+export type AccessErrorCode = Exclude<AccessHttpErrorCode, 'rate_limited'>;
 
 /** Safe Access module identity contract. Never carries a bearer token or password hash. */
 export interface AccessIdentity {

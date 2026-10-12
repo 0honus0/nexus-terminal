@@ -1,5 +1,5 @@
 import type { CaptchaVerifier } from '../../../../platform/security/captcha-verifier.js';
-import { AccessFailure } from '../../authentication/model/access-failure.js';
+import { AccessFailure } from '../../access-failure.js';
 import type { CaptchaConfiguration } from './captcha-types.js';
 
 /** The Model owns the technical call and maps provider failure to application failure. */

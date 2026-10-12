@@ -1,6 +1,10 @@
 import type { SchemaMigration } from '../platform/storage/sqlite/schema-types.js';
 import { targetMigrations, initializeHostKeySchema } from '../modules/targets/schema.js';
-import { initializeAccessSchema, migrateAccessLoginFailureHistory } from '../modules/access/migrations.js';
+import {
+	initializeAccessSchema,
+	migrateAccessLoginFailureHistory,
+	migrateAccessFactors,
+} from '../modules/access/migrations.js';
 import { initializeAgentSchema } from '../modules/agent/migrations.js';
 import { initializeDesktopConnectionHistory } from '../modules/targets/migrations.js';
 
@@ -45,6 +49,14 @@ export const applicationMigrations: readonly SchemaMigration[] = [
 
 		async apply(tx) {
 			await migrateAccessLoginFailureHistory(tx);
+		},
+	},
+	{
+		version: 6,
+		signature: 'backend-next-v6-access-factors-20261012',
+
+		async apply(tx) {
+			await migrateAccessFactors(tx);
 		},
 	},
 ];

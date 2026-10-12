@@ -1,6 +1,6 @@
 import type { SourceAddresses } from '../../../../platform/security/source-address.js';
 import type { AllowedNetwork, SourceAddress } from './admission-types.js';
-import { AccessFailure } from '../../authentication/model/access-failure.js';
+import { AccessFailure } from '../../access-failure.js';
 import { isInternalRange } from '../source-ip-rules.js';
 
 export class SourceAddressModel {

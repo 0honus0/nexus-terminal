@@ -1,5 +1,5 @@
 import type { SessionModel } from '../../sessions/model/session-model.js';
-import type { LoginFailurePolicy } from '../../authentication/service/login-failure-policy.js';
+import type { LoginFailurePolicy } from '../../login-failure-policy.js';
 import type { SourceAddressModel } from '../model/source-address-model.js';
 import type { AllowedNetwork, SourceAddress } from '../model/admission-types.js';
 import { readAllowedNetworks } from '../source-ip-rules.js';

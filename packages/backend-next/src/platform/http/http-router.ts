@@ -18,12 +18,16 @@ export function compileHttpRoutes(definitions: readonly HttpRoute[]): HttpRouter
 	for (const route of definitions) {
 		const key = route.method + ' ' + route.path;
 		if (
-			route.maxBodyBytes !== undefined &&
-			(!Number.isSafeInteger(route.maxBodyBytes) ||
-				route.maxBodyBytes < 1 ||
-				route.maxBodyBytes > MAX_JSON_BODY_BYTES)
+			(route.maxBodyBytes !== undefined &&
+				(!Number.isSafeInteger(route.maxBodyBytes) ||
+					route.maxBodyBytes < 1 ||
+					route.maxBodyBytes > MAX_JSON_BODY_BYTES)) ||
+			(route.maxPathParameterBytes !== undefined &&
+				(!Number.isSafeInteger(route.maxPathParameterBytes) ||
+					route.maxPathParameterBytes < 1 ||
+					route.maxPathParameterBytes > 2048))
 		) {
-			throw new Error('Invalid HTTP route body budget');
+			throw new Error('Invalid HTTP route budget');
 		}
 		const shape =
 			route.method +
@@ -61,7 +65,11 @@ export function compileHttpRoutes(definitions: readonly HttpRoute[]): HttpRouter
 					const matched = entry.parts.every((part, index) => {
 						const actual = actualParts[index];
 						if (part.startsWith(':')) {
-							if (!actual || !/^[A-Za-z0-9_-]{1,64}$/u.test(actual)) {
+							if (
+								!actual ||
+								!/^[A-Za-z0-9_-]+$/u.test(actual) ||
+								Buffer.byteLength(actual, 'utf8') > (entry.route.maxPathParameterBytes ?? 64)
+							) {
 								return false;
 							}
 							candidate[part.slice(1)] = actual;

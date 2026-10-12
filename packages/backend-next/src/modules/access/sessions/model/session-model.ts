@@ -8,7 +8,7 @@ import type {
 	LoginFailurePage,
 	IssueSessionResult,
 } from './session-types.js';
-import type { LoginFailureLimits } from '../../authentication/model/login-failure-types.js';
+import type { LoginFailureLimits } from '../../login-failure-types.js';
 import { mayAttemptLogin, nextLoginFailure } from '../login-failure-rules.js';
 
 function fromLoginFailureRecord(record: LoginFailureRecord): LoginFailureState {

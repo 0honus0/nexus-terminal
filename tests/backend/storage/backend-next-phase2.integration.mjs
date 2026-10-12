@@ -178,7 +178,7 @@ try {
 		lastAttemptAt: 20000,
 	});
 	const versions = (await db.all('SELECT version FROM schema_version ORDER BY version')).map((r) => r.version);
-	assert.deepEqual(versions, [1, 2, 3, 4, 5]);
+	assert.deepEqual(versions, [1, 2, 3, 4, 5, 6]);
 	const creds = await db.all('SELECT encrypted_password FROM proxy_credentials');
 	assert.ok(creds[0].encrypted_password.startsWith('v1.'));
 	assert.equal(creds[0].encrypted_password.includes('SECRET_PROXY'), false);
@@ -215,7 +215,7 @@ try {
 	db = SqliteRuntime.open(failPath);
 	assert.deepEqual(
 		(await db.all('SELECT version FROM schema_version ORDER BY version')).map((r) => r.version),
-		[1, 2, 3, 4, 5],
+		[1, 2, 3, 4, 5, 6],
 	);
 	await db.close();
 	// Reject the first batch's incompatible pre-release v1 instead of silently

@@ -1,4 +1,4 @@
-import type { LoginFailurePolicyInput, LoginFailureLimits } from '../model/login-failure-types.js';
+import type { LoginFailurePolicyInput, LoginFailureLimits } from './login-failure-types.js';
 
 function bounded(value: number | undefined, fallback: number, min: number, max: number): number {
 	const chosen = value ?? fallback;

@@ -48,6 +48,10 @@
       "types": "./dist/access/http.d.ts",
       "default": "./dist/access/http.js"
     },
+    "./access/factors/http": {
+      "types": "./dist/access/factors/http.d.ts",
+      "default": "./dist/access/factors/http.js"
+    },
     "./access/model": {
       "types": "./dist/access/model.d.ts",
       "default": "./dist/access/model.js"

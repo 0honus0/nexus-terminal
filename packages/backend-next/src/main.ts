@@ -80,6 +80,10 @@ async function main(): Promise<void> {
 			secretKey: process.env.NEXUS_NEXT_CAPTCHA_SECRET_KEY ?? '',
 			expectedHostname: new URL(http.publicOrigin).hostname,
 		},
+		passkeys: {
+			origin: new URL(http.publicOrigin).origin,
+			rpId: process.env.NEXUS_NEXT_PASSKEY_RP_ID?.trim() || new URL(http.publicOrigin).hostname,
+		},
 		guacd: {
 			host: process.env.GUACD_HOST?.trim() || 'localhost',
 			port: parsePort(process.env.GUACD_PORT ?? '4822', 'GUACD_PORT'),

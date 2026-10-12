@@ -4,9 +4,15 @@
 
 ## 1. 职责与范围
 
+### B4.2 Factors / Passkey 认证范围（源码阶段）
+
+Access 在 B4.1 完整密码和摘要会话之上扩展 TOTP 与 WebAuthn。Factors 只拥有部分认证、挑战、密码因素启停与凭据操作；**完整身份权威仍为 access_sessions / AccessPublicApi**。五分钟 `nexus_partial` 是独立随机 bearer，只能用于 `POST /auth/login/2fa`，不能传给普通 SSH、Agent 或其它需完整身份的路由。Passkey 登录最终直接核实 WebAuthn signature/RP/Origin/user verification 并签完整摘要会话；已经建立的完整会话不因启用新 TOTP 被隐式撤销。真实 UI 对接在 F1，审计/通知/动态 Settings 在 B7。当前独立 HTTP 入口只接一个 publicOrigin/RP；旧正式多 Origin/RP 安装配置由 B7 统一盘点接入，当前不声称已迁移。
+
+B4.2 本轮复审：WebAuthn 技术 Port 以具名选项表达 RP/user/credential descriptors，Adapter 先对浏览器 clientDataJSON 的 challenge/Origin/type 与 assertion RP Hash、UP/UV、counter 做确定性拒绝；第三方验证仍是最终权威，无法可靠分类的供应商异常映射为不可用而非凭据失败。注册与登录 options 明确要求 User Verification（required），与最终 requireUserVerification 一致。Model 在写 challenge 之前投影技术选项，HTTP 对 options 仅维护一套可选字段白名单；HTTP 签发后的挑战 Cookie 必须交付成功，若在完成之前断开连接则撤销已提交的 challenge/TOTP setup，回收失败保留因果。源码/静态已收口，B10 行为尚未验收。
+
 ### B4.1 Access 核心认证与入场策略
 
-Access 统一拥有初始管理员、密码身份认证、token 摘要会话、登录失败/封禁、来源白名单和 CAPTCHA 准入。HTTP/WS 接收由 Platform HTTP 从 TCP peer 与明确受信代理链解析的来源，不读取业务客户端自报 userId/IP；已登录身份由 Access public 的 token/digest 实时复验。安装态策略现在真实执行，但 B7 尚未提供持久 Settings 及运行时配置更新；TOTP/Passkey 只保留不可被密码绕过的因素闸门，完整挑战由 B4.2 接管。
+Access 统一拥有初始管理员、密码身份认证、token 摘要会话、登录失败/封禁、来源白名单和 CAPTCHA 准入。HTTP/WS 接收由 Platform HTTP 从 TCP peer 与明确受信代理链解析的来源，不读取业务客户端自报 userId/IP；已登录身份由 Access public 的 token/digest 实时复验。安装态策略现在真实执行，但 B7 尚未提供持久 Settings 及运行时配置更新；TOTP/Passkey 已由 factors 实现完整挑战流程，完整因素不能被密码闸门绕过。
 
 ### B3.2 资源观测与 Docker
 
@@ -18,17 +24,21 @@ Remote 的普通 SSH Workspace 是一条持续存在的交互式 shell，而非 
 
 正式后端仍为 `packages/backend`；新架构在 `packages/backend-next`，新包不运行时导入旧 Backend/Protocol。旧包是功能和调用链参考，正式切换需单独迁移与验收，不因新包能构建就切流量。
 
-| 一级模块 | 业务 owner                                                    | 当前边界                                                                                                               |
-| -------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Access   | 账号、认证、会话与访问策略                                    | B4.1 增量实现管理员、密码、摘要会话、可信来源、IP 策略和 CAPTCHA；源码/架构复审已收口，B4.2 因素与 B7 持久配置仍未迁移 |
-| Targets  | 连接配置、凭据、Proxy、SSH Key、Tag、目标解析与 Host Key 信任 | 已有 SSH/RDP/VNC 定义和基础管理；RDP/VNC 定义不等于运行能力                                                            |
-| Remote   | 普通用户终端、文件与其他远程用例                              | PTY/Workspace/Files/传输/终端挂起恢复及 B3.3 桌面源码已接线；正式浏览器桌面操作与其他真实行为仍待 B10                  |
-| System   | 本机资源状态                                                  | 已有认证状态 HTTP、Service/Model 与 Node 技术 Adapter；无管理配置持久化。                                              |
-| Agent    | Agent scope、Run 与后续执行/治理                              | 已有 App/Thread、pending/cancelled Root Run、幂等与事件；无执行链；Shared 与开发前端源码已接入                         |
+| 一级模块 | 业务 owner                                                    | 当前边界                                                                                                                                         |
+| -------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Access   | 账号、认证、会话与访问策略                                    | B4.1 增量实现管理员、密码、摘要会话、可信来源、IP 策略和 CAPTCHA；源码/架构复审已收口，B4.2 因素源码/静态已收口、行为待 B10；B7 持久配置仍未迁移 |
+| Targets  | 连接配置、凭据、Proxy、SSH Key、Tag、目标解析与 Host Key 信任 | 已有 SSH/RDP/VNC 定义和基础管理；RDP/VNC 定义不等于运行能力                                                                                      |
+| Remote   | 普通用户终端、文件与其他远程用例                              | PTY/Workspace/Files/传输/终端挂起恢复及 B3.3 桌面源码已接线；正式浏览器桌面操作与其他真实行为仍待 B10                                            |
+| System   | 本机资源状态                                                  | 已有认证状态 HTTP、Service/Model 与 Node 技术 Adapter；无管理配置持久化。                                                                        |
+| Agent    | Agent scope、Run 与后续执行/治理                              | 已有 App/Thread、pending/cancelled Root Run、幂等与事件；无执行链；Shared 与开发前端源码已接入                                                   |
 
 本机状态已有独立 System owner；后续 preferences、notifications、audit 及其他 system 能力按各自业务所有权实施，不提前创建空模块；Agent 的 Provider/调度/Tool/授权/审批/Job/Artifact/Memory/集成归 Agent 子功能，不复制技术底座。
 
 ## 2. 子功能与目录
+
+### B4.2 目录与唯一 owner
+
+`access/factors/service/factor-service.ts` 管因素用例、cookie 对应的授权、失败与恢复政策；`factors/model/{factor-model,factor-types,options-projector}.ts` 管存储↔应用字段投影、SecretBox 加解密、TOTP/WebAuthn Port 调用、WebAuthn 浏览器选项白名单；`factors/storage/factor-storage.ts` 仅定义持久命令；Access 一级 `access-failure.ts` 持有跨账户/认证/因素共用的内部具名错误；`factors/adapters/sqlite/{factor-schema,factor-sql}.ts` 持 DDL、事务、challenge 与 counter 原子更新。Platform 的 `security/{totp-port,webauthn-port}` 与 `adapters/{rfc-totp,native-webauthn}` 只拥有通用算法、签名验证和提供者消息。HTTP `interfaces/http/factor-http.ts` 接真实路由，Shared `access/factors/http.ts` 负责严格未知输入解码；不向其他模块新增部分登录 public。
 
 ### B4.1 Access 目录
 
@@ -78,6 +88,10 @@ Targets 的 connections/proxies/ssh-keys/tags/host-keys/resolver/import 为同�
 
 ## 3. 依赖方向
 
+### B4.2 实际调用链
+
+B4.1 密码成功且 TOTP 已启用时，`AccessService → FactorService → FactorModel → FactorStorage → SQLite` 写五分钟待认证；`POST /auth/login/2fa` 读取独立部分 Cookie，再经 `FactorModel → TotpPort → RfcTotp` 真实验证，最终同事务删除 pending、插入完整 session、清失败计数。WebAuthn OPTIONS/VERIFY 经相同 FactorService/Model，Model 消费 `WebauthnPort`，Adapter 调 `@simplewebauthn/server` 并将不可确定的供应商异常封装为具名技术失败；Model 转为安全应用失败；Shared unknown 解码经 HTTP 显式转换为内部 credential evidence，不让原始第三方凭据对象进入 Service。只有已提交的完整 SessionModel/AccessPublicApi 能供 Targets、Remote、Agent 使用。Platform Port 是合法通用技术契约，Service 不直接调用。
+
 ### B4.1 Access 调用链
 
 Bootstrap 安装 Access、注入技术 Scrypt/SQLite/CAPTCHA Adapter；`platform/http` 只解析来源、Host/Origin/CSRF 和通用路由。安装模块时，对业务 HTTP 与 WS 路由施加 `AccessPublicApi.admitSource(trustedIp)`，登录/状态/登出/管理员黑名单恢复 HTTP 路由使用只检查白名单的 `admitAuthenticationSource(trustedIp)`（登录封禁由用例返回 429）；未匹配 HTTP 路由通过 Platform 可选通用回调先执行完整来源准入；业务端点依旧经各自 Access public `authenticate/authenticateDigest` 判定当前身份。Access Service → Accounts/Sessions/Captcha Model → 各自 Storage/Platform Port → Adapter。Remote/Targets/Agent/System 只依赖 Access public；Service 不直接调用密码、网络、SQL Port，Platform 不依赖 Access 业务类型。正常 HTTP/WS 入场不重复身份查询，长时建连、资源交付和敏感操作由所属 Service 复验原会话及实例身份。
@@ -106,6 +120,10 @@ Platform 不依赖业务模块、不持有 Connection/Run/User、业务表、授
 Port 文件表达 Platform 的技术能力及技术输入/输出，不是新增业务层：Model 调 Port，具体 Adapter 实现 Port。不得在 Port 中定义账户、连接、Run、授权或业务 registry，不允许 Service 绕 Model 直接调用；原始第三方对象不得进入应用类型。文件是否命名为 *-port 不改变此边界。
 
 ## 4. 类型与转换
+
+### B4.2 类型及公开白名单
+
+Shared 的 `access/factors/http.ts` 拥有 TOTP token/disable、WebAuthn credential JSON 和 Passkey 名称/发现 query 的未知输入解码，以及公开成功结果。Factors 内部身份、PendingLogin/FactorChallenge/PasskeyCredential 分别归 `factors/model/factor-types.ts`，Storage 行/命令归 `factors/storage`，Port 的公钥/注册结果不含 account/user 类型。HTTP 明确构造用户/id/计数/时间响应，登录成功联合含 `requiresTwoFactor:true` 的部分分支，注册 options 由 Model `publicWebauthnOptions` 投影；完整会话 bearer、服务端 pending/challenge cookie 和加密的 TOTP secret 不进入跨模块 public。
 
 ### B4.1 Access 类型唯一归属
 
@@ -143,6 +161,12 @@ ssh2 的 SFTP status、异步 read stream error 与 command channel 派发结果
 
 ## 5. 入口与安装
 
+### B4.2 安装与真实接口
+
+`registerAccess({sqlite,secrets,passkeys})` 装配 Factors，`createApp` 的 passkeys 可选安装配置为明确 `{origin,rpId}`，独立入口从 `NEXUS_NEXT_PUBLIC_ORIGIN` 推断并允许 `NEXUS_NEXT_PASSKEY_RP_ID` 收窄。RP 必须与公开来源 hostname 一致或是其合法父域；非 localhost 的 HTTP Origin 禁止启用。
+
+因素路由：`POST /api/v1/auth/login/2fa`、`POST /api/v1/auth/2fa/{setup,verify}`、`DELETE /api/v1/auth/2fa`、`POST /api/v1/auth/passkey/{registration-options,register,authentication-options,authenticate}`、`GET /api/v1/auth/passkey/has-configured`、`GET /api/v1/auth/user/passkeys`、`DELETE /api/v1/auth/user/passkeys/:credentialID`、`PUT /api/v1/auth/user/passkeys/:credentialID/name`。Auth HTTP 仅签 HttpOnly/SameSite/Lax 受控 cookie；FactorService 始终通过完整 SessionModel 验证管理权限。
+
 ### B4.1 Access 安装与入口
 
 `createApp` 从 `AppOptions.loginFailurePolicy/ipWhitelist/captcha` 安装快照；独立 `main.ts` 提供 `NEXUS_NEXT_IP_WHITELIST`（逗号/换行分隔 CIDR）、`NEXUS_NEXT_IP_BLACKLIST_ENABLED`（默认 true）、`NEXUS_NEXT_MAX_LOGIN_ATTEMPTS`（默认 5）、`NEXUS_NEXT_LOGIN_BAN_SECONDS`（默认 300）、`NEXUS_NEXT_CAPTCHA_ENABLED/PROVIDER/SITE_KEY/SECRET_KEY`（默认关闭）并在开放监听前检查值。实际 Access HTTP：`GET /api/v1/auth/{needs-setup,status,captcha/config}`、`POST /api/v1/auth/{setup,login,logout}`、`PUT /api/v1/auth/password`；认证的黑名单 `GET/DELETE /api/v1/settings/ip-blacklist`；其它 Targets/Remote/Agent/System 路由经全局完整来源准入，未知路径同样检查来源；仅状态、登出、登录及管理员黑名单恢复保留白名单级入场（后者须 Access Service 验证 userId=1）。CAPTCHA 成功绑定公共 Origin hostname；安装时从公共 Origin 推导，未绑定拒绝启用。B7 持久 Settings 应在 Access 注册前提供经过校验的版本化策略快照，后续安全刷新必须确保原子替换和无静默默认，不能复用技术 Platform 注册槽。
@@ -170,6 +194,10 @@ Remote 会话 HTTP 仅负责协议解码和失败投影，入场身份查询与�
 Remote 同时安装 `/ws/workspace` 的旧 Files 子协议适配层。Interface 持有旧 envelope、requestId/in-flight、binary read owner、NXW1 发送、cancel 和 ready/error；旧 WorkspaceEventHub/Protocol 复查确认没有独立 Files mutation change event，因此适配层不虚构 `filesystem.changed` 一类消息。Files Service 持有路径/编码/操作政策；Model/Platform 不知道旧 Workspace DTO。R1 恢复 fresh `workspace.connect`、`workspace.ping` 与 Files 消息；完整 `workspace.resume`、Terminal/suspend 已有 B3.1 源码，status/docker 已有 B3.2 源码，行为统一待 B10。下载/上传/传输/归档的 B2 源码已收口，行为待 B10。现有 `/api/v1/remote/files` 暂由 DEV `remote-next` 消费，后续 P1/F1 决定最终 API，不把双入口固化成长期设计。
 
 ## 6. 数据、事务与并发
+
+### B4.2 v6 与挑战原子性
+
+应用迁移 v6 在不重写 v1–v5 的前提下给 `access_accounts` 增加 `totp_secret_encrypted`，新建 `access_pending_logins`、`access_factor_challenges`、`access_passkeys`。待登录只保存 digest、用户、密码修订、rememberMe 与五分钟到期，同一浏览器旧 partial 按摘要同事务替换，最大 64 在事务中准入；挑战只保存 digest、kind、用户/完整会话摘要、加密的暂存 TOTP secret 或 WebAuthn challenge、RP/Origin 与到期，最多 1024。保存新 challenge 会删除旧 cookie 对应项，完整会话下同类 challenge 被替换。注册只有在原 challenge 未过期、同一账号完整 session 仍有效、credential ID 未占用时入库。认证在存储事务内复验 challenge、账户/credential 所属、counter 变化、来源封禁，并同事务消耗 challenge、更新计数、签发完整 session；零 counter 遵循旧技术契约，非零 counter 必须递增。TOTP 激活在 session 与 challenge 上 CAS，禁用在密码旧 hash、session 和当前加密 secret 上 CAS；禁用后删除该账户 pending/challenge。
 
 Access 改密由 Service 一次入场认证、AccountModel 转 token digest，SQLite 在修改同一事务复核原 session 仍存在且未到期、旧 password hash 未变，再撤销账号全部会话；计算密码期间撤销或过期阻止写入。登录签发 Storage 与 Model 各自持有具名结果，明确 issued、credentials_changed、rate_limited、cancelled，避免并发封禁被降为错误密码。accounts/sessions Model 使用共用 access-storage-boundary 转技术失败，公开 accessBoundary 只消费应用失败并投影安全码。该 helper 只用于 Model 的技术错误转换，不是新的 Service 或公开能力。
 
@@ -199,9 +227,15 @@ Access 的失败窗口/封禁计算在 sessions/login-failure-rules，Adapter �
 
 ## 7. 生命周期与失败
 
+Factors 的期限/容量和已启用政策由 Service 决定，Model 接收应用政策再转换为 storage/技术命令。应用时间保持毫秒，Unix 秒只在 HTTP mapper 转换。统一 access/interfaces/http/access-delivery 对会话及挑战追踪到 HTTP finish/close，未交付时撤销；finish 不证明浏览器接收。已签会话后确认失败按 operation_unknown 表达并尝试撤销，保留全部失败因果。Platform WebAuthn Port 以独立技术证据定义输入，Adapter 明确投影 vendor JSON，产品 issuer/RP 显示名由应用传入。
+
+### B4.2 安全失败与清理
+
+TOTP 使用随机 20-byte 秘钥的 Base32/HMAC-SHA1 6 位 RFC6238、30 秒步进前后各一窗，向用户展示 otpauth QR；仅在加密 `SecretBox` 生效时允许初始化，密钥以账户绑定 AAD 存 SQLite，失败拒绝而非明文降级。WebAuthn 由本地 `@simplewebauthn/server` 验证签名、challenge、公开 Origin、RP ID 与 user verification，认证 counter 用 SQLite CAS，不能信任客户端自报结果。多个并发完成只能消费同一 token 一次，重试未知结果先重新获取权威会话。完成登录前检查来源黑名单，错误因素验证码累计来源失败。Logout 同时撤销完整/部分 bearer 和设置/Passkey challenge；过期与替换 challenge 不成为资源授权。已经派发的数据库事务不因断连而假定回滚；WebAuthn 浏览器结果的真实交付行为留 B10。
+
 ### B4.1 Access 生命周期
 
-账号不存在时仍执行无账号的耗时密码校验以缩小用户枚举时差；密码错误与 CAPTCHA 拒绝只记有权限的公网失败计数，完整因素未迁移时返回 `factor_unavailable` 而不签发完整会话。CAPTCHA 网络 Adapter 单次 POST、不自动重试、十秒截止、16 KiB 响应预算；配置无效在安装时拒绝，网络/非预期响应是安全 `captcha_unavailable`，供应商明确 `success:false` 是 `captcha_invalid`；成功时还必须匹配配置的公开 Origin hostname，Google 仅支持 v2 checkbox、不接受 v3 action/score，非 2xx 响应体取消，不能固定成功。请求断连传播 AbortSignal，已开始的 SQLite 事务不凭取消推断回滚。失败计数/签发是独立事务，供应商失败不影响既有会话。改密和登出持久撤销立即阻断下一次身份复查，但不能撤回已经发出的远端副作用；Workspace、Files、PTY、desktop、Agent 原 owner 仍在操作/交付/定期状态门槛复验会话摘要并自行收尾。HTTP 与各独立模块关闭并发收尾，SQLite 在二者实际结束后关闭；失败聚合，不把定时等待终结当资源释放。
+账号不存在时仍执行无账号的耗时密码校验以缩小用户枚举时差；密码错误与 CAPTCHA 拒绝只记有权限的公网失败计数，强制 Passkey 的账号拒绝密码路径（`factor_unavailable`），TOTP 账号转部分认证而不签发完整会话。CAPTCHA 网络 Adapter 单次 POST、不自动重试、十秒截止、16 KiB 响应预算；配置无效在安装时拒绝，网络/非预期响应是安全 `captcha_unavailable`，供应商明确 `success:false` 是 `captcha_invalid`；成功时还必须匹配配置的公开 Origin hostname，Google 仅支持 v2 checkbox、不接受 v3 action/score，非 2xx 响应体取消，不能固定成功。请求断连传播 AbortSignal，已开始的 SQLite 事务不凭取消推断回滚。失败计数/签发是独立事务，供应商失败不影响既有会话。改密和登出持久撤销立即阻断下一次身份复查，但不能撤回已经发出的远端副作用；Workspace、Files、PTY、desktop、Agent 原 owner 仍在操作/交付/定期状态门槛复验会话摘要并自行收尾。HTTP 与各独立模块关闭并发收尾，SQLite 在二者实际结束后关闭；失败聚合，不把定时等待终结当资源释放。
 
 ### B3.2 生命周期
 
@@ -263,9 +297,13 @@ Remote Files 的流 attachment 绑定具体任务实例；prepare 配额由资�
 
 ## 8. 当前能力与验收
 
+### B4.2 施工状态
+
+B4.2 因素/Passkey 主链、v6 迁移、Shared/HTTP、登录联合与 Platform Adapter 已落源码，旧正式 Frontend/Backend/Protocol 未改。本轮安装依赖并修复真实静态失败，Shared/Backend-next/Frontend、根检查与格式门禁实际通过；四表、命令证据与未验场景归 testing。静态通过不能视为行为验收完成。B7 的动态 Settings、审计/通知和 F1 前端迁移仍未实施；实际 TOTP 客户端、RP、challenge 并发、回滚/断连、库升级均留 B10。v6 增加凭据 generation、匿名挑战来源约束与全局改密修订，最终签发事务复验 generation/counter/挑战修订；静态与行为门禁均不得用设计声明替代。
+
 ### B4.1 Access 验收界限
 
-B4.1 已建立上述源码及安装配置入口，并完成 Review 纠正（入场例外、身份和时间边界、断连令牌、供应商 hostname、既有测试源码契约），但仍须按实施方案四表完成静态门禁，静态门禁以实际当前工作区执行结果为准。B7 持久 Settings、审计/通知与在线策略更新尚未接通；B4.2 TOTP/Passkey 挑战尚未迁移，密码登录对既有已启用因素拒绝降级。全套 HTTP/WS、真实代理、受控验证码供应商、封禁并发、撤销后的长任务收敛和实机浏览器行为统一留 B10；正式 Frontend 仍消费旧 Protocol，按 F1 登记差异，不能宣称已切换。
+B4.1 已建立上述源码及安装配置入口，并完成 Review 纠正（入场例外、身份和时间边界、断连令牌、供应商 hostname、既有测试源码契约），当前静态结果归 testing，后续修改需按实际工作区重跑。B7 持久 Settings、审计/通知与在线策略更新尚未接通；B4.2 TOTP/Passkey 挑战已在新 Access 收口，密码登录对已启用因素仍拒绝降级，源码/静态已收口，仍待 B10 行为验收。全套 HTTP/WS、真实代理、受控验证码供应商、封禁并发、撤销后的长任务收敛和实机浏览器行为统一留 B10；正式 Frontend 仍消费旧 Protocol，按 F1 登记差异，不能宣称已切换。
 
 ### B3.2 施工范围
 
@@ -273,7 +311,7 @@ B4.1 已建立上述源码及安装配置入口，并完成 Review 纠正（入�
 
 ### B3.1 设计与验收边界
 
-本设计建立于原 `workspace.service`、`workspace-terminal.service`、shell integration、suspend coordinator/registry、ssh-suspend HTTP、log/xterm Adapter、现有 Files WS/transfer 与前端 WorkspaceSocket 实际消费者盘点；不据此声称 B3.1 已实现。源码实现和四表核验留本批 C1–C5；Shared/backend-next check/build、Frontend build、根 check、格式和 diff 静态门禁须对应最终工作区重新运行。逻辑/故障/E2E 保留 B10，浏览器协议/反馈迁移与静态消费者差异进入 F1。
+本设计建立于原 `workspace.service`、`workspace-terminal.service`、shell integration、suspend coordinator/registry、ssh-suspend HTTP、log/xterm Adapter、现有 Files WS/transfer 与前端 WorkspaceSocket 实际消费者盘点；B3.1 源码及四表已收口，行为待 B10；Shared/backend-next check/build、Frontend build、根 check、格式和 diff 静态门禁须对应最终工作区重新运行。逻辑/故障/E2E 保留 B10，浏览器协议/反馈迁移与静态消费者差异进入 F1。
 
 Workspace 的当前源码由唯一 sessions Service 持有：64 项准入覆盖 opening、detached、resuming、closing 和 cleanup_unknown；普通恢复使用同一 SSH shell、8 MiB journal、120 秒宽限及显式 workspace.resumeAck。独立 Remote HTTP/PTY 使用自己的技术 SessionService，复用 machines Model/Platform，不暴露用户 Workspace 的活跃 shell 或权限。
 
@@ -283,13 +321,13 @@ Workspace 的当前源码由唯一 sessions Service 持有：64 项准入覆盖 
 
 日志由技术 Adapter 串行 append/read/compact/delete，绝对 offset 不随 100 MiB 可见窗口裁剪回退；checkpoint 和 renderer 的技术资源通过 Model 隐藏。日志导出在 Service 对每个最多 64 KiB 的块复查身份和实例，技术分块归 renderer Adapter；取消与清理失败分别判断，不能把 allSettled 的完成当作释放成功。历史前页交付成功并复查原 cursor 后才推进。HTTP/WS 管理视图共用 suspend-view 白名单；当前身份、attachment/generation 和 45 秒租约在异步边界复查，2 秒 sweep 不代替实时授权。关闭、背压、导出和失败边界见第 7 节与下述当前范围。
 
-B3.1 源码收口不等于行为验收。实际类型、构建和格式结论以 [B3.1 收口证据](../testing/后端重构待实机验证.md#b31-源码阶段最终收口) 为准；真实 Bash/Zsh、SSH/SFTP、磁盘背压、双 ACK/接管、VT 模式、日志导出和故障恢复均待 B10。正式前端仍未消费新的双 ACK/Shared（F-R10），完整 Access/IP/2FA 仍待 B4。
+B3.1 源码收口不等于行为验收。实际类型、构建和格式结论以 [B3.1 收口证据](../testing/后端重构待实机验证.md#b31-源码阶段最终收口) 为准；真实 Bash/Zsh、SSH/SFTP、磁盘背压、双 ACK/接管、VT 模式、日志导出和故障恢复均待 B10。正式前端仍未消费新的双 ACK/Shared（F-R10），完整 Access/IP/2FA 源码已收口、行为待 B10。
 
 Access/Targets/Remote 基础切片与有限 Agent 状态已具备源码；未实现能力见职责表。Remote Files 已同时具备 B1 新 HTTP 读写能力及 R1 旧 Workspace Files 子协议源码：编码写入/独占新建、list/search/stat、binary read/cancel、递归/force 批量删除、rename/chmod/realpath、ready/error 均有真实调用链；A-04 machines owner、SFTP 技术失败边界及 Files Service/Model 职责已收口。R1 行为验证未运行，真实 SSH/SFTP、故障窗口和旧消费者全链路仍待 B10。
 
 R2-01–R2-05 的源码缺口已修补：背压/final 纳入同一操作截止时间，心跳按实际资源 owner 验证并续期，Workspace 64 与独立 Files 8 的预算分别计数；WS authorize 的身份查询异常沿技术握手返回服务不可用而非伪装未登录；PTY 定时/EOF 身份查询异常与正常拒绝分开，所有 unsubscribe 与 release 失败聚合进入原关闭追踪。以上仅是源码/静态完成，B10 的长背压、撤销、故障及容量行为尚未执行，不能标为已验收。
 
-B2 下载/上传/copy/move/目录 ZIP、原生归档、密码与进度、属性及链接恢复的源码已收口；D12/D13 的部署取舍已确定，B2-V01–V66 全部待 B10 行为验证。Files 子协议不等于完整 Workspace 已迁移：完整 reconnect/resume、Terminal/挂起恢复的 B3.1 源码已收口、行为待 B10；status/docker 的 B3.2 源码已收口、行为待 B10；RDP/VNC 的 B3.3 源码复审已矫正，本轮最终静态通过，行为待 B10；完整旧 Access/IP/2FA 策略待 Access 阶段。按明确决定，旧 writer 的隐式 metadata 失败容错不在后端保留，正式编辑器的显式失败处理转 F1。Agent Shared、六个 HTTP 与开发前端源码消费者已接入；真实浏览器与故障行为仍待验收，不能因静态通过就声称正式通信迁移完成。
+B2 下载/上传/copy/move/目录 ZIP、原生归档、密码与进度、属性及链接恢复的源码已收口；D12/D13 的部署取舍已确定，B2-V01–V66 全部待 B10 行为验证。Files 子协议不等于完整 Workspace 已迁移：完整 reconnect/resume、Terminal/挂起恢复的 B3.1 源码已收口、行为待 B10；status/docker 的 B3.2 源码已收口、行为待 B10；RDP/VNC 的 B3.3 源码复审已矫正，本轮最终静态通过，行为待 B10；完整 Access/IP/2FA 源码已收口、行为待 B10。按明确决定，旧 writer 的隐式 metadata 失败容错不在后端保留，正式编辑器的显式失败处理转 F1。Agent Shared、六个 HTTP 与开发前端源码消费者已接入；真实浏览器与故障行为仍待验收，不能因静态通过就声称正式通信迁移完成。
 
 **B3.3 RDP/VNC 新后端源码**：`remote/desktop/service/desktop-service.ts` 持有单次短期 ticket、pending/opening/active 限额与当前 Access/Targets 版本、周期复核及精确关闭实例；`remote/desktop/model` 显式转换 Targets 的可信配置/解密快照与 Platform 技术请求。Targets 的 Desktop resolver 在同一 SQLite 只读事务获取连接/密码密文，Targets Model 持有 `SecretBox` 技术解密与应用转换；独立 v4 migration 增加 recent attempt 时间字段，版本不随单纯连接尝试变化；RDP/VNC 的 `credentials.set` 允许密码但拒绝 SSH key。Guacamole 技术 Port/Adapter 独占 guacamole-lite 1.2.0 与 guacd：独立 raw WS 仍由统一 Platform HTTP origin/upgrade owner 接入，内部 AES token 仅含一次 bridge ID，真实密码和远端参数只在适配器私有映射内。`POST /api/v1/connections/:id/{rdp,vnc}-session`、`WS /ws/remote-desktop` 和 Shared `remote/desktop` 均已接线；双端正式消费者仍留 F-R12。B3.3 功能/类型/生命周期详细八节见 [远程桌面专题](REMOTE_DESKTOP.md)，源码/静态进度和 B10 未验证单列实施方案与 testing，不以接线作为验收。
 

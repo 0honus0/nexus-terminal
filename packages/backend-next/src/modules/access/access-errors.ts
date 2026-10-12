@@ -1,4 +1,4 @@
-import { AccessFailure } from './authentication/model/access-failure.js';
+import { AccessFailure } from './access-failure.js';
 
 import type { AccessErrorCode } from './public.js';
 

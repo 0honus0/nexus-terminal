@@ -56,7 +56,7 @@ export function sendJson(
 	response: ServerResponse,
 	status: number,
 	body: unknown,
-	headers: Readonly<Record<string, string>> = {},
+	headers: Readonly<Record<string, string | string[]>> = {},
 ): void {
 	if (response.writableEnded || response.destroyed) {
 		return;

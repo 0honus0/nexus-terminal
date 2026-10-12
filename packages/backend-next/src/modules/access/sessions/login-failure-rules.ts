@@ -1,5 +1,5 @@
 import type { LoginFailureState } from './model/session-types.js';
-import type { LoginFailureLimits } from '../authentication/model/login-failure-types.js';
+import type { LoginFailureLimits } from '../login-failure-types.js';
 
 export function mayAttemptLogin(state: LoginFailureState | null, now: number): boolean {
 	return state === null || state.blockedUntil <= now;

@@ -38,6 +38,7 @@ interface ModuleRegistrationOptions {
 	guacd?: { host: string; port: number };
 	ipWhitelist?: AccessRegistrationOptions['ipWhitelist'];
 	captcha?: AccessRegistrationOptions['captcha'];
+	passkeys?: AccessRegistrationOptions['passkeys'];
 }
 
 /** Only independent business lifecycle owners appear here. */
@@ -49,8 +50,16 @@ export function registerModules({
 	guacd,
 	ipWhitelist,
 	captcha,
+	passkeys,
 }: ModuleRegistrationOptions): RegisteredModules {
-	const access = registerAccess({ sqlite, loginFailurePolicy: loginFailureOptions, ipWhitelist, captcha });
+	const access = registerAccess({
+		sqlite,
+		secrets,
+		passkeys,
+		loginFailurePolicy: loginFailureOptions,
+		ipWhitelist,
+		captcha,
+	});
 	const targets = registerTargets({ sqlite, secrets });
 	const remote = registerRemote({
 		resolver: targets.trustedSshTargets,
@@ -71,12 +80,19 @@ export function registerModules({
 			method: route.method,
 			path: route.path,
 			...(route.maxBodyBytes === undefined ? {} : { maxBodyBytes: route.maxBodyBytes }),
+			...(route.maxPathParameterBytes === undefined
+				? {}
+				: { maxPathParameterBytes: route.maxPathParameterBytes }),
 
 			handle: async (context) => {
 				let allowed: boolean;
 				try {
 					const authenticationRoute =
 						route.path === '/api/v1/auth/login' ||
+						route.path === '/api/v1/auth/login/2fa' ||
+						route.path === '/api/v1/auth/passkey/authentication-options' ||
+						route.path === '/api/v1/auth/passkey/authenticate' ||
+						route.path === '/api/v1/auth/passkey/has-configured' ||
 						route.path === '/api/v1/auth/status' ||
 						route.path === '/api/v1/auth/logout' ||
 						route.path === '/api/v1/settings/ip-blacklist';

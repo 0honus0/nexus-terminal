@@ -4,11 +4,15 @@
 
 ## 1. 职责与范围
 
+B4.2 因素的双端新增范围是密码成功后的 `requiresTwoFactor:true`、TOTP setup/verify/disable/二次登录、WebAuthn 的 options/verify、Passkey 发现/列表/改名/删除。Shared 不持有部分会话密钥、challenge 的服务端归属、TOTP secret 密文和签名算法；完整授权仍须 Access 验证。
+
 `packages/shared` 持有前后端同义同表示的基础取值、业务对象与完整通信契约；不持有后端秘密、权限状态、存储行、技术连接或 UI 草稿。旧正式通信仍使用 `packages/protocol`，迁移按功能同步消费者，不让新后端运行时导入旧 Protocol。
 
 B4.1 Access 的双端范围是管理员初始化、密码登录、明确的认证状态、改密/登出、CAPTCHA 公开配置与黑名单读/解除；Shared 只规定传输形状/预算/有限值，真正身份、IP、失败阈值、因素生效、事务及来源信任由 Access/Platform 负责。正式前端在 F1 迁移前尚非新协议消费者，行为验收留 B10。
 
 ## 2. 子功能与目录
+
+`access/factors/http.ts` 定义因素请求的 unknown 解码、有限 token/名称/credential 字段、公开 TOTP setup 与 Passkey 摘要；`access/values.ts` 新增 HttpOnly partial/challenge/TOTP setup Cookie 名和 300 秒临时生命周期、`limit_exceeded` 等具名错误；`access/http.ts` 将密码登录结果扩充为成功用户或 `requiresTwoFactor:true` 的判别联合。标准 WebAuthn OPTIONS 的 RP、user、algorithm、credential descriptor 先由后端 Model 投影为具名应用类型，再经 Interface 白名单转为 Shared `access/factors/http.ts` 响应类型；已验证的 browser credential JSON 先由 Shared unknown codec 严格校验必要字段，再经 Interface 转为 Factors 应用证据，由 Model 显式转回技术 Port 所需表示。Provider 对象与存储公钥不进入 Service/Shared。
 
 B4.1 的 `access/values.ts` 统一持有新后端会话 Cookie 名 `nexus_session`、rememberMe 30 天 Max-Age、CAPTCHA token 4096 UTF-8 bytes、黑名单分页最多 200、CAPTCHA provider 有限值以及登录/来源/供应商的具名安全错误。`access/http.ts` 为 setup/login（可选 captchaToken）/status（成功 200 `isAuthenticated:true/user`；未认证 401 安全码）/改密/logout/公开 CAPTCHA config/黑名单管理提供请求、响应和 unknown 严格取值；`access/model.ts` 只保留前端可见用户名/id/双因素标志。秘密、SQL 行、封禁策略快照和会话 digest 不属于 Shared；验证码供应商技术参数不进 wire。正式 Frontend 的旧 Auth/Settings API 仍待 F1 切换，不能把这些单端当前引用算作正式双端迁移。
 
@@ -33,13 +37,21 @@ Remote Workspace 的共用 envelope、connect/resume/close/ACK、NXW1 帧编码�
 
 待实施设计：各子域增加实际通信需要的 `http-schema.ts`，协议类型与运行时 schema 使用同一契约来源，业务对象仍归 model，基础取值仍归 values。模块 interfaces 将 schema 关联实际安装路由，汇总生成 OpenAPI；WebSocket 消息另按 AsyncAPI 组织。工具选型与迁移见实施方案 A-01/A-02，目前手写 codec 不等于已有自动生成能力。
 
+WebAuthn 创建/请求的 User Verification 均要求 `required`，与服务端验证一致；已知不匹配的 challenge、Origin、RP hash 和 UV 等在技术 Adapter 明确归无效，尚无法由供应商具名失败证明的异常只作不可用处理。HTTP 复用单一的可选字段转换过程，TOTP setup/Passkey options 已提交的挑战在响应最终 finish 之前遭遇断连时撤销，不交付未确认的 challenge Cookie。
+
 ## 3. 依赖方向
+
+B4.2 HTTP 对 unknown body 调 Shared `access/factors` 解码，再传应用 Service；成功响应由应用→HTTP 逐字段构造。Shared 不导入 `@simplewebauthn/server`、Node crypto/SecretBox 或 SQLite；Platform WebAuthn Port 仍是技术侧唯一协议语境，不借用 Shared 的业务用户类型。正式前端旧 Protocol 消费者留 F1。
 
 Access 的请求字段、错误与容量唯一来源为 Shared；后端 HTTP 接口消费 codec 并逐字段生成响应，Service 使用所属内部类型，技术 Adapter 不导入 Shared 业务 DTO。Platform HTTP 仅提取受信源 IP/Origin/Cookie 字符串，不持有 Access 策略或产品身份对象。
 
 Shared 不依赖 Backend、Frontend、具体 Adapter 或运行时；不访问数据库、网络和环境。values 与 model/http/events 隔离；Platform/业务 SQL Adapter 仅可精确引用确需共用的基础值，不能借 Shared 导入业务对象。package exports 明确列出真实入口，不靠内部深层路径消费。
 
 ## 4. 类型与转换
+
+Factors 注册/认证 JSON 请求预算 128 KiB、证据字段 96,000 bytes、凭据 ID 1024 bytes、名称 128 bytes、transports 最多 16 项且每项 32 UTF-8 bytes，唯一常量归 access/values。内部应用仍保持独立类型与 Model/HTTP 白名单转换。正式前端在 F1 实施时同步消费成功/失败契约、补齐实际响应解码与上下文校验；当前没有新增前端消费者。
+
+TOTP code 限定 6 位 ASCII 数字（纯边界上限再由应用验证）；密码/Passkey 名称限定 UTF-8 字节，WebAuthn credential JSON 明确读取 id/rawId/type、认证器签名或注册 attestation、extension 结果及有限公共字段。注册/认证完整输入最多由后端 HTTP 128 KiB 读取预算保护，解码不接受任意额外顶层字段；Provider 生成的 OPTIONS 由 Model 显式转换为浏览器 public 字段。Passkey 列表时间对外 Unix 秒，内部存储毫秒，不含 publicKey/counter/secret。
 
 Access `readAccessLoginRequest` 只允许 username/password/rememberMe/captchaToken；黑名单 query 的 `limit` 默认为 50、`offset` 为 0，拒绝重复或未知查询键及非十进制整数；删除请求显式使用 JSON `{ip}`。公开 CAPTCHA 返回启用标志、provider 和两个站点公钥字段，不含 secret；提供严格响应解码。status 未认证 401 返回 `{code:'unauthenticated'}` 供已存在的 DEV Auth client 正确识别，成功 200 为 `{isAuthenticated:true,user}`，不能折叠成 `user:null` 取代 isAuthenticated。后端即使返回字段同名仍保持应用/public/HTTP 三处各自一次白名单投影。
 
@@ -61,6 +73,8 @@ Agent name/title 原始输入为 128 bytes、prompt 为 16 KiB；创建 Run 完�
 
 ## 5. 入口与安装
 
+新增 GET/POST/DELETE/PUT HTTP 路由及已安装 path 见 Backend B4.2 第 5 节。密码登录正确但要求 TOTP 时返回 200 `{requiresTwoFactor:true}` 和五分钟独立 HttpOnly Cookie；`POST /login/2fa` 需该 Cookie 而不接纳完整 session 伪装部分授权。Passkey 认证 options 用独立 challenge Cookie，同一浏览器调用替换旧挑战；完成后签普通 `nexus_session`。HTTP URI 和 Schema 注册自动化仍属规划，Shared 当前为手写严格 codec。
+
 Access 的 `GET /api/v1/auth/captcha/config` 与 `GET/DELETE /api/v1/settings/ip-blacklist` 是本批真实入口；其它初始化、登录、status、logout、密码修改沿真实路由关联本 Shared 协议。全局 IP 来源政策在后端 HTTP/WS 安装处，不是 Shared codec 或 Platform 身份判断。前端的 captcha Widget、黑名单设置、Auth store/刷新暂时仍使用旧协议，F1 必须同时迁请求、失败联合和恢复路径。
 
 B3.2 真实消费者为新后端 Workspace status/Docker 和 system 三条 HTTP。Shared codec 解码 Docker 请求、HTTP path 及完整响应，出口是精确 package exports；正式前端 systemOverviewApi、Workspace capabilityAdapters 仍用旧 Protocol，差异由实施方案 F-R11 承接，未迁移。
@@ -77,11 +91,15 @@ Workspace Files Shared 契约由 backend-next 的 `/ws/workspace` Files adapter 
 
 ## 6. 数据、事务与并发
 
+Shared 不声称数据库原子细节；外部保证为无完整身份的部分 Cookie 不享业务权限，WebAuthn/OTP 验证必须成功后才发完整 Cookie；服务端保留签名 challenge 单次使用与 counter CAS，Unknown 事务状态不得自行重放。Passkey credential ID 是不透明 WebAuthn 标识，前端不得把它当密码或授权。
+
 Access 对外只表达会话到期与撤销所导致的 authenticated 状态、显式错误和黑名单分页；token 摘要、失败累积、CAS、改密原会话的提交时复核与当前账号因素检查在 Access SQLite/Model 内，Shared 不声明数据库强事务或 CAPTCHA 远端一次性 token 的完成保证。
 
 Shared 只表达对外版本、游标、幂等结果等契约，不执行事务。expectedVersion、operationKey、事件序号/分页与 replay 结果的含义由业务 owner 保证；共享类型不替代服务端授权及同事务状态校验。Agent 应用和存储对象独立保留，只复用 values 中的状态/事件基础值；内部 scope_not_found 在 HTTP 转为 not_found，不进入成功响应联合。
 
 ## 7. 生命周期与失败
+
+B4.2 安全错误扩展 `challenge_expired`、`not_found`、`limit_exceeded`，既有 `unauthenticated`/`invalid_credentials`/`factor_unavailable`、`operation_unknown` 仍保留。部分 Cookie 最多 300 秒且服务器挑战至多五分钟，logout 清理完整/部分/challenge Cookie；前端 F1 必须在新挑战开始、成功、取消、登出和网络错误时刷新相关状态，并对未知提交避免静默重放。
 
 黑名单 `lastAttemptAt/blockedUntil` 对外使用 Unix 秒（匹配现有安全设置消费者），SQLite 与应用规则保留毫秒；HTTP 显式转换。Access 可见错误区分错误凭据 `invalid_credentials`、验证码明确失败 `captcha_invalid`、验证供应商不可用 `captcha_unavailable`、来源入场拒绝 `forbidden`、封禁 `rate_limited`、未迁移因素 `factor_unavailable`、SQLite 提交/回滚不确定 `operation_unknown` 与确定存储不可用 `storage_unavailable`。status 成功 200 保留 `isAuthenticated:true`；未认证 401 返回 `{code:'unauthenticated'}`，与实际路由/codec 一致，字段是否精简仍依 D8 延后确认。客户端不要在登录失败后自动重播 CAPTCHA token，未知写入/网络错误不推断服务器已回滚；撤销后的长期任务仍需由原资源 owner 完成收尾。
 
@@ -90,6 +108,8 @@ Shared 只表达对外版本、游标、幂等结果等契约，不执行事务�
 公开失败使用稳定安全码，未知失败不可当成功；不传技术 cause、秘密或对象 dump。Remote Files 的 `operation_unknown` 表示 mutation 已派发但终态无法可信确认，消费者不得把它当作安全未执行或自动重试依据。协议解码不持有活跃资源。取消、generation、终态和资源关闭分别归实际前后端 owner，Shared 可以描述语义，但不能虚构远端回滚保证。
 
 ## 8. 当前能力与验收
+
+B4.2 Shared codec 与后端 route/Model 已接线，但正式 UI 仍依旧 Protocol；当前 pnpm 静态门禁因执行环境权限受阻而没有实际 PASS。下游前端联动/浏览器 WebAuthn、真实 TOTP 及并发/数据库场景留 B10。B7 审计/通知和持久 Settings 不在本批实现范围。
 
 B4.1 Access Shared 的 codec/类型和后端入口已有源码，但正式浏览器尚未迁移，所有真实供应商响应、反向代理链、HTTP/WS 准入、Cookie/CSRF 和撤销交错的行为归 B10。静态与架构状态由当前阶段四表和命令证据单独记录，B4.2/B7 未实现部分不得写成已完成。
 

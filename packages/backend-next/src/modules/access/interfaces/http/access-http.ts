@@ -1,3 +1,4 @@
+import { deliverAccessResult } from './access-delivery.js';
 import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
 import type { AccessService } from '../../authentication/service/access-service.js';
 import { AccessOperationError, accessBoundary } from '../../access-errors.js';
@@ -6,6 +7,7 @@ import {
 	type AccessNeedsSetupResponse,
 	type AccessSetupResponse,
 	type AccessLoginResponse,
+	type AccessPendingTwoFactorResponse,
 	type AccessStatusResponse,
 	type AccessLogoutResponse,
 	type AccessPasswordResponse,
@@ -21,7 +23,14 @@ import {
 	readAccessIpBlacklistRemoveRequest,
 } from '@nexus-terminal/shared/access/http';
 import { type AccessUserView } from '@nexus-terminal/shared/access/model';
-import { ACCESS_SESSION_COOKIE_NAME, ACCESS_REMEMBER_SECONDS } from '@nexus-terminal/shared/access/values';
+import {
+	ACCESS_SESSION_COOKIE_NAME,
+	ACCESS_REMEMBER_SECONDS,
+	ACCESS_PARTIAL_COOKIE_NAME,
+	ACCESS_PARTIAL_SECONDS,
+} from '@nexus-terminal/shared/access/values';
+import { ACCESS_CHALLENGE_COOKIE_NAME, ACCESS_TOTP_SETUP_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
+import type { FactorService } from '../../factors/service/factor-service.js';
 
 function readSession(context: HttpRouteContext): string | null {
 	return context.cookie(ACCESS_SESSION_COOKIE_NAME);
@@ -80,6 +89,9 @@ function errorResponse(context: HttpRouteContext, error: unknown): void {
 		case 'conflict':
 			status = 409;
 			break;
+		case 'limit_exceeded':
+			status = 429;
+			break;
 		case 'unauthenticated':
 		case 'invalid_credentials':
 			status = 401;
@@ -119,7 +131,7 @@ async function handle(context: HttpRouteContext, action: () => Promise<void>, ac
 }
 
 /** Access owns its own endpoints; HTTP runtime never receives Access storage or SQL ports. */
-export function createAccessRoutes(access: AccessService, secureCookies: boolean): HttpRoute[] {
+export function createAccessRoutes(access: AccessService, factors: FactorService, secureCookies: boolean): HttpRoute[] {
 	return [
 		{
 			method: 'GET',
@@ -164,50 +176,64 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 			handle: (context) =>
 				handle(context, async () => {
 					const data = readAccessLoginRequest(await context.json());
-					const cancelled = new AbortController();
-
-					const onClose = () => {
-						if (!context.response.writableFinished) {
-							cancelled.abort();
-						}
-					};
-
-					context.response.once('close', onClose);
-					if (context.response.destroyed || context.request.aborted) {
-						cancelled.abort();
-					}
-					try {
-						const result = await accessBoundary(() =>
+					await deliverAccessResult(
+						context,
+						(signal) =>
 							access.login({
 								username: data.username,
 								password: data.password,
 								rememberMe: data.rememberMe === true,
 								source: context.sourceIp,
 								captchaToken: data.captchaToken,
-								signal: cancelled.signal,
+								previousPartialToken: context.cookie(ACCESS_PARTIAL_COOKIE_NAME),
+								signal,
 							}),
-						);
-						if (cancelled.signal.aborted) {
-							if (result.status === 'authenticated') {
-								await accessBoundary(() => access.logout(result.token));
+						(result) => {
+							if (result.status === 'requires_two_factor') {
+								const cookie = [
+									ACCESS_PARTIAL_COOKIE_NAME + '=' + result.token,
+									'Path=/',
+									'HttpOnly',
+									'SameSite=Lax',
+									'Max-Age=' + ACCESS_PARTIAL_SECONDS,
+									...(secureCookies ? ['Secure'] : []),
+								].join('; ');
+								context.send(
+									200,
+									{ requiresTwoFactor: true } satisfies AccessPendingTwoFactorResponse,
+									{ 'Set-Cookie': cookie },
+								);
+								return;
 							}
-							return;
-						}
-						if (result.status !== 'authenticated') {
-							const code = result.status;
-							context.send(code === 'rate_limited' ? 429 : code === 'factor_unavailable' ? 403 : 401, {
-								code,
-							} satisfies AccessHttpErrorResponse);
-							return;
-						}
-						context.send(
-							200,
-							{ user: toUser(result.identity), requiresTwoFactor: false } satisfies AccessLoginResponse,
-							{ 'Set-Cookie': cookieHeader(result.token, result.rememberMe, secureCookies) },
-						);
-					} finally {
-						context.response.off('close', onClose);
-					}
+							if (result.status !== 'authenticated') {
+								const code = result.status;
+								context.send(
+									code === 'rate_limited' || code === 'limit_exceeded'
+										? 429
+										: code === 'factor_unavailable'
+											? 403
+											: 401,
+									{ code } satisfies AccessHttpErrorResponse,
+								);
+								return;
+							}
+							context.send(
+								200,
+								{
+									user: toUser(result.identity),
+									requiresTwoFactor: false,
+								} satisfies AccessLoginResponse,
+								{ 'Set-Cookie': cookieHeader(result.token, result.rememberMe, secureCookies) },
+							);
+						},
+						async (result) => {
+							if (result.status === 'authenticated') {
+								await access.logout(result.token);
+							} else if (result.status === 'requires_two_factor') {
+								await factors.logoutFlows(result.token, null, null);
+							}
+						},
+					);
 				}),
 		},
 		{
@@ -234,9 +260,38 @@ export function createAccessRoutes(access: AccessService, secureCookies: boolean
 			handle: (context) =>
 				handle(context, async () => {
 					const token = readSession(context);
-					await accessBoundary(() => access.logout(token));
+					const results = await Promise.allSettled([
+						accessBoundary(() => access.logout(token)),
+						accessBoundary(() =>
+							factors.logoutFlows(
+								context.cookie(ACCESS_PARTIAL_COOKIE_NAME),
+								context.cookie(ACCESS_CHALLENGE_COOKIE_NAME),
+								context.cookie(ACCESS_TOTP_SETUP_COOKIE_NAME),
+							),
+						),
+					]);
+					const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+					if (failures.length > 0) {
+						throw new AggregateError(failures, 'Access logout cleanup incomplete');
+					}
 					context.send(200, { loggedOut: true } satisfies AccessLogoutResponse, {
-						'Set-Cookie': clearedCookie(secureCookies),
+						'Set-Cookie': [
+							clearedCookie(secureCookies),
+							...[
+								ACCESS_PARTIAL_COOKIE_NAME,
+								ACCESS_CHALLENGE_COOKIE_NAME,
+								ACCESS_TOTP_SETUP_COOKIE_NAME,
+							].map((name) =>
+								[
+									name + '=',
+									'Path=/',
+									'HttpOnly',
+									'SameSite=Lax',
+									'Max-Age=0',
+									...(secureCookies ? ['Secure'] : []),
+								].join('; '),
+							),
+						],
 					});
 				}),
 		},

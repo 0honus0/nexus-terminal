@@ -65,6 +65,12 @@ export interface AccessLoginResponse {
 	requiresTwoFactor: false;
 }
 
+export interface AccessPendingTwoFactorResponse {
+	requiresTwoFactor: true;
+}
+
+export type AccessPasswordLoginResponse = AccessLoginResponse | AccessPendingTwoFactorResponse;
+
 export interface AccessStatusResponse {
 	isAuthenticated: true;
 	user: AccessUserView;
@@ -128,10 +134,13 @@ export function readAccessHttpError(value: unknown): AccessHttpErrorResponse {
 		case 'already_initialized':
 		case 'invalid_credentials':
 		case 'rate_limited':
+		case 'limit_exceeded':
 		case 'captcha_invalid':
 		case 'captcha_unavailable':
 		case 'operation_unknown':
 		case 'factor_unavailable':
+		case 'challenge_expired':
+		case 'not_found':
 		case 'conflict':
 		case 'storage_unavailable':
 		case 'internal_failure':
@@ -285,9 +294,12 @@ export function readAccessSetup(value: unknown): AccessSetupResponse {
 	return { user: readAccessUser(row.user) };
 }
 
-export function readAccessLogin(value: unknown): AccessLoginResponse {
-	const row = record(value, ['user', 'requiresTwoFactor']);
-	if (row.requiresTwoFactor !== false) {
+export function readAccessLogin(value: unknown): AccessPasswordLoginResponse {
+	const row = record(value, ['user', 'requiresTwoFactor'], ['requiresTwoFactor']);
+	if (row.requiresTwoFactor === true && !Object.hasOwn(row, 'user')) {
+		return { requiresTwoFactor: true };
+	}
+	if (row.requiresTwoFactor !== false || !Object.hasOwn(row, 'user')) {
 		throw new InvalidAccessPayload();
 	}
 	return { user: readAccessUser(row.user), requiresTwoFactor: false };
