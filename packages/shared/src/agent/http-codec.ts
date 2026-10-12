@@ -39,15 +39,19 @@ export function agentRecord(
 	keys: readonly string[],
 	maxBytes = AGENT_MAX_RESPONSE_BYTES,
 ): Record<string, unknown> {
-	if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+	if (!isAgentRecord(input)) {
 		throw new InvalidAgentPayload();
 	}
 	encodeAgentJson(input, maxBytes);
-	const row = input as Record<string, unknown>;
+	const row = input;
 	if (Object.keys(row).some((key) => !keys.includes(key)) || keys.some((key) => !Object.hasOwn(row, key))) {
 		throw new InvalidAgentPayload();
 	}
 	return row;
+}
+
+export function isAgentRecord(input: unknown): input is Record<string, unknown> {
+	return input !== null && typeof input === 'object' && !Array.isArray(input);
 }
 
 export function agentInteger(input: unknown, min = 0, max = Number.MAX_SAFE_INTEGER): number {

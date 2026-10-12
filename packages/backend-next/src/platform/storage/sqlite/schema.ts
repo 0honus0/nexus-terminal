@@ -19,13 +19,19 @@ export async function initializeSchema(db: SqliteRuntime, migrations: readonly S
 		}
 	});
 	for (const migration of ordered.slice(versions.length)) {
-		await db.transaction(async (tx) => {
+		const apply = async (tx: Parameters<SchemaMigration['apply']>[0]) => {
 			const metadata = new SqliteSchemaAdapter(tx);
 			if ((await metadata.latestVersion()) !== (migration.version === 1 ? null : migration.version - 1)) {
 				throw new Error('Schema changed during initialization');
 			}
 			await migration.apply(tx);
 			await metadata.record(migration.version, migration.signature, Date.now());
-		});
+		};
+
+		if (migration.rebuildsReferencedTable) {
+			await db.rebuildReferencedTable(apply);
+		} else {
+			await db.transaction(apply);
+		}
 	}
 }

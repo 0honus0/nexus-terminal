@@ -13,13 +13,20 @@ import {
 	readAgentRunEventsQuery,
 	readAgentCreateRunPath,
 	readAgentRunPath,
+	readAgentRunStepPath,
 } from '@nexus-terminal/shared/agent/runs/http-codec';
 import type { AgentAppView, AgentThreadView } from '@nexus-terminal/shared/agent/scope/model';
-import type { AgentRunView, AgentRunEventView } from '@nexus-terminal/shared/agent/runs/model';
+import type {
+	AgentRunView,
+	AgentRunEventView,
+	AgentRunStepView,
+	AgentRunStepEventView,
+} from '@nexus-terminal/shared/agent/runs/model';
 import type {
 	AgentCreateRunResponse,
 	AgentCancelRunResponse,
 	AgentRunEventsResponse,
+	AgentRunStepEventsResponse,
 	AgentRunPath,
 } from '@nexus-terminal/shared/agent/runs/http';
 import type { AgentErrorResponse } from '@nexus-terminal/shared/agent/http';
@@ -40,6 +47,8 @@ type AgentHttpResponse =
 	| AgentCreateRunResponse
 	| AgentCancelRunResponse
 	| AgentRunEventsResponse
+	| AgentRunStepView
+	| AgentRunStepEventsResponse
 	| AgentErrorResponse;
 
 function sendAgent(context: HttpRouteContext, status: number, value: AgentHttpResponse): void {
@@ -82,6 +91,40 @@ function toEvent(value: AgentRunEventView): AgentRunEventView {
 	};
 }
 
+function toStep(value: AgentRunStepView): AgentRunStepView {
+	return {
+		runId: value.runId,
+		stepIndex: value.stepIndex,
+		state: value.state,
+		revision: value.revision,
+		runVersion: value.runVersion,
+		textBytes: value.textBytes,
+		...(value.finishReason === undefined ? {} : { finishReason: value.finishReason }),
+		...(value.inputTokens === undefined
+			? {}
+			: { inputTokens: value.inputTokens, outputTokens: value.outputTokens }),
+		...(value.failureCode === undefined ? {} : { failureCode: value.failureCode }),
+		createdAt: value.createdAt,
+		updatedAt: value.updatedAt,
+	};
+}
+
+function toStepEvent(value: AgentRunStepEventView): AgentRunStepEventView {
+	const identity = {
+		runId: value.runId,
+		stepIndex: value.stepIndex,
+		sequence: value.sequence,
+		createdAt: value.createdAt,
+	};
+	if (value.kind === 'text.delta') {
+		return { ...identity, kind: value.kind, textBytes: value.textBytes };
+	}
+	if (value.kind === 'usage') {
+		return { ...identity, kind: value.kind, inputTokens: value.inputTokens, outputTokens: value.outputTokens };
+	}
+	return { ...identity, kind: value.kind };
+}
+
 function failure(context: HttpRouteContext, error: unknown): void {
 	if (error instanceof HttpInputFailure) {
 		throw error;
@@ -106,6 +149,8 @@ function failure(context: HttpRouteContext, error: unknown): void {
 
 function agentErrorStatus(code: AgentOperationError['code']): number {
 	switch (code) {
+		case 'limit_exceeded':
+			return 413;
 		case 'invalid_input':
 			return 400;
 		case 'not_found':
@@ -113,8 +158,15 @@ function agentErrorStatus(code: AgentOperationError['code']): number {
 		case 'active_run_conflict':
 		case 'idempotency_conflict':
 		case 'version_conflict':
+		case 'provider_in_use':
+		case 'provider_configuration_stale':
 			return 409;
+		case 'model_not_found':
+			return 404;
+		case 'provider_unavailable':
+		case 'provider_request_failed':
 		case 'storage_unavailable':
+		case 'operation_unknown':
 			return 503;
 		case 'internal_failure':
 			return 500;
@@ -183,6 +235,10 @@ function statusResult(context: HttpRouteContext, value: AgentCreateRunResult | A
 		sendAgent(context, 201, { status: 'created', run: toRun(value.run) });
 		return;
 	}
+	if (value.status === 'provider_unavailable') {
+		sendAgent(context, 503, { code: 'provider_unavailable' });
+		return;
+	}
 	if (value.status === 'cancelled' || value.status === 'already_cancelled') {
 		sendAgent(context, 200, { status: value.status, run: toRun(value.run) });
 		return;
@@ -224,6 +280,11 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 				appId: path.appId,
 				threadId: path.threadId,
 				prompt: body.prompt,
+				model: {
+					providerId: body.model.providerId,
+					modelId: body.model.modelId,
+					configurationVersion: body.model.configurationVersion,
+				},
 				operationKey: key,
 			});
 			statusResult(ctx, value);
@@ -265,6 +326,48 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 					? { code: 'not_found' }
 					: {
 							items: result.items.map(toEvent),
+							nextCursor: result.nextCursor,
+						},
+			);
+		},
+		['after', 'limit'],
+	);
+	add(routes, 'GET', '/apps/:appId/runs/:id/steps/:stepIndex', access, async (ctx, userId) => {
+		const path = readAgentRunStepPath({
+			appId: ctx.params.appId,
+			runId: ctx.params.id,
+			stepIndex: ctx.params.stepIndex,
+		});
+		const result = await agent.getStep(userId, path.appId, path.runId, path.stepIndex);
+		sendAgent(ctx, result === null ? 404 : 200, result === null ? { code: 'not_found' } : toStep(result));
+	});
+	add(
+		routes,
+		'GET',
+		'/apps/:appId/runs/:id/steps/:stepIndex/events',
+		access,
+		async (ctx, userId) => {
+			const path = readAgentRunStepPath({
+				appId: ctx.params.appId,
+				runId: ctx.params.id,
+				stepIndex: ctx.params.stepIndex,
+			});
+			const query = readAgentRunEventsQuery(ctx.query);
+			const result = await agent.listStepEvents(
+				userId,
+				path.appId,
+				path.runId,
+				path.stepIndex,
+				query.after,
+				query.limit,
+			);
+			sendAgent(
+				ctx,
+				result === null ? 404 : 200,
+				result === null
+					? { code: 'not_found' }
+					: {
+							items: result.items.map(toStepEvent),
 							nextCursor: result.nextCursor,
 						},
 			);

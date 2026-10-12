@@ -1,6 +1,11 @@
 import type { AgentRunStatus, AgentRunCommandOutcome } from '@nexus-terminal/shared/agent/runs/values';
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
+import type { ProviderStorage } from '../../../providers/storage/provider-storage.js';
+import type { ProviderStoredRow } from '../../../providers/storage/provider-storage.js';
+import type { StoredModelReference } from '../../../providers/storage/provider-storage.js';
+import { decodeStoredModel } from '../../../providers/adapters/sqlite/provider-row.js';
+import type { StoredFrozenInput } from '../../storage/run-storage.js';
 import type {
 	RunStorage,
 	StoredRun,
@@ -30,7 +35,14 @@ function integer(value: unknown, min = 0): number {
 }
 
 function runStatus(value: unknown): AgentRunStatus {
-	if (value === 'pending' || value === 'cancelled') {
+	if (
+		value === 'pending' ||
+		value === 'running' ||
+		value === 'completed' ||
+		value === 'failed' ||
+		value === 'unknown' ||
+		value === 'cancelled'
+	) {
 		return value;
 	}
 	throw new Error('Corrupt Agent Run status');
@@ -51,7 +63,14 @@ function decodeRun(row: Row): StoredRun {
 
 function decodeEvent(row: Row): StoredRunEvent {
 	const type = row.event_type;
-	if (type !== 'run.created' && type !== 'run.cancelled') {
+	if (
+		type !== 'run.created' &&
+		type !== 'run.started' &&
+		type !== 'run.completed' &&
+		type !== 'run.failed' &&
+		type !== 'run.unknown' &&
+		type !== 'run.cancelled'
+	) {
 		throw new Error('Corrupt Agent event');
 	}
 	return {
@@ -88,6 +107,45 @@ function decodeReplay(row: Row): {
 const SELECT_RUN = `
 	SELECT id,user_id,app_id,thread_id,status,version,created_at,updated_at FROM agent_runs
 `;
+
+/** The Run-owned SQLite adapter decodes frozen JSON inside an existing transaction. */
+export async function frozenFromRun(
+	db: SqlExecutor,
+	userId: number,
+	appId: string,
+	runId: string,
+): Promise<StoredFrozenInput | null> {
+	const row = await db.one(
+		'SELECT f.provider_id,f.provider_version,f.credential_revision,f.model_id,f.base_url,f.protocol,f.capabilities_json,f.execution_policy FROM agent_run_frozen_inputs f JOIN agent_runs r ON r.id=f.run_id WHERE r.id=? AND r.user_id=? AND r.app_id=?',
+		[runId, userId, appId],
+	);
+	if (!row) {
+		return null;
+	}
+	const protocol = row.protocol;
+	if (protocol !== 'responses' && protocol !== 'chat-completions') {
+		throw new Error('Corrupt frozen protocol');
+	}
+	if (row.execution_policy !== 'awaiting_b6_b7') {
+		throw new Error('Corrupt execution policy');
+	}
+	const modelId = stringValue(row.model_id);
+	const capabilities = decodeStoredModel(JSON.parse(stringValue(row.capabilities_json)));
+	if (capabilities.id !== modelId) {
+		throw new Error('Corrupt frozen capability identity');
+	}
+	return {
+		providerId: stringValue(row.provider_id),
+		providerVersion: integer(row.provider_version, 1),
+		credentialRevision: integer(row.credential_revision, 1),
+		modelId,
+		baseUrl: stringValue(row.base_url),
+		protocol,
+		capabilities,
+		executionPolicy: 'awaiting_b6_b7',
+	};
+}
+
 const SELECT_REPLAY = `
 	SELECT i.user_id,i.app_id,i.run_id,i.request_hash,i.result_status,i.result_outcome,
 		i.result_version,i.result_created_at,i.result_updated_at,r.thread_id
@@ -138,11 +196,15 @@ async function saveReplay(
 }
 
 export class SqliteRunStorage implements RunStorage {
-	constructor(private readonly db: SqliteRuntime) {}
+	constructor(
+		private readonly db: SqliteRuntime,
+		private readonly providers: ProviderStorage,
+	) {}
 
 	create(
 		command: CreateRunStorageCommand,
 		mayCreate: (active: StoredRun | null) => boolean,
+		resolve: (provider: ProviderStoredRow, reference: StoredModelReference) => StoredFrozenInput | null,
 	): Promise<StoredCreateResult> {
 		return this.db.transaction(async (tx) => {
 			const previous = await replay(tx, command.userId, command.appId, 'create_run', command.operationKey);
@@ -163,10 +225,17 @@ export class SqliteRunStorage implements RunStorage {
 			if (scope === null) {
 				return { status: 'scope_not_found' };
 			}
-			const row = await tx.one(SELECT_RUN + ' WHERE thread_id=? AND status=?', [command.threadId, 'pending']);
+			const row = await tx.one(SELECT_RUN + " WHERE thread_id=? AND status IN ('pending','running','unknown')", [
+				command.threadId,
+			]);
 			const active = row === null ? null : decodeRun(row);
 			if (!mayCreate(active)) {
 				return { status: 'active_run_conflict' };
+			}
+			const provider = await this.providers.snapshot(tx, command.userId, command.model.providerId);
+			const frozen = provider === null ? null : resolve(provider, command.model);
+			if (!frozen) {
+				return { status: 'provider_unavailable' };
 			}
 			await tx.run(
 				`
@@ -197,6 +266,20 @@ export class SqliteRunStorage implements RunStorage {
 				updatedAt: command.createdAt,
 			};
 			await tx.run(
+				'INSERT INTO agent_run_frozen_inputs(run_id,provider_id,provider_version,credential_revision,model_id,base_url,protocol,capabilities_json,execution_policy) VALUES(?,?,?,?,?,?,?,?,?)',
+				[
+					run.id,
+					frozen.providerId,
+					frozen.providerVersion,
+					frozen.credentialRevision,
+					frozen.modelId,
+					frozen.baseUrl,
+					frozen.protocol,
+					JSON.stringify(frozen.capabilities),
+					frozen.executionPolicy,
+				],
+			);
+			await tx.run(
 				`
 				INSERT INTO agent_run_events(run_id,sequence,event_type,run_version,created_at)
 				VALUES(?,?,?,?,?)
@@ -206,6 +289,10 @@ export class SqliteRunStorage implements RunStorage {
 			await saveReplay(tx, command, 'create_run', run, 'created');
 			return { status: 'created', run };
 		});
+	}
+
+	async frozen(userId: number, appId: string, runId: string): Promise<StoredFrozenInput | null> {
+		return frozenFromRun(this.db, userId, appId, runId);
 	}
 
 	cancel(
@@ -237,6 +324,9 @@ export class SqliteRunStorage implements RunStorage {
 			if (decision === 'version_conflict') {
 				return { status: 'version_conflict' };
 			}
+			if (decision === 'active_run_conflict') {
+				return { status: 'active_run_conflict' };
+			}
 			if (decision === 'already_cancelled') {
 				await saveReplay(tx, command, 'cancel_run', current, 'already_cancelled');
 				return { status: 'already_cancelled', run: current };
@@ -254,7 +344,7 @@ export class SqliteRunStorage implements RunStorage {
 			const changed = await tx.run(
 				`
 				UPDATE agent_runs SET status='cancelled',version=?,updated_at=?
-				WHERE id=? AND app_id=? AND user_id=? AND status='pending' AND version=?
+				WHERE id=? AND app_id=? AND user_id=? AND status IN ('pending','running','unknown') AND version=?
 			`,
 				[updated.version, updated.updatedAt, updated.id, updated.appId, updated.userId, current.version],
 			);
@@ -276,6 +366,26 @@ export class SqliteRunStorage implements RunStorage {
 				[updated.id, sequence, 'run.cancelled', updated.version, updated.updatedAt],
 			);
 			await saveReplay(tx, command, 'cancel_run', updated, 'cancelled');
+			// A reserved step was never dispatched; a dispatched step may have
+			// reached the provider. Preserve this distinction when fencing writers.
+			const stepEvents = await tx.run(
+				`INSERT INTO agent_run_model_step_events(run_id,step_index,sequence,kind,created_at)
+				 SELECT run_id,step_index,revision+1,
+				        CASE WHEN state='reserved' THEN 'step.failed' ELSE 'step.unknown' END,?
+				 FROM agent_run_model_steps WHERE run_id=? AND state IN ('reserved','dispatched')`,
+				[updated.updatedAt, updated.id],
+			);
+			const stepChanges = await tx.run(
+				`UPDATE agent_run_model_steps
+				 SET failure_code=CASE WHEN state='reserved' THEN 'DISPATCH_NOT_STARTED' ELSE NULL END,
+				     state=CASE WHEN state='reserved' THEN 'failed' ELSE 'unknown' END,
+				     expected_run_version=?,revision=revision+1,updated_at=?
+				 WHERE run_id=? AND state IN ('reserved','dispatched')`,
+				[updated.version, updated.updatedAt, updated.id],
+			);
+			if (stepEvents.changes !== stepChanges.changes) {
+				throw new Error('Run cancellation step event/state mismatch');
+			}
 			return { status: 'cancelled', run: updated };
 		});
 	}

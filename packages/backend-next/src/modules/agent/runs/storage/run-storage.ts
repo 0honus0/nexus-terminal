@@ -4,6 +4,24 @@ import type {
 	AgentCreateRunOutcome,
 	AgentCancelRunOutcome,
 } from '@nexus-terminal/shared/agent/runs/values';
+import type {
+	StoredModelReference,
+	StoredProviderModel,
+	ProviderStoredRow,
+} from '../../providers/storage/provider-storage.js';
+import type { AgentProviderProtocol } from '@nexus-terminal/shared/agent/providers/values';
+
+/** Storage projection; RunModel converts persisted capability text to an application value. */
+export interface StoredFrozenInput {
+	providerId: string;
+	providerVersion: number;
+	credentialRevision: number;
+	modelId: string;
+	baseUrl: string;
+	protocol: AgentProviderProtocol;
+	capabilities: StoredProviderModel;
+	executionPolicy: 'awaiting_b6_b7';
+}
 
 /** Storage contracts: no HTTP DTO or SQLite row escapes. */
 export interface StoredRun {
@@ -18,6 +36,7 @@ export interface StoredRun {
 }
 
 export interface CreateRunStorageCommand {
+	model: StoredModelReference;
 	id: string;
 	userId: number;
 	appId: string;
@@ -41,12 +60,12 @@ export interface CancelRunStorageCommand {
 export type StoredCreateResult =
 	| { status: AgentCreateRunOutcome; run: StoredRun }
 	| { status: 'replayed'; originalStatus: AgentCreateRunOutcome; run: StoredRun }
-	| { status: 'scope_not_found' | 'active_run_conflict' | 'idempotency_conflict' };
+	| { status: 'scope_not_found' | 'active_run_conflict' | 'idempotency_conflict' | 'provider_unavailable' };
 
 export type StoredCancelResult =
 	| { status: AgentCancelRunOutcome; run: StoredRun }
 	| { status: 'replayed'; originalStatus: AgentCancelRunOutcome; run: StoredRun }
-	| { status: 'not_found' | 'version_conflict' | 'idempotency_conflict' };
+	| { status: 'not_found' | 'version_conflict' | 'idempotency_conflict' | 'active_run_conflict' };
 
 export interface StoredRunEvent {
 	runId: string;
@@ -61,12 +80,14 @@ export interface RunEventPageRecord {
 	nextCursor: number;
 }
 
-export type StoredCancelRunDecision = 'cancel' | 'already_cancelled' | 'version_conflict';
+export type StoredCancelRunDecision = 'cancel' | 'already_cancelled' | 'version_conflict' | 'active_run_conflict';
 
 export interface RunStorage {
+	frozen(userId: number, appId: string, runId: string): Promise<StoredFrozenInput | null>;
 	create(
 		command: CreateRunStorageCommand,
 		mayCreate: (active: StoredRun | null) => boolean,
+		resolve: (provider: ProviderStoredRow, reference: StoredModelReference) => StoredFrozenInput | null,
 	): Promise<StoredCreateResult>;
 	cancel(
 		command: CancelRunStorageCommand,

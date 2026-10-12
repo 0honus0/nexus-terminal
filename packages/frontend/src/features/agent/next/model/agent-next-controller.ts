@@ -1,7 +1,14 @@
+import type { AgentRunStepFailureCode } from '@nexus-terminal/shared/agent/runs/values';
 import type { AgentAppView, AgentThreadView } from '@nexus-terminal/shared/agent/scope/model';
-import type { AgentRunEventView, AgentRunView } from '@nexus-terminal/shared/agent/runs/model';
-import type { AgentRunEventType, AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
-import type { AgentNextApi } from '../api/agent-next-api';
+import type {
+	AgentRunEventView,
+	AgentRunView,
+	AgentRunStepView,
+	AgentRunStepEventView,
+} from '@nexus-terminal/shared/agent/runs/model';
+import type { AgentRunEventType, AgentRunStatus, AgentRunStepState } from '@nexus-terminal/shared/agent/runs/values';
+import { AgentNextFailure } from '../api/agent-next-api';
+import type { AgentNextApi, AgentNextFailureCode } from '../api/agent-next-api';
 
 export interface AgentNextUnknownWrite {
 	kind: 'create_run' | 'cancel_run';
@@ -39,15 +46,66 @@ export interface AgentNextEventState {
 	createdAt: number;
 }
 
+export interface AgentNextAvailableModel {
+	providerId: string;
+	modelId: string;
+	configurationVersion: number;
+	displayName: string;
+}
+
+export interface AgentNextStepState {
+	runId: string;
+	stepIndex: number;
+	state: AgentRunStepState;
+	revision: number;
+	runVersion: number;
+	textBytes: number;
+	finishReason?: 'stop';
+	inputTokens?: number;
+	outputTokens?: number;
+	failureCode?: AgentRunStepFailureCode;
+	createdAt: number;
+	updatedAt: number;
+}
+
+export type AgentNextStepEventState =
+	| { runId: string; stepIndex: number; sequence: number; kind: 'text.delta'; textBytes: number; createdAt: number }
+	| {
+			runId: string;
+			stepIndex: number;
+			sequence: number;
+			kind: 'usage';
+			inputTokens: number;
+			outputTokens: number;
+			createdAt: number;
+	  }
+	| {
+			runId: string;
+			stepIndex: number;
+			sequence: number;
+			kind: 'step.completed' | 'step.failed' | 'step.unknown';
+			createdAt: number;
+	  };
+
+export interface AgentNextModelSelection {
+	providerId: string;
+	modelId: string;
+	configurationVersion: number;
+}
+
 export interface AgentNextControllerState {
 	busy: boolean;
-	errorCode: string | null;
+	errorCode: AgentNextFailureCode | null;
 	unknownWrite: AgentNextUnknownWrite | null;
 	app: AgentNextAppState | null;
 	thread: AgentNextThreadState | null;
 	run: AgentNextRunState | null;
 	events: AgentNextEventState[];
 	nextCursor: number;
+	step: AgentNextStepState | null;
+	stepEvents: AgentNextStepEventState[];
+	stepCursor: number;
+	availableModels: AgentNextAvailableModel[];
 }
 
 interface WriteIntent {
@@ -85,6 +143,40 @@ function toEventState(value: AgentRunEventView): AgentNextEventState {
 	};
 }
 
+function toStepState(value: AgentRunStepView): AgentNextStepState {
+	return {
+		runId: value.runId,
+		stepIndex: value.stepIndex,
+		state: value.state,
+		revision: value.revision,
+		runVersion: value.runVersion,
+		textBytes: value.textBytes,
+		...(value.finishReason === undefined ? {} : { finishReason: value.finishReason }),
+		...(value.inputTokens === undefined
+			? {}
+			: { inputTokens: value.inputTokens, outputTokens: value.outputTokens }),
+		...(value.failureCode === undefined ? {} : { failureCode: value.failureCode }),
+		createdAt: value.createdAt,
+		updatedAt: value.updatedAt,
+	};
+}
+
+function toStepEventState(value: AgentRunStepEventView): AgentNextStepEventState {
+	const identity = {
+		runId: value.runId,
+		stepIndex: value.stepIndex,
+		sequence: value.sequence,
+		createdAt: value.createdAt,
+	};
+	if (value.kind === 'text.delta') {
+		return { ...identity, kind: value.kind, textBytes: value.textBytes };
+	}
+	if (value.kind === 'usage') {
+		return { ...identity, kind: value.kind, inputTokens: value.inputTokens, outputTokens: value.outputTokens };
+	}
+	return { ...identity, kind: value.kind };
+}
+
 const freshState = (): AgentNextControllerState => ({
 	busy: false,
 	errorCode: null,
@@ -94,17 +186,22 @@ const freshState = (): AgentNextControllerState => ({
 	run: null,
 	events: [],
 	nextCursor: 0,
+	step: null,
+	stepEvents: [],
+	stepCursor: 0,
+	availableModels: [],
 });
 
-function codeOf(error: unknown): string {
-	return error instanceof Error && error.message ? error.message : 'request_failed';
+function codeOf(error: unknown): AgentNextFailureCode {
+	return error instanceof AgentNextFailure ? error.code : 'request_failed';
 }
 
-function unknownWriteResult(code: string): boolean {
+function unknownWriteResult(code: AgentNextFailureCode): boolean {
 	return (
 		code === 'request_failed' ||
 		code === 'protocol_failure' ||
 		code === 'storage_unavailable' ||
+		code === 'operation_unknown' ||
 		code === 'internal_failure'
 	);
 }
@@ -127,6 +224,9 @@ export class AgentNextController {
 		return {
 			...this.state,
 			events: [...this.state.events],
+			step: this.state.step ? { ...this.state.step } : null,
+			stepEvents: [...this.state.stepEvents],
+			availableModels: this.state.availableModels.map((model) => ({ ...model })),
 			unknownWrite: this.state.unknownWrite ? { ...this.state.unknownWrite } : null,
 		};
 	}
@@ -146,6 +246,7 @@ export class AgentNextController {
 		this.state.run = null;
 		this.state.events = [];
 		this.state.nextCursor = 0;
+		this.clearStepAudit();
 		this.state.errorCode = null;
 		this.emit();
 	}
@@ -166,6 +267,21 @@ export class AgentNextController {
 
 	private emit(): void {
 		this.publish(this.snapshot());
+	}
+
+	private clearStepAudit(): void {
+		this.state.step = null;
+		this.state.stepEvents = [];
+		this.state.stepCursor = 0;
+	}
+
+	private requireSelectedRun(appId: string, runId: string): boolean {
+		if (this.state.run?.appId === appId.toLowerCase() && this.state.run.id === runId.toLowerCase()) {
+			return true;
+		}
+		this.state.errorCode = 'invalid_input';
+		this.emit();
+		return false;
 	}
 
 	private begin(): { generation: number; controller: AbortController } {
@@ -190,7 +306,7 @@ export class AgentNextController {
 		this.emit();
 	}
 
-	private fail(generation: number, controller: AbortController, error: unknown): string | null {
+	private fail(generation: number, controller: AbortController, error: unknown): AgentNextFailureCode | null {
 		if (!this.active(generation, controller)) return null;
 		const code = codeOf(error);
 		this.state.errorCode = code;
@@ -199,6 +315,30 @@ export class AgentNextController {
 
 	private writeIntent(current: WriteIntent | null, signature: string): WriteIntent {
 		return current?.signature === signature ? current : { signature, operationKey: crypto.randomUUID() };
+	}
+
+	async loadModels(): Promise<boolean> {
+		const { generation, controller } = this.begin();
+		try {
+			const providers = await this.api.listProviders(controller.signal);
+			if (!this.active(generation, controller)) return false;
+			this.state.availableModels = providers
+				.filter((provider) => provider.enabled)
+				.flatMap((provider) =>
+					provider.models.map((model) => ({
+						providerId: provider.id,
+						modelId: model.id,
+						configurationVersion: provider.version,
+						displayName: provider.displayName,
+					})),
+				);
+			return true;
+		} catch (error) {
+			this.fail(generation, controller, error);
+			return false;
+		} finally {
+			this.finish(generation, controller);
+		}
 	}
 
 	async createApp(name: string): Promise<AgentNextAppState | null> {
@@ -231,13 +371,36 @@ export class AgentNextController {
 		}
 	}
 
-	async createRun(appId: string, threadId: string, prompt: string): Promise<AgentNextRunState | null> {
-		const signature = JSON.stringify([appId.toLowerCase(), threadId.toLowerCase(), prompt]);
+	async createRun(
+		appId: string,
+		threadId: string,
+		prompt: string,
+		model: AgentNextModelSelection,
+	): Promise<AgentNextRunState | null> {
+		const signature = JSON.stringify([
+			appId.toLowerCase(),
+			threadId.toLowerCase(),
+			prompt,
+			model.providerId.toLowerCase(),
+			model.modelId,
+			model.configurationVersion,
+		]);
 		this.createRunIntent = this.writeIntent(this.createRunIntent, signature);
 		const intent = this.createRunIntent;
 		const { generation, controller } = this.begin();
 		try {
-			const result = await this.api.createRun(appId, threadId, prompt, intent.operationKey, controller.signal);
+			const result = await this.api.createRun(
+				appId,
+				threadId,
+				prompt,
+				{
+					providerId: model.providerId,
+					modelId: model.modelId,
+					configurationVersion: model.configurationVersion,
+				},
+				intent.operationKey,
+				controller.signal,
+			);
 			if (!this.active(generation, controller)) return null;
 			const run = toRunState(result.run);
 			this.createRunIntent = null;
@@ -245,6 +408,7 @@ export class AgentNextController {
 			this.state.run = run;
 			this.state.events = [];
 			this.state.nextCursor = 0;
+			this.clearStepAudit();
 			return run;
 		} catch (error) {
 			const code = this.fail(generation, controller, error);
@@ -314,6 +478,7 @@ export class AgentNextController {
 			if (changed) {
 				this.state.events = [];
 				this.state.nextCursor = 0;
+				this.clearStepAudit();
 			}
 			return run;
 		} catch (error) {
@@ -325,6 +490,7 @@ export class AgentNextController {
 	}
 
 	async listEvents(appId: string, runId: string, limit = 50): Promise<boolean> {
+		if (!this.requireSelectedRun(appId, runId)) return false;
 		const { generation, controller } = this.begin();
 		try {
 			const page = await this.api.listEvents(appId, runId, this.state.nextCursor, limit, controller.signal);
@@ -336,6 +502,50 @@ export class AgentNextController {
 			}
 			this.state.events = [...merged.values()].sort((left, right) => left.sequence - right.sequence);
 			this.state.nextCursor = page.nextCursor;
+			return true;
+		} catch (error) {
+			this.fail(generation, controller, error);
+			return false;
+		} finally {
+			this.finish(generation, controller);
+		}
+	}
+
+	async getStep(appId: string, runId: string): Promise<boolean> {
+		if (!this.requireSelectedRun(appId, runId)) return false;
+		const { generation, controller } = this.begin();
+		try {
+			const step = await this.api.getStep(appId, runId, controller.signal);
+			if (!this.active(generation, controller)) return false;
+			this.state.step = toStepState(step);
+			return true;
+		} catch (error) {
+			if (
+				this.active(generation, controller) &&
+				codeOf(error) === 'not_found' &&
+				this.state.run?.id === runId.toLowerCase() &&
+				this.state.run.appId === appId.toLowerCase()
+			) {
+				this.clearStepAudit();
+				return true; // No authorized execution step is expected for a pending Run.
+			}
+			this.fail(generation, controller, error);
+			return false;
+		} finally {
+			this.finish(generation, controller);
+		}
+	}
+
+	async listStepEvents(appId: string, runId: string, limit = 50): Promise<boolean> {
+		if (!this.requireSelectedRun(appId, runId)) return false;
+		const { generation, controller } = this.begin();
+		try {
+			const page = await this.api.listStepEvents(appId, runId, this.state.stepCursor, limit, controller.signal);
+			if (!this.active(generation, controller)) return false;
+			const merged = new Map(this.state.stepEvents.map((item) => [item.sequence, item]));
+			for (const event of page.items) merged.set(event.sequence, toStepEventState(event));
+			this.state.stepEvents = [...merged.values()].sort((a, b) => a.sequence - b.sequence);
+			this.state.stepCursor = page.nextCursor;
 			return true;
 		} catch (error) {
 			this.fail(generation, controller, error);

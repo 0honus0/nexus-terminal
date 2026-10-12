@@ -5,7 +5,12 @@ import {
 	migrateAccessLoginFailureHistory,
 	migrateAccessFactors,
 } from '../modules/access/migrations.js';
-import { initializeAgentSchema } from '../modules/agent/migrations.js';
+import {
+	initializeAgentSchema,
+	migrateAgentProviderSchema,
+	migrateAgentExecutionJournal,
+	migrateAgentRootRunLifecycle,
+} from '../modules/agent/migrations.js';
 import { initializeDesktopConnectionHistory } from '../modules/targets/migrations.js';
 
 /** Application owns the only ordered migration registry; modules own DDL. */
@@ -57,6 +62,31 @@ export const applicationMigrations: readonly SchemaMigration[] = [
 
 		async apply(tx) {
 			await migrateAccessFactors(tx);
+		},
+	},
+	{
+		version: 7,
+		signature: 'backend-next-v7-agent-providers-frozen-input-20261012',
+
+		async apply(tx) {
+			await migrateAgentProviderSchema(tx);
+		},
+	},
+	{
+		version: 8,
+		signature: 'backend-next-v8-agent-model-step-journal-20261012',
+
+		async apply(tx) {
+			await migrateAgentExecutionJournal(tx);
+		},
+	},
+	{
+		version: 9,
+		signature: 'backend-next-v9-root-run-lifecycle-fk-safe-20261012',
+		rebuildsReferencedTable: true,
+
+		async apply(tx) {
+			await migrateAgentRootRunLifecycle(tx);
 		},
 	},
 ];

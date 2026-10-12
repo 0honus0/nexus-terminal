@@ -1,9 +1,37 @@
 import type { SqlExecutor } from '../sql-types.js';
 import type { SchemaVersion } from '../schema-types.js';
+import { SqliteFailure } from '../sqlite-errors.js';
 
 /** Technical migration metadata only; never owns a module's business tables. */
 export class SqliteSchemaAdapter {
 	constructor(private readonly executor: SqlExecutor) {}
+
+	async suspendForeignKeys(): Promise<void> {
+		await this.executor.exec('PRAGMA foreign_keys=OFF');
+		const row = await this.executor.one('PRAGMA foreign_keys');
+		if (row?.foreign_keys !== 0) {
+			throw new SqliteFailure('transaction', null, {
+				cause: new Error('Failed to suspend SQLite FK enforcement'),
+			});
+		}
+	}
+
+	async restoreForeignKeys(): Promise<void> {
+		await this.executor.exec('PRAGMA foreign_keys=ON');
+		const row = await this.executor.one('PRAGMA foreign_keys');
+		if (row?.foreign_keys !== 1) {
+			throw new Error('Failed to restore SQLite FK enforcement');
+		}
+	}
+
+	async verifyForeignKeys(): Promise<void> {
+		const violations = await this.executor.all('PRAGMA foreign_key_check');
+		if (violations.length) {
+			throw new SqliteFailure('constraint', null, {
+				cause: new Error('Referenced table rebuild violates foreign keys'),
+			});
+		}
+	}
 
 	async initialize(): Promise<void> {
 		await this.executor.exec(`

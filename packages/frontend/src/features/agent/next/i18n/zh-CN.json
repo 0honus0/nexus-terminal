@@ -1,7 +1,7 @@
 {
   "agentNext": {
     "title": "新版后端 Agent — 开发入口",
-    "isolation": "此开发页只消费 backend-next 的六个 Agent 状态接口，不启用 Provider 执行、工具、审批、WebSocket 流式能力，也不切换旧 Agent。",
+    "isolation": "此开发页仅消费 backend-next 的 Agent 状态和只读模型步骤审计接口，不启用 Provider 执行、工具、审批、WebSocket 流式能力，也不切换旧 Agent。",
     "setup": "首次管理员初始化",
     "login": "登录新版后端",
     "username": "用户名",
@@ -17,6 +17,9 @@
     "threadId": "Thread ID",
     "createThread": "创建 Thread",
     "runTitle": "Run 状态",
+    "loadModels": "刷新已配置的模型",
+    "modelSelection": "Provider 模型及配置版本",
+    "chooseModel": "选择模型后才能创建 pending Run",
     "prompt": "Prompt",
     "createRun": "创建 pending Run",
     "runId": "Run ID",
@@ -24,6 +27,10 @@
     "getRun": "读取 Run",
     "cancelRun": "取消 Run",
     "listEvents": "读取下一页事件",
+    "getStep": "读取步骤 1 审计",
+    "listStepEvents": "读取步骤审计事件",
+    "stepAudit": "模型步骤审计（不含输出原文）",
+    "noStep": "尚未批准或记录模型步骤。",
     "currentRun": "当前 Run",
     "events": "事件",
     "nextCursor": "下一游标",
@@ -50,7 +57,8 @@
       "already_initialized": "初始管理员已经配置完成。",
       "conflict": "认证状态已变化，请重试。",
       "request_failed": "网络请求失败，请重试。",
-      "protocol_failure": "后端响应不符合 Agent 协议；不会把它当作成功结果。"
+      "protocol_failure": "后端响应不符合 Agent 协议；不会把它当作成功结果。",
+      "operation_unknown": "数据库写入结果未知；只能复用原 Idempotency-Key 重试相同请求。"
     }
   }
 }

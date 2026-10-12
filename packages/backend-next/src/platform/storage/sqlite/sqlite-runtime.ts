@@ -1,5 +1,6 @@
 import type { SqlExecutor } from './sql-types.js';
 import { SqliteTransactionAdapter } from './adapters/transaction-sql.js';
+import { SqliteSchemaAdapter } from './adapters/schema-sql.js';
 import { Worker } from 'node:worker_threads';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { realpathSync, mkdirSync } from 'node:fs';
@@ -33,9 +34,17 @@ export class SqliteRuntime implements SqlExecutor {
 	private unavailable: SqliteFailure | null = null;
 	private closed = false;
 	private readonly transactionScope = new AsyncLocalStorage<boolean>();
-	private readonly transactions = new SqliteTransactionAdapter({
+	private readonly directExecutor: SqlExecutor = {
 		exec: (sql) => this.call('exec', sql),
-	});
+
+		one: (sql, params = []) => this.call('one', sql, params),
+
+		all: (sql, params = []) => this.call('all', sql, params),
+
+		run: (sql, params = []) => this.call('run', sql, params),
+	};
+	private readonly transactions = new SqliteTransactionAdapter(this.directExecutor);
+	private readonly schema = new SqliteSchemaAdapter(this.directExecutor);
 
 	private constructor(readonly path: string) {
 		this.worker = new Worker(new URL('./adapters/worker.js', import.meta.url), { workerData: { path } });
@@ -182,6 +191,49 @@ export class SqliteRuntime implements SqlExecutor {
 
 	transaction<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> {
 		return this.enqueue(() => this.runTransaction(work));
+	}
+
+	/**
+	 * One-off signed schema migration for a referenced parent table. The whole
+	 * OFF → BEGIN/DDL/FK-check/version-marker/COMMIT → ON sequence owns the
+	 * runtime queue; PRAGMA foreign_keys cannot be changed inside BEGIN.
+	 * This must never be exposed as a normal module mutation facility.
+	 */
+	rebuildReferencedTable<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> {
+		return this.enqueue(async () => {
+			let outcome: TransactionOutcome<T>;
+			try {
+				await this.schema.suspendForeignKeys();
+				const value = await this.runTransaction(async (tx) => {
+					const result = await work(tx);
+					await new SqliteSchemaAdapter(tx).verifyForeignKeys();
+					return result;
+				});
+				outcome = { status: 'ok', value };
+			} catch (error) {
+				outcome = { status: 'error', error };
+			}
+			// An uncertain commit already poisons the connection. Otherwise restore
+			// enforcement even if suspending it failed after the PRAGMA was applied.
+			if (!this.unavailable) {
+				try {
+					await this.schema.restoreForeignKeys();
+				} catch (cause) {
+					const failure = new SqliteFailure('transaction', null, {
+						cause:
+							outcome.status === 'error'
+								? new AggregateError([outcome.error, cause], 'Migration and FK restore failed')
+								: cause,
+					});
+					this.markUnavailable(failure);
+					throw failure;
+				}
+			}
+			if (outcome.status === 'error') {
+				throw outcome.error;
+			}
+			return outcome.value;
+		});
 	}
 
 	private async runTransaction<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> {

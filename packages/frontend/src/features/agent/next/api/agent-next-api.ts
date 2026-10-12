@@ -4,7 +4,11 @@ import {
 	readAgentErrorResponse,
 	readAgentId,
 } from '@nexus-terminal/shared/agent/http-codec';
+import type { AgentHttpErrorCode } from '@nexus-terminal/shared/agent/values';
 import { AGENT_MAX_JSON_BODY_BYTES, AGENT_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/values';
+import { readAgentProviderListResponse } from '@nexus-terminal/shared/agent/providers/http-codec';
+import type { AgentProviderView } from '@nexus-terminal/shared/agent/providers/model';
+import { AGENT_PROVIDER_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/providers/values';
 import {
 	readAgentCreateAppRequest,
 	readAgentCreateAppResponse,
@@ -21,20 +25,33 @@ import {
 	readAgentRunEventsQuery,
 	readAgentRunEventsResponse,
 	readAgentRunResponse,
+	readAgentRunStepPath,
+	readAgentRunStepResponse,
+	readAgentRunStepEventsResponse,
 } from '@nexus-terminal/shared/agent/runs/http-codec';
 import type {
 	AgentCancelRunResponse,
 	AgentCreateRunResponse,
 	AgentRunEventsResponse,
+	AgentRunStepEventsResponse,
+	AgentCreateRunRequest,
 } from '@nexus-terminal/shared/agent/runs/http';
-import type { AgentRunView } from '@nexus-terminal/shared/agent/runs/model';
+import type { AgentRunView, AgentRunStepView } from '@nexus-terminal/shared/agent/runs/model';
 import { AGENT_RUN_IDEMPOTENCY_HEADER, AGENT_RUN_MAX_JSON_BODY_BYTES } from '@nexus-terminal/shared/agent/runs/values';
 
-function requestFailure(): Error {
-	return new Error('request_failed');
+export type AgentNextFailureCode = AgentHttpErrorCode | 'request_failed' | 'protocol_failure';
+
+export class AgentNextFailure extends Error {
+	constructor(readonly code: AgentNextFailureCode) {
+		super(code);
+	}
 }
 
-class AgentNextProtocolFailure extends Error {
+function requestFailure(): AgentNextFailure {
+	return new AgentNextFailure('request_failed');
+}
+
+class AgentNextProtocolFailure extends AgentNextFailure {
 	constructor() {
 		super('protocol_failure');
 	}
@@ -44,17 +61,7 @@ function protocolFailure(): Error {
 	return new AgentNextProtocolFailure();
 }
 
-async function readBoundedJson(response: Response): Promise<unknown> {
-	const declared = response.headers.get('content-length');
-	if (declared !== null) {
-		if (!/^(0|[1-9][0-9]*)$/u.test(declared)) {
-			throw protocolFailure();
-		}
-		const bytes = Number(declared);
-		if (!Number.isSafeInteger(bytes) || bytes > AGENT_MAX_RESPONSE_BYTES) {
-			throw protocolFailure();
-		}
-	}
+async function readBoundedJson(response: Response, maxBytes = AGENT_MAX_RESPONSE_BYTES): Promise<unknown> {
 	const reader = response.body?.getReader();
 	if (!reader) {
 		throw protocolFailure();
@@ -62,21 +69,31 @@ async function readBoundedJson(response: Response): Promise<unknown> {
 	const chunks: Uint8Array[] = [];
 	let received = 0;
 	try {
+		const declared = response.headers.get('content-length');
+		if (declared !== null) {
+			if (!/^(0|[1-9][0-9]*)$/u.test(declared)) {
+				throw protocolFailure();
+			}
+			const bytes = Number(declared);
+			if (!Number.isSafeInteger(bytes) || bytes > maxBytes) {
+				throw protocolFailure();
+			}
+		}
 		while (true) {
 			const result = await reader.read();
 			if (result.done) break;
 			received += result.value.byteLength;
-			if (received > AGENT_MAX_RESPONSE_BYTES) {
-				try {
-					await reader.cancel();
-				} catch {
-					// The response is already invalid; cancellation failure does not change that.
-				}
+			if (received > maxBytes) {
 				throw protocolFailure();
 			}
 			chunks.push(result.value);
 		}
 	} catch (error) {
+		try {
+			await reader.cancel();
+		} catch {
+			/* The failed read remains unknown; cleanup cannot establish the remote result. */
+		}
 		if (error instanceof AgentNextProtocolFailure) {
 			throw error;
 		}
@@ -113,7 +130,7 @@ function inputDecoded<T>(decode: () => T): T {
 		return decode();
 	} catch (error) {
 		if (error instanceof InvalidAgentPayload) {
-			throw new Error('invalid_input');
+			throw new AgentNextFailure('invalid_input');
 		}
 		throw error;
 	}
@@ -143,6 +160,7 @@ export function createAgentNextApi(baseUrl: string) {
 		body?: string,
 		operationKey?: string,
 		signal?: AbortSignal,
+		maxResponseBytes = AGENT_MAX_RESPONSE_BYTES,
 	): Promise<unknown> {
 		let response: Response;
 		try {
@@ -161,10 +179,10 @@ export function createAgentNextApi(baseUrl: string) {
 			if (signal?.aborted) throw error;
 			throw requestFailure();
 		}
-		const value = await readBoundedJson(response);
+		const value = await readBoundedJson(response, maxResponseBytes);
 		if (!response.ok) {
 			try {
-				throw new Error(readAgentErrorResponse(value).code);
+				throw new AgentNextFailure(readAgentErrorResponse(value).code);
 			} catch (error) {
 				if (error instanceof InvalidAgentPayload) {
 					throw protocolFailure();
@@ -176,6 +194,12 @@ export function createAgentNextApi(baseUrl: string) {
 	}
 
 	return {
+		listProviders: async (signal?: AbortSignal): Promise<AgentProviderView[]> =>
+			decoded(
+				await request('GET', '/ai/providers', undefined, undefined, signal, AGENT_PROVIDER_MAX_RESPONSE_BYTES),
+				readAgentProviderListResponse,
+			),
+
 		createApp: async (name: string, signal?: AbortSignal): Promise<AgentAppView> => {
 			const body = encoded({ name }, readAgentCreateAppRequest, AGENT_MAX_JSON_BODY_BYTES);
 			return decoded(await request('POST', '/apps', body, undefined, signal), readAgentCreateAppResponse);
@@ -184,27 +208,32 @@ export function createAgentNextApi(baseUrl: string) {
 		createThread: async (appId: string, title: string, signal?: AbortSignal): Promise<AgentThreadView> => {
 			const app = inputDecoded(() => readAgentId(appId));
 			const body = encoded({ title }, readAgentCreateThreadRequest, AGENT_MAX_JSON_BODY_BYTES);
-			return decoded(
+			const result = decoded(
 				await request('POST', `/apps/${app}/threads`, body, undefined, signal),
 				readAgentCreateThreadResponse,
 			);
+			if (result.appId !== app) throw protocolFailure();
+			return result;
 		},
 
 		createRun: async (
 			appId: string,
 			threadId: string,
 			prompt: string,
+			model: AgentCreateRunRequest['model'],
 			operationKey: string,
 			signal?: AbortSignal,
 		): Promise<AgentCreateRunResponse> => {
 			const app = inputDecoded(() => readAgentId(appId));
 			const thread = inputDecoded(() => readAgentId(threadId));
 			const key = inputDecoded(() => readAgentRunCommandHeaders(operationKey).operationKey);
-			const body = encoded({ prompt }, readAgentCreateRunRequest, AGENT_RUN_MAX_JSON_BODY_BYTES);
-			return decoded(
+			const body = encoded({ prompt, model }, readAgentCreateRunRequest, AGENT_RUN_MAX_JSON_BODY_BYTES);
+			const result = decoded(
 				await request('POST', `/apps/${app}/threads/${thread}/runs`, body, key, signal),
 				readAgentCreateRunResponse,
 			);
+			if (result.run.appId !== app || result.run.threadId !== thread) throw protocolFailure();
+			return result;
 		},
 
 		cancelRun: async (
@@ -218,19 +247,23 @@ export function createAgentNextApi(baseUrl: string) {
 			const run = inputDecoded(() => readAgentId(runId));
 			const key = inputDecoded(() => readAgentRunCommandHeaders(operationKey).operationKey);
 			const body = encoded({ expectedVersion }, readAgentCancelRunRequest, AGENT_MAX_JSON_BODY_BYTES);
-			return decoded(
+			const result = decoded(
 				await request('POST', `/apps/${app}/runs/${run}/cancel`, body, key, signal),
 				readAgentCancelRunResponse,
 			);
+			if (result.run.appId !== app || result.run.id !== run) throw protocolFailure();
+			return result;
 		},
 
 		getRun: async (appId: string, runId: string, signal?: AbortSignal): Promise<AgentRunView> => {
 			const app = inputDecoded(() => readAgentId(appId));
 			const run = inputDecoded(() => readAgentId(runId));
-			return decoded(
+			const result = decoded(
 				await request('GET', `/apps/${app}/runs/${run}`, undefined, undefined, signal),
 				readAgentRunResponse,
 			);
+			if (result.id !== run || result.appId !== app) throw protocolFailure();
+			return result;
 		},
 
 		listEvents: async (
@@ -254,10 +287,59 @@ export function createAgentNextApi(baseUrl: string) {
 				),
 				readAgentRunEventsResponse,
 			);
-			if (response.items.some((item) => item.runId !== run)) {
+			if (
+				response.items.length > query.limit ||
+				response.nextCursor < query.after ||
+				(response.items.length === 0 && response.nextCursor !== query.after) ||
+				response.items.some((item) => item.runId !== run || item.sequence <= query.after)
+			) {
 				throw protocolFailure();
 			}
 			return response;
+		},
+
+		getStep: async (appId: string, runId: string, signal?: AbortSignal): Promise<AgentRunStepView> => {
+			const path = inputDecoded(() => readAgentRunStepPath({ appId, runId, stepIndex: '1' }));
+			const step = decoded(
+				await request('GET', `/apps/${path.appId}/runs/${path.runId}/steps/1`, undefined, undefined, signal),
+				readAgentRunStepResponse,
+			);
+			if (step.runId !== path.runId || step.stepIndex !== 1) throw protocolFailure();
+			return step;
+		},
+
+		listStepEvents: async (
+			appId: string,
+			runId: string,
+			after: number,
+			limit: number,
+			signal?: AbortSignal,
+		): Promise<AgentRunStepEventsResponse> => {
+			const path = inputDecoded(() => readAgentRunStepPath({ appId, runId, stepIndex: '1' }));
+			const query = inputDecoded(() =>
+				readAgentRunEventsQuery(new URLSearchParams({ after: String(after), limit: String(limit) })),
+			);
+			const page = decoded(
+				await request(
+					'GET',
+					`/apps/${path.appId}/runs/${path.runId}/steps/1/events?after=${query.after}&limit=${query.limit}`,
+					undefined,
+					undefined,
+					signal,
+				),
+				readAgentRunStepEventsResponse,
+			);
+			if (
+				page.items.length > query.limit ||
+				page.nextCursor < query.after ||
+				(page.items.length === 0 && page.nextCursor !== query.after) ||
+				page.items.some(
+					(item) => item.runId !== path.runId || item.stepIndex !== 1 || item.sequence <= query.after,
+				)
+			) {
+				throw protocolFailure();
+			}
+			return page;
 		},
 	};
 }

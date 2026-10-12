@@ -15,7 +15,7 @@ export interface HttpRouteContext {
 }
 
 export interface HttpRoute {
-	readonly method: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'DELETE';
+	readonly method: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 	readonly path: string;
 	/** Transport-only JSON body budget. Default 16 KiB; large routes must opt in explicitly. */
 	readonly maxBodyBytes?: number;

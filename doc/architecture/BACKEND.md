@@ -4,6 +4,16 @@
 
 ## 1. 职责与范围
 
+### B5.2 Root Run 执行链（建设中）
+
+唯一 Run owner 在 `modules/agent/runs`，持有创建/取消、主状态、模型步骤、事件、幂等、执行任务和恢复。旧 Backend 的现存 Run/提交/调度/模型端口及 HTTP/WS 是功能覆盖依据，不恢复退役 Runner。主 Run 已有 pending/running/completed/failed/unknown/cancelled 源码，步骤与主状态同事务联动。模型探测和 pending 均不证明执行成功。
+
+当前冻结政策只有 `awaiting_b6_b7`，所有执行路径拒绝外呼。B6 工具/审批授权与 B7 上下文、配置预算的冻结及接线仍缺；执行骨架源码完成不等于整个 B5.2 可运行或通过 B10。
+
+### Agent Provider 与冻结输入
+
+管理 Provider、加密凭据、发现/测试模型、查询/刷新 Registry，并在创建 Root Run 时冻结模型配置与凭据代际。Run 持有完整主状态与子步骤，执行政策/工具审批 B6、上下文/预算 B7、正式前端 F1、行为验收 B10 分别承接。
+
 ### B4.2 Factors / Passkey 认证范围（源码阶段）
 
 Access 在 B4.1 完整密码和摘要会话之上扩展 TOTP 与 WebAuthn。Factors 只拥有部分认证、挑战、密码因素启停与凭据操作；**完整身份权威仍为 access_sessions / AccessPublicApi**。五分钟 `nexus_partial` 是独立随机 bearer，只能用于 `POST /auth/login/2fa`，不能传给普通 SSH、Agent 或其它需完整身份的路由。Passkey 登录最终直接核实 WebAuthn signature/RP/Origin/user verification 并签完整摘要会话；已经建立的完整会话不因启用新 TOTP 被隐式撤销。真实 UI 对接在 F1，审计/通知/动态 Settings 在 B7。当前独立 HTTP 入口只接一个 publicOrigin/RP；旧正式多 Origin/RP 安装配置由 B7 统一盘点接入，当前不声称已迁移。
@@ -30,11 +40,21 @@ Remote 的普通 SSH Workspace 是一条持续存在的交互式 shell，而非 
 | Targets  | 连接配置、凭据、Proxy、SSH Key、Tag、目标解析与 Host Key 信任 | 已有 SSH/RDP/VNC 定义和基础管理；RDP/VNC 定义不等于运行能力                                                                                      |
 | Remote   | 普通用户终端、文件与其他远程用例                              | PTY/Workspace/Files/传输/终端挂起恢复及 B3.3 桌面源码已接线；正式浏览器桌面操作与其他真实行为仍待 B10                                            |
 | System   | 本机资源状态                                                  | 已有认证状态 HTTP、Service/Model 与 Node 技术 Adapter；无管理配置持久化。                                                                        |
-| Agent    | Agent scope、Run 与后续执行/治理                              | 已有 App/Thread、pending/cancelled Root Run、幂等与事件；无执行链；Shared 与开发前端源码已接入                                                   |
+| Agent    | scope、Run、Provider与后续治理                                | 已有完整主状态/步骤、执行owner、恢复和DEV审计；当前政策拒绝外呼。授权/审批B6、上下文/预算B7与执行回接、正式前端F1及行为B10待完成                 |
 
 本机状态已有独立 System owner；后续 preferences、notifications、audit 及其他 system 能力按各自业务所有权实施，不提前创建空模块；Agent 的 Provider/调度/Tool/授权/审批/Job/Artifact/Memory/集成归 Agent 子功能，不复制技术底座。
 
 ## 2. 子功能与目录
+
+### B5.2 所属目录
+
+`agent/service/agent-request-owner.ts` 负责模块请求准入/停机排空（最多64个在途请求）；`runs/service/run-execution-owner.ts` 是唯一进程内模型执行任务 owner；RunService 编排用例，Model 转换存储/技术请求及结果。`runs/model/run-projection.ts` 统一主 Run、事件和冻结输入的存储投影；复用应用类型归 `run-types.ts`。
+
+步骤契约在 `runs/storage/run-step-storage.ts`，事务和行/JSON 解码在 `runs/adapters/sqlite`；`run-step-model.ts` 持有步骤转换。`run-model-stream.ts` 把技术流转成应用增量/终态/安全失败。通用协议和 SSE 解码归 `platform/ai/{model-port,adapters}`，不含 Run/用户/业务授权类型。
+
+### Provider 与 Registry 目录
+
+`agent/providers/{service,model,storage,adapters/sqlite}` 持有配置与秘密；Provider规范化和冻结资格归`provider-rules.ts/provider-capability-rules.ts`，Service及Run事务回调消费纯规则；Model只做事实转换。`providers/registry/{service,model,storage,adapters/sqlite}` 持有目录刷新、缓存与解析；Registry Service决定快照生成时点、缓存损坏恢复和别名冲突，纯规则在`registry-rules.ts`；Model从技术结果投影独立RegistryCatalogEntry，从存储投影snapshotInvalid事实。HTTP 统一在 Agent `interfaces/http`。`platform/ai` 提供通用模型/目录技术契约及 Adapter；不持有用户、Run 或授权政策。
 
 ### B4.2 目录与唯一 owner
 
@@ -84,9 +104,19 @@ packages/backend-next/src/
       adapters/sqlite/            SQL、行解码、事务和 DDL
 ```
 
-Targets 的 connections/proxies/ssh-keys/tags/host-keys/resolver/import 为同一模块子功能；Remote 的 sessions/files 各有资源，共用可信目标→SSH 建连转换归 `remote/machines/model`，不为该共用 Model 机械创建空 Service/Storage；Agent 当前为 scope/runs；通信对象在 Shared，内部可信输入和用例/存储对象仍各有 owner。无持久化功能不创建 storage。文件按职责和消费者拆分，独立 helper 不自动升级为公用能力。
+Targets 的 connections/proxies/ssh-keys/tags/host-keys/resolver/import 为同一模块子功能；Remote 的 sessions/files 各有资源，共用可信目标→SSH 建连转换归 `remote/machines/model`，不为该共用 Model 机械创建空 Service/Storage；Agent 当前为 scope/runs/providers（含 registry）；通信对象在 Shared，内部可信输入和用例/存储对象仍各有 owner。无持久化功能不创建 storage。文件按职责和消费者拆分，独立 helper 不自动升级为公用能力。
 
 ## 3. 依赖方向
+
+### B5.2 执行流方向
+
+HTTP → Shared codec/HTTP mapper → RunService → RunModel/RunStepModel → storage → SQLite Adapter。首次创建提交后，RunService 调用 RunExecutionOwner；owner 通过 Model 读取冻结、获取凭据、复查 Provider，保留/确认派发后消费 RunModelStream → ModelNetworkPort → 网络 Adapter。重放和重启不启动新请求。
+
+reserve/dispatch 的事务回调由 Model 将独立 frozen/Provider 存储事实投影成应用类型，再调用纯业务规则。Storage 负责同事务读取和写入，不持有授权策略。当前规则和流入口均拒绝 awaiting_b6_b7；配置存在、测试成功或手工步骤记录都不能授予执行权。
+
+### Provider 调用链
+
+HTTP → Shared codec → HTTP mapper → Provider Service → Model → storage/AI Port → Adapter。SQL 行在 SQLite Adapter 解码；厂商 `/models`、SSE、models.dev JSON 在网络 Adapter 解码；Model 逐字段转换应用命令、记录、技术结果及失败。Run 的同步冻结回调由 Run Model 持有，Adapter 只接收 storage 契约。
 
 ### B4.2 实际调用链
 
@@ -120,6 +150,16 @@ Platform 不依赖业务模块、不持有 Connection/Run/User、业务表、授
 Port 文件表达 Platform 的技术能力及技术输入/输出，不是新增业务层：Model 调 Port，具体 Adapter 实现 Port。不得在 Port 中定义账户、连接、Run、授权或业务 registry，不允许 Service 绕 Model 直接调用；原始第三方对象不得进入应用类型。文件是否命名为 *-port 不改变此边界。
 
 ## 4. 类型与转换
+
+### B5.2 模型流表示
+
+应用类型唯一归 `runs/model/run-types.ts`；存储命令/记录归 storage，第三方流契约归 Platform。Model 明确逐字段投影，包括同步事务回调的输入。Adapter 校验持久 JSON、模型 ID 与能力快照一致性，业务资格判断留应用规则。
+
+Shared Run 子域持有主状态/事件、步骤状态/事件基础取值、2 MiB 正文容量，以及严格路径/分页/响应 codec。只读步骤公开投影提供状态、版本、用量和文本字节数；原始增量、prompt、冻结配置、凭据、技术 cause 不公开。现有 DEV transport 严格解码 wire，controller 再投影独立应用状态。
+
+### Provider 类型与转换
+
+应用类型分别在 `providers/model/provider-types.ts`、`registry/model/registry-types.ts`；存储类型各在 storage，技术类型在 Platform。Provider/Registry错误码、步骤状态/事件与失败码取值归Shared独立values，存储只引用基础取值，不能借用Shared对象。通用网络失败由`providers/model/provider-network-failure.ts`唯一转换，两个Model共享，原始cause不公开。内部 HTTP 协作接口 `providers/model/provider-api-types.ts` 不作跨模块出口。冻结输入仅由 Run Model/Service 内部读取，不放 Agent public。Provider 输入/视图、能力基础值及完整请求响应归 Shared；Run 的模型引用必填。
 
 ### B4.2 类型及公开白名单
 
@@ -161,6 +201,16 @@ ssh2 的 SFTP status、异步 read stream error 与 command channel 派发结果
 
 ## 5. 入口与安装
 
+### B5.2 安装边界
+
+register 安装一个 RunModel、RunStepModel、RunModelStream、RunExecutionOwner 和 RunService；ProviderService 在配置提交后通知该执行 owner 中止对应请求。AgentRequestOwner 先停止准入，quiesce Run/Provider/Registry，再等待已准入请求、实际Registry刷新和各资源close，SQLite最后关闭。Provider端点发现也纳入同一取消owner；Provider close独立等待其持有的网络Promise并有界保留多项清理失败，模块停止及关闭逐项执行，同步抛错不跳过其余资源；Registry最后一个HTTP订阅者离开不解除实际任务追踪。初始化在迁移后 reconcileUnsettled，不重发已派发请求。
+
+保留创建/查询/取消/主事件 HTTP；增加 `/api/v1/agent/apps/:appId/runs/:id/steps/1` 和 `/steps/1/events` 两个管理员只读审计入口。没有公开执行启动/步骤写入接口。既有 DEV 页消费模型候选、必填模型三字段和步骤审计，正式前端 F1 未切换。
+
+### Provider 安装与接口
+
+register 安装 Provider/Registry/Run owners；管理员接口前缀 `/api/v1/agent/ai`，含 Provider CRUD、models、端点/保存配置的发现、test、model-registry 查询/resolve/refresh。PATCH 为 `expectedVersion` 加部分字段；省略字段保留旧值。Provider身份来自Access；各管理接口在异步读取/写入之后、结果交付前复查身份，撤销后不发布结果；写入已提交但交付失败不证明回滚。query契约及容量归Shared严格codec。
+
 ### B4.2 安装与真实接口
 
 `registerAccess({sqlite,secrets,passkeys})` 装配 Factors，`createApp` 的 passkeys 可选安装配置为明确 `{origin,rpId}`，独立入口从 `NEXUS_NEXT_PUBLIC_ORIGIN` 推断并允许 `NEXUS_NEXT_PASSKEY_RP_ID` 收窄。RP 必须与公开来源 hostname 一致或是其合法父域；非 localhost 的 HTTP Origin 禁止启用。
@@ -195,6 +245,18 @@ Remote 同时安装 `/ws/workspace` 的旧 Files 子协议适配层。Interface 
 
 ## 6. 数据、事务与并发
 
+### B5.2 状态提交与恢复约束
+
+v8 步骤账本和 v9 主状态/事件扩展追加迁移，不修改 v3/v7/v8 签名。被引用父表重建由 SQLite Runtime 在独占队列中编排，暂停/恢复/核验外键和真实 PRAGMA 全由 Schema SQL Adapter 实现：事务前暂停、事务内复制重建/外键检查、事务结束恢复开启；原失败和恢复失败同时保留，无法恢复时毒化连接。幂等快照、冻结和子记录保持原事实；提交未知不重试。
+
+reserve/dispatch 同事务校验主体、App、Run version、step revision、请求 hash、冻结政策和当前 Provider 版本/凭据代际。dispatch 同时写 running、run.started 和 dispatched；finish 同时写主子终态、版本及事件。文本/usage 写入须持有 running 和有效 CAS。取消先持久围栏，再 Abort。
+
+恢复仅将 reserved 归 failed/DISPATCH_NOT_STARTED、dispatched 或孤立 running 归 unknown；主子状态、版本、hash 和事件数量不合法则拒绝并保留现场。unknown 主 Run 保持活跃直到显式取消；已终结 unknown 步骤后取消主 Run 允许主版本多一。均不自动重放付费请求。
+
+### Provider 事务与冻结
+
+v7 追加 Provider、Registry 与冻结输入表，v1–v6 不回写。配置更新 CAS 增加 version；替换/清除/删除凭据增加 credentialRevision。Run、冻结输入、初始事件及幂等记录同事务写入；Model 回调从存储记录投影应用事实并判断，结果再投影为存储命令。重放先返回原结果。冻结包含端点、协议、模型能力和原凭据代际，不含密钥；已变配置或凭据不能以新秘密替代旧引用。删除关联 active `pending/running/unknown` Run 的 Provider 返回冲突。观察数据失效与删除准入由 Provider 纯规则决定；Adapter 在同一事务读取当前配置或去重的 Run 状态，Model 显式转换后调用同步规则，再由 Adapter 执行存储任务。CAS/关联读取与写入保持同一事务，Adapter 不定义业务状态筛选政策。
+
 ### B4.2 v6 与挑战原子性
 
 应用迁移 v6 在不重写 v1–v5 的前提下给 `access_accounts` 增加 `totp_secret_encrypted`，新建 `access_pending_logins`、`access_factor_challenges`、`access_passkeys`。待登录只保存 digest、用户、密码修订、rememberMe 与五分钟到期，同一浏览器旧 partial 按摘要同事务替换，最大 64 在事务中准入；挑战只保存 digest、kind、用户/完整会话摘要、加密的暂存 TOTP secret 或 WebAuthn challenge、RP/Origin 与到期，最多 1024。保存新 challenge 会删除旧 cookie 对应项，完整会话下同类 challenge 被替换。注册只有在原 challenge 未过期、同一账号完整 session 仍有效、credential ID 未占用时入库。认证在存储事务内复验 challenge、账户/credential 所属、counter 变化、来源封禁，并同事务消耗 challenge、更新计数、签发完整 session；零 counter 遵循旧技术契约，非零 counter 必须递增。TOTP 激活在 session 与 challenge 上 CAS，禁用在密码旧 hash、session 和当前加密 secret 上 CAS；禁用后删除该账户 pending/challenge。
@@ -227,7 +289,19 @@ Access 的失败窗口/封禁计算在 sessions/login-failure-rules，Adapter �
 
 ## 7. 生命周期与失败
 
-Factors 的期限/容量和已启用政策由 Service 决定，Model 接收应用政策再转换为 storage/技术命令。应用时间保持毫秒，Unix 秒只在 HTTP mapper 转换。统一 access/interfaces/http/access-delivery 对会话及挑战追踪到 HTTP finish/close，未交付时撤销；finish 不证明浏览器接收。已签会话后确认失败按 operation_unknown 表达并尝试撤销，保留全部失败因果。Platform WebAuthn Port 以独立技术证据定义输入，Adapter 明确投影 vendor JSON，产品 issuer/RP 显示名由应用传入。
+### B5.2 增量执行流生命周期
+
+Run owner 在持久创建前保留本机准入：8 个尝试名额（含在途创建、资源清理失败的已结算任务），64 个在途写入。拒绝关闭/满额请求不先创建 Run。每个尝试有 5 分钟本地 Abort 期限，不能证明远端停止或计费结束。quiesce 拒绝新请求并中止任务；close 共享 Promise，等待已准入写入与任务结算，有界保留 32 个失败及超量计数。清理失败任务不提前释放名额。
+
+Provider 配置提交后中止本进程关联请求；获取凭据后、dispatch 返回后及发布每个模型事件前复查当前 Provider，复查 await 后检查 Abort。跨进程配置变更以重新读取发现，不宣称网络副作用与配置更新具有跨系统原子性。未派发失败与已派发 unknown 分开，SQLite 写入异常不误归网络失败或重复补写；双重失败保留 AggregateError。
+
+技术 Adapter 持有响应体、reader 和迭代器清理，取消失败仍尝试 releaseLock，异常 cause 留内部。Registry下载同样保留清理失败；Provider/Registry在清理失败后拒绝新网络工作并在模块close上报，Registry无人订阅后的持久写入失败也保留并阻断重试。Model 等待技术迭代自然退出及清理完成后才发布唯一 finished/stop；缺失/重复终态、断流、拒绝/工具输出、未知事件、空正文和不一致快照都不能成功。Provider probe 与 Run 共用解码器，前者仍受 512 KiB/16 token 限额，不授予执行权。
+
+SSE 逐块严格 UTF-8，先归一化 LF/CRLF/CR 再分帧，跨 chunk 的 CRLF 仍是一个换行；校验 event 名称与载荷。普通帧/注释帧 128 KiB，Responses 重复完整文本的 done/completed 快照帧可至 8 MiB，网络总量 8 MiB、正文总量 2 MiB 独立限制。普通增量不因快照预算扩大。
+
+### Provider 生命周期与失败
+
+Provider 外呼完整期限 10 秒，Registry 刷新 15 秒；真实 fetch 支持 Abort、有界读取及拒绝重定向。允许管理员配置的 HTTP(S)/内网端点，额外出口隔离由部署承担。更新/删除中止本进程相关请求；外呼前后及观察写入前复查配置、凭据与身份，CAS 拒绝陈旧回写。Registry 请求 single-flight，各订阅者独立取消，最后订阅者退出中止底层任务；新请求先等待已取消任务及其存储写入收尾，再共享新刷新，避免旧失败覆盖新成功。缓存 JSON 由 Registry SQLite Adapter 解码为独立 storage 快照，Model 经 registry-projection 双向白名单转换；损坏缓存由应用层报告不可用，不影响后续刷新。精确的 provider/modelId 条目优先于短名称别名。测试传递模型推理参数并校验两种协议的 SSE 终态；缺省 usage 不补零。Model 将技术错误转具名应用失败并保留 cause。提交未知保留 operation_unknown；响应总预算 8 MiB，超限返回 limit_exceeded。应用/存储时间为毫秒，Registry 对外 Unix 秒由 HTTP mapper 转换。
 
 ### B4.2 安全失败与清理
 
@@ -296,6 +370,16 @@ Remote Files 的流 attachment 绑定具体任务实例；prepare 配额由资�
 归档解压的目录、普通文件和链接统一逐项发布，不以整树 rename 绕过子项复查；stage 根及中间目录的类型/规范路径检查归 Service，不能冒充原子 nofollow。新建目录集合仅是局部属性恢复状态，已有隐式目录不被重写。原生列表 EXIT 清理由 Adapter 确认，具名 cleanup_failed 经 Model 转安全 unknown，原操作与清理因果只留内部。HTTP 下载 Interface 持有覆盖最终 flush 的完整传输期限与取消监听；Service 的写入执行在 mutation 队列后重新核对身份、owner 与指纹。
 
 ## 8. 当前能力与验收
+
+### B5.2 范围与延期
+
+B5.2 可独立完成的源码链路已具备：持久状态/步骤/事务、追加迁移、取消/恢复、通用双协议模型流、Model 转换、唯一执行 owner/准入/停机及只读审计消费者。当前全部冻结政策拒绝执行，B6/B7 的可信授权/上下文/预算冻结与回接是剩余功能，不把运行骨架或新增状态当作真正完成。
+
+静态门禁与四表归 testing 最新复审；网络、迁移、资源、并发等全部行为仍待 B10。正式前端、输出交付与 F-R14/F1 留后端完成后，不自动进入 B6/B7。
+
+### Provider 验收边界
+
+源码与静态证据见 testing 最新复审；行为全部留 B10。`/__agent-next` 已消费模型候选与必填 model 及步骤审计；正式前端、旧 Backend/Protocol 未切换。Run 执行 owner 已安装，但没有 B6/B7 的授权和预算，不以 pending 或骨架源码声称 Agent 执行完成。
 
 ### B4.2 施工状态
 

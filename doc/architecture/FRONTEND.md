@@ -20,6 +20,10 @@ Frontend 展示产品状态并驱动用例，服务端事实不在浏览器重�
 
 新后端开发能力在 `features/targets-next`、`runtimes/remote-next`；Agent 状态消费归 `features/agent/next` 的 api/model/views/i18n，DEV 路由为 `/__agent-next`。共用的新 Access client 归 Auth next，通过 Auth public 安装到 Targets/Agent，不跨功能深层引用。现有业务按真实 owner 扩展。i18n 使用所属功能目录，应用入口聚合，不把翻译或 UI 草稿放入 workspace Shared。
 
+B5.2 只读步骤审计在原隔离 `features/agent/next` API/Controller/DEV view 增加 `GET /steps/1` 与 `/steps/1/events` 消费：传输只使用 Shared 严格 path/query/response codec，响应仍受 32 KiB 上限，Controller 将 wire 逐字段转换为独立应用 step/event 状态，保有按 Run 隔离的元数据和游标。transport 核对响应与请求的 App/Thread/Run 关联及分页界限，按具名失败类/code 判断错误，不比较异常正文。登录状态失效、切换 Run 或中止异步请求时不显示旧步骤；没有实际步骤（404）显示“无步骤”，不把 pending Run 伪装成执行中。开发页只显示文本**字节数**、状态和用量，绝不显示模型原始 output。正式旧 Agent 未切换，真正输出/流式恢复与 F-R14/F1 仍待后续阶段。
+
+隔离开发页的创建 Run 原本仅发送 `prompt`，不满足 B5.1 已安装的强制 `model` 请求。现经 `GET /ai/providers` 使用 Shared 的严格 Provider 列表解码、独立 8 MiB Provider 响应读取预算，Controller 仅保留启用 Provider 的模型选择元数据，提交时携带 `providerId/modelId/configurationVersion`，三字段一起纳入幂等写入签名，保留相同内容未知提交的原 key。Provider 配置是候选目录，后端依旧核实实时版本与能力冲突，任何本地选择都不成为真实执行授权。失效登录重置候选选择，刷新后不可用的选择会清除；本入口不是正式 Agent 页面迁移。
+
 ## 3. 依赖方向
 
 app 装配 feature/runtime；feature 通过窄公开能力消费 runtime 和 foundation。跨功能通过公开入口/明确能力，不深层引用私有组件、Store 或实现。foundation 不反向依赖业务。新 Shared 契约按 [SHARED](SHARED.md) 消费，不在前端手写同义 DTO。

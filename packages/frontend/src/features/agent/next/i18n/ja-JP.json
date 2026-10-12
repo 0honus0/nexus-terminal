@@ -1,7 +1,7 @@
 {
   "agentNext": {
     "title": "新バックエンド Agent — 開発用",
-    "isolation": "この開発画面は backend-next の6個の Agent 状態 API だけを使用します。Provider 実行、ツール、承認、WebSocket ストリーミング、旧 Agent の切替は有効化しません。",
+    "isolation": "この開発画面は backend-next の Agent 状態と読み取り専用のモデルステップ監査 API を使用します。Provider 実行、ツール、承認、WebSocket ストリーミング、旧 Agent の切替は有効化しません。",
     "setup": "初期管理者の設定",
     "login": "新バックエンドにログイン",
     "username": "ユーザー名",
@@ -17,6 +17,9 @@
     "threadId": "Thread ID",
     "createThread": "Thread を作成",
     "runTitle": "Run 状態",
+    "loadModels": "設定済みモデルを更新",
+    "modelSelection": "Provider モデルと設定バージョン",
+    "chooseModel": "pending Run の作成前にモデルを選択",
     "prompt": "Prompt",
     "createRun": "pending Run を作成",
     "runId": "Run ID",
@@ -24,6 +27,10 @@
     "getRun": "Run を取得",
     "cancelRun": "Run をキャンセル",
     "listEvents": "次のイベントを取得",
+    "getStep": "ステップ1の監査を取得",
+    "listStepEvents": "ステップ監査イベントを取得",
+    "stepAudit": "モデルステップ監査（出力本文なし）",
+    "noStep": "承認済みまたは記録済みのモデルステップはありません。",
     "currentRun": "現在の Run",
     "events": "イベント",
     "nextCursor": "次のカーソル",
@@ -50,7 +57,8 @@
       "already_initialized": "初期管理者はすでに設定されています。",
       "conflict": "認証状態が変更されました。再試行してください。",
       "request_failed": "ネットワークリクエストに失敗しました。再試行してください。",
-      "protocol_failure": "バックエンド応答が Agent プロトコルと一致しません。成功とは扱いません。"
+      "protocol_failure": "バックエンド応答が Agent プロトコルと一致しません。成功とは扱いません。",
+      "operation_unknown": "データベースへの書き込み結果は不明です。元の Idempotency-Key で同じ内容だけを再試行してください。"
     }
   }
 }

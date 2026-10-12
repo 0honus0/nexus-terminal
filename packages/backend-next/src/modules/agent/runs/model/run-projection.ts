@@ -1,0 +1,51 @@
+import type { StoredRun, StoredRunEvent, StoredFrozenInput } from '../storage/run-storage.js';
+import type { AgentRun, AgentRunEvent, RunFrozenInput } from './run-types.js';
+import { fromStoredModel, toStoredModel } from '../../providers/model/provider-projection.js';
+
+export function fromStoredRun(value: StoredRun): AgentRun {
+	return {
+		id: value.id,
+		appId: value.appId,
+		threadId: value.threadId,
+		status: value.status,
+		version: value.version,
+		createdAt: value.createdAt,
+		updatedAt: value.updatedAt,
+	};
+}
+
+export function fromStoredEvent(value: StoredRunEvent): AgentRunEvent {
+	return {
+		runId: value.runId,
+		sequence: value.sequence,
+		type: value.type,
+		runVersion: value.runVersion,
+		createdAt: value.createdAt,
+	};
+}
+
+export function fromStoredFrozen(value: StoredFrozenInput): RunFrozenInput {
+	return {
+		providerId: value.providerId,
+		providerVersion: value.providerVersion,
+		credentialRevision: value.credentialRevision,
+		modelId: value.modelId,
+		baseUrl: value.baseUrl,
+		protocol: value.protocol,
+		capabilities: fromStoredModel(value.capabilities),
+		executionPolicy: value.executionPolicy,
+	};
+}
+
+export function toStoredFrozen(value: RunFrozenInput): StoredFrozenInput {
+	return {
+		providerId: value.providerId,
+		providerVersion: value.providerVersion,
+		credentialRevision: value.credentialRevision,
+		modelId: value.modelId,
+		baseUrl: value.baseUrl,
+		protocol: value.protocol,
+		capabilities: toStoredModel(value.capabilities),
+		executionPolicy: value.executionPolicy,
+	};
+}

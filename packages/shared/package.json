@@ -8,6 +8,26 @@
     "check": "tsc --noEmit"
   },
   "exports": {
+    "./agent/providers/values": {
+      "types": "./dist/agent/providers/values.d.ts",
+      "default": "./dist/agent/providers/values.js"
+    },
+    "./agent/providers/model": {
+      "types": "./dist/agent/providers/model.d.ts",
+      "default": "./dist/agent/providers/model.js"
+    },
+    "./agent/providers/http": {
+      "types": "./dist/agent/providers/http.d.ts",
+      "default": "./dist/agent/providers/http.js"
+    },
+    "./agent/providers/http-codec": {
+      "types": "./dist/agent/providers/http-codec.d.ts",
+      "default": "./dist/agent/providers/http-codec.js"
+    },
+    "./agent/providers/registry": {
+      "types": "./dist/agent/providers/registry.d.ts",
+      "default": "./dist/agent/providers/registry.js"
+    },
     "./agent/http": {
       "types": "./dist/agent/http.d.ts",
       "default": "./dist/agent/http.js"

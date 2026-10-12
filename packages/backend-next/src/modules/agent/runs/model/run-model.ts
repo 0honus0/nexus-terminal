@@ -1,37 +1,18 @@
-import type { RunStorage, StoredRun, StoredRunEvent } from '../storage/run-storage.js';
+import type { RunStorage } from '../storage/run-storage.js';
 import { mayCreateRootRun, decideCancelRootRun } from '../run-rules.js';
+import { resolveFrozenModel } from '../../providers/provider-capability-rules.js';
+import { fromStoredProvider } from '../../providers/model/provider-projection.js';
+import { fromStoredRun, fromStoredEvent, fromStoredFrozen, toStoredFrozen } from './run-projection.js';
+import type { RunFrozenInput } from './run-types.js';
 
 import type {
 	CreateRootRunCommand,
 	CancelRootRunCommand,
 	AgentRun,
-	AgentRunEvent,
 	CreateRunResult,
 	CancelRunResult,
 	RunEventPage,
 } from './run-types.js';
-
-function toRun(value: StoredRun): AgentRun {
-	return {
-		id: value.id,
-		appId: value.appId,
-		threadId: value.threadId,
-		status: value.status,
-		version: value.version,
-		createdAt: value.createdAt,
-		updatedAt: value.updatedAt,
-	};
-}
-
-function toEvent(value: StoredRunEvent): AgentRunEvent {
-	return {
-		runId: value.runId,
-		sequence: value.sequence,
-		type: value.type,
-		runVersion: value.runVersion,
-		createdAt: value.createdAt,
-	};
-}
 
 export class RunModel {
 	constructor(private readonly storage: RunStorage) {}
@@ -39,6 +20,11 @@ export class RunModel {
 	async create(command: CreateRootRunCommand): Promise<CreateRunResult> {
 		const result = await this.storage.create(
 			{
+				model: {
+					providerId: command.model.providerId,
+					modelId: command.model.modelId,
+					configurationVersion: command.model.configurationVersion,
+				},
 				id: command.id,
 				userId: command.userId,
 				appId: command.appId,
@@ -49,17 +35,26 @@ export class RunModel {
 				createdAt: command.createdAt,
 			},
 			(active) => mayCreateRootRun(active === null ? null : { status: active.status, version: active.version }),
+			(provider, reference) => {
+				const frozen = resolveFrozenModel(fromStoredProvider(provider), {
+					providerId: reference.providerId,
+					modelId: reference.modelId,
+					configurationVersion: reference.configurationVersion,
+				});
+				return frozen === null ? null : toStoredFrozen(frozen);
+			},
 		);
 		if (result.status === 'replayed') {
-			return { status: 'replayed', originalStatus: result.originalStatus, run: toRun(result.run) };
+			return { status: 'replayed', originalStatus: result.originalStatus, run: fromStoredRun(result.run) };
 		}
 		if (result.status === 'created') {
-			return { status: 'created', run: toRun(result.run) };
+			return { status: 'created', run: fromStoredRun(result.run) };
 		}
 		return { status: result.status };
 	}
 
 	async cancel(command: CancelRootRunCommand): Promise<CancelRunResult> {
+		// Frozen definition remains immutable even when Run cancellation succeeds.
 		const result = await this.storage.cancel(
 			{
 				userId: command.userId,
@@ -73,17 +68,22 @@ export class RunModel {
 			(run) => decideCancelRootRun({ status: run.status, version: run.version }, command.expectedVersion),
 		);
 		if (result.status === 'replayed') {
-			return { status: 'replayed', originalStatus: result.originalStatus, run: toRun(result.run) };
+			return { status: 'replayed', originalStatus: result.originalStatus, run: fromStoredRun(result.run) };
 		}
 		if (result.status === 'cancelled' || result.status === 'already_cancelled') {
-			return { status: result.status, run: toRun(result.run) };
+			return { status: result.status, run: fromStoredRun(result.run) };
 		}
 		return { status: result.status };
 	}
 
 	async get(userId: number, appId: string, runId: string): Promise<AgentRun | null> {
 		const value = await this.storage.get(userId, appId, runId);
-		return value === null ? null : toRun(value);
+		return value === null ? null : fromStoredRun(value);
+	}
+
+	async frozen(userId: number, appId: string, runId: string): Promise<RunFrozenInput | null> {
+		const stored = await this.storage.frozen(userId, appId, runId);
+		return stored === null ? null : fromStoredFrozen(stored);
 	}
 
 	async listEvents(
@@ -97,6 +97,6 @@ export class RunModel {
 		if (result === null) {
 			return null;
 		}
-		return { items: result.items.map(toEvent), nextCursor: result.nextCursor };
+		return { items: result.items.map(fromStoredEvent), nextCursor: result.nextCursor };
 	}
 }

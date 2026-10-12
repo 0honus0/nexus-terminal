@@ -464,7 +464,7 @@ Run completed/completed_unverified/failed/cancelled/interrupted 回收 Browser S
 
 正式 Agent 来源拒绝保留 `error.code=CSRF_REJECTED` envelope/request ID；通用规则见 [安全与认证](#安全与认证)。
 
-新后端状态接口与开发前端源码已接入，正式 Agent 不切换。DEV 路由 `/__agent-next` 只支持创建 App/Thread/Run、读取/取消 Run 和事件分页；Run 仅 pending/cancelled，尚不执行模型或工具。真实浏览器行为仍待验收。
+新后端状态接口与开发前端源码已接入，正式 Agent 不切换。DEV 路由 `/__agent-next` 只支持创建 App/Thread/Run、读取/取消 Run 和事件分页；新 Run 初始 pending、可取消为 cancelled；完整状态联合已包含 running/completed/failed/unknown，**当前没有获授权的模型执行者使 Run 进入真实运行/完成**。真实浏览器行为仍待验收，旧 DEV 消费差异归 F1。
 
 | 范围 | 限制与语义                                                                                                                      |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------- |
@@ -476,7 +476,40 @@ Run completed/completed_unverified/failed/cancelled/interrupted 回收 Browser S
 | 分页 | after 默认0，limit 默认50/最大100；nextCursor 为最后事件序号，空页保持传入游标；重复/未知 query 拒绝                            |
 | 前端 | Targets/Agent 共用 Auth next 的公开认证 client；切 scope/run、登录或卸载取消旧等待并失效 generation；事件按 runId/sequence 去重 |
 
-同 App/Thread 只允许一个活动 Run。网络失败、协议异常或提交结果未知不能证明未写入，重试保持原 key 和输入；改变输入才形成新意图，不自动生成新 key 重放。version_conflict 显示冲突并尝试读取最新 Run，不自动用新版本继续取消。安全失败只返回 code；非 JSON、未知状态/错误码或错误 shape 显示协议失败，不伪造成功，也不返回 prompt、hash、秘密或技术 cause。开发入口与剩余项见 [下一阶段方案](后端重构下一阶段实施方案.md#延后的前端事项未验收不删除)。
+同 App/Thread 只允许一个活动 Run（pending/running/unknown 均占用名额）；明确完成或失败后才释放。网络失败、协议异常或提交结果未知不能证明未写入，重试保持原 key 和输入；改变输入才形成新意图，不自动生成新 key 重放。version_conflict 显示冲突并尝试读取最新 Run，不自动用新版本继续取消；已完成的 Run 拒绝取消，unknown 允许有版本条件地取消但不保证远端回滚。安全失败只返回 code；非 JSON、未知状态/错误码或错误 shape 显示协议失败，不伪造成功，也不返回 prompt、hash、秘密或技术 cause。开发入口与剩余项见 [下一阶段方案](后端重构下一阶段实施方案.md#延后的前端事项未验收不删除)。
+
+### 新后端 Provider 与模型冻结
+
+新后端管理员接口前缀为 `/api/v1/agent/ai`；正式界面尚未迁移。
+
+| 接口                                                                    | 操作                                                           |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------- |
+| GET/POST /providers                                                     | 查询/创建 Provider                                             |
+| GET/PATCH/DELETE /providers/:providerId                                 | 查询、部分更新、删除；更新 JSON、删除 query 需 expectedVersion |
+| GET /models                                                             | 查询当前可以冻结的模型及配置版本                               |
+| POST /providers/discover-endpoint-models                                | 指定 baseUrl 和可选 credential，读取模型目录                   |
+| POST /providers/:providerId/discover-models、/test                      | 发现并记录观察；test body 指定 modelId，发送真实模型请求       |
+| GET /model-registry、/resolve?modelId=...；POST /model-registry/refresh | 查询缓存状态、解析能力、手动更新 models.dev                    |
+
+Provider 配置包含名称、HTTP(S) 端点、启用状态、协议及显式模型能力。单模型协议覆盖 Provider 默认。更新省略字段即保留；credential 省略保留、传新值加密替换、clearCredential:true 清除，两者不能同时指定。缺少加密密钥时拒绝保存凭据；查询只显示 hasCredential 和修订，不回显密钥。发现观察不覆盖手工配置；变更端点、默认协议或凭据会清除旧观察，单独修改模型手工配置保留观察。未知能力不补默认值，放宽已知上限或启用供应商明确拒绝的能力会阻止冻结。
+
+请求最多 128 KiB、每 Provider 最多 128 模型、发现最多 1000；名称 128、modelId 512、URL 2048、credential 8192 UTF-8 bytes。完整响应含 JSON 转义最多 8 MiB；超过返回 413/limit_exceeded，不截断。Provider 请求 10 秒、Registry 单次刷新 15 秒（新请求可能先等待已取消刷新收尾）；非 2xx、网络、无效/未完成流返回安全失败。模型测试传递推理配置并校验完整 SSE 终态，usage 缺省不补零。配置/凭据更新使旧请求失效；取消不能证明上游未处理。
+
+Run 创建必传 model:{providerId,modelId,configurationVersion}，与 Run、初始事件、幂等记录同事务冻结模型配置和凭据代际。冻结输入不含密钥；Provider 版本失效/禁用拒绝创建，关联 pending/running/unknown Run 时拒绝删除 Provider。同意图重放保持原 key 和输入及**原提交快照**，不会因后续状态变化修改历史幂等响应；operation_unknown 不代表回滚。当前没有真实模型或工具执行者。
+
+新后端已有独立 Chat Completions/Responses 增量模型流、Run 执行 owner、持久步骤与恢复源码。当前冻结政策只有 `awaiting_b6_b7`，仍缺授权和上下文/预算，**Run 不自动外呼，pending 不表示正在执行**。正式界面与输出交付留 F1，真实行为留 B10。DEV 页可选择 Provider 模型和配置版本；候选不保证提交时仍有效，后端按当前配置校验。
+
+Provider/Registry公开失败只使用已定义的安全码，步骤未派发失败码为`DISPATCH_NOT_STARTED`；不返回供应商错误正文。管理接口在异步结果交付前复查会话；写入完成后若登录失效或响应失败，先重新登录并查询配置，不能据错误响应推断写入已回滚。Registry resolve的modelId最多256 UTF-8字节；重复或未知query参数拒绝。
+
+模型流普通帧/注释帧上限 128 KiB；Responses 的 done/completed 完整文本快照帧可至 8 MiB。完整网络流上限 8 MiB、正文上限 2 MiB；JSON 转义和重复快照也计网络量。只有明确成功终态、正常结束和本地资源清理完成才可记 completed；断流、工具/拒绝内容、未知事件和非成功终态不能冒充成功；结束原因只接受原始字符串取值，数组或对象即使可转成同名文本也拒绝。Chat Completions 的 `[DONE]` 帧同样受普通帧上限约束。
+
+管理员可读取 `GET /api/v1/agent/apps/:appId/runs/:id/steps/1` 及 `/steps/1/events?after=&limit=`。不存在或不属于当前用户/App/Run 的步骤返回 404；默认 50、每页最多 100 条，完整响应限 32 KiB。只返回状态、版本、用量和文本**字节数**，不返回正文、prompt、冻结配置或秘密。DEV 切换 Run/登出会取消旧读取并隔离状态和游标。
+
+Agent模块最多64个在途请求，停机同时中止发现/探测和Registry刷新并等待持久写入；Provider自身关闭也等待实际网络任务，单项清理失败仍执行其它清理；网络清理失败后对应owner拒绝后续网络工作。Registry取消后的持久写入异常不静默丢弃。
+
+本机最多 8 个 Run 尝试名额（含在途创建和清理失败任务）、64 个在途写入；关闭或满额时在持久创建前返回安全不可用错误。尝试期限 5 分钟，仅触发本地 Abort；取消/配置变更不证明供应商端已经停止。停机先停止准入再等待已准入写入和模型任务；清理失败保留内部原因，不暴露供应商诊断。
+
+未派发步骤失败为 failed/DISPATCH_NOT_STARTED；已派发后断流、取消或重启保守归 unknown，不自动重试付费调用。取消先持久围栏再中止资源；unknown 主 Run 保持活跃直到显式取消。重启核对主子状态、版本、hash 与事件，不一致数据拒绝恢复并保留现场。网络或提交结果未知时保留原输入与幂等键，查询权威状态，不能通过重复创建新意图恢复；version_conflict 明确刷新核对，不自动改版重放。
 
 ## 布局与通用操作
 

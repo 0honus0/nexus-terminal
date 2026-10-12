@@ -72,7 +72,7 @@ export function registerModules({
 		guacdHost: guacd?.host ?? 'localhost',
 		guacdPort: guacd?.port ?? 4822,
 	});
-	const agent = registerAgent(sqlite);
+	const agent = registerAgent(sqlite, secrets);
 	const system = registerSystem(access.publicApi);
 
 	const admitHttp = (routes: HttpRoute[]): HttpRoute[] =>
@@ -137,7 +137,10 @@ export function registerModules({
 
 		admitUnmatchedHttp: (sourceIp) => access.publicApi.admitSource(sourceIp),
 
-		initialize: remote.initialize,
+		initialize: async () => {
+			await agent.initialize();
+			await remote.initialize();
+		},
 
 		httpRoutes: (secureCookies) =>
 			admitHttp([
@@ -156,6 +159,7 @@ export function registerModules({
 		agent: agent.publicApi,
 
 		quiesce: () => {
+			agent.quiesce();
 			system.quiesce();
 			remote.quiesce();
 		},
@@ -166,6 +170,7 @@ export function registerModules({
 			}
 			closePromise = Promise.resolve().then(async () => {
 				const results = await Promise.allSettled([
+					Promise.resolve().then(() => agent.close()),
 					Promise.resolve().then(() => remote.close()),
 					Promise.resolve().then(() => system.close()),
 				]);

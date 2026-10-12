@@ -8,6 +8,13 @@ export const AGENT_OPERATION_ERROR_CODES = [
 	'version_conflict',
 	'storage_unavailable',
 	'internal_failure',
+	'provider_unavailable',
+	'provider_in_use',
+	'provider_configuration_stale',
+	'model_not_found',
+	'provider_request_failed',
+	'limit_exceeded',
+	'operation_unknown',
 ] as const;
 
 export type AgentOperationErrorCode = (typeof AGENT_OPERATION_ERROR_CODES)[number];

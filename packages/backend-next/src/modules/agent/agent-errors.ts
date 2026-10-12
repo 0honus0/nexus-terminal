@@ -13,11 +13,10 @@ export async function agentBoundary<T>(action: () => Promise<T>): Promise<T> {
 			throw new AgentOperationError(error.code);
 		}
 		if (error instanceof SqliteFailure) {
-			if (
-				['closed', 'unavailable', 'worker_exit', 'busy', 'rollback_failed', 'commit_unknown'].includes(
-					error.kind,
-				)
-			) {
+			if (error.kind === 'commit_unknown' || error.kind === 'rollback_failed') {
+				throw new AgentOperationError('operation_unknown');
+			}
+			if (['closed', 'unavailable', 'worker_exit', 'busy'].includes(error.kind)) {
 				throw new AgentOperationError('storage_unavailable');
 			}
 		}

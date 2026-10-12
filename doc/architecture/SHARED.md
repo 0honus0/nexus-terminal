@@ -4,6 +4,8 @@
 
 ## 1. 职责与范围
 
+**B5.1 Agent Provider（源码接线，行为待 B10）**：新增 Provider 管理、模型能力来源/冲突、models.dev 能力注册表、OpenAI-compatible 发现与真实测试的双端线契约，以及 Run 创建的模型选择引用；仅传公开视图（`hasCredential`、版本/修订），不传明文或密文。B5.1 不让 Shared 持有 Run 的内部不可变冻结存储、模型 SSE、网络失败原因或 B6/B7 未具备的政策。
+
 B4.2 因素的双端新增范围是密码成功后的 `requiresTwoFactor:true`、TOTP setup/verify/disable/二次登录、WebAuthn 的 options/verify、Passkey 发现/列表/改名/删除。Shared 不持有部分会话密钥、challenge 的服务端归属、TOTP secret 密文和签名算法；完整授权仍须 Access 验证。
 
 `packages/shared` 持有前后端同义同表示的基础取值、业务对象与完整通信契约；不持有后端秘密、权限状态、存储行、技术连接或 UI 草稿。旧正式通信仍使用 `packages/protocol`，迁移按功能同步消费者，不让新后端运行时导入旧 Protocol。
@@ -11,6 +13,8 @@ B4.2 因素的双端新增范围是密码成功后的 `requiresTwoFactor:true`�
 B4.1 Access 的双端范围是管理员初始化、密码登录、明确的认证状态、改密/登出、CAPTCHA 公开配置与黑名单读/解除；Shared 只规定传输形状/预算/有限值，真正身份、IP、失败阈值、因素生效、事务及来源信任由 Access/Platform 负责。正式前端在 F1 迁移前尚非新协议消费者，行为验收留 B10。
 
 ## 2. 子功能与目录
+
+`agent/providers/{values,model,http,http-codec,registry}` 是 Provider 输入/可见模型/显式来源、严格 unknown 解码、测试联合与远端 Registry 状态的唯一 wire 归属；能力字段名、能力来源和协议取值统一归 providers/values，内部应用/存储引用这些基础值，各层对象仍独立投影；`agent/runs/http` 创建请求增加具名 `model.providerId/modelId/configurationVersion`。Provider 完整响应最多 8 MiB（超限 limit_exceeded）、请求单条最多 128 KiB、单 Provider 最多 128 模型、发现最多 1000、秘密输入 ≤8192 UTF-8 bytes、URL ≤2048、modelId ≤512，完整集合和嵌套观察均计入响应预算。正式前端还使用旧 Protocol，F1 负责迁移，不在 B5.1 导入旧包。
 
 `access/factors/http.ts` 定义因素请求的 unknown 解码、有限 token/名称/credential 字段、公开 TOTP setup 与 Passkey 摘要；`access/values.ts` 新增 HttpOnly partial/challenge/TOTP setup Cookie 名和 300 秒临时生命周期、`limit_exceeded` 等具名错误；`access/http.ts` 将密码登录结果扩充为成功用户或 `requiresTwoFactor:true` 的判别联合。标准 WebAuthn OPTIONS 的 RP、user、algorithm、credential descriptor 先由后端 Model 投影为具名应用类型，再经 Interface 白名单转为 Shared `access/factors/http.ts` 响应类型；已验证的 browser credential JSON 先由 Shared unknown codec 严格校验必要字段，再经 Interface 转为 Factors 应用证据，由 Model 显式转回技术 Port 所需表示。Provider 对象与存储公钥不进入 Service/Shared。
 
@@ -41,6 +45,8 @@ WebAuthn 创建/请求的 User Verification 均要求 `required`，与服务端�
 
 ## 3. 依赖方向
 
+B5.1 HTTP 从 Shared 解码请求，Provider Model 对应用数据与 SQL/第三方事实逐字段转换；Platform 的模型/Registry Adapter 不导入 Shared Agent DTO。`providers/registry.ts` 的模型目录是管理员读/刷新/解析接口，存储缓存、etag 和失败状态不是浏览器可写对象。Shared 只定义明确信任层之间真实使用的取值，不能当后端内部 Service/Storage 的代用品。
+
 B4.2 HTTP 对 unknown body 调 Shared `access/factors` 解码，再传应用 Service；成功响应由应用→HTTP 逐字段构造。Shared 不导入 `@simplewebauthn/server`、Node crypto/SecretBox 或 SQLite；Platform WebAuthn Port 仍是技术侧唯一协议语境，不借用 Shared 的业务用户类型。正式前端旧 Protocol 消费者留 F1。
 
 Access 的请求字段、错误与容量唯一来源为 Shared；后端 HTTP 接口消费 codec 并逐字段生成响应，Service 使用所属内部类型，技术 Adapter 不导入 Shared 业务 DTO。Platform HTTP 仅提取受信源 IP/Origin/Cookie 字符串，不持有 Access 策略或产品身份对象。
@@ -48,6 +54,10 @@ Access 的请求字段、错误与容量唯一来源为 Shared；后端 HTTP 接
 Shared 不依赖 Backend、Frontend、具体 Adapter 或运行时；不访问数据库、网络和环境。values 与 model/http/events 隔离；Platform/业务 SQL Adapter 仅可精确引用确需共用的基础值，不能借 Shared 导入业务对象。package exports 明确列出真实入口，不靠内部深层路径消费。
 
 ## 4. 类型与转换
+
+B5.1 区分手工配置、Provider `/models:nexus_capabilities` 观察和远端 Registry 来源。Provider 可见 `models[].capabilitySources` 明示手工配置，`providerCapabilities` 提供有版本/来源的观察，`capabilityConflicts` 表达两者不一致；发现字段缺省不假定 false/zero；`reasoningEfforts/defaultReasoningEffort` 必须为受限取值且默认值在支持集合内。Run 模型选择版本必须正整数；冻结对象包含协议/模型能力/凭据代际，仅在 Run 内部读取，不是 Shared 公共响应；其 `awaiting_b6_b7` 不能解释成允许执行。
+
+Provider 手工能力与供应商观察独立，未知不补 false/zero；只有双方明确提供的值才报告冲突。Shared 对象经 HTTP mapper 转内部应用对象；技术 JSON 不进入 Shared。
 
 Factors 注册/认证 JSON 请求预算 128 KiB、证据字段 96,000 bytes、凭据 ID 1024 bytes、名称 128 bytes、transports 最多 16 项且每项 32 UTF-8 bytes，唯一常量归 access/values。内部应用仍保持独立类型与 Model/HTTP 白名单转换。正式前端在 F1 实施时同步消费成功/失败契约、补齐实际响应解码与上下文校验；当前没有新增前端消费者。
 
@@ -73,6 +83,8 @@ Agent name/title 原始输入为 128 bytes、prompt 为 16 KiB；创建 Run 完�
 
 ## 5. 入口与安装
 
+新 Agent HTTP 的 `/ai/providers` 列表/创建/PATCH/DELETE、`/ai/models`、`/ai/providers/discover-endpoint-models`、`/:providerId/discover-models`/`test`，以及 `/ai/model-registry`、`/resolve`、`/refresh` 使用上述契约；既有 Run 创建端点仍以 `Idempotency-Key` 为提交意图，新增可见模型选择字段。仅新 Backend 作为本批真实 HTTP 消费者；前端与浏览器动作均未迁移、未测试。
+
 新增 GET/POST/DELETE/PUT HTTP 路由及已安装 path 见 Backend B4.2 第 5 节。密码登录正确但要求 TOTP 时返回 200 `{requiresTwoFactor:true}` 和五分钟独立 HttpOnly Cookie；`POST /login/2fa` 需该 Cookie 而不接纳完整 session 伪装部分授权。Passkey 认证 options 用独立 challenge Cookie，同一浏览器调用替换旧挑战；完成后签普通 `nexus_session`。HTTP URI 和 Schema 注册自动化仍属规划，Shared 当前为手写严格 codec。
 
 Access 的 `GET /api/v1/auth/captcha/config` 与 `GET/DELETE /api/v1/settings/ip-blacklist` 是本批真实入口；其它初始化、登录、status、logout、密码修改沿真实路由关联本 Shared 协议。全局 IP 来源政策在后端 HTTP/WS 安装处，不是 Shared codec 或 Platform 身份判断。前端的 captcha Widget、黑名单设置、Auth store/刷新暂时仍使用旧协议，F1 必须同时迁请求、失败联合和恢复路径。
@@ -85,11 +97,17 @@ B3.2 真实消费者为新后端 Workspace status/Docker 和 system 三条 HTTP�
 
 Agent 六个状态 HTTP 已接入 Shared 的请求、路径、幂等 header、分页 query、成功联合及安全错误；后端 public 只保留可信身份输入、能力和后端结果语义。正式前端 `features/agent/api` 仍消费旧 Protocol；新消费者已在 `features/agent/next` 接入 Shared codec 和容量，真实浏览器行为由实施方案另行验收，不能把正式旧 Agent 当作新 API 消费者。
 
+步骤状态/事件基础取值及累计正文容量（2 MiB）唯一归 Run 子域 values.ts，Shared codec、Backend应用和存储均消费它；Platform仍保有独立技术上限。B5.2 只读模型步骤审计新增 Run 子域现有 `model.ts/http.ts/http-codec.ts` 中的 `AgentRunStepView`、`AgentRunStepEventView`、严格 stepIndex=1 路径和事件分页；仅暴露状态、序号、用量、UTF-8 文本字节数、安全失败分类，**不导出 `textDelta` 或冻结模型/凭据**。Backend-next Service/Model/Storage 保留独立类型，经注册和 HTTP 逐字段白名单投影。隔离开发页 API/Controller 是实际 Shared 解码消费者，正式 F1 仍未迁；100 条每页的小型元数据响应须服从现有 32 KiB 完整 JSON 预算，正文/流式输出需要另定可审核协议，不能把这个审计响应上限擅自提高。
+
+Agent Provider 列表新增纯 `readAgentProviderListResponse`，基于既有 ProviderView 严格 decoder 检查完整 8 MiB 上限及唯一 Provider ID；隔离 `agent/next` 使用它读取 `GET /ai/providers` 的配置候选，最终 Run 创建仍由原 `runs/http-codec` 验证非可选 `model` 三字段及 128 KiB 请求预算。Shared 不代替 Provider 当前版本、观察冲突和 Run 同事务冻结决策；正式 F1 尚未切换。
+
 Remote Files B1 当前真实写消费者是 backend-next HTTP；已有 `remote-next` 前端 transport 继续只读消费同一 read-text/容量契约，未增加 mutation 方法或界面。Shared 变更因此要求现有只读消费者继续编译，但不把后端 B1 描述成前端写入已迁移。
 
 Workspace Files Shared 契约由 backend-next 的 `/ws/workspace` Files adapter 生产。正式 Frontend 的 `WorkspaceSocket`/capability adapters 当前仍消费旧 Protocol，未完成 Shared 类型或运行时迁移；旧 Backend/Protocol 与其二进制 codec 保持原有参考实现，不增加旧路径到 Shared 的兼容转导出。双包期间逐项核对正常 wire 等价，不能宣称旧消费者已迁移；B10 验证正常通信，P1/F1 再破坏性迁移正式前端并移除旧定义与 codec，最终仅保留新契约 owner。R1 不改前端 transport/controller/view。
 
 ## 6. 数据、事务与并发
+
+Provider `expectedVersion` 是配置 CAS，凭据修订只随替换/清除/删除递增；缺失 credential 表示保留。Registry 远端观察写入通过原 Provider 版本/凭据代际比对，不把过期响应回写；Run 冻结记录与 Run+初始事件+幂等写在同一新后端 SQLite 事务，不因 wire 字段相同而以 HTTP 契约替代事务。若 Provider 不可用或版本不符，创建返回安全失败；未知提交结果暴露 `operation_unknown`，不允许客户端假定已回滚。
 
 Shared 不声称数据库原子细节；外部保证为无完整身份的部分 Cookie 不享业务权限，WebAuthn/OTP 验证必须成功后才发完整 Cookie；服务端保留签名 challenge 单次使用与 counter CAS，Unknown 事务状态不得自行重放。Passkey credential ID 是不透明 WebAuthn 标识，前端不得把它当密码或授权。
 
@@ -98,6 +116,8 @@ Access 对外只表达会话到期与撤销所导致的 authenticated 状态、�
 Shared 只表达对外版本、游标、幂等结果等契约，不执行事务。expectedVersion、operationKey、事件序号/分页与 replay 结果的含义由业务 owner 保证；共享类型不替代服务端授权及同事务状态校验。Agent 应用和存储对象独立保留，只复用 values 中的状态/事件基础值；内部 scope_not_found 在 HTTP 转为 not_found，不进入成功响应联合。
 
 ## 7. 生命周期与失败
+
+B5.1 Provider 测试用实际 OpenAI-compatible 流终态返回 `ok=true/false`（含有限、无秘密的错误码）；管理/查询层返回 `not_found`、`model_not_found`、`provider_configuration_stale`、`provider_in_use`、`provider_unavailable`、`provider_request_failed`。独立 Registry 对外只报告远端是否可用与缓存状态，不把原始 models.dev JSON 暴露为 wire。10 秒 Provider 查询/测试与 15 秒 Registry 手动刷新均可取消，真实失败留 B10。
 
 B4.2 安全错误扩展 `challenge_expired`、`not_found`、`limit_exceeded`，既有 `unauthenticated`/`invalid_credentials`/`factor_unavailable`、`operation_unknown` 仍保留。部分 Cookie 最多 300 秒且服务器挑战至多五分钟，logout 清理完整/部分/challenge Cookie；前端 F1 必须在新挑战开始、成功、取消、登出和网络错误时刷新相关状态，并对未知提交避免静默重放。
 
@@ -109,7 +129,9 @@ B4.2 安全错误扩展 `challenge_expired`、`not_found`、`limit_exceeded`，�
 
 ## 8. 当前能力与验收
 
-B4.2 Shared codec 与后端 route/Model 已接线，但正式 UI 仍依旧 Protocol；当前 pnpm 静态门禁因执行环境权限受阻而没有实际 PASS。下游前端联动/浏览器 WebAuthn、真实 TOTP 及并发/数据库场景留 B10。B7 审计/通知和持久 Settings 不在本批实现范围。
+Provider/Registry错误码、步骤状态/事件/失败码唯一归对应values；Provider test失败采用有限取值及受限HTTP状态参数，Registry resolve/delete完整query在http/codec，SQLite行解码也校验基础取值。Provider Shared 与新后端已接线；静态检查结果集中见 testing 最新复审。正式前端 F1、完整执行 B5.2、工具 B6、配置 B7 与行为 B10 未完成。
+
+Access 因素 Shared 与新后端已接线；正式前端仍消费旧 Protocol。TOTP/WebAuthn 与数据库并发行为留 B10，动态配置及审计通知留 B7。
 
 B4.1 Access Shared 的 codec/类型和后端入口已有源码，但正式浏览器尚未迁移，所有真实供应商响应、反向代理链、HTTP/WS 准入、Cookie/CSRF 和撤销交错的行为归 B10。静态与架构状态由当前阶段四表和命令证据单独记录，B4.2/B7 未实现部分不得写成已完成。
 

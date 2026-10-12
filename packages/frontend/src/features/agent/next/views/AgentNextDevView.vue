@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { onMounted, onUnmounted, ref, watch } from 'vue';
+	import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { createAccessNextApi } from '@/features/auth/public';
 	import { createAgentNextApi } from '../api/agent-next-api';
@@ -19,6 +19,10 @@
 		run: null,
 		events: [],
 		nextCursor: 0,
+		step: null,
+		stepEvents: [],
+		stepCursor: 0,
+		availableModels: [],
 	};
 	const state = ref<AgentNextControllerState>(initialState);
 	const controller = new AgentNextController(agent, (next) => {
@@ -42,6 +46,19 @@
 	const prompt = ref('');
 	const runId = ref('');
 	const expectedVersion = ref(1);
+	const selectedModelKey = ref('');
+
+	function modelKey(model: { providerId: string; modelId: string; configurationVersion: number }): string {
+		return JSON.stringify([model.providerId, model.modelId, model.configurationVersion]);
+	}
+
+	const selectedModel = computed(() =>
+		state.value.availableModels.find((item) => modelKey(item) === selectedModelKey.value),
+	);
+
+	async function loadModels(): Promise<void> {
+		await controller.loadModels();
+	}
 
 	function localized(code: string | null): string {
 		if (!code) return '';
@@ -144,7 +161,13 @@
 	}
 
 	async function createRun(): Promise<void> {
-		const created = await controller.createRun(appId.value, threadId.value, prompt.value);
+		const model = selectedModel.value;
+		if (!model) return;
+		const created = await controller.createRun(appId.value, threadId.value, prompt.value, {
+			providerId: model.providerId,
+			modelId: model.modelId,
+			configurationVersion: model.configurationVersion,
+		});
 		if (created) {
 			runId.value = created.id;
 			expectedVersion.value = created.version;
@@ -165,6 +188,14 @@
 		await controller.listEvents(appId.value, runId.value);
 	}
 
+	async function getStep(): Promise<void> {
+		await controller.getStep(appId.value, runId.value);
+	}
+
+	async function listStepEvents(): Promise<void> {
+		await controller.listStepEvents(appId.value, runId.value);
+	}
+
 	watch([appId, threadId, runId], ([nextAppId, nextThreadId, nextRunId]) => {
 		const current = state.value.run;
 		if (
@@ -177,6 +208,12 @@
 		}
 		controller.resetRunSelection();
 	});
+	watch(
+		() => state.value.availableModels,
+		(items) => {
+			if (!items.some((item) => modelKey(item) === selectedModelKey.value)) selectedModelKey.value = '';
+		},
+	);
 	watch(
 		() => state.value.run?.version,
 		(version) => {
@@ -263,11 +300,23 @@
 
 			<section class="space-y-3 rounded border p-4">
 				<h2 class="font-semibold">{{ t('agentNext.runTitle') }}</h2>
+				<button class="rounded border px-3 py-2" :disabled="state.busy" @click="loadModels">
+					{{ t('agentNext.loadModels') }}
+				</button>
+				<label class="block">
+					{{ t('agentNext.modelSelection') }}
+					<select v-model="selectedModelKey" class="block w-full border p-2" :disabled="state.busy">
+						<option value="">{{ t('agentNext.chooseModel') }}</option>
+						<option v-for="model in state.availableModels" :key="modelKey(model)" :value="modelKey(model)">
+							{{ model.displayName }} · {{ model.modelId }} · v{{ model.configurationVersion }}
+						</option>
+					</select>
+				</label>
 				<label class="block">
 					{{ t('agentNext.prompt') }}
 					<textarea v-model="prompt" class="block min-h-24 w-full border p-2" required />
 				</label>
-				<button class="rounded border px-3 py-2" :disabled="state.busy" @click="createRun">
+				<button class="rounded border px-3 py-2" :disabled="state.busy || !selectedModel" @click="createRun">
 					{{ t('agentNext.createRun') }}
 				</button>
 				<label class="block">
@@ -294,6 +343,16 @@
 					<button class="rounded border px-3 py-2" :disabled="state.busy" @click="listEvents">
 						{{ t('agentNext.listEvents') }}
 					</button>
+					<button class="rounded border px-3 py-2" :disabled="state.busy" @click="getStep">
+						{{ t('agentNext.getStep') }}
+					</button>
+					<button
+						class="rounded border px-3 py-2"
+						:disabled="state.busy || !state.step"
+						@click="listStepEvents"
+					>
+						{{ t('agentNext.listStepEvents') }}
+					</button>
 				</div>
 			</section>
 
@@ -308,6 +367,23 @@
 				<ul class="space-y-1">
 					<li v-for="event in state.events" :key="event.runId + ':' + event.sequence">
 						#{{ event.sequence }} · {{ event.type }} · v{{ event.runVersion }}
+					</li>
+				</ul>
+			</section>
+
+			<section class="space-y-2 rounded border p-4">
+				<h2 class="font-semibold">{{ t('agentNext.stepAudit') }}</h2>
+				<p v-if="!state.step">{{ t('agentNext.noStep') }}</p>
+				<pre v-else class="overflow-auto whitespace-pre-wrap break-all">{{
+					JSON.stringify(state.step, null, 2)
+				}}</pre>
+				<p>{{ t('agentNext.nextCursor') }}: {{ state.stepCursor }}</p>
+				<ul class="space-y-1">
+					<li
+						v-for="event in state.stepEvents"
+						:key="event.runId + ':' + event.stepIndex + ':' + event.sequence"
+					>
+						#{{ event.sequence }} · {{ event.kind }} · {{ 'textBytes' in event ? event.textBytes : '' }}
 					</li>
 				</ul>
 			</section>

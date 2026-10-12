@@ -1,7 +1,7 @@
 {
   "agentNext": {
     "title": "New Backend Agent — Development",
-    "isolation": "This development view only consumes the six backend-next Agent state endpoints. It does not enable Provider execution, tools, approvals, WebSocket streaming, or legacy Agent switching.",
+    "isolation": "This development view uses backend-next Agent state and read-only model-step audit endpoints. It does not enable Provider execution, tools, approvals, WebSocket streaming, or legacy Agent switching.",
     "setup": "Initial administrator setup",
     "login": "Sign in to backend-next",
     "username": "Username",
@@ -17,6 +17,9 @@
     "threadId": "Thread ID",
     "createThread": "Create thread",
     "runTitle": "Run state",
+    "loadModels": "Refresh configured models",
+    "modelSelection": "Provider model and configuration version",
+    "chooseModel": "Choose a model before creating a pending run",
     "prompt": "Prompt",
     "createRun": "Create pending run",
     "runId": "Run ID",
@@ -24,6 +27,10 @@
     "getRun": "Get run",
     "cancelRun": "Cancel run",
     "listEvents": "Load next events",
+    "getStep": "Read step 1 audit",
+    "listStepEvents": "Load step audit events",
+    "stepAudit": "Model step audit (no output text)",
+    "noStep": "No model step has been authorized or recorded.",
     "currentRun": "Current run",
     "events": "Events",
     "nextCursor": "Next cursor",
@@ -50,7 +57,8 @@
       "already_initialized": "The initial administrator is already configured.",
       "conflict": "The authentication state changed. Retry.",
       "request_failed": "The network request failed. Retry.",
-      "protocol_failure": "The backend response did not match the Agent protocol. No success was assumed."
+      "protocol_failure": "The backend response did not match the Agent protocol. No success was assumed.",
+      "operation_unknown": "The database write outcome is unknown. Retry only the same request with the original Idempotency-Key."
     }
   }
 }
