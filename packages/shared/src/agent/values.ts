@@ -5,6 +5,7 @@ export const AGENT_OPERATION_ERROR_CODES = [
 	'not_found',
 	'active_run_conflict',
 	'idempotency_conflict',
+	'approval_stale',
 	'version_conflict',
 	'storage_unavailable',
 	'internal_failure',

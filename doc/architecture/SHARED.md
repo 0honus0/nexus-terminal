@@ -152,3 +152,9 @@ Shared check/build、Backend-next check/build、适用消费者编译及对应�
 传输 codec 不使用对象断言、String 强制转换或数组断言通过验证；字符串按 UTF-8 字节检查，有限值严格匹配，数组逐项与可选字段显式投影。upload 单帧 1 MiB、路径 4096 bytes、task ID 512 bytes、单批 prepare 20k 目录、copy/archive 64 sources 归 values；服务端资源名额/缓存和每 Workspace 总配额仍私有。
 
 Suspend 的 snapshot 原文 4 MiB、最坏转义及完整 JSON 预算 24 MiB + 16 KiB、history 页 256 KiB 与 name 长度归 `remote/suspend/values.ts`；完整 wire 上限由真实 WS 路由 opt-in，并受 Platform 技术上限容纳。普通控制消息仍消费 Workspace 的 1 MiB，不因 snapshot 扩大所有用例范围。
+
+### B6.1 Agent 治理协议（静态源码，正式双端未迁移）
+
+`shared/src/agent/governance/{values,model,http,http-codec}.ts` 与 `packages/shared/package.json` exports 统一定义 13 项 capability、4 项 ssh-target grant、policy revision、执行策略覆盖、审批 `requested/approved/denied/expired/superseded`、严格请求及响应解码；不为尚无生产者的工具事件增设虚构 WS 类型。HTTP identity/userId 由 Access session 产生，Shared 中的 `AgentApprovalResolveRequest` 或 Grant JSON **不是**后端批准/持有的授权事实。
+
+完整 API 成功响应的 `AgentGrantView`、`AgentExecutionPolicyView`、`AgentApprovalView` 和审批列表有对应解码函数；`http.ts` 定义具名 App/Run/审批 path、resolve header 及响应；路径 App/Run/审批 ID 采用 UUID，版本原始数值、有限枚举原始字符串及所有字段白名单严格核对，未知/空缺/错型及状态与决议/消费字段矛盾拒绝。toolName/toolVersion 分别最多 256 UTF-8 bytes、summary 2048、feedback 2000，均引用 values 唯一常量。目标 ID 上限 256/项、单 ID 128 UTF-8 bytes，普通 JSON 16 KiB、grants 写入 JSON 512 KiB、完整治理响应 JSON 8 MiB（均计序列化及转义）；成功和安全错误走实际后端 HTTP mapper。存储态、Trusted AuthorizationFact、SQLite 事务和实际 Approval waiter 不属于 Shared。新后端当前只生成这些 HTTP 响应；**正式前端仍由 F1 迁移**，不能因存在 codec 就声称双端已经通过验证。

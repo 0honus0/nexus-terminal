@@ -1,3 +1,4 @@
+import { agentErrorStatus } from './agent-http-status.js';
 import { InvalidAgentPayload, encodeAgentJson } from '@nexus-terminal/shared/agent/http-codec';
 import { AGENT_MAX_JSON_BODY_BYTES, AGENT_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/values';
 import { AGENT_RUN_MAX_JSON_BODY_BYTES, AGENT_RUN_IDEMPOTENCY_HEADER } from '@nexus-terminal/shared/agent/runs/values';
@@ -145,32 +146,6 @@ function failure(context: HttpRouteContext, error: unknown): void {
 		return;
 	}
 	sendAgent(context, 500, { code: 'internal_failure' });
-}
-
-function agentErrorStatus(code: AgentOperationError['code']): number {
-	switch (code) {
-		case 'limit_exceeded':
-			return 413;
-		case 'invalid_input':
-			return 400;
-		case 'not_found':
-			return 404;
-		case 'active_run_conflict':
-		case 'idempotency_conflict':
-		case 'version_conflict':
-		case 'provider_in_use':
-		case 'provider_configuration_stale':
-			return 409;
-		case 'model_not_found':
-			return 404;
-		case 'provider_unavailable':
-		case 'provider_request_failed':
-		case 'storage_unavailable':
-		case 'operation_unknown':
-			return 503;
-		case 'internal_failure':
-			return 500;
-	}
 }
 
 function add(

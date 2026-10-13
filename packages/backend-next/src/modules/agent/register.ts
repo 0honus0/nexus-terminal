@@ -1,3 +1,4 @@
+import { AgentFailure } from './agent-failure.js';
 import type { AgentAppView, AgentThreadView } from '@nexus-terminal/shared/agent/scope/model';
 import type {
 	AgentRunView,
@@ -45,6 +46,10 @@ import { agentBoundary } from './agent-errors.js';
 import type { AccessPublicApi } from '../access/public.js';
 import type { HttpRoute } from '../../platform/http/http-types.js';
 import { createAgentHttpRoutes } from './interfaces/http/agent-http.js';
+import { SqliteGovernanceStorage } from './governance/adapters/sqlite/governance-sql.js';
+import { GovernanceModel } from './governance/model/governance-model.js';
+import { GovernanceService } from './governance/service/governance-service.js';
+import { createGovernanceHttpRoutes } from './interfaces/http/governance-http.js';
 
 function toAppView(value: AgentApp): AgentAppView {
 	return { id: value.id, name: value.name, createdAt: value.createdAt };
@@ -162,7 +167,8 @@ export function registerAgent(sqlite: SqliteRuntime, secrets: SecretBox | null):
 	const providerService = new ProviderService(providerModel, (userId, providerId) =>
 		execution.abortProvider(userId, providerId),
 	);
-	const requests = new AgentRequestOwner([execution, providerService, registryService]);
+	const governance = new GovernanceService(new GovernanceModel(new SqliteGovernanceStorage(sqlite)));
+	const requests = new AgentRequestOwner([execution, providerService, registryService, governance]);
 
 	function boundary<T>(work: () => Promise<T>): Promise<T> {
 		return agentBoundary(() => requests.run(work));
@@ -233,6 +239,18 @@ export function registerAgent(sqlite: SqliteRuntime, secrets: SecretBox | null):
 					operationKey: input.operationKey,
 				});
 				// Cancellation commits the durable fence before aborting the local attempt.
+				if (
+					result.status === 'cancelled' ||
+					result.status === 'already_cancelled' ||
+					(result.status === 'replayed' && result.run.status === 'cancelled')
+				) {
+					try {
+						await governance.invalidate(input.userId, input.appId, input.runId);
+					} catch (error) {
+						// The cancellation fence is already committed; cleanup failure cannot undo it.
+						throw new AgentFailure('operation_unknown', { cause: error });
+					}
+				}
 				return toCancelResult(result);
 			}),
 
@@ -276,6 +294,7 @@ export function registerAgent(sqlite: SqliteRuntime, secrets: SecretBox | null):
 		routes: (access) => [
 			...createAgentHttpRoutes(access, publicApi),
 			...createAgentProviderHttpRoutes(access, providerApi),
+			...createGovernanceHttpRoutes(access, governance, boundary),
 		],
 	};
 }

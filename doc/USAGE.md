@@ -478,6 +478,22 @@ Run completed/completed_unverified/failed/cancelled/interrupted 回收 Browser S
 
 同 App/Thread 只允许一个活动 Run（pending/running/unknown 均占用名额）；明确完成或失败后才释放。网络失败、协议异常或提交结果未知不能证明未写入，重试保持原 key 和输入；改变输入才形成新意图，不自动生成新 key 重放。version_conflict 显示冲突并尝试读取最新 Run，不自动用新版本继续取消；已完成的 Run 拒绝取消，unknown 允许有版本条件地取消但不保证远端回滚。安全失败只返回 code；非 JSON、未知状态/错误码或错误 shape 显示协议失败，不伪造成功，也不返回 prompt、hash、秘密或技术 cause。开发入口与剩余项见 [下一阶段方案](后端重构下一阶段实施方案.md#延后的前端事项未验收不删除)。
 
+### 新后端授权与审批基础（B6.1 源码范围）
+
+当前新后端 Agent 管理员仍使用 Access 登录会话（userId=1），正式前端和生产切换**尚未**完成。新建 App 的 grant 默认**为空**，策略修订从 0 开始；不因 capability 出现在定义列表、选择 Full Access、模型答复或 SSH 连接存在就自动批准。普通 SSH 的技术通道与 Agent 授权彼此独立，Agent 还须在每次真实工具执行前复查目标身份、当前 Run、ToolCall 和授权版本；该最终执行链由 B6.2/B5-R 承接。
+
+| 已安装的 B6.1 HTTP 路径                                  | 当前语义                                                                                                                                                                                                                                                                                                         |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET/PUT `/api/v1/agent/apps/:appId/grants`               | GET 返回能力定义、当前 grants 与 policyRevision；PUT 带 `{expectedPolicyRevision,grants:[{capability,scope}]}`，全量替换、同事务 CAS，撤权使未决审批失效；目标 scope 为 `{kind:"targets",targets:{ssh:{mode:"all"}}}` 或 `{kind:"targets",targets:{ssh:{mode:"ids",ids:["1"]}}}`，非目标能力用 `{kind:"global"}` |
+| GET/PUT `/api/v1/agent/apps/:appId/execution-policy`     | GET 返回 `{version,overrides,effective}`，PUT 带 `{expectedVersion,overrides}` 全量 CAS；秒/字节/条数必须是正安全整数并满足硬上限。默认/初始限额参照旧 Agent 基线；B7 尚未接入动态设置与预算执行                                                                                                                 |
+| GET `/api/v1/apps/:appId/approvals/:approvalId`          | 读取当前可见审批（含请求、截止秒时间、状态、版本、风险摘要），不存在/非本人返回 404                                                                                                                                                                                                                              |
+| GET `/api/v1/apps/:appId/runs/:runId/approvals`          | 读取此 App/Run 的审批记录数组；到期或终止 Run 的未决审批于读取事务内刷新；最多返回 1024 条，超出时明确拒绝，不截断                                                                                                                                                                                               |
+| POST `/api/v1/apps/:appId/approvals/:approvalId/resolve` | 发送 decision 为 `approved` 或 `denied`、operationHash、expectedVersion、可选 feedback，并附 UUID `Idempotency-Key`；在同一事务复查 App/Run/operationHash/policyRevision/inputRevision/TTL 后 CAS 决议；同 key 同内容重放，变更内容冲突                                                                          |
+
+授权目标 ID 最多 256 个、每项最多 128 UTF-8 bytes；grants 请求 JSON 上限 512 KiB，其余治理请求 16 KiB，完整响应最多 8 MiB（包含转义与 envelope）。审批列表还受到 1024 条完整记录上限约束，超出返回 413 `limit_exceeded`；仍可按 ID 查询单项，当前无分页接口。无效类型/未知字段拒绝 400，身份失效 401、非管理员 403、不存在 404、版本/审批漂移或幂等内容冲突 409；不可用/未知提交结果须保留原意图并读取现状，不得自行换 key 自动执行。审批摘要的 toolName/toolVersion 各最多 256 UTF-8 bytes、summary 2048；可选 feedback 非空且最多 2000 UTF-8 bytes。审批请求 TTL 600 秒，以实际事务决策时刻核验，超过时限不能批准；Run 取消已提交而审批失效清理失败时返回 `operation_unknown`，先读取 Run 与审批现状；`approved` 仅表示用户决议已提交，**不是**工具已派发或远端任务已成功。
+
+目前 B5 的 `awaiting_b6_b7` 仍强制禁止模型派发，B6.2 的可信 Tool/ACP 审批生产者、活动 waiter、实际消耗/租约与用户通知未接线，因此新 App 的审批列表通常为空，POST resolve 不会虚构可批准任务。旧版按 App 安装 manifest 默认 grant、完整 ToolInspection/通知和动态 Settings 的差异记录 F1；不得把新后台管理页面未迁移误认为已可操作。源码/静态与真实行为分别见 B6.1 审核及 B10。
+
 ### 新后端 Provider 与模型冻结
 
 新后端管理员接口前缀为 `/api/v1/agent/ai`；正式界面尚未迁移。

@@ -11,7 +11,13 @@ export class AgentFailure extends Error {
 			| 'provider_in_use'
 			| 'provider_configuration_stale'
 			| 'model_not_found'
-			| 'provider_request_failed',
+			| 'provider_request_failed'
+			| 'approval_stale'
+			| 'limit_exceeded'
+			| 'storage_unavailable'
+			| 'operation_unknown'
+			| 'internal_failure'
+			| 'idempotency_conflict',
 		options?: ErrorOptions,
 	) {
 		super('Agent: ' + code, options);
@@ -28,4 +34,14 @@ export class ProviderRequestFailure extends AgentFailure {
 		super('provider_request_failed', options);
 		this.name = 'ProviderRequestFailure';
 	}
+}
+
+/** Business refusals are expected; persistence and unknown failures remain shutdown evidence. */
+export function isAgentDrainFailure(error: unknown): boolean {
+	return (
+		!(error instanceof AgentFailure) ||
+		error.code === 'storage_unavailable' ||
+		error.code === 'operation_unknown' ||
+		error.code === 'internal_failure'
+	);
 }

@@ -1,4 +1,4 @@
-import { AgentFailure } from '../agent-failure.js';
+import { AgentFailure, isAgentDrainFailure } from '../agent-failure.js';
 
 interface AgentResource {
 	quiesce(): void;
@@ -56,7 +56,7 @@ export class AgentRequestOwner {
 			);
 			const failures: unknown[] = [...this.stopFailures];
 			for (const result of requests) {
-				if (result.status === 'rejected' && !(result.reason instanceof AgentFailure)) {
+				if (result.status === 'rejected' && isAgentDrainFailure(result.reason)) {
 					failures.push(result.reason);
 				}
 			}
@@ -66,10 +66,34 @@ export class AgentRequestOwner {
 				}
 			}
 			if (failures.length) {
-				throw new AggregateError(failures, 'Agent shutdown failed');
+				throw new AggregateError(uniqueDrainFailures(failures), 'Agent shutdown failed');
 			}
 		});
 		this.quiesce();
 		return this.closePromise;
 	}
+}
+
+function uniqueDrainFailures(failures: readonly unknown[]): unknown[] {
+	const unique = new Set<unknown>();
+	const visited = new Set<unknown>();
+
+	function collect(error: unknown): void {
+		if (visited.has(error)) {
+			return;
+		}
+		visited.add(error);
+		if (error instanceof AggregateError) {
+			for (const cause of error.errors) {
+				collect(cause);
+			}
+			return;
+		}
+		unique.add(error);
+	}
+
+	for (const error of failures) {
+		collect(error);
+	}
+	return [...unique];
 }

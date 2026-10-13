@@ -5,6 +5,7 @@ import {
 } from './values.js';
 
 const MAGIC = 0x4e585731;
+
 const HEADER_BYTES = 16;
 
 /** NXW1 frames; terminal has no request ID, file/history response frames always have one. */

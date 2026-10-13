@@ -10,6 +10,7 @@ import {
 	migrateAgentProviderSchema,
 	migrateAgentExecutionJournal,
 	migrateAgentRootRunLifecycle,
+	migrateAgentGovernance,
 } from '../modules/agent/migrations.js';
 import { initializeDesktopConnectionHistory } from '../modules/targets/migrations.js';
 
@@ -87,6 +88,14 @@ export const applicationMigrations: readonly SchemaMigration[] = [
 
 		async apply(tx) {
 			await migrateAgentRootRunLifecycle(tx);
+		},
+	},
+	{
+		version: 10,
+		signature: 'backend-next-v10-agent-grants-approvals-20261012',
+
+		async apply(tx) {
+			await migrateAgentGovernance(tx);
 		},
 	},
 ];

@@ -16,15 +16,25 @@ const functionSpacingPlugin = {
 		'function-spacing': {
 			meta: {
 				type: 'layout',
-				docs: { description: 'require a blank line around functions, methods and export declarations' },
+				docs: {
+					description:
+						'require blank lines around functions, methods, exports and configured top-level declarations',
+				},
 				fixable: 'whitespace',
-				schema: [],
-				messages: { needsSpacing: 'Add a blank line around this function, method or export declaration.' },
+				schema: [
+					{
+						type: 'object',
+						properties: { topLevelDeclarations: { type: 'boolean' } },
+						additionalProperties: false,
+					},
+				],
+				messages: { needsSpacing: 'Add a blank line around this declaration.' },
 			},
 
 			create(context) {
 				const sourceCode = context.sourceCode;
 				const lineEnding = sourceCode.text.includes('\r\n') ? '\r\n' : '\n';
+				const topLevelDeclarations = context.options[0]?.topLevelDeclarations === true;
 
 				const isFunctionExpression = (node) => {
 					let current = node;
@@ -69,7 +79,19 @@ const functionSpacingPlugin = {
 				const isExport = (node) =>
 					['ExportNamedDeclaration', 'ExportDefaultDeclaration', 'ExportAllDeclaration'].includes(node.type);
 
-				const checkSpacing = (members) => {
+				const isDeclaration = (node) =>
+					[
+						'VariableDeclaration',
+						'FunctionDeclaration',
+						'ClassDeclaration',
+						'TSTypeAliasDeclaration',
+						'TSInterfaceDeclaration',
+						'TSEnumDeclaration',
+						'TSModuleDeclaration',
+						'TSImportEqualsDeclaration',
+					].includes(node.type);
+
+				const checkSpacing = (members, includeDeclarations = false) => {
 					for (let index = 1; index < members.length; index += 1) {
 						const previous = members[index - 1];
 						const current = members[index];
@@ -77,7 +99,8 @@ const functionSpacingPlugin = {
 							!isFunctionLike(previous) &&
 							!isFunctionLike(current) &&
 							!isExport(previous) &&
-							!isExport(current)
+							!isExport(current) &&
+							!(includeDeclarations && (isDeclaration(previous) || isDeclaration(current)))
 						) {
 							continue;
 						}
@@ -118,7 +141,7 @@ const functionSpacingPlugin = {
 
 				return {
 					Program(node) {
-						checkSpacing(node.body);
+						checkSpacing(node.body, topLevelDeclarations);
 					},
 
 					BlockStatement(node) {
@@ -211,6 +234,11 @@ export default [
 		files: ['**/*.{ts,tsx,js,jsx,mjs,cjs,vue}'],
 		plugins: { 'nexus-style': functionSpacingPlugin },
 		rules: { 'nexus-style/function-spacing': 'error' },
+	},
+	{
+		name: 'nexus/shared-declaration-spacing',
+		files: ['packages/shared/src/**/*.{ts,tsx}'],
+		rules: { 'nexus-style/function-spacing': ['error', { topLevelDeclarations: true }] },
 	},
 	{
 		name: 'nexus/refactor-control-flow',

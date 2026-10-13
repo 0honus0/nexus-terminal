@@ -422,3 +422,51 @@ B3.3 实施复核已修正实际注入接口：`registerRemote.targets` 精确�
 当前实施顺序为完成全部保留后端功能及后端最终环境验收，再启动前端对接。后端 HTTP/WS 通过 Shared 与实际协议消费者核对，行为回归按实施决定统一留 B10；已有 DEV 前端未验收，不作为后端功能完整或正式迁移完成的证明。
 
 B3.1 当前关闭/导出边界：Workspace Service 跟踪导出准入、60 秒完整期限、交付 sink 及实例关联取消；HTTP Interface 持有 response/pipeline，History Model 暴露应用字节源与可等待释放，Platform 只提供技术流/VT 操作。全 Remote 导出最多 2 项，清理失败保留名额。checkpoint dispose 返回共享 Promise，参与关闭确认；临时日志删除及渲染释放的具名技术失败经 Model 转为模块清理失败，HTTP/WS 都输出 operation_unknown。模块各独立 owner 并发关闭，30 秒确认截止不代表真实任务结束，晚任务继续观察；应用整体验收仍待 B10。
+
+## B6.1 授权与审批基础（按照模块模板八节，静态/行为结论见 testing）
+
+### 1. 职责与范围
+
+Agent 模块的 `governance` 持有每个 user/App 的 capability grant、执行预算覆盖项与审批持久状态。它不是普通 SSH 的权限授予器；普通 SSH 仍由 Access/Targets/Remote 各自独立鉴权与管理活跃连接。授权事实仅说明 Agent 某一 capability 在指定 App/目标范围内的授予情况，**不能代替**执行时 Targets 当前身份、Tool Inspection、App 生命周期及 Run 策略检查。B5 的冻结运行政策仍为 `awaiting_b6_b7`，本批不启动模型/工具派发。
+
+### 2. 子功能与目录
+
+- `agent/governance/service/governance-service.ts`：用户/App 输入校验、能力定义与政策、审批构造/幂等意图哈希、关闭准入与自身在途任务等待；无无主 timer。纯政策在 `governance-rules.ts`：授权范围交集判断、grant 校验、执行预算默认/硬上限、审批过期/版本判断。
+- `governance/model/governance-model.ts`：应用 Grant/政策事实/Approval 与 storage command/record 的显式转换；适配同步应用回调及技术失败；`model/governance-types.ts` 独占内部授权事实与审批命令。
+- `governance/storage/governance-storage.ts`：狭窄持久记录与同步回调接口，不携带 Shared DTO。
+- `governance/adapters/sqlite/{governance-schema,governance-row,governance-sql}.ts`：v10 DDL、严谨行/持久 JSON 解码、SQLite 事务、CAS、失效与审批决议。技术操作、SQL/事务不外泄至 Service。
+- `agent/interfaces/http/governance-http.ts`：安装真实 HTTP 路由与参数白名单、登录验证、Model→安全 wire 投影。未发现独立的旧审批命令 WS；旧通知是从持久 Run `approval.requested` 事件投影到 Notifications，不在本批虚构新的审批 WS 指令/通知通道。
+
+### 3. 依赖方向
+
+`registerAgent` 装配同模块 `GovernanceService → GovernanceModel → GovernanceStorage ← SQLite Adapter`；Adapter 只依赖通用 Platform SQL、storage 契约与 Shared 基础有限取值。Service 只消费 Model 暴露的应用对象；同步事务政策回调由 Service 提供，Model 将 Storage 事实转换后调用，再将创建任务投影回 Storage；Model 不选默认政策或构造虚假的初始 revision。跨模块 Access 仅通过 `AccessPublicApi.authenticate`；普通 SSH 通过 Targets 自身授权；没有跨模块深层引用、全局 dispatcher 或 Platform 定义的 grant/approval 类型。后续 B6.2 必须通过 Targets public 重新解析当前目标，禁止利用普通 Workspace 既有会话冒名授权。
+
+### 4. 类型与转换
+
+| 边界         | 类型唯一 owner                                           | 转换与实际消费                                                                                                                                                                  |
+| ------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 协议→请求    | Shared `agent/governance/{values,model,http,http-codec}` | HTTP 严格读 UUID/原始类型、完整 grant/审批/执行政策字段与具名 path/header/response；Interface 将 scope 转 Model 输入，不收客户端身份或授权布尔                                  |
+| DB→应用      | governance/storage、Model types                          | SQLite Adapter 校验 schemaVersion/JSON/行的有限值及状态/期限/决议/消耗关联；Model 转换 GrantScope、政策覆盖、Approval；实际 grant replace、request/resolve 回调在同一事务内消费 |
+| 应用→协议    | Model / Shared model                                     | governance HTTP 白名单映射；只输出 tool 摘要、hash/版本，不输出 SQL 行、凭据/冻结输入；正式前端仍消费旧 Protocol（F1）                                                          |
+| App 当前授权 | governance/model 的 `AuthorizationFact`                  | 包含 user/App/capability/connectionId/revision；不复用客户端 DTO，批准不自动授权派发                                                                                            |
+| 技术资源     | Platform SQL Executor/SqliteRuntime                      | Adapter 执行事务及行解码；Policy 不由 Platform 拥有                                                                                                                             |
+
+目标 grant 的 ssh IDs 在 Shared 协议中是长度受限文本，应用判断时严格要求规范化的正安全整数目标 ID；执行政策秒/字节/条数沿原始类型进行验证，不将 `String(value)` 后的相同文字当成有效 enum。grant 目标 ID 最多 256、单个最多 128 UTF-8 bytes，capability 固定 13 项；审批 TTL 600 秒；grant 请求上限 512 KiB，普通 governance JSON 16 KiB，完整结果上限 8 MiB；审批 list 至多 1024 条完整记录，超额为安全的 `limit_exceeded` 而非截断（分页消费者仍未实现）；容量按完整 JSON 编码计算。
+
+### 5. 入口与安装
+
+`modules/agent/register.ts` 在 Agent request owner 中装配 governance；`bootstrap/schema.ts` 注册追加 v10。已接线的管理员 HTTP 为 GET/PUT `/api/v1/agent/apps/:appId/grants`、GET/PUT `/api/v1/agent/apps/:appId/execution-policy`、GET `/api/v1/apps/:appId/approvals/:approvalId`、POST `.../resolve`、GET `/api/v1/apps/:appId/runs/:runId/approvals`。共享认证、CSRF/Origin 控制由新 Platform/Access 负责；治理入口使用实际 session userId=1，结果交付前再次认证。没有创建审批的客户端 HTTP 入口：审批生产者必须是 B6.2 的受信 Tool/ACP 过程而非客户端请求。
+
+### 6. 数据、事务与并发
+
+v10 新增 `agent_governance_policies`、`agent_governance_grants`、`agent_governance_approvals`、`agent_governance_resolution_keys`，引用 Agent App/Run 身份；不修改 v1–v9 签名。首次 GET 不会自动批准任何 capability：revision/version 为 0、grant 空、政策 override 空。grant PUT 在同一个 SQLite 事务中查 App、读当前 policy、调用 Model 转换后的同步纯规则、CAS revision、替换所有 grant、失效 requested 审批并读取最终结果。执行政策 PUT CAS executionVersion 并推进 policyRevision/使旧待批失效；拒绝超过旧初始 hard limits 的覆盖项，B7 动态 settings 尚未回接。
+
+审批请求的窄内部命令写入时校验当前 Run 版本及 App grant，并冻结 operationHash、policyRevision、inputRevision 与 TTL；Model 必须消费经 Adapter 读取的 Storage 快照，未经认证客户端不能创建。resolve 在同一事务读原审批、Run 当前 status/version、App 当前 policyRevision 和幂等键；同步规则拒绝 stale/expiry/版本/哈希漂移；时钟在实际事务执行时读取，决议校验与 decidedAt 共用一个时刻；成功 CAS 到 approved/denied 并保存 feedback、首次事务结果快照。同键/同输入重放原始已提交结果，不从随后变化的审批行重建，不同输入返回冲突；无网络派发，不能把批准视为副作用已经执行。审批 list 先以有界数量检查总量，再分批失效扫描和读取，避免先聚合无限记录后才检查字节上限。此处 inputRevision 当前绑定单个 Root Run version；B6.2 有 ToolCall/输入 journal 后须用其权威 input revision 取代，不得默许跨版本批准。App/Run 删除由外键回收，不在 Adapter 内藏删除准入规则。
+
+### 7. 生命周期与失败
+
+Governance Service 与 AgentRequestOwner 双层跟踪自身请求；停止新准入、`closePromise` 先保存，等待 in-flight 事务/请求终态，Governance 最多保留 32 个原始持久/关闭失败及额外失败计数，不使单项清理跳过其他子资源。审批 TTL 不启动无 owner 的 interval：get/list/resolve 同事务按数据库条件把到期 requested 转 expired，把已终止 Run 的 requested 转 superseded。grant 撤回/执行政策修改同事务令待批 superseded，取消 Run 持久终态后执行失效，并通过后续读取 sweep 恢复；取消已经提交后失效失败返回 operation_unknown，不能假称取消已回滚；commit_unknown 不得默认重放写入。继承取消清理只在 quiesce 后、子 owner close 开始前准入；close 开始后拒绝全部新任务。原 owner 在任务退出前记录存储/未知/内部故障，不因它们已映射为 AgentFailure 就忽略；父层聚合去除同一失败的重复引用。持久 approved/denied 的产生只是审批状态提交，B6.2 在真正执行前必须重新确认当前 grants、Run、ToolCall、目标/租约及消耗状态。停机后已经派发的远端任务不得因本批 `close` 即宣称终止。
+
+### 8. 当前能力与验收
+
+B6.1 的 Shared、SQLite 与 HTTP 请求/查询/变更/决议路径有源码；审批请求生产者、ACP 活 waiter、真实 tool execution、独立授权目标 denylist/App manifest、审批事件推送、B7 动态 settings 均**未接入**，不是源码通过的证明。旧代码实际包含 App enable/manifest/默认 grant 和详细 ToolInspection；新 App 目前尚无等价安装声明，故默认 grant 空（fail closed），差异登记 F1，不补虚假兼容桥。行为、真实取消/并发、SQLite 迁移与实机权限试验按 D2 登记 B10，静态命令结果限 testing 当前批次，不复用 B5.2 PASS。
