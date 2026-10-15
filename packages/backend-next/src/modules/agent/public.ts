@@ -1,10 +1,18 @@
-import type { AgentAppView, AgentThreadView } from '@nexus-terminal/shared/agent/scope/model';
+import type { AgentAppView, AgentAppDefinitionView, AgentThreadView } from '@nexus-terminal/shared/agent/scope/model';
 import type { AgentRunView, AgentRunStepView } from '@nexus-terminal/shared/agent/runs/model';
 import type { AgentRunEventsResponse, AgentRunStepEventsResponse } from '@nexus-terminal/shared/agent/runs/http';
 import type { AgentCreateRunOutcome, AgentCancelRunOutcome } from '@nexus-terminal/shared/agent/runs/values';
+import type { AgentToolView } from '@nexus-terminal/shared/agent/tools/model';
+import type { AgentToolEventsResponse } from '@nexus-terminal/shared/agent/tools/http';
+
+import type {
+	AgentChildrenResponse,
+	AgentMessageMetadataResponse,
+} from '@nexus-terminal/shared/agent/collaboration/http';
 
 /** Trusted backend inputs: identity comes from authentication, not a request body. */
 export interface AgentCreateRunInput {
+	connectionIds: number[];
 	model: { providerId: string; modelId: string; configurationVersion: number };
 	userId: number;
 	appId: string;
@@ -32,11 +40,39 @@ export type AgentCancelRunResult =
 	| { status: 'not_found' | 'version_conflict' | 'idempotency_conflict' | 'active_run_conflict' };
 
 export interface AgentStateApi {
-	createApp(userId: number, name: string): Promise<AgentAppView>;
+	listChildren(userId: number, appId: string, runId: string): Promise<AgentChildrenResponse | null>;
+	listChildMessages(
+		userId: number,
+		appId: string,
+		runId: string,
+		childId: string,
+		after: number,
+		limit: number,
+	): Promise<AgentMessageMetadataResponse | null>;
+	cancelChild(input: AgentCancelRunInput, childId: string): Promise<AgentCancelRunResult>;
+	listApps(userId: number): Promise<AgentAppView[]>;
+	getApp(userId: number, appId: string): Promise<AgentAppView | null>;
+	setAppEnabled(
+		userId: number,
+		appId: string,
+		enabled: boolean,
+		expectedVersion: number,
+	): Promise<AgentAppView | null>;
+	listAppDefinitions(): Promise<AgentAppDefinitionView[]>;
+	createApp(userId: number, name: string, definitionId?: string): Promise<AgentAppView>;
 	createThread(userId: number, appId: string, title: string): Promise<AgentThreadView | null>;
 	createRun(input: AgentCreateRunInput): Promise<AgentCreateRunResult>;
 	cancelRun(input: AgentCancelRunInput): Promise<AgentCancelRunResult>;
 	getRun(userId: number, appId: string, runId: string): Promise<AgentRunView | null>;
+	getTool(userId: number, appId: string, runId: string, toolCallId: string): Promise<AgentToolView | null>;
+	listToolEvents(
+		userId: number,
+		appId: string,
+		runId: string,
+		toolCallId: string,
+		after: number,
+		limit: number,
+	): Promise<AgentToolEventsResponse | null>;
 	listEvents(
 		userId: number,
 		appId: string,

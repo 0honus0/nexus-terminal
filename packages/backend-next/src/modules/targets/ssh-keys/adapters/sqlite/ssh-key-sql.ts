@@ -15,7 +15,7 @@ function decodeInteger(value: unknown): number {
 	return value;
 }
 
-function decode(row: Record<string, unknown>): SshKeySummary {
+export function readSshKeyRow(row: Record<string, unknown>): SshKeySummary {
 	if (typeof row.name !== 'string') {
 		throw new Error('Corrupt SSH key name');
 	}
@@ -31,7 +31,7 @@ function decode(row: Record<string, unknown>): SshKeySummary {
 
 async function readSshKeySummary(tx: SqlExecutor, id: number): Promise<SshKeySummary | null> {
 	const row = await tx.one('SELECT id,name,version,created_at,updated_at FROM ssh_keys WHERE id=?', [id]);
-	return row ? decode(row) : null;
+	return row ? readSshKeyRow(row) : null;
 }
 
 async function readRequiredSshKeySummary(tx: SqlExecutor, id: number): Promise<SshKeySummary> {
@@ -47,7 +47,7 @@ export class SqliteSshKeyStorage implements SshKeyStorage {
 
 	list(): Promise<SshKeySummary[]> {
 		return this.db.transaction(async (tx) =>
-			(await tx.all('SELECT id,name,version,created_at,updated_at FROM ssh_keys ORDER BY id')).map(decode),
+			(await tx.all('SELECT id,name,version,created_at,updated_at FROM ssh_keys ORDER BY id')).map(readSshKeyRow),
 		);
 	}
 

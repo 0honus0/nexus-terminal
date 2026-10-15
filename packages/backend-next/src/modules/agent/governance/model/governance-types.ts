@@ -1,4 +1,46 @@
+import type { ExecutionSettings } from '../../execution/model/execution-types.js';
 import type { AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
+import type { ToolOperation } from '../../runs/model/run-tool-types.js';
+import type { RunFrozenInput } from '../../runs/model/run-types.js';
+import type { ProviderRecord } from '../../providers/model/provider-types.js';
+
+export interface ToolAuthorityIdentity {
+	userId: number;
+	appId: string;
+	runId: string;
+	id: string;
+	expectedRevision: number;
+	operationHash: string;
+}
+
+export type ToolAuthorityTask =
+	| { kind: 'dispatch' }
+	| { kind: 'inspect'; policyRevision: number }
+	| { kind: 'verify'; policyRevision: number }
+	| { kind: 'complete'; policyRevision: number; resultText: string; targets: { id: number; version: number }[] };
+
+export interface ToolAuthority {
+	operation: ToolOperation;
+	policy: GrantState;
+	connectionIds: number[];
+}
+
+export type ToolPermitDecision = (
+	approval: Approval,
+	operation: ToolOperation,
+	policy: GrantState,
+	now: number,
+) => boolean;
+
+export type ToolAuthorityDecision = (
+	operation: ToolOperation,
+	policy: GrantState,
+	status: AgentRunStatus,
+	frozen: RunFrozenInput,
+	provider: ProviderRecord | null,
+	connectionIds: number[],
+) => boolean;
+
 import type {
 	AgentCapability,
 	AgentApprovalStatus,
@@ -25,6 +67,7 @@ export interface GrantInput {
 }
 
 export interface GrantState {
+	app: AppPolicyFacts;
 	appId: string;
 	userId: number;
 	revision: number;
@@ -33,8 +76,6 @@ export interface GrantState {
 
 export type PolicyOverrides = {
 	maxModelRequests?: number;
-	maxAutoModelRequests?: number;
-	maxAutoActiveExecutionSeconds?: number;
 	maxActiveExecutionSeconds?: number;
 	toolTimeoutSeconds?: number;
 	maxToolOutputBytes?: number;
@@ -71,6 +112,8 @@ export interface ApprovalInspection {
 }
 
 export interface Approval {
+	targetVersion: number | null;
+	capability: AgentCapability;
 	id: string;
 	userId: number;
 	appId: string;
@@ -97,11 +140,15 @@ export interface ApprovalRequest {
 	appId: string;
 	runId: string;
 	toolCallId: string;
-	operationHash: string;
 	kind: AgentApprovalKind;
-	inputRevision: number;
+}
+
+export interface ApprovalOperation {
+	id: string;
+	operationHash: string;
+	operationRevision: number;
 	capability: AgentCapability;
-	connectionId: number | null;
+	targetVersion: number | null;
 	inspection: ApprovalInspection;
 }
 
@@ -116,7 +163,16 @@ export interface ResolveApproval {
 	feedback?: string;
 }
 
+export interface ConsumeApproval {
+	userId: number;
+	appId: string;
+	approvalId: string;
+	expectedVersion: number;
+}
+
 export interface ExecutionPolicyFacts {
+	settings: ExecutionSettings | null;
+	app: AppPolicyFacts;
 	version: number;
 	overrides: PolicyOverrides;
 }
@@ -134,7 +190,11 @@ export type ExecutionChangeDecision = (current: ExecutionPolicyFacts) => {
 	pendingStatus: 'superseded' | null;
 };
 
-export type ApprovalRequestDecision = (policy: GrantState, status: AgentRunStatus, version: number) => Approval | null;
+export type ApprovalRequestDecision = (
+	policy: GrantState,
+	status: AgentRunStatus,
+	operation: ApprovalOperation,
+) => Approval | null;
 
 export type ApprovalResolveDecision = (
 	approval: Approval,
@@ -157,4 +217,35 @@ export interface GrantCatalogState {
 	revision: number;
 	grants: Grant[];
 	definitions: CapabilityDefinition[];
+}
+
+export interface AppPolicyFacts {
+	enabled: boolean;
+	declared: boolean;
+	capabilities: AgentCapability[];
+	deniedTargetIds: number[];
+}
+
+export interface TargetDenylist {
+	revision: number;
+	entries: { connectionId: number; reason: string; changedBy: number; changedAt: number }[];
+}
+
+export interface DenylistCommand {
+	userId: number;
+	expectedRevision: number;
+	connectionIds: number[];
+	reason: string;
+}
+
+export interface DenylistTarget {
+	id: number;
+	version: number;
+}
+
+export type DenylistChangeDecision = (current: TargetDenylist) => { revoke: boolean };
+
+export interface DenylistMutation {
+	value: TargetDenylist;
+	revokedRuns: boolean;
 }

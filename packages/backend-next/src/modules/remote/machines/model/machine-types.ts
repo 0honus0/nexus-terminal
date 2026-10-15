@@ -6,6 +6,8 @@ export interface RemoteMachineOpenRequest {
 	expectedFingerprint?: string;
 	timeoutMs: number;
 	signal: AbortSignal;
+	/** Recheck the caller's application authority immediately before opening the transport. */
+	validate?: () => Promise<void>;
 }
 
 export interface OpenedRemoteMachine {

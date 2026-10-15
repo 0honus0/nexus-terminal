@@ -10,7 +10,7 @@ function decodeInteger(value: unknown): number {
 	return value;
 }
 
-function decode(row: Record<string, unknown>): TagRecord {
+export function readTagRow(row: Record<string, unknown>): TagRecord {
 	if (typeof row.name !== 'string') {
 		throw new Error('Corrupt tag name');
 	}
@@ -26,7 +26,7 @@ function decode(row: Record<string, unknown>): TagRecord {
 
 async function readTagRecord(tx: SqlExecutor, id: number): Promise<TagRecord | null> {
 	const row = await tx.one('SELECT id,name,version,created_at,updated_at FROM tags WHERE id=?', [id]);
-	return row ? decode(row) : null;
+	return row ? readTagRow(row) : null;
 }
 
 async function readRequiredTagRecord(tx: SqlExecutor, id: number): Promise<TagRecord> {
@@ -42,7 +42,7 @@ export class SqliteTagStorage implements TagStorage {
 
 	list(): Promise<TagRecord[]> {
 		return this.db.transaction(async (tx) =>
-			(await tx.all('SELECT id,name,version,created_at,updated_at FROM tags ORDER BY id')).map(decode),
+			(await tx.all('SELECT id,name,version,created_at,updated_at FROM tags ORDER BY id')).map(readTagRow),
 		);
 	}
 

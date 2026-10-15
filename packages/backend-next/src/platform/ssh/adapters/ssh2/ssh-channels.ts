@@ -137,7 +137,15 @@ export class SshCommandChannel extends ByteChannel implements MachineCommand {
 			this.settle = resolve;
 		});
 		channel.on('close', (code: number | null, signal?: string | null) => {
-			if (typeof code !== 'number' || !Number.isInteger(code)) {
+			if (
+				typeof code !== 'number' ||
+				!Number.isSafeInteger(code) ||
+				code < 0 ||
+				code > 0xffffffff ||
+				(signal !== undefined &&
+					signal !== null &&
+					(typeof signal !== 'string' || Buffer.byteLength(signal, 'utf8') > 128))
+			) {
 				this.finish({ status: 'unknown', reason: 'disconnect' });
 			} else if (code === 0) {
 				this.finish({ status: 'completed', exitCode: 0, signal: signal ?? null });

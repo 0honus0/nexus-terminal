@@ -11,8 +11,11 @@ import {
 	AGENT_RUN_EVENT_DEFAULT_LIMIT,
 	AGENT_RUN_EVENT_MAX_LIMIT,
 	AGENT_RUN_MAX_PROMPT_BYTES,
+	AGENT_RUN_MAX_SELECTED_CONNECTIONS,
 	AGENT_RUN_MAX_JSON_BODY_BYTES,
 	AGENT_RUN_STEP_MAX_TEXT_BYTES,
+	AGENT_RUN_STEP_MAX_COUNT,
+	AGENT_RUN_STEP_FINISH_REASONS,
 } from './values.js';
 import { AGENT_MAX_JSON_BODY_BYTES } from '../values.js';
 import { AGENT_PROVIDER_MAX_MODEL_ID_BYTES } from '../providers/values.js';
@@ -32,10 +35,18 @@ import type {
 } from './http.js';
 
 export function readAgentCreateRunRequest(input: unknown): AgentCreateRunRequest {
-	const fields = agentRecord(input, ['prompt', 'model'], AGENT_RUN_MAX_JSON_BODY_BYTES);
+	const fields = agentRecord(input, ['prompt', 'model', 'connectionIds'], AGENT_RUN_MAX_JSON_BODY_BYTES);
+	if (!Array.isArray(fields.connectionIds) || fields.connectionIds.length > AGENT_RUN_MAX_SELECTED_CONNECTIONS) {
+		throw new InvalidAgentPayload();
+	}
+	const connectionIds = fields.connectionIds.map((id: unknown) => agentInteger(id, 1));
+	if (new Set(connectionIds).size !== connectionIds.length) {
+		throw new InvalidAgentPayload();
+	}
 	const model = agentRecord(fields.model, ['providerId', 'modelId', 'configurationVersion']);
 	return {
 		prompt: agentText(fields.prompt, AGENT_RUN_MAX_PROMPT_BYTES),
+		connectionIds,
 		model: {
 			providerId: readAgentId(model.providerId),
 			modelId: agentText(model.modelId, AGENT_PROVIDER_MAX_MODEL_ID_BYTES),
@@ -69,11 +80,14 @@ export function readAgentRunPath(input: unknown): AgentRunPath {
 
 export function readAgentRunStepPath(input: unknown): AgentRunStepPath {
 	const row = agentRecord(input, ['appId', 'runId', 'stepIndex']);
-	if (typeof row.stepIndex !== 'string' || row.stepIndex !== '1') {
-		// v8 has precisely one model step. Do not advertise future multi-step execution.
+	if (typeof row.stepIndex !== 'string' || !/^[1-9][0-9]*$/u.test(row.stepIndex)) {
 		throw new InvalidAgentPayload();
 	}
-	return { appId: readAgentId(row.appId), runId: readAgentId(row.runId), stepIndex: 1 };
+	return {
+		appId: readAgentId(row.appId),
+		runId: readAgentId(row.runId),
+		stepIndex: agentInteger(Number(row.stepIndex), 1, AGENT_RUN_STEP_MAX_COUNT),
+	};
 }
 
 function queryNumber(query: URLSearchParams, key: string, fallback: number, min: number, max: number): number {
@@ -227,8 +241,8 @@ export function readAgentRunStepResponse(input: unknown): AgentRunStepView {
 	}
 	if (
 		(state === 'reserved' && (row.textBytes !== 0 || row.inputTokens !== undefined)) ||
-		(state === 'completed' && row.textBytes === 0) ||
-		(state === 'completed' && row.finishReason !== 'stop') ||
+		(state === 'completed' && row.finishReason === 'stop' && row.textBytes === 0) ||
+		(state === 'completed' && !AGENT_RUN_STEP_FINISH_REASONS.some((reason) => reason === row.finishReason)) ||
 		(state !== 'completed' && row.finishReason !== undefined) ||
 		(state === 'failed' && row.failureCode !== 'DISPATCH_NOT_STARTED') ||
 		(state !== 'failed' && row.failureCode !== undefined) ||
@@ -238,12 +252,12 @@ export function readAgentRunStepResponse(input: unknown): AgentRunStepView {
 	}
 	return {
 		runId: readAgentId(row.runId),
-		stepIndex: agentInteger(row.stepIndex, 1, 1),
+		stepIndex: agentInteger(row.stepIndex, 1, AGENT_RUN_STEP_MAX_COUNT),
 		state,
 		revision: agentInteger(row.revision, 1),
 		runVersion: agentInteger(row.runVersion, 1),
 		textBytes: agentInteger(row.textBytes, 0, AGENT_RUN_STEP_MAX_TEXT_BYTES),
-		...(row.finishReason === undefined ? {} : { finishReason: 'stop' as const }),
+		...(row.finishReason === 'stop' || row.finishReason === 'tool_calls' ? { finishReason: row.finishReason } : {}),
 		...(row.inputTokens === undefined
 			? {}
 			: {
@@ -272,7 +286,7 @@ export function readAgentRunStepEvent(input: unknown): AgentRunStepEventView {
 	);
 	const identity = {
 		runId: readAgentId(row.runId),
-		stepIndex: agentInteger(row.stepIndex, 1, 1),
+		stepIndex: agentInteger(row.stepIndex, 1, AGENT_RUN_STEP_MAX_COUNT),
 		sequence: agentInteger(row.sequence, 1),
 		createdAt: agentInteger(row.createdAt),
 	};

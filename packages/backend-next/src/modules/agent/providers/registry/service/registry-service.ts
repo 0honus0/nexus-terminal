@@ -3,7 +3,7 @@ import { buildRegistrySnapshot, recoverRegistryState, resolveRegistryDefaults } 
 import type { CapabilityRegistryState } from '../model/registry-types.js';
 import type { RegistryStatus, RegistryResolution } from '../model/registry-types.js';
 import { RegistryRefreshFailure } from '../model/registry-types.js';
-import { AgentFailure } from '../../../agent-failure.js';
+import { AgentFailure, isAgentDrainFailure } from '../../../agent-failure.js';
 import { validateUserId } from '../../../agent-validation.js';
 import type { CapabilityRegistryModel } from '../model/registry-model.js';
 
@@ -116,7 +116,7 @@ export class CapabilityRegistryService {
 			// Observe both outcomes without creating an unhandled rejecting finally-chain.
 			void flight.promise.then(clear, (error: unknown) => {
 				// The last subscriber may already have left when a durable write fails.
-				if (!(error instanceof AgentFailure)) {
+				if (isAgentDrainFailure(error)) {
 					this.unexpectedFailure = { cause: error };
 				}
 				clear();

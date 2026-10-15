@@ -1,3 +1,5 @@
+export const ACCESS_PASSWORD_MAX_BYTES = 1024;
+
 /** Stable authentication error values consumed by both endpoints. */
 export type AccessHttpErrorCode =
 	| 'invalid_input'

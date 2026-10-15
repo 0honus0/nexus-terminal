@@ -11,8 +11,14 @@ export class RemoteFileModel {
 		private readonly resolver: TrustedSshTargetResolver,
 	) {}
 
-	async open(targetId: number, timeoutMs: number, signal: AbortSignal): Promise<FileResource> {
-		const opened = await this.machines.open({ targetId, timeoutMs, signal });
+	async open(
+		targetId: number,
+		timeoutMs: number,
+		signal: AbortSignal,
+		expectedFingerprint?: string,
+		validate?: () => Promise<void>,
+	): Promise<FileResource> {
+		const opened = await this.machines.open({ targetId, timeoutMs, signal, expectedFingerprint, validate });
 		let lease: MachineSftpLease | null = null;
 		try {
 			signal.throwIfAborted();

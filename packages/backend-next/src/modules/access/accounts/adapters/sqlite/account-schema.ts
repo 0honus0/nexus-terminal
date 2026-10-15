@@ -8,6 +8,7 @@ export async function initializeAccountSchema(tx: SqlExecutor): Promise<void> {
       password_hash TEXT NOT NULL,
       two_factor_enabled INTEGER NOT NULL DEFAULT 0 CHECK(two_factor_enabled IN (0,1)),
       passkey_required INTEGER NOT NULL DEFAULT 0 CHECK(passkey_required IN (0,1)),
+      totp_secret_encrypted TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );

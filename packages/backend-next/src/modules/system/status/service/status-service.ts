@@ -1,6 +1,7 @@
 import type { AccessPublicApi } from '../../../access/public.js';
 import type { SystemStatusModel } from '../model/status-model.js';
-import { SystemStatusFailure, type LocalSystemStatus } from '../model/status-types.js';
+import type { LocalSystemStatus } from '../model/status-types.js';
+import { SystemStatusFailure } from '../../system-failure.js';
 
 export class SystemStatusService {
 	private accepting = true;

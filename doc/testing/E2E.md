@@ -102,10 +102,10 @@ The current Docker smoke validates the unified Frontend/Backend/Guacd production
 
 以下脚本位于根 `tests/backend/`，只对独立的 `backend-next` 临时数据库和环回服务运行，不依赖正式生产 Backend 或部署入口。先执行：
 
-**清理时点：整个 Backend 重构完成后、切换到旧版 E2E 验证前。** 在这两个条件同时满足以前，所有临时专项测试继续保留、运行和更新；不因为阶段性通过、日常提交或协议阶段开始就提前删除。当前工作分支已经有相关测试提交，未来切换前再单独清理：
+**清理时点：整个 Backend 重构完成后、切换到旧版 E2E 验证前。** 在这两个条件同时满足以前，所有临时专项测试继续保留和维护；执行时机遵循当前实施方案 D2/D3，源码阶段不运行测试；不因为阶段性通过、日常提交或协议阶段开始就提前删除。当前工作分支已经有相关测试提交，未来切换前再单独清理：
 
 - 到约定时点再移除本轮新增的 `tests/backend/remote/backend-next-transport.integration.mjs`、`backend-next-ssh.integration.mjs`、`backend-next-frontend.integration.mjs`，并同步整理复现命令；这些文件**目前仍属于有效的临时验收资产**。
-- `tests/backend/storage/backend-next.integration.mjs`、`backend-next-phase2.integration.mjs` 属于**原有仓库测试文件**，不得整文件删除；**必须保留适配现行安全错误码（如 `reference_in_use`、`unavailable`）和全库当前 Schema（现为 v1–v4）的必要断言**。仅清除真正不再被旧 E2E 切换流程使用的临时验收辅助内容，不允许将上述适配回滚成已失效的旧断言。`backend-next-public-boundary.integration.mjs` 同样保留。
+- `tests/backend/storage/backend-next.integration.mjs`、`backend-next-phase2.integration.mjs` 属于**原有仓库测试文件**，不得整文件删除；**必须保留适配现行安全错误码（如 `reference_in_use`、`unavailable`）和全库当前 Schema（单一 v1 初始化，见实施方案 D14）的必要断言**。仅清除真正不再被旧 E2E 切换流程使用的临时验收辅助内容，不允许将上述适配回滚成已失效的旧断言。`backend-next-public-boundary.integration.mjs` 同样保留。
 - **保留本文中的验收结论、失败复现、修复依据与未通过项**。下面的命令在 Backend 重构结束前保持可执行；未来清理新增专项文件后，需同步更新此处入口。历史测试提交届时用独立清理提交或最终变更整理处理，不能仅在文档标注后声称已移除。
 
 ```bash
@@ -559,3 +559,7 @@ Run-channel durable replay regression consumes every current Protocol event thro
 Agent 自适应预算场景同时验证真实 durable proposal/rejection/model continuation：检查失败的原始错误码跨持久化传给模型，拒绝调用的 toolExecutions 保持零。
 
 移动端远程桌面回归覆盖直接触摸和触控板模式下画面点按不聚焦键盘输入框、兼容 click 路径不唤起键盘、显式键盘按钮显示与收起、文字按键发送、全屏下键盘控制，以及模式切换不重连和偏好持久化。
+
+### B7 源码快照与 B10 准备
+
+B7 完整源码/两轮审核及最终静态证据见 [B7 整批收口](后端重构待实机验证.md#b7-整批源码收口行为待-b10)。最新初始 v1 签名为 `backend-next-v1-initial-20261013-b7-governed-operations`；仅 `governed`，默认执行关闭、工具 grant 空。B10 启动前同步既有 backend-next fixtures 的安装参数、最新空库结构、Shared 联合及原 Run 执行设置，不加旧迁移兼容或放宽断言。新增 B7-F01–F13 与历史 B7 场景全部待验，特别覆盖配置消费者、文件/数据库跨阶段确认、通知排空/重启 unknown、真实事件生产者与关闭顺序。本批没有运行行为测试，正式前端仍由 F1 承接。

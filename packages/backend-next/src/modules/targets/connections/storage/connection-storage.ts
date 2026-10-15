@@ -1,5 +1,15 @@
 import type { ConnectionRoute, ConnectionType } from '@nexus-terminal/shared/targets/connections/values';
 
+export interface StoredCatalogEntry {
+	id: number;
+	version: number;
+	type: ConnectionType;
+	name: string;
+	host: string;
+	port: number;
+	username: string;
+}
+
 export interface ConnectionData {
 	name: string;
 	type: ConnectionType;
@@ -27,6 +37,7 @@ export type MutationResult =
 	{ status: 'updated'; value: StoredConnection } | { status: 'not_found' } | { status: 'version_conflict' };
 
 export interface ConnectionStorage {
+	listEntries(ids: number[]): Promise<StoredCatalogEntry[]>;
 	list(): Promise<StoredConnection[]>;
 	get(id: number): Promise<StoredConnection | null>;
 	create(data: ConnectionData): Promise<StoredConnection>;
@@ -58,4 +69,9 @@ export type ConnectionGraphValidator = (
 	connection: ConnectionData,
 	graph: StoredSshGraphSnapshot,
 	changedId: number,
+) => void;
+
+export type ConnectionSnapshotValidator = (
+	connections: readonly StoredConnection[],
+	graph: StoredSshGraphSnapshot,
 ) => void;

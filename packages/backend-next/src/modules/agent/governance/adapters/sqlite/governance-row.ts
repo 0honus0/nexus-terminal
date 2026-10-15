@@ -24,6 +24,7 @@ import type {
 	StoredPolicy,
 	StoredScope,
 	StoredPolicyOverrides,
+	StoredAppPolicyFacts,
 } from '../../storage/governance-storage.js';
 
 const invalid = (): never => {
@@ -109,7 +110,7 @@ export function scopeJson(value: StoredScope): string {
 	return JSON.stringify({ kind: 'targets', targets: { ssh: { mode: 'ids', ids: value.sshIds.map((id) => id) } } });
 }
 
-function readOverrides(value: unknown): StoredPolicyOverrides {
+export function readOverrides(value: unknown): StoredPolicyOverrides {
 	const row = record(parse(value));
 	exact(row, [...AGENT_EXECUTION_INTEGER_KEYS, 'contextCompactionMode', 'contextProfile']);
 	const result: StoredPolicyOverrides = {};
@@ -150,15 +151,17 @@ function readGrant(row: Record<string, unknown>): StoredGrant {
 export function readPolicy(
 	userId: number,
 	appId: string,
-	head: Record<string, unknown> | null,
+	head: Record<string, unknown>,
 	grants: readonly Record<string, unknown>[],
+	app: StoredAppPolicyFacts,
 ): StoredPolicy {
 	const policy: StoredPolicy = {
+		app,
 		userId,
 		appId,
-		revision: head === null ? 0 : integer(head.policy_revision),
-		executionVersion: head === null ? 0 : integer(head.execution_version),
-		overrides: head === null ? {} : readOverrides(head.execution_overrides_json),
+		revision: integer(head.policy_revision),
+		executionVersion: integer(head.execution_version),
+		overrides: readOverrides(head.execution_overrides_json),
 		grants: grants.map(readGrant),
 	};
 	return policy;
@@ -222,7 +225,13 @@ export function readApproval(row: Record<string, unknown>): StoredApproval {
 	) {
 		return invalid();
 	}
+	const capability = AGENT_CAPABILITIES.find((item) => item === row.capability);
+	if (capability === undefined) {
+		return invalid();
+	}
 	const result: StoredApproval = {
+		capability,
+		targetVersion: row.target_version === null ? null : integer(row.target_version, 1),
 		id: id(row.id),
 		userId: integer(row.user_id, 1),
 		appId: id(row.app_id),
@@ -243,6 +252,9 @@ export function readApproval(row: Record<string, unknown>): StoredApproval {
 		inspection: readInspection(row.inspection_json),
 	};
 
+	if ((result.targetVersion === null) !== (result.inspection.targetConnectionId === null)) {
+		return invalid();
+	}
 	const decided = result.status === 'approved' || result.status === 'denied';
 	if (
 		result.expiresAt <= result.requestedAt ||
@@ -270,6 +282,8 @@ export function readApprovalSnapshot(raw: unknown): StoredApproval {
 		'run_id',
 		'tool_call_id',
 		'operation_hash',
+		'capability',
+		'target_version',
 		'kind',
 		'status',
 		'policy_revision',

@@ -133,6 +133,7 @@ export interface FactorTotpSetupIssue {
 }
 
 export interface PasskeyAuthenticationOptionsCommand {
+	origin: string;
 	accountId: number | null;
 	previous: string | null;
 	source: string;
@@ -162,4 +163,18 @@ export interface CompletePartialLogin {
 	source: string;
 	enforceFailurePolicy: boolean;
 	expiresAt: number;
+}
+
+export interface FactorPasskeySite {
+	origin: string;
+	rpId: string;
+}
+
+export interface BeginPasskeySetup {
+	accountId: number;
+	username: string;
+	session: string;
+	previous: string | null;
+	policy: FactorChallengePolicy;
+	origin: string;
 }

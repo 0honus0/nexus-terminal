@@ -1,7 +1,7 @@
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type { ConfirmHostKeyRecord, HostKeyRecord, HostKeyStorage } from '../../storage/host-key-storage.js';
 
-function decode(row: Record<string, unknown>): HostKeyRecord {
+export function readHostKeyRow(row: Record<string, unknown>): HostKeyRecord {
 	if (
 		typeof row.host !== 'string' ||
 		typeof row.fingerprint !== 'string' ||
@@ -28,7 +28,7 @@ export class SqliteHostKeyStorage implements HostKeyStorage {
 		const rows = await this.db.all(
 			'SELECT host,port,fingerprint,confirmed_at FROM target_host_keys ORDER BY host,port',
 		);
-		return rows.map(decode);
+		return rows.map(readHostKeyRow);
 	}
 
 	async confirm(command: ConfirmHostKeyRecord): Promise<HostKeyRecord> {
@@ -47,7 +47,7 @@ export class SqliteHostKeyStorage implements HostKeyStorage {
 			if (!row) {
 				throw new Error('Missing confirmed host key');
 			}
-			return decode(row);
+			return readHostKeyRow(row);
 		});
 	}
 

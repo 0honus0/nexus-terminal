@@ -1,6 +1,5 @@
 import type { SqlExecutor } from './sql-types.js';
 import { SqliteTransactionAdapter } from './adapters/transaction-sql.js';
-import { SqliteSchemaAdapter } from './adapters/schema-sql.js';
 import { Worker } from 'node:worker_threads';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { realpathSync, mkdirSync } from 'node:fs';
@@ -23,6 +22,11 @@ interface PendingCall {
 
 type TransactionOutcome<T> = { status: 'ok'; value: T } | { status: 'error'; error: unknown };
 
+interface TransactionAdmissionScope {
+	active: boolean;
+	admissions: readonly ((tx: SqlExecutor) => Promise<void>)[];
+}
+
 const openDatabasePaths = new Set<string>();
 
 export class SqliteRuntime implements SqlExecutor {
@@ -34,6 +38,7 @@ export class SqliteRuntime implements SqlExecutor {
 	private unavailable: SqliteFailure | null = null;
 	private closed = false;
 	private readonly transactionScope = new AsyncLocalStorage<boolean>();
+	private readonly admissionScope = new AsyncLocalStorage<TransactionAdmissionScope>();
 	private readonly directExecutor: SqlExecutor = {
 		exec: (sql) => this.call('exec', sql),
 
@@ -44,7 +49,6 @@ export class SqliteRuntime implements SqlExecutor {
 		run: (sql, params = []) => this.call('run', sql, params),
 	};
 	private readonly transactions = new SqliteTransactionAdapter(this.directExecutor);
-	private readonly schema = new SqliteSchemaAdapter(this.directExecutor);
 
 	private constructor(readonly path: string) {
 		this.worker = new Worker(new URL('./adapters/worker.js', import.meta.url), { workerData: { path } });
@@ -101,6 +105,11 @@ export class SqliteRuntime implements SqlExecutor {
 			openDatabasePaths.delete(canonical);
 			throw error;
 		}
+	}
+
+	/** Isolated production preflight; never aliases an on-disk application database. */
+	static openMemory(): SqliteRuntime {
+		return new SqliteRuntime(':memory:');
 	}
 
 	private markUnavailable(error: SqliteFailure): void {
@@ -174,69 +183,79 @@ export class SqliteRuntime implements SqlExecutor {
 	}
 
 	all(sql: string, params: SqlParameter[] = []): Promise<SqlRow[]> {
-		return this.enqueue(() => this.call('all', sql, params));
+		return this.readOrWrite(
+			(tx) => tx.all(sql, params),
+			() => this.call('all', sql, params),
+		);
 	}
 
 	one(sql: string, params: SqlParameter[] = []): Promise<SqlRow | null> {
-		return this.enqueue(() => this.call('one', sql, params));
+		return this.readOrWrite(
+			(tx) => tx.one(sql, params),
+			() => this.call('one', sql, params),
+		);
 	}
 
 	run(sql: string, params: SqlParameter[] = []): Promise<SqlRunResult> {
-		return this.enqueue(() => this.call('run', sql, params));
+		return this.readOrWrite(
+			(tx) => tx.run(sql, params),
+			() => this.call('run', sql, params),
+		);
 	}
 
 	exec(sql: string): Promise<void> {
-		return this.enqueue(() => this.call('exec', sql));
+		return this.readOrWrite(
+			(tx) => tx.exec(sql),
+			() => this.call('exec', sql),
+		);
+	}
+
+	/** Enqueued operations capture admission before waiting; checks run inside their actual transaction.
+	 * Completed scopes do not become the authority of separately owned background work.
+	 */
+	async withTransactionAdmission<T>(admit: (tx: SqlExecutor) => Promise<void>, work: () => Promise<T>): Promise<T> {
+		if (this.transactionScope.getStore()) {
+			throw new SqliteFailure('transaction');
+		}
+		const parent = this.admissionScope.getStore();
+		const scope: TransactionAdmissionScope = {
+			active: true,
+			admissions: [...(parent?.active ? parent.admissions : []), admit],
+		};
+		try {
+			return await this.admissionScope.run(scope, work);
+		} finally {
+			scope.active = false;
+		}
+	}
+
+	private admissions(): readonly ((tx: SqlExecutor) => Promise<void>)[] {
+		const scope = this.admissionScope.getStore();
+		return scope?.active ? scope.admissions : [];
+	}
+
+	/** Transfer a separately owned task out of the caller's temporary admission scope. */
+	withoutTransactionAdmission<T>(work: () => Promise<T>): Promise<T> {
+		if (this.transactionScope.getStore()) {
+			throw new SqliteFailure('transaction');
+		}
+		return this.admissionScope.run({ active: false, admissions: [] }, () => Promise.resolve().then(work));
+	}
+
+	private readOrWrite<T>(work: (tx: SqlExecutor) => Promise<T>, direct: () => Promise<T>): Promise<T> {
+		const admissions = this.admissions();
+		return this.enqueue(admissions.length ? () => this.runTransaction(work, admissions) : direct);
 	}
 
 	transaction<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> {
-		return this.enqueue(() => this.runTransaction(work));
+		const admissions = this.admissions();
+		return this.enqueue(() => this.runTransaction(work, admissions));
 	}
 
-	/**
-	 * One-off signed schema migration for a referenced parent table. The whole
-	 * OFF → BEGIN/DDL/FK-check/version-marker/COMMIT → ON sequence owns the
-	 * runtime queue; PRAGMA foreign_keys cannot be changed inside BEGIN.
-	 * This must never be exposed as a normal module mutation facility.
-	 */
-	rebuildReferencedTable<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> {
-		return this.enqueue(async () => {
-			let outcome: TransactionOutcome<T>;
-			try {
-				await this.schema.suspendForeignKeys();
-				const value = await this.runTransaction(async (tx) => {
-					const result = await work(tx);
-					await new SqliteSchemaAdapter(tx).verifyForeignKeys();
-					return result;
-				});
-				outcome = { status: 'ok', value };
-			} catch (error) {
-				outcome = { status: 'error', error };
-			}
-			// An uncertain commit already poisons the connection. Otherwise restore
-			// enforcement even if suspending it failed after the PRAGMA was applied.
-			if (!this.unavailable) {
-				try {
-					await this.schema.restoreForeignKeys();
-				} catch (cause) {
-					const failure = new SqliteFailure('transaction', null, {
-						cause:
-							outcome.status === 'error'
-								? new AggregateError([outcome.error, cause], 'Migration and FK restore failed')
-								: cause,
-					});
-					this.markUnavailable(failure);
-					throw failure;
-				}
-			}
-			if (outcome.status === 'error') {
-				throw outcome.error;
-			}
-			return outcome.value;
-		});
-	}
-
-	private async runTransaction<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> {
+	private async runTransaction<T>(
+		work: (tx: SqlExecutor) => Promise<T>,
+		admissions: readonly ((tx: SqlExecutor) => Promise<void>)[],
+	): Promise<T> {
 		await this.transactions.begin();
 		let active = true;
 		const operations = new Set<Promise<unknown>>();
@@ -269,7 +288,16 @@ export class SqliteRuntime implements SqlExecutor {
 		};
 		let outcome: TransactionOutcome<T>;
 		try {
-			const value = await this.transactionScope.run(true, () => work(tx));
+			const value = await this.transactionScope.run(true, async () => {
+				for (const admit of admissions) {
+					await admit(tx);
+				}
+				const value = await work(tx);
+				for (const admit of admissions) {
+					await admit(tx);
+				}
+				return value;
+			});
 			outcome = { status: 'ok', value };
 		} catch (error) {
 			outcome = { status: 'error', error };

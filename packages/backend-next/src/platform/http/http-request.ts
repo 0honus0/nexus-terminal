@@ -1,3 +1,4 @@
+import { readBodyBytes } from './http-body.js';
 import { DEFAULT_JSON_BODY_BYTES } from './http-limits.js';
 import proxyaddr from 'proxy-addr';
 import type { HttpRouter } from './http-router.js';
@@ -26,26 +27,14 @@ export function readRequestCookie(request: IncomingMessage, name: string): strin
 	return values[0].slice(name.length + 1);
 }
 
-export async function readJson(request: IncomingMessage, maxBodyBytes: number): Promise<unknown> {
+export async function readJson(request: IncomingMessage, maxBodyBytes: number, signal?: AbortSignal): Promise<unknown> {
 	const contentType = firstHeader(request, 'content-type');
 	if (!contentType || !/^application\/json(?:\s*;\s*charset=utf-8)?$/iu.test(contentType.trim())) {
 		throw new HttpInputFailure(415, 'unsupported_media_type');
 	}
-	if (Number(request.headers['content-length'] ?? 0) > maxBodyBytes) {
-		throw new HttpInputFailure(413, 'body_too_large');
-	}
-	let received = 0;
-	const chunks: Buffer[] = [];
-	for await (const raw of request) {
-		const chunk = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
-		received += chunk.length;
-		if (received > maxBodyBytes) {
-			throw new HttpInputFailure(413, 'body_too_large');
-		}
-		chunks.push(chunk);
-	}
+	const bytes = await readBodyBytes(request, maxBodyBytes, signal ?? new AbortController().signal);
 	try {
-		const source = new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks));
+		const source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
 		return JSON.parse(source) as unknown;
 	} catch {
 		throw new HttpInputFailure(400, 'invalid_json');
@@ -83,8 +72,7 @@ export function sendJson(
 function requestHost(request: IncomingMessage, trustedPeer: boolean): string | null {
 	const forwardedHost = trustedPeer ? firstHeader(request, 'x-forwarded-host') : null;
 	if (forwardedHost) {
-		// This deployment accepts exactly one external origin. Multiple proxy
-		// assertions are ambiguous; do not guess which hop supplied the truth.
+		// Multiple proxy assertions are ambiguous; do not guess which hop supplied the truth.
 		return forwardedHost.includes(',') ? null : forwardedHost.trim();
 	}
 	return firstHeader(request, 'host');
@@ -98,14 +86,15 @@ function requestProtocol(request: IncomingMessage, trustedPeer: boolean): string
 	return 'encrypted' in request.socket && request.socket.encrypted === true ? 'https' : 'http';
 }
 
-export function validateOrigin(request: IncomingMessage, expectedOrigin: URL, trustedPeer: boolean): void {
+export function validateOrigin(request: IncomingMessage, origins: readonly URL[], trustedPeer: boolean): URL {
 	const host = requestHost(request, trustedPeer);
 	const protocol = requestProtocol(request, trustedPeer);
-	if (host !== expectedOrigin.host || protocol !== expectedOrigin.protocol.slice(0, -1)) {
+	const expectedOrigin = origins.find((origin) => host === origin.host && protocol === origin.protocol.slice(0, -1));
+	if (!expectedOrigin) {
 		throw new HttpInputFailure(403, 'invalid_host');
 	}
 	if (request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS') {
-		return;
+		return expectedOrigin;
 	}
 	const site = firstHeader(request, 'sec-fetch-site');
 	const rawOrigin = firstHeader(request, 'origin');
@@ -126,10 +115,11 @@ export function validateOrigin(request: IncomingMessage, expectedOrigin: URL, tr
 		// cookie-bearing mutation provenance.
 		throw new HttpInputFailure(403, 'csrf_rejected');
 	}
+	return expectedOrigin;
 }
 
 interface HttpRequestOptions {
-	origin: URL;
+	origins: readonly URL[];
 	trust(address: string, index: number): boolean;
 	router: HttpRouter;
 	admitUnmatched?: (sourceIp: string) => Promise<boolean>;
@@ -142,9 +132,9 @@ export function createHttpRequestHandler(
 		try {
 			const directIp = request.socket.remoteAddress ?? '';
 			const trustedPeer = options.trust(directIp, 0);
-			validateOrigin(request, options.origin, trustedPeer);
-			const url = new URL(request.url ?? '/', options.origin);
-			if (url.origin !== options.origin.origin) {
+			const origin = validateOrigin(request, options.origins, trustedPeer);
+			const url = new URL(request.url ?? '/', origin);
+			if (url.origin !== origin.origin) {
 				throw new HttpInputFailure(400, 'invalid_path');
 			}
 			const method = request.method ?? '';
@@ -168,6 +158,7 @@ export function createHttpRequestHandler(
 			}
 			const { route, params } = matched;
 			const context: HttpRouteContext = {
+				origin: origin.origin,
 				method,
 				path: url.pathname,
 				query: new URLSearchParams(url.searchParams),
@@ -176,7 +167,7 @@ export function createHttpRequestHandler(
 				response,
 				sourceIp: proxyaddr(request, options.trust),
 
-				json: () => readJson(request, route.maxBodyBytes ?? DEFAULT_JSON_BODY_BYTES),
+				json: (signal) => readJson(request, route.maxBodyBytes ?? DEFAULT_JSON_BODY_BYTES, signal),
 
 				cookie: (name) => readRequestCookie(request, name),
 

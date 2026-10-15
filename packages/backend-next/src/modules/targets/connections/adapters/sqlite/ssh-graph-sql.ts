@@ -1,4 +1,4 @@
-import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
+import type { SqlReader } from '../../../../../platform/storage/sqlite/sql-types.js';
 import { CONNECTION_TYPES, CONNECTION_ROUTES } from '@nexus-terminal/shared/targets/connections/values';
 import type { ConnectionType, ConnectionRoute } from '@nexus-terminal/shared/targets/connections/values';
 import type { StoredSshGraphSnapshot } from '../../storage/connection-storage.js';
@@ -28,7 +28,7 @@ function connectionRoute(value: unknown): ConnectionRoute {
 	throw new Error('Corrupt SSH graph route');
 }
 
-export async function readSshGraph(tx: SqlExecutor): Promise<StoredSshGraphSnapshot> {
+export async function readSshGraph(tx: SqlReader): Promise<StoredSshGraphSnapshot> {
 	const records = await tx.all('SELECT id,type,route FROM connections');
 	const edges = await tx.all(
 		'SELECT connection_id,position,jump_connection_id FROM connection_jumps ORDER BY connection_id,position',

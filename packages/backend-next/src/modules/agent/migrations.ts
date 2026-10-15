@@ -1,37 +1,46 @@
+import { initializePluginIntents } from './plugins/adapters/sqlite/plugin-intent-sql.js';
+import { initializeAgentPlugins } from './plugins/adapters/sqlite/plugin-schema.js';
+import { initializeBrowserConfiguration } from './integrations/adapters/sqlite/browser-sql.js';
+import { initializeAgentIntegrations } from './integrations/adapters/sqlite/integration-schema.js';
+import { initializeAgentExecution } from './execution/adapters/sqlite/execution-schema.js';
+import { initializeContextCheckpoints } from './context/adapters/sqlite/checkpoint-sql.js';
+import { initializeAgentArtifacts } from './artifacts/adapters/sqlite/artifact-schema.js';
+import { initializeAgentMemory } from './memory/adapters/sqlite/memory-schema.js';
+import { initializeToolProjects } from './tools/adapters/sqlite/tool-project-schema.js';
+import { initializeContextSnapshots } from './context/adapters/sqlite/context-schema.js';
+import { initializeRunCollaboration } from './runs/adapters/sqlite/run-collaboration-schema.js';
+import { initializeToolJobs } from './tools/adapters/sqlite/tool-job-schema.js';
 import type { SqlExecutor } from '../../platform/storage/sqlite/sql-types.js';
+import { initializeAppDeclarations } from './scope/adapters/sqlite/app-schema.js';
 import { initializeAgentScopeSchema } from './scope/adapters/sqlite/scope-schema.js';
-import {
-	initializeAgentRunSchema,
-	migrateAgentRunSteps,
-	migrateAgentRunLifecycle,
-} from './runs/adapters/sqlite/run-schema.js';
-import { migrateAgentProviders } from './providers/adapters/sqlite/provider-schema.js';
-import { migrateAgentGovernance as addGovernanceSchema } from './governance/adapters/sqlite/governance-schema.js';
-import { migrateModelRegistry } from './providers/registry/adapters/sqlite/registry-sql.js';
+import { initializeAgentRunSchema, initializeAgentRunSteps } from './runs/adapters/sqlite/run-schema.js';
+import { initializeAgentProviders } from './providers/adapters/sqlite/provider-schema.js';
+import { initializeModelRegistry } from './providers/registry/adapters/sqlite/registry-sql.js';
+import { initializeAgentGovernance } from './governance/adapters/sqlite/governance-schema.js';
+import { initializeTargetDenylist } from './governance/adapters/sqlite/denylist-schema.js';
+import { initializeRunTools } from './runs/adapters/sqlite/run-tool-schema.js';
 
-/** v3: install scope before Runs; the application migration owns the transaction. */
+/** Module installation order; SQL remains in the owning adapters. */
 export async function initializeAgentSchema(tx: SqlExecutor): Promise<void> {
+	await initializeAppDeclarations(tx);
 	await initializeAgentScopeSchema(tx);
 	await initializeAgentRunSchema(tx);
-}
-
-/** v7 only: existing v1–v6 signatures and schema are not rewritten. */
-export async function migrateAgentProviderSchema(tx: SqlExecutor): Promise<void> {
-	await migrateAgentProviders(tx);
-	await migrateModelRegistry(tx);
-}
-
-/** v8: only additive Run-owned journal tables; existing migration signatures remain unchanged. */
-export async function migrateAgentExecutionJournal(tx: SqlExecutor): Promise<void> {
-	await migrateAgentRunSteps(tx);
-}
-
-/** v9 changes the referenced Run parent in-place through a dedicated FK-safe migration transaction. */
-export async function migrateAgentRootRunLifecycle(tx: SqlExecutor): Promise<void> {
-	await migrateAgentRunLifecycle(tx);
-}
-
-/** v10 additive governance records; historical migration signatures are immutable. */
-export async function migrateAgentGovernance(tx: SqlExecutor): Promise<void> {
-	await addGovernanceSchema(tx);
+	await initializeAgentProviders(tx);
+	await initializeModelRegistry(tx);
+	await initializeAgentRunSteps(tx);
+	await initializeContextSnapshots(tx);
+	await initializeRunTools(tx);
+	await initializeContextCheckpoints(tx);
+	await initializeRunCollaboration(tx);
+	await initializeToolJobs(tx);
+	await initializeToolProjects(tx);
+	await initializeAgentGovernance(tx);
+	await initializeTargetDenylist(tx);
+	await initializeAgentMemory(tx);
+	await initializeAgentArtifacts(tx);
+	await initializeAgentExecution(tx);
+	await initializeAgentIntegrations(tx);
+	await initializeBrowserConfiguration(tx);
+	await initializeAgentPlugins(tx);
+	await initializePluginIntents(tx);
 }

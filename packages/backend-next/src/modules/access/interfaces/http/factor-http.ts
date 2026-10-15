@@ -326,6 +326,7 @@ export function createFactorRoutes(factors: FactorService, secure: boolean): Htt
 							factors.registrationOptions(
 								context.cookie(ACCESS_SESSION_COOKIE_NAME),
 								context.cookie(ACCESS_CHALLENGE_COOKIE_NAME),
+								context.origin,
 							),
 						(result) =>
 							context.send(200, toRegistrationOptions(result.options), {
@@ -374,6 +375,7 @@ export function createFactorRoutes(factors: FactorService, secure: boolean): Htt
 								username,
 								context.cookie(ACCESS_CHALLENGE_COOKIE_NAME),
 								context.sourceIp,
+								context.origin,
 							),
 						(result) =>
 							context.send(200, toAuthenticationOptions(result.options), {

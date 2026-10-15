@@ -1,5 +1,5 @@
 import { TargetFailure } from '../../../target-failure.js';
-import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
+import type { SqlExecutor, SqlReader } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type {
 	ConnectionData,
@@ -7,6 +7,7 @@ import type {
 	ConnectionStorage,
 	MutationResult,
 	ConnectionGraphValidator,
+	StoredCatalogEntry,
 } from '../../storage/connection-storage.js';
 import { readSshGraph } from './ssh-graph-sql.js';
 
@@ -76,7 +77,7 @@ function decodeNullableString(value: unknown): string | null {
 	return decodeString(value);
 }
 
-async function readConnection(tx: SqlExecutor, id: number): Promise<StoredConnection | null> {
+export async function readConnection(tx: SqlReader, id: number): Promise<StoredConnection | null> {
 	const row = await tx.one('SELECT * FROM connections WHERE id=?', [id]);
 	if (!row) {
 		return null;
@@ -176,6 +177,44 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 		private readonly db: SqliteRuntime,
 		private readonly validateGraph: ConnectionGraphValidator,
 	) {}
+
+	async listEntries(ids: number[]): Promise<StoredCatalogEntry[]> {
+		if (
+			ids.length > 200 ||
+			new Set(ids).size !== ids.length ||
+			ids.some((id) => !Number.isSafeInteger(id) || id < 1)
+		) {
+			throw new Error('Invalid directory query');
+		}
+		if (ids.length === 0) {
+			return [];
+		}
+		const rows = await this.db.all(
+			`SELECT id,version,type,name,host,port,username FROM connections WHERE id IN (${ids.map(() => '?').join(',')}) ORDER BY id`,
+			ids,
+		);
+		return rows.map((row) => {
+			const type = row.type;
+			if (type !== 'SSH' && type !== 'RDP' && type !== 'VNC') {
+				throw new Error('Corrupt directory connection type');
+			}
+			const id = decodeInteger(row.id);
+			const version = decodeInteger(row.version);
+			const port = decodeInteger(row.port);
+			if (id < 1 || version < 1 || port < 1 || port > 65535) {
+				throw new Error('Corrupt directory connection bounds');
+			}
+			return {
+				id,
+				version,
+				type,
+				name: decodeString(row.name),
+				host: decodeString(row.host),
+				port,
+				username: decodeString(row.username),
+			};
+		});
+	}
 
 	list(): Promise<StoredConnection[]> {
 		return this.db.transaction(async (tx) => {

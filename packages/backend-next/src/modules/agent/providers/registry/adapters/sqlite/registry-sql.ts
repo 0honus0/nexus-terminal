@@ -5,7 +5,7 @@ import type { CapabilityRegistryStorage } from '../../storage/registry-storage.j
 import { decodeRegistrySnapshot } from './registry-row.js';
 import type { StoredCapabilityRegistryRead, StoredCapabilityRegistryState } from '../../storage/registry-storage.js';
 
-export async function migrateModelRegistry(tx: SqlExecutor): Promise<void> {
+export async function initializeModelRegistry(tx: SqlExecutor): Promise<void> {
 	await tx.exec(`
 		CREATE TABLE agent_model_capability_registry (
 			id INTEGER PRIMARY KEY CHECK (id=1),

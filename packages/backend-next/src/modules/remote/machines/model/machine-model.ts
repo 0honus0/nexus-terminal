@@ -66,6 +66,7 @@ export class RemoteMachineModel {
 
 	async open(request: RemoteMachineOpenRequest): Promise<OpenedRemoteMachine> {
 		const deadline = Date.now() + request.timeoutMs;
+		await request.validate?.();
 		const resolvedRequest: TrustedSshResolveRequest = { targetId: request.targetId };
 		if (request.expectedFingerprint !== undefined) {
 			resolvedRequest.expectedFingerprint = request.expectedFingerprint;
@@ -89,6 +90,7 @@ export class RemoteMachineModel {
 		};
 
 		try {
+			await request.validate?.();
 			const remaining = deadline - Date.now();
 			if (remaining < 1) {
 				throw new Error('Remote machine opening deadline exceeded');

@@ -88,7 +88,7 @@ export interface FrozenModelInput {
 	protocol: AgentProviderProtocol;
 	capabilities: ProviderModelInput;
 	/** Unresolved B6 tool, approval and B7 policy cannot be interpreted as approval. */
-	executionPolicy: 'awaiting_b6_b7';
+	executionPolicy: 'governed';
 }
 
 export type ProviderTestResult =
@@ -147,6 +147,7 @@ export interface ProviderProbeResult {
 }
 
 export interface AvailableModel {
+	protocol: AgentProviderProtocol;
 	providerId: string;
 	providerDisplayName: string;
 	configurationVersion: number;

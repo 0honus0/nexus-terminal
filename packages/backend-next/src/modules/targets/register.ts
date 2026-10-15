@@ -1,3 +1,5 @@
+import { registerTargetsSnapshot } from './snapshots/adapters/sqlite/snapshot-registration.js';
+import type { SnapshotRegistration } from '../../platform/storage/sqlite/snapshot-types.js';
 import { importConnections } from './import/connection-import-batch.js';
 import type { SqliteRuntime } from '../../platform/storage/sqlite/sqlite-runtime.js';
 import type { SecretBox } from '../../platform/security/secret-box.js';
@@ -8,7 +10,11 @@ import {
 import { SqliteConnectionCredentialStorage } from './connections/adapters/sqlite/connection-credential-sql.js';
 import { ConnectionCredentialModel } from './connections/model/connection-credential-model.js';
 import { ConnectionCredentialService } from './connections/service/connection-credential-service.js';
-import { ConnectionModel, validateStoredConnectionGraph } from './connections/model/connection-model.js';
+import {
+	ConnectionModel,
+	validateStoredConnectionGraph,
+	validateStoredConnectionSnapshot,
+} from './connections/model/connection-model.js';
 import { ConnectionService } from './connections/service/connection-service.js';
 import { SqliteDesktopTargetAdapter } from './connections/adapters/sqlite/desktop-target-sql.js';
 import { DesktopTargetModel } from './connections/model/desktop-target-model.js';
@@ -127,6 +133,19 @@ export function registerTargets({ sqlite, secrets }: TargetsRegistrationOptions)
 
 		list: () => targetsBoundary(async () => (await service.list()).map(toConnectionView)),
 
+		listEntries: (ids) =>
+			targetsBoundary(async () =>
+				(await service.listEntries(ids.map((id) => id))).map((entry) => ({
+					id: entry.id,
+					version: entry.version,
+					type: entry.type,
+					name: entry.name,
+					host: entry.host,
+					port: entry.port,
+					username: entry.username,
+				})),
+			),
+
 		get: (id) =>
 			targetsBoundary(async () => {
 				const record = await service.get(id);
@@ -231,4 +250,9 @@ export function registerTargets({ sqlite, secrets }: TargetsRegistrationOptions)
 
 		routes: (access) => createTargetsRoutes(access, publicApi),
 	};
+}
+
+/** Installation-only fixed storage coverage; no business records leave the adapter. */
+export function registerTargetsBackup(secrets: SecretBox | null): SnapshotRegistration {
+	return registerTargetsSnapshot(secrets, validateStoredConnectionSnapshot);
 }

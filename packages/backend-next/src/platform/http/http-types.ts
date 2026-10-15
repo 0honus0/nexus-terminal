@@ -2,6 +2,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type WebSocket from 'ws';
 
 export interface HttpRouteContext {
+	/** Canonical external origin selected from trusted installation configuration. */
+	readonly origin: string;
 	readonly method: string;
 	readonly path: string;
 	readonly query: URLSearchParams;
@@ -9,7 +11,7 @@ export interface HttpRouteContext {
 	readonly request: IncomingMessage;
 	readonly response: ServerResponse;
 	readonly sourceIp: string;
-	json(): Promise<unknown>;
+	json(signal?: AbortSignal): Promise<unknown>;
 	cookie(name: string): string | null;
 	send(status: number, body: unknown, headers?: Readonly<Record<string, string | string[]>>): void;
 }
@@ -19,21 +21,27 @@ export interface HttpRoute {
 	readonly path: string;
 	/** Transport-only JSON body budget. Default 16 KiB; large routes must opt in explicitly. */
 	readonly maxBodyBytes?: number;
-	/** Optional route-owned bound for opaque URL path parameters; default 64 bytes. */
+	/** Route-owned decoded UTF-8 path parameter budget; default 64 bytes. */
 	readonly maxPathParameterBytes?: number;
+	/** Opaque allows ASCII dots/colons; segment allows text without separators/controls. Routes validate meaning. */
+	readonly pathParameterAlphabet?: 'identifier' | 'opaque' | 'segment';
 	handle(context: HttpRouteContext): Promise<void>;
 }
 
-export interface HttpServerOptions {
+export interface HttpBindings {
+	allowedOrigins?: readonly string[];
+	/** Optional application admission for paths without an installed route. */
+	admitUnmatched?: (sourceIp: string) => Promise<boolean>;
+	routes: readonly HttpRoute[];
+	webSockets?: readonly HttpWebSocketRoute[];
+}
+
+export interface HttpServerOptions extends HttpBindings {
 	/** Explicit external URL prevents Host/X-Forwarded-Host origin spoofing. */
 	publicOrigin: string;
 	bindHost: string;
 	port: number;
 	trustedProxies: readonly string[];
-	/** Optional application admission for paths without an installed route. */
-	admitUnmatched?: (sourceIp: string) => Promise<boolean>;
-	routes: readonly HttpRoute[];
-	webSockets?: readonly HttpWebSocketRoute[];
 }
 
 /** Technology-only channel. Message parsing, authorization and sessions belong to modules. */
@@ -65,5 +73,17 @@ export interface HttpWebSocketRoute {
 
 export interface HttpListener {
 	readonly address: string;
+	/** Stops admission immediately. Only an already admitted owner request may be preserved. */
+	suspend(owner?: IncomingMessage): HttpSuspension;
 	close(): Promise<void>;
+}
+
+/** Transport maintenance does not quiesce business owners or decide whether restored data is valid. */
+export interface HttpSuspension {
+	/** Waits for other requests and all old WS tasks; business owners must also be closed by the caller. */
+	drain(): Promise<void>;
+	/** Replace all captured HTTP/WS/origin/admission consumers only after a confirmed drain. */
+	replace(bindings: HttpBindings): void;
+	/** Requires fresh bindings; old closed module consumers cannot be resumed. */
+	resume(): void;
 }

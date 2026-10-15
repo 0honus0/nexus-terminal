@@ -1,4 +1,11 @@
 import {
+	AGENT_DENYLIST_MAX_TARGETS,
+	AGENT_DENYLIST_MAX_REASON_BYTES,
+	AGENT_DENYLIST_MAX_REASON_CODE_POINTS,
+} from './values.js';
+import type { AgentTargetDenylistView } from './model.js';
+import type { AgentTargetDenylistReplaceRequest } from './http.js';
+import {
 	agentInteger,
 	agentRecord,
 	agentText,
@@ -273,8 +280,6 @@ export function readAgentExecutionPolicyView(value: unknown): AgentExecutionPoli
 	}
 	const complete = {
 		maxModelRequests: agentInteger(effective.maxModelRequests, 1),
-		maxAutoModelRequests: agentInteger(effective.maxAutoModelRequests, 1),
-		maxAutoActiveExecutionSeconds: agentInteger(effective.maxAutoActiveExecutionSeconds, 1),
 		maxActiveExecutionSeconds: agentInteger(effective.maxActiveExecutionSeconds, 1),
 		toolTimeoutSeconds: agentInteger(effective.toolTimeoutSeconds, 1),
 		maxToolOutputBytes: agentInteger(effective.maxToolOutputBytes, 1),
@@ -394,4 +399,44 @@ export function readAgentApprovalList(value: unknown): AgentApprovalView[] {
 
 export function readAgentApprovalCommandHeaders(raw: unknown): AgentApprovalCommandHeaders {
 	return { operationKey: readAgentId(raw) };
+}
+
+function denylistReason(input: unknown): string {
+	const reason = agentText(input, AGENT_DENYLIST_MAX_REASON_BYTES).trim();
+	if ([...reason].length > AGENT_DENYLIST_MAX_REASON_CODE_POINTS) {
+		throw new InvalidAgentPayload();
+	}
+	return reason;
+}
+
+export function readAgentTargetDenylistReplaceRequest(input: unknown): AgentTargetDenylistReplaceRequest {
+	const row = agentRecord(input, ['connectionIds', 'reason', 'expectedRevision'], AGENT_GOVERNANCE_MAX_BODY_BYTES);
+	if (!Array.isArray(row.connectionIds) || row.connectionIds.length > AGENT_DENYLIST_MAX_TARGETS) {
+		throw new InvalidAgentPayload();
+	}
+	return {
+		connectionIds: [...new Set(row.connectionIds.map((id) => agentInteger(id, 1)))].sort((a, b) => a - b),
+		reason: denylistReason(row.reason),
+		expectedRevision: agentInteger(row.expectedRevision, 1),
+	};
+}
+
+export function readAgentTargetDenylistResponse(input: unknown): AgentTargetDenylistView {
+	const row = agentRecord(input, ['revision', 'entries'], AGENT_GOVERNANCE_MAX_RESPONSE_BYTES);
+	if (!Array.isArray(row.entries) || row.entries.length > AGENT_DENYLIST_MAX_TARGETS) {
+		throw new InvalidAgentPayload();
+	}
+	const entries = row.entries.map((value) => {
+		const entry = agentRecord(value, ['connectionId', 'reason', 'changedBy', 'changedAt']);
+		return {
+			connectionId: agentInteger(entry.connectionId, 1),
+			reason: denylistReason(entry.reason),
+			changedBy: agentInteger(entry.changedBy, 1),
+			changedAt: agentInteger(entry.changedAt),
+		};
+	});
+	if (new Set(entries.map((entry) => entry.connectionId)).size !== entries.length) {
+		throw new InvalidAgentPayload();
+	}
+	return { revision: agentInteger(row.revision, 1), entries };
 }

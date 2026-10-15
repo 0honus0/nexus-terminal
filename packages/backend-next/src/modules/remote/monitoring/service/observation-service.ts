@@ -1,3 +1,5 @@
+import type { MachineMutationService } from '../../machines/service/mutation-service.js';
+import { RemoteFileFailure } from '../../files/model/file-types.js';
 import type { ObservationErrorCode } from '@nexus-terminal/shared/remote/monitoring/values';
 import { randomUUID } from 'node:crypto';
 import type { AccessPublicApi } from '../../../access/public.js';
@@ -27,7 +29,6 @@ interface ObservationTaskPolicy {
 export class RemoteObservationService {
 	private readonly tasks = new Map<AbortController, Promise<unknown>>();
 	private readonly subscriptions = new Set<() => void>();
-	private readonly mutations = new Set<string>();
 	private readonly failures: unknown[] = [];
 	private accepting = true;
 	private closePromise: Promise<void> | null = null;
@@ -37,6 +38,7 @@ export class RemoteObservationService {
 		private readonly resolver: TrustedSshTargetResolver,
 		private readonly workspaces: WorkspaceService,
 		private readonly model: ObservationModel,
+		private readonly mutationClaims: MachineMutationService,
 		private readonly intervalSeconds = 3,
 	) {
 		if (!Number.isSafeInteger(intervalSeconds) || intervalSeconds < 1 || intervalSeconds > 86400) {
@@ -248,24 +250,24 @@ export class RemoteObservationService {
 	): Promise<void> {
 		return this.workspace(owner, signal, { mutation: true }, async (scope) => {
 			await this.validate(scope);
-			// Names and short/full IDs may address the same container. Serialize this connection snapshot.
-			const key = scope.targetId + ':' + scope.fingerprint;
-			if (this.mutations.has(key)) {
-				throw new ObservationFailure('conflict');
-			}
-			this.mutations.add(key);
-			let retainMutation = false;
 			try {
-				await this.model.commandDocker(scope, id, action);
+				await this.mutationClaims.run(
+					randomUUID(),
+					[{ targetId: scope.targetId, fingerprint: scope.fingerprint }],
+					() => this.model.commandDocker(scope, id, action),
+				);
 			} catch (error) {
-				retainMutation =
-					error instanceof RemoteResourceCleanupFailure ||
-					(error instanceof ObservationFailure && error.code === 'operation_unknown');
-				throw error;
-			} finally {
-				if (!retainMutation) {
-					this.mutations.delete(key);
+				if (error instanceof RemoteFileFailure) {
+					throw new ObservationFailure(
+						error.code === 'conflict'
+							? 'conflict'
+							: error.code === 'operation_unknown'
+								? 'operation_unknown'
+								: 'remote_unavailable',
+						{ cause: error },
+					);
 				}
+				throw error;
 			}
 		});
 	}

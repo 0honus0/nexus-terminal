@@ -1,5 +1,6 @@
 import { parentPort, workerData, type MessagePort } from 'node:worker_threads';
 import { DatabaseSync } from 'node:sqlite';
+import { installUnicodeTextFunctions } from './unicode-text.js';
 import type { WorkerSqliteError } from '../sqlite-errors.js';
 import { decodeWorkerRequest, type WorkerRequest } from '../worker-types.js';
 
@@ -63,7 +64,8 @@ if (port === null) {
 	throw new Error('SQLite worker requires a parent port');
 }
 const db = new DatabaseSync(databasePath(workerData));
-db.exec('PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000');
+installUnicodeTextFunctions(db);
+db.exec('PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000');
 port.on('message', (value: unknown) => {
 	try {
 		handleRequest(port, db, decodeWorkerRequest(value));

@@ -1,7 +1,27 @@
-import { validateConnectionGraph } from '../ssh-graph-rules.js';
-import type { ConnectionStorage, MutationResult, ConnectionGraphValidator } from '../storage/connection-storage.js';
-import type { ConnectionMetadata, ConnectionSnapshot, ConnectionMutation } from './connection-types.js';
-import { fromStorage, toStorage, toStoragePatch } from './connection-mapper.js';
+import { validateConnectionGraph, validateConnectionSnapshot } from '../ssh-graph-rules.js';
+import type {
+	ConnectionStorage,
+	MutationResult,
+	ConnectionGraphValidator,
+	ConnectionSnapshotValidator,
+} from '../storage/connection-storage.js';
+import type {
+	ConnectionMetadata,
+	ConnectionSnapshot,
+	ConnectionMutation,
+	ConnectionCatalogEntry,
+} from './connection-types.js';
+import {
+	fromStorage,
+	toStorage,
+	toStoragePatch,
+	fromStoredRelationships,
+	fromStoredGraph,
+} from './connection-mapper.js';
+
+export const validateStoredConnectionSnapshot: ConnectionSnapshotValidator = (connections, snapshot) => {
+	validateConnectionSnapshot(connections.map(fromStoredRelationships), fromStoredGraph(snapshot));
+};
 
 function toApplicationMutation(value: MutationResult): ConnectionMutation {
 	if (value.status === 'updated') {
@@ -15,28 +35,23 @@ function toApplicationMutation(value: MutationResult): ConnectionMutation {
 
 /** Bridge storage snapshots to application facts before running a pure business rule. */
 export const validateStoredConnectionGraph: ConnectionGraphValidator = (connection, snapshot, changedId) => {
-	validateConnectionGraph(
-		{
-			type: connection.type,
-			route: connection.route,
-			proxyId: connection.proxyId,
-			jumpIds: [...connection.jumpIds],
-			tagIds: [...connection.tagIds],
-		},
-		{
-			nodes: snapshot.nodes.map((node) => ({ id: node.id, type: node.type, route: node.route })),
-			edges: snapshot.edges.map((edge) => ({
-				connectionId: edge.connectionId,
-				position: edge.position,
-				jumpConnectionId: edge.jumpConnectionId,
-			})),
-		},
-		changedId,
-	);
+	validateConnectionGraph(fromStoredRelationships(connection), fromStoredGraph(snapshot), changedId);
 };
 
 export class ConnectionModel {
 	constructor(private readonly storage: Readonly<ConnectionStorage>) {}
+
+	async listEntries(ids: number[]): Promise<ConnectionCatalogEntry[]> {
+		return (await this.storage.listEntries(ids.map((id) => id))).map((row) => ({
+			id: row.id,
+			version: row.version,
+			type: row.type,
+			name: row.name,
+			host: row.host,
+			port: row.port,
+			username: row.username,
+		}));
+	}
 
 	async list(): Promise<ConnectionSnapshot[]> {
 		return (await this.storage.list()).map(fromStorage);

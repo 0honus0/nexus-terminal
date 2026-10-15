@@ -9,7 +9,13 @@ export interface AccessIdentity {
 	twoFactorEnabled: boolean;
 }
 
+export interface AccessPasswordProof {
+	userId: number;
+	assertCurrent(): Promise<void>;
+}
+
 export interface AccessPublicApi {
+	provePassword(token: string | null, password: string): Promise<AccessPasswordProof>;
 	needsSetup(): Promise<boolean>;
 	/** Missing, invalid, expired and revoked cookies produce null. */
 	authenticate(sessionToken: string | null): Promise<AccessIdentity | null>;

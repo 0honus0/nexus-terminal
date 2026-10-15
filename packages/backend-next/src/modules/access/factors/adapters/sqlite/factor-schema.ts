@@ -1,9 +1,8 @@
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 
-/** Application-wide v6, additive to immutable v1–v5 schema. */
-export async function extendAccessFactors(tx: SqlExecutor): Promise<void> {
+/** Factor tables belong to the first-release schema. */
+export async function initializeAccessFactors(tx: SqlExecutor): Promise<void> {
 	await tx.exec(`
-		ALTER TABLE access_accounts ADD COLUMN totp_secret_encrypted TEXT;
 		CREATE TABLE access_password_epoch (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL);
 		INSERT INTO access_password_epoch(id,revision) VALUES(1,0);
 		CREATE TABLE access_pending_logins (

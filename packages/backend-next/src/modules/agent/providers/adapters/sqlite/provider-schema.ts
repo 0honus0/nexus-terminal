@@ -1,6 +1,6 @@
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 
-export async function migrateAgentProviders(tx: SqlExecutor): Promise<void> {
+export async function initializeAgentProviders(tx: SqlExecutor): Promise<void> {
 	await tx.exec(`
  CREATE TABLE agent_providers(
   id TEXT PRIMARY KEY, user_id INTEGER NOT NULL,
@@ -24,7 +24,7 @@ export async function migrateAgentProviders(tx: SqlExecutor): Promise<void> {
   model_id TEXT NOT NULL,base_url TEXT NOT NULL,
   protocol TEXT NOT NULL CHECK(protocol IN ('chat-completions','responses')),
   capabilities_json TEXT NOT NULL,
-  execution_policy TEXT NOT NULL CHECK(execution_policy='awaiting_b6_b7')
+  execution_policy TEXT NOT NULL CHECK(execution_policy='governed')
  );
  CREATE INDEX agent_frozen_by_provider ON agent_run_frozen_inputs(provider_id,run_id);
  `);

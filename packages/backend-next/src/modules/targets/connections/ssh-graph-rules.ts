@@ -9,12 +9,7 @@ interface GraphNode {
 	jumps: number[];
 }
 
-/** Validate the proposed graph, including ancestors, using only transaction snapshot facts. */
-export function validateConnectionGraph(
-	connection: ConnectionRelationshipFacts,
-	snapshot: SshGraphSnapshot,
-	changedId: number,
-): void {
+function validateRelationships(connection: ConnectionRelationshipFacts): void {
 	if (
 		(connection.route === 'jump' && (connection.type !== 'SSH' || connection.jumpIds.length === 0)) ||
 		(connection.route !== 'jump' && connection.jumpIds.length > 0) ||
@@ -24,8 +19,18 @@ export function validateConnectionGraph(
 	) {
 		throw new TargetFailure('invalid_input');
 	}
+}
+
+function buildGraph(
+	snapshot: SshGraphSnapshot,
+	edges: SshGraphSnapshot['edges'],
+): {
+	graph: Map<number, GraphNode>;
+	reverse: Map<number, Set<number>>;
+} {
 	const graph = new Map<number, GraphNode>();
 	const reverse = new Map<number, Set<number>>();
+	const targets = new Map<number, Set<number>>();
 	for (const row of snapshot.nodes) {
 		graph.set(row.id, {
 			type: row.type,
@@ -33,10 +38,6 @@ export function validateConnectionGraph(
 			jumps: [],
 		});
 	}
-	const edges = snapshot.edges.filter((edge) => edge.connectionId !== changedId);
-	connection.jumpIds.forEach((jumpConnectionId, position) => {
-		edges.push({ connectionId: changedId, position, jumpConnectionId });
-	});
 	for (const row of edges) {
 		const parent = row.connectionId;
 		const target = row.jumpConnectionId;
@@ -44,28 +45,23 @@ export function validateConnectionGraph(
 		if (!node || !graph.has(target) || node.jumps.length !== row.position) {
 			throw new TargetFailure('invalid_input');
 		}
-		if (node.jumps.includes(target)) {
+		const seen = targets.get(parent) ?? new Set<number>();
+		if (seen.has(target)) {
 			throw new TargetFailure('invalid_input');
 		}
+		seen.add(target);
+		targets.set(parent, seen);
 		node.jumps.push(target);
 		const ancestors = reverse.get(target) ?? new Set<number>();
 		ancestors.add(parent);
 		reverse.set(target, ancestors);
 	}
 
-	const affected = new Set<number>([changedId]);
-	const queue = [changedId];
-	for (let index = 0; index < queue.length; index++) {
-		const next = queue[index];
-		for (const ancestor of reverse.get(next) ?? []) {
-			if (!affected.has(ancestor)) {
-				affected.add(ancestor);
-				queue.push(ancestor);
-			}
-		}
-	}
+	return { graph, reverse };
+}
 
-	for (const root of affected) {
+function validateRoots(graph: ReadonlyMap<number, GraphNode>, roots: Iterable<number>): void {
+	for (const root of roots) {
 		const path = new Set<number>();
 		let expanded = 0;
 
@@ -96,4 +92,43 @@ export function validateConnectionGraph(
 
 		walk(root, 0);
 	}
+}
+
+/** Validate the proposed graph, including ancestors, using only transaction snapshot facts. */
+export function validateConnectionGraph(
+	connection: ConnectionRelationshipFacts,
+	snapshot: SshGraphSnapshot,
+	changedId: number,
+): void {
+	validateRelationships(connection);
+	const edges = snapshot.edges.filter((edge) => edge.connectionId !== changedId);
+	connection.jumpIds.forEach((jumpConnectionId, position) => {
+		edges.push({ connectionId: changedId, position, jumpConnectionId });
+	});
+	const { graph, reverse } = buildGraph(snapshot, edges);
+	const affected = new Set<number>([changedId]);
+	const queue = [changedId];
+	for (let index = 0; index < queue.length; index++) {
+		const next = queue[index];
+		for (const ancestor of reverse.get(next) ?? []) {
+			if (!affected.has(ancestor)) {
+				affected.add(ancestor);
+				queue.push(ancestor);
+			}
+		}
+	}
+
+	validateRoots(graph, affected);
+}
+
+/** A full snapshot builds its graph once instead of rebuilding it for every stored connection. */
+export function validateConnectionSnapshot(
+	connections: readonly ConnectionRelationshipFacts[],
+	snapshot: SshGraphSnapshot,
+): void {
+	for (const connection of connections) {
+		validateRelationships(connection);
+	}
+	const { graph } = buildGraph(snapshot, snapshot.edges);
+	validateRoots(graph, graph.keys());
 }

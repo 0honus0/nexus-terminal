@@ -9,6 +9,7 @@ import { initializeSchema } from '../../../packages/backend-next/dist/platform/s
 import { targetMigrations } from '../../../packages/backend-next/dist/modules/targets/migrations.js';
 import { applicationMigrations } from '../../../packages/backend-next/dist/bootstrap/schema.js';
 import { SqliteAccountStorage } from '../../../packages/backend-next/dist/modules/access/accounts/adapters/sqlite/account-sql.js';
+import { SqliteProviderStorage } from '../../../packages/backend-next/dist/modules/agent/providers/adapters/sqlite/provider-sql.js';
 import { SqliteSessionStorage } from '../../../packages/backend-next/dist/modules/access/sessions/adapters/sqlite/session-sql.js';
 import { SessionModel } from '../../../packages/backend-next/dist/modules/access/sessions/model/session-model.js';
 import { SecureSessionTokens } from '../../../packages/backend-next/dist/platform/security/adapters/secure-session-tokens.js';
@@ -42,13 +43,24 @@ try {
 	const dbPath = join(root, 'initial-v1.db');
 	let db = SqliteRuntime.open(dbPath);
 	assert.equal(targetMigrations.length, 1, 'unreleased schema must be a single v1 initial install');
-	await initializeSchema(db, applicationMigrations.slice(0, 1));
+	assert.equal(applicationMigrations.length, 1, 'first release must have one application migration');
+	await initializeSchema(db, applicationMigrations);
 	assert.deepEqual(
 		(await db.all('SELECT version FROM schema_version')).map((r) => r.version),
 		[1],
 	);
 	await initializeSchema(db, applicationMigrations);
 	await new SqliteAccountStorage(db).createInitialAdmin({ username: 'regression', passwordHash: 'fixture-hash' });
+	const provider = await new SqliteProviderStorage(db).create({
+		id: randomUUID(),
+		userId: 1,
+		displayName: 'storage fixture',
+		baseUrl: 'https://fixture.invalid/v1',
+		protocol: 'chat-completions',
+		models: [{ id: 'fixture', contextWindow: 8192, maxOutputTokens: 256, supportsTools: true }],
+		enabled: true,
+		now: Date.now(),
+	});
 	await db.close();
 	app = await createApp(dbPath, { encryptionKey: key });
 	const proxy = await app.targets.proxies.create({
@@ -122,7 +134,15 @@ try {
 	);
 	const agentApp = await app.agent.createApp(1, 'regression');
 	const thread = await app.agent.createThread(1, agentApp.id, 'state');
-	const intent = { userId: 1, appId: agentApp.id, threadId: thread.id, prompt: 'hello', operationKey: randomUUID() };
+	const intent = {
+		userId: 1,
+		appId: agentApp.id,
+		threadId: thread.id,
+		prompt: 'hello',
+		connectionIds: [host.id],
+		model: { providerId: provider.id, modelId: 'fixture', configurationVersion: provider.version },
+		operationKey: randomUUID(),
+	};
 	const createdRun = await app.agent.createRun(intent);
 	assert.equal(createdRun.status, 'created');
 	assert.equal((await app.agent.createRun(intent)).status, 'replayed');
@@ -178,14 +198,14 @@ try {
 		lastAttemptAt: 20000,
 	});
 	const versions = (await db.all('SELECT version FROM schema_version ORDER BY version')).map((r) => r.version);
-	assert.deepEqual(versions, [1, 2, 3, 4, 5, 6]);
+	assert.deepEqual(versions, [1]);
 	const creds = await db.all('SELECT encrypted_password FROM proxy_credentials');
 	assert.ok(creds[0].encrypted_password.startsWith('v1.'));
 	assert.equal(creds[0].encrypted_password.includes('SECRET_PROXY'), false);
 	const keyRows = await db.all('SELECT encrypted_private_key FROM ssh_keys');
 	assert.equal(keyRows[0].encrypted_private_key.includes('SECRET_PRIVATE_KEY'), false);
 	await db.close();
-	// A failing synthetic v2 must roll back while preserving the published v1.
+	// A failing synthetic v2 must roll back while preserving the initial v1.
 	const failPath = join(root, 'failure.db');
 	db = SqliteRuntime.open(failPath);
 	await assert.rejects(
@@ -215,7 +235,7 @@ try {
 	db = SqliteRuntime.open(failPath);
 	assert.deepEqual(
 		(await db.all('SELECT version FROM schema_version ORDER BY version')).map((r) => r.version),
-		[1, 2, 3, 4, 5, 6],
+		[1],
 	);
 	await db.close();
 	// Reject the first batch's incompatible pre-release v1 instead of silently

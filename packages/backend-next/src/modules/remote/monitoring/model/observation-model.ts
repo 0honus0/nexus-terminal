@@ -4,6 +4,7 @@ import { DOCKER_MAX_CONTAINERS } from '@nexus-terminal/shared/remote/docker/valu
 import type { ConnectionCatalog, TrustedSshTargetResolver } from '../../../targets/public.js';
 import { OBSERVATION_MAX_RESOURCES } from '@nexus-terminal/shared/remote/monitoring/values';
 import type { ObservationTarget } from './observation-types.js';
+import type { ReadDiagnostics } from '../../machines/model/operation-types.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { RemoteMachineModel } from '../../machines/model/machine-model.js';
 import { RemoteHostKeyUntrustedError } from '../../machines/model/machine-errors.js';
@@ -92,7 +93,7 @@ export class ObservationModel {
 		private readonly machines: RemoteMachineModel,
 		private readonly collector: MachineStatusCollector,
 		private readonly docker: DockerPort,
-		private readonly catalog: ConnectionCatalog,
+		private readonly catalog: Pick<ConnectionCatalog, 'list' | 'get'>,
 		private readonly resolver: TrustedSshTargetResolver,
 	) {}
 
@@ -112,6 +113,8 @@ export class ObservationModel {
 				expectedFingerprint: scope.fingerprint,
 				timeoutMs: 5000,
 				signal: scope.signal,
+
+				validate: () => scope.validate(),
 			});
 			machine = opened.machine;
 			const connected = machine;
@@ -201,6 +204,32 @@ export class ObservationModel {
 			}
 			return sample(value);
 		});
+	}
+
+	/** Monitoring stores MiB memory and KiB disk; independent diagnostics consistently expose bytes. */
+	async diagnose(scope: ObservationScope, key: string): Promise<ReadDiagnostics> {
+		const value = await this.collect(scope, key, true);
+
+		const bytes = (amount: number | undefined, unit: number): number | null => {
+			if (amount === undefined) {
+				return null;
+			}
+			const result = amount * unit;
+			if (!Number.isSafeInteger(result) || result < 0) {
+				throw new ObservationFailure('remote_unavailable');
+			}
+			return result;
+		};
+
+		return {
+			generatedAt: value.timestamp,
+			cpuPercent: value.cpuPercent ?? null,
+			memUsedBytes: bytes(value.memUsed, 1024 * 1024),
+			memTotalBytes: bytes(value.memTotal, 1024 * 1024),
+			diskUsedBytes: bytes(value.diskUsed, 1024),
+			diskTotalBytes: bytes(value.diskTotal, 1024),
+			loadAverage: value.loadAvg?.map((number) => number) ?? [],
+		};
 	}
 
 	async listTargets(signal?: AbortSignal): Promise<ObservationTarget[]> {

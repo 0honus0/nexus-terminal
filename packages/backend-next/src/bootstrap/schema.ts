@@ -1,101 +1,27 @@
+import { initializeOperationsSchema } from '../modules/operations/migrations.js';
+import { initializePreferencesSchema } from '../modules/preferences/migrations.js';
+import { initializeRemoteSchema } from '../modules/remote/migrations.js';
 import type { SchemaMigration } from '../platform/storage/sqlite/schema-types.js';
 import { targetMigrations, initializeHostKeySchema } from '../modules/targets/schema.js';
-import {
-	initializeAccessSchema,
-	migrateAccessLoginFailureHistory,
-	migrateAccessFactors,
-} from '../modules/access/migrations.js';
-import {
-	initializeAgentSchema,
-	migrateAgentProviderSchema,
-	migrateAgentExecutionJournal,
-	migrateAgentRootRunLifecycle,
-	migrateAgentGovernance,
-} from '../modules/agent/migrations.js';
-import { initializeDesktopConnectionHistory } from '../modules/targets/migrations.js';
+import { initializeAccessSchema } from '../modules/access/migrations.js';
+import { initializeAgentSchema } from '../modules/agent/migrations.js';
+import { initializeSnapshotRestoreSchema } from '../platform/storage/sqlite/adapters/snapshot-restore-sql.js';
 
-/** Application owns the only ordered migration registry; modules own DDL. */
+/** First-release schema: install the current layout atomically, without development upgrade history. */
 export const applicationMigrations: readonly SchemaMigration[] = [
 	{
 		version: 1,
-		signature: 'backend-next-v1-targets-access-20261009',
+		signature: 'backend-next-v1-initial-20261014-b8-receipts',
 
 		async apply(tx) {
 			await targetMigrations[0].apply(tx);
-			await initializeAccessSchema(tx);
-		},
-	},
-	{
-		version: 2,
-		signature: 'backend-next-v2-target-host-key-trust-20261010',
-
-		async apply(tx) {
 			await initializeHostKeySchema(tx);
-		},
-	},
-	{
-		version: 3,
-		signature: 'backend-next-v3-agent-root-run-20261010',
-
-		async apply(tx) {
+			await initializeAccessSchema(tx);
 			await initializeAgentSchema(tx);
-		},
-	},
-	{
-		version: 4,
-		signature: 'backend-next-v4-desktop-last-connected-20261011',
-
-		async apply(tx) {
-			await initializeDesktopConnectionHistory(tx);
-		},
-	},
-	{
-		version: 5,
-		signature: 'backend-next-v5-access-login-history-20261011',
-
-		async apply(tx) {
-			await migrateAccessLoginFailureHistory(tx);
-		},
-	},
-	{
-		version: 6,
-		signature: 'backend-next-v6-access-factors-20261012',
-
-		async apply(tx) {
-			await migrateAccessFactors(tx);
-		},
-	},
-	{
-		version: 7,
-		signature: 'backend-next-v7-agent-providers-frozen-input-20261012',
-
-		async apply(tx) {
-			await migrateAgentProviderSchema(tx);
-		},
-	},
-	{
-		version: 8,
-		signature: 'backend-next-v8-agent-model-step-journal-20261012',
-
-		async apply(tx) {
-			await migrateAgentExecutionJournal(tx);
-		},
-	},
-	{
-		version: 9,
-		signature: 'backend-next-v9-root-run-lifecycle-fk-safe-20261012',
-		rebuildsReferencedTable: true,
-
-		async apply(tx) {
-			await migrateAgentRootRunLifecycle(tx);
-		},
-	},
-	{
-		version: 10,
-		signature: 'backend-next-v10-agent-grants-approvals-20261012',
-
-		async apply(tx) {
-			await migrateAgentGovernance(tx);
+			await initializeRemoteSchema(tx);
+			await initializePreferencesSchema(tx);
+			await initializeOperationsSchema(tx);
+			await initializeSnapshotRestoreSchema(tx);
 		},
 	},
 ];

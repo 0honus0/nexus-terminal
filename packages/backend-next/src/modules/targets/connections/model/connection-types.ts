@@ -1,5 +1,15 @@
 import type { ConnectionType, ConnectionRoute } from '@nexus-terminal/shared/targets/connections/values';
 
+export interface ConnectionCatalogEntry {
+	id: number;
+	version: number;
+	type: ConnectionType;
+	name: string;
+	host: string;
+	port: number;
+	username: string;
+}
+
 export interface ConnectionMetadata {
 	name: string;
 	type: ConnectionType;

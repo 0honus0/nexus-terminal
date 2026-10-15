@@ -1,3 +1,4 @@
+import { agentStorage } from '../../agent-storage-failure.js';
 import { createHash } from 'node:crypto';
 import type { SecretBox } from '../../../../platform/security/secret-box.js';
 import type { ModelNetworkPort, EndpointModel } from '../../../../platform/ai/model-port.js';
@@ -139,21 +140,23 @@ export class ProviderModel {
 	}
 
 	async list(userId: number): Promise<ProviderRecord[]> {
-		return (await this.storage.list(userId)).map(fromStoredProvider);
+		return (await agentStorage(() => this.storage.list(userId))).map(fromStoredProvider);
 	}
 
 	async get(userId: number, id: string): Promise<ProviderRecord | null> {
-		const row = await this.storage.get(userId, id);
+		const row = await agentStorage(() => this.storage.get(userId, id));
 		return row === null ? null : fromStoredProvider(row);
 	}
 
 	async create(command: ProviderWriteCommand): Promise<ProviderRecord> {
-		return fromStoredProvider(await this.storage.create(this.write(command)));
+		return fromStoredProvider(await agentStorage(() => this.storage.create(this.write(command))));
 	}
 
 	async update(command: ProviderWriteCommand, version: number): Promise<ProviderMutation> {
-		const result = await this.storage.update(this.write(command), version, (current) =>
-			shouldResetProviderObservations(fromStoredProvider(current), command.input),
+		const result = await agentStorage(() =>
+			this.storage.update(this.write(command), version, (current) =>
+				shouldResetProviderObservations(fromStoredProvider(current), command.input),
+			),
 		);
 		return result.status === 'ok'
 			? { status: 'ok', provider: fromStoredProvider(result.provider) }
@@ -161,14 +164,18 @@ export class ProviderModel {
 	}
 
 	async remove(userId: number, id: string, version: number, now: number): Promise<ProviderDeletion> {
-		const result = await this.storage.remove(userId, id, version, now, (usage) =>
-			mayDeleteProvider({ runStatuses: usage.runStatuses.map((status) => status) }),
+		const result = await agentStorage(() =>
+			this.storage.remove(userId, id, version, now, (usage) =>
+				mayDeleteProvider({ runStatuses: usage.runStatuses.map((status) => status) }),
+			),
 		);
 		return { status: result.status };
 	}
 
 	async credential(row: ProviderRecord): Promise<string | null> {
-		const encrypted = await this.storage.credential(row.userId, row.id, row.version, row.credentialRevision);
+		const encrypted = await agentStorage(() =>
+			this.storage.credential(row.userId, row.id, row.version, row.credentialRevision),
+		);
 		if (row.hasCredential && encrypted === null) {
 			throw new AgentFailure('provider_configuration_stale');
 		}
@@ -243,12 +250,14 @@ export class ProviderModel {
 				},
 			}));
 		if (
-			!(await this.storage.recordObservations(
-				provider.userId,
-				provider.id,
-				provider.version,
-				provider.credentialRevision,
-				items.map(toStoredObservation),
+			!(await agentStorage(() =>
+				this.storage.recordObservations(
+					provider.userId,
+					provider.id,
+					provider.version,
+					provider.credentialRevision,
+					items.map(toStoredObservation),
+				),
 			))
 		) {
 			throw new AgentFailure('provider_configuration_stale');

@@ -10,6 +10,7 @@ import type {
 	ProviderTestResult,
 	ProviderPatch,
 	AvailableModel,
+	ProviderRecord,
 } from '../model/provider-types.js';
 import { validateProviderInput, normalizeProviderInput } from '../provider-rules.js';
 import type { ProviderModel } from '../model/provider-model.js';
@@ -104,6 +105,20 @@ export class ProviderService {
 			request.abort();
 		}
 		this.revokeDependentRequests(userId, id);
+	}
+
+	private async guardFailedRequest(provider: ProviderRecord, error: unknown): Promise<void> {
+		// Persistence and internal failures must not be replaced by a later state check.
+		if (!(error instanceof ProviderRequestFailure)) {
+			throw error;
+		}
+		try {
+			await this.model.guardCurrent(provider);
+		} catch (guardError) {
+			throw new AgentFailure(guardError instanceof AgentFailure ? guardError.code : 'internal_failure', {
+				cause: new AggregateError([error, guardError], 'Provider request and state check failed'),
+			});
+		}
 	}
 
 	private async withProviderRequest<T>(
@@ -232,21 +247,24 @@ export class ProviderService {
 		const records = await this.model.list(userId);
 		return records.flatMap((record) => {
 			const view = this.model.toView(record);
-			return view.models
-				.filter(
-					(model) =>
-						resolveFrozenModel(record, {
-							providerId: record.id,
-							modelId: model.id,
-							configurationVersion: record.version,
-						}) !== null,
-				)
-				.map((model) => ({
-					providerId: view.id,
-					providerDisplayName: view.displayName,
-					configurationVersion: view.version,
-					model,
-				}));
+			return view.models.flatMap((model) => {
+				const frozen = resolveFrozenModel(record, {
+					providerId: record.id,
+					modelId: model.id,
+					configurationVersion: record.version,
+				});
+				return frozen === null
+					? []
+					: [
+							{
+								protocol: frozen.protocol,
+								providerId: view.id,
+								providerDisplayName: view.displayName,
+								configurationVersion: view.version,
+								model,
+							},
+						];
+			});
 		});
 	}
 
@@ -290,7 +308,7 @@ export class ProviderService {
 				return this.model.discover(provider.baseUrl, credential, s);
 			});
 		} catch (error) {
-			await this.model.guardCurrent(provider);
+			await this.guardFailedRequest(provider, error);
 			if (signal?.aborted) {
 				throw new AgentFailure('provider_configuration_stale');
 			}
@@ -361,7 +379,7 @@ export class ProviderService {
 				...(result.usage === undefined ? {} : { usage: result.usage }),
 			};
 		} catch (error) {
-			await this.model.guardCurrent(provider);
+			await this.guardFailedRequest(provider, error);
 			if (signal?.aborted) {
 				throw new AgentFailure('provider_configuration_stale');
 			}

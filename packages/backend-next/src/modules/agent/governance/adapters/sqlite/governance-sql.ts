@@ -1,7 +1,32 @@
+import { executionSettings } from '../../../execution/adapters/sqlite/execution-sql.js';
+import type { StoredExecutionSettings } from '../../../execution/storage/execution-storage.js';
+import { currentParticipant } from '../../../runs/adapters/sqlite/run-participant-sql.js';
+import { currentAcpParent } from '../../../runs/adapters/sqlite/acp-parent-sql.js';
+import { frozenFromRun } from '../../../runs/adapters/sqlite/run-sql.js';
+import { readRunSelection } from '../../../runs/adapters/sqlite/run-selection.js';
+import { recordToolEvent } from '../../../runs/adapters/sqlite/run-tool-events.js';
+import { toolAuthority } from './tool-authority-sql.js';
+import type { ProviderStorage } from '../../../providers/storage/provider-storage.js';
+import type {
+	StoredToolAuthorityIdentity,
+	StoredToolAuthorityTask,
+	StoredToolAuthorityDecision,
+	StoredToolPermitDecision,
+	StoredToolAuthority,
+} from '../../storage/governance-storage.js';
+import { toolOperation } from '../../../runs/adapters/sqlite/run-tool-row.js';
+import type { StoredToolOperation } from '../../../runs/storage/run-tool-storage.js';
+import { appAuthority } from '../../../scope/adapters/sqlite/app-row.js';
+import { currentDenylist, replaceTargetDenylist } from './denylist-sql.js';
+import type {
+	StoredDenylistCommand,
+	StoredTargetDenylist,
+	StoredDenylistMutation,
+} from '../../storage/governance-storage.js';
 import type { AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
-import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
+import type { SqlExecutor, SqlReader } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
-import { AGENT_APPROVAL_MAX_LIST_ITEMS } from '@nexus-terminal/shared/agent/governance/values';
+import { AGENT_APPROVAL_MAX_LIST_ITEMS, AGENT_CAPABILITIES } from '@nexus-terminal/shared/agent/governance/values';
 import type {
 	GovernanceStorage,
 	StoredPolicyOverrides,
@@ -24,29 +49,34 @@ import {
 } from './governance-row.js';
 
 const approvalColumns =
-	'id,user_id,app_id,run_id,tool_call_id,operation_hash,kind,status,policy_revision,input_revision,version,requested_at,expires_at,decided_at,decided_by_user_id,consumed_at,feedback,inspection_json';
+	'id,user_id,app_id,run_id,tool_call_id,operation_hash,capability,target_version,kind,status,policy_revision,input_revision,version,requested_at,expires_at,decided_at,decided_by_user_id,consumed_at,feedback,inspection_json';
 
-async function appExists(tx: SqlExecutor, userId: number, appId: string): Promise<boolean> {
-	return (await tx.one('SELECT 1 AS present FROM agent_apps WHERE user_id=? AND id=?', [userId, appId])) !== null;
-}
-
-async function currentPolicy(tx: SqlExecutor, userId: number, appId: string): Promise<StoredPolicy | null> {
-	if (!(await appExists(tx, userId, appId))) {
+export async function currentPolicy(tx: SqlReader, userId: number, appId: string): Promise<StoredPolicy | null> {
+	const app = await appAuthority(tx, userId, appId);
+	if (app === null) {
 		return null;
 	}
 	const header = await tx.one(
 		'SELECT policy_revision,execution_version,execution_overrides_json FROM agent_governance_policies WHERE user_id=? AND app_id=?',
 		[userId, appId],
 	);
+	if (header === null) {
+		throw new Error('Missing App governance policy');
+	}
 	const grants = await tx.all(
-		'SELECT capability,schema_version,scope_json,granted_at FROM agent_governance_grants WHERE user_id=? AND app_id=? ORDER BY capability',
-		[userId, appId],
+		'SELECT capability,schema_version,scope_json,granted_at FROM agent_governance_grants WHERE user_id=? AND app_id=? ORDER BY capability LIMIT ?',
+		[userId, appId, AGENT_CAPABILITIES.length + 1],
 	);
-	return readPolicy(userId, appId, header, grants);
-}
-
-async function ensurePolicy(tx: SqlExecutor, userId: number, appId: string): Promise<void> {
-	await tx.run('INSERT OR IGNORE INTO agent_governance_policies(user_id,app_id) VALUES(?,?)', [userId, appId]);
+	if (grants.length > AGENT_CAPABILITIES.length) {
+		throw new Error('Corrupt Agent grant capacity');
+	}
+	const denylist = await currentDenylist(tx);
+	return readPolicy(userId, appId, header, grants, {
+		enabled: app.enabled,
+		declared: app.declared,
+		capabilities: app.capabilities.map((capability) => capability),
+		deniedTargetIds: denylist.entries.map((entry) => entry.connectionId),
+	});
 }
 
 async function approvalRow(tx: SqlExecutor, userId: number, appId: string, id: string): Promise<StoredApproval | null> {
@@ -55,6 +85,48 @@ async function approvalRow(tx: SqlExecutor, userId: number, appId: string, id: s
 		[id, userId, appId],
 	);
 	return row === null ? null : readApproval(row);
+}
+
+function matchesOperation(approval: StoredApproval, operation: StoredToolOperation): boolean {
+	return (
+		approval.kind === (operation.toolName === 'acp_inner_permission' ? 'acp_permission' : 'tool') &&
+		approval.userId === operation.userId &&
+		approval.appId === operation.appId &&
+		approval.runId === operation.runId &&
+		approval.toolCallId === operation.id &&
+		approval.operationHash === operation.operationHash &&
+		approval.inputRevision === operation.operationRevision &&
+		approval.capability === operation.capability &&
+		approval.targetVersion === operation.targetVersion &&
+		approval.inspection.targetConnectionId === operation.targetId &&
+		approval.inspection.toolName === operation.toolName &&
+		approval.inspection.toolVersion === operation.toolVersion &&
+		approval.inspection.risk === operation.risk &&
+		approval.inspection.mutation === operation.mutation &&
+		approval.inspection.summary === operation.summary
+	);
+}
+
+async function currentToolTarget(tx: SqlExecutor, operation: StoredToolOperation): Promise<boolean> {
+	if (
+		!(await currentParticipant(
+			tx,
+			{ userId: operation.userId, appId: operation.appId, runId: operation.runId },
+			Date.now(),
+			operation.toolName,
+			operation.modelStepIndex,
+		))
+	) {
+		return false;
+	}
+	if (!(await currentAcpParent(tx, operation))) {
+		return false;
+	}
+	if (operation.targetId === null) {
+		return true;
+	}
+	const target = await tx.one('SELECT type,version FROM connections WHERE id=?', [operation.targetId]);
+	return target !== null && target.type === 'SSH' && integer(target.version, 1) === operation.targetVersion;
 }
 
 async function sweep(
@@ -67,6 +139,7 @@ async function sweep(
 ): Promise<number> {
 	let changed = 0;
 	let cursor = '';
+	const policy = await currentPolicy(tx, userId, appId);
 	// Keyset traversal bounds adapter memory even when a Run has many old approvals.
 	while (true) {
 		const rows = await tx.all(
@@ -88,15 +161,22 @@ async function sweep(
 		for (const row of rows) {
 			const approval = readApproval(row);
 			cursor = approval.id;
-			const run = await tx.one('SELECT status FROM agent_runs WHERE id=? AND user_id=? AND app_id=?', [
-				approval.runId,
-				userId,
-				appId,
-			]);
+			const run = await tx.one(
+				'SELECT status,selected_connections_json FROM agent_runs WHERE id=? AND user_id=? AND app_id=?',
+				[approval.runId, userId, appId],
+			);
 			if (!run) {
 				throw new Error('Orphan Agent approval');
 			}
-			const next = transition(approval, readRunStatus(run.status), now());
+			const operation = await toolOperation(tx, userId, appId, approval.runId, approval.toolCallId);
+			const stale =
+				operation === null ||
+				operation.state !== 'inspected' ||
+				!matchesOperation(approval, operation) ||
+				policy === null ||
+				policy.revision !== approval.policyRevision ||
+				!(await currentToolTarget(tx, operation));
+			const next = transition(approval, readRunStatus(run.status), now()) ?? (stale ? 'superseded' : null);
 			if (next === null) {
 				continue;
 			}
@@ -118,7 +198,124 @@ async function sweep(
 }
 
 export class SqliteGovernanceStorage implements GovernanceStorage {
-	constructor(private readonly db: SqliteRuntime) {}
+	constructor(
+		private readonly db: SqliteRuntime,
+		private readonly providers: ProviderStorage,
+	) {}
+
+	toolAuthority(
+		input: StoredToolAuthorityIdentity,
+		task: StoredToolAuthorityTask,
+		clock: () => number,
+		decide: StoredToolAuthorityDecision,
+		permit: StoredToolPermitDecision,
+	): Promise<StoredToolAuthority | null> {
+		return this.db.transaction((tx) =>
+			toolAuthority(tx, input, task, clock, currentPolicy, this.providers, decide, permit),
+		);
+	}
+
+	consumeApproval(
+		input: { userId: number; appId: string; approvalId: string; expectedVersion: number },
+		clock: () => { approvalTime: number; operationTime: number },
+		decide: (
+			approval: StoredApproval,
+			policy: StoredPolicy,
+			status: AgentRunStatus,
+			operationRevision: number,
+			now: number,
+		) => boolean,
+		authorize: StoredToolAuthorityDecision,
+	): Promise<StoredToolOperation | 'approval_stale'> {
+		return this.db.transaction(async (tx) => {
+			const approval = await approvalRow(tx, input.userId, input.appId, input.approvalId);
+			if (
+				approval === null ||
+				approval.version !== input.expectedVersion ||
+				approval.status !== 'approved' ||
+				approval.consumedAt !== null
+			) {
+				return 'approval_stale';
+			}
+			const operation = await toolOperation(tx, input.userId, input.appId, approval.runId, approval.toolCallId);
+			const policy = await currentPolicy(tx, input.userId, input.appId);
+			const run = await tx.one(
+				'SELECT status,selected_connections_json FROM agent_runs WHERE id=? AND user_id=? AND app_id=?',
+				[approval.runId, input.userId, input.appId],
+			);
+			if (
+				operation === null ||
+				policy === null ||
+				run === null ||
+				operation.state !== 'inspected' ||
+				!matchesOperation(approval, operation) ||
+				!(await currentToolTarget(tx, operation))
+			) {
+				return 'approval_stale';
+			}
+			const frozen = await frozenFromRun(tx, input.userId, input.appId, approval.runId);
+			if (!frozen) {
+				return 'approval_stale';
+			}
+			const provider = await this.providers.snapshot(tx, input.userId, frozen.providerId);
+			if (
+				!authorize(
+					operation,
+					policy,
+					readRunStatus(run.status),
+					frozen,
+					provider,
+					readRunSelection(run.selected_connections_json),
+				)
+			) {
+				return 'approval_stale';
+			}
+			const time = clock();
+			const consumedAt = time.approvalTime;
+			if (!decide(approval, policy, readRunStatus(run.status), operation.operationRevision, consumedAt)) {
+				return 'approval_stale';
+			}
+			const permit = await tx.run(
+				"UPDATE agent_governance_approvals SET consumed_at=?,version=version+1 WHERE id=? AND version=? AND status='approved' AND consumed_at IS NULL",
+				[consumedAt, approval.id, approval.version],
+			);
+			const dispatch = await tx.run(
+				"UPDATE agent_run_tools SET state='dispatched',revision=revision+1,updated_at=? WHERE id=? AND revision=? AND state='inspected'",
+				[time.operationTime, operation.id, operation.revision],
+			);
+			if (permit.changes !== 1 || dispatch.changes !== 1) {
+				throw new Error('Lost atomic approval consumption');
+			}
+			const dispatched = await toolOperation(tx, input.userId, input.appId, approval.runId, operation.id);
+			if (dispatched === null) {
+				throw new Error('Consumed tool operation disappeared');
+			}
+			await recordToolEvent(tx, dispatched);
+			return dispatched;
+		});
+	}
+
+	denylist(): Promise<StoredTargetDenylist> {
+		return this.db.transaction(currentDenylist);
+	}
+
+	replaceDenylist(
+		input: StoredDenylistCommand,
+		now: () => number,
+		decide: (current: StoredTargetDenylist) => { revoke: boolean },
+	): Promise<StoredDenylistMutation | 'version_conflict' | 'not_found'> {
+		return this.db.transaction((tx) => replaceTargetDenylist(tx, input, now, decide));
+	}
+
+	execution(
+		userId: number,
+		appId: string,
+	): Promise<{ policy: StoredPolicy; settings: StoredExecutionSettings | null } | null> {
+		return this.db.transaction(async (tx) => {
+			const policy = await currentPolicy(tx, userId, appId);
+			return policy === null ? null : { policy, settings: await executionSettings(tx, userId) };
+		});
+	}
 
 	policy(userId: number, appId: string): Promise<StoredPolicy | null> {
 		return this.db.transaction((tx) => currentPolicy(tx, userId, appId));
@@ -143,7 +340,6 @@ export class SqliteGovernanceStorage implements GovernanceStorage {
 			if (!decision.allow) {
 				return { status: 'version_conflict' };
 			}
-			await ensurePolicy(tx, userId, appId);
 			const cas = await tx.run(
 				'UPDATE agent_governance_policies SET policy_revision=policy_revision+1 WHERE user_id=? AND app_id=? AND policy_revision=?',
 				[userId, appId, expectedRevision],
@@ -179,7 +375,10 @@ export class SqliteGovernanceStorage implements GovernanceStorage {
 		appId: string,
 		version: number,
 		overrides: StoredPolicyOverrides,
-		decide: (current: StoredPolicy) => { allow: boolean; pendingStatus: 'superseded' | null },
+		decide: (
+			current: StoredPolicy,
+			settings: StoredExecutionSettings | null,
+		) => { allow: boolean; pendingStatus: 'superseded' | null },
 	): Promise<ExecutionReplaceResult> {
 		return this.db.transaction(async (tx) => {
 			const current = await currentPolicy(tx, userId, appId);
@@ -189,11 +388,11 @@ export class SqliteGovernanceStorage implements GovernanceStorage {
 			if (current.executionVersion !== version) {
 				return { status: 'version_conflict' };
 			}
-			const decision = decide(current);
+			const settings = await executionSettings(tx, userId);
+			const decision = decide(current, settings);
 			if (!decision.allow) {
 				return { status: 'version_conflict' };
 			}
-			await ensurePolicy(tx, userId, appId);
 			const updated = await tx.run(
 				`UPDATE agent_governance_policies
     SET execution_version=execution_version+1,execution_overrides_json=?,policy_revision=policy_revision+1
@@ -214,7 +413,7 @@ export class SqliteGovernanceStorage implements GovernanceStorage {
 			if (!policy) {
 				throw new Error('Governance policy disappeared');
 			}
-			return { status: 'ok', policy };
+			return { status: 'ok', policy, settings };
 		});
 	}
 
@@ -277,31 +476,72 @@ export class SqliteGovernanceStorage implements GovernanceStorage {
 	}
 
 	async requestApproval(
-		input: { userId: number; appId: string; runId: string },
-		create: (policy: StoredPolicy, runStatus: AgentRunStatus, runVersion: number) => StoredApproval | null,
+		input: { userId: number; appId: string; runId: string; toolCallId: string },
+		create: (
+			policy: StoredPolicy,
+			runStatus: AgentRunStatus,
+			operation: StoredToolOperation,
+		) => StoredApproval | null,
+		authorize: StoredToolAuthorityDecision,
 	): Promise<StoredApproval | null> {
 		return this.db.transaction(async (tx) => {
 			const policy = await currentPolicy(tx, input.userId, input.appId);
 			if (!policy) {
 				return null;
 			}
-			const run = await tx.one('SELECT status,version FROM agent_runs WHERE id=? AND user_id=? AND app_id=?', [
-				input.runId,
-				input.userId,
-				input.appId,
-			]);
+			const run = await tx.one(
+				'SELECT status,selected_connections_json FROM agent_runs WHERE id=? AND user_id=? AND app_id=?',
+				[input.runId, input.userId, input.appId],
+			);
 			if (!run) {
 				return null;
 			}
-			const requested = create(policy, readRunStatus(run.status), integer(run.version, 1));
+			const operation = await toolOperation(tx, input.userId, input.appId, input.runId, input.toolCallId);
+			if (operation === null || operation.state !== 'inspected' || !(await currentToolTarget(tx, operation))) {
+				return null;
+			}
+			const frozen = await frozenFromRun(tx, input.userId, input.appId, input.runId);
+			if (!frozen) {
+				return null;
+			}
+			const provider = await this.providers.snapshot(tx, input.userId, frozen.providerId);
+			if (
+				!authorize(
+					operation,
+					policy,
+					readRunStatus(run.status),
+					frozen,
+					provider,
+					readRunSelection(run.selected_connections_json),
+				)
+			) {
+				return null;
+			}
+			const requested = create(policy, readRunStatus(run.status), operation);
 			if (requested === null) {
 				return null;
 			}
+			if (
+				!matchesOperation(requested, operation) ||
+				requested.policyRevision !== policy.revision ||
+				requested.status !== 'requested'
+			) {
+				throw new Error('Approval producer changed authoritative operation');
+			}
+			const previous = await approvalRow(tx, input.userId, input.appId, requested.id);
+			if (previous !== null) {
+				const current =
+					matchesOperation(previous, operation) &&
+					previous.kind === requested.kind &&
+					previous.policyRevision === policy.revision &&
+					previous.consumedAt === null &&
+					previous.expiresAt > requested.requestedAt;
+				return current ? previous : null;
+			}
 			await tx.run(
 				`INSERT INTO agent_governance_approvals
-    (id,user_id,app_id,run_id,tool_call_id,operation_hash,kind,status,policy_revision,
-     input_revision,version,requested_at,expires_at,decided_at,decided_by_user_id,consumed_at,feedback,inspection_json)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    (${approvalColumns})
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 				[
 					requested.id,
 					requested.userId,
@@ -309,6 +549,8 @@ export class SqliteGovernanceStorage implements GovernanceStorage {
 					requested.runId,
 					requested.toolCallId,
 					requested.operationHash,
+					requested.capability,
+					requested.targetVersion,
 					requested.kind,
 					requested.status,
 					requested.policyRevision,
@@ -339,7 +581,7 @@ export class SqliteGovernanceStorage implements GovernanceStorage {
 			approval: StoredApproval,
 			policy: StoredPolicy,
 			runStatus: AgentRunStatus,
-			runVersion: number,
+			operationRevision: number,
 			now: number,
 		) => boolean,
 	): Promise<ApprovalCommitResult> {
@@ -394,16 +636,25 @@ export class SqliteGovernanceStorage implements GovernanceStorage {
 				return { status: 'version_conflict' };
 			}
 			const policy = await currentPolicy(tx, userId, appId);
-			const run = await tx.one('SELECT status,version FROM agent_runs WHERE id=? AND user_id=? AND app_id=?', [
+			const run = await tx.one('SELECT status FROM agent_runs WHERE id=? AND user_id=? AND app_id=?', [
 				approval.runId,
 				userId,
 				appId,
 			]);
+			const operation = await toolOperation(tx, userId, appId, approval.runId, approval.toolCallId);
+			if (
+				operation === null ||
+				operation.state !== 'inspected' ||
+				!matchesOperation(approval, operation) ||
+				!(await currentToolTarget(tx, operation))
+			) {
+				return { status: 'approval_stale' };
+			}
 			const decidedAt = now();
 			if (
 				!policy ||
 				!run ||
-				!decide(approval, policy, readRunStatus(run.status), integer(run.version, 1), decidedAt)
+				!decide(approval, policy, readRunStatus(run.status), operation.operationRevision, decidedAt)
 			) {
 				return { status: 'approval_stale' };
 			}

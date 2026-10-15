@@ -1,6 +1,6 @@
 import type { HttpRoute } from '../../../../platform/http/http-types.js';
 import type { SystemStatusService } from '../../status/service/status-service.js';
-import { SystemStatusFailure } from '../../status/model/status-types.js';
+import { SystemStatusFailure } from '../../system-failure.js';
 import type { LocalSystemStatusResponse } from '@nexus-terminal/shared/system/status/http';
 import { SYSTEM_STATUS_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/system/status/values';
 

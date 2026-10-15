@@ -19,6 +19,7 @@ export async function initializeConnectionsSchema(db: SqlExecutor): Promise<void
       version INTEGER NOT NULL CHECK(version>=1),
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
+      last_connected_at INTEGER,
       CHECK ((route='proxy' AND proxy_id IS NOT NULL) OR (route!='proxy' AND proxy_id IS NULL)),
       CHECK (route!='jump' OR type='SSH'),
       CHECK (

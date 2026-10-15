@@ -1,3 +1,10 @@
+import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
+import { AGENT_APP_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/scope/values';
+import { readAgentAppStateUpdateRequest } from '@nexus-terminal/shared/agent/scope/http-codec';
+import { readAgentToolPath, readAgentToolEventsQuery } from '@nexus-terminal/shared/agent/tools/http-codec';
+import { AGENT_TOOL_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/tools/values';
+import type { AgentToolView } from '@nexus-terminal/shared/agent/tools/model';
+import type { AgentToolEventsResponse } from '@nexus-terminal/shared/agent/tools/http';
 import { agentErrorStatus } from './agent-http-status.js';
 import { InvalidAgentPayload, encodeAgentJson } from '@nexus-terminal/shared/agent/http-codec';
 import { AGENT_MAX_JSON_BODY_BYTES, AGENT_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/values';
@@ -16,7 +23,7 @@ import {
 	readAgentRunPath,
 	readAgentRunStepPath,
 } from '@nexus-terminal/shared/agent/runs/http-codec';
-import type { AgentAppView, AgentThreadView } from '@nexus-terminal/shared/agent/scope/model';
+import type { AgentAppView, AgentAppDefinitionView, AgentThreadView } from '@nexus-terminal/shared/agent/scope/model';
 import type {
 	AgentRunView,
 	AgentRunEventView,
@@ -38,11 +45,25 @@ import { AccessOperationError } from '../../../access/public-errors.js';
 import { AgentOperationError } from '../../public-errors.js';
 import type { AgentStateApi, AgentCreateRunResult, AgentCancelRunResult } from '../../public.js';
 
+import {
+	readAgentChildPath,
+	readAgentMessageMetadataQuery,
+} from '@nexus-terminal/shared/agent/collaboration/http-codec';
+import { AGENT_COLLABORATION_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/collaboration/values';
+import type {
+	AgentChildrenResponse,
+	AgentMessageMetadataResponse,
+} from '@nexus-terminal/shared/agent/collaboration/http';
+
 const ROOT = '/api/v1/agent';
 type Handler = (context: HttpRouteContext, userId: number) => Promise<void>;
 
 type AgentHttpResponse =
 	| AgentAppView
+	| AgentChildrenResponse
+	| AgentMessageMetadataResponse
+	| AgentAppView[]
+	| AgentAppDefinitionView[]
 	| AgentThreadView
 	| AgentRunView
 	| AgentCreateRunResponse
@@ -50,14 +71,21 @@ type AgentHttpResponse =
 	| AgentRunEventsResponse
 	| AgentRunStepView
 	| AgentRunStepEventsResponse
+	| AgentToolView
+	| AgentToolEventsResponse
 	| AgentErrorResponse;
 
-function sendAgent(context: HttpRouteContext, status: number, value: AgentHttpResponse): void {
+function sendAgent(
+	context: HttpRouteContext,
+	status: number,
+	value: AgentHttpResponse,
+	maxBytes = AGENT_MAX_RESPONSE_BYTES,
+): void {
 	try {
-		encodeAgentJson(value, AGENT_MAX_RESPONSE_BYTES);
+		encodeAgentJson(value, maxBytes);
 	} catch {
 		// A producer exceeding its contract is a server failure, not invalid user input.
-		throw new AgentOperationError('internal_failure');
+		throw new AgentOperationError('limit_exceeded');
 	}
 	context.send(status, value);
 }
@@ -167,7 +195,7 @@ function add(
 				if ([...context.query.keys()].some((key) => !queryKeys.includes(key))) {
 					throw new AgentOperationError('invalid_input');
 				}
-				const token = context.cookie('nexus_session');
+				const token = context.cookie(ACCESS_SESSION_COOKIE_NAME);
 				const identity = await access.authenticate(token);
 				if (identity === null) {
 					sendAgent(context, 401, { code: 'unauthenticated' });
@@ -185,38 +213,38 @@ function add(
 	});
 }
 
-function statusResult(context: HttpRouteContext, value: AgentCreateRunResult | AgentCancelRunResult): void {
+function toMutationResponse(value: AgentCreateRunResult | AgentCancelRunResult): {
+	status: number;
+	value: AgentCreateRunResponse | AgentCancelRunResponse | AgentErrorResponse;
+} {
 	if (value.status === 'scope_not_found' || value.status === 'not_found') {
-		sendAgent(context, 404, { code: 'not_found' });
-		return;
+		return { status: 404, value: { code: 'not_found' } };
 	}
 	if (
 		value.status === 'active_run_conflict' ||
 		value.status === 'idempotency_conflict' ||
 		value.status === 'version_conflict'
 	) {
-		sendAgent(context, 409, { code: value.status });
-		return;
+		return { status: 409, value: { code: value.status } };
 	}
 	if (value.status === 'replayed') {
-		sendAgent(context, 200, {
-			status: 'replayed',
-			originalStatus: value.originalStatus,
-			run: toRun(value.run),
-		});
-		return;
+		return {
+			status: 200,
+			value: {
+				status: 'replayed',
+				originalStatus: value.originalStatus,
+				run: toRun(value.run),
+			},
+		};
 	}
 	if (value.status === 'created') {
-		sendAgent(context, 201, { status: 'created', run: toRun(value.run) });
-		return;
+		return { status: 201, value: { status: 'created', run: toRun(value.run) } };
 	}
 	if (value.status === 'provider_unavailable') {
-		sendAgent(context, 503, { code: 'provider_unavailable' });
-		return;
+		return { status: 503, value: { code: 'provider_unavailable' } };
 	}
 	if (value.status === 'cancelled' || value.status === 'already_cancelled') {
-		sendAgent(context, 200, { status: value.status, run: toRun(value.run) });
-		return;
+		return { status: 200, value: { status: value.status, run: toRun(value.run) } };
 	}
 	// Never silently treat a newly introduced result as a successful HTTP call.
 	throw new AgentOperationError('internal_failure');
@@ -224,21 +252,148 @@ function statusResult(context: HttpRouteContext, value: AgentCreateRunResult | A
 
 export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentStateApi): HttpRoute[] {
 	const routes: HttpRoute[] = [];
+
+	async function deliver(
+		ctx: HttpRouteContext,
+		status: number,
+		value: AgentHttpResponse,
+		maxBytes = AGENT_MAX_RESPONSE_BYTES,
+	): Promise<void> {
+		const identity = await access.authenticate(ctx.cookie(ACCESS_SESSION_COOKIE_NAME));
+		if (identity === null) {
+			sendAgent(ctx, 401, { code: 'unauthenticated' });
+			return;
+		}
+		if (identity.userId !== 1) {
+			sendAgent(ctx, 403, { code: 'forbidden' });
+			return;
+		}
+		sendAgent(ctx, status, value, maxBytes);
+	}
+
+	add(routes, 'GET', '/apps/:appId/runs/:id/subagents', access, async (ctx, userId) => {
+		const path = runPath(ctx);
+		const result = await agent.listChildren(userId, path.appId, path.runId);
+		await deliver(
+			ctx,
+			result === null ? 404 : 200,
+			result === null
+				? { code: 'not_found' }
+				: {
+						items: result.items.map((child) => ({
+							id: child.id,
+							parentId: child.parentId,
+							status: child.status,
+							version: child.version,
+							profile: child.profile,
+							deadlineAt: child.deadlineAt,
+						})),
+					},
+			AGENT_COLLABORATION_MAX_RESPONSE_BYTES,
+		);
+	});
+	add(routes, 'POST', '/apps/:appId/runs/:id/subagents/:childId/cancel', access, async (ctx, userId) => {
+		const path = readAgentChildPath({ appId: ctx.params.appId, runId: ctx.params.id, childId: ctx.params.childId });
+		const key = operationKey(ctx);
+		const body = readAgentCancelRunRequest(await ctx.json());
+		const result = await agent.cancelChild(
+			{ userId, appId: path.appId, runId: path.runId, expectedVersion: body.expectedVersion, operationKey: key },
+			path.childId,
+		);
+		const response = toMutationResponse(result);
+		await deliver(ctx, response.status, response.value);
+	});
+	add(
+		routes,
+		'GET',
+		'/apps/:appId/runs/:id/subagents/:childId/messages',
+		access,
+		async (ctx, userId) => {
+			const path = readAgentChildPath({
+				appId: ctx.params.appId,
+				runId: ctx.params.id,
+				childId: ctx.params.childId,
+			});
+			const query = readAgentMessageMetadataQuery(ctx.query);
+			const result = await agent.listChildMessages(
+				userId,
+				path.appId,
+				path.runId,
+				path.childId,
+				query.after,
+				query.limit,
+			);
+			await deliver(
+				ctx,
+				result === null ? 404 : 200,
+				result === null
+					? { code: 'not_found' }
+					: {
+							items: result.items.map((item) => ({
+								sequence: item.sequence,
+								senderId: item.senderId,
+								bodyBytes: item.bodyBytes,
+								expiresAt: item.expiresAt,
+							})),
+							nextCursor: result.nextCursor,
+						},
+				AGENT_COLLABORATION_MAX_RESPONSE_BYTES,
+			);
+		},
+		['after', 'limit'],
+	);
+
+	add(routes, 'GET', '/app-definitions', access, async (ctx) => {
+		const values = await agent.listAppDefinitions();
+		await deliver(
+			ctx,
+			200,
+			values.map((value) => ({
+				id: value.id,
+				version: value.version,
+				displayName: value.displayName,
+				capabilities: value.capabilities.map((capability) => capability),
+				defaultEnabled: value.defaultEnabled,
+			})),
+			AGENT_APP_MAX_RESPONSE_BYTES,
+		);
+	});
+	add(routes, 'GET', '/apps', access, async (ctx, userId) => {
+		await deliver(ctx, 200, (await agent.listApps(userId)).map(toApp), AGENT_APP_MAX_RESPONSE_BYTES);
+	});
+	add(routes, 'GET', '/apps/:appId', access, async (ctx, userId) => {
+		const appId = readAgentAppPath(ctx.params).appId;
+		const value = await agent.getApp(userId, appId);
+		await deliver(ctx, value === null ? 404 : 200, value === null ? { code: 'not_found' } : toApp(value));
+	});
+	add(routes, 'PATCH', '/apps/:appId', access, async (ctx, userId) => {
+		const appId = readAgentAppPath(ctx.params).appId;
+		const input = readAgentAppStateUpdateRequest(await ctx.json());
+		const value = await agent.setAppEnabled(userId, appId, input.enabled, input.expectedVersion);
+		await deliver(ctx, value === null ? 404 : 200, value === null ? { code: 'not_found' } : toApp(value));
+	});
 	add(routes, 'POST', '/apps', access, async (ctx, userId) => {
 		const body = readAgentCreateAppRequest(await ctx.json());
-		const view = await agent.createApp(userId, body.name);
-		sendAgent(ctx, 201, { id: view.id, name: view.name, createdAt: view.createdAt });
+		const view = await agent.createApp(userId, body.name, body.definitionId);
+		await deliver(ctx, 201, toApp(view));
 	});
 	add(routes, 'POST', '/apps/:appId/threads', access, async (ctx, userId) => {
 		const body = readAgentCreateThreadRequest(await ctx.json());
 		const path = readAgentAppPath(ctx.params);
 		const result = await agent.createThread(userId, path.appId, body.title);
-		sendAgent(
+		await deliver(
 			ctx,
 			result === null ? 404 : 201,
 			result === null
 				? { code: 'not_found' }
-				: { id: result.id, appId: result.appId, title: result.title, createdAt: result.createdAt },
+				: {
+						id: result.id,
+						appId: result.appId,
+						title: result.title,
+						version: result.version,
+						createdAt: result.createdAt,
+						updatedAt: result.updatedAt,
+					},
 		);
 	});
 	add(
@@ -255,6 +410,7 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 				appId: path.appId,
 				threadId: path.threadId,
 				prompt: body.prompt,
+				connectionIds: body.connectionIds.map((id) => id),
 				model: {
 					providerId: body.model.providerId,
 					modelId: body.model.modelId,
@@ -262,7 +418,8 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 				},
 				operationKey: key,
 			});
-			statusResult(ctx, value);
+			const response = toMutationResponse(value);
+			await deliver(ctx, response.status, response.value);
 		},
 		[],
 		AGENT_RUN_MAX_JSON_BODY_BYTES,
@@ -278,13 +435,70 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 			expectedVersion: body.expectedVersion,
 			operationKey: key,
 		});
-		statusResult(ctx, value);
+		const response = toMutationResponse(value);
+		await deliver(ctx, response.status, response.value);
 	});
 	add(routes, 'GET', '/apps/:appId/runs/:id', access, async (ctx, userId) => {
 		const path = runPath(ctx);
 		const result = await agent.getRun(userId, path.appId, path.runId);
-		sendAgent(ctx, result === null ? 404 : 200, result === null ? { code: 'not_found' } : toRun(result));
+		await deliver(ctx, result === null ? 404 : 200, result === null ? { code: 'not_found' } : toRun(result));
 	});
+	add(routes, 'GET', '/apps/:appId/runs/:id/tools/:toolCallId', access, async (ctx, userId) => {
+		const path = readAgentToolPath({
+			appId: ctx.params.appId,
+			runId: ctx.params.id,
+			toolCallId: ctx.params.toolCallId,
+		});
+		const result = await agent.getTool(userId, path.appId, path.runId, path.toolCallId);
+		await deliver(
+			ctx,
+			result === null ? 404 : 200,
+			result === null ? { code: 'not_found' } : toTool(result),
+			AGENT_TOOL_MAX_RESPONSE_BYTES,
+		);
+	});
+	add(
+		routes,
+		'GET',
+		'/apps/:appId/runs/:id/tools/:toolCallId/events',
+		access,
+		async (ctx, userId) => {
+			const path = readAgentToolPath({
+				appId: ctx.params.appId,
+				runId: ctx.params.id,
+				toolCallId: ctx.params.toolCallId,
+			});
+			const query = readAgentToolEventsQuery(ctx.query);
+			const result = await agent.listToolEvents(
+				userId,
+				path.appId,
+				path.runId,
+				path.toolCallId,
+				query.after,
+				query.limit,
+			);
+			await deliver(
+				ctx,
+				result === null ? 404 : 200,
+				result === null
+					? { code: 'not_found' }
+					: {
+							items: result.items.map((event) => ({
+								toolCallId: event.toolCallId,
+								runId: event.runId,
+								revision: event.revision,
+								operationRevision: event.operationRevision,
+								state: event.state,
+								operationHash: event.operationHash,
+								createdAt: event.createdAt,
+							})),
+							nextCursor: result.nextCursor,
+						},
+				AGENT_TOOL_MAX_RESPONSE_BYTES,
+			);
+		},
+		['after', 'limit'],
+	);
 	add(
 		routes,
 		'GET',
@@ -294,7 +508,7 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 			const query = readAgentRunEventsQuery(ctx.query);
 			const path = runPath(ctx);
 			const result = await agent.listEvents(userId, path.appId, path.runId, query.after, query.limit);
-			sendAgent(
+			await deliver(
 				ctx,
 				result === null ? 404 : 200,
 				result === null
@@ -314,7 +528,7 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 			stepIndex: ctx.params.stepIndex,
 		});
 		const result = await agent.getStep(userId, path.appId, path.runId, path.stepIndex);
-		sendAgent(ctx, result === null ? 404 : 200, result === null ? { code: 'not_found' } : toStep(result));
+		await deliver(ctx, result === null ? 404 : 200, result === null ? { code: 'not_found' } : toStep(result));
 	});
 	add(
 		routes,
@@ -336,7 +550,7 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 				query.after,
 				query.limit,
 			);
-			sendAgent(
+			await deliver(
 				ctx,
 				result === null ? 404 : 200,
 				result === null
@@ -350,4 +564,41 @@ export function createAgentHttpRoutes(access: AccessPublicApi, agent: AgentState
 		['after', 'limit'],
 	);
 	return routes;
+}
+
+function toApp(value: AgentAppView): AgentAppView {
+	return {
+		id: value.id,
+		name: value.name,
+		definitionId: value.definitionId,
+		definitionVersion: value.definitionVersion,
+		capabilities: value.capabilities.map((capability) => capability),
+		enabled: value.enabled,
+		version: value.version,
+		executionState: value.executionState,
+		createdAt: value.createdAt,
+		updatedAt: value.updatedAt,
+	};
+}
+
+function toTool(value: AgentToolView): AgentToolView {
+	return {
+		id: value.id,
+		appId: value.appId,
+		runId: value.runId,
+		modelStepIndex: value.modelStepIndex,
+		toolName: value.toolName,
+		toolVersion: value.toolVersion,
+		capability: value.capability,
+		targetId: value.targetId,
+		targetVersion: value.targetVersion,
+		risk: value.risk,
+		mutation: value.mutation,
+		operationHash: value.operationHash,
+		operationRevision: value.operationRevision,
+		revision: value.revision,
+		state: value.state,
+		createdAt: value.createdAt,
+		updatedAt: value.updatedAt,
+	};
 }

@@ -1,0 +1,82 @@
+import { AGENT_THREAD_MAX_PAGE } from '@nexus-terminal/shared/agent/scope/values';
+import { AGENT_SCOPE_MAX_NAME_BYTES } from '@nexus-terminal/shared/agent/scope/values';
+import { validateAgentId, validateUserId } from '../../agent-validation.js';
+import { AgentFailure } from '../../agent-failure.js';
+import type { ThreadModel } from '../model/thread-model.js';
+import type { ThreadAccess, ThreadPage, ThreadMutation, ThreadAccessFacts } from '../model/thread-types.js';
+import type { AgentThread } from '../model/scope-types.js';
+
+function admission(access: ThreadAccess, facts: ThreadAccessFacts): void {
+	access.assertCurrent();
+	if (facts.identityUserId !== access.userId) {
+		throw new AgentFailure('unauthenticated');
+	}
+	if (!facts.installed || !facts.enabled || !facts.trusted) {
+		throw new AgentFailure('forbidden');
+	}
+	if (facts.revision !== access.revision || access.expiresAt <= Date.now()) {
+		throw new AgentFailure('version_conflict');
+	}
+}
+
+export class ThreadService {
+	constructor(private readonly model: ThreadModel) {}
+
+	async list(access: ThreadAccess, after: string | null, limit: number): Promise<ThreadPage> {
+		validateUserId(access.userId);
+		validateAgentId(access.appId);
+		if (after !== null) {
+			validateAgentId(after);
+		}
+		if (!Number.isSafeInteger(limit) || limit < 1 || limit > AGENT_THREAD_MAX_PAGE) {
+			throw new AgentFailure('invalid_input');
+		}
+		const values = await this.model.list(access, after, limit + 1, (facts) => admission(access, facts));
+		const items = values.slice(0, limit);
+		return { items, nextCursor: values.length > limit ? items[items.length - 1].id : null };
+	}
+
+	mutate(access: ThreadAccess, input: ThreadMutation): Promise<AgentThread> {
+		validateUserId(access.userId);
+		validateAgentId(access.appId);
+		validateAgentId(input.operationId);
+		if (
+			typeof input.title !== 'string' ||
+			!input.title.trim() ||
+			Buffer.byteLength(input.title, 'utf8') > AGENT_SCOPE_MAX_NAME_BYTES ||
+			Buffer.from(input.title, 'utf8').toString('utf8') !== input.title
+		) {
+			throw new AgentFailure('invalid_input');
+		}
+		if (input.kind === 'rename') {
+			validateAgentId(input.threadId);
+			if (
+				!Number.isSafeInteger(input.expectedVersion) ||
+				input.expectedVersion < 1 ||
+				input.expectedVersion >= Number.MAX_SAFE_INTEGER
+			) {
+				throw new AgentFailure('invalid_input');
+			}
+		}
+		const command: ThreadMutation =
+			input.kind === 'create'
+				? { kind: input.kind, operationId: input.operationId, title: input.title.trim() }
+				: {
+						kind: input.kind,
+						operationId: input.operationId,
+						title: input.title.trim(),
+						threadId: input.threadId,
+						expectedVersion: input.expectedVersion,
+					};
+		return this.model.mutate(
+			access,
+			command,
+			(threads, commands) => {
+				if ((input.kind === 'create' && threads >= 512) || commands >= 4096) {
+					throw new AgentFailure('limit_exceeded');
+				}
+			},
+			(facts) => admission(access, facts),
+		);
+	}
+}

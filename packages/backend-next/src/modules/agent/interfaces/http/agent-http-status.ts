@@ -2,6 +2,15 @@ import type { AgentOperationError } from '../../public-errors.js';
 
 export function agentErrorStatus(code: AgentOperationError['code']): number {
 	switch (code) {
+		case 'unauthenticated':
+			return 401;
+		case 'forbidden':
+			return 403;
+		case 'execution_disabled':
+		case 'app_disabled':
+		case 'capability_undeclared':
+		case 'target_denied':
+			return 403;
 		case 'limit_exceeded':
 			return 413;
 		case 'invalid_input':

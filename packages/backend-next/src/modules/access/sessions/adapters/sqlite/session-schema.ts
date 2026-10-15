@@ -16,14 +16,9 @@ export async function initializeSessionSchema(tx: SqlExecutor): Promise<void> {
       source TEXT PRIMARY KEY,
       attempts INTEGER NOT NULL CHECK(attempts >= 0),
       window_started_at INTEGER NOT NULL,
-      blocked_until INTEGER NOT NULL
+      blocked_until INTEGER NOT NULL,
+      last_attempt_at INTEGER NOT NULL
     );
+    CREATE INDEX idx_access_login_attempts_last ON access_login_attempts(last_attempt_at);
   `);
-}
-
-/** v5 extension for the existing v1–v4 database; do not rewrite v1 history. */
-export async function extendSessionLoginFailureSchema(tx: SqlExecutor): Promise<void> {
-	await tx.exec('ALTER TABLE access_login_attempts ADD COLUMN last_attempt_at INTEGER NOT NULL DEFAULT 0;');
-	await tx.run('UPDATE access_login_attempts SET last_attempt_at=window_started_at WHERE last_attempt_at=0;');
-	await tx.exec('CREATE INDEX idx_access_login_attempts_last ON access_login_attempts(last_attempt_at);');
 }

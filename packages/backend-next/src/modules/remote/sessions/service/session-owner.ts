@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import type { OperationsEvents } from '../../../operations/public.js';
 import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.js';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import { RecentResults } from '../../../../platform/lifecycle/recent-results.js';
@@ -45,6 +47,7 @@ export class RemoteSessionOwner {
 	constructor(
 		private readonly access: AccessPublicApi,
 		private readonly remote: RemoteSessionOperations,
+		private readonly events: OperationsEvents,
 	) {}
 
 	private async identity(token: string | null): Promise<number> {
@@ -87,7 +90,25 @@ export class RemoteSessionOwner {
 			term: request.term,
 			signal: request.signal,
 		});
-		const view = await task;
+		let view: Awaited<typeof task>;
+		try {
+			view = await task;
+		} catch (error) {
+			try {
+				await this.events.publish({
+					key: 'ssh-failure:' + randomUUID(),
+					event: 'SSH_CONNECT_FAILURE',
+					userId,
+					subjectId: String(request.targetId),
+					sourceIp: null,
+					route: null,
+					statusCode: null,
+				});
+			} catch (publication) {
+				throw new AggregateError([error, publication], 'SSH connection and event publication failed');
+			}
+			throw error;
+		}
 		try {
 			if (!token || (await this.identity(token)) !== userId || !this.accepting || request.signal?.aborted) {
 				throw new RemotePermissionError('unauthenticated');
@@ -106,6 +127,15 @@ export class RemoteSessionOwner {
 			}, 30_000);
 			record.attachDeadline.unref();
 			this.owners.set(view.id, record);
+			await this.events.publish({
+				key: 'ssh:' + view.id,
+				event: 'SSH_CONNECT_SUCCESS',
+				userId,
+				subjectId: String(view.targetId),
+				sourceIp: null,
+				route: null,
+				statusCode: null,
+			});
 			return {
 				id: view.id,
 				targetId: view.targetId,
@@ -115,6 +145,11 @@ export class RemoteSessionOwner {
 			};
 		} catch (error) {
 			try {
+				const owner = this.owners.get(view.id);
+				if (owner?.attachDeadline) {
+					clearTimeout(owner.attachDeadline);
+				}
+				this.owners.delete(view.id);
 				await this.remote.closeSession(view.id);
 			} catch (cleanup) {
 				throw new RemoteResourceCleanupFailure([error, cleanup]);

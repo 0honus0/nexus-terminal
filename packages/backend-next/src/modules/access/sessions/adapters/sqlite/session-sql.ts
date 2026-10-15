@@ -1,3 +1,4 @@
+import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 import { createHash } from 'node:crypto';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type {
@@ -119,49 +120,51 @@ export class SqliteSessionStorage implements SessionStorage {
 
 	async validate(tokenDigest: string, now: number): Promise<SessionRecord | null> {
 		await this.maybeSweep(now);
-		return this.db.transaction(async (tx) => {
-			const row = await tx.one(
-				`SELECT s.expires_at,s.password_revision,a.id,a.username,a.password_hash,
+		return this.db.transaction((tx) => this.validateInTransaction(tx, tokenDigest, now));
+	}
+
+	async validateInTransaction(tx: SqlExecutor, tokenDigest: string, now: number): Promise<SessionRecord | null> {
+		const row = await tx.one(
+			`SELECT s.expires_at,s.password_revision,a.id,a.username,a.password_hash,
                 a.two_factor_enabled,a.passkey_required,a.created_at,a.updated_at
          FROM access_sessions s JOIN access_accounts a ON a.id=s.user_id
          WHERE s.token_digest=?`,
-				[tokenDigest],
-			);
-			if (!row) {
-				return null;
-			}
-			if (
-				typeof row.password_hash !== 'string' ||
-				row.password_revision !== credentialRevision(row.password_hash) ||
-				typeof row.expires_at !== 'number' ||
-				row.expires_at <= now ||
-				(row.two_factor_enabled !== 0 && row.two_factor_enabled !== 1) ||
-				(row.passkey_required !== 0 && row.passkey_required !== 1)
-			) {
-				await tx.run('DELETE FROM access_sessions WHERE token_digest=?', [tokenDigest]);
-				return null;
-			}
+			[tokenDigest],
+		);
+		if (!row) {
+			return null;
+		}
+		if (
+			typeof row.password_hash !== 'string' ||
+			row.password_revision !== credentialRevision(row.password_hash) ||
+			typeof row.expires_at !== 'number' ||
+			row.expires_at <= now ||
+			(row.two_factor_enabled !== 0 && row.two_factor_enabled !== 1) ||
+			(row.passkey_required !== 0 && row.passkey_required !== 1)
+		) {
+			await tx.run('DELETE FROM access_sessions WHERE token_digest=?', [tokenDigest]);
+			return null;
+		}
 
-			const number = (value: unknown): number => {
-				if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
-					throw new Error('Corrupt session account');
-				}
-				return value;
-			};
-
-			if (typeof row.username !== 'string') {
-				throw new Error('Corrupt session username');
+		const number = (value: unknown): number => {
+			if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+				throw new Error('Corrupt session account');
 			}
-			return {
-				userId: number(row.id),
-				username: row.username,
-				twoFactorEnabled: row.two_factor_enabled === 1,
-				passkeyRequired: row.passkey_required === 1,
-				createdAt: number(row.created_at),
-				updatedAt: number(row.updated_at),
-				expiresAt: number(row.expires_at),
-			};
-		});
+			return value;
+		};
+
+		if (typeof row.username !== 'string') {
+			throw new Error('Corrupt session username');
+		}
+		return {
+			userId: number(row.id),
+			username: row.username,
+			twoFactorEnabled: row.two_factor_enabled === 1,
+			passkeyRequired: row.passkey_required === 1,
+			createdAt: number(row.created_at),
+			updatedAt: number(row.updated_at),
+			expiresAt: number(row.expires_at),
+		};
 	}
 
 	async revoke(tokenDigest: string): Promise<void> {

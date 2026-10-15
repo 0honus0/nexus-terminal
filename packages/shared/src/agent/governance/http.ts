@@ -49,3 +49,11 @@ export type AgentExecutionPolicyResponse = AgentExecutionPolicyView;
 export type AgentApprovalResponse = AgentApprovalView;
 
 export type AgentApprovalListResponse = AgentApprovalView[];
+
+export interface AgentTargetDenylistReplaceRequest {
+	connectionIds: number[];
+	reason: string;
+	expectedRevision: number;
+}
+
+export type AgentTargetDenylistResponse = import('./model.js').AgentTargetDenylistView;

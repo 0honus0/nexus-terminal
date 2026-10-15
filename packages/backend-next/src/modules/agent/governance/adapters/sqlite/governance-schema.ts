@@ -1,7 +1,7 @@
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 
-/** Additive v10 schema; signed earlier migrations remain unchanged. */
-export async function migrateAgentGovernance(tx: SqlExecutor): Promise<void> {
+/** Governance tables in the first-release schema. */
+export async function initializeAgentGovernance(tx: SqlExecutor): Promise<void> {
 	await tx.exec(`
  CREATE TABLE agent_governance_policies(
    user_id INTEGER NOT NULL, app_id TEXT NOT NULL,
@@ -27,6 +27,8 @@ export async function migrateAgentGovernance(tx: SqlExecutor): Promise<void> {
    policy_revision INTEGER NOT NULL,input_revision INTEGER NOT NULL,
    version INTEGER NOT NULL CHECK(version>=1),requested_at INTEGER NOT NULL,expires_at INTEGER NOT NULL,
    decided_at INTEGER,decided_by_user_id INTEGER,consumed_at INTEGER,feedback TEXT,inspection_json TEXT NOT NULL,
+   capability TEXT NOT NULL,target_version INTEGER CHECK(target_version>=1),
+   FOREIGN KEY(tool_call_id,user_id,app_id,run_id) REFERENCES agent_run_tools(id,user_id,app_id,run_id) ON DELETE CASCADE,
    FOREIGN KEY(app_id,user_id) REFERENCES agent_apps(id,user_id) ON DELETE CASCADE
  );
  CREATE INDEX agent_governance_approval_run ON agent_governance_approvals(user_id,app_id,run_id,requested_at,id);

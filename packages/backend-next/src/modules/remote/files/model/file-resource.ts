@@ -70,7 +70,10 @@ export class SftpFileResource implements FileResource {
 		return this.usable && this.closePromise === null && this.#machine.isOpen;
 	}
 
-	private translate(error: unknown, mutation: boolean): RemoteFileFailure {
+	private translate(error: unknown, mutation: boolean): RemoteFileFailure | RemoteResourceCleanupFailure {
+		if (error instanceof RemoteResourceCleanupFailure) {
+			return error;
+		}
 		if (error instanceof RemoteFileFailure) {
 			return error;
 		}
@@ -134,8 +137,26 @@ export class SftpFileResource implements FileResource {
 		return this.perform(() => this.openByteSource(request), request.signal);
 	}
 
-	stage(request: FileStageRequest): Promise<FileStagedWrite> {
-		return this.perform(() => this.stageBytes(request), request.signal, true);
+	async stage(request: FileStageRequest): Promise<FileStagedWrite> {
+		if (!this.isOpen) {
+			throw new RemoteFileFailure('remote_unavailable');
+		}
+		request.signal.throwIfAborted();
+		let staged: FileStagedWrite;
+		try {
+			staged = await this.stageBytes(request);
+		} catch (error) {
+			throw this.translate(error, true);
+		}
+		if (request.signal.aborted || !this.isOpen) {
+			try {
+				await staged.discard();
+			} catch (cleanup) {
+				throw new RemoteResourceCleanupFailure([cleanup]);
+			}
+			throw new RemoteFileFailure('operation_unknown');
+		}
+		return staged;
 	}
 
 	openUploadStage(request: FileOperationRequest & { mode?: number }): Promise<FileUploadStage> {
@@ -597,12 +618,35 @@ export class SftpFileResource implements FileResource {
 	private async stageBytes(request: FileStageRequest): Promise<FileStagedWrite> {
 		const remaining = this.deadline(request);
 		const temporary = path.posix.join(path.posix.dirname(request.path), `.nexus-save-${randomUUID()}.part`);
-		await this.#lease.writeFile(temporary, request.bytes, {
-			flags: 'wx',
-			mode: request.mode,
-			signal: request.signal,
-			timeoutMs: remaining(),
-		});
+		let written = false;
+		try {
+			await this.#lease.writeFile(temporary, request.bytes, {
+				flags: 'wx',
+				mode: request.mode,
+				signal: request.signal,
+				timeoutMs: remaining(),
+			});
+			written = true;
+			if (request.mode !== undefined) {
+				await this.#lease.chmod(temporary, request.mode, { signal: request.signal, timeoutMs: remaining() });
+			}
+		} catch (error) {
+			if (hasUnknownOutcome(error)) {
+				this.usable = false;
+				throw new RemoteResourceCleanupFailure([this.translate(error, true)]);
+			}
+			if (written) {
+				try {
+					await this.#lease.remove(temporary, { timeoutMs: 2000 });
+				} catch (cleanup) {
+					if (!(cleanup instanceof MachineSftpFailure && cleanup.remoteStatus === 'not_found')) {
+						this.usable = false;
+						throw new RemoteResourceCleanupFailure([error, cleanup]);
+					}
+				}
+			}
+			throw error;
+		}
 		let state: 'staged' | 'committed' | 'discarded' | 'unknown' = 'staged';
 
 		const commit = async (mode: 'create' | 'replace'): Promise<void> => {

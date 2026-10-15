@@ -1,5 +1,13 @@
+import { readOverrides } from '../../../governance/adapters/sqlite/governance-row.js';
+import type { StoredPolicyOverrides } from '../../../governance/storage/governance-storage.js';
+import { executionSettings } from '../../../execution/adapters/sqlite/execution-sql.js';
+import type { StoredExecutionSettings } from '../../../execution/storage/execution-storage.js';
+import { appAuthority } from '../../../scope/adapters/sqlite/app-row.js';
+import { nextThreadSequence } from './run-order.js';
+import type { StoredAppAuthority } from '../../../scope/storage/scope-storage.js';
+import { fenceRunSteps } from './run-fence.js';
 import type { AgentRunStatus, AgentRunCommandOutcome } from '@nexus-terminal/shared/agent/runs/values';
-import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
+import type { SqlExecutor, SqlReader } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type { ProviderStorage } from '../../../providers/storage/provider-storage.js';
 import type { ProviderStoredRow } from '../../../providers/storage/provider-storage.js';
@@ -48,7 +56,7 @@ function runStatus(value: unknown): AgentRunStatus {
 	throw new Error('Corrupt Agent Run status');
 }
 
-function decodeRun(row: Row): StoredRun {
+export function decodeRun(row: Row): StoredRun {
 	return {
 		id: stringValue(row.id),
 		userId: integer(row.user_id, 1),
@@ -61,7 +69,7 @@ function decodeRun(row: Row): StoredRun {
 	};
 }
 
-function decodeEvent(row: Row): StoredRunEvent {
+export function decodeEvent(row: Row): StoredRunEvent {
 	const type = row.event_type;
 	if (
 		type !== 'run.created' &&
@@ -110,7 +118,7 @@ const SELECT_RUN = `
 
 /** The Run-owned SQLite adapter decodes frozen JSON inside an existing transaction. */
 export async function frozenFromRun(
-	db: SqlExecutor,
+	db: SqlReader,
 	userId: number,
 	appId: string,
 	runId: string,
@@ -126,7 +134,7 @@ export async function frozenFromRun(
 	if (protocol !== 'responses' && protocol !== 'chat-completions') {
 		throw new Error('Corrupt frozen protocol');
 	}
-	if (row.execution_policy !== 'awaiting_b6_b7') {
+	if (row.execution_policy !== 'governed') {
 		throw new Error('Corrupt execution policy');
 	}
 	const modelId = stringValue(row.model_id);
@@ -142,7 +150,7 @@ export async function frozenFromRun(
 		baseUrl: stringValue(row.base_url),
 		protocol,
 		capabilities,
-		executionPolicy: 'awaiting_b6_b7',
+		executionPolicy: 'governed',
 	};
 }
 
@@ -196,6 +204,10 @@ async function saveReplay(
 }
 
 export class SqliteRunStorage implements RunStorage {
+	ownExecution(work: () => Promise<void>): Promise<void> {
+		return this.db.withoutTransactionAdmission(work);
+	}
+
 	constructor(
 		private readonly db: SqliteRuntime,
 		private readonly providers: ProviderStorage,
@@ -205,6 +217,13 @@ export class SqliteRunStorage implements RunStorage {
 		command: CreateRunStorageCommand,
 		mayCreate: (active: StoredRun | null) => boolean,
 		resolve: (provider: ProviderStoredRow, reference: StoredModelReference) => StoredFrozenInput | null,
+		authorizeApp: (current: StoredAppAuthority) => void,
+		authorizeOrigin: (current: StoredRun | null) => void,
+		freezeExecution: (
+			current: StoredExecutionSettings | null,
+			activeRuns: number,
+			overrides: StoredPolicyOverrides,
+		) => StoredExecutionSettings,
 	): Promise<StoredCreateResult> {
 		return this.db.transaction(async (tx) => {
 			const previous = await replay(tx, command.userId, command.appId, 'create_run', command.operationKey);
@@ -213,6 +232,13 @@ export class SqliteRunStorage implements RunStorage {
 					return { status: 'idempotency_conflict' };
 				}
 				return { status: 'replayed', originalStatus: 'created', run: previous.run };
+			}
+			if (command.origin !== null) {
+				const source = await tx.one(
+					"SELECT * FROM agent_runs WHERE user_id=? AND app_id=? AND thread_id=? AND id=? AND run_kind='root'",
+					[command.userId, command.appId, command.threadId, command.origin.runId],
+				);
+				authorizeOrigin(source === null ? null : decodeRun(source));
 			}
 			const scope = await tx.one(
 				`
@@ -225,13 +251,36 @@ export class SqliteRunStorage implements RunStorage {
 			if (scope === null) {
 				return { status: 'scope_not_found' };
 			}
-			const row = await tx.one(SELECT_RUN + " WHERE thread_id=? AND status IN ('pending','running','unknown')", [
-				command.threadId,
-			]);
+			const authority = await appAuthority(tx, command.userId, command.appId);
+			if (authority === null) {
+				return { status: 'scope_not_found' };
+			}
+			authorizeApp(authority);
+			const row = await tx.one(
+				SELECT_RUN + " WHERE thread_id=? AND run_kind='root' AND status IN ('pending','running','unknown')",
+				[command.threadId],
+			);
 			const active = row === null ? null : decodeRun(row);
 			if (!mayCreate(active)) {
 				return { status: 'active_run_conflict' };
 			}
+			const occupied = await tx.one(
+				"SELECT COUNT(*) AS count FROM agent_runs WHERE user_id=? AND status IN ('pending','running','unknown')",
+				[command.userId],
+			);
+			if (!occupied) {
+				throw new Error('Execution occupancy missing');
+			}
+			const policy = await tx.one(
+				'SELECT execution_overrides_json FROM agent_governance_policies WHERE user_id=? AND app_id=?',
+				[command.userId, command.appId],
+			);
+			const execution = freezeExecution(
+				await executionSettings(tx, command.userId),
+				integer(occupied.count),
+				policy === null ? {} : readOverrides(policy.execution_overrides_json),
+			);
+			const deadlineAt = command.createdAt + execution.limits.maxActiveSeconds * 1000;
 			const provider = await this.providers.snapshot(tx, command.userId, command.model.providerId);
 			const frozen = provider === null ? null : resolve(provider, command.model);
 			if (!frozen) {
@@ -239,20 +288,23 @@ export class SqliteRunStorage implements RunStorage {
 			}
 			await tx.run(
 				`
-				INSERT INTO agent_runs(id,user_id,app_id,thread_id,run_kind,status,version,input_text,created_at,updated_at)
-				VALUES(?,?,?,?,?,?,?,?,?,?)
+				INSERT INTO agent_runs(id,user_id,app_id,thread_id,thread_sequence,run_kind,status,version,input_text,selected_connections_json,created_at,updated_at,deadline_at)
+				VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
 			`,
 				[
 					command.id,
 					command.userId,
 					command.appId,
 					command.threadId,
+					await nextThreadSequence(tx, command.threadId),
 					'root',
 					'pending',
 					1,
 					command.inputText,
+					JSON.stringify(command.connectionIds),
 					command.createdAt,
 					command.createdAt,
+					deadlineAt,
 				],
 			);
 			const run: StoredRun = {
@@ -286,6 +338,10 @@ export class SqliteRunStorage implements RunStorage {
 			`,
 				[run.id, 1, 'run.created', run.version, run.createdAt],
 			);
+			await tx.run('INSERT INTO agent_run_execution_settings(run_id,settings_json) VALUES(?,?)', [
+				command.id,
+				JSON.stringify(execution),
+			]);
 			await saveReplay(tx, command, 'create_run', run, 'created');
 			return { status: 'created', run };
 		});
@@ -366,26 +422,7 @@ export class SqliteRunStorage implements RunStorage {
 				[updated.id, sequence, 'run.cancelled', updated.version, updated.updatedAt],
 			);
 			await saveReplay(tx, command, 'cancel_run', updated, 'cancelled');
-			// A reserved step was never dispatched; a dispatched step may have
-			// reached the provider. Preserve this distinction when fencing writers.
-			const stepEvents = await tx.run(
-				`INSERT INTO agent_run_model_step_events(run_id,step_index,sequence,kind,created_at)
-				 SELECT run_id,step_index,revision+1,
-				        CASE WHEN state='reserved' THEN 'step.failed' ELSE 'step.unknown' END,?
-				 FROM agent_run_model_steps WHERE run_id=? AND state IN ('reserved','dispatched')`,
-				[updated.updatedAt, updated.id],
-			);
-			const stepChanges = await tx.run(
-				`UPDATE agent_run_model_steps
-				 SET failure_code=CASE WHEN state='reserved' THEN 'DISPATCH_NOT_STARTED' ELSE NULL END,
-				     state=CASE WHEN state='reserved' THEN 'failed' ELSE 'unknown' END,
-				     expected_run_version=?,revision=revision+1,updated_at=?
-				 WHERE run_id=? AND state IN ('reserved','dispatched')`,
-				[updated.version, updated.updatedAt, updated.id],
-			);
-			if (stepEvents.changes !== stepChanges.changes) {
-				throw new Error('Run cancellation step event/state mismatch');
-			}
+			await fenceRunSteps(tx, updated.id, updated.version, updated.updatedAt);
 			return { status: 'cancelled', run: updated };
 		});
 	}
@@ -393,6 +430,34 @@ export class SqliteRunStorage implements RunStorage {
 	async get(userId: number, appId: string, runId: string): Promise<StoredRun | null> {
 		const row = await this.db.one(SELECT_RUN + ' WHERE id=? AND app_id=? AND user_id=?', [runId, appId, userId]);
 		return row === null ? null : decodeRun(row);
+	}
+
+	list(
+		userId: number,
+		appId: string,
+		threadId: string,
+		after: number,
+		limit: number,
+	): Promise<{ items: StoredRun[]; nextCursor: number } | null> {
+		return this.db.transaction(async (tx) => {
+			if (
+				!(await tx.one('SELECT id FROM agent_threads WHERE user_id=? AND app_id=? AND id=?', [
+					userId,
+					appId,
+					threadId,
+				]))
+			) {
+				return null;
+			}
+			const rows = await tx.all(
+				"SELECT * FROM agent_runs WHERE user_id=? AND app_id=? AND thread_id=? AND run_kind='root' AND thread_sequence>? ORDER BY thread_sequence LIMIT ?",
+				[userId, appId, threadId, after, limit],
+			);
+			return {
+				items: rows.map(decodeRun),
+				nextCursor: rows.length ? integer(rows[rows.length - 1].thread_sequence, after + 1) : after,
+			};
+		});
 	}
 
 	listEvents(

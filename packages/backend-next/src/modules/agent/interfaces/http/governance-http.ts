@@ -1,3 +1,8 @@
+import { toApproval } from './governance-mapper.js';
+import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
+import { readAgentTargetDenylistReplaceRequest } from '@nexus-terminal/shared/agent/governance/http-codec';
+import type { AgentTargetDenylistView } from '@nexus-terminal/shared/agent/governance/model';
+import type { TargetDenylist } from '../../governance/model/governance-types.js';
 import { agentErrorStatus } from './agent-http-status.js';
 import {
 	AGENT_GOVERNANCE_MAX_BODY_BYTES,
@@ -38,7 +43,12 @@ import type {
 } from '../../governance/model/governance-types.js';
 
 type Response =
-	AgentGrantView | AgentExecutionPolicyView | AgentApprovalView | AgentApprovalView[] | AgentErrorResponse;
+	| AgentGrantView
+	| AgentExecutionPolicyView
+	| AgentApprovalView
+	| AgentApprovalView[]
+	| AgentTargetDenylistView
+	| AgentErrorResponse;
 
 function send(ctx: HttpRouteContext, status: number, value: Response): void {
 	try {
@@ -89,12 +99,6 @@ function fromPublicPolicy(value: AgentExecutionPolicyOverrides): PolicyOverrides
 	if (value.maxModelRequests !== undefined) {
 		result.maxModelRequests = value.maxModelRequests;
 	}
-	if (value.maxAutoModelRequests !== undefined) {
-		result.maxAutoModelRequests = value.maxAutoModelRequests;
-	}
-	if (value.maxAutoActiveExecutionSeconds !== undefined) {
-		result.maxAutoActiveExecutionSeconds = value.maxAutoActiveExecutionSeconds;
-	}
 	if (value.maxActiveExecutionSeconds !== undefined) {
 		result.maxActiveExecutionSeconds = value.maxActiveExecutionSeconds;
 	}
@@ -129,12 +133,6 @@ function toPublicPolicy(value: PolicyOverrides): AgentExecutionPolicyOverrides {
 	const result: AgentExecutionPolicyOverrides = {};
 	if (value.maxModelRequests !== undefined) {
 		result.maxModelRequests = value.maxModelRequests;
-	}
-	if (value.maxAutoModelRequests !== undefined) {
-		result.maxAutoModelRequests = value.maxAutoModelRequests;
-	}
-	if (value.maxAutoActiveExecutionSeconds !== undefined) {
-		result.maxAutoActiveExecutionSeconds = value.maxAutoActiveExecutionSeconds;
 	}
 	if (value.maxActiveExecutionSeconds !== undefined) {
 		result.maxActiveExecutionSeconds = value.maxActiveExecutionSeconds;
@@ -185,8 +183,6 @@ const toPolicy = (v: ExecutionPolicy): AgentExecutionPolicyView => ({
 	overrides: toPublicPolicy(v.overrides),
 	effective: {
 		maxModelRequests: v.effective.maxModelRequests,
-		maxAutoModelRequests: v.effective.maxAutoModelRequests,
-		maxAutoActiveExecutionSeconds: v.effective.maxAutoActiveExecutionSeconds,
 		maxActiveExecutionSeconds: v.effective.maxActiveExecutionSeconds,
 		toolTimeoutSeconds: v.effective.toolTimeoutSeconds,
 		maxToolOutputBytes: v.effective.maxToolOutputBytes,
@@ -196,32 +192,6 @@ const toPolicy = (v: ExecutionPolicy): AgentExecutionPolicyView => ({
 		maxSubagentMessageBytes: v.effective.maxSubagentMessageBytes,
 		contextCompactionMode: v.effective.contextCompactionMode,
 		contextProfile: v.effective.contextProfile,
-	},
-});
-
-const toApproval = (a: Approval): AgentApprovalView => ({
-	id: a.id,
-	appId: a.appId,
-	runId: a.runId,
-	toolCallId: a.toolCallId,
-	kind: a.kind,
-	operationHash: a.operationHash,
-	status: a.status,
-	policyRevision: a.policyRevision,
-	inputRevision: a.inputRevision,
-	version: a.version,
-	requestedAt: a.requestedAt,
-	expiresAt: a.expiresAt,
-	decidedAt: a.decidedAt,
-	decidedByUserId: a.decidedByUserId,
-	consumedAt: a.consumedAt,
-	inspection: {
-		toolName: a.inspection.toolName,
-		toolVersion: a.inspection.toolVersion,
-		risk: a.inspection.risk,
-		mutation: a.inspection.mutation,
-		targetConnectionId: a.inspection.targetConnectionId,
-		summary: a.inspection.summary,
 	},
 });
 
@@ -256,7 +226,7 @@ export function createGovernanceHttpRoutes(
 	const base = '/api/v1';
 
 	async function identity(ctx: HttpRouteContext): Promise<number | null> {
-		const session = await access.authenticate(ctx.cookie('nexus_session'));
+		const session = await access.authenticate(ctx.cookie(ACCESS_SESSION_COOKIE_NAME));
 		if (session === null) {
 			send(ctx, 401, { code: 'unauthenticated' });
 			return null;
@@ -305,6 +275,19 @@ export function createGovernanceHttpRoutes(
 		send(ctx, status, value);
 	}
 
+	add('GET', '/agent/target-denylist', async (ctx, userId) => {
+		await deliver(ctx, 200, toDenylist(await governance.denylist(userId)));
+	});
+	add('PUT', '/agent/target-denylist', async (ctx, userId) => {
+		const input = readAgentTargetDenylistReplaceRequest(await ctx.json());
+		const result = await governance.replaceDenylist({
+			userId,
+			expectedRevision: input.expectedRevision,
+			connectionIds: input.connectionIds.map((id) => id),
+			reason: input.reason,
+		});
+		await deliver(ctx, 200, toDenylist(result));
+	});
 	add('GET', '/agent/apps/:appId/grants', async (ctx, userId) => {
 		const appId = readAgentGovernanceAppPath(ctx.params).appId;
 		const grants = await governance.grants(userId, appId);
@@ -377,4 +360,16 @@ export function createGovernanceHttpRoutes(
 		await deliver(ctx, 200, toApproval(result));
 	});
 	return routes;
+}
+
+function toDenylist(value: TargetDenylist): AgentTargetDenylistView {
+	return {
+		revision: value.revision,
+		entries: value.entries.map((entry) => ({
+			connectionId: entry.connectionId,
+			reason: entry.reason,
+			changedBy: entry.changedBy,
+			changedAt: Math.floor(entry.changedAt / 1000),
+		})),
+	};
 }

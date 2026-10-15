@@ -28,10 +28,6 @@ export async function initializeSchema(db: SqliteRuntime, migrations: readonly S
 			await metadata.record(migration.version, migration.signature, Date.now());
 		};
 
-		if (migration.rebuildsReferencedTable) {
-			await db.rebuildReferencedTable(apply);
-		} else {
-			await db.transaction(apply);
-		}
+		await db.transaction(apply);
 	}
 }

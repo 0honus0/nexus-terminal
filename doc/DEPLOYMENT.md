@@ -93,7 +93,7 @@ Compose 默认启用 IPv6；宿主需要时合并 `/etc/docker/daemon.json`：
 
 ## 备份与更新
 
-停止写入后备份完整 data：
+停止写入后备份完整 data。独立 backend-next 还须保留 SQLite 路径旁的 .artifacts/.appearance 目录和实例密钥，不能只复制数据库：
 
 ```bash
 docker compose stop backend

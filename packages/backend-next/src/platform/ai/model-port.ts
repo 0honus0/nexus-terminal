@@ -38,14 +38,61 @@ export const MODEL_STREAM_MAX_TEXT_BYTES = 2 * 1024 * 1024;
 
 export const MODEL_STREAM_MAX_DELTA_FRAME_BYTES = 128 * 1024;
 
+export const MODEL_TOOL_MAX_CALLS = 32;
+
+export const MODEL_TOOL_MAX_ARGUMENT_BYTES = 128 * 1024;
+
+export const MODEL_REASONING_MAX_BYTES = 1024 * 1024;
+
+/** Opaque provider continuation evidence; never public application state. */
+export interface ModelReasoningState {
+	id: string;
+	encryptedContent: string;
+	summary: string[];
+}
+
+export interface ModelToolCall {
+	id: string;
+	name: string;
+	argumentsJson: string;
+}
+
+export interface ModelToolDefinition {
+	name: string;
+	description: string;
+	parameters: {
+		type: 'object';
+		properties: Record<string, ModelToolProperty>;
+		required: string[];
+		additionalProperties: false;
+	};
+}
+
+export type ModelToolProperty =
+	| {
+			type: 'array';
+			minItems: number;
+			maxItems: number;
+			items: { type: 'string'; minLength: number; maxLength: number };
+	  }
+	| { type: 'integer'; minimum: number; maximum: number }
+	| { type: 'string'; minLength: number; maxLength: number };
+
+export type ModelMessage =
+	| { role: 'user'; content: string }
+	| { role: 'assistant'; content: string; toolCalls: ModelToolCall[]; reasoning: ModelReasoningState[] }
+	| { role: 'tool'; callId: string; content: string };
+
 export interface ModelStreamInput extends ModelProbe {
-	prompt: string;
+	messages: ModelMessage[];
+	tools: ModelToolDefinition[];
 }
 
 export type ModelStreamEvent =
 	| { type: 'text_delta'; text: string }
 	| { type: 'usage'; inputTokens: number; outputTokens: number }
-	| { type: 'completed'; finishReason: 'stop' | 'length' | 'content_filter' };
+	| { type: 'completed'; finishReason: 'stop' | 'length' | 'content_filter' }
+	| { type: 'completed'; finishReason: 'tool_calls'; toolCalls: ModelToolCall[]; reasoning: ModelReasoningState[] };
 
 export interface ModelNetworkPort {
 	discover(baseUrl: string, credential: string | null, signal: AbortSignal): Promise<EndpointModel[]>;

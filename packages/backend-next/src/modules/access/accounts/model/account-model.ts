@@ -33,6 +33,17 @@ export class AccountModel {
 		}
 	}
 
+	confirmCredential(userId: number, passwordHash: string, token: string): Promise<boolean> {
+		return accessStorageBoundary(() =>
+			this.storage.confirmCredential({
+				userId,
+				passwordHash,
+				sessionDigest: this.tokens.digest(token),
+				now: Date.now,
+			}),
+		);
+	}
+
 	needsSetup(): Promise<boolean> {
 		return accessStorageBoundary(() => this.storage.needsSetup());
 	}

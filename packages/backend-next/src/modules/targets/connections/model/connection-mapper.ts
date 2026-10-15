@@ -1,5 +1,31 @@
-import type { ConnectionData, StoredConnection } from '../storage/connection-storage.js';
-import type { ConnectionMetadata, ConnectionSnapshot } from './connection-types.js';
+import type { ConnectionData, StoredConnection, StoredSshGraphSnapshot } from '../storage/connection-storage.js';
+import type {
+	ConnectionMetadata,
+	ConnectionSnapshot,
+	ConnectionRelationshipFacts,
+	SshGraphSnapshot,
+} from './connection-types.js';
+
+export function fromStoredRelationships(value: ConnectionData): ConnectionRelationshipFacts {
+	return {
+		type: value.type,
+		route: value.route,
+		proxyId: value.proxyId,
+		jumpIds: value.jumpIds.map((id) => id),
+		tagIds: value.tagIds.map((id) => id),
+	};
+}
+
+export function fromStoredGraph(value: StoredSshGraphSnapshot): SshGraphSnapshot {
+	return {
+		nodes: value.nodes.map((node) => ({ id: node.id, type: node.type, route: node.route })),
+		edges: value.edges.map((edge) => ({
+			connectionId: edge.connectionId,
+			position: edge.position,
+			jumpConnectionId: edge.jumpConnectionId,
+		})),
+	};
+}
 
 /** Explicit application/storage projection, even while field representations match. */
 export function toStorage(value: ConnectionMetadata): ConnectionData {

@@ -1,4 +1,9 @@
 import type { AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
+import type { ToolOperation } from '../runs/model/run-tool-types.js';
+import type { RunFrozenInput } from '../runs/model/run-types.js';
+import type { ProviderRecord } from '../providers/model/provider-types.js';
+import { mayExecuteFrozenRun } from '../runs/run-rules.js';
+
 import {
 	AGENT_CAPABILITIES,
 	AGENT_TARGET_CAPABILITIES,
@@ -18,7 +23,51 @@ import type {
 	GrantState,
 	AuthorizationFact,
 	CapabilityDefinition,
+	ToolAuthorityIdentity,
 } from './model/governance-types.js';
+
+export function toolAuthorityIdentity(operation: ToolOperation): ToolAuthorityIdentity {
+	return {
+		userId: operation.userId,
+		appId: operation.appId,
+		runId: operation.runId,
+		id: operation.id,
+		expectedRevision: operation.revision,
+		operationHash: operation.operationHash,
+	};
+}
+
+export function mayUseTool(
+	operation: ToolOperation,
+	policy: GrantState,
+	status: AgentRunStatus,
+	frozen: RunFrozenInput,
+	provider: ProviderRecord | null,
+	connectionIds: number[],
+): boolean {
+	return (
+		status === 'running' &&
+		operation.risk !== 'forbidden' &&
+		(operation.targetId === null || connectionIds.includes(operation.targetId)) &&
+		mayExecuteFrozenRun(frozen, provider) &&
+		authorizationFact(policy, operation.capability, operation.targetId).allowed
+	);
+}
+
+export function mayReadTool(
+	operation: ToolOperation,
+	policy: GrantState,
+	status: AgentRunStatus,
+	frozen: RunFrozenInput,
+	provider: ProviderRecord | null,
+	connectionIds: number[],
+): boolean {
+	return (
+		operation.risk === 'read' &&
+		!operation.mutation &&
+		mayUseTool(operation, policy, status, frozen, provider, connectionIds)
+	);
+}
 
 export function authorize(grants: readonly Grant[], capability: AgentCapability, connectionId: number | null): boolean {
 	const grant = grants.find((g) => g.capability === capability);
@@ -82,27 +131,10 @@ export function grantChangeDecision(
 	};
 }
 
-export const DEFAULT_EXECUTION_POLICY: Required<PolicyOverrides> = {
-	maxModelRequests: 80,
-	maxAutoModelRequests: 400,
-	maxAutoActiveExecutionSeconds: 7200,
-	maxActiveExecutionSeconds: 1800,
-	toolTimeoutSeconds: 60,
-	maxToolOutputBytes: 65536,
-	maxRecallItems: 5,
-	maxRecallBytes: 8192,
-	maxSubagentMessages: 1000,
-	maxSubagentMessageBytes: 2097152,
-	contextCompactionMode: 'balanced',
-	contextProfile: 'normal',
-};
-
 export const HARD_EXECUTION_LIMITS: Readonly<
 	Record<Exclude<keyof PolicyOverrides, 'contextCompactionMode' | 'contextProfile'>, number>
 > = {
 	maxModelRequests: 400,
-	maxAutoModelRequests: 400,
-	maxAutoActiveExecutionSeconds: 7200,
 	maxActiveExecutionSeconds: 7200,
 	toolTimeoutSeconds: 300,
 	maxToolOutputBytes: 262144,
@@ -138,15 +170,11 @@ export function executionChangeDecision(
 	};
 }
 
-export function effectivePolicy(overrides: PolicyOverrides): Required<PolicyOverrides> {
-	return { ...DEFAULT_EXECUTION_POLICY, ...overrides };
-}
-
 export function mayResolve(
 	approval: Approval,
 	policyRevision: number,
 	runStatus: AgentRunStatus,
-	runVersion: number,
+	operationRevision: number,
 	hash: string,
 	version: number,
 	now: number,
@@ -156,9 +184,58 @@ export function mayResolve(
 		approval.version === version &&
 		approval.operationHash === hash &&
 		approval.policyRevision === policyRevision &&
-		approval.inputRevision === runVersion &&
+		approval.inputRevision === operationRevision &&
 		now < approval.expiresAt &&
 		(runStatus === 'running' || runStatus === 'pending')
+	);
+}
+
+export function mayUseConsumedApproval(
+	approval: Approval,
+	operation: ToolOperation,
+	policy: GrantState,
+	now: number,
+): boolean {
+	return (
+		approval.status === 'approved' &&
+		approval.kind === (operation.toolName === 'acp_inner_permission' ? 'acp_permission' : 'tool') &&
+		approval.userId === operation.userId &&
+		approval.appId === operation.appId &&
+		approval.runId === operation.runId &&
+		approval.toolCallId === operation.id &&
+		approval.consumedAt !== null &&
+		now < approval.expiresAt &&
+		approval.policyRevision === policy.revision &&
+		approval.inputRevision === operation.operationRevision &&
+		approval.operationHash === operation.operationHash &&
+		approval.capability === operation.capability &&
+		approval.targetVersion === operation.targetVersion &&
+		approval.inspection.targetConnectionId === operation.targetId &&
+		approval.inspection.risk === operation.risk &&
+		approval.inspection.mutation === operation.mutation &&
+		approval.inspection.toolName === operation.toolName &&
+		approval.inspection.toolVersion === operation.toolVersion &&
+		approval.inspection.summary === operation.summary
+	);
+}
+
+export function mayConsumeApproval(
+	approval: Approval,
+	policy: GrantState,
+	runStatus: AgentRunStatus,
+	operationRevision: number,
+	now: number,
+): boolean {
+	return (
+		approval.status === 'approved' &&
+		approval.kind === (approval.inspection.toolName === 'acp_inner_permission' ? 'acp_permission' : 'tool') &&
+		approval.inspection.risk !== 'forbidden' &&
+		approval.consumedAt === null &&
+		approval.policyRevision === policy.revision &&
+		approval.inputRevision === operationRevision &&
+		now < approval.expiresAt &&
+		(runStatus === 'pending' || runStatus === 'running') &&
+		authorizationFact(policy, approval.capability, approval.inspection.targetConnectionId).allowed
 	);
 }
 
@@ -179,21 +256,8 @@ export function approvalTransition(
 	return null;
 }
 
-export function mayRequestApproval(
-	runStatus: AgentRunStatus,
-	runVersion: number,
-	inputRevision: number,
-	risk: Approval['inspection']['risk'],
-	connectionId: number | null,
-	inspectedConnectionId: number | null,
-): boolean {
-	return (
-		(runStatus === 'running' || runStatus === 'pending') &&
-		runVersion === inputRevision &&
-		risk !== 'forbidden' &&
-		connectionId === inspectedConnectionId &&
-		(connectionId === null || (Number.isSafeInteger(connectionId) && connectionId > 0))
-	);
+export function mayRequestApproval(runStatus: AgentRunStatus, risk: Approval['inspection']['risk']): boolean {
+	return (runStatus === 'running' || runStatus === 'pending') && risk !== 'forbidden';
 }
 
 export function capabilityDefinitions(): CapabilityDefinition[] {
@@ -221,6 +285,11 @@ export function authorizationFact(
 		capability,
 		connectionId,
 		revision: policy.revision,
-		allowed: authorize(policy.grants, capability, connectionId),
+		allowed:
+			policy.app.declared &&
+			policy.app.enabled &&
+			policy.app.capabilities.includes(capability) &&
+			(connectionId === null || !policy.app.deniedTargetIds.includes(connectionId)) &&
+			authorize(policy.grants, capability, connectionId),
 	};
 }

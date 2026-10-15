@@ -27,7 +27,7 @@ export interface AgentRunStepView {
 	revision: number;
 	runVersion: number;
 	textBytes: number;
-	finishReason?: 'stop';
+	finishReason?: import('./values.js').AgentRunStepFinishReason;
 	inputTokens?: number;
 	outputTokens?: number;
 	failureCode?: AgentRunStepFailureCode;

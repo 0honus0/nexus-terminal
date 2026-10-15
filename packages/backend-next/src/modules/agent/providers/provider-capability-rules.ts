@@ -88,6 +88,6 @@ export function resolveFrozenModel(provider: ProviderRecord, reference: ModelRef
 				: { defaultReasoningEffort: selected.defaultReasoningEffort }),
 			...(selected.reasoningMandatory === undefined ? {} : { reasoningMandatory: selected.reasoningMandatory }),
 		},
-		executionPolicy: 'awaiting_b6_b7',
+		executionPolicy: 'governed',
 	};
 }

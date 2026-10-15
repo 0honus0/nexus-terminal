@@ -30,3 +30,8 @@ export type LoginAttempt =
 	| { status: 'limit_exceeded' }
 	| { status: 'factor_unavailable' }
 	| { status: 'captcha_invalid' };
+
+export interface PasswordProof {
+	userId: number;
+	assertCurrent(): Promise<void>;
+}

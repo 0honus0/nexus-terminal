@@ -1,3 +1,4 @@
+import { modelRequest } from './model-request.js';
 import type {
 	EndpointModel,
 	ModelNetworkPort,
@@ -323,34 +324,8 @@ function parseProbeStream(data: Uint8Array, protocol: ModelProbe['protocol']): M
 
 export class OpenAiCompatibleAdapter implements ModelNetworkPort {
 	async *stream(input: ModelStreamInput, signal: AbortSignal): AsyncIterable<ModelStreamEvent> {
-		if (
-			!input.prompt.trim() ||
-			Buffer.byteLength(input.prompt, 'utf8') > 16 * 1024 ||
-			!Number.isSafeInteger(input.maxOutputTokens) ||
-			input.maxOutputTokens < 1
-		) {
-			throw new ModelNetworkFailure('response_invalid');
-		}
 		const responses = input.protocol === 'responses';
-		const body = responses
-			? JSON.stringify({
-					model: input.modelId,
-					input: [{ role: 'user', content: input.prompt }],
-					max_output_tokens: input.maxOutputTokens,
-					stream: true,
-					store: false,
-					...(input.reasoningEffort === undefined ? {} : { reasoning: { effort: input.reasoningEffort } }),
-				})
-			: JSON.stringify({
-					model: input.modelId,
-					messages: [{ role: 'user', content: input.prompt }],
-					...(input.usesReasoning
-						? { max_completion_tokens: input.maxOutputTokens }
-						: { max_tokens: input.maxOutputTokens }),
-					stream: true,
-					stream_options: { include_usage: true },
-					...(input.reasoningEffort === undefined ? {} : { reasoning_effort: input.reasoningEffort }),
-				});
+		const body = modelRequest(input);
 		const response = await request(
 			endpoint(input.baseUrl, responses ? 'responses' : 'chat/completions'),
 			input.credential,
@@ -363,7 +338,7 @@ export class OpenAiCompatibleAdapter implements ModelNetworkPort {
 		if (!reader) {
 			throw new ModelNetworkFailure('response_invalid');
 		}
-		const decoder = new ModelStreamDecoder(input.protocol);
+		const decoder = new ModelStreamDecoder(input.protocol, input.tools.length > 0);
 		let bytes = 0;
 		let ended = false;
 		let primaryError: unknown;

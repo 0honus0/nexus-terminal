@@ -227,7 +227,11 @@ export function createAgentNextApi(baseUrl: string) {
 			const app = inputDecoded(() => readAgentId(appId));
 			const thread = inputDecoded(() => readAgentId(threadId));
 			const key = inputDecoded(() => readAgentRunCommandHeaders(operationKey).operationKey);
-			const body = encoded({ prompt, model }, readAgentCreateRunRequest, AGENT_RUN_MAX_JSON_BODY_BYTES);
+			const body = encoded(
+				{ prompt, model, connectionIds: [] },
+				readAgentCreateRunRequest,
+				AGENT_RUN_MAX_JSON_BODY_BYTES,
+			);
 			const result = decoded(
 				await request('POST', `/apps/${app}/threads/${thread}/runs`, body, key, signal),
 				readAgentCreateRunResponse,

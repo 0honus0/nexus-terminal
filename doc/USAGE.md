@@ -49,6 +49,16 @@
 - Header 大小写不敏感判重；重复返回 400，不修改配置。
 - 管理员可配置内网 SMTP、Webhook、自定义 Telegram 域名及 HTTP 重定向。只使用可信目标，出站隔离由部署网络提供。
 
+### 新后端通知（源码接线，行为待 B10）
+
+管理员使用 /api/v1/settings/notifications：GET列表、POST新增、PUT/DELETE /:id带expectedVersion；最多64项。配置明确 webhook/email/telegram 联合，秘密用 keep/clear/replace，读取仅有存在标志。POST /:id/test测试已保存配置；POST /test-unsaved 带{config}测试未保存输入；都返回delivery受理回执，真实结果读取 /notification-deliveries，不能把queued当成功。
+
+事件只含有限 event、subjectId 和 UTC time；模板支持 {event}/{subjectId}/{time}，Email纯文本，默认Webhook为JSON。订阅采用分发时已启用配置，不追溯新配置创建前的事件；禁用阻止后续分发，已排队项仍使用原加密快照，删除令queued失败，不能撤回已派发请求。队列最多4096在途，满载保留事件等待空位；单项20秒、串行派发。重启把dispatched标unknown，不自动重发；管理写入响应中断/认证失效也可能已提交，先只读核对。
+
+请求64KiB、响应8MiB（包含JSON转义）；400 invalid_input、401 unauthenticated、403 forbidden、404 not_found、409 version_conflict、413 limit_exceeded、503不可用/未知。正式前端仍使用下述旧通道，迁移归F1；业务提交与事件发布分事务，未发布前崩溃可能缺事件，不作为执行结果权威。
+
+派发前取消记 failed；SMTP 部分收件人已接受而其余拒绝记 unknown，不能据此重发整项。
+
 ### 通知容量与失败
 
 | 范围              | 限制                                                               |
@@ -146,6 +156,12 @@
 - 新增/编辑命令与标签关联同事务，失败整体回滚。
 - “创建标签后批量关联”是两个请求：关联失败标签仍存在，先刷新再重试关联或删除，不重复建同名标签。
 
+### 新后端快捷命令（源码已接线，行为待 B10）
+
+登录后通过 `/api/v1/quick-commands` 与 `/api/v1/quick-command-tags` 管理当前用户数据。命令保留变量、标签和使用次数；新增/编辑/删除/计数、标签 CRUD 与批量关联已安装，记录数据不执行 Shell。列表使用 offset/limit，命令每页最多50项，按名称或usageCount排序；标签按名称排序。每用户最多2,000命令、200标签，每命令50标签、32变量；命令16 KiB、名称256 bytes、变量值4 KiB、变量名为最多64字符的标识符且拒绝原型保留键。完整请求1 MiB、响应64 MiB，包含JSON转义。
+
+修改/删除/计数带 expectedVersion；批量关联为 `{commands:[{id,expectedVersion}],tagId}`，最多1,000项且不重复，全部检查后同事务写入，已有关联不增加计数。删除标签同时移除关联并推进受影响命令版本；缺记录404、名称或版本冲突409。成功分别返回command/tag、deleted或实际新增count；unknown不自动重放，先只读核对。正式UI待F1。
+
 ## 历史命令
 
 截断命令可悬停查看全文。
@@ -154,6 +170,11 @@
 
 - 最近命令 10,000 条、路径 2,000 条；新增/复用时同事务裁剪，同秒优先保留本次触及记录。
 - 并发写入按值合并，旧重复保留最小 ID 并更新时间。旧超额备份可导入，读取只展示窗口，下次写入再清理。
+
+### 新后端个人历史与收藏（源码已接线，行为待 B10）
+
+- 命令历史与路径历史保留原 `/api/v1/command-history`、`/api/v1/path-history` 的 GET/POST/DELETE 方法；仅当前用户可读写。POST分别为 `{command}` / `{path}`，按原值去重并更新时间；10,000命令/2,000路径同事务修剪，同秒保留本次记录。单条4 KiB、请求32 KiB；GET用offset/limit（默认100、最多100）返回entries/nextOffset，按时间/ID升序，完整响应4 MiB。新增返回id，删除返回deleted，清空返回count；不执行命令。分页不是跨请求快照，写入/清空后从首页刷新。生产者仍是前端HTTP，后端Workspace不自动记录。
+- `/api/v1/favorite-paths` 保留收藏 CRUD、`PUT /:id/update-last-used` 及按name/lastUsedAt排序。列表默认100、每页最多100，返回entries/nextOffset；最多2,000条/用户，名称可null（256 bytes）、路径4 KiB，请求32 KiB/响应4 MiB。编辑/删除/更新时间都必填expectedVersion；修改返回favoritePath，删除返回deleted。其他用户记录视为not_found，版本冲突重新读取，unknown仅核对、不自动重放。正式前端待F1。
 
 ## 终端
 
@@ -348,6 +369,10 @@ RDP/VNC 的密码使用 Targets 中加密存储的版本化 `credentials.set`；
 - Child 交接从全部已保存成功且已验证历史收集证据，最多 64 个引用/16 个工具摘要；超量或读取失败明确失败，不删除原始数据。
 - 实时事件按字段解码，其余合法事件刷新快照，sequence 去重/续接；未知事件、非法 payload/schema 报错，不静默跳过。
 
+新后端已接线 Run-local 交换、Thread 历史和逐步骤持久内容快照，默认执行关闭，行为待 B10。Root 按 Thread 内序号读取此前 Root，保留失败/取消/unknown 及实际记录的工具结果，缺失结果不补成功；历史仅作为不可信数据，不授予权限。Child 不继承父私有历史。一组当前 proposal 的全部结果确定后才进入下一轮。历史来源最多4096个 Root，未压缩部分最多1024步骤、4096工具、512KiB原始正文；每 Run 最多1024消息，消息与工具定义合计4MiB。派发前估算完整 UTF-8/JSON、框架及冻结输出预留，超限拒绝，不静默截断或重跑工具；估算不是供应商精确 token 用量。每次步骤预留同事务保存内容、来源与哈希，来源变化或续接与账本不符时拒绝；快照不允许重启后自动重放。首轮确定拒绝只结算原版本/请求且无步骤的 pending Run，后续按真实派发事实结算；未知提交不重试。语义检查点、Memory/Recall、Artifact/清理已接线；Thread 来源最多4096个 Root，只有当前来源一致的持久摘要可替换已覆盖前缀，未压缩部分仍受容量约束；行为待 B10。
+
+新后端工具结果账本最多保存256KiB原始捕获文本；模型直接结果超过8KiB时改为标记 captured_result_preview，包含 toolCallId、SHA-256、originalBytes、首段及nextOffset，原文不删除。tool_result_read v2传toolCallId/sha256，可选offset（默认0）和maxBytes（默认4096，8–4096）；offset/nextOffset计Unicode码点，maxBytes计JSON编码文本（含引号），nextOffset=null表示结束。仅读取同user/App/Run较早模型步骤的completed结果，拒绝Root/Child互读、unknown/缺失正文、hash变化及递归读取续读工具；需要context.read及原工具当前权限，原SSH目标版本在结果确认事务复查。连接目录结果若当前选择中存在denylist项则拒绝续读。页和预览均非授权/当前指令，不能恢复执行capture已丢弃输出。原始账本和下一轮投影在步骤预留事务通过Model验证，不绕过完整工具组；整个上下文仍可能明确超限。执行冻结/行为待B10保持。
+
 ### 审批、协作与 Browser
 
 - `ask` 逐次审批；`full_access` 只在已有 capability/目标/deny 内自动批准，无按路径/命令记忆批准的第三档。Child 仍受 grant；审批后重检，拒绝/过期/新输入失效旧审批。
@@ -450,6 +475,40 @@ Run completed/completed_unverified/failed/cancelled/interrupted 回收 Browser S
 - 前端/SDK 静态代码可匿名缓存获取，含 sourcemap 不可放秘密；代码可见不授予 App/RPC 权限。
 - MCP 每 integration 有限制，无 aggregate 硬配额；Backend Plugin 独立 Node 进程，也无 aggregate 进程配额，按部署资源启停。
 
+### 新后端 MCP、ACP 与 Browser（源码就绪，行为待 B10）
+
+- 管理员通过 `/api/v1/apps/:appId/integrations` 查询/创建，`/:integrationId` 查询、PATCH 和删除；`/:integrationId/refresh` 刷新 MCP 目录。创建用 UUID `Idempotency-Key`，修改/删除/刷新用 `expectedVersion`；未知结果保留原键、输入和版本，不自动重放。同一创建键重放返回首次提交的安全回执，即使该集成之后修改或删除也不重建；回执只说明首次创建结果，当前状态另行查询。每 App 最多128项，配置 JSON 最多32 KiB、完整响应16 MiB，时间为毫秒。MCP 为 streamable HTTP/2026-07-28，握手使用实际产品版本；ACP 显式保存 SSH connectionId/argv/cwd，保存配置的执行与直接 ACP 执行均按 destructive 风险独立审批。
+- 凭据写意图为 keep/clear/replace；创建不能 keep，ACP 仅 clear。响应只有 hasCredential/credentialRevision，密码在服务器加密；URL 不允许内嵌密码。私网例外使用明确 host:port，保留合法内网 HTTPS；HTTP 仅非生产的显式 loopback例外。远端跳转/跨源拒绝，DNS地址固定到本次连接。每个MCP连接复用一个固定DNS连接池（最多4条socket），不以累计请求次数充当在途配额；技术目录/结果编码上限8 MiB、单工具schema 1 MiB，重复目录标识拒绝；关闭涵盖尚未建立完成的原连接，清理失败仍占用资源名额。
+- 模型通过 `mcp_discover` 列出本 App 的 MCP ID/版本，指定 ID/版本后发现真实 tool/resource/prompt 与 schemaHash；不要求先由管理页刷新。模型调用绑定原 integrationId/version/schemaHash，派发前重取目录核对 hash；管理页已保存的目录仅为观察，不当授权。调用和每次续接沿原Run工具账本/权限/审批，不自动授予 capability。input_required返回服务器生成的续接身份，最多10分钟、全局最多128项，只能用于原user/App/Run、配置、方法、名称及参数；原始远端state不直接当权限。取消或关闭后不发布迟到续接；Run结束释放等待，重启不自动重放。远端执行结果未知不等同本地资源清理失败；真实清理失败仍保留诊断并阻止继续准入。
+- Browser配置独立 GET/PUT `/api/v1/agent/browser/configuration`，CAS覆盖完整targets；最多32目标、每目标8个CDP端点和32条HTTP(S)页面规则。CDP使用明确ws/wss、allowPlaintext与verifyTls；页面规则只允许固定origin，路径可使用末尾`*`，不支持任意host通配。按 priority 从小到大尝试端点；只有上一连接的清理已确认且失败为不可用才尝试下一端点，完整期限不重置。不启用宿主浏览器或 Workspace fallback。
+- Browser 工具已有 open/close/snapshot/screenshot/console/navigate/back/scroll/press/select/wait/click/type/upload/download 的真实 CDP 路径。会话限原 user/App/Run，最多 16 活跃会话与 16 在途任务；配置更新释放旧会话。存储和备份恢复也校验端点、明文许可、页面模式、数量及唯一目标，损坏配置被拒绝。快照最多 1024 节点、64 KiB、8 层；导航及已观察的 DOM 变更使引用失效；快照采集或节点解析期间失效也会拒绝，重新获取快照后再决策。建连完成后 Run 已取消时不发放会话。按键可作用于页面或同时指定 snapshotId/nodeRef 聚焦，支持导航/编辑键、KeyA–KeyZ、Digit0–Digit9、可打印 ASCII、F1–F12 与不重复的 Alt/Control/Meta/Shift 组合；失败也尝试释放每个键，结果未知不自动重放。navigate/back/scroll/press/select/click/type/upload 支持可选 settleMs（默认250ms，范围0–2000ms），仅做有界网络空闲观察；其正常超时不冒充动作失败，但断开/取消仍保留失败或未知结果。scroll 的 deltaX 可省略并取0。显式 wait 的 timeout/networkIdle 最长10秒，仍是严格等待。截图最多 8 MiB，下载最多 16 MiB，均生成 Artifact 并返回 ID/版本/hash；上传引用现有 Artifact 的 ID/版本/SHA-256，读取保护覆盖真实上传。下载拒绝跳转，不自动开放原生下载。关闭仅收尾本次独立 context/CDP，下载策略也只作用于该 context；Run 结束释放资源，不退出共享远端浏览器。全部行为待 B10。
+- 插件管理位于 `/api/v1/agent/plugins`：publisher 列表/创建/CAS 撤销，Artifact stage、stage 查询/verify/install，以及 installations/versions 查询。原包预算 50 MiB、展开文件 200 MiB；Artifact 暂存来源仍受 Artifact 的 16 MiB 限制；仓库下载入口支持完整 50 MiB 包。拒绝链接、特殊条目、路径跳转、重复/未列文件；整个 TAR（含元数据/填充）也有展开上限。每用户最多 256 publisher/256 stage，JSON 请求 256 KiB、响应 32 MiB。重启只核对 staging 文件/hash，完整则转 staged，缺失/不一致转 failed，不自动安装。
+
+- 新签名 manifest 的 frontendEntry/backendEntry 显式可空，分别限定 `frontend/` 与 `backend/`，不转换旧包。安装经 Scope 同事务写入不可变声明和用户 App，初始禁用、空 grant；签名不代替授权。撤销 publisher 同事务禁用对应 App/围栏 Run，再取消本地任务。
+- `POST /installations/:appId/upgrade` 提交 expectedRevision、stageId、expectedStageVersion；`DELETE /installations/:appId` 卸载，`POST /installations/:appId/cancel-retirement` 取消退役，后两者传 expectedRevision。先持久 draining/围栏，再分别启动并等待原 Run 与 runtime 收尾；一项失败仍收尾另一项。失败保留 draining，按当前 revision 查询/继续原操作，不能自动换意图重试。取消保留旧版本且不自动启用；重启不重放退役或工具。当前覆盖 Run、前端内容、独立持久数据和后端runtime；数据迁移使用下述明确流程，不执行旧migrate回调。
+- `GET /installations/:appId/descriptor` 为当前已启用、受信安装发放30分钟资源地址，绑定会话与安装revision。`/plugins/:appId/:version/:grant/<frontend asset>` 每文件16 MiB，no-store、sandbox/CSP，不提供后端代码或签名元文件。SDK入口 `/sdk/frontend-v1.mjs` 交付完整白名单依赖图；父页通过认证 `POST /installations/:appId/frontend/rpc` 转发 `{grant,envelope}`，严格关联nonce/id/seq/method/App。前端RPC完整JSON为8 MiB+1 KiB；原核心方法仍有512 KiB子预算，后端IPC仍512 KiB。单次等待30秒、最多32个待响应；写入超时、协议失败或关闭后保留原operationId与输入，不自动重发。正式父页桥留F1。
+- 前端SDK的request已有26个方法（subagents.messages只返回序号/发送者/正文长度/期限，不输出模型私有mailbox正文；approvals只输出安全inspection）：原host/storage/intents九方法，加definitions/providers.list、threads.list/create/rename/entries、runs.list/get/events/create/appendInput/cancel、subagents.list/messages/cancel、approvals.list/resolve。Thread列表最多50项，新增UUID operationId和rename expectedVersion；每App最多512 Thread、4096条线程意图，重放返回原提交快照。entries只读取Root的用户输入和assistant文字，不含工具正文、凭据或私有reasoning；每页最多16片，每片4096 Unicode码点/16 KiB，完整512 KiB，以服务器四段码点游标续读，支持emoji/NUL，分片未读完不跳到后项。
+- appendInput改为在同一Thread创建新的后续Root Run：原Run必须completed/failed/cancelled且expectedVersion匹配，调用方显式选择当前模型和连接；running/pending/unknown拒绝，不改写活跃上下文。`agent.runs.subscribe/unsubscribe` 是SDK本地500ms轮询既有事件页，最多8个订阅、同订阅不重叠；不是WS推送。退订取消原等待并等待任务，close返回共享Promise并等待订阅；切换/关闭后不发布迟到页。回调可以异步，须收敛；回调内不要等待自身unsubscribe/close。失败回调失败保留两项因果；订阅已退出后显式 close 仍汇总这些失败，最多保留32项并记录额外失败数量，不自动重订阅。
+- 插件独立数据通过 GET/PUT/DELETE /installations/:appId/data/:key 消费；key为128-byte ASCII标识，valueJson为合法JSON文本（128 KiB），JSON null文本与删除墓碑不同。写入传 expectedRevision、expectedVersion、UUID operationId，创建用expectedVersion=0；读取返回 {value}，已删除键保留version/valueJson:null。仅当前已启用、受信安装可读写，身份/信任/版本在写入事务复核；同键同内容操作重放不重复写，不同内容冲突。每App最多1024个键（含墓碑）、当前正文8 MiB；每次清除周期最多4096个写意图、正文账本32 MiB，满额仍可重放已有确定结果。
+- 升级需转换数据时先POST `/installations/:appId/prepare-upgrade`（与upgrade同输入），排空后保持draining；GET `/data-snapshot` 返回当前revision及所有键/墓碑；版本耗尽记录仍可读取，不能继续写入。管理员自行转换后POST `/migrate-data` `{expectedRevision,operationId,items:[{key,expectedVersion,valueJson}]}`，须包含快照全部键，新增键用版本0，删除用null，遗漏/旧版本拒绝。最多1024键、最终正文8 MiB、完整请求/快照52 MiB；每App最多32次迁移。数据、安装revision+1和不可变迁移回执同事务；消费者核对changedKeys不超过本次提交条目数。未知结果保持原键/输入，不重复执行插件代码。之后用新revision继续原目标upgrade；迁移已提交后禁止cancel-retirement，避免旧版本读取新数据。取消、重启及失败不自动切换版本或重放迁移。
+- 卸载仅保留数据；明确删除使用 POST /installations/:appId/delete-data {expectedRevision,operationId}，仅removed安装允许。事务清除正文/历史结果正文、推进安装修订及数据墓碑，保留旧意图摘要以拒绝换内容重放；返回revision/deletedKeys/updatedAt。未知结果保留原键和输入，明确重试同一意图返回原结果；每App最多32次明确删除。重新安装不接受旧修订或重新发放旧资源grant。全部行为待 B10。
+
+签名包可包含 `skills/<name>/SKILL.md`，最多64份，每份12KiB；name须与目录一致，description最多1024字节。支持受限 frontmatter（name/description/license/compatibility/metadata/allowed-tools），不执行文档，也不将 allowed-tools 当授权。模型通过 `skill_search` 查询当前 App 的文档元数据（query最多512字节、limit最多8），再用精确 name/version/sha256 调用 `skill_read`；需要当前 context.read grant，沿原工具账本。内置 App 返回空搜索，不跨 App 查找；文档明确为不可信内容，不再自动注入每轮提示。升级、撤销、禁用、取消和版本变化拒绝旧读取；未知写入仍不重放。
+
+新后端插件后端入口使用独立 Node 进程：重新校验原包大小/hash/签名后物化到数据库旁的私有 `.modules` 目录，只允许该目录的文件读取，禁止子进程、Worker 和原生扩展，不继承宿主环境变量；这不是操作系统级沙箱，也不承诺网络隔离。SDK 类型位于 Shared agent/plugins/backend-sdk；模块导出可选 activate({context,request})、health()→boolean、quiesce(deadlineUnixMs)、dispose()，当前request支持host.appInfo、storage.get/put/delete和intents.create/listReceived/revoke/artifacts.get/artifacts.readRange。它们绑定原用户/App/安装revision，并在真实SQL事务复核启用与当前信任；intents使用原运行实例的存活授权，在实际事务检查安装revision/双方声明与grant，不伪造后台会话Cookie，也不继承Workspace权限；confirmed:true只是本次公开消息意图，不能替代grant。手工启用App后启动，启动复核/health失败会返回unknown，先读取已保存状态；重启只重新初始化上次已确认关闭、仍启用的受信模块；上次opening/active转unknown并停止自动激活，不重派旧Run、写意图或未知插件任务。最多32个实例、同时2个构造、每实例32个host调用；完整IPC为512KiB，初始化/控制15秒、SDK等待30秒，整体构造60秒。构造/host/进程退出/目录清理均由原owner等待；运行中异常退出会立即围栏原实例、取消它的读取并追踪清理，不继续把旧实例当可用或自动重启。退出通知不等于目录/host任务已清理，失败保留并阻止旧实例退役；升级/卸载/撤销先围栏权限，再排空Run和对应runtime。后端SDK仍限定九个已实现方法，不因前端SDK扩展获得额外Agent权限；完整备份恢复及 B8 源码复审已收口，行为待 B10。
+
+插件运行状态可由管理员GET /api/v1/agent/plugins/installations/:appId/runtime查询，历史实例用/runtime/:instanceId。状态为opening/active/closed/unknown，包含原instanceId/revision及毫秒unknownAt/acknowledgedAt。出现unknown先完成服务重启与目录对账，再检查可能生效的写入；POST /runtime/acknowledge传{expectedRevision,instanceRevision,instanceId,confirmed:true}，两份revision分别取当前installation与原实例。确认不自动启动、不表示回滚；之后明确启用才可启动新实例，原未知证据保留。升级/卸载的draining按当前安装revision继续。运行目录对账需要Linux /proc；活父进程、缺失/损坏journal或无法确认清理会阻止启动，应保留现场排查。每用户最多4096条历史记录，满额拒绝新构造，不自动清除。所有行为仍待B10。
+
+新后端仓库接口位于 /api/v1/agent/plugins：GET/PUT /repositories，PUT传{expectedVersion,repositories:[{url}]}，首次读取为version=0，最多16个规范HTTP/HTTPS URL（每个4096bytes），拒绝URL凭据、fragment、重复项；保存不证明远端可用。GET /official/catalog、GET /remote/catalog?repositoryUrl，远端必须已配置；原始目录1MiB/64发布者/512包，公开完整目录8MiB。版本范围与实际安装包的产品version核对，最新包sdkVersion为字符串`1`；不转换旧SDK/manifest。目录公钥允许标准 PEM 的 LF/CRLF 换行，拒绝其他控制字符；目录中的公钥不自动成为信任。POST /official/stage与/remote/stage按appId/version下载完整包，远端还带repositoryUrl；最多50MiB，大小/hash、签名与实际manifest身份均须匹配，复用同一stage/verify/install。官方来源固定公钥，显式官方stage可登记该公钥，但不能恢复已撤销信任或授予grant。包下载后复查原仓库配置版本与当前身份，变化返回冲突，重新读取配置后再发起新意图。下载最多5次重定向、120秒整体期限，插件stage仍有60秒子期限；合法管理员内网HTTP部署保留，不发出宿主凭据。源码未进行外部网络验证。
+
+推荐入口保留GET /api/v1/agent/onboarding/recommended-plugin、POST /recommended-plugin/install（空JSON）。已安装项离线可读，安装复用既有用例；新安装仍禁用、空grant，需明确授权并启用，不自动继承旧推荐入口的全能力授权。返回entry/installation或安装对象，前端F1对齐；数据提交后交付失败保留unknown，不自动重复安装。部署必须同时提供根package.json的产品version，启动读取一次，不使用硬编码版本或工作目录猜测。
+
+新后端跨 App 消息位于 /api/v1/agent/apps/:appId/plugin-intents：POST 创建、GET 接收列表、DELETE /:receiptId 撤销；GET /:receiptId/artifacts/:artifactId 读取元数据，GET 同路径 /content 下载并支持单段 Range。仅当前管理员完整会话；发送和接收 App 均须启用、受信声明并授予 app.intents.exchange，带文件还须双方 artifacts.read。接收意图必须在当前 manifest 声明。消息绑定原 App/授权修订与声明版本，禁用、改授权或升级后旧消息不会恢复有效；接收不生成 Run、不执行模型。
+
+创建传 {operationId,receiverAppId,intentId,inputJson,artifactIds,confirmed:true}；inputJson 是显式公开 JSON 文本，最多 64 KiB、32 层，拒绝保留的凭据/隐私上下文字段名（不检测字符串正文是否包含秘密）；最多 16 个发送 App 自有、ready 的文件。有效期 10 分钟，时间为毫秒。HTTP 完整请求 512 KiB、接收列表完整响应 16 MiB，limit 默认50、最大100；不是跨请求快照。SDK 使用同一创建对象、显式 limit、receiptId 和 artifactId；RPC 仍为512 KiB，列表编码超限时减小 limit，不截断正文；后端SDK保留1 KiB IPC封装余量。intents.artifacts.readRange传{receiptId,artifactId,start,endInclusive}，单次最多128 KiB且结束字节必须存在；返回同身份/范围的dataBase64，严格校验完整长度和规范编码，短读或授权失效不交付部分结果。两端均复用Artifact lease，运行实例退役取消对应读取。
+
+创建与文件授权同一事务，原 operationId/内容重放不会重复发消息，改内容冲突；撤销后/过期后原键拒绝，不复活旧意图。每发送 App 最多100条有效消息，每用户最多4096条持久意图、正文64 MiB；过期或撤销不删除防重放证据，满额明确拒绝新消息，仍可查询/撤销及重放有效确定结果。管理面身份允许在 App 禁用后撤销自己的发送消息；SDK 仍须有效资源授权。有效文件授权进入 Artifact 删除/清理/容量保护，流由 Artifact owner 持有 lease，每块交付前复查原会话、双方当前修订、有效期和文件版本；撤销/失效终止后续交付，已交付字节不能撤回。SQLite unknown、响应断流与已提交后身份失效不得自动换键重发。真实行为待 B10，正式 UI/SDK 父页对接留 F1。
+
 ### Plugin 安装、幂等与生命周期
 
 - intents.create 首次前持久保存 UUID operationId，未知结果同 ID/同 payload 重试；不同 payload 拒绝，重试仍校验 App/grant。receipt 仅 10 分钟，过期先核对业务，不保证外部动作一次性。
@@ -478,21 +537,108 @@ Run completed/completed_unverified/failed/cancelled/interrupted 回收 Browser S
 
 同 App/Thread 只允许一个活动 Run（pending/running/unknown 均占用名额）；明确完成或失败后才释放。网络失败、协议异常或提交结果未知不能证明未写入，重试保持原 key 和输入；改变输入才形成新意图，不自动生成新 key 重放。version_conflict 显示冲突并尝试读取最新 Run，不自动用新版本继续取消；已完成的 Run 拒绝取消，unknown 允许有版本条件地取消但不保证远端回滚。安全失败只返回 code；非 JSON、未知状态/错误码或错误 shape 显示协议失败，不伪造成功，也不返回 prompt、hash、秘密或技术 cause。开发入口与剩余项见 [下一阶段方案](后端重构下一阶段实施方案.md#延后的前端事项未验收不删除)。
 
-### 新后端授权与审批基础（B6.1 源码范围）
+### 新后端项目目录与突变占用（源码已接线，行为待 B10）
+
+- 旧正式 Agent 长会话仍按上方说明运行；新后端移除 ssh_session_open/list/close 和 sessionId，使用独立45秒 Remote 任务及当前 Run 的 Job/取消管理，不继承 shell cwd/env，不共享 Root/Child 活跃连接。
+- project_directory_bind v2 参数 connectionId/directory；read 参数 connectionId/可选 path；clear 只有 connectionId。目录绝对路径≤256 UTF-8 bytes，read 仅允许绑定根及深度≤8的子目录。未绑定返回空上下文；目标 version/fingerprint 变化报冲突，重新绑定须独立批准。绑定按 Run 独立保存，删除 Run/connection 清理，不沿用旧 Thread 共享。
+- 从绑定根到选定子目录读取不区分大小写的 AGENT.md/AGENTS.md，最多4份、每份≤8 KiB，拒绝链接、超量和越界；返回 path/scopePath/text/sha256。指导是不可信工具数据，不自动变为系统提示、Shell cwd 或权限；bind/clear 需要当前 file.read 与单次批准，read 需要当前只读授权。
+- Agent 文件/Shell/Job/ACP/Docker、普通 Files/上传/复制移动/归档/权限修改与 Workspace Docker 按 lowercase host+port 共用持久独占占用。不同连接ID、用户或凭据不能绕过同一文本 endpoint；跨主机复制/移动原子占用两端。冲突直接拒绝，最多128个 endpoint，不自动排队/重试；同资源已有 Files 队列保留。
+- 结果及清理确认才释放，unknown/清理失败和重启后的遗留占用保持 blocked；先只读核对，不按 TTL/重启/改连接自动放行。当前没有解锁入口，B9须补证据核对与授权恢复。DNS/IP别名无法准确合并；交互PTY、外部进程及远端派生进程不受数据库锁隔离。执行按 governed 政策核对，默认 enabled=false；启用设置不授予工具 grant 或审批。 行为待 B10。
+
+### 新后端 App、授权与审批（源码范围）
+
+新后端内置声明为 `nexus.terminal@1.3.0`，声明文件读/写/删除、状态、Shell、Docker、ACP 调用、本地协作与context.read能力；声明不等于授权或已能执行工具。声明 ID 与 App 实例 UUID 分开：GET `/api/v1/agent/apps` 首次为当前账号原子初始化默认实例，默认启用、grants 为空。重启不重建已存在实例，不恢复用户撤回的权限。治理操作遇到实例缺失必需政策记录时返回安全失败，不静默补权限或假定默认状态。创建新实例使用受信来源，不按名称自动绑定旧实例。
+
+| App / 目标管理接口                      | 操作                                                                                                                                                                                 |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GET `/api/v1/agent/app-definitions`     | 读取服务器受信声明，客户端不能自报 capabilities、版本或执行状态                                                                                                                      |
+| GET/POST `/api/v1/agent/apps`           | 读取实例列表；POST `{name,definitionId?}`，省略来源时使用内置声明，返回新 UUID；列表最多 1024 项，超限拒绝而非截断                                                                   |
+| GET/PATCH `/api/v1/agent/apps/:appId`   | 读取实例；PATCH `{enabled,expectedVersion}`，CAS 冲突先读取最新实例；禁用不删除历史，启用不恢复旧 Run                                                                                |
+| GET/PUT `/api/v1/agent/target-denylist` | 读取/全量替换全局 Agent 目标拒绝名单；PUT `{connectionIds,reason,expectedRevision}`，初始 revision=1，最多 50 个可信 Targets ID，reason 非空且最多 512 Unicode 码点/2048 UTF-8 bytes |
+
+App 返回必填非空 definitionId/definitionVersion、capabilities、enabled/version、毫秒 createdAt/updatedAt 与 `executionState:governed`；enabled 只表示管理准入，不代表 running/healthy。App 列表/声明完整响应最多 8 MiB。grant 定义只显示实例当前真实声明；来源已卸载的实例拒绝授权与创建 Run（403 `app_disabled/capability_undeclared`）。
+
+禁用或声明变更在同事务失效未决审批、围栏活动 Run/步骤，再由执行 owner 收尾。目标集合变更同事务围栏所有旧 App Run：当前 Run 未绑定单个目标，采用保守取消；仅改拒绝原因不取消 Run。取消不证明远端副作用回滚。拒绝条目保留到显式移除，目标删除后仍保留 ID 防止复用绕过；加入时经 Targets public 读取身份、提交时核对版本。denylist 的 changedAt 对外使用 Unix 秒，App/Run 时间使用毫秒。普通 SSH 不受 Agent denylist 影响。审批创建/决议复查当前声明、启用、grant、拒绝名单及目标版本；旧批准快照不是新执行许可。写入/清理结果未知时读取现状，不盲目重发或恢复运行。
 
 当前新后端 Agent 管理员仍使用 Access 登录会话（userId=1），正式前端和生产切换**尚未**完成。新建 App 的 grant 默认**为空**，策略修订从 0 开始；不因 capability 出现在定义列表、选择 Full Access、模型答复或 SSH 连接存在就自动批准。普通 SSH 的技术通道与 Agent 授权彼此独立，Agent 还须在每次真实工具执行前复查目标身份、当前 Run、ToolCall 和授权版本；该最终执行链由 B6.2/B5-R 承接。
 
-| 已安装的 B6.1 HTTP 路径                                  | 当前语义                                                                                                                                                                                                                                                                                                         |
-| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET/PUT `/api/v1/agent/apps/:appId/grants`               | GET 返回能力定义、当前 grants 与 policyRevision；PUT 带 `{expectedPolicyRevision,grants:[{capability,scope}]}`，全量替换、同事务 CAS，撤权使未决审批失效；目标 scope 为 `{kind:"targets",targets:{ssh:{mode:"all"}}}` 或 `{kind:"targets",targets:{ssh:{mode:"ids",ids:["1"]}}}`，非目标能力用 `{kind:"global"}` |
-| GET/PUT `/api/v1/agent/apps/:appId/execution-policy`     | GET 返回 `{version,overrides,effective}`，PUT 带 `{expectedVersion,overrides}` 全量 CAS；秒/字节/条数必须是正安全整数并满足硬上限。默认/初始限额参照旧 Agent 基线；B7 尚未接入动态设置与预算执行                                                                                                                 |
-| GET `/api/v1/apps/:appId/approvals/:approvalId`          | 读取当前可见审批（含请求、截止秒时间、状态、版本、风险摘要），不存在/非本人返回 404                                                                                                                                                                                                                              |
-| GET `/api/v1/apps/:appId/runs/:runId/approvals`          | 读取此 App/Run 的审批记录数组；到期或终止 Run 的未决审批于读取事务内刷新；最多返回 1024 条，超出时明确拒绝，不截断                                                                                                                                                                                               |
-| POST `/api/v1/apps/:appId/approvals/:approvalId/resolve` | 发送 decision 为 `approved` 或 `denied`、operationHash、expectedVersion、可选 feedback，并附 UUID `Idempotency-Key`；在同一事务复查 App/Run/operationHash/policyRevision/inputRevision/TTL 后 CAS 决议；同 key 同内容重放，变更内容冲突                                                                          |
+| 已安装的 B6.1 HTTP 路径                                  | 当前语义                                                                                                                                                                                                                                                                                                                   |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET/PUT `/api/v1/agent/apps/:appId/grants`               | GET 返回当前声明的能力定义、当前 grants 与 policyRevision；PUT 带 `{expectedPolicyRevision,grants:[{capability,scope}]}`，全量替换、同事务 CAS，撤权使未决审批失效；目标 scope 为 `{kind:"targets",targets:{ssh:{mode:"all"}}}` 或 `{kind:"targets",targets:{ssh:{mode:"ids",ids:["1"]}}}`，非目标能力用 `{kind:"global"}` |
+| GET/PUT `/api/v1/agent/apps/:appId/execution-policy`     | GET 返回 `{version,overrides,effective}`，PUT 带 `{expectedVersion,overrides}` 全量 CAS；秒/字节/条数必须是正安全整数并满足硬上限。effective 同事务消费全局动态设置与 App 缩窄覆盖项；Root 创建冻结实际值                                                                                                                  |
+| GET `/api/v1/apps/:appId/approvals/:approvalId`          | 读取当前可见审批（含请求、截止秒时间、状态、版本、风险摘要），不存在/非本人返回 404                                                                                                                                                                                                                                        |
+| GET `/api/v1/apps/:appId/runs/:runId/approvals`          | 读取此 App/Run 的审批记录数组；到期或终止 Run 的未决审批于读取事务内刷新；最多返回 1024 条，超出时明确拒绝，不截断                                                                                                                                                                                                         |
+| POST `/api/v1/apps/:appId/approvals/:approvalId/resolve` | 发送 decision 为 `approved` 或 `denied`、operationHash、expectedVersion、可选 feedback，并附 UUID `Idempotency-Key`；在同一事务复查 App/Run/operationHash/policyRevision/inputRevision/TTL 后 CAS 决议；同 key 同内容重放，变更内容冲突                                                                                    |
 
 授权目标 ID 最多 256 个、每项最多 128 UTF-8 bytes；grants 请求 JSON 上限 512 KiB，其余治理请求 16 KiB，完整响应最多 8 MiB（包含转义与 envelope）。审批列表还受到 1024 条完整记录上限约束，超出返回 413 `limit_exceeded`；仍可按 ID 查询单项，当前无分页接口。无效类型/未知字段拒绝 400，身份失效 401、非管理员 403、不存在 404、版本/审批漂移或幂等内容冲突 409；不可用/未知提交结果须保留原意图并读取现状，不得自行换 key 自动执行。审批摘要的 toolName/toolVersion 各最多 256 UTF-8 bytes、summary 2048；可选 feedback 非空且最多 2000 UTF-8 bytes。审批请求 TTL 600 秒，以实际事务决策时刻核验，超过时限不能批准；Run 取消已提交而审批失效清理失败时返回 `operation_unknown`，先读取 Run 与审批现状；`approved` 仅表示用户决议已提交，**不是**工具已派发或远端任务已成功。
 
-目前 B5 的 `awaiting_b6_b7` 仍强制禁止模型派发，B6.2 的可信 Tool/ACP 审批生产者、活动 waiter、实际消耗/租约与用户通知未接线，因此新 App 的审批列表通常为空，POST resolve 不会虚构可批准任务。旧版按 App 安装 manifest 默认 grant、完整 ToolInspection/通知和动态 Settings 的差异记录 F1；不得把新后台管理页面未迁移误认为已可操作。源码/静态与真实行为分别见 B6.1 审核及 B10。
+新后端已安装两个管理员只读工具审计入口：`GET /api/v1/agent/apps/:appId/runs/:id/tools/:toolCallId` 及其 `/events?after=0&limit=50`。事件默认 50、最多 100 条，after/nextCursor 是状态 revision；空页保留 after，非空页取最后一项 revision。未知或重复 query、非规范整数拒绝 400；跨 user/App/Run/Tool 或不存在返回 404；交付前会话失效返回 401，非管理员 403。完整响应最多 128 KiB；只含安全身份、工具名称/版本、能力、目标 ID/version、风险/变更标志、hash/修订/状态及毫秒时间，不含参数、结果正文或供应商调用 ID。正式前端未迁移，读取审计不创建工具或授予执行许可。
+
+新后端工具账本现已记录独立操作内容修订、状态修订及状态事件；审批读取真实操作，单次消费与派发意图同事务提交。目录、文件、Shell 和 Docker 工具已有账本与审批消费者；模型派发须 governed 准入与冻结预算，历史批准不可复用。取消/重启将未派发操作关闭、已派发操作标为 unknown，不自动重试。
+
+新后端 Agent 状态接口（App/Thread/Run/步骤/工具及事件页）在异步结果交付前再次核验管理员会话；401/403 或交付失败不证明刚才的创建/取消未提交。写入结果不明时保留原输入与 Idempotency-Key，登录后只读核对，不自动重放。
+
+已派发工具不能报告确定取消；Run 取消或终结后，晚到工具结果不能覆盖账本围栏。存在未结或 unknown 工具时不能报告 Run 成功。启动恢复同时核对模型步骤与工具操作，即使没有模型步骤也保留工具的未知副作用；这些源码约束仍待 B10 行为验证。
+
+当前原执行链使用 governed 政策，默认执行关闭；目录、诊断及文件只读工具的可信检查和结果反馈已接线；file_write/patch/move/delete 的审批生产者、可取消等待、单次消费与结果反馈已接线；Shell/Docker 与当前 Run 内后台 Job 已接线；ACP调用、独立权限等待/消费、安全HTTP观察和直接 Child/协作已接线；Run-local项目目录与跨Run持久突变占用已接线，用户通知归 Operations；审批只由真实工具动作产生，POST resolve 不会虚构可批准任务。核心持久Settings已接线；外围集成/工具由B8、Settings与上下文已由B7接线、blocked恢复由B9承接；不得把新后台管理页面未迁移误认为已可操作。源码/静态与真实行为分别见 B6.1 审核及 B10。
+
+首工具 machine_connection_list 参数只能为 {}，只返回持久选中且当前授权、未在 denylist 的 SSH 连接 id/name/host/port/username，不返回凭据或非 SSH 项。参数最多 16 KiB、结果最多 256 KiB，超限失败，不截断。结果确认持久后才回送模型；工具步骤不结束 Root，最终 stop 才可成功。当前执行须 governed 准入，未运行行为验证。DEV 尚无选中器，默认 []，多步 UI 留正式前端阶段。
+
+新后端还提供v2只读工具：`machine_diagnostics_read({connectionId})`读取所选SSH机器的CPU百分比、内存/磁盘bytes及1/5/15分钟load指标，generatedAt为毫秒（CPU以同一任务两次采样差值计算），不读取宿主诊断；`file_read({connectionId,path})`读取整个UTF-8文件（最多32KiB，含captured-content SHA-256），不支持旧offset；`file_list({connectionId,path})`最多200条/48KiB metadata，超额拒绝；`file_search({connectionId,path,query,maxResults?})`做区分大小写字面量内容搜索，不接受旧regex/glob/contextLines。maxResults默认20、最多100，每行首匹配，行/UTF-16列从1开始；发现超量匹配时返回truncated。搜索最多100文件、100目录、8层和2MiB，超遍历/编码预算失败，不截断伪报完整结果；非文本文件跳过，文件单项超过32KiB则失败。
+
+新后端 file_write v2 参数为 {connectionId,path,content,expectedSha256}：绝对路径最多256 UTF-8 bytes，content最多8KiB且允许空文本，完整参数JSON最多16KiB。新建必须传 expectedSha256: 'absent'；替换必须传 file_read 返回的原内容小写SHA-256。每次写入单独申请人工批准，审批摘要只含动作、路径、字节数及哈希，不展示正文。拒绝、过期、撤权或取消停止等待；批准需在当前权限/目标版本有效时消费一次，不能授权下一次写入。新建权限0600，替换保留普通权限，不保留特殊权限位，不提供旧mode参数。使用同目录暂存、提交后回读确认；哈希预检并非远端原子CAS，存在跨调用竞争窗口。暂存/提交/确认/最终交付或清理不能确认时记录unknown，不自动重放；需人工核对远端文件与临时文件。读写任务共用8个名额，整项最长45秒，清理未确认仍占名额。
+
+新后端 file_inspect v2 参数为 {connectionId,path}，返回规范路径、kind、fingerprint、fileCount、directoryCount、bytes，不返回内容。允许普通文件（含二进制）与目录；最多100文件/100目录、深度8、单文件1MiB、累计2MiB、元数据256KiB；超过预算整项拒绝，不截断。指纹包含相对路径、权限/所有者、大小/修改时间及文件内容哈希，不是原子文件系统快照。
+
+file_patch v2 参数为 {connectionId,path,expectedSha256,oldText,newText}，原 SHA 来自 file_read；oldText 必须非空且在原文件中唯一出现（重叠重复也拒绝），newText 可以为空，但不能与 oldText 相同。oldText/newText 各最多4KiB，原文件/结果各最多32KiB。取消旧 unified diff/多文件请求，每个文件分别调用、审批，不承诺多文件事务。
+
+file_move v2 参数为 {connectionId,path,destinationPath,expectedFingerprint}，file_delete v2 参数为 {connectionId,path,expectedFingerprint,scope}，指纹来自 file_inspect。移动目的必须不存在，拒绝同路径/祖先关系；删除 scope:'entry' 仅普通文件或空目录，scope:'tree' 明确递归删除。路径各最多256 UTF-8 bytes，不允许控制字符、根目录、链接或特殊节点。移动/删除采用上述有界目录预算，每项独立审批；patch/move 要 file.write，delete 要 file.delete 且为 destructive，inspect 要 file.read。删除逐节点复查，部分执行或提交后确认失败为 unknown，不自动重放，人工核对源、目的和剩余树。全部工具参数完整JSON最多16KiB，审批摘要不包含文件正文。
+
+shell_execute v2 参数为 {connectionId,kind,argv?,script?,cwd?,mode?}：kind:'argv' 只允许 argv（最多128项、原始UTF-8合计8KiB），kind:'shell' 只允许可执行 script（8KiB）。cwd 可选绝对路径，最多256 bytes；mode 默认 foreground，也可 background。所有执行均需 shell.execute 和独立 destructive 人工批准，不根据命令文本推断安全。前台返回真实退出状态、stdout/stderr（合计捕获32KiB）和 truncated；非零退出是确认的命令失败。后台返回 {jobId,accepted:true}，只表示受理，不表示进程健康或成功。完整参数JSON最多16KiB，结果最多256KiB，包含转义预算。
+
+shell_job_control v2 使用 {connectionId,action,jobId?,waitSeconds?}。list 不传 jobId；status/wait/cancel 使用原 Shell 工具账本 UUID，只操作当前 user/App/Run（Root 或 Child 各自隔离）、目标版本和指纹一致的 Job。list/status/wait 需当前 shell.execute；cancel 还需独立 control 批准。wait 默认10秒、最多30秒，等待结束不取消 Job。状态为 queued/dispatched/completed/failed/unknown；dispatched 是派发意图，非进程健康。每 Run 最多64条历史，全后端最多8个活跃 Job预约，远端与文件任务仍共用8个资源名额。后台属于实际 Run，Root/Child 各自在结束/取消时收尾自己的 Job，Root 最终收尾覆盖整族；unknown 子任务阻止 Root 成功。启动将 queued 转 failed/not_started、dispatched 转 unknown，不重放。权限每秒复查，撤权/过期取消并等待收尾。每个 Job 从 launch 到远端执行最长45秒，不提供旧24小时后台服务承诺；本地取消或 SSH 关闭不证明远端子进程停止。
+
+machine_docker_inspect v2 使用 {connectionId,containerId}，要求完整小写64位hex容器ID，返回 containerId/state/image/fingerprint。machine_docker_control v2 使用 {connectionId,containerId,action,expectedFingerprint}，action 为 start/stop/restart/remove，指纹取自 inspect。两者需 machine.docker.manage；control 独立批准，remove 为 destructive，其余 mutate。执行前核对指纹，后核对请求状态或容器不存在；并发窗口不提供原子CAS，派发/后验未知不得自动重放。Docker 与其他独立远端任务共用45秒整项期限。
+
+新后端 acp_execute v2 使用 {connectionId,argv,cwd,prompt}，仅通过独立SSH调用远端已安装的ACP v1程序。argv最多128项、原始UTF-8合计8KiB，cwd为必填绝对路径且最多256bytes，prompt最多8KiB，完整参数JSON最多16KiB。不接受旧integrationId/target/Workspace/profile，也不自动安装程序或添加本机回落。需当前 integration.acp.invoke、选中目标和独立destructive人工批准；当前调用参数绑定批准，内置声明不授予grant。
+
+ACP执行初始化、创建新会话、提交prompt并收集文本更新；输出最多32KiB，超限整项失败而非截断伪报完整。整项最长45秒，包含内部权限等待，跨层传递剩余期限；独立远端任务共用8名额。stopReason明确返回end_turn/max_tokens/max_turn_requests/refusal/cancelled，协议完成不代表远端副作用已被业务验证或程序处于OS沙箱。
+
+每个受支持的ACP内部权限请求生成独立acp_inner_permission工具操作和kind:acp_permission批准，绑定父调用、会话/请求/远端toolCall身份、目标版本、原输入哈希及独立修订。父批准只允许启动程序，不能批准内部动作。只支持allow_once/reject_once；没有allow_once选项直接取消，不支持allow_always。direct文件/terminal请求拒绝。读取现有审批列表/单项并resolve后，执行方仍须在当前权限有效时原子消费一次，确认许可响应已发送才记录交付；该子操作completed表示许可已交付，不保证远端内部动作成功。审计摘要不展示rawInput或prompt正文，远端title/kind仅是未受信说明。
+
+权限与状态使用现有审批HTTP和工具事件页查询，不透传原始ACP更新或新建独立WS。每父调用最多64个内部权限操作；协议单消息256KiB、总入站8MiB，最多16个在途权限handler。每秒复查当前父授权/目标；撤权、过期、Root取消或停机关闭本次流并等待资源收尾，晚批准不继续。重启收敛未派发子操作与已派发未知意图，不恢复活waiter或自动重放。断线、响应交付/持久确认或清理未知不得报回滚；本地关流不保证远端进程停止。正式前端改动见F1，全部行为待B10。
+
+以上写入链须 governed 准入；源码接线不表示 B10 已通过；正式前端的参数及审批呈现调整统一留F1。
+
+路径必须绝对，拒绝`..`和符号链接跟随；目录可显示symlink条目。读取前后复查版本、指纹、选中与授权。hash只描述捕获内容，不保证远端并发原子快照；已开始的读取不能因撤权追溯撤回，但结果交付仍会拒绝。每个远端操作受冻结 toolTimeoutSeconds 与 Root 剩余期限共同限制，取消等待实际资源收尾；不自动重放unknown。当前工具执行须 governed 准入，没有运行测试，正式前端按F1同步新字段与提示。
+
+### 新后端 Root/Child 与协作（源码接线，默认执行关闭，行为待 B10）
+
+新后端提供十个模型工具：`collaboration_delegate/profiles/list/join/cancel/message_send/message_read/message_consume/fact_read/fact_write`（每项都使用完整 `collaboration_` 前缀）。必须显式授予 `app.intents.exchange`；委派、取消、发送、消费和写事实分别批准，读取也须当前授权。父批准不授予 Child 远端工具许可。正式旧界面的协作管理尚未切换，执行按 governed 政策核对，默认 enabled=false；启用设置不授予工具 grant 或审批。 真实模型与协作行为待 B10。
+
+- Root 最多累计四个直接 Child，不支持嵌套。Root/Child/依赖等待共用八个任务名额，满载拒绝，不自动排队或重放。Root 五分钟绝对期限，Child durationSeconds 为1–120秒且不超父期限，maxRequests 为1–32；全族预算、并发和期限由创建时冻结的执行设置约束。
+- delegate 参数为 profile、objective、maxRequests、durationSeconds、dependencyMode 及可选 targets/dependencies。profile=explore|review|worker；explore/review 限远端只读与本地协作，worker 的写动作仍逐次批准。objective 为独立任务（最多8 KiB），不复制父私有历史；targets 为选中 SSH ID 的十进制字符串子集（最多50项，省略表示无目标），dependencies 为最多四个此前 Child UUID，success 要求成功、settled 接受终态。完整工具参数 JSON 最多16 KiB，不能只看单字段上限。
+- list/join 返回安全状态及 Child 最后正文（最多8 KiB），Child 每步正文也最多8 KiB；正文只是模型生成结果，不是已验证证据。join 只由 Root 发起，childIds 必须为其直接 Child，mode=all|any，waitSeconds 为1–30；超时不停止 Child。父成功前等待全部 Child 成功和实际资源收尾。cancel 独立批准后围栏并等待本地清理，不承诺远端进程回滚。
+- message_send 使用 recipientId/body/ttlSeconds，只能发给当前族内仍活跃的其他参与者；body 最多8 KiB，TTL为1–300秒。全族最多累计256条/512 KiB原始正文，过期与已消费记录仍计累计配额。接纳不等于消费；不使用旧 runtimeId/任意 JSON/artifactRefs。
+- message_read 使用 after/limit（每页1–4条），只读自己的持久邮箱；按服务端 nextCursor 继续，过期文本被省略，但扫描进度保留。message_consume 使用 through/expectedConsumed CAS，只能确认已经连续扫描的范围，跳页不能确认未读间隙。
+- fact_read 使用 key；fact_write 使用 key/value/expectedVersion，0表示创建，更新必须匹配当前版本。key 最多128 UTF-8 bytes，value 最多8 KiB，全族最多128 keys。消息和事实均是未验证文本，不能作为权限或可信指令。
+- 取消、撤权、Provider变更和停机收尾全族；存储失败仍尝试本地清理并保留失败原因。提交未知不猜测、不重新派发；重启不恢复活 waiter 或旧付费请求，未派发 Child 失败、已运行 Child 保守 unknown。冲突需读取当前状态后由新意图决定下一步，不能自动换键重放。
+
+管理员观察接口前缀为 /api/v1/agent/apps/:appId/runs/:id：GET /subagents 只返回直接 Child 的 id/parentId/status/version/profile/deadlineAt；POST /subagents/:childId/cancel 带 expectedVersion 与稳定 Idempotency-Key，复用 Run 取消结果，冲突先只读核对、unknown 不换键重放。GET /subagents/:childId/messages?after=0&limit=16 只返回 sequence/senderId/bodyBytes/expiresAt，最多32项，完整响应16 KiB；包含过期记录的元数据，按 nextCursor 继续，不读取正文或推进模型消费水位。均须新 Access 管理员会话，错族/错 App/非直接 Child 返回 not_found。外部直接创建 Child 改为受审批模型委派；可配置 profile 管理由执行设置接口承接，正式前端后置 F1。
+
+### 新后端 Memory、Artifact 与语义检查点（源码接线，行为待 B10）
+
+Memory 管理归 /api/v1/agent/apps/:appId/memories：列表 status/limit/offset、POST 候选、GET 单项、POST /:memoryId/review、POST /imports/preview 和 /confirm。正文最多 16 KiB，审核带 expectedVersion，只有人工 publish 才进入 Recall；模型提案绑定真实 Run。跨 App 导入限同一用户、已发布且未过期的来源，确认重新核对版本，目标仍为候选。确认一次消费，未知结果按 preview.memoryId 只读查询，不重发。
+
+Artifact 位于 /api/v1/agent/apps/:appId/artifacts；先 POST name/mediaType/declaredBytes，再 PUT /:artifactId/content，以 application/octet-stream 发送真实字节并带 If-Match 的带引号版本。单项最多 16 MiB，服务端校验实际长度，GET 内容支持单个 bytes=start-end Range，下载不内联执行。库 /api/v1/agent/files 与 /files/storage；App 内支持 retain、带版本删除、attachments/解除引用及 cleanup/preview、confirm。被引用或保留的文件不能清理；确认绑定资源版本、十分钟期限并只消费一次。文件发布后 SQL 失败是未知结果，预留额度不因此释放，不能自动重传或删除。
+
+模型工具 memory_recall/propose、artifact_create/read 与 context_checkpoint 使用独立当前能力和必要审批。Artifact 续读按字节 offset 返回 base64；Memory 和摘要均是不可信数据，不能成为授权。语义检查点按冻结 aggressive/balanced/conservative 限制摘要至来源字节的35%/50%/75%，只在完成原步骤工具组后替换已绑定输入前缀，原用户请求和完整当前交换保留；没有开启模型派发就不会伪造摘要。
+
+### 新后端执行设置（源码接线，行为待 B10）
+
+管理员 GET/PUT /api/v1/agent/execution-settings 管理 enabled、完整 limits 与三个 profile；初态 version=0、执行关闭。PUT 带 expectedVersion，硬限制通过 /hard-limits/preview 与 /confirm 单次确认，确认重查版本和实际占用。profile 可继承 Root 模型或显式选择 Provider/model/configurationVersion；不会自动回退另一个模型，Child 仍需独立工具权限。Root 创建冻结设置，全族模型请求、工具登记与 token reservation 共用账本；token reservation 是保守预算单位，实际供应商用量另记，不声称精确 token 硬限制。执行按 governed 政策核对，默认 enabled=false；启用设置不授予工具 grant 或审批。
+
+全用户模型并发、Root/Child 占用、完整期限、工具输出/超时、Recall、Artifact 额度/TTL 与协作消息均接入实际消费者。配置变化先持久围栏旧 Run，再取消本地任务；App 覆盖项只能缩窄全局值。normal 上下文窗口取 Provider 窗口与 max(32768, 输出预留+2048) 的较小值，extended 使用 Provider 窗口；摘要按冻结压缩模式校验，容量不足明确拒绝。旧 maxAutoModelRequests/maxAutoActiveExecutionSeconds 删除，不保留自动增额双轨。
 
 ### 新后端 Provider 与模型冻结
 
@@ -511,15 +657,15 @@ Provider 配置包含名称、HTTP(S) 端点、启用状态、协议及显式模
 
 请求最多 128 KiB、每 Provider 最多 128 模型、发现最多 1000；名称 128、modelId 512、URL 2048、credential 8192 UTF-8 bytes。完整响应含 JSON 转义最多 8 MiB；超过返回 413/limit_exceeded，不截断。Provider 请求 10 秒、Registry 单次刷新 15 秒（新请求可能先等待已取消刷新收尾）；非 2xx、网络、无效/未完成流返回安全失败。模型测试传递推理配置并校验完整 SSE 终态，usage 缺省不补零。配置/凭据更新使旧请求失效；取消不能证明上游未处理。
 
-Run 创建必传 model:{providerId,modelId,configurationVersion}，与 Run、初始事件、幂等记录同事务冻结模型配置和凭据代际。冻结输入不含密钥；Provider 版本失效/禁用拒绝创建，关联 pending/running/unknown Run 时拒绝删除 Provider。同意图重放保持原 key 和输入及**原提交快照**，不会因后续状态变化修改历史幂等响应；operation_unknown 不代表回滚。当前没有真实模型或工具执行者。
+Run 创建必传 model:{providerId,modelId,configurationVersion} 及 connectionIds（最多 50 个唯一正整数，空数组表示未选中目标），与 Run、初始事件、幂等记录同事务冻结模型配置和凭据代际。冻结输入不含密钥；Provider 版本失效/禁用拒绝创建，关联 pending/running/unknown Run 时拒绝删除 Provider。同意图重放保持原 key 和输入及**原提交快照**，不会因后续状态变化修改历史幂等响应；operation_unknown 不代表回滚。当前已有目录、诊断、文件只读及受审批 file_write/patch/move/delete、Shell/后台 Job/Docker 的执行源码，实际执行须 governed 准入。
 
-新后端已有独立 Chat Completions/Responses 增量模型流、Run 执行 owner、持久步骤与恢复源码。当前冻结政策只有 `awaiting_b6_b7`，仍缺授权和上下文/预算，**Run 不自动外呼，pending 不表示正在执行**。正式界面与输出交付留 F1，真实行为留 B10。DEV 页可选择 Provider 模型和配置版本；候选不保证提交时仍有效，后端按当前配置校验。
+新后端已有独立 Chat Completions/Responses 增量模型流、Run 执行 owner、持久步骤与恢复源码。当前政策为 `governed`，执行设置默认关闭；开启后仅新建且已确认提交的 Run 可进入原执行 owner，权限、版本、预算逐阶段复查。pending 不表示已派发；重放和未知结果不触发第二次调用。正式界面与输出交付留 F1，真实行为留 B10。DEV 页可选择 Provider 模型和配置版本；候选不保证提交时仍有效，后端按当前配置校验。
 
 Provider/Registry公开失败只使用已定义的安全码，步骤未派发失败码为`DISPATCH_NOT_STARTED`；不返回供应商错误正文。管理接口在异步结果交付前复查会话；写入完成后若登录失效或响应失败，先重新登录并查询配置，不能据错误响应推断写入已回滚。Registry resolve的modelId最多256 UTF-8字节；重复或未知query参数拒绝。
 
-模型流普通帧/注释帧上限 128 KiB；Responses 的 done/completed 完整文本快照帧可至 8 MiB。完整网络流上限 8 MiB、正文上限 2 MiB；JSON 转义和重复快照也计网络量。只有明确成功终态、正常结束和本地资源清理完成才可记 completed；断流、工具/拒绝内容、未知事件和非成功终态不能冒充成功；结束原因只接受原始字符串取值，数组或对象即使可转成同名文本也拒绝。Chat Completions 的 `[DONE]` 帧同样受普通帧上限约束。
+模型流普通帧/注释帧上限 128 KiB；Responses 的 done/completed 完整文本快照帧可至 8 MiB。完整网络流上限 8 MiB、正文上限 2 MiB；JSON 转义和重复快照也计网络量。只有明确成功终态、正常结束和本地资源清理完成才可记 completed；断流、拒绝内容、未知事件和非成功终态不能冒充成功；服务器声明的工具调用可形成 tool_calls 步骤终态，无正文也合法，不能直接记 Root 成功；结束原因只接受原始字符串取值，数组或对象即使可转成同名文本也拒绝。Chat Completions 的 `[DONE]` 帧同样受普通帧上限约束。
 
-管理员可读取 `GET /api/v1/agent/apps/:appId/runs/:id/steps/1` 及 `/steps/1/events?after=&limit=`。不存在或不属于当前用户/App/Run 的步骤返回 404；默认 50、每页最多 100 条，完整响应限 32 KiB。只返回状态、版本、用量和文本**字节数**，不返回正文、prompt、冻结配置或秘密。DEV 切换 Run/登出会取消旧读取并隔离状态和游标。
+管理员可读取 `GET /api/v1/agent/apps/:appId/runs/:id/steps/:stepIndex` 及其 `/events?after=&limit=`（stepIndex 为 1–400，属于审计容量，不授予执行额度）。不存在或不属于当前用户/App/Run 的步骤返回 404；默认 50、每页最多 100 条，完整响应限 32 KiB。只返回状态、版本、用量和文本**字节数**，不返回正文、prompt、冻结配置或秘密。DEV 切换 Run/登出会取消旧读取并隔离状态和游标。
 
 Agent模块最多64个在途请求，停机同时中止发现/探测和Registry刷新并等待持久写入；Provider自身关闭也等待实际网络任务，单项清理失败仍执行其它清理；网络清理失败后对应owner拒绝后续网络工作。Registry取消后的持久写入异常不静默丢弃。
 
@@ -537,6 +683,24 @@ Agent模块最多64个在途请求，停机同时中止发现/探测和Registry�
 - Ctrl+滚轮缩放终端/文件/编辑/快捷指令；容器水平/垂直只改直接子项排列。
 - 侧栏宽度持久化，默认点击外部收回，“保持侧栏”持续展开；popup/embedded/sidebar 共用功能状态。
 - SSH/文件标签右键支持关当前/左侧/其他/右侧，分组名可点改；触摸终端规则见 [终端](#终端)。
+
+### 独立重构入口：核心持久设置（源码已接线，行为待 B10）
+
+管理员使用 GET /api/v1/settings 读取 {version,effectiveVersion,requiresRestart,policy,captcha}；PUT 同路径提交完整 {expectedVersion,policy,captcha}。policy 包含 ipWhitelist、ipBlacklistEnabled、maxLoginAttempts（1–1000）、loginBanDuration（1–2592000秒）、statusMonitorIntervalSeconds / remoteHostRefreshIntervalSeconds（1–86400秒）、passkeys。白名单最多256条IP/CIDR、16 KiB；Passkey站点最多16项。未知字段、旧字符串字典、布局/外观字段均拒绝；个人偏好使用独立 /settings/preferences 与布局入口；外观归 B8。
+
+CAPTCHA配置为 {enabled,provider,siteKey,expectedHostname,secret}，secret 显式使用 {action:'keep'}、{action:'clear'} 或 {action:'replace',value}；key最多1024 UTF-8 bytes，启用时须有效供应商、非空site/secret和准确hostname。更换供应商不能keep旧密钥。读响应只含hasSecret，不含明文或密文。匿名 GET /api/v1/settings/captcha 与 GET /api/v1/auth/captcha/config 都返回当前实际生效的公开验证码配置；管理员 PUT /api/v1/settings/captcha 只更新CAPTCHA，但与完整设置共享expectedVersion，返回安全配置及生效元数据。
+
+所有核心设置保存后需要重启：version为已保存版本，effectiveVersion为本次启动版本，requiresRestart表明二者是否不同。重启前来源准入、登录、CAPTCHA、Passkey和监控共同保持原快照；重启读取/校验/解密全部持久设置后才开放监听。已有配置不受初始化环境覆盖；数据库或密钥异常拒绝启动，不回落默认。网络/主Origin/代理/加密密钥/Guacd仍由部署提供；站点协议必须与监听主Origin一致，修改协议须同时调整部署后重启。管理员应保留可用部署入口，不能把保存成功当已通过实际外部验证码或域名配置验证。
+
+请求/响应完整JSON最多64 KiB；400 invalid_input、401 unauthenticated、403 forbidden、409 version_conflict、413 limit_exceeded、415 invalid_input（媒体类型）、503 storage_unavailable/operation_unknown/internal_failure/unavailable。冲突先重新读取并人工核对；设置CAS在同一SQLite事务复查当前管理员会话，先完成撤销则拒绝写入；写入后认证失效、响应中断或未知提交可能已保存，恢复身份后只读核对version与内容，不自动重放PUT，也不以新版本覆盖。源码/静态完成不代表正式前端已迁移，全部真实行为留B10。
+
+### 新后端界面偏好与布局（源码已接线，行为待 B10）
+
+GET/PUT `/api/v1/settings/preferences` 读取/替换当前用户的完整界面偏好；安全配置仍独立于 `/settings`。保留语言/时区、前端日志级别、终端/编辑器/预览/缩放、Docker面板轮询、标签显示、侧栏尺寸及桌面窗口尺寸字段。backendLogLevel通过独立 /api/v1/settings/logging 管理，状态采样/资源缓存间隔归核心policy；不会因保存UI字段修改这些后端限制。语言仅en-US/zh-CN/ja-JP，时区必须有效；终端scrollback0–100000，预览行10–2000/列5–200，桌面宽320–8192/高200–8192。
+
+GET/PUT `/settings/layout`、`/settings/sidebar`、`/settings/focus-switcher-sequence` 与PUT `/settings/workspace-layout` 均安装；最后一项原子更新布局与侧栏。每项共享同一用户版本，未保存时明确version=0/默认布局，PUT带expectedVersion，首写变成1，冲突先刷新。布局用明确pane/container联合，id/size必填、ID及pane不重复，深度最多12/总节点100，容器至少一项；焦点最多32项、不重复，快捷键为序列项→字符串。请求/响应128 KiB，未知字段拒绝。
+
+成功保存立即成为后续读取权威，不要求重启；实际显示及终端参数生效由正式前端F1接线。本版没有声称DEV终端或后端checkpoint已消费这些UI字段，也不把客户端显示偏好当后端资源许可。unknown先读取核对，不自动重放。
 
 ### 系统设置截图
 
@@ -559,6 +723,42 @@ Agent模块最多64个在途请求，停机同时中止发现/探测和Registry�
 - 删除活跃主题同事务清空设置引用；同名新 preset 将用户主题改名“原名 (user ID)”（冲突再编号），保留颜色/ID/引用。
 - 上传/删除顺序执行；删背景先清设置再删文件，设置失败不先删，清理失败记诊断但不改变已清引用结果。崩溃可能遗留文件，非文件/数据库跨资源原子更新。
 
+上述界面仍使用正式后端。独立 backend-next 已接入主题、外观设置和图片背景源码，行为待 B10；本地/远端 HTML 主题库也已接入，正式前端切换留 F1。
+
+### 新后端主题、外观与背景（源码接线，行为待 B10）
+
+完整认证用户只能消费自己的主题、外观和图片；403 个内置终端主题全局只读。GET/POST /api/v1/terminal-themes、GET/PUT/DELETE /:id；更新/删除带 expectedVersion。POST /import 保留 multipart themeFile 和可选 name，GET /:id/export 下载完整颜色 JSON，包含 selectionForeground。删除活跃主题同事务清空引用并推进外观版本；preset 同名处理保留用户颜色、ID 和引用。每用户最多 2,000 个自定义主题。
+
+GET /api/v1/appearance 首次建立该用户默认设置（version=1）；之后读取、重启不会覆盖选择或主动清空的主题。PUT 带 expectedVersion 和实际修改字段；支持 UI JSON、桌面/移动端/editor 字体、窗口色、描边/阴影、背景显示参数、活动主题、HTML 内容副本和 GitHub 来源地址。图片引用只能通过图片接口更改，不接收任意服务端路径。尚未建立设置时 PUT 返回 version_conflict，先 GET；主题选择在写事务核对归属。
+
+POST /api/v1/appearance/background/{page,terminal} 使用 pageBackgroundFile/terminalBackgroundFile 和 expectedVersion；DELETE 同路径使用 JSON expectedVersion。返回 {appearance,cleanupPending}，图片通过返回的 /background/file/<UUID> 路径读取，旧图片更换后不再公开。保留 JPEG/PNG/GIF/WebP/SVG，校验格式签名；SVG 为 UTF-8 内容，沙箱 CSP 交付。读取不代表后端执行 HTML/SVG；交付受服务关闭与请求期限共同取消，以响应完成确认交付，写入错误不会报告读取成功。
+
+上传/读取/删除共用 16 个在途名额并串行，名额覆盖大文件读取、等待、发布和收尾；完整请求期限 60 秒。文件先登记 pending、持久发布，再同事务替换引用/版本并标 ready；旧项 retired 后清理。cleanupPending=true 表示引用已经提交，但仍有文件或元数据待清理；启动、下一次上传和停机复查无引用 pending/retired，失败保留记录和诊断。最多 1,024 个存储记录，未清理项继续占用。文件与数据库不是物理原子事务。
+
+| 范围                    | UTF-8/编码预算                                                                    |
+| ----------------------- | --------------------------------------------------------------------------------- |
+| 主题名称/单个颜色       | 1,024 / 128 bytes                                                                 |
+| 主题 JSON 请求/导入文件 | 32 KiB / 1 MiB；导入请求另留 16 KiB multipart 外壳                                |
+| 主题列表/完整响应       | 最多 4,096 项 / 128 MiB，含 JSON 转义                                             |
+| 外观请求/响应           | 各 8 MiB；UI JSON 16 KiB、HTML 副本 1 MiB、字体 1,024 bytes、来源 URL 4,096 bytes |
+| 背景文件/完整 multipart | 5 MiB / 5 MiB + 16 KiB；五种媒体类型                                              |
+
+UI JSON 为 CSS 变量对象：最多 128 个 ASCII --变量名，单值 2 KiB；HTTP 使用 JSON 字符串，内部使用对象。完整外观输入在应用名额取得后读取，读取期限 60 秒，停机或断连取消读取。字体范围 0.1–512、蒙版 0–1、描边宽度 0–32、阴影偏移 ±512/模糊 0–512。400 invalid_input、401 unauthenticated、403 forbidden、404 not_found/theme_not_found、409 version_conflict/name_conflict/preset_readonly、413 limit_exceeded、415 unsupported_media_type；不可用/内部失败/清理失败/提交未知为安全 503。冲突先只读刷新；operation_unknown 或响应中断先核对当前主题/外观，不自动重传、重删或换版本重试。缺内容/损坏记录报失败，不静默修改用户设置。
+
+### 新后端 HTML 主题库（源码接线，行为待 B10）
+
+完整认证用户使用 GET/POST /api/v1/appearance/html-presets/local 和 GET/PUT/DELETE /local/:themeName。17 个预置只读，自定义按用户隔离，可覆盖同名预置；删除自定义后再次读取同名预置。列表同时包含两种来源，返回 {name,type,version,updatedAt}；内容 GET 返回 text/plain，后端不执行 HTML。活动 HTML 保存在外观设置的内容副本，修改或删除库条目不会自动修改副本。
+
+POST 使用 {name,content}；PUT 使用 {expectedVersion,content}，DELETE 使用 {expectedVersion}。名称是单个 .html 文件名，最多 255 UTF-8 bytes，允许中文和空格，禁止路径、..、控制字符；放入路径时使用 encodeURIComponent，字节预算按解码后的名称计算。内容最多 1 MiB，允许空文本。更新/删除以自定义列表项的 version 为准；用户级持久修订不因删除重建而复用，也不保证每项版本连续。JSON 请求 8 MiB、完整响应 32 MiB（容纳远端目录最坏转义），列表最多 4,096 项，每用户最多 2,048 个自定义主题。输入先准入再读取，60 秒期限；unknown 或响应断开后只读核对，不自动重写。
+
+远端使用 GET/PUT /html-presets/remote/repository-url，读取 {url,version}，写入 {url,expectedVersion}（url 可为 null，版本与外观设置共用）。GET /remote/list 可提供单个 repoUrl，否则使用已保存来源；GET /remote/content 必须提供单个 fileUrl。仓库仅接受 HTTPS github.com 的 owner/repo 或 /tree/ref/path，内容仅接受 HTTPS raw.githubusercontent.com 的 .html；不跟随重定向，不自动改写旧官方 URL。保存来源不证明仓库可用或授予执行权。
+
+目录最多 1,000 个上游条目，返回 {name,downloadUrl}，只列合法 HTML 文件；内容最多 1 MiB，UTF-8 严格解码、纯文本交付。目录/下载共用 HTML 在途名额（16），网络期限 10 秒，关闭/断连会取消；读取已保存来源期间设置版本变化返回 409 source_changed，重新读取后人工确认。远端不可用为 503 source_unavailable，超限为 413，来源无效为 400；资源释放未确认返回 cleanup_failed 并停止该 owner 新准入，保留诊断。可选 GITHUB_TOKEN/GH_TOKEN 只发给 GitHub API，不发给 raw 内容地址，也不返回给前端。
+
+### 新后端宿主诊断（源码接线，行为待 B10）
+
+管理员 GET /api/v1/system/diagnostics 读取 collectedAt、进程uptimeSeconds/residentBytes/heapUsedBytes/runtimeVersion 与数据库available/schemaVersion，响应最多16KiB。进程/数据库并非同一物理采样时刻，不含路径、环境或表内容。Agent 的 host_diagnostics_read 需单独 host.inspect grant，默认不授予；与普通SSH目标诊断分开。正式界面迁移留F1。
+
 ## Dashboard
 
 连接目录加载后结束 loading，不等待审计/挂起；返回保留内容并刷新。快速连接/SSH 资源列表限高内滚动，保留最近活动首屏，手机搜索随列表滚动，长列表有回顶按钮。
@@ -576,16 +776,16 @@ Agent模块最多64个在途请求，停机同时中止发现/探测和Registry�
 
 同一 Workspace WS 支持 status.start/stop、status.sample/error 与 docker.status/stats/command；Docker 控制仍为 Start/Stop/Restart/Remove，Enter/Logs 继续走交互终端，不新增任意命令接口。三个 HTTP 保留为 GET /api/v1/system/status、/api/v1/system/ssh-resources、/api/v1/system/ssh-resources/:connectionId。只接受新 Access 管理员会话；正式前端对接留 F1。
 
-| 项目     | 新后端当前语义                                                                                                                                                                                        |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 采样     | 独立临时 SSH，不在交互式 PTY 注入命令、不刷新最近连接时间；首轮间隔 500ms 采两次，之后每次完成再等待默认 3 秒，不重叠。                                                                               |
-| 后台     | 同主机/配置共享在途采样，默认 TTL 60 秒从开始算；每个请求最多并行 2 个主机、最多 4 个后台请求；单个请求等待最多 120 秒。当前不复用 Workspace 活跃 SSH。                                               |
-| 配置     | 新后端安装选项可设置状态间隔/资源 TTL；旧 Settings 的持久化值接线留 B7，目前使用上述默认值，不代表已迁移设置。                                                                                        |
-| 容量     | Remote 观测操作合计最多 8 项、单项完整期限 45 秒；Docker identifier 最多 128 ASCII 字符、列表最多 4096 个容器；完整观测 HTTP/WS JSON（含外壳）最多 512 KiB，本机状态 JSON 最多 16 KiB。超限明确失败。 |
-| Docker   | 非零控制退出返回 command_failed；已派发但缺少退出证据或后续确认失败为 operation_unknown。容器中途停止/确定 stats 读取失败可返回 stats=null，不当成零值。                                              |
-| 恢复     | 同一连接配置的控制动作互斥，unknown 或清理失败保留控制阻断；先只读核对，不自动重试。当前阻断限于本进程和该连接配置，尚无 B6 的持久/跨 Agent 治理或自动解除功能。                                      |
-| 取消     | stop、附件断开/接管、Workspace 终止及停机取消原实例的观测任务；真实收尾前仍占名额，清理失败不冒充成功。HTTP 请求取消只结束其等待，其他请求共享的采样由原 owner 继续追踪。                             |
-| 安全失败 | HTTP 返回 code；WS response.error/status.error.message 和资源 error 使用 Shared 安全码，不回传技术 stderr、cause 或凭据。                                                                             |
+| 项目     | 新后端当前语义                                                                                                                                                                                                               |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 采样     | 独立临时 SSH，不在交互式 PTY 注入命令、不刷新最近连接时间；首轮间隔 500ms 采两次，之后每次完成再等待默认 3 秒，不重叠。                                                                                                      |
+| 后台     | 同主机/配置共享在途采样，默认 TTL 60 秒从开始算；每个请求最多并行 2 个主机、最多 4 个后台请求；单个请求等待最多 120 秒。当前不复用 Workspace 活跃 SSH。                                                                      |
+| 配置     | 新后端从持久核心设置安装状态间隔和后台资源 TTL，首次默认3秒/30秒，范围1–86400秒；保存后下次重启统一生效。                                                                                                                    |
+| 容量     | Remote 观测操作合计最多 8 项、单项完整期限 45 秒；Docker identifier 最多 128 ASCII 字符、列表最多 4096 个容器；完整观测 HTTP/WS JSON（含外壳）最多 512 KiB，本机状态 JSON 最多 16 KiB。超限明确失败。                        |
+| Docker   | 非零控制退出返回 command_failed；已派发但缺少退出证据或后续确认失败为 operation_unknown。容器中途停止/确定 stats 读取失败可返回 stats=null，不当成零值。                                                                     |
+| 恢复     | 同一连接配置的控制动作互斥，unknown 或清理失败保留控制阻断；先只读核对，不自动重试。占用已持久化并与 Agent/Files 共用，同一文本 host/port 冲突；unknown/清理失败跨重启保留 blocked，无自动解除。证据核对恢复入口由 B9 补齐。 |
+| 取消     | stop、附件断开/接管、Workspace 终止及停机取消原实例的观测任务；真实收尾前仍占名额，清理失败不冒充成功。HTTP 请求取消只结束其等待，其他请求共享的采样由原 owner 继续追踪。                                                    |
+| 安全失败 | HTTP 返回 code；WS response.error/status.error.message 和资源 error 使用 Shared 安全码，不回传技术 stderr、cause 或凭据。                                                                                                    |
 
 ### 资源采集与缓存
 
@@ -629,11 +829,11 @@ Agent模块最多64个在途请求，停机同时中止发现/探测和Registry�
 
 新的 `backend-next` 入口不复用正式旧 Backend 的 Express session/cookie。空库管理员 setup 成功一次，密码长度至少 8、最多 1024 UTF-8 bytes，用户名去空白后不超过 64 字符；普通密码登录的返回身份不含密码 hash 或秘密。会话 Cookie 名 `nexus_session`，HttpOnly/SameSite=Lax，同外部 HTTPS origin 时 Secure；服务端仅存随机 token 摘要和 30 天期限，普通 Cookie 仅本次浏览器会话，rememberMe 才设置 30 天 Max-Age。再次登录创建独立新会话，不提前撤销浏览器原有 token；断连或响应丢失不废止原会话；登出清除当前 cookie 并撤销当前 token，改密提交时会复核原会话仍有效与密码版本，计算期间登出、过期或并发改密可返回冲突且不写入；成功则原子撤销该账号所有会话。状态 200 带 `isAuthenticated:true/user`，无效/过期返回 401 `{code:'unauthenticated'}`（当前开发客户端据此返回未登录）；成功结果仍保留 `isAuthenticated:true`；未迁移已启用因素 403 `factor_unavailable`，不能退回密码登录或宣称完整 2FA 已通过。
 
-启动安装读取 `NEXUS_NEXT_IP_WHITELIST` 的逗号/换行分隔 IP/CIDR（最多 256 项、16 KiB），空值放行全部已知来源；非法条目在监听前拒绝启动。HTTP/WS 入口统一使用直接 TCP/受信代理链提供的真实 IP；未知来源拒绝，loopback、RFC1918、link-local 和 ULA 豁免白名单与封禁，但**不**豁免密码、CAPTCHA、Origin。独立入口 `NEXUS_NEXT_IP_BLACKLIST_ENABLED` 默认 true、最多 5 次失败、封禁 300 秒，可通过 `NEXUS_NEXT_MAX_LOGIN_ATTEMPTS` 与 `NEXUS_NEXT_LOGIN_BAN_SECONDS` 设置有效范围；`createApp` 的可选安装参数仍可显式关闭。其他业务的公网封禁入场返回 403 `forbidden`；登录路由由 Access Service 返回 429 `rate_limited`，状态、登出与黑名单管理员恢复路由仅执行来源白名单检查；未知 HTTP 路径也先做来源准入；管理员凭有效 Cookie 可读 `GET /api/v1/settings/ip-blacklist?limit=50&offset=0`（最大 200）及使用 `DELETE /api/v1/settings/ip-blacklist` JSON `{ip}` 解除，保留明确 `removed` 结果。登录错误/CAPTCHA 明确拒绝按来源原子计数，正常成功才清对应失败记录；第三方校验期间出现并发封禁，签发事务仍拒绝并返回 429 rate_limited。
+首次初始化读取 `NEXUS_NEXT_IP_WHITELIST` 的逗号/换行分隔 IP/CIDR（最多 256 项、16 KiB），空值放行全部已知来源；非法条目在监听前拒绝启动。HTTP/WS 入口统一使用直接 TCP/受信代理链提供的真实 IP；未知来源拒绝，loopback、RFC1918、link-local 和 ULA 豁免白名单与封禁，但**不**豁免密码、CAPTCHA、Origin。独立入口 `NEXUS_NEXT_IP_BLACKLIST_ENABLED` 默认 true、最多 5 次失败、封禁 300 秒，可通过 `NEXUS_NEXT_MAX_LOGIN_ATTEMPTS` 与 `NEXUS_NEXT_LOGIN_BAN_SECONDS` 设置有效范围；`createApp.configuration` 的首次初始化工厂可显式关闭；后续重启和配置保存从持久设置读取，不重新用环境覆盖。其他业务的公网封禁入场返回 403 `forbidden`；登录路由由 Access Service 返回 429 `rate_limited`，状态、登出与黑名单管理员恢复路由仅执行来源白名单检查；未知 HTTP 路径也先做来源准入；管理员凭有效 Cookie 可读 `GET /api/v1/settings/ip-blacklist?limit=50&offset=0`（最大 200）及使用 `DELETE /api/v1/settings/ip-blacklist` JSON `{ip}` 解除，保留明确 `removed` 结果。登录错误/CAPTCHA 明确拒绝按来源原子计数，正常成功才清对应失败记录；第三方校验期间出现并发封禁，签发事务仍拒绝并返回 429 rate_limited。
 
-CAPTCHA 默认关闭；启用需配置 `NEXUS_NEXT_CAPTCHA_ENABLED=true`、`NEXUS_NEXT_CAPTCHA_PROVIDER=hcaptcha|recaptcha`、`NEXUS_NEXT_CAPTCHA_SITE_KEY` 与 `NEXUS_NEXT_CAPTCHA_SECRET_KEY`。配置缺失在启动时报错，`GET /api/v1/auth/captcha/config` 公开 provider 与适用 site key、不公开 secret；登录 `captchaToken` 必填且最多 4096 UTF-8 bytes。后端向 hCaptcha/Google 验证接口发真实 POST、十秒截止且不重试；启用时必须绑定 `NEXUS_NEXT_PUBLIC_ORIGIN` 的准确 hostname，成功响应需要 hostname 一致；Google 仅支持 reCAPTCHA v2 checkbox，不接受 v3 score/action 响应，非 2xx 响应体即时关闭；供应商明确失败返回 `captcha_invalid`，网络/格式/超时异常返回 503 `captcha_unavailable`，不固定成功或故障静默关闭。密码与 CAPTCHA 均通过后才签发会话；客户端断连会取消待执行的网络校验/写入意图，已提交的新 token 若未交付则尽力撤销，原 Cookie 不因此失效；SQLite 提交未知仍按未知结果处理。HTTPS/Host/Origin/Fetch Metadata 检查在 Platform 的统一 HTTP/WS 边界实施。此安装快照并非 B7 的持久 Settings 管理，当前不能在正式设置页动态更新；审计/通知的完整迁移待 B7，TOTP/Passkey 挑战已在 B4.2 源码/静态收口但行为仍待 B10，前端同步留 F1，源码不等于 B10 行为验收。
+CAPTCHA 默认关闭；启用需配置 `NEXUS_NEXT_CAPTCHA_ENABLED=true`、`NEXUS_NEXT_CAPTCHA_PROVIDER=hcaptcha|recaptcha`、`NEXUS_NEXT_CAPTCHA_SITE_KEY` 与 `NEXUS_NEXT_CAPTCHA_SECRET_KEY`。配置缺失在启动时报错，`GET /api/v1/auth/captcha/config` 公开 provider 与适用 site key、不公开 secret；登录 `captchaToken` 必填且最多 4096 UTF-8 bytes。后端向 hCaptcha/Google 验证接口发真实 POST、十秒截止且不重试；启用时必须绑定 `NEXUS_NEXT_PUBLIC_ORIGIN` 的准确 hostname，成功响应需要 hostname 一致；Google 仅支持 reCAPTCHA v2 checkbox，不接受 v3 score/action 响应，非 2xx 响应体即时关闭；供应商明确失败返回 `captcha_invalid`，网络/格式/超时异常返回 503 `captcha_unavailable`，不固定成功或故障静默关闭。密码与 CAPTCHA 均通过后才签发会话；客户端断连会取消待执行的网络校验/写入意图，已提交的新 token 若未交付则尽力撤销，原 Cookie 不因此失效；SQLite 提交未知仍按未知结果处理。HTTPS/Host/Origin/Fetch Metadata 检查在 Platform 的统一 HTTP/WS 边界实施。核心安装快照已由 B7.1 持久 Settings 管理，保存后重启生效；正式设置页尚未切换到新协议；新后端审计/通知已有 Operations 管理入口，正式前端尚未迁移，TOTP/Passkey 挑战已在 B4.2 源码/静态收口但行为仍待 B10，前端同步留 F1，源码不等于 B10 行为验收。
 
-独立入口数据库升级通过应用统一迁移 v5 为旧登录失败行补最后失败时间和索引；成功登录/会话验证等存储访问至多每五分钟惰性清理过期会话与已结束且七天无新失败的黑名单行，不清除活跃封禁。SQLite 提交或回滚状态不确定返回 `operation_unknown`（503），可能已有副作用，客户端不得假定失败并重放密码修改或设置写入；重登/重新查状态由当前身份和持久事实决定。
+独立入口第一版只保留一个 v1 初始化项，直接创建当前完整表结构，不升级开发版数据库；登录失败记录包含最后失败时间和索引。成功登录/会话验证等存储访问至多每五分钟惰性清理过期会话与已结束且七天无新失败的黑名单行，不清除活跃封禁。SQLite 提交或回滚状态不确定返回 `operation_unknown`（503），可能已有副作用，客户端不得假定失败并重放密码修改或设置写入；重登/重新查状态由当前身份和持久事实决定。
 
 ### 独立重构入口 B4.2：TOTP 与 Passkey（源码已接线，尚未行为验收）
 
@@ -642,13 +842,19 @@ CAPTCHA 默认关闭；启用需配置 `NEXUS_NEXT_CAPTCHA_ENABLED=true`、`NEXU
 - Passkey 使用独立 5 分钟 `nexus_challenge` Cookie。匿名 options 挑战全局最多 768、每可信来源最多 16，所有因素挑战总额 1024，以免公开入口挤占已认证注册配额；首次无关联 Cookie 的并发匿名请求不能视为同一认证实例，只有携带旧挑战 Cookie 的替换和已登录同 Session 的注册替换才有事务级唯一性。改密递增认证修订、使修改前签发的 Passkey 登录挑战在最终提交时失效；每个 credential 有不可复用的 generation，验签后的会话事务复查 generation 与 counter。已认证用户可请求 `POST /api/v1/auth/passkey/registration-options`，再经 `POST /api/v1/auth/passkey/register` 提交 `{registrationResponse}`。匿名可 `POST /api/v1/auth/passkey/authentication-options`（`{username?}`）和 `POST /api/v1/auth/passkey/authenticate`（`{assertionResponse,rememberMe?}`）登录；`GET /api/v1/auth/passkey/has-configured?username` 查询配置。已认证用户可 `GET /api/v1/auth/user/passkeys`、`DELETE /api/v1/auth/user/passkeys/:credentialID`、`PUT /api/v1/auth/user/passkeys/:credentialID/name` 带 `{name}` 管理本人凭据。
 - 注册/认证 JSON 请求最多 128 KiB，单个证据字段最多 96,000 UTF-8 bytes；凭据 ID 最多 1024 bytes，名称最多 128 bytes，transports 最多 16 项、每项 32 bytes。列表时间为 Unix 秒；原始 public key/counter 不公开。
 - WebAuthn 只有实际验证完整 challenge、RP ID、公开 Origin、数字签名与 User Verification 才能登录；客户端 options 使用 `required`，与服务端要求的用户验证一致；计数器状态和 challenge 单次消费与会话签发同事务。旧挑战被新请求替换或过期须重新发起，旧失败不能换一个当前挑战重放。每个浏览器上下文 Cookie/Session 绑定挑战，签名结果不等于客户端声称的 verified 标志。支持既有 ES256/RS256 与零 counter 的同步凭据语义；不提供虚构的 recovery-code。公网禁用非安全来源的 WebAuthn RP，独立入口可用 `NEXUS_NEXT_PASSKEY_RP_ID` 与 `NEXUS_NEXT_PUBLIC_ORIGIN` 配置。
-- 登录/设置流程遵循来源准入和完整会话授权，logout 清理普通、部分、challenge 和 TOTP 设置 Cookie。客户端明确无效的 challenge/Origin/RP/UP/UV/counter 认证证据拒绝登录，不能确定为凭据错误的 Provider 技术失败不回退为通过，也不累计密码错误；密码/因素签发的完整或部分会话以及 TOTP setup/Passkey options 已写入而 HTTP 未完成交付时撤销对应令牌/挑战；会话签发后的身份确认失败保持 operation_unknown 并尽力撤销，HTTP finish 不证明浏览器收到；数据库未知提交不可自动重试；真实第三方浏览器、网络中断和并发安全需在 B10 进一步验收。当前独立入口仅支持一个 publicOrigin/RP；旧多 Origin/RP 部署配置由 B7 统一迁移。正式前端 `LoginView`、Auth store/2FA 组件、Passkey 浏览器选项转换与凭据设置页仍由 F1 迁移；审计、通知和持久 Settings 由 B7 接续。当前源码实现及静态执行状态不等于正式功能已经上线。
+- 登录/设置流程遵循来源准入和完整会话授权，logout 清理普通、部分、challenge 和 TOTP 设置 Cookie。客户端明确无效的 challenge/Origin/RP/UP/UV/counter 认证证据拒绝登录，不能确定为凭据错误的 Provider 技术失败不回退为通过，也不累计密码错误；密码/因素签发的完整或部分会话以及 TOTP setup/Passkey options 已写入而 HTTP 未完成交付时撤销对应令牌/挑战；会话签发后的身份确认失败保持 operation_unknown 并尽力撤销，HTTP finish 不证明浏览器收到；数据库未知提交不可自动重试；真实第三方浏览器、网络中断和并发安全需在 B10 进一步验收。独立入口已支持持久多 Origin/RP：首次可用 NEXUS_NEXT_PASSKEY_SITES JSON 数组配置，每项为 {origin,rpId}；未配置时以公共 Origin 和可选 NEXUS_NEXT_PASSKEY_RP_ID 初始化一个站点。最多16站点，Origin严格规范且与主监听同协议，RP必须匹配域名或其父域；HTTP仅支持localhost/127.0.0.1。HTTP/WS只接收配置站点或主Origin的受信Host/协议，同一请求的Origin必须匹配选中站点，不能跨配置站点借用CSRF许可。未配置RP的主Origin可密码登录但不能签发Passkey挑战；改变/删除Origin/RP在重启后令旧挑战失效，不自动选择首个RP。正式前端 `LoginView`、Auth store/2FA 组件、Passkey 浏览器选项转换与凭据设置页仍由 F1 迁移；审计、通知和持久 Settings 已由新后端接线，正式设置页待 F1。当前源码实现及静态执行状态不等于正式功能已经上线。
 
 ### 审计日志
 
 列表时间/类型/原详情代码块逐行展示，长内容换行，窄屏纵排，不弹窗或内部滚动。关键词防抖/类型自动筛选，每批 40，近底加载/手动加载，失败保留旧项可重试，动态虚拟列表及回顶。
 
 SSH Key 新增/更新/删除记录 ID、操作者、来源、字段名，不记录私钥/passphrase，无额外外部通知。
+
+### 新后端审计与日志（源码接线，行为待 B10）
+
+GET /api/v1/settings/audit-logs 支持 event/from/to/q/limit/offset：时间为毫秒，默认50条、最多200条，以nextOffset续页。仅记录有限事件、用户/来源IP、资源ID、路由模板与状态码，不记录请求正文、Cookie、密钥或模型正文。审计保留最新50000条和尚未完成通知分发的积压；投递保留最新50000条终态及全部在途项。
+
+GET/PUT /api/v1/settings/logging 使用 {expectedVersion,level}，level为debug/info/warn/error/silent；默认info。已保存阈值启动加载，保存后立即按版本单调激活，GET同时显示effectiveLevel。Operations事件写有限安全元数据到stderr，失败/未知事件为warn，其余info；不声称所有模块已有详细debug诊断。日志配置和审计只供当前管理员，更新与会话复查同事务，冲突先刷新，未知结果不自动重放。
 
 ### 审计保留与失败
 
@@ -662,6 +868,12 @@ SSH Key 新增/更新/删除记录 ID、操作者、来源、字段名，不记�
 
 完整认证会话可导入合法备份，同实例用 instance key，跨实例需备份密码；校验完整性/密钥，不含认证表。无额外 recent-auth/服务端破坏式确认，导入前核对目标，合法旧备份可能回放旧状态。
 
+上段说明当前正式后端。独立 backend-next 已安装 `POST /api/v1/settings/backup/export`：完整管理员会话提交 JSON `{password}`，验证当前密码后下载二进制 `nexus-terminal.nexus-backup`。正式前端尚未对接。新后端已接入同路径 backup/import，使用 multipart backupFile 和可选 password；仅完整管理员会话可导入最新备份，不兼容旧备份。password 用于备份解封：同实例可省略，跨实例需备份密码，不是再次验证当前登录密码。源码已接线，运行恢复仍待 B10 验证。
+
+新导出采用最新 NXSEALED2 认证加密封装，载荷及数据密钥分别保护，包含同实例密钥包和密码密钥包；跨实例秘密以受加密保护的明文传递，不复制源实例密文。覆盖五个产品模块的85张固定表和被引用的背景、Artifact、插件原包；HTML自定义库及活动副本已在SQLite。认证表、会话、模型目录缓存和活跃进程目录不导出。
+
+新导出的快照最多64 MiB，文件最多100 MiB；导入/导出共用一个在途名额，输入、预检和执行共用120秒期限；导出的交付也计入期限。采集前后核对全部表内容，复用实际持久记录解码器和跨表读取，检查跳板关系/成环/展开上限、Agent 声明与原包/内置目录一致性、文件实际大小/hash、外观引用和插件清单/签名；上传/发布/删除中的内容或数据变化返回`source_changed`，稍后重新导出，不返回缺引用包。文件句柄清理未确认时停止新的导出；下载断流须重新导出。此链仅完成源码与静态检查，运行行为待B10。
+
 ### 容量、一致性与运行资源
 
 | 范围              | 限制                                          |
@@ -671,8 +883,10 @@ SSH Key 新增/更新/删除记录 ID、操作者、来源、字段名，不记�
 
 - Artifact 配额不等于备份容量，保留整个 data 的外部备份，勿因导出失败盲删数据。
 - 表快照短暂阻塞数据库，扫描文件不占事务；非跨文件/数据库同一物理时点。验证 ready Artifact 大小/hash、Plugin 包/入口/清单，缺失或并发变化拒绝，不交付缺引用包。
-- 导入先停 Agent 调度/维护及旧 Plugin/模型句柄，不能安全停则拒绝；成功或回滚后按存活数据重新初始化，不复用旧队列/审批。
-- 恢复清理挂起会话，保留服务维护与撤销订阅，成功/失败后仍可新建挂起会话。
+- 新后端先完成解密和隔离预检，再暂停 HTTP/WS/public 能力并排空旧 owner；不能安全排空时停止准入。文件和数据库按持久日志及同事务提交标记对账，确认成功或回滚后重建全部模块和接口。
+- 导入响应为 restoredTables/restoredRows/restoredFiles/cleanupPending；cleanupPending 只表示已确认恢复后的旧文件清理待续，不表示恢复回滚。operation_unknown、重建失败或响应断流可能已经恢复，不能自动再次导入；保留数据现场，通过重启对账和只读状态核对处理。
+- 认证表和当前会话不恢复；旧模型/工具/Job 不自动续跑，派发未知状态仍保留。历史 queued 通知结算 failed、dispatched 保留 unknown，旧审计不重新派发通知；导入的插件运行时不自动启动，需显式管理操作。
+- 恢复清理挂起会话并撤销旧订阅；恢复成功或确认回滚且模块重建完成后，可新建挂起会话。提交未知、排空/重建或旧实例关闭失败时保持维护状态，不继续接受新操作。
 
 ## 客户端与平台
 

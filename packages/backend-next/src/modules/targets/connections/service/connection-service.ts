@@ -1,11 +1,24 @@
 import { TargetFailure } from '../../target-failure.js';
-import type { ConnectionMetadata, ConnectionSnapshot, ConnectionMutation } from '../model/connection-types.js';
+import type {
+	ConnectionMetadata,
+	ConnectionSnapshot,
+	ConnectionMutation,
+	ConnectionCatalogEntry,
+} from '../model/connection-types.js';
 import type { ConnectionModel } from '../model/connection-model.js';
 import { validateConnection, normalizeConnectionChanges } from '../connection-rules.js';
 import { validateTargetId as validateId } from '../../target-validation.js';
 
 export class ConnectionService {
 	constructor(private readonly model: ConnectionModel) {}
+
+	listEntries(ids: number[]): Promise<ConnectionCatalogEntry[]> {
+		if (ids.length > 200 || new Set(ids).size !== ids.length) {
+			throw new TargetFailure('invalid_input');
+		}
+		ids.forEach(validateId);
+		return this.model.listEntries(ids);
+	}
 
 	list(): Promise<ConnectionSnapshot[]> {
 		return this.model.list();

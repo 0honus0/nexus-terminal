@@ -3,6 +3,8 @@ import type { AgentCreateRunOutcome, AgentCancelRunOutcome } from './values.js';
 
 export interface AgentCreateRunRequest {
 	prompt: string;
+	/** Restricts this Run; selection never grants Agent permission. Empty means no selected targets. */
+	connectionIds: number[];
 	/** Selected configuration must match when the Run is created. */
 	model: { providerId: string; modelId: string; configurationVersion: number };
 }

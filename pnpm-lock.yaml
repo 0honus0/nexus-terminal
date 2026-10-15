@@ -223,6 +223,9 @@ importers:
 
   packages/backend-next:
     dependencies:
+      '@modelcontextprotocol/client':
+        specifier: 2.2.0
+        version: 2.2.0
       '@nexus-terminal/shared':
         specifier: workspace:*
         version: link:../shared
@@ -247,15 +250,27 @@ importers:
       ipaddr.js:
         specifier: ^2.5.0
         version: 2.5.0
+      nodemailer:
+        specifier: ^10.0.14
+        version: 10.0.14
       proxy-addr:
         specifier: ^2.0.7
         version: 2.0.8
+      puppeteer-core:
+        specifier: 'catalog:'
+        version: 25.10.0
       qrcode:
         specifier: ^1.5.4
         version: 1.5.4
       ssh2:
         specifier: ^1.17.0
         version: 1.17.0
+      tar:
+        specifier: ^7.5.22
+        version: 7.5.22
+      undici:
+        specifier: ^7.29.1
+        version: 7.29.1
       ws:
         specifier: ^8.22.0
         version: 8.22.0
@@ -266,6 +281,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.4
+      '@types/nodemailer':
+        specifier: ^8.0.2
+        version: 8.0.2
       '@types/proxy-addr':
         specifier: ^2.0.3
         version: 2.0.3

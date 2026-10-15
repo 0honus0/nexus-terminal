@@ -1,5 +1,16 @@
-import { AGENT_RUN_MAX_PROMPT_BYTES, AGENT_RUN_EVENT_MAX_LIMIT } from '@nexus-terminal/shared/agent/runs/values';
+import type { ExecutionService } from '../../execution/service/execution-service.js';
+import type { GovernanceService } from '../../governance/service/governance-service.js';
+import type { RunCollaborationService } from './run-collaboration-service.js';
+import {
+	AGENT_RUN_MAX_PROMPT_BYTES,
+	AGENT_RUN_EVENT_MAX_LIMIT,
+	AGENT_RUN_STEP_MAX_COUNT,
+	AGENT_RUN_MAX_SELECTED_CONNECTIONS,
+} from '@nexus-terminal/shared/agent/runs/values';
 import { AGENT_PROVIDER_MAX_MODEL_ID_BYTES } from '@nexus-terminal/shared/agent/providers/values';
+import { AGENT_TOOL_EVENT_MAX_LIMIT } from '@nexus-terminal/shared/agent/tools/values';
+import type { ToolOperation, ToolIdentity, ToolEventPage } from '../model/run-tool-types.js';
+import type { RunToolModel } from '../model/run-tool-model.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { RunModel } from '../model/run-model.js';
 import type { RunStepModel } from '../model/run-step-model.js';
@@ -52,9 +63,65 @@ export class RunService {
 		private readonly model: RunModel,
 		private readonly steps: RunStepModel,
 		private readonly execution: RunExecutionOwner,
+		private readonly tools: RunToolModel,
+		private readonly collaboration: RunCollaborationService,
+		private readonly governance: GovernanceService,
+		private readonly settings: ExecutionService,
 	) {}
 
-	async create(request: CreateRunRequest): Promise<CreateRunResult> {
+	list(
+		userId: number,
+		appId: string,
+		threadId: string,
+		after: number,
+		limit: number,
+	): Promise<import('../model/run-types.js').RunPage | null> {
+		validateScope(userId, appId);
+		validateAgentId(threadId);
+		validateCursor(after);
+		if (!Number.isSafeInteger(limit) || limit < 1 || limit > AGENT_RUN_EVENT_MAX_LIMIT) {
+			throw new AgentFailure('invalid_input');
+		}
+		return this.model.list(userId, appId, threadId, after, limit);
+	}
+
+	async cancelChild(request: CancelRunRequest, childId: string): Promise<CancelRunResult> {
+		validateScope(request.userId, request.appId);
+		validateAgentId(request.runId);
+		validateAgentId(childId);
+		if (
+			!(await this.collaboration.child(
+				{ userId: request.userId, appId: request.appId, runId: request.runId },
+				childId,
+			))
+		) {
+			return { status: 'not_found' };
+		}
+		return this.cancel({
+			userId: request.userId,
+			appId: request.appId,
+			runId: childId,
+			expectedVersion: request.expectedVersion,
+			operationKey: request.operationKey,
+		});
+	}
+
+	create(request: CreateRunRequest): Promise<CreateRunResult> {
+		return this.createRoot(request, null);
+	}
+
+	appendInput(request: CreateRunRequest, sourceRunId: string, expectedVersion: number): Promise<CreateRunResult> {
+		validateAgentId(sourceRunId);
+		if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
+			throw new AgentFailure('invalid_input');
+		}
+		return this.createRoot(request, { runId: sourceRunId, expectedVersion });
+	}
+
+	private async createRoot(
+		request: CreateRunRequest,
+		origin: { runId: string; expectedVersion: number } | null,
+	): Promise<CreateRunResult> {
 		validateScope(request.userId, request.appId);
 		validateAgentId(request.threadId);
 		validateOperationKey(request.operationKey);
@@ -77,6 +144,15 @@ export class RunService {
 			modelId: request.model.modelId,
 			configurationVersion: request.model.configurationVersion,
 		};
+		if (
+			!Array.isArray(request.connectionIds) ||
+			request.connectionIds.length > AGENT_RUN_MAX_SELECTED_CONNECTIONS ||
+			new Set(request.connectionIds).size !== request.connectionIds.length ||
+			request.connectionIds.some((id) => !Number.isSafeInteger(id) || id < 1)
+		) {
+			throw new AgentFailure('invalid_input');
+		}
+		const connectionIds = request.connectionIds.slice().sort((a, b) => a - b);
 		const requestHash = hashCommand('create_run', [
 			request.appId,
 			request.threadId,
@@ -84,23 +160,60 @@ export class RunService {
 			model.providerId,
 			model.modelId,
 			model.configurationVersion,
+			JSON.stringify(connectionIds),
+			JSON.stringify(origin),
 		]);
+		const settings = await this.settings.get(request.userId);
 		return this.execution.admitCreate(async () => {
-			const created = await this.model.create({
-				model,
-				userId: request.userId,
-				appId: request.appId,
-				threadId: request.threadId,
-				id: randomUUID(),
-				prompt: request.prompt,
-				operationKey: request.operationKey.toLowerCase(),
-				requestHash,
-				createdAt: Date.now(),
-			});
+			let activeSeconds = settings.limits.maxActiveSeconds;
+			const created = await this.model.create(
+				{
+					origin,
+					model,
+					connectionIds,
+					userId: request.userId,
+					appId: request.appId,
+					threadId: request.threadId,
+					id: randomUUID(),
+					prompt: request.prompt,
+					operationKey: request.operationKey.toLowerCase(),
+					requestHash,
+					createdAt: Date.now(),
+				},
+				(authority) => {
+					if (!authority.enabled || !authority.declared) {
+						throw new AgentFailure('app_disabled');
+					}
+				},
+				(current) => {
+					if (current === null || origin === null) {
+						throw new AgentFailure('not_found');
+					}
+					if (current.version !== origin.expectedVersion) {
+						throw new AgentFailure('version_conflict');
+					}
+					if (
+						current.status !== 'completed' &&
+						current.status !== 'failed' &&
+						current.status !== 'cancelled'
+					) {
+						throw new AgentFailure('active_run_conflict');
+					}
+				},
+				(current, activeRuns, overrides) => {
+					const frozen = this.settings.freeze(current, overrides);
+					activeSeconds = frozen.limits.maxActiveSeconds;
+					if (Math.max(activeRuns, this.execution.occupiedSlots() - 1) >= frozen.limits.maxConcurrentRuns) {
+						throw new AgentFailure('limit_exceeded');
+					}
+					return frozen;
+				},
+			);
 			if (created.status === 'created') {
 				// A replay, stale Provider or unknown DB commit must never start a
 				// second paid request. The execution owner checks frozen authorization.
-				this.execution.start({
+				const command = {
+					deadlineAt: created.run.createdAt + activeSeconds * 1000,
 					userId: request.userId,
 					appId: request.appId,
 					runId: created.run.id,
@@ -108,10 +221,17 @@ export class RunService {
 					version: created.run.version,
 					prompt: request.prompt,
 					requestHash,
-				});
+				};
+				if (!this.execution.start(command)) {
+					try {
+						await this.execution.failUnstarted(command);
+					} catch (error) {
+						throw new AgentFailure('operation_unknown', { cause: error });
+					}
+				}
 			}
 			return created;
-		});
+		}, settings.limits.maxConcurrentRuns);
 	}
 
 	async cancel(request: CancelRunRequest): Promise<CancelRunResult> {
@@ -146,6 +266,11 @@ export class RunService {
 			// authoritative cancellation has committed or replayed as cancelled.
 			if ('run' in result && result.run.status === 'cancelled') {
 				this.execution.abort(request.userId, request.appId, request.runId);
+				try {
+					await this.governance.invalidate(request.userId, request.appId, request.runId);
+				} catch (error) {
+					throw new AgentFailure('operation_unknown', { cause: error });
+				}
 			}
 			return result;
 		});
@@ -156,6 +281,24 @@ export class RunService {
 		validateScope(userId, appId);
 		validateAgentId(runId);
 		return this.model.get(userId, appId, runId);
+	}
+
+	getTool(input: ToolIdentity): Promise<ToolOperation | null> {
+		validateScope(input.userId, input.appId);
+		validateAgentId(input.runId);
+		validateAgentId(input.id);
+		return this.tools.get(input);
+	}
+
+	listToolEvents(input: ToolIdentity, after: number, limit: number): Promise<ToolEventPage | null> {
+		validateScope(input.userId, input.appId);
+		validateAgentId(input.runId);
+		validateAgentId(input.id);
+		validateCursor(after);
+		if (!Number.isSafeInteger(limit) || limit < 1 || limit > AGENT_TOOL_EVENT_MAX_LIMIT) {
+			throw new AgentFailure('invalid_input');
+		}
+		return this.tools.listEvents(input, after, limit);
 	}
 
 	frozen(userId: number, appId: string, runId: string): Promise<RunFrozenInput | null> {
@@ -184,7 +327,7 @@ export class RunService {
 	getStep(userId: number, appId: string, runId: string, stepIndex: number): Promise<RunModelStep | null> {
 		validateScope(userId, appId);
 		validateAgentId(runId);
-		if (stepIndex !== 1) {
+		if (!Number.isSafeInteger(stepIndex) || stepIndex < 1 || stepIndex > AGENT_RUN_STEP_MAX_COUNT) {
 			throw new AgentFailure('invalid_input');
 		}
 		return this.steps.get(userId, appId, runId, stepIndex);
@@ -200,7 +343,7 @@ export class RunService {
 	): Promise<RunStepEventPage | null> {
 		validateScope(userId, appId);
 		validateAgentId(runId);
-		if (stepIndex !== 1) {
+		if (!Number.isSafeInteger(stepIndex) || stepIndex < 1 || stepIndex > AGENT_RUN_STEP_MAX_COUNT) {
 			throw new AgentFailure('invalid_input');
 		}
 		validateCursor(after);

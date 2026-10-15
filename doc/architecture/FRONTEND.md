@@ -28,7 +28,11 @@ B5.2 只读步骤审计在原隔离 `features/agent/next` API/Controller/DEV vie
 
 app 装配 feature/runtime；feature 通过窄公开能力消费 runtime 和 foundation。跨功能通过公开入口/明确能力，不深层引用私有组件、Store 或实现。foundation 不反向依赖业务。新 Shared 契约按 [SHARED](SHARED.md) 消费，不在前端手写同义 DTO。
 
+DEV transport 创建 Run 明确传 connectionIds:[]，不声称已有选中器；controller 消费 Shared stop/tool_calls 基础值，但 DEV view 仍只读取步骤 1。正式选择器、多步状态/游标与工具 modelStepIndex 留 F1，按最新 Shared 契约破坏性迁移。
+
 ## 4. 类型与转换
+
+正式 Agent 工具审计待 F1：消费 Shared tools 的单项/事件页与 128 KiB 读取预算，transport 核对请求 App/Run/Tool、after/limit、服务器 nextCursor，controller 逐字段转本地状态并按 revision 去重。参数/结果正文不在公开协议，历史批准/审计状态不等同执行许可；当前不新增前端页面或宣称双端完成。
 
 HTTP/WS transport 从 unknown 验证完整响应及安全错误，wire 与 UI 草稿/展示状态区分。字段、嵌套对象及联合分支按白名单投影；不能用断言冒充响应解码。Agent next API 使用 Shared codec，controller 再逐字段投影为本地应用状态。请求完整编码字节预算与后端共用 Shared，响应流在累计预算内读取，不全量加载后才拒绝。
 
@@ -50,10 +54,36 @@ transport 产生具名失败与受约束 code，controller/view 只消费该契�
 
 普通终端、Files、Agent 各有业务生命周期，共用技术原则而不混用权限与资源。PTY ACK/背压由对应 runtime 消费协议，view 不复制流状态机。资源关闭失败须有可追踪反馈，不能静默伪造关闭成功。
 
+正式 Settings 在 F1 使用 Shared preferences/configuration：旧字符串字典替换为完整核心配置和 expectedVersion，CAPTCHA 使用 keep/clear/replace 且只读取 hasSecret；显示 version/effectiveVersion/requiresRestart。HTTP 失败/断流/unknown 后只读核对，不自动提交新版本；保存后当前认证与监控仍使用启动快照，重启才生效。布局等其它设置等待各自真实后端契约，不能拼进核心 policy。
+
 ## 8. 当前能力与验收
 
-既有正式产品事实由 USAGE 与对应源码核对，本文不保存逐次修复记录。有限 Agent 状态的 Shared、backend-next、Auth next、Agent next transport/controller/DEV view 与三语源码已接入；现有开发入口不等于正式切换。Provider、执行、工具、审批、WS 与真实浏览器行为仍未因此完成。
+既有正式产品事实由 USAGE 与对应源码核对，本文不保存逐次修复记录。有限 Agent 状态的 Shared、backend-next、Auth next、Agent next transport/controller/DEV view 与三语源码已接入；现有开发入口不等于正式切换。Provider、App 启停/声明/目标名单、执行、工具、审批、WS 与真实浏览器行为仍未因此完成。既有 DEV App 创建通过 Shared 解码新的实例字段，controller 仍仅保留旧有限状态；完整 App 管理、UUID/definition 区分与新安全码消费归 F1。
 
 源码复核的错误契约、类型归属、请求上下文校验及响应早退收尾仍未完成，已转入 [前端延期事项](../后端重构下一阶段实施方案.md#延后的前端事项未验收不删除)。当前先完成后端及其最终环境验收，再进行前端对接；已有 DEV 代码保留。上述边界是开发约束，不能因端点接通和静态通过就声称已全部满足。
 
 执行 Frontend 类型检查、build、ESLint/Prettier 和根检查；桌面/移动端操作、滚动、取消与资源清理通过真实浏览器行为验证，未执行项明确保留。每次发布/行为变更同步 USAGE，不凭静态通过改写真实行为证据。
+
+## Preferences 后续对接边界
+
+F1迁移 preferences/presentation、commands、history、favorites Shared完整codec，transport先从unknown解码，所属controller再逐字段转UI状态。旧混合settings写入拆成核心policy与个人完整preferences；布局/焦点/侧栏共享用户版本，全部写入带CAS，未保存version0。历史与收藏改分页entries/nextOffset，编辑、触及、计数/批量标签传原版本；变量保留原型保留键限制。旧生产链仍由前端通过HTTP记录命令和访问路径，不新增后端Workspace自动记录。刷新隔离generation，冲突只读刷新，unknown不自动重放；正式消费和实际显示生效尚未实施。
+
+## B8 后续消费范围（后端部分源码接线，前端未施工）
+
+备份导出仍为POST settings/backup/export的JSON password→二进制下载，但F1须使用Shared system/backups及新Access会话，明确busy/source_changed/limit_exceeded/invalid_password和断流重导出。新文件为NXSEALED2，仅供最新恢复实现消费；在线导入尚未接线，正式前端当前不切换，也不将新导出描述为已验证可恢复备份。
+
+外观实际消费者不只有 settings 面板，还包括 appearanceApi/store/useAppearance、终端/editor 字体、活动主题、HTML sandbox 和背景加载。F1 按 B8 最终 Shared 契约迁移，保留 wire→本地状态的明确转换；版本冲突只读核对，unknown 不盲目重传文件或重新删除。正式前端类型、UI 及素材加载本轮不修改。已接线差异：主题读取使用 version/preset 和毫秒时间，保留 selectionForeground，写/删传 expectedVersion；导入仍为 themeFile/name。外观首次 GET 持久默认 version=1，PUT 明确 patch/CAS，图片字段只读；背景 multipart 加 expectedVersion，删除传 JSON expectedVersion，返回 appearance/cleanupPending，按返回的 UUID URL 加载并处理更换后的 404。字体与 HTML/JSON/图片按 Shared 实际 UTF-8/转义预算校验；unknown 只读核对，不自动重复上传/删除。UI JSON 字符串通过 Shared helper 转变量对象再投影到 UI；ASCII --变量名/128 项/单值 2 KiB/完整 JSON 16 KiB，HTML 1 MiB，完整外观请求/响应 8 MiB。HTML库/远端来源已接后端源码，正式前端仍待F1。
+
+Agent 后续须分别消费 integrations 的 MCP/ACP 管理、Browser target 设置与任务状态，以及 plugins 的安装/可信发布者/catalog、SDK/RPC、跨 App intents 和有限 Artifact 读取。静态可读不等于 App/RPC 获授权，发现工具不等于可执行。SDK 的版本/操作身份、iframe 及订阅归属也属于迁移范围，不能只替换 plugin-api 的 DTO import。
+
+BackupApi 最终消费 system/backups 的输入、安全摘要/错误与实际加密下载/导入，媒体类型、容量和内容交付独立于 JSON codec；恢复维护态、重启/重新登录要求及结果未知须有明确反馈。具体字段、路由和状态差异随后端实现回填实施方案 F1；这里不虚构尚未完成的契约或页面。
+
+B8 HTML 库 F1：消费 shared/preferences/html-themes，移除旧无版本写入/旧 URL 重写；列表区分同名 preset/custom，读内容按 text/plain 严格 UTF-8/1 MiB 解码，更新/删除取 custom 项原 version，不假定逐项连续。活动 HTML 是外观副本；库变更不自动修改活动内容。repository GET/PUT 与外观共享版本；处理 source_changed、source_unavailable、cleanup_failed/unknown，不自动覆盖或重传。当前正式 UI 未切换；源码接线不等于双端验收。
+
+### B8 集成与插件待对接
+
+正式Frontend仍使用旧Backend。后续F1通过Shared agent/integrations与plugins严格解码并在Frontend转换UI对象；集成create提供稳定UUID键，更新/删除/refresh显式CAS。Browser配置改走独立owner，MCP目录/hash/version及服务器续接身份不可由UI自造；新增stage/publisher CAS、安装/升级/卸载/取消退役、最新签名manifest和短期资源grant结构见实施方案F-R34/F-R35。Browser截图/下载改为Artifact ID/版本/hash，上传引用已存在Artifact；插件frontend资源不能沿用旧匿名永久缓存地址。有限SDK与data RPC已接线，正式父页仍待F1；有限backend runtime和仓库/推荐已接后端源码；其余Agent host/订阅、完整runtime恢复/备份尚未完成，不标为可用。F1父页校验当前iframe source/generation，使用Shared init/ack和appId/nonce建立通道；认证转发grant/envelope，核对每条响应id/seq/method，不把静态资源读取当授权。网络/未解码HTTP拒绝须转换为原请求的安全关联失败，写入断流保留operationId/输入；读写数据使用valueJson/墓碑版本和安装revision，卸载后明确清除复用原操作键。
+
+F1插件仓库设置改消费Shared repository-*的独立CAS入口：最多16个URL、版本0首次保存、公开目录8MiB、规范URL4096bytes；目录兼容性由服务器计算，不从本地版本猜测。保留官方/远端catalog/stage与推荐路径，stage要求真实App/version/publisher匹配，最新sdkVersion为1。推荐返回entry/installation，已安装时entry可以为null；安装仍禁用/空grant，明确展示后续授权/启用步骤，不自动恢复旧全能力grant行为。后端SDK进程契约已是Shared backend-sdk；正式iframe只能消费前端SDK，不能取得进程句柄、宿主环境或数据目录。当前源码状态不代表网络/插件实机验收。
+
+B8跨App对接留F1：plugin-api/agent-dispatcher/SDK父页改用Shared plugins/intent-*与九方法RPC；创建用稳定UUID operationId、inputJson、artifactIds及confirmed:true，不补旧input/artifactRefs字段；列表显式limit。冻结双方版本/修订，过期/撤销后不能换键自动重发；消息不会启动模型。Artifact metadata/单段Range仍须原接收会话与有效receipt，断流不算完整下载；RPC编码超限由用户减小limit；SDK分段读取传明确start/endInclusive，单次128 KiB，严格解码身份/范围/规范base64及实际长度后再转UI字节，不保留旧无身份裸字节桥。正式前端本批没有改动。

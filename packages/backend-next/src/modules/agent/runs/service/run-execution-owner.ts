@@ -1,24 +1,51 @@
+import type { OperationsEvents } from '../../../operations/public.js';
+import type { ExecutionService } from '../../execution/service/execution-service.js';
+import type { CheckpointService } from '../../context/service/checkpoint-service.js';
+import type { RunCollaborationService } from './run-collaboration-service.js';
+import type { ContextService } from '../../context/service/context-service.js';
+import type { ContextHistoryService } from '../../context/service/context-history-service.js';
 import type { RunModel } from '../model/run-model.js';
 import type { RunStepModel } from '../model/run-step-model.js';
 import type { RunModelStream } from '../model/run-model-stream.js';
-import type { RunStepMutation, RunModelStep, RunExecutionCommand } from '../model/run-types.js';
+import type {
+	RunStepMutation,
+	RunModelStep,
+	RunExecutionCommand,
+	RunRevocationRequest,
+	RunFrozenInput,
+	RunModelDelta,
+} from '../model/run-types.js';
+import type { ToolService } from '../../tools/service/tool-service.js';
+import { AGENT_RUN_STEP_MAX_COUNT } from '@nexus-terminal/shared/agent/runs/values';
 import type { ProviderModel } from '../../providers/model/provider-model.js';
 import type { ProviderRecord } from '../../providers/model/provider-types.js';
-import { AgentFailure, ProviderRequestFailure } from '../../agent-failure.js';
+import {
+	AgentFailure,
+	ToolExecutionUnknown,
+	ToolCleanupFailure,
+	ProviderRequestFailure,
+	isAgentDrainFailure,
+} from '../../agent-failure.js';
 
-/** Technical upper bound for one attempt, not permission to execute it. */
-const RUN_ATTEMPT_DEADLINE_MS = 5 * 60 * 1000;
 const MAX_RUN_ATTEMPTS = 8;
 const MAX_PENDING_RUN_WRITES = 64;
 
+interface ModelStepOutcome {
+	step: RunModelStep;
+	text: string;
+	terminal: Extract<RunModelDelta, { kind: 'finished' }>;
+}
+
 function hasCleanupFailure(error: unknown): boolean {
 	return (
+		error instanceof ToolCleanupFailure ||
 		(error instanceof ProviderRequestFailure && error.errorCode === 'PROVIDER_STREAM_CLEANUP_FAILED') ||
 		(error instanceof AggregateError && error.errors.some(hasCleanupFailure))
 	);
 }
 
 interface RunningTask {
+	parentId: string | null;
 	userId: number;
 	appId: string;
 	providerId: string;
@@ -28,10 +55,10 @@ interface RunningTask {
 }
 
 /**
- * The single in-process owner of a newly created Root Run's model attempt.
- * Only fresh creates enter; persisted unknown/dispatched attempts are NEVER
- * scheduled on restart or replay. The B6/B7 frozen policy currently denies
- * every attempt before reservation, so no model traffic is enabled by this.
+ * The single in-process owner of newly created Root and Child model attempts.
+ * Only fresh committed creates enter; persisted unknown/dispatched attempts are NEVER
+ * scheduled on restart or replay. Every attempt consumes governed frozen
+ * configuration and rechecks live authority before dispatch.
  */
 export class RunExecutionOwner {
 	private readonly tasks = new Map<string, RunningTask>();
@@ -47,6 +74,12 @@ export class RunExecutionOwner {
 		private readonly steps: RunStepModel,
 		private readonly stream: RunModelStream,
 		private readonly providers: ProviderModel,
+		private readonly tools: ToolService,
+		private readonly collaboration: RunCollaborationService,
+		private readonly contexts: ContextHistoryService,
+		private readonly checkpoints: CheckpointService,
+		private readonly settings: ExecutionService,
+		private readonly events: OperationsEvents,
 	) {}
 
 	private recordFailure(error: unknown): void {
@@ -69,14 +102,19 @@ export class RunExecutionOwner {
 		this.admittedWrites.add(pending);
 		try {
 			return await pending;
+		} catch (error) {
+			if (isAgentDrainFailure(error)) {
+				this.recordFailure(error);
+			}
+			throw error;
 		} finally {
 			this.admittedWrites.delete(pending);
 		}
 	}
 
 	/** Reserve local attempt capacity before creating a durable Run, including in-flight creates. */
-	async admitCreate<T>(work: () => Promise<T>): Promise<T> {
-		if (this.tasks.size + this.pendingCreates >= MAX_RUN_ATTEMPTS) {
+	async admitCreate<T>(work: () => Promise<T>, maxRuns: number): Promise<T> {
+		if (this.tasks.size + this.pendingCreates >= Math.min(maxRuns, MAX_RUN_ATTEMPTS)) {
 			throw new AgentFailure('provider_unavailable');
 		}
 		this.pendingCreates++;
@@ -87,17 +125,22 @@ export class RunExecutionOwner {
 		}
 	}
 
+	occupiedSlots(): number {
+		return this.tasks.size + this.pendingCreates;
+	}
+
 	/** Call exactly once after a newly committed create, never for an idempotent replay. */
-	start(command: RunExecutionCommand): void {
+	start(command: RunExecutionCommand, parentId: string | null = null): boolean {
 		if (this.closing || this.tasks.has(command.runId)) {
-			return;
+			return false;
 		}
 		const controller = new AbortController();
 		const deadline = setTimeout(
 			() => controller.abort(new Error('Root Run attempt deadline exceeded')),
-			RUN_ATTEMPT_DEADLINE_MS,
+			Math.max(1, command.deadlineAt - Date.now()),
 		);
 		const task: RunningTask = {
+			parentId,
 			userId: command.userId,
 			appId: command.appId,
 			providerId: command.providerId,
@@ -108,7 +151,8 @@ export class RunExecutionOwner {
 		this.tasks.set(command.runId, task);
 		// Own the rejection until shutdown; a failed/unknown durable commit is
 		// never replayed by the in-memory task manager.
-		task.settled = this.execute(command, controller.signal)
+		task.settled = this.runs
+			.ownExecutionTask(() => this.executeOwned(command, controller.signal))
 			.catch((error: unknown) => {
 				task.cleanupFailed = hasCleanupFailure(error);
 				this.recordFailure(error);
@@ -122,6 +166,30 @@ export class RunExecutionOwner {
 			});
 		// A cleanup failure retains its occupied slot; observing rejection is not release evidence.
 		void task.settled.catch(() => undefined);
+		return true;
+	}
+
+	async waitChildren(ids: string[]): Promise<void> {
+		const results = await Promise.allSettled(
+			ids.flatMap((id) => {
+				const task = this.tasks.get(id);
+				return task ? [task.settled] : [];
+			}),
+		);
+		const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+		if (failures.length) {
+			throw new AggregateError(failures, 'Child task cleanup failed');
+		}
+	}
+
+	async drainChildren(scope: { userId: number; appId: string; runId: string }): Promise<void> {
+		const children = [...this.tasks.entries()].filter(
+			([, task]) => task.parentId === scope.runId && task.userId === scope.userId && task.appId === scope.appId,
+		);
+		for (const [, task] of children) {
+			task.controller.abort();
+		}
+		await this.waitChildren(children.map(([id]) => id));
 	}
 
 	/** Cancel after the authoritative DB fence; never wait before fencing. */
@@ -129,6 +197,59 @@ export class RunExecutionOwner {
 		const task = this.tasks.get(runId);
 		if (task?.userId === userId && task.appId === appId) {
 			task.controller.abort();
+		}
+		for (const child of this.tasks.values()) {
+			if (child.parentId === runId && child.userId === userId && child.appId === appId) {
+				child.controller.abort();
+			}
+		}
+	}
+
+	/** A policy mutation has already fenced storage. Recheck each exact task before aborting, so newly admitted tasks are not stopped by an older mutation's continuation. */
+	async abortRevoked(request: RunRevocationRequest): Promise<void> {
+		const tasks = [...this.tasks.entries()].filter(
+			([, task]) =>
+				(request.userId === null || task.userId === request.userId) &&
+				(request.appId === null || task.appId === request.appId),
+		);
+		const results = await Promise.allSettled(
+			tasks.map(async ([id, task]) => {
+				try {
+					const current = request.uncertain ? null : await this.runs.get(task.userId, task.appId, id);
+					if (this.tasks.get(id) === task && (current === null || current.status === 'cancelled')) {
+						task.controller.abort();
+					}
+				} catch (error) {
+					if (this.tasks.get(id) === task) {
+						task.controller.abort();
+					}
+					throw error;
+				}
+			}),
+		);
+		const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+		if (failures.length) {
+			const failure = new AggregateError(failures, 'Run revocation confirmation failed');
+			this.recordFailure(failure);
+			throw new AgentFailure('operation_unknown', { cause: failure });
+		}
+	}
+
+	/** Await the exact App tasks already fenced by a committed lifecycle change. */
+	async drainRevokedApp(userId: number, appId: string): Promise<void> {
+		const tasks = [...this.tasks.values()].filter((task) => task.userId === userId && task.appId === appId);
+		await this.abortRevoked({ userId, appId, uncertain: false });
+		const results = await Promise.allSettled(tasks.map((task) => task.settled));
+		if (tasks.some((task) => task.cleanupFailed)) {
+			throw new ToolCleanupFailure();
+		}
+		const failures = results.flatMap((result) =>
+			result.status === 'rejected' && isAgentDrainFailure(result.reason) ? [result.reason] : [],
+		);
+		if (failures.length) {
+			throw new AgentFailure('operation_unknown', {
+				cause: new AggregateError(failures, 'App Run drain unconfirmed'),
+			});
 		}
 	}
 
@@ -158,16 +279,7 @@ export class RunExecutionOwner {
 		this.closePromise = Promise.resolve().then(async () => {
 			// Requests admitted before quiesce can still be writing their Run.
 			// No new admission or model task can enter after closing=true.
-			const writes = await Promise.allSettled([...this.admittedWrites]);
-			for (const result of writes) {
-				if (result.status === 'rejected' && !(result.reason instanceof AgentFailure)) {
-					// An admitted write may have reached COMMIT even when its caller
-					// receives an unexpected error. Preserve that uncertainty without
-					// coupling this Service to the technical SQLite error taxonomy or
-					// treating normal application rejections as shutdown failures.
-					this.recordFailure(result.reason);
-				}
-			}
+			await Promise.allSettled([...this.admittedWrites]);
 			await Promise.allSettled([...this.tasks.values()].map((task) => task.settled));
 			if (this.failures.length || this.excessFailures) {
 				throw new AggregateError(
@@ -190,30 +302,267 @@ export class RunExecutionOwner {
 			stepIndex: step.stepIndex,
 			expectedRunVersion: step.runVersion,
 			expectedRevision: step.revision,
-			requestHash: command.requestHash,
+			requestHash: step.requestHash,
+			creationHash: command.requestHash,
 			now: Date.now(),
 		};
 	}
 
-	private async execute(command: RunExecutionCommand, signal: AbortSignal): Promise<void> {
-		const frozen = await this.runs.frozen(command.userId, command.appId, command.runId);
-		// This is an actual persisted-policy boundary, not a default-allow or
-		// temporary approval flag. No task, budget, or Provider probe grants it.
-		if (!frozen || frozen.executionPolicy === 'awaiting_b6_b7' || signal.aborted) {
-			return;
+	private async executeOwned(command: RunExecutionCommand, signal: AbortSignal): Promise<void> {
+		let failure: unknown = null;
+		try {
+			await this.execute(command, signal);
+		} catch (error) {
+			failure = error;
+			throw error;
+		} finally {
+			try {
+				const scope = { userId: command.userId, appId: command.appId, runId: command.runId };
+				const results = await Promise.allSettled([
+					Promise.resolve().then(() => this.collaboration.drain(scope)),
+					Promise.resolve().then(() => this.tools.drainRun(scope)),
+				]);
+				const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+				if (failures.length) {
+					throw new AggregateError(failures, 'Run resources failed to drain');
+				}
+				const state = await this.runs.get(command.userId, command.appId, command.runId);
+				if (state && ['completed', 'failed', 'cancelled', 'unknown'].includes(state.status)) {
+					await this.events.publish({
+						key: 'run:' + state.id + ':' + state.version,
+						event:
+							state.status === 'completed'
+								? 'AGENT_RUN_COMPLETED'
+								: state.status === 'failed'
+									? 'AGENT_RUN_FAILED'
+									: state.status === 'unknown'
+										? 'AGENT_ATTENTION_REQUIRED'
+										: 'AGENT_RUN_INTERRUPTED',
+						userId: command.userId,
+						subjectId: state.id,
+						sourceIp: null,
+						route: null,
+						statusCode: null,
+					});
+				}
+			} catch (cleanup) {
+				if (failure !== null) {
+					throw new AggregateError([failure, cleanup], 'Root and Jobs failed');
+				}
+				throw cleanup;
+			}
 		}
+	}
 
-		const reserved = await this.steps.reserve({
+	failUnstarted(command: RunExecutionCommand): Promise<boolean> {
+		return this.steps.failUnstarted({
 			userId: command.userId,
 			appId: command.appId,
 			runId: command.runId,
-			stepIndex: 1,
-			expectedRunVersion: command.version,
-			requestHash: command.requestHash,
+			expectedVersion: command.version,
+			creationHash: command.requestHash,
 			now: Date.now(),
 		});
-		if (reserved.status !== 'ok') {
+	}
+
+	private async rejectAdmission(
+		command: RunExecutionCommand,
+		previous: RunModelStep | null,
+		error: unknown,
+		uncertain: boolean,
+	): Promise<void> {
+		if (isAgentDrainFailure(error)) {
+			throw error;
+		}
+		try {
+			if (previous) {
+				await this.steps.endRoot(this.mutation(command, previous), uncertain);
+			} else {
+				await this.steps.failUnstarted({
+					userId: command.userId,
+					appId: command.appId,
+					runId: command.runId,
+					expectedVersion: command.version,
+					creationHash: command.requestHash,
+					now: Date.now(),
+				});
+			}
+		} catch (settlement) {
+			throw new AggregateError([error, settlement], 'Model admission rejection and Run settlement failed');
+		}
+	}
+
+	private async execute(command: RunExecutionCommand, signal: AbortSignal): Promise<void> {
+		const scope = { userId: command.userId, appId: command.appId, runId: command.runId };
+		const participant = await this.collaboration.prepare(scope, signal);
+		if (!participant || signal.aborted) {
+			await this.collaboration.abandon(scope);
+			await this.failUnstarted(command);
 			return;
+		}
+		const frozen = await this.runs.frozen(command.userId, command.appId, command.runId);
+		// This is an actual persisted-policy boundary, not a default-allow or
+		// temporary approval flag. No task, budget, or Provider probe grants it.
+		if (!frozen || frozen.executionPolicy !== 'governed' || signal.aborted) {
+			await this.failUnstarted(command);
+			return;
+		}
+
+		let context: ContextService | null;
+		try {
+			context = await this.contexts.open(
+				{
+					userId: command.userId,
+					appId: command.appId,
+					runId: command.runId,
+					expectedVersion: command.version,
+					includeThread: participant.parentId === null,
+				},
+				command.prompt,
+			);
+		} catch (error) {
+			await this.rejectAdmission(command, null, error, signal.aborted);
+			return;
+		}
+		if (context === null || signal.aborted) {
+			await this.failUnstarted(command);
+			return;
+		}
+
+		let version = command.version;
+		let previous: RunModelStep | null = null;
+		for (let stepIndex = 1; stepIndex <= Math.min(AGENT_RUN_STEP_MAX_COUNT, participant.maxRequests); stepIndex++) {
+			let outcome: ModelStepOutcome | null;
+			try {
+				outcome = await this.executeStep(command, frozen, context, stepIndex, version, signal);
+			} catch (error) {
+				// A definite local rejection between rounds must settle the Root.
+				// Unknown storage commits remain untouched for durable recovery.
+				await this.rejectAdmission(command, previous, error, signal.aborted);
+				return;
+			}
+			if (!outcome) {
+				if (previous) {
+					await this.steps.endRoot(this.mutation(command, previous), signal.aborted);
+				} else {
+					await this.failUnstarted(command);
+				}
+				return;
+			}
+			if (outcome.terminal.finishReason === 'stop') {
+				return;
+			}
+			const { step, terminal } = outcome;
+			try {
+				const results: { providerCallId: string; content: string }[] = [];
+				for (const proposal of terminal.proposals) {
+					const content = await this.tools.execute(
+						{
+							userId: command.userId,
+							appId: command.appId,
+							runId: command.runId,
+							modelStepIndex: step.stepIndex,
+						},
+						proposal,
+						signal,
+					);
+					results.push({ providerCallId: proposal.providerCallId, content });
+				}
+				if (
+					signal.aborted ||
+					Date.now() >= participant.deadline ||
+					stepIndex === Math.min(AGENT_RUN_STEP_MAX_COUNT, participant.maxRequests)
+				) {
+					throw new AgentFailure('limit_exceeded');
+				}
+				context.appendExchange({
+					content: outcome.text,
+					proposals: terminal.proposals,
+					reasoning: terminal.reasoning,
+					results,
+				});
+				await this.checkpoints.apply(
+					{ userId: command.userId, appId: command.appId, runId: command.runId },
+					stepIndex,
+					context,
+				);
+			} catch (error) {
+				if (isAgentDrainFailure(error) && !(error instanceof ToolExecutionUnknown)) {
+					throw error;
+				}
+				try {
+					await this.steps.endRoot(this.mutation(command, step), signal.aborted);
+				} catch (settlement) {
+					throw new AggregateError([error, settlement], 'Tool failure and Root settlement failed');
+				}
+				if (error instanceof ToolExecutionUnknown) {
+					throw error;
+				}
+				return;
+			}
+			version = step.runVersion;
+			previous = step;
+		}
+	}
+
+	private async executeStep(
+		command: RunExecutionCommand,
+		frozen: RunFrozenInput,
+		context: ContextService,
+		stepIndex: number,
+		version: number,
+		signal: AbortSignal,
+	): Promise<ModelStepOutcome | null> {
+		if (signal.aborted) {
+			return null;
+		}
+		const participant = await this.collaboration.participant({
+			userId: command.userId,
+			appId: command.appId,
+			runId: command.runId,
+		});
+		const definitions = frozen.capabilities.supportsTools ? this.collaboration.definitions(participant) : [];
+		// Reject a complete over-budget request before journaling dispatch intent.
+		const snapshot = context.snapshot(definitions, {
+			contextWindow: Math.min(
+				frozen.capabilities.contextWindow,
+				(await this.settings.frozen(command.userId, command.appId, command.runId)).contextProfile === 'extended'
+					? frozen.capabilities.contextWindow
+					: Math.max(32768, frozen.capabilities.maxOutputTokens + 2048),
+			),
+			reservedOutputTokens: frozen.capabilities.maxOutputTokens,
+		});
+		const messages = snapshot.messages;
+		const estimatedTokens =
+			Buffer.byteLength(JSON.stringify(messages), 'utf8') +
+			Buffer.byteLength(JSON.stringify(definitions), 'utf8') +
+			messages.length * 64 +
+			definitions.length * 512 +
+			1024 +
+			frozen.capabilities.maxOutputTokens;
+		if (signal.aborted) {
+			return null;
+		}
+		const reserved = await this.steps.reserve(
+			{
+				userId: command.userId,
+				appId: command.appId,
+				runId: command.runId,
+				stepIndex,
+				expectedRunVersion: version,
+				requestHash: this.stream.requestHash(frozen, messages, definitions),
+				creationHash: command.requestHash,
+				now: Date.now(),
+			},
+			snapshot,
+			estimatedTokens,
+			(settings, usage) => this.settings.admitReservation(settings, usage, estimatedTokens),
+		);
+		if (reserved.status !== 'ok') {
+			if (reserved.status === 'stale') {
+				throw new AgentFailure('version_conflict');
+			}
+			return null;
 		}
 
 		const failUndispatched = async (): Promise<void> => {
@@ -227,7 +576,7 @@ export class RunExecutionOwner {
 
 		if (signal.aborted) {
 			await failUndispatched();
-			return;
+			return null;
 		}
 		let credential: string | null = null;
 		let provider: ProviderRecord | null = null;
@@ -253,25 +602,28 @@ export class RunExecutionOwner {
 			} catch (settlementError) {
 				throw new AggregateError([error, settlementError], 'Provider check and undispatched settlement failed');
 			}
-			if (error instanceof AgentFailure) {
-				return;
+			if (!isAgentDrainFailure(error)) {
+				return null;
 			}
 			throw error;
 		}
 		if (!provider || signal.aborted) {
 			await failUndispatched();
-			return;
+			return null;
 		}
-		const dispatched = await this.steps.dispatch(this.mutation(command, reserved.step));
+		const dispatched = await this.steps.dispatch(this.mutation(command, reserved.step), (settings, usage) =>
+			this.settings.admitDispatch(settings, usage),
+		);
 		// A thrown DB commit or a non-ok CAS is NOT permission to re-dispatch.
 		if (dispatched.status !== 'ok') {
 			// The storage returned a definite non-dispatch. Another writer may
 			// already have fenced the step; the original CAS then returns stale.
 			// In contrast, a thrown commit_unknown above is never settled here.
 			await failUndispatched();
-			return;
+			return null;
 		}
 		let current = dispatched.step;
+		let text = '';
 		let resourceCleanupFailure: ProviderRequestFailure | null = null;
 
 		try {
@@ -280,18 +632,56 @@ export class RunExecutionOwner {
 			if (signal.aborted) {
 				throw new AgentFailure('provider_unavailable');
 			}
-			for await (const event of this.stream.stream(frozen, command.prompt, credential, signal)) {
+			for await (const event of this.stream.stream(frozen, messages, definitions, credential, signal)) {
 				// Also fence configuration changes made by a different server process.
 				await this.providers.guardCurrent(provider);
 				if (signal.aborted) {
 					break; // Wait for iterator.return() and transport cleanup.
 				}
 				if (event.kind === 'finished') {
-					const result = await this.steps.finish(this.mutation(command, current), { state: 'completed' });
-					if (result.status !== 'ok') {
-						return;
+					if (event.finishReason === 'stop') {
+						await this.collaboration.finishChildren({
+							userId: command.userId,
+							appId: command.appId,
+							runId: command.runId,
+						});
+						await this.tools.drainRun({
+							userId: command.userId,
+							appId: command.appId,
+							runId: command.runId,
+						});
 					}
-					return;
+					if (event.finishReason === 'tool_calls') {
+						for (const proposal of event.proposals) {
+							this.tools.validate(proposal);
+						}
+					}
+					if (signal.aborted || Date.now() >= command.deadlineAt) {
+						break;
+					}
+					const result = await this.steps.finish(
+						this.mutation(command, current),
+						event.finishReason === 'stop'
+							? { state: 'completed', finishReason: 'stop', outputText: text }
+							: { state: 'completed', finishReason: 'tool_calls', proposals: event.proposals },
+					);
+					if (result.status === 'step_conflict') {
+						// The model finished, but a tool effect is still unconfirmed.
+						// Close the stream before settling the aggregate as unknown.
+						break;
+					}
+					if (result.status !== 'ok') {
+						return null;
+					}
+					return { step: result.step, text, terminal: event };
+				}
+				if (
+					event.kind === 'text' &&
+					participant?.parentId !== null &&
+					participant?.parentId !== undefined &&
+					Buffer.byteLength(text + event.content, 'utf8') > 8192
+				) {
+					throw new AgentFailure('limit_exceeded');
 				}
 				const result =
 					event.kind === 'text'
@@ -302,9 +692,12 @@ export class RunExecutionOwner {
 								event.outputTokens,
 							);
 				if (result.status !== 'ok') {
-					return;
+					return null;
 				} // Cancel or concurrent terminal fenced this task.
 				current = result.step;
+				if (event.kind === 'text') {
+					text += event.content;
+				}
 				// Abort may arrive while SQLite is settling the last delta. Do not
 				// ask the provider for another chunk; for-await break awaits the
 				// iterator's resource cleanup before the unknown-state CAS.
@@ -313,7 +706,15 @@ export class RunExecutionOwner {
 				}
 			}
 		} catch (error) {
-			if (!(error instanceof AgentFailure)) {
+			if (error instanceof ToolExecutionUnknown) {
+				try {
+					await this.steps.finish(this.mutation(command, current), { state: 'unknown' });
+				} catch (settlement) {
+					throw new AggregateError([error, settlement], 'Job failure and Root settlement failed');
+				}
+				throw error;
+			}
+			if (isAgentDrainFailure(error)) {
 				throw error;
 			}
 			if (error instanceof ProviderRequestFailure && error.errorCode === 'PROVIDER_STREAM_CLEANUP_FAILED') {
@@ -340,5 +741,6 @@ export class RunExecutionOwner {
 		if (resourceCleanupFailure) {
 			throw resourceCleanupFailure;
 		}
+		return null;
 	}
 }

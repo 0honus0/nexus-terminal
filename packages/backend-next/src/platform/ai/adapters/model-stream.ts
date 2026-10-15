@@ -1,4 +1,6 @@
-import type { ModelStreamEvent, ModelStreamInput } from '../model-port.js';
+import { ModelToolStream } from './model-tool-stream.js';
+import { responseReasoning } from './model-reasoning.js';
+import type { ModelStreamEvent, ModelStreamInput, ModelReasoningState } from '../model-port.js';
 import { ModelNetworkFailure } from '../model-port.js';
 import {
 	MODEL_STREAM_MAX_BYTES,
@@ -40,14 +42,18 @@ function usage(raw: unknown, input: string, output: string): ModelStreamEvent | 
 	return { type: 'usage', inputTokens: obj[input], outputTokens: obj[output] };
 }
 
-function textFromResponse(raw: Record<string, unknown>): string {
+function textFromResponse(raw: Record<string, unknown>, tools: ModelToolStream): string {
 	if (!Array.isArray(raw.output)) {
 		throw new ModelNetworkFailure('response_invalid');
 	}
 	const chunks: string[] = [];
 	let textBytes = 0;
-	for (const item of raw.output) {
+	for (const [index, item] of raw.output.entries()) {
 		const obj = record(item);
+		if (obj?.type === 'function_call') {
+			tools.responseSnapshot(index, obj);
+			continue;
+		}
 		if (!obj || (obj.type !== 'message' && obj.type !== 'reasoning')) {
 			throw new ModelNetworkFailure('response_invalid');
 		}
@@ -84,11 +90,18 @@ export class ModelStreamDecoder {
 	private itemChunks: string[] = [];
 	private hasVisibleText = false;
 	private finished = false;
-	private finishReason: 'stop' | 'length' | 'content_filter' | null = null;
+	private finishReason: 'stop' | 'length' | 'content_filter' | 'tool_calls' | null = null;
+	private readonly tools: ModelToolStream;
+	private reasoning: ModelReasoningState[] = [];
 	private done = false;
 	private hasUsage = false;
 
-	constructor(private readonly protocol: ModelStreamInput['protocol']) {}
+	constructor(
+		private readonly protocol: ModelStreamInput['protocol'],
+		allowTools = false,
+	) {
+		this.tools = new ModelToolStream(allowTools);
+	}
 
 	private delta(value: unknown): ModelStreamEvent[] {
 		if (typeof value !== 'string') {
@@ -173,7 +186,8 @@ export class ModelStreamDecoder {
 			(event.type === 'response.completed' ||
 				event.type === 'response.output_text.done' ||
 				event.type === 'response.content_part.done' ||
-				event.type === 'response.output_item.done');
+				event.type === 'response.output_item.done' ||
+				event.type === 'response.function_call_arguments.done');
 		if (frameBytes > MAX_FRAME_BYTES && !isOutputSnapshot) {
 			throw new ModelNetworkFailure('too_large');
 		}
@@ -183,6 +197,13 @@ export class ModelStreamDecoder {
 				(event.incomplete_details !== undefined && event.incomplete_details !== null)
 			) {
 				throw new ModelNetworkFailure('response_invalid');
+			}
+			if (
+				event.type === 'response.function_call_arguments.delta' ||
+				event.type === 'response.function_call_arguments.done'
+			) {
+				this.tools.response(event);
+				return [];
 			}
 			if (event.type === 'response.output_text.delta') {
 				return this.delta(event.delta);
@@ -209,14 +230,25 @@ export class ModelStreamDecoder {
 				) {
 					throw new ModelNetworkFailure('response_invalid');
 				}
-				const full = textFromResponse(response);
+				const full = textFromResponse(response, this.tools);
+				const calls = this.tools.finish();
+				if (
+					!Array.isArray(response.output) ||
+					response.output.filter((item: unknown) => record(item)?.type === 'function_call').length !==
+						calls.length
+				) {
+					throw new ModelNetworkFailure('response_invalid');
+				}
+				if (calls.length > 0) {
+					this.reasoning = responseReasoning(response.output);
+				}
 				const outputs = full && this.textBytes === 0 ? this.delta(full) : [];
 				if (this.responseChunks.join('') !== full) {
 					throw new ModelNetworkFailure('response_invalid');
 				}
 				const reported = usage(response.usage, 'input_tokens', 'output_tokens');
 				this.finished = true;
-				this.finishReason = 'stop';
+				this.finishReason = calls.length === 0 ? 'stop' : 'tool_calls';
 				return [...outputs, ...(reported ? [reported] : [])];
 			}
 			if (event.type === 'response.failed' || event.type === 'response.incomplete' || event.type === 'error') {
@@ -224,6 +256,17 @@ export class ModelStreamDecoder {
 			}
 			if (event.type === 'response.output_item.added' || event.type === 'response.output_item.done') {
 				const item = record(event.item);
+				if (item?.type === 'function_call') {
+					if (event.type === 'response.output_item.added') {
+						this.tools.response(event);
+					} else {
+						if (typeof event.output_index !== 'number') {
+							throw new ModelNetworkFailure('response_invalid');
+						}
+						this.tools.responseSnapshot(event.output_index, item);
+					}
+					return [];
+				}
 				if (!item || (item.type !== 'message' && item.type !== 'reasoning')) {
 					throw new ModelNetworkFailure('response_invalid');
 				}
@@ -247,7 +290,7 @@ export class ModelStreamDecoder {
 				event.type !== 'response.reasoning_summary_part.added' &&
 				event.type !== 'response.reasoning_summary_part.done'
 			) {
-				// Refusal, tool calls and unrecognized vendor output are never a silent success.
+				// Refusal and unrecognized vendor output are never a silent success.
 				throw new ModelNetworkFailure('response_invalid');
 			}
 			return [];
@@ -287,18 +330,22 @@ export class ModelStreamDecoder {
 					choice.finish_reason !== undefined &&
 					choice.finish_reason !== 'stop' &&
 					choice.finish_reason !== 'length' &&
-					choice.finish_reason !== 'content_filter')
+					choice.finish_reason !== 'content_filter' &&
+					choice.finish_reason !== 'tool_calls')
 			) {
 				throw new ModelNetworkFailure('response_invalid');
 			}
 			const delta = record(choice.delta);
 			if (
 				!delta ||
-				Object.keys(delta).some((key) => key !== 'role' && key !== 'content') ||
+				Object.keys(delta).some((key) => key !== 'role' && key !== 'content' && key !== 'tool_calls') ||
 				(delta.role !== undefined && delta.role !== 'assistant')
 			) {
-				// Tools, refusals, audio and unknown output must not be silently discarded.
+				// Refusals, audio and unknown output must not be silently discarded.
 				throw new ModelNetworkFailure('response_invalid');
+			}
+			if (delta.tool_calls !== undefined) {
+				this.tools.chat(delta.tool_calls);
 			}
 			if (delta?.content !== undefined && delta.content !== null) {
 				if (this.finished) {
@@ -371,6 +418,16 @@ export class ModelStreamDecoder {
 		}
 		if (!this.finished || (this.protocol === 'chat-completions' && !this.done)) {
 			throw new ModelNetworkFailure('stream_truncated');
+		}
+		const calls = this.tools.finish();
+		if (this.finishReason === 'tool_calls') {
+			if (calls.length === 0) {
+				throw new ModelNetworkFailure('response_invalid');
+			}
+			return { type: 'completed', finishReason: 'tool_calls', toolCalls: calls, reasoning: this.reasoning };
+		}
+		if (calls.length !== 0) {
+			throw new ModelNetworkFailure('response_invalid');
 		}
 		if (!this.hasVisibleText) {
 			throw new ModelNetworkFailure('response_empty');

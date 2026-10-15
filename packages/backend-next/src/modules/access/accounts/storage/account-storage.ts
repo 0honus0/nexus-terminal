@@ -21,7 +21,15 @@ export interface PasswordUpdateRecord {
 	sessionDigest: string;
 }
 
+export interface CredentialConfirmation {
+	userId: number;
+	passwordHash: string;
+	sessionDigest: string;
+	now(): number;
+}
+
 export interface AccountStorage {
+	confirmCredential(input: CredentialConfirmation): Promise<boolean>;
 	needsSetup(): Promise<boolean>;
 	findByUsername(username: string): Promise<AccountRecord | null>;
 	findById(id: number): Promise<AccountRecord | null>;

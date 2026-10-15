@@ -1,6 +1,22 @@
 /** State rules operate on application facts, not SQLite/storage records. */
 import type { RootRunState, CancelRootRunDecision, RunFrozenInput } from './model/run-types.js';
 import type { ProviderRecord } from '../providers/model/provider-types.js';
+import type { RunStepFinish } from './model/run-types.js';
+
+export function mayFinishModelStep(
+	result: RunStepFinish,
+	hasUnsettledTools: boolean,
+	hasUnsettledChildren: boolean,
+): boolean {
+	return (
+		result.state !== 'completed' ||
+		(!hasUnsettledTools && (result.finishReason !== 'stop' || !hasUnsettledChildren))
+	);
+}
+
+export function interruptedRootState(uncertain: boolean, hasUnconfirmedEffects: boolean): 'failed' | 'unknown' {
+	return uncertain || hasUnconfirmedEffects ? 'unknown' : 'failed';
+}
 
 /** Provider eligibility alone never grants execution; B6/B7 own the frozen policy. */
 export function mayExecuteFrozenRun(frozen: RunFrozenInput, provider: ProviderRecord | null): boolean {
@@ -14,8 +30,8 @@ export function mayExecuteFrozenRun(frozen: RunFrozenInput, provider: ProviderRe
 		return false;
 	}
 	switch (frozen.executionPolicy) {
-		case 'awaiting_b6_b7':
-			return false;
+		case 'governed':
+			return true;
 		default: {
 			// New policy values require an explicit authorization decision here.
 			const unsupported: never = frozen.executionPolicy;

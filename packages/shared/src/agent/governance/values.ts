@@ -4,6 +4,7 @@ export const AGENT_CAPABILITIES = [
 	'file.write',
 	'file.delete',
 	'machine.inspect',
+	'host.inspect',
 	'shell.execute',
 	'machine.docker.manage',
 	'browser.read',
@@ -12,6 +13,11 @@ export const AGENT_CAPABILITIES = [
 	'integration.mcp.invoke',
 	'integration.acp.invoke',
 	'artifacts.read',
+	'artifacts.write',
+	'context.read',
+	'context.compact',
+	'memory.read',
+	'memory.propose',
 	'app.intents.exchange',
 ] as const;
 
@@ -69,8 +75,6 @@ export type AgentContextProfile = (typeof AGENT_EXECUTION_CONTEXT_PROFILES)[numb
 
 export const AGENT_EXECUTION_INTEGER_KEYS = [
 	'maxModelRequests',
-	'maxAutoModelRequests',
-	'maxAutoActiveExecutionSeconds',
 	'maxActiveExecutionSeconds',
 	'toolTimeoutSeconds',
 	'maxToolOutputBytes',
@@ -91,3 +95,9 @@ export const AGENT_APPROVAL_MAX_FEEDBACK_BYTES = 2000;
 export const AGENT_APPROVAL_OPERATION_HASH_LENGTH = 64;
 
 export const AGENT_APPROVAL_OPERATION_HASH_PATTERN = /^[a-f0-9]{64}$/iu;
+
+export const AGENT_DENYLIST_MAX_TARGETS = 50;
+
+export const AGENT_DENYLIST_MAX_REASON_CODE_POINTS = 512;
+
+export const AGENT_DENYLIST_MAX_REASON_BYTES = 2048;

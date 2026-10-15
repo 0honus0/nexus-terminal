@@ -1,3 +1,5 @@
+import { accessBackupExclusions } from './accounts/adapters/sqlite/backup-exclusions.js';
+import type { SqlExecutor } from '../../platform/storage/sqlite/sql-types.js';
 import type { SqliteRuntime } from '../../platform/storage/sqlite/sqlite-runtime.js';
 import type { HttpRoute } from '../../platform/http/http-types.js';
 import { ScryptPasswordHasher } from '../../platform/security/password-hasher.js';
@@ -33,13 +35,13 @@ import { createFactorRoutes } from './interfaces/http/factor-http.js';
 export interface AccessRegistrationOptions {
 	sqlite: SqliteRuntime;
 	secrets?: SecretBox | null;
-	passkeys?: { rpId: string; origin: string };
+	passkeys?: Array<{ rpId: string; origin: string }>;
 	loginFailurePolicy?: {
 		enabled: boolean;
 		maxAttempts?: number;
 		banSeconds?: number;
 	};
-	/** Installation snapshot until B7 Settings provides the durable policy source. */
+	/** Immutable installation snapshot from Preferences. */
 	ipWhitelist?: string;
 	captcha?: {
 		enabled: boolean;
@@ -72,6 +74,8 @@ function toAccessIdentity(identity: AuthenticatedIdentity): AccessIdentity {
 }
 
 export interface RegisteredAccess {
+	/** Installation-only identity reader; executes through the caller-owned SQLite transaction. */
+	readTransactionIdentity(tx: SqlExecutor, digest: string): Promise<number | null>;
 	publicApi: AccessPublicApi;
 	/** Install internally; do not expose Service, password hashes or bearer issuance to other modules. */
 	routes(secureCookies: boolean): HttpRoute[];
@@ -85,22 +89,27 @@ export function registerAccess({
 	ipWhitelist,
 	captcha,
 }: AccessRegistrationOptions): RegisteredAccess {
-	if (passkeys) {
-		const origin = new URL(passkeys.origin);
+	const origins = new Set<string>();
+	for (const site of passkeys ?? []) {
+		const origin = new URL(site.origin);
 		if (
 			!['http:', 'https:'].includes(origin.protocol) ||
-			origin.origin !== passkeys.origin ||
-			!passkeys.rpId ||
-			(origin.hostname !== passkeys.rpId && !origin.hostname.endsWith('.' + passkeys.rpId)) ||
+			origin.origin !== site.origin ||
+			!site.rpId ||
+			!/^[a-z0-9.-]+$/u.test(site.rpId) ||
+			origins.has(site.origin) ||
+			(origin.hostname !== site.rpId && !origin.hostname.endsWith('.' + site.rpId)) ||
 			(origin.protocol === 'http:' && origin.hostname !== 'localhost' && origin.hostname !== '127.0.0.1')
 		) {
 			throw new Error('Invalid WebAuthn relying party');
 		}
+		origins.add(site.origin);
 	}
 	const tokens = new SecureSessionTokens();
 	const addresses = new SourceAddressModel(new NativeSourceAddresses());
 	const accounts = new AccountModel(new SqliteAccountStorage(sqlite), new ScryptPasswordHasher(), tokens);
-	const sessions = new SessionModel(new SqliteSessionStorage(sqlite), tokens);
+	const sessionStorage = new SqliteSessionStorage(sqlite);
+	const sessions = new SessionModel(sessionStorage, tokens);
 	const failurePolicy = new LoginFailurePolicy(toLoginFailurePolicy(loginFailurePolicy));
 	const factorModel = new FactorModel(
 		new SqliteFactorStorage(sqlite),
@@ -108,7 +117,7 @@ export function registerAccess({
 		secrets ?? null,
 		new RfcTotp(),
 		new NativeWebauthn(),
-		passkeys ?? null,
+		(passkeys ?? []).map((site) => ({ origin: site.origin, rpId: site.rpId })),
 	);
 	const factors = new FactorService(accounts, sessions, factorModel, addresses, failurePolicy);
 	const captchaSettings: CaptchaConfiguration = captcha
@@ -130,6 +139,16 @@ export function registerAccess({
 	);
 	const admission = new SourceAdmissionService(ipWhitelist ?? '', addresses, sessions, failurePolicy);
 	const publicApi: AccessPublicApi = {
+		provePassword: (token, password) =>
+			accessBoundary(async () => {
+				const proof = await service.provePassword(token, password);
+				return {
+					userId: proof.userId,
+
+					assertCurrent: () => accessBoundary(() => proof.assertCurrent()),
+				};
+			}),
+
 		needsSetup: () => accessBoundary(() => service.needsSetup()),
 
 		authenticate: (token) =>
@@ -151,9 +170,19 @@ export function registerAccess({
 	return {
 		publicApi,
 
+		readTransactionIdentity: async (tx, digest) => {
+			const record = await sessionStorage.validateInTransaction(tx, digest, Date.now());
+			return record === null ? null : record.userId;
+		},
+
 		routes: (secureCookies) => [
 			...createAccessRoutes(service, factors, secureCookies),
 			...createFactorRoutes(factors, secureCookies),
 		],
 	};
+}
+
+/** Installation-only exclusions; the System module never reads authentication storage. */
+export function registerAccessBackupExclusions(): readonly string[] {
+	return accessBackupExclusions();
 }

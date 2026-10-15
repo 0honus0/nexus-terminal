@@ -1,3 +1,17 @@
+import { registerRemoteSnapshot } from './snapshots/adapters/sqlite/snapshot-registration.js';
+import type { SnapshotRegistration } from '../../platform/storage/sqlite/snapshot-types.js';
+import type { OperationsEvents } from '../operations/public.js';
+import type { SqliteRuntime } from '../../platform/storage/sqlite/sqlite-runtime.js';
+import { SqliteMachineMutationStorage } from './machines/adapters/sqlite/mutation-sql.js';
+import { MachineMutationModel } from './machines/model/mutation-model.js';
+import { MachineMutationService } from './machines/service/mutation-service.js';
+import { MachineAcpModel } from './machines/model/acp-model.js';
+import { NdjsonAcpAdapter } from '../../platform/acp/adapters/ndjson-acp.js';
+import { MachineCommandModel } from './machines/model/command-model.js';
+import { PosixCommandAdapter } from '../../platform/commands/adapters/posix-command.js';
+import { RemoteMachineOperationService } from './machines/service/operation-service.js';
+import { remoteOperations } from './operation-mapper.js';
+import type { RemoteMachineOperations } from './public.js';
 import { RemoteResourceCleanupFailure } from './resource-errors.js';
 import { PosixServerStatusCollector } from '../../platform/system/adapters/posix-status.js';
 import { NativeDockerAdapter } from '../../platform/docker/adapters/native-docker.js';
@@ -44,6 +58,8 @@ import { createDesktopHttpRoutes } from './interfaces/http/desktop-http.js';
 import { createDesktopWebSocketRoute } from './interfaces/ws/desktop-ws.js';
 
 interface RemoteRegistrationOptions {
+	events: OperationsEvents;
+	sqlite: SqliteRuntime;
 	resolver: TrustedSshTargetResolver;
 	ssh: MachineSshFactory;
 	verifyHostKey: MachineConnectOptions['verifyHostKey'] | null;
@@ -60,6 +76,7 @@ interface RemoteRegistrationOptions {
 
 interface RemoteRegistration {
 	publicApi: RemoteSessions;
+	operations: RemoteMachineOperations;
 	httpRoutes(): HttpRoute[];
 	webSocketRoutes(): HttpWebSocketRoute[];
 	quiesce(): void;
@@ -94,6 +111,9 @@ function toOpenSessionRequest(input: OpenShellRequest): OpenSessionRequest {
 }
 
 export function registerRemote(options: RemoteRegistrationOptions): RemoteRegistration {
+	const mutations = new MachineMutationService(
+		new MachineMutationModel(new SqliteMachineMutationStorage(options.sqlite), options.resolver),
+	);
 	const machines = new RemoteMachineModel(options.resolver, options.ssh, options.verifyHostKey, options.hostKeys);
 	const service = new RemoteSessionService(new RemoteSessionModel(machines));
 	// Independent technical PTY leases: public Remote/Agent sessions never enumerate
@@ -109,6 +129,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		options.access,
 		new RemoteFileModel(machines, options.resolver),
 		options.targets,
+		mutations,
 	);
 	const workspaces = new WorkspaceService(
 		options.access,
@@ -128,11 +149,19 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		options.targets,
 		options.resolver,
 	);
+	const operations = new RemoteMachineOperationService(
+		new RemoteFileModel(machines, options.resolver),
+		observationModel,
+		new MachineCommandModel(machines, new PosixCommandAdapter()),
+		new MachineAcpModel(machines, new PosixCommandAdapter(), new NdjsonAcpAdapter()),
+		mutations,
+	);
 	const observations = new RemoteObservationService(
 		options.access,
 		options.resolver,
 		workspaces,
 		observationModel,
+		mutations,
 		options.statusIntervalSeconds,
 	);
 	const resources = new ResourceStatusService(
@@ -176,13 +205,17 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 
 		closeSession: (id) => remoteBoundary(() => service.closeSession(id)),
 	};
-	const owner = new RemoteSessionOwner(options.access, service);
+	const owner = new RemoteSessionOwner(options.access, service, options.events);
 	let closePromise: Promise<void> | null = null;
 	const closeFailures: unknown[] = [];
 	return {
 		publicApi,
+		operations: remoteOperations(operations),
 
-		initialize: () => suspendedLogs?.clearAll() ?? Promise.resolve(),
+		initialize: async () => {
+			await mutations.initialize();
+			await suspendedLogs?.clearAll();
+		},
 
 		httpRoutes: () => [
 			...createDesktopHttpRoutes(desktops),
@@ -201,6 +234,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		],
 
 		quiesce: () => {
+			operations.quiesce();
 			desktops.quiesce();
 			resources.quiesce();
 			observations.quiesce();
@@ -217,6 +251,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 				return closePromise;
 			}
 			closePromise = Promise.resolve().then(async () => {
+				operations.quiesce();
 				desktops.quiesce();
 				resources.quiesce();
 				observations.quiesce();
@@ -228,6 +263,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 				files.quiesce();
 				// Start independent owners together; a slow owner cannot block release of the others.
 				const actual = Promise.allSettled([
+					Promise.resolve().then(() => operations.close()),
 					Promise.resolve().then(() => desktops.close()),
 					Promise.resolve().then(() => desktopModel.close()),
 					Promise.resolve().then(() => resources.close()),
@@ -281,4 +317,9 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 			return closePromise;
 		},
 	};
+}
+
+/** Installation-only fixed storage coverage; no business records leave the adapter. */
+export function registerRemoteBackup(): SnapshotRegistration {
+	return registerRemoteSnapshot();
 }

@@ -69,6 +69,18 @@ export interface HostKeyManagement {
 export interface ConnectionCatalog {
 	list(): Promise<ConnectionSnapshot[]>;
 	get(id: number): Promise<ConnectionSnapshot | null>;
+	/** Bounded backend directory projection, without credentials or relationship collections. */
+	listEntries(ids: number[]): Promise<ConnectionCatalogEntry[]>;
+}
+
+export interface ConnectionCatalogEntry {
+	id: number;
+	version: number;
+	type: import('@nexus-terminal/shared/targets/connections/values').ConnectionType;
+	name: string;
+	host: string;
+	port: number;
+	username: string;
 }
 
 /** Trusted backend-only decrypted desktop snapshot. Never serialize this type. */

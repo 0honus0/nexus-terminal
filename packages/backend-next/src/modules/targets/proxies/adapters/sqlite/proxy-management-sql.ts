@@ -9,7 +9,7 @@ function decodeInteger(value: unknown): number {
 	return value;
 }
 
-function decode(row: Record<string, unknown>): ProxyRecord {
+export function readProxyRow(row: Record<string, unknown>): ProxyRecord {
 	if (
 		typeof row.name !== 'string' ||
 		typeof row.host !== 'string' ||
@@ -37,7 +37,7 @@ async function readProxyRecord(tx: SqlExecutor, id: number): Promise<ProxyRecord
 		'SELECT id,name,type,host,port,username,version,created_at,updated_at FROM proxies WHERE id=?',
 		[id],
 	);
-	return row ? decode(row) : null;
+	return row ? readProxyRow(row) : null;
 }
 
 async function readRequiredProxyRecord(tx: SqlExecutor, id: number): Promise<ProxyRecord> {
@@ -57,7 +57,7 @@ export class SqliteProxyStorage implements ProxyStorage {
 				await tx.all(
 					'SELECT id,name,type,host,port,username,version,created_at,updated_at FROM proxies ORDER BY id',
 				)
-			).map(decode),
+			).map(readProxyRow),
 		);
 	}
 

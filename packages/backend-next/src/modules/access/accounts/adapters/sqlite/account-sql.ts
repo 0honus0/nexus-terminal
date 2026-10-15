@@ -1,3 +1,4 @@
+import type { CredentialConfirmation } from '../../storage/account-storage.js';
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type {
@@ -41,6 +42,16 @@ async function getAccount(tx: SqlExecutor, sql: string, value: string | number):
 
 export class SqliteAccountStorage implements AccountStorage {
 	constructor(private readonly db: SqliteRuntime) {}
+
+	confirmCredential(input: CredentialConfirmation): Promise<boolean> {
+		return this.db.transaction(
+			async (tx) =>
+				(await tx.one(
+					'SELECT 1 FROM access_accounts a JOIN access_sessions s ON s.user_id=a.id WHERE a.id=? AND a.password_hash=? AND s.token_digest=? AND s.expires_at>?',
+					[input.userId, input.passwordHash, input.sessionDigest, input.now()],
+				)) !== null,
+		);
+	}
 
 	needsSetup(): Promise<boolean> {
 		return this.db.one('SELECT 1 AS present FROM access_accounts LIMIT 1').then((row) => row === null);

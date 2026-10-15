@@ -1,3 +1,4 @@
+import type { MachineMutationService } from '../../machines/service/mutation-service.js';
 import { isWellFormedFileText } from '@nexus-terminal/shared/remote/files/text-codec';
 import {
 	WORKSPACE_UPLOAD_MAX_CHUNK_BYTES,
@@ -242,6 +243,7 @@ export class RemoteFileService {
 		private readonly access: AccessPublicApi,
 		private readonly model: RemoteFileModel,
 		private readonly targets: Pick<TargetsPublicApi, 'get'>,
+		private readonly mutations: MachineMutationService,
 	) {
 		this.expiryTimer = setInterval(() => {
 			for (const record of this.owners.values()) {
@@ -595,9 +597,20 @@ export class RemoteFileService {
 		timeoutMs = FILE_OPERATION_MS,
 		authorization: 'bound_session' | 'same_user_workspace' | 'download_ticket' = 'bound_session',
 		resourceUse: FileResourceUse = 'direct',
+		mutationPeers: FileResource[] = [],
 	): Promise<T> {
 		return this.track(
-			this.runAdmitted(token, id, action, requestSignal, mutation, timeoutMs, authorization, resourceUse),
+			this.runAdmitted(
+				token,
+				id,
+				action,
+				requestSignal,
+				mutation,
+				timeoutMs,
+				authorization,
+				resourceUse,
+				mutationPeers,
+			),
 		);
 	}
 
@@ -610,6 +623,7 @@ export class RemoteFileService {
 		timeoutMs = FILE_OPERATION_MS,
 		authorization: 'bound_session' | 'same_user_workspace' | 'download_ticket' = 'bound_session',
 		resourceUse: FileResourceUse = 'direct',
+		mutationPeers: FileResource[] = [],
 	): Promise<T> {
 		const controller = new AbortController();
 
@@ -657,17 +671,31 @@ export class RemoteFileService {
 			}
 			controller.signal.throwIfAborted();
 			executing = true;
-			const operation = this.executeOwned(
-				record,
-				token,
-				id,
-				action,
-				controller.signal,
-				started,
-				mutation,
-				timeoutMs,
-				authorization,
-			);
+			const activeRecord = record;
+
+			const execute = () =>
+				this.executeOwned(
+					activeRecord,
+					token,
+					id,
+					action,
+					controller.signal,
+					started,
+					mutation,
+					timeoutMs,
+					authorization,
+				);
+
+			const operation = mutation
+				? this.mutations.run(
+						randomUUID(),
+						[record.resource, ...mutationPeers].map((resource) => ({
+							targetId: resource.targetId,
+							fingerprint: resource.fingerprint,
+						})),
+						execute,
+					)
+				: execute();
 			try {
 				return await operation;
 			} catch (error) {
@@ -1719,58 +1747,70 @@ export class RemoteFileService {
 			token,
 			destinationRecord.id,
 			async (destinationOwner, destinationMs, signal) => {
-				return this.run(
-					token,
-					sourceRecord.id,
-					async (sourceOwner, sourceMs, sourceSignal) => {
-						const budget = Math.min(sourceMs, destinationMs);
-						return this.withUploadResource(sourceOwner, budget, sourceSignal, task, async (source) =>
-							this.withUploadResource(
-								destinationOwner,
-								budget,
-								sourceSignal,
-								task,
-								async (destinationResource) => {
-									const remaining = this.remaining(budget, sourceSignal);
-									return copyRemoteEntries(
-										source,
-										destinationResource,
-										paths,
-										destinationDirectory,
-										mode,
-										remaining,
-										sourceSignal,
-										(progress) =>
-											emit({
-												type: 'progress',
-												requestId,
-												transferredBytes: progress.transferredBytes,
-												totalBytes: progress.transferredBytes,
-												completedFiles: progress.completedFiles,
-												totalFiles: paths.length,
-												totalKnown: false,
-												currentFile: progress.currentFile,
-											}),
-										() => {
-											dispatchedMutation = true;
-										},
-									);
-								},
-							),
-						);
-					},
-					signal,
-					false,
-					FILE_TRANSFER_MS,
-					'same_user_workspace',
-					'dedicated_transfer',
-				);
+				try {
+					return await this.run(
+						token,
+						sourceRecord.id,
+						async (sourceOwner, sourceMs, sourceSignal) => {
+							const budget = Math.min(sourceMs, destinationMs);
+							return this.withUploadResource(sourceOwner, budget, sourceSignal, task, async (source) =>
+								this.withUploadResource(
+									destinationOwner,
+									budget,
+									sourceSignal,
+									task,
+									async (destinationResource) => {
+										const remaining = this.remaining(budget, sourceSignal);
+										return copyRemoteEntries(
+											source,
+											destinationResource,
+											paths,
+											destinationDirectory,
+											mode,
+											remaining,
+											sourceSignal,
+											(progress) =>
+												emit({
+													type: 'progress',
+													requestId,
+													transferredBytes: progress.transferredBytes,
+													totalBytes: progress.transferredBytes,
+													completedFiles: progress.completedFiles,
+													totalFiles: paths.length,
+													totalKnown: false,
+													currentFile: progress.currentFile,
+												}),
+											() => {
+												dispatchedMutation = true;
+											},
+										);
+									},
+								),
+							);
+						},
+						signal,
+						false,
+						FILE_TRANSFER_MS,
+						'same_user_workspace',
+						'dedicated_transfer',
+					);
+				} catch (cause) {
+					if (cause instanceof RemoteResourceCleanupFailure) {
+						throw cause;
+					}
+					// Source delivery revalidation belongs inside the shared claim, after the actual copy/move.
+					if (dispatchedMutation) {
+						throw new RemoteFileFailure('operation_unknown', { cause });
+					}
+					throw cause;
+				}
 			},
 			task.controller.signal,
 			true,
 			FILE_TRANSFER_MS,
 			'bound_session',
 			'dedicated_transfer',
+			[sourceRecord.resource],
 		)
 			.then(
 				(result) => {

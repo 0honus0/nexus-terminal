@@ -57,7 +57,7 @@ registerRemote 安装 Model、Service、HTTP/WS；Guacd 使用 GUACD_HOST/GUACD_
 
 ## 6. 数据、事务与并发
 
-Targets 在同一 SQLite 只读事务读取连接版本与密码密文，Model 解密；RDP/VNC credentials.set 接受密码、拒绝 SSH key。v4 migration 的 last_connected_at 单独记录尝试，版本匹配更新，不改变配置版本；SQL/DDL 均归 Adapter，Bootstrap 只编排迁移。
+Targets 在同一 SQLite 只读事务读取连接版本与密码密文，Model 解密；RDP/VNC credentials.set 接受密码、拒绝 SSH key。初始 Connections 表的 last_connected_at 单独记录尝试，版本匹配更新，不改变配置版本；SQL/DDL 均归 Adapter，Bootstrap 只编排迁移。
 
 ticket 绑定当前 Cookie 摘要、用户、目标版本、协议及显示配置，30 秒有效，WS 同步一次消费；票据不保存明文凭据。签发与待用共用 1024 配额，连接中/活跃/未确认清理共用16槽。近期连接记录表示尝试，不表示远端已连接；取消后不再派发新的近期写入，已派发写入不声称回滚。
 
@@ -75,6 +75,6 @@ Adapter 显式保留 RDP/VNC 默认 audio/image、96 dpi，以及 RDP security a
 
 ## 8. 当前能力与验收
 
-B3.3 HTTP/WS、可信 Targets、Shared、ticket/生命周期、Guacamole、v4 迁移及架构矫正已有源码，本轮最终静态全部通过。真实 RDP/VNC/guacd、屏幕输入输出、取消/并发/故障均未测试，全部 B3.3-V01–V12 留 B10。
+B3.3 HTTP/WS、可信 Targets、Shared、ticket/生命周期、Guacamole、初始表结构及架构矫正已有源码，本轮最终静态全部通过。真实 RDP/VNC/guacd、屏幕输入输出、取消/并发/故障均未测试，全部 B3.3-V01–V12 留 B10。
 
 完整 IP/2FA/认证与主动撤销策略归 B4；持久 Settings 治理归 B7；正式前端 Shared、密码保存、错误反馈、代理拒绝和最近连接可见性归 F-R12。上述独立依赖不能通过本批接线声明完成。测试与交接见 [实施方案](../后端重构下一阶段实施方案.md)。

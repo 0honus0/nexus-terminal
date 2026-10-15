@@ -2,6 +2,7 @@ import {
 	type AccessHttpErrorCode,
 	type AccessCaptchaProvider,
 	ACCESS_CAPTCHA_TOKEN_MAX_BYTES,
+	ACCESS_PASSWORD_MAX_BYTES,
 	ACCESS_IP_BLACKLIST_MAX_PAGE_SIZE,
 } from './values.js';
 import type { AccessUserView } from './model.js';
@@ -155,8 +156,8 @@ export function readAccessHttpError(value: unknown): AccessHttpErrorResponse {
 export function readAccessSetupRequest(value: unknown): AccessSetupRequest {
 	const row = record(value, ['username', 'password', 'confirmPassword']);
 	const username = text(row.username, 1, 256);
-	const password = text(row.password, 8, 1024);
-	const confirmPassword = text(row.confirmPassword, 8, 1024);
+	const password = text(row.password, 8, ACCESS_PASSWORD_MAX_BYTES);
+	const confirmPassword = text(row.confirmPassword, 8, ACCESS_PASSWORD_MAX_BYTES);
 	if (password !== confirmPassword) {
 		throw new InvalidAccessPayload();
 	}
@@ -169,7 +170,7 @@ export function readAccessLoginRequest(value: unknown): AccessLoginRequest {
 		row.captchaToken === undefined ? undefined : text(row.captchaToken, 1, ACCESS_CAPTCHA_TOKEN_MAX_BYTES);
 	return {
 		username: text(row.username, 1, 256),
-		password: text(row.password, 1, 1024),
+		password: text(row.password, 1, ACCESS_PASSWORD_MAX_BYTES),
 		rememberMe: row.rememberMe === undefined ? undefined : bool(row.rememberMe),
 		captchaToken,
 	};
@@ -273,7 +274,10 @@ export function readAccessIpBlacklistRemove(value: unknown): AccessIpBlacklistRe
 
 export function readAccessPasswordRequest(value: unknown): AccessPasswordRequest {
 	const row = record(value, ['currentPassword', 'newPassword']);
-	return { currentPassword: text(row.currentPassword, 1, 1024), newPassword: text(row.newPassword, 8, 1024) };
+	return {
+		currentPassword: text(row.currentPassword, 1, ACCESS_PASSWORD_MAX_BYTES),
+		newPassword: text(row.newPassword, 8, ACCESS_PASSWORD_MAX_BYTES),
+	};
 }
 
 export function readAccessUser(value: unknown): AccessUserView {

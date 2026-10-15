@@ -1,3 +1,9 @@
+import { fromSettings, fromUsage } from '../../execution/model/execution-projection.js';
+import type { ExecutionBudgetAdmission } from '../../execution/model/execution-types.js';
+import { agentStorage } from '../../agent-storage-failure.js';
+import { toStoredContext } from '../../context/model/context-model.js';
+import { projectCapturedResult } from '../../context/result-rules.js';
+import type { ContextSnapshot } from '../../context/model/context-types.js';
 import type {
 	RunStepStorage,
 	StoredRunStep,
@@ -7,7 +13,7 @@ import type {
 } from '../storage/run-step-storage.js';
 import { fromStoredProvider } from '../../providers/model/provider-projection.js';
 import { fromStoredFrozen } from './run-projection.js';
-import { mayExecuteFrozenRun } from '../run-rules.js';
+import { mayExecuteFrozenRun, mayFinishModelStep, interruptedRootState } from '../run-rules.js';
 import type { StoredFrozenInput } from '../storage/run-storage.js';
 import type { ProviderStoredRow } from '../../providers/storage/provider-storage.js';
 import type {
@@ -18,23 +24,12 @@ import type {
 	RunStepFinish,
 	RunStepEvent,
 	RunStepEventPage,
+	RunUnstartedFailure,
 } from './run-types.js';
 
 /** Frozen Provider configuration is not an execution authorization. */
 function authorizeExecution(frozen: StoredFrozenInput, provider: ProviderStoredRow | null): boolean {
 	return mayExecuteFrozenRun(fromStoredFrozen(frozen), provider === null ? null : fromStoredProvider(provider));
-}
-
-function toStorageCommand(command: RunStepCommand) {
-	return {
-		userId: command.userId,
-		appId: command.appId,
-		runId: command.runId,
-		stepIndex: command.stepIndex,
-		expectedRunVersion: command.expectedRunVersion,
-		requestHash: command.requestHash,
-		now: command.now,
-	};
 }
 
 function toStorageMutation(command: RunStepMutation) {
@@ -46,6 +41,7 @@ function toStorageMutation(command: RunStepMutation) {
 		expectedRunVersion: command.expectedRunVersion,
 		expectedRevision: command.expectedRevision,
 		requestHash: command.requestHash,
+		creationHash: command.creationHash,
 		now: command.now,
 	};
 }
@@ -65,11 +61,17 @@ function projectEvent(row: StoredRunStepEvent): RunStepEvent {
 function projectStep(row: StoredRunStep): RunModelStep {
 	return {
 		runId: row.runId,
+		requestHash: row.requestHash,
 		stepIndex: row.stepIndex,
 		state: row.state,
 		revision: row.revision,
 		runVersion: row.expectedRunVersion,
 		textBytes: row.textBytes,
+		proposals: row.proposals.map((proposal) => ({
+			providerCallId: proposal.providerCallId,
+			toolName: proposal.toolName,
+			argumentsJson: proposal.argumentsJson,
+		})),
 		...(row.finishReason === undefined ? {} : { finishReason: row.finishReason }),
 		...(row.inputTokens === undefined ? {} : { inputTokens: row.inputTokens }),
 		...(row.outputTokens === undefined ? {} : { outputTokens: row.outputTokens }),
@@ -90,16 +92,85 @@ function projectResult(value: StepWriteResult): RunModelStepResult {
 export class RunStepModel {
 	constructor(private readonly storage: RunStepStorage) {}
 
-	async reserve(command: RunStepCommand): Promise<RunModelStepResult> {
-		return projectResult(await this.storage.reserve(toStorageCommand(command), authorizeExecution));
+	failUnstarted(command: RunUnstartedFailure): Promise<boolean> {
+		return agentStorage(() =>
+			this.storage.failUnstarted({
+				userId: command.userId,
+				appId: command.appId,
+				runId: command.runId,
+				expectedVersion: command.expectedVersion,
+				creationHash: command.creationHash,
+				now: command.now,
+			}),
+		);
 	}
 
-	async dispatch(command: RunStepMutation): Promise<RunModelStepResult> {
-		return projectResult(await this.storage.dispatch(toStorageMutation(command), authorizeExecution));
+	async endRoot(command: RunStepMutation, uncertain: boolean): Promise<RunModelStepResult> {
+		return projectResult(
+			await agentStorage(() =>
+				this.storage.endRoot(toStorageMutation(command), (hasUnconfirmedEffects) =>
+					interruptedRootState(uncertain, hasUnconfirmedEffects),
+				),
+			),
+		);
+	}
+
+	async reserve(
+		command: RunStepCommand,
+		context: ContextSnapshot,
+		estimatedTokens: number,
+		admitBudget: ExecutionBudgetAdmission,
+	): Promise<RunModelStepResult> {
+		return projectResult(
+			await agentStorage(() =>
+				this.storage.reserve(
+					{
+						userId: command.userId,
+						appId: command.appId,
+						runId: command.runId,
+						stepIndex: command.stepIndex,
+						expectedRunVersion: command.expectedRunVersion,
+						requestHash: command.requestHash,
+						creationHash: command.creationHash,
+						now: command.now,
+						context: toStoredContext(context.messages, context.sources),
+						estimatedTokens,
+					},
+					authorizeExecution,
+					(results) => {
+						const facts = results.map((result) => ({
+							id: result.id,
+							providerCallId: result.providerCallId,
+							content: result.content,
+						}));
+						const messages = context.messages.slice(context.messages.length - facts.length);
+						return facts.every((result) =>
+							messages.some(
+								(message) =>
+									message.role === 'tool' &&
+									message.providerCallId === result.providerCallId &&
+									message.content === projectCapturedResult(result.id, result.content),
+							),
+						);
+					},
+					(settings, usage) => admitBudget(fromSettings(settings), fromUsage(usage)),
+				),
+			),
+		);
+	}
+
+	async dispatch(command: RunStepMutation, admitBudget: ExecutionBudgetAdmission): Promise<RunModelStepResult> {
+		return projectResult(
+			await agentStorage(() =>
+				this.storage.dispatch(toStorageMutation(command), authorizeExecution, (settings, usage) =>
+					admitBudget(fromSettings(settings), fromUsage(usage)),
+				),
+			),
+		);
 	}
 
 	async appendText(command: RunStepMutation, text: string): Promise<RunModelStepResult> {
-		return projectResult(await this.storage.appendText(toStorageMutation(command), text));
+		return projectResult(await agentStorage(() => this.storage.appendText(toStorageMutation(command), text)));
 	}
 
 	async recordUsage(
@@ -107,7 +178,9 @@ export class RunStepModel {
 		inputTokens: number,
 		outputTokens: number,
 	): Promise<RunModelStepResult> {
-		return projectResult(await this.storage.recordUsage(toStorageMutation(command), inputTokens, outputTokens));
+		return projectResult(
+			await agentStorage(() => this.storage.recordUsage(toStorageMutation(command), inputTokens, outputTokens)),
+		);
 	}
 
 	async finish(command: RunStepMutation, result: RunStepFinish): Promise<RunModelStepResult> {
@@ -115,15 +188,32 @@ export class RunStepModel {
 		if (result.state === 'failed') {
 			stored = { state: 'failed', failureCode: result.failureCode };
 		} else if (result.state === 'completed') {
-			stored = { state: 'completed' };
+			stored =
+				result.finishReason === 'stop'
+					? { state: 'completed', finishReason: 'stop', outputText: result.outputText }
+					: {
+							state: 'completed',
+							finishReason: 'tool_calls',
+							proposals: result.proposals.map((proposal) => ({
+								providerCallId: proposal.providerCallId,
+								toolName: proposal.toolName,
+								argumentsJson: proposal.argumentsJson,
+							})),
+						};
 		} else {
 			stored = { state: 'unknown' };
 		}
-		return projectResult(await this.storage.finish(toStorageMutation(command), stored));
+		return projectResult(
+			await agentStorage(() =>
+				this.storage.finish(toStorageMutation(command), stored, (hasUnsettledTools, hasUnsettledChildren) =>
+					mayFinishModelStep(result, hasUnsettledTools, hasUnsettledChildren),
+				),
+			),
+		);
 	}
 
 	async get(userId: number, appId: string, runId: string, stepIndex: number): Promise<RunModelStep | null> {
-		const stored = await this.storage.get(userId, appId, runId, stepIndex);
+		const stored = await agentStorage(() => this.storage.get(userId, appId, runId, stepIndex));
 		return stored === null ? null : projectStep(stored);
 	}
 
@@ -135,12 +225,12 @@ export class RunStepModel {
 		after: number,
 		limit: number,
 	): Promise<RunStepEventPage | null> {
-		const page = await this.storage.listEvents(userId, appId, runId, stepIndex, after, limit);
+		const page = await agentStorage(() => this.storage.listEvents(userId, appId, runId, stepIndex, after, limit));
 		return page === null ? null : { items: page.items.map(projectEvent), nextCursor: page.nextCursor };
 	}
 
 	/** Never resend after restart: undispatched is failed, dispatched is unknown. */
 	reconcileUnsettled(now: number): Promise<number> {
-		return this.storage.reconcileUnsettled(now);
+		return agentStorage(() => this.storage.reconcileUnsettled(now));
 	}
 }

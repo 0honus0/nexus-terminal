@@ -34,8 +34,6 @@ export interface AgentGrantView {
 
 export interface AgentExecutionPolicyOverrides {
 	maxModelRequests?: number;
-	maxAutoModelRequests?: number;
-	maxAutoActiveExecutionSeconds?: number;
 	maxActiveExecutionSeconds?: number;
 	toolTimeoutSeconds?: number;
 	maxToolOutputBytes?: number;
@@ -77,4 +75,10 @@ export interface AgentApprovalView {
 		targetConnectionId: number | null;
 		summary: string;
 	};
+}
+
+export interface AgentTargetDenylistView {
+	revision: number;
+	/** changedAt is Unix seconds; backend persistence retains millisecond precision. */
+	entries: { connectionId: number; reason: string; changedBy: number; changedAt: number }[];
 }

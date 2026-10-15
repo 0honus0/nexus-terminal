@@ -52,6 +52,33 @@ function requireCaptchaProvider(raw: string): 'none' | 'hcaptcha' | 'recaptcha' 
 	throw new Error('Invalid NEXUS_NEXT_CAPTCHA_PROVIDER');
 }
 
+function parsePasskeySites(primaryOrigin: string): Array<{ origin: string; rpId: string }> {
+	const raw = process.env.NEXUS_NEXT_PASSKEY_SITES;
+	if (raw === undefined) {
+		const url = new URL(primaryOrigin);
+		return [{ origin: url.origin, rpId: process.env.NEXUS_NEXT_PASSKEY_RP_ID?.trim() || url.hostname }];
+	}
+	const sites: unknown = JSON.parse(raw);
+	if (!Array.isArray(sites)) {
+		throw new Error('Invalid NEXUS_NEXT_PASSKEY_SITES');
+	}
+	return sites.map((site: unknown) => {
+		if (
+			site === null ||
+			typeof site !== 'object' ||
+			Array.isArray(site) ||
+			Object.keys(site).length !== 2 ||
+			!('origin' in site) ||
+			!('rpId' in site) ||
+			typeof site.origin !== 'string' ||
+			typeof site.rpId !== 'string'
+		) {
+			throw new Error('Invalid NEXUS_NEXT_PASSKEY_SITES');
+		}
+		return { origin: site.origin, rpId: site.rpId };
+	});
+}
+
 async function main(): Promise<void> {
 	const dbPath = requireSetting('NEXUS_NEXT_DB_PATH');
 	const rawKey = requireSetting('NEXUS_NEXT_ENCRYPTION_KEY');
@@ -67,23 +94,24 @@ async function main(): Promise<void> {
 	};
 	const app = await createApp(dbPath, {
 		encryptionKey: key,
-		ipWhitelist: process.env.NEXUS_NEXT_IP_WHITELIST ?? '',
-		loginFailurePolicy: {
-			enabled: parseBooleanSetting('NEXUS_NEXT_IP_BLACKLIST_ENABLED', true),
-			maxAttempts: parseBoundedSetting('NEXUS_NEXT_MAX_LOGIN_ATTEMPTS', 5, 1, 1000),
-			banSeconds: parseBoundedSetting('NEXUS_NEXT_LOGIN_BAN_SECONDS', 300, 1, 30 * 86400),
-		},
-		captcha: {
-			enabled: parseBooleanSetting('NEXUS_NEXT_CAPTCHA_ENABLED', false),
-			provider: requireCaptchaProvider(process.env.NEXUS_NEXT_CAPTCHA_PROVIDER ?? 'none'),
-			siteKey: process.env.NEXUS_NEXT_CAPTCHA_SITE_KEY ?? '',
-			secretKey: process.env.NEXUS_NEXT_CAPTCHA_SECRET_KEY ?? '',
-			expectedHostname: new URL(http.publicOrigin).hostname,
-		},
-		passkeys: {
-			origin: new URL(http.publicOrigin).origin,
-			rpId: process.env.NEXUS_NEXT_PASSKEY_RP_ID?.trim() || new URL(http.publicOrigin).hostname,
-		},
+
+		configuration: () => ({
+			ipWhitelist: process.env.NEXUS_NEXT_IP_WHITELIST ?? '',
+			ipBlacklistEnabled: parseBooleanSetting('NEXUS_NEXT_IP_BLACKLIST_ENABLED', true),
+			maxLoginAttempts: parseBoundedSetting('NEXUS_NEXT_MAX_LOGIN_ATTEMPTS', 5, 1, 1000),
+			loginBanDuration: parseBoundedSetting('NEXUS_NEXT_LOGIN_BAN_SECONDS', 300, 1, 30 * 86400),
+			statusMonitorIntervalSeconds: parseBoundedSetting('NEXUS_NEXT_STATUS_INTERVAL_SECONDS', 3, 1, 86400),
+			remoteHostRefreshIntervalSeconds: parseBoundedSetting('NEXUS_NEXT_RESOURCE_REFRESH_SECONDS', 30, 1, 86400),
+			captcha: {
+				enabled: parseBooleanSetting('NEXUS_NEXT_CAPTCHA_ENABLED', false),
+				provider: requireCaptchaProvider(process.env.NEXUS_NEXT_CAPTCHA_PROVIDER ?? 'none'),
+				siteKey: process.env.NEXUS_NEXT_CAPTCHA_SITE_KEY ?? '',
+				secretKey: process.env.NEXUS_NEXT_CAPTCHA_SECRET_KEY ?? '',
+				expectedHostname: new URL(http.publicOrigin).hostname,
+			},
+			passkeys: parsePasskeySites(http.publicOrigin),
+		}),
+
 		guacd: {
 			host: process.env.GUACD_HOST?.trim() || 'localhost',
 			port: parsePort(process.env.GUACD_PORT ?? '4822', 'GUACD_PORT'),

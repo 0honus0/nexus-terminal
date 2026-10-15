@@ -1,20 +1,22 @@
-import { closeHttpResources } from './http-lifecycle.js';
+import { closeHttpResources, drainHttpTransport, waitForResponse } from './http-lifecycle.js';
 import { MAX_WEBSOCKET_FRAME_BYTES } from './http-limits.js';
 import { createServer, type Server } from 'node:http';
-import type { IncomingMessage } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { isIP } from 'node:net';
 import proxyaddr from 'proxy-addr';
 import { WebSocket, WebSocketServer } from 'ws';
-import type { HttpServerOptions, HttpListener, HttpWebSocketRoute } from './http-types.js';
-import { firstHeader, validateOrigin, sendJson, createHttpRequestHandler } from './http-request.js';
-import { compileHttpRoutes } from './http-router.js';
+import type { HttpServerOptions, HttpListener, HttpSuspension } from './http-types.js';
+import { firstHeader, validateOrigin, sendJson } from './http-request.js';
+import { compileHttpBindings } from './http-bindings.js';
+import { HttpLifecycleFailure } from './http-errors.js';
 import { createWebSocketChannel } from './websocket-channel.js';
 import { FailureSummary } from '../lifecycle/failure-summary.js';
 
 export async function openHttpListener(options: HttpServerOptions): Promise<HttpListener> {
-	const origin = validateHttpOptions(options);
+	validateHttpOptions(options);
 	const trust = proxyaddr.compile([...options.trustedProxies]);
+	let bindings = compileHttpBindings(options.publicOrigin, options, trust);
 	const websocketServer = new WebSocketServer({
 		noServer: true,
 		// Raw third-party protocols may remove their socket 'close' listeners.
@@ -28,39 +30,38 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 	const pendingUpgrades = new Set<Duplex>();
 	const websocketTasks = new Set<Promise<unknown>>();
 	const websocketFailures = new FailureSummary();
-	const webSocketRoutes = new Map<string, HttpWebSocketRoute>();
-	for (const route of options.webSockets ?? []) {
-		if (
-			webSocketRoutes.has(route.path) ||
-			!!route.connected === !!route.connectedRaw ||
-			(route.maxTextMessageBytes !== undefined &&
-				(!Number.isSafeInteger(route.maxTextMessageBytes) ||
-					route.maxTextMessageBytes < 1 ||
-					route.maxTextMessageBytes > MAX_WEBSOCKET_FRAME_BYTES)) ||
-			(route.maxBinaryMessageBytes !== undefined &&
-				(!Number.isSafeInteger(route.maxBinaryMessageBytes) ||
-					route.maxBinaryMessageBytes < 1 ||
-					route.maxBinaryMessageBytes > MAX_WEBSOCKET_FRAME_BYTES))
-		) {
-			throw new Error('Duplicate websocket route');
-		}
-		webSocketRoutes.set(route.path, route);
-	}
-	const router = compileHttpRoutes(options.routes);
-
 	let accepting = true;
+	let generation = 0;
+	let suspension: HttpSuspension | null = null;
 	const activeRequests = new Set<Promise<void>>();
-
-	const handleRequest = createHttpRequestHandler({ origin, trust, router, admitUnmatched: options.admitUnmatched });
+	const requests = new Map<IncomingMessage, { response: ServerResponse; task: Promise<void> }>();
 
 	const server: Server = createServer((request, response) => {
 		if (!accepting) {
-			sendJson(response, 503, { code: 'shutting_down' });
+			sendJson(response, 503, { code: 'shutting_down' }, { Connection: 'close' });
 			return;
 		}
-		const task = handleRequest(request, response);
+		const completed = waitForResponse(response);
+		const handler = bindings.handle;
+		// Publish ownership before any synchronous handler can enter maintenance.
+		const task = Promise.resolve().then(async () => {
+			try {
+				await handler(request, response);
+			} catch (error) {
+				response.destroy();
+				throw error;
+			} finally {
+				await completed;
+			}
+		});
 		activeRequests.add(task);
-		void task.finally(() => activeRequests.delete(task)).catch(() => undefined);
+		requests.set(request, { response, task });
+		void task
+			.finally(() => {
+				activeRequests.delete(task);
+				requests.delete(request);
+			})
+			.catch(() => undefined);
 	});
 
 	function trackWebSocketTask(task: Promise<unknown>, observeFailure = false): void {
@@ -72,6 +73,9 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 	}
 
 	async function upgrade(request: IncomingMessage, socket: Duplex, head: Buffer): Promise<void> {
+		const admittedGeneration = generation;
+		const admittedBindings = bindings;
+
 		const reject = (status: number) => {
 			if (!socket.destroyed) {
 				socket.end('HTTP/1.1 ' + status + ' Rejected\r\nConnection: close\r\n\r\n');
@@ -80,7 +84,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 
 		try {
 			const trustedPeer = trust(request.socket.remoteAddress ?? '', 0);
-			validateOrigin(request, origin, trustedPeer);
+			const origin = validateOrigin(request, admittedBindings.origins, trustedPeer);
 			// GET upgrade needs a strict Origin; never inherit ordinary GET exemption.
 			if (
 				request.method !== 'GET' ||
@@ -91,7 +95,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 				return;
 			}
 			const url = new URL(request.url ?? '/', origin);
-			const route = webSocketRoutes.get(url.pathname);
+			const route = admittedBindings.webSockets.get(url.pathname);
 			if (!route || url.origin !== origin.origin) {
 				reject(404);
 				return;
@@ -107,7 +111,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 				reject(401);
 				return;
 			}
-			if (!accepting || socket.destroyed) {
+			if (!accepting || generation !== admittedGeneration || socket.destroyed) {
 				reject(503);
 				return;
 			}
@@ -137,7 +141,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 					return;
 				}
 				const channel = createWebSocketChannel(ws, {
-					isAccepting: () => accepting,
+					isAccepting: () => accepting && generation === admittedGeneration,
 
 					maxBinaryMessageBytes: route.maxBinaryMessageBytes,
 					maxTextMessageBytes: route.maxTextMessageBytes,
@@ -174,8 +178,92 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 	const boundAddress = address && typeof address !== 'string' ? address.address + ':' + address.port : '';
 
 	let closePromise: Promise<void> | null = null;
+
+	function suspend(owner?: IncomingMessage): HttpSuspension {
+		if (closePromise || suspension || !accepting) {
+			throw new HttpLifecycleFailure('invalid_state');
+		}
+		if (owner) {
+			const entry = requests.get(owner);
+			const sharedSocket = [...requests.keys()].some(
+				(request) => request !== owner && request.socket === owner.socket,
+			);
+			if (
+				!entry ||
+				entry.response.writableFinished ||
+				entry.response.destroyed ||
+				owner.socket.destroyed ||
+				sharedSocket
+			) {
+				throw new HttpLifecycleFailure('invalid_owner');
+			}
+		}
+		accepting = false;
+		generation += 1;
+		let drainPromise: Promise<void> | null = null;
+		let drained = false;
+		let replaced = false;
+
+		function assertCurrent(): void {
+			if (closePromise || suspension !== lease) {
+				throw new HttpLifecycleFailure('invalid_state');
+			}
+		}
+
+		const lease: HttpSuspension = {
+			drain(): Promise<void> {
+				if (drainPromise) {
+					return drainPromise;
+				}
+				try {
+					assertCurrent();
+				} catch (error) {
+					return Promise.reject(error);
+				}
+				drainPromise = Promise.resolve().then(async () => {
+					try {
+						await drainHttpTransport({
+							requests,
+							owner,
+							activeSockets,
+							pendingUpgrades,
+							websocketTasks,
+							websocketFailures,
+						});
+						assertCurrent();
+						drained = true;
+					} catch (cause) {
+						throw new HttpLifecycleFailure('drain_failed', { cause });
+					}
+				});
+				return drainPromise;
+			},
+
+			replace(replacement): void {
+				assertCurrent();
+				if (!drained || replaced) {
+					throw new HttpLifecycleFailure('invalid_state');
+				}
+				bindings = compileHttpBindings(options.publicOrigin, replacement, trust);
+				replaced = true;
+			},
+
+			resume(): void {
+				assertCurrent();
+				if (!drained || !replaced) {
+					throw new HttpLifecycleFailure('invalid_state');
+				}
+				suspension = null;
+				accepting = true;
+			},
+		};
+		suspension = lease;
+		return lease;
+	}
+
 	return {
 		address: boundAddress,
+		suspend,
 
 		close(): Promise<void> {
 			if (closePromise) {
@@ -183,6 +271,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 			}
 			// Admission closes synchronously, before the returned Promise is published.
 			accepting = false;
+			generation += 1;
 			closePromise = Promise.resolve().then(() =>
 				closeHttpResources({
 					server,
@@ -199,25 +288,16 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 	};
 }
 
-function validateHttpOptions(options: HttpServerOptions): URL {
-	const origin = new URL(options.publicOrigin);
+function validateHttpOptions(options: HttpServerOptions): void {
 	if (
-		!['http:', 'https:'].includes(origin.protocol) ||
-		origin.pathname !== '/' ||
-		origin.search ||
-		origin.hash ||
-		origin.username ||
-		origin.password ||
 		!Number.isInteger(options.port) ||
 		options.port < 0 ||
 		options.port > 65535 ||
 		!options.bindHost ||
 		!(isIP(options.bindHost) || options.bindHost === 'localhost')
 	) {
-		throw new Error('Invalid HTTP listen or external origin');
+		throw new Error('Invalid HTTP bind address or port');
 	}
-
-	return origin;
 }
 
 async function listen(server: Server, options: HttpServerOptions): Promise<void> {

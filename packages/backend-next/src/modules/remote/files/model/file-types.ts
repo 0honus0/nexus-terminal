@@ -278,3 +278,20 @@ export interface FileDownloadTicketClaim {
 }
 
 export type FileLineCommandOutcome = { status: 'completed' } | { status: 'nonzero'; exitCode: number };
+
+export interface FileSnapshotNode {
+	relativePath: string;
+	kind: 'file' | 'directory';
+	info: FileInfo;
+	contentSha256: string | null;
+}
+
+export interface FileTreeSnapshot {
+	path: string;
+	kind: 'file' | 'directory';
+	fingerprint: string;
+	fileCount: number;
+	directoryCount: number;
+	bytes: number;
+	nodes: FileSnapshotNode[];
+}

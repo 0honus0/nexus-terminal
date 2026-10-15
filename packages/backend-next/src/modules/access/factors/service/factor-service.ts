@@ -1,3 +1,4 @@
+import { ACCESS_PASSWORD_MAX_BYTES } from '@nexus-terminal/shared/access/values';
 import {
 	ACCESS_PARTIAL_SECONDS,
 	ACCESS_REMEMBER_SECONDS,
@@ -195,7 +196,11 @@ export class FactorService {
 	async totpDisable(cookie: string | null, password: string): Promise<void> {
 		const session = validCookie(cookie);
 		const actor = await this.identity(session);
-		if (typeof password !== 'string' || password.length === 0 || Buffer.byteLength(password, 'utf8') > 1024) {
+		if (
+			typeof password !== 'string' ||
+			password.length === 0 ||
+			Buffer.byteLength(password, 'utf8') > ACCESS_PASSWORD_MAX_BYTES
+		) {
 			throw new AccessFailure('invalid_input');
 		}
 		const account = await this.accounts.getById(actor.id);
@@ -207,10 +212,15 @@ export class FactorService {
 		}
 	}
 
-	async registrationOptions(cookie: string | null, prior: string | null): Promise<FactorPasskeyOptionsIssue> {
+	async registrationOptions(
+		cookie: string | null,
+		prior: string | null,
+		origin: string,
+	): Promise<FactorPasskeyOptionsIssue> {
 		const session = validCookie(cookie);
 		const actor = await this.identity(session);
 		return this.factors.passkeyRegistrationOptions({
+			origin,
 			accountId: actor.id,
 			username: actor.username,
 			session,
@@ -238,6 +248,7 @@ export class FactorService {
 		username: string | undefined,
 		prior: string | null,
 		source: string,
+		origin: string,
 	): Promise<FactorPasskeyOptionsIssue> {
 		if (username !== undefined && (typeof username !== 'string' || username.length === 0 || username.length > 64)) {
 			throw new AccessFailure('invalid_input');
@@ -249,6 +260,7 @@ export class FactorService {
 		const account = username === undefined ? null : await this.accounts.getByUsername(username);
 		return this.factors.passkeyAuthenticationOptions(
 			{
+				origin,
 				accountId: account?.id ?? null,
 				previous: prior,
 				source: ip.ip,

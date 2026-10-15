@@ -1,7 +1,8 @@
+import { ACCESS_PASSWORD_MAX_BYTES } from '@nexus-terminal/shared/access/values';
 import { ACCESS_IP_BLACKLIST_MAX_PAGE_SIZE } from '@nexus-terminal/shared/access/values';
 import { AccountModel } from '../../accounts/model/account-model.js';
 import { SessionModel } from '../../sessions/model/session-model.js';
-import type { AuthenticatedIdentity, LoginAttempt, PasswordLogin } from '../model/access-types.js';
+import type { AuthenticatedIdentity, LoginAttempt, PasswordLogin, PasswordProof } from '../model/access-types.js';
 import type { Account } from '../../accounts/model/account-types.js';
 import type { LoginFailurePolicy } from '../../login-failure-policy.js';
 import { AccessFailure } from '../../access-failure.js';
@@ -31,7 +32,7 @@ function validateUsername(value: string): string {
 }
 
 function validatePassword(value: string): void {
-	if (typeof value !== 'string' || value.length < 8 || Buffer.byteLength(value, 'utf8') > 1024) {
+	if (typeof value !== 'string' || value.length < 8 || Buffer.byteLength(value, 'utf8') > ACCESS_PASSWORD_MAX_BYTES) {
 		throw new AccessFailure('invalid_input');
 	}
 }
@@ -69,7 +70,7 @@ export class AccessService {
 		if (
 			typeof command.password !== 'string' ||
 			!command.password ||
-			Buffer.byteLength(command.password, 'utf8') > 1024 ||
+			Buffer.byteLength(command.password, 'utf8') > ACCESS_PASSWORD_MAX_BYTES ||
 			typeof command.source !== 'string' ||
 			command.source.length > 256
 		) {
@@ -220,6 +221,33 @@ export class AccessService {
 		}
 	}
 
+	async provePassword(token: string | null, password: string): Promise<PasswordProof> {
+		const identity = await this.authenticate(token);
+		if (!identity || token === null) {
+			throw new AccessFailure('unauthenticated');
+		}
+		if (
+			typeof password !== 'string' ||
+			!password.length ||
+			Buffer.byteLength(password, 'utf8') > ACCESS_PASSWORD_MAX_BYTES
+		) {
+			throw new AccessFailure('invalid_input');
+		}
+		const account = await this.accounts.getById(identity.userId);
+		if (!account || !(await this.accounts.verifyPassword(password, account))) {
+			throw new AccessFailure('invalid_credentials');
+		}
+
+		const assertCurrent = async () => {
+			if (!(await this.accounts.confirmCredential(account.id, account.passwordHash, token))) {
+				throw new AccessFailure('unauthenticated');
+			}
+		};
+
+		await assertCurrent();
+		return { userId: account.id, assertCurrent };
+	}
+
 	async changePassword(token: string | null, currentPassword: string, nextPassword: string): Promise<void> {
 		const identity = await this.authenticate(token);
 		if (!identity || token === null) {
@@ -228,7 +256,7 @@ export class AccessService {
 		if (
 			typeof currentPassword !== 'string' ||
 			currentPassword.length === 0 ||
-			Buffer.byteLength(currentPassword, 'utf8') > 1024
+			Buffer.byteLength(currentPassword, 'utf8') > ACCESS_PASSWORD_MAX_BYTES
 		) {
 			throw new AccessFailure('invalid_input');
 		}

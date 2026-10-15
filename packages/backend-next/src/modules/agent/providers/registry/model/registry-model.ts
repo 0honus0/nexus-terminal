@@ -1,3 +1,4 @@
+import { agentStorage } from '../../../agent-storage-failure.js';
 import type { ModelCatalogPort, CatalogModelCapabilities } from '../../../../../platform/ai/catalog-port.js';
 import { RegistryRefreshFailure } from './registry-types.js';
 import { CatalogFailure } from '../../../../../platform/ai/catalog-port.js';
@@ -30,7 +31,7 @@ export class CapabilityRegistryModel {
 	) {}
 
 	async load(): Promise<CapabilityRegistryRead> {
-		const row = await this.storage.load();
+		const row = await agentStorage(() => this.storage.load());
 		return {
 			snapshot: row.snapshot === null ? null : fromStoredSnapshot(row.snapshot),
 			lastAttemptAt: row.lastAttemptAt,
@@ -41,12 +42,14 @@ export class CapabilityRegistryModel {
 	}
 
 	async save(state: CapabilityRegistryState): Promise<void> {
-		await this.storage.save({
-			snapshot: state.snapshot === null ? null : toStoredSnapshot(state.snapshot),
-			lastAttemptAt: state.lastAttemptAt,
-			lastSuccessAt: state.lastSuccessAt,
-			lastErrorCode: state.lastErrorCode,
-		});
+		await agentStorage(() =>
+			this.storage.save({
+				snapshot: state.snapshot === null ? null : toStoredSnapshot(state.snapshot),
+				lastAttemptAt: state.lastAttemptAt,
+				lastSuccessAt: state.lastSuccessAt,
+				lastErrorCode: state.lastErrorCode,
+			}),
+		);
 	}
 
 	async fetch(revision: string | null, signal: AbortSignal): Promise<RegistryFetchResult> {

@@ -1,3 +1,6 @@
+import type { StoredPolicyOverrides } from '../../governance/storage/governance-storage.js';
+import type { StoredExecutionSettings } from '../../execution/storage/execution-storage.js';
+import type { StoredAppAuthority } from '../../scope/storage/scope-storage.js';
 import type {
 	AgentRunStatus,
 	AgentRunEventType,
@@ -20,7 +23,7 @@ export interface StoredFrozenInput {
 	baseUrl: string;
 	protocol: AgentProviderProtocol;
 	capabilities: StoredProviderModel;
-	executionPolicy: 'awaiting_b6_b7';
+	executionPolicy: 'governed';
 }
 
 /** Storage contracts: no HTTP DTO or SQLite row escapes. */
@@ -36,7 +39,9 @@ export interface StoredRun {
 }
 
 export interface CreateRunStorageCommand {
+	origin: { runId: string; expectedVersion: number } | null;
 	model: StoredModelReference;
+	connectionIds: number[];
 	id: string;
 	userId: number;
 	appId: string;
@@ -83,11 +88,26 @@ export interface RunEventPageRecord {
 export type StoredCancelRunDecision = 'cancel' | 'already_cancelled' | 'version_conflict' | 'active_run_conflict';
 
 export interface RunStorage {
+	ownExecution(work: () => Promise<void>): Promise<void>;
+	list(
+		userId: number,
+		appId: string,
+		threadId: string,
+		after: number,
+		limit: number,
+	): Promise<{ items: StoredRun[]; nextCursor: number } | null>;
 	frozen(userId: number, appId: string, runId: string): Promise<StoredFrozenInput | null>;
 	create(
 		command: CreateRunStorageCommand,
 		mayCreate: (active: StoredRun | null) => boolean,
 		resolve: (provider: ProviderStoredRow, reference: StoredModelReference) => StoredFrozenInput | null,
+		authorizeApp: (current: StoredAppAuthority) => void,
+		authorizeOrigin: (current: StoredRun | null) => void,
+		freezeExecution: (
+			current: StoredExecutionSettings | null,
+			activeRuns: number,
+			overrides: StoredPolicyOverrides,
+		) => StoredExecutionSettings,
 	): Promise<StoredCreateResult>;
 	cancel(
 		command: CancelRunStorageCommand,

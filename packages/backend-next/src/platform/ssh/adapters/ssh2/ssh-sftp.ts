@@ -332,6 +332,10 @@ export class SshSftpLease implements MachineSftpLease {
 					throw new MachineSftpFailure('invalid_metadata', 'unknown');
 				}
 				for (const row of rows) {
+					// SFTP servers may return these protocol navigation entries.
+					if (row && (row.filename === '.' || row.filename === '..')) {
+						continue;
+					}
 					const entry = directoryEntry(row);
 					metadataBytes += (entries.length === 0 ? 0 : 1) + Buffer.byteLength(JSON.stringify(entry), 'utf8');
 					if (entries.length >= options.maxEntries || metadataBytes > options.maxMetadataBytes) {
@@ -420,6 +424,10 @@ export class SshSftpLease implements MachineSftpLease {
 						throw new MachineSftpFailure('invalid_metadata', 'unknown');
 					}
 					for (const row of rows) {
+						// SFTP servers may return these protocol navigation entries.
+						if (row && (row.filename === '.' || row.filename === '..')) {
+							continue;
+						}
 						yield directoryEntry(row);
 					}
 				}

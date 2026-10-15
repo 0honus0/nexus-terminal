@@ -60,7 +60,7 @@ export interface AgentNextStepState {
 	revision: number;
 	runVersion: number;
 	textBytes: number;
-	finishReason?: 'stop';
+	finishReason?: import('@nexus-terminal/shared/agent/runs/values').AgentRunStepFinishReason;
 	inputTokens?: number;
 	outputTokens?: number;
 	failureCode?: AgentRunStepFailureCode;

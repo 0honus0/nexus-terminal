@@ -18,6 +18,8 @@ import type {
 	PasskeyStorageRecord,
 } from '../storage/factor-storage.js';
 import type {
+	FactorPasskeySite,
+	BeginPasskeySetup,
 	FactorChallenge,
 	PasskeyCredential,
 	PendingLogin,
@@ -55,7 +57,7 @@ export class FactorModel {
 		private readonly secrets: SecretBox | null,
 		private readonly totp: TotpPort,
 		private readonly webauthn: WebauthnPort,
-		private readonly rp: WebauthnRelyingParty | null,
+		private readonly sites: readonly FactorPasskeySite[],
 	) {}
 
 	/** Model-owned application-to-technical credential projection. */
@@ -169,11 +171,12 @@ export class FactorModel {
 		}
 	}
 
-	private relyingParty(): WebauthnRelyingParty {
-		if (!this.rp) {
+	private relyingParty(origin: string | null): WebauthnRelyingParty {
+		const site = this.sites.find((site) => site.origin === origin);
+		if (!site) {
 			throw new AccessFailure('factor_unavailable');
 		}
-		return { origin: this.rp.origin, rpId: this.rp.rpId };
+		return { origin: site.origin, rpId: site.rpId };
 	}
 
 	private async saveChallenge(input: NewFactorChallenge): Promise<string> {
@@ -327,9 +330,9 @@ export class FactorModel {
 		return { status: 'issued', token, accountId: pending.accountId, rememberMe: pending.rememberMe, expiresAt };
 	}
 
-	async passkeyRegistrationOptions(command: BeginFactorSetup): Promise<FactorPasskeyOptionsIssue> {
+	async passkeyRegistrationOptions(command: BeginPasskeySetup): Promise<FactorPasskeyOptionsIssue> {
 		const { accountId, username, session, previous, policy } = command;
-		const rp = this.relyingParty();
+		const rp = this.relyingParty(command.origin);
 		const existing = await accessStorageBoundary(() => this.storage.listPasskeys(accountId));
 		let options: WebauthnRegistrationOptions;
 		try {
@@ -374,10 +377,10 @@ export class FactorModel {
 		if (!challenge || challenge.accountId !== accountId || challenge.sessionDigest !== this.digest(session)) {
 			return false;
 		}
-		const rp = this.relyingParty();
-		if (challenge.origin !== rp.origin || challenge.rpId !== rp.rpId) {
+		if (!this.sites.some((site) => site.origin === challenge.origin && site.rpId === challenge.rpId)) {
 			return false;
 		}
+		const rp = this.relyingParty(challenge.origin);
 		let credential;
 		try {
 			credential = await this.webauthn.registrationVerify({
@@ -428,7 +431,7 @@ export class FactorModel {
 		command: PasskeyAuthenticationOptionsCommand,
 		policy: FactorChallengePolicy,
 	): Promise<FactorPasskeyOptionsIssue> {
-		const rp = this.relyingParty();
+		const rp = this.relyingParty(command.origin);
 		const accountId = command.accountId;
 		const existing = command.restrictToNone
 			? []
@@ -468,15 +471,18 @@ export class FactorModel {
 
 	async finishPasskeyAuthentication(command: VerifyPasskeyLogin): Promise<IssuedFactorLogin> {
 		const expiresAt = command.expiresAt;
-		const rp = this.relyingParty();
 		const digest = this.digest(command.cookie);
 		const storedChallenge = await accessStorageBoundary(() =>
 			this.storage.findChallenge(digest, 'passkey_authentication', Date.now()),
 		);
 		const challenge = storedChallenge === null ? null : this.toChallenge(storedChallenge);
-		if (!challenge || challenge.origin !== rp.origin || challenge.rpId !== rp.rpId) {
+		if (
+			!challenge ||
+			!this.sites.some((site) => site.origin === challenge.origin && site.rpId === challenge.rpId)
+		) {
 			return { status: 'stale' };
 		}
+		const rp = this.relyingParty(challenge.origin);
 		const storedKey = await accessStorageBoundary(() => this.storage.getPasskey(command.response.id));
 		const key = storedKey === null ? null : this.toCredential(storedKey);
 		if (!key || (challenge.accountId !== null && challenge.accountId !== key.accountId)) {
