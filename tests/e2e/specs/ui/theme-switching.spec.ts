@@ -883,6 +883,16 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
 				LEGACY_OFFICIAL_HTML_THEME_REPOSITORY,
 			);
 			await updateTestHtmlRepository(context.request, TESTED_OFFICIAL_HTML_THEME_REPOSITORY);
+			// These mutations bypass the UI's versioned Appearance owner. Reopen
+			// the editor against the authoritative revision before attempting the
+			// next independent Save, rather than submitting a stale expectedVersion.
+			await page.reload({ waitUntil: 'domcontentloaded' });
+			await page.getByTitle('Customize Style').click();
+			await customizer.getByRole('combobox', { name: 'HTML Background Themes', exact: true }).click();
+			await page.getByRole('option', { name: 'Remote Themes', exact: true }).click();
+			await expect(appearanceField(customizer, 'Remote HTML Themes Repository URL')).toHaveValue(
+				TESTED_OFFICIAL_HTML_THEME_REPOSITORY,
+			);
 		});
 
 		await step(
