@@ -146,6 +146,7 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 
 					maxBinaryMessageBytes: route.maxBinaryMessageBytes,
 					maxTextMessageBytes: route.maxTextMessageBytes,
+					maxBufferedTextBytes: route.maxBufferedTextBytes,
 
 					trackTask: trackWebSocketTask,
 

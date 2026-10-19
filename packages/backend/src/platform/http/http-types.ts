@@ -63,6 +63,8 @@ export interface HttpWebSocketRoute {
 	/** Opt-in technical per-message ceiling; absent means binary input is rejected. */
 	maxBinaryMessageBytes?: number;
 	maxTextMessageBytes?: number;
+	/** Opt-in bounded text send allowance; the default remains 1 MiB. Binary sends are unchanged. */
+	maxBufferedTextBytes?: number;
 	/** Source address has been resolved by the trusted proxy chain, never a client header. */
 	authorize(request: IncomingMessage, url: URL, sourceIp: string): Promise<boolean>;
 	/** Ordinary application WS routes use a bounded channel. */
