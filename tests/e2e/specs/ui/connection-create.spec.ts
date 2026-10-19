@@ -5,11 +5,7 @@ import { configureSshE2eSettings, E2E_SSH, ensureTestSshConnection, trustTestSsh
 import { slowStep, step } from '../../support/steps';
 import { E2E_URLS } from '../../support/test-env';
 
-import {
-	readConnectionList,
-	readConnectionView,
-	readConnectionImportResponse,
-} from '../../../../packages/shared/src/targets/connections/http-codec';
+import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
 import { readTagList } from '../../../../packages/shared/src/targets/tags/http-codec';
 import {
 	readConnectionTestResponse,
@@ -18,19 +14,19 @@ import {
 
 const headers = { Origin: E2E_URLS.frontendOrigin };
 
-function importedId(value: unknown): number {
-	const results = readConnectionImportResponse(value).items;
-	expect(results).toHaveLength(1);
-	const first = results[0];
-	if (!first || first.status !== 'ok') throw new Error('Connection import failed');
-	return first.id;
-}
-
 const FORM_NAME = 'E2E UI Created SSH';
 const FORM_CLONE_NAME = `${FORM_NAME} Copy`;
 const SCRIPT_NAME_ONE = 'E2E Script SSH One';
 const SCRIPT_NAME_TWO = 'E2E Script SSH Two';
 const SCRIPT_TAG = 'E2E Script Imported Tag';
+
+async function savedConnectionId(request: APIRequestContext, name: string): Promise<number> {
+	const result = await request.get('/api/v1/targets/connections');
+	expect(result.ok()).toBeTruthy();
+	const matches = readConnectionList(await result.json()).filter((item) => item.name === name);
+	expect(matches).toHaveLength(1);
+	return matches[0]!.id;
+}
 
 async function cleanupConnections(request: APIRequestContext): Promise<void> {
 	const response = await request.get('/api/v1/targets/connections');
@@ -164,7 +160,7 @@ test('regular connection form tests and creates a persisted working SSH connecti
 		await form.getByRole('button', { name: 'Confirm Add', exact: true }).click();
 		const create = await createPromise;
 		expect(create.status()).toBe(200);
-		connectionId = importedId(await create.json());
+		connectionId = await savedConnectionId(context.request, FORM_NAME);
 		await expect(form).toBeHidden({ timeout: 15_000 });
 		const row = page.getByRole('listitem').filter({ has: page.getByText(FORM_NAME, { exact: true }) });
 		await expect(row).toContainText(FORM_NAME);
@@ -189,7 +185,7 @@ test('regular connection form tests and creates a persisted working SSH connecti
 		await row.getByRole('button', { name: 'Clone', exact: true }).click();
 		const clone = await clonePromise;
 		expect(clone.status()).toBe(201);
-		const cloneId = readConnectionView(await clone.json()).id;
+		const cloneId = await savedConnectionId(context.request, FORM_CLONE_NAME);
 		expect(cloneId).not.toBe(connectionId);
 		await expect(
 			page.getByRole('listitem').filter({ has: page.getByText(FORM_CLONE_NAME, { exact: true }) }),
