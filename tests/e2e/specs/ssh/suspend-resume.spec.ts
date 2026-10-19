@@ -192,6 +192,11 @@ test('marked attached workspace stays usable and another authorized socket can t
 	const original = await openWorkspaceSession(request, connectionId, `marked-attached-${crypto.randomUUID()}`);
 	const other = await openAuthenticatedWebSocket(request);
 	try {
+		// Workspace connection acceptance precedes the independent SFTP
+		// owner and shell integration probes. Prepare must only run once both
+		// resources have actually entered their authorized ready states.
+		await waitForFilesystemReady(original.socket);
+		await expect(requestWorkspace(original.socket, 'terminal.currentDirectory')).resolves.toBe('/');
 		await requestWorkspace(original.socket, 'suspend.prepare', {});
 		const marked = await requestWorkspace<{ suspendedSessionId: string }>(original.socket, 'suspend.commit', {});
 		await expect(requestWorkspace(original.socket, 'terminal.currentDirectory')).resolves.toEqual('/');
