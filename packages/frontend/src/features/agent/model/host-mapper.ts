@@ -30,8 +30,12 @@ export function toHostDirectory(
 				(item) => item.id === app.definitionId && item.version === app.definitionVersion,
 			);
 			let surface: HostApp['surface'] = 'unavailable';
+			// /app-definitions is the trusted built-in catalogue, not the installed
+			// plugin catalogue. A verified installed package has its own matching
+			// manifest/publisher/hash identity and must not depend on a built-in
+			// declaration to expose its authorized Agent or custom surface.
 			if (declared && !installation) surface = 'agent';
-			else if (declared && version) surface = version.manifest.frontendEntry ? 'custom' : 'agent';
+			else if (version) surface = version.manifest.frontendEntry ? 'custom' : 'agent';
 			return {
 				id: app.id,
 				displayName: app.name,

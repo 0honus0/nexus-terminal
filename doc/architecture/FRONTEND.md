@@ -398,6 +398,8 @@ Shared system/backups定义完整请求/回执/错误和容量，应用Export/Re
 
 ## 原生 Agent Host 与工作区
 
+第九轮远程复核修复 Plugin Surface 授权来源：`GET /app-definitions` 仅提供内置可信定义；签名安装的 App 应由精确匹配 `installed` 安装、definition/version、packageHash、publisherKeyId 与已验证 Manifest 的版本记录决定 `agent` 或 `custom` Surface，不可再要求同时存在内置定义。缺失或失配时仍 `unavailable`，不退化为任意 iframe。该修复的真实插件帧/原生线程 E2E 仍待下轮远程验收。
+
 1. **职责与范围**：正式悬浮Host拥有实际App选择、原生线程／Run交互和插件窗口，窗口布局与业务状态分开；不再依赖旧summary、host流或单例Run Store。
 2. **子功能与目录**：host组件保留窗口／焦点／键盘／拖动生命周期；host-mapper/type持目录投影。native-thread-api与native-run-api复用唯一native-workspace-request；native-audit-api持步骤／工具只读HTTP。model/native-*-types、mapper/rules持独立应用对象、白名单和纯判断；use-native-threads/runs持本实例用例及原意图。NativeRunDetails/NativeAuditPanel只展示和发出用户操作，NativeInputArtifacts拥有引用准备，不让模板承担传输或版本策略。
 3. **依赖方向**：组件→composable→API／mapper→Shared与通用同源传输；Connections仅通过capabilities public提供安全目录。正式Host与DEV共用原生线程契约但各持实际入口；插件继续真实descriptor/grant/iframe桥，不借插件凭据调用原生能力。前端包不再依赖Protocol。
