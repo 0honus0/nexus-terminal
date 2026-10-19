@@ -18,6 +18,11 @@ const MAX_LISTING_BYTES = 8 * 1024 * 1024;
 // the decoded budget while bounding each remote metadata file before reading it.
 const LISTING_FILE_LIMIT_BLOCKS = MAX_LISTING_BYTES / 512;
 
+// Info-ZIP's Unicode Path (0x7075) extra field is locale-sensitive. With
+// LC_ALL=C, legitimate UTF-8 names can become #Uxxxx placeholders. Listing,
+// link reads and extraction must all decode the same member names.
+const ZIP_UTF8_LOCALE = 'LC_ALL=C.UTF-8; export LC_ALL';
+
 function quote(value: string): string {
 	return "'" + value.replaceAll("'", "'\"'\"'") + "'";
 }
@@ -74,6 +79,7 @@ export class NativeArchiveCommands {
 			'umask 077',
 			'ulimit -f ' + LISTING_FILE_LIMIT_BLOCKS + ' || exit 78',
 			'LC_MESSAGES=C; export LC_MESSAGES',
+			...(isZip ? [ZIP_UTF8_LOCALE] : []),
 			'command -v ' + (isZip ? 'unzip' : 'tar') + ' >/dev/null 2>&1 || exit 127',
 			'command -v od >/dev/null 2>&1 || { ' + "printf 'NEXUS_ARCHIVE_MISSING:od\\n'; exit 127; }",
 			...(isZip
@@ -309,6 +315,7 @@ export class NativeArchiveCommands {
 				'; do command -v "$archive_tool" >/dev/null 2>&1 || { ' +
 				'printf \'NEXUS_ARCHIVE_MISSING:%s\\n\' "$archive_tool"; exit 127; }; done',
 			'LC_MESSAGES=C; export LC_MESSAGES',
+			...(format === 'zip' ? [ZIP_UTF8_LOCALE] : []),
 			'umask 077',
 			...(format === 'zip'
 				? [
@@ -366,6 +373,7 @@ export class NativeArchiveCommands {
 			'command -v unzip >/dev/null 2>&1 || exit 127',
 			'command -v od >/dev/null 2>&1 || exit 126',
 			'LC_MESSAGES=C; export LC_MESSAGES',
+			ZIP_UTF8_LOCALE,
 			'(unzip -p ' +
 				(password === undefined ? '' : '-P ' + quote(password) + ' ') +
 				'-- ' +
