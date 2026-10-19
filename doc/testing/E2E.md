@@ -361,6 +361,14 @@ Production-ingress coverage can still be run explicitly against a prepared produ
 NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18113 pnpm --filter @nexus-terminal/e2e run test:ingress
 ```
 
+## Codex CLI 计时刷新专项（2026-10-19）
+
+用户反馈上一版后仍需点击刷新。本次源码复核发现：已有同步提交分支依赖 SynchronizedOutputHandler 先有缓冲行；完整 DEC 2026 帧在一个解析批次内闭合时没有先登记，关闭通知仍走异步绘制，随后开启的帧可再次阻止绘制。InputHandler 在开启后立即发出行刷新通知，先由同步模式登记范围；关闭时原 RenderService 同步提交。源码及两种交付产物同步补丁，锁文件更新；普通输出的动画帧／100ms 期限保持原路径。
+
+两轮源码复核分别追踪 InputHandler→CoreBrowserTerminal→RenderService→SynchronizedOutputHandler／RenderDebouncer，以及同批／拆批／连续帧、超时、后台暂停和销毁；不添加业务类型、Vue 强制刷新或全局计时器。已离线应用补丁。基线 dev／1f87fd08，Node 22.23.1、pnpm 11.26.0；根 `pnpm run check` 和 Frontend build 均 exit0，日志 `/tmp/nexus-codex-timer-check.log`、`/tmp/nexus-codex-timer-build.log`。依赖两个入口和生产 TerminalView 资产静态确认含开启登记逻辑，`git diff --check` 通过。全仓 `format:all:check` exit1，停在既有工作区 `tests/e2e/support/test-ssh-server.mjs:182–183` 的两处声明空行，日志 `/tmp/nexus-codex-timer-format.log`；该文件不属本专项，不覆盖其在途修改。本专项四份文档单独 Prettier 检查通过，不将其当全仓格式通过。按 D17 未新增或运行行为测试、浏览器专项或本地 E2E。现有 terminal-lifecycle 的同步帧回归通过 serialize 分隔 begin／end，只覆盖其原场景，不能作为本次修复的行为证据。
+
+待远程补充并验收：同批完整帧后紧接未结束帧、连续计时、同批多帧、跨 chunk 控制序列、延迟动画帧、后台恢复和销毁；实际 Codex CLI 不点击持续计时与真实手机验收仍未执行。不宣称用户现场已恢复，不沿用历史 PASS。
+
 ## Regression coverage
 
 Agent task-oriented coverage is planned in [AGENT_TASK_SCENARIOS.md](AGENT_TASK_SCENARIOS.md). Its 81 scenarios are design targets, not a claim that all are implemented or verified.

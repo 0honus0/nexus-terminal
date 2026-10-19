@@ -110,6 +110,8 @@ Registry状态卡片由`useAuthenticatedViewScope`隔离身份、卸载及KeepAl
 
 执行配置的保存快照、普通草稿、硬限制草稿和确认分别持有；保存使用原 version，预览绑定完整 proposed/version，confirm 只发送原确认 ID。普通草稿有变更时不能预览，确认存在时锁定普通草稿，编辑硬限制使确认失效；提交前复查期限，提交即移除可再用确认。读写互斥，模型目录独立读取。写入冲突/unknown 须显式只读恢复；读失败不解锁，不自动跟随新版本续写。视图 scope/generation 约束全部返回与 finally，撤销清除私有状态。
 
+终端输出解析归 TerminalView／terminalOutputWriter，绘制调度归 workspace 安装的 xterm 补丁。DEC 2026 开启通知先登记待绘制范围，关闭通知经 RenderService 同步提交，避免整帧同批解析时没有缓冲记录、下一帧又阻止异步绘制；源码与 CommonJS／ESM 交付入口保持一致。普通输出仍由 RenderDebouncer 的动画帧及单批 100ms 期限驱动，视图与依赖原有关闭路径释放计时器，不增加 Vue 强制刷新或全局轮询。
+
 ## 7. 生命周期与失败
 
 明确打开、取消、订阅、解除、关闭和卸载 owner。取消前端请求不证明后端副作用终止；晚返回的资源仍尝试归还给原 owner。错误映射稳定安全码，区分网络失败、协议失败、业务拒绝和未知写入结果；非 JSON、未知状态/错误码及错误 shape 不当作成功。不把失败刷新作为操作已恢复证明。
