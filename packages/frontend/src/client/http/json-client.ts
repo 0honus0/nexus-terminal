@@ -1,5 +1,6 @@
 import { HttpRequestFailure } from './request-failure';
 import { readResponseBytes, rejectResponse } from './response-body';
+import { dispatchUnauthorized } from './unauthorized';
 
 export interface JsonRequest {
 	method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -81,6 +82,12 @@ export async function requestJson(input: JsonRequest): Promise<{ status: number;
 		});
 	} catch (cause) {
 		throw new HttpRequestFailure(input.signal?.aborted ? 'cancelled' : 'request_failed', 'unknown', { cause });
+	}
+	// Axios and bounded fetch have the same session-loss boundary. A protected
+	// JSON endpoint can return 401 without ever entering the Axios interceptor.
+	// The app-level handler checks current authentication before invalidating.
+	if (response.status === 401 && !input.url.split(/[?#]/u, 1)[0]?.endsWith('/auth/logout')) {
+		dispatchUnauthorized(input.url);
 	}
 	try {
 		return { status: response.status, body: await readJson(response, input.maxResponseBytes) };

@@ -134,6 +134,8 @@ Files首次读取等待当前附件的SFTP ready，尚未ACK、已断开/撤销�
 
 ## 8. 当前能力与验收
 
+第九轮补充统一未授权响应边界：旧 Axios `httpClient` 与新版有界 `requestJson` 均可触发同一个防重入 `dispatchUnauthorized`；已确认的 401 由应用启动时注册的鉴权回调验证当前身份后撤销会话并导航 Login。显式 logout 仍不触发全局 401 拦截，以保留先排空资源、再只读确认同一用户的独立不确定结果处理。该项来自 `ssh/terminal-ui` 中 Preferences PUT 已返回 401 但 Workspace 未导航的真实远程日志，待下一轮复验。
+
 第九轮远程日志确认失败登出反馈生命周期缺口：`beginAuthentication` 会卸载 `AppHeader`，因而其局部 `logoutError` 无法在重新读取原身份后继续展示。失败消息改由独立于会话挂载的 `NotificationHost` 承载，并为错误通知设置 `role=alert`；不改变原有先撤销 Workspace/Agent 所有者、再经 `/auth/status` 核实同一身份的围栏。该变更待远程 E2E 复验。
 
 F1-A/B源码已覆盖正式setup/password/status/logout、TOTP/Passkey登录、改密/因素设置、公共CAPTCHA与CAPTCHA/IP安全配置，以及DEV共用认证。Passkey的第三方对象只在Auth adapters/browser-passkey显式投影，Store按实例持有取消能力；session generation变化取消旧ceremony并阻止晚签发。Security的use-passkey-settings持有列表、名称草稿和刷新恢复。其余正式配置与业务源码已接Shared，完整前端行为仍待远程验收。新传输已接源码；真实密码/Cookie/登出与受控TOTP/竞态/失败场景的分项证据归testing。构建或受控响应不替代完整页面/真实因素验收。

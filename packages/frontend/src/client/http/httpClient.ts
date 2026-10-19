@@ -1,5 +1,8 @@
 import axios, { type AxiosInstance } from 'axios';
 import { logger } from '../logging/logger';
+import { dispatchUnauthorized } from './unauthorized';
+
+export { setUnauthorizedHandler } from './unauthorized';
 
 export interface ApiErrorBody {
 	message?: string;
@@ -11,15 +14,6 @@ export const httpClient: AxiosInstance = axios.create({
 	timeout: 15_000,
 	withCredentials: true,
 });
-
-export type UnauthorizedHandler = () => void | Promise<void>;
-
-let unauthorizedHandler: UnauthorizedHandler | null = null;
-let handlingUnauthorized = false;
-
-export const setUnauthorizedHandler = (handler: UnauthorizedHandler | null): void => {
-	unauthorizedHandler = handler;
-};
 
 const requestPath = (url: string | undefined): string => url?.split(/[?#]/, 1)[0] || 'unknown';
 
@@ -54,17 +48,9 @@ httpClient.interceptors.response.use(
 		if (
 			axios.isAxiosError(error) &&
 			error.response?.status === 401 &&
-			!isExplicitLogoutRequest(error.config?.url) &&
-			unauthorizedHandler &&
-			!handlingUnauthorized
+			!isExplicitLogoutRequest(error.config?.url)
 		) {
-			handlingUnauthorized = true;
-			logger.debug({ path: requestPath(error.config?.url) }, 'Dispatching HTTP session-loss handler');
-			void Promise.resolve(unauthorizedHandler())
-				.catch((cause) => logger.error({ err: cause }, 'Failed to handle HTTP session loss'))
-				.finally(() => {
-					handlingUnauthorized = false;
-				});
+			dispatchUnauthorized(requestPath(error.config?.url));
 		}
 		return Promise.reject(error);
 	},
