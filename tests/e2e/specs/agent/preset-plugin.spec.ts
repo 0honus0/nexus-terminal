@@ -815,6 +815,10 @@ test('remote signed Nexus Agent plugin installs, registers an Agent definition, 
 		await waitNativeApproval(task, run.id, 'shell_execute');
 		await cancelNativeTask(task, run.id);
 		expect((await readNativeRun(task, run.id)).status).toBe('cancelled');
+		// Cancellation was issued by the authenticated API context, outside the
+		// mounted Agent composer. Reopen the same persisted thread so its UI
+		// releases the previous active-Run fence before accepting a new intent.
+		await openNativeTask(task);
 		expect((await execute('E2E_NATIVE_PLUGIN_OK')).text).toBe('OK');
 		expect((await readNativeRun(task, run.id)).status).toBe('cancelled');
 	});
