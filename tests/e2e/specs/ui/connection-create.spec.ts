@@ -75,7 +75,7 @@ test('connections page remains usable when connection tags fail to load', async 
 	await expect(page.getByRole('button', { name: 'Add New Connection', exact: true })).toBeEnabled();
 });
 
-test('direct connection form remains usable when the proxy catalog fails to load', async ({ page }) => {
+test('direct connection form remains usable when the proxy catalog fails to load', async ({ page, context }) => {
 	await page.route('**/api/v1/targets/proxies', (route) => route.abort('failed'));
 	await page.goto('/connections');
 	await page.getByRole('button', { name: 'Add New Connection', exact: true }).click();
@@ -96,7 +96,14 @@ test('direct connection form remains usable when the proxy catalog fails to load
 	await form.getByRole('button', { name: 'Confirm Add', exact: true }).click();
 	const created = await createPromise;
 	expect(created.status()).toBe(200);
-	importedId(await created.json());
+	// The form is dismissed as part of the successful import. CDP can retire
+	// that POST body before a consumer reads it; confirm the persisted record
+	// without replaying a non-idempotent import.
+	const persisted = await context.request.get('/api/v1/targets/connections');
+	expect(persisted.ok()).toBeTruthy();
+	const matches = readConnectionList(await persisted.json()).filter((item) => item.name === FORM_NAME);
+	expect(matches).toHaveLength(1);
+	expect(matches[0]).toMatchObject({ host: E2E_SSH.host, port: E2E_SSH.port, username: E2E_SSH.username });
 	await expect(form).toBeHidden({ timeout: 15_000 });
 });
 
