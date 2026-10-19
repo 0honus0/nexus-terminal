@@ -21,9 +21,10 @@ async function saveForm(page: Page, form: Locator, path = '/api/v1/settings/pref
 	const response = page.waitForResponse((value) => value.url().endsWith(path) && value.request().method() === 'PUT');
 	await form.locator('button[type="submit"]').click();
 	expect((await response).ok()).toBe(true);
-	// After successful persistence there is no dirty draft, so the save
-	// control is disabled. Callers independently verify the saved API values.
-	await expect(form.locator('button[type="submit"]')).toBeDisabled();
+	// The section forms deliberately keep Save available; only their active
+	// mutation disables the fieldset. Require re-enablement after the 2xx
+	// receipt, while callers separately assert the exact persisted API value.
+	await expect(form.locator('button[type="submit"]')).toBeEnabled();
 }
 
 async function systemTab(page: Page): Promise<void> {
