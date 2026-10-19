@@ -154,16 +154,25 @@ test('data management UI exports a real backup file and imports it through the f
 				response.url().endsWith('/api/v1/settings/backup/import') && response.request().method() === 'POST',
 		);
 		await section.getByRole('button', { name: 'Import backup', exact: true }).click();
+		// Restoring replaces business data and closes active resources. The UI
+		// must obtain the separate destructive confirmation before dispatching
+		// the import; merely clicking the form's submit never sends the POST.
+		const confirm = page.getByRole('dialog', { name: 'Please confirm' });
+		await expect(confirm).toContainText('Restore this backup and replace all backed-up business data?');
+		await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
 		const response = await importPromise;
 		expect(response.ok()).toBeTruthy();
 		const body = readBackupImportResponse(await response.json());
 		expect(body.restoredTables).toBeGreaterThan(0);
 		expect(body.cleanupPending).toBe(false);
-		await expect(section).toContainText(/Backup imported: restored \d+ data rows and \d+ files\./);
+		const recovery = page.locator('[data-backup-recovery]');
+		await expect(recovery).toContainText(
+			`Backup restored: ${body.restoredRows} rows and ${body.restoredFiles} files.`,
+		);
+		await recovery.getByRole('button', { name: 'Reload application', exact: true }).click();
 	});
 
 	await step('the browser remains authenticated after the import-triggered reload', async () => {
-		await page.waitForTimeout(1_000);
 		await page.waitForLoadState('domcontentloaded');
 		const status = await context.request.get('/api/v1/auth/status');
 		expect(status.ok()).toBeTruthy();

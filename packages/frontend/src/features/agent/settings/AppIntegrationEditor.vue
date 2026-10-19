@@ -118,7 +118,13 @@
 					>{{ t('agent.settings.appManagement.name')
 					}}<input v-model="draft.name" class="mt-1 w-full rounded border border-border bg-background p-2"
 				/></label>
-				<UiCheckbox v-model="draft.enabled">{{ t('agent.settings.integrationManagement.enabled') }}</UiCheckbox>
+				<label class="flex items-center gap-2 text-sm">
+					<UiCheckbox
+						v-model="draft.enabled"
+						:aria-label="t('agent.settings.integrationManagement.enabled')"
+					/>
+					<span>{{ t('agent.settings.integrationManagement.enabled') }}</span>
+				</label>
 				<template v-if="draft.kind === 'mcp'">
 					<label class="block text-sm"
 						>{{ t('agent.settings.integrationManagement.endpoint')

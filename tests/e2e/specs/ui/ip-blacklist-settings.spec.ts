@@ -143,6 +143,11 @@ test('IP blacklist UI saves policy, activates it after restart, and removes a bl
 					value.url().endsWith('/api/v1/settings/ip-blacklist') && value.request().method() === 'DELETE',
 			);
 			await row.getByRole('button', { name: 'Remove', exact: true }).click();
+			// Removing a banned address is a destructive security mutation;
+			// the owner intentionally waits for a separate user confirmation.
+			const confirm = page.getByRole('dialog', { name: 'Please confirm' });
+			await expect(confirm).toContainText(TEST_BLOCKED_IP);
+			await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
 			const result = await removed;
 			expect(result.ok()).toBe(true);
 			readAccessIpBlacklistRemove(await result.json());

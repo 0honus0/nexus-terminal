@@ -44,7 +44,12 @@ test('CAPTCHA UI saves provider configuration and explicit secrets without activ
 			await captcha.getByRole('button', { name: 'Save', exact: true }).click();
 			const result = await response;
 			expect(result.ok()).toBe(true);
-			const saved = readSettingsCaptchaResponse(await result.json());
+			// The browser may retire the PUT response body when auth settings
+			// re-render. Read the independently persisted CAPTCHA projection;
+			// this still verifies exact version, restart fence and secret state.
+			const reread = await context.request.get('/api/v1/settings/captcha');
+			expect(reread.status()).toBe(200);
+			const saved = readSettingsCaptchaResponse(await reread.json());
 			expect(saved.version).toBe(current.version + 1);
 			expect(saved.effectiveVersion).toBe(baseline.effectiveVersion);
 			expect(saved.requiresRestart).toBe(true);

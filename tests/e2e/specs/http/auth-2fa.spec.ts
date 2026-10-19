@@ -271,8 +271,8 @@ test('2FA settings UI completes setup, reports errors, reloads, and disables the
 	context,
 }) => {
 	const request = context.request;
-	await setUiLanguage(request);
 	await loginAsInitialAdmin(request);
+	await setUiLanguage(request);
 
 	try {
 		await page.goto('/settings');

@@ -294,7 +294,9 @@ test('SSH key selector and manager surface key-list loading failures without ove
 	await expect(form.getByText('Options could not be loaded. Refresh and review.', { exact: true })).toBeVisible();
 	await form.getByRole('button', { name: 'Manage SSH Keys', exact: true }).click();
 	const modal = keyManager(page);
-	await expect(modal.locator('p.text-error')).toContainText('Network Error');
+	// The public target owner deliberately localizes transport failures instead
+	// of leaking the browser's raw Network Error string into this modal.
+	await expect(modal.getByRole('alert')).toContainText('The operation failed. Please try again later.');
 	await expect
 		.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
 		.toBeLessThanOrEqual(1);

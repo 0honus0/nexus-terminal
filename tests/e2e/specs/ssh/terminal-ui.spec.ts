@@ -26,19 +26,13 @@ test('terminal theme fills the whole mobile surface beyond the fixed xterm rows'
 	const theme = (await themes.json()).find((candidate: { name: string }) => candidate.name === 'Monokai Classic');
 	expect(theme).toBeTruthy();
 	try {
-		expect(
-			(
-				await context.request.put('/api/v1/appearance', {
-					headers: { Origin: E2E_URLS.frontendOrigin },
-					data: {
-						activeTerminalThemeId: theme.id,
-						terminalBackgroundEnabled: true,
-						terminalBackgroundImage: null,
-						terminalCustomHtml: '',
-					},
-				})
-			).ok(),
-		).toBeTruthy();
+		// Appearance updates require a current CAS version and do not permit
+		// mutating background-file pointers through the settings endpoint.
+		await updateTestAppearance(context.request, (change) => {
+			change.activeTerminalThemeId = theme.id;
+			change.terminalBackgroundEnabled = true;
+			change.terminalCustomHtml = '';
+		});
 		await page.setViewportSize({ width: 390, height: 844 });
 		const connectionId = await ensureTestSshConnection(context.request);
 		await connectTestSshFromConnectionsPage(page, connectionId);
@@ -60,19 +54,11 @@ test('terminal theme fills the whole mobile surface beyond the fixed xterm rows'
 			.poll(() => terminal.evaluate((element) => getComputedStyle(element).backgroundColor))
 			.toBe('rgb(39, 40, 34)');
 	} finally {
-		expect(
-			(
-				await context.request.put('/api/v1/appearance', {
-					headers: { Origin: E2E_URLS.frontendOrigin },
-					data: {
-						activeTerminalThemeId: original.activeTerminalThemeId,
-						terminalBackgroundEnabled: original.terminalBackgroundEnabled,
-						terminalBackgroundImage: original.terminalBackgroundImage ?? null,
-						terminalCustomHtml: original.terminalCustomHtml ?? '',
-					},
-				})
-			).ok(),
-		).toBeTruthy();
+		await updateTestAppearance(context.request, (change) => {
+			change.activeTerminalThemeId = original.activeTerminalThemeId;
+			change.terminalBackgroundEnabled = original.terminalBackgroundEnabled;
+			change.terminalCustomHtml = original.terminalCustomHtml;
+		});
 	}
 });
 

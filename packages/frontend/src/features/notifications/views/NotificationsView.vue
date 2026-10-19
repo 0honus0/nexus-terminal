@@ -149,7 +149,12 @@
 				:description="t('settings.notifications.noChannels')"
 			/>
 			<div class="grid gap-4">
-				<UiManagementCard v-for="item in items" :key="item.id" class="notifications-channel-card">
+				<UiManagementCard
+					v-for="item in items"
+					:key="item.id"
+					:data-notification-id="item.id"
+					class="notifications-channel-card"
+				>
 					<div class="min-w-0 space-y-2">
 						<strong class="break-words">{{ item.name }}</strong>
 						<span class="mx-3 text-sm">{{ t('settings.notifications.types.' + item.config.kind) }}</span>

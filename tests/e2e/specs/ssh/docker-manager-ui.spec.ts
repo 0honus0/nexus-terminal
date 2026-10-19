@@ -215,6 +215,10 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
 				)
 				.toBeTruthy();
 
+			// A command frame proves dispatch, not that the DockerController has
+			// finished its post-command state reconciliation. Wait for the actual
+			// Stop control to become actionable before submitting a new mutation.
+			await expect(row.getByRole('button', { name: 'Stop', exact: true })).toBeEnabled();
 			await row.getByRole('button', { name: 'Stop', exact: true }).click();
 			await expect
 				.poll(

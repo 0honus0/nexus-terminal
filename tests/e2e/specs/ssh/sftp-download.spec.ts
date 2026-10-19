@@ -159,7 +159,10 @@ test('HTTP download ticket, Range, inline file, and directory ZIP work for an ac
 		expect(zip.subarray(0, 2).toString('ascii')).toBe('PK');
 
 		const capacityUrls: string[] = [];
-		for (let index = 0; index < 65; index += 1) {
+		// The original reusable ticket above counts toward the per-user 64
+		// lease limit. Overflow is refused; a live ticket is never silently
+		// evicted to make room for a new bearer capability.
+		for (let index = 0; index < 63; index += 1) {
 			const issued = await request.post('/api/v1/sftp/download-ticket', {
 				headers: { Origin: E2E_URLS.frontendOrigin },
 				data: {
@@ -171,32 +174,31 @@ test('HTTP download ticket, Range, inline file, and directory ZIP work for an ac
 			expect(issued.status()).toBe(201);
 			capacityUrls.push(((await issued.json()) as { url: string }).url);
 		}
-		const evicted = await request.head(capacityUrls[0], {
+		const excess = await request.post('/api/v1/sftp/download-ticket', {
+			headers: { Origin: E2E_URLS.frontendOrigin },
+			data: { connectionId, sessionId: session.workspaceId, remotePath: '/seed.txt' },
+		});
+		expect(excess.status()).toBe(429);
+		expect(await excess.json()).toEqual({ code: 'limit_exceeded' });
+		const retained = await request.head(capacityUrls[0], {
 			headers: { 'X-Forwarded-For': '203.0.113.30' },
 		});
-		expect(evicted.status()).toBe(410);
+		expect(retained.status()).toBe(200);
 		const newest = await request.get(capacityUrls.at(-1)!, {
 			headers: { 'X-Forwarded-For': '203.0.113.30' },
 		});
 		expect(newest.status()).toBe(200);
 		expect((await newest.body()).toString('utf8')).toBe('nexus-e2e-seed\n');
 
-		const changedFileTicketResponse = await request.post('/api/v1/sftp/download-ticket', {
-			headers: { Origin: E2E_URLS.frontendOrigin },
-			data: {
-				connectionId,
-				sessionId: session.workspaceId,
-				remotePath: '/seed.txt',
-			},
-		});
-		expect(changedFileTicketResponse.status()).toBe(201);
-		const changedFileTicket = (await changedFileTicketResponse.json()) as { url: string };
+		// A ticket issued before a remote file mutation must fail closed even
+		// when the user's ticket registry is already at its capacity ceiling.
+		const changedFileTicket = capacityUrls.at(-2)!;
 		await requestWorkspace(session.socket, 'filesystem.writeText', {
 			path: '/seed.txt',
 			content: 'ticket-invalidated-after-remote-change\n',
 			encoding: 'utf-8',
 		});
-		const invalidated = await request.get(changedFileTicket.url, {
+		const invalidated = await request.get(changedFileTicket, {
 			headers: { 'X-Forwarded-For': '203.0.113.40' },
 		});
 		expect(invalidated.status()).toBe(410);

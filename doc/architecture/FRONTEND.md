@@ -72,6 +72,8 @@ Tags的本地类型/mapper/API/Store归features/tags；use-tag-picker持有选�
 
 Targets正式资源请求归`client/targets/target-request`，它消费Shared安全错误、完整预算与已有同源Cookie传输，不持有登录状态。Proxy/SSH Key各自api严格解码集合、创建视图及更新联合；更新校验原ID/version+1，安全错误同时核对HTTP状态。各自model mapper将wire逐字段转为本地Summary，并将独立表单草稿转为Shared写命令；跨功能capabilities引用feature public的应用类型，删除旧Protocol别名。列表最多10,000项，Proxy完整JSON 64MiB、SSH Key 16MiB，拒绝重复ID、非法时间及额外私密字段。
 
+ProxiesView 的错误状态是显示副作用，不再通过 `v-else-if` 卸载最后一次确认的代理列表。错误 alert 与实体行并列；全部写入按钮仍按 Store 的 `needsRefresh` 围栏禁用，View 不重发未知 mutation，也不自行销毁缓存。
+
 Workspace下载归runtimes/workspace/adapters/download-adapters，正式FileManager通过FilesystemDownloadPort消费；它复用同源有界JSON client，Shared严格解码201票据、有效期与有限安全失败，再显式投影本地{url}。只接收固定相对下载路由和单一ticket参数；目录URL由原connection/workspace/path编码构造，不接受任意服务端导航地址。原附件ACK/socket、生命周期AbortController和调用方signal共同限制派发及晚结果；FileManager失活、卸载或能力替换后不触发anchor。anchor交给浏览器后，文件交付不由Vue状态确认；服务器传输/归档能力已分别迁移，完整页面仍C2-D。
 
 Workspace上传归adapters/upload-adapters，通过capabilityAdapters装配到正式TransferChannel；UploadCommand/TransferTask/TransferController及冲突类型唯一归features/transfers/model/transfer-types。Shared完整prepare/start/stop回执与upload事件严格解码；投影为独立应用事件，只发布需要的进度/冲突/安全失败，不把wire对象作为UI状态。目录完整计划和编码预算在首个控制请求前核对，prepare回执绑定根目录/目录集合和原附件代次。
@@ -457,6 +459,8 @@ const { setScale } = useWheelScale({
 同一事件只能被一个缩放入口消费，普通滚轮不拦截；不足阈值、禁用或到达边界的 Ctrl 手势也阻止底层滚动及浏览器缩放。连续事件在 Vue 完成渲染前保留同一视口快照，只允许最新恢复代次执行。界面 Ref 是即时状态；外部值由业务保存 owner 协调预览后回读，不用时间窗口猜测哪些 props 是旧响应。
 
 Appearance 的字体保存、Presentation 的面板比例保存分别在所属原串行队列执行时读取最新快照及版本，只修改当前缩放字段；普通设置草稿仍冻结原版本，不自动覆盖冲突。Workspace 用 createLatestValueSaver 防抖及合并最新值，并保持各字段预览直到最新任务结算；Appearance accept 只更新持久快照，不能清除其它未结算字体预览。外部版本冲突仍按原具名错误阻断并要求刷新，不自动重试未知写入。
+
+第七轮独立 Consumer 复核还发现 Background 编辑器保存 slider 草稿后上传图片：上传成功时 Shared Appearance 版本会前进，但编辑器因有其他脏字段而不运行完整 `sync()`，导致后续 slider 保存错误使用旧基线。正式 `TerminalBackgroundSettingsPanel` 只在 upload/remove 自己已确认的 store.accept 回执中推进当前 editor CAS 基线，同时保留未保存表单值，不合并陌生的外部更新、不消除未知写入围栏。Notifications 渠道卡片稳定绑定 `item.id` 的 data 属性以区分重复名称行；AppIntegrationEditor 的 Reka Checkbox 暴露明确的启用 aria-label。以上为局部 owner 变更，不修改通用 UiCheckbox 角色或全局控制面。
 
 ### 7. 生命周期与失败
 

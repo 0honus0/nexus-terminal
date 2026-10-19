@@ -116,7 +116,10 @@ test('notification UI localizes delivery status while preserving the wire event 
 		failed: '发送失败',
 		unknown: '投递结果未知，请核对接收端后再操作',
 	};
-	await expect(page.locator('form [role="status"]')).toHaveText(translations[delivery.status]);
+	// The durable delivery list may advance from queued to sent *after* the
+	// POST returns but before the read-back. The form still owns its original
+	// accepted receipt; only the refreshed ledger may claim final delivery.
+	await expect(page.locator('form [role="status"]')).toHaveText(translations.queued);
 	await waitForTestDelivery(context.request, delivery.id, 'sent');
 	await page.getByRole('button', { name: '取消', exact: true }).click();
 	await page.getByRole('button', { name: '刷新', exact: true }).click();

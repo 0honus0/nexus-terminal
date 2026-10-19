@@ -29,15 +29,17 @@
 			<p v-if="data.needsRefresh.value" class="mb-3 text-text-secondary">
 				{{ t('proxies.failures.recovery_required') }}
 			</p>
+			<!-- A failed mutation must not unmount the last confirmed proxy list:
+			     unknown results leave rows visible, but fence all edits until refresh. -->
+			<div v-if="message" role="alert" class="mb-4 rounded border-l-4 border-error bg-error/10 p-4 text-error">
+				{{ message }}
+			</div>
 			<div class="mt-4">
 				<div
 					v-if="loading && data.proxies.value.length === 0"
 					class="ui-solid-inset mb-4 rounded-lg p-4 text-center text-text-secondary italic"
 				>
 					{{ t('proxies.loading') }}
-				</div>
-				<div v-else-if="message" class="mb-4 rounded border-l-4 border-error bg-error/10 p-4 text-error">
-					{{ message }}
 				</div>
 				<UiEmptyState
 					v-else-if="data.proxies.value.length === 0"

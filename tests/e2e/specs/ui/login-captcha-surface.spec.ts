@@ -88,6 +88,7 @@ async function restoreCaptcha(
 async function loadLoginWithCaptcha(
 	page: import('@playwright/test').Page,
 	expectedConfig: { enabled: boolean; provider: string },
+	options: { intercepted?: boolean } = {},
 ): Promise<void> {
 	const captchaResponsePromise = page.waitForResponse(
 		(response) => response.url().endsWith('/api/v1/auth/captcha/config') && response.request().method() === 'GET',
@@ -95,11 +96,14 @@ async function loadLoginWithCaptcha(
 	await page.goto('/login');
 	const captchaResponse = await captchaResponsePromise;
 	expect(captchaResponse.ok()).toBeTruthy();
-	// Navigation can discard CDP's cached body after the GET succeeded.
-	// Confirm the same public configuration through the safe read-only API.
-	const actual = await page.context().request.get('/api/v1/auth/captcha/config');
-	expect(actual.status()).toBe(200);
-	expect(readAccessCaptchaConfig(await actual.json())).toMatchObject(expectedConfig);
+	// A route-fulfilled malformed configuration exists only in this browser.
+	// The separate APIRequestContext deliberately bypasses Playwright's route,
+	// so reading it would incorrectly assert the persisted valid configuration.
+	if (!options.intercepted) {
+		const actual = await page.context().request.get('/api/v1/auth/captcha/config');
+		expect(actual.status()).toBe(200);
+		expect(readAccessCaptchaConfig(await actual.json())).toMatchObject(expectedConfig);
+	}
 }
 
 async function completeHcaptchaTestWidget(page: import('@playwright/test').Page): Promise<void> {
@@ -207,7 +211,7 @@ test('login CAPTCHA fails closed for invalid configuration', async ({ page, requ
 	);
 	try {
 		await step('a malformed public configuration fences first-factor submission', async () => {
-			await loadLoginWithCaptcha(page, { enabled: true, provider: 'none' });
+			await loadLoginWithCaptcha(page, { enabled: true, provider: 'none' }, { intercepted: true });
 			await expect(page.getByRole('heading', { name: 'User Login', exact: true })).toBeVisible();
 			await expect(page.getByText(CAPTCHA_INVALID_MESSAGE, { exact: true })).toBeVisible();
 			await expect(page.getByRole('button', { name: 'Login', exact: true })).toBeDisabled();

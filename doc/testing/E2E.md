@@ -1563,6 +1563,50 @@ Monaco 补丁为 `scripts/patches/monaco-editor@0.56.0.patch`，pnpm workspace/l
 
 远程待验：首次只打开普通 txt/日志，不打开 JSON 时搜索图标；Ctrl/Cmd+F、点击输入框后持续输入、Enter/Shift+Enter/上下按钮导航到长文件首中尾并核对选区与 scrollTop；开关大小写/整词/正则，替换单项/全部和只读拒绝；鼠标/键盘提示在顶端、窄栏、短面板和弹窗内不被裁切，正则校验消息可读；两个编辑器切换、背景标签关闭、缩放与搜索并用。静态通过不能代替这些交互验收。
 
+## 第七轮远程 Actions #39226129870：全八组反馈与当前补丁（2026-10-19）
+
+**第八轮阶段性验证授权（2026-10-19，用户最新指令）**：用户明确要求“可以先把改完的提交运行一次，看修改的对不对”。因此这一次只将当前已写入的第七轮修复候选统一提交并推送 `dev`，用于触发完整远程 Actions，属于 D18 整轮收口前的明确授权例外，**不代表 45 份失败 spec 已关闭**。原先逐份记录中的 SFTP cleanup unknown、归档取消、上传和布局/重连等未解项仍必须继续查证。提交前本地严格 TS、`pnpm run check`、Backend/Frontend build、`pnpm run format:all:check`、SSH 测试夹具 `node --check`、`git diff --check` 均已 exit 0；没有在本地运行浏览器、Playwright、E2E 或用例收集。远程八组结果尚需在新 run 完成后逐组验收。
+
+基线 `dev`/`b1f89858fce5555d11a58a851060d0c2f8a05dae`，GitHub [Actions 39226129870](https://github.com/0honus0/nexus-terminal/actions/runs/39226129870)，八组结束；Checks/format/build 与 Docker smoke 为 PASS，八组 Playwright 均 failure（第 7 组 timedOut）。逐组按完整 reporter 首次失败题目去重得到 **45 份失败 spec**（各组分别 4/5/3/7/4/10/5/7）。同 shard 后续 `Backend-next isolated baseline reset HTTP 500/503` 不是对应测试自身的产品失败；必须回溯首次资源 cleanup failure，不能绕过隔离重置或把未执行项标记通过。
+
+本次在途修改按照 root 和每份消费者单独归因，仍没有运行本地行为/E2E/用例收集：
+
+| 直接失败 spec                             | 分类与有证据的改动（全部**远程未验收**）                                                                                                                                                                                                |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `http/auth-2fa.spec.ts`                   | 明确的测试初始化错误：2FA UI 用例 `setUiLanguage` 在 `loginAsInitialAdmin` 之前访问受保护的 Preferences GET，401；改为先登录再写语言，不跳过后续真实 2FA 拒绝及恢复                                                                     |
+| `ui/login-captcha-surface.spec.ts`        | 恶意 public config 只通过 `page.route` 注入；`context.request` 读取的是未污染的真实 server config。只在主动注入分支不把两者误判相同，仍要求 UI fail-closed 和登录 POST 未发出                                                           |
+| `ui/captcha-settings.spec.ts`             | 页面消费 PUT 后失去 CDP response body，仍断言 PUT 200，再读取正式 `/settings/captcha` GET 验 version、effectiveVersion、restart 和持久状态                                                                                              |
+| `agent/host.spec.ts`                      | Concurrent Runs 测试任选低于 Concurrent Model Calls 的值，触发合法 `invalid_input` 400。备选值只选符合现有交叉限制的合法范围；仍验证首写 200 和原版本写 409                                                                             |
+| `agent/ssh-acp-settings.spec.ts`          | Reka UiCheckbox 不接受原 `locator.check()` 操作方式；给正式 Integration Editor checkbox 明确 label 和 aria-label；测试通过真实点击及 `aria-checked` 验证                                                                                |
+| `ui/ssh-key-management.spec.ts`           | 预期原始 `Network Error`，但正式 Targets consumer 将网络故障安全地本地化为通用失败；保持拦截 GET、Modal alert、320px 宽度断言                                                                                                           |
+| `ssh/quick-command-management.spec.ts`    | 失败是 Tag 可选列表 GET，不能要求完整 Quick Commands 主查询也显示报错；直接计数被拦截 tag GET、保持未标记回退与真实命令执行                                                                                                             |
+| `ui/notification-delivery.spec.ts`        | 表单显示其 POST 接受时的 queued receipt，与异步最终投递状态不同；仍验证异步真实 sent、刷新后正式 ledger 显示已发送                                                                                                                      |
+| `ui/notification-settings.spec.ts`        | 正式通知渠道卡片此前没有按 `item.id` 的 `data-notification-id` 标识；在唯一卡片 root 补稳定数据 ID，不删除秘密 keep/replace/clear 测试                                                                                                  |
+| `ui/system-settings.spec.ts`              | Preferences 当前设计允许已保存后继续按 Save，旧测试误认为必须 disabled；仍断言实际 PUT、版本、后端持久语言/时区及 reload                                                                                                                |
+| `ui/theme-switching.spec.ts`              | 同一编辑器先移动 overlay slider 再上传图片，完成上传更新 Appearance version，但旧草稿保存仍用旧 CAS version；在单编辑器 upload/remove 已确认结果仅更新该 editor 版本基线，不覆写未保存 opacity 草稿，保留 0.37 精确值                   |
+| `ui/backup-ui.spec.ts`                    | 测试忘记真正的破坏性恢复确认，POST 从未发出；确认对话框后验证导入回执与正式恢复 overlay，显式执行完成恢复后的 Reload；不把 unknown 当成功                                                                                               |
+| `ui/ip-blacklist-settings.spec.ts`        | 移除封禁 IP 必须经过独立破坏性确认；保留 DELETE 200、正式 decoder 与最终空态，补实际 Confirm 点击                                                                                                                                       |
+| `ssh/connection-list-search.spec.ts`      | 正式 Tag Group Manager 分离改名 `Save tag name` 和关联 `Save` 两项独立 CAS 写入。先确认改名，再操作过滤选择及关联，不允许脏名称时跳过校验                                                                                               |
+| `ssh/sftp-download.spec.ts`               | 旧票据测试假设 65 次签发自动逐出最老者，正式 owner 是每用户 64 个 live ticket 上限（包括先前首张票据）、超额 429 不驱逐；测试改为先签发剩余 63 张、超额断言 429、老票据仍可使用、文件突变后老票据 410，不放松 IP/Range/TTL              |
+| `ssh/download-admission.spec.ts`          | 8 个 HTTP body 收完可能领先 remote CLOSE 与 admission release；保留最大 8、额外 429、HEAD 可达和精确字节，只在未超时的有界 poll 中验证 ticket 最终重新准入 200                                                                          |
+| `mobile/suspend-resume-ui.spec.ts`        | 正式 suspended log 下载名为 UUID `.txt`，旧测试要求 `ssh_log_*.log`；保留真实字节内容与恢复前后痕迹断言，匹配当前正式导出名                                                                                                             |
+| `ui/dashboard-workflows.spec.ts`          | Recent Connection wire timestamp 只有 Unix 秒精度，前后两次连接同一秒会同值；第二次发起前明确跨下一秒时间量化边界，仍保留后续 10 秒内严格 `>`、刷新而不导航的判据                                                                       |
+| `ssh/terminal-ui.spec.ts`                 | 旧 Appearance PUT 缺 expectedVersion 且尝试通过设置接口写 read-only 文件指针，正式 Shared 拒绝；采用每次读版本的一次性 updateTestAppearance，仍保存/恢复主题和 CSS 几何                                                                 |
+| `websocket/authenticated-session.spec.ts` | **产品侧安全修复候选**：密码修改的事务确实删掉所有用户 token，但活跃、空闲 Workspace WS 只每 15 秒复核 token，测试要求 10 秒内撤权。缩短工作区独立认证复核到 3 秒，保持认证失败即 close、原凭据立即无法调用的服务检查，不放宽 10 秒断言 |
+| `ssh/file-manager-navigation.spec.ts`     | Path change UI input 先同步填值，SFTP 导航与 per-session history POST 异步；先轮询有界真实 history GET 直到该绝对路径已落库，再打开历史下拉；仍检查宽度、复制、删除、路径导航                                                           |
+
+**仍有直接未解决或只能视作线索的失败**：`agent/functional-regressions` A08 导航后的 CDP body 退场、`agent/preset-plugin` 3 安装项 Select options、`ui/proxy-management` unknown 后 Delete 未禁用、`ssh/file-list-profile` 大目录 10s 内加载、`ssh/archive-cancel-recovery` 取消归档 reported failed、`ssh/docker-manager-ui` 停止按钮定位、`ssh/suspend-resume` filesystem gate 解除后 cwd remote_unavailable、`ssh/upload-protocol` WS CLOSE 结算、`ssh/protocol` detached archive not_found、`ssh/file-preview-editor` plainfile 种子缺失、`ssh/progress-display-archive` 隐藏任务、`ssh/cross-session-transfer` operation_unknown、`ssh/file-upload` Ctrl+V 字节及大批后半段、`ssh/reconnect-ui` 多次自动重连、`mobile/touch-preview-progress` 浮窗可见等。`mobile/ssh-workspace`、`mobile/touch-advanced`、`mobile/touch-workflows`、`ssh/progress-display-baseline`、`ssh/progress-display-upload-copy`、`ssh/status-history-time-axis`、`ssh/suspend-log-compaction`、`ssh/terminal-session-cache` 等是前置基线 reset 500/503 的**未运行**项；不能据主根因修复而从清单抹除。
+
+继续逐文件核对后新增的**直接源码根因**：`ui/proxy-management` 测试看到 Delete 按钮消失，而非仍存在但 enabled。ProxiesView 原先 `v-else-if="message"` 在未知 DELETE 后卸载全部已知行。现将错误 alert 与数据列表并列渲染，保留后端已确认的旧行和 `needsRefresh` 写入围栏，Refresh 才解除；未修改 API 成功语义。`ssh/protocol` 发起 archive 时尚未 await `filesystem.ready`，而 startArchive 正式 owner 依赖已获准的 FileResource，增加真正 readiness barrier。`ssh/suspend-resume` 的 resumed shell 已有前景输入，ShellIntegration 不能事后注入 PID 探针；先在原始附件确认 cwd 为 `/` 再 suspend，仍要求恢复后命令可用和 cwd 一致，不能把探测错误改成成功。
+
+**第七轮 SFTP fixture 的已确认契约缺陷**：`tests/e2e/support/test-ssh-server.mjs` 的 `SETSTAT`、`FSETSTAT` 原来仅实施 chmod/truncate，对 SFTP 客户端要求的 `atime/mtime` 仍答 `STATUS_CODE.OK`，从未更改时间。真实 FileService `copyOneFile`/directory 复制会在 SFTP 目标恢复元数据后按 `modifiedAt` 精确复验，因此假成功会引发 `operation_unknown`；本地 SFTP server 还可能留下一批待清理暂存文件，继而污染其他 spec。现仅在这两个测试 SSH server 事件中按 SFTP 秒值实施 `FileHandle.utimes` / `fsp.utimes`，非法秒值拒绝；未放松任何生产复制验证或改变生产 SFTP。_这明确解释了复制元数据不一致，但并不证明第 4/6 shard 所有 `abort/append/discard` 清理 unknown 也由它直接导致；仍须 Remote Job 独立验证与二轮复审。_
+
+续审 `ssh/file-preview-editor`：失败是测试在点击异步 Save 后调用 `expect.poll(() => readFile(...))`，首次暂存替换期间恰好读到 ENOENT，`poll` 函数抛错而不是继续观察最终持久文件。已限定只将 ENOENT 作为尚未安装完毕的瞬时状态，并继续等待**原本不变的精确目标字节**；其他文件错误继续抛出。底层临时缺失是否违反产品承诺尚需复核，不能凭此将“稳定替换”当已验收。相关场景独立标记待远程复验。
+
+新的原始 shutdown 嵌套证据：shard 4 `RemoteFileService` 的 `stage.abort / stage.discard -> operation_unknown`；shard 6 `copyOneFile` 的 `append -> operation_unknown` 后 `discard -> operation_unknown`，最终 `RemoteResourceCleanupFailure`，其余同 shard reset 阻断由此产生。这是**已确认未知清理事实**，不是 safe rollback；严禁将 cleanup failure try/catch 后吞掉、提高总阈值或绕过控制服务的失败围栏。上述产品修复候选尚未覆盖此项，D18 **不得推送**，直到剩余独立根因静态复核两轮、门禁与整批待验项交付条件满足。
+
+`agent/functional-regressions.spec.ts` A08 的首错来自 `fixtures/agent/native-task.ts:startNativeTask()`：Run POST 接受后页面可立即导航，使 DevTools 丢失 `response.json()` 正文。现在对这一次正式 Workspace Run 请求用页面 Route `fetch()` 先捕获**同一次服务器回应**并将它 `fulfill()` 给前端，再验证浏览器 POST 200、Shared Workspace Response 解码及同 Thread 的 Run ID；没有发出第二次 mutation，也没有根据 DOM 猜测成功。该 fixture 被其它 Agent spec 复用，但 A07/Plugin/cleanup 仍须分别验收；不能将 helper 调整改写为全体通过。
+
 ## 状态监控等待布局（2026-10-19）
 
 dev / `8fa1713c` 未提交工作区，沿用本页 Node/pnpm 环境。状态面板原等待态用字体旋转图标和只设置 place-content 的 Grid；改用现有 16px UiSpinner，局部纵向 Flex 双轴居中、0.5rem 间距，文字限制最大宽度并允许换行，错误空态复用相同对齐。加载容器提供 status 语义，装饰图标不重复朗读。不改采样、网络、比例及通用 UI；已核对 Frontend 状态监控 owner 说明仍符合实际，无架构边界变化。

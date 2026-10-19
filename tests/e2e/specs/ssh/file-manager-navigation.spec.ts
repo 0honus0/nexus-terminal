@@ -17,6 +17,10 @@ import {
 } from '../../support/ssh';
 import { step } from '../../support/steps';
 import { readFavoriteDelete, readFavoriteList } from '../../../../packages/shared/src/preferences/favorites/http-codec';
+import {
+	readHistoryListQuery,
+	readPathHistoryList,
+} from '../../../../packages/shared/src/preferences/history/http-codec';
 import { closeWebSocket, openWorkspaceSession, requestWorkspace, waitForBinaryText } from '../../support/ws';
 
 const FAVORITE_NAME = 'E2E Folder Seed';
@@ -385,6 +389,19 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 
 	await step('Path history records, copies, deletes, and navigates through visited directories', async () => {
 		await navigateViaPathInput(page, SPECIAL_PATH);
+		// The path input is populated synchronously, but its SFTP navigation
+		// and the session-owned history POST settle asynchronously. Confirm the
+		// real durable visit before opening a separate GET-backed dropdown.
+		await expect
+			.poll(async () => {
+				const query = new URLSearchParams({ offset: '0', limit: '100' });
+				const response = await context.request.get('/api/v1/path-history?' + query);
+				expect(response.ok()).toBeTruthy();
+				return readPathHistoryList(await response.json(), readHistoryListQuery(query)).entries.some(
+					(item) => item.path === SPECIAL_PATH,
+				);
+			})
+			.toBeTruthy();
 		await pathInput(page).click();
 		const historyDropdown = manager(page).locator('.path-history-dropdown');
 		await expect(historyDropdown).toBeVisible();

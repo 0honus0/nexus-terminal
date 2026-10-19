@@ -261,6 +261,14 @@ test('workspace tag picker and group manager create, assign, remove, rename, and
 	await step('group manager renames the tag and assigns the filtered secondary connection', async () => {
 		const manager = await openManager(WORKSPACE_TAG);
 		await manager.getByRole('textbox', { name: 'Tag name', exact: true }).fill(WORKSPACE_TAG_RENAMED);
+		// Renaming the tag and replacing memberships are two independently
+		// confirmed mutations. The Save Associations button is intentionally
+		// disabled for a still-dirty name; rename first without resetting the
+		// selected group or weakening the membership assertions below.
+		await manager.getByRole('button', { name: 'Save tag name', exact: true }).click();
+		await expect
+			.poll(async () => (await listTags(context.request)).find((tag) => tag.id === tagId)?.name ?? '')
+			.toBe(WORKSPACE_TAG_RENAMED);
 		await manager.getByPlaceholder('Search connections...', { exact: true }).fill('Search Secondary');
 		await manager.getByRole('button', { name: 'Select All', exact: true }).click();
 		await manager.getByRole('button', { name: 'Save', exact: true }).click();

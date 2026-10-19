@@ -180,6 +180,9 @@
 				permission,
 				(result) => {
 					store.accept(result.appearance);
+					// Upload is a confirmed write by this editor. Advance only its
+					// CAS baseline while preserving unsaved visual form changes.
+					baseline = result.appearance.version;
 					if (result.cleanupPending) {
 						feedback.notifyWarning(t('appearanceNext.cleanupPending'));
 					}
@@ -199,6 +202,7 @@
 				permission,
 				(result) => {
 					store.accept(result.appearance);
+					baseline = result.appearance.version;
 					if (result.cleanupPending) {
 						feedback.notifyWarning(t('appearanceNext.cleanupPending'));
 					}

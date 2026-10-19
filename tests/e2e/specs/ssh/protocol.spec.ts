@@ -258,6 +258,10 @@ test('detached workspace keeps archive work running and replays its outcome on r
 
 	await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=1000`, { method: 'POST' });
 	try {
+		// A connected terminal does not imply that its independently acquired
+		// FileResource has finished initialization. Archive admission requires
+		// the actual filesystem.ready event, not a timing assumption.
+		await waitForFilesystemReady(workspace.socket);
 		await requestWorkspace(
 			workspace.socket,
 			'transfer.compress',

@@ -91,7 +91,9 @@ for (const decision of ['denied', 'cancelled'] as const) {
 			.getByRole('textbox', { name: 'argv (JSON string array, executable first)', exact: true })
 			.fill(JSON.stringify(argv));
 		await section.getByRole('textbox', { name: 'Absolute working directory', exact: true }).fill(directory);
-		await section.getByRole('checkbox', { name: 'Enable integration', exact: true }).check();
+		const enabled = section.getByRole('checkbox', { name: 'Enable integration', exact: true });
+		if ((await enabled.getAttribute('aria-checked')) !== 'true') await enabled.click();
+		await expect(enabled).toHaveAttribute('aria-checked', 'true');
 		const integrationPath = `/api/v1/apps/${app.id}/integrations`;
 		const creation = page.waitForResponse(
 			(response) =>

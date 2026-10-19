@@ -100,6 +100,10 @@ for (const outcome of ['ready', 'error', 'closed'] as const) {
 		await resetTestSshFilesystem();
 		const original = await openWorkspaceSession(request, await ensureTestSshConnection(request));
 		await waitForFilesystemReady(original.socket);
+		// Shell discovery must finish before the first attachment is detached.
+		// After user foreground input, the service deliberately refuses to
+		// inject a new PID-discovery probe into an unverified PTY program.
+		await expect(requestWorkspace(original.socket, 'terminal.currentDirectory')).resolves.toBe('/');
 		const marked = await requestWorkspace<{ suspendedSessionId: string }>(original.socket, 'suspend.mark');
 		await closeWebSocket(original.socket);
 		const socket = await openAuthenticatedWebSocket(request);

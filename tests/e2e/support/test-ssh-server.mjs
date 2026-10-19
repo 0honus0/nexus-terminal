@@ -974,6 +974,16 @@ function attachSftp(session, accept) {
 		try {
 			if (typeof attrs?.mode === 'number') await state.fileHandle.chmod(attrs.mode & 0o7777);
 			if (typeof attrs?.size === 'number') await state.fileHandle.truncate(attrs.size);
+			if (attrs?.atime !== undefined || attrs?.mtime !== undefined) {
+				if (
+					!Number.isSafeInteger(attrs.atime) ||
+					!Number.isSafeInteger(attrs.mtime) ||
+					attrs.atime < 0 ||
+					attrs.mtime < 0
+				)
+					throw new Error('Invalid SFTP timestamps');
+				await state.fileHandle.utimes(attrs.atime, attrs.mtime);
+			}
 			sftp.status(reqid, STATUS_CODE.OK);
 		} catch (error) {
 			respondError(reqid, error);
@@ -1050,6 +1060,20 @@ function attachSftp(session, accept) {
 			const fullPath = resolveRemotePath(remotePath);
 			if (typeof attrs?.mode === 'number') await fsp.chmod(fullPath, attrs.mode & 0o7777);
 			if (typeof attrs?.size === 'number') await fsp.truncate(fullPath, attrs.size);
+			// SFTP SETSTAT carries POSIX seconds, not JS milliseconds. The
+			// fixture must actually apply requested times: returning OK without
+			// doing so makes production's post-copy metadata verification report
+			// operation_unknown and poisons later isolated reset/cleanup.
+			if (attrs?.atime !== undefined || attrs?.mtime !== undefined) {
+				if (
+					!Number.isSafeInteger(attrs.atime) ||
+					!Number.isSafeInteger(attrs.mtime) ||
+					attrs.atime < 0 ||
+					attrs.mtime < 0
+				)
+					throw new Error('Invalid SFTP timestamps');
+				await fsp.utimes(fullPath, attrs.atime, attrs.mtime);
+			}
 			sftp.status(reqid, STATUS_CODE.OK);
 		} catch (error) {
 			respondError(reqid, error);

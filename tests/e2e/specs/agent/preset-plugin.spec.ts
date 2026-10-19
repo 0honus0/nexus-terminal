@@ -331,8 +331,13 @@ test('frontend target owns a full Custom App Surface and connects through the is
 	}
 	await page.goto('/settings?tab=agent');
 	const section = page.getByRole('heading', { name: 'Plugin management', exact: true }).locator('..');
+	// Installation writes were performed by an independent APIRequestContext.
+	// Explicitly read the product's plugin directory (not the unrelated
+	// scoped-app selector) before asserting the runtime installation picker.
+	await section.getByRole('button', { name: 'Read plugin directories', exact: true }).click();
+	const runtimePicker = section.getByRole('combobox', { name: 'App', exact: true });
 	for (const installed of [custom, agent, fullstack]) {
-		await expect(section.locator('option[value="' + installed.appId + '"]')).toHaveCount(1);
+		await expect(runtimePicker.locator('option[value="' + installed.appId + '"]')).toHaveCount(1);
 		// The native select option is intentionally hidden. Also assert the
 		// visible installed-app record; the old first text match selected the
 		// hidden option and never exercised the management surface.

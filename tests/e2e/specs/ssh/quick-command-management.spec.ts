@@ -263,16 +263,21 @@ test('quick commands remain usable when the tag catalog fails to load', async ({
 	const commandId = readCommandMutation(await create.json()).command.id;
 	const connectionId = await ensureTestSshConnection(context.request);
 
+	let rejectedTagReads = 0;
 	await page.route('**/api/v1/quick-command-tags?*', async (route) => {
-		if (route.request().method() === 'GET') await route.abort('failed');
-		else await route.continue();
+		if (route.request().method() === 'GET') {
+			rejectedTagReads += 1;
+			await route.abort('failed');
+		} else await route.continue();
 	});
 
 	try {
 		await connectTestSshFromConnectionsPage(page, connectionId);
 		const quickView = page.locator('.quick-commands-root').filter({ visible: true }).first();
 		const row = quickView.locator(`[data-command-id="${commandId}"]`);
-		await expect(quickView.getByRole('alert')).toContainText('Personal data request failed. Try reading again.');
+		// Tags are an optional read owner. The command directory itself did
+		// not fail, so it does not show a false directory-wide error alert.
+		await expect.poll(() => rejectedTagReads).toBeGreaterThan(0);
 		await expect(row).toBeVisible();
 		await expect(quickView.getByText('Untagged', { exact: true })).toBeVisible();
 

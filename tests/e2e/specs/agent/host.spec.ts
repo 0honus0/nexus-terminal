@@ -982,9 +982,12 @@ test('concurrent Agent settings preserve dirty drafts and reject their original 
 		const leaderInput = leader.getByRole('spinbutton', { name: 'Concurrent Runs', exact: true });
 		const otherInput = other.getByRole('spinbutton', { name: 'Concurrent Runs', exact: true });
 		const original = Number(await leaderInput.inputValue());
+		const minimumRuns = Number(
+			await leader.getByRole('spinbutton', { name: 'Concurrent Model Calls', exact: true }).inputValue(),
+		);
 		const maximum = Number(await leaderInput.getAttribute('max'));
 		const alternatives = Array.from({ length: maximum }, (_, index) => index + 1).filter(
-			(value) => value !== original,
+			(value) => value !== original && value >= minimumRuns,
 		);
 		expect(alternatives.length).toBeGreaterThanOrEqual(2);
 		await otherInput.fill(String(alternatives[1]));

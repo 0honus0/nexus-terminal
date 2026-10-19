@@ -107,6 +107,10 @@ import type {
 } from '@nexus-terminal/shared/remote/transfers/workspace';
 
 const ROOT = '/ws/workspace';
+// Credential rotation revokes every session token in the account transaction.
+// Check independently of client traffic so an idle authenticated WebSocket is
+// fenced promptly after password change or logout, not only on its next RPC.
+const WORKSPACE_AUTH_RECHECK_MS = 3000;
 const OUTPUT_RETRY_MS = 10;
 const MAX_WS_TERMINAL_QUEUE_BYTES = 8 * 1024 * 1024;
 
@@ -1203,7 +1207,7 @@ class WorkspaceFilesSession {
 					}
 				})
 				.catch(() => this.channel.close(1011, 'Workspace authorization unavailable'));
-		}, 15_000);
+		}, WORKSPACE_AUTH_RECHECK_MS);
 		this.identityPoll.unref();
 	}
 

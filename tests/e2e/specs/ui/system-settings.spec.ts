@@ -21,10 +21,9 @@ async function saveForm(page: Page, form: Locator, path = '/api/v1/settings/pref
 	const response = page.waitForResponse((value) => value.url().endsWith(path) && value.request().method() === 'PUT');
 	await form.locator('button[type="submit"]').click();
 	expect((await response).ok()).toBe(true);
-	// Preferences disable Save after the draft is persisted; this is a valid
-	// no-dirty-state result, not a failed mutation. Callers independently read
-	// the persisted API values and check the updated form after the response.
-	await expect(form.locator('button[type="submit"]')).toBeDisabled();
+	// Preferences keeps Save available after successful persistence. Callers
+	// independently verify the saved API values and the updated form.
+	await expect(form.locator('button[type="submit"]')).toBeEnabled();
 }
 
 async function systemTab(page: Page): Promise<void> {

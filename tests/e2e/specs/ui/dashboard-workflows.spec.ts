@@ -323,6 +323,12 @@ test('dashboard reconnect completion refreshes recent connection without navigat
 		await expect(row).toBeVisible();
 		const previousLastConnectedAt = Number(await row.getAttribute('data-last-connected-at'));
 		expect(previousLastConnectedAt).toBeGreaterThan(0);
+		// The recent-connection wire timestamp is whole Unix seconds. Two
+		// successful SSH connects within the same second legitimately produce
+		// equal milliseconds, even after a correct Dashboard store refresh.
+		// Start the second connect in the next representable tick instead of
+		// weakening the strict greater-than assertion on the refreshed row.
+		await expect.poll(() => Date.now()).toBeGreaterThan(previousLastConnectedAt + 1_000);
 
 		await reconnect.click();
 		await connectionDetailStarted;

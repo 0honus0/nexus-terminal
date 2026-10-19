@@ -192,9 +192,19 @@ test('HTTP downloads reject excess admission and reclaim delayed OPEN handles af
 			expect(response.status()).toBe(200);
 			expect(await response.body()).toEqual(bytes);
 		}
-		const ticketRecovery = await request.get(ticket.url);
-		expect(ticketRecovery.status()).toBe(200);
-		expect(await ticketRecovery.body()).toEqual(bytes);
+		// Receipt of all eight HTTP bodies does not prove their remote CLOSE
+		// and release callbacks have reclaimed the admission slots. Probe the
+		// still-valid ticket until a slot is really available, keeping the
+		// earlier exact eight-at-capacity 429 checks unchanged.
+		await expect
+			.poll(async () => {
+				const response = await request.get(ticket.url);
+				const status = response.status();
+				if (status === 200) expect(await response.body()).toEqual(bytes);
+				await response.dispose();
+				return status;
+			})
+			.toBe(200);
 		// Receiving Content-Length bytes can precede remote CLOSE/pipeline cleanup.
 		// Observe remote handle settlement; HTTP handler admission can settle later.
 		await expect.poll(handles).toEqual({ opened: baseline.opened + 17, closed: baseline.closed + 17 });

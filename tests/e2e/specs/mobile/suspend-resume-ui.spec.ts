@@ -1009,7 +1009,9 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
 		const downloadPromise = page.waitForEvent('download');
 		await hanging.getByRole('button', { name: 'Export Log', exact: true }).click();
 		const download = await downloadPromise;
-		expect(download.suggestedFilename()).toMatch(/^ssh_log_.*\.log$/);
+		// The SuspendedSessions owner exports a session-UUID-addressed UTF-8
+		// text transcript; the old ssh_log_*.log name no longer exists.
+		expect(download.suggestedFilename()).toBe(primary!.id + '.txt');
 		const downloadStream = await download.createReadStream();
 		const chunks: Buffer[] = [];
 		for await (const chunk of downloadStream) chunks.push(Buffer.from(chunk));

@@ -493,7 +493,17 @@ test('file previews and text editor protect historical file-opening regressions'
 			const started = performance.now();
 			await editor.getByRole('button', { name: 'Save', exact: true }).click();
 			await expect
-				.poll(() => readFile(path.resolve('.tmp/ssh-root/plainfile'), 'utf8'))
+				.poll(async () => {
+					try {
+						return await readFile(path.resolve('.tmp/ssh-root/plainfile'), 'utf8');
+					} catch (cause) {
+						// Save is asynchronous and the target may be temporarily absent
+						// while the staged SFTP replacement is being committed. Never
+						// suppress a non-ENOENT read error or weaken the final byte check.
+						if (cause instanceof Error && 'code' in cause && cause.code === 'ENOENT') return null;
+						throw cause;
+					}
+				})
 				.toBe('plain-updated-through-editor\n');
 			console.log(
 				'[editor save profile]',
