@@ -12,6 +12,36 @@ import { readAccessCaptchaConfig, readAccessHttpError } from '../../../../packag
 
 const headers = { Origin: E2E_URLS.frontendOrigin };
 
+async function submitTwoFactorChallenge(
+	page: Page,
+	submit: () => Promise<void>,
+): Promise<{ status: number; code: string }> {
+	const url = '**/api/v1/auth/login/2fa';
+	let code: string | null = null;
+	await page.route(url, async (route) => {
+		if (route.request().method() !== 'POST') {
+			await route.continue();
+			return;
+		}
+		// Capture the original 401 before navigation retires its CDP body.
+		// Never replay this credential/challenge mutation just to inspect it.
+		const upstream = await route.fetch();
+		code = readAccessHttpError(await upstream.json()).code;
+		await route.fulfill({ response: upstream });
+	});
+	try {
+		const responsePromise = page.waitForResponse(
+			(response) => response.url().endsWith('/api/v1/auth/login/2fa') && response.request().method() === 'POST',
+		);
+		await submit();
+		const response = await responsePromise;
+		expect(code, 'Captured exact 2FA error response before navigation').not.toBeNull();
+		return { status: response.status(), code: code! };
+	} finally {
+		await page.unroute(url);
+	}
+}
+
 function totpCode(secret: string, now = Date.now()): string {
 	const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 	if (!/^[A-Z2-7]{32}$/.test(secret)) throw new Error('Invalid fixture TOTP secret');
@@ -430,15 +460,9 @@ test('Login 2FA challenge supports invalid-token retry and expired-session recov
 			await step(`${viewport.name}: reject an invalid code without leaving the challenge`, async () => {
 				const invalidToken = invalidTotpCode(secret);
 				await twoFactorToken.fill(invalidToken);
-				const responsePromise = page.waitForResponse(
-					(response) =>
-						response.url().endsWith('/api/v1/auth/login/2fa') && response.request().method() === 'POST',
-				);
-				await submit.click();
-				const response = await responsePromise;
-				invalidTokenStatus = response.status();
-				const body = readAccessHttpError(await response.json());
-				expect(body.code).toBe('invalid_credentials');
+				const response = await submitTwoFactorChallenge(page, () => submit.click());
+				invalidTokenStatus = response.status;
+				expect(response.code).toBe('invalid_credentials');
 				invalidTokenMessage = 'The username, password or verification code is incorrect.';
 				expect(invalidTokenStatus).toBe(401);
 				expect(invalidTokenMessage).toBeTruthy();
@@ -457,15 +481,9 @@ test('Login 2FA challenge supports invalid-token retry and expired-session recov
 				expect(logout.ok()).toBeTruthy();
 
 				await twoFactorToken.fill('000000');
-				const responsePromise = page.waitForResponse(
-					(response) =>
-						response.url().endsWith('/api/v1/auth/login/2fa') && response.request().method() === 'POST',
-				);
-				await submit.click();
-				const response = await responsePromise;
-				expiredRecoveryStatus = response.status();
-				const body = readAccessHttpError(await response.json());
-				expect(body.code).toBe('unauthenticated');
+				const response = await submitTwoFactorChallenge(page, () => submit.click());
+				expiredRecoveryStatus = response.status;
+				expect(response.code).toBe('unauthenticated');
 				expiredRecoveryMessage = 'The login challenge expired. Sign in again.';
 				expect(expiredRecoveryStatus).toBe(401);
 				expect(expiredRecoveryMessage).toBeTruthy();
