@@ -773,6 +773,11 @@ for (const fixture of regressionInputs.memoryProposals) {
 		);
 		expect(managed.confidence).toBe(fixture.confidence);
 		const reviewId = managed.id;
+
+		const readManaged = async () =>
+			(await requestAgentJson(request, { method: 'GET', path: `${path}/${reviewId}` }, readAgentMemoryResponse))
+				.memory;
+
 		await page.goto('/settings?tab=agent');
 		const section = page.getByRole('region', { name: 'Memory management', exact: true });
 		await section
@@ -789,7 +794,7 @@ for (const fixture of regressionInputs.memoryProposals) {
 		await section.getByRole('button', { name: 'Publish current content', exact: true }).click();
 		const publishedResponse = await publishedWaiting;
 		expect(publishedResponse.status()).toBe(200);
-		const { memory: published } = readAgentMemoryResponse(await publishedResponse.json());
+		const published = await readManaged();
 		expect(published).toMatchObject({
 			id: reviewId,
 			status: 'published',
@@ -813,7 +818,9 @@ for (const fixture of regressionInputs.memoryProposals) {
 		await section.getByRole('button', { name: 'Revoke publication', exact: true }).click();
 		const stale = await staleWaiting;
 		expect(stale.status()).toBe(409);
-		expect(readAgentErrorResponse(await stale.json()).code).toBe('version_conflict');
+		// Stale CAS is confirmed by 409 and unchanged persisted revision; the
+		// UI can discard the browser-owned response body when it resets review.
+		expect(await readManaged()).toMatchObject({ id: reviewId, status: 'published', version: 2 });
 		await expect(
 			section.getByRole('button', { name: 'Read current version for review', exact: true }).first(),
 		).toBeDisabled();
@@ -825,7 +832,7 @@ for (const fixture of regressionInputs.memoryProposals) {
 		await section.getByRole('button', { name: 'Revoke publication', exact: true }).click();
 		const revokedResponse = await revokeWaiting;
 		expect(revokedResponse.status()).toBe(200);
-		expect(readAgentMemoryResponse(await revokedResponse.json()).memory).toMatchObject({
+		expect(await readManaged()).toMatchObject({
 			id: reviewId,
 			status: 'revoked',
 			version: 3,
