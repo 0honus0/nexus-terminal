@@ -134,7 +134,7 @@ Files首次读取等待当前附件的SFTP ready，尚未ACK、已断开/撤销�
 
 ## 8. 当前能力与验收
 
-第九轮补充统一未授权响应边界：旧 Axios `httpClient` 与新版有界 `requestJson` 均可触发同一个防重入 `dispatchUnauthorized`；已确认的 401 由应用启动时注册的鉴权回调验证当前身份后撤销会话并导航 Login。显式 logout 仍不触发全局 401 拦截，以保留先排空资源、再只读确认同一用户的独立不确定结果处理。该项来自 `ssh/terminal-ui` 中 Preferences PUT 已返回 401 但 Workspace 未导航的真实远程日志，待下一轮复验。
+第九轮补充统一未授权响应边界：旧 Axios `httpClient` 与新版有界 JSON 请求各自使用同一防重入 `dispatchUnauthorized`。新版 JSON 只有经对应领域的 Shared 错误解码确认 `unauthenticated` 时才触发，不能把密码输错导致的 `401 invalid_credentials` 当作会话失效；如 2FA 禁用的错误密码应继续展示表单错误。显式 logout 仍不触发全局 401 拦截，以保留先排空资源、再只读确认同一用户的独立不确定结果处理。该项来自 `ssh/terminal-ui` 中 Preferences PUT 已返回 401 但 Workspace 未导航的真实远程日志，待下一轮复验。
 
 第九轮远程日志确认失败登出反馈生命周期缺口：`beginAuthentication` 会卸载 `AppHeader`，因而其局部 `logoutError` 无法在重新读取原身份后继续展示。失败消息改由独立于会话挂载的 `NotificationHost` 承载，并为错误通知设置 `role=alert`；不改变原有先撤销 Workspace/Agent 所有者、再经 `/auth/status` 核实同一身份的围栏。该变更待远程 E2E 复验。
 

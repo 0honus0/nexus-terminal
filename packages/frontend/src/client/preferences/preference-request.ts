@@ -3,6 +3,7 @@ import type { FavoriteErrorCode } from '@nexus-terminal/shared/preferences/favor
 import type { HistoryErrorCode } from '@nexus-terminal/shared/preferences/history/values';
 import { requestJson, type JsonRequest } from '../http/json-client';
 import { HttpRequestFailure, type RequestOutcome } from '../http/request-failure';
+import { dispatchUnauthorized } from '../http/unauthorized';
 
 type PreferenceFailureCode =
 	CommandErrorCode | FavoriteErrorCode | HistoryErrorCode | HttpRequestFailure['code'] | 'refresh_required';
@@ -87,6 +88,7 @@ export async function requestPreference<T>(input: PreferenceRequest<T>): Promise
 			throw new PreferenceRequestFailure('protocol_failure', 'unknown', { cause });
 		}
 		const unknown = code === 'operation_unknown' || code === 'storage_unavailable' || code === 'internal_failure';
+		if (code === 'unauthenticated') dispatchUnauthorized(input.path);
 		throw new PreferenceRequestFailure(code, unknown ? 'unknown' : 'confirmed');
 	}
 	try {

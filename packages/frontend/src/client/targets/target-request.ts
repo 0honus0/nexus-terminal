@@ -6,6 +6,7 @@ import {
 import type { TargetHttpErrorCode } from '@nexus-terminal/shared/targets/values';
 import { requestJson } from '../http/json-client';
 import { HttpRequestFailure } from '../http/request-failure';
+import { dispatchUnauthorized } from '../http/unauthorized';
 import { TargetRequestFailure } from './target-types';
 
 interface TargetRequest<T> {
@@ -86,6 +87,7 @@ export async function requestTarget<T>(input: TargetRequest<T>): Promise<T> {
 			throw new TargetRequestFailure('protocol_failure', 'unknown', { cause });
 		}
 		const unknown = code === 'operation_unknown' || code === 'internal_failure' || code === 'storage_unavailable';
+		if (code === 'unauthenticated') dispatchUnauthorized('/targets' + input.path);
 		throw new TargetRequestFailure(code, unknown ? 'unknown' : 'confirmed');
 	}
 	try {

@@ -12,6 +12,7 @@ import {
 } from '@nexus-terminal/shared/preferences/configuration/values';
 import { requestJson } from '@/client/http/json-client';
 import { HttpRequestFailure } from '@/client/http/request-failure';
+import { dispatchUnauthorized } from '@/client/http/unauthorized';
 import {
 	ConfigurationFailure,
 	type CoreConfiguration,
@@ -81,6 +82,7 @@ async function send<T>(
 			throw new ConfigurationFailure('protocol_failure', 'unknown', { cause });
 		}
 		const unknown = ['operation_unknown', 'storage_unavailable', 'internal_failure'].includes(failure.code);
+		if (failure.code === 'unauthenticated') dispatchUnauthorized('/settings' + path);
 		throw new ConfigurationFailure(failure.code, unknown ? 'unknown' : 'confirmed');
 	}
 	try {
