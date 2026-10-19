@@ -458,8 +458,10 @@ test('a marked live SSH session survives WebSocket disconnect and resumes the sa
 			attachedWorkspaceId: resumedWorkspaceId,
 		});
 
-		// Resume does not cancel the suspend mark. Closing the restored Workspace must hand
-		// the same live shell back to the suspend service under the replacement workspace id.
+		// Resume does not cancel the suspend mark. Its originalWorkspaceId is
+		// immutable across attachment generations; the replacement Workspace ID
+		// belongs only to the temporary attachedWorkspaceId field. Closing that
+		// socket must return the *same* suspended shell ID to available ownership.
 		await closeWebSocket(recoverySocket);
 		const verifier = await openAuthenticatedWebSocket(request);
 		try {
@@ -468,13 +470,22 @@ test('a marked live SSH session survives WebSocket disconnect and resumes the sa
 				const list = readSuspendedSessionCatalog(await requestWorkspace(verifier, 'suspend.list'));
 				resuspended = list.find(
 					(session) =>
-						session.originalWorkspaceId === resumedWorkspaceId &&
+						session.id === suspended!.id &&
+						session.originalWorkspaceId === original.workspaceId &&
 						session.status === 'active' &&
 						session.ownershipState === 'available',
 				);
 				if (!resuspended) await new Promise((resolve) => setTimeout(resolve, 100));
 			}
 			expect(resuspended).toBeTruthy();
+			expect(resuspended).toMatchObject({
+				id: suspended!.id,
+				originalWorkspaceId: original.workspaceId,
+				connectionId,
+				status: 'active',
+				ownershipState: 'available',
+			});
+			expect(resuspended!.attachedWorkspaceId).toBeUndefined();
 			await requestWorkspace(verifier, 'suspend.terminate', { suspendedSessionId: resuspended!.id });
 		} finally {
 			await closeWebSocket(verifier);
