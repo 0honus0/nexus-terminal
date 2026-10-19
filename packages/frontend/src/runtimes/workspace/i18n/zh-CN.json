@@ -13,7 +13,8 @@
       "back": "返回当前终端"
     },
     "terminal": {
-      "reconnectingMsg": "正在尝试重新连接..."
+      "reconnectingMsg": "正在尝试重新连接...",
+      "ownershipUnknown": "连接所有权结果未知，已停止自动重试。请关闭此标签后重新建立连接；这不表示原远端进程已停止。"
     },
     "title": "工作区",
     "sessions": "{count} 个会话",

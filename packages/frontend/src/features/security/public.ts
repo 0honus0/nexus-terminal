@@ -6,6 +6,4 @@ export { default as IpAccessPanel } from './components/IpAccessPanel.vue';
 
 export { useLoginSecurity } from './composables/useLoginSecurity';
 
-export type { CaptchaStatus, LoginSecurityController } from './composables/useLoginSecurity';
-
-export type { CaptchaConfigDto, CaptchaProviderDto, PasskeySummaryDto, PasskeyTransportDto } from './model/security';
+export type { LoginCaptchaConfig, CaptchaStatus, LoginSecurityController } from './model/security-types';

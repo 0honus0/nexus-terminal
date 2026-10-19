@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { filesystemFailureMessage } from '@/features/filesystem/public';
 	import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiButton, UiContextMenu, UiSelect } from '@/foundation/ui';
@@ -424,7 +425,9 @@
 			<div v-else class="editor-placeholder">{{ t('fileManager.selectFileToEdit') }}</div>
 		</div>
 
-		<p v-if="editorSession.active.value?.error" class="editor-error">{{ editorSession.active.value.error }}</p>
+		<p v-if="editorSession.active.value?.error" class="editor-error">
+			{{ filesystemFailureMessage(editorSession.active.value.error, t) }}
+		</p>
 
 		<UiContextMenu :visible="Boolean(context)" :x="context?.x ?? 0" :y="context?.y ?? 0" @close="context = null">
 			<button

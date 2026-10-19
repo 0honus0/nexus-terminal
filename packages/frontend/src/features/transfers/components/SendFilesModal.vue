@@ -1,24 +1,21 @@
 <script setup lang="ts">
-	import { computed, onMounted, ref, watch } from 'vue';
+	import type { ServerTransferMethod } from '@nexus-terminal/shared/remote/transfers/server-values';
+	import { computed, onMounted, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiOverlayPanel, UiSelect } from '@/foundation/ui';
 	import { apiErrorMessage } from '@/client/http';
 	import { useFeedback } from '@/shared/feedback/public';
-	import { useRuntimeFeatureCapabilities, type ConnectionDto } from '@/shared/capabilities/public';
-	import { useServerTransfersStore } from '../store/serverTransfers.store';
-	import type {
-		SendFileSourceItemDto,
-		ServerTransferMethodDto,
-		ServerTransferTaskDto,
-	} from '../model/serverTransfer';
+	import { useRuntimeFeatureCapabilities, type ConnectionSummary } from '@/shared/capabilities/public';
+	import { useServerTransfersStore, serverTransferFailureKey } from '../store/serverTransfers.store';
+	import type { SendFileSource, ServerTransferTask } from '../model/server-transfer-types';
 
 	const props = defineProps<{
 		visible: boolean;
 		sourceConnectionId: number;
-		items: readonly SendFileSourceItemDto[];
+		items: readonly SendFileSource[];
 		initialTargetPath?: string;
 	}>();
-	const emit = defineEmits<{ close: []; sent: [task: ServerTransferTaskDto] }>();
+	const emit = defineEmits<{ close: []; sent: [task: ServerTransferTask] }>();
 	const { t } = useI18n();
 	const feedback = useFeedback();
 	const capabilities = useRuntimeFeatureCapabilities();
@@ -28,16 +25,29 @@
 	const search = ref('');
 	const selected = ref(new Set<number>());
 	const targetPath = ref('');
-	const method = ref<ServerTransferMethodDto>('auto');
+	const method = ref<ServerTransferMethod>('auto');
 	const loadingOptions = ref(false);
 	const submitting = ref(false);
 	const error = ref('');
 	const expandedGroups = ref<Record<string, boolean>>({});
+	let generation = 0;
+	let operation = new AbortController();
+
+	function invalidate(): void {
+		generation += 1;
+		operation.abort();
+		operation = new AbortController();
+		submitting.value = false;
+		loadingOptions.value = false;
+	}
+
+	onBeforeUnmount(invalidate);
+	onDeactivated(invalidate);
 
 	interface ConnectionGroup {
 		id: string;
 		name: string;
-		connections: ConnectionDto[];
+		connections: ConnectionSummary[];
 	}
 
 	const tagNames = computed(() => new Map(tags.items.value.map((tag) => [tag.id, tag.name])));
@@ -47,8 +57,8 @@
 		),
 	);
 	const groupedConnections = computed<ConnectionGroup[]>(() => {
-		const groups = new Map<number, ConnectionDto[]>();
-		const untagged: ConnectionDto[] = [];
+		const groups = new Map<number, ConnectionSummary[]>();
+		const untagged: ConnectionSummary[] = [];
 
 		for (const connection of sshConnections.value) {
 			if (!connection.tagIds.length) {
@@ -130,20 +140,26 @@
 	const clear = () => (selected.value = new Set());
 
 	const loadOptions = async () => {
+		const current = generation;
 		loadingOptions.value = true;
 		error.value = '';
 		try {
 			await Promise.all([connections.load(), tags.load()]);
 		} catch (cause) {
-			error.value = apiErrorMessage(cause, t('sendFilesModal.errorFetchingData'));
+			if (current === generation && props.visible) {
+				error.value = apiErrorMessage(cause, t('sendFilesModal.errorFetchingData'));
+			}
 		} finally {
-			loadingOptions.value = false;
+			if (current === generation) {
+				loadingOptions.value = false;
+			}
 		}
 	};
 
 	watch(
 		() => props.visible,
 		(visible) => {
+			invalidate();
 			if (!visible) return;
 			search.value = '';
 			selected.value = new Set();
@@ -154,6 +170,7 @@
 		},
 	);
 	onMounted(() => props.visible && void loadOptions());
+	watch([() => props.sourceConnectionId, () => props.items], invalidate);
 
 	const submit = async () => {
 		if (submitting.value) return;
@@ -164,23 +181,42 @@
 			return;
 		}
 		submitting.value = true;
+		const current = generation;
+		const signal = operation.signal;
+		const command = {
+			sourceConnectionId: props.sourceConnectionId,
+			connectionIds: [...selected.value],
+			sourceItems: props.items.map((item) => ({ name: item.name, path: item.path, type: item.type })),
+			remoteTargetPath: path,
+			transferMethod: method.value,
+		};
 		try {
-			if (!(await feedback.confirm({ message: t('sendFilesModal.credentialTrustWarning'), destructive: true })))
+			if (
+				!(await feedback.confirm({
+					message: t('sendFilesModal.credentialTrustWarning'),
+					destructive: true,
+					signal,
+				})) ||
+				current !== generation ||
+				!props.visible ||
+				signal.aborted
+			)
 				return;
-			const task = await transfers.send({
-				sourceConnectionId: props.sourceConnectionId,
-				connectionIds: [...selected.value],
-				sourceItems: [...props.items],
-				remoteTargetPath: path,
-				transferMethod: method.value,
-			});
+			const task = await transfers.send(command, signal);
+			if (current !== generation || !props.visible || signal.aborted) {
+				return;
+			}
 			feedback.notifySuccess(t('sendFilesModal.transferInitiatedGeneric'));
 			emit('sent', task);
 			emit('close');
 		} catch (cause) {
-			error.value = apiErrorMessage(cause, t('sendFilesModal.transferFailedError'));
+			if (current === generation && props.visible) {
+				error.value = t(serverTransferFailureKey(cause));
+			}
 		} finally {
-			submitting.value = false;
+			if (current === generation) {
+				submitting.value = false;
+			}
 		}
 	};
 </script>
@@ -353,7 +389,10 @@
 				<p v-else class="text-xs italic text-text-secondary">{{ t('sendFilesModal.noItemsSelected') }}</p>
 			</section>
 
-			<p v-if="error" class="rounded-md bg-error/10 p-2 text-sm text-error" role="alert">{{ error }}</p>
+			<p v-if="transfers.sendBlocked" class="rounded-md bg-error/10 p-2 text-sm text-error" role="alert">
+				{{ t('serverTransferErrors.operation_unknown') }}
+			</p>
+			<p v-else-if="error" class="rounded-md bg-error/10 p-2 text-sm text-error" role="alert">{{ error }}</p>
 		</div>
 
 		<div class="mt-auto flex shrink-0 items-center justify-end gap-3 border-t border-border pt-4">
@@ -367,7 +406,7 @@
 			<button
 				type="button"
 				class="rounded-md bg-button px-4 py-2 text-button-text shadow-sm transition hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
-				:disabled="submitting || !items.length || !selected.size || !targetPath.trim()"
+				:disabled="submitting || transfers.sendBlocked || !items.length || !selected.size || !targetPath.trim()"
 				@click="submit"
 			>
 				<i v-if="submitting" class="fas fa-spinner fa-spin mr-1" aria-hidden="true"></i

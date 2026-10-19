@@ -131,14 +131,16 @@ export function readFavoriteQuery(query: URLSearchParams): FavoritePathListQuery
 
 export function readFavoritePath(input: unknown): FavoritePath {
 	const value = object(input, ['id', 'version', 'name', 'path', 'lastUsedAt', 'createdAt', 'updatedAt']);
+	const createdAt = integer(value.createdAt, 0);
+	const lastUsedAt = value.lastUsedAt === null ? null : integer(value.lastUsedAt, createdAt);
 	return {
 		id: integer(value.id, 1),
 		version: integer(value.version, 1),
 		name: value.name === null ? null : text(value.name, FAVORITE_NAME_MAX_BYTES),
 		path: path(value.path),
-		lastUsedAt: value.lastUsedAt === null ? null : integer(value.lastUsedAt, 0),
-		createdAt: integer(value.createdAt, 0),
-		updatedAt: integer(value.updatedAt, 0),
+		lastUsedAt,
+		createdAt,
+		updatedAt: integer(value.updatedAt, lastUsedAt ?? createdAt),
 	};
 }
 

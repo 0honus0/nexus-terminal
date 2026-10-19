@@ -1,6 +1,6 @@
 # 部署与更新
 
-默认使用 Docker Compose。功能见 [USAGE](USAGE.md)，开发规则见 [AGENTS](AGENTS.md)。正式镜像使用旧 Backend；backend-next 尚未切换。
+默认使用 Docker Compose。唯一后端为 `packages/backend`（原 backend-next），启动产物 `dist/main.js`；前后端消费 Shared。旧实现从 Git 历史读取，不提供旧库、旧快照或旧环境变量的兼容层。功能见 [USAGE](USAGE.md)，待验范围见 [实施方案](后端重构下一阶段实施方案.md)。
 
 ## 部署
 
@@ -9,12 +9,13 @@
 ```bash
 mkdir -p nexus-terminal
 cd nexus-terminal
-wget https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/main/docker-compose.yml -O docker-compose.yml
-wget https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/main/.env.example -O .env.example
+wget https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/dev/docker-compose.yml -O docker-compose.yml
+wget https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/dev/.env.example -O .env.example
 cp .env.example .env
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
 ```
 
-编辑 `.env`，在受控网络完成首次管理员初始化后再开放公网；空库 setup 没有部署 token。
+把生成结果保存为 `.env` 的 `NEXUS_ENCRYPTION_KEY`，并设置实际 `NEXUS_PUBLIC_ORIGIN`。部署文件与所选镜像必须来自同一版本；合并源码不代表镜像已发布。重构版本使用空数据目录，不直接挂载旧产品数据库。在受控网络完成首次管理员初始化后再开放公网。
 
 ```bash
 docker compose up -d
@@ -22,41 +23,29 @@ docker compose ps
 docker compose logs --tail=100 backend
 ```
 
-默认访问 `http://服务器地址:18111`。仅发布 Frontend；本机访问可将 `ports` 改为 `127.0.0.1:18111:80`。
+默认访问 `http://localhost:18111`。仅发布 Frontend；仅本机访问时将 `ports` 改为 `127.0.0.1:18111:80`。
 
 ## 配置与数据
 
-```dotenv
-NEXUS_IMAGE_REPOSITORY=ghcr.io/0honus0/nexus-terminal
-NEXUS_IMAGE_TAG=latest
-NEXUS_HTTP_PORT=18111
-NEXUS_PUBLIC_ORIGIN=https://terminal.example.com
-APP_NAME=Nexus Terminal
-RP_ID=terminal.example.com
-RP_ORIGIN=https://terminal.example.com
-```
+| 配置/路径                    | 用途                                                                                      |
+| ---------------------------- | ----------------------------------------------------------------------------------------- |
+| `NEXUS_IMAGE_REPOSITORY/TAG` | 镜像地址与已发布版本，开发镜像使用 `dev`                                                  |
+| `NEXUS_HTTP_PORT`            | Frontend 发布端口，默认 18111                                                             |
+| `NEXUS_PUBLIC_ORIGIN`        | 实际公开协议、域名和非默认端口，不带路径                                                  |
+| `NEXUS_ENCRYPTION_KEY`       | 必填、固定的 32-byte 标准 base64 实例密钥；不可每次重启重新生成                           |
+| `NEXUS_TRUSTED_PROXIES`      | IP/CIDR 或 proxy-addr 具名范围；Compose 默认 `loopback,uniquelocal`，只适用于受控隔离网络 |
+| `./data`                     | SQLite、邻接 `.artifacts/.appearance` 等持久文件；备份包含完整目录及实例密钥              |
+| `.env`                       | Compose 插值和 Backend env_file；首次初始化设置以后以持久配置为准                         |
+| `GUACD_IMAGE`                | 默认 `guacamole/guacd:latest`；Backend 内连 `guacd:4822`，3001 不公开                     |
+| `NEXUS_IPV6_SUBNET/GATEWAY`  | 默认 `fd01::/80` / `fd01::1`，与宿主冲突时修改                                            |
 
-| 配置/路径      | 核心要求                                                                         |
-| -------------- | -------------------------------------------------------------------------------- |
-| image tag      | `latest` 稳定版；`dev` 最近一次手动开发发布，主镜像支持 AMD64/ARM64              |
-| public origin  | 实际公开协议、域名和非默认端口，与反向代理保持一致                               |
-| RP ID/Origin   | 独立域名按位置使用逗号分隔；Related Origins 可用一个 RP ID 对应多个受信 Origin   |
-| `./data`       | 数据及首次生成密钥；备份包含 `./data/.env`                                       |
-| `.env`         | Compose 插值和 Backend env_file；environment 优先，修改运行配置后 force-recreate |
-| `VITE_*`       | 构建时配置；运行时改 `.env` 不改变已有前端                                       |
-| guacd          | 默认 `guacamole/guacd:latest`，Backend 内连 `guacd:4822`；Backend 3001 不公开    |
-| IPv6           | 默认 `fd01::/80` / `fd01::1`；冲突时改 `NEXUS_IPV6_SUBNET/GATEWAY`               |
-| plugin catalog | `NEXUS_AGENT_OFFICIAL_PLUGIN_CATALOG_URL` 可用官方目录镜像，内容须保持签名       |
+首次 Passkey 站点从公开 Origin 推导；多站点可用 `NEXUS_PASSKEY_SITES` JSON 初始化。CAPTCHA、安全策略和站点配置在设置页维护，按界面提示重启激活。插件仓库与信任 Publisher 由管理接口配置，不使用旧 catalog 环境变量。写操作依赖当前会话、同源 Origin/Fetch Metadata，不使用旧 CSRF token 端点。
 
 ```bash
 docker compose up -d --force-recreate
 ```
 
-Frontend/Backend 共用主镜像层，Plugin UI/SDK 走同源 `/plugins/...`、`/sdk/...`。Agent 远程操作/ACP 使用显式授权的 SSH，Browser 使用 Backend CDP；首次启用安装官方签名插件，不安装 Agent Runner。模型 Registry 加载缓存并尝试同步，离线不阻止启动，可手动刷新。
-
 ## HTTPS 与代理
-
-在已配置 HTTPS 的 Nginx server 中添加：
 
 ```nginx
 location / {
@@ -73,62 +62,39 @@ location / {
 }
 ```
 
-保留公开 Host/协议，启用 WebSocket；HTTPS 支持 Passkey、剪贴板等浏览器能力，Agent 写操作仍需 CSRF token。
-
-| 入口         | 来源信任                                                                  |
-| ------------ | ------------------------------------------------------------------------- |
-| 默认 Compose | `TRUST_PROXY=1`；Backend 只接受可信 Frontend，不可被不可信客户端/容器直连 |
-| 宿主 Backend | 默认 loopback；外部代理配置精确 IP/最小 CIDR                              |
-| 多级代理     | 支持 hop 或逗号分隔 IP/CIDR；隔离绕过入口，不盲目信任全部私网             |
-
-Nginx Proxy Manager 可转发 `http://127.0.0.1:18111`；`X-Forwarded-For` 最后一项须是 NPM 观察到的来源，仅传 `X-Real-IP` 不足。Frontend 信任 loopback/私网入口，将最后一个来源单值转发 Backend；用防火墙保护入口。前有 CDN 时在 NPM 解析真实来源。真实内网豁免 IP 白名单/失败封禁，仍需密码/2FA；HTTP/WS 使用同一来源策略。
-
-Compose 默认启用 IPv6；宿主需要时合并 `/etc/docker/daemon.json`：
-
-```json
-{ "ipv6": true, "fixed-cidr-v6": "fd00::/80", "ip6tables": true }
-```
-
-执行 `sudo systemctl restart docker` 会影响宿主容器。关闭 IPv6 时同步改 Compose 的 `enable_ipv6` 和 IPv6 IPAM。
+保留公开 Host/协议并启用 WebSocket。HTTPS 支持 Passkey、剪贴板等浏览器能力。代理必须传递实际观察到的来源，并用网络隔离阻止绕过；宿主 Backend 默认信任 loopback，外部代理使用精确 IP/最小 CIDR，不接受旧 hop 数配置。Compose 默认启用 IPv6，宿主不支持时同步关闭 `enable_ipv6` 和 IPv6 IPAM。
 
 ## 备份与更新
 
-停止写入后备份完整 data。独立 backend-next 还须保留 SQLite 路径旁的 .artifacts/.appearance 目录和实例密钥，不能只复制数据库：
-
 ```bash
 docker compose stop backend
-sudo tar -czf "nexus-data-$(date +%Y%m%d-%H%M%S).tar.gz" data
+sudo tar -czf "nexus-data-$(date +%Y%m%d-%H%M%S).tar.gz" data .env
 docker compose up -d
 ```
+
+备份含实例密钥，按秘密文件保管。不要只复制数据库，也不要在 Backend 写入时复制目录。
 
 ```bash
 docker compose pull
 docker compose up -d --remove-orphans
 ```
 
-开发版先设置 `NEXUS_IMAGE_TAG=dev`。`--remove-orphans` 清除旧 Runner 容器，宿主数据不会自动删除；省略镜像 tag 只拉 latest。
+## 构建与开发
 
-## 构建与发布
-
-```bash
-git clone https://github.com/0honus0/nexus-terminal.git
-cd nexus-terminal
-NEXUS_IMAGE_REPOSITORY=local/nexus-terminal NEXUS_IMAGE_TAG=dev scripts/build/build.sh docker
-```
-
-在 `.env` 设置同一 repository/tag，再执行 Compose up，无需 pull。脚本默认构建主镜像 latest；刷新基础镜像/系统包用 `docker build --pull --no-cache -t local/nexus-terminal:dev .`。
-
-本机使用 Node.js Current 和根 packageManager 指定的 pnpm，从仓库根执行：
+使用 Node.js Current 和根 `packageManager` 指定的 pnpm。
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm run build
-pnpm --filter @nexus-terminal/backend-next build
+pnpm run check
+pnpm run format:all:check
 ```
 
-- 根 build 仍构建正式后端/前端；单包用 `build:backend` / `build:frontend`。
-- 仅用根 workspace/lockfile/catalog，依赖构建由 allowBuilds 管理；Docker 安装包含 scripts/patches，Backend 用 deploy --prod，Frontend 产出静态 dist。
-- 镜像使用 alpine:latest 与 APK 最新 nodejs-current/nginx；命中缓存不会刷新系统包。
-- 依赖 update/dedupe 保持声明范围，合并前核对 PR 被测 SHA；pnpm 固定版本。
-- Release 发布 main 的 latest/版本 tag，须完整 E2E 和 high 级生产依赖审计通过；手动发布默认 dev。
-- Agent 先发布官方签名 catalog/插件包，再发布兼容主镜像。
+单包用 `build:backend` / `build:frontend`。直接启动后端须提供 `NEXUS_DB_PATH`、`NEXUS_ENCRYPTION_KEY`、`NEXUS_PUBLIC_ORIGIN`；默认绑定 `127.0.0.1:3001`。
+
+```bash
+NEXUS_DB_PATH=/absolute/path/nexus-terminal.db pnpm --filter @nexus-terminal/backend start
+scripts/build/build.sh docker
+```
+
+启动命令还需从受控环境注入实例密钥和公开 Origin。Docker 使用 `alpine:latest`、APK 最新 `nodejs-current/nginx`，命中缓存不会刷新系统包；刷新用 `docker build --pull --no-cache .`。后端构建 Shared 后通过 `deploy --prod` 交付，不再构建 Protocol。发布与远程 E2E 仍按当前实施方案执行。

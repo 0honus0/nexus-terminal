@@ -1,11 +1,16 @@
 <script setup lang="ts">
-	import { computed, ref, toRaw, watch } from 'vue';
+	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import type { WorkspaceFocusConfigDto } from '@nexus-terminal/protocol/settings';
+	import type { WorkspaceFocusConfig } from '../model/presentation-types';
 	import { structurallyEqual } from '@/foundation/data';
 	import { UiButton, UiInput, UiModal } from '@/foundation/ui';
-	import { useFeedback } from '@/shared/feedback/public';
-	import { normalizeWorkspaceFocusShortcut, workspaceFocusTargets } from '../focus/workspaceFocus';
+	import { useAuthenticatedViewScope } from '@/shared/session/public';
+	import { useFeedback, preferenceFailureMessage } from '@/shared/feedback/public';
+	import {
+		cloneWorkspaceFocus,
+		normalizeWorkspaceFocusShortcut,
+		workspaceFocusTargets,
+	} from '../focus/workspaceFocus';
 	import { useWorkspaceUiState } from '../state/workspaceUiState';
 
 	const props = defineProps<{ visible: boolean }>();
@@ -13,27 +18,27 @@
 	const { t } = useI18n();
 	const feedback = useFeedback();
 	const { focus: workspaceFocus } = useWorkspaceUiState();
-	const draft = ref<WorkspaceFocusConfigDto>({ sequence: [], shortcuts: {} });
-	const original = ref<WorkspaceFocusConfigDto>({ sequence: [], shortcuts: {} });
+	const draft = ref<WorkspaceFocusConfig>({ sequence: [], shortcuts: {} });
+	const original = ref<WorkspaceFocusConfig>({ sequence: [], shortcuts: {} });
 	const saving = ref(false);
+	const originalVersion = ref(0);
+	const view = useAuthenticatedViewScope({
+		available: () => props.visible,
+
+		onRevoke: () => {
+			saving.value = false;
+		},
+	});
 	const draggingTarget = ref<string | null>(null);
 	const hasChanges = computed(() => !structurallyEqual(draft.value, original.value));
-
-	const clone = <T,>(value: T): T => {
-		const raw = toRaw(value);
-		if (Array.isArray(raw)) return raw.map(clone) as T;
-		if (raw && typeof raw === 'object') {
-			return Object.fromEntries(Object.entries(raw).map(([key, nested]) => [key, clone(nested)])) as T;
-		}
-		return raw;
-	};
 
 	watch(
 		() => props.visible,
 		(visible) => {
 			if (!visible) return;
-			draft.value = clone(workspaceFocus.config.value);
-			original.value = clone(workspaceFocus.config.value);
+			originalVersion.value = workspaceFocus.version.value;
+			draft.value = cloneWorkspaceFocus(workspaceFocus.config.value);
+			original.value = cloneWorkspaceFocus(workspaceFocus.config.value);
 		},
 		{ immediate: true },
 	);
@@ -44,7 +49,10 @@
 
 	const setEnabled = (id: string, value: boolean) => {
 		if (value && !enabled(id)) draft.value.sequence.push(id);
-		if (!value) draft.value.sequence = draft.value.sequence.filter((item) => item !== id);
+		if (!value) {
+			draft.value.sequence = draft.value.sequence.filter((item) => item !== id);
+			delete draft.value.shortcuts[id];
+		}
 	};
 
 	const move = (id: string, delta: number) => {
@@ -88,7 +96,7 @@
 		draggingTarget.value = null;
 	};
 
-	const shortcut = (id: string) => draft.value.shortcuts[id]?.shortcut ?? '';
+	const shortcut = (id: string) => draft.value.shortcuts[id] ?? '';
 
 	const captureShortcut = (event: KeyboardEvent, id: string) => {
 		if (event.key === 'Backspace' || event.key === 'Delete') {
@@ -98,27 +106,50 @@
 		if (['Alt', 'Control', 'Shift', 'Meta'].includes(event.key)) return;
 		if (!event.altKey || event.ctrlKey || event.shiftKey || event.metaKey) return;
 		const normalized = normalizeWorkspaceFocusShortcut(`Alt+${event.key}`);
-		if (normalized) draft.value.shortcuts[id] = { shortcut: normalized };
+		if (normalized && enabled(id)) draft.value.shortcuts[id] = normalized;
 	};
 
 	const attemptClose = async () => {
+		const signal = view.capture();
 		if (hasChanges.value) {
 			const confirmed = await feedback.confirm({ message: t('focusSwitcher.confirmClose') });
-			if (!confirmed) return;
+			if (!confirmed || !view.isCurrent(signal)) return;
 		}
 		emit('close');
 	};
 
-	const save = async () => {
+	const refresh = async (): Promise<void> => {
+		if (saving.value) return;
+		const signal = view.capture();
+		if (signal.aborted) return;
 		saving.value = true;
 		try {
-			await workspaceFocus.save(clone(draft.value));
-			original.value = clone(draft.value);
+			await workspaceFocus.load(true);
+			if (!view.isCurrent(signal)) return;
+			originalVersion.value = workspaceFocus.version.value;
+			draft.value = cloneWorkspaceFocus(workspaceFocus.config.value);
+			original.value = cloneWorkspaceFocus(draft.value);
+		} catch (cause) {
+			if (view.isCurrent(signal)) feedback.notifyError(preferenceFailureMessage(cause, t));
+		} finally {
+			if (view.isCurrent(signal)) saving.value = false;
+		}
+	};
+
+	const save = async () => {
+		if (saving.value) return;
+		const signal = view.capture();
+		if (signal.aborted) return;
+		saving.value = true;
+		try {
+			await workspaceFocus.save(cloneWorkspaceFocus(draft.value), originalVersion.value, signal);
+			if (!view.isCurrent(signal)) return;
+			original.value = cloneWorkspaceFocus(draft.value);
 			emit('close');
 		} catch (cause) {
-			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+			if (view.isCurrent(signal)) feedback.notifyError(preferenceFailureMessage(cause, t));
 		} finally {
-			saving.value = false;
+			if (view.isCurrent(signal)) saving.value = false;
 		}
 	};
 </script>
@@ -257,6 +288,7 @@
 
 		<template #footer>
 			<div class="flex justify-end gap-3">
+				<UiButton :disabled="saving" @click="refresh">{{ t('common.refresh') }}</UiButton>
 				<UiButton @click="attemptClose">{{ t('common.cancel') }}</UiButton>
 				<UiButton appearance="solid" tone="primary" :loading="saving" :disabled="!hasChanges" @click="save">
 					{{ t('common.save') }}{{ hasChanges ? ' *' : '' }}

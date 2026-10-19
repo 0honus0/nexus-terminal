@@ -1,82 +1,38 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { computed, watch } from 'vue';
 import { setFrontendLogLevel } from '@/client/logging/logger';
-import { preferencesApi } from '../api/preferencesApi';
-import {
-	defaultPreferences,
-	type PreferenceKey,
-	type PreferencesPatchDto,
-	type PreferencesDto,
-} from '../model/preferences';
+import { PreferenceRequestFailure } from '@/client/preferences/preference-request';
+import { usePresentationStore } from './presentation.store';
+import { defaultPreferences, type PreferencesPatch, type UserPreferences } from '../model/preferences-types';
+import { projectPreferences } from '../model/presentation-mapper';
 
 export const usePreferencesStore = defineStore('preferences', () => {
-	const values = ref<PreferencesDto>({ ...defaultPreferences });
-	const loaded = ref(false);
-	let preferenceUpdateRevision = 0;
-	const preferenceKeyRevisions = new Map<PreferenceKey, number>();
-	let preferenceLoadPromise: Promise<PreferencesDto> | null = null;
-	let preferenceCacheGeneration = 0;
+	const presentation = usePresentationStore();
+	const values = computed(() => presentation.snapshot?.preferences ?? defaultPreferences);
+	const loaded = computed(() => presentation.snapshot !== null);
+	const version = computed(() => presentation.snapshot?.version ?? 0);
+	watch(
+		() => values.value.frontendLogLevel,
+		(level) => setFrontendLogLevel(level),
+		{ immediate: true, flush: 'sync' },
+	);
 
-	return {
-		values,
-		loaded,
+	async function load(force = false): Promise<UserPreferences> {
+		const value = await presentation.load(force);
+		if (presentation.blocked) throw new PreferenceRequestFailure('refresh_required', 'not_dispatched');
+		return value.preferences;
+	}
 
-		reset() {
-			preferenceCacheGeneration += 1;
-			preferenceUpdateRevision += 1;
-			preferenceKeyRevisions.clear();
-			preferenceLoadPromise = null;
-			values.value = { ...defaultPreferences };
-			loaded.value = false;
-			setFrontendLogLevel(defaultPreferences.frontendLogLevel);
-		},
+	async function update(
+		patch: PreferencesPatch,
+		expectedVersion = version.value,
+		permission?: AbortSignal,
+	): Promise<void> {
+		if (!presentation.snapshot) throw new PreferenceRequestFailure('refresh_required', 'not_dispatched');
+		const preferences = projectPreferences(values.value);
+		Object.assign(preferences, patch);
+		await presentation.update({ action: 'preferences', expectedVersion, preferences }, permission);
+	}
 
-		async load(force = false, fallbackLanguage?: string) {
-			if (loaded.value && !force) return values.value;
-			if (!force && preferenceLoadPromise) return preferenceLoadPromise;
-			const generation = preferenceCacheGeneration;
-			const load = preferencesApi.load(fallbackLanguage ?? values.value.language).then((incoming) => {
-				if (generation !== preferenceCacheGeneration) return values.value;
-				values.value = incoming;
-				setFrontendLogLevel(incoming.frontendLogLevel);
-				loaded.value = true;
-				return values.value;
-			});
-			if (!force) preferenceLoadPromise = load;
-			try {
-				return await load;
-			} finally {
-				if (preferenceLoadPromise === load) preferenceLoadPromise = null;
-			}
-		},
-
-		async update(patch: PreferencesPatchDto) {
-			const revision = ++preferenceUpdateRevision;
-			const keys = Object.keys(patch) as PreferenceKey[];
-			const previous: Partial<PreferencesDto> = {};
-			for (const key of keys) {
-				(previous as Record<string, unknown>)[key] = values.value[key];
-				preferenceKeyRevisions.set(key, revision);
-			}
-
-			Object.assign(values.value, patch);
-			if (patch.frontendLogLevel !== undefined) setFrontendLogLevel(patch.frontendLogLevel, true);
-			try {
-				await preferencesApi.update(patch);
-				for (const key of keys) {
-					if (preferenceKeyRevisions.get(key) === revision) preferenceKeyRevisions.delete(key);
-				}
-			} catch (cause) {
-				const rollback: Partial<PreferencesDto> = {};
-				for (const key of keys) {
-					if (preferenceKeyRevisions.get(key) !== revision) continue;
-					(rollback as Record<string, unknown>)[key] = previous[key];
-					preferenceKeyRevisions.delete(key);
-				}
-				Object.assign(values.value, rollback);
-				if (rollback.frontendLogLevel !== undefined) setFrontendLogLevel(rollback.frontendLogLevel, true);
-				throw cause;
-			}
-		},
-	};
+	return { values, version, loaded, load, update, reset: presentation.reset };
 });

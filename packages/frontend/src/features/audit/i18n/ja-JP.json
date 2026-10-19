@@ -21,7 +21,10 @@
     "previousPage": "前のページ",
     "nextPage": "次のページ",
     "pageNumber": "ページ番号",
-    "status": { "danger": "失敗", "warning": "未承認" },
+    "status": {
+      "danger": "失敗",
+      "warning": "未承認"
+    },
     "fields": {
       "username": "アカウント",
       "userId": "ユーザー ID",
@@ -49,10 +52,13 @@
       "proposalId": "提案 ID",
       "action": "操作",
       "count": "件数",
-      "path": "パス"
+      "path": "パス",
+      "subjectId": "対象",
+      "route": "ルート",
+      "statusCode": "HTTPステータス"
     },
     "title": "監査ログ",
-    "searchPlaceholder": "詳細を",
+    "searchPlaceholder": "イベント、対象、ルートを検索…",
     "noLogs": "監査ログが見つかりませんでした。",
     "table": {
       "timestamp": "タイムスタンプ",
@@ -105,6 +111,7 @@
     },
     "allActions": "すべての操作",
     "parseErrorRaw": "解析エラー — 生の値: {raw}",
-    "loadFailed": "監査ログの読み込みに失敗しました。"
+    "loadFailed": "監査ログの読み込みに失敗しました。",
+    "loadedOnly": "{loaded}件読み込み済み"
   }
 }

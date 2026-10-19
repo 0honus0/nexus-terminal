@@ -1,7 +1,9 @@
 export const loadAuditLogView = () => import('./views/AuditLogView.vue');
 
-export { auditApi } from './api/auditApi';
+export { auditApi } from './api/audit-api';
 
 export { resetAuditCache } from './composables/resetAuditCache';
 
-export type { AuditLogEntryDto, AuditLogPageDto, AuditLogQueryDto } from './model/audit';
+export type { AuditEntry, AuditPage, AuditQuery } from './model/audit-types';
+
+export { auditSummary } from './model/auditPresentation';

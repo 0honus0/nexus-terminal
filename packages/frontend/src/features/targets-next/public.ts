@@ -1,4 +1,4 @@
-/** Explicit opt-in backend-next management; never shares legacy Pinia/Workspace state. */
+/** DEV management entry; application state is separate from the regular Connections view. */
 export { createTargetsNextApi } from './api/targets-next-api';
 
 export const loadTargetsNextDevView = () => import('./views/TargetsNextDevView.vue');

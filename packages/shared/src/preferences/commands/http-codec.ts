@@ -209,6 +209,7 @@ export function readQuickCommand(input: unknown): QuickCommand {
 		'createdAt',
 		'updatedAt',
 	]);
+	const createdAt = integer(value.createdAt, 0);
 	return {
 		id: integer(value.id, 1),
 		version: integer(value.version, 1),
@@ -217,19 +218,20 @@ export function readQuickCommand(input: unknown): QuickCommand {
 		usageCount: integer(value.usageCount, 0),
 		variables: variables(value.variables),
 		tagIds: tagIds(value.tagIds),
-		createdAt: integer(value.createdAt, 0),
-		updatedAt: integer(value.updatedAt, 0),
+		createdAt,
+		updatedAt: integer(value.updatedAt, createdAt),
 	};
 }
 
 export function readQuickCommandTag(input: unknown): QuickCommandTag {
 	const value = object(input, ['id', 'version', 'name', 'createdAt', 'updatedAt']);
+	const createdAt = integer(value.createdAt, 0);
 	return {
 		id: integer(value.id, 1),
 		version: integer(value.version, 1),
 		name: text(value.name, COMMAND_NAME_MAX_BYTES, true),
-		createdAt: integer(value.createdAt, 0),
-		updatedAt: integer(value.updatedAt, 0),
+		createdAt,
+		updatedAt: integer(value.updatedAt, createdAt),
 	};
 }
 

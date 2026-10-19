@@ -10,6 +10,7 @@ const parsePort = (name: string, fallback: number): number => {
 
 export const E2E_PORTS = {
 	backend: parsePort('NEXUS_E2E_BACKEND_PORT', 3001),
+	backendControl: parsePort('NEXUS_E2E_BACKEND_CONTROL_PORT', 29098),
 	frontend: parsePort('NEXUS_E2E_FRONTEND_PORT', 4173),
 	guacd: parsePort('NEXUS_E2E_GUACD_PORT', 24822),
 	guacdControl: parsePort('NEXUS_E2E_GUACD_CONTROL_PORT', 29090),
@@ -25,6 +26,7 @@ export const E2E_PORTS = {
 
 export const E2E_URLS = {
 	backendOrigin: `http://127.0.0.1:${E2E_PORTS.backend}`,
+	backendControlOrigin: `http://127.0.0.1:${E2E_PORTS.backendControl}`,
 	backendWsOrigin: `ws://127.0.0.1:${E2E_PORTS.backend}`,
 	frontendOrigin: `http://localhost:${E2E_PORTS.frontend}`,
 	frontendLoopbackOrigin: `http://127.0.0.1:${E2E_PORTS.frontend}`,

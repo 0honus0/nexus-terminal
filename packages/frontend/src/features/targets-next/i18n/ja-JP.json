@@ -1,7 +1,7 @@
 {
   "targetsNext": {
     "title": "新バックエンド Targets — 開発用",
-    "isolation": "この画面は backend-next のみを使用します。従来の接続とワークスペースには引き継がれません。",
+    "isolation": "この開発画面は現在の Backend に直接接続し、通常の接続画面と同じ永続データを使用します。",
     "setup": "初期管理者の設定",
     "login": "新バックエンドにログイン",
     "username": "ユーザー名",

@@ -1,10 +1,12 @@
 import type { RemoteFileTargetType } from './values.js';
+import type { WorkspaceErrorCode } from '../workspace/values.js';
 
 export interface WorkspaceFileMetadata {
 	size: number;
 	uid: number;
 	gid: number;
 	mode: number;
+	/** Unix milliseconds, already converted by the producer's Model. */
 	accessedAt: number;
 	modifiedAt: number;
 	isFile: boolean;
@@ -89,7 +91,7 @@ export interface WorkspaceFileRealpathResponse {
 }
 
 export interface WorkspaceFileErrorEvent {
-	message: string;
+	message: WorkspaceErrorCode;
 }
 
 export interface WorkspaceFilesRequestMap {

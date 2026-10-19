@@ -15,11 +15,22 @@ export class InvalidWorkspaceDockerPayload extends Error {
 	}
 }
 
-function record(value: unknown, keys: string[]): Record<string, unknown> {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function budget(value: unknown): void {
+	const json = JSON.stringify(value);
+	if (json === undefined || new TextEncoder().encode(json).length > OBSERVATION_MAX_RESPONSE_BYTES) {
 		throw new InvalidWorkspaceDockerPayload();
 	}
-	const row = value as Record<string, unknown>;
+}
+
+function record(value: unknown, keys: string[]): Record<string, unknown> {
+	if (!isRecord(value)) {
+		throw new InvalidWorkspaceDockerPayload();
+	}
+	const row = value;
 	if (Object.keys(row).some((key) => !keys.includes(key)) || keys.some((key) => !Object.hasOwn(row, key))) {
 		throw new InvalidWorkspaceDockerPayload();
 	}
@@ -51,15 +62,11 @@ export function readWorkspaceDockerCommand(value: unknown): WorkspaceDockerComma
 	return { containerId: id(row.containerId), command };
 }
 
-export function readWorkspaceObservationEmpty(value: unknown): void {
-	record(value ?? {}, []);
-}
-
 function responseRow(value: unknown, allowed: readonly string[], required: readonly string[]): Record<string, unknown> {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+	if (!isRecord(value)) {
 		throw new InvalidWorkspaceDockerPayload();
 	}
-	const result = value as Record<string, unknown>;
+	const result = value;
 	if (
 		Object.keys(result).some((key) => !allowed.includes(key)) ||
 		required.some((key) => !Object.hasOwn(result, key))
@@ -99,13 +106,14 @@ function responsePort(value: unknown): WorkspaceDockerPortBinding {
 }
 
 export function readWorkspaceDockerStatsResponse(value: unknown): WorkspaceDockerStats | null {
+	budget(value);
 	if (value === null) {
 		return null;
 	}
 	const keys = ['id', 'name', 'cpuPercent', 'memoryUsage', 'memoryPercent', 'networkIo', 'blockIo', 'pids'];
 	const row = responseRow(value, keys, keys);
 	return {
-		id: responseText(row.id),
+		id: id(row.id),
 		name: responseText(row.name),
 		cpuPercent: responseText(row.cpuPercent),
 		memoryUsage: responseText(row.memoryUsage),
@@ -155,25 +163,27 @@ function responseContainer(value: unknown): WorkspaceDockerContainer {
 			Object.entries(source).map(([key, value]) => [responseText(key), responseText(value)]),
 		);
 	}
+	const stats = row.stats === undefined ? undefined : readWorkspaceDockerStatsResponse(row.stats);
+	if (stats && stats.id !== row.id && stats.id !== id(row.id).slice(0, 12)) {
+		throw new InvalidWorkspaceDockerPayload();
+	}
 	return {
-		id: responseText(row.id),
+		id: id(row.id),
 		names: row.names.map(responseText),
 		image: responseText(row.image),
 		imageId: responseText(row.imageId),
 		command: responseText(row.command),
-		created,
+		created: typeof created === 'string' ? responseText(created) : created,
 		state: responseText(row.state),
 		status: responseText(row.status),
 		ports: row.ports.map(responsePort),
 		labels,
-		stats: row.stats === undefined ? undefined : readWorkspaceDockerStatsResponse(row.stats),
+		stats,
 	};
 }
 
 export function readWorkspaceDockerStatusResponse(value: unknown): WorkspaceDockerStatus {
-	if (new TextEncoder().encode(JSON.stringify(value)).length > OBSERVATION_MAX_RESPONSE_BYTES) {
-		throw new InvalidWorkspaceDockerPayload();
-	}
+	budget(value);
 	const row = responseRow(value, ['available', 'containers'], ['available', 'containers']);
 	if (
 		typeof row.available !== 'boolean' ||

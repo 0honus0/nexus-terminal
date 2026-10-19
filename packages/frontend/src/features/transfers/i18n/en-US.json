@@ -30,7 +30,8 @@
       "skipped": "Skipped",
       "completed": "Completed",
       "error": "Failed",
-      "partial": "Partially completed"
+      "partial": "Partially completed",
+      "unknown": "Result unknown"
     },
     "resize": "Resize progress window",
     "restore": "Restore",
@@ -38,13 +39,14 @@
     "speed": "Speed",
     "error": {
       "unknown": "Transfer failed.",
-      "uploadDirectoryStateLost": "Upload preparation state was lost. Retry the upload.",
-      "uploadStreamClosed": "Upload stream closed unexpectedly (code {code}).",
-      "uploadStreamOpenFailed": "Could not open the upload stream for {file}.",
       "uploadFailed": "Upload failed.",
       "transferFailed": "File transfer failed.",
       "workspaceConnectionClosed": "Workspace connection closed before the transfer completed.",
-      "archiveFailed": "Archive operation failed."
+      "archiveFailed": "Archive operation failed.",
+      "uploadUnknown": "Upload result or cleanup is unconfirmed. Check the remote files before starting a new upload.",
+      "uploadProtocolError": "Invalid upload response. Check the remote files before retrying.",
+      "uploadNotConnected": "Workspace is not connected; upload was not dispatched.",
+      "transferUnknown": "Operation result or cleanup is unconfirmed. Check the source and destination before repeating a copy, move or archive operation."
     },
     "warning": {
       "archiveCompletedWithWarning": "Archive completed with warnings.",
@@ -131,5 +133,31 @@
     "clearSelection": "Clear selection",
     "methodRsync": "rsync",
     "methodScp": "scp"
+  },
+  "serverTransferErrors": {
+    "invalid_input": "Check source items, distinct names, absolute paths and target selection.",
+    "invalid_body": "Invalid request.",
+    "unauthenticated": "Sign in again.",
+    "forbidden": "Administrator access required.",
+    "not_found": "Task or connection no longer exists.",
+    "resource_active": "Execution or cleanup is not confirmed; this task cannot be removed.",
+    "limit_exceeded": "Transfer capacity exceeded. Split the request.",
+    "shutting_down": "Server is stopping.",
+    "stale_target": "Connection configuration changed. Review the connections.",
+    "unsupported_target_route": "Source-side transfers require a direct target; configured proxy or jump routes are not supported.",
+    "unsupported_endpoint": "The source-side SSH client cannot represent this endpoint.",
+    "host_key_untrusted": "Confirm the target Host Key before sending.",
+    "connection_failed": "Could not connect to the source or target.",
+    "tool_unavailable": "Required ssh/rsync/scp/sshpass tool is unavailable.",
+    "transfer_failed": "The remote transfer failed and may have written partial files. Check the target.",
+    "operation_unknown": "Transfer result or cleanup is unconfirmed. Inspect the task list and remote files; do not resend automatically.",
+    "cleanup_failed": "Remote credential or resource cleanup is unconfirmed. Inspect the original task before proceeding.",
+    "storage_unavailable": "Storage is unavailable. Check tasks before retrying.",
+    "internal_failure": "Transfer service failed. Check tasks before retrying.",
+    "cancelled": "Cancelled before dispatch.",
+    "request_timeout": "Request timed out.",
+    "conflict": "A machine is occupied or blocked by another operation.",
+    "request_failed": "Could not read transfer state.",
+    "protocol_failure": "Invalid transfer response. Check tasks before retrying."
   }
 }

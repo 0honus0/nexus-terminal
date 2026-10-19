@@ -195,7 +195,13 @@
       "commandNotFoundCompress": "サーバーにコマンド '{command}' が見つからないため、圧縮操作を完了できません。",
       "commandNotFoundDecompress": "サーバーにコマンド '{command}' が見つからないため、解凍操作を完了できません。",
       "genericCommandNotFound": "サーバーにコマンド '{command}' が見つからないため、'{operation}' 操作を完了できません。",
-      "copyPathFailed": "パスのコピーに失敗しました"
+      "copyPathFailed": "パスのコピーに失敗しました",
+      "terminalPathChangeUnknown": "ディレクトリ変更の結果を確認できません。再操作の前に現在のディレクトリを読み取ってください。",
+      "operationUnknown": "リモートファイルが変更された可能性があります。更新して実際のパスを確認してから再操作してください。",
+      "notConnected": "ファイルセッションの準備ができていません。再接続してください。",
+      "invalidResponse": "ファイルの応答を検証できませんでした。更新して現在の状態を確認してください。",
+      "capacityExceeded": "ファイル操作の容量制限を超えています。保存要求は JSON エンコードを含めて 1 MiB 以内にしてください。",
+      "requestRejected": "ファイル操作が拒否されました。権限と現在のファイル状態を確認してください。"
     },
     "notifications": {
       "terminalPathQueued": "フォアグラウンドコマンドの実行中です。シェルのプロンプトが戻った後に安全に実行されます。",
@@ -211,7 +217,8 @@
     },
     "warnings": {
       "moveSameDirectory": "同じディレクトリ内で切り取りと貼り付けはできません。",
-      "crossHostDeleteFailed": "コピー先へのコピーは成功しましたが、コピー元ファイルの削除に失敗しました: {error}"
+      "crossHostDeleteFailed": "コピー先へのコピーは成功しましたが、コピー元ファイルの削除に失敗しました: {error}",
+      "transferRefreshFailed": "ファイル操作は完了しましたが、一覧の更新に失敗しました。操作を繰り返さず、一覧を再読み込みして確認してください。"
     },
     "prompts": {
       "enterFolderName": "新しいフォルダーの名前を入力してください:",

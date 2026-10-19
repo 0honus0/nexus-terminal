@@ -1,124 +1,46 @@
 <script setup lang="ts">
-	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiInput, UiModal } from '@/foundation/ui';
-	import { useFeedback } from '@/shared/feedback/public';
-	import { connectionTagsService, useConnectionTags, type ConnectionTagDto } from '@/features/tags/public';
-	import { useConnections, type ConnectionDto } from '@/features/connections/public';
+	import type { ConnectionSummary } from '@/features/connections/public';
+	import type { TagGroupInput } from '../model/tag-group-types';
+	import { useTagGroupManagement } from '../composables/use-tag-group-management';
 
-	const props = defineProps<{
-		visible: boolean;
-		tag: ConnectionTagDto | null;
-		connections: readonly ConnectionDto[];
-	}>();
+	const props = defineProps<TagGroupInput>();
 	const emit = defineEmits<{ close: []; changed: [] }>();
 	const { t } = useI18n();
-	const feedback = useFeedback();
-	const data = useConnections();
-	const tags = useConnectionTags();
-	const search = ref('');
-	const selected = ref(new Set<number>());
-	const name = ref('');
-	const saving = ref(false);
+	const {
+		tags,
+		search,
+		selected,
+		name,
+		snapshot,
+		saving,
+		message,
+		requiresReview,
+		modalTitle,
+		filtered,
+		toggle,
+		selectVisible,
+		deselectVisible,
+		invertVisible,
+		rename,
+		save,
+		removeTag,
+	} = useTagGroupManagement(props, {
+		close: () => emit('close'),
 
-	const modalTitle = computed(() =>
-		props.tag
-			? `${t('workspaceConnectionList.manageTags.title')} - ${props.tag.name}`
-			: t('workspaceConnectionList.manageTags.title'),
-	);
-	const filtered = computed(() => {
-		const q = search.value.trim().toLocaleLowerCase();
-		return props.connections
-			.filter(
-				(connection) =>
-					!q ||
-					`${connection.name ?? ''} ${connection.username} ${connection.host}`
-						.toLocaleLowerCase()
-						.includes(q),
-			)
-			.slice()
-			.sort((a, b) => (a.name || a.host).localeCompare(b.name || b.host));
+		changed: () => emit('changed'),
 	});
 
-	const protocolIcon = (connection: ConnectionDto): string => {
-		if (connection.type === 'RDP') return 'fas fa-desktop';
-		if (connection.type === 'VNC') return 'fas fa-plug';
+	function protocolIcon(connection: ConnectionSummary): string {
+		if (connection.type === 'RDP') {
+			return 'fas fa-desktop';
+		}
+		if (connection.type === 'VNC') {
+			return 'fas fa-plug';
+		}
 		return 'fas fa-server';
-	};
-
-	watch(
-		() => [props.visible, props.tag?.id] as const,
-		([visible]) => {
-			if (!visible || !props.tag) return;
-			search.value = '';
-			name.value = props.tag.name;
-			selected.value = new Set(
-				props.connections
-					.filter((connection) => connection.tagIds.includes(props.tag!.id))
-					.map((connection) => connection.id),
-			);
-		},
-	);
-
-	const toggle = (id: number) => {
-		const next = new Set(selected.value);
-		if (next.has(id)) next.delete(id);
-		else next.add(id);
-		selected.value = next;
-	};
-
-	const selectVisible = () =>
-		(selected.value = new Set([...selected.value, ...filtered.value.map((item) => item.id)]));
-
-	const deselectVisible = () => {
-		const visible = new Set(filtered.value.map((item) => item.id));
-		selected.value = new Set([...selected.value].filter((id) => !visible.has(id)));
-	};
-
-	const invertVisible = () => {
-		const next = new Set(selected.value);
-		for (const connection of filtered.value) {
-			if (next.has(connection.id)) next.delete(connection.id);
-			else next.add(connection.id);
-		}
-		selected.value = next;
-	};
-
-	const save = async () => {
-		if (!props.tag || saving.value) return;
-		saving.value = true;
-		try {
-			const nextName = name.value.trim();
-			if (nextName && nextName !== props.tag.name) await tags.rename(props.tag.id, nextName);
-			await connectionTagsService.setConnections(props.tag.id, [...selected.value]);
-			await data.load(true);
-			emit('changed');
-			emit('close');
-		} catch (cause) {
-			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
-		} finally {
-			saving.value = false;
-		}
-	};
-
-	const removeTag = async () => {
-		if (!props.tag) return;
-		if (
-			!(await feedback.confirm({
-				message: t('workspaceConnectionList.manageTags.confirmDeleteTag', { name: props.tag.name }),
-				destructive: true,
-			}))
-		)
-			return;
-		try {
-			await tags.remove(props.tag.id);
-			await data.load(true);
-			emit('changed');
-			emit('close');
-		} catch (cause) {
-			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
-		}
-	};
+	}
 </script>
 
 <template>
@@ -131,10 +53,29 @@
 		@close="emit('close')"
 	>
 		<div v-if="tag" class="flex min-h-0 flex-col py-4">
+			<p v-if="message" role="alert" class="px-4 text-sm text-error">{{ message }}</p>
+			<p v-if="requiresReview || tags.needsRefresh.value" class="px-4 text-sm">{{ t('tags.reopenToRefresh') }}</p>
 			<div class="space-y-3 border-b border-border/50 px-4 pb-4">
 				<label class="grid gap-1.5 text-sm text-text-secondary">
 					<span>{{ t('workspaceConnectionList.manageTags.tagName') }}</span>
-					<UiInput v-model="name" :aria-label="t('workspaceConnectionList.manageTags.tagName')" />
+					<UiInput
+						v-model="name"
+						:disabled="saving"
+						:aria-label="t('workspaceConnectionList.manageTags.tagName')"
+					/>
+					<button
+						type="button"
+						:disabled="
+							saving ||
+							requiresReview ||
+							tags.busy.value ||
+							tags.needsRefresh.value ||
+							name.trim() === snapshot?.name
+						"
+						@click="rename"
+					>
+						{{ t('tags.renameOnly') }}
+					</button>
 				</label>
 
 				<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -202,12 +143,29 @@
 
 		<template #footer>
 			<div v-if="tag" class="flex flex-wrap justify-end gap-2 sm:gap-3">
-				<button type="button" class="footer-action footer-action--danger" @click="removeTag">
+				<button
+					type="button"
+					class="footer-action footer-action--danger"
+					:disabled="saving || requiresReview || tags.busy.value || tags.needsRefresh.value"
+					@click="removeTag"
+				>
 					{{ t('common.delete') }}
 				</button>
 				<button type="button" class="footer-action" @click="emit('close')">{{ t('common.cancel') }}</button>
-				<button type="button" class="footer-action footer-action--primary" :disabled="saving" @click="save">
-					<i v-if="saving" class="fas fa-spinner fa-spin mr-1" aria-hidden="true"></i>{{ t('common.save') }}
+				<button
+					type="button"
+					class="footer-action footer-action--primary"
+					:disabled="
+						saving ||
+						requiresReview ||
+						tags.busy.value ||
+						tags.needsRefresh.value ||
+						name.trim() !== snapshot?.name
+					"
+					@click="save"
+				>
+					<i v-if="saving" class="fas fa-spinner fa-spin mr-1" aria-hidden="true"></i
+					>{{ t('tags.saveAssociations') }}
 				</button>
 			</div>
 		</template>

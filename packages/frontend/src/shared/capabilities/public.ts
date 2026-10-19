@@ -1,6 +1,9 @@
 import { inject, provide, type Component, type ComputedRef, type InjectionKey } from 'vue';
-import type { ConnectionDto, ConnectionTagDto, ProxyDto, SshKeySummaryDto } from '@nexus-terminal/protocol/connections';
-import type { WorkspaceTerminalViewportDto } from '@nexus-terminal/protocol/workspace';
+import type { ConnectionSummary } from '@/features/connections/public';
+import type { TagSummary } from '@/features/tags/public';
+import type { ProxySummary } from '@/features/proxies/public';
+import type { SshKeySummary } from '@/features/ssh-keys/public';
+import type { TerminalViewport } from '@/features/terminal/public';
 
 export interface RuntimeAuthCapability {
 	userId: ComputedRef<number | null>;
@@ -8,28 +11,28 @@ export interface RuntimeAuthCapability {
 }
 
 export interface RuntimeConnectionsCapability {
-	items: ComputedRef<ConnectionDto[]>;
+	items: ComputedRef<ConnectionSummary[]>;
 	loaded: ComputedRef<boolean>;
-	load(force?: boolean): Promise<ConnectionDto[]>;
-	revalidate(maxAgeMs?: number): Promise<ConnectionDto[]>;
+	load(force?: boolean): Promise<ConnectionSummary[]>;
+	revalidate(maxAgeMs?: number): Promise<ConnectionSummary[]>;
 }
 
 export interface RuntimeTagsCapability {
-	items: ComputedRef<ConnectionTagDto[]>;
-	load(force?: boolean): Promise<ConnectionTagDto[]>;
-	revalidate(maxAgeMs?: number): Promise<ConnectionTagDto[]>;
-	ensure(names: string[]): Promise<ConnectionTagDto[]>;
+	items: ComputedRef<TagSummary[]>;
+	load(force?: boolean): Promise<TagSummary[]>;
+	revalidate(maxAgeMs?: number): Promise<TagSummary[]>;
+	ensure(names: string[]): Promise<TagSummary[]>;
 	picker: Component;
 }
 
 export interface RuntimeProxiesCapability {
-	items: ComputedRef<ProxyDto[]>;
-	load(force?: boolean): Promise<ProxyDto[]>;
+	items: ComputedRef<ProxySummary[]>;
+	load(force?: boolean): Promise<ProxySummary[]>;
 }
 
 export interface RuntimeSshKeysCapability {
-	items: ComputedRef<SshKeySummaryDto[]>;
-	load(force?: boolean): Promise<SshKeySummaryDto[]>;
+	items: ComputedRef<SshKeySummary[]>;
+	load(force?: boolean): Promise<SshKeySummary[]>;
 	selector: Component;
 }
 
@@ -39,7 +42,7 @@ export interface RuntimeTerminalOutput {
 
 export interface RuntimeTerminalChannel {
 	sendInput(data: string): void | Promise<void>;
-	resize(viewport: WorkspaceTerminalViewportDto): void | Promise<void>;
+	resize(viewport: TerminalViewport): void | Promise<void>;
 	onOutput(handler: (output: RuntimeTerminalOutput) => void): () => void;
 	onClose(handler: (reason?: string) => void): () => void;
 	onError(handler: (message: string) => void): () => void;
@@ -52,7 +55,7 @@ export interface RuntimeFeatureCapabilities {
 	proxies: RuntimeProxiesCapability;
 	sshKeys: RuntimeSshKeysCapability;
 	remoteDesktop: {
-		open(connection: Pick<ConnectionDto, 'id' | 'name' | 'type'>): void;
+		open(connection: Pick<ConnectionSummary, 'id' | 'name' | 'type'>): void;
 	};
 	terminal: {
 		loadView(): Promise<{ default: Component }>;
@@ -72,4 +75,4 @@ export const useRuntimeFeatureCapabilities = (): RuntimeFeatureCapabilities => {
 	return capabilities;
 };
 
-export type { ConnectionDto, WorkspaceTerminalViewportDto };
+export type { ConnectionSummary, TerminalViewport };

@@ -36,7 +36,24 @@
     "restoreWindow": "恢复远程桌面窗口",
     "keyboard": "键盘",
     "showKeyboard": "显示键盘",
-    "hideKeyboard": "收起键盘"
+    "hideKeyboard": "收起键盘",
+    "fullscreenFailed": "无法切换全屏。",
+    "unknownOutcome": "远端结果未知。本地关闭不证明远端程序已停止；请主动重连以签发新票据。",
+    "failures": {
+      "invalid_input": "显示参数或连接无效；桌面仅支持直连，请检查代理和跳板设置。",
+      "unauthenticated": "请重新登录。",
+      "forbidden": "没有桌面访问权限。",
+      "not_found": "连接不存在。",
+      "conflict": "目标已变化或路由不支持；桌面仅支持直连。",
+      "limit_exceeded": "桌面容量已满，请等待其他会话关闭。",
+      "remote_unavailable": "桌面服务不可用。",
+      "operation_unknown": "无法确认远端操作结果。",
+      "protocol_failure": "桌面响应协议无效。",
+      "request_failed": "请求未能完成。",
+      "cancelled": "请求已取消。",
+      "input_failed": "输入或剪贴板同步失败。",
+      "cleanup_failed": "无法确认本地清理完成，请关闭窗口后再打开桌面。"
+    }
   },
   "vncModal": {
     "title": "VNC 会话",

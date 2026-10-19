@@ -1,36 +1,43 @@
 <script setup lang="ts">
-	import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+	import { computed, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 	import { storeToRefs } from 'pinia';
 	import { useI18n } from 'vue-i18n';
 	import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller';
 	import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
 	import { UiButton, UiSelect, UiSpinner } from '@/foundation/ui';
 	import UiListToolbar from '@/foundation/ui/UiListToolbar.vue';
-	import { auditActionTypes, type AuditLogQueryDto } from '../model/audit';
+	import { OPERATION_EVENTS } from '@nexus-terminal/shared/operations/values';
+	import type { AuditQuery } from '../model/audit-types';
+	import { useAuthenticatedViewScope } from '@/shared/session/public';
 	import { useAuditStore } from '../store/audit.store';
 	import AuditLogRow from './AuditLogRow.vue';
 
 	const { t, te } = useI18n();
 	const store = useAuditStore();
-	const { logs, total, loading, error, hasMore } = storeToRefs(store);
+	const { logs, loading, error, hasMore } = storeToRefs(store);
 	const searchDraft = ref('');
 	const actionTypeDraft = ref('');
-	const appliedFilters = ref<Pick<AuditLogQueryDto, 'search' | 'actionType'>>({});
+	const appliedFilters = ref<Pick<AuditQuery, 'q' | 'event'>>({});
 
 	const actionLabel = (action: string) =>
 		te(`auditLog.actions.${action}`) ? t(`auditLog.actions.${action}`) : t('auditLog.unknownAction');
 
 	const options = computed(() => [
 		{ value: '', label: t('auditLog.allActions') },
-		...auditActionTypes.map((value) => ({ value, label: actionLabel(value) })),
+		...OPERATION_EVENTS.map((value) => ({ value, label: actionLabel(value) })),
 	]);
 
-	const load = () => store.load({ ...appliedFilters.value, limit: 40 });
+	const view = useAuthenticatedViewScope();
+
+	const load = () =>
+		store.load({ event: appliedFilters.value.event, q: appliedFilters.value.q, limit: 40 }, view.capture());
+
+	const loadMore = () => store.loadMore(view.capture());
 
 	const applyFilters = () => {
 		appliedFilters.value = {
-			...(searchDraft.value.trim() ? { search: searchDraft.value.trim() } : {}),
-			...(actionTypeDraft.value ? { actionType: actionTypeDraft.value } : {}),
+			q: searchDraft.value.trim(),
+			event: OPERATION_EVENTS.find((event) => event === actionTypeDraft.value) ?? null,
 		};
 		void load();
 	};
@@ -38,7 +45,12 @@
 	let searchTimer: ReturnType<typeof setTimeout> | undefined;
 	watch(searchDraft, () => {
 		clearTimeout(searchTimer);
-		searchTimer = setTimeout(applyFilters, 300);
+		const signal = view.capture();
+		searchTimer = setTimeout(() => {
+			if (view.isCurrent(signal)) {
+				applyFilters();
+			}
+		}, 300);
 	});
 	watch(actionTypeDraft, () => {
 		clearTimeout(searchTimer);
@@ -50,11 +62,20 @@
 
 	const onScroll = (event: Event) => {
 		const element = event.target as HTMLElement;
-		if (element.scrollHeight - element.scrollTop - element.clientHeight < 320 && !error.value)
-			void store.loadMore();
+		if (element.scrollHeight - element.scrollTop - element.clientHeight < 320 && !error.value) {
+			void loadMore();
+		}
 	};
 
 	onMounted(() => void load());
+	let initialActivation = true;
+	onActivated(() => {
+		if (initialActivation) {
+			initialActivation = false;
+			return;
+		}
+		void load();
+	});
 </script>
 
 <template>
@@ -89,7 +110,7 @@
 			<div class="audit-list-heading">
 				<span>{{ t('auditLog.activity') }}</span
 				><span class="text-xs font-normal text-text-secondary" role="status">{{
-					t('auditLog.loadedInfo', { loaded: logs.length, total })
+					t('auditLog.loadedOnly', { loaded: logs.length })
 				}}</span>
 			</div>
 			<div
@@ -97,8 +118,8 @@
 				role="alert"
 				class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm text-error"
 			>
-				<span>{{ error === 'audit-load-error' ? t('auditLog.loadFailed') : error }}</span
-				><UiButton appearance="soft" @click="logs.length ? store.loadMore() : load()">{{
+				<span>{{ t('auditLog.loadFailed') }}</span
+				><UiButton appearance="soft" @click="logs.length ? loadMore() : load()">{{
 					t('auditLog.retry')
 				}}</UiButton>
 			</div>
@@ -122,7 +143,7 @@
 					<DynamicScrollerItem
 						:item="item"
 						:active="active"
-						:size-dependencies="[item.details]"
+						:size-dependencies="[item.subjectId, item.route, item.sourceIp]"
 						:emit-resize="true"
 					>
 						<div class="audit-row-spacing"><AuditLogRow :log="item" /></div>
@@ -144,7 +165,7 @@
 					v-if="hasMore && !loading && !error"
 					density="compact"
 					appearance="ghost"
-					@click="store.loadMore()"
+					@click="loadMore()"
 					>{{ t('auditLog.loadMore') }}</UiButton
 				>
 			</footer>

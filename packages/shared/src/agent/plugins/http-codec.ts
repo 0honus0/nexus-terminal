@@ -8,6 +8,7 @@ import {
 	AGENT_PLUGIN_MAX_RESPONSE_BYTES,
 	AGENT_PLUGIN_MAX_ENTRY_BYTES,
 	AGENT_PLUGIN_MAX_MESSAGE_BYTES,
+	AGENT_PLUGIN_MAX_FRONTEND_MESSAGE_BYTES,
 	AGENT_PLUGIN_RPC_TIMEOUT_MS,
 } from './values.js';
 import type {
@@ -291,7 +292,7 @@ export function readAgentPluginDescriptor(input: unknown): AgentPluginDescriptor
 		sdkVersion: '1',
 		protocolVersion: 1,
 		sandbox: 'allow-scripts',
-		maxMessageBytes: agentInteger(row.maxMessageBytes, 1, AGENT_PLUGIN_MAX_MESSAGE_BYTES),
+		maxMessageBytes: agentInteger(row.maxMessageBytes, 1, AGENT_PLUGIN_MAX_FRONTEND_MESSAGE_BYTES),
 		requestTimeoutMs: agentInteger(row.requestTimeoutMs, 1, AGENT_PLUGIN_RPC_TIMEOUT_MS),
 		expiresAt: agentInteger(row.expiresAt, 1),
 	};

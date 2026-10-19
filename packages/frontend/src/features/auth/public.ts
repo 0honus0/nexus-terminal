@@ -1,24 +1,31 @@
 import type { Pinia } from 'pinia';
-import type { AuthSessionState, SetupState } from './model/auth';
+import type { AuthSessionState, SetupState } from './model/auth-types';
 import { useAuthSession } from './composables/useAuthSession';
 import { useAuthStore } from './store/auth.store';
 
-export { createAccessNextApi } from './next/public';
+export { createPasskeyCeremony } from './adapters/browser-passkey';
 
-export type { AccessNextApi } from './next/public';
+export { createAccessApi } from './api/access-api';
+
+export { authErrorKey } from './model/auth-errors';
+
+export { AuthRequestFailure } from './model/auth-failure';
+
+export type { AccessApi } from './api/access-api';
 
 export { default as LoginView } from './views/LoginView.vue';
 
 export const loadSetupView = () => import('./views/SetupView.vue');
 
 export type {
-	AuthUserDto,
-	AuthLoginRequestDto,
-	AuthLoginResultViewModel,
-	AuthSetupRequestDto,
+	PasskeyLoginInput,
+	AuthUser,
+	AuthLoginRequest,
+	AuthLoginResult,
+	AuthSetupRequest,
 	AuthSessionState,
 	SetupState,
-} from './model/auth';
+} from './model/auth-types';
 
 export { useAuthSession };
 

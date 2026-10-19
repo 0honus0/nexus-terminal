@@ -39,6 +39,10 @@ export const AGENT_PROVIDER_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 
 export const AGENT_REGISTRY_MAX_MODEL_ID_BYTES = 256;
 
+export const AGENT_REGISTRY_SOURCES = ['remote', 'unavailable'] as const;
+
+export type AgentRegistrySource = (typeof AGENT_REGISTRY_SOURCES)[number];
+
 export const AGENT_PROVIDER_FAILURE_CODES = [
 	'PROVIDER_DNS_FAILED',
 	'PROVIDER_TLS_FAILED',

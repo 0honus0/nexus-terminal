@@ -1,9 +1,8 @@
 <script setup lang="ts">
 	import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-	import type { AgentHostSummaryDto } from '../api/agent-api';
 	import { useAgentHostState } from './agent-host-state';
 
-	const props = defineProps<{ summary: AgentHostSummaryDto | null; paused?: boolean }>();
+	const props = defineProps<{ paused?: boolean }>();
 	const emit = defineEmits<{ layoutChange: [] }>();
 	const { windowManager: agentWindowManager } = useAgentHostState();
 
@@ -21,12 +20,6 @@
 	let hasMoved = false;
 
 	const dragging = ref(false);
-
-	const badge = computed(() => {
-		const summary = props.summary;
-		if (!summary) return 0;
-		return summary.totalRunningRuns + summary.totalPendingApprovals + summary.totalPendingBudgetRequests;
-	});
 
 	const clamp = (right: number, bottom: number) => ({
 		right: Math.max(0, Math.min(right, Math.max(0, window.innerWidth - 44))),
@@ -182,12 +175,6 @@
 			</div>
 
 			<!-- 状态与任务数字指示徽标 -->
-			<span
-				v-if="badge > 0"
-				class="absolute -right-0.5 -top-0.5 sm:-right-1 sm:-top-1 flex h-4 min-w-4 sm:h-4.5 sm:min-w-4.5 items-center justify-center rounded-full bg-error px-1 text-[10px] font-bold leading-none text-white shadow-xs ring-2 ring-background"
-			>
-				{{ badge > 99 ? '99+' : badge }}
-			</span>
 		</button>
 	</div>
 </template>

@@ -1,9 +1,9 @@
 {
   "agentNext": {
     "title": "New Backend Agent — Development",
-    "isolation": "This development view uses backend-next Agent state and read-only model-step audit endpoints. It does not enable Provider execution, tools, approvals, WebSocket streaming, or legacy Agent switching.",
+    "isolation": "This development view uses Backend Agent state and read-only model-step audit endpoints. It does not enable Provider execution, tools, approvals, WebSocket streaming, or legacy Agent switching.",
     "setup": "Initial administrator setup",
-    "login": "Sign in to backend-next",
+    "login": "Sign in to Backend",
     "username": "Username",
     "password": "Password",
     "continue": "Continue",
@@ -43,7 +43,7 @@
       "invalid_host": "The backend host does not match the configured origin.",
       "csrf_rejected": "The request origin was rejected.",
       "invalid_path": "The request path is invalid.",
-      "unauthenticated": "Your backend-next session expired. Sign in again.",
+      "unauthenticated": "Your Backend session expired. Sign in again.",
       "forbidden": "This account cannot access the isolated Agent surface.",
       "not_found": "The requested Agent record does not exist.",
       "active_run_conflict": "This thread already has an active pending run.",

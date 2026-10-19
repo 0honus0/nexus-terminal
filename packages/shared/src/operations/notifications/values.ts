@@ -11,3 +11,5 @@ export type NotificationDeliveryOutcome = Extract<NotificationDeliveryStatus, 's
 export const NOTIFICATION_MAX_SETTINGS = 64;
 
 export const NOTIFICATION_MAX_TEXT_BYTES = 16384;
+
+export const NOTIFICATION_MAX_HEADERS = 32;

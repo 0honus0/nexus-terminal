@@ -1,20 +1,20 @@
 <script setup lang="ts">
-	import { computed, ref, toRaw, watch } from 'vue';
+	import type { WorkspaceLayoutNodeState } from '../model/presentation-types';
+	import type { WorkspacePane } from '@nexus-terminal/shared/preferences/presentation/values';
+	import type { WorkspaceSidebar } from '../model/presentation-types';
+
+	import { computed, ref, watch } from 'vue';
 	import draggable from 'vuedraggable';
 	import { useI18n } from 'vue-i18n';
 	import { structurallyEqual } from '@/foundation/data';
 	import { UiOverlayPanel } from '@/foundation/ui';
-	import { useFeedback } from '@/shared/feedback/public';
+	import { useAuthenticatedViewScope } from '@/shared/session/public';
+	import { useFeedback, preferenceFailureMessage } from '@/shared/feedback/public';
 	import WorkspaceLayoutNodeEditor from './WorkspaceLayoutNodeEditor.vue';
-	import {
-		createDefaultWorkspaceLayout,
-		type WorkspaceLayoutNodeState,
-		type WorkspacePaneNameDto,
-		type WorkspaceSidebarConfigDto,
-	} from '../layout/workspaceLayout';
+	import { cloneWorkspaceLayout, createDefaultWorkspaceLayout } from '../layout/workspaceLayout';
 	import { useWorkspaceUiState } from '../state/workspaceUiState';
 
-	type DragItem = WorkspaceLayoutNodeState | WorkspacePaneNameDto;
+	type DragItem = WorkspaceLayoutNodeState | WorkspacePane;
 
 	const props = defineProps<{ visible: boolean; layoutLocked?: boolean }>();
 	const emit = defineEmits<{ close: []; layoutLocked: [locked: boolean] }>();
@@ -22,37 +22,40 @@
 	const feedback = useFeedback();
 	const { layout: workspaceLayout } = useWorkspaceUiState();
 	const draft = ref<WorkspaceLayoutNodeState>(createDefaultWorkspaceLayout());
-	const sidebar = ref<WorkspaceSidebarConfigDto>({ left: [], right: [] });
+	const sidebar = ref<WorkspaceSidebar>({ left: [], right: [] });
 	const originalDraft = ref<WorkspaceLayoutNodeState>(createDefaultWorkspaceLayout());
-	const originalSidebar = ref<WorkspaceSidebarConfigDto>({ left: [], right: [] });
+	const originalSidebar = ref<WorkspaceSidebar>({ left: [], right: [] });
 	const saving = ref(false);
+	const originalVersion = ref(0);
+	const view = useAuthenticatedViewScope({
+		available: () => props.visible,
 
-	const clone = <T,>(value: T): T => {
-		const unproxy = (candidate: unknown): unknown => {
-			const raw = toRaw(candidate);
-			if (Array.isArray(raw)) return raw.map(unproxy);
-			if (raw && typeof raw === 'object')
-				return Object.fromEntries(Object.entries(raw).map(([key, nested]) => [key, unproxy(nested)]));
-			return raw;
-		};
-
-		return unproxy(value) as T;
-	};
+		onRevoke: () => {
+			saving.value = false;
+		},
+	});
 
 	watch(
 		() => props.visible,
 		(visible) => {
 			if (!visible) return;
-			draft.value = clone(workspaceLayout.tree.value);
-			sidebar.value = clone(workspaceLayout.sidebars.value);
-			originalDraft.value = clone(workspaceLayout.tree.value);
-			originalSidebar.value = clone(workspaceLayout.sidebars.value);
+			originalVersion.value = workspaceLayout.version.value;
+			draft.value = cloneWorkspaceLayout(workspaceLayout.tree.value);
+			sidebar.value = {
+				left: [...workspaceLayout.sidebars.value.left],
+				right: [...workspaceLayout.sidebars.value.right],
+			};
+			originalDraft.value = cloneWorkspaceLayout(workspaceLayout.tree.value);
+			originalSidebar.value = {
+				left: [...workspaceLayout.sidebars.value.left],
+				right: [...workspaceLayout.sidebars.value.right],
+			};
 		},
 		{ immediate: true },
 	);
 
 	const mainPanes = computed(() => {
-		const result = new Set<WorkspacePaneNameDto>();
+		const result = new Set<WorkspacePane>();
 
 		const visit = (node: WorkspaceLayoutNodeState): void => {
 			if (node.type === 'pane' && node.component) result.add(node.component);
@@ -69,24 +72,24 @@
 			!structurallyEqual(sidebar.value, originalSidebar.value),
 	);
 	const allUsedPanes = computed(
-		() => new Set<WorkspacePaneNameDto>([...mainPanes.value, ...sidebar.value.left, ...sidebar.value.right]),
+		() => new Set<WorkspacePane>([...mainPanes.value, ...sidebar.value.left, ...sidebar.value.right]),
 	);
 	const availablePanes = computed(() =>
 		workspaceLayout.paneNames.filter((pane) => pane !== 'terminal' || !allUsedPanes.value.has('terminal')),
 	);
 
-	const paneLabel = (pane: WorkspacePaneNameDto): string => t(`layout.pane.${pane}`);
+	const paneLabel = (pane: WorkspacePane): string => t(`layout.pane.${pane}`);
 
-	const clonePane = (pane: WorkspacePaneNameDto): WorkspaceLayoutNodeState => ({
+	const clonePane = (pane: WorkspacePane): WorkspaceLayoutNodeState => ({
 		id: crypto.randomUUID(),
 		type: 'pane',
 		component: pane,
 		size: 25,
 	});
 
-	const normalizeSidebar = (side: 'left' | 'right', items: DragItem[]): WorkspacePaneNameDto[] => {
+	const normalizeSidebar = (side: 'left' | 'right', items: DragItem[]): WorkspacePane[] => {
 		const other = side === 'left' ? sidebar.value.right : sidebar.value.left;
-		const next: WorkspacePaneNameDto[] = [];
+		const next: WorkspacePane[] = [];
 		for (const item of items) {
 			const pane = typeof item === 'string' ? item : item.type === 'pane' ? item.component : undefined;
 			if (!pane || next.includes(pane) || other.includes(pane)) continue;
@@ -124,29 +127,63 @@
 	const toggleLayoutLock = (): void => emit('layoutLocked', !Boolean(props.layoutLocked));
 
 	const attemptClose = async (): Promise<void> => {
+		const signal = view.capture();
 		if (hasChanges.value) {
 			const confirmed = await feedback.confirm({ message: t('layoutConfigurator.confirmClose') });
-			if (!confirmed) return;
+			if (!confirmed || !view.isCurrent(signal)) return;
 		}
 		emit('close');
 	};
 
 	const reset = async (): Promise<void> => {
+		const signal = view.capture();
 		const confirmed = await feedback.confirm({ message: t('layoutConfigurator.confirmReset') });
-		if (!confirmed) return;
+		if (!confirmed || !view.isCurrent(signal)) return;
 		draft.value = createDefaultWorkspaceLayout();
 		sidebar.value = { left: ['connections', 'dockerManager'], right: [] };
 	};
 
-	const save = async (): Promise<void> => {
+	const refresh = async (): Promise<void> => {
+		if (saving.value) return;
+		const signal = view.capture();
+		if (signal.aborted) return;
 		saving.value = true;
 		try {
-			await workspaceLayout.save(clone(draft.value), clone(sidebar.value));
+			await workspaceLayout.load(true);
+			if (!view.isCurrent(signal)) return;
+			originalVersion.value = workspaceLayout.version.value;
+			draft.value = cloneWorkspaceLayout(workspaceLayout.tree.value);
+			originalDraft.value = cloneWorkspaceLayout(draft.value);
+			sidebar.value = {
+				left: [...workspaceLayout.sidebars.value.left],
+				right: [...workspaceLayout.sidebars.value.right],
+			};
+			originalSidebar.value = { left: [...sidebar.value.left], right: [...sidebar.value.right] };
+		} catch (cause) {
+			if (view.isCurrent(signal)) feedback.notifyError(preferenceFailureMessage(cause, t));
+		} finally {
+			if (view.isCurrent(signal)) saving.value = false;
+		}
+	};
+
+	const save = async (): Promise<void> => {
+		if (saving.value) return;
+		const signal = view.capture();
+		if (signal.aborted) return;
+		saving.value = true;
+		try {
+			await workspaceLayout.save(
+				cloneWorkspaceLayout(draft.value),
+				{ left: [...sidebar.value.left], right: [...sidebar.value.right] },
+				originalVersion.value,
+				signal,
+			);
+			if (!view.isCurrent(signal)) return;
 			emit('close');
 		} catch (cause) {
-			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+			if (view.isCurrent(signal)) feedback.notifyError(preferenceFailureMessage(cause, t));
 		} finally {
-			saving.value = false;
+			if (view.isCurrent(signal)) saving.value = false;
 		}
 	};
 </script>
@@ -187,7 +224,7 @@
 						:list="availablePanes"
 						tag="ul"
 						class="layout-available-panes m-0 flex-grow list-none p-0"
-						:item-key="(pane: WorkspacePaneNameDto) => pane"
+						:item-key="(pane: WorkspacePane) => pane"
 						:group="{ name: 'workspace-layout-items', pull: 'clone', put: false }"
 						:sort="false"
 						:clone="clonePane"
@@ -361,6 +398,9 @@
 			</main>
 
 			<footer class="flex justify-end gap-3 border-t border-border bg-header p-4">
+				<button type="button" class="secondary-action" :disabled="saving" @click="refresh">
+					{{ t('common.refresh') }}
+				</button>
 				<button type="button" class="secondary-action" @click="attemptClose">{{ t('common.cancel') }}</button>
 				<button type="button" class="primary-action" :disabled="!hasChanges || saving" @click="save">
 					{{ saving ? t('common.saving') : t('common.save') }}{{ hasChanges ? '*' : '' }}

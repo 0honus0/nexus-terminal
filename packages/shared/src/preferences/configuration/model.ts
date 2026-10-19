@@ -28,5 +28,11 @@ export interface SettingsView {
 	effectiveVersion: number;
 	requiresRestart: boolean;
 	policy: SettingsPolicy;
+	effectiveMonitoring: SettingsMonitoring;
 	captcha: SettingsCaptchaView;
+}
+
+export interface SettingsMonitoring {
+	statusMonitorIntervalSeconds: number;
+	remoteHostRefreshIntervalSeconds: number;
 }

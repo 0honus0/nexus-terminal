@@ -13,7 +13,8 @@
       "back": "ターミナルに戻る"
     },
     "terminal": {
-      "reconnectingMsg": "再接続を試行中..."
+      "reconnectingMsg": "再接続を試行中...",
+      "ownershipUnknown": "接続の所有権を確認できないため、自動再試行を停止しました。このタブを閉じてから新しく接続してください。元のリモートプロセスは動作中の可能性があります。"
     },
     "title": "ワークスペース",
     "sessions": "{count} セッション",

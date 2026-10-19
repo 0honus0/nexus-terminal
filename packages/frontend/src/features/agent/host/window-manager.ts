@@ -1,15 +1,16 @@
 import { reactive, readonly } from 'vue';
+import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
 import { logger } from '@/client/logging/logger';
 import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
 
-export interface AgentHubBounds {
+interface AgentHubBounds {
 	x: number;
 	y: number;
 	width: number;
 	height: number;
 }
 
-export type AgentHubStatus = 'closed' | 'opening' | 'visible' | 'minimized' | 'error';
+type AgentHubStatus = 'closed' | 'opening' | 'visible' | 'minimized';
 
 interface AgentHubState {
 	status: AgentHubStatus;
@@ -20,13 +21,80 @@ interface AgentHubState {
 	hubView: 'conversation' | 'files';
 	launcherPosition: { right: number; bottom: number };
 	launcherDock: 'left' | 'right' | null;
-	/** §7.2-c: drives the desktop sidebar column and the narrow overlay drawer alike. */
-	threadSidebarVisible: boolean;
-	taskRailVisible: boolean;
 }
 
-interface StoredAgentHubState extends Partial<AgentHubState> {
-	schemaVersion: 1;
+interface StoredAgentHubState {
+	schemaVersion: 2;
+	bounds: AgentHubBounds;
+	maximized: boolean;
+	recentAppIds: string[];
+	hubView: 'conversation' | 'files';
+	launcherPosition: { right: number; bottom: number };
+	launcherDock: 'left' | 'right' | null;
+}
+
+function readStoredHub(value: unknown): StoredAgentHubState | undefined {
+	if (
+		!value ||
+		typeof value !== 'object' ||
+		Array.isArray(value) ||
+		!('schemaVersion' in value) ||
+		value.schemaVersion !== 2 ||
+		!('bounds' in value) ||
+		!('launcherPosition' in value) ||
+		!('maximized' in value) ||
+		!('recentAppIds' in value) ||
+		!('hubView' in value) ||
+		!('launcherDock' in value)
+	)
+		return undefined;
+	const bounds = value.bounds;
+	const launcher = value.launcherPosition;
+	if (
+		!bounds ||
+		typeof bounds !== 'object' ||
+		!('x' in bounds) ||
+		!('y' in bounds) ||
+		!('width' in bounds) ||
+		!('height' in bounds) ||
+		typeof bounds.x !== 'number' ||
+		typeof bounds.y !== 'number' ||
+		typeof bounds.width !== 'number' ||
+		typeof bounds.height !== 'number' ||
+		![bounds.x, bounds.y, bounds.width, bounds.height].every(Number.isFinite) ||
+		bounds.width <= 0 ||
+		bounds.height <= 0
+	)
+		return undefined;
+	if (
+		!launcher ||
+		typeof launcher !== 'object' ||
+		!('right' in launcher) ||
+		!('bottom' in launcher) ||
+		typeof launcher.right !== 'number' ||
+		typeof launcher.bottom !== 'number' ||
+		!Number.isFinite(launcher.right) ||
+		!Number.isFinite(launcher.bottom)
+	)
+		return undefined;
+	if (
+		typeof value.maximized !== 'boolean' ||
+		!Array.isArray(value.recentAppIds) ||
+		value.recentAppIds.length > 8 ||
+		!value.recentAppIds.every((id): id is string => typeof id === 'string' && AGENT_ID_PATTERN.test(id)) ||
+		(value.hubView !== 'conversation' && value.hubView !== 'files') ||
+		(value.launcherDock !== 'left' && value.launcherDock !== 'right' && value.launcherDock !== null)
+	)
+		return undefined;
+	return {
+		schemaVersion: 2,
+		bounds: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height },
+		maximized: value.maximized,
+		recentAppIds: value.recentAppIds.map((id) => id),
+		hubView: value.hubView,
+		launcherPosition: { right: launcher.right, bottom: launcher.bottom },
+		launcherDock: value.launcherDock,
+	};
 }
 
 const DEFAULT_BOUNDS: AgentHubBounds = { x: 80, y: 16, width: 1180, height: 740 };
@@ -48,8 +116,6 @@ const createDefaultState = (): AgentHubState => ({
 	hubView: 'conversation',
 	launcherPosition: { ...DEFAULT_LAUNCHER_POSITION },
 	launcherDock: null,
-	threadSidebarVisible: true,
-	taskRailVisible: false,
 });
 
 export const createAgentWindowManager = () => {
@@ -103,15 +169,9 @@ export const createAgentWindowManager = () => {
 
 	const storageForUser = (userId: number) => ({
 		namespace: 'agent.surface',
-		version: 1,
+		version: 2,
 		scope: { kind: 'user', id: userId } as const,
-		codec: jsonStorageCodec<StoredAgentHubState>((value) => {
-			if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-			const record = value as Record<string, unknown>;
-			if (record.schemaVersion !== 1) return undefined;
-			return record as unknown as StoredAgentHubState;
-		}),
-		legacyKeys: [`nexus.agent.surface.v1.user.${userId}`],
+		codec: jsonStorageCodec<StoredAgentHubState>(readStoredHub),
 	});
 
 	const rememberApp = (appId: string): void => {
@@ -123,8 +183,6 @@ export const createAgentWindowManager = () => {
 		maximized: state.maximized,
 		activeAppId: state.activeAppId,
 		hubView: state.hubView,
-		threadSidebarVisible: state.threadSidebarVisible,
-		taskRailVisible: state.taskRailVisible,
 		bounds: { ...state.bounds },
 		launcherPosition: { ...state.launcherPosition },
 	});
@@ -149,7 +207,7 @@ export const createAgentWindowManager = () => {
 			);
 		},
 
-		switchApp(input: { appId: string; threadId?: string }): void {
+		switchApp(input: { appId: string }): void {
 			const previousAppId = state.activeAppId;
 			state.activeAppId = input.appId;
 			rememberApp(input.appId);
@@ -162,23 +220,6 @@ export const createAgentWindowManager = () => {
 			const previousView = state.hubView;
 			state.hubView = view;
 			logger.debug({ previousView, ...logContext() }, 'Agent floating window view changed');
-		},
-
-		/*
-		 * §7.2-c: the thread sidebar used to be nailed open on wide windows (the toggle
-		 * only existed below the 760px container query) and neither panel remembered its
-		 * state across sessions — the user re-arranged the window on every visit.
-		 */
-		setThreadSidebarVisible(visible: boolean): void {
-			if (state.threadSidebarVisible === visible) return;
-			state.threadSidebarVisible = visible;
-			logger.debug({ visible, ...logContext() }, 'Agent floating window sidebar toggled');
-		},
-
-		setTaskRailVisible(visible: boolean): void {
-			if (state.taskRailVisible === visible) return;
-			state.taskRailVisible = visible;
-			logger.debug({ visible, ...logContext() }, 'Agent floating window task rail toggled');
 		},
 
 		setLauncherPosition(position: { right: number; bottom: number }): void {
@@ -217,8 +258,6 @@ export const createAgentWindowManager = () => {
 					state.bounds = clampBounds(preferredBounds);
 				}
 				state.maximized = stored.maximized === true;
-				state.threadSidebarVisible = stored.threadSidebarVisible !== false;
-				state.taskRailVisible = stored.taskRailVisible === true;
 				if (stored.hubView === 'conversation' || stored.hubView === 'files') state.hubView = stored.hubView;
 				state.recentAppIds = Array.isArray(stored.recentAppIds)
 					? stored.recentAppIds.filter((value): value is string => typeof value === 'string').slice(0, 8)
@@ -240,15 +279,13 @@ export const createAgentWindowManager = () => {
 		persistForUser(userId: number): void {
 			try {
 				const stored: StoredAgentHubState = {
-					schemaVersion: 1,
+					schemaVersion: 2,
 					bounds: preferredBounds,
 					maximized: state.maximized,
 					launcherPosition: preferredLauncherPosition,
 					launcherDock: state.launcherDock,
 					recentAppIds: state.recentAppIds,
 					hubView: state.hubView,
-					threadSidebarVisible: state.threadSidebarVisible,
-					taskRailVisible: state.taskRailVisible,
 				};
 				const payloadBytes = JSON.stringify(stored).length;
 				if (payloadBytes > 8 * 1024) {

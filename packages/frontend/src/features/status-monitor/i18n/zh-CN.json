@@ -46,6 +46,21 @@
     "historyRange": "历史时间范围",
     "closeTrend": "关闭趋势图",
     "copyIpError": "复制 IP 失败",
-    "load": "负载"
+    "load": "负载",
+    "failures": {
+      "invalid_input": "请求无效。",
+      "unauthenticated": "请重新登录。",
+      "forbidden": "需要管理员权限。",
+      "not_found": "资源已不存在。",
+      "conflict": "状态已变化，请先读取最新状态。",
+      "limit_exceeded": "观测容量已达上限。",
+      "host_key_untrusted": "请先确认主机密钥。",
+      "operation_unknown": "命令结果未知，请勿重复操作，先核对远端状态。",
+      "remote_unavailable": "远端观测暂不可用。",
+      "command_failed": "远端命令执行失败。",
+      "stale_target": "目标配置已变化，请重新连接。",
+      "not_text": "返回内容不是文本。",
+      "protocol_failure": "响应无法验证，请先核对远端状态。"
+    }
   }
 }

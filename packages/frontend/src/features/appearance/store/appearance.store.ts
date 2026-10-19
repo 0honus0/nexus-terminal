@@ -1,139 +1,282 @@
+import { computed, ref, shallowRef } from 'vue';
 import { defineStore } from 'pinia';
-import { logger } from '@/client/logging/logger';
-import { appearanceApi } from '../api/appearanceApi';
+import { appearanceApi } from '../api/appearance-api';
+import { themeApi } from '../api/theme-api';
+import { htmlThemeApi } from '../api/html-theme-api';
+import { AppearanceRequestFailure } from '../model/appearance-failure';
+import { toAppearancePatch } from '../model/appearance-mapper';
+import type { AppearanceSettings, AppearancePatch, TerminalTheme, LocalHtmlTheme } from '../model/appearance-types';
+import { readAppearanceUiTheme } from '@nexus-terminal/shared/preferences/appearance/http-codec';
 import { defaultWindowThemeColor, normalizeUiTheme } from '../config/default-theme';
-import type {
-	AppearanceSettingsDto,
-	AppearanceUpdateRequestDto,
-	TerminalThemeDto,
-} from '@nexus-terminal/protocol/appearance';
 
-const parseTheme = (value?: string): Record<string, string> => {
-	if (!value) return normalizeUiTheme({});
-	try {
-		const parsed: unknown = JSON.parse(value);
-		return normalizeUiTheme(
-			parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, string>) : {},
-		);
-	} catch {
-		return normalizeUiTheme({});
+let appliedThemeKeys = new Set<string>();
+
+function applySettings(settings: AppearanceSettings | null): void {
+	const theme = normalizeUiTheme(settings ? readAppearanceUiTheme(settings.customUiTheme) : {});
+	for (const key of appliedThemeKeys) {
+		if (!(key in theme)) {
+			document.documentElement.style.removeProperty(key);
+		}
 	}
-};
-
-const applyUiTheme = (theme: Record<string, string>): void => {
+	appliedThemeKeys = new Set(Object.keys(theme));
 	for (const [key, value] of Object.entries(theme)) {
 		document.documentElement.style.setProperty(key, value);
 	}
-};
-
-const applyWindowColor = (value?: string): void => {
-	const color = /^#[0-9a-f]{6}$/i.test(value ?? '') ? value! : defaultWindowThemeColor;
 	let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
 	if (!meta) {
 		meta = document.createElement('meta');
 		meta.name = 'theme-color';
 		document.head.append(meta);
 	}
-	meta.content = color;
-};
+	meta.content = settings?.windowThemeColor ?? defaultWindowThemeColor;
+	const path = settings?.pageBackgroundImage;
+	document.body.style.backgroundImage = path ? `url(${new URL(path, window.location.origin).href})` : 'none';
+	document.body.style.backgroundSize = path ? 'cover' : '';
+	document.body.style.backgroundPosition = path ? 'center' : '';
+	document.body.style.backgroundRepeat = path ? 'no-repeat' : '';
+	document.body.style.backgroundAttachment = path ? 'fixed' : '';
+}
 
-const applyPageBackground = (path?: string): void => {
-	const body = document.body;
-	body.style.backgroundImage = path ? `url(${new URL(path, window.location.origin).href})` : 'none';
-	body.style.backgroundSize = path ? 'cover' : '';
-	body.style.backgroundPosition = path ? 'center' : '';
-	body.style.backgroundRepeat = path ? 'no-repeat' : '';
-	body.style.backgroundAttachment = path ? 'fixed' : '';
-};
+export const useAppearanceStore = defineStore('appearance', () => {
+	const snapshot = shallowRef<AppearanceSettings | null>(null);
+	const preview = shallowRef<AppearancePatch>({});
+	const themes = shallowRef<TerminalTheme[]>([]);
+	const localThemes = shallowRef<LocalHtmlTheme[]>([]);
+	const customizerVisible = ref(false);
+	const busy = ref(false);
+	const blocked = ref(false);
+	const error = shallowRef<unknown>(null);
+	let scope = new AbortController();
+	let revision = 0;
+	let queue: Promise<unknown> = Promise.resolve();
+	let pendingRead: Promise<void> | null = null;
+	const settings = computed<Partial<AppearanceSettings>>(() =>
+		snapshot.value ? { ...snapshot.value, ...preview.value } : {},
+	);
+	const version = computed(() => snapshot.value?.version ?? null);
+	const loaded = computed(() => snapshot.value !== null);
 
-const applySettings = (settings: AppearanceSettingsDto): void => {
-	applyUiTheme(parseTheme(settings.customUiTheme));
-	applyWindowColor(settings.windowThemeColor);
-	applyPageBackground(settings.pageBackgroundImage);
-};
+	function reset(): void {
+		scope.abort();
+		scope = new AbortController();
+		revision++;
+		queue = Promise.resolve();
+		pendingRead = null;
+		snapshot.value = null;
+		preview.value = {};
+		themes.value = [];
+		localThemes.value = [];
+		customizerVisible.value = false;
+		busy.value = false;
+		blocked.value = false;
+		error.value = null;
+		applySettings(null);
+	}
 
-export const useAppearanceStore = defineStore('appearance', {
-	state: () => ({
-		settings: {} as AppearanceSettingsDto,
-		themes: [] as TerminalThemeDto[],
-		loaded: false,
-		settingsRevision: 0,
-		customizerVisible: false,
-		cacheGeneration: 0,
-	}),
+	function enqueue<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T> {
+		const signal = scope.signal;
+		const task = queue.then(() => {
+			if (signal.aborted) {
+				throw new AppearanceRequestFailure('cancelled', 'not_dispatched');
+			}
+			return work(signal);
+		});
+		queue = task.catch(() => undefined);
+		return task;
+	}
 
-	actions: {
-		reset() {
-			this.cacheGeneration += 1;
-			this.settingsRevision += 1;
-			this.settings = {} as AppearanceSettingsDto;
-			this.themes = [];
-			this.loaded = false;
-			this.customizerVisible = false;
-			applySettings(this.settings);
-		},
-
-		openCustomizer() {
-			this.customizerVisible = true;
-		},
-
-		closeCustomizer() {
-			this.customizerVisible = false;
-		},
-
-		async load(force = false) {
-			if (this.loaded && !force) return;
-			const generation = this.cacheGeneration;
-			const settingsRevision = this.settingsRevision;
-			const settings = await appearanceApi.load();
-			if (generation !== this.cacheGeneration) return;
-			this.loaded = true;
-			if (settingsRevision === this.settingsRevision) {
-				this.settings = settings;
-				applySettings(settings);
+	function load(recover = false, permission?: AbortSignal): Promise<void> {
+		if (!recover && blocked.value) {
+			return Promise.reject(new AppearanceRequestFailure('refresh_required', 'not_dispatched'));
+		}
+		if (!recover && loaded.value) {
+			return Promise.resolve();
+		}
+		if (!recover && pendingRead) {
+			return pendingRead;
+		}
+		const recoveryRevision = revision;
+		const task = enqueue(async (owner) => {
+			const signal = permission ? AbortSignal.any([owner, permission]) : owner;
+			if (signal.aborted) {
+				throw new AppearanceRequestFailure('cancelled', 'not_dispatched');
 			}
 			try {
-				const themes = await appearanceApi.listThemes();
-				if (generation === this.cacheGeneration) this.themes = themes;
+				const value = await appearanceApi.load(signal);
+				const results = await Promise.allSettled([
+					themeApi.list(signal),
+					htmlThemeApi.list(signal),
+					htmlThemeApi.repository(signal),
+				]);
+				const failures = results.flatMap((entry) => (entry.status === 'rejected' ? [entry.reason] : []));
+				if (failures.length) {
+					throw failures.length === 1 ? failures[0] : new AggregateError(failures, 'Appearance reads failed');
+				}
+				const [themeResult, htmlResult, repoResult] = results;
+				if (
+					themeResult.status !== 'fulfilled' ||
+					htmlResult.status !== 'fulfilled' ||
+					repoResult.status !== 'fulfilled'
+				) {
+					throw new AppearanceRequestFailure('protocol_failure', 'unknown');
+				}
+				if (repoResult.value.version !== value.version || repoResult.value.url !== value.remoteHtmlPresetsUrl) {
+					throw new AppearanceRequestFailure('version_conflict', 'confirmed');
+				}
+				if (signal.aborted) {
+					throw new AppearanceRequestFailure('cancelled', 'not_dispatched');
+				}
+				snapshot.value = value;
+				preview.value = {};
+				themes.value = themeResult.value;
+				localThemes.value = htmlResult.value;
+				applySettings(value);
+				if (recover && recoveryRevision !== revision) {
+					throw new AppearanceRequestFailure('refresh_required', 'not_dispatched');
+				}
+				if (recover) {
+					blocked.value = false;
+					error.value = null;
+				}
 			} catch (cause) {
-				logger.warn({ err: cause }, 'Failed to load terminal themes; appearance settings remain available');
+				if (!signal.aborted) {
+					error.value = cause;
+					blocked.value = true;
+					revision++;
+				}
+				throw cause;
 			}
-		},
+		});
+		pendingRead = task;
+		void task
+			.finally(() => {
+				if (pendingRead === task) {
+					pendingRead = null;
+				}
+			})
+			.catch(() => undefined);
+		return task;
+	}
 
-		async update(patch: AppearanceUpdateRequestDto) {
-			const generation = this.cacheGeneration;
-			const settings = await appearanceApi.update(patch);
-			if (generation !== this.cacheGeneration) return;
-			this.settingsRevision += 1;
-			this.settings = settings;
-			applySettings(settings);
-		},
-
-		applyBackgroundReference(kind: 'page' | 'terminal', filePath: string) {
-			this.settingsRevision += 1;
-			if (kind === 'page') {
-				this.settings = { ...this.settings, pageBackgroundImage: filePath };
-				applyPageBackground(filePath);
-			} else {
-				this.settings = { ...this.settings, terminalBackgroundImage: filePath };
+	function mutate<T>(
+		work: (signal: AbortSignal) => Promise<T>,
+		permission: AbortSignal,
+		publish?: (value: T) => void,
+	): Promise<T> {
+		return enqueue(async (signal) => {
+			if (permission.aborted) {
+				throw new AppearanceRequestFailure('cancelled', 'not_dispatched');
 			}
+			if (blocked.value || !loaded.value) {
+				throw new AppearanceRequestFailure('refresh_required', 'not_dispatched');
+			}
+			busy.value = true;
+			try {
+				const value = await work(AbortSignal.any([signal, permission]));
+				if (!signal.aborted) {
+					publish?.(value);
+					error.value = null;
+				}
+				return value;
+			} catch (cause) {
+				if (!signal.aborted) {
+					error.value = cause;
+					if (
+						!(cause instanceof AppearanceRequestFailure) ||
+						cause.outcome === 'unknown' ||
+						cause.code === 'version_conflict' ||
+						cause.code === 'source_changed'
+					) {
+						revision++;
+						blocked.value = true;
+					}
+				}
+				throw cause;
+			} finally {
+				if (!signal.aborted) {
+					busy.value = false;
+				}
+			}
+		});
+	}
+
+	function accept(value: AppearanceSettings): void {
+		snapshot.value = value;
+		preview.value = {};
+		applySettings(value);
+	}
+
+	function update(
+		patch: AppearancePatch,
+		expectedVersion: number,
+		permission: AbortSignal,
+	): Promise<AppearanceSettings> {
+		const frozen = toAppearancePatch(patch, expectedVersion);
+		return mutate((signal) => appearanceApi.update(frozen, expectedVersion, signal), permission, accept);
+	}
+
+	function previewSettings(patch: AppearancePatch): void {
+		// Only local font previews are supported; durable state/version remain unchanged.
+		const next: AppearancePatch = {};
+		const font = patch.terminalFontSize ?? preview.value.terminalFontSize;
+		if (font !== undefined) {
+			next.terminalFontSize = font;
+		}
+		const mobileFont = patch.terminalFontSizeMobile ?? preview.value.terminalFontSizeMobile;
+		if (mobileFont !== undefined) {
+			next.terminalFontSizeMobile = mobileFont;
+		}
+		const editor = patch.editorFontSize ?? preview.value.editorFontSize;
+		if (editor !== undefined) {
+			next.editorFontSize = editor;
+		}
+		const mobileEditor = patch.mobileEditorFontSize ?? preview.value.mobileEditorFontSize;
+		if (mobileEditor !== undefined) {
+			next.mobileEditorFontSize = mobileEditor;
+		}
+		preview.value = next;
+	}
+
+	function clearFontPreview(kind: 'terminal' | 'editor' | 'mobile-editor'): void {
+		const next = { ...preview.value };
+		if (kind === 'terminal') {
+			delete next.terminalFontSize;
+			delete next.terminalFontSizeMobile;
+		}
+		if (kind === 'editor') {
+			delete next.editorFontSize;
+		}
+		if (kind === 'mobile-editor') {
+			delete next.mobileEditorFontSize;
+		}
+		preview.value = next;
+	}
+
+	return {
+		clearFontPreview,
+		snapshot,
+		settings,
+		version,
+		loaded,
+		themes,
+		localThemes,
+		customizerVisible,
+		busy,
+		blocked,
+		error,
+		reset,
+		load,
+		mutate,
+		update,
+		accept,
+		previewSettings,
+
+		openCustomizer: (): void => {
+			customizerVisible.value = true;
 		},
 
-		previewSettings(patch: AppearanceUpdateRequestDto) {
-			const { terminalCustomHtml, ...previewPatch } = patch;
-			this.settings = {
-				...this.settings,
-				...previewPatch,
-				...(terminalCustomHtml === undefined ? {} : { terminalCustomHtml: terminalCustomHtml ?? '' }),
-			};
+		closeCustomizer: (): void => {
+			customizerVisible.value = false;
 		},
-
-		async saveUiTheme(theme: Record<string, string>) {
-			await this.update({ customUiTheme: JSON.stringify(theme) });
-		},
-
-		async refreshThemes() {
-			this.themes = await appearanceApi.listThemes();
-		},
-	},
+	};
 });

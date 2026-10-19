@@ -8,7 +8,6 @@ catalog:
   dompurify: ^3.4.15
   pino: ^9.14.0
   puppeteer-core: 25.10.0
-  tar: 7.5.22
 
 catalogs:
   node-build:
@@ -30,3 +29,4 @@ catalogPrune: true
 verifyDepsBeforeRun: false
 patchedDependencies:
   '@xterm/xterm@6.0.0': scripts/patches/@xterm__xterm@6.0.0.patch
+  guacamole-common-js@1.5.0: scripts/patches/guacamole-common-js@1.5.0.patch

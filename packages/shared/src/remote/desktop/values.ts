@@ -14,12 +14,17 @@ export const REMOTE_DESKTOP_MAX_DPI = 480;
 
 export type RemoteDesktopProtocol = 'RDP' | 'VNC';
 
-export type RemoteDesktopErrorCode =
-	| 'invalid_input'
-	| 'unauthenticated'
-	| 'forbidden'
-	| 'not_found'
-	| 'conflict'
-	| 'limit_exceeded'
-	| 'remote_unavailable'
-	| 'operation_unknown';
+export const REMOTE_DESKTOP_RESPONSE_MAX_BYTES = 1024;
+
+export const REMOTE_DESKTOP_ERROR_CODES = [
+	'invalid_input',
+	'unauthenticated',
+	'forbidden',
+	'not_found',
+	'conflict',
+	'limit_exceeded',
+	'remote_unavailable',
+	'operation_unknown',
+] as const;
+
+export type RemoteDesktopErrorCode = (typeof REMOTE_DESKTOP_ERROR_CODES)[number];

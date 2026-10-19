@@ -1,4 +1,11 @@
-import { TARGET_ERROR_CODES, TARGET_HTTP_BODY_LIMITS, type TargetHttpErrorCode } from './values.js';
+import {
+	TARGET_ERROR_CODES,
+	TARGET_HTTP_BODY_LIMITS,
+	TARGET_MANAGEMENT_RESPONSE_MAX_BYTES,
+	type TargetHttpErrorCode,
+} from './values.js';
+import { TARGET_CONNECTION_IMPORT_FILE_MAX_BYTES, CONNECTION_TEST_BODY_MAX_BYTES } from './connections/values.js';
+import { TARGET_TAG_CONNECTION_BODY_MAX_BYTES } from './tags/values.js';
 
 /** Target wire input is deliberately strict and framework independent. */
 export class InvalidTargetPayload extends Error {
@@ -13,6 +20,15 @@ export interface TargetErrorResponse {
 
 /** Paths are relative to /api/v1/targets on both server and client. */
 export function targetHttpBodyLimit(path: string): number {
+	if (path === '/connections/add-tag' || /^\/tags\/[^/]+\/connections$/u.test(path)) {
+		return TARGET_TAG_CONNECTION_BODY_MAX_BYTES;
+	}
+	if (path === '/connections/import') {
+		return TARGET_CONNECTION_IMPORT_FILE_MAX_BYTES;
+	}
+	if (/^\/connections\/(?:test-unsaved|[1-9]\d*\/test)$/u.test(path)) {
+		return CONNECTION_TEST_BODY_MAX_BYTES;
+	}
 	const resource = path.split('/')[1];
 	switch (resource) {
 		case 'connections':
@@ -35,6 +51,25 @@ export function encodeTargetRequest(path: string, input: unknown): string {
 		throw new Error('body_too_large');
 	}
 	return body;
+}
+
+export function targetManagementResponseLimit(path: string): number {
+	switch (path.split('/')[1]) {
+		case 'connections':
+			return path === '/connections'
+				? TARGET_MANAGEMENT_RESPONSE_MAX_BYTES.connections
+				: TARGET_HTTP_BODY_LIMITS.connections;
+		case 'proxies':
+			return TARGET_MANAGEMENT_RESPONSE_MAX_BYTES.proxies;
+		case 'ssh-keys':
+			return TARGET_MANAGEMENT_RESPONSE_MAX_BYTES['ssh-keys'];
+		case 'tags':
+			return TARGET_MANAGEMENT_RESPONSE_MAX_BYTES.tags;
+		case 'host-keys':
+			return TARGET_MANAGEMENT_RESPONSE_MAX_BYTES['host-keys'];
+		default:
+			throw new InvalidTargetPayload();
+	}
 }
 
 export interface TargetDeleteResponse {
@@ -60,6 +95,7 @@ export function targetText(input: unknown, max = 512, allowEmpty = true): string
 	if (
 		typeof input !== 'string' ||
 		new TextEncoder().encode(input).byteLength > max ||
+		new TextDecoder().decode(new TextEncoder().encode(input)) !== input ||
 		(!allowEmpty && !input.trim())
 	) {
 		throw new InvalidTargetPayload();
@@ -132,11 +168,11 @@ export function readTargetError(input: unknown): TargetErrorResponse {
 	const row = targetObject(input, ['code']);
 	const stable = [
 		...TARGET_ERROR_CODES,
-		'unauthenticated',
-		'forbidden',
 		'not_found',
 		'version_conflict',
 		'body_too_large',
+		'request_timeout',
+		'limit_exceeded',
 	] as const;
 	return { code: targetOption(row.code, stable) };
 }

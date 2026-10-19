@@ -1,4 +1,4 @@
-import type { AgentRegistryErrorCode } from './values.js';
+import type { AgentRegistryErrorCode, AgentRegistrySource } from './values.js';
 import type { AgentReasoningEffort } from './values.js';
 
 export interface AgentRegistryDefaults {
@@ -13,7 +13,7 @@ export interface AgentRegistryDefaults {
 
 export interface AgentRegistryStatus {
 	sourceUrl: string;
-	activeSource: 'remote' | 'unavailable';
+	activeSource: AgentRegistrySource;
 	entryCount: number;
 	/** Registry generation timestamp uses Unix seconds. */
 	generatedAt: number | null;

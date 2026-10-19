@@ -1,3 +1,5 @@
+import type { WorkspaceTransferHttpErrorCode, WorkspaceTransferTransportErrorCode } from './values.js';
+
 /** Existing /sftp/download-ticket POST body; sessionId is an optional selector. */
 export interface WorkspaceDownloadTicketRequest {
 	connectionId: number;
@@ -10,6 +12,6 @@ export interface WorkspaceDownloadTicketResponse {
 	expiresInSeconds: number;
 }
 
-export interface WorkspaceTransferHttpError {
-	message: string;
-}
+/** Route failures use message; transport admission/input failures use code. */
+export type WorkspaceTransferHttpError =
+	{ message: WorkspaceTransferHttpErrorCode } | { code: WorkspaceTransferTransportErrorCode };

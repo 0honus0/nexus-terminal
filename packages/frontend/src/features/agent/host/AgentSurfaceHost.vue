@@ -1,380 +1,128 @@
 <script setup lang="ts">
 	import { onBeforeUnmount, ref, watch } from 'vue';
-	import { logger } from '@/client/logging/logger';
 	import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
-	import { agentApi, resetAgentCsrf, type AgentHostSummaryDto } from '../api/agent-api';
-	import { agentEvents } from '../api/agent-events';
-	import { canExecuteAgentApp } from '../app-availability';
+	import { useAgentManagementOperation } from '../composables/use-agent-management-operation';
+	import { listAppDefinitions, listManagedApps } from '../api/app-management-api';
+	import { listPluginInstallations, listPluginVersions } from '../api/plugin-management-api';
+	import { getExecutionSettings } from '../api/execution-api';
+	import { toHostDirectory } from '../model/host-mapper';
+	import type { HostDirectory } from '../model/host-types';
+	import { AgentManagementFailure } from '../model/management-failure';
 	import AgentHubWindow from './AgentHubWindow.vue';
 	import AgentLauncher from './AgentLauncher.vue';
 	import { agentHostEvents } from '../events/agent-host-events';
 	import { provideAgentHostState } from './agent-host-state';
 
 	const auth = useRuntimeFeatureCapabilities().auth;
-	const { surfaceSession: agentSurfaceSession, windowManager: agentWindowManager } = provideAgentHostState();
-	const summary = ref<AgentHostSummaryDto | null>(null);
-	const HOST_STREAM_LOCK_NAME = 'nexus.agent.host-stream.v1';
-	const HOST_EVENT_CHANNEL_NAME = 'nexus.agent.host-events.v1';
-	const HOST_REFRESH_RETRY_BASE_MS = 500;
-	const HOST_REFRESH_RETRY_MAX_MS = 10_000;
-	const hostChannel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(HOST_EVENT_CHANNEL_NAME);
+	const { windowManager } = provideAgentHostState();
+	const directory = ref<HostDirectory | null>(null);
+	let userId: number | null = null;
+	const operation = useAgentManagementOperation(
+		(reason) => {
+			persistLayout();
+			if (reason === 'view') return;
+			directory.value = null;
+			windowManager.reset();
+		},
+		() => auth.authenticated.value && auth.userId.value === 1,
+	);
 
-	let hostAbort: AbortController | null = null;
-	let generation = 0;
-	let refreshGeneration = 0;
-	let activeUserId: number | null = null;
+	function persistLayout(): void {
+		if (userId !== null) windowManager.persistForUser(userId);
+	}
 
-	const dispatchThreadChanged = (payload: Record<string, unknown>): void => {
-		agentHostEvents.emit('thread-changed', payload);
-	};
+	async function refresh(): Promise<void> {
+		await operation.execute(
+			async (signal) => {
+				const [apps, definitions, installations, versions, execution] = await Promise.all([
+					listManagedApps(signal),
+					listAppDefinitions(signal),
+					listPluginInstallations(signal),
+					listPluginVersions(signal),
+					getExecutionSettings(signal),
+				]);
+				return toHostDirectory(apps, definitions, installations, versions, execution.enabled);
+			},
+			(next) => {
+				directory.value = next;
+				const enabled = next.apps.filter((app) => app.enabled);
+				if (!enabled.some((app) => app.id === windowManager.state.activeAppId)) {
+					const first = enabled.find((app) => app.surface === 'agent') ?? enabled[0];
+					if (first) windowManager.switchApp({ appId: first.id });
+					else windowManager.closeHub();
+				}
+			},
+			{
+				write: false,
 
-	const dispatchAuthorizationChanged = (payload: Record<string, unknown> = {}): void => {
-		agentHostEvents.emit('authorization-changed', payload);
-	};
-
-	const dispatchMemoryChanged = (payload: Record<string, unknown>): void => {
-		agentHostEvents.emit('memory-changed', payload);
-	};
-
-	const dispatchConfigurationChanged = (): void => {
-		agentHostEvents.emit('configuration-changed', { origin: 'external' });
-	};
-
-	const chooseDefaultApp = (next: AgentHostSummaryDto): void => {
-		const enabled = next.apps.filter((app) => app.enabled);
-		if (enabled.length === 0) {
-			agentWindowManager.closeHub();
-			return;
-		}
-		const executable = enabled.filter(canExecuteAgentApp);
-		const current = enabled.find((app) => app.id === agentWindowManager.state.activeAppId);
-		if (current && (canExecuteAgentApp(current) || executable.length === 0)) return;
-		const preferred = executable.find((app) => app.id === 'nexus.agent') ?? executable[0] ?? current ?? enabled[0]!;
-		agentWindowManager.switchApp({ appId: preferred.id });
-	};
-
-	const refresh = async (reason: 'initial' | 'host-event'): Promise<AgentHostSummaryDto | null> => {
-		if (!auth.authenticated.value || activeUserId === null) return null;
-		const requestGeneration = ++refreshGeneration;
-		const requestUserId = activeUserId;
-		try {
-			const next = await agentApi.summary();
-			if (!auth.authenticated.value || activeUserId !== requestUserId) return null;
-			if (requestGeneration !== refreshGeneration) return next;
-			const previousFeatureEnabled = summary.value?.featureEnabled ?? null;
-			summary.value = next;
-			chooseDefaultApp(next);
-			if (!next.featureEnabled) agentWindowManager.closeHub();
-			if (previousFeatureEnabled !== null && previousFeatureEnabled !== next.featureEnabled) {
-				logger.info(
-					{ userId: activeUserId, previousFeatureEnabled, featureEnabled: next.featureEnabled },
-					'Agent global surface feature state changed',
-				);
-			}
-			logger.debug(
-				{
-					reason,
-					userId: activeUserId,
-					generation,
-					refreshGeneration: requestGeneration,
-					featureEnabled: next.featureEnabled,
-					eventCursor: next.eventCursor,
-					appCount: next.apps.length,
-					runningRuns: next.totalRunningRuns,
-					pendingApprovals: next.totalPendingApprovals,
-					pendingBudgetRequests: next.totalPendingBudgetRequests,
+				onFailure: (cause) => {
+					if (
+						cause instanceof AgentManagementFailure &&
+						(cause.code === 'unauthenticated' || cause.code === 'forbidden')
+					) {
+						directory.value = null;
+						windowManager.reset();
+					}
 				},
-				'Agent global surface summary refreshed',
-			);
-			return next;
-		} catch (cause) {
-			if (!auth.authenticated.value || activeUserId !== requestUserId) return null;
-			if (requestGeneration !== refreshGeneration) return summary.value;
-			logger.warn(
-				{ err: cause, reason, userId: activeUserId, generation, refreshGeneration: requestGeneration },
-				'Failed to refresh Agent global surface',
-			);
-			return null;
-		}
-	};
-
-	const stop = (reason: string): void => {
-		const previousGeneration = generation;
-		generation += 1;
-		const hadSubscription = hostAbort !== null;
-		hostAbort?.abort();
-		hostAbort = null;
-		if (hadSubscription) {
-			logger.debug(
-				{ reason, userId: activeUserId, previousGeneration, generation },
-				'Agent global surface event subscription stopped',
-			);
-		}
-	};
-
-	const waitForHostRefreshRetry = (attempt: number, signal: AbortSignal): Promise<void> =>
-		new Promise((resolve) => {
-			if (signal.aborted) {
-				resolve();
-				return;
-			}
-			const delay = Math.min(HOST_REFRESH_RETRY_MAX_MS, HOST_REFRESH_RETRY_BASE_MS * 2 ** Math.min(attempt, 5));
-
-			const onAbort = (): void => {
-				window.clearTimeout(timer);
-				resolve();
-			};
-
-			const timer = window.setTimeout(() => {
-				signal.removeEventListener('abort', onAbort);
-				resolve();
-			}, delay);
-			signal.addEventListener('abort', onAbort, { once: true });
-		});
-
-	const runHostStreamAsLeader = async (controller: AbortController, currentGeneration: number): Promise<void> => {
-		let refreshAttempt = 0;
-		while (!controller.signal.aborted && currentGeneration === generation) {
-			const initial = await refresh('initial');
-			if (controller.signal.aborted || currentGeneration !== generation) return;
-			if (!initial) {
-				refreshAttempt += 1;
-				logger.warn(
-					{ userId: activeUserId, generation: currentGeneration, refreshAttempt },
-					'Agent global surface initial summary unavailable; retrying',
-				);
-				await waitForHostRefreshRetry(refreshAttempt, controller.signal);
-				continue;
-			}
-			logger.debug(
-				{ userId: activeUserId, generation: currentGeneration, cursor: initial.eventCursor },
-				'Agent global surface event subscription starting as cross-tab leader',
-			);
-			for await (const event of agentEvents.host(initial.eventCursor, controller.signal)) {
-				if (controller.signal.aborted || currentGeneration !== generation) return;
-				logger.debug(
-					{
-						userId: activeUserId,
-						generation: currentGeneration,
-						eventType: event.type,
-						sourceType: event.type === 'host.changed' ? event.sourceType : undefined,
-						eventId: event.id,
-					},
-					'Agent global surface host event received',
-				);
-				if (event.type === 'host.changed' && event.sourceType === 'thread.changed') {
-					dispatchThreadChanged(event.payload);
-				}
-				if (event.type === 'host.changed' && event.sourceType === 'authorization.changed') {
-					dispatchAuthorizationChanged(event.payload);
-				}
-				if (event.type === 'host.changed' && event.sourceType === 'memory.changed') {
-					dispatchMemoryChanged(event.payload);
-				}
-				if (event.type === 'host.changed' && event.sourceType === 'configuration.changed') {
-					dispatchConfigurationChanged();
-				}
-				await refresh('host-event');
-				if (activeUserId !== null) {
-					hostChannel?.postMessage({
-						type: 'host.changed',
-						userId: activeUserId,
-						sourceType: event.type === 'host.changed' ? event.sourceType : undefined,
-						payload: event.type === 'host.changed' ? event.payload : undefined,
-					});
-				}
-			}
-			return;
-		}
-	};
-
-	const bootstrapLocalSummary = async (controller: AbortController, currentGeneration: number): Promise<boolean> => {
-		let refreshAttempt = 0;
-		while (!controller.signal.aborted && currentGeneration === generation) {
-			const initial = await refresh('initial');
-			if (controller.signal.aborted || currentGeneration !== generation) return false;
-			if (initial) return true;
-			refreshAttempt += 1;
-			logger.warn(
-				{ userId: activeUserId, generation: currentGeneration, refreshAttempt },
-				'Agent global surface local summary unavailable; retrying',
-			);
-			await waitForHostRefreshRetry(refreshAttempt, controller.signal);
-		}
-		return false;
-	};
-
-	const start = (): void => {
-		stop('restart');
-		const controller = new AbortController();
-		hostAbort = controller;
-		const currentGeneration = ++generation;
-		logger.debug(
-			{ userId: activeUserId, generation: currentGeneration },
-			'Agent global surface host coordination starting',
+			},
 		);
-		void (async () => {
-			try {
-				const bootstrapped = await bootstrapLocalSummary(controller, currentGeneration);
-				if (!bootstrapped || controller.signal.aborted || currentGeneration !== generation) return;
-				if (typeof navigator.locks?.request === 'function') {
-					await navigator.locks.request(
-						HOST_STREAM_LOCK_NAME,
-						{ mode: 'exclusive', signal: controller.signal },
-						async () => {
-							if (controller.signal.aborted || currentGeneration !== generation) return;
-							logger.debug(
-								{ userId: activeUserId, generation: currentGeneration },
-								'Agent global surface acquired cross-tab host stream ownership',
-							);
-							await runHostStreamAsLeader(controller, currentGeneration);
-						},
-					);
-					return;
-				}
-				await runHostStreamAsLeader(controller, currentGeneration);
-			} catch (cause) {
-				if (controller.signal.aborted || currentGeneration !== generation) return;
-				logger.warn(
-					{ err: cause, userId: activeUserId, generation: currentGeneration },
-					'Agent global surface host coordination ended unexpectedly',
-				);
-			}
-		})();
-	};
-
-	const persistLayout = (reason: string): void => {
-		if (activeUserId === null) return;
-		agentWindowManager.persistForUser(activeUserId);
-		logger.debug({ reason, userId: activeUserId }, 'Agent global surface layout persistence requested');
-	};
-
-	const detachUserScopedState = (reason: string): void => {
-		const detachedUserId = activeUserId;
-		refreshGeneration += 1;
-		persistLayout(reason);
-		stop(reason);
-		summary.value = null;
-		resetAgentCsrf();
-		agentWindowManager.reset();
-		agentSurfaceSession.disposeSession();
-		logger.debug({ reason, userId: detachedUserId }, 'Agent global surface user-scoped state cleared');
-	};
+	}
 
 	watch(
 		() => [auth.authenticated.value, auth.userId.value] as const,
-		([authenticated, userId]) => {
-			if (authenticated && userId !== null) {
-				if (activeUserId !== null && activeUserId !== userId) {
-					const previousUserId = activeUserId;
-					detachUserScopedState('user-changed');
-					logger.info({ previousUserId, userId }, 'Agent global surface authenticated user changed');
-				}
-				activeUserId = userId;
-				logger.debug({ userId }, 'Agent global surface attached to authenticated shell');
-				agentWindowManager.restoreForUser(userId);
-				start();
-				return;
+		([authenticated, next]) => {
+			persistLayout();
+			userId = authenticated && next === 1 ? next : null;
+			if (userId !== null) {
+				windowManager.restoreForUser(userId);
+				void refresh();
 			}
-			const detachedUserId = activeUserId;
-			detachUserScopedState('auth-ended');
-			logger.debug({ userId: detachedUserId }, 'Agent global surface detached from authenticated shell');
-			activeUserId = null;
 		},
-		{ immediate: true },
+		{ immediate: true, flush: 'post' },
 	);
+	watch(
+		() => windowManager.state.status,
+		(status) => {
+			if (status === 'visible') void refresh();
+		},
+	);
+	const stopHost = agentHostEvents.on('host-changed', () => {
+		void refresh();
+	});
+	const stopConfiguration = agentHostEvents.on('configuration-changed', () => {
+		void refresh();
+	});
 
-	const onHostBroadcast = (event: MessageEvent<unknown>): void => {
-		if (!auth.authenticated.value || activeUserId === null) return;
-		if (!event.data || typeof event.data !== 'object' || Array.isArray(event.data)) return;
-		const message = event.data as {
-			type?: unknown;
-			userId?: unknown;
-			sourceType?: unknown;
-			payload?: unknown;
-		};
-		if (message.type !== 'host.changed' || message.userId !== activeUserId) return;
-		if (
-			message.sourceType === 'thread.changed' &&
-			message.payload &&
-			typeof message.payload === 'object' &&
-			!Array.isArray(message.payload)
-		) {
-			dispatchThreadChanged(message.payload as Record<string, unknown>);
-		}
-		if (message.sourceType === 'authorization.changed') {
-			dispatchAuthorizationChanged(
-				message.payload && typeof message.payload === 'object' && !Array.isArray(message.payload)
-					? (message.payload as Record<string, unknown>)
-					: {},
-			);
-		}
-		if (
-			message.sourceType === 'memory.changed' &&
-			message.payload &&
-			typeof message.payload === 'object' &&
-			!Array.isArray(message.payload)
-		) {
-			dispatchMemoryChanged(message.payload as Record<string, unknown>);
-		}
-		if (message.sourceType === 'configuration.changed') {
-			dispatchConfigurationChanged();
-		}
-		void refresh('host-event');
-	};
-
-	hostChannel?.addEventListener('message', onHostBroadcast);
-
-	const onLocalHostChanged = (): void => {
-		if (!auth.authenticated.value || activeUserId === null) return;
-		void refresh('host-event');
-		if (activeUserId !== null) hostChannel?.postMessage({ type: 'host.changed', userId: activeUserId });
-	};
-
-	const stopLocalHostChanged = agentHostEvents.on('host-changed', onLocalHostChanged);
-
-	const onLocalConfigurationChanged = (event: { origin: 'local' | 'external' }): void => {
-		if (event.origin !== 'local' || !auth.authenticated.value || activeUserId === null) return;
-		void refresh('host-event');
-		hostChannel?.postMessage({
-			type: 'host.changed',
-			userId: activeUserId,
-			sourceType: 'configuration.changed',
-		});
-	};
-
-	const stopLocalConfigurationChanged = agentHostEvents.on('configuration-changed', onLocalConfigurationChanged);
-
-	const onVisibility = (): void => {
-		if (document.visibilityState === 'hidden') persistLayout('document-hidden');
-	};
+	function onVisibility(): void {
+		if (document.visibilityState === 'hidden') persistLayout();
+		else if (userId !== null) void refresh();
+	}
 
 	document.addEventListener('visibilitychange', onVisibility);
-
 	onBeforeUnmount(() => {
-		detachUserScopedState('host-unmount');
-		activeUserId = null;
+		persistLayout();
+		stopHost();
+		stopConfiguration();
 		document.removeEventListener('visibilitychange', onVisibility);
-		stopLocalHostChanged();
-		stopLocalConfigurationChanged();
-		hostChannel?.removeEventListener('message', onHostBroadcast);
-		hostChannel?.close();
 	});
 </script>
 
 <template>
 	<Teleport to="body">
-		<template v-if="auth.authenticated.value && summary">
-			<AgentHubWindow
-				v-if="summary.featureEnabled"
-				:summary="summary"
-				@layout-change="persistLayout('window-interaction')"
-			/>
+		<template v-if="auth.authenticated.value && auth.userId.value === 1">
+			<AgentHubWindow v-if="directory" :directory="directory" @layout-change="persistLayout" @refresh="refresh" />
 			<AgentLauncher
-				v-if="summary.featureEnabled && agentWindowManager.state.status !== 'visible'"
-				:summary="summary"
-				@layout-change="persistLayout('launcher-interaction')"
+				v-if="windowManager.state.status !== 'visible' || !directory"
+				@layout-change="persistLayout"
 			/>
+			<div
+				v-if="operation.notice.value"
+				class="fixed bottom-20 right-4 z-50 rounded border bg-card p-3"
+				role="status"
+			>
+				{{ $t('agent.settings.appManagement.' + operation.notice.value) }}
+				<button :disabled="operation.busy.value" @click="refresh">{{ $t('agent.nativeThreads.read') }}</button>
+			</div>
 		</template>
 	</Teleport>
 </template>

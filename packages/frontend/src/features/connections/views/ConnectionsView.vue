@@ -1,5 +1,6 @@
 <script setup lang="ts">
-	import { computed, onActivated, onMounted, ref, watch } from 'vue';
+	import { computed, onActivated, onMounted, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
+	import { useAuthSession } from '@/features/auth/public';
 	import { useRouter } from 'vue-router';
 	import { useI18n } from 'vue-i18n';
 	import { formatDistanceToNow } from 'date-fns';
@@ -15,61 +16,108 @@
 	import { useFeedback } from '@/shared/feedback/public';
 	import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
 	import { preloadWorkspaceTerminalSurface } from '@/runtimes/workspace/public';
-	import { useConnections } from '../composables/useConnections';
-	import { connectionsApi } from '../api/connectionsApi';
+	import { useConnectionManagement } from '../composables/use-connection-management';
+	import ConnectionImportModal from '../components/ConnectionImportModal.vue';
 	import ConnectionEditorModal from '../components/ConnectionEditorModal.vue';
 	import BatchEditConnectionModal from '../components/BatchEditConnectionModal.vue';
-	import type { ConnectionDto, ConnectionFormUpdate } from '../model/connection';
+	import HostKeyManagementModal from '../components/HostKeyManagementModal.vue';
+	import type { ConnectionSummary } from '../model/connection-types';
 	const { t, locale } = useI18n();
 	const router = useRouter();
 	const feedback = useFeedback();
-	const data = useConnections();
+	const {
+		data,
+		selected,
+		batchModal,
+		loading,
+		message,
+		testing,
+		testResults,
+		refresh,
+		openBatch,
+		clone,
+		test,
+		testAll,
+		deleteSelected,
+		batchSave,
+		cancelBatch,
+		appendTag,
+		exportItems,
+	} = useConnectionManagement();
+	const importVisible = ref(false);
+	const appendTagId = ref<number | null>(null);
 	const capabilities = useRuntimeFeatureCapabilities();
 	const tags = capabilities.tags;
 	const search = ref('');
 	type SortField = 'lastConnected' | 'name' | 'type' | 'updated' | 'created';
 	type SortOrder = 'asc' | 'desc';
-	const validSorts = new Set<SortField>(['lastConnected', 'name', 'type', 'updated', 'created']);
+
+	function isSortField(value: unknown): value is SortField {
+		return (
+			value === 'lastConnected' ||
+			value === 'name' ||
+			value === 'type' ||
+			value === 'updated' ||
+			value === 'created'
+		);
+	}
+
 	const sortStorage = {
 		namespace: 'connections.sort',
 		version: 1,
-		codec: stringStorageCodec((value) => validSorts.has(value as SortField)),
-		legacyKeys: ['connections_view_sort_by'],
+		codec: stringStorageCodec(isSortField),
 	} as const;
 	const orderStorage = {
 		namespace: 'connections.sort-order',
 		version: 1,
 		codec: stringStorageCodec((value) => value === 'asc' || value === 'desc'),
-		legacyKeys: ['connections_view_sort_order'],
 	} as const;
 	const tagStorage = {
 		namespace: 'connections.tag',
 		version: 1,
 		codec: numberStorageCodec((value) => Number.isInteger(value) && value > 0),
-		legacyKeys: ['connections_view_filter_tag'],
 	} as const;
-	const sort = ref<SortField>((readStoredValue(sortStorage) as SortField | undefined) ?? 'lastConnected');
-	const sortOrder = ref<SortOrder>((readStoredValue(orderStorage) as SortOrder | undefined) ?? 'desc');
+	const storedSort = readStoredValue(sortStorage);
+	const storedOrder = readStoredValue(orderStorage);
+	const sort = ref<SortField>(isSortField(storedSort) ? storedSort : 'lastConnected');
+	const sortOrder = ref<SortOrder>(storedOrder === 'asc' ? 'asc' : 'desc');
 	const tagId = ref<number | ''>(readStoredValue(tagStorage) ?? '');
 	const formVisible = ref(false);
-	const editing = ref<ConnectionDto | null>(null);
+	const editing = ref<ConnectionSummary | null>(null);
 	const batch = ref(false);
-	const selected = ref(new Set<number>());
-	const batchModal = ref(false);
-	const testing = ref(new Set<number>());
-	const testResults = ref(new Map<number, { success: boolean; message: string; latency?: number }>());
+	const hostKeysVisible = ref(false);
+	const auth = useAuthSession();
+	let loadGeneration = 0;
 
-	const loadInitialData = async () => {
-		const [connectionsResult, tagsResult] = await Promise.allSettled([data.load(), tags.load()]);
-		if (connectionsResult.status === 'rejected') feedback.notifyError(t('connections.loadFailed'));
-		if (tagsResult.status === 'rejected') feedback.notifyError(t('connections.tagLoadFailed'));
+	const loadInitialData = async (): Promise<void> => {
+		const current = ++loadGeneration;
+		const [connectionsResult, tagsResult] = await Promise.allSettled([data.revalidate(), tags.revalidate()]);
+		if (current !== loadGeneration) {
+			return;
+		}
+		if (connectionsResult.status === 'rejected') {
+			feedback.notifyError(t('connections.loadFailed'));
+		}
+		if (tagsResult.status === 'rejected') {
+			feedback.notifyError(t('connections.tagLoadFailed'));
+		}
 	};
 
 	onMounted(() => void loadInitialData());
-	onActivated(() => {
-		void data.revalidate().catch(() => undefined);
-		void tags.revalidate().catch(() => undefined);
-	});
+	onActivated(() => void loadInitialData());
+
+	function resetPanels(): void {
+		loadGeneration++;
+		formVisible.value = false;
+		importVisible.value = false;
+		hostKeysVisible.value = false;
+		editing.value = null;
+		appendTagId.value = null;
+	}
+
+	watch(() => (auth.isAuthenticated.value ? auth.user.value?.id : null), resetPanels, { flush: 'sync' });
+	onDeactivated(resetPanels);
+	onBeforeUnmount(resetPanels);
 	const filtered = computed(() => {
 		const q = search.value.toLowerCase().trim();
 		const values = data.connections.value.filter((c) => {
@@ -98,7 +146,7 @@
 		if (!timestamp) return t('connections.status.never');
 		const language = locale.value.split('-')[0];
 		const dateLocale = language === 'zh' ? zhCN : language === 'ja' ? ja : enUS;
-		return formatDistanceToNow(new Date(timestamp * 1000), { addSuffix: true, locale: dateLocale });
+		return formatDistanceToNow(new Date(timestamp), { addSuffix: true, locale: dateLocale });
 	};
 
 	const openAdd = () => {
@@ -106,32 +154,12 @@
 		formVisible.value = true;
 	};
 
-	const openEdit = (c: ConnectionDto) => {
+	const openEdit = (c: ConnectionSummary) => {
 		editing.value = c;
 		formVisible.value = true;
 	};
 
-	const test = async (c: ConnectionDto) => {
-		testing.value = new Set(testing.value).add(c.id);
-		try {
-			const result = await connectionsApi.test(c.id);
-			testResults.value = new Map(testResults.value).set(c.id, result);
-			feedback.notifySuccess(t('connections.test.success'));
-		} catch (cause) {
-			const message = cause instanceof Error ? cause.message : String(cause);
-			testResults.value = new Map(testResults.value).set(c.id, { success: false, message });
-			feedback.notifyError(t('connections.test.failed', { error: message }));
-		} finally {
-			const next = new Set(testing.value);
-			next.delete(c.id);
-			testing.value = next;
-		}
-	};
-
-	const testAllFiltered = async () => {
-		const ssh = filtered.value.filter((connection) => connection.type === 'SSH');
-		await Promise.allSettled(ssh.map((connection) => test(connection)));
-	};
+	const testAllFiltered = () => testAll(filtered.value.filter((item) => item.type === 'SSH'));
 
 	const connectAllFiltered = () => {
 		const ids = filtered.value
@@ -142,20 +170,10 @@
 		void router.push({ name: 'Workspace', query: { connectionId: ids } });
 	};
 
-	const tagNames = (connection: ConnectionDto) =>
+	const tagNames = (connection: ConnectionSummary) =>
 		connection.tagIds
 			.map((id) => tags.items.value.find((tag) => tag.id === id)?.name)
 			.filter((name): name is string => Boolean(name));
-
-	const clone = async (c: ConnectionDto) => {
-		try {
-			await data.clone(c.id, t('connections.cloneName', { name: c.name || c.host }));
-		} catch (cause) {
-			feedback.notifyError(
-				t('connections.errors.cloneFailed', { error: cause instanceof Error ? cause.message : String(cause) }),
-			);
-		}
-	};
 
 	const toggleSelected = (id: number) => {
 		const next = new Set(selected.value);
@@ -177,54 +195,7 @@
 		selected.value = next;
 	};
 
-	const deleteSelected = async () => {
-		const ids = [...selected.value];
-		if (
-			!(await feedback.confirm({
-				message: t('connections.batchEdit.confirmMessage', { count: ids.length }),
-				destructive: true,
-			}))
-		)
-			return;
-
-		const results = await Promise.allSettled(ids.map((id) => data.remove(id)));
-		const failedIds = ids.filter((_, index) => results[index]?.status === 'rejected');
-		const successCount = ids.length - failedIds.length;
-		selected.value = new Set(failedIds);
-
-		if (failedIds.length === 0) {
-			await feedback.alert({ message: t('connections.batchEdit.successMessage') });
-			return;
-		}
-		const message = t('connections.batchEdit.partialDeleteMessage', {
-			successCount,
-			errorCount: failedIds.length,
-		});
-		if (successCount > 0) feedback.notifyWarning(message);
-		else feedback.notifyError(message);
-	};
-
-	const batchSave = async (update: ConnectionFormUpdate) => {
-		const ids = [...selected.value];
-		const results = await Promise.allSettled(ids.map((id) => data.update(id, update)));
-		const failedIds = ids.filter((_, index) => results[index]?.status === 'rejected');
-		const successCount = ids.length - failedIds.length;
-		selected.value = new Set(failedIds);
-
-		if (failedIds.length === 0) {
-			batchModal.value = false;
-			feedback.notifySuccess(t('connections.batchEdit.updateSuccessMessage', { count: successCount }));
-			return;
-		}
-		const message = t('connections.batchEdit.partialUpdateMessage', {
-			successCount,
-			errorCount: failedIds.length,
-		});
-		if (successCount > 0) feedback.notifyWarning(message);
-		else feedback.notifyError(message);
-	};
-
-	const connect = (c: ConnectionDto) => {
+	const connect = (c: ConnectionSummary) => {
 		if (c.type === 'RDP' || c.type === 'VNC') {
 			capabilities.remoteDesktop.open({ id: c.id, name: c.name || c.host, type: c.type });
 			return;
@@ -235,6 +206,11 @@
 </script>
 <template>
 	<main class="p-4 text-foreground md:p-6 lg:p-8">
+		<p v-if="message" role="status" class="my-3">{{ message }}</p>
+		<p v-if="data.needsRefresh.value" class="my-3 text-text-secondary">
+			{{ t('connections.failures.recovery_required') }}
+		</p>
+		<p class="my-3 text-sm text-text-secondary">{{ t('connections.exportHelp') }}</p>
 		<div class="mx-auto max-w-screen-lg">
 			<h1 class="mb-6 text-2xl font-semibold">{{ t('nav.connections') }}</h1>
 
@@ -280,7 +256,38 @@
 								<option value="created">{{ t('dashboard.sortOptions.created') }}</option>
 							</UiSelect>
 						</div>
-						<div class="ml-auto flex shrink-0 items-center gap-2">
+						<div class="ml-auto flex flex-wrap shrink-0 items-center gap-2">
+							<UiSelect
+								v-if="selected.size"
+								v-model="appendTagId"
+								:aria-label="t('connections.appendTag')"
+								><option :value="null">{{ t('connections.form.tags') }}</option>
+								<option v-for="tag in tags.items.value" :key="tag.id" :value="tag.id">
+									{{ tag.name }}
+								</option></UiSelect
+							><UiButton
+								v-if="selected.size"
+								:disabled="appendTagId === null || loading || data.needsRefresh.value"
+								@click="appendTagId !== null && appendTag(appendTagId)"
+								>{{ t('connections.appendTag') }}</UiButton
+							><UiButton :disabled="loading || data.busy.value" @click="refresh">{{
+								t('connections.refresh')
+							}}</UiButton
+							><UiButton :disabled="loading" @click="importVisible = true">{{
+								t('connections.importTitle')
+							}}</UiButton
+							><UiButton
+								:disabled="data.needsRefresh.value || loading"
+								@click="
+									exportItems(
+										selected.size ? filtered.filter((item) => selected.has(item.id)) : filtered,
+									)
+								"
+								>{{ t('connections.exportTitle') }}</UiButton
+							>
+							<UiButton type="button" appearance="soft" @click="hostKeysVisible = true">{{
+								t('hostKeys.title')
+							}}</UiButton>
 							<UiButton
 								appearance="soft"
 								icon-only
@@ -348,7 +355,7 @@
 						:disabled="selected.size === 0"
 						appearance="solid"
 						density="compact"
-						@click="batchModal = true"
+						@click="openBatch"
 					>
 						<i class="fas fa-edit" aria-hidden="true" />{{ t('connections.batchEdit.editSelected') }}
 					</UiButton>
@@ -438,8 +445,8 @@
 												'mr-1.5',
 											]"
 										/>{{ testResults.get(c.id)?.message
-										}}<template v-if="testResults.get(c.id)?.latency != null">
-											· {{ testResults.get(c.id)?.latency }} ms</template
+										}}<template v-if="testResults.get(c.id)?.latencyMs != null">
+											· {{ testResults.get(c.id)?.latencyMs }} ms</template
 										></span
 									>
 								</div>
@@ -508,6 +515,8 @@
 			</section>
 		</div>
 
+		<ConnectionImportModal :visible="importVisible" @close="importVisible = false" />
+		<HostKeyManagementModal :visible="hostKeysVisible" @close="hostKeysVisible = false" />
 		<ConnectionEditorModal
 			:visible="formVisible"
 			:connection="editing"
@@ -519,7 +528,8 @@
 		<BatchEditConnectionModal
 			:visible="batchModal"
 			:count="selected.size"
-			@close="batchModal = false"
+			:loading="loading || data.needsRefresh.value"
+			@close="cancelBatch"
 			@save="batchSave"
 		/>
 	</main>

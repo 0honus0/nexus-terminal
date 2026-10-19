@@ -1,23 +1,23 @@
 <script setup lang="ts">
+	import type {
+		ServerTransferItemStatus,
+		ServerTransferTaskStatus,
+	} from '@nexus-terminal/shared/remote/transfers/server-values';
 	import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
 	import { useDraggablePosition } from '@/foundation/interaction';
 	import { UiOverlayPanel } from '@/foundation/ui';
 	import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
-	import type { ProgressSource, TransferTask } from '../model/transfer';
+	import type { ProgressSource, TransferTask } from '../model/transfer-types';
 	import { transferTaskErrorDescriptor, transferTaskWarningDescriptor } from '../presentation-transfer-message';
-	import type {
-		ServerTransferSubTaskStatusDto,
-		ServerTransferTaskDto,
-		ServerTransferTaskStatusDto,
-	} from '../model/serverTransfer';
+	import type { ServerTransferTask } from '../model/server-transfer-types';
 
 	const props = withDefaults(
 		defineProps<{
 			visible: boolean;
 			sources: readonly ProgressSource[];
-			serverTransfers?: readonly ServerTransferTaskDto[];
+			serverTransfers?: readonly ServerTransferTask[];
 			serverTransfersLoading?: boolean;
 			serverTransfersError?: string;
 			mobile?: boolean;
@@ -134,7 +134,7 @@
 	onBeforeUnmount(() => window.removeEventListener('resize', clampRestoredPosition));
 
 	const done = (status: TransferTask['status']) =>
-		['completed', 'cancelled', 'skipped', 'partial', 'error'].includes(status);
+		['completed', 'cancelled', 'skipped', 'partial', 'unknown', 'error'].includes(status);
 
 	const activeCount = (source: ProgressSource) => source.tasks.filter((task) => !done(task.status)).length;
 
@@ -158,15 +158,13 @@
 	};
 
 	const displayedServerTransfers = computed(() =>
-		[...props.serverTransfers]
-			.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
-			.slice(0, 5),
+		[...props.serverTransfers].sort((left, right) => right.createdAt - left.createdAt).slice(0, 5),
 	);
 
-	const serverTaskFinal = (status: ServerTransferTaskStatusDto): boolean =>
+	const serverTaskFinal = (status: ServerTransferTaskStatus): boolean =>
 		['completed', 'failed', 'partially-completed', 'cancelled'].includes(status);
 
-	const serverTaskCancellable = (status: ServerTransferTaskStatusDto): boolean =>
+	const serverTaskCancellable = (status: ServerTransferTaskStatus): boolean =>
 		['queued', 'in-progress'].includes(status);
 
 	const connectionName = (connectionId?: number): string => {
@@ -179,19 +177,18 @@
 		);
 	};
 
-	const serverTaskTitle = (task: ServerTransferTaskDto): string => {
-		const sourceConnectionId = task.sourceConnectionId ?? task.payload.sourceConnectionId;
+	const serverTaskTitle = (task: ServerTransferTask): string => {
+		const sourceConnectionId = task.payload.sourceConnectionId;
 		const fileName =
 			task.payload.sourceItems[0]?.name ||
 			task.subTasks[0]?.sourceItemName ||
 			t('transferProgressModal.unknownFileName');
-		const targetPath =
-			task.remoteTargetPath || task.payload.remoteTargetPath || t('transferProgressModal.unknownTargetPath');
+		const targetPath = task.payload.remoteTargetPath || t('transferProgressModal.unknownTargetPath');
 		return `${connectionName(sourceConnectionId)} (${fileName} -> ${targetPath})`;
 	};
 
-	const statusLabel = (status: ServerTransferTaskStatusDto | ServerTransferSubTaskStatusDto): string => {
-		const keys: Record<ServerTransferTaskStatusDto | ServerTransferSubTaskStatusDto, string> = {
+	const statusLabel = (status: ServerTransferTaskStatus | ServerTransferItemStatus): string => {
+		const keys: Record<ServerTransferTaskStatus | ServerTransferItemStatus, string> = {
 			queued: 'transferProgressModal.status.queued',
 			'in-progress': 'transferProgressModal.status.inProgress',
 			completed: 'transferProgressModal.status.completed',
@@ -201,11 +198,12 @@
 			transferring: 'transferProgressModal.status.transferring',
 			cancelling: 'transferProgressModal.status.cancelling',
 			cancelled: 'transferProgressModal.status.cancelled',
+			unknown: 'progressCenter.status.unknown',
 		};
 		return t(keys[status]);
 	};
 
-	const statusClasses = (status: ServerTransferTaskStatusDto | ServerTransferSubTaskStatusDto) => ({
+	const statusClasses = (status: ServerTransferTaskStatus | ServerTransferItemStatus) => ({
 		'bg-green-100 text-green-700': status === 'completed',
 		'bg-red-100 text-red-700': status === 'failed',
 		'bg-yellow-100 text-yellow-700':
@@ -214,9 +212,9 @@
 		'bg-gray-100 text-gray-700': status === 'cancelled',
 	});
 
-	const formatDate = (value: string): string => {
+	const formatDate = (value: number): string => {
 		const date = new Date(value);
-		if (!Number.isFinite(date.getTime())) return value;
+		if (!Number.isFinite(date.getTime())) return '';
 		return date.toLocaleString(locale.value, {
 			year: 'numeric',
 			month: 'short',
@@ -416,15 +414,18 @@
 							<i class="fas fa-spinner fa-spin mb-2 text-2xl text-primary" aria-hidden="true"></i>
 							<div>{{ t('transferProgressModal.loading') }}</div>
 						</div>
-						<div v-else-if="serverTransfersError" class="rounded-md bg-red-50 p-4 text-center text-red-500">
+						<div v-if="serverTransfersError" class="rounded-md bg-red-50 p-4 text-center text-red-500">
 							<p class="font-semibold">{{ t('transferProgressModal.errorLoadingTitle') }}</p>
-							<p>{{ t('transferProgressModal.errorLoading', { error: serverTransfersError }) }}</p>
+							<p>{{ t('transferProgressModal.errorLoading', { error: t(serverTransfersError) }) }}</p>
 						</div>
-						<div v-else-if="!serverTransfers.length" class="py-10 text-center text-text-secondary">
+						<div
+							v-if="!serverTransfersLoading && !serverTransfers.length"
+							class="py-10 text-center text-text-secondary"
+						>
 							<i class="far fa-file-lines mb-2 text-4xl text-gray-400" aria-hidden="true"></i>
 							<div>{{ t('transferProgressModal.noTasks') }}</div>
 						</div>
-						<div v-else class="space-y-3">
+						<div v-if="serverTransfers.length" class="space-y-3">
 							<article
 								v-for="task in displayedServerTransfers"
 								:key="task.taskId"
@@ -557,11 +558,14 @@
 												{{ subTask.transferMethodUsed }}
 											</p>
 											<p
-												v-if="subTask.status === 'failed' && subTask.message"
+												v-if="
+													(subTask.status === 'failed' || subTask.status === 'unknown') &&
+													subTask.error
+												"
 												class="text-red-600"
 											>
 												<strong>{{ t('transferProgressModal.subTask.error') }}:</strong>
-												{{ subTask.message }}
+												{{ t('serverTransferErrors.' + subTask.error) }}
 											</p>
 										</li>
 									</ul>

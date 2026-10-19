@@ -128,7 +128,12 @@ export function readAgentMemoryView(value: unknown): AgentMemoryView {
 	}
 	const createdAt = agentInteger(r.createdAt);
 	const updatedAt = agentInteger(r.updatedAt, createdAt);
-	if (r.reviewedAt !== null && agentInteger(r.reviewedAt, createdAt) > updatedAt) {
+	const expiresAt = r.expiresAt === null ? null : agentInteger(r.expiresAt, createdAt + 1);
+	const reviewedAt = r.reviewedAt === null ? null : agentInteger(r.reviewedAt, createdAt);
+	if (
+		(reviewedAt !== null && reviewedAt > updatedAt) ||
+		(status === 'published' && expiresAt !== null && reviewedAt !== null && reviewedAt >= expiresAt)
+	) {
 		throw new InvalidAgentPayload();
 	}
 	return {
@@ -138,9 +143,9 @@ export function readAgentMemoryView(value: unknown): AgentMemoryView {
 		confidence: confidence(r.confidence),
 		status,
 		sourceRunId: r.sourceRunId === null ? null : readAgentId(r.sourceRunId),
-		expiresAt: r.expiresAt === null ? null : agentInteger(r.expiresAt, 1),
+		expiresAt,
 		reviewAction: action,
-		reviewedAt: r.reviewedAt === null ? null : agentInteger(r.reviewedAt, createdAt),
+		reviewedAt,
 		version: agentInteger(r.version, 1),
 		createdAt,
 		updatedAt,

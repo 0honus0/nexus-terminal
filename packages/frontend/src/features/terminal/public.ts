@@ -8,9 +8,9 @@ export type {
 	TerminalConnectionState,
 	TerminalOutput,
 	TerminalSnapshot,
-	WorkspaceTerminalViewportDto,
+	TerminalViewport,
 	TerminalVisualOptions,
-} from './model/terminal';
+} from './model/terminal-types';
 
 export { createTerminalSessionState } from './state/terminalSessionState';
 

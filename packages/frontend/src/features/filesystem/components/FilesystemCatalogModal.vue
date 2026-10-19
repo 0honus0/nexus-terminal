@@ -4,9 +4,10 @@
 	import { UiContextMenu, UiOverlayPanel } from '@/foundation/ui';
 	import { useDeviceCapabilities } from '@/foundation/browser';
 	import { useLongPressGesture } from '@/foundation/interaction';
-	import { useFeedback } from '@/shared/feedback/public';
+	import { useAuthenticatedViewScope } from '@/shared/session/public';
+	import { useFeedback, preferenceFailureMessage } from '@/shared/feedback/public';
 	import { useFilesystemCatalog } from '../composables/useFilesystemCatalog';
-	import type { FavoritePathDto } from '../model/catalog';
+	import type { FavoritePathSummary } from '../model/catalog-types';
 
 	const PADDING = 8;
 	const props = defineProps<{
@@ -21,20 +22,37 @@
 	const catalog = useFilesystemCatalog();
 	const panel = ref<HTMLElement | null>(null);
 	const panelStyle = ref<Record<string, string>>({ visibility: 'hidden' });
-	const editing = ref<FavoritePathDto | null>(null);
-	const context = ref<{ item: FavoritePathDto; x: number; y: number } | null>(null);
+	const editing = ref<FavoritePathSummary | null>(null);
+	const context = ref<{ item: FavoritePathSummary; x: number; y: number } | null>(null);
 	const formVisible = ref(false);
 	const saving = ref(false);
 	const errorMessage = ref('');
 	const form = reactive({ name: '', path: '' });
+	const view = useAuthenticatedViewScope({
+		available: () => props.visible,
+
+		onRevoke: () => {
+			editing.value = null;
+			context.value = null;
+			formVisible.value = false;
+			saving.value = false;
+			form.name = '';
+			form.path = '';
+			errorMessage.value = '';
+		},
+	});
 	const sortIcon = computed(() =>
 		catalog.favoriteSort.value === 'name' ? 'fas fa-sort-alpha-down' : 'fas fa-clock',
 	);
 
 	const updatePosition = async (): Promise<void> => {
-		if (!props.visible || !props.triggerElement) return;
+		if (!props.visible || !props.triggerElement) {
+			return;
+		}
 		await nextTick();
-		if (!props.visible || !panel.value) return;
+		if (!props.visible || !panel.value) {
+			return;
+		}
 		const trigger = props.triggerElement.getBoundingClientRect();
 		const width = panel.value.offsetWidth;
 		const below = Math.max(0, window.innerHeight - trigger.bottom - 4 - PADDING);
@@ -57,9 +75,13 @@
 	};
 
 	const handleOutsidePointer = (event: MouseEvent): void => {
-		if (!props.visible || formVisible.value || context.value) return;
+		if (!props.visible || formVisible.value || context.value) {
+			return;
+		}
 		const target = event.target as Node;
-		if (props.triggerElement?.contains(target) || panel.value?.contains(target)) return;
+		if (props.triggerElement?.contains(target) || panel.value?.contains(target)) {
+			return;
+		}
 		emit('close');
 	};
 
@@ -90,9 +112,11 @@
 			attachPositioning();
 			await updatePosition();
 			try {
-				await catalog.loadFavorites();
+				await catalog.loadFavorites(true);
 			} catch {
-				if (current) feedback.notifyError(t('favoritePaths.notifications.fetchError'));
+				if (current) {
+					feedback.notifyError(t('favoritePaths.notifications.fetchError'));
+				}
 			}
 		},
 		{ immediate: true },
@@ -116,7 +140,7 @@
 		formVisible.value = true;
 	};
 
-	const openEdit = (item: FavoritePathDto): void => {
+	const openEdit = (item: FavoritePathSummary): void => {
 		editing.value = item;
 		form.name = item.name ?? '';
 		form.path = item.path;
@@ -125,19 +149,35 @@
 	};
 
 	const closeForm = (): void => {
-		if (!saving.value) formVisible.value = false;
+		if (!saving.value) {
+			formVisible.value = false;
+		}
 	};
 
 	const save = async (): Promise<void> => {
+		const signal = view.capture();
+		if (!view.isCurrent(signal)) {
+			return;
+		}
 		const path = form.path.trim();
 		if (!path || saving.value) {
-			if (!path) errorMessage.value = t('favoritePaths.addEditForm.validation.pathRequired');
+			if (!path) {
+				errorMessage.value = t('favoritePaths.addEditForm.validation.pathRequired');
+			}
 			return;
 		}
 		saving.value = true;
 		errorMessage.value = '';
 		try {
-			await catalog.saveFavorite({ id: editing.value?.id, path, name: form.name });
+			await catalog.saveFavorite(
+				editing.value
+					? { id: editing.value.id, expectedVersion: editing.value.version, path, name: form.name }
+					: { path, name: form.name },
+				signal,
+			);
+			if (!view.isCurrent(signal)) {
+				return;
+			}
 			feedback.notifySuccess(
 				t(
 					editing.value
@@ -148,55 +188,81 @@
 			formVisible.value = false;
 			await updatePosition();
 		} catch (cause) {
-			errorMessage.value =
-				cause instanceof Error ? cause.message : t('favoritePaths.addEditForm.errors.genericSaveError');
+			if (view.isCurrent(signal)) {
+				errorMessage.value = preferenceFailureMessage(cause, t);
+			}
 		} finally {
-			saving.value = false;
+			if (view.isCurrent(signal)) {
+				saving.value = false;
+			}
 		}
 	};
 
-	const removeFavorite = async (item: FavoritePathDto): Promise<void> => {
+	const removeFavorite = async (item: FavoritePathSummary): Promise<void> => {
+		const signal = view.capture();
+		if (!view.isCurrent(signal)) {
+			return;
+		}
 		if (
 			!(await feedback.confirm({
 				message: t('favoritePaths.confirmDelete', { name: item.name || item.path }),
+				signal,
 				destructive: true,
 			}))
-		)
+		) {
 			return;
+		}
 		try {
-			await catalog.removeFavorite(item.id);
+			if (!view.isCurrent(signal)) {
+				return;
+			}
+			await catalog.removeFavorite(item, signal);
+			if (!view.isCurrent(signal)) {
+				return;
+			}
 			feedback.notifySuccess(t('favoritePaths.notifications.deleteSuccess'));
 			await updatePosition();
 		} catch (cause) {
-			feedback.notifyError(cause instanceof Error ? cause.message : t('favoritePaths.notifications.deleteError'));
+			if (view.isCurrent(signal)) {
+				feedback.notifyError(preferenceFailureMessage(cause, t));
+			}
 		}
 	};
 
-	const navigateFavorite = async (item: FavoritePathDto): Promise<void> => {
+	const navigateFavorite = async (item: FavoritePathSummary): Promise<void> => {
+		const signal = view.capture();
+		if (!view.isCurrent(signal)) {
+			return;
+		}
 		try {
-			await catalog.useFavorite(item);
+			await catalog.useFavorite(item, signal);
 		} catch {
-			feedback.notifyError(t('favoritePaths.notifications.markAsUsedError'));
+			if (view.isCurrent(signal)) {
+				feedback.notifyError(t('favoritePaths.notifications.markAsUsedError'));
+			}
+		}
+		if (!view.isCurrent(signal)) {
+			return;
 		}
 		emit('navigate', item.path);
 		emit('close');
 	};
 
-	const sendToTerminal = (item: FavoritePathDto): void => {
+	const sendToTerminal = (item: FavoritePathSummary): void => {
 		emit('terminal', item.path);
 		emit('close');
 	};
 
-	const openContextAt = (item: FavoritePathDto, x: number, y: number): void => {
+	const openContextAt = (item: FavoritePathSummary, x: number, y: number): void => {
 		context.value = { item, x, y };
 	};
 
-	const openContext = (event: MouseEvent, item: FavoritePathDto): void => {
+	const openContext = (event: MouseEvent, item: FavoritePathSummary): void => {
 		event.preventDefault();
 		openContextAt(item, event.clientX, event.clientY);
 	};
 
-	const longPress = useLongPressGesture<FavoritePathDto>({
+	const longPress = useLongPressGesture<FavoritePathSummary>({
 		enabled: () => device.hasTouch.value,
 
 		vibrateMs: 15,
@@ -204,27 +270,35 @@
 		onTrigger: (item, point) => openContextAt(item, point.x, point.y),
 	});
 
-	const navigateFromClick = (event: MouseEvent, item: FavoritePathDto): void => {
-		if (longPress.consumeClick(event)) return;
+	const navigateFromClick = (event: MouseEvent, item: FavoritePathSummary): void => {
+		if (longPress.consumeClick(event)) {
+			return;
+		}
 		void navigateFavorite(item);
 	};
 
 	const sendContextToTerminal = (): void => {
-		if (!context.value) return;
+		if (!context.value) {
+			return;
+		}
 		const item = context.value.item;
 		context.value = null;
 		sendToTerminal(item);
 	};
 
 	const editContextFavorite = (): void => {
-		if (!context.value) return;
+		if (!context.value) {
+			return;
+		}
 		const item = context.value.item;
 		context.value = null;
 		openEdit(item);
 	};
 
 	const removeContextFavorite = (): void => {
-		if (!context.value) return;
+		if (!context.value) {
+			return;
+		}
 		const item = context.value.item;
 		context.value = null;
 		void removeFavorite(item);

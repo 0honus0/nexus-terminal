@@ -2,8 +2,6 @@ export { default as ConnectionTagPicker } from './components/ConnectionTagPicker
 
 export { resetConnectionTagsCache, useConnectionTags } from './composables/useConnectionTags';
 
-export type { ConnectionTagsController } from './composables/useConnectionTags';
+export type { ConnectionTagsController, TagSummary } from './model/tag-types';
 
-export { tagsApi as connectionTagsService } from './api/tagsApi';
-
-export type { ConnectionTagDto } from './model/tag';
+export { TagEnsureFailure } from './model/tag-errors';

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+	import type { WorkspacePane } from '@nexus-terminal/shared/preferences/presentation/values';
+
 	import { computed, defineAsyncComponent, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { booleanStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
@@ -11,8 +13,8 @@
 	} from '@/features/terminal/public';
 	import { loadQuickCommandsPanel, type ExecuteCommandIntent } from '@/features/quick-commands/public';
 	import { loadStatusMonitor, type StatusMonitorSessionController } from '@/features/status-monitor/public';
-	import type { PreferencesDto } from '@/features/preferences/public';
-	import type { WorkspacePaneNameDto } from '../layout/workspaceLayout';
+	import type { UserPreferences } from '@/features/preferences/public';
+
 	import WorkspaceCommandBar from './WorkspaceCommandBar.vue';
 
 	const QuickCommandsPanel = defineAsyncComponent(loadQuickCommandsPanel);
@@ -30,11 +32,11 @@
 	}
 
 	const props = defineProps<{
-		pane: WorkspacePaneNameDto;
+		pane: WorkspacePane;
 		terminalApi: MobileTerminalApi | null;
 		terminalChannel: TerminalChannel;
 		statusSession: StatusMonitorSessionController;
-		statusIntervalSeconds?: number;
+
 		statusScale?: number;
 		statusShowIp?: boolean;
 		statusHost?: string;
@@ -42,7 +44,7 @@
 		showQuickCommandTags?: boolean;
 		quickCommandRowScale?: number;
 		commandDraft: string;
-		commandInputSyncTarget?: PreferencesDto['commandInputSyncTarget'];
+		commandInputSyncTarget?: UserPreferences['commandInputSyncTarget'];
 		quickCommandsGrouped?: boolean;
 		commandReady?: boolean;
 		terminalSearchOpen?: boolean;
@@ -51,7 +53,7 @@
 	}>();
 
 	const emit = defineEmits<{
-		'update:pane': [pane: WorkspacePaneNameDto];
+		'update:pane': [pane: WorkspacePane];
 		'update:commandDraft': [value: string];
 		'update:terminalSearchOpen': [open: boolean];
 		'update:terminalSearchTerm': [term: string];
@@ -102,7 +104,7 @@
 		if (!keyboardVisible.value) emit('clearModifiers');
 	};
 
-	const selectPane = (pane: WorkspacePaneNameDto) => {
+	const selectPane = (pane: WorkspacePane) => {
 		if (pane !== 'terminal') emit('clearModifiers');
 		emit('update:pane', pane);
 	};
@@ -229,7 +231,6 @@
 		<StatusMonitor
 			class="h-full min-h-0 overflow-hidden"
 			:session="statusSession"
-			:interval-seconds="statusIntervalSeconds"
 			:scale="statusScale"
 			:show-ip="statusShowIp"
 			:host="statusHost"

@@ -1,3 +1,5 @@
+import type { WorkspaceDirectoryChangeFailureCode } from './values.js';
+
 export interface WorkspaceTerminalInput {
 	data: string;
 }
@@ -28,7 +30,7 @@ export interface WorkspaceTerminalDirectoryChanged {
 
 export interface WorkspaceTerminalDirectoryChangeFailed {
 	requestId: string;
-	message: string;
+	message: WorkspaceDirectoryChangeFailureCode;
 }
 
 export interface WorkspaceTerminalRequests {
@@ -49,7 +51,7 @@ export interface WorkspaceTerminalResponses {
 
 export interface WorkspaceTerminalEvents {
 	'terminal.closed': Record<string, never>;
-	'terminal.error': { message: string };
+	'terminal.error': { message: 'remote_unavailable' };
 	'terminal.directoryChangeQueued': WorkspaceTerminalDirectoryChangeQueued;
 	'terminal.directoryChanged': WorkspaceTerminalDirectoryChanged;
 	'terminal.directoryChangeFailed': WorkspaceTerminalDirectoryChangeFailed;

@@ -6,7 +6,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
-import { createApp } from '../../../packages/backend-next/dist/bootstrap/create-app.js';
+import { fileURLToPath } from 'node:url';
+import { createApp } from '../../../packages/backend/dist/bootstrap/create-app.js';
 
 const requirePlaywright = createRequire(new URL('../../e2e/package.json', import.meta.url));
 const { chromium } = requirePlaywright('@playwright/test');
@@ -76,8 +77,8 @@ try {
 		process.execPath,
 		['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
 		{
-			cwd: join(process.cwd(), 'packages/frontend'),
-			env: { ...process.env, NEXUS_VITE_BACKEND_NEXT_ORIGIN: 'http://' + backendOrigin },
+			cwd: fileURLToPath(new URL('../../../packages/frontend', import.meta.url)),
+			env: { ...process.env, NEXUS_VITE_BACKEND_ORIGIN: 'http://' + backendOrigin },
 			stdio: ['ignore', 'pipe', 'pipe'],
 		},
 	);
@@ -90,7 +91,7 @@ try {
 	});
 
 	browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
-	const context = await browser.newContext();
+	const context = await browser.newContext({ extraHTTPHeaders: { Origin: origin } });
 	await context.addInitScript(() => {
 		const NativeObserver = window.ResizeObserver;
 		window.__remoteObserverState = { observed: 0 };

@@ -1,5 +1,5 @@
 import type { ConnectionType, ConnectionRoute } from './values.js';
-import type { TargetErrorCode } from '../values.js';
+import type { TargetImportErrorCode } from './values.js';
 
 /** Writable connection facts; intentionally independent from the public read view. */
 export interface TargetConnectionInput {
@@ -22,6 +22,10 @@ export type TargetConnectionChanges = Partial<TargetConnectionInput>;
 
 export type TargetCredentialInput = { kind: 'password'; password: string } | { kind: 'ssh_key'; sshKeyId: number };
 
+/** Import-only creation intent; never returned as a read view. */
+export type TargetImportCredential =
+	TargetCredentialInput | { kind: 'private_key'; name: string; privateKey: string; passphrase: string | null };
+
 export interface TargetImportInput {
 	connection: TargetConnectionInput;
 	inlineProxy?: {
@@ -30,13 +34,15 @@ export interface TargetImportInput {
 		host: string;
 		port: number;
 		username: string | null;
+		password?: string;
 	};
 	tagNames?: string[];
+	credential?: TargetImportCredential;
 }
 
 export type TargetCredentialMutation = { status: 'updated' } | { status: 'not_found' } | { status: 'version_conflict' };
 
-export type TargetImportItem = { status: 'ok'; id: number } | { status: 'error'; code: TargetErrorCode };
+export type TargetImportItem = { status: 'ok'; id: number } | { status: 'error'; code: TargetImportErrorCode };
 
 export interface TargetConnectionUpdateRequest {
 	version: number;
@@ -68,4 +74,9 @@ export interface TargetConnectionImportRequest {
 
 export interface TargetConnectionImportResponse {
 	items: TargetImportItem[];
+}
+
+export interface TargetConnectionAddTagRequest {
+	tagId: number;
+	connectionIds: number[];
 }

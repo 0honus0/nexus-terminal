@@ -1,3 +1,5 @@
+export type { ServerTransferMethod } from '@nexus-terminal/shared/remote/transfers/server-values';
+
 export const loadProgressCenter = () => import('./components/ProgressCenter.vue');
 
 export const loadProgressDisplayModal = () => import('./components/ProgressDisplayModal.vue');
@@ -25,16 +27,17 @@ export { transferTaskErrorDescriptor, transferTaskWarningDescriptor } from './pr
 
 export type { TransferMessageDescriptor } from './presentation-transfer-message';
 
-export type { ConflictStrategy, TransferController, UploadConflict } from './state/transferController';
+export type { ConflictStrategy, TransferController, UploadConflict } from './model/transfer-types';
 
 export type { TransferChannel } from './ports/transfer-channel';
 
+export { TransferFailure } from './model/transfer-types';
+
 export type {
 	ProgressSource,
-	WorkspaceArchiveErrorCodeDto,
+	WorkspaceArchiveErrorCode,
 	ArchiveCommand,
 	CopyMoveCommand,
-	TransferErrorContext,
 	TransferErrorKind,
 	TransferEvent,
 	TransferKind,
@@ -45,11 +48,6 @@ export type {
 	UploadPrepareCommand,
 	UploadCommand,
 	UploadSourceFile,
-} from './model/transfer';
+} from './model/transfer-types';
 
-export type {
-	SendFileSourceItemDto,
-	SendFilesRequestDto,
-	ServerTransferMethodDto,
-	ServerTransferTaskDto,
-} from './model/serverTransfer';
+export type { SendFileSource, SendFilesCommand, ServerTransferTask } from './model/server-transfer-types';

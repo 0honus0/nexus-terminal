@@ -11,3 +11,5 @@ export type {
 	AuthenticatedSessionLifecycle,
 	AuthenticatedSessionOwner,
 } from './authenticatedSessionLifecycle';
+
+export { useAuthenticatedViewScope } from './use-authenticated-view-scope';

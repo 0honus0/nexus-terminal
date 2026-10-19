@@ -1,109 +1,25 @@
 <script setup lang="ts">
-	import { onMounted, reactive, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { apiErrorMessage } from '@/client/http';
-	import { UiButton, UiFormField, UiInput, UiModal, UiTextarea } from '@/foundation/ui';
-	import { useFeedback } from '@/shared/feedback/public';
-	import { useSshKeys } from '../composables/useSshKeys';
-	import type { SshKeySummaryDto } from '../model/sshKey';
+	import { UiButton, UiCheckbox, UiFormField, UiInput, UiModal, UiTextarea } from '@/foundation/ui';
+	import { useSshKeyManagement } from '../composables/use-ssh-key-management';
 	const visible = defineModel<boolean>({ default: false });
 	const { t } = useI18n();
-	const keys = useSshKeys();
-	const feedback = useFeedback();
-	const editing = ref<SshKeySummaryDto | null>(null);
-	const showForm = ref(false);
-	const form = reactive({ name: '', privateKey: '', passphrase: '' });
-	const error = ref('');
-	const keyFileInput = ref<HTMLInputElement | null>(null);
-	const listError = ref('');
-	const loading = ref(false);
-
-	const reset = () => {
-		editing.value = null;
-		showForm.value = false;
-		Object.assign(form, { name: '', privateKey: '', passphrase: '' });
-		error.value = '';
-	};
-
-	const add = () => {
-		reset();
-		showForm.value = true;
-	};
-
-	const edit = (key: SshKeySummaryDto) => {
-		editing.value = key;
-		showForm.value = true;
-		Object.assign(form, { name: key.name, privateKey: '', passphrase: '' });
-	};
-
-	const submit = async () => {
-		if (loading.value) return;
-		error.value = '';
-		loading.value = true;
-		try {
-			if (editing.value)
-				await keys.update(editing.value.id, {
-					name: form.name,
-					...(form.privateKey ? { privateKey: form.privateKey, passphrase: form.passphrase || null } : {}),
-					...(!form.privateKey && form.passphrase ? { passphrase: form.passphrase } : {}),
-				});
-			else
-				await keys.create({
-					name: form.name,
-					privateKey: form.privateKey,
-					passphrase: form.passphrase || null,
-				});
-			reset();
-		} catch (cause) {
-			error.value = apiErrorMessage(cause, t('common.errorOccurred'));
-		} finally {
-			loading.value = false;
-		}
-	};
-
-	const chooseKeyFile = () => keyFileInput.value?.click();
-
-	const loadKeyFile = async (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const file = input.files?.[0];
-		if (!file) return;
-		try {
-			form.privateKey = await file.text();
-			if (!form.name.trim()) form.name = file.name;
-			error.value = '';
-		} catch (cause) {
-			error.value = cause instanceof Error ? cause.message : String(cause);
-		} finally {
-			input.value = '';
-		}
-	};
-
-	const remove = async (key: SshKeySummaryDto) => {
-		if (loading.value) return;
-		if (!(await feedback.confirm({ message: `${t('common.delete')} ${key.name}?`, destructive: true }))) return;
-		loading.value = true;
-		listError.value = '';
-		try {
-			await keys.remove(key.id);
-		} catch (cause) {
-			listError.value = apiErrorMessage(cause, t('common.errorOccurred'));
-			feedback.notifyError(listError.value);
-		} finally {
-			loading.value = false;
-		}
-	};
-
-	onMounted(async () => {
-		loading.value = true;
-		listError.value = '';
-		try {
-			await keys.load();
-		} catch (cause) {
-			listError.value = apiErrorMessage(cause, t('common.errorOccurred'));
-		} finally {
-			loading.value = false;
-		}
-	});
+	const {
+		keys,
+		editing,
+		showForm,
+		form,
+		message,
+		loading,
+		keyFileInput,
+		reset,
+		edit,
+		submit,
+		remove,
+		refresh,
+		chooseKeyFile,
+		loadKeyFile,
+	} = useSshKeyManagement(visible);
 </script>
 <template>
 	<UiModal
@@ -114,20 +30,25 @@
 		@close="visible = false"
 	>
 		<div class="flex max-h-[68vh] min-h-0 flex-col">
+			<p v-if="message" role="alert" class="mb-3 break-words text-error">{{ message }}</p>
+			<p v-if="keys.needsRefresh.value" class="mb-3 text-text-secondary">
+				{{ t('sshKeys.failures.recovery_required') }}
+			</p>
+			<UiButton class="mb-3" :disabled="loading || keys.busy.value" @click="refresh">{{
+				t('sshKeys.refresh')
+			}}</UiButton>
 			<template v-if="!showForm">
 				<h3 class="mb-4 shrink-0 text-center text-xl font-semibold">{{ t('sshKeys.modal.title') }}</h3>
 				<div class="mb-4 flex shrink-0 justify-end">
-					<UiButton appearance="solid" tone="primary" :disabled="loading" @click="add"
+					<UiButton
+						appearance="solid"
+						tone="primary"
+						:disabled="loading || keys.busy.value || keys.needsRefresh.value"
+						@click="edit()"
 						><template #leading><i class="fas fa-plus !text-white" aria-hidden="true" /></template
 						>{{ t('sshKeys.modal.addKey') }}</UiButton
 					>
 				</div>
-				<p
-					v-if="listError"
-					class="mb-3 shrink-0 break-words rounded-md border border-error/30 bg-error/10 p-3 text-sm font-medium text-error"
-				>
-					{{ listError }}
-				</p>
 				<div class="max-h-[50vh] flex-grow overflow-y-auto rounded-md border border-border">
 					<table class="w-full table-fixed divide-y divide-border">
 						<thead class="sticky top-0 bg-header">
@@ -165,7 +86,7 @@
 									<button
 										type="button"
 										class="text-primary hover:text-link-hover disabled:opacity-50"
-										:disabled="loading"
+										:disabled="loading || keys.busy.value || keys.needsRefresh.value"
 										:title="t('sshKeys.modal.edit')"
 										@click="edit(key)"
 									>
@@ -173,7 +94,7 @@
 									><button
 										type="button"
 										class="text-error hover:opacity-80 disabled:opacity-50"
-										:disabled="loading"
+										:disabled="loading || keys.busy.value || keys.needsRefresh.value"
 										:title="t('sshKeys.modal.delete')"
 										@click="remove(key)"
 									>
@@ -193,46 +114,54 @@
 				<h3 class="mb-6 shrink-0 text-center text-xl font-semibold">
 					{{ editing ? t('sshKeys.modal.editTitle') : t('sshKeys.modal.addTitle') }}
 				</h3>
-				<form class="flex-grow space-y-4 overflow-y-auto pr-2" @submit.prevent="submit">
-					<UiFormField :label="t('sshKeys.modal.keyName')"
-						><UiInput id="key-name" v-model="form.name" required
-					/></UiFormField>
-					<UiFormField :label="t('sshKeys.modal.privateKey')">
-						<div class="mb-2 flex flex-wrap items-center gap-2">
-							<input ref="keyFileInput" type="file" class="hidden" @change="loadKeyFile" />
-							<UiButton type="button" :disabled="loading" @click="chooseKeyFile">
-								<template #leading><i class="fas fa-upload" aria-hidden="true" /></template>
-								{{ t('sshKeys.modal.chooseKeyFile') }}
-							</UiButton>
-							<span class="text-xs text-text-secondary">{{ t('sshKeys.modal.keyInputHint') }}</span>
-						</div>
-						<UiTextarea
-							id="key-private"
-							v-model="form.privateKey"
-							:min-rows="8"
-							:required="!editing"
-							class="font-mono text-sm"
-						/>
-					</UiFormField>
-					<UiFormField :label="`${t('sshKeys.modal.passphrase')} (${t('connections.form.optional')})`"
-						><UiInput
-							id="key-passphrase"
-							v-model="form.passphrase"
-							type="password"
-							autocomplete="new-password"
-					/></UiFormField>
-					<p
-						v-if="error"
-						class="rounded-md border border-error/30 bg-error/10 p-3 text-center text-sm font-medium text-error"
-					>
-						{{ error }}
-					</p>
+				<form class="flex-grow overflow-y-auto pr-2" @submit.prevent="submit">
+					<fieldset class="space-y-4" :disabled="loading || keys.busy.value || keys.needsRefresh.value">
+						<UiFormField :label="t('sshKeys.modal.keyName')"
+							><UiInput id="key-name" v-model="form.name" required
+						/></UiFormField>
+						<UiFormField :label="t('sshKeys.modal.privateKey')">
+							<div class="mb-2 flex flex-wrap items-center gap-2">
+								<input ref="keyFileInput" type="file" class="hidden" @change="loadKeyFile" />
+								<UiButton type="button" :disabled="loading" @click="chooseKeyFile">
+									<template #leading><i class="fas fa-upload" aria-hidden="true" /></template>
+									{{ t('sshKeys.modal.chooseKeyFile') }}
+								</UiButton>
+								<span class="text-xs text-text-secondary">{{ t('sshKeys.modal.keyInputHint') }}</span>
+							</div>
+							<UiTextarea
+								id="key-private"
+								v-model="form.privateKey"
+								:min-rows="8"
+								:required="!editing"
+								class="font-mono text-sm"
+							/>
+						</UiFormField>
+						<UiFormField :label="`${t('sshKeys.modal.passphrase')} (${t('connections.form.optional')})`"
+							><UiInput
+								id="key-passphrase"
+								v-model="form.passphrase"
+								type="password"
+								autocomplete="new-password"
+						/></UiFormField>
+						<p v-if="editing" class="text-xs text-text-secondary">
+							{{ t('sshKeys.modal.keyUpdateNote') }} {{ t('sshKeys.modal.passphraseUpdateNote') }}
+						</p>
+						<label v-if="editing" class="flex items-center gap-2 text-sm"
+							><UiCheckbox v-model="form.clearPassphrase" />{{
+								t('sshKeys.modal.clearPassphrase')
+							}}</label
+						>
+					</fieldset>
 				</form>
 				<div class="mt-4 flex shrink-0 justify-end space-x-3 border-t border-border/50 pt-5">
 					<UiButton :disabled="loading" @click="reset">{{ t('sshKeys.modal.cancel') }}</UiButton
-					><UiButton appearance="solid" tone="primary" :disabled="loading" @click="submit">{{
-						editing ? t('sshKeys.modal.saveChanges') : t('sshKeys.modal.addKey')
-					}}</UiButton>
+					><UiButton
+						appearance="solid"
+						tone="primary"
+						:disabled="loading || keys.busy.value || keys.needsRefresh.value"
+						@click="submit"
+						>{{ editing ? t('sshKeys.modal.saveChanges') : t('sshKeys.modal.addKey') }}</UiButton
+					>
 				</div>
 			</template>
 		</div>

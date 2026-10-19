@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createApp } from '../../../packages/backend-next/dist/bootstrap/create-app.js';
+import { createApp } from '../../../packages/backend/dist/bootstrap/create-app.js';
 const root = await mkdtemp(join(tmpdir(), 'nexus-storage-integration-'));
 
 const make = (name, { route = 'direct', proxyId = null, tagIds = [], jumpIds = [] } = {}) => ({

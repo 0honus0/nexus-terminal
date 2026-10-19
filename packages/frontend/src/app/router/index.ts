@@ -138,9 +138,12 @@ export const createAppRouter = (pinia: Pinia) => {
 	});
 
 	router.beforeEach(async (to) => {
-		// Separate backend-next session; never share legacy auth or Workspace state.
+		// DEV inspection view; it uses the same Backend as the formal application.
 		if (import.meta.env.DEV && (to.name === 'TargetsNextDev' || to.name === 'AgentNextDev')) return true;
 		await auth.resolveSetupState();
+		if (!auth.setupResolved) {
+			return to.name === 'Login' ? true : { name: 'Login' };
+		}
 
 		if (auth.setupRequired && to.name !== 'Setup') return { name: 'Setup' };
 

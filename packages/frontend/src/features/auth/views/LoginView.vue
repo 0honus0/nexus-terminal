@@ -2,11 +2,12 @@
 	import { computed, reactive, ref, watch } from 'vue';
 	import { useRouter } from 'vue-router';
 	import { useI18n } from 'vue-i18n';
-	import { apiErrorMessage } from '@/client/http';
+	import { authErrorKey } from '../model/auth-errors';
 	import { UiButton, UiCheckbox, UiFormField, UiInput } from '@/foundation/ui';
-	import { useAuthSession } from '../public';
+	import { useAuthSession } from '../composables/useAuthSession';
+	import type { PasskeyLoginInput } from '../model/auth-types';
 
-	type CaptchaStatus = 'loading' | 'ready' | 'error' | 'invalid';
+	import type { CaptchaStatus } from '@/features/security/public';
 
 	const props = withDefaults(
 		defineProps<{
@@ -25,7 +26,7 @@
 		},
 	);
 	const emit = defineEmits<{
-		passkey: [username: string];
+		passkey: [input: PasskeyLoginInput];
 		loginAttempted: [];
 		securityChallengeFeedback: [message: string | null];
 		securityChallengeConsumed: [];
@@ -46,12 +47,16 @@
 	watch(
 		() => auth.pendingSecondFactor.value,
 		(pending) => {
-			if (!pending) twoFactorToken.value = '';
+			if (!pending) {
+				twoFactorToken.value = '';
+			}
 		},
 	);
 
 	const submit = async (): Promise<void> => {
-		if (isBusy.value) return;
+		if (isBusy.value) {
+			return;
+		}
 		const submittingSecondFactor = auth.pendingSecondFactor.value;
 		error.value = null;
 		if (!submittingSecondFactor) {
@@ -82,15 +87,16 @@
 					captchaToken: props.captchaToken ?? undefined,
 				});
 
-				if (result.status === 'authenticated') await router.push({ name: 'Dashboard' });
+				if (result.status === 'authenticated') {
+					await router.push({ name: 'Dashboard' });
+				}
 			} finally {
-				if (props.captchaRequired) emit('securityChallengeConsumed');
+				if (props.captchaRequired) {
+					emit('securityChallengeConsumed');
+				}
 			}
 		} catch (cause) {
-			error.value = apiErrorMessage(
-				cause,
-				t(submittingSecondFactor ? 'auth.login.error.twoFactorGeneric' : 'auth.login.error.generic'),
-			);
+			error.value = t(authErrorKey(cause));
 		} finally {
 			isLoading.value = false;
 		}
@@ -98,7 +104,7 @@
 
 	const startPasskey = (): void => {
 		error.value = null;
-		emit('passkey', credentials.username);
+		emit('passkey', { username: credentials.username || undefined, rememberMe: rememberMe.value });
 	};
 </script>
 

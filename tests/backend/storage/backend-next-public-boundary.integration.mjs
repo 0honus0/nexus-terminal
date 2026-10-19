@@ -19,8 +19,8 @@ import {
 	toCredentialInput,
 	toCredentialMutation,
 	toTrustedTargetView,
-} from '../../../packages/backend-next/dist/modules/targets/public-mappers.js';
-import { createApp } from '../../../packages/backend-next/dist/bootstrap/create-app.js';
+} from '../../../packages/backend/dist/modules/targets/public-mappers.js';
+import { createApp } from '../../../packages/backend/dist/bootstrap/create-app.js';
 import { InvalidAccessPayload, readAccessHttpError } from '../../../packages/shared/dist/access/http.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
@@ -114,7 +114,7 @@ const importCommand = {
 		host: 'proxy.local',
 		port: 8080,
 		username: null,
-		password: forbidden,
+		password: 'imported password',
 		encryptedPassword: forbidden,
 	},
 	tagNames: ['tag'],
@@ -122,6 +122,7 @@ const importCommand = {
 };
 const mappedImport = toImportInput(importCommand);
 withoutInternal(mappedImport);
+assert.equal(mappedImport.inlineProxy.password, 'imported password');
 assert.notStrictEqual(mappedImport.connection, connection);
 assert.notStrictEqual(mappedImport.connection.tagIds, connection.tagIds);
 assert.notStrictEqual(mappedImport.inlineProxy, importCommand.inlineProxy);

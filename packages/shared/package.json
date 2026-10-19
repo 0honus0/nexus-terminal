@@ -204,6 +204,10 @@
       "types": "./dist/targets/tags/http.d.ts",
       "default": "./dist/targets/tags/http.js"
     },
+    "./targets/tags/values": {
+      "types": "./dist/targets/tags/values.d.ts",
+      "default": "./dist/targets/tags/values.js"
+    },
     "./targets/tags/model": {
       "types": "./dist/targets/tags/model.d.ts",
       "default": "./dist/targets/tags/model.js"
@@ -751,6 +755,94 @@
     "./system/backups/http-codec": {
       "types": "./dist/system/backups/http-codec.d.ts",
       "default": "./dist/system/backups/http-codec.js"
+    },
+    "./remote/mutations/values": {
+      "types": "./dist/remote/mutations/values.d.ts",
+      "default": "./dist/remote/mutations/values.js"
+    },
+    "./remote/mutations/model": {
+      "types": "./dist/remote/mutations/model.d.ts",
+      "default": "./dist/remote/mutations/model.js"
+    },
+    "./remote/mutations/http": {
+      "types": "./dist/remote/mutations/http.d.ts",
+      "default": "./dist/remote/mutations/http.js"
+    },
+    "./remote/mutations/http-codec": {
+      "types": "./dist/remote/mutations/http-codec.d.ts",
+      "default": "./dist/remote/mutations/http-codec.js"
+    },
+    "./targets/connections/test-http": {
+      "types": "./dist/targets/connections/test-http.d.ts",
+      "default": "./dist/targets/connections/test-http.js"
+    },
+    "./targets/connections/test-codec": {
+      "types": "./dist/targets/connections/test-codec.d.ts",
+      "default": "./dist/targets/connections/test-codec.js"
+    },
+    "./targets/host-keys/values": {
+      "types": "./dist/targets/host-keys/values.d.ts",
+      "default": "./dist/targets/host-keys/values.js"
+    },
+    "./targets/ssh-keys/values": {
+      "types": "./dist/targets/ssh-keys/values.d.ts",
+      "default": "./dist/targets/ssh-keys/values.js"
+    },
+    "./access/factors/http-codec": {
+      "types": "./dist/access/factors/http-codec.d.ts",
+      "default": "./dist/access/factors/http-codec.js"
+    },
+    "./access/factors/passkey-codec": {
+      "types": "./dist/access/factors/passkey-codec.d.ts",
+      "default": "./dist/access/factors/passkey-codec.js"
+    },
+    "./remote/terminal/values": {
+      "types": "./dist/remote/terminal/values.d.ts",
+      "default": "./dist/remote/terminal/values.js"
+    },
+    "./remote/transfers/task-codec": {
+      "types": "./dist/remote/transfers/task-codec.d.ts",
+      "default": "./dist/remote/transfers/task-codec.js"
+    },
+    "./remote/transfers/server-values": {
+      "types": "./dist/remote/transfers/server-values.d.ts",
+      "default": "./dist/remote/transfers/server-values.js"
+    },
+    "./remote/transfers/server-model": {
+      "types": "./dist/remote/transfers/server-model.d.ts",
+      "default": "./dist/remote/transfers/server-model.js"
+    },
+    "./remote/transfers/server-http": {
+      "types": "./dist/remote/transfers/server-http.d.ts",
+      "default": "./dist/remote/transfers/server-http.js"
+    },
+    "./remote/transfers/server-codec": {
+      "types": "./dist/remote/transfers/server-codec.d.ts",
+      "default": "./dist/remote/transfers/server-codec.js"
+    },
+    "./remote/suspend/http-codec": {
+      "types": "./dist/remote/suspend/http-codec.d.ts",
+      "default": "./dist/remote/suspend/http-codec.js"
+    },
+    "./remote/suspend/workspace-result-codec": {
+      "types": "./dist/remote/suspend/workspace-result-codec.d.ts",
+      "default": "./dist/remote/suspend/workspace-result-codec.js"
+    },
+    "./remote/monitoring/workspace": {
+      "types": "./dist/remote/monitoring/workspace.d.ts",
+      "default": "./dist/remote/monitoring/workspace.js"
+    },
+    "./remote/monitoring/workspace-codec": {
+      "types": "./dist/remote/monitoring/workspace-codec.d.ts",
+      "default": "./dist/remote/monitoring/workspace-codec.js"
+    },
+    "./agent/scope/workspace-http": {
+      "types": "./dist/agent/scope/workspace-http.d.ts",
+      "default": "./dist/agent/scope/workspace-http.js"
+    },
+    "./agent/scope/workspace-http-codec": {
+      "types": "./dist/agent/scope/workspace-http-codec.d.ts",
+      "default": "./dist/agent/scope/workspace-http-codec.js"
     }
   },
   "devDependencies": {

@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
-import WebSocket from '../../../packages/backend-next/node_modules/ws/index.js';
-import { openHttpListener } from '../../../packages/backend-next/dist/platform/http/http-server.js';
-import { RemoteSessionOwner } from '../../../packages/backend-next/dist/modules/remote/sessions/service/session-owner.js';
-import { createRemoteWebSocketRoute } from '../../../packages/backend-next/dist/modules/remote/interfaces/ws/pty-stream.js';
+import WebSocket from '../../../packages/backend/node_modules/ws/index.js';
+import { openHttpListener } from '../../../packages/backend/dist/platform/http/http-server.js';
+import { SessionTokenModel } from '../../../packages/backend/dist/modules/remote/sessions/model/session-token-model.js';
+import { SecureSessionTokens } from '../../../packages/backend/dist/platform/security/adapters/secure-session-tokens.js';
+import { RemoteSessionOwner } from '../../../packages/backend/dist/modules/remote/sessions/service/session-owner.js';
+import { createRemoteWebSocketRoute } from '../../../packages/backend/dist/modules/remote/interfaces/ws/pty-stream.js';
 
 function deferred() {
 	let resolve;
@@ -190,7 +192,12 @@ async function terminalEofAndConsumerAck() {
 	const fixture = remoteFixture(async () => {
 		closures += 1;
 	});
-	const owner = new RemoteSessionOwner(access, fixture.remote);
+	const owner = new RemoteSessionOwner(
+		access,
+		fixture.remote,
+		{ publish: async () => undefined },
+		new SessionTokenModel(new SecureSessionTokens()),
+	);
 	const session = await owner.open('good', { targetId: 7, columns: 80, rows: 25, timeoutMs: 1000 });
 	const server = await listen([createRemoteWebSocketRoute(owner, fixture.remote)]);
 	let socket;
@@ -252,7 +259,12 @@ async function terminalEofAndConsumerAck() {
 
 async function abnormalTermination(reason) {
 	const fixture = remoteFixture(async () => undefined);
-	const owner = new RemoteSessionOwner(access, fixture.remote);
+	const owner = new RemoteSessionOwner(
+		access,
+		fixture.remote,
+		{ publish: async () => undefined },
+		new SessionTokenModel(new SecureSessionTokens()),
+	);
 	const session = await owner.open('good', { targetId: 7, columns: 80, rows: 25, timeoutMs: 1000 });
 	const server = await listen([createRemoteWebSocketRoute(owner, fixture.remote)]);
 	let socket;
@@ -297,7 +309,12 @@ async function sharedCleanupFailure() {
 		closeCount += 1;
 		return release.promise;
 	});
-	const owner = new RemoteSessionOwner(access, fixture.remote);
+	const owner = new RemoteSessionOwner(
+		access,
+		fixture.remote,
+		{ publish: async () => undefined },
+		new SessionTokenModel(new SecureSessionTokens()),
+	);
 	const session = await owner.open('good', { targetId: 7, columns: 80, rows: 25, timeoutMs: 1000 });
 	const first = owner.release(session.id);
 	const second = owner.release(session.id);
@@ -329,7 +346,12 @@ async function deleteAfterWebSocketRelease() {
 	const fixture = remoteFixture(async () => {
 		count += 1;
 	});
-	const owner = new RemoteSessionOwner(access, fixture.remote);
+	const owner = new RemoteSessionOwner(
+		access,
+		fixture.remote,
+		{ publish: async () => undefined },
+		new SessionTokenModel(new SecureSessionTokens()),
+	);
 	const session = await owner.open('good', { targetId: 7, columns: 80, rows: 25, timeoutMs: 1000 });
 	await owner.release(session.id);
 	assert.equal(await owner.closeSession('good', session.id), true);

@@ -1,16 +1,14 @@
 import { inject, provide, type InjectionKey } from 'vue';
-import { createAgentSurfaceSession, type AgentSurfaceSession } from './surface-session';
 import { createAgentWindowManager, type AgentWindowManager } from './window-manager';
 
 export interface AgentHostState {
-	surfaceSession: AgentSurfaceSession;
 	windowManager: AgentWindowManager;
 }
 
 const agentHostStateKey: InjectionKey<AgentHostState> = Symbol('agent-host-state');
 
 export const provideAgentHostState = (): AgentHostState => {
-	const state = { surfaceSession: createAgentSurfaceSession(), windowManager: createAgentWindowManager() };
+	const state = { windowManager: createAgentWindowManager() };
 	provide(agentHostStateKey, state);
 	return state;
 };

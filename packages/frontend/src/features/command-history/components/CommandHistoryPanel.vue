@@ -10,23 +10,22 @@
 		writeClipboardText,
 		writeStoredValue,
 	} from '@/foundation/browser';
-	import { useFeedback } from '@/shared/feedback/public';
+	import { useAuthenticatedViewScope } from '@/shared/session/public';
+	import { useFeedback, preferenceFailureMessage } from '@/shared/feedback/public';
 	import { focusRegistry } from '@/shared/focus/public';
 	import { createWheelScaleResolver } from '@/foundation/interaction';
 	import { useCommandHistoryStore } from '../store/commandHistory.store';
-	import type { CommandHistoryEntryDto, ExecuteHistoryIntent } from '../model/commandHistory';
+	import type { CommandHistoryItem, ExecuteHistoryIntent } from '../model/command-history-types';
 
 	const compactStorage = {
 		namespace: 'command-history.compact',
 		version: 1,
 		codec: booleanStorageCodec,
-		legacyKeys: ['commandHistoryCompactMode'],
 	} as const;
 	const rowScaleStorage = {
 		namespace: 'command-history.row-scale',
 		version: 1,
 		codec: numberStorageCodec((value) => value >= 0.5 && value <= 2.5),
-		legacyKeys: ['commandHistoryRowScale'],
 	} as const;
 
 	const props = withDefaults(
@@ -52,9 +51,14 @@
 	const searchInput = ref<HTMLInputElement | null>(null);
 	const root = ref<HTMLElement | null>(null);
 	const list = ref<HTMLElement | null>(null);
-	const context = ref<{ entry: CommandHistoryEntryDto; x: number; y: number } | null>(null);
+	const context = ref<{ entry: CommandHistoryItem; x: number; y: number } | null>(null);
 	const searchExpanded = ref(!props.collapsibleSearch || Boolean(search.value));
 	let unregisterFocus: (() => void) | undefined;
+	const view = useAuthenticatedViewScope({
+		onRevoke: () => {
+			context.value = null;
+		},
+	});
 
 	const readCompactMode = (): boolean => (props.compact ? true : (readStoredValue(compactStorage) ?? false));
 
@@ -62,7 +66,9 @@
 	watch(
 		() => props.compact,
 		(val) => {
-			if (typeof val === 'boolean') isCompact.value = val;
+			if (typeof val === 'boolean') {
+				isCompact.value = val;
+			}
 		},
 	);
 
@@ -73,7 +79,9 @@
 	};
 
 	const readRowScale = (): number => {
-		if (Number.isFinite(props.rowScale) && props.rowScale !== 1) return props.rowScale!;
+		if (Number.isFinite(props.rowScale) && props.rowScale !== 1) {
+			return props.rowScale!;
+		}
 		return readStoredValue(rowScaleStorage) ?? 1;
 	};
 
@@ -91,13 +99,17 @@
 	watch(
 		() => props.rowScale,
 		(value) => {
-			if (Number.isFinite(value)) localScale.value = value;
+			if (Number.isFinite(value)) {
+				localScale.value = value;
+			}
 		},
 	);
 
 	const scaleRows = (event: WheelEvent) => {
 		const change = resolveScale(event, localScale.value);
-		if (!change) return;
+		if (!change) {
+			return;
+		}
 		localScale.value = change.next;
 		writeStoredValue(rowScaleStorage, change.next);
 		emit('rowScale', change.next);
@@ -126,24 +138,39 @@
 	onBeforeUnmount(() => unregisterFocus?.());
 
 	const clear = async () => {
-		if (!(await feedback.confirm({ message: t('commandHistory.confirmClear'), destructive: true }))) return;
+		const signal = view.capture();
+		if (!view.isCurrent(signal)) {
+			return;
+		}
+		if (!(await feedback.confirm({ message: t('commandHistory.confirmClear'), destructive: true, signal }))) {
+			return;
+		}
 		try {
-			await store.clear();
+			if (!view.isCurrent(signal)) {
+				return;
+			}
+			await store.clear(signal);
 		} catch (cause) {
-			feedback.notifyError(
-				t('commandHistory.clearFailed', { error: cause instanceof Error ? cause.message : String(cause) }),
-			);
+			if (!view.isCurrent(signal)) {
+				return;
+			}
+			feedback.notifyError(t('commandHistory.clearFailed', { error: preferenceFailureMessage(cause, t) }));
 		}
 	};
 
 	const remove = async (id: number) => {
+		const signal = view.capture();
+		if (!view.isCurrent(signal)) {
+			return;
+		}
 		context.value = null;
 		try {
-			await store.remove(id);
+			await store.remove(id, signal);
 		} catch (cause) {
-			feedback.notifyError(
-				t('commandHistory.deleteFailed', { error: cause instanceof Error ? cause.message : String(cause) }),
-			);
+			if (!view.isCurrent(signal)) {
+				return;
+			}
+			feedback.notifyError(t('commandHistory.deleteFailed', { error: preferenceFailureMessage(cause, t) }));
 		}
 	};
 
@@ -157,12 +184,12 @@
 		}
 	};
 
-	const execute = (entry: CommandHistoryEntryDto, allSessions = false) => {
+	const execute = (entry: CommandHistoryItem, allSessions = false) => {
 		context.value = null;
 		emit('execute', { command: entry.command, allSessions: allSessions || undefined });
 	};
 
-	const openContext = (event: MouseEvent, entry: CommandHistoryEntryDto) => {
+	const openContext = (event: MouseEvent, entry: CommandHistoryItem) => {
 		const idx = filtered.value.findIndex((e) => e.id === entry.id);
 		if (idx !== -1) {
 			selectedIndex.value = idx;
@@ -172,7 +199,7 @@
 
 	const refresh = async () => {
 		try {
-			await store.load();
+			await store.load(true);
 		} catch {
 			// Store error is rendered in the UI
 		}
@@ -180,7 +207,9 @@
 
 	const revealSelected = () => {
 		const entry = filtered.value[selectedIndex.value];
-		if (!entry) return;
+		if (!entry) {
+			return;
+		}
 		root.value?.querySelector<HTMLElement>(`[data-history-id="${entry.id}"]`)?.scrollIntoView({ block: 'nearest' });
 	};
 
@@ -199,7 +228,9 @@
 				return;
 			}
 		}
-		if (!filtered.value.length) return;
+		if (!filtered.value.length) {
+			return;
+		}
 		if (event.key === 'ArrowDown') {
 			event.preventDefault();
 			store.selectNext();
@@ -214,7 +245,9 @@
 		}
 		if (event.key === 'Enter') {
 			const entry = filtered.value[selectedIndex.value] ?? filtered.value[0];
-			if (!entry) return;
+			if (!entry) {
+				return;
+			}
 			event.preventDefault();
 			execute(entry);
 		}
@@ -224,13 +257,17 @@
 		window.setTimeout(() => {
 			if (document.activeElement !== searchInput.value && !list.value?.contains(document.activeElement)) {
 				store.resetSelection();
-				if (props.collapsibleSearch && !search.value) searchExpanded.value = false;
+				if (props.collapsibleSearch && !search.value) {
+					searchExpanded.value = false;
+				}
 			}
 		}, 0);
 	};
 
 	const formatTime = (ts: number): string => {
-		if (!ts) return '';
+		if (!ts) {
+			return '';
+		}
 		const date = new Date(ts > 1e11 ? ts : ts * 1000);
 		const now = new Date();
 		const isToday =
@@ -244,7 +281,9 @@
 	};
 
 	const formatFullDate = (ts: number): string => {
-		if (!ts) return '';
+		if (!ts) {
+			return '';
+		}
 		const date = new Date(ts > 1e11 ? ts : ts * 1000);
 		return date.toLocaleString();
 	};
@@ -319,7 +358,9 @@
 				<i class="fas fa-spinner fa-spin mb-2 text-xl" aria-hidden="true"></i>
 				<p>{{ t('commandHistory.loading') }}</p>
 			</div>
-			<p v-else-if="error" class="p-4 text-sm text-error">{{ t('commandHistory.loadFailed', { error }) }}</p>
+			<p v-else-if="error" class="p-4 text-sm text-error">
+				{{ t('commandHistory.loadFailed', { error: preferenceFailureMessage(error, t) }) }}
+			</p>
 			<div
 				v-else-if="!filtered.length"
 				class="flex min-h-0 flex-1 flex-col items-center justify-center p-6 text-center text-sm text-text-secondary"

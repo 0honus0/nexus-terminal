@@ -1,22 +1,84 @@
 # Nexus Terminal E2E
 
+B9 源码审核已收口：当时719/719完整读审，B10/F1修补后当前索引726条；基线证据见[最终源码收口](后端重构待实机验证.md#b9-最终源码收口2026-10-15)和[源码索引](后端重构源码审核.md)。初始v1签名为 backend-next-v1-initial-20261015-b9-mutation-evidence；B10本机可执行范围已收口，外部依赖按D16保留未验，F1已开始，历史B7/B8或旧Backend证据不代表当前行为通过。
+
 > Read [AGENTS.md](../AGENTS.md) before development. Observable product requirements are maintained in [USAGE](../USAGE.md). This document owns test commands, coverage and delivery evidence; update them alongside changes to the actual validation flow.
 
 Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end coverage.
 
-**Scope and evidence:** Formal product tests target `packages/backend`; independent `backend-next` checks are identified separately below. PASS statements apply only to their recorded version and executed cases. Historical Runner/Workspace evidence does not define current development tasks or acceptance of the new backend. Current work is owned by the [implementation plan](../后端重构下一阶段实施方案.md); this documentation review adds no new code-check or behavior PASS.
+**Scope and evidence:** The current Playwright launcher targets `packages/backend`. Its fixtures and assertions are still being migrated; changing the launcher is not a behavior PASS. Historical product runs against the removed legacy Backend remain evidence only for their recorded baseline. PASS statements apply only to their recorded version and executed cases. Historical Runner/Workspace evidence does not define current development tasks or acceptance of the new backend. Current work is owned by the [implementation plan](../后端重构下一阶段实施方案.md); this documentation review adds no new code-check or behavior PASS.
 
-### B10 重构后端执行入口（待启动）
+### 当前远程 E2E 准备
 
-**B3.3 远程桌面待验清单**：新 `backend-next` 已接入 RDP/VNC 两个原有 POST 入口、Guacamole raw WS、Targets 密码读取/迁移、Shared desktop 和 Guacamole/guacd 技术 Adapter。真实 RDP/VNC 连接与异常行为全部保留 [B3.3-V01–V12](后端重构待实机验证.md) 至 B10；必须核对新后端监听、guacd 服务端口、真实目标、浏览器 Guacamole 协议，绝不复用旧正式 Backend 的通过结果。B4 IP/2FA 和 F-R12 正式前端迁移单独承接。**本批没有运行任何桌面行为测试。** 本轮复审后的源码/架构与真实静态证据见待实机清单 B3.3 最终收口；历史 store-lock 拒绝不代表当前环境。
+- Playwright 构建并启动当前 Backend；独立环回控制端口默认为29098，支持`NEXUS_E2E_BACKEND_CONTROL_PORT`覆盖。随机控制token只供Node夹具使用，拒绝带Origin的控制请求；控制入口不进入产品HTTP。
+- 每个用例先等待原App关闭，再创建独立目录、随机密钥和当前v1数据库；seed模式通过真实setup初始化管理员，empty不初始化。原实例关闭失败则阻断后续重置，保留目录；丢失重置回执不自动重试。restart保持原数据库及密钥，以实际HTTP验证持久状态和凭据解密。
+- 已移除旧数据库种子、复制/生成脚本及seed命令；历史升级用例改为当前初始化和重启持久化。Runner镜像安装及指纹包含当前backend和shared；CI构建实际被测包。Docker/Compose源码已切换当前Backend，尚未部署或进行镜像行为验证。
+- 已迁移event-catchup、provider、performance-settings、configuration-hints及database-migrations的源码与Shared解码；具体覆盖和余项归实施方案V1。尚未迁移的旧用例继续保留，不能因新入口可编译就启动整套回归或宣称V1完成。
+- D17：当前仅源码、类型/语法、构建与格式检查，不执行Playwright、浏览器或本地行为专项。迁移完成后再按授权运行远程Actions；历史PASS不代表本轮用例已通过。
+
+### B10 重构后端执行入口（本机范围收口）
+
+第三十二批最终统一66文件584/584、0失败/取消/跳过，725536.636675ms、exit0；独立真实五分钟自然到期1/1（三业务分支）、总耗时301570ms通过。冻结1507项、720产品摘要、Backend-next/根check、全仓格式及资源核验通过，日志/tmp/nexus-b10-batch32-unified-final.log、/tmp/nexus-b10-batch32-natural-final.log与/tmp/nexus-b10-batch32-final-verification.log。[本批证据](后端重构待实机验证.md#b10-第三十二批-认证交付自然到期与资源期限2026-10-17)。当前本机必验项收口，外部依赖按D16继续待验；后续F1源码有独立检查，不复用此冻结PASS。历史各批“待验”为当时快照，以本节当前结果和精确证据为准。
+
+第三十一批补齐实际Chromium签名后的Passkey有限提交确认/撤销，以及Files下载交付权限失效；新增8个业务场景，专项26/26通过，最终统一63文件570/570、0失败/取消/跳过、618985.55359ms、exit0。Backend-next/根check、全仓格式及冻结/720摘要/资源核验通过，日志/tmp/nexus-b10-batch31-unified-final.log和/tmp/nexus-b10-batch31-final-verification.log。[本批证据](后端重构待实机验证.md#b10-第三十一批-passkey-确认与下载交付2026-10-17)。本批产品源码不变；其余未验范围继续保留，不代表B10全部通过。
+
+第三十批已修补独立Files数据通道的Workspace租约边界，新增TOTP真实事务确认/撤销及队列/复制权限专项；[本批证据](后端重构待实机验证.md#b10-第三十批-传输租约与因素事务确认2026-10-16)。最终冻结1502项，统一63文件562/562、0失败/取消/跳过、620647.009253ms、exit0；Backend-next build/check、根check、全仓格式及冻结/720摘要/资源核验通过。日志 /tmp/nexus-b10-batch30-unified-final.log 和 /tmp/nexus-b10-batch30-final-verification.log。其余未验子项仍保留，不能视为B10整体完成。
+
+第二十九批已对用户提供的专用Windows经原backend-next HTTP/WS与隔离guacd完成普通RDP实机：真实Windows Server 2022画面、键盘打开winver、鼠标关闭、1280×800调整及新票据重连。用户明确未配置RemoteApp，仍为环境阻断。专项1/1、17624.621512ms、exit0；凭据文件已删除，日志/私有截图仅owner访问，准确脚本hash、首失败及实际范围见[本批证据](后端重构待实机验证.md#b10-第二十九批-windows-实机与租约扫描前围栏2026-10-16)。另扩展原45秒自然lease专项，受控延后扫描、保留真实时钟，在旧WS仍打开时七种操作拒绝，HTTP当前身份管理与新owner原PTY接管通过；原60秒文件预算及test计数不变。最终1501项冻结的统一62文件551/551、0失败/取消/跳过、622171.483557ms、exit0，日志/tmp/nexus-b10-batch29-unified-final.log；Backend-next/根check、全仓格式与冻结/720产品摘要/资源核验通过，日志/tmp/nexus-b10-batch29-final-verification.log。
+
+第二十八批补认证因素技术故障、实际 WebAuthn 验签供应商故障、慢日志接管回滚、真实隔离文件系统 ENOSPC 与混合清理失败、Tool 账本确认丢失、ACP/Job 实际 SSH 进程退出和持久权限监控混合失败，共17个新增业务场景。格式后专项五文件24/24、0失败/取消/跳过，30975.705159ms，日志/tmp/nexus-b10-batch28-focused-final.log。1501项源码/执行配置冻结后，最终统一62文件551/551、0失败/取消/跳过、620730.106873ms、exit0，日志/tmp/nexus-b10-batch28-unified-final.log；Backend-next/根check与全仓格式通过，冻结、720项产品摘要及资源核验通过，日志/tmp/nexus-b10-batch28-final-verification.log；精确范围见[第二十八批](后端重构待实机验证.md#b10-第二十八批-因素技术故障真实空间耗尽与工具账本2026-10-16)。本批未改变产品源码、Shared或正式前端。
+
+真实空间耗尽专项额外要求Linux的unshare、mount、umount及可创建用户/挂载命名空间的权限；只在独立命名空间挂载8/140MiB tmpfs，先核对文件系统类型和容量，不填满宿主磁盘。工作区位于私有home时，按原字节复制构建后的日志Adapter及唯一错误依赖到夹具目录运行，不改写产品实现。缺依赖是环境阻断，不静默skip或以模拟错误替代。
+
+第二十七批新增挂起history/导出和插件owner故障三个专项，并扩展Access/备份/消费背压/MCP/日志/SIGKILL恢复，共27个业务子项；另发现并修复prepared unmark绕过消费背压，prepared断开与实际写失败至PTY退出也已核对。八文件74/74与最终日志/MCP两文件14/14专项通过；后者含重复日志文件，不累加统计。修复关联两文件6/6通过。修复前1486项版本统一59文件531/531通过；修复后1497项冻结纳入11个既有执行配置，719产品摘要不变、WorkspaceService一项更新。最终修复后统一59文件534/534、0失败/取消/跳过、592159.91089ms、exit0，日志/tmp/nexus-b10-batch27-unified-final.log。Backend-next/根check与全仓格式通过，1497项冻结及720产品索引匹配，本批资源核验通过，9个早于本批且无打开句柄的旧tmp目录保留；日志/tmp/nexus-b10-batch27-final-verification.log。精确场景、夹具首失败和范围见[第二十七批](后端重构待实机验证.md#b10-第二十七批-挂起交付插件确认未知与恢复重建2026-10-16)。产品修复只在原WorkspaceService，Shared和正式前端不变，原60秒文件预算不变。
+
+第二十五/二十六批补挂起baseline消费背压、慢日志detach、真实45秒租约、技术日志压缩/分页/旧inode/删除失败，以及ACP实际writer callback；再补Access真实密码/会话事务竞争、MCP应用续接128/任务16准入、SQLite刷新排队取消、后续失败分类与ACP/Job在途监控。五文件13/13和四文件22/22专项通过；1480项版本统一53文件486/486通过，日志/tmp/nexus-b10-batch25-unified-final.log。最终1483项版本两轮复审完成；统一56文件507/507、0失败/取消/跳过、约566.0秒、exit0，日志/tmp/nexus-b10-batch26-unified-final.log。Backend-next/根check和全仓格式通过；冻结、720产品摘要及本批资源核验通过，结果/tmp/nexus-b10-batch26-final-verification.log。范围及首失败见[第二十五批](后端重构待实机验证.md#b10-第二十五批-挂起背压自然租约与实际日志存储2026-10-16)与[第二十六批](后端重构待实机验证.md#b10-第二十六批-认证事务竞争与集成应用层收敛2026-10-16)。没有产品源码/Shared变化；受控应用接缝、真实传输与外部缺证据分别记录。
+
+第二十四批新增传输/集成六个专项及共用真实SSH夹具，扩展原Snapshot SIGKILL专项：35个新增业务场景，覆盖copy/archive真实取消和关联关闭、双端清理故障、混合16/17准入、MCP实际128个pending握手与清理失败、CDP构造取消/键释放、ACP reader/permission清理与Model因果，以及6个publish内部rename窗口和2个恢复再次文件系统拒绝。原包目录7文件60/60通过，约56.3秒；最终统一49文件479/479通过，0失败/取消/跳过，约502.1秒，日志/tmp/nexus-b10-batch24-unified-final.log。Backend-next/根check、全仓格式通过；冻结1476项、720产品摘要与资源核验均通过。统一结果与精确受控/实机范围见[本批证据](后端重构待实机验证.md#b10-第二十四批-传输取消集成清理与恢复内部窗口2026-10-16)。原60秒文件预算不变，未覆盖子项不据此通过。
+
+第二十三批增加 `remote/backend-next-files-queue.integration.mjs`：原 Files Service、SftpFileResource 与真实 SQLite mutation owner，控制 Access、目标查询及 SFTP 到达点。覆盖中间排队取消、队首结算后撤权/指纹变化、close/quiesce、64个 Workspace 预约、晚成功的两阶段清理及双失败因果，共10个业务子项；三文件专项19/19通过，最终统一43文件438/438通过，约447.8秒，日志 `/tmp/nexus-b10-batch23-unified-final.log`。此为受控边界证据，不替代真实SSH copy/archive取消。统一与静态结果见[本批证据](后端重构待实机验证.md#b10-第二十三批-files-排队撤销与-workspace-晚构造预约2026-10-16)。
+
+第二十二批增加 `remote/backend-next-upload-lifecycle.integration.mjs`：实际Access/Workspace/上传WS、环回OpenSSH/SFTP及Linux `/proc` 句柄观察，覆盖ready/部分块取消、字节流断开、显式Workspace关闭、未知围栏和另一SSH端点的健康读写。修复SFTP错误流不发close导致的本地定时器遗漏，原60秒预算不变；五文件专项16/16通过，约14.2秒。最终统一42文件427/427通过，约443.0秒，日志 `/tmp/nexus-b10-batch22-unified-styled-final.log`。原失败、两份冻结及静态结果见[本批证据](后端重构待实机验证.md#b10-第二十二批-真实上传取消与关联关闭2026-10-16)。
+
+第二十一批新增 `remote/backend-next-file-model-lifecycle.integration.mjs`，覆盖原 File Model 的机器/SFTP 晚到、取消与获取拒绝竞争、同步及异步清理失败、关闭等待和独立资源隔离。Machine/SFTP 为受控技术边界，不能据此宣称真实上传取消通过；与既有 Files write 脚本专项8/8通过，统一41文件421/421通过，约430.9秒，日志 `/tmp/nexus-b10-batch21-unified-final.log`；范围及静态结果见[本批证据](后端重构待实机验证.md#b10-第二十一批-files-model-晚到资源与清理2026-10-16)。
+
+当前独立入口（先构建 Shared/backend-next，再以原生 Node 运行，临时数据库与环回服务逐项清理）：
+
+```bash
+pnpm run test:backend-next
+```
+
+入口委托 `packages/backend` 的 `test`，覆盖 `tests/backend/{storage,http,remote}/backend-next*.integration.mjs`，串行运行、每个测试文件最多60秒。默认 Playwright 启动入口已改为 backend-next，旧用例契约仍在逐项迁移；该变更尚未执行远程验收。DEV历史专项不替代当前正式前端整链回归。新增 HTTP 场景使用本地脚本 Provider，只模拟供应商响应，认证、SQL、Run执行、取消及恢复仍走实际新后端。
+
+首批统一执行统计20/20通过（10个文件，含嵌套用例）；命令、版本、缺陷及覆盖限制见[当前B10证据](后端重构待实机验证.md#b10-首批逻辑与真实传输回归2026-10-15)。日志 `/tmp/nexus-b10-integration-final.log`。历史待验编号只按实际覆盖标记部分通过，不批量改为PASS。
+
+第二批加入 `backend-next-openssh.integration.mjs`，需本机 `/usr/sbin/sshd`、`ssh-keygen`、Info-ZIP和GNU tar，以及启动独立sshd的权限（本轮为root）。专用daemon仅监听环回随机高端口，配置、密钥及数据均临时隔离，不改系统SSH配置。真实登录后验证SFTP/PTY、三格式归档/密码/链接属性、恶意路径拒绝、多块上传、同主机跨Workspace copy/move、Range与票据下载；详细状态见[第二批证据](后端重构待实机验证.md#b10-第二批-opensshsftpworkspace-与原生归档2026-10-15)。缺少依赖须显式记录阻断，不把旧ssh2脚本或内存SFTP结果扩写为OS通过。最终统一命令退出0，11文件、Node统计29/29通过；日志 `/tmp/nexus-b10-openssh-unified.log`，不代表B10整体完成。
+
+第三批增加独立Workspace续接文件，与归档文件共用openssh-fixture.mjs。普通离线输出回放/双阶段确认、挂起恢复与主动接管、注销后新登录续接和Files重新授权已实机验证；仍按原60秒分文件运行。最终统一12文件、Node统计33/33通过，日志/tmp/nexus-b10-resume-unified-final.log，详见[第三批证据](后端重构待实机验证.md#b10-第三批-workspace-续接挂起接管与注销2026-10-15)。未覆盖期限、容量、背压及撤销竞争继续待验。
+
+第四批增加backend-next-access.integration.mjs，验证TOTP真实登录/并发单次消费、受信/不受信代理来源的HTTP/Workspace准入、CAPTCHA技术失败边界，以及Chromium虚拟CTAP2的真实WebAuthn验签。需要现有Playwright Chromium；MockAgent仅替代hCaptcha/Google公网响应并禁止公网连接，不能据此宣称真实供应商或硬件通过。最终统一13文件、Node统计38/38通过，日志/tmp/nexus-b10-access-unified.log。精确结果及剩余项见[第四批证据](后端重构待实机验证.md#b10-第四批-access-因素来源与-captcha2026-10-15)。
+
+第五批增加backend-next-agent-tools.integration.mjs，复用隔离OpenSSH，脚本Provider只给出工具proposal；真实HTTP/审批消费/SQLite/SSH文件写入和模型续轮均走新后端。覆盖normal上下文、声明/调用容量、并发同键批准、拒绝/待批取消/撤权/denylist的实际无写入。两个准入阻断已回到原owner修复；统一14文件45/45、独立7/7通过，日志/tmp/nexus-b10-tools-unified.log。范围及未验项见[第五批证据](后端重构待实机验证.md#b10-第五批-agent-工具审批与授权2026-10-16)。
+
+**B3.3 远程桌面**：B10 第十一批已建立真实 TigerVNC、TLS xrdp、guacd → backend-next HTTP/raw WS 的隔离链路，覆盖图像/输入、票据/容量、权限轮询与部分故障；详见本页第十一批及 testing 对应证据。[B3.3-V01–V12](后端重构待实机验证.md) 的未验子项仍保留，不能复用旧正式 Backend 的结果。原生 Windows 普通 RDP 的独立实机结果见第二十九批；正式前端 F-R12、未配置的 RemoteApp、慢握手与全部清理故障另验；历史 B3.3 源码阶段未测试记录不代表当前 B10 状态。
+
+第六批增加backend-next-agent-shell.integration.mjs、backend-next-agent-files.integration.mjs及共用agent-execution-fixture.mjs。真实Shell/Job、取消/撤权、受控重启与machine claim证据释放、七步文件变更及HTTP输入拒绝走当前新后端/隔离OpenSSH；仅Provider输出脚本化，另有原ToolService排空方法的独立故障回归。统一16文件、Node统计64/64通过，日志/tmp/nexus-b10-execution-unified-final.log；正常close重建不代表崩溃/断电，释放前由fixture独立确认远端进程退出，不能据此推断SSH关闭会终止子进程。详细范围见[第六批证据](后端重构待实机验证.md#b10-第六批-shelljob文件变更与-http-输入2026-10-16)。
+
+第七批增加 backend-next-agent-collaboration.integration.mjs，9个实际父子/协作子场景与原 waitChildren 故障分类回归；独立11/11、统一17文件75/75通过，日志 /tmp/nexus-b10-collaboration-unified.log。Child后台Job的效果未知已验证父最终unknown，消息HTTP观察不消费、独立批准与错族拒绝均走新后端。精确版本、统一结果和剩余限制见[第七批证据](后端重构待实机验证.md#b10-第七批-rootchild-与协作2026-10-16)。MCP/ACP/Browser的有限行为结果见第八批，其余专项继续待验。
+
+第八批增加 backend-next-agent-{mcp,acp,browser}.integration.mjs，需既有Chromium、Puppeteer、环回HTTP与独立OpenSSH。MCP使用真实SDK固定2026-07-28；ACP程序在真实SSH运行；Browser实际CDP核对页面效果与跨客户端context，外部端点/模型输出脚本化，不模拟权限/执行/SQL。独立19业务子场景、Node统计22/22通过，日志 /tmp/nexus-b10-integrations-review-final.log；修复保存ACP入口内层许可与Child准入遗漏。最终统一20文件97/97通过，日志 /tmp/nexus-b10-integrations-unified.log；Backend-next/根check、全仓格式与diff检查通过。版本和限制见[第八批证据](后端重构待实机验证.md#b10-第八批-mcpacp-与-browser2026-10-16)。第九批已补截图字节、Docker及跨实例备份有限整链；其余专项继续待验。
+
+第九批新增 backend-next-{docker,backup}.integration.mjs，需要可用Docker daemon和本地alpine:latest镜像；无依赖时明确失败，不静默skip。所有容器带唯一名称与nexus.b10=docker label，仅清理本轮创建的ID。独立3文件34/34、统一22文件125/125通过，新增25个叶子场景并扩展Browser截图下载/hash/实际解码；修复HTTP上传中断后排空悬挂及Artifact取消误报。命令、最终统一/静态和限制见[第九批证据](后端重构待实机验证.md#b10-第九批-docker跨实例备份与截图正文2026-10-16)。桌面真实服务入口及所有其余历史未验项保留。
+
+第十批新增 backend-next-{notifications,appearance,plugins}.integration.mjs 与 management-fixture.mjs，所有修改经已安装HTTP入口，使用真实SQLite/密码加密、环回HTTP/SMTP和实际插件独立子进程；签名包由既有隔离构建脚本以临时Ed25519密钥生成。需Linux /proc、当前Node permission能力和GNU tar；没有插件运行时注入或公网供应商调用。独立新增62个业务场景、Node统计65/65通过，日志 /tmp/nexus-b10-batch10-review-final.log。修复SMTP全部收件人明确拒绝误记unknown；部分成功、断流和清理失败仍保持原语义。最终统一25文件190/190通过（0失败/跳过、约244秒），日志/tmp/nexus-b10-batch10-unified.log；Backend-next/根check、全仓格式通过。完整场景与静态结论见[第十批证据](后端重构待实机验证.md#b10-第十批-通知外观与插件2026-10-16)。桌面、仓库/SDK浏览器/intents、故障与其他未验项继续保留。
 
 **B3.2 新增待验清单**：待实机文档 B3.2-V01–V12 覆盖 Workspace 状态/Docker、Dashboard 采样、三 system HTTP、指纹/授权/缓存竞态、容量、关闭与 unknown。源码阶段不运行，统一 B10；B7/B6/F1 的独立依赖分别核验。
 
-**B3.1 新增待验清单**：`后端重构待实机验证.md` 的 B3.1-V01–V65，覆盖 Workspace 真 shell 准入与晚开、终端背压/cwd、普通续接、挂起两阶段交付/显式 ACK、owner lease/撤销、100 MiB 历史/4 MiB checkpoint 与管理 HTTP、Files/transfer 双端关闭、并发 pending takeover、长时间日志/取消、独立 Agent/PTY 隔离。当前 B3.1 源码已收口，最终静态证据见待实机清单的“B3.1 源码阶段最终收口”，**没有运行任何上述行为用例**；不能从旧 Backend Playwright、旧 suspend 恢复流程或 R1 Files-only WS 推出通过。按 D2 只能在 B10 且执行入口已指向 backend-next 后运行，并分别保留真实资源清理、传输交付、关联响应的证据。
+**B3.1 新增待验清单**：`后端重构待实机验证.md` 的 B3.1-V01–V65，覆盖 Workspace 真 shell 准入与晚开、终端背压/cwd、普通续接、挂起两阶段交付/显式 ACK、owner lease/撤销、100 MiB 历史/4 MiB checkpoint 与管理 HTTP、Files/transfer 双端关闭、并发 pending takeover、长时间日志/取消、独立 Agent/PTY 隔离。当前 B3.1 源码已收口，最终静态证据见待实机清单的“B3.1 源码阶段最终收口”，**B10已验证普通PTY/Files/传输部分正常链、普通终端消费窗口/暂停后续接与journal裁剪、挂起恢复/接管、注销后重新登录续接；容量/期限/挂起日志背压及其余专项故障仍待验**；不能从旧 Backend Playwright、旧 suspend 恢复流程或 R1 Files-only WS 推出通过。按 D2 只能在 B10 且执行入口已指向 backend-next 后运行，并分别保留真实资源清理、传输交付、关联响应的证据。
 
-**本节是后续 B10 运行与证据落点，不是已运行报告。** 按 [实施方案 B2 至 B10 交付安排](../后端重构下一阶段实施方案.md#b2-至-b10-验证交付安排) 和 D2，须先完成 B1–B9 后端源码及静态准入，才统一运行逻辑回归与重构后端全链路。专项编号与准入/失败回退以 [B10 验证清单](后端重构待实机验证.md#b10-执行交付包与准入) 为准，至少包含 B2-V01–V66、R2-V01–V08；下方旧 backend 的历史 PASS 不纳入本轮计数。
+**用户已授权开始 B10。以下维护执行入口，实际命令和逐项结果见本节当前批次；未登记的历史待验项仍未通过。** 按 [实施方案 B2 至 B10 交付安排](../后端重构下一阶段实施方案.md#b2-至-b10-验证交付安排) 和 D2，须先完成 B1–B9 后端源码及静态准入，才统一运行逻辑回归与重构后端全链路。专项编号与准入/失败回退以 [B10 验证清单](后端重构待实机验证.md#b10-执行交付包与准入) 为准，至少包含 B2-V01–V66、R2-V01–V08；下方旧 backend 的历史 PASS 不纳入本轮计数。
 
-B10 的实际启动配置必须将测试流量、旧正常 HTTP/WS 接口及可核对的消费者**明确指向正在构建的 `packages/backend-next`**。运行前核实测试启动脚本、环境变量、监听端口及依赖/迁移安装目标；若现有 Playwright 或 Docker 脚本默认仍启动 `packages/backend`，必须先调整 B10 专属测试入口和 fixture，不允许只重命名旧 backend 的测试结果。正式前端 Shared 迁移和生产切换仍分别遵循 F1/B9 的阶段边界。
+B10 的实际启动配置必须将测试流量、旧正常 HTTP/WS 接口及可核对的消费者**明确指向正在构建的 `packages/backend`**。运行前核实测试启动脚本、环境变量、监听端口及依赖/迁移安装目标；若现有 Playwright 或 Docker 脚本默认仍启动 `packages/backend`，必须先调整 B10 专属测试入口和 fixture，不允许只重命名旧 backend 的测试结果。正式前端 Shared 迁移按 F1 承接；生产切换按实施方案 D4/D5 另行授权，B9 源码收口不代表已切换。
 
 运行顺序及留档约定：先冻结完整 SHA + 未提交 diff、Node/pnpm 版本、数据库隔离根目录、SSH/SFTP/zip/unzip/zipinfo/GNU tar 工具版本与网络形态，运行对应版本的 Shared/backend-next/Frontend 静态检查和构建；再运行单元、集成及隔离 fixture；再跑实际 backend-next 的 HTTP/WS/SSH/SFTP 全链路、旧正常消费者和传输/归档专项；最后注入断线、取消、竞争、恶意归档、权限及资源清理故障并复跑受影响场景。记录每项原始命令、退出码、日志/trace 路径、断言、文件/数据库前后状态和敏感信息脱敏结果，不能仅填写“通过”。未建立对应 backend-next 执行入口或未运行的项目状态仍为「待验证」，权限/工具故障为「环境阻断」。
 
@@ -25,8 +87,8 @@ B10 的实际启动配置必须将测试流量、旧正常 HTTP/WS 接口及可�
 ```sh
 pnpm --filter @nexus-terminal/shared check
 pnpm --filter @nexus-terminal/shared build
-pnpm --filter @nexus-terminal/backend-next check
-pnpm --filter @nexus-terminal/backend-next build
+pnpm --filter @nexus-terminal/backend check
+pnpm --filter @nexus-terminal/backend build
 pnpm --filter @nexus-terminal/frontend exec vue-tsc --noEmit
 pnpm --filter @nexus-terminal/frontend build
 pnpm run check
@@ -37,6 +99,30 @@ git diff --check
 行为测试命令须在 B10 核对 runner 真正启动/连接 backend-next 后填入本文件的执行记录；目前尚无该新后端完整 B10 E2E 的执行证据，不凭旧脚本名称假定覆盖。
 
 当 B10 发现缺陷，将用例、被测版本、复现证据交回实际 Service/Model/Adapter/Interface/Shared owner 修改，修改后的版本重新执行对应静态和行为范围；禁止用吞错、无依据增大超时、自动重放 unknown 或指向旧后端替代修复。最终 B10 总结应给出逐项编号结论、运行版本、未关闭风险、经过批准的兼容性取舍及是否满足后端完成判据。该总结不自动批准部署、提交或进入 P1/F1。
+
+第十一批新增 backend-next-desktop{,-authorization,-tickets}.integration.mjs、desktop-fixture/desktop-management-fixture及desktop目录下Docker三文件。需可用Docker、Alpine包镜像源（首次构建）、guacamole/guacd:latest和已安装Chromium；缓存构建不强制刷新镜像。实际新后端连TigerVNC与TLS xrdp，图像字节由Chromium解码，键鼠在X Server/xterm核对，资源以原上游TCP确认。28个业务场景、三个父项，实际包目录按统一60秒文件上限运行31/31通过（约142秒），日志/tmp/nexus-b10-batch11-desktop-package-cwd.log。合并文件曾触发原runner文件级60秒超时，已按连接/权限/票据拆分，不改产品TTL或统一超时。16路并发的全局事件监听告警在原Desktop Adapter修正，未提高阈值。最终统一28文件221/221通过（0失败/取消/跳过、约386秒），日志/tmp/nexus-b10-batch11-unified.log；完整结果见[第十一批证据](后端重构待实机验证.md#b10-第十一批-真实桌面与生命周期2026-10-16)，全部历史未验子项仍保留。
+
+B10第十二批新增storage/backend-next-snapshot-crash.integration.mjs及独立snapshot-crash-worker.mjs，需原生Node SQLite/子进程IPC和SIGKILL。使用当前新后端dist、真实持久文件及SQLite，五个步骤时点分别杀原child，有/无旧根、真实Bootstrap未提交启动恢复、提交前后证据不可读与五类损坏日志共19项；实际包目录独立19/19通过（约3.5秒），日志/tmp/nexus-b10-batch12-crash-final.log。无产品注入或迁移；SIGKILL不替代断电，已确认提交后中断不替代提交确认丢失。最终统一、静态、清单及未验限制见[第十二批证据](后端重构待实机验证.md#b10-第十二批-备份持久恢复与异常退出2026-10-16)；仍按原60秒文件预算执行。
+
+第十二批最终统一 pnpm run test:backend-next 已退出0：29文件240/240（含父项），0失败/取消/跳过，约392秒，日志/tmp/nexus-b10-batch12-unified.log；包括最终19项恢复回归和Shared/backend-next build。Backend-next/根check通过，源码清单1452项及原720项索引匹配；完整范围与未验项仍以上述第十二批证据为准。
+
+第十三批新增http/backend-next-plugin-{browser,intents}.integration.mjs及两个plugin fixture，需要既有Playwright Chromium和签名包构建脚本。实际签名资源/完整SDK模块图、opaque sandbox与MessagePort→真实HTTP RPC，以及真实Run事件/订阅/回调失败收敛均经浏览器验证；父页是隔离测试桥，不代表F1。跨App消息核对双方grant、原回执/重启、实际附件/Range/RPC分段与100条容量，修复先截候选再过滤导致漏消息，140条失效候选后的有效回执已回归。实际包目录两个文件37/37通过（35叶子+2父项，约6.2秒），日志/tmp/nexus-b10-batch13-after-fix.log；完整版本、最终统一/静态、修复前失败及未验限制见[第十三批证据](后端重构待实机验证.md#b10-第十三批-浏览器sdk与跨app消息2026-10-16)。仓库/推荐、后端runtime消息、自然期限及流中撤权继续待验。
+
+第十三批最终统一pnpm run test:backend-next退出0：31文件277/277（含父项），0失败/取消/跳过、约392秒，日志/tmp/nexus-b10-batch13-unified-final.log；包含最终Shared/backend-next build，Backend-next/根check和全仓格式通过。1456项源码冻结及720项索引匹配；完整范围仍以第十三批证据为准，不将局部验证扩为B10全部验收。
+
+第十四批新增http/backend-next-plugin-{repositories,runtime-intents}.integration.mjs并扩展原签名包fixture：环回仓库真实配置/目录/下载安装，官方固定公钥与兼容推荐（仅脚本化公网响应），以及两个实际签名子进程的backend-sdk九方法/消息/附件授权。新增45业务叶子、48项含父项；连同第十三批两文件复跑，实际包目录四文件85/85通过、0失败/跳过，约11.6秒，日志/tmp/nexus-b10-batch14-focused-final.log。最终统一33文件325/325通过，0失败/取消/跳过，约404秒；日志/tmp/nexus-b10-batch14-unified-final.log。原生Node permission、Linux /proc、GNU tar和既有Chromium仍为统一runner依赖。未替换产品公钥、runtime或SQL；官方新包完整安装/公网、流中取消撤权、全部自然期限和故障不在此PASS内。静态门禁、1458项冻结与失败历史见[第十四批证据](后端重构待实机验证.md#b10-第十四批-仓库推荐与后台插件消息2026-10-16)。
+
+第十五批新增http/backend-next-plugin-{repository-faults,runtime-lifecycle}.integration.mjs，复用真实环回部分响应/断流、原8任务队列及签名子进程：下载注销/排空、quiesce内SDK拒绝、health失败关闭、SIGKILL的unknown持久化与重启后原实例明确确认。17业务叶子、20项含父项；插件七文件128/128通过、0失败/取消/跳过、约18.7秒，日志/tmp/nexus-b10-batch15-plugin-final.log。修复BoundedFetch把errored stream的cancel原错误传播误判成独立清理失败；无时间跳跃、产品后门或SQL替换。最终统一35文件345/345通过、0失败/取消/跳过、约406秒，日志/tmp/nexus-b10-batch15-unified-final.log；类型、仓库与全仓格式检查通过。1460项冻结、两轮复审及剩余范围见[第十五批证据](后端重构待实机验证.md#b10-第十五批-插件下载故障与运行实例恢复2026-10-16)。
+
+第十六批新增http/backend-next-plugin-artifact-streams.integration.mjs并复用management真实流fixture。用16MiB实际blob、暂停HTTP消费者及Linux原文件句柄确认在途后，验证普通/intent下载的断连、注销、停机、文件版本变化、双方grant/禁用、回执撤销与准备升级；新会话/受控重启保留有效receipt，旧失效receipt不能复活。新增14业务叶子、16项含两个父项，实际包目录插件八文件144/144通过、约25.2秒，日志/tmp/nexus-b10-batch16-plugin-final.log。无产品源码/SQL/Shared变化；最终统一36文件361/361通过、0失败/取消/跳过、约414秒，日志/tmp/nexus-b10-batch16-unified-final.log；Backend-next/根check及全仓格式通过。冻结1461项、720产品摘要未变，范围及静态证据见[第十六批证据](后端重构待实机验证.md#b10-第十六批-在途-artifact-交付与权限围栏2026-10-16)。已在途SDK/RPC、全部容量/自然期限与混合故障仍待验，不把本批HTTP流结果扩为B10整体通过。
+
+第十七批新增storage/backend-next-module-runtime.integration.mjs，使用原Node Module/worker、真实子进程/IPC及受控技术host回调。11个场景覆盖32个host等待/溢出/回收、8控制等待、quiesce、子进程退出后的原host晚结果/独立拒绝、SIGKILL与替换实例隔离、有界失败账本、派发后错误分类及同一后续异常去重；同时确认真实/proc退出后的ESRCH。修复原Node Module失败账本及进程恢复探测，未改SQL/Shared/应用授权。实际包目录连同Shell和八个插件文件共十文件166/166通过、约42.2秒，日志/tmp/nexus-b10-batch17-focused-corrected-final.log；1462项冻结、720索引更新2项及最终统一/静态结果见[第十七批证据](后端重构待实机验证.md#b10-第十七批-隔离运行时在途-host-与独立失败2026-10-16)。修正后最终统一37文件372/372通过、0失败/取消/跳过，约413.7秒，日志/tmp/nexus-b10-batch17-unified-corrected-final.log；Backend-next/根check及全仓格式通过。首轮统一失败记录与修正后结果分别保留；技术结果不代替应用级撤权/安装升级、32实例/全局host额度或全部混合清理验收。
+
+第十八批新增http/backend-next-plugin-rpc-races.integration.mjs与blob-lease-fixture.mjs，需要本机Linux、Perl/Fcntl和支持文件租约的临时文件系统。内核SIGIO确认原NativeBlobStore.open已派发后，经真实HTTP变更双方grant、回执、启停、会话和Artifact版本；实际签名后台child另验证原实例停用/升级排空、新实例与旧回执隔离。原产品SQL/runtime/授权不替换，全部127字节读取不冒充全容量或其他方法。九插件文件161/161通过、0失败/取消/跳过，约29.8秒，日志/tmp/nexus-b10-batch18-plugin-final.log；统一38文件389/389通过，0失败/取消/跳过，约411.9秒，日志/tmp/nexus-b10-batch18-unified-final.log；1464项冻结、720产品摘要不变，失败历史、最终统一/静态和剩余范围见[第十八批证据](后端重构待实机验证.md#b10-第十八批-应用级在途-rpc-与原实例升级2026-10-16)。该夹具不增加生产或远端SSH部署要求。
+
+第十九批新增http/backend-next-plugin-{runtime-capacity,retirement-failures}.integration.mjs，复用签名安装与原Node permission child/IPC、Linux /proc及只读SQLite观察。32真实实例/2在途构造、31+2最后名额竞争、同App共用、发布者批量撤销及独立生命周期失败、卸载unknown重启/围栏/明确确认均经真实HTTP验证。修复原Runtime异步预留占位竞争与Agent已知围栏聚合分类；11插件文件183/183通过，0失败/取消/跳过，约41.6秒，日志/tmp/nexus-b10-batch19-plugin-final.log；统一40文件411/411通过，0失败/取消/跳过，约428.8秒，日志/tmp/nexus-b10-batch19-unified-final.log。1466项冻结及720索引更新3项；失败历史、最终统一/静态及范围见[第十九批证据](后端重构待实机验证.md#b10-第十九批-插件实例容量与失败退役恢复2026-10-16)。每实例32host与生命周期队列32分别表达，不宣称后者或全部容量期限通过。
+
+第二十批扩展原Workspace续接文件和OpenSSH夹具，需原sshd/ssh-keygen及实际PTY。新增三个业务子测试覆盖1MiB普通消费窗口、6MiB精确恢复、满窗口detach后的原Shell与4MiB回放、10MiB离线journal裁剪和越界offset拒绝；字节消费与所有权ACK分别核对。夹具默认ACK按正式客户端20ms合并，允许暂停消费；不改产品容量。相关六文件专项21/21通过，约79.7秒，日志/tmp/nexus-b10-batch20-remote-final.log；统一40文件414/414通过、约430.4秒，日志/tmp/nexus-b10-batch20-unified-final.log；统一后仅补两处空行，最终专项/静态及两份冻结范围见[第二十批证据](后端重构待实机验证.md#b10-第二十批-真实-pty-背压与续接裁剪2026-10-16)。挂起baseline/日志背压、Files取消/晚构造和其他原故障仍待验，不将普通PTY结果扩大为全部传输通过。
 
 SSH search cancellation checks both temporary and persistent SFTP sessions: held reads must settle, open read handles must return to zero, the fixture must stay healthy, and a new search must succeed. The SSH fixture closes remaining file handles when a channel ends, including OPEN operations that finish after cancellation.
 
@@ -109,7 +195,7 @@ The current Docker smoke validates the unified Frontend/Backend/Guacd production
 - **保留本文中的验收结论、失败复现、修复依据与未通过项**。下面的命令在 Backend 重构结束前保持可执行；未来清理新增专项文件后，需同步更新此处入口。历史测试提交届时用独立清理提交或最终变更整理处理，不能仅在文档标注后声称已移除。
 
 ```bash
-pnpm --filter @nexus-terminal/backend-next build
+pnpm --filter @nexus-terminal/backend build
 node tests/backend/storage/backend-next.integration.mjs
 node tests/backend/storage/backend-next-phase2.integration.mjs
 node tests/backend/storage/backend-next-public-boundary.integration.mjs
@@ -563,3 +649,597 @@ Agent 自适应预算场景同时验证真实 durable proposal/rejection/model c
 ### B7 源码快照与 B10 准备
 
 B7 完整源码/两轮审核及最终静态证据见 [B7 整批收口](后端重构待实机验证.md#b7-整批源码收口行为待-b10)。最新初始 v1 签名为 `backend-next-v1-initial-20261013-b7-governed-operations`；仅 `governed`，默认执行关闭、工具 grant 空。B10 启动前同步既有 backend-next fixtures 的安装参数、最新空库结构、Shared 联合及原 Run 执行设置，不加旧迁移兼容或放宽断言。新增 B7-F01–F13 与历史 B7 场景全部待验，特别覆盖配置消费者、文件/数据库跨阶段确认、通知排空/重启 unknown、真实事件生产者与关闭顺序。本批没有运行行为测试，正式前端仍由 F1 承接。
+
+## F1 基础认证前端回归
+
+命令：`pnpm run test:frontend-auth`。先构建新后端，再启动独立SQLite/真实Access与临时Vite/Chromium；不切换生产。F1-A当时专项19项检查通过，/tmp/nexus-f1-auth-browser-final.log：7项真实setup/password/Cookie/status/logout及TOTP设置夹具/部分登录/真实TOTP完成检查；12项受控响应/竞态/网络与协议失败、流容量/收尾、请求预算、未知401、派发前取消及禁止自动重放。受控TOTP响应不代替另外的真实TOTP链；尚未验证完整正式登录页/因素设置/Passkey UI，不宣称前端全集完成。
+
+实际DEV原浏览器消费者以原包cwd/60秒预算复跑`tests/backend/remote/backend-next-frontend.integration.mjs`，1/1、0失败/取消/跳过、6164.153414ms、exit0，/tmp/nexus-f1-dev-consumer.log。它验证共用认证变更后原终端失败/重试和observer收尾，不替代正式终端迁移。
+
+F1最终Shared check/build、Backend-next check/build、根check、Frontend build通过；日志/tmp/nexus-f1-{backend-check,backend-build,root-check-final,frontend-build-final}.log（Shared结果见本批实际命令输出）。Shared请求预算显式接入原后端路由后，原认证三个文件31/31、0失败/取消/跳过，9131.999755ms、exit0，/tmp/nexus-f1-access-regression.log；实际限额仍16KiB。全仓格式通过，/tmp/nexus-f1-format-check.log；文档最后回填另执行定向格式/diff。最终源码/配置冻结1512项，/tmp/nexus-f1-auth-final-source-manifest.json，SHA256 42eb3ceacabbf811080349c226f1a0b1b97ddadd6b57030b16bde29a8396a813；720后端摘要、链接、资源及diff核验通过，/tmp/nexus-f1-final-verification.log。B10第三十二批冻结只证明开始F1前的版本，不用于这些新增前端源码。
+
+## F1-B 改密与 TOTP 设置回归
+
+本批基线仍为 `refactor/backend-storage-v1` / `05e140d202e78b8c1248c3c3d0ccf44eb398a278` 加累计工作区；不提交或切换生产。改密与 TOTP 设置复用 Auth 的 Shared transport，Security 持有本地临时 setup 与生命周期，不再调用旧 securityApi 的四个写入口。
+
+`pnpm run test:frontend-auth` 的当前源码专项覆盖 35 项浏览器检查：14 项真实后端/SQLite/Cookie 操作，21 项受控响应与生命周期检查。新增真实 TOTP 密码确认禁用、状态重读、改密拒绝/成功、旧密码失效/新密码可用；实际改密组件验证重复提交仅派发一次，以及会话变化卸载组件后仍完成原路由回登录。受控场景包含未知改密清除本地身份且不重放、远端 QR/额外响应字段拒绝、挑战到期、未知 TOTP 阻止重复写入、只读恢复、因素变更、缓存页停用和卸载清理。没有执行真实安全硬件、公网 CAPTCHA、完整 Passkey/安全配置页面验收。
+
+两轮源码复核关注契约转换/唯一 owner，以及异步交付、页面重建、旧 finally 和秘密清理。页面夹具曾因使用另一份 Vite 优化后的 Vue Router 模块而缺失注入，已改为解析应用实际依赖 URL；最终检查不绕过 DOM 提交或放宽断言。检查失败的中间日志不作为通过证据，最终命令、结果和源码冻结在本批收口时核对。
+
+最终 `pnpm run test:frontend-auth` 构建及 35 项检查退出 0；最后一次等价执行 `node tests/frontend/auth.integration.mjs` 同样退出 0，日志 `/tmp/nexus-f1b-auth-browser-final.log`。Shared check、Shared/Backend-next build（专项命令前置）、根 check、Frontend build、全仓 format:all:check 与 diff 全部通过；日志为 `/tmp/nexus-f1b-{shared-check,check-final,build-final,format-final}.log`。最终冻结 1514 项源码/配置，`/tmp/nexus-f1b-final-source-manifest.json`，SHA256 `b235a7583e5c5f965877569e5c347031e6ef62f0cab6b8e61a8bb51e9088b0e8`；720 后端审核摘要、文档链接和临时资源核验通过，`/tmp/nexus-f1b-verification.log`。本批没有修改后端实现，不重复已收口的 B10 全量；上述 F1-A 冻结与 19 项证据仅代表其原版本。
+
+## F1-B Passkey与安全配置回归
+
+本批延续同一分支和累计工作区，不提交推送或切换生产。Auth 的 Access request/Passkey API、浏览器 Adapter、Store 和正式 LoginPage/PasskeyPanel 已接完整 Shared 因素响应；Preferences 的核心配置 API/mapper 供 Security 通过 public 消费，CAPTCHA/IP面板携带各自原快照CAS，黑名单使用集合DELETE JSON和独立分页。
+
+`pnpm run test:frontend-auth` 最终退出0，日志 `/tmp/nexus-f1-complete-browser-final.log`。当前共 **76 项检查：39项真实后端/SQLite/Cookie/浏览器操作，37项受控协议/竞态/生命周期检查**：
+
+- 原改密/TOTP等35项继续通过。
+- Passkey新增14项：9项真实发现、options、Chromium CTAP2虚拟认证器注册/验签、列表/改名/删除，5项受控拒绝、弱化UV、关联时间、非法路径及会话失效取消/晚结果；另有1项真实HttpOnly持久Cookie期限检查，确认“记住我”传到最终签发。
+- 配置12项：10项真实保存视图、CAS/冲突、保留其他字段、secret替换/保留/清除、活动快照、黑名单分页/解除；2项受控unknown/分页上下文拒绝。黑名单通过显式受信环回测试代理提供公网来源，因为环回来源按产品规则豁免失败计数，不修改产品准入规则绕过此事实。
+- 管理controller 9项受控检查：成功写入后刷新失败单独反馈、阻止重复写入、只读恢复、CAS冲突保留原版本、断流unknown、KeepAlive失效/秘密清除，以及发现失败的重试状态。
+- 正式组件5项真实操作：CAPTCHA表单重复提交只写一次；并存的IP面板遇到真实409后阻止写入，重新读取并由用户再次修改才成功；数值输入转换和重启提示；实际PasskeyPanel调用虚拟认证器注册、删除并刷新列表。
+
+实体安全硬件、公共域名/公网CAPTCHA仍D16未验。以上使用真实产品组件的独立挂载，不等于所有生产路由、其他业务会话资源或完整Preferences页面通过；相应集成随F1-C/D完成。
+
+认证相关后端四文件回归38/38、0失败/取消/跳过，`/tmp/nexus-f1-complete-access-regression.log`；未重复B10全量。两轮源码复核分别覆盖类型/唯一owner/预算，以及CAS、ceremony取消、未知结果、confirmed后刷新失败、缓存页/卸载与旧finally；新发现的Passkey“记住我”缺失已补齐并验证真实Cookie期限。已有E-03/E-05/E-07/E-11覆盖这些共性，不重复追加临时规则。
+
+最终静态/构建与格式结果见本节后续冻结记录；历史F1-A及上一批F1-B冻结仅代表其原版本，不能用于本批新增源码。
+
+最终Shared check/build、Backend-next check/build、根check及Frontend build退出0；build包含实际前端类型检查，认证脚本先构建Shared/Backend-next。日志 `/tmp/nexus-f1-complete-{shared-check,backend-check,check-final,build-final,browser-final}.log`。全仓 `format:all:check` 退出0，`/tmp/nexus-f1-complete-format-check.log`；文档最终回填另执行定向Prettier/diff检查。
+
+源码/配置冻结1525项，`/tmp/nexus-f1-complete-source-manifest.json`，SHA256 `23ef8e2720e1134911a17c1b661fc18ac92576e936a42b5def09b5802fe9fa4c`；720后端源码审核摘要、文档本地链接、临时目录/子进程/Docker资源及diff核验通过，`/tmp/nexus-f1-complete-verification.log`。更新的后端Access/Factors HTTP预算生产者已重读并刷新对应审核摘要；此前遗留的九个B10目录保留，当前批没有新遗留资源。
+
+## F1-C1 Proxy与SSH Key回归
+
+```bash
+pnpm run test:frontend-targets
+```
+
+隔离SQLite/backend-next、Vite与Chromium，挂载正式Proxy页面和SSH Key弹窗/选择器。2026-10-17最终43项通过：19项真实链路，22项浏览器受控故障/边界及2项后端受控producer。日志`/tmp/nexus-f1-c1-browser-final.log`。
+
+真实范围：CRUD/原版本CAS、引用删除拒绝、SQLite秘密原值核对、密码/口令保留与显式清除、私钥替换、严格UTF-8及64KiB文件、正式组件提交与只读恢复。受控范围：提交后丢失响应、不重放、错误资源/版本/字段、完整响应预算与body取消、晚列表、缓存重置/读取失败不误清选择、隐藏/KeepAlive、确认取消及替换隔离。认证注销走真实HTTP，资源事件在隔离挂载中显式调用实际session lifecycle；不等于整个App跨业务撤销验收。
+
+Auth/Security原76项另行复跑通过，日志`/tmp/nexus-f1-c1-auth-regression.log`。冻结1532项源码/配置，`/tmp/nexus-f1-c1-source-manifest.json`，SHA256 `f253d38d4130c8227db161066d5b2d938a8df37a848ae0997fe84a65c56d26c1`。验证入口`/tmp/nexus-f1-c1-verify.mjs`核对冻结、720项后端摘要、本地链接和资源，不复用F1-B冻结。Shared check/build、Backend-next check/build、根check、Frontend build和全仓格式/diff按本批日志记录。
+
+未覆盖：正式Connections/Tags/Host Key/导入测试与Remote资源，完整App路由及跨业务撤销仍F1-C/D；公网/硬件按D16。没有部署或生产切换。
+
+## F1-C1 标签与管理组件回归
+
+入口：`pnpm run test:frontend-targets`（构建 Backend-next 后执行同一隔离浏览器 runner）。本批直接运行已构建产物的 `node tests/frontend/targets.integration.mjs`；最终74项：34真实HTTP/SQLite/Cookie与组件检查、35浏览器受控检查、5真实HTTP handler/受控公开集合生产者检查。包括此前Proxy/SSH Key，旧43项证据保留原基线。
+
+- 真实：标签创建/名称规范化、原版本CAS、名称确保、关联重复合并/空清空/缺引用原子拒绝/连接版本推进、级联删除；正式Picker创建/选择/删除，正式标签组独立改名与确认替换；提交后的只读核对。
+- 受控：128-byte UTF-8派发前拒绝、完整集合先校验、部分创建的确定拒绝与真实提交回执丢失、停止后续派发与不重放、错误ID/version响应、重复ID/倒序时间/额外私密字段、失败与缓存重置保留选择、原确认窗口卸载、三语、原会话重置。生产者额外验证Tag条数/完整编码字节超限413，以及10,000项最大转义合法集合通过完整codec。
+- 范围限制：标签组挂载时使用真实后端连接视图所需字段；父级正式Connections仍消费旧API，本专项没有验证整个Workspace页面迁移。关系unknown后须重读连接集合，不能只刷新标签名称列表就宣称关系已核对。脚本完整解析/导入与Host Key/终端仍待F1-C1/C2。认证登出后由夹具显式派发会话生命周期事件，非整个App自动派发证明。
+
+环境：Node22.23.1/pnpm11.26.0，分支`refactor/backend-storage-v1`、HEAD `05e140d202e78b8c1248c3c3d0ccf44eb398a278`；累计工作区未提交。日志`/tmp/nexus-f1-tags-browser.log`。本批源码/配置冻结1537项：`/tmp/nexus-f1-tags-source-manifest.json`，SHA256 `da52cf6220f898f3435c20b4a14efb14cf17ddefaa4adef6434374586238a4f9`；校验脚本`/tmp/nexus-f1-tags-verify.mjs`同时核对720条Backend源码摘要、文档本地链接及本批资源残留，不沿用旧冻结PASS。
+
+Shared check/build、Backend-next check/build、Frontend build、根check、全量格式和diff检查按本批日志`/tmp/nexus-f1-tags-{shared-check,shared-build,backend-check,backend-build,frontend-build,root-check,format-check,verification}.log`记录。编译/受控检查不替代尚未迁移的整页功能；外部仍按D16未验，不提交推送或部署切换。
+
+### F1-C1 Host Key 正式管理回归
+
+沿用现有Targets浏览器专项，不重复全量B10。Connections工具栏安装正式HostKeyManagementModal；夹具独立挂载同一组件并经当前新后端真实HTTP/SQLite验证，并非整个旧Connections页面已迁移。
+
+最终命令 `node tests/frontend/targets.integration.mjs` 退出0，共96项：41真实、47浏览器受控、8生产者受控，比Tags基线新增22项。新增覆盖独立确认/小写地址/覆盖/移除/读回、正式表单和移除确认、真实提交后丢失响应且禁止重放、显式刷新、关闭待确认、关闭后的晚读取、KeepAlive停用后的真实晚提交及重新打开核对、身份失效、三语。严格codec拒绝重复host/port、非规范主机、非法指纹/额外字段及错误资源响应；producer验证10,001项拒绝、完整JSON超限和10,000项最大合法转义集合。受控fetch只替换指定确认响应/时序，真实提交与受控交付分别记录；本轮没有真实SSH握手或独立可信渠道的指纹核验。
+
+两轮源码复核覆盖本批17个源码/测试文件及全部新增入口：边界/转换/真实协议，以及取消/晚结果/unknown/原确认owner。现有E-07/E-08.2/E-11/E-13已覆盖本批经验，没有追加重复rules。第一次Frontend类型检查发现i18n参数需要显式字段对象，已修复并重新检查；本地输入错误保留可编辑状态，已派发失败才要求只读恢复。Shared check/build、Backend-next check/build、Frontend类型检查/build、根check、全仓format:all:check和diff按本批最终日志收口。
+
+环境Node22.23.1/pnpm11.26.0，分支refactor/backend-storage-v1、HEAD05e140d202e78b8c1248c3c3d0ccf44eb398a278；累计工作区未提交。日志 `/tmp/nexus-f1-hostkeys-{browser,shared-check,shared-build,backend-check,backend-build,frontend-check,frontend-build,root-check,format-check,verification}.log`。源码/配置冻结1542项，`/tmp/nexus-f1-hostkeys-source-manifest.json`，SHA256 `7ff25e760a6eb9a952d19ebce75cc7b2d92c6ef47bd572e057b87da773a7a84b`；`/tmp/nexus-f1-hostkeys-verify.mjs`核对当前冻结、720项Backend摘要、文档本地链接和资源。更新Targets HTTP、Host Key Service/SQLite三个摘要，其余保留；历史Tags/Proxy冻结仅代表原版本。C1仍有五组及C2/D未验，不推定整个应用切换或资源撤销通过。
+
+## F1-C1 Connections 完整管理回归
+
+本批完成正式连接列表/缓存、Connections整页、Workspace标签树、创建/元数据编辑/凭据独立操作、克隆/删除/串行批量/追加标签、保存/未保存SSH测试，以及新文件导入/配置导出、纯脚本/IP范围创建。后端只补安全凭据GET及连接列表完整预算；SQL仍在原Adapter，无新增迁移。旧ConnectionDto/API已删除，所有应用类型消费者迁Connections public；Remote运行协议仍C2。
+
+两轮审核：第一轮覆盖本批全部新增/修改/删除文件和真实消费者，核对Shared→应用、Model→Storage、公开/HTTP投影与容量；第二轮复查CAS、独立提交、部分回执、unknown、会话/停用/晚响应/旧finally及秘密清理。修复批量回执、关闭确认、读取失败反馈和导入关联目录刷新；没有扩大HUMAN或重复AGENTS/rules。后端10个变更文件逐项更新源码索引摘要，其余历史720项不冒充本批重读。
+
+当前专项命令：Shared check/build → Backend-next check/build → `node tests/frontend/targets.integration.mjs`；另执行Frontend vue-tsc/build、根check、format:all:check、git diff --check。上述最终命令均exit0；源码冻结、720项Backend摘要、本地文档链接及本批资源清理核验通过。运行专项需要本机sshd、ssh-keygen及启动隔离daemon的权限。浏览器专项 **142项**：67真实链路/应用检查、64浏览器受控、10生产者受控及1实际浏览器下载。真实链路使用隔离SQLite、原Access/HTTP、Vite/Chromium和环回OpenSSH：原子创建与回滚、凭据安全摘要/清除/元数据CAS、正式表单/脚本/范围/文件导入部分回执、标签缓存/树、批量追加/删除、未知写入读回、保存/未保存SSH握手与关闭；导出实际下载后核对新数组且不含credential。
+
+受控场景只替换指定fetch/时序：错误资源/状态、重复ID/额外秘密/逆序时间、未知后停止后续批量与禁止重放、关闭确认、晚读取/缓存reset、三语等。真实凭据写入后丢失响应单列受控交付；最大10,000项连接集合/10,001项拒绝由实际HTTP handler的受控public producer验证，没有声称向数据库真实写入10,000条或实测640MiB极端JSON。未验证公网SSH、外部因素/供应商、全部生产App撤销与C2终端/Files/桌面；不重复全套B10。
+
+环境Node22.23.1/pnpm11.26.0，分支refactor/backend-storage-v1，HEAD05e140d202e78b8c1248c3c3d0ccf44eb398a278；累计工作区保留，未提交推送。最终日志 `/tmp/nexus-f1-connections-{browser,shared-check,shared-build,backend-check,backend-build,frontend-check,frontend-build,root-check,format-check,verification}.log`。冻结 `/tmp/nexus-f1-connections-source-manifest.json`：1550项，SHA256 `68ed0228abaff6139f5dfc4fde212a27398e57f4907cff6eb3f041af9d934b19`；校验器 `/tmp/nexus-f1-connections-verify.mjs`。精确最终检查状态以该日志为准；先前Host Key冻结只表示原版本。
+
+## F1-C2 Workspace 二进制与传输边界回归
+
+本批仅收口C2-A的NXW1与Socket等待/清理，**C2-A整体仍未完成**。Shared `remote/workspace/workspace-binary`持有唯一编解码，正式WorkspaceSocket及OpenSSH夹具消费；删除前端重复文件，版本也改从Shared读取。二进制读取请求消费Shared严格codec，拒绝NaN/非正数/超额后才建连；文件累计64MiB、历史256KiB均引用Shared。取消只发送当前附件，畸形消息结束等待且不记录JSON解析异常中的原始正文。普通/挂起独立ACK、其余JSON请求/事件及应用mapper尚未迁移，不能视为仅剩测试。
+
+命令 `node tests/frontend/workspace-transport.integration.mjs`：**18项codec检查、17项真实Chromium/受控WS检查通过，exit0**。覆盖完整头/保留位/UTF-8/BOM身份、子数组offset、容量边界；元数据先到/后到、空文件、其他请求帧、重复元数据/终帧、final后数据、畸形JSON/二进制、并发共享opening同ID、原请求累计预算、同帧消费一次、未消费旧回调不能确认新附件、发送失败解除真实已安装abort监听。WS由隔离环回producer发送；发送失败单项控制浏览器WebSocket.send，不声称操作系统发送缓冲故障或真实SSH客户端全链路验收。
+
+命令 `node --test tests/backend/remote/backend-next-workspace-resume.integration.mjs`：**7/7（父项及6子项），exit0**，真实环回OpenSSH/新后端Access/WS验证独立恢复ACK、同PTY、流控/回放、journal游标及撤销；夹具已改用Shared decoder。它验证新Shared解码面对真实生产者，不代替正式WorkspaceRuntimeSession的ACK迁移。两轮复核覆盖本批5个现存源码/测试变更及1个删除入口：第一轮核对生产者→Shared→正式Socket/版本消费者，第二轮核对等待/交付顺序/重复消息/取消/旧消费回调及秘密；复核补修NaN绕过容量、取消自动重开连接及测试只重复已消费回调的覆盖缺口。未新增临时rules条目，仍引用E-07/E-08/E-10/E-13。
+
+环境Node22.23.1/pnpm11.26.0；分支refactor/backend-storage-v1，HEAD05e140d202e78b8c1248c3c3d0ccf44eb398a278，累计工作区保留，未提交推送或切换生产。Shared check/build、Backend-next check/build、Frontend vue-tsc/build及根check均exit0；全仓格式、diff及冻结/文档/资源核验均通过。日志 `/tmp/nexus-c2-{browser,workspace-resume,shared-check,shared-build,backend-check,backend-build,frontend-check,frontend-build,root-check,format-check,verification}.log`。冻结 `/tmp/nexus-f1-workspace-source-manifest.json`：1550项，SHA256 `c7dca08a87232d1f7a233d8936215572cb64c138081c9ab53d40fb85f3a828e0`；校验器 `/tmp/nexus-f1-workspace-verify.mjs`。Backend产品源码不变，720项摘要仅核对匹配，不声称本批全量重审；C2余项和D16外部依赖继续待完成/待验。
+
+## F1-C2 普通 Workspace 连接、独立 ACK 与关闭
+
+本批完成正式 `WorkspaceRuntimeSession` 的普通 connect/resume/close，**C2-A 整体未完成**：终端请求/事件严格解码与有限失败契约仍有源码工作，Files/传输/挂起/监控/桌面和App撤销仍按C2-B/C/D。Shared新增普通连接结果与null确认的严格codec；`WorkspaceAttachment`只承载普通/挂起共用附件字段，普通连接回执增加必填replayedBytes，未增加旧回执兼容。后端connect依据真实retained journal返回回放量；前端显式映射独立应用对象，Unix秒转毫秒，以journal端点、回放量及实际接收字节定位游标。
+
+| 证据                                                                             | 本批结果                                                           | 限制                                                       |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------- |
+| `node tests/frontend/workspace-session.integration.mjs`                          | 10项结果codec、21项正式Session浏览器受控、10项producer断言，exit0  | 受控WS，不冒充真实SSH或整页UI                              |
+| `node tests/frontend/workspace-ssh.integration.mjs`                              | 5项真实Access、Backend-next、Vite/Chromium、环回OpenSSH检查，exit0 | 正式Session/终端channel实际消费；没有挂载整个Workspace页面 |
+| `node tests/frontend/workspace-transport.integration.mjs`                        | 18项codec及20项浏览器受控检查，exit0                               | 原NXW1/传输边界回归，非挂起ACK                             |
+| `node --test tests/backend/remote/backend-next-workspace-resume.integration.mjs` | 7/7，exit0                                                         | 原后端真实OpenSSH续接/挂起/撤销专项，不代替其余C2迁移      |
+
+受控专项覆盖并发connect/close共享Promise；初始响应前后输出及ACK期间输出进入下次offset；资源身份/原generation+1/换token/完整回放校验；ACK后才resize/启用能力；旧附件请求不能发往替换socket；创建或ACK回执缺失禁止重放；关闭请求只走原附件，晚到创建回执归原owner关闭；终端结束拒绝迟到激活，关闭回执缺失保留unknown。三语未知所有权提示已有正式Terminal消费者，但未声称本专项实际挂载并验证该提示。真实专项先确认远端接收后台命令，再断开、等待离线输出并续接，核对同一PID/原Shell变量、恢复后继续输入及确认关闭；不以浏览器send成功替代远端已执行。
+
+两轮复核：第一轮核对Shared→后端journal→Socket→应用mapper→正式Session/Terminal消费者的owner、单位、嵌套投影和ACK顺序；第二轮核对派发/未知确认/取消/晚回执/终端结束/原附件关闭。第二轮补修原Socket身份跨步骤绑定与终端结束generation围栏。Socket拒绝成功/失败字段矛盾和空失败响应，并删除按错误正文分类的旧日志启发式；完整有限失败契约仍列入C2-A，不把它改成已完成。阶段仍引用H-04–H-09/H-12及E-02/E-07/E-08/E-10/E-13，未修改HUMAN或新增临时rules。
+
+夹具开发时修复了独立Vite缓存导致的重复Pinia实例、错误调用凭据设置签名，以及尚未收到后台命令确认就断开的问题；最终回归使用同一模块解析入口、实际API签名和真实远端输出确认，没有放宽产品断言。
+
+最终Shared check/build、Backend-next check/build、Frontend vue-tsc/build、根check均exit0；格式、diff及冻结/链接/资源检查见本批日志。Node22.23.1/pnpm11.26.0，分支refactor/backend-storage-v1，HEAD05e140d202e78b8c1248c3c3d0ccf44eb398a278，累计工作区保留，未提交推送。日志 `/tmp/nexus-c2-ack-{session,ssh,transport,workspace-resume,shared-check,shared-build,backend-check,backend-build,frontend-check,frontend-build,root-check,format-check,verification}.log`。冻结 `/tmp/nexus-f1-workspace-ack-source-manifest.json`：1554项，SHA256 `78e5d6e7e0dddebc2af73a3db8ba714bc1ff4042200810ae6ee4254129a163b2`；校验器 `/tmp/nexus-f1-workspace-ack-verify.mjs`。仅后端workspace-files的本批connect/bindTerminal修改重新审核并刷新索引摘要，其余720项核对匹配，不声称本批全量重审。未覆盖公网SSH、完整正式页面、App登出/关闭汇总、挂起ACK及D16外部能力。
+
+## F1-C2 终端输入、目录与有限失败契约
+
+本批收口C2-A源码及本机专项：普通Workspace的请求/响应/事件映射与共用envelope改消费Shared；终端输入/resize/flow使用Shared校验和容量，目录结果/事件严格解码。独立应用TerminalViewport归features/terminal/model/terminal-types，终端适配归runtimes/workspace/adapters/terminal-adapters，队列投影归workspace-terminal-mapper。旧Backend/Protocol保留参考及未迁移子协议，新终端没有运行时兼容分支。
+
+目录变更绑定原附件及requestId，核对queued路径，请求确认与实际完成事件均有效后才报告成功；合法规范路径可不同于请求路径。失败事件采用Shared有限取值，失败回执及protocol.error仅接受实际producer的安全码，准入满额改为limit_exceeded。断线/超时保留unknown，不自动重放；本地主动关闭也结清已ACK后的事件等待，重复关闭不重复通知。FileManager错误使用对应三语说明，不直接展示服务端正文。
+
+| 命令                                                                             | 当前结果                                   | 范围                                                                                                                                                                    |
+| -------------------------------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node tests/frontend/workspace-terminal.integration.mjs`                         | 17项codec、17项浏览器、4项producer，exit0  | 输入Unicode/字节预算、尺寸、目录响应/事件、有限失败、确认前事件、错误requestId/排队路径、丢回执、未连接禁止派发、本地关闭等待及畸形事件收尾；真实浏览器+受控WS producer |
+| `node tests/frontend/workspace-ssh.integration.mjs`                              | 10项，exit0                                | 正式Session/Terminal/DirectoryPort、真实Access/Backend-next/SQLite/环回OpenSSH；目录探测/切换/回读、实际PTY尺寸、原PID/变量/离线输出续接、关闭确认                      |
+| `node tests/frontend/workspace-transport.integration.mjs`                        | 18项codec、20项浏览器，exit0               | 原NXW1、等待/终帧/取消、消费与旧附件专项，在当前冻结版本重跑                                                                                                            |
+| `node tests/frontend/workspace-session.integration.mjs`                          | 10项codec、21项浏览器、10项producer，exit0 | 原普通连接/独立ACK/身份代次/unknown/晚创建/关闭专项，在当前冻结版本重跑                                                                                                 |
+| `node --test tests/backend/remote/backend-next-workspace-resume.integration.mjs` | 7/7、0失败/取消/跳过，exit0                | 原后端真实SSH续接/挂起/撤销专项，不代表挂起前端已迁移                                                                                                                   |
+
+两轮复核覆盖本批新增、修改、移动文件及真实消费者：第一轮核对Shared基础值/完整联合/codec→Backend Shell Service/WS→Socket→应用mapper/port→正式Session/FileManager；第二轮核对派发前拒绝、请求ACK与完成事件乱序、错误关联、未知效果、本地/远端断开、迟到回执、订阅/timer收尾与秘密。旧terminal.ts已移至terminal-types.ts，全部前端Viewport消费者经应用public入口迁移；未重复迁移其他Remote子协议。
+
+实机首轮尝试在用户输入后补探测，被已有安全政策拒绝；夹具改为首次输入前安装。随后真实Bash暴露Hook命令的`fi`缺少分隔符，导致setup超时；诊断日志`/tmp/nexus-c2-terminal-debug.log`保留失败因果。修复只在原Native Shell Adapter，不放宽迟到注入政策；最终实机验证正常目录效果与续接。另修复Socket本地关闭抑制native stale-close后遗留的事件等待，并增加ACK后主动关闭专项。E-10.1只补充生成脚本须由实际目标解释器验证这一共性经验，不将本次缺陷或阶段沟通写入rules。
+
+环境Node22.23.1/pnpm11.26.0；分支refactor/backend-storage-v1、HEAD05e140d202e78b8c1248c3c3d0ccf44eb398a278，累计工作区保留。Shared check/build、Backend-next check/build、Frontend vue-tsc/build、根check均exit0；日志`/tmp/nexus-c2-terminal-{shared-check,shared-build,backend-check,backend-build,frontend-check,frontend-build,root-check,browser,ssh,transport,session,workspace-resume}.log`。当前源码/配置冻结1560项，`/tmp/nexus-f1-workspace-terminal-source-manifest.json`，SHA256 `73292b7a35c372e44218d6916efbaa9eb82ebba75f6f9011a0412b8afc67c2e4`；核验入口`/tmp/nexus-f1-workspace-terminal-verify.mjs`。720项Backend索引只更新本批Workspace WS、Workspace类型、Shell Service和Native Shell Adapter四项摘要，其余只核对匹配，不宣称全量重审。
+
+最终全仓`pnpm run format:all:check`、`git diff --check`及冻结/720源码摘要/124个本地链接目标/资源核验均exit0，日志`/tmp/nexus-c2-terminal-{format-check,verification}.log`。本批临时目录、SSH/worker子进程及相关Docker资源均已清理；继承的历史目录保持原状。
+
+限制：没有挂载整个Workspace/FileManager/Terminal页面验证三语提示及交互；真实目录专项为Bash/Linux `/proc`，不冒充Zsh或所有登录脚本通过。Files/传输和其他Remote子协议仍C2-B/C；整体App资源撤销与页面交互归C2-D，F1-D、D16和P1继续保留。未提交推送、部署或切换生产。
+
+## F1-C2 Files 浏览、编辑、预览与变更
+
+C2-B1本批收口正式Files 11条用例，以及Document/Preview实际消费；Shared补齐完整成功结果、metadata、ready/error有限事件和结果项容量。应用对象归filesystem-types，wire→应用映射归workspace-files-mapper，协议/生命周期归filesystem-adapters。旧Frontend Files DTO引用已删除；旧Backend/Protocol保留参考及未迁移子协议，不增加运行时兼容。
+
+第一轮核对请求、Shared/后端生产者、成功/失败解码、白名单/嵌套投影及正式consumer；第二轮核对ACK准入、SFTP首次就绪、原附件/generation、预派发/unknown、read取消、关闭/dispose与晚结果。修复首次目录读取早于后台SFTP初始化、预览stat等待无法取消、断线隐式新开socket和成功对象未经验证的问题。已确认的本地发送拒绝保留确定未派发；写后丢回执/畸形成功保留unknown，不自动重放。metadata沿实际Model使用Unix毫秒，1MiB只限制发往后端的完整WS控制消息。
+
+| 命令                                                      | 结果                                   | 精确范围                                                                                                                                                                                                               |
+| --------------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node tests/frontend/workspace-files.integration.mjs`     | 18 codec、25浏览器、4派发断言，exit0   | 严格联合/metadata/Unicode/额外字段；路径/搜索关联、重复项、binary final、错误确认；Files就绪/ACK门、取消/本地关闭/dispose/64等待预算、有限失败与未知结果。真实Chromium，WS producer及本地发送拒绝受控。                |
+| `node tests/frontend/workspace-files-ssh.integration.mjs` | 20浏览器、4磁盘核对，exit0             | 正式Session/Files/Document/Preview，真实Access/Backend-next/SQLite/环回OpenSSH/SFTP；首次目录读取、search/stat/链接解析、建目录/文件、UTF-16LE/BOM读写、预览容量/取消、chmod/rename/remove、关闭后不派发及超限无文件。 |
+| `node tests/frontend/workspace-terminal.integration.mjs`  | 17 codec、17浏览器、4 producer，exit0  | 原终端/目录/unknown专项在本批源码重跑。                                                                                                                                                                                |
+| `node tests/frontend/workspace-session.integration.mjs`   | 10 codec、21浏览器、10 producer，exit0 | 原connect/ACK/代次/晚资源/关闭专项在本批源码重跑。                                                                                                                                                                     |
+| `node tests/frontend/workspace-transport.integration.mjs` | 18 codec、20浏览器，exit0              | 原NXW1/二进制等待、取消及旧附件专项。                                                                                                                                                                                  |
+| `node tests/frontend/workspace-ssh.integration.mjs`       | 10项，exit0                            | 原真实Shell/PID/变量/目录/resize/续接/关闭，确认Files改动未破坏终端链。                                                                                                                                                |
+
+过程中真实编码夹具首次把应用规范名误写为utf16le，核对codec后修正为utf-16le；就绪断言改为只统计Files命令，不能用其他通道的流控消息推导Files提前派发。一次具名选项重构漏改四处旧布尔实参，被类型检查与丢回执回归发现，全部修正后重新执行最终静态/受影响专项。没有放宽生产容量或unknown语义取绿。
+
+环境Node22.23.1/pnpm11.26.0；分支refactor/backend-storage-v1、HEAD05e140d202e78b8c1248c3c3d0ccf44eb398a278，累计工作区保留。Shared check/build、Backend-next check/build、Frontend vue-tsc/build、根check均exit0。日志`/tmp/nexus-c2-files-{shared-check,shared-build,backend-check,backend-build,frontend-check,frontend-build,root-check,browser,ssh,terminal,session,transport,original-ssh}.log`。冻结`/tmp/nexus-f1-workspace-files-source-manifest.json`：1565项，SHA256 `d9327d0fac2f9d9ad0afc1fbbfe6e3d556fddc52bbf91f120d7af6c3ddef04e5`，校验器`/tmp/nexus-f1-workspace-files-verify.mjs`；Backend索引只刷新共享容量引用的File Search/File Service两项摘要，其余仅核对匹配，不宣称720项本批全量重读。
+
+完整Workspace/FileManager/Editor/Preview页面挂载、三语交互及App跨业务撤销仍C2-D；本批真实资源是本机Linux/OpenSSH/SFTP，不冒充公网服务器、上传下载、归档或其他Remote子协议已通过。上传下载继续C2-B2，服务器传输/归档继续B3，C2-C、F1-D、D16及P1保留。未提交推送、部署或切换生产。
+
+最终`pnpm run format:all:check`、`git diff --check`、冻结1565项/720源码摘要/125本地链接目标与资源核验均exit0；日志`/tmp/nexus-c2-files-{format-check,verification}.log`。本批临时目录及SSH/worker资源已清理，继承目录原样保留。文档最后补录后另执行目标Prettier与冻结/diff核验，不复跑无变更的行为场景。
+
+## F1-C2-B2 下载契约与交付
+
+本批只收口C2-B2下载子项，上传仍未完成。真实入口为POST /api/v1/sftp/download-ticket、GET/HEAD /api/v1/sftp/download与GET /api/v1/sftp/download-directory；正式consumer为download-adapters、FilesystemDownloadPort与FileManager，不以DEV页面替代。Shared持有请求/201成功/有限失败codec、固定相对URL、32KiB完整JSON预算与300秒TTL；应用只投影{url}。文件交给浏览器后不宣称已保存，完整页面与三语交互仍C2-D。
+
+两轮复核覆盖Shared/HTTP/正式port/原附件/取消/失活/晚结果、范围与零字节/ZIP。真实Chromium→Vite proxy→Backend-next→OpenSSH/SFTP发现：Content-Length字节提前写完后，代理已完成响应并关闭上游，而Service还在最后授权复查；原请求被判中断，健康Files owner退役，下一次Range返回410。已在HTTP sink只保留最后1字节，源迭代和最后授权成功后随end交付；没有删除授权复查，也没有让本地finish冒充用户保存。HttpInputFailure交还Platform，非法JSON/超完整容量分别400/413；route安全错误改有限码，保留实际状态。
+
+| 命令                                                      | 本批结果                                 | 范围与限制                                                                                                                                                                                                                                                                |
+| --------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node tests/frontend/workspace-download.integration.mjs`  | 14 codec + 23浏览器检查，exit0           | 实际Chromium与正式adapter；HTTP producer/网络时序受控。固定相对URL/TTL/投影、ACK门、完整响应容量/媒体类型、两种真实失败envelope与status关联、预取消、网络/响应体断流、无自动重试、断开后晚回执与dispose。                                                                 |
+| `node tests/frontend/workspace-files-ssh.integration.mjs` | 38浏览器 + 5磁盘/ZIP检查，exit0          | 实际Access/SQLite/Session/正式Files与下载port、环回OpenSSH/SFTP；票据HEAD/完整字节/单段与suffix Range/416、显式与直接目录ZIP/HEAD、inline/20MiB拒绝、零字节、JSON/容量拒绝、原资源释放后410、关闭后不派发。ZIP另用unzip解码并核对原文件正文。保留B1的编辑/预览/变更回归。 |
+| `node tests/frontend/workspace-files.integration.mjs`     | 18 codec + 25浏览器 + 4派发断言，exit0   | 当前Files原就绪、取消、容量及unknown受控专项。                                                                                                                                                                                                                            |
+| `node tests/frontend/workspace-terminal.integration.mjs`  | 17 codec + 17浏览器 + 4 producer，exit0  | 当前正式终端/目录能力专项。                                                                                                                                                                                                                                               |
+| `node tests/frontend/workspace-session.integration.mjs`   | 10 codec + 21浏览器 + 10 producer，exit0 | 当前正式Session/ACK/关闭/原资源专项。                                                                                                                                                                                                                                     |
+
+环境Node22.23.1/pnpm11.26.0，分支refactor/backend-storage-v1、HEAD05e140d202e78b8c1248c3c3d0ccf44eb398a278；原583行累计工作区保留。日志均为`/tmp/nexus-c2-download-<项目>.log`；下载子项最终Shared/Backend-next check/build、Frontend vue-tsc/build、根check、全仓格式、冻结/资源核验与diff均exit0；最终全仓格式进程已收取exit0。后端OpenSSH专项和冻结见下方。未重跑整套B10；测试夹具的临时诊断只观察票据/owner，不改变产品结果，最终常规脚本独立重跑。
+
+尚未验收：上传prepare/start/独立WS/分块/冲突/unknown与自动恢复迁移；完整FileManager挂载/KeepAlive三语交互；全部大文件/慢读/取消清理故障和自然TTL；完整注销/权限竞争与C2-D跨业务资源撤销；外部环境。不能继承B10旧冻结PASS，也不能以下载通过判B2整体完成。未提交、推送、部署或切换生产。
+
+后端实际专项`node tests/backend/remote/backend-next-openssh.integration.mjs`退出0：8个业务子场景、Node统计9/9，0失败/跳过，约51秒；复用真实SFTP/HTTP/PTY/原生归档及票据/Range链，不代表重跑整套B10。日志`/tmp/nexus-c2-download-backend-ssh.log`。
+
+当前源码冻结`/tmp/nexus-f1-workspace-download-source-manifest.json`：1567项，SHA256 `3069a88f07810cce0cf84bcfacdcea0a12423099635285c239d4e204e705c4e2`，核验器`/tmp/nexus-f1-workspace-download-verify.mjs`。相对B1冻结只有10项既有源码/测试变化与2个新增文件；其余原工作区源码摘要不变。Backend索引只更新HTTP下载、DownloadTickets及FileService三项；其余717项仅比摘要，不宣称全量重读。
+
+## F1-C2-B2 上传契约与任务生命周期
+
+本批完成正式TransferChannel/Controller的上传迁移；独立`/ws/uploads`及Workspace四个upload请求沿实际producer核对，没有虚构HTTP上传入口。Shared补完整prepare/start/stop回执、七分支事件与严格codec、精确map和有限失败；Backend只收窄FileUploadEvent失败类型，应用/WS逐字段边界及SQL/资源语义保持。原capabilityAdapters上传大实现移至upload-adapters，旧自动prepare/start恢复、上传Protocol query和错误文本判断删除。应用类型及Controller/冲突契约唯一归transfers/model/transfer-types，全部实际类型消费者同步，无旧路径转导出。
+
+两轮复核：第一轮沿Shared→WS producer→原FileService任务→正式适配→Controller/Progress UI及全部修改消费者核对职责/类型/依赖；第二轮覆盖prepare完整计划/容量、原附件绑定、start回执前事件、close-before-open、分块/进度/终态关联、取消受理/本地取消/unknown、准备时取消/旧代次和资源收尾。修复旧进度事件复活终态、取消布尔值冒充完成，以及准备期间已取消文件仍被后续循环上传。未知结果为独立unknown终态，保留安全三语提示；已发送字节、socket关闭和取消受理均不能宣称远端发布或清理完成。使用既有E-05/E-07/E-11/E-13约束，不把本次任务再写成rules条目。
+
+| 命令                                                                          | 当前结果                        | 实际范围与限制                                                                                                                                                                                                                           |
+| ----------------------------------------------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node tests/frontend/workspace-upload.integration.mjs`                        | 13 codec + 29浏览器检查，exit0  | 真Chromium/正式adapter及Controller，控制producer/WS时序受控；目录整计划/完整路径预算、ACK/原scope、早ready、零字节、close-before-open、丢回执/断线不重发、队列取消、取消受理/unknown、畸形/错路径/乱序事件、晚prepare/进度、准备中取消。 |
+| `node tests/frontend/workspace-files-ssh.integration.mjs`                     | 46浏览器 + 8磁盘/ZIP检查，exit0 | 真实Access/Backend-next/OpenSSH/SFTP与正式Session/TransferController；多块UTF-8正文、空文件、目录prepare、真实冲突skip/overwrite，独立SFTP和磁盘核对文件；保留下载38项及ZIP/Files/编辑/预览回归。                                        |
+| `node tests/backend/remote/backend-next-openssh.integration.mjs`              | Node统计9/9、0失败/跳过，exit0  | 原后端真实SFTP/HTTP/PTY/归档及上传中断专项；8个业务子场景，约51秒，不是整套B10重跑。                                                                                                                                                     |
+| 下载 / Files / Terminal / Session既有专项                                     | 全部exit0                       | 下载14 codec+23浏览器；Files18+25+4派发；Terminal17+17+4producer；Session10+21+10producer。共用Socket/装配变更后重跑，旧下载最后字节交付保持。                                                                                           |
+| Shared check/build、Backend-next check/build、Frontend vue-tsc/build、根check | 全部exit0                       | 当前最终源码；格式/diff/冻结/资源核验另记录下方。                                                                                                                                                                                        |
+
+环境Node22.23.1/pnpm11.26.0，分支refactor/backend-storage-v1，HEAD05e140d202e78b8c1248c3c3d0ccf44eb398a278。下载交接587行累计工作区保留，本批尚未提交/推送。日志`/tmp/nexus-c2-upload-<项目>.log`。过程中修复类型文件改名漏引入和TS联合收窄；受控完整路径夹具先前恰好4096bytes是合法边界，改用4097验证拒绝；异步Blob读取按实际send观察，不凭单次tick推断已发送。一次浏览器回归受源码修改触发Vite热更新而中止，最终源码冻结后独立重跑通过，不把中止结果当产品PASS。
+
+当前冻结`/tmp/nexus-f1-workspace-upload-source-manifest.json`共1569项，SHA256 `12f6fda9d582826cb04bcfb127f368832b23c15d8482de1f3fd17de1ee13941c`。相对下载冻结：17个既有文件变化、3个新增文件、移除旧transfer.ts；其余原累计源码摘要不变。Backend仅更新file-upload-types一项，完整读审该类型与upload-stream，并接缝复核workspace-files/FileService上传及关闭链；其余719项只比摘要，不宣称本批全量重读。
+
+完整Workspace/上传冲突弹窗/Progress页面与KeepAlive三语实际挂载、App跨业务撤销、全部大文件/慢网/自然超时和清理故障组合仍C2-D。当前已验是正式能力/Controller与真实SFTP有限链路，不是完整页面验收；服务器传输/归档迁移仍C2-B3。盘点下一批时确认旧五个transfers HTTP在backend-next源码中未检出，Shared对应HTTP也尚缺，已纳入B3先设计/补后端再接前端，不能把Workspace copy/move当作同能力已还原。C2-C、F1-D、D16/P1保持；未部署或切换生产。
+
+最终收口：`pnpm run format:all:check`退出0（ESLint与全仓Prettier）；`git diff --check`退出0。`node /tmp/nexus-f1-workspace-upload-verify.mjs`退出0：1569项冻结一致、720个Backend摘要一致、126个本地链接目标存在，本批临时目录/相关sshd与worker无残留；继承的9个B10目录保留且无打开描述符。日志为`/tmp/nexus-c2-upload-{format-check,verification}.log`。源码冻结后未再修改产品/测试；最后文档补录单独格式化、检查并再次核验。C2-B2源码及本批专项已收口，完整页面/扩大故障范围按上文保留，下一批C2-B3。
+
+## F1-C2-B3 Workspace复制移动与归档
+
+2026-10-18，分支refactor/backend-storage-v1，HEAD 05e140d202e78b8c1248c3c3d0ccf44eb398a278加累计工作区。Node /usr/local/bin/node v22.23.1、pnpm /usr/local/bin/pnpm 11.26.0；本批工作区由604增至607项，原有修改保留，未提交推送或切换生产。
+
+范围：Shared transfers/{values,workspace,workspace-codec,task-codec}和精确包出口；Backend file-task-types及workspace-files的有限安全投影；Frontend transfer-adapters、capabilityAdapters/WorkspaceSocket装配、transfer-types/Controller/public/presentation、上传共用失败/回执命名、WorkspaceSessionSurface/WorkspacePage剪贴板及三语消费者。新增受控专项、扩展原真实SSH专项，上传专项同步共用回执命名。其余后台serverTransfersApi/store/UI仍未迁移。
+
+两轮复核：第一轮沿原Files Service/Model/Adapter→WS→Shared→正式adapter/controller/view，移除旧Protocol任务类型、原始错误正文与单文件大适配实现，明确任务所有权和无消费者markPartial删除。第二轮核对原附件、受理/早终态、完整路径/源集合/双端Workspace、密码/有限工具名、进度倒退、取消受理/终态、断线/销毁unknown及旧结果；剪切直接调用后端move，删除前端copy成功后的第二次remove，已确认变更与刷新失败分开。未改变Files真实执行/准入、SQL或D12/D13。
+
+| 当前命令                                                | 结果与实际范围                                                                                                                                                                                                                       |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| node tests/frontend/workspace-transfer.integration.mjs  | exit0：11 codec +28受控Chromium断言。正式Channel/adapter/Controller，正常受理、取消真假回执、早终态、错目标/源owner/operation、递归未知总量、进度倒退、有限密码错误/警告、畸形受理/事件、取消响应丢失、断线不重放、dispose拒绝新任务 |
+| node tests/frontend/workspace-files-ssh.integration.mjs | exit0：66浏览器+14磁盘/ZIP核对。真实Access/Backend-next/OpenSSH/SFTP，原Files/上传下载回归、递归复制、同Workspace移动、zip/tar.gz/tar.bz2压缩/解压、密码ZIP缺密码/错密码/正确密码、双Workspace后端move及独立读取/磁盘确认            |
+| node tests/frontend/workspace-upload.integration.mjs    | exit0：13 codec +29浏览器；共用TransferFailure和Task回执重命名后重跑                                                                                                                                                                 |
+| node tests/frontend/workspace-download.integration.mjs  | exit0：14 codec +23浏览器                                                                                                                                                                                                            |
+| node tests/frontend/workspace-files.integration.mjs     | exit0：18 codec +25浏览器+4派发断言                                                                                                                                                                                                  |
+| node tests/frontend/workspace-terminal.integration.mjs  | exit0：17 codec +17浏览器+4producer                                                                                                                                                                                                  |
+| node tests/frontend/workspace-session.integration.mjs   | exit0：10 codec +21浏览器+10producer                                                                                                                                                                                                 |
+
+真实专项首轮失败于原搜索断言：新增复制产生第二个needle.txt，原夹具仍断言仅一项；修正为核对原/复制后的两个真实路径，完整重跑通过，未放宽产品行为。类型检查首稿曾暴露record类型守卫和请求联合收窄，修正后重跑通过。最终日志只对应修正后执行，不能当首轮通过。受控警告/取消/协议失败不当作真实工具故障；真实双Workspace使用同一环回SSH服务器，不冒充不同服务器的rsync/scp后台直传。
+
+源码冻结：/tmp/nexus-f1-workspace-transfer-source-manifest.json，1572项，SHA-256 87e256ac493017d7d717db283b1a5ca2c10c270029fa9c414a53c442591b89b5。与B2基线相比23个既有源码/配置/测试变化、3新增；Backend只改2文件并同步源码索引，其余718仅比对摘要，不宣称本批720全量重读。日志/tmp/nexus-c2-b3-{shared-check,shared-build,backend-check,backend-build,frontend-check,frontend-build,root-check,transfer,ssh,upload,download,files,terminal,session}.log；最终格式、后端OpenSSH及资源核验另在收口补录。
+
+本批Workspace子链通过不等于C2-B3整体完成：旧/api/v1/transfers五HTTP、后台任务/原生直传及正式SendFiles/Progress消费者仍缺新实现，已在同一实施方案保留逐入口盘点及下一轮提示词。C2-C/D、完整Workspace页面/三语实际挂载与跨业务撤销、F1-D、D16外部及P1保持未完成。本批发现沿用E-03/E-05/E-07/E-09/E-11/E-13，不把临时缺陷写进rules，不改HUMAN或重复AGENTS正文。
+
+最终收口：Shared check/build、Backend-next check/build、Frontend vue-tsc/build、根check、全仓格式检查均exit0；node tests/backend/remote/backend-next-openssh.integration.mjs为9/9（8业务子场景），50918ms、0失败/取消/跳过。日志/tmp/nexus-c2-b3-{backend-ssh,format-check}.log。源码冻结后保持不变；node /tmp/nexus-f1-workspace-transfer-verify.mjs退出0，1572项冻结/720项Backend摘要一致、129个本地链接目标存在，本批临时目录/相关sshd与worker无残留，继承9个B10目录保留且无打开描述符。验证日志/tmp/nexus-c2-b3-verification.log；最后USAGE导航及证据补录仅改文档，单独格式化并再次核验。
+
+## F1-C2-B3 后台发送到服务器
+
+当前版本：refactor/backend-storage-v1，HEAD 05e140d202e78b8c1248c3c3d0ccf44eb398a278 加累计工作区；Node22.23.1/pnpm11.26.0。未提交推送、部署或切换生产。本批独立承接五个/api/v1/transfers管理HTTP，Shared server-*及正式API/store/SendFiles/Progress已接线，不借用Workspace复制专项作为后台任务证据。
+
+两轮审核：完整覆盖6新增/8修改Backend、Shared四文件与精确exports、Frontend新增/删除及正式消费者、两专项测试。第一轮核对真实旧五入口、Service/Model/Platform职责与独立应用对象；第二轮核对独立后台事务准入、实际已验证握手key、双端shell/rsync解释、取消/晚结果/清理unknown、会话epoch和意图关联。修复另一并发意图的确定拒绝清除既有unknown保护；未新增兼容fallback或空持久层。探测与执行的真实发起端/路线/身份/信任核对已提炼到E-03.3，不把任务流水写入rules。
+
+| 当前命令                                                                                                                                                                                                                                        | 实际结果与覆盖                                                                                                                                                                                                                                                                                                                        | 日志                                               |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| node --test tests/backend/remote/backend-next-server-transfers.integration.mjs                                                                                                                                                                  | 8/8、0失败/取消/跳过，14810.556ms；两套独立环回OpenSSH端点，真实源端scp/rsync/auto、加密私钥/sshpass口令、特殊中文/空格/引号/元字符及递归目录实际字节/目录形状、临时秘密清理、五HTTP/认证/缺pin；受控Service排队/执行取消/unknown/关闭、真实SQLite准入身份失效及脱离请求scope、关库重开blocked围栏、Native清理失败/错key/派发后取消。 | /tmp/nexus-server-transfers-backend-final.log      |
+| node tests/frontend/server-transfers.integration.mjs                                                                                                                                                                                            | 24项受控Chromium断言；真实Vite/正式Shared/API/Pinia store，受控fetch：严格关联/容量/有限失败/204、分页、旧poll/send/session reset、unknown不重发/不被另一意图拒绝清除、取消单请求/受理非终态。                                                                                                                                        | /tmp/nexus-server-transfers-frontend-final.log     |
+| node --test --test-concurrency=1 --test-timeout=60000 tests/backend/remote/backend-next-ssh.integration.mjs tests/backend/remote/backend-next-openssh.integration.mjs tests/backend/remote/backend-next-file-transfer-ownership.integration.mjs | 三文件20/20、0失败/取消/跳过，56403.824ms；受影响机器建连、实际OpenSSH/SFTP及文件任务所有权回归。                                                                                                                                                                                                                                     | /tmp/nexus-server-transfers-ssh-regression.log     |
+| node tests/frontend/auth.integration.mjs                                                                                                                                                                                                        | exit0；原正式Auth/Security/Passkey/配置及生命周期专项，核对通用JSON client变更。                                                                                                                                                                                                                                                      | /tmp/nexus-server-transfers-auth-regression.log    |
+| node tests/frontend/targets.integration.mjs                                                                                                                                                                                                     | exit0，142项（67真实/64浏览器受控/10生产者受控/1下载）；含保存/未保存实际SSH及严格新契约。                                                                                                                                                                                                                                            | /tmp/nexus-server-transfers-targets-regression.log |
+
+Shared check/build、Backend-next check/build、Frontend vue-tsc/build、根check均exit0，日志/tmp/nexus-server-transfers-{shared-check,shared-build,backend-check,backend-build,frontend-check,frontend-build,root-check}.log。专项在源码不变的冻结范围内执行；后端8项执行后未再改后端源码，前端最终24项在修补并发保护后执行。
+
+冻结清单/tmp/nexus-f1-server-transfers-source-manifest.json，1871项，SHA256 379bbe470f04057e21b8acbb2d8e5b35a971350304609e7b534a2aaf20a3dd29。相对上一冻结扩大到相关packages/scripts/tests全部现存文件，数量差不等于新增文件数。源码索引新增6/刷新8，其余712仅摘要核对；不冒称726文件本轮全部重读。最终格式/冻结/链接/资源结果在本节末补录。
+
+边界：真实两端点为同一Linux主机上不同port/hostkey的OpenSSH daemon，不冒称两台物理服务器、公网或目标非直连。任务列表内存保存，执行unknown围栏持久；不承诺自动续传或跨重启完整列表。仅验证受控取消/身份/秘密清理时序，不扩为全部自然期限/容量/混合故障。完整SendFiles/Progress/Workspace页面及三语挂载、App撤销/KeepAlive仍C2-D；C2-C挂起/监控/Docker/桌面、F1-D、D16和P1继续保留。
+
+最终收口：pnpm run format:all:check与git diff --check均exit0；node /tmp/nexus-f1-server-transfers-verify.mjs退出0，1871项源码/配置冻结一致、726项Backend摘要匹配、131个本地链接目标存在；本批临时目录/相关SSH与worker无残留，继承9个B10目录保留且无打开描述符。日志/tmp/nexus-server-transfers-{format-check,verification}.log。最后补录仅改文档，定向格式并再次核验，不复跑未变源码的行为测试。C2-B3源码/本机专项收口，下一批C2-C；完整页面及扩大故障组合仍C2-D。
+
+## F1-C2-C1 挂起管理 HTTP
+
+分支refactor/backend-storage-v1，HEAD 05e140d202e78b8c1248c3c3d0ccf44eb398a278加累计工作区；Node22.23.1/pnpm11.26.0。未提交推送、部署或切生产。本批只收口五管理HTTP，WS mark/prepare/commit/恢复ACK/续租/历史与事件仍是未完成源码，不转为单纯待验。
+
+两轮审核：第一轮覆盖Shared values/http/codec与精确出口→Backend HTTP安全投影/WorkspaceService管理接缝→Frontend API/本地types/mapper/store/public→正式Panel/Modal和所有目录类型消费者，删除旧API及DTO转导出。第二轮覆盖预算/媒体类型/固定filename/错误状态关联、输入/输出规范名、旧读取/写入/会话代次、未知结果保护、显式恢复不能清除后来未知、取消/KeepAlive/卸载/注销、stream取消与释放。修补读前headers校验、注销后的下载交付、晚rename成功通知及复杂轮询条件，删除无消费者的旧Workspace HTTP命名codec；适用E-03/E-06/E-07/E-08/E-11/E-13，未将临时任务写成rules。
+
+| 命令                                                                                                                                                                                          | 最终结果与实际覆盖                                                                                                                                                                                                                                                                                                                                                                                  | 日志                                 |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `node tests/frontend/suspended-sessions.integration.mjs`                                                                                                                                      | exit0，38项受控Chromium断言。真实Vite/Shared/API/Pinia与正式Panel有限挂载：畸形/额外字段/状态关联/规范日期和name/重复ID/条目上限、无效输入不派发、错误code/status、rename关联、旧GET与新会话、unknown不重放/不由poll解除/新unknown不被旧recover清除、log headers与body取消/晚下载、KeepAlive确认取消/恢复、读取失败保留记录、注销确认不派发。fetch及时序受控，不冒充真实SSH页面整链或三语实际挂载。 | /tmp/nexus-suspend-browser-final.log |
+| `node --test --test-concurrency=1 --test-timeout=60000 tests/backend/remote/backend-next-suspend-management.integration.mjs tests/backend/remote/backend-next-suspend-export.integration.mjs` | exit0，4/4、0失败/取消/跳过，约7秒。真实环回OpenSSH/PTY、管理HTTP/Shared完整解码、name规范化/额外字段拒绝/4KiB请求超限/无登录/active记录不可走断开移除/明确终止；原日志渲染后重新认证、两名额准入、断开取消及文件句柄释放。                                                                                                                                                                         | /tmp/nexus-suspend-backend-final.log |
+
+浏览器首轮因并行构建触发Vite重载中断；构建结束后独立执行最终专项通过，不将中断作为PASS。后端新夹具首稿误把DELETE entry对活动记录预期为409；实际方法只读断开tombstone并返回404，核对Service后修正为not_found、重跑4项通过，未修改业务或放宽权限断言。冻结脚本首稿遍历到既有失效测试symlink而失败，改为git可追踪/未忽略文件清单；保留原资源，没有删除该链接。
+
+最终冻结/tmp/nexus-f1-suspend-management-source-manifest.json，1875项，SHA256 2744489d0a475dccb9ceb5f3e3bce8878a5f98b3c31956a52ebcc37cfe3e05c0。相对上一1871项为18个既有文件修改、6新增、2删除；Backend仅2个修改，源码索引同步，其余724项只比摘要。旧冻结文件保留。静态/格式/资源最终结果在下段补录；源码冻结后未再改产品或测试。
+
+边界：128MiB渲染后日志保护已有双端实现，但本批未制造128MiB边界/全部自然60秒超时或多清理故障组合；不把4KiB请求超限当作日志容量实机证据。只验证英文Panel有限挂载；三语文案已同步，完整三语/整体Workspace/App撤销留C2-D。前端WS恢复缺独立ACK、prepare失败补偿、lease/history和旧事件尚未迁移，继续C2-C1；监控/Docker/桌面、F1-D、外部D16和P1保留。
+
+最终收口：Shared check/build、Backend-next check/build、Frontend vue-tsc/build、根check、全仓ESLint/Prettier及git diff --check均exit0。最终浏览器38项、后端4/4在上述最终冻结下独立执行；日志/tmp/nexus-suspend-{shared-check-final,backend-check-final,backend-build-final,frontend-check-final,frontend-build-final,root-check-final,format-check-final}.log，其中Shared build由Backend-next check/build执行并记录。node /tmp/nexus-f1-suspend-management-verify.mjs退出0：1875项冻结一致、726项Backend摘要匹配、134个本地链接目标存在，本批临时目录/相关SSH及worker无残留，继承9个B10目录保留且无打开描述符；日志/tmp/nexus-suspend-verification.log。最后证据补录只改文档，定向格式并再次核验。C2-C1仅管理HTTP子链收口，继续WS恢复子链。
+
+## F1-C2-C1 挂起恢复 WS
+
+分支refactor/backend-storage-v1，HEAD 05e140d202e78b8c1248c3c3d0ccf44eb398a278加累计工作区；Node22.23.1/pnpm11.26.0。未提交推送、部署或切生产。本批在管理HTTP的独立历史证据之上完成挂起WS子链，不沿用其冻结作为本批PASS。
+
+两轮审核覆盖相对管理HTTP冻结的23个修改/6个新增源码与测试、精确包出口及实际消费者。第一轮核对Shared完整请求/结果/事件/容量→Backend真实生产者→Frontend独立应用类型/mapper→正式Socket/Session/terminal与安全三语接缝；第二轮核对prepare/commit未知、baseline实际字节、原附件与独立ACK、ACK期间live offset、串行续租/代次/期限、撤销、历史页/reset、关闭与晚快照。修补ACK未派发不能抹掉已准备的恢复副作用、标记标签关闭不能误发终止Workspace、关闭追踪在途标记任务及普通断线不能丢弃未挂载终端字节。恢复/标记unknown不自动unmark或重放。沿用H-04–H-07/H-09与E-05/E-06/E-07/E-08/E-09/E-11/E-13，不将临时缺陷写入rules，不修改HUMAN。
+
+| 最终命令                                                                                                                                                                                                                                                     | 结果与覆盖                                                                                                                                                                                                                                                                                                          | 日志                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `node tests/frontend/workspace-suspend.integration.mjs`                                                                                                                                                                                                      | exit0；6项Shared codec、32项受控Chromium与6项生产者核对。正式Session/Socket/适配器：恢复单飞及不同意图拒绝、普通connect互斥、ACK前输入禁用、ACK期间live offset、错会话/基线、丢ACK与unknown不重放、原附件历史页/畸形metadata/reset、撤销代次、续租generation失配、mark容量/丢commit无补偿、unmark、关闭等待晚快照。 | /tmp/nexus-suspend-ws-browser.log               |
+| `node tests/frontend/workspace-suspend-ssh.integration.mjs`                                                                                                                                                                                                  | exit0；9项浏览器断言及独立磁盘PID核对。真实Access/新Backend/环回OpenSSH，正式Session执行prepare/commit、标记关闭仅detach、恢复独立ACK、原shell PID一致、history reset及有界NXW1页、主动接管撤销旧附件、unmark后明确关闭。                                                                                           | /tmp/nexus-suspend-ws-ssh.log                   |
+| `node tests/frontend/workspace-session.integration.mjs`                                                                                                                                                                                                      | exit0；21项浏览器、10项codec与10项生产者核对，普通连接/恢复ACK/关闭的受影响回归。                                                                                                                                                                                                                                   | /tmp/nexus-suspend-ws-session-regression.log    |
+| `node tests/frontend/suspended-sessions.integration.mjs`                                                                                                                                                                                                     | exit0；38项管理API/store/正式Panel有限受控回归，含KeepAlive/注销/unknown及下载取消。                                                                                                                                                                                                                                | /tmp/nexus-suspend-ws-management-regression.log |
+| `node --test --test-concurrency=1 --test-timeout=90000 tests/backend/remote/backend-next-suspend-history.integration.mjs tests/backend/remote/backend-next-suspend-lease.integration.mjs tests/backend/remote/backend-next-workspace-resume.integration.mjs` | exit0；11/11，0失败/取消/跳过，79005.176478ms。真实OpenSSH，历史页失败/游标/reset及并发顺序、自然租约截止/原PTY续接、普通及挂起ACK/接管/Access撤销。                                                                                                                                                                | /tmp/nexus-suspend-ws-backend-final.log         |
+
+Shared check/build、Backend-next check/build和Frontend vue-tsc均exit0；最终Frontend build及根check也exit0，日志/tmp/nexus-suspend-ws-{frontend-build,root-check}.log。首轮受控与真实专项已通过后，复核又修补恢复提示状态及普通断线缓冲边界，并增加晚快照关闭断言；重新冻结后独立运行表中最终专项。最终冻结/tmp/nexus-f1-suspend-ws-source-manifest.json，1881项，SHA256 ad326624a7e99cb52e4d43e06ff46c8cfbc159786429db36744bb2bff80bc828；源码冻结后未再修改。原管理HTTP冻结及证据保留，Backend本轮两文件摘要更新，其余724项仅比对。
+
+边界：真实端点为同一Linux主机上的独立OpenSSH daemon，不冒充公网、跨物理设备或跨重启PTY恢复。浏览器专项运行正式Session/Socket/适配器与原管理Panel有限挂载，未挂载整个Workspace/xterm页面；完整页面、实际xterm历史重建/取消、三语实际显示及App跨业务撤销仍C2-D。续租异常有受控generation专项，自然期限由Backend真实专项覆盖，不冒称浏览器已验证全部时钟偏差/限流/背压/清理组合。C2-C1源码与上述本机有限专项收口；监控/Docker、桌面、F1-D、D16外部及P1保留。格式/链接/冻结/资源最终核验在下段补录。
+
+最终收口：全仓ESLint/Prettier（pnpm run format:all:check）与git diff --check均exit0，日志/tmp/nexus-suspend-ws-format-check.log。node /tmp/nexus-f1-suspend-ws-verify.mjs退出0：1881项源码/配置冻结一致、726项Backend摘要匹配、135个本地链接目标存在，本批临时目录及相关SSH/worker无残留；继承9个B10目录保留且无打开描述符，日志/tmp/nexus-suspend-ws-verification.log。最终证据补录仅改文档，定向格式并再次核验；不复跑未变源码的行为测试。下一批C2-C2监控/Docker尚未开始。
+
+## F1-C2-C2 监控与 Docker WS
+
+分支refactor/backend-storage-v1，HEAD 05e140d202e78b8c1248c3c3d0ccf44eb398a278加累计工作区。Node22.23.1（/usr/local/bin/node）、pnpm11.26.0（/usr/local/bin/pnpm）；Docker daemon29.8.2。本批不提交推送、部署或切换生产。只收口Workspace观测WS子链；独立HTTP及采样配置消费者仍在本阶段待办。
+
+两轮审核覆盖相对上一挂起WS冻结的全部新增/修改/删除文件与真实消费者：Shared maps/codec/精确exports→Backend观测入口→Frontend原附件adapter→独立应用mapper/types→controller→正式视图。先核对职责、依赖、嵌套白名单、有限安全码与单位，再核对ACK前准入、start/stop串行与原socket、缺测、命令前旧读取、pending/unknown、停用/断线/晚finally、删除确认及安全三语。移除旧DTO转导出和WorkspaceSocket的Protocol混合maps。Backend仅同步观测空请求codec的真实owner与输入失败映射，不改变普通/Agent授权政策；源码索引仅刷新workspace-files一项，其余725项保留原审核。
+
+| 最终命令                                                                                                        | 结果与范围                                                                                                                                                                                                                                     | 日志                                             |
+| --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `node tests/frontend/workspace-observation.integration.mjs`                                                     | exit0；13项Shared codec、27项受控Chromium、2项生产者核对。涵盖ACK前拒绝、嵌套stats/安全ID/请求关联、畸形及丢命令回执、缺测与真实零、原附件退订、晚start、代次、pending、unknown不被轮询/无关拒绝/KeepAlive清除、显式只读恢复及确认后刷新失败。 | /tmp/nexus-f1-observation-controlled-final.log   |
+| `node tests/frontend/workspace-observation-ssh.integration.mjs`                                                 | exit0；12项真实浏览器断言及daemon独立删除核对。真实Access→Backend-next→环回OpenSSH→Linux/Docker，正式Session/controller消费真实样本、原生labels、stats、start/restart/stop/remove、退订和Workspace关闭。                                       | /tmp/nexus-f1-observation-ssh-final.log          |
+| `node tests/frontend/workspace-session.integration.mjs`                                                         | exit0；10项codec、21项浏览器与10项生产者核对。普通连接/续接/ACK/关闭的受影响回归。                                                                                                                                                             | /tmp/nexus-f1-observation-session-regression.log |
+| `node --test --test-concurrency=1 --test-timeout=180000 tests/backend/http/backend-next-docker.integration.mjs` | exit0；10/10，失败/取消/跳过均0，31645.415652ms。普通Workspace及治理Agent真实SSH/Docker，四动作、严格拒绝与权限/批准/目标限制。                                                                                                                | /tmp/nexus-f1-observation-backend-docker.log     |
+
+首轮受控夹具误给无需回执的terminal.flow发送无requestId响应，严格解码按设计断开；修正夹具，不放宽协议。源码/夹具冻结后再执行上表最终检查，期间不改源码。最终冻结/tmp/nexus-f1-observation-ws-source-manifest.json，1888项，SHA256 2202aab2017deb6d94739455dfc650feec1cff255cc80e865825d09a6fb2cb73；旧挂起WS证据独立保留。规则沿用H-04–H-07/H-09及E-02.5/E-05/E-06/E-07/E-08/E-09/E-10/E-11/E-13，不把本批临时问题写入rules或HUMAN。
+
+边界：浏览器运行正式Session/Socket/适配器/controller，不是整个Workspace/DockerManager/StatusMonitor页面的实际挂载验收。删除确认/三语/响应布局已按源码审核，实际界面、App撤销和扩大故障组合仍C2-D。真实SSH与Docker在同一Linux宿主，不代替公网或跨物理设备。浏览器只读核对只解除本地保护，不解除Backend持久围栏，也不证明未知命令已停止。systemOverview的HTTP、资源列表/单项及实际采样配置消费仍待C2-C2，RDP/VNC为C2-C3；Agent/Preferences/Operations/System为F1-D，D16外部和P1继续保留。
+
+本批最终静态：Shared check/build、Backend-next check/build、Frontend vue-tsc/build及根check均exit0，日志/tmp/nexus-f1-observation-static.log。全仓ESLint/Prettier检查exit0，日志/tmp/nexus-f1-observation-format.log；后续仅修改文档，定向格式并复查。node /tmp/nexus-f1-observation-ws-verify.mjs核对1888项冻结、726项Backend摘要、136个本地链接及资源均通过；当前专项临时目录/SSH/worker无残留，继承9个目录保留且无打开描述符。Docker新建容器已由daemon确认删除；git diff --check通过。
+
+## F1-C2-C2 资源概览 HTTP
+
+基线：`refactor/backend-storage-v1`、HEAD `05e140d202e78b8c1248c3c3d0ccf44eb398a278` 加累计工作区；未提交推送、未部署、未切生产。工具为Node22.23.1/pnpm11.26.0，真实Chromium、Access和临时SQLite；不使用外部凭据。
+
+本批改动为Shared本机/观测安全失败codec、system-overview完整应用边界、Dashboard资源生命周期与有限三语。删除旧API路径/DTO转导出。两轮源码审核覆盖本批14项新增/修改/删除源码及测试；其余累计变更不冒充本轮重审。Backend源码未改，726项源码摘要只核对匹配，不重写历史审核。
+
+| 命令/场景                                                   | 结果与实际覆盖                                                                                                                                                                                                                                                  |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node tests/frontend/system-overview.integration.mjs`       | exit0：18项codec、6项真实HTTP浏览器、59项受控时序/三语。严格错误/额外字段/预算/失败联合、真实本机与匿名/撤销、空SSH列表和单项404；受控同主机回退/错主机关联、四路去重/逐主机发布、缺测/零值、原请求取消/晚结果/旧finally、首次登录与注销重置、dispose及三语键。 |
+| `node tests/frontend/workspace-observation.integration.mjs` | exit0：13项codec、27项浏览器、2项producer；本轮独立复跑，Shared新增HTTP错误codec不破坏既有Workspace监控/Docker。                                                                                                                                                |
+| 静态与构建                                                  | Shared check/build、Backend-next check/build、Frontend vue-tsc/build、根check均exit0。                                                                                                                                                                          |
+| 格式、冻结与资源                                            | 全仓format:all:check与diff exit0；1893项冻结/726项Backend摘要/137个本地链接匹配。本批临时目录及相关worker无残留，既有9个B10目录保留且无打开句柄。                                                                                                               |
+
+最终源码冻结：`/tmp/nexus-f1-overview-http-source-manifest.json`，1893项，SHA256 `a6e948283b329f58ed2a72674679e3c264fceb4413f9c132244d7fa225510746`。早期静态后补了首次登录的请求隔离及相应回归，再重新冻结；行为与最终静态均基于此摘要，测试运行中未修改源码。日志：`/tmp/nexus-f1-overview-http-browser.log`、`/tmp/nexus-f1-overview-http-ws-regression.log`、`/tmp/nexus-f1-overview-http-static.log`；格式与核验日志：`/tmp/nexus-f1-overview-http-format.log`、`/tmp/nexus-f1-overview-http-verification.log`。
+
+保证限制：SSH资源成功/同主机回退由受控HTTP验证，本批未新增真实SSH HTTP成功链；不将其写成真实远端验收。未挂载完整Dashboard，页面/隐藏/KeepAlive整体集成交错、Connections与旧Audit时间单位、真实SSH资源HTTP及扩大故障仍C2-D；采样配置仍C2-C2后续，C2-C3/F1-D/D16/P1继续待办。现有规则H-04–H-07、E-02.5/E-05/E-07.8/E-10/E-13.1已覆盖，本次无新增rules或人工规则。
+
+## F1-C2-C2 监控核心配置
+
+基线：`refactor/backend-storage-v1`、HEAD `05e140d202e78b8c1248c3c3d0ccf44eb398a278` 加累计工作区，未提交推送、部署或切生产。实际工具为 `/usr/local/bin/node` 22.23.1、`/usr/local/bin/pnpm` 11.26.0，真实 Chromium/Access/HTTP/临时 SQLite；不使用历史凭据。
+
+本批相对上一HTTP冻结修改26项既有源码/测试，新增配置controller、共用面板和专项3项。第一轮核对Shared→配置HTTP/Service启动快照→前端API/独立mapper/types→两个正式面板与Dashboard全部消费者，以及删除Workspace图表周期props；第二轮核对CAS保留其它配置、saved/effective、冲突/unknown只读恢复、停用/会话更换/旧finally与图表实际时间。Backend仅完整重审五项配置row/rules/types/service/HTTP，更新五项摘要，其余721项只比对，不宣称全量重审。
+
+| 命令/场景                                                      | 当前执行结果及范围                                                                                                                                                                                                                                                                     |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node tests/frontend/monitoring-configuration.integration.mjs` | exit0：4项真实HTTP/重启；50项受控codec/controller/组件/三语检查。真实配置保存、旧CAS拒绝、只读权威和关闭重建后有效值统一；受控缺字段/额外字段/范围/同版本关联、网络/响应断流、冲突/错误状态/错误保存值、禁止自动重放、只读恢复、已知输入拒绝、晚结果/旧finally/首次登录/注销/dispose。 |
+| 正式组件/图表                                                  | 同专项实际挂载MonitoringConfigurationPanel及两个旧正式设置入口，核对数字输入、一次CAS保存、反馈和三语；其余个人偏好请求是受控返回，不当完整Preferences迁移验收。实际StatusCharts挂载保留零值和两个真实样本时点，不依赖伪周期props。                                                    |
+| `node tests/frontend/auth.integration.mjs`                     | exit0，既有真实密码/Cookie、TOTP/Passkey、安全配置CAS/秘密keep-clear-replace、管理生命周期及正式安全面板回归通过；Settings fixture同步必填effectiveMonitoring。真实因素和受控分支仍按该专项原范围区分。                                                                                |
+| `node tests/frontend/system-overview.integration.mjs`          | exit0：18项codec、6项真实HTTP浏览器、59项受控/三语；本批独立重跑，不沿用上一冻结PASS。                                                                                                                                                                                                 |
+| `node tests/frontend/workspace-observation.integration.mjs`    | exit0：13项codec、27项受控浏览器、2项producer；监控/Docker当前回归，不当真实SSH/Docker新增验收。                                                                                                                                                                                       |
+| 最终静态/构建                                                  | Shared check/build、Backend-next check/build、Frontend vue-tsc/build、根check全部exit0。                                                                                                                                                                                               |
+| 格式/资源                                                      | 全仓format:all:check、diff与最终核验exit0；1896项冻结、726项Backend摘要、136个本地链接匹配。本轮临时目录/相关worker无残留；保留9个历史B10目录且无打开句柄。                                                                                                                            |
+
+最终源码冻结：`/tmp/nexus-f1-monitoring-config-source-manifest.json`，1896项，SHA256 `94d58d2b465c4c868b0d924f762963cbb76e282f7af496f1876f5c111ef3b956`。初次组件专项发现夹具混用全局与隔离Vite依赖缓存导致两份Vue/Pinia，以及submit后的DOM检查早于Vue更新；改为Vite虚拟模块统一解析、等待下一次渲染。修正仅在各次运行结束后进行，再冻结并从头完整重跑；不将初次失败当产品行为PASS。初次日志 `/tmp/nexus-f1-monitoring-config-browser-initial-failure.log`，最终专项 `/tmp/nexus-f1-monitoring-config-browser.log`。
+
+受影响回归日志：`/tmp/nexus-f1-monitoring-config-auth-regression.log`、`/tmp/nexus-f1-monitoring-config-overview-regression.log`、`/tmp/nexus-f1-monitoring-config-ws-regression.log`；静态、格式和最终核验分别为 `/tmp/nexus-f1-monitoring-config-static.log`、`/tmp/nexus-f1-monitoring-config-format.log`、`/tmp/nexus-f1-monitoring-config-verification.log`。
+
+范围限制：本批真实启动验证配置的持久/有效事实，Remote实际采样/TTL安装沿Bootstrap唯一快照链源码核对；不把GET有效字段等同真实SSH采样时序已验。完整Dashboard/Workspace页面、KeepAlive/App撤销、真实SSH资源HTTP成功/回退、扩大时序/TTL故障及Connections/Audit相对时间单位仍C2-D。完整个人Preferences其余功能F1-D，桌面C2-C3、D16外部和P1继续保留。沿用H-04–H-07、E-02.5/E-07.8/E-10/E-13等既有规则，本批无新增人工规则或临时rules。
+
+## F1-C2-C3 桌面前端
+
+2026-10-18，分支 `refactor/backend-storage-v1`，HEAD `05e140d202e78b8c1248c3c3d0ccf44eb398a278` 加累计工作区；入场691项未提交变更原样保留，本轮未提交、推送或切换。运行工具 `/usr/local/bin/node` v22.23.1、pnpm 11.26.0。最终冻结清单 `/tmp/nexus-f1-desktop-source-manifest.json` 含1519项：Frontend/Shared/Backend-next源码、Frontend专项、依赖配置/补丁及移动端触控测试消费者；清单文件SHA-256为 `f14dc0e56e81e69e5e972afb34de83aceb51f674504b2a0a18b2bc846d702d17`，逐项SHA-256与最终检查后源码核对。该范围是本批明确冻结集，不替代上一批更大冻结集，也不把旧PASS复用为本批证据。
+
+两轮源码审核覆盖：Shared桌面values/codec；旧桌面API、Model、Port、输入/剪贴板路径删除及全部消费者；新types/mapper/API/controller、Guacamole/监听/触控/剪贴板adapter；Modal/public/launcher、App尝试时间、三语、移动端测试路径及pnpm双产物补丁。第一轮逐功能核对画面、显示、窗口、输入和转换owner；第二轮核对签发/原目标、generation、晚callback/finally、会话/停用、已发效果与清理因果。Backend应用源码未改，726项摘要仅核对未漂移，不宣称重新全量读审。
+
+| 命令/场景                                                        | 当前结果与实际范围                                                                                                                                                                                                                                                                                         |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node tests/frontend/remote-desktop.integration.mjs`             | exit0：29项受控协议/API/controller/真实Guacamole输入机制检查；两协议真实HTTP票据→Chromium绘制非空画面→实际xterm键盘输入→本地关闭；5项正式Modal毫秒事件/三语/会话撤销检查。使用隔离Xvnc/xrdp/guacd、本机SQLite与真实Access Cookie，不使用外部凭据。                                                         |
+| 严格协议与时序                                                   | 拒绝额外私密字段、非法票据/时间、安全错误与HTTP状态不匹配、完整响应超量；响应流失败保留unknown；取消后的旧票据不打开WS或发布尝试；新意图不被旧peer回调覆盖，unknown不自动重放。                                                                                                                            |
+| 原实例释放与输入                                                 | 五轮真实Guacamole peer创建/触控模式切换/关闭，软键盘与Display全局blur监听归零；两触控模式真实库手势的按下/释放、关闭取消待长按；剪贴板累计超量明确拒绝，不截断。真实controller与正式Modal关闭后再次核对Display监听归零。监听计数的Window包装只在测试页，产品不修改共享Window方法。                         |
+| `node tests/backend/remote/backend-next-desktop.integration.mjs` | exit0：24项（含顶层），实际双协议画面/键鼠、输入范围/协议、缺凭据、重放/过期/版本、容量/撤权/故障及日志秘密范围；使用独立本机桌面夹具，不以旧B10记录代替。                                                                                                                                                 |
+| `node tests/frontend/auth.integration.mjs`                       | 首次因Vite动态模块获取失败退出1；未修改产品源码，再次完整执行exit0。真实认证/因素、安全配置CAS/秘密意图、管理生命周期和安全面板断言均通过。首次失败单独保留，不冒充产品逻辑PASS。                                                                                                                          |
+| 静态                                                             | Shared check/build、Backend-next check/build、Frontend vue-tsc/build、根check实际退出0；全仓format及diff最终结果见本批核验（格式日志 `/tmp/nexus-desktop-format-check-final.log`）。原始日志 `/tmp/nexus-desktop-{types,shared-check,shared-build,backend-check,backend-build,frontend-build,check}.log`。 |
+
+专项输出分别在 `/tmp/nexus-desktop-regression.log`、`/tmp/nexus-desktop-backend-regression.log`、`/tmp/nexus-desktop-auth-regression.log`（首轮失败）及 `/tmp/nexus-desktop-auth-regression-retry.log`。首轮源码验证发现依赖生命周期扩展与原方法重名，已改为独立`retire`、保留`dispose(layer)`并重新冻结后完整重跑桌面专项；首次结果不代替最终产物证据。资源与冻结最终核验归 `/tmp/nexus-desktop-verification.log`：1519项摘要、726项Backend索引及142个本地链接通过；测试容器/网络、当前测试目录和相关子进程无残留，入场9个旧临时目录保留且无打开句柄。
+
+尚未覆盖：完整Dashboard/Workspace/App整页联动、KeepAlive/标签关闭及扩大撤销组合、桌面真实鼠标/软键盘IME/剪贴板权限与窗口resize/fullscreen/最小化等完整交互留C2-D；本批两协议真实键盘和画面不替代这些项。RemoteApp未配置、Windows本轮及其余外部能力仍D16，不使用历史凭据或旧实机PASS。完整个人Preferences、Agent、Operations、System仍F1-D；P1不施工。沿用H-04–H-09/H-12、E-01.1/E-02.5/E-03/E-05–E-13，新增经验仅在E-01.1补充第三方生命周期扩展的原方法语义与实际产物核对，不增加临时rules或人工规则。
+
+## F1-C2-D 整页与认证生命周期首批
+
+2026-10-18，分支`refactor/backend-storage-v1`，HEAD `05e140d202e78b8c1248c3c3d0ccf44eb398a278`加累计工作区；入场713项未提交变更保留。使用`/usr/local/bin/node` v22.23.1、pnpm 11.26.0，未提交推送、部署或切生产，不使用历史外部凭据。
+
+两轮源码复审核对App/Header、Dashboard与Audit取消参数、Workspace公开出口/注册表/Session关闭、挂起恢复替换调用链及三个专项文件。修复毫秒误按秒显示、停用后旧读取发布、同tick身份中间状态被批处理跳过、动态导入清理误触新集合、隐藏旧实例漏关、已移出标签的在途关闭漏等，以及已关闭恢复标签被重新插入。删除App清理包装和运行时裸清理出口，转换仍归现有owner，无Backend/Shared源码修改；其余累计变更不作为本轮全量重审。复审先发现并修复隐藏实例/恢复回填，再冻结源码执行检查；产品源码在全部回归期间未修改。
+
+| 命令/场景                                                       | 结果与实际覆盖                                                                                                                                                                                                                                                                                                |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node tests/frontend/app-lifecycle.integration.mjs`             | 最终exit0，4组断言。加载真实App/main/Router/Dashboard，真实Access初始化/登录与Targets导入/列表；正式页面验证连接毫秒和受控旧Audit秒均显示两分钟前。真实KeepAlive切换撤销旧Audit读取，同tick同用户认证中间失效同步分发logout/attach。Audit正文和快速认证时序为受控，不能写成Operations或新Cookie签发整页验收。 |
+| `node tests/frontend/workspace-session.integration.mjs`         | exit0。原10项codec、21项浏览器Session和10项producer检查保留；新增15项注册表受控浏览器断言，覆盖共享dispose、独立清理失败、已移出但仍在关闭的原附件、晚关闭不删新标签、认证同步撤销、预渲染恢复/隐藏替换/用户关闭标签、unknown拒绝成功。WS为受控producer，不冒充真实SSH释放证据。                              |
+| `node tests/frontend/workspace-observation-ssh.integration.mjs` | exit0，16项浏览器检查及daemon实际删除。真实Access/Backend-next/OpenSSH/Docker：无效用户先被拒绝后回退同主机有效连接；Shared→前端应用对象交付实际Linux指标、毫秒检查时间、同主机缓存复用且不改最近连接时间。另复跑实际监控、Docker四操作与原Workspace关闭；缓存复用不等于TTL自然到期已验。                     |
+| `node tests/frontend/workspace-ssh.integration.mjs`             | exit0，10项真实OpenSSH Session检查：目录、同PID/变量续接、resize、实际关闭和断开。                                                                                                                                                                                                                            |
+| `node tests/frontend/workspace-suspend.integration.mjs`         | exit0，6项codec、32项受控浏览器及6项producer检查，包含在途快照关闭及晚结果围栏。                                                                                                                                                                                                                              |
+| `node tests/frontend/auth.integration.mjs`                      | exit0，原认证/Passkey/配置/安全面板及生命周期回归。                                                                                                                                                                                                                                                           |
+| 静态与格式                                                      | Shared check/build、Backend-next check/build、Frontend vue-tsc/build、根check均exit0；最终全仓format/diff、冻结摘要/本地链接/资源核验见`/tmp/nexus-c2d-verification.log`。                                                                                                                                    |
+
+整页专项前三次退出1，原因依次为夹具遗漏Shared要求的confirmPassword、选择器命中页面内另一个header、品牌与导航存在同路径链接。各次均在运行完全结束后修正夹具、复核并更新冻结清单；未修改产品以适配夹具。原失败日志保留`/tmp/nexus-c2d-app-lifecycle{,-retry,-retry2}.log`；最终通过为`/tmp/nexus-c2d-app-lifecycle-retry3.log`。其他日志为`/tmp/nexus-c2d-{workspace-session,observation-ssh,ssh-regression,suspend-regression,auth-regression}.log`；静态为`/tmp/nexus-c2d-{types,build-shared,build-backend,frontend-build,frontend-check}.log`。
+
+最终源码清单`/tmp/nexus-c2d-source-manifest.json`包含1515项Frontend/Shared/Backend-next源码和Frontend专项，逐项摘要在最终核验比对；726项Backend索引仅确认未漂移，不声称重审。依赖补丁本轮未改。验证脚本核对本批临时目录、相关子进程与测试容器退出，保留9个入场旧B10目录，不代为清理历史现场。
+
+仍待C2-D：完整Workspace整页的终端/Files/传输/挂起/监控/桌面联动、扩大跨业务撤销/会话替换、自然TTL和采样/缺测/零值组合、桌面窗口/鼠标/IME/触控/剪贴板权限及新票据重连。正式Dashboard已验子集不替代这些事项。F1-D完整Agent/Preferences/Operations/System、D16外部、P1均未施工。本批只在E-07.3提炼“绑定撤销当时原实例集合、区分可见与已接纳资源”，不修改HUMAN或AGENTS，不把具体缺陷写入rules。
+
+## F1-C2-D 编辑与预览资源撤销子批
+
+环境：分支refactor/backend-storage-v1，HEAD 05e140d202e78b8c1248c3c3d0ccf44eb398a278；保留累计未提交工作。本批Node /usr/local/bin/node v22.23.1、pnpm 11.26.0。两轮源码复审覆盖file-editor session、file-preview session、Workspace注册表/Session/Page和实际组件、adapter接缝：首轮修复读/编码晚结果覆盖、注销草稿残留、私有预览未清理和批量关闭等待窗口；次轮区分close-all取消新打开与reset撤销全部操作，避免拒绝关闭保存中文档后使原保存失效，并确认不误失效同scope其它文档。未重审全部累计变更。
+
+冻结清单 /tmp/nexus-c2d-editor-source-manifest.json 共1515项，SHA256 3104013c69f7ba03a9c32fea6853fb0544652e31ebf77655254e2e54df9a65d9。源码冻结后执行，未在测试期间修改源码。
+
+| 命令/场景                                                                     | 结果与证据                                                                                                                                                                                                                                                                   |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| node tests/frontend/workspace-session.integration.mjs                         | exit0；原10 codec、21浏览器/10 producer断言；新增编辑/预览22项受控断言、注册表17项（含2项新认证清理断言）；/tmp/nexus-c2d-editor-workspace-session.log。                                                                                                                     |
+| node tests/frontend/app-lifecycle.integration.mjs                             | exit0，4项正式App/Router/Dashboard检查；Access/Targets真实，Audit响应和同tick认证时序受控；/tmp/nexus-c2d-editor-app.log。                                                                                                                                                   |
+| node tests/frontend/workspace-files.integration.mjs                           | exit0，18 codec/25浏览器/4派发断言；/tmp/nexus-c2d-editor-files.log。                                                                                                                                                                                                        |
+| node tests/frontend/workspace-ssh.integration.mjs                             | exit0，10项真实Access/Backend-next/OpenSSH/PTY检查；/tmp/nexus-c2d-editor-ssh.log。                                                                                                                                                                                          |
+| node tests/frontend/workspace-files-ssh.integration.mjs                       | exit0，66项真实Access/Backend-next/OpenSSH/SFTP浏览器检查及14项磁盘/ZIP检查；/tmp/nexus-c2d-editor-files-ssh.log。                                                                                                                                                           |
+| Shared check/build、Backend-next check/build、Frontend vue-tsc/build、根check | 完成exit0；各日志 /tmp/nexus-c2d-editor-{shared-check,shared-build,backend-check,backend-build,frontend-check,frontend-build,root-check}.log。                                                                                                                               |
+| 全仓format、diff、清单与资源收尾                                              | 文档收口后全仓format exit0；/tmp/nexus-c2d-editor-final-format.log。清单1515项、Backend726项索引摘要、147个文档链接目标、diff与本轮夹具资源均核对通过；/tmp/nexus-c2d-editor-verification-final.log。Backend索引仅摘要核对，不代表本轮重新读审726文件；9个历史临时目录保留。 |
+
+22项编辑/预览检查直接消费真实前端session，文件端口的延迟、返回和保存确认受控；不能称真实SFTP故障或完整Workspace整页通过。覆盖读取互相替代、读取中继续编辑、保存原快照与后续输入、断连保留草稿但不能保存、reset清私有内容、旧open/finally/save失效、拒绝close-all不破坏保存，以及preview清空中止原读取/旧refresh不派发。注册表认证撤销确认共享草稿与私有编辑/预览同步清空；不把前端清空解释成远端写入回滚。
+
+C2-D仍保留正式Workspace全部交互、跨业务撤销扩大组合、采样/TTL和桌面交互；本子批不宣称这些已验收。
+
+## F1-C2-D Workspace页面与个人目录契约
+
+环境：`refactor/backend-storage-v1`，HEAD `05e140d202e78b8c1248c3c3d0ccf44eb398a278`；Node `/usr/local/bin/node` v22.23.1、pnpm 11.26.0。保留累计未提交工作，未提交、推送、部署或切换生产。当前个人目录按 Shared 破坏性替换，不接收旧裸数组或旧无版本写入。
+
+本批两轮源码审核覆盖 WorkspacePage/LayoutRenderer、client/preferences、共享 view scope/有限反馈、Files 个人目录、快捷命令与命令历史的 API/model/mapper/Store/UI/public、三语及真实消费者。删除的旧文件路径没有转导出。接续复核发现命令发送晚返回后可能借新会话追加历史：页面补原 signal/Session 检查，Store 派发前复查原 UI permission；再逐项复核该增量和新回归。审核不代表累计工作区全量重审。
+
+最终冻结 `/tmp/nexus-c2d-personal-final-source-manifest.json`，1522项，SHA256 `6dc22d6e6d624d874be3f2477999e1fb39712d4d39ee0fae983ff23ea6df4109`。相对前一版个人目录冻结只变更 WorkspacePage、CommandHistory types/Store 与 App 专项四项；保留原 `/tmp/nexus-c2d-personal-source-manifest.json` 和旧日志。以下检查均在最终源码冻结后执行，测试期间没有修改源码；构建完成后才运行浏览器，未并行重写运行产物。
+
+| 命令/场景                                                                                         | 最终结果与证据                                                                                                                                                       |
+| ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared check/build、Backend-next check/build、Frontend vue-tsc/build、根 check、全仓 format、diff | 全部 exit0；`/tmp/nexus-c2d-personal-final-static.log`。文档收口后另复查格式与链接。                                                                                 |
+| `node tests/frontend/app-lifecycle.integration.mjs`                                               | exit0，30项；`/tmp/nexus-c2d-personal-final-app.log`。真实 App/Router/Access/Targets/OpenSSH/个人数据 HTTP；Audit、延迟交付、占用目录与确认时序受控。                |
+| `node tests/frontend/workspace-session.integration.mjs`                                           | exit0，10 codec、21浏览器/10 producer、编辑预览22及注册表17项；`/tmp/nexus-c2d-personal-final-session.log`。WS与文件端口时序受控。                                   |
+| `node tests/frontend/workspace-ssh.integration.mjs`                                               | exit0，10项真实 Access/Backend-next/OpenSSH/PTY；`/tmp/nexus-c2d-personal-final-regressions.log`。                                                                   |
+| `node tests/frontend/workspace-files.integration.mjs`                                             | exit0，18 codec/25浏览器/4派发断言；同一 regressions 日志。                                                                                                          |
+| `node tests/frontend/workspace-files-ssh.integration.mjs`                                         | exit0，66浏览器与14磁盘/ZIP检查，真实 Access/OpenSSH/SFTP；同一 regressions 日志。                                                                                   |
+| `node tests/frontend/workspace-suspend.integration.mjs`                                           | exit0，6 codec、32浏览器/6 producer；同一 regressions 日志，挂起 WS 生产者受控。                                                                                     |
+| 冻结/Backend索引/链接/资源                                                                        | `/tmp/nexus-c2d-personal-final-verification.log`；1522项冻结与726项Backend摘要一致。索引仅确认未漂移，不宣称重新读审726项；9个历史临时目录保留，本批夹具退出并清理。 |
+
+App 30项包括：真实 Workspace 终端与 Files 路径输入无任何 runtime boundary 错误挂载；旧查询交付不得新建 SSH；KeepAlive 保留原 Session/唯一 WS；正式命令输入正常追加历史，真实 SSH 发送返回经受控门延迟至离开/重新进入后不再追加，排队历史撤销后无 POST；收藏 CRUD/touch/CAS、102项路径分页、命令 CRUD/CAS、标签创建关联及删除后权威版本、计数、51项命令分页、102项历史分页及清空；已撤销 UI 意图不派发；真实收藏201已提交后受控丢响应，保留unknown、阻止第二次写入、显式只读核对仅一条；旧裸数组受控响应必须 protocol_failure；挂起接管确认撤销不影响新确认；同tick同用户认证替换同步撤销缓存并确认原真实 SSH closed。直接调用 API/Store 的断言不算全部对应 UI 操作已验收。
+
+首轮整页的旧个人数据契约失败保留 `/tmp/nexus-c2d-page-app.log`；局部隔离后的9项中间结果仍有 Files 契约错误，不作为最终成功。随后真实 Shared 迁移修复。先前浏览器执行与构建改写产物交错产生 evaluate context/metadata 等失败，保留 `/tmp/nexus-c2d-page-final-{app,session,ssh}.log`；这些是失败运行，不能引用为 PASS。最新版本按串行构建及冻结源码重跑上述全部命令通过。
+
+未验范围：完整 Files/上传下载/传输/挂起/监控/桌面整页交互与扩大跨业务撤销；真实采样/自然TTL/缺测/零值；桌面 resize/fullscreen/最小化、鼠标/IME/触控/剪贴板权限和新票据重连。其余完整 Preferences/Agent/Operations/System 仍 F1-D，外部 D16 与 P1 不启动。
+
+文档收口复查：`pnpm run format:all:check`、变更文档Prettier、`git diff --check` 与冻结/索引/链接/资源核验均exit0。日志 `/tmp/nexus-c2d-personal-final-format.log`、`/tmp/nexus-c2d-personal-final-doc-format.log`、`/tmp/nexus-c2d-personal-final-verification.log`；USAGE新增导航与本批证据锚点另已核对。
+
+## F1 Presentation与后端日志
+
+2026-10-18：正式Preferences/Workspace已破坏性迁到Shared presentation；日志从个人偏好分离至Operations独立CAS。旧preferences API、Workspace裸HTTP与本地布局兼容均删除。原工作区累计变更保留，无提交/推送/部署。
+
+| 范围       | 当前证据                                                                                                                                                                                                                                                                                 |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 静态       | Shared check/build、Backend-next check/build、Frontend vue-tsc/build与根check均exit 0，日志 /tmp/nexus-presentation-static.log；激活流程修复后Frontend类型/构建exit 0，/tmp/nexus-presentation-fix-static.log。最终全仓format与diff检查exit 0，/tmp/nexus-presentation-full-format.log。 |
+| 正式App    | app-lifecycle.integration.mjs 39项PASS，/tmp/nexus-presentation-app.log：真实SSH/页面原有30项及统一个人快照、跨域CAS、Vue响应式草稿白名单冻结、布局侧栏原子写、真实已提交丢响应、较早恢复请求不清后发unknown、排队取消、旧裸布局拒绝、正式设置双表单与旧草稿冲突。                       |
+| 受影响回归 | workspace-session、monitoring-configuration、workspace-observation、remote-desktop和auth五专项均exit 0，/tmp/nexus-presentation-regressions.log；各专项保持其原有真实/受控范围，不扩大外部验收。                                                                                         |
+| 两轮复审   | 第一次沿API→mapper→唯一Store→Workspace/表单检查版本、队列及转换；第二次检查原权限、读取收敛、unknown恢复时序、递归布局、焦点字符串、KeepAlive与明确恢复入口。回归发现重新激活后未继续query连接，已修正且39项重新PASS；测试控件按实际自定义combobox交互修正，未改产品来适配测试。         |
+| 冻结       | /tmp/nexus-presentation-source-manifest.json，1532项，最终专项后逐项哈希一致；包含Backend-next、Shared、Frontend源码和Frontend测试。下一批源码变更后此PASS仅代表本版本。                                                                                                                 |
+
+完整C2-D联动、真实TTL/扩大桌面交互，及完整Agent/Appearance/其余Operations/System/P1继续当前实施方案；不以本子批宣称全部完成。
+
+## F1 审计与通知 Shared 消费
+
+2026-10-18：审计API/独立应用mapper/分页Store/正式列表及Dashboard安全摘要已破坏性迁移；随后Notifications完整列表、三通道表单、已保存/未保存测试及投递记录接Shared，删除旧API/DTO。两轮源码复审修正原会话、原版本、秘密草稿和故障修订恢复，并保留已确认结果；CAPTCHA功能设置说明已纠正为页面持久配置，环境变量仅可选首次seed。
+
+- 审计冻结1533文件：前端type/build、43项正式App回归通过，覆盖真实event/毫秒/nextOffset、安全摘要、旧响应拒绝与正式筛选；同时承接原39项Presentation/Workspace生命周期回归。
+- 通知冻结1536文件，SHA-256 061551924aa4486b498c30f092653c8da932b0e53db3ccc538123a3e97ca1f91：Shared与Backend-next check/build、Frontend build、根check通过。notifications.integration.mjs 12项通过，含三通道真实CRUD、keep/clear/replace、UUID/CAS删除、真实本地Webhook投递、queued与sent区分、分页、提交后丢失响应、早发恢复不清晚故障、排队取消、旧响应拒绝、正式表单及三语；App43项和backend-next-notifications 22项受影响回归通过。
+- 执行日志分别为/tmp/nexus-audit-app.log、/tmp/nexus-notifications-behavior.log、/tmp/nexus-notifications-app-regression.log、/tmp/nexus-notifications-backend-regression.log与静态日志；冻结源码摘要核验一致。当前可用工具链实际为.agent-tmp Node22.16.0/pnpm11.26.0，不复用其他工具链的历史PASS。
+- 仅隔离本机范围，公网SMTP/Telegram/Webhook供应商仍D16；完整C2-D、外观、Agent、System管理和P1继续实施，未提交推送或切换生产。
+
+## F1 System备份恢复与宿主诊断
+
+2026-10-18：正式数据页接Shared备份导出/导入及宿主诊断；删除旧无类型API。通用HTTP失败独立owner，JSON与二进制共用有界完整读取；通知public收窄为真实消费者能力。两轮源码复核覆盖容量准入、原身份/视图、已确认结果、全局恢复状态与Blob URL清理。
+
+冻结 /tmp/nexus-system-source-manifest.json 共1548项，SHA-256 74ab8faa6e302f38901d5a8d3471582903f0a2e071c6a0d6072d881162286bbf。工具链.agent-tmp Node22.16.0/pnpm11.26.0，分支/HEAD不变；测试期间未修改源码。
+
+- Frontend build exit0：/tmp/nexus-system-final-build.log。
+- system-management.integration.mjs 11项PASS：/tmp/nexus-system-behavior.log。真实Access/Backend-next/Vite/Chromium、加密完整下载、正式multipart恢复UTC、显式重载保留账户、恢复已提交后受控丢响应、禁止重传、auth reset不清未知围栏；File预容量/取消、跨源/字节预算、正式诊断及畸形响应拒绝、隐藏清秘密。第一次仅因两处相同提示导致严格选择器失败，改为弹窗内断言后重跑完整专项。
+- 公共HTTP影响回归：auth、targets、app-lifecycle（43项）、notifications（12项）、monitoring-configuration、system-overview全部exit0；日志/tmp/nexus-system-regression-<name>.log，各专项真实/受控范围不扩大。
+- 不宣称旧备份文件前端拒绝、全部恢复故障组合或真实介质通过；D16继续延期。Appearance/Agent/机器突变管理、完整C2-D与P1继续当前方案，未提交推送/部署/切换。
+
+## F1 外观、主题与HTML库
+
+2026-10-18：正式外观、终端主题、两类背景、HTML库/仓库及Workspace字体预览已破坏性迁到Shared，删除旧API/Protocol类型与旧themeEditor路径。两轮审核覆盖协议媒体类型、白名单转换、原草稿版本、串行写入、故障修订与明确只读恢复、视图撤销和资源清理。主题导入仍使用真实multipart，不改成JSON；HTML改名另存副本。
+
+- 原冻结`/tmp/nexus-appearance-source-manifest.json`1556项，SHA-256 `57bf14b2e1e76391a43340df10dc736c01eb97c15039066d7a54163d1f63a0d6`。工具链.agent-tmp Node22.16.0/pnpm11.26.0。
+- Shared/Backend-next check/build、Frontend build和根check通过，日志`/tmp/nexus-appearance-static.log`、`/tmp/nexus-appearance-final-build.log`、`/tmp/nexus-appearance-root-check.log`。全仓格式首轮仅FRONTEND文档失败，最终文档收口另行复查，不将该次失败写成PASS。
+- `appearance.integration.mjs`14项PASS，`/tmp/nexus-appearance-behavior.log`：真实主题CRUD/CAS/multipart及导出、两类图片字节上传读取删除、Unicode/空HTML与另存副本、Repository共享版本、字体预览隔离、正式旧草稿冲突/刷新、Customizer创建、真实已提交后丢响应的unknown围栏、协议私密额外字段拒绝和reset晚结果隔离。首次缺刷新翻译的失败日志保留，修复后完整重跑。
+- Backend外观20项和App43项受影响回归通过，日志`/tmp/nexus-appearance-appearance-backend.log`、`/tmp/nexus-appearance-app-lifecycle.log`。后续恢复管理装配及公共refresh三语新增后，外观14项与System11项再次通过：`/tmp/nexus-mutation-appearance-regression.log`、`/tmp/nexus-mutation-system-regression.log`；本轮Frontend build/根check通过，冻结见恢复管理章节。
+- 远端目录及正文使用受控响应，未联系公网仓库；公网与真实介质仍D16。未将本子批算作Agent、完整C2-D或P1完成。
+
+## F1 机器突变恢复管理
+
+2026-10-18：新增正式设置数据页的Shared恢复管理消费者。两轮源码审核沿API严格解码/关联→白名单应用mapper→唯一Store→原草稿/确认→Settings安装核对；修复busy提前解除及重复确认，故障恢复必须读取原未知claim，即使用户已改选其它条目，较早排队恢复不得清除较晚故障。公共refresh三语补齐。
+
+冻结`/tmp/nexus-mutation-source-manifest.json`1566项，SHA-256 `fbc481d7bc3021a512c32788767c0d956a52fd155535f9289eb4ef57352be531`；Node22.16.0/pnpm11.26.0，分支/HEAD不变，无提交推送/部署。Frontend build与根check均exit0：`/tmp/nexus-mutation-build.log`、`/tmp/nexus-mutation-root-check.log`。源码冻结后执行专项，期间不改产品源码；仅修正夹具后重新冻结完整重跑，旧失败日志保留。
+
+- `mutation-recovery.integration.mjs`12项PASS，`/tmp/nexus-mutation-behavior.log`。真实Adapter建立22条持久阻断后启动Backend-next/Vite/Chromium，验证未登录401、两页真实列表、人工证据与独立解除、原revision冲突、排队前撤销、实际提交丢响应且仅一次写入、正式表单逐项确认与三语、私密额外字段/错误资源拒绝、早发恢复不清晚故障、reset后晚读取不发布，以及停机后独立Adapter复读实际结果。
+- 占用记录由生产Adapter建立；本夹具没有派发远端突变，不证明真实进程停止，也不替代既有Agent Shell/Files/Docker端到端生产者验收。人工证据与released不证明原操作成功。
+- 受影响回归：外观14项、System11项与正式App43项PASS，日志`/tmp/nexus-mutation-appearance-regression.log`、`/tmp/nexus-mutation-system-regression.log`、`/tmp/nexus-mutation-app-regression.log`。冻结中后续仅增加恢复专项的关联/时序断言，产品源码未变，已验子批保持其真实范围。
+- 夹具首次直接请求内部监听地址被来源校验拒绝，改经实际同源代理；首次seed的非UUID owner被生产行解码拒绝，修正为真实UUID后完整重跑。没有放宽产品来源检查、解码器或断言取绿。清理失败保留全部原因。
+
+完整C2-D、正式Agent和P1继续实施方案，D16外部延期。文档格式/链接、冻结摘要与资源核验在本批收口执行并记录，不复用历史全仓PASS。
+
+## F1 C2-D 正式Workspace文件整页
+
+2026-10-18：FileManager、LayoutRenderer、SessionSurface两轮源码复核；将文件意图绑定原视图、channel/session，防重复删除及旧finally解除新锁；移动/上传/归档已派发任务归原TransferController，离页清密码，晚错误不重开原弹窗，任务观察拒绝显式收尾。未引入兼容层或修改Shared/Backend契约。
+
+冻结 /tmp/nexus-workspace-page-final-source-manifest.json 共1567项，SHA-256 6aff0fd07ed5c95fadaff17477b6e56395cd00d896163f141dcddb4d7a5afbfb；工具链.agent-tmp Node22.16.0/pnpm11.26.0，分支/HEAD不变。源码冻结后执行，测试期间未改产品源码。
+
+- workspace-page-files.integration.mjs **17项PASS**，/tmp/nexus-workspace-page-expanded.log：真实Backend-next/Access/Vite/Chromium/OpenSSH/SFTP的正式页面导航、新建目录/文件、Monaco保存实际字节、Markdown预览、原生选择器上传、实际浏览器下载字节、rename、copy源保留/move源删除、zip及解压恢复、删除取消/确认、应用内离开取消原确认；原生选择器和受控Clipboard晚返回不上传；真实挂起mark/关闭标签/catalog available/恢复ACK，前后BASHPID一致并重新读取Files；真实加密ZIP密码拒绝经受控等待延迟到离页后交付，不重开旧密码框。
+- Session/Files/Transfer/Suspend四受影响专项exit0，分别/tmp/nexus-workspace-page-regression-<name>.log。范围仍按各专项原真实/受控分类，不冒充全环境。
+- 初次归档脚本未展开子菜单、挂起脚本误用非协议detached值、生成脚本替换误将双美元变单美元，均修正夹具并重冻完整重跑；产品校验/协议未放宽。旧失败日志保留，非PASS。
+- D-2真实自然TTL/扩大观测、D-3完整桌面、完整Agent和P1仍继续；D16外部延期。本批静态/全仓格式、App和资源核验结果随后按实际补齐，未提交推送/部署或切生产。
+
+## F1 C2-D 正式监控整页
+
+2026-10-18：产品源码未变，沿真实页面新增workspace-page-monitoring.integration.mjs。/tmp/nexus-monitoring-page-behavior.log四项PASS：正式Workspace组件发起一秒Linux采样、连续真实毫秒历史；正式Dashboard显示真实SSH指标、即时命中同一checkedAt、自然五秒TTL后实际重采；KeepAlive离开后status.stop发出且原session历史停止增长；受控协议响应通过正式卡片区分缺测“—”与真实零“0%”。后者仅为展示分支验证，不冒充本机实测零。采样/缓存均使用首次持久化配置，不修改时钟或替换采集器。
+
+冻结/tmp/nexus-monitoring-page-source-manifest.json共1568项，SHA-256 a5cce962735f99e553db7e37feff5a63784551793e01bf542f50e767d30599c1；工具链.agent-tmp Node22.16.0/pnpm11.26.0。首次夹具将条件等待和后续快照分离导致断言失败，改为同次取得满足判据的完整快照后重冻通过，未修改产品源码或放宽判据。最终测试格式整理后的冻结另在收口记录，不沿用旧测试源码摘要。
+
+同主机认证失败回退、Docker真实列表/控制与停用仍沿workspace-observation-ssh独立范围；原受控专项覆盖晚样本及缺测/零值模型语义。扩大桌面交互、Agent/P1及D16仍分别保留。
+
+## F1 C2-D 正式桌面整页
+
+2026-10-18：正式Dashboard→App→RemoteDesktopModal→Shared票据→Guacamole→隔离Xvnc/xrdp/guacd，两协议完整本机交互通过。整页发现连续尺寸编辑的旧偏好响应回填/共享旧版本竞态，App装配单次保存状态，Modal保存期间禁用宽高和拖动；失败使用Preferences安全反馈，身份替换后不向新用户发布旧错误，不自动重放。最终源码与受影响调用链复审两次，未增加Shared字段或兼容路径。
+
+- remote-desktop-page.integration.mjs **17项PASS**，/tmp/nexus-desktop-page-complete-final-behavior.log：RDP/VNC各自真实非空画面、900×700尺寸及延迟保存期间互斥、最小化/恢复/浏览器全屏保持原socket、浏览器直接触控改变真实远端指针、允许剪贴板时真实Guacamole字节、原browser context明确denied与真实NotAllowedError保持连接、软键盘真实键入、受控composition保留中间值且完成正文在远端只出现一次、新票据重连及旧socket实际关闭、关闭后原browser socket与底层TCP分别归零；最后正式Header注销关闭已最小化的真实桌面并释放资源。
+- composition使用合成浏览器事件与真实远端正文断言，触控使用Chromium touchscreen API；不冒充物理手机、系统输入法或完整远端剪贴板取回。允许剪贴板验证实际出站协议字节，拒绝权限验证实际浏览器拒绝。
+- 最终冻结/tmp/nexus-desktop-page-expanded-source-manifest.json共1569项，SHA-256 8395ccd4867166277881b322cef1a72e6bba63adc3b0b2bb9f8e61574820a595；工具链.agent-tmp Node22.16.0/pnpm11.26.0，分支refactor/backend-storage-v1/HEAD05e140d不变。测试期间未修改产品源码。
+- Frontend build、根check与App43项exit0，分别/tmp/nexus-desktop-page-final-build.log、/tmp/nexus-desktop-page-final-root-check.log、/tmp/nexus-desktop-page-final-app.log。既有remote-desktop.integration.mjs已exit0，/tmp/nexus-desktop-page-regression-desktop.log：原受控生命周期/容量/触控与实际双协议键入、三语Modal/监听释放通过。最终格式/资源核验另按实际补记，不能沿用此前冻结的全仓PASS。
+- 失败夹具保留：初始模块网络变化、尺寸断言、原生触控等待、剪贴板context定位与注销控件定位；最终只允许明确ERR_NETWORK_CHANGED后的初始只读导航重试，不重放setup或变更。TCP关闭与browser close独立等待；固定触点碰巧等于原指针不再作为移动判据。各旧失败日志非PASS。
+
+D-1文件17项、D-2监控4项及真实observation-ssh的16浏览器检查/daemon删除均已另批通过；文件子批最终Frontend build/根check、App43及全仓格式也通过，日志/tmp/nexus-workspace-page-final-{build,root-check,app}.log与/tmp/nexus-c2d-final-format.log。它们分别保留原冻结与场景，不代替桌面修补后的受影响回归。完整Agent与P1继续，D16外部延期；无提交/推送/部署或生产切换。
+
+桌面本批最终收口：全仓format:all:check exit0（/tmp/nexus-desktop-page-final-format3.log）；冻结1569项一致、Backend逐文件726项摘要一致、151个本地文档链接目标存在、diff检查通过。/tmp/nexus-desktop-page-final-verification.log确认无本批临时目录/SSH或Worker子进程/观察容器/桌面容器及网络；九个历史目录保留且无打开FD。后续仅证据文字更新，定向文档格式和链接/diff另核对，不重用失败格式日志。
+
+### F1 Agent Registry 独立消费者
+
+范围：Shared Registry 状态/解析响应codec，正式Agent设置的独立状态卡片，Provider页模型查询及其白名单应用转换；Provider管理和完整聚合设置仍待迁移。本批未改Backend产品源码，没有执行公网models.dev刷新，也未以局部组件验收代替整个正式Agent页面。
+
+两轮源码复核分别覆盖协议形状/安全失败/请求关联，以及独立设置装配、身份/页面撤销、晚返回和刷新恢复。产品源码冻结为`/tmp/nexus-agent-registry-source-manifest.json`，1552项，SHA256 `8d41b409e0239a324e6177103391df8252df2e0ebc760aaacf946f55fc3abf26`；清单覆盖Frontend/Backend-next/Shared源码和列出的包/根配置，未包含测试及文档。
+
+`PATH="$PWD/.agent-tmp:$PATH" node tests/frontend/agent-registry.integration.mjs`退出0，日志`/tmp/nexus-agent-registry-behavior.log`，23项PASS：
+
+- 真实隔离Backend-next与Access登录会话：匿名/注销后拒绝、初始无缓存状态、明确无匹配。
+- 受控浏览器响应：秒到毫秒投影；未知能力不补false；额外字段、未知错误、来源/快照矛盾、错误modelId、重复推理值与状态/安全码不符均拒绝；超UTF-8预算及不可无损编码标识在派发前拒绝。
+- 受控刷新未知与响应流失败：保留unknown，真实卡片阻止重复刷新；只读核对不重发POST；三语错误不展示内部code；模拟底层忽略取消的晚响应在身份撤销后仍不得回填。
+
+Shared check/build、Frontend build、Backend-next check及根check退出0，日志分别为本轮工具输出、`/tmp/nexus-agent-registry-build.log`、`/tmp/nexus-agent-registry-backend-check.log`、`/tmp/nexus-agent-registry-root-check.log`。未新增外部凭据、容器或生产改动；测试自身等待Browser/Vite/Backend关闭并删除本批独立目录。全仓format:all:check退出0，日志`/tmp/nexus-agent-registry-final-format.log`；`git diff --check`通过。冻结复核1552项一致，本批临时目录归零，分支与HEAD未变，日志`/tmp/nexus-agent-registry-final-verification.log`。未提交、推送或部署。
+
+### F1 Agent 执行设置独立消费者
+
+范围：正式 `ExecutionSettings` 卡片、独立 composable/API/应用 mapper 与 Shared 完整响应解码，旧 BudgetContext/Performance/HardLimits/Subagent 控件及对应硬限制/profile请求移除。Backend 仅将相同 profile 基础容量改引 Shared values；执行/事务语义未改变。Provider 管理与完整 Agent 仍未迁完。
+
+两轮源码复核覆盖四个真实HTTP、Provider模型候选、逐字段双向投影、完整容量、原版本/确认关联、互斥、过期/unknown恢复、身份/视图撤销与旧消费者清理。冻结 `/tmp/nexus-agent-execution-source-manifest.json` 共1553项，SHA256 `01c707dc9b7bc84628b50da0d4d207cbbe117ebb43cf2c1baa09225a00a557fa`，包含源码与原清单配置，不含测试/文档。行为验证期间产品源码未修改。
+
+`PATH="$PWD/.agent-tmp:$PATH" node tests/frontend/agent-execution.integration.mjs` 退出0，32项PASS，日志 `/tmp/nexus-agent-execution-behavior.log`：
+
+- 真实隔离 Backend-next、SQLite、Access Cookie：匿名/注销拒绝、初态和三profile、Provider配置/版本化模型候选（不派发供应商请求）、完整预算及模型保存、CAS冲突、硬限制占用预览/确认和持久只读核对。
+- 真实 Chromium 中实际卡片保存/确认；完整正式设置组件在旧聚合settings读取失败时仍可使用执行卡片。未把该有限装配验收当作整个Agent或正式路由全流程完成。
+- 受控网络：写后断流保持unknown，响应内容/预览与请求不匹配、额外私有字段拒绝；重复工具在派发前拒绝。unknown和冲突阻止再写，读取失败不解锁，成功只读核对不重放；三语安全提示、原模型保留、编辑使确认失效、过期不派发confirm、撤销后晚响应不回填。
+
+首轮夹具在Vue更新按钮disabled前判断读取结束，导致第二次点击落在原busy中；已在操作后等待nextTick再观察收敛，未修改产品，最终重跑通过。受影响 Registry 另重跑23项通过，日志 `/tmp/nexus-agent-execution-registry-regression.log`；此前Registry冻结只作历史证据。
+
+Shared check/build、Backend-next check/build、Frontend build（含vue-tsc）、根check均退出0，日志 `/tmp/nexus-agent-execution-{shared-check,shared-build,backend-check,backend-build,frontend-build,root-check}.log`。全仓 format:all:check 退出0，日志 `/tmp/nexus-agent-execution-final-format.log`；`git diff --check`通过。最终1553项冻结一致，本批临时目录归零，分支与HEAD未变，日志 `/tmp/nexus-agent-execution-final-verification.log`。未调用公网供应商、未使用外部凭据、未切换部署，未提交或推送。工具链沿仓库 `.agent-tmp` Node22.16.0/pnpm11.26.0；这记录实际执行环境，不改变仓库版本约束。
+
+### F1 Agent Provider 管理独立消费者
+
+2026-10-18，D17人工决定前已完成的本批证据：两轮源码审核后冻结 `/tmp/nexus-agent-provider-source-manifest.json`，1556项，SHA256 `c33b2550c79be8b7214640a50a3e575e21d3b65cc7d636852acf951f48c548b6`。正式管理卡片、独立应用类型/mapper/composable、Shared删除回执与发现唯一性解码均在范围；旧Host/SDK Provider读取未迁。
+
+`tests/frontend/agent-provider.integration.mjs` 36项通过（`/tmp/nexus-provider-behavior.log`）：真实Access/SQLite的创建、原版本PATCH/冲突、凭据保留/替换/清除、删除；本机HTTP夹具发现及真实SSE解析测试，模型请求仅一次；受控私密字段/状态/重复目录拒绝、字节预算、真实写后响应断流、只读失败不解锁、三语、撤销晚结果；实际卡片创建与正式聚合失败时独立安装。公网供应商未调用，不代表外部验收。执行设置32项与Registry23项受影响回归通过，日志 `/tmp/nexus-provider-{execution,registry}-regression.log`。
+
+Shared check/build、Backend-next check/build、Frontend build、根check及全仓format:all:check退出0，日志 `/tmp/nexus-provider-{shared-check,shared-build,backend-check,backend-build,frontend-build,root-check,final-format}.log`；工具链 `.agent-tmp` Node22.16.0/pnpm11.26.0。D17生效后不继续新增或运行本地行为测试；后续源码变化不沿用本冻结作为当前PASS，全部适配后统一远程Actions E2E。未提交、推送或部署。
+
+## F1 原生工作区入口与线程适配（2026-10-18，静态）
+
+D17范围：通用工作区17方法从插件归属迁到Scope；原生当前会话/App版本事务准入、Shared严格契约及SDK交付依赖、独立原生线程前端API/mapper/composable和DEV实际组件。正式Host仍未切换。本批未新增/运行行为测试或浏览器专项，未触发Actions，未提交/推送。
+
+Node22.16.0 / pnpm11.26.0。Shared check/build、Backend-next check/build、Frontend build（含vue-tsc）、根check、全仓format:all:check及git diff --check最终均exit0；日志分别为/tmp/nexus-native-final-shared-{check,build}.log、/tmp/nexus-native-reviewed-backend-{check,build}.log、/tmp/nexus-native-reviewed-frontend-build.log、/tmp/nexus-native-reviewed-root-check.log、/tmp/nexus-native-reviewed-format-check.log及/tmp/nexus-native-reviewed-diff-check.log。首次格式检查发现新composable函数间缺空行，已修复并完整重跑通过。静态通过不能替代原生与插件授权竞争、线程幂等/CAS、unknown重试、身份撤销及SDK真实交付回归；这些场景统一留最后远程Actions E2E。
+
+## F1 正式 Agent Host 与运行界面收口（2026-10-18，静态）
+
+范围：正式 Host 实际 App／声明／安装目录，原生线程、Run 创建／终态续接／取消、正文游标、事件、审批、Child 消息元数据、Step／Tool 审计，附件原版本关联及实际 prompt 引用。Frontend 已移除 Protocol 依赖和旧 Agent API／事件流／facade／Store；旧 Backend／Protocol 仍保留参考。按 D15 使用新设计，不恢复旧 Goal／队列／手工 checkpoint 控件。
+
+两轮源码复核覆盖 Shared 严格解码、逐字段应用转换、原 CAS／幂等意图、unknown 围栏、规范化请求与响应关联，以及身份／视图生命周期。修正 unknown Run 活跃判断、临时隐藏的意图保留、附件未知状态通知父界面，以及 Host 暂停或目录读取失败时不无故销毁原运行 owner；会话拒绝仍清除私有状态。附件对象存在不证明关联提交，不据此自动继续发送。
+
+本批依 D17 未新增或运行行为测试、浏览器专项及本地 E2E，未触发 Actions，未提交／推送／部署。此前冻结与 PASS 仅属于原基线，不能作为本轮界面行为 PASS。远程回归前须迁移现有旧夹具／断言：例如 agent/event-catchup.spec.ts 仍动态导入已删除的 agent-events.ts；不得恢复旧模块来满足断言。具体接续见实施方案 V1–V5。
+
+最终静态门禁均退出0：Shared check/build、Backend-next check/build、Frontend build（含vue-tsc）、根check、全仓format:all:check；日志分别为 `/tmp/nexus-host-final-shared.log`、`/tmp/nexus-host-final-backend.log`、`/tmp/nexus-host-final-frontend-build.log`、`/tmp/nexus-host-final-check.log`、`/tmp/nexus-host-final-format.log`。`git diff --check`通过。工具链实际为`.agent-tmp` Node22.16.0／pnpm11.26.0；分支`refactor/backend-storage-v1`、HEAD`05e140d2`未变。最终仅文档证据补充，另行核对文档格式与链接，不重跑行为测试。
+
+### 唯一 Backend 归一（2026-10-19）
+
+- 范围：删除旧 Backend，原 backend-next 归位 `packages/backend`，包名 `@nexus-terminal/backend`；`main.ts` / `dist/main.js` 为唯一启动入口。旧实现定位 `05e140d2:packages/backend`，历史场景、源码索引与冻结摘要只对原基线有效，不能作为重命名后工作区的当前证据。初始 v1 精确签名保持不变。
+- 消费者：根构建/check/format、Docker Shared 构建及生产 deploy、Compose 的必填实例密钥/公开来源/代理与健康探针、远程 runner/缓存指纹、所有当前专项的 import 路径和 Frontend DEV 代理已更新。旧实现专属 agent-scenarios、插件升级迁移/吞吐测试和旧数据库基准脚本随旧实现移除；当前 storage/http/remote 和 Frontend 专项保留，未运行。
+- 静态环境：分支 `refactor/backend-storage-v1`，修改前 HEAD `05e140d2`；`.agent-tmp/node` 22.16.0 / pnpm 11.26.0，工具目录已忽略，不随源码提交。该版本为实际检查环境，部署仍使用 Node Current。
+- 已执行：`pnpm install --frozen-lockfile --ignore-scripts`、根 `pnpm run check`、`pnpm run build`、现有五份 E2E 用例/Playwright config/`support/backend-server.mjs` 的显式严格类型检查、`pnpm run format:all:check`、`git diff --check`，结果 exit 0。日志 `/tmp/nexus-backend-rename-{install,check,build,e2e-types,format-check}.log`。
+- 交付检查：`pnpm --filter @nexus-terminal/backend --prod deploy /tmp/nexus-backend-rename-delivery` exit 0，产物包含 main/bootstrap 及 Shared runtime。ssh2 的可选原生加速编译失败后按依赖自身机制回落；该结果不是 SSH 行为证据。`docker compose config --quiet` 使用仅供配置校验的固定测试密钥，修正 shell 展开需要的 `$$` 后 exit 0；shell 启动/烟雾脚本及 Node 控制启动器语法通过。未执行 Docker build/up、Playwright、浏览器或其他行为回归，V1 未完成部分和 D16/P1 继续保留。
+- 复审两轮：第一轮沿包名/目录→根门禁→构建/启动→真实消费者修正旧入口；第二轮核对 Shared 独立构建、生产包完整性、Compose Host/插值、单 Backend DEV 代理及受影响专项的环境变量，未恢复旧类型/DB/环境变量兼容分支。本轮明确授权提交、合并 dev 和删除重构分支；合并不代表镜像已发布或整套 E2E 已通过。

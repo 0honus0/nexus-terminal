@@ -1,7 +1,7 @@
 {
   "agentNext": {
     "title": "新版后端 Agent — 开发入口",
-    "isolation": "此开发页仅消费 backend-next 的 Agent 状态和只读模型步骤审计接口，不启用 Provider 执行、工具、审批、WebSocket 流式能力，也不切换旧 Agent。",
+    "isolation": "此开发页仅消费 Backend 的 Agent 状态和只读模型步骤审计接口，不启用 Provider 执行、工具、审批、WebSocket 流式能力，也不切换旧 Agent。",
     "setup": "首次管理员初始化",
     "login": "登录新版后端",
     "username": "用户名",

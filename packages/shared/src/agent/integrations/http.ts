@@ -23,3 +23,11 @@ export interface AgentIntegrationVersionRequest {
 export interface AgentIntegrationListResponse {
 	items: AgentIntegrationView[];
 }
+
+export interface AgentIntegrationCreateHeaders {
+	idempotencyKey: string;
+}
+
+export interface AgentIntegrationDeleteResponse {
+	status: 'deleted';
+}

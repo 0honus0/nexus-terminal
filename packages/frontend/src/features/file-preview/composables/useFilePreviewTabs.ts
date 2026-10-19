@@ -154,7 +154,7 @@ export function createFilePreviewSession(defaultSource?: FilePreviewSource): Fil
 	}
 
 	async function refresh(tab = active.value): Promise<void> {
-		if (!tab || tab.loading || tab.refreshing) return;
+		if (!tab || tab.loading || tab.refreshing || !tabs.value.some((item) => item.id === tab.id)) return;
 		const source = sources.get(tab.id) ?? defaultSource;
 		if (!source) throw new Error('The source session for this preview is no longer available.');
 		const operation = beginOperation(tab.id);

@@ -1,145 +1,204 @@
-import { computed, onScopeDispose, ref, type ComputedRef, type Ref } from 'vue';
-import { apiErrorMessage } from '@/client/http';
-import { systemOverviewApi } from '../api/systemOverviewApi';
-import type { ResourceStatusDto, SshResourceStatusDto } from '../model/systemOverview';
+import { computed, onScopeDispose, ref, shallowReadonly } from 'vue';
+import { registerAuthenticatedSessionOwner } from '@/shared/session/public';
+import { systemOverviewApi } from '../api/system-overview-api';
+import { resourceKey, toPendingResource } from '../model/system-overview-mapper';
+import {
+	ResourceFailure,
+	type LocalResourceStatus,
+	type SshResource,
+	type SshResourceTarget,
+	type ResourceFailureCode,
+	type SystemOverviewController,
+} from '../model/system-overview-types';
 
-export interface SshResourceTarget {
-	id: number;
-	name: string | null;
-	username: string;
-	host: string;
-	port: number;
+let nextOwnerId = 0;
+
+function waitForNextHost(signal: AbortSignal): Promise<void> {
+	if (signal.aborted) {
+		return Promise.resolve();
+	}
+	return new Promise((resolve) => {
+		const finish = () => {
+			clearTimeout(timer);
+			signal.removeEventListener('abort', finish);
+			resolve();
+		};
+
+		const timer = setTimeout(finish, 200);
+		signal.addEventListener('abort', finish, { once: true });
+	});
 }
 
-export interface SystemOverviewController {
-	local: Ref<ResourceStatusDto | null>;
-	remote: Ref<SshResourceStatusDto[]>;
-	loading: ComputedRef<boolean>;
-	localLoading: Ref<boolean>;
-	remoteLoading: Ref<boolean>;
-	localError: Ref<string | null>;
-	remoteError: Ref<string | null>;
-	loadLocal(): Promise<void>;
-	loadRemote(targets: () => Promise<SshResourceTarget[]>): Promise<void>;
+function failureCode(cause: unknown): ResourceFailureCode {
+	return cause instanceof ResourceFailure ? cause.code : 'request_failed';
 }
 
-export const useSystemOverview = (): SystemOverviewController => {
-	const local = ref<ResourceStatusDto | null>(null);
-	const remote = ref<SshResourceStatusDto[]>([]);
+export function createSystemOverview(): SystemOverviewController {
+	const local = ref<LocalResourceStatus | null>(null);
+	const remote = ref<SshResource[]>([]);
 	const localLoading = ref(false);
 	const remoteLoading = ref(false);
-	const localError = ref<string | null>(null);
-	const remoteError = ref<string | null>(null);
-	const loading = computed(() => localLoading.value || remoteLoading.value);
-	const remoteAbort = new AbortController();
-	onScopeDispose(() => remoteAbort.abort());
+	const localError = ref<ResourceFailureCode | null>(null);
+	const remoteError = ref<ResourceFailureCode | null>(null);
+	let active = true;
+	let disposed = false;
+	let localRequest: AbortController | null = null;
+	let remoteRequest: AbortController | null = null;
 
-	const waitForNextHost = (): Promise<void> =>
-		new Promise((resolve) => {
-			const finish = () => {
-				clearTimeout(timer);
-				remoteAbort.signal.removeEventListener('abort', finish);
-				resolve();
-			};
+	function stopLocal(): void {
+		localRequest?.abort();
+		localRequest = null;
+		localLoading.value = false;
+		local.value = null;
+		localError.value = null;
+	}
 
-			const timer = setTimeout(finish, 200);
-			remoteAbort.signal.addEventListener('abort', finish, { once: true });
-		});
+	function stopRemote(): void {
+		remoteRequest?.abort();
+		remoteRequest = null;
+		remoteLoading.value = false;
+		remote.value = [];
+		remoteError.value = null;
+	}
 
-	const loadLocal = async (): Promise<void> => {
-		if (localLoading.value) return;
+	const unregister = registerAuthenticatedSessionOwner(`system-overview-${++nextOwnerId}`, () => {
+		stopLocal();
+		stopRemote();
+	});
+
+	async function loadLocal(): Promise<void> {
+		if (!active || disposed || localRequest) {
+			return;
+		}
+		const request = new AbortController();
+		localRequest = request;
 		localLoading.value = true;
 		localError.value = null;
 		try {
-			local.value = await systemOverviewApi.local();
+			const value = await systemOverviewApi.local(request.signal);
+			if (localRequest === request) {
+				local.value = value;
+			}
 		} catch (cause) {
-			localError.value = apiErrorMessage(cause, '');
+			if (localRequest === request) {
+				local.value = null;
+				localError.value = failureCode(cause);
+			}
 		} finally {
-			localLoading.value = false;
+			if (localRequest === request) {
+				localLoading.value = false;
+				localRequest = null;
+			}
 		}
-	};
+	}
 
-	const loadRemote = async (targets: () => Promise<SshResourceTarget[]>): Promise<void> => {
-		if (remoteLoading.value || remoteAbort.signal.aborted) return;
+	async function loadRemote(targets: () => Promise<SshResourceTarget[]>): Promise<void> {
+		if (!active || disposed || remoteRequest) {
+			return;
+		}
+		const request = new AbortController();
+		remoteRequest = request;
 		remoteLoading.value = true;
 		remoteError.value = null;
 		try {
-			const unique = new Map<string, SshResourceTarget>();
 			const items = await targets();
-			if (remoteAbort.signal.aborted) return;
-			for (const target of items) {
-				const key = `${target.host.trim().toLowerCase()}:${target.port}`;
-				if (!unique.has(key)) unique.set(key, target);
+			if (remoteRequest !== request) {
+				return;
 			}
-			const previous = new Map(remote.value.map((resource) => [resource.key, resource]));
-			remote.value = [...unique]
-				.sort((a, b) => (a[1].name || a[1].host).localeCompare(b[1].name || b[1].host))
-				.map(([key, target]) => {
-					const old = previous.get(key);
-					return {
-						...old,
-						key,
-						connectionId: target.id,
-						name: target.name || target.host,
+			const unique = new Map<string, SshResourceTarget>();
+			for (const target of items) {
+				const key = resourceKey(target.host, target.port);
+				if (!unique.has(key)) {
+					unique.set(key, {
+						id: target.id,
+						name: target.name,
 						username: target.username,
 						host: target.host,
 						port: target.port,
-						checkedAt: old?.checkedAt ?? 0,
-					};
-				});
-
-			const update = (key: string, value: SshResourceStatusDto) => {
-				remote.value = remote.value.map((resource) => (resource.key === key ? value : resource));
-			};
-
-			const pending = [...unique.entries()];
-
-			const loadHost = async (key: string, target: SshResourceTarget): Promise<void> => {
-				try {
-					const result = await systemOverviewApi.ssh(target.id, remoteAbort.signal);
-					if (remoteAbort.signal.aborted) return;
-					update(key, result);
-				} catch (cause) {
-					if (remoteAbort.signal.aborted) return;
-					const current = remote.value.find((resource) => resource.key === key);
-					if (current)
-						update(key, {
-							...current,
-							status: undefined,
-							error: apiErrorMessage(cause, ''),
-							checkedAt: Date.now(),
-						});
+					});
 				}
-			};
+			}
+			const pending = [...unique.values()].sort((a, b) => (a.name || a.host).localeCompare(b.name || b.host));
+			remote.value = pending.map((target) => toPendingResource(target));
 
-			// Independent hosts must publish independently; bound simultaneous probes rather
-			// than waiting for a slow host before even starting the next one.
+			async function loadHost(target: SshResourceTarget): Promise<void> {
+				let result: SshResource;
+				try {
+					result = await systemOverviewApi.ssh(target, request.signal);
+				} catch (cause) {
+					result = toPendingResource(target, failureCode(cause));
+				}
+				if (remoteRequest === request) {
+					const key = resourceKey(target.host, target.port);
+					remote.value = remote.value.map((current) => (current.key === key ? result : current));
+				}
+			}
+
 			await Promise.all(
 				Array.from({ length: Math.min(4, pending.length) }, async () => {
-					while (!remoteAbort.signal.aborted) {
-						const next = pending.shift();
-						if (!next) return;
-						await loadHost(...next);
-						if (pending.length) await waitForNextHost();
+					while (remoteRequest === request) {
+						const target = pending.shift();
+						if (!target) {
+							return;
+						}
+						await loadHost(target);
+						if (pending.length) {
+							await waitForNextHost(request.signal);
+						}
 					}
 				}),
 			);
 		} catch (cause) {
-			remoteError.value = apiErrorMessage(cause, '');
+			if (remoteRequest === request) {
+				remote.value = [];
+				remoteError.value = failureCode(cause);
+			}
 		} finally {
-			remoteLoading.value = false;
+			if (remoteRequest === request) {
+				remoteLoading.value = false;
+				remoteRequest = null;
+			}
 		}
-	};
+	}
+
+	function deactivate(): void {
+		active = false;
+		stopLocal();
+		stopRemote();
+	}
+
+	function dispose(): void {
+		disposed = true;
+		deactivate();
+		unregister();
+	}
 
 	return {
-		local,
-		remote,
-		loading,
-		localLoading,
-		remoteLoading,
-		localError,
-		remoteError,
+		local: shallowReadonly(local),
+		remote: shallowReadonly(remote),
+		loading: computed(() => localLoading.value || remoteLoading.value),
+		localLoading: shallowReadonly(localLoading),
+		remoteLoading: shallowReadonly(remoteLoading),
+		localError: shallowReadonly(localError),
+		remoteError: shallowReadonly(remoteError),
 		loadLocal,
 		loadRemote,
+		stopLocal,
+		stopRemote,
+
+		activate() {
+			if (!disposed) {
+				active = true;
+			}
+		},
+
+		deactivate,
+		dispose,
 	};
-};
+}
+
+export function useSystemOverview(): SystemOverviewController {
+	const controller = createSystemOverview();
+	onScopeDispose(controller.dispose);
+	return controller;
+}

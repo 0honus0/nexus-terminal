@@ -1,53 +1,142 @@
+import { readWorkspaceSuspendHistory } from '@nexus-terminal/shared/remote/suspend/workspace-codec';
 import type {
-	WorkspaceEventMapDto,
-	WorkspaceProtocolEventDto,
-	WorkspaceProtocolResponseDto,
-	WorkspaceRequestMapDto,
-	WorkspaceResponseMapDto,
-} from '@nexus-terminal/protocol/workspace';
+	WorkspaceSuspendRequests,
+	WorkspaceSuspendResponses,
+	WorkspaceSuspendEvents,
+} from '@nexus-terminal/shared/remote/suspend/workspace';
+import {
+	readWorkspaceSuspendAutoTerminated,
+	readWorkspaceSuspendRevoked,
+} from '@nexus-terminal/shared/remote/suspend/workspace-result-codec';
+import type {
+	WorkspaceUploadRequests,
+	WorkspaceUploadResponses,
+	WorkspaceUploadEvents,
+	WorkspaceTransferRequests,
+	WorkspaceTransferResponses,
+	WorkspaceTransferEvents,
+} from '@nexus-terminal/shared/remote/transfers/workspace';
+import type {
+	WorkspaceFilesRequestMap,
+	WorkspaceFilesResponseMap,
+	WorkspaceFilesEventMap,
+} from '@nexus-terminal/shared/remote/files/workspace';
+import { readWorkspaceFileReady, readWorkspaceFileError } from '@nexus-terminal/shared/remote/files/workspace-codec';
+import type {
+	WorkspaceProtocolResponse,
+	WorkspaceProtocolEvent,
+	WorkspaceCoreRequests,
+	WorkspaceCoreResponses,
+	WorkspaceCoreEvents,
+} from '@nexus-terminal/shared/remote/workspace/workspace';
+import {
+	readWorkspaceMessage,
+	readWorkspaceProtocolError,
+	readWorkspaceEmptyResponse,
+} from '@nexus-terminal/shared/remote/workspace/workspace-codec';
+import { WorkspaceRequestFailure, WorkspaceDispatchFailure } from '../model/workspace-error-types';
+import type {
+	WorkspaceMonitoringRequests,
+	WorkspaceMonitoringResponses,
+	WorkspaceMonitoringEvents,
+} from '@nexus-terminal/shared/remote/monitoring/workspace';
+import type { WorkspaceDockerRequests, WorkspaceDockerResponses } from '@nexus-terminal/shared/remote/docker/workspace';
+import { readRemoteStatusSample } from '@nexus-terminal/shared/remote/monitoring/http-codec';
+import { readWorkspaceStatusError } from '@nexus-terminal/shared/remote/monitoring/workspace-codec';
+import type {
+	WorkspaceTerminalEvents,
+	WorkspaceTerminalRequests,
+	WorkspaceTerminalResponses,
+} from '@nexus-terminal/shared/remote/terminal/workspace';
+import {
+	readWorkspaceTerminalClosed,
+	readWorkspaceTerminalError,
+	readWorkspaceTerminalDirectoryQueued,
+	readWorkspaceTerminalDirectoryChanged,
+	readWorkspaceTerminalDirectoryFailed,
+	readWorkspaceTerminalFlow,
+} from '@nexus-terminal/shared/remote/terminal/workspace-codec';
 import { logger } from '@/client/logging/logger';
 import { openWebSocket } from '@/client/websocket';
-import { decodeWorkspaceBinaryFrame } from './workspaceBinaryProtocol';
+import { decodeWorkspaceBinaryFrame } from '@nexus-terminal/shared/remote/workspace/workspace-binary';
+import { readWorkspaceFileReadBinaryRequest } from '@nexus-terminal/shared/remote/files/workspace-codec';
+import { WORKSPACE_FILES_MAX_BINARY_READ_BYTES } from '@nexus-terminal/shared/remote/files/values';
+import {
+	WORKSPACE_SUSPEND_MAX_HISTORY_PAGE_BYTES,
+	WORKSPACE_SUSPEND_MAX_JSON_BYTES,
+} from '@nexus-terminal/shared/remote/suspend/values';
 
-type ProtocolResponse<T = unknown> = WorkspaceProtocolResponseDto<T>;
-type ProtocolEvent<T = unknown> = WorkspaceProtocolEventDto<T>;
+type ProtocolResponse = WorkspaceProtocolResponse;
+type ProtocolEvent = WorkspaceProtocolEvent;
 type ProtocolMessage = ProtocolResponse | ProtocolEvent;
+
+type WorkspaceRequests = WorkspaceMonitoringRequests &
+	WorkspaceDockerRequests &
+	WorkspaceTerminalRequests &
+	WorkspaceFilesRequestMap &
+	WorkspaceTransferRequests &
+	WorkspaceUploadRequests &
+	WorkspaceCoreRequests &
+	WorkspaceSuspendRequests;
+type WorkspaceResponses = WorkspaceMonitoringResponses &
+	WorkspaceDockerResponses &
+	WorkspaceTerminalResponses &
+	WorkspaceFilesResponseMap &
+	WorkspaceTransferResponses &
+	WorkspaceUploadResponses &
+	WorkspaceCoreResponses &
+	WorkspaceSuspendResponses;
+type WorkspaceEvents = WorkspaceMonitoringEvents &
+	WorkspaceTerminalEvents &
+	WorkspaceFilesEventMap &
+	WorkspaceTransferEvents &
+	WorkspaceUploadEvents &
+	WorkspaceCoreEvents &
+	WorkspaceSuspendEvents;
 
 type EventHandler<T = unknown> = (payload: T) => void;
 type BinaryHandler = (data: Uint8Array, consumed?: () => void) => void;
-const MAX_SEND_BUFFER_BYTES = 1024 * 1024;
-const MAX_HISTORY_RESPONSE_BYTES = 1024 * 1024;
-const MAX_FILE_RESPONSE_BYTES = 128 * 1024 * 1024;
-const messageEncoder = new TextEncoder();
 
-const isProtocolRecord = (value: unknown): value is Record<string, unknown> =>
-	value !== null && typeof value === 'object' && !Array.isArray(value);
+export type WorkspaceAttachmentRequest = (
+	type: string,
+	payload?: object,
+	requestId?: string,
+	signal?: AbortSignal,
+) => Promise<unknown>;
 
-const protocolRecord = (value: unknown): Record<string, unknown> | null => (isProtocolRecord(value) ? value : null);
-
-const decodeProtocolMessage = (raw: string): ProtocolMessage => {
-	const parsed = protocolRecord(JSON.parse(raw) as unknown);
-	if (!parsed || typeof parsed.type !== 'string' || !parsed.type)
-		throw new Error('Workspace protocol message is invalid.');
-	if (parsed.type !== 'response') {
-		return parsed.payload === undefined ? { type: parsed.type } : { type: parsed.type, payload: parsed.payload };
+function readKnownEvent(type: string, payload: unknown): unknown {
+	switch (type) {
+		case 'status.sample':
+			return readRemoteStatusSample(payload);
+		case 'status.error':
+			return readWorkspaceStatusError(payload);
+		case 'suspend.autoTerminated':
+			return readWorkspaceSuspendAutoTerminated(payload);
+		case 'suspend.revoked':
+			return readWorkspaceSuspendRevoked(payload);
+		case 'filesystem.ready':
+			return readWorkspaceFileReady(payload);
+		case 'filesystem.error':
+			return readWorkspaceFileError(payload);
+		case 'protocol.error':
+			return readWorkspaceProtocolError(payload);
+		case 'terminal.closed':
+			return readWorkspaceTerminalClosed(payload);
+		case 'terminal.error':
+			return readWorkspaceTerminalError(payload);
+		case 'terminal.directoryChangeQueued':
+			return readWorkspaceTerminalDirectoryQueued(payload);
+		case 'terminal.directoryChanged':
+			return readWorkspaceTerminalDirectoryChanged(payload);
+		case 'terminal.directoryChangeFailed':
+			return readWorkspaceTerminalDirectoryFailed(payload);
+		default:
+			return payload;
 	}
-	if (typeof parsed.requestId !== 'string' || !parsed.requestId)
-		throw new Error('Workspace response requestId is invalid.');
-	const payload = protocolRecord(parsed.payload);
-	if (!payload || typeof payload.ok !== 'boolean') throw new Error('Workspace response payload is invalid.');
-	if (payload.error !== undefined && typeof payload.error !== 'string')
-		throw new Error('Workspace response error is invalid.');
-	return {
-		type: 'response',
-		requestId: parsed.requestId,
-		payload: {
-			ok: payload.ok,
-			...(payload.data === undefined ? {} : { data: payload.data }),
-			...(payload.error === undefined ? {} : { error: payload.error }),
-		},
-	};
-};
+}
+
+const MAX_SEND_BUFFER_BYTES = 1024 * 1024;
+const messageEncoder = new TextEncoder();
 
 interface PendingRequest {
 	maxBytes?: number;
@@ -68,30 +157,6 @@ interface WorkspaceSocketLogContext {
 	connectionId?: number;
 }
 
-const workspaceFailureKind = (reason: string): string => {
-	const value = reason.toLowerCase();
-	if (value.includes('workspace session') && value.includes('not found')) return 'workspace_not_found';
-	if (value.includes('workspace socket is not connected')) return 'workspace_not_connected';
-	if (value.includes('suspended session') && value.includes('not found')) return 'suspended_session_not_found';
-	if (value.includes('no prepared resume exists')) return 'resume_not_prepared';
-	if (value.includes('workspace resume') && value.includes('already pending')) return 'resume_already_pending';
-	if (value.includes('挂起恢复') && value.includes('取消')) return 'resume_cancelled';
-	if (value.includes('挂起恢复事务') && value.includes('失败')) return 'resume_commit_failed';
-	if (value.includes('会话不存在') && value.includes('状态不正确')) return 'session_not_found_or_invalid';
-	if (value.includes('workspace socket is already bound')) return 'workspace_already_bound';
-	if (value.includes('workspace') && value.includes('already exists')) return 'workspace_already_exists';
-	if (value.includes('workspaceid is invalid')) return 'invalid_workspace_id';
-	if (value.includes('connection') && value.includes('not found')) return 'connection_not_found';
-	if (value.includes('unsupported workspace operation')) return 'unsupported_operation';
-	if (value.includes('expired') || value.includes('过期')) return 'session_expired';
-	if (value.includes('stale')) return 'stale_state';
-	if (value.includes('无权')) return 'forbidden';
-	if (value.includes('不存在')) return 'not_found';
-	if (value.includes('not found')) return 'not_found';
-	if (value.includes('invalid') || value.includes('required')) return 'invalid_request';
-	return 'request_failed';
-};
-
 const OPEN_TIMEOUT_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 30_000;
 const HIGH_FREQUENCY_OPERATIONS = new Set([
@@ -109,13 +174,18 @@ export class WorkspaceSocket {
 	private consumptionTimer?: number;
 
 	private scheduleConsumptionAck(): void {
-		if (this.consumptionTimer !== undefined) return;
+		if (this.consumptionTimer !== undefined) {
+			return;
+		}
 		const socket = this.socket;
 		this.consumptionTimer = window.setTimeout(() => {
 			this.consumptionTimer = undefined;
-			if (this.socket !== socket || !this.connected) return;
-			if (!this.sendConnected('terminal.flow', { consumedBytes: this.consumedTerminalBytes }))
+			if (this.socket !== socket || !this.connected) {
+				return;
+			}
+			if (!this.sendConnected('terminal.flow', { consumedBytes: this.consumedTerminalBytes })) {
 				this.scheduleConsumptionAck();
+			}
 		}, 20);
 	}
 
@@ -140,13 +210,20 @@ export class WorkspaceSocket {
 
 	/** Probe only the current attachment; never open a new, unbound socket. */
 	checkLiveness(): Promise<void> {
-		if (this.probe) return this.probe;
+		if (this.probe) {
+			return this.probe;
+		}
 		const socket = this.socket;
-		if (!socket || !this.connected) return Promise.resolve();
+		if (!socket || !this.connected) {
+			return Promise.resolve();
+		}
 		const task = this.requestInternal('workspace.ping', crypto.randomUUID(), {}, false, 5_000, socket)
+			.then(readWorkspaceEmptyResponse)
 			.then(() => undefined)
 			.catch(() => {
-				if (this.socket !== socket || document.visibilityState !== 'visible') return;
+				if (this.socket !== socket || document.visibilityState !== 'visible') {
+					return;
+				}
 				this.socket = undefined;
 				this.rejectPending(new Error('Workspace transport liveness check failed.'));
 				// An abnormal transport close preserves ordinary-session reconnect credentials/PTY.
@@ -155,19 +232,27 @@ export class WorkspaceSocket {
 				} catch {
 					// A frozen browser may already have discarded the underlying transport.
 				} finally {
-					for (const handler of this.closeHandlers) handler();
+					for (const handler of this.closeHandlers) {
+						handler();
+					}
 				}
 			})
 			.finally(() => {
-				if (this.probe === task) this.probe = undefined;
+				if (this.probe === task) {
+					this.probe = undefined;
+				}
 			});
 		this.probe = task;
 		return task;
 	}
 
 	async open(): Promise<void> {
-		if (this.connected) return;
-		if (this.opening) return this.opening;
+		if (this.connected) {
+			return;
+		}
+		if (this.opening) {
+			return this.opening;
+		}
 
 		logger.debug(this.context({ pendingRequests: this.pending.size }), 'Workspace WebSocket opening');
 		const socket = openWebSocket('/ws/workspace');
@@ -180,20 +265,26 @@ export class WorkspaceSocket {
 			let openTimer: number | undefined;
 
 			const clearOpenTimer = () => {
-				if (openTimer === undefined) return;
+				if (openTimer === undefined) {
+					return;
+				}
 				window.clearTimeout(openTimer);
 				openTimer = undefined;
 			};
 
 			const settleResolve = () => {
-				if (settled) return;
+				if (settled) {
+					return;
+				}
 				settled = true;
 				clearOpenTimer();
 				resolve();
 			};
 
 			const settleReject = (error: Error) => {
-				if (settled) return;
+				if (settled) {
+					return;
+				}
 				settled = true;
 				clearOpenTimer();
 				reject(error);
@@ -209,14 +300,20 @@ export class WorkspaceSocket {
 					'Workspace WebSocket open timed out',
 				);
 				settleReject(error);
-				if (this.socket !== socket) return;
+				if (this.socket !== socket) {
+					return;
+				}
 
 				// Release the transport slot immediately so reconnect can create a fresh socket even if
 				// the browser delays the close event for the timed-out CONNECTING socket.
 				this.socket = undefined;
 				this.rejectPending(error);
-				for (const handler of this.errorHandlers) handler(error.message);
-				for (const handler of this.closeHandlers) handler(error.message);
+				for (const handler of this.errorHandlers) {
+					handler(error.message);
+				}
+				for (const handler of this.closeHandlers) {
+					handler(error.message);
+				}
 				try {
 					socket.close(1000, 'Workspace WebSocket open timed out');
 				} catch {
@@ -241,7 +338,9 @@ export class WorkspaceSocket {
 				settleResolve();
 			};
 			socket.onmessage = (event) => {
-				if (this.socket === socket) this.handleMessage(event.data);
+				if (this.socket === socket) {
+					this.handleMessage(event.data);
+				}
 			};
 			socket.onerror = () => {
 				const error = new Error('Workspace WebSocket connection failed.');
@@ -254,8 +353,12 @@ export class WorkspaceSocket {
 					'Workspace WebSocket error event',
 				);
 				settleReject(error);
-				if (this.socket !== socket) return;
-				for (const handler of this.errorHandlers) handler(error.message);
+				if (this.socket !== socket) {
+					return;
+				}
+				for (const handler of this.errorHandlers) {
+					handler(error.message);
+				}
 			};
 			socket.onclose = (event) => {
 				const error = new Error(
@@ -271,7 +374,9 @@ export class WorkspaceSocket {
 					failureKind: event.code === 1000 ? undefined : 'transport_closed',
 				});
 				logger.debug(closeContext, 'Workspace WebSocket close event');
-				if (event.code !== 1000) logger.warn(closeContext, 'Workspace WebSocket closed unexpectedly');
+				if (event.code !== 1000) {
+					logger.warn(closeContext, 'Workspace WebSocket closed unexpectedly');
+				}
 				settleReject(error);
 				if (this.socket !== socket) {
 					logger.debug(closeContext, 'Workspace WebSocket stale close ignored');
@@ -282,14 +387,20 @@ export class WorkspaceSocket {
 				// installed a replacement. They must never clear the replacement or reject its requests.
 				this.socket = undefined;
 				this.rejectPending(error);
-				for (const handler of this.closeHandlers) handler(event.reason || undefined);
+				for (const handler of this.closeHandlers) {
+					handler(event.reason || undefined);
+				}
 			};
 		});
 
 		let tracked!: Promise<void>;
 		tracked = opening.finally(() => {
-			if (this.opening === tracked) this.opening = undefined;
-			if (this.rejectOpening === rejectOpening) this.rejectOpening = undefined;
+			if (this.opening === tracked) {
+				this.opening = undefined;
+			}
+			if (this.rejectOpening === rejectOpening) {
+				this.rejectOpening = undefined;
+			}
 		});
 		this.opening = tracked;
 		return tracked;
@@ -312,18 +423,24 @@ export class WorkspaceSocket {
 		this.socket = undefined;
 		this.rejectOpening?.(error);
 		this.rejectPending(error);
-		if (!socket || socket.readyState >= WebSocket.CLOSING) return;
-		try {
-			socket.close(1000, reason);
-		} catch {
-			// Best effort: the transport has already been detached from this WorkspaceSocket.
+		if (!socket) {
+			return;
+		}
+		if (socket.readyState < WebSocket.CLOSING) {
+			try {
+				socket.close(1000, reason);
+			} catch {
+				// Best effort: the transport has already been detached from this WorkspaceSocket.
+			}
+		}
+		// Local detach suppresses the native stale-close callback. Event-based
+		// operations still need to release their listeners and completion waits.
+		for (const handler of this.closeHandlers) {
+			handler(reason);
 		}
 	}
 
-	request<K extends keyof WorkspaceRequestMapDto>(
-		type: K,
-		payload: WorkspaceRequestMapDto[K],
-	): Promise<WorkspaceResponseMapDto[K]>;
+	request<K extends keyof WorkspaceRequests>(type: K, payload: WorkspaceRequests[K]): Promise<WorkspaceResponses[K]>;
 
 	request<T = unknown>(type: string, payload?: object): Promise<T>;
 
@@ -331,11 +448,27 @@ export class WorkspaceSocket {
 		return this.requestWithId<T>(type, crypto.randomUUID(), payload);
 	}
 
-	requestWithId<K extends keyof WorkspaceRequestMapDto>(
+	/** Correlated request on this exact attachment; never creates a replacement transport. */
+	requestConnected(type: string, payload: object = {}, signal?: AbortSignal): Promise<unknown> {
+		return this.bindRequests()(type, payload, undefined, signal);
+	}
+
+	/** Capture once for multi-step operations whose confirmation must use the original socket. */
+	bindRequests(): WorkspaceAttachmentRequest {
+		const socket = this.socket;
+		return (type, payload = {}, requestId = crypto.randomUUID(), signal) => {
+			if (!socket || socket.readyState !== WebSocket.OPEN) {
+				return Promise.reject(new WorkspaceDispatchFailure('not_connected'));
+			}
+			return this.requestInternal<unknown>(type, requestId, payload, false, REQUEST_TIMEOUT_MS, socket, signal);
+		};
+	}
+
+	requestWithId<K extends keyof WorkspaceRequests>(
 		type: K,
 		requestId: string,
-		payload: WorkspaceRequestMapDto[K],
-	): Promise<WorkspaceResponseMapDto[K]>;
+		payload: WorkspaceRequests[K],
+	): Promise<WorkspaceResponses[K]>;
 
 	requestWithId<T = unknown>(type: string, requestId: string, payload?: object): Promise<T>;
 
@@ -343,11 +476,11 @@ export class WorkspaceSocket {
 		return this.requestInternal<T>(type, requestId, payload, false) as Promise<T>;
 	}
 
-	requestBinary<K extends keyof WorkspaceRequestMapDto>(
+	requestBinary<K extends keyof WorkspaceRequests>(
 		type: K,
-		payload: WorkspaceRequestMapDto[K],
+		payload: WorkspaceRequests[K],
 		signal?: AbortSignal,
-	): Promise<{ data: WorkspaceResponseMapDto[K]; bytes: Uint8Array }>;
+	): Promise<{ data: WorkspaceResponses[K]; bytes: Uint8Array }>;
 
 	requestBinary<T = unknown>(
 		type: string,
@@ -370,6 +503,28 @@ export class WorkspaceSocket {
 		}>;
 	}
 
+	/** Binary reads are bound to the current attachment and never open another socket. */
+	requestBinaryConnected(
+		type: 'filesystem.readBinary' | 'suspend.history.previous',
+		payload:
+			WorkspaceFilesRequestMap['filesystem.readBinary'] | WorkspaceSuspendRequests['suspend.history.previous'],
+		signal?: AbortSignal,
+	): Promise<{ data: unknown; bytes: Uint8Array }> {
+		const socket = this.socket;
+		if (!socket || socket.readyState !== WebSocket.OPEN) {
+			return Promise.reject(new Error('Workspace transport is not connected.'));
+		}
+		return this.requestInternal<unknown>(
+			type,
+			crypto.randomUUID(),
+			payload,
+			true,
+			REQUEST_TIMEOUT_MS,
+			socket,
+			signal,
+		) as Promise<{ data: unknown; bytes: Uint8Array }>;
+	}
+
 	private async requestInternal<T>(
 		type: string,
 		requestId: string,
@@ -379,19 +534,39 @@ export class WorkspaceSocket {
 		expectedSocket?: WebSocket,
 		signal?: AbortSignal,
 	): Promise<T | { data: T; bytes: Uint8Array }> {
-		if (!requestId) throw new Error('Workspace requestId is required.');
-		if (this.pending.has(requestId)) throw new Error(`Workspace request is already pending: ${requestId}`);
-		await this.open();
-		if (signal?.aborted) throw new DOMException('Binary read aborted', 'AbortError');
-		if (expectedSocket && this.socket !== expectedSocket)
+		if (!requestId) {
+			throw new Error('Workspace requestId is required.');
+		}
+		if (this.pending.has(requestId)) {
+			throw new Error(`Workspace request is already pending: ${requestId}`);
+		}
+		const binaryRead = type === 'filesystem.readBinary' ? readWorkspaceFileReadBinaryRequest(payload) : undefined;
+		const historyRead = type === 'suspend.history.previous' ? readWorkspaceSuspendHistory(payload) : undefined;
+		if (expectedSocket) {
+			if (this.socket !== expectedSocket || expectedSocket.readyState !== WebSocket.OPEN) {
+				throw new WorkspaceDispatchFailure('not_connected');
+			}
+		} else {
+			await this.open();
+		}
+		if (signal?.aborted) {
+			throw new DOMException('Binary read aborted', 'AbortError');
+		}
+		// Opening can be shared by concurrent callers with the same request ID.
+		if (this.pending.has(requestId)) {
+			throw new Error('Workspace request is already pending.');
+		}
+		if (expectedSocket && this.socket !== expectedSocket) {
 			throw new Error('Workspace probe transport was superseded.');
+		}
 		return new Promise<T | { data: T; bytes: Uint8Array }>((resolve, reject) => {
 			const timer = window.setTimeout(() => {
 				const pending = this.pending.get(requestId);
 				this.pending.delete(requestId);
 				pending?.binaryChunks.splice(0);
-				if (type === 'filesystem.readBinary')
-					void this.request('filesystem.cancelRead', { requestId }).catch(() => undefined);
+				if (type === 'filesystem.readBinary') {
+					this.sendConnected('filesystem.cancelRead', { requestId });
+				}
 				logger.warn(
 					this.context({
 						operation: type,
@@ -415,17 +590,20 @@ export class WorkspaceSocket {
 				binaryDone: false,
 				binaryChunks: [],
 				binaryBytes: 0,
-				maxBytes:
-					type === 'filesystem.readBinary' ? Number((payload as { maxBytes?: number }).maxBytes) : undefined,
+				maxBytes: binaryRead?.maxBytes ?? historyRead?.maxBytes,
 			});
 
 			const abort = () => {
 				const pending = this.pending.get(requestId);
-				if (!pending) return;
+				if (!pending) {
+					return;
+				}
 				this.pending.delete(requestId);
 				window.clearTimeout(pending.timer);
 				pending.binaryChunks.length = 0;
-				void this.request('filesystem.cancelRead', { requestId }).catch(() => undefined);
+				if (type === 'filesystem.readBinary') {
+					this.sendConnected('filesystem.cancelRead', { requestId });
+				}
 				pending.reject(new DOMException('Binary read aborted', 'AbortError'));
 			};
 
@@ -448,7 +626,7 @@ export class WorkspaceSocket {
 						'Workspace request queued',
 					);
 				}
-				this.sendJson({ type, requestId, payload });
+				this.sendJson({ type, requestId, payload: binaryRead ?? payload });
 			} catch (cause) {
 				window.clearTimeout(timer);
 				this.pending.delete(requestId);
@@ -463,34 +641,37 @@ export class WorkspaceSocket {
 					}),
 					'Workspace request dispatch failed',
 				);
-				reject(error);
+				pending.reject(error);
 			}
 		});
 	}
 
-	send<K extends keyof WorkspaceRequestMapDto>(type: K, payload: WorkspaceRequestMapDto[K]): Promise<void>;
+	send<K extends keyof WorkspaceRequests>(type: K, payload: WorkspaceRequests[K]): Promise<void>;
 
 	send(type: string, payload?: object): Promise<void>;
 
 	async send(type: string, payload: object = {}): Promise<void> {
 		await this.open();
-		if (!HIGH_FREQUENCY_OPERATIONS.has(type))
+		if (!HIGH_FREQUENCY_OPERATIONS.has(type)) {
 			logger.trace(this.context({ operation: type }), 'Workspace message dispatch');
+		}
 		this.sendJson({ type, payload });
 	}
 
 	/** Send only through the currently open Workspace transport; never opens/reopens the socket. */
-	sendConnected<K extends keyof WorkspaceRequestMapDto>(type: K, payload: WorkspaceRequestMapDto[K]): boolean;
+	sendConnected<K extends keyof WorkspaceRequests>(type: K, payload: WorkspaceRequests[K]): boolean;
 
 	sendConnected(type: string, payload?: object): boolean;
 
 	sendConnected(type: string, payload: object = {}): boolean {
-		if (!this.connected) return false;
+		if (!this.connected) {
+			return false;
+		}
 		try {
-			this.sendJson({ type, payload });
+			this.sendJson({ type, payload: type === 'terminal.flow' ? readWorkspaceTerminalFlow(payload) : payload });
 			return true;
 		} catch (cause) {
-			if (type === 'terminal.input')
+			if (type === 'terminal.input') {
 				logger.warn(
 					this.context({
 						err: cause,
@@ -500,11 +681,12 @@ export class WorkspaceSocket {
 					}),
 					'Terminal input rejected by transport',
 				);
+			}
 			return false;
 		}
 	}
 
-	on<K extends keyof WorkspaceEventMapDto>(type: K, handler: EventHandler<WorkspaceEventMapDto[K]>): () => void;
+	on<K extends keyof WorkspaceEvents>(type: K, handler: EventHandler<WorkspaceEvents[K]>): () => void;
 
 	on<T = unknown>(type: string, handler: EventHandler<T>): () => void;
 
@@ -514,7 +696,9 @@ export class WorkspaceSocket {
 		this.handlers.set(type, listeners);
 		return () => {
 			listeners.delete(handler as EventHandler);
-			if (!listeners.size) this.handlers.delete(type);
+			if (!listeners.size) {
+				this.handlers.delete(type);
+			}
 		};
 	}
 
@@ -533,12 +717,18 @@ export class WorkspaceSocket {
 		return () => this.errorHandlers.delete(handler);
 	}
 
-	private sendJson(value: unknown): void {
-		if (!this.socket || this.socket.readyState !== WebSocket.OPEN)
-			throw new Error('Workspace WebSocket is not open.');
+	private sendJson(value: { type: string; requestId?: string; payload?: object }): void {
+		if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+			throw new WorkspaceDispatchFailure('not_connected');
+		}
 		const message = JSON.stringify(value);
-		if (this.socket.bufferedAmount + messageEncoder.encode(message).byteLength > MAX_SEND_BUFFER_BYTES)
-			throw new Error('Workspace send buffer limit exceeded.');
+		const limit =
+			value.type === 'suspend.mark' || value.type === 'suspend.prepare' || value.type === 'suspend.commit'
+				? WORKSPACE_SUSPEND_MAX_JSON_BYTES
+				: MAX_SEND_BUFFER_BYTES;
+		if (this.socket.bufferedAmount + messageEncoder.encode(message).byteLength > limit) {
+			throw new WorkspaceDispatchFailure('limit_exceeded');
+		}
 		this.socket.send(message);
 	}
 
@@ -547,22 +737,21 @@ export class WorkspaceSocket {
 			this.handleBinaryMessage(new Uint8Array(raw));
 			return;
 		}
-		if (raw instanceof Blob) {
-			void raw.arrayBuffer().then((buffer) => {
-				this.handleBinaryMessage(new Uint8Array(buffer));
-			});
+		// binaryType is arraybuffer: asynchronous Blob conversion could publish an old
+		// attachment's bytes after a reconnect and reorder frames around its response.
+		if (typeof raw !== 'string') {
+			this.failProtocol('Workspace message type is invalid.');
 			return;
 		}
-		if (typeof raw !== 'string') return;
 		let message: ProtocolMessage;
 		try {
-			message = decodeProtocolMessage(raw);
-		} catch (error) {
+			message = readWorkspaceMessage(JSON.parse(raw));
+		} catch {
 			logger.warn(
-				this.context({ err: error, failureKind: 'protocol_invalid_json' }),
+				this.context({ failureKind: 'protocol_invalid_json' }),
 				'Workspace protocol returned invalid JSON',
 			);
-			for (const handler of this.errorHandlers) handler('Workspace protocol returned invalid JSON.');
+			this.failProtocol('Workspace protocol returned invalid JSON.');
 			return;
 		}
 		if (message.type === 'response' && 'requestId' in message) {
@@ -573,6 +762,10 @@ export class WorkspaceSocket {
 					this.context({ requestId: response.requestId, failureKind: 'stale_response' }),
 					'Workspace response has no pending request',
 				);
+				return;
+			}
+			if (pending.responseReceived) {
+				this.failProtocol('Workspace response was received more than once.');
 				return;
 			}
 			if (!HIGH_FREQUENCY_OPERATIONS.has(pending.operation)) {
@@ -589,17 +782,17 @@ export class WorkspaceSocket {
 			if (!response.payload.ok) {
 				this.pending.delete(response.requestId);
 				window.clearTimeout(pending.timer);
-				const reason = response.payload.error || 'Workspace request failed.';
+				const reason = response.payload.error;
 				logger.debug(
 					this.context({
 						operation: pending.operation,
 						requestId: response.requestId,
 						reason,
-						failureKind: workspaceFailureKind(reason),
+						failureKind: 'request_rejected',
 					}),
 					'Workspace request rejected',
 				);
-				pending.reject(new Error(reason));
+				pending.reject(new WorkspaceRequestFailure(pending.operation, reason));
 				return;
 			}
 			if (!pending.expectBinary) {
@@ -620,18 +813,24 @@ export class WorkspaceSocket {
 				'Workspace event dispatched',
 			);
 		}
-		for (const handler of handlers) handler(message.payload);
+		let payload: unknown;
+		try {
+			payload = readKnownEvent(message.type, message.payload);
+		} catch {
+			this.failProtocol('Workspace event is invalid.');
+			return;
+		}
+		for (const handler of handlers) {
+			handler(payload);
+		}
 	}
 
 	private handleBinaryMessage(raw: Uint8Array): void {
 		let frame;
 		try {
 			frame = decodeWorkspaceBinaryFrame(raw);
-		} catch (cause) {
-			const error = cause instanceof Error ? cause : new Error(String(cause));
-			this.rejectPending(error);
-			for (const handler of this.errorHandlers) handler(error.message);
-			this.close('Workspace binary protocol error');
+		} catch {
+			this.failProtocol('Workspace binary protocol error');
 			return;
 		}
 		if (frame.kind === 'terminal') {
@@ -639,40 +838,62 @@ export class WorkspaceSocket {
 			let acknowledged = false;
 
 			const consumed = () => {
-				if (acknowledged || this.socket !== socket) return;
+				if (acknowledged || this.socket !== socket) {
+					return;
+				}
 				acknowledged = true;
 				this.consumedTerminalBytes += frame.data.byteLength;
 				this.scheduleConsumptionAck();
 			};
 
-			for (const handler of this.binaryHandlers) handler(frame.data, consumed);
+			for (const handler of this.binaryHandlers) {
+				handler(frame.data, consumed);
+			}
 			return;
 		}
 		const pending = this.pending.get(frame.requestId);
-		if (!pending || !pending.expectBinary) return;
+		if (!pending || !pending.expectBinary) {
+			return;
+		}
+		if (pending.binaryDone) {
+			this.failProtocol('Workspace binary response continued after its final frame.');
+			return;
+		}
 		if (frame.data.byteLength) {
 			const maxBytes =
 				pending.operation === 'suspend.history.previous'
-					? MAX_HISTORY_RESPONSE_BYTES
-					: Math.min(pending.maxBytes ?? MAX_FILE_RESPONSE_BYTES, MAX_FILE_RESPONSE_BYTES);
+					? Math.min(
+							pending.maxBytes ?? WORKSPACE_SUSPEND_MAX_HISTORY_PAGE_BYTES,
+							WORKSPACE_SUSPEND_MAX_HISTORY_PAGE_BYTES,
+						)
+					: Math.min(
+							pending.maxBytes ?? WORKSPACE_FILES_MAX_BINARY_READ_BYTES,
+							WORKSPACE_FILES_MAX_BINARY_READ_BYTES,
+						);
 			if (pending.binaryBytes + frame.data.byteLength > maxBytes) {
 				this.pending.delete(frame.requestId);
 				window.clearTimeout(pending.timer);
 				pending.binaryChunks.length = 0;
 				pending.reject(new Error('Workspace binary response limit exceeded.'));
-				void this.request('filesystem.cancelRead', { requestId: frame.requestId }).catch(() => undefined);
+				if (pending.operation === 'filesystem.readBinary') {
+					this.sendConnected('filesystem.cancelRead', { requestId: frame.requestId });
+				}
 				return;
 			}
 			const copy = frame.data.slice();
 			pending.binaryChunks.push(copy);
 			pending.binaryBytes += copy.byteLength;
 		}
-		if (frame.final) pending.binaryDone = true;
+		if (frame.final) {
+			pending.binaryDone = true;
+		}
 		this.resolveBinaryPending(frame.requestId, pending);
 	}
 
 	private resolveBinaryPending(requestId: string, pending: PendingRequest): void {
-		if (!pending.expectBinary || !pending.responseReceived || !pending.binaryDone) return;
+		if (!pending.expectBinary || !pending.responseReceived || !pending.binaryDone) {
+			return;
+		}
 		this.pending.delete(requestId);
 		window.clearTimeout(pending.timer);
 		const bytes = new Uint8Array(pending.binaryBytes);
@@ -682,6 +903,15 @@ export class WorkspaceSocket {
 			offset += chunk.byteLength;
 		}
 		pending.resolve({ data: pending.responseValue, bytes });
+	}
+
+	private failProtocol(message: string): void {
+		// Reject waits and detach before notifying subscribers; invalid wire data must
+		// not leave requests alive or allow further frames to update this attachment.
+		this.close(message);
+		for (const handler of this.errorHandlers) {
+			handler(message);
+		}
 	}
 
 	private rejectPending(error: Error): void {

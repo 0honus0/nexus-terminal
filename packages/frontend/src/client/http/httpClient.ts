@@ -42,8 +42,11 @@ httpClient.interceptors.response.use(
 				statusCode: error.response?.status,
 				errorCode: error.code,
 			};
-			if (!error.response || (error.response.status ?? 0) >= 500) logger.warn(context, 'HTTP request failed');
-			else logger.debug(context, 'HTTP request rejected');
+			if (!error.response || (error.response.status ?? 0) >= 500) {
+				logger.warn(context, 'HTTP request failed');
+			} else {
+				logger.debug(context, 'HTTP request rejected');
+			}
 		} else {
 			logger.warn({ err: error }, 'Unexpected HTTP client failure');
 		}

@@ -1,13 +1,14 @@
 <script setup lang="ts">
 	import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { createAccessNextApi } from '@/features/auth/public';
+	import { createAccessApi, AuthRequestFailure } from '@/features/auth/public';
 	import { createAgentNextApi } from '../api/agent-next-api';
 	import { AgentNextController, type AgentNextControllerState } from '../model/agent-next-controller';
+	import NativeThreadPanel from '../../host/NativeThreadPanel.vue';
 
 	const { t, te } = useI18n();
 	const base = new URL('/__next/', window.location.href);
-	const auth = createAccessNextApi(base.toString());
+	const auth = createAccessApi('/__next/api/v1/auth');
 	const agent = createAgentNextApi(base.toString());
 
 	const initialState: AgentNextControllerState = {
@@ -61,7 +62,9 @@
 	}
 
 	function localized(code: string | null): string {
-		if (!code) return '';
+		if (!code) {
+			return '';
+		}
 		const key = 'agentNext.errors.' + code;
 		return te(key) ? t(key) : t('agentNext.errors.request_failed');
 	}
@@ -85,13 +88,15 @@
 		try {
 			const needsSetup = await auth.needsSetup(current.request.signal);
 			const session = await auth.status(current.request.signal);
-			if (!authActive(current.generation, current.request)) return;
+			if (!authActive(current.generation, current.request)) {
+				return;
+			}
 			setupNeeded.value = needsSetup;
 			loggedIn.value = session !== null;
 			controller.reset();
 		} catch (error) {
 			if (authActive(current.generation, current.request)) {
-				authError.value = localized(error instanceof Error ? error.message : 'request_failed');
+				authError.value = localized(error instanceof AuthRequestFailure ? error.code : 'request_failed');
 			}
 		} finally {
 			if (authActive(current.generation, current.request)) {
@@ -111,17 +116,23 @@
 					current.request.signal,
 				);
 			}
-			await auth.login(
+			const result = await auth.login(
 				{ username: username.value, password: password.value, rememberMe: false },
 				current.request.signal,
 			);
-			if (!authActive(current.generation, current.request)) return;
+			if (!authActive(current.generation, current.request)) {
+				return;
+			}
 			password.value = '';
 			setupNeeded.value = false;
-			loggedIn.value = true;
+			loggedIn.value = !result.requiresTwoFactor;
+			if (result.requiresTwoFactor) {
+				authError.value = t('auth.login.twoFactorPrompt');
+				return;
+			}
 		} catch (error) {
 			if (authActive(current.generation, current.request)) {
-				authError.value = localized(error instanceof Error ? error.message : 'request_failed');
+				authError.value = localized(error instanceof AuthRequestFailure ? error.code : 'request_failed');
 			}
 		} finally {
 			if (authActive(current.generation, current.request)) {
@@ -136,11 +147,13 @@
 		controller.reset();
 		try {
 			await auth.logout(current.request.signal);
-			if (!authActive(current.generation, current.request)) return;
+			if (!authActive(current.generation, current.request)) {
+				return;
+			}
 			loggedIn.value = false;
 		} catch (error) {
 			if (authActive(current.generation, current.request)) {
-				authError.value = localized(error instanceof Error ? error.message : 'request_failed');
+				authError.value = localized(error instanceof AuthRequestFailure ? error.code : 'request_failed');
 			}
 		} finally {
 			if (authActive(current.generation, current.request)) {
@@ -152,17 +165,23 @@
 
 	async function createApp(): Promise<void> {
 		const created = await controller.createApp(appName.value);
-		if (created) appId.value = created.id;
+		if (created) {
+			appId.value = created.id;
+		}
 	}
 
 	async function createThread(): Promise<void> {
 		const created = await controller.createThread(appId.value, threadTitle.value);
-		if (created) threadId.value = created.id;
+		if (created) {
+			threadId.value = created.id;
+		}
 	}
 
 	async function createRun(): Promise<void> {
 		const model = selectedModel.value;
-		if (!model) return;
+		if (!model) {
+			return;
+		}
 		const created = await controller.createRun(appId.value, threadId.value, prompt.value, {
 			providerId: model.providerId,
 			modelId: model.modelId,
@@ -176,12 +195,16 @@
 
 	async function getRun(): Promise<void> {
 		const current = await controller.getRun(appId.value, runId.value);
-		if (current) expectedVersion.value = current.version;
+		if (current) {
+			expectedVersion.value = current.version;
+		}
 	}
 
 	async function cancelRun(): Promise<void> {
 		const current = await controller.cancelRun(appId.value, runId.value, expectedVersion.value);
-		if (current) expectedVersion.value = current.version;
+		if (current) {
+			expectedVersion.value = current.version;
+		}
 	}
 
 	async function listEvents(): Promise<void> {
@@ -211,13 +234,17 @@
 	watch(
 		() => state.value.availableModels,
 		(items) => {
-			if (!items.some((item) => modelKey(item) === selectedModelKey.value)) selectedModelKey.value = '';
+			if (!items.some((item) => modelKey(item) === selectedModelKey.value)) {
+				selectedModelKey.value = '';
+			}
 		},
 	);
 	watch(
 		() => state.value.run?.version,
 		(version) => {
-			if (version !== undefined) expectedVersion.value = version;
+			if (version !== undefined) {
+				expectedVersion.value = version;
+			}
 		},
 	);
 
@@ -235,7 +262,7 @@
 	<main class="mx-auto max-w-4xl space-y-4 p-6">
 		<h1 class="text-xl font-semibold">{{ t('agentNext.title') }}</h1>
 		<p class="text-sm">{{ t('agentNext.isolation') }}</p>
-		<p class="text-xs">/__next/ → NEXUS_VITE_BACKEND_NEXT_ORIGIN</p>
+		<p class="text-xs">/__next/ → NEXUS_VITE_BACKEND_ORIGIN</p>
 
 		<p v-if="authError" role="alert">{{ authError }}</p>
 		<form v-if="!loggedIn" class="space-y-3 rounded border p-4" @submit.prevent="login">
@@ -296,6 +323,14 @@
 					{{ t('agentNext.threadId') }}
 					<input v-model="threadId" class="block w-full border p-2" autocomplete="off" />
 				</label>
+				<NativeThreadPanel
+					v-if="loggedIn && appId"
+					:key="appId"
+					:app-id="appId"
+					:active="loggedIn"
+					api-base="/__next/api/v1/agent"
+					@select="threadId = $event.id"
+				/>
 			</section>
 
 			<section class="space-y-3 rounded border p-4">

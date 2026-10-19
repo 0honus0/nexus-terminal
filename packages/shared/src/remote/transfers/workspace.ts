@@ -6,7 +6,32 @@ import type {
 	WorkspaceArchiveOperation,
 	WorkspaceUploadConflictPolicy,
 	WorkspaceArchiveErrorCode,
+	WorkspaceArchiveTool,
+	WorkspaceArchiveWarning,
 } from './values.js';
+import type { RemoteFileErrorCode } from '../files/values.js';
+
+export interface WorkspaceUploadPrepared {
+	preparedDirectories: number;
+}
+
+export interface WorkspaceUploadRequests {
+	'upload.prepare': WorkspaceUploadPrepare;
+	'upload.start': WorkspaceUploadStart;
+	'upload.cancel': WorkspaceUploadSession;
+	'upload.abort': WorkspaceUploadAbort;
+}
+
+export interface WorkspaceUploadResponses {
+	'upload.prepare': WorkspaceUploadPrepared;
+	'upload.start': WorkspaceTaskStarted;
+	'upload.cancel': boolean;
+	'upload.abort': boolean;
+}
+
+export interface WorkspaceUploadEvents {
+	'transfer.upload': WorkspaceUploadEvent;
+}
 
 export interface WorkspaceCopyMoveRequest {
 	mode: WorkspaceCopyMoveMode;
@@ -50,15 +75,15 @@ export type WorkspaceArchiveEvent =
 			operation: WorkspaceArchiveOperation;
 			requestId: string;
 			path: string;
-			warning?: string;
+			warning?: WorkspaceArchiveWarning;
 	  }
 	| {
 			type: 'failed';
 			operation: WorkspaceArchiveOperation;
 			requestId: string;
-			message: string;
+			message: RemoteFileErrorCode | WorkspaceArchiveErrorCode;
 			code?: WorkspaceArchiveErrorCode;
-			commandNotFound?: string;
+			commandNotFound?: WorkspaceArchiveTool;
 	  }
 	| { type: 'cancelled'; operation: WorkspaceArchiveOperation; requestId: string };
 
@@ -83,7 +108,7 @@ export type WorkspaceCopyMoveEvent =
 			crossSession: boolean;
 			sourceOwnerId?: string;
 	  }
-	| { type: 'failed'; requestId: string; mode: WorkspaceCopyMoveMode; message: string }
+	| { type: 'failed'; requestId: string; mode: WorkspaceCopyMoveMode; message: RemoteFileErrorCode }
 	| { type: 'cancelling'; requestId: string }
 	| { type: 'cancelled'; requestId: string };
 
@@ -130,4 +155,25 @@ export type WorkspaceUploadEvent =
 	  }
 	| { type: 'completed'; uploadId: string; destinationPath: string; item: WorkspaceFileEntry }
 	| { type: 'cancelled'; uploadId: string }
-	| { type: 'failed'; uploadId: string; message: string };
+	| { type: 'failed'; uploadId: string; message: RemoteFileErrorCode };
+
+export interface WorkspaceTransferRequests {
+	'transfer.copyMove': WorkspaceCopyMoveRequest;
+	'transfer.cancel': WorkspaceTaskCancelRequest;
+	'transfer.compress': WorkspaceArchiveCompressRequest;
+	'transfer.decompress': WorkspaceArchiveDecompressRequest;
+	'transfer.cancelArchive': WorkspaceTaskCancelRequest;
+}
+
+export interface WorkspaceTransferResponses {
+	'transfer.copyMove': WorkspaceTaskStarted;
+	'transfer.cancel': boolean;
+	'transfer.compress': WorkspaceTaskStarted;
+	'transfer.decompress': WorkspaceTaskStarted;
+	'transfer.cancelArchive': boolean;
+}
+
+export interface WorkspaceTransferEvents {
+	'transfer.copyMove': WorkspaceCopyMoveEvent;
+	'transfer.archive': WorkspaceArchiveEvent;
+}

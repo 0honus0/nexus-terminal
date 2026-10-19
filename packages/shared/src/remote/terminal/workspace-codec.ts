@@ -3,13 +3,16 @@ import {
 	WORKSPACE_TERMINAL_MAX_COLUMNS,
 	WORKSPACE_TERMINAL_MAX_INPUT_BYTES,
 	WORKSPACE_TERMINAL_MAX_ROWS,
+	WORKSPACE_BINARY_MAX_REQUEST_ID_BYTES,
 } from '../workspace/values.js';
+import { WORKSPACE_DIRECTORY_CHANGE_FAILURE_CODES } from './values.js';
 import { isWellFormedFileText } from '../files/text-codec.js';
 import type {
 	WorkspaceTerminalFlow,
 	WorkspaceTerminalInput,
 	WorkspaceTerminalResize,
 	WorkspaceTerminalChangeDirectory,
+	WorkspaceTerminalEvents,
 } from './workspace.js';
 
 export class InvalidWorkspaceTerminalPayload extends Error {
@@ -74,4 +77,71 @@ export function readWorkspaceTerminalChangeDirectory(value: unknown): WorkspaceT
 		throw new InvalidWorkspaceTerminalPayload();
 	}
 	return { path };
+}
+
+function requestId(value: unknown): string {
+	if (
+		typeof value !== 'string' ||
+		!value ||
+		!isWellFormedFileText(value) ||
+		new TextEncoder().encode(value).length > WORKSPACE_BINARY_MAX_REQUEST_ID_BYTES
+	) {
+		throw new InvalidWorkspaceTerminalPayload();
+	}
+	return value;
+}
+
+export function readWorkspaceTerminalCurrentDirectory(value: unknown): string {
+	return readWorkspaceTerminalChangeDirectory({ path: value }).path;
+}
+
+export function readWorkspaceTerminalChangeDirectoryResponse(value: unknown): { queued: true } {
+	if (row(value, ['queued']).queued !== true) {
+		throw new InvalidWorkspaceTerminalPayload();
+	}
+	return { queued: true };
+}
+
+export function readWorkspaceTerminalClosed(value: unknown): WorkspaceTerminalEvents['terminal.closed'] {
+	row(value, []);
+	return {};
+}
+
+export function readWorkspaceTerminalError(value: unknown): WorkspaceTerminalEvents['terminal.error'] {
+	if (row(value, ['message']).message !== 'remote_unavailable') {
+		throw new InvalidWorkspaceTerminalPayload();
+	}
+	return { message: 'remote_unavailable' };
+}
+
+export function readWorkspaceTerminalDirectoryQueued(
+	value: unknown,
+): WorkspaceTerminalEvents['terminal.directoryChangeQueued'] {
+	const input = row(value, ['requestId', 'path', 'waitingForPrompt']);
+	if (typeof input.waitingForPrompt !== 'boolean') {
+		throw new InvalidWorkspaceTerminalPayload();
+	}
+	return {
+		requestId: requestId(input.requestId),
+		path: readWorkspaceTerminalCurrentDirectory(input.path),
+		waitingForPrompt: input.waitingForPrompt,
+	};
+}
+
+export function readWorkspaceTerminalDirectoryChanged(
+	value: unknown,
+): WorkspaceTerminalEvents['terminal.directoryChanged'] {
+	const input = row(value, ['requestId', 'path']);
+	return { requestId: requestId(input.requestId), path: readWorkspaceTerminalCurrentDirectory(input.path) };
+}
+
+export function readWorkspaceTerminalDirectoryFailed(
+	value: unknown,
+): WorkspaceTerminalEvents['terminal.directoryChangeFailed'] {
+	const input = row(value, ['requestId', 'message']);
+	const message = WORKSPACE_DIRECTORY_CHANGE_FAILURE_CODES.find((code) => code === input.message);
+	if (!message) {
+		throw new InvalidWorkspaceTerminalPayload();
+	}
+	return { requestId: requestId(input.requestId), message };
 }

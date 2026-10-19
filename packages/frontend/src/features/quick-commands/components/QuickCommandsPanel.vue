@@ -4,20 +4,25 @@
 	import { useI18n } from 'vue-i18n';
 	import { UiContextMenu, UiInput } from '@/foundation/ui';
 	import { readStoredValue, stringStorageCodec, writeClipboardText, writeStoredValue } from '@/foundation/browser';
-	import { useFeedback } from '@/shared/feedback/public';
+	import { useAuthenticatedViewScope } from '@/shared/session/public';
+	import { useFeedback, preferenceFailureMessage } from '@/shared/feedback/public';
 	import { focusRegistry } from '@/shared/focus/public';
 	import { createWheelScaleResolver } from '@/foundation/interaction';
 	import QuickCommandForm from './QuickCommandForm.vue';
 	import { useQuickCommandsStore } from '../store/quickCommands.store';
-	import { expandQuickCommand } from '../model/quickCommand';
-	import type { ExecuteCommandIntent, QuickCommandDto, QuickCommandFormInput } from '../model/quickCommand';
+	import { expandQuickCommand } from '../model/quick-command-expansion';
+	import type {
+		ExecuteCommandIntent,
+		QuickCommandSummary,
+		QuickCommandFormInput,
+		QuickCommandTagSummary,
+	} from '../model/quick-command-types';
 
 	type DisplayMode = 'name' | 'command';
 	const displayModeStorage = {
 		namespace: 'quick-commands.display-mode',
 		version: 1,
 		codec: stringStorageCodec((value) => value === 'name' || value === 'command'),
-		legacyKeys: ['quickCommandsDisplayMode'],
 	} as const;
 	const props = withDefaults(
 		defineProps<{ collapsibleSearch?: boolean; showTags?: boolean; rowScale?: number; compact?: boolean }>(),
@@ -31,18 +36,37 @@
 	const { t } = useI18n();
 	const feedback = useFeedback();
 	const store = useQuickCommandsStore();
-	const { groups, flat, tags, search, sort, loading, error, tagLoadError, expanded, selectedId } = storeToRefs(store);
+	const { groups, flat, tags, search, sort, loading, error, expanded, selectedId } = storeToRefs(store);
 	const localScale = ref(props.rowScale);
 	const visible = ref(false);
-	const editing = ref<QuickCommandDto | null>(null);
+	const editing = ref<QuickCommandSummary | null>(null);
 	const searchInput = ref<HTMLInputElement | null>(null);
 	const searchExpanded = ref(!props.collapsibleSearch);
 	const root = ref<HTMLElement | null>(null);
 	const list = ref<HTMLElement | null>(null);
-	const context = ref<{ command: QuickCommandDto; x: number; y: number } | null>(null);
+	const context = ref<{ command: QuickCommandSummary; x: number; y: number } | null>(null);
 	const editingTagId = ref<number | 'untagged' | null>(null);
 	const tagDraft = ref('');
+	const editingTag = ref<QuickCommandTagSummary | null>(null);
 	let unregisterFocus: (() => void) | undefined;
+	const view = useAuthenticatedViewScope({
+		onRevoke: () => {
+			visible.value = false;
+			editing.value = null;
+			context.value = null;
+			editingTagId.value = null;
+			editingTag.value = null;
+			tagDraft.value = '';
+		},
+	});
+	const saving = ref(false);
+	const formView = useAuthenticatedViewScope({
+		available: () => visible.value,
+
+		onRevoke: () => {
+			saving.value = false;
+		},
+	});
 
 	const readDisplayMode = (): DisplayMode => (readStoredValue(displayModeStorage) === 'name' ? 'name' : 'command');
 
@@ -71,7 +95,9 @@
 	watch(
 		() => props.rowScale,
 		(value) => {
-			if (Number.isFinite(value)) localScale.value = value;
+			if (Number.isFinite(value)) {
+				localScale.value = value;
+			}
 		},
 	);
 	watch(
@@ -98,7 +124,9 @@
 
 	const scaleRows = (event: WheelEvent) => {
 		const change = resolveScale(event, localScale.value);
-		if (!change) return;
+		if (!change) {
+			return;
+		}
 		localScale.value = change.next;
 		emit('rowScale', change.next);
 	};
@@ -131,7 +159,9 @@
 
 	const revealSelected = () => {
 		const id = selectedId.value;
-		if (id === null) return;
+		if (id === null) {
+			return;
+		}
 		root.value?.querySelector<HTMLElement>(`[data-command-id="${id}"]`)?.scrollIntoView({ block: 'nearest' });
 	};
 
@@ -143,7 +173,9 @@
 			return;
 		}
 		const candidates = props.showTags ? store.visible : store.flat;
-		if (!candidates.length) return;
+		if (!candidates.length) {
+			return;
+		}
 		if (event.key === 'ArrowDown') {
 			event.preventDefault();
 			store.selectNext(props.showTags);
@@ -158,7 +190,9 @@
 		}
 		if (event.key === 'Enter') {
 			const command = candidates.find((item) => item.id === selectedId.value);
-			if (!command) return;
+			if (!command) {
+				return;
+			}
 			event.preventDefault();
 			run(command);
 		}
@@ -168,13 +202,16 @@
 		window.setTimeout(() => {
 			if (document.activeElement !== searchInput.value && !list.value?.contains(document.activeElement)) {
 				store.resetSelection();
-				if (props.collapsibleSearch && !search.value) searchExpanded.value = false;
+				if (props.collapsibleSearch && !search.value) {
+					searchExpanded.value = false;
+				}
 			}
 		}, 0);
 	};
 
 	const startTagEdit = (group: { id: number | null; name: string }) => {
 		editingTagId.value = group.id ?? 'untagged';
+		editingTag.value = tags.value.find((tag) => tag.id === group.id) ?? null;
 		tagDraft.value = group.id === null ? '' : group.name;
 	};
 
@@ -183,40 +220,54 @@
 		tagDraft.value = '';
 	};
 
-	const finishTagEdit = async (group: { id: number | null; name: string; commands: QuickCommandDto[] }) => {
+	const finishTagEdit = async (group: { id: number | null; name: string; commands: QuickCommandSummary[] }) => {
+		const signal = view.capture();
+		if (!view.isCurrent(signal)) {
+			return;
+		}
 		const editing = editingTagId.value;
-		if (editing === null) return;
+		const original = editingTag.value;
+		if (editing === null) {
+			return;
+		}
 		const name = tagDraft.value.trim();
 		cancelTagEdit();
-		if (!name) return;
+		if (!name) {
+			return;
+		}
 		try {
 			if (editing === 'untagged') {
-				const result = await store.createTagForCommands(
-					name,
-					group.commands.map((command) => command.id),
-				);
+				const result = await store.createTagForCommands(name, group.commands, signal);
+				if (!view.isCurrent(signal)) {
+					return;
+				}
 				if (!result.assigned) {
 					feedback.notifyWarning(
 						t('quickCommands.tags.assignFailedAfterCreate', {
 							name: result.tag.name,
-							error: result.error ?? '',
+							error: preferenceFailureMessage(result.error, t),
 						}),
 					);
 				}
-			} else if (name !== group.name) await store.renameTag(editing, name);
+			} else if (original && name !== original.name) {
+				await store.renameTag(original, name, signal);
+			}
 		} catch (cause) {
+			if (!view.isCurrent(signal)) {
+				return;
+			}
 			feedback.notifyError(
 				t(editing === 'untagged' ? 'quickCommands.tags.createFailed' : 'quickCommands.tags.renameFailed', {
-					error: cause instanceof Error ? cause.message : String(cause),
+					error: preferenceFailureMessage(cause, t),
 				}),
 			);
 		}
 	};
 
-	const displayText = (command: QuickCommandDto) =>
+	const displayText = (command: QuickCommandSummary) =>
 		displayMode.value === 'name' ? command.name?.trim() || command.command : command.command;
 
-	const edit = (command: QuickCommandDto) => {
+	const edit = (command: QuickCommandSummary) => {
 		editing.value = command;
 		visible.value = true;
 	};
@@ -227,15 +278,29 @@
 	};
 
 	const save = async (input: QuickCommandFormInput) => {
+		const signal = formView.capture();
+		if (!formView.isCurrent(signal) || saving.value) {
+			return;
+		}
+		saving.value = true;
 		try {
-			await store.save(input, editing.value?.id);
-			visible.value = false;
+			await store.save(input, editing.value ?? undefined, signal);
+			if (formView.isCurrent(signal)) {
+				visible.value = false;
+			}
 		} catch (cause) {
+			if (!formView.isCurrent(signal)) {
+				return;
+			}
 			feedback.notifyError(
 				t('quickCommands.notifications.saveFailed', {
-					error: cause instanceof Error ? cause.message : String(cause),
+					error: preferenceFailureMessage(cause, t),
 				}),
 			);
+		} finally {
+			if (formView.isCurrent(signal)) {
+				saving.value = false;
+			}
 		}
 	};
 
@@ -251,7 +316,7 @@
 		return expansion.command;
 	};
 
-	const processCommand = (commandDefinition: QuickCommandDto) =>
+	const processCommand = (commandDefinition: QuickCommandSummary) =>
 		processTemplate(commandDefinition.command, commandDefinition.variables);
 
 	const executeDraft = (input: QuickCommandFormInput) => {
@@ -259,13 +324,13 @@
 		visible.value = false;
 	};
 
-	const run = (command: QuickCommandDto, all = false) => {
+	const run = (command: QuickCommandSummary, all = false) => {
 		context.value = null;
 		emit('execute', { command: processCommand(command), sourceId: command.id, allSessions: all });
 		void store.recordUsage(command.id);
 	};
 
-	const copy = async (command: QuickCommandDto) => {
+	const copy = async (command: QuickCommandSummary) => {
 		context.value = null;
 		try {
 			await writeClipboardText(command.command);
@@ -275,27 +340,38 @@
 		}
 	};
 
-	const remove = async (command: QuickCommandDto) => {
+	const remove = async (command: QuickCommandSummary) => {
 		context.value = null;
+		const signal = view.capture();
+		if (!view.isCurrent(signal)) {
+			return;
+		}
 		if (
 			await feedback.confirm({
 				message: t('quickCommands.confirmDelete', { name: command.name ?? command.command }),
+				signal,
 				destructive: true,
 			})
 		) {
 			try {
-				await store.remove(command.id);
+				if (!view.isCurrent(signal)) {
+					return;
+				}
+				await store.remove(command, signal);
 			} catch (cause) {
+				if (!view.isCurrent(signal)) {
+					return;
+				}
 				feedback.notifyError(
 					t('quickCommands.notifications.deleteFailed', {
-						error: cause instanceof Error ? cause.message : String(cause),
+						error: preferenceFailureMessage(cause, t),
 					}),
 				);
 			}
 		}
 	};
 
-	const openContext = (event: MouseEvent, command: QuickCommandDto) => {
+	const openContext = (event: MouseEvent, command: QuickCommandSummary) => {
 		selectedId.value = command.id;
 		context.value = { command, x: event.clientX, y: event.clientY };
 	};
@@ -373,13 +449,10 @@
 			:data-row-scale="localScale.toFixed(2)"
 			@wheel="scaleRows"
 		>
-			<p
-				v-if="tagLoadError"
-				class="mb-2 rounded-md border border-warning/40 bg-warning/10 p-2 text-xs text-warning"
-				role="alert"
-			>
-				{{ t('quickCommands.notifications.tagLoadFailed', { error: tagLoadError }) }}
-			</p>
+			<div v-if="error && store.items.length" role="alert" class="p-2 text-sm text-error">
+				{{ preferenceFailureMessage(error, t) }}
+				<button @click="store.load(true).catch(() => undefined)">{{ t('common.retry') }}</button>
+			</div>
 			<div
 				v-if="loading"
 				class="flex h-full flex-col items-center justify-center p-6 text-center text-sm text-text-secondary"
@@ -392,7 +465,8 @@
 				class="flex h-full flex-col items-center justify-center p-6 text-center text-sm text-error"
 			>
 				<i class="fas fa-exclamation-triangle mb-2 text-xl" aria-hidden="true"></i>
-				<p>{{ t('quickCommands.notifications.loadFailed', { error }) }}</p>
+				<p>{{ t('quickCommands.notifications.loadFailed', { error: preferenceFailureMessage(error, t) }) }}</p>
+				<button @click="store.load(true).catch(() => undefined)">{{ t('common.retry') }}</button>
 			</div>
 			<div
 				v-else-if="!(showTags ? groups.length : flat.length) && search"
@@ -416,7 +490,7 @@
 				</button>
 			</div>
 
-			<template v-else-if="showTags && !tagLoadError">
+			<template v-else-if="showTags">
 				<section
 					v-for="group in groups"
 					:key="group.id ?? 'untagged'"

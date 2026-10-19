@@ -1,28 +1,39 @@
 <script setup lang="ts">
 	import { computed, defineAsyncComponent, markRaw, onBeforeUnmount, ref, watch } from 'vue';
 	import { RouterView } from 'vue-router';
+	import { useI18n } from 'vue-i18n';
 	import { preloadAuthenticatedRoutes } from './router';
 	import { logger } from '@/client/logging/logger';
 	import AppHeader from './shell/AppHeader.vue';
 	import { useAuthSession } from '@/features/auth/public';
+	import { BackupRecoveryOverlay, useBackupStore } from '@/features/backup/public';
 	import { loadAppearanceCustomizerModal, useAppearance } from '@/features/appearance/public';
 	import { AgentSurfaceHost } from '@/features/agent/public';
 	import { markConnectionConnected, useConnections } from '@/features/connections/public';
-	import { ConnectionTagPicker, connectionTagsService, useConnectionTags } from '@/features/tags/public';
+	import { ConnectionTagPicker, useConnectionTags } from '@/features/tags/public';
 	import { useProxies } from '@/features/proxies/public';
 	import { SshKeySelector, useSshKeys } from '@/features/ssh-keys/public';
 	import { loadTerminalView } from '@/features/terminal/public';
 	import { loadRemoteDesktopModal, remoteDesktopLauncher } from '@/features/remote-desktop/public';
 	import { usePreferences } from '@/features/preferences/public';
-	import { DialogHost, NotificationHost, RuntimeErrorBoundary } from '@/shared/feedback/public';
+	import {
+		DialogHost,
+		NotificationHost,
+		RuntimeErrorBoundary,
+		useOperationFeedback,
+		preferenceFailureMessage,
+	} from '@/shared/feedback/public';
 	import { authenticatedSessionLifecycle, type AuthenticatedSessionDispatch } from '@/shared/session/public';
 	import { provideRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
 	import { getLocale, setLocale } from './i18n';
-	import { disposeWorkspaceRuntime } from './workspaceLifecycle';
 
 	const RemoteDesktopModal = defineAsyncComponent(loadRemoteDesktopModal);
 	const AppearanceCustomizerModal = defineAsyncComponent(loadAppearanceCustomizerModal);
 	const auth = useAuthSession();
+	const { t } = useI18n();
+	const desktopFeedback = useOperationFeedback('remote-desktop.size');
+	const desktopSizeSaving = ref(false);
+	const backup = useBackupStore();
 	const connections = useConnections();
 	const tags = useConnectionTags();
 	const proxies = useProxies();
@@ -43,7 +54,7 @@
 			load: tags.load,
 			revalidate: tags.revalidate,
 
-			ensure: (names) => connectionTagsService.ensure(names),
+			ensure: tags.ensure,
 
 			picker: markRaw(ConnectionTagPicker),
 		},
@@ -58,7 +69,9 @@
 	watch(
 		[preferences.loaded, () => preferences.values.value.language],
 		([loaded, language]) => {
-			if (loaded) setLocale(language);
+			if (loaded) {
+				setLocale(language);
+			}
 		},
 		{ immediate: true },
 	);
@@ -80,20 +93,36 @@
 		markConnectionConnected(connectionId, lastConnectedAt);
 	};
 
-	const saveRemoteDesktopSize = (size: { width: number; height: number }) => {
+	const saveRemoteDesktopSize = async (size: { width: number; height: number }): Promise<void> => {
 		const type = remoteDesktopConnection.value?.type;
-		if (!type) return;
-		void preferences
-			.update(
+		if (!type || desktopSizeSaving.value) {
+			return;
+		}
+		const user = auth.user.value;
+		desktopSizeSaving.value = true;
+		try {
+			await preferences.update(
 				type === 'VNC'
 					? { vncModalWidth: size.width, vncModalHeight: size.height }
 					: { rdpModalWidth: size.width, rdpModalHeight: size.height },
-			)
-			.catch((cause) => logger.error({ err: cause }, 'Failed to persist remote desktop window size'));
+			);
+		} catch (cause) {
+			if (auth.user.value === user) {
+				desktopFeedback.notifyError({
+					operation: 'save-size',
+					message: preferenceFailureMessage(cause, t),
+					cause,
+				});
+			}
+		} finally {
+			desktopSizeSaving.value = false;
+		}
 	};
 
 	const reportSessionCleanupFailures = (result: AuthenticatedSessionDispatch | null): void => {
-		if (!result) return;
+		if (!result) {
+			return;
+		}
 		for (const failure of result.failures) {
 			logger.error(
 				{ err: failure.cause, ownerId: failure.ownerId, sessionEvent: result.event.type },
@@ -105,7 +134,6 @@
 	const disposeAuthenticatedShell = (): void => {
 		authenticatedPageCacheGeneration.value += 1;
 		remoteDesktopLauncher.close();
-		void disposeWorkspaceRuntime();
 	};
 
 	watch(
@@ -114,7 +142,9 @@
 			if (authenticated && userId !== null) {
 				const result = authenticatedSessionLifecycle.attach(userId);
 				reportSessionCleanupFailures(result);
-				if (result?.event.type === 'user-changed') disposeAuthenticatedShell();
+				if (result?.event.type === 'user-changed') {
+					disposeAuthenticatedShell();
+				}
 				preloadAuthenticatedRoutes();
 				void appearance
 					.load()
@@ -126,20 +156,22 @@
 			}
 			const result = authenticatedSessionLifecycle.logout();
 			reportSessionCleanupFailures(result);
-			if (result) disposeAuthenticatedShell();
+			if (result) {
+				disposeAuthenticatedShell();
+			}
 		},
-		{ immediate: true },
+		{ immediate: true, flush: 'sync' },
 	);
 
 	onBeforeUnmount(() => {
 		reportSessionCleanupFailures(authenticatedSessionLifecycle.dispose());
 		remoteDesktopLauncher.close();
-		void disposeWorkspaceRuntime();
 	});
 </script>
 
 <template>
-	<div class="flex min-h-dvh flex-col text-foreground">
+	<div class="flex min-h-dvh flex-col text-foreground" :inert="backup.blocked">
+		<BackupRecoveryOverlay />
 		<AppHeader v-if="auth.isAuthenticated.value" @customize-appearance="appearance.openCustomizer()" />
 		<div class="min-h-0 flex-1">
 			<RouterView v-slot="{ Component, route }">
@@ -160,8 +192,9 @@
 			:connection="remoteDesktopConnection"
 			:width="remoteDesktopWidth"
 			:height="remoteDesktopHeight"
+			:size-saving="desktopSizeSaving"
 			@size-change="saveRemoteDesktopSize"
-			@connected="updateRemoteDesktopConnection"
+			@attempted="updateRemoteDesktopConnection"
 			@close="remoteDesktopLauncher.close()"
 		/>
 		<AppearanceCustomizerModal

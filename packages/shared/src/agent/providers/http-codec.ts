@@ -8,6 +8,7 @@ import {
 	AGENT_PROVIDER_MAX_SECRET_BYTES,
 	AGENT_PROVIDER_MAX_URL_BYTES,
 	AGENT_PROVIDER_MODEL_LIMIT,
+	AGENT_PROVIDER_DISCOVERY_LIMIT,
 	AGENT_REASONING_EFFORTS,
 	AGENT_PROVIDER_FAILURE_CODES,
 	AGENT_REGISTRY_MAX_MODEL_ID_BYTES,
@@ -26,8 +27,11 @@ import type {
 	AgentProviderTestRequest,
 	AgentProviderTestResponse,
 	AgentProviderDeleteQuery,
+	AgentProviderDeleteResponse,
 	AgentRegistryResolveQuery,
 } from './http.js';
+import type { AgentRegistryDefaults, AgentRegistryResolveResponse, AgentRegistryStatus } from './registry.js';
+import { AGENT_REGISTRY_ERROR_CODES } from './values.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -444,12 +448,20 @@ export function readAgentProviderListResponse(v: unknown): AgentProviderView[] {
 	return providers;
 }
 
-export function readAgentDiscoveredModels(v: unknown): AgentDiscoveredModel[] {
-	encodeAgentJson(v, AGENT_PROVIDER_MAX_RESPONSE_BYTES);
-	if (!Array.isArray(v) || v.length > 1000) {
+export function readAgentProviderDeleteResponse(value: unknown): AgentProviderDeleteResponse {
+	const row = agentRecord(value, ['deleted']);
+	if (row.deleted !== true) {
 		throw new InvalidAgentPayload();
 	}
-	return v.map((raw) => {
+	return { deleted: true };
+}
+
+export function readAgentDiscoveredModels(v: unknown): AgentDiscoveredModel[] {
+	encodeAgentJson(v, AGENT_PROVIDER_MAX_RESPONSE_BYTES);
+	if (!Array.isArray(v) || v.length > AGENT_PROVIDER_DISCOVERY_LIMIT) {
+		throw new InvalidAgentPayload();
+	}
+	const discovered = v.map((raw) => {
 		const r = agentRecord(raw, ['id', 'ownedBy', 'createdAt', 'providerCapabilities']);
 		if (r.providerCapabilities !== undefined) {
 			const cap = agentRecord(r.providerCapabilities, [
@@ -530,6 +542,10 @@ export function readAgentDiscoveredModels(v: unknown): AgentDiscoveredModel[] {
 			...(r.createdAt === undefined ? {} : { createdAt: agentInteger(r.createdAt) }),
 		};
 	});
+	if (new Set(discovered.map((item) => item.id)).size !== discovered.length) {
+		throw new InvalidAgentPayload();
+	}
+	return discovered;
 }
 
 function isProviderHttpFailure(value: unknown): value is `PROVIDER_HTTP_${number}` {
@@ -585,4 +601,103 @@ export function readAgentProviderDeleteQuery(params: URLSearchParams): AgentProv
 
 export function readAgentRegistryResolveQuery(params: URLSearchParams): AgentRegistryResolveQuery {
 	return { modelId: agentText(queryValue(params, 'modelId'), AGENT_REGISTRY_MAX_MODEL_ID_BYTES) };
+}
+
+function registryTimestamp(value: unknown): number | null {
+	// The wire uses seconds; callers may convert to safe-integer milliseconds.
+	return value === null ? null : agentInteger(value, 0, Math.floor(Number.MAX_SAFE_INTEGER / 1000));
+}
+
+export function readAgentRegistryStatus(value: unknown): AgentRegistryStatus {
+	const row = agentRecord(value, [
+		'sourceUrl',
+		'activeSource',
+		'entryCount',
+		'generatedAt',
+		'sourceRevision',
+		'lastAttemptAt',
+		'lastSuccessAt',
+		'lastErrorCode',
+	]);
+	if (row.activeSource !== 'remote' && row.activeSource !== 'unavailable') {
+		throw new InvalidAgentPayload();
+	}
+	const generatedAt = registryTimestamp(row.generatedAt);
+	const entryCount = agentInteger(row.entryCount);
+	if (row.sourceRevision !== null && typeof row.sourceRevision !== 'string') {
+		throw new InvalidAgentPayload();
+	}
+	const sourceRevision = row.sourceRevision;
+	if (
+		(row.activeSource === 'remote' && generatedAt === null) ||
+		(row.activeSource === 'unavailable' && (generatedAt !== null || entryCount !== 0 || sourceRevision !== null))
+	) {
+		throw new InvalidAgentPayload();
+	}
+	const lastErrorCode =
+		row.lastErrorCode === null ? null : AGENT_REGISTRY_ERROR_CODES.find((code) => code === row.lastErrorCode);
+	if (lastErrorCode === undefined) {
+		throw new InvalidAgentPayload();
+	}
+	return {
+		sourceUrl: agentText(row.sourceUrl, AGENT_PROVIDER_MAX_RESPONSE_BYTES),
+		activeSource: row.activeSource,
+		entryCount,
+		generatedAt,
+		sourceRevision,
+		lastAttemptAt: registryTimestamp(row.lastAttemptAt),
+		lastSuccessAt: registryTimestamp(row.lastSuccessAt),
+		lastErrorCode,
+	};
+}
+
+function registryDefaults(value: unknown): AgentRegistryDefaults {
+	const row = agentRecord(value, [
+		'contextWindow',
+		'maxOutputTokens',
+		'supportsTools',
+		'supportsImageInput',
+		'supportsFileInput',
+		'reasoningEfforts',
+	]);
+	const contextWindow = agentInteger(row.contextWindow, 1);
+	let reasoningEfforts: AgentRegistryDefaults['reasoningEfforts'];
+	if (row.reasoningEfforts !== undefined) {
+		if (
+			!Array.isArray(row.reasoningEfforts) ||
+			row.reasoningEfforts.length === 0 ||
+			row.reasoningEfforts.length > AGENT_REASONING_EFFORTS.length
+		) {
+			throw new InvalidAgentPayload();
+		}
+		reasoningEfforts = row.reasoningEfforts.map((value) => {
+			const effort = optionalEffort(value);
+			if (effort === undefined) {
+				throw new InvalidAgentPayload();
+			}
+			return effort;
+		});
+		if (new Set(reasoningEfforts).size !== reasoningEfforts.length) {
+			throw new InvalidAgentPayload();
+		}
+	}
+	return {
+		contextWindow,
+		maxOutputTokens: agentInteger(row.maxOutputTokens, 1, contextWindow),
+		...(row.supportsTools === undefined ? {} : { supportsTools: boolean(row.supportsTools) }),
+		...(row.supportsImageInput === undefined ? {} : { supportsImageInput: boolean(row.supportsImageInput) }),
+		...(row.supportsFileInput === undefined ? {} : { supportsFileInput: boolean(row.supportsFileInput) }),
+		...(reasoningEfforts === undefined ? {} : { reasoningEfforts }),
+	};
+}
+
+export function readAgentRegistryResolveResponse(value: unknown): AgentRegistryResolveResponse {
+	const row = agentRecord(value, ['modelId', 'defaults']);
+	if (!Object.hasOwn(row, 'defaults')) {
+		throw new InvalidAgentPayload();
+	}
+	return {
+		modelId: agentText(row.modelId, AGENT_REGISTRY_MAX_MODEL_ID_BYTES),
+		defaults: row.defaults === null ? null : registryDefaults(row.defaults),
+	};
 }

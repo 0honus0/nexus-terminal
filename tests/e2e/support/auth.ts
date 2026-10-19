@@ -1,44 +1,65 @@
 import { expect, type APIRequestContext } from '@playwright/test';
+import {
+	readAccessNeedsSetup,
+	readAccessSetup,
+	readAccessLogin,
+	readAccessStatus,
+} from '../../../packages/shared/src/access/http';
+import {
+	readPreferencesResponse,
+	readPreferencesUpdate,
+	readPresentationUpdateResponse,
+} from '../../../packages/shared/src/preferences/presentation/http-codec';
+import { PREFERENCE_LANGUAGES } from '../../../packages/shared/src/preferences/presentation/values';
 import { E2E_ADMIN } from './test-identity';
+import { E2E_URLS } from './test-env';
 
 export { E2E_ADMIN } from './test-identity';
 
 export async function ensureInitialAdmin(request: APIRequestContext): Promise<void> {
-	const setupStateResponse = await request.get('/api/v1/auth/needs-setup');
-	expect(setupStateResponse.ok()).toBeTruthy();
-	const setupState = (await setupStateResponse.json()) as { needsSetup: boolean };
-
-	if (!setupState.needsSetup) return;
-
-	const setupResponse = await request.post('/api/v1/auth/setup', {
+	const response = await request.get('/api/v1/auth/needs-setup');
+	expect(response.ok()).toBeTruthy();
+	if (!readAccessNeedsSetup(await response.json()).needsSetup) return;
+	const setup = await request.post('/api/v1/auth/setup', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: {
 			username: E2E_ADMIN.username,
 			password: E2E_ADMIN.password,
 			confirmPassword: E2E_ADMIN.password,
 		},
 	});
-	expect(setupResponse.status()).toBe(201);
+	expect(setup.status()).toBe(201);
+	expect(readAccessSetup(await setup.json()).user.username).toBe(E2E_ADMIN.username);
 }
 
 export async function loginAsInitialAdmin(request: APIRequestContext): Promise<void> {
-	const loginResponse = await request.post('/api/v1/auth/login', {
-		data: {
-			username: E2E_ADMIN.username,
-			password: E2E_ADMIN.password,
-			rememberMe: false,
-		},
+	const response = await request.post('/api/v1/auth/login', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
+		data: { username: E2E_ADMIN.username, password: E2E_ADMIN.password, rememberMe: false },
 	});
-	expect(loginResponse.ok()).toBeTruthy();
-
-	const authStatus = await request.get('/api/v1/auth/status');
-	expect(authStatus.ok()).toBeTruthy();
-	await expect(authStatus.json()).resolves.toMatchObject({
-		isAuthenticated: true,
-		user: { username: E2E_ADMIN.username },
-	});
+	expect(response.ok()).toBeTruthy();
+	const login = readAccessLogin(await response.json());
+	expect(login.requiresTwoFactor).toBe(false);
+	const status = await request.get('/api/v1/auth/status');
+	expect(status.ok()).toBeTruthy();
+	expect(readAccessStatus(await status.json()).user.username).toBe(E2E_ADMIN.username);
 }
 
 export async function setUiLanguage(request: APIRequestContext, language = 'en-US'): Promise<void> {
-	const response = await request.put('/api/v1/settings', { data: { language } });
-	expect(response.ok(), await response.text()).toBeTruthy();
+	const response = await request.get('/api/v1/settings/preferences');
+	expect(response.ok()).toBeTruthy();
+	const current = readPreferencesResponse(await response.json());
+	const input = readPreferencesUpdate({
+		expectedVersion: current.version,
+		preferences: current.preferences,
+	});
+	const selected = PREFERENCE_LANGUAGES.find((value) => value === language);
+	if (!selected) throw new Error('Unsupported E2E UI language');
+	input.preferences.language = selected;
+	const saved = await request.put('/api/v1/settings/preferences', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
+		data: input,
+	});
+	expect(saved.ok()).toBeTruthy();
+	expect(readPresentationUpdateResponse(await saved.json()).version).toBe(current.version + 1);
 }

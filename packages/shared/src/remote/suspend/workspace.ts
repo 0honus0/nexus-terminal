@@ -1,4 +1,6 @@
-import type { WorkspaceConnectResponse, WorkspaceTerminalViewport } from '../workspace/workspace.js';
+import type { SuspendedSessionView } from './http.js';
+import type { SuspendedRevocationReason, SuspendedTerminationReason } from './values.js';
+import type { WorkspaceAttachment, WorkspaceTerminalViewport } from '../workspace/workspace.js';
 
 export interface WorkspaceSuspendMarkRequest {
 	terminalSnapshot?: string;
@@ -15,7 +17,7 @@ export interface WorkspaceSuspendResumeRequest {
 	takeover?: boolean;
 }
 
-export interface WorkspaceSuspendResumeResponse extends WorkspaceConnectResponse {
+export interface WorkspaceSuspendResumeResponse extends WorkspaceAttachment {
 	resumedFrom: string;
 	historyAvailable: boolean;
 	ownershipGeneration: number;
@@ -53,4 +55,52 @@ export interface WorkspaceSuspendSessionRequest {
 
 export interface WorkspaceSuspendRenameRequest extends WorkspaceSuspendSessionRequest {
 	name: string;
+}
+
+export interface WorkspaceSuspendAutoTerminatedEvent {
+	suspendedSessionId: string;
+	reason: SuspendedTerminationReason;
+}
+
+export interface WorkspaceSuspendRevokedEvent {
+	suspendedSessionId: string;
+	generation: number;
+	reason: SuspendedRevocationReason;
+}
+
+export interface WorkspaceSuspendRequests {
+	'suspend.mark': WorkspaceSuspendMarkRequest;
+	'suspend.prepare': WorkspaceSuspendMarkRequest;
+	'suspend.commit': WorkspaceSuspendMarkRequest;
+	'suspend.unmark': Record<string, never>;
+	'suspend.list': Record<string, never>;
+	'suspend.resume': WorkspaceSuspendResumeRequest;
+	'suspend.resumeAck': WorkspaceSuspendResumeAck;
+	'suspend.owner.renew': Record<string, never>;
+	'suspend.history.previous': WorkspaceSuspendHistoryPreviousRequest;
+	'suspend.history.reset': Record<string, never>;
+	'suspend.terminate': WorkspaceSuspendSessionRequest;
+	'suspend.remove': WorkspaceSuspendSessionRequest;
+	'suspend.rename': WorkspaceSuspendRenameRequest;
+}
+
+export interface WorkspaceSuspendResponses {
+	'suspend.mark': WorkspaceSuspendMarkResponse;
+	'suspend.prepare': null;
+	'suspend.commit': WorkspaceSuspendMarkResponse;
+	'suspend.unmark': null;
+	'suspend.list': SuspendedSessionView[];
+	'suspend.resume': WorkspaceSuspendResumeResponse;
+	'suspend.resumeAck': null;
+	'suspend.owner.renew': WorkspaceSuspendOwnerRenewResponse;
+	'suspend.history.previous': WorkspaceSuspendHistoryPreviousResponse;
+	'suspend.history.reset': WorkspaceSuspendHistoryResetResponse;
+	'suspend.terminate': null;
+	'suspend.remove': null;
+	'suspend.rename': null;
+}
+
+export interface WorkspaceSuspendEvents {
+	'suspend.autoTerminated': WorkspaceSuspendAutoTerminatedEvent;
+	'suspend.revoked': WorkspaceSuspendRevokedEvent;
 }

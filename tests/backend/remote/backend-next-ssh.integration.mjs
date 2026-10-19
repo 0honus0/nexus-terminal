@@ -6,14 +6,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
 import { request as httpRequest } from 'node:http';
-import WebSocket from '../../../packages/backend-next/node_modules/ws/index.js';
-import { createApp } from '../../../packages/backend-next/dist/bootstrap/create-app.js';
-import { openHttpListener } from '../../../packages/backend-next/dist/platform/http/http-server.js';
-import { RemoteSessionOwner } from '../../../packages/backend-next/dist/modules/remote/sessions/service/session-owner.js';
-import { createRemoteHttpRoutes } from '../../../packages/backend-next/dist/modules/remote/interfaces/http/remote-http.js';
-import { createRemoteWebSocketRoute } from '../../../packages/backend-next/dist/modules/remote/interfaces/ws/pty-stream.js';
+import WebSocket from '../../../packages/backend/node_modules/ws/index.js';
+import { createApp } from '../../../packages/backend/dist/bootstrap/create-app.js';
+import { openHttpListener } from '../../../packages/backend/dist/platform/http/http-server.js';
+import { SessionTokenModel } from '../../../packages/backend/dist/modules/remote/sessions/model/session-token-model.js';
+import { SecureSessionTokens } from '../../../packages/backend/dist/platform/security/adapters/secure-session-tokens.js';
+import { RemoteSessionOwner } from '../../../packages/backend/dist/modules/remote/sessions/service/session-owner.js';
+import { createRemoteHttpRoutes } from '../../../packages/backend/dist/modules/remote/interfaces/http/remote-http.js';
+import { createRemoteWebSocketRoute } from '../../../packages/backend/dist/modules/remote/interfaces/ws/pty-stream.js';
 
-const requireBackendNext = createRequire(new URL('../../../packages/backend-next/package.json', import.meta.url));
+const requireBackendNext = createRequire(new URL('../../../packages/backend/package.json', import.meta.url));
 const { Server, utils } = requireBackendNext('ssh2');
 
 function deferred() {
@@ -139,7 +141,12 @@ try {
 	assert.equal(saved.status, 'updated');
 
 	const access = { authenticate: async (token) => (token === 'good' ? { userId: 1 } : null) };
-	owner = new RemoteSessionOwner(access, app.remote);
+	owner = new RemoteSessionOwner(
+		access,
+		app.remote,
+		{ publish: async () => undefined },
+		new SessionTokenModel(new SecureSessionTokens()),
+	);
 	const session = await within(
 		owner.open('good', {
 			targetId: target.id,

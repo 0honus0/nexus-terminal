@@ -58,7 +58,12 @@
     "primaryNavigation": "メインナビゲーション",
     "clear": "クリア",
     "create": "作成",
-    "value": "値"
+    "value": "値",
+    "personalDataFailure": "個人データの取得に失敗しました。再読み込みしてください。",
+    "personalDataUnknown": "結果は不明です。一覧を再読み込みして確認してから、編集や再操作を行ってください。",
+    "personalDataConflict": "レコードが変更または削除されました。一覧を再読み込みして編集画面を開き直してください。",
+    "personalDataInvalid": "入力内容と容量制限を確認してください。",
+    "refresh": "更新"
   },
   "header": {
     "hide": "非表示",

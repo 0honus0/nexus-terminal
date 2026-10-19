@@ -1,27 +1,19 @@
-import { createHash, createPublicKey } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
 import path from 'node:path';
 import { E2E_PORTS, E2E_URLS } from './support/test-env';
+import { E2E_ADMIN } from './support/test-identity';
 
 const e2eRoot = __dirname;
 const repoRoot = path.resolve(e2eRoot, '../..');
 const testDataDir = path.join(e2eRoot, '.tmp', 'backend-data');
-const seedDbPath = path.join(e2eRoot, 'fixtures', 'seeded-data', 'nexus-terminal.db');
-const prepareTestDataScript = path.join(e2eRoot, 'support', 'prepare-test-data.mjs');
+process.env.NEXUS_E2E_CONTROL_TOKEN ??= randomBytes(32).toString('hex');
 const isCI = Boolean(process.env.CI);
 const e2ePluginPrivateKeyPem = readFileSync(
 	path.join(e2eRoot, 'fixtures', 'agent', 'keys', 'official-e2e-private.pem'),
 	'utf8',
 );
-const e2ePluginPublicKeyPem = readFileSync(
-	path.join(e2eRoot, 'fixtures', 'agent', 'keys', 'official-e2e-public.pem'),
-	'utf8',
-);
-const e2ePluginPublisherKeyId = `ed25519:${createHash('sha256')
-	.update(createPublicKey(e2ePluginPublicKeyPem).export({ type: 'spki', format: 'der' }))
-	.digest('hex')}`;
-
 const inheritedEnv = Object.fromEntries(
 	Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
 );
@@ -35,22 +27,15 @@ const pluginRepositoryEnv: Record<string, string> = {
 const backendEnv: Record<string, string> = {
 	...inheritedEnv,
 	NODE_ENV: 'test',
-	PORT: String(E2E_PORTS.backend),
-	NEXUS_DATA_DIR: testDataDir,
-	NEXUS_E2E_RESET_ENABLED: '1',
-	NEXUS_E2E_SEED_DB: seedDbPath,
-	SESSION_COOKIE_NAME: 'nexus.e2e.sid',
-	SESSION_SECRET: 'e2e-session-secret-do-not-use-outside-tests-000000000000000000000000',
-	ENCRYPTION_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
-	RP_ID: 'localhost',
-	RP_ORIGIN: E2E_URLS.frontendOrigin,
+	NEXUS_E2E_BACKEND_PORT: String(E2E_PORTS.backend),
+	NEXUS_E2E_BACKEND_CONTROL_PORT: String(E2E_PORTS.backendControl),
+	NEXUS_E2E_DATA_ROOT: testDataDir,
+	NEXUS_E2E_ADMIN_USERNAME: E2E_ADMIN.username,
+	NEXUS_E2E_ADMIN_PASSWORD: E2E_ADMIN.password,
 	GUACD_HOST: '127.0.0.1',
 	GUACD_PORT: String(E2E_PORTS.guacd),
 	NEXUS_VITE_BACKEND_ORIGIN: E2E_URLS.backendOrigin,
 	NEXUS_PUBLIC_ORIGIN: E2E_URLS.frontendOrigin,
-	NEXUS_AGENT_OFFICIAL_PLUGIN_CATALOG_URL: `${E2E_URLS.pluginRepositoryOrigin}/official-catalog.json`,
-	NEXUS_AGENT_OFFICIAL_PLUGIN_PUBLISHER_KEY_ID: e2ePluginPublisherKeyId,
-	NEXUS_AGENT_OFFICIAL_PLUGIN_PUBLISHER_PUBLIC_KEY_PEM: e2ePluginPublicKeyPem,
 };
 
 export default defineConfig({
@@ -174,14 +159,14 @@ export default defineConfig({
 			stderr: 'pipe',
 		},
 		{
-			command: `node ${JSON.stringify(prepareTestDataScript)} && ${pnpmCommand} exec tsx src/index.ts`,
-			cwd: path.join(repoRoot, 'packages/backend'),
+			command: `${pnpmCommand} --filter @nexus-terminal/backend build && node support/backend-server.mjs`,
+			cwd: e2eRoot,
 			env: backendEnv,
-			url: `${E2E_URLS.backendOrigin}/api/v1/auth/needs-setup`,
+			url: `${E2E_URLS.backendControlOrigin}/health`,
 			reuseExistingServer: false,
 			timeout: 120_000,
 			stdout: 'pipe',
-			stderr: 'inherit',
+			stderr: 'pipe',
 		},
 		{
 			command: `${pnpmCommand} run dev --host 127.0.0.1 --port ${E2E_PORTS.frontend} --strictPort`,

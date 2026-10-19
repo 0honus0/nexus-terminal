@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import UiListToolbar from '@/foundation/ui/UiListToolbar.vue';
-	import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
+	import { computed, onActivated, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
 	import { useRouter } from 'vue-router';
 	import { useI18n } from 'vue-i18n';
 	import { UiButton, UiSelect, UiSpinner, UiScrollArea } from '@/foundation/ui';
@@ -12,11 +12,11 @@
 		stringStorageCodec,
 		writeStoredValue,
 	} from '@/foundation/browser';
-	import { useConnections, type ConnectionDto } from '@/features/connections/public';
+	import { useConnections, type ConnectionSummary } from '@/features/connections/public';
 	import { useConnectionTags } from '@/features/tags/public';
-	import { auditApi, type AuditLogEntryDto } from '@/features/audit/public';
+	import { auditApi, auditSummary, type AuditEntry } from '@/features/audit/public';
 	import { useSystemOverview } from '@/features/system-overview/public';
-	import { usePreferences } from '@/features/preferences/public';
+	import { usePreferences, useMonitoringConfiguration } from '@/features/preferences/public';
 	import { remoteDesktopLauncher } from '@/features/remote-desktop/public';
 	import { useSuspendedSessions } from '@/features/ssh-suspend/public';
 	import { preloadWorkspaceTerminalSurface } from '@/runtimes/workspace/public';
@@ -27,8 +27,12 @@
 	const tags = useConnectionTags();
 	const resources = useSystemOverview();
 	const preferences = usePreferences();
+	const monitoring = useMonitoringConfiguration();
+	const effectiveMonitoring = computed(() =>
+		monitoring.needsRefresh.value ? null : (monitoring.snapshot.value?.effectiveMonitoring ?? null),
+	);
 	const suspended = useSuspendedSessions();
-	const activity = ref<AuditLogEntryDto[]>([]);
+	const activity = ref<AuditEntry[]>([]);
 	const search = ref('');
 	type DashboardSort = 'lastConnected' | 'name' | 'type' | 'updated' | 'created';
 	type DashboardSortOrder = 'asc' | 'desc';
@@ -92,7 +96,7 @@
 	});
 	const MAX_RECENT_LOGS = 5;
 	const latestConnection = computed(() => {
-		let latest: ConnectionDto | null = null;
+		let latest: ConnectionSummary | null = null;
 		let latestTimestamp = -1;
 		for (const item of connections.connections.value) {
 			if (!item.lastConnectedAt || item.lastConnectedAt <= latestTimestamp) continue;
@@ -113,7 +117,7 @@
 			.join(' · '),
 	);
 
-	const connect = (item: ConnectionDto) => {
+	const connect = (item: ConnectionSummary) => {
 		if (item.type === 'RDP' || item.type === 'VNC') {
 			remoteDesktopLauncher.open({ id: item.id, name: item.name || item.host, type: item.type });
 			return;
@@ -129,7 +133,7 @@
 	const formatRelativeTime = (timestamp: number | null | undefined): string => {
 		if (!timestamp) return t('connections.status.never');
 		try {
-			const seconds = timestamp - Date.now() / 1000;
+			const seconds = (timestamp - Date.now()) / 1000;
 			const absoluteSeconds = Math.abs(seconds);
 			const [scale, unit]: [number, Intl.RelativeTimeFormatUnit] =
 				absoluteSeconds < 60
@@ -153,7 +157,7 @@
 
 	const tagNameById = computed(() => new Map(tags.tags.value.map((tag) => [tag.id, tag.name] as const)));
 
-	const tagNames = (item: ConnectionDto): string[] =>
+	const tagNames = (item: ConnectionSummary): string[] =>
 		item.tagIds.map((id) => tagNameById.value.get(id)).filter((name): name is string => Boolean(name));
 
 	const actionLabel = (actionType: string): string => t(`auditLog.actions.${actionType}`, actionType);
@@ -163,44 +167,19 @@
 		return normalized.includes('fail') || normalized.includes('error') || normalized.includes('denied');
 	};
 
-	const auditSummary = (details: unknown): string => {
-		if (!details || typeof details !== 'object') return '';
-		const record = details as Record<string, unknown>;
-		if (typeof record.raw === 'string') return record.raw.slice(0, 120);
-		const connectionName =
-			typeof record.connectionName === 'string'
-				? record.connectionName
-				: typeof record.connection_name === 'string'
-					? record.connection_name
-					: '';
-		const username = typeof record.username === 'string' ? record.username : '';
-		const host = typeof record.host === 'string' ? record.host : typeof record.ip === 'string' ? record.ip : '';
-		const subject =
-			typeof record.command === 'string'
-				? record.command
-				: typeof record.path === 'string'
-					? record.path
-					: typeof record.filename === 'string'
-						? record.filename
-						: '';
-		return [connectionName, username && host ? `${username}@${host}` : username || host, subject]
-			.filter(Boolean)
-			.slice(0, 2)
-			.join(' · ');
-	};
-
 	let dashboardActive = false;
 	let hasActivatedOnce = false;
 	let localRefreshTimer: number | undefined;
 	let remoteRefreshTimer: number | undefined;
 	let remoteInitialTimer: number | undefined;
+	let dashboardRequest: AbortController | null = null;
 
 	const refreshLocal = () => {
-		if (!document.hidden) void resources.loadLocal();
+		if (!document.hidden && effectiveMonitoring.value) void resources.loadLocal();
 	};
 
 	const refreshRemote = () => {
-		if (!document.hidden)
+		if (!document.hidden && effectiveMonitoring.value)
 			void resources.loadRemote(() =>
 				connections.load().then((items) => items.filter((item) => item.type === 'SSH')),
 			);
@@ -209,21 +188,28 @@
 	const scheduleLocalRefresh = () => {
 		window.clearInterval(localRefreshTimer);
 		localRefreshTimer = undefined;
-		if (!preferences.values.value.dashboardShowLocalResources) return;
-		const seconds = Math.max(1, preferences.values.value.statusMonitorIntervalSeconds);
+		if (!preferences.values.value.dashboardShowLocalResources || !effectiveMonitoring.value) return;
+		const seconds = effectiveMonitoring.value.statusIntervalSeconds;
 		localRefreshTimer = window.setInterval(refreshLocal, seconds * 1000);
 	};
 
 	const scheduleRemoteRefresh = () => {
 		window.clearInterval(remoteRefreshTimer);
 		remoteRefreshTimer = undefined;
-		if (!preferences.values.value.dashboardShowRemoteResources) return;
-		const seconds = Math.max(1, preferences.values.value.remoteHostRefreshIntervalSeconds);
+		if (!preferences.values.value.dashboardShowRemoteResources || !effectiveMonitoring.value) return;
+		const seconds = effectiveMonitoring.value.hostIntervalSeconds;
 		remoteRefreshTimer = window.setInterval(refreshRemote, seconds * 1000);
 	};
 
 	const syncLocalRefresh = () => {
-		if (!dashboardActive) {
+		if (
+			!dashboardActive ||
+			document.hidden ||
+			!preferences.values.value.dashboardShowLocalResources ||
+			!effectiveMonitoring.value
+		)
+			resources.stopLocal();
+		if (!dashboardActive || document.hidden) {
 			window.clearInterval(localRefreshTimer);
 			localRefreshTimer = undefined;
 			return;
@@ -233,7 +219,14 @@
 	};
 
 	const syncRemoteRefresh = () => {
-		if (!dashboardActive) {
+		if (
+			!dashboardActive ||
+			document.hidden ||
+			!preferences.values.value.dashboardShowRemoteResources ||
+			!effectiveMonitoring.value
+		)
+			resources.stopRemote();
+		if (!dashboardActive || document.hidden) {
 			window.clearInterval(remoteRefreshTimer);
 			remoteRefreshTimer = undefined;
 			window.clearTimeout(remoteInitialTimer);
@@ -243,7 +236,7 @@
 		scheduleRemoteRefresh();
 		window.clearTimeout(remoteInitialTimer);
 		remoteInitialTimer = undefined;
-		if (!preferences.values.value.dashboardShowRemoteResources) return;
+		if (!preferences.values.value.dashboardShowRemoteResources || !effectiveMonitoring.value) return;
 		remoteInitialTimer = window.setTimeout(() => {
 			remoteInitialTimer = undefined;
 			refreshRemote();
@@ -257,55 +250,71 @@
 	watch(sort, (value) => writeStoredValue(dashboardSortStorage, value));
 	watch(sortOrder, (value) => writeStoredValue(dashboardSortOrderStorage, value));
 	watch(
-		() => [
-			preferences.values.value.dashboardShowLocalResources,
-			preferences.values.value.statusMonitorIntervalSeconds,
-		],
+		() => [preferences.values.value.dashboardShowLocalResources, effectiveMonitoring.value?.statusIntervalSeconds],
 		syncLocalRefresh,
 	);
 	watch(
-		() => [
-			preferences.values.value.dashboardShowRemoteResources,
-			preferences.values.value.remoteHostRefreshIntervalSeconds,
-		],
+		() => [preferences.values.value.dashboardShowRemoteResources, effectiveMonitoring.value?.hostIntervalSeconds],
 		syncRemoteRefresh,
 	);
 
 	const handleVisibilityChange = () => {
-		if (document.hidden) return;
-		if (preferences.values.value.dashboardShowLocalResources) refreshLocal();
-		if (preferences.values.value.dashboardShowRemoteResources) refreshRemote();
+		if (!dashboardActive) return;
+		if (document.hidden) {
+			resources.deactivate();
+			monitoring.deactivate();
+		} else {
+			resources.activate();
+			monitoring.activate();
+		}
+		syncLocalRefresh();
+		syncRemoteRefresh();
 	};
 
 	const refreshDashboardData = async (initial = false) => {
+		dashboardRequest?.abort();
+		const request = new AbortController();
+		dashboardRequest = request;
 		if (initial) loading.value = !connections.loaded.value || !tags.loaded.value;
 		const catalog = Promise.allSettled([
 			initial ? connections.load() : connections.revalidate(),
 			initial ? tags.load() : tags.revalidate(),
 		]).then(() => {
-			if (initial) loading.value = false;
+			if (dashboardRequest === request && initial) loading.value = false;
 		});
 		const [, , audit] = await Promise.allSettled([
 			catalog,
 			preferences.load(),
-			auditApi.list({ limit: MAX_RECENT_LOGS, offset: 0 }),
+			auditApi.list({ limit: MAX_RECENT_LOGS, offset: 0 }, request.signal),
 			suspended.load({ silent: true, force: true }),
 		]);
-		if (audit.status === 'fulfilled') activity.value = audit.value.logs.slice(0, MAX_RECENT_LOGS);
+		if (dashboardRequest !== request) return;
+		if (audit.status === 'fulfilled') activity.value = audit.value.items.slice(0, MAX_RECENT_LOGS);
+		dashboardRequest = null;
 	};
 
 	const activateDashboard = () => {
+		if (dashboardActive) return;
 		dashboardActive = true;
+		if (!document.hidden) {
+			resources.activate();
+			monitoring.activate();
+		} else monitoring.deactivate();
 		document.addEventListener('visibilitychange', handleVisibilityChange);
 		suspended.startPolling();
 		syncLocalRefresh();
 		syncRemoteRefresh();
-		if (hasActivatedOnce) void refreshDashboardData(false);
-		else hasActivatedOnce = true;
+		void refreshDashboardData(!hasActivatedOnce);
+		hasActivatedOnce = true;
 	};
 
 	const deactivateDashboard = () => {
 		dashboardActive = false;
+		dashboardRequest?.abort();
+		dashboardRequest = null;
+		loading.value = false;
+		resources.deactivate();
+		monitoring.deactivate();
 		window.clearInterval(localRefreshTimer);
 		localRefreshTimer = undefined;
 		window.clearInterval(remoteRefreshTimer);
@@ -316,25 +325,27 @@
 		suspended.stopPolling();
 	};
 
-	onMounted(() => void refreshDashboardData(true));
 	onActivated(activateDashboard);
 	onDeactivated(deactivateDashboard);
 	onBeforeUnmount(deactivateDashboard);
 
 	const percent = (value?: number) => {
-		if (!Number.isFinite(value)) return '—';
-		return `${Math.min(100, Math.max(0, Math.round(value!)))}%`;
+		if (value === undefined || !Number.isFinite(value)) return '—';
+		return `${Math.min(100, Math.max(0, Math.round(value)))}%`;
 	};
 
+	const percentageWidth = (value?: number) =>
+		value === undefined || !Number.isFinite(value) ? '0%' : percent(value);
+
 	const formatMemory = (value?: number) => {
-		if (!Number.isFinite(value)) return '—';
-		if (value! >= 1024) return `${(value! / 1024).toFixed(value! >= 10240 ? 0 : 1)} GB`;
-		return `${Math.round(value!)} MB`;
+		if (value === undefined || !Number.isFinite(value)) return '—';
+		if (value >= 1024) return `${(value / 1024).toFixed(value >= 10240 ? 0 : 1)} GB`;
+		return `${Math.round(value)} MB`;
 	};
 
 	const formatDisk = (value?: number) => {
-		if (!Number.isFinite(value)) return '—';
-		const gibibytes = value! / 1024 / 1024;
+		if (value === undefined || !Number.isFinite(value)) return '—';
+		const gibibytes = value / 1024 / 1024;
 		if (gibibytes >= 1024) return `${(gibibytes / 1024).toFixed(gibibytes >= 10240 ? 0 : 1)} TB`;
 		return `${gibibytes.toFixed(gibibytes >= 100 ? 0 : 1)} GB`;
 	};
@@ -343,6 +354,16 @@
 <template>
 	<main class="dashboard-page min-h-full bg-background px-4 py-5 text-foreground sm:px-6 lg:px-9 lg:py-6">
 		<div class="dashboard-layout mx-auto flex w-full max-w-[1680px] flex-col gap-5">
+			<div
+				v-if="monitoring.needsRefresh.value && monitoring.feedback.value"
+				class="flex flex-wrap items-center gap-3 rounded-lg border border-error p-3 text-sm"
+				data-monitoring-dashboard-error
+			>
+				<p>{{ t(`settings.monitoring.feedback.${monitoring.feedback.value}`) }}</p>
+				<UiButton :disabled="monitoring.loading.value" @click="monitoring.refresh">{{
+					t('settings.monitoring.refresh')
+				}}</UiButton>
+			</div>
 			<section class="border-b border-border/70 pb-4">
 				<div class="grid gap-4 px-1 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
 					<div class="min-w-0">
@@ -453,7 +474,13 @@
 									</div>
 									<span class="flex items-center gap-1.5 text-[11px] text-text-secondary"
 										><span class="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true"></span
-										>{{ t('dashboard.resources.live') }}</span
+										>{{
+											t(
+												resources.localError.value
+													? 'dashboard.resources.unavailable'
+													: 'dashboard.resources.live',
+											)
+										}}</span
 									>
 								</div>
 								<div v-if="resources.local.value" class="mt-2 grid grid-cols-3 gap-4">
@@ -469,7 +496,7 @@
 										<div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
 											<div
 												class="h-full rounded-full bg-primary"
-												:style="{ width: percent(resources.local.value.cpuPercent) }"
+												:style="{ width: percentageWidth(resources.local.value.cpuPercent) }"
 											></div>
 										</div>
 									</div>
@@ -487,7 +514,7 @@
 										<div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
 											<div
 												class="h-full rounded-full bg-success"
-												:style="{ width: percent(resources.local.value.memPercent) }"
+												:style="{ width: percentageWidth(resources.local.value.memPercent) }"
 											></div>
 										</div>
 									</div>
@@ -503,13 +530,13 @@
 										<div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
 											<div
 												class="h-full rounded-full bg-warning"
-												:style="{ width: percent(resources.local.value.diskPercent) }"
+												:style="{ width: percentageWidth(resources.local.value.diskPercent) }"
 											></div>
 										</div>
 									</div>
 								</div>
 								<div v-else-if="resources.localError.value" class="py-2 text-[11px] text-error">
-									{{ resources.localError.value }}
+									{{ t(`systemOverview.errors.${resources.localError.value}`) }}
 								</div>
 								<div
 									v-else
@@ -722,7 +749,7 @@
 								class="rounded-full border border-success/25 bg-success/10 px-2.5 py-1 font-medium text-success"
 								>{{
 									t('dashboard.resources.snapshot', {
-										seconds: preferences.values.value.remoteHostRefreshIntervalSeconds,
+										seconds: effectiveMonitoring?.hostIntervalSeconds ?? '—',
 									})
 								}}</span
 							>
@@ -766,7 +793,7 @@
 										<div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
 											<div
 												class="h-full rounded-full bg-primary"
-												:style="{ width: percent(remote.status.cpuPercent) }"
+												:style="{ width: percentageWidth(remote.status.cpuPercent) }"
 											></div>
 										</div>
 									</div>
@@ -784,7 +811,7 @@
 										<div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
 											<div
 												class="h-full rounded-full bg-success"
-												:style="{ width: percent(remote.status.memPercent) }"
+												:style="{ width: percentageWidth(remote.status.memPercent) }"
 											></div>
 										</div>
 										<div
@@ -808,7 +835,7 @@
 										<div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
 											<div
 												class="h-full rounded-full bg-warning"
-												:style="{ width: percent(remote.status.diskPercent) }"
+												:style="{ width: percentageWidth(remote.status.diskPercent) }"
 											></div>
 										</div>
 										<div
@@ -826,9 +853,9 @@
 								<div
 									v-else-if="remote.error"
 									class="mt-3 truncate text-xs text-error"
-									:title="remote.error"
+									:title="t(`systemOverview.errors.${remote.error}`)"
 								>
-									{{ remote.error }}
+									{{ t(`systemOverview.errors.${remote.error}`) }}
 								</div>
 								<div v-else class="mt-3 text-xs text-text-secondary">
 									{{ t('dashboard.resources.waiting') }}
@@ -838,7 +865,11 @@
 								v-if="!resources.remoteLoading.value && resources.remote.value.length === 0"
 								class="flex h-full min-h-0 items-center justify-center px-4 text-center text-xs text-text-secondary"
 							>
-								{{ resources.remoteError.value || t('dashboard.resources.noRemoteSessions') }}
+								{{
+									resources.remoteError.value
+										? t(`systemOverview.errors.${resources.remoteError.value}`)
+										: t('dashboard.resources.noRemoteSessions')
+								}}
 							</div>
 						</div>
 					</UiScrollArea>
@@ -885,26 +916,26 @@
 							<div class="flex min-w-0 items-center gap-2">
 								<span
 									class="activity-dot h-1.5 w-1.5 shrink-0 rounded-full"
-									:class="isFailedAction(log.actionType) ? 'bg-error' : 'bg-primary'"
+									:class="isFailedAction(log.event) ? 'bg-error' : 'bg-primary'"
 									aria-hidden="true"
 								></span>
 								<span
 									class="activity-title min-w-0 truncate text-sm font-medium leading-5"
-									:class="isFailedAction(log.actionType) ? 'text-error' : 'text-foreground'"
-									:title="actionLabel(log.actionType)"
-									>{{ actionLabel(log.actionType) }}</span
+									:class="isFailedAction(log.event) ? 'text-error' : 'text-foreground'"
+									:title="actionLabel(log.event)"
+									>{{ actionLabel(log.event) }}</span
 								>
 							</div>
 							<time class="shrink-0 pt-0.5 text-[11px] text-text-secondary">{{
-								formatRelativeTime(log.timestamp)
+								formatRelativeTime(log.createdAt)
 							}}</time>
 						</div>
 						<p
-							v-if="auditSummary(log.details)"
+							v-if="auditSummary(log)"
 							class="mt-1.5 truncate pl-3.5 text-xs text-text-secondary"
-							:title="auditSummary(log.details)"
+							:title="auditSummary(log)"
 						>
-							{{ auditSummary(log.details) }}
+							{{ auditSummary(log) }}
 						</p>
 					</li>
 				</ol>

@@ -23,6 +23,10 @@ import type {
 	AgentArtifactCleanupRequest,
 	AgentArtifactResponse,
 	AgentArtifactListResponse,
+	AgentArtifactStorageResponse,
+	AgentArtifactCleanupResponse,
+	AgentArtifactCleanupResultResponse,
+	AgentArtifactAttachResponse,
 } from './http.js';
 
 function boolean(value: unknown): boolean {
@@ -207,6 +211,28 @@ export function readAgentArtifactStorage(value: unknown): AgentArtifactStorageVi
 	};
 }
 
+export function readAgentArtifactStorageResponse(value: unknown): AgentArtifactStorageResponse {
+	return {
+		storage: readAgentArtifactStorage(agentRecord(value, ['storage'], AGENT_ARTIFACT_MAX_RESPONSE_BYTES).storage),
+	};
+}
+
+export function readAgentArtifactCleanupResponse(value: unknown): AgentArtifactCleanupResponse {
+	return {
+		confirmation: readAgentArtifactCleanupView(
+			agentRecord(value, ['confirmation'], AGENT_ARTIFACT_MAX_RESPONSE_BYTES).confirmation,
+		),
+	};
+}
+
+export function readAgentArtifactCleanupResultResponse(value: unknown): AgentArtifactCleanupResultResponse {
+	return {
+		result: readAgentArtifactCleanupResult(
+			agentRecord(value, ['result'], AGENT_ARTIFACT_MAX_RESPONSE_BYTES).result,
+		),
+	};
+}
+
 export function readAgentArtifactCleanupView(value: unknown): AgentArtifactCleanupView {
 	const r = agentRecord(value, [
 		'confirmationId',
@@ -281,6 +307,10 @@ export function readAgentArtifactAttachment(value: unknown): AgentArtifactAttach
 		role: 'input',
 		crossApp,
 	};
+}
+
+export function readAgentArtifactAttachResponse(value: unknown): AgentArtifactAttachResponse {
+	return { attachment: readAgentArtifactAttachment(agentRecord(value, ['attachment']).attachment) };
 }
 
 export function readAgentArtifactUploadHeaders(ifMatch: unknown, contentType: unknown): { expectedVersion: number } {

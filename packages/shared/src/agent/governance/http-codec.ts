@@ -382,7 +382,10 @@ export function readAgentApprovalView(value: unknown): AgentApprovalView {
 		(result.decidedAt !== null &&
 			(result.decidedAt < result.requestedAt || result.decidedAt >= result.expiresAt)) ||
 		(result.consumedAt !== null &&
-			(result.status !== 'approved' || result.decidedAt === null || result.consumedAt < result.decidedAt))
+			(result.status !== 'approved' ||
+				result.decidedAt === null ||
+				result.consumedAt < result.decidedAt ||
+				result.consumedAt >= result.expiresAt))
 	) {
 		throw new InvalidAgentPayload();
 	}

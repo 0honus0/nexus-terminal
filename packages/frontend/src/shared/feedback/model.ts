@@ -8,6 +8,7 @@ export interface UiNotification {
 }
 
 export interface ConfirmDialogOptions {
+	signal?: AbortSignal;
 	title?: string;
 	message: string;
 	confirmText?: string;

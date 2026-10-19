@@ -1,82 +1,35 @@
 <script setup lang="ts">
-	import { ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { apiErrorMessage } from '@/client/http';
 	import { UiButton, UiFormField, UiInput } from '@/foundation/ui';
-	import { securityApi } from '../api/securityApi';
-	import type { AuthTwoFactorSetupDto } from '../model/security';
+	import { useTwoFactorSettings } from '../composables/use-two-factor-settings';
 
 	const props = defineProps<{ enabled: boolean }>();
 	const emit = defineEmits<{ changed: [] }>();
 	const { t } = useI18n();
-	const setup = ref<AuthTwoFactorSetupDto | null>(null);
-	const verificationCode = ref('');
-	const disablePassword = ref('');
-	const loading = ref(false);
-	const message = ref('');
-	const success = ref(false);
-
-	const begin = async () => {
-		loading.value = true;
-		message.value = '';
-		success.value = false;
-		try {
-			setup.value = await securityApi.beginTwoFactorSetup();
-		} catch (cause) {
-			message.value = apiErrorMessage(cause, t('settings.twoFactor.error.setupFailed'));
-		} finally {
-			loading.value = false;
-		}
-	};
-
-	const activate = async () => {
-		if (!verificationCode.value) {
-			message.value = t('settings.twoFactor.error.codeRequired');
-			return;
-		}
-		loading.value = true;
-		message.value = '';
-		success.value = false;
-		try {
-			await securityApi.activateTwoFactor(verificationCode.value);
-			emit('changed');
-			setup.value = null;
-			verificationCode.value = '';
-			message.value = t('settings.twoFactor.success.activated');
-			success.value = true;
-		} catch (cause) {
-			message.value = apiErrorMessage(cause, t('settings.twoFactor.error.verificationFailed'));
-		} finally {
-			loading.value = false;
-		}
-	};
-
-	const disable = async () => {
-		if (!disablePassword.value) {
-			message.value = t('settings.twoFactor.error.passwordRequiredForDisable');
-			return;
-		}
-		loading.value = true;
-		message.value = '';
-		success.value = false;
-		try {
-			await securityApi.disableTwoFactor(disablePassword.value);
-			emit('changed');
-			disablePassword.value = '';
-			message.value = t('settings.twoFactor.success.disabled');
-			success.value = true;
-		} catch (cause) {
-			message.value = apiErrorMessage(cause, t('settings.twoFactor.error.disableFailed'));
-		} finally {
-			loading.value = false;
-		}
-	};
+	const {
+		setup,
+		verificationCode,
+		disablePassword,
+		loading,
+		message,
+		success,
+		needsRefresh,
+		begin,
+		activate,
+		disable,
+		refresh,
+		cancel,
+	} = useTwoFactorSettings(
+		() => props.enabled,
+		() => emit('changed'),
+	);
 </script>
 
 <template>
 	<section>
 		<h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.twoFactor.title') }}</h3>
-		<div v-if="props.enabled">
+		<UiButton v-if="needsRefresh" :loading="loading" @click="refresh">{{ t('common.retry') }}</UiButton>
+		<div v-else-if="props.enabled">
 			<p class="mb-3 rounded border-l-4 border-success bg-success/10 p-3 text-sm text-success">
 				{{ t('settings.twoFactor.status.enabled') }}
 			</p>
@@ -126,9 +79,7 @@
 						<UiButton type="submit" appearance="solid" tone="primary" :loading="loading">{{
 							t('settings.twoFactor.setup.verifyButton')
 						}}</UiButton>
-						<UiButton type="button" :disabled="loading" @click="setup = null">{{
-							t('common.cancel')
-						}}</UiButton>
+						<UiButton type="button" :disabled="loading" @click="cancel">{{ t('common.cancel') }}</UiButton>
 					</div>
 				</form>
 			</div>

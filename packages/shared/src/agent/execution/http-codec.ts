@@ -2,6 +2,10 @@ import { agentRecord, agentInteger, agentText, readAgentId, InvalidAgentPayload 
 import { AGENT_CHILD_PROFILES } from '../collaboration/values.js';
 import {
 	AGENT_EXECUTION_LIMIT_KEYS,
+	AGENT_EXECUTION_PROFILE_MAX_REQUESTS,
+	AGENT_EXECUTION_PROFILE_MAX_TOOLS,
+	AGENT_EXECUTION_PROFILE_MODEL_MAX_BYTES,
+	AGENT_EXECUTION_PROFILE_TOOL_MAX_BYTES,
 	AGENT_EXECUTION_LIMIT_MAXIMA,
 	AGENT_EXECUTION_SETTINGS_MAX_BYTES,
 } from './values.js';
@@ -16,6 +20,8 @@ import type {
 	AgentExecutionSettingsUpdate,
 	AgentHardLimitPreviewRequest,
 	AgentHardLimitConfirmRequest,
+	AgentExecutionSettingsResponse,
+	AgentHardLimitPreviewResponse,
 } from './http.js';
 
 export function readAgentExecutionLimits(value: unknown): AgentExecutionLimits {
@@ -50,9 +56,18 @@ export function readAgentExecutionProfiles(value: unknown): AgentExecutionProfil
 		throw new InvalidAgentPayload();
 	}
 	const items = value.map((raw: unknown) => {
-		const r = agentRecord(raw, ['name', 'enabled', 'model', 'maxRequests', 'maxSeconds', 'tools']);
+		const r = agentRecord(
+			raw,
+			['name', 'enabled', 'model', 'maxRequests', 'maxSeconds', 'tools'],
+			AGENT_EXECUTION_SETTINGS_MAX_BYTES,
+		);
 		const name = AGENT_CHILD_PROFILES.find((v) => v === r.name);
-		if (!name || typeof r.enabled !== 'boolean' || !Array.isArray(r.tools) || r.tools.length > 128) {
+		if (
+			!name ||
+			typeof r.enabled !== 'boolean' ||
+			!Array.isArray(r.tools) ||
+			r.tools.length > AGENT_EXECUTION_PROFILE_MAX_TOOLS
+		) {
 			throw new InvalidAgentPayload();
 		}
 		const model = agentRecord(
@@ -68,14 +83,14 @@ export function readAgentExecutionProfiles(value: unknown): AgentExecutionProfil
 			selection = {
 				kind: 'explicit',
 				providerId: readAgentId(model.providerId),
-				modelId: agentText(model.modelId, 256),
+				modelId: agentText(model.modelId, AGENT_EXECUTION_PROFILE_MODEL_MAX_BYTES),
 				configurationVersion: agentInteger(model.configurationVersion, 1),
 			};
 		} else {
 			throw new InvalidAgentPayload();
 		}
 		const tools = r.tools.map((tool: unknown) => {
-			const name = agentText(tool, 256);
+			const name = agentText(tool, AGENT_EXECUTION_PROFILE_TOOL_MAX_BYTES);
 			if (!/^[a-z][a-z0-9_]*$/u.test(name)) {
 				throw new InvalidAgentPayload();
 			}
@@ -88,8 +103,8 @@ export function readAgentExecutionProfiles(value: unknown): AgentExecutionProfil
 			name,
 			enabled: r.enabled,
 			model: selection,
-			maxRequests: agentInteger(r.maxRequests, 1, 32),
-			maxSeconds: agentInteger(r.maxSeconds, 1, 7200),
+			maxRequests: agentInteger(r.maxRequests, 1, AGENT_EXECUTION_PROFILE_MAX_REQUESTS),
+			maxSeconds: agentInteger(r.maxSeconds, 1, AGENT_EXECUTION_LIMIT_MAXIMA.maxActiveSeconds),
 			tools,
 		};
 	});
@@ -166,4 +181,14 @@ export function readAgentHardLimitPreviewView(value: unknown): AgentHardLimitPre
 		occupiedArtifactBytes: agentInteger(r.occupiedArtifactBytes),
 		activeRuns: agentInteger(r.activeRuns),
 	};
+}
+
+export function readAgentExecutionSettingsResponse(value: unknown): AgentExecutionSettingsResponse {
+	const row = agentRecord(value, ['settings'], AGENT_EXECUTION_SETTINGS_MAX_BYTES);
+	return { settings: readAgentExecutionSettingsView(row.settings) };
+}
+
+export function readAgentHardLimitPreviewResponse(value: unknown): AgentHardLimitPreviewResponse {
+	const row = agentRecord(value, ['confirmation'], AGENT_EXECUTION_SETTINGS_MAX_BYTES);
+	return { confirmation: readAgentHardLimitPreviewView(row.confirmation) };
 }

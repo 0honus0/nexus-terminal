@@ -20,8 +20,6 @@ export const AGENT_PLUGIN_MAX_FRONTEND_MESSAGE_BYTES =
 
 export const AGENT_PLUGIN_RPC_TIMEOUT_MS = 30000;
 
-export const AGENT_PLUGIN_MAX_SELECTABLE_MODELS = 1024;
-
 export const AGENT_PLUGIN_MAX_MIGRATION_KEYS = 1024;
 
 /** 8 MiB of persisted JSON strings can expand sixfold in the surrounding wire JSON. */

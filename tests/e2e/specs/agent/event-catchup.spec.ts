@@ -1,449 +1,144 @@
-import { AGENT_DURABLE_EVENT_TYPES } from '../../../../packages/protocol/src/agent-events';
+import { randomUUID } from 'node:crypto';
 import { expect, test } from '../../support/fixtures';
+import { loginAsInitialAdmin } from '../../support/auth';
+import { prepareAgentRun, requestAgentWorkspace } from '../../support/agent';
+import { AGENT_RUN_EVENT_TYPES } from '../../../../packages/shared/src/agent/runs/values';
+import { E2E_URLS } from '../../support/test-env';
 
-interface BacklogRaceState {
-	delivered: number;
-	ids: string[];
-	controller: AbortController;
-	iterator: AsyncIterator<{ id?: string }>;
-	original: typeof WebSocket;
-}
-
-test('production Agent subscription drains disconnected backlog and reconnects from its consumed cursor', async ({
-	page,
+test('native Run events catch up from the server cursor and preserve the original creation result', async ({
+	request,
 }) => {
-	const cursors: number[] = [];
-	let disconnect: (() => void) | undefined;
-	let unsubscriptions = 0;
-	await page.routeWebSocket('**/ws/agent', (socket) => {
-		socket.onMessage((data) => {
-			const message = JSON.parse(String(data));
-			if (message.type === 'unsubscribe') {
-				unsubscriptions++;
-				return;
-			}
-			if (message.type !== 'subscribe') return;
-			cursors.push(message.payload.cursor);
-			socket.send(JSON.stringify({ type: 'subscribed', requestId: message.requestId }));
-
-			const send = (sequence: number) =>
-				socket.send(
-					JSON.stringify({
-						type: 'event',
-						payload: {
-							subscriptionId: message.payload.subscriptionId,
-							durability: 'durable',
-							sequence,
-							eventType: 'summary.changed',
-							schemaVersion: 1,
-							payload: {},
-						},
-					}),
-				);
-
-			if (cursors.length === 1) {
-				for (let sequence = 1; sequence <= 100; sequence++) send(sequence);
-				disconnect = () => socket.close({ code: 1012, reason: 'fixture restart' });
-			} else {
-				send(100);
-				send(101);
-			}
-		});
-	});
-	await page.goto('/login');
-	await page.evaluate(async () => {
-		const modulePath = '/src/features/agent/api/agent-events.ts';
-		const { agentEvents } = await import(/* @vite-ignore */ modulePath);
-		const OriginalSocket = window.WebSocket;
-		let state: BacklogRaceState;
-		window.WebSocket = class extends OriginalSocket {
-			constructor(url: string | URL, protocols?: string | string[]) {
-				super(url, protocols);
-				this.addEventListener('message', (event) => {
-					if (JSON.parse(String(event.data)).type === 'event') state.delivered++;
-				});
-			}
-		};
-		const controller = new AbortController();
-		state = {
-			delivered: 0,
-			ids: [],
-			controller,
-			iterator: agentEvents.host(0, controller.signal)[Symbol.asyncIterator](),
-			original: OriginalSocket,
-		};
-		window.agentBacklogRace = state;
-		const first = await state.iterator.next();
-		state.ids.push(first.value?.id ?? 'missing');
-	});
-	try {
-		await expect.poll(() => page.evaluate(() => window.agentBacklogRace.delivered)).toBe(100);
-		disconnect!();
-		const result = await page.evaluate(async () => {
-			const state = window.agentBacklogRace;
-			for (let sequence = 2; sequence <= 100; sequence++) {
-				const next = await state.iterator.next();
-				state.ids.push(next.value?.id ?? 'missing');
-			}
-			const disconnected = await state.iterator.next();
-			const recovered = await state.iterator.next();
-			state.ids.push(recovered.value?.id ?? 'missing');
-			return { ids: state.ids, disconnectedType: (disconnected.value as { type?: string })?.type };
-		});
-		expect(result.ids).toEqual(Array.from({ length: 101 }, (_, index) => String(index + 1)));
-		expect(result.disconnectedType).toBe('transport.disconnected');
-		expect(cursors).toEqual([0, 100]);
-	} finally {
-		await page.evaluate(async () => {
-			const state = window.agentBacklogRace;
-			state.controller.abort();
-			await state.iterator.return?.();
-			window.WebSocket = state.original;
-		});
-	}
-	await expect.poll(() => unsubscriptions).toBe(1);
-});
-declare global {
-	interface Window {
-		agentBacklogRace: BacklogRaceState;
-	}
-}
-
-test('production Agent subscription preserves arrivals during paused consumption and aborts a remaining backlog', async ({
-	page,
-}) => {
-	let appendBatch: (() => void) | undefined;
-	let confirmInitial!: () => void;
-	const initialSent = new Promise<void>((resolve) => {
-		confirmInitial = resolve;
-	});
-	let unsubscriptions = 0;
-	await page.routeWebSocket('**/ws/agent', (socket) => {
-		socket.onMessage((data) => {
-			const message = JSON.parse(String(data));
-			if (message.type === 'unsubscribe') {
-				unsubscriptions++;
-				return;
-			}
-			if (message.type !== 'subscribe') return;
-
-			const send = (sequence: number) =>
-				socket.send(
-					JSON.stringify({
-						type: 'event',
-						payload: {
-							subscriptionId: message.payload.subscriptionId,
-							durability: 'durable',
-							sequence,
-							eventType: 'summary.changed',
-							schemaVersion: 1,
-							payload: {},
-						},
-					}),
-				);
-
-			socket.send(JSON.stringify({ type: 'subscribed', requestId: message.requestId }));
-			for (let sequence = 1; sequence <= 100; sequence++) send(sequence);
-			appendBatch = () => {
-				send(100); // Durable duplicate must not be delivered twice.
-				for (let sequence = 101; sequence <= 200; sequence++) send(sequence);
-			};
-			confirmInitial();
-		});
-	});
-	await page.goto('/login');
-	await page.evaluate(async () => {
-		const modulePath = '/src/features/agent/api/agent-events.ts';
-		const { agentEvents } = await import(/* @vite-ignore */ modulePath);
-		const OriginalSocket = window.WebSocket;
-		const controller = new AbortController();
-		let state: BacklogRaceState;
-		window.WebSocket = class extends OriginalSocket {
-			constructor(url: string | URL, protocols?: string | string[]) {
-				super(url, protocols);
-				this.addEventListener('message', (event) => {
-					if (JSON.parse(String(event.data)).type === 'event') state.delivered++;
-				});
-			}
-		};
-		state = {
-			delivered: 0,
-			ids: [],
-			controller,
-			iterator: agentEvents.host(0, controller.signal)[Symbol.asyncIterator](),
-			original: OriginalSocket,
-		};
-		window.agentBacklogRace = state;
-		const first = await state.iterator.next();
-		state.ids.push(first.value?.id ?? 'missing');
-	});
-	try {
-		await initialSent;
-		await expect.poll(() => page.evaluate(() => window.agentBacklogRace.delivered)).toBe(100);
-		appendBatch!();
-		await expect.poll(() => page.evaluate(() => window.agentBacklogRace.delivered)).toBe(201);
-		const result = await page.evaluate(async () => {
-			const state = window.agentBacklogRace;
-			for (let sequence = 2; sequence <= 150; sequence++) {
-				const next = await state.iterator.next();
-				state.ids.push(next.value?.id ?? 'missing');
-			}
-			// Fifty delivered unique events remain queued when cancellation occurs.
-			state.controller.abort();
-			const afterAbort = await state.iterator.next();
-			return { ids: state.ids, done: afterAbort.done };
-		});
-		expect(result.ids).toEqual(Array.from({ length: 150 }, (_, index) => String(index + 1)));
-		expect(result.done).toBe(true);
-		await expect.poll(() => unsubscriptions).toBe(1);
-	} finally {
-		await page.evaluate(async () => {
-			const state = window.agentBacklogRace;
-			state.controller.abort();
-			await state.iterator.return?.();
-			window.WebSocket = state.original;
-		});
-	}
-});
-
-test('production Agent subscription drains a delivered backlog in order and releases on abort', async ({ page }) => {
-	const count = 20_000;
-	let subscriptions = 0;
-	let unsubscriptions = 0;
-	await page.routeWebSocket('**/ws/agent', (socket) => {
-		socket.onMessage((data) => {
-			const message = JSON.parse(String(data));
-			if (message.type === 'unsubscribe') {
-				unsubscriptions++;
-				return;
-			}
-			if (message.type !== 'subscribe') return;
-			subscriptions++;
-			socket.send(JSON.stringify({ type: 'subscribed', requestId: message.requestId }));
-			for (let sequence = 1; sequence <= count; sequence++) {
-				socket.send(
-					JSON.stringify({
-						type: 'event',
-						payload: {
-							subscriptionId: message.payload.subscriptionId,
-							durability: 'durable',
-							sequence,
-							eventType: 'summary.changed',
-							schemaVersion: 1,
-							payload: {},
-						},
-					}),
-				);
-			}
-		});
-	});
-	await page.goto('/login');
-	const samples = await page.evaluate(async (count) => {
-		const modulePath = '/src/features/agent/api/agent-events.ts';
-		const { agentEvents } = await import(/* @vite-ignore */ modulePath);
-		const OriginalSocket = window.WebSocket;
-		let delivered = 0;
-		let resolveDelivered: (() => void) | undefined;
-		const samples = [];
-		class ObservedSocket extends OriginalSocket {
-			constructor(url: string | URL, protocols?: string | string[]) {
-				super(url, protocols);
-				this.addEventListener('message', (event) => {
-					if (JSON.parse(String(event.data)).type === 'event') {
-						delivered++;
-						if (delivered === count) resolveDelivered?.();
-					}
-				});
-			}
-		}
-		window.WebSocket = ObservedSocket;
-		try {
-			for (let sample = 0; sample < 1; sample++) {
-				delivered = 0;
-				const allDelivered = new Promise<void>((resolve) => {
-					resolveDelivered = resolve;
-				});
-				const controller = new AbortController();
-				const iterator = agentEvents.host(0, controller.signal)[Symbol.asyncIterator]();
-				try {
-					const first = await iterator.next();
-					await allDelivered;
-					// Every frame is dispatched before the consumer resumes; no timer-based backlog assumption.
-					await Promise.resolve();
-					let ordered = !first.done && first.value.id === '1';
-					for (let sequence = 2; sequence <= count; sequence++) {
-						const next = await iterator.next();
-						ordered &&= !next.done && next.value.id === String(sequence);
-					}
-					samples.push({ count, delivered, ordered });
-				} finally {
-					controller.abort();
-					await iterator.return?.();
-				}
-			}
-		} finally {
-			window.WebSocket = OriginalSocket;
-		}
-		return samples;
-	}, count);
-	expect(samples).toHaveLength(1);
-	expect(samples.every((sample) => sample.ordered && sample.delivered === count)).toBe(true);
-	await expect.poll(() => unsubscriptions).toBe(1);
-	expect(subscriptions).toBe(1);
-});
-
-test('Run subscription accepts every current durable event and reconnects after consuming the backlog', async ({
-	page,
-}) => {
-	const cursors: number[] = [];
-	let disconnect: (() => void) | undefined;
-	const payloads: Record<string, unknown> = {
-		'message.final': { text: 'completed' },
-		'run.status_changed': { from: 'running', to: 'completed' },
-		'run.error': { code: 'EXPECTED_ERROR' },
-		'run.cancelled': { reason: 'cancelled' },
-		'run.interrupted': { reason: 'execution_limit', needsReconciliation: false },
-		'run.cancel_requested': { previousStatus: 'running' },
-		'run.recovery_continued': {
-			reason: 'backend_restart',
-			checkpointId: 'checkpoint',
-			continuedRunId: 'continued',
-		},
-		'run.recovery_failed': { reason: 'backend_restart', checkpointId: null, reasons: ['unavailable'] },
-		'model.retrying': {
-			stepId: 'step',
-			previousAttemptId: 'previous',
-			attemptId: 'attempt',
-			attemptIndex: 2,
-			errorCode: 'PROVIDER_UNAVAILABLE',
-		},
-	};
-	await page.routeWebSocket('**/ws/agent', (socket) => {
-		socket.onMessage((data) => {
-			const message = JSON.parse(String(data));
-			if (message.type !== 'subscribe') return;
-			expect(message.payload.channel).toBe('run');
-			cursors.push(message.payload.cursor);
-			socket.send(JSON.stringify({ type: 'subscribed', requestId: message.requestId }));
-
-			const emit = (eventType: string, sequence: number) =>
-				socket.send(
-					JSON.stringify({
-						type: 'event',
-						payload: {
-							subscriptionId: message.payload.subscriptionId,
-							durability: 'durable',
-							sequence,
-							schemaVersion: 1,
-							eventType,
-							payload: payloads[eventType] ?? {},
-							occurredAt: 1800000000,
-						},
-					}),
-				);
-
-			if (cursors.length === 1) {
-				AGENT_DURABLE_EVENT_TYPES.forEach((type, index) => emit(type, index + 1));
-				disconnect = () => socket.close({ code: 1012, reason: 'restart' });
-			} else {
-				emit('tool.completed', AGENT_DURABLE_EVENT_TYPES.length); // Replay duplicate.
-				emit('plan.updated', AGENT_DURABLE_EVENT_TYPES.length + 1);
-			}
-		});
-	});
-	await page.goto('/login');
-	const count = AGENT_DURABLE_EVENT_TYPES.length;
-	const events = await page.evaluate(async (count) => {
-		const { agentEvents } = await import(/* @vite-ignore */ '/src/features/agent/api/agent-events.ts');
-		const controller = new AbortController();
-		const iterator = agentEvents.run('nexus.agent', 'fixture-run', 0, controller.signal)[Symbol.asyncIterator]();
-		window.agentRunBacklog = { controller, iterator };
-		const events = [];
-		for (let index = 0; index < count; index++) events.push((await iterator.next()).value);
-		return events;
-	}, count);
-	expect(events.map((event) => event.id)).toEqual(Array.from({ length: count }, (_, index) => String(index + 1)));
-	expect(events.some((event) => event.type === 'unknown')).toBe(false);
-	for (const type of [
-		'run.created',
-		'tool.completed',
-		'approval.approved',
-		'goal.updated',
-		'input.requested',
-		'subagent.completed',
-	]) {
-		expect(events).toContainEqual(expect.objectContaining({ type: 'snapshot.changed', sourceType: type }));
-	}
-	disconnect!();
-	const resumed = await page.evaluate(async () => {
-		const state = window.agentRunBacklog;
-		try {
-			const disconnected = await state.iterator.next();
-			const next = await state.iterator.next();
-			return { disconnected: disconnected.value?.type, next: next.value };
-		} finally {
-			state.controller.abort();
-			await state.iterator.return?.();
-		}
-	});
-	expect(resumed.disconnected).toBe('transport.disconnected');
-	expect(resumed.next).toMatchObject({ id: String(count + 1), type: 'snapshot.changed', sourceType: 'plan.updated' });
-	expect(cursors).toEqual([0, count]);
-});
-
-declare global {
-	interface Window {
-		agentRunBacklog: { controller: AbortController; iterator: AsyncIterator<{ id?: string; type?: string }> };
-	}
-}
-
-for (const invalid of [
-	{ name: 'unknown durable event', eventType: 'future.unknown', schemaVersion: 1, payload: {} },
-	{ name: 'unknown schema', eventType: 'tool.completed', schemaVersion: 2, payload: {} },
-	{ name: 'malformed final message', eventType: 'message.final', schemaVersion: 1, payload: {} },
-	{ name: 'malformed snapshot payload', eventType: 'tool.completed', schemaVersion: 1, payload: null },
-]) {
-	test(`Run subscription rejects ${invalid.name} without skipping its cursor`, async ({ page }) => {
-		const cursors: number[] = [];
-		await page.routeWebSocket('**/ws/agent', (socket) => {
-			socket.onMessage((data) => {
-				const message = JSON.parse(String(data));
-				if (message.type !== 'subscribe') return;
-				cursors.push(message.payload.cursor);
-				socket.send(JSON.stringify({ type: 'subscribed', requestId: message.requestId }));
-				socket.send(
-					JSON.stringify({
-						type: 'event',
-						payload: {
-							subscriptionId: message.payload.subscriptionId,
-							durability: 'durable',
-							sequence: 1,
-							eventType: invalid.eventType,
-							schemaVersion: invalid.schemaVersion,
-							payload: invalid.payload,
-						},
-					}),
-				);
+	await loginAsInitialAdmin(request);
+	const { app, thread, input } = await prepareAgentRun(request);
+	const command = {
+		method: 'agent.runs.create',
+		params: { threadId: thread.id, operationId: randomUUID(), input },
+	} as const;
+	const created = await requestAgentWorkspace(request, app, command);
+	if (created.method !== 'agent.runs.create') throw new Error('Unexpected Run confirmation');
+	expect(created.value.status).toBe('created');
+	const initial = created.value.run;
+	await expect
+		.poll(async () => {
+			const result = await requestAgentWorkspace(request, app, {
+				method: 'agent.runs.get',
+				params: { runId: initial.id },
 			});
+			return result.method === 'agent.runs.get' ? result.value?.status : null;
+		})
+		.toBe('completed');
+
+	const events = [];
+	let cursor = 0;
+	for (let page = 0; page < 10; page++) {
+		const result = await requestAgentWorkspace(request, app, {
+			method: 'agent.runs.events',
+			params: { runId: initial.id, after: cursor, limit: 1 },
 		});
-		await page.goto('/login');
-		const error = await page.evaluate(async () => {
-			const { agentEvents } = await import(/* @vite-ignore */ '/src/features/agent/api/agent-events.ts');
-			const controller = new AbortController();
-			const iterator = agentEvents
-				.run('nexus.agent', 'fixture-run', 0, controller.signal)
-				[Symbol.asyncIterator]();
-			try {
-				await iterator.next();
-				return null;
-			} catch (error) {
-				return error instanceof Error ? error.message : String(error);
-			} finally {
-				controller.abort();
-				await iterator.return?.();
-			}
-		});
-		expect(error).toBe('AGENT_WS_DURABLE_EVENT_UNSUPPORTED');
-		expect(cursors).toEqual([0]);
+		if (result.method !== 'agent.runs.events') throw new Error('Unexpected event page');
+		if (result.value.items.length === 0) {
+			expect(result.value.nextCursor).toBe(cursor);
+			break;
+		}
+		expect(result.value.items).toHaveLength(1);
+		const event = result.value.items[0];
+		expect(event.runId).toBe(initial.id);
+		expect(event.sequence).toBeGreaterThan(cursor);
+		expect(AGENT_RUN_EVENT_TYPES).toContain(event.type);
+		expect(result.value.nextCursor).toBe(event.sequence);
+		events.push(event);
+		cursor = result.value.nextCursor;
+	}
+	expect(events.map((item) => item.type)).toEqual(['run.created', 'run.started', 'run.completed']);
+	expect(new Set(events.map((item) => item.sequence)).size).toBe(events.length);
+
+	const replay = await requestAgentWorkspace(request, app, command);
+	if (replay.method !== 'agent.runs.create') throw new Error('Unexpected replay confirmation');
+	expect(replay.value).toEqual({ status: 'replayed', originalStatus: 'created', run: initial });
+	const afterReplay = await requestAgentWorkspace(request, app, {
+		method: 'agent.runs.events',
+		params: { runId: initial.id, after: cursor, limit: 1 },
 	});
-}
+	if (afterReplay.method !== 'agent.runs.events') throw new Error('Unexpected replay event page');
+	expect(afterReplay.value).toEqual({ items: [], nextCursor: cursor });
+});
+
+test('native event pages reject invalid cursors and do not leak events to another App or a logged-out session', async ({
+	request,
+}) => {
+	await loginAsInitialAdmin(request);
+	const { app, thread, input } = await prepareAgentRun(request);
+	const result = await requestAgentWorkspace(request, app, {
+		method: 'agent.runs.create',
+		params: { threadId: thread.id, operationId: randomUUID(), input },
+	});
+	if (result.method !== 'agent.runs.create') throw new Error('Unexpected Run confirmation');
+	const path = '/api/v1/agent/apps/' + app.id + '/runs/' + result.value.run.id + '/events';
+	for (const query of ['after=-1', 'after=01', 'after=0&after=0', 'limit=0', 'limit=101', 'cursor=0']) {
+		const rejected = await request.get(path + '?' + query);
+		expect(rejected.status()).toBe(400);
+		await expect(rejected.json()).resolves.toEqual({ code: 'invalid_input' });
+	}
+	const other = await request.get('/api/v1/agent/apps/' + randomUUID() + '/runs/' + result.value.run.id + '/events');
+	expect(other.status()).toBe(404);
+	await expect(other.json()).resolves.toEqual({ code: 'not_found' });
+	const logout = await request.post('/api/v1/auth/logout', { headers: { Origin: E2E_URLS.frontendOrigin } });
+	expect(logout.ok()).toBeTruthy();
+	const denied = await request.get(path + '?after=0&limit=1');
+	expect(denied.status()).toBe(401);
+	await expect(denied.json()).resolves.toEqual({ code: 'unauthenticated' });
+});
+
+// Browser transport tests use the real production client, not the removed WS subscription module.
+test('production native event client rejects duplicate pages and retains its supplied cursor', async ({ page }) => {
+	const appId = randomUUID();
+	const runId = randomUUID();
+	const afterValues: number[] = [];
+	let malformed = false;
+	await page.route('**/api/v1/agent/apps/*/workspace', async (route) => {
+		const body = route.request().postDataJSON();
+		expect(body.request.method).toBe('agent.runs.events');
+		afterValues.push(body.request.params.after);
+		const event = { runId, sequence: 8, type: 'run.completed', runVersion: 3, createdAt: Date.now() };
+		await route.fulfill({
+			json: {
+				appId,
+				appVersion: 1,
+				result: {
+					method: 'agent.runs.events',
+					value: { items: malformed ? [event, event] : [event], nextCursor: 8 },
+				},
+			},
+		});
+	});
+	await page.goto('/login');
+
+	const read = () =>
+		page.evaluate(
+			async ({ appId, runId }) => {
+				const path = '/src/features/agent/api/native-run-api.ts';
+				const { listNativeEvents } = await import(/* @vite-ignore */ path);
+				try {
+					const result = await listNativeEvents({ appId, appVersion: 1 }, runId, 7);
+					return { status: 'ok', cursor: result.nextCursor, runId: result.items[0]?.runId };
+				} catch (cause) {
+					const failurePath = '/src/features/agent/model/management-failure.ts';
+					const { AgentManagementFailure } = await import(/* @vite-ignore */ failurePath);
+					if (
+						!(cause instanceof AgentManagementFailure) ||
+						!(cause instanceof Error) ||
+						!('code' in cause) ||
+						!('outcome' in cause)
+					)
+						throw cause;
+					return { status: 'error', code: cause.code, outcome: cause.outcome };
+				}
+			},
+			{ appId, runId },
+		);
+
+	expect(await read()).toEqual({ status: 'ok', cursor: 8, runId });
+	malformed = true;
+	expect(await read()).toEqual({ status: 'error', code: 'protocol_failure', outcome: 'unknown' });
+	expect(afterValues).toEqual([7, 7]);
+});

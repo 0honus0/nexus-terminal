@@ -13,7 +13,7 @@
 		type ChartOptions,
 		type TooltipModel,
 	} from 'chart.js';
-	import type { StatusHistory, StatusHistoryPoint } from '../model/status';
+	import type { StatusHistory, StatusHistoryPoint } from '../model/status-types';
 	import { formatStatusPercent, formatStatusRate, formatStatusRateAxis } from '../model/statusFormatting';
 
 	export type StatusMetric = 'cpu' | 'memory' | 'swap' | 'disk' | 'network';
@@ -27,10 +27,10 @@
 			history: StatusHistory;
 			metric?: StatusMetric;
 			rangeMinutes?: number;
-			intervalSeconds?: number;
+
 			scale?: number;
 		}>(),
-		{ metric: 'cpu', rangeMinutes: 5, intervalSeconds: 3, scale: 1 },
+		{ metric: 'cpu', rangeMinutes: 5, scale: 1 },
 	);
 	const { t } = useI18n();
 	const MAX_CHART_POINTS = 110;
@@ -77,11 +77,10 @@
 	 */
 	const stableDownsample = (points: StatusHistoryPoint[], mode: DownsampleMode = 'average'): StatusHistoryPoint[] => {
 		const source = inRange(points);
-		if (!source.length) return [];
-		const bucketDurationMs = Math.max(
-			Math.max(1, props.intervalSeconds) * 1000,
-			Math.ceil(rangeMs.value / MAX_CHART_POINTS),
-		);
+		if (!source.length) {
+			return [];
+		}
+		const bucketDurationMs = Math.max(1, Math.ceil(rangeMs.value / MAX_CHART_POINTS));
 
 		const groups = new Map<number, { sum: number; count: number; max: number; time: number; sequence: number }>();
 		for (const point of source) {
@@ -111,10 +110,18 @@
 	};
 
 	const percentageSeries = computed(() => {
-		if (props.metric === 'cpu') return stableDownsample(props.history.cpu);
-		if (props.metric === 'memory') return stableDownsample(props.history.memory);
-		if (props.metric === 'swap') return stableDownsample(props.history.swap);
-		if (props.metric === 'disk') return stableDownsample(props.history.disk);
+		if (props.metric === 'cpu') {
+			return stableDownsample(props.history.cpu);
+		}
+		if (props.metric === 'memory') {
+			return stableDownsample(props.history.memory);
+		}
+		if (props.metric === 'swap') {
+			return stableDownsample(props.history.swap);
+		}
+		if (props.metric === 'disk') {
+			return stableDownsample(props.history.disk);
+		}
 		return [];
 	});
 	const networkRx = computed(() => stableDownsample(props.history.networkRx, 'max'));
@@ -125,9 +132,15 @@
 	});
 
 	const singleLabel = computed(() => {
-		if (props.metric === 'cpu') return t('statusMonitor.cpuUsageLabel');
-		if (props.metric === 'memory') return t('statusMonitor.memoryPercentLabel');
-		if (props.metric === 'swap') return t('statusMonitor.swapPercentLabel');
+		if (props.metric === 'cpu') {
+			return t('statusMonitor.cpuUsageLabel');
+		}
+		if (props.metric === 'memory') {
+			return t('statusMonitor.memoryPercentLabel');
+		}
+		if (props.metric === 'swap') {
+			return t('statusMonitor.swapPercentLabel');
+		}
 		return t('statusMonitor.diskPercentLabel');
 	});
 
@@ -140,7 +153,9 @@
 	);
 
 	const niceNetworkAxisMax = (rawBytes: number): number => {
-		if (!Number.isFinite(rawBytes) || rawBytes <= 1) return 1;
+		if (!Number.isFinite(rawBytes) || rawBytes <= 1) {
+			return 1;
+		}
 		const unit = rawBytes >= 1024 ** 2 ? 1024 ** 2 : rawBytes >= 1024 ? 1024 : 1;
 		const value = rawBytes / unit;
 		const roughStep = Math.max(value / 10, Number.EPSILON);

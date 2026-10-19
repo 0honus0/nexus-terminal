@@ -46,11 +46,9 @@ networks:
     name: nexus-core-no-runner-network-$suffix
 EOF_OVERRIDE
 mkdir -p "$data_dir"
-cat >"$data_dir/.env" <<'EOF_SECRETS'
-SESSION_SECRET=core-no-runner-session-secret-2026-0000000000000000000000000000
-ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-EOF_SECRETS
-chmod 0777 "$data_dir"; chmod 0600 "$data_dir/.env"
+chmod 0700 "$data_dir"
+# Ephemeral test key, injected through the same required setting as deployment.
+set_env NEXUS_ENCRYPTION_KEY "$(node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))")"
 set_env NEXUS_IMAGE_REPOSITORY "$repo"
 set_env NEXUS_IMAGE_TAG "$tag"
 set_env NEXUS_HTTP_PORT 0

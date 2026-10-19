@@ -45,6 +45,10 @@ export const WORKSPACE_FILES_MAX_BINARY_READS = 4;
 
 export const WORKSPACE_FILES_MAX_BINARY_READ_BYTES = 64 * 1024 * 1024;
 
+export const WORKSPACE_FILES_MAX_LIST_ENTRIES = 20_000;
+
+export const WORKSPACE_FILES_MAX_SEARCH_ENTRIES = 500;
+
 export type RemoteFileWriteStatus = 'created' | 'replaced';
 
 export type RemoteFileTargetType = 'file' | 'directory' | 'other';

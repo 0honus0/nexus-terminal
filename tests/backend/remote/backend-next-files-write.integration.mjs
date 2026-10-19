@@ -1,5 +1,14 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { SqliteRuntime } from '../../../packages/backend/dist/platform/storage/sqlite/sqlite-runtime.js';
+import { SecureSessionTokens } from '../../../packages/backend/dist/platform/security/adapters/secure-session-tokens.js';
+import { initializeMachineMutations } from '../../../packages/backend/dist/modules/remote/machines/adapters/sqlite/mutation-schema.js';
+import { SqliteMachineMutationStorage } from '../../../packages/backend/dist/modules/remote/machines/adapters/sqlite/mutation-sql.js';
+import { MachineMutationModel } from '../../../packages/backend/dist/modules/remote/machines/model/mutation-model.js';
+import { MachineMutationService } from '../../../packages/backend/dist/modules/remote/machines/service/mutation-service.js';
 import { EventEmitter } from 'node:events';
 import { request as httpRequest } from 'node:http';
 import { Readable, Writable } from 'node:stream';
@@ -11,14 +20,14 @@ import {
 	InvalidRemoteFilePayload,
 	readRemoteFileWriteTextRequest,
 } from '../../../packages/shared/dist/remote/files/http-codec.js';
-import { MachineSftpFailure } from '../../../packages/backend-next/dist/platform/ssh/ssh-port.js';
-import { SshSftpLease } from '../../../packages/backend-next/dist/platform/ssh/adapters/ssh2/ssh-sftp.js';
-import { openHttpListener } from '../../../packages/backend-next/dist/platform/http/http-server.js';
-import { SftpFileResource } from '../../../packages/backend-next/dist/modules/remote/files/model/file-resource.js';
-import { RemoteFileFailure } from '../../../packages/backend-next/dist/modules/remote/files/model/file-types.js';
-import { RemoteFileService } from '../../../packages/backend-next/dist/modules/remote/files/service/file-service.js';
-import { createRemoteFileHttpRoutes } from '../../../packages/backend-next/dist/modules/remote/interfaces/http/file-http.js';
-import { RemoteResourceCleanupFailure } from '../../../packages/backend-next/dist/modules/remote/resource-errors.js';
+import { MachineSftpFailure } from '../../../packages/backend/dist/platform/ssh/ssh-port.js';
+import { SshSftpLease } from '../../../packages/backend/dist/platform/ssh/adapters/ssh2/ssh-sftp.js';
+import { openHttpListener } from '../../../packages/backend/dist/platform/http/http-server.js';
+import { SftpFileResource } from '../../../packages/backend/dist/modules/remote/files/model/file-resource.js';
+import { RemoteFileFailure } from '../../../packages/backend/dist/modules/remote/files/model/file-types.js';
+import { RemoteFileService } from '../../../packages/backend/dist/modules/remote/files/service/file-service.js';
+import { createRemoteFileHttpRoutes } from '../../../packages/backend/dist/modules/remote/interfaces/http/file-http.js';
+import { RemoteResourceCleanupFailure } from '../../../packages/backend/dist/modules/remote/resource-errors.js';
 
 function sftpError(code, message) {
 	return Object.assign(new Error(message), { code });
@@ -141,6 +150,10 @@ class MemoryLease {
 		const entry = this.entry(from);
 		this.entries.delete(from);
 		this.entries.set(to, entry);
+	}
+
+	async chmod(path, mode) {
+		this.entry(path).mode = mode;
 	}
 
 	async remove(path) {
@@ -348,6 +361,8 @@ async function cleanupAndLateOpenLifecycle() {
 		},
 	};
 	const model = {
+		digestToken: (token) => tokens.digest(token),
+
 		open: async () => {
 			openCount += 1;
 			if (openCount === 1) {
@@ -360,7 +375,7 @@ async function cleanupAndLateOpenLifecycle() {
 		checkFingerprint: async () => undefined,
 	};
 	const access = { authenticate: async () => ({ userId: 1 }) };
-	const service = new RemoteFileService(access, model, { get: async () => ({ name: 'Fixture target' }) });
+	const service = new RemoteFileService(access, model, { get: async () => ({ name: 'Fixture target' }) }, mutations);
 	const controller = new AbortController();
 	const cancelled = service.open('good', 1, controller.signal);
 	await lateOpenEntered;
@@ -394,6 +409,8 @@ async function lateRejectedOpenCleanupEvidence() {
 		rejectOpen = reject;
 	});
 	const model = {
+		digestToken: (token) => tokens.digest(token),
+
 		open: async () => {
 			enteredOpen();
 			return opening;
@@ -401,9 +418,14 @@ async function lateRejectedOpenCleanupEvidence() {
 
 		checkFingerprint: async () => undefined,
 	};
-	const service = new RemoteFileService({ authenticate: async () => ({ userId: 1 }) }, model, {
-		get: async () => ({ name: 'Fixture target' }),
-	});
+	const service = new RemoteFileService(
+		{ authenticate: async () => ({ userId: 1 }) },
+		model,
+		{
+			get: async () => ({ name: 'Fixture target' }),
+		},
+		mutations,
+	);
 	const controller = new AbortController();
 	const cancelled = service.open('good', 1, controller.signal);
 	await entered;
@@ -461,6 +483,8 @@ async function fullMutationChain() {
 	const resource = new SftpFileResource(7, 'f'.repeat(64), machine, lease);
 	let stale = false;
 	const model = {
+		digestToken: (token) => tokens.digest(token),
+
 		async open() {
 			return resource;
 		},
@@ -472,7 +496,7 @@ async function fullMutationChain() {
 	const access = {
 		authenticate: async (token) => (token === 'good' ? { userId: 1 } : token === 'other' ? { userId: 2 } : null),
 	};
-	const files = new RemoteFileService(access, model, { get: async () => ({ name: 'Fixture target' }) });
+	const files = new RemoteFileService(access, model, { get: async () => ({ name: 'Fixture target' }) }, mutations);
 	const listener = await openHttpListener({
 		port: 0,
 		bindHost: '127.0.0.1',
@@ -655,17 +679,35 @@ async function fullMutationChain() {
 		assert.equal(entries.has('/unknown.txt'), false, 'fixture proves unknown may include a completed side effect');
 	} finally {
 		await listener.close();
-		await files.close().catch(() => undefined);
+		await files.close();
 	}
 }
 
-await platformOutcomeClassification();
-console.log('B1 Platform SFTP not-started/failed/unknown classification PASS');
-await cleanupAndLateOpenLifecycle();
-console.log('B1 cleanup aggregation / late-open quota lifecycle PASS');
-await lateRejectedOpenCleanupEvidence();
-console.log('B1 late rejected open preserves cleanup evidence PASS');
-sharedCapacityAndUnicode();
-console.log('B1 Shared UTF-8/JSON text capacity and Unicode validation PASS');
-await fullMutationChain();
-console.log('B1 Remote Files write/create/rename/remove/mkdir/rmdir HTTP-Service-Model chain PASS');
+const directory = await mkdtemp(join(tmpdir(), 'nexus-b10-files-'));
+const tokens = new SecureSessionTokens();
+let mutations;
+const db = SqliteRuntime.open(join(directory, 'mutations.db'));
+try {
+	await db.transaction(initializeMachineMutations);
+	const mutationModel = new MachineMutationModel(
+		new SqliteMachineMutationStorage(db),
+		{
+			resolveStored: async () => ({ host: 'fixture.local', port: 22 }),
+		},
+		tokens,
+	);
+	mutations = new MachineMutationService(mutationModel);
+	await platformOutcomeClassification();
+	console.log('B1 Platform SFTP not-started/failed/unknown classification PASS');
+	await cleanupAndLateOpenLifecycle();
+	console.log('B1 cleanup aggregation / late-open quota lifecycle PASS');
+	await lateRejectedOpenCleanupEvidence();
+	console.log('B1 late rejected open preserves cleanup evidence PASS');
+	sharedCapacityAndUnicode();
+	console.log('B1 Shared UTF-8/JSON text capacity and Unicode validation PASS');
+	await fullMutationChain();
+	console.log('B1 Remote Files write/create/rename/remove/mkdir/rmdir HTTP-Service-Model chain PASS');
+} finally {
+	await db.close();
+	await rm(directory, { recursive: true, force: true });
+}

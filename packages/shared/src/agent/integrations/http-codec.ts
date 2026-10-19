@@ -1,6 +1,7 @@
 import { agentRecord, agentText, agentInteger, readAgentId, InvalidAgentPayload } from '../http-codec.js';
 import {
 	AGENT_INTEGRATION_MAX_BODY_BYTES,
+	AGENT_INTEGRATION_MAX_ITEMS,
 	AGENT_INTEGRATION_MAX_RESPONSE_BYTES,
 	AGENT_MCP_PROTOCOL_VERSION,
 	AGENT_INTEGRATION_NAME_MAX_BYTES,
@@ -16,6 +17,8 @@ import type {
 	AgentIntegrationCreateRequest,
 	AgentIntegrationUpdateRequest,
 	AgentIntegrationCredential,
+	AgentIntegrationCreateHeaders,
+	AgentIntegrationDeleteResponse,
 } from './http.js';
 
 function list(input: unknown, max: number, bytes: number): string[] {
@@ -161,6 +164,19 @@ export function readAgentIntegrationVersion(input: unknown): number {
 	return agentInteger(agentRecord(input, ['expectedVersion']).expectedVersion, 1);
 }
 
+export function readAgentIntegrationCreateHeaders(input: unknown): AgentIntegrationCreateHeaders {
+	const row = agentRecord(input, ['idempotencyKey']);
+	return { idempotencyKey: readAgentId(row.idempotencyKey) };
+}
+
+export function readAgentIntegrationDeleteResponse(input: unknown): AgentIntegrationDeleteResponse {
+	const row = agentRecord(input, ['status']);
+	if (row.status !== 'deleted') {
+		throw new InvalidAgentPayload();
+	}
+	return { status: 'deleted' };
+}
+
 export function readAgentIntegrationPath(input: unknown): { appId: string; integrationId: string } {
 	const row = agentRecord(input, ['appId', 'integrationId']);
 	return { appId: readAgentId(row.appId), integrationId: readAgentId(row.integrationId) };
@@ -187,6 +203,11 @@ export function readAgentIntegrationView(input: unknown): AgentIntegrationView {
 	if (hash !== null && !/^[a-f0-9]{64}$/u.test(hash)) {
 		throw new InvalidAgentPayload();
 	}
+	const createdAt = agentInteger(row.createdAt);
+	const updatedAt = agentInteger(row.updatedAt);
+	if (updatedAt < createdAt) {
+		throw new InvalidAgentPayload();
+	}
 	return {
 		id: readAgentId(row.id),
 		appId: readAgentId(row.appId),
@@ -196,14 +217,14 @@ export function readAgentIntegrationView(input: unknown): AgentIntegrationView {
 		credentialRevision: agentInteger(row.credentialRevision),
 		schemaHash: hash,
 		version: agentInteger(row.version, 1),
-		createdAt: agentInteger(row.createdAt),
-		updatedAt: agentInteger(row.updatedAt),
+		createdAt,
+		updatedAt,
 	};
 }
 
 export function readAgentIntegrationList(input: unknown): { items: AgentIntegrationView[] } {
 	const row = agentRecord(input, ['items'], AGENT_INTEGRATION_MAX_RESPONSE_BYTES);
-	if (!Array.isArray(row.items) || row.items.length > 128) {
+	if (!Array.isArray(row.items) || row.items.length > AGENT_INTEGRATION_MAX_ITEMS) {
 		throw new InvalidAgentPayload();
 	}
 	const items = row.items.map(readAgentIntegrationView);

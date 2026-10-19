@@ -48,3 +48,17 @@ export const ACCESS_PASSKEY_EVIDENCE_MAX_BYTES = 96_000;
 export const ACCESS_PASSKEY_MAX_TRANSPORTS = 16;
 
 export const ACCESS_PASSKEY_TRANSPORT_MAX_BYTES = 32;
+
+/** Complete JSON budgets for basic authentication and TOTP login, excluding Passkey management. */
+export const ACCESS_AUTH_REQUEST_MAX_BYTES = 16 * 1024;
+
+export const ACCESS_AUTH_RESPONSE_MAX_BYTES = 16 * 1024;
+
+/** Complete TOTP setup JSON, including the inline PNG QR code. */
+export const ACCESS_TOTP_SETUP_RESPONSE_MAX_BYTES = 64 * 1024;
+
+/** Complete Passkey options/list JSON; individual proofs use the request budget. */
+export const ACCESS_FACTOR_RESPONSE_MAX_BYTES = 8 * 1024 * 1024;
+
+/** Complete blacklist page JSON, including up to 200 entries and escaping. */
+export const ACCESS_IP_BLACKLIST_RESPONSE_MAX_BYTES = 256 * 1024;

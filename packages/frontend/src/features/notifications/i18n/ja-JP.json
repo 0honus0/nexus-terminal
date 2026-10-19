@@ -37,8 +37,6 @@
         "channelTypeEditNote": "作成後はチャンネルタイプを変更できません。",
         "webhookMethod": "HTTP メソッド:",
         "webhookHeaders": "カスタムヘッダー",
-        "secretHeaderNames": "追加の秘密ヘッダー名（カンマ区切り）",
-        "secretHeaderHint": "認証ヘッダーは自動的に非表示になります。null は既存の秘密を保持し、項目を削除すると秘密も削除されます。独自の認証ヘッダー名はここで指定してください。",
         "webhookBodyTemplate": "リクエスト本文テンプレート (オプション)",
         "webhookBodyPlaceholder": "デフォルト: JSON フォーマットのペイロード。利用可能:",
         "emailTo": "宛先メールアドレス:",
@@ -57,15 +55,23 @@
         "testFailed": "テスト通知の送信に失敗しました",
         "fillRequiredToTest": "テストを有効にするには、必須フィールドを入力してください。",
         "telegramToken": "ボットトークン:",
-        "telegramTokenHelp": "安全に保管してください。環境変数の使用をお勧めします。",
         "telegramChatId": "チャット ID:",
         "telegramMessageTemplate": "メッセージテンプレート (オプション)",
         "telegramMessagePlaceholder": "デフォルト: Markdown 形式。利用可能:",
         "telegramCustomDomain": "カスタム Telegram API ドメイン",
         "enabledEvents": "有効なイベント:",
         "templateHelp": "利用可能なプレースホルダー:",
-        "invalidJson": "無効な JSON 形式",
-        "headersObjectRequired": "Headers は JSON オブジェクトである必要があります。"
+        "keepSecret": "保存値を保持",
+        "clearSecret": "保存値を削除",
+        "replaceSecret": "値を置換",
+        "headerName": "ヘッダー名",
+        "headerValue": "新しい秘密値",
+        "secretAction": "秘密値の操作",
+        "secretPresent": "保存値あり",
+        "secretAbsent": "保存値なし",
+        "addHeader": "ヘッダーを追加",
+        "secretHint": "保存済み秘密値は返されません。保持、削除、置換を明示してください。",
+        "testSaved": "保存済み設定をテスト"
       },
       "events": {
         "LOGIN_SUCCESS": "ログイン成功",
@@ -110,7 +116,23 @@
         "webhook": "Webhook",
         "email": "メール",
         "telegram": "Telegram"
-      }
+      },
+      "deliveries": "通知の配信記録",
+      "deliveryHint": "キュー登録と送出は受付を表し、送信成功ではありません。結果不明の通知は自動再送しません。",
+      "loadMore": "さらに読み込む",
+      "deliveryStatus": {
+        "queued": "キュー登録済み",
+        "dispatched": "送出済み・結果待ち",
+        "sent": "送信済み",
+        "failed": "送信失敗",
+        "unknown": "配信結果不明・送信先を確認してください"
+      },
+      "refresh": "更新して確認",
+      "failure": "通知の要求に失敗しました。現在の状態を再読込してください。",
+      "unknown": "結果不明です。再操作の前に設定と配信記録を確認してください。",
+      "conflict": "チャンネルが変更または削除されました。更新して編集を開き直してください。",
+      "invalid": "入力と許容容量を確認してください。",
+      "refreshRequired": "変更前に更新して確認してください。"
     }
   }
 }

@@ -25,6 +25,7 @@ import type {
 import {
 	NOTIFICATION_DELIVERY_STATUSES,
 	NOTIFICATION_MAX_SETTINGS,
+	NOTIFICATION_MAX_HEADERS,
 	NOTIFICATION_MAX_TEXT_BYTES,
 } from './notifications/values.js';
 
@@ -83,7 +84,7 @@ export function readNotificationConfig(value: unknown): NotificationConfigInput 
 		if (
 			(r.method !== 'GET' && r.method !== 'POST' && r.method !== 'PUT') ||
 			!Array.isArray(r.headers) ||
-			r.headers.length > 32
+			r.headers.length > NOTIFICATION_MAX_HEADERS
 		) {
 			throw new InvalidPayload();
 		}
@@ -294,7 +295,7 @@ export function readNotificationView(value: unknown): NotificationSettingView {
 		if (
 			(c.method !== 'GET' && c.method !== 'POST' && c.method !== 'PUT') ||
 			!Array.isArray(c.headers) ||
-			c.headers.length > 32
+			c.headers.length > NOTIFICATION_MAX_HEADERS
 		) {
 			throw new InvalidPayload();
 		}

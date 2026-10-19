@@ -23,3 +23,11 @@ export interface TargetConnectionView {
 
 export type TargetConnectionMutation =
 	{ status: 'updated'; value: TargetConnectionView } | { status: 'not_found' } | { status: 'version_conflict' };
+
+export type TargetCredentialState = { kind: 'none' } | { kind: 'password' } | { kind: 'ssh_key'; sshKeyId: number };
+
+export interface TargetCredentialView {
+	connectionId: number;
+	version: number;
+	credential: TargetCredentialState;
+}

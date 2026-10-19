@@ -20,6 +20,7 @@ if (minimumNodeMajor && currentNodeMajor < minimumNodeMajor) {
 
 const portNames = [
 	'NEXUS_E2E_BACKEND_PORT',
+	'NEXUS_E2E_BACKEND_CONTROL_PORT',
 	'NEXUS_E2E_FRONTEND_PORT',
 	'NEXUS_E2E_GUACD_PORT',
 	'NEXUS_E2E_GUACD_CONTROL_PORT',

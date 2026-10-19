@@ -1,5 +1,11 @@
 import type { LocalSystemStatus } from './model.js';
-import { SYSTEM_STATUS_MAX_RESPONSE_BYTES } from './values.js';
+import {
+	SYSTEM_STATUS_MAX_RESPONSE_BYTES,
+	SYSTEM_HEALTH_STATUS,
+	SYSTEM_SERVICE_NAME,
+	SYSTEM_STATUS_ERROR_CODES,
+} from './values.js';
+import type { SystemHealthResponse, LocalSystemStatusError } from './http.js';
 
 export class InvalidSystemStatusPayload extends Error {
 	constructor() {
@@ -28,6 +34,24 @@ function text(value: unknown): string | undefined {
 	return value;
 }
 
+export function readSystemHealthResponse(value: unknown): SystemHealthResponse {
+	if (
+		value === null ||
+		typeof value !== 'object' ||
+		Array.isArray(value) ||
+		!('status' in value) ||
+		!('service' in value) ||
+		Object.keys(value).length !== 2 ||
+		!Object.hasOwn(value, 'status') ||
+		!Object.hasOwn(value, 'service') ||
+		value.status !== SYSTEM_HEALTH_STATUS ||
+		value.service !== SYSTEM_SERVICE_NAME
+	) {
+		throw new InvalidSystemStatusPayload();
+	}
+	return { status: value.status, service: value.service };
+}
+
 export function readLocalSystemStatus(value: unknown): LocalSystemStatus {
 	if (
 		!value ||
@@ -37,7 +61,7 @@ export function readLocalSystemStatus(value: unknown): LocalSystemStatus {
 	) {
 		throw new InvalidSystemStatusPayload();
 	}
-	const row = value as Record<string, unknown>;
+
 	const keys = [
 		'cpuPercent',
 		'memPercent',
@@ -51,21 +75,44 @@ export function readLocalSystemStatus(value: unknown): LocalSystemStatus {
 		'uptimeSeconds',
 	];
 	if (
-		Object.keys(row).some((key) => !keys.includes(key)) ||
-		['cpuPercent', 'memPercent', 'memUsed', 'memTotal', 'uptimeSeconds'].some((key) => !Object.hasOwn(row, key))
+		Object.keys(value).some((key) => !keys.includes(key)) ||
+		!('cpuPercent' in value) ||
+		!('memPercent' in value) ||
+		!('memUsed' in value) ||
+		!('memTotal' in value) ||
+		!('uptimeSeconds' in value) ||
+		['cpuPercent', 'memPercent', 'memUsed', 'memTotal', 'uptimeSeconds'].some((key) => !Object.hasOwn(value, key))
 	) {
 		throw new InvalidSystemStatusPayload();
 	}
 	return {
-		cpuPercent: number(row.cpuPercent),
-		memPercent: number(row.memPercent),
-		memUsed: number(row.memUsed),
-		memTotal: number(row.memTotal),
-		diskPercent: optionalNumber(row.diskPercent),
-		diskUsed: optionalNumber(row.diskUsed),
-		diskTotal: optionalNumber(row.diskTotal),
-		cpuModel: text(row.cpuModel),
-		osName: text(row.osName),
-		uptimeSeconds: number(row.uptimeSeconds),
+		cpuPercent: number(value.cpuPercent),
+		memPercent: number(value.memPercent),
+		memUsed: number(value.memUsed),
+		memTotal: number(value.memTotal),
+		diskPercent: 'diskPercent' in value ? optionalNumber(value.diskPercent) : undefined,
+		diskUsed: 'diskUsed' in value ? optionalNumber(value.diskUsed) : undefined,
+		diskTotal: 'diskTotal' in value ? optionalNumber(value.diskTotal) : undefined,
+		cpuModel: 'cpuModel' in value ? text(value.cpuModel) : undefined,
+		osName: 'osName' in value ? text(value.osName) : undefined,
+		uptimeSeconds: number(value.uptimeSeconds),
 	};
+}
+
+export function readLocalSystemStatusError(value: unknown): LocalSystemStatusError {
+	if (
+		value === null ||
+		typeof value !== 'object' ||
+		Array.isArray(value) ||
+		Object.keys(value).length !== 1 ||
+		!Object.hasOwn(value, 'code') ||
+		!('code' in value)
+	) {
+		throw new InvalidSystemStatusPayload();
+	}
+	const code = SYSTEM_STATUS_ERROR_CODES.find((code) => code === value.code);
+	if (!code) {
+		throw new InvalidSystemStatusPayload();
+	}
+	return { code };
 }

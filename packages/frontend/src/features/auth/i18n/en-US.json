@@ -41,6 +41,17 @@
         "fieldsRequired": "Username and password are required.",
         "generic": "An error occurred during setup. Please check the server logs."
       }
+    },
+    "errors": {
+      "generic": "Authentication could not complete. Please try again later.",
+      "unknown": "The result is unknown. Refresh the session status before submitting again.",
+      "invalidInput": "Check the input format and length.",
+      "credentials": "The username, password or verification code is incorrect.",
+      "expired": "The login challenge expired. Sign in again.",
+      "rateLimited": "Too many requests. Try again later.",
+      "captcha": "CAPTCHA verification failed. Complete a new challenge.",
+      "initialized": "An account already exists. Refresh and sign in.",
+      "cancelled": "This operation is no longer current. Check the session status."
     }
   }
 }

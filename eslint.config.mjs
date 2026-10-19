@@ -174,25 +174,6 @@ export default [
 		name: 'nexus/ignores',
 		ignores: ['**/dist/**', '**/node_modules/**', '**/data/**'],
 	},
-	{
-		name: 'nexus/agent-typescript',
-		files: [
-			'packages/backend/src/modules/agent/**/*.ts',
-			'packages/backend/src/infrastructure/agent/**/*.ts',
-			'packages/backend/src/interfaces/http/agent/**/*.ts',
-			'packages/backend/src/interfaces/websocket/agent*.ts',
-			'tests/backend/agent-scenarios/**/*.ts',
-		],
-		languageOptions: {
-			parser: tseslint.parser,
-			parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
-			globals: { ...globals.browser, ...globals.node },
-		},
-		plugins: { '@typescript-eslint': tseslint.plugin },
-		rules: {
-			'@typescript-eslint/no-unused-vars': unusedRule,
-		},
-	},
 	...vue.configs['flat/essential'],
 	{
 		name: 'nexus/frontend-typescript',
@@ -241,9 +222,9 @@ export default [
 		rules: { 'nexus-style/function-spacing': ['error', { topLevelDeclarations: true }] },
 	},
 	{
-		name: 'nexus/refactor-control-flow',
+		name: 'nexus/control-flow',
 		files: [
-			'packages/backend-next/src/**/*.ts',
+			'packages/backend/src/**/*.ts',
 			'packages/shared/src/**/*.ts',
 			'packages/frontend/src/runtimes/remote-next/**/*.ts',
 		],

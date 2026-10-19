@@ -2,16 +2,16 @@ export const loadQuickCommandsPanel = () => import('./components/QuickCommandsPa
 
 export { useQuickCommands } from './composables/useQuickCommands';
 
-export type { QuickCommandsController } from './composables/useQuickCommands';
+export type { QuickCommandsController } from './model/quick-command-types';
 
 export type {
 	ExecuteCommandIntent,
 	QuickCommandExpansion,
-	QuickCommandDto,
+	QuickCommandSummary,
 	QuickCommandGroup,
 	QuickCommandFormInput,
 	QuickCommandSort,
-	QuickCommandTagDto,
-} from './model/quickCommand';
+	QuickCommandTagSummary,
+} from './model/quick-command-types';
 
-export { expandQuickCommand } from './model/quickCommand';
+export { expandQuickCommand } from './model/quick-command-expansion';

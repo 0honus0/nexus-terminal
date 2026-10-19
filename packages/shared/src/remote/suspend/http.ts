@@ -21,6 +21,18 @@ export interface SuspendedSessionRenameRequest {
 }
 
 export interface SuspendedSessionRenameResponse {
-	message: string;
+	message: 'Suspended session name updated.';
 	customName: string;
+}
+
+export interface SuspendedSessionTerminatedResponse {
+	message: 'Suspended session terminated and removed.';
+}
+
+export interface SuspendedSessionRemovedResponse {
+	message: 'Disconnected suspended entry removed.';
+}
+
+export interface SuspendedSessionHttpError {
+	code: import('./values.js').SuspendedHttpErrorCode;
 }

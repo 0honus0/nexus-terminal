@@ -8,7 +8,7 @@
 	} from '@/runtimes/remote-next/public';
 	import type { RemoteFileResourceView } from '@nexus-terminal/shared/remote/files/model';
 	import { createTargetsNextApi } from '../api/targets-next-api';
-	import { createAccessNextApi } from '@/features/auth/public';
+	import { createAccessApi, AuthRequestFailure } from '@/features/auth/public';
 	import type { TargetConnectionInput, TargetImportInput } from '@nexus-terminal/shared/targets/connections/http';
 	import type { TargetConnectionView } from '@nexus-terminal/shared/targets/connections/model';
 	import type { TargetProxyView } from '@nexus-terminal/shared/targets/proxies/model';
@@ -30,7 +30,7 @@
 	let fileMounted = true;
 	let fileGeneration = 0;
 	let fileController: AbortController | null = null;
-	const auth = createAccessNextApi(base.toString());
+	const auth = createAccessApi('/__next/api/v1/auth');
 	const username = ref('');
 	const password = ref('');
 	const loggedIn = ref(false);
@@ -191,7 +191,12 @@
 	}
 
 	function localizedError(cause: unknown): string {
-		const code = cause instanceof Error ? cause.message : 'request_failed';
+		const code =
+			cause instanceof AuthRequestFailure
+				? cause.code
+				: cause instanceof Error
+					? cause.message
+					: 'request_failed';
 		const key = 'targetsNext.errors.' + code;
 		return te(key) ? t(key) : t('targetsNext.errors.request_failed');
 	}
@@ -243,9 +248,13 @@
 					confirmPassword: password.value,
 				});
 			}
-			await auth.login({ username: username.value, password: password.value, rememberMe: false });
+			const result = await auth.login({ username: username.value, password: password.value, rememberMe: false });
 			password.value = '';
-			loggedIn.value = true;
+			loggedIn.value = !result.requiresTwoFactor;
+			if (result.requiresTwoFactor) {
+				message.value = t('auth.login.twoFactorPrompt');
+				return;
+			}
 			setupNeeded.value = false;
 			await refresh();
 		});
@@ -404,7 +413,7 @@
 	<main class="mx-auto max-w-4xl space-y-4 p-6">
 		<h1 class="text-xl font-semibold">{{ t('targetsNext.title') }}</h1>
 		<p class="text-sm">{{ t('targetsNext.isolation') }}</p>
-		<p class="text-xs">/__next/ → NEXUS_VITE_BACKEND_NEXT_ORIGIN</p>
+		<p class="text-xs">/__next/ → NEXUS_VITE_BACKEND_ORIGIN</p>
 		<p v-if="error" role="alert" class="text-red-600">{{ error }}</p>
 		<p v-if="message" role="status">{{ message }}</p>
 		<form v-if="!loggedIn" class="space-y-3" @submit.prevent="login">

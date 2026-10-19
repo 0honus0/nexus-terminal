@@ -1,9 +1,10 @@
 <script setup lang="ts">
-	import { computed } from 'vue';
+	import type { DockerSessionController } from '../model/docker-types';
+	import { computed, onMounted, onActivated, onDeactivated, onBeforeUnmount, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { useFeedback } from '@/shared/feedback/public';
-	import { useDocker, type DockerSessionController } from '../composables/useDocker';
-	import type { WorkspaceDockerCommandDto, WorkspaceDockerContainerDto } from '../model/docker';
+	import { useDocker } from '../composables/useDocker';
+	import { DockerFailure, type DockerAction, type DockerContainer } from '../model/docker-types';
 
 	type DockerConnectionState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error';
 
@@ -27,23 +28,70 @@
 	);
 	const connecting = computed(() => ['idle', 'connecting', 'reconnecting'].includes(props.connectionState));
 
-	const run = async (container: WorkspaceDockerContainerDto, action: WorkspaceDockerCommandDto) => {
+	let active = false;
+	let confirmation = new AbortController();
+
+	const activate = (): void => {
+		if (active) {
+			return;
+		}
+		active = true;
+		confirmation = new AbortController();
+	};
+
+	const deactivate = (): void => {
+		active = false;
+		confirmation.abort();
+	};
+
+	onMounted(activate);
+	onActivated(activate);
+	onDeactivated(deactivate);
+	onBeforeUnmount(deactivate);
+	watch(
+		() => props.connectionState,
+		() => {
+			confirmation.abort();
+			confirmation = new AbortController();
+		},
+	);
+	const actionsDisabled = computed(() => docker.commandPending.value || docker.commandBlocked.value);
+
+	const run = async (container: DockerContainer, action: DockerAction): Promise<void> => {
+		const owner = confirmation;
+		if (!active || props.connectionState !== 'connected' || actionsDisabled.value) {
+			return;
+		}
 		if (
 			action === 'remove' &&
 			!(await feedback.confirm({
 				message: t('dockerManager.action.removeConfirm', { name: container.names[0] ?? container.id }),
 				destructive: true,
+				signal: owner.signal,
 			}))
-		)
+		) {
 			return;
+		}
+		if (
+			!active ||
+			owner !== confirmation ||
+			owner.signal.aborted ||
+			actionsDisabled.value ||
+			props.connectionState !== 'connected'
+		) {
+			return;
+		}
 		try {
 			await docker.command(container.id, action);
 		} catch (cause) {
-			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+			if (active && owner === confirmation && !owner.signal.aborted) {
+				const code = cause instanceof DockerFailure ? cause.code : 'remote_unavailable';
+				feedback.notifyError(t('dockerManager.failures.' + code));
+			}
 		}
 	};
 
-	const ports = (container: WorkspaceDockerContainerDto) =>
+	const ports = (container: DockerContainer) =>
 		container.ports
 			.map((port) => {
 				const publicSide = port.publicPort
@@ -55,7 +103,10 @@
 			})
 			.join(', ');
 
-	const terminalCommand = (container: WorkspaceDockerContainerDto, kind: 'enter' | 'logs') => {
+	const terminalCommand = (container: DockerContainer, kind: 'enter' | 'logs') => {
+		if (!active || props.connectionState !== 'connected' || actionsDisabled.value) {
+			return;
+		}
 		emit(
 			'terminalCommand',
 			kind === 'enter' ? `docker exec -it ${container.id} sh` : `docker logs --tail 1000 -f ${container.id}`,
@@ -63,10 +114,18 @@
 	};
 
 	const stateBadgeClass = (state: string) => {
-		if (state === 'running') return 'bg-green-500 text-white';
-		if (state === 'exited' || state === 'dead') return 'bg-red-500 text-white';
-		if (state === 'paused') return 'bg-yellow-500 text-gray-800';
-		if (state === 'restarting') return 'bg-blue-500 text-white';
+		if (state === 'running') {
+			return 'bg-green-500 text-white';
+		}
+		if (state === 'exited' || state === 'dead') {
+			return 'bg-red-500 text-white';
+		}
+		if (state === 'paused') {
+			return 'bg-yellow-500 text-gray-800';
+		}
+		if (state === 'restarting') {
+			return 'bg-blue-500 text-white';
+		}
 		return 'bg-gray-500 text-white';
 	};
 </script>
@@ -92,16 +151,25 @@
 			<i class="fas fa-spinner fa-spin mb-3 text-4xl" aria-hidden="true"></i>
 			<span>{{ t('dockerManager.loading') }}</span>
 		</div>
+		<div v-else-if="docker.error.value" class="docker-state">
+			<i class="fas fa-exclamation-triangle mb-2 text-3xl text-red-500" aria-hidden="true"></i>
+			<p class="mb-1 mt-2 font-medium">{{ t('dockerManager.error.fetchFailed') }}</p>
+			<small class="text-xs">{{ t('dockerManager.failures.' + docker.error.value) }}</small>
+			<button
+				type="button"
+				class="mt-3 underline"
+				:disabled="docker.loading.value || docker.commandPending.value"
+				@click="docker.reconcile()"
+			>
+				{{ t('dockerManager.reconcile') }}
+			</button>
+		</div>
 		<div v-else-if="!docker.available.value" class="docker-state">
 			<i class="fab fa-docker mb-3 text-4xl" aria-hidden="true"></i>
 			<p class="mb-1 mt-2 font-medium">{{ t('dockerManager.notAvailable') }}</p>
 			<small class="text-xs text-text-disabled">{{ t('dockerManager.installHintRemote') }}</small>
 		</div>
-		<div v-else-if="docker.error.value" class="docker-state">
-			<i class="fas fa-exclamation-triangle mb-2 text-3xl text-red-500" aria-hidden="true"></i>
-			<p class="mb-1 mt-2 font-medium">{{ t('dockerManager.error.fetchFailed') }}</p>
-			<small class="text-xs">{{ docker.error.value }}</small>
-		</div>
+
 		<div v-else-if="!docker.containers.value.length" class="docker-state">
 			<span>{{ t('dockerManager.noContainers') }}</span>
 		</div>
@@ -213,7 +281,7 @@
 									<button
 										type="button"
 										class="docker-action docker-touch-target hover:text-green-500"
-										:disabled="container.state === 'running'"
+										:disabled="actionsDisabled || container.state === 'running'"
 										:title="t('dockerManager.action.start')"
 										:aria-label="t('dockerManager.action.start')"
 										@click="run(container, 'start')"
@@ -223,7 +291,7 @@
 									<button
 										type="button"
 										class="docker-action docker-touch-target hover:text-yellow-500"
-										:disabled="container.state !== 'running'"
+										:disabled="actionsDisabled || container.state !== 'running'"
 										:title="t('dockerManager.action.stop')"
 										:aria-label="t('dockerManager.action.stop')"
 										@click="run(container, 'stop')"
@@ -243,6 +311,7 @@
 									<button
 										type="button"
 										class="docker-action docker-touch-target hover:text-red-500"
+										:disabled="actionsDisabled"
 										:title="t('dockerManager.action.remove')"
 										:aria-label="t('dockerManager.action.remove')"
 										@click="run(container, 'remove')"
@@ -252,6 +321,7 @@
 									<button
 										type="button"
 										class="docker-action docker-touch-target hover:text-blue-400"
+										:disabled="actionsDisabled"
 										:title="t('dockerManager.action.enter')"
 										:aria-label="t('dockerManager.action.enter')"
 										@click="terminalCommand(container, 'enter')"
@@ -261,6 +331,7 @@
 									<button
 										type="button"
 										class="docker-action docker-touch-target hover:text-gray-400"
+										:disabled="actionsDisabled"
 										:title="t('dockerManager.action.logs')"
 										:aria-label="t('dockerManager.action.logs')"
 										@click="terminalCommand(container, 'logs')"

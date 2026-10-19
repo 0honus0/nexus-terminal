@@ -1,4 +1,4 @@
-import type { SettingsPolicy, SettingsCaptchaView, SettingsView } from './model.js';
+import type { SettingsPolicy, SettingsCaptchaView, SettingsView, SettingsMonitoring } from './model.js';
 import type {
 	SettingsCaptchaCommand,
 	SettingsSecretCommand,
@@ -13,6 +13,8 @@ import {
 	SETTINGS_WHITELIST_MAX_BYTES,
 	SETTINGS_CAPTCHA_KEY_MAX_BYTES,
 	SETTINGS_MAX_PASSKEY_SITES,
+	SETTINGS_MONITORING_MIN_SECONDS,
+	SETTINGS_MONITORING_MAX_SECONDS,
 	SETTINGS_RESPONSE_MAX_BYTES,
 } from './values.js';
 
@@ -101,8 +103,16 @@ function policy(input: unknown): SettingsPolicy {
 		ipBlacklistEnabled: boolean(value.ipBlacklistEnabled),
 		maxLoginAttempts: integer(value.maxLoginAttempts, 1, 1000),
 		loginBanDuration: integer(value.loginBanDuration, 1, 30 * 86400),
-		statusMonitorIntervalSeconds: integer(value.statusMonitorIntervalSeconds, 1, 86400),
-		remoteHostRefreshIntervalSeconds: integer(value.remoteHostRefreshIntervalSeconds, 1, 86400),
+		statusMonitorIntervalSeconds: integer(
+			value.statusMonitorIntervalSeconds,
+			SETTINGS_MONITORING_MIN_SECONDS,
+			SETTINGS_MONITORING_MAX_SECONDS,
+		),
+		remoteHostRefreshIntervalSeconds: integer(
+			value.remoteHostRefreshIntervalSeconds,
+			SETTINGS_MONITORING_MIN_SECONDS,
+			SETTINGS_MONITORING_MAX_SECONDS,
+		),
 		passkeys,
 	};
 }
@@ -192,14 +202,46 @@ function budget(input: unknown, max: number): void {
 }
 
 export function readSettingsResponse(input: unknown): SettingsView {
-	const value = object(input, ['version', 'effectiveVersion', 'requiresRestart', 'policy', 'captcha']);
+	const value = object(input, [
+		'version',
+		'effectiveVersion',
+		'requiresRestart',
+		'policy',
+		'effectiveMonitoring',
+		'captcha',
+	]);
 	budget(value, SETTINGS_RESPONSE_MAX_BYTES);
 	const state = activation(value);
+	const saved = policy(value.policy);
+	const effective = object(value.effectiveMonitoring, [
+		'statusMonitorIntervalSeconds',
+		'remoteHostRefreshIntervalSeconds',
+	]);
+	const effectiveMonitoring: SettingsMonitoring = {
+		statusMonitorIntervalSeconds: integer(
+			effective.statusMonitorIntervalSeconds,
+			SETTINGS_MONITORING_MIN_SECONDS,
+			SETTINGS_MONITORING_MAX_SECONDS,
+		),
+		remoteHostRefreshIntervalSeconds: integer(
+			effective.remoteHostRefreshIntervalSeconds,
+			SETTINGS_MONITORING_MIN_SECONDS,
+			SETTINGS_MONITORING_MAX_SECONDS,
+		),
+	};
+	if (
+		state.version === state.effectiveVersion &&
+		(saved.statusMonitorIntervalSeconds !== effectiveMonitoring.statusMonitorIntervalSeconds ||
+			saved.remoteHostRefreshIntervalSeconds !== effectiveMonitoring.remoteHostRefreshIntervalSeconds)
+	) {
+		throw new InvalidSettingsPayload();
+	}
 	return {
 		version: state.version,
 		effectiveVersion: state.effectiveVersion,
 		requiresRestart: state.requiresRestart,
-		policy: policy(value.policy),
+		policy: saved,
+		effectiveMonitoring,
 		captcha: captchaView(value.captcha),
 	};
 }

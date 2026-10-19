@@ -1,10 +1,25 @@
 <script setup lang="ts">
-	import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+	import {
+		computed,
+		defineAsyncComponent,
+		nextTick,
+		onBeforeUnmount,
+		onDeactivated,
+		onMounted,
+		ref,
+		watch,
+	} from 'vue';
+	import { useAuthSession } from '@/features/auth/public';
 	import { useI18n } from 'vue-i18n';
 	import { UiContextMenu, UiInput } from '@/foundation/ui';
 	import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
-	import { loadConnectionEditorModal, useConnections, type ConnectionDto } from '@/features/connections/public';
-	import { useConnectionTags, type ConnectionTagDto } from '@/features/tags/public';
+	import {
+		loadConnectionEditorModal,
+		useConnectionManagement,
+		type ConnectionSummary,
+	} from '@/features/connections/public';
+	import { useConnectionTags, type TagSummary } from '@/features/tags/public';
+	import { targetErrorKey } from '@/client/targets/target-types';
 	import { useFeedback } from '@/shared/feedback/public';
 	import WorkspaceTagGroupManager from './WorkspaceTagGroupManager.vue';
 	import { focusRegistry } from '@/shared/focus/public';
@@ -17,52 +32,76 @@
 			activeConnectionId: null,
 		},
 	);
-	const emit = defineEmits<{ open: [connection: ConnectionDto]; openMany: [connections: ConnectionDto[]] }>();
+	const emit = defineEmits<{ open: [connection: ConnectionSummary]; openMany: [connections: ConnectionSummary[]] }>();
 	const { t } = useI18n();
 	const feedback = useFeedback();
-	const data = useConnections();
+	const management = useConnectionManagement();
+	const data = management.data;
 	const tags = useConnectionTags();
 	const root = ref<HTMLElement | null>(null);
 	const search = ref('');
 	const highlightedId = ref<number | null>(null);
-	const managerTag = ref<ConnectionTagDto | null>(null);
+	const managerTag = ref<TagSummary | null>(null);
 	const editorVisible = ref(false);
-	const editorConnection = ref<ConnectionDto | null>(null);
-	const context = ref<{ connection: ConnectionDto; x: number; y: number } | null>(null);
+	const editorConnection = ref<ConnectionSummary | null>(null);
+	const context = ref<{ connection: ConnectionSummary; x: number; y: number } | null>(null);
 	const expandedGroupsStorage = {
 		namespace: 'workspace.connection-groups',
 		version: 1,
 		codec: jsonStorageCodec<Record<string, boolean>>((value) => {
 			if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-			const entries = Object.entries(value as Record<string, unknown>);
-			if (!entries.every(([, expanded]) => typeof expanded === 'boolean')) return undefined;
-			return Object.fromEntries(entries) as Record<string, boolean>;
+			const result = new Map<string, boolean>();
+			for (const [key, expanded] of Object.entries(value)) {
+				if (typeof expanded !== 'boolean') {
+					return undefined;
+				}
+				result.set(key, expanded);
+			}
+			return Object.fromEntries(result);
 		}),
-		legacyKeys: ['nexus.workspace.connectionGroups'],
 	} as const;
 	const expanded = ref<Record<string, boolean>>(readStoredValue(expandedGroupsStorage) ?? {});
 	let unregisterFocus: (() => void) | undefined;
 	const loading = ref(true);
 	const loadError = ref('');
+	const auth = useAuthSession();
+	let loadGeneration = 0;
+
+	function resetPanels(): void {
+		loadGeneration++;
+		loading.value = false;
+		loadError.value = '';
+		editorVisible.value = false;
+		editorConnection.value = null;
+		managerTag.value = null;
+		context.value = null;
+	}
 
 	const reportTagLoadFailure = () => feedback.notifyError(t('workspaceConnectionList.tagLoadFailed'));
 
-	const load = async (): Promise<void> => {
+	const load = async (force = false): Promise<void> => {
+		const current = ++loadGeneration;
 		loading.value = true;
 		loadError.value = '';
 		try {
-			await data.load();
+			await data.load(force);
 		} catch (cause) {
-			loadError.value = cause instanceof Error ? cause.message : t('workspaceConnectionList.loadFailed');
+			if (current === loadGeneration) {
+				loadError.value = t('connections.failures.' + targetErrorKey(cause, 'read'));
+			}
 			return;
 		} finally {
-			loading.value = false;
+			if (current === loadGeneration) {
+				loading.value = false;
+			}
 		}
-		if (props.showTags) {
+		if (current === loadGeneration && props.showTags) {
 			try {
 				await tags.load();
 			} catch {
-				reportTagLoadFailure();
+				if (current === loadGeneration) {
+					reportTagLoadFailure();
+				}
 			}
 		}
 	};
@@ -78,11 +117,18 @@
 		);
 		void load();
 	});
-	onBeforeUnmount(() => unregisterFocus?.());
+	watch(() => (auth.isAuthenticated.value ? auth.user.value?.id : null), resetPanels, { flush: 'sync' });
+	onDeactivated(resetPanels);
+	onBeforeUnmount(() => {
+		resetPanels();
+		unregisterFocus?.();
+	});
 	watch(
 		() => props.showTags,
 		(value) => {
-			if (value) void tags.load().catch(reportTagLoadFailure);
+			if (value) {
+				void load();
+			}
 		},
 	);
 	const tagMap = computed(() => new Map(tags.tags.value.map((tag) => [tag.id, tag.name])));
@@ -97,14 +143,14 @@
 		);
 	});
 	const groups = computed(() => {
-		const result = new Map<number, ConnectionDto[]>();
-		const untagged: ConnectionDto[] = [];
+		const result = new Map<number, ConnectionSummary[]>();
+		const untagged: ConnectionSummary[] = [];
 		for (const connection of filtered.value) {
 			const ids = connection.tagIds.filter((id) => tagMap.value.has(id));
 			if (!ids.length) untagged.push(connection);
 			else for (const id of ids) result.set(id, [...(result.get(id) ?? []), connection]);
 		}
-		const tagged: Array<{ key: string; tagId: number | null; name: string; connections: ConnectionDto[] }> = [
+		const tagged: Array<{ key: string; tagId: number | null; name: string; connections: ConnectionSummary[] }> = [
 			...result.entries(),
 		].map(([tagId, connections]) => ({
 			key: String(tagId),
@@ -150,7 +196,7 @@
 		const current =
 			highlightedId.value === null ? -1 : list.findIndex((connection) => connection.id === highlightedId.value);
 		const next = current < 0 ? (delta > 0 ? 0 : list.length - 1) : (current + delta + list.length) % list.length;
-		highlightedId.value = list[next]!.id;
+		highlightedId.value = list[next]?.id ?? null;
 		void scrollHighlightedIntoView();
 	};
 
@@ -184,13 +230,17 @@
 		writeStoredValue(expandedGroupsStorage, expanded.value);
 	};
 
-	const connectGroup = (connections: ConnectionDto[]) => {
+	const connectGroup = (connections: ConnectionSummary[]) => {
 		const ssh = connections.filter((connection) => connection.type === 'SSH');
 		if (ssh.length) emit('openMany', ssh);
 	};
 
 	const manageGroup = (tagId: number | null) => {
 		if (tagId === null) return;
+		if (!data.loaded.value || tags.needsRefresh.value) {
+			feedback.notifyError(t('tags.reopenToRefresh'));
+			return;
+		}
 		managerTag.value = tags.tags.value.find((tag) => tag.id === tagId) ?? null;
 	};
 
@@ -199,80 +249,28 @@
 		editorVisible.value = true;
 	};
 
-	const editConnection = (connection: ConnectionDto) => {
+	const editConnection = (connection: ConnectionSummary) => {
 		context.value = null;
 		editorConnection.value = connection;
 		editorVisible.value = true;
 	};
 
-	const cloneConnection = async (connection: ConnectionDto) => {
+	const cloneConnection = (connection: ConnectionSummary) => {
 		context.value = null;
-		try {
-			await data.clone(connection.id, t('connections.cloneName', { name: connection.name || connection.host }));
-		} catch (cause) {
-			feedback.notifyError(
-				t('connections.errors.cloneFailed', { error: cause instanceof Error ? cause.message : String(cause) }),
-			);
-		}
+		return management.clone(connection);
 	};
 
-	const deleteConnection = async (connection: ConnectionDto) => {
+	const deleteConnection = (connection: ConnectionSummary) => {
 		context.value = null;
-		if (
-			!(await feedback.confirm({
-				message: t('connections.prompts.confirmDelete', { name: connection.name || connection.host }),
-				destructive: true,
-			}))
-		)
-			return;
-		try {
-			await data.remove(connection.id);
-		} catch (cause) {
-			feedback.notifyError(
-				t('connections.errors.deleteFailed', { error: cause instanceof Error ? cause.message : String(cause) }),
-			);
-		}
+		return management.remove(connection);
 	};
 
-	const openContext = (event: MouseEvent, connection: ConnectionDto) => {
+	const openContext = (event: MouseEvent, connection: ConnectionSummary) => {
 		context.value = { connection, x: event.clientX, y: event.clientY };
 	};
 
-	const deleteGroupConnections = async (group: {
-		tagId: number | null;
-		name: string;
-		connections: ConnectionDto[];
-	}) => {
-		if (group.tagId === null || !group.connections.length) return;
-		if (
-			!(await feedback.confirm({
-				message: t('workspaceConnectionList.confirmDeleteAllConnectionsInGroup', {
-					count: group.connections.length,
-					groupName: group.name,
-				}),
-				destructive: true,
-			}))
-		)
-			return;
-		const results = await Promise.allSettled(group.connections.map((connection) => data.remove(connection.id)));
-		const succeeded = results.filter((result) => result.status === 'fulfilled').length;
-		const failed = results.length - succeeded;
-		if (succeeded > 0)
-			feedback.notifySuccess(
-				t('workspaceConnectionList.allConnectionsInGroupDeletedSuccess', {
-					count: succeeded,
-					groupName: group.name,
-				}),
-			);
-		if (failed > 0)
-			feedback.notifyError(
-				t('workspaceConnectionList.someConnectionsInGroupDeleteFailed', {
-					count: failed,
-					groupName: group.name,
-				}),
-			);
-		await data.load(true);
-	};
+	const deleteGroupConnections = (group: { tagId: number | null; name: string; connections: ConnectionSummary[] }) =>
+		group.tagId === null ? Promise.resolve() : management.removeMany(group.connections);
 </script>
 <template>
 	<section
@@ -280,6 +278,10 @@
 		class="workspace-connection-list flex min-h-0 flex-col text-foreground"
 		:class="props.pageScroll ? 'workspace-connection-list--page' : 'h-full overflow-hidden'"
 	>
+		<p v-if="management.message.value" role="status">{{ management.message.value }}</p>
+		<button type="button" :disabled="loading || management.loading.value" @click="load(true)">
+			{{ t('connections.refresh') }}
+		</button>
 		<div class="workspace-connection-toolbar flex items-center gap-2" :class="props.pageScroll ? 'mb-3' : 'p-2'">
 			<UiInput
 				v-model="search"

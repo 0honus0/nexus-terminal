@@ -3,8 +3,16 @@ import {
 	REMOTE_DESKTOP_MAX_DIMENSION,
 	REMOTE_DESKTOP_MIN_DPI,
 	REMOTE_DESKTOP_MAX_DPI,
+	REMOTE_DESKTOP_RESPONSE_MAX_BYTES,
+	REMOTE_DESKTOP_ERROR_CODES,
 } from './values.js';
-import type { RemoteDesktopDisplayRequest, RemoteDesktopSessionPath } from './http.js';
+import type {
+	RemoteDesktopDisplayRequest,
+	RemoteDesktopSessionPath,
+	RemoteDesktopSessionResponse,
+	RemoteDesktopFailureResponse,
+} from './http.js';
+import { record, integer } from '../../common/http-codec.js';
 
 export class InvalidRemoteDesktopPayload extends Error {
 	constructor() {
@@ -62,4 +70,24 @@ export function readRemoteDesktopTicket(query: URLSearchParams): string {
 		throw new InvalidRemoteDesktopPayload();
 	}
 	return ticket;
+}
+
+export function readRemoteDesktopSessionResponse(value: unknown): RemoteDesktopSessionResponse {
+	const item = record(value, ['ticket', 'lastConnectedAt'], REMOTE_DESKTOP_RESPONSE_MAX_BYTES);
+	if (typeof item.ticket !== 'string') {
+		throw new InvalidRemoteDesktopPayload();
+	}
+	return {
+		ticket: readRemoteDesktopTicket(new URLSearchParams({ ticket: item.ticket })),
+		lastConnectedAt: integer(item.lastConnectedAt, 1, Math.floor(Number.MAX_SAFE_INTEGER / 1000)),
+	};
+}
+
+export function readRemoteDesktopFailureResponse(value: unknown): RemoteDesktopFailureResponse {
+	const item = record(value, ['code'], REMOTE_DESKTOP_RESPONSE_MAX_BYTES);
+	const code = REMOTE_DESKTOP_ERROR_CODES.find((candidate) => candidate === item.code);
+	if (code === undefined) {
+		throw new InvalidRemoteDesktopPayload();
+	}
+	return { code };
 }

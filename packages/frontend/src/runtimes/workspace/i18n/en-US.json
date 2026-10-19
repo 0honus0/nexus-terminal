@@ -13,7 +13,8 @@
       "back": "Back to terminal"
     },
     "terminal": {
-      "reconnectingMsg": "Attempting to reconnect..."
+      "reconnectingMsg": "Attempting to reconnect...",
+      "ownershipUnknown": "Connection ownership is unknown; automatic retries stopped. Close this tab before opening a new connection. The original remote process may still be running."
     },
     "title": "Workspace",
     "sessions": "{count} sessions",

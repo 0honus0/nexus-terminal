@@ -1,27 +1,19 @@
-import { computed, type ComputedRef } from 'vue';
-import { registerAuthenticatedSessionReset } from '@/shared/session/public';
-import type { ProxyCreateRequestDto, ProxyDto } from '../model/proxy';
+import { computed } from 'vue';
+import type { ProxiesController } from '../model/proxy-types';
 import { useProxiesStore } from '../store/proxies.store';
-
-export interface ProxiesController {
-	proxies: ComputedRef<ProxyDto[]>;
-	load(force?: boolean): Promise<ProxyDto[]>;
-	create(input: ProxyCreateRequestDto): Promise<ProxyDto>;
-	update(id: number, input: Partial<ProxyCreateRequestDto>): Promise<ProxyDto>;
-	remove(id: number): Promise<void>;
-}
 
 export function useProxies(): ProxiesController {
 	const store = useProxiesStore();
 	return {
 		proxies: computed(() => store.items),
-		load: store.load.bind(store),
-		create: store.create.bind(store),
-		update: store.update.bind(store),
-		remove: store.remove.bind(store),
+		loaded: computed(() => store.loaded),
+		busy: computed(() => store.busy),
+		needsRefresh: computed(() => store.needsRefresh),
+		load: store.load,
+		create: store.create,
+		update: store.update,
+		remove: store.remove,
 	};
 }
 
 export const resetProxiesCache = (): void => useProxiesStore().reset();
-
-registerAuthenticatedSessionReset('proxies-cache', resetProxiesCache);

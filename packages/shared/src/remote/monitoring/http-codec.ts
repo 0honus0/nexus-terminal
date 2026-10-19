@@ -1,4 +1,4 @@
-import type { SshResourceStatusPath } from './http.js';
+import type { SshResourceStatusPath, ObservationErrorResponse } from './http.js';
 import type { RemoteStatusSample, SshResourceStatus } from './model.js';
 import {
 	OBSERVATION_ERROR_CODES,
@@ -13,11 +13,22 @@ export class InvalidObservationPayload extends Error {
 	}
 }
 
-function row(value: unknown, keys: readonly string[], required: readonly string[]): Record<string, unknown> {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function budget(value: unknown): void {
+	const json = JSON.stringify(value);
+	if (json === undefined || new TextEncoder().encode(json).length > OBSERVATION_MAX_RESPONSE_BYTES) {
 		throw new InvalidObservationPayload();
 	}
-	const data = value as Record<string, unknown>;
+}
+
+function row(value: unknown, keys: readonly string[], required: readonly string[]): Record<string, unknown> {
+	if (!isRecord(value)) {
+		throw new InvalidObservationPayload();
+	}
+	const data = value;
 	if (Object.keys(data).some((key) => !keys.includes(key)) || required.some((key) => !Object.hasOwn(data, key))) {
 		throw new InvalidObservationPayload();
 	}
@@ -47,6 +58,7 @@ function optionalText(value: unknown): string | undefined {
 }
 
 export function readRemoteStatusSample(value: unknown): RemoteStatusSample {
+	budget(value);
 	const data = row(
 		value,
 		[
@@ -99,6 +111,7 @@ export function readRemoteStatusSample(value: unknown): RemoteStatusSample {
 }
 
 export function readSshResourceStatus(value: unknown): SshResourceStatus {
+	budget(value);
 	const data = row(
 		value,
 		['key', 'connectionId', 'name', 'username', 'host', 'port', 'status', 'error', 'checkedAt'],
@@ -172,4 +185,13 @@ export function readSshResourceStatusPath(value: unknown): SshResourceStatusPath
 		throw new InvalidObservationPayload();
 	}
 	return { connectionId };
+}
+
+export function readObservationError(value: unknown): ObservationErrorResponse {
+	const data = row(value, ['code'], ['code']);
+	const code = OBSERVATION_ERROR_CODES.find((code) => code === data.code);
+	if (!code) {
+		throw new InvalidObservationPayload();
+	}
+	return { code };
 }

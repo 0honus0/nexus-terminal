@@ -1,4 +1,6 @@
 import { isWellFormedFileText } from '../files/text-codec.js';
+import { readWorkspaceFileEntry } from '../files/workspace-codec.js';
+import { REMOTE_FILE_ERROR_CODES } from '../files/values.js';
 import type {
 	WorkspaceArchiveCompressRequest,
 	WorkspaceArchiveDecompressRequest,
@@ -9,6 +11,9 @@ import type {
 	WorkspaceUploadSession,
 	WorkspaceUploadStart,
 	WorkspaceUploadStream,
+	WorkspaceUploadEvent,
+	WorkspaceUploadPrepared,
+	WorkspaceTaskStarted,
 } from './workspace.js';
 import {
 	WORKSPACE_TRANSFER_MAX_PATH_BYTES,
@@ -17,9 +22,9 @@ import {
 	WORKSPACE_UPLOAD_MAX_PREPARE_DIRECTORIES,
 } from './values.js';
 
-export class InvalidWorkspaceUploadPayload extends Error {
+export class InvalidWorkspaceTransferPayload extends Error {
 	constructor() {
-		super('invalid_workspace_upload');
+		super('invalid_workspace_transfer');
 	}
 }
 
@@ -29,7 +34,7 @@ function isRecord(input: unknown): input is Record<string, unknown> {
 
 function row(input: unknown): Record<string, unknown> {
 	if (!isRecord(input)) {
-		throw new InvalidWorkspaceUploadPayload();
+		throw new InvalidWorkspaceTransferPayload();
 	}
 	return input;
 }
@@ -42,7 +47,7 @@ function nonEmpty(value: unknown): string {
 		value.includes('\0') ||
 		new TextEncoder().encode(value).byteLength > WORKSPACE_TRANSFER_MAX_PATH_BYTES
 	) {
-		throw new InvalidWorkspaceUploadPayload();
+		throw new InvalidWorkspaceTransferPayload();
 	}
 	return value;
 }
@@ -50,9 +55,104 @@ function nonEmpty(value: unknown): string {
 function uploadId(value: unknown): string {
 	const id = nonEmpty(value);
 	if (new TextEncoder().encode(id).byteLength > WORKSPACE_TRANSFER_MAX_TASK_ID_BYTES) {
-		throw new InvalidWorkspaceUploadPayload();
+		throw new InvalidWorkspaceTransferPayload();
 	}
 	return id;
+}
+
+function nonnegativeInteger(value: unknown): number {
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+		throw new InvalidWorkspaceTransferPayload();
+	}
+	return value;
+}
+
+function absolutePath(value: unknown): string {
+	const path = nonEmpty(value);
+	if (!path.startsWith('/')) {
+		throw new InvalidWorkspaceTransferPayload();
+	}
+	return path;
+}
+
+export function readWorkspaceUploadPrepared(input: unknown): WorkspaceUploadPrepared {
+	const preparedDirectories = nonnegativeInteger(row(input).preparedDirectories);
+	// The producer includes the root in addition to the submitted directories.
+	if (preparedDirectories < 1 || preparedDirectories > WORKSPACE_UPLOAD_MAX_PREPARE_DIRECTORIES + 1) {
+		throw new InvalidWorkspaceTransferPayload();
+	}
+	return { preparedDirectories };
+}
+
+export function readWorkspaceTaskStarted(input: unknown): WorkspaceTaskStarted {
+	if (row(input).started !== true) {
+		throw new InvalidWorkspaceTransferPayload();
+	}
+	return { started: true };
+}
+
+/** Acknowledges cancellation admission, not task completion or remote cleanup. */
+export function readWorkspaceTaskStopped(input: unknown): boolean {
+	if (typeof input !== 'boolean') {
+		throw new InvalidWorkspaceTransferPayload();
+	}
+	return input;
+}
+
+export function readWorkspaceUploadEvent(input: unknown): WorkspaceUploadEvent {
+	const value = row(input);
+	const id = uploadId(value.uploadId);
+	switch (value.type) {
+		case 'ready':
+		case 'cancelled':
+			return { type: value.type, uploadId: id };
+		case 'conflict': {
+			const destinationPath = absolutePath(value.destinationPath);
+			const filename = nonEmpty(value.filename);
+			if (filename.includes('/') || destinationPath.split('/').at(-1) !== filename) {
+				throw new InvalidWorkspaceTransferPayload();
+			}
+			return { type: 'conflict', uploadId: id, destinationPath, filename };
+		}
+		case 'skipped':
+			return { type: 'skipped', uploadId: id, destinationPath: absolutePath(value.destinationPath) };
+		case 'progress': {
+			const chunkIndex = nonnegativeInteger(value.chunkIndex);
+			const bytesWritten = nonnegativeInteger(value.bytesWritten);
+			const totalSize = nonnegativeInteger(value.totalSize);
+			const progress = nonnegativeInteger(value.progress);
+			if (
+				totalSize === 0 ||
+				bytesWritten === 0 ||
+				bytesWritten > totalSize ||
+				progress !== Math.round((bytesWritten / totalSize) * 100)
+			) {
+				throw new InvalidWorkspaceTransferPayload();
+			}
+			return { type: 'progress', uploadId: id, chunkIndex, bytesWritten, totalSize, progress };
+		}
+		case 'completed': {
+			const destinationPath = absolutePath(value.destinationPath);
+			const item = readWorkspaceFileEntry(value.item);
+			if (
+				item.path !== destinationPath ||
+				item.name !== destinationPath.split('/').at(-1) ||
+				!item.metadata.isFile
+			) {
+				throw new InvalidWorkspaceTransferPayload();
+			}
+			return { type: 'completed', uploadId: id, destinationPath, item };
+		}
+		case 'failed': {
+			const message = REMOTE_FILE_ERROR_CODES.find((code) => code === value.message);
+			if (!message) {
+				throw new InvalidWorkspaceTransferPayload();
+			}
+			return { type: 'failed', uploadId: id, message };
+		}
+		default:
+			throw new InvalidWorkspaceTransferPayload();
+	}
 }
 
 export function readWorkspaceUploadPrepare(input: unknown): WorkspaceUploadPrepare {
@@ -62,11 +162,11 @@ export function readWorkspaceUploadPrepare(input: unknown): WorkspaceUploadPrepa
 		value.directories.length > WORKSPACE_UPLOAD_MAX_PREPARE_DIRECTORIES ||
 		value.directories.some((item) => typeof item !== 'string')
 	) {
-		throw new InvalidWorkspaceUploadPayload();
+		throw new InvalidWorkspaceTransferPayload();
 	}
 	return {
 		prepareId: uploadId(value.prepareId),
-		basePath: nonEmpty(value.basePath),
+		basePath: absolutePath(value.basePath),
 		directories: value.directories.map((item) => {
 			if (
 				typeof item !== 'string' ||
@@ -74,7 +174,7 @@ export function readWorkspaceUploadPrepare(input: unknown): WorkspaceUploadPrepa
 				item.includes('\0') ||
 				!isWellFormedFileText(item)
 			) {
-				throw new InvalidWorkspaceUploadPayload();
+				throw new InvalidWorkspaceTransferPayload();
 			}
 			return item;
 		}),
@@ -94,11 +194,11 @@ export function readWorkspaceUploadStart(input: unknown): WorkspaceUploadStart {
 			value.conflictPolicy !== 'overwrite' &&
 			value.conflictPolicy !== 'skip')
 	) {
-		throw new InvalidWorkspaceUploadPayload();
+		throw new InvalidWorkspaceTransferPayload();
 	}
 	const result: WorkspaceUploadStart = {
 		uploadId: uploadId(value.uploadId),
-		destinationPath: nonEmpty(value.destinationPath),
+		destinationPath: absolutePath(value.destinationPath),
 		size: value.size,
 	};
 	if (value.prepareId !== undefined) {
@@ -129,16 +229,16 @@ export function readWorkspaceUploadStream(input: URLSearchParams): WorkspaceUplo
 		input.getAll('size').length !== 1 ||
 		[...input.keys()].some((key) => !['workspaceId', 'uploadId', 'size'].includes(key))
 	) {
-		throw new InvalidWorkspaceUploadPayload();
+		throw new InvalidWorkspaceTransferPayload();
 	}
 	const workspaceId = nonEmpty(input.get('workspaceId'));
 	const sizeRaw = input.get('size');
 	if (!sizeRaw || !/^(0|[1-9]\d*)$/u.test(sizeRaw)) {
-		throw new InvalidWorkspaceUploadPayload();
+		throw new InvalidWorkspaceTransferPayload();
 	}
 	const size = Number(sizeRaw);
 	if (!/^[A-Za-z0-9_-]{8,128}$/u.test(workspaceId) || !Number.isSafeInteger(size)) {
-		throw new InvalidWorkspaceUploadPayload();
+		throw new InvalidWorkspaceTransferPayload();
 	}
 	return { workspaceId, uploadId: uploadId(input.get('uploadId')), size };
 }
@@ -159,7 +259,7 @@ export function readWorkspaceCopyMove(input: unknown): WorkspaceCopyMoveRequest 
 		(data.sourceWorkspaceId !== undefined &&
 			(typeof data.sourceWorkspaceId !== 'string' || !/^[A-Za-z0-9_-]{8,128}$/u.test(data.sourceWorkspaceId)))
 	) {
-		throw new InvalidWorkspaceUploadPayload();
+		throw new InvalidWorkspaceTransferPayload();
 	}
 	const result: WorkspaceCopyMoveRequest = {
 		mode: data.mode,
@@ -193,7 +293,7 @@ export function readWorkspaceArchiveCompress(input: unknown): WorkspaceArchiveCo
 		(data.format !== 'zip' && data.format !== 'tar.gz' && data.format !== 'tar.bz2') ||
 		(data.password !== undefined && (typeof data.password !== 'string' || !isWellFormedFileText(data.password)))
 	) {
-		throw new InvalidWorkspaceUploadPayload();
+		throw new InvalidWorkspaceTransferPayload();
 	}
 	const result: WorkspaceArchiveCompressRequest = {
 		sources: data.sources.map(nonEmpty),
@@ -209,7 +309,7 @@ export function readWorkspaceArchiveCompress(input: unknown): WorkspaceArchiveCo
 export function readWorkspaceArchiveDecompress(input: unknown): WorkspaceArchiveDecompressRequest {
 	const data = row(input);
 	if (data.password !== undefined && (typeof data.password !== 'string' || !isWellFormedFileText(data.password))) {
-		throw new InvalidWorkspaceUploadPayload();
+		throw new InvalidWorkspaceTransferPayload();
 	}
 	const result: WorkspaceArchiveDecompressRequest = {
 		source: nonEmpty(data.source),

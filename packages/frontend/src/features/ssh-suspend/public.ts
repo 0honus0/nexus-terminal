@@ -16,18 +16,14 @@ export type {
 	SuspendedSessionsController,
 	SuspendedSessionsLoadOptions,
 	SuspendedSessionsLoadResult,
-} from './composables/useSuspendedSessions';
+} from './model/suspended-session-types';
 
-export type {
-	WorkspaceSuspendAutoTerminatedEventDto,
-	SuspendedAutoTerminationViewModel,
-} from './composables/useSuspendedSessions';
+export type { SuspendedAutoTermination } from './model/suspended-session-types';
+
+export { toSuspendedAutoTermination } from './model/suspended-session-mapper';
 
 export type { SshSuspendChannel } from './ports/ssh-suspend-channel';
 
-export type {
-	MarkedSuspendedSessionState,
-	WorkspaceSuspendResumeRequestDto,
-	SuspendedSessionDto,
-	SuspendedSessionStatusDto,
-} from './model/sshSuspend';
+export type { MarkedSuspendedSessionState, SuspendedSession } from './model/suspended-session-types';
+
+export type { SuspendedAutoTerminationViewModel } from './model/suspended-session-types';

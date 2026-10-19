@@ -4,7 +4,7 @@ import type {
 	TransferEvent,
 	UploadPrepareCommand,
 	UploadCommand,
-} from '../model/transfer';
+} from '../model/transfer-types';
 
 export interface TransferChannel {
 	prepareUpload(request: UploadPrepareCommand): Promise<void>;

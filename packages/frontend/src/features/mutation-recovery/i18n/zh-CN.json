@@ -1,0 +1,39 @@
+{
+  "mutationRecovery": {
+    "title": "机器突变恢复",
+    "warning": "解除只移除执行围栏，不重试原操作，也不证明原操作成功。请先独立核对远端实际效果。",
+    "refresh": "刷新权威状态",
+    "refreshRequired": "写入已阻止，请刷新并核对当前状态后再开始新操作。",
+    "failed": "请求失败，请刷新并核对当前状态。",
+    "unknown": "结果未知。请勿重复本操作，先刷新并核对远端实际效果。",
+    "required": "请确认生产者及相关资源均已停止，明确选择结果并填写有效的观察时间与证据说明。",
+    "more": "加载更多",
+    "recoveryAllowed": "允许恢复",
+    "evidence": "记录独立证据",
+    "producerStopped": "我已独立确认生产者停止",
+    "resourcesStopped": "我已独立确认相关资源停止",
+    "outcome": "观察结果",
+    "choose": "请明确选择",
+    "observedAt": "观察时间",
+    "note": "证据说明",
+    "record": "记录证据",
+    "selectEvidence": "解除所用证据",
+    "release": "解除执行围栏",
+    "releaseConfirm": "使用所选证据解除执行围栏？此操作不会重试原操作，也不证明其成功。",
+    "origins": {
+      "files": "文件",
+      "docker": "Docker",
+      "agent": "Agent"
+    },
+    "states": {
+      "held": "持有中",
+      "blocked": "已阻止",
+      "released": "已解除"
+    },
+    "outcomes": {
+      "applied": "已生效",
+      "not_applied": "未生效",
+      "partially_applied": "部分生效"
+    }
+  }
+}

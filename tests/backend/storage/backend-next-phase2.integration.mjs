@@ -3,20 +3,25 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { createApp } from '../../../packages/backend-next/dist/bootstrap/create-app.js';
-import { SqliteRuntime } from '../../../packages/backend-next/dist/platform/storage/sqlite/sqlite-runtime.js';
-import { initializeSchema } from '../../../packages/backend-next/dist/platform/storage/sqlite/schema.js';
-import { targetMigrations } from '../../../packages/backend-next/dist/modules/targets/migrations.js';
-import { applicationMigrations } from '../../../packages/backend-next/dist/bootstrap/schema.js';
-import { SqliteAccountStorage } from '../../../packages/backend-next/dist/modules/access/accounts/adapters/sqlite/account-sql.js';
-import { SqliteProviderStorage } from '../../../packages/backend-next/dist/modules/agent/providers/adapters/sqlite/provider-sql.js';
-import { SqliteSessionStorage } from '../../../packages/backend-next/dist/modules/access/sessions/adapters/sqlite/session-sql.js';
-import { SessionModel } from '../../../packages/backend-next/dist/modules/access/sessions/model/session-model.js';
-import { SecureSessionTokens } from '../../../packages/backend-next/dist/platform/security/adapters/secure-session-tokens.js';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+import { SqliteExecutionStorage } from '../../../packages/backend/dist/modules/agent/execution/adapters/sqlite/execution-sql.js';
+import { ExecutionModel } from '../../../packages/backend/dist/modules/agent/execution/model/execution-model.js';
+import { ExecutionService } from '../../../packages/backend/dist/modules/agent/execution/service/execution-service.js';
+import { createApp } from '../../../packages/backend/dist/bootstrap/create-app.js';
+import { SqliteRuntime } from '../../../packages/backend/dist/platform/storage/sqlite/sqlite-runtime.js';
+import { initializeSchema } from '../../../packages/backend/dist/platform/storage/sqlite/schema.js';
+import { targetMigrations } from '../../../packages/backend/dist/modules/targets/migrations.js';
+import { applicationMigrations } from '../../../packages/backend/dist/bootstrap/schema.js';
+import { SqliteAccountStorage } from '../../../packages/backend/dist/modules/access/accounts/adapters/sqlite/account-sql.js';
+import { SqliteProviderStorage } from '../../../packages/backend/dist/modules/agent/providers/adapters/sqlite/provider-sql.js';
+import { SqliteSessionStorage } from '../../../packages/backend/dist/modules/access/sessions/adapters/sqlite/session-sql.js';
+import { SessionModel } from '../../../packages/backend/dist/modules/access/sessions/model/session-model.js';
+import { SecureSessionTokens } from '../../../packages/backend/dist/platform/security/adapters/secure-session-tokens.js';
 import {
 	nextLoginFailure,
 	mayAttemptLogin,
-} from '../../../packages/backend-next/dist/modules/access/sessions/login-failure-rules.js';
+} from '../../../packages/backend/dist/modules/access/sessions/login-failure-rules.js';
 const root = await mkdtemp(join(tmpdir(), 'nexus-phase2-'));
 const key = randomBytes(32);
 
@@ -39,7 +44,18 @@ function metadata(name, route = 'direct', proxyId = null, jumpIds = []) {
 }
 
 let app;
+let providerRequested;
+const requested = new Promise((resolve) => {
+	providerRequested = resolve;
+});
+const modelServer = createServer((_request, response) => {
+	response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+	response.flushHeaders();
+	providerRequested();
+});
 try {
+	modelServer.listen(0, '127.0.0.1');
+	await once(modelServer, 'listening');
 	const dbPath = join(root, 'initial-v1.db');
 	let db = SqliteRuntime.open(dbPath);
 	assert.equal(targetMigrations.length, 1, 'unreleased schema must be a single v1 initial install');
@@ -55,12 +71,26 @@ try {
 		id: randomUUID(),
 		userId: 1,
 		displayName: 'storage fixture',
-		baseUrl: 'https://fixture.invalid/v1',
+		baseUrl: 'http://127.0.0.1:' + modelServer.address().port + '/v1',
 		protocol: 'chat-completions',
-		models: [{ id: 'fixture', contextWindow: 8192, maxOutputTokens: 256, supportsTools: true }],
+		models: [{ id: 'fixture', contextWindow: 8192, maxOutputTokens: 256, supportsTools: false }],
 		enabled: true,
 		now: Date.now(),
 	});
+	const executionStorage = new SqliteExecutionStorage(db);
+	const tokens = new SecureSessionTokens();
+	executionStorage.installTransactionIdentityReader(async (_tx, digest) =>
+		digest === tokens.digest('fixture-session') ? 1 : null,
+	);
+	const settings = new ExecutionService(new ExecutionModel(executionStorage, tokens), async () => undefined);
+	const defaults = await settings.get(1);
+	await settings.update(
+		{ userId: 1, token: 'fixture-session' },
+		defaults.version,
+		true,
+		defaults.limits,
+		defaults.profiles,
+	);
 	await db.close();
 	app = await createApp(dbPath, { encryptionKey: key });
 	const proxy = await app.targets.proxies.create({
@@ -102,8 +132,14 @@ try {
 		() => app.targets.create({ ...metadata('invalid-ssh'), rdpRemoteApp: 'notepad' }),
 		(error) => error.code === 'invalid_input',
 	);
-	await assert.rejects(() => app.targets.sshKeys.delete(sshKey.id));
-	await assert.rejects(() => app.targets.proxies.delete(proxy.id));
+	await assert.rejects(
+		() => app.targets.sshKeys.delete(sshKey.id),
+		(error) => error.code === 'reference_in_use',
+	);
+	await assert.rejects(
+		() => app.targets.proxies.delete(proxy.id),
+		(error) => error.code === 'reference_in_use',
+	);
 	const changedKey = await app.targets.sshKeys.update(sshKey.id, sshKey.version, {
 		privateKey: 'SECRET_PRIVATE_KEY_2',
 	});
@@ -133,6 +169,9 @@ try {
 		'graph rejection must roll back metadata and version',
 	);
 	const agentApp = await app.agent.createApp(1, 'regression');
+	if (!agentApp.enabled) {
+		await app.agent.setAppEnabled(1, agentApp.id, true, agentApp.version);
+	}
 	const thread = await app.agent.createThread(1, agentApp.id, 'state');
 	const intent = {
 		userId: 1,
@@ -145,6 +184,13 @@ try {
 	};
 	const createdRun = await app.agent.createRun(intent);
 	assert.equal(createdRun.status, 'created');
+	await Promise.race([
+		requested,
+		new Promise((_, reject) => {
+			const timer = setTimeout(() => reject(new Error('Model fixture was not dispatched')), 5000);
+			timer.unref();
+		}),
+	]);
 	assert.equal((await app.agent.createRun(intent)).status, 'replayed');
 	assert.equal((await app.agent.createRun({ ...intent, prompt: 'different' })).status, 'idempotency_conflict');
 	assert.equal((await app.agent.createRun({ ...intent, operationKey: randomUUID() })).status, 'active_run_conflict');
@@ -152,7 +198,7 @@ try {
 		userId: 1,
 		appId: agentApp.id,
 		runId: createdRun.run.id,
-		expectedVersion: createdRun.run.version,
+		expectedVersion: (await app.agent.getRun(1, agentApp.id, createdRun.run.id)).version,
 		operationKey: randomUUID(),
 	};
 	assert.equal((await app.agent.cancelRun({ ...cancelIntent, expectedVersion: 99 })).status, 'version_conflict');
@@ -171,10 +217,11 @@ try {
 		'SECRET_CONNECTION',
 	);
 	assert.equal((await app.targets.tags.rename(tag.id, tag.version, 'ops-next')).status, 'updated');
-	await assert.rejects(
-		() => app.targets.tags.delete(tag.id),
-		(error) => error.code === 'reference_in_use',
-	);
+	const beforeTagDelete = await app.targets.get(host.id);
+	assert.equal(await app.targets.tags.delete(tag.id), true);
+	const afterTagDelete = await app.targets.get(host.id);
+	assert.equal(afterTagDelete.tagIds.includes(tag.id), false);
+	assert.equal(afterTagDelete.version, beforeTagDelete.version + 1);
 	await app.close();
 	app = undefined;
 	db = SqliteRuntime.open(dbPath);
@@ -251,6 +298,8 @@ try {
 	);
 	console.log('Backend-next phase2 SQLite integration PASS');
 } finally {
+	modelServer.closeAllConnections();
+	await new Promise((resolve) => modelServer.close(resolve));
 	if (app) await app.close();
 	await rm(root, { recursive: true, force: true });
 }

@@ -27,6 +27,9 @@ export const WORKSPACE_ERROR_CODES = [
 	'host_key_untrusted',
 	'operation_unknown',
 	'remote_unavailable',
+	'command_failed',
+	'stale_target',
+	'not_text',
 ] as const;
 
 export type WorkspaceErrorCode = (typeof WORKSPACE_ERROR_CODES)[number];

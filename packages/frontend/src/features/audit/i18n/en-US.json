@@ -22,7 +22,10 @@
     "previousPage": "Previous page",
     "nextPage": "Next page",
     "pageNumber": "Page number",
-    "status": { "danger": "Failed", "warning": "Not authorized" },
+    "status": {
+      "danger": "Failed",
+      "warning": "Not authorized"
+    },
     "fields": {
       "username": "Account",
       "userId": "User ID",
@@ -50,9 +53,12 @@
       "proposalId": "Proposal ID",
       "action": "Action",
       "count": "Count",
-      "path": "Path"
+      "path": "Path",
+      "subjectId": "Subject",
+      "route": "Route",
+      "statusCode": "HTTP status"
     },
-    "searchPlaceholder": "Search details...",
+    "searchPlaceholder": "Search event, subject or route…",
     "noLogs": "No audit logs found.",
     "table": {
       "timestamp": "When",
@@ -105,6 +111,7 @@
     },
     "allActions": "All actions",
     "parseErrorRaw": "Parse error — raw value: {raw}",
-    "loadFailed": "Failed to load audit logs."
+    "loadFailed": "Failed to load audit logs.",
+    "loadedOnly": "{loaded} records loaded"
   }
 }

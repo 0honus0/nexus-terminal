@@ -9,17 +9,6 @@ export {
 	useConnections,
 } from './composables/useConnections';
 
-export type { ConnectionsController } from './composables/useConnections';
+export type { ConnectionSummary, ConnectionsController } from './model/connection-types';
 
-export { connectionsApi as connectionService } from './api/connectionsApi';
-
-export type {
-	ConnectionDto,
-	ConnectionAuthMethodDto,
-	ConnectionFormInput,
-	ConnectionRouteDto,
-	ConnectionTestResponseDto,
-	ConnectionTypeDto,
-	ConnectionFormUpdate,
-	RdpConnectionOptionsDto,
-} from './model/connection';
+export { useConnectionManagement } from './composables/use-connection-management';

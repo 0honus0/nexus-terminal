@@ -7,7 +7,7 @@ ENV PNPM_CONFIG_STORE_DIR=/pnpm/store
 WORKDIR /build
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY scripts/patches ./scripts/patches
-COPY packages/protocol/package.json ./packages/protocol/package.json
+COPY packages/shared/package.json ./packages/shared/package.json
 RUN PNPM_VERSION="$(node -p "require('./package.json').packageManager.replace(/^pnpm@/, '')")" \
     && npm install --global "pnpm@${PNPM_VERSION}"
 
@@ -16,14 +16,12 @@ RUN apk add --no-cache python3 py3-setuptools make g++
 COPY packages/backend/package.json ./packages/backend/package.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @nexus-terminal/backend
-COPY packages/protocol/src ./packages/protocol/src
-COPY packages/protocol/tsconfig.runtime.json ./packages/protocol/tsconfig.runtime.json
+COPY packages/shared/src ./packages/shared/src
+COPY packages/shared/tsconfig.json ./packages/shared/tsconfig.json
 COPY packages/backend/src ./packages/backend/src
 COPY packages/backend/tsconfig.json ./packages/backend/tsconfig.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm --filter @nexus-terminal/backend build \
-    && pnpm --filter @nexus-terminal/backend exec tsc -p ../protocol/tsconfig.runtime.json \
-    && node -e "const fs=require('node:fs'); const path='packages/protocol/package.json'; const manifest=JSON.parse(fs.readFileSync(path,'utf8')); for (const target of Object.values(manifest.exports ?? {})) { if (target && typeof target === 'object' && typeof target.default?.startsWith('./src/') && target.default.endsWith('.ts')) target.default='./dist/'+target.default.slice(6,-3)+'.js'; } fs.writeFileSync(path, JSON.stringify(manifest, null, 2)+'\\n');" \
     && pnpm --filter @nexus-terminal/backend --prod deploy /out/backend
 
 FROM workspace-base AS frontend-builder
@@ -32,11 +30,13 @@ ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 COPY packages/frontend/package.json ./packages/frontend/package.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @nexus-terminal/frontend
-COPY packages/protocol/src ./packages/protocol/src
+COPY packages/shared/src ./packages/shared/src
+COPY packages/shared/tsconfig.json ./packages/shared/tsconfig.json
 COPY packages/frontend/src ./packages/frontend/src
 COPY packages/frontend/public ./packages/frontend/public
 COPY packages/frontend/index.html packages/frontend/tsconfig.json packages/frontend/vite.config.ts ./packages/frontend/
-RUN pnpm --filter @nexus-terminal/frontend build
+RUN pnpm --filter @nexus-terminal/shared build \
+    && pnpm --filter @nexus-terminal/frontend build
 
 FROM alpine:latest AS runtime
 LABEL org.opencontainers.image.title="Nexus Terminal" \

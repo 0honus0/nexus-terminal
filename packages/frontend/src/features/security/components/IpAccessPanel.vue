@@ -1,147 +1,72 @@
 <script setup lang="ts">
-	import { onMounted, reactive, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { apiErrorMessage } from '@/client/http';
 	import { UiButton, UiCheckbox, UiFormField, UiInput, UiTable, UiTextarea } from '@/foundation/ui';
-	import { useFeedback } from '@/shared/feedback/public';
-	import { securityApi } from '../api/securityApi';
-	import type { IpAccessPolicyDto, IpBlacklistEntryDto } from '../model/security';
-
+	import { useSecurityConfiguration } from '../composables/use-security-configuration';
+	import { useIpBlacklist } from '../composables/use-ip-blacklist';
+	import ConfigurationStatus from './ConfigurationStatus.vue';
 	const { t } = useI18n();
-	const feedback = useFeedback();
-	const policy = reactive<IpAccessPolicyDto>({
-		whitelist: '',
-		blacklistEnabled: true,
-		maxLoginAttempts: 5,
-		loginBanDuration: 300,
-	});
-	const entries = ref<IpBlacklistEntryDto[]>([]);
-	const total = ref(0);
-	const loading = ref(false);
-	const message = ref('');
-	const success = ref(false);
-
-	const load = async () => {
-		loading.value = true;
-		try {
-			Object.assign(policy, await securityApi.getIpAccessPolicy());
-			const list = await securityApi.listBlockedIps(50, 0);
-			entries.value = list.entries;
-			total.value = list.total;
-		} catch (cause) {
-			message.value = apiErrorMessage(cause, t('common.errorOccurred'));
-		} finally {
-			loading.value = false;
-		}
-	};
-
-	const saveWhitelist = async () => {
-		loading.value = true;
-		try {
-			await securityApi.updateIpAccessPolicy({ whitelist: policy.whitelist });
-			message.value = t('settings.ipWhitelist.success.saved');
-			success.value = true;
-		} catch (cause) {
-			message.value = apiErrorMessage(cause, t('settings.ipWhitelist.error.saveFailed'));
-			success.value = false;
-		} finally {
-			loading.value = false;
-		}
-	};
-
-	const toggleBlacklist = async (enabled: boolean) => {
-		if (loading.value || enabled === policy.blacklistEnabled) return;
-		const previous = policy.blacklistEnabled;
-		policy.blacklistEnabled = enabled;
-		message.value = '';
-		loading.value = true;
-		try {
-			await securityApi.updateIpAccessPolicy({ blacklistEnabled: enabled });
-			if (enabled && entries.value.length === 0) {
-				const list = await securityApi.listBlockedIps(50, 0);
-				entries.value = list.entries;
-				total.value = list.total;
-			}
-		} catch (cause) {
-			policy.blacklistEnabled = previous;
-			message.value = apiErrorMessage(cause, t('settings.ipBlacklist.error.updateConfigFailed'));
-			success.value = false;
-		} finally {
-			loading.value = false;
-		}
-	};
-
-	const saveBlacklist = async () => {
-		message.value = '';
-		success.value = false;
-		const maxLoginAttempts = Number(policy.maxLoginAttempts);
-		const loginBanDuration = Number(policy.loginBanDuration);
-		if (!Number.isInteger(maxLoginAttempts) || maxLoginAttempts <= 0) {
-			message.value = t('settings.ipBlacklist.error.invalidMaxAttempts');
-			return;
-		}
-		if (!Number.isInteger(loginBanDuration) || loginBanDuration <= 0) {
-			message.value = t('settings.ipBlacklist.error.invalidBanDuration');
-			return;
-		}
-		loading.value = true;
-		try {
-			await securityApi.updateIpAccessPolicy({ maxLoginAttempts, loginBanDuration });
-			policy.maxLoginAttempts = maxLoginAttempts;
-			policy.loginBanDuration = loginBanDuration;
-			message.value = t('settings.ipBlacklist.success.configUpdated');
-			success.value = true;
-		} catch (cause) {
-			message.value = apiErrorMessage(cause, t('settings.ipBlacklist.error.updateConfigFailed'));
-		} finally {
-			loading.value = false;
-		}
-	};
-
-	const remove = async (ip: string) => {
-		const confirmed = await feedback.confirm({
-			message: t('settings.ipBlacklist.confirmRemoveIp', { ip }),
-			destructive: true,
-		});
-		if (!confirmed) return;
-		loading.value = true;
-		try {
-			await securityApi.removeBlockedIp(ip);
-			await load();
-		} catch (cause) {
-			message.value = apiErrorMessage(cause, t('settings.ipBlacklist.error.deleteFailed'));
-			success.value = false;
-		} finally {
-			loading.value = false;
-		}
-	};
-
-	onMounted(load);
+	const {
+		snapshot,
+		network: policy,
+		loading,
+		needsRefresh,
+		message,
+		success,
+		refresh,
+		saveNetwork,
+	} = useSecurityConfiguration();
+	const {
+		entries,
+		total,
+		offset,
+		pageSize,
+		loading: blacklistLoading,
+		needsRefresh: blacklistNeedsRefresh,
+		message: blacklistMessage,
+		refresh: refreshBlacklist,
+		previous,
+		next,
+		remove,
+	} = useIpBlacklist();
 </script>
-
 <template>
 	<div class="space-y-6">
+		<ConfigurationStatus
+			:revision="snapshot?.revision"
+			:effective-revision="snapshot?.effectiveRevision"
+			:pending-restart="snapshot?.pendingRestart"
+			:loading="loading"
+			:needs-refresh="needsRefresh"
+			:message="message"
+			:success="success"
+			@refresh="refresh"
+		/>
 		<section class="ui-solid-panel overflow-hidden rounded-xl">
 			<h2 class="border-b border-border/60 px-6 py-4 text-lg font-semibold text-foreground">
 				{{ t('settings.ipWhitelist.title') }}
 			</h2>
 			<div class="p-6">
 				<p class="mb-4 text-sm text-text-secondary">{{ t('settings.ipWhitelist.description') }}</p>
-				<form class="space-y-4" @submit.prevent="saveWhitelist">
+				<form class="space-y-4" @submit.prevent="saveNetwork">
 					<UiFormField :label="t('settings.ipWhitelist.label')" for-id="ipWhitelist">
 						<UiTextarea
 							id="ipWhitelist"
 							v-model="policy.whitelist"
 							:min-rows="4"
 							class="font-mono"
-							:disabled="loading"
+							:disabled="loading || needsRefresh"
 						/>
 						<p class="mt-1 text-xs text-text-secondary">{{ t('settings.ipWhitelist.hint') }}</p>
 					</UiFormField>
 					<div class="flex items-center justify-between gap-4">
-						<UiButton type="submit" appearance="solid" tone="primary" :loading="loading">{{
-							t('common.save')
-						}}</UiButton>
+						<UiButton
+							type="submit"
+							appearance="solid"
+							tone="primary"
+							:loading="loading"
+							:disabled="loading || needsRefresh"
+							>{{ t('common.save') }}</UiButton
+						>
 						<p v-if="message" :class="success ? 'text-success' : 'text-error'" class="text-sm">
 							{{ message }}
 						</p>
@@ -156,18 +81,19 @@
 				<label class="flex items-center gap-2 text-sm">
 					<UiCheckbox
 						:model-value="policy.blacklistEnabled"
-						:disabled="loading"
+						:disabled="loading || needsRefresh"
 						role="switch"
 						:aria-checked="String(policy.blacklistEnabled)"
-						@update:model-value="toggleBlacklist"
+						@update:model-value="policy.blacklistEnabled = $event"
 					/>
-					<span>{{ policy.blacklistEnabled ? t('common.enabled') : t('common.disabled') }}</span>
+					<UiButton :disabled="loading || needsRefresh" @click="saveNetwork">{{ t('common.save') }}</UiButton
+					><span>{{ policy.blacklistEnabled ? t('common.enabled') : t('common.disabled') }}</span>
 				</label>
 			</div>
 			<div class="space-y-6 p-6">
 				<template v-if="policy.blacklistEnabled">
 					<p class="text-sm text-text-secondary">{{ t('settings.ipBlacklist.description') }}</p>
-					<form class="flex flex-wrap items-end gap-4" @submit.prevent="saveBlacklist">
+					<form class="flex flex-wrap items-end gap-4" @submit.prevent="saveNetwork">
 						<UiFormField
 							:label="t('settings.ipBlacklist.maxAttemptsLabel')"
 							for-id="maxLoginAttempts"
@@ -178,7 +104,7 @@
 								v-model="policy.maxLoginAttempts"
 								type="number"
 								min="1"
-								:disabled="loading"
+								:disabled="loading || needsRefresh"
 							/>
 						</UiFormField>
 						<UiFormField
@@ -191,7 +117,7 @@
 								v-model="policy.loginBanDuration"
 								type="number"
 								min="1"
-								:disabled="loading"
+								:disabled="loading || needsRefresh"
 							/>
 						</UiFormField>
 						<UiButton type="submit" appearance="solid" tone="primary" :loading="loading">{{
@@ -203,7 +129,15 @@
 					<h3 class="text-base font-semibold text-foreground">
 						{{ t('settings.ipBlacklist.currentBannedTitle') }}
 					</h3>
-					<UiTable :empty="entries.length === 0" :empty-text="t('settings.ipBlacklist.noBannedIps')">
+					<p v-if="blacklistMessage" class="text-sm text-error" role="alert">{{ blacklistMessage }}</p>
+					<UiButton :loading="blacklistLoading" @click="refreshBlacklist">{{
+						t(blacklistNeedsRefresh ? 'common.retry' : 'common.refresh')
+					}}</UiButton>
+					<UiTable
+						v-if="!blacklistNeedsRefresh"
+						:empty="entries.length === 0"
+						:empty-text="t('settings.ipBlacklist.noBannedIps')"
+					>
 						<template #head>
 							<tr>
 								<th class="px-4 py-2 text-left font-medium text-text-secondary">IP</th>
@@ -224,21 +158,27 @@
 						<tr v-for="entry in entries" :key="entry.ip" class="hover:bg-header/50">
 							<td class="px-4 py-2 font-mono">{{ entry.ip }}</td>
 							<td class="px-4 py-2">{{ entry.attempts }}</td>
-							<td class="px-4 py-2">{{ new Date(entry.lastAttemptAt * 1000).toLocaleString() }}</td>
+							<td class="px-4 py-2">{{ new Date(entry.lastAttemptAtMs).toLocaleString() }}</td>
 							<td class="px-4 py-2">
-								{{ entry.blockedUntil ? new Date(entry.blockedUntil * 1000).toLocaleString() : '—' }}
+								{{ entry.blockedUntilMs ? new Date(entry.blockedUntilMs).toLocaleString() : '—' }}
 							</td>
 							<td class="px-4 py-2">
 								<UiButton
 									density="compact"
 									appearance="solid"
 									tone="danger"
+									:disabled="blacklistLoading || blacklistNeedsRefresh"
 									@click="remove(entry.ip)"
 									>{{ t('common.remove') }}</UiButton
 								>
 							</td>
 						</tr>
 					</UiTable>
+					<div class="flex items-center gap-3">
+						<UiButton :disabled="blacklistLoading || offset === 0" @click="previous">←</UiButton
+						><span>{{ offset + entries.length }} / {{ total }}</span
+						><UiButton :disabled="blacklistLoading || offset + pageSize >= total" @click="next">→</UiButton>
+					</div>
 				</template>
 				<div
 					v-else

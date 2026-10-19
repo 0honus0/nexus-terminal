@@ -1,7 +1,7 @@
-import type { WorkspaceStatusSampleDto } from '../model/status';
+import type { StatusSample, StatusFailure } from '../model/status-types';
 
 export interface StatusChannel {
-	subscribe(handler: (sample: WorkspaceStatusSampleDto) => void, error?: (message: string) => void): () => void;
+	subscribe(handler: (sample: StatusSample) => void, error?: (failure: StatusFailure) => void): () => void;
 	start(): void | Promise<void>;
 	stop(): void | Promise<void>;
 }

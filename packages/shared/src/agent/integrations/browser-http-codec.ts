@@ -1,5 +1,14 @@
 import { agentRecord, agentText, agentInteger, InvalidAgentPayload } from '../http-codec.js';
-import { AGENT_BROWSER_MAX_BODY_BYTES, AGENT_BROWSER_MAX_TARGETS } from './browser-values.js';
+import {
+	AGENT_BROWSER_MAX_BODY_BYTES,
+	AGENT_BROWSER_MAX_TARGETS,
+	AGENT_BROWSER_MAX_ENDPOINTS,
+	AGENT_BROWSER_ENDPOINT_MAX_BYTES,
+	AGENT_BROWSER_MAX_PATTERNS,
+	AGENT_BROWSER_PATTERN_MAX_BYTES,
+	AGENT_BROWSER_MAX_PRIORITY,
+	AGENT_BROWSER_TARGET_ID_MAX_BYTES,
+} from './browser-values.js';
 import type { AgentBrowserTarget, AgentBrowserConfiguration } from './browser-model.js';
 import type { AgentBrowserUpdateRequest } from './browser-http.js';
 
@@ -16,23 +25,23 @@ export function readAgentBrowserTargets(input: unknown): AgentBrowserTarget[] {
 	}
 	const targets = input.map((value) => {
 		const row = agentRecord(value, ['id', 'endpoints', 'allowedUrlPatterns'], AGENT_BROWSER_MAX_BODY_BYTES);
-		const id = agentText(row.id, 128);
+		const id = agentText(row.id, AGENT_BROWSER_TARGET_ID_MAX_BYTES);
 		if (!/^[a-z][a-z0-9_-]*$/u.test(id)) {
 			throw new InvalidAgentPayload();
 		}
 		if (
 			!Array.isArray(row.endpoints) ||
 			!row.endpoints.length ||
-			row.endpoints.length > 8 ||
+			row.endpoints.length > AGENT_BROWSER_MAX_ENDPOINTS ||
 			!Array.isArray(row.allowedUrlPatterns) ||
 			!row.allowedUrlPatterns.length ||
-			row.allowedUrlPatterns.length > 32
+			row.allowedUrlPatterns.length > AGENT_BROWSER_MAX_PATTERNS
 		) {
 			throw new InvalidAgentPayload();
 		}
 		const endpoints = row.endpoints.map((value) => {
 			const endpoint = agentRecord(value, ['url', 'priority', 'allowPlaintext', 'verifyTls']);
-			const url = agentText(endpoint.url, 4096);
+			const url = agentText(endpoint.url, AGENT_BROWSER_ENDPOINT_MAX_BYTES);
 			let parsed: URL;
 			try {
 				parsed = new URL(url);
@@ -51,13 +60,13 @@ export function readAgentBrowserTargets(input: unknown): AgentBrowserTarget[] {
 			}
 			return {
 				url: parsed.toString(),
-				priority: agentInteger(endpoint.priority, 0, 100),
+				priority: agentInteger(endpoint.priority, 0, AGENT_BROWSER_MAX_PRIORITY),
 				allowPlaintext,
 				verifyTls: boolean(endpoint.verifyTls),
 			};
 		});
 		const allowedUrlPatterns = row.allowedUrlPatterns.map((value) => {
-			const pattern = agentText(value, 2048);
+			const pattern = agentText(value, AGENT_BROWSER_PATTERN_MAX_BYTES);
 			let url: URL;
 			try {
 				url = new URL(pattern);

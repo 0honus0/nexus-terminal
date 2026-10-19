@@ -9,3 +9,5 @@ export { default as NotificationHost } from './components/NotificationHost.vue';
 export { default as RuntimeErrorBoundary } from './components/RuntimeErrorBoundary.vue';
 
 export type { AlertDialogOptions, ConfirmDialogOptions, NotificationKind, UiNotification } from './model';
+
+export { preferenceFailureMessage } from './preference-failure-message';

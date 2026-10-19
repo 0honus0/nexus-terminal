@@ -21,3 +21,7 @@ export const SETTINGS_ERROR_CODES = [
 ] as const;
 
 export type SettingsErrorCode = (typeof SETTINGS_ERROR_CODES)[number];
+
+export const SETTINGS_MONITORING_MIN_SECONDS = 1;
+
+export const SETTINGS_MONITORING_MAX_SECONDS = 86400;

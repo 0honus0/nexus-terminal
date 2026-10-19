@@ -1,0 +1,30 @@
+{
+  "systemOverview": {
+    "errors": {
+      "invalid_input": "リクエストが無効です。",
+      "unauthenticated": "セッションが失効しました。再度ログインしてください。",
+      "forbidden": "リソースを表示する権限がありません。",
+      "not_found": "接続が存在しません。接続一覧を更新してください。",
+      "limit_exceeded": "読み取り上限に達しました。しばらくして再試行してください。",
+      "conflict": "リソースを使用中です。しばらくして再試行してください。",
+      "remote_unavailable": "リソースを読み取れません。",
+      "command_failed": "リモートのサンプリングに失敗しました。",
+      "operation_unknown": "測定結果を確認できません。読み取り専用で更新してください。",
+      "host_key_untrusted": "ホスト鍵が信頼されていません。先に確認してください。",
+      "request_failed": "通信に失敗しました。読み取りを再試行してください。",
+      "protocol_failure": "応答が無効です。読み取りを再試行してください。",
+      "cancelled": "読み取りを中止しました。"
+    },
+    "diagnostics": {
+      "title": "ホスト診断",
+      "failed": "ホスト診断を読み込めません。更新して再読込してください。",
+      "runtime": "ランタイム",
+      "uptime": "稼働時間",
+      "resident": "常駐メモリ",
+      "heap": "使用ヒープ",
+      "database": "DBスキーマ",
+      "unavailable": "利用不可",
+      "collectedAt": "取得日時"
+    }
+  }
+}

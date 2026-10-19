@@ -195,7 +195,13 @@
       "commandNotFoundCompress": "Command '{command}' not found on server, cannot complete compression.",
       "commandNotFoundDecompress": "Command '{command}' not found on server, cannot complete decompression.",
       "genericCommandNotFound": "Command '{command}' not found on server, cannot complete '{operation}' operation.",
-      "copyPathFailed": "Failed to copy path"
+      "copyPathFailed": "Failed to copy path",
+      "terminalPathChangeUnknown": "The directory change result is unknown. Read the current directory before trying again.",
+      "operationUnknown": "The operation may have changed remote files. Refresh and check the actual paths before trying again.",
+      "notConnected": "The file session is not ready. Reconnect before operating on files.",
+      "invalidResponse": "The file response could not be verified. Refresh to read the current state.",
+      "capacityExceeded": "The file operation exceeds its capacity. Save requests, including JSON encoding, must fit within 1 MiB.",
+      "requestRejected": "The file operation was rejected. Check access and the current file state."
     },
     "notifications": {
       "terminalPathQueued": "A foreground command is running. The directory change is safely queued until the shell prompt returns.",
@@ -211,7 +217,8 @@
     },
     "warnings": {
       "moveSameDirectory": "Cannot cut and paste in the same directory.",
-      "crossHostDeleteFailed": "The target copy succeeded, but deleting the source files failed: {error}"
+      "crossHostDeleteFailed": "The target copy succeeded, but deleting the source files failed: {error}",
+      "transferRefreshFailed": "The file operation completed, but refreshing the directory failed. Refresh to check the result without repeating the operation."
     },
     "prompts": {
       "enterFolderName": "Enter the name for the new folder:",

@@ -23,3 +23,7 @@ export const AGENT_APP_MAX_DEFINITION_VERSION_BYTES = 64;
 export const AGENT_APP_EXECUTION_STATE = 'governed';
 
 export type AgentAppExecutionState = typeof AGENT_APP_EXECUTION_STATE;
+
+export const AGENT_WORKSPACE_MAX_SELECTABLE_MODELS = 1024;
+
+export const AGENT_WORKSPACE_MAX_RESPONSE_BYTES = 8 * 1024 * 1024 + 1024;

@@ -1,17 +1,22 @@
 <script setup lang="ts">
-	import { nextTick, onMounted, reactive, ref, watch } from 'vue';
+	import { reactive, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { structurallyEqual } from '@/foundation/data';
 	import { UiButton, UiCheckbox, UiFormField, UiInput, UiSelect } from '@/foundation/ui';
 	import { useFeedback } from '@/shared/feedback/public';
-	import { usePreferences } from '../composables/usePreferences';
-	import { LOG_LEVELS, commonTimezones, preferenceLanguageNames, type PreferencesDto } from '../model/preferences';
+	import { BackendLoggingPanel } from '@/features/logging/public';
+	import MonitoringConfigurationPanel from './MonitoringConfigurationPanel.vue';
+	import { usePreferencesEditor } from '../composables/use-preferences-editor';
+	import {
+		LOG_LEVELS,
+		commonTimezones,
+		preferenceLanguageNames,
+		type UserPreferences,
+	} from '../model/preferences-types';
 
 	const { t } = useI18n();
 	const feedback = useFeedback();
 	const savingSection = ref<string | null>(null);
-	const loading = ref(true);
-	const loadError = ref('');
+
 	const props = withDefaults(
 		defineProps<{ locales?: readonly string[]; section?: 'all' | 'system' | 'workspace' }>(),
 		{
@@ -20,74 +25,19 @@
 			section: 'all',
 		},
 	);
-	const preferences = usePreferences();
-	const form = reactive<PreferencesDto>({ ...preferences.values.value });
-	const dirty = ref(false);
+	const editor = usePreferencesEditor(t);
+	const { form, loading, loadError, needsRefresh } = editor;
 	const sectionMessages = reactive<Record<string, { text: string; success: boolean }>>({});
-	let syncing = false;
-	watch(
-		preferences.values,
-		async (value) => {
-			if (dirty.value) return;
-			syncing = true;
-			Object.assign(form, value);
-			await nextTick();
-			syncing = false;
-		},
-		{ deep: true },
-	);
-	watch(
-		form,
-		() => {
-			if (!syncing) dirty.value = true;
-		},
-		{ deep: true },
-	);
-	onMounted(async () => {
-		try {
-			await preferences.load();
-		} catch (cause) {
-			loadError.value = t('settings.preferences.loadFailed', {
-				error: cause instanceof Error ? cause.message : String(cause),
-			});
-			feedback.notifyError(loadError.value);
-		} finally {
-			syncing = true;
-			Object.assign(form, preferences.values.value);
-			await nextTick();
-			syncing = false;
-			dirty.value = false;
-			loading.value = false;
-		}
-	});
 
-	const refreshDirtyState = () => {
-		dirty.value = (Object.keys(form) as (keyof PreferencesDto)[]).some(
-			(key) => !structurallyEqual(form[key], preferences.values.value[key]),
-		);
-	};
-
-	const validatePatch = (patch: Partial<PreferencesDto>): string | null => {
+	const validatePatch = (patch: Partial<UserPreferences>): string | null => {
 		const integerInRange = (value: number, min: number, max: number) =>
 			Number.isInteger(Number(value)) && Number(value) >= min && Number(value) <= max;
 
-		if (
-			patch.statusMonitorIntervalSeconds !== undefined &&
-			!integerInRange(patch.statusMonitorIntervalSeconds, 1, 86400)
-		) {
-			return t('settings.statusMonitor.error.invalidInterval');
-		}
 		if (
 			patch.dockerStatusIntervalSeconds !== undefined &&
 			!integerInRange(patch.dockerStatusIntervalSeconds, 1, 86400)
 		) {
 			return t('settings.docker.error.invalidInterval');
-		}
-		if (
-			patch.remoteHostRefreshIntervalSeconds !== undefined &&
-			!integerInRange(patch.remoteHostRefreshIntervalSeconds, 1, 86400)
-		) {
-			return t('settings.dashboardResources.error.invalidInterval');
 		}
 		if (patch.terminalScrollbackLimit !== undefined && !integerInRange(patch.terminalScrollbackLimit, 0, 100000)) {
 			return t('settings.terminalScrollback.error.invalidInput');
@@ -107,7 +57,9 @@
 		return null;
 	};
 
-	const savePatch = async (sectionId: string, patch: Partial<PreferencesDto>) => {
+	const savePatch = async (sectionId: string, patch: Partial<UserPreferences>) => {
+		const signal = editor.view.capture();
+		if (signal.aborted) return;
 		const validationError = validatePatch(patch);
 		if (validationError) {
 			sectionMessages[sectionId] = { text: validationError, success: false };
@@ -118,19 +70,19 @@
 		savingSection.value = sectionId;
 		sectionMessages[sectionId] = { text: '', success: false };
 		try {
-			await preferences.update(patch);
-			refreshDirtyState();
+			if (!(await editor.save(patch))) return;
 			const message = t('settings.preferences.saved');
 			sectionMessages[sectionId] = { text: message, success: true };
 			feedback.notifySuccess(message);
 		} catch (cause) {
+			if (!editor.view.isCurrent(signal)) return;
 			const message = t('settings.preferences.saveFailed', {
 				error: cause instanceof Error ? cause.message : String(cause),
 			});
 			sectionMessages[sectionId] = { text: message, success: false };
 			feedback.notifyError(message);
 		} finally {
-			savingSection.value = null;
+			if (editor.view.isCurrent(signal)) savingSection.value = null;
 		}
 	};
 </script>
@@ -141,11 +93,20 @@
 			{{ props.section === 'system' ? t('settings.category.system') : t('settings.workspace.title') }}
 		</h2>
 
+		<UiButton class="m-6" :disabled="loading || editor.saving.value" @click="editor.refresh">{{
+			t('common.refresh')
+		}}</UiButton>
+		<MonitoringConfigurationPanel v-if="props.section !== 'system'" class="m-6" />
+
 		<div v-if="loading" class="p-4 text-center text-text-secondary">
 			{{ t('common.loading') }}
 		</div>
 
-		<div v-else-if="props.section === 'system'" class="space-y-6 p-6">
+		<fieldset
+			v-else-if="props.section === 'system'"
+			:disabled="needsRefresh || editor.saving.value"
+			class="space-y-6 p-6"
+		>
 			<p v-if="loadError" class="rounded border border-error/40 bg-error/5 p-3 text-sm text-error">
 				{{ loadError }}
 			</p>
@@ -205,7 +166,6 @@
 				@submit.prevent="
 					savePatch('logging', {
 						frontendLogLevel: form.frontendLogLevel,
-						backendLogLevel: form.backendLogLevel,
 					})
 				"
 			>
@@ -215,17 +175,6 @@
 						<UiSelect
 							id="frontendLogLevelSelect"
 							v-model="form.frontendLogLevel"
-							:disabled="savingSection !== null"
-						>
-							<option v-for="level in LOG_LEVELS" :key="level" :value="level">
-								{{ level.toUpperCase() }}
-							</option>
-						</UiSelect>
-					</UiFormField>
-					<UiFormField :label="t('settings.logging.backendLabel')" for-id="backendLogLevelSelect">
-						<UiSelect
-							id="backendLogLevelSelect"
-							v-model="form.backendLogLevel"
 							:disabled="savingSection !== null"
 						>
 							<option v-for="level in LOG_LEVELS" :key="level" :value="level">
@@ -248,9 +197,8 @@
 					</p>
 				</div>
 			</form>
-		</div>
-
-		<div v-else class="space-y-6 p-6">
+		</fieldset>
+		<fieldset v-else :disabled="needsRefresh || editor.saving.value" class="space-y-6 p-6">
 			<p v-if="loadError" class="rounded border border-error/40 bg-error/5 p-3 text-sm text-error">
 				{{ loadError }}
 			</p>
@@ -855,7 +803,6 @@
 						savePatch('dashboard-resources', {
 							dashboardShowLocalResources: form.dashboardShowLocalResources,
 							dashboardShowRemoteResources: form.dashboardShowRemoteResources,
-							remoteHostRefreshIntervalSeconds: form.remoteHostRefreshIntervalSeconds,
 						})
 					"
 				>
@@ -897,23 +844,6 @@
 								}}</span>
 							</span>
 						</label>
-						<UiFormField
-							:label="t('settings.dashboardResources.refreshIntervalLabel')"
-							for-id="remoteHostRefreshIntervalSeconds"
-						>
-							<UiInput
-								id="remoteHostRefreshIntervalSeconds"
-								v-model="form.remoteHostRefreshIntervalSeconds"
-								type="number"
-								min="1"
-								max="86400"
-								step="1"
-								:disabled="savingSection !== null"
-							/>
-							<p class="mt-1 text-xs text-text-secondary">
-								{{ t('settings.dashboardResources.refreshIntervalHint') }}
-							</p>
-						</UiFormField>
 					</div>
 					<div class="flex flex-wrap items-center justify-between gap-3">
 						<UiButton
@@ -971,51 +901,6 @@
 							:class="sectionMessages['status-ip'].success ? 'text-success' : 'text-error'"
 						>
 							{{ sectionMessages['status-ip'].text }}
-						</p>
-					</div>
-				</form>
-			</section>
-
-			<hr class="border-border" />
-
-			<section class="settings-section-content">
-				<h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.statusMonitor.title') }}</h3>
-				<form
-					class="space-y-4"
-					@submit.prevent="
-						savePatch('status-monitor', { statusMonitorIntervalSeconds: form.statusMonitorIntervalSeconds })
-					"
-				>
-					<UiFormField
-						:label="t('settings.statusMonitor.refreshIntervalLabel')"
-						for-id="statusMonitorIntervalSeconds"
-					>
-						<UiInput
-							id="statusMonitorIntervalSeconds"
-							v-model="form.statusMonitorIntervalSeconds"
-							type="number"
-							min="1"
-							step="1"
-							:disabled="savingSection !== null"
-						/>
-						<p class="mt-1 text-xs text-text-secondary">
-							{{ t('settings.statusMonitor.refreshIntervalHint') }}
-						</p>
-					</UiFormField>
-					<div class="flex flex-wrap items-center justify-between gap-3">
-						<UiButton
-							type="submit"
-							appearance="solid"
-							tone="primary"
-							:loading="savingSection === 'status-monitor'"
-							>{{ t('settings.statusMonitor.saveButton') }}</UiButton
-						>
-						<p
-							v-if="sectionMessages['status-monitor']?.text"
-							class="text-sm"
-							:class="sectionMessages['status-monitor'].success ? 'text-success' : 'text-error'"
-						>
-							{{ sectionMessages['status-monitor'].text }}
 						</p>
 					</div>
 				</form>
@@ -1152,6 +1037,7 @@
 					</div>
 				</form>
 			</section>
-		</div>
+		</fieldset>
+		<BackendLoggingPanel v-if="props.section === 'system'" class="p-6" />
 	</section>
 </template>

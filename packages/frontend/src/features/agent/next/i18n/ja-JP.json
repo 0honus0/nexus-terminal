@@ -1,7 +1,7 @@
 {
   "agentNext": {
     "title": "新バックエンド Agent — 開発用",
-    "isolation": "この開発画面は backend-next の Agent 状態と読み取り専用のモデルステップ監査 API を使用します。Provider 実行、ツール、承認、WebSocket ストリーミング、旧 Agent の切替は有効化しません。",
+    "isolation": "この開発画面は Backend の Agent 状態と読み取り専用のモデルステップ監査 API を使用します。Provider 実行、ツール、承認、WebSocket ストリーミング、旧 Agent の切替は有効化しません。",
     "setup": "初期管理者の設定",
     "login": "新バックエンドにログイン",
     "username": "ユーザー名",

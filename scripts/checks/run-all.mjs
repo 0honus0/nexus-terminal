@@ -4,9 +4,9 @@ import { spawnSync } from 'node:child_process';
 
 const checks = [
 	['Frontend ESLint', ['run', 'lint:frontend']],
-	['Agent ESLint', ['run', 'lint:agent']],
+	['Backend ESLint', ['run', 'lint:backend']],
 	['Frontend type check', ['--filter', '@nexus-terminal/frontend', 'exec', 'vue-tsc', '--noEmit']],
-	['Backend type check', ['--filter', '@nexus-terminal/backend', 'exec', 'tsc', '--noEmit']],
+	['Backend type check', ['--filter', '@nexus-terminal/backend', 'check']],
 ];
 
 for (const [name, args] of checks) {

@@ -1,0 +1,30 @@
+{
+  "systemOverview": {
+    "errors": {
+      "invalid_input": "Invalid request.",
+      "unauthenticated": "Session expired. Sign in again.",
+      "forbidden": "You cannot view these resources.",
+      "not_found": "The connection no longer exists. Refresh the connection list.",
+      "limit_exceeded": "Resource reading limit reached. Try again later.",
+      "conflict": "The resource is busy. Try again later.",
+      "remote_unavailable": "Resources are temporarily unavailable.",
+      "command_failed": "Remote sampling failed.",
+      "operation_unknown": "The sample result is unconfirmed. Refresh to read the current state.",
+      "host_key_untrusted": "The host key is not trusted. Verify it first.",
+      "request_failed": "The network request failed. Retry the read.",
+      "protocol_failure": "Invalid response. Retry the read.",
+      "cancelled": "Reading cancelled."
+    },
+    "diagnostics": {
+      "title": "Host diagnostics",
+      "failed": "Cannot read host diagnostics. Refresh to try the read again.",
+      "runtime": "Runtime",
+      "uptime": "Uptime",
+      "resident": "Resident memory",
+      "heap": "Used heap",
+      "database": "Database schema",
+      "unavailable": "Unavailable",
+      "collectedAt": "Collected at"
+    }
+  }
+}

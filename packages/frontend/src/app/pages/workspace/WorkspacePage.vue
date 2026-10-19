@@ -15,27 +15,30 @@
 	import { logger } from '@/client/logging/logger';
 	import { useDeviceCapabilities } from '@/foundation/browser';
 	import { createLatestValueSaver } from '@/foundation/async';
-	import { useFeedback } from '@/shared/feedback/public';
+	import { UiButton } from '@/foundation/ui';
+	import { useFeedback, preferenceFailureMessage } from '@/shared/feedback/public';
+	import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 	import { focusRegistry, normalizeShortcut, shortcutFromKeyboardEvent } from '@/shared/focus/public';
-	import { connectionService, type ConnectionDto } from '@/features/connections/public';
+	import { refreshConnection, type ConnectionSummary } from '@/features/connections/public';
 	import { terminalScrollbackForRuntime, usePreferences } from '@/features/preferences/public';
 	import { defaultTerminalTheme, useAppearance } from '@/features/appearance/public';
 	import { useCommandHistory } from '@/features/command-history/public';
 	import { remoteDesktopLauncher } from '@/features/remote-desktop/public';
 	import {
 		loadProgressDisplayModal,
+		TransferFailure,
 		transferTaskErrorDescriptor,
 		useServerTransfers,
 		type FileClipboardOperation,
 		type ProgressSource,
 		type TransferTask,
 	} from '@/features/transfers/public';
-	import type { WorkspaceRemoteFileEntryDto } from '@/features/filesystem/public';
+	import type { RemoteFileEntry } from '@/features/filesystem/public';
 	import {
 		loadSuspendedSessionsModal,
 		findSuspendedSessionByOriginalWorkspace,
 		refreshSuspendedSessionsCatalog,
-		type SuspendedSessionDto,
+		type SuspendedSession,
 	} from '@/features/ssh-suspend/public';
 	import {
 		WorkspaceStartPage,
@@ -87,16 +90,52 @@
 	let sessionReconcilePromise: Promise<void> | null = null;
 	let sessionReconcileRequested = false;
 	let workspaceActive = false;
+	let pageScope = new AbortController();
+
+	const isPageCurrent = (signal: AbortSignal): boolean =>
+		workspaceActive &&
+		router.currentRoute.value.name === 'Workspace' &&
+		pageScope.signal === signal &&
+		!signal.aborted;
+
+	const revokePageActions = (): void => {
+		pageScope.abort();
+		activationGeneration += 1;
+		preparingSessionId.value = null;
+		sessionReconcilePromise = null;
+		sessionReconcileRequested = false;
+	};
+
+	const activatePageActions = (): void => {
+		workspaceActive = true;
+		if (pageScope.signal.aborted) pageScope = new AbortController();
+	};
+
+	const waitForReconciliation = (signal: AbortSignal): Promise<void> => {
+		if (signal.aborted) return Promise.resolve();
+		return new Promise((resolve) => {
+			const finish = (): void => {
+				window.clearTimeout(timer);
+				signal.removeEventListener('abort', finish);
+				resolve();
+			};
+
+			const timer = window.setTimeout(finish, SESSION_RECONCILE_DELAY_MS);
+			signal.addEventListener('abort', finish, { once: true });
+		});
+	};
+
 	const workspaceVisible = ref(true);
 	watch(registry.suspendAutoTerminationNotice, (notice) => {
 		if (!notice) return;
 		const name =
 			notice.name ??
 			`${t('sshSuspend.notifications.defaultSessionName')} ${notice.suspendedSessionId.slice(0, 8)}`;
-		feedback.notifyWarning(t('sshSuspend.notifications.autoTerminated', { name, reason: notice.reason }));
+		feedback.notifyWarning(
+			t('sshSuspend.notifications.autoTerminated', { name, reason: t(`sshSuspend.reasons.${notice.reason}`) }),
+		);
 	});
 	const surfaces = new Map<string, SurfaceApi>();
-	const opening = ref(false);
 	const suspendedVisible = ref(false);
 	const connectionPickerVisible = ref(false);
 	const layoutConfiguratorVisible = ref(false);
@@ -140,17 +179,27 @@
 		},
 		{ flush: 'sync' },
 	);
-	const statusScaleSaver = createLatestValueSaver<number>({
+	const statusScaleSaver = createLatestValueSaver<{ scale: number; version: number; permission: AbortSignal }>({
 		delayMs: 240,
 
-		save: (scale) => preferences.update({ statusMonitorScale: scale }),
+		save: ({ scale, version, permission }) =>
+			permission.aborted
+				? Promise.resolve()
+				: preferences.update({ statusMonitorScale: scale }, version, permission),
 
 		onError: reportPreferenceSaveError,
 	});
-	const fileManagerRowScaleSaver = createLatestValueSaver<number>({
+	const fileManagerRowScaleSaver = createLatestValueSaver<{
+		scale: number;
+		version: number;
+		permission: AbortSignal;
+	}>({
 		delayMs: 240,
 
-		save: (scale) => preferences.update({ fileManagerRowSizeMultiplier: scale }),
+		save: ({ scale, version, permission }) =>
+			permission.aborted
+				? Promise.resolve()
+				: preferences.update({ fileManagerRowSizeMultiplier: scale }, version, permission),
 
 		onPendingChange: (pending) => {
 			if (!pending) fileManagerRowScalePreview.value = null;
@@ -158,43 +207,94 @@
 
 		onError: reportPreferenceSaveError,
 	});
-	const quickCommandRowScaleSaver = createLatestValueSaver<number>({
+	const quickCommandRowScaleSaver = createLatestValueSaver<{
+		scale: number;
+		version: number;
+		permission: AbortSignal;
+	}>({
 		delayMs: 240,
 
-		save: (scale) => preferences.update({ quickCommandRowSizeMultiplier: scale }),
+		save: ({ scale, version, permission }) =>
+			permission.aborted
+				? Promise.resolve()
+				: preferences.update({ quickCommandRowSizeMultiplier: scale }, version, permission),
 
 		onError: reportPreferenceSaveError,
 	});
 
-	const terminalFontSaver = createLatestValueSaver<{ mobile: boolean; size: number }>({
+	const terminalFontSaver = createLatestValueSaver<{
+		mobile: boolean;
+		size: number;
+		version: number | null;
+		permission: AbortSignal;
+	}>({
 		delayMs: 240,
 
-		save: ({ mobile, size }) =>
-			appearance.update(mobile ? { terminalFontSizeMobile: size } : { terminalFontSize: size }),
+		save: ({ mobile, size, version, permission }) =>
+			version === null || permission.aborted
+				? Promise.resolve()
+				: appearance.update(
+						mobile ? { terminalFontSizeMobile: size } : { terminalFontSize: size },
+						version,
+						permission,
+					),
 
 		onPendingChange: (pending) => {
-			if (!pending) terminalFontPreview.value = null;
+			if (!pending) {
+				terminalFontPreview.value = null;
+				appearance.clearFontPreview('terminal');
+			}
 		},
 
-		onError: (cause) => feedback.notifyError(cause instanceof Error ? cause.message : String(cause)),
+		onError: () => feedback.notifyError(t('common.errorOccurred')),
 	});
-	const editorFontSaver = createLatestValueSaver<number>({
+	const editorFontSaver = createLatestValueSaver<{ size: number; version: number | null; permission: AbortSignal }>({
 		delayMs: 240,
 
-		save: (size) => appearance.update({ editorFontSize: size }),
+		save: ({ size, version, permission }) =>
+			version === null || permission.aborted
+				? Promise.resolve()
+				: appearance.update({ editorFontSize: size }, version, permission),
 
-		onError: (cause) => feedback.notifyError(cause instanceof Error ? cause.message : String(cause)),
+		onPendingChange: (pending) => {
+			if (!pending) {
+				appearance.clearFontPreview('editor');
+			}
+		},
+
+		onError: () => feedback.notifyError(t('common.errorOccurred')),
 	});
-	const mobileEditorFontSaver = createLatestValueSaver<number>({
+	const mobileEditorFontSaver = createLatestValueSaver<{
+		size: number;
+		version: number | null;
+		permission: AbortSignal;
+	}>({
 		delayMs: 240,
 
-		save: (size) => appearance.update({ mobileEditorFontSize: size }),
+		save: ({ size, version, permission }) =>
+			version === null || permission.aborted
+				? Promise.resolve()
+				: appearance.update({ mobileEditorFontSize: size }, version, permission),
 
-		onError: (cause) => feedback.notifyError(cause instanceof Error ? cause.message : String(cause)),
+		onPendingChange: (pending) => {
+			if (!pending) {
+				appearance.clearFontPreview('mobile-editor');
+			}
+		},
+
+		onError: () => feedback.notifyError(t('common.errorOccurred')),
 	});
+
+	const scheduleStatusScale = (scale: number) =>
+		statusScaleSaver.schedule({ scale, version: preferences.version.value, permission: pageScope.signal });
+
+	const scheduleQuickCommandScale = (scale: number) =>
+		quickCommandRowScaleSaver.schedule({ scale, version: preferences.version.value, permission: pageScope.signal });
 
 	const saveFileManagerColumnWidths = (widths: Record<string, number>) => {
-		void preferences.update({ fileManagerColWidths: widths }).catch(reportPreferenceSaveError);
+		void preferences
+			.update({ fileManagerColWidths: widths }, preferences.version.value, pageScope.signal)
+			.catch(reportPreferenceSaveError);
 	};
 
 	const updateTerminalFontSize = (size: number) => {
@@ -202,22 +302,27 @@
 		appearance.previewSettings(
 			device.isMobile.value ? { terminalFontSizeMobile: size } : { terminalFontSize: size },
 		);
-		terminalFontSaver.schedule({ mobile: device.isMobile.value, size });
+		terminalFontSaver.schedule({
+			mobile: device.isMobile.value,
+			size,
+			version: appearance.version.value,
+			permission: pageScope.signal,
+		});
 	};
 
 	const updateFileManagerRowScale = (scale: number) => {
 		fileManagerRowScalePreview.value = scale;
-		fileManagerRowScaleSaver.schedule(scale);
+		fileManagerRowScaleSaver.schedule({ scale, version: preferences.version.value, permission: pageScope.signal });
 	};
 
 	const updateEditorFontSize = (size: number) => {
 		appearance.previewSettings({ editorFontSize: size });
-		editorFontSaver.schedule(size);
+		editorFontSaver.schedule({ size, version: appearance.version.value, permission: pageScope.signal });
 	};
 
 	const updateMobileEditorFontSize = (size: number) => {
 		appearance.previewSettings({ mobileEditorFontSize: size });
-		mobileEditorFontSaver.schedule(size);
+		mobileEditorFontSaver.schedule({ size, version: appearance.version.value, permission: pageScope.signal });
 	};
 
 	const focusConfiguratorVisible = ref(false);
@@ -285,7 +390,7 @@
 	const setFileClipboard = (
 		source: WorkspaceRuntimeSession,
 		operation: FileClipboardOperation,
-		entries: WorkspaceRemoteFileEntryDto[],
+		entries: RemoteFileEntry[],
 	) => {
 		registry.fileClipboard.set(
 			operation,
@@ -321,13 +426,13 @@
 
 		try {
 			const taskId = await target.transferController.copyMove({
-				kind: snapshot.operation === 'cut' && sameSession ? 'move' : 'copy',
+				kind: snapshot.operation === 'cut' ? 'move' : 'copy',
 				sources: snapshot.items.map((item) => ({ scopeId: source.id, path: item.path })),
 				destination: { scopeId: target.id, path: targetPath },
 			});
 
 			const task = await target.transferController.waitForTask(taskId);
-			if (task.status === 'error') {
+			if (task.status === 'error' || task.status === 'unknown') {
 				feedback.notifyError(
 					task.error || task.errorKind
 						? transferErrorMessage(task)
@@ -339,27 +444,23 @@
 				);
 				return;
 			}
-			if (task.status === 'completed' || task.status === 'partial') {
-				await target.filesystemState.browser.refresh();
-			}
-			if (snapshot.operation === 'copy' || task.status !== 'completed') return;
-
-			if (sameSession) {
+			if (task.status !== 'completed' && task.status !== 'partial') return;
+			if (snapshot.operation === 'cut' && task.status === 'completed')
 				registry.fileClipboard.clear(snapshot.generation);
-				return;
-			}
-
-			try {
-				await source.adapters.filesystem.remove(snapshot.items.map((item) => item.path));
-				registry.fileClipboard.clear(snapshot.generation);
-				feedback.notifySuccess(t('fileManager.notifications.crossHostMoveSuccess'));
-			} catch (cause) {
-				const message = cause instanceof Error ? cause.message : String(cause);
-				target.transferController.markPartial(taskId, message);
-				feedback.notifyWarning(t('fileManager.warnings.crossHostDeleteFailed', { error: message }));
-			}
+			// Refresh is a read after the confirmed mutation; its failure must not suggest replaying the move.
+			const refreshes = [target.filesystemState.browser.refresh()];
+			if (!sameSession && snapshot.operation === 'cut') refreshes.push(source.filesystemState.browser.refresh());
+			const refreshed = await Promise.allSettled(refreshes);
+			if (refreshed.some((result) => result.status === 'rejected'))
+				feedback.notifyWarning(t('fileManager.warnings.transferRefreshFailed'));
 		} catch (cause) {
-			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+			feedback.notifyError(
+				t(
+					cause instanceof TransferFailure && cause.outcomeUnknown
+						? 'progressCenter.error.transferUnknown'
+						: 'progressCenter.error.transferFailed',
+				),
+			);
 		}
 	};
 
@@ -370,7 +471,7 @@
 
 	const terminalVisual = computed(() => ({
 		backgroundEnabled: appearanceSettings.value.terminalBackgroundEnabled,
-		backgroundImageUrl: appearanceSettings.value.terminalBackgroundImage,
+		backgroundImageUrl: appearanceSettings.value.terminalBackgroundImage ?? undefined,
 		backgroundOverlayOpacity: appearanceSettings.value.terminalBackgroundOverlayOpacity,
 		customHtml: appearanceSettings.value.terminalCustomHtml,
 		textStroke: {
@@ -405,7 +506,9 @@
 		else surfaces.delete(id);
 	};
 
-	const openConnection = async (connection: ConnectionDto): Promise<void> => {
+	const openConnection = async (connection: ConnectionSummary): Promise<void> => {
+		const signal = pageScope.signal;
+		if (!isPageCurrent(signal)) return;
 		if (connection.type === 'RDP' || connection.type === 'VNC') {
 			remoteDesktopLauncher.open({
 				id: connection.id,
@@ -415,36 +518,37 @@
 			return;
 		}
 		connectionPickerVisible.value = false;
-		opening.value = true;
 		try {
 			await registry.open(connection);
 		} catch (cause) {
-			if (cause instanceof DOMException && cause.name === 'AbortError') return;
+			if (!isPageCurrent(signal) || (cause instanceof DOMException && cause.name === 'AbortError')) return;
 			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
-		} finally {
-			opening.value = false;
 		}
 	};
 
-	const openConnections = async (connections: ConnectionDto[]) => {
-		for (const connection of connections) await openConnection(connection);
-	};
-
-	const openConnectionFromPicker = async (connection: ConnectionDto): Promise<void> => {
-		await openConnection(connection);
-	};
-
-	const openConnectionsFromPicker = async (connections: ConnectionDto[]): Promise<void> => {
-		await openConnections(connections);
+	const openConnections = async (connections: ConnectionSummary[]) => {
+		const signal = pageScope.signal;
+		for (const connection of connections) {
+			if (!isPageCurrent(signal)) return;
+			await openConnection(connection);
+		}
 	};
 
 	const sendCommand = async (source: WorkspaceRuntimeSession, command: string, allSessions: boolean) => {
+		const signal = pageScope.signal;
+
+		const isCurrent = () => isPageCurrent(signal) && registry.sessions.get(source.id) === source;
+
+		if (!isCurrent()) return;
 		const value = command.replace(/[\r\n]+$/, '');
 		const targets = allSessions ? registry.orderedSessions.value : [source];
 		if (value === '') {
 			for (const session of targets) {
+				if (!isCurrent()) return;
+				if (registry.sessions.get(session.id) !== session) continue;
 				if (session.state.value === 'connected') await session.adapters.terminal.sendInput('\r');
 				else session.reconnectNow();
+				if (!isCurrent() || registry.sessions.get(session.id) !== session) return;
 				surfaces.get(session.id)?.scrollTerminalToBottom?.();
 			}
 			return;
@@ -454,6 +558,7 @@
 		const results = await Promise.allSettled(
 			activeTargets.map((session) => session.adapters.terminal.sendInput(payload)),
 		);
+		if (!isCurrent()) return;
 		if (allSessions) {
 			if (activeTargets.length > 0) {
 				feedback.notifySuccess(
@@ -466,8 +571,9 @@
 		const sentToSource = !allSessions && activeTargets[0]?.id === source.id && results[0]?.status === 'fulfilled';
 		if (value !== '\x03' && sentToSource) {
 			try {
-				await history.add(value);
+				await history.add(value, signal);
 			} catch (cause) {
+				if (!isCurrent()) return;
 				feedback.notifyError(
 					t('commandHistory.addFailed', { error: cause instanceof Error ? cause.message : String(cause) }),
 				);
@@ -479,11 +585,18 @@
 	let activationGeneration = 0;
 
 	const activateSession = (id: string) => {
+		const signal = pageScope.signal;
+		const session = registry.sessions.get(id);
+		if (!isPageCurrent(signal) || !session) return;
+
+		const isCurrent = () => isPageCurrent(signal) && registry.sessions.get(id) === session;
+
 		connectionPickerVisible.value = false;
 		const generation = ++activationGeneration;
 		if (id === registry.activeId.value) {
 			preparingSessionId.value = null;
 			void nextTick(() => {
+				if (!isCurrent() || generation !== activationGeneration) return;
 				surfaces.get(id)?.fitTerminal?.();
 				surfaces.get(id)?.focusTerminal?.();
 			});
@@ -496,13 +609,14 @@
 		// real geometry, then make it active on the next animation frame.
 		preparingSessionId.value = id;
 		void nextTick(() => {
-			if (generation !== activationGeneration || preparingSessionId.value !== id) return;
+			if (!isCurrent() || generation !== activationGeneration || preparingSessionId.value !== id) return;
 			surfaces.get(id)?.prepareTerminal?.();
 			window.requestAnimationFrame(() => {
-				if (generation !== activationGeneration || preparingSessionId.value !== id) return;
+				if (!isCurrent() || generation !== activationGeneration || preparingSessionId.value !== id) return;
 				registry.activate(id);
 				preparingSessionId.value = null;
 				void nextTick(() => {
+					if (!isCurrent() || generation !== activationGeneration) return;
 					surfaces.get(id)?.fitTerminal?.();
 					surfaces.get(id)?.focusTerminal?.();
 				});
@@ -519,29 +633,35 @@
 		]);
 
 	const closeSession = async (id: string) => {
-		await flushWorkspacePresentation();
+		const flushed = flushWorkspacePresentation();
 		const next = { ...progressVisibility.value };
 		delete next[id];
 		progressVisibility.value = next;
 		registry.remove(id);
+		await flushed;
 	};
 
 	const closeOtherSessions = async (id: string) => {
-		await flushWorkspacePresentation();
+		const flushed = flushWorkspacePresentation();
 		registry.closeOthers(id);
+		await flushed;
 	};
 
 	const closeSessionsToRight = async (id: string) => {
-		await flushWorkspacePresentation();
+		const flushed = flushWorkspacePresentation();
 		registry.closeToRight(id);
+		await flushed;
 	};
 
 	const closeSessionsToLeft = async (id: string) => {
-		await flushWorkspacePresentation();
+		const flushed = flushWorkspacePresentation();
 		registry.closeToLeft(id);
+		await flushed;
 	};
 
 	const toggleSuspendMark = async (id: string) => {
+		const signal = pageScope.signal;
+		if (!isPageCurrent(signal)) return;
 		const session = registry.sessions.get(id);
 		if (!session) {
 			logger.debug(
@@ -550,22 +670,30 @@
 			);
 			return;
 		}
+
+		const isCurrent = () => isPageCurrent(signal) && registry.sessions.get(id) === session;
+
 		const unmarking = session.markedForSuspend.value;
 		try {
 			if (unmarking) {
 				await session.unmarkSuspend();
+				if (!isCurrent()) return;
 				await refreshSuspendedSessionsCatalog();
+				if (!isCurrent()) return;
 				feedback.notifySuccess(t('sshSuspend.notifications.unmarkedSuccess', { id }));
 				return;
 			}
-			const snapshot = surfaces.get(id)?.terminalSnapshot
-				? () => surfaces.get(id)!.terminalSnapshot!()
-				: async () => session.terminalState.snapshot.value;
+			const surface = surfaces.get(id);
+			const snapshot =
+				surface?.terminalSnapshot?.bind(surface) ?? (async () => session.terminalState.snapshot.value);
 			const suspendedSessionId = await session.markForSuspend(snapshot);
+			if (!isCurrent()) return;
 			await refreshSuspendedSessionsCatalog();
+			if (!isCurrent()) return;
 			logger.debug({ workspaceId: id, suspendedSessionId }, 'Workspace marked for suspend while attached');
 			feedback.notifySuccess(t('sshSuspend.notifications.markedForSuspendSuccess', { id }));
 		} catch (cause) {
+			if (!isCurrent()) return;
 			const message = cause instanceof Error ? cause.message : String(cause);
 			feedback.notifyError(
 				unmarking
@@ -576,28 +704,35 @@
 	};
 
 	const resumeSuspended = async (
-		suspended: SuspendedSessionDto,
+		suspended: SuspendedSession,
 		options: { silent?: boolean } = {},
 	): Promise<boolean> => {
+		const signal = pageScope.signal;
+		const replacement = registry.sessions.get(suspended.originalWorkspaceId);
+
+		const isCurrent = () =>
+			isPageCurrent(signal) && registry.sessions.get(suspended.originalWorkspaceId) === replacement;
+
+		if (!isCurrent()) return false;
 		try {
 			const takeover = suspended.ownershipState !== 'available';
 			if (takeover) {
 				if (options.silent) return false;
 				const name = suspended.customName ?? suspended.connectionName;
-				if (!(await feedback.confirm({ message: t('sshSuspend.prompts.confirmTakeover', { name }) })))
+				if (!(await feedback.confirm({ message: t('sshSuspend.prompts.confirmTakeover', { name }), signal })))
 					return false;
 			}
-			const replacement = registry.sessions.get(suspended.originalWorkspaceId);
-			const shouldReplace = Boolean(
-				replacement?.markedForSuspend.value &&
-				(replacement.state.value === 'disconnected' || replacement.state.value === 'error'),
-			);
-			const connection = shouldReplace
-				? replacement!.connection
-				: await connectionService.get(suspended.connectionId);
+			if (!isCurrent()) return false;
+			const shouldReplace =
+				replacement &&
+				replacement.markedForSuspend.value &&
+				(replacement.state.value === 'disconnected' || replacement.state.value === 'error');
+			const connection = shouldReplace ? replacement.connection : await refreshConnection(suspended.connectionId);
+			if (!isCurrent()) return false;
 			if (connection.type !== 'SSH') throw new Error(t('workspace.errors.suspendedConnectionNotSsh'));
-			if (shouldReplace) await registry.resumeReplacing(suspended, connection, replacement!.id, { takeover });
+			if (shouldReplace) await registry.resumeReplacing(suspended, connection, replacement.id, { takeover });
 			else await registry.resume(suspended, connection, { takeover });
+			if (!isPageCurrent(signal)) return false;
 			if (!options.silent) {
 				connectionPickerVisible.value = false;
 				suspendedVisible.value = false;
@@ -609,6 +744,7 @@
 			}
 			return true;
 		} catch (cause) {
+			if (!isPageCurrent(signal)) return false;
 			logger.debug(
 				{
 					err: cause,
@@ -626,6 +762,8 @@
 	};
 
 	const resumeMarkedSession = async (workspaceId: string) => {
+		const signal = pageScope.signal;
+		if (!isPageCurrent(signal)) return;
 		const session = registry.sessions.get(workspaceId);
 		if (!session) {
 			logger.debug(
@@ -648,6 +786,7 @@
 			return;
 		}
 		const refreshed = await refreshSuspendedSessionsCatalog();
+		if (!isPageCurrent(signal) || registry.sessions.get(workspaceId) !== session) return;
 		if (!refreshed.ok) {
 			logger.debug(
 				{ workspaceId, status: refreshed.status, failureKind: 'suspended_catalog_refresh_failed' },
@@ -672,7 +811,8 @@
 	};
 
 	const reconcileDisconnectedWorkspaceSessions = (options: { kickOrdinary?: boolean } = {}): Promise<void> => {
-		if (!workspaceActive || document.visibilityState !== 'visible') return Promise.resolve();
+		const signal = pageScope.signal;
+		if (!isPageCurrent(signal) || document.visibilityState !== 'visible') return Promise.resolve();
 
 		if (options.kickOrdinary) {
 			for (const session of registry.orderedSessions.value) {
@@ -692,8 +832,8 @@
 			return sessionReconcilePromise;
 		}
 		sessionReconcileRequested = false;
-		sessionReconcilePromise = (async () => {
-			const candidates = new Set(
+		const task = (async () => {
+			const candidates = new Map(
 				registry.orderedSessions.value
 					.filter(
 						(session) =>
@@ -701,15 +841,16 @@
 							session.state.value !== 'connected' &&
 							session.state.value !== 'connecting',
 					)
-					.map((session) => session.id),
+					.map((session) => [session.id, session]),
 			);
 			if (!candidates.size) return;
 
 			for (let attempt = 0; attempt < SESSION_RECONCILE_ATTEMPTS && candidates.size; attempt += 1) {
-				if (!workspaceActive || document.visibilityState !== 'visible') return;
-				for (const workspaceId of [...candidates]) {
+				if (!isPageCurrent(signal) || document.visibilityState !== 'visible') return;
+				for (const workspaceId of [...candidates.keys()]) {
 					const session = registry.sessions.get(workspaceId);
 					if (
+						session !== candidates.get(workspaceId) ||
 						!session?.markedForSuspend.value ||
 						session.state.value === 'connected' ||
 						session.state.value === 'connecting'
@@ -720,9 +861,14 @@
 				if (!candidates.size) break;
 
 				const refreshed = await refreshSuspendedSessionsCatalog();
-				if (!workspaceActive || document.visibilityState !== 'visible') return;
+				if (!isPageCurrent(signal) || document.visibilityState !== 'visible') return;
 				if (refreshed.ok) {
-					for (const workspaceId of [...candidates]) {
+					for (const workspaceId of [...candidates.keys()]) {
+						if (!isPageCurrent(signal)) return;
+						if (registry.sessions.get(workspaceId) !== candidates.get(workspaceId)) {
+							candidates.delete(workspaceId);
+							continue;
+						}
 						const suspended = findSuspendedSessionByOriginalWorkspace(workspaceId);
 						if (!suspended) continue;
 						if (suspended.ownershipState !== 'available') {
@@ -745,11 +891,12 @@
 				}
 
 				if (candidates.size && attempt + 1 < SESSION_RECONCILE_ATTEMPTS) {
-					await new Promise((resolve) => window.setTimeout(resolve, SESSION_RECONCILE_DELAY_MS));
+					await waitForReconciliation(signal);
 				}
 			}
 
-			for (const workspaceId of candidates) {
+			if (!isPageCurrent(signal)) return;
+			for (const workspaceId of candidates.keys()) {
 				const session = registry.sessions.get(workspaceId);
 				if (!session?.markedForSuspend.value) continue;
 				logger.debug(
@@ -763,13 +910,15 @@
 				);
 			}
 		})().finally(() => {
+			if (sessionReconcilePromise !== task) return;
 			sessionReconcilePromise = null;
-			if (sessionReconcileRequested && workspaceActive) {
+			if (sessionReconcileRequested && isPageCurrent(signal)) {
 				sessionReconcileRequested = false;
 				void reconcileDisconnectedWorkspaceSessions();
 			}
 		});
-		return sessionReconcilePromise;
+		sessionReconcilePromise = task;
+		return task;
 	};
 
 	watch(
@@ -797,9 +946,11 @@
 
 	const recoverForegroundSessions = async () => {
 		if (!workspaceActive || document.visibilityState !== 'visible') return;
+		const signal = pageScope.signal;
 		await Promise.all(registry.orderedSessions.value.map((session) => session.recoverForeground()));
-		if (!workspaceActive || document.visibilityState !== 'visible') return;
+		if (!isPageCurrent(signal) || document.visibilityState !== 'visible') return;
 		await refreshSuspendedSessionsCatalog();
+		if (!isPageCurrent(signal)) return;
 		await reconcileDisconnectedWorkspaceSessions({ kickOrdinary: true });
 	};
 
@@ -809,27 +960,50 @@
 
 	const saveSidebarWidth = (pane: string, width: string) => {
 		void preferences
-			.update({ sidebarPaneWidths: { ...preferences.values.value.sidebarPaneWidths, [pane]: width } })
+			.update(
+				{ sidebarPaneWidths: { ...preferences.values.value.sidebarPaneWidths, [pane]: width } },
+				preferences.version.value,
+				pageScope.signal,
+			)
 			.catch(reportPreferenceSaveError);
 	};
 
 	const updateQuickCommandCompactMode = (compact: boolean) => {
-		void preferences.update({ quickCommandsCompactMode: compact }).catch(reportPreferenceSaveError);
+		void preferences
+			.update({ quickCommandsCompactMode: compact }, preferences.version.value, pageScope.signal)
+			.catch(reportPreferenceSaveError);
 	};
 
 	const updateLayoutLocked = async (locked: boolean) => {
 		try {
-			await preferences.update({ layoutLocked: locked });
+			await preferences.update({ layoutLocked: locked }, preferences.version.value, pageScope.signal);
 		} catch {
 			feedback.notifyError(t('layoutConfigurator.lockUpdateError'));
 		}
 	};
 
 	const toggleHeader = async () => {
-		await preferences.update({ navBarVisible: !preferences.values.value.navBarVisible });
+		await preferences.update(
+			{ navBarVisible: !preferences.values.value.navBarVisible },
+			preferences.version.value,
+			pageScope.signal,
+		);
+	};
+
+	const refreshWorkspaceSettings = async (): Promise<void> => {
+		const signal = pageScope.signal;
+		try {
+			await workspaceLayout.load(true);
+			if (!isPageCurrent(signal)) return;
+			await workspaceFocus.load(true);
+		} catch (cause) {
+			if (isPageCurrent(signal)) feedback.notifyError(preferenceFailureMessage(cause, t));
+		}
 	};
 
 	const loadQueryActions = async () => {
+		const signal = pageScope.signal;
+		if (!isPageCurrent(signal)) return;
 		const raw = route.query.connectionId;
 		const values = (Array.isArray(raw) ? raw : raw ? [raw] : [])
 			.map((value) => Number(value))
@@ -841,14 +1015,20 @@
 		if (!values.length && !shouldOpenSuspended) return;
 
 		// Consume one-shot query actions before starting any potentially slow connection work.
-		// ConnectionDto success must never perform a later navigation: if the user returns to the
+		// ConnectionSummary success must never perform a later navigation: if the user returns to the
 		// dashboard while SSH is still connecting, the background completion should stay there.
-		if (router.currentRoute.value.name === 'Workspace') {
+		try {
 			await router.replace({ name: 'Workspace', query: {} });
+			for (const id of [...new Set(values)]) {
+				if (!isPageCurrent(signal)) return;
+				const connection = await refreshConnection(id);
+				if (!isPageCurrent(signal)) return;
+				await openConnection(connection);
+			}
+			if (isPageCurrent(signal) && shouldOpenSuspended) suspendedVisible.value = true;
+		} catch (cause) {
+			if (isPageCurrent(signal)) feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
 		}
-
-		for (const id of [...new Set(values)]) await openConnection(await connectionService.get(id));
-		if (shouldOpenSuspended) suspendedVisible.value = true;
 	};
 
 	const handleGlobalKeydown = (event: KeyboardEvent) => {
@@ -872,7 +1052,7 @@
 		const pressed = normalizeShortcut(shortcutFromKeyboardEvent(event));
 		if (!pressed) return;
 		const target = Object.entries(workspaceFocus.config.value.shortcuts).find(
-			([, config]) => config.shortcut && normalizeShortcut(config.shortcut) === pressed,
+			([, config]) => config && normalizeShortcut(config) === pressed,
 		)?.[0];
 		if (target) {
 			event.preventDefault();
@@ -888,8 +1068,14 @@
 		altCycleCandidate = false;
 	};
 
+	const unregisterSessionReset = registerAuthenticatedSessionReset(`workspace-page-${crypto.randomUUID()}`, () => {
+		workspaceActive = false;
+		revokePageActions();
+	});
+
 	onMounted(async () => {
-		workspaceActive = true;
+		activatePageActions();
+		const signal = pageScope.signal;
 		if (route.query.connectionId) preloadWorkspaceTerminalSurface();
 		window.addEventListener('keydown', handleGlobalKeydown, true);
 		window.addEventListener('keyup', handleGlobalKeyup, true);
@@ -901,27 +1087,46 @@
 		// the provisional session connects. Appearance changes are reactive, including its background.
 		const layoutLoad = workspaceLayout.load();
 		void Promise.allSettled([workspaceFocus.load(), appearance.load(), history.load()]);
-		void preferences
-			.load()
-			.catch((cause) => feedback.notifyError(cause instanceof Error ? cause.message : String(cause)));
-		await layoutLoad.catch(() => undefined);
-		if (!workspaceActive) return;
+		void preferences.load().catch((cause) => {
+			if (isPageCurrent(signal)) feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+		});
+		await layoutLoad.catch((cause) => {
+			if (isPageCurrent(signal)) feedback.notifyError(preferenceFailureMessage(cause, t));
+		});
+		if (!isPageCurrent(signal)) return;
 		await loadQueryActions();
-		if (document.visibilityState === 'visible') {
+		if (isPageCurrent(signal) && document.visibilityState === 'visible') {
 			void recoverForegroundSessions();
 		}
 	});
-	onActivated(() => {
-		workspaceActive = true;
+	let initialActivation = true;
+	onActivated(async () => {
+		activatePageActions();
 		workspaceVisible.value = true;
-		if (!workspaceLayout.loaded.value) return;
+		if (initialActivation) {
+			initialActivation = false;
+			return;
+		}
+		const permission = pageScope.signal;
+		if (!workspaceLayout.loaded.value) {
+			const signal = pageScope.signal;
+			await Promise.all([workspaceLayout.load(), workspaceFocus.load()]).catch((cause) => {
+				if (isPageCurrent(signal)) feedback.notifyError(preferenceFailureMessage(cause, t));
+			});
+		}
+		if (!isPageCurrent(permission)) return;
 		stopServerTransferPolling ??= serverTransfers.startPolling();
-		void nextTick(() => surfaces.get(registry.activeId.value ?? '')?.fitTerminal?.());
+		const signal = pageScope.signal;
+		const id = registry.activeId.value;
+		void nextTick(() => {
+			if (isPageCurrent(signal) && id === registry.activeId.value) surfaces.get(id ?? '')?.fitTerminal?.();
+		});
 		void loadQueryActions();
 		void recoverForegroundSessions();
 	});
 	onDeactivated(() => {
 		workspaceActive = false;
+		revokePageActions();
 		workspaceVisible.value = false;
 		altCycleCandidate = false;
 		stopServerTransferPolling?.();
@@ -934,6 +1139,8 @@
 	});
 	onBeforeUnmount(() => {
 		workspaceActive = false;
+		revokePageActions();
+		unregisterSessionReset();
 		void workspaceLayout.dispose();
 		window.removeEventListener('keydown', handleGlobalKeydown, true);
 		window.removeEventListener('keyup', handleGlobalKeyup, true);
@@ -955,6 +1162,12 @@
 		class="flex min-h-0 flex-col overflow-hidden bg-background"
 		:class="preferences.values.value.navBarVisible ? 'h-[calc(100dvh-var(--app-header-height))]' : 'h-dvh'"
 	>
+		<div v-if="workspaceLayout.error.value" role="alert" class="flex items-center gap-3 p-3 text-error">
+			<span>{{ preferenceFailureMessage(workspaceLayout.error.value, t) }}</span>
+			<UiButton :disabled="workspaceLayout.loading.value" @click="refreshWorkspaceSettings">{{
+				t('common.refresh')
+			}}</UiButton>
+		</div>
 		<WorkspaceTabBar
 			:sessions="registry.orderedSessions.value"
 			:active-id="registry.activeId.value"
@@ -997,8 +1210,8 @@
 			:mobile="device.isMobile.value"
 			:marked-sessions="markedSuspendedSessions"
 			:can-return="Boolean(registry.orderedSessions.value.length)"
-			@open="openConnectionFromPicker"
-			@open-many="openConnectionsFromPicker"
+			@open="openConnection"
+			@open-many="openConnections"
 			@resume="resumeSuspended"
 			@resume-marked="resumeMarkedSession"
 			@unmark="toggleSuspendMark"
@@ -1041,7 +1254,6 @@
 				:editor-font-size="appearanceSettings.editorFontSize"
 				:mobile-editor-font-size="appearanceSettings.mobileEditorFontSize"
 				:command-input-sync-target="preferences.values.value.commandInputSyncTarget"
-				:status-interval-seconds="preferences.values.value.statusMonitorIntervalSeconds"
 				:docker-interval-seconds="preferences.values.value.dockerStatusIntervalSeconds"
 				:docker-default-expand="preferences.values.value.dockerDefaultExpand"
 				:status-scale="preferences.values.value.statusMonitorScale"
@@ -1077,13 +1289,13 @@
 				@file-clipboard-set="(operation, entries) => setFileClipboard(session, operation, entries)"
 				@file-clipboard-paste="(destination) => pasteFileClipboard(session, destination)"
 				@server-transfer-started="progressDisplayVisible = true"
-				@status-scale="statusScaleSaver.schedule"
+				@status-scale="scheduleStatusScale"
 				@terminal-font-size="updateTerminalFontSize"
 				@editor-font-size="updateEditorFontSize"
 				@mobile-editor-font-size="updateMobileEditorFontSize"
 				@file-manager-row-scale="updateFileManagerRowScale"
 				@file-manager-column-widths="saveFileManagerColumnWidths"
-				@quick-command-row-scale="quickCommandRowScaleSaver.schedule"
+				@quick-command-row-scale="scheduleQuickCommandScale"
 				@quick-command-compact-mode="updateQuickCommandCompactMode"
 				@progress-visible="setProgressVisible(session.id, $event)"
 				@interaction="session.reconnectNow()"

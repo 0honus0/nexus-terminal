@@ -1,9 +1,9 @@
 {
   "targetsNext": {
     "title": "New Backend Targets — Development",
-    "isolation": "This view uses only backend-next. Legacy Connections/Workspace are not connected to these records.",
+    "isolation": "This development view uses the current Backend and shares persistent records with the regular Connections page.",
     "setup": "Initial administrator setup",
-    "login": "Sign in to backend-next",
+    "login": "Sign in to Backend",
     "username": "Username",
     "password": "Password",
     "continue": "Continue",

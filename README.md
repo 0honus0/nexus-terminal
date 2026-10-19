@@ -18,6 +18,8 @@ mkdir -p nexus-terminal && cd nexus-terminal
 
 wget https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/main/{docker-compose.yml,.env.example}
 cp .env.example .env
+# Set NEXUS_ENCRYPTION_KEY to a persistent 32-byte base64 key before startup.
+# See doc/DEPLOYMENT.md for the key-generation command.
 
 docker compose up -d
 ```

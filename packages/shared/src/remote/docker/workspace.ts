@@ -47,3 +47,15 @@ export interface WorkspaceDockerCommandRequest {
 export interface WorkspaceDockerStatsRequest {
 	containerId: string;
 }
+
+export interface WorkspaceDockerRequests {
+	'docker.status': Record<string, never>;
+	'docker.stats': WorkspaceDockerStatsRequest;
+	'docker.command': WorkspaceDockerCommandRequest;
+}
+
+export interface WorkspaceDockerResponses {
+	'docker.status': WorkspaceDockerStatus;
+	'docker.stats': WorkspaceDockerStats | null;
+	'docker.command': null;
+}

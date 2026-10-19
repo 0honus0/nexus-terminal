@@ -28,6 +28,7 @@ export interface FileEditorSessionController {
 	closeToLeft(id: string): Promise<boolean>;
 	closeAll(): Promise<boolean>;
 	closeScope(scopeId: string): void;
+	reset(): void;
 	invalidatePaths(scopeId: string, paths: readonly string[]): boolean;
 	activateRelative(delta: number): void;
 }
@@ -38,9 +39,11 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 	const loading = ref(false);
 	const ports = new Map<string, FileDocumentPort>();
 	const savingDocuments = new Set<string>();
+	const reads = new Map<string, symbol>();
 	let loadingOperations = 0;
 	let openGeneration = 0;
 	let closeEpoch = 0;
+	let openEpoch = 0;
 	const scopeGenerations = new Map<string | undefined, number>();
 
 	let confirmClose = async (): Promise<boolean> => false;
@@ -53,7 +56,8 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 		loading.value = true;
 	};
 
-	const endLoading = (): void => {
+	const endLoading = (epoch: number): void => {
+		if (epoch !== closeEpoch) return;
 		loadingOperations = Math.max(0, loadingOperations - 1);
 		loading.value = loadingOperations > 0;
 	};
@@ -63,6 +67,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 		const scopeId = context?.scopeId;
 		const scopeGeneration = scopeGenerations.get(scopeId) ?? 0;
 		const epoch = closeEpoch;
+		const openingEpoch = openEpoch;
 		const existing = tabs.value.find((item) => item.path === path && item.scopeId === scopeId);
 		if (existing) {
 			activeId.value = existing.id;
@@ -73,7 +78,11 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 		beginLoading();
 		try {
 			const loaded = await port.load(path);
-			if (epoch !== closeEpoch || scopeGeneration !== (scopeGenerations.get(scopeId) ?? 0))
+			if (
+				epoch !== closeEpoch ||
+				openingEpoch !== openEpoch ||
+				scopeGeneration !== (scopeGenerations.get(scopeId) ?? 0)
+			)
 				throw new DOMException('Document scope was closed or changed.', 'AbortError');
 			const loadedExisting = tabs.value.find((item) => item.path === path && item.scopeId === scopeId);
 			if (loadedExisting) {
@@ -99,13 +108,14 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 			if (generation === openGeneration || !activeId.value) activeId.value = doc.id;
 			return doc;
 		} finally {
-			endLoading();
+			endLoading(epoch);
 		}
 	}
 
 	function update(content: string): void {
 		if (!active.value) return;
 		const doc = active.value;
+		reads.delete(doc.id);
 		doc.content = content;
 		doc.dirty = content !== doc.originalContent;
 		if (!savingDocuments.has(doc.id)) {
@@ -116,6 +126,8 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 
 	async function save(doc = active.value): Promise<void> {
 		if (!doc) return;
+		if (!tabs.value.some((item) => item.id === doc.id))
+			throw new DOMException('Document was closed.', 'AbortError');
 		if (savingDocuments.has(doc.id)) return;
 		const port = unavailableDocuments.has(doc.id) ? undefined : (ports.get(doc.id) ?? defaultPort);
 		if (!port) {
@@ -124,6 +136,12 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 			doc.error = error.message;
 			throw error;
 		}
+		const epoch = closeEpoch;
+
+		const isCurrent = () =>
+			epoch === closeEpoch && tabs.value.some((item) => item.id === doc.id) && !unavailableDocuments.has(doc.id);
+
+		reads.delete(doc.id);
 		const contentToSave = doc.content;
 		const encodingToSave = doc.encoding;
 		savingDocuments.add(doc.id);
@@ -131,62 +149,62 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 		doc.error = undefined;
 		try {
 			await port.save(doc.path, contentToSave, encodingToSave);
+			if (!isCurrent()) throw new DOMException('Document scope was closed or changed.', 'AbortError');
 			doc.originalContent = contentToSave;
 			doc.dirty = doc.content !== contentToSave;
 			doc.saveState = doc.dirty ? 'idle' : 'saved';
 		} catch (cause) {
-			doc.saveState = 'error';
-			doc.error = cause instanceof Error ? cause.message : String(cause);
+			if (isCurrent()) {
+				doc.saveState = 'error';
+				doc.error = cause instanceof Error ? cause.message : String(cause);
+			}
 			throw cause;
 		} finally {
 			savingDocuments.delete(doc.id);
 		}
 	}
 
-	async function reload(id: string): Promise<void> {
-		const doc = tabs.value.find((item) => item.id === id);
-		if (!doc) return;
+	async function loadDocument(doc: EditorDocument, encoding?: string): Promise<void> {
 		if (savingDocuments.has(doc.id)) return;
 		const port = unavailableDocuments.has(doc.id) ? undefined : (ports.get(doc.id) ?? defaultPort);
 		if (!port) throw new Error('The source session for this file is no longer available.');
-		beginLoading();
-		doc.error = undefined;
-		try {
-			const loaded = await port.load(doc.path);
-			doc.content = loaded.content;
-			doc.originalContent = loaded.content;
-			doc.encoding = canonicalEditorEncoding(loaded.encoding);
-			doc.dirty = false;
-			doc.saveState = 'idle';
-		} catch (cause) {
-			doc.error = cause instanceof Error ? cause.message : String(cause);
-			throw cause;
-		} finally {
-			endLoading();
-		}
-	}
+		const epoch = closeEpoch;
+		const operation = Symbol('document-read');
+		reads.set(doc.id, operation);
 
-	async function changeEncoding(id: string, encoding: string): Promise<void> {
-		const doc = tabs.value.find((item) => item.id === id);
-		if (!doc || !encoding || doc.encoding === encoding) return;
-		if (savingDocuments.has(doc.id)) return;
-		const port = unavailableDocuments.has(doc.id) ? undefined : (ports.get(doc.id) ?? defaultPort);
-		if (!port) throw new Error('The source session for this file is no longer available.');
+		const isCurrent = () =>
+			epoch === closeEpoch &&
+			reads.get(doc.id) === operation &&
+			tabs.value.some((item) => item.id === doc.id) &&
+			!unavailableDocuments.has(doc.id);
+
 		beginLoading();
 		doc.error = undefined;
 		try {
 			const loaded = await port.load(doc.path, encoding);
+			if (!isCurrent()) throw new DOMException('Document changed during loading.', 'AbortError');
 			doc.content = loaded.content;
 			doc.originalContent = loaded.content;
 			doc.encoding = canonicalEditorEncoding(loaded.encoding);
 			doc.dirty = false;
 			doc.saveState = 'idle';
 		} catch (cause) {
-			doc.error = cause instanceof Error ? cause.message : String(cause);
+			if (isCurrent()) doc.error = cause instanceof Error ? cause.message : String(cause);
 			throw cause;
 		} finally {
-			endLoading();
+			if (reads.get(doc.id) === operation) reads.delete(doc.id);
+			endLoading(epoch);
 		}
+	}
+
+	async function reload(id: string): Promise<void> {
+		const doc = tabs.value.find((item) => item.id === id);
+		if (doc) await loadDocument(doc);
+	}
+
+	async function changeEncoding(id: string, encoding: string): Promise<void> {
+		const doc = tabs.value.find((item) => item.id === id);
+		if (doc && encoding && doc.encoding !== encoding) await loadDocument(doc, encoding);
 	}
 
 	function changeLineEnding(id: string, lineEnding: EditorLineEnding): void {
@@ -197,6 +215,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 		const normalized = doc.content.replace(/\r\n|\r|\n/g, '\n');
 		const next = normalized.replace(/\n/g, delimiter);
 		if (next === doc.content) return;
+		reads.delete(doc.id);
 		doc.content = next;
 		doc.dirty = next !== doc.originalContent;
 		doc.saveState = 'idle';
@@ -214,6 +233,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 		const index = tabs.value.findIndex((item) => item.id === id);
 		if (index < 0) return;
 		tabs.value.splice(index, 1);
+		reads.delete(id);
 		ports.delete(id);
 		unavailableDocuments.delete(id);
 		if (activeId.value === id) activeId.value = tabs.value[Math.min(index, tabs.value.length - 1)]?.id ?? null;
@@ -255,8 +275,23 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 	}
 
 	function closeAll(): Promise<boolean> {
-		closeEpoch += 1;
+		openEpoch += 1;
 		return closeDocuments([...tabs.value]);
+	}
+
+	function reset(): void {
+		closeEpoch += 1;
+		openGeneration += 1;
+		tabs.value = [];
+		activeId.value = null;
+		ports.clear();
+		reads.clear();
+		scopeGenerations.clear();
+		unavailableDocuments.clear();
+		savingDocuments.clear();
+		loadingOperations = 0;
+		loading.value = false;
+		confirmClose = async () => false;
 	}
 
 	function closeScope(scopeId: string): void {
@@ -266,6 +301,10 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 				if (tab.dirty || savingDocuments.has(tab.id)) {
 					ports.delete(tab.id);
 					unavailableDocuments.add(tab.id);
+					if (savingDocuments.has(tab.id)) {
+						tab.saveState = 'error';
+						tab.error = 'The source session for this file is no longer available.';
+					}
 				} else removeDocument(tab.id);
 			}
 	}
@@ -315,6 +354,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 		closeToLeft,
 		closeAll,
 		closeScope,
+		reset,
 		invalidatePaths,
 		activateRelative,
 	};
