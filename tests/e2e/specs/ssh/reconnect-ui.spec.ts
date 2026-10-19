@@ -432,6 +432,10 @@ for (const background of [false, true]) {
 }
 
 test('disconnected SSH retries periodically and any key reconnects immediately', async ({ page, context }) => {
+	// Two real reconnect cycles include the remote SSH connect timeout between
+	// the 2s and 4s backoff periods. Leave enough end-to-end time for both
+	// attempts under CI contention without changing the reconnect policy.
+	test.setTimeout(120_000);
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
 	const settingsResponse = await context.request.get('/api/v1/settings/preferences');
@@ -588,7 +592,7 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
 			// SSH-level connect failure, so business reconnect attempts are counted by their
 			// workspace.connect requests rather than by forcing a new WebSocket per attempt.
 			await expect
-				.poll(() => workspaceConnectRequests, { timeout: 12_000 })
+				.poll(() => workspaceConnectRequests, { timeout: 25_000 })
 				.toBeGreaterThanOrEqual(initialConnectRequestCount + 2);
 			await expect
 				.poll(() => frontendDebugLogs.some((entry) => entry.msg === 'Workspace reconnect scheduled'))
