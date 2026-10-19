@@ -1349,6 +1349,16 @@ class WorkspaceFilesSession {
 
 	private async closeWorkspace(payload: unknown): Promise<null> {
 		const input = readWorkspaceCloseRequest(payload);
+		if (this.workspaceId === null && this.attachmentId === null) {
+			await this.workspaces.closeDetachedAuthorized(
+				this.token,
+				input.workspaceId,
+				input.connectionId,
+				input.resumeToken,
+				input.attachmentGeneration,
+			);
+			return null;
+		}
 		if (
 			input.workspaceId !== this.workspaceId ||
 			input.connectionId !== this.connectionId ||
