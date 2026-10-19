@@ -834,7 +834,9 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
 				const remoteListResponse = await listRemote;
 				expect(
 					remoteListResponse.ok(),
-					`Remote preset list HTTP ${remoteListResponse.status()}: ${await remoteListResponse.text()}`,
+					// A browser-owned response body may be retired after UI navigation.
+					// The persisted list is independently validated through the remote row.
+					`Remote preset list HTTP ${remoteListResponse.status()}`,
 				).toBeTruthy();
 				await customizer.getByPlaceholder('Search remote themes...', { exact: true }).fill('丝带');
 				const remoteRow = customizer
