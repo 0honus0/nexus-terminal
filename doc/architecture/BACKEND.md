@@ -273,6 +273,10 @@ Files 的 `FileResource` 只提供应用身份、可用状态、metadata/字节�
 
 本轮 HTTP 流式下载的身份、Workspace owner、原附件期限及下载票据绑定维持不变；HEAD 只读元数据复用 owner 的 FileResource，GET 的实际 byte body 由 FileService 准入一个 fingerprint 一致的独立 SFTP 技术资源，避免浏览器取消导致主 Workspace lease 同时退场。该临时技术资源关闭结果仍记录在原 owner cleanup ledger，失败或未知不可推断为已清理。Platform SFTP Adapter 针对 RTT 较大的 4MiB+ 下载使用有限 8×32KiB 并行 READ、按 offset 严格有序输出、关闭前结算全部已派发读取；取消时必须确认整条 lease 关闭。写入端用户明确 Cancel 在 stage 未提交且通道仍可用时等待已有 WRITE 结算，确认私有暂存删除后再返回，不提前 abort SFTP 去制造伪 unknown；完成阶段或断流时仍保留未知状态。以上只是源码候选，远程 admission/backpressure/字节 hash/Handle 计数/复原必须独立验收。
 
+第八轮进一步确认 `/ws/uploads` **丢失客户端 binary transport 不等于专属 SFTP 失效**：过去 onClose 立即 abort 复合 signal，先前已 ACK 的写入也无法经过 `stage.discard()` 的确认流程，进而在 reset 留下 RemoteResourceCleanupFailure。新的未提交 owner 候选只对尚未 terminal、SFTP stage 仍在且 signal 有效的任务停止接受新帧、令上传 worker drain 已派发队列后做正常关闭及删除；仍向调用方投影不确定操作结果，不能擅自标为 `cancelled` 或 `completed`。已进入 commit、SFTP 真正失效、无法确认的并行写入及 discard 不确定时仍保留未知和原 Root ledger，不尝试重复提交。
+
+八组最新 Actions `39239518815` 证明同类异常仍发生于明确的 `upload.abort`：旧 Service 的 `finishUpload(mode='abort')` 即使拥有未提交、可收敛的 SFTP stage，也在 reject 已接收字节之后立即 abort 其 SFTP 信号，导致 `stage.discard()` 没有可用连接确认。这条独立调用路径现与 binary WS onClose 一样，保留健康的技术 lease 到 ACK 队列和 stage 的删除/关闭结算；不同之处是 transport abort 始终以 unknown 投影，绝不报告用户已成功取消。已经进入 commit 或 stage/lease 不可用的分支仍不伪造回滚成功，清理失败继续由 Root ledger 汇总。
+
 Workspace WebSocket 在绑定附件后的 owner 身份轮询属于 Remote WS 协议边界：密码轮换的 Access/SQLite 事务会撤销旧 token；即使 socket 上不再发生 RPC，`WorkspaceFilesSession` 每 3 秒重新调用 Workspaces.allowed 验证会话及附件身份，失效主动 close(1008)。既不引入旧兼容 WS，也不延长原安全撤销测试的 10 秒要求；负载与撤销时延须由远程 Actions 独立复核。第七轮第 4/6 shard 已出现真实 stage `abort/append` 与 `discard` 无法确认后 Root shutdown 失败，必须保留 cleanup ledger 未知，不允许把这类 500 当作普通 404 或吞错。
 
 ssh2 的 SFTP status、异步 read stream error 与 command channel 派发结果在 Platform Adapter 转为具名技术失败；Model 只消费 `remoteStatus` / `not_started|failed|unknown` 等技术契约，不读取供应商 `cause.code` 或错误正文。原始 cause 仅作诊断。PTY 同样通过应用资源操作。公开出口不传 cause 或凭据。Agent 的安全错误类在 public-errors，内部 agent-errors 只映射失败，不重复定义公开码；HTTP 使用 Shared 严格解码并逐字段投影。
