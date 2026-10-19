@@ -1243,3 +1243,5 @@ Node22.16.0 / pnpm11.26.0。Shared check/build、Backend-next check/build、Fron
 - 已执行：`pnpm install --frozen-lockfile --ignore-scripts`、根 `pnpm run check`、`pnpm run build`、现有五份 E2E 用例/Playwright config/`support/backend-server.mjs` 的显式严格类型检查、`pnpm run format:all:check`、`git diff --check`，结果 exit 0。日志 `/tmp/nexus-backend-rename-{install,check,build,e2e-types,format-check}.log`。
 - 交付检查：`pnpm --filter @nexus-terminal/backend --prod deploy /tmp/nexus-backend-rename-delivery` exit 0，产物包含 main/bootstrap 及 Shared runtime。ssh2 的可选原生加速编译失败后按依赖自身机制回落；该结果不是 SSH 行为证据。`docker compose config --quiet` 使用仅供配置校验的固定测试密钥，修正 shell 展开需要的 `$$` 后 exit 0；shell 启动/烟雾脚本及 Node 控制启动器语法通过。未执行 Docker build/up、Playwright、浏览器或其他行为回归，V1 未完成部分和 D16/P1 继续保留。
 - 复审两轮：第一轮沿包名/目录→根门禁→构建/启动→真实消费者修正旧入口；第二轮核对 Shared 独立构建、生产包完整性、Compose Host/插值、单 Backend DEV 代理及受影响专项的环境变量，未恢复旧类型/DB/环境变量兼容分支。本轮明确授权提交、合并 dev 和删除重构分支；合并不代表镜像已发布或整套 E2E 已通过。
+
+本地交付：源码提交 `75289ef9`，合并提交 `a7ba2d80`（父提交 `cad36397` / `75289ef9`）；唯一冲突为 E2E 耗时估计，保留 origin/dev 当前完整数据。已确认重构提交属于 dev 历史后删除本地重构分支，未推送、未删除远端分支、未部署。合并后的源码与静态检查版本一致，差异仅为远端耗时估计及本文状态说明。
