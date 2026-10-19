@@ -437,6 +437,10 @@ test('Nexus Agent Browser lifecycle cases reclaim contexts across cancellation a
 	await openNativeTask(task);
 	for (const phase of ['cancel-creating', 'complete', 'cancel-live', 'repeat', 'cancel-approval', 'approve']) {
 		await step(`Root Browser cleanup: ${phase}`, async () => {
+			// The prior Run is terminated by the separately authenticated API
+			// owner. Re-read the same persisted thread before composing a new Run;
+			// an already-mounted composer can still display the old active fence.
+			await openNativeTask(task);
 			const creating = phase === 'cancel-creating';
 			const approval = phase === 'cancel-approval' || phase === 'approve';
 			const cancel = phase.startsWith('cancel-');
