@@ -362,7 +362,9 @@ test('login CAPTCHA clears expired/rejected verification and succeeds after a fr
 			evidence.push({
 				phase: 'provider-rejected',
 				status: rejectedLogin.status(),
-				body: await rejectedLogin.json(),
+				// The rejection and visible CAPTCHA error are durable even when
+				// Login re-renders and retires the browser's CDP response body.
+				alert: await page.getByRole('alert').innerText(),
 			});
 
 			await setCaptchaConfig(request, VALID_HCAPTCHA);
