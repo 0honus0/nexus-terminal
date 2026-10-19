@@ -1251,3 +1251,5 @@ Node22.16.0 / pnpm11.26.0。Shared check/build、Backend-next check/build、Fron
 本轮已明确授权推送、删除远程分支和远程 E2E。dev 推送至 `71a0291c`，远程 `refactor/backend-storage-v1` 已删除。[运行 39183397896](https://github.com/0honus0/nexus-terminal/actions/runs/39183397896) 失败：质量检查/格式/生产构建通过；Docker frontend-builder 编译 Shared 报 `tsc: not found`；8个 Playwright 分片全部在 Backend webServer 启动退出，实际用例数为0。不能计为功能失败数或回归通过。日志 `/tmp/nexus-e2e-first-failures.log`、`/tmp/nexus-first-shard2.log`。
 
 修复范围：Docker过滤安装包含依赖工作区开发工具；Reporter保留无测试关联的启动输出及正确异步完成契约。SSH夹具通过独立控制通道提供实际公钥指纹；Auth/SSH helper直接消费Shared偏好CAS、Targets元数据/独立凭据及Host Key确认，不恢复旧settings/connections入口。源码/类型/格式复核后提交，行为以修复后的远程运行单独记录。仍有旧Agent/HTTP/Workspace用例待迁移，不缩减覆盖，不新增本地行为测试。
+
+第二轮 [39184073324](https://github.com/0honus0/nexus-terminal/actions/runs/39184073324)，基线 `6aaf3294`：启动日志已保留，8分片初始化请求返回403，仍未进入用例。控制启动器使用Fetch覆盖Host，改为已配置loopback受信代理的X-Forwarded-Host，不放宽产品Host/Origin校验。Docker继续发现独立包编译引用未导入的ReadableStreamReadResult，补充node:stream/web显式类型导入，不依赖其他工作区偶然加载DOM类型。Workspace helper及两份终端/挂起消费者改用Shared NXW1帧，不保留重复帧解码；补齐Origin、connect响应关联及JSON等待失败监听清理。修复后的行为继续由后续远程运行核对。日志 `/tmp/nexus-second-{shard2,docker}.log`。

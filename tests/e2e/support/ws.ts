@@ -2,8 +2,12 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import type { APIRequestContext } from '@playwright/test';
 import { E2E_URLS } from './test-env';
+import { decodeWorkspaceBinaryFrame } from '../../../packages/shared/src/remote/workspace/workspace-binary';
+import { readWorkspaceConnectResponse } from '../../../packages/shared/src/remote/workspace/workspace-codec';
 
-const repoRoot = path.resolve(process.cwd(), '../..');
+export { decodeWorkspaceBinaryFrame } from '../../../packages/shared/src/remote/workspace/workspace-binary';
+
+const repoRoot = path.resolve(__dirname, '../../..');
 const requireFromBackend = createRequire(path.join(repoRoot, 'packages', 'backend', 'package.json'));
 const WebSocket = requireFromBackend('ws') as any;
 
@@ -16,37 +20,6 @@ export interface JsonWsMessage {
 
 export type E2eWebSocket = any;
 
-const WORKSPACE_BINARY_MAGIC = 0x4e585731;
-const WORKSPACE_BINARY_PROTOCOL_VERSION = 1;
-const WORKSPACE_BINARY_HEADER_BYTES = 16;
-const WORKSPACE_BINARY_TERMINAL = 1;
-const WORKSPACE_BINARY_RESPONSE = 2;
-const WORKSPACE_BINARY_FINAL = 1;
-
-export const decodeWorkspaceBinaryFrame = (data: Buffer) => {
-	if (data.byteLength < WORKSPACE_BINARY_HEADER_BYTES) throw new Error('Workspace binary frame is truncated');
-	if (
-		data.readUInt32BE(0) !== WORKSPACE_BINARY_MAGIC ||
-		data.readUInt8(4) !== WORKSPACE_BINARY_PROTOCOL_VERSION ||
-		data.readUInt8(7) !== 0 ||
-		data.readUInt16BE(10) !== 0
-	) {
-		throw new Error('Workspace binary protocol mismatch');
-	}
-	const type = data.readUInt8(5);
-	const flags = data.readUInt8(6);
-	const requestIdBytes = data.readUInt16BE(8);
-	const payloadBytes = data.readUInt32BE(12);
-	if (data.byteLength !== WORKSPACE_BINARY_HEADER_BYTES + requestIdBytes + payloadBytes) {
-		throw new Error('Workspace binary frame length mismatch');
-	}
-	const requestId = data
-		.subarray(WORKSPACE_BINARY_HEADER_BYTES, WORKSPACE_BINARY_HEADER_BYTES + requestIdBytes)
-		.toString('utf8');
-	const payload = data.subarray(WORKSPACE_BINARY_HEADER_BYTES + requestIdBytes);
-	return { type, flags, requestId, payload };
-};
-
 export async function openAuthenticatedWebSocket(
 	request: APIRequestContext,
 	url = `${E2E_URLS.frontendWsOrigin}/ws/workspace`,
@@ -57,7 +30,7 @@ export async function openAuthenticatedWebSocket(
 		.map((cookie) => `${cookie.name}=${cookie.value}`)
 		.join('; ');
 
-	const socket = new WebSocket(url, { headers: { Cookie: cookies } });
+	const socket = new WebSocket(url, { headers: { Cookie: cookies, Origin: E2E_URLS.frontendOrigin } });
 	await new Promise<void>((resolve, reject) => {
 		const timeout = setTimeout(() => reject(new Error(`WebSocket open timeout: ${url}`)), 10_000);
 		socket.once('open', () => {
@@ -82,8 +55,15 @@ export function waitForJson(
 	timeoutMs = 15_000,
 ): Promise<JsonWsMessage> {
 	return new Promise((resolve, reject) => {
-		const timeout = setTimeout(() => {
+		const cleanup = () => {
+			clearTimeout(timeout);
 			socket.off('message', onMessage);
+			socket.off('close', onClose);
+			socket.off('error', onError);
+		};
+
+		const timeout = setTimeout(() => {
+			cleanup();
 			reject(new Error('Timed out waiting for WebSocket JSON message'));
 		}, timeoutMs);
 
@@ -92,16 +72,34 @@ export function waitForJson(
 			let parsed: JsonWsMessage;
 			try {
 				parsed = JSON.parse(data.toString('utf8'));
-			} catch {
+			} catch (cause) {
+				cleanup();
+				reject(cause);
 				return;
 			}
-			if (!predicate(parsed)) return;
-			clearTimeout(timeout);
-			socket.off('message', onMessage);
-			resolve(parsed);
+			try {
+				if (!predicate(parsed)) return;
+				cleanup();
+				resolve(parsed);
+			} catch (cause) {
+				cleanup();
+				reject(cause);
+			}
+		};
+
+		const onClose = () => {
+			cleanup();
+			reject(new Error('WebSocket closed before the expected JSON message'));
+		};
+
+		const onError = (cause: Error) => {
+			cleanup();
+			reject(cause);
 		};
 
 		socket.on('message', onMessage);
+		socket.once('close', onClose);
+		socket.once('error', onError);
 	});
 }
 
@@ -170,8 +168,8 @@ export function waitForBinaryText(socket: E2eWebSocket, expectedText: string, ti
 		const onMessage = (data: Buffer, isBinary: boolean) => {
 			if (!isBinary) return;
 			const frame = decodeWorkspaceBinaryFrame(Buffer.from(data));
-			if (frame.type !== WORKSPACE_BINARY_TERMINAL) return;
-			chunks.push(frame.payload);
+			if (frame.kind !== 'terminal') return;
+			chunks.push(Buffer.from(frame.data));
 			const output = Buffer.concat(chunks).toString('utf8');
 			if (!output.includes(expectedText)) return;
 			cleanup();
@@ -231,9 +229,9 @@ export function requestWorkspaceBinary<T = unknown>(
 		const onMessage = (raw: Buffer, isBinary: boolean) => {
 			if (isBinary) {
 				const frame = decodeWorkspaceBinaryFrame(Buffer.from(raw));
-				if (frame.type !== WORKSPACE_BINARY_RESPONSE || frame.requestId !== requestId) return;
-				if (frame.payload.byteLength) chunks.push(frame.payload);
-				if ((frame.flags & WORKSPACE_BINARY_FINAL) !== 0) binaryDone = true;
+				if (frame.kind !== 'response' || frame.requestId !== requestId) return;
+				if (frame.data.byteLength) chunks.push(Buffer.from(frame.data));
+				if (frame.final) binaryDone = true;
 				settle();
 				return;
 			}
@@ -296,19 +294,15 @@ export async function openWorkspaceSession(
 	terminalOffset: number;
 }> {
 	const socket = await openAuthenticatedWebSocket(request);
-	const connected = await requestWorkspace<{
-		workspaceId: string;
-		binaryProtocolVersion: number;
-		resumeToken: string;
-		attachmentGeneration: number;
-		terminalOffset: number;
-	}>(socket, 'workspace.connect', {
-		connectionId,
-		workspaceId,
-		viewport: { columns: 100, rows: 30 },
-	});
-	if (connected.binaryProtocolVersion !== WORKSPACE_BINARY_PROTOCOL_VERSION) {
-		throw new Error(`Unexpected Workspace binary protocol: ${connected.binaryProtocolVersion}`);
+	const connected = readWorkspaceConnectResponse(
+		await requestWorkspace(socket, 'workspace.connect', {
+			connectionId,
+			workspaceId,
+			viewport: { columns: 100, rows: 30 },
+		}),
+	);
+	if (connected.workspaceId !== workspaceId || connected.connectionId !== connectionId) {
+		throw new Error('Workspace connection response belongs to another resource');
 	}
 	return {
 		socket,

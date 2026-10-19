@@ -23,9 +23,9 @@ test('terminal consumption window pauses output and drains without missing bytes
 	socket.on('message', (raw: Buffer, binary: boolean) => {
 		if (!binary) return;
 		const frame = decodeWorkspaceBinaryFrame(raw);
-		if (frame.type !== 1) return;
-		receivedBytes += frame.payload.byteLength;
-		chunks.push(frame.payload);
+		if (frame.kind !== 'terminal') return;
+		receivedBytes += frame.data.byteLength;
+		chunks.push(Buffer.from(frame.data));
 		if (consume) sendJson(socket, { type: 'terminal.flow', payload: { consumedBytes: receivedBytes } });
 	});
 	try {

@@ -1,3 +1,4 @@
+import type { ReadableStreamReadResult } from 'node:stream/web';
 import { modelRequest } from './model-request.js';
 import type {
 	EndpointModel,

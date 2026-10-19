@@ -595,7 +595,7 @@ test('resizing a suspended fullscreen terminal is ordered after its checkpoint',
 		const onInitialMessage = (data: Buffer, isBinary: boolean) => {
 			if (!isBinary) return;
 			const frame = decodeWorkspaceBinaryFrame(Buffer.from(data));
-			if (frame.type === 1) initialChunks.push(frame.payload);
+			if (frame.kind === 'terminal') initialChunks.push(Buffer.from(frame.data));
 		};
 
 		recovery.on('message', onInitialMessage);
@@ -949,7 +949,7 @@ test('resume sends only the newest cached tail and pages older terminal history 
 		const onInitialMessage = (data: Buffer, isBinary: boolean) => {
 			if (!isBinary) return;
 			const frame = decodeWorkspaceBinaryFrame(Buffer.from(data));
-			if (frame.type === 1) initialChunks.push(frame.payload);
+			if (frame.kind === 'terminal') initialChunks.push(Buffer.from(frame.data));
 		};
 
 		recoverySocket.on('message', onInitialMessage);

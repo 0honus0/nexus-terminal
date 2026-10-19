@@ -63,7 +63,13 @@ async function resetApplication(mode) {
 	if (mode === 'seed') {
 		const response = await fetch('http://127.0.0.1:' + backendPort + '/api/v1/auth/setup', {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json', Host: new URL(publicOrigin).host, Origin: publicOrigin },
+			// This loopback request represents the trusted frontend proxy. Fetch may
+			// discard Host overrides; use the proxy header consumed by the real ingress.
+			headers: {
+				'Content-Type': 'application/json',
+				'X-Forwarded-Host': new URL(publicOrigin).host,
+				Origin: publicOrigin,
+			},
 			body: JSON.stringify({
 				username: required('NEXUS_E2E_ADMIN_USERNAME'),
 				password: required('NEXUS_E2E_ADMIN_PASSWORD'),
