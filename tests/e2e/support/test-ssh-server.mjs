@@ -817,9 +817,9 @@ function attachSftp(session, accept) {
 			// Preserve the requested directory order while bounding metadata
 			// concurrency. A sequential lstat per entry was fixture-only latency
 			// unrelated to SFTP pagination or the product's large-list budget.
-			for (let start = 0; start < entries.length; start += 64) {
+			for (let start = 0; start < entries.length; start += 256) {
 				const batch = await Promise.all(
-					entries.slice(start, start + 64).map(async (entry) => {
+					entries.slice(start, start + 256).map(async (entry) => {
 						const stats = await fsp.lstat(path.join(fullPath, entry.name));
 						return {
 							filename: entry.name,
@@ -849,7 +849,9 @@ function attachSftp(session, accept) {
 		}
 		// Real servers split directory listings across NAME packets. Sending the
 		// whole fixture in one packet can exceed the client's 256 KiB packet limit.
-		const entries = state.entries.slice(state.offset, state.offset + 128);
+		// Keep a NAME packet well below ssh2's 256 KiB frame bound while
+		// avoiding dozens of round trips for the 5,000-file profile fixture.
+		const entries = state.entries.slice(state.offset, state.offset + 256);
 		state.offset += entries.length;
 		sftp.name(reqid, entries);
 	});
