@@ -256,10 +256,16 @@ export function respondFunctionalModel(messages, userText, response, send) {
 		const session = () => result('browser_open').sessionId;
 
 		const click = (id) => {
-			const snapshot = result(id),
-				button = snapshot.nodes.find(
-					(node) => node.tag === 'button' && node.text.includes('Deploy fixture-v1'),
-				);
+			const snapshot = result(id);
+			// CDP DOM.getDocument retains uppercase nodeName on elements and
+			// places visible button labels in child #text nodes, not BUTTON.nodeValue.
+			const button = snapshot.nodes.find(
+				(node) =>
+					node.tag === 'BUTTON' &&
+					snapshot.nodes.some(
+						(child) => child.parentRef === node.ref && child.text.includes('Deploy fixture-v1'),
+					),
+			);
 			if (!button) {
 				throw new Error('Deployment button missing from actual snapshot');
 			}
