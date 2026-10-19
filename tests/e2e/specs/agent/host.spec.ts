@@ -979,15 +979,19 @@ test('concurrent Agent settings preserve dirty drafts and reject their original 
 		await follower.goto('/settings?tab=agent');
 		const leader = page.getByRole('region', { name: 'Execution settings', exact: true });
 		const other = follower.getByRole('region', { name: 'Execution settings', exact: true });
-		const leaderInput = leader.getByRole('spinbutton', { name: 'Concurrent Runs', exact: true });
-		const otherInput = other.getByRole('spinbutton', { name: 'Concurrent Runs', exact: true });
+		// Lowering Concurrent Runs alone violates the execution contract if
+		// model-call capacity still equals the current maximum run capacity.
+		// Use the independently editable (and bounded by Runs) model-call limit
+		// to exercise the same concurrent CAS conflict without invalid input.
+		const leaderInput = leader.getByRole('spinbutton', { name: 'Concurrent model calls', exact: true });
+		const otherInput = other.getByRole('spinbutton', { name: 'Concurrent model calls', exact: true });
 		const original = Number(await leaderInput.inputValue());
-		const minimumRuns = Number(
-			await leader.getByRole('spinbutton', { name: 'Concurrent Model Calls', exact: true }).inputValue(),
-		);
 		const maximum = Number(await leaderInput.getAttribute('max'));
-		const alternatives = Array.from({ length: maximum }, (_, index) => index + 1).filter(
-			(value) => value !== original && value >= minimumRuns,
+		const runs = Number(
+			await leader.getByRole('spinbutton', { name: 'Concurrent Runs', exact: true }).inputValue(),
+		);
+		const alternatives = Array.from({ length: Math.min(maximum, runs) }, (_, index) => index + 1).filter(
+			(value) => value !== original,
 		);
 		expect(alternatives.length).toBeGreaterThanOrEqual(2);
 		await otherInput.fill(String(alternatives[1]));

@@ -163,6 +163,11 @@ test('A07 browser rejects a stale click, then a separate approved Run deploys on
 	await expect.poll(contexts).toEqual(baseline);
 	// Explicitly release the unknown Run; a new intent must not bypass its active-thread fence.
 	await cancelNativeTask(task, stale.id);
+	// Cancellation above is performed by the separately authenticated API
+	// context. Reopen the Hub and read the newly settled thread before
+	// submitting the next user intent; an already-mounted composer can still
+	// display the prior active-run view until that explicit refresh.
+	await openNativeTask(task);
 	const created = await startNativeTask(task, marker);
 	const result = await finishNativeTask(task, created.id, [
 		'browser_open',

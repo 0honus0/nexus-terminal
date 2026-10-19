@@ -102,7 +102,16 @@ for (const decision of ['denied', 'cancelled'] as const) {
 		await section.getByRole('button', { name: 'Save', exact: true }).click();
 		const response = await creation;
 		expect(response.status()).toBe(201);
-		const integration = readAgentIntegrationView(await response.json());
+		// Saving the integration re-renders the app-scoped editor; the same
+		// authenticated list is authoritative after the browser's response
+		// body becomes unavailable. Do not submit the creation a second time.
+		const savedIntegrations = await request.get(integrationPath);
+		expect(savedIntegrations.ok()).toBeTruthy();
+		const matches = readAgentIntegrationList(await savedIntegrations.json()).items.filter(
+			(item) => item.configuration.displayName === 'SSH ACP settings fixture',
+		);
+		expect(matches).toHaveLength(1);
+		const integration = readAgentIntegrationView(matches[0]);
 		expect(integration).toMatchObject({
 			appId: app.id,
 			enabled: true,
@@ -159,20 +168,46 @@ for (const decision of ['denied', 'cancelled'] as const) {
 		await hub
 			.getByRole('textbox', { name: 'Task input', exact: true })
 			.fill(`E2E_ACP_EXECUTE integration=${integration.id} version=${integration.version}`);
+		// Hub navigation can retire the browser's CDP copy of a successful
+		// Run POST. Capture the original response through this exact route,
+		// then fulfill that same request; never replay a non-idempotent Run.
+		const workspacePath = `/api/v1/agent/apps/${app.id}/workspace`;
+		let acceptedRunBody: unknown;
+		let capturedRunBody = false;
+		const routePattern = `**${workspacePath}`;
+		await page.route(routePattern, async (route) => {
+			if (
+				route.request().method() !== 'POST' ||
+				route.request().postDataJSON()?.request?.method !== 'agent.runs.create'
+			) {
+				await route.continue();
+				return;
+			}
+			const upstream = await route.fetch();
+			acceptedRunBody = await upstream.json();
+			capturedRunBody = true;
+			await route.fulfill({ response: upstream });
+		});
 		const runCreation = page.waitForResponse(
 			(item) =>
 				new URL(item.url()).pathname === `/api/v1/agent/apps/${app.id}/workspace` &&
 				item.request().postDataJSON()?.request?.method === 'agent.runs.create',
 		);
-		await hub.getByRole('button', { name: 'Create a new Run', exact: true }).click();
-		const runResponse = await runCreation;
-		expect(runResponse.status()).toBe(200);
-		// Correlate the receipt through the same Shared workspace decoder as production.
-		const runResult = readAgentWorkspaceResponse(
-			await runResponse.json(),
-			app.id,
-			readAgentWorkspaceRequest(runResponse.request().postDataJSON()),
-		).result;
+		let runResult: ReturnType<typeof readAgentWorkspaceResponse>['result'];
+		try {
+			await hub.getByRole('button', { name: 'Create a new Run', exact: true }).click();
+			const runResponse = await runCreation;
+			expect(runResponse.status()).toBe(200);
+			expect(capturedRunBody).toBe(true);
+			// Correlate the actual receipt through the same Shared decoder.
+			runResult = readAgentWorkspaceResponse(
+				acceptedRunBody,
+				app.id,
+				readAgentWorkspaceRequest(runResponse.request().postDataJSON()),
+			).result;
+		} finally {
+			await page.unroute(routePattern);
+		}
 		if (runResult.method !== 'agent.runs.create') throw new Error('Unexpected Run receipt');
 		const runId = runResult.value.run.id;
 
