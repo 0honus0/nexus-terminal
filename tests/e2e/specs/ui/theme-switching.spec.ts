@@ -844,24 +844,36 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
 					.filter({ has: page.getByText('丝带', { exact: true }) });
 				await expect(remoteRow).toBeVisible();
 
-				const remoteContent = page.waitForResponse(
-					(response) =>
-						response.url().includes('/api/v1/appearance/html-presets/remote/content') &&
-						response.request().method() === 'GET',
-				);
-				const apply = page.waitForResponse(
-					(response) =>
-						response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
-				);
-				await remoteRow.getByRole('button', { name: 'Apply', exact: true }).click();
-				const downloaded = await remoteContent;
-				expect(downloaded.ok()).toBeTruthy();
-				const downloadedHtml = await downloaded.text();
-				expect(downloadedHtml.length).toBeGreaterThan(20);
-				expect((await apply).ok()).toBeTruthy();
-				await expect
-					.poll(async () => (await appearance(context.request)).terminalCustomHtml)
-					.toBe(downloadedHtml);
+				const contentPattern = '**/api/v1/appearance/html-presets/remote/content**';
+				let downloadedHtml: string | null = null;
+				await page.route(contentPattern, async (route) => {
+					const upstream = await route.fetch();
+					if (upstream.ok()) downloadedHtml = await upstream.text();
+					await route.fulfill({ response: upstream });
+				});
+				try {
+					const remoteContent = page.waitForResponse(
+						(response) =>
+							response.url().includes('/api/v1/appearance/html-presets/remote/content') &&
+							response.request().method() === 'GET',
+					);
+					const apply = page.waitForResponse(
+						(response) =>
+							response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
+					);
+					await remoteRow.getByRole('button', { name: 'Apply', exact: true }).click();
+					expect((await remoteContent).ok()).toBeTruthy();
+					// Read the original GET before CDP retires its body after the Apply
+					// navigation; compare that exact payload to the persisted setting.
+					expect(downloadedHtml).not.toBeNull();
+					expect(downloadedHtml!.length).toBeGreaterThan(20);
+					expect((await apply).ok()).toBeTruthy();
+					await expect
+						.poll(async () => (await appearance(context.request)).terminalCustomHtml)
+						.toBe(downloadedHtml);
+				} finally {
+					await page.unroute(contentPattern);
+				}
 			},
 		);
 
