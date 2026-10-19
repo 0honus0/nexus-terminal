@@ -704,8 +704,8 @@ test('a second device explicitly takes over an attached suspended SSH owner with
 		expect(resumedB.ownershipGeneration).toBeGreaterThan(resumedA.ownershipGeneration);
 		await expect(revokedA).resolves.toMatchObject({ reason: 'takeover', generation: resumedA.ownershipGeneration });
 		await expect(ownerAClosed).resolves.toMatchObject({
-			code: 4009,
-			reason: 'Suspended session ownership was taken over by another device.',
+			code: 1008,
+			reason: 'Suspended owner revoked',
 		});
 
 		const sameShellOutput = waitForBinaryText(ownerB, `TAKEOVER_STATE=${marker}`);
