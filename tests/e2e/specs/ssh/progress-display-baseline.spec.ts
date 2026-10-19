@@ -177,6 +177,22 @@ test('desktop Progress Display floats above the workspace without resizing the t
 		);
 
 		await closeProgressDisplay(display);
+		// Layout assertions can finish before this deliberately delayed copy.
+		// Confirm the destination rather than aborting a live SFTP stage when the
+		// next spec resets its isolated Backend.
+		await reopenConnectedFileManager(page);
+		await expect(
+			page.getByRole('dialog', { name: 'File Manager', exact: true }).locator('.file-manager-path-input input'),
+		).toHaveValue('/folder-seed');
+		await expect(row(page, 'copy-source.txt')).toBeVisible({ timeout: 30_000 });
+		// Destination visibility may precede final metadata verification and lease
+		// close. Completed client tasks retire after their server terminal event;
+		// unknown/error tasks remain observable in Progress Display.
+		const settledDisplay = await openDesktopProgressDisplay(page);
+		await expect(
+			settledDisplay.locator('.hidden-progress-task-row').filter({ hasText: 'copy-source.txt' }),
+		).toHaveCount(0, { timeout: 30_000 });
+		await closeProgressDisplay(settledDisplay);
 	} finally {
 		releaseBackgroundRefresh?.();
 		await page.unroute('**/api/v1/transfers/status');
@@ -221,6 +237,9 @@ test('existing copy progress popup hides and restores through Progress Display',
 		});
 
 		await expect(row(page, sourceName)).toBeVisible({ timeout: 30_000 });
+		// The restored popup remains visible. Wait for task retirement, not just
+		// the first directory refresh to observe the destination file.
+		await expect(visibleProgressTask(page, sourceName)).toHaveCount(0, { timeout: 30_000 });
 	} finally {
 		await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
 	}
@@ -297,6 +316,14 @@ test('application modals open above the standalone transfer progress popup', asy
 			{ x: (left + right) / 2, y: (top + bottom) / 2 },
 		);
 		expect(topmostDialogLabel).toBe('Configure Focus Switcher');
+		// Finish the real transfer before resetting the Backend for the next test.
+		await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+		await reopenConnectedFileManager(page);
+		await expect(
+			page.getByRole('dialog', { name: 'File Manager', exact: true }).locator('.file-manager-path-input input'),
+		).toHaveValue('/folder-seed');
+		await expect(row(page, sourceName)).toBeVisible({ timeout: 30_000 });
+		await expect(visibleProgressTask(page, sourceName)).toHaveCount(0, { timeout: 30_000 });
 	} finally {
 		await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
 	}
