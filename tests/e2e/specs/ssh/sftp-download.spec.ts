@@ -179,7 +179,7 @@ test('HTTP download ticket, Range, inline file, and directory ZIP work for an ac
 			data: { connectionId, sessionId: session.workspaceId, remotePath: '/seed.txt' },
 		});
 		expect(excess.status()).toBe(429);
-		expect(await excess.json()).toEqual({ code: 'limit_exceeded' });
+		expect(await excess.json()).toEqual({ message: 'limit_exceeded' });
 		const retained = await request.head(capacityUrls[0], {
 			headers: { 'X-Forwarded-For': '203.0.113.30' },
 		});
