@@ -526,6 +526,16 @@ async function fullMutationChain() {
 		assert.equal(replaced.body.bytes, Buffer.byteLength('新内容'));
 		assert.equal(entries.get('/note.txt').mode, 0o640);
 		assert.equal(entries.get('/note.txt').data.toString('utf8'), '新内容');
+		// A known pre-existing path is a definite exclusive-create conflict.
+		// Keep the existing bytes and the same SFTP owner usable for later work.
+		await assert.rejects(
+			files.createFile('good', id, '/note.txt', '', 'utf-8'),
+			(error) => error instanceof RemoteFileFailure && error.code === 'conflict',
+		);
+		assert.equal(entries.get('/note.txt').data.toString('utf8'), '新内容');
+		assert.equal(resource.isOpen, true);
+		await files.createFile('good', id, '/new-exclusive.txt', 'exclusive-create', 'utf-8');
+		assert.equal(entries.get('/new-exclusive.txt').data.toString('utf8'), 'exclusive-create');
 
 		const conflict = await request(listener, 'POST', root + '/write-text', {
 			path: '/note.txt',

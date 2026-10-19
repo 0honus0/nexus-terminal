@@ -190,18 +190,31 @@ export class SftpFileResource implements FileResource {
 		return staged;
 	}
 
-	create(request: FileCreateRequest): Promise<void> {
-		return this.perform(
-			() =>
-				this.#lease.writeFile(request.path, request.bytes, {
-					flags: 'wx',
-					mode: request.mode,
-					signal: request.signal,
-					timeoutMs: request.timeoutMs,
-				}),
-			request.signal,
-			true,
-		);
+	async create(request: FileCreateRequest): Promise<void> {
+		// SFTP v3 often answers an exclusive OPEN of an existing file with the
+		// generic FAILURE status. That write failure cannot prove if the server
+		// dispatched an effect, so it would fence the healthy Workspace lease.
+		// First establish an existing entry with a read-only LSTAT: this is a
+		// confirmed conflict without opening the destination for writing.
+		try {
+			await this.perform(() => this.#lease.lstat(request.path, this.options(request)), request.signal);
+		} catch (error) {
+			if (!(error instanceof RemoteFileFailure) || error.code !== 'not_found') {
+				throw error;
+			}
+			return this.perform(
+				() =>
+					this.#lease.writeFile(request.path, request.bytes, {
+						flags: 'wx',
+						mode: request.mode,
+						signal: request.signal,
+						timeoutMs: request.timeoutMs,
+					}),
+				request.signal,
+				true,
+			);
+		}
+		throw new RemoteFileFailure('conflict');
 	}
 
 	rename(request: FileRenameRequest): Promise<void> {
