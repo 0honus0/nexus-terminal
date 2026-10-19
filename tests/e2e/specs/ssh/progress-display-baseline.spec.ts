@@ -204,7 +204,10 @@ test('existing copy progress popup hides and restores through Progress Display',
 	await openFileManager(page, context);
 
 	const sourceName = 'baseline-copy-progress.bin';
-	await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(sourceName)}&size=${4 * 1024 * 1024}`, {
+	// The fixture delays each actual SFTP WRITE by 3 seconds. Four MiB
+	// outlives the UI assertion window; 256 KiB still requires multiple
+	// genuine writes and keeps the popup active for hide/restore.
+	await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(sourceName)}&size=${256 * 1024}`, {
 		method: 'POST',
 	});
 	await refreshFileManager(page);
@@ -249,7 +252,9 @@ test('application modals open above the standalone transfer progress popup', asy
 	await page.setViewportSize({ width: 1024, height: 768 });
 	await openFileManager(page, context);
 	const sourceName = 'modal-layering-progress.bin';
-	await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(sourceName)}&size=${4 * 1024 * 1024}`, {
+	// Preserve a bounded multi-write transfer instead of leaving the
+	// modal-layering test's delayed SFTP stage alive across Backend reset.
+	await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(sourceName)}&size=${256 * 1024}`, {
 		method: 'POST',
 	});
 	await refreshFileManager(page);
