@@ -135,7 +135,15 @@ test('A07 browser rejects a stale click, then a separate approved Run deploys on
 						endpoints: [
 							{ url: E2E_URLS.browserCdpEndpoint, priority: 1, allowPlaintext: true, verifyTls: true },
 						],
-						allowedUrlPatterns: [E2E_URLS.deploymentPageOrigin],
+						// Browser's URL gate is exact-path by default. The fixture page
+						// loads /state and its approved button POSTs /deploy; without
+						// explicit paths CDP blocks both while a script-text snapshot can
+						// misleadingly contain the expected words.
+						allowedUrlPatterns: [
+							E2E_URLS.deploymentPageOrigin + '/',
+							E2E_URLS.deploymentPageOrigin + '/state',
+							E2E_URLS.deploymentPageOrigin + '/deploy',
+						],
 					},
 				],
 			},
