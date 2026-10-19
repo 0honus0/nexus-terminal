@@ -16,6 +16,8 @@ const defaultDurationMs = 10_000;
 const isolatedUnknownSpec = 'specs/agent/preset-plugin.spec.ts';
 const isolatedUnknownTitle =
 	'Nexus Agent subagent lifecycle preserves tool batches and reclaims child Browser contexts';
+const isolatedInvalidToolTitle =
+	'installed Nexus Agent plugin uses the host-owned Agent surface and captures functional evidence';
 
 function parseArgs(argv) {
 	const args = { command: argv[0] ?? 'plan' };
@@ -149,15 +151,22 @@ function run(plan, rawShard) {
 		process.platform === 'win32' ? 'playwright.cmd' : 'playwright',
 	);
 	const isolated = shard.specs.includes(isolatedUnknownSpec);
-	const suffixes = isolated ? ['regular', 'unknown'] : ['regular'];
+	const suffixes = isolated ? ['regular', 'invalid-tool', 'unknown'] : ['regular'];
 	const outcomes = [];
 	const durations = [];
-	const regularLogs = path.join(e2eRoot, '.tmp', 'balanced-shard-regular-logs');
+	const capturedLogs = [];
 	for (const suffix of suffixes) {
 		const selected =
 			suffix === 'unknown'
 				? [isolatedUnknownSpec, '--grep', isolatedUnknownTitle]
-				: [...shard.specs, ...(isolated ? ['--grep-invert', isolatedUnknownTitle] : [])];
+				: suffix === 'invalid-tool'
+					? [isolatedUnknownSpec, '--grep', isolatedInvalidToolTitle]
+					: [
+							...shard.specs,
+							...(isolated
+								? ['--grep-invert', `${isolatedUnknownTitle}|${isolatedInvalidToolTitle}`]
+								: []),
+						];
 		const timingsPath = path.join(e2eRoot, 'test-results', `spec-durations-${suffix}.json`);
 		console.log(`[E2E shards] ${suffix}: ${selected.join(' ')}`);
 		const result = spawnSync(playwright, ['test', ...selected, '--output', `test-results/${suffix}`], {
@@ -173,16 +182,20 @@ function run(plan, rawShard) {
 		outcomes.push(result.status ?? 1);
 		if (!fs.existsSync(timingsPath)) throw new Error(`Missing E2E duration record: ${timingsPath}`);
 		durations.push(JSON.parse(fs.readFileSync(timingsPath, 'utf8')).specs);
-		if (isolated && suffix === 'regular') {
-			// Each Playwright process resets its own log directory. Preserve the
-			// first process's failures before starting the isolated lifecycle test.
-			fs.rmSync(regularLogs, { recursive: true, force: true });
-			fs.cpSync(path.join(e2eRoot, 'logs'), regularLogs, { recursive: true });
+		if (isolated && suffix !== suffixes[suffixes.length - 1]) {
+			// Playwright recreates the log directory on each new backend lifetime.
+			// Preserve real failures and timing evidence from every earlier phase.
+			const location = path.join(e2eRoot, '.tmp', `balanced-shard-${suffix}-logs`);
+			fs.rmSync(location, { recursive: true, force: true });
+			fs.cpSync(path.join(e2eRoot, 'logs'), location, { recursive: true });
+			capturedLogs.push({ suffix, location });
 		}
 	}
 	if (isolated) {
-		fs.cpSync(regularLogs, path.join(e2eRoot, 'logs', 'regular'), { recursive: true });
-		fs.rmSync(regularLogs, { recursive: true, force: true });
+		for (const { suffix, location } of capturedLogs) {
+			fs.cpSync(location, path.join(e2eRoot, 'logs', suffix), { recursive: true });
+			fs.rmSync(location, { recursive: true, force: true });
+		}
 	}
 	const merged = Object.assign({}, ...durations);
 	if (isolated) {

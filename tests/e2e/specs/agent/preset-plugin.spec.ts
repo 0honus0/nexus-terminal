@@ -983,12 +983,15 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			await cancelNativeTask(task, run.id);
 		}
 	});
-	await step('protocol-invalid model tools settle as failed without a fabricated successful response', async () => {
+	await step('protocol-invalid dispatched model tools remain unknown without a fabricated success', async () => {
 		const run = await startNativeTask(task, 'E2E_NATIVE_PLUGIN_FAIL');
 		const result = await finishNativeTask(task, run.id);
-		expect(result.run.status).toBe('failed');
+		// The provider stream was dispatched before the untrusted tool name was
+		// discovered. The durable Run intentionally records an uncertain outcome
+		// instead of claiming that all remote effects are proven to have failed.
+		expect(result.run.status).toBe('unknown');
 		expect(result.text).toBe('');
-		await expect(hub.locator('strong').filter({ hasText: /^Failed$/ })).toBeVisible();
+		await expect(hub.locator('strong').filter({ hasText: /^Unknown$/ })).toBeVisible();
 	});
 	await step(
 		'uploaded Artifact appears in the actual App library and verified download preserves bytes',
