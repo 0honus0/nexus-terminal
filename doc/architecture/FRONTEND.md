@@ -136,6 +136,8 @@ Files首次读取等待当前附件的SFTP ready，尚未ACK、已断开/撤销�
 
 F1-A/B源码已覆盖正式setup/password/status/logout、TOTP/Passkey登录、改密/因素设置、公共CAPTCHA与CAPTCHA/IP安全配置，以及DEV共用认证。Passkey的第三方对象只在Auth adapters/browser-passkey显式投影，Store按实例持有取消能力；session generation变化取消旧ceremony并阻止晚签发。Security的use-passkey-settings持有列表、名称草稿和刷新恢复。其余正式配置与业务源码已接Shared，完整前端行为仍待远程验收。新传输已接源码；真实密码/Cookie/登出与受控TOTP/竞态/失败场景的分项证据归testing。构建或受控响应不替代完整页面/真实因素验收。
 
+第八轮失败登出链核对：AuthStore 发出 POST logout 前先撤销本地可用身份以释放所有已挂载 Workspace/Agent Owner；当 POST 报错而服务器状态未知时，不假定凭据还可用。只允许经独立只读 `/auth/status` 确认**原用户 ID 仍有效**后恢复 UI 身份供用户查看真实错误；如果 GET 同样失败、主体变化或服务器已撤销，则继续封锁原会话，保留失败因果。该局部候选不恢复任何旧兼容层，远程 `ssh/terminal-ui` 和身份安全断言待验。
+
 既有产品事实由USAGE与对应源码核对。正式Agent管理与Host/运行已消费Shared，DEV仍是有限诊断消费者，不代替正式界面验收。SOURCE、静态和行为证据分别归testing；既有DEV和独立管理回归不代表当前完整Agent或远程Actions E2E通过。部署切换仍须明确执行授权。
 
 源码已核对错误契约、类型归属、请求上下文校验及响应早退收尾，跨业务行为回归承接到 [前端延期事项](../后端重构下一阶段实施方案.md#延后的前端事项未验收不删除)。当前后端本机B10已收口，外部按D16延期，F1正式源码已接Shared；DEV消费者共用新认证owner。上述边界是开发约束，不能因端点接通和静态通过就声称已全部满足。
