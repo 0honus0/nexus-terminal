@@ -43,6 +43,12 @@ export default defineConfig({
 		// Keep this explicit instead of disabling host checks globally.
 		allowedHosts: ['api.honus.top'],
 		proxy: {
+			'/__next': {
+				target: devBackendOrigin,
+				changeOrigin: false,
+				ws: true,
+				rewrite: (path: string) => path.replace(/^\/__next/, ''),
+			},
 			'/plugins': {
 				target: devBackendOrigin,
 				changeOrigin: false,

@@ -1,102 +1,27 @@
 <script setup lang="ts">
-	import { onMounted, reactive, ref } from 'vue';
-	import { startRegistration } from '@simplewebauthn/browser';
 	import { useI18n } from 'vue-i18n';
-	import { apiErrorMessage } from '@/client/http';
 	import { UiButton, UiInput } from '@/foundation/ui';
-	import { securityApi } from '../api/securityApi';
-	import type { PasskeySummaryDto } from '../model/security';
+	import { usePasskeySettings } from '../composables/use-passkey-settings';
 
 	const { t } = useI18n();
-	const passkeys = ref<PasskeySummaryDto[]>([]);
-	const loading = ref(false);
-	const message = ref('');
-	const success = ref(false);
-	const editing = ref<string | null>(null);
-	const names = reactive<Record<string, string>>({});
+	const { passkeys, names, editing, loading, needsRefresh, message, success, refresh, register, saveName, remove } =
+		usePasskeySettings();
 
-	const load = async () => {
-		loading.value = true;
-		try {
-			passkeys.value = await securityApi.listPasskeys();
-			for (const key of passkeys.value) names[key.credentialId] = key.name ?? '';
-		} catch (cause) {
-			message.value = apiErrorMessage(cause, t('settings.passkey.error.fetchFailed'));
-		} finally {
-			loading.value = false;
-		}
-	};
-
-	const register = async () => {
-		loading.value = true;
-		message.value = '';
-		success.value = false;
-		try {
-			const optionsJSON = await securityApi.getPasskeyRegistrationOptions();
-			const registrationResponse = await startRegistration({ optionsJSON });
-			await securityApi.registerPasskey(registrationResponse);
-			message.value = t('settings.passkey.success.registered');
-			success.value = true;
-			await load();
-		} catch (cause) {
-			message.value = apiErrorMessage(cause, t('settings.passkey.error.registrationFailed'));
-		} finally {
-			loading.value = false;
-		}
-	};
-
-	const saveName = async (key: PasskeySummaryDto) => {
-		const name = names[key.credentialId]?.trim();
-		if (!name) {
-			message.value = t('settings.passkey.error.nameRequired');
-			return;
-		}
-		loading.value = true;
-		try {
-			await securityApi.renamePasskey(key.credentialId, name);
-			editing.value = null;
-			message.value = t('settings.passkey.success.nameUpdated');
-			success.value = true;
-			await load();
-		} catch (cause) {
-			message.value = apiErrorMessage(cause, t('settings.passkey.error.nameUpdateFailed'));
-			success.value = false;
-		} finally {
-			loading.value = false;
-		}
-	};
-
-	const remove = async (key: PasskeySummaryDto) => {
-		loading.value = true;
-		message.value = '';
-		success.value = false;
-		try {
-			await securityApi.deletePasskey(key.credentialId);
-			message.value = t('settings.passkey.success.deleted');
-			success.value = true;
-			await load();
-		} catch (cause) {
-			message.value = apiErrorMessage(cause, t('settings.passkey.error.deleteFailedGeneral'));
-		} finally {
-			loading.value = false;
-		}
-	};
-
-	const formatDate = (value: number | null) => (value ? new Date(value * 1000).toLocaleString() : '—');
-
-	onMounted(load);
+	const formatDate = (value: number | null) => (value === null ? '—' : new Date(value).toLocaleString());
 </script>
 
 <template>
 	<section>
 		<h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.passkey.title') }}</h3>
 		<p class="mb-4 text-sm text-text-secondary">{{ t('settings.passkey.description') }}</p>
-		<UiButton appearance="solid" tone="primary" :loading="loading" @click="register">{{
+		<UiButton appearance="solid" tone="primary" :loading="loading" :disabled="needsRefresh" @click="register">{{
 			t('settings.passkey.registerNewButton')
 		}}</UiButton>
 		<p v-if="message" :class="success ? 'text-success' : 'text-error'" class="mt-3 text-sm" role="status">
 			{{ message }}
 		</p>
+
+		<UiButton v-if="needsRefresh" :loading="loading" @click="refresh">{{ t('common.retry') }}</UiButton>
 
 		<div class="mt-6">
 			<h4 class="mb-3 text-base font-semibold text-foreground">
@@ -124,6 +49,7 @@
 									type="button"
 									class="ml-2 p-1 text-text-secondary transition hover:text-foreground"
 									:title="t('common.edit')"
+									:disabled="loading || needsRefresh"
 									@click="editing = key.credentialId"
 								>
 									<svg
@@ -157,19 +83,23 @@
 									density="compact"
 									appearance="solid"
 									tone="primary"
-									:disabled="loading"
+									:disabled="loading || needsRefresh"
 									@click="saveName(key)"
 									>{{ t('common.save') }}</UiButton
 								>
-								<UiButton class="ml-1" density="compact" :disabled="loading" @click="editing = null">{{
-									t('common.cancel')
-								}}</UiButton>
+								<UiButton
+									class="ml-1"
+									density="compact"
+									:disabled="loading || needsRefresh"
+									@click="editing = null"
+									>{{ t('common.cancel') }}</UiButton
+								>
 							</div>
 						</div>
 						<div class="mt-1 space-x-2 text-xs text-text-secondary">
-							<span>{{ t('settings.passkey.createdDate') }}: {{ formatDate(key.createdAt) }}</span>
-							<span v-if="key.lastUsedAt"
-								>{{ t('settings.passkey.lastUsedDate') }}: {{ formatDate(key.lastUsedAt) }}</span
+							<span>{{ t('settings.passkey.createdDate') }}: {{ formatDate(key.createdAtMs) }}</span>
+							<span v-if="key.lastUsedAtMs"
+								>{{ t('settings.passkey.lastUsedDate') }}: {{ formatDate(key.lastUsedAtMs) }}</span
 							>
 							<span v-if="key.transports?.length" class="capitalize"
 								>({{ key.transports.join(', ') }})</span
@@ -181,13 +111,15 @@
 						appearance="solid"
 						tone="danger"
 						class="self-start sm:self-center"
-						:disabled="loading || editing === key.credentialId"
+						:disabled="loading || needsRefresh || editing === key.credentialId"
 						@click="remove(key)"
 						>{{ t('common.delete') }}</UiButton
 					>
 				</li>
 			</ul>
-			<p v-else class="text-sm text-text-secondary italic">{{ t('settings.passkey.noKeysRegistered') }}</p>
+			<p v-else-if="!needsRefresh" class="text-sm text-text-secondary italic">
+				{{ t('settings.passkey.noKeysRegistered') }}
+			</p>
 		</div>
 	</section>
 </template>

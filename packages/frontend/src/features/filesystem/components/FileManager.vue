@@ -1,10 +1,11 @@
 <script setup lang="ts">
-	import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+	import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiContextMenu, UiSpinner, UiOverlayPanel } from '@/foundation/ui';
 	import { useDeviceCapabilities } from '@/foundation/browser';
 	import { writeClipboardText } from '@/foundation/browser';
 	import { createWheelScaleResolver, useLongPressGesture } from '@/foundation/interaction';
+	import { useAuthenticatedViewScope } from '@/shared/session/public';
 	import { useFeedback } from '@/shared/feedback/public';
 	import { focusRegistry } from '@/shared/focus/public';
 	import FilesystemCatalogModal from './FilesystemCatalogModal.vue';
@@ -17,15 +18,18 @@
 	import { useFilesystemCatalog } from '../composables/useFilesystemCatalog';
 	import { collectDroppedLocalFiles } from '../composables/collectDroppedLocalFiles';
 	import type { FilesystemChannel, FilesystemDownloadPort, TerminalDirectoryPort } from '../ports/filesystem-channel';
+	import { filesystemFailureMessage } from '../model/filesystem-feedback';
+	import { TerminalDirectoryFailure } from '../model/terminal-directory-types';
 	import type {
 		ArchiveCompressionFormat,
 		ArchiveCompressionIntent,
 		LocalUploadFile,
-		WorkspaceRemoteFileEntryDto,
-	} from '../model/filesystem';
+		RemoteFileEntry,
+	} from '../model/filesystem-types';
 
 	const props = withDefaults(
 		defineProps<{
+			active?: boolean;
 			channel: FilesystemChannel;
 			beforeFileMutation?: (paths: readonly string[]) => boolean;
 			download?: FilesystemDownloadPort;
@@ -38,22 +42,22 @@
 			state?: FilesystemSessionState;
 			showEditorButton?: boolean;
 		}>(),
-		{ confirmDelete: true, rowScale: 1, showEditorButton: false },
+		{ active: true, confirmDelete: true, rowScale: 1, showEditorButton: false },
 	);
 	const emit = defineEmits<{
-		openFile: [entry: WorkspaceRemoteFileEntryDto];
-		openAsText: [entry: WorkspaceRemoteFileEntryDto];
+		openFile: [entry: RemoteFileEntry];
+		openAsText: [entry: RemoteFileEntry];
 		openEditor: [];
 		upload: [path: string];
 		uploadFiles: [path: string, files: LocalUploadFile[], directories: string[]];
-		copyToClipboard: [entries: WorkspaceRemoteFileEntryDto[]];
-		cutToClipboard: [entries: WorkspaceRemoteFileEntryDto[]];
-		moveTo: [entries: WorkspaceRemoteFileEntryDto[], destination: string];
+		copyToClipboard: [entries: RemoteFileEntry[]];
+		cutToClipboard: [entries: RemoteFileEntry[]];
+		moveTo: [entries: RemoteFileEntry[], destination: string];
 		paste: [destination: string];
-		compress: [entries: WorkspaceRemoteFileEntryDto[]];
+		compress: [entries: RemoteFileEntry[]];
 		compressPreset: [intent: ArchiveCompressionIntent];
-		decompress: [entry: WorkspaceRemoteFileEntryDto];
-		sendFiles: [entries: WorkspaceRemoteFileEntryDto[]];
+		decompress: [entry: RemoteFileEntry];
+		sendFiles: [entries: RemoteFileEntry[]];
 		rowScale: [scale: number];
 		columnWidths: [widths: Record<string, number>];
 	}>();
@@ -65,7 +69,9 @@
 	const browser = filesystemState.browser;
 	const catalog = useFilesystemCatalog();
 	const action = ref<'mkdir' | 'file' | 'rename' | 'chmod' | null>(null);
-	const target = ref<WorkspaceRemoteFileEntryDto | null>(null);
+	const actionBusy = ref(false);
+	let actionRevision = 0;
+	const target = ref<RemoteFileEntry | null>(null);
 	const value = ref('');
 	const catalogVisible = ref(false);
 	const searchExpanded = ref(false);
@@ -84,12 +90,12 @@
 	const keyboardCursor = ref<string | null>(null);
 	const multiSelect = ref(false);
 	const dragging = ref(false);
-	const draggedRemoteEntries = ref<WorkspaceRemoteFileEntryDto[]>([]);
+	const draggedRemoteEntries = ref<RemoteFileEntry[]>([]);
 	const remoteDragTarget = ref<string | null>(null);
 	let remoteDragScrollTimer: number | undefined;
 	let remoteDragScrollDirection = 0;
 	type FileManagerContext =
-		| { scope: 'entry'; entry: WorkspaceRemoteFileEntryDto; x: number; y: number }
+		| { scope: 'entry'; entry: RemoteFileEntry; x: number; y: number }
 		| { scope: 'current-directory' | 'parent-directory'; destination: string; x: number; y: number };
 	const context = ref<FileManagerContext | null>(null);
 	const contextDownloadLabel = computed(() => {
@@ -141,6 +147,7 @@
 		return Boolean(name && browser.entries.value.some((entry) => entry.name === name));
 	});
 	const actionConfirmDisabled = computed(() => {
+		if (actionBusy.value) return true;
 		const text = value.value.trim();
 		if (!text) return true;
 		if (createNameConflict.value) return true;
@@ -219,17 +226,49 @@
 	let navigationQueue: Promise<void> = Promise.resolve();
 	let queuedRefresh: { promise: Promise<void>; draftRevision: number } | undefined;
 	let clipboardPasteSerial = 0;
+	let pendingDelete: symbol | undefined;
+	let clipboardPasteTimer: number | undefined;
+	const view = useAuthenticatedViewScope({
+		available: () => props.active,
+
+		onRevoke: clearIntents,
+	});
+
+	function clearIntents(): void {
+		pendingDelete = undefined;
+		clipboardPasteSerial++;
+		changingTerminalPath.value = false;
+		syncingTerminalPath.value = false;
+		if (clipboardPasteTimer !== undefined) {
+			window.clearTimeout(clipboardPasteTimer);
+			clipboardPasteTimer = undefined;
+		}
+		action.value = null;
+		context.value = null;
+	}
+
+	watch(() => props.channel, clearIntents);
 
 	const enqueueNavigation = (operation: () => Promise<void>): Promise<void> => {
 		queuedRefresh = undefined;
-		const next = navigationQueue.then(operation, operation);
+		const permission = view.capture();
+		const channel = props.channel;
+
+		const dispatch = () =>
+			view.isCurrent(permission) && channel === props.channel ? operation() : Promise.resolve();
+
+		const next = navigationQueue.then(dispatch, dispatch);
 		navigationQueue = next.catch(() => undefined);
 		return next;
 	};
 
 	const loadPath = async (path: string, draftRevision = pathDraftRevision): Promise<void> => {
+		const permission = view.capture();
+		if (permission.aborted) {
+			return;
+		}
 		const loaded = await browser.load(path);
-		if (loaded && (!pathDraftEditing.value || pathDraftRevision === draftRevision)) {
+		if (view.isCurrent(permission) && loaded && (!pathDraftEditing.value || pathDraftRevision === draftRevision)) {
 			pathDraft.value = browser.path.value;
 		}
 	};
@@ -436,12 +475,12 @@
 		return index <= 0 ? '/' : normalized.slice(0, index);
 	};
 
-	const isArchive = (entry: WorkspaceRemoteFileEntryDto) => /\.(zip|tar\.gz|tgz|tar\.bz2|tbz2)$/i.test(entry.name);
+	const isArchive = (entry: RemoteFileEntry) => /\.(zip|tar\.gz|tgz|tar\.bz2|tbz2)$/i.test(entry.name);
 
-	const canOpenAsText = (entry: WorkspaceRemoteFileEntryDto) =>
+	const canOpenAsText = (entry: RemoteFileEntry) =>
 		!entry.metadata.isDirectory && /\.(md|markdown)$/i.test(entry.name);
 
-	const displayEntryName = (entry: WorkspaceRemoteFileEntryDto) =>
+	const displayEntryName = (entry: RemoteFileEntry) =>
 		browser.searchActive.value && 'relativePath' in entry && typeof entry.relativePath === 'string'
 			? entry.relativePath
 			: entry.name;
@@ -580,7 +619,26 @@
 		};
 	};
 
+	let downloadLifetime = new AbortController();
+	let downloadsActive = true;
+
+	const invalidateDownloads = () => {
+		downloadLifetime.abort();
+		downloadLifetime = new AbortController();
+	};
+
+	watch(() => [props.channel, props.download], invalidateDownloads);
+	onActivated(() => {
+		downloadsActive = true;
+	});
+	onDeactivated(() => {
+		downloadsActive = false;
+		invalidateDownloads();
+	});
+
 	onBeforeUnmount(() => {
+		downloadsActive = false;
+		invalidateDownloads();
 		document.removeEventListener('mousedown', handleOutsideHistory);
 		unregisterSearchFocus?.();
 		unregisterPathFocus?.();
@@ -631,7 +689,7 @@
 		},
 	);
 
-	const activate = async (entry: WorkspaceRemoteFileEntryDto): Promise<void> => {
+	const activate = async (entry: RemoteFileEntry): Promise<void> => {
 		try {
 			if (entry.metadata.isSymbolicLink) {
 				const resolved = await props.channel.realpath(entry.path);
@@ -666,12 +724,12 @@
 		}
 	};
 
-	const openContextAt = (clientX: number, clientY: number, entry: WorkspaceRemoteFileEntryDto): void => {
+	const openContextAt = (clientX: number, clientY: number, entry: RemoteFileEntry): void => {
 		if (!browser.selected.value.has(entry.path)) browser.select(entry, 'only');
 		context.value = { scope: 'entry', entry, x: clientX, y: clientY };
 	};
 
-	const contextEntries = (): WorkspaceRemoteFileEntryDto[] => {
+	const contextEntries = (): RemoteFileEntry[] => {
 		const entry = context.value?.scope === 'entry' ? context.value.entry : undefined;
 		if (!entry) return [];
 		if (!browser.selected.value.has(entry.path)) return [entry];
@@ -679,7 +737,7 @@
 		return selected.length ? selected : [entry];
 	};
 
-	const longPress = useLongPressGesture<WorkspaceRemoteFileEntryDto>({
+	const longPress = useLongPressGesture<RemoteFileEntry>({
 		enabled: () => device.supportsTouchInteraction.value,
 
 		vibrateMs: 15,
@@ -687,7 +745,7 @@
 		onTrigger: (entry, point) => openContextAt(point.x, point.y, entry),
 	});
 
-	const clickEntry = (event: MouseEvent, entry: WorkspaceRemoteFileEntryDto) => {
+	const clickEntry = (event: MouseEvent, entry: RemoteFileEntry) => {
 		if (longPress.consumeClick(event)) return;
 		keyboardCursor.value = entry.path;
 		if (device.isMobile.value || device.hasTouch.value) {
@@ -708,7 +766,7 @@
 		if (entry.metadata.isDirectory) void activate(entry);
 	};
 
-	const doubleClickEntry = (event: MouseEvent, entry: WorkspaceRemoteFileEntryDto) => {
+	const doubleClickEntry = (event: MouseEvent, entry: RemoteFileEntry) => {
 		if (device.isMobile.value || device.hasTouch.value || multiSelect.value) return;
 		if (event.ctrlKey || event.metaKey || event.shiftKey || entry.metadata.isDirectory) return;
 		event.preventDefault();
@@ -759,7 +817,7 @@
 		row?.closest('tr')?.scrollIntoView({ block: 'nearest' });
 	};
 
-	const ensureKeyboardSelection = (): WorkspaceRemoteFileEntryDto[] => {
+	const ensureKeyboardSelection = (): RemoteFileEntry[] => {
 		const selected = selectedEntries();
 		if (selected.length) return selected;
 		const cursor = keyboardCursor.value;
@@ -846,7 +904,9 @@
 	};
 
 	const handleClipboardPaste = (event: ClipboardEvent): void => {
-		if (isEditableTarget(event.target)) return;
+		if (isEditableTarget(event.target) || view.capture().aborted) {
+			return;
+		}
 		clipboardPasteSerial += 1;
 
 		const imageFiles = eventClipboardImageFiles(event);
@@ -864,23 +924,37 @@
 		}
 	};
 
-	const handleKeyboardPasteFallback = async (observedPasteSerial: number, destination: string): Promise<void> => {
-		if (clipboardPasteSerial !== observedPasteSerial) return;
+	const handleKeyboardPasteFallback = async (
+		observedPasteSerial: number,
+		destination: string,
+		permission: AbortSignal,
+		channel: FilesystemChannel,
+	): Promise<void> => {
+		const isCurrent = () =>
+			view.isCurrent(permission) && channel === props.channel && clipboardPasteSerial === observedPasteSerial;
+
+		if (!isCurrent()) {
+			return;
+		}
 		try {
 			const imageFiles = await navigatorClipboardImageFiles();
-			if (clipboardPasteSerial !== observedPasteSerial) return;
+			if (!isCurrent()) {
+				return;
+			}
 			if (imageFiles.length) {
 				emit('uploadFiles', destination, imageFiles, []);
 				return;
 			}
 		} catch {
-			// Native ClipboardEvent remains the preferred path; permission/API failures fall through.
+			// A denied Clipboard API does not prevent the original live view's remote-file paste.
 		}
-		if (clipboardPasteSerial === observedPasteSerial && props.clipboardCount) emit('paste', destination);
+		if (isCurrent() && props.clipboardCount) {
+			emit('paste', destination);
+		}
 	};
 
 	const handleKeyboardNavigation = (event: KeyboardEvent) => {
-		if (isEditableTarget(event.target)) return;
+		if (isEditableTarget(event.target) || view.capture().aborted) return;
 
 		const key = event.key.toLowerCase();
 		const ctrlOrMeta = event.ctrlKey || event.metaKey;
@@ -906,7 +980,15 @@
 			// Only if no paste event arrives do we fall back to the async Clipboard API.
 			const observedPasteSerial = clipboardPasteSerial;
 			const destination = browser.path.value;
-			window.setTimeout(() => void handleKeyboardPasteFallback(observedPasteSerial, destination), 0);
+			const permission = view.capture();
+			const channel = props.channel;
+			if (clipboardPasteTimer !== undefined) {
+				window.clearTimeout(clipboardPasteTimer);
+			}
+			clipboardPasteTimer = window.setTimeout(() => {
+				clipboardPasteTimer = undefined;
+				void handleKeyboardPasteFallback(observedPasteSerial, destination, permission, channel);
+			}, 0);
 			return;
 		}
 		if (ctrlOrMeta && event.shiftKey && key === 'n') {
@@ -1010,7 +1092,7 @@
 			return !(entry.metadata.isDirectory && destination.startsWith(`${entry.path}/`));
 		});
 
-	const startRemoteDrag = (event: DragEvent, entry: WorkspaceRemoteFileEntryDto) => {
+	const startRemoteDrag = (event: DragEvent, entry: RemoteFileEntry) => {
 		if (device.isMobile.value || !event.dataTransfer) return;
 		const selection = selectedEntries();
 		draggedRemoteEntries.value = browser.selected.value.has(entry.path) && selection.length ? selection : [entry];
@@ -1085,7 +1167,7 @@
 		browser.clearSelection();
 	};
 
-	const begin = (type: typeof action.value, entry?: WorkspaceRemoteFileEntryDto) => {
+	const begin = (type: typeof action.value, entry?: RemoteFileEntry) => {
 		action.value = type;
 		target.value = entry ?? null;
 		value.value =
@@ -1097,82 +1179,168 @@
 		context.value = null;
 	};
 
-	watch(action, async (type) => {
-		if (!type) return;
-		await nextTick();
-		actionInput.value?.focus();
-		actionInput.value?.select();
-	});
+	watch(
+		action,
+		async (type) => {
+			const revision = ++actionRevision;
+			actionBusy.value = false;
+			if (!type) {
+				return;
+			}
+			const permission = view.capture();
+			await nextTick();
+			if (!view.isCurrent(permission) || revision !== actionRevision) {
+				return;
+			}
+			actionInput.value?.focus();
+			actionInput.value?.select();
+		},
+		{ flush: 'sync' },
+	);
 
 	const submit = async () => {
+		const permission = view.capture();
+		if (permission.aborted || actionConfirmDisabled.value) {
+			return;
+		}
+		const channel = props.channel;
+		const revision = actionRevision;
+		const type = action.value;
+		const entry = target.value;
 		const text = value.value.trim();
-		if (!text || createNameConflict.value) return;
+		const path = join(text);
+
+		const isCurrent = () => view.isCurrent(permission) && channel === props.channel && revision === actionRevision;
+
+		actionBusy.value = true;
 		try {
-			if (action.value === 'mkdir') await props.channel.createDirectory(join(text));
-			else if (action.value === 'file') await props.channel.createFile(join(text), '');
-			else if (action.value === 'rename' && target.value) {
-				if (props.beforeFileMutation && !props.beforeFileMutation([target.value.path])) return;
-				await props.channel.rename(target.value.path, joinPath(parentOf(target.value.path), text));
-			} else if (action.value === 'chmod' && target.value) {
-				if (!/^[0-7]{3,4}$/.test(text)) throw new Error(t('fileManager.errors.invalidPermissionsFormat'));
-				await props.channel.chmod(target.value.path, Number.parseInt(text, 8));
+			if (type === 'mkdir') {
+				await channel.createDirectory(path);
+			} else if (type === 'file') {
+				await channel.createFile(path, '');
+			} else if ((type === 'rename' || type === 'chmod') && entry) {
+				if (props.beforeFileMutation && !props.beforeFileMutation([entry.path])) {
+					return;
+				}
+				if (type === 'rename') {
+					await channel.rename(entry.path, joinPath(parentOf(entry.path), text));
+				} else {
+					await channel.chmod(entry.path, Number.parseInt(text, 8));
+				}
+			} else {
+				return;
+			}
+			if (!isCurrent()) {
+				return;
 			}
 			action.value = null;
 			await browser.load();
 		} catch (cause) {
-			const detail = cause instanceof Error ? cause.message : String(cause);
-			feedback.notifyError(
-				action.value === 'chmod' ? `${t('fileManager.errors.chmodFailed')}: ${detail}` : detail,
-			);
+			if (isCurrent()) {
+				const detail = filesystemFailureMessage(cause, t);
+				feedback.notifyError(type === 'chmod' ? t('fileManager.errors.chmodFailed') + ': ' + detail : detail);
+			}
+		} finally {
+			if (isCurrent()) {
+				actionBusy.value = false;
+			}
 		}
 	};
 
-	const remove = async (entries: WorkspaceRemoteFileEntryDto[]) => {
-		if (!entries.length) return;
-		context.value = null;
+	const remove = async (entries: RemoteFileEntry[]): Promise<void> => {
+		const permission = view.capture();
+		const first = entries[0];
+		if (!first || permission.aborted || pendingDelete) {
+			return;
+		}
+		const channel = props.channel;
+		const paths = entries.map((entry) => entry.path);
+		const directories = entries.filter((entry) => entry.metadata.isDirectory).map((entry) => entry.path);
 		const key =
 			entries.length > 1
 				? 'fileManager.prompts.confirmDeleteMultiple'
-				: entries[0]!.metadata.isDirectory
+				: first.metadata.isDirectory
 					? 'fileManager.prompts.confirmDeleteFolder'
 					: 'fileManager.prompts.confirmDeleteFile';
-		const params = entries.length > 1 ? { count: entries.length } : { name: entries[0]!.name };
-		if (props.confirmDelete && !(await feedback.confirm({ message: t(key, params), destructive: true }))) return;
-		if (props.beforeFileMutation && !props.beforeFileMutation(entries.map((entry) => entry.path))) return;
+		const params = entries.length > 1 ? { count: entries.length } : { name: first.name };
+
+		const isCurrent = () => view.isCurrent(permission) && channel === props.channel;
+
+		context.value = null;
+		const deletion = Symbol();
+		pendingDelete = deletion;
 		try {
-			await props.channel.remove(
-				entries.map((entry) => entry.path),
-				{
-					forceDirectoryPaths: entries
-						.filter((entry) => entry.metadata.isDirectory)
-						.map((entry) => entry.path),
-				},
-			);
-			await browser.load();
+			if (
+				props.confirmDelete &&
+				!(await feedback.confirm({ message: t(key, params), destructive: true, signal: permission }))
+			) {
+				return;
+			}
+			if (!isCurrent() || (props.beforeFileMutation && !props.beforeFileMutation(paths))) {
+				return;
+			}
+			await channel.remove(paths, { forceDirectoryPaths: directories });
+			if (isCurrent()) {
+				await browser.load();
+			}
 		} catch (cause) {
-			feedback.notifyError(
-				`${t('fileManager.errors.deletePartial')}: ${cause instanceof Error ? cause.message : String(cause)}`,
-			);
-			await browser.load().catch(() => undefined);
+			if (isCurrent()) {
+				feedback.notifyError(t('fileManager.errors.deletePartial') + ': ' + filesystemFailureMessage(cause, t));
+				await browser.load().catch(() => undefined);
+			}
+		} finally {
+			if (pendingDelete === deletion) {
+				pendingDelete = undefined;
+			}
 		}
 	};
 
-	const changeTerminalToCurrent = async () => {
-		if (!props.terminalDirectory || changingTerminalPath.value) return;
+	const terminalDirectoryErrorMessage = (cause: unknown): string => {
+		const isUnknownResult =
+			cause instanceof TerminalDirectoryFailure &&
+			cause.code !== 'not_connected' &&
+			cause.code !== 'invalid_input' &&
+			cause.code !== 'directory_unchanged';
+		return t(
+			isUnknownResult
+				? 'fileManager.errors.terminalPathChangeUnknown'
+				: 'fileManager.errors.terminalPathChangeFailed',
+		);
+	};
+
+	const changeTerminalPath = async (path: string, showSuccess: boolean): Promise<void> => {
+		const permission = view.capture();
+		const directory = props.terminalDirectory;
+		if (!directory || permission.aborted || changingTerminalPath.value) {
+			return;
+		}
+
+		const isCurrent = () => view.isCurrent(permission) && directory === props.terminalDirectory;
+
 		changingTerminalPath.value = true;
 		try {
-			const result = await props.terminalDirectory.changeDirectory(browser.path.value, {
+			const result = await directory.changeDirectory(path, {
 				onQueued: ({ waitingForPrompt }) => {
-					if (waitingForPrompt) feedback.notifyInfo(t('fileManager.notifications.terminalPathQueued'));
+					if (isCurrent() && waitingForPrompt) {
+						feedback.notifyInfo(t('fileManager.notifications.terminalPathQueued'));
+					}
 				},
 			});
-			feedback.notifySuccess(t('fileManager.notifications.terminalPathChanged', { path: result.path }));
+			if (isCurrent() && showSuccess) {
+				feedback.notifySuccess(t('fileManager.notifications.terminalPathChanged', { path: result.path }));
+			}
 		} catch (cause) {
-			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+			if (isCurrent()) {
+				feedback.notifyError(terminalDirectoryErrorMessage(cause));
+			}
 		} finally {
-			changingTerminalPath.value = false;
+			if (isCurrent()) {
+				changingTerminalPath.value = false;
+			}
 		}
 	};
+
+	const changeTerminalToCurrent = () => changeTerminalPath(browser.path.value, true);
 
 	const openPathHistory = async () => {
 		catalogVisible.value = false;
@@ -1183,7 +1351,7 @@
 		pathHistoryOpen.value = true;
 		pathHistoryIndex.value = -1;
 		catalog.historySearch.value = pathDraft.value;
-		await catalog.loadHistory().catch(() => undefined);
+		await catalog.loadHistory(true).catch(() => undefined);
 	};
 
 	const closePathHistory = (restore = false) => {
@@ -1303,20 +1471,32 @@
 		searchExpanded.value = false;
 	};
 
-	const syncFromTerminal = async () => {
-		if (!props.terminalDirectory || syncingTerminalPath.value) return;
+	const syncFromTerminal = async (): Promise<void> => {
+		const permission = view.capture();
+		const directory = props.terminalDirectory;
+		if (!directory || permission.aborted || syncingTerminalPath.value) {
+			return;
+		}
+
+		const isCurrent = () => view.isCurrent(permission) && directory === props.terminalDirectory;
+
 		syncingTerminalPath.value = true;
 		const draftRevision = pathDraftRevision;
 		try {
-			const terminalDirectory = props.terminalDirectory;
 			await enqueueNavigation(async () => {
-				const path = await terminalDirectory.readCurrentDirectory();
-				if (path) await loadPath(path, draftRevision);
+				const path = await directory.readCurrentDirectory();
+				if (isCurrent() && path) {
+					await loadPath(path, draftRevision);
+				}
 			});
 		} catch (cause) {
-			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+			if (isCurrent()) {
+				feedback.notifyError(filesystemFailureMessage(cause, t));
+			}
 		} finally {
-			syncingTerminalPath.value = false;
+			if (isCurrent()) {
+				syncingTerminalPath.value = false;
+			}
 		}
 	};
 
@@ -1325,37 +1505,44 @@
 		await enqueueNavigation(() => loadPath(path, draftRevision));
 	};
 
-	const sendPathToTerminal = async (path: string) => {
-		if (!props.terminalDirectory || changingTerminalPath.value) return;
-		changingTerminalPath.value = true;
-		try {
-			await props.terminalDirectory.changeDirectory(path, {
-				onQueued: ({ waitingForPrompt }) => {
-					if (waitingForPrompt) feedback.notifyInfo(t('fileManager.notifications.terminalPathQueued'));
-				},
-			});
-		} catch (cause) {
-			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
-		} finally {
-			changingTerminalPath.value = false;
-		}
-	};
+	const sendPathToTerminal = (path: string) => changeTerminalPath(path, false);
 
-	const download = async (entries: WorkspaceRemoteFileEntryDto[]) => {
+	const download = async (entries: RemoteFileEntry[]) => {
 		context.value = null;
 		const downloadPort = props.download;
-		if (!downloadPort || !entries.length) return;
+		if (!downloadPort || !entries.length || !downloadsActive) return;
+		const lifetime = downloadLifetime;
+		const permission = view.capture();
+		const channel = props.channel;
+
+		const isCurrent = () =>
+			downloadsActive &&
+			view.isCurrent(permission) &&
+			!lifetime.signal.aborted &&
+			lifetime === downloadLifetime &&
+			props.channel === channel &&
+			props.download === downloadPort;
+
+		if (!isCurrent()) {
+			return;
+		}
 		await Promise.all(
 			entries.map(async (entry) => {
 				try {
 					let path = entry.path;
 					let kind: 'file' | 'directory' = entry.metadata.isDirectory ? 'directory' : 'file';
 					if (entry.metadata.isSymbolicLink) {
-						const resolved = await props.channel.realpath(entry.path);
+						const resolved = await channel.realpath(entry.path);
+						if (!isCurrent()) return;
 						path = resolved.path;
 						kind = resolved.targetType === 'directory' ? 'directory' : 'file';
 					}
-					const { url } = await downloadPort.createDownload(path, kind);
+					const { url } = await downloadPort.createDownload(
+						path,
+						kind,
+						AbortSignal.any([lifetime.signal, permission]),
+					);
+					if (!isCurrent()) return;
 					const anchor = document.createElement('a');
 					anchor.href = url;
 					anchor.download = '';
@@ -1364,13 +1551,13 @@
 					anchor.click();
 					anchor.remove();
 				} catch (cause) {
-					feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+					if (isCurrent()) feedback.notifyError(filesystemFailureMessage(cause, t));
 				}
 			}),
 		);
 	};
 
-	const copyPath = async (entry: WorkspaceRemoteFileEntryDto) => {
+	const copyPath = async (entry: RemoteFileEntry) => {
 		context.value = null;
 		try {
 			await writeClipboardText(entry.path);
@@ -1380,7 +1567,7 @@
 		}
 	};
 
-	const openContext = (event: MouseEvent, entry: WorkspaceRemoteFileEntryDto) => {
+	const openContext = (event: MouseEvent, entry: RemoteFileEntry) => {
 		event.preventDefault();
 		if (!browser.selected.value.has(entry.path) && !event.ctrlKey && !event.metaKey && !event.shiftKey)
 			browser.select(entry, 'only');
@@ -1447,7 +1634,7 @@
 				emit('uploadFiles', browser.path.value, batch.files, batch.directories);
 			}
 		} catch (cause) {
-			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+			feedback.notifyError(filesystemFailureMessage(cause, t));
 		}
 	};
 
@@ -1687,7 +1874,9 @@
 		>
 			<UiSpinner />
 		</div>
-		<p v-else-if="browser.error.value" class="p-4 text-error">{{ browser.error.value }}</p>
+		<p v-else-if="browser.error.value" class="p-4 text-error">
+			{{ filesystemFailureMessage(browser.error.value, t) }}
+		</p>
 		<div
 			v-else
 			ref="listScroller"
@@ -1705,7 +1894,7 @@
 				v-if="browser.searchError.value"
 				class="border-b border-error/30 bg-error/10 px-3 py-2 text-sm text-error"
 			>
-				{{ browser.searchError.value }}
+				{{ filesystemFailureMessage(browser.searchError.value, t) }}
 			</p>
 			<p
 				v-if="browser.searchActive.value && browser.searchTruncated.value"

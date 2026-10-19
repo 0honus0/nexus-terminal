@@ -3,6 +3,8 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { createAuthNavigationFacade, loadSetupView } from '@/features/auth/public';
 import { loadConnectionsView } from '@/features/connections/public';
 import { loadProxiesView } from '@/features/proxies/public';
+import { loadTargetsNextDevView } from '@/features/targets-next/public';
+import { loadAgentNextDevView } from '@/features/agent/public';
 import { loadNotificationsView } from '@/features/notifications/public';
 import { loadAuditLogView } from '@/features/audit/public';
 import { clearDynamicImportRecoveryMarker, recoverStaleDynamicImport } from '@/app/bootstrap/pwa';
@@ -106,6 +108,16 @@ if (import.meta.env.DEV) {
 
 		component: () => import('../pages/ui/UiGalleryPage.vue'),
 	});
+	routes.splice(catchAllIndex < 0 ? routes.length : catchAllIndex, 0, {
+		path: '/__targets-next',
+		name: 'TargetsNextDev',
+		component: loadTargetsNextDevView,
+	});
+	routes.splice(catchAllIndex < 0 ? routes.length : catchAllIndex, 0, {
+		path: '/__agent-next',
+		name: 'AgentNextDev',
+		component: loadAgentNextDevView,
+	});
 }
 
 export const createAppRouter = (pinia: Pinia) => {
@@ -126,7 +138,12 @@ export const createAppRouter = (pinia: Pinia) => {
 	});
 
 	router.beforeEach(async (to) => {
+		// DEV inspection view; it uses the same Backend as the formal application.
+		if (import.meta.env.DEV && (to.name === 'TargetsNextDev' || to.name === 'AgentNextDev')) return true;
 		await auth.resolveSetupState();
+		if (!auth.setupResolved) {
+			return to.name === 'Login' ? true : { name: 'Login' };
+		}
 
 		if (auth.setupRequired && to.name !== 'Setup') return { name: 'Setup' };
 

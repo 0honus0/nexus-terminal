@@ -1,19 +1,10 @@
-import type {
-	WorkspaceConnectResponseDto,
-	WorkspaceConnectRequestDto,
-	WorkspaceResumeRequestDto,
-	WorkspaceResumeResponseDto,
-	WorkspaceSuspendAutoTerminatedEventDto,
-	WorkspaceSuspendResumeResponseDto,
-	WorkspaceSuspendResumeRequestDto,
-} from '@nexus-terminal/protocol/workspace';
 import { ref, type Ref } from 'vue';
 import { logger } from '@/client/logging/logger';
-import { markConnectionConnected, type ConnectionDto } from '@/features/connections/public';
+import { markConnectionConnected, type ConnectionSummary } from '@/features/connections/public';
 import {
 	createTerminalSessionState,
 	type TerminalSessionState,
-	type WorkspaceTerminalViewportDto,
+	type TerminalViewport,
 } from '@/features/terminal/public';
 import { createFileEditorSession, type FileEditorSessionController } from '@/features/file-editor/public';
 import { createFilePreviewSession, type FilePreviewSessionController } from '@/features/file-preview/public';
@@ -23,14 +14,42 @@ import { createStatusMonitorSession, type StatusMonitorSessionController } from 
 import { createDockerSession, type DockerSessionController } from '@/features/docker/public';
 import { createWorkspaceCapabilityAdapters, type WorkspaceCapabilityAdapters } from '../adapters/capabilityAdapters';
 import type { WorkspaceLifecycleState } from '../model/workspace';
-import { WORKSPACE_BINARY_PROTOCOL_VERSION } from '../protocol/workspaceBinaryProtocol';
-import { WorkspaceSocket } from '../protocol/workspaceSocket';
-
-type WorkspaceSuspendResumeOptions = Pick<WorkspaceSuspendResumeRequestDto, 'takeover'>;
+import { WORKSPACE_SUSPEND_MAX_SNAPSHOT_BYTES } from '@nexus-terminal/shared/remote/suspend/values';
+import {
+	readWorkspaceSuspendResume,
+	readWorkspaceSuspendAck,
+} from '@nexus-terminal/shared/remote/suspend/workspace-codec';
+import {
+	readWorkspaceSuspendResumeResponse,
+	readWorkspaceSuspendOwnerRenew,
+} from '@nexus-terminal/shared/remote/suspend/workspace-result-codec';
+import { toSuspendedWorkspace, toSuspendedLease } from '../model/workspace-suspend-mapper';
+import {
+	WorkspaceSuspendFailure,
+	type WorkspaceSuspendedConnection,
+	type WorkspaceSuspendResumeOptions,
+} from '../model/workspace-suspend-types';
+import { WorkspaceDispatchFailure, WorkspaceRequestFailure } from '../model/workspace-error-types';
+import { toSuspendedAutoTermination, type SuspendedAutoTermination } from '@/features/ssh-suspend/public';
+import { WorkspaceSocket, type WorkspaceAttachmentRequest } from '../protocol/workspaceSocket';
+import {
+	readWorkspaceConnectRequest,
+	readWorkspaceConnectResponse,
+	readWorkspaceResumeRequest,
+	readWorkspaceResumeAck,
+	readWorkspaceCloseRequest,
+	readWorkspaceEmptyResponse,
+} from '@nexus-terminal/shared/remote/workspace/workspace-codec';
+import { toWorkspaceConnection } from '../model/workspace-connection-mapper';
+import type {
+	WorkspaceConnection,
+	WorkspaceConnectionState,
+	WorkspaceCloseOutcome,
+} from '../model/workspace-connection-types';
 
 export interface WorkspaceRuntimeSessionOptions {
 	workspaceId?: string;
-	onSuspendedAutoTerminated?: (event: WorkspaceSuspendAutoTerminatedEventDto) => void;
+	onSuspendedAutoTerminated?: (event: SuspendedAutoTermination) => void;
 }
 
 const RECONNECT_MAX_DELAY_MS = 30_000;
@@ -44,6 +63,7 @@ export class WorkspaceRuntimeSession {
 	readonly markedForSuspend = ref(false);
 	readonly markedForSuspendAt = ref<string | null>(null);
 	readonly hasConnected = ref(false);
+	readonly recoveryRequired = ref(false);
 	readonly commandDraft = ref('');
 	readonly socket: WorkspaceSocket;
 	readonly adapters: WorkspaceCapabilityAdapters;
@@ -67,6 +87,23 @@ export class WorkspaceRuntimeSession {
 		this.terminalState.searchTerm.value = value;
 	}
 
+	private connecting?: Promise<WorkspaceConnectionState>;
+	private suspendedResume?: Promise<WorkspaceSuspendedConnection>;
+	private suspendMutation?: Promise<unknown>;
+	private suspendedResumeIntent?: { id: string; takeover: boolean };
+	private suspendedSessionId?: string;
+	private ownershipGeneration?: number;
+	private leaseExpiresAt?: number;
+	private leaseDeadline?: number;
+	private heartbeatGeneration = 0;
+	private heartbeatController?: AbortController;
+	private receivingSuspendBaseline = false;
+	private currentConnection?: WorkspaceConnectionState;
+	private closeTask?: Promise<WorkspaceCloseOutcome>;
+	private disposeTask?: Promise<WorkspaceCloseOutcome>;
+	private lifecycleGeneration = 0;
+	private attachmentReady = false;
+	private attachmentRequest?: WorkspaceAttachmentRequest;
 	private reconnectAttempt = 0;
 	private reconnectTimer?: number;
 	private reconnectInFlight = false;
@@ -79,11 +116,11 @@ export class WorkspaceRuntimeSession {
 	private closing = false;
 	private terminalEnded = false;
 	private freshConnectionRequired = false;
-	private lastViewport?: WorkspaceTerminalViewportDto;
+	private lastViewport?: TerminalViewport;
 	private readonly cleanup: Array<() => void> = [];
 
 	constructor(
-		readonly connection: ConnectionDto,
+		readonly connection: ConnectionSummary,
 		options: WorkspaceRuntimeSessionOptions = {},
 	) {
 		this.id = options.workspaceId ?? crypto.randomUUID();
@@ -92,6 +129,9 @@ export class WorkspaceRuntimeSession {
 		this.cleanup.push(
 			this.socket.onBinary((data) => {
 				this.terminalOffset += data.byteLength;
+				if (this.receivingSuspendBaseline && this.terminalOffset > WORKSPACE_SUSPEND_MAX_SNAPSHOT_BYTES) {
+					this.socket.close('Suspended baseline exceeds budget');
+				}
 			}),
 		);
 		this.transferController = createTransferController(this.adapters.transfers);
@@ -104,7 +144,9 @@ export class WorkspaceRuntimeSession {
 		this.cleanup.push(
 			this.socket.onClose((reason) => this.handleTransportClosed(reason)),
 			this.socket.onError((message) => {
-				if (this.disposed || this.closing) return;
+				if (this.disposed || this.closing) {
+					return;
+				}
 				logger.debug(
 					{
 						workspaceId: this.id,
@@ -140,7 +182,9 @@ export class WorkspaceRuntimeSession {
 				this.scheduleReconnect();
 			}),
 			this.socket.on('terminal.closed', () => {
-				if (this.closing) return;
+				if (this.closing) {
+					return;
+				}
 				this.terminalEnded = true;
 				this.prepareFreshConnection();
 				logger.debug(
@@ -169,31 +213,61 @@ export class WorkspaceRuntimeSession {
 				);
 				this.statusMessage.value = `${operation}: ${message}`;
 			}),
-			this.socket.on('suspend.autoTerminated', (event) => options.onSuspendedAutoTerminated?.(event)),
+			this.socket.on('suspend.autoTerminated', (event) =>
+				options.onSuspendedAutoTerminated?.(toSuspendedAutoTermination(event)),
+			),
 			this.socket.on('suspend.revoked', (event) => {
+				if (
+					this.disposed ||
+					this.closing ||
+					event.suspendedSessionId !== this.suspendedSessionId ||
+					(this.ownershipGeneration !== undefined && event.generation !== this.ownershipGeneration)
+				) {
+					return;
+				}
+				this.lifecycleGeneration += 1;
+				this.recoveryRequired.value = true;
 				this.clearSuspendOwnerHeartbeat();
 				this.markCapabilitiesDisconnected();
 				this.state.value = 'disconnected';
-				this.statusMessage.value = event.message;
-				logger.warn(
-					{
-						workspaceId: this.id,
-						suspendedSessionId: event.suspendedSessionId,
-						generation: event.generation,
-						reason: event.reason,
-					},
-					'Workspace suspended-session ownership revoked',
-				);
+				this.statusMessage.value = event.reason;
+				this.socket.close('Suspended ownership revoked');
 			}),
 		);
 	}
 
-	async connect(viewport?: WorkspaceTerminalViewportDto): Promise<WorkspaceConnectResponseDto> {
-		if (this.disposed) throw new Error('Workspace session has been disposed.');
+	connect(viewport?: TerminalViewport): Promise<WorkspaceConnectionState> {
+		if (this.suspendedResume) {
+			return Promise.reject(new WorkspaceSuspendFailure('conflict', 'not_dispatched'));
+		}
+		if (this.connecting) {
+			return this.connecting;
+		}
+		if (this.disposed || this.closing || this.recoveryRequired.value) {
+			return Promise.reject(new Error('Workspace cannot reconnect; close it and open a new workspace.'));
+		}
+		if (this.state.value === 'connected' && this.socket.connected && this.currentConnection) {
+			return Promise.resolve(this.currentConnection);
+		}
+		const task = this.runConnect(viewport).finally(() => {
+			if (this.connecting === task) {
+				this.connecting = undefined;
+			}
+		});
+		this.connecting = task;
+		return task;
+	}
+
+	private async runConnect(viewport?: TerminalViewport): Promise<WorkspaceConnection> {
+		if (this.disposed) {
+			throw new Error('Workspace session has been disposed.');
+		}
 		const latestViewport = viewport ?? this.adapters.terminalViewport();
-		if (latestViewport) this.lastViewport = latestViewport;
+		if (latestViewport) {
+			this.lastViewport = latestViewport;
+		}
 		this.clearReconnectTimer();
-		this.closing = false;
+		this.markCapabilitiesDisconnected();
 		const reconnectAttempt = this.reconnectAttempt;
 		const phase = this.hasConnected.value ? 'reconnect' : 'initial';
 		const startedAt = performance.now();
@@ -212,21 +286,17 @@ export class WorkspaceRuntimeSession {
 		);
 		try {
 			const result =
-				phase === 'initial' || this.freshConnectionRequired
+				!this.resumeToken || this.freshConnectionRequired
 					? await this.connectWorkspace()
 					: await this.resumeWorkspace();
-			if (result.binaryProtocolVersion !== WORKSPACE_BINARY_PROTOCOL_VERSION) {
-				throw new Error('Workspace binary protocol version mismatch.');
+			if (this.disposed || this.closing) {
+				throw new DOMException('Workspace closed', 'AbortError');
 			}
-			if (this.disposed || this.closing) throw new DOMException('Workspace closed', 'AbortError');
 			await this.adapters.workspaceConnected();
-			if (this.disposed || this.closing || !this.socket.connected)
+			if (this.disposed || this.closing || !this.socket.connected) {
 				throw new Error('Workspace connection closed during terminal activation.');
+			}
 			this.hasConnected.value = true;
-			this.resumeToken = result.resumeToken;
-			this.attachmentGeneration = result.attachmentGeneration;
-			this.terminalOffset =
-				phase === 'initial' ? result.terminalOffset : Math.max(this.terminalOffset, result.terminalOffset);
 			this.terminalEnded = false;
 			this.freshConnectionRequired = false;
 			this.reconnectAttempt = 0;
@@ -242,8 +312,9 @@ export class WorkspaceRuntimeSession {
 				},
 				'Workspace connection attempt succeeded',
 			);
-			if (result.lastConnectedAt !== undefined)
+			if (result.lastConnectedAt !== undefined) {
 				markConnectionConnected(this.connection.id, result.lastConnectedAt);
+			}
 			void (
 				phase === 'reconnect' ? this.filesystemState.browser.refresh() : this.filesystemState.ensureLoaded()
 			).catch((error) =>
@@ -275,6 +346,10 @@ export class WorkspaceRuntimeSession {
 				},
 				'Workspace runtime connection failed',
 			);
+			this.markCapabilitiesDisconnected();
+			if (!this.closing) {
+				this.socket.close('Workspace connection failed');
+			}
 			if (!this.disposed && !this.closing) {
 				this.state.value = 'error';
 				this.statusMessage.value = error.message;
@@ -283,126 +358,321 @@ export class WorkspaceRuntimeSession {
 		}
 	}
 
-	private connectWorkspace(): Promise<WorkspaceConnectResponseDto> {
-		const request: WorkspaceConnectRequestDto = {
+	private async connectWorkspace(): Promise<WorkspaceConnection> {
+		const generation = this.lifecycleGeneration;
+		const request = readWorkspaceConnectRequest({
 			workspaceId: this.id,
 			connectionId: this.connection.id,
-			...(this.lastViewport ? { viewport: this.lastViewport } : {}),
-		};
-		return this.socket.request('workspace.connect', request);
+			viewport: this.lastViewport
+				? { columns: this.lastViewport.columns, rows: this.lastViewport.rows }
+				: undefined,
+		});
+		await this.socket.open();
+		this.assertConnectionActive();
+		const requestAttached = this.socket.bindRequests();
+		this.terminalOffset = 0;
+		// Once sent, absence of a valid receipt does not prove that creation failed.
+		this.recoveryRequired.value = true;
+		const wire = readWorkspaceConnectResponse(await requestAttached('workspace.connect', request));
+		const result = toWorkspaceConnection(wire);
+		this.validateConnectionIdentity(result);
+		this.assertConnectionGeneration(generation);
+		this.terminalOffset += result.terminalOffset - result.replayedBytes;
+		this.commitAttachment(result, requestAttached);
+		return result;
 	}
 
-	private resumeWorkspace(): Promise<WorkspaceResumeResponseDto> {
+	private async resumeWorkspace(): Promise<WorkspaceConnection> {
+		const generation = this.lifecycleGeneration;
 		if (!this.resumeToken || this.attachmentGeneration === undefined) {
 			throw new Error('Workspace resume credentials are unavailable.');
 		}
-		const request: WorkspaceResumeRequestDto = {
+		const request = readWorkspaceResumeRequest({
 			workspaceId: this.id,
 			connectionId: this.connection.id,
 			resumeToken: this.resumeToken,
 			attachmentGeneration: this.attachmentGeneration,
 			terminalOffset: this.terminalOffset,
-			...(this.lastViewport ? { viewport: this.lastViewport } : {}),
-		};
-		return this.socket.request('workspace.resume', request);
+			viewport: this.lastViewport
+				? { columns: this.lastViewport.columns, rows: this.lastViewport.rows }
+				: undefined,
+		});
+		await this.socket.open();
+		this.assertConnectionActive();
+		const requestAttached = this.socket.bindRequests();
+		this.attachmentReady = false;
+		const result = toWorkspaceConnection(
+			readWorkspaceConnectResponse(await requestAttached('workspace.resume', request)),
+		);
+		this.validateConnectionIdentity(result);
+		this.assertConnectionGeneration(generation);
+		if (
+			result.attachmentGeneration !== request.attachmentGeneration + 1 ||
+			result.resumeToken === request.resumeToken ||
+			result.terminalOffset !== request.terminalOffset + result.replayedBytes ||
+			this.terminalOffset !== result.terminalOffset
+		) {
+			throw new Error('Workspace replay does not match the requested attachment.');
+		}
+		this.assertConnectionActive();
+		// Flow confirms rendered bytes. Only this separate ACK commits ownership.
+		this.recoveryRequired.value = true;
+		readWorkspaceEmptyResponse(
+			await requestAttached(
+				'workspace.resumeAck',
+				readWorkspaceResumeAck({
+					resumeToken: result.resumeToken,
+					attachmentGeneration: result.attachmentGeneration,
+				}),
+			),
+		);
+		this.assertConnectionGeneration(generation);
+		this.commitAttachment(result, requestAttached);
+		return result;
 	}
 
-	async resume(
+	private assertConnectionActive(): void {
+		if (this.disposed || this.closing) {
+			throw new DOMException('Workspace closed', 'AbortError');
+		}
+	}
+
+	private assertConnectionGeneration(generation: number): void {
+		if (generation !== this.lifecycleGeneration) {
+			throw new DOMException('Workspace terminal ended', 'AbortError');
+		}
+	}
+
+	private validateConnectionIdentity(result: WorkspaceConnectionState): void {
+		if (result.workspaceId !== this.id || result.connectionId !== this.connection.id) {
+			throw new Error('Workspace response identity does not match the request.');
+		}
+	}
+
+	private commitAttachment(result: WorkspaceConnectionState, requestAttached: WorkspaceAttachmentRequest): void {
+		this.attachmentRequest = requestAttached;
+		this.currentConnection = result;
+		this.resumeToken = result.resumeToken;
+		this.attachmentGeneration = result.attachmentGeneration;
+		this.recoveryRequired.value = false;
+		this.attachmentReady = true;
+	}
+
+	resume(
 		suspendedSessionId: string,
 		markedAt?: string,
 		options: WorkspaceSuspendResumeOptions = {},
-	): Promise<WorkspaceSuspendResumeResponseDto> {
-		if (this.disposed) throw new Error('Workspace session has been disposed.');
+	): Promise<WorkspaceSuspendedConnection> {
+		if (this.suspendedResume) {
+			return this.suspendedResumeIntent?.id === suspendedSessionId &&
+				this.suspendedResumeIntent.takeover === (options.takeover ?? false)
+				? this.suspendedResume
+				: Promise.reject(new WorkspaceSuspendFailure('conflict', 'not_dispatched'));
+		}
+		if (this.disposed || this.closing || this.connecting || this.recoveryRequired.value || this.attachmentReady) {
+			return Promise.reject(new WorkspaceSuspendFailure('conflict', 'not_dispatched'));
+		}
+		const task = this.resumeSuspendedWorkspace(suspendedSessionId, markedAt, options).finally(() => {
+			if (this.suspendedResume === task) {
+				this.suspendedResume = undefined;
+				this.suspendedResumeIntent = undefined;
+			}
+		});
+		this.suspendedResumeIntent = { id: suspendedSessionId, takeover: options.takeover ?? false };
+		this.suspendedResume = task;
+		return task;
+	}
+
+	private async resumeSuspendedWorkspace(
+		suspendedSessionId: string,
+		markedAt: string | undefined,
+		options: WorkspaceSuspendResumeOptions,
+	): Promise<WorkspaceSuspendedConnection> {
+		const generation = this.lifecycleGeneration;
+		const viewport = this.adapters.terminalViewport();
+		const input = readWorkspaceSuspendResume({
+			suspendedSessionId,
+			workspaceId: this.id,
+			viewport: viewport ? { columns: viewport.columns, rows: viewport.rows } : undefined,
+			takeover: options.takeover,
+		});
 		this.clearReconnectTimer();
-		this.closing = false;
+		this.markCapabilitiesDisconnected();
 		this.state.value = 'connecting';
 		this.statusMessage.value = '';
-		const startedAt = performance.now();
-		logger.debug(
-			{ workspaceId: this.id, connectionId: this.connection.id, suspendedSessionId },
-			'Workspace suspended-session resume started',
-		);
+		this.suspendedSessionId = suspendedSessionId;
+		this.ownershipGeneration = undefined;
+		this.leaseExpiresAt = undefined;
+		let dispatched = false;
+		let prepared = false;
 		try {
-			const viewport = this.adapters.terminalViewport();
-			const request: WorkspaceSuspendResumeRequestDto = {
-				suspendedSessionId,
-				workspaceId: this.id,
-				...(viewport ? { viewport } : {}),
-				...(options.takeover ? { takeover: true } : {}),
-			};
-			const result = await this.socket.request('suspend.resume', request);
-			if (result.binaryProtocolVersion !== WORKSPACE_BINARY_PROTOCOL_VERSION) {
-				throw new Error('Workspace binary protocol version mismatch.');
+			await this.socket.open();
+			this.assertConnectionActive();
+			this.assertConnectionGeneration(generation);
+			const request = this.socket.bindRequests();
+			this.terminalOffset = 0;
+			this.receivingSuspendBaseline = true;
+			dispatched = true;
+			this.recoveryRequired.value = true;
+			const result = toSuspendedWorkspace(
+				readWorkspaceSuspendResumeResponse(await request('suspend.resume', input)),
+			);
+			this.receivingSuspendBaseline = false;
+			prepared = true;
+			this.validateConnectionIdentity(result);
+			this.assertConnectionActive();
+			this.assertConnectionGeneration(generation);
+			if (result.suspendedSessionId !== suspendedSessionId || this.terminalOffset !== result.terminalOffset) {
+				throw new WorkspaceSuspendFailure('protocol_failure', 'unknown');
 			}
-			this.adapters.terminal.setPreviousOutputAvailable?.(Boolean(result.historyAvailable));
-			await this.adapters.workspaceConnected();
-			if (!this.socket.connected) throw new Error('Workspace connection closed during terminal activation.');
-			this.adapters.terminal.completeResume?.();
-			this.hasConnected.value = true;
-			this.resumeToken = result.resumeToken;
-			this.attachmentGeneration = result.attachmentGeneration;
-			this.terminalOffset = result.terminalOffset;
-			this.reconnectAttempt = 0;
+			this.ownershipGeneration = result.ownershipGeneration;
+			this.leaseExpiresAt = result.ownershipLeaseExpiresAt;
+			readWorkspaceEmptyResponse(
+				await request(
+					'suspend.resumeAck',
+					readWorkspaceSuspendAck({
+						suspendedSessionId,
+						resumeToken: result.resumeToken,
+						attachmentGeneration: result.attachmentGeneration,
+						ownershipGeneration: result.ownershipGeneration,
+					}),
+				),
+			);
+			this.assertConnectionActive();
+			this.assertConnectionGeneration(generation);
+			// ACK can release queued live output. Keep the already accumulated offset.
+			this.commitAttachment(result, request);
 			this.markedForSuspend.value = true;
 			this.markedForSuspendAt.value = markedAt ?? new Date().toISOString();
+			await this.adapters.workspaceConnected();
+			this.assertConnectionActive();
+			this.assertConnectionGeneration(generation);
+			if (!this.socket.connected) {
+				throw new WorkspaceSuspendFailure('remote_unavailable', 'unknown');
+			}
+			this.adapters.terminal.setPreviousOutputAvailable?.(result.historyAvailable);
+			this.adapters.terminal.completeResume?.();
+			this.hasConnected.value = true;
+			this.terminalEnded = false;
+			this.freshConnectionRequired = false;
+			this.reconnectAttempt = 0;
 			this.state.value = 'connected';
 			this.startSuspendOwnerHeartbeat();
-			logger.debug(
-				{
-					workspaceId: this.id,
-					connectionId: this.connection.id,
-					suspendedSessionId,
-					elapsedMs: Math.round(performance.now() - startedAt),
-				},
-				'Workspace suspended-session resume succeeded',
-			);
+			if (result.lastConnectedAt !== undefined) {
+				markConnectionConnected(this.connection.id, result.lastConnectedAt);
+			}
 			void this.filesystemState
 				.ensureLoaded()
-				.catch((error) =>
-					logger.debug({ err: error, workspaceId: this.id }, 'Resumed workspace filesystem warmup failed'),
+				.catch((cause) =>
+					logger.debug({ err: cause, workspaceId: this.id }, 'Resumed workspace filesystem warmup failed'),
 				);
 			void this.statusController
 				.workspaceConnected()
-				.catch((error) =>
-					logger.debug({ err: error, workspaceId: this.id }, 'Resumed workspace status warmup failed'),
+				.catch((cause) =>
+					logger.debug({ err: cause, workspaceId: this.id }, 'Resumed workspace status warmup failed'),
 				);
 			this.dockerController.workspaceConnected();
 			return result;
 		} catch (cause) {
-			const error = cause instanceof Error ? cause : new Error(String(cause));
-			logger.warn(
-				{
-					err: error,
-					workspaceId: this.id,
-					connectionId: this.connection.id,
-					suspendedSessionId,
-					elapsedMs: Math.round(performance.now() - startedAt),
-				},
-				'Workspace suspended-session resume failed',
-			);
-			this.state.value = 'error';
-			this.statusMessage.value = error.message;
-			throw error;
+			this.receivingSuspendBaseline = false;
+			const refused =
+				cause instanceof WorkspaceRequestFailure &&
+				cause.operation === 'suspend.resume' &&
+				cause.code !== 'operation_unknown' &&
+				cause.code !== 'remote_unavailable';
+			const unsent = !prepared && cause instanceof WorkspaceDispatchFailure;
+			if (generation === this.lifecycleGeneration) {
+				this.recoveryRequired.value = dispatched && !refused && !unsent;
+			}
+			this.markCapabilitiesDisconnected();
+			this.socket.close('Suspended resume failed');
+			if (!this.disposed && !this.closing && generation === this.lifecycleGeneration) {
+				this.state.value = 'error';
+				this.statusMessage.value = this.recoveryRequired.value ? 'operation_unknown' : 'remote_unavailable';
+			}
+			throw cause;
 		}
 	}
 
-	async markForSuspend(terminalSnapshot: () => Promise<string>): Promise<string> {
-		const result = await this.adapters.suspend.mark(this.id, terminalSnapshot);
-		this.markedForSuspend.value = true;
-		this.markedForSuspendAt.value = new Date().toISOString();
-		this.startSuspendOwnerHeartbeat();
-		return result.suspendedSessionId;
+	markForSuspend(terminalSnapshot: () => Promise<string>): Promise<string> {
+		if (this.suspendMutation) return Promise.reject(new WorkspaceSuspendFailure('conflict', 'not_dispatched'));
+		const task = Promise.resolve()
+			.then(() => this.runMarkForSuspend(terminalSnapshot))
+			.finally(() => {
+				if (this.suspendMutation === task) this.suspendMutation = undefined;
+			});
+		this.suspendMutation = task;
+		return task;
 	}
 
-	async unmarkSuspend(): Promise<void> {
-		await this.adapters.suspend.unmark(this.id);
+	private async runMarkForSuspend(terminalSnapshot: () => Promise<string>): Promise<string> {
+		this.assertConnectionActive();
+		const generation = this.lifecycleGeneration;
+		try {
+			const result = await this.adapters.suspend.mark(this.id, terminalSnapshot);
+			this.assertConnectionActive();
+			this.assertConnectionGeneration(generation);
+			this.suspendedSessionId = result.suspendedSessionId;
+			this.ownershipGeneration = undefined;
+			this.leaseExpiresAt = undefined;
+			this.markedForSuspend.value = true;
+			this.markedForSuspendAt.value = new Date().toISOString();
+			this.startSuspendOwnerHeartbeat();
+			return result.suspendedSessionId;
+		} catch (cause) {
+			this.handleSuspendMutationFailure(cause, generation);
+			throw cause;
+		}
+	}
+
+	unmarkSuspend(): Promise<void> {
+		if (this.suspendMutation) return Promise.reject(new WorkspaceSuspendFailure('conflict', 'not_dispatched'));
+		const task = Promise.resolve()
+			.then(() => this.runUnmarkSuspend())
+			.finally(() => {
+				if (this.suspendMutation === task) this.suspendMutation = undefined;
+			});
+		this.suspendMutation = task;
+		return task;
+	}
+
+	private async runUnmarkSuspend(): Promise<void> {
+		this.assertConnectionActive();
+		const generation = this.lifecycleGeneration;
+		try {
+			await this.adapters.suspend.unmark(this.id);
+			this.assertConnectionActive();
+			this.assertConnectionGeneration(generation);
+			this.clearSuspendOwnerHeartbeat();
+			this.markedForSuspend.value = false;
+			this.markedForSuspendAt.value = null;
+			this.suspendedSessionId = undefined;
+			this.ownershipGeneration = undefined;
+			this.leaseExpiresAt = undefined;
+		} catch (cause) {
+			this.handleSuspendMutationFailure(cause, generation);
+			throw cause;
+		}
+	}
+
+	private handleSuspendMutationFailure(cause: unknown, generation: number): void {
+		if (this.disposed || this.closing || generation !== this.lifecycleGeneration) {
+			return;
+		}
+		if (cause instanceof WorkspaceSuspendFailure && cause.outcome !== 'unknown') {
+			return;
+		}
+		this.recoveryRequired.value = true;
 		this.clearSuspendOwnerHeartbeat();
-		this.markedForSuspend.value = false;
-		this.markedForSuspendAt.value = null;
+		this.markCapabilitiesDisconnected();
+		this.socket.close('Suspended mutation result unknown');
+		this.statusMessage.value = 'operation_unknown';
 	}
 
 	reconnectNow(): void {
-		if (this.disposed || this.closing || this.markedForSuspend.value || this.state.value === 'connected') return;
+		if (this.disposed || this.closing || this.markedForSuspend.value || this.state.value === 'connected') {
+			return;
+		}
 		if (this.reconnectInFlight || this.state.value === 'connecting') {
 			this.immediateReconnectRequested = true;
 			this.clearReconnectTimer();
@@ -422,14 +692,24 @@ export class WorkspaceRuntimeSession {
 	}
 
 	async recoverForeground(): Promise<void> {
-		if (this.disposed || this.closing || this.terminalEnded) return;
-		if (this.state.value === 'connected') await this.socket.checkLiveness();
-		if (this.disposed || this.closing || document.visibilityState !== 'visible') return;
-		if (this.state.value !== 'connected') this.reconnectNow();
+		if (this.disposed || this.closing || this.terminalEnded) {
+			return;
+		}
+		if (this.state.value === 'connected') {
+			await this.socket.checkLiveness();
+		}
+		if (this.disposed || this.closing || document.visibilityState !== 'visible') {
+			return;
+		}
+		if (this.state.value !== 'connected') {
+			this.reconnectNow();
+		}
 	}
 
-	close(reason = 'Workspace closed'): void {
-		if (this.disposed) return;
+	close(reason = 'Workspace closed'): Promise<WorkspaceCloseOutcome> {
+		if (this.closeTask) {
+			return this.closeTask;
+		}
 		const context = {
 			workspaceId: this.id,
 			connectionId: this.connection.id,
@@ -441,19 +721,44 @@ export class WorkspaceRuntimeSession {
 				? { triggerStack: new Error('Workspace runtime close trigger').stack }
 				: {}),
 		};
-		if (this.markedForSuspend.value) logger.info(context, 'Marked Workspace runtime close requested');
-		else logger.debug(context, 'Workspace runtime close requested');
+		if (this.markedForSuspend.value) {
+			logger.info(context, 'Marked Workspace runtime close requested');
+		} else {
+			logger.debug(context, 'Workspace runtime close requested');
+		}
 		this.closing = true;
 		this.clearReconnectTimer();
 		this.clearSuspendOwnerHeartbeat();
-		this.statusController.workspaceDisconnected();
-		this.dockerController.workspaceDisconnected();
-		this.closeRemoteWorkspace(reason);
+		this.markCapabilitiesDisconnected();
+		if (this.suspendedResume || this.suspendMutation) {
+			if (this.suspendMutation) this.recoveryRequired.value = true;
+			this.socket.close(reason);
+		}
+		const task = this.closeRemoteWorkspace(reason);
+		this.closeTask = task;
 		this.state.value = 'disconnected';
+		return task;
 	}
 
-	dispose(reason = 'Workspace disposed'): void {
-		if (this.disposed) return;
+	dispose(reason = 'Workspace disposed'): Promise<WorkspaceCloseOutcome> {
+		if (this.disposeTask) {
+			return this.disposeTask;
+		}
+		const completion = Promise.withResolvers<WorkspaceCloseOutcome>();
+		this.disposeTask = completion.promise;
+		this.disposed = true;
+		const failures: unknown[] = [];
+		let closed: Promise<WorkspaceCloseOutcome>;
+		try {
+			closed = this.close(reason);
+		} catch (cause) {
+			closed = Promise.reject(cause);
+			try {
+				this.socket.close(reason);
+			} catch (cleanupError) {
+				failures.push(cleanupError);
+			}
+		}
 		const context = {
 			workspaceId: this.id,
 			connectionId: this.connection.id,
@@ -465,25 +770,52 @@ export class WorkspaceRuntimeSession {
 				? { triggerStack: new Error('Workspace runtime dispose trigger').stack }
 				: {}),
 		};
-		if (this.markedForSuspend.value) logger.info(context, 'Marked Workspace runtime dispose requested');
-		else logger.debug(context, 'Workspace runtime dispose requested');
-		this.disposed = true;
+		if (this.markedForSuspend.value) {
+			logger.info(context, 'Marked Workspace runtime dispose requested');
+		} else {
+			logger.debug(context, 'Workspace runtime dispose requested');
+		}
 		this.closing = true;
-		this.clearReconnectTimer();
-		this.clearSuspendOwnerHeartbeat();
-		this.transferController.dispose();
-		this.filesystemState.dispose();
-		this.statusController.dispose();
-		this.dockerController.dispose();
-		this.adapters.dispose();
-		while (this.cleanup.length) this.cleanup.pop()?.();
-		this.closeRemoteWorkspace(reason);
+		const cleanup = [
+			() => this.clearReconnectTimer(),
+			() => this.clearSuspendOwnerHeartbeat(),
+			() => this.editorController.reset(),
+			() => this.previewController.clear(),
+			() => this.transferController.dispose(),
+			() => this.filesystemState.dispose(),
+			() => this.statusController.dispose(),
+			() => this.dockerController.dispose(),
+			() => this.adapters.dispose(),
+			...this.cleanup.splice(0).reverse(),
+		];
+		for (const release of cleanup) {
+			try {
+				release();
+			} catch (cause) {
+				failures.push(cause);
+			}
+		}
 		this.state.value = 'disconnected';
+		void closed.then(
+			(outcome) => {
+				if (failures.length) {
+					const causes =
+						outcome === 'unknown'
+							? [new Error('Workspace close outcome is unknown'), ...failures]
+							: failures;
+					completion.reject(new AggregateError(causes, 'Workspace cleanup failed'));
+				} else completion.resolve(outcome);
+			},
+			(cause) => completion.reject(new AggregateError([cause, ...failures], 'Workspace cleanup failed')),
+		);
+		return completion.promise;
 	}
 
 	private handleTransportClosed(reason?: string): void {
 		this.clearSuspendOwnerHeartbeat();
-		if (this.disposed || this.closing) return;
+		if (this.disposed || this.closing) {
+			return;
+		}
 		const context = {
 			workspaceId: this.id,
 			connectionId: this.connection.id,
@@ -494,34 +826,77 @@ export class WorkspaceRuntimeSession {
 			markedForSuspend: this.markedForSuspend.value,
 			visibilityState: document.visibilityState,
 		};
-		if (this.markedForSuspend.value) logger.info(context, 'Marked Workspace transport closed');
-		else logger.debug(context, 'Workspace transport closed');
+		if (this.markedForSuspend.value) {
+			logger.info(context, 'Marked Workspace transport closed');
+		} else {
+			logger.debug(context, 'Workspace transport closed');
+		}
 		this.markCapabilitiesDisconnected();
-		this.state.value = 'disconnected';
-		if (reason) this.statusMessage.value = reason;
-		if (this.markedForSuspend.value || this.terminalEnded) return;
+		this.state.value = this.recoveryRequired.value ? 'error' : 'disconnected';
+		if (reason && !this.recoveryRequired.value) {
+			this.statusMessage.value = reason;
+		}
+		if (this.markedForSuspend.value || this.terminalEnded) {
+			return;
+		}
 		this.scheduleReconnect();
 	}
 
-	private closeRemoteWorkspace(reason: string): void {
-		if (!this.resumeToken || this.attachmentGeneration === undefined) {
+	private async closeRemoteWorkspace(reason: string): Promise<WorkspaceCloseOutcome> {
+		// Closing during acquisition still owns the eventual receipt and its cleanup.
+		await this.connecting?.catch(() => undefined);
+		await this.suspendedResume?.catch(() => undefined);
+		await this.suspendMutation?.catch(() => undefined);
+		try {
+			if (this.recoveryRequired.value) {
+				return 'unknown';
+			}
+			// Marked PTYs belong to the suspension owner; closing this tab only detaches.
+			if (this.markedForSuspend.value) return 'detached';
+			if (
+				!this.attachmentReady ||
+				!this.attachmentRequest ||
+				!this.socket.connected ||
+				!this.resumeToken ||
+				this.attachmentGeneration === undefined
+			) {
+				return 'detached';
+			}
+			readWorkspaceEmptyResponse(
+				await this.attachmentRequest(
+					'workspace.close',
+					readWorkspaceCloseRequest({
+						workspaceId: this.id,
+						connectionId: this.connection.id,
+						resumeToken: this.resumeToken,
+						attachmentGeneration: this.attachmentGeneration,
+					}),
+				),
+			);
+			this.attachmentReady = false;
+			return 'closed';
+		} catch {
+			this.recoveryRequired.value = true;
+			logger.warn(
+				{ workspaceId: this.id, connectionId: this.connection.id },
+				'Workspace close result is unknown',
+			);
+			return 'unknown';
+		} finally {
 			this.socket.close(reason);
-			return;
 		}
-		const closeRequest = {
-			workspaceId: this.id,
-			connectionId: this.connection.id,
-			resumeToken: this.resumeToken,
-			attachmentGeneration: this.attachmentGeneration,
-		};
-		this.socket.close(reason);
-		void this.socket
-			.request('workspace.close', closeRequest)
-			.catch(() => undefined)
-			.finally(() => this.socket.close(reason));
 	}
 
 	private prepareFreshConnection(): void {
+		this.lifecycleGeneration += 1;
+		this.clearSuspendOwnerHeartbeat();
+		// Terminal termination during a suspended handover cannot prove its remote outcome.
+		this.recoveryRequired.value = this.recoveryRequired.value || Boolean(this.suspendedResume);
+		this.ownershipGeneration = undefined;
+		this.leaseExpiresAt = undefined;
+		this.socket.close('Workspace terminal ended');
+		this.currentConnection = undefined;
+		this.attachmentReady = false;
 		this.resumeToken = undefined;
 		this.attachmentGeneration = undefined;
 		this.terminalOffset = 0;
@@ -530,7 +905,15 @@ export class WorkspaceRuntimeSession {
 	}
 
 	private scheduleReconnect(): void {
-		if (this.reconnectTimer !== undefined || this.disposed || this.closing || this.markedForSuspend.value) return;
+		if (
+			this.reconnectTimer !== undefined ||
+			this.disposed ||
+			this.closing ||
+			this.recoveryRequired.value ||
+			this.markedForSuspend.value
+		) {
+			return;
+		}
 		if (!this.hasConnected.value && this.reconnectAttempt >= INITIAL_RECONNECT_ATTEMPT_LIMIT) {
 			this.state.value = 'error';
 			logger.warn(
@@ -574,7 +957,15 @@ export class WorkspaceRuntimeSession {
 	}
 
 	private async reconnect(): Promise<void> {
-		if (this.disposed || this.closing || this.markedForSuspend.value || this.reconnectInFlight) return;
+		if (
+			this.disposed ||
+			this.closing ||
+			this.recoveryRequired.value ||
+			this.markedForSuspend.value ||
+			this.reconnectInFlight
+		) {
+			return;
+		}
 		const reconnectAttempt = this.reconnectAttempt;
 		this.reconnectInFlight = true;
 		logger.debug(
@@ -612,32 +1003,90 @@ export class WorkspaceRuntimeSession {
 
 	private startSuspendOwnerHeartbeat(): void {
 		this.clearSuspendOwnerHeartbeat();
+		const generation = this.heartbeatGeneration;
+		const lifecycle = this.lifecycleGeneration;
+		const controller = new AbortController();
+		this.heartbeatController = controller;
+		const request = this.socket.bindRequests();
 
-		const renew = async (): Promise<void> => {
-			if (this.disposed || this.closing || !this.markedForSuspend.value || !this.socket.connected) return;
-			try {
-				await this.socket.request('suspend.owner.renew', {});
-			} catch (cause) {
-				const error = cause instanceof Error ? cause : new Error(String(cause));
-				logger.warn(
-					{ err: error, workspaceId: this.id, connectionId: this.connection.id },
-					'Suspended-session owner lease renewal failed',
-				);
-				this.statusMessage.value = error.message;
+		const current = () =>
+			generation === this.heartbeatGeneration &&
+			lifecycle === this.lifecycleGeneration &&
+			!controller.signal.aborted &&
+			!this.disposed &&
+			!this.closing &&
+			this.markedForSuspend.value &&
+			this.socket.connected;
+
+		const expire = () => {
+			if (!current()) {
+				return;
+			}
+			this.recoveryRequired.value = true;
+			this.clearSuspendOwnerHeartbeat();
+			this.markCapabilitiesDisconnected();
+			this.socket.close('Suspended lease unavailable');
+			this.statusMessage.value = 'lease_expired';
+		};
+
+		const armDeadline = () => {
+			window.clearTimeout(this.leaseDeadline);
+			if (this.leaseExpiresAt !== undefined) {
+				this.leaseDeadline = window.setTimeout(expire, Math.max(0, this.leaseExpiresAt - Date.now()));
 			}
 		};
 
-		this.suspendOwnerHeartbeat = window.setInterval(() => void renew(), SUSPEND_OWNER_HEARTBEAT_MS);
+		const renew = async (): Promise<void> => {
+			if (!current()) {
+				return;
+			}
+			try {
+				const lease = toSuspendedLease(
+					readWorkspaceSuspendOwnerRenew(
+						await request('suspend.owner.renew', {}, undefined, controller.signal),
+					),
+				);
+				if (!current()) {
+					return;
+				}
+				if (
+					(this.ownershipGeneration !== undefined && lease.generation !== this.ownershipGeneration) ||
+					(this.leaseExpiresAt !== undefined && lease.expiresAt < this.leaseExpiresAt) ||
+					lease.expiresAt <= Date.now()
+				) {
+					throw new WorkspaceSuspendFailure('protocol_failure', 'unknown');
+				}
+				this.ownershipGeneration = lease.generation;
+				this.leaseExpiresAt = lease.expiresAt;
+				armDeadline();
+				this.suspendOwnerHeartbeat = window.setTimeout(() => void renew(), SUSPEND_OWNER_HEARTBEAT_MS);
+			} catch (cause) {
+				if (!current()) {
+					return;
+				}
+				logger.warn({ err: cause, workspaceId: this.id }, 'Suspended owner renewal failed');
+				expire();
+			}
+		};
+
+		armDeadline();
+		void renew();
 	}
 
 	private clearSuspendOwnerHeartbeat(): void {
-		if (this.suspendOwnerHeartbeat === undefined) return;
-		window.clearInterval(this.suspendOwnerHeartbeat);
+		this.heartbeatGeneration += 1;
+		this.heartbeatController?.abort();
+		this.heartbeatController = undefined;
+		window.clearTimeout(this.suspendOwnerHeartbeat);
+		window.clearTimeout(this.leaseDeadline);
 		this.suspendOwnerHeartbeat = undefined;
+		this.leaseDeadline = undefined;
 	}
 
 	private clearReconnectTimer(): void {
-		if (this.reconnectTimer === undefined) return;
+		if (this.reconnectTimer === undefined) {
+			return;
+		}
 		window.clearTimeout(this.reconnectTimer);
 		this.reconnectTimer = undefined;
 	}

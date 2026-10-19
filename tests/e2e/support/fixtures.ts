@@ -11,25 +11,25 @@ type E2EFixtures = {
 	_e2eTestReset: void;
 };
 
-const resetE2EBaseline = async (request: import('@playwright/test').APIRequestContext, mode: E2EDatabaseMode) => {
-	let lastFailure = 'E2E reset did not run.';
-	for (let attempt = 1; attempt <= 3; attempt += 1) {
-		const response = await request.post(`${E2E_URLS.backendOrigin}/api/v1/__e2e/reset`, { data: { mode } });
-		const body = await response.text();
-		if (response.ok()) return;
-
-		lastFailure = `E2E reset attempt ${attempt}/3 returned HTTP ${response.status()}: ${body || '<empty body>'}`;
-		if (response.status() < 500 || attempt === 3) break;
-		await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
-	}
-	baseExpect(false, lastFailure).toBeTruthy();
+const resetE2EBaseline = async (mode: E2EDatabaseMode) => {
+	const token = process.env.NEXUS_E2E_CONTROL_TOKEN;
+	if (!token) throw new Error('NEXUS_E2E_CONTROL_TOKEN is required');
+	// A reset with a lost response is unknown; never retry replacement of the baseline.
+	const response = await fetch(E2E_URLS.backendControlOrigin + '/reset', {
+		method: 'POST',
+		headers: { 'X-Nexus-E2E-Control': token, 'Content-Type': 'application/json' },
+		body: JSON.stringify({ mode }),
+		signal: AbortSignal.timeout(60_000),
+	});
+	baseExpect(response.ok, 'Backend-next isolated baseline reset failed: HTTP ' + response.status).toBeTruthy();
+	await baseExpect(response.json()).resolves.toEqual({ reset: true, mode });
 };
 
 export const test = base.extend<E2EFixtures>({
 	e2eDatabaseMode: ['seed', { option: true }],
 	_e2eTestReset: [
-		async ({ request, e2eDatabaseMode }, use) => {
-			await resetE2EBaseline(request, e2eDatabaseMode);
+		async ({ e2eDatabaseMode }, use) => {
+			await resetE2EBaseline(e2eDatabaseMode);
 			await resetTestSshFilesystem();
 
 			await use();

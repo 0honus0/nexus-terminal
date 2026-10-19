@@ -1,11 +1,11 @@
 <script setup lang="ts">
-	import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+	import { computed, onBeforeUnmount, onMounted, onActivated, onDeactivated, ref, useId } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiInput } from '@/foundation/ui';
-	import { apiErrorMessage } from '@/client/http';
+	import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 	import { useFeedback } from '@/shared/feedback/public';
-	import { useSuspendedSessions } from '../composables/useSuspendedSessions';
-	import type { MarkedSuspendedSessionState, SuspendedSessionDto } from '../model/sshSuspend';
+	import { useSuspendedSessions, suspendedFailureKey } from '../composables/useSuspendedSessions';
+	import type { MarkedSuspendedSessionState, SuspendedSession } from '../model/suspended-session-types';
 
 	const props = withDefaults(
 		defineProps<{ canResume?: boolean; markedSessions?: MarkedSuspendedSessionState[]; pageScroll?: boolean }>(),
@@ -16,10 +16,10 @@
 		},
 	);
 	const emit = defineEmits<{
-		resume: [session: SuspendedSessionDto];
+		resume: [session: SuspendedSession];
 		resumeMarked: [workspaceId: string];
 		unmark: [workspaceId: string];
-		removed: [session: SuspendedSessionDto];
+		removed: [session: SuspendedSession];
 	}>();
 	const { t } = useI18n();
 	const feedback = useFeedback();
@@ -33,8 +33,12 @@
 	const catalogWorkspaceIds = computed(() => {
 		const ids = new Set<string>();
 		for (const session of data.sessions.value) {
-			if (session.originalWorkspaceId) ids.add(session.originalWorkspaceId);
-			if (session.attachedWorkspaceId) ids.add(session.attachedWorkspaceId);
+			if (session.originalWorkspaceId) {
+				ids.add(session.originalWorkspaceId);
+			}
+			if (session.attachedWorkspaceId) {
+				ids.add(session.attachedWorkspaceId);
+			}
 		}
 		return ids;
 	});
@@ -44,30 +48,50 @@
 			// A marked runtime is only a provisional/local representation. Once the backend
 			// catalog owns the same original or attached Workspace, render that authoritative
 			// record instead of showing the same suspended shell twice after resume/reconnect.
-			if (catalogWorkspaceIds.value.has(session.workspaceId)) return false;
+			if (catalogWorkspaceIds.value.has(session.workspaceId)) {
+				return false;
+			}
 			return !term || `${session.connectionName} ${session.workspaceId}`.toLowerCase().includes(term);
 		});
 	});
 	const hasResults = computed(() => filteredMarked.value.length > 0 || data.filtered.value.length > 0);
-	let panelMounted = false;
-	let pollingStarted = false;
+	let panelActive = false;
+	let viewController = new AbortController();
 
-	onMounted(async () => {
-		panelMounted = true;
-		await data.load({ force: true });
-		if (!panelMounted) return;
+	function activate(): void {
+		if (panelActive) {
+			return;
+		}
+		panelActive = true;
+		viewController = new AbortController();
+		void data.load({ force: true });
 		data.startPolling();
-		pollingStarted = true;
-	});
-	onBeforeUnmount(() => {
-		panelMounted = false;
-		if (!pollingStarted) return;
+	}
+
+	function deactivate(): void {
+		panelActive = false;
+		viewController.abort();
 		data.stopPolling();
-		pollingStarted = false;
+		editingId.value = null;
+		editingName.value = '';
+		renamingId.value = null;
+		exportingId.value = null;
+		removingId.value = null;
+	}
+
+	const detachSessionReset = registerAuthenticatedSessionReset('suspended-panel-' + useId(), deactivate);
+	onMounted(activate);
+	onActivated(activate);
+	onDeactivated(deactivate);
+	onBeforeUnmount(() => {
+		deactivate();
+		detachSessionReset();
 	});
 
-	const startRename = (session: SuspendedSessionDto) => {
-		if (renamingId.value) return;
+	const startRename = (session: SuspendedSession) => {
+		if (!panelActive || renamingId.value) {
+			return;
+		}
 		editingId.value = session.id;
 		editingName.value = session.customName ?? session.connectionName;
 	};
@@ -77,8 +101,11 @@
 		editingName.value = '';
 	};
 
-	const finishRename = async (session: SuspendedSessionDto) => {
-		if (editingId.value !== session.id || renamingId.value === session.id) return;
+	const finishRename = async (session: SuspendedSession) => {
+		if (editingId.value !== session.id || renamingId.value === session.id) {
+			return;
+		}
+		const owner = viewController;
 		const name = editingName.value.trim();
 		const currentName = session.customName ?? session.connectionName;
 		if (!name || name === currentName) {
@@ -88,84 +115,107 @@
 		renamingId.value = session.id;
 		editingId.value = null;
 		try {
-			const authoritativeName = await data.rename(session, name);
+			const authoritativeName = await data.rename(session, name, owner.signal);
+			if (owner.signal.aborted || viewController !== owner) {
+				return;
+			}
 			feedback.notifySuccess(
 				t('sshSuspend.notifications.nameEditedSuccess', {
 					name: authoritativeName.trim() || session.connectionName,
 				}),
 			);
 		} catch (cause) {
-			feedback.notifyError(apiErrorMessage(cause, t('sshSuspend.notifications.nameEditedError', { error: '' })));
+			if (!owner.signal.aborted && viewController === owner) {
+				feedback.notifyError(t(suspendedFailureKey(cause)));
+			}
 		} finally {
-			renamingId.value = null;
-			editingName.value = '';
+			if (viewController === owner && !owner.signal.aborted) {
+				renamingId.value = null;
+				editingName.value = '';
+			}
 		}
 	};
 
-	const remove = async (session: SuspendedSessionDto) => {
-		if (removingId.value) return;
-		const name = session.customName ?? session.connectionName;
-		if (
-			!(await feedback.confirm({
-				message: `${t('suspendedSshSessions.action.remove')} ${name}?`,
-				destructive: true,
-			}))
-		)
+	const remove = async (session: SuspendedSession) => {
+		if (!panelActive || removingId.value) {
 			return;
+		}
+		const owner = viewController;
 		removingId.value = session.id;
+		const name = session.customName ?? session.connectionName;
 		try {
-			const wasActive = session.status === 'active';
-			await data.remove(session);
+			const confirmed = await feedback.confirm({
+				message: t('sshSuspend.prompts.confirmRemove', { name }),
+				destructive: true,
+				signal: owner.signal,
+			});
+			if (!confirmed || owner.signal.aborted || viewController !== owner) {
+				return;
+			}
+			await data.remove(session, owner.signal);
+			if (owner.signal.aborted || viewController !== owner) {
+				return;
+			}
 			feedback.notifySuccess(
 				t(
-					wasActive
+					session.status === 'active'
 						? 'sshSuspend.notifications.terminatedSuccess'
 						: 'sshSuspend.notifications.entryRemovedSuccess',
-					{
-						name,
-					},
+					{ name },
 				),
 			);
 			emit('removed', session);
 		} catch (cause) {
-			feedback.notifyError(
-				apiErrorMessage(
-					cause,
-					t(
-						session.status === 'active'
-							? 'sshSuspend.notifications.terminateError'
-							: 'sshSuspend.notifications.entryRemovedError',
-						{ error: '' },
-					),
-				),
-			);
+			if (!owner.signal.aborted && viewController === owner) {
+				feedback.notifyError(t(suspendedFailureKey(cause)));
+			}
 		} finally {
-			removingId.value = null;
+			if (!owner.signal.aborted && viewController === owner) {
+				removingId.value = null;
+			}
 		}
 	};
 
-	const exportLog = async (session: SuspendedSessionDto) => {
-		if (exportingId.value) return;
+	const exportLog = async (session: SuspendedSession) => {
+		if (!panelActive || exportingId.value) {
+			return;
+		}
+		const owner = viewController;
 		exportingId.value = session.id;
 		try {
-			const filename = await data.exportLog(session.id);
+			const filename = await data.exportLog(session.id, owner.signal);
+			if (owner.signal.aborted || viewController !== owner) {
+				return;
+			}
 			feedback.notifySuccess(t('sshSuspend.notifications.logExportSuccess', { name: filename }));
 		} catch (cause) {
-			feedback.notifyError(apiErrorMessage(cause, t('sshSuspend.notifications.logExportError', { error: '' })));
+			if (!owner.signal.aborted && viewController === owner) {
+				feedback.notifyError(t(suspendedFailureKey(cause)));
+			}
 		} finally {
-			exportingId.value = null;
+			if (!owner.signal.aborted && viewController === owner) {
+				exportingId.value = null;
+			}
 		}
 	};
 
-	const getStatusLabel = (session: SuspendedSessionDto): string => {
-		if (session.status !== 'active') return t('suspendedSshSessions.status.disconnected');
-		if (session.ownershipState === 'attached') return t('suspendedSshSessions.status.attached');
-		if (session.ownershipState === 'resuming') return t('suspendedSshSessions.status.resuming');
+	const getStatusLabel = (session: SuspendedSession): string => {
+		if (session.status !== 'active') {
+			return t('suspendedSshSessions.status.disconnected');
+		}
+		if (session.ownershipState === 'attached') {
+			return t('suspendedSshSessions.status.attached');
+		}
+		if (session.ownershipState === 'resuming') {
+			return t('suspendedSshSessions.status.resuming');
+		}
 		return t('suspendedSshSessions.status.hanging');
 	};
 
 	const formatTime = (isoString?: string | number): string => {
-		if (!isoString) return '';
+		if (!isoString) {
+			return '';
+		}
 		try {
 			const d = new Date(isoString);
 			return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -204,6 +254,17 @@
 			</UiInput>
 		</div>
 
+		<div
+			v-if="data.error.value"
+			class="rounded-lg border border-error/20 bg-error/5 p-2 text-xs text-error"
+			role="alert"
+		>
+			<p>{{ t(data.error.value) }}</p>
+			<button type="button" class="mt-1 underline" :disabled="data.loading.value" @click="data.recover()">
+				{{ t('sshSuspend.recover') }}
+			</button>
+		</div>
+
 		<!-- 列表容器 -->
 		<div class="session-list-container min-h-0" :class="props.pageScroll ? '' : 'flex-1 overflow-y-auto'">
 			<div
@@ -213,9 +274,6 @@
 				<i class="fas fa-spinner fa-spin text-base text-primary" aria-hidden="true"></i>
 				<p class="mt-1.5 text-xs">{{ t('suspendedSshSessions.loading') }}</p>
 			</div>
-			<p v-else-if="data.error.value" class="rounded-lg border border-error/20 bg-error/5 p-2 text-xs text-error">
-				{{ data.error.value }}
-			</p>
 			<div
 				v-else-if="!hasResults"
 				class="suspended-session-empty flex flex-col items-center justify-center py-6 px-3 text-center"

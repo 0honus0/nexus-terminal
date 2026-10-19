@@ -37,8 +37,6 @@
         "channelTypeEditNote": "创建后无法修改渠道类型。",
         "webhookMethod": "HTTP 方法:",
         "webhookHeaders": "自定义 Headers",
-        "secretHeaderNames": "额外的秘密 Header 名称（逗号分隔）",
-        "secretHeaderHint": "常见凭据 Header 自动脱敏。null 保留已有秘密，删除对应条目则删除；自定义凭据名称请在此标记。",
         "webhookBodyTemplate": "请求体模板 (可选)",
         "webhookBodyPlaceholder": "默认: JSON 格式负载。可使用",
         "emailTo": "收件人邮箱:",
@@ -57,15 +55,23 @@
         "testFailed": "测试通知发送失败",
         "fillRequiredToTest": "请填写必填字段以启用测试。",
         "telegramToken": "机器人 Token:",
-        "telegramTokenHelp": "请安全存储。建议使用环境变量。",
         "telegramChatId": "聊天 ID:",
         "telegramMessageTemplate": "消息模板 (可选)",
         "telegramMessagePlaceholder": "默认: Markdown 格式。可使用",
         "telegramCustomDomain": "自定义 Telegram API 域名",
         "enabledEvents": "启用的事件:",
         "templateHelp": "可用占位符:",
-        "invalidJson": "无效的 JSON 格式",
-        "headersObjectRequired": "Headers 必须是 JSON 对象。"
+        "keepSecret": "保留已保存值",
+        "clearSecret": "清除已保存值",
+        "replaceSecret": "替换值",
+        "headerName": "Header 名称",
+        "headerValue": "新秘密值",
+        "secretAction": "秘密操作",
+        "secretPresent": "已有保存值",
+        "secretAbsent": "未保存值",
+        "addHeader": "添加 Header",
+        "secretHint": "不返回已保存秘密；请明确选择保留、清除或替换。",
+        "testSaved": "测试已保存配置"
       },
       "events": {
         "LOGIN_SUCCESS": "登录成功",
@@ -110,7 +116,23 @@
         "webhook": "Webhook",
         "email": "邮件",
         "telegram": "Telegram"
-      }
+      },
+      "deliveries": "通知投递记录",
+      "deliveryHint": "排队和已派发仅表示受理，不代表发送成功。结果未知时不会自动重发。",
+      "loadMore": "加载更多",
+      "deliveryStatus": {
+        "queued": "已排队",
+        "dispatched": "已派发，等待结果",
+        "sent": "已发送",
+        "failed": "发送失败",
+        "unknown": "投递结果未知，请核对接收端后再操作"
+      },
+      "refresh": "刷新并核对",
+      "failure": "通知请求失败，请重新读取当前状态。",
+      "unknown": "结果未知，请先核对配置和投递记录，不要直接重复操作。",
+      "conflict": "通道已变化或删除，请刷新后重新打开编辑。",
+      "invalid": "请核对输入和允许的容量。",
+      "refreshRequired": "请先刷新并核对，再进行变更。"
     }
   }
 }

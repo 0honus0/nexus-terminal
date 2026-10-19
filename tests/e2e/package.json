@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "seed:refresh": "pnpm --filter @nexus-terminal/backend exec tsx -- ../../tests/e2e/support/create-seed.ts",
     "test": "playwright test",
     "test:auth": "playwright test --project=auth",
     "test:http": "playwright test --project=http",

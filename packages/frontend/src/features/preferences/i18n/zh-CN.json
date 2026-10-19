@@ -26,7 +26,8 @@
       "title": "日志等级",
       "frontendLabel": "前端日志等级:",
       "backendLabel": "后端日志等级:",
-      "description": "用于排查和性能调试。DEBUG/TRACE 会输出更详细的运行信息；性能统计仅在 DEBUG 或 TRACE 时输出。修改后立即生效。"
+      "description": "用于排查和性能调试。DEBUG/TRACE 会输出更详细的运行信息；性能统计仅在 DEBUG 或 TRACE 时输出。修改后立即生效。",
+      "effective": "当前生效级别：{level}"
     },
     "popupEditor": {
       "title": "弹窗文件编辑器",
@@ -206,6 +207,33 @@
       "loadFailed": "加载偏好设置失败：{error}",
       "saved": "偏好设置已保存。",
       "saveFailed": "保存偏好设置失败：{error}"
+    },
+    "monitoring": {
+      "title": "监控核心配置",
+      "hint": "仅管理员可修改。周期为1–86400秒，保存后下次重启统一生效；显示开关和图表不改变远端采样。",
+      "versions": "已保存版本 {saved} · 当前生效版本 {effective}",
+      "effective": "当前生效：采样间隔 {status} 秒 · 主机缓存 TTL / 概览刷新 {host} 秒",
+      "restart": "配置已保存，重启后生效。",
+      "status": "监控采样间隔（秒）",
+      "host": "主机缓存 TTL / 概览刷新（秒）",
+      "refresh": "只读重新加载并核对",
+      "feedback": {
+        "saved": "保存成功；重启前仍使用上方当前生效值。",
+        "conflict": "配置版本冲突。请先只读重新加载，核对后再保存。",
+        "unknown": "结果未确认。先只读重新加载并核对，不要重复保存。",
+        "invalid_input": "请输入范围内的整数周期。",
+        "unauthenticated": "会话已失效，请重新登录。",
+        "forbidden": "只有管理员可以查看或修改核心配置。",
+        "version_conflict": "配置版本冲突，请先只读核对。",
+        "limit_exceeded": "配置超出容量限制。",
+        "storage_unavailable": "存储不可用，请先只读核对。",
+        "operation_unknown": "保存结果未知，请先只读核对。",
+        "internal_failure": "配置服务异常，请先只读核对。",
+        "unavailable": "配置服务暂时不可用，请重新加载。",
+        "request_failed": "读取失败，请重新加载。",
+        "protocol_failure": "响应无效，请重新加载。",
+        "cancelled": "请求已取消，请重新加载。"
+      }
     }
   }
 }

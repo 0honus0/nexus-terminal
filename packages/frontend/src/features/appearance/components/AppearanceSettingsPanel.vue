@@ -1,66 +1,117 @@
 <script setup lang="ts">
-	import { computed, onMounted, ref, watch } from 'vue';
+	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiButton, UiInput } from '@/foundation/ui';
+	import { useAuthenticatedViewScope } from '@/shared/session/public';
 	import { defaultWindowThemeColor } from '../config/default-theme';
 	import { useAppearanceStore } from '../store/appearance.store';
-
+	import { useAppearanceEditor } from '../composables/use-appearance-editor';
 	const emit = defineEmits<{ customize: [] }>();
+	const props = withDefaults(defineProps<{ active?: boolean }>(), { active: true });
 	const { t } = useI18n();
 	const store = useAppearanceStore();
+	const editor = useAppearanceEditor({ available: () => props.active });
+	const scope = useAuthenticatedViewScope({ available: () => props.active });
 	const draft = ref(defaultWindowThemeColor);
-	const saving = ref(false);
+	const saving = editor.busy;
 	const loadError = ref(false);
 	const status = ref<'saved' | 'error' | null>(null);
+	let baseline: number | null = null;
+	let original = defaultWindowThemeColor;
 
-	const normalize = (value: string): string | null => {
-		const trimmed = value.trim();
-		return /^#[0-9a-f]{6}$/i.test(trimmed) ? trimmed.toUpperCase() : null;
-	};
+	const normalize = (value: string): string | null =>
+		/^#[0-9a-f]{6}$/iu.test(value.trim()) ? value.trim().toUpperCase() : null;
 
 	const valid = computed(() => normalize(draft.value) !== null);
 
-	const sync = (): void => {
-		draft.value = (store.settings.windowThemeColor ?? defaultWindowThemeColor).toUpperCase();
-		status.value = null;
-	};
-
-	watch(() => store.settings.windowThemeColor, sync);
-	onMounted(async () => {
-		try {
-			await store.load();
-		} catch {
-			loadError.value = true;
-		} finally {
-			sync();
+	function sync(): void {
+		if (!store.snapshot) {
+			return;
 		}
-	});
+		draft.value = store.snapshot.windowThemeColor;
+		original = draft.value;
+		baseline = store.snapshot.version;
+		status.value = null;
+	}
 
-	const save = async (): Promise<void> => {
+	watch(
+		() => store.snapshot,
+		() => {
+			if (baseline === null || draft.value === original) {
+				sync();
+			}
+		},
+		{ immediate: true },
+	);
+
+	async function refresh(): Promise<void> {
+		const signal = scope.capture();
+		try {
+			await store.load(true, signal);
+			if (scope.isCurrent(signal)) {
+				loadError.value = false;
+				sync();
+			}
+		} catch {
+			if (scope.isCurrent(signal)) {
+				loadError.value = true;
+			}
+		}
+	}
+
+	watch(
+		() => props.active,
+		(active) => {
+			if (active) {
+				const signal = scope.capture();
+				void store
+					.load(false, signal)
+					.then(() => {
+						if (scope.isCurrent(signal)) {
+							loadError.value = false;
+							if (baseline === null || draft.value === original) {
+								sync();
+							}
+						}
+					})
+					.catch(() => {
+						if (scope.isCurrent(signal)) {
+							loadError.value = true;
+						}
+					});
+			}
+		},
+		{ immediate: true },
+	);
+
+	async function save(): Promise<void> {
 		const value = normalize(draft.value);
-		if (!value || saving.value) return;
-		saving.value = true;
-		status.value = null;
-		try {
-			await store.update({ windowThemeColor: value });
-			draft.value = value;
-			status.value = 'saved';
-		} catch {
-			status.value = 'error';
-		} finally {
-			saving.value = false;
+		const version = baseline;
+		if (!value || version === null || !props.active) {
+			return;
 		}
-	};
+		const signal = scope.capture();
+		const saved = await editor.run(() => store.update({ windowThemeColor: value }, version, signal));
+		if (scope.isCurrent(signal)) {
+			status.value = saved ? 'saved' : 'error';
+			if (saved) {
+				sync();
+				status.value = 'saved';
+			}
+		}
+	}
 
-	const reset = async (): Promise<void> => {
+	async function reset(): Promise<void> {
 		draft.value = defaultWindowThemeColor;
 		await save();
-	};
+	}
 
-	const pick = (event: Event): void => {
-		draft.value = (event.target as HTMLInputElement).value.toUpperCase();
-		status.value = null;
-	};
+	function pick(event: Event): void {
+		if (event.target instanceof HTMLInputElement) {
+			draft.value = event.target.value.toUpperCase();
+			status.value = null;
+		}
+	}
 </script>
 
 <template>
@@ -69,6 +120,8 @@
 			{{ t('settings.category.appearance') }}
 		</h2>
 		<div class="space-y-6 p-6">
+			<p v-if="store.blocked" role="status">{{ t('appearanceNext.refreshRequired') }}</p>
+			<UiButton :disabled="store.busy" @click="refresh">{{ t('appearanceNext.refresh') }}</UiButton>
 			<p v-if="loadError" class="rounded border border-error/40 bg-error/5 p-3 text-sm text-error">
 				{{ t('settings.appearance.loadFailed') }}
 			</p>
@@ -94,6 +147,7 @@
 				</label>
 				<div class="flex flex-wrap items-center gap-3">
 					<input
+						:disabled="saving || store.busy || store.blocked || !store.loaded"
 						type="color"
 						:value="draft"
 						class="h-10 w-14 cursor-pointer rounded border border-border bg-background"
@@ -101,6 +155,7 @@
 					/>
 					<UiInput
 						id="windowThemeColorInput"
+						:disabled="saving || store.busy || store.blocked || !store.loaded"
 						v-model="draft"
 						maxlength="7"
 						spellcheck="false"

@@ -4,9 +4,12 @@ export {
 	registerAuthenticatedSessionOwner,
 	registerAuthenticatedSessionReset,
 } from './authenticatedSessionLifecycle';
+
 export type {
 	AuthenticatedSessionDispatch,
 	AuthenticatedSessionEvent,
 	AuthenticatedSessionLifecycle,
 	AuthenticatedSessionOwner,
 } from './authenticatedSessionLifecycle';
+
+export { useAuthenticatedViewScope } from './use-authenticated-view-scope';

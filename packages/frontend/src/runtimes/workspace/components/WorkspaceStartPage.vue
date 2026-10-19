@@ -2,19 +2,19 @@
 	import { defineAsyncComponent } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiButton } from '@/foundation/ui';
-	import type { ConnectionDto } from '@/features/connections/public';
+	import type { ConnectionSummary } from '@/features/connections/public';
 	import {
 		loadSuspendedSessionsPanel,
 		type MarkedSuspendedSessionState,
-		type SuspendedSessionDto,
+		type SuspendedSession,
 	} from '@/features/ssh-suspend/public';
 	import WorkspaceConnectionList from './WorkspaceConnectionList.vue';
 
 	defineProps<{ markedSessions: MarkedSuspendedSessionState[]; canReturn?: boolean; mobile?: boolean }>();
 	const emit = defineEmits<{
-		open: [connection: ConnectionDto];
-		openMany: [connections: ConnectionDto[]];
-		resume: [session: SuspendedSessionDto];
+		open: [connection: ConnectionSummary];
+		openMany: [connections: ConnectionSummary[]];
+		resume: [session: SuspendedSession];
 		resumeMarked: [workspaceId: string];
 		unmark: [workspaceId: string];
 		back: [];

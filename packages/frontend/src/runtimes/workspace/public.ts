@@ -1,12 +1,5 @@
+export type { WorkspacePane } from '@nexus-terminal/shared/preferences/presentation/values';
+
+export type { WorkspaceLayoutNodeState, WorkspaceSidebar } from './model/presentation-types';
+
 export { preloadWorkspaceTerminalSurface } from './components/preloadWorkspaceTerminalSurface';
-
-export const disposeWorkspaceRuntimes = async (reason = 'Workspace runtime disposed'): Promise<void> => {
-	const { workspaceRuntimeRegistry } = await import('./session');
-	workspaceRuntimeRegistry.disposeAll(reason);
-};
-
-export type {
-	WorkspaceLayoutNodeState,
-	WorkspacePaneNameDto,
-	WorkspaceSidebarConfigDto,
-} from './layout/workspaceLayout';

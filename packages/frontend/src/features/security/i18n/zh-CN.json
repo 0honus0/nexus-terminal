@@ -82,7 +82,9 @@
         "registrationFailed": "Passkey 注册失败。",
         "deleteFailedGeneral": "删除 Passkey 失败。请重试。",
         "fetchFailed": "加载通行密钥失败。",
-        "nameUpdateFailed": "更新通行密钥名称失败。"
+        "nameUpdateFailed": "更新通行密钥名称失败。",
+        "refreshAfterChange": "变更已确认，但列表刷新失败。请先读取最新列表，再进行其他变更。",
+        "discoveryFailed": "无法确认 Passkey 是否可用，请重试查询。"
       },
       "success": {
         "registered": "新的 Passkey 已成功注册！",
@@ -144,6 +146,20 @@
       },
       "hcaptchaProviderName": "hCaptcha",
       "recaptchaProviderName": "Google reCAPTCHA"
+    },
+    "configuration": {
+      "saved": "已保存，重启服务器后生效。",
+      "versions": "保存版本 {saved}；当前生效版本 {effective}。",
+      "restart": "配置将在服务器重启后生效。",
+      "conflict": "配置已被其他操作修改，请重新读取并核对后再保存。",
+      "unknown": "结果未知，请重新读取已保存配置后再修改。",
+      "refreshAfterChange": "修改已确认，但刷新失败，请重新读取核对当前状态。",
+      "hostname": "验证码预期主机名",
+      "hasSecret": "已存储密钥，不会返回密钥正文。",
+      "noSecret": "尚未存储密钥。",
+      "keepSecret": "保留已存储密钥",
+      "clearSecret": "清除已存储密钥",
+      "replaceSecret": "替换已存储密钥"
     }
   }
 }

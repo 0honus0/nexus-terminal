@@ -1,418 +1,51 @@
 <script setup lang="ts">
-	import { computed, onMounted, reactive, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { apiErrorMessage } from '@/client/http';
 	import { UiButton, UiFormField, UiInput, UiSelect, UiTextarea } from '@/foundation/ui';
-	import { useFeedback } from '@/shared/feedback/public';
-	import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
-	import { connectionsApi } from '../api/connectionsApi';
-	import { useConnections } from '../composables/useConnections';
-	import type {
-		ConnectionDto,
-		ConnectionAuthMethodDto,
-		ConnectionFormInput,
-		ConnectionTypeDto,
-	} from '../model/connection';
-
-	const props = defineProps<{ connection?: ConnectionDto | null; loading?: boolean }>();
+	import { useConnectionForm } from '../composables/use-connection-form';
+	import type { ConnectionSummary, ConnectionSubmission, CredentialSummary } from '../model/connection-types';
+	import type { TargetImportInput, TargetCredentialInput } from '@nexus-terminal/shared/targets/connections/http';
+	const props = defineProps<{
+		connection?: ConnectionSummary | null;
+		credential?: CredentialSummary | null;
+		loading?: boolean;
+	}>();
 	const emit = defineEmits<{
-		submit: [input: ConnectionFormInput | Partial<ConnectionFormInput>];
-		submitMany: [inputs: ConnectionFormInput[]];
+		submit: [value: ConnectionSubmission];
+		submitMany: [values: TargetImportInput[]];
+		credential: [value: TargetCredentialInput | null];
 		cancel: [];
 		delete: [];
 	}>();
 	const { t } = useI18n();
-	const feedback = useFeedback();
-	const capabilities = useRuntimeFeatureCapabilities();
-	const proxies = capabilities.proxies;
-	const sshKeys = capabilities.sshKeys;
-	const ConnectionTagPicker = capabilities.tags.picker;
-	const SshKeySelector = capabilities.sshKeys.selector;
-	const connections = useConnections();
-	const scriptMode = ref(false);
-	const script = ref('');
-	const testing = ref(false);
-	const testResult = ref<{ success: boolean; message: string; latency?: number } | null>(null);
-	const submitError = ref('');
-	const remoteAppEnabled = ref(false);
-	const form = reactive({
-		name: '',
-		type: 'SSH' as ConnectionTypeDto,
-		host: '',
-		port: 22,
-		username: '',
-		authMethod: 'password' as ConnectionAuthMethodDto,
-		password: '',
-		sshKeyId: null as number | null,
-		proxyId: null as number | null,
-		route: null as 'proxy' | 'jump' | null,
-		tagIds: [] as number[],
-		notes: '',
-		jumpChain: [] as number[],
-		remoteApp: '',
-		remoteAppDirectory: '',
-		remoteAppArguments: '',
-	});
-
-	const resetFrom = (c?: ConnectionDto | null) => {
-		Object.assign(
-			form,
-			c
-				? {
-						name: c.name ?? '',
-						type: c.type,
-						host: c.host,
-						port: c.port,
-						username: c.username,
-						authMethod: c.authMethod,
-						password: '',
-						sshKeyId: c.sshKeyId,
-						proxyId: c.proxyId,
-						route: c.route,
-						tagIds: [...c.tagIds],
-						notes: c.notes ?? '',
-						jumpChain: c.jumpChain ? [...c.jumpChain] : [],
-						remoteApp: c.rdpOptions?.remoteApp ?? '',
-						remoteAppDirectory: c.rdpOptions?.remoteAppDirectory ?? '',
-						remoteAppArguments: c.rdpOptions?.remoteAppArguments ?? '',
-					}
-				: {
-						name: '',
-						type: 'SSH',
-						host: '',
-						port: 22,
-						username: '',
-						authMethod: 'password',
-						password: '',
-						sshKeyId: null,
-						proxyId: null,
-						route: null,
-						tagIds: [],
-						notes: '',
-						jumpChain: [],
-						remoteApp: '',
-						remoteAppDirectory: '',
-						remoteAppArguments: '',
-					},
-		);
-		remoteAppEnabled.value = Boolean(c?.rdpOptions?.remoteApp);
-		scriptMode.value = false;
-		script.value = '';
-		testResult.value = null;
-		submitError.value = '';
-	};
-
-	watch(() => props.connection, resetFrom, { immediate: true });
-	watch(
-		() => form.type,
-		(type) => {
-			if (!props.connection) {
-				form.port = type === 'SSH' ? 22 : type === 'RDP' ? 3389 : 5900;
-			}
-			if (type !== 'SSH') {
-				form.authMethod = 'password';
-				form.route = null;
-				form.proxyId = null;
-				form.jumpChain = [];
-			}
-		},
-	);
-	onMounted(async () => {
-		const [proxyResult, connectionResult] = await Promise.allSettled([proxies.load(), connections.load()]);
-		if (proxyResult.status === 'rejected') {
-			feedback.notifyError(
-				t('proxies.error', {
-					error:
-						proxyResult.reason instanceof Error ? proxyResult.reason.message : String(proxyResult.reason),
-				}),
-			);
-		}
-		if (connectionResult.status === 'rejected') feedback.notifyError(t('connections.loadFailed'));
-	});
-
-	const regularInput = (): ConnectionFormInput => ({
-		name: form.name || null,
-		type: form.type,
-		host: form.host.trim(),
-		port: Number(form.port),
-		username: form.username.trim(),
-		authMethod: form.type === 'SSH' ? form.authMethod : 'password',
-		...(form.password ? { password: form.password } : {}),
-		sshKeyId: form.type === 'SSH' && form.authMethod === 'key' ? form.sshKeyId : null,
-		proxyId: form.route === 'proxy' ? form.proxyId : null,
-		route: form.route,
-		tagIds: [...form.tagIds],
-		notes: form.notes || null,
-		jumpChain: form.route === 'jump' ? [...form.jumpChain] : null,
-		rdpOptions:
-			form.type === 'RDP' && remoteAppEnabled.value
-				? {
-						remoteApp: form.remoteApp,
-						remoteAppDirectory: form.remoteAppDirectory || null,
-						remoteAppArguments: form.remoteAppArguments || null,
-					}
-				: null,
-	});
-
-	const parseIpv4Range = (value: string): string[] | null => {
-		if (!value.includes('~')) return null;
-		const parts = value.split('~').map((part) => part.trim());
-		if (parts.length !== 2 || !parts[0] || !parts[1])
-			throw new Error(t('connections.form.errorInvalidIpRangeFormat'));
-
-		const parse = (ip: string) => {
-			const segments = ip.split('.');
-			if (segments.length !== 4 || segments.some((part) => !/^\d+$/.test(part)))
-				throw new Error(t('connections.form.errorInvalidIpFormat'));
-			const numbers = segments.map(Number);
-			if (numbers.some((part) => part < 0 || part > 255))
-				throw new Error(t('connections.form.errorInvalidIpSuffix'));
-			return numbers;
-		};
-
-		const start = parse(parts[0]);
-		const end = parse(parts[1]);
-		if (start.slice(0, 3).join('.') !== end.slice(0, 3).join('.'))
-			throw new Error(t('connections.form.errorIpRangeNotSameSubnet'));
-		if (start[3]! > end[3]!) throw new Error(t('connections.form.errorIpRangeStartAfterEnd'));
-		const prefix = start.slice(0, 3).join('.');
-		return Array.from({ length: end[3]! - start[3]! + 1 }, (_, index) => `${prefix}.${start[3]! + index}`);
-	};
-
-	const validateRegular = () => {
-		if (!form.host.trim() || !form.username.trim()) throw new Error(t('connections.form.errorRequiredFields'));
-		const port = Number(form.port);
-		if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error(t('connections.form.errorPort'));
-
-		const current = props.connection;
-		if (form.type === 'SSH') {
-			if (form.authMethod === 'password') {
-				const canPreserve = Boolean(current && current.type === 'SSH' && current.authMethod === 'password');
-				if (!form.password && !canPreserve)
-					throw new Error(
-						t(
-							current
-								? 'connections.form.errorPasswordRequiredOnSwitch'
-								: 'connections.form.errorPasswordRequired',
-						),
-					);
-			} else {
-				const canPreserveLegacyDirectKey = Boolean(
-					current && current.type === 'SSH' && current.authMethod === 'key' && current.sshKeyId === null,
-				);
-				if (!form.sshKeyId && !canPreserveLegacyDirectKey)
-					throw new Error(
-						t(
-							current
-								? 'connections.form.errorSshKeyRequiredOnSwitch'
-								: 'connections.form.errorSshKeyRequired',
-						),
-					);
-			}
-		} else {
-			const canPreserve = Boolean(current && !(current.type === 'SSH' && current.authMethod === 'key'));
-			if (!form.password && !canPreserve)
-				throw new Error(
-					t(
-						form.type === 'VNC'
-							? 'connections.form.errorVncPasswordRequired'
-							: 'connections.form.errorPasswordRequired',
-					),
-				);
-		}
-
-		if (form.type === 'RDP' && remoteAppEnabled.value && !form.remoteApp.trim())
-			throw new Error(t('connections.form.errorRemoteAppAliasRequired'));
-	};
-
-	const submitRegular = () => {
-		submitError.value = '';
-		try {
-			validateRegular();
-			const hosts = parseIpv4Range(form.host);
-			if (props.connection && hosts) throw new Error(t('connections.form.errorIpRangeNotAllowedInEditMode'));
-			if (!props.connection && hosts) {
-				if (!hosts.length) throw new Error(t('connections.form.errorIpRangeEmpty'));
-				const base = regularInput();
-				emit(
-					'submitMany',
-					hosts.map((host) => ({
-						...base,
-						host,
-						name: form.name ? `${form.name}-${host.split('.').at(-1)}` : host,
-					})),
-				);
-				return;
-			}
-			const input = regularInput();
-			if (props.connection) {
-				const update: Partial<ConnectionFormInput> = { ...input };
-				if (!form.password) delete update.password;
-				emit('submit', update);
-			} else emit('submit', input);
-		} catch (cause) {
-			submitError.value = cause instanceof Error ? cause.message : String(cause);
-		}
-	};
-
-	const test = async () => {
-		testing.value = true;
-		testResult.value = null;
-		try {
-			if (form.host.includes('~')) throw new Error(t('connections.form.errorIpRangeNotAllowedInEditMode'));
-			if (!props.connection) validateRegular();
-			const r = props.connection
-				? await connectionsApi.test(props.connection.id)
-				: await connectionsApi.testUnsaved(regularInput());
-			testResult.value = r;
-		} catch (cause) {
-			testResult.value = {
-				success: false,
-				message: apiErrorMessage(cause, t('connections.test.errorUnknown')),
-			};
-		} finally {
-			testing.value = false;
-		}
-	};
-
-	const tokenize = (line: string) =>
-		[...(line.match(/"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|\S+/g) ?? [])].map((x) => x.replace(/^("|')|("|')$/g, ''));
-
-	const parseLine = async (line: string): Promise<ConnectionFormInput> => {
-		const tokens = tokenize(line);
-		const first = tokens.shift();
-		if (!first || !first.includes('@')) throw new Error(t('connections.form.scriptErrorMissingHost', { line }));
-		const at = first.indexOf('@');
-		const username = first.slice(0, at);
-		const hostPort = first.slice(at + 1);
-		const colon = hostPort.lastIndexOf(':');
-		let host = hostPort;
-		let port = 22;
-		if (colon > 0 && /^\d+$/.test(hostPort.slice(colon + 1))) {
-			host = hostPort.slice(0, colon);
-			port = Number(hostPort.slice(colon + 1));
-		}
-		let type: ConnectionTypeDto = 'SSH',
-			name = `${username}@${host}`,
-			password = '',
-			keyName = '',
-			proxyName = '',
-			notes = '';
-		const tagNames: string[] = [];
-		for (let i = 0; i < tokens.length; i++) {
-			const token = tokens[i];
-			const value = tokens[i + 1];
-			if (token === '-type') {
-				type = value?.toUpperCase() as ConnectionTypeDto;
-				i++;
-			} else if (token === '-name') {
-				name = value ?? name;
-				i++;
-			} else if (token === '-p') {
-				password = value ?? '';
-				i++;
-			} else if (token === '-k') {
-				keyName = value ?? '';
-				i++;
-			} else if (token === '-proxy') {
-				proxyName = value ?? '';
-				i++;
-			} else if (token === '-note') {
-				notes = value ?? '';
-				i++;
-			} else if (token === '-tags') {
-				for (i++; i < tokens.length && !tokens[i]?.startsWith('-'); i++)
-					tagNames.push(...(tokens[i] ?? '').split(',').filter(Boolean));
-				i--;
-			} else throw new Error(t('connections.form.scriptErrorUnknownOption', { option: token }));
-		}
-		if (!['SSH', 'RDP', 'VNC'].includes(type))
-			throw new Error(t('connections.form.scriptErrorInvalidType', { type, line }));
-		if (!Number.isInteger(port) || port <= 0 || port > 65535)
-			throw new Error(t('connections.form.scriptErrorInvalidPort', { port, line }));
-		if (type === 'SSH' && !password && !keyName)
-			throw new Error(t('connections.form.scriptErrorMissingAuthForSsh'));
-		if (type === 'RDP' && !password) throw new Error(t('connections.form.scriptErrorMissingPasswordForRdp'));
-		if (type === 'VNC' && !password) throw new Error(t('connections.form.scriptErrorMissingPasswordForVnc'));
-		if (type === 'RDP' && keyName) throw new Error(t('connections.form.scriptErrorKeyNotApplicableForRdp'));
-		if (type === 'VNC' && keyName) throw new Error(t('connections.form.scriptErrorKeyNotApplicableForVnc'));
-		const tags = await capabilities.tags.ensure(tagNames);
-		let sshKeyId: number | null = null;
-		if (keyName) {
-			await sshKeys.load(true);
-			sshKeyId = sshKeys.items.value.find((k) => k.name === keyName)?.id ?? null;
-			if (!sshKeyId) throw new Error(t('connections.form.scriptErrorSshKeyNotFound', { keyName }));
-		}
-		let proxyId: number | null = null;
-		if (proxyName) {
-			await proxies.load(true);
-			proxyId = proxies.items.value.find((p) => p.name === proxyName)?.id ?? null;
-			if (!proxyId) throw new Error(t('connections.form.scriptErrorProxyNotFound', { proxyName }));
-		}
-		return {
-			name,
-			type,
-			host,
-			port: type === 'SSH' ? port : type === 'RDP' ? (colon > 0 ? port : 3389) : colon > 0 ? port : 5900,
-			username,
-			authMethod: keyName ? 'key' : 'password',
-			...(password && !keyName ? { password } : {}),
-			sshKeyId,
-			proxyId,
-			route: proxyId ? 'proxy' : null,
-			tagIds: tags.map((x) => x.id),
-			notes: notes || null,
-			rdpOptions: null,
-		};
-	};
-
-	const submit = async () => {
-		if (!scriptMode.value) {
-			submitRegular();
-			return;
-		}
-		submitError.value = '';
-		try {
-			const lines = script.value
-				.split(/\r?\n/)
-				.map((x) => x.trim())
-				.filter(Boolean);
-			if (!lines.length) throw new Error(t('connections.form.scriptModeEmpty'));
-			const inputs: ConnectionFormInput[] = [];
-			for (const line of lines) inputs.push(await parseLine(line));
-			emit('submitMany', inputs);
-		} catch (cause) {
-			submitError.value = cause instanceof Error ? cause.message : String(cause);
-		}
-	};
-
-	const availableJumpHosts = computed(() =>
-		connections.connections.value.filter(
-			(connection) => connection.type === 'SSH' && connection.id !== props.connection?.id,
-		),
-	);
-
-	const jumpHostsForIndex = (index: number) =>
-		availableJumpHosts.value.filter(
-			(connection) => !form.jumpChain.some((id, chainIndex) => chainIndex !== index && id === connection.id),
-		);
-
-	const addJumpHost = () => {
-		const used = new Set(form.jumpChain);
-		const next = availableJumpHosts.value.find((connection) => !used.has(connection.id));
-		if (next) form.jumpChain.push(next.id);
-	};
-
-	const removeJumpHost = (index: number) => form.jumpChain.splice(index, 1);
+	const {
+		form,
+		remoteAppEnabled,
+		scriptMode,
+		script,
+		testing,
+		parsing,
+		testResult,
+		submitError,
+		proxies,
+		ConnectionTagPicker,
+		SshKeySelector,
+		availableJumpHosts,
+		jumpHostsForIndex,
+		addJumpHost,
+		removeJumpHost,
+		submit,
+		test,
+		saveCredential,
+		clearCredential,
+	} = useConnectionForm(props, emit);
 </script>
-
 <template>
 	<form class="connection-form flex max-h-[82dvh] min-h-0 flex-col" @submit.prevent="submit">
 		<h3 class="mb-5 shrink-0 text-lg font-semibold">
 			{{ connection ? t('connections.form.titleEdit') : t('connections.form.title') }}
 		</h3>
 
-		<div class="flex-grow space-y-7 overflow-y-auto pr-1 sm:pr-3">
+		<fieldset :disabled="loading || testing || parsing" class="flex-grow space-y-7 overflow-y-auto pr-1 sm:pr-3">
 			<template v-if="!scriptMode">
 				<section class="ui-form-section space-y-5">
 					<h4 class="mb-3 text-sm font-semibold">
@@ -484,9 +117,16 @@
 						{{ t('connections.form.sectionAuth') }}
 					</h4>
 					<UiFormField :label="t('connections.form.username')">
-						<UiInput id="conn-username" v-model="form.username" required />
+						<UiInput id="conn-username" v-model="form.username" :required="form.type === 'SSH'" />
 					</UiFormField>
 
+					<p v-if="connection" class="text-sm text-text-secondary">
+						{{
+							t('connections.credentialState', {
+								kind: t('connections.credentialKinds.' + (credential?.credential.kind ?? 'none')),
+							})
+						}}
+					</p>
 					<template v-if="form.type === 'SSH'">
 						<div>
 							<label class="mb-1 block text-sm font-medium text-text-secondary">{{
@@ -530,7 +170,7 @@
 						<UiFormField v-else :label="t('connections.form.sshKey')">
 							<SshKeySelector v-model="form.sshKeyId" />
 							<p
-								v-if="connection && connection.authMethod === 'key'"
+								v-if="credential?.credential.kind === 'ssh_key'"
 								class="mt-1 text-xs text-text-secondary"
 							>
 								{{ t('connections.form.keyUpdateNoteSelected') }}
@@ -550,6 +190,13 @@
 							autocomplete="new-password"
 						/>
 					</UiFormField>
+					<div v-if="connection" class="flex flex-wrap gap-2">
+						<UiButton type="button" @click="saveCredential">{{ t('connections.saveCredential') }}</UiButton
+						><UiButton type="button" tone="danger" @click="clearCredential">{{
+							t('connections.clearCredential')
+						}}</UiButton>
+						<p class="text-sm text-text-secondary">{{ t('connections.separateSaves') }}</p>
+					</div>
 				</section>
 
 				<section class="ui-form-section space-y-5">
@@ -566,11 +213,11 @@
 									type="button"
 									class="connection-form-segment flex-1 px-3 py-2 text-sm font-medium"
 									:class="
-										form.route === null
+										form.route === 'direct'
 											? 'bg-primary text-white'
 											: 'bg-background text-foreground hover:bg-border'
 									"
-									@click="form.route = null"
+									@click="form.route = 'direct'"
 								>
 									{{ t('connections.form.connectionModeDirect') }}
 								</button>
@@ -616,14 +263,14 @@
 								t('connections.form.jumpHostsTitle')
 							}}</label>
 							<div
-								v-for="(jumpHostId, index) in form.jumpChain"
+								v-for="(jumpHostId, index) in form.jumpIds"
 								:key="index"
 								class="flex items-center space-x-2 rounded-md border border-border bg-background/50 p-2"
 							>
 								<span class="whitespace-nowrap text-sm font-medium text-text-secondary"
 									>{{ t('connections.form.jumpHostLabel') }} {{ index + 1 }}:</span
 								>
-								<UiSelect v-model="form.jumpChain[index]" class="min-w-0 flex-1">
+								<UiSelect v-model="form.jumpIds[index]" class="min-w-0 flex-1">
 									<option v-for="host in jumpHostsForIndex(index)" :key="host.id" :value="host.id">
 										{{ host.name || host.host }}
 									</option>
@@ -640,7 +287,7 @@
 							<button
 								type="button"
 								class="flex w-full items-center justify-center space-x-2 rounded-md border border-dashed border-primary px-3 py-2 text-primary hover:bg-primary/10 disabled:opacity-50"
-								:disabled="form.jumpChain.length >= availableJumpHosts.length"
+								:disabled="form.jumpIds.length >= availableJumpHosts.length"
 								@click="addJumpHost"
 							>
 								<i class="fas fa-plus" aria-hidden="true" /><span>{{
@@ -735,6 +382,7 @@
 					<p class="mt-1 whitespace-pre-line text-xs text-text-secondary">
 						{{ t('connections.form.scriptModeFormatInfo') }}
 					</p>
+					<p class="mt-2 text-xs text-text-secondary">{{ t('connections.scriptHelp') }}</p>
 				</div>
 			</section>
 
@@ -744,7 +392,7 @@
 			>
 				{{ submitError }}
 			</p>
-		</div>
+		</fieldset>
 
 		<footer class="mt-7 flex shrink-0 flex-wrap items-center gap-4 border-t border-border/50 pt-5">
 			<div v-if="!scriptMode && form.type === 'SSH'" class="flex min-w-0 items-center gap-2">
@@ -764,8 +412,8 @@
 					<span>{{
 						testResult.success ? t('connections.test.successShort') : t('connections.test.failedShort')
 					}}</span>
-					<span v-if="testResult.success && testResult.latency != null" class="font-normal opacity-80">
-						· {{ testResult.latency }} ms
+					<span v-if="testResult.success && testResult.latencyMs != null" class="font-normal opacity-80">
+						· {{ testResult.latencyMs }} ms
 					</span>
 					<span v-else-if="!testResult.success" class="max-w-64 truncate font-normal opacity-90">
 						· {{ testResult.message }}
@@ -783,9 +431,14 @@
 					@click="emit('delete')"
 					>{{ t('connections.actions.delete') }}</UiButton
 				>
-				<UiButton type="submit" appearance="solid" tone="primary" :loading="loading" :disabled="testing">{{
-					connection ? t('connections.form.confirmEdit') : t('connections.form.confirm')
-				}}</UiButton>
+				<UiButton
+					type="submit"
+					appearance="solid"
+					tone="primary"
+					:loading="loading"
+					:disabled="testing || parsing"
+					>{{ connection ? t('connections.form.confirmEdit') : t('connections.form.confirm') }}</UiButton
+				>
 				<UiButton type="button" :disabled="loading || testing" @click="emit('cancel')">{{
 					t('connections.form.cancel')
 				}}</UiButton>

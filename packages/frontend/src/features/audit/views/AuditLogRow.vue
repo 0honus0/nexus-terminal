@@ -1,35 +1,34 @@
 <script setup lang="ts">
 	import { computed } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import type { AuditLogEntryDto } from '../model/audit';
-	import { auditText } from '../model/auditPresentation';
+	import type { AuditEntry } from '../model/audit-types';
 
-	const props = defineProps<{ log: AuditLogEntryDto }>();
+	const props = defineProps<{ log: AuditEntry }>();
 	const { t, te, locale } = useI18n();
 	const action = computed(() =>
-		te(`auditLog.actions.${props.log.actionType}`)
-			? t(`auditLog.actions.${props.log.actionType}`)
-			: props.log.actionType,
+		te(`auditLog.actions.${props.log.event}`) ? t(`auditLog.actions.${props.log.event}`) : props.log.event,
 	);
-	const raw = computed(() => {
-		const value = props.log.details;
-		if (value == null) return '';
-		if (typeof value === 'object') {
-			const record = value as Record<string, unknown>;
-			if (record.parseError && 'raw' in record) return auditText(record.raw);
-			return JSON.stringify(value, null, 2);
-		}
-		return String(value);
-	});
+	const summary = computed(() =>
+		[
+			[t('auditLog.fields.userId'), props.log.userId],
+			[t('auditLog.fields.ip'), props.log.sourceIp],
+			[t('auditLog.fields.subjectId'), props.log.subjectId],
+			[t('auditLog.fields.route'), props.log.route],
+			[t('auditLog.fields.statusCode'), props.log.statusCode],
+		]
+			.filter(([, value]) => value !== null)
+			.map(([label, value]) => label + ': ' + value)
+			.join('\n'),
+	);
 </script>
 
 <template>
 	<article class="audit-row" :data-audit-id="log.id">
-		<time :datetime="new Date(log.timestamp * 1000).toISOString()">{{
-			new Date(log.timestamp * 1000).toLocaleString(locale)
+		<time :datetime="new Date(log.createdAt).toISOString()">{{
+			new Date(log.createdAt).toLocaleString(locale)
 		}}</time>
 		<span class="audit-action">{{ action }}</span>
-		<pre v-if="raw" class="audit-raw" tabindex="0" :aria-label="t('auditLog.table.details')">{{ raw }}</pre>
+		<pre v-if="summary" class="audit-raw" tabindex="0" :aria-label="t('auditLog.table.details')">{{ summary }}</pre>
 		<span v-else class="text-text-secondary">—</span>
 	</article>
 </template>

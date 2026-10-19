@@ -1,28 +1,30 @@
 <script setup lang="ts">
-	import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
-	import Guacamole from 'guacamole-common-js';
-	import type { Client, Event as GuacamoleEvent, Keyboard, Mouse, Status } from 'guacamole-common-js';
+	import { computed, nextTick, onBeforeUnmount, onActivated, onDeactivated, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiButton, UiOverlayPanel, UiResizeHandle } from '@/foundation/ui';
 	import { readStoredValue, stringStorageCodec, useDeviceCapabilities, writeStoredValue } from '@/foundation/browser';
 	import { useDraggablePosition, useResizeHandle } from '@/foundation/interaction';
-	import { apiErrorMessage } from '@/client/http';
-	import { logger } from '@/client/logging/logger';
-	import { remoteDesktopApi } from '../api/remoteDesktopApi';
+	import { remoteDesktopApi } from '../api/remote-desktop-api';
+	import { createGuacamoleDesktop } from '../adapters/guacamole-desktop';
+	import { createRemoteDesktopController } from '../model/remote-desktop-controller';
+	import type {
+		RemoteDesktopConnection,
+		RemoteDesktopDisplay,
+		RemoteDesktopState,
+		RemoteTouchMode,
+	} from '../model/remote-desktop-types';
 	import {
-		attachRemoteTouchInput,
-		type RemoteTouchInput,
-		type RemoteTouchMode,
-	} from '../composables/remoteTouchInput';
-	import { attachRemoteClipboard, type RemoteClipboardBridge } from '../composables/remoteClipboard';
-	import type { RemoteDesktopConnection, RemoteDesktopDisplayDto, RemoteDesktopState } from '../model/remoteDesktop';
-	import type { RemoteDesktopSessionPort } from '../ports/remote-desktop-session-port';
+		REMOTE_DESKTOP_MIN_DIMENSION,
+		REMOTE_DESKTOP_MAX_DIMENSION,
+		REMOTE_DESKTOP_MIN_DPI,
+		REMOTE_DESKTOP_MAX_DPI,
+	} from '@nexus-terminal/shared/remote/desktop/values';
+	import { registerAuthenticatedSessionOwner } from '@/shared/session/public';
 
 	const touchModeStorage = {
 		namespace: 'remote-desktop.touch-mode',
 		version: 1,
 		codec: stringStorageCodec((value) => value === 'touchpad' || value === 'direct'),
-		legacyKeys: ['nexus.rdp.touch-mode'],
 	} as const;
 
 	const readTouchMode = (): RemoteTouchMode =>
@@ -32,22 +34,21 @@
 		defineProps<{
 			visible: boolean;
 			connection: RemoteDesktopConnection | null;
-			sessionPort?: RemoteDesktopSessionPort;
 			width?: number;
 			height?: number;
 			dpi?: number;
+			sizeSaving?: boolean;
 		}>(),
 		{
-			sessionPort: () => remoteDesktopApi,
-
 			width: 1064,
 			height: 858,
+			sizeSaving: false,
 		},
 	);
 	const emit = defineEmits<{
 		close: [];
 		sizeChange: [size: { width: number; height: number }];
-		connected: [connectionId: number, lastConnectedAt: number];
+		attempted: [connectionId: number, lastConnectedAt: number];
 	}>();
 	const { t } = useI18n();
 	const device = useDeviceCapabilities();
@@ -78,19 +79,40 @@
 	const vncText = ref('');
 	const vncTextFocused = ref(false);
 
-	let client: Client | undefined;
-	let keyboard: Keyboard | undefined;
-	let mouse: Mouse | undefined;
-	let mouseForwarder: ((event: GuacamoleEvent) => void) | undefined;
-	let remoteTouch: RemoteTouchInput | undefined;
-	let clipboard: RemoteClipboardBridge | undefined;
 	let resizeObserver: ResizeObserver | undefined;
-	let displayClick: (() => void) | undefined;
-	let displayMouseEnter: (() => void) | undefined;
-	let displayMouseLeave: (() => void) | undefined;
 	let resizeAnimationFrame: number | undefined;
-	let connectGeneration = 0;
 	let mobileInputComposing = false;
+	let active = true;
+	let viewRevision = 0;
+	const controller = createRemoteDesktopController({
+		api: remoteDesktopApi,
+		createPeer: createGuacamoleDesktop,
+
+		onState(next, failure) {
+			state.value = next;
+			message.value = failure
+				? t('remoteDesktopModal.failures.' + failure.code) +
+					(failure.outcome === 'unknown' ? ' ' + t('remoteDesktopModal.unknownOutcome') : '')
+				: t('remoteDesktopModal.status.' + next);
+			if (next === 'connected') void nextTick(sendSize);
+			if (next === 'disconnected' || next === 'error') {
+				resizeObserver?.disconnect();
+				resizeObserver = undefined;
+				cancelScheduledSize();
+				hideMobileKeyboard();
+			}
+		},
+
+		onAttempt(id, lastConnectedAt) {
+			emit('attempted', id, lastConnectedAt);
+		},
+	});
+	const unregisterSession = registerAuthenticatedSessionOwner('remote-desktop-modal', (event) => {
+		if (event.type !== 'attach') {
+			active = false;
+			disconnect();
+		}
+	});
 
 	const protocolMinWidth = () => (props.connection?.type === 'VNC' ? 800 : 640);
 
@@ -115,12 +137,24 @@
 			: { width: `${modalWidth.value}px`, height: `${modalHeight.value}px` },
 	);
 
-	const currentDisplay = (): RemoteDesktopDisplayDto => {
-		const width = Math.max(100, Math.round(display.value?.clientWidth || modalWidth.value));
+	const currentDisplay = (): RemoteDesktopDisplay => {
+		const width = Math.min(
+			REMOTE_DESKTOP_MAX_DIMENSION,
+			Math.max(REMOTE_DESKTOP_MIN_DIMENSION, Math.round(display.value?.clientWidth || modalWidth.value)),
+		);
 		return {
 			width,
-			height: Math.max(100, Math.round(display.value?.clientHeight || modalHeight.value)),
-			dpi: props.dpi ?? (props.connection?.type === 'RDP' && width > 1920 ? 120 : 96),
+			height: Math.min(
+				REMOTE_DESKTOP_MAX_DIMENSION,
+				Math.max(REMOTE_DESKTOP_MIN_DIMENSION, Math.round(display.value?.clientHeight || modalHeight.value)),
+			),
+			dpi: Math.min(
+				REMOTE_DESKTOP_MAX_DPI,
+				Math.max(
+					REMOTE_DESKTOP_MIN_DPI,
+					Math.round(props.dpi ?? (props.connection?.type === 'RDP' && width > 1920 ? 120 : 96)),
+				),
+			),
 		};
 	};
 
@@ -134,15 +168,15 @@
 		cancelScheduledSize();
 		resizeAnimationFrame = window.requestAnimationFrame(() => {
 			resizeAnimationFrame = undefined;
-			if (!client || state.value !== 'connected' || minimized.value || !props.visible) return;
+			if (!controller.peer || state.value !== 'connected' || minimized.value || !props.visible) return;
 			const size = currentDisplay();
-			if (size.width > 0 && size.height > 0) client.sendSize(size.width, size.height);
+			if (size.width > 0 && size.height > 0) controller.peer.resize(size);
 		});
 	};
 
 	const focusMobileKeyboard = () => {
 		if (!device.hasTouch.value || !mobileKeyboardInput.value || state.value !== 'connected') return;
-		void clipboard?.syncHostToRemote();
+		void controller.peer?.syncClipboard();
 		mobileKeyboardInput.value.value = '';
 		mobileKeyboardInput.value.focus({ preventScroll: true });
 		mobileKeyboardInput.value.click();
@@ -159,243 +193,49 @@
 		else focusMobileKeyboard();
 	};
 
-	const bindTouch = (element: HTMLElement) => {
-		remoteTouch?.destroy();
-		remoteTouch = undefined;
-		if (!client || !device.hasTouch.value) return;
-		remoteTouch = attachRemoteTouchInput(element, client, touchMode.value);
-	};
-
 	const setTouchMode = (mode: RemoteTouchMode) => {
-		if (touchMode.value === mode) return;
 		touchMode.value = mode;
 		writeStoredValue(touchModeStorage, mode);
-		const element = client?.getDisplay().getElement();
-		if (element && state.value === 'connected') bindTouch(element);
-	};
-
-	const cleanupInput = () => {
-		hideMobileKeyboard();
-		const element = client?.getDisplay().getElement();
-		clipboard?.destroy();
-		clipboard = undefined;
-		remoteTouch?.destroy();
-		remoteTouch = undefined;
-		if (keyboard) {
-			keyboard.reset();
-			keyboard.onkeydown = null;
-			keyboard.onkeyup = null;
-		}
-		keyboard = undefined;
-		if (mouse && mouseForwarder) mouse.offEach(['mousedown', 'mousemove', 'mouseup'], mouseForwarder);
-		mouse = undefined;
-		mouseForwarder = undefined;
-		if (element) {
-			element.style.cursor = 'default';
-			if (displayClick) element.removeEventListener('click', displayClick);
-			if (displayMouseEnter) element.removeEventListener('mouseenter', displayMouseEnter);
-			if (displayMouseLeave) element.removeEventListener('mouseleave', displayMouseLeave);
-		}
-		displayClick = undefined;
-		displayMouseEnter = undefined;
-		displayMouseLeave = undefined;
-	};
-
-	const cleanupClient = (nextState: RemoteDesktopState = 'disconnected') => {
-		cleanupInput();
-		resizeObserver?.disconnect();
-		resizeObserver = undefined;
-		cancelScheduledSize();
-		const current = client;
-		client = undefined;
-		if (current) {
-			current.onstatechange = null;
-			current.onerror = null;
-			try {
-				current.disconnect();
-			} catch {
-				/* already closed */
-			}
-		}
-		if (display.value) display.value.replaceChildren();
-		state.value = nextState;
+		controller.peer?.setTouchMode(mode);
 	};
 
 	const disconnect = () => {
-		logger.debug(
-			{
-				connectionId: props.connection?.id,
-				protocol: props.connection?.type,
-				state: state.value,
-				generation: connectGeneration,
-			},
-			'Remote desktop disconnect requested',
-		);
-		connectGeneration += 1;
-		cleanupClient('disconnected');
-	};
-
-	const failConnection = (generation: number, errorMessage: string) => {
-		if (generation !== connectGeneration) return;
-		logger.debug(
-			{
-				connectionId: props.connection?.id,
-				protocol: props.connection?.type,
-				state: state.value,
-				generation,
-				reason: errorMessage,
-			},
-			'Remote desktop connection failed',
-		);
-		connectGeneration += 1;
-		message.value = errorMessage;
-		cleanupClient('error');
-	};
-
-	const setupInput = () => {
-		if (!client || !display.value) return;
-		const element = client.getDisplay().getElement();
-		element.tabIndex = 0;
-		keyboard = new Guacamole.Keyboard(element);
-		if (mobileKeyboardInput.value) keyboard.listenTo(mobileKeyboardInput.value);
-		keyboard.onkeydown = (keysym) => {
-			if (!vncTextFocused.value) client?.sendKeyEvent(1, keysym);
-		};
-		keyboard.onkeyup = (keysym) => {
-			if (!vncTextFocused.value) client?.sendKeyEvent(0, keysym);
-		};
-		mouse = new Guacamole.Mouse(element);
-		mouseForwarder = (event) => {
-			if (event instanceof Guacamole.Mouse.Event) client?.sendMouseState(event.state, true);
-		};
-		mouse.onEach(['mousedown', 'mousemove', 'mouseup'], mouseForwarder);
-		displayClick = () => {
-			if (!device.hasTouch.value) element.focus();
-		};
-		displayMouseEnter = () => {
-			element.style.cursor = 'none';
-		};
-		displayMouseLeave = () => {
-			element.style.cursor = 'default';
-		};
-		element.addEventListener('click', displayClick);
-		element.addEventListener('mouseenter', displayMouseEnter);
-		element.addEventListener('mouseleave', displayMouseLeave);
-		clipboard = attachRemoteClipboard(element, client);
-		bindTouch(element);
-		const guacDisplay = client.getDisplay();
-		guacDisplay.showCursor(true);
-		const cursorElement = guacDisplay.getCursorLayer()?.getElement();
-		if (cursorElement) cursorElement.style.zIndex = '1000';
-		if (!device.hasTouch.value) element.focus();
+		viewRevision += 1;
+		vncText.value = '';
+		vncTextFocused.value = false;
+		if (mobileKeyboardInput.value) mobileKeyboardInput.value.value = '';
+		controller.close();
+		resizeObserver?.disconnect();
+		resizeObserver = undefined;
+		cancelScheduledSize();
+		hideMobileKeyboard();
 	};
 
 	const connect = async () => {
-		if (!props.connection || !display.value || state.value === 'connecting') return;
-		const generation = ++connectGeneration;
-		const connectionId = props.connection.id;
-		const protocol = props.connection.type;
-		const startedAt = performance.now();
-		cleanupClient('disconnected');
-		state.value = 'connecting';
-		message.value = t('remoteDesktopModal.status.fetchingToken');
-		try {
-			const spec = currentDisplay();
-			logger.debug(
-				{ connectionId, protocol, generation, width: spec.width, height: spec.height, dpi: spec.dpi },
-				'Remote desktop connection attempt started',
-			);
-			const session = await props.sessionPort.create(connectionId, protocol, spec);
-			logger.debug(
-				{
-					connectionId,
-					protocol,
-					generation,
-					elapsedMs: Math.round(performance.now() - startedAt),
-				},
-				'Remote desktop session ticket acquired',
-			);
-			emit('connected', connectionId, session.lastConnectedAt);
-			if (
-				generation !== connectGeneration ||
-				!props.visible ||
-				props.connection?.id !== connectionId ||
-				props.connection.type !== protocol ||
-				!display.value
-			) {
-				logger.debug(
-					{
-						connectionId,
-						protocol,
-						generation,
-						currentGeneration: connectGeneration,
-						visible: props.visible,
-					},
-					'Remote desktop connection attempt superseded before tunnel open',
-				);
-				return;
-			}
-
-			const tunnel = new Guacamole.WebSocketTunnel(props.sessionPort.tunnelUrl());
-			const nextClient = new Guacamole.Client(tunnel);
-			tunnel.onerror = (status: Status) => {
-				logger.debug(
-					{ connectionId, protocol, generation, reason: status.message || undefined },
-					'Remote desktop tunnel error event',
-				);
-				failConnection(generation, status.message || t('remoteDesktopModal.errors.tunnelError'));
-			};
-			client = nextClient;
-			display.value.replaceChildren();
-			display.value.appendChild(nextClient.getDisplay().getElement());
-			nextClient.onstatechange = (value: number) => {
-				if (generation !== connectGeneration || client !== nextClient) return;
-				logger.debug(
-					{ connectionId, protocol, generation, guacamoleState: value, previousState: state.value },
-					'Remote desktop client state changed',
-				);
-				if (value === 3) {
-					state.value = 'connected';
-					message.value = t('remoteDesktopModal.status.connected');
-					logger.debug(
-						{
-							connectionId,
-							protocol,
-							generation,
-							elapsedMs: Math.round(performance.now() - startedAt),
-						},
-						'Remote desktop connection established',
-					);
-					setupInput();
-					void nextTick(sendSize);
-				} else if (value === 1 || value === 2) state.value = 'connecting';
-				else if (value === 4) state.value = 'disconnecting';
-				else if (value === 0 || value === 5) state.value = 'disconnected';
-			};
-			nextClient.onerror = (status: Status) => {
-				logger.debug(
-					{ connectionId, protocol, generation, reason: status.message || undefined },
-					'Remote desktop client error event',
-				);
-				failConnection(generation, status.message || t('remoteDesktopModal.errors.clientError'));
-			};
-			nextClient.connect(props.sessionPort.tunnelData(session, spec));
+		if (!active || !props.visible || !props.connection || !display.value || state.value === 'connecting') return;
+		viewRevision += 1;
+		const target = { id: props.connection.id, name: props.connection.name, type: props.connection.type };
+		const host = display.value;
+		await controller.connect(
+			target,
+			currentDisplay(),
+			{
+				hasTouch: device.hasTouch.value,
+				touchMode: touchMode.value,
+				mobileInput: mobileKeyboardInput.value,
+			},
+			host,
+		);
+		if (
+			controller.peer &&
+			active &&
+			props.visible &&
+			props.connection?.id === target.id &&
+			props.connection.type === target.type
+		) {
+			resizeObserver?.disconnect();
 			resizeObserver = new ResizeObserver(sendSize);
-			resizeObserver.observe(display.value);
-		} catch (cause) {
-			if (generation !== connectGeneration) return;
-			const error = cause instanceof Error ? cause : new Error(String(cause));
-			logger.debug(
-				{
-					err: error,
-					connectionId,
-					protocol,
-					generation,
-					elapsedMs: Math.round(performance.now() - startedAt),
-				},
-				'Remote desktop connection attempt threw',
-			);
-			failConnection(generation, apiErrorMessage(cause, t('remoteDesktopModal.errors.connectionFailed')));
+			resizeObserver.observe(host);
 		}
 	};
 
@@ -459,7 +299,7 @@
 		try {
 			await document.exitFullscreen();
 		} catch {
-			/* browser may already be leaving fullscreen */
+			if (active) message.value = t('remoteDesktopModal.fullscreenFailed');
 		}
 	};
 
@@ -468,8 +308,8 @@
 		try {
 			if (document.fullscreenElement === panel.value) await document.exitFullscreen();
 			else await panel.value.requestFullscreen();
-		} catch (cause) {
-			message.value = cause instanceof Error ? cause.message : String(cause);
+		} catch {
+			message.value = t('remoteDesktopModal.fullscreenFailed');
 		}
 	};
 
@@ -484,7 +324,11 @@
 	};
 
 	const closeModal = async () => {
+		disconnect();
+		const originalPanel = panel.value;
+		const revision = viewRevision;
 		await exitFullscreen();
+		if (panel.value !== originalPanel || !active || revision !== viewRevision) return;
 		fullscreen.value = false;
 		minimized.value = false;
 		vncText.value = '';
@@ -500,7 +344,7 @@
 	const clearMobileInput = (event?: Event) => {
 		if (mobileInputComposing || (event instanceof InputEvent && event.isComposing)) return;
 		queueMicrotask(() => {
-			if (mobileKeyboardInput.value && !mobileInputComposing) mobileKeyboardInput.value.value = '';
+			if (active && mobileKeyboardInput.value && !mobileInputComposing) mobileKeyboardInput.value.value = '';
 		});
 	};
 
@@ -509,37 +353,31 @@
 		clearMobileInput();
 	};
 
-	const unicodeKeysym = (character: string): number | null => {
-		if (character === '\n' || character === '\r') return 0xff0d;
-		if (character === '\t') return 0xff09;
-		const codePoint = character.codePointAt(0);
-		if (codePoint === undefined) return null;
-		if ((codePoint >= 0x20 && codePoint <= 0x7e) || (codePoint >= 0xa0 && codePoint <= 0xff)) return codePoint;
-		return 0x01000000 | codePoint;
-	};
-
-	const sendVncText = async (): Promise<void> => {
-		const text = vncText.value;
-		if (!client || state.value !== 'connected' || props.connection?.type !== 'VNC' || !text) return;
+	const sendVncText = (): void => {
+		if (props.connection?.type !== 'VNC' || state.value !== 'connected') return;
 		try {
-			for (const character of text) {
-				const keysym = unicodeKeysym(character);
-				if (keysym === null) continue;
-				client.sendKeyEvent(1, keysym);
-				client.sendKeyEvent(0, keysym);
-			}
-		} catch (cause) {
-			message.value = t('vncModal.errors.simulateInputError', {
-				error: cause instanceof Error ? cause.message : String(cause),
-			});
+			controller.peer?.sendText(vncText.value);
+		} catch {
+			message.value = t('remoteDesktopModal.failures.input_failed');
 		}
 	};
 
 	const releaseVncTextFocus = () => {
 		vncTextFocused.value = false;
-		if (state.value === 'connected') client?.getDisplay().getElement().focus();
+		if (state.value === 'connected') controller.peer?.focus();
 	};
 
+	watch(vncTextFocused, (value) => controller.peer?.setTextInputActive(value), { flush: 'sync' });
+	onActivated(() => {
+		active = true;
+	});
+	onDeactivated(() => {
+		active = false;
+		disconnect();
+		void exitFullscreen();
+		fullscreen.value = false;
+		minimized.value = false;
+	});
 	document.addEventListener('fullscreenchange', onFullscreen);
 	window.addEventListener('keydown', handleFullscreenKeydown, true);
 	watch(
@@ -555,7 +393,7 @@
 	watch(
 		() => [props.visible, props.connection?.id, props.connection?.type] as const,
 		([visible, connectionId, protocol], previous) => {
-			if (visible) {
+			if (visible && active) {
 				fullscreen.value = Boolean(panel.value && document.fullscreenElement === panel.value);
 				const changedConnection = previous?.[1] !== connectionId || previous?.[2] !== protocol;
 				if (!previous?.[0] || changedConnection) {
@@ -578,6 +416,8 @@
 		{ immediate: true },
 	);
 	onBeforeUnmount(() => {
+		active = false;
+		unregisterSession();
 		document.removeEventListener('fullscreenchange', onFullscreen);
 		window.removeEventListener('keydown', handleFullscreenKeydown, true);
 		void exitFullscreen();
@@ -731,6 +571,14 @@
 				</div>
 			</div>
 
+			<p
+				v-if="message && state !== 'connecting' && state !== 'error' && message !== stateLabel"
+				role="status"
+				class="shrink-0 px-3 py-1 text-xs text-text-secondary"
+			>
+				{{ message }}
+			</p>
+
 			<footer
 				v-if="!fullscreen"
 				class="flex shrink-0 gap-2 border-t border-border bg-header p-2 text-xs text-text-secondary"
@@ -816,7 +664,7 @@
 						<button
 							type="button"
 							class="whitespace-nowrap rounded bg-primary px-3 py-1 text-xs text-white hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
-							:disabled="state !== 'connected' || !vncText.trim()"
+							:disabled="state !== 'connected' || !vncText"
 							:title="t('vncModal.sendButtonTitle')"
 							@mousedown.prevent
 							@click="sendVncText"
@@ -838,6 +686,7 @@
 					<input
 						:id="connection?.type === 'VNC' ? 'vnc-modal-width' : 'rdp-modal-width'"
 						v-model.number="modalWidth"
+						:disabled="sizeSaving"
 						type="number"
 						:min="minPanelWidth()"
 						:max="maxPanelWidth()"
@@ -851,6 +700,7 @@
 					<input
 						:id="connection?.type === 'VNC' ? 'vnc-modal-height' : 'rdp-modal-height'"
 						v-model.number="modalHeight"
+						:disabled="sizeSaving"
 						type="number"
 						:min="minPanelHeight()"
 						:max="maxPanelHeight()"
@@ -872,6 +722,7 @@
 
 			<UiResizeHandle
 				v-if="!fullscreen && !device.isMobile.value"
+				:disabled="sizeSaving"
 				class="absolute bottom-0 right-0 z-[1100]"
 				:title="t('remoteDesktopModal.resize')"
 				:aria-label="t('remoteDesktopModal.resize')"

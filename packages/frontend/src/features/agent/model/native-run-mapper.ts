@@ -1,0 +1,312 @@
+import type {
+	AgentRunView,
+	AgentRunEventView,
+	AgentRunStepView,
+	AgentRunStepEventView,
+} from '@nexus-terminal/shared/agent/runs/model';
+import type { AgentApprovalView } from '@nexus-terminal/shared/agent/governance/model';
+import type { AgentChildView, AgentMessageMetadata } from '@nexus-terminal/shared/agent/collaboration/model';
+import type { AgentSelectableModel, AgentWorkspaceRequest } from '@nexus-terminal/shared/agent/scope/workspace-http';
+import type { AgentThreadEntry, AgentThreadEntryCursor } from '@nexus-terminal/shared/agent/scope/model';
+import type { AgentToolView, AgentToolEventView } from '@nexus-terminal/shared/agent/tools/model';
+import type { AgentCreateRunRequest } from '@nexus-terminal/shared/agent/runs/http';
+import type {
+	NativeRun,
+	NativeModel,
+	NativeEvent,
+	NativeApproval,
+	NativeChild,
+	NativeMessage,
+	NativeEntry,
+	NativeEntryCursor,
+	NativeRunInput,
+	NativeRunAction,
+	NativeRunIntent,
+	NativeStep,
+	NativeStepEvent,
+	NativeTool,
+	NativeToolEvent,
+} from './native-run-types';
+
+export function fromNativeRun(value: AgentRunView): NativeRun {
+	return {
+		id: value.id,
+		appId: value.appId,
+		threadId: value.threadId,
+		status: value.status,
+		version: value.version,
+		createdAt: value.createdAt,
+		updatedAt: value.updatedAt,
+	};
+}
+
+export function fromNativeModel(value: AgentSelectableModel): NativeModel {
+	return {
+		providerId: value.providerId,
+		providerName: value.providerDisplayName,
+		configurationVersion: value.configurationVersion,
+		modelId: value.modelId,
+		protocol: value.protocol,
+	};
+}
+
+export function fromNativeEvent(value: AgentRunEventView): NativeEvent {
+	return {
+		runId: value.runId,
+		sequence: value.sequence,
+		type: value.type,
+		runVersion: value.runVersion,
+		createdAt: value.createdAt,
+	};
+}
+
+export function fromNativeApproval(value: AgentApprovalView): NativeApproval {
+	return {
+		id: value.id,
+		appId: value.appId,
+		runId: value.runId,
+		toolCallId: value.toolCallId,
+		operationHash: value.operationHash,
+		kind: value.kind,
+		status: value.status,
+		policyRevision: value.policyRevision,
+		inputRevision: value.inputRevision,
+		version: value.version,
+		requestedAt: value.requestedAt,
+		expiresAt: value.expiresAt,
+		decidedAt: value.decidedAt,
+		decidedByUserId: value.decidedByUserId,
+		consumedAt: value.consumedAt,
+		inspection: {
+			toolName: value.inspection.toolName,
+			toolVersion: value.inspection.toolVersion,
+			risk: value.inspection.risk,
+			mutation: value.inspection.mutation,
+			targetConnectionId: value.inspection.targetConnectionId,
+			summary: value.inspection.summary,
+		},
+	};
+}
+
+export function fromNativeChild(value: AgentChildView): NativeChild {
+	return {
+		id: value.id,
+		parentId: value.parentId,
+		status: value.status,
+		version: value.version,
+		profile: value.profile,
+		deadlineAt: value.deadlineAt,
+	};
+}
+
+export function fromNativeMessage(value: AgentMessageMetadata): NativeMessage {
+	return {
+		sequence: value.sequence,
+		senderId: value.senderId,
+		bodyBytes: value.bodyBytes,
+		expiresAt: value.expiresAt,
+	};
+}
+
+export function fromNativeCursor(value: AgentThreadEntryCursor): NativeEntryCursor {
+	return {
+		runSequence: value.runSequence,
+		stepIndex: value.stepIndex,
+		eventSequence: value.eventSequence,
+		textOffset: value.textOffset,
+	};
+}
+
+export function fromNativeEntry(value: AgentThreadEntry): NativeEntry {
+	return { runId: value.runId, role: value.role, position: fromNativeCursor(value.position), text: value.text };
+}
+
+export function toNativeRunInput(value: NativeRunInput): AgentCreateRunRequest {
+	return {
+		prompt: value.prompt,
+		connectionIds: value.connectionIds.map((id) => id),
+		model: {
+			providerId: value.model.providerId,
+			modelId: value.model.modelId,
+			configurationVersion: value.model.configurationVersion,
+		},
+	};
+}
+
+export function toNativeRunMutation(value: NativeRunIntent): AgentWorkspaceRequest {
+	const action = value.action;
+	const operationId = value.operationId;
+	const appVersion = value.scope.appVersion;
+	switch (action.kind) {
+		case 'create':
+			return {
+				appVersion,
+				request: {
+					method: 'agent.runs.create',
+					params: { threadId: action.threadId, operationId, input: toNativeRunInput(action.input) },
+				},
+			};
+		case 'append':
+			return {
+				appVersion,
+				request: {
+					method: 'agent.runs.appendInput',
+					params: {
+						threadId: action.run.threadId,
+						runId: action.run.id,
+						expectedVersion: action.run.version,
+						operationId,
+						input: toNativeRunInput(action.input),
+					},
+				},
+			};
+		case 'cancel':
+			return {
+				appVersion,
+				request: {
+					method: 'agent.runs.cancel',
+					params: { runId: action.run.id, expectedVersion: action.run.version, operationId },
+				},
+			};
+		case 'cancelChild':
+			return {
+				appVersion,
+				request: {
+					method: 'agent.subagents.cancel',
+					params: {
+						runId: action.run.id,
+						childId: action.child.id,
+						expectedVersion: action.child.version,
+						operationId,
+					},
+				},
+			};
+		case 'approve':
+			return {
+				appVersion,
+				request: {
+					method: 'agent.approvals.resolve',
+					params: {
+						approvalId: action.approval.id,
+						operationId,
+						input: {
+							decision: action.decision,
+							expectedVersion: action.approval.version,
+							operationHash: action.approval.operationHash,
+							...(action.feedback ? { feedback: action.feedback } : {}),
+						},
+					},
+				},
+			};
+	}
+}
+
+export function fromNativeStep(value: AgentRunStepView): NativeStep {
+	const result: NativeStep = {
+		runId: value.runId,
+		stepIndex: value.stepIndex,
+		state: value.state,
+		revision: value.revision,
+		runVersion: value.runVersion,
+		textBytes: value.textBytes,
+		createdAt: value.createdAt,
+		updatedAt: value.updatedAt,
+	};
+	if (value.finishReason !== undefined) result.finishReason = value.finishReason;
+	if (value.inputTokens !== undefined) result.inputTokens = value.inputTokens;
+	if (value.outputTokens !== undefined) result.outputTokens = value.outputTokens;
+	if (value.failureCode !== undefined) result.failureCode = value.failureCode;
+	return result;
+}
+
+export function fromNativeStepEvent(value: AgentRunStepEventView): NativeStepEvent {
+	if (value.kind === 'text.delta')
+		return {
+			runId: value.runId,
+			stepIndex: value.stepIndex,
+			sequence: value.sequence,
+			kind: value.kind,
+			textBytes: value.textBytes,
+			createdAt: value.createdAt,
+		};
+	if (value.kind === 'usage')
+		return {
+			runId: value.runId,
+			stepIndex: value.stepIndex,
+			sequence: value.sequence,
+			kind: value.kind,
+			inputTokens: value.inputTokens,
+			outputTokens: value.outputTokens,
+			createdAt: value.createdAt,
+		};
+	return {
+		runId: value.runId,
+		stepIndex: value.stepIndex,
+		sequence: value.sequence,
+		kind: value.kind,
+		createdAt: value.createdAt,
+	};
+}
+
+export function fromNativeTool(value: AgentToolView): NativeTool {
+	return {
+		id: value.id,
+		appId: value.appId,
+		runId: value.runId,
+		modelStepIndex: value.modelStepIndex,
+		toolName: value.toolName,
+		toolVersion: value.toolVersion,
+		capability: value.capability,
+		targetId: value.targetId,
+		targetVersion: value.targetVersion,
+		risk: value.risk,
+		mutation: value.mutation,
+		operationHash: value.operationHash,
+		operationRevision: value.operationRevision,
+		revision: value.revision,
+		state: value.state,
+		createdAt: value.createdAt,
+		updatedAt: value.updatedAt,
+	};
+}
+
+export function fromNativeToolEvent(value: AgentToolEventView): NativeToolEvent {
+	return {
+		toolCallId: value.toolCallId,
+		runId: value.runId,
+		revision: value.revision,
+		operationRevision: value.operationRevision,
+		state: value.state,
+		operationHash: value.operationHash,
+		createdAt: value.createdAt,
+	};
+}
+
+/** Freeze nested reactive editor objects before the first dispatch. */
+export function snapshotNativeRunAction(value: NativeRunAction): NativeRunAction {
+	function input(value: NativeRunInput): NativeRunInput {
+		return {
+			prompt: value.prompt,
+			connectionIds: value.connectionIds.map((id) => id),
+			model: {
+				providerId: value.model.providerId,
+				providerName: value.model.providerName,
+				configurationVersion: value.model.configurationVersion,
+				modelId: value.model.modelId,
+				protocol: value.model.protocol,
+			},
+		};
+	}
+
+	if (value.kind === 'create') return { kind: value.kind, threadId: value.threadId, input: input(value.input) };
+	if (value.kind === 'append') return { kind: value.kind, run: fromNativeRun(value.run), input: input(value.input) };
+	if (value.kind === 'cancel') return { kind: value.kind, run: fromNativeRun(value.run) };
+	if (value.kind === 'cancelChild')
+		return { kind: value.kind, run: fromNativeRun(value.run), child: fromNativeChild(value.child) };
+	return {
+		kind: value.kind,
+		approval: fromNativeApproval(value.approval),
+		decision: value.decision,
+		feedback: value.feedback,
+	};
+}

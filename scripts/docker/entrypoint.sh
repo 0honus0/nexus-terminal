@@ -14,7 +14,7 @@ case "$role" in
         ;;
     backend)
         cd /app
-        exec node dist/index.js "$@"
+        exec node dist/main.js "$@"
         ;;
     *)
         exec "$role" "$@"

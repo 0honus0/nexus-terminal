@@ -39,6 +39,7 @@ bower_components
 build/Release
 
 # Dependency directories
+/.agent-tmp/
 node_modules/
 jspm_packages/
 scripts/*
@@ -150,7 +151,6 @@ dist
 /packages/data
 *.db
 *.db
-!/tests/e2e/fixtures/seeded-data/nexus-terminal.db
 *.jpg
 /packages/backend/uploads/backgrounds
 /temp_iterm_schemes

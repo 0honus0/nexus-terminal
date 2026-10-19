@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { filesystemFailureMessage } from '@/features/filesystem/public';
 	import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiSpinner } from '@/foundation/ui';
@@ -65,7 +66,7 @@
 		if (tab.error.type === 'tooLarge') {
 			return t('fileManager.preview.fileTooLarge', { size: formatBytes(tab.error.maxBytes) });
 		}
-		return tab.error.message;
+		return filesystemFailureMessage(tab.error.message, t);
 	};
 
 	const open = (path: string) => preview.open(path, { scopeId: props.scopeId, source: props.source });

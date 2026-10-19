@@ -1,23 +1,39 @@
 <script setup lang="ts">
-	import { ref } from 'vue';
+	import { onBeforeUnmount, onDeactivated, ref } from 'vue';
+	import { useRouter } from 'vue-router';
 	import { useI18n } from 'vue-i18n';
-	import { apiErrorMessage } from '@/client/http';
+	import { authErrorKey, useAuthSession } from '@/features/auth/public';
 	import { UiButton, UiFormField, UiInput } from '@/foundation/ui';
 	import { useFeedback } from '@/shared/feedback/public';
-	import { securityApi } from '../api/securityApi';
 
 	const { t } = useI18n();
 	const feedback = useFeedback();
+	const auth = useAuthSession();
+	const router = useRouter();
+	let disposed = false;
+	onBeforeUnmount(() => {
+		disposed = true;
+		clearPasswords();
+	});
 	const currentPassword = ref('');
 	const newPassword = ref('');
 	const confirmPassword = ref('');
 	const loading = ref(false);
 	const message = ref('');
-	const success = ref(false);
+
+	function clearPasswords(): void {
+		currentPassword.value = '';
+		newPassword.value = '';
+		confirmPassword.value = '';
+	}
+
+	onDeactivated(clearPasswords);
 
 	const submit = async () => {
+		if (loading.value || disposed) {
+			return;
+		}
 		message.value = '';
-		success.value = false;
 		if (!currentPassword.value || !newPassword.value) {
 			message.value = t('settings.changePassword.error.fieldsRequired');
 			feedback.notifyError(message.value);
@@ -28,20 +44,37 @@
 			feedback.notifyError(message.value);
 			return;
 		}
+		const originRoute = router.currentRoute.value;
 		loading.value = true;
+		let completed = false;
 		try {
-			await securityApi.changePassword(currentPassword.value, newPassword.value);
-			message.value = t('settings.changePassword.success');
-			success.value = true;
-			feedback.notifySuccess(message.value);
-			currentPassword.value = '';
-			newPassword.value = '';
-			confirmPassword.value = '';
+			await auth.changePassword(currentPassword.value, newPassword.value);
+			completed = true;
 		} catch (cause) {
-			message.value = apiErrorMessage(cause, t('settings.changePassword.error.generic'));
-			feedback.notifyError(message.value);
+			if (!disposed) {
+				message.value = t(authErrorKey(cause));
+				feedback.notifyError(message.value);
+			}
 		} finally {
-			loading.value = false;
+			if (!disposed) {
+				loading.value = false;
+				clearPasswords();
+			}
+		}
+		if (router.currentRoute.value !== originRoute) {
+			return;
+		}
+		if (completed) {
+			feedback.notifySuccess(t('settings.changePassword.success'));
+		}
+		// Session invalidation can rebuild the cached page before this continuation.
+		// Finish navigation for this route, but never redirect a subsequent user action.
+		if (!auth.isAuthenticated.value) {
+			try {
+				await router.replace({ name: 'Login' });
+			} catch {
+				feedback.notifyError(t('auth.errors.generic'));
+			}
 		}
 	};
 </script>
@@ -68,7 +101,7 @@
 				<UiButton type="submit" appearance="solid" tone="primary" :loading="loading">{{
 					t('settings.changePassword.submit')
 				}}</UiButton>
-				<p v-if="message" :class="success ? 'text-success' : 'text-error'" class="text-sm" role="status">
+				<p v-if="message" class="text-sm text-error" role="status">
 					{{ message }}
 				</p>
 			</div>

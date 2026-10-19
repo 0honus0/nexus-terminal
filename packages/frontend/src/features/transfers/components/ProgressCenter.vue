@@ -4,7 +4,7 @@
 	import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
 	import { useDraggablePosition, useResizeHandle } from '@/foundation/interaction';
 	import { UiResizeHandle } from '@/foundation/ui';
-	import type { TransferTask } from '../model/transfer';
+	import type { TransferTask } from '../model/transfer-types';
 	import { transferTaskErrorDescriptor, transferTaskWarningDescriptor } from '../presentation-transfer-message';
 
 	interface ProgressWindowGeometry {
@@ -60,7 +60,8 @@
 
 	const sorted = computed(() => [...props.tasks].sort((a, b) => b.createdAt - a.createdAt));
 
-	const done = (status: string) => ['completed', 'cancelled', 'skipped', 'partial', 'error'].includes(status);
+	const done = (status: string) =>
+		['completed', 'cancelled', 'skipped', 'partial', 'unknown', 'error'].includes(status);
 
 	const activeTasks = computed(() => sorted.value.filter((task) => !done(task.status)));
 	const presentationMode = computed<'upload' | 'archive' | 'transfer' | 'mixed'>(() => {

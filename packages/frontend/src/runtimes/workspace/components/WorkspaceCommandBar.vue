@@ -4,13 +4,13 @@
 	import { focusRegistry } from '@/shared/focus/public';
 	import { expandQuickCommand, useQuickCommands } from '@/features/quick-commands/public';
 	import { useCommandHistory } from '@/features/command-history/public';
-	import type { PreferencesDto } from '@/features/preferences/public';
+	import type { UserPreferences } from '@/features/preferences/public';
 	import { applyTerminalModifiers, type TerminalModifierState } from '@/features/terminal/public';
 	import { useFeedback } from '@/shared/feedback/public';
 
 	const props = withDefaults(
 		defineProps<{
-			commandInputSyncTarget?: PreferencesDto['commandInputSyncTarget'];
+			commandInputSyncTarget?: UserPreferences['commandInputSyncTarget'];
 			quickCommandsGrouped?: boolean;
 			showFileManagerButton?: boolean;
 			showEditorButton?: boolean;

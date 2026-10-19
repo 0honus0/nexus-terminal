@@ -1,6 +1,6 @@
 # Agent 任务型功能验收计划
 
-本计划以应用任务验证 Agent 能力，以 `tests/e2e/specs/agent/` 中的可执行用例为最终验收依据。以下是设计清单，不是已通过清单。共 81 个主场景；落地前核对当前实现，不虚构工具或协议。下方 **2026-10-05 及更早的执行记录是退役 Agent Workspace 版本的历史证据**，不作为当前运行流程、Runner 接口或已完成验收标准；现行 Agent 仅使用授权 SSH 与独立 Backend CDP。
+本计划以应用任务验证 Agent 能力，以 `tests/e2e/specs/agent/` 中的可执行用例为最终验收依据。以下是设计清单，不是已通过清单。共 81 个主场景；落地前核对当前实现，不虚构工具或协议。下方历史批次中的 **Runner/Agent Workspace 执行记录是退役版本证据**，不作为当前运行流程、Runner 接口或已完成验收标准；现行 Agent 仅使用授权 SSH 与独立 Backend CDP。
 
 ## 方法与边界
 
@@ -152,7 +152,7 @@
 | K07 | 错参数后修正               | 精确错误，执行前拒绝不是未知副作用  |
 | K08 | 未知结果核对并恢复目标     | quarantine／reconciliation 生命周期 |
 
-## 批次与实施状态
+## 历史批次与执行证据
 
 1. A01–A08、B01–B04、C01、F01、F06：接手、部署、Skill、浏览器和交付。
 2. D01–D05、E01–E06、B05–B10：MCP、协作、复杂排障。
@@ -168,7 +168,7 @@
 - A01/A02：已准备 `tests/e2e/fixtures/agent/task-projects/startup-failure/`，包含项目规则、无外部依赖的服务、配置键错误及必须保留的业务数据。A01 只读调查；A02 修复配置并启动，由测试端独立检查两个接口和数据 hash。尚未纳入已通过覆盖。
 - CDP `172.30.30.11:9223` 可连接指定测试页；首次检查 Provider、Workspace、Settings 请求均为 HTTP 502，本机测试 Backend/Frontend 端口未监听。该次真实任务被前置条件阻塞，不计 Agent 缺陷。后续获准调整本地隔离测试环境，最终由 Actions 验收，不操作部署服务器。
 
-### 当前进度与接续入口（2026-10-05）
+### 历史进度与接续记录（2026-10-05）
 
 - 执行分工：本机连接真实模型 API 运行能力任务；Actions 模拟外部 API／模型响应，但真实执行产品状态流转、隔离服务及文件副作用。真实能力结论来自本机任务，最终回归交付以精确提交 SHA 的 canonical Actions 为准；缺少任何一层均不得标记完整验收。
 - Git 已 fetch 核对：远程 dev 为 `4daf981e`，本地文档提交为 `a5c6fc21`，仅 ahead 1，不是 ahead 18。原先 18 个提交已经在远程历史中，本轮没有删除／撤销它们。当前未提交内容为本计划更新及 startup-failure fixture。
@@ -334,4 +334,4 @@
 - 路径错误传递修复本地送验：check、三包 build、隔离全量格式与 Runner HTTP coding 场景通过；全量场景仅上述 Context 基线失败。准备单独本地提交，无推送或远程验收结论。
 - 路径错误传递修复已本地提交 `901b1468`，未推送。失败 Run 的独立测试 Workspace `206a3a8c-2d79-4de3-a937-4ee06dfb7883` 经管理 API 显式 stop 后确认 succeeded/stopped，再 delete 后确认 succeeded/deleted、retained=false；不复用它执行新 Run，不把 generation 删除当作 persistent project root 已清理。Provider HTTP 400 原始上游正文按现有安全约束未保存，当前日志只能确认状态码，尚不足以判断请求 contract 或上游故障；不凭推测修复 Provider，不重复创建 Run 换绿。
 
-本文件是本轮临时场景计划与进度入口，过程中持续更新，不保留已解决问题的开放状态。全部场景完成（或明确说明实际 contract／环境导致的未覆盖范围）、有效回归进入 `tests/e2e/specs/agent/`，且对应 SHA 的 canonical Actions 验收后，删除本文件和 `E2E.md` 中的入口；长期验证命令与覆盖边界仅保留在 `E2E.md`，不留下完成报告。本条记录的是将来的删除要求，当前尚未删除、尚未全部完成。
+本文件是正式 Agent 的场景设计与历史执行证据入口，不是 backend-next 的当前施工计划。当前重构任务仅由 [下一阶段方案](../后端重构下一阶段实施方案.md) 维护；旧记录中的“当前”“接续”“下一步”和串行提交要求只描述当时任务，不授权恢复已退役 Runner、沿用旧能力或立即执行测试。全部场景完成（或明确说明实际 contract／环境导致的未覆盖范围）、有效回归进入 `tests/e2e/specs/agent/`，且对应 SHA 的 canonical Actions 验收后，删除本文件和 `E2E.md` 中的入口；长期验证命令与覆盖边界仅保留在 `E2E.md`，不留下完成报告。本条记录的是将来的删除要求，当前尚未删除、尚未全部完成。

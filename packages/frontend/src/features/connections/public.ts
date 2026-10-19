@@ -8,15 +8,7 @@ export {
 	resetConnectionsCache,
 	useConnections,
 } from './composables/useConnections';
-export type { ConnectionsController } from './composables/useConnections';
-export { connectionsApi as connectionService } from './api/connectionsApi';
-export type {
-	ConnectionDto,
-	ConnectionAuthMethodDto,
-	ConnectionFormInput,
-	ConnectionRouteDto,
-	ConnectionTestResponseDto,
-	ConnectionTypeDto,
-	ConnectionFormUpdate,
-	RdpConnectionOptionsDto,
-} from './model/connection';
+
+export type { ConnectionSummary, ConnectionsController } from './model/connection-types';
+
+export { useConnectionManagement } from './composables/use-connection-management';

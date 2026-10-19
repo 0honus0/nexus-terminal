@@ -1,21 +1,20 @@
 <script setup lang="ts">
-	import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+	import { computed, reactive, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { structurallyEqual } from '@/foundation/data';
 	import { UiButton, UiCheckbox, UiFormField, UiInput, UiSelect } from '@/foundation/ui';
 	import { useFeedback } from '@/shared/feedback/public';
-	import { usePreferences } from '../composables/usePreferences';
-	import type { PreferencesDto } from '../model/preferences';
+	import MonitoringConfigurationPanel from './MonitoringConfigurationPanel.vue';
+	import { usePreferencesEditor } from '../composables/use-preferences-editor';
+	import type { UserPreferences } from '../model/preferences-types';
 
 	type GroupId = 'files' | 'commands' | 'monitoring' | 'layout';
 
 	const { t } = useI18n();
 	const feedback = useFeedback();
-	const emit = defineEmits<{ saved: [preferences: PreferencesDto] }>();
-	const preferences = usePreferences();
-	const form = reactive<PreferencesDto>({ ...preferences.values.value });
-	const loading = ref(true);
-	const loadError = ref('');
+	const emit = defineEmits<{ saved: [preferences: UserPreferences] }>();
+	const editor = usePreferencesEditor(t);
+	const { form, baseline, loading, loadError, needsRefresh, preferences } = editor;
 	const savingGroup = ref<GroupId | null>(null);
 	const groupMessages = reactive<Record<GroupId, { text: string; success: boolean } | null>>({
 		files: null,
@@ -23,7 +22,6 @@
 		monitoring: null,
 		layout: null,
 	});
-	let syncing = false;
 
 	const fileKeys = [
 		'showPopupFileEditor',
@@ -32,7 +30,7 @@
 		'fileManagerShowDeleteConfirmation',
 		'spreadsheetPreviewRowsPerPage',
 		'spreadsheetPreviewMaxColumns',
-	] as const satisfies readonly (keyof PreferencesDto)[];
+	] as const satisfies readonly (keyof UserPreferences)[];
 	const commandKeys = [
 		'workspaceSidebarPersistent',
 		'commandInputSyncTarget',
@@ -42,20 +40,20 @@
 		'quickCommandsCompactMode',
 		'terminalScrollbackLimit',
 		'terminalRightClickCopyPaste',
-	] as const satisfies readonly (keyof PreferencesDto)[];
+	] as const satisfies readonly (keyof UserPreferences)[];
 	const monitoringKeys = [
 		'dashboardShowLocalResources',
 		'dashboardShowRemoteResources',
-		'remoteHostRefreshIntervalSeconds',
+
 		'showStatusMonitorIpAddress',
-		'statusMonitorIntervalSeconds',
+
 		'dockerStatusIntervalSeconds',
 		'dockerDefaultExpand',
-	] as const satisfies readonly (keyof PreferencesDto)[];
-	const layoutKeys = ['layoutLocked', 'navBarVisible'] as const satisfies readonly (keyof PreferencesDto)[];
+	] as const satisfies readonly (keyof UserPreferences)[];
+	const layoutKeys = ['layoutLocked', 'navBarVisible'] as const satisfies readonly (keyof UserPreferences)[];
 
-	const isDirty = (keys: readonly (keyof PreferencesDto)[]) =>
-		keys.some((key) => !structurallyEqual(form[key], preferences.values.value[key]));
+	const isDirty = (keys: readonly (keyof UserPreferences)[]) =>
+		keys.some((key) => !structurallyEqual(form[key], baseline.value[key]));
 
 	const filesDirty = computed(() => isDirty(fileKeys));
 	const commandsDirty = computed(() => isDirty(commandKeys));
@@ -65,31 +63,21 @@
 		() => [filesDirty.value, commandsDirty.value, monitoringDirty.value, layoutDirty.value].filter(Boolean).length,
 	);
 
-	const patchFor = (keys: readonly (keyof PreferencesDto)[]): Partial<PreferencesDto> => {
-		const patch: Partial<PreferencesDto> = {};
+	const patchFor = (keys: readonly (keyof UserPreferences)[]): Partial<UserPreferences> => {
+		const patch: Partial<UserPreferences> = {};
 		for (const key of keys) (patch as Record<string, unknown>)[key] = form[key];
 		return patch;
 	};
 
-	const validatePatch = (patch: Partial<PreferencesDto>): string | null => {
+	const validatePatch = (patch: Partial<UserPreferences>): string | null => {
 		const integerInRange = (value: number, min: number, max: number) =>
 			Number.isInteger(Number(value)) && Number(value) >= min && Number(value) <= max;
 
-		if (
-			patch.statusMonitorIntervalSeconds !== undefined &&
-			!integerInRange(patch.statusMonitorIntervalSeconds, 1, 86400)
-		)
-			return t('settings.statusMonitor.error.invalidInterval');
 		if (
 			patch.dockerStatusIntervalSeconds !== undefined &&
 			!integerInRange(patch.dockerStatusIntervalSeconds, 1, 86400)
 		)
 			return t('settings.docker.error.invalidInterval');
-		if (
-			patch.remoteHostRefreshIntervalSeconds !== undefined &&
-			!integerInRange(patch.remoteHostRefreshIntervalSeconds, 1, 86400)
-		)
-			return t('settings.dashboardResources.error.invalidInterval');
 		if (patch.terminalScrollbackLimit !== undefined && !integerInRange(patch.terminalScrollbackLimit, 0, 100000))
 			return t('settings.terminalScrollback.error.invalidInput');
 		if (
@@ -105,7 +93,9 @@
 		return null;
 	};
 
-	const saveGroup = async (group: GroupId, keys: readonly (keyof PreferencesDto)[]) => {
+	const saveGroup = async (group: GroupId, keys: readonly (keyof UserPreferences)[]) => {
+		const signal = editor.view.capture();
+		if (signal.aborted) return;
 		const patch = patchFor(keys);
 		const validationError = validatePatch(patch);
 		if (validationError) {
@@ -116,66 +106,29 @@
 		savingGroup.value = group;
 		groupMessages[group] = null;
 		try {
-			await preferences.update(patch);
+			if (!(await editor.save(patch))) return;
 			emit('saved', { ...preferences.values.value });
 			const message = t('settings.preferences.saved');
 			groupMessages[group] = { text: message, success: true };
 			feedback.notifySuccess(message);
 		} catch (cause) {
+			if (!editor.view.isCurrent(signal)) return;
 			const message = t('settings.preferences.saveFailed', {
 				error: cause instanceof Error ? cause.message : String(cause),
 			});
 			groupMessages[group] = { text: message, success: false };
 			feedback.notifyError(message);
 		} finally {
-			savingGroup.value = null;
+			if (editor.view.isCurrent(signal)) savingGroup.value = null;
 		}
 	};
-
-	watch(
-		preferences.values,
-		async (value) => {
-			if (savingGroup.value) return;
-			syncing = true;
-			Object.assign(form, value);
-			await nextTick();
-			syncing = false;
-		},
-		{ deep: true },
-	);
-
-	watch(
-		form,
-		() => {
-			if (!syncing) {
-				for (const group of ['files', 'commands', 'monitoring', 'layout'] as const) {
-					if (groupMessages[group]?.success) groupMessages[group] = null;
-				}
-			}
-		},
-		{ deep: true },
-	);
-
-	onMounted(async () => {
-		try {
-			await preferences.load();
-		} catch (cause) {
-			loadError.value = t('settings.preferences.loadFailed', {
-				error: cause instanceof Error ? cause.message : String(cause),
-			});
-			feedback.notifyError(loadError.value);
-		} finally {
-			syncing = true;
-			Object.assign(form, preferences.values.value);
-			await nextTick();
-			syncing = false;
-			loading.value = false;
-		}
-	});
 </script>
 
 <template>
 	<section class="workspace-preferences min-w-0">
+		<UiButton class="mb-3" :disabled="loading || editor.saving.value" @click="editor.refresh">{{
+			t('common.refresh')
+		}}</UiButton>
 		<header class="flex flex-col gap-2 px-1 py-3 sm:flex-row sm:items-center sm:justify-between">
 			<div class="min-w-0">
 				<h2 class="text-lg font-semibold text-foreground">{{ t('settings.workspace.title') }}</h2>
@@ -190,6 +143,8 @@
 				{{ t('settings.workspace.unsavedGroups', { count: dirtyCount }) }}
 			</span>
 		</header>
+
+		<MonitoringConfigurationPanel class="mb-5" />
 
 		<div v-if="loading" class="p-6 text-center text-sm text-text-secondary">{{ t('common.loading') }}</div>
 		<div v-else class="space-y-5">
@@ -211,7 +166,7 @@
 							<UiCheckbox
 								id="showPopupFileEditor"
 								v-model="form.showPopupFileEditor"
-								:disabled="savingGroup !== null"
+								:disabled="savingGroup !== null || needsRefresh || loading"
 								class="mt-0.5"
 							/>
 							<span class="min-w-0">{{ t('settings.popupEditor.enableLabel') }}</span>
@@ -231,7 +186,7 @@
 							<UiCheckbox
 								id="showPopupFileManager"
 								v-model="form.showPopupFileManager"
-								:disabled="savingGroup !== null"
+								:disabled="savingGroup !== null || needsRefresh || loading"
 								class="mt-0.5"
 							/>
 							<span>{{ t('settings.popupFileManager.enableLabel') }}</span>
@@ -248,7 +203,7 @@
 							<UiCheckbox
 								id="shareFileEditorTabs"
 								v-model="form.shareFileEditorTabs"
-								:disabled="savingGroup !== null"
+								:disabled="savingGroup !== null || needsRefresh || loading"
 								class="mt-0.5"
 							/>
 							<span>{{ t('settings.shareEditorTabs.enableLabel') }}</span>
@@ -265,7 +220,7 @@
 							<UiCheckbox
 								id="fileManagerShowDeleteConfirmation"
 								v-model="form.fileManagerShowDeleteConfirmation"
-								:disabled="savingGroup !== null"
+								:disabled="savingGroup !== null || needsRefresh || loading"
 								class="mt-0.5"
 							/>
 							<span>{{ t('settings.workspace.fileManagerShowDeleteConfirmationLabel') }}</span>
@@ -287,7 +242,7 @@
 									min="10"
 									max="2000"
 									step="1"
-									:disabled="savingGroup !== null"
+									:disabled="savingGroup !== null || needsRefresh || loading"
 								/>
 							</UiFormField>
 							<UiFormField
@@ -301,7 +256,7 @@
 									min="5"
 									max="200"
 									step="1"
-									:disabled="savingGroup !== null"
+									:disabled="savingGroup !== null || needsRefresh || loading"
 								/>
 							</UiFormField>
 						</div>
@@ -338,7 +293,7 @@
 							><UiCheckbox
 								id="workspaceSidebarPersistent"
 								v-model="form.workspaceSidebarPersistent"
-								:disabled="savingGroup !== null"
+								:disabled="savingGroup !== null || needsRefresh || loading"
 								class="mt-0.5"
 							/><span>{{ t('settings.workspace.sidebarPersistentLabel') }}</span></label
 						>
@@ -354,7 +309,7 @@
 							<UiSelect
 								id="commandInputSyncTarget"
 								v-model="form.commandInputSyncTarget"
-								:disabled="savingGroup !== null"
+								:disabled="savingGroup !== null || needsRefresh || loading"
 							>
 								<option value="none">{{ t('settings.commandInputSync.targetNone') }}</option>
 								<option value="quickCommands">
@@ -374,7 +329,7 @@
 							><UiCheckbox
 								id="showConnectionTags"
 								v-model="form.showConnectionTags"
-								:disabled="savingGroup !== null"
+								:disabled="savingGroup !== null || needsRefresh || loading"
 								class="mt-0.5"
 							/><span>{{ t('settings.workspace.showConnectionTagsLabel') }}</span></label
 						>
@@ -389,7 +344,7 @@
 							><UiCheckbox
 								id="showQuickCommandTags"
 								v-model="form.showQuickCommandTags"
-								:disabled="savingGroup !== null"
+								:disabled="savingGroup !== null || needsRefresh || loading"
 								class="mt-0.5"
 							/><span>{{ t('settings.workspace.showQuickCommandTagsLabel') }}</span></label
 						>
@@ -404,7 +359,7 @@
 							><UiCheckbox
 								id="quickCommandsCollapsibleSearch"
 								v-model="form.quickCommandsCollapsibleSearch"
-								:disabled="savingGroup !== null"
+								:disabled="savingGroup !== null || needsRefresh || loading"
 								class="mt-0.5"
 							/><span>{{ t('settings.workspace.quickCommandsCollapsibleSearchLabel') }}</span></label
 						>
@@ -419,7 +374,7 @@
 							><UiCheckbox
 								id="quickCommandsCompactMode"
 								v-model="form.quickCommandsCompactMode"
-								:disabled="savingGroup !== null"
+								:disabled="savingGroup !== null || needsRefresh || loading"
 								class="mt-0.5"
 							/><span>{{ t('settings.workspace.quickCommandsCompactModeLabel') }}</span></label
 						>
@@ -439,7 +394,7 @@
 								min="0"
 								max="100000"
 								step="1"
-								:disabled="savingGroup !== null"
+								:disabled="savingGroup !== null || needsRefresh || loading"
 							/>
 						</UiFormField>
 						<p class="mt-2 text-xs text-text-secondary">{{ t('settings.terminalScrollback.limitHint') }}</p>
@@ -451,7 +406,7 @@
 							><UiCheckbox
 								id="terminalRightClickCopyPaste"
 								v-model="form.terminalRightClickCopyPaste"
-								:disabled="savingGroup !== null"
+								:disabled="savingGroup !== null || needsRefresh || loading"
 								class="mt-0.5"
 							/><span>{{ t('settings.workspace.terminalRightClickCopyPasteLabel') }}</span></label
 						>
@@ -492,7 +447,7 @@
 									id="dashboardShowLocalResources"
 									v-model="form.dashboardShowLocalResources"
 									:aria-label="t('settings.dashboardResources.localLabel')"
-									:disabled="savingGroup !== null"
+									:disabled="savingGroup !== null || needsRefresh || loading"
 									class="mt-0.5"
 								/><span>{{ t('settings.dashboardResources.localLabel') }}</span></label
 							>
@@ -503,25 +458,11 @@
 									id="dashboardShowRemoteResources"
 									v-model="form.dashboardShowRemoteResources"
 									:aria-label="t('settings.dashboardResources.remoteLabel')"
-									:disabled="savingGroup !== null"
+									:disabled="savingGroup !== null || needsRefresh || loading"
 									class="mt-0.5"
 								/><span>{{ t('settings.dashboardResources.remoteLabel') }}</span></label
 							>
 						</div>
-					</div>
-					<div class="workspace-preferences__field">
-						<UiFormField
-							:label="t('settings.dashboardResources.refreshIntervalLabel')"
-							for-id="remoteHostRefreshIntervalSeconds"
-							><UiInput
-								id="remoteHostRefreshIntervalSeconds"
-								v-model="form.remoteHostRefreshIntervalSeconds"
-								type="number"
-								min="1"
-								max="86400"
-								step="1"
-								:disabled="savingGroup !== null"
-						/></UiFormField>
 					</div>
 					<div class="workspace-preferences__field">
 						<label
@@ -530,24 +471,10 @@
 							><UiCheckbox
 								id="showStatusMonitorIpAddress"
 								v-model="form.showStatusMonitorIpAddress"
-								:disabled="savingGroup !== null"
+								:disabled="savingGroup !== null || needsRefresh || loading"
 								class="mt-0.5"
 							/><span>{{ t('settings.statusMonitorShowIp.enableLabel') }}</span></label
 						>
-						<div class="mt-3">
-							<UiFormField
-								:label="t('settings.statusMonitor.refreshIntervalLabel')"
-								for-id="statusMonitorIntervalSeconds"
-								><UiInput
-									id="statusMonitorIntervalSeconds"
-									v-model="form.statusMonitorIntervalSeconds"
-									type="number"
-									min="1"
-									max="86400"
-									step="1"
-									:disabled="savingGroup !== null"
-							/></UiFormField>
-						</div>
 					</div>
 					<div class="workspace-preferences__field">
 						<UiFormField
@@ -560,7 +487,7 @@
 								min="1"
 								max="86400"
 								step="1"
-								:disabled="savingGroup !== null"
+								:disabled="savingGroup !== null || needsRefresh || loading"
 						/></UiFormField>
 						<label
 							for="dockerDefaultExpand"
@@ -568,7 +495,7 @@
 							><UiCheckbox
 								id="dockerDefaultExpand"
 								v-model="form.dockerDefaultExpand"
-								:disabled="savingGroup !== null"
+								:disabled="savingGroup !== null || needsRefresh || loading"
 								class="mt-0.5"
 							/><span>{{ t('settings.docker.defaultExpandLabel') }}</span></label
 						>
@@ -613,7 +540,7 @@
 								><UiCheckbox
 									id="layoutLocked"
 									v-model="form.layoutLocked"
-									:disabled="savingGroup !== null"
+									:disabled="savingGroup !== null || needsRefresh || loading"
 									class="mt-0.5"
 								/><span>{{ t('settings.workspace.layoutLockLabel') }}</span></label
 							>
@@ -626,7 +553,7 @@
 								><UiCheckbox
 									id="navBarVisible"
 									v-model="form.navBarVisible"
-									:disabled="savingGroup !== null"
+									:disabled="savingGroup !== null || needsRefresh || loading"
 									class="mt-0.5"
 								/><span>{{ t('settings.workspace.navBarVisibleLabel') }}</span></label
 							>

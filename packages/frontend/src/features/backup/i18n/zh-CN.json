@@ -11,11 +11,22 @@
       "selectFile": "请选择备份文件。",
       "imported": "备份已导入。",
       "importFailed": "备份导入失败。",
-      "importedWithCounts": "备份导入成功：恢复 {rows} 条数据、{files} 个文件。正在重新加载应用。",
-      "description": "导出连接、代理、SSH 密钥、标签、快捷指令、主题、外观与工作区设置、背景文件及自定义 HTML 主题。账户凭据、Passkey、审计日志和 IP 封禁记录不会写入备份。",
+      "importedWithCounts": "备份已恢复：{rows} 条数据、{files} 个文件。请重载后使用恢复的数据。",
+      "description": "导出当前业务配置、Agent 状态、审计/通知记录及引用的背景、Artifact 和插件文件。不包含账户凭据、Passkey 和活跃资源。",
       "importDescription": "同一实例导出的备份可在登录后不填写备份密码直接导入；来自其他实例的备份需要输入导出时使用的登录密码。导入会替换备份范围内的业务数据和自定义主题文件。",
       "backupFile": "备份文件",
-      "backupPasswordHelp": "同一实例导出的备份可留空；跨实例恢复时请输入导出备份时使用的密码。"
+      "backupPasswordHelp": "同一实例导出的备份可留空；跨实例恢复时请输入导出备份时使用的密码。",
+      "confirmImport": "恢复此备份并替换备份范围内的业务数据？请先核对目标实例；现有活跃资源将关闭。",
+      "restoreStateTitle": "备份恢复",
+      "restoring": "正在恢复，请保持应用打开，等待确认结果。",
+      "cleanupPending": "恢复已确认，旧文件仍待清理。请重载后继续使用恢复的数据。",
+      "reload": "重载应用",
+      "unknown": "恢复结果未知，请勿再次提交导入。",
+      "unknownRecovery": "请保留服务端数据现场，通过重启对账和只读检查核对后再变更。",
+      "invalidPassword": "密码不正确。",
+      "invalidInput": "请核对密码并选择非空、最大100 MiB的当前格式备份。",
+      "busy": "已有备份任务或源数据已变化，请核对当前状态后再操作。",
+      "operationFailed": "备份请求失败，请核对认证和服务可用性。"
     }
   }
 }

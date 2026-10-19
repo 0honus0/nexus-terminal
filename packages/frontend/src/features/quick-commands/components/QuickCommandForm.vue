@@ -1,7 +1,8 @@
 <script setup lang="ts">
 	import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { useFeedback } from '@/shared/feedback/public';
+	import { useAuthenticatedViewScope } from '@/shared/session/public';
+	import { useFeedback, preferenceFailureMessage } from '@/shared/feedback/public';
 	import { useResizeHandle } from '@/foundation/interaction';
 	import {
 		UiButton,
@@ -13,10 +14,18 @@
 		UiTokenInput,
 		type UiTokenOption,
 	} from '@/foundation/ui';
-	import type { QuickCommandDto, QuickCommandFormInput, QuickCommandTagDto } from '../model/quickCommand';
+	import type {
+		QuickCommandSummary,
+		QuickCommandFormInput,
+		QuickCommandTagSummary,
+	} from '../model/quick-command-types';
 	import { useQuickCommandsStore } from '../store/quickCommands.store';
 
-	const props = defineProps<{ visible: boolean; command?: QuickCommandDto | null; tags: QuickCommandTagDto[] }>();
+	const props = defineProps<{
+		visible: boolean;
+		command?: QuickCommandSummary | null;
+		tags: QuickCommandTagSummary[];
+	}>();
 	const emit = defineEmits<{
 		close: [];
 		save: [input: QuickCommandFormInput];
@@ -26,17 +35,17 @@
 	const feedback = useFeedback();
 	const store = useQuickCommandsStore();
 
-	const LEGACY_MIN_WIDTH = 800;
-	const LEGACY_MIN_HEIGHT = 700;
+	const MIN_DIALOG_WIDTH = 800;
+	const MIN_DIALOG_HEIGHT = 700;
 	const VIEWPORT_GAP = 32;
 
 	const availableWidth = () => Math.max(1, window.innerWidth - VIEWPORT_GAP);
 
 	const availableHeight = () => Math.max(1, window.innerHeight - VIEWPORT_GAP);
 
-	const minWidth = () => Math.min(LEGACY_MIN_WIDTH, availableWidth());
+	const minWidth = () => Math.min(MIN_DIALOG_WIDTH, availableWidth());
 
-	const minHeight = () => Math.min(LEGACY_MIN_HEIGHT, availableHeight());
+	const minHeight = () => Math.min(MIN_DIALOG_HEIGHT, availableHeight());
 
 	const defaultWidth = () => Math.min(1152, window.innerWidth * 0.9, availableWidth());
 
@@ -45,7 +54,7 @@
 	const desktopResizable = ref(typeof window !== 'undefined' && window.innerWidth >= 768);
 	const dialogWidth = ref(typeof window === 'undefined' ? 1152 : defaultWidth());
 	const dialogHeight = ref(
-		typeof window === 'undefined' ? LEGACY_MIN_HEIGHT : Math.max(minHeight(), defaultHeight()),
+		typeof window === 'undefined' ? MIN_DIALOG_HEIGHT : Math.max(minHeight(), defaultHeight()),
 	);
 
 	const resetDialogSize = () => {
@@ -108,10 +117,24 @@
 		variables: [] as Array<{ key: string; value: string }>,
 	});
 
+	const view = useAuthenticatedViewScope({
+		available: () => props.visible,
+
+		onRevoke: () => {
+			form.name = '';
+			form.command = '';
+			form.tagIds = [];
+			form.variables = [];
+		},
+	});
+
 	watch(
 		() => [props.visible, props.command] as const,
 		([visible]) => {
-			if (visible) resetDialogSize();
+			if (!visible) {
+				return;
+			}
+			resetDialogSize();
 			const command = props.command;
 			form.name = command?.name ?? '';
 			form.command = command?.command ?? '';
@@ -124,40 +147,65 @@
 	const options = () => props.tags.map<UiTokenOption>((tag) => ({ value: String(tag.id), label: tag.name }));
 
 	const createTag = async (name: string) => {
+		const signal = view.capture();
+		if (!view.isCurrent(signal)) {
+			return;
+		}
 		const normalized = name.trim();
-		if (!normalized) return;
+		if (!normalized) {
+			return;
+		}
 		const existing = props.tags.find((tag) => tag.name.toLowerCase() === normalized.toLowerCase());
 		try {
-			const tag = existing ?? (await store.addTag(normalized));
-			if (!form.tagIds.includes(tag.id)) form.tagIds = [...form.tagIds, tag.id];
+			const tag = existing ?? (await store.addTag(normalized, signal));
+			if (view.isCurrent(signal) && !form.tagIds.includes(tag.id)) {
+				form.tagIds = [...form.tagIds, tag.id];
+			}
 		} catch (cause) {
+			if (!view.isCurrent(signal)) {
+				return;
+			}
 			feedback.notifyError(
 				t('quickCommands.tags.createTagFailed', {
-					error: cause instanceof Error ? cause.message : String(cause),
+					error: preferenceFailureMessage(cause, t),
 				}),
 			);
 		}
 	};
 
 	const deleteTag = async (option: UiTokenOption) => {
+		const signal = view.capture();
+		if (!view.isCurrent(signal)) {
+			return;
+		}
 		const id = Number(option.value);
 		const tag = props.tags.find((item) => item.id === id);
-		if (!tag) return;
+		if (!tag) {
+			return;
+		}
 		if (
 			!(await feedback.confirm({
 				message: t('quickCommands.tags.confirmDelete', { name: tag.name }),
+				signal,
 				destructive: true,
 			}))
-		)
+		) {
 			return;
+		}
 		try {
-			await store.removeTag(id);
+			if (!view.isCurrent(signal)) {
+				return;
+			}
+			await store.removeTag(tag, signal);
+			if (!view.isCurrent(signal)) {
+				return;
+			}
 			form.tagIds = form.tagIds.filter((tagId) => tagId !== id);
 		} catch (cause) {
 			feedback.notifyError(
 				t('quickCommands.tags.deleteFailed', {
 					name: tag.name,
-					error: cause instanceof Error ? cause.message : String(cause),
+					error: preferenceFailureMessage(cause, t),
 				}),
 			);
 		}
@@ -174,13 +222,17 @@
 
 	const save = () => {
 		const input = toInput();
-		if (!input.command) return;
+		if (!input.command) {
+			return;
+		}
 		emit('save', input);
 	};
 
 	const execute = () => {
 		const input = toInput();
-		if (!input.command) return;
+		if (!input.command) {
+			return;
+		}
 		emit('execute', input);
 	};
 </script>

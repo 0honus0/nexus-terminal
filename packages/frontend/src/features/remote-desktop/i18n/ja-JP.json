@@ -36,7 +36,24 @@
     "restoreWindow": "リモートデスクトップウィンドウを復元",
     "keyboard": "キーボード",
     "showKeyboard": "キーボードを表示",
-    "hideKeyboard": "キーボードを閉じる"
+    "hideKeyboard": "キーボードを閉じる",
+    "fullscreenFailed": "全画面表示を変更できませんでした。",
+    "unknownOutcome": "リモートの結果は不明です。ローカルで閉じてもリモートプログラムの停止は確認できません。新しいチケットで明示的に再接続してください。",
+    "failures": {
+      "invalid_input": "表示設定または接続が無効です。直接接続のみ対応するため、プロキシと踏み台の設定を確認してください。",
+      "unauthenticated": "再度ログインしてください。",
+      "forbidden": "デスクトップへのアクセス権限がありません。",
+      "not_found": "接続が見つかりません。",
+      "conflict": "接続先が変更されたか経路が未対応です。デスクトップは直接接続のみ対応します。",
+      "limit_exceeded": "デスクトップの上限に達しました。他のセッションが閉じるまでお待ちください。",
+      "remote_unavailable": "デスクトップサービスを利用できません。",
+      "operation_unknown": "リモート操作の結果を確認できません。",
+      "protocol_failure": "デスクトップ応答が無効です。",
+      "request_failed": "要求を完了できませんでした。",
+      "cancelled": "要求はキャンセルされました。",
+      "input_failed": "入力またはクリップボードの同期に失敗しました。",
+      "cleanup_failed": "ローカルの後処理を確認できません。ウィンドウを閉じてから開き直してください。"
+    }
   },
   "vncModal": {
     "title": "VNCセッション",

@@ -1,26 +1,24 @@
 <script setup lang="ts">
+	import type { WorkspaceLayoutNodeState } from '../model/presentation-types';
+	import type { WorkspacePane } from '@nexus-terminal/shared/preferences/presentation/values';
+
 	import { computed } from 'vue';
 	import draggable from 'vuedraggable';
 	import { useI18n } from 'vue-i18n';
-	import {
-		normalizeWorkspaceLayout,
-		rebalanceWorkspaceLayoutChildren,
-		type WorkspaceLayoutNodeState,
-		type WorkspacePaneNameDto,
-	} from '../layout/workspaceLayout';
+	import { normalizeWorkspaceLayout, rebalanceWorkspaceLayoutChildren } from '../layout/workspaceLayout';
 
-	type DragItem = WorkspaceLayoutNodeState | WorkspacePaneNameDto;
+	type DragItem = WorkspaceLayoutNodeState | WorkspacePane;
 
 	const props = withDefaults(
 		defineProps<{
 			modelValue: WorkspaceLayoutNodeState;
 			root?: boolean;
-			usedMainPanes?: ReadonlySet<WorkspacePaneNameDto>;
+			usedMainPanes?: ReadonlySet<WorkspacePane>;
 		}>(),
 		{
 			root: false,
 
-			usedMainPanes: () => new Set<WorkspacePaneNameDto>(),
+			usedMainPanes: () => new Set<WorkspacePane>(),
 		},
 	);
 	const emit = defineEmits<{ 'update:modelValue': [node: WorkspaceLayoutNodeState]; remove: [] }>();
@@ -48,7 +46,7 @@
 		},
 	});
 
-	const paneLabel = (pane: WorkspacePaneNameDto | undefined): string =>
+	const paneLabel = (pane: WorkspacePane | undefined): string =>
 		pane ? t(`layout.pane.${pane}`) : t('layoutNodeEditor.pane');
 
 	const addContainer = (direction: 'horizontal' | 'vertical') => {

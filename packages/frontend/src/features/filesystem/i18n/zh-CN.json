@@ -195,7 +195,13 @@
       "commandNotFoundCompress": "服务器上缺少 '{command}' 命令，无法完成压缩操作。",
       "commandNotFoundDecompress": "服务器上缺少 '{command}' 命令，无法完成解压操作。",
       "genericCommandNotFound": "服务器上缺少 '{command}' 命令，无法完成 '{operation}' 操作。",
-      "copyPathFailed": "复制路径失败"
+      "copyPathFailed": "复制路径失败",
+      "terminalPathChangeUnknown": "终端目录切换结果未知，请先读取当前目录确认，不要直接重复操作。",
+      "operationUnknown": "操作可能已改变远端文件。请刷新并核对实际路径，再决定是否重新操作。",
+      "notConnected": "文件会话尚未就绪，请重新连接后操作。",
+      "invalidResponse": "无法确认文件响应，请刷新读取当前状态。",
+      "capacityExceeded": "文件操作超过容量限制。保存请求包含 JSON 编码后须在 1 MiB 内。",
+      "requestRejected": "文件操作被拒绝，请核对权限及当前文件状态。"
     },
     "notifications": {
       "terminalPathQueued": "前台命令正在运行，目录切换已安全排队，将在 Shell 返回提示符后执行。",
@@ -211,7 +217,8 @@
     },
     "warnings": {
       "moveSameDirectory": "不能在同一目录下剪切和粘贴。",
-      "crossHostDeleteFailed": "目标主机复制成功，但源文件删除失败：{error}"
+      "crossHostDeleteFailed": "目标主机复制成功，但源文件删除失败：{error}",
+      "transferRefreshFailed": "文件操作已完成，但目录刷新失败。请只读刷新核对，不要重复操作。"
     },
     "prompts": {
       "enterFolderName": "请输入新文件夹的名称:",

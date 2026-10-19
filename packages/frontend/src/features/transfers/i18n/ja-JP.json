@@ -30,7 +30,8 @@
       "skipped": "スキップ済み",
       "completed": "完了",
       "error": "失敗",
-      "partial": "一部完了"
+      "partial": "一部完了",
+      "unknown": "結果不明"
     },
     "resize": "進捗ウィンドウのサイズを変更",
     "restore": "表示を復元",
@@ -38,13 +39,14 @@
     "speed": "速度",
     "error": {
       "unknown": "転送に失敗しました。",
-      "uploadDirectoryStateLost": "アップロード準備状態が失われました。もう一度アップロードしてください。",
-      "uploadStreamClosed": "アップロードストリームが予期せず閉じられました（コード {code}）。",
-      "uploadStreamOpenFailed": "{file} のアップロードストリームを開けませんでした。",
       "uploadFailed": "アップロードに失敗しました。",
       "transferFailed": "ファイル転送に失敗しました。",
       "workspaceConnectionClosed": "ワークスペース接続が切断され、転送を完了できませんでした。",
-      "archiveFailed": "アーカイブ操作に失敗しました。"
+      "archiveFailed": "アーカイブ操作に失敗しました。",
+      "uploadUnknown": "アップロード結果またはクリーンアップは未確認です。再送信前にリモートファイルを確認してください。",
+      "uploadProtocolError": "アップロード応答が無効です。再試行前にリモートファイルを確認してください。",
+      "uploadNotConnected": "ワークスペースに接続されていないため、アップロードは送信されていません。",
+      "transferUnknown": "操作結果またはクリーンアップは未確認です。コピー・移動・アーカイブを再実行する前に、転送元と転送先を確認してください。"
     },
     "warning": {
       "archiveCompletedWithWarning": "アーカイブは完了しましたが、警告があります。",
@@ -131,5 +133,31 @@
     "clearSelection": "選択を解除",
     "methodRsync": "rsync",
     "methodScp": "scp"
+  },
+  "serverTransferErrors": {
+    "invalid_input": "送信元、重複しない名前、絶対パス、送信先を確認してください。",
+    "invalid_body": "無効なリクエストです。",
+    "unauthenticated": "再ログインしてください。",
+    "forbidden": "管理者権限が必要です。",
+    "not_found": "タスクまたは接続がありません。",
+    "resource_active": "実行またはクリーンアップが未確認のため削除できません。",
+    "limit_exceeded": "上限を超えています。分割してください。",
+    "shutting_down": "サーバーは停止中です。",
+    "stale_target": "接続設定が変更されました。確認してください。",
+    "unsupported_target_route": "送信元からの転送では送信先への直接接続が必要です。プロキシや踏み台は利用できません。",
+    "unsupported_endpoint": "送信元SSHクライアントで扱えない接続先です。",
+    "host_key_untrusted": "先に送信先ホスト鍵を確認してください。",
+    "connection_failed": "送信元または送信先へ接続できません。",
+    "tool_unavailable": "必要なssh/rsync/scp/sshpassがありません。",
+    "transfer_failed": "転送に失敗しました。一部が書き込まれた可能性があります。",
+    "operation_unknown": "転送結果またはクリーンアップは未確認です。タスクとファイルを確認し、自動再送しないでください。",
+    "cleanup_failed": "資格情報またはリソースの削除が未確認です。元のタスクを確認してください。",
+    "storage_unavailable": "ストレージを利用できません。再試行前にタスクを確認してください。",
+    "internal_failure": "転送サービスのエラーです。先にタスクを確認してください。",
+    "cancelled": "実行前にキャンセルされました。",
+    "request_timeout": "タイムアウトしました。",
+    "conflict": "別の操作がマシンを使用またはブロックしています。",
+    "request_failed": "転送状態を取得できません。",
+    "protocol_failure": "転送応答が不正です。先にタスクを確認してください。"
   }
 }

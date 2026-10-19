@@ -1,11 +1,12 @@
 <script setup lang="ts">
+	import type { StatusMonitorSessionController } from '../model/status-types';
 	import { computed, defineAsyncComponent, defineComponent, h, ref, watch, type Component } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiSpinner } from '@/foundation/ui';
 	import { writeClipboardText } from '@/foundation/browser';
 	import { createWheelScaleResolver } from '@/foundation/interaction';
 	import { useFeedback } from '@/shared/feedback/public';
-	import { useStatusMonitor, type StatusMonitorSessionController } from '../composables/useStatusMonitor';
+	import { useStatusMonitor } from '../composables/useStatusMonitor';
 	import {
 		formatStatusDiskPair,
 		formatStatusMemoryPair,
@@ -27,17 +28,17 @@
 	const props = withDefaults(
 		defineProps<{
 			session: StatusMonitorSessionController;
-			intervalSeconds?: number;
+
 			showIp?: boolean;
 			host?: string;
 			scale?: number;
 		}>(),
-		{ intervalSeconds: 3, showIp: true, scale: 1 },
+		{ showIp: true, scale: 1 },
 	);
 	const emit = defineEmits<{ 'update:scale': [scale: number] }>();
 	const { t } = useI18n();
 	const feedback = useFeedback();
-	const monitor = useStatusMonitor(props.session, () => props.intervalSeconds);
+	const monitor = useStatusMonitor(props.session);
 	const localScale = ref(props.scale);
 	const selectedMetric = ref<StatusMetric | null>(null);
 	const historyRange = ref<1 | 5 | 10 | 30>(5);
@@ -66,13 +67,17 @@
 
 	const handleWheel = (event: WheelEvent) => {
 		const change = resolveScale(event, localScale.value);
-		if (!change) return;
+		if (!change) {
+			return;
+		}
 		localScale.value = change.next;
 		emit('update:scale', change.next);
 	};
 
 	const copyHost = async () => {
-		if (!props.host) return;
+		if (!props.host) {
+			return;
+		}
 		try {
 			await writeClipboardText(props.host);
 			feedback.notifySuccess(t('common.copied'));
@@ -149,11 +154,19 @@
 	};
 
 	const compactRate = (bytesPerSecond?: number): string => {
-		if (bytesPerSecond === undefined || !Number.isFinite(bytesPerSecond)) return '0B';
+		if (bytesPerSecond === undefined || !Number.isFinite(bytesPerSecond)) {
+			return '0B';
+		}
 		const value = Math.max(0, bytesPerSecond);
-		if (value < 1024) return `${Math.round(value)}B`;
-		if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)}K`;
-		if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)}M`;
+		if (value < 1024) {
+			return `${Math.round(value)}B`;
+		}
+		if (value < 1024 ** 2) {
+			return `${(value / 1024).toFixed(1)}K`;
+		}
+		if (value < 1024 ** 3) {
+			return `${(value / 1024 ** 2).toFixed(1)}M`;
+		}
 		return `${(value / 1024 ** 3).toFixed(1)}G`;
 	};
 
@@ -252,7 +265,7 @@
 		>
 			<div v-if="monitor.error.value" class="empty-state error-state">
 				<i class="fas fa-exclamation-triangle"></i>
-				<span>{{ t('statusMonitor.errorPrefix') }} {{ monitor.error.value }}</span>
+				<span>{{ t('statusMonitor.failures.' + monitor.error.value) }}</span>
 			</div>
 			<div v-else-if="!monitor.current.value" class="empty-state">
 				<i class="fas fa-spinner fa-spin"></i>
@@ -429,7 +442,6 @@
 							:history="monitor.history.value"
 							:metric="selectedMetric"
 							:range-minutes="historyRange"
-							:interval-seconds="intervalSeconds"
 							:scale="localScale"
 						/>
 					</section>

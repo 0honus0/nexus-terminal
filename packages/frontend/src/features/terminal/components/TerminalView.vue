@@ -11,7 +11,7 @@
 	import { createWheelScaleResolver } from '@/foundation/interaction';
 	import '@xterm/xterm/css/xterm.css';
 	import type { TerminalChannel } from '../ports/terminal-channel';
-	import type { TerminalVisualOptions } from '../model/terminal';
+	import type { TerminalVisualOptions } from '../model/terminal-types';
 	import { desktopBackgroundRuntime, mobileBackgroundRuntime } from '../model/mobileBackgroundRuntime';
 	import { trackTerminalRuntimeModes, type TerminalRuntimeModeTracker } from '../model/terminalRuntimeModes';
 	import { serializeTerminalSnapshot } from '../model/terminalSnapshot';

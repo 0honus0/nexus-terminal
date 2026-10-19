@@ -36,7 +36,24 @@
     "restoreWindow": "Restore remote desktop window",
     "keyboard": "Keyboard",
     "showKeyboard": "Show keyboard",
-    "hideKeyboard": "Hide keyboard"
+    "hideKeyboard": "Hide keyboard",
+    "fullscreenFailed": "Fullscreen could not be changed.",
+    "unknownOutcome": "The remote result is unknown. Closing here does not confirm that the remote program stopped. Reconnect explicitly with a new ticket.",
+    "failures": {
+      "invalid_input": "Invalid display or connection. Desktop supports direct routes only; check proxy and jump settings.",
+      "unauthenticated": "Sign in again.",
+      "forbidden": "Desktop access is not permitted.",
+      "not_found": "Connection not found.",
+      "conflict": "The target changed or its route is unsupported. Only direct desktop connections are supported.",
+      "limit_exceeded": "Desktop capacity is full. Try again after another session closes.",
+      "remote_unavailable": "The desktop service is unavailable.",
+      "operation_unknown": "The remote operation could not be confirmed.",
+      "protocol_failure": "The desktop response is invalid.",
+      "request_failed": "The request could not be completed.",
+      "cancelled": "The request was cancelled.",
+      "input_failed": "Input or clipboard synchronization failed.",
+      "cleanup_failed": "Local cleanup could not be confirmed. Close this window before opening another desktop."
+    }
   },
   "vncModal": {
     "title": "VNC Session",

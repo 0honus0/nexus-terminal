@@ -1,0 +1,30 @@
+{
+  "systemOverview": {
+    "errors": {
+      "invalid_input": "请求无效。",
+      "unauthenticated": "会话已失效，请重新登录。",
+      "forbidden": "没有查看资源的权限。",
+      "not_found": "连接已不存在，请刷新连接列表。",
+      "limit_exceeded": "资源读取达到容量限制，请稍后重试。",
+      "conflict": "资源正在使用，请稍后重试。",
+      "remote_unavailable": "暂时无法读取资源。",
+      "command_failed": "远端采样失败。",
+      "operation_unknown": "采样结果未确认，请只读刷新。",
+      "host_key_untrusted": "主机密钥未受信任，请先核对主机密钥。",
+      "request_failed": "网络请求失败，请重试读取。",
+      "protocol_failure": "响应无效，请重试读取。",
+      "cancelled": "读取已取消。"
+    },
+    "diagnostics": {
+      "title": "宿主诊断",
+      "failed": "无法读取宿主诊断，请刷新重试读取。",
+      "runtime": "运行时",
+      "uptime": "运行时长",
+      "resident": "驻留内存",
+      "heap": "已用堆内存",
+      "database": "数据库版本",
+      "unavailable": "不可用",
+      "collectedAt": "采集时间"
+    }
+  }
+}

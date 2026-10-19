@@ -1,6 +1,9 @@
 export { isMobileUserAgent, useDeviceCapabilities } from './useDeviceCapabilities';
+
 export type { DeviceCapabilities } from './useDeviceCapabilities';
+
 export { writeClipboardText } from './clipboard';
+
 export {
 	booleanStorageCodec,
 	browserStorageKey,
@@ -12,4 +15,5 @@ export {
 	stringStorageCodec,
 	writeStoredValue,
 } from './storage';
+
 export type { BrowserStorageArea, BrowserStorageCodec, BrowserStorageDefinition, BrowserStorageScope } from './storage';

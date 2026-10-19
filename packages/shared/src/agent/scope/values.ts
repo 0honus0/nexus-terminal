@@ -1,0 +1,29 @@
+export const AGENT_SCOPE_MAX_NAME_BYTES = 128;
+
+export const AGENT_THREAD_MAX_PAGE = 50;
+
+export const AGENT_THREAD_ENTRY_MAX_PAGE = 16;
+
+export const AGENT_THREAD_ENTRY_MAX_TEXT_CODE_POINTS = 4096;
+
+export const AGENT_THREAD_ENTRY_MAX_TEXT_BYTES = 16 * 1024;
+
+export const AGENT_THREAD_ENTRIES_MAX_RESPONSE_BYTES = 512 * 1024;
+
+export const AGENT_APP_MAX_LIST_ITEMS = 1024;
+
+export const AGENT_APP_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
+
+export const AGENT_APP_DEFINITION_ID_PATTERN = /^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$/u;
+
+export const AGENT_APP_MAX_DEFINITION_ID_BYTES = 128;
+
+export const AGENT_APP_MAX_DEFINITION_VERSION_BYTES = 64;
+
+export const AGENT_APP_EXECUTION_STATE = 'governed';
+
+export type AgentAppExecutionState = typeof AGENT_APP_EXECUTION_STATE;
+
+export const AGENT_WORKSPACE_MAX_SELECTABLE_MODELS = 1024;
+
+export const AGENT_WORKSPACE_MAX_RESPONSE_BYTES = 8 * 1024 * 1024 + 1024;

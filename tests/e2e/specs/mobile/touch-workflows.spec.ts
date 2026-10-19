@@ -36,7 +36,7 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
 	await page.goto('/login');
 
 	const result = await page.evaluate(async () => {
-		const modulePath = '/src/features/remote-desktop/composables/remoteTouchInput.ts';
+		const modulePath = '/src/features/remote-desktop/adapters/remote-touch-input.ts';
 		const { attachRemoteTouchInput } = await import(/* @vite-ignore */ modulePath);
 		const calls: Array<{
 			x: number;

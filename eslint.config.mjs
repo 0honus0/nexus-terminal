@@ -16,15 +16,25 @@ const functionSpacingPlugin = {
 		'function-spacing': {
 			meta: {
 				type: 'layout',
-				docs: { description: 'require a blank line around functions and methods' },
+				docs: {
+					description:
+						'require blank lines around functions, methods, exports and configured top-level declarations',
+				},
 				fixable: 'whitespace',
-				schema: [],
-				messages: { needsSpacing: 'Add a blank line around this function or method.' },
+				schema: [
+					{
+						type: 'object',
+						properties: { topLevelDeclarations: { type: 'boolean' } },
+						additionalProperties: false,
+					},
+				],
+				messages: { needsSpacing: 'Add a blank line around this declaration.' },
 			},
 
 			create(context) {
 				const sourceCode = context.sourceCode;
 				const lineEnding = sourceCode.text.includes('\r\n') ? '\r\n' : '\n';
+				const topLevelDeclarations = context.options[0]?.topLevelDeclarations === true;
 
 				const isFunctionExpression = (node) => {
 					let current = node;
@@ -66,15 +76,42 @@ const functionSpacingPlugin = {
 					return false;
 				};
 
-				const checkSpacing = (members) => {
+				const isExport = (node) =>
+					['ExportNamedDeclaration', 'ExportDefaultDeclaration', 'ExportAllDeclaration'].includes(node.type);
+
+				const isDeclaration = (node) =>
+					[
+						'VariableDeclaration',
+						'FunctionDeclaration',
+						'ClassDeclaration',
+						'TSTypeAliasDeclaration',
+						'TSInterfaceDeclaration',
+						'TSEnumDeclaration',
+						'TSModuleDeclaration',
+						'TSImportEqualsDeclaration',
+					].includes(node.type);
+
+				const checkSpacing = (members, includeDeclarations = false) => {
 					for (let index = 1; index < members.length; index += 1) {
 						const previous = members[index - 1];
 						const current = members[index];
-						if (!isFunctionLike(previous) && !isFunctionLike(current)) continue;
+						if (
+							!isFunctionLike(previous) &&
+							!isFunctionLike(current) &&
+							!isExport(previous) &&
+							!isExport(current) &&
+							!(includeDeclarations && (isDeclaration(previous) || isDeclaration(current)))
+						) {
+							continue;
+						}
 
-						const comments = sourceCode
-							.getCommentsBefore(current)
-							.filter((comment) => comment.range[0] >= previous.range[1]);
+						const comments = sourceCode.getCommentsBefore(current).filter(
+							(comment) =>
+								comment.range[0] >= previous.range[1] &&
+								// Trailing same-line comments belong to the previous declaration,
+								// not to the next one. Only move an actual leading comment group.
+								comment.loc.start.line > previous.loc.end.line,
+						);
 						const boundary = comments[0] ?? current;
 						if (boundary.loc.start.line - previous.loc.end.line >= 2) continue;
 
@@ -104,7 +141,7 @@ const functionSpacingPlugin = {
 
 				return {
 					Program(node) {
-						checkSpacing(node.body);
+						checkSpacing(node.body, topLevelDeclarations);
 					},
 
 					BlockStatement(node) {
@@ -136,25 +173,6 @@ export default [
 	{
 		name: 'nexus/ignores',
 		ignores: ['**/dist/**', '**/node_modules/**', '**/data/**'],
-	},
-	{
-		name: 'nexus/agent-typescript',
-		files: [
-			'packages/backend/src/modules/agent/**/*.ts',
-			'packages/backend/src/infrastructure/agent/**/*.ts',
-			'packages/backend/src/interfaces/http/agent/**/*.ts',
-			'packages/backend/src/interfaces/websocket/agent*.ts',
-			'tests/backend/agent-scenarios/**/*.ts',
-		],
-		languageOptions: {
-			parser: tseslint.parser,
-			parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
-			globals: { ...globals.browser, ...globals.node },
-		},
-		plugins: { '@typescript-eslint': tseslint.plugin },
-		rules: {
-			'@typescript-eslint/no-unused-vars': unusedRule,
-		},
 	},
 	...vue.configs['flat/essential'],
 	{
@@ -197,5 +215,19 @@ export default [
 		files: ['**/*.{ts,tsx,js,jsx,mjs,cjs,vue}'],
 		plugins: { 'nexus-style': functionSpacingPlugin },
 		rules: { 'nexus-style/function-spacing': 'error' },
+	},
+	{
+		name: 'nexus/shared-declaration-spacing',
+		files: ['packages/shared/src/**/*.{ts,tsx}'],
+		rules: { 'nexus-style/function-spacing': ['error', { topLevelDeclarations: true }] },
+	},
+	{
+		name: 'nexus/control-flow',
+		files: [
+			'packages/backend/src/**/*.ts',
+			'packages/shared/src/**/*.ts',
+			'packages/frontend/src/runtimes/remote-next/**/*.ts',
+		],
+		rules: { curly: ['error', 'all'] },
 	},
 ];

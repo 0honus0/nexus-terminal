@@ -82,7 +82,9 @@
         "registrationFailed": "Passkey の登録に失敗しました。",
         "deleteFailedGeneral": "Passkey の削除に失敗しました。もう一度お試しください。",
         "fetchFailed": "パスキーの読み込みに失敗しました。",
-        "nameUpdateFailed": "パスキー名の更新に失敗しました。"
+        "nameUpdateFailed": "パスキー名の更新に失敗しました。",
+        "refreshAfterChange": "変更は確認済みですが一覧を更新できません。次の変更前に最新の一覧を読み込んでください。",
+        "discoveryFailed": "Passkey の利用可否を確認できませんでした。再試行してください。"
       },
       "success": {
         "registered": "新しい Passkey が正常に登録されました！",
@@ -144,6 +146,20 @@
       },
       "hcaptchaProviderName": "hCaptcha",
       "recaptchaProviderName": "Google reCAPTCHA"
+    },
+    "configuration": {
+      "saved": "保存しました。サーバーの再起動後に反映されます。",
+      "versions": "保存済みバージョン {saved}、有効なバージョン {effective}。",
+      "restart": "変更はサーバーの再起動後に反映されます。",
+      "conflict": "設定が変更されました。再読み込みして確認してから保存してください。",
+      "unknown": "結果を確認できません。保存済み設定を再読み込みしてから変更してください。",
+      "refreshAfterChange": "変更は確認できましたが、再読み込みに失敗しました。現在の状態を再確認してください。",
+      "hostname": "CAPTCHA の想定ホスト名",
+      "hasSecret": "秘密鍵は保存済みです。値は返されません。",
+      "noSecret": "秘密鍵は未保存です。",
+      "keepSecret": "保存済み秘密鍵を保持",
+      "clearSecret": "保存済み秘密鍵を削除",
+      "replaceSecret": "保存済み秘密鍵を置換"
     }
   }
 }

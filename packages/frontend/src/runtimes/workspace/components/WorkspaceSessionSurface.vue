@@ -1,4 +1,8 @@
 <script setup lang="ts">
+	import type { WorkspaceLayoutNodeState } from '../model/presentation-types';
+	import type { WorkspacePane } from '@nexus-terminal/shared/preferences/presentation/values';
+	import type { WorkspaceSidebar } from '../model/presentation-types';
+
 	import { useI18n } from 'vue-i18n';
 	import { logger } from '@/client/logging/logger';
 	import {
@@ -23,6 +27,7 @@
 	} from '@/foundation/ui';
 	import { useDraggablePosition, usePersistentResizablePanel, useResizeHandle } from '@/foundation/interaction';
 	import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
+	import { useAuthenticatedViewScope } from '@/shared/session/public';
 	import { RuntimeErrorBoundary, useFeedback } from '@/shared/feedback/public';
 	import { loadFilePreview, previewKindFor } from '@/features/file-preview/public';
 	import { loadFileEditor, type FileEditorSessionController } from '@/features/file-editor/public';
@@ -34,11 +39,12 @@
 	} from '@/features/terminal/public';
 	import {
 		loadProgressCenter,
+		TransferFailure,
 		loadSendFilesModal,
 		transferTaskErrorDescriptor,
 		loadUploadConflictModal,
-		type WorkspaceArchiveErrorCodeDto,
-		type SendFileSourceItemDto,
+		type WorkspaceArchiveErrorCode,
+		type SendFileSource,
 		type TransferTask,
 	} from '@/features/transfers/public';
 	import {
@@ -46,16 +52,11 @@
 		type ArchiveCompressionFormat,
 		type ArchiveCompressionIntent,
 		type LocalUploadFile,
-		type WorkspaceRemoteFileEntryDto,
+		type RemoteFileEntry,
 	} from '@/features/filesystem/public';
-	import type { ConnectionDto } from '@/features/connections/public';
-	import type { MarkedSuspendedSessionState, SuspendedSessionDto } from '@/features/ssh-suspend/public';
+	import type { ConnectionSummary } from '@/features/connections/public';
+	import type { MarkedSuspendedSessionState, SuspendedSession } from '@/features/ssh-suspend/public';
 	import type { WorkspaceRuntimeSession } from '../session';
-	import type {
-		WorkspaceLayoutNodeState,
-		WorkspacePaneNameDto,
-		WorkspaceSidebarConfigDto,
-	} from '../layout/workspaceLayout';
 	import WorkspaceLayoutRenderer from './WorkspaceLayoutRenderer.vue';
 	import WorkspaceMobileTools from './WorkspaceMobileTools.vue';
 
@@ -93,7 +94,7 @@
 		active?: boolean;
 		session: WorkspaceRuntimeSession;
 		layout: WorkspaceLayoutNodeState;
-		sidebars: WorkspaceSidebarConfigDto;
+		sidebars: WorkspaceSidebar;
 		terminalFontFamily?: string;
 		terminalFontSize?: number;
 		terminalTheme?: Record<string, string>;
@@ -103,8 +104,8 @@
 		editorFontFamily?: string;
 		editorFontSize?: number;
 		mobileEditorFontSize?: number;
-		commandInputSyncTarget?: import('@/features/preferences/public').PreferencesDto['commandInputSyncTarget'];
-		statusIntervalSeconds?: number;
+		commandInputSyncTarget?: import('@/features/preferences/public').UserPreferences['commandInputSyncTarget'];
+
 		dockerIntervalSeconds?: number;
 		dockerDefaultExpand?: boolean;
 		statusScale?: number;
@@ -131,16 +132,16 @@
 		layoutLocked?: boolean;
 	}>();
 	const emit = defineEmits<{
-		openConnection: [connection: ConnectionDto];
+		openConnection: [connection: ConnectionSummary];
 		command: [command: string, allSessions: boolean];
-		resumeSuspended: [session: SuspendedSessionDto];
+		resumeSuspended: [session: SuspendedSession];
 		resumeMarkedSuspended: [workspaceId: string];
 		unmarkSuspended: [workspaceId: string];
-		fileClipboardSet: [operation: 'copy' | 'cut', entries: WorkspaceRemoteFileEntryDto[]];
+		fileClipboardSet: [operation: 'copy' | 'cut', entries: RemoteFileEntry[]];
 		fileClipboardPaste: [destination: string];
 		serverTransferStarted: [];
 		statusScale: [scale: number];
-		sidebarWidth: [pane: WorkspacePaneNameDto, width: string];
+		sidebarWidth: [pane: WorkspacePane, width: string];
 		terminalFontSize: [size: number];
 		editorFontSize: [size: number];
 		mobileEditorFontSize: [size: number];
@@ -235,9 +236,9 @@
 
 	const popupEditorRef = ref<EditorApi | null>(null);
 	const popupPreviewRef = ref<PreviewApi | null>(null);
-	const activeLeftSidebar = ref<WorkspacePaneNameDto | null>(null);
-	const activeRightSidebar = ref<WorkspacePaneNameDto | null>(null);
-	const mobilePane = ref<WorkspacePaneNameDto>('terminal');
+	const activeLeftSidebar = ref<WorkspacePane | null>(null);
+	const activeRightSidebar = ref<WorkspacePane | null>(null);
+	const mobilePane = ref<WorkspacePane>('terminal');
 	const mobileModifiers = createStickyTerminalModifiers();
 	const runtimeTerminalChannel = props.session.adapters.terminal;
 	const stopInputErrorFeedback = runtimeTerminalChannel.onError((message) => {
@@ -443,8 +444,10 @@
 	const editorApi = ref<EditorApi | null>(null);
 	const previewApi = ref<PreviewApi | null>(null);
 	const uploadInput = ref<HTMLInputElement | null>(null);
-	const uploadPath = ref('/');
-	const archiveDialog = ref<{ kind: 'compress' | 'decompress'; entries: WorkspaceRemoteFileEntryDto[] } | null>(null);
+	const uploadChooserVisible = ref(false);
+	let uploadIntent: { path: string; permission: AbortSignal; session: WorkspaceRuntimeSession } | null = null;
+
+	const archiveDialog = ref<{ kind: 'compress' | 'decompress'; entries: RemoteFileEntry[] } | null>(null);
 	const archiveDestination = ref('/');
 	const archiveFormat = ref<'zip' | 'tar.gz' | 'tar.bz2'>('zip');
 	const archivePassword = ref('');
@@ -452,10 +455,29 @@
 	const archiveShowPassword = ref(false);
 	const archivePasswordRequired = ref(false);
 	const archiveRemoteError = ref('');
-	const sendFilesItems = ref<SendFileSourceItemDto[]>([]);
+	const sendFilesItems = ref<SendFileSource[]>([]);
 	let archivePromptGeneration = 0;
+	const fileView = useAuthenticatedViewScope({
+		available: () => props.active !== false,
 
-	const parseSidebarWidth = (name: WorkspacePaneNameDto | null): number => {
+		onRevoke: () => {
+			uploadIntent = null;
+			uploadChooserVisible.value = false;
+			if (uploadInput.value) {
+				uploadInput.value.value = '';
+			}
+			archivePromptGeneration++;
+			archiveDialog.value = null;
+			archivePassword.value = '';
+			archiveConfirmPassword.value = '';
+			archiveShowPassword.value = false;
+			archivePasswordRequired.value = false;
+			archiveRemoteError.value = '';
+			sendFilesItems.value = [];
+		},
+	});
+
+	const parseSidebarWidth = (name: WorkspacePane | null): number => {
 		const raw = name ? props.sidebarPaneWidths?.[name] : undefined;
 		const parsed = raw ? Number.parseFloat(raw) : 350;
 		return Number.isFinite(parsed) ? Math.min(Math.max(parsed, 200), 800) : 350;
@@ -628,9 +650,9 @@
 		activeRightSidebar.value = null;
 	};
 
-	const paneLabel = (name: WorkspacePaneNameDto) => t(`layout.pane.${name}`);
+	const paneLabel = (name: WorkspacePane) => t(`layout.pane.${name}`);
 
-	const paneIcon = (pane: WorkspacePaneNameDto): string => {
+	const paneIcon = (pane: WorkspacePane): string => {
 		if (pane === 'connections') return 'fas fa-network-wired';
 		if (pane === 'fileManager') return 'fas fa-folder-open';
 		if (pane === 'commandHistory') return 'fas fa-history';
@@ -642,14 +664,14 @@
 		return 'fas fa-terminal';
 	};
 
-	const sidebarNode = (name: WorkspacePaneNameDto, side: 'left' | 'right'): WorkspaceLayoutNodeState => ({
+	const sidebarNode = (name: WorkspacePane, side: 'left' | 'right'): WorkspaceLayoutNodeState => ({
 		id: `workspace-sidebar-${side}-${name}`,
 		type: 'pane',
 		component: name,
 		size: 100,
 	});
 
-	const toggleSidebar = (side: 'left' | 'right', name: WorkspacePaneNameDto) => {
+	const toggleSidebar = (side: 'left' | 'right', name: WorkspacePane) => {
 		if (side === 'left') {
 			activeLeftSidebar.value = activeLeftSidebar.value === name ? null : name;
 			if (activeLeftSidebar.value) activeRightSidebar.value = null;
@@ -768,7 +790,11 @@
 	};
 
 	const chooseUpload = (path: string) => {
-		uploadPath.value = path;
+		const permission = fileView.capture();
+		if (permission.aborted) {
+			return;
+		}
+		uploadIntent = { path, permission, session: props.session };
 		if (props.mobile) {
 			uploadChooserVisible.value = true;
 			return;
@@ -776,7 +802,6 @@
 		uploadInput.value?.click();
 	};
 
-	const uploadChooserVisible = ref(false);
 	onDeactivated(() => {
 		documentPopupVisible.value = false;
 		fileManagerPopupVisible.value = false;
@@ -785,6 +810,10 @@
 
 	const selectUploadFiles = async () => {
 		uploadChooserVisible.value = false;
+		const intent = uploadIntent;
+		if (!intent || !fileView.isCurrent(intent.permission) || intent.session !== props.session) {
+			return;
+		}
 		const picker = (
 			window as Window & {
 				showOpenFilePicker?: (options: { multiple: boolean }) => Promise<Array<{ getFile(): Promise<File> }>>;
@@ -796,11 +825,23 @@
 		}
 		try {
 			const handles = await picker.call(window, { multiple: true });
+			if (!fileView.isCurrent(intent.permission) || intent.session !== props.session) {
+				return;
+			}
 			const files = await Promise.all(handles.map((handle) => handle.getFile()));
-			await uploadFilesAt(uploadPath.value, files);
+			if (!fileView.isCurrent(intent.permission) || intent.session !== props.session) {
+				return;
+			}
+			uploadIntent = null;
+			await uploadFilesAt(intent.path, files);
 		} catch (cause) {
-			if (cause instanceof DOMException && cause.name === 'AbortError') return;
-			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+			if (
+				!fileView.isCurrent(intent.permission) ||
+				(cause instanceof DOMException && cause.name === 'AbortError')
+			) {
+				return;
+			}
+			feedback.notifyError(t('progressCenter.error.uploadFailed'));
 		}
 	};
 
@@ -809,26 +850,52 @@
 		files: readonly (File | LocalUploadFile)[],
 		directories: readonly string[] = [],
 	) => {
+		const permission = fileView.capture();
+		const session = props.session;
+		if (permission.aborted) {
+			return;
+		}
 		try {
-			const taskIds = await transfers.startUploadBatch(files, { scopeId: props.session.id, path }, directories);
-			void Promise.all(taskIds.map((id) => transfers.waitForTask(id))).then(async (tasks) => {
-				if (tasks.some((task) => task.status === 'completed' || task.status === 'partial')) {
-					await props.session.filesystemState.browser.refresh();
-				}
-			});
+			const controller = session.transferController;
+			const taskIds = await controller.startUploadBatch(files, { scopeId: session.id, path }, directories);
+			void Promise.all(taskIds.map((id) => controller.waitForTask(id)))
+				.then(async (tasks) => {
+					if (
+						fileView.isCurrent(permission) &&
+						props.session === session &&
+						tasks.some((task) => task.status === 'completed' || task.status === 'partial')
+					) {
+						await session.filesystemState.browser.refresh();
+					}
+				})
+				.catch((cause) => {
+					if (fileView.isCurrent(permission) && props.session === session) {
+						feedback.notifyError(transferStartMessage(cause));
+					}
+				});
 		} catch (cause) {
-			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+			if (fileView.isCurrent(permission) && props.session === session) {
+				feedback.notifyError(transferStartMessage(cause));
+			}
 		}
 	};
 
 	const uploadFiles = async (event: Event) => {
-		const input = event.target as HTMLInputElement;
+		const input = event.target;
+		if (!(input instanceof HTMLInputElement)) {
+			return;
+		}
 		const files = [...(input.files ?? [])];
 		input.value = '';
-		await uploadFilesAt(uploadPath.value, files);
+		const intent = uploadIntent;
+		uploadIntent = null;
+		if (!intent || !fileView.isCurrent(intent.permission) || intent.session !== props.session) {
+			return;
+		}
+		await uploadFilesAt(intent.path, files);
 	};
 
-	const beginSendFiles = (entries: WorkspaceRemoteFileEntryDto[]) => {
+	const beginSendFiles = (entries: RemoteFileEntry[]) => {
 		if (!entries.length) return;
 		sendFilesItems.value = entries.map((entry) => ({
 			name: entry.name,
@@ -837,22 +904,43 @@
 		}));
 	};
 
-	const moveWithinSession = async (entries: WorkspaceRemoteFileEntryDto[], destination: string) => {
-		if (!entries.length || !destination.startsWith('/')) return;
+	const transferStartMessage = (cause: unknown, archive = false): string =>
+		t(
+			cause instanceof TransferFailure && cause.outcomeUnknown
+				? 'progressCenter.error.transferUnknown'
+				: archive
+					? 'progressCenter.error.archiveFailed'
+					: 'progressCenter.error.transferFailed',
+		);
+
+	const moveWithinSession = async (entries: RemoteFileEntry[], destination: string): Promise<void> => {
+		const permission = fileView.capture();
+		const session = props.session;
+		if (!entries.length || !destination.startsWith('/') || permission.aborted) {
+			return;
+		}
+
+		const isCurrent = () => fileView.isCurrent(permission) && props.session === session;
+
 		try {
-			const taskId = await transfers.copyMove({
+			const taskId = await session.transferController.copyMove({
 				kind: 'move',
-				sources: entries.map((entry) => ({ scopeId: props.session.id, path: entry.path })),
-				destination: { scopeId: props.session.id, path: destination },
+				sources: entries.map((entry) => ({ scopeId: session.id, path: entry.path })),
+				destination: { scopeId: session.id, path: destination },
 			});
-			const task = await transfers.waitForTask(taskId);
-			if (task.status === 'completed' || task.status === 'partial') {
-				await props.session.filesystemState.browser.refresh();
+			const task = await session.transferController.waitForTask(taskId);
+			if (!isCurrent()) {
 				return;
 			}
-			if (task.status === 'error') throw new Error(transferErrorMessage(task));
+			if (task.status === 'completed' || task.status === 'partial') {
+				await session.filesystemState.browser.refresh();
+			} else if (task.status === 'error' || task.status === 'unknown') {
+				feedback.notifyError(transferErrorMessage(task));
+			}
 		} catch (cause) {
-			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+			if (isCurrent()) {
+				feedback.notifyError(transferStartMessage(cause));
+			}
 		}
 	};
 
@@ -863,8 +951,10 @@
 	};
 
 	type ArchiveRequestContext = {
+		session: WorkspaceRuntimeSession;
+		permission: AbortSignal;
 		kind: 'compress' | 'decompress';
-		entries: WorkspaceRemoteFileEntryDto[];
+		entries: RemoteFileEntry[];
 		destination: string;
 		format: ArchiveCompressionFormat;
 	};
@@ -918,10 +1008,7 @@
 		resetArchivePassword();
 	};
 
-	const compressionDestination = (
-		entries: WorkspaceRemoteFileEntryDto[],
-		format: ArchiveCompressionFormat,
-	): string => {
+	const compressionDestination = (entries: RemoteFileEntry[], format: ArchiveCompressionFormat): string => {
 		const parent = parentPath(entries[0]!.path);
 		let base = 'archive';
 		if (entries.length === 1) {
@@ -934,7 +1021,7 @@
 		return `${parent.replace(/\/$/, '')}/${base}.${format}`.replace(/^\/\//, '/');
 	};
 
-	const archivePasswordFailureMessage = (code: WorkspaceArchiveErrorCodeDto): string => {
+	const archivePasswordFailureMessage = (code: WorkspaceArchiveErrorCode): string => {
 		if (code === 'INVALID_PASSWORD') return t('fileManager.archivePassword.wrongPassword');
 		if (code === 'PASSWORD_TOO_LONG') return t('fileManager.archivePassword.tooLong', { max: 128 });
 		if (code === 'INVALID_PASSWORD_FORMAT') return t('fileManager.archivePassword.invalidCharacters');
@@ -942,12 +1029,12 @@
 	};
 
 	type ArchivePasswordErrorCode = Extract<
-		WorkspaceArchiveErrorCodeDto,
+		WorkspaceArchiveErrorCode,
 		'PASSWORD_REQUIRED' | 'INVALID_PASSWORD' | 'PASSWORD_TOO_LONG' | 'INVALID_PASSWORD_FORMAT'
 	>;
 
 	const isArchivePasswordErrorCode = (
-		code: WorkspaceArchiveErrorCodeDto | undefined,
+		code: WorkspaceArchiveErrorCode | undefined,
 	): code is ArchivePasswordErrorCode =>
 		code === 'PASSWORD_REQUIRED' ||
 		code === 'INVALID_PASSWORD' ||
@@ -956,7 +1043,7 @@
 
 	const openArchivePasswordPrompt = (
 		requestContext: ArchiveRequestContext,
-		code: WorkspaceArchiveErrorCodeDto = 'PASSWORD_REQUIRED',
+		code: WorkspaceArchiveErrorCode = 'PASSWORD_REQUIRED',
 	) => {
 		archiveDialog.value = { kind: requestContext.kind, entries: [...requestContext.entries] };
 		archiveDestination.value = requestContext.destination;
@@ -966,34 +1053,50 @@
 		archiveRemoteError.value = archivePasswordFailureMessage(code);
 	};
 
+	const isArchiveViewCurrent = (context: ArchiveRequestContext): boolean =>
+		fileView.isCurrent(context.permission) && props.session === context.session;
+
 	const observeArchiveTask = (
 		taskId: string,
 		requestContext: ArchiveRequestContext,
 		submissionGeneration: number,
 	): void => {
-		void transfers.waitForTask(taskId).then(async (task) => {
-			if (task.status === 'completed' || task.status === 'partial') {
-				await props.session.filesystemState.browser.refresh();
-				return;
-			}
-			if (task.status !== 'error') return;
-			if (
-				isArchivePasswordErrorCode(task.errorCode) &&
-				submissionGeneration === archivePromptGeneration &&
-				!archiveDialog.value
-			) {
-				openArchivePasswordPrompt(requestContext, task.errorCode);
-				return;
-			}
-			if (task.status === 'error') {
-				const detail = transferErrorMessage(task);
+		void requestContext.session.transferController
+			.waitForTask(taskId)
+			.then(async (task) => {
+				if (!isArchiveViewCurrent(requestContext)) {
+					return;
+				}
+				if (task.status === 'completed' || task.status === 'partial') {
+					await requestContext.session.filesystemState.browser.refresh();
+					return;
+				}
+				if (task.status === 'unknown') {
+					feedback.notifyError(transferErrorMessage(task));
+					return;
+				}
+				if (task.status !== 'error') {
+					return;
+				}
+				if (
+					isArchivePasswordErrorCode(task.errorCode) &&
+					submissionGeneration === archivePromptGeneration &&
+					!archiveDialog.value
+				) {
+					openArchivePasswordPrompt(requestContext, task.errorCode);
+					return;
+				}
 				const messageKey =
 					requestContext.kind === 'compress'
 						? 'fileManager.errors.compressErrorDetailed'
 						: 'fileManager.errors.decompressErrorDetailed';
-				feedback.notifyError(t(messageKey, { error: detail }));
-			}
-		});
+				feedback.notifyError(t(messageKey, { error: transferErrorMessage(task) }));
+			})
+			.catch((cause) => {
+				if (isArchiveViewCurrent(requestContext)) {
+					feedback.notifyError(transferStartMessage(cause, true));
+				}
+			});
 	};
 
 	const startArchiveTask = async (
@@ -1001,10 +1104,13 @@
 		password: string | undefined,
 		submissionGeneration: number,
 	): Promise<void> => {
-		const taskId = await transfers.archive({
+		if (!isArchiveViewCurrent(requestContext)) {
+			return;
+		}
+		const taskId = await requestContext.session.transferController.archive({
 			kind: requestContext.kind,
-			sources: requestContext.entries.map((entry) => ({ scopeId: props.session.id, path: entry.path })),
-			destination: { scopeId: props.session.id, path: requestContext.destination },
+			sources: requestContext.entries.map((entry) => ({ scopeId: requestContext.session.id, path: entry.path })),
+			destination: { scopeId: requestContext.session.id, path: requestContext.destination },
 			...(requestContext.kind === 'compress' ? { format: requestContext.format } : {}),
 			...(password ? { password } : {}),
 		});
@@ -1013,12 +1119,16 @@
 
 	const launchArchiveTask = (requestContext: ArchiveRequestContext, submissionGeneration: number) => {
 		void startArchiveTask(requestContext, undefined, submissionGeneration).catch((cause) => {
-			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+			if (isArchiveViewCurrent(requestContext)) {
+				feedback.notifyError(transferStartMessage(cause, true));
+			}
 		});
 	};
 
-	const beginCompress = (entries: WorkspaceRemoteFileEntryDto[]) => {
-		if (!entries.length) return;
+	const beginCompress = (entries: RemoteFileEntry[]) => {
+		if (!entries.length || fileView.capture().aborted) {
+			return;
+		}
 		archivePromptGeneration += 1;
 		archiveDialog.value = { kind: 'compress', entries: [...entries] };
 		archiveFormat.value = 'zip';
@@ -1027,10 +1137,14 @@
 	};
 
 	const beginCompressPreset = (intent: ArchiveCompressionIntent) => {
-		if (!intent.entries.length) return;
+		if (!intent.entries.length || fileView.capture().aborted) {
+			return;
+		}
 		archivePromptGeneration += 1;
 		const generation = archivePromptGeneration;
 		const requestContext: ArchiveRequestContext = {
+			session: props.session,
+			permission: fileView.capture(),
 			kind: 'compress',
 			entries: [...intent.entries],
 			destination: compressionDestination(intent.entries, intent.format),
@@ -1044,12 +1158,17 @@
 		launchArchiveTask(requestContext, generation);
 	};
 
-	const beginDecompress = (entry: WorkspaceRemoteFileEntryDto) => {
+	const beginDecompress = (entry: RemoteFileEntry) => {
+		if (fileView.capture().aborted) {
+			return;
+		}
 		archivePromptGeneration += 1;
 		const generation = archivePromptGeneration;
 		closeArchiveDialog(false);
 		launchArchiveTask(
 			{
+				session: props.session,
+				permission: fileView.capture(),
 				kind: 'decompress',
 				entries: [entry],
 				destination: parentPath(entry.path),
@@ -1061,13 +1180,22 @@
 
 	const submitArchive = async () => {
 		const current = archiveDialog.value;
-		if (!current) return;
+		if (!current || fileView.capture().aborted) {
+			return;
+		}
+		const permission = fileView.capture();
 		try {
 			const destination = archiveDestination.value.trim();
-			if (current.kind === 'compress' && !destination.startsWith('/')) return;
-			if (archivePasswordInvalid.value) return;
+			if (current.kind === 'compress' && !destination.startsWith('/')) {
+				return;
+			}
+			if (archivePasswordInvalid.value) {
+				return;
+			}
 			const submissionGeneration = archivePromptGeneration;
 			const requestContext: ArchiveRequestContext = {
+				session: props.session,
+				permission: fileView.capture(),
 				kind: current.kind,
 				entries: [...current.entries],
 				destination: current.kind === 'compress' ? destination : parentPath(current.entries[0]!.path),
@@ -1078,7 +1206,9 @@
 			closeArchiveDialog(false);
 			await startArchiveTask(requestContext, password, submissionGeneration);
 		} catch (cause) {
-			feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+			if (fileView.isCurrent(permission)) {
+				feedback.notifyError(transferStartMessage(cause, true));
+			}
 		}
 	};
 
@@ -1163,7 +1293,6 @@
 				:editor-scope-label="editorScopeLabel"
 				:show-editor-scope-label="showEditorScopeLabel"
 				:command-input-sync-target="commandInputSyncTarget"
-				:status-interval-seconds="statusIntervalSeconds"
 				:docker-interval-seconds="dockerIntervalSeconds"
 				:docker-default-expand="dockerDefaultExpand"
 				:status-scale="statusScale"
@@ -1249,7 +1378,6 @@
 				:editor-scope-label="editorScopeLabel"
 				:show-editor-scope-label="showEditorScopeLabel"
 				:command-input-sync-target="commandInputSyncTarget"
-				:status-interval-seconds="statusIntervalSeconds"
 				:docker-interval-seconds="dockerIntervalSeconds"
 				:docker-default-expand="dockerDefaultExpand"
 				:status-scale="statusScale"
@@ -1354,7 +1482,6 @@
 				:editor-scope-label="editorScopeLabel"
 				:show-editor-scope-label="showEditorScopeLabel"
 				:command-input-sync-target="commandInputSyncTarget"
-				:status-interval-seconds="statusIntervalSeconds"
 				:docker-interval-seconds="dockerIntervalSeconds"
 				:docker-default-expand="dockerDefaultExpand"
 				:status-scale="statusScale"
@@ -1450,7 +1577,6 @@
 			:terminal-channel="presentationTerminalChannel"
 			:modifiers="mobileModifiers.levels"
 			:status-session="session.statusController"
-			:status-interval-seconds="statusIntervalSeconds"
 			:status-scale="statusScale"
 			:status-show-ip="statusShowIp"
 			:status-host="session.connection.host"
@@ -1571,6 +1697,7 @@
 			</div>
 			<div class="min-h-0 flex-grow overflow-hidden">
 				<FileManager
+					:active="active !== false && fileManagerPopupVisible"
 					:before-file-mutation="(paths) => editorSession.invalidatePaths(session.id, paths)"
 					class="h-full min-h-0"
 					:channel="session.adapters.filesystem"

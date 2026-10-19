@@ -1,0 +1,39 @@
+{
+  "mutationRecovery": {
+    "title": "Machine mutation recovery",
+    "warning": "Release only removes the execution fence. It does not retry or prove the original operation succeeded. Independently verify the remote effects first.",
+    "refresh": "Refresh authoritative state",
+    "refreshRequired": "Writes are blocked. Refresh and review the current state before starting a new action.",
+    "failed": "The request failed. Refresh and review the current state.",
+    "unknown": "The result is unknown. Do not repeat this action; refresh and inspect the remote effects.",
+    "required": "Confirm both resources have stopped, choose an outcome and enter a valid observation time and note.",
+    "more": "Load more",
+    "recoveryAllowed": "Recovery permitted",
+    "evidence": "Record independent evidence",
+    "producerStopped": "I have independently verified the producer has stopped",
+    "resourcesStopped": "I have independently verified the related resources have stopped",
+    "outcome": "Observed outcome",
+    "choose": "Choose explicitly",
+    "observedAt": "Observation time",
+    "note": "Evidence note",
+    "record": "Record evidence",
+    "selectEvidence": "Evidence for release",
+    "release": "Release execution fence",
+    "releaseConfirm": "Release this execution fence using the selected evidence? This neither retries the operation nor confirms its success.",
+    "origins": {
+      "files": "Files",
+      "docker": "Docker",
+      "agent": "Agent"
+    },
+    "states": {
+      "held": "Held",
+      "blocked": "Blocked",
+      "released": "Released"
+    },
+    "outcomes": {
+      "applied": "Applied",
+      "not_applied": "Not applied",
+      "partially_applied": "Partially applied"
+    }
+  }
+}

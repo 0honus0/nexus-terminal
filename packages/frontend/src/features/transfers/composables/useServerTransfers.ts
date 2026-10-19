@@ -1,10 +1,10 @@
 import { computed, type ComputedRef } from 'vue';
-import type { TransferTask } from '../model/transfer';
-import type { ServerTransferTaskDto } from '../model/serverTransfer';
+import type { TransferTask } from '../model/transfer-types';
+import type { ServerTransferTask } from '../model/server-transfer-types';
 import { useServerTransfersStore } from '../store/serverTransfers.store';
 
 export interface ServerTransfersController {
-	items: ComputedRef<readonly ServerTransferTaskDto[]>;
+	items: ComputedRef<readonly ServerTransferTask[]>;
 	progressTasks: ComputedRef<readonly TransferTask[]>;
 	loading: ComputedRef<boolean>;
 	error: ComputedRef<string>;
@@ -20,7 +20,7 @@ export function useServerTransfers(): ServerTransfersController {
 	const store = useServerTransfersStore();
 
 	return {
-		items: computed<readonly ServerTransferTaskDto[]>(() => store.items),
+		items: computed<readonly ServerTransferTask[]>(() => store.items),
 		progressTasks: computed<readonly TransferTask[]>(() => store.progressTasks),
 		loading: computed(() => store.loading),
 		error: computed(() => store.error),

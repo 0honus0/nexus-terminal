@@ -3,7 +3,7 @@
 	import { logger } from '@/client/logging/logger';
 	import { structurallyEqual } from '@/foundation/data';
 	import { overlayStack, UiResizeHandle, type OverlayStackRegistration } from '@/foundation/ui';
-	import type { AgentAppSummaryDto, AgentHostSummaryDto } from '../api/agent-api';
+	import type { HostApp, HostDirectory } from '../model/host-types';
 	import PluginAppFrame from './PluginAppFrame.vue';
 	import AgentAppSwitcher from './AgentAppSwitcher.vue';
 	import { useAgentHostState } from './agent-host-state';
@@ -13,11 +13,11 @@
 	const AgentAppSurface = defineAsyncComponent(loadAgentAppSurface);
 	const ArtifactLibraryView = defineAsyncComponent(() => import('../files/ArtifactLibraryView.vue'));
 
-	const props = defineProps<{ summary: AgentHostSummaryDto }>();
-	const { surfaceSession: agentSurfaceSession, windowManager: agentWindowManager } = useAgentHostState();
-	const emit = defineEmits<{ layoutChange: [] }>();
+	const props = defineProps<{ directory: HostDirectory }>();
+	const { windowManager: agentWindowManager } = useAgentHostState();
+	const emit = defineEmits<{ layoutChange: []; refresh: [] }>();
 	const state = agentWindowManager.state;
-	const activeApp = computed(() => props.summary.apps.find((app) => app.id === state.activeAppId) ?? null);
+	const activeApp = computed(() => props.directory.apps.find((app) => app.id === state.activeAppId) ?? null);
 	const visible = computed(() => state.status === 'visible');
 	const hasOpened = ref(visible.value);
 	const hubWindowRef = ref<HTMLElement | null>(null);
@@ -246,13 +246,7 @@
 		},
 		{ immediate: true },
 	);
-	const enabledApps = computed(() => props.summary.apps.filter((app) => app.enabled));
-	const activityCount = computed(
-		() =>
-			props.summary.totalRunningRuns +
-			props.summary.totalPendingApprovals +
-			props.summary.totalPendingBudgetRequests,
-	);
+	const enabledApps = computed(() => props.directory.apps.filter((app) => app.enabled));
 
 	let surfacePreloadHandle: number | ReturnType<typeof setTimeout> | null = null;
 	let surfacePreloadUsesIdleCallback = false;
@@ -470,34 +464,20 @@
 	};
 
 	const openAppIds = ref<string[]>([]);
-	type ResidentAppSurface = {
-		appId: string;
-		version: string;
-		surface: 'agent' | 'custom';
-		defaultApprovalMode: AgentAppSummaryDto['defaultApprovalMode'];
-		health: AgentAppSummaryDto['health'];
-		healthReason: string | null;
-	};
+	type ResidentAppSurface = { appId: string; version: number; packageVersion: string; surface: 'agent' | 'custom' };
 	const residentAppSurfaces = ref<ResidentAppSurface[]>([]);
 	const filesMounted = ref(state.hubView === 'files');
 
-	const residentKey = (surface: Pick<ResidentAppSurface, 'appId' | 'version'>): string =>
-		`${surface.appId}@${surface.version}`;
+	const residentKey = (surface: ResidentAppSurface): string =>
+		surface.appId + '@' + surface.version + ':' + surface.packageVersion;
 
-	const toResidentSurface = (app: AgentAppSummaryDto): ResidentAppSurface | null => {
-		if (!app.enabled || (app.surface !== 'agent' && app.surface !== 'custom')) return null;
-		return {
-			appId: app.id,
-			version: app.version,
-			surface: app.surface,
-			defaultApprovalMode: app.defaultApprovalMode,
-			health: app.health,
-			healthReason: app.healthReason,
-		};
+	const toResidentSurface = (app: HostApp): ResidentAppSurface | null => {
+		if (!app.enabled || app.surface === 'unavailable') return null;
+		return { appId: app.id, version: app.version, packageVersion: app.packageVersion, surface: app.surface };
 	};
 
 	watch(
-		() => [props.summary.apps, state.activeAppId] as const,
+		() => [props.directory.apps, state.activeAppId] as const,
 		([apps, activeId]) => {
 			const enabled = apps.filter((app) => app.enabled).map((app) => app.id);
 			const availableIds = enabled;
@@ -517,7 +497,7 @@
 	);
 
 	const syncResidentSurfaces = (): void => {
-		const appsById = new Map(props.summary.apps.map((app) => [app.id, app]));
+		const appsById = new Map(props.directory.apps.map((app) => [app.id, app]));
 		const openIds = new Set(openAppIds.value);
 		residentAppSurfaces.value = residentAppSurfaces.value.flatMap((resident) => {
 			const current = appsById.get(resident.appId);
@@ -526,18 +506,12 @@
 				!openIds.has(resident.appId) ||
 				!current.enabled ||
 				current.version !== resident.version ||
+				current.packageVersion !== resident.packageVersion ||
 				current.surface !== resident.surface
 			) {
 				return [];
 			}
-			return [
-				{
-					...resident,
-					defaultApprovalMode: current.defaultApprovalMode,
-					health: current.health,
-					healthReason: current.healthReason,
-				},
-			];
+			return [resident];
 		});
 
 		if (state.hubView === 'files') {
@@ -555,11 +529,8 @@
 
 	watch(
 		() => [
-			props.summary.apps
-				.map(
-					(app) =>
-						`${app.id}:${app.version}:${app.enabled ? 1 : 0}:${app.surface}:${app.defaultApprovalMode}:${app.health}:${app.healthReason ?? ''}`,
-				)
+			props.directory.apps
+				.map((app) => `${app.id}:${app.version}:${app.enabled ? 1 : 0}:${app.surface}:${app.packageVersion}`)
 				.join('|'),
 			openAppIds.value.join('|'),
 			state.activeAppId,
@@ -570,10 +541,10 @@
 	);
 
 	const displayedApps = computed(() => {
-		const apps = props.summary.apps;
+		const apps = props.directory.apps;
 		const list = openAppIds.value
 			.map((id) => apps.find((app) => app.id === id))
-			.filter((app): app is AgentAppSummaryDto => !!app);
+			.filter((app): app is HostApp => !!app);
 		return list.length > 0 ? list : enabledApps.value;
 	});
 
@@ -583,8 +554,6 @@
 			openAppIds.value.push(appId);
 		}
 		if (appId === state.activeAppId) return;
-		if (state.activeAppId) agentSurfaceSession.pauseDetail(state.activeAppId);
-		agentSurfaceSession.activateApp(appId);
 		agentWindowManager.switchApp({ appId });
 	};
 
@@ -626,19 +595,9 @@
 		};
 	});
 
-	/*
-	 * §7.2-a: the composer keeps three rows of height no matter how short the
-	 * floating window gets. Below 560px the surface compacts it (see
-	 * AgentConversation.vue) instead of letting it eat the transcript.
-	 */
 	const hubCompact = computed(() => !state.maximized && state.bounds.height < 560);
-	/*
-	 * §7.2-e: the sidebar / rail toggles and the conversation-files view live in the
-	 * surface, but persistence is driven from here — any of them changing is a layout
-	 * change that has to reach browser persistence.
-	 */
 	watch(
-		() => [state.threadSidebarVisible, state.taskRailVisible, state.hubView] as const,
+		() => state.hubView,
 		() => emit('layoutChange'),
 	);
 
@@ -734,12 +693,6 @@
 						<span class="text-[11px] font-semibold leading-none tracking-[-0.015em] text-foreground/90">{{
 							$t('agent.hub.title')
 						}}</span>
-						<span
-							v-if="activityCount > 0"
-							class="rounded-full bg-primary/15 px-1.5 py-0.5 text-[11px] font-semibold text-primary"
-						>
-							{{ activityCount }}
-						</span>
 					</div>
 				</div>
 
@@ -782,30 +735,6 @@
 							<span class="agent-app-name min-w-0 flex-1 truncate">{{ app.displayName }}</span>
 
 							<!-- 运行状态指示徽标 -->
-							<span
-								v-if="app.runningRuns"
-								class="shrink-0 rounded-md bg-primary/15 px-1.5 py-0.5 text-[11px] font-medium text-primary"
-								:title="$t('agent.hub.runningRuns')"
-							>
-								<i class="fa-solid fa-play mr-0.5 text-[6px]" aria-hidden="true"></i
-								>{{ app.runningRuns }}
-							</span>
-							<span
-								v-if="app.pendingApprovals"
-								class="shrink-0 rounded-md bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning"
-								:title="$t('agent.hub.pendingApprovals')"
-							>
-								<i class="fa-solid fa-shield-halved mr-0.5 text-[6px]" aria-hidden="true"></i
-								>{{ app.pendingApprovals }}
-							</span>
-							<span
-								v-if="app.pendingBudgetRequests"
-								class="shrink-0 rounded-md bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning"
-								:title="$t('agent.hub.pendingBudget')"
-							>
-								<i class="fa-solid fa-coins mr-0.5 text-[6px]" aria-hidden="true"></i
-								>{{ app.pendingBudgetRequests }}
-							</span>
 						</button>
 
 						<!-- 关闭 Tab：与切换按钮并列，使用原生 button 的 Enter / Space 语义。 -->
@@ -824,21 +753,20 @@
 
 					<!-- 新建 App 按钮 -->
 					<div class="flex shrink-0 items-center" @pointerdown.stop>
-						<AgentAppSwitcher :apps="summary.apps" :active-app-id="state.activeAppId" @switch="switchApp" />
+						<button class="px-2" :aria-label="$t('agent.nativeThreads.read')" @click="emit('refresh')">
+							<i class="fa-solid fa-rotate-right" />
+						</button>
+						<AgentAppSwitcher
+							:apps="directory.apps"
+							:active-app-id="state.activeAppId"
+							@switch="switchApp"
+						/>
 					</div>
 				</div>
 			</div>
 
 			<!-- 右侧：会话/文件磨砂微胶囊分段器 + 窗口控制 -->
 			<div class="flex shrink-0 items-center gap-1.5" @pointerdown.stop>
-				<span
-					v-if="summary.totalPendingApprovals > 0"
-					class="agent-hub-approval-badge mr-0.5 flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning"
-				>
-					<span class="h-1.5 w-1.5 rounded-full bg-warning animate-pulse"></span>
-					{{ $t('agent.hub.approvals', { count: summary.totalPendingApprovals }) }}
-				</span>
-
 				<!-- 悬浮微胶囊分段器 (Segmented Control) -->
 				<nav
 					class="agent-hub-view-switch flex shrink-0 items-center rounded-md bg-header/45 p-0.5 backdrop-blur-xs"
@@ -932,7 +860,11 @@
 		</header>
 
 		<div class="min-h-0 flex-1 bg-background">
-			<ArtifactLibraryView v-if="filesMounted" v-show="state.hubView === 'files'" :apps="summary.apps" />
+			<ArtifactLibraryView
+				v-if="filesMounted"
+				v-show="state.hubView === 'files'"
+				:active="visible && state.hubView === 'files'"
+			/>
 			<div
 				v-for="resident in residentAppSurfaces"
 				:key="residentKey(resident)"
@@ -946,11 +878,21 @@
 				<AgentAppSurface
 					v-if="resident.surface === 'agent'"
 					:app-id="resident.appId"
-					:default-approval-mode="resident.defaultApprovalMode"
-					:app-health="resident.health"
-					:app-health-reason="resident.healthReason"
+					:active="visible && state.hubView !== 'files' && state.activeAppId === resident.appId"
+					:app-version="resident.version"
+					:execution-enabled="directory.executionEnabled"
 				/>
-				<PluginAppFrame v-else :app-id="resident.appId" :version="resident.version" />
+				<PluginAppFrame
+					v-else
+					:app-id="resident.appId"
+					:version="resident.packageVersion"
+					:visible="
+						visible &&
+						state.hubView !== 'files' &&
+						state.activeAppId === resident.appId &&
+						activeApp?.version === resident.version
+					"
+				/>
 			</div>
 			<div
 				v-if="state.hubView !== 'files' && activeApp && !['agent', 'custom'].includes(activeApp.surface)"

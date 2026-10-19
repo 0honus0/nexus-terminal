@@ -18,6 +18,8 @@ mkdir -p nexus-terminal && cd nexus-terminal
 
 wget https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/main/{docker-compose.yml,.env.example}
 cp .env.example .env
+# Set NEXUS_ENCRYPTION_KEY to a persistent 32-byte base64 key before startup.
+# See doc/DEPLOYMENT.md for the key-generation command.
 
 docker compose up -d
 ```
@@ -58,8 +60,7 @@ Agent 的 File/Shell/ACP 工具通过明确授权的 SSH 连接执行，Browser 
 
 ## 用户文档
 
-- [功能](./doc/FEATURES.md)
-- [使用](./doc/USAGE.md)
+- [功能与使用](./doc/USAGE.md)
 - [部署与更新](./doc/DEPLOYMENT.md)
 - [English README](./doc/README_EN.md)
 

@@ -1,14 +1,16 @@
 import type {
-	WorkspaceFilesystemListResponseDto,
-	WorkspaceFilesystemSearchResponseDto,
-	WorkspaceRemoteFileEntryDto,
+	DirectoryListing,
+	FileSearchResult,
+	RemoteFileEntry,
 	ResolvedRemotePath,
-} from '../model/filesystem';
+} from '../model/filesystem-types';
+import type { TerminalDirectoryQueueState } from '../model/terminal-directory-types';
+
 export interface FilesystemChannel {
-	listDirectory(path: string): Promise<WorkspaceFilesystemListResponseDto>;
-	search(path: string, query: string): Promise<WorkspaceFilesystemSearchResponseDto>;
-	stat(path: string): Promise<WorkspaceRemoteFileEntryDto>;
-	readBinary(path: string, maxBytes: number): Promise<{ path: string; bytes: Uint8Array }>;
+	listDirectory(path: string): Promise<DirectoryListing>;
+	search(path: string, query: string): Promise<FileSearchResult>;
+	stat(path: string, signal?: AbortSignal): Promise<RemoteFileEntry>;
+	readBinary(path: string, maxBytes: number, signal?: AbortSignal): Promise<{ path: string; bytes: Uint8Array }>;
 	writeText(path: string, content: string, encoding?: string): Promise<void>;
 	createDirectory(path: string): Promise<void>;
 	createFile(path: string, content?: string): Promise<void>;
@@ -16,11 +18,6 @@ export interface FilesystemChannel {
 	rename(from: string, to: string): Promise<void>;
 	chmod(path: string, mode: number): Promise<void>;
 	realpath(path: string): Promise<ResolvedRemotePath>;
-}
-
-export interface TerminalDirectoryQueueState {
-	path: string;
-	waitingForPrompt: boolean;
 }
 
 export interface TerminalDirectoryPort {
@@ -32,5 +29,5 @@ export interface TerminalDirectoryPort {
 }
 
 export interface FilesystemDownloadPort {
-	createDownload(path: string, kind: 'file' | 'directory'): Promise<{ url: string }>;
+	createDownload(path: string, kind: 'file' | 'directory', signal?: AbortSignal): Promise<{ url: string }>;
 }

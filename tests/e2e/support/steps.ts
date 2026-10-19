@@ -1,6 +1,7 @@
 import { test } from '@playwright/test';
 
 export const DEFAULT_STEP_TIMEOUT = 30_000;
+
 export const SLOW_STEP_TIMEOUT = 60_000;
 
 export function step<T>(title: string, body: () => Promise<T>, timeout = DEFAULT_STEP_TIMEOUT): Promise<T> {

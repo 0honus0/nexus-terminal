@@ -140,8 +140,8 @@ jobs:
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify Plugin upgrade migrations
-        run: pnpm --filter @nexus-terminal/backend exec tsx --test ../../tests/backend/plugin-runner-manifest-migration.test.ts
+      - name: Check independent backend types
+        run: pnpm --filter @nexus-terminal/backend check
 
       - name: Run standard checks serially
         run: pnpm run check
@@ -151,7 +151,8 @@ jobs:
 
       - name: Build production packages
         run: |
-          pnpm run build
+          pnpm --filter @nexus-terminal/backend build
+          pnpm --filter @nexus-terminal/frontend build
 
   playwright:
     name: Playwright shard ${{ matrix.shard }}

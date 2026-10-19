@@ -22,7 +22,10 @@
     "previousPage": "上一页",
     "nextPage": "下一页",
     "pageNumber": "页码",
-    "status": { "danger": "操作失败", "warning": "未获授权" },
+    "status": {
+      "danger": "操作失败",
+      "warning": "未获授权"
+    },
     "fields": {
       "username": "操作账号",
       "userId": "用户编号",
@@ -50,9 +53,12 @@
       "proposalId": "提案编号",
       "action": "操作",
       "count": "数量",
-      "path": "路径"
+      "path": "路径",
+      "subjectId": "对象",
+      "route": "路由",
+      "statusCode": "HTTP状态"
     },
-    "searchPlaceholder": "搜索详细信息...",
+    "searchPlaceholder": "搜索事件、对象或路由…",
     "noLogs": "未找到审计日志记录。",
     "table": {
       "timestamp": "发生时间",
@@ -105,6 +111,7 @@
     },
     "allActions": "全部操作",
     "parseErrorRaw": "解析失败 — 原始值：{raw}",
-    "loadFailed": "加载审计日志失败。"
+    "loadFailed": "加载审计日志失败。",
+    "loadedOnly": "已加载 {loaded} 条记录"
   }
 }

@@ -2,7 +2,7 @@
 	import { ref } from 'vue';
 	import { useRouter } from 'vue-router';
 	import { useI18n } from 'vue-i18n';
-	import { apiErrorMessage } from '@/client/http';
+	import { authErrorKey } from '../model/auth-errors';
 	import { UiButton, UiFormField, UiInput } from '@/foundation/ui';
 	import { useAuthSession } from '../public';
 
@@ -18,6 +18,9 @@
 	const successMessage = ref<string | null>(null);
 
 	const submit = async (): Promise<void> => {
+		if (isLoading.value) {
+			return;
+		}
 		error.value = null;
 		successMessage.value = null;
 
@@ -40,7 +43,7 @@
 			successMessage.value = t('auth.setup.success');
 			await router.push({ name: 'Login' });
 		} catch (cause) {
-			error.value = apiErrorMessage(cause, t('auth.setup.error.generic'));
+			error.value = t(authErrorKey(cause));
 		} finally {
 			isLoading.value = false;
 		}

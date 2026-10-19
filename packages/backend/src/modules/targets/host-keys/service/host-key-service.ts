@@ -1,0 +1,53 @@
+import {
+	TARGET_HOST_KEY_HOST_MAX_BYTES,
+	TARGET_HOST_KEY_FINGERPRINT_PATTERN,
+} from '@nexus-terminal/shared/targets/host-keys/values';
+import { TargetFailure } from '../../target-failure.js';
+import type { HostKeyModel } from '../model/host-key-model.js';
+import type { ConfirmHostKey, HostKeyTrust } from '../model/host-key-types.js';
+
+function canonicalHost(host: string): string {
+	if (typeof host !== 'string') {
+		throw new TargetFailure('invalid_input');
+	}
+	const canonical = host.toLowerCase();
+	const encoded = Buffer.from(canonical, 'utf8');
+	if (
+		!canonical ||
+		encoded.byteLength > TARGET_HOST_KEY_HOST_MAX_BYTES ||
+		encoded.toString('utf8') !== canonical ||
+		/[\s\u0000-\u001f\u007f]/u.test(canonical)
+	) {
+		throw new TargetFailure('invalid_input');
+	}
+	return canonical;
+}
+
+function validPort(port: number): number {
+	if (!Number.isSafeInteger(port) || port < 1 || port > 65535) {
+		throw new TargetFailure('invalid_input');
+	}
+	return port;
+}
+
+export class HostKeyService {
+	constructor(private readonly model: HostKeyModel) {}
+
+	list(): Promise<HostKeyTrust[]> {
+		return this.model.list();
+	}
+
+	confirm(input: ConfirmHostKey): Promise<HostKeyTrust> {
+		const host = canonicalHost(input.host);
+		const port = validPort(input.port);
+		// Host key is the SSH wire public key SHA-256, not a target config hash.
+		if (typeof input.fingerprint !== 'string' || !TARGET_HOST_KEY_FINGERPRINT_PATTERN.test(input.fingerprint)) {
+			throw new TargetFailure('invalid_input');
+		}
+		return this.model.confirm({ host, port, fingerprint: input.fingerprint });
+	}
+
+	remove(host: string, port: number): Promise<boolean> {
+		return this.model.remove(canonicalHost(host), validPort(port));
+	}
+}

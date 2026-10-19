@@ -1,4 +1,4 @@
-import type { TransferTask } from './model/transfer';
+import type { TransferTask } from './model/transfer-types';
 
 export interface TransferMessageDescriptor {
 	key: string;
@@ -7,22 +7,16 @@ export interface TransferMessageDescriptor {
 
 export const transferTaskErrorDescriptor = (task: TransferTask): TransferMessageDescriptor | null => {
 	switch (task.errorKind) {
-		case 'upload_directory_state_lost':
-			return { key: 'progressCenter.error.uploadDirectoryStateLost' };
-		case 'upload_stream_closed':
-			return {
-				key: 'progressCenter.error.uploadStreamClosed',
-				...(task.errorContext?.closeCode !== undefined
-					? { params: { code: task.errorContext.closeCode } }
-					: {}),
-			};
-		case 'upload_stream_open_failed':
-			return {
-				key: 'progressCenter.error.uploadStreamOpenFailed',
-				...(task.errorContext?.fileName ? { params: { file: task.errorContext.fileName } } : {}),
-			};
+		case 'upload_unknown':
+			return { key: 'progressCenter.error.uploadUnknown' };
+		case 'upload_protocol_error':
+			return { key: 'progressCenter.error.uploadProtocolError' };
+		case 'upload_not_connected':
+			return { key: 'progressCenter.error.uploadNotConnected' };
 		case 'upload_failed':
 			return { key: 'progressCenter.error.uploadFailed' };
+		case 'transfer_unknown':
+			return { key: 'progressCenter.error.transferUnknown' };
 		case 'transfer_failed':
 			return { key: 'progressCenter.error.transferFailed' };
 		case 'workspace_connection_closed':

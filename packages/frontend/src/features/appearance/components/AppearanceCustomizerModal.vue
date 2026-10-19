@@ -2,6 +2,8 @@
 	import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 	import { UiButton, UiSurface } from '@/foundation/ui';
 	import { useI18n } from 'vue-i18n';
+	import { useAppearanceStore } from '../store/appearance.store';
+	import { useAppearanceEditor } from '../composables/use-appearance-editor';
 	import BasicAppearancePanel from './BasicAppearancePanel.vue';
 	import TerminalBackgroundSettingsPanel from './TerminalBackgroundSettingsPanel.vue';
 	import TerminalThemeSettingsPanel from './TerminalThemeSettingsPanel.vue';
@@ -9,6 +11,16 @@
 	const props = defineProps<{ visible: boolean }>();
 	const emit = defineEmits<{ close: [] }>();
 	const { t } = useI18n();
+	const store = useAppearanceStore();
+	const editor = useAppearanceEditor();
+	const editorGeneration = ref(0);
+
+	async function refresh(): Promise<void> {
+		if (await editor.run((permission) => store.load(true, permission), { notify: false })) {
+			editorGeneration.value++;
+		}
+	}
+
 	const activeTab = ref<'ui' | 'terminal' | 'background' | 'other'>('ui');
 	const tabs = [
 		{ id: 'ui', label: 'styleCustomizer.uiStyles' },
@@ -122,7 +134,9 @@
 						>
 					</nav>
 
-					<main class="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 md:px-6 md:py-4">
+					<main :key="editorGeneration" class="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 md:px-6 md:py-4">
+						<p v-if="store.blocked" role="status">{{ t('appearanceNext.refreshRequired') }}</p>
+						<UiButton :disabled="store.busy" @click="refresh">{{ t('appearanceNext.refresh') }}</UiButton>
 						<UiSurface v-if="activeTab === 'ui'" class="min-w-0 p-4"
 							><BasicAppearancePanel ref="uiPanel" section="ui" :show-ui-actions="false"
 						/></UiSurface>

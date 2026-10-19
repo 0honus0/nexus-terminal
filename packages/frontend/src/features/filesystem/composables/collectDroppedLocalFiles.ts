@@ -1,4 +1,4 @@
-import type { LocalUploadBatch, LocalUploadFile } from '../model/filesystem';
+import type { LocalUploadBatch, LocalUploadFile } from '../model/filesystem-types';
 
 interface DroppedItemSnapshot {
 	entry?: FileSystemEntry;

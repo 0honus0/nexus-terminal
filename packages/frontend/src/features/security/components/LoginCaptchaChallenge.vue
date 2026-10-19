@@ -3,13 +3,11 @@
 	import { useI18n } from 'vue-i18n';
 	import VueHcaptcha from '@hcaptcha/vue3-hcaptcha';
 	import VueRecaptcha from 'vue3-recaptcha2';
-	import type { CaptchaConfigDto } from '../model/security';
-
-	type CaptchaStatus = 'loading' | 'ready' | 'error' | 'invalid';
+	import type { LoginCaptchaConfig, CaptchaStatus } from '../model/security-types';
 
 	const props = withDefaults(
 		defineProps<{
-			config: CaptchaConfigDto;
+			config: LoginCaptchaConfig;
 			status?: CaptchaStatus;
 			feedback?: string | null;
 		}>(),
@@ -66,18 +64,18 @@
 		<template v-else>
 			<p class="text-sm font-medium text-text-secondary">{{ t('auth.login.captchaPrompt') }}</p>
 			<VueHcaptcha
-				v-if="config.provider === 'hcaptcha' && config.hcaptchaSiteKey"
+				v-if="config.provider === 'hcaptcha' && config.siteKey"
 				ref="hcaptcha"
-				:sitekey="config.hcaptchaSiteKey"
+				:sitekey="config.siteKey"
 				theme="auto"
 				@verify="verified"
 				@expired="expired"
 				@error="failed"
 			/>
 			<VueRecaptcha
-				v-else-if="config.provider === 'recaptcha' && config.recaptchaSiteKey"
+				v-else-if="config.provider === 'recaptcha' && config.siteKey"
 				ref="recaptcha"
-				:sitekey="config.recaptchaSiteKey"
+				:sitekey="config.siteKey"
 				theme="light"
 				@verify="verified"
 				@expire="expired"

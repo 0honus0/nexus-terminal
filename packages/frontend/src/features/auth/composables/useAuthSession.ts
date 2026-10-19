@@ -1,21 +1,24 @@
 import { computed, type ComputedRef } from 'vue';
 import type {
-	AuthLoginRequestDto,
-	AuthLoginResultViewModel,
+	AuthLoginRequest,
+	AuthLoginResult,
 	AuthSessionState,
-	AuthSetupRequestDto,
-	AuthUserDto,
-} from '../model/auth';
+	AuthSetupRequest,
+	PasskeyLoginInput,
+	AuthUser,
+} from '../model/auth-types';
 import { useAuthStore } from '../store/auth.store';
 
 export interface AuthSessionController {
-	user: ComputedRef<AuthUserDto | null>;
+	user: ComputedRef<AuthUser | null>;
 	isAuthenticated: ComputedRef<boolean>;
 	setupRequired: ComputedRef<boolean>;
 	pendingSecondFactor: ComputedRef<boolean>;
-	setup(credentials: AuthSetupRequestDto): Promise<void>;
-	login(credentials: AuthLoginRequestDto): Promise<AuthLoginResultViewModel>;
-	verifyTwoFactor(token: string): Promise<AuthUserDto>;
+	setup(credentials: AuthSetupRequest): Promise<void>;
+	login(credentials: AuthLoginRequest): Promise<AuthLoginResult>;
+	loginWithPasskey(input: PasskeyLoginInput, signal?: AbortSignal): Promise<AuthUser>;
+	verifyTwoFactor(token: string): Promise<AuthUser>;
+	changePassword(currentPassword: string, newPassword: string): Promise<void>;
 	logout(): Promise<void>;
 	refreshSession(): Promise<AuthSessionState>;
 }
@@ -30,7 +33,9 @@ export function useAuthSession(): AuthSessionController {
 		pendingSecondFactor: computed(() => store.pendingSecondFactor),
 		setup: store.setup.bind(store),
 		login: store.login.bind(store),
+		loginWithPasskey: store.loginWithPasskey.bind(store),
 		verifyTwoFactor: store.verifyTwoFactor.bind(store),
+		changePassword: store.changePassword.bind(store),
 		logout: store.logout.bind(store),
 
 		refreshSession: () => store.resolveSession(true),

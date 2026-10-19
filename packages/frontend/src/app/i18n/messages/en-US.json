@@ -58,7 +58,12 @@
     "primaryNavigation": "Primary navigation",
     "clear": "Clear",
     "create": "Create",
-    "value": "Value"
+    "value": "Value",
+    "personalDataFailure": "Personal data request failed. Try reading again.",
+    "personalDataUnknown": "The result is unknown. Read the list again and verify before editing or repeating the action.",
+    "personalDataConflict": "The record changed or no longer exists. Read the list again, then reopen the editor.",
+    "personalDataInvalid": "Check the input and the permitted capacity.",
+    "refresh": "Refresh"
   },
   "header": {
     "hide": "Hide",

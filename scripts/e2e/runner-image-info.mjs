@@ -22,6 +22,7 @@ const definitionFiles = [
 	'pnpm-lock.yaml',
 	'pnpm-workspace.yaml',
 	'packages/backend/package.json',
+	'packages/shared/package.json',
 	'packages/frontend/package.json',
 	'packages/protocol/package.json',
 	'tests/e2e/package.json',

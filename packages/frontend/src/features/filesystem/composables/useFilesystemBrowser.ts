@@ -1,15 +1,16 @@
 import { computed, ref, shallowRef, watch, type ComputedRef, type Ref } from 'vue';
 import type { FilesystemChannel } from '../ports/filesystem-channel';
-import type { WorkspaceFileSearchEntryDto, WorkspaceRemoteFileEntryDto } from '../model/filesystem';
+import type { RemoteFileSearchEntry, RemoteFileEntry } from '../model/filesystem-types';
 
 export type FilesystemSortKey = 'name' | 'size' | 'permissions' | 'modified';
+
 export type FilesystemSortDirection = 'asc' | 'desc';
 
 export interface FilesystemBrowserController {
 	path: Ref<string>;
-	entries: Ref<WorkspaceRemoteFileEntryDto[]>;
-	searchEntries: Ref<WorkspaceFileSearchEntryDto[]>;
-	visible: ComputedRef<(WorkspaceRemoteFileEntryDto | WorkspaceFileSearchEntryDto)[]>;
+	entries: Ref<RemoteFileEntry[]>;
+	searchEntries: Ref<RemoteFileSearchEntry[]>;
+	visible: ComputedRef<(RemoteFileEntry | RemoteFileSearchEntry)[]>;
 	searchQuery: Ref<string>;
 	searchActive: ComputedRef<boolean>;
 	searching: Ref<boolean>;
@@ -24,13 +25,13 @@ export interface FilesystemBrowserController {
 	sortDirection: Ref<FilesystemSortDirection>;
 	load(path?: string): Promise<boolean | undefined>;
 	refresh(): Promise<void>;
-	open(entry: WorkspaceRemoteFileEntryDto): Promise<void>;
+	open(entry: RemoteFileEntry): Promise<void>;
 	goParent(): Promise<boolean | undefined>;
 	search(): Promise<void>;
 	scheduleSearch(delayMs?: number): void;
 	clearSearch(): void;
-	select(entry: WorkspaceRemoteFileEntryDto, mode?: 'only' | 'toggle' | 'range'): void;
-	toggle(entry: WorkspaceRemoteFileEntryDto): void;
+	select(entry: RemoteFileEntry, mode?: 'only' | 'toggle' | 'range'): void;
+	toggle(entry: RemoteFileEntry): void;
 	selectAll(): void;
 	clearSelection(): void;
 	setSort(key: FilesystemSortKey): void;
@@ -44,21 +45,15 @@ const parentPath = (path: string) => {
 	return index <= 0 ? '/' : normalized.slice(0, index);
 };
 
-const entryName = (entry: WorkspaceRemoteFileEntryDto): string =>
-	'relativePath' in entry && typeof (entry as WorkspaceFileSearchEntryDto).relativePath === 'string'
-		? (entry as WorkspaceFileSearchEntryDto).relativePath
-		: entry.name;
+const entryName = (entry: RemoteFileEntry): string =>
+	'relativePath' in entry && typeof entry.relativePath === 'string' ? entry.relativePath : entry.name;
 
 const entryNameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
-const compareEntryNames = (left: WorkspaceRemoteFileEntryDto, right: WorkspaceRemoteFileEntryDto): number =>
+const compareEntryNames = (left: RemoteFileEntry, right: RemoteFileEntry): number =>
 	entryNameCollator.compare(entryName(left), entryName(right));
 
-const compare = (
-	left: WorkspaceRemoteFileEntryDto,
-	right: WorkspaceRemoteFileEntryDto,
-	key: FilesystemSortKey,
-): number => {
+const compare = (left: RemoteFileEntry, right: RemoteFileEntry, key: FilesystemSortKey): number => {
 	let result: number;
 	if (key === 'size') result = left.metadata.size - right.metadata.size;
 	else if (key === 'permissions') result = left.metadata.mode - right.metadata.mode;
@@ -71,8 +66,8 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
 	const path = ref(initialPath);
 	// Remote listings are replaced as snapshots; entries and metadata are not
 	// edited in place. Avoid tracking every property read during full-list sorts.
-	const entries = shallowRef<WorkspaceRemoteFileEntryDto[]>([]);
-	const searchEntries = shallowRef<WorkspaceFileSearchEntryDto[]>([]);
+	const entries = shallowRef<RemoteFileEntry[]>([]);
+	const searchEntries = shallowRef<RemoteFileSearchEntry[]>([]);
 	const searchQuery = ref('');
 	const searching = ref(false);
 	const searchTruncated = ref(false);
@@ -178,7 +173,7 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
 		}
 	};
 
-	const open = async (entry: WorkspaceRemoteFileEntryDto) => {
+	const open = async (entry: RemoteFileEntry) => {
 		if (entry.metadata.isDirectory) await load(entry.path);
 	};
 
@@ -208,7 +203,7 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
 		resetSearchResults();
 	};
 
-	const select = (entry: WorkspaceRemoteFileEntryDto, mode: 'only' | 'toggle' | 'range' = 'only') => {
+	const select = (entry: RemoteFileEntry, mode: 'only' | 'toggle' | 'range' = 'only') => {
 		if (mode === 'range' && selectionAnchor.value) {
 			const anchorIndex = visible.value.findIndex((item) => item.path === selectionAnchor.value);
 			const targetIndex = visible.value.findIndex((item) => item.path === entry.path);
@@ -232,7 +227,7 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
 		selectionAnchor.value = entry.path;
 	};
 
-	const toggle = (entry: WorkspaceRemoteFileEntryDto) => select(entry, 'toggle');
+	const toggle = (entry: RemoteFileEntry) => select(entry, 'toggle');
 
 	const selectAll = () => {
 		selected.value = new Set(visible.value.map((entry) => entry.path));

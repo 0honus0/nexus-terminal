@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { defineAsyncComponent, ref, watch } from 'vue';
+	import { computed, defineAsyncComponent, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { Splitpanes, Pane, type SplitpanesResizedPayload } from 'splitpanes';
 	import 'splitpanes/dist/splitpanes.css';
@@ -8,7 +8,7 @@
 		loadFileManager,
 		type ArchiveCompressionIntent,
 		type LocalUploadFile,
-		type WorkspaceRemoteFileEntryDto,
+		type RemoteFileEntry,
 	} from '@/features/filesystem/public';
 	import { loadFileEditor, type FileEditorSessionController } from '@/features/file-editor/public';
 	import { loadFilePreview, type FilePreviewSessionController } from '@/features/file-preview/public';
@@ -19,12 +19,13 @@
 	import {
 		loadSuspendedSessionsPanel,
 		type MarkedSuspendedSessionState,
-		type SuspendedSessionDto,
+		type SuspendedSession,
 	} from '@/features/ssh-suspend/public';
-	import type { ConnectionDto } from '@/features/connections/public';
+	import { RuntimeErrorBoundary } from '@/shared/feedback/public';
+	import type { ConnectionSummary } from '@/features/connections/public';
 	import WorkspaceCommandBar from './WorkspaceCommandBar.vue';
 	import WorkspaceConnectionList from './WorkspaceConnectionList.vue';
-	import type { WorkspaceLayoutNodeState } from '../layout/workspaceLayout';
+	import type { WorkspaceLayoutNodeState } from '../model/presentation-types';
 	import type { WorkspaceRuntimeSession } from '../session';
 
 	const TerminalView = defineAsyncComponent(loadTerminalView);
@@ -70,8 +71,8 @@
 		mobileEditorFontSize?: number;
 		editorScopeLabel?: string;
 		showEditorScopeLabel?: boolean;
-		commandInputSyncTarget?: import('@/features/preferences/public').PreferencesDto['commandInputSyncTarget'];
-		statusIntervalSeconds?: number;
+		commandInputSyncTarget?: import('@/features/preferences/public').UserPreferences['commandInputSyncTarget'];
+
 		dockerIntervalSeconds?: number;
 		dockerDefaultExpand?: boolean;
 		statusScale?: number;
@@ -97,18 +98,24 @@
 		terminalChannel?: TerminalChannel;
 	}>();
 
+	const ownershipMessage = computed(() => {
+		if (props.session.statusMessage.value === 'takeover') return t('sshSuspend.reasons.takeover');
+		if (props.session.statusMessage.value === 'lease_expired') return t('sshSuspend.reasons.lease_expired');
+		return t('workspace.terminal.ownershipUnknown');
+	});
+
 	const emit = defineEmits<{
-		openConnection: [connection: ConnectionDto];
+		openConnection: [connection: ConnectionSummary];
 		openFile: [path: string];
 		openTextFile: [path: string];
 		upload: [path: string];
-		clipboardSet: [operation: 'copy' | 'cut', entries: WorkspaceRemoteFileEntryDto[]];
-		moveTo: [entries: WorkspaceRemoteFileEntryDto[], destination: string];
+		clipboardSet: [operation: 'copy' | 'cut', entries: RemoteFileEntry[]];
+		moveTo: [entries: RemoteFileEntry[], destination: string];
 		paste: [destination: string];
-		compress: [entries: WorkspaceRemoteFileEntryDto[]];
+		compress: [entries: RemoteFileEntry[]];
 		compressPreset: [intent: ArchiveCompressionIntent];
-		decompress: [entry: WorkspaceRemoteFileEntryDto];
-		sendFiles: [entries: WorkspaceRemoteFileEntryDto[]];
+		decompress: [entry: RemoteFileEntry];
+		sendFiles: [entries: RemoteFileEntry[]];
 		command: [command: string, allSessions: boolean];
 		clearTerminal: [];
 		findTerminalNext: [];
@@ -118,7 +125,7 @@
 		editorApi: [api: EditorApi | null];
 		previewApi: [api: PreviewApi | null];
 		documentMode: [mode: 'editor' | 'preview'];
-		resumeSuspended: [session: SuspendedSessionDto];
+		resumeSuspended: [session: SuspendedSession];
 		resumeMarkedSuspended: [workspaceId: string];
 		unmarkSuspended: [workspaceId: string];
 		openFileManager: [];
@@ -201,7 +208,6 @@
 				:editor-scope-label="editorScopeLabel"
 				:show-editor-scope-label="showEditorScopeLabel"
 				:command-input-sync-target="commandInputSyncTarget"
-				:status-interval-seconds="statusIntervalSeconds"
 				:docker-interval-seconds="dockerIntervalSeconds"
 				:docker-default-expand="dockerDefaultExpand"
 				:status-scale="statusScale"
@@ -269,170 +275,184 @@
 	</Splitpanes>
 
 	<section v-else class="relative flex h-full min-h-0 flex-col overflow-hidden border border-border/60 bg-background">
-		<WorkspaceConnectionList
-			v-if="node.component === 'connections'"
-			:show-tags="showConnectionTags"
-			:active-connection-id="session.connection.id"
-			@open="emit('openConnection', $event)"
-		/>
-
-		<TerminalView
-			v-else-if="node.component === 'terminal'"
-			ref="terminalRef"
-			:active="active !== false"
-			class="min-h-0 flex-1"
-			:input-enabled="session.state.value === 'connected'"
-			:channel="terminalChannel ?? session.adapters.terminal"
-			:font-family="terminalFontFamily"
-			:font-size="terminalFontSize"
-			:theme="terminalTheme"
-			:visual="terminalVisual"
-			:scrollback="terminalScrollback"
-			:right-click-copy-paste="rightClickCopyPaste"
-			:state="session.terminalState"
-			@font-size-change="emit('terminalFontSize', $event)"
-			@interaction="emit('interaction')"
-		/>
-
-		<WorkspaceCommandBar
-			v-else-if="node.component === 'commandBar'"
-			:model-value="session.commandDraft.value"
-			:command-input-sync-target="commandInputSyncTarget"
-			:quick-commands-grouped="showQuickCommandTags"
-			:show-file-manager-button="popupFileManager"
-			:show-editor-button="popupDocuments"
-			:ready="session.state.value === 'connected'"
-			:terminal-search-open="session.terminalState.searchOpen.value"
-			:terminal-search-term="session.terminalState.searchTerm.value"
-			@update:model-value="session.setCommandDraft($event)"
-			@update:terminal-search-open="session.setTerminalSearchOpen($event)"
-			@update:terminal-search-term="session.setTerminalSearchTerm($event)"
-			@open-file-manager="emit('openFileManager')"
-			@open-editor="emit('openEditor')"
-			@find-search-next="emit('findTerminalNext')"
-			@find-search-previous="emit('findTerminalPrevious')"
-			@open-focus-configurator="emit('openFocusConfigurator')"
-			@send="(command, all) => emit('command', command, all)"
-			@clear="emit('clearTerminal')"
-			@interaction="emit('interaction')"
-		/>
-
-		<template v-else-if="node.component === 'fileManager'">
-			<FileManager
-				:channel="session.adapters.filesystem"
-				:before-file-mutation="
-					(paths) => (editorSession ?? session.editorController).invalidatePaths(session.id, paths)
-				"
-				:download="session.adapters.download"
-				:terminal-directory="session.adapters.terminalDirectory"
-				:confirm-delete="fileManagerConfirmDelete"
-				:row-scale="fileManagerRowScale"
-				:column-widths="fileManagerColumnWidths"
-				:clipboard-count="clipboardCount"
-				:state="session.filesystemState"
-				:show-editor-button="popupDocuments"
-				@open-file="emit('openFile', $event.path)"
-				@open-as-text="emit('openTextFile', $event.path)"
-				@open-editor="emit('openEditor')"
-				@upload="emit('upload', $event)"
-				@upload-files="(path, files, directories) => emit('uploadFiles', path, files, directories)"
-				@copy-to-clipboard="emit('clipboardSet', 'copy', $event)"
-				@cut-to-clipboard="emit('clipboardSet', 'cut', $event)"
-				@move-to="(entries, destination) => emit('moveTo', entries, destination)"
-				@paste="emit('paste', $event)"
-				@compress="emit('compress', $event)"
-				@compress-preset="emit('compressPreset', $event)"
-				@decompress="emit('decompress', $event)"
-				@send-files="emit('sendFiles', $event)"
-				@row-scale="emit('fileManagerRowScale', $event)"
-				@column-widths="emit('fileManagerColumnWidths', $event)"
-			/>
-		</template>
-
-		<template v-else-if="node.component === 'editor'">
-			<FileEditor
-				ref="editorRef"
-				v-show="popupDocuments || documentMode === 'editor'"
-				class="min-h-0 flex-1"
-				:port="session.adapters.documents"
-				:scope-id="session.id"
-				:scope-label="editorScopeLabel"
-				:show-scope-label="showEditorScopeLabel"
-				:session="editorSession"
-				:font-family="editorFontFamily"
-				:font-size="editorFontSize"
-				:mobile-font-size="mobileEditorFontSize"
-				@font-size="emit('editorFontSize', $event)"
-				@mobile-font-size="emit('mobileEditorFontSize', $event)"
-			/>
-			<FilePreview
-				v-if="!popupDocuments"
-				ref="previewRef"
-				v-show="documentMode === 'preview'"
-				class="min-h-0 flex-1"
-				:source="session.adapters.preview"
-				:scope-id="session.id"
-				:session="previewSession"
-				:spreadsheet-rows-per-page="spreadsheetRowsPerPage"
-				:spreadsheet-max-columns="spreadsheetMaxColumns"
-				:quick-command-row-scale="quickCommandRowScale"
-				@edit="emit('editPreview', $event)"
-				@hide="emit('hidePreview')"
-				@dismiss="emit('hidePreview')"
-			/>
-		</template>
-
-		<StatusMonitor
-			v-else-if="node.component === 'statusMonitor' && active !== false"
-			class="min-h-0 flex-1 overflow-hidden"
-			:session="session.statusController"
-			:interval-seconds="statusIntervalSeconds"
-			:scale="statusScale"
-			:show-ip="statusShowIp"
-			:host="statusHost"
-			@update:scale="emit('statusScale', $event)"
-		/>
-		<DockerManager
-			v-else-if="node.component === 'dockerManager' && active !== false"
-			class="min-h-0 flex-1 overflow-hidden"
-			:session="session.dockerController"
-			:interval-seconds="dockerIntervalSeconds"
-			:default-expand="dockerDefaultExpand"
-			:connection-state="session.state.value"
-			:connection-message="session.statusMessage.value"
-			@terminal-command="emit('command', $event, false)"
-		/>
-		<QuickCommandsPanel
-			v-else-if="node.component === 'quickCommands'"
-			:collapsible-search="quickCommandsCollapsibleSearch"
-			:compact="quickCommandsCompactMode"
-			:show-tags="showQuickCommandTags"
-			:row-scale="quickCommandRowScale"
-			@row-scale="emit('quickCommandRowScale', $event)"
-			@compact-mode="emit('quickCommandCompactMode', $event)"
-			@execute="executeQuick"
-		/>
-		<CommandHistoryPanel v-else-if="node.component === 'commandHistory'" @execute="executeHistory" />
-		<SuspendedSessionsPanel
-			v-else-if="node.component === 'suspendedSshSessions'"
-			:can-resume="true"
-			:marked-sessions="markedSuspendedSessions"
-			@resume="emit('resumeSuspended', $event)"
-			@resume-marked="emit('resumeMarkedSuspended', $event)"
-			@unmark="emit('unmarkSuspended', $event)"
-		/>
-		<div
-			v-if="node.component === 'terminal' && ['connecting', 'reconnecting'].includes(session.state.value)"
-			role="status"
-			class="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center"
+		<RuntimeErrorBoundary
+			:scope="`workspace-pane:${node.component}`"
+			:reset-key="`${session.id}:${node.component}`"
 		>
-			<span
-				class="rounded-full border border-border/70 bg-background/90 px-3 py-1.5 text-xs text-foreground shadow-sm"
+			<WorkspaceConnectionList
+				v-if="node.component === 'connections'"
+				:show-tags="showConnectionTags"
+				:active-connection-id="session.connection.id"
+				@open="emit('openConnection', $event)"
+			/>
+
+			<TerminalView
+				v-else-if="node.component === 'terminal'"
+				ref="terminalRef"
+				:active="active !== false"
+				class="min-h-0 flex-1"
+				:input-enabled="session.state.value === 'connected'"
+				:channel="terminalChannel ?? session.adapters.terminal"
+				:font-family="terminalFontFamily"
+				:font-size="terminalFontSize"
+				:theme="terminalTheme"
+				:visual="terminalVisual"
+				:scrollback="terminalScrollback"
+				:right-click-copy-paste="rightClickCopyPaste"
+				:state="session.terminalState"
+				@font-size-change="emit('terminalFontSize', $event)"
+				@interaction="emit('interaction')"
+			/>
+
+			<WorkspaceCommandBar
+				v-else-if="node.component === 'commandBar'"
+				:model-value="session.commandDraft.value"
+				:command-input-sync-target="commandInputSyncTarget"
+				:quick-commands-grouped="showQuickCommandTags"
+				:show-file-manager-button="popupFileManager"
+				:show-editor-button="popupDocuments"
+				:ready="session.state.value === 'connected'"
+				:terminal-search-open="session.terminalState.searchOpen.value"
+				:terminal-search-term="session.terminalState.searchTerm.value"
+				@update:model-value="session.setCommandDraft($event)"
+				@update:terminal-search-open="session.setTerminalSearchOpen($event)"
+				@update:terminal-search-term="session.setTerminalSearchTerm($event)"
+				@open-file-manager="emit('openFileManager')"
+				@open-editor="emit('openEditor')"
+				@find-search-next="emit('findTerminalNext')"
+				@find-search-previous="emit('findTerminalPrevious')"
+				@open-focus-configurator="emit('openFocusConfigurator')"
+				@send="(command, all) => emit('command', command, all)"
+				@clear="emit('clearTerminal')"
+				@interaction="emit('interaction')"
+			/>
+
+			<template v-else-if="node.component === 'fileManager'">
+				<FileManager
+					:active="active !== false"
+					:channel="session.adapters.filesystem"
+					:before-file-mutation="
+						(paths) => (editorSession ?? session.editorController).invalidatePaths(session.id, paths)
+					"
+					:download="session.adapters.download"
+					:terminal-directory="session.adapters.terminalDirectory"
+					:confirm-delete="fileManagerConfirmDelete"
+					:row-scale="fileManagerRowScale"
+					:column-widths="fileManagerColumnWidths"
+					:clipboard-count="clipboardCount"
+					:state="session.filesystemState"
+					:show-editor-button="popupDocuments"
+					@open-file="emit('openFile', $event.path)"
+					@open-as-text="emit('openTextFile', $event.path)"
+					@open-editor="emit('openEditor')"
+					@upload="emit('upload', $event)"
+					@upload-files="(path, files, directories) => emit('uploadFiles', path, files, directories)"
+					@copy-to-clipboard="emit('clipboardSet', 'copy', $event)"
+					@cut-to-clipboard="emit('clipboardSet', 'cut', $event)"
+					@move-to="(entries, destination) => emit('moveTo', entries, destination)"
+					@paste="emit('paste', $event)"
+					@compress="emit('compress', $event)"
+					@compress-preset="emit('compressPreset', $event)"
+					@decompress="emit('decompress', $event)"
+					@send-files="emit('sendFiles', $event)"
+					@row-scale="emit('fileManagerRowScale', $event)"
+					@column-widths="emit('fileManagerColumnWidths', $event)"
+				/>
+			</template>
+
+			<template v-else-if="node.component === 'editor'">
+				<FileEditor
+					ref="editorRef"
+					v-show="popupDocuments || documentMode === 'editor'"
+					class="min-h-0 flex-1"
+					:port="session.adapters.documents"
+					:scope-id="session.id"
+					:scope-label="editorScopeLabel"
+					:show-scope-label="showEditorScopeLabel"
+					:session="editorSession"
+					:font-family="editorFontFamily"
+					:font-size="editorFontSize"
+					:mobile-font-size="mobileEditorFontSize"
+					@font-size="emit('editorFontSize', $event)"
+					@mobile-font-size="emit('mobileEditorFontSize', $event)"
+				/>
+				<FilePreview
+					v-if="!popupDocuments"
+					ref="previewRef"
+					v-show="documentMode === 'preview'"
+					class="min-h-0 flex-1"
+					:source="session.adapters.preview"
+					:scope-id="session.id"
+					:session="previewSession"
+					:spreadsheet-rows-per-page="spreadsheetRowsPerPage"
+					:spreadsheet-max-columns="spreadsheetMaxColumns"
+					:quick-command-row-scale="quickCommandRowScale"
+					@edit="emit('editPreview', $event)"
+					@hide="emit('hidePreview')"
+					@dismiss="emit('hidePreview')"
+				/>
+			</template>
+
+			<StatusMonitor
+				v-else-if="node.component === 'statusMonitor' && active !== false"
+				class="min-h-0 flex-1 overflow-hidden"
+				:session="session.statusController"
+				:scale="statusScale"
+				:show-ip="statusShowIp"
+				:host="statusHost"
+				@update:scale="emit('statusScale', $event)"
+			/>
+			<DockerManager
+				v-else-if="node.component === 'dockerManager' && active !== false"
+				class="min-h-0 flex-1 overflow-hidden"
+				:session="session.dockerController"
+				:interval-seconds="dockerIntervalSeconds"
+				:default-expand="dockerDefaultExpand"
+				:connection-state="session.state.value"
+				:connection-message="session.statusMessage.value"
+				@terminal-command="emit('command', $event, false)"
+			/>
+			<QuickCommandsPanel
+				v-else-if="node.component === 'quickCommands'"
+				:collapsible-search="quickCommandsCollapsibleSearch"
+				:compact="quickCommandsCompactMode"
+				:show-tags="showQuickCommandTags"
+				:row-scale="quickCommandRowScale"
+				@row-scale="emit('quickCommandRowScale', $event)"
+				@compact-mode="emit('quickCommandCompactMode', $event)"
+				@execute="executeQuick"
+			/>
+			<CommandHistoryPanel v-else-if="node.component === 'commandHistory'" @execute="executeHistory" />
+			<SuspendedSessionsPanel
+				v-else-if="node.component === 'suspendedSshSessions'"
+				:can-resume="true"
+				:marked-sessions="markedSuspendedSessions"
+				@resume="emit('resumeSuspended', $event)"
+				@resume-marked="emit('resumeMarkedSuspended', $event)"
+				@unmark="emit('unmarkSuspended', $event)"
+			/>
+			<div
+				v-if="
+					node.component === 'terminal' && session.recoveryRequired.value && session.state.value === 'error'
+				"
+				role="alert"
+				class="absolute inset-x-2 bottom-2 z-10 rounded border border-border bg-background p-3 text-sm text-foreground shadow"
 			>
-				<i class="fas fa-spinner fa-spin mr-1" aria-hidden="true"></i>
-				{{ t(`workspace.sessionState.${session.state.value}`) }}
-			</span>
-		</div>
+				{{ ownershipMessage }}
+			</div>
+			<div
+				v-if="node.component === 'terminal' && ['connecting', 'reconnecting'].includes(session.state.value)"
+				role="status"
+				class="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center"
+			>
+				<span
+					class="rounded-full border border-border/70 bg-background/90 px-3 py-1.5 text-xs text-foreground shadow-sm"
+				>
+					<i class="fas fa-spinner fa-spin mr-1" aria-hidden="true"></i>
+					{{ t(`workspace.sessionState.${session.state.value}`) }}
+				</span>
+			</div>
+		</RuntimeErrorBoundary>
 	</section>
 </template>
 

@@ -1,15 +1,9 @@
-import type {
-	WorkspaceFocusConfigDto,
-	WorkspaceLayoutNodeDto,
-	WorkspaceLayoutSettingsRequestDto,
-	WorkspaceSidebarConfigDto,
-} from '@nexus-terminal/protocol/settings';
+import type { WorkspaceLayoutSnapshot, WorkspaceFocusSnapshot } from '../model/presentation-types';
 
 export interface WorkspaceSettingsRepository {
-	loadLayout(): Promise<WorkspaceLayoutNodeDto | null>;
-	loadSidebar(): Promise<WorkspaceSidebarConfigDto>;
-	saveResizedLayout(layout: WorkspaceLayoutNodeDto): Promise<void>;
-	saveLayout(settings: WorkspaceLayoutSettingsRequestDto): Promise<void>;
-	loadFocus(): Promise<WorkspaceFocusConfigDto>;
-	saveFocus(config: WorkspaceFocusConfigDto): Promise<void>;
+	loadLayout(recover?: boolean): Promise<WorkspaceLayoutSnapshot>;
+	saveResizedLayout(snapshot: WorkspaceLayoutSnapshot, permission?: AbortSignal): Promise<number>;
+	saveLayout(snapshot: WorkspaceLayoutSnapshot, permission?: AbortSignal): Promise<number>;
+	loadFocus(recover?: boolean): Promise<WorkspaceFocusSnapshot>;
+	saveFocus(snapshot: WorkspaceFocusSnapshot, permission?: AbortSignal): Promise<number>;
 }

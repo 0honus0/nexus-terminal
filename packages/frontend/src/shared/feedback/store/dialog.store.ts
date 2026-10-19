@@ -28,24 +28,44 @@ export const useDialogStore = defineStore('shared-dialog', () => {
 	});
 
 	let resolveCurrent: ((value: boolean) => void) | undefined;
+	let detachAbort: (() => void) | undefined;
 
-	const begin = (): Promise<boolean> => {
-		if (resolveCurrent) resolveCurrent(false);
+	const begin = (signal?: AbortSignal): Promise<boolean> => {
+		if (signal?.aborted) {
+			return Promise.resolve(false);
+		}
+		detachAbort?.();
+		detachAbort = undefined;
+		resolveCurrent?.(false);
+		resolveCurrent = undefined;
 		state.visible = true;
 		state.loading = false;
 		return new Promise<boolean>((resolve) => {
 			resolveCurrent = resolve;
+			if (signal) {
+				const abort = (): void => {
+					if (resolveCurrent === resolve) {
+						finish(false);
+					}
+				};
+
+				signal.addEventListener('abort', abort, { once: true });
+				detachAbort = () => signal.removeEventListener('abort', abort);
+			}
 		});
 	};
 
 	const confirm = (options: ConfirmDialogOptions): Promise<boolean> => {
+		if (options.signal?.aborted) {
+			return Promise.resolve(false);
+		}
 		state.kind = 'confirm';
 		state.title = options.title;
 		state.message = options.message;
 		state.confirmText = options.confirmText;
 		state.cancelText = options.cancelText;
 		state.destructive = Boolean(options.destructive);
-		return begin();
+		return begin(options.signal);
 	};
 
 	const alert = async (options: AlertDialogOptions): Promise<void> => {
@@ -59,6 +79,8 @@ export const useDialogStore = defineStore('shared-dialog', () => {
 	};
 
 	const finish = (result: boolean): void => {
+		detachAbort?.();
+		detachAbort = undefined;
 		resolveCurrent?.(result);
 		resolveCurrent = undefined;
 		state.visible = false;

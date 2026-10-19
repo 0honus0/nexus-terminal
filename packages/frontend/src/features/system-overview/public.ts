@@ -1,3 +1,5 @@
 export { useSystemOverview } from './composables/useSystemOverview';
-export type { SystemOverviewController, SshResourceTarget } from './composables/useSystemOverview';
-export type { ResourceStatusDto, SshResourceStatusDto } from './model/systemOverview';
+
+export type { SystemOverviewController, SshResourceTarget } from './model/system-overview-types';
+
+export { default as HostDiagnosticsPanel } from './components/HostDiagnosticsPanel.vue';

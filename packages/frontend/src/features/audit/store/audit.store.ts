@@ -1,72 +1,96 @@
 import { defineStore } from 'pinia';
-import { ref, shallowRef } from 'vue';
-import { apiErrorMessage } from '@/client/http';
-import { auditApi } from '../api/auditApi';
-import type { AuditLogEntryDto, AuditLogQueryDto } from '../model/audit';
+import { computed, ref, shallowRef } from 'vue';
+import { OperationsRequestFailure } from '@/client/operations/operations-request';
+import { auditApi } from '../api/audit-api';
+import type { AuditEntry, AuditQuery } from '../model/audit-types';
 
 export const useAuditStore = defineStore('audit', () => {
-	let loadGeneration = 0;
-	let activeQuery: AuditLogQueryDto = {};
-	let nextOffset = 0;
-	const hasMore = ref(false);
-	const logs = shallowRef<AuditLogEntryDto[]>([]),
-		total = ref(0),
-		loading = ref(false),
-		error = ref<string | null>(null);
+	const logs = shallowRef<AuditEntry[]>([]);
+	const loading = ref(false);
+	const error = shallowRef<unknown>(null);
+	const nextOffset = ref<number | null>(null);
+	let generation = 0;
+	let scope = new AbortController();
+	let request: AbortController | null = null;
+	let activeQuery: AuditQuery = {};
 
-	async function load(query: AuditLogQueryDto = {}) {
-		const generation = ++loadGeneration;
-		activeQuery = { ...query, offset: 0 };
-		nextOffset = 0;
+	function reset(): void {
+		generation++;
+		scope.abort();
+		scope = new AbortController();
+		request?.abort();
+		request = null;
 		logs.value = [];
-		total.value = 0;
-		hasMore.value = false;
-		loading.value = true;
-		error.value = null;
-		try {
-			const page = await auditApi.list(activeQuery);
-			if (generation !== loadGeneration) return;
-			logs.value = page.logs;
-			total.value = page.total;
-			nextOffset = page.logs.length;
-			hasMore.value = page.logs.length > 0 && nextOffset < page.total;
-		} catch (e) {
-			if (generation === loadGeneration) error.value = apiErrorMessage(e, 'audit-load-error');
-		} finally {
-			if (generation === loadGeneration) loading.value = false;
-		}
-	}
-
-	async function loadMore() {
-		if (loading.value || !hasMore.value) return;
-		const generation = loadGeneration;
-		loading.value = true;
-		error.value = null;
-		try {
-			const page = await auditApi.list({ ...activeQuery, offset: nextOffset });
-			if (generation !== loadGeneration) return;
-			const ids = new Set(logs.value.map((log) => log.id));
-			logs.value = [...logs.value, ...page.logs.filter((log) => !ids.has(log.id))];
-			nextOffset += page.logs.length;
-			total.value = page.total;
-			hasMore.value = page.logs.length > 0 && nextOffset < page.total;
-		} catch (e) {
-			if (generation === loadGeneration) error.value = apiErrorMessage(e, 'audit-load-error');
-		} finally {
-			if (generation === loadGeneration) loading.value = false;
-		}
-	}
-
-	function reset() {
-		loadGeneration += 1;
-		logs.value = [];
-		total.value = 0;
 		loading.value = false;
 		error.value = null;
-		hasMore.value = false;
-		nextOffset = 0;
+		nextOffset.value = null;
 		activeQuery = {};
 	}
 
-	return { logs, total, loading, error, hasMore, load, loadMore, reset };
+	async function read(append: boolean, permission?: AbortSignal): Promise<void> {
+		if (permission?.aborted) {
+			return;
+		}
+		if (append && (loading.value || nextOffset.value === null)) {
+			return;
+		}
+		request?.abort();
+		const current = new AbortController();
+		request = current;
+		const originalGeneration = ++generation;
+		const signal = AbortSignal.any([scope.signal, current.signal, ...(permission ? [permission] : [])]);
+		const query: AuditQuery = {
+			event: activeQuery.event,
+			from: activeQuery.from,
+			to: activeQuery.to,
+			q: activeQuery.q,
+			limit: activeQuery.limit,
+			offset: append ? (nextOffset.value ?? 0) : 0,
+		};
+		loading.value = true;
+		error.value = null;
+		try {
+			const page = await auditApi.list(query, signal);
+			if (signal.aborted || originalGeneration !== generation) {
+				return;
+			}
+			const existing = new Set(logs.value.map((log) => log.id));
+			if (append && page.items.some((log) => existing.has(log.id))) {
+				throw new OperationsRequestFailure('protocol_failure', 'unknown');
+			}
+			logs.value = append ? [...logs.value, ...page.items] : page.items;
+			nextOffset.value = page.nextOffset;
+		} catch (cause) {
+			if (!signal.aborted && originalGeneration === generation) {
+				error.value = cause;
+			}
+		} finally {
+			if (request === current) {
+				request = null;
+				loading.value = false;
+			}
+		}
+	}
+
+	function load(query: AuditQuery = {}, permission?: AbortSignal): Promise<void> {
+		if (permission?.aborted) {
+			return Promise.resolve();
+		}
+		activeQuery = { event: query.event, from: query.from, to: query.to, q: query.q, limit: query.limit, offset: 0 };
+		logs.value = [];
+		nextOffset.value = null;
+		return read(false, permission);
+	}
+
+	return {
+		logs,
+		loading,
+		error,
+		hasMore: computed(() => nextOffset.value !== null),
+		load,
+
+		loadMore: (permission?: AbortSignal) => read(true, permission),
+
+		reset,
+	};
 });

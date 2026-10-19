@@ -1,8 +1,8 @@
 <script setup lang="ts">
 	import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
-	import type { AgentAppSummaryDto } from '../api/agent-api';
+	import type { HostApp } from '../model/host-types';
 
-	const props = defineProps<{ apps: AgentAppSummaryDto[]; activeAppId: string | null }>();
+	const props = defineProps<{ apps: HostApp[]; activeAppId: string | null }>();
 	const emit = defineEmits<{ switch: [appId: string] }>();
 
 	const open = ref(false);
@@ -219,16 +219,6 @@
 						@click="selectApp(app.id)"
 					>
 						<div class="flex min-w-0 items-center gap-2">
-							<span
-								class="h-2 w-2 shrink-0 rounded-full"
-								:class="
-									app.health === 'healthy'
-										? 'bg-success'
-										: app.health === 'degraded'
-											? 'bg-warning'
-											: 'bg-text-secondary/50'
-								"
-							></span>
 							<div class="min-w-0">
 								<div class="truncate text-xs font-medium leading-none">{{ app.displayName }}</div>
 								<div class="mt-1 truncate text-[11px] text-text-secondary">
@@ -238,22 +228,6 @@
 						</div>
 
 						<div class="flex shrink-0 items-center gap-1.5">
-							<span
-								v-if="app.runningRuns"
-								class="rounded-md border border-border/60 bg-header px-1.5 py-0.5 text-[11px] font-medium text-foreground"
-								:title="$t('agent.hub.runningRuns')"
-							>
-								<i class="fa-solid fa-play mr-0.5 text-[6px]" aria-hidden="true"></i
-								>{{ app.runningRuns }}
-							</span>
-							<span
-								v-if="app.pendingApprovals"
-								class="rounded-md bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning"
-								:title="$t('agent.hub.pendingApprovals')"
-							>
-								<i class="fa-solid fa-shield-halved mr-0.5 text-[6px]" aria-hidden="true"></i
-								>{{ app.pendingApprovals }}
-							</span>
 							<i
 								v-if="app.id === activeAppId"
 								class="fa-solid fa-check text-xs text-foreground"

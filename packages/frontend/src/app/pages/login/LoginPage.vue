@@ -1,19 +1,22 @@
 <script setup lang="ts">
-	import { onMounted, ref } from 'vue';
+	import { onBeforeUnmount, onMounted, ref } from 'vue';
 	import { useRouter } from 'vue-router';
 	import { useI18n } from 'vue-i18n';
-	import { apiErrorMessage } from '@/client/http';
-	import { LoginView, useAuthSession } from '@/features/auth/public';
+	import { UiButton } from '@/foundation/ui';
+	import { authErrorKey, LoginView, type PasskeyLoginInput } from '@/features/auth/public';
 	import { LoginCaptchaChallenge, useLoginSecurity } from '@/features/security/public';
 
 	const router = useRouter();
 	const { t } = useI18n();
-	const auth = useAuthSession();
 	const security = useLoginSecurity();
 	const captchaToken = ref<string | null>(null);
 	const captchaFeedback = ref<string | null>(null);
 	const captchaChallenge = ref<{ reset: () => void } | null>(null);
 	const passkeyError = ref('');
+	let disposed = false;
+	onBeforeUnmount(() => {
+		disposed = true;
+	});
 	onMounted(() => security.refresh());
 
 	const handleLoginAttempted = () => {
@@ -26,15 +29,19 @@
 		if (token) captchaFeedback.value = null;
 	};
 
-	const loginWithPasskey = async (username: string) => {
+	const loginWithPasskey = async (input: PasskeyLoginInput) => {
 		passkeyError.value = '';
 		captchaFeedback.value = null;
 		try {
-			await security.loginWithPasskey(username || undefined);
-			await auth.refreshSession();
+			await security.loginWithPasskey(input);
+			if (disposed) {
+				return;
+			}
 			await router.push({ name: 'Dashboard' });
 		} catch (cause) {
-			passkeyError.value = apiErrorMessage(cause, t('auth.login.error.passkeyAuthFailed'));
+			if (!disposed) {
+				passkeyError.value = t(authErrorKey(cause));
+			}
 		}
 	};
 </script>
@@ -58,6 +65,10 @@
 				:feedback="captchaFeedback"
 				@token="handleCaptchaToken"
 			/>
+			<div v-if="security.passkeyLoadError.value" class="text-center text-sm text-error" role="alert">
+				{{ t('settings.passkey.error.discoveryFailed')
+				}}<UiButton @click="security.refresh()">{{ t('common.retry') }}</UiButton>
+			</div>
 			<p v-if="passkeyError" class="mt-2 text-center text-sm text-error" role="alert">{{ passkeyError }}</p>
 		</template>
 	</LoginView>

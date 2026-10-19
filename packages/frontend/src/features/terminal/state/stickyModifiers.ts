@@ -2,7 +2,9 @@ import { computed, reactive, type ComputedRef } from 'vue';
 import type { TerminalModifierState } from '../model/terminalModifiers';
 
 export type TerminalModifier = keyof TerminalModifierState;
+
 export type StickyModifierLevel = 'off' | 'once' | 'locked';
+
 export type StickyModifierLevels = Readonly<Record<TerminalModifier, StickyModifierLevel>>;
 
 export interface StickyTerminalModifiers {

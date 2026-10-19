@@ -37,6 +37,20 @@
     "errors": {
       "deleteFailed": "删除代理失败: {error}"
     },
-    "updatedAt": "最后更新"
+    "updatedAt": "最后更新",
+    "refresh": "刷新并核对",
+    "failures": {
+      "failed": "操作失败，请稍后重试。",
+      "unknown": "结果未知，可能已经保存。请先刷新并核对，勿重复提交。",
+      "unauthenticated": "会话已失效，请重新登录。",
+      "forbidden": "只有管理员可进行此操作。",
+      "version_conflict": "记录已发生变化。请刷新并核对后重新编辑。",
+      "not_found": "记录已不存在，请刷新列表。",
+      "reference_in_use": "此项正在被连接引用，请先解除引用。",
+      "invalid_input": "输入无效或超出容量，请检查名称、端口和凭据。",
+      "recovery_required": "请先刷新并核对当前状态，再开始修改。",
+      "request_pending": "操作正在进行，请等待完成。",
+      "limit_exceeded": "列表超出容量，请先减少记录后再刷新。"
+    }
   }
 }

@@ -37,8 +37,6 @@
         "channelTypeEditNote": "Channel type cannot be changed after creation.",
         "webhookMethod": "HTTP Method:",
         "webhookHeaders": "Custom Headers",
-        "secretHeaderNames": "Additional secret header names (comma separated)",
-        "secretHeaderHint": "Credential headers are redacted automatically. null preserves an existing secret; remove its entry to delete it. Mark custom credential names here.",
         "webhookBodyTemplate": "Body Template (Optional)",
         "webhookBodyPlaceholder": "Default: JSON payload. Use",
         "emailTo": "Recipient Email(s):",
@@ -57,15 +55,23 @@
         "testFailed": "Test notification failed",
         "fillRequiredToTest": "Fill required fields to enable testing.",
         "telegramToken": "Bot Token:",
-        "telegramTokenHelp": "Store securely. Consider environment variables.",
         "telegramChatId": "Chat ID:",
         "telegramMessageTemplate": "Message Template (Optional)",
         "telegramMessagePlaceholder": "Default: Markdown format. Use",
         "telegramCustomDomain": "Custom Telegram API Domain",
         "enabledEvents": "Enabled Events:",
         "templateHelp": "Placeholders:",
-        "invalidJson": "Invalid JSON",
-        "headersObjectRequired": "Headers must be a JSON object."
+        "keepSecret": "Keep saved value",
+        "clearSecret": "Clear saved value",
+        "replaceSecret": "Replace value",
+        "headerName": "Header name",
+        "headerValue": "New secret value",
+        "secretAction": "Secret action",
+        "secretPresent": "Saved value exists",
+        "secretAbsent": "No saved value",
+        "addHeader": "Add header",
+        "secretHint": "Saved secrets are never returned. Choose an explicit action to keep, clear or replace them.",
+        "testSaved": "Test saved configuration"
       },
       "events": {
         "LOGIN_SUCCESS": "Login Success",
@@ -110,7 +116,23 @@
         "webhook": "Webhook",
         "email": "Email",
         "telegram": "Telegram"
-      }
+      },
+      "deliveries": "Notification deliveries",
+      "deliveryHint": "Queued and dispatched mean accepted work, not confirmed delivery. Unknown results are never resent automatically.",
+      "loadMore": "Load more",
+      "deliveryStatus": {
+        "queued": "Queued",
+        "dispatched": "Dispatched; awaiting result",
+        "sent": "Sent",
+        "failed": "Failed",
+        "unknown": "Delivery unknown; check the destination before trying again"
+      },
+      "refresh": "Refresh and review",
+      "failure": "Notification request failed. Read the current state again.",
+      "unknown": "The result is unknown. Review the settings and delivery records before repeating the operation.",
+      "conflict": "The channel changed or was deleted. Refresh and reopen the editor.",
+      "invalid": "Check the input and permitted capacity.",
+      "refreshRequired": "Refresh and review before making another change."
     }
   }
 }

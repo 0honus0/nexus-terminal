@@ -18,6 +18,8 @@ mkdir -p nexus-terminal && cd nexus-terminal
 
 wget https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/main/{docker-compose.yml,.env.example}
 cp .env.example .env
+# Set NEXUS_ENCRYPTION_KEY to a persistent 32-byte base64 key before startup.
+# See doc/DEPLOYMENT.md for the key-generation command.
 
 docker compose up -d
 ```
@@ -58,7 +60,7 @@ A browser-based SSH / SFTP / RDP / VNC remote access tool with terminal sessions
 
 ## Documentation
 
-[Features](./FEATURES.md) · [Usage & product requirements](./USAGE.md) · [Deployment & updates](./DEPLOYMENT.md) · [Frontend architecture](./architecture/FRONTEND.md) · [Backend architecture](./architecture/BACKEND.md) · [Remote Desktop architecture](./architecture/REMOTE_DESKTOP.md) · [E2E](./testing/E2E.md) · [Development rules](./AGENTS.md) · [中文](../README.md)
+[Features, usage & product requirements](./USAGE.md) · [Deployment & updates](./DEPLOYMENT.md) · [Frontend architecture](./architecture/FRONTEND.md) · [Backend architecture](./architecture/BACKEND.md) · [Remote Desktop architecture](./architecture/REMOTE_DESKTOP.md) · [E2E](./testing/E2E.md) · [Development rules](./AGENTS.md) · [中文](../README.md)
 
 ## License
 

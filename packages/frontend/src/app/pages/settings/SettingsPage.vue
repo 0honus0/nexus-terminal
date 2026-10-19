@@ -5,6 +5,8 @@
 	import { loadAppearanceSettingsPanel, useAppearance } from '@/features/appearance/public';
 	import { AgentSettingsPanel } from '@/features/agent/public';
 	import { BackupSettingsPanel } from '@/features/backup/public';
+	import { MutationRecoveryPanel } from '@/features/mutation-recovery/public';
+	import { HostDiagnosticsPanel } from '@/features/system-overview/public';
 	import { loadPreferencesSettingsPanel, loadWorkspacePreferencesPanel } from '@/features/preferences/public';
 	import { SecuritySettingsPanel } from '@/features/security/public';
 	import { useAuthSession } from '@/features/auth/public';
@@ -514,13 +516,25 @@
 							@auth-changed="auth.refreshSession"
 						/>
 						<BackupSettingsPanel
+							:active="active === 'data'"
 							v-if="visited.has('data')"
 							v-show="active === 'data'"
 							id="settings-panel-data"
 							role="tabpanel"
 							:aria-label="tabLabel('data')"
 						/>
+						<HostDiagnosticsPanel
+							v-if="visited.has('data')"
+							v-show="active === 'data'"
+							:active="active === 'data'"
+						/>
+						<MutationRecoveryPanel
+							v-if="visited.has('data')"
+							v-show="active === 'data'"
+							:active="active === 'data'"
+						/>
 						<AppearanceSettingsPanel
+							:active="active === 'appearance'"
 							v-if="visited.has('appearance')"
 							v-show="active === 'appearance'"
 							id="settings-panel-appearance"
