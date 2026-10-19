@@ -17,14 +17,16 @@ async function preferences(request: APIRequestContext) {
 	return readPreferencesResponse(await response.json()).preferences;
 }
 
-async function saveForm(page: Page, form: Locator, path = '/api/v1/settings/preferences'): Promise<void> {
-	const response = page.waitForResponse((value) => value.url().endsWith(path) && value.request().method() === 'PUT');
+async function saveForm(page: Page, form: Locator, postSave: 'enabled' | 'disabled' = 'disabled'): Promise<void> {
+	const response = page.waitForResponse(
+		(value) => value.url().endsWith('/api/v1/settings/preferences') && value.request().method() === 'PUT',
+	);
 	await form.locator('button[type="submit"]').click();
 	expect((await response).ok()).toBe(true);
-	// The section forms deliberately keep Save available; only their active
-	// mutation disables the fieldset. Require re-enablement after the 2xx
-	// receipt, while callers separately assert the exact persisted API value.
-	await expect(form.locator('button[type="submit"]')).toBeEnabled();
+	// System forms keep Save available. Workspace forms disable it when no dirty
+	// draft remains. Both still require an independently verified API value.
+	if (postSave === 'enabled') await expect(form.locator('button[type="submit"]')).toBeEnabled();
+	else await expect(form.locator('button[type="submit"]')).toBeDisabled();
 }
 
 async function systemTab(page: Page): Promise<void> {
@@ -53,11 +55,11 @@ test('system settings persist timezone and language changes through the UI', asy
 		await step('save timezone and language through their preference forms', async () => {
 			const timezone = page.locator('#timezoneSelect');
 			await selectUiOption(timezone, 'Asia/Shanghai');
-			await saveForm(page, page.locator('form').filter({ has: timezone }));
+			await saveForm(page, page.locator('form').filter({ has: timezone }), 'enabled');
 			expect((await preferences(context.request)).timezone).toBe('Asia/Shanghai');
 			const language = page.locator('#languageSelect');
 			await selectUiOption(language, 'zh-CN');
-			await saveForm(page, page.locator('form').filter({ has: language }));
+			await saveForm(page, page.locator('form').filter({ has: language }), 'enabled');
 			expect((await preferences(context.request)).language).toBe('zh-CN');
 			await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
 		});
@@ -289,7 +291,7 @@ test('frontend preferences and backend logging persist independently through the
 		await expectUiSelectValue(frontend, 'info');
 		await expectUiSelectValue(backend, logging.level);
 		await selectUiOption(frontend, 'debug');
-		await saveForm(page, page.locator('form').filter({ has: frontend }));
+		await saveForm(page, page.locator('form').filter({ has: frontend }), 'enabled');
 		expect((await preferences(context.request)).frontendLogLevel).toBe('debug');
 		await selectUiOption(backend, targetLevel);
 		const savedResponse = page.waitForResponse(
