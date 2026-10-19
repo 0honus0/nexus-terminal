@@ -212,7 +212,7 @@ export async function registerModules({
 			operations.publicApi,
 			system.diagnostics,
 			plugins,
-			await readPackageVersion(new URL('../../../../package.json', import.meta.url)),
+			await readPackageVersion(new URL('../../package.json', import.meta.url)),
 		);
 		agent.installTransactionIdentityReader(access.readTransactionIdentity);
 		owners.push(agent);

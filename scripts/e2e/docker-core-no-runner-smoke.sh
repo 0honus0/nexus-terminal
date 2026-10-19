@@ -69,9 +69,9 @@ for _ in {1..60}; do
   [[ "$b" == *healthy* && "$f" == *healthy* ]] && break
   sleep 1
 done
-compose exec -T backend wget -q -O - http://127.0.0.1:3001/api/v1/status | grep -q '"status":"ok"'
 compose exec -T backend node --input-type=module - <<'NODE'
 import { existsSync } from 'node:fs';
+import { readSystemHealthResponse } from '@nexus-terminal/shared/system/status/http-codec';
 const retired = [
   '/app/dist/infrastructure/agent/workspace-runtime/runner-http.adapter.js',
   '/app/dist/modules/agent/workspace-runtime/workspace-runtime.service.js',
@@ -79,8 +79,12 @@ const retired = [
 for (const modulePath of retired) {
   if (existsSync(modulePath)) throw new Error(`Retired Agent Workspace module still shipped: ${modulePath}`);
 }
-const status = await fetch('http://127.0.0.1:3001/api/v1/status');
+const origin = new URL(process.env.NEXUS_PUBLIC_ORIGIN);
+const status = await fetch('http://127.0.0.1:3001/api/v1/status', {
+  headers: { 'X-Forwarded-Host': origin.host, 'X-Forwarded-Proto': origin.protocol.slice(0, -1) },
+});
 if (!status.ok) throw new Error(`Backend health returned ${status.status}`);
+readSystemHealthResponse(await status.json());
 console.log('Production Backend starts without a Runner or Agent Workspace execution modules.');
 NODE
 failed=0

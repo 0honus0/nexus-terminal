@@ -1253,3 +1253,9 @@ Node22.16.0 / pnpm11.26.0。Shared check/build、Backend-next check/build、Fron
 修复范围：Docker过滤安装包含依赖工作区开发工具；Reporter保留无测试关联的启动输出及正确异步完成契约。SSH夹具通过独立控制通道提供实际公钥指纹；Auth/SSH helper直接消费Shared偏好CAS、Targets元数据/独立凭据及Host Key确认，不恢复旧settings/connections入口。源码/类型/格式复核后提交，行为以修复后的远程运行单独记录。仍有旧Agent/HTTP/Workspace用例待迁移，不缩减覆盖，不新增本地行为测试。
 
 第二轮 [39184073324](https://github.com/0honus0/nexus-terminal/actions/runs/39184073324)，基线 `6aaf3294`：启动日志已保留，8分片初始化请求返回403，仍未进入用例。控制启动器使用Fetch覆盖Host，改为已配置loopback受信代理的X-Forwarded-Host，不放宽产品Host/Origin校验。Docker继续发现独立包编译引用未导入的ReadableStreamReadResult，补充node:stream/web显式类型导入，不依赖其他工作区偶然加载DOM类型。Workspace helper及两份终端/挂起消费者改用Shared NXW1帧，不保留重复帧解码；补齐Origin、connect响应关联及JSON等待失败监听清理。修复后的行为继续由后续远程运行核对。日志 `/tmp/nexus-second-{shard2,docker}.log`。
+
+第三轮 [39184340686](https://github.com/0honus0/nexus-terminal/actions/runs/39184340686)，基线 `89227f3a`：Backend/Vite已启动并进入实际用例；质量门禁通过。镜像构建通过，容器启动报读取 `/package.json` 的ENOENT。Bootstrap改为读取实际交付包的package.json，并将Backend版本与当前项目/Frontend的1.0.2对齐；烟雾健康请求使用既有受信代理头并经Shared成功codec校验。功能与授权设计未改变，已核对USAGE部署/Shared章节。
+
+旧用例消费者迁移继续：Auth API改为独立核心设置/个人偏好完整CAS与原子布局、通知UUID及显式秘密意图；Origin场景保留全部正反例，按当前政策拒绝无来源和非配置Host；2FA去除旧实现专属speakeasy加载，按RFC6238在测试侧独立计算真实TOTP，消费Shared安全失败并核对当前401/挑战失效。初始App目录按真实首次默认nexus.terminal核对，语言用例分别核对setup本地语言、未保存默认和显式已保存选择。上述改动未运行本地行为，当前结果不代表这些场景PASS；完整各分片失败仍需后续清理与远程复跑。
+
+第三轮失败日志按完整用例标题去重（重试合并）检出325个失败标题、40个通过标题；第4分片另因旧speakeasy依赖在收集时退出，因此这不是完整套件最终统计。当前补丁两轮复审已完成；根check、Backend build、5份变更spec严格类型检查、全仓format和git diff --check通过。2FA反例排除实际时间窗相邻有效码，避免固定000000偶然命中。未执行本地行为回归，待下一轮远程确认。

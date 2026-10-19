@@ -1,6 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { expect, test } from '../../support/fixtures';
-import { E2E_ADMIN } from '../../support/auth';
+import { E2E_ADMIN, setUiLanguage } from '../../support/auth';
+import { readPreferencesResponse } from '../../../../packages/shared/src/preferences/presentation/http-codec';
 
 test.describe('initial setup', () => {
 	test.use({ e2eDatabaseMode: 'empty' });
@@ -10,7 +11,7 @@ test.describe('initial setup', () => {
 	]) {
 		test.describe(`initial language ${expectedLocale}`, () => {
 			test.use({ locale: browserLocale });
-			test('retains the setup language after login and reload when no server language is saved', async ({
+			test('uses the setup locale before authentication and persisted preferences after login and reload', async ({
 				page,
 				context,
 			}) => {
@@ -33,17 +34,24 @@ test.describe('initial setup', () => {
 				await page.locator('#username').fill(E2E_ADMIN.username);
 				await page.locator('#password').fill(E2E_ADMIN.password);
 				const settingsLoaded = page.waitForResponse(
-					(response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'GET',
+					(response) =>
+						response.url().endsWith('/api/v1/settings/preferences') &&
+						response.request().method() === 'GET',
 				);
 				await page.locator('form button[type="submit"]').click();
 				expect((await settingsLoaded).ok()).toBeTruthy();
 				await expect(page).toHaveURL(/\/$/);
-				await expect(page.locator('html')).toHaveAttribute('lang', expectedLocale);
-				const settings = await context.request.get('/api/v1/settings');
+				await expect(page.locator('html')).toHaveAttribute('lang', 'en-US');
+				const settings = await context.request.get('/api/v1/settings/preferences');
 				expect(settings.ok()).toBeTruthy();
-				expect((await settings.json()).language).toBeUndefined();
+				const initialPreferences = readPreferencesResponse(await settings.json());
+				expect(initialPreferences.version).toBe(0);
+				expect(initialPreferences.preferences.language).toBe('en-US');
+				await setUiLanguage(context.request, expectedLocale);
 				const reloadedSettings = page.waitForResponse(
-					(response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'GET',
+					(response) =>
+						response.url().endsWith('/api/v1/settings/preferences') &&
+						response.request().method() === 'GET',
 				);
 				await page.reload();
 				expect((await reloadedSettings).ok()).toBeTruthy();

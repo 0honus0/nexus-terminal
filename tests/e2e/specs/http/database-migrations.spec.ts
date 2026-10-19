@@ -21,7 +21,14 @@ test('the current first-release schema initializes a clean database through norm
 	const setup = await request.get('/api/v1/auth/needs-setup');
 	expect(setup.ok()).toBeTruthy();
 	expect(readAccessNeedsSetup(await setup.json()).needsSetup).toBe(false);
-	expect(await requestAgentJson(request, { method: 'GET', path: '/apps' }, readAgentAppListResponse)).toEqual([]);
+	const initialApps = await requestAgentJson(request, { method: 'GET', path: '/apps' }, readAgentAppListResponse);
+	expect(initialApps).toHaveLength(1);
+	expect(initialApps[0]).toMatchObject({
+		definitionId: 'nexus.terminal',
+		version: 1,
+		enabled: true,
+		executionState: 'governed',
+	});
 	const app = await requestAgentJson(
 		request,
 		{

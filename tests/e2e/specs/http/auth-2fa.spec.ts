@@ -1,17 +1,39 @@
 import { writeFile } from 'node:fs/promises';
-import path from 'node:path';
-import { createRequire } from 'node:module';
+import { createHmac } from 'node:crypto';
 import type { BrowserContext, Page, TestInfo } from '@playwright/test';
 import { expect, test } from '../../support/fixtures';
-import { E2E_ADMIN, loginAsInitialAdmin } from '../../support/auth';
+import { E2E_ADMIN, loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
 
-const repoRoot = path.resolve(process.cwd(), '../..');
-const requireFromBackend = createRequire(path.join(repoRoot, 'packages', 'backend', 'package.json'));
-const speakeasy = requireFromBackend('speakeasy') as {
-	totp: (options: { secret: string; encoding: string }) => string;
-};
+import { E2E_URLS } from '../../support/test-env';
+import { readAccessTotpSetup } from '../../../../packages/shared/src/access/factors/http-codec';
+import { readAccessHttpError } from '../../../../packages/shared/src/access/http';
+
+const headers = { Origin: E2E_URLS.frontendOrigin };
+
+function totpCode(secret: string, now = Date.now()): string {
+	const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+	if (!/^[A-Z2-7]{32}$/.test(secret)) throw new Error('Invalid fixture TOTP secret');
+	const bits = [...secret].map((char) => alphabet.indexOf(char).toString(2).padStart(5, '0')).join('');
+	const bytes: number[] = [];
+	for (let index = 0; index + 8 <= bits.length; index += 8) bytes.push(parseInt(bits.slice(index, index + 8), 2));
+	const counter = Buffer.alloc(8);
+	counter.writeBigUInt64BE(BigInt(Math.floor(now / 30_000)));
+	const digest = createHmac('sha1', Buffer.from(bytes)).update(counter).digest();
+	return String((digest.readUInt32BE(digest[digest.length - 1] & 15) & 0x7fffffff) % 1_000_000).padStart(6, '0');
+}
+
+function invalidTotpCode(secret: string): string {
+	const now = Date.now();
+	// Exclude adjacent windows too, so a clock boundary cannot make the negative case valid.
+	const accepted = new Set([-2, -1, 0, 1, 2].map((offset) => totpCode(secret, now + offset * 30_000)));
+	for (let candidate = 0; candidate < 1_000_000; candidate++) {
+		const token = String(candidate).padStart(6, '0');
+		if (!accepted.has(token)) return token;
+	}
+	throw new Error('Unable to choose an invalid TOTP fixture');
+}
 
 type LoginViewport = {
 	name: 'desktop' | 'narrow';
@@ -30,20 +52,19 @@ async function prepareTwoFactorLogin(context: BrowserContext): Promise<string> {
 	const request = context.request;
 	await loginAsInitialAdmin(request);
 
-	const language = await request.put('/api/v1/settings', { data: { language: 'en-US' } });
-	expect(language.ok()).toBeTruthy();
+	await setUiLanguage(request);
 
-	const setup = await request.post('/api/v1/auth/2fa/setup');
+	const setup = await request.post('/api/v1/auth/2fa/setup', { headers });
 	expect(setup.ok()).toBeTruthy();
-	const setupBody = (await setup.json()) as { secret: string; qrCodeUrl: string };
+	const setupBody = readAccessTotpSetup(await setup.json());
 	expect(setupBody.secret).toBeTruthy();
 	expect(setupBody.qrCodeUrl).toMatch(/^data:image\/png;base64,/);
 
-	const token = speakeasy.totp({ secret: setupBody.secret, encoding: 'base32' });
-	const verify = await request.post('/api/v1/auth/2fa/verify', { data: { token } });
+	const token = totpCode(setupBody.secret);
+	const verify = await request.post('/api/v1/auth/2fa/verify', { headers, data: { token } });
 	expect(verify.ok()).toBeTruthy();
 
-	const logout = await request.post('/api/v1/auth/logout');
+	const logout = await request.post('/api/v1/auth/logout', { headers });
 	expect(logout.ok()).toBeTruthy();
 	return setupBody.secret;
 }
@@ -175,15 +196,15 @@ test('2FA can be enabled, required at login, verified, and disabled', async ({ r
 
 	let secret = '';
 	await step('start and activate TOTP 2FA', async () => {
-		const setup = await request.post('/api/v1/auth/2fa/setup');
+		const setup = await request.post('/api/v1/auth/2fa/setup', { headers });
 		expect(setup.ok()).toBeTruthy();
-		const setupBody = (await setup.json()) as { secret: string; qrCodeUrl: string };
+		const setupBody = readAccessTotpSetup(await setup.json());
 		secret = setupBody.secret;
 		expect(secret).toBeTruthy();
 		expect(setupBody.qrCodeUrl).toMatch(/^data:image\/png;base64,/);
 
-		const token = speakeasy.totp({ secret, encoding: 'base32' });
-		const verify = await request.post('/api/v1/auth/2fa/verify', { data: { token } });
+		const token = totpCode(secret);
+		const verify = await request.post('/api/v1/auth/2fa/verify', { headers, data: { token } });
 		expect(verify.ok()).toBeTruthy();
 
 		const status = await request.get('/api/v1/auth/status');
@@ -195,8 +216,9 @@ test('2FA can be enabled, required at login, verified, and disabled', async ({ r
 	});
 
 	await step('password login is blocked behind the second factor', async () => {
-		expect((await request.post('/api/v1/auth/logout')).ok()).toBeTruthy();
+		expect((await request.post('/api/v1/auth/logout', { headers })).ok()).toBeTruthy();
 		const login = await request.post('/api/v1/auth/login', {
+			headers,
 			data: {
 				username: E2E_ADMIN.username,
 				password: E2E_ADMIN.password,
@@ -211,11 +233,14 @@ test('2FA can be enabled, required at login, verified, and disabled', async ({ r
 	});
 
 	await step('a real current TOTP completes login', async () => {
-		const invalid = await request.post('/api/v1/auth/login/2fa', { data: { token: '000000' } });
+		const invalid = await request.post('/api/v1/auth/login/2fa', {
+			headers,
+			data: { token: invalidTotpCode(secret) },
+		});
 		expect(invalid.status()).toBe(401);
 
-		const token = speakeasy.totp({ secret, encoding: 'base32' });
-		const verify = await request.post('/api/v1/auth/login/2fa', { data: { token } });
+		const token = totpCode(secret);
+		const verify = await request.post('/api/v1/auth/login/2fa', { headers, data: { token } });
 		expect(verify.ok()).toBeTruthy();
 
 		const status = await request.get('/api/v1/auth/status');
@@ -224,10 +249,13 @@ test('2FA can be enabled, required at login, verified, and disabled', async ({ r
 	});
 
 	await step('2FA can be disabled only with the current password', async () => {
-		const wrongPassword = await request.delete('/api/v1/auth/2fa', { data: { password: 'not-the-password' } });
-		expect(wrongPassword.status()).toBe(400);
+		const wrongPassword = await request.delete('/api/v1/auth/2fa', {
+			headers,
+			data: { password: 'not-the-password' },
+		});
+		expect(wrongPassword.status()).toBe(401);
 
-		const disable = await request.delete('/api/v1/auth/2fa', { data: { password: E2E_ADMIN.password } });
+		const disable = await request.delete('/api/v1/auth/2fa', { headers, data: { password: E2E_ADMIN.password } });
 		expect(disable.ok()).toBeTruthy();
 
 		const status = await request.get('/api/v1/auth/status');
@@ -262,10 +290,10 @@ test('2FA settings UI completes setup, reports errors, reloads, and disables the
 			await panel.getByRole('button', { name: 'Enable Two-Factor Authentication', exact: true }).click();
 			const setupResponse = await setupPromise;
 			expect(setupResponse.ok()).toBeTruthy();
-			const setupBody = (await setupResponse.json()) as { secret: string; qrCodeUrl: string };
+			const setupBody = readAccessTotpSetup(await setupResponse.json());
 			expect(setupBody.secret).toBeTruthy();
 			expect(setupBody.qrCodeUrl).toMatch(/^data:image\/png;base64,/);
-			const token = speakeasy.totp({ secret: setupBody.secret, encoding: 'base32' });
+			const token = totpCode(setupBody.secret);
 			await panel.locator('#verificationCode').fill(token);
 			const verifyPromise = page.waitForResponse(
 				(response) =>
@@ -289,8 +317,8 @@ test('2FA settings UI completes setup, reports errors, reloads, and disables the
 				(response) => response.url().endsWith('/api/v1/auth/2fa') && response.request().method() === 'DELETE',
 			);
 			await reloadedPanel.getByRole('button', { name: 'Disable Two-Factor Authentication', exact: true }).click();
-			expect((await wrongPasswordPromise).status()).toBe(400);
-			await expect(reloadedPanel).toContainText('当前密码不正确。');
+			expect((await wrongPasswordPromise).status()).toBe(401);
+			await expect(reloadedPanel).toContainText('The username, password or verification code is incorrect.');
 		});
 
 		await step('disable 2FA through the Security UI and verify the real server state', async () => {
@@ -315,7 +343,7 @@ test('2FA settings UI completes setup, reports errors, reloads, and disables the
 	} finally {
 		const status = await request.get('/api/v1/auth/status');
 		if (status.ok() && (await status.json()).user?.twoFactorEnabled) {
-			await request.delete('/api/v1/auth/2fa', { data: { password: E2E_ADMIN.password } });
+			await request.delete('/api/v1/auth/2fa', { headers, data: { password: E2E_ADMIN.password } });
 		}
 	}
 });
@@ -330,7 +358,7 @@ test('Login 2FA challenge supports invalid-token retry and expired-session recov
 	try {
 		for (const [index, viewport] of LOGIN_VIEWPORTS.entries()) {
 			if (index > 0) {
-				const logout = await context.request.post('/api/v1/auth/logout');
+				const logout = await context.request.post('/api/v1/auth/logout', { headers });
 				expect(logout.ok()).toBeTruthy();
 			}
 
@@ -393,7 +421,8 @@ test('Login 2FA challenge supports invalid-token retry and expired-session recov
 			await recordLoginEvidence(page, testInfo, viewport, 'challenge');
 
 			await step(`${viewport.name}: reject an invalid code without leaving the challenge`, async () => {
-				await twoFactorToken.fill('000000');
+				const invalidToken = invalidTotpCode(secret);
+				await twoFactorToken.fill(invalidToken);
 				const responsePromise = page.waitForResponse(
 					(response) =>
 						response.url().endsWith('/api/v1/auth/login/2fa') && response.request().method() === 'POST',
@@ -401,14 +430,15 @@ test('Login 2FA challenge supports invalid-token retry and expired-session recov
 				await submit.click();
 				const response = await responsePromise;
 				invalidTokenStatus = response.status();
-				const body = (await response.json()) as { message?: string };
-				invalidTokenMessage = body.message ?? '';
+				const body = readAccessHttpError(await response.json());
+				expect(body.code).toBe('invalid_credentials');
+				invalidTokenMessage = 'The username, password or verification code is incorrect.';
 				expect(invalidTokenStatus).toBe(401);
 				expect(invalidTokenMessage).toBeTruthy();
 				await expect(alert).toBeVisible();
 				await expect(alert).toContainText(invalidTokenMessage);
 				await expect(twoFactorToken).toBeVisible();
-				await expect(twoFactorToken).toHaveValue('000000');
+				await expect(twoFactorToken).toHaveValue(invalidToken);
 				await expect(username).toHaveCount(0);
 				await expect(password).toHaveCount(0);
 				await expect(submit).toHaveText('Verify');
@@ -416,7 +446,7 @@ test('Login 2FA challenge supports invalid-token retry and expired-session recov
 			await recordLoginEvidence(page, testInfo, viewport, 'invalid-token');
 
 			await step(`${viewport.name}: recover when the pending challenge session is invalidated`, async () => {
-				const logout = await context.request.post('/api/v1/auth/logout');
+				const logout = await context.request.post('/api/v1/auth/logout', { headers });
 				expect(logout.ok()).toBeTruthy();
 
 				await twoFactorToken.fill('000000');
@@ -427,9 +457,10 @@ test('Login 2FA challenge supports invalid-token retry and expired-session recov
 				await submit.click();
 				const response = await responsePromise;
 				expiredRecoveryStatus = response.status();
-				const body = (await response.json()) as { message?: string };
-				expiredRecoveryMessage = body.message ?? '';
-				expect(expiredRecoveryStatus).toBe(400);
+				const body = readAccessHttpError(await response.json());
+				expect(body.code).toBe('unauthenticated');
+				expiredRecoveryMessage = 'The login challenge expired. Sign in again.';
+				expect(expiredRecoveryStatus).toBe(401);
 				expect(expiredRecoveryMessage).toBeTruthy();
 				await expect(alert).toBeVisible();
 				await expect(alert).toContainText(expiredRecoveryMessage);
@@ -458,7 +489,7 @@ test('Login 2FA challenge supports invalid-token retry and expired-session recov
 			});
 
 			await step(`${viewport.name}: verify the current TOTP and reach the Dashboard`, async () => {
-				const token = speakeasy.totp({ secret, encoding: 'base32' });
+				const token = totpCode(secret);
 				await twoFactorToken.fill(token);
 				const responsePromise = page.waitForResponse(
 					(response) =>
@@ -502,9 +533,9 @@ test('Login 2FA challenge supports invalid-token retry and expired-session recov
 		if (status.ok()) {
 			const body = (await status.json()) as { user?: { twoFactorEnabled?: boolean } };
 			if (body.user?.twoFactorEnabled) {
-				await context.request.delete('/api/v1/auth/2fa', { data: { password: E2E_ADMIN.password } });
+				await context.request.delete('/api/v1/auth/2fa', { headers, data: { password: E2E_ADMIN.password } });
 			}
 		}
-		await context.request.post('/api/v1/auth/logout');
+		await context.request.post('/api/v1/auth/logout', { headers });
 	}
 });
