@@ -853,9 +853,13 @@ test('delegation rejects the retired absolute deadline and an excessive current 
 	const task = await prepareNativeTask(request, page, ['app.intents.exchange']);
 	await openNativeTask(task);
 	for (const boundary of ['absolute', 'duration']) {
+		// A provider response has already been dispatched when its untrusted
+		// tool payload is rejected. Preserve the Run's uncertain outcome and
+		// explicitly re-read the thread before an independent next intent.
+		await openNativeTask(task);
 		const created = await startNativeTask(task, `E2E_REGRESSION_DEADLINE_SENTINEL boundary=${boundary}`);
 		const result = await finishNativeTask(task, created.id);
-		expect(result.run.status).toBe('failed');
+		expect(result.run.status).toBe('unknown');
 		const step = await requestAgentJson(
 			request,
 			{ method: 'GET', path: `/apps/${task.app.id}/runs/${created.id}/steps/1` },
