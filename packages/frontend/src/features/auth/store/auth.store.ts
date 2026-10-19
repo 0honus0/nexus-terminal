@@ -209,10 +209,31 @@ export const useAuthStore = defineStore('auth', {
 		},
 
 		async logout(): Promise<void> {
+			const before = this.user;
 			const generation = this.beginAuthentication();
-			await authApi.logout();
-			this.assertCurrent(generation);
-			this.invalidateSession();
+			try {
+				await authApi.logout();
+				this.assertCurrent(generation);
+				this.invalidateSession();
+			} catch (cause) {
+				this.assertCurrent(generation);
+				// The owner teardown above is deliberate even when logout failed.
+				// Do not silently assume that a lost HTTP response means the server
+				// kept the cookie. A read-only status check may explicitly restore
+				// an unchanged principal; otherwise remain unauthenticated/unknown.
+				let current: AuthUser | null;
+				try {
+					current = await authApi.readSession();
+				} catch (readFailure) {
+					throw new AggregateError([cause, readFailure], 'Logout and session verification failed');
+				}
+				this.assertCurrent(generation);
+				if (current && before && current.id === before.id) {
+					this.user = current;
+					this.sessionState = 'authenticated';
+				}
+				throw cause;
+			}
 		},
 	},
 });
