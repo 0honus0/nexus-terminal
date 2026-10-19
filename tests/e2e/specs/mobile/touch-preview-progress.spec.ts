@@ -438,7 +438,11 @@ test('mobile upload progress stays inside the viewport and restores from Progres
 		await slowStep(
 			'throttled uploads expose all floating controls without overflowing the Pixel viewport',
 			async () => {
-				const fileInput = page.locator('input[type="file"][multiple]').filter({ visible: false }).last();
+				// Hidden upload input belongs to the active Workspace surface, not
+				// the teleported File Manager dialog. Inactive Workspace surfaces
+				// keep their own inputs mounted, so never select a global last input.
+				const surface = page.locator('[data-workspace-surface][data-workspace-active="true"]');
+				const fileInput = surface.locator('input[type="file"][multiple]').last();
 				await fileInput.setInputFiles(
 					filenames.map((name, index) => ({
 						name,

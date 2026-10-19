@@ -61,6 +61,9 @@ test('registered archive progress supports hide, restore, and real cancel for co
 			task = hiddenTask(reopenedModal, 'archive-source.zip');
 			await expect(task).toBeVisible();
 			await task.getByRole('button', { name: 'Cancel', exact: true }).click();
+			// Cancelled tasks are filtered from the hidden source list and then
+			// retired by the transfer controller; they have no visible Remove
+			// button. Also verify the remote archive was not installed below.
 			await expect(task).toBeHidden({ timeout: 10_000 });
 			await closeProgressDisplay(reopenedModal);
 			await reopenConnectedFileManager(page);
@@ -101,6 +104,8 @@ test('registered archive progress supports hide, restore, and real cancel for co
 				await expect(task).toContainText('Decompress');
 				await expect(task.getByRole('button', { name: 'Cancel', exact: true })).toBeEnabled();
 				await task.getByRole('button', { name: 'Cancel', exact: true }).click();
+				// Hidden cancelled tasks are removed automatically; the functional
+				// outcome is confirmed by absence of extracted files after release.
 				await expect(task).toBeHidden({ timeout: 10_000 });
 				await fetch(`${E2E_SSH.controlUrl}/archive/exec-hold?enabled=0`, { method: 'POST' });
 				await closeProgressDisplay(modal);
