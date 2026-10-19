@@ -1769,6 +1769,17 @@ export class RemoteFileService {
 				if (this.uploads.get(this.uploadKey(workspaceId, uploadId)) !== task || task.finished) {
 					return;
 				}
+				// Losing the browser's binary WebSocket does not imply the dedicated
+				// SFTP lease is lost. The acknowledged WRITE queue is still owned by
+				// the upload worker. Let that worker drain admitted packets, close
+				// the staging handle, and prove REMOVE before retiring the lease.
+				// The client-side transfer outcome remains unknown, never "cancelled"
+				// or successfully committed, even if the private stage is discarded.
+				if (task.stage && !task.terminal && !task.controller.signal.aborted) {
+					task.terminal = true;
+					task.fail(new RemoteFileFailure('operation_unknown'));
+					return;
+				}
 				task.fail(new RemoteFileFailure('operation_unknown'));
 				task.controller.abort();
 			},
@@ -1801,13 +1812,15 @@ export class RemoteFileService {
 		if (this.uploads.get(key) !== task || task.finished) {
 			return false;
 		}
-		// An explicit pre-commit cancel must retain its live SFTP lease long
-		// enough to drain admitted writes and prove the private stage was
-		// discarded. An abort/late commit still has unknown mutation outcome.
-		if (mode === 'cancel' && task.stage !== null && !task.terminal && !task.controller.signal.aborted) {
-			task.cancelled = true;
+		// A pre-commit stage can be discarded even if its binary WebSocket was
+		// lost. Aborting its dedicated SFTP signal before the acknowledged WRITE
+		// queue drains makes REMOVE unprovable, cascading into baseline failures.
+		// Keep the client outcome unknown for transport aborts, and do not
+		// take this path after a final frame has admitted a commit.
+		if (task.stage !== null && !task.terminal && !task.controller.signal.aborted) {
+			task.cancelled = mode === 'cancel';
 			task.terminal = true;
-			task.fail(new RemoteFileFailure('remote_unavailable'));
+			task.fail(new RemoteFileFailure(mode === 'cancel' ? 'remote_unavailable' : 'operation_unknown'));
 			if (task.settlement) {
 				await task.settlement;
 			}
