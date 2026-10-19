@@ -214,39 +214,24 @@ export function respondFunctionalModel(messages, userText, response, send) {
 						'background',
 					),
 				],
-				[
-					'deploy_check',
-					'shell_execute',
-					shell(
-						`node --input-type=module -e 'const end=Date.now()+5000;for(;;){try{for(const path of ["health","catalog"]){const r=await fetch("http://127.0.0.1:${deployment[1]}/"+path);if(!r.ok)throw Error("HTTP_"+r.status);console.log(path+"="+await r.text())}break}catch(e){if(Date.now()>=end)throw e;await new Promise(r=>setTimeout(r,50))}}'`,
-					),
-				],
-				[
-					'deploy_stop',
-					'shell_execute',
-					shell(
-						`node --input-type=module -e 'const r=await fetch("http://127.0.0.1:${deployment[1]}/shutdown",{method:"POST"});if(!r.ok||!(await r.json()).stopping)process.exit(1)'`,
-					),
-				],
-				[
-					'deploy_wait',
-					'shell_job_control',
-					() => ({ connectionId, action: 'wait', jobId: result('deploy_launch').jobId, waitSeconds: 10 }),
-				],
-				// Inspect the same persisted Job after its shutdown and bounded wait.
-				// A live Job status query must not sit between a health receipt and
-				// releasing the Run-owned server process.
+				// A background Shell Job holds the target's exclusive durable mutation
+				// claim until it exits. Its live HTTP endpoints are independently
+				// inspected and shut down by the E2E owner, not another Agent Shell
+				// command that must correctly fail to acquire the same target claim.
 				[
 					'deploy_status',
 					'shell_job_control',
 					() => ({ connectionId, action: 'status', jobId: result('deploy_launch').jobId }),
 				],
+				[
+					'deploy_wait',
+					'shell_job_control',
+					() => ({ connectionId, action: 'wait', jobId: result('deploy_launch').jobId, waitSeconds: 30 }),
+				],
 			],
 			() => ({
 				launch: result('deploy_launch'),
-				health: result('deploy_check'),
 				status: result('deploy_status'),
-				stop: result('deploy_stop'),
 				settled: result('deploy_wait'),
 				...(withSkill ? { skill: result('operations_read') } : {}),
 			}),

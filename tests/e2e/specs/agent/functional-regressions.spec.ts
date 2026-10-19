@@ -291,7 +291,6 @@ for (const signedSkill of [false, true]) {
 			runId = run.id;
 			const launch = await waitNativeApproval(task, run.id, 'shell_execute');
 			await resolveNativeApproval(task, launch, 'approved');
-			const healthApproval = await waitNativeApproval(task, run.id, 'shell_execute');
 			await expect.poll(() => tcpPortOpen(port)).toBe(true);
 			pid = await listenerPid(port);
 			expect(pid).not.toBeNull();
@@ -309,18 +308,23 @@ for (const signedSkill of [false, true]) {
 						: JSON.parse(baseline.get('data/catalog.json')!.toString()),
 				);
 			}
-			await resolveNativeApproval(task, healthApproval, 'approved');
-			const stopApproval = await waitNativeApproval(task, run.id, 'shell_execute');
-			await resolveNativeApproval(task, stopApproval, 'approved');
+			// This live background Job owns the target mutation claim until its
+			// process exits. Sending another Agent shell mutation against the same
+			// machine correctly conflicts; prove health/catalog from the separate
+			// test owner above and end the exact observed HTTP process here.
+			const shutdown = await fetch(`http://127.0.0.1:${port}/shutdown`, { method: 'POST' });
+			expect(shutdown.status).toBe(200);
+			expect(await shutdown.json()).toEqual({ stopping: true });
+			await expect.poll(() => tcpPortOpen(port)).toBe(false);
+			await expect.poll(() => processGone(pid!)).toBe(true);
 			const result = await finishNativeTask(task, run.id);
 			expect(result.run.status).toBe('completed');
 			const report = JSON.parse(result.text);
 			expect(report.launch.accepted).toBe(true);
 			readAgentId(report.launch.jobId);
-			expect(report.health).toMatchObject({ status: 'completed', exitCode: 0 });
 			expect(report.status.jobId).toBe(report.launch.jobId);
-			expect(report.stop).toMatchObject({ status: 'completed', exitCode: 0 });
 			expect(report.settled).toMatchObject({ jobId: report.launch.jobId, state: 'completed' });
+			expect(report.settled.result).toMatchObject({ status: 'completed', exitCode: 0 });
 			if (signedSkill) {
 				expect(report.skill.name).toBe('operations');
 				expect(report.skill.body).toContain('begin with bounded read-only inspection');
