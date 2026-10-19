@@ -817,9 +817,13 @@ function attachSftp(session, accept) {
 			// Preserve the requested directory order while bounding metadata
 			// concurrency. A sequential lstat per entry was fixture-only latency
 			// unrelated to SFTP pagination or the product's large-list budget.
-			for (let start = 0; start < entries.length; start += 256) {
+			// The 5k-entry profile visits this directory repeatedly. Keep stat
+			// concurrency bounded while reducing the number of sequential batches
+			// under CI disk contention; SFTP READDIR packet framing stays unchanged.
+			const metadataBatchSize = 512;
+			for (let start = 0; start < entries.length; start += metadataBatchSize) {
 				const batch = await Promise.all(
-					entries.slice(start, start + 256).map(async (entry) => {
+					entries.slice(start, start + metadataBatchSize).map(async (entry) => {
 						const stats = await fsp.lstat(path.join(fullPath, entry.name));
 						return {
 							filename: entry.name,
