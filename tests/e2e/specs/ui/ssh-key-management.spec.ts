@@ -7,11 +7,7 @@ import { selectUiOption } from '../../support/ui-select';
 import { E2E_URLS } from '../../support/test-env';
 import { readSshKeyList } from '../../../../packages/shared/src/targets/ssh-keys/http-codec';
 import type { TargetSshKeyView } from '../../../../packages/shared/src/targets/ssh-keys/model';
-import {
-	readConnectionList,
-	readCredentialView,
-	readConnectionImportResponse,
-} from '../../../../packages/shared/src/targets/connections/http-codec';
+import { readConnectionList, readCredentialView } from '../../../../packages/shared/src/targets/connections/http-codec';
 import { readConnectionTestResponse } from '../../../../packages/shared/src/targets/connections/test-codec';
 const headers = { Origin: E2E_URLS.frontendOrigin };
 
@@ -190,11 +186,14 @@ test('SSH key management UI adds, renames without replacing private key, and del
 		await form.getByRole('button', { name: 'Confirm Add', exact: true }).click();
 		const create = await createPromise;
 		expect(create.status()).toBe(200);
-		const results = readConnectionImportResponse(await create.json()).items;
-		expect(results).toHaveLength(1);
-		const imported = results[0];
-		if (!imported || imported.status !== 'ok') throw new Error('Key connection import failed');
-		connectionId = imported.id;
+		// Closing the add form may retire the browser's CDP response body.
+		// Observe the exact newly persisted connection via the authenticated
+		// list instead of repeating a potentially non-idempotent import.
+		const saved = await context.request.get('/api/v1/targets/connections');
+		expect(saved.ok()).toBeTruthy();
+		const matches = readConnectionList(await saved.json()).filter((item) => item.name === CONNECTION_NAME);
+		expect(matches).toHaveLength(1);
+		connectionId = matches[0]!.id;
 		await expect(form).toBeHidden({ timeout: 15_000 });
 
 		const keyed = await context.request.get(`/api/v1/targets/connections/${connectionId}/credential`);
