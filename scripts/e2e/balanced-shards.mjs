@@ -10,6 +10,12 @@ const specsRoot = path.join(e2eRoot, 'specs');
 const estimatesPath = path.join(scriptDir, 'duration-estimates.json');
 const projectNames = ['auth', 'http', 'agent', 'websocket', 'ui', 'ssh', 'mobile'];
 const defaultDurationMs = 10_000;
+// Deliberate unknown descendant effects must retain their backend shutdown
+// fence. Give that full E2E scenario its own application lifetime instead of
+// trying to reset or force-close a backend with unconfirmed Run effects.
+const isolatedUnknownSpec = 'specs/agent/preset-plugin.spec.ts';
+const isolatedUnknownTitle =
+	'Nexus Agent subagent lifecycle preserves tool batches and reclaims child Browser contexts';
 
 function parseArgs(argv) {
 	const args = { command: argv[0] ?? 'plan' };
@@ -142,13 +148,57 @@ function run(plan, rawShard) {
 		'.bin',
 		process.platform === 'win32' ? 'playwright.cmd' : 'playwright',
 	);
-	const result = spawnSync(playwright, ['test', ...shard.specs], {
-		cwd: e2eRoot,
-		env: process.env,
-		stdio: 'inherit',
-	});
-	if (result.error) throw result.error;
-	process.exitCode = result.status ?? 1;
+	const isolated = shard.specs.includes(isolatedUnknownSpec);
+	const suffixes = isolated ? ['regular', 'unknown'] : ['regular'];
+	const outcomes = [];
+	const durations = [];
+	const regularLogs = path.join(e2eRoot, '.tmp', 'balanced-shard-regular-logs');
+	for (const suffix of suffixes) {
+		const selected =
+			suffix === 'unknown'
+				? [isolatedUnknownSpec, '--grep', isolatedUnknownTitle]
+				: [...shard.specs, ...(isolated ? ['--grep-invert', isolatedUnknownTitle] : [])];
+		const timingsPath = path.join(e2eRoot, 'test-results', `spec-durations-${suffix}.json`);
+		console.log(`[E2E shards] ${suffix}: ${selected.join(' ')}`);
+		const result = spawnSync(playwright, ['test', ...selected, '--output', `test-results/${suffix}`], {
+			cwd: e2eRoot,
+			env: {
+				...process.env,
+				E2E_SPEC_DURATIONS_PATH: `test-results/spec-durations-${suffix}.json`,
+				PLAYWRIGHT_HTML_OUTPUT_DIR: path.join(e2eRoot, 'playwright-report', suffix),
+			},
+			stdio: 'inherit',
+		});
+		if (result.error) throw result.error;
+		outcomes.push(result.status ?? 1);
+		if (!fs.existsSync(timingsPath)) throw new Error(`Missing E2E duration record: ${timingsPath}`);
+		durations.push(JSON.parse(fs.readFileSync(timingsPath, 'utf8')).specs);
+		if (isolated && suffix === 'regular') {
+			// Each Playwright process resets its own log directory. Preserve the
+			// first process's failures before starting the isolated lifecycle test.
+			fs.rmSync(regularLogs, { recursive: true, force: true });
+			fs.cpSync(path.join(e2eRoot, 'logs'), regularLogs, { recursive: true });
+		}
+	}
+	if (isolated) {
+		fs.cpSync(regularLogs, path.join(e2eRoot, 'logs', 'regular'), { recursive: true });
+		fs.rmSync(regularLogs, { recursive: true, force: true });
+	}
+	const merged = Object.assign({}, ...durations);
+	if (isolated) {
+		// A spec is eligible for duration rebalancing only when both halves pass.
+		if (durations.every((part) => Number.isFinite(part[isolatedUnknownSpec]))) {
+			merged[isolatedUnknownSpec] = durations.reduce((total, part) => total + part[isolatedUnknownSpec], 0);
+		} else {
+			delete merged[isolatedUnknownSpec];
+		}
+	}
+	fs.writeFileSync(
+		path.join(e2eRoot, 'test-results', 'spec-durations.json'),
+		`${JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), specs: merged }, null, 2)}\n`,
+		'utf8',
+	);
+	process.exitCode = outcomes.every((status) => status === 0) ? 0 : 1;
 }
 
 const args = parseArgs(process.argv.slice(2));
