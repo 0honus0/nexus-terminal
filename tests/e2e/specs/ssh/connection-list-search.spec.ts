@@ -271,7 +271,10 @@ test('workspace tag picker and group manager create, assign, remove, rename, and
 			.toBe(WORKSPACE_TAG_RENAMED);
 		await manager.getByPlaceholder('Search connections...', { exact: true }).fill('Search Secondary');
 		await manager.getByRole('button', { name: 'Select All', exact: true }).click();
-		await manager.getByRole('button', { name: 'Save', exact: true }).click();
+		await manager.getByRole('button', { name: 'Replace associations', exact: true }).click();
+		const replace = page.getByRole('dialog', { name: 'Please confirm' });
+		await expect(replace).toBeVisible();
+		await replace.getByRole('button', { name: 'Confirm', exact: true }).click();
 		await expect(manager).toBeHidden({ timeout: 15_000 });
 		await expect
 			.poll(async () => (await listTags(context.request)).find((tag) => tag.id === tagId)?.name ?? '')
@@ -284,7 +287,10 @@ test('workspace tag picker and group manager create, assign, remove, rename, and
 		const manager = await openManager(WORKSPACE_TAG_RENAMED);
 		await manager.getByPlaceholder('Search connections...', { exact: true }).fill('127.0.0.1');
 		await manager.getByRole('button', { name: 'Deselect All', exact: true }).click();
-		await manager.getByRole('button', { name: 'Save', exact: true }).click();
+		await manager.getByRole('button', { name: 'Replace associations', exact: true }).click();
+		const replace = page.getByRole('dialog', { name: 'Please confirm' });
+		await expect(replace).toBeVisible();
+		await replace.getByRole('button', { name: 'Confirm', exact: true }).click();
 		await expect(manager).toBeHidden({ timeout: 15_000 });
 		await expect.poll(async () => (await connectionTagIds(context.request, primaryId)).includes(tagId)).toBeFalsy();
 		expect(await connectionTagIds(context.request, secondaryId)).toContain(tagId);
