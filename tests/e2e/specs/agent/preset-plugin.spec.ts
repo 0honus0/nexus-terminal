@@ -587,6 +587,10 @@ test('Nexus Agent subagent lifecycle preserves tool batches and reclaims child B
 	});
 	for (const phase of ['complete', 'cancel-live', 'cancel-creating', 'child-cancel-live', 'child-cancel-creating']) {
 		await step(`Child Browser resources settle: ${phase}`, async () => {
+			// Refresh the authoritative same-thread view after the previous child
+			// Run finished through the API. The mounted composer may otherwise
+			// remain disabled against the retired active-run fence.
+			await openNativeTask(task);
 			const independent = phase.startsWith('child-');
 			const creating = phase.endsWith('creating');
 			const cancelled = phase !== 'complete';
