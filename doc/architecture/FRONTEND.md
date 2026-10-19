@@ -134,6 +134,8 @@ Files首次读取等待当前附件的SFTP ready，尚未ACK、已断开/撤销�
 
 ## 8. 当前能力与验收
 
+第九轮远程日志确认失败登出反馈生命周期缺口：`beginAuthentication` 会卸载 `AppHeader`，因而其局部 `logoutError` 无法在重新读取原身份后继续展示。失败消息改由独立于会话挂载的 `NotificationHost` 承载，并为错误通知设置 `role=alert`；不改变原有先撤销 Workspace/Agent 所有者、再经 `/auth/status` 核实同一身份的围栏。该变更待远程 E2E 复验。
+
 F1-A/B源码已覆盖正式setup/password/status/logout、TOTP/Passkey登录、改密/因素设置、公共CAPTCHA与CAPTCHA/IP安全配置，以及DEV共用认证。Passkey的第三方对象只在Auth adapters/browser-passkey显式投影，Store按实例持有取消能力；session generation变化取消旧ceremony并阻止晚签发。Security的use-passkey-settings持有列表、名称草稿和刷新恢复。其余正式配置与业务源码已接Shared，完整前端行为仍待远程验收。新传输已接源码；真实密码/Cookie/登出与受控TOTP/竞态/失败场景的分项证据归testing。构建或受控响应不替代完整页面/真实因素验收。
 
 第八轮失败登出链核对：AuthStore 发出 POST logout 前先撤销本地可用身份以释放所有已挂载 Workspace/Agent Owner；当 POST 报错而服务器状态未知时，不假定凭据还可用。只允许经独立只读 `/auth/status` 确认**原用户 ID 仍有效**后恢复 UI 身份供用户查看真实错误；如果 GET 同样失败、主体变化或服务器已撤销，则继续封锁原会话，保留失败因果。该局部候选不恢复任何旧兼容层，远程 `ssh/terminal-ui` 和身份安全断言待验。

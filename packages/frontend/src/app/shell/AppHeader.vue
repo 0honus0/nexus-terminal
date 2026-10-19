@@ -8,6 +8,7 @@
 	import { usePreferences } from '@/features/preferences/public';
 	import { releaseRepository, releaseRepositoryUrl } from '@/app/config/release';
 	import { useHorizontalDragScroll } from '@/foundation/interaction';
+	import { useFeedback } from '@/shared/feedback/public';
 
 	const emit = defineEmits<{ customizeAppearance: [] }>();
 	const router = useRouter();
@@ -15,7 +16,7 @@
 	const { t } = useI18n();
 	const auth = useAuthSession();
 	const preferences = usePreferences();
-	const logoutError = ref<string | null>(null);
+	const feedback = useFeedback();
 	const loggingOut = ref(false);
 	const navigationLinks = ref<HTMLElement | null>(null);
 	const navigationDrag = useHorizontalDragScroll();
@@ -49,12 +50,14 @@
 	const logout = async (): Promise<void> => {
 		if (loggingOut.value) return;
 		loggingOut.value = true;
-		logoutError.value = null;
 		try {
 			await auth.logout();
 			await router.push({ name: 'Login' });
 		} catch (cause) {
-			logoutError.value = apiErrorMessage(cause, t('common.errorOccurred'));
+			// beginAuthentication tears down this Header while draining Workspace
+			// owners. A restored session mounts a new Header, so local error state
+			// would disappear. The app-owned notification host survives both states.
+			feedback.notifyError(apiErrorMessage(cause, t('common.errorOccurred')));
 		} finally {
 			loggingOut.value = false;
 		}
@@ -133,7 +136,6 @@
 				</a>
 			</div>
 		</nav>
-		<p v-if="logoutError" class="sr-only" role="alert">{{ logoutError }}</p>
 	</header>
 </template>
 
