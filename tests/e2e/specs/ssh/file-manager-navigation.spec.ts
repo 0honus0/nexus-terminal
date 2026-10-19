@@ -829,6 +829,11 @@ test('file-manager terminal path sync does not pollute bash command history with
 	const workspace = await openWorkspaceSession(request, connectionId, `history-clean-${crypto.randomUUID()}`);
 
 	try {
+		// Bash shell hooks must be installed while the verified prompt is
+		// available, before arbitrary user input. The integration intentionally
+		// refuses to inject setup code into an unknown foreground program.
+		await requestWorkspace(workspace.socket, 'terminal.currentDirectory');
+		await requestWorkspace(workspace.socket, 'terminal.changeDirectory', { path: '/' });
 		const sentinelOutput = waitForBinaryText(workspace.socket, 'USER_HISTORY_SENTINEL', 10_000);
 		await requestWorkspace(workspace.socket, 'terminal.input', { data: "HISTIGNORE='cd *'\r" });
 		await requestWorkspace(workspace.socket, 'terminal.input', { data: 'echo USER_HISTORY_SENTINEL\r' });

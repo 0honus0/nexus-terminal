@@ -1093,7 +1093,7 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
 			.poll(
 				async () => {
 					resuspended = (await suspendedSessions(context.request)).find(
-						(session) => session.originalWorkspaceId === resumedSessionId && session.status === 'active',
+						(session) => session.originalWorkspaceId === originalSessionId && session.status === 'active',
 					);
 					return Boolean(resuspended);
 				},
