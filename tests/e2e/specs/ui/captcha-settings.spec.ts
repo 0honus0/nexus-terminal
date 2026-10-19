@@ -4,7 +4,6 @@ import { captureFunctionalScreenshot } from '../../support/functional-screenshot
 import { step } from '../../support/steps';
 import { expectUiSelectValue, selectUiOption } from '../../support/ui-select';
 import { getTestSettings, updateTestCaptcha } from '../../support/settings';
-import { readSettingsCaptchaResponse } from '../../../../packages/shared/src/preferences/configuration/http-codec';
 import { readAccessCaptchaConfig } from '../../../../packages/shared/src/access/http';
 
 const HCAPTCHA_SITE_KEY = '10000000-ffff-ffff-ffff-000000000001';
@@ -44,12 +43,10 @@ test('CAPTCHA UI saves provider configuration and explicit secrets without activ
 			await captcha.getByRole('button', { name: 'Save', exact: true }).click();
 			const result = await response;
 			expect(result.ok()).toBe(true);
-			// The browser may retire the PUT response body when auth settings
-			// re-render. Read the independently persisted CAPTCHA projection;
-			// this still verifies exact version, restart fence and secret state.
-			const reread = await context.request.get('/api/v1/settings/captcha');
-			expect(reread.status()).toBe(200);
-			const saved = readSettingsCaptchaResponse(await reread.json());
+			// GET /settings/captcha is the *public effective* CAPTCHA config,
+			// not the versioned write receipt. Read the authenticated installation
+			// settings to verify persistence after navigation retires the PUT body.
+			const saved = await getTestSettings(context.request);
 			expect(saved.version).toBe(current.version + 1);
 			expect(saved.effectiveVersion).toBe(baseline.effectiveVersion);
 			expect(saved.requiresRestart).toBe(true);
