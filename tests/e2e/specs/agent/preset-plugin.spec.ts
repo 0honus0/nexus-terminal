@@ -71,7 +71,7 @@ async function cancelBrowserPhase<T>(
 		pollingFailure = error;
 	} finally {
 		if (creating) {
-			await browserControl('/creation-barrier/release', 'POST');
+			await releaseBrowserCreationBarrier();
 		}
 	}
 	const result = await pending;
@@ -119,6 +119,13 @@ async function browserControl(path: string, method: 'GET' | 'POST' = 'GET') {
 	const response = await fetch(E2E_URLS.browserControlOrigin + path, { method });
 	expect(response.ok).toBe(true);
 	return response.json();
+}
+
+async function releaseBrowserCreationBarrier(): Promise<void> {
+	// The release fixture intentionally responds 200 with no JSON body.
+	const response = await fetch(E2E_URLS.browserControlOrigin + '/creation-barrier/release', { method: 'POST' });
+	expect(response.ok).toBe(true);
+	expect(await response.text()).toBe('');
 }
 
 async function releaseBrowserModel() {
@@ -485,7 +492,7 @@ test('Nexus Agent Browser lifecycle cases reclaim contexts across cancellation a
 					}
 				} finally {
 					if (creating) {
-						await browserControl('/creation-barrier/release', 'POST');
+						await releaseBrowserCreationBarrier();
 					}
 					await releaseBrowserModel();
 				}
@@ -660,7 +667,7 @@ test('Nexus Agent subagent lifecycle preserves tool batches and reclaims child B
 					}
 				} finally {
 					if (creating) {
-						await browserControl('/creation-barrier/release', 'POST');
+						await releaseBrowserCreationBarrier();
 					}
 					await releaseBrowserModel();
 				}
