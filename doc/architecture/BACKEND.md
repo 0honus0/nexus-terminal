@@ -271,6 +271,8 @@ Model 逐字段转换应用与存储/技术输入结果；模块入口/出口 ma
 
 Files 的 `FileResource` 只提供应用身份、可用状态、metadata/字节读取、staged write、基础 SFTP mutation、realpath/chmod 及受约束 command 结果；Machine/SFTP lease/Node Stream 私有持有于 Model 的 `SftpFileResource`。Model 负责技术 metadata/byte source、同目录临时项和技术 commit/discard 转换；Service 持有 UTF-8/hash/文件类型、覆盖、编码、search、递归/force 删除、批量顺序和写后确认等业务政策；目录搜索流程归 `files/service/file-search.ts`，资源准入与整项期限由主 Service 统一管理，不取得技术句柄。Files 内部失败码归 model，HTTP/WS 分别白名单投影公开契约。
 
+本轮 HTTP 流式下载的身份、Workspace owner、原附件期限及下载票据绑定维持不变；HEAD 只读元数据复用 owner 的 FileResource，GET 的实际 byte body 由 FileService 准入一个 fingerprint 一致的独立 SFTP 技术资源，避免浏览器取消导致主 Workspace lease 同时退场。该临时技术资源关闭结果仍记录在原 owner cleanup ledger，失败或未知不可推断为已清理。Platform SFTP Adapter 针对 RTT 较大的 4MiB+ 下载使用有限 8×32KiB 并行 READ、按 offset 严格有序输出、关闭前结算全部已派发读取；取消时必须确认整条 lease 关闭。写入端用户明确 Cancel 在 stage 未提交且通道仍可用时等待已有 WRITE 结算，确认私有暂存删除后再返回，不提前 abort SFTP 去制造伪 unknown；完成阶段或断流时仍保留未知状态。以上只是源码候选，远程 admission/backpressure/字节 hash/Handle 计数/复原必须独立验收。
+
 ssh2 的 SFTP status、异步 read stream error 与 command channel 派发结果在 Platform Adapter 转为具名技术失败；Model 只消费 `remoteStatus` / `not_started|failed|unknown` 等技术契约，不读取供应商 `cause.code` 或错误正文。原始 cause 仅作诊断。PTY 同样通过应用资源操作。公开出口不传 cause 或凭据。Agent 的安全错误类在 public-errors，内部 agent-errors 只映射失败，不重复定义公开码；HTTP 使用 Shared 严格解码并逐字段投影。
 
 Workspace复制失败message收窄为Shared RemoteFileErrorCode；归档失败为该有限码或WorkspaceArchiveErrorCode。内部任务对象保持独立，WS逐字段投影，归档警告仅投影verified_warning，缺失工具名按Shared有限取值投影，不输出原生命令、密码或技术诊断。Shared task-codec由正式前端严格消费；原Files执行、独立SSH/SFTP、资源准入与清理owner不变。
@@ -421,7 +423,7 @@ R2 二次审核：Workspace `connect` 的 Targets `get` 不再由 Interface 在�
 
 关闭先保存共享 Promise，再执行可能重入的清理；取消订阅也属于可能失败的清理步骤，一项失败仍继续其余退订、资源关闭和终态通知，保留全部因果并聚合。停机停止新准入、关闭 HTTP/WS 并等待已接纳任务、取消并 drain 模块资源，最后关闭 SQLite。当前动态资源由 Remote 持有，后续 Agent 调度/执行必须提供自己的生命周期。
 
-普通 PTY、Files 和 Agent 使用共同 SSH/SFTP Platform 工厂，但不共用授权或活跃资源；Remote sessions/files 共用的可信目标建连转换由本模块 `machines/model` 持有，Agent 不深层导入它。PTY 协议 owner 管 ACK/背压/EOF；Files Service 管身份/指纹复查、准入/期限和文件业务流程，Files Model 管 SFTP lease、byte source、metadata 转换与 staged temp/commit。新建文件使用标准 SFTP rename，不调用可覆盖目标的 POSIX replace；覆盖已有文件才使用 replace。实际 SFTP 目录扫描以 opendir/readdir(handle)/close 收敛，文件读取经 Adapter `readChunks` 将异步 ssh2 error 归一后再交 Model。
+普通 PTY、Files 和 Agent 使用共同 SSH/SFTP Platform 工厂，但不共用授权或活跃资源；Remote sessions/files 共用的可信目标建连转换由本模块 `machines/model` 持有，Agent 不深层导入它。PTY 协议 owner 管 ACK/背压/EOF；Files Service 管身份/指纹复查、准入/期限和文件业务流程，Files Model 管 SFTP lease、byte source、metadata 转换与 staged temp/commit。新建文件使用标准 SFTP rename，不调用可覆盖目标的 POSIX replace；覆盖已有文件才使用 replace。`ssh2` POSIX rename 扩展仅在协商声明可用时调用；无声明视为本地尚未派发，使用有备份恢复的标准 rename 路径；已派发操作仅明确 unsupported 可回退，超时、远端未知与备份清理失败保留 unknown，不冒充已提交成功。此协商修正仍待第五轮后续远程 E2E 复验。实际 SFTP 目录扫描以 opendir/readdir(handle)/close 收敛，文件读取经 Adapter `readChunks` 将异步 ssh2 error 归一后再交 Model。
 
 下载HTTP Interface保留GET/HEAD、单段/suffix Range、inline和目录ZIP；票据POST显式使用Shared 32KiB预算，JSON/容量等HttpInputFailure交还Platform，不包装成500。安全失败由Shared有限message/code契约约束，真实状态码保持对应。HTTP sink只保留最后1字节，源迭代与最后授权复查后随response.end交付，避免Content-Length已满足但应用还在等待时代理提前断开并退役健康Files资源；空文件不生成额外字节。票据300秒TTL的协议值与Service实际期限同源，活跃流/原实例/IP/会话绑定政策仍归Files owner。服务端finish仍不证明浏览器保存成功。
 

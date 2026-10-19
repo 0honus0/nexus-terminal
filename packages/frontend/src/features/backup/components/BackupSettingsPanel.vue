@@ -148,6 +148,7 @@
 							id="backup-import-file"
 							ref="importInput"
 							type="file"
+							class="block w-full min-w-0 overflow-hidden rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
 							accept=".nexus-backup,application/octet-stream"
 							required
 							:disabled="backup.busy || backup.blocked"

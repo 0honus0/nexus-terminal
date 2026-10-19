@@ -27,7 +27,7 @@ import { OperationsError } from './public-errors.js';
 
 export interface OperationsRegistration {
 	publicApi: OperationsEvents;
-	observe(routes: readonly HttpRoute[]): HttpRoute[];
+	observe(routes: readonly HttpRoute[], access: AccessPublicApi): HttpRoute[];
 	installTransactionIdentityReader(read: (tx: SqlExecutor, digest: string) => Promise<number | null>): void;
 	initialize(mode: 'startup' | 'restore'): Promise<void>;
 	routes(access: AccessPublicApi): HttpRoute[];
@@ -64,11 +64,12 @@ export function registerOperations(sqlite: SqliteRuntime, secrets: SecretBox | n
 	return {
 		publicApi,
 
-		observe: (routes) =>
+		observe: (routes, access) =>
 			observeOperationRoutes(
 				routes,
 				(notice) => owner.publish(notice),
 				(work) => owner.run(work),
+				async (token) => (await access.authenticate(token))?.userId ?? null,
 			),
 
 		installTransactionIdentityReader: (read) => {

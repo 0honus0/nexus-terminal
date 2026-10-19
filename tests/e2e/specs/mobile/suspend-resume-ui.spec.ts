@@ -778,7 +778,8 @@ test('mobile resume replaces an immediately suspended tab without exposing a tem
 			)
 			.toMatchObject({
 				tabCount: 1,
-				originalWorkspaceId: resumedSessionId,
+				// Original identity is immutable across every new Workspace attachment.
+				originalWorkspaceId: originalSessionId,
 				status: 'active',
 				ownershipState: 'attached',
 			});
@@ -992,7 +993,15 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
 		const exportUrl = `**/api/v1/ssh-suspend/log/${primary!.id}`;
 		await page.route(exportUrl, (route) => route.abort());
 		await hanging.getByRole('button', { name: 'Export Log', exact: true }).click();
-		await expect(page.getByText('Network Error', { exact: true })).toBeVisible({ timeout: 15_000 });
+		// The current SuspendedSessions export owner reports a safe unknown
+		// request failure, not the retired generic "Network Error" toast.
+		// Keep the blocked download and intact suspended record assertions.
+		await expect(
+			page.getByText(
+				'Operation outcome is unknown. Read and verify the latest state before another action. No automatic retry.',
+				{ exact: true },
+			),
+		).toBeVisible({ timeout: 15_000 });
 		await page.unroute(exportUrl);
 		expect((await suspendedSessions(context.request)).some((session) => session.id === primary!.id)).toBeTruthy();
 		await expect(hanging).toBeVisible();

@@ -8,7 +8,7 @@ import {
 	readAgentWorkspaceRequest,
 	readAgentWorkspaceResponse,
 } from '../../../../packages/shared/src/agent/scope/workspace-http-codec';
-import { AGENT_THREAD_ENTRY_MAX_PAGE } from '../../../../packages/shared/src/agent/scope/values';
+import { AGENT_THREAD_ENTRY_MAX_PAGE, AGENT_THREAD_MAX_PAGE } from '../../../../packages/shared/src/agent/scope/values';
 import type { AgentThreadEntry, AgentThreadEntryCursor } from '../../../../packages/shared/src/agent/scope/model';
 import type { AgentAppView } from '../../../../packages/shared/src/agent/scope/model';
 import type { AgentCapability } from '../../../../packages/shared/src/agent/governance/values';
@@ -92,7 +92,26 @@ export async function openNativeTask(task: NativeTask) {
 		.filter({ has: page.getByText(task.app.id, { exact: true }) })
 		.click();
 	const threads = hub.getByRole('heading', { name: 'Native threads', exact: true }).locator('..');
-	await threads.getByRole('button', { name: `${thread.title} · v${thread.version}`, exact: true }).click();
+	await threads.getByRole('button', { name: 'Read current threads', exact: true }).click();
+	let after: string | null = null;
+	let selectedThread: { title: string; version: number } | undefined;
+	for (;;) {
+		const listed = await requestAgentWorkspace(task.request, task.app, {
+			method: 'agent.threads.list',
+			params: { after, limit: AGENT_THREAD_MAX_PAGE },
+		});
+		if (listed.method !== 'agent.threads.list') throw new Error('Unexpected thread list receipt');
+		selectedThread = listed.value.items.find((item) => item.id === thread.id);
+		if (selectedThread || listed.value.nextCursor === null) break;
+		after = listed.value.nextCursor;
+	}
+	if (!selectedThread) throw new Error('Prepared Agent thread missing from its current App');
+	const option = threads.getByRole('button', {
+		name: `${selectedThread.title} · v${selectedThread.version}`,
+		exact: true,
+	});
+	await expect(option).toHaveCount(1);
+	await option.click();
 	await hub
 		.getByRole('combobox', { name: 'Model for this execution', exact: true })
 		.selectOption(JSON.stringify([provider.id, 'e2e-model', provider.version]));

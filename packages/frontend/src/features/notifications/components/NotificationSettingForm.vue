@@ -327,11 +327,14 @@
 					{{ t('settings.notifications.form.templateHelp') }} {event}, {subjectId}, {time}
 				</p>
 			</UiFormField>
-			<div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-				<label v-for="event in OPERATION_EVENTS" :key="event" class="flex gap-2 text-sm">
-					<UiCheckbox :model-value="events.includes(event)" @update:model-value="toggleEvent(event)" />{{
-						eventLabel(event)
-					}}
+			<div class="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+				<label v-for="event in OPERATION_EVENTS" :key="event" class="flex min-w-0 max-w-full gap-2 text-sm">
+					<UiCheckbox
+						class="shrink-0"
+						:model-value="events.includes(event)"
+						@update:model-value="toggleEvent(event)"
+					/>
+					<span class="min-w-0 break-words [overflow-wrap:anywhere]">{{ eventLabel(event) }}</span>
 				</label>
 			</div>
 			<UiButton type="button" @click="testChannel">{{

@@ -13,8 +13,9 @@ import {
 } from '../../support/notifications';
 import {
 	readNotificationResponse,
-	readNotificationTestResponse,
+	readNotificationDeliveries,
 } from '../../../../packages/shared/src/operations/http-codec';
+import type { NotificationDeliveryView } from '../../../../packages/shared/src/operations/notifications/model';
 
 const CRUD_CHANNEL_NAME = 'E2E Notification CRUD Delivery';
 const STRICT_WEBHOOK_URL = `${E2E_SSH.controlUrl}/e2e-notification-webhook-strict`;
@@ -45,6 +46,18 @@ async function webhookForm(page: Page, name: string): Promise<void> {
 }
 
 async function trigger(page: Page, path: string) {
+	const request = page.context().request;
+
+	const listDeliveries = async (): Promise<NotificationDeliveryView[]> => {
+		const result = await request.get('/api/v1/settings/notification-deliveries?limit=100&offset=0');
+		expect(result.status()).toBe(200);
+		return readNotificationDeliveries(await result.json()).items;
+	};
+
+	const previousIds = new Set((await listDeliveries()).map((item) => item.id));
+	const settingId = path.endsWith('/test-unsaved')
+		? null
+		: path.slice(NOTIFICATIONS_PATH.length + 1, -'/test'.length);
 	const pending = page.waitForResponse(
 		(response) => response.url().endsWith(path) && response.request().method() === 'POST',
 	);
@@ -56,7 +69,20 @@ async function trigger(page: Page, path: string) {
 		.click();
 	const response = await pending;
 	expect(response.ok()).toBe(true);
-	const delivery = readNotificationTestResponse(await response.json()).delivery;
+	// Navigation can lose the CDP response body, but the accepted delivery is
+	// durable. Do not trigger the webhook a second time merely to read its ID.
+	let delivery: NotificationDeliveryView | undefined;
+	await expect
+		.poll(async () => {
+			const matches = (await listDeliveries()).filter(
+				(item) =>
+					!previousIds.has(item.id) && item.settingId === settingId && item.event === 'SETTINGS_UPDATED',
+			);
+			if (matches.length === 1) delivery = matches[0];
+			return matches.length;
+		})
+		.toBe(1);
+	if (!delivery) throw new Error('Accepted notification delivery is missing');
 	expect(delivery.event).toBe('SETTINGS_UPDATED');
 	expect(['queued', 'dispatched', 'sent', 'failed', 'unknown']).toContain(delivery.status);
 	return delivery;

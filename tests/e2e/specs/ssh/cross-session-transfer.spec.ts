@@ -2,7 +2,7 @@ import { readTestConnectionImportId } from '../../support/targets';
 import { E2E_URLS } from '../../support/test-env';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
-import { E2E_SSH, resetTestSshFilesystem, setTestSshLstatDenyPrefix } from '../../support/ssh';
+import { E2E_SSH, resetTestSshFilesystem, setTestSshLstatDenyPrefix, trustTestSshHostKey } from '../../support/ssh';
 import {
 	closeWebSocket,
 	type E2eWebSocket,
@@ -92,6 +92,7 @@ async function runTransfer(
 
 test('cross-session copy and move transfer data and progress over real SFTP', async ({ request }) => {
 	await loginAsInitialAdmin(request);
+	await trustTestSshHostKey(request);
 	await resetTestSshFilesystem();
 
 	const sourceId = await createConnection(request, 'E2E Cross Source');

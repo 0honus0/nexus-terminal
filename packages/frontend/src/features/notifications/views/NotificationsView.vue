@@ -149,7 +149,7 @@
 				:description="t('settings.notifications.noChannels')"
 			/>
 			<div class="grid gap-4">
-				<UiManagementCard v-for="item in items" :key="item.id" :data-notification-id="item.id">
+				<UiManagementCard v-for="item in items" :key="item.id" class="notifications-channel-card">
 					<div class="min-w-0 space-y-2">
 						<strong class="break-words">{{ item.name }}</strong>
 						<span class="mx-3 text-sm">{{ t('settings.notifications.types.' + item.config.kind) }}</span>
@@ -211,3 +211,16 @@
 		</div>
 	</div>
 </template>
+
+<style scoped>
+	@media (max-width: 639px) {
+		.notifications-channel-card :deep(.ui-action-group[data-layout='management']) {
+			min-width: 0;
+		}
+		.notifications-channel-card :deep(.ui-button--action-management) {
+			min-width: 0;
+			white-space: normal;
+			overflow-wrap: anywhere;
+		}
+	}
+</style>

@@ -136,7 +136,7 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
 	await configureSshE2eSettings(context.request);
 	await updateUiPreferences(context.request, (preferences) => {
 		preferences.fileManagerRowSizeMultiplier = 1;
-		preferences.fileManagerColWidths = { type: 50, name: 300, size: 100, permissions: 120, modified: 180 };
+		preferences.fileManagerColWidths = { name: 300, permissions: 120, modified: 180 };
 		preferences.quickCommandRowSizeMultiplier = 1;
 		preferences.statusMonitorScale = 1;
 		preferences.showStatusMonitorIpAddress = true;
@@ -367,7 +367,7 @@ test('File Manager keeps the latest wheel scale when the sidebar is closed immed
 	await updateUiPreferences(context.request, (preferences) => {
 		preferences.showPopupFileManager = false;
 		preferences.fileManagerRowSizeMultiplier = 1;
-		preferences.fileManagerColWidths = { type: 50, name: 300, size: 100, permissions: 120, modified: 180 };
+		preferences.fileManagerColWidths = { name: 300, permissions: 120, modified: 180 };
 	});
 
 	await updateUiPreferences(context.request, (preferences) => {
@@ -432,7 +432,7 @@ test('rapid panel scaling persists the newest value when save responses arrive o
 	await configureSshE2eSettings(context.request);
 	await updateUiPreferences(context.request, (preferences) => {
 		preferences.fileManagerRowSizeMultiplier = 1;
-		preferences.fileManagerColWidths = { type: 50, name: 300, size: 100, permissions: 120, modified: 180 };
+		preferences.fileManagerColWidths = { name: 300, permissions: 120, modified: 180 };
 		preferences.quickCommandRowSizeMultiplier = 1;
 		preferences.statusMonitorScale = 1;
 	});

@@ -16,6 +16,7 @@ import {
 	resetTestSshFilesystem,
 } from '../../support/ssh';
 import { step } from '../../support/steps';
+import { readFavoriteDelete, readFavoriteList } from '../../../../packages/shared/src/preferences/favorites/http-codec';
 import { closeWebSocket, openWorkspaceSession, requestWorkspace, waitForBinaryText } from '../../support/ws';
 
 const FAVORITE_NAME = 'E2E Folder Seed';
@@ -46,11 +47,29 @@ async function openSearchInput(page: Page): Promise<Locator> {
 }
 
 async function cleanupFavorite(request: APIRequestContext): Promise<void> {
-	const response = await request.get('/api/v1/favorite-paths');
-	if (!response.ok()) return;
-	const favorites = (await response.json()) as Array<{ id: string; name?: string; path?: string }>;
-	for (const favorite of favorites.filter((item) => item.name === FAVORITE_NAME || item.path === FAVORITE_PATH)) {
-		await request.delete(`/api/v1/favorite-paths/${favorite.id}`, { headers: { Origin: E2E_URLS.frontendOrigin } });
+	let offset = 0;
+	for (;;) {
+		const query = { sortBy: 'name', offset, limit: 50 } as const;
+		const response = await request.get('/api/v1/favorite-paths', { params: query });
+		expect(response.status()).toBe(200);
+		const page = readFavoriteList(await response.json(), query);
+		const obsolete = page.entries.filter((item) => item.name === FAVORITE_NAME || item.path === FAVORITE_PATH);
+		for (const favorite of obsolete) {
+			const deleted = await request.delete(`/api/v1/favorite-paths/${favorite.id}`, {
+				headers: { Origin: E2E_URLS.frontendOrigin },
+				data: { expectedVersion: favorite.version },
+			});
+			expect(deleted.status()).toBe(200);
+			readFavoriteDelete(await deleted.json());
+		}
+		if (page.nextOffset === null) break;
+		// The list has no snapshot guarantee; deletions shift the live offset.
+		if (obsolete.length) {
+			offset = 0;
+		} else {
+			expect(page.nextOffset).toBeGreaterThan(offset);
+			offset = page.nextOffset;
+		}
 	}
 }
 

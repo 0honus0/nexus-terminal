@@ -10,6 +10,7 @@ import {
 } from '../../../../packages/shared/src/agent/scope/http-codec';
 import { readAgentGrantView } from '../../../../packages/shared/src/agent/governance/http-codec';
 import { readAgentErrorResponse } from '../../../../packages/shared/src/agent/http-codec';
+import { readAgentPluginRecommended } from '../../../../packages/shared/src/agent/plugins/repository-http-codec';
 import {
 	readAgentWorkspaceRequest,
 	readAgentWorkspaceResponse,
@@ -988,7 +989,13 @@ test('concurrent Agent settings preserve dirty drafts and reject their original 
 		expect(alternatives.length).toBeGreaterThanOrEqual(2);
 		await otherInput.fill(String(alternatives[1]));
 		await leaderInput.fill(String(alternatives[0]));
+		const leaderSave = page.waitForResponse(
+			(response) =>
+				new URL(response.url()).pathname === '/api/v1/agent/execution-settings' &&
+				response.request().method() === 'PUT',
+		);
 		await leader.getByRole('button', { name: 'Save', exact: true }).click();
+		expect((await leaderSave).status()).toBe(200);
 		await expect(leader.getByText('Settings saved.', { exact: true })).toBeVisible();
 		await expect(otherInput).toHaveValue(String(alternatives[1]));
 		const conflict = follower.waitForResponse(
@@ -1015,7 +1022,7 @@ test('retired Agent Host subscriptions reject every connection without blocking 
 	context,
 }) => {
 	await loginAsInitialAdmin(context.request);
-	await createTestAgentApp(context.request);
+	const created = await createTestAgentApp(context.request);
 	await page.goto('/connections');
 	const outcomes = await page.evaluate(async () =>
 		Promise.all(
@@ -1051,7 +1058,10 @@ test('retired Agent Host subscriptions reject every connection without blocking 
 	);
 	expect(outcomes).toEqual(['rejected', 'rejected', 'rejected', 'rejected']);
 	const apps = await requestAgentJson(context.request, { method: 'GET', path: '/apps' }, readAgentAppListResponse);
-	expect(apps).toHaveLength(1);
+	// The native app and the built-in product app can coexist. The removed
+	// WebSocket subscriptions must not mutate or conceal this authenticated
+	// app directory; verify the exact app created for this scenario.
+	expect(apps.filter((app) => app.id === created.id)).toEqual([created]);
 });
 
 test('Agent App lifecycle uses safe contracts, explicit grants and original state versions', async ({ request }) => {
@@ -1099,8 +1109,18 @@ test('Agent App lifecycle uses safe contracts, explicit grants and original stat
 	);
 	expect(currentGrants.grants).toEqual(grants.grants);
 	expect(currentGrants.policyRevision).toBe(grants.policyRevision + 2);
-	for (const path of ['/security/csrf', '/settings', '/summary', '/onboarding/recommended-plugin']) {
+	for (const path of ['/security/csrf', '/settings', '/summary']) {
 		const retired = await request.get('/api/v1/agent' + path);
 		expect(retired.status(), path).toBe(404);
+	}
+	// Recommended onboarding is a live first-version Plugin endpoint, not a
+	// retired Agent Host compatibility route. An offline external catalog has
+	// an explicit provider-unavailable failure, not an invented 404 contract.
+	const recommended = await request.get('/api/v1/agent/onboarding/recommended-plugin');
+	if (recommended.status() === 200) {
+		readAgentPluginRecommended(await recommended.json());
+	} else {
+		expect(recommended.status()).toBe(503);
+		expect(readAgentErrorResponse(await recommended.json())).toEqual({ code: 'provider_unavailable' });
 	}
 });

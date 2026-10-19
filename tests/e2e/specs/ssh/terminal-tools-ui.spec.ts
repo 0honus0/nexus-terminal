@@ -118,10 +118,8 @@ test('common terminal tools work through the real SSH session', async ({ page, c
 
 		await expect
 			.poll(async () => {
-				const response = await context.request.get('/api/v1/quick-commands');
-				if (!response.ok()) return 0;
-				const commands = (await response.json()) as Array<{ id: number; usageCount?: number }>;
-				return Number(commands.find((item) => item.id === quickCommandId)?.usageCount ?? 0);
+				const commands = await listTestCommands(context.request);
+				return commands.find((item) => item.id === quickCommandId)?.usageCount ?? 0;
 			})
 			.toBeGreaterThanOrEqual(1);
 	});

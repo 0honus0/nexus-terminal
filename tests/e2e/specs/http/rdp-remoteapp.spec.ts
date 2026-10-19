@@ -105,7 +105,7 @@ test('RDP RemoteApp options persist and create a remote desktop session', async 
 	expect(readConnectionView(await persisted.json())).toMatchObject({
 		id: connectionId,
 		type: 'RDP',
-		rdpRemoteApp: 'notepad',
+		rdpRemoteApp: '||notepad',
 		rdpRemoteAppDirectory: 'C:\\RemoteApps',
 		rdpRemoteAppArguments: '/A sample.txt',
 	});

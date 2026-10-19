@@ -84,6 +84,11 @@ test('custom terminal theme UI creates, edits, applies, persists, and deletes a 
 					2,
 				),
 			);
+			// Commit the raw editor on blur before dispatching the create command;
+			// the validation and HTTP mutation have separate lifecycle owners.
+			await editor.locator('textarea').blur();
+			await expect(editor.locator('.text-error')).toHaveCount(0);
+			await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
 
 			const createPromise = page.waitForResponse(
 				(response) =>

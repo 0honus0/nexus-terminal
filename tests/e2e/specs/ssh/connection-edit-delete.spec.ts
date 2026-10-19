@@ -4,7 +4,6 @@ import { createTestSshConnection, trustTestSshHostKey, configureSshE2eSettings }
 import { slowStep, step } from '../../support/steps';
 import { E2E_URLS } from '../../support/test-env';
 import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
-import { readConnectionTestResponse } from '../../../../packages/shared/src/targets/connections/test-codec';
 const headers = { Origin: E2E_URLS.frontendOrigin };
 
 const ORIGINAL_NAME = 'E2E SSH Lifecycle';
@@ -13,7 +12,7 @@ const EDITED_NAME = 'E2E SSH Lifecycle Edited';
 async function cleanupConnections(request: APIRequestContext): Promise<void> {
 	const response = await request.get('/api/v1/targets/connections');
 	expect(response.ok()).toBeTruthy();
-	const items = readConnectionList(readConnectionList(await response.json()));
+	const items = readConnectionList(await response.json());
 	for (const item of items.filter(
 		(connection) => connection.name === ORIGINAL_NAME || connection.name === EDITED_NAME,
 	)) {
@@ -47,7 +46,7 @@ test('saved SSH connection can be tested, renamed without re-entering password, 
 		await row.getByRole('button', { name: 'Test', exact: true }).click();
 		const response = await responsePromise;
 		expect(response.ok()).toBeTruthy();
-		expect(readConnectionTestResponse(await response.json()).status).toBe('ok');
+		await expect(row.locator('.text-success')).toContainText('Connection test successful!');
 	});
 
 	await step('edit changes only the name and leaves the stored password untouched', async () => {
@@ -79,7 +78,7 @@ test('saved SSH connection can be tested, renamed without re-entering password, 
 		await row.getByRole('button', { name: 'Test', exact: true }).click();
 		const response = await responsePromise;
 		expect(response.ok()).toBeTruthy();
-		expect(readConnectionTestResponse(await response.json()).status).toBe('ok');
+		await expect(row.locator('.text-success')).toContainText('Connection test successful!');
 	});
 
 	await step('delete from the edit form removes the connection from UI and persistence', async () => {
@@ -94,8 +93,8 @@ test('saved SSH connection can be tested, renamed without re-entering password, 
 		await expect
 			.poll(async () => {
 				const response = await context.request.get('/api/v1/targets/connections');
-				if (!response.ok()) return true;
-				const items = readConnectionList(readConnectionList(await response.json()));
+				expect(response.ok()).toBeTruthy();
+				const items = readConnectionList(await response.json());
 				return items.some((item) => item.id === connectionId);
 			})
 			.toBeFalsy();

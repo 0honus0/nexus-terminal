@@ -258,7 +258,10 @@ test('UI theme switches to dark mode, persists across reload, and resets to defa
 			() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
 		);
 		try {
-			const lastVisibleThemeRow = customizer.getByText('Link active bg color', { exact: true }).locator('..');
+			// UI color fields are now literal CSS-token labels, followed by the
+			// JSON editor. Use its final editable row rather than the removed
+			// humanized "Link active bg color" label.
+			const lastVisibleThemeRow = customizer.locator('main textarea').last().locator('..');
 			const footer = customizer.locator('footer');
 			await expect(lastVisibleThemeRow).toBeVisible();
 			await lastVisibleThemeRow.scrollIntoViewIfNeeded();

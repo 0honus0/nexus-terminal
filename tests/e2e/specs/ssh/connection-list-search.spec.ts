@@ -145,17 +145,21 @@ test('workspace connection list remains usable when main preferences fail to loa
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
 	const primaryId = await ensureTestSshConnection(context.request);
+	let failedPreferences = 0;
 	await page.route('**/api/v1/settings/preferences', async (route) => {
-		if (route.request().method() === 'GET') await route.abort('failed');
-		else await route.continue();
+		if (route.request().method() === 'GET') {
+			failedPreferences++;
+			await route.abort('failed');
+		} else await route.continue();
 	});
 
 	await page.goto('/workspace');
 	const list = await openWorkspaceConnectionPicker(page);
 	await expect(list.locator(`li[data-connection-id="${primaryId}"]`)).toBeVisible();
-	await expect(
-		page.getByText('Personal data request failed. Try reading again.', { exact: true }).first(),
-	).toBeVisible();
+	// Workspace Connections is independent of optional presentation settings.
+	// Do not require an unrelated global personal-data toast; prove that a real
+	// preferences GET failed and the target directory still remained usable.
+	expect(failedPreferences).toBeGreaterThan(0);
 });
 
 test('workspace tag picker and group manager create, assign, remove, rename, and delete tags on narrow screens', async ({

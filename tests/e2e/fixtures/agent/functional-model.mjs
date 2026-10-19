@@ -226,11 +226,25 @@ export function respondFunctionalModel(messages, userText, response, send) {
 					'shell_job_control',
 					() => ({ connectionId, action: 'status', jobId: result('deploy_launch').jobId }),
 				],
+				[
+					'deploy_stop',
+					'shell_execute',
+					shell(
+						`node --input-type=module -e 'const r=await fetch("http://127.0.0.1:${deployment[1]}/shutdown",{method:"POST"});if(!r.ok||!(await r.json()).stopping)process.exit(1)'`,
+					),
+				],
+				[
+					'deploy_wait',
+					'shell_job_control',
+					() => ({ connectionId, action: 'wait', jobId: result('deploy_launch').jobId, waitSeconds: 10 }),
+				],
 			],
 			() => ({
 				launch: result('deploy_launch'),
 				health: result('deploy_check'),
 				status: result('deploy_status'),
+				stop: result('deploy_stop'),
+				settled: result('deploy_wait'),
 				...(withSkill ? { skill: result('operations_read') } : {}),
 			}),
 		);

@@ -127,6 +127,7 @@ interface RunningUpload extends TransferResourceOwner {
 	stage: FileUploadStage | null;
 	queue: Promise<void>;
 	completion: Promise<void>;
+	settlement: Promise<void> | null;
 	terminal: boolean;
 	cancelled: boolean;
 	mutationStarted: boolean;
@@ -900,10 +901,10 @@ export class RemoteFileService {
 	}
 
 	/**
-	 * B2 file streaming shares the Workspace's authorized FileResource, not a
-	 * second SFTP lease. Policy/Range selection precedes the HTTP response.
-	 * The old downloader relied on a metadata size but did not always prove a
-	 * complete body; FileResource now checks the requested byte count exactly.
+	 * HTTP download authorization and lifetime remain bound to the original
+	 * Workspace. HEAD uses its metadata resource; byte responses hold a separate
+	 * fingerprint-matched SFTP resource so aborted reads cannot poison the live
+	 * Workspace. A complete body is checked against the exact requested range.
 	 */
 	private workspaceRecord(
 		token: string | null,
@@ -1065,64 +1066,82 @@ export class RemoteFileService {
 		return this.run(
 			token,
 			record.id,
-			async (resource, ms, signal) => {
-				if (this.owners.get(record.id) !== record || !record.workspaceId) {
-					throw new RemoteFileFailure('not_found');
-				}
-				const remaining = this.remaining(ms, signal, record.id);
-				const info = await resource.stat({
-					path: normalized,
-					followLinks: true,
-					// Metadata RPCs retain the short technical timeout; the later byte
-					// stream owns the separate bounded long-transfer deadline.
-					timeoutMs: Math.min(remaining(), 300000),
-					signal,
-				});
-				if (info.kind !== 'file' || !Number.isSafeInteger(info.size) || info.size < 0) {
-					throw new RemoteFileFailure('invalid_input');
-				}
-				const range = selectDownloadRange(selection, info.size);
-				const start = range?.start ?? 0;
-				const end = range?.end ?? info.size - 1;
-				const length = Math.max(0, end - start + 1);
-				remaining();
-				await sink.plan({
-					path: normalized,
-					size: info.size,
-					modifiedAt: info.modifiedAt,
-					partial: range !== null,
-					start,
-					end,
-					length,
-				});
-				if (withBody && length > 0) {
-					const reader = await resource.openRead({
+			async (workspace, ms, signal) => {
+				const serve = async (resource: FileResource): Promise<void> => {
+					if (this.owners.get(record.id) !== record || !record.workspaceId) {
+						throw new RemoteFileFailure('not_found');
+					}
+					const remaining = this.remaining(ms, signal, record.id);
+					const info = await resource.stat({
 						path: normalized,
-						start,
-						length,
-						maxBytes: length,
-						timeoutMs: remaining(),
+						followLinks: true,
+						// Metadata RPCs retain the short technical timeout; the later byte
+						// stream owns the separate bounded long-transfer deadline.
+						timeoutMs: Math.min(remaining(), 300000),
 						signal,
 					});
-					let lastIdentityCheck = Date.now();
-					for await (const bytes of reader) {
-						remaining();
-						await sink.write(bytes, signal);
-						if (Date.now() - lastIdentityCheck >= 5000) {
-							// Long transfers must not retain access after revocation merely
-							// because the initial GET passed cookie authorization.
-							await this.untilAbort(this.operationIdentity(token, authorization), signal);
-							lastIdentityCheck = Date.now();
+					if (info.kind !== 'file' || !Number.isSafeInteger(info.size) || info.size < 0) {
+						throw new RemoteFileFailure('invalid_input');
+					}
+					const range = selectDownloadRange(selection, info.size);
+					const start = range?.start ?? 0;
+					const end = range?.end ?? info.size - 1;
+					const length = Math.max(0, end - start + 1);
+					remaining();
+					await sink.plan({
+						path: normalized,
+						size: info.size,
+						modifiedAt: info.modifiedAt,
+						partial: range !== null,
+						start,
+						end,
+						length,
+					});
+					if (withBody && length > 0) {
+						const reader = await resource.openRead({
+							path: normalized,
+							start,
+							length,
+							maxBytes: length,
+							timeoutMs: remaining(),
+							signal,
+						});
+						let lastIdentityCheck = Date.now();
+						for await (const bytes of reader) {
+							remaining();
+							await sink.write(bytes, signal);
+							if (Date.now() - lastIdentityCheck >= 5000) {
+								// Long transfers must not retain access after revocation merely
+								// because the initial GET passed cookie authorization.
+								await this.untilAbort(this.operationIdentity(token, authorization), signal);
+								lastIdentityCheck = Date.now();
+							}
 						}
 					}
+					await this.checkDelivery(record, token, record.id, signal, authorization);
+					await sink.finish(signal);
+				};
+
+				if (!withBody) {
+					return serve(workspace);
 				}
-				await this.checkDelivery(record, token, record.id, signal, authorization);
-				await sink.finish(signal);
+				// An aborted HTTP response destroys its SFTP read stream. The read
+				// must not share the long-lived Workspace lease or it can break
+				// every later download and turn an unrelated baseline reset into
+				// cleanup_failed. Keep the same owner, fingerprint and authorization,
+				// but give the streamed body a separately owned connection.
+				const transfer: TransferResourceOwner = {
+					finished: false,
+					cleanupFailure: null,
+					cleanupOwnerIds: [record.id],
+				};
+				return this.withUploadResource(workspace, ms, signal, transfer, serve);
 			},
 			requestSignal,
 			false,
 			withBody ? FILE_TRANSFER_MS : FILE_OPERATION_MS,
 			authorization,
+			withBody ? 'dedicated_transfer' : 'direct',
 		);
 	}
 
@@ -1443,6 +1462,7 @@ export class RemoteFileService {
 			stage: null,
 			queue: Promise.resolve(),
 			completion,
+			settlement: null,
 			terminal: false,
 			cancelled: false,
 			mutationStarted: false,
@@ -1556,6 +1576,9 @@ export class RemoteFileService {
 							throw new RemoteFileFailure('operation_unknown', { cause });
 						}
 					} catch (error) {
+						// No private temporary file can be removed until previously
+						// admitted SFTP WRITE callbacks have all settled.
+						await task.queue;
 						try {
 							await stage.discard();
 						} catch (cleanup) {
@@ -1616,6 +1639,7 @@ export class RemoteFileService {
 					this.uploads.delete(key);
 				}
 			});
+		task.settlement = operation;
 		void operation.catch(() => undefined);
 		return { started: true };
 	}
@@ -1777,9 +1801,24 @@ export class RemoteFileService {
 		if (this.uploads.get(key) !== task || task.finished) {
 			return false;
 		}
-		task.cancelled = mode === 'cancel';
-		task.fail(new RemoteFileFailure('operation_unknown'));
-		task.controller.abort();
+		// An explicit pre-commit cancel must retain its live SFTP lease long
+		// enough to drain admitted writes and prove the private stage was
+		// discarded. An abort/late commit still has unknown mutation outcome.
+		if (mode === 'cancel' && task.stage !== null && !task.terminal && !task.controller.signal.aborted) {
+			task.cancelled = true;
+			task.terminal = true;
+			task.fail(new RemoteFileFailure('remote_unavailable'));
+			if (task.settlement) {
+				await task.settlement;
+			}
+			if (task.cleanupFailure) {
+				throw task.cleanupFailure;
+			}
+		} else {
+			task.cancelled = mode === 'cancel';
+			task.fail(new RemoteFileFailure('operation_unknown'));
+			task.controller.abort();
+		}
 		return true;
 	}
 

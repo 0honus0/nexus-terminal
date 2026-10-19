@@ -37,5 +37,6 @@ export const E2E_URLS = {
 	openAiProviderOrigin: `http://127.0.0.1:${E2E_PORTS.openAiProvider}`,
 	browserControlOrigin: `http://127.0.0.1:${E2E_PORTS.browserControl}`,
 	browserCdpOrigin: `http://127.0.0.1:${E2E_PORTS.browserCdp}`,
+	browserCdpEndpoint: `ws://127.0.0.1:${E2E_PORTS.browserCdp}/browser`,
 	deploymentPageOrigin: `http://127.0.0.1:${E2E_PORTS.deploymentPage}`,
 } as const;

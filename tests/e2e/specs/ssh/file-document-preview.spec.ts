@@ -1,4 +1,3 @@
-import { E2E_URLS } from '../../support/test-env';
 import { readPreferencesResponse } from '../../../../packages/shared/src/preferences/presentation/http-codec';
 import { expect, test, type Locator, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
@@ -639,24 +638,12 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
 			},
 		);
 	} finally {
-		const restore: {
-			language: string;
-			spreadsheetPreviewRowsPerPage?: number;
-			spreadsheetPreviewMaxColumns?: number;
-		} = { language: original.language ?? 'en-US' };
-		if (original.spreadsheetPreviewRowsPerPage !== undefined) {
-			restore.spreadsheetPreviewRowsPerPage = original.spreadsheetPreviewRowsPerPage;
-		}
-		if (original.spreadsheetPreviewMaxColumns !== undefined) {
-			restore.spreadsheetPreviewMaxColumns = original.spreadsheetPreviewMaxColumns;
-		}
-		expect(
-			(
-				await context.request.put('/api/v1/settings/preferences', {
-					headers: { Origin: E2E_URLS.frontendOrigin },
-					data: restore,
-				})
-			).ok(),
-		).toBeTruthy();
+		// Preferences write requests are versioned complete representations,
+		// not a partial object. Restore through the same Shared CAS consumer.
+		await updateUiPreferences(context.request, (preferences) => {
+			preferences.language = original.language;
+			preferences.spreadsheetPreviewRowsPerPage = original.spreadsheetPreviewRowsPerPage;
+			preferences.spreadsheetPreviewMaxColumns = original.spreadsheetPreviewMaxColumns;
+		});
 	}
 });

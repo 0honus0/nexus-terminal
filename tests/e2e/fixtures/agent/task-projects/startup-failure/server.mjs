@@ -9,14 +9,19 @@ const catalog = JSON.parse(fs.readFileSync(new URL(config.catalogPath, import.me
 const port = Number(process.env.PORT);
 if (!Number.isSafeInteger(port) || port < 1024 || port > 65535) throw new Error('TASK_PORT_REQUIRED');
 
-http.createServer((request, response) => {
-	response.setHeader('Content-Type', 'application/json');
-	if (request.method === 'GET' && request.url === '/health') {
-		response.end(JSON.stringify({ status: 'ok' }));
-	} else if (request.method === 'GET' && request.url === '/catalog') {
-		response.end(JSON.stringify(catalog));
-	} else {
-		response.statusCode = 404;
-		response.end(JSON.stringify({ error: 'not_found' }));
-	}
-}).listen(port, '127.0.0.1');
+const server = http
+	.createServer((request, response) => {
+		response.setHeader('Content-Type', 'application/json');
+		if (request.method === 'GET' && request.url === '/health') {
+			response.end(JSON.stringify({ status: 'ok' }));
+		} else if (request.method === 'GET' && request.url === '/catalog') {
+			response.end(JSON.stringify(catalog));
+		} else if (request.method === 'POST' && request.url === '/shutdown') {
+			response.end(JSON.stringify({ stopping: true }));
+			server.close();
+		} else {
+			response.statusCode = 404;
+			response.end(JSON.stringify({ error: 'not_found' }));
+		}
+	})
+	.listen(port, '127.0.0.1');

@@ -1,5 +1,4 @@
-import { E2E_URLS } from '../../support/test-env';
-import { expect, test } from '../../support/fixtures';
+import { expect, test, resetE2EBaseline } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { dragLocalFiles, openFileManager, uploadProgressTask } from '../../support/file-upload';
 import {
@@ -40,14 +39,7 @@ test('repeated cancelled-upload teardown keeps fresh Workspace WebSockets reconn
 			// session clearing, and SSH-server reset. This is the churn that previously made a later
 			// /ws/workspace upgrade intermittently fall through the shared dev/E2E WebSocket proxy.
 			await context.setOffline(true);
-			const resetResponse = await request.post('/api/v1/__e2e/reset', {
-				headers: { Origin: E2E_URLS.frontendOrigin },
-				data: { mode: 'seed' },
-			});
-			expect(
-				resetResponse.ok(),
-				`cycle ${cycle}: Backend E2E reset failed: ${await resetResponse.text()}`,
-			).toBeTruthy();
+			await resetE2EBaseline('seed');
 			await resetTestSshFilesystem();
 
 			// A new browser page models the next E2E case: old Workspace/upload sockets are gone, while

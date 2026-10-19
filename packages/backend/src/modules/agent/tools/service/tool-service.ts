@@ -224,6 +224,7 @@ export class ToolService {
 				taskSignal,
 				configuration.limits.toolTimeoutSeconds * 1000,
 				validateIntegration,
+				signal,
 			);
 			interrupted(taskSignal);
 			if (
@@ -348,6 +349,7 @@ export class ToolService {
 		signal: AbortSignal,
 		timeoutMs: number,
 		validateIntegration: () => Promise<void>,
+		runSignal: AbortSignal,
 	): Promise<{ text: string; targets: { id: number; version: number }[] }> {
 		const validate = async () => {
 			await validateIntegration();
@@ -598,7 +600,10 @@ export class ToolService {
 					operation,
 					target,
 					policyRevision: revision,
-					signal,
+					// The accepted background Job belongs to the Run, not to the
+					// completed shell_execute invocation's tool timeout signal. The
+					// JobService owns its independent bounded deadline and Root drain.
+					signal: runSignal,
 					timeoutMs,
 
 					work: (jobSignal, timeoutMs) =>

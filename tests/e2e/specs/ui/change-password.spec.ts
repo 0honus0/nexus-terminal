@@ -1,6 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import { expect, test, type APIRequestContext, type BrowserContext } from '../../support/fixtures';
-import { E2E_ADMIN, loginAsInitialAdmin } from '../../support/auth';
+import { E2E_ADMIN, loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
 import { E2E_URLS } from '../../support/test-env';
@@ -54,6 +54,7 @@ test('password change UI updates the real login credential and can restore the t
 	context,
 }, testInfo) => {
 	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
 	let passwordChanged = false;
 
 	try {
@@ -174,7 +175,9 @@ test('password change UI updates the real login credential and can restore the t
 			expect(await login(context.request, TEMP_PASSWORD)).toBeTruthy();
 			const renewedStatus = await context.request.get('/api/v1/auth/status');
 			await expect(renewedStatus.json()).resolves.toMatchObject({ isAuthenticated: true });
-			await page.reload({ waitUntil: 'domcontentloaded' });
+			// The APIRequestContext login restores the cookie, but does not
+			// navigate the browser away from the previous /login screen.
+			await page.goto('/settings');
 			await page.getByRole('tab', { name: 'Security', exact: true }).click();
 			await expect(form).toBeVisible();
 			await expect(currentPassword).toHaveValue('');
@@ -222,6 +225,7 @@ test('passkey settings UI registers, renames, reloads, and deletes a real creden
 	context,
 }, testInfo) => {
 	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
 	const { cdp, authenticatorId } = await addVirtualAuthenticator(context, page);
 
 	try {

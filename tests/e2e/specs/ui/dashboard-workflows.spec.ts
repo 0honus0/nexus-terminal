@@ -1,7 +1,6 @@
 import { readSuspendedSessionCatalog } from '../../../../packages/shared/src/remote/suspend/http-codec';
 import { readLocalSystemStatus } from '../../../../packages/shared/src/system/status/http-codec';
 import { readSshResourceStatusList } from '../../../../packages/shared/src/remote/monitoring/http-codec';
-import { readAuditResponse } from '../../../../packages/shared/src/operations/http-codec';
 import { E2E_URLS } from '../../support/test-env';
 import { readTagList, readTagView } from '../../../../packages/shared/src/targets/tags/http-codec';
 import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
@@ -295,16 +294,11 @@ test('dashboard reconnect completion refreshes recent connection without navigat
 	await page.locator('.app-nav-links').getByRole('link', { name: 'Dashboard', exact: true }).click();
 	await expect(page).toHaveURL(/\/$/);
 
-	const latestConnectionAudit = async (): Promise<number> => {
-		const response = await context.request.get('/api/v1/settings/audit-logs', {
-			params: { limit: 1, offset: 0, event: 'SSH_CONNECT_SUCCESS' },
-		});
-		expect(response.ok()).toBeTruthy();
-		return readAuditResponse(await response.json()).items[0]?.id ?? 0;
-	};
-
-	await expect.poll(latestConnectionAudit).toBeGreaterThan(0);
-	const beforeAuditId = await latestConnectionAudit();
+	// Workspace SSH sessions use WorkspaceService, not the legacy HTTP
+	// SessionOwner. Only the latter emits SSH_CONNECT_SUCCESS audit records;
+	// asserting that event here incorrectly couples two different producers.
+	// The actual contract is the active Workspace binding and Dashboard's
+	// recent-connection timestamp, which are both checked below.
 
 	let releaseConnectionDetail: (() => void) | undefined;
 	const connectionDetailGate = new Promise<void>((resolve) => {
@@ -339,8 +333,6 @@ test('dashboard reconnect completion refreshes recent connection without navigat
 		await expect(page).toHaveURL(/\/$/);
 
 		releaseConnectionDetail?.();
-		await expect.poll(latestConnectionAudit, { timeout: 20_000 }).toBeGreaterThan(beforeAuditId);
-
 		// Successful background completion must update the already-mounted Dashboard store without a page reload.
 		await expect
 			.poll(async () => Number(await row.getAttribute('data-last-connected-at')), { timeout: 10_000 })

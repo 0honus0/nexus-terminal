@@ -75,8 +75,16 @@ test('proxy UI preserves, updates, and explicitly clears a stored password', asy
 		await form.getByRole('button', { name: 'Save', exact: true }).click();
 		const create = await createPromise;
 		expect(create.status()).toBe(201);
-		const createBody = readProxyView(await create.json());
-		proxyId = createBody.id;
+		// The UI may navigate immediately after the mutation; the response body
+		// can no longer be fetched through CDP. Verify the durable public view.
+		const createdList = await context.request.get('/api/v1/targets/proxies');
+		expect(createdList.status()).toBe(200);
+		const createdMatches = readProxyList(await createdList.json()).filter((item) => item.name === ORIGINAL_NAME);
+		expect(createdMatches).toHaveLength(1);
+		proxyId = createdMatches[0]!.id;
+		const createdView = await context.request.get(`/api/v1/targets/proxies/${proxyId}`);
+		expect(createdView.status()).toBe(200);
+		const createBody = readProxyView(await createdView.json());
 		expect(createBody).toMatchObject({
 			id: proxyId,
 			name: ORIGINAL_NAME,
@@ -147,7 +155,10 @@ test('proxy UI preserves, updates, and explicitly clears a stored password', asy
 			(request) => request.url().endsWith(`/api/v1/targets/proxies/${proxyId}`) && request.method() === 'PUT',
 		);
 		await form.getByRole('button', { name: 'Save', exact: true }).click();
-		expect((await updatePromise).postDataJSON()).toMatchObject({ name: CLEARED_NAME, password: null });
+		expect(readProxyUpdateRequest((await updatePromise).postDataJSON()).changes).toMatchObject({
+			name: CLEARED_NAME,
+			password: null,
+		});
 		await expect(row).toContainText(CLEARED_NAME);
 	});
 

@@ -11,7 +11,7 @@ type E2EFixtures = {
 	_e2eTestReset: void;
 };
 
-const resetE2EBaseline = async (mode: E2EDatabaseMode) => {
+export const resetE2EBaseline = async (mode: E2EDatabaseMode) => {
 	const token = process.env.NEXUS_E2E_CONTROL_TOKEN;
 	if (!token) throw new Error('NEXUS_E2E_CONTROL_TOKEN is required');
 	// A reset with a lost response is unknown; never retry replacement of the baseline.

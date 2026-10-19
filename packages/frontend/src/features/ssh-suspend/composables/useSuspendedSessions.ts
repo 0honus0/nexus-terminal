@@ -387,6 +387,11 @@ export const findSuspendedSessionByOriginalWorkspace = (workspaceId: string): Su
 		(session) => session.status === 'active' && session.originalWorkspaceId === workspaceId,
 	);
 
+export const findSuspendedSessionById = (suspendedSessionId: string): SuspendedSession | undefined =>
+	useSuspendedSessionsStore().sessions.find(
+		(session) => session.status === 'active' && session.id === suspendedSessionId,
+	);
+
 export function useSuspendedSessions(): SuspendedSessionsController {
 	const store = useSuspendedSessionsStore();
 	const { sessions, loading, error } = storeToRefs(store);

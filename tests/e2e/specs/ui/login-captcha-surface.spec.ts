@@ -95,7 +95,11 @@ async function loadLoginWithCaptcha(
 	await page.goto('/login');
 	const captchaResponse = await captchaResponsePromise;
 	expect(captchaResponse.ok()).toBeTruthy();
-	expect(readAccessCaptchaConfig(await captchaResponse.json())).toMatchObject(expectedConfig);
+	// Navigation can discard CDP's cached body after the GET succeeded.
+	// Confirm the same public configuration through the safe read-only API.
+	const actual = await page.context().request.get('/api/v1/auth/captcha/config');
+	expect(actual.status()).toBe(200);
+	expect(readAccessCaptchaConfig(await actual.json())).toMatchObject(expectedConfig);
 }
 
 async function completeHcaptchaTestWidget(page: import('@playwright/test').Page): Promise<void> {
@@ -324,7 +328,13 @@ test('login CAPTCHA clears expired/rejected verification and succeeds after a fr
 			const rejected = await rejectedPromise;
 			expect(rejected.status()).toBe(401);
 			await expect(page.getByRole('alert')).toContainText('CAPTCHA');
-			evidence.push({ phase: 'hostname-rejected', status: rejected.status(), body: await rejected.json() });
+			// Login can replace the page immediately: CDP no longer retains the
+			// response body, but the actual rejection and visible error are durable.
+			evidence.push({
+				phase: 'hostname-rejected',
+				status: rejected.status(),
+				alert: await page.getByRole('alert').innerText(),
+			});
 			await setCaptchaConfig(request, VALID_HCAPTCHA);
 		});
 

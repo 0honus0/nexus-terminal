@@ -133,7 +133,7 @@ test('A07 browser rejects a stale click, then a separate approved Run deploys on
 					{
 						id: 'e2e-deployment',
 						endpoints: [
-							{ url: E2E_URLS.browserCdpOrigin, priority: 1, allowPlaintext: true, verifyTls: true },
+							{ url: E2E_URLS.browserCdpEndpoint, priority: 1, allowPlaintext: true, verifyTls: true },
 						],
 						allowedUrlPatterns: [E2E_URLS.deploymentPageOrigin],
 					},
@@ -297,6 +297,8 @@ for (const signedSkill of [false, true]) {
 				);
 			}
 			await resolveNativeApproval(task, healthApproval, 'approved');
+			const stopApproval = await waitNativeApproval(task, run.id, 'shell_execute');
+			await resolveNativeApproval(task, stopApproval, 'approved');
 			const result = await finishNativeTask(task, run.id);
 			expect(result.run.status).toBe('completed');
 			const report = JSON.parse(result.text);
@@ -304,6 +306,8 @@ for (const signedSkill of [false, true]) {
 			readAgentId(report.launch.jobId);
 			expect(report.health).toMatchObject({ status: 'completed', exitCode: 0 });
 			expect(report.status.jobId).toBe(report.launch.jobId);
+			expect(report.stop).toMatchObject({ status: 'completed', exitCode: 0 });
+			expect(report.settled).toMatchObject({ jobId: report.launch.jobId, state: 'completed' });
 			if (signedSkill) {
 				expect(report.skill.name).toBe('operations');
 				expect(report.skill.body).toContain('begin with bounded read-only inspection');

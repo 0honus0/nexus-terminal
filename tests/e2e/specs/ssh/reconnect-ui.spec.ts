@@ -4,6 +4,7 @@ import { E2E_URLS } from '../../support/test-env';
 import { readAppearanceView } from '../../../../packages/shared/src/preferences/appearance/http-codec';
 import { updateTestAppearance } from '../../support/appearance';
 import { readPreferencesResponse } from '../../../../packages/shared/src/preferences/presentation/http-codec';
+import { readCommandHistoryList } from '../../../../packages/shared/src/preferences/history/http-codec';
 import { writeFile } from 'node:fs/promises';
 import type { APIRequestContext, Locator, Page, TestInfo } from '@playwright/test';
 import { expect, test } from '../../support/fixtures';
@@ -23,6 +24,21 @@ const MULTI_SESSION_NAMES = [
 	'M08 Workspace Session Bravo Long Label',
 	'M08 Workspace Session Charlie Long Label',
 ] as const;
+
+async function listHistoryEntries(request: APIRequestContext): Promise<Array<{ id: number; command: string }>> {
+	const entries: Array<{ id: number; command: string }> = [];
+	let offset = 0;
+	for (;;) {
+		const query = { offset, limit: 100 };
+		const response = await request.get('/api/v1/command-history', { params: query });
+		expect(response.status()).toBe(200);
+		const page = readCommandHistoryList(await response.json(), query);
+		entries.push(...page.entries);
+		if (page.nextOffset === null) return entries;
+		expect(page.nextOffset).toBeGreaterThan(offset);
+		offset = page.nextOffset;
+	}
+}
 
 async function removeMultiSessionConnections(request: APIRequestContext): Promise<void> {
 	const response = await request.get('/api/v1/targets/connections');
@@ -860,9 +876,7 @@ test('command history broadcasts a saved command to every connected SSH session'
 	const marker = 'COMMAND_HISTORY_BROADCAST_E2E';
 	const command = `printf '${marker}\\n'`;
 
-	const existingHistory = await context.request.get('/api/v1/command-history');
-	expect(existingHistory.ok()).toBeTruthy();
-	for (const entry of (await existingHistory.json()) as Array<{ id: number; command: string }>) {
+	for (const entry of await listHistoryEntries(context.request)) {
 		if (entry.command !== command) continue;
 		expect(
 			(
@@ -906,9 +920,7 @@ test('command history broadcasts a saved command to every connected SSH session'
 			.poll(async () => terminals.nth(0).locator('.xterm-rows').textContent(), { timeout: 15_000 })
 			.toContain(marker);
 	} finally {
-		const history = await context.request.get('/api/v1/command-history');
-		expect(history.ok()).toBeTruthy();
-		for (const entry of (await history.json()) as Array<{ id: number; command: string }>) {
+		for (const entry of await listHistoryEntries(context.request)) {
 			if (entry.command !== command) continue;
 			const remove = await context.request.delete(`/api/v1/command-history/${entry.id}`, {
 				headers: { Origin: E2E_URLS.frontendOrigin },

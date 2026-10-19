@@ -120,6 +120,16 @@ function isSftpEof(error: unknown): boolean {
 	return error instanceof MachineSftpFailure && error.remoteStatus === 'eof';
 }
 
+function supportsPosixRename(sftp: SFTPWrapper): boolean {
+	// ssh2 checks its negotiated extension map synchronously, before sending a
+	// request. That local refusal has no SFTP status code and is not an unknown
+	// remote mutation. Keep this vendor-specific capability check in the Adapter.
+	if (!('_extensions' in sftp) || sftp._extensions === null || typeof sftp._extensions !== 'object') {
+		throw new MachineSftpFailure('invalid_metadata', 'not_started');
+	}
+	return 'posix-rename@openssh.com' in sftp._extensions && sftp._extensions['posix-rename@openssh.com'] === '1';
+}
+
 function operationTimeout(options: MachineOperationOptions | undefined, fallback: number, ceilingMs?: number): number;
 function operationTimeout(
 	options?: MachineOperationOptions,
@@ -555,21 +565,128 @@ export class SshSftpLease implements MachineSftpLease {
 	}
 
 	async *readChunks(path: string, options?: MachineSftpReadOptions): AsyncIterable<Uint8Array> {
-		const stream = this.read(path, options);
+		this.ensure(options);
+		const start = options?.start ?? 0;
+		const end = options?.end;
+		if (
+			!Number.isSafeInteger(start) ||
+			start < 0 ||
+			(end !== undefined && (!Number.isSafeInteger(end) || end < start))
+		) {
+			throw new RangeError('Invalid inclusive SFTP read byte range');
+		}
+		const deadline = Date.now() + operationTimeout(options, 60 * 60 * 1000, 60 * 60 * 1000);
+
+		const remaining = (): MachineOperationOptions => {
+			const timeoutMs = Math.min(deadline - Date.now(), 300000);
+			if (timeoutMs < 1) {
+				throw new MachineSftpFailure('timeout', 'unknown');
+			}
+			return options?.signal ? { timeoutMs, signal: options.signal } : { timeoutMs };
+		};
+
+		const handle = await this.call<Buffer>((finish) => this.sftp.open(path, 'r', finish), remaining());
+		if (!Buffer.isBuffer(handle) || handle.length === 0) {
+			throw new MachineSftpFailure('invalid_metadata', 'unknown');
+		}
+		// ssh2's ReadStream waits for every READ reply before dispatching the
+		// next one. At 80-200ms RTT, this serializes a multi-MiB HTTP body.
+		// Keep at most eight independently acknowledged 32KiB READs ahead,
+		// emit strictly in offset order, and never buffer an unbounded file.
+		const packetBytes = 32 * 1024;
+		const windowSize = 8;
+		const queue: Array<{ length: number; pending: Promise<Buffer> }> = [];
+		let nextOffset = start;
+		let failure: unknown = null;
+
+		const readPart = async (position: number, length: number): Promise<Buffer> => {
+			const buffer = Buffer.allocUnsafe(length);
+			let received = 0;
+			while (received < length) {
+				let bytes: number;
+				try {
+					bytes = await this.call<number>(
+						(finish) =>
+							this.sftp.read(handle, buffer, received, length - received, position + received, finish),
+						remaining(),
+					);
+				} catch (cause) {
+					if (isSftpEof(cause)) {
+						break;
+					}
+					throw cause;
+				}
+				if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > length - received) {
+					throw new MachineSftpFailure('invalid_metadata', 'unknown');
+				}
+				if (bytes === 0) {
+					break;
+				}
+				received += bytes;
+			}
+			return buffer.subarray(0, received);
+		};
+
+		const fill = () => {
+			while (queue.length < windowSize && (end === undefined || nextOffset <= end)) {
+				const length = end === undefined ? packetBytes : Math.min(packetBytes, end - nextOffset + 1);
+				const pending = readPart(nextOffset, length);
+				// A later offset can fail before its predecessor; own the rejection
+				// now so it is never an unhandled Promise during backpressure.
+				void pending.catch(() => undefined);
+				queue.push({ length, pending });
+				nextOffset += length;
+			}
+		};
+
 		try {
-			for await (const value of stream) {
-				const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
-				yield Uint8Array.from(chunk);
+			fill();
+			while (queue.length) {
+				const current = queue.shift()!;
+				const chunk = await current.pending;
+				if (chunk.length > 0) {
+					yield chunk;
+				}
+				if (chunk.length < current.length) {
+					break;
+				}
+				fill();
 			}
 		} catch (cause) {
-			if (cause instanceof MachineSftpFailure) {
-				throw cause;
-			}
-			throw remoteFailure(cause, 'failed');
+			failure = cause;
 		} finally {
-			if (!stream.destroyed && !stream.readableEnded) {
-				stream.destroy();
+			const remainingReads = await Promise.allSettled(queue.map((item) => item.pending));
+			if (failure === null) {
+				const rejected = remainingReads.find((result) => result.status === 'rejected');
+				if (rejected?.status === 'rejected') {
+					failure = rejected.reason;
+				}
 			}
+			try {
+				if (this.closed || options?.signal?.aborted) {
+					// A cancelled READ has no remote mutation. Confirmed whole-lease
+					// shutdown retires the handle, unlike CLOSE on a closed channel.
+					await this.shutdown(new MachineSftpFailure('closed', 'unknown'));
+				} else {
+					await this.voidCall((finish) => this.sftp.close(handle, finish), { timeoutMs: 2000 });
+				}
+			} catch (cleanup) {
+				try {
+					await this.shutdown(new MachineSftpFailure('closed', 'unknown'));
+				} catch (closing) {
+					throw new AggregateError(
+						[failure, cleanup, closing].filter((value) => value !== null),
+						'SFTP read cleanup failed',
+					);
+				}
+				throw new AggregateError(
+					[failure, cleanup].filter((value) => value !== null),
+					'SFTP read handle cleanup failed',
+				);
+			}
+		}
+		if (failure !== null) {
+			throw failure;
 		}
 	}
 
@@ -665,13 +782,15 @@ export class SshSftpLease implements MachineSftpLease {
 			return { timeoutMs, signal: options?.signal };
 		};
 
-		try {
-			await this.voidCall((finish) => this.sftp.ext_openssh_rename(from, to, finish), remaining());
-			return;
-		} catch (error) {
-			// Only an explicit SSH_FX_OP_UNSUPPORTED permits the weaker fallback.
-			if (!(error instanceof MachineSftpFailure) || error.remoteStatus !== 'unsupported') {
-				throw error;
+		if (supportsPosixRename(this.sftp)) {
+			try {
+				await this.voidCall((finish) => this.sftp.ext_openssh_rename(from, to, finish), remaining());
+				return;
+			} catch (error) {
+				// Once dispatched, only explicit unsupported permits the fallback.
+				if (!(error instanceof MachineSftpFailure) || error.remoteStatus !== 'unsupported') {
+					throw error;
+				}
 			}
 		}
 

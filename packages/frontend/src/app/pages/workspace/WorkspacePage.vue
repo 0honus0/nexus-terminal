@@ -37,6 +37,7 @@
 	import {
 		loadSuspendedSessionsModal,
 		findSuspendedSessionByOriginalWorkspace,
+		findSuspendedSessionById,
 		refreshSuspendedSessionsCatalog,
 		type SuspendedSession,
 	} from '@/features/ssh-suspend/public';
@@ -703,10 +704,16 @@
 		options: { silent?: boolean } = {},
 	): Promise<boolean> => {
 		const signal = pageScope.signal;
-		const replacement = registry.sessions.get(suspended.originalWorkspaceId);
+		// Backend originalWorkspaceId is immutable across resumes, but the
+		// mounted Workspace ID changes on each resume. Use the known suspension
+		// ID to locate the current runtime rather than opening a duplicate tab.
+		const replacement =
+			registry.orderedSessions.value.find(
+				(session) => session.markedForSuspend.value && session.associatedSuspendedSessionId === suspended.id,
+			) ?? registry.sessions.get(suspended.originalWorkspaceId);
 
 		const isCurrent = () =>
-			isPageCurrent(signal) && registry.sessions.get(suspended.originalWorkspaceId) === replacement;
+			isPageCurrent(signal) && (!replacement || registry.sessions.get(replacement.id) === replacement);
 
 		if (!isCurrent()) return false;
 		try {
@@ -789,7 +796,9 @@
 			);
 			return;
 		}
-		const suspended = findSuspendedSessionByOriginalWorkspace(workspaceId);
+		const suspended =
+			(session.associatedSuspendedSessionId && findSuspendedSessionById(session.associatedSuspendedSessionId)) ||
+			findSuspendedSessionByOriginalWorkspace(workspaceId);
 		if (!suspended) {
 			logger.debug(
 				{
@@ -860,11 +869,15 @@
 				if (refreshed.ok) {
 					for (const workspaceId of [...candidates.keys()]) {
 						if (!isPageCurrent(signal)) return;
-						if (registry.sessions.get(workspaceId) !== candidates.get(workspaceId)) {
+						const session = candidates.get(workspaceId);
+						if (!session || registry.sessions.get(workspaceId) !== session) {
 							candidates.delete(workspaceId);
 							continue;
 						}
-						const suspended = findSuspendedSessionByOriginalWorkspace(workspaceId);
+						const suspended =
+							(session.associatedSuspendedSessionId &&
+								findSuspendedSessionById(session.associatedSuspendedSessionId)) ||
+							findSuspendedSessionByOriginalWorkspace(workspaceId);
 						if (!suspended) continue;
 						if (suspended.ownershipState !== 'available') {
 							if (suspended.attachedWorkspaceId && suspended.attachedWorkspaceId !== workspaceId) {

@@ -1,5 +1,9 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
+import {
+	WORKSPACE_BINARY_MAX_PAYLOAD_BYTES,
+	WORKSPACE_TERMINAL_MAX_IN_FLIGHT_BYTES,
+} from '../../../../packages/shared/src/remote/workspace/values';
 import { ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
 import {
 	closeWebSocket,
@@ -38,9 +42,21 @@ test('terminal consumption window pauses output and drains without missing bytes
 		await requestWorkspace(socket, 'terminal.input', {
 			data: "head -c 3145728 /dev/zero | tr '\\0' 'Z'; printf '\\nFLOW_WINDOW_DONE\\n'\r",
 		});
-		await expect.poll(() => receivedBytes).toBeGreaterThanOrEqual(1024 * 1024);
-		await requestWorkspace(socket, 'workspace.ping');
-		expect(receivedBytes).toBeLessThan(1024 * 1024 + 256 * 1024);
+		// Flow control reserves room for the next complete terminal frame;
+		// the in-flight budget is a maximum, not a mandated minimum payload.
+		await expect
+			.poll(() => receivedBytes)
+			.toBeGreaterThanOrEqual(WORKSPACE_TERMINAL_MAX_IN_FLIGHT_BYTES - WORKSPACE_BINARY_MAX_PAYLOAD_BYTES);
+		// Reach the actual backpressure plateau, not merely an intermediate
+		// buffered frame. No additional data may escape after a ping completes.
+		await expect
+			.poll(async () => {
+				const before = receivedBytes;
+				await requestWorkspace(socket, 'workspace.ping');
+				return receivedBytes - before;
+			})
+			.toBe(0);
+		expect(receivedBytes).toBeLessThanOrEqual(WORKSPACE_TERMINAL_MAX_IN_FLIGHT_BYTES);
 		expect(Buffer.concat(chunks).toString()).not.toMatch(/\nFLOW_WINDOW_DONE\r?\n/);
 		await expect(requestWorkspace(socket, 'terminal.flow', { consumedBytes: receivedBytes + 1 })).rejects.toThrow();
 		consume = true;

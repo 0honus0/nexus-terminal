@@ -143,7 +143,9 @@ test.describe('authenticated HTTP API', () => {
 
 	test('notification HTTP responses redact stored provider secrets', async ({ request }) => {
 		await loginAsInitialAdmin(request);
-		const secret = 'test-value-not-for-use';
+		// Telegram tokens must carry a numeric bot ID; keep a valid secret so
+		// this exercises redaction rather than input validation.
+		const secret = '123456:test-value-not-for-use';
 		const inputs: NotificationCreateRequest[] = [
 			{
 				name: 'E2E redacted email',

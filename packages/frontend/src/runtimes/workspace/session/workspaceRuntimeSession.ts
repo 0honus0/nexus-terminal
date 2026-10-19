@@ -236,6 +236,11 @@ export class WorkspaceRuntimeSession {
 		);
 	}
 
+	/** Stable suspension identity, independent of each resumed Workspace UUID. */
+	get associatedSuspendedSessionId(): string | undefined {
+		return this.suspendedSessionId;
+	}
+
 	connect(viewport?: TerminalViewport): Promise<WorkspaceConnectionState> {
 		if (this.suspendedResume) {
 			return Promise.reject(new WorkspaceSuspendFailure('conflict', 'not_dispatched'));

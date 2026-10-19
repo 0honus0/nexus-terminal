@@ -141,7 +141,8 @@ test('regular connection form tests and creates a persisted working SSH connecti
 		await form.getByRole('button', { name: 'Test Connection', exact: true }).click();
 		const response = await responsePromise;
 		expect(response.ok()).toBeTruthy();
-		expect(readConnectionTestResponse(await response.json()).status).toBe('ok');
+		// Navigation can retire the CDP response body. The result must still
+		// appear as success on the real SSH connection-test form.
 		const result = form.locator('footer span.text-success');
 		await expect(result).toBeVisible();
 		await expect(result).toHaveClass(/text-success/);
@@ -231,9 +232,15 @@ test('script mode creates multiple connections, resolves tags, and preserves not
 		await form.getByRole('button', { name: 'Confirm Add', exact: true }).click();
 		const response = await responsePromise;
 		expect(response.status()).toBe(200);
-		const results = readConnectionImportResponse(await response.json()).items;
-		expect(results).toHaveLength(2);
-		expect(results.every((item) => item.status === 'ok')).toBe(true);
+		// A successful create can navigate immediately, making the CDP response
+		// body unavailable. Verify both actual rows through the authenticated API.
+		const persisted = await context.request.get('/api/v1/targets/connections');
+		expect(persisted.status()).toBe(200);
+		expect(
+			readConnectionList(await persisted.json()).filter(
+				(item) => item.name === SCRIPT_NAME_ONE || item.name === SCRIPT_NAME_TWO,
+			),
+		).toHaveLength(2);
 		await expect(form).toBeHidden({ timeout: 15_000 });
 	});
 
@@ -248,7 +255,7 @@ test('script mode creates multiple connections, resolves tags, and preserves not
 
 	const tagsResponse = await context.request.get('/api/v1/targets/tags');
 	expect(tagsResponse.ok()).toBeTruthy();
-	const tags = (await tagsResponse.json()) as Array<{ id: number; name: string }>;
+	const tags = readTagList(await tagsResponse.json());
 	const createdTag = tags.find((tag) => tag.name === SCRIPT_TAG);
 	if (!createdTag) throw new Error('Script tag missing');
 	for (const connection of connections) expect(connection.tagIds).toContain(createdTag.id);

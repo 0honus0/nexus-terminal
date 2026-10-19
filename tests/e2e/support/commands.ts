@@ -38,7 +38,7 @@ export async function listTestCommandTags(request: APIRequestContext): Promise<Q
 	let offset = 0;
 	for (;;) {
 		const query = { limit: 50, offset, sortBy: 'name' } as const;
-		const response = await request.get('/api/v1/quick-command-tags', { params: query });
+		const response = await request.get('/api/v1/quick-command-tags', { params: { limit: query.limit, offset } });
 		expect(response.status()).toBe(200);
 		const page = readCommandTagList(await response.json(), query);
 		entries.push(...page.entries);

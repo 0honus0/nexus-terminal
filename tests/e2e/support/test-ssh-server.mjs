@@ -173,12 +173,32 @@ function remapRemovalExecPath(command) {
 }
 
 function remapArchiveExecWorkingDirectory(command) {
-	if (!command.includes('__NEXUS_ARCHIVE_TOTAL__:')) return command;
+	// The native Archive adapter now invokes a quoted multi-line script with
+	// `sh -c`, not a leading `cd` or the retired total marker. Map only the
+	// shell-quoted absolute path arguments back into this fixture's SFTP root;
+	// relative member names and shell syntax retain their original meaning.
+	// The no-marker helpers (snapshot, zip verification, hardlinks and ZIP link
+	// payloads) must see the same root as progress-producing commands.
+	if (!command.startsWith("sh -c '") || !command.endsWith("'")) return command;
+	if (
+		!command.includes('NEXUS_ARCHIVE_') &&
+		!command.includes('NEXUS_NATIVE_STATUS_') &&
+		!command.includes('zip -T ') &&
+		!command.includes('cp --reflink=auto ') &&
+		!command.includes('ln -P -- ') &&
+		!command.includes('unzip -p ')
+	)
+		return command;
 
-	return command.replace(
-		/^cd\s+'([^']*)'(?=\s*(?:\|\||&&))/,
-		(_match, remoteDirectory) => `cd ${JSON.stringify(resolveRemotePath(remoteDirectory))}`,
-	);
+	const quote = (value) => "'" + value.replaceAll("'", "'\"'\"'") + "'";
+
+	const script = command.slice(7, -1).replaceAll("'\"'\"'", "'");
+	const mapped = script.replace(/'(?:[^']|'"'"')*'/g, (token) => {
+		const value = token.slice(1, -1).replaceAll("'\"'\"'", "'");
+		if (!value.startsWith('/') || value === rootDir || value.startsWith(rootDir + path.sep)) return token;
+		return quote(resolveRemotePath(value));
+	});
+	return 'sh -c ' + quote(mapped);
 }
 
 function remapTransferExecPaths(command) {
@@ -794,14 +814,21 @@ function attachSftp(session, accept) {
 			const fullPath = resolveRemotePath(remotePath);
 			const entries = await fsp.readdir(fullPath, { withFileTypes: true });
 			const names = [];
-			for (const entry of entries) {
-				const entryPath = path.join(fullPath, entry.name);
-				const stats = await fsp.lstat(entryPath);
-				names.push({
-					filename: entry.name,
-					longname: entry.name,
-					attrs: attrsFromStats(stats),
-				});
+			// Preserve the requested directory order while bounding metadata
+			// concurrency. A sequential lstat per entry was fixture-only latency
+			// unrelated to SFTP pagination or the product's large-list budget.
+			for (let start = 0; start < entries.length; start += 64) {
+				const batch = await Promise.all(
+					entries.slice(start, start + 64).map(async (entry) => {
+						const stats = await fsp.lstat(path.join(fullPath, entry.name));
+						return {
+							filename: entry.name,
+							longname: entry.name,
+							attrs: attrsFromStats(stats),
+						};
+					}),
+				);
+				names.push(...batch);
 			}
 			const handle = registry.add({ type: 'dir', entries: names, offset: 0 });
 			sftp.handle(reqid, handle);
@@ -1098,7 +1125,9 @@ function runRemoteCommand(command, stream, session) {
 				Image: 'alpine:latest',
 				ImageID: 'sha256:e2e',
 				Command: 'sleep 3600',
-				CreatedAt: 1_700_000_000,
+				// Docker --format '{{json .}}' emits CreatedAt as a textual field.
+				// The native adapter correctly rejects a numeric fixture value.
+				CreatedAt: '2023-11-14 22:13:20 +0000 UTC',
 				State: dockerContainerState,
 				Status: running ? 'Up 10 minutes' : 'Exited (0) 1 second ago',
 				Ports: '127.0.0.1:8080->80/tcp',
@@ -1144,13 +1173,17 @@ function runRemoteCommand(command, stream, session) {
 	}
 
 	const executableCommand = remapTransferExecPaths(remapArchiveExecWorkingDirectory(remapRemovalExecPath(command)));
-	const isArchiveCommand = command.includes('__NEXUS_ARCHIVE_TOTAL__:');
+	const isArchiveCommand =
+		command.includes('NEXUS_NATIVE_STATUS_') ||
+		/NEXUS_ARCHIVE_(?:COUNT|PROGRESS|EXIT|SECTION|CLEANUP|ERROR)/.test(command);
 	const normalizedArchivePreflight = String(command)
 		.trim()
 		.replace(/\s+>\s*\/dev\/null\s+2>&1\s*$/, '')
 		.replace(/["']/g, '')
 		.trim();
-	const isArchivePreflightCommand = /^(?:command -v|which)\s+(?:zip|tar|unzip)\s*$/.test(normalizedArchivePreflight);
+	const isArchivePreflightCommand =
+		/^(?:command -v|which)\s+(?:zip|tar|unzip)\s*$/.test(normalizedArchivePreflight) ||
+		(isArchiveCommand && command.includes('command -v '));
 	const preflightHoldPrefix = isArchivePreflightCommand
 		? `while [ -f ${JSON.stringify(archivePreflightHoldPath)} ]; do sleep 0.05; done; `
 		: '';

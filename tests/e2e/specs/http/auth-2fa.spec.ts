@@ -271,6 +271,7 @@ test('2FA settings UI completes setup, reports errors, reloads, and disables the
 	context,
 }) => {
 	const request = context.request;
+	await setUiLanguage(request);
 	await loginAsInitialAdmin(request);
 
 	try {
@@ -290,10 +291,12 @@ test('2FA settings UI completes setup, reports errors, reloads, and disables the
 			await panel.getByRole('button', { name: 'Enable Two-Factor Authentication', exact: true }).click();
 			const setupResponse = await setupPromise;
 			expect(setupResponse.ok()).toBeTruthy();
-			const setupBody = readAccessTotpSetup(await setupResponse.json());
-			expect(setupBody.secret).toBeTruthy();
-			expect(setupBody.qrCodeUrl).toMatch(/^data:image\/png;base64,/);
-			const token = totpCode(setupBody.secret);
+			// Read the on-screen secret and QR code: CDP may lose the response body
+			// during navigation, while the rendered TOTP setup is the UI contract.
+			const secret = (await panel.locator('code').innerText()).trim();
+			expect(secret).toMatch(/^[A-Z2-7]{32}$/);
+			await expect(panel.locator('img')).toHaveAttribute('src', /^data:image\/png;base64,/);
+			const token = totpCode(secret);
 			await panel.locator('#verificationCode').fill(token);
 			const verifyPromise = page.waitForResponse(
 				(response) =>
@@ -408,9 +411,10 @@ test('Login 2FA challenge supports invalid-token retry and expired-session recov
 				await submit.click();
 				const response = await responsePromise;
 				firstFactorStatus = response.status();
-				const body = (await response.json()) as { requiresTwoFactor?: boolean };
 				expect(firstFactorStatus).toBe(200);
-				expect(body.requiresTwoFactor).toBe(true);
+				// Successful first factor transitions the actual form into its TOTP
+				// challenge. Page navigation may retire the CDP response body.
+				await expect(twoFactorToken).toBeVisible();
 			});
 
 			await expect(page).toHaveURL(/\/login$/);
@@ -486,7 +490,8 @@ test('Login 2FA challenge supports invalid-token retry and expired-session recov
 				await submit.click();
 				const response = await responsePromise;
 				expect(response.status()).toBe(200);
-				await expect(response.json()).resolves.toMatchObject({ requiresTwoFactor: true });
+				// A fresh TOTP challenge, not the response body's CDP lifetime,
+				// is the UI contract after first-factor acceptance.
 				await expect(twoFactorToken).toBeVisible();
 				await expect(twoFactorToken).toHaveValue('');
 			});

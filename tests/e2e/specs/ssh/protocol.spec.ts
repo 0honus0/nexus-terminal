@@ -365,7 +365,7 @@ test('workspace rejects request ids that cannot be represented by the binary cor
 			requestId: 'x'.repeat(129),
 			payload: { path: '/' },
 		});
-		await expect(closed).resolves.toEqual({ code: 1003, reason: 'Invalid requestId' });
+		await expect(closed).resolves.toEqual({ code: 1003, reason: 'Invalid Workspace protocol request' });
 	} finally {
 		await closeWebSocket(workspace.socket);
 	}

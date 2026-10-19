@@ -70,7 +70,7 @@ test('full backup restores settings and connection data', async ({ request }) =>
 					},
 				},
 			});
-			expect(response.status()).toBe(400);
+			expect(response.status()).toBe(401);
 			expect(readBackupError(await response.json()).code).toBe('invalid_password');
 			const current = await request.get('/api/v1/targets/connections/' + connectionId);
 			expect(current.status()).toBe(200);

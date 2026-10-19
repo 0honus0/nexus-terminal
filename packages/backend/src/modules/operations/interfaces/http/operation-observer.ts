@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import type { HttpRoute, HttpRouteContext } from '../../../../platform/http/http-types.js';
 import type { AuditNotice } from '../../audit/model/audit-types.js';
 import type { OperationEvent } from '@nexus-terminal/shared/operations/values';
+import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 
 function userId(value: unknown): number | null {
 	if (value === null || typeof value !== 'object' || !('user' in value)) {
@@ -111,6 +112,7 @@ export function observeOperationRoutes(
 	routes: readonly HttpRoute[],
 	publish: (notice: AuditNotice) => Promise<void>,
 	admit: (work: () => Promise<void>) => Promise<void>,
+	identifySession: (token: string) => Promise<number | null>,
 ): HttpRoute[] {
 	return routes.map((route) => ({
 		method: route.method,
@@ -124,6 +126,17 @@ export function observeOperationRoutes(
 				let status: number | null = null;
 				let identity: number | null = null;
 				let notice: OperationEvent | null = null;
+				// A CRUD response has no public user object. Capture the original
+				// authenticated actor before a mutation (including logout), never
+				// infer it from target data or an untrusted request field.
+				const sessionToken = context.cookie(ACCESS_SESSION_COOKIE_NAME);
+				const actorId =
+					route.method !== 'GET' &&
+					route.method !== 'HEAD' &&
+					route.path !== '/api/v1/auth/login' &&
+					sessionToken !== null
+						? await identifySession(sessionToken)
+						: null;
 				const observed: HttpRouteContext = {
 					origin: context.origin,
 					method: context.method,
@@ -141,7 +154,7 @@ export function observeOperationRoutes(
 					send: (code, body, headers) => {
 						context.send(code, body, headers);
 						status = code;
-						identity = userId(body);
+						identity = userId(body) ?? actorId;
 						notice = event(route, code, body);
 					},
 				};

@@ -67,7 +67,7 @@ for (const decision of ['denied', 'cancelled'] as const) {
 					grants: [
 						{
 							capability: 'integration.acp.invoke',
-							scope: { kind: 'targets', targets: { ssh: { mode: 'ids', ids: [String(connectionId)] } } },
+							scope: { kind: 'global' },
 						},
 					],
 				},

@@ -29,7 +29,9 @@ test('IP blacklist UI saves policy, activates it after restart, and removes a bl
 		const blacklist = page
 			.locator('section.ui-solid-panel')
 			.filter({ has: page.getByRole('heading', { name: 'IP Blacklist Management', exact: true }) });
-		const toggle = blacklist.getByRole('switch');
+		// UiCheckbox renders through Reka CheckboxRoot; use the public control
+		// marker instead of assuming the primitive retains a custom switch role.
+		const toggle = blacklist.locator('[data-ui="checkbox"]').first();
 		await expect(toggle).toHaveAttribute('aria-checked', 'true');
 		await blacklist.scrollIntoViewIfNeeded();
 		const metrics = await blacklist.evaluate((element) => {

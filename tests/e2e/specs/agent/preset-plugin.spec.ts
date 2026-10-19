@@ -104,7 +104,7 @@ async function configureLifecycleBrowser(request: APIRequestContext) {
 					{
 						id: 'e2e-lifecycle',
 						endpoints: [
-							{ url: E2E_URLS.browserCdpOrigin, priority: 1, allowPlaintext: true, verifyTls: true },
+							{ url: E2E_URLS.browserCdpEndpoint, priority: 1, allowPlaintext: true, verifyTls: true },
 						],
 						allowedUrlPatterns: [E2E_URLS.browserControlOrigin],
 					},
@@ -332,7 +332,11 @@ test('frontend target owns a full Custom App Surface and connects through the is
 	await page.goto('/settings?tab=agent');
 	const section = page.getByRole('heading', { name: 'Plugin management', exact: true }).locator('..');
 	for (const installed of [custom, agent, fullstack]) {
-		await expect(section.getByText(installed.appId, { exact: false }).first()).toBeVisible();
+		await expect(section.locator('option[value="' + installed.appId + '"]')).toHaveCount(1);
+		// The native select option is intentionally hidden. Also assert the
+		// visible installed-app record; the old first text match selected the
+		// hidden option and never exercised the management surface.
+		await expect(section.locator('article').filter({ hasText: installed.appId })).toBeVisible();
 	}
 	await captureFunctionalScreenshot(page, 'agent-plugins-multiple-installed.png', {
 		viewport: { width: 1440, height: 900 },

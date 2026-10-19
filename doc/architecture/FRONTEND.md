@@ -318,7 +318,9 @@ Shared 唯一定义 channel/event/status、完整 wire 请求/响应和容量。
 
 ### 5. 入口与安装
 
-正式 NotificationsView 继续由既有路由和 Settings 装配；API 接 /api/v1/settings/notifications、/:id、/:id/test、/test-unsaved 及 /settings/notification-deliveries。UUID 在请求前严格校验；DELETE 携原 expectedVersion。
+正式 NotificationsView 继续由既有路由和 Settings 装配；API 接 /api/v1/settings/notifications、/:id、/:id/test、/test-unsaved 及 /settings/notification-deliveries。UUID 在请求前严格校验；DELETE 携原 expectedVersion。渠道管理卡片在窄屏以本视图作用域允许底部动作文字折行并限制最小宽度，不修改共享按钮桌面尺寸或请求语义；此 UI 调整待远程窄屏验收。
+
+事件表单由 `NotificationSettingForm` 自身限定选项行宽：事件网格与 label `min-w-0`，UiCheckbox 不压缩，事件文本独立 `overflow-wrap:anywhere`。这修复匿名 flex 文本在 320px 撑宽的问题；不通过删事件、截断翻译或改变通用 UiCheckbox/Shared 合同取绿。
 
 ### 6. 数据、事务与并发
 
@@ -333,6 +335,8 @@ Shared 唯一定义 channel/event/status、完整 wire 请求/响应和容量。
 正式消费者已接通，三通道安全配置、秘密意图、CAS、投递分页、断流未知、排队撤销及正式表单已有本机专项；审计43项App回归和通知12项专项及22项后端受影响回归见testing。公网供应商仍D16，不借本地受理宣称外部发送成功。
 
 ## System 备份、恢复与宿主诊断
+
+正式 `BackupSettingsPanel` 的原生导入 file input 自己承担可见的主题边框、圆角、裁剪和键盘焦点，不能只依赖不可见的外层控件。测试直接验证 native input 的 computed styles；不改变导入协议、认证与 global restore fence。
 
 ### 1. 职责与范围
 

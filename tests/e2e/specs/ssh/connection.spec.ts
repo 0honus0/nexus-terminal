@@ -9,7 +9,7 @@ import {
 	trustTestSshHostKey,
 } from '../../support/ssh';
 import { E2E_URLS } from '../../support/test-env';
-import { readConnectionTestResponse } from '../../../../packages/shared/src/targets/connections/test-codec';
+import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
 import { captureFunctionalScreenshot, functionalScreenshotsEnabled } from '../../support/functional-screenshots';
 import { step, slowStep } from '../../support/steps';
 
@@ -47,7 +47,8 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
 		await page.getByRole('button', { name: 'Test Connection', exact: true }).click();
 		const response = await responsePromise;
 		expect(response.ok()).toBeTruthy();
-		expect(readConnectionTestResponse(await response.json()).status).toBe('ok');
+		// Browser navigation can invalidate the CDP response body. The actual
+		// result must be rendered as Success by the UI, not merely return HTTP 200.
 		const testResult = page.locator('form footer span.text-success');
 		await expect(testResult).toBeVisible();
 		await expect(testResult).toHaveClass(/text-success/);
@@ -57,11 +58,17 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
 	await step('save SSH connection', async () => {
 		const createPromise = page.waitForResponse(
 			(response) =>
-				response.url().endsWith('/api/v1/targets/connections') && response.request().method() === 'POST',
+				response.url().endsWith('/api/v1/targets/connections/import') && response.request().method() === 'POST',
 		);
 		await page.locator('form button[type="submit"]').click();
 		const response = await createPromise;
-		expect(response.status()).toBe(201);
+		expect(response.status()).toBe(200);
+		// Creation goes through the bulk import owner and returns a per-item
+		// receipt. Verify the persisted record without relying on a CDP body
+		// that can disappear when the form closes or navigation begins.
+		const saved = await page.request.get('/api/v1/targets/connections');
+		expect(saved.ok()).toBeTruthy();
+		expect(readConnectionList(await saved.json()).filter((item) => item.name === E2E_SSH.name)).toHaveLength(1);
 		await expect(page.getByText(E2E_SSH.name, { exact: true }).first()).toBeVisible();
 	});
 

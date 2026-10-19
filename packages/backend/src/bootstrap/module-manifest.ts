@@ -300,15 +300,18 @@ export async function registerModules({
 
 			httpRoutes: (secureCookies) =>
 				admitHttp([
-					...operations.observe([
-						...access.routes(secureCookies),
-						...targets.routes(access.publicApi),
-						...remote.httpRoutes(),
-						...agent.routes(access.publicApi),
-						...system.httpRoutes(),
-						...preferences.routes(access.publicApi),
-						...operations.routes(access.publicApi),
-					]),
+					...operations.observe(
+						[
+							...access.routes(secureCookies),
+							...targets.routes(access.publicApi),
+							...remote.httpRoutes(),
+							...agent.routes(access.publicApi),
+							...system.httpRoutes(),
+							...preferences.routes(access.publicApi),
+							...operations.routes(access.publicApi),
+						],
+						access.publicApi,
+					),
 					...system.maintenanceRoutes(),
 				]),
 

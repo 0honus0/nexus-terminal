@@ -67,9 +67,11 @@ const BUFFER_HIGH_WATER = 8 * 1024 * 1024;
 const BUFFER_LOW_WATER = 2 * 1024 * 1024;
 
 function activeStreamLimit(): number {
-	const detected = Number(navigator.hardwareConcurrency || 4);
-	const cores = Number.isFinite(detected) ? Math.max(1, Math.min(16, Math.round(detected))) : 4;
-	return Math.max(6, Math.min(12, Math.ceil(cores * 1.5)));
+	// Each active upload opens a separately owned SSH/SFTP connection. A
+	// per-Workspace budget reserves host capacity for Files reads and control
+	// traffic; a large local drop queues its tail rather than starting every
+	// SSH connection simultaneously on high-core-count browsers.
+	return 6;
 }
 
 function failure(cause: unknown, dispatched: boolean): TransferFailure {

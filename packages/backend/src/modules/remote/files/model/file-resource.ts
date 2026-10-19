@@ -50,6 +50,13 @@ function quotePosixShellArg(value: string): string {
 	return "'" + value.replaceAll("'", "'\"'\"'") + "'";
 }
 
+// ssh2's WriteStream serializes the acknowledgements of a single large
+// write. Corking bounded, packet-sized writes invokes its _writev path, so
+// independent SFTP WRITE acknowledgements may overlap without using the
+// vendor API outside the Platform or bypassing this Stage's commit barrier.
+const SFTP_STAGE_PACKET_BYTES = 16 * 1024;
+const SFTP_STAGE_WINDOW_BYTES = 512 * 1024;
+
 /** Technical SFTP/machine resources stay private; only application bytes and facts cross this Model boundary. */
 export class SftpFileResource implements FileResource {
 	readonly #machine: MachineConnection;
@@ -574,12 +581,45 @@ export class SftpFileResource implements FileResource {
 					throw new RemoteFileFailure('operation_unknown');
 				}
 				try {
-					await new Promise<void>((resolve, reject) => {
-						stream.write(Buffer.from(bytes), (error?: Error | null) => (error ? reject(error) : resolve()));
-					});
+					const stable = Buffer.from(bytes);
+					for (let windowStart = 0; windowStart < stable.length; windowStart += SFTP_STAGE_WINDOW_BYTES) {
+						const windowEnd = Math.min(stable.length, windowStart + SFTP_STAGE_WINDOW_BYTES);
+						await new Promise<void>((resolve, reject) => {
+							let pending = Math.ceil((windowEnd - windowStart) / SFTP_STAGE_PACKET_BYTES);
+							let failed = false;
+
+							const acknowledged = (error?: Error | null) => {
+								if (failed) {
+									return;
+								}
+								if (error) {
+									failed = true;
+									reject(error);
+								} else if (--pending === 0) {
+									resolve();
+								}
+							};
+
+							stream.cork();
+							try {
+								for (let start = windowStart; start < windowEnd; start += SFTP_STAGE_PACKET_BYTES) {
+									stream.write(
+										stable.subarray(start, Math.min(start + SFTP_STAGE_PACKET_BYTES, windowEnd)),
+										acknowledged,
+									);
+								}
+							} finally {
+								stream.uncork();
+							}
+						});
+					}
 				} catch (cause) {
 					state = 'unknown';
-					throw this.translate(cause, true);
+					// A failed parallel WRITE can race acknowledgements still in flight.
+					// Destroying the stream does not prove remote writes have stopped.
+					this.usable = false;
+					stream.destroy();
+					throw new RemoteFileFailure('operation_unknown', { cause });
 				}
 			},
 

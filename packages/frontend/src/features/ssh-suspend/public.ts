@@ -10,6 +10,7 @@ export {
 	refreshSuspendedSessionsAfterHandoff,
 	removeSuspendedSessionFromCatalog,
 	findSuspendedSessionByOriginalWorkspace,
+	findSuspendedSessionById,
 } from './composables/useSuspendedSessions';
 
 export type {

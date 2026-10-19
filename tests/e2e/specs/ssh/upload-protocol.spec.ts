@@ -70,11 +70,24 @@ test('pipelined upload and HTTP download stay fast under SFTP latency and preser
 		}
 		await completed;
 		const uploadMs = performance.now() - uploadStarted;
-		// 8MiB needs at least 256 SFTP WRITE packets at 32KiB. Waiting for
-		// each packet's 60ms response costs >=15s; bounded batching must beat it.
+		// Even 32KiB packets need 256 SFTP WRITE acknowledgements at 60ms each;
+		// bounded 16KiB batches must overlap responses instead of serializing them.
 		expect(uploadMs, 'upload must pipeline remote writes rather than serialize acknowledgements').toBeLessThan(
 			10_000,
 		);
+		const writeStatsResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay`);
+		expect(writeStatsResponse.ok).toBe(true);
+		const writeStats = (await writeStatsResponse.json()) as {
+			sftpPeakPendingWrites: number;
+			sftpPendingWrites: number;
+			sftpWriteBytes: number;
+		};
+		expect(
+			writeStats.sftpPeakPendingWrites,
+			'the SSH fixture must observe concurrent SFTP WRITE packets',
+		).toBeGreaterThan(1);
+		expect(writeStats.sftpPendingWrites).toBe(0);
+		expect(writeStats.sftpWriteBytes).toBeGreaterThanOrEqual(payload.length);
 		await closeWebSocket(uploadSocket);
 
 		const readDelay = await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=60`, { method: 'POST' });
