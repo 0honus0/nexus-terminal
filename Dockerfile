@@ -15,7 +15,7 @@ FROM workspace-base AS backend-builder
 RUN apk add --no-cache python3 py3-setuptools make g++
 COPY packages/backend/package.json ./packages/backend/package.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile --filter @nexus-terminal/backend
+    pnpm install --frozen-lockfile --filter @nexus-terminal/backend...
 COPY packages/shared/src ./packages/shared/src
 COPY packages/shared/tsconfig.json ./packages/shared/tsconfig.json
 COPY packages/backend/src ./packages/backend/src
@@ -29,7 +29,7 @@ ARG VITE_API_BASE_URL=""
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 COPY packages/frontend/package.json ./packages/frontend/package.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile --filter @nexus-terminal/frontend
+    pnpm install --frozen-lockfile --filter @nexus-terminal/frontend...
 COPY packages/shared/src ./packages/shared/src
 COPY packages/shared/tsconfig.json ./packages/shared/tsconfig.json
 COPY packages/frontend/src ./packages/frontend/src

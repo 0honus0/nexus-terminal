@@ -1,5 +1,14 @@
 import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import { E2E_PORTS, E2E_URLS } from './test-env';
+import { updateUiPreferences } from './auth';
+import {
+	readConnectionList,
+	readConnectionView,
+	readCredentialMutation,
+} from '../../../packages/shared/src/targets/connections/http-codec';
+import { readHostKeyConfirmRequest } from '../../../packages/shared/src/targets/host-keys/http-codec';
+
+const targetHeaders = { Origin: E2E_URLS.frontendOrigin };
 
 export const E2E_SSH = {
 	name: 'E2E SSH',
@@ -12,17 +21,14 @@ export const E2E_SSH = {
 } as const;
 
 export async function configureSshE2eSettings(request: APIRequestContext): Promise<void> {
-	const response = await request.put('/api/v1/settings', {
-		data: {
-			language: 'en-US',
-			showPopupFileManager: true,
-			showPopupFileEditor: true,
-			fileManagerShowDeleteConfirmation: true,
-			workspaceSidebarPersistent: false,
-			showStatusMonitorIpAddress: false,
-		},
+	await updateUiPreferences(request, (preferences) => {
+		preferences.language = 'en-US';
+		preferences.showPopupFileManager = true;
+		preferences.showPopupFileEditor = true;
+		preferences.fileManagerShowDeleteConfirmation = true;
+		preferences.workspaceSidebarPersistent = false;
+		preferences.showStatusMonitorIpAddress = false;
 	});
-	expect(response.ok()).toBeTruthy();
 }
 
 export async function resetTestSshFilesystem(): Promise<void> {
@@ -43,42 +49,64 @@ export async function setTestSshLstatDenyPrefix(prefix: string): Promise<void> {
 }
 
 export async function removeNamedSshConnections(request: APIRequestContext): Promise<void> {
-	const response = await request.get('/api/v1/connections');
+	const response = await request.get('/api/v1/targets/connections');
 	expect(response.ok()).toBeTruthy();
-	const connections = (await response.json()) as Array<{ id: number; name?: string }>;
+	const connections = readConnectionList(await response.json());
 	for (const connection of connections.filter((item) => item.name === E2E_SSH.name)) {
-		const deleteResponse = await request.delete(`/api/v1/connections/${connection.id}`);
+		const deleteResponse = await request.delete(`/api/v1/targets/connections/${connection.id}`, {
+			headers: targetHeaders,
+		});
 		expect(deleteResponse.ok()).toBeTruthy();
 	}
 }
 
 export async function ensureTestSshConnection(request: APIRequestContext): Promise<number> {
-	const listResponse = await request.get('/api/v1/connections');
+	const fixtureResponse = await fetch(E2E_SSH.controlUrl + '/host-key');
+	expect(fixtureResponse.ok).toBeTruthy();
+	const trusted = readHostKeyConfirmRequest(await fixtureResponse.json());
+	expect(trusted.host).toBe(E2E_SSH.host);
+	expect(trusted.port).toBe(E2E_SSH.port);
+	const confirmed = await request.post('/api/v1/targets/host-keys/confirm', {
+		headers: targetHeaders,
+		data: trusted,
+	});
+	expect(confirmed.status()).toBe(201);
+	const listResponse = await request.get('/api/v1/targets/connections');
 	expect(listResponse.ok()).toBeTruthy();
-	const existing = ((await listResponse.json()) as Array<{ id: number; name?: string }>).find(
-		(item) => item.name === E2E_SSH.name,
-	);
+	const existing = readConnectionList(await listResponse.json()).find((item) => item.name === E2E_SSH.name);
 	if (existing) return existing.id;
-
-	const createResponse = await request.post('/api/v1/connections', {
+	const createResponse = await request.post('/api/v1/targets/connections', {
+		headers: targetHeaders,
 		data: {
 			name: E2E_SSH.name,
 			type: 'SSH',
 			host: E2E_SSH.host,
 			port: E2E_SSH.port,
 			username: E2E_SSH.username,
-			authMethod: 'password',
-			password: E2E_SSH.password,
+			route: 'direct',
+			proxyId: null,
+			notes: null,
+			rdpRemoteApp: null,
+			rdpRemoteAppDirectory: null,
+			rdpRemoteAppArguments: null,
+			tagIds: [],
+			jumpIds: [],
 		},
 	});
 	expect(createResponse.status()).toBe(201);
-	const body = (await createResponse.json()) as { connection: { id: number } };
-	return body.connection.id;
+	const connection = readConnectionView(await createResponse.json());
+	const credential = await request.put('/api/v1/targets/connections/' + connection.id + '/credential', {
+		headers: targetHeaders,
+		data: { version: connection.version, credential: { kind: 'password', password: E2E_SSH.password } },
+	});
+	expect(credential.status()).toBe(200);
+	expect(readCredentialMutation(await credential.json())).toEqual({ status: 'updated' });
+	return connection.id;
 }
 
 export async function connectTestSshFromConnectionsPage(page: Page, connectionId: number): Promise<void> {
 	await page.goto('/connections');
-	const response = await page.request.get('/api/v1/connections');
+	const response = await page.request.get('/api/v1/targets/connections');
 	expect(response.ok()).toBeTruthy();
 	const connection = ((await response.json()) as Array<{ id: number; name: string; host: string }>).find(
 		(item) => item.id === connectionId,

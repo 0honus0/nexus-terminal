@@ -95,12 +95,18 @@ export default class MirroredLogReporter implements Reporter {
 	}
 
 	onStdOut(chunk: string | Buffer, test?: TestCase) {
-		if (!test) return;
+		if (!test) {
+			process.stdout.write(chunk);
+			return;
+		}
 		this.append(test, `[stdout] ${chunk.toString()}`);
 	}
 
 	onStdErr(chunk: string | Buffer, test?: TestCase) {
-		if (!test) return;
+		if (!test) {
+			process.stderr.write(chunk);
+			return;
+		}
 		this.append(test, `[stderr] ${chunk.toString()}`);
 	}
 
@@ -137,11 +143,11 @@ export default class MirroredLogReporter implements Reporter {
 			`[E2E] ${marker} ${this.consoleTitle(test)} — ${result.status} (${this.formatDuration(result.duration)})`,
 		);
 		if (result.error) {
-			this.consoleLog(`[E2E]   error: ${this.singleLine(result.error.message)}`);
+			this.consoleLog(`[E2E]   error: ${this.singleLine(result.error.message ?? 'Unknown test failure')}`);
 		}
 	}
 
-	onEnd(result: FullResult) {
+	async onEnd(result: FullResult) {
 		const elapsed = this.runStartedAt > 0 ? Date.now() - this.runStartedAt : result.duration;
 		this.consoleLog(`\n[E2E] Finished: ${result.status} in ${this.formatDuration(elapsed)}`);
 		this.writeSpecDurations();
@@ -174,7 +180,7 @@ export default class MirroredLogReporter implements Reporter {
 		const specs = Object.fromEntries(
 			[...bySpec.entries()]
 				.filter(([, results]) => results.length > 0 && results.every(({ status }) => status === 'passed'))
-				.map(([spec, results]) => [
+				.map(([spec, results]): [string, number] => [
 					spec,
 					Math.round(results.reduce((total, { duration }) => total + duration, 0)),
 				])

@@ -5,7 +5,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { generateKeyPairSync } from 'node:crypto';
+import { generateKeyPairSync, createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -20,6 +20,7 @@ const requireFromBackend = createRequire(path.join(repoRoot, 'packages', 'backen
 const {
 	Server,
 	utils: {
+		parseKey,
 		sftp: { OPEN_MODE, STATUS_CODE },
 	},
 } = requireFromBackend('ssh2');
@@ -128,6 +129,10 @@ readlink() {
 
 const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const hostKey = privateKey.export({ type: 'pkcs1', format: 'pem' });
+const parsedHostKey = parseKey(hostKey);
+if (parsedHostKey instanceof Error) throw parsedHostKey;
+const hostFingerprint =
+	'SHA256:' + createHash('sha256').update(parsedHostKey.getPublicSSH()).digest('base64').replace(/=+$/, '');
 
 function normalizeRemotePath(remotePath = '.') {
 	let raw = String(remotePath || '.');
@@ -1359,6 +1364,11 @@ smtpServer.on('error', (error) => {
 const controlServer = http.createServer(async (req, res) => {
 	try {
 		const requestUrl = new URL(req.url || '/', `http://${SSH_HOST}:${CONTROL_PORT}`);
+		if (req.method === 'GET' && requestUrl.pathname === '/host-key') {
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ host: SSH_HOST, port: SSH_PORT, fingerprint: hostFingerprint }));
+			return;
+		}
 		if (req.method === 'GET' && requestUrl.pathname === '/health') {
 			res.writeHead(200, { 'content-type': 'application/json' });
 			res.end(JSON.stringify({ ok: true, sshPort: SSH_PORT, rootDir }));

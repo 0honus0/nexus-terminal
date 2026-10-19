@@ -11,6 +11,7 @@ import {
 	readPresentationUpdateResponse,
 } from '../../../packages/shared/src/preferences/presentation/http-codec';
 import { PREFERENCE_LANGUAGES } from '../../../packages/shared/src/preferences/presentation/values';
+import type { PresentationPreferences } from '../../../packages/shared/src/preferences/presentation/model';
 import { E2E_ADMIN } from './test-identity';
 import { E2E_URLS } from './test-env';
 
@@ -46,6 +47,17 @@ export async function loginAsInitialAdmin(request: APIRequestContext): Promise<v
 }
 
 export async function setUiLanguage(request: APIRequestContext, language = 'en-US'): Promise<void> {
+	const selected = PREFERENCE_LANGUAGES.find((value) => value === language);
+	if (!selected) throw new Error('Unsupported E2E UI language');
+	await updateUiPreferences(request, (preferences) => {
+		preferences.language = selected;
+	});
+}
+
+export async function updateUiPreferences(
+	request: APIRequestContext,
+	change: (preferences: PresentationPreferences) => void,
+): Promise<void> {
 	const response = await request.get('/api/v1/settings/preferences');
 	expect(response.ok()).toBeTruthy();
 	const current = readPreferencesResponse(await response.json());
@@ -53,9 +65,7 @@ export async function setUiLanguage(request: APIRequestContext, language = 'en-U
 		expectedVersion: current.version,
 		preferences: current.preferences,
 	});
-	const selected = PREFERENCE_LANGUAGES.find((value) => value === language);
-	if (!selected) throw new Error('Unsupported E2E UI language');
-	input.preferences.language = selected;
+	change(input.preferences);
 	const saved = await request.put('/api/v1/settings/preferences', {
 		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: input,

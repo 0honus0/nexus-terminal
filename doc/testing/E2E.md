@@ -1245,3 +1245,9 @@ Node22.16.0 / pnpm11.26.0。Shared check/build、Backend-next check/build、Fron
 - 复审两轮：第一轮沿包名/目录→根门禁→构建/启动→真实消费者修正旧入口；第二轮核对 Shared 独立构建、生产包完整性、Compose Host/插值、单 Backend DEV 代理及受影响专项的环境变量，未恢复旧类型/DB/环境变量兼容分支。本轮明确授权提交、合并 dev 和删除重构分支；合并不代表镜像已发布或整套 E2E 已通过。
 
 本地交付：源码提交 `75289ef9`，合并提交 `a7ba2d80`（父提交 `cad36397` / `75289ef9`）；唯一冲突为 E2E 耗时估计，保留 origin/dev 当前完整数据。已确认重构提交属于 dev 历史后删除本地重构分支，未推送、未删除远端分支、未部署。合并后的源码与静态检查版本一致，差异仅为远端耗时估计及本文状态说明。
+
+### dev 推送及首轮远程 Actions（2026-10-19）
+
+本轮已明确授权推送、删除远程分支和远程 E2E。dev 推送至 `71a0291c`，远程 `refactor/backend-storage-v1` 已删除。[运行 39183397896](https://github.com/0honus0/nexus-terminal/actions/runs/39183397896) 失败：质量检查/格式/生产构建通过；Docker frontend-builder 编译 Shared 报 `tsc: not found`；8个 Playwright 分片全部在 Backend webServer 启动退出，实际用例数为0。不能计为功能失败数或回归通过。日志 `/tmp/nexus-e2e-first-failures.log`、`/tmp/nexus-first-shard2.log`。
+
+修复范围：Docker过滤安装包含依赖工作区开发工具；Reporter保留无测试关联的启动输出及正确异步完成契约。SSH夹具通过独立控制通道提供实际公钥指纹；Auth/SSH helper直接消费Shared偏好CAS、Targets元数据/独立凭据及Host Key确认，不恢复旧settings/connections入口。源码/类型/格式复核后提交，行为以修复后的远程运行单独记录。仍有旧Agent/HTTP/Workspace用例待迁移，不缩减覆盖，不新增本地行为测试。
