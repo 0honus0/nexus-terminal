@@ -883,6 +883,13 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 		if (result.method !== 'agent.threads.create') {
 			throw new Error('Unexpected thread creation');
 		}
+		// The mutation receipt precedes the host controller's authoritative
+		// post-write refresh. Wait until the created thread is selected and
+		// the rename form is writable before issuing the next versioned CAS.
+		await expect(
+			panel.getByRole('button', { name: `Plugin surface conversation · v${result.value.version}`, exact: true }),
+		).toBeVisible();
+		await expect(panel.getByRole('button', { name: 'Save title', exact: true })).toBeEnabled();
 		await panel.getByRole('textbox', { name: 'Thread title', exact: true }).fill('Renamed plugin conversation');
 		const rename = page.waitForResponse(
 			(response) =>
