@@ -280,6 +280,14 @@ export function respondFunctionalModel(messages, userText, response, send) {
 				['browser_old', 'browser_snapshot', () => ({ sessionId: session() })],
 				...(stale ? [['browser_fresh', 'browser_snapshot', () => ({ sessionId: session() })]] : []),
 				['browser_click', 'browser_click', () => click('browser_old')],
+				// The DOM click starts an asynchronous /deploy mutation. Its CDP
+				// receipt only confirms dispatch; wait for network idle before
+				// taking the committed-state snapshot or closing the Browser.
+				[
+					'browser_wait',
+					'browser_wait',
+					() => ({ sessionId: session(), mode: 'networkIdle', maxMillis: 5000 }),
+				],
 				['browser_after', 'browser_snapshot', () => ({ sessionId: session() })],
 				['browser_capture', 'browser_screenshot', () => ({ sessionId: session() })],
 				['browser_close', 'browser_close', () => ({ sessionId: session() })],
