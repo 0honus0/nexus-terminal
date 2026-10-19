@@ -298,7 +298,13 @@ test('frontend preferences and backend logging persist independently through the
 			(response) => response.url().endsWith('/api/v1/settings/logging') && response.request().method() === 'PUT',
 		);
 		await page.locator('[data-backend-logging] button[type="submit"]').click();
-		const saved = readBackendLoggingView(await (await savedResponse).json());
+		// The successful PUT may navigate the Settings component before CDP can
+		// read its body. Confirm the original receipt, then independently read
+		// the persisted logging version and level through the API context.
+		expect((await savedResponse).ok()).toBe(true);
+		const savedRead = await context.request.get('/api/v1/settings/logging');
+		expect(savedRead.ok()).toBe(true);
+		const saved = readBackendLoggingView(await savedRead.json());
 		expect(saved.version).toBe(logging.version + 1);
 		expect(saved.level).toBe(targetLevel);
 		await page.reload({ waitUntil: 'domcontentloaded' });
