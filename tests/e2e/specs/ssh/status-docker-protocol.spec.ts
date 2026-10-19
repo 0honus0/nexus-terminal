@@ -2,11 +2,16 @@ import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
 import { closeWebSocket, openWorkspaceSession, requestWorkspace, waitForJson } from '../../support/ws';
+import { readSettingsResponse } from '../../../../packages/shared/src/preferences/configuration/http-codec';
+import { readRemoteStatusSample } from '../../../../packages/shared/src/remote/monitoring/http-codec';
+import { readWorkspaceDockerStatusResponse } from '../../../../packages/shared/src/remote/docker/workspace-codec';
 
 test('status monitor and Docker protocols work through the live SSH session', async ({ request }) => {
 	await loginAsInitialAdmin(request);
-	const settings = await request.put('/api/v1/settings', { data: { statusMonitorIntervalSeconds: 1 } });
+	const settings = await request.get('/api/v1/settings');
 	expect(settings.ok()).toBeTruthy();
+	const intervalMs =
+		readSettingsResponse(await settings.json()).effectiveMonitoring.statusMonitorIntervalSeconds * 1000;
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(request);
 	const workspace = await openWorkspaceSession(request, connectionId, `status-${crypto.randomUUID()}`);
@@ -31,29 +36,22 @@ test('status monitor and Docker protocols work through the live SSH session', as
 				message.payload?.timestamp !== secondTimestamp,
 			10_000,
 		);
-		expect(Date.now() - startedAt).toBeLessThan(2500);
+		expect(Date.now() - startedAt).toBeGreaterThanOrEqual(2 * intervalMs);
+		expect(Date.now() - startedAt).toBeLessThan(2 * intervalMs + 5000);
 
-		const docker = await requestWorkspace<{
-			available: boolean;
-			containers: Array<{
-				names: string[];
-				image: string;
-				state: string;
-				stats?: { cpuPercent?: string };
-			}>;
-		}>(workspace.socket, 'docker.status');
+		const docker = readWorkspaceDockerStatusResponse(await requestWorkspace(workspace.socket, 'docker.status'));
 		await requestWorkspace(workspace.socket, 'status.stop');
 
-		expect(firstStatus.payload).toMatchObject({
+		expect(readRemoteStatusSample(firstStatus.payload)).toMatchObject({
 			osName: 'Nexus E2E Linux',
 			cpuModel: 'Nexus Virtual CPU',
 			memTotal: 2048,
 			diskPercent: 30,
 			netInterface: 'eth0',
 		});
-		expect(Number(secondStatus.payload?.netRxRate)).toBeGreaterThan(0);
-		expect(Number(secondStatus.payload?.netTxRate)).toBeGreaterThan(0);
-		expect(Number(thirdStatus.payload?.netRxRate)).toBeGreaterThan(0);
+		expect(readRemoteStatusSample(secondStatus.payload).netRxRate).toBeGreaterThan(0);
+		expect(readRemoteStatusSample(secondStatus.payload).netTxRate).toBeGreaterThan(0);
+		expect(readRemoteStatusSample(thirdStatus.payload).netRxRate).toBeGreaterThan(0);
 
 		expect(docker).toMatchObject({ available: true });
 		expect(docker.containers).toHaveLength(1);

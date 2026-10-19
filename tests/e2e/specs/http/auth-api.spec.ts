@@ -177,7 +177,7 @@ test.describe('authenticated HTTP API', () => {
 		const ids: string[] = [];
 		for (const input of inputs) {
 			const created = await request.post('/api/v1/settings/notifications', { headers, data: input });
-			expect(created.status()).toBe(201);
+			expect(created.status()).toBe(200);
 			expect(await created.text()).not.toContain(secret);
 			const view = readNotificationResponse(await created.json()).setting;
 			ids.push(view.id);

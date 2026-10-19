@@ -1,3 +1,5 @@
+import { readAppearanceView } from '../../../../packages/shared/src/preferences/appearance/http-codec';
+import { updateTestAppearance } from '../../support/appearance';
 import { expect, test, type BrowserContext, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
@@ -17,8 +19,10 @@ async function enableClipboard(context: BrowserContext): Promise<void> {
 async function connectMobileTerminal(page: Page, request: Parameters<typeof loginAsInitialAdmin>[0]): Promise<void> {
 	await loginAsInitialAdmin(request);
 	await configureSshE2eSettings(request);
-	const appearance = await request.put('/api/v1/appearance', { data: { terminalFontSizeMobile: 14 } });
-	expect(appearance.ok()).toBeTruthy();
+	await updateTestAppearance(request, (preferences) => {
+		preferences.terminalFontSizeMobile = 14;
+	});
+
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(request);
 	await connectTestSshFromConnectionsPage(page, connectionId);
@@ -323,9 +327,7 @@ test('mobile pinch zoom persists the mobile terminal font size even when the tab
 				async () => {
 					const appearance = await context.request.get('/api/v1/appearance');
 					expect(appearance.ok()).toBeTruthy();
-					return Number(
-						((await appearance.json()) as { terminalFontSizeMobile?: number }).terminalFontSizeMobile,
-					);
+					return Number(readAppearanceView(await appearance.json()).terminalFontSizeMobile);
 				},
 				{ timeout: 5_000 },
 			)

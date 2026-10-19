@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 
 let active = false;
-let activation = null;
 
 const assertDenied = (probe, expectedPermission) => {
 	try {
@@ -14,46 +14,42 @@ const assertDenied = (probe, expectedPermission) => {
 	throw new Error(`FULLSTACK_PERMISSION_NOT_ENFORCED:${expectedPermission}`);
 };
 
-const module = {
-	async activate(context) {
-		activation = context;
-		active = true;
+export default {
+	async activate({ context, request }) {
 		const fileReadDenied = assertDenied(() => fs.readFileSync('/etc/passwd', 'utf8'), 'FileSystemRead');
 		const childProcessDenied = assertDenied(() => spawnSync(process.execPath, ['--version']), 'ChildProcess');
-		const current = await context.sdk.storage.get('backend.status');
-		await context.sdk.storage.put(
-			'backend.status',
-			{
-				state: 'active',
-				source: 'backend',
-				appId: context.scope.appId,
-				version: context.plugin.version,
-				protocolVersion: context.protocolVersion,
-				fileReadDenied,
-				childProcessDenied,
+		const current = await request({ method: 'storage.get', params: { key: 'backend.status' } });
+		if (!current.ok || current.result.method !== 'storage.get') throw new Error('Backend storage read failed');
+		const saved = await request({
+			method: 'storage.put',
+			params: {
+				key: 'backend.status',
+				expectedVersion: current.result.value?.version ?? 0,
+				operationId: randomUUID(),
+				valueJson: JSON.stringify({
+					state: 'active',
+					source: 'backend',
+					appId: context.appId,
+					version: context.version,
+					protocolVersion: context.protocol,
+					fileReadDenied,
+					childProcessDenied,
+				}),
 			},
-			current?.version ?? null,
-		);
+		});
+		if (!saved.ok || saved.result.method !== 'storage.put') throw new Error('Backend storage write failed');
+		active = true;
 	},
 
 	health() {
-		return active && activation
-			? { available: true, reason: null }
-			: { available: false, reason: 'FULLSTACK_BACKEND_NOT_ACTIVE' };
+		return active;
 	},
 
 	quiesce() {
-		return undefined;
+		active = false;
 	},
 
 	dispose() {
 		active = false;
-		activation = null;
-	},
-
-	migrate({ storage }) {
-		return storage;
 	},
 };
-
-export default module;

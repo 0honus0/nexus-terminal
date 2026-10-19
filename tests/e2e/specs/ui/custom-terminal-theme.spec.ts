@@ -1,27 +1,27 @@
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
+import { getTestAppearance, updateTestAppearance } from '../../support/appearance';
+import { listTestThemes, removeTestTheme } from '../../support/themes';
+import { readTerminalThemeView } from '../../../../packages/shared/src/preferences/themes/http-codec';
 import { step } from '../../support/steps';
 
 const THEME_NAME = 'E2E Custom Terminal Theme UI';
 const EDITED_THEME_NAME = 'E2E Custom Terminal Theme UI Edited';
 
 async function cleanupThemes(request: APIRequestContext): Promise<void> {
-	const response = await request.get('/api/v1/terminal-themes');
-	expect(response.ok()).toBeTruthy();
-	const themes = (await response.json()) as Array<{ id?: string; name: string; preset?: boolean }>;
-	for (const theme of themes.filter((item) => !item.preset && [THEME_NAME, EDITED_THEME_NAME].includes(item.name))) {
-		if (theme.id) expect((await request.delete(`/api/v1/terminal-themes/${theme.id}`)).ok()).toBeTruthy();
+	for (const theme of await listTestThemes(request)) {
+		if (!theme.preset && [THEME_NAME, EDITED_THEME_NAME].includes(theme.name)) {
+			await removeTestTheme(request, theme);
+		}
 	}
 }
 
 test('custom terminal theme UI creates, edits, applies, persists, and deletes a theme', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
-	expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
+	await setUiLanguage(context.request);
 	await cleanupThemes(context.request);
 
-	const originalAppearanceResponse = await context.request.get('/api/v1/appearance');
-	expect(originalAppearanceResponse.ok()).toBeTruthy();
-	const originalAppearance = (await originalAppearanceResponse.json()) as { activeTerminalThemeId?: number | null };
+	const originalAppearance = await getTestAppearance(context.request);
 	let createdThemeId = 0;
 
 	try {
@@ -92,7 +92,7 @@ test('custom terminal theme UI creates, edits, applies, persists, and deletes a 
 			await editor.getByRole('button', { name: 'Save', exact: true }).click();
 			const create = await createPromise;
 			expect(create.status()).toBe(201);
-			createdThemeId = Number(((await create.json()) as { id?: string }).id);
+			createdThemeId = readTerminalThemeView(await create.json()).id;
 			expect(createdThemeId).toBeGreaterThan(0);
 			await expect(editor).toBeHidden({ timeout: 15_000 });
 
@@ -156,11 +156,7 @@ test('custom terminal theme UI creates, edits, applies, persists, and deletes a 
 
 			await expect
 				.poll(async () => {
-					const response = await context.request.get('/api/v1/appearance');
-					if (!response.ok()) return 0;
-					return Number(
-						((await response.json()) as { activeTerminalThemeId?: number }).activeTerminalThemeId ?? 0,
-					);
+					return (await getTestAppearance(context.request)).activeTerminalThemeId;
 				})
 				.toBe(createdThemeId);
 
@@ -197,26 +193,17 @@ test('custom terminal theme UI creates, edits, applies, persists, and deletes a 
 
 			await expect
 				.poll(async () => {
-					const response = await context.request.get('/api/v1/appearance');
-					if (!response.ok()) return createdThemeId;
-					return Number(
-						((await response.json()) as { activeTerminalThemeId?: number }).activeTerminalThemeId ?? 0,
-					);
+					return (await getTestAppearance(context.request)).activeTerminalThemeId;
 				})
 				.not.toBe(createdThemeId);
 		});
 	} finally {
 		await cleanupThemes(context.request);
-		const themes = await context.request.get('/api/v1/terminal-themes');
-		const availableIds = themes.ok()
-			? new Set(
-					((await themes.json()) as Array<{ id?: string }>)
-						.map((theme) => Number(theme.id))
-						.filter(Number.isFinite),
-				)
-			: new Set<number>();
-		let restoreId: number | null = originalAppearance.activeTerminalThemeId ?? null;
-		if (restoreId !== null && !availableIds.has(restoreId)) restoreId = 1;
-		await context.request.put('/api/v1/appearance', { data: { activeTerminalThemeId: restoreId } });
+		const availableIds = new Set((await listTestThemes(context.request)).map((theme) => theme.id));
+		const originalId = originalAppearance.activeTerminalThemeId;
+		const restoreId = originalId !== null && availableIds.has(originalId) ? originalId : null;
+		await updateTestAppearance(context.request, (input) => {
+			input.activeTerminalThemeId = restoreId;
+		});
 	}
 });

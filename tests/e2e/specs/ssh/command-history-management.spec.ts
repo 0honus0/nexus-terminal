@@ -9,6 +9,10 @@ import {
 import { slowStep, step } from '../../support/steps';
 import { E2E_URLS } from '../../support/test-env';
 
+import { readCommandHistoryList } from '../../../../packages/shared/src/preferences/history/http-codec';
+
+const query = { limit: 50, offset: 0 };
+
 const COMMAND_A = "printf 'HISTORY_MANAGED_A\\n'";
 const COMMAND_B = "printf 'HISTORY_MANAGED_B\\n'";
 
@@ -19,7 +23,7 @@ function markerCount(text: string, marker: string): number {
 test('command history UI searches, copies, re-runs, and deletes real terminal history', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: E2E_URLS.frontendLoopbackOrigin });
+	await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: E2E_URLS.frontendOrigin });
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
 	await connectTestSshFromConnectionsPage(page, connectionId);
@@ -41,9 +45,9 @@ test('command history UI searches, copies, re-runs, and deletes real terminal hi
 		await expect
 			.poll(
 				async () => {
-					const response = await context.request.get('/api/v1/command-history');
-					if (!response.ok()) return [];
-					const items = (await response.json()) as Array<{ command: string }>;
+					const response = await context.request.get('/api/v1/command-history?limit=50&offset=0');
+					expect(response.ok()).toBe(true);
+					const items = readCommandHistoryList(await response.json(), query).entries;
 					return items.map((item) => item.command).filter((command) => command.includes('HISTORY_MANAGED_'));
 				},
 				{ timeout: 15_000 },
@@ -91,9 +95,9 @@ test('command history UI searches, copies, re-runs, and deletes real terminal hi
 
 		await expect
 			.poll(async () => {
-				const response = await context.request.get('/api/v1/command-history');
-				if (!response.ok()) return true;
-				const items = (await response.json()) as Array<{ id: number }>;
+				const response = await context.request.get('/api/v1/command-history?limit=50&offset=0');
+				expect(response.ok()).toBe(true);
+				const items = readCommandHistoryList(await response.json(), query).entries;
 				return items.some((item) => item.id === historyId);
 			})
 			.toBeFalsy();

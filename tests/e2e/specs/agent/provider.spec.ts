@@ -78,7 +78,9 @@ test('Provider credentials, observations and original configuration versions use
 
 	await page.goto('/settings?tab=agent');
 	const panel = page.getByRole('region', { name: 'Model providers', exact: true });
-	await expect(panel.getByText('Renamed local provider', { exact: true })).toBeVisible();
+	await expect(
+		panel.getByRole('heading', { name: 'Renamed local provider v' + provider.version, exact: true }),
+	).toBeVisible();
 	await expect(panel).not.toContainText('e2e-provider-secret');
 	provider = await requestAgentJson(
 		request,

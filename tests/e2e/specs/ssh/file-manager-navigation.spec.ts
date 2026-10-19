@@ -1,7 +1,8 @@
+import { E2E_URLS } from '../../support/test-env';
 import { expect, test, type APIRequestContext, type Locator, type Page } from '../../support/fixtures';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import {
 	activeFileManagerList,
 	closeConnectedFileManager,
@@ -49,7 +50,7 @@ async function cleanupFavorite(request: APIRequestContext): Promise<void> {
 	if (!response.ok()) return;
 	const favorites = (await response.json()) as Array<{ id: string; name?: string; path?: string }>;
 	for (const favorite of favorites.filter((item) => item.name === FAVORITE_NAME || item.path === FAVORITE_PATH)) {
-		await request.delete(`/api/v1/favorite-paths/${favorite.id}`);
+		await request.delete(`/api/v1/favorite-paths/${favorite.id}`, { headers: { Origin: E2E_URLS.frontendOrigin } });
 	}
 }
 
@@ -729,10 +730,11 @@ test.describe('remote drag move on touch-capable desktop', () => {
 	}) => {
 		await loginAsInitialAdmin(context.request);
 		await configureSshE2eSettings(context.request);
-		const embeddedSettings = await context.request.put('/api/v1/settings', {
-			data: { showPopupFileManager: false, showPopupFileEditor: false },
+		await updateUiPreferences(context.request, (preferences) => {
+			preferences.showPopupFileManager = false;
+			preferences.showPopupFileEditor = false;
 		});
-		expect(embeddedSettings.ok()).toBeTruthy();
+
 		await resetTestSshFilesystem();
 
 		const sourceFixture = await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent('.hermes.zip')}`, {

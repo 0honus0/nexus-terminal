@@ -1,5 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { suspendedLogFile } from '../../support/backend-data';
+import { readWorkspaceSuspendMarkResponse } from '../../../../packages/shared/src/remote/suspend/workspace-result-codec';
+import { readSuspendedSessionCatalog } from '../../../../packages/shared/src/remote/suspend/http-codec';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
@@ -135,13 +138,9 @@ for (const outputKind of ['line logs', 'single line'] as const) {
 		const connectionId = await ensureTestSshConnection(context.request);
 		const original = await openWorkspaceSession(context.request, connectionId, `pad-output-${crypto.randomUUID()}`);
 		const gate = path.resolve(__dirname, '../../.tmp/ssh-root/pad-output-release');
-		const log = path.resolve(
-			__dirname,
-			'../../.tmp/backend-data/temp_suspended_ssh_logs',
-			`${original.workspaceId}.log`,
-		);
 		try {
-			await requestWorkspace(original.socket, 'suspend.mark');
+			const mark = readWorkspaceSuspendMarkResponse(await requestWorkspace(original.socket, 'suspend.mark'));
+			const log = await suspendedLogFile(mark.suspendedSessionId);
 			const started = waitForBinaryText(original.socket, 'PAD_PRODUCER_READY');
 			const producer =
 				outputKind === 'line logs'
@@ -157,10 +156,10 @@ for (const outputKind of ['line logs', 'single line'] as const) {
 				.poll(async () => {
 					const response = await context.request.get('/api/v1/ssh-suspend/suspended-sessions');
 					expect(response.ok()).toBeTruthy();
-					const sessions = await response.json();
+					const sessions = readSuspendedSessionCatalog(await response.json());
 					suspendedId =
 						sessions.find(
-							(session: { originalWorkspaceId: string; ownershipState: string }) =>
+							(session) =>
 								session.originalWorkspaceId === original.workspaceId &&
 								session.ownershipState === 'available',
 						)?.id ?? '';

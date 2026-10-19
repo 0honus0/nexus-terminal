@@ -1,7 +1,11 @@
+import { readPreferencesUpdate } from '../../../../packages/shared/src/preferences/presentation/http-codec';
+import { getTestFocus, updateTestFocus } from '../../support/presentation';
+import { readAppearanceView } from '../../../../packages/shared/src/preferences/appearance/http-codec';
+import { updateTestAppearance } from '../../support/appearance';
 import { writeFile } from 'node:fs/promises';
 import type { Page, Route, TestInfo } from '@playwright/test';
 import { expect, test } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import {
 	configureSshE2eSettings,
 	connectTestSshFromConnectionsPage,
@@ -16,7 +20,7 @@ test('terminal theme fills the whole mobile surface beyond the fixed xterm rows'
 	await configureSshE2eSettings(context.request);
 	const originalResponse = await context.request.get('/api/v1/appearance');
 	expect(originalResponse.ok()).toBeTruthy();
-	const original = await originalResponse.json();
+	const original = readAppearanceView(await originalResponse.json());
 	const themes = await context.request.get('/api/v1/terminal-themes');
 	expect(themes.ok()).toBeTruthy();
 	const theme = (await themes.json()).find((candidate: { name: string }) => candidate.name === 'Monokai Classic');
@@ -25,6 +29,7 @@ test('terminal theme fills the whole mobile surface beyond the fixed xterm rows'
 		expect(
 			(
 				await context.request.put('/api/v1/appearance', {
+					headers: { Origin: E2E_URLS.frontendOrigin },
 					data: {
 						activeTerminalThemeId: theme.id,
 						terminalBackgroundEnabled: true,
@@ -58,6 +63,7 @@ test('terminal theme fills the whole mobile surface beyond the fixed xterm rows'
 		expect(
 			(
 				await context.request.put('/api/v1/appearance', {
+					headers: { Origin: E2E_URLS.frontendOrigin },
 					data: {
 						activeTerminalThemeId: original.activeTerminalThemeId,
 						terminalBackgroundEnabled: original.terminalBackgroundEnabled,
@@ -109,16 +115,8 @@ test('saved custom focus shortcut moves focus from the live terminal to the comm
 }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	const originalResponse = await context.request.get('/api/v1/settings/focus-switcher-sequence');
-	expect(originalResponse.ok()).toBeTruthy();
-	const originalFocus = (await originalResponse.json()) as {
-		sequence: string[];
-		shortcuts: Record<string, { shortcut?: string }>;
-	};
-	const normalized = await context.request.put('/api/v1/settings/focus-switcher-sequence', {
-		data: { sequence: originalFocus.sequence, shortcuts: {} },
-	});
-	expect(normalized.ok()).toBeTruthy();
+	const originalFocus = (await getTestFocus(context.request)).focus;
+	await updateTestFocus(context.request, { sequence: originalFocus.sequence, shortcuts: {} });
 
 	try {
 		const connectionId = await ensureTestSshConnection(context.request);
@@ -131,10 +129,8 @@ test('saved custom focus shortcut moves focus from the live terminal to the comm
 		await dialog.getByRole('button', { name: /^Save/ }).click();
 		await expect(dialog).toBeHidden();
 
-		const persistedResponse = await context.request.get('/api/v1/settings/focus-switcher-sequence');
-		expect(persistedResponse.ok()).toBeTruthy();
-		const persisted = (await persistedResponse.json()) as typeof originalFocus;
-		expect(persisted.shortcuts.commandInput?.shortcut).toBe('Alt+J');
+		const persisted = (await getTestFocus(context.request)).focus;
+		expect(persisted.shortcuts.commandInput).toBe('Alt+J');
 
 		const terminalInput = page.locator('.terminal-inner-container .xterm-helper-textarea');
 		const commandInput = page.locator('.command-bar-command-input');
@@ -143,10 +139,7 @@ test('saved custom focus shortcut moves focus from the live terminal to the comm
 		await page.keyboard.press('Alt+J');
 		await expect(commandInput).toBeFocused();
 	} finally {
-		const restore = await context.request.put('/api/v1/settings/focus-switcher-sequence', {
-			data: originalFocus,
-		});
-		expect(restore.ok()).toBeTruthy();
+		await updateTestFocus(context.request, originalFocus);
 	}
 });
 
@@ -156,16 +149,8 @@ test('plain Alt cycles the configured focus sequence from a live terminal and wr
 }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	const originalResponse = await context.request.get('/api/v1/settings/focus-switcher-sequence');
-	expect(originalResponse.ok()).toBeTruthy();
-	const originalFocus = (await originalResponse.json()) as {
-		sequence: string[];
-		shortcuts: Record<string, { shortcut?: string }>;
-	};
-	const normalized = await context.request.put('/api/v1/settings/focus-switcher-sequence', {
-		data: { sequence: ['commandInput', 'terminalSearch'], shortcuts: {} },
-	});
-	expect(normalized.ok()).toBeTruthy();
+	const originalFocus = (await getTestFocus(context.request)).focus;
+	await updateTestFocus(context.request, { sequence: ['commandInput', 'terminalSearch'], shortcuts: {} });
 
 	try {
 		const connectionId = await ensureTestSshConnection(context.request);
@@ -187,10 +172,7 @@ test('plain Alt cycles the configured focus sequence from a live terminal and wr
 		await expect(commandInput).toBeFocused();
 		await expect(commandInput).toHaveAttribute('data-focus-id', 'commandInput');
 	} finally {
-		const restore = await context.request.put('/api/v1/settings/focus-switcher-sequence', {
-			data: originalFocus,
-		});
-		expect(restore.ok()).toBeTruthy();
+		await updateTestFocus(context.request, originalFocus);
 	}
 });
 
@@ -200,7 +182,9 @@ test('desktop command bar wraps only when needed and distributes second-row butt
 }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	expect((await context.request.put('/api/v1/settings', { data: { showPopupFileEditor: false } })).ok()).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.showPopupFileEditor = false;
+	});
 	const connectionId = await ensureTestSshConnection(context.request);
 	await connectTestSshFromConnectionsPage(page, connectionId);
 	const bar = page.locator('.command-bar-root--desktop');
@@ -451,7 +435,7 @@ async function captureTerminalEvidence(page: Page, testInfo: TestInfo, name: 'be
 		const commandBar = document.querySelector<HTMLElement>('.command-bar-root');
 		const commandInput = commandBar?.querySelector<HTMLElement>('.command-bar-command-input');
 
-		const rect = (element: Element | null) => {
+		const rect = (element: Element | null | undefined) => {
 			if (!element) return null;
 			const box = element.getBoundingClientRect();
 			return { x: box.x, y: box.y, width: box.width, height: box.height, right: box.right, bottom: box.bottom };
@@ -825,10 +809,10 @@ test('Ctrl+C interrupts a long-running terminal output stream', async ({ page, c
 test('large terminal scrollback follows rapid scrollbar drags back to the newest output', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	const settings = await context.request.put('/api/v1/settings', {
-		data: { terminalScrollbackLimit: 100000 },
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.terminalScrollbackLimit = 100000;
 	});
-	expect(settings.ok()).toBeTruthy();
+
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
 	await connectTestSshFromConnectionsPage(page, connectionId);
@@ -1014,10 +998,10 @@ test('desktop terminal right-click copies a selection then pastes when no select
 	await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: E2E_URLS.frontendLoopbackOrigin });
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	const preferences = await context.request.put('/api/v1/settings', {
-		data: { terminalRightClickCopyPaste: true },
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.terminalRightClickCopyPaste = true;
 	});
-	expect(preferences.ok()).toBeTruthy();
+
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
 	await connectTestSshFromConnectionsPage(page, connectionId);
@@ -1116,8 +1100,10 @@ test('terminal font-size wheel change persists when the session is closed before
 }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	const resetAppearance = await context.request.put('/api/v1/appearance', { data: { terminalFontSize: 14 } });
-	expect(resetAppearance.ok()).toBeTruthy();
+	await updateTestAppearance(context.request, (preferences) => {
+		preferences.terminalFontSize = 14;
+	});
+
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
 	await connectTestSshFromConnectionsPage(page, connectionId);
@@ -1138,7 +1124,7 @@ test('terminal font-size wheel change persists when the session is closed before
 			async () => {
 				const appearance = await context.request.get('/api/v1/appearance');
 				expect(appearance.ok()).toBeTruthy();
-				return Number((await appearance.json()).terminalFontSize);
+				return Number(readAppearanceView(await appearance.json()).terminalFontSize);
 			},
 			{ timeout: 3_000 },
 		)
@@ -1151,8 +1137,10 @@ test('rapid terminal Ctrl+wheel keeps the newest rendered size while older appea
 }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	const resetAppearance = await context.request.put('/api/v1/appearance', { data: { terminalFontSize: 14 } });
-	expect(resetAppearance.ok()).toBeTruthy();
+	await updateTestAppearance(context.request, (preferences) => {
+		preferences.terminalFontSize = 14;
+	});
+
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
 	await connectTestSshFromConnectionsPage(page, connectionId);
@@ -1181,7 +1169,7 @@ test('rapid terminal Ctrl+wheel keeps the newest rendered size while older appea
 				async () => {
 					const appearance = await context.request.get('/api/v1/appearance');
 					expect(appearance.ok()).toBeTruthy();
-					return Number((await appearance.json()).terminalFontSize);
+					return Number(readAppearanceView(await appearance.json()).terminalFontSize);
 				},
 				{ timeout: 3_000 },
 			)
@@ -1244,7 +1232,9 @@ test('desktop touch hardware keeps the legacy desktop Workspace classification',
 test('a failed logout still releases live Workspace sessions before reporting the error', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	expect((await context.request.put('/api/v1/settings', { data: { navBarVisible: true } })).ok()).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.navBarVisible = true;
+	});
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
 	await connectTestSshFromConnectionsPage(page, connectionId);
@@ -1276,7 +1266,9 @@ test('a protected API 401 invalidates the local session and releases the live Wo
 
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	expect((await context.request.put('/api/v1/settings', { data: { navBarVisible: true } })).ok()).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.navBarVisible = true;
+	});
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
 	await connectTestSshFromConnectionsPage(page, connectionId);
@@ -1285,15 +1277,17 @@ test('a protected API 401 invalidates the local session and releases the live Wo
 	await expect(tabBar.getByRole('tab')).toHaveCount(1);
 	await expect(tabBar.getByRole('button', { name: 'Hide', exact: true })).toBeVisible();
 
-	const serverLogout = await context.request.post('/api/v1/auth/logout');
+	const serverLogout = await context.request.post('/api/v1/auth/logout', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
+	});
 	expect(serverLogout.ok()).toBeTruthy();
 	await expect(page).toHaveURL(/\/workspace(?:\?|$)/);
 
 	const unauthorized = page.waitForResponse(
 		(response) =>
-			response.url().endsWith('/api/v1/settings') &&
+			response.url().endsWith('/api/v1/settings/preferences') &&
 			response.request().method() === 'PUT' &&
-			(response.request().postDataJSON() as { navBarVisible?: boolean } | null)?.navBarVisible === false &&
+			readPreferencesUpdate(response.request().postDataJSON()).preferences.navBarVisible === false &&
 			response.status() === 401,
 	);
 	await tabBar.getByRole('button', { name: 'Hide', exact: true }).click();

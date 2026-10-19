@@ -340,8 +340,6 @@ importers:
         specifier: ^3.3.12
         version: 3.3.12(@typescript/typescript6@6.0.2)
 
-  packages/protocol: {}
-
   packages/shared:
     devDependencies:
       typescript:

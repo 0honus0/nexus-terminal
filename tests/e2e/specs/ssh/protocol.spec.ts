@@ -1,7 +1,16 @@
 import { generateKeyPairSync } from 'node:crypto';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
-import { E2E_SSH, ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
+import {
+	E2E_SSH,
+	createTestSshConnection,
+	ensureTestSshConnection,
+	resetTestSshFilesystem,
+	trustTestSshHostKey,
+} from '../../support/ssh';
+import { E2E_URLS } from '../../support/test-env';
+import { readConnectionTestResponse } from '../../../../packages/shared/src/targets/connections/test-codec';
+import { readSshKeyView, readSshKeyMutation } from '../../../../packages/shared/src/targets/ssh-keys/http-codec';
 import {
 	closeWebSocket,
 	type E2eWebSocket,
@@ -9,6 +18,7 @@ import {
 	openWorkspaceSession,
 	requestWorkspace,
 	requestWorkspaceBinary,
+	resumeWorkspaceSession,
 	sendJson,
 	waitForBinaryBytes,
 	waitForBinaryText,
@@ -16,6 +26,8 @@ import {
 	waitForFilesystemReady,
 } from '../../support/ws';
 import { step } from '../../support/steps';
+
+const headers = { Origin: E2E_URLS.frontendOrigin };
 
 type ArchiveResult = {
 	type: 'completed' | 'failed' | 'cancelled';
@@ -59,63 +71,66 @@ test('backend can authenticate to the real SSH test server', async ({ request })
 	await loginAsInitialAdmin(request);
 	await resetTestSshFilesystem();
 
-	const response = await request.post('/api/v1/connections/test-unsaved', {
+	await trustTestSshHostKey(request);
+	const response = await request.post('/api/v1/targets/connections/test-unsaved', {
+		headers,
 		data: {
-			name: E2E_SSH.name,
-			type: 'SSH',
 			host: E2E_SSH.host,
 			port: E2E_SSH.port,
 			username: E2E_SSH.username,
-			authMethod: 'password',
-			password: E2E_SSH.password,
+			authentication: { kind: 'password', password: E2E_SSH.password },
+			route: 'direct',
+			proxyId: null,
+			jumpIds: [],
 		},
 	});
 
 	expect(response.ok()).toBeTruthy();
-	await expect(response.json()).resolves.toMatchObject({ success: true });
+	expect(readConnectionTestResponse(await response.json()).status).toBe('ok');
 });
 
 test('saved SSH key survives a name-only update without exposing decrypted material', async ({ request }) => {
 	await loginAsInitialAdmin(request);
 	const suffix = crypto.randomUUID();
-	const privateKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({
-		type: 'pkcs1',
-		format: 'pem',
-	});
-	const createKey = await request.post('/api/v1/ssh-keys', {
+	const privateKey = generateKeyPairSync('rsa', { modulusLength: 2048 })
+		.privateKey.export({
+			type: 'pkcs1',
+			format: 'pem',
+		})
+		.toString();
+	const createKey = await request.post('/api/v1/targets/ssh-keys', {
+		headers,
 		data: { name: `E2E protocol key ${suffix}`, privateKey },
 	});
 	expect(createKey.status()).toBe(201);
-	const keyId = ((await createKey.json()) as { key: { id: number } }).key.id;
+	const key = readSshKeyView(await createKey.json());
+	const keyId = key.id;
 	let connectionId = 0;
 
 	try {
-		const rename = await request.put(`/api/v1/ssh-keys/${keyId}`, {
-			data: { name: `E2E protocol key renamed ${suffix}` },
+		const renamedName = `E2E protocol key renamed ${suffix}`;
+		const rename = await request.put(`/api/v1/targets/ssh-keys/${keyId}`, {
+			headers,
+			data: { version: key.version, changes: { name: renamedName } },
 		});
 		expect(rename.ok()).toBeTruthy();
-		expect((await request.get(`/api/v1/ssh-keys/${keyId}/details`)).status()).toBe(404);
-
-		const createConnection = await request.post('/api/v1/connections', {
-			data: {
-				name: `E2E key connection ${suffix}`,
-				type: 'SSH',
-				host: E2E_SSH.host,
-				port: E2E_SSH.port,
-				username: E2E_SSH.username,
-				authMethod: 'key',
-				sshKeyId: keyId,
-			},
+		expect(await rename.text()).not.toContain(privateKey.toString());
+		const mutation = readSshKeyMutation(await rename.json());
+		expect(mutation).toMatchObject({ status: 'updated', value: { name: renamedName } });
+		expect((await request.get(`/api/v1/targets/ssh-keys/${keyId}/details`)).status()).toBe(404);
+		await trustTestSshHostKey(request);
+		connectionId = await createTestSshConnection(request, `E2E key connection ${suffix}`, {
+			kind: 'ssh_key',
+			sshKeyId: keyId,
 		});
-		expect(createConnection.status()).toBe(201);
-		connectionId = ((await createConnection.json()) as { connection: { id: number } }).connection.id;
 
-		const connectionTest = await request.post(`/api/v1/connections/${connectionId}/test`);
+		const connectionTest = await request.post(`/api/v1/targets/connections/${connectionId}/test`, { headers });
 		expect(connectionTest.ok()).toBeTruthy();
-		await expect(connectionTest.json()).resolves.toMatchObject({ success: true });
+		expect(readConnectionTestResponse(await connectionTest.json()).status).toBe('ok');
 	} finally {
-		if (connectionId) await request.delete(`/api/v1/connections/${connectionId}`).catch(() => undefined);
-		await request.delete(`/api/v1/ssh-keys/${keyId}`).catch(() => undefined);
+		if (connectionId)
+			expect((await request.delete(`/api/v1/targets/connections/${connectionId}`, { headers })).ok()).toBe(true);
+		expect((await request.delete(`/api/v1/targets/ssh-keys/${keyId}`, { headers })).ok()).toBe(true);
 	}
 });
 
@@ -133,7 +148,7 @@ test('duplicate workspace.connect is rejected without breaking filesystem access
 					connectionId,
 					workspaceId: `duplicate-second-${crypto.randomUUID()}`,
 				}),
-			).rejects.toThrow(/already bound/i);
+			).rejects.toThrow(/conflict/);
 		});
 
 		await step('filesystem operations still work after the rejected duplicate request', async () => {
@@ -170,7 +185,7 @@ test('detached workspace resumes only with its credential and replays missed ter
 				connectionId,
 				viewport: { columns: 100, rows: 30 },
 			}),
-		).rejects.toThrow(/already exists/i);
+		).rejects.toThrow(/conflict/);
 	} finally {
 		await closeWebSocket(replacement);
 	}
@@ -181,11 +196,11 @@ test('detached workspace resumes only with its credential and replays missed ter
 			requestWorkspace(rejected, 'workspace.resume', {
 				workspaceId: workspace.workspaceId,
 				connectionId,
-				resumeToken: `${workspace.resumeToken}x`,
+				resumeToken: workspace.resumeToken.slice(0, -1) + (workspace.resumeToken.endsWith('A') ? 'B' : 'A'),
 				attachmentGeneration: workspace.attachmentGeneration,
 				terminalOffset: workspace.terminalOffset,
 			}),
-		).rejects.toThrow(/WORKSPACE_RESUME_REJECTED/);
+		).rejects.toThrow(/not_found/);
 	} finally {
 		await closeWebSocket(rejected);
 	}
@@ -194,11 +209,7 @@ test('detached workspace resumes only with its credential and replays missed ter
 	const resumed = await openAuthenticatedWebSocket(request);
 	try {
 		const replay = waitForBinaryText(resumed, 'NEXUS_DETACHED_REPLAY', 10_000);
-		const result = await requestWorkspace<{
-			resumeToken: string;
-			attachmentGeneration: number;
-			replayedBytes: number;
-		}>(resumed, 'workspace.resume', {
+		const result = await resumeWorkspaceSession(resumed, {
 			workspaceId: workspace.workspaceId,
 			connectionId,
 			resumeToken: workspace.resumeToken,
@@ -208,8 +219,8 @@ test('detached workspace resumes only with its credential and replays missed ter
 		});
 		await expect(replay).resolves.toContain('NEXUS_DETACHED_REPLAY');
 		expect(result.replayedBytes).toBeGreaterThan(0);
-		expect(result.resumeToken).toBe(workspace.resumeToken);
-		expect(result.attachmentGeneration).toBe(workspace.attachmentGeneration);
+		expect(result.resumeToken).not.toBe(workspace.resumeToken);
+		expect(result.attachmentGeneration).toBe(workspace.attachmentGeneration + 1);
 
 		const stale = await openAuthenticatedWebSocket(request);
 		try {
@@ -221,7 +232,7 @@ test('detached workspace resumes only with its credential and replays missed ter
 					attachmentGeneration: workspace.attachmentGeneration,
 					terminalOffset: workspace.terminalOffset,
 				}),
-			).rejects.toThrow(/WORKSPACE_RESUME_REJECTED/);
+			).rejects.toThrow(/not_found/);
 		} finally {
 			await closeWebSocket(stale);
 		}
@@ -229,8 +240,8 @@ test('detached workspace resumes only with its credential and replays missed ter
 		await requestWorkspace(resumed, 'workspace.close', {
 			workspaceId: workspace.workspaceId,
 			connectionId,
-			resumeToken: workspace.resumeToken,
-			attachmentGeneration: workspace.attachmentGeneration,
+			resumeToken: result.resumeToken,
+			attachmentGeneration: result.attachmentGeneration,
 		});
 	} finally {
 		await closeWebSocket(resumed);
@@ -263,7 +274,7 @@ test('detached workspace keeps archive work running and replays its outcome on r
 				(message) => message.type === 'transfer.archive' && message.payload?.requestId === requestId,
 				10_000,
 			);
-			await requestWorkspace(resumed, 'workspace.resume', {
+			const result = await resumeWorkspaceSession(resumed, {
 				workspaceId: workspace.workspaceId,
 				connectionId,
 				resumeToken: workspace.resumeToken,
@@ -281,8 +292,8 @@ test('detached workspace keeps archive work running and replays its outcome on r
 			await requestWorkspace(resumed, 'workspace.close', {
 				workspaceId: workspace.workspaceId,
 				connectionId,
-				resumeToken: workspace.resumeToken,
-				attachmentGeneration: workspace.attachmentGeneration,
+				resumeToken: result.resumeToken,
+				attachmentGeneration: result.attachmentGeneration,
 			});
 		} finally {
 			await closeWebSocket(resumed);
@@ -322,7 +333,7 @@ test('credentialed close releases a detached workspace immediately', async ({ re
 				attachmentGeneration: workspace.attachmentGeneration,
 				terminalOffset: workspace.terminalOffset,
 			}),
-		).rejects.toThrow(/WORKSPACE_RESUME_REJECTED/);
+		).rejects.toThrow(/not_found/);
 	} finally {
 		await closeWebSocket(stale);
 	}

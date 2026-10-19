@@ -1,5 +1,10 @@
-import { expect, test, type APIRequestContext, type Locator, type Page, type Route } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { readPreferencesUpdate } from '../../../../packages/shared/src/preferences/presentation/http-codec';
+import { getTestSidebar, updateTestSidebar } from '../../support/presentation';
+import { listTestCommands, cleanupTestCommand } from '../../support/commands';
+import { E2E_URLS } from '../../support/test-env';
+import { expect, test, type APIRequestContext, type Locator, type Page } from '../../support/fixtures';
+import type { Route } from '@playwright/test';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import {
 	activeFileManagerList,
 	configureSshE2eSettings,
@@ -13,15 +18,13 @@ import { slowStep, step } from '../../support/steps';
 const QUICK_COMMAND_NAME = 'E2E Wheel Scale Command';
 
 async function recreateQuickCommand(request: APIRequestContext): Promise<number> {
-	const list = await request.get('/api/v1/quick-commands');
-	expect(list.ok()).toBeTruthy();
-	const existing = (await list.json()) as Array<{ id: number; name?: string }>;
+	const existing = await listTestCommands(request);
 	for (const command of existing.filter((item) => item.name === QUICK_COMMAND_NAME)) {
-		const remove = await request.delete(`/api/v1/quick-commands/${command.id}`);
-		expect(remove.ok()).toBeTruthy();
+		await cleanupTestCommand(request, command.id);
 	}
 
 	const create = await request.post('/api/v1/quick-commands', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: {
 			name: QUICK_COMMAND_NAME,
 			command: "printf 'WHEEL_SCALE_E2E\\n'",
@@ -78,14 +81,14 @@ async function holdFirstSettingsResponse(
 			await route.continue();
 			return;
 		}
-		let body: Record<string, unknown> = {};
+		let body;
 		try {
-			body = request.postDataJSON() as Record<string, unknown>;
+			body = readPreferencesUpdate(request.postDataJSON());
 		} catch {
 			await route.continue();
 			return;
 		}
-		if (!(key in body)) {
+		if (!(key in body.preferences)) {
 			await route.continue();
 			return;
 		}
@@ -103,7 +106,7 @@ async function holdFirstSettingsResponse(
 		await route.continue();
 	};
 
-	await page.route('**/api/v1/settings', handler);
+	await page.route('**/api/v1/settings/preferences', handler);
 	return {
 		firstStarted,
 		secondStarted,
@@ -112,7 +115,7 @@ async function holdFirstSettingsResponse(
 
 		dispose: async () => {
 			releaseFirstResolve();
-			await page.unroute('**/api/v1/settings', handler);
+			await page.unroute('**/api/v1/settings/preferences', handler);
 		},
 	};
 }
@@ -131,20 +134,17 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
 	await context.grantPermissions(['clipboard-read', 'clipboard-write']);
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	const settings = await context.request.put('/api/v1/settings', {
-		data: {
-			fileManagerRowSizeMultiplier: 1,
-			fileManagerColWidths: { type: 50, name: 300, size: 100, permissions: 120, modified: 180 },
-			quickCommandRowSizeMultiplier: 1,
-			statusMonitorScale: 1,
-			showStatusMonitorIpAddress: true,
-		},
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.fileManagerRowSizeMultiplier = 1;
+		preferences.fileManagerColWidths = { type: 50, name: 300, size: 100, permissions: 120, modified: 180 };
+		preferences.quickCommandRowSizeMultiplier = 1;
+		preferences.statusMonitorScale = 1;
+		preferences.showStatusMonitorIpAddress = true;
 	});
-	expect(settings.ok()).toBeTruthy();
-	const tagVisibility = await context.request.put('/api/v1/settings', {
-		data: { showQuickCommandTags: false },
+
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.showQuickCommandTags = false;
 	});
-	expect(tagVisibility.ok()).toBeTruthy();
 
 	await resetTestSshFilesystem();
 	const quickCommandId = await recreateQuickCommand(context.request);
@@ -335,16 +335,14 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
 test('large Ctrl+wheel delta does not leak unused zoom steps into the next event', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	const settings = await context.request.put('/api/v1/settings', {
-		data: {
-			quickCommandRowSizeMultiplier: 1,
-		},
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.quickCommandRowSizeMultiplier = 1;
 	});
-	expect(settings.ok()).toBeTruthy();
-	const tagVisibility = await context.request.put('/api/v1/settings', {
-		data: { showQuickCommandTags: false },
+
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.showQuickCommandTags = false;
 	});
-	expect(tagVisibility.ok()).toBeTruthy();
+
 	await resetTestSshFilesystem();
 	const quickCommandId = await recreateQuickCommand(context.request);
 	const connectionId = await ensureTestSshConnection(context.request);
@@ -366,25 +364,18 @@ test('File Manager keeps the latest wheel scale when the sidebar is closed immed
 	test.setTimeout(60_000);
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	const settings = await context.request.put('/api/v1/settings', {
-		data: {
-			showPopupFileManager: false,
-			fileManagerRowSizeMultiplier: 1,
-			fileManagerColWidths: { type: 50, name: 300, size: 100, permissions: 120, modified: 180 },
-		},
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.showPopupFileManager = false;
+		preferences.fileManagerRowSizeMultiplier = 1;
+		preferences.fileManagerColWidths = { type: 50, name: 300, size: 100, permissions: 120, modified: 180 };
 	});
-	expect(settings.ok()).toBeTruthy();
-	const tagVisibility = await context.request.put('/api/v1/settings', {
-		data: { showQuickCommandTags: false },
+
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.showQuickCommandTags = false;
 	});
-	expect(tagVisibility.ok()).toBeTruthy();
-	const originalSidebarResponse = await context.request.get('/api/v1/settings/sidebar');
-	expect(originalSidebarResponse.ok()).toBeTruthy();
-	const originalSidebar = (await originalSidebarResponse.json()) as { left: string[]; right: string[] };
-	const sidebarResponse = await context.request.put('/api/v1/settings/sidebar', {
-		data: { left: originalSidebar.left, right: ['fileManager'] },
-	});
-	expect(sidebarResponse.ok()).toBeTruthy();
+
+	const originalSidebar = (await getTestSidebar(context.request)).sidebar;
+	await updateTestSidebar(context.request, { left: originalSidebar.left, right: ['fileManager'] });
 
 	try {
 		await resetTestSshFilesystem();
@@ -404,10 +395,11 @@ test('File Manager keeps the latest wheel scale when the sidebar is closed immed
 
 		const persisted = page.waitForResponse(
 			(response) => {
-				if (!response.url().includes('/api/v1/settings') || response.request().method() !== 'PUT') return false;
+				if (!response.url().includes('/api/v1/settings/preferences') || response.request().method() !== 'PUT')
+					return false;
 				try {
-					const body = response.request().postDataJSON() as Record<string, unknown>;
-					return body.fileManagerRowSizeMultiplier === 0.92;
+					const body = readPreferencesUpdate(response.request().postDataJSON());
+					return body.preferences.fileManagerRowSizeMultiplier === 0.92;
 				} catch {
 					return false;
 				}
@@ -427,7 +419,7 @@ test('File Manager keeps the latest wheel scale when the sidebar is closed immed
 		await expect(reopenedList).toBeVisible();
 		await expect(reopenedList).toHaveAttribute('data-row-scale', '0.92');
 	} finally {
-		await context.request.put('/api/v1/settings/sidebar', { data: originalSidebar });
+		await updateTestSidebar(context.request, originalSidebar);
 	}
 });
 
@@ -438,19 +430,17 @@ test('rapid panel scaling persists the newest value when save responses arrive o
 	test.setTimeout(75_000);
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	const settings = await context.request.put('/api/v1/settings', {
-		data: {
-			fileManagerRowSizeMultiplier: 1,
-			fileManagerColWidths: { type: 50, name: 300, size: 100, permissions: 120, modified: 180 },
-			quickCommandRowSizeMultiplier: 1,
-			statusMonitorScale: 1,
-		},
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.fileManagerRowSizeMultiplier = 1;
+		preferences.fileManagerColWidths = { type: 50, name: 300, size: 100, permissions: 120, modified: 180 };
+		preferences.quickCommandRowSizeMultiplier = 1;
+		preferences.statusMonitorScale = 1;
 	});
-	expect(settings.ok()).toBeTruthy();
-	const tagVisibility = await context.request.put('/api/v1/settings', {
-		data: { showQuickCommandTags: false },
+
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.showQuickCommandTags = false;
 	});
-	expect(tagVisibility.ok()).toBeTruthy();
+
 	await resetTestSshFilesystem();
 	const quickCommandId = await recreateQuickCommand(context.request);
 	const connectionId = await ensureTestSshConnection(context.request);

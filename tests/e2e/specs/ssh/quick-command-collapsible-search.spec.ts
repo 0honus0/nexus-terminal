@@ -1,5 +1,8 @@
+import { listTestCommands, cleanupTestCommand } from '../../support/commands';
+import { E2E_URLS } from '../../support/test-env';
+import { readPreferencesResponse } from '../../../../packages/shared/src/preferences/presentation/http-codec';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import {
 	configureSshE2eSettings,
 	connectTestSshFromConnectionsPage,
@@ -11,14 +14,13 @@ import { step } from '../../support/steps';
 const COMMAND_NAME = 'E2E Collapsible Search Command';
 
 async function recreateQuickCommand(request: APIRequestContext): Promise<number> {
-	const list = await request.get('/api/v1/quick-commands');
-	expect(list.ok()).toBeTruthy();
-	const commands = (await list.json()) as Array<{ id: number; name?: string }>;
+	const commands = await listTestCommands(request);
 	for (const command of commands.filter((item) => item.name === COMMAND_NAME)) {
-		expect((await request.delete(`/api/v1/quick-commands/${command.id}`)).ok()).toBeTruthy();
+		await cleanupTestCommand(request, command.id);
 	}
 
 	const create = await request.post('/api/v1/quick-commands', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: {
 			name: COMMAND_NAME,
 			command: "printf 'COLLAPSIBLE_SEARCH_E2E\\n'",
@@ -39,22 +41,15 @@ test('quick command search stays visible by default and can be collapsed behind 
 	await configureSshE2eSettings(context.request);
 	await resetTestSshFilesystem();
 
-	const originalResponse = await context.request.get('/api/v1/settings');
+	const originalResponse = await context.request.get('/api/v1/settings/preferences');
 	expect(originalResponse.ok()).toBeTruthy();
-	const original = (await originalResponse.json()) as {
-		language?: string;
-		quickCommandsCollapsibleSearch?: boolean;
-		showQuickCommandTags?: boolean;
-	};
+	const original = readPreferencesResponse(await originalResponse.json()).preferences;
 
-	const normalize = await context.request.put('/api/v1/settings', {
-		data: {
-			language: 'en-US',
-			quickCommandsCollapsibleSearch: false,
-			showQuickCommandTags: false,
-		},
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.language = 'en-US';
+		preferences.quickCommandsCollapsibleSearch = false;
+		preferences.showQuickCommandTags = false;
 	});
-	expect(normalize.ok()).toBeTruthy();
 
 	const commandId = await recreateQuickCommand(context.request);
 	const connectionId = await ensureTestSshConnection(context.request);
@@ -84,17 +79,17 @@ test('quick command search stays visible by default and can be collapsed behind 
 			await checkbox.check();
 
 			const responsePromise = page.waitForResponse(
-				(response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
+				(response) =>
+					response.url().endsWith('/api/v1/settings/preferences') && response.request().method() === 'PUT',
 			);
 			await settings.getByRole('button', { name: 'Save group', exact: true }).click();
 			expect((await responsePromise).ok()).toBeTruthy();
 
-			const persisted = await context.request.get('/api/v1/settings');
+			const persisted = await context.request.get('/api/v1/settings/preferences');
 			expect(persisted.ok()).toBeTruthy();
-			expect(
-				((await persisted.json()) as { quickCommandsCollapsibleSearch?: boolean })
-					.quickCommandsCollapsibleSearch,
-			).toBe(true);
+			expect(readPreferencesResponse(await persisted.json()).preferences.quickCommandsCollapsibleSearch).toBe(
+				true,
+			);
 		});
 
 		await step('enabled setting replaces the input with a button until search is requested', async () => {
@@ -171,14 +166,12 @@ test('quick command search stays visible by default and can be collapsed behind 
 			await expect(toggle).toBeVisible();
 		});
 	} finally {
-		const restore = await context.request.put('/api/v1/settings', {
-			data: {
-				language: original.language ?? 'en-US',
-				quickCommandsCollapsibleSearch: original.quickCommandsCollapsibleSearch ?? false,
-				showQuickCommandTags: original.showQuickCommandTags ?? true,
-			},
+		await updateUiPreferences(context.request, (preferences) => {
+			preferences.language = original.language ?? 'en-US';
+			preferences.quickCommandsCollapsibleSearch = original.quickCommandsCollapsibleSearch ?? false;
+			preferences.showQuickCommandTags = original.showQuickCommandTags ?? true;
 		});
-		expect(restore.ok()).toBeTruthy();
-		await context.request.delete(`/api/v1/quick-commands/${commandId}`);
+
+		await cleanupTestCommand(context.request, commandId);
 	}
 });

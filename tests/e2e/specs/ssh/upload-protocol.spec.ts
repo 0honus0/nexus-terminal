@@ -80,6 +80,7 @@ test('pipelined upload and HTTP download stay fast under SFTP latency and preser
 		const readDelay = await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=60`, { method: 'POST' });
 		expect(readDelay.ok).toBe(true);
 		const ticketResponse = await request.post('/api/v1/sftp/download-ticket', {
+			headers: { Origin: E2E_URLS.frontendOrigin },
 			data: { connectionId, sessionId: workspace.workspaceId, remotePath },
 		});
 		expect(ticketResponse.status()).toBe(201);

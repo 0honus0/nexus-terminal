@@ -12,6 +12,7 @@ import {
 } from '../../../packages/shared/src/preferences/presentation/http-codec';
 import { PREFERENCE_LANGUAGES } from '../../../packages/shared/src/preferences/presentation/values';
 import type { PresentationPreferences } from '../../../packages/shared/src/preferences/presentation/model';
+import type { PreferencesResponse } from '../../../packages/shared/src/preferences/presentation/http';
 import { E2E_ADMIN } from './test-identity';
 import { E2E_URLS } from './test-env';
 
@@ -58,9 +59,7 @@ export async function updateUiPreferences(
 	request: APIRequestContext,
 	change: (preferences: PresentationPreferences) => void,
 ): Promise<void> {
-	const response = await request.get('/api/v1/settings/preferences');
-	expect(response.ok()).toBeTruthy();
-	const current = readPreferencesResponse(await response.json());
+	const current = await getUiPreferences(request);
 	const input = readPreferencesUpdate({
 		expectedVersion: current.version,
 		preferences: current.preferences,
@@ -72,4 +71,10 @@ export async function updateUiPreferences(
 	});
 	expect(saved.ok()).toBeTruthy();
 	expect(readPresentationUpdateResponse(await saved.json()).version).toBe(current.version + 1);
+}
+
+export async function getUiPreferences(request: APIRequestContext): Promise<PreferencesResponse> {
+	const response = await request.get('/api/v1/settings/preferences');
+	expect(response.ok()).toBeTruthy();
+	return readPreferencesResponse(await response.json());
 }

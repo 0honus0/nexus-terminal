@@ -1,16 +1,23 @@
 import { expect, test, type APIRequestContext, type Page } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { step } from '../../support/steps';
+import { E2E_URLS } from '../../support/test-env';
+import {
+	readConnectionList,
+	readConnectionView,
+	readConnectionImportResponse,
+} from '../../../../packages/shared/src/targets/connections/http-codec';
+const headers = { Origin: E2E_URLS.frontendOrigin };
 
 const RDP_NAME = 'E2E NonSSH Batch RDP';
 const VNC_NAME = 'E2E NonSSH Batch VNC';
 
 async function cleanupConnections(request: APIRequestContext): Promise<void> {
-	const response = await request.get('/api/v1/connections');
+	const response = await request.get('/api/v1/targets/connections');
 	expect(response.ok()).toBeTruthy();
-	const connections = (await response.json()) as Array<{ id: number; name?: string }>;
+	const connections = readConnectionList(await response.json());
 	for (const connection of connections.filter((item) => [RDP_NAME, VNC_NAME].includes(item.name || ''))) {
-		expect((await request.delete(`/api/v1/connections/${connection.id}`)).ok()).toBeTruthy();
+		expect((await request.delete(`/api/v1/targets/connections/${connection.id}`, { headers })).ok()).toBeTruthy();
 	}
 }
 
@@ -34,12 +41,17 @@ async function createNonSshConnection(
 	await form.locator('#conn-notes').fill(`${type} created through conditional browser form`);
 
 	const createPromise = page.waitForResponse(
-		(response) => response.url().endsWith('/api/v1/connections') && response.request().method() === 'POST',
+		(response) =>
+			response.url().endsWith('/api/v1/targets/connections/import') && response.request().method() === 'POST',
 	);
 	await form.locator('button[type="submit"]').click();
 	const create = await createPromise;
-	expect(create.status()).toBe(201);
-	const id = ((await create.json()) as { connection: { id: number } }).connection.id;
+	expect(create.status()).toBe(200);
+	const imported = readConnectionImportResponse(await create.json()).items;
+	expect(imported).toHaveLength(1);
+	const result = imported[0];
+	if (!result || result.status !== 'ok') throw new Error('Non-SSH import failed');
+	const id = result.id;
 	await expect(form).toBeHidden({ timeout: 15_000 });
 	await expect(page.locator('.connection-card').filter({ hasText: name })).toBeVisible();
 	return id;
@@ -50,7 +62,7 @@ test('RDP and VNC form branches persist correctly and filtered batch selection d
 	context,
 }) => {
 	await loginAsInitialAdmin(context.request);
-	expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
+	await setUiLanguage(context.request);
 	await cleanupConnections(context.request);
 
 	try {
@@ -62,11 +74,11 @@ test('RDP and VNC form branches persist correctly and filtered batch selection d
 			rdpId = await createNonSshConnection(page, 'RDP', RDP_NAME, '192.0.2.41', 3389);
 			vncId = await createNonSshConnection(page, 'VNC', VNC_NAME, '192.0.2.42', 5901);
 
-			const rdp = await context.request.get(`/api/v1/connections/${rdpId}`);
-			const vnc = await context.request.get(`/api/v1/connections/${vncId}`);
+			const rdp = await context.request.get(`/api/v1/targets/connections/${rdpId}`);
+			const vnc = await context.request.get(`/api/v1/targets/connections/${vncId}`);
 			expect(rdp.ok()).toBeTruthy();
 			expect(vnc.ok()).toBeTruthy();
-			await expect(rdp.json()).resolves.toMatchObject({
+			expect(readConnectionView(await rdp.json())).toMatchObject({
 				id: rdpId,
 				name: RDP_NAME,
 				type: 'RDP',
@@ -74,7 +86,7 @@ test('RDP and VNC form branches persist correctly and filtered batch selection d
 				port: 3389,
 				username: 'rdp-e2e-user',
 			});
-			await expect(vnc.json()).resolves.toMatchObject({
+			expect(readConnectionView(await vnc.json())).toMatchObject({
 				id: vncId,
 				name: VNC_NAME,
 				type: 'VNC',
@@ -124,19 +136,15 @@ test('RDP and VNC form branches persist correctly and filtered batch selection d
 				await expect(confirm).toBeVisible();
 				await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
 
-				const success = page
-					.getByRole('dialog')
-					.filter({ hasText: 'Selected connections have been successfully deleted.' });
-				await expect(success).toBeVisible({ timeout: 15_000 });
-				await success.getByRole('button', { name: 'OK', exact: true }).click();
+				await expect(page.getByText('Completed 2 operations.', { exact: true })).toBeVisible();
 				await expect(page.locator('.connection-card').filter({ hasText: RDP_NAME })).toHaveCount(0);
 				await expect(page.locator('.connection-card').filter({ hasText: VNC_NAME })).toHaveCount(0);
 
 				await expect
 					.poll(async () => {
-						const response = await context.request.get('/api/v1/connections');
+						const response = await context.request.get('/api/v1/targets/connections');
 						if (!response.ok()) return [RDP_NAME, VNC_NAME];
-						const names = ((await response.json()) as Array<{ name?: string }>).map((item) => item.name);
+						const names = readConnectionList(await response.json()).map((item) => item.name);
 						return [RDP_NAME, VNC_NAME].filter((name) => names.includes(name));
 					})
 					.toEqual([]);

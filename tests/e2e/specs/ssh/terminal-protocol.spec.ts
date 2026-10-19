@@ -96,11 +96,7 @@ test('directory changes reject terminal control characters before writing to the
 
 	try {
 		const requestId = `cwd-control-${crypto.randomUUID()}`;
-		const failedPromise = waitForJson(
-			workspace.socket,
-			(message) => message.type === 'terminal.directoryChangeFailed' && message.payload?.requestId === requestId,
-			10_000,
-		);
+		const before = await requestWorkspace(workspace.socket, 'terminal.currentDirectory');
 		await expect(
 			requestWorkspace(
 				workspace.socket,
@@ -108,9 +104,8 @@ test('directory changes reject terminal control characters before writing to the
 				{ path: '/folder-seed\nsecond-command' },
 				requestId,
 			),
-		).resolves.toMatchObject({ queued: true });
-		const failed = await failedPromise;
-		expect(failed.payload?.message).toContain('控制字符');
+		).rejects.toThrow(/invalid_input/);
+		await expect(requestWorkspace(workspace.socket, 'terminal.currentDirectory')).resolves.toEqual(before);
 	} finally {
 		await closeWebSocket(workspace.socket);
 	}

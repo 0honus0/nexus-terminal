@@ -1,5 +1,5 @@
 import { expect, test } from '../../support/fixtures';
-import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
+import { loginAsInitialAdmin, setUiLanguage, updateUiPreferences } from '../../support/auth';
 import { configureSshE2eSettings, ensureTestSshConnection } from '../../support/ssh';
 
 test('server status keeps values aligned and contained in narrow, short and zoomed panes', async ({
@@ -10,7 +10,9 @@ test('server status keeps values aligned and contained in narrow, short and zoom
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
 	await setUiLanguage(context.request, 'zh-CN');
-	expect((await context.request.put('/api/v1/settings', { data: { statusMonitorScale: 1 } })).ok()).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.statusMonitorScale = 1;
+	});
 	// Use the screenshot's longer capacity values while preserving the real SSH status transport.
 	await page.routeWebSocket('**/ws/workspace', (socket) => {
 		const server = socket.connectToServer();

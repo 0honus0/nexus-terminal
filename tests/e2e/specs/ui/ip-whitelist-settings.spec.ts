@@ -1,8 +1,10 @@
 import { writeFile } from 'node:fs/promises';
 import { expect, test } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
+
+import { getTestSettings, updateTestSettings } from '../../support/settings';
 
 const WHITELIST = '127.0.0.1\n10.0.0.0/8\n192.168.0.0/16';
 
@@ -11,9 +13,8 @@ test('IP whitelist UI saves and reloads the configured allow-list without enabli
 	context,
 }, testInfo) => {
 	await loginAsInitialAdmin(context.request);
-	const originalResponse = await context.request.get('/api/v1/settings');
-	expect(originalResponse.ok()).toBeTruthy();
-	const original = (await originalResponse.json()) as Record<string, string | undefined>;
+	await setUiLanguage(context.request);
+	const original = await getTestSettings(context.request);
 
 	try {
 		await page.goto('/settings');
@@ -71,17 +72,18 @@ test('IP whitelist UI saves and reloads the configured allow-list without enabli
 			const responsePromise = page.waitForResponse((response) => {
 				if (!response.url().endsWith('/api/v1/settings') || response.request().method() !== 'PUT') return false;
 				try {
-					const body = response.request().postDataJSON() as { ipWhitelist?: unknown };
-					return body.ipWhitelist === WHITELIST;
+					const body = response.request().postDataJSON() as { policy?: { ipWhitelist?: unknown } };
+					return body.policy?.ipWhitelist === WHITELIST;
 				} catch {
 					return false;
 				}
 			});
 			await whitelist.getByRole('button', { name: 'Save', exact: true }).click();
 			expect((await responsePromise).ok()).toBeTruthy();
-			await expect(whitelist).toContainText('IP whitelist saved successfully.');
-			const persisted = await context.request.get('/api/v1/settings');
-			expect(((await persisted.json()) as Record<string, string>).ipWhitelist).toBe(WHITELIST);
+			await expect(whitelist).toContainText('Saved. Restart the server to apply this configuration.');
+			const persisted = await getTestSettings(context.request);
+			expect(persisted.policy.ipWhitelist).toBe(WHITELIST);
+			expect(persisted.effectiveVersion).toBe(original.effectiveVersion);
 		});
 
 		await step('reload keeps the saved whitelist visible', async () => {
@@ -100,17 +102,17 @@ test('IP whitelist UI saves and reloads the configured allow-list without enabli
 			);
 			await reloadedWhitelist.getByRole('button', { name: 'Save', exact: true }).click();
 			expect((await responsePromise).ok()).toBeTruthy();
-			await expect(reloadedWhitelist).toContainText('IP whitelist saved successfully.');
-			const persisted = await context.request.get('/api/v1/settings');
-			expect(((await persisted.json()) as Record<string, string>).ipWhitelist).toBe('');
+			await expect(reloadedWhitelist).toContainText('Saved. Restart the server to apply this configuration.');
+			const persisted = await getTestSettings(context.request);
+			expect(persisted.policy.ipWhitelist).toBe('');
+			expect(persisted.effectiveVersion).toBe(original.effectiveVersion);
 			await page.reload();
 			await page.getByRole('tab', { name: 'IP Control', exact: true }).click();
 			await expect(page.locator('#ipWhitelist')).toHaveValue('');
 		});
 	} finally {
-		const restore = await context.request.put('/api/v1/settings', {
-			data: { ipWhitelist: original.ipWhitelist ?? '' },
+		await updateTestSettings(context.request, (value) => {
+			value.policy.ipWhitelist = original.policy.ipWhitelist;
 		});
-		expect(restore.ok()).toBeTruthy();
 	}
 });

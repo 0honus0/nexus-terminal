@@ -1,7 +1,13 @@
+import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
+import { readTestConnectionImportId } from '../../support/targets';
+import { E2E_URLS } from '../../support/test-env';
+import { readAppearanceView } from '../../../../packages/shared/src/preferences/appearance/http-codec';
+import { updateTestAppearance } from '../../support/appearance';
+import { readPreferencesResponse } from '../../../../packages/shared/src/preferences/presentation/http-codec';
 import { writeFile } from 'node:fs/promises';
 import type { APIRequestContext, Locator, Page, TestInfo } from '@playwright/test';
 import { expect, test } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import {
 	E2E_SSH,
 	configureSshE2eSettings,
@@ -19,13 +25,15 @@ const MULTI_SESSION_NAMES = [
 ] as const;
 
 async function removeMultiSessionConnections(request: APIRequestContext): Promise<void> {
-	const response = await request.get('/api/v1/connections');
+	const response = await request.get('/api/v1/targets/connections');
 	expect(response.ok()).toBeTruthy();
-	const connections = (await response.json()) as Array<{ id: number; name?: string | null }>;
+	const connections = readConnectionList(await response.json());
 	for (const connection of connections.filter((item) =>
 		MULTI_SESSION_NAMES.includes(item.name as (typeof MULTI_SESSION_NAMES)[number]),
 	)) {
-		const remove = await request.delete(`/api/v1/connections/${connection.id}`);
+		const remove = await request.delete(`/api/v1/targets/connections/${connection.id}`, {
+			headers: { Origin: E2E_URLS.frontendOrigin },
+		});
 		expect(remove.ok()).toBeTruthy();
 	}
 }
@@ -33,19 +41,33 @@ async function removeMultiSessionConnections(request: APIRequestContext): Promis
 async function createMultiSessionConnections(request: APIRequestContext): Promise<number[]> {
 	const ids: number[] = [];
 	for (const name of MULTI_SESSION_NAMES) {
-		const response = await request.post('/api/v1/connections', {
+		const response = await request.post('/api/v1/targets/connections/import', {
+			headers: { Origin: E2E_URLS.frontendOrigin },
 			data: {
-				name,
-				type: 'SSH',
-				host: E2E_SSH.host,
-				port: E2E_SSH.port,
-				username: E2E_SSH.username,
-				authMethod: 'password',
-				password: E2E_SSH.password,
+				items: [
+					{
+						connection: {
+							name: name,
+							type: 'SSH',
+							host: E2E_SSH.host,
+							port: E2E_SSH.port,
+							username: E2E_SSH.username,
+							notes: null,
+							route: 'direct',
+							proxyId: null,
+							rdpRemoteApp: null,
+							rdpRemoteAppDirectory: null,
+							rdpRemoteAppArguments: null,
+							tagIds: [],
+							jumpIds: [],
+						},
+						credential: { kind: 'password', password: E2E_SSH.password },
+					},
+				],
 			},
 		});
-		expect(response.status()).toBe(201);
-		ids.push(((await response.json()) as { connection: { id: number } }).connection.id);
+		expect(response.status()).toBe(200);
+		ids.push(readTestConnectionImportId(await response.json()));
 	}
 	return ids;
 }
@@ -76,7 +98,7 @@ async function captureWorkspaceEvidence(page: Page, testInfo: TestInfo, name: 'b
 		const tabs = [...(tabBar?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])];
 		const activeTab = tabs.find((tab) => tab.getAttribute('aria-selected') === 'true');
 
-		const rect = (element: Element | null) => {
+		const rect = (element: Element | null | undefined) => {
 			if (!element) return null;
 			const box = element.getBoundingClientRect();
 			return { x: box.x, y: box.y, width: box.width, height: box.height, right: box.right, bottom: box.bottom };
@@ -122,19 +144,33 @@ test('initial SSH failure removes its connecting tab without automatic retry', a
 	await configureSshE2eSettings(context.request);
 
 	const name = `E2E Initial Failure ${Date.now()}`;
-	const create = await context.request.post('/api/v1/connections', {
+	const create = await context.request.post('/api/v1/targets/connections/import', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: {
-			name,
-			type: 'SSH',
-			host: '127.0.0.1',
-			port: 1,
-			username: 'e2e',
-			authMethod: 'password',
-			password: 'invalid-for-unreachable-port',
+			items: [
+				{
+					connection: {
+						name: name,
+						type: 'SSH',
+						host: '127.0.0.1',
+						port: 1,
+						username: 'e2e',
+						notes: null,
+						route: 'direct',
+						proxyId: null,
+						rdpRemoteApp: null,
+						rdpRemoteAppDirectory: null,
+						rdpRemoteAppArguments: null,
+						tagIds: [],
+						jumpIds: [],
+					},
+					credential: { kind: 'password', password: 'invalid-for-unreachable-port' },
+				},
+			],
 		},
 	});
-	expect(create.status()).toBe(201);
-	const connectionId = ((await create.json()) as { connection: { id: number } }).connection.id;
+	expect(create.status()).toBe(200);
+	const connectionId = readTestConnectionImportId(await create.json());
 
 	await page.addInitScript(() => {
 		const state = window as typeof window & { __e2eMaxWorkspaceTabs?: number };
@@ -190,7 +226,9 @@ test('initial SSH failure removes its connecting tab without automatic retry', a
 		await page.waitForTimeout(3_000);
 		expect(workspaceConnectIds).toEqual([failedWorkspaceId]);
 	} finally {
-		const remove = await context.request.delete(`/api/v1/connections/${connectionId}`);
+		const remove = await context.request.delete(`/api/v1/targets/connections/${connectionId}`, {
+			headers: { Origin: E2E_URLS.frontendOrigin },
+		});
 		expect([200, 204, 404]).toContain(remove.status());
 	}
 });
@@ -380,12 +418,14 @@ for (const background of [false, true]) {
 test('disconnected SSH retries periodically and any key reconnects immediately', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	const settingsResponse = await context.request.get('/api/v1/settings');
+	const settingsResponse = await context.request.get('/api/v1/settings/preferences');
 	expect(settingsResponse.ok()).toBeTruthy();
 	const originalFrontendLogLevel =
-		((await settingsResponse.json()) as { frontendLogLevel?: string }).frontendLogLevel ?? 'info';
-	const debugSettings = await context.request.put('/api/v1/settings', { data: { frontendLogLevel: 'debug' } });
-	expect(debugSettings.ok()).toBeTruthy();
+		readPreferencesResponse(await settingsResponse.json()).preferences.frontendLogLevel ?? 'info';
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.frontendLogLevel = 'debug';
+	});
+
 	await setTestSshOnline(true);
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
@@ -592,10 +632,9 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
 	} finally {
 		await setTestSshOnline(true);
 		await loginAsInitialAdmin(context.request);
-		const restoreSettings = await context.request.put('/api/v1/settings', {
-			data: { frontendLogLevel: originalFrontendLogLevel },
+		await updateUiPreferences(context.request, (preferences) => {
+			preferences.frontendLogLevel = originalFrontendLogLevel;
 		});
-		expect(restoreSettings.ok()).toBeTruthy();
 	}
 });
 
@@ -825,10 +864,19 @@ test('command history broadcasts a saved command to every connected SSH session'
 	expect(existingHistory.ok()).toBeTruthy();
 	for (const entry of (await existingHistory.json()) as Array<{ id: number; command: string }>) {
 		if (entry.command !== command) continue;
-		expect((await context.request.delete(`/api/v1/command-history/${entry.id}`)).ok()).toBeTruthy();
+		expect(
+			(
+				await context.request.delete(`/api/v1/command-history/${entry.id}`, {
+					headers: { Origin: E2E_URLS.frontendOrigin },
+				})
+			).ok(),
+		).toBeTruthy();
 	}
 
-	const createHistory = await context.request.post('/api/v1/command-history', { data: { command } });
+	const createHistory = await context.request.post('/api/v1/command-history', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
+		data: { command },
+	});
 	expect(createHistory.status()).toBe(201);
 	const historyId = ((await createHistory.json()) as { id: number }).id;
 
@@ -862,7 +910,9 @@ test('command history broadcasts a saved command to every connected SSH session'
 		expect(history.ok()).toBeTruthy();
 		for (const entry of (await history.json()) as Array<{ id: number; command: string }>) {
 			if (entry.command !== command) continue;
-			const remove = await context.request.delete(`/api/v1/command-history/${entry.id}`);
+			const remove = await context.request.delete(`/api/v1/command-history/${entry.id}`, {
+				headers: { Origin: E2E_URLS.frontendOrigin },
+			});
 			expect([200, 404]).toContain(remove.status());
 		}
 		await setTestSshOnline(true);
@@ -881,10 +931,7 @@ test('HTML terminal background starts with a visible viewport after session swit
 	await removeMultiSessionConnections(context.request);
 	const originalResponse = await context.request.get('/api/v1/appearance');
 	expect(originalResponse.ok()).toBeTruthy();
-	const original = (await originalResponse.json()) as {
-		terminalCustomHtml: string;
-		terminalBackgroundEnabled: boolean;
-	};
+	const original = readAppearanceView(await originalResponse.json());
 	const presetName = 'e2e-visible-viewport.html';
 	const html = `<canvas id="scene"></canvas><script>
     const canvas = document.getElementById('scene');
@@ -896,6 +943,7 @@ test('HTML terminal background starts with a visible viewport after session swit
   </script>`;
 	const connectionIds = await createMultiSessionConnections(context.request);
 	const presetResponse = await context.request.post('/api/v1/appearance/html-presets/local', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: { name: presetName, content: html },
 	});
 	expect(presetResponse.status()).toBe(201);
@@ -953,13 +1001,13 @@ test('HTML terminal background starts with a visible viewport after session swit
 			await expectPaintedBackground();
 		}
 	} finally {
-		await context.request.put('/api/v1/appearance', {
-			data: {
-				terminalCustomHtml: original.terminalCustomHtml,
-				terminalBackgroundEnabled: original.terminalBackgroundEnabled,
-			},
+		await updateTestAppearance(context.request, (preferences) => {
+			preferences.terminalCustomHtml = original.terminalCustomHtml;
+			preferences.terminalBackgroundEnabled = original.terminalBackgroundEnabled;
 		});
-		await context.request.delete(`/api/v1/appearance/html-presets/local/${presetName}`);
+		await context.request.delete(`/api/v1/appearance/html-presets/local/${presetName}`, {
+			headers: { Origin: E2E_URLS.frontendOrigin },
+		});
 		await removeMultiSessionConnections(context.request);
 	}
 });

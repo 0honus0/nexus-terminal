@@ -3,11 +3,9 @@
   "id": "nexus.upgrade",
   "version": "1.0.0",
   "displayName": "Upgrade Fixture",
-  "sdkVersion": "1.0.0",
-  "nexus": {
-    "minVersion": "1.0.0",
-    "maxVersion": "1.99.99"
-  },
+  "sdkVersion": "1",
   "capabilities": [],
-  "intents": []
+  "intents": [],
+  "frontendEntry": null,
+  "backendEntry": null
 }

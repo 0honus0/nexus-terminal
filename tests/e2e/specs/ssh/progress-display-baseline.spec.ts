@@ -1,3 +1,5 @@
+import { readTestConnectionImportId } from '../../support/targets';
+import { E2E_URLS } from '../../support/test-env';
 import { expect, test, type BrowserContext, type Locator, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
@@ -354,34 +356,60 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 	const sourceConnectionId = await ensureTestSshConnection(context.request);
 	const validTargetName = `E2E Send OK ${crypto.randomUUID().slice(0, 8)}`;
 	const failedTargetName = `E2E Send Fail ${crypto.randomUUID().slice(0, 8)}`;
-	const validTargetResponse = await context.request.post('/api/v1/connections', {
+	const validTargetResponse = await context.request.post('/api/v1/targets/connections/import', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: {
-			name: validTargetName,
-			type: 'SSH',
-			host: E2E_SSH.host,
-			port: E2E_SSH.port,
-			username: E2E_SSH.username,
-			authMethod: 'password',
-			password: E2E_SSH.password,
+			items: [
+				{
+					connection: {
+						name: validTargetName,
+						type: 'SSH',
+						host: E2E_SSH.host,
+						port: E2E_SSH.port,
+						username: E2E_SSH.username,
+						notes: null,
+						route: 'direct',
+						proxyId: null,
+						rdpRemoteApp: null,
+						rdpRemoteAppDirectory: null,
+						rdpRemoteAppArguments: null,
+						tagIds: [],
+						jumpIds: [],
+					},
+					credential: { kind: 'password', password: E2E_SSH.password },
+				},
+			],
 		},
 	});
-	expect(validTargetResponse.status()).toBe(201);
-	const validTargetConnectionId = ((await validTargetResponse.json()) as { connection: { id: number } }).connection
-		.id;
-	const failedTargetResponse = await context.request.post('/api/v1/connections', {
+	expect(validTargetResponse.status()).toBe(200);
+	const validTargetConnectionId = readTestConnectionImportId(await validTargetResponse.json());
+	const failedTargetResponse = await context.request.post('/api/v1/targets/connections/import', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: {
-			name: failedTargetName,
-			type: 'SSH',
-			host: E2E_SSH.host,
-			port: 1,
-			username: E2E_SSH.username,
-			authMethod: 'password',
-			password: E2E_SSH.password,
+			items: [
+				{
+					connection: {
+						name: failedTargetName,
+						type: 'SSH',
+						host: E2E_SSH.host,
+						port: 1,
+						username: E2E_SSH.username,
+						notes: null,
+						route: 'direct',
+						proxyId: null,
+						rdpRemoteApp: null,
+						rdpRemoteAppDirectory: null,
+						rdpRemoteAppArguments: null,
+						tagIds: [],
+						jumpIds: [],
+					},
+					credential: { kind: 'password', password: E2E_SSH.password },
+				},
+			],
 		},
 	});
-	expect(failedTargetResponse.status()).toBe(201);
-	const failedTargetConnectionId = ((await failedTargetResponse.json()) as { connection: { id: number } }).connection
-		.id;
+	expect(failedTargetResponse.status()).toBe(200);
+	const failedTargetConnectionId = readTestConnectionImportId(await failedTargetResponse.json());
 
 	try {
 		await connectTestSshFromConnectionsPage(page, sourceConnectionId);
@@ -487,11 +515,17 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 						[validTargetConnectionId, failedTargetConnectionId].includes(id),
 					)
 				) {
-					await context.request.delete(`/api/v1/transfers/${encodeURIComponent(task.taskId)}`);
+					await context.request.delete(`/api/v1/transfers/${encodeURIComponent(task.taskId)}`, {
+						headers: { Origin: E2E_URLS.frontendOrigin },
+					});
 				}
 			}
 		}
-		await context.request.delete(`/api/v1/connections/${validTargetConnectionId}`);
-		await context.request.delete(`/api/v1/connections/${failedTargetConnectionId}`);
+		await context.request.delete(`/api/v1/targets/connections/${validTargetConnectionId}`, {
+			headers: { Origin: E2E_URLS.frontendOrigin },
+		});
+		await context.request.delete(`/api/v1/targets/connections/${failedTargetConnectionId}`, {
+			headers: { Origin: E2E_URLS.frontendOrigin },
+		});
 	}
 });

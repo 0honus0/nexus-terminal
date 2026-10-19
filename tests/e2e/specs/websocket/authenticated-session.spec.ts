@@ -2,6 +2,10 @@ import { expect, test } from '../../support/fixtures';
 import { E2E_ADMIN, loginAsInitialAdmin } from '../../support/auth';
 import { closeWebSocket, openAuthenticatedWebSocket, openWorkspaceSession, requestWorkspace } from '../../support/ws';
 import { ensureTestSshConnection } from '../../support/ssh';
+import { E2E_URLS } from '../../support/test-env';
+import { readWorkspaceMessage } from '../../../../packages/shared/src/remote/workspace/workspace-codec';
+
+const headers = { Origin: E2E_URLS.frontendOrigin };
 
 test('password rotation revokes established WebSocket capability and requires new-password authentication', async ({
 	request,
@@ -24,6 +28,7 @@ test('password rotation revokes established WebSocket capability and requires ne
 			});
 		});
 		const changed = await request.put('/api/v1/auth/password', {
+			headers,
 			data: { currentPassword: E2E_ADMIN.password, newPassword: password },
 		});
 		expect(changed.ok()).toBeTruthy();
@@ -33,6 +38,7 @@ test('password rotation revokes established WebSocket capability and requires ne
 		expect((await request.get('/api/v1/auth/status')).status()).toBe(401);
 		expect((await request.get('/api/v1/auth/status', { headers: { Cookie: oldCookie } })).status()).toBe(401);
 		const login = await request.post('/api/v1/auth/login', {
+			headers,
 			data: { username: E2E_ADMIN.username, password, rememberMe: false },
 		});
 		expect(login.ok()).toBeTruthy();
@@ -48,6 +54,7 @@ test('password rotation revokes established WebSocket capability and requires ne
 			expect(
 				(
 					await request.post('/api/v1/auth/login', {
+						headers,
 						data: { username: E2E_ADMIN.username, password, rememberMe: false },
 					})
 				).ok(),
@@ -55,6 +62,7 @@ test('password rotation revokes established WebSocket capability and requires ne
 			expect(
 				(
 					await request.put('/api/v1/auth/password', {
+						headers,
 						data: { currentPassword: password, newPassword: E2E_ADMIN.password },
 					})
 				).ok(),
@@ -79,7 +87,7 @@ test('logout revokes an established Workspace WebSocket and the previous HTTP se
 				resolve({ code });
 			});
 		});
-		expect((await request.post('/api/v1/auth/logout')).ok()).toBeTruthy();
+		expect((await request.post('/api/v1/auth/logout', { headers })).ok()).toBeTruthy();
 		await closed;
 		expect(socket.readyState).toBe(3);
 		expect((await request.get('/api/v1/auth/status')).status()).toBe(401);
@@ -187,12 +195,11 @@ test.describe('authenticated WebSocket', () => {
 			});
 		});
 
-		expect(response).toMatchObject({
+		expect(readWorkspaceMessage(response)).toEqual({
 			type: 'response',
 			requestId: 'e2e-route-check',
-			payload: { ok: false },
+			payload: { ok: false, error: 'invalid_input' },
 		});
-		expect(response.payload?.error).toContain('Unsupported Workspace operation');
 		expect(
 			observedFrames.some(
 				(frame) => frame.direction === 'sent' && String(frame.payload).includes('e2e.unsupported'),

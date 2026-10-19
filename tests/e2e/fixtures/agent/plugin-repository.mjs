@@ -103,7 +103,7 @@ const catalog = {
 		{
 			appId: 'nexus.unsafe',
 			version: '1.0.0',
-			sdkVersion: '1.0.0',
+			sdkVersion: '1',
 			nexus: { minVersion: '1.0.0', maxVersion: '1.99.99' },
 			displayName: 'Unsafe Archive Fixture',
 			description: 'E2E-only package containing a symbolic link and no trusted payload.',
@@ -115,7 +115,7 @@ const catalog = {
 		{
 			appId: 'nexus.agent',
 			version: '1.0.4',
-			sdkVersion: '1.0.0',
+			sdkVersion: '1',
 			nexus: { minVersion: '1.0.4', maxVersion: '1.0.99' },
 			displayName: 'Nexus Agent',
 			description: 'E2E-only compatibility fixture that requires a newer Nexus 1.0.x host.',

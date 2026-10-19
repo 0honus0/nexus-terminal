@@ -1,5 +1,12 @@
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { getUiPreferences, loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
+import { readCommandMutation } from '../../../../packages/shared/src/preferences/commands/http-codec';
+import { listTestCommands, removeTestCommand } from '../../support/commands';
+import {
+	readCommandHistoryList,
+	readHistoryAddResponse,
+} from '../../../../packages/shared/src/preferences/history/http-codec';
+import { E2E_URLS } from '../../support/test-env';
 import {
 	configureSshE2eSettings,
 	connectTestSshFromConnectionsPage,
@@ -16,14 +23,13 @@ const QUICK_COMMAND_MARKER = 'COMMAND_INPUT_SYNC_E2E';
 const COMMAND_HISTORY_SYNC_MARKER = 'COMMAND_HISTORY_SYNC_E2E';
 
 async function recreateQuickCommand(request: APIRequestContext): Promise<number> {
-	const list = await request.get('/api/v1/quick-commands');
-	expect(list.ok()).toBeTruthy();
-	const commands = (await list.json()) as Array<{ id: number; name?: string }>;
+	const commands = await listTestCommands(request);
 	for (const command of commands.filter((item) => item.name === QUICK_COMMAND_NAME)) {
-		expect((await request.delete(`/api/v1/quick-commands/${command.id}`)).ok()).toBeTruthy();
+		await removeTestCommand(request, command);
 	}
 
 	const create = await request.post('/api/v1/quick-commands', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: {
 			name: QUICK_COMMAND_NAME,
 			command: `printf '${QUICK_COMMAND_MARKER}\\n'`,
@@ -32,7 +38,7 @@ async function recreateQuickCommand(request: APIRequestContext): Promise<number>
 		},
 	});
 	expect(create.status()).toBe(201);
-	return ((await create.json()) as { command: { id: number } }).command.id;
+	return readCommandMutation(await create.json()).command.id;
 }
 
 test('command input sync setting drives quick-command search and keyboard execution in a live SSH session', async ({
@@ -43,25 +49,12 @@ test('command input sync setting drives quick-command search and keyboard execut
 	await configureSshE2eSettings(context.request);
 	await resetTestSshFilesystem();
 
-	const originalResponse = await context.request.get('/api/v1/settings');
-	expect(originalResponse.ok()).toBeTruthy();
-	const original = (await originalResponse.json()) as {
-		commandInputSyncTarget?: string;
-		quickCommandsCollapsibleSearch?: boolean;
-		showQuickCommandTags?: boolean;
-	};
-
-	expect(
-		(
-			await context.request.put('/api/v1/settings', {
-				data: {
-					commandInputSyncTarget: 'none',
-					quickCommandsCollapsibleSearch: false,
-					showQuickCommandTags: false,
-				},
-			})
-		).ok(),
-	).toBeTruthy();
+	const original = (await getUiPreferences(context.request)).preferences;
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.commandInputSyncTarget = 'none';
+		preferences.quickCommandsCollapsibleSearch = false;
+		preferences.showQuickCommandTags = false;
+	});
 
 	const commandId = await recreateQuickCommand(context.request);
 	const connectionId = await ensureTestSshConnection(context.request);
@@ -77,16 +70,13 @@ test('command input sync setting drives quick-command search and keyboard execut
 			await selectUiOption(syncTarget, 'quickCommands');
 
 			const responsePromise = page.waitForResponse(
-				(response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
+				(response) =>
+					response.url().endsWith('/api/v1/settings/preferences') && response.request().method() === 'PUT',
 			);
 			await commandsGroup.getByRole('button', { name: 'Save group', exact: true }).click();
 			expect((await responsePromise).ok()).toBeTruthy();
 
-			const persisted = await context.request.get('/api/v1/settings');
-			expect(persisted.ok()).toBeTruthy();
-			expect(((await persisted.json()) as { commandInputSyncTarget?: string }).commandInputSyncTarget).toBe(
-				'quickCommands',
-			);
+			expect((await getUiPreferences(context.request)).preferences.commandInputSyncTarget).toBe('quickCommands');
 		});
 
 		await step(
@@ -116,15 +106,14 @@ test('command input sync setting drives quick-command search and keyboard execut
 			},
 		);
 	} finally {
-		const restore = await context.request.put('/api/v1/settings', {
-			data: {
-				commandInputSyncTarget: original.commandInputSyncTarget ?? 'none',
-				quickCommandsCollapsibleSearch: original.quickCommandsCollapsibleSearch ?? false,
-				showQuickCommandTags: original.showQuickCommandTags ?? true,
-			},
+		await updateUiPreferences(context.request, (preferences) => {
+			preferences.commandInputSyncTarget = original.commandInputSyncTarget;
+			preferences.quickCommandsCollapsibleSearch = original.quickCommandsCollapsibleSearch;
+			preferences.showQuickCommandTags = original.showQuickCommandTags;
 		});
-		expect(restore.ok()).toBeTruthy();
-		await context.request.delete(`/api/v1/quick-commands/${commandId}`);
+		const command = (await listTestCommands(context.request)).find((item) => item.id === commandId);
+		if (!command) throw new Error('Quick command disappeared before cleanup');
+		await removeTestCommand(context.request, command);
 	}
 });
 
@@ -136,31 +125,31 @@ test('command input sync filters command history and executes the keyboard selec
 	await configureSshE2eSettings(context.request);
 	await resetTestSshFilesystem();
 
-	const originalResponse = await context.request.get('/api/v1/settings');
-	expect(originalResponse.ok()).toBeTruthy();
-	const original = (await originalResponse.json()) as { commandInputSyncTarget?: string };
+	const original = (await getUiPreferences(context.request)).preferences;
 	const historyCommand = `printf '${COMMAND_HISTORY_SYNC_MARKER}\\n'`;
 
-	const existingHistory = await context.request.get('/api/v1/command-history');
+	const existingHistory = await context.request.get('/api/v1/command-history?limit=50&offset=0');
 	expect(existingHistory.ok()).toBeTruthy();
-	for (const entry of (await existingHistory.json()) as Array<{ id: number; command: string }>) {
+	for (const entry of readCommandHistoryList(await existingHistory.json(), { limit: 50, offset: 0 }).entries) {
 		if (entry.command !== historyCommand) continue;
-		expect((await context.request.delete(`/api/v1/command-history/${entry.id}`)).ok()).toBeTruthy();
+		expect(
+			(
+				await context.request.delete(`/api/v1/command-history/${entry.id}`, {
+					headers: { Origin: E2E_URLS.frontendOrigin },
+				})
+			).ok(),
+		).toBeTruthy();
 	}
 
 	const createHistory = await context.request.post('/api/v1/command-history', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: { command: historyCommand },
 	});
 	expect(createHistory.status()).toBe(201);
-	const historyId = ((await createHistory.json()) as { id: number }).id;
-
-	expect(
-		(
-			await context.request.put('/api/v1/settings', {
-				data: { commandInputSyncTarget: 'commandHistory' },
-			})
-		).ok(),
-	).toBeTruthy();
+	const historyId = readHistoryAddResponse(await createHistory.json()).id;
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.commandInputSyncTarget = 'commandHistory';
+	});
 
 	const connectionId = await ensureTestSshConnection(context.request);
 
@@ -187,16 +176,17 @@ test('command input sync filters command history and executes the keyboard selec
 		await expect(commandInput).toHaveValue('');
 		await expect(historySearch).toHaveValue('');
 	} finally {
-		const restore = await context.request.put('/api/v1/settings', {
-			data: { commandInputSyncTarget: original.commandInputSyncTarget ?? 'none' },
+		await updateUiPreferences(context.request, (preferences) => {
+			preferences.commandInputSyncTarget = original.commandInputSyncTarget;
 		});
-		expect(restore.ok()).toBeTruthy();
 
-		const history = await context.request.get('/api/v1/command-history');
+		const history = await context.request.get('/api/v1/command-history?limit=50&offset=0');
 		expect(history.ok()).toBeTruthy();
-		for (const entry of (await history.json()) as Array<{ id: number; command: string }>) {
+		for (const entry of readCommandHistoryList(await history.json(), { limit: 50, offset: 0 }).entries) {
 			if (entry.command !== historyCommand) continue;
-			const remove = await context.request.delete(`/api/v1/command-history/${entry.id}`);
+			const remove = await context.request.delete(`/api/v1/command-history/${entry.id}`, {
+				headers: { Origin: E2E_URLS.frontendOrigin },
+			});
 			expect([200, 404]).toContain(remove.status());
 		}
 	}
@@ -210,9 +200,7 @@ test('file-manager delete confirmation setting can disable the prompt for real S
 	await configureSshE2eSettings(context.request);
 	await resetTestSshFilesystem();
 
-	const originalResponse = await context.request.get('/api/v1/settings');
-	expect(originalResponse.ok()).toBeTruthy();
-	const original = (await originalResponse.json()) as { fileManagerShowDeleteConfirmation?: boolean };
+	const original = (await getUiPreferences(context.request)).preferences;
 	const connectionId = await ensureTestSshConnection(context.request);
 
 	try {
@@ -229,17 +217,13 @@ test('file-manager delete confirmation setting can disable the prompt for real S
 			await confirmation.uncheck();
 
 			const responsePromise = page.waitForResponse(
-				(response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
+				(response) =>
+					response.url().endsWith('/api/v1/settings/preferences') && response.request().method() === 'PUT',
 			);
 			await filesGroup.getByRole('button', { name: 'Save group', exact: true }).click();
 			expect((await responsePromise).ok()).toBeTruthy();
 
-			const persisted = await context.request.get('/api/v1/settings');
-			expect(persisted.ok()).toBeTruthy();
-			expect(
-				((await persisted.json()) as { fileManagerShowDeleteConfirmation?: boolean })
-					.fileManagerShowDeleteConfirmation,
-			).toBe(false);
+			expect((await getUiPreferences(context.request)).preferences.fileManagerShowDeleteConfirmation).toBe(false);
 		});
 
 		await step('deleting a real file skips the confirmation dialog and removes it over SFTP', async () => {
@@ -256,9 +240,8 @@ test('file-manager delete confirmation setting can disable the prompt for real S
 			await expect(target).toHaveCount(0, { timeout: 20_000 });
 		});
 	} finally {
-		const restore = await context.request.put('/api/v1/settings', {
-			data: { fileManagerShowDeleteConfirmation: original.fileManagerShowDeleteConfirmation ?? true },
+		await updateUiPreferences(context.request, (preferences) => {
+			preferences.fileManagerShowDeleteConfirmation = original.fileManagerShowDeleteConfirmation;
 		});
-		expect(restore.ok()).toBeTruthy();
 	}
 });

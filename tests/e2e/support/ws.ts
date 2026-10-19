@@ -3,7 +3,41 @@ import { createRequire } from 'node:module';
 import type { APIRequestContext } from '@playwright/test';
 import { E2E_URLS } from './test-env';
 import { decodeWorkspaceBinaryFrame } from '../../../packages/shared/src/remote/workspace/workspace-binary';
-import { readWorkspaceConnectResponse } from '../../../packages/shared/src/remote/workspace/workspace-codec';
+import {
+	readWorkspaceConnectResponse,
+	readWorkspaceMessage,
+} from '../../../packages/shared/src/remote/workspace/workspace-codec';
+import type {
+	WorkspaceResumeRequest,
+	WorkspaceResumeResponse,
+} from '../../../packages/shared/src/remote/workspace/workspace';
+import type {
+	WorkspaceSuspendResumeRequest,
+	WorkspaceSuspendResumeResponse,
+} from '../../../packages/shared/src/remote/suspend/workspace';
+import { readWorkspaceSuspendResumeResponse } from '../../../packages/shared/src/remote/suspend/workspace-result-codec';
+
+import type { WorkspaceErrorCode } from '../../../packages/shared/src/remote/workspace/values';
+
+export class WorkspaceRequestFailure extends Error {
+	constructor(
+		operation: string,
+		readonly code: WorkspaceErrorCode,
+	) {
+		super(operation + ' failed: ' + code);
+		this.name = 'WorkspaceRequestFailure';
+	}
+}
+
+function workspaceFailure(operation: string, value: unknown): Error {
+	try {
+		const message = readWorkspaceMessage(value);
+		if (!('requestId' in message) || message.payload.ok) throw new Error('Invalid Workspace failure response');
+		return new WorkspaceRequestFailure(operation, message.payload.error);
+	} catch (cause) {
+		return new Error('Invalid Workspace failure response', { cause });
+	}
+}
 
 export { decodeWorkspaceBinaryFrame } from '../../../packages/shared/src/remote/workspace/workspace-binary';
 
@@ -195,8 +229,8 @@ export function waitForBinaryText(socket: E2eWebSocket, expectedText: string, ti
 export function requestWorkspaceBinary<T = unknown>(
 	socket: E2eWebSocket,
 	type: string,
-	payload: Record<string, unknown> = {},
-	requestId = crypto.randomUUID(),
+	payload: object = {},
+	requestId: string = crypto.randomUUID(),
 	timeoutMs = 20_000,
 ): Promise<{ data: T; bytes: Buffer }> {
 	return new Promise((resolve, reject) => {
@@ -215,7 +249,7 @@ export function requestWorkspaceBinary<T = unknown>(
 			if (!response || !binaryDone) return;
 			cleanup();
 			if (!response.payload?.ok) {
-				reject(new Error(`${type} failed: ${String(response.payload?.error ?? 'unknown error')}`));
+				reject(workspaceFailure(type, response));
 				return;
 			}
 			resolve({ data: response.payload.data as T, bytes: Buffer.concat(chunks) });
@@ -267,8 +301,8 @@ export function requestWorkspaceBinary<T = unknown>(
 export async function requestWorkspace<T = unknown>(
 	socket: E2eWebSocket,
 	type: string,
-	payload: Record<string, unknown> = {},
-	requestId = crypto.randomUUID(),
+	payload: object = {},
+	requestId: string = crypto.randomUUID(),
 	timeoutMs = 20_000,
 ): Promise<T> {
 	const responsePromise = waitForJson(
@@ -278,7 +312,7 @@ export async function requestWorkspace<T = unknown>(
 	);
 	sendJson(socket, { type, payload, requestId });
 	const response = await responsePromise;
-	if (!response.payload?.ok) throw new Error(`${type} failed: ${String(response.payload?.error ?? 'unknown error')}`);
+	if (!response.payload?.ok) throw workspaceFailure(type, response);
 	return response.payload.data as T;
 }
 
@@ -289,28 +323,101 @@ export async function openWorkspaceSession(
 ): Promise<{
 	socket: E2eWebSocket;
 	workspaceId: string;
+	lastConnectedAt: number;
 	resumeToken: string;
 	attachmentGeneration: number;
 	terminalOffset: number;
 }> {
 	const socket = await openAuthenticatedWebSocket(request);
-	const connected = readWorkspaceConnectResponse(
-		await requestWorkspace(socket, 'workspace.connect', {
-			connectionId,
-			workspaceId,
-			viewport: { columns: 100, rows: 30 },
-		}),
-	);
-	if (connected.workspaceId !== workspaceId || connected.connectionId !== connectionId) {
-		throw new Error('Workspace connection response belongs to another resource');
+	try {
+		const connected = readWorkspaceConnectResponse(
+			await requestWorkspace(socket, 'workspace.connect', {
+				connectionId,
+				workspaceId,
+				viewport: { columns: 100, rows: 30 },
+			}),
+		);
+		if (
+			connected.workspaceId !== workspaceId ||
+			connected.connectionId !== connectionId ||
+			connected.lastConnectedAt === undefined
+		) {
+			throw new Error('Workspace connection response belongs to another resource');
+		}
+		return {
+			socket,
+			workspaceId: connected.workspaceId,
+			lastConnectedAt: connected.lastConnectedAt,
+			resumeToken: connected.resumeToken,
+			attachmentGeneration: connected.attachmentGeneration,
+			terminalOffset: connected.terminalOffset,
+		};
+	} catch (cause) {
+		try {
+			await closeWebSocket(socket);
+		} catch (cleanup) {
+			throw new AggregateError([cause, cleanup], 'Workspace initialization and close failed');
+		}
+		throw cause;
 	}
-	return {
-		socket,
-		workspaceId: connected.workspaceId,
-		resumeToken: connected.resumeToken,
-		attachmentGeneration: connected.attachmentGeneration,
-		terminalOffset: connected.terminalOffset,
+}
+
+/** Normal lifecycle only; rejection and lost-ACK cases must use the raw request helper. */
+export async function resumeWorkspaceSession(
+	socket: E2eWebSocket,
+	input: WorkspaceResumeRequest,
+): Promise<WorkspaceResumeResponse> {
+	const payload: WorkspaceResumeRequest = {
+		workspaceId: input.workspaceId,
+		connectionId: input.connectionId,
+		resumeToken: input.resumeToken,
+		attachmentGeneration: input.attachmentGeneration,
+		terminalOffset: input.terminalOffset,
 	};
+	if (input.viewport !== undefined) {
+		payload.viewport = { columns: input.viewport.columns, rows: input.viewport.rows };
+	}
+	const result = readWorkspaceConnectResponse(await requestWorkspace(socket, 'workspace.resume', payload));
+	if (
+		result.workspaceId !== input.workspaceId ||
+		result.connectionId !== input.connectionId ||
+		result.resumeToken === input.resumeToken ||
+		result.attachmentGeneration <= input.attachmentGeneration
+	) {
+		throw new Error('Workspace resume response does not match the requested handover');
+	}
+	await requestWorkspace(socket, 'workspace.resumeAck', {
+		resumeToken: result.resumeToken,
+		attachmentGeneration: result.attachmentGeneration,
+	});
+	return result;
+}
+
+export async function resumeSuspendedWorkspace(
+	socket: E2eWebSocket,
+	input: WorkspaceSuspendResumeRequest,
+): Promise<WorkspaceSuspendResumeResponse> {
+	const payload: WorkspaceSuspendResumeRequest = {
+		suspendedSessionId: input.suspendedSessionId,
+		workspaceId: input.workspaceId,
+	};
+	if (input.viewport !== undefined) {
+		payload.viewport = { columns: input.viewport.columns, rows: input.viewport.rows };
+	}
+	if (input.takeover !== undefined) {
+		payload.takeover = input.takeover;
+	}
+	const result = readWorkspaceSuspendResumeResponse(await requestWorkspace(socket, 'suspend.resume', payload));
+	if (result.workspaceId !== input.workspaceId || result.resumedFrom !== input.suspendedSessionId) {
+		throw new Error('Suspended workspace response belongs to another handover');
+	}
+	await requestWorkspace(socket, 'suspend.resumeAck', {
+		suspendedSessionId: input.suspendedSessionId,
+		resumeToken: result.resumeToken,
+		attachmentGeneration: result.attachmentGeneration,
+		ownershipGeneration: result.ownershipGeneration,
+	});
+	return result;
 }
 
 export async function waitForFilesystemReady(socket: E2eWebSocket): Promise<void> {
@@ -332,13 +439,36 @@ export async function waitForFilesystemReady(socket: E2eWebSocket): Promise<void
 }
 
 export async function closeWebSocket(socket: E2eWebSocket): Promise<void> {
-	if (!socket || socket.readyState >= WebSocket.CLOSING) return;
-	await new Promise<void>((resolve) => {
-		const timeout = setTimeout(resolve, 2_000);
-		socket.once('close', () => {
+	if (!socket || socket.readyState === WebSocket.CLOSED) return;
+	await new Promise<void>((resolve, reject) => {
+		const cleanup = () => {
 			clearTimeout(timeout);
+			socket.off('close', closed);
+		};
+
+		const closed = () => {
+			cleanup();
 			resolve();
-		});
-		socket.close();
+		};
+
+		const timeout = setTimeout(() => {
+			cleanup();
+			try {
+				socket.terminate();
+			} catch (cause) {
+				reject(new Error('WebSocket close and forced cleanup failed', { cause }));
+				return;
+			}
+			reject(new Error('WebSocket close was not confirmed before its deadline'));
+		}, 5000);
+		socket.once('close', closed);
+		if (socket.readyState !== WebSocket.CLOSING) {
+			try {
+				socket.close();
+			} catch (cause) {
+				cleanup();
+				reject(cause);
+			}
+		}
 	});
 }

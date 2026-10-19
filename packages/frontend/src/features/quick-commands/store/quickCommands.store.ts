@@ -115,13 +115,22 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
 	}
 
 	async function readCurrent(signal: AbortSignal): Promise<void> {
-		const next = await quickCommandsApi.list(signal);
-		const nextTags = await quickCommandsApi.listTags(signal);
+		const [commands, catalog] = await Promise.allSettled([
+			quickCommandsApi.list(signal),
+			quickCommandsApi.listTags(signal),
+		]);
 		if (signal.aborted) {
 			return;
 		}
-		items.value = next;
-		tags.value = nextTags;
+		if (commands.status === 'fulfilled') {
+			items.value = commands.value;
+		}
+		// Commands remain executable without a tag catalog; stale labels must not imply current associations.
+		tags.value = catalog.status === 'fulfilled' ? catalog.value : [];
+		const failures = [commands, catalog].flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+		if (failures.length) {
+			throw failures.length === 1 ? failures[0] : new AggregateError(failures, 'Quick command reads failed');
+		}
 	}
 
 	function load(recover = false): Promise<void> {
@@ -140,6 +149,8 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
 			} catch (cause) {
 				if (!signal.aborted) {
 					error.value = cause;
+					blocked = true;
+					recoveryRevision += 1;
 				}
 				throw cause;
 			} finally {

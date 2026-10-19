@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
+import { E2E_URLS } from '../../support/test-env';
+import { readHtmlThemeSummary } from '../../../../packages/shared/src/preferences/html-themes/http-codec';
+import { removeTestHtmlTheme } from '../../support/html-themes';
 
 test('direct navigation to HTML theme content displays source without same-origin script execution', async ({
 	page,
@@ -11,9 +14,11 @@ test('direct navigation to HTML theme content displays source without same-origi
 	const source =
 		'<!doctype html><script>document.documentElement.dataset.e2eExecuted="yes";localStorage.setItem("e2e-theme-executed","yes")</script><h1>E2E untrusted theme</h1>';
 	const created = await context.request.post('/api/v1/appearance/html-presets/local', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: { name, content: source },
 	});
 	expect(created.status(), await created.text()).toBe(201);
+	const theme = readHtmlThemeSummary(await created.json());
 	const path = `/api/v1/appearance/html-presets/local/${name}`;
 	try {
 		await page.goto('/');
@@ -31,6 +36,6 @@ test('direct navigation to HTML theme content displays source without same-origi
 		await page.goto('/');
 		expect(await page.evaluate(() => localStorage.getItem('e2e-theme-executed'))).toBeNull();
 	} finally {
-		expect((await context.request.delete(path)).ok()).toBeTruthy();
+		await removeTestHtmlTheme(context.request, theme);
 	}
 });

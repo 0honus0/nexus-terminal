@@ -1,11 +1,17 @@
 import { expect, test } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import {
 	configureSshE2eSettings,
 	connectTestSshFromConnectionsPage,
 	ensureTestSshConnection,
+	createTestSshConnection,
 	E2E_SSH,
 } from '../../support/ssh';
+import { E2E_URLS } from '../../support/test-env';
+import {
+	readLayoutResponse,
+	readPresentationUpdateResponse,
+} from '../../../../packages/shared/src/preferences/presentation/http-codec';
 
 test('workspace keeps the live terminal and draft cached across page navigation', async ({ page, context }) => {
 	test.setTimeout(60_000);
@@ -19,41 +25,33 @@ test('workspace keeps the live terminal and draft cached across page navigation'
 	});
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	expect((await context.request.put('/api/v1/settings', { data: { navBarVisible: true } })).ok()).toBeTruthy();
-	expect(
-		(
-			await context.request.put('/api/v1/settings/workspace-layout', {
-				data: {
-					layout: {
-						id: 'restore-root',
-						type: 'container',
-						direction: 'vertical',
-						children: [
-							{ id: 'restore-terminal', type: 'pane', component: 'terminal', size: 90 },
-							{ id: 'restore-command', type: 'pane', component: 'commandBar', size: 10 },
-						],
-					},
-					sidebar: { left: [], right: [] },
-				},
-			})
-		).ok(),
-	).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.navBarVisible = true;
+	});
+	const beforeLayout = await context.request.get('/api/v1/settings/layout');
+	expect(beforeLayout.ok()).toBeTruthy();
+	const original = readLayoutResponse(await beforeLayout.json());
+	const saved = await context.request.put('/api/v1/settings/workspace-layout', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
+		data: {
+			expectedVersion: original.version,
+			layout: {
+				id: 'restore-root',
+				size: 100,
+				type: 'container',
+				direction: 'vertical',
+				children: [
+					{ id: 'restore-terminal', type: 'pane', component: 'terminal', size: 90 },
+					{ id: 'restore-command', type: 'pane', component: 'commandBar', size: 10 },
+				],
+			},
+			sidebar: { left: [], right: [] },
+		},
+	});
+	expect(saved.ok()).toBeTruthy();
+	expect(readPresentationUpdateResponse(await saved.json()).version).toBe(original.version + 1);
 	const additionalName = 'E2E Cache Additional';
-	expect(
-		(
-			await context.request.post('/api/v1/connections', {
-				data: {
-					name: additionalName,
-					type: 'SSH',
-					host: E2E_SSH.host,
-					port: E2E_SSH.port,
-					username: E2E_SSH.username,
-					authMethod: 'password',
-					password: E2E_SSH.password,
-				},
-			})
-		).ok(),
-	).toBeTruthy();
+	await createTestSshConnection(context.request, additionalName);
 	const connectionId = await ensureTestSshConnection(context.request);
 	await connectTestSshFromConnectionsPage(page, connectionId);
 	const terminal = page.locator('.terminal-inner-container');

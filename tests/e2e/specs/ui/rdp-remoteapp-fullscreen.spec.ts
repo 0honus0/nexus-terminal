@@ -1,5 +1,7 @@
+import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
+import { readTestConnectionImportId } from '../../support/targets';
 import { expect, test, type APIRequestContext, type Locator, type Page } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import { step } from '../../support/steps';
 import { E2E_URLS } from '../../support/test-env';
 
@@ -24,11 +26,17 @@ async function openWorkspaceConnectionList(page: Page) {
 }
 
 async function cleanupConnection(request: APIRequestContext): Promise<void> {
-	const response = await request.get('/api/v1/connections');
+	const response = await request.get('/api/v1/targets/connections');
 	expect(response.ok()).toBeTruthy();
-	const connections = (await response.json()) as Array<{ id: number; name?: string }>;
+	const connections = readConnectionList(await response.json());
 	for (const connection of connections.filter((item) => item.name === CONNECTION_NAME)) {
-		expect((await request.delete(`/api/v1/connections/${connection.id}`)).ok()).toBeTruthy();
+		expect(
+			(
+				await request.delete(`/api/v1/targets/connections/${connection.id}`, {
+					headers: { Origin: E2E_URLS.frontendOrigin },
+				})
+			).ok(),
+		).toBeTruthy();
 	}
 }
 
@@ -42,9 +50,11 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
 			if (typeof event.payload === 'string') remoteFrames.push(event.payload);
 		});
 	});
-	await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: E2E_URLS.frontendLoopbackOrigin });
+	await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: E2E_URLS.frontendOrigin });
 	await loginAsInitialAdmin(context.request);
-	expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.language = 'en-US';
+	});
 	await cleanupConnection(context.request);
 
 	await page.addInitScript(() => {
@@ -104,24 +114,24 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
 			await formField(form, 'Arguments (Optional)').fill('/A readme.txt');
 
 			const createPromise = page.waitForResponse(
-				(response) => response.url().endsWith('/api/v1/connections') && response.request().method() === 'POST',
+				(response) =>
+					response.url().endsWith('/api/v1/targets/connections/import') &&
+					response.request().method() === 'POST',
 			);
 			await form.locator('button[type="submit"]').click();
 			const createResponse = await createPromise;
-			expect(createResponse.status()).toBe(201);
-			connectionId = ((await createResponse.json()) as { connection: { id: number } }).connection.id;
+			expect(createResponse.status()).toBe(200);
+			connectionId = readTestConnectionImportId(await createResponse.json());
 			await expect(form).toBeHidden({ timeout: 15_000 });
 
-			const persisted = await context.request.get(`/api/v1/connections/${connectionId}`);
+			const persisted = await context.request.get(`/api/v1/targets/connections/${connectionId}`);
 			expect(persisted.ok()).toBeTruthy();
 			await expect(persisted.json()).resolves.toMatchObject({
 				id: connectionId,
 				type: 'RDP',
-				rdpOptions: {
-					remoteApp: 'notepad',
-					remoteAppDirectory: 'C:\\Work',
-					remoteAppArguments: '/A readme.txt',
-				},
+				rdpRemoteApp: 'notepad',
+				rdpRemoteAppDirectory: 'C:\\Work',
+				rdpRemoteAppArguments: '/A readme.txt',
 			});
 		});
 
@@ -143,6 +153,7 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
 		await step('RDP ticket generation succeeds with the persisted RemoteApp settings', async () => {
 			const session = await context.request.post(
 				`/api/v1/connections/${connectionId}/rdp-session?width=1440&height=900&dpi=120`,
+				{ headers: { Origin: E2E_URLS.frontendOrigin } },
 			);
 			expect(session.ok()).toBeTruthy();
 			await expect(session.json()).resolves.toMatchObject({ ticket: expect.any(String) });
@@ -313,18 +324,33 @@ async function createRemoteConnection(
 	host: string,
 	port: number,
 ): Promise<number> {
-	const response = await request.post('/api/v1/connections', {
+	const response = await request.post('/api/v1/targets/connections/import', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: {
-			type,
-			name,
-			host,
-			port,
-			username: `${type.toLowerCase()}-pointer-user`,
-			password: `${type.toLowerCase()}-pointer-password`,
+			items: [
+				{
+					connection: {
+						name: name,
+						type: type,
+						host: host,
+						port: port,
+						username: `${type.toLowerCase()}-pointer-user`,
+						notes: null,
+						route: 'direct',
+						proxyId: null,
+						rdpRemoteApp: null,
+						rdpRemoteAppDirectory: null,
+						rdpRemoteAppArguments: null,
+						tagIds: [],
+						jumpIds: [],
+					},
+					credential: { kind: 'password', password: `${type.toLowerCase()}-pointer-password` },
+				},
+			],
 		},
 	});
-	expect(response.status(), await response.text()).toBe(201);
-	return ((await response.json()) as { connection: { id: number } }).connection.id;
+	expect(response.status(), await response.text()).toBe(200);
+	return readTestConnectionImportId(await response.json());
 }
 
 async function openRemoteConnection(page: Page, name: string): Promise<void> {
@@ -337,17 +363,11 @@ async function openRemoteConnection(page: Page, name: string): Promise<void> {
 test('wide RDP restores the legacy 120 DPI connection rule', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 	await page.setViewportSize({ width: 2400, height: 1200 });
-	expect(
-		(
-			await context.request.put('/api/v1/settings', {
-				data: {
-					language: 'en-US',
-					rdpModalWidth: 2200,
-					rdpModalHeight: 900,
-				},
-			})
-		).ok(),
-	).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.language = 'en-US';
+		preferences.rdpModalWidth = 2200;
+		preferences.rdpModalHeight = 900;
+	});
 
 	const name = 'E2E RDP Wide DPI';
 	const connectionId = await createRemoteConnection(context.request, 'RDP', name, '192.0.2.93', 3389);
@@ -377,7 +397,9 @@ test('wide RDP restores the legacy 120 DPI connection rule', async ({ page, cont
 		expect(tunnelUrl.searchParams.has('dpi')).toBe(false);
 		await expect(remoteWindow(page)).toContainText('Connected', { timeout: 15_000 });
 	} finally {
-		await context.request.delete(`/api/v1/connections/${connectionId}`);
+		await context.request.delete(`/api/v1/targets/connections/${connectionId}`, {
+			headers: { Origin: E2E_URLS.frontendOrigin },
+		});
 	}
 });
 
@@ -491,17 +513,11 @@ async function exercisePointerWindow(page: Page): Promise<void> {
 test('RDP pointer resize and restore-button dragging preserve minimized window behavior', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 	await page.setViewportSize({ width: 1600, height: 1100 });
-	expect(
-		(
-			await context.request.put('/api/v1/settings', {
-				data: {
-					language: 'en-US',
-					rdpModalWidth: 900,
-					rdpModalHeight: 560,
-				},
-			})
-		).ok(),
-	).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.language = 'en-US';
+		preferences.rdpModalWidth = 900;
+		preferences.rdpModalHeight = 560;
+	});
 
 	const connectionId = await createRemoteConnection(context.request, 'RDP', POINTER_RDP_NAME, '192.0.2.91', 3389);
 	try {
@@ -513,7 +529,9 @@ test('RDP pointer resize and restore-button dragging preserve minimized window b
 		await modal.getByRole('button', { name: 'Close', exact: true }).click();
 		await expect(modal).toBeHidden();
 	} finally {
-		await context.request.delete(`/api/v1/connections/${connectionId}`);
+		await context.request.delete(`/api/v1/targets/connections/${connectionId}`, {
+			headers: { Origin: E2E_URLS.frontendOrigin },
+		});
 	}
 });
 
@@ -524,20 +542,14 @@ test('VNC pointer resize and restore-button dragging share the same window seman
 			if (typeof event.payload === 'string') remoteFrames.push(event.payload);
 		});
 	});
-	await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: E2E_URLS.frontendLoopbackOrigin });
+	await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: E2E_URLS.frontendOrigin });
 	await loginAsInitialAdmin(context.request);
 	await page.setViewportSize({ width: 1600, height: 1100 });
-	expect(
-		(
-			await context.request.put('/api/v1/settings', {
-				data: {
-					language: 'en-US',
-					vncModalWidth: 900,
-					vncModalHeight: 650,
-				},
-			})
-		).ok(),
-	).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.language = 'en-US';
+		preferences.vncModalWidth = 900;
+		preferences.vncModalHeight = 650;
+	});
 
 	const connectionId = await createRemoteConnection(context.request, 'VNC', POINTER_VNC_NAME, '192.0.2.92', 5901);
 	try {
@@ -597,6 +609,8 @@ test('VNC pointer resize and restore-button dragging share the same window seman
 		await modal.getByRole('button', { name: 'Close', exact: true }).click();
 		await expect(modal).toBeHidden();
 	} finally {
-		await context.request.delete(`/api/v1/connections/${connectionId}`);
+		await context.request.delete(`/api/v1/targets/connections/${connectionId}`, {
+			headers: { Origin: E2E_URLS.frontendOrigin },
+		});
 	}
 });

@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import {
 	closeConnectedFileManager,
 	configureSshE2eSettings,
@@ -328,7 +328,10 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
 	const thirdPage = pdfPage(dialog, 3);
 	await scroller.evaluate(
 		(element, top) => element.scrollTo({ top, behavior: 'auto' }),
-		await thirdPage.evaluate((element) => element.offsetTop),
+		await thirdPage.evaluate((element) => {
+			if (!(element instanceof HTMLElement)) throw new Error('PDF page is not an HTML element');
+			return element.offsetTop;
+		}),
 	);
 	await expect(pdfCurrentPage(dialog)).toHaveValue('3');
 
@@ -389,13 +392,9 @@ test('mobile preview close button clears cached state when popup file editing is
 }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	expect(
-		(
-			await context.request.put('/api/v1/settings', {
-				data: { showPopupFileEditor: true },
-			})
-		).ok(),
-	).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.showPopupFileEditor = true;
+	});
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
 	await connectTestSshFromConnectionsPage(page, connectionId);

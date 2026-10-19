@@ -1322,7 +1322,7 @@ Targets每条连接的直接跳板协议容量16项归Shared，与递归深度/�
 1. **职责与范围**：HTTP/WS、SSH/SFTP、终端渲染和ACP提供技术能力；Remote监控Service持有用户准入、采样订阅与任务归属。普通SSH与Agent复用技术能力，分别保留授权及活跃资源owner。
 2. **子功能与目录**：Platform既有http、ssh/adapters/ssh2、terminal/adapters、acp/adapters持有传输实现；Remote monitoring/model转换技术事实，monitoring/service管理订阅及缓存请求。
 3. **依赖方向**：Service→Model→技术契约/Adapter；Platform不引用业务类型。诊断采样汇总复用通用有界FailureSummary，不新建业务分发或兼容层。
-4. **类型与转换**：ACP技术cleanup_failed在MachineAcpModel显式转为RemoteResourceCleanupFailure；操作失败与清理失败分别保留因果。SFTP路径由Adapter校验实际字符串，协议出口不推断第三方异常。
+4. **类型与转换**：ACP技术cleanup_failed在MachineAcpModel显式转为RemoteResourceCleanupFailure；操作失败与清理失败分别保留因果。SFTP路径由Adapter校验实际字符串，协议出口不推断第三方异常。技术目录项与realpath保留合法POSIX字面量，包括换行；不得把终端/归档/Agent的控制字符政策下沉成全局SFTP拒绝。各应用与Shared边界继续按自身契约校验。
 5. **入口与安装**：HTTP安装有界channel与Desktop原生WS，两者均接管socket error。HTTP传输等待由原请求aborted、响应finish/close与原socket close共同结算并退订；业务handler与资源收尾仍独立等待，不将传输中断当业务完成。Artifact HTTP将具名AbortError连同原signal交协议取消转换，应用/存储/清理失败继续保留到排空；仅signal取消不能掩盖其他错误。有界channel在实际派发排队消息时复查准入generation及关闭状态，输入队列同时考虑路由允许的文本/二进制预算。
 6. **数据、事务与并发**：不新增表或迁移。SFTP复合replace共用完整操作期限，恢复/备份删除另有独立清理预算；确定目录打开拒绝不退役健康lease。
 7. **生命周期与失败**：SSH Client/SFTP先请求结束，2秒后请求destroy，再最多等待2秒确认真实close；超时为清理失败，不当作关闭成功。SFTP未确认资源仍归原连接owner，晚close仅解除原实例。SFTP Adapter单独登记流的期限与取消监听清理；流错误及lease关闭均解除本地等待，即使供应商流不发close。流清理回调不替代SFTP channel关闭确认，未知临时文件仍由Files owner保留。HTTP、SSH channel及路由独立清理不被首个同步异常中断；ACP取消只执行一次并等待读写及permission任务。监控退订后的baseline清理被追踪，采样清理失败有界保留到close；日志停止准入后不新建读写owner。

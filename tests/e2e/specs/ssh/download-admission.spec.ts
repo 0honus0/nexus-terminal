@@ -153,6 +153,7 @@ test('HTTP downloads reject excess admission and reclaim delayed OPEN handles af
 			.toBe(0);
 		const baseline = await handles();
 		const ticketResponse = await request.post('/api/v1/sftp/download-ticket', {
+			headers: { Origin: E2E_URLS.frontendOrigin },
 			data: { connectionId, sessionId: workspace.workspaceId, remotePath: '/seed.txt' },
 		});
 		expect(ticketResponse.ok()).toBeTruthy();

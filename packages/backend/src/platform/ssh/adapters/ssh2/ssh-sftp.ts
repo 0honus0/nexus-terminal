@@ -102,7 +102,8 @@ function directoryEntry(row: { filename: string; longname?: string; attrs: Stats
 		!row.filename ||
 		row.filename === '.' ||
 		row.filename === '..' ||
-		/[/\u0000-\u001f\u007f\ufffd]/u.test(row.filename) ||
+		// SFTP names are literal POSIX components, not terminal or shell input.
+		/[/\u0000\ufffd]/u.test(row.filename) ||
 		Buffer.byteLength(row.filename, 'utf8') > 255 ||
 		(row.longname !== undefined && typeof row.longname !== 'string')
 	) {
@@ -603,7 +604,7 @@ export class SshSftpLease implements MachineSftpLease {
 
 	realpath(path: string, options?: MachineOperationOptions): Promise<string> {
 		return this.call<string>((finish) => this.sftp.realpath(path, finish), options).then((value) => {
-			if (typeof value !== 'string' || !value || /[\u0000-\u001f\u007f\ufffd]/u.test(value)) {
+			if (typeof value !== 'string' || !value || /[\u0000\ufffd]/u.test(value)) {
 				throw new MachineSftpFailure('invalid_metadata', 'unknown');
 			}
 			return value;

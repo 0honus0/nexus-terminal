@@ -1,5 +1,15 @@
 import { expect, test } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { E2E_URLS } from '../../support/test-env';
+import type { SuspendedSessionView as SuspendedSession } from '../../../../packages/shared/src/remote/suspend/http';
+import type { PresentationLayout } from '../../../../packages/shared/src/preferences/presentation/model';
+import { readSuspendedSessionCatalog } from '../../../../packages/shared/src/remote/suspend/http-codec';
+import {
+	readPreferencesResponse,
+	readLayoutResponse,
+	readPresentationUpdateResponse,
+} from '../../../../packages/shared/src/preferences/presentation/http-codec';
+const headers = { Origin: E2E_URLS.frontendOrigin };
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import {
 	E2E_SSH,
 	configureSshE2eSettings,
@@ -14,6 +24,7 @@ import {
 	openWorkspaceSession,
 	requestWorkspace,
 	requestWorkspaceBinary,
+	resumeSuspendedWorkspace,
 	sendJson,
 	waitForFilesystemReady,
 	waitForBinaryText,
@@ -114,7 +125,7 @@ for (const outcome of ['ready', 'error', 'closed'] as const) {
 					filesystemEvents.push(message.type);
 			});
 			const started = performance.now();
-			const resumed = requestWorkspace(socket, 'suspend.resume', {
+			const resumed = resumeSuspendedWorkspace(socket, {
 				suspendedSessionId: marked.suspendedSessionId,
 				workspaceId: `gated-${crypto.randomUUID()}`,
 			});
@@ -144,7 +155,7 @@ for (const outcome of ['ready', 'error', 'closed'] as const) {
 				const next = await openAuthenticatedWebSocket(request);
 				try {
 					const ready = waitForJson(next, (message) => message.type === 'filesystem.ready');
-					await requestWorkspace(next, 'suspend.resume', {
+					await resumeSuspendedWorkspace(next, {
 						suspendedSessionId: marked.suspendedSessionId,
 						workspaceId: `after-gate-${crypto.randomUUID()}`,
 					});
@@ -163,7 +174,9 @@ for (const outcome of ['ready', 'error', 'closed'] as const) {
 		} finally {
 			await fetch(`${E2E_SSH.controlUrl}/sftp/realpath-gate`, { method: 'POST' });
 			await closeWebSocket(socket);
-			await request.delete(`/api/v1/ssh-suspend/terminate/${marked.suspendedSessionId}`);
+			await request.delete(`/api/v1/ssh-suspend/terminate/${marked.suspendedSessionId}`, {
+				headers: { Origin: E2E_URLS.frontendOrigin },
+			});
 		}
 	});
 }
@@ -194,7 +207,7 @@ test('marked attached workspace stays usable and another authorized socket can t
 				workspaceId: `no-takeover-${crypto.randomUUID()}`,
 			}),
 		).rejects.toThrow();
-		await requestWorkspace(other, 'suspend.resume', {
+		await resumeSuspendedWorkspace(other, {
 			suspendedSessionId: marked.suspendedSessionId,
 			workspaceId: `takeover-${crypto.randomUUID()}`,
 			takeover: true,
@@ -286,33 +299,23 @@ test('stale suspended-session resume logs structured not-found diagnostics', asy
 	await configureSshE2eSettings(context.request);
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
-	const settingsResponse = await context.request.get('/api/v1/settings');
-	expect(settingsResponse.ok()).toBeTruthy();
-	const originalFrontendLogLevel =
-		((await settingsResponse.json()) as { frontendLogLevel?: string }).frontendLogLevel ?? 'info';
-	expect(
-		(
-			await context.request.put('/api/v1/settings', {
-				data: { frontendLogLevel: 'debug' },
-			})
-		).ok(),
-	).toBeTruthy();
+	const settingsResponse = await context.request.get('/api/v1/settings/preferences');
+	expect(settingsResponse.ok()).toBe(true);
+	const originalFrontendLogLevel = readPreferencesResponse(await settingsResponse.json()).preferences
+		.frontendLogLevel;
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.frontendLogLevel = 'debug';
+	});
 
 	const original = await openWorkspaceSession(context.request, connectionId, `stale-resume-${crypto.randomUUID()}`);
 	await requestWorkspace(original.socket, 'suspend.mark');
 	await closeWebSocket(original.socket);
 
-	type SuspendedSession = {
-		id: string;
-		originalWorkspaceId: string;
-		status: 'active' | 'disconnected';
-		ownershipState: 'available' | 'resuming' | 'attached';
-	};
 	let suspended: SuspendedSession | undefined;
 	const catalogSocket = await openAuthenticatedWebSocket(context.request);
 	try {
 		for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
-			const list = await requestWorkspace<SuspendedSession[]>(catalogSocket, 'suspend.list');
+			const list = readSuspendedSessionCatalog(await requestWorkspace(catalogSocket, 'suspend.list'));
 			suspended = list.find(
 				(session) =>
 					session.originalWorkspaceId === original.workspaceId &&
@@ -350,7 +353,7 @@ test('stale suspended-session resume logs structured not-found diagnostics', asy
 		const resumeButton = row.getByRole('button', { name: 'Resume', exact: true });
 		await expect(resumeButton).toBeVisible();
 
-		const terminate = await context.request.delete(`/api/v1/ssh-suspend/terminate/${suspended!.id}`);
+		const terminate = await context.request.delete(`/api/v1/ssh-suspend/terminate/${suspended!.id}`, { headers });
 		expect(terminate.ok(), await terminate.text()).toBeTruthy();
 		await resumeButton.click();
 
@@ -360,7 +363,8 @@ test('stale suspended-session resume logs structured not-found diagnostics', asy
 					(entry) =>
 						entry.msg === 'Workspace request rejected' &&
 						entry.operation === 'suspend.resume' &&
-						entry.failureKind === 'session_not_found_or_invalid' &&
+						entry.failureKind === 'request_rejected' &&
+						entry.reason === 'not_found' &&
 						entry.connectionId === connectionId,
 				),
 			)
@@ -378,11 +382,12 @@ test('stale suspended-session resume logs structured not-found diagnostics', asy
 		expect(JSON.stringify(frontendDebugLogs)).not.toContain(E2E_SSH.password);
 	} finally {
 		if (suspended)
-			await context.request.delete(`/api/v1/ssh-suspend/terminate/${suspended.id}`).catch(() => undefined);
-		const restoreSettings = await context.request.put('/api/v1/settings', {
-			data: { frontendLogLevel: originalFrontendLogLevel },
+			await context.request
+				.delete(`/api/v1/ssh-suspend/terminate/${suspended.id}`, { headers })
+				.catch(() => undefined);
+		await updateUiPreferences(context.request, (preferences) => {
+			preferences.frontendLogLevel = originalFrontendLogLevel;
 		});
-		expect(restoreSettings.ok()).toBeTruthy();
 	}
 });
 
@@ -397,20 +402,11 @@ test('a marked live SSH session survives WebSocket disconnect and resumes the sa
 
 	const recoverySocket = await openAuthenticatedWebSocket(request);
 	try {
-		type SuspendedSession = {
-			id: string;
-			originalWorkspaceId: string;
-			connectionId: number;
-			connectionName: string;
-			status: 'active' | 'disconnected';
-			ownershipState: 'available' | 'resuming' | 'attached';
-			attachedWorkspaceId?: string;
-		};
 		// The client close handshake can finish before the server flushes retained output
 		// and returns ownership. An active session may still belong to the old socket.
 		let suspended: SuspendedSession | undefined;
 		for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
-			const list = await requestWorkspace<SuspendedSession[]>(recoverySocket, 'suspend.list');
+			const list = readSuspendedSessionCatalog(await requestWorkspace(recoverySocket, 'suspend.list'));
 			suspended = list.find(
 				(session) =>
 					session.originalWorkspaceId === original.workspaceId &&
@@ -428,12 +424,7 @@ test('a marked live SSH session survives WebSocket disconnect and resumes the sa
 		});
 
 		const resumedWorkspaceId = `resumed-${crypto.randomUUID()}`;
-		const resumed = await requestWorkspace<{
-			workspaceId: string;
-			connectionId: number;
-			connectionName: string;
-			resumedFrom: string;
-		}>(recoverySocket, 'suspend.resume', {
+		const resumed = await resumeSuspendedWorkspace(recoverySocket, {
 			suspendedSessionId: suspended!.id,
 			workspaceId: resumedWorkspaceId,
 		});
@@ -444,7 +435,7 @@ test('a marked live SSH session survives WebSocket disconnect and resumes the sa
 		});
 		await waitForFilesystemReady(recoverySocket);
 
-		const listAfter = await requestWorkspace<SuspendedSession[]>(recoverySocket, 'suspend.list');
+		const listAfter = readSuspendedSessionCatalog(await requestWorkspace(recoverySocket, 'suspend.list'));
 		expect(listAfter.find((session) => session.id === suspended!.id)).toMatchObject({
 			originalWorkspaceId: original.workspaceId,
 			connectionId,
@@ -460,7 +451,7 @@ test('a marked live SSH session survives WebSocket disconnect and resumes the sa
 		try {
 			let resuspended: SuspendedSession | undefined;
 			for (let attempt = 0; attempt < 30 && !resuspended; attempt += 1) {
-				const list = await requestWorkspace<SuspendedSession[]>(verifier, 'suspend.list');
+				const list = readSuspendedSessionCatalog(await requestWorkspace(verifier, 'suspend.list'));
 				resuspended = list.find(
 					(session) =>
 						session.originalWorkspaceId === resumedWorkspaceId &&
@@ -490,17 +481,11 @@ test('resumed terminal preserves SGR wheel encoding requested by the remote TUI'
 	});
 	await closeWebSocket(original.socket);
 
-	type SuspendedSession = {
-		id: string;
-		originalWorkspaceId: string;
-		status: 'active' | 'disconnected';
-		ownershipState: 'available' | 'resuming' | 'attached';
-	};
 	let suspended: SuspendedSession | undefined;
 	const catalogSocket = await openAuthenticatedWebSocket(context.request);
 	try {
 		for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
-			const list = await requestWorkspace<SuspendedSession[]>(catalogSocket, 'suspend.list');
+			const list = readSuspendedSessionCatalog(await requestWorkspace(catalogSocket, 'suspend.list'));
 			suspended = list.find(
 				(session) =>
 					session.originalWorkspaceId === original.workspaceId &&
@@ -569,17 +554,11 @@ test('resizing a suspended fullscreen terminal is ordered after its checkpoint',
 	await requestWorkspace(original.socket, 'suspend.mark', { terminalSnapshot: snapshot });
 	await closeWebSocket(original.socket);
 
-	type SuspendedSession = {
-		id: string;
-		originalWorkspaceId: string;
-		status: 'active' | 'disconnected';
-		ownershipState: 'available' | 'resuming' | 'attached';
-	};
 	const recovery = await openAuthenticatedWebSocket(request);
 	try {
 		let suspended: SuspendedSession | undefined;
 		for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
-			const list = await requestWorkspace<SuspendedSession[]>(recovery, 'suspend.list');
+			const list = readSuspendedSessionCatalog(await requestWorkspace(recovery, 'suspend.list'));
 			suspended = list.find(
 				(session) =>
 					session.originalWorkspaceId === original.workspaceId &&
@@ -599,7 +578,7 @@ test('resizing a suspended fullscreen terminal is ordered after its checkpoint',
 		};
 
 		recovery.on('message', onInitialMessage);
-		await requestWorkspace(recovery, 'suspend.resume', {
+		await resumeSuspendedWorkspace(recovery, {
 			suspendedSessionId: suspended!.id,
 			workspaceId: `resized-${crypto.randomUUID()}`,
 			viewport: { columns: resumedColumns, rows: resumedRows },
@@ -632,20 +611,12 @@ test('a second device explicitly takes over an attached suspended SSH owner with
 	await requestWorkspace(original.socket, 'suspend.mark');
 	await closeWebSocket(original.socket);
 
-	type SuspendedSession = {
-		id: string;
-		originalWorkspaceId: string;
-		status: 'active' | 'disconnected';
-		ownershipState: 'available' | 'resuming' | 'attached';
-		ownershipGeneration: number;
-		attachedWorkspaceId?: string;
-	};
 	const ownerA = await openAuthenticatedWebSocket(request);
 	const ownerB = await openAuthenticatedWebSocket(request);
 	let suspended: SuspendedSession | undefined;
 	try {
 		for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
-			const list = await requestWorkspace<SuspendedSession[]>(ownerA, 'suspend.list');
+			const list = readSuspendedSessionCatalog(await requestWorkspace(ownerA, 'suspend.list'));
 			suspended = list.find(
 				(session) =>
 					session.originalWorkspaceId === original.workspaceId &&
@@ -657,18 +628,14 @@ test('a second device explicitly takes over an attached suspended SSH owner with
 		expect(suspended).toBeTruthy();
 
 		const workspaceA = `takeover-a-${crypto.randomUUID()}`;
-		const resumedA = await requestWorkspace<{
-			workspaceId: string;
-			resumedFrom: string;
-			ownershipGeneration: number;
-		}>(ownerA, 'suspend.resume', {
+		const resumedA = await resumeSuspendedWorkspace(ownerA, {
 			suspendedSessionId: suspended!.id,
 			workspaceId: workspaceA,
 		});
 		expect(resumedA).toMatchObject({ workspaceId: workspaceA, resumedFrom: suspended!.id });
 		await waitForFilesystemReady(ownerA);
 
-		const attached = (await requestWorkspace<SuspendedSession[]>(ownerB, 'suspend.list')).find(
+		const attached = readSuspendedSessionCatalog(await requestWorkspace(ownerB, 'suspend.list')).find(
 			(session) => session.id === suspended!.id,
 		);
 		expect(attached).toMatchObject({
@@ -683,7 +650,7 @@ test('a second device explicitly takes over an attached suspended SSH owner with
 				suspendedSessionId: suspended!.id,
 				workspaceId: `takeover-denied-${crypto.randomUUID()}`,
 			}),
-		).rejects.toThrow(/SUSPENDED_SESSION_OWNED/);
+		).rejects.toMatchObject({ code: 'conflict' });
 
 		const revokedA = new Promise<{ reason?: string; generation?: number }>((resolve, reject) => {
 			const timeout = setTimeout(
@@ -719,11 +686,7 @@ test('a second device explicitly takes over an attached suspended SSH owner with
 		});
 
 		const workspaceB = `takeover-b-${crypto.randomUUID()}`;
-		const resumedB = await requestWorkspace<{
-			workspaceId: string;
-			resumedFrom: string;
-			ownershipGeneration: number;
-		}>(ownerB, 'suspend.resume', {
+		const resumedB = await resumeSuspendedWorkspace(ownerB, {
 			suspendedSessionId: suspended!.id,
 			workspaceId: workspaceB,
 			takeover: true,
@@ -744,7 +707,7 @@ test('a second device explicitly takes over an attached suspended SSH owner with
 		expect(terminalOutput).toContain(`TAKEOVER_STATE=${marker}`);
 		expect(terminalOutput).toContain('folder-seed');
 
-		const afterTakeover = (await requestWorkspace<SuspendedSession[]>(ownerB, 'suspend.list')).find(
+		const afterTakeover = readSuspendedSessionCatalog(await requestWorkspace(ownerB, 'suspend.list')).find(
 			(session) => session.id === suspended!.id,
 		);
 		expect(afterTakeover).toMatchObject({
@@ -757,7 +720,8 @@ test('a second device explicitly takes over an attached suspended SSH owner with
 	} finally {
 		await closeWebSocket(ownerA);
 		await closeWebSocket(ownerB);
-		if (suspended) await request.delete(`/api/v1/ssh-suspend/terminate/${suspended.id}`).catch(() => undefined);
+		if (suspended)
+			await request.delete(`/api/v1/ssh-suspend/terminate/${suspended.id}`, { headers }).catch(() => undefined);
 	}
 });
 
@@ -769,16 +733,10 @@ test('closing a resume request rolls the handoff back to the original suspended 
 	await requestWorkspace(original.socket, 'suspend.mark', { terminalSnapshot: 'ROLLBACK_HISTORY\r\n' });
 	await closeWebSocket(original.socket);
 
-	type SuspendedSession = {
-		id: string;
-		originalWorkspaceId: string;
-		status: 'active' | 'disconnected';
-		ownershipState: 'available' | 'resuming' | 'attached';
-	};
 	const recoverySocket = await openAuthenticatedWebSocket(request);
 	let suspended: SuspendedSession | undefined;
 	for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
-		const list = await requestWorkspace<SuspendedSession[]>(recoverySocket, 'suspend.list');
+		const list = readSuspendedSessionCatalog(await requestWorkspace(recoverySocket, 'suspend.list'));
 		suspended = list.find(
 			(session) =>
 				session.originalWorkspaceId === original.workspaceId &&
@@ -812,7 +770,7 @@ test('closing a resume request rolls the handoff back to the original suspended 
 	try {
 		let recoverable: SuspendedSession | undefined;
 		for (let attempt = 0; attempt < 40 && !recoverable; attempt += 1) {
-			const list = await requestWorkspace<SuspendedSession[]>(verifier, 'suspend.list');
+			const list = readSuspendedSessionCatalog(await requestWorkspace(verifier, 'suspend.list'));
 			// If close wins before commit, rollback preserves the original suspended id. If commit wins
 			// first, the still-marked replacement is immediately suspended on socket close. Either way
 			// the same shell must remain recoverable instead of being terminated.
@@ -827,14 +785,10 @@ test('closing a resume request rolls the handoff back to the original suspended 
 		expect(recoverable).toBeTruthy();
 
 		const retryWorkspaceId = `resume-retry-${crypto.randomUUID()}`;
-		const retried = await requestWorkspace<{ workspaceId: string; resumedFrom: string }>(
-			verifier,
-			'suspend.resume',
-			{
-				suspendedSessionId: recoverable!.id,
-				workspaceId: retryWorkspaceId,
-			},
-		);
+		const retried = await resumeSuspendedWorkspace(verifier, {
+			suspendedSessionId: recoverable!.id,
+			workspaceId: retryWorkspaceId,
+		});
 		expect(retried).toMatchObject({ workspaceId: retryWorkspaceId, resumedFrom: recoverable!.id });
 		await requestWorkspace(verifier, 'suspend.unmark');
 	} finally {
@@ -863,15 +817,9 @@ test('terminal output produced after marking is retained in suspended history', 
 
 	const verifier = await openAuthenticatedWebSocket(request);
 	try {
-		type SuspendedSession = {
-			id: string;
-			originalWorkspaceId: string;
-			status: 'active' | 'disconnected';
-			ownershipState: 'available' | 'resuming' | 'attached';
-		};
 		let suspended: SuspendedSession | undefined;
 		for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
-			const list = await requestWorkspace<SuspendedSession[]>(verifier, 'suspend.list');
+			const list = readSuspendedSessionCatalog(await requestWorkspace(verifier, 'suspend.list'));
 			suspended = list.find(
 				(session) =>
 					session.originalWorkspaceId === workspace.workspaceId &&
@@ -896,7 +844,13 @@ test('terminal output produced after marking is retained in suspended history', 
 		expect(text).toContain(before);
 		expect(text).not.toContain('STALE_HISTORY_TEXT');
 		expect(text).not.toContain('\x1b[');
-		expect((await request.delete(`/api/v1/ssh-suspend/terminate/${suspended!.id}`)).ok()).toBeTruthy();
+		expect(
+			(
+				await request.delete(`/api/v1/ssh-suspend/terminate/${suspended!.id}`, {
+					headers: { Origin: E2E_URLS.frontendOrigin },
+				})
+			).ok(),
+		).toBeTruthy();
 	} finally {
 		await closeWebSocket(verifier);
 	}
@@ -925,15 +879,9 @@ test('resume sends only the newest cached tail and pages older terminal history 
 
 	const recoverySocket = await openAuthenticatedWebSocket(request);
 	try {
-		type SuspendedSession = {
-			id: string;
-			originalWorkspaceId: string;
-			status: 'active' | 'disconnected';
-			ownershipState: 'available' | 'resuming' | 'attached';
-		};
 		let suspended: SuspendedSession | undefined;
 		for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
-			const list = await requestWorkspace<SuspendedSession[]>(recoverySocket, 'suspend.list');
+			const list = readSuspendedSessionCatalog(await requestWorkspace(recoverySocket, 'suspend.list'));
 			suspended = list.find(
 				(session) =>
 					session.originalWorkspaceId === original.workspaceId &&
@@ -955,17 +903,10 @@ test('resume sends only the newest cached tail and pages older terminal history 
 		recoverySocket.on('message', onInitialMessage);
 		const resumedWorkspaceId = `resumed-history-${crypto.randomUUID()}`;
 		const startedAt = Date.now();
-		const resumed = await requestWorkspace<{
-			workspaceId: string;
-			resumedFrom: string;
-			historyAvailable: boolean;
-		}>(
-			recoverySocket,
-			'suspend.resume',
-			{ suspendedSessionId: suspended!.id, workspaceId: resumedWorkspaceId },
-			crypto.randomUUID(),
-			5_000,
-		);
+		const resumed = await resumeSuspendedWorkspace(recoverySocket, {
+			suspendedSessionId: suspended!.id,
+			workspaceId: resumedWorkspaceId,
+		});
 		recoverySocket.off('message', onInitialMessage);
 
 		const resumeMs = Date.now() - startedAt;
@@ -1073,17 +1014,11 @@ test('resumed terminal pages older history through a bounded window and restores
 	await requestWorkspace(suspendedWorkspace.socket, 'suspend.mark', { terminalSnapshot: snapshot });
 	await closeWebSocket(suspendedWorkspace.socket);
 
-	type SuspendedSession = {
-		id: string;
-		originalWorkspaceId: string;
-		status: 'active' | 'disconnected';
-		ownershipState: 'available' | 'resuming' | 'attached';
-	};
 	let suspended: SuspendedSession | undefined;
 	const catalogSocket = await openAuthenticatedWebSocket(context.request);
 	try {
 		for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
-			const list = await requestWorkspace<SuspendedSession[]>(catalogSocket, 'suspend.list');
+			const list = readSuspendedSessionCatalog(await requestWorkspace(catalogSocket, 'suspend.list'));
 			suspended = list.find(
 				(session) =>
 					session.originalWorkspaceId === suspendedWorkspace.workspaceId &&
@@ -1097,29 +1032,26 @@ test('resumed terminal pages older history through a bounded window and restores
 	}
 	expect(suspended).toBeTruthy();
 
-	type E2eLayoutNode = {
-		id?: string;
-		type: 'pane' | 'container';
-		component?: string;
-		direction?: 'horizontal' | 'vertical';
-		size?: number;
-		children?: E2eLayoutNode[];
-	};
 	const layoutResponse = await context.request.get('/api/v1/settings/layout');
 	expect(layoutResponse.ok()).toBeTruthy();
-	const originalLayout = (await layoutResponse.json()) as E2eLayoutNode;
-	const suspendedLayout = structuredClone(originalLayout);
+	const originalLayout = readLayoutResponse(await layoutResponse.json());
+	const suspendedLayout = structuredClone(originalLayout.layout);
 
-	const replaceEditorWithSuspended = (node: E2eLayoutNode): boolean => {
+	const replaceEditorWithSuspended = (node: PresentationLayout): boolean => {
 		if (node.type === 'pane' && node.component === 'editor') {
 			node.component = 'suspendedSshSessions';
 			return true;
 		}
-		return node.children?.some(replaceEditorWithSuspended) ?? false;
+		return node.type === 'container' && node.children.some(replaceEditorWithSuspended);
 	};
 
 	expect(replaceEditorWithSuspended(suspendedLayout)).toBe(true);
-	expect((await context.request.put('/api/v1/settings/layout', { data: suspendedLayout })).ok()).toBeTruthy();
+	const savedLayout = await context.request.put('/api/v1/settings/layout', {
+		headers,
+		data: { expectedVersion: originalLayout.version, layout: suspendedLayout },
+	});
+	expect(savedLayout.ok()).toBe(true);
+	expect(readPresentationUpdateResponse(await savedLayout.json()).version).toBe(originalLayout.version + 1);
 
 	try {
 		await connectTestSshFromConnectionsPage(page, connectionId);
@@ -1335,6 +1267,14 @@ test('resumed terminal pages older history through a bounded window and restores
 		);
 	} finally {
 		expect((await fetch(`${E2E_SSH.controlUrl}/sftp/realpath-gate`, { method: 'POST' })).ok).toBe(true);
-		expect((await context.request.put('/api/v1/settings/layout', { data: originalLayout })).ok()).toBeTruthy();
+		const latestResponse = await context.request.get('/api/v1/settings/layout');
+		expect(latestResponse.ok()).toBe(true);
+		const latest = readLayoutResponse(await latestResponse.json());
+		const restored = await context.request.put('/api/v1/settings/layout', {
+			headers,
+			data: { expectedVersion: latest.version, layout: originalLayout.layout },
+		});
+		expect(restored.ok()).toBe(true);
+		expect(readPresentationUpdateResponse(await restored.json()).version).toBe(latest.version + 1);
 	}
 });

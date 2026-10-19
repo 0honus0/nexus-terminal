@@ -1,7 +1,10 @@
+import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
+import { readTestConnectionImportId } from '../../support/targets';
+import { E2E_URLS } from '../../support/test-env';
 import { expect, test, type Locator, type Page } from '../../support/fixtures';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import {
 	E2E_SSH,
 	configureSshE2eSettings,
@@ -162,40 +165,58 @@ for (const shared of [true, false] as const) {
 		test.setTimeout(90_000);
 		await loginAsInitialAdmin(context.request);
 		await configureSshE2eSettings(context.request);
-		const setting = await context.request.put('/api/v1/settings', { data: { shareFileEditorTabs: shared } });
-		expect(setting.ok()).toBeTruthy();
+		await updateUiPreferences(context.request, (preferences) => {
+			preferences.shareFileEditorTabs = shared;
+		});
+
 		await resetTestSshFilesystem();
 		const primaryId = await ensureTestSshConnection(context.request);
 		const peerName = `E2E Editor ${shared ? 'Shared' : 'Scoped'} Peer`;
 
 		const removePeer = async (): Promise<void> => {
-			let list = await context.request.get('/api/v1/connections');
+			let list = await context.request.get('/api/v1/targets/connections');
 			for (let attempt = 0; attempt < 2 && !list.ok(); attempt += 1) {
 				await new Promise((resolve) => setTimeout(resolve, 200));
-				list = await context.request.get('/api/v1/connections');
+				list = await context.request.get('/api/v1/targets/connections');
 			}
 			expect(list.ok()).toBeTruthy();
-			const connections = (await list.json()) as Array<{ id: number; name?: string }>;
+			const connections = readConnectionList(await list.json());
 			for (const connection of connections.filter((item) => item.name === peerName)) {
-				const removed = await context.request.delete(`/api/v1/connections/${connection.id}`);
+				const removed = await context.request.delete(`/api/v1/targets/connections/${connection.id}`, {
+					headers: { Origin: E2E_URLS.frontendOrigin },
+				});
 				expect(removed.ok()).toBeTruthy();
 			}
 		};
 
 		await removePeer();
-		const created = await context.request.post('/api/v1/connections', {
+		const created = await context.request.post('/api/v1/targets/connections/import', {
+			headers: { Origin: E2E_URLS.frontendOrigin },
 			data: {
-				name: peerName,
-				type: 'SSH',
-				host: E2E_SSH.host,
-				port: E2E_SSH.port,
-				username: E2E_SSH.username,
-				authMethod: 'password',
-				password: E2E_SSH.password,
+				items: [
+					{
+						connection: {
+							name: peerName,
+							type: 'SSH',
+							host: E2E_SSH.host,
+							port: E2E_SSH.port,
+							username: E2E_SSH.username,
+							notes: null,
+							route: 'direct',
+							proxyId: null,
+							rdpRemoteApp: null,
+							rdpRemoteAppDirectory: null,
+							rdpRemoteAppArguments: null,
+							tagIds: [],
+							jumpIds: [],
+						},
+						credential: { kind: 'password', password: E2E_SSH.password },
+					},
+				],
 			},
 		});
-		expect(created.status()).toBe(201);
-		const peerId = ((await created.json()) as { connection: { id: number } }).connection.id;
+		expect(created.status()).toBe(200);
+		const peerId = readTestConnectionImportId(await created.json());
 
 		const terminalTabs = page.locator('.terminal-tab-shell').getByRole('tab');
 
@@ -238,8 +259,9 @@ for (const shared of [true, false] as const) {
 		} finally {
 			await page.goto('/connections').catch(() => undefined);
 			await removePeer();
-			const restore = await context.request.put('/api/v1/settings', { data: { shareFileEditorTabs: true } });
-			expect(restore.ok()).toBeTruthy();
+			await updateUiPreferences(context.request, (preferences) => {
+				preferences.shareFileEditorTabs = true;
+			});
 		}
 	});
 }
@@ -965,13 +987,9 @@ test('preview workspace backdrop hiding preserves tabs across directories when p
 	test.setTimeout(90_000);
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	expect(
-		(
-			await context.request.put('/api/v1/settings', {
-				data: { showPopupFileEditor: true },
-			})
-		).ok(),
-	).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.showPopupFileEditor = true;
+	});
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
 	await connectTestSshFromConnectionsPage(page, connectionId);

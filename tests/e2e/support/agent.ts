@@ -59,7 +59,8 @@ export async function createAgentProvider(request: APIRequestContext): Promise<A
 				displayName: 'E2E local model',
 				baseUrl: E2E_URLS.openAiProviderOrigin + '/v1',
 				protocol: 'chat-completions',
-				models: [{ id: 'e2e-model', contextWindow: 8192, maxOutputTokens: 128, supportsTools: true }],
+				// Include the current server-owned tool catalog in the request budget.
+				models: [{ id: 'e2e-model', contextWindow: 131072, maxOutputTokens: 128, supportsTools: true }],
 				enabled: true,
 				credential: 'e2e-provider-secret',
 			},
@@ -68,42 +69,23 @@ export async function createAgentProvider(request: APIRequestContext): Promise<A
 	);
 }
 
-export async function prepareAgentRun(request: APIRequestContext): Promise<{
+export async function prepareAgentRun(
+	request: APIRequestContext,
+	existingApp?: AgentAppView,
+): Promise<{
 	app: AgentAppView;
 	thread: AgentThreadView;
 	provider: AgentProviderView;
 	input: AgentCreateRunRequest;
 }> {
-	const app = await requestAgentJson(
-		request,
-		{ method: 'POST', path: '/apps', data: { name: 'E2E native Agent' }, status: 201 },
-		readAgentCreateAppResponse,
-	);
+	const app = existingApp ?? (await createTestAgentApp(request));
 	const created = await requestAgentWorkspace(request, app, {
 		method: 'agent.threads.create',
 		params: { operationId: randomUUID(), title: 'Event pagination' },
 	});
 	if (created.method !== 'agent.threads.create') throw new Error('Unexpected thread confirmation');
 	const provider = await createAgentProvider(request);
-	const settings = await requestAgentJson(
-		request,
-		{ method: 'GET', path: '/execution-settings' },
-		readAgentExecutionSettingsResponse,
-	);
-	await requestAgentJson(
-		request,
-		{
-			method: 'PUT',
-			path: '/execution-settings',
-			data: readAgentExecutionSettingsUpdate({
-				expectedVersion: settings.settings.version,
-				enabled: true,
-				limits: settings.settings.limits,
-				profiles: settings.settings.profiles,
-			}),
-		},
-		readAgentExecutionSettingsResponse,
-	);
+	await enableTestAgentExecution(request);
 	return {
 		app,
 		thread: created.value,
@@ -114,4 +96,39 @@ export async function prepareAgentRun(request: APIRequestContext): Promise<{
 			model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
 		},
 	};
+}
+
+export async function createTestAgentApp(request: APIRequestContext, name = 'E2E native Agent'): Promise<AgentAppView> {
+	return requestAgentJson(
+		request,
+		{ method: 'POST', path: '/apps', data: { name }, status: 201 },
+		readAgentCreateAppResponse,
+	);
+}
+
+export async function enableTestAgentExecution(request: APIRequestContext): Promise<void> {
+	const current = await requestAgentJson(
+		request,
+		{ method: 'GET', path: '/execution-settings' },
+		readAgentExecutionSettingsResponse,
+	);
+	if (current.settings.enabled) {
+		return;
+	}
+	const saved = await requestAgentJson(
+		request,
+		{
+			method: 'PUT',
+			path: '/execution-settings',
+			data: readAgentExecutionSettingsUpdate({
+				expectedVersion: current.settings.version,
+				enabled: true,
+				limits: current.settings.limits,
+				profiles: current.settings.profiles,
+			}),
+		},
+		readAgentExecutionSettingsResponse,
+	);
+	expect(saved.settings.enabled).toBe(true);
+	expect(saved.settings.version).toBe(current.settings.version + 1);
 }

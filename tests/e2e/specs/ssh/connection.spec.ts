@@ -1,18 +1,28 @@
 import { expect, test } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
-import { E2E_SSH, configureSshE2eSettings, removeNamedSshConnections, resetTestSshFilesystem } from '../../support/ssh';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
+import {
+	E2E_SSH,
+	configureSshE2eSettings,
+	createTestSshConnection,
+	removeNamedSshConnections,
+	resetTestSshFilesystem,
+	trustTestSshHostKey,
+} from '../../support/ssh';
+import { E2E_URLS } from '../../support/test-env';
+import { readConnectionTestResponse } from '../../../../packages/shared/src/targets/connections/test-codec';
 import { captureFunctionalScreenshot, functionalScreenshotsEnabled } from '../../support/functional-screenshots';
 import { step, slowStep } from '../../support/steps';
 
 test('adds, tests, and connects to a real SSH server', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	const embeddedWorkspaceSettings = await context.request.put('/api/v1/settings', {
-		data: { showPopupFileManager: false, showPopupFileEditor: false },
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.showPopupFileManager = false;
+		preferences.showPopupFileEditor = false;
 	});
-	expect(embeddedWorkspaceSettings.ok()).toBeTruthy();
 	await resetTestSshFilesystem();
 	await removeNamedSshConnections(context.request);
+	await trustTestSshHostKey(context.request);
 
 	await step('open add SSH connection form', async () => {
 		await page.goto('/connections');
@@ -31,12 +41,13 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
 	await step('test unsaved SSH connection against real server', async () => {
 		const responsePromise = page.waitForResponse(
 			(response) =>
-				response.url().includes('/api/v1/connections/test-unsaved') && response.request().method() === 'POST',
+				response.url().includes('/api/v1/targets/connections/test-unsaved') &&
+				response.request().method() === 'POST',
 		);
 		await page.getByRole('button', { name: 'Test Connection', exact: true }).click();
 		const response = await responsePromise;
 		expect(response.ok()).toBeTruthy();
-		await expect(response.json()).resolves.toMatchObject({ success: true });
+		expect(readConnectionTestResponse(await response.json()).status).toBe('ok');
 		const testResult = page.locator('form footer span.text-success');
 		await expect(testResult).toBeVisible();
 		await expect(testResult).toHaveClass(/text-success/);
@@ -45,7 +56,8 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
 
 	await step('save SSH connection', async () => {
 		const createPromise = page.waitForResponse(
-			(response) => response.url().endsWith('/api/v1/connections') && response.request().method() === 'POST',
+			(response) =>
+				response.url().endsWith('/api/v1/targets/connections') && response.request().method() === 'POST',
 		);
 		await page.locator('form button[type="submit"]').click();
 		const response = await createPromise;
@@ -112,24 +124,12 @@ test('Connect All waits for each Workspace binding before mounted file managers 
 	const connectionIds: number[] = [];
 	const protocolErrors: string[] = [];
 
-	const createConnection = async (suffix: string): Promise<number> => {
-		const response = await context.request.post('/api/v1/connections', {
-			data: {
-				name: `${prefix} ${suffix}`,
-				type: 'SSH',
-				host: E2E_SSH.host,
-				port: E2E_SSH.port,
-				username: E2E_SSH.username,
-				authMethod: 'password',
-				password: E2E_SSH.password,
-			},
-		});
-		expect(response.status()).toBe(201);
-		return ((await response.json()) as { connection: { id: number } }).connection.id;
-	};
-
+	await trustTestSshHostKey(context.request);
 	try {
-		connectionIds.push(await createConnection('A'), await createConnection('B'));
+		connectionIds.push(
+			await createTestSshConnection(context.request, prefix + ' A'),
+			await createTestSshConnection(context.request, prefix + ' B'),
+		);
 		page.on('websocket', (socket) => {
 			socket.on('framereceived', ({ payload }) => {
 				if (typeof payload !== 'string') return;
@@ -182,7 +182,9 @@ test('Connect All waits for each Workspace binding before mounted file managers 
 		).toEqual([]);
 	} finally {
 		for (const id of connectionIds) {
-			const response = await context.request.delete(`/api/v1/connections/${id}`);
+			const response = await context.request.delete(`/api/v1/targets/connections/${id}`, {
+				headers: { Origin: E2E_URLS.frontendOrigin },
+			});
 			expect([200, 204, 404]).toContain(response.status());
 		}
 	}

@@ -1,3 +1,4 @@
+import { E2E_URLS } from '../../support/test-env';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { dragLocalFiles, openFileManager, uploadProgressTask } from '../../support/file-upload';
@@ -40,6 +41,7 @@ test('repeated cancelled-upload teardown keeps fresh Workspace WebSockets reconn
 			// /ws/workspace upgrade intermittently fall through the shared dev/E2E WebSocket proxy.
 			await context.setOffline(true);
 			const resetResponse = await request.post('/api/v1/__e2e/reset', {
+				headers: { Origin: E2E_URLS.frontendOrigin },
 				data: { mode: 'seed' },
 			});
 			expect(

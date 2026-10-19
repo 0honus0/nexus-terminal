@@ -1,3 +1,6 @@
+import { readTestConnectionImportId } from '../../support/targets';
+import { E2E_URLS } from '../../support/test-env';
+import { updateTestAppearance } from '../../support/appearance';
 import { writeFile } from 'node:fs/promises';
 import { expect, test } from '../../support/fixtures';
 import { E2E_SSH, configureSshE2eSettings, connectTestSshFromConnectionsPage } from '../../support/ssh';
@@ -19,37 +22,45 @@ test('session switches retain terminal and background instances and skip unchang
 	);
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	expect(
-		(
-			await context.request.put('/api/v1/appearance', {
-				data: {
-					terminalBackgroundEnabled: true,
-					terminalCustomHtml: `<canvas id="scene"></canvas><script>
+	await updateTestAppearance(context.request, (preferences) => {
+		preferences.terminalBackgroundEnabled = true;
+		preferences.terminalCustomHtml = `<canvas id="scene"></canvas><script>
         const canvas = document.getElementById('scene');
         canvas.dataset.instance = String(Math.random());
         let frames = 0;
         function paint() { canvas.dataset.frames = String(++frames); requestAnimationFrame(paint); }
         requestAnimationFrame(paint);
-      </script>`,
-				},
-			})
-		).ok(),
-	).toBeTruthy();
+      </script>`;
+	});
 	const ids: number[] = [];
 	for (let index = 0; index < 3; index++) {
-		const created = await context.request.post('/api/v1/connections', {
+		const created = await context.request.post('/api/v1/targets/connections/import', {
+			headers: { Origin: E2E_URLS.frontendOrigin },
 			data: {
-				name: `E2E Cached Tab ${index}`,
-				type: 'SSH',
-				host: E2E_SSH.host,
-				port: E2E_SSH.port,
-				username: E2E_SSH.username,
-				authMethod: 'password',
-				password: E2E_SSH.password,
+				items: [
+					{
+						connection: {
+							name: `E2E Cached Tab ${index}`,
+							type: 'SSH',
+							host: E2E_SSH.host,
+							port: E2E_SSH.port,
+							username: E2E_SSH.username,
+							notes: null,
+							route: 'direct',
+							proxyId: null,
+							rdpRemoteApp: null,
+							rdpRemoteAppDirectory: null,
+							rdpRemoteAppArguments: null,
+							tagIds: [],
+							jumpIds: [],
+						},
+						credential: { kind: 'password', password: E2E_SSH.password },
+					},
+				],
 			},
 		});
-		expect(created.status()).toBe(201);
-		ids.push((await created.json()).connection.id);
+		expect(created.status()).toBe(200);
+		ids.push(readTestConnectionImportId(await created.json()));
 	}
 	await connectTestSshFromConnectionsPage(page, ids[0]!);
 	const cdp = await context.newCDPSession(page);

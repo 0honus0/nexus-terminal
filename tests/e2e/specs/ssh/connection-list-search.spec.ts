@@ -1,6 +1,10 @@
+import { readTagList } from '../../../../packages/shared/src/targets/tags/http-codec';
+import { readConnectionList, readConnectionView } from '../../../../packages/shared/src/targets/connections/http-codec';
+import { readTestConnectionImportId } from '../../support/targets';
+import { E2E_URLS } from '../../support/test-env';
 import type { Page } from '@playwright/test';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import {
 	configureSshE2eSettings,
 	connectTestSshFromConnectionsPage,
@@ -22,49 +26,65 @@ async function openWorkspaceConnectionPicker(page: Page) {
 }
 
 async function listTags(request: APIRequestContext): Promise<Array<{ id: number; name: string }>> {
-	const response = await request.get('/api/v1/tags');
+	const response = await request.get('/api/v1/targets/tags');
 	expect(response.ok()).toBeTruthy();
-	return (await response.json()) as Array<{ id: number; name: string }>;
+	return readTagList(await response.json());
 }
 
 async function connectionTagIds(request: APIRequestContext, id: number): Promise<number[]> {
-	const response = await request.get(`/api/v1/connections/${id}`);
+	const response = await request.get(`/api/v1/targets/connections/${id}`);
 	expect(response.ok()).toBeTruthy();
-	return ((await response.json()) as { tagIds?: number[] }).tagIds ?? [];
+	return readConnectionView(await response.json()).tagIds ?? [];
 }
 
 async function recreateSecondaryConnection(request: APIRequestContext): Promise<number> {
-	const list = await request.get('/api/v1/connections');
+	const list = await request.get('/api/v1/targets/connections');
 	expect(list.ok()).toBeTruthy();
-	const connections = (await list.json()) as Array<{ id: number; name?: string }>;
+	const connections = readConnectionList(await list.json());
 	for (const connection of connections.filter((item) => item.name === SECONDARY_NAME)) {
-		const remove = await request.delete(`/api/v1/connections/${connection.id}`);
+		const remove = await request.delete(`/api/v1/targets/connections/${connection.id}`, {
+			headers: { Origin: E2E_URLS.frontendOrigin },
+		});
 		expect(remove.ok()).toBeTruthy();
 	}
 
-	const create = await request.post('/api/v1/connections', {
+	const create = await request.post('/api/v1/targets/connections/import', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: {
-			name: SECONDARY_NAME,
-			type: 'SSH',
-			host: SECONDARY_HOST,
-			port: 22,
-			username: 'search-e2e',
-			authMethod: 'password',
-			password: 'not-used-in-this-test',
+			items: [
+				{
+					connection: {
+						name: SECONDARY_NAME,
+						type: 'SSH',
+						host: SECONDARY_HOST,
+						port: 22,
+						username: 'search-e2e',
+						notes: null,
+						route: 'direct',
+						proxyId: null,
+						rdpRemoteApp: null,
+						rdpRemoteAppDirectory: null,
+						rdpRemoteAppArguments: null,
+						tagIds: [],
+						jumpIds: [],
+					},
+					credential: { kind: 'password', password: 'not-used-in-this-test' },
+				},
+			],
 		},
 	});
-	expect(create.status()).toBe(201);
-	const body = (await create.json()) as { connection: { id: number } };
-	return body.connection.id;
+	expect(create.status()).toBe(200);
+	const body = readTestConnectionImportId(await create.json());
+	return body;
 }
 
 test('workspace connection search filters by name and host and restores the full list', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	const settings = await context.request.put('/api/v1/settings', {
-		data: { showConnectionTags: false },
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.showConnectionTags = false;
 	});
-	expect(settings.ok()).toBeTruthy();
+
 	await resetTestSshFilesystem();
 	const primaryId = await ensureTestSshConnection(context.request);
 	const secondaryId = await recreateSecondaryConnection(context.request);
@@ -107,15 +127,11 @@ test('workspace connection search filters by name and host and restores the full
 test('workspace connection list remains usable when connection tags fail to load', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	expect(
-		(
-			await context.request.put('/api/v1/settings', {
-				data: { showConnectionTags: true },
-			})
-		).ok(),
-	).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.showConnectionTags = true;
+	});
 	const primaryId = await ensureTestSshConnection(context.request);
-	await page.route('**/api/v1/tags', (route) => route.abort('failed'));
+	await page.route('**/api/v1/targets/tags', (route) => route.abort('failed'));
 
 	await page.goto('/workspace');
 	const list = await openWorkspaceConnectionPicker(page);
@@ -129,7 +145,7 @@ test('workspace connection list remains usable when main preferences fail to loa
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
 	const primaryId = await ensureTestSshConnection(context.request);
-	await page.route('**/api/v1/settings', async (route) => {
+	await page.route('**/api/v1/settings/preferences', async (route) => {
 		if (route.request().method() === 'GET') await route.abort('failed');
 		else await route.continue();
 	});
@@ -137,7 +153,9 @@ test('workspace connection list remains usable when main preferences fail to loa
 	await page.goto('/workspace');
 	const list = await openWorkspaceConnectionPicker(page);
 	await expect(list.locator(`li[data-connection-id="${primaryId}"]`)).toBeVisible();
-	await expect(page.getByText('Network Error', { exact: true }).first()).toBeVisible();
+	await expect(
+		page.getByText('Personal data request failed. Try reading again.', { exact: true }).first(),
+	).toBeVisible();
 });
 
 test('workspace tag picker and group manager create, assign, remove, rename, and delete tags on narrow screens', async ({
@@ -146,20 +164,22 @@ test('workspace tag picker and group manager create, assign, remove, rename, and
 }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	expect(
-		(
-			await context.request.put('/api/v1/settings', {
-				data: { showConnectionTags: true },
-			})
-		).ok(),
-	).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.showConnectionTags = true;
+	});
 	await resetTestSshFilesystem();
 	const primaryId = await ensureTestSshConnection(context.request);
 	const secondaryId = await recreateSecondaryConnection(context.request);
 	for (const tag of (await listTags(context.request)).filter((item) =>
 		[WORKSPACE_TAG, WORKSPACE_TAG_RENAMED].includes(item.name),
 	)) {
-		expect((await context.request.delete(`/api/v1/tags/${tag.id}`)).ok()).toBeTruthy();
+		expect(
+			(
+				await context.request.delete(`/api/v1/targets/tags/${tag.id}`, {
+					headers: { Origin: E2E_URLS.frontendOrigin },
+				})
+			).ok(),
+		).toBeTruthy();
 	}
 
 	await connectTestSshFromConnectionsPage(page, primaryId);
@@ -205,7 +225,7 @@ test('workspace tag picker and group manager create, assign, remove, rename, and
 
 			const save = page.waitForResponse(
 				(response) =>
-					response.url().endsWith(`/api/v1/connections/${primaryId}`) &&
+					response.url().endsWith(`/api/v1/targets/connections/${primaryId}`) &&
 					response.request().method() === 'PUT',
 			);
 			await form.getByRole('button', { name: 'Confirm Edit', exact: true }).click();

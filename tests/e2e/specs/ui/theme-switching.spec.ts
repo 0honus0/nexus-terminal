@@ -1,6 +1,10 @@
+import { listTestHtmlThemes, removeTestHtmlTheme, updateTestHtmlRepository } from '../../support/html-themes';
+import type { AppearanceView } from '../../../../packages/shared/src/preferences/appearance/model';
+import { readAppearanceView } from '../../../../packages/shared/src/preferences/appearance/http-codec';
+import { updateTestAppearance } from '../../support/appearance';
 import { execFileSync } from 'node:child_process';
 import { expect, test, type APIRequestContext, type Locator, type Page } from '../../support/fixtures';
-import { ensureInitialAdmin, loginAsInitialAdmin } from '../../support/auth';
+import { ensureInitialAdmin, loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
 
@@ -35,7 +39,7 @@ const ONE_PIXEL_PNG = Buffer.from(
 	'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZpmIAAAAASUVORK5CYII=',
 	'base64',
 );
-const LEGACY_DARK_UI_THEME_WITHOUT_INPUT_TOKENS: Record<string, string> = {
+const DARK_UI_THEME_WITH_EXPLICIT_INPUT_TOKENS: Record<string, string> = {
 	'--app-bg-color': '#212529',
 	'--text-color': '#e9ecef',
 	'--text-color-secondary': '#adb5bd',
@@ -54,6 +58,9 @@ const LEGACY_DARK_UI_THEME_WITHOUT_INPUT_TOKENS: Record<string, string> = {
 	'--icon-hover-color': 'var(--link-hover-color)',
 	'--split-line-color': 'var(--border-color)',
 	'--split-line-hover-color': 'var(--border-color)',
+	'--input-bg-color': '#1e293b',
+	'--input-text-color': '#f8fafc',
+	'--input-placeholder-color': '#94a3b8',
 	'--input-focus-border-color': 'var(--link-active-color)',
 	'--input-focus-glow': 'var(--link-active-color)',
 	'--overlay-bg-color': 'rgba(0, 0, 0, 0.8)',
@@ -62,22 +69,17 @@ const LEGACY_DARK_UI_THEME_WITHOUT_INPUT_TOKENS: Record<string, string> = {
 	'--base-margin': '0.5rem',
 };
 
-async function appearance(request: APIRequestContext): Promise<Record<string, unknown>> {
+async function appearance(request: APIRequestContext): Promise<AppearanceView> {
 	const response = await request.get('/api/v1/appearance');
 	expect(response.ok()).toBeTruthy();
-	return (await response.json()) as Record<string, unknown>;
+	return readAppearanceView(await response.json());
 }
 
 async function cleanupHtmlThemes(request: APIRequestContext): Promise<void> {
-	const response = await request.get('/api/v1/appearance/html-presets/local');
-	expect(response.ok()).toBeTruthy();
-	const themes = (await response.json()) as Array<{ name: string; type: string }>;
-	for (const theme of themes.filter(
-		(item) => item.type === 'custom' && [HTML_THEME_NAME, HTML_THEME_RENAMED].includes(item.name),
-	)) {
-		expect(
-			(await request.delete(`/api/v1/appearance/html-presets/local/${encodeURIComponent(theme.name)}`)).ok(),
-		).toBeTruthy();
+	for (const theme of await listTestHtmlThemes(request)) {
+		if (theme.type === 'custom' && [HTML_THEME_NAME, HTML_THEME_RENAMED].includes(theme.name)) {
+			await removeTestHtmlTheme(request, theme);
+		}
 	}
 }
 
@@ -93,19 +95,21 @@ test.describe('fresh installation appearance defaults', () => {
 	});
 });
 
-test('current appearance settings still apply when the terminal theme catalog fails to load', async ({
+test('appearance writes stay fenced after a catalog failure and recover through an explicit refresh', async ({
 	page,
 	context,
 }) => {
 	await loginAsInitialAdmin(context.request);
-	expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.language = 'en-US';
+	});
 	const originalResponse = await context.request.get('/api/v1/appearance');
 	expect(originalResponse.ok()).toBeTruthy();
-	const original = (await originalResponse.json()) as { windowThemeColor?: string };
+	const original = readAppearanceView(await originalResponse.json());
 	const targetColor = '#123456';
-	expect(
-		(await context.request.put('/api/v1/appearance', { data: { windowThemeColor: targetColor } })).ok(),
-	).toBeTruthy();
+	await updateTestAppearance(context.request, (preferences) => {
+		preferences.windowThemeColor = targetColor;
+	});
 
 	await page.route('**/api/v1/terminal-themes', async (route) => {
 		if (route.request().method() === 'GET') await route.abort('failed');
@@ -113,18 +117,20 @@ test('current appearance settings still apply when the terminal theme catalog fa
 	});
 	try {
 		await page.goto('/settings');
-		await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
 		await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
-		await expect(page.getByRole('textbox', { name: 'Title bar color', exact: true })).toHaveValue(targetColor);
+		const input = page.getByRole('textbox', { name: 'Title bar color', exact: true });
+		await expect(input).toBeDisabled();
+		expect((await appearance(context.request)).windowThemeColor).toBe(targetColor);
+		await page.unroute('**/api/v1/terminal-themes');
+		await page.locator('#settings-panel-appearance').getByRole('button', { name: 'Refresh', exact: true }).click();
+		await expect(input).toBeEnabled();
+		await expect(input).toHaveValue(targetColor);
+		await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
 	} finally {
 		await page.unroute('**/api/v1/terminal-themes');
-		expect(
-			(
-				await context.request.put('/api/v1/appearance', {
-					data: { windowThemeColor: original.windowThemeColor ?? '#212529' },
-				})
-			).ok(),
-		).toBeTruthy();
+		await updateTestAppearance(context.request, (preferences) => {
+			preferences.windowThemeColor = original.windowThemeColor ?? '#212529';
+		});
 	}
 });
 
@@ -133,7 +139,9 @@ test('appearance settings report a main appearance load failure and keep default
 	context,
 }) => {
 	await loginAsInitialAdmin(context.request);
-	expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.language = 'en-US';
+	});
 	await page.route('**/api/v1/appearance', async (route) => {
 		if (route.request().method() === 'GET') await route.abort('failed');
 		else await route.continue();
@@ -149,12 +157,13 @@ test('appearance settings report a main appearance load failure and keep default
 
 test('PWA window title bar color updates immediately and persists across reload', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
-	const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
-	expect(language.ok()).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.language = 'en-US';
+	});
 
 	const originalResponse = await context.request.get('/api/v1/appearance');
 	expect(originalResponse.ok()).toBeTruthy();
-	const original = (await originalResponse.json()) as { windowThemeColor?: string };
+	const original = readAppearanceView(await originalResponse.json());
 	const targetColor = '#1F2937';
 
 	let releaseStaleLoads: (() => void) | undefined;
@@ -165,7 +174,7 @@ test('PWA window title bar color updates immediately and persists across reload'
 	const staleLoadStarted = new Promise<void>((resolve) => {
 		markStaleLoadStarted = resolve;
 	});
-	let holdAppearanceLoads = true;
+	let holdAppearanceLoads = false;
 	let heldLoadCount = 0;
 	let fulfilledHeldLoadCount = 0;
 
@@ -184,22 +193,24 @@ test('PWA window title bar color updates immediately and persists across reload'
 
 	try {
 		await page.goto('/settings');
-		await staleLoadStarted;
 		await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
 
 		const input = page.getByRole('textbox', { name: 'Title bar color', exact: true });
-		await expect(input).toBeVisible();
+		await expect(input).toBeEnabled();
 		await input.fill(targetColor);
+		holdAppearanceLoads = true;
+		await page.locator('#settings-panel-appearance').getByRole('button', { name: 'Refresh', exact: true }).click();
+		await staleLoadStarted;
 
 		const savePromise = page.waitForResponse(
 			(response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
 		);
 		await page.locator('#settings-panel-appearance').getByRole('button', { name: 'Save', exact: true }).click();
-		expect((await savePromise).ok()).toBeTruthy();
-		await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
-
+		// The owner serializes refresh and writes; release the captured read before awaiting the queued write.
 		holdAppearanceLoads = false;
 		releaseStaleLoads?.();
+		expect((await savePromise).ok()).toBeTruthy();
+		await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
 		await expect.poll(() => fulfilledHeldLoadCount).toBe(heldLoadCount);
 		await page.evaluate(
 			() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
@@ -209,7 +220,7 @@ test('PWA window title bar color updates immediately and persists across reload'
 
 		const persisted = await context.request.get('/api/v1/appearance');
 		expect(persisted.ok()).toBeTruthy();
-		expect(((await persisted.json()) as { windowThemeColor?: string }).windowThemeColor).toBe(targetColor);
+		expect(readAppearanceView(await persisted.json()).windowThemeColor).toBe(targetColor);
 
 		await page.unrouteAll({ behavior: 'wait' });
 		await page.reload({ waitUntil: 'domcontentloaded' });
@@ -220,17 +231,18 @@ test('PWA window title bar color updates immediately and persists across reload'
 		holdAppearanceLoads = false;
 		releaseStaleLoads?.();
 		await page.unrouteAll({ behavior: 'wait' });
-		const restore = await context.request.put('/api/v1/appearance', {
-			data: { windowThemeColor: original.windowThemeColor ?? '#343A40' },
+		await updateTestAppearance(context.request, (preferences) => {
+			preferences.windowThemeColor = original.windowThemeColor ?? '#343A40';
 		});
-		expect(restore.ok()).toBeTruthy();
 	}
 });
 
 test('UI theme switches to dark mode, persists across reload, and resets to default', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
-	const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
-	expect(language.ok()).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.language = 'en-US';
+	});
+
 	await page.goto('/');
 
 	await step('Dark Mode applies immediately and is persisted by the appearance API', async () => {
@@ -264,7 +276,7 @@ test('UI theme switches to dark mode, persists across reload, and resets to defa
 
 		const response = await context.request.get('/api/v1/appearance');
 		expect(response.ok()).toBeTruthy();
-		const body = (await response.json()) as { customUiTheme?: string };
+		const body = readAppearanceView(await response.json());
 		expect(JSON.parse(body.customUiTheme || '{}')['--app-bg-color']).toBe('#212529');
 	});
 
@@ -281,25 +293,26 @@ test('UI theme switches to dark mode, persists across reload, and resets to defa
 
 		const response = await context.request.get('/api/v1/appearance');
 		expect(response.ok()).toBeTruthy();
-		const body = (await response.json()) as { customUiTheme?: string };
+		const body = readAppearanceView(await response.json());
 		expect(JSON.parse(body.customUiTheme || '{}')['--app-bg-color']).toBe('#ffffff');
 	});
 });
 
-test('legacy dark UI themes without input tokens keep Dashboard controls readable and normalize on save', async ({
+test('explicit dark UI input tokens keep Dashboard controls readable and persist on save', async ({
 	page,
 	context,
 }) => {
 	await loginAsInitialAdmin(context.request);
-	const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
-	expect(language.ok()).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.language = 'en-US';
+	});
+
 	const original = await appearance(context.request);
 
 	try {
-		const legacyTheme = await context.request.put('/api/v1/appearance', {
-			data: { customUiTheme: JSON.stringify(LEGACY_DARK_UI_THEME_WITHOUT_INPUT_TOKENS) },
+		await updateTestAppearance(context.request, (preferences) => {
+			preferences.customUiTheme = JSON.stringify(DARK_UI_THEME_WITH_EXPLICIT_INPUT_TOKENS);
 		});
-		expect(legacyTheme.ok()).toBeTruthy();
 
 		await page.goto('/');
 		await expect.poll(() => appBackground(page)).toBe('#212529');
@@ -402,10 +415,9 @@ test('legacy dark UI themes without input tokens keep Dashboard controls readabl
 		expect(persistedTheme['--input-text-color']).toBe('#f8fafc');
 		expect(persistedTheme['--input-placeholder-color']).toBe('#94a3b8');
 	} finally {
-		const restore = await context.request.put('/api/v1/appearance', {
-			data: { customUiTheme: original.customUiTheme },
+		await updateTestAppearance(context.request, (preferences) => {
+			preferences.customUiTheme = original.customUiTheme;
 		});
-		expect(restore.ok()).toBeTruthy();
 	}
 });
 
@@ -414,12 +426,13 @@ test('terminal preset themes load from the API, switch through the UI, and persi
 	context,
 }) => {
 	await loginAsInitialAdmin(context.request);
-	const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
-	expect(language.ok()).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.language = 'en-US';
+	});
 
 	const originalAppearanceResponse = await context.request.get('/api/v1/appearance');
 	expect(originalAppearanceResponse.ok()).toBeTruthy();
-	const originalAppearance = (await originalAppearanceResponse.json()) as { activeTerminalThemeId?: number | null };
+	const originalAppearance = readAppearanceView(await originalAppearanceResponse.json());
 
 	const themesResponse = await context.request.get('/api/v1/terminal-themes');
 	expect(themesResponse.ok()).toBeTruthy();
@@ -461,7 +474,7 @@ test('terminal preset themes load from the API, switch through the UI, and persi
 				.poll(async () => {
 					const response = await context.request.get('/api/v1/appearance');
 					expect(response.ok()).toBeTruthy();
-					return ((await response.json()) as { activeTerminalThemeId?: number | null }).activeTerminalThemeId;
+					return readAppearanceView(await response.json()).activeTerminalThemeId;
 				})
 				.toBe(targetThemeId);
 
@@ -482,15 +495,12 @@ test('terminal preset themes load from the API, switch through the UI, and persi
 
 			const response = await context.request.get('/api/v1/appearance');
 			expect(response.ok()).toBeTruthy();
-			expect(((await response.json()) as { activeTerminalThemeId?: number | null }).activeTerminalThemeId).toBe(
-				targetThemeId,
-			);
+			expect(readAppearanceView(await response.json()).activeTerminalThemeId).toBe(targetThemeId);
 		});
 	} finally {
-		const restore = await context.request.put('/api/v1/appearance', {
-			data: { activeTerminalThemeId: originalAppearance.activeTerminalThemeId ?? null },
+		await updateTestAppearance(context.request, (preferences) => {
+			preferences.activeTerminalThemeId = originalAppearance.activeTerminalThemeId ?? null;
 		});
-		expect(restore.ok()).toBeTruthy();
 	}
 });
 
@@ -499,7 +509,9 @@ test('style customizer keeps mobile geometry stable and persists custom UI, inde
 	context,
 }) => {
 	await loginAsInitialAdmin(context.request);
-	expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.language = 'en-US';
+	});
 	const original = await appearance(context.request);
 
 	try {
@@ -619,24 +631,22 @@ test('style customizer keeps mobile geometry stable and persists custom UI, inde
 			await expect(appearanceField(reloaded, 'Mobile Editor Font Size')).toHaveValue('21');
 		});
 	} finally {
-		await context.request.put('/api/v1/appearance', {
-			data: {
-				customUiTheme: original.customUiTheme,
-				terminalFontFamily: original.terminalFontFamily,
-				terminalFontSize: original.terminalFontSize,
-				terminalFontSizeMobile: original.terminalFontSizeMobile,
-				editorFontFamily: original.editorFontFamily,
-				editorFontSize: original.editorFontSize,
-				mobileEditorFontSize: original.mobileEditorFontSize,
-				terminalTextStrokeEnabled: original.terminalTextStrokeEnabled,
-				terminalTextStrokeWidth: original.terminalTextStrokeWidth,
-				terminalTextStrokeColor: original.terminalTextStrokeColor,
-				terminalTextShadowEnabled: original.terminalTextShadowEnabled,
-				terminalTextShadowOffsetX: original.terminalTextShadowOffsetX,
-				terminalTextShadowOffsetY: original.terminalTextShadowOffsetY,
-				terminalTextShadowBlur: original.terminalTextShadowBlur,
-				terminalTextShadowColor: original.terminalTextShadowColor,
-			},
+		await updateTestAppearance(context.request, (preferences) => {
+			preferences.customUiTheme = original.customUiTheme;
+			preferences.terminalFontFamily = original.terminalFontFamily;
+			preferences.terminalFontSize = original.terminalFontSize;
+			preferences.terminalFontSizeMobile = original.terminalFontSizeMobile;
+			preferences.editorFontFamily = original.editorFontFamily;
+			preferences.editorFontSize = original.editorFontSize;
+			preferences.mobileEditorFontSize = original.mobileEditorFontSize;
+			preferences.terminalTextStrokeEnabled = original.terminalTextStrokeEnabled;
+			preferences.terminalTextStrokeWidth = original.terminalTextStrokeWidth;
+			preferences.terminalTextStrokeColor = original.terminalTextStrokeColor;
+			preferences.terminalTextShadowEnabled = original.terminalTextShadowEnabled;
+			preferences.terminalTextShadowOffsetX = original.terminalTextShadowOffsetX;
+			preferences.terminalTextShadowOffsetY = original.terminalTextShadowOffsetY;
+			preferences.terminalTextShadowBlur = original.terminalTextShadowBlur;
+			preferences.terminalTextShadowColor = original.terminalTextShadowColor;
 		});
 	}
 });
@@ -646,18 +656,14 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
 	context,
 }) => {
 	await loginAsInitialAdmin(context.request);
-	expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.language = 'en-US';
+	});
 	await cleanupHtmlThemes(context.request);
 	const original = await appearance(context.request);
 	expect(original.pageBackgroundImage ?? null).toBeNull();
 	expect(original.terminalBackgroundImage ?? null).toBeNull();
-	expect(
-		(
-			await context.request.put('/api/v1/appearance/html-presets/remote/repository-url', {
-				data: { url: null },
-			})
-		).ok(),
-	).toBeTruthy();
+	await updateTestHtmlRepository(context.request, null);
 
 	try {
 		await page.setViewportSize({ width: 320, height: 667 });
@@ -721,7 +727,7 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
 		});
 
 		await step(
-			'local HTML preset create, duplicate conflict, apply, rename, and delete use the real API',
+			'local HTML preset create, duplicate conflict, apply, save-as-copy, and delete use the real API',
 			async () => {
 				await customizer.getByRole('button', { name: 'New Theme', exact: true }).click();
 				const editor = page
@@ -766,7 +772,7 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
 						response.request().method() === 'POST',
 				);
 				await duplicate.getByRole('button', { name: 'Save', exact: true }).click();
-				expect((await conflict).status()).toBe(400);
+				expect((await conflict).status()).toBe(409);
 				await expect(duplicate).toBeVisible();
 				const originalContent = await context.request.get(
 					`/api/v1/appearance/html-presets/local/${encodeURIComponent(HTML_THEME_NAME)}`,
@@ -788,6 +794,9 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
 					.getByRole('listitem')
 					.filter({ has: page.getByTitle(HTML_THEME_RENAMED, { exact: true }) });
 				await expect(row).toBeVisible();
+				const originals = await listTestHtmlThemes(context.request);
+				expect(originals.some((item) => item.name === HTML_THEME_NAME)).toBe(true);
+				expect(originals.some((item) => item.name === HTML_THEME_RENAMED)).toBe(true);
 				await row.getByRole('button', { name: 'Delete', exact: true }).click();
 				const confirm = page.getByRole('dialog', { name: 'Please confirm' });
 				await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
@@ -851,36 +860,13 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
 			},
 		);
 
-		await step(
-			'legacy official HTML theme repository URLs normalize and still list the current catalog',
-			async () => {
-				const legacyList = await context.request.get('/api/v1/appearance/html-presets/remote/list', {
-					params: { repoUrl: LEGACY_OFFICIAL_HTML_THEME_REPOSITORY },
-				});
-				expect(legacyList.ok()).toBeTruthy();
-				const remoteThemes = (await legacyList.json()) as Array<{ name?: string }>;
-				expect(remoteThemes.some((theme) => theme.name === '丝带.html')).toBeTruthy();
-
-				const saveLegacy = await context.request.put('/api/v1/appearance/html-presets/remote/repository-url', {
-					data: { url: LEGACY_OFFICIAL_HTML_THEME_REPOSITORY },
-				});
-				expect(saveLegacy.ok()).toBeTruthy();
-				await expect
-					.poll(async () => (await appearance(context.request)).remoteHtmlPresetsUrl)
-					.toBe(DEFAULT_OFFICIAL_HTML_THEME_REPOSITORY);
-
-				const restoreTestedRef = await context.request.put(
-					'/api/v1/appearance/html-presets/remote/repository-url',
-					{
-						data: { url: TESTED_OFFICIAL_HTML_THEME_REPOSITORY },
-					},
-				);
-				expect(restoreTestedRef.ok()).toBeTruthy();
-				await expect
-					.poll(async () => (await appearance(context.request)).remoteHtmlPresetsUrl)
-					.toBe(TESTED_OFFICIAL_HTML_THEME_REPOSITORY);
-			},
-		);
+		await step('repository settings preserve explicit GitHub paths without historical URL rewrites', async () => {
+			await updateTestHtmlRepository(context.request, LEGACY_OFFICIAL_HTML_THEME_REPOSITORY);
+			expect((await appearance(context.request)).remoteHtmlPresetsUrl).toBe(
+				LEGACY_OFFICIAL_HTML_THEME_REPOSITORY,
+			);
+			await updateTestHtmlRepository(context.request, TESTED_OFFICIAL_HTML_THEME_REPOSITORY);
+		});
 
 		await step(
 			'invalid remote repository loading fails without changing the applied HTML and clearing the URL disables the list',
@@ -952,15 +938,11 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
 		});
 	} finally {
 		await cleanupHtmlThemes(context.request);
-		await context.request.put('/api/v1/appearance/html-presets/remote/repository-url', {
-			data: { url: original.remoteHtmlPresetsUrl ?? null },
-		});
-		await context.request.put('/api/v1/appearance', {
-			data: {
-				terminalBackgroundEnabled: original.terminalBackgroundEnabled,
-				terminalBackgroundOverlayOpacity: original.terminalBackgroundOverlayOpacity,
-				terminalCustomHtml: original.terminalCustomHtml,
-			},
+		await updateTestHtmlRepository(context.request, original.remoteHtmlPresetsUrl ?? null);
+		await updateTestAppearance(context.request, (preferences) => {
+			preferences.terminalBackgroundEnabled = original.terminalBackgroundEnabled;
+			preferences.terminalBackgroundOverlayOpacity = original.terminalBackgroundOverlayOpacity;
+			preferences.terminalCustomHtml = original.terminalCustomHtml;
 		});
 	}
 });

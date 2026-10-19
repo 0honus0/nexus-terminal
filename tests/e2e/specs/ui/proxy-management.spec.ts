@@ -1,7 +1,16 @@
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { step } from '../../support/steps';
 import { selectUiOption } from '../../support/ui-select';
+
+import {
+	readProxyView,
+	readProxyList,
+	readProxyUpdateRequest,
+} from '../../../../packages/shared/src/targets/proxies/http-codec';
+import { E2E_URLS } from '../../support/test-env';
+
+const headers = { Origin: E2E_URLS.frontendOrigin };
 
 const ORIGINAL_NAME = 'E2E Proxy Lifecycle';
 const RENAMED_NAME = 'E2E Proxy Lifecycle Renamed';
@@ -10,19 +19,20 @@ const CLEARED_NAME = 'E2E Proxy Lifecycle Cleared';
 const LONG_HOST = 'proxy-host-with-a-very-long-unbroken-name-for-narrow-mobile.invalid';
 
 async function cleanup(request: APIRequestContext): Promise<void> {
-	const response = await request.get('/api/v1/proxies');
+	const response = await request.get('/api/v1/targets/proxies');
 	expect(response.ok()).toBeTruthy();
-	const proxies = (await response.json()) as Array<{ id: number; name: string }>;
+	const proxies = readProxyList(await response.json());
 	for (const proxy of proxies.filter((item) =>
 		[ORIGINAL_NAME, RENAMED_NAME, UPDATED_NAME, CLEARED_NAME].includes(item.name),
 	)) {
-		const remove = await request.delete(`/api/v1/proxies/${proxy.id}`);
+		const remove = await request.delete(`/api/v1/targets/proxies/${proxy.id}`, { headers });
 		expect(remove.ok()).toBeTruthy();
 	}
 }
 
 test('proxy UI preserves, updates, and explicitly clears a stored password', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
 	await cleanup(context.request);
 	await page.setViewportSize({ width: 320, height: 667 });
 	await page.goto('/proxies');
@@ -60,26 +70,25 @@ test('proxy UI preserves, updates, and explicitly clears a stored password', asy
 		).toBeTruthy();
 		await form.locator('#proxy-port').fill('18080');
 		const createPromise = page.waitForResponse(
-			(response) => response.url().endsWith('/api/v1/proxies') && response.request().method() === 'POST',
+			(response) => response.url().endsWith('/api/v1/targets/proxies') && response.request().method() === 'POST',
 		);
 		await form.getByRole('button', { name: 'Save', exact: true }).click();
 		const create = await createPromise;
 		expect(create.status()).toBe(201);
-		const createBody = (await create.json()) as { proxy: Record<string, unknown> & { id: number } };
-		proxyId = createBody.proxy.id;
-		expect(createBody.proxy).toMatchObject({
+		const createBody = readProxyView(await create.json());
+		proxyId = createBody.id;
+		expect(createBody).toMatchObject({
 			id: proxyId,
 			name: ORIGINAL_NAME,
 			type: 'HTTP',
 			host: LONG_HOST,
 			port: 18080,
 			username: 'proxy-user',
-			authMethod: 'password',
 			createdAt: expect.any(Number),
 			updatedAt: expect.any(Number),
 		});
 		for (const legacyName of ['auth_method', 'created_at', 'updated_at'])
-			expect(createBody.proxy).not.toHaveProperty(legacyName);
+			expect(createBody).not.toHaveProperty(legacyName);
 		const row = proxyRow();
 		await expect(row).toContainText(ORIGINAL_NAME);
 		await expect(row).toContainText(LONG_HOST);
@@ -97,12 +106,12 @@ test('proxy UI preserves, updates, and explicitly clears a stored password', asy
 		await expect(form.locator('#proxy-password')).toHaveValue('');
 		await form.locator('#proxy-name').fill(RENAMED_NAME);
 		const updatePromise = page.waitForRequest(
-			(request) => request.url().endsWith(`/api/v1/proxies/${proxyId}`) && request.method() === 'PUT',
+			(request) => request.url().endsWith(`/api/v1/targets/proxies/${proxyId}`) && request.method() === 'PUT',
 		);
 		await form.getByRole('button', { name: 'Save', exact: true }).click();
 		const updateRequest = await updatePromise;
-		expect(updateRequest.postDataJSON()).toMatchObject({ name: RENAMED_NAME });
-		expect(updateRequest.postDataJSON()).not.toHaveProperty('password');
+		expect(readProxyUpdateRequest(updateRequest.postDataJSON()).changes).toMatchObject({ name: RENAMED_NAME });
+		expect(readProxyUpdateRequest(updateRequest.postDataJSON()).changes).not.toHaveProperty('password');
 		await expect(row).toContainText(RENAMED_NAME);
 	});
 
@@ -114,10 +123,10 @@ test('proxy UI preserves, updates, and explicitly clears a stored password', asy
 		await selectUiOption(form.locator('#proxy-type'), 'SOCKS5');
 		await form.locator('#proxy-password').fill('proxy-password-v2');
 		const updatePromise = page.waitForRequest(
-			(request) => request.url().endsWith(`/api/v1/proxies/${proxyId}`) && request.method() === 'PUT',
+			(request) => request.url().endsWith(`/api/v1/targets/proxies/${proxyId}`) && request.method() === 'PUT',
 		);
 		await form.getByRole('button', { name: 'Save', exact: true }).click();
-		expect((await updatePromise).postDataJSON()).toMatchObject({
+		expect(readProxyUpdateRequest((await updatePromise).postDataJSON()).changes).toMatchObject({
 			name: UPDATED_NAME,
 			type: 'SOCKS5',
 			password: 'proxy-password-v2',
@@ -135,7 +144,7 @@ test('proxy UI preserves, updates, and explicitly clears a stored password', asy
 		await expect(form.getByRole('checkbox', { name: 'Clear saved password' })).not.toBeChecked();
 		await form.getByRole('checkbox', { name: 'Clear saved password' }).check();
 		const updatePromise = page.waitForRequest(
-			(request) => request.url().endsWith(`/api/v1/proxies/${proxyId}`) && request.method() === 'PUT',
+			(request) => request.url().endsWith(`/api/v1/targets/proxies/${proxyId}`) && request.method() === 'PUT',
 		);
 		await form.getByRole('button', { name: 'Save', exact: true }).click();
 		expect((await updatePromise).postDataJSON()).toMatchObject({ name: CLEARED_NAME, password: null });
@@ -143,7 +152,7 @@ test('proxy UI preserves, updates, and explicitly clears a stored password', asy
 	});
 
 	await step('delete failure is surfaced and leaves the row intact', async () => {
-		await page.route(`**/api/v1/proxies/${proxyId}`, async (route) => {
+		await page.route(`**/api/v1/targets/proxies/${proxyId}`, async (route) => {
 			if (route.request().method() === 'DELETE') await route.abort('failed');
 			else await route.continue();
 		});
@@ -152,9 +161,17 @@ test('proxy UI preserves, updates, and explicitly clears a stored password', asy
 		const confirm = page.getByRole('dialog').filter({ hasText: CLEARED_NAME });
 		await expect(confirm).toBeVisible();
 		await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
-		await expect(page.getByText(/Failed to delete proxy:.*Network Error/)).toBeVisible();
+		await expect(
+			page.getByText(
+				'The result is unknown and may already be saved. Refresh and review before submitting again.',
+				{ exact: true },
+			),
+		).toBeVisible();
+		await expect(row.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
 		await expect(row).toBeVisible();
-		await page.unroute(`**/api/v1/proxies/${proxyId}`);
+		await page.unroute(`**/api/v1/targets/proxies/${proxyId}`);
+		await page.getByRole('button', { name: 'Refresh and review', exact: true }).click();
+		await expect(row.getByRole('button', { name: 'Delete', exact: true })).toBeEnabled();
 	});
 
 	await step('delete removes the proxy from UI and persistence', async () => {
@@ -166,8 +183,9 @@ test('proxy UI preserves, updates, and explicitly clears a stored password', asy
 		await expect(row).toHaveCount(0);
 		await expect
 			.poll(async () => {
-				const response = await context.request.get('/api/v1/proxies');
-				const proxies = (await response.json()) as Array<{ id: number }>;
+				const response = await context.request.get('/api/v1/targets/proxies');
+				expect(response.ok()).toBe(true);
+				const proxies = readProxyList(await response.json());
 				return proxies.some((item) => item.id === proxyId);
 			})
 			.toBeFalsy();

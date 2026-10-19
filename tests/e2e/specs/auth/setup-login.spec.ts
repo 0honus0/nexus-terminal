@@ -147,14 +147,17 @@ test.describe('initial setup', () => {
 		await page.locator('form button[type="submit"]').scrollIntoViewIfNeeded();
 		await collectMetrics('320x667-before-failure');
 
-		const failedSetupResponse = page.waitForResponse(
-			(response) => response.url().endsWith('/api/v1/auth/setup') && response.request().method() === 'POST',
-		);
+		const setupRequests: string[] = [];
+		page.on('request', (request) => {
+			if (request.method() === 'POST' && request.url().endsWith('/api/v1/auth/setup')) {
+				setupRequests.push(request.url());
+			}
+		});
 		await page.locator('form button[type="submit"]').click();
-		expect((await failedSetupResponse).status()).toBe(400);
 		await expect(page).toHaveURL(/\/setup$/);
 		await expect(page.getByRole('alert')).toBeVisible();
 		await expect(page.getByRole('alert')).toContainText(/\S+/);
+		expect(setupRequests).toEqual([]);
 		await collectMetrics('320x667-failure');
 		const failureShot = testInfo.outputPath('setup-mobile-320x667-failure.png');
 		await page.screenshot({ path: failureShot, fullPage: false, animations: 'disabled', caret: 'hide' });

@@ -1,3 +1,5 @@
+import { getTestSidebar, updateTestSidebar } from '../../support/presentation';
+import { E2E_URLS } from '../../support/test-env';
 import { expect, test } from '../../support/fixtures';
 import {
 	closeConnectedFileManager,
@@ -8,7 +10,7 @@ import {
 	resetTestSshFilesystem,
 	E2E_SSH,
 } from '../../support/ssh';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import { slowStep, step } from '../../support/steps';
 import {
 	clickMenuItem,
@@ -198,19 +200,14 @@ test('a sidebar FileManager can unmount without orphaning its hidden archive tas
 	test.setTimeout(60_000);
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	expect(
-		(await context.request.put('/api/v1/settings', { data: { showPopupFileManager: false } })).ok(),
-	).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.showPopupFileManager = false;
+	});
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
-	const originalSidebarResponse = await context.request.get('/api/v1/settings/sidebar');
-	expect(originalSidebarResponse.ok()).toBeTruthy();
-	const originalSidebar = (await originalSidebarResponse.json()) as { left: string[]; right: string[] };
+	const originalSidebar = (await getTestSidebar(context.request)).sidebar;
 
-	const sidebarResponse = await context.request.put('/api/v1/settings/sidebar', {
-		data: { left: originalSidebar.left, right: ['fileManager'] },
-	});
-	expect(sidebarResponse.ok()).toBeTruthy();
+	await updateTestSidebar(context.request, { left: originalSidebar.left, right: ['fileManager'] });
 	await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=3000`, { method: 'POST' });
 
 	try {
@@ -246,6 +243,6 @@ test('a sidebar FileManager can unmount without orphaning its hidden archive tas
 		await expect(sidebarList.locator('tr[data-filename="archive-source.zip"]')).toHaveCount(0);
 	} finally {
 		await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
-		await context.request.put('/api/v1/settings/sidebar', { data: originalSidebar });
+		await updateTestSidebar(context.request, originalSidebar);
 	}
 });

@@ -1,5 +1,6 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
+import { getTestAppearance, updateTestAppearance } from '../../support/appearance';
 import { configureSshE2eSettings, connectTestSshFromConnectionsPage, ensureTestSshConnection } from '../../support/ssh';
 
 test('mobile HTML background follows container geometry without native resize or iframe reload', async ({
@@ -8,9 +9,7 @@ test('mobile HTML background follows container geometry without native resize or
 }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	const originalResponse = await context.request.get('/api/v1/appearance');
-	expect(originalResponse.ok()).toBeTruthy();
-	const original = await originalResponse.json();
+	const original = await getTestAppearance(context.request);
 	const html = `<canvas id="scene"></canvas><script>
     // Model a browser that does not deliver native resize to the theme.
     window.addEventListener('resize', event => {
@@ -30,10 +29,10 @@ test('mobile HTML background follows container geometry without native resize or
     resize();
   </script>`;
 	try {
-		const response = await context.request.put('/api/v1/appearance', {
-			data: { terminalBackgroundEnabled: true, terminalCustomHtml: html },
+		await updateTestAppearance(context.request, (input) => {
+			input.terminalBackgroundEnabled = true;
+			input.terminalCustomHtml = html;
 		});
-		expect(response.ok()).toBeTruthy();
 		const connectionId = await ensureTestSshConnection(context.request);
 		await connectTestSshFromConnectionsPage(page, connectionId);
 		const frame = page.locator('.terminal-custom-html');
@@ -96,11 +95,9 @@ test('mobile HTML background follows container geometry without native resize or
 		});
 		await expectGeometry();
 	} finally {
-		await context.request.put('/api/v1/appearance', {
-			data: {
-				terminalBackgroundEnabled: original.terminalBackgroundEnabled,
-				terminalCustomHtml: original.terminalCustomHtml,
-			},
+		await updateTestAppearance(context.request, (input) => {
+			input.terminalBackgroundEnabled = original.terminalBackgroundEnabled;
+			input.terminalCustomHtml = original.terminalCustomHtml;
 		});
 	}
 });
@@ -111,9 +108,7 @@ test('mobile background limits continuous frame work and pauses without losing i
 }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	const originalResponse = await context.request.get('/api/v1/appearance');
-	expect(originalResponse.ok()).toBeTruthy();
-	const original = await originalResponse.json();
+	const original = await getTestAppearance(context.request);
 	const html = `<style>
     @keyframes spin { to { transform: rotate(360deg); } }
     #scene { animation: spin 1s linear infinite; }
@@ -132,13 +127,10 @@ test('mobile background limits continuous frame work and pauses without losing i
     requestAnimationFrame(draw);
   </script>`;
 	try {
-		expect(
-			(
-				await context.request.put('/api/v1/appearance', {
-					data: { terminalBackgroundEnabled: true, terminalCustomHtml: html },
-				})
-			).ok(),
-		).toBeTruthy();
+		await updateTestAppearance(context.request, (input) => {
+			input.terminalBackgroundEnabled = true;
+			input.terminalCustomHtml = html;
+		});
 		const connectionId = await ensureTestSshConnection(context.request);
 		await connectTestSshFromConnectionsPage(page, connectionId);
 		const frame = page.locator('.terminal-custom-html');
@@ -183,11 +175,9 @@ test('mobile background limits continuous frame work and pauses without losing i
 		await expect.poll(async () => Number(await canvas.getAttribute('data-frames'))).toBeGreaterThan(beforeResume);
 		await expect(canvas).toHaveAttribute('data-instance', instance!);
 	} finally {
-		await context.request.put('/api/v1/appearance', {
-			data: {
-				terminalBackgroundEnabled: original.terminalBackgroundEnabled,
-				terminalCustomHtml: original.terminalCustomHtml,
-			},
+		await updateTestAppearance(context.request, (input) => {
+			input.terminalBackgroundEnabled = original.terminalBackgroundEnabled;
+			input.terminalCustomHtml = original.terminalCustomHtml;
 		});
 	}
 });

@@ -720,7 +720,11 @@ function attachSftp(session, accept) {
 		}
 	};
 
-	sftp.once('end', detachChannel);
+	sftp.once('end', () => {
+		detachChannel();
+		// ssh2's SFTP channel does not automatically reciprocate CHANNEL_CLOSE.
+		sftp.end();
+	});
 	sftp.once('close', detachChannel);
 
 	const respondError = (reqid, error) => {
@@ -1323,8 +1327,11 @@ const smtpServer = net.createServer((socket) => {
 				}
 				data += buffer.slice(0, end);
 				buffer = buffer.slice(end + 5);
-				const valid = /content-type:\s*text\/html\b/i.test(data) && data.includes('NEXUS-E2E-HTML');
-				reply(valid ? '250 2.0.0 accepted' : '550 5.6.0 expected HTML notification body');
+				const valid =
+					/content-type:\s*text\/plain\b/i.test(data) &&
+					data.includes('NEXUS-E2E-TEXT') &&
+					data.includes('SETTINGS_UPDATED');
+				reply(valid ? '250 2.0.0 accepted' : '550 5.6.0 expected plain-text notification body');
 				data = '';
 				dataMode = false;
 				continue;
@@ -1728,25 +1735,14 @@ const controlServer = http.createServer(async (req, res) => {
 			} catch {
 				// Invalid JSON is handled by the strict validation below.
 			}
-			const locale = requestUrl.searchParams.get('locale') || 'en-US';
-			const expected =
-				locale === 'zh-CN'
-					? {
-							eventDisplay: '设置已更新',
-							message: '这是来自 Nexus Terminal 的测试通知（Webhook），事件为“设置已更新”。',
-						}
-					: {
-							eventDisplay: undefined,
-							message:
-								"This is a test notification from Nexus Terminal (Webhook - i18n) for event 'Settings Updated'.",
-						};
 			const valid =
 				req.headers['x-e2e-webhook'] === 'delivery' &&
+				req.headers['content-type']?.startsWith('application/json') &&
 				parsed?.source === 'nexus-e2e' &&
 				parsed?.event === 'SETTINGS_UPDATED' &&
-				(expected.eventDisplay === undefined || parsed?.eventDisplay === expected.eventDisplay) &&
-				parsed?.details?.message === expected.message &&
-				parsed?.details?.test === true;
+				parsed?.subject === '' &&
+				typeof parsed?.time === 'string' &&
+				Number.isFinite(Date.parse(parsed.time));
 			res.writeHead(valid ? 204 : 422, { 'content-type': 'application/json' });
 			res.end(valid ? undefined : JSON.stringify({ error: 'invalid E2E webhook request' }));
 			return;

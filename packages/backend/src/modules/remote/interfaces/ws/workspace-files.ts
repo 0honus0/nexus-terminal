@@ -615,7 +615,7 @@ class WorkspaceFilesSession {
 				};
 			}
 			default:
-				throw new Error('unsupported_workspace_operation');
+				throw new WorkspaceFailure('invalid_input');
 		}
 	}
 
@@ -1425,7 +1425,7 @@ class WorkspaceFilesSession {
 
 	private async readBinary(payload: unknown, requestId: string): Promise<{ path: string }> {
 		if (this.binaryReads.has(requestId) || this.binaryReads.size >= WORKSPACE_FILES_MAX_BINARY_READS) {
-			throw new Error('BINARY_READ_CAPACITY_EXCEEDED');
+			throw new WorkspaceFailure('limit_exceeded');
 		}
 		const input = readWorkspaceFileReadBinaryRequest(payload);
 		const controller = new AbortController();

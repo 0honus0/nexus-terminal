@@ -1,3 +1,4 @@
+import { E2E_URLS } from '../../support/test-env';
 import { expect, test, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
@@ -482,6 +483,7 @@ test('mobile suspended catalog refreshes promptly after the immediate suspend ha
 		if (suspendedId) {
 			const cleanup = await context.request.delete(
 				`/api/v1/ssh-suspend/terminate/${encodeURIComponent(suspendedId)}`,
+				{ headers: { Origin: E2E_URLS.frontendOrigin } },
 			);
 			expect([200, 404]).toContain(cleanup.status());
 		}
@@ -1094,6 +1096,12 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
 		expect(resumedLogText).toContain('BEFORE_SUSPEND=');
 		expect(resumedLogText).toContain('AFTER_SUSPEND=');
 		expect(resumedLogText).toContain('AFTER_RESUME=');
-		expect((await context.request.delete(`/api/v1/ssh-suspend/terminate/${resuspended!.id}`)).ok()).toBeTruthy();
+		expect(
+			(
+				await context.request.delete(`/api/v1/ssh-suspend/terminate/${resuspended!.id}`, {
+					headers: { Origin: E2E_URLS.frontendOrigin },
+				})
+			).ok(),
+		).toBeTruthy();
 	});
 });

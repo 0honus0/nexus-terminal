@@ -1,3 +1,5 @@
+import { readdirSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { request as playwrightRequest } from '@playwright/test';
@@ -10,8 +12,14 @@ const {
 	waitForRemoteDesktopUpgradeRejection,
 } = require('../../support/remote-desktop-websocket.cjs');
 
-const databasePath = path.resolve(__dirname, '../../.tmp/backend-data/nexus-terminal.db');
-const backendBaseUrl = E2E_URLS.backendOrigin;
+import {
+	readConnectionView,
+	readConnectionImportResponse,
+} from '../../../../packages/shared/src/targets/connections/http-codec';
+import { readRemoteDesktopSessionResponse } from '../../../../packages/shared/src/remote/desktop/http-codec';
+
+const headers = { Origin: E2E_URLS.frontendOrigin };
+const backendBaseUrl = E2E_URLS.frontendOrigin;
 
 const sessionCookie = async (request: APIRequestContext): Promise<string> => {
 	const storage = await request.storageState();
@@ -19,31 +27,46 @@ const sessionCookie = async (request: APIRequestContext): Promise<string> => {
 };
 
 const createRdpConnection = async (request: APIRequestContext, name: string): Promise<number> => {
-	const created = await request.post('/api/v1/connections', {
+	const created = await request.post('/api/v1/targets/connections/import', {
+		headers,
 		data: {
-			type: 'RDP',
-			name,
-			host: '192.0.2.88',
-			port: 3389,
-			username: 'rdp-http-user',
-			password: 'rdp-http-password',
-			rdpOptions: {
-				remoteApp: '||notepad',
-				remoteAppDirectory: 'C:\\RemoteApps',
-				remoteAppArguments: '/A sample.txt',
-			},
+			items: [
+				{
+					connection: {
+						type: 'RDP',
+						name,
+						host: '192.0.2.88',
+						port: 3389,
+						username: 'rdp-http-user',
+						route: 'direct',
+						proxyId: null,
+						notes: null,
+						rdpRemoteApp: '||notepad',
+						rdpRemoteAppDirectory: 'C:\\RemoteApps',
+						rdpRemoteAppArguments: '/A sample.txt',
+						tagIds: [],
+						jumpIds: [],
+					},
+					credential: { kind: 'password', password: 'rdp-http-password' },
+				},
+			],
 		},
 	});
-	expect(created.status(), await created.text()).toBe(201);
-	return ((await created.json()) as { connection: { id: number } }).connection.id;
+	expect(created.status()).toBe(200);
+	const imported = readConnectionImportResponse(await created.json());
+	expect(imported.items).toHaveLength(1);
+	const result = imported.items[0];
+	if (result.status !== 'ok') throw new Error('RDP fixture import rejected: ' + result.code);
+	return result.id;
 };
 
 const createSessionTicket = async (request: APIRequestContext, connectionId: number): Promise<string> => {
 	const session = await request.post(
 		`/api/v1/connections/${connectionId}/rdp-session?width=1600&height=1000&dpi=144`,
+		{ headers },
 	);
 	expect(session.status(), await session.text()).toBe(200);
-	const payload = (await session.json()) as { ticket: string; lastConnectedAt: number };
+	const payload = readRemoteDesktopSessionResponse(await session.json());
 	expect(payload).toMatchObject({ ticket: expect.any(String), lastConnectedAt: expect.any(Number) });
 	expect(Object.keys(payload).sort()).toEqual(['lastConnectedAt', 'ticket']);
 	expect(payload.lastConnectedAt).toBeGreaterThan(0);
@@ -52,13 +75,20 @@ const createSessionTicket = async (request: APIRequestContext, connectionId: num
 };
 
 const insertUserWithAdminPassword = (username: string): void => {
+	const dataRoot = path.resolve(__dirname, '../../.tmp/backend-data');
+	const directories = readdirSync(dataRoot, { withFileTypes: true }).filter(
+		(item) => item.isDirectory() && item.name.startsWith('backend-'),
+	);
+	expect(directories).toHaveLength(1);
+	const databasePath = path.join(dataRoot, directories[0].name, 'nexus-terminal.db');
 	const script = String.raw`
     const { DatabaseSync } = require('node:sqlite');
     const db = new DatabaseSync(process.argv[1]);
     try {
-      const source = db.prepare('SELECT hashed_password FROM users WHERE username = ?').get(process.argv[2]);
-      if (!source?.hashed_password) throw new Error('Seed admin password hash is missing.');
-      db.prepare('INSERT INTO users (username, hashed_password) VALUES (?, ?)').run(process.argv[3], source.hashed_password);
+      const source = db.prepare('SELECT password_hash FROM access_accounts WHERE username = ?').get(process.argv[2]);
+      if (!source?.password_hash) throw new Error('Seed admin password hash is missing.');
+      const now = Math.floor(Date.now() / 1000);
+      db.prepare('INSERT INTO access_accounts(username,password_hash,created_at,updated_at) VALUES (?,?,?,?)').run(process.argv[3], source.password_hash, now, now);
     } finally {
       db.close();
     }
@@ -70,16 +100,14 @@ test('RDP RemoteApp options persist and create a remote desktop session', async 
 	await loginAsInitialAdmin(request);
 	const connectionId = await createRdpConnection(request, 'E2E HTTP RDP RemoteApp');
 
-	const persisted = await request.get(`/api/v1/connections/${connectionId}`);
+	const persisted = await request.get(`/api/v1/targets/connections/${connectionId}`);
 	expect(persisted.ok()).toBeTruthy();
-	await expect(persisted.json()).resolves.toMatchObject({
+	expect(readConnectionView(await persisted.json())).toMatchObject({
 		id: connectionId,
 		type: 'RDP',
-		rdpOptions: {
-			remoteApp: 'notepad',
-			remoteAppDirectory: 'C:\\RemoteApps',
-			remoteAppArguments: '/A sample.txt',
-		},
+		rdpRemoteApp: 'notepad',
+		rdpRemoteAppDirectory: 'C:\\RemoteApps',
+		rdpRemoteAppArguments: '/A sample.txt',
 	});
 
 	const ticket = await createSessionTicket(request, connectionId);
@@ -95,7 +123,7 @@ test('RDP RemoteApp options persist and create a remote desktop session', async 
 
 	const reused = (await waitForRemoteDesktopTicketRejection(ticket, cookie)) as { code: number; reason: string };
 	expect(reused.code).toBe(1008);
-	expect(reused.reason).toContain('ticket');
+	expect(reused.reason).toBe('invalid_input');
 });
 
 test('remote desktop ticket is bound to its authenticated user without consuming the owner ticket', async ({
@@ -111,18 +139,20 @@ test('remote desktop ticket is bound to its authenticated user without consuming
 	const otherRequest = await playwrightRequest.newContext({ baseURL: backendBaseUrl });
 	try {
 		const login = await otherRequest.post('/api/v1/auth/login', {
+			headers,
 			data: { username: otherUsername, password: E2E_ADMIN.password, rememberMe: false },
 		});
 		expect(login.ok(), await login.text()).toBeTruthy();
 		const otherCookie = await sessionCookie(otherRequest);
 		expect(otherCookie).toBeTruthy();
 
-		const rejected = (await waitForRemoteDesktopTicketRejection(ticket, otherCookie)) as {
-			code: number;
-			reason: string;
-		};
-		expect(rejected.code).toBe(1008);
-		expect(rejected.reason).toContain('ticket');
+		const rejected = (await waitForRemoteDesktopUpgradeRejection(ticket, otherCookie)) as { statusCode: number };
+		expect(rejected.statusCode).toBe(401);
+
+		await loginAsInitialAdmin(otherRequest);
+		const anotherAdminSession = await sessionCookie(otherRequest);
+		const wrongSession = await waitForRemoteDesktopTicketRejection(ticket, anotherAdminSession);
+		expect(wrongSession).toEqual({ code: 1008, reason: 'invalid_input' });
 
 		const ownerTunnel = (await openRemoteDesktopWebSocket(ticket, ownerCookie)) as {
 			firstMessage: string;
@@ -139,15 +169,15 @@ test('expired, unknown, and oversized remote desktop tickets are rejected', asyn
 	await loginAsInitialAdmin(request);
 	const cookie = await sessionCookie(request);
 
-	const unknown = (await waitForRemoteDesktopTicketRejection('not-a-real-ticket', cookie)) as {
+	const unknown = (await waitForRemoteDesktopTicketRejection(randomBytes(32).toString('base64url'), cookie)) as {
 		code: number;
 		reason: string;
 	};
 	expect(unknown.code).toBe(1008);
-	expect(unknown.reason).toContain('ticket');
+	expect(unknown.reason).toBe('invalid_input');
 
 	const oversized = (await waitForRemoteDesktopUpgradeRejection('x'.repeat(257), cookie)) as { statusCode: number };
-	expect(oversized.statusCode).toBe(400);
+	expect(oversized.statusCode).toBe(401);
 
 	const connectionId = await createRdpConnection(request, 'E2E RDP expired ticket');
 	const expiringTicket = await createSessionTicket(request, connectionId);
@@ -157,5 +187,5 @@ test('expired, unknown, and oversized remote desktop tickets are rejected', asyn
 		reason: string;
 	};
 	expect(expired.code).toBe(1008);
-	expect(expired.reason).toContain('ticket');
+	expect(expired.reason).toBe('invalid_input');
 });

@@ -1,3 +1,5 @@
+import { readTestConnectionImportId } from '../../support/targets';
+import { E2E_URLS } from '../../support/test-env';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { E2E_SSH, resetTestSshFilesystem, setTestSshLstatDenyPrefix } from '../../support/ssh';
@@ -13,19 +15,33 @@ import {
 import { step, slowStep } from '../../support/steps';
 
 async function createConnection(request: APIRequestContext, name: string): Promise<number> {
-	const response = await request.post('/api/v1/connections', {
+	const response = await request.post('/api/v1/targets/connections/import', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: {
-			name,
-			type: 'SSH',
-			host: E2E_SSH.host,
-			port: E2E_SSH.port,
-			username: E2E_SSH.username,
-			authMethod: 'password',
-			password: E2E_SSH.password,
+			items: [
+				{
+					connection: {
+						name: name,
+						type: 'SSH',
+						host: E2E_SSH.host,
+						port: E2E_SSH.port,
+						username: E2E_SSH.username,
+						notes: null,
+						route: 'direct',
+						proxyId: null,
+						rdpRemoteApp: null,
+						rdpRemoteAppDirectory: null,
+						rdpRemoteAppArguments: null,
+						tagIds: [],
+						jumpIds: [],
+					},
+					credential: { kind: 'password', password: E2E_SSH.password },
+				},
+			],
 		},
 	});
-	expect(response.status()).toBe(201);
-	return ((await response.json()) as { connection: { id: number } }).connection.id;
+	expect(response.status()).toBe(200);
+	return readTestConnectionImportId(await response.json());
 }
 
 async function readRemoteFile(socket: E2eWebSocket, remotePath: string): Promise<string> {

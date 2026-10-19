@@ -1,5 +1,9 @@
+import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
+import { readTestConnectionImportId } from '../../support/targets';
+import { E2E_URLS } from '../../support/test-env';
+import { readPreferencesResponse } from '../../../../packages/shared/src/preferences/presentation/http-codec';
 import { expect, test, type APIRequestContext, type Locator, type Page } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import { E2E_SSH, ensureTestSshConnection } from '../../support/ssh';
 import { selectUiOption } from '../../support/ui-select';
 
@@ -42,28 +46,48 @@ async function expectHorizontallyInside(locator: Locator, viewportWidth: number)
 }
 
 async function clearConnections(request: APIRequestContext): Promise<void> {
-	const response = await request.get('/api/v1/connections');
+	const response = await request.get('/api/v1/targets/connections');
 	expect(response.ok()).toBeTruthy();
-	const connections = (await response.json()) as Array<{ id: number }>;
+	const connections = readConnectionList(await response.json());
 	for (const connection of connections) {
-		expect((await request.delete(`/api/v1/connections/${connection.id}`)).ok()).toBeTruthy();
+		expect(
+			(
+				await request.delete(`/api/v1/targets/connections/${connection.id}`, {
+					headers: { Origin: E2E_URLS.frontendOrigin },
+				})
+			).ok(),
+		).toBeTruthy();
 	}
 }
 
 async function createMobileConnection(request: APIRequestContext, name: string, username: string): Promise<number> {
-	const response = await request.post('/api/v1/connections', {
+	const response = await request.post('/api/v1/targets/connections/import', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: {
-			name,
-			type: 'SSH',
-			host: E2E_SSH.host,
-			port: E2E_SSH.port,
-			username,
-			authMethod: 'password',
-			password: E2E_SSH.password,
+			items: [
+				{
+					connection: {
+						name: name,
+						type: 'SSH',
+						host: E2E_SSH.host,
+						port: E2E_SSH.port,
+						username: username,
+						notes: null,
+						route: 'direct',
+						proxyId: null,
+						rdpRemoteApp: null,
+						rdpRemoteAppDirectory: null,
+						rdpRemoteAppArguments: null,
+						tagIds: [],
+						jumpIds: [],
+					},
+					credential: { kind: 'password', password: E2E_SSH.password },
+				},
+			],
 		},
 	});
-	expect(response.status()).toBe(201);
-	return ((await response.json()) as { connection: { id: number } }).connection.id;
+	expect(response.status()).toBe(200);
+	return readTestConnectionImportId(await response.json());
 }
 
 async function switchInterfaceToChinese(page: Page): Promise<void> {
@@ -74,7 +98,7 @@ async function switchInterfaceToChinese(page: Page): Promise<void> {
 	await expect(language).toBeVisible();
 	await selectUiOption(language, 'zh-CN');
 	const save = page.waitForResponse(
-		(response) => response.url().includes('/api/v1/settings') && response.request().method() === 'PUT',
+		(response) => response.url().includes('/api/v1/settings/preferences') && response.request().method() === 'PUT',
 	);
 	await page.getByRole('button', { name: 'Save Language' }).click();
 	expect((await save).ok()).toBeTruthy();
@@ -84,22 +108,15 @@ async function switchInterfaceToChinese(page: Page): Promise<void> {
 test('mobile dashboard reflows without horizontal overflow or cramped control rows', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 
-	const originalSettingsResponse = await context.request.get('/api/v1/settings');
+	const originalSettingsResponse = await context.request.get('/api/v1/settings/preferences');
 	expect(originalSettingsResponse.ok()).toBeTruthy();
-	const originalSettings = (await originalSettingsResponse.json()) as {
-		language?: string;
-		dashboardShowLocalResources?: boolean;
-		dashboardShowRemoteResources?: boolean;
-	};
+	const originalSettings = readPreferencesResponse(await originalSettingsResponse.json()).preferences;
 
-	const normalizedSettings = await context.request.put('/api/v1/settings', {
-		data: {
-			language: 'en-US',
-			dashboardShowLocalResources: true,
-			dashboardShowRemoteResources: true,
-		},
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.language = 'en-US';
+		preferences.dashboardShowLocalResources = true;
+		preferences.dashboardShowRemoteResources = true;
 	});
-	expect(normalizedSettings.ok()).toBeTruthy();
 
 	await ensureTestSshConnection(context.request);
 
@@ -237,14 +254,11 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
 			await expectHorizontallyInside(row, viewport.width);
 		}
 	} finally {
-		const restoreSettings = await context.request.put('/api/v1/settings', {
-			data: {
-				language: originalSettings.language ?? 'en-US',
-				dashboardShowLocalResources: originalSettings.dashboardShowLocalResources ?? true,
-				dashboardShowRemoteResources: originalSettings.dashboardShowRemoteResources ?? true,
-			},
+		await updateUiPreferences(context.request, (preferences) => {
+			preferences.language = originalSettings.language ?? 'en-US';
+			preferences.dashboardShowLocalResources = originalSettings.dashboardShowLocalResources ?? true;
+			preferences.dashboardShowRemoteResources = originalSettings.dashboardShowRemoteResources ?? true;
 		});
-		expect(restoreSettings.ok()).toBeTruthy();
 	}
 });
 
@@ -253,17 +267,15 @@ test('mobile dashboard keeps empty and multi-connection states usable when resou
 	context,
 }) => {
 	await loginAsInitialAdmin(context.request);
-	const originalSettingsResponse = await context.request.get('/api/v1/settings');
+	const originalSettingsResponse = await context.request.get('/api/v1/settings/preferences');
 	expect(originalSettingsResponse.ok()).toBeTruthy();
-	const originalSettings = (await originalSettingsResponse.json()) as {
-		dashboardShowLocalResources?: boolean;
-		dashboardShowRemoteResources?: boolean;
-	};
+	const originalSettings = readPreferencesResponse(await originalSettingsResponse.json()).preferences;
 
-	const disableResources = await context.request.put('/api/v1/settings', {
-		data: { dashboardShowLocalResources: false, dashboardShowRemoteResources: false },
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.dashboardShowLocalResources = false;
+		preferences.dashboardShowRemoteResources = false;
 	});
-	expect(disableResources.ok()).toBeTruthy();
+
 	await clearConnections(context.request);
 
 	try {
@@ -340,12 +352,9 @@ test('mobile dashboard keeps empty and multi-connection states usable when resou
 			await page.goto('/');
 		}
 	} finally {
-		const restoreSettings = await context.request.put('/api/v1/settings', {
-			data: {
-				dashboardShowLocalResources: originalSettings.dashboardShowLocalResources ?? true,
-				dashboardShowRemoteResources: originalSettings.dashboardShowRemoteResources ?? true,
-			},
+		await updateUiPreferences(context.request, (preferences) => {
+			preferences.dashboardShowLocalResources = originalSettings.dashboardShowLocalResources ?? true;
+			preferences.dashboardShowRemoteResources = originalSettings.dashboardShowRemoteResources ?? true;
 		});
-		expect(restoreSettings.ok()).toBeTruthy();
 	}
 });

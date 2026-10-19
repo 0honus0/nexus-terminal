@@ -3,24 +3,30 @@ import { expect, test, type APIRequestContext, type BrowserContext } from '../..
 import { E2E_ADMIN, loginAsInitialAdmin } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
+import { E2E_URLS } from '../../support/test-env';
+import { readPasskeyList } from '../../../../packages/shared/src/access/factors/passkey-codec';
+import { ACCESS_PASSKEY_NAME_MAX_BYTES } from '../../../../packages/shared/src/access/values';
+const headers = { Origin: E2E_URLS.frontendOrigin };
 
 const TEMP_PASSWORD = 'E2e-Temporary-Password-2026!';
 
 async function login(request: APIRequestContext, password: string): Promise<boolean> {
 	const response = await request.post('/api/v1/auth/login', {
+		headers,
 		data: { username: E2E_ADMIN.username, password, rememberMe: false },
 	});
 	return response.ok();
 }
 
 async function restoreDefaultPassword(request: APIRequestContext): Promise<void> {
-	await request.post('/api/v1/auth/logout').catch(() => undefined);
+	await request.post('/api/v1/auth/logout', { headers }).catch(() => undefined);
 	if (await login(request, TEMP_PASSWORD)) {
 		const restore = await request.put('/api/v1/auth/password', {
+			headers,
 			data: { currentPassword: TEMP_PASSWORD, newPassword: E2E_ADMIN.password },
 		});
 		expect(restore.ok()).toBeTruthy();
-		await request.post('/api/v1/auth/logout');
+		await request.post('/api/v1/auth/logout', { headers });
 	}
 	if (!(await login(request, E2E_ADMIN.password))) {
 		throw new Error('failed to restore the default E2E administrator password');
@@ -137,18 +143,18 @@ test('password change UI updates the real login credential and can restore the t
 			expect(await mismatchRequest).toBeUndefined();
 		});
 
-		await step('the API rejects a wrong current password without losing form input', async () => {
+		await step('the API rejects a wrong current password and clears secret inputs', async () => {
 			await currentPassword.fill('Definitely-Wrong-Current-Password!');
 			await confirmPassword.fill(TEMP_PASSWORD);
 			const responsePromise = page.waitForResponse(
 				(response) => response.url().endsWith('/api/v1/auth/password') && response.request().method() === 'PUT',
 			);
 			await submit.click();
-			expect((await responsePromise).status()).toBe(400);
-			await expect(form).toContainText('当前密码不正确。');
-			await expect(currentPassword).toHaveValue('Definitely-Wrong-Current-Password!');
-			await expect(newPassword).toHaveValue(TEMP_PASSWORD);
-			await expect(confirmPassword).toHaveValue(TEMP_PASSWORD);
+			expect((await responsePromise).status()).toBe(401);
+			await expect(form).toContainText('The username, password or verification code is incorrect.');
+			await expect(currentPassword).toHaveValue('');
+			await expect(newPassword).toHaveValue('');
+			await expect(confirmPassword).toHaveValue('');
 		});
 
 		await step('change the administrator password through the security UI', async () => {
@@ -161,11 +167,8 @@ test('password change UI updates the real login credential and can restore the t
 			await submit.click();
 			expect((await responsePromise).ok()).toBeTruthy();
 			passwordChanged = true;
-			await expect(currentPassword).toHaveValue('');
-			await expect(newPassword).toHaveValue('');
-			await expect(confirmPassword).toHaveValue('');
-			await expect(form).toContainText('Password changed successfully!');
-
+			await expect(page).toHaveURL(/\/login$/);
+			await expect(page.locator('#currentPassword')).toHaveCount(0);
 			const authenticatedStatus = await context.request.get('/api/v1/auth/status');
 			expect(authenticatedStatus.status()).toBe(401);
 			expect(await login(context.request, TEMP_PASSWORD)).toBeTruthy();
@@ -186,7 +189,7 @@ test('password change UI updates the real login credential and can restore the t
 		});
 
 		await step('the new password authenticates after logout', async () => {
-			expect((await context.request.post('/api/v1/auth/logout')).ok()).toBeTruthy();
+			expect((await context.request.post('/api/v1/auth/logout', { headers })).ok()).toBeTruthy();
 			expect(await login(context.request, TEMP_PASSWORD)).toBeTruthy();
 			const status = await context.request.get('/api/v1/auth/status');
 			await expect(status.json()).resolves.toMatchObject({
@@ -198,14 +201,15 @@ test('password change UI updates the real login credential and can restore the t
 		});
 
 		await step('restore the standard E2E password for following tests', async () => {
-			expect((await context.request.post('/api/v1/auth/logout')).ok()).toBeTruthy();
+			expect((await context.request.post('/api/v1/auth/logout', { headers })).ok()).toBeTruthy();
 			expect(await login(context.request, TEMP_PASSWORD)).toBeTruthy();
 			const restore = await context.request.put('/api/v1/auth/password', {
+				headers,
 				data: { currentPassword: TEMP_PASSWORD, newPassword: E2E_ADMIN.password },
 			});
 			expect(restore.ok()).toBeTruthy();
 			passwordChanged = false;
-			expect((await context.request.post('/api/v1/auth/logout')).ok()).toBeTruthy();
+			expect((await context.request.post('/api/v1/auth/logout', { headers })).ok()).toBeTruthy();
 			expect(await login(context.request, E2E_ADMIN.password)).toBeTruthy();
 		});
 	} finally {
@@ -232,7 +236,7 @@ test('passkey settings UI registers, renames, reloads, and deletes a real creden
 			const metrics = await panel.evaluate((panelElement) => {
 				const listItem = panelElement.querySelector<HTMLElement>('li');
 
-				const rect = (element: HTMLElement | null) => {
+				const rect = (element: Element | null) => {
 					if (!element) return null;
 					const box = element.getBoundingClientRect();
 					return {
@@ -282,9 +286,10 @@ test('passkey settings UI registers, renames, reloads, and deletes a real creden
 		const row = panel.locator('li').first();
 		const passkeys = await context.request.get('/api/v1/auth/user/passkeys');
 		expect(passkeys.ok()).toBeTruthy();
-		const passkeyList = (await passkeys.json()) as Array<Record<string, unknown> & { credentialId: string }>;
+		const passkeyList = readPasskeyList(await passkeys.json());
 		expect(passkeyList).toHaveLength(1);
-		const passkey = passkeyList[0]!;
+		const passkey = passkeyList[0];
+		if (!passkey) throw new Error('Registered passkey missing');
 		expect(passkey).toMatchObject({
 			credentialId: expect.any(String),
 			name: null,
@@ -296,24 +301,46 @@ test('passkey settings UI registers, renames, reloads, and deletes a real creden
 			expect(passkey).not.toHaveProperty(legacyName);
 		const credentialId = passkey.credentialId;
 		expect(credentialId).toBeTruthy();
-		const renamedPasskeyName = `E2E Security Key ${'long-name-'.repeat(14)}`;
-		expect(renamedPasskeyName.length).toBeGreaterThan(128);
+		const renamedPasskeyName = 'E2E Security Key '.padEnd(ACCESS_PASSKEY_NAME_MAX_BYTES, 'x');
 
-		await step('rename the registered passkey beyond 128 characters and persist the name', async () => {
-			await row.getByTitle('Edit').click();
-			const nameInput = row.locator('input');
-			await nameInput.fill(renamedPasskeyName);
-			const renamePromise = page.waitForResponse(
-				(response) =>
-					response.url().endsWith(`/api/v1/auth/user/passkeys/${credentialId}/name`) &&
-					response.request().method() === 'PUT',
-			);
-			await row.getByRole('button', { name: 'Save', exact: true }).click();
-			expect((await renamePromise).ok()).toBeTruthy();
-			await expect(row).toContainText(renamedPasskeyName);
-			const renamed = await context.request.get('/api/v1/auth/user/passkeys');
-			await expect(renamed.json()).resolves.toMatchObject([{ credentialId, name: renamedPasskeyName }]);
-		});
+		await step(
+			'reject an oversized passkey name locally then persist a name at the Shared byte limit',
+			async () => {
+				await row.getByTitle('Edit').click();
+				const nameInput = row.locator('input');
+				await nameInput.fill(renamedPasskeyName + 'x');
+				let dispatched = 0;
+
+				const countRename = (request: import('@playwright/test').Request) => {
+					if (request.url().endsWith('/name') && request.method() === 'PUT') dispatched++;
+				};
+
+				page.on('request', countRename);
+				try {
+					await row.getByRole('button', { name: 'Save', exact: true }).click();
+					await expect(panel).toContainText('Check the input format and length.');
+					expect(dispatched).toBe(0);
+				} finally {
+					page.off('request', countRename);
+				}
+				const unchanged = await context.request.get('/api/v1/auth/user/passkeys');
+				expect(unchanged.ok()).toBe(true);
+				expect(readPasskeyList(await unchanged.json())[0].name).toBeNull();
+				await nameInput.fill(renamedPasskeyName);
+				const renamePromise = page.waitForResponse(
+					(response) =>
+						response.url().endsWith(`/api/v1/auth/user/passkeys/${credentialId}/name`) &&
+						response.request().method() === 'PUT',
+				);
+				await row.getByRole('button', { name: 'Save', exact: true }).click();
+				expect((await renamePromise).ok()).toBeTruthy();
+				await expect(row).toContainText(renamedPasskeyName);
+				const renamed = await context.request.get('/api/v1/auth/user/passkeys');
+				expect(readPasskeyList(await renamed.json())).toMatchObject([
+					{ credentialId, name: renamedPasskeyName },
+				]);
+			},
+		);
 
 		await step('reload keeps the renamed passkey visible', async () => {
 			await page.reload();
@@ -338,7 +365,7 @@ test('passkey settings UI registers, renames, reloads, and deletes a real creden
 			expect((await deletePromise).ok()).toBeTruthy();
 			await expect(reloadedPanel).toContainText('No Passkeys registered yet.');
 			const deleted = await context.request.get('/api/v1/auth/user/passkeys');
-			await expect(deleted.json()).resolves.toEqual([]);
+			expect(readPasskeyList(await deleted.json())).toEqual([]);
 		});
 	} finally {
 		await cdp.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId }).catch(() => undefined);

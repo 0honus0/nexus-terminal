@@ -89,7 +89,7 @@ try {
 				appId: manifest.id,
 				version: manifest.version,
 				sdkVersion: manifest.sdkVersion,
-				nexus: manifest.nexus,
+				nexus: { minVersion: '1.0.0', maxVersion: '1.99.99' },
 				displayName: manifest.displayName,
 				publisherKeyId,
 				publicKeyPem: publicKey.export({ type: 'spki', format: 'pem' }).toString(),

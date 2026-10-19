@@ -3,11 +3,7 @@
   "id": "nexus.agent",
   "version": "1.0.0",
   "displayName": "Nexus Agent",
-  "sdkVersion": "1.0.0",
-  "nexus": {
-    "minVersion": "1.0.0",
-    "maxVersion": "1.99.99"
-  },
+  "sdkVersion": "1",
   "capabilities": [
     "file.read",
     "file.write",
@@ -21,7 +17,8 @@
     "integration.mcp.invoke",
     "integration.acp.invoke",
     "artifacts.read",
-    "app.intents.exchange"
+    "app.intents.exchange",
+    "context.read"
   ],
   "intents": [
     {
@@ -29,16 +26,6 @@
       "schemaVersion": 1
     }
   ],
-  "agents": [
-    {
-      "id": "agent.default",
-      "version": "1.0.0",
-      "displayName": "Nexus Agent",
-      "description": "General-purpose Nexus Agent that selects signed first-party Skills while all execution remains governed by Host capabilities, policy, approvals, leases, SSH execution targets, and Browser boundaries.",
-      "requiredModelCapabilities": ["tools"]
-    }
-  ],
-  "agentSurface": {
-    "defaultApprovalMode": "full_access"
-  }
+  "frontendEntry": null,
+  "backendEntry": null
 }

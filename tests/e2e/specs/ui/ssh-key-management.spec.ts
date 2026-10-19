@@ -1,9 +1,19 @@
 import { generateKeyPairSync } from 'node:crypto';
 import { expect, test, type APIRequestContext, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
-import { configureSshE2eSettings, E2E_SSH } from '../../support/ssh';
+import { configureSshE2eSettings, E2E_SSH, trustTestSshHostKey } from '../../support/ssh';
 import { step } from '../../support/steps';
 import { selectUiOption } from '../../support/ui-select';
+import { E2E_URLS } from '../../support/test-env';
+import { readSshKeyList } from '../../../../packages/shared/src/targets/ssh-keys/http-codec';
+import type { TargetSshKeyView } from '../../../../packages/shared/src/targets/ssh-keys/model';
+import {
+	readConnectionList,
+	readCredentialView,
+	readConnectionImportResponse,
+} from '../../../../packages/shared/src/targets/connections/http-codec';
+import { readConnectionTestResponse } from '../../../../packages/shared/src/targets/connections/test-codec';
+const headers = { Origin: E2E_URLS.frontendOrigin };
 
 const ORIGINAL_NAME = 'Z-E2EManagedSSHKeyWithAnExtremelyLongUnbrokenNameForNarrowMobile';
 const EDITED_NAME = 'A-E2EManagedSSHKeyWithAnExtremelyLongUnbrokenNameForNarrowMobileEdited';
@@ -15,32 +25,34 @@ const keyManager = (page: Page) =>
 		.getByRole('dialog')
 		.filter({ has: page.getByRole('heading', { name: /^(SSH Key Management|Add New SSH Key|Edit SSH Key)$/ }) });
 
-const PRIVATE_KEY = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({
-	type: 'pkcs1',
-	format: 'pem',
-});
+const PRIVATE_KEY = generateKeyPairSync('rsa', { modulusLength: 2048 })
+	.privateKey.export({
+		type: 'pkcs1',
+		format: 'pem',
+	})
+	.toString();
 
-async function listKeys(request: APIRequestContext): Promise<Array<{ id: number; name: string }>> {
-	const response = await request.get('/api/v1/ssh-keys');
+async function listKeys(request: APIRequestContext): Promise<TargetSshKeyView[]> {
+	const response = await request.get('/api/v1/targets/ssh-keys');
 	expect(response.ok()).toBeTruthy();
-	return (await response.json()) as Array<{ id: number; name: string }>;
+	return readSshKeyList(await response.json());
 }
 
 async function cleanupKeys(request: APIRequestContext): Promise<void> {
 	for (const key of (await listKeys(request)).filter(
 		(item) => item.name === ORIGINAL_NAME || item.name === EDITED_NAME || item.name === SORT_PEER_NAME,
 	)) {
-		const remove = await request.delete(`/api/v1/ssh-keys/${key.id}`);
+		const remove = await request.delete(`/api/v1/targets/ssh-keys/${key.id}`, { headers });
 		expect(remove.ok()).toBeTruthy();
 	}
 }
 
 async function cleanupConnection(request: APIRequestContext): Promise<void> {
-	const response = await request.get('/api/v1/connections');
+	const response = await request.get('/api/v1/targets/connections');
 	expect(response.ok()).toBeTruthy();
-	const connections = (await response.json()) as Array<{ id: number; name?: string }>;
+	const connections = readConnectionList(await response.json());
 	for (const connection of connections.filter((item) => item.name === CONNECTION_NAME)) {
-		expect((await request.delete(`/api/v1/connections/${connection.id}`)).ok()).toBeTruthy();
+		expect((await request.delete(`/api/v1/targets/connections/${connection.id}`, { headers })).ok()).toBeTruthy();
 	}
 }
 
@@ -50,9 +62,11 @@ test('SSH key management UI adds, renames without replacing private key, and del
 }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
+	await trustTestSshHostKey(context.request);
 	await cleanupKeys(context.request);
 	await cleanupConnection(context.request);
-	const peer = await context.request.post('/api/v1/ssh-keys', {
+	const peer = await context.request.post('/api/v1/targets/ssh-keys', {
+		headers,
 		data: { name: SORT_PEER_NAME, privateKey: PRIVATE_KEY, passphrase: null },
 	});
 	expect(peer.status()).toBe(201);
@@ -124,8 +138,10 @@ test('SSH key management UI adds, renames without replacing private key, and del
 			.toBeLessThanOrEqual(1);
 
 		const listItem = (await listKeys(context.request)).find((item) => item.id === keyId);
-		expect(listItem).toEqual({ id: keyId, name: ORIGINAL_NAME });
-		const retiredDetails = await context.request.get(`/api/v1/ssh-keys/${keyId}/details`);
+		expect(listItem).toMatchObject({ id: keyId, name: ORIGINAL_NAME });
+		expect(listItem).not.toHaveProperty('privateKey');
+		expect(listItem).not.toHaveProperty('passphrase');
+		const retiredDetails = await context.request.get(`/api/v1/targets/ssh-keys/${keyId}/details`);
 		expect(retiredDetails.status()).toBe(404);
 	});
 
@@ -144,7 +160,7 @@ test('SSH key management UI adds, renames without replacing private key, and del
 				timeout: 15_000,
 			})
 			.toBe(EDITED_NAME);
-		expect((await listKeys(context.request)).find((item) => item.id === keyId)).toEqual({
+		expect((await listKeys(context.request)).find((item) => item.id === keyId)).toMatchObject({
 			id: keyId,
 			name: EDITED_NAME,
 		});
@@ -168,25 +184,30 @@ test('SSH key management UI adds, renames without replacing private key, and del
 		await form.locator('#conn-port').fill(String(E2E_SSH.port));
 		await form.locator('#conn-username').fill(E2E_SSH.username);
 		const createPromise = page.waitForResponse(
-			(response) => response.url().endsWith('/api/v1/connections') && response.request().method() === 'POST',
+			(response) =>
+				response.url().endsWith('/api/v1/targets/connections/import') && response.request().method() === 'POST',
 		);
 		await form.getByRole('button', { name: 'Confirm Add', exact: true }).click();
 		const create = await createPromise;
-		expect(create.status()).toBe(201);
-		connectionId = ((await create.json()) as { connection: { id: number } }).connection.id;
+		expect(create.status()).toBe(200);
+		const results = readConnectionImportResponse(await create.json()).items;
+		expect(results).toHaveLength(1);
+		const imported = results[0];
+		if (!imported || imported.status !== 'ok') throw new Error('Key connection import failed');
+		connectionId = imported.id;
 		await expect(form).toBeHidden({ timeout: 15_000 });
 
-		const keyed = await context.request.get(`/api/v1/connections/${connectionId}`);
+		const keyed = await context.request.get(`/api/v1/targets/connections/${connectionId}/credential`);
 		expect(keyed.ok()).toBeTruthy();
-		await expect(keyed.json()).resolves.toMatchObject({
-			id: connectionId,
-			name: CONNECTION_NAME,
-			authMethod: 'key',
-			sshKeyId: keyId,
+		expect(readCredentialView(await keyed.json())).toMatchObject({
+			connectionId,
+			credential: { kind: 'ssh_key', sshKeyId: keyId },
 		});
-		const keyConnectionTest = await context.request.post(`/api/v1/connections/${connectionId}/test`);
+		const keyConnectionTest = await context.request.post(`/api/v1/targets/connections/${connectionId}/test`, {
+			headers,
+		});
 		expect(keyConnectionTest.ok()).toBeTruthy();
-		await expect(keyConnectionTest.json()).resolves.toMatchObject({ success: true });
+		expect(readConnectionTestResponse(await keyConnectionTest.json()).status).toBe('ok');
 
 		const row = page.getByRole('listitem').filter({ has: page.getByText(CONNECTION_NAME, { exact: true }) });
 		await row.getByRole('button', { name: 'Edit', exact: true }).click();
@@ -195,23 +216,28 @@ test('SSH key management UI adds, renames without replacing private key, and del
 		await form.locator('#conn-password').fill(E2E_SSH.password);
 		const updatePromise = page.waitForResponse(
 			(response) =>
-				response.url().endsWith(`/api/v1/connections/${connectionId}`) && response.request().method() === 'PUT',
+				response.url().endsWith(`/api/v1/targets/connections/${connectionId}/credential`) &&
+				response.request().method() === 'PUT',
 		);
-		await form.getByRole('button', { name: 'Confirm Edit', exact: true }).click();
+		await form.getByRole('button', { name: 'Save credentials only', exact: true }).click();
 		expect((await updatePromise).ok()).toBeTruthy();
 		await expect(form).toBeHidden({ timeout: 15_000 });
 
-		const passwordBased = await context.request.get(`/api/v1/connections/${connectionId}`);
+		const passwordBased = await context.request.get(`/api/v1/targets/connections/${connectionId}/credential`);
 		expect(passwordBased.ok()).toBeTruthy();
-		await expect(passwordBased.json()).resolves.toMatchObject({ authMethod: 'password', sshKeyId: null });
-		const connectionTest = await context.request.post(`/api/v1/connections/${connectionId}/test`);
+		expect(readCredentialView(await passwordBased.json()).credential).toEqual({ kind: 'password' });
+		const connectionTest = await context.request.post(`/api/v1/targets/connections/${connectionId}/test`, {
+			headers,
+		});
 		expect(connectionTest.ok()).toBeTruthy();
-		await expect(connectionTest.json()).resolves.toMatchObject({ success: true });
+		expect(readConnectionTestResponse(await connectionTest.json()).status).toBe('ok');
 	});
 
 	await step('delete failure is visible and preserves the key row', async () => {
 		if (connectionId) {
-			expect((await context.request.delete(`/api/v1/connections/${connectionId}`)).ok()).toBeTruthy();
+			expect(
+				(await context.request.delete(`/api/v1/targets/connections/${connectionId}`, { headers })).ok(),
+			).toBeTruthy();
 			connectionId = 0;
 		}
 		await page.goto('/connections');
@@ -222,7 +248,7 @@ test('SSH key management UI adds, renames without replacing private key, and del
 		const modal = keyManager(page);
 		const row = modal.locator(`tr[data-key-id="${keyId}"]`);
 		await expect(row).toContainText(EDITED_NAME);
-		await page.route(`**/api/v1/ssh-keys/${keyId}`, async (route) => {
+		await page.route(`**/api/v1/targets/ssh-keys/${keyId}`, async (route) => {
 			if (route.request().method() === 'DELETE') await route.abort('failed');
 			else await route.continue();
 		});
@@ -230,9 +256,13 @@ test('SSH key management UI adds, renames without replacing private key, and del
 		const confirm = page.getByRole('dialog', { name: 'Please confirm' });
 		await expect(confirm).toContainText(EDITED_NAME);
 		await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
-		await expect(modal.locator('p.text-error')).toContainText('Network Error');
+		await expect(modal.getByRole('alert')).toContainText(
+			'The result is unknown and may already be saved. Refresh and review before submitting again.',
+		);
 		await expect(row).toBeVisible();
-		await page.unroute(`**/api/v1/ssh-keys/${keyId}`);
+		await page.unroute(`**/api/v1/targets/ssh-keys/${keyId}`);
+		await modal.getByRole('button', { name: 'Refresh and review', exact: true }).click();
+		await expect(row.getByRole('button', { name: 'Delete', exact: true })).toBeEnabled();
 	});
 
 	await step('delete removes the key from UI and persistence', async () => {
@@ -256,12 +286,12 @@ test('SSH key selector and manager surface key-list loading failures without ove
 }) => {
 	await loginAsInitialAdmin(context.request);
 	await page.setViewportSize({ width: 320, height: 667 });
-	await page.route('**/api/v1/ssh-keys', async (route) => route.abort('failed'));
+	await page.route('**/api/v1/targets/ssh-keys', async (route) => route.abort('failed'));
 	await page.goto('/connections');
 	await page.getByRole('button', { name: 'Add New Connection', exact: true }).click();
 	const form = page.locator('form.connection-form');
 	await form.getByRole('button', { name: 'SSH Key', exact: true }).click();
-	await expect(form.getByText('Failed to load SSH keys: Network Error', { exact: true })).toBeVisible();
+	await expect(form.getByText('Options could not be loaded. Refresh and review.', { exact: true })).toBeVisible();
 	await form.getByRole('button', { name: 'Manage SSH Keys', exact: true }).click();
 	const modal = keyManager(page);
 	await expect(modal.locator('p.text-error')).toContainText('Network Error');

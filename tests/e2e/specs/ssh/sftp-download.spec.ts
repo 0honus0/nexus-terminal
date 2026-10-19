@@ -1,3 +1,4 @@
+import { E2E_URLS } from '../../support/test-env';
 import { expect, test } from '../../support/fixtures';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
@@ -87,6 +88,7 @@ test('HTTP download ticket, Range, inline file, and directory ZIP work for an ac
 		await waitForFilesystemReady(session.socket);
 
 		const ticketResponse = await request.post('/api/v1/sftp/download-ticket', {
+			headers: { Origin: E2E_URLS.frontendOrigin },
 			data: {
 				connectionId,
 				sessionId: session.workspaceId,
@@ -159,6 +161,7 @@ test('HTTP download ticket, Range, inline file, and directory ZIP work for an ac
 		const capacityUrls: string[] = [];
 		for (let index = 0; index < 65; index += 1) {
 			const issued = await request.post('/api/v1/sftp/download-ticket', {
+				headers: { Origin: E2E_URLS.frontendOrigin },
 				data: {
 					connectionId,
 					sessionId: session.workspaceId,
@@ -179,6 +182,7 @@ test('HTTP download ticket, Range, inline file, and directory ZIP work for an ac
 		expect((await newest.body()).toString('utf8')).toBe('nexus-e2e-seed\n');
 
 		const changedFileTicketResponse = await request.post('/api/v1/sftp/download-ticket', {
+			headers: { Origin: E2E_URLS.frontendOrigin },
 			data: {
 				connectionId,
 				sessionId: session.workspaceId,

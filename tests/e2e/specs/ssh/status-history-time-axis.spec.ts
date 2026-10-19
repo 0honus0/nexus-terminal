@@ -1,5 +1,5 @@
 import { expect, test } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import {
 	configureSshE2eSettings,
 	connectTestSshFromConnectionsPage,
@@ -15,10 +15,11 @@ test('status history uses real time windows and keeps controls fixed and axes sh
 	await page.setViewportSize({ width: 1280, height: 900 });
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	const settings = await context.request.put('/api/v1/settings', {
-		data: { statusMonitorScale: 1, showStatusMonitorIpAddress: true },
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.statusMonitorScale = 1;
+		preferences.showStatusMonitorIpAddress = true;
 	});
-	expect(settings.ok()).toBeTruthy();
+
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
 	await connectTestSshFromConnectionsPage(page, connectionId);

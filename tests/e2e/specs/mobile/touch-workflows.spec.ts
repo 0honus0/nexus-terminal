@@ -1,5 +1,8 @@
+import { readTestConnectionImportId } from '../../support/targets';
+import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
+import { E2E_URLS } from '../../support/test-env';
 import { expect, test } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import {
 	configureSshE2eSettings,
 	connectTestSshFromConnectionsPage,
@@ -66,7 +69,18 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
 				},
 			}),
 
-			sendMouseState: (state, applyDisplayScale = false) => {
+			sendMouseState: (
+				state: {
+					x: number;
+					y: number;
+					left: boolean;
+					middle: boolean;
+					right: boolean;
+					up: boolean;
+					down: boolean;
+				},
+				applyDisplayScale = false,
+			) => {
 				calls.push({
 					x: state.x,
 					y: state.y,
@@ -286,27 +300,50 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 	});
 
 	await loginAsInitialAdmin(context.request);
-	expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.language = 'en-US';
+	});
 
-	const existingResponse = await context.request.get('/api/v1/connections');
+	const existingResponse = await context.request.get('/api/v1/targets/connections');
 	expect(existingResponse.ok()).toBeTruthy();
-	const existingConnections = (await existingResponse.json()) as Array<{ id: number; name?: string }>;
+	const existingConnections = readConnectionList(await existingResponse.json());
 	for (const connection of existingConnections.filter((item) => item.name === connectionName)) {
-		expect((await context.request.delete(`/api/v1/connections/${connection.id}`)).ok()).toBeTruthy();
+		expect(
+			(
+				await context.request.delete(`/api/v1/targets/connections/${connection.id}`, {
+					headers: { Origin: E2E_URLS.frontendOrigin },
+				})
+			).ok(),
+		).toBeTruthy();
 	}
 
-	const createResponse = await context.request.post('/api/v1/connections', {
+	const createResponse = await context.request.post('/api/v1/targets/connections/import', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: {
-			type: 'RDP',
-			name: connectionName,
-			host: '192.0.2.93',
-			port: 3389,
-			username: 'mobile-touch-e2e-user',
-			password: 'mobile-touch-e2e-password',
+			items: [
+				{
+					connection: {
+						name: connectionName,
+						type: 'RDP',
+						host: '192.0.2.93',
+						port: 3389,
+						username: 'mobile-touch-e2e-user',
+						notes: null,
+						route: 'direct',
+						proxyId: null,
+						rdpRemoteApp: null,
+						rdpRemoteAppDirectory: null,
+						rdpRemoteAppArguments: null,
+						tagIds: [],
+						jumpIds: [],
+					},
+					credential: { kind: 'password', password: 'mobile-touch-e2e-password' },
+				},
+			],
 		},
 	});
-	expect(createResponse.status(), await createResponse.text()).toBe(201);
-	const connectionId = ((await createResponse.json()) as { connection: { id: number } }).connection.id;
+	expect(createResponse.status(), await createResponse.text()).toBe(200);
+	const connectionId = readTestConnectionImportId(await createResponse.json());
 
 	const openConnection = async () => {
 		await page.goto('/workspace');
@@ -397,7 +434,9 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 		await expect.poll(() => sessionCreateRequests).toBe(3);
 		await expect(page.getByRole('button', { name: 'Direct', exact: true })).toHaveAttribute('aria-pressed', 'true');
 	} finally {
-		await context.request.delete(`/api/v1/connections/${connectionId}`);
+		await context.request.delete(`/api/v1/targets/connections/${connectionId}`, {
+			headers: { Origin: E2E_URLS.frontendOrigin },
+		});
 	}
 });
 

@@ -1,7 +1,10 @@
 import { expect, test, type APIRequestContext, type BrowserContext, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
-import { E2E_SSH } from '../../support/ssh';
+import { createTestSshConnection } from '../../support/ssh';
 import { step } from '../../support/steps';
+import { E2E_URLS } from '../../support/test-env';
+import { readConnectionList, readConnectionView } from '../../../../packages/shared/src/targets/connections/http-codec';
+const headers = { Origin: E2E_URLS.frontendOrigin };
 
 const NAMES = ['E2E Batch SSH A', 'E2E Batch SSH B'];
 const NOTES = 'updated-by-batch-e2e';
@@ -14,44 +17,27 @@ const batchModal = (page: Page) =>
 
 async function editNotes(page: Page, notes: string): Promise<void> {
 	const modal = batchModal(page);
-	const advanced = modal
-		.locator('section')
-		.filter({ has: page.getByRole('heading', { name: 'Advanced Options', exact: true }) });
-	await advanced.getByRole('checkbox').check();
-	await advanced.getByRole('checkbox', { name: /Change notes/ }).check();
-	await modal.locator('#batch-notes').fill(notes);
+	await modal.getByRole('checkbox', { name: /^Notes:?$/ }).check();
+	await modal.locator('textarea').fill(notes);
 	await modal.getByRole('button', { name: 'Save', exact: true }).click();
 }
 
 async function cleanup(request: APIRequestContext): Promise<void> {
-	const response = await request.get('/api/v1/connections');
+	const response = await request.get('/api/v1/targets/connections');
 	expect(response.ok()).toBeTruthy();
-	const items = (await response.json()) as Array<{ id: number; name?: string }>;
+	const items = readConnectionList(await response.json());
 	for (const item of items.filter((connection) => NAMES.includes(connection.name ?? ''))) {
-		expect((await request.delete(`/api/v1/connections/${item.id}`)).ok()).toBeTruthy();
+		expect((await request.delete(`/api/v1/targets/connections/${item.id}`, { headers })).ok()).toBeTruthy();
 	}
-}
-
-async function createConnection(request: APIRequestContext, name: string): Promise<number> {
-	const response = await request.post('/api/v1/connections', {
-		data: {
-			name,
-			type: 'SSH',
-			host: E2E_SSH.host,
-			port: E2E_SSH.port,
-			username: E2E_SSH.username,
-			authMethod: 'password',
-			password: E2E_SSH.password,
-		},
-	});
-	expect(response.status()).toBe(201);
-	return ((await response.json()) as { connection: { id: number } }).connection.id;
 }
 
 async function runBatchConnectionEdit(page: Page, context: BrowserContext): Promise<void> {
 	await loginAsInitialAdmin(context.request);
 	await cleanup(context.request);
-	const ids = [await createConnection(context.request, NAMES[0]), await createConnection(context.request, NAMES[1])];
+	const ids = [
+		await createTestSshConnection(context.request, NAMES[0]),
+		await createTestSshConnection(context.request, NAMES[1]),
+	];
 
 	try {
 		await page.goto('/connections');
@@ -76,9 +62,9 @@ async function runBatchConnectionEdit(page: Page, context: BrowserContext): Prom
 			for (const id of ids) {
 				await expect
 					.poll(async () => {
-						const response = await context.request.get(`/api/v1/connections/${id}`);
+						const response = await context.request.get(`/api/v1/targets/connections/${id}`);
 						if (!response.ok()) return '';
-						return ((await response.json()) as { notes?: string }).notes ?? '';
+						return readConnectionView(await response.json()).notes ?? '';
 					})
 					.toBe(NOTES);
 			}
@@ -95,7 +81,10 @@ test('batch connection edit applies one advanced change to multiple saved connec
 test('batch edit reports partial failure and keeps only the failed item selected', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 	await cleanup(context.request);
-	const ids = [await createConnection(context.request, NAMES[0]), await createConnection(context.request, NAMES[1])];
+	const ids = [
+		await createTestSshConnection(context.request, NAMES[0]),
+		await createTestSshConnection(context.request, NAMES[1]),
+	];
 
 	try {
 		await page.goto('/connections');
@@ -103,7 +92,7 @@ test('batch edit reports partial failure and keeps only the failed item selected
 		for (const name of NAMES) await connectionCard(page, name).click();
 		await expect(page.getByRole('button', { name: 'Edit Selected', exact: true })).toBeEnabled();
 
-		expect((await context.request.delete(`/api/v1/connections/${ids[1]}`)).ok()).toBeTruthy();
+		expect((await context.request.delete(`/api/v1/targets/connections/${ids[1]}`, { headers })).ok()).toBeTruthy();
 
 		await page.getByRole('button', { name: 'Edit Selected', exact: true }).click();
 		const modal = batchModal(page);
@@ -111,16 +100,18 @@ test('batch edit reports partial failure and keeps only the failed item selected
 		await editNotes(page, 'partial-update-survivor');
 
 		await expect(
-			page.getByText('Batch update: 1 succeeded, 1 failed. Failed items remain selected.'),
+			page.getByText(
+				'Confirmed 1 changes; remaining operations stopped. The record no longer exists. Refresh the list.',
+			),
 		).toBeVisible();
 		await expect(modal).toBeVisible();
 		await expect(connectionCard(page, NAMES[0])).not.toHaveClass(/ring-2/);
 		await expect(connectionCard(page, NAMES[1])).toHaveClass(/ring-2/);
 
-		const survivor = await context.request.get(`/api/v1/connections/${ids[0]}`);
+		const survivor = await context.request.get(`/api/v1/targets/connections/${ids[0]}`);
 		expect(survivor.ok()).toBeTruthy();
-		await expect(survivor.json()).resolves.toMatchObject({ notes: 'partial-update-survivor' });
-		expect((await context.request.get(`/api/v1/connections/${ids[1]}`)).status()).toBe(404);
+		expect(readConnectionView(await survivor.json())).toMatchObject({ notes: 'partial-update-survivor' });
+		expect((await context.request.get(`/api/v1/targets/connections/${ids[1]}`)).status()).toBe(404);
 	} finally {
 		await cleanup(context.request);
 	}
@@ -132,14 +123,14 @@ test('batch edit loads auxiliary catalogs only when opened and remains usable wh
 }) => {
 	await loginAsInitialAdmin(context.request);
 	await cleanup(context.request);
-	const id = await createConnection(context.request, NAMES[0]);
+	const id = await createTestSshConnection(context.request, NAMES[0]);
 	let proxyRequests = 0;
 	let keyRequests = 0;
-	await page.route('**/api/v1/proxies', (route) => {
+	await page.route('**/api/v1/targets/proxies', (route) => {
 		proxyRequests += 1;
 		void route.abort('failed');
 	});
-	await page.route('**/api/v1/ssh-keys', (route) => {
+	await page.route('**/api/v1/targets/ssh-keys', (route) => {
 		keyRequests += 1;
 		void route.abort('failed');
 	});
@@ -156,14 +147,15 @@ test('batch edit loads auxiliary catalogs only when opened and remains usable wh
 		await expect(modal).toBeVisible();
 		await expect.poll(() => proxyRequests).toBeGreaterThan(0);
 		await expect.poll(() => keyRequests).toBeGreaterThan(0);
-		await expect(page.getByText('Failed to load proxies: Network Error', { exact: true })).toBeVisible();
-		await expect(page.getByText('Failed to load SSH keys: Network Error', { exact: true })).toBeVisible();
+		await expect(
+			modal.getByText('Options could not be loaded. Refresh and review.', { exact: true }),
+		).toBeVisible();
 
 		await editNotes(page, 'aux-catalog-failure-still-usable');
 		await expect(modal).toBeHidden({ timeout: 15_000 });
-		const persisted = await context.request.get(`/api/v1/connections/${id}`);
+		const persisted = await context.request.get(`/api/v1/targets/connections/${id}`);
 		expect(persisted.ok()).toBeTruthy();
-		await expect(persisted.json()).resolves.toMatchObject({ notes: 'aux-catalog-failure-still-usable' });
+		expect(readConnectionView(await persisted.json())).toMatchObject({ notes: 'aux-catalog-failure-still-usable' });
 	} finally {
 		await cleanup(context.request);
 	}
@@ -172,7 +164,7 @@ test('batch edit loads auxiliary catalogs only when opened and remains usable wh
 test.describe('narrow connections viewport', () => {
 	test.use({
 		viewport: { width: 375, height: 812 },
-		screen: { width: 375, height: 812 },
+		contextOptions: { screen: { width: 375, height: 812 } },
 		hasTouch: true,
 		isMobile: true,
 	});

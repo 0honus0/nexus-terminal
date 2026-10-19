@@ -3,16 +3,14 @@
   "id": "nexus.intent-peer",
   "version": "1.0.0",
   "displayName": "Intent Peer Fixture",
-  "sdkVersion": "1.0.0",
-  "nexus": {
-    "minVersion": "1.0.0",
-    "maxVersion": "1.99.99"
-  },
+  "sdkVersion": "1",
   "capabilities": ["app.intents.exchange"],
   "intents": [
     {
       "id": "e2e.receive",
       "schemaVersion": 1
     }
-  ]
+  ],
+  "frontendEntry": null,
+  "backendEntry": null
 }

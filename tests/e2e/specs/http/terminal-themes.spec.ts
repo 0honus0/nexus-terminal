@@ -2,6 +2,13 @@ import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
 
+import { getTestTheme, listTestThemes, removeTestTheme, themeHeaders } from '../../support/themes';
+import {
+	readTerminalThemeView,
+	readTerminalThemeColors,
+} from '../../../../packages/shared/src/preferences/themes/http-codec';
+import type { TerminalThemeColors } from '../../../../packages/shared/src/preferences/themes/model';
+
 const THEME_NAME = 'E2E Terminal Theme';
 const UPDATED_NAME = 'E2E Terminal Theme Updated';
 const IMPORTED_NAME = 'E2E Terminal Theme Imported';
@@ -27,12 +34,14 @@ test('custom terminal theme supports create, conflict, update, export, import, a
 	await loginAsInitialAdmin(request);
 
 	const cleanupByName = async (...names: string[]) => {
-		const list = await request.get('/api/v1/terminal-themes');
-		expect(list.ok()).toBeTruthy();
-		const themes = (await list.json()) as Array<{ id?: number; name: string; preset: boolean }>;
-		for (const theme of themes.filter((item) => !item.preset && names.includes(item.name) && item.id)) {
-			expect((await request.delete(`/api/v1/terminal-themes/${theme.id}`)).ok()).toBeTruthy();
-		}
+		const themes = await listTestThemes(request);
+		const results = await Promise.allSettled(
+			themes
+				.filter((item) => !item.preset && names.includes(item.name))
+				.map((theme) => removeTestTheme(request, theme)),
+		);
+		const failures = results.filter((item) => item.status === 'rejected').map((item) => item.reason);
+		if (failures.length) throw new AggregateError(failures, 'Theme cleanup failed');
 	};
 
 	await cleanupByName(THEME_NAME, UPDATED_NAME, IMPORTED_NAME);
@@ -42,15 +51,11 @@ test('custom terminal theme supports create, conflict, update, export, import, a
 	try {
 		await step('create a custom theme and fetch it by id', async () => {
 			const create = await request.post('/api/v1/terminal-themes', {
+				headers: themeHeaders,
 				data: { name: THEME_NAME, themeData: initialTheme },
 			});
 			expect(create.status()).toBe(201);
-			const created = (await create.json()) as {
-				id: number;
-				name: string;
-				preset: boolean;
-				themeData: Record<string, string>;
-			};
+			const created = readTerminalThemeView(await create.json());
 			themeId = created.id;
 			expect(created).toMatchObject({ name: THEME_NAME, preset: false, themeData: initialTheme });
 
@@ -65,6 +70,7 @@ test('custom terminal theme supports create, conflict, update, export, import, a
 
 		await step('duplicate names are rejected without overwriting the existing theme', async () => {
 			const duplicate = await request.post('/api/v1/terminal-themes', {
+				headers: themeHeaders,
 				data: { name: THEME_NAME, themeData: updatedTheme },
 			});
 			expect(duplicate.status()).toBe(409);
@@ -74,7 +80,12 @@ test('custom terminal theme supports create, conflict, update, export, import, a
 
 		await step('update changes both metadata and terminal colors', async () => {
 			const update = await request.put(`/api/v1/terminal-themes/${themeId}`, {
-				data: { name: UPDATED_NAME, themeData: updatedTheme },
+				headers: themeHeaders,
+				data: {
+					expectedVersion: (await getTestTheme(request, themeId)).version,
+					name: UPDATED_NAME,
+					themeData: updatedTheme,
+				},
 			});
 			expect(update.ok()).toBeTruthy();
 
@@ -83,18 +94,19 @@ test('custom terminal theme supports create, conflict, update, export, import, a
 			await expect(read.json()).resolves.toMatchObject({ name: UPDATED_NAME, themeData: updatedTheme });
 		});
 
-		let exportedTheme: Record<string, string> = {};
+		let exportedTheme: TerminalThemeColors = initialTheme;
 		await step('export returns the raw xterm theme JSON with a safe filename', async () => {
 			const exported = await request.get(`/api/v1/terminal-themes/${themeId}/export`);
 			expect(exported.ok()).toBeTruthy();
 			expect(exported.headers()['content-type']).toContain('application/json');
 			expect(exported.headers()['content-disposition']).toContain('e2e_terminal_theme_updated.json');
-			exportedTheme = (await exported.json()) as Record<string, string>;
+			exportedTheme = readTerminalThemeColors(await exported.json());
 			expect(exportedTheme).toMatchObject(updatedTheme);
 		});
 
 		await step('an exported theme can be imported under a new name', async () => {
 			const imported = await request.post('/api/v1/terminal-themes/import', {
+				headers: themeHeaders,
 				multipart: {
 					name: IMPORTED_NAME,
 					themeFile: {
@@ -105,28 +117,21 @@ test('custom terminal theme supports create, conflict, update, export, import, a
 				},
 			});
 			expect(imported.status()).toBe(201);
-			const body = (await imported.json()) as {
-				id: number;
-				name: string;
-				preset: boolean;
-				themeData: Record<string, string>;
-			};
+			const body = readTerminalThemeView(await imported.json());
 			importedId = body.id;
 			expect(body).toMatchObject({ name: IMPORTED_NAME, preset: false, themeData: updatedTheme });
 		});
 
 		await step('custom themes delete cleanly and no longer resolve by id', async () => {
-			expect((await request.delete(`/api/v1/terminal-themes/${themeId}`)).ok()).toBeTruthy();
+			await removeTestTheme(request, await getTestTheme(request, themeId));
 			expect((await request.get(`/api/v1/terminal-themes/${themeId}`)).status()).toBe(404);
 			themeId = 0;
 
-			expect((await request.delete(`/api/v1/terminal-themes/${importedId}`)).ok()).toBeTruthy();
+			await removeTestTheme(request, await getTestTheme(request, importedId));
 			expect((await request.get(`/api/v1/terminal-themes/${importedId}`)).status()).toBe(404);
 			importedId = 0;
 		});
 	} finally {
-		if (themeId) await request.delete(`/api/v1/terminal-themes/${themeId}`).catch(() => undefined);
-		if (importedId) await request.delete(`/api/v1/terminal-themes/${importedId}`).catch(() => undefined);
 		await cleanupByName(THEME_NAME, UPDATED_NAME, IMPORTED_NAME);
 	}
 });

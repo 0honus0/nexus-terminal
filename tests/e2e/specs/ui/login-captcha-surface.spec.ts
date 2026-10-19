@@ -1,62 +1,64 @@
 import { writeFile } from 'node:fs/promises';
 import { expect, test } from '../../support/fixtures';
-import { E2E_ADMIN, loginAsInitialAdmin } from '../../support/auth';
+import { E2E_ADMIN, loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
+import { E2E_URLS } from '../../support/test-env';
+import { getTestSettings, updateTestCaptcha, restartTestBackend } from '../../support/settings';
+import type { SettingsCaptchaCommand } from '../../../../packages/shared/src/preferences/configuration/http';
+import { readAccessCaptchaConfig, readAccessStatus } from '../../../../packages/shared/src/access/http';
 
 const HCAPTCHA_SITE_KEY = '10000000-ffff-ffff-ffff-000000000001';
 const HCAPTCHA_TEST_SECRET = `0x${'0'.repeat(40)}`;
 const CAPTCHA_REQUIRED_MESSAGE = 'Please complete the CAPTCHA verification.';
 const CAPTCHA_INVALID_MESSAGE = 'CAPTCHA configuration is incomplete. Please contact an administrator.';
 
-type CaptchaConfigUpdate = {
-	enabled: boolean;
-	provider: 'none' | 'hcaptcha';
-	hcaptchaSiteKey: string;
-	hcaptchaSecretKey: string;
-	recaptchaSiteKey: string;
-	recaptchaSecretKey: string;
-};
-
-const DISABLED_CAPTCHA: CaptchaConfigUpdate = {
+const DISABLED_CAPTCHA: SettingsCaptchaCommand = {
 	enabled: false,
 	provider: 'none',
-	hcaptchaSiteKey: '',
-	hcaptchaSecretKey: '',
-	recaptchaSiteKey: '',
-	recaptchaSecretKey: '',
+	siteKey: '',
+	expectedHostname: null,
+	secret: { action: 'clear' },
 };
-
-const INVALID_CAPTCHA: CaptchaConfigUpdate = {
-	...DISABLED_CAPTCHA,
+const INVALID_CAPTCHA: SettingsCaptchaCommand = {
 	enabled: true,
+	provider: 'none',
+	siteKey: '',
+	expectedHostname: null,
+	secret: { action: 'clear' },
 };
-
-const VALID_HCAPTCHA: CaptchaConfigUpdate = {
-	...DISABLED_CAPTCHA,
+const VALID_HCAPTCHA: SettingsCaptchaCommand = {
 	enabled: true,
 	provider: 'hcaptcha',
-	hcaptchaSiteKey: HCAPTCHA_SITE_KEY,
-	hcaptchaSecretKey: HCAPTCHA_TEST_SECRET,
+	siteKey: HCAPTCHA_SITE_KEY,
+	// hCaptcha's public test key reports this synthetic hostname, not the browser origin.
+	// Production still requires an exact match with its configured provider hostname.
+	expectedHostname: 'dummy-key-pass',
+	secret: { action: 'replace', value: HCAPTCHA_TEST_SECRET },
 };
 
 async function setCaptchaConfig(
 	request: import('@playwright/test').APIRequestContext,
-	config: CaptchaConfigUpdate,
+	config: SettingsCaptchaCommand,
 ): Promise<void> {
-	const response = await request.put('/api/v1/settings/captcha', { data: config });
-	expect(response.ok(), await response.text()).toBeTruthy();
+	const saved = await updateTestCaptcha(request, config);
+	expect(saved.requiresRestart).toBe(true);
+	await restartTestBackend();
+	const effective = await getTestSettings(request);
+	expect(effective.effectiveVersion).toBe(saved.version);
+	expect(effective.requiresRestart).toBe(false);
 }
 
 async function prepareCaptchaLogin(
 	request: import('@playwright/test').APIRequestContext,
-	config: CaptchaConfigUpdate,
+	config: SettingsCaptchaCommand,
 ): Promise<void> {
 	await loginAsInitialAdmin(request);
-	const settingsResponse = await request.put('/api/v1/settings', {
-		data: { language: 'en-US', timezone: 'UTC' },
+	await updateUiPreferences(request, (preferences) => {
+		preferences.language = 'en-US';
+		preferences.timezone = 'UTC';
 	});
-	expect(settingsResponse.ok(), await settingsResponse.text()).toBeTruthy();
+
 	await setCaptchaConfig(request, config);
 }
 
@@ -64,12 +66,23 @@ async function restoreCaptcha(
 	request: import('@playwright/test').APIRequestContext,
 	authenticatedFallback?: import('@playwright/test').APIRequestContext,
 ): Promise<void> {
-	const restore = (context: import('@playwright/test').APIRequestContext) =>
-		context.put('/api/v1/settings/captcha', { data: DISABLED_CAPTCHA });
-
-	let response = await restore(request);
-	if (response.status() === 401 && authenticatedFallback) response = await restore(authenticatedFallback);
-	expect(response.ok(), await response.text()).toBeTruthy();
+	// The isolated restart retains durable sessions; use an authenticated owner to disable the factor.
+	const status = await request.get('/api/v1/auth/status');
+	let authenticated = false;
+	if (status.status() === 200) {
+		authenticated = readAccessStatus(await status.json()).isAuthenticated;
+	} else {
+		expect(status.status()).toBe(401);
+		expect(await status.json()).toEqual({ code: 'unauthenticated' });
+	}
+	if (!authenticated && !authenticatedFallback) {
+		throw new Error('No authenticated CAPTCHA cleanup owner');
+	}
+	if (authenticated) {
+		await setCaptchaConfig(request, DISABLED_CAPTCHA);
+	} else if (authenticatedFallback) {
+		await setCaptchaConfig(authenticatedFallback, DISABLED_CAPTCHA);
+	}
 }
 
 async function loadLoginWithCaptcha(
@@ -77,12 +90,12 @@ async function loadLoginWithCaptcha(
 	expectedConfig: { enabled: boolean; provider: string },
 ): Promise<void> {
 	const captchaResponsePromise = page.waitForResponse(
-		(response) => response.url().endsWith('/api/v1/settings/captcha') && response.request().method() === 'GET',
+		(response) => response.url().endsWith('/api/v1/auth/captcha/config') && response.request().method() === 'GET',
 	);
 	await page.goto('/login');
 	const captchaResponse = await captchaResponsePromise;
 	expect(captchaResponse.ok()).toBeTruthy();
-	await expect(captchaResponse.json()).resolves.toMatchObject(expectedConfig);
+	expect(readAccessCaptchaConfig(await captchaResponse.json())).toMatchObject(expectedConfig);
 }
 
 async function completeHcaptchaTestWidget(page: import('@playwright/test').Page): Promise<void> {
@@ -168,10 +181,28 @@ async function recordCaptchaMetrics(
 }
 
 test('login CAPTCHA fails closed for invalid configuration', async ({ page, request }, testInfo) => {
-	await prepareCaptchaLogin(request, INVALID_CAPTCHA);
-
+	await prepareCaptchaLogin(request, DISABLED_CAPTCHA);
+	const before = await getTestSettings(request);
+	const rejected = await request.put('/api/v1/settings/captcha', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
+		data: { expectedVersion: before.version, captcha: INVALID_CAPTCHA },
+	});
+	expect(rejected.status()).toBe(400);
+	expect(await rejected.json()).toEqual({ code: 'invalid_input' });
+	expect(await getTestSettings(request)).toEqual(before);
+	// Invalid settings cannot be persisted. Exercise the browser's independent fail-closed boundary explicitly.
+	await page.route('**/api/v1/auth/captcha/config', (route) =>
+		route.fulfill({
+			json: {
+				enabled: true,
+				provider: 'none',
+				hcaptchaSiteKey: '',
+				recaptchaSiteKey: '',
+			},
+		}),
+	);
 	try {
-		await step('load the login page with the real invalid CAPTCHA configuration', async () => {
+		await step('a malformed public configuration fences first-factor submission', async () => {
 			await loadLoginWithCaptcha(page, { enabled: true, provider: 'none' });
 			await expect(page.getByRole('heading', { name: 'User Login', exact: true })).toBeVisible();
 			await expect(page.getByText(CAPTCHA_INVALID_MESSAGE, { exact: true })).toBeVisible();
@@ -201,6 +232,7 @@ test('login CAPTCHA fails closed for invalid configuration', async ({ page, requ
 			await recordCaptchaMetrics(page, testInfo, 'login-captcha-invalid-config.metrics.json');
 		});
 	} finally {
+		await page.unrouteAll({ behavior: 'wait' });
 		await restoreCaptcha(request);
 	}
 });
@@ -279,6 +311,23 @@ test('login CAPTCHA clears expired/rejected verification and succeeds after a fr
 			160_000,
 		);
 
+		await step('a provider token for the wrong configured hostname is rejected', async () => {
+			await completeHcaptchaTestWidget(page);
+			await setCaptchaConfig(request, {
+				...VALID_HCAPTCHA,
+				expectedHostname: new URL(E2E_URLS.frontendOrigin).hostname,
+			});
+			const rejectedPromise = page.waitForResponse(
+				(response) => response.url().endsWith('/api/v1/auth/login') && response.request().method() === 'POST',
+			);
+			await page.getByRole('button', { name: 'Login', exact: true }).click();
+			const rejected = await rejectedPromise;
+			expect(rejected.status()).toBe(401);
+			await expect(page.getByRole('alert')).toContainText('CAPTCHA');
+			evidence.push({ phase: 'hostname-rejected', status: rejected.status(), body: await rejected.json() });
+			await setCaptchaConfig(request, VALID_HCAPTCHA);
+		});
+
 		await step('a real provider rejection resets the Login CAPTCHA token', async () => {
 			await completeHcaptchaTestWidget(page);
 
@@ -287,7 +336,7 @@ test('login CAPTCHA clears expired/rejected verification and succeeds after a fr
 			// backend still calls hCaptcha siteverify; the provider rejects the pair.
 			await setCaptchaConfig(request, {
 				...VALID_HCAPTCHA,
-				hcaptchaSecretKey: `0x${'f'.repeat(40)}`,
+				secret: { action: 'replace', value: `0x${'f'.repeat(40)}` },
 			});
 			const rejectedLoginPromise = page.waitForResponse(
 				(response) => response.url().endsWith('/api/v1/auth/login') && response.request().method() === 'POST',

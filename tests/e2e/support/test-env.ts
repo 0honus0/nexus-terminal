@@ -30,7 +30,7 @@ export const E2E_URLS = {
 	backendWsOrigin: `ws://127.0.0.1:${E2E_PORTS.backend}`,
 	frontendOrigin: `http://localhost:${E2E_PORTS.frontend}`,
 	frontendLoopbackOrigin: `http://127.0.0.1:${E2E_PORTS.frontend}`,
-	frontendWsOrigin: `ws://127.0.0.1:${E2E_PORTS.frontend}`,
+	frontendWsOrigin: `ws://localhost:${E2E_PORTS.frontend}`,
 	guacdControlOrigin: `http://127.0.0.1:${E2E_PORTS.guacdControl}`,
 	sshControlOrigin: `http://127.0.0.1:${E2E_PORTS.sshControl}`,
 	pluginRepositoryOrigin: `http://127.0.0.1:${E2E_PORTS.pluginRepository}`,

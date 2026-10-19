@@ -1,3 +1,5 @@
+import { readTestConnectionImportId } from '../../support/targets';
+import { E2E_URLS } from '../../support/test-env';
 import { mkdir, stat, writeFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { expect, test } from '../../support/fixtures';
@@ -76,19 +78,33 @@ test('unclassified preparation failure retains quarantine after the remote error
 	await loginAsInitialAdmin(request);
 	await resetTestSshFilesystem();
 	// Dedicated fixture connection prevents intentional quarantine affecting other tests.
-	const connection = await request.post('/api/v1/connections', {
+	const connection = await request.post('/api/v1/targets/connections/import', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: {
-			name: `prepare-quarantine-${crypto.randomUUID()}`,
-			type: 'SSH',
-			host: E2E_SSH.host,
-			port: E2E_SSH.port,
-			username: E2E_SSH.username,
-			authMethod: 'password',
-			password: E2E_SSH.password,
+			items: [
+				{
+					connection: {
+						name: `prepare-quarantine-${crypto.randomUUID()}`,
+						type: 'SSH',
+						host: E2E_SSH.host,
+						port: E2E_SSH.port,
+						username: E2E_SSH.username,
+						notes: null,
+						route: 'direct',
+						proxyId: null,
+						rdpRemoteApp: null,
+						rdpRemoteAppDirectory: null,
+						rdpRemoteAppArguments: null,
+						tagIds: [],
+						jumpIds: [],
+					},
+					credential: { kind: 'password', password: E2E_SSH.password },
+				},
+			],
 		},
 	});
-	expect(connection.status()).toBe(201);
-	const workspace = await openWorkspaceSession(request, (await connection.json()).connection.id);
+	expect(connection.status()).toBe(200);
+	const workspace = await openWorkspaceSession(request, readTestConnectionImportId(await connection.json()));
 	const control = `${E2E_SSH.controlUrl}/sftp/lstat-deny-prefix`;
 	try {
 		await waitForFilesystemReady(workspace.socket);

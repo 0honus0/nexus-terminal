@@ -1,120 +1,94 @@
 import { expect, test } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import type { Page, Locator, APIRequestContext } from '@playwright/test';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
 import { expectUiSelectValue, selectUiOption } from '../../support/ui-select';
+import { readPreferencesResponse } from '../../../../packages/shared/src/preferences/presentation/http-codec';
+import { readBackendLoggingView } from '../../../../packages/shared/src/operations/http-codec';
+import { getTestSettings, updateTestSettings } from '../../support/settings';
+import { E2E_URLS } from '../../support/test-env';
 
-const TARGET_TIMEZONE = 'Asia/Shanghai';
-const TARGET_LANGUAGE = 'zh-CN';
+const headers = { Origin: E2E_URLS.frontendOrigin };
+
+async function preferences(request: APIRequestContext) {
+	const response = await request.get('/api/v1/settings/preferences');
+	expect(response.ok()).toBe(true);
+	return readPreferencesResponse(await response.json()).preferences;
+}
+
+async function saveForm(page: Page, form: Locator, path = '/api/v1/settings/preferences'): Promise<void> {
+	const response = page.waitForResponse((value) => value.url().endsWith(path) && value.request().method() === 'PUT');
+	await form.locator('button[type="submit"]').click();
+	expect((await response).ok()).toBe(true);
+	await expect(form.locator('button[type="submit"]')).toBeEnabled();
+}
+
+async function systemTab(page: Page): Promise<void> {
+	await page.locator('[role="tab"][aria-controls="settings-panel-system"]:visible').click();
+	await expect(page.locator('#settings-panel-system')).toBeVisible();
+}
+
+async function workspaceTab(page: Page): Promise<void> {
+	await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
+	await expect(page.locator('#settings-panel-workspace')).toBeVisible();
+}
 
 test('system settings persist timezone and language changes through the UI', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
-	const originalResponse = await context.request.get('/api/v1/settings');
-	expect(originalResponse.ok()).toBeTruthy();
-	const original = (await originalResponse.json()) as { language?: string; timezone?: string };
-
-	const normalize = await context.request.put('/api/v1/settings', {
-		data: {
-			language: 'en-US',
-			timezone: 'UTC',
-		},
+	const original = await preferences(context.request);
+	await updateUiPreferences(context.request, (value) => {
+		value.language = 'en-US';
+		value.timezone = 'UTC';
 	});
-	expect(normalize.ok()).toBeTruthy();
-
 	try {
 		await page.goto('/settings');
-		await page.locator('[role="tab"][aria-controls="settings-panel-system"]:visible').click();
-		await expect(page.locator('#settings-panel-system')).toBeVisible();
-		await expect(page.locator('#languageSelect')).toBeVisible();
+		await systemTab(page);
 		await expectUiSelectValue(page.locator('#languageSelect'), 'en-US');
 		await expect(page.locator('html')).toHaveAttribute('lang', 'en-US');
-		await expect(page.locator('#timezoneSelect')).toBeVisible();
 		await captureFunctionalScreenshot(page, 'system-settings.png', { viewport: { width: 1440, height: 900 } });
-
-		await step('save a timezone through the system settings form', async () => {
+		await step('save timezone and language through their preference forms', async () => {
 			const timezone = page.locator('#timezoneSelect');
-			const timezoneForm = page.locator('form').filter({ has: timezone });
-			await selectUiOption(timezone, TARGET_TIMEZONE);
-
-			const responsePromise = page.waitForResponse(
-				(response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
-			);
-			await timezoneForm.locator('button[type="submit"]').click();
-			expect((await responsePromise).ok()).toBeTruthy();
-
-			const persisted = await context.request.get('/api/v1/settings');
-			expect(persisted.ok()).toBeTruthy();
-			expect(((await persisted.json()) as { timezone?: string }).timezone).toBe(TARGET_TIMEZONE);
-		});
-
-		await step('save a language through the system settings form', async () => {
+			await selectUiOption(timezone, 'Asia/Shanghai');
+			await saveForm(page, page.locator('form').filter({ has: timezone }));
+			expect((await preferences(context.request)).timezone).toBe('Asia/Shanghai');
 			const language = page.locator('#languageSelect');
-			const languageForm = page.locator('form').filter({ has: language });
-			await selectUiOption(language, TARGET_LANGUAGE);
-
-			const responsePromise = page.waitForResponse(
-				(response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
-			);
-			await languageForm.locator('button[type="submit"]').click();
-			expect((await responsePromise).ok()).toBeTruthy();
-			await expectUiSelectValue(language, TARGET_LANGUAGE);
-			await expect(page.locator('html')).toHaveAttribute('lang', TARGET_LANGUAGE);
-
-			const persisted = await context.request.get('/api/v1/settings');
-			expect(persisted.ok()).toBeTruthy();
-			expect(((await persisted.json()) as { language?: string }).language).toBe(TARGET_LANGUAGE);
+			await selectUiOption(language, 'zh-CN');
+			await saveForm(page, page.locator('form').filter({ has: language }));
+			expect((await preferences(context.request)).language).toBe('zh-CN');
+			await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
 		});
-
-		await step('both values survive a full settings page reload', async () => {
+		await page.reload({ waitUntil: 'domcontentloaded' });
+		await systemTab(page);
+		await expectUiSelectValue(page.locator('#timezoneSelect'), 'Asia/Shanghai');
+		await expectUiSelectValue(page.locator('#languageSelect'), 'zh-CN');
+		await step('saved server language overrides the browser language on reload', async () => {
+			await updateUiPreferences(context.request, (value) => {
+				value.language = 'en-US';
+			});
 			await page.reload({ waitUntil: 'domcontentloaded' });
-			await page.locator('[role="tab"][aria-controls="settings-panel-system"]:visible').click();
-			await expect(page.locator('#settings-panel-system')).toBeVisible();
-			await expectUiSelectValue(page.locator('#timezoneSelect'), TARGET_TIMEZONE);
-			await expectUiSelectValue(page.locator('#languageSelect'), TARGET_LANGUAGE);
-			await expect(page.locator('html')).toHaveAttribute('lang', TARGET_LANGUAGE);
-		});
-
-		await step('server language overrides the previous browser language on reload', async () => {
-			const updated = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
-			expect(updated.ok()).toBeTruthy();
-			await page.reload({ waitUntil: 'domcontentloaded' });
-			await page.locator('[role="tab"][aria-controls="settings-panel-system"]:visible').click();
+			await systemTab(page);
 			await expectUiSelectValue(page.locator('#languageSelect'), 'en-US');
 			await expect(page.locator('html')).toHaveAttribute('lang', 'en-US');
 		});
 	} finally {
-		const restore = await context.request.put('/api/v1/settings', {
-			data: {
-				language: original.language ?? 'en-US',
-				timezone: original.timezone ?? 'UTC',
-			},
+		await updateUiPreferences(context.request, (value) => {
+			value.language = original.language;
+			value.timezone = original.timezone;
 		});
-		expect(restore.ok()).toBeTruthy();
 	}
 });
 
-test('preferences load workspace values from the unified settings contract', async ({ page, context }) => {
+test('preferences load workspace values from the Shared presentation contract', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
-	const originalResponse = await context.request.get('/api/v1/settings');
-	expect(originalResponse.ok()).toBeTruthy();
-	const original = (await originalResponse.json()) as {
-		language?: string;
-		showPopupFileManager?: boolean;
-		navBarVisible?: boolean;
-		showConnectionTags?: boolean;
-		showQuickCommandTags?: boolean;
-	};
-	const normalize = await context.request.put('/api/v1/settings', {
-		data: {
-			language: 'en-US',
-			showPopupFileManager: true,
-			navBarVisible: true,
-			showConnectionTags: false,
-			showQuickCommandTags: false,
-		},
+	const original = await preferences(context.request);
+	await updateUiPreferences(context.request, (value) => {
+		value.language = 'en-US';
+		value.showPopupFileManager = true;
+		value.navBarVisible = true;
+		value.showConnectionTags = false;
+		value.showQuickCommandTags = false;
 	});
-	expect(normalize.ok()).toBeTruthy();
-
 	const retiredRequests: string[] = [];
 	page.on('request', (request) => {
 		if (
@@ -126,266 +100,234 @@ test('preferences load workspace values from the unified settings contract', asy
 	});
 	try {
 		await page.goto('/settings');
-		await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
+		await workspaceTab(page);
 		await expect(page.locator('#showPopupFileManager')).toBeChecked();
 		await expect(page.locator('#showConnectionTags')).not.toBeChecked();
 		await expect(page.locator('#showQuickCommandTags')).not.toBeChecked();
 		expect(retiredRequests).toEqual([]);
 	} finally {
-		const restore = await context.request.put('/api/v1/settings', {
-			data: {
-				language: original.language ?? 'en-US',
-				showPopupFileManager: original.showPopupFileManager ?? false,
-				navBarVisible: original.navBarVisible ?? true,
-				showConnectionTags: original.showConnectionTags ?? true,
-				showQuickCommandTags: original.showQuickCommandTags ?? true,
-			},
+		await updateUiPreferences(context.request, (value) => {
+			value.language = original.language;
+			value.showPopupFileManager = original.showPopupFileManager;
+			value.navBarVisible = original.navBarVisible;
+			value.showConnectionTags = original.showConnectionTags;
+			value.showQuickCommandTags = original.showQuickCommandTags;
 		});
-		expect(restore.ok()).toBeTruthy();
 	}
 });
 
-test('preferences settings report a main settings load failure and keep the form usable', async ({ page, context }) => {
+test('preferences load failure fences writes until an explicit successful refresh', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
-	expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
-	await page.route('**/api/v1/settings', async (route) => {
+	await updateUiPreferences(context.request, (value) => {
+		value.language = 'en-US';
+	});
+	let writes = 0;
+	page.on('request', (request) => {
+		if (request.url().endsWith('/api/v1/settings/preferences') && request.method() === 'PUT') writes += 1;
+	});
+	await page.route('**/api/v1/settings/preferences', async (route) => {
 		if (route.request().method() === 'GET') await route.abort('failed');
 		else await route.continue();
 	});
-
 	await page.goto('/settings');
-	await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
-	await expect(page.locator('#settings-panel-workspace')).toBeVisible();
-	await expect(page.getByText('Failed to load preferences: Network Error', { exact: true }).first()).toBeVisible();
-	await expect(page.locator('#showPopupFileManager')).toBeVisible();
+	await workspaceTab(page);
+	const panel = page.locator('#settings-panel-workspace');
+	await expect(
+		panel.getByText(
+			'The result is unknown. Read the list again and verify before editing or repeating the action.',
+			{ exact: true },
+		),
+	).toBeVisible();
+	await expect(page.locator('#showPopupFileManager')).toBeDisabled();
+	expect(writes).toBe(0);
+	await page.unroute('**/api/v1/settings/preferences');
+	await panel.getByRole('button', { name: 'Refresh', exact: true }).click();
+	await expect(page.locator('#showPopupFileManager')).toBeEnabled();
+	expect(writes).toBe(0);
 });
 
-test('dashboard local and remote resource cards can be configured independently', async ({ page, context }) => {
+test('dashboard toggles are personal preferences while monitoring changes require restart', async ({
+	page,
+	context,
+}) => {
 	await loginAsInitialAdmin(context.request);
-	const originalResponse = await context.request.get('/api/v1/settings');
-	expect(originalResponse.ok()).toBeTruthy();
-	const original = (await originalResponse.json()) as {
-		language?: string;
-		dashboardShowLocalResources?: boolean;
-		dashboardShowRemoteResources?: boolean;
-		remoteHostRefreshIntervalSeconds?: number;
-		statusMonitorIntervalSeconds?: number;
-	};
-
-	const normalize = await context.request.put('/api/v1/settings', {
-		data: {
-			language: 'en-US',
-			dashboardShowLocalResources: true,
-			dashboardShowRemoteResources: true,
-			remoteHostRefreshIntervalSeconds: 30,
-			statusMonitorIntervalSeconds: 3,
-		},
+	const original = await preferences(context.request);
+	const core = await getTestSettings(context.request);
+	await updateUiPreferences(context.request, (value) => {
+		value.language = 'en-US';
+		value.dashboardShowLocalResources = true;
+		value.dashboardShowRemoteResources = true;
 	});
-	expect(normalize.ok()).toBeTruthy();
-
 	try {
 		await page.goto('/settings');
-		await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
-
-		const localToggle = page.getByRole('checkbox', { name: 'Show local resources', exact: true });
-		const remoteToggle = page.getByRole('checkbox', { name: 'Show remote resources', exact: true });
-		const refreshInterval = page.getByLabel('SSH resource refresh interval (seconds)', { exact: true });
-		const resourceForm = page.locator('form').filter({ has: localToggle });
-		await expect(localToggle).toBeChecked();
-		await expect(remoteToggle).toBeChecked();
-		await expect(refreshInterval).toHaveValue('30');
-
-		await step('save an SSH dashboard refresh interval independently from the status monitor', async () => {
-			await refreshInterval.fill('17');
-			const responsePromise = page.waitForResponse(
+		await workspaceTab(page);
+		const local = page.getByRole('checkbox', { name: 'Show local resources', exact: true });
+		const remote = page.getByRole('checkbox', { name: 'Show remote resources', exact: true });
+		const resourceForm = page.locator('form').filter({ has: local });
+		await expect(local).toBeChecked();
+		await expect(remote).toBeChecked();
+		await step('save monitoring policy without claiming it is already effective', async () => {
+			const monitoring = page.locator('[data-monitoring-configuration]');
+			const hostInterval = core.policy.remoteHostRefreshIntervalSeconds === 17 ? 18 : 17;
+			await monitoring.locator('[data-monitoring-host]').fill(String(hostInterval));
+			const savedResponse = page.waitForResponse(
 				(response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
 			);
-			await resourceForm.locator('button[type="submit"]').click();
-			expect((await responsePromise).ok()).toBeTruthy();
-
-			const persisted = await context.request.get('/api/v1/settings');
-			expect(persisted.ok()).toBeTruthy();
-			const values = (await persisted.json()) as {
-				remoteHostRefreshIntervalSeconds?: number;
-				statusMonitorIntervalSeconds?: number;
-			};
-			expect(values.remoteHostRefreshIntervalSeconds).toBe(17);
-			expect(values.statusMonitorIntervalSeconds).toBe(3);
-
+			await monitoring.locator('[data-monitoring-save]').click();
+			expect((await savedResponse).ok()).toBe(true);
+			await expect(monitoring.locator('[data-monitoring-feedback]')).toContainText('Saved');
+			const saved = await getTestSettings(context.request);
+			expect(saved.policy.remoteHostRefreshIntervalSeconds).toBe(hostInterval);
+			expect(saved.policy.statusMonitorIntervalSeconds).toBe(core.policy.statusMonitorIntervalSeconds);
+			expect(saved.effectiveMonitoring).toEqual(core.effectiveMonitoring);
+			expect(saved.requiresRestart).toBe(true);
 			const invalid = await context.request.put('/api/v1/settings', {
-				data: { remoteHostRefreshIntervalSeconds: 0 },
+				headers,
+				data: {
+					expectedVersion: saved.version,
+					policy: { ...saved.policy, remoteHostRefreshIntervalSeconds: 0 },
+					captcha: {
+						enabled: saved.captcha.enabled,
+						provider: saved.captcha.provider,
+						siteKey: saved.captcha.siteKey,
+						expectedHostname: saved.captcha.expectedHostname,
+						secret: { action: 'keep' },
+					},
+				},
 			});
 			expect(invalid.status()).toBe(400);
+			expect((await getTestSettings(context.request)).version).toBe(saved.version);
 		});
-
-		await step('dashboard reflects the dedicated SSH refresh interval', async () => {
-			await page.goto('/');
-			await expect(page.getByRole('heading', { name: 'SSH resources', exact: true })).toBeVisible();
-			await page.goto('/settings');
-			await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
-			await expect(page.getByLabel('SSH resource refresh interval (seconds)', { exact: true })).toHaveValue('17');
-		});
-
-		await step('disable only local dashboard resources', async () => {
-			await localToggle.uncheck();
-			const responsePromise = page.waitForResponse(
-				(response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
-			);
-			await resourceForm.locator('button[type="submit"]').click();
-			expect((await responsePromise).ok()).toBeTruthy();
-
-			const persisted = await context.request.get('/api/v1/settings');
-			expect(persisted.ok()).toBeTruthy();
-			const values = (await persisted.json()) as {
-				dashboardShowLocalResources?: boolean;
-				dashboardShowRemoteResources?: boolean;
-			};
-			expect(values.dashboardShowLocalResources).toBe(false);
-			expect(values.dashboardShowRemoteResources).toBe(true);
-		});
-
-		await step('switch to local-only resources and persist across reload', async () => {
-			await localToggle.check();
-			await remoteToggle.uncheck();
-			const responsePromise = page.waitForResponse(
-				(response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
-			);
-			await resourceForm.locator('button[type="submit"]').click();
-			expect((await responsePromise).ok()).toBeTruthy();
-
+		await step('disable only local resources then persist local-only resources', async () => {
+			await local.uncheck();
+			await saveForm(page, resourceForm);
+			expect(await preferences(context.request)).toMatchObject({
+				dashboardShowLocalResources: false,
+				dashboardShowRemoteResources: true,
+			});
+			await local.check();
+			await remote.uncheck();
+			await saveForm(page, resourceForm);
 			await page.reload({ waitUntil: 'domcontentloaded' });
-			await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
-			await expect(page.getByRole('checkbox', { name: 'Show local resources', exact: true })).toBeChecked();
-			await expect(page.getByRole('checkbox', { name: 'Show remote resources', exact: true })).not.toBeChecked();
-			await expect(page.getByLabel('SSH resource refresh interval (seconds)', { exact: true })).toHaveValue('17');
+			await workspaceTab(page);
+			await expect(local).toBeChecked();
+			await expect(remote).not.toBeChecked();
 		});
+		await page.goto('/');
+		await expect(page.getByRole('heading', { name: 'SSH resources', exact: true })).not.toBeVisible();
 	} finally {
-		const restore = await context.request.put('/api/v1/settings', {
-			data: {
-				language: original.language ?? 'en-US',
-				dashboardShowLocalResources: original.dashboardShowLocalResources ?? true,
-				dashboardShowRemoteResources: original.dashboardShowRemoteResources ?? true,
-				remoteHostRefreshIntervalSeconds: original.remoteHostRefreshIntervalSeconds ?? 30,
-				statusMonitorIntervalSeconds: original.statusMonitorIntervalSeconds ?? 3,
-			},
-		});
-		expect(restore.ok()).toBeTruthy();
+		const failures: unknown[] = [];
+		try {
+			await updateUiPreferences(context.request, (value) => {
+				value.language = original.language;
+				value.dashboardShowLocalResources = original.dashboardShowLocalResources;
+				value.dashboardShowRemoteResources = original.dashboardShowRemoteResources;
+			});
+		} catch (cause) {
+			failures.push(cause);
+		}
+		try {
+			await updateTestSettings(context.request, (value) => {
+				value.policy.remoteHostRefreshIntervalSeconds = core.policy.remoteHostRefreshIntervalSeconds;
+				value.policy.statusMonitorIntervalSeconds = core.policy.statusMonitorIntervalSeconds;
+			});
+		} catch (cause) {
+			failures.push(cause);
+		}
+		if (failures.length) throw new AggregateError(failures, 'Settings restoration failed');
 	}
 });
 
 test('workspace popup editor setting is the only editor and preview close control', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
-	const originalResponse = await context.request.get('/api/v1/settings');
-	expect(originalResponse.ok()).toBeTruthy();
-	const original = (await originalResponse.json()) as { language?: string; showPopupFileEditor?: boolean };
+	const original = await preferences(context.request);
 	expect(original).not.toHaveProperty('clearFileEditorTabsOnClose');
-
-	const normalize = await context.request.put('/api/v1/settings', {
-		data: {
-			language: 'en-US',
-			showPopupFileEditor: true,
-		},
+	await updateUiPreferences(context.request, (value) => {
+		value.language = 'en-US';
+		value.showPopupFileEditor = true;
 	});
-	expect(normalize.ok()).toBeTruthy();
-
 	try {
 		await page.goto('/settings');
-		await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
-
-		const unifiedToggle = page.locator('#showPopupFileEditor');
-		const unifiedForm = page.locator('form').filter({ has: unifiedToggle });
-		await expect(unifiedToggle).toBeChecked();
-		await expect(unifiedToggle.locator('xpath=ancestor::label')).toContainText(
-			'Show popup editor when opening files',
-		);
-
-		await step('disabling the single control saves only showPopupFileEditor', async () => {
-			await unifiedToggle.uncheck();
-			const responsePromise = page.waitForResponse(
-				(response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
-			);
-			await unifiedForm.locator('button[type="submit"]').click();
-			expect((await responsePromise).ok()).toBeTruthy();
-
-			const persisted = await context.request.get('/api/v1/settings');
-			expect(persisted.ok()).toBeTruthy();
-			const values = (await persisted.json()) as { showPopupFileEditor?: boolean };
-			expect(values.showPopupFileEditor).toBe(false);
-		});
-
-		await step('enabling the single control saves only showPopupFileEditor', async () => {
-			await unifiedToggle.check();
-			const responsePromise = page.waitForResponse(
-				(response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
-			);
-			await unifiedForm.locator('button[type="submit"]').click();
-			expect((await responsePromise).ok()).toBeTruthy();
-
-			const persisted = await context.request.get('/api/v1/settings');
-			expect(persisted.ok()).toBeTruthy();
-			const values = (await persisted.json()) as { showPopupFileEditor?: boolean };
-			expect(values.showPopupFileEditor).toBe(true);
-		});
+		await workspaceTab(page);
+		const toggle = page.locator('#showPopupFileEditor');
+		const form = page.locator('form').filter({ has: toggle });
+		await expect(toggle).toBeChecked();
+		await expect(toggle.locator('xpath=ancestor::label')).toContainText('Show popup editor when opening files');
+		await toggle.uncheck();
+		await saveForm(page, form);
+		expect((await preferences(context.request)).showPopupFileEditor).toBe(false);
+		await toggle.check();
+		await saveForm(page, form);
+		expect((await preferences(context.request)).showPopupFileEditor).toBe(true);
 	} finally {
-		const restore = await context.request.put('/api/v1/settings', {
-			data: {
-				language: original.language ?? 'en-US',
-				showPopupFileEditor: original.showPopupFileEditor ?? true,
-			},
+		await updateUiPreferences(context.request, (value) => {
+			value.language = original.language;
+			value.showPopupFileEditor = original.showPopupFileEditor;
 		});
-		expect(restore.ok()).toBeTruthy();
 	}
 });
 
-test('system settings persist frontend and backend log levels through the UI', async ({ page, context }) => {
+test('frontend preferences and backend logging persist independently through the UI', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
-	const originalResponse = await context.request.get('/api/v1/settings');
-	expect(originalResponse.ok()).toBeTruthy();
-	const original = (await originalResponse.json()) as {
-		frontendLogLevel?: string;
-		backendLogLevel?: string;
-	};
-
-	const normalize = await context.request.put('/api/v1/settings', {
-		data: { frontendLogLevel: 'info', backendLogLevel: 'info' },
+	const original = await preferences(context.request);
+	const loggingResponse = await context.request.get('/api/v1/settings/logging');
+	expect(loggingResponse.ok()).toBe(true);
+	const logging = readBackendLoggingView(await loggingResponse.json());
+	await updateUiPreferences(context.request, (value) => {
+		value.language = 'en-US';
+		value.frontendLogLevel = 'info';
 	});
-	expect(normalize.ok()).toBeTruthy();
-
 	try {
 		await page.goto('/settings');
-		await page.locator('[role="tab"][aria-controls="settings-panel-system"]:visible').click();
+		await systemTab(page);
 		const frontend = page.locator('#frontendLogLevelSelect');
 		const backend = page.locator('#backendLogLevelSelect');
-		const form = page.locator('form').filter({ has: frontend });
+		const targetLevel = logging.level === 'debug' ? 'info' : 'debug';
 		await expectUiSelectValue(frontend, 'info');
-		await expectUiSelectValue(backend, 'info');
-
+		await expectUiSelectValue(backend, logging.level);
 		await selectUiOption(frontend, 'debug');
-		await selectUiOption(backend, 'debug');
-		const responsePromise = page.waitForResponse(
-			(response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
+		await saveForm(page, page.locator('form').filter({ has: frontend }));
+		expect((await preferences(context.request)).frontendLogLevel).toBe('debug');
+		await selectUiOption(backend, targetLevel);
+		const savedResponse = page.waitForResponse(
+			(response) => response.url().endsWith('/api/v1/settings/logging') && response.request().method() === 'PUT',
 		);
-		await form.locator('button[type="submit"]').click();
-		expect((await responsePromise).ok()).toBeTruthy();
-
-		const persisted = await context.request.get('/api/v1/settings');
-		expect(persisted.ok()).toBeTruthy();
-		expect(await persisted.json()).toMatchObject({ frontendLogLevel: 'debug', backendLogLevel: 'debug' });
-
+		await page.locator('[data-backend-logging] button[type="submit"]').click();
+		const saved = readBackendLoggingView(await (await savedResponse).json());
+		expect(saved.version).toBe(logging.version + 1);
+		expect(saved.level).toBe(targetLevel);
 		await page.reload({ waitUntil: 'domcontentloaded' });
-		await page.locator('[role="tab"][aria-controls="settings-panel-system"]:visible').click();
-		await expectUiSelectValue(page.locator('#frontendLogLevelSelect'), 'debug');
-		await expectUiSelectValue(page.locator('#backendLogLevelSelect'), 'debug');
-
-		const invalid = await context.request.put('/api/v1/settings', { data: { backendLogLevel: 'verbose' } });
+		await systemTab(page);
+		await expectUiSelectValue(frontend, 'debug');
+		await expectUiSelectValue(backend, targetLevel);
+		const invalid = await context.request.put('/api/v1/settings/logging', {
+			headers,
+			data: { expectedVersion: saved.version, level: 'verbose' },
+		});
 		expect(invalid.status()).toBe(400);
 	} finally {
-		const restore = await context.request.put('/api/v1/settings', {
-			data: {
-				frontendLogLevel: original.frontendLogLevel ?? 'info',
-				backendLogLevel: original.backendLogLevel ?? 'info',
-			},
-		});
-		expect(restore.ok()).toBeTruthy();
+		const failures: unknown[] = [];
+		try {
+			await updateUiPreferences(context.request, (value) => {
+				value.language = original.language;
+				value.frontendLogLevel = original.frontendLogLevel;
+			});
+		} catch (cause) {
+			failures.push(cause);
+		}
+		try {
+			const currentResponse = await context.request.get('/api/v1/settings/logging');
+			expect(currentResponse.ok()).toBe(true);
+			const current = readBackendLoggingView(await currentResponse.json());
+			const restored = await context.request.put('/api/v1/settings/logging', {
+				headers,
+				data: { expectedVersion: current.version, level: logging.level },
+			});
+			expect(restored.ok()).toBe(true);
+			expect(readBackendLoggingView(await restored.json()).level).toBe(logging.level);
+		} catch (cause) {
+			failures.push(cause);
+		}
+		if (failures.length) throw new AggregateError(failures, 'Logging settings restoration failed');
 	}
 });

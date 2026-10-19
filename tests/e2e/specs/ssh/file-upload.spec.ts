@@ -1,7 +1,12 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { expect, test, type Locator, type Page } from '../../support/fixtures';
-import { dragLocalFiles, openFileManager, uploadProgressTask } from '../../support/file-upload';
+import {
+	dragLocalFiles,
+	openFileManager,
+	uploadProgressTask,
+	type DragFileDescriptor,
+} from '../../support/file-upload';
 import {
 	activeFileManagerList,
 	closeConnectedFileManager,

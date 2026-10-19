@@ -1,5 +1,10 @@
+import type { PresentationLayout } from '../../../../packages/shared/src/preferences/presentation/model';
+import { getTestLayout, updateTestLayout } from '../../support/presentation';
+import { E2E_URLS } from '../../support/test-env';
+import { readSuspendedSessionCatalog } from '../../../../packages/shared/src/remote/suspend/http-codec';
+import { readPreferencesResponse } from '../../../../packages/shared/src/preferences/presentation/http-codec';
 import { expect, test } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import {
 	configureSshE2eSettings,
@@ -29,10 +34,10 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
 	await page.setViewportSize({ width: 1440, height: 900 });
-	const settings = await context.request.put('/api/v1/settings', {
-		data: { dockerStatusIntervalSeconds: 1, dockerDefaultExpand: true },
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.dockerStatusIntervalSeconds = 1;
+		preferences.dockerDefaultExpand = true;
 	});
-	expect(settings.ok()).toBeTruthy();
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
 
@@ -279,40 +284,27 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
 	await page.setViewportSize({ width: 1440, height: 900 });
-	expect((await context.request.put('/api/v1/settings', { data: { layoutLocked: false } })).ok()).toBeTruthy();
-	expect(
-		(
-			await context.request.put('/api/v1/settings', {
-				data: { navBarVisible: true },
-			})
-		).ok(),
-	).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.layoutLocked = false;
+	});
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.navBarVisible = true;
+	});
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
-	const layoutResponse = await context.request.get('/api/v1/settings/layout');
-	expect(layoutResponse.ok()).toBeTruthy();
-	type E2eLayoutNode = {
-		id?: string;
-		type: 'pane' | 'container';
-		component?: string;
-		direction?: 'horizontal' | 'vertical';
-		size?: number;
-		children?: E2eLayoutNode[];
-	};
-	const originalLayout = (await layoutResponse.json()) as E2eLayoutNode;
-	expect(originalLayout).toBeTruthy();
+	const originalLayout = (await getTestLayout(context.request)).layout;
 	const utilityLayout = structuredClone(originalLayout);
 
-	const replaceEditorWithSuspended = (node: E2eLayoutNode): boolean => {
+	const replaceEditorWithSuspended = (node: PresentationLayout): boolean => {
 		if (node.type === 'pane' && node.component === 'editor') {
 			node.component = 'suspendedSshSessions';
 			return true;
 		}
-		return node.children?.some(replaceEditorWithSuspended) ?? false;
+		return node.type === 'container' && node.children.some(replaceEditorWithSuspended);
 	};
 
 	expect(replaceEditorWithSuspended(utilityLayout)).toBe(true);
-	expect((await context.request.put('/api/v1/settings/layout', { data: utilityLayout })).ok()).toBeTruthy();
+	await updateTestLayout(context.request, utilityLayout);
 
 	const utilitySuspended = await openWorkspaceSession(
 		context.request,
@@ -327,7 +319,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
 		.poll(async () => {
 			const response = await context.request.get('/api/v1/ssh-suspend/suspended-sessions');
 			expect(response.ok(), await response.text()).toBeTruthy();
-			const sessions = (await response.json()) as SuspendedSession[];
+			const sessions = readSuspendedSessionCatalog(await response.json());
 			utilitySuspendedId =
 				sessions.find(
 					(session) =>
@@ -706,8 +698,8 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
 			await expect(lockSwitch).toHaveAttribute('aria-checked', 'true');
 			await expect
 				.poll(async () => {
-					const response = await context.request.get('/api/v1/settings');
-					const settings = (await response.json()) as Record<string, unknown>;
+					const response = await context.request.get('/api/v1/settings/preferences');
+					const settings = readPreferencesResponse(await response.json()).preferences;
 					return settings.layoutLocked;
 				})
 				.toBe(true);
@@ -738,8 +730,8 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
 			await expect(tabBar.getByRole('button', { name: 'Show Top Navigation', exact: true })).toBeVisible();
 			await expect
 				.poll(async () => {
-					const response = await context.request.get('/api/v1/settings');
-					return ((await response.json()) as { navBarVisible: boolean }).navBarVisible;
+					const response = await context.request.get('/api/v1/settings/preferences');
+					return readPreferencesResponse(await response.json()).preferences.navBarVisible;
 				})
 				.toBe(false);
 
@@ -747,19 +739,25 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
 			await expect(header).toBeVisible();
 			await expect
 				.poll(async () => {
-					const response = await context.request.get('/api/v1/settings');
-					return ((await response.json()) as { navBarVisible: boolean }).navBarVisible;
+					const response = await context.request.get('/api/v1/settings/preferences');
+					return readPreferencesResponse(await response.json()).preferences.navBarVisible;
 				})
 				.toBe(true);
 		});
 	} finally {
 		await loginAsInitialAdmin(context.request);
 		if (utilitySuspendedId) {
-			const cleanup = await context.request.delete(`/api/v1/ssh-suspend/terminate/${utilitySuspendedId}`);
+			const cleanup = await context.request.delete(`/api/v1/ssh-suspend/terminate/${utilitySuspendedId}`, {
+				headers: { Origin: E2E_URLS.frontendOrigin },
+			});
 			expect([200, 404]).toContain(cleanup.status());
 		}
-		await context.request.put('/api/v1/settings/layout', { data: originalLayout });
-		await context.request.put('/api/v1/settings', { data: { layoutLocked: false } });
-		await context.request.put('/api/v1/settings', { data: { navBarVisible: true } });
+		await updateTestLayout(context.request, originalLayout);
+		await updateUiPreferences(context.request, (preferences) => {
+			preferences.layoutLocked = false;
+		});
+		await updateUiPreferences(context.request, (preferences) => {
+			preferences.navBarVisible = true;
+		});
 	}
 });

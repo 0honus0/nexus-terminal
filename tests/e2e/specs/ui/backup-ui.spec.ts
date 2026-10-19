@@ -1,10 +1,12 @@
+import { readBackupImportResponse } from '../../../../packages/shared/src/system/backups/http-codec';
+import { readAccessStatus } from '../../../../packages/shared/src/access/http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import { expect, test } from '../../support/fixtures';
 import { E2E_ADMIN, loginAsInitialAdmin } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { slowStep, step } from '../../support/steps';
 
-const BACKUP_MAGIC = 'NEXUS_TERMINAL_BACKUP_V1\n';
+const BACKUP_MAGIC = 'NXSEALED2\n';
 
 async function captureEvidence(
 	page: import('@playwright/test').Page,
@@ -142,19 +144,7 @@ test('data management UI exports a real backup file and imports it through the f
 		expect((await stat(backupPath)).size).toBeGreaterThan(100);
 		const backup = await readFile(backupPath);
 		expect(backup.subarray(0, BACKUP_MAGIC.length).toString('utf8')).toBe(BACKUP_MAGIC);
-		const envelope = JSON.parse(backup.subarray(BACKUP_MAGIC.length).toString('utf8')) as {
-			format?: string;
-			version?: number;
-			passwordKdf?: { algorithm?: string; iterations?: number };
-			payload?: { iv?: string; ciphertext?: string; tag?: string };
-		};
-		expect(envelope).toMatchObject({
-			format: 'nexus-terminal-backup',
-			version: 1,
-			passwordKdf: { algorithm: 'pbkdf2-sha256', iterations: 210_000 },
-			payload: { iv: expect.any(String), ciphertext: expect.any(String), tag: expect.any(String) },
-		});
-		expect(envelope).not.toHaveProperty('tables');
+		expect(backup.toString('utf8')).not.toContain(E2E_ADMIN.password);
 	});
 
 	await slowStep('import submits the downloaded backup through the real UI file picker', async () => {
@@ -166,9 +156,9 @@ test('data management UI exports a real backup file and imports it through the f
 		await section.getByRole('button', { name: 'Import backup', exact: true }).click();
 		const response = await importPromise;
 		expect(response.ok()).toBeTruthy();
-		const body = (await response.json()) as { restoredRows?: number; restoredFiles?: number };
-		expect(Number(body.restoredRows ?? 0)).toBeGreaterThanOrEqual(0);
-		expect(Number(body.restoredFiles ?? 0)).toBeGreaterThanOrEqual(0);
+		const body = readBackupImportResponse(await response.json());
+		expect(body.restoredTables).toBeGreaterThan(0);
+		expect(body.cleanupPending).toBe(false);
 		await expect(section).toContainText(/Backup imported: restored \d+ data rows and \d+ files\./);
 	});
 
@@ -177,7 +167,7 @@ test('data management UI exports a real backup file and imports it through the f
 		await page.waitForLoadState('domcontentloaded');
 		const status = await context.request.get('/api/v1/auth/status');
 		expect(status.ok()).toBeTruthy();
-		await expect(status.json()).resolves.toMatchObject({ isAuthenticated: true });
+		expect(readAccessStatus(await status.json()).user.username).toBe(E2E_ADMIN.username);
 		await page.getByRole('tab', { name: 'Data Management', exact: true }).click();
 		const reloadedSection = page.getByRole('tabpanel', { name: 'Data Management', exact: true });
 		await expect(reloadedSection).toBeVisible();

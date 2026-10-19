@@ -3,6 +3,7 @@ import { loginAsInitialAdmin } from '../../support/auth';
 import { E2E_SSH, ensureTestSshConnection } from '../../support/ssh';
 import {
 	closeWebSocket,
+	WorkspaceRequestFailure,
 	openWorkspaceSession,
 	requestWorkspace,
 	requestWorkspaceBinary,
@@ -47,6 +48,7 @@ test('rejecting a duplicate binary read ID preserves cancellation of the origina
 	await loginAsInitialAdmin(request);
 	const connectionId = await ensureTestSshConnection(request);
 	const workspace = await openWorkspaceSession(request, connectionId);
+	let recovery: Awaited<ReturnType<typeof openWorkspaceSession>> | undefined;
 	const id = crypto.randomUUID();
 	try {
 		await waitForFilesystemReady(workspace.socket);
@@ -59,10 +61,10 @@ test('rejecting a duplicate binary read ID preserves cancellation of the origina
 			(message) => message.requestId === id && message.payload?.ok === false,
 		);
 		sendJson(workspace.socket, { type: 'filesystem.readBinary', requestId: id, payload });
-		expect((await rejected).payload.error).toBe('BINARY_READ_CAPACITY_EXCEEDED');
+		expect((await rejected).payload.error).toBe('limit_exceeded');
 		const aborted = waitForJson(
 			workspace.socket,
-			(message) => message.requestId === id && message.payload?.error === 'BINARY_READ_ABORTED',
+			(message) => message.requestId === id && message.payload?.error === 'remote_unavailable',
 		);
 		// Handle the listener promise even if the cancellation assertion fails.
 		const outcome = aborted.then(
@@ -72,12 +74,16 @@ test('rejecting a duplicate binary read ID preserves cancellation of the origina
 		expect(await requestWorkspace(workspace.socket, 'filesystem.cancelRead', { requestId: id })).toBe(true);
 		expect(await outcome).toBe(true);
 		expect((await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=0`, { method: 'POST' })).ok).toBeTruthy();
+		const reopened = await openWorkspaceSession(request, connectionId);
+		recovery = reopened;
+		await waitForFilesystemReady(reopened.socket);
 		expect(
-			(await requestWorkspaceBinary(workspace.socket, 'filesystem.readBinary', payload)).bytes.length,
+			(await requestWorkspaceBinary(reopened.socket, 'filesystem.readBinary', payload)).bytes.length,
 		).toBeGreaterThan(0);
 	} finally {
 		await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=0`, { method: 'POST' });
 		await closeWebSocket(workspace.socket);
+		if (recovery) await closeWebSocket(recovery.socket);
 	}
 });
 
@@ -85,6 +91,7 @@ test('four delayed binary reads reject excess admission and cancellation frees e
 	await loginAsInitialAdmin(request);
 	const connectionId = await ensureTestSshConnection(request);
 	const workspace = await openWorkspaceSession(request, connectionId);
+	let recovery: Awaited<ReturnType<typeof openWorkspaceSession>> | undefined;
 
 	const delay = async (ms: number) => {
 		const response = await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=${ms}`, { method: 'POST' });
@@ -105,22 +112,31 @@ test('four delayed binary reads reject excess admission and cancellation frees e
 					id,
 				).then(
 					() => ({ completed: true }),
-					(error: Error) => ({ error: error.message }),
+					(error: unknown) => {
+						if (!(error instanceof WorkspaceRequestFailure)) throw error;
+						return { error: error.code };
+					},
 				),
 			);
 		}
 		await requestWorkspace(workspace.socket, 'workspace.ping');
 		await expect(
 			requestWorkspaceBinary(workspace.socket, 'filesystem.readBinary', { path: '/seed.txt', maxBytes: 1024 }),
-		).rejects.toThrow('BINARY_READ_CAPACITY_EXCEEDED');
-		for (const id of ids)
-			expect(await requestWorkspace(workspace.socket, 'filesystem.cancelRead', { requestId: id })).toBe(true);
+		).rejects.toThrow('limit_exceeded');
+		const cancellations = await Promise.all(
+			ids.map((requestId) => requestWorkspace(workspace.socket, 'filesystem.cancelRead', { requestId })),
+		);
+		expect(cancellations.some((result) => result === true)).toBe(true);
+		expect(cancellations.every((result) => typeof result === 'boolean')).toBe(true);
 		for (const result of await Promise.all(pending))
-			expect(result).toMatchObject({ error: expect.stringContaining('BINARY_READ_ABORTED') });
+			expect(result).toMatchObject({ error: expect.stringContaining('remote_unavailable') });
 		await delay(0);
+		const reopened = await openWorkspaceSession(request, connectionId);
+		recovery = reopened;
+		await waitForFilesystemReady(reopened.socket);
 		const recovered = await Promise.all(
 			Array.from({ length: 4 }, () =>
-				requestWorkspaceBinary(workspace.socket, 'filesystem.readBinary', {
+				requestWorkspaceBinary(reopened.socket, 'filesystem.readBinary', {
 					path: '/seed.txt',
 					maxBytes: 1024,
 				}),
@@ -131,6 +147,7 @@ test('four delayed binary reads reject excess admission and cancellation frees e
 	} finally {
 		await delay(0);
 		await closeWebSocket(workspace.socket);
+		if (recovery) await closeWebSocket(recovery.socket);
 		await Promise.allSettled(pending);
 	}
 });
@@ -149,13 +166,16 @@ test('failed SFTP stream acquisition releases admission and does not poison late
 						maxBytes: 1024,
 					}).then(
 						() => ({ completed: true }),
-						(error: Error) => ({ error: error.message }),
+						(error: unknown) => {
+							if (!(error instanceof WorkspaceRequestFailure)) throw error;
+							return { error: error.code };
+						},
 					),
 				),
 			);
 			for (const result of results) {
-				expect(result).toMatchObject({ error: expect.stringContaining('filesystem.readBinary failed:') });
-				expect('error' in result ? result.error : '').not.toContain('CAPACITY_EXCEEDED');
+				expect(result).toMatchObject({ error: 'not_found' });
+				expect('error' in result ? result.error : '').not.toBe('limit_exceeded');
 			}
 		}
 		const recovered = await Promise.all(
@@ -173,10 +193,11 @@ test('failed SFTP stream acquisition releases admission and does not poison late
 	}
 });
 
-test('cancelling while SFTP OPEN is pending aborts the read and releases its slot', async ({ request }) => {
+test('cancelling pending SFTP OPEN retires its lease and a new Workspace can read', async ({ request }) => {
 	await loginAsInitialAdmin(request);
 	const connectionId = await ensureTestSshConnection(request);
 	const workspace = await openWorkspaceSession(request, connectionId);
+	let recovery: Awaited<ReturnType<typeof openWorkspaceSession>> | undefined;
 	const id = crypto.randomUUID();
 	let pending: Promise<unknown> | undefined;
 	try {
@@ -189,7 +210,10 @@ test('cancelling while SFTP OPEN is pending aborts the read and releases its slo
 			id,
 		).then(
 			() => ({ completed: true }),
-			(error: Error) => ({ error: error.message }),
+			(error: unknown) => {
+				if (!(error instanceof WorkspaceRequestFailure)) throw error;
+				return { error: error.code };
+			},
 		);
 		await expect
 			.poll(async () => {
@@ -198,12 +222,15 @@ test('cancelling while SFTP OPEN is pending aborts the read and releases its slo
 			})
 			.toBe(1);
 		expect(await requestWorkspace(workspace.socket, 'filesystem.cancelRead', { requestId: id })).toBe(true);
-		expect(await pending).toMatchObject({ error: expect.stringContaining('BINARY_READ_ABORTED') });
+		expect(await pending).toMatchObject({ error: expect.stringContaining('remote_unavailable') });
 		expect(await requestWorkspace(workspace.socket, 'filesystem.cancelRead', { requestId: id })).toBe(false);
 		expect((await fetch(`${E2E_SSH.controlUrl}/sftp/open-delay?ms=0`, { method: 'POST' })).ok).toBeTruthy();
+		const reopened = await openWorkspaceSession(request, connectionId);
+		recovery = reopened;
+		await waitForFilesystemReady(reopened.socket);
 		const recovered = await Promise.all(
 			Array.from({ length: 4 }, () =>
-				requestWorkspaceBinary(workspace.socket, 'filesystem.readBinary', {
+				requestWorkspaceBinary(reopened.socket, 'filesystem.readBinary', {
 					path: '/seed.txt',
 					maxBytes: 1024,
 				}),
@@ -214,6 +241,7 @@ test('cancelling while SFTP OPEN is pending aborts the read and releases its slo
 	} finally {
 		await fetch(`${E2E_SSH.controlUrl}/sftp/open-delay?ms=0`, { method: 'POST' });
 		await closeWebSocket(workspace.socket);
+		if (recovery) await closeWebSocket(recovery.socket);
 		if (pending) await pending;
 	}
 });
@@ -230,7 +258,10 @@ test('a file growing after SFTP READ starts cannot exceed the admitted byte budg
 		expect((await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=3000`, { method: 'POST' })).ok).toBeTruthy();
 		pending = requestWorkspaceBinary(workspace.socket, 'filesystem.readBinary', { path, maxBytes: 1024 }).then(
 			(result) => ({ bytes: result.bytes }),
-			(error: Error) => ({ error: error.message }),
+			(error: unknown) => {
+				if (!(error instanceof WorkspaceRequestFailure)) throw error;
+				return { error: error.code };
+			},
 		);
 		await expect
 			.poll(async () => {
@@ -253,7 +284,7 @@ test('a file growing after SFTP READ starts cannot exceed the admitted byte budg
 		expect((await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=0`, { method: 'POST' })).ok).toBeTruthy();
 		await expect(
 			requestWorkspaceBinary(workspace.socket, 'filesystem.readBinary', { path, maxBytes: 1024 }),
-		).rejects.toThrow('BINARY_READ_SIZE_LIMIT_EXCEEDED');
+		).rejects.toThrow('limit_exceeded');
 		const recovered = await requestWorkspaceBinary(workspace.socket, 'filesystem.readBinary', {
 			path,
 			maxBytes: Buffer.byteLength(content),

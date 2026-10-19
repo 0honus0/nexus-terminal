@@ -1,8 +1,25 @@
+import { readSuspendedSessionCatalog } from '../../../../packages/shared/src/remote/suspend/http-codec';
+import { readLocalSystemStatus } from '../../../../packages/shared/src/system/status/http-codec';
+import { readSshResourceStatusList } from '../../../../packages/shared/src/remote/monitoring/http-codec';
+import { readAuditResponse } from '../../../../packages/shared/src/operations/http-codec';
+import { E2E_URLS } from '../../support/test-env';
+import { readTagList, readTagView } from '../../../../packages/shared/src/targets/tags/http-codec';
+import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
+import { readTestConnectionImportId } from '../../support/targets';
+import { readAppearanceView } from '../../../../packages/shared/src/preferences/appearance/http-codec';
+import { updateTestAppearance } from '../../support/appearance';
+import { readPreferencesResponse } from '../../../../packages/shared/src/preferences/presentation/http-codec';
 import { expect, test, type APIRequestContext, type Page } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import { step } from '../../support/steps';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
-import { E2E_SSH, configureSshE2eSettings, ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
+import {
+	E2E_SSH,
+	connectTestSshFromConnectionsPage,
+	configureSshE2eSettings,
+	ensureTestSshConnection,
+	resetTestSshFilesystem,
+} from '../../support/ssh';
 import { closeWebSocket, openWorkspaceSession, requestWorkspace } from '../../support/ws';
 import { selectUiOption } from '../../support/ui-select';
 
@@ -48,18 +65,28 @@ const DASHBOARD_DARK_THEME = {
 };
 
 async function cleanupDashboardFixtures(request: APIRequestContext): Promise<void> {
-	const connectionsResponse = await request.get('/api/v1/connections');
+	const connectionsResponse = await request.get('/api/v1/targets/connections');
 	expect(connectionsResponse.ok()).toBeTruthy();
-	const connections = (await connectionsResponse.json()) as Array<{ id: number; name?: string }>;
+	const connections = readConnectionList(await connectionsResponse.json());
 	for (const connection of connections.filter((item) => item.name === ALPHA_NAME || item.name === BETA_NAME)) {
-		expect((await request.delete(`/api/v1/connections/${connection.id}`)).ok()).toBeTruthy();
+		expect(
+			(
+				await request.delete(`/api/v1/targets/connections/${connection.id}`, {
+					headers: { Origin: E2E_URLS.frontendOrigin },
+				})
+			).ok(),
+		).toBeTruthy();
 	}
 
-	const tagsResponse = await request.get('/api/v1/tags');
+	const tagsResponse = await request.get('/api/v1/targets/tags');
 	expect(tagsResponse.ok()).toBeTruthy();
-	const tags = (await tagsResponse.json()) as Array<{ id: number; name: string }>;
+	const tags = readTagList(await tagsResponse.json());
 	for (const tag of tags.filter((item) => [ALPHA_TAG, BETA_TAG, EMPTY_TAG].includes(item.name))) {
-		expect((await request.delete(`/api/v1/tags/${tag.id}`)).ok()).toBeTruthy();
+		expect(
+			(
+				await request.delete(`/api/v1/targets/tags/${tag.id}`, { headers: { Origin: E2E_URLS.frontendOrigin } })
+			).ok(),
+		).toBeTruthy();
 	}
 }
 
@@ -71,7 +98,7 @@ async function switchInterfaceToChinese(page: Page): Promise<void> {
 	await expect(language).toBeVisible();
 	await selectUiOption(language, 'zh-CN');
 	const save = page.waitForResponse(
-		(response) => response.url().includes('/api/v1/settings') && response.request().method() === 'PUT',
+		(response) => response.url().includes('/api/v1/settings/preferences') && response.request().method() === 'PUT',
 	);
 	await page.getByRole('button', { name: 'Save Language' }).click();
 	expect((await save).ok()).toBeTruthy();
@@ -79,9 +106,12 @@ async function switchInterfaceToChinese(page: Page): Promise<void> {
 }
 
 async function createTag(request: APIRequestContext, name: string): Promise<number> {
-	const response = await request.post('/api/v1/tags', { data: { name } });
+	const response = await request.post('/api/v1/targets/tags', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
+		data: { name },
+	});
 	expect(response.status()).toBe(201);
-	return ((await response.json()) as { tag: { id: number } }).tag.id;
+	return readTagView(await response.json()).id;
 }
 
 async function createConnection(
@@ -91,22 +121,36 @@ async function createConnection(
 	host: string,
 	tagId: number,
 ): Promise<number> {
-	const create = await request.post('/api/v1/connections', {
+	const create = await request.post('/api/v1/targets/connections/import', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: {
-			name,
-			type: 'SSH',
-			host,
-			port: 22,
-			username,
-			authMethod: 'password',
-			password: 'dashboard-e2e-not-used',
-			notes: `${name} notes`,
+			items: [
+				{
+					connection: {
+						name: name,
+						type: 'SSH',
+						host: host,
+						port: 22,
+						username: username,
+						notes: `${name} notes`,
+						route: 'direct',
+						proxyId: null,
+						rdpRemoteApp: null,
+						rdpRemoteAppDirectory: null,
+						rdpRemoteAppArguments: null,
+						tagIds: [],
+						jumpIds: [],
+					},
+					credential: { kind: 'password', password: 'dashboard-e2e-not-used' },
+				},
+			],
 		},
 	});
-	expect(create.status()).toBe(201);
-	const id = ((await create.json()) as { connection: { id: number } }).connection.id;
+	expect(create.status()).toBe(200);
+	const id = readTestConnectionImportId(await create.json());
 
-	const assignTag = await request.post('/api/v1/connections/add-tag', {
+	const assignTag = await request.post('/api/v1/targets/connections/add-tag', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: { connectionIds: [id], tagId: tagId },
 	});
 	expect(assignTag.ok()).toBeTruthy();
@@ -136,16 +180,12 @@ test('desktop dashboard exposes suspended sessions without changing the main wor
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
 	await resetTestSshFilesystem();
-	const originalSettingsResponse = await context.request.get('/api/v1/settings');
+	const originalSettingsResponse = await context.request.get('/api/v1/settings/preferences');
 	expect(originalSettingsResponse.ok()).toBeTruthy();
-	const originalSettings = (await originalSettingsResponse.json()) as { dashboardShowRemoteResources?: boolean };
-	expect(
-		(
-			await context.request.put('/api/v1/settings', {
-				data: { dashboardShowRemoteResources: true },
-			})
-		).ok(),
-	).toBeTruthy();
+	const originalSettings = readPreferencesResponse(await originalSettingsResponse.json()).preferences;
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.dashboardShowRemoteResources = true;
+	});
 	const connectionId = await ensureTestSshConnection(context.request);
 	const createdSuspendedIds: string[] = [];
 
@@ -164,11 +204,7 @@ test('desktop dashboard exposes suspended sessions without changing the main wor
 				async () => {
 					const response = await context.request.get('/api/v1/ssh-suspend/suspended-sessions');
 					expect(response.ok()).toBeTruthy();
-					const sessions = (await response.json()) as Array<{
-						id: string;
-						originalWorkspaceId: string;
-						status: 'active' | 'disconnected';
-					}>;
+					const sessions = readSuspendedSessionCatalog(await response.json());
 					const match = sessions.find(
 						(session) =>
 							session.originalWorkspaceId === workspace.workspaceId && session.status === 'active',
@@ -234,16 +270,13 @@ test('desktop dashboard exposes suspended sessions without changing the main wor
 		for (const suspendedId of createdSuspendedIds) {
 			const response = await context.request.delete(
 				`/api/v1/ssh-suspend/terminate/${encodeURIComponent(suspendedId)}`,
+				{ headers: { Origin: E2E_URLS.frontendOrigin } },
 			);
 			expect([200, 404]).toContain(response.status());
 		}
-		expect(
-			(
-				await context.request.put('/api/v1/settings', {
-					data: { dashboardShowRemoteResources: originalSettings.dashboardShowRemoteResources ?? true },
-				})
-			).ok(),
-		).toBeTruthy();
+		await updateUiPreferences(context.request, (preferences) => {
+			preferences.dashboardShowRemoteResources = originalSettings.dashboardShowRemoteResources ?? true;
+		});
 	}
 });
 
@@ -256,19 +289,22 @@ test('dashboard reconnect completion refreshes recent connection without navigat
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
 
-	// Prime lastConnectedAt so the dashboard exposes the dedicated Reconnect action.
-	const primingSession = await openWorkspaceSession(
-		context.request,
-		connectionId,
-		`dashboard-reconnect-prime-${crypto.randomUUID()}`,
-	);
-	await closeWebSocket(primingSession.socket);
+	// Recent connections are owned by the mounted frontend store, so prime through the UI.
+	await connectTestSshFromConnectionsPage(page, connectionId);
+	await page.getByRole('button', { name: 'Close Tab', exact: true }).click();
+	await page.locator('.app-nav-links').getByRole('link', { name: 'Dashboard', exact: true }).click();
+	await expect(page).toHaveURL(/\/$/);
 
-	const beforeAudit = await context.request.get('/api/v1/audit-logs', {
-		params: { limit: 1, offset: 0, actionType: 'SSH_CONNECT_SUCCESS' },
-	});
-	expect(beforeAudit.ok()).toBeTruthy();
-	const beforeSuccessCount = ((await beforeAudit.json()) as { total: number }).total;
+	const latestConnectionAudit = async (): Promise<number> => {
+		const response = await context.request.get('/api/v1/settings/audit-logs', {
+			params: { limit: 1, offset: 0, event: 'SSH_CONNECT_SUCCESS' },
+		});
+		expect(response.ok()).toBeTruthy();
+		return readAuditResponse(await response.json()).items[0]?.id ?? 0;
+	};
+
+	await expect.poll(latestConnectionAudit).toBeGreaterThan(0);
+	const beforeAuditId = await latestConnectionAudit();
 
 	let releaseConnectionDetail: (() => void) | undefined;
 	const connectionDetailGate = new Promise<void>((resolve) => {
@@ -279,7 +315,7 @@ test('dashboard reconnect completion refreshes recent connection without navigat
 		markConnectionDetailStarted = resolve;
 	});
 
-	await page.route(`**/api/v1/connections/${connectionId}`, async (route) => {
+	await page.route(`**/api/v1/targets/connections/${connectionId}`, async (route) => {
 		const response = await route.fetch();
 		markConnectionDetailStarted?.();
 		await connectionDetailGate;
@@ -287,7 +323,6 @@ test('dashboard reconnect completion refreshes recent connection without navigat
 	});
 
 	try {
-		await page.goto('/');
 		const reconnect = page.getByRole('button', { name: 'Reconnect', exact: true });
 		const row = connectionRow(page, 'E2E SSH');
 		await expect(reconnect).toBeVisible();
@@ -295,8 +330,6 @@ test('dashboard reconnect completion refreshes recent connection without navigat
 		const previousLastConnectedAt = Number(await row.getAttribute('data-last-connected-at'));
 		expect(previousLastConnectedAt).toBeGreaterThan(0);
 
-		// lastConnectedAt has one-second precision. Ensure the reconnect writes a distinguishable value.
-		await page.waitForTimeout(1_100);
 		await reconnect.click();
 		await connectionDetailStarted;
 
@@ -306,18 +339,7 @@ test('dashboard reconnect completion refreshes recent connection without navigat
 		await expect(page).toHaveURL(/\/$/);
 
 		releaseConnectionDetail?.();
-		await expect
-			.poll(
-				async () => {
-					const response = await context.request.get('/api/v1/audit-logs', {
-						params: { limit: 1, offset: 0, actionType: 'SSH_CONNECT_SUCCESS' },
-					});
-					expect(response.ok()).toBeTruthy();
-					return ((await response.json()) as { total: number }).total;
-				},
-				{ timeout: 20_000 },
-			)
-			.toBeGreaterThan(beforeSuccessCount);
+		await expect.poll(latestConnectionAudit, { timeout: 20_000 }).toBeGreaterThan(beforeAuditId);
 
 		// Successful background completion must update the already-mounted Dashboard store without a page reload.
 		await expect
@@ -342,18 +364,13 @@ test('SSH resource cards appear while their status requests are pending', async 
 	await loginAsInitialAdmin(context.request);
 	await ensureTestSshConnection(context.request);
 
-	const originalSettingsResponse = await context.request.get('/api/v1/settings');
+	const originalSettingsResponse = await context.request.get('/api/v1/settings/preferences');
 	expect(originalSettingsResponse.ok()).toBeTruthy();
-	const originalSettings = (await originalSettingsResponse.json()) as {
-		language?: string;
-		dashboardShowLocalResources?: boolean;
-		dashboardShowRemoteResources?: boolean;
-	};
+	const originalSettings = readPreferencesResponse(await originalSettingsResponse.json()).preferences;
 
-	const enableRemoteResources = await context.request.put('/api/v1/settings', {
-		data: { dashboardShowRemoteResources: true },
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.dashboardShowRemoteResources = true;
 	});
-	expect(enableRemoteResources.ok()).toBeTruthy();
 
 	let releaseRemoteResources: (() => void) | undefined;
 	const remoteResourcesReleased = new Promise<void>((resolve) => {
@@ -382,39 +399,50 @@ test('SSH resource cards appear while their status requests are pending', async 
 	} finally {
 		releaseRemoteResources?.();
 		await page.unrouteAll({ behavior: 'wait' });
-		const restoreSettings = await context.request.put('/api/v1/settings', {
-			data: {
-				dashboardShowRemoteResources: originalSettings.dashboardShowRemoteResources ?? true,
-			},
+		await updateUiPreferences(context.request, (preferences) => {
+			preferences.dashboardShowRemoteResources = originalSettings.dashboardShowRemoteResources ?? true;
 		});
-		expect(restoreSettings.ok()).toBeTruthy();
 	}
 });
 
 test('a slow SSH resource does not hold back another host on the dashboard', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 	const goodConnectionId = await ensureTestSshConnection(context.request);
-	const originalSettingsResponse = await context.request.get('/api/v1/settings');
+	const originalSettingsResponse = await context.request.get('/api/v1/settings/preferences');
 	expect(originalSettingsResponse.ok()).toBeTruthy();
-	const originalSettings = (await originalSettingsResponse.json()) as { dashboardShowRemoteResources?: boolean };
-	expect(
-		(await context.request.put('/api/v1/settings', { data: { dashboardShowRemoteResources: true } })).ok(),
-	).toBeTruthy();
+	const originalSettings = readPreferencesResponse(await originalSettingsResponse.json()).preferences;
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.dashboardShowRemoteResources = true;
+	});
 	const badHost = '198.51.100.88';
 	const badPort = 2222;
-	const create = await context.request.post('/api/v1/connections', {
+	const create = await context.request.post('/api/v1/targets/connections/import', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: {
-			name: 'E2E Slow SSH Resource',
-			type: 'SSH',
-			host: badHost,
-			port: badPort,
-			username: 'slow',
-			authMethod: 'password',
-			password: 'unused',
+			items: [
+				{
+					connection: {
+						name: 'E2E Slow SSH Resource',
+						type: 'SSH',
+						host: badHost,
+						port: badPort,
+						username: 'slow',
+						notes: null,
+						route: 'direct',
+						proxyId: null,
+						rdpRemoteApp: null,
+						rdpRemoteAppDirectory: null,
+						rdpRemoteAppArguments: null,
+						tagIds: [],
+						jumpIds: [],
+					},
+					credential: { kind: 'password', password: 'unused' },
+				},
+			],
 		},
 	});
-	expect(create.status()).toBe(201);
-	const badConnectionId = ((await create.json()) as { connection: { id: number } }).connection.id;
+	expect(create.status()).toBe(200);
+	const badConnectionId = readTestConnectionImportId(await create.json());
 	let releaseSlow: (() => void) | undefined;
 	const slowReleased = new Promise<void>((resolve) => {
 		releaseSlow = resolve;
@@ -448,36 +476,36 @@ test('a slow SSH resource does not hold back another host on the dashboard', asy
 		await expect(goodCard).toContainText('7%');
 		await expect(goodCard.getByText('SSH', { exact: true })).toHaveCount(0);
 		await expect(badCard).toBeVisible();
-		await expect(badCard).not.toContainText('Network Error');
+		await expect(badCard).not.toContainText('The network request failed. Retry the read.');
 		releaseSlow?.();
-		await expect(badCard).toContainText('Network Error');
+		await expect(badCard).toContainText('The network request failed. Retry the read.');
 		await expect(goodCard).toContainText('7%');
 	} finally {
 		releaseSlow?.();
 		await page.unrouteAll({ behavior: 'wait' });
-		expect((await context.request.delete(`/api/v1/connections/${badConnectionId}`)).ok()).toBeTruthy();
 		expect(
 			(
-				await context.request.put('/api/v1/settings', {
-					data: { dashboardShowRemoteResources: originalSettings.dashboardShowRemoteResources ?? true },
+				await context.request.delete(`/api/v1/targets/connections/${badConnectionId}`, {
+					headers: { Origin: E2E_URLS.frontendOrigin },
 				})
 			).ok(),
 		).toBeTruthy();
+		await updateUiPreferences(context.request, (preferences) => {
+			preferences.dashboardShowRemoteResources = originalSettings.dashboardShowRemoteResources ?? true;
+		});
 	}
 });
 
 test('resource failures stay inside their panels and do not block quick connect', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
-	const originalSettingsResponse = await context.request.get('/api/v1/settings');
+	const originalSettingsResponse = await context.request.get('/api/v1/settings/preferences');
 	expect(originalSettingsResponse.ok()).toBeTruthy();
-	const originalSettings = (await originalSettingsResponse.json()) as {
-		dashboardShowLocalResources?: boolean;
-		dashboardShowRemoteResources?: boolean;
-	};
-	const enableResources = await context.request.put('/api/v1/settings', {
-		data: { dashboardShowLocalResources: true, dashboardShowRemoteResources: true },
+	const originalSettings = readPreferencesResponse(await originalSettingsResponse.json()).preferences;
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.dashboardShowLocalResources = true;
+		preferences.dashboardShowRemoteResources = true;
 	});
-	expect(enableResources.ok()).toBeTruthy();
+
 	const connectionId = await ensureTestSshConnection(context.request);
 
 	await page.route('**/api/v1/system/status', async (route) => {
@@ -496,8 +524,8 @@ test('resource failures stay inside their panels and do not block quick connect'
 		const connectionList = quickConnectPanel(page).getByRole('list');
 		const row = connectionRow(page, 'E2E SSH');
 
-		await expect(local).toContainText('Network Error');
-		await expect(remoteError).toContainText('Network Error');
+		await expect(local).toContainText('The network request failed. Retry the read.');
+		await expect(remoteError).toContainText('The network request failed. Retry the read.');
 		await expect(connectionList).toBeVisible();
 		await expect(row).toBeVisible();
 		await expect(row.getByRole('button', { name: 'Connect E2E SSH', exact: true })).toBeEnabled();
@@ -513,13 +541,10 @@ test('resource failures stay inside their panels and do not block quick connect'
 		});
 	} finally {
 		await page.unrouteAll({ behavior: 'wait' });
-		const restoreSettings = await context.request.put('/api/v1/settings', {
-			data: {
-				dashboardShowLocalResources: originalSettings.dashboardShowLocalResources ?? true,
-				dashboardShowRemoteResources: originalSettings.dashboardShowRemoteResources ?? true,
-			},
+		await updateUiPreferences(context.request, (preferences) => {
+			preferences.dashboardShowLocalResources = originalSettings.dashboardShowLocalResources ?? true;
+			preferences.dashboardShowRemoteResources = originalSettings.dashboardShowRemoteResources ?? true;
 		});
-		expect(restoreSettings.ok()).toBeTruthy();
 	}
 });
 
@@ -531,47 +556,27 @@ test('dashboard filters connections and persists tag and sort preferences across
 	await cleanupDashboardFixtures(context.request);
 	await resetTestSshFilesystem();
 
-	const originalSettingsResponse = await context.request.get('/api/v1/settings');
+	const originalSettingsResponse = await context.request.get('/api/v1/settings/preferences');
 	expect(originalSettingsResponse.ok()).toBeTruthy();
-	const originalSettings = (await originalSettingsResponse.json()) as {
-		language?: string;
-		dashboardShowLocalResources?: boolean;
-		dashboardShowRemoteResources?: boolean;
-		remoteHostRefreshIntervalSeconds?: number;
-	};
+	const originalSettings = readPreferencesResponse(await originalSettingsResponse.json()).preferences;
 	const originalAppearanceResponse = await context.request.get('/api/v1/appearance');
 	expect(originalAppearanceResponse.ok()).toBeTruthy();
-	const originalAppearance = (await originalAppearanceResponse.json()) as {
-		customUiTheme?: string;
-		windowThemeColor?: string;
-	};
+	const originalAppearance = readAppearanceView(await originalAppearanceResponse.json());
 
-	const normalizeSettings = await context.request.put('/api/v1/settings', {
-		data: {
-			language: 'en-US',
-			dashboardShowLocalResources: true,
-			dashboardShowRemoteResources: true,
-			remoteHostRefreshIntervalSeconds: 30,
-		},
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.language = 'en-US';
+		preferences.dashboardShowLocalResources = true;
+		preferences.dashboardShowRemoteResources = true;
 	});
-	expect(normalizeSettings.ok()).toBeTruthy();
-	const darkAppearance = await context.request.put('/api/v1/appearance', {
-		data: {
-			customUiTheme: JSON.stringify(DASHBOARD_DARK_THEME),
-			windowThemeColor: '#343a40',
-		},
+
+	await updateTestAppearance(context.request, (preferences) => {
+		preferences.customUiTheme = JSON.stringify(DASHBOARD_DARK_THEME);
+		preferences.windowThemeColor = '#343a40';
 	});
-	expect(darkAppearance.ok()).toBeTruthy();
 
 	const systemStatusResponse = await context.request.get('/api/v1/system/status');
 	expect(systemStatusResponse.ok()).toBeTruthy();
-	const systemStatus = (await systemStatusResponse.json()) as {
-		cpuPercent: number;
-		memPercent: number;
-		memUsed: number;
-		memTotal: number;
-		diskPercent?: number;
-	};
+	const systemStatus = readLocalSystemStatus(await systemStatusResponse.json());
 	expect(systemStatus.cpuPercent).toBeGreaterThanOrEqual(0);
 	expect(systemStatus.cpuPercent).toBeLessThanOrEqual(100);
 	expect(systemStatus.memPercent).toBeGreaterThanOrEqual(0);
@@ -585,6 +590,7 @@ test('dashboard filters connections and persists tag and sort preferences across
 
 	const primedSshResourcesResponse = await context.request.get('/api/v1/system/ssh-resources');
 	expect(primedSshResourcesResponse.ok()).toBeTruthy();
+	readSshResourceStatusList(await primedSshResourcesResponse.json());
 
 	const alphaTagId = await createTag(context.request, ALPHA_TAG);
 	const betaTagId = await createTag(context.request, BETA_TAG);
@@ -630,7 +636,13 @@ test('dashboard filters connections and persists tag and sort preferences across
 			await expect(alphaRow).toBeVisible();
 			await expect(betaRow).toBeHidden();
 
-			expect((await context.request.delete(`/api/v1/tags/${emptyTagId}`)).ok()).toBeTruthy();
+			expect(
+				(
+					await context.request.delete(`/api/v1/targets/tags/${emptyTagId}`, {
+						headers: { Origin: E2E_URLS.frontendOrigin },
+					})
+				).ok(),
+			).toBeTruthy();
 			await page.reload();
 			await expect(tagFilter(page)).toHaveAttribute('data-value', String(alphaTagId));
 			await expect(alphaRow).toBeVisible();
@@ -824,37 +836,31 @@ test('dashboard filters connections and persists tag and sort preferences across
 		);
 
 		await step('local and remote dashboard resource sections honor their independent settings', async () => {
-			const remoteOnly = await context.request.put('/api/v1/settings', {
-				data: {
-					dashboardShowLocalResources: false,
-					dashboardShowRemoteResources: true,
-				},
+			await updateUiPreferences(context.request, (preferences) => {
+				preferences.dashboardShowLocalResources = false;
+				preferences.dashboardShowRemoteResources = true;
 			});
-			expect(remoteOnly.ok()).toBeTruthy();
+
 			await page.reload({ waitUntil: 'domcontentloaded' });
 			await expect(resourcePanel(page)).toBeVisible();
 			await expect(page.locator('.dashboard-overview-local')).toHaveCount(0);
 			await expect(page.locator('article.dashboard-host-card')).toHaveCount(3, { timeout: 20_000 });
 
-			const localOnly = await context.request.put('/api/v1/settings', {
-				data: {
-					dashboardShowLocalResources: true,
-					dashboardShowRemoteResources: false,
-				},
+			await updateUiPreferences(context.request, (preferences) => {
+				preferences.dashboardShowLocalResources = true;
+				preferences.dashboardShowRemoteResources = false;
 			});
-			expect(localOnly.ok()).toBeTruthy();
+
 			await page.reload({ waitUntil: 'domcontentloaded' });
 			await expect(page.locator('.dashboard-overview-local')).toBeVisible();
 			await expect(page.locator('article.dashboard-host-card')).toHaveCount(0);
 			await expect(resourcePanel(page)).toHaveCount(0);
 
-			const restoreBoth = await context.request.put('/api/v1/settings', {
-				data: {
-					dashboardShowLocalResources: true,
-					dashboardShowRemoteResources: true,
-				},
+			await updateUiPreferences(context.request, (preferences) => {
+				preferences.dashboardShowLocalResources = true;
+				preferences.dashboardShowRemoteResources = true;
 			});
-			expect(restoreBoth.ok()).toBeTruthy();
+
 			await page.reload({ waitUntil: 'domcontentloaded' });
 		});
 
@@ -865,21 +871,15 @@ test('dashboard filters connections and persists tag and sort preferences across
 		});
 	} finally {
 		await cleanupDashboardFixtures(context.request);
-		const restoreSettings = await context.request.put('/api/v1/settings', {
-			data: {
-				language: originalSettings.language ?? 'en-US',
-				dashboardShowLocalResources: originalSettings.dashboardShowLocalResources ?? true,
-				dashboardShowRemoteResources: originalSettings.dashboardShowRemoteResources ?? true,
-				remoteHostRefreshIntervalSeconds: originalSettings.remoteHostRefreshIntervalSeconds ?? 30,
-			},
+		await updateUiPreferences(context.request, (preferences) => {
+			preferences.language = originalSettings.language ?? 'en-US';
+			preferences.dashboardShowLocalResources = originalSettings.dashboardShowLocalResources ?? true;
+			preferences.dashboardShowRemoteResources = originalSettings.dashboardShowRemoteResources ?? true;
 		});
-		expect(restoreSettings.ok()).toBeTruthy();
-		const restoreAppearance = await context.request.put('/api/v1/appearance', {
-			data: {
-				customUiTheme: originalAppearance.customUiTheme,
-				windowThemeColor: originalAppearance.windowThemeColor,
-			},
+
+		await updateTestAppearance(context.request, (preferences) => {
+			preferences.customUiTheme = originalAppearance.customUiTheme;
+			preferences.windowThemeColor = originalAppearance.windowThemeColor;
 		});
-		expect(restoreAppearance.ok()).toBeTruthy();
 	}
 });

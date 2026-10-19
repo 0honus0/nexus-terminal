@@ -1,37 +1,25 @@
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
-import { E2E_SSH, configureSshE2eSettings } from '../../support/ssh';
+import { createTestSshConnection, trustTestSshHostKey, configureSshE2eSettings } from '../../support/ssh';
 import { slowStep, step } from '../../support/steps';
+import { E2E_URLS } from '../../support/test-env';
+import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
+import { readConnectionTestResponse } from '../../../../packages/shared/src/targets/connections/test-codec';
+const headers = { Origin: E2E_URLS.frontendOrigin };
 
 const ORIGINAL_NAME = 'E2E SSH Lifecycle';
 const EDITED_NAME = 'E2E SSH Lifecycle Edited';
 
 async function cleanupConnections(request: APIRequestContext): Promise<void> {
-	const response = await request.get('/api/v1/connections');
+	const response = await request.get('/api/v1/targets/connections');
 	expect(response.ok()).toBeTruthy();
-	const items = (await response.json()) as Array<{ id: number; name?: string }>;
+	const items = readConnectionList(readConnectionList(await response.json()));
 	for (const item of items.filter(
 		(connection) => connection.name === ORIGINAL_NAME || connection.name === EDITED_NAME,
 	)) {
-		const remove = await request.delete(`/api/v1/connections/${item.id}`);
+		const remove = await request.delete(`/api/v1/targets/connections/${item.id}`, { headers });
 		expect(remove.ok()).toBeTruthy();
 	}
-}
-
-async function createConnection(request: APIRequestContext): Promise<number> {
-	const response = await request.post('/api/v1/connections', {
-		data: {
-			name: ORIGINAL_NAME,
-			type: 'SSH',
-			host: E2E_SSH.host,
-			port: E2E_SSH.port,
-			username: E2E_SSH.username,
-			authMethod: 'password',
-			password: E2E_SSH.password,
-		},
-	});
-	expect(response.status()).toBe(201);
-	return ((await response.json()) as { connection: { id: number } }).connection.id;
 }
 
 test('saved SSH connection can be tested, renamed without re-entering password, retested, and deleted through UI', async ({
@@ -40,8 +28,9 @@ test('saved SSH connection can be tested, renamed without re-entering password, 
 }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
+	await trustTestSshHostKey(context.request);
 	await cleanupConnections(context.request);
-	const connectionId = await createConnection(context.request);
+	const connectionId = await createTestSshConnection(context.request, ORIGINAL_NAME);
 	await page.goto('/connections');
 
 	const row = page
@@ -52,13 +41,13 @@ test('saved SSH connection can be tested, renamed without re-entering password, 
 	await slowStep('saved connection test reaches the real SSH server', async () => {
 		const responsePromise = page.waitForResponse(
 			(response) =>
-				response.url().includes(`/api/v1/connections/${connectionId}/test`) &&
+				response.url().includes(`/api/v1/targets/connections/${connectionId}/test`) &&
 				response.request().method() === 'POST',
 		);
 		await row.getByRole('button', { name: 'Test', exact: true }).click();
 		const response = await responsePromise;
 		expect(response.ok()).toBeTruthy();
-		await expect(response.json()).resolves.toMatchObject({ success: true });
+		expect(readConnectionTestResponse(await response.json()).status).toBe('ok');
 	});
 
 	await step('edit changes only the name and leaves the stored password untouched', async () => {
@@ -71,7 +60,8 @@ test('saved SSH connection can be tested, renamed without re-entering password, 
 
 		const updatePromise = page.waitForResponse(
 			(response) =>
-				response.url().endsWith(`/api/v1/connections/${connectionId}`) && response.request().method() === 'PUT',
+				response.url().endsWith(`/api/v1/targets/connections/${connectionId}`) &&
+				response.request().method() === 'PUT',
 		);
 		await form.getByRole('button', { name: 'Confirm Edit', exact: true }).click();
 		const update = await updatePromise;
@@ -83,13 +73,13 @@ test('saved SSH connection can be tested, renamed without re-entering password, 
 	await slowStep('connection still authenticates after the name-only edit', async () => {
 		const responsePromise = page.waitForResponse(
 			(response) =>
-				response.url().includes(`/api/v1/connections/${connectionId}/test`) &&
+				response.url().includes(`/api/v1/targets/connections/${connectionId}/test`) &&
 				response.request().method() === 'POST',
 		);
 		await row.getByRole('button', { name: 'Test', exact: true }).click();
 		const response = await responsePromise;
 		expect(response.ok()).toBeTruthy();
-		await expect(response.json()).resolves.toMatchObject({ success: true });
+		expect(readConnectionTestResponse(await response.json()).status).toBe('ok');
 	});
 
 	await step('delete from the edit form removes the connection from UI and persistence', async () => {
@@ -103,9 +93,9 @@ test('saved SSH connection can be tested, renamed without re-entering password, 
 
 		await expect
 			.poll(async () => {
-				const response = await context.request.get('/api/v1/connections');
+				const response = await context.request.get('/api/v1/targets/connections');
 				if (!response.ok()) return true;
-				const items = (await response.json()) as Array<{ id: number }>;
+				const items = readConnectionList(readConnectionList(await response.json()));
 				return items.some((item) => item.id === connectionId);
 			})
 			.toBeFalsy();

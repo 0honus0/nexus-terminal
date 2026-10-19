@@ -1,5 +1,7 @@
+import { listTestCommands, cleanupTestCommand } from '../../support/commands';
+import { E2E_URLS } from '../../support/test-env';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import {
 	configureSshE2eSettings,
 	connectTestSshFromConnectionsPage,
@@ -11,15 +13,13 @@ import { step } from '../../support/steps';
 const QUICK_COMMAND_NAME = 'E2E UI Quick Command';
 
 async function recreateQuickCommand(request: APIRequestContext): Promise<number> {
-	const list = await request.get('/api/v1/quick-commands');
-	expect(list.ok()).toBeTruthy();
-	const existing = (await list.json()) as Array<{ id: number; name?: string }>;
+	const existing = await listTestCommands(request);
 	for (const command of existing.filter((item) => item.name === QUICK_COMMAND_NAME)) {
-		const remove = await request.delete(`/api/v1/quick-commands/${command.id}`);
-		expect(remove.ok()).toBeTruthy();
+		await cleanupTestCommand(request, command.id);
 	}
 
 	const create = await request.post('/api/v1/quick-commands', {
+		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: {
 			name: QUICK_COMMAND_NAME,
 			command: "printf 'QUICK_UI_E2E\\n'",
@@ -39,14 +39,14 @@ function markerCount(text: string, marker: string): number {
 test('common terminal tools work through the real SSH session', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	const settings = await context.request.put('/api/v1/settings', {
-		data: { commandInputSyncTarget: 'none' },
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.commandInputSyncTarget = 'none';
 	});
-	expect(settings.ok()).toBeTruthy();
-	const tagVisibility = await context.request.put('/api/v1/settings', {
-		data: { showQuickCommandTags: false },
+
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.showQuickCommandTags = false;
 	});
-	expect(tagVisibility.ok()).toBeTruthy();
+
 	await resetTestSshFilesystem();
 	const quickCommandId = await recreateQuickCommand(context.request);
 	const connectionId = await ensureTestSshConnection(context.request);

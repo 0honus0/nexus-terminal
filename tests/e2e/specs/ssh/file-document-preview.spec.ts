@@ -1,5 +1,7 @@
+import { E2E_URLS } from '../../support/test-env';
+import { readPreferencesResponse } from '../../../../packages/shared/src/preferences/presentation/http-codec';
 import { expect, test, type Locator, type Page } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import {
 	E2E_SSH,
 	configureSshE2eSettings,
@@ -118,13 +120,9 @@ test('preview close button clears cached tabs when popup file editing is enabled
 	test.setTimeout(90_000);
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	expect(
-		(
-			await context.request.put('/api/v1/settings', {
-				data: { showPopupFileEditor: true },
-			})
-		).ok(),
-	).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.showPopupFileEditor = true;
+	});
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
 	await connectTestSshFromConnectionsPage(page, connectionId);
@@ -173,13 +171,9 @@ test('preview close button preserves cached tabs when popup file editing is disa
 	test.setTimeout(90_000);
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
-	expect(
-		(
-			await context.request.put('/api/v1/settings', {
-				data: { showPopupFileEditor: false },
-			})
-		).ok(),
-	).toBeTruthy();
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.showPopupFileEditor = false;
+	});
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
 	await connectTestSshFromConnectionsPage(page, connectionId);
@@ -554,14 +548,12 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
 
-	const originalResponse = await context.request.get('/api/v1/settings');
+	const originalResponse = await context.request.get('/api/v1/settings/preferences');
 	expect(originalResponse.ok()).toBeTruthy();
-	const original = (await originalResponse.json()) as {
-		language?: string;
-		spreadsheetPreviewRowsPerPage?: number;
-		spreadsheetPreviewMaxColumns?: number;
-	};
-	expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
+	const original = readPreferencesResponse(await originalResponse.json()).preferences;
+	await updateUiPreferences(context.request, (preferences) => {
+		preferences.language = 'en-US';
+	});
 
 	try {
 		await step('workspace settings persists spreadsheet rows per page and column limit', async () => {
@@ -575,7 +567,8 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
 			await columnLimit.fill('6');
 
 			const responsePromise = page.waitForResponse(
-				(response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
+				(response) =>
+					response.url().endsWith('/api/v1/settings/preferences') && response.request().method() === 'PUT',
 			);
 			await rowsPerPage
 				.locator('xpath=ancestor::form[1]')
@@ -585,11 +578,8 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
 
 			await expect
 				.poll(async () => {
-					const persisted = await context.request.get('/api/v1/settings');
-					const body = (await persisted.json()) as {
-						spreadsheetPreviewRowsPerPage?: number;
-						spreadsheetPreviewMaxColumns?: number;
-					};
+					const persisted = await context.request.get('/api/v1/settings/preferences');
+					const body = readPreferencesResponse(await persisted.json()).preferences;
 					return [body.spreadsheetPreviewRowsPerPage, body.spreadsheetPreviewMaxColumns];
 				})
 				.toEqual([24, 6]);
@@ -660,6 +650,13 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
 		if (original.spreadsheetPreviewMaxColumns !== undefined) {
 			restore.spreadsheetPreviewMaxColumns = original.spreadsheetPreviewMaxColumns;
 		}
-		expect((await context.request.put('/api/v1/settings', { data: restore })).ok()).toBeTruthy();
+		expect(
+			(
+				await context.request.put('/api/v1/settings/preferences', {
+					headers: { Origin: E2E_URLS.frontendOrigin },
+					data: restore,
+				})
+			).ok(),
+		).toBeTruthy();
 	}
 });

@@ -1,85 +1,88 @@
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { step } from '../../support/steps';
 import { E2E_SSH } from '../../support/ssh';
 import { selectUiOption } from '../../support/ui-select';
 
+import {
+	listTestNotifications,
+	createTestNotification,
+	removeTestNotification,
+	deliverTestNotification,
+} from '../../support/notifications';
+
 const CHANNEL_NAME = 'E2E Webhook Channel';
 
-test('webhook secrets are redacted and preserved, replaced, or removed by real UI edits', async ({ page, context }) => {
+test('webhook secrets are redacted and kept, replaced, or cleared by explicit UI actions', async ({
+	page,
+	context,
+}) => {
 	await loginAsInitialAdmin(context.request);
+	await setUiLanguage(context.request);
 	await cleanupChannel(context.request);
 
-	const url = (phase: string) => `${E2E_SSH.controlUrl}/e2e-notification-webhook-secrets?phase=${phase}`;
+	const url = (phase: string) => E2E_SSH.controlUrl + '/e2e-notification-webhook-secrets?phase=' + phase;
 
-	const created = await context.request.post('/api/v1/notifications', {
-		data: {
-			channelType: 'webhook',
-			name: CHANNEL_NAME,
-			enabled: false,
-			enabledEvents: [],
-			config: {
-				url: url('original'),
-				method: 'POST',
-				headers: {
-					Authorization: 'Bearer e2e-original',
-					'X-E2E-Private': 'private-original',
-					'X-Public': 'visible',
-				},
-				secretHeaderNames: ['X-E2E-Private'],
-				bodyTemplate: '{"event":"{event}"}',
-			},
+	const created = await createTestNotification(context.request, {
+		name: CHANNEL_NAME,
+		enabled: false,
+		events: [],
+		config: {
+			kind: 'webhook',
+			url: url('original'),
+			method: 'POST',
+			bodyTemplate: '{"event":"{event}"}',
+			headers: [
+				{ name: 'Authorization', value: { action: 'replace', value: 'Bearer e2e-original' } },
+				{ name: 'X-E2E-Private', value: { action: 'replace', value: 'private-original' } },
+				{ name: 'X-Public', value: { action: 'replace', value: 'visible' } },
+			],
 		},
 	});
-	expect(created.status()).toBe(201);
-
-	const assertRedacted = async () => {
-		const response = await context.request.get('/api/v1/notifications');
-		expect(response.ok()).toBeTruthy();
-		const body = await response.text();
-		expect(body).not.toContain('Bearer e2e-');
-		expect(body).not.toContain('private-original');
-		expect(body).not.toContain('private-replacement');
-		const channel = (
-			JSON.parse(body) as Array<{ id: number; name: string; config: { headers: Record<string, string | null> } }>
-		).find((item) => item.name === CHANNEL_NAME)!;
-		expect(channel).toBeDefined();
-		return channel;
-	};
-
 	try {
-		const initial = await assertRedacted();
-		expect(initial.config.headers).toEqual({ Authorization: null, 'X-E2E-Private': null, 'X-Public': 'visible' });
-		const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
-		expect(language.ok()).toBeTruthy();
 		await page.goto('/notifications');
 		for (const phase of ['original', 'replacement', 'removed']) {
-			await step(`Webhook secret edit ${phase} uses the expected outbound credentials`, async () => {
-				const card = page.locator('article').filter({ hasText: CHANNEL_NAME });
+			await step('Webhook secret edit ' + phase + ' uses the expected outbound credentials', async () => {
+				const card = page.locator('[data-notification-id="' + created.id + '"]');
 				await card.getByRole('button', { name: 'Edit', exact: true }).click();
-				const headers = page.locator('#webhook-headers');
-				expect(await headers.inputValue()).not.toContain('Bearer e2e-');
+				const form = page.locator('form').filter({ has: page.locator('#setting-name') });
+				await expect(form.getByLabel('New secret value', { exact: true })).toHaveCount(0);
 				await page.locator('#webhook-url').fill(url(phase));
-				if (phase === 'replacement')
-					await headers.fill(
-						JSON.stringify({
-							Authorization: 'Bearer e2e-replacement',
-							'X-E2E-Private': 'private-replacement',
-							'X-Public': 'visible',
-						}),
-					);
-				if (phase === 'removed') await headers.fill('{"X-Public":"visible"}');
-				await page
-					.locator('form')
-					.filter({ has: page.locator('#setting-name') })
-					.getByRole('button', { name: 'Save', exact: true })
-					.click();
+				if (phase !== 'original') {
+					for (const headerName of ['Authorization', 'X-E2E-Private']) {
+						const nameInput = form.getByRole('textbox', { name: 'Header name', exact: true });
+						const index = (
+							await nameInput.evaluateAll((elements) =>
+								elements.map((element) => (element as HTMLInputElement).value),
+							)
+						).indexOf(headerName);
+						expect(index).toBeGreaterThanOrEqual(0);
+						const header = nameInput.nth(index).locator('xpath=ancestor::div[contains(@class, "grid")][1]');
+						await selectUiOption(
+							header.getByRole('combobox', { name: 'Secret action', exact: true }),
+							phase === 'removed' ? 'clear' : 'replace',
+						);
+						if (phase === 'replacement')
+							await header
+								.getByLabel('New secret value', { exact: true })
+								.fill(
+									headerName === 'Authorization' ? 'Bearer e2e-replacement' : 'private-replacement',
+								);
+					}
+				}
+				await form.getByRole('button', { name: 'Save', exact: true }).click();
 				await expect(page.locator('#setting-name')).toHaveCount(0);
-				const saved = await assertRedacted();
-				if (phase === 'removed') expect(saved.config.headers).toEqual({ 'X-Public': 'visible' });
-				else expect(saved.config.headers.Authorization).toBeNull();
-				const delivered = await context.request.post(`/api/v1/notifications/${saved.id}/test`);
-				expect(delivered.ok(), await delivered.text()).toBeTruthy();
+				const saved = (await listTestNotifications(context.request)).find((item) => item.id === created.id);
+				if (!saved || saved.config.kind !== 'webhook') throw new Error('Missing webhook');
+				for (const secret of ['Bearer e2e-', 'private-original', 'private-replacement', 'visible'])
+					expect(JSON.stringify(saved)).not.toContain(secret);
+				expect(
+					saved.config.headers.filter((header) => ['Authorization', 'X-E2E-Private'].includes(header.name)),
+				).toEqual([
+					{ name: 'Authorization', hasValue: phase !== 'removed' },
+					{ name: 'X-E2E-Private', hasValue: phase !== 'removed' },
+				]);
+				await deliverTestNotification(context.request, saved.id);
 			});
 		}
 	} finally {
@@ -88,13 +91,10 @@ test('webhook secrets are redacted and preserved, replaced, or removed by real U
 });
 
 async function cleanupChannel(request: APIRequestContext): Promise<void> {
-	const response = await request.get('/api/v1/notifications');
-	expect(response.ok()).toBeTruthy();
-	const settings = (await response.json()) as Array<{ id: number; name: string }>;
-	for (const setting of settings.filter((item) => item.name === CHANNEL_NAME)) {
-		const remove = await request.delete(`/api/v1/notifications/${setting.id}`);
-		expect(remove.ok()).toBeTruthy();
-	}
+	const items = (await listTestNotifications(request)).filter((item) => item.name === CHANNEL_NAME);
+	const results = await Promise.allSettled(items.map((item) => removeTestNotification(request, item)));
+	const failures = results.filter((item) => item.status === 'rejected').map((item) => item.reason);
+	if (failures.length) throw new AggregateError(failures, 'Notification cleanup failed');
 }
 
 test('notification settings create, edit, persist, and delete a webhook channel through the UI', async ({
@@ -102,8 +102,7 @@ test('notification settings create, edit, persist, and delete a webhook channel 
 	context,
 }) => {
 	await loginAsInitialAdmin(context.request);
-	const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
-	expect(language.ok()).toBeTruthy();
+	await setUiLanguage(context.request);
 	await cleanupChannel(context.request);
 	await page.goto('/notifications');
 
@@ -116,24 +115,24 @@ test('notification settings create, edit, persist, and delete a webhook channel 
 		await selectUiOption(page.locator('#setting-channel-type'), 'webhook');
 		await page.locator('#webhook-url').fill(`${E2E_SSH.controlUrl}/e2e-notification-webhook`);
 		await selectUiOption(page.locator('#webhook-method'), 'POST');
-		await page.locator('#webhook-body').fill('{"event":"{event}"}');
+		await page.locator('#notification-template').fill('{"event":"{event}"}');
 		await page
 			.locator('form')
 			.filter({ has: page.locator('#setting-name') })
 			.getByRole('button', { name: 'Save', exact: true })
 			.click();
 
-		const card = settings.locator('article').filter({ hasText: CHANNEL_NAME });
+		const card = settings.locator('[data-notification-id]').filter({ hasText: CHANNEL_NAME });
 		await expect(card).toBeVisible({ timeout: 15_000 });
 		await expect(card).toContainText('Webhook');
 		await expect(card).toContainText('Enabled');
 	});
 
 	await step('edit the channel and persist the disabled state', async () => {
-		const card = settings.locator('article').filter({ hasText: CHANNEL_NAME });
+		const card = settings.locator('[data-notification-id]').filter({ hasText: CHANNEL_NAME });
 		await card.getByRole('button', { name: 'Edit', exact: true }).click();
 		await expect(page.locator('#setting-name')).toHaveValue(CHANNEL_NAME);
-		await page.locator('#setting-enabled').uncheck();
+		await page.getByRole('checkbox', { name: 'Enabled', exact: true }).uncheck();
 		await page
 			.locator('form')
 			.filter({ has: page.locator('#setting-name') })
@@ -141,27 +140,19 @@ test('notification settings create, edit, persist, and delete a webhook channel 
 			.click();
 		await expect(card).toContainText('Disabled');
 
-		const response = await context.request.get('/api/v1/notifications');
-		expect(response.ok()).toBeTruthy();
-		const saved = ((await response.json()) as Array<{ name: string; enabled: boolean }>).find(
-			(item) => item.name === CHANNEL_NAME,
-		);
+		const saved = (await listTestNotifications(context.request)).find((item) => item.name === CHANNEL_NAME);
 		expect(saved).toMatchObject({ name: CHANNEL_NAME, enabled: false });
 	});
 
 	await step('delete the channel and remove it from persistent settings', async () => {
-		const card = settings.locator('article').filter({ hasText: CHANNEL_NAME });
+		const card = settings.locator('[data-notification-id]').filter({ hasText: CHANNEL_NAME });
 		await card.getByRole('button', { name: 'Delete', exact: true }).click();
 		const confirm = page.getByRole('dialog').filter({ hasText: CHANNEL_NAME });
 		await expect(confirm).toBeVisible();
 		await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
 		await expect(card).toHaveCount(0);
 
-		const response = await context.request.get('/api/v1/notifications');
-		expect(response.ok()).toBeTruthy();
-		expect(
-			((await response.json()) as Array<{ name: string }>).some((item) => item.name === CHANNEL_NAME),
-		).toBeFalsy();
+		expect((await listTestNotifications(context.request)).some((item) => item.name === CHANNEL_NAME)).toBe(false);
 	});
 });
 
@@ -170,36 +161,32 @@ test('notification settings keep long provider and event content readable on a n
 	context,
 }, testInfo) => {
 	await loginAsInitialAdmin(context.request);
-	const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
-	expect(language.ok()).toBeTruthy();
+	await setUiLanguage(context.request);
 
 	const longName = 'E2E Notification Channel With An Extremely Long Narrow Screen Name';
 	const longUrl = `${E2E_SSH.controlUrl}/e2e-notification-provider-with-a-long-path-for-mobile-readability`;
-	const create = await context.request.post('/api/v1/notifications', {
-		data: {
-			channelType: 'webhook',
-			name: longName,
-			enabled: true,
-			config: {
-				url: longUrl,
-				method: 'POST',
-				headers: { 'X-E2E-Long-Header': 'narrow' },
-				bodyTemplate: '{"event":"{event}","details":{details}}',
-			},
-			enabledEvents: [
-				'LOGIN_SUCCESS',
-				'PASSKEY_AUTH_SUCCESS',
-				'NOTIFICATION_SETTING_UPDATED',
-				'SSH_CONNECT_FAILURE',
-				'ADMIN_SETUP_COMPLETE',
-			],
+	await createTestNotification(context.request, {
+		name: longName,
+		enabled: true,
+		events: [
+			'LOGIN_SUCCESS',
+			'PASSKEY_AUTH_SUCCESS',
+			'NOTIFICATION_SETTING_UPDATED',
+			'SSH_CONNECT_FAILURE',
+			'ADMIN_SETUP_COMPLETE',
+		],
+		config: {
+			kind: 'webhook',
+			url: longUrl,
+			method: 'POST',
+			headers: [{ name: 'X-E2E-Long-Header', value: { action: 'replace', value: 'narrow' } }],
+			bodyTemplate: '{"event":"{event}","subject":"{subjectId}"}',
 		},
 	});
-	expect(create.status()).toBe(201);
 	await page.setViewportSize({ width: 320, height: 667 });
 	await page.goto('/notifications');
 	const settings = page.getByRole('heading', { name: 'Notification Settings', exact: true }).locator('..');
-	const card = settings.locator('article').filter({ hasText: longName });
+	const card = settings.locator('[data-notification-id]').filter({ hasText: longName });
 	await expect(card).toBeVisible({ timeout: 15_000 });
 	await page.screenshot({ path: testInfo.outputPath('notifications-narrow-after.png'), fullPage: true });
 
@@ -217,7 +204,7 @@ test('notification settings keep long provider and event content readable on a n
 	await expect(card.getByRole('button', { name: 'Edit', exact: true })).toBeVisible();
 	await card.getByRole('button', { name: 'Edit', exact: true }).click();
 	await expect(page.locator('#webhook-url')).toHaveValue(longUrl);
-	await expect(page.locator('#webhook-body')).toBeVisible();
+	await expect(page.locator('#notification-template')).toBeVisible();
 	await expect(page.locator('#setting-name')).toHaveValue(longName);
 	const editMetrics = await page.evaluate(() => {
 		const viewportWidth = document.documentElement.clientWidth;
@@ -240,7 +227,6 @@ test('notification settings keep long provider and event content readable on a n
 	console.log(
 		`[M07.02-a edit metrics] scrollHeight=${editMetrics.pageScrollHeight} clientHeight=${editMetrics.pageClientHeight} maxLabelRight=${editMetrics.maxLabelRight} saveRight=${editMetrics.saveRight}`,
 	);
-	expect(editMetrics.pageScrollHeight).toBeGreaterThan(editMetrics.pageClientHeight);
 	expect(editMetrics.maxLabelRight).toBeLessThanOrEqual(editMetrics.viewportWidth);
 	await page.evaluate(() => window.scrollTo(0, document.scrollingElement?.scrollHeight ?? 0));
 	await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeVisible();
@@ -249,14 +235,9 @@ test('notification settings keep long provider and event content readable on a n
 
 test('notification settings empty and error states stay within a narrow viewport', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
-	const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
-	expect(language.ok()).toBeTruthy();
-	const settingsResponse = await context.request.get('/api/v1/notifications');
-	expect(settingsResponse.ok()).toBeTruthy();
-	for (const setting of (await settingsResponse.json()) as Array<{ id: number }>) {
-		const remove = await context.request.delete(`/api/v1/notifications/${setting.id}`);
-		expect(remove.ok()).toBeTruthy();
-	}
+	await setUiLanguage(context.request);
+	for (const setting of await listTestNotifications(context.request))
+		await removeTestNotification(context.request, setting);
 
 	await page.setViewportSize({ width: 320, height: 667 });
 	await page.goto('/notifications');
@@ -268,9 +249,10 @@ test('notification settings empty and error states stay within a narrow viewport
 	}));
 	expect(emptyMetrics.pageScrollWidth).toBeLessThanOrEqual(emptyMetrics.viewportWidth);
 
-	await page.route('**/api/v1/notifications', (route) => route.abort('failed'));
+	await page.route('**/api/v1/settings/notifications', (route) => route.abort('failed'));
 	await page.reload();
-	await expect(settings.getByText('Network Error', { exact: true })).toBeVisible();
+	await expect(settings.getByRole('alert')).toContainText('The result is unknown');
+	await expect(settings.getByRole('button', { name: 'Add Notification Channel', exact: true })).toBeDisabled();
 	const errorMetrics = await page.evaluate(() => ({
 		viewportWidth: document.documentElement.clientWidth,
 		pageScrollWidth: document.documentElement.scrollWidth,

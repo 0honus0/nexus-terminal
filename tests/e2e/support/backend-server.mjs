@@ -40,6 +40,37 @@ let resetting = null;
 let shutdown = null;
 let failed = false;
 
+/**
+ * Keep technical locations and finite codes, never exception messages or arbitrary properties.
+ * @param {unknown} cause
+ * @param {number} depth
+ * @returns {object}
+ */
+function failureEvidence(cause, depth = 0) {
+	if (!(cause instanceof Error)) return { name: 'NonError' };
+	const evidence = {
+		name: cause.name,
+		code:
+			'code' in cause && typeof cause.code === 'string' && /^[a-zA-Z0-9_]{1,80}$/.test(cause.code)
+				? cause.code
+				: undefined,
+		frames: cause.stack
+			?.split('\n')
+			.filter((line) => /^\s+at /.test(line))
+			.slice(0, 6),
+	};
+	if (depth >= 6) return evidence;
+	return {
+		...evidence,
+		causes:
+			cause instanceof AggregateError
+				? cause.errors.slice(0, 12).map((error) => failureEvidence(error, depth + 1))
+				: cause.cause === undefined
+					? []
+					: [failureEvidence(cause.cause, depth + 1)],
+	};
+}
+
 async function closeApplication() {
 	if (application) {
 		// Failed cleanup keeps the owner and its files; a new baseline must not hide it.
@@ -166,7 +197,7 @@ async function resetMode(request) {
 const control = createServer((request, response) => {
 	void handleControl(request, response).catch((cause) => {
 		failed = true;
-		process.stderr.write('E2E baseline failed: ' + (cause instanceof Error ? cause.name : 'unknown') + '\n');
+		process.stderr.write('E2E baseline failed: ' + JSON.stringify(failureEvidence(cause)) + '\n');
 		if (!response.headersSent) response.writeHead(500, { 'Content-Type': 'application/json' });
 		response.end(JSON.stringify({ code: 'baseline_failed' }));
 	});
@@ -241,7 +272,7 @@ function stop() {
 function handleSignal() {
 	void stop().catch((cause) => {
 		process.exitCode = 1;
-		process.stderr.write('E2E shutdown failed: ' + (cause instanceof Error ? cause.name : 'unknown') + '\n');
+		process.stderr.write('E2E shutdown failed: ' + JSON.stringify(failureEvidence(cause)) + '\n');
 	});
 }
 

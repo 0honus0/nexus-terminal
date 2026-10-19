@@ -6,14 +6,14 @@ B9 源码审核已收口：当时719/719完整读审，B10/F1修补后当前索�
 
 Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end coverage.
 
-**Scope and evidence:** The current Playwright launcher targets `packages/backend`. Its fixtures and assertions are still being migrated; changing the launcher is not a behavior PASS. Historical product runs against the removed legacy Backend remain evidence only for their recorded baseline. PASS statements apply only to their recorded version and executed cases. Historical Runner/Workspace evidence does not define current development tasks or acceptance of the new backend. Current work is owned by the [implementation plan](../后端重构下一阶段实施方案.md); this documentation review adds no new code-check or behavior PASS.
+**Scope and evidence:** The current Playwright launcher targets `packages/backend`. The fourth remote run failed all eight shards; this batch migrates the failing consumers and fixes their shared causes. Current source review and static checks are not a behavior PASS. Historical product runs against the removed legacy Backend remain evidence only for their recorded baseline. PASS statements apply only to their recorded version and executed cases. Historical Runner/Workspace evidence does not define current development tasks or acceptance of the new backend. Current work is owned by the [implementation plan](../后端重构下一阶段实施方案.md); this documentation review adds no new code-check or behavior PASS.
 
 ### 当前远程 E2E 准备
 
 - Playwright 构建并启动当前 Backend；独立环回控制端口默认为29098，支持`NEXUS_E2E_BACKEND_CONTROL_PORT`覆盖。随机控制token只供Node夹具使用，拒绝带Origin的控制请求；控制入口不进入产品HTTP。
 - 每个用例先等待原App关闭，再创建独立目录、随机密钥和当前v1数据库；seed模式通过真实setup初始化管理员，empty不初始化。原实例关闭失败则阻断后续重置，保留目录；丢失重置回执不自动重试。restart保持原数据库及密钥，以实际HTTP验证持久状态和凭据解密。
-- 已移除旧数据库种子、复制/生成脚本及seed命令；历史升级用例改为当前初始化和重启持久化。Runner镜像安装及指纹包含当前backend和shared；CI构建实际被测包。Docker/Compose源码已切换当前Backend，尚未部署或进行镜像行为验证。
-- 已迁移event-catchup、provider、performance-settings、configuration-hints及database-migrations的源码与Shared解码；具体覆盖和余项归实施方案V1。尚未迁移的旧用例继续保留，不能因新入口可编译就启动整套回归或宣称V1完成。
+- 已移除旧数据库种子、复制/生成脚本及seed命令；历史升级用例改为当前初始化和重启持久化。Runner镜像安装及指纹包含当前backend和shared，不再复制 Protocol；CI构建实际被测包。第四轮远程质量门禁与 Docker deployment smoke 已通过，八组 Playwright 失败，不沿用烟雾结果替代完整功能验收。
+- 失败清单中的 Agent、HTTP、UI、Workspace/SSH 与移动端消费者已按当前 Shared 迁移或核对；精确修复、静态结果和外部待验分别见本文第四轮记录与实施方案。D18 下整批复审和门禁完成后统一交付，不以编译通过宣称远程验收完成。
 - D17：当前仅源码、类型/语法、构建与格式检查，不执行Playwright、浏览器或本地行为专项。迁移完成后再按授权运行远程Actions；历史PASS不代表本轮用例已通过。
 
 ### B10 重构后端执行入口（本机范围收口）
@@ -158,7 +158,7 @@ The A08 case deliberately proposes a real SSH file-writing command in a plan-onl
 
 Functional task regressions configure their mock model Provider through the frontend settings dialog and send tasks through the Agent Composer. The mock returns model responses/tool proposals only; execution, permissions and durable settlement remain real product behavior. Read-only HTTP/file/process checks provide independent evidence, not an alternate API-only task entry. Fault injection may alter a frontend request revision to exercise actual stale-state rejection. Tests do not attach to an external browser or dispatch CDP commands; the isolated Browser fixture is a product integration endpoint, not a frontend test driver.
 
-Plugin and SSH ACP task regressions reuse `fixtures/agent/task-ui.ts` for frontend Provider setup, conversation creation and Composer submission; Run definitions are independently checked for the selected model, SSH IDs and execution/approval modes. Root cancellation, goal changes and streaming interrupts use Composer commands. Explicit stale/late protocol requests and management cleanup remain separate API assertions. Touch launcher regressions dispatch touch Pointer events for drag state and use Playwright touchscreen input to open the Hub; they do not establish native touchscreen scroll arbitration during a drag.
+Current plugin tasks reuse `fixtures/agent/native-task.ts` for actual App selection, native thread/Run submission, strict Shared decoding and explicitly named tool approvals. SSH ACP additionally exercises the current integration settings UI and independent inner permissions. Goal/Plan, interrupt and legacy task-ui consumers are retired under D15; current follow-ups create explicit new Runs. Stale/late protocol requests, original versions/hashes and resource cleanup remain separate assertions. Touch launcher regressions dispatch touch Pointer events for drag state and use Playwright touchscreen input to open the Hub; they do not establish native touchscreen scroll arbitration during a drag.
 
 The B01 case reproduces a real HTTP 500 with a request ID and matching server stack, patches only the production schema lookup, then runs the unchanged health/catalog/404 checks. The test independently compares protected file bytes, reruns HTTP verification and checks that the identified server PID and listener disappear after both failed and successful checks. Provider scripting verifies the production tool chain, not autonomous diagnosis.
 
@@ -1259,3 +1259,75 @@ Node22.16.0 / pnpm11.26.0。Shared check/build、Backend-next check/build、Fron
 旧用例消费者迁移继续：Auth API改为独立核心设置/个人偏好完整CAS与原子布局、通知UUID及显式秘密意图；Origin场景保留全部正反例，按当前政策拒绝无来源和非配置Host；2FA去除旧实现专属speakeasy加载，按RFC6238在测试侧独立计算真实TOTP，消费Shared安全失败并核对当前401/挑战失效。初始App目录按真实首次默认nexus.terminal核对，语言用例分别核对setup本地语言、未保存默认和显式已保存选择。上述改动未运行本地行为，当前结果不代表这些场景PASS；完整各分片失败仍需后续清理与远程复跑。
 
 第三轮失败日志按完整用例标题去重（重试合并）检出325个失败标题、40个通过标题；第4分片另因旧speakeasy依赖在收集时退出，因此这不是完整套件最终统计。当前补丁两轮复审已完成；根check、Backend build、5份变更spec严格类型检查、全仓format和git diff --check通过。2FA反例排除实际时间窗相邻有效码，避免固定000000偶然命中。未执行本地行为回归，待下一轮远程确认。
+
+### 第四轮远程结果与合批修复（2026-10-19，进行中）
+
+[Actions 39185212927](https://github.com/0honus0/nexus-terminal/actions/runs/39185212927)，基线2505acff：质量门禁和Docker deployment smoke通过，8个Playwright分片均失败。分片1–8失败标题按重试去重分别为33/39/27/67/54/41/73/52；基线重置失败造成的连锁阻断不能计为独立产品缺陷。具体待修范围集中在实施方案，未将整套回归标为通过。按D18收齐全部8组并完成本轮失败修复后才统一推送。
+
+当前未推送修复：SFTP技术Adapter按POSIX字面量接受换行名称，保留NUL/路径分隔及损坏字符拒绝，终端/归档/Agent的独立政策不放宽；SSH夹具显式回应SFTP CHANNEL_CLOSE。WS夹具使用配置的localhost来源；正常Workspace恢复使用Shared解码、资源关联、旋转凭据和显式ACK，故障/丢ACK场景仍使用原始请求。容量拒绝及未知操作改为具名有限错误，未泄露技术正文。Auth/setup/通知/Provider、外观CAS、部分SSH/WS消费者迁移已开始，其余旧Agent/管理用例尚未收口；这些源码变更尚无本轮远程行为PASS。
+
+按用户要求删除旧packages/protocol，清除workspace锁文件importer、CI runner Docker COPY及指纹输入；双端已有Shared消费者，不新增兼容包。历史测试记录中的Protocol路径仅描述当时基线。冻结安装通过（/tmp/nexus-protocol-removal-install.log）；后续静态检查结果单独补记。未运行本地行为/浏览器/E2E，也未触发新的远程运行。
+
+本轮当前静态：删除Protocol后冻结安装、根check、Backend build、所有已变更TS E2E消费者的显式严格类型检查及控制启动器checkJs均exit0；新增正常挂起恢复消费者单独严格类型检查exit0。日志分别为/tmp/nexus-protocol-removal-{install,check,build}.log、/tmp/nexus-fourth-batch-spec-types.log、/tmp/nexus-fourth-launcher-types.log及/tmp/nexus-fourth-suspend-types.log。静态不代表8组失败已修完，未提交、未推送。
+
+第四轮续修（本地静态，尚未推送）：已继续迁移 Targets 的连接导入/创建/非 SSH/批量编辑/凭据及 SSH Key 审计消费者，普通挂起恢复统一使用 ACK 和旋转凭据。新增本批覆盖 11 份管理/HTTP spec 的 36 个场景定义：System Settings 6、CAPTCHA 设置 1、IP 控制 2、通知设置/投递 8、Webhook 秘密契约 10、终端主题 2、HTTP 架构契约 6、Proxy 1。该数字仅表示源码场景数量，不是行为通过数；未执行本地用例收集或行为测试。
+
+核对到的实际语义：个人偏好/核心配置/后端日志分别使用各自 Shared CAS；核心配置与 CAPTCHA 保存后重启生效，IP 黑名单用既有隔离控制面的 restart 验证激活，未放宽产品认证。Webhook 每项 header 使用 keep/replace/clear，公开视图仅有 hasValue；原值不返回，拒绝旧 null 编辑和大小写重复名称。投递请求接受不等于发送成功，按 delivery ID 只读轮询最终 sent/failed/unknown，邮件按现有 USAGE 的纯文本契约验证。主题写入/删除保留原版本和 Origin。WS 初始化失败关闭已开的 socket；关闭超时作为失败保留，不能提前报告清理成功。
+
+本续批定向严格类型检查均 exit 0：`/tmp/nexus-fourth-{settings,ip-settings,webhook,theme,notification-ui,notification,architecture,proxy}-types.log`；一次通知迁移脚本误用 index 方法，在写文件前失败，修正 indexOf 后重新执行并严格检查通过。全体当时已修改 E2E TS 严格检查、根 check、Backend build 分别 exit 0：`/tmp/nexus-fourth-expanded-{types,check,build}.log`；此后新增 architecture/proxy 和 WS 清理变更另做最终类型/格式核对。格式写入 `/tmp/nexus-fourth-expanded-format.log` exit 0。未执行行为、浏览器、故障注入、E2E 或新 Actions。原 8 组尚未全部完成修复，继续按 D18 合批，不将以上静态证据写成整套 PASS。
+
+续批追加 RDP HTTP 3 场景（共 12 份管理/HTTP spec、39 个源码场景定义）：连接导入使用 Shared Targets，票据入口保留现有路径及无请求体约束；WS 夹具使用实际 localhost 来源，不放宽产品 Host/Origin。隔离非管理员种子改用当前临时目录及 access_accounts/password_hash；非管理员 upgrade 拒绝与 owner 票据可继续使用分别验证，未知票据为合法形状的随机值，格式错误拒绝和有效格式票据失效分别判断。定向严格类型检查 `/tmp/nexus-fourth-rdp-types.log` exit 0，仍无行为 PASS。
+
+本续批最终核对：新增及既有变更 E2E TS 全量显式严格类型检查 exit 0（`/tmp/nexus-fourth-continuation-final-types.log`）；CJS/SSH/Backend 控制启动器语法及 diff 检查 exit 0（`/tmp/nexus-fourth-continuation-final-syntax.log`）；全仓格式 exit 0（`/tmp/nexus-fourth-continuation-final-format.log`）。根 check 与 Backend build 的本续批结果仍为前述 expanded 日志，产品源码此后未改。二轮复核修正个人偏好读取断流提示分类、UiInput 包装下的 Header 行定位、Remote Desktop upgrade 的实际 401 拒绝，以及同一管理员不同会话也不能消费原票据；没有放宽产品校验。随后仅补迁移命令历史 UI 的 Shared 分页解码与 localhost 剪贴板授权（原 items.map 失败），定向类型检查 `/tmp/nexus-fourth-history-types.log` exit 0。最终文档及该单文件按相同 Prettier 格式核对；这些静态结论不替代整套远程行为。分支 dev、HEAD 2505acff 保持不变，未提交、未推送、新 Actions 未触发。
+
+第四轮续修追加（源码与静态，未提交）：Agent coverage 的五项已按当前 Shared 迁移，包括一次性硬限制确认、原版本策略、Memory 候选/发布/撤销、签名插件 AppIntent 幂等和升级排空。硬限制用例在协议最大值以内先收紧再恢复，未扩大协议上限。Dashboard 改由真实 UI 建连并在 SPA 内回到看板；最近连接属于内存状态，不用原始 WS 或整页重载代替。审计以安全记录 ID 核对最新事件，偏好读取与 Targets 元数据保持各自 owner。
+
+快捷命令实际缺陷已修正：命令和标签目录独立完整读取，标签失败时可执行已成功读取的命令并显示未分类，管理写入和使用计数保持围栏；只有显式重读且两者成功才解锁。USAGE/Frontend 对应章节已同步。CAPTCHA 登录消费者改为 Shared 配置与真实重启激活，清理允许读取 401 后使用独立认证 owner；公网 test key 的准确 hostname 与自然到期仍未确认，不计外部验收通过。
+
+Host 用例按 D15 迁移对照：
+
+| 原检查目的                               | 当前检查入口与边界                                                                                                                           |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| 启动器、拖动、停靠、触控、窗口缩放和跨页 | 显式创建真实 App，保留几何交互；窗口持久化使用当前用户 v2 命名空间，核对损坏记录拒绝与用户隔离                                               |
+| 线程读取和未知创建重试                   | 原生 workspace 严格解码；读取等待期间保留选择身份；未知结果先检查，再显式复用完整原 operationId/版本/输入，不重复创建                        |
+| 启用和模型/运行配置                      | 执行开关与启动器分离；正式 Provider 表单、能力/凭据/协议/发现/真实 probe；失败写入围栏和只读恢复；显式模型旧版本保留为不可用，不自动选择替代 |
+| Host 断连、事件追赶和跨标签              | 保留目录失败时原窗口/草稿；显式刷新恢复；实际 Run 事件游标追赶；两标签独立草稿与原版本冲突，不重建已删除 Host 领导者/订阅流                  |
+| 订阅准入和生命周期                       | 已退休 Host WS 拒绝连接；原生认证读取保持可用；安全匿名错误、真实实例 UUID、显式空 grants、App 原版本启停与策略修订                          |
+
+ACP 两个产品链用例改为当前设置表单、保存的 SSH 目标/argv/cwd 和固定 integration version。模型夹具调用实际 `acp_integration_execute`；外层启动和每次内层权限分别审批。拒绝/取消均检查独立进程证据、真实进程消失、没有越权文件和安全 Tool 审计。被取消的派发仍保留 unknown，不依据取消状态声称远端回滚。模型夹具区分 `max_tokens` 与 `max_completion_tokens`，要求只出现一项；未放宽生产预算或审批。
+
+当前静态证据：根 check、根 build 先前本续批分别 exit 0（`/tmp/nexus-review-check.log`、`/tmp/nexus-review-build.log`）；Host/ACP 迁移后变更 E2E TS 的严格检查 exit 0（`/tmp/nexus-host-complete-types.log`），检查配置仅放忽略目录 `.agent-tmp/e2e-review-tsconfig.json`，沿用前端别名以核对动态 import 的实际模块类型。JS 模型夹具 `node --check` 通过。此后最终 check、全体类型与格式结果单独补记。以上均非行为证据；未运行本地 Playwright、浏览器、行为测试或用例收集。functional/preset-plugin/task-ui 及其余模型夹具仍有已知旧消费者，整批八组未完成，未提交、未推送或触发新 Actions。
+
+第四轮续修追加：`functional-regressions.spec.ts` 保留 23 个场景，迁移到真实 App UUID、原生 workspace 和 Shared 严格解码。`fixtures/agent/native-task.ts` 只显式批准场景列出的工具，不恢复 full_access；`functional-model.mjs` 使用当前扁平工具参数、读得的 SHA-256/指纹及实际结果，最终模型报告与本机文件、HTTP、PID/端口事实分别核对，不从公开审计接口读取秘密正文。签名 Operations 包声明其实际使用的 context.read；不据此授予其他能力。
+
+| 原场景目的                     | 当前对应与限制                                                                                                                                               |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| plan-only 拒绝部署             | 当前无 plan 模式；显式拒绝 shell 审批，Run failed，文件不存在；不伪造被拒工具的后续模型回复                                                                  |
+| Browser 过期点击和部署/PNG     | 过期引用 Run unknown 且部署次数为 0；显式取消后另起意图，只部署 1 次；实际下载 PNG、哈希和图片解码，检查 Browser context 已释放                              |
+| 旧 Workspace 环境              | 退休接口 404、当前 create-run 拒绝 environment，空 Run 列表和可执行的新 Run 分别核对                                                                         |
+| 前台修复/后台服务/只读交接     | 原验证脚本与文件逐项保留；后台先独立核对 HTTP、cwd、环境和 PID，再让 Run 结束；最终端口关闭/进程消失后才删除目录                                             |
+| 文件生命周期与搜索取消/容量    | 使用读得的 hash/指纹和显式审批；不匹配/超限派发保留 unknown；搜索深度、文件数、单文件容量拒绝且内容未变，符号链接不跟随；同 App 新 Run 与新 App 恢复分别覆盖 |
+| 旧计划/结构化等待输入/精确输出 | 不恢复计划门禁或 awaiting_input；普通问题完成原 Run，显式 follow-up 创建另一 Run；重开界面恢复正文，旧 Run 不变；JSON/marker 精确输出保留                    |
+| 四种 Memory 置信度             | 模型候选固定 0.5 且来源为实际 Run；管理入口分别保留 0/0.5/0.8/1，并通过 UI 发布、旧版本拒绝、显式重读和撤销；不把管理输入加回模型工具                        |
+| 远期委派期限                   | 旧绝对 deadlineAt 与当前 durationSeconds 超上限分别拒绝，Run failed、模型 Step 保留 tool_calls、没有 Child；不伪造可恢复的旧 tool error envelope             |
+
+两轮源码复核修正正文分页上限、unknown 活跃占用、显式 App 选择、Memory 发布后的重读围栏和实际工具输出字段。变更 E2E TS 严格检查 exit 0（`/tmp/nexus-functional-native-types.log`），JS 语法检查通过；随后格式和根门禁另记最终结果。未运行本地行为/浏览器/Playwright 或用例收集，23 是源码场景数量，不是 PASS 数。preset-plugin/task-ui 及剩余跨域复核尚未完成，八组仍按 D18 合批，未提交/推送。
+
+### 第四轮整批续修：插件、取消与挂起日志（源码审核）
+
+远程基线仍为 [39185212927](https://github.com/0honus0/nexus-terminal/actions/runs/39185212927)，未产生本批行为 PASS。以下是源码迁移及复审结论，依 D17 未在本机执行行为、浏览器、E2E 或收集。
+
+| 原覆盖                     | 当前实现与判据                                                                                                                                                                                                                                   |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 插件不安全包、官方来源     | 不安全归档在 remote/stage 前拒绝且 stages 不增加；官方入口拒绝第三方 repositoryUrl 覆盖。受控包仍验证实际签名、manifest 与 publisher。实际固定官方 catalog、固定 key 和下载/安装验收仍属 D16 外部待验，不能以拒绝覆盖场景代替。                  |
+| 卸载与 AppStorage          | 原 installation revision 写入、卸载、清除保留数据；同 operationId 回放相同回执，旧 revision 拒绝，新意图确认零项。removed 状态不误用仅 draining/upgrade 可读的 data-snapshot。                                                                   |
+| Custom/Fullstack 插件      | 实际 App UUID、隔离 iframe/MessagePort、Shared RPC；SDK 存储由独立管理读取验证；跨 App 不泄漏，Node 文件/子进程权限拒绝由真实 worker 探测。remote/stage 已返回 verified，不重复 verify。                                                         |
+| Root/Child Browser         | Root 六阶段和 Child 五阶段继续使用真实 CDP context 与创建屏障；取消前版本不重试，必须观察持久取消后再释放创建屏障，并等待原取消回执与 context 归零。Child 独立取消使 Root unknown；父不能假报完成。                                              |
+| Skills、工具批次与重复意图 | 签名 Skill 先 metadata 后 name/version/hash 读取；退役 Plan 工具换为当前 fact_write，验证同 assistant turn 的全部工具结果及顺序；两条相同 shell 为两个明确意图，实际文件恰好两行；读取保留 hash。                                                |
+| Host 与附件                | 原生线程创建/改名/切换、终态 follow-up、审批原 hash/version、Step/Tool 审计、失败不虚构正文、Artifact 上传/下载实际字节；旧 Goal/Plan/checkpoint/delete 明确 404，不恢复旧 API。无消费者 task-ui 删除。                                          |
+| 挂起日志                   | 压缩和 Pad 大输出按真实 Backend 隔离目录与挂起 UUID 读取实际日志，不再创建旧目录；压缩种子在 shell gate 内写入，真实追加越过 132 MiB 后触发批量压缩，保留 100 MiB 及原 shell。恢复显式 Shared ACK。Pad 两种真实 112 MiB 输出仍保留，无渲染替身。 |
+| CAPTCHA                    | 公共 hCaptcha 测试密钥配置合成 hostname dummy-key-pass；新增 localhost 不匹配拒绝，保留真实到期、错误 secret、重置及新 token 成功链。生产精确 hostname 校验不变；公网执行及真实站点配置仍待远程/外部验收。                                       |
+
+未修改的失败消费者也纳入盘点：小上传/编辑保存、归档取消/复制进度、目录排序/搜索/下载网络、移动键盘/TUI/触控/输出调度等沿当前实际 Workspace/UI 调用，保留既有独立字节、进程退出与清理断言。静态 TS 范围扩至全部失败 spec 加本批 TS 消费者共 116 个根文件；发现上传用例漏导入 DragFileDescriptor 后修正。静态、语法和构建证据在最终交付时追加，不据此清空八组远程未验状态。
+
+本批最终静态门禁：`pnpm run check`、`pnpm run build`、`pnpm run format:all:check` 均 exit 0，日志 `/tmp/nexus-final-batch-{check,build,format-check}.log`。116 个根文件及其依赖的额外严格 TS 检查 exit 0（`/tmp/nexus-final-batch-e2e-types.log`）；12 份新增/修改 JavaScript 的 `node --check` 通过；`git diff --check` 通过。实际工具链为 Node 22.23.1 / pnpm 11.26.0，远程浮动 Node 镜像仍有独立执行范围。第一轮复核修正 remote stage 已验签、Child 取消父 unknown、真实日志目录/ID/ACK；第二轮复核修正创建屏障与原取消回执等待、fact_write 实际 fact 嵌套结果和上传类型导入。对应 USAGE 快捷命令、Files 字面量路径以及既有 Agent/插件操作章节已核对。未运行本地行为测试，下一步按 D18 统一交付后收集全部八组结果。
