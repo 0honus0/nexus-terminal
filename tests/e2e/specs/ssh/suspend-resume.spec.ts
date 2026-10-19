@@ -18,6 +18,7 @@ import {
 	resetTestSshFilesystem,
 } from '../../support/ssh';
 import {
+	acknowledgeTerminalOutput,
 	closeWebSocket,
 	decodeWorkspaceBinaryFrame,
 	openAuthenticatedWebSocket,
@@ -197,6 +198,10 @@ test('marked attached workspace stays usable and another authorized socket can t
 		// resources have actually entered their authorized ready states.
 		await waitForFilesystemReady(original.socket);
 		await expect(requestWorkspace(original.socket, 'terminal.currentDirectory')).resolves.toBe('/');
+		// The raw WS fixture has no xterm consumer. Acknowledge exactly the PTY
+		// bytes actually received before requiring suspend.prepare to drain its
+		// terminal output window, as the production browser client does.
+		await acknowledgeTerminalOutput(original.socket);
 		await requestWorkspace(original.socket, 'suspend.prepare', {});
 		const marked = await requestWorkspace<{ suspendedSessionId: string }>(original.socket, 'suspend.commit', {});
 		await expect(requestWorkspace(original.socket, 'terminal.currentDirectory')).resolves.toEqual('/');
