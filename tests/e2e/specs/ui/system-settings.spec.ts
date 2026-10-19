@@ -21,9 +21,9 @@ async function saveForm(page: Page, form: Locator, path = '/api/v1/settings/pref
 	const response = page.waitForResponse((value) => value.url().endsWith(path) && value.request().method() === 'PUT');
 	await form.locator('button[type="submit"]').click();
 	expect((await response).ok()).toBe(true);
-	// Preferences keeps Save available after successful persistence. Callers
-	// independently verify the saved API values and the updated form.
-	await expect(form.locator('button[type="submit"]')).toBeEnabled();
+	// After successful persistence there is no dirty draft, so the save
+	// control is disabled. Callers independently verify the saved API values.
+	await expect(form.locator('button[type="submit"]')).toBeDisabled();
 }
 
 async function systemTab(page: Page): Promise<void> {

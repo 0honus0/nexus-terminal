@@ -879,20 +879,28 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
 				await appearanceField(customizer, 'Remote HTML Themes Repository URL').fill(
 					'https://example.com/not-a-github-repository',
 				);
-				const invalidSave = page.waitForResponse(
-					(response) =>
-						response.url().endsWith('/api/v1/appearance/html-presets/remote/repository-url') &&
-						response.request().method() === 'PUT',
-				);
-				await customizer.getByRole('button', { name: 'Save', exact: true }).last().click();
-				expect((await invalidSave).status()).toBe(400);
-				expect((await appearance(context.request)).remoteHtmlPresetsUrl).toBe(repository);
-				const load = page.waitForResponse((response) =>
-					response.url().includes('/api/v1/appearance/html-presets/remote/list'),
-				);
-				await customizer.getByRole('button', { name: 'refresh', exact: true }).click();
-				expect((await load).status()).toBe(400);
-				expect((await appearance(context.request)).terminalCustomHtml).toBe(before);
+				const invalidDispatches: string[] = [];
+
+				const onRequest = (request: import('@playwright/test').Request) => {
+					if (request.url().includes('/api/v1/appearance/html-presets/remote/')) {
+						invalidDispatches.push(request.url());
+					}
+				};
+
+				page.on('request', onRequest);
+				try {
+					await customizer.getByRole('button', { name: 'Save', exact: true }).last().click();
+					// Shared only accepts github.com repositories. The frontend
+					// rejects example.com *before* dispatch; expecting an HTTP 400
+					// wrongly required bypassing the stricter local URL validation.
+					await expect(page.getByText('Invalid appearance input or capacity exceeded.')).toBeVisible();
+					expect((await appearance(context.request)).remoteHtmlPresetsUrl).toBe(repository);
+					await customizer.getByRole('button', { name: 'refresh', exact: true }).click();
+					expect(invalidDispatches).toEqual([]);
+					expect((await appearance(context.request)).terminalCustomHtml).toBe(before);
+				} finally {
+					page.off('request', onRequest);
+				}
 
 				await appearanceField(customizer, 'Remote HTML Themes Repository URL').fill('');
 				const clearSave = page.waitForResponse(
