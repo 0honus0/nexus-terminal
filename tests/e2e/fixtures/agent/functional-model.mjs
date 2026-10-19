@@ -222,11 +222,6 @@ export function respondFunctionalModel(messages, userText, response, send) {
 					),
 				],
 				[
-					'deploy_status',
-					'shell_job_control',
-					() => ({ connectionId, action: 'status', jobId: result('deploy_launch').jobId }),
-				],
-				[
 					'deploy_stop',
 					'shell_execute',
 					shell(
@@ -237,6 +232,14 @@ export function respondFunctionalModel(messages, userText, response, send) {
 					'deploy_wait',
 					'shell_job_control',
 					() => ({ connectionId, action: 'wait', jobId: result('deploy_launch').jobId, waitSeconds: 10 }),
+				],
+				// Inspect the same persisted Job after its shutdown and bounded wait.
+				// A live Job status query must not sit between a health receipt and
+				// releasing the Run-owned server process.
+				[
+					'deploy_status',
+					'shell_job_control',
+					() => ({ connectionId, action: 'status', jobId: result('deploy_launch').jobId }),
 				],
 			],
 			() => ({
