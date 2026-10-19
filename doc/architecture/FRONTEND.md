@@ -398,3 +398,77 @@ Shared system/backups定义完整请求/回执/错误和容量，应用Export/Re
 6. **数据、事务与并发**：后端是权威；先读实际App版本，写入冻结原线程／Run／审批版本、输入、operationHash与operationId；原意图不跟随刷新变更。follow-up只基于已收敛Run创建新Root，unknown仍活跃且可取消。事件、正文、Run和消息各持服务端游标；事件显示最近200条、正文显示窗口最多128片／约256 Ki UTF-16单元，省略有明确提示，不删除服务器数据。Step/Tool/消息按页替换展示，不伪造完整统计或原子快照。
 7. **生命周期与失败**：useAuthenticatedViewScope明确区分视图暂停、会话重置和销毁；各owner按generation／signal隔离晚返回与旧finally。可见pending/running每两秒只读刷新，隐藏／unknown／失败／销毁停止轮询；不自动重放写入。原实例隐藏时保留在途／未知写意图，会话重置与销毁清私有数据。未知恢复先只读核对实际资源，重试保留原键／版本／输入，后续拒绝不抹去原未知；明确放弃不表示回滚。附件关联与Run派发是两个动作，关联未知阻断后续，查询文件不冒充已确认引用；确认引用以不可信数据写入实际prompt，工具仍复查权限。
 8. **当前能力与验收**：正式Host、线程、Run/正文/事件/审批/Child与步骤／工具审计已接Shared；旧API、CSRF、聚合settings、host/Run流、facade/Store和旧Protocol消费删除。旧Goal/Plan、活动输入队列/interrupt、手工增额/checkpoint/resume及历史删除按当前后端Run/上下文/治理重新设计，不提供兼容接口；具体差异归USAGE与当前方案。两轮源码审核及静态结果归testing，D17最终远程Actions E2E未执行，旧行为证据不代表此次界面通过。
+
+## 终端动态背景
+
+1. **职责与范围**：背景与 SSH 输出／xterm 字体测量独立。TerminalView 只消费当前 visual 内容、背景开关、设备模式与 active；背景不是终端几何成功后的附属操作。
+2. **子功能与目录**：features/terminal/composables/use-terminal-background 唯一拥有 ready、iframe 引用、尺寸观察、显隐通知和生命周期；model/terminal-background-document 唯一生成 CSP／样式／HTML 与沙箱动画和尺寸 runtime。旧 mobileBackgroundRuntime 及 TerminalView 内嵌 resize bridge 已删除，不留转导出或双轨。
+3. **依赖方向**：Workspace 与 Appearance 只传现有 TerminalVisualOptions；composable 依赖 Vue／浏览器，文档生成是纯字符串装配；不修改 SSH、Shared 或后端。
+4. **类型与转换**：composable 与文档入参为单文件局部类型。HTML 不解释为可信宿主代码；iframe 仅 allow-scripts／opaque origin，消息仅接受 parent source、固定 type 与 boolean visible，不放开外部资源。
+5. **入口与安装**：TerminalView setup 安装唯一背景 owner；mounted、active／内容变化、iframe load、ResizeObserver、visibilitychange、pageshow、focus 与 KeepAlive 恢复统一协调，加载无需 xterm 初始化完成。
+6. **数据、事务与并发**：无持久化改动。当前设置为权威，隐藏时延后写入新 srcdoc，显示后使用最新内容；相同 srcdoc 不重载。可见性同时核对 active、视图生命周期、document visibility、容器／iframe 连接与非零尺寸。普通会话切换保留文档；浏览器若自行销毁脱离 DOM 的 iframe 上下文，仍走 load 重新同步。
+7. **生命周期与失败**：父级每次显式恢复立即协调并仅追加一次 100ms 布局确认，隐藏／销毁取消该计时器，卸载移除监听和 observer。沙箱统一管理 RAF 回调、移动端 50ms 节流和每个待绘制帧的 100ms 期限；隐藏取消原生调度但保留回调，恢复重排，generation 隔离晚回调。尺寸与显隐共用一个 runtime，主题自持 canvas resize；减少动态效果后 resize／恢复可补画。完全冻结、主题自身异常／不处理 resize、WebGL context 丢失不构成已保证恢复能力。
+8. **当前能力与验收**：沿设置→Workspace→TerminalView→父级 owner→沙箱 runtime 完成两轮源码复核；静态与构建结果归 testing/E2E。按 D17 未新增或执行本地行为测试，普通切换／长期后台、桌面／移动端、减少动态效果和真实主题回归仍待远程验收。
+
+## 通用滚轮缩放
+
+### 1. 职责与范围
+
+foundation/interaction 的 useWheelScale 是 Ctrl+滚轮的唯一绑定入口，六个消费者为 TerminalView、MonacoEditor、FileManager、QuickCommandsPanel、CommandHistoryPanel 和 StatusMonitor。它拥有输入消费与即时比例，不拥有网络保存或业务资源。
+
+### 2. 子功能与目录
+
+use-wheel-scale.ts 管理捕获阶段的非 passive 监听、比例同步、同步/渲染后视口恢复与销毁；wheelScale.ts 只计算像素归一化、方向切换、离散步进及边界，resolver 不再从 public barrel 导出。配置类型唯一归 interaction/model/wheel-scale-types.ts。旧组件滚轮缩放处理器全部删除；终端普通滚轮的历史加载仍归 Terminal。
+
+### 3. 依赖方向
+
+组件从 foundation/interaction 入口使用 useWheelScale，foundation 仅依赖 Vue 和 DOM，不引用 Monaco、xterm、业务 Store 或 HTTP。组件提供必要的技术适配闭包，跨功能不得复制事件绑定和 props 同步。
+
+### 4. 类型与转换
+
+WheelScaleBindingOptions 指定目标 getter、权威外部值 getter、当前展示 Ref、范围、步长和 onChange。onApply 同步更新嵌入式渲染器，外部值变化也会调用；onChange 仅由用户缩放或返回的 setScale 触发保存，不因 props 回读重复保存。captureViewport 在变更前返回恢复闭包；Monaco 用模型行/列和屏幕偏移恢复位置，Files 虚拟列表用可见行比例恢复并关闭浏览器自动锚定。技术句柄留在原组件，不进入通用配置类型。无 Shared/后端协议变化。
+
+### 5. 入口与安装
+
+在组件 setup 调用一次；getter 跟随 v-if 的 DOM 替换，模块自动安装和移除监听。基础接入如下，保存 owner 需提供包含未结算预览的 value：
+
+```ts
+const root = ref<HTMLElement | null>(null);
+const scale = ref(props.scale);
+const { setScale } = useWheelScale({
+	target: () => root.value,
+	value: () => props.scale,
+	scale,
+	min: 0.5,
+	max: 2,
+	step: 0.1,
+	onChange: (value) => emit('scale', value),
+});
+```
+
+普通 DOM 用 scale 驱动样式。嵌入式编辑器增加 onApply 与 captureViewport、viewportFlush: 'sync'；Vue 渲染列表使用默认的 post 恢复。按钮或双指入口可调用 setScale，复用相同边界、通知和定位。
+
+### 6. 数据、事务与并发
+
+同一事件只能被一个缩放入口消费，普通滚轮不拦截；不足阈值、禁用或到达边界的 Ctrl 手势也阻止底层滚动及浏览器缩放。连续事件在 Vue 完成渲染前保留同一视口快照，只允许最新恢复代次执行。界面 Ref 是即时状态；外部值由业务保存 owner 协调预览后回读，不用时间窗口猜测哪些 props 是旧响应。
+
+Appearance 的字体保存、Presentation 的面板比例保存分别在所属原串行队列执行时读取最新快照及版本，只修改当前缩放字段；普通设置草稿仍冻结原版本，不自动覆盖冲突。Workspace 用 createLatestValueSaver 防抖及合并最新值，并保持各字段预览直到最新任务结算；Appearance accept 只更新持久快照，不能清除其它未结算字体预览。外部版本冲突仍按原具名错误阻断并要求刷新，不自动重试未知写入。
+
+### 7. 生命周期与失败
+
+监听归组件 scope，目标替换撤销旧监听及待恢复回调；scope 销毁取消 watch、监听和未完成视口恢复。恢复闭包只在当前代次执行，不在卸载后访问旧组件。保存失败由业务 owner 提示并清除对应预览，网络结果不由通用交互模块解释。
+
+### 8. 当前能力与验收
+
+六处源码已迁移，编辑器避免原先冒泡缩放与内部滚动竞争，包含自动换行后的模型定位。文件首尾仍受实际可滚动范围约束；缩放动画、鼠标设备、快速反转与慢保存的行为验收按 D17 留待远程执行，具体检查证据归 testing/E2E。产品行为见 USAGE 工作区与文件编辑章节。
+
+## 文本编辑器内置搜索集成
+
+1. **职责与范围**：MonacoEditor 拥有普通文本查找/替换的宿主集成；查询、匹配、选区和结果滚动均由 Monaco 内置 FindController 管理，不另建搜索状态或外层滚动修正。
+2. **子功能与目录**：组件显式 import Codicon CSS；Vite 的 @monaco-codicon.css 精确定位当前安装包字体样式，不能依赖 JSON 语言按需加载。固定版本补丁 scripts/patches/monaco-editor@0.56.0.patch 修复 HoverWidget 的垂直可用空间计算，pnpm workspace/lock 同步绑定。
+3. **依赖方向**：FileEditor 调用 MonacoEditor.openSearch，组件调用内置 actions.find；搜索控件自行管理点击和键盘焦点。宿主容器不再把冒泡 click 强制转给正文；focusRegistry 的显式聚焦入口仍保留。
+4. **类型与转换**：无应用/Shared/后端契约变化。字体与 tooltip 的 DOM/几何留技术集成边界，不传播为业务状态。
+5. **入口与安装**：Codicon 随组件同步进入构建依赖图，字体 URL 由 Vite 重写和打包。Monaco 按固定 lockfile 安装补丁；当前前端仅消费 ESM hover 实现，不把本补丁声称为 AMD/min 入口修复。
+6. **数据、事务与并发**：查找/替换的计数、动作和 reveal 保留原 owner；不添加重复监听或异步选区回写。HoverWidget 每次布局计算窗口和实际 overflow hidden/clip/auto/scroll 祖先的垂直交集，上方不足时选择空间更大的一侧，并按剩余高度限制内容。
+7. **生命周期与失败**：继续由 Monaco dispose 清理查询与提示。依赖补丁不增加全局 observer、事件或 timer；保留现有编辑器 scope、滚动记录及缩放生命周期。不能靠抬高 z-index 绕过祖先裁切，也不将提示重挂到无归属的 body 容器。
+8. **当前能力与验收**：普通文本字体资产、搜索焦点与裁切边界的源码修复已接入；实际输入/下一条/上一条/替换/正则错误提示与小面板场景按 D17 待远程回归。静态检查及资产依赖证据归 testing/E2E，产品说明见 USAGE 文件管理器章节。

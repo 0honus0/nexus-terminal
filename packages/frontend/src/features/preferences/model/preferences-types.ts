@@ -49,7 +49,10 @@ export type PreferenceKey = keyof UserPreferences;
 
 export const LOG_LEVELS = FRONTEND_LOG_LEVELS;
 
+export type PanelScaleKind = 'status' | 'files' | 'quick-commands';
+
 export interface PreferencesController {
+	savePanelScale(kind: PanelScaleKind, scale: number, permission: AbortSignal): Promise<void>;
 	values: ComputedRef<UserPreferences>;
 	version: ComputedRef<number>;
 	loaded: ComputedRef<boolean>;

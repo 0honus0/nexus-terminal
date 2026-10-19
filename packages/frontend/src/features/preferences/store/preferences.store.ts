@@ -3,7 +3,12 @@ import { computed, watch } from 'vue';
 import { setFrontendLogLevel } from '@/client/logging/logger';
 import { PreferenceRequestFailure } from '@/client/preferences/preference-request';
 import { usePresentationStore } from './presentation.store';
-import { defaultPreferences, type PreferencesPatch, type UserPreferences } from '../model/preferences-types';
+import {
+	defaultPreferences,
+	type PreferencesPatch,
+	type UserPreferences,
+	type PanelScaleKind,
+} from '../model/preferences-types';
 import { projectPreferences } from '../model/presentation-mapper';
 
 export const usePreferencesStore = defineStore('preferences', () => {
@@ -34,5 +39,9 @@ export const usePreferencesStore = defineStore('preferences', () => {
 		await presentation.update({ action: 'preferences', expectedVersion, preferences }, permission);
 	}
 
-	return { values, version, loaded, load, update, reset: presentation.reset };
+	async function savePanelScale(kind: PanelScaleKind, scale: number, permission: AbortSignal): Promise<void> {
+		await presentation.savePanelScale(kind, scale, permission);
+	}
+
+	return { values, version, loaded, load, update, savePanelScale, reset: presentation.reset };
 });

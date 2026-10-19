@@ -1,6 +1,8 @@
 <script setup lang="ts">
 	import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
+	// UI glyphs must load for plain text too, independently of lazy language contributions.
+	import '@monaco-codicon.css';
 	// Register before the first editor.create() snapshots Monaco's standalone service collection.
 	import 'monaco-editor/platform/actionWidget/browser/actionWidget';
 	import 'monaco-editor/editor/contrib/comment/browser/comment';
@@ -10,7 +12,7 @@
 	import JsonWorker from 'monaco-editor/language/json/json.worker?worker';
 	import 'monaco-editor/basic-languages/monaco.contribution';
 	import 'monaco-editor/language/json/monaco.contribution';
-	import { createWheelScaleResolver } from '@/foundation/interaction';
+	import { useWheelScale } from '@/foundation/interaction';
 	// Monaco keeps these services internal; its own comment action reads the same configuration service.
 	// @ts-ignore internal Monaco ESM module
 	import { StandaloneServices } from 'monaco-editor/editor/standalone/browser/standaloneServices';
@@ -262,10 +264,9 @@
 
 	const focusEditor = (): void => editor?.focus();
 
-	let wheelHandler: ((event: WheelEvent) => void) | undefined;
 	let resizeObserver: ResizeObserver | undefined;
 	let layoutFrame: number | undefined;
-	let appliedFontSize = props.fontSize;
+	const appliedFontSize = ref(props.fontSize);
 	let suppress = false;
 
 	const scheduleLayout = (): void => {
@@ -279,7 +280,45 @@
 		});
 	};
 
-	const resolveWheelScale = createWheelScaleResolver({ min: 8, max: 40, step: 1, precision: 0, thresholdPx: 72 });
+	useWheelScale({
+		target: () => root.value,
+
+		value: () => props.fontSize,
+
+		scale: appliedFontSize,
+		min: 8,
+		max: 40,
+		step: 1,
+		precision: 0,
+		thresholdPx: 72,
+
+		onApply: (size) => editor?.updateOptions({ fontSize: size }),
+
+		onChange: (size) => emit('fontSize', size),
+
+		viewportFlush: 'sync',
+
+		captureViewport: (event) => {
+			const activeEditor = editor;
+			if (!activeEditor) return;
+			const position = event
+				? activeEditor.getTargetAtClientPoint(event.clientX, event.clientY)?.position
+				: undefined;
+			const anchor = position ?? activeEditor.getVisibleRanges()[0]?.getStartPosition();
+			if (!anchor) return;
+			const offset =
+				activeEditor.getTopForPosition(anchor.lineNumber, anchor.column) - activeEditor.getScrollTop();
+			const scrollLeft = activeEditor.getScrollLeft();
+			return () =>
+				activeEditor.setScrollPosition(
+					{
+						scrollTop: activeEditor.getTopForPosition(anchor.lineNumber, anchor.column) - offset,
+						scrollLeft,
+					},
+					monaco.editor.ScrollType.Immediate,
+				);
+		},
+	});
 	(globalThis as typeof globalThis & { MonacoEnvironment?: unknown }).MonacoEnvironment = {
 		getWorker: (_workerId: string, label: string) => (label === 'json' ? new JsonWorker() : new EditorWorker()),
 	};
@@ -292,7 +331,7 @@
 		editor = monaco.editor.create(root.value!, {
 			model,
 			automaticLayout: false,
-			fontSize: appliedFontSize,
+			fontSize: appliedFontSize.value,
 			fontFamily: props.fontFamily,
 			theme: 'vs-dark',
 			readOnly: props.readOnly,
@@ -309,6 +348,7 @@
 			stickyScroll: { enabled: !props.largeFile },
 			bracketPairColorization: { enabled: !props.largeFile },
 			scrollBeyondLastLine: false,
+			mouseWheelZoom: false,
 		});
 		editor.onDidChangeModelContent(() => {
 			if (!suppress) emit('update:modelValue', editor!.getValue());
@@ -335,18 +375,6 @@
 				if (editor) await toggleEditorComment(editor);
 			},
 		});
-		const domNode = editor.getDomNode();
-		if (domNode) {
-			wheelHandler = (event: WheelEvent) => {
-				if (!editor) return;
-				const change = resolveWheelScale(event, appliedFontSize);
-				if (!change) return;
-				appliedFontSize = change.next;
-				editor.updateOptions({ fontSize: appliedFontSize });
-				emit('fontSize', appliedFontSize);
-			};
-			domNode.addEventListener('wheel', wheelHandler, { passive: false });
-		}
 		resizeObserver = new ResizeObserver(scheduleLayout);
 		resizeObserver.observe(root.value!);
 		void nextTick(scheduleLayout);
@@ -359,14 +387,6 @@
 				editor.setValue(value);
 				suppress = false;
 			}
-		},
-	);
-	watch(
-		() => props.fontSize,
-		(fontSize) => {
-			if (Object.is(fontSize, appliedFontSize)) return;
-			appliedFontSize = fontSize;
-			editor?.updateOptions({ fontSize: appliedFontSize });
 		},
 	);
 	watch(
@@ -385,9 +405,6 @@
 	);
 
 	onBeforeUnmount(() => {
-		const domNode = editor?.getDomNode();
-		if (domNode && wheelHandler) domNode.removeEventListener('wheel', wheelHandler);
-		wheelHandler = undefined;
 		resizeObserver?.disconnect();
 		resizeObserver = undefined;
 		if (layoutFrame !== undefined) cancelAnimationFrame(layoutFrame);
@@ -411,7 +428,6 @@
 		class="monaco-editor-container"
 		:data-large-file="largeFile ? 'true' : 'false'"
 		data-word-wrap="on"
-		@click="focusEditor"
 	></div>
 </template>
 

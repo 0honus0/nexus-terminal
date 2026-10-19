@@ -1339,3 +1339,64 @@ ACP 两个产品链用例改为当前设置表单、保存的 SSH 目标/argv/cw
 未修改的失败消费者也纳入盘点：小上传/编辑保存、归档取消/复制进度、目录排序/搜索/下载网络、移动键盘/TUI/触控/输出调度等沿当前实际 Workspace/UI 调用，保留既有独立字节、进程退出与清理断言。静态 TS 范围扩至全部失败 spec 加本批 TS 消费者共 116 个根文件；发现上传用例漏导入 DragFileDescriptor 后修正。静态、语法和构建证据在最终交付时追加，不据此清空八组远程未验状态。
 
 本批最终静态门禁：`pnpm run check`、`pnpm run build`、`pnpm run format:all:check` 均 exit 0，日志 `/tmp/nexus-final-batch-{check,build,format-check}.log`。116 个根文件及其依赖的额外严格 TS 检查 exit 0（`/tmp/nexus-final-batch-e2e-types.log`）；12 份新增/修改 JavaScript 的 `node --check` 通过；`git diff --check` 通过。实际工具链为 Node 22.23.1 / pnpm 11.26.0，远程浮动 Node 镜像仍有独立执行范围。第一轮复核修正 remote stage 已验签、Child 取消父 unknown、真实日志目录/ID/ACK；第二轮复核修正创建屏障与原取消回执等待、fact_write 实际 fact 嵌套结果和上传类型导入。对应 USAGE 快捷命令、Files 字面量路径以及既有 Agent/插件操作章节已核对。未运行本地行为测试，下一步按 D18 统一交付后收集全部八组结果。
+
+### 终端动态背景重构审查（2026-10-19）
+
+用户确认仅 HTML 动态背景，无图片；两会话中长期隐藏的一方切回后偶发空白，要求整体审查并直接重构，不保留旧兼容代码。
+
+源码缺口：原 ready 与 iframe 加载依赖 TerminalView 的 FitAddon／动画帧测量，props.active 和 KeepAlive 状态没有作为背景消息的显式输入；父级消息只根据 iframe 尺寸判断 visible，隐藏时内部 viewport 可能仍非零，ResizeObserver 又可能合并同尺寸切换。原沙箱恢复保留失效 RAF ID；减少动态效果后 canvas resize 清屏却不补画。KeepAlive 失活还主动销毁背景文档。
+
+新 owner：use-terminal-background 独立持有挂载、实际可见状态、观察和恢复，主题隐藏期间延后新 srcdoc，普通切换保留文档。terminal-background-document 合并原 runtime 和内嵌 resize bridge，统一几何／动画状态；每个可见待绘制帧有 100ms 期限，旧回调有 generation，移动端保持至少50ms节流，减少动态效果下尺寸变化／恢复允许一次静态补画。旧 mobileBackgroundRuntime 删除，全部源码消费者改用新入口；原 CSP 与 sandbox 权限不放宽。
+
+第一轮沿 Appearance 管理／Store→Workspace visual／active→TerminalView→composable→沙箱复核职责与内容，第二轮核对初次非零尺寸、active 与预渲染错序、加载后隐藏、同尺寸切换、恢复、RAF 超期与晚回调、减少动态效果、KeepAlive 和卸载。内置主题按当前保存副本消费，不为旧主题增加兼容重写；不保证第三方主题自身错误、缺失 resize、外部依赖或 WebGL context 丢失可自动修复。
+
+本机基线 dev／8fa1713c、Node22.23.1／pnpm11.26.0。Frontend build exit0（含 vue-tsc），日志 `/tmp/nexus-background-refactor-build.log`；背景三文件 ESLint exit0，日志 `/tmp/nexus-background-refactor-eslint.log`；本批源码与四份文档 Prettier exit0，日志 `/tmp/nexus-background-refactor-focused-format.log`。提取桌面／移动 runtime 后分别 `node --check /tmp/nexus-background-runtime-{0,50}.js` 均通过，仅语法编译，没有执行 DOM／动画；旧源码入口搜索无残留，`git diff --check` 通过。根 check exit1：Frontend ESLint通过后，在其它在途 `packages/backend/src/modules/remote/files/model/file-resource.ts:590–599` 的两处空行及一处 curly 失败（`/tmp/nexus-background-refactor-check.log`）；全仓格式同样受该文件及 `tests/e2e/support/test-ssh-server.mjs:191–192` 两处空行阻断（`/tmp/nexus-background-refactor-format.log`）。不覆盖这两份其它在途修改，不将专项检查计为根门禁通过。按 D17 未新增或执行本地行为／浏览器／E2E；后续远程需补充并验收：两会话同尺寸切换和长期后台、快速切换与主题加载错序、RAF延后／取消后晚回调、移动限帧、减少动态效果 resize／恢复、KeepAlive／卸载及真实用户主题。现有 background-geometry 两项只覆盖原尺寸与暂停范围，不能作为本轮行为 PASS。
+
+## 通用滚轮缩放重构审查（2026-10-19）
+
+基线 dev / `8fa1713c`，含本轮未提交源码及其它在途变更；Node v22.23.1、pnpm 11.26.0。用户确认文本文件字体缩放反向跳动，并要求统一模块、替换已有实现；按 D17 未新增或运行本地行为测试、浏览器专项、E2E 或用例收集，也未提交、推送或触发 Actions。
+
+源码定位：Monaco 原监听在冒泡阶段修改字号，内部滚轮已可能滚动；字体旧保存返回时 Appearance accept 清空未结算预览，且连续保存携带手势时旧版本。Files/Status/Quick Commands 同样存在旧版本自动保存或缺少预览保护的链路。它们均是本轮已确认的源码风险，未冒充浏览器复现证据。
+
+实现：useWheelScale 统一捕获阶段监听与清理、步进、即时值/外部值同步、可选同步/渲染后视口恢复及代次。六处实际消费者已替换，没有旧组件 resolver 或缩放 wheel 绑定。Monaco 通过模型位置和屏幕偏移保持位置；Files 虚拟列表合并同一轮渲染前的定位，核对 DOM/内容身份，关闭浏览器自动锚定。Appearance/Presentation 在各自串行队列内读取即时设置版本，仅修改所选缩放字段；普通编辑草稿仍保留原版本冲突。Workspace 持有最新未结算预览，旧保存结果不能清空其它待保存字段。
+
+两轮源码审核覆盖：六处事件路径、普通滚动与 Terminal 历史加载、鼠标/双指设置入口、props 回读、同字段连续保存、跨字段队列、外部冲突/未知失败、目标替换及卸载后恢复取消。架构八节及接入示例见 Frontend 的“通用滚轮缩放”，产品操作见 USAGE 文件编辑/工作区/个人偏好章节。
+
+| 检查                              | 结果与证据                                                                                                                          |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Frontend build（vue-tsc + Vite）  | 通过，退出 0；`/tmp/nexus-wheel-build.log`。首轮发现重复 style 属性，已合并并通过最终重跑。                                         |
+| Frontend ESLint                   | 通过，退出 0；`/tmp/nexus-wheel-frontend-eslint.log`。                                                                              |
+| 本轮源码和文档 Prettier           | 通过；`/tmp/nexus-wheel-focused-format.log`，文档回填后再核对。                                                                     |
+| 根 `pnpm run check`               | 前端通过，后端失败：其它在途 `file-resource.ts:590/591/599` 的 function-spacing/curly；`/tmp/nexus-wheel-check.log`。               |
+| `pnpm run format:all:check`       | 失败：上述后端问题及其它在途 `test-ssh-server.mjs:191/192` 的 function-spacing；`/tmp/nexus-wheel-format.log`。不覆盖其它任务修改。 |
+| `git diff --check` / 旧消费者搜索 | 通过；resolver 仅在 foundation 内实现和使用，六个功能均使用 useWheelScale。                                                         |
+
+远程待验：文本长文件滚动到中部后缩放，短行/自动换行/鼠标位于空白区/文件首尾；字号与比例上下限，小 delta、大 delta、连续同向、反向惯性和显式反转；旧保存延迟期间继续缩放并同时调整其它面板；保存失败、版本冲突及重新加载；虚拟列表中部快速缩放/切目录；六处普通滚动、终端顶端历史加载与鼠标接管；双指入口；v-if 重挂载和卸载后无恢复回调。本轮静态结果不代表以上行为已通过。
+
+## 普通文本编辑器搜索修复审查（2026-10-19）
+
+基线 dev / `8fa1713c` 加未提交工作区；Node v22.23.1、pnpm 11.26.0、Monaco 0.56.0。用户报告普通文件 Ctrl+F 图标方块、结果跳转正文不动及上方提示被遮挡。按 D17 未新增/运行本地行为测试、浏览器测试、E2E 或用例收集；未提交、推送或触发 Actions。
+
+源码及产物原因：原 Codicon `@font-face` 只出现在 `jsonMode-*.css`，普通文本没有稳定的加载路径；Monaco 宿主冒泡 click 无条件 focus 正文，干扰搜索框和按钮；内置 HoverWidget 的上下布局只检查 window 高度，未检查实际编辑器/弹窗祖先的 overflow 裁切，窗口上方有空间不代表提示可见。前两者已由组件显式字体依赖和移除宿主 click 修复；提示通过版本固定的 ESM HoverWidget 补丁计算真实垂直可用区域并限制高度。查找/替换匹配、导航和 reveal 仍由原 FindController 管理，不新增外层选区或滚动回写。
+
+Monaco 补丁为 `scripts/patches/monaco-editor@0.56.0.patch`，pnpm workspace/lock 同步绑定 hash `c23d454741b9c602522924706171e4362a6cf35302051169b54531f4484538e7`；安装从缓存完成，无下载。补丁仅覆盖正式 Vite 使用的 ESM 入口，不声明 AMD/min 入口也已修复。两轮源码复审核对目标文档、父级裁切、上下空间均不足、显式位置/forcePosition、原提示生命周期，以及组件搜索入口/焦点/滚动记录。
+
+| 检查                               | 实际结果与证据                                                                                                                                                                                                            |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Frontend build（vue-tsc + Vite）   | 退出 0，`/tmp/nexus-search-build.log`。                                                                                                                                                                                   |
+| 根 `pnpm run check`                | 退出 0，包含前后端 ESLint、Frontend type check、Shared build 和 Backend type check；`/tmp/nexus-search-check.log`。                                                                                                       |
+| 全仓 `pnpm run format:all:check`   | 退出 0，`/tmp/nexus-search-format.log`。                                                                                                                                                                                  |
+| 组件和 Vite 配置专项 ESLint        | 首轮发现 Vite 配置原有两处函数间距，已修复；最终退出 0，`/tmp/nexus-search-focused-eslint.log`。                                                                                                                          |
+| 专项 Prettier / `git diff --check` | 均通过，退出 0；`/tmp/nexus-search-focused-format.log`。                                                                                                                                                                  |
+| 补丁安装与 JS 语法                 | `pnpm patch-commit` 缓存安装成功；对实际安装的 ESM hoverWidget 执行 `node --check` 退出 0，`/tmp/nexus-monaco-patch-commit.log`。                                                                                         |
+| 构建字体依赖图                     | `/tmp/nexus-search-assets.log`：FileEditor 预加载依赖包含 `MonacoEditor-CeKmAFMc.css`，该文件直接声明 Codicon font-face，指向已打包 `/assets/codicon-Brq4_Ui5.ttf`；不需先打开 JSON。此为静态产物核对，非浏览器加载证据。 |
+
+远程待验：首次只打开普通 txt/日志，不打开 JSON 时搜索图标；Ctrl/Cmd+F、点击输入框后持续输入、Enter/Shift+Enter/上下按钮导航到长文件首中尾并核对选区与 scrollTop；开关大小写/整词/正则，替换单项/全部和只读拒绝；鼠标/键盘提示在顶端、窄栏、短面板和弹窗内不被裁切，正则校验消息可读；两个编辑器切换、背景标签关闭、缩放与搜索并用。静态通过不能代替这些交互验收。
+
+## 状态监控等待布局（2026-10-19）
+
+dev / `8fa1713c` 未提交工作区，沿用本页 Node/pnpm 环境。状态面板原等待态用字体旋转图标和只设置 place-content 的 Grid；改用现有 16px UiSpinner，局部纵向 Flex 双轴居中、0.5rem 间距，文字限制最大宽度并允许换行，错误空态复用相同对齐。加载容器提供 status 语义，装饰图标不重复朗读。不改采样、网络、比例及通用 UI；已核对 Frontend 状态监控 owner 说明仍符合实际，无架构边界变化。
+
+源码审核覆盖等待/错误/正常三个分支、窄栏换行、固定尺寸 spinner 不拉伸、比例样式和既有状态切换。USAGE 状态监控章节已同步。按 D17 不新增/运行本地行为测试或浏览器测试，未提交/推送；真实宽窄面板、比例上下限及小高度视觉效果待远程验收。
+
+静态结果均退出 0：Frontend build `/tmp/nexus-status-loading-build.log`、根 check `/tmp/nexus-status-loading-check.log`、全仓格式 `/tmp/nexus-status-loading-format.log`；`git diff --check` 通过。文档回填后再执行本轮专项 Prettier，日志 `/tmp/nexus-status-loading-focused-format.log`。静态结果不作为视觉验收证据。

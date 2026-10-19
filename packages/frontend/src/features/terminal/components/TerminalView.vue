@@ -8,11 +8,12 @@
 	import { WebLinksAddon } from '@xterm/addon-web-links';
 	import { useDeviceCapabilities } from '@/foundation/browser';
 	import { writeClipboardText } from '@/foundation/browser';
-	import { createWheelScaleResolver } from '@/foundation/interaction';
+	import { useWheelScale } from '@/foundation/interaction';
 	import '@xterm/xterm/css/xterm.css';
 	import type { TerminalChannel } from '../ports/terminal-channel';
 	import type { TerminalVisualOptions } from '../model/terminal-types';
-	import { desktopBackgroundRuntime, mobileBackgroundRuntime } from '../model/mobileBackgroundRuntime';
+	import { createTerminalBackgroundDocument } from '../model/terminal-background-document';
+	import { useTerminalBackground } from '../composables/use-terminal-background';
 	import { trackTerminalRuntimeModes, type TerminalRuntimeModeTracker } from '../model/terminalRuntimeModes';
 	import { serializeTerminalSnapshot } from '../model/terminalSnapshot';
 	import { createTerminalOutputWriter } from '../model/terminalOutputWriter';
@@ -52,8 +53,6 @@
 	const searchOpen = terminalState.searchOpen;
 	const searchTerm = terminalState.searchTerm;
 	const renderedFontSize = ref(props.fontSize);
-	const backgroundReady = ref(false);
-	const backgroundFrame = ref<HTMLIFrameElement | null>(null);
 	let terminal: Terminal | undefined;
 	let fit: FitAddon | undefined;
 	let searchAddon: SearchAddon | undefined;
@@ -106,109 +105,33 @@
 		'--terminal-stroke-color': props.visual?.textStroke?.color ?? 'transparent',
 		'--terminal-shadow': `${props.visual?.textShadow?.offsetX ?? 0}px ${props.visual?.textShadow?.offsetY ?? 0}px ${props.visual?.textShadow?.blur ?? 0}px ${props.visual?.textShadow?.color ?? 'transparent'}`,
 	}));
-	const customHtmlCsp = [
-		"default-src 'none'",
-		"script-src 'unsafe-inline'",
-		"style-src 'unsafe-inline'",
-		'img-src data: blob:',
-		'font-src data:',
-		"connect-src 'none'",
-		'media-src data: blob:',
-	].join('; ');
-	const customHtmlBaseStyle = 'html,body{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}';
-	// Notify resize-aware themes inside the opaque-origin sandbox, without
-	// changing their canvas attributes or reloading their animation state.
-	const customHtmlResizeBridge = `<script>(() => {
-    let width = -1, height = -1;
-    const sync = () => {
-      const nextWidth = document.documentElement.clientWidth;
-      const nextHeight = document.documentElement.clientHeight;
-      if (nextWidth === width && nextHeight === height) return;
-      width = nextWidth; height = nextHeight;
-      if (width > 0 && height > 0) window.dispatchEvent(new Event('resize'));
-    };
-    const reset = () => { width = height = -1; sync(); };
-    const observer = new ResizeObserver(sync);
-    observer.observe(document.documentElement);
-    window.addEventListener('message', event => {
-      if (event.source !== window.parent || event.data?.type !== 'nexus-background-geometry') return;
-      if (!event.data.visible) { width = height = -1; return; }
-      sync();
-    });
-    window.addEventListener('pageshow', reset);
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') reset();
-    });
-    sync();
-  })();<\/script>`;
-
 	const sandboxedCustomHtml = computed(() => {
 		const html = props.visual?.customHtml;
 		if (!html || !props.visual?.backgroundEnabled) return '';
-		const imageOverride = props.visual.backgroundImageUrl
-			? 'html,body{background:transparent!important}body>:not(style):not(script){background-color:transparent!important}'
-			: '';
-		return [
-			`<meta http-equiv="Content-Security-Policy" content="${customHtmlCsp}">`,
-			`<style>${customHtmlBaseStyle}${imageOverride}</style>`,
-			device.isMobile.value || device.hasCoarsePointer.value ? mobileBackgroundRuntime : desktopBackgroundRuntime,
+		return createTerminalBackgroundDocument({
 			html,
-			customHtmlResizeBridge,
-		].join('');
+			imageVisible: Boolean(props.visual.backgroundImageUrl),
+			isMobile: device.isMobile.value || device.hasCoarsePointer.value,
+		});
 	});
+
 	let lastColumns = 0;
 	let lastRows = 0;
 	let geometryFrame: number | undefined;
 	let geometryResizeTimer: ReturnType<typeof setTimeout> | undefined;
 	let forceGeometrySync = false;
 
-	const revealBackgroundWhenSized = () => {
-		const element = root.value;
-		if (
-			disposed ||
-			!viewActive ||
-			!props.active ||
-			!element?.isConnected ||
-			element.clientWidth <= 0 ||
-			element.clientHeight <= 0
-		)
-			return;
-		backgroundReady.value = true;
-	};
+	const {
+		ready: backgroundReady,
+		frame: backgroundFrame,
+		refresh: refreshBackground,
+	} = useTerminalBackground({
+		container: wrapper,
 
-	watch(
-		[backgroundFrame, sandboxedCustomHtml],
-		([frame, html], _previous, onCleanup) => {
-			if (!frame || !html) return;
+		active: () => props.active,
 
-			const loadWhenSized = () => {
-				if (
-					props.active &&
-					frame.isConnected &&
-					frame.clientWidth > 0 &&
-					frame.clientHeight > 0 &&
-					frame.getAttribute('srcdoc') !== html
-				)
-					frame.srcdoc = html;
-				// Hidden iframes may retain a nonzero internal viewport. The parent
-				// observer supplies the missing visibility transition to the bridge.
-				frame.contentWindow?.postMessage(
-					{ type: 'nexus-background-geometry', visible: frame.clientWidth > 0 && frame.clientHeight > 0 },
-					'*',
-				);
-			};
-
-			const observer = new ResizeObserver(loadWhenSized);
-			observer.observe(frame);
-			frame.addEventListener('load', loadWhenSized);
-			loadWhenSized();
-			onCleanup(() => {
-				observer.disconnect();
-				frame.removeEventListener('load', loadWhenSized);
-			});
-		},
-		{ flush: 'post' },
-	);
+		html: sandboxedCustomHtml,
+	});
 
 	const fitAndResize = (allowInactive = false) => {
 		clearTimeout(geometryResizeTimer);
@@ -226,7 +149,6 @@
 			return;
 		const dimensions = fit.proposeDimensions();
 		if (!dimensions || !Number.isFinite(dimensions.cols) || !Number.isFinite(dimensions.rows)) return;
-		revealBackgroundWhenSized();
 		// Resize through the public API without FitAddon clearing the renderer first.
 		// This keeps the current prompt visible while xterm reflows and the PTY redraws.
 		if (terminal.cols !== dimensions.cols || terminal.rows !== dimensions.rows) {
@@ -271,7 +193,6 @@
 	onDeactivated(() => {
 		viewActive = false;
 		resetInteractions();
-		backgroundReady.value = false;
 	});
 
 	// Browser wakeups and transport recovery need a fresh PTY sync. Ordinary tab switches
@@ -1077,13 +998,30 @@
 		event.stopPropagation();
 	};
 
-	const resolveWheelScale = createWheelScaleResolver({
+	const { setScale: applyFontSize } = useWheelScale({
+		target: () => root.value,
+
+		value: () => props.fontSize,
+
+		scale: renderedFontSize,
+
+		enabled: () => !historyRebuilding,
+
+		precision: 0,
+
+		onApply: (size) => {
+			if (!terminal) return;
+			terminal.options.fontSize = size;
+			fitAndResize();
+		},
+
+		onChange: (size) => emit('fontSizeChange', size),
+
 		min: 8,
 		max: 40,
 		step: 1,
 		thresholdPx: 72,
 		maxStepsPerEvent: 3,
-		stopImmediatePropagation: true,
 	});
 	let pinchStartDistance = 0;
 	let pinchStartFontSize = renderedFontSize.value;
@@ -1095,26 +1033,10 @@
 		return Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
 	};
 
-	const applyFontSize = (size: number) => {
-		const next = Math.min(40, Math.max(8, Math.round(size)));
-		if (next === renderedFontSize.value) return;
-		renderedFontSize.value = next;
-		if (terminal) {
-			terminal.options.fontSize = next;
-			fitAndResize();
-		}
-		emit('fontSizeChange', next);
-	};
-
-	const handleWheelScale = (event: WheelEvent) => {
+	const handleHistoryWheel = (event: WheelEvent) => {
 		if (historyRebuilding) {
 			event.preventDefault();
 			event.stopImmediatePropagation();
-			return;
-		}
-		const change = resolveWheelScale(event, renderedFontSize.value);
-		if (change) {
-			applyFontSize(change.next);
 			return;
 		}
 		if (event.ctrlKey) return;
@@ -1381,8 +1303,6 @@
 	onMounted(async () => {
 		const snapshot = await terminalState.restoreSnapshot();
 		if (disposed) return;
-		// Start the sandboxed background while xterm initializes; its own script can draw in parallel.
-		revealBackgroundWhenSized();
 		terminal = new Terminal({
 			convertEol: true,
 			scrollOnUserInput: true,
@@ -1449,7 +1369,7 @@
 		);
 		if (snapshot) terminal.write(snapshot, syncSearchDecorations);
 		else syncSearchDecorations();
-		root.value!.addEventListener('wheel', handleWheelScale, { capture: true, passive: false });
+		root.value!.addEventListener('wheel', handleHistoryWheel, { capture: true, passive: false });
 		root.value!.addEventListener('touchstart', handleTouchStart, { capture: true, passive: false });
 		root.value!.addEventListener('touchmove', handleTouchMove, { passive: false });
 		root.value!.addEventListener('touchend', handleTouchEnd, { passive: false });
@@ -1588,12 +1508,10 @@
 	);
 
 	watch(
-		() => [props.fontFamily, props.fontSize, resolvedTheme.value, props.scrollback] as const,
+		() => [props.fontFamily, resolvedTheme.value, props.scrollback] as const,
 		() => {
 			if (!terminal) return;
 			terminal.options.fontFamily = props.fontFamily;
-			if (props.fontSize !== renderedFontSize.value) renderedFontSize.value = props.fontSize;
-			terminal.options.fontSize = renderedFontSize.value;
 			terminal.options.theme = resolvedTheme.value;
 			terminal.options.scrollback = historyBrowsing ? HISTORY_WINDOW_SCROLLBACK_LINES : liveScrollbackLimit();
 			fitAndResize();
@@ -1627,7 +1545,7 @@
 		if (!closingTerminal || !serializeAddon) outputWriter.discard();
 		if (historyBrowsing || historyLoading) void resetHistoryCursor();
 		if (root.value) {
-			root.value.removeEventListener('wheel', handleWheelScale, true);
+			root.value.removeEventListener('wheel', handleHistoryWheel, true);
 			root.value.removeEventListener('touchstart', handleTouchStart, true);
 			root.value.removeEventListener('touchmove', handleTouchMove);
 			root.value.removeEventListener('touchend', handleTouchEnd);
@@ -1699,6 +1617,7 @@
 			sandbox="allow-scripts"
 			tabindex="-1"
 			aria-hidden="true"
+			@load="refreshBackground"
 		></iframe>
 		<div
 			ref="root"

@@ -12,9 +12,15 @@ export { usePersistentResizablePanel } from './usePersistentResizablePanel';
 
 export type { PersistentResizablePanelOptions } from './usePersistentResizablePanel';
 
-export { clampScale, createWheelScaleResolver, createWheelStepAccumulator } from './wheelScale';
+export { clampScale, createWheelStepAccumulator } from './wheelScale';
 
-export type { WheelScaleChange, WheelScaleResolverOptions, WheelStepAccumulatorOptions } from './wheelScale';
+export { useWheelScale } from './use-wheel-scale';
+
+export type {
+	WheelScaleBindingOptions,
+	WheelScaleOptions,
+	WheelStepAccumulatorOptions,
+} from './model/wheel-scale-types';
 
 export { useLongPressGesture } from './useLongPressGesture';
 

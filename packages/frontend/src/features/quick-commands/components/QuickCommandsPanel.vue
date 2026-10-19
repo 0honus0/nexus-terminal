@@ -7,7 +7,7 @@
 	import { useAuthenticatedViewScope } from '@/shared/session/public';
 	import { useFeedback, preferenceFailureMessage } from '@/shared/feedback/public';
 	import { focusRegistry } from '@/shared/focus/public';
-	import { createWheelScaleResolver } from '@/foundation/interaction';
+	import { useWheelScale } from '@/foundation/interaction';
 	import QuickCommandForm from './QuickCommandForm.vue';
 	import { useQuickCommandsStore } from '../store/quickCommands.store';
 	import { expandQuickCommand } from '../model/quick-command-expansion';
@@ -71,14 +71,23 @@
 	const readDisplayMode = (): DisplayMode => (readStoredValue(displayModeStorage) === 'name' ? 'name' : 'command');
 
 	const displayMode = ref<DisplayMode>(readDisplayMode());
-	const resolveScale = createWheelScaleResolver({
+	useWheelScale({
+		target: () => list.value,
+
+		value: () => props.rowScale,
+
+		scale: localScale,
+
+		onChange: (scale) => {
+			emit('rowScale', scale);
+		},
+
 		min: 0.5,
 		max: 2.5,
 		step: 0.12,
 		precision: 2,
 		thresholdPx: 64,
 		maxStepsPerEvent: 3,
-		stopImmediatePropagation: true,
 	});
 	const rowStyle = computed(() => {
 		const scale = localScale.value;
@@ -92,14 +101,6 @@
 		};
 	});
 
-	watch(
-		() => props.rowScale,
-		(value) => {
-			if (Number.isFinite(value)) {
-				localScale.value = value;
-			}
-		},
-	);
 	watch(
 		() => props.collapsibleSearch,
 		(enabled) => {
@@ -121,15 +122,6 @@
 		);
 	});
 	onBeforeUnmount(() => unregisterFocus?.());
-
-	const scaleRows = (event: WheelEvent) => {
-		const change = resolveScale(event, localScale.value);
-		if (!change) {
-			return;
-		}
-		localScale.value = change.next;
-		emit('rowScale', change.next);
-	};
 
 	const toggleDisplayMode = () => {
 		displayMode.value = displayMode.value === 'name' ? 'command' : 'name';
@@ -447,7 +439,6 @@
 			class="quick-command-list-area min-h-0 flex-1 overflow-y-auto p-2"
 			:style="rowStyle"
 			:data-row-scale="localScale.toFixed(2)"
-			@wheel="scaleRows"
 		>
 			<div v-if="error && store.items.length" role="alert" class="p-2 text-sm text-error">
 				{{ preferenceFailureMessage(error, t) }}

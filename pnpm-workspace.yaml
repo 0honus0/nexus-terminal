@@ -30,3 +30,4 @@ verifyDepsBeforeRun: false
 patchedDependencies:
   '@xterm/xterm@6.0.0': scripts/patches/@xterm__xterm@6.0.0.patch
   guacamole-common-js@1.5.0: scripts/patches/guacamole-common-js@1.5.0.patch
+  monaco-editor@0.56.0: scripts/patches/monaco-editor@0.56.0.patch

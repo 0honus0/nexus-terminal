@@ -29,6 +29,7 @@ overrides:
 patchedDependencies:
   '@xterm/xterm@6.0.0': fdc066c72e28d5596d6fc51bf7caaa5d1b1cf7f65f947875e74fb6ba4fde8709
   guacamole-common-js@1.5.0: 9a6ddcea88a6b7def4ab8f7014e33c3b670a8146bf83b1e870dd1ac38b81077c
+  monaco-editor@0.56.0: c23d454741b9c602522924706171e4362a6cf35302051169b54531f4484538e7
 
 importers:
 
@@ -268,7 +269,7 @@ importers:
         version: 18.0.14
       monaco-editor:
         specifier: ^0.56.0
-        version: 0.56.0
+        version: 0.56.0(patch_hash=c23d454741b9c602522924706171e4362a6cf35302051169b54531f4484538e7)
       pdfjs-dist:
         specifier: ^6.4.299
         version: 6.4.299
@@ -5149,7 +5150,7 @@ snapshots:
 
   modern-tar@0.8.5: {}
 
-  monaco-editor@0.56.0:
+  monaco-editor@0.56.0(patch_hash=c23d454741b9c602522924706171e4362a6cf35302051169b54531f4484538e7):
     dependencies:
       dompurify: 3.4.16
       marked: 14.0.0

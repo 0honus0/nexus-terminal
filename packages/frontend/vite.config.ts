@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath } from 'node:url';
 
 const resolveLocalModule = (path: string) => fileURLToPath(new URL(path, import.meta.url));
+
 const devBackendOrigin = process.env.NEXUS_VITE_BACKEND_ORIGIN || 'http://localhost:3001';
 const devBackendWebSocketOrigin = devBackendOrigin.replace(/^http/, 'ws');
 
@@ -13,6 +14,9 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			'@': resolveLocalModule('./src'),
+			'@monaco-codicon.css': resolveLocalModule(
+				'./node_modules/monaco-editor/esm/vs/base/browser/ui/codicons/codicon/codicon.css',
+			),
 			'@monaco-editor-api': resolveLocalModule('./node_modules/monaco-editor/esm/vs/editor/editor.api.js'),
 			'@monaco-basic-languages': resolveLocalModule(
 				'./node_modules/monaco-editor/esm/vs/basic-languages/monaco.contribution.js',
@@ -47,6 +51,7 @@ export default defineConfig({
 				target: devBackendOrigin,
 				changeOrigin: false,
 				ws: true,
+
 				rewrite: (path: string) => path.replace(/^\/__next/, ''),
 			},
 			'/plugins': {

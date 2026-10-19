@@ -441,12 +441,25 @@ button.live-state {
 	width: calc(24px / var(--status-scale, 1));
 }
 .empty-state {
-	display: grid;
-	place-content: center;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
 	height: 100%;
 	min-height: 0;
-	gap: 0.5em;
+	gap: 0.5rem;
 	text-align: center;
+}
+.empty-state > i {
+	flex: none;
+	width: 1em;
+	height: 1em;
+	line-height: 1;
+}
+.empty-state-message {
+	max-width: 100%;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
 }
 .error-state {
 	color: #ef4444;

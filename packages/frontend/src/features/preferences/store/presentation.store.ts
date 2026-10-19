@@ -3,8 +3,8 @@ import { shallowRef, ref } from 'vue';
 import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 import { PreferenceRequestFailure } from '@/client/preferences/preference-request';
 import { presentationApi } from '../api/presentation-api';
-import { snapshotPresentationChange } from '../model/presentation-mapper';
-import type { UserPresentation, PresentationChange } from '../model/preferences-types';
+import { snapshotPresentationChange, projectPreferences } from '../model/presentation-mapper';
+import type { UserPresentation, PresentationChange, PanelScaleKind } from '../model/preferences-types';
 
 export const usePresentationStore = defineStore('presentation', () => {
 	const snapshot = shallowRef<UserPresentation | null>(null);
@@ -68,14 +68,12 @@ export const usePresentationStore = defineStore('presentation', () => {
 		return task;
 	}
 
-	function update(change: PresentationChange, permission?: AbortSignal): Promise<UserPresentation> {
-		// Freeze mutable draft fields before entering the queue.
-		const frozen = snapshotPresentationChange(change);
+	function mutate(resolveChange: () => PresentationChange, permission?: AbortSignal): Promise<UserPresentation> {
 		return enqueue(async (signal) => {
 			if (permission?.aborted) throw new PreferenceRequestFailure('cancelled', 'not_dispatched');
 			if (blocked.value) throw new PreferenceRequestFailure('refresh_required', 'not_dispatched');
 			try {
-				const value = await presentationApi.update(frozen, signal);
+				const value = await presentationApi.update(resolveChange(), signal);
 				if (signal.aborted) throw new PreferenceRequestFailure('cancelled', 'unknown');
 				snapshot.value = value;
 				error.value = null;
@@ -96,7 +94,32 @@ export const usePresentationStore = defineStore('presentation', () => {
 		});
 	}
 
-	return { snapshot, error, blocked, load, update, reset };
+	function update(change: PresentationChange, permission?: AbortSignal): Promise<UserPresentation> {
+		const frozen = snapshotPresentationChange(change);
+		return mutate(() => frozen, permission);
+	}
+
+	function savePanelScale(kind: PanelScaleKind, scale: number, permission: AbortSignal): Promise<UserPresentation> {
+		return mutate(() => {
+			const current = snapshot.value;
+			if (!current) throw new PreferenceRequestFailure('refresh_required', 'not_dispatched');
+			const preferences = projectPreferences(current.preferences);
+			switch (kind) {
+				case 'status':
+					preferences.statusMonitorScale = scale;
+					break;
+				case 'files':
+					preferences.fileManagerRowSizeMultiplier = scale;
+					break;
+				case 'quick-commands':
+					preferences.quickCommandRowSizeMultiplier = scale;
+					break;
+			}
+			return { action: 'preferences', expectedVersion: current.version, preferences };
+		}, permission);
+	}
+
+	return { snapshot, error, blocked, load, update, savePanelScale, reset };
 });
 
 registerAuthenticatedSessionReset('presentation', () => usePresentationStore().reset());

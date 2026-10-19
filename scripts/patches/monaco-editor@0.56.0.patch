@@ -1,0 +1,81 @@
+diff --git a/esm/vs/platform/hover/browser/hoverWidget.js b/esm/vs/platform/hover/browser/hoverWidget.js
+index 531215dd1b5530b5a337500bf889409aa9e7529d..4fff020c1b11d9e1943f1dcefaf63625f5bfa027 100644
+--- a/esm/vs/platform/hover/browser/hoverWidget.js
++++ b/esm/vs/platform/hover/browser/hoverWidget.js
+@@ -484,41 +484,51 @@ let HoverWidget = class HoverWidget extends Widget {
+             }
+         }
+     }
++    getVerticalHoverBounds() {
++        let top = 0;
++        let bottom = this._targetWindow.innerHeight;
++        // Standalone editors live in clipped panes/dialogs. The window bounds alone
++        // can place a tooltip above the editor where its ancestors will hide it.
++        for (let node = this._hoverContainer.parentElement; node; node = node.parentElement) {
++            const overflow = this._targetWindow.getComputedStyle(node).overflowY;
++            if (overflow !== 'hidden' && overflow !== 'clip' && overflow !== 'auto' && overflow !== 'scroll') {
++                continue;
++            }
++            const rect = node.getBoundingClientRect();
++            const zoom = getDomNodeZoomLevel(node);
++            const contentTop = (rect.top + node.clientTop) * zoom;
++            top = Math.max(top, contentTop);
++            bottom = Math.min(bottom, contentTop + node.clientHeight * zoom);
++        }
++        return { top, bottom };
++    }
+     adjustVerticalHoverPosition(target) {
+-        // Do not adjust vertical hover position if the y coordinate is provided
+-        // or the position is forced
+         if (this._target.y !== undefined || this._forcePosition) {
+             return;
+         }
+-        const hoverPointerOffset = (this._hoverPointer ? 3 /* Constants.PointerSize */ : 0);
+-        // Position hover on top of the target
+-        if (this._hoverPosition === 3 /* HoverPosition.ABOVE */) {
+-            // Hover on top is going beyond window
+-            if (target.top - this._hover.containerDomNode.clientHeight - hoverPointerOffset < 0) {
+-                this._hoverPosition = 2 /* HoverPosition.BELOW */;
+-            }
++        const bounds = this.getVerticalHoverBounds();
++        const pointerOffset = this._hoverPointer ? 3 /* Constants.PointerSize */ : 0;
++        const requiredHeight = this._hover.containerDomNode.clientHeight + pointerOffset;
++        const roomAbove = target.top - bounds.top;
++        const roomBelow = bounds.bottom - target.bottom;
++        if (this._hoverPosition === 3 /* HoverPosition.ABOVE */ && roomAbove < requiredHeight && roomBelow > roomAbove) {
++            this._hoverPosition = 2 /* HoverPosition.BELOW */;
+         }
+-        // Position hover below the target
+-        else if (this._hoverPosition === 2 /* HoverPosition.BELOW */) {
+-            // Hover on bottom is going beyond window
+-            if (target.bottom + this._hover.containerDomNode.offsetHeight + hoverPointerOffset > this._targetWindow.innerHeight) {
+-                this._hoverPosition = 3 /* HoverPosition.ABOVE */;
+-            }
++        else if (this._hoverPosition === 2 /* HoverPosition.BELOW */ && roomBelow < requiredHeight && roomAbove > roomBelow) {
++            this._hoverPosition = 3 /* HoverPosition.ABOVE */;
+         }
+     }
+     adjustHoverMaxHeight(target) {
+         let maxHeight = this._targetWindow.innerHeight * this._maxHeightRatioRelativeToWindow;
+-        // When force position is enabled, restrict max height
+-        if (this._forcePosition) {
+-            const padding = (this._hoverPointer ? 3 /* Constants.PointerSize */ : 0) + 2 /* Constants.HoverBorderWidth */;
+-            if (this._hoverPosition === 3 /* HoverPosition.ABOVE */) {
+-                maxHeight = Math.min(maxHeight, target.top - padding);
+-            }
+-            else if (this._hoverPosition === 2 /* HoverPosition.BELOW */) {
+-                maxHeight = Math.min(maxHeight, this._targetWindow.innerHeight - target.bottom - padding);
+-            }
++        const bounds = this.getVerticalHoverBounds();
++        const padding = (this._hoverPointer ? 3 /* Constants.PointerSize */ : 0) + 2 /* Constants.HoverBorderWidth */;
++        if (this._hoverPosition === 3 /* HoverPosition.ABOVE */) {
++            maxHeight = Math.min(maxHeight, target.top - bounds.top - padding);
++        }
++        else if (this._hoverPosition === 2 /* HoverPosition.BELOW */) {
++            maxHeight = Math.min(maxHeight, bounds.bottom - target.bottom - padding);
+         }
+-        this._hover.containerDomNode.style.maxHeight = `${maxHeight}px`;
++        this._hover.containerDomNode.style.maxHeight = `${Math.max(0, maxHeight)}px`;
+         if (this._hover.contentsDomNode.clientHeight < this._hover.contentsDomNode.scrollHeight) {
+             // Add padding for a vertical scrollbar
+             const extraRightPadding = `${this._hover.scrollbar.options.verticalScrollbarSize}px`;

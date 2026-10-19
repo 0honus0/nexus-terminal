@@ -5,7 +5,13 @@ import { themeApi } from '../api/theme-api';
 import { htmlThemeApi } from '../api/html-theme-api';
 import { AppearanceRequestFailure } from '../model/appearance-failure';
 import { toAppearancePatch } from '../model/appearance-mapper';
-import type { AppearanceSettings, AppearancePatch, TerminalTheme, LocalHtmlTheme } from '../model/appearance-types';
+import type {
+	AppearanceSettings,
+	AppearancePatch,
+	TerminalTheme,
+	LocalHtmlTheme,
+	FontPreferenceKind,
+} from '../model/appearance-types';
 import { readAppearanceUiTheme } from '@nexus-terminal/shared/preferences/appearance/http-codec';
 import { defaultWindowThemeColor, normalizeUiTheme } from '../config/default-theme';
 
@@ -202,7 +208,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
 
 	function accept(value: AppearanceSettings): void {
 		snapshot.value = value;
-		preview.value = {};
+		// In-flight font owners clear their own preview only after their latest write settles.
 		applySettings(value);
 	}
 
@@ -213,6 +219,39 @@ export const useAppearanceStore = defineStore('appearance', () => {
 	): Promise<AppearanceSettings> {
 		const frozen = toAppearancePatch(patch, expectedVersion);
 		return mutate((signal) => appearanceApi.update(frozen, expectedVersion, signal), permission, accept);
+	}
+
+	function saveFontPreference(
+		kind: FontPreferenceKind,
+		size: number,
+		permission: AbortSignal,
+	): Promise<AppearanceSettings> {
+		const patch: AppearancePatch = {};
+		switch (kind) {
+			case 'terminal':
+				patch.terminalFontSize = size;
+				break;
+			case 'mobile-terminal':
+				patch.terminalFontSizeMobile = size;
+				break;
+			case 'editor':
+				patch.editorFontSize = size;
+				break;
+			case 'mobile-editor':
+				patch.mobileEditorFontSize = size;
+				break;
+		}
+		return mutate(
+			(signal) => {
+				const current = snapshot.value;
+				if (!current) throw new AppearanceRequestFailure('refresh_required', 'not_dispatched');
+				// Font gestures are immediate preferences. Read the version when the serialized write starts,
+				// after older gestures and writes to other font fields have committed.
+				return appearanceApi.update(toAppearancePatch(patch, current.version), current.version, signal);
+			},
+			permission,
+			accept,
+		);
 	}
 
 	function previewSettings(patch: AppearancePatch): void {
@@ -253,6 +292,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
 	}
 
 	return {
+		saveFontPreference,
 		clearFontPreview,
 		snapshot,
 		settings,

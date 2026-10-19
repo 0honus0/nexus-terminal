@@ -142,6 +142,8 @@
 	const progressDisplayVisible = ref(false);
 	const terminalFontPreview = ref<number | null>(null);
 	const fileManagerRowScalePreview = ref<number | null>(null);
+	const statusScalePreview = ref<number | null>(null);
+	const quickCommandScalePreview = ref<number | null>(null);
 	const markedSuspendedSessions = computed(() =>
 		registry.orderedSessions.value
 			.filter((session) => session.markedForSuspend.value && session.markedForSuspendAt.value)
@@ -179,27 +181,26 @@
 		},
 		{ flush: 'sync' },
 	);
-	const statusScaleSaver = createLatestValueSaver<{ scale: number; version: number; permission: AbortSignal }>({
+	const statusScaleSaver = createLatestValueSaver<{ scale: number; permission: AbortSignal }>({
 		delayMs: 240,
 
-		save: ({ scale, version, permission }) =>
-			permission.aborted
-				? Promise.resolve()
-				: preferences.update({ statusMonitorScale: scale }, version, permission),
+		save: ({ scale, permission }) =>
+			permission.aborted ? Promise.resolve() : preferences.savePanelScale('status', scale, permission),
+
+		onPendingChange: (pending) => {
+			if (!pending) statusScalePreview.value = null;
+		},
 
 		onError: reportPreferenceSaveError,
 	});
 	const fileManagerRowScaleSaver = createLatestValueSaver<{
 		scale: number;
-		version: number;
 		permission: AbortSignal;
 	}>({
 		delayMs: 240,
 
-		save: ({ scale, version, permission }) =>
-			permission.aborted
-				? Promise.resolve()
-				: preferences.update({ fileManagerRowSizeMultiplier: scale }, version, permission),
+		save: ({ scale, permission }) =>
+			permission.aborted ? Promise.resolve() : preferences.savePanelScale('files', scale, permission),
 
 		onPendingChange: (pending) => {
 			if (!pending) fileManagerRowScalePreview.value = null;
@@ -209,15 +210,16 @@
 	});
 	const quickCommandRowScaleSaver = createLatestValueSaver<{
 		scale: number;
-		version: number;
 		permission: AbortSignal;
 	}>({
 		delayMs: 240,
 
-		save: ({ scale, version, permission }) =>
-			permission.aborted
-				? Promise.resolve()
-				: preferences.update({ quickCommandRowSizeMultiplier: scale }, version, permission),
+		save: ({ scale, permission }) =>
+			permission.aborted ? Promise.resolve() : preferences.savePanelScale('quick-commands', scale, permission),
+
+		onPendingChange: (pending) => {
+			if (!pending) quickCommandScalePreview.value = null;
+		},
 
 		onError: reportPreferenceSaveError,
 	});
@@ -225,19 +227,14 @@
 	const terminalFontSaver = createLatestValueSaver<{
 		mobile: boolean;
 		size: number;
-		version: number | null;
 		permission: AbortSignal;
 	}>({
 		delayMs: 240,
 
-		save: ({ mobile, size, version, permission }) =>
-			version === null || permission.aborted
+		save: ({ mobile, size, permission }) =>
+			permission.aborted
 				? Promise.resolve()
-				: appearance.update(
-						mobile ? { terminalFontSizeMobile: size } : { terminalFontSize: size },
-						version,
-						permission,
-					),
+				: appearance.saveFontPreference(mobile ? 'mobile-terminal' : 'terminal', size, permission),
 
 		onPendingChange: (pending) => {
 			if (!pending) {
@@ -248,13 +245,11 @@
 
 		onError: () => feedback.notifyError(t('common.errorOccurred')),
 	});
-	const editorFontSaver = createLatestValueSaver<{ size: number; version: number | null; permission: AbortSignal }>({
+	const editorFontSaver = createLatestValueSaver<{ size: number; permission: AbortSignal }>({
 		delayMs: 240,
 
-		save: ({ size, version, permission }) =>
-			version === null || permission.aborted
-				? Promise.resolve()
-				: appearance.update({ editorFontSize: size }, version, permission),
+		save: ({ size, permission }) =>
+			permission.aborted ? Promise.resolve() : appearance.saveFontPreference('editor', size, permission),
 
 		onPendingChange: (pending) => {
 			if (!pending) {
@@ -266,15 +261,12 @@
 	});
 	const mobileEditorFontSaver = createLatestValueSaver<{
 		size: number;
-		version: number | null;
 		permission: AbortSignal;
 	}>({
 		delayMs: 240,
 
-		save: ({ size, version, permission }) =>
-			version === null || permission.aborted
-				? Promise.resolve()
-				: appearance.update({ mobileEditorFontSize: size }, version, permission),
+		save: ({ size, permission }) =>
+			permission.aborted ? Promise.resolve() : appearance.saveFontPreference('mobile-editor', size, permission),
 
 		onPendingChange: (pending) => {
 			if (!pending) {
@@ -285,11 +277,15 @@
 		onError: () => feedback.notifyError(t('common.errorOccurred')),
 	});
 
-	const scheduleStatusScale = (scale: number) =>
-		statusScaleSaver.schedule({ scale, version: preferences.version.value, permission: pageScope.signal });
+	const scheduleStatusScale = (scale: number) => {
+		statusScalePreview.value = scale;
+		statusScaleSaver.schedule({ scale, permission: pageScope.signal });
+	};
 
-	const scheduleQuickCommandScale = (scale: number) =>
-		quickCommandRowScaleSaver.schedule({ scale, version: preferences.version.value, permission: pageScope.signal });
+	const scheduleQuickCommandScale = (scale: number) => {
+		quickCommandScalePreview.value = scale;
+		quickCommandRowScaleSaver.schedule({ scale, permission: pageScope.signal });
+	};
 
 	const saveFileManagerColumnWidths = (widths: Record<string, number>) => {
 		void preferences
@@ -305,24 +301,23 @@
 		terminalFontSaver.schedule({
 			mobile: device.isMobile.value,
 			size,
-			version: appearance.version.value,
 			permission: pageScope.signal,
 		});
 	};
 
 	const updateFileManagerRowScale = (scale: number) => {
 		fileManagerRowScalePreview.value = scale;
-		fileManagerRowScaleSaver.schedule({ scale, version: preferences.version.value, permission: pageScope.signal });
+		fileManagerRowScaleSaver.schedule({ scale, permission: pageScope.signal });
 	};
 
 	const updateEditorFontSize = (size: number) => {
 		appearance.previewSettings({ editorFontSize: size });
-		editorFontSaver.schedule({ size, version: appearance.version.value, permission: pageScope.signal });
+		editorFontSaver.schedule({ size, permission: pageScope.signal });
 	};
 
 	const updateMobileEditorFontSize = (size: number) => {
 		appearance.previewSettings({ mobileEditorFontSize: size });
-		mobileEditorFontSaver.schedule({ size, version: appearance.version.value, permission: pageScope.signal });
+		mobileEditorFontSaver.schedule({ size, permission: pageScope.signal });
 	};
 
 	const focusConfiguratorVisible = ref(false);
@@ -1256,7 +1251,7 @@
 				:command-input-sync-target="preferences.values.value.commandInputSyncTarget"
 				:docker-interval-seconds="preferences.values.value.dockerStatusIntervalSeconds"
 				:docker-default-expand="preferences.values.value.dockerDefaultExpand"
-				:status-scale="preferences.values.value.statusMonitorScale"
+				:status-scale="statusScalePreview ?? preferences.values.value.statusMonitorScale"
 				:status-show-ip="preferences.values.value.showStatusMonitorIpAddress"
 				:mobile="device.isMobile.value"
 				:clipboard-count="clipboardCount"
@@ -1276,7 +1271,9 @@
 				:file-manager-column-widths="preferences.values.value.fileManagerColWidths"
 				:spreadsheet-rows-per-page="preferences.values.value.spreadsheetPreviewRowsPerPage"
 				:spreadsheet-max-columns="preferences.values.value.spreadsheetPreviewMaxColumns"
-				:quick-command-row-scale="preferences.values.value.quickCommandRowSizeMultiplier"
+				:quick-command-row-scale="
+					quickCommandScalePreview ?? preferences.values.value.quickCommandRowSizeMultiplier
+				"
 				:progress-visible="progressVisibility[session.id] !== false"
 				:marked-suspended-sessions="markedSuspendedSessions"
 				:layout-locked="preferences.values.value.layoutLocked"

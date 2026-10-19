@@ -1,10 +1,10 @@
 <script setup lang="ts">
 	import type { StatusMonitorSessionController } from '../model/status-types';
-	import { computed, defineAsyncComponent, defineComponent, h, ref, watch, type Component } from 'vue';
+	import { computed, defineAsyncComponent, defineComponent, h, ref, type Component } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiSpinner } from '@/foundation/ui';
 	import { writeClipboardText } from '@/foundation/browser';
-	import { createWheelScaleResolver } from '@/foundation/interaction';
+	import { useWheelScale } from '@/foundation/interaction';
 	import { useFeedback } from '@/shared/feedback/public';
 	import { useStatusMonitor } from '../composables/useStatusMonitor';
 	import {
@@ -40,11 +40,25 @@
 	const feedback = useFeedback();
 	const monitor = useStatusMonitor(props.session);
 	const localScale = ref(props.scale);
+	const scaleRoot = ref<HTMLElement | null>(null);
 	const selectedMetric = ref<StatusMetric | null>(null);
 	const historyRange = ref<1 | 5 | 10 | 30>(5);
 	const ranges = [1, 5, 10, 30] as const;
 	const hasVisibleData = computed(() => Boolean(monitor.current.value && !monitor.error.value));
-	const resolveScale = createWheelScaleResolver({ min: 0.65, max: 1.6, step: 0.1, precision: 2, thresholdPx: 72 });
+	useWheelScale({
+		target: () => scaleRoot.value,
+
+		value: () => props.scale,
+
+		scale: localScale,
+		min: 0.65,
+		max: 1.6,
+		step: 0.1,
+		precision: 2,
+		thresholdPx: 72,
+
+		onChange: (scale) => emit('update:scale', scale),
+	});
 	const scaleStyle = computed(() => {
 		const scale = localScale.value;
 		const inverse = 100 / scale;
@@ -57,22 +71,6 @@
 			transformOrigin: 'top left',
 		};
 	});
-
-	watch(
-		() => props.scale,
-		(value) => {
-			localScale.value = Math.min(1.6, Math.max(0.65, value));
-		},
-	);
-
-	const handleWheel = (event: WheelEvent) => {
-		const change = resolveScale(event, localScale.value);
-		if (!change) {
-			return;
-		}
-		localScale.value = change.next;
-		emit('update:scale', change.next);
-	};
 
 	const copyHost = async () => {
 		if (!props.host) {
@@ -256,7 +254,7 @@
 </script>
 
 <template>
-	<section :data-status-scale="localScale.toFixed(2)" class="status-monitor h-full min-h-0" @wheel="handleWheel">
+	<section ref="scaleRoot" :data-status-scale="localScale.toFixed(2)" class="status-monitor h-full min-h-0">
 		<div
 			:style="scaleStyle"
 			:data-status-scale="localScale.toFixed(2)"
@@ -264,12 +262,12 @@
 			:class="{ 'has-history': Boolean(selectedMetric), 'status-has-data': hasVisibleData }"
 		>
 			<div v-if="monitor.error.value" class="empty-state error-state">
-				<i class="fas fa-exclamation-triangle"></i>
-				<span>{{ t('statusMonitor.failures.' + monitor.error.value) }}</span>
+				<i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
+				<span class="empty-state-message">{{ t('statusMonitor.failures.' + monitor.error.value) }}</span>
 			</div>
-			<div v-else-if="!monitor.current.value" class="empty-state">
-				<i class="fas fa-spinner fa-spin"></i>
-				<span>{{ t('statusMonitor.loading') }}</span>
+			<div v-else-if="!monitor.current.value" class="empty-state" role="status">
+				<UiSpinner density="comfortable" />
+				<span class="empty-state-message">{{ t('statusMonitor.loading') }}</span>
 			</div>
 			<section v-else class="monitor-panel">
 				<header class="monitor-header">

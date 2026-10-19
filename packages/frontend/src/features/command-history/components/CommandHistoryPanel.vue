@@ -13,7 +13,7 @@
 	import { useAuthenticatedViewScope } from '@/shared/session/public';
 	import { useFeedback, preferenceFailureMessage } from '@/shared/feedback/public';
 	import { focusRegistry } from '@/shared/focus/public';
-	import { createWheelScaleResolver } from '@/foundation/interaction';
+	import { useWheelScale } from '@/foundation/interaction';
 	import { useCommandHistoryStore } from '../store/commandHistory.store';
 	import type { CommandHistoryItem, ExecuteHistoryIntent } from '../model/command-history-types';
 
@@ -51,6 +51,7 @@
 	const searchInput = ref<HTMLInputElement | null>(null);
 	const root = ref<HTMLElement | null>(null);
 	const list = ref<HTMLElement | null>(null);
+	const scaleArea = ref<HTMLElement | null>(null);
 	const context = ref<{ entry: CommandHistoryItem; x: number; y: number } | null>(null);
 	const searchExpanded = ref(!props.collapsibleSearch || Boolean(search.value));
 	let unregisterFocus: (() => void) | undefined;
@@ -86,34 +87,26 @@
 	};
 
 	const localScale = ref(readRowScale());
-	const resolveScale = createWheelScaleResolver({
+	useWheelScale({
+		target: () => scaleArea.value,
+
+		value: () => props.rowScale,
+
+		scale: localScale,
+
+		onChange: (scale) => {
+			writeStoredValue(rowScaleStorage, scale);
+			emit('rowScale', scale);
+		},
+
 		min: 0.5,
 		max: 2.5,
 		step: 0.12,
 		precision: 2,
 		thresholdPx: 64,
 		maxStepsPerEvent: 3,
-		stopImmediatePropagation: true,
 	});
 	const rowStyle = computed(() => ({ '--history-row-scale': localScale.value }));
-	watch(
-		() => props.rowScale,
-		(value) => {
-			if (Number.isFinite(value)) {
-				localScale.value = value;
-			}
-		},
-	);
-
-	const scaleRows = (event: WheelEvent) => {
-		const change = resolveScale(event, localScale.value);
-		if (!change) {
-			return;
-		}
-		localScale.value = change.next;
-		writeStoredValue(rowScaleStorage, change.next);
-		emit('rowScale', change.next);
-	};
 
 	watch(
 		() => props.collapsibleSearch,
@@ -346,10 +339,10 @@
 		</div>
 
 		<div
+			ref="scaleArea"
 			class="command-history-list-area min-h-0 flex-1 overflow-y-auto p-2"
 			:style="rowStyle"
 			:data-row-scale="localScale.toFixed(2)"
-			@wheel="scaleRows"
 		>
 			<div
 				v-if="loading && !filtered.length"

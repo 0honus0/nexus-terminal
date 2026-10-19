@@ -85,3 +85,5 @@ export interface BackgroundChange {
 	appearance: AppearanceSettings;
 	cleanupPending: boolean;
 }
+
+export type FontPreferenceKind = 'terminal' | 'mobile-terminal' | 'editor' | 'mobile-editor';

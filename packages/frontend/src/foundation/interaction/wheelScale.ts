@@ -1,24 +1,4 @@
-export interface WheelStepAccumulatorOptions {
-	thresholdPx?: number;
-	resetAfterMs?: number;
-	maxStepsPerEvent?: number;
-}
-
-export interface WheelScaleResolverOptions extends WheelStepAccumulatorOptions {
-	min: number;
-	max: number;
-	step: number;
-	precision?: number;
-	requireCtrlKey?: boolean;
-	stopPropagation?: boolean;
-	stopImmediatePropagation?: boolean;
-}
-
-export interface WheelScaleChange {
-	previous: number;
-	next: number;
-	wheelSteps: number;
-}
+import type { WheelScaleChange, WheelScaleOptions, WheelStepAccumulatorOptions } from './model/wheel-scale-types';
 
 const deltaToPixels = (event: WheelEvent): number => {
 	if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return event.deltaY * 16;
@@ -66,18 +46,11 @@ export function createWheelScaleResolver({
 	thresholdPx = 72,
 	resetAfterMs = 220,
 	maxStepsPerEvent = 3,
-	requireCtrlKey = true,
-	stopPropagation = false,
-	stopImmediatePropagation = false,
-}: WheelScaleResolverOptions) {
+}: WheelScaleOptions) {
 	const consumeSteps = createWheelStepAccumulator({ thresholdPx, resetAfterMs, maxStepsPerEvent });
 
 	return (event: WheelEvent, current: number): WheelScaleChange | null => {
-		if (requireCtrlKey && !event.ctrlKey) return null;
-
-		event.preventDefault();
-		if (stopImmediatePropagation) event.stopImmediatePropagation();
-		else if (stopPropagation) event.stopPropagation();
+		if (!event.ctrlKey) return null;
 
 		const wheelSteps = consumeSteps(event);
 		if (wheelSteps === 0) return null;

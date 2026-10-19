@@ -4,7 +4,7 @@
 	import { UiContextMenu, UiSpinner, UiOverlayPanel } from '@/foundation/ui';
 	import { useDeviceCapabilities } from '@/foundation/browser';
 	import { writeClipboardText } from '@/foundation/browser';
-	import { createWheelScaleResolver, useLongPressGesture } from '@/foundation/interaction';
+	import { useWheelScale, useLongPressGesture } from '@/foundation/interaction';
 	import { useAuthenticatedViewScope } from '@/shared/session/public';
 	import { useFeedback } from '@/shared/feedback/public';
 	import { focusRegistry } from '@/shared/focus/public';
@@ -162,12 +162,7 @@
 	const FILE_MANAGER_SCALE_MIN = 0.5;
 	const FILE_MANAGER_SCALE_MAX = 2;
 
-	const normalizeRowScale = (value: number): number =>
-		Math.min(FILE_MANAGER_SCALE_MAX, Math.max(FILE_MANAGER_SCALE_MIN, value));
-
-	const renderedRowScale = ref(
-		Number.isFinite(props.rowScale) ? normalizeRowScale(props.rowScale) : FILE_MANAGER_SCALE_MIN,
-	);
+	const renderedRowScale = ref(props.rowScale);
 	const changingTerminalPath = ref(false);
 	const syncingTerminalPath = ref(false);
 	const listScrollTop = ref(0);
@@ -291,13 +286,32 @@
 		await pending.promise;
 	};
 
-	const resolveWheelScale = createWheelScaleResolver({
+	useWheelScale({
+		target: () => listScroller.value,
+
+		value: () => props.rowScale,
+
+		scale: renderedRowScale,
+
+		onChange: (scale) => emit('rowScale', scale),
+
+		captureViewport: () => {
+			const scroller = listScroller.value;
+			if (!scroller || !shouldVirtualize.value) return;
+			const entries = browser.visible.value;
+			const anchoredRow = scroller.scrollTop / estimatedRowHeight.value;
+			return () => {
+				if (scroller !== listScroller.value || entries !== browser.visible.value) return;
+				scroller.scrollTop = anchoredRow * estimatedRowHeight.value;
+				listScrollTop.value = scroller.scrollTop;
+			};
+		},
+
 		min: FILE_MANAGER_SCALE_MIN,
 		max: FILE_MANAGER_SCALE_MAX,
 		step: 0.08,
 		thresholdPx: 72,
 		maxStepsPerEvent: 3,
-		stopImmediatePropagation: true,
 	});
 	const rowStyle = computed(() => ({ '--file-row-scale': renderedRowScale.value }));
 	const estimatedRowHeight = computed(() => Math.max(24, 34 * renderedRowScale.value));
@@ -681,12 +695,6 @@
 			}
 		},
 		{ deep: true },
-	);
-	watch(
-		() => props.rowScale,
-		(value) => {
-			if (Number.isFinite(value)) renderedRowScale.value = normalizeRowScale(value);
-		},
 	);
 
 	const activate = async (entry: RemoteFileEntry): Promise<void> => {
@@ -1637,23 +1645,6 @@
 			feedback.notifyError(filesystemFailureMessage(cause, t));
 		}
 	};
-
-	const scaleRows = (event: WheelEvent) => {
-		const change = resolveWheelScale(event, renderedRowScale.value);
-		if (!change) return;
-		const oldEstimatedRowHeight = estimatedRowHeight.value;
-		const scroller = listScroller.value;
-		const anchoredRow = shouldVirtualize.value && scroller ? scroller.scrollTop / oldEstimatedRowHeight : null;
-		renderedRowScale.value = change.next;
-		emit('rowScale', change.next);
-		if (anchoredRow !== null && scroller) {
-			void nextTick(() => {
-				const nextScrollTop = anchoredRow * estimatedRowHeight.value;
-				scroller.scrollTop = nextScrollTop;
-				listScrollTop.value = nextScrollTop;
-			});
-		}
-	};
 </script>
 
 <template>
@@ -1883,9 +1874,8 @@
 			tabindex="0"
 			:aria-label="t('fileManager.modalTitle')"
 			class="min-h-0 flex-1 overflow-auto outline-none"
-			:style="rowStyle"
+			:style="[rowStyle, { overflowAnchor: shouldVirtualize ? 'none' : undefined }]"
 			:data-row-scale="renderedRowScale.toFixed(2)"
-			@wheel="scaleRows"
 			@scroll="handleListScroll"
 			@pointerdown="focusFileListFromPointer"
 			@contextmenu="openDirectoryContext($event, 'current-directory', browser.path.value)"
