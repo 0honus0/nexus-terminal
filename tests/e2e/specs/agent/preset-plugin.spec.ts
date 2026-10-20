@@ -10,6 +10,7 @@ import {
 	type NativeTask,
 	prepareNativeTask,
 	openNativeTask,
+	openNativeTaskPanel,
 	startNativeTask,
 	finishNativeTask,
 	cancelNativeTask,
@@ -347,13 +348,14 @@ test('frontend target owns a full Custom App Surface and connects through the is
 	// Explicitly read the product's plugin directory (not the unrelated
 	// scoped-app selector) before asserting the runtime installation picker.
 	await section.getByRole('button', { name: 'Read plugin directories', exact: true }).click();
+	await section.getByText('Runtime observations', { exact: true }).click();
 	const runtimePicker = section.getByRole('combobox', { name: 'App', exact: true });
 	for (const installed of [custom, agent, fullstack]) {
 		await expect(runtimePicker.locator('option[value="' + installed.appId + '"]')).toHaveCount(1);
 		// The native select option is intentionally hidden. Also assert the
 		// visible installed-app record; the old first text match selected the
 		// hidden option and never exercised the management surface.
-		await expect(section.locator('article').filter({ hasText: installed.appId })).toBeVisible();
+		await expect(section.locator('article').filter({ hasText: installed.definitionId })).toBeVisible();
 	}
 	await captureFunctionalScreenshot(page, 'agent-plugins-multiple-installed.png', {
 		viewport: { width: 1440, height: 900 },
@@ -852,6 +854,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 		await expect(hub.getByText('OK', { exact: true })).toBeVisible();
 		await expect(hub.getByRole('button', { name: 'Environment', exact: true })).toHaveCount(0);
 		await expect(hub.getByRole('button', { name: 'Execution mode', exact: true })).toHaveCount(0);
+		await openNativeTaskPanel(page);
 		await hub.getByText('Step and tool audit', { exact: true }).click();
 		const audit = hub
 			.locator('details')
@@ -863,6 +866,10 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 		await captureFunctionalScreenshot(page, 'agent-installed-native-run.png', {
 			viewport: { width: 1440, height: 900 },
 		});
+		await hub
+			.getByRole('complementary', { name: 'Tasks', exact: true })
+			.getByRole('button', { name: 'Close', exact: true })
+			.click();
 	});
 	await step('resizing persists host-owned geometry across reload', async () => {
 		const handle = hub.getByRole('button', { name: 'Resize Agent', exact: true });
@@ -877,7 +884,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 	});
 	await step('create, rename and switch threads through versioned native commands', async () => {
 		await openAgentConversations(page);
-		const panel = hub.getByRole('heading', { name: 'Native threads', exact: true }).locator('..');
+		const panel = hub.getByRole('heading', { name: 'Conversations', exact: true }).locator('..');
 		await panel.getByRole('button', { name: 'New thread', exact: true }).click();
 		await panel.getByRole('textbox', { name: 'Thread title', exact: true }).fill('Plugin surface conversation');
 		const { result } = await captureNativeCommand(task, 'agent.threads.create', () =>
@@ -935,9 +942,9 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 		]);
 		try {
 			const approval = await waitNativeApproval(task, run.id, 'shell_execute');
-			const article = hub.locator('article').filter({ hasText: approval.operationHash });
+			const article = hub.locator('article').filter({ hasText: approval.inspection.summary });
 			await expect(article).toContainText('shell_execute');
-			await expect(article).toContainText('destructive');
+			await expect(article).toContainText('Destructive');
 			const { command: input } = await captureNativeCommand(task, 'agent.approvals.resolve', () =>
 				article.getByRole('button', { name: 'Approve original operation', exact: true }).click(),
 			);
@@ -952,7 +959,9 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			const result = await finishNativeTask(task, run.id);
 			expect(result.run.status).toBe('completed');
 			expect(JSON.parse(result.text)).toMatchObject({ exitCode: 0, stdout: 'approval-e2e' });
+			await article.getByText('Normalized operation', { exact: true }).click();
 			await article.getByRole('button', { name: 'Inspect tool audit', exact: true }).click();
+			await openNativeTaskPanel(page);
 			await hub.getByText('Step and tool audit', { exact: true }).click();
 			const audit = hub
 				.locator('details')
@@ -972,7 +981,12 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 		// instead of claiming that all remote effects are proven to have failed.
 		expect(result.run.status).toBe('unknown');
 		expect(result.text).toBe('');
+		await openNativeTaskPanel(page);
 		await expect(hub.locator('strong').filter({ hasText: /^Unknown$/ })).toBeVisible();
+		await hub
+			.getByRole('complementary', { name: 'Tasks', exact: true })
+			.getByRole('button', { name: 'Close', exact: true })
+			.click();
 	});
 	await step(
 		'uploaded Artifact appears in the actual App library and verified download preserves bytes',
@@ -1024,7 +1038,8 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			const row = library
 				.locator('article')
 				.filter({ has: page.getByRole('heading', { name: /plugin-evidence\.txt/ }) });
-			await expect(row).toContainText(artifact.id);
+			await expect(row).toContainText(artifact.name);
+			await expect(row).toContainText(String(artifact.sizeBytes));
 			const downloading = page.waitForEvent('download');
 			await row.getByRole('button', { name: 'Download and verify', exact: true }).click();
 			const download = await downloading;

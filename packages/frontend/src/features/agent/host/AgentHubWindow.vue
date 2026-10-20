@@ -15,7 +15,7 @@
 
 	const props = defineProps<{ directory: HostDirectory }>();
 	const { windowManager: agentWindowManager } = useAgentHostState();
-	const emit = defineEmits<{ layoutChange: []; refresh: [] }>();
+	const emit = defineEmits<{ layoutChange: [] }>();
 	const state = agentWindowManager.state;
 	const activeApp = computed(() => props.directory.apps.find((app) => app.id === state.activeAppId) ?? null);
 	const visible = computed(() => state.status === 'visible');
@@ -753,9 +753,6 @@
 
 					<!-- 新建 App 按钮 -->
 					<div class="flex shrink-0 items-center" @pointerdown.stop>
-						<button class="px-2" :aria-label="$t('agent.nativeThreads.read')" @click="emit('refresh')">
-							<i class="fa-solid fa-rotate-right" />
-						</button>
 						<AgentAppSwitcher
 							:apps="directory.apps"
 							:active-app-id="state.activeAppId"

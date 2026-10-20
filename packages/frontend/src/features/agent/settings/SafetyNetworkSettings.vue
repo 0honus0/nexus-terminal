@@ -8,10 +8,9 @@
 	import type { AgentDenylist, AgentDenylistDraft } from '../model/app-management-types';
 	import { useAgentManagementOperation } from '../composables/use-agent-management-operation';
 	import { agentHostEvents } from '../events/agent-host-events';
-	import { formatAgentDateTime } from '../locale-format';
 	import AgentTargetPicker from './AgentTargetPicker.vue';
 
-	const { t, locale } = useI18n();
+	const { t } = useI18n();
 	const expanded = ref(false);
 	const saved = ref<AgentDenylist | null>(null);
 	const draft = ref<AgentDenylistDraft>({ connectionIds: [], reason: '' });
@@ -144,17 +143,6 @@
 					t('common.save')
 				}}</UiButton>
 			</fieldset>
-			<div
-				v-for="entry in saved?.entries"
-				:key="entry.connectionId"
-				class="space-y-1 border-t border-border pt-2 text-xs"
-			>
-				<p>#{{ entry.connectionId }} · {{ entry.reason }}</p>
-				<p>
-					{{ formatAgentDateTime(locale, new Date(entry.changedAt)) }} ·
-					{{ t('agent.settings.appManagement.changedBy', { id: entry.changedBy }) }}
-				</p>
-			</div>
 		</div>
 	</section>
 </template>

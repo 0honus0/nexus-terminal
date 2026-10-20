@@ -126,7 +126,7 @@
 					@change="load()"
 				>
 					<option value="">{{ t('agent.artifactManagement.allApps') }}</option>
-					<option v-for="app in apps" :key="app.id" :value="app.id">{{ app.name }} · {{ app.id }}</option>
+					<option v-for="app in apps" :key="app.id" :value="app.id">{{ app.name }}</option>
 				</select></label
 			>
 			<label class="text-sm"
@@ -162,45 +162,92 @@
 					@keydown.enter.prevent="load()"
 			/></label>
 		</fieldset>
-		<article v-for="item in items" :key="item.id" class="space-y-2 rounded border border-border p-3">
-			<h4 class="break-all">{{ item.name }} · v{{ item.version }} · {{ item.sizeBytes }} B</h4>
-			<p class="break-all text-xs">
-				{{ item.appId }} / {{ item.id }} · {{ t('agent.artifactManagement.status.' + item.status) }} ·
-				{{ item.mediaType }}
-			</p>
-			<p class="break-all text-xs">SHA-256: {{ item.sha256 ?? '—' }}</p>
-			<p class="text-xs">
-				{{
-					t('agent.artifactManagement.times', {
-						created: time(item.createdAt),
-						ready: time(item.readyAt),
-						expires: time(item.expiresAt),
-						deleted: time(item.deletedAt),
-					})
-				}}
-			</p>
-			<p v-if="item.retained" class="text-xs">{{ t('agent.artifactManagement.retained') }}</p>
-			<div class="flex flex-wrap gap-2">
-				<UiButton type="button" :disabled="blocked || item.status !== 'ready'" @click="download(item)">{{
-					t('agent.artifactManagement.download')
-				}}</UiButton>
-				<UiButton type="button" :disabled="blocked || item.status !== 'ready'" @click="retain(item)">{{
-					t(item.retained ? 'agent.artifactManagement.releaseRetention' : 'agent.artifactManagement.retain')
-				}}</UiButton>
-				<UiButton
-					type="button"
-					:disabled="blocked || item.retained || item.status === 'deleted'"
-					@click="deleteTarget = item"
-					>{{ t('common.delete') }}</UiButton
-				>
+		<div
+			v-if="items.length"
+			class="grid grid-cols-[minmax(0,1fr)_5rem_5.5rem] gap-3 border-b border-border px-2 py-2 text-[11px] font-semibold text-text-secondary sm:grid-cols-[minmax(0,1fr)_7rem_5rem_5rem_5.5rem]"
+		>
+			<span>{{ t('agent.files.columns.name') }}</span
+			><span class="hidden sm:block">{{ t('agent.files.columns.source') }}</span
+			><span class="hidden sm:block">{{ t('agent.files.columns.size') }}</span
+			><span>{{ t('agent.files.columns.status') }}</span
+			><span>{{ t('agent.files.columns.actions') }}</span>
+		</div>
+		<article v-for="item in items" :key="item.id" class="border-b border-border/55 px-2 py-2 hover:bg-header/45">
+			<div
+				class="grid min-h-[58px] grid-cols-[minmax(0,1fr)_5rem_5.5rem] items-center gap-3 sm:grid-cols-[minmax(0,1fr)_7rem_5rem_5rem_5.5rem]"
+			>
+				<div class="min-w-0">
+					<h4 class="truncate text-xs font-semibold" :title="item.name">{{ item.name }}</h4>
+					<p class="truncate text-[11px] text-text-secondary">
+						{{ item.sizeBytes }} B · {{ time(item.createdAt)
+						}}<span v-if="item.retained"> · {{ t('agent.artifactManagement.retained') }}</span>
+					</p>
+				</div>
+				<span class="hidden truncate text-[11px] text-text-secondary sm:block">{{
+					apps.find((app) => app.id === item.appId)?.name ?? '—'
+				}}</span>
+				<span class="hidden text-[11px] tabular-nums text-text-secondary sm:block">{{ item.sizeBytes }} B</span>
+				<span class="text-[11px]">{{ t('agent.artifactManagement.status.' + item.status) }}</span>
+				<div class="flex items-center justify-end gap-0.5">
+					<button
+						type="button"
+						class="flex h-7 w-7 items-center justify-center rounded-md text-text-secondary hover:bg-primary/10 hover:text-primary disabled:opacity-50"
+						:disabled="blocked || item.status !== 'ready'"
+						:aria-label="t('agent.artifactManagement.download')"
+						:title="t('agent.artifactManagement.download')"
+						@click="download(item)"
+					>
+						<i class="fa-solid fa-download" aria-hidden="true"></i>
+					</button>
+					<button
+						type="button"
+						class="flex h-7 w-7 items-center justify-center rounded-md text-text-secondary hover:bg-primary/10 hover:text-primary disabled:opacity-50"
+						:disabled="blocked || item.status !== 'ready'"
+						:aria-label="
+							t(
+								item.retained
+									? 'agent.artifactManagement.releaseRetention'
+									: 'agent.artifactManagement.retain',
+							)
+						"
+						:title="
+							t(
+								item.retained
+									? 'agent.artifactManagement.releaseRetention'
+									: 'agent.artifactManagement.retain',
+							)
+						"
+						@click="retain(item)"
+					>
+						<i
+							:class="item.retained ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark'"
+							aria-hidden="true"
+						></i>
+					</button>
+					<button
+						type="button"
+						class="flex h-7 w-7 items-center justify-center rounded-md text-text-secondary hover:bg-error/10 hover:text-error disabled:opacity-50"
+						:disabled="blocked || item.retained || item.status === 'deleted'"
+						:aria-label="t('common.delete')"
+						:title="t('common.delete')"
+						@click="deleteTarget = item"
+					>
+						<i class="fa-solid fa-trash-can" aria-hidden="true"></i>
+					</button>
+				</div>
 			</div>
-			<ArtifactAttachmentEditor
-				:key="item.id"
-				:artifact="item"
-				:apps="apps"
-				:disabled="blocked"
-				@changed="load()"
-			/>
+			<details class="text-xs">
+				<summary class="cursor-pointer py-1 text-text-secondary">
+					{{ t('agent.artifactManagement.attachments') }}
+				</summary>
+				<ArtifactAttachmentEditor
+					:key="item.id"
+					:artifact="item"
+					:apps="apps"
+					:disabled="blocked"
+					@changed="load()"
+				/>
+			</details>
 		</article>
 		<div class="flex flex-wrap gap-2">
 			<UiButton

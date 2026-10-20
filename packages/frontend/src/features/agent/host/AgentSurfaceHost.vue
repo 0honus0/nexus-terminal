@@ -110,7 +110,7 @@
 <template>
 	<Teleport to="body">
 		<template v-if="auth.authenticated.value && auth.userId.value === 1">
-			<AgentHubWindow v-if="directory" :directory="directory" @layout-change="persistLayout" @refresh="refresh" />
+			<AgentHubWindow v-if="directory" :directory="directory" @layout-change="persistLayout" />
 			<AgentLauncher
 				v-if="windowManager.state.status !== 'visible' || !directory"
 				@layout-change="persistLayout"

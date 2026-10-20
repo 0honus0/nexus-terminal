@@ -10,6 +10,7 @@ import { expect, test } from '../../support/fixtures';
 import {
 	prepareNativeTask,
 	openNativeTask,
+	openNativeTaskPanel,
 	startNativeTask,
 	finishNativeTask,
 	readNativeRun,
@@ -509,6 +510,7 @@ for (const repeat of [false, true]) {
 			const run = await startNativeTask(task, `E2E_SEARCH_SCAN connection=${connectionId}`, [connectionId]);
 			runId = run.id;
 			await expect.poll(async () => (await (await request.get(hold)).json()).pending).toBeGreaterThan(0);
+			await openNativeTaskPanel(page);
 			await page.getByRole('button', { name: 'Request cancellation', exact: true }).click();
 			await expect.poll(async () => (await readNativeRun(task, run.id)).status).toBe('cancelled');
 			await expect.poll(async () => (await (await request.get(hold)).json()).pending).toBe(0);
@@ -792,7 +794,7 @@ for (const fixture of regressionInputs.memoryProposals) {
 			task.app.id,
 		);
 
-		const row = () => section.locator('article').filter({ has: page.getByText(reviewId, { exact: true }) });
+		const row = () => section.locator('article').filter({ has: page.getByText(managed.content, { exact: true }) });
 
 		await row().getByRole('button', { name: 'Read current version for review', exact: true }).click();
 		const endpoint = `/api/v1/agent${path}/${reviewId}/review`;

@@ -37,7 +37,6 @@
 		<h3 class="border-b border-border/45 pb-2 text-xs font-semibold text-foreground">
 			{{ t('agent.nativeThreads.title') }}
 		</h3>
-		<p class="text-xs text-text-secondary">{{ t('agent.nativeThreads.scope') }}</p>
 
 		<div class="flex flex-wrap gap-2">
 			<UiButton

@@ -132,7 +132,7 @@
 	<div class="space-y-2 text-xs">
 		<ArtifactPicker v-model="items" :app-id="appId" :active="active" :disabled="locked" />
 		<div v-if="items.length" class="flex flex-wrap gap-2">
-			<span v-for="item in items" :key="item.id">{{ item.name }} · {{ item.id }}</span
+			<span v-for="item in items" :key="item.id">{{ item.name }}</span
 			><button type="button" :disabled="locked" @click="items = []">
 				{{ t('agent.nativeRun.clearAttachments') }}
 			</button>

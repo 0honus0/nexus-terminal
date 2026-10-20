@@ -1,13 +1,16 @@
 <script setup lang="ts">
-	import { onBeforeUnmount, onMounted, ref } from 'vue';
+	import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 	import { UiButton } from '@/foundation/ui';
 	import { useI18n } from 'vue-i18n';
 	import { useNativeRuns } from '../composables/use-native-runs';
 	import { isNativeRunActive, nativeModelKey } from '../model/native-run-rules';
 	import NativeThreadPanel from './NativeThreadPanel.vue';
 	import NativeInputArtifacts from '../files/NativeInputArtifacts.vue';
+	import AgentConfigPopover from '../files/AgentConfigPopover.vue';
 	import NativeRunDetails from '../runtime/NativeRunDetails.vue';
+	import NativeApprovalList from '../runtime/NativeApprovalList.vue';
 	import AgentMessageBody from '../ai/AgentMessageBody.vue';
+	import AgentConversationWelcome from '../ai/AgentConversationWelcome.vue';
 
 	const props = defineProps<{ appId: string; appVersion: number; executionEnabled: boolean; active: boolean }>();
 	const { t } = useI18n();
@@ -15,6 +18,8 @@
 	const threadsOverlay = ref(false);
 	const threadSidebarVisible = ref(true);
 	const threadDrawerOpen = ref(false);
+	const taskRailVisible = ref(false);
+	const auditToolId = ref('');
 	let layoutObserver: ResizeObserver | null = null;
 
 	onMounted(() => {
@@ -66,12 +71,31 @@
 		inputArtifacts,
 		attachmentsReady,
 	} = runtime;
+
+	watch(
+		() => run.value?.id,
+		() => {
+			auditToolId.value = '';
+		},
+	);
+
+	const selectedModel = computed(() => models.value.find((model) => nativeModelKey(model) === modelKey.value));
+
+	function handleComposerKeydown(event: KeyboardEvent): void {
+		if (event.key !== 'Enter' || event.shiftKey || event.isComposing) {
+			return;
+		}
+		event.preventDefault();
+		if (event.currentTarget instanceof HTMLTextAreaElement) {
+			event.currentTarget.form?.requestSubmit();
+		}
+	}
 </script>
 <template>
 	<div
 		ref="layoutRoot"
 		class="agent-surface-layout relative grid h-full min-h-0"
-		:class="{ 'is-threads-hidden': !threadSidebarVisible }"
+		:class="{ 'is-threads-hidden': !threadSidebarVisible, 'has-task-rail': run && taskRailVisible }"
 	>
 		<aside
 			id="agent-thread-sidebar"
@@ -110,7 +134,8 @@
 						:disabled="operation.busy.value || !!pending"
 						@click="runtime.selectRun(item)"
 					>
-						{{ t('agent.nativeRun.states.' + item.status) }} · {{ item.id }}
+						{{ t('agent.nativeRun.states.' + item.status) }} ·
+						{{ new Date(item.createdAt).toLocaleString() }}
 					</UiButton>
 				</li>
 			</ul>
@@ -148,8 +173,19 @@
 					class="ml-auto shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary"
 					>{{ t('agent.nativeRun.states.' + run.status) }}</span
 				>
+				<button
+					v-if="run"
+					type="button"
+					class="flex h-7.5 w-7.5 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-card/60 text-text-secondary hover:bg-header hover:text-foreground"
+					:aria-label="t('agent.ui.toggleTasks')"
+					:aria-expanded="taskRailVisible"
+					aria-controls="agent-task-rail"
+					@click="taskRailVisible = !taskRailVisible"
+				>
+					<i class="fa-solid fa-list-check text-xs" aria-hidden="true"></i>
+				</button>
 			</header>
-			<!-- Keep composer and details in flow; the pane scrolls when their minimum heights exceed the window. -->
+			<!-- The conversation owns scrolling; task inspection has an independent rail. -->
 			<div class="flex flex-1 shrink-0 flex-col gap-3 p-3 sm:p-4">
 				<p v-if="!executionEnabled" role="status">{{ t('agent.nativeRun.executionDisabled') }}</p>
 				<p v-if="operation.notice.value" role="status">
@@ -182,6 +218,12 @@
 						class="agent-conversation-scroller min-h-48 flex-1 space-y-3 overflow-y-auto overscroll-contain px-2 py-4 touch-pan-y"
 						aria-live="polite"
 					>
+						<AgentConversationWelcome
+							v-if="!entries.length"
+							:active="active"
+							:draft="draft"
+							@select="draft = $event"
+						/>
 						<article
 							v-for="entry in entries"
 							:key="
@@ -192,56 +234,129 @@
 									entry.position.textOffset,
 								].join(':')
 							"
-							class="mx-auto max-w-3xl rounded-2xl border border-border/60 bg-card/70 p-4 shadow-2xs"
+							class="mx-auto flex w-full max-w-3xl"
+							:class="entry.role === 'user' ? 'justify-end' : ''"
 						>
-							<p class="mb-1 text-xs text-text-secondary">
-								{{ t('agent.nativeRun.roles.' + entry.role) }}
-							</p>
-							<AgentMessageBody :text="entry.text" />
+							<div
+								class="min-w-0"
+								:class="
+									entry.role === 'user'
+										? 'max-w-[80%] rounded-2xl rounded-tr-[5px] bg-primary/[0.07] px-4 py-3.5 ring-1 ring-inset ring-primary/10 shadow-2xs'
+										: 'w-full'
+								"
+							>
+								<div
+									v-if="entry.role === 'assistant'"
+									class="mb-2.5 flex items-center gap-2 px-1 text-[11px] text-text-secondary/70"
+								>
+									<span class="h-1.5 w-1.5 rounded-full bg-primary"></span
+									>{{ t('agent.nativeRun.roles.assistant') }}
+								</div>
+								<p
+									v-if="entry.role === 'user'"
+									class="whitespace-pre-wrap break-words text-[13px] leading-[1.7]"
+								>
+									{{ entry.text }}
+								</p>
+								<div
+									v-else
+									class="rounded-xl bg-card px-4 py-3.5 ring-1 ring-inset ring-border/30 shadow-2xs"
+								>
+									<AgentMessageBody :text="entry.text" />
+								</div>
+							</div>
 						</article>
 					</div>
 					<UiButton :disabled="operation.busy.value || threadBusy" @click="runtime.readEntries">
 						{{ t('agent.nativeRun.moreBody') }}
 					</UiButton>
+					<NativeApprovalList
+						v-if="run"
+						:key="run.id"
+						:approvals="approvals"
+						:disabled="operation.busy.value || threadBusy"
+						@mutate="runtime.mutate"
+						@inspect="
+							auditToolId = $event;
+							taskRailVisible = true;
+						"
+					/>
 					<form
 						class="agent-composer-shell shrink-0 space-y-2 rounded-2xl border border-border/70 bg-card/80 p-3 shadow-sm"
 						@submit.prevent="runtime.send(false)"
 					>
-						<label class="block text-sm"
-							>{{ t('agent.nativeRun.model')
-							}}<select
-								v-model="modelKey"
-								class="ml-2 max-w-full rounded border bg-background p-2"
+						<div class="agent-run-config flex items-center gap-1">
+							<AgentConfigPopover
+								:ariaLabel="t('agent.nativeRun.model')"
 								:disabled="blocked"
+								panel-class="w-72"
 							>
-								<option value="">{{ t('agent.nativeRun.chooseModel') }}</option>
-								<option
-									v-for="model in models"
-									:key="nativeModelKey(model)"
-									:value="nativeModelKey(model)"
+								<template #trigger
+									><i class="fa-solid fa-microchip text-[9px]" aria-hidden="true"></i
+									><span class="max-w-28 truncate">{{
+										selectedModel?.modelId || t('agent.nativeRun.chooseModel')
+									}}</span
+									><i class="fa-solid fa-chevron-down text-[7px]" aria-hidden="true"></i
+								></template>
+								<template #panel>
+									<label class="block text-sm"
+										>{{ t('agent.nativeRun.model')
+										}}<select
+											v-model="modelKey"
+											class="ml-2 max-w-full rounded border bg-background p-2"
+											:disabled="blocked"
+										>
+											<option value="">{{ t('agent.nativeRun.chooseModel') }}</option>
+											<option
+												v-for="model in models"
+												:key="nativeModelKey(model)"
+												:value="nativeModelKey(model)"
+											>
+												{{ model.providerName }} / {{ model.modelId }}
+											</option>
+										</select></label
+									></template
 								>
-									{{ model.providerName }} / {{ model.modelId }} · v{{ model.configurationVersion }}
-								</option>
-							</select></label
-						>
-						<fieldset :disabled="blocked" class="max-h-32 overflow-auto text-xs">
-							<legend>{{ t('agent.nativeRun.targets') }}</legend>
-							<label v-for="connection in connections" :key="connection.id" class="mr-3 inline-flex gap-1"
-								><input v-model="connectionIds" type="checkbox" :value="connection.id" />{{
-									connection.name
-								}}</label
+							</AgentConfigPopover>
+							<AgentConfigPopover
+								:ariaLabel="t('agent.nativeRun.targets')"
+								:disabled="blocked"
+								panel-class="w-72"
 							>
-						</fieldset>
-						<p class="text-xs text-text-secondary">{{ t('agent.nativeRun.targetHelp') }}</p>
+								<template #trigger
+									><i class="fa-solid fa-server text-[9px]" aria-hidden="true"></i
+									><span
+										>{{ t('agent.nativeRun.targets')
+										}}<span v-if="connectionIds.length"> · {{ connectionIds.length }}</span></span
+									><i class="fa-solid fa-chevron-down text-[7px]" aria-hidden="true"></i
+								></template>
+								<template #panel>
+									<fieldset :disabled="blocked" class="max-h-32 overflow-auto text-xs">
+										<legend>{{ t('agent.nativeRun.targets') }}</legend>
+										<label
+											v-for="connection in connections"
+											:key="connection.id"
+											class="mr-3 inline-flex gap-1"
+											><input v-model="connectionIds" type="checkbox" :value="connection.id" />{{
+												connection.name
+											}}</label
+										>
+									</fieldset></template
+								>
+							</AgentConfigPopover>
+						</div>
+
 						<textarea
 							v-model="draft"
 							rows="4"
-							class="w-full rounded border bg-background p-2"
+							class="w-full resize-none rounded-xl border-0 bg-transparent p-2 text-[13px] leading-relaxed outline-none"
 							:disabled="blocked"
 							:aria-label="t('agent.nativeRun.prompt')"
+							:placeholder="t('agent.conversation.placeholder')"
+							@keydown="handleComposerKeydown"
 							required
 						/>
-						<p class="text-xs text-text-secondary">{{ t('agent.nativeRun.attachmentHelp') }}</p>
+
 						<NativeInputArtifacts
 							:key="thread.id"
 							:app-id="appId"
@@ -284,26 +399,43 @@
 						</div>
 					</form>
 				</section>
-				<div class="max-h-[45vh] shrink-0 overflow-y-auto">
-					<NativeRunDetails
-						v-if="run"
-						:key="run.id"
-						:app-id="appId"
-						:run="run"
-						:events="events"
-						:approvals="approvals"
-						:children="children"
-						:child="child"
-						:messages="messages"
-						:active="active"
-						:disabled="blocked"
-						@refresh="runtime.refreshRun"
-						@mutate="runtime.mutate($event)"
-						@messages="runtime.readMessages"
-					/>
-				</div>
 			</div>
 		</main>
+		<button
+			v-if="run && taskRailVisible"
+			type="button"
+			class="agent-task-backdrop absolute inset-0 z-20 hidden bg-black/20"
+			:aria-label="t('common.close')"
+			@click="taskRailVisible = false"
+		></button>
+		<aside
+			v-if="run && taskRailVisible"
+			id="agent-task-rail"
+			class="agent-task-rail min-h-0 overflow-y-auto border-l border-border/50 bg-background p-3"
+			:aria-label="t('agent.tasks.title')"
+		>
+			<header class="mb-3 flex items-center justify-between border-b border-border/50 pb-2">
+				<h3 class="text-xs font-semibold">{{ t('agent.tasks.title') }}</h3>
+				<button type="button" :aria-label="t('common.close')" @click="taskRailVisible = false">
+					<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+				</button>
+			</header>
+			<NativeRunDetails
+				:key="run.id"
+				:app-id="appId"
+				:run="run"
+				:events="events"
+				:audit-tool-id="auditToolId"
+				:children="children"
+				:child="child"
+				:messages="messages"
+				:active="active"
+				:disabled="blocked"
+				@refresh="runtime.refreshRun"
+				@mutate="runtime.mutate($event)"
+				@messages="runtime.readMessages"
+			/>
+		</aside>
 		<button
 			v-if="threadsOverlay && threadDrawerOpen"
 			type="button"

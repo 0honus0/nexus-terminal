@@ -21,7 +21,7 @@ test('execution settings validate before dispatch, save the original CAS and rej
 	);
 	await page.goto('/settings?tab=agent');
 	await selectAgentSettingsGroup(page, 'runtime');
-	const section = page.getByRole('region', { name: 'Execution settings', exact: true });
+	const section = page.getByRole('region', { name: 'Execution and performance', exact: true });
 	const input = section.getByRole('spinbutton', { name: 'Concurrent Runs', exact: true });
 	const save = section.getByRole('button', { name: 'Save', exact: true });
 	const original = initial.settings.limits.maxConcurrentRuns;
@@ -39,9 +39,11 @@ test('execution settings validate before dispatch, save the original CAS and rej
 	}
 	// The execution switch is a complete versioned setting, not the removed feature toggle.
 	await input.fill(String(original));
-	const enabled = section.getByRole('checkbox', { name: 'Allow new Agent execution', exact: true });
-	await enabled.setChecked(!initial.settings.enabled);
-	await save.click();
+	const toggle = page.getByRole('button', {
+		name: initial.settings.enabled ? 'Disable Agent' : 'Enable Agent',
+		exact: true,
+	});
+	await toggle.click();
 	await expect(section.getByRole('status')).toHaveText('Settings saved.');
 	expect(writes).toBe(1);
 	const persisted = await requestAgentJson(
@@ -73,7 +75,9 @@ test('execution settings validate before dispatch, save the original CAS and rej
 	await page.reload();
 	await selectAgentSettingsGroup(page, 'runtime');
 	await expect(input).toHaveValue(String(original));
-	await expect(enabled).toBeChecked({ checked: !initial.settings.enabled });
+	await expect(
+		page.getByRole('button', { name: initial.settings.enabled ? 'Enable Agent' : 'Disable Agent', exact: true }),
+	).toBeEnabled();
 	const unchanged = await requestAgentJson(
 		context.request,
 		{

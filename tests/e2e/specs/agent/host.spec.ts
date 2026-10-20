@@ -610,7 +610,7 @@ test('Agent create-thread Retry retains the exact operation after an unknown out
 	await openAgentConversations(page);
 	const threads = hub
 		.locator('section')
-		.filter({ has: page.getByRole('heading', { name: 'Native threads', exact: true }) });
+		.filter({ has: page.getByRole('heading', { name: 'Conversations', exact: true }) });
 	await threads.getByRole('textbox', { name: 'Thread title', exact: true }).fill('E2E retained intent');
 	await threads.getByRole('button', { name: 'Create thread', exact: true }).click();
 	await expect.poll(() => attempts.length).toBe(1);
@@ -639,9 +639,8 @@ test('Agent execution enable is independent of the launcher and its global windo
 	const app = await createTestAgentApp(context.request);
 	await page.goto('/settings?tab=agent');
 	await selectAgentSettingsGroup(page, 'runtime');
-	const panel = page.getByRole('region', { name: 'Execution settings', exact: true });
-	const enabled = panel.getByRole('checkbox', { name: 'Allow new Agent execution', exact: true });
-	await expect(enabled).not.toBeChecked();
+	const enable = page.getByRole('button', { name: 'Enable Agent', exact: true });
+	await expect(enable).toBeEnabled();
 	const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
 	const hub = page.locator('section[aria-label="Agent"]');
 	await expect(launcher).toBeVisible();
@@ -649,14 +648,14 @@ test('Agent execution enable is independent of the launcher and its global windo
 	await expect(hub).toBeVisible();
 	await expect(hub).toContainText('Execution is disabled');
 	await hub.getByRole('button', { name: 'Close Agent', exact: true }).click();
-	await enabled.check();
 	const save = page.waitForResponse(
 		(response) =>
 			new URL(response.url()).pathname === '/api/v1/agent/execution-settings' &&
 			response.request().method() === 'PUT',
 	);
-	await panel.getByRole('button', { name: 'Save', exact: true }).click();
+	await enable.click();
 	expect((await save).status()).toBe(200);
+	await expect(page.getByRole('button', { name: 'Disable Agent', exact: true })).toBeEnabled();
 	await launcher.click();
 	await expect(hub).toBeVisible();
 	await expect(hub).toContainText(app.name);
@@ -697,7 +696,7 @@ test('Agent settings load independently of retired Runner endpoints and expose c
 	const panel = page.locator('#settings-panel-agent');
 	for (const [group, name] of [
 		['models', 'Model providers'],
-		['runtime', 'Execution settings'],
+		['runtime', 'Execution and performance'],
 		['tools', 'MCP / ACP integrations'],
 	] as const) {
 		await selectAgentSettingsGroup(page, group);
@@ -720,7 +719,7 @@ test('Agent settings surface exposes the current control plane and saves explici
 	const panel = page.locator('#settings-panel-agent');
 	for (const [group, name] of [
 		['models', 'Model providers'],
-		['runtime', 'Execution settings'],
+		['runtime', 'Execution and performance'],
 		['tools', 'Agent apps and permissions'],
 		['runtime', 'CDP'],
 		['tools', 'MCP / ACP integrations'],
@@ -827,7 +826,7 @@ test('Agent settings surface exposes the current control plane and saves explici
 	await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
 	await captureFunctionalScreenshot(page, 'agent-settings-models.png', { viewport: { width: 1440, height: 900 } });
 	await selectAgentSettingsGroup(page, 'runtime');
-	await panel.getByRole('region', { name: 'Execution settings', exact: true }).scrollIntoViewIfNeeded();
+	await panel.getByRole('region', { name: 'Execution and performance', exact: true }).scrollIntoViewIfNeeded();
 	await captureFunctionalScreenshot(page, 'agent-settings-runtime.png', { viewport: { width: 1440, height: 900 } });
 });
 
@@ -879,8 +878,8 @@ test('explicit profile models retain unavailable versions instead of silently se
 		readAgentProviderView,
 	);
 	await page.goto('/settings?tab=agent');
-	await selectAgentSettingsGroup(page, 'runtime');
-	const execution = page.getByRole('region', { name: 'Execution settings', exact: true });
+	await selectAgentSettingsGroup(page, 'safety');
+	const execution = page.getByRole('region', { name: 'Subagents', exact: true });
 	const model = execution.getByRole('combobox', { name: 'Model and configuration version', exact: true }).first();
 	await expect(model.locator('option:checked')).toHaveText('e2e-model · v1 — Unavailable / verify version');
 	await requestAgentJson(
@@ -890,7 +889,7 @@ test('explicit profile models retain unavailable versions instead of silently se
 	);
 	// Normal reads load on entry; the recovery button is reserved for failed/unknown state.
 	await page.reload();
-	await selectAgentSettingsGroup(page, 'runtime');
+	await selectAgentSettingsGroup(page, 'safety');
 	await expect(model.locator('option:checked')).toHaveText('e2e-model · v1 — Unavailable / verify version');
 	const current = await requestAgentJson(
 		context.request,
@@ -912,11 +911,12 @@ test('Agent Host preserves an open surface when a directory refresh fails and re
 	await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
 	const hub = page.locator('section[aria-label="Agent"]');
 	await openAgentConversations(page);
-	const threads = hub.getByRole('heading', { name: 'Native threads', exact: true }).locator('..');
+	const threads = hub.getByRole('heading', { name: 'Conversations', exact: true }).locator('..');
 	await threads.getByRole('textbox', { name: 'Thread title', exact: true }).fill('Unsaved local title');
 	const appsPath = '**/api/v1/agent/apps';
 	await page.route(appsPath, (route) => route.fulfill({ status: 503, json: { code: 'storage_unavailable' } }));
-	await hub.getByRole('button', { name: 'Read current threads', exact: true }).first().click();
+	await hub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
+	await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
 	await expect(
 		page.getByRole('status').filter({ hasText: 'Request failed. Check your session or read again.' }),
 	).toBeVisible();
@@ -925,7 +925,11 @@ test('Agent Host preserves an open surface when a directory refresh fails and re
 		'Unsaved local title',
 	);
 	await page.unroute(appsPath);
-	await hub.getByRole('button', { name: 'Read current threads', exact: true }).first().click();
+	await page
+		.getByRole('status')
+		.filter({ hasText: 'Request failed. Check your session or read again.' })
+		.getByRole('button', { name: 'Read current threads', exact: true })
+		.click();
 	await expect(
 		page.getByRole('status').filter({ hasText: 'Request failed. Check your session or read again.' }),
 	).toHaveCount(0);
@@ -994,8 +998,8 @@ test('Agent tabs own independent local drafts and observe external threads throu
 		await follower.getByRole('button', { name: 'Open Agent', exact: true }).click();
 		await openAgentConversations(page);
 		await openAgentConversations(follower);
-		const firstThreads = page.getByRole('heading', { name: 'Native threads', exact: true }).locator('..');
-		const secondThreads = follower.getByRole('heading', { name: 'Native threads', exact: true }).locator('..');
+		const firstThreads = page.getByRole('heading', { name: 'Conversations', exact: true }).locator('..');
+		const secondThreads = follower.getByRole('heading', { name: 'Conversations', exact: true }).locator('..');
 		await secondThreads.getByRole('textbox', { name: 'Thread title', exact: true }).fill('Follower draft');
 		await firstThreads.getByRole('textbox', { name: 'Thread title', exact: true }).fill('Leader draft');
 		const result = await requestAgentWorkspace(context.request, app, {
@@ -1029,8 +1033,8 @@ test('concurrent Agent settings preserve dirty drafts and reject their original 
 		await follower.goto('/settings?tab=agent');
 		await selectAgentSettingsGroup(page, 'runtime');
 		await selectAgentSettingsGroup(follower, 'runtime');
-		const leader = page.getByRole('region', { name: 'Execution settings', exact: true });
-		const other = follower.getByRole('region', { name: 'Execution settings', exact: true });
+		const leader = page.getByRole('region', { name: 'Execution and performance', exact: true });
+		const other = follower.getByRole('region', { name: 'Execution and performance', exact: true });
 		// Lowering Concurrent Runs alone violates the execution contract if
 		// model-call capacity still equals the current maximum run capacity.
 		// Use the independently editable (and bounded by Runs) model-call limit

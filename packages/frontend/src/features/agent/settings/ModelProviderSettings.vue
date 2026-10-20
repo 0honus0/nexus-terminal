@@ -9,6 +9,7 @@
 	import type { DiscoveredProviderModel, Provider, ProviderModelDraft } from '../model/provider-types';
 	import { formatAgentDate } from '../locale-format';
 	import ProviderModelEditor from './ProviderModelEditor.vue';
+	import ModelRegistrySettings from './ModelRegistrySettings.vue';
 
 	const { t, locale } = useI18n();
 	const props = withDefaults(defineProps<{ active?: boolean }>(), { active: true });
@@ -246,6 +247,7 @@
 			</UiButton>
 		</div>
 		<div class="space-y-4 p-4 sm:p-5">
+			<ModelRegistrySettings />
 			<p v-if="notice && !draft" role="status" class="text-sm">
 				{{ t('agent.settings.providerManagement.' + notice) }}
 			</p>

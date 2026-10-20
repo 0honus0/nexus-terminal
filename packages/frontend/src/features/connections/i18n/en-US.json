@@ -216,7 +216,6 @@
     "completed": "Completed {count} operations.",
     "importTitle": "Import connections",
     "exportTitle": "Export configuration",
-    "appendTag": "Append tag",
     "failures": {
       "failed": "The operation failed. Please try again later.",
       "unknown": "The result is unknown and may already be saved. Refresh and review before submitting again.",

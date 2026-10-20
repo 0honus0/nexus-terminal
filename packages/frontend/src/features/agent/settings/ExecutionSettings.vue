@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { computed } from 'vue';
 	import { UiButton, UiInfoHint } from '@/foundation/ui';
 	import { useI18n } from 'vue-i18n';
 	import {
@@ -6,9 +7,41 @@
 		AGENT_EXECUTION_LIMIT_MAXIMA,
 		AGENT_EXECUTION_PROFILE_MAX_REQUESTS,
 	} from '@nexus-terminal/shared/agent/execution/values';
-	import { useExecutionSettings } from '../composables/use-execution-settings';
+	import type { useExecutionSettings } from '../composables/use-execution-settings';
 	import type { ExecutionModel, ExecutionModelChoice } from '../model/execution-types';
 	import { formatAgentDate } from '../locale-format';
+
+	const props = defineProps<{
+		editor: ReturnType<typeof useExecutionSettings>;
+		section: 'budget' | 'runtime' | 'storage' | 'subagents';
+	}>();
+	const sectionKeys = {
+		budget: [
+			'maxModelRequests',
+			'maxToolExecutions',
+			'maxActiveSeconds',
+			'toolTimeoutSeconds',
+			'maxToolOutputBytes',
+			'maxTokenReservations',
+			'maxRecallItems',
+			'maxRecallBytes',
+		],
+		runtime: ['maxConcurrentRuns', 'maxConcurrentModelCalls'],
+		storage: ['maxSingleArtifactBytes', 'maxArtifactBytes', 'artifactTtlSeconds'],
+		subagents: ['maxChildren', 'maxMessages', 'maxMessageBytes'],
+	};
+	const visibleKeys = computed(() =>
+		AGENT_EXECUTION_LIMIT_KEYS.filter((key) => sectionKeys[props.section].includes(key)),
+	);
+	const sectionTitle = computed(
+		() =>
+			({
+				budget: 'agent.settings.budget.title',
+				runtime: 'agent.settings.performance.title',
+				storage: 'agent.settings.groups.storage',
+				subagents: 'agent.settings.subagents.title',
+			})[props.section],
+	);
 
 	const { t, locale } = useI18n();
 	const {
@@ -26,7 +59,7 @@
 		hardChanged,
 		perform,
 		loadModels,
-	} = useExecutionSettings();
+	} = props.editor;
 
 	function explicitModel(choice: ExecutionModelChoice): ExecutionModel {
 		return {
@@ -51,15 +84,12 @@
 </script>
 
 <template>
-	<section
-		class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs"
-		:aria-label="t('agent.settings.execution.title')"
-	>
+	<section class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs" :aria-label="t(sectionTitle)">
 		<div
 			class="agent-settings-head flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3 sm:px-5 sm:py-3.5"
 		>
 			<div class="flex items-center gap-1.5">
-				<h3 class="text-sm font-semibold text-foreground">{{ t('agent.settings.execution.title') }}</h3>
+				<h3 class="text-sm font-semibold text-foreground">{{ t(sectionTitle) }}</h3>
 				<UiInfoHint :text="t('agent.settings.execution.description')" />
 			</div>
 		</div>
@@ -76,7 +106,7 @@
 				{{ t('agent.settings.execution.refreshRequired') }}
 			</p>
 			<UiButton
-				v-if="refreshRequired || notice === 'failed'"
+				v-if="(draft && refreshRequired) || notice === 'failed'"
 				type="button"
 				:disabled="busy"
 				@click="perform('read')"
@@ -84,14 +114,9 @@
 			>
 			<template v-if="draft && hardDraft">
 				<fieldset :disabled="blocked || confirmation !== null" class="space-y-4">
-					<label class="flex items-center gap-2"
-						><input v-model="draft.enabled" type="checkbox" />{{
-							t('agent.settings.execution.enabled')
-						}}</label
-					>
 					<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
 						<label
-							v-for="key in AGENT_EXECUTION_LIMIT_KEYS"
+							v-for="key in visibleKeys"
 							:key="key"
 							class="block space-y-1 rounded-lg bg-header/25 p-4 text-sm"
 						>
@@ -112,75 +137,86 @@
 							}}</span>
 						</label>
 					</div>
-					<h4 class="font-medium">{{ t('agent.settings.execution.profiles') }}</h4>
-					<p v-if="modelsFailed" role="alert" class="text-sm text-warning">
-						{{ t('agent.settings.execution.modelsFailed') }}
-					</p>
-					<UiButton v-if="modelsFailed" type="button" :disabled="modelsBusy" @click="loadModels">{{
-						t('agent.settings.execution.readModels')
-					}}</UiButton>
-					<div
-						v-for="profile in draft.profiles"
-						:key="profile.name"
-						class="space-y-3 rounded-xl border border-border/80 bg-background/60 p-4 shadow-2xs"
-					>
-						<label class="flex items-center gap-2"
-							><input v-model="profile.enabled" type="checkbox" />{{
-								t('agent.settings.execution.profileNames.' + profile.name)
-							}}</label
+					<template v-if="section === 'subagents'">
+						<h4 class="font-medium">{{ t('agent.settings.execution.profiles') }}</h4>
+						<p v-if="modelsFailed" role="alert" class="text-sm text-warning">
+							{{ t('agent.settings.execution.modelsFailed') }}
+						</p>
+						<UiButton v-if="modelsFailed" type="button" :disabled="modelsBusy" @click="loadModels">{{
+							t('agent.settings.execution.readModels')
+						}}</UiButton>
+						<div
+							v-for="profile in draft.profiles"
+							:key="profile.name"
+							class="space-y-3 rounded-xl border border-border/80 bg-background/60 p-4 shadow-2xs"
 						>
-						<div class="grid gap-3 sm:grid-cols-2">
-							<label class="space-y-1 text-sm"
-								><span class="block">{{ t('agent.settings.execution.model') }}</span>
-								<select
-									v-model="profile.model"
-									class="w-full rounded border border-border bg-background p-2"
-								>
-									<option :value="{ kind: 'inherit' }">
-										{{ t('agent.settings.execution.inherit') }}
-									</option>
-									<option
-										v-if="isUnavailable(profile.model) && profile.model.kind === 'explicit'"
-										:value="profile.model"
+							<label class="flex items-center gap-2"
+								><input v-model="profile.enabled" type="checkbox" />{{
+									t('agent.settings.execution.profileNames.' + profile.name)
+								}}</label
+							>
+							<div class="grid gap-3 sm:grid-cols-2">
+								<label class="space-y-1 text-sm"
+									><span class="block">{{ t('agent.settings.execution.model') }}</span>
+									<select
+										v-model="profile.model"
+										class="w-full rounded border border-border bg-background p-2"
 									>
-										{{ profile.model.modelId }} · v{{ profile.model.configurationVersion }} —
-										{{ t('agent.settings.execution.unavailable') }}
-									</option>
-									<option v-for="choice in choices" :key="choice.key" :value="explicitModel(choice)">
-										{{ choice.label }} · v{{ choice.configurationVersion }}
-									</option>
-								</select>
-							</label>
-							<label class="space-y-1 text-sm"
-								><span class="block">{{ t('agent.settings.execution.requests') }}</span
-								><input
-									v-model.number="profile.maxRequests"
-									type="number"
-									min="1"
-									:max="Math.min(AGENT_EXECUTION_PROFILE_MAX_REQUESTS, draft.limits.maxModelRequests)"
-									step="1"
-									class="w-full rounded border border-border bg-background p-2"
-							/></label>
-							<label class="space-y-1 text-sm"
-								><span class="block">{{ t('agent.settings.execution.seconds') }}</span
-								><input
-									v-model.number="profile.maxSeconds"
-									type="number"
-									min="1"
-									:max="draft.limits.maxActiveSeconds"
-									step="1"
-									class="w-full rounded border border-border bg-background p-2"
-							/></label>
-							<label class="space-y-1 text-sm"
-								><span class="block">{{ t('agent.settings.execution.tools') }}</span
-								><textarea
-									v-model="profile.toolsText"
-									rows="3"
-									class="w-full rounded border border-border bg-background p-2"
-								/>
-							</label>
+										<option :value="{ kind: 'inherit' }">
+											{{ t('agent.settings.execution.inherit') }}
+										</option>
+										<option
+											v-if="isUnavailable(profile.model) && profile.model.kind === 'explicit'"
+											:value="profile.model"
+										>
+											{{ profile.model.modelId }} · v{{ profile.model.configurationVersion }} —
+											{{ t('agent.settings.execution.unavailable') }}
+										</option>
+										<option
+											v-for="choice in choices"
+											:key="choice.key"
+											:value="explicitModel(choice)"
+										>
+											{{ choice.label }}
+										</option>
+									</select>
+								</label>
+								<label class="space-y-1 text-sm"
+									><span class="block">{{ t('agent.settings.execution.requests') }}</span
+									><input
+										v-model.number="profile.maxRequests"
+										type="number"
+										min="1"
+										:max="
+											Math.min(
+												AGENT_EXECUTION_PROFILE_MAX_REQUESTS,
+												draft.limits.maxModelRequests,
+											)
+										"
+										step="1"
+										class="w-full rounded border border-border bg-background p-2"
+								/></label>
+								<label class="space-y-1 text-sm"
+									><span class="block">{{ t('agent.settings.execution.seconds') }}</span
+									><input
+										v-model.number="profile.maxSeconds"
+										type="number"
+										min="1"
+										:max="draft.limits.maxActiveSeconds"
+										step="1"
+										class="w-full rounded border border-border bg-background p-2"
+								/></label>
+								<label class="space-y-1 text-sm"
+									><span class="block">{{ t('agent.settings.execution.tools') }}</span
+									><textarea
+										v-model="profile.toolsText"
+										rows="3"
+										class="w-full rounded border border-border bg-background p-2"
+									/>
+								</label>
+							</div>
 						</div>
-					</div>
+					</template>
 					<UiButton
 						type="button"
 						:appearance="dirty ? 'solid' : 'soft'"
@@ -190,7 +226,7 @@
 						>{{ t('common.save') }}</UiButton
 					>
 				</fieldset>
-				<details class="space-y-3 border-t border-border pt-3">
+				<details v-if="section === 'budget'" class="space-y-3 border-t border-border pt-3">
 					<summary class="cursor-pointer font-medium">{{ t('agent.settings.execution.hardLimits') }}</summary>
 					<p class="text-sm text-text-secondary">{{ t('agent.settings.execution.hardDescription') }}</p>
 					<fieldset :disabled="blocked || dirty" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

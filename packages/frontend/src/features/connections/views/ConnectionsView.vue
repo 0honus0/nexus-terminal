@@ -41,11 +41,9 @@
 		deleteSelected,
 		batchSave,
 		cancelBatch,
-		appendTag,
 		exportItems,
 	} = useConnectionManagement();
 	const importVisible = ref(false);
-	const appendTagId = ref<number | null>(null);
 	const capabilities = useRuntimeFeatureCapabilities();
 	const tags = capabilities.tags;
 	const search = ref('');
@@ -112,7 +110,6 @@
 		importVisible.value = false;
 		hostKeysVisible.value = false;
 		editing.value = null;
-		appendTagId.value = null;
 	}
 
 	watch(() => (auth.isAuthenticated.value ? auth.user.value?.id : null), resetPanels, { flush: 'sync' });
@@ -256,20 +253,7 @@
 							</UiSelect>
 						</div>
 						<div class="ml-auto flex flex-wrap shrink-0 items-center gap-2">
-							<UiSelect
-								v-if="selected.size"
-								v-model="appendTagId"
-								:aria-label="t('connections.appendTag')"
-								><option :value="null">{{ t('connections.form.tags') }}</option>
-								<option v-for="tag in tags.items.value" :key="tag.id" :value="tag.id">
-									{{ tag.name }}
-								</option></UiSelect
-							><UiButton
-								v-if="selected.size"
-								:disabled="appendTagId === null || loading || data.needsRefresh.value"
-								@click="appendTagId !== null && appendTag(appendTagId)"
-								>{{ t('connections.appendTag') }}</UiButton
-							><UiButton :disabled="loading || data.busy.value" @click="refresh">{{
+							<UiButton :disabled="loading || data.busy.value" @click="refresh">{{
 								t('connections.refresh')
 							}}</UiButton
 							><UiButton :disabled="loading" @click="importVisible = true">{{

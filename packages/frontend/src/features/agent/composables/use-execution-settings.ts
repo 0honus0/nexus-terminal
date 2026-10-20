@@ -195,6 +195,14 @@ export function useExecutionSettings() {
 		}
 	}
 
+	async function toggleEnabled(): Promise<void> {
+		if (blocked.value || dirty.value || hardChanged.value || confirmation.value || !draft.value) {
+			return;
+		}
+		draft.value.enabled = !draft.value.enabled;
+		await perform('save');
+	}
+
 	function loadInitial(): void {
 		if (draft.value === null) {
 			void perform('read');
@@ -205,6 +213,8 @@ export function useExecutionSettings() {
 	onMounted(loadInitial);
 	onActivated(loadInitial);
 	return {
+		saved,
+		toggleEnabled,
 		draft,
 		hardDraft,
 		confirmation,

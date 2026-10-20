@@ -24,7 +24,7 @@ test('native configuration explains execution and target boundaries without the 
 	await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
 	const hub = page.locator('.agent-hub-window');
 	await openAgentConversations(page);
-	await expect(hub.getByRole('heading', { name: 'Native threads', exact: true })).toBeVisible();
+	await expect(hub.getByRole('heading', { name: 'Conversations', exact: true })).toBeVisible();
 	await expect(
 		hub.getByText('Uses the current session and actual App version, independently of plugin grants.', {
 			exact: true,
@@ -33,7 +33,7 @@ test('native configuration explains execution and target boundaries without the 
 	await hub.getByRole('textbox', { name: 'Thread title', exact: true }).fill('Configuration thread');
 	await hub.getByRole('button', { name: 'Create thread', exact: true }).click();
 	await expect(hub.getByRole('textbox', { name: 'Task input', exact: true })).toBeVisible();
-	await expect(hub.getByRole('button', { name: 'Create a new Run', exact: true })).toBeDisabled();
+	await expect(hub.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
 	await expect(
 		hub.getByText(
 			'Selection only narrows scope; it grants no permission. Authorized non-SSH capabilities remain available without a target.',

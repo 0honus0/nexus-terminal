@@ -97,7 +97,7 @@ export async function openNativeTask(task: NativeTask) {
 		.filter({ has: page.getByText(task.app.id, { exact: true }) })
 		.click();
 	await openAgentConversations(page);
-	const threads = hub.getByRole('heading', { name: 'Native threads', exact: true }).locator('..');
+	const threads = hub.getByRole('heading', { name: 'Conversations', exact: true }).locator('..');
 	await threads.getByRole('button', { name: 'Read current threads', exact: true }).click();
 	let after: string | null = null;
 	let selectedThread: { title: string; version: number } | undefined;
@@ -118,9 +118,11 @@ export async function openNativeTask(task: NativeTask) {
 	});
 	await expect(option).toHaveCount(1);
 	await option.click();
-	await hub
+	await hub.getByRole('button', { name: 'Model for this execution', exact: true }).click();
+	await page
 		.getByRole('combobox', { name: 'Model for this execution', exact: true })
 		.selectOption(JSON.stringify([provider.id, 'e2e-model', provider.version]));
+	await page.keyboard.press('Escape');
 	return hub;
 }
 
@@ -206,6 +208,14 @@ export async function captureNativeCommand(
 	}
 }
 
+export async function openNativeTaskPanel(page: Page): Promise<void> {
+	const toggle = page.getByRole('button', { name: 'Show or hide task panel', exact: true });
+	await expect(toggle).toBeVisible();
+	if ((await toggle.getAttribute('aria-expanded')) !== 'true') {
+		await toggle.click();
+	}
+}
+
 export async function startNativeTask(
 	task: NativeTask,
 	prompt: string,
@@ -213,18 +223,25 @@ export async function startNativeTask(
 	followUp = false,
 ) {
 	const hub = task.page.getByRole('dialog', { name: 'Agent', exact: true });
-	const targets = hub.locator('fieldset').filter({ has: task.page.locator('legend') });
+	const panel = hub.getByRole('complementary', { name: 'Tasks', exact: true });
+	if (await panel.isVisible()) {
+		await panel.getByRole('button', { name: 'Close', exact: true }).click();
+	}
+	await hub.getByRole('button', { name: 'Select SSH targets', exact: true }).click();
+	const targets = task.page
+		.locator('fieldset')
+		.filter({ has: task.page.locator('legend', { hasText: 'Select SSH targets' }) });
+	await expect(targets).toBeVisible();
 	const boxes = targets.getByRole('checkbox');
 	for (let index = 0; index < (await boxes.count()); index++) {
 		const box = boxes.nth(index);
 		await box.setChecked(connectionIds.includes(Number(await box.getAttribute('value'))));
 	}
+	await task.page.keyboard.press('Escape');
 	await hub.getByRole('textbox', { name: 'Task input', exact: true }).fill(prompt);
 	const method = followUp ? 'agent.runs.appendInput' : 'agent.runs.create';
 	const { result } = await captureNativeCommand(task, method, () =>
-		hub
-			.getByRole('button', { name: followUp ? 'Follow up this terminal Run' : 'Create a new Run', exact: true })
-			.click(),
+		hub.getByRole('button', { name: followUp ? 'Continue' : 'Send', exact: true }).click(),
 	);
 	if (result.method !== 'agent.runs.create' && result.method !== 'agent.runs.appendInput') {
 		throw new Error('Unexpected Run receipt');

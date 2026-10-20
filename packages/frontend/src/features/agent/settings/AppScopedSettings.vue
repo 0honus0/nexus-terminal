@@ -63,7 +63,7 @@
 					class="mt-1 w-full rounded border border-border bg-background p-2"
 				>
 					<option value="">{{ t('agent.settings.appManagement.chooseApp') }}</option>
-					<option v-for="app in apps" :key="app.id" :value="app.id">{{ app.name }} · {{ app.id }}</option>
+					<option v-for="app in apps" :key="app.id" :value="app.id">{{ app.name }}</option>
 				</UiSelect></label
 			>
 			<slot v-if="selectedId" :key="selectedId" :appId="selectedId" :apps="apps" />

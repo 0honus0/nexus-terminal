@@ -216,7 +216,6 @@
     "completed": "已完成 {count} 项操作。",
     "importTitle": "导入连接",
     "exportTitle": "导出配置",
-    "appendTag": "追加标签",
     "failures": {
       "failed": "操作失败，请稍后重试。",
       "unknown": "结果未知，可能已经保存。请先刷新并核对，勿重复提交。",

@@ -2,9 +2,10 @@
 	import { computed } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiButton, UiInfoHint, UiSelect } from '@/foundation/ui';
-	import { useAppManagement } from '../composables/use-app-management';
+	import type { useAppManagement } from '../composables/use-app-management';
 	import AppGovernanceEditor from './AppGovernanceEditor.vue';
 	const { t } = useI18n();
+	const props = defineProps<{ model: ReturnType<typeof useAppManagement> }>();
 	const {
 		apps,
 		definitions,
@@ -17,7 +18,7 @@
 		loadDefinitions,
 		create,
 		toggle,
-	} = useAppManagement();
+	} = props.model;
 	const enabledCount = computed(() => apps.value.filter((app) => app.enabled).length);
 	const blocked = computed(() => appOperation.busy.value || appOperation.refreshRequired.value);
 </script>

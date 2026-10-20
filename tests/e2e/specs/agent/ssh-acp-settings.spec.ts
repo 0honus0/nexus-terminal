@@ -1,3 +1,4 @@
+import { openNativeTaskPanel } from '../../fixtures/agent/native-task';
 import { openAgentConversations, selectAgentSettingsGroup } from '../../support/agent';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, stat } from 'node:fs/promises';
@@ -170,13 +171,17 @@ for (const decision of ['denied', 'cancelled'] as const) {
 		const hub = page.locator('section[aria-label="Agent"]');
 		await openAgentConversations(page);
 		await hub.getByRole('button', { name: thread.title, exact: true }).click();
-		await hub
+		await hub.getByRole('button', { name: 'Model for this execution', exact: true }).click();
+		await page
 			.getByRole('combobox', { name: 'Model for this execution', exact: true })
-			.selectOption({ label: `${provider.displayName} / e2e-model · v${provider.version}` });
-		const target = hub
+			.selectOption({ label: `${provider.displayName} / e2e-model` });
+		await page.keyboard.press('Escape');
+		await hub.getByRole('button', { name: 'Select SSH targets', exact: true }).click();
+		const target = page
 			.locator('fieldset')
 			.filter({ has: page.locator('legend', { hasText: 'Select SSH targets' }) });
 		await target.locator(`input[value="${connectionId}"]`).check();
+		await page.keyboard.press('Escape');
 		await hub
 			.getByRole('textbox', { name: 'Task input', exact: true })
 			.fill(`E2E_ACP_EXECUTE integration=${integration.id} version=${integration.version}`);
@@ -207,7 +212,7 @@ for (const decision of ['denied', 'cancelled'] as const) {
 				new URL(item.url()).pathname === `/api/v1/agent/apps/${app.id}/workspace` &&
 				item.request().postDataJSON()?.request?.method === 'agent.runs.create',
 		);
-		await hub.getByRole('button', { name: 'Create a new Run', exact: true }).click();
+		await hub.getByRole('button', { name: 'Send', exact: true }).click();
 		const runResponse = await runCreation;
 		expect(runResponse.status()).toBe(200);
 		expect(capturedRunBody).toBe(true);
@@ -219,7 +224,8 @@ for (const decision of ['denied', 'cancelled'] as const) {
 		).result;
 		if (runResult.method !== 'agent.runs.create') throw new Error('Unexpected Run receipt');
 		const runId = runResult.value.run.id;
-		await expect(hub.locator('code').filter({ hasText: runId })).toBeVisible();
+		await expect(hub.getByRole('textbox', { name: 'Task input', exact: true })).toHaveValue('');
+		await openNativeTaskPanel(page);
 		await expect(hub.getByRole('button', { name: 'Request cancellation', exact: true })).toBeEnabled();
 
 		const readRun = async () => {

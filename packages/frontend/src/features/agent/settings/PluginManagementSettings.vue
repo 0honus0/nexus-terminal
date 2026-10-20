@@ -14,6 +14,9 @@
 		stages,
 		versions,
 		selectedStageId,
+		candidate,
+		candidateInstallation,
+		applyCandidate,
 		label,
 		publicKeyPem,
 		runtime,
@@ -42,10 +45,13 @@
 	const showPublishers = ref(false);
 	const blocked = computed(() => !canWrite());
 
-	function choosePackage(event: Event): void {
+	async function choosePackage(event: Event, appId: string): Promise<void> {
 		if (event.target instanceof HTMLInputElement) {
 			file.value = event.target.files?.[0] ?? null;
 			event.target.value = '';
+			candidate.value = null;
+			uploadAppId.value = appId;
+			await preparePackage();
 		}
 	}
 </script>
@@ -95,61 +101,117 @@
 						type="file"
 						:disabled="blocked"
 						:aria-label="t('agent.pluginManagement.upload')"
-						@change="choosePackage"
+						@change="choosePackage($event, appId)"
 					/>
 					<p v-if="file" class="text-xs">{{ file.name }} · {{ file.size }} B</p>
-					<UiButton
-						type="button"
-						:disabled="blocked || !file"
-						@click="
-							uploadAppId = appId;
-							preparePackage();
-						"
-						>{{ t('agent.pluginManagement.stage') }}</UiButton
-					>
 				</template>
 			</AppScopedSettings>
-			<p v-if="uploadReservation" class="break-all text-xs">
-				{{ t('agent.pluginManagement.reservation') }}: {{ uploadReservation.appId }} /
-				{{ uploadReservation.id }} · v{{ uploadReservation.version }}
-			</p>
-			<div class="space-y-2 rounded border border-border p-3">
-				<h4>{{ t('agent.pluginManagement.stages') }}</h4>
-				<label class="block text-sm"
-					>{{ t('agent.pluginManagement.selectedStage')
-					}}<select
-						v-model="selectedStageId"
-						:disabled="operation.busy.value"
-						class="ml-2 rounded border border-border bg-background p-2"
-					>
-						<option value="">—</option>
-						<option
-							v-for="stage in stages.filter((item) => item.status === 'verified')"
-							:key="stage.id"
-							:value="stage.id"
+			<div
+				v-if="candidate"
+				class="rounded-xl border border-primary/50 bg-primary/5 p-4 shadow-xs ring-1 ring-primary/20"
+			>
+				<div class="flex items-center justify-between gap-2 border-b border-border pb-2.5">
+					<div class="flex items-center gap-2 text-xs font-semibold text-foreground">
+						<div class="flex h-6 w-6 items-center justify-center rounded-md bg-primary/20 text-primary">
+							<i class="fa-solid fa-box-open text-xs" aria-hidden="true"></i>
+						</div>
+						{{ t('agent.settings.plugins.package') }}
+					</div>
+					<span class="rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-medium text-success">{{
+						t('agent.settings.plugins.signatureVerified')
+					}}</span>
+				</div>
+				<div class="mt-3 rounded-lg bg-header/25 p-3.5">
+					<div class="flex flex-wrap items-center justify-between gap-2">
+						<span class="text-sm font-bold text-foreground">{{ candidate.manifest?.displayName }}</span
+						><span
+							class="rounded-md border border-border/60 bg-header/40 px-2 py-0.5 font-mono text-xs text-text-secondary"
+							>v{{ candidate.manifest?.version }}</span
 						>
-							{{ stage.manifest?.displayName }} · {{ stage.manifest?.version }} · {{ stage.id }}
-						</option>
-					</select></label
-				>
-				<article v-for="stage in stages" :key="stage.id" class="space-y-1 border-t border-border py-2 text-xs">
-					<p class="break-all">
-						{{ stage.id }} · v{{ stage.version }} · {{ stage.status }} · {{ stage.sizeBytes }} B
+					</div>
+					<p class="mt-2 break-all font-mono text-[11px] text-text-secondary">
+						{{ candidate.publisherKeyId }}
 					</p>
-					<p class="break-all">
-						{{ stage.manifest?.id }} · {{ stage.manifest?.version }} · {{ stage.packageHash }}
-					</p>
-					<UiButton type="button" :disabled="blocked || stage.status !== 'staged'" @click="verify(stage)">{{
-						t('agent.pluginManagement.verify')
-					}}</UiButton>
-					<UiButton
-						type="button"
-						:disabled="blocked || stage.status !== 'verified'"
-						@click="install(stage)"
-						>{{ t('agent.pluginManagement.install') }}</UiButton
-					>
-				</article>
+					<div class="mt-3.5 flex justify-end gap-2 border-t border-border pt-3">
+						<UiButton
+							type="button"
+							appearance="ghost"
+							:disabled="operation.busy.value"
+							@click="candidate = null"
+							>{{ t('common.cancel') }}</UiButton
+						><UiButton
+							type="button"
+							appearance="solid"
+							tone="primary"
+							:disabled="blocked"
+							@click="applyCandidate"
+							><i class="fa-solid fa-download text-xs" aria-hidden="true"></i
+							>{{
+								t(
+									candidateInstallation
+										? candidateInstallation.status === 'draining'
+											? 'agent.pluginManagement.upgrade'
+											: 'agent.pluginManagement.prepareUpgrade'
+										: 'agent.pluginManagement.install',
+								)
+							}}</UiButton
+						>
+					</div>
+				</div>
 			</div>
+			<details class="space-y-2">
+				<summary class="cursor-pointer text-sm text-text-secondary">
+					{{ t('agent.pluginManagement.stages') }}
+				</summary>
+				<p v-if="uploadReservation" class="break-all text-xs">
+					{{ t('agent.pluginManagement.reservation') }}: {{ uploadReservation.appId }} /
+					{{ uploadReservation.id }} · v{{ uploadReservation.version }}
+				</p>
+				<div class="space-y-2 rounded border border-border p-3">
+					<h4>{{ t('agent.pluginManagement.stages') }}</h4>
+					<label class="block text-sm"
+						>{{ t('agent.pluginManagement.selectedStage')
+						}}<select
+							v-model="selectedStageId"
+							:disabled="operation.busy.value"
+							class="ml-2 rounded border border-border bg-background p-2"
+						>
+							<option value="">—</option>
+							<option
+								v-for="stage in stages.filter((item) => item.status === 'verified')"
+								:key="stage.id"
+								:value="stage.id"
+							>
+								{{ stage.manifest?.displayName }} · {{ stage.manifest?.version }}
+							</option>
+						</select></label
+					>
+					<article
+						v-for="stage in stages"
+						:key="stage.id"
+						class="space-y-1 border-t border-border py-2 text-xs"
+					>
+						<p class="break-all">
+							{{ stage.id }} · v{{ stage.version }} · {{ stage.status }} · {{ stage.sizeBytes }} B
+						</p>
+						<p class="break-all">
+							{{ stage.manifest?.id }} · {{ stage.manifest?.version }} · {{ stage.packageHash }}
+						</p>
+						<UiButton
+							type="button"
+							:disabled="blocked || stage.status !== 'staged'"
+							@click="verify(stage)"
+							>{{ t('agent.pluginManagement.verify') }}</UiButton
+						>
+						<UiButton
+							type="button"
+							:disabled="blocked || stage.status !== 'verified'"
+							@click="install(stage)"
+							>{{ t('agent.pluginManagement.install') }}</UiButton
+						>
+					</article>
+				</div>
+			</details>
 			<div class="space-y-2 rounded border border-border p-3">
 				<h4>{{ t('agent.pluginManagement.installations') }}</h4>
 				<article
@@ -158,10 +220,7 @@
 					class="space-y-2 border-t border-border py-2 text-xs"
 				>
 					<p class="break-all">
-						{{ installation.appId }} · {{ installation.definitionId }} · {{ installation.version }} · r{{
-							installation.revision
-						}}
-						· {{ installation.status }}
+						{{ installation.definitionId }} · {{ installation.version }} · {{ installation.status }}
 					</p>
 					<div class="flex flex-wrap gap-2">
 						<UiButton
@@ -203,8 +262,10 @@
 					{{ version.manifest.id }} · {{ version.manifest.version }} · {{ version.packageHash }}
 				</p>
 			</details>
-			<div class="space-y-2 rounded border border-border p-3">
-				<h4>{{ t('agent.pluginManagement.runtime') }}</h4>
+			<details class="space-y-2 rounded border border-border p-3">
+				<summary class="cursor-pointer text-sm text-text-secondary">
+					{{ t('agent.pluginManagement.runtime') }}
+				</summary>
 				<label class="block text-sm"
 					>App<select
 						v-model="runtimeAppId"
@@ -245,7 +306,7 @@
 					@click="acknowledgeRuntime"
 					>{{ t('agent.pluginManagement.acknowledgeRuntime') }}</UiButton
 				>
-			</div>
+			</details>
 			<PluginRepositorySettings />
 			<div class="overflow-hidden rounded-xl border border-border bg-header/20 shadow-2xs">
 				<button
@@ -294,7 +355,7 @@
 						:key="publisher.keyId"
 						class="space-y-1 break-all border-t border-border py-2 text-xs"
 					>
-						<p>{{ publisher.label }} · {{ publisher.keyId }} · v{{ publisher.version }}</p>
+						<p>{{ publisher.label }} · {{ publisher.keyId }}</p>
 						<UiButton
 							type="button"
 							:disabled="blocked || publisher.revokedAt !== null"

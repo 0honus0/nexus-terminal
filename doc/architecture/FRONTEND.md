@@ -410,12 +410,14 @@ Shared system/backups定义完整请求/回执/错误和容量，应用Export/Re
 7. **生命周期与失败**：数据页隐藏/卸载/身份替换撤销原读取、确认及未派发意图；在途写入仍结清确定/未知结果。旧finally和晚详情不得覆盖新选择；失败不显示原异常正文。
 8. **当前能力与验收**：两轮源码审核、Frontend build和根check完成；12项隔离HTTP/真实持久化与浏览器专项通过，覆盖管理员分页、证据/CAS解除、正式三语页面、未知不重放、故障修订恢复及会话撤销。受影响外观14项、System11项与App43项通过；证据归testing。夹具占用经生产Adapter建立，不冒充真实远端操作或停止事实，外部效果仍由人工独立核对。
 
+Agent 设置按原四分类组织：AgentSettingsPanel 持唯一 useExecutionSettings/useAppManagement owner，ExecutionSettings 按预算、性能、存储、子任务展示同一草稿与 CAS，不能每张卡重复实例化设置状态。顶部启停只在没有草稿或硬限制确认时提交；Registry 放在 Provider 卡片内，文件库仅由 Host 文件入口消费。插件上传／暂存／验证由 usePluginManagement 编排，确认成功后只读刷新；unknown 阻止后续写入。
+
 ## 原生 Agent Host 与工作区
 
 第九轮远程复核修复 Plugin Surface 授权来源：`GET /app-definitions` 仅提供内置可信定义；签名安装的 App 应由精确匹配 `installed` 安装、definition/version、packageHash、publisherKeyId 与已验证 Manifest 的版本记录决定 `agent` 或 `custom` Surface，不可再要求同时存在内置定义。缺失或失配时仍 `unavailable`，不退化为任意 iframe。该修复的真实插件帧/原生线程 E2E 仍待下轮远程验收。
 
 1. **职责与范围**：正式悬浮Host拥有实际App选择、原生线程／Run交互和插件窗口，窗口布局与业务状态分开；不再依赖旧summary、host流或单例Run Store。
-2. **子功能与目录**：AgentAppSurface 复用原布局 CSS，持线程侧栏／窄窗抽屉与 ResizeObserver 生命周期；NativeThreadPanel 仅发出选择和编辑意图。host组件保留窗口／焦点／键盘／拖动生命周期；host-mapper/type持目录投影。native-thread-api与native-run-api复用唯一native-workspace-request；native-audit-api持步骤／工具只读HTTP。model/native-*-types、mapper/rules持独立应用对象、白名单和纯判断；use-native-threads/runs持本实例用例及原意图。NativeRunDetails/NativeAuditPanel只展示和发出用户操作，NativeInputArtifacts拥有引用准备，不让模板承担传输或版本策略。
+2. **子功能与目录**：AgentAppSurface 复用原布局 CSS，持线程侧栏／窄窗抽屉与 ResizeObserver 生命周期；NativeThreadPanel 仅发出选择和编辑意图。host组件保留窗口／焦点／键盘／拖动生命周期；host-mapper/type持目录投影。native-thread-api与native-run-api复用唯一native-workspace-request；native-audit-api持步骤／工具只读HTTP。model/native-*-types、mapper/rules持独立应用对象、白名单和纯判断；use-native-threads/runs持本实例用例及原意图。AgentConversationWelcome 只持欢迎卡展示与有界轮播；NativeApprovalList 在会话内展示审批并发出原意图，NativeRunDetails/NativeAuditPanel 在独立任务侧栏展示和发出用户操作，NativeInputArtifacts拥有引用准备，不让模板承担传输或版本策略。
 3. **依赖方向**：组件→composable→API／mapper→Shared与通用同源传输；Connections仅通过capabilities public提供安全目录。正式Host与DEV共用原生线程契约但各持实际入口；插件继续真实descriptor/grant/iframe桥，不借插件凭据调用原生能力。前端包不再依赖Protocol。
 4. **类型与转换**：Shared唯一持工作区17方法及App、Provider、Run、正文、审批、Child、Step、Tool的完整协议／基础值／容量；前端分别转HostApp/NativeThread/NativeRun/Entry/Approval等本地对象，数组与嵌套字段显式投影。App数字CAS、definitionVersion、安装revision分开；请求先规范化解码，再使用同一解码结果验证响应关联。正文offset是Unicode码点，审计textBytes是字节，本地显示窗口以UTF-16长度估算内存，不相互冒充。
 5. **入口与安装**：正式Host读取实际App、定义、安装、版本与执行设置，按受信声明及真实manifest选择通用原生界面／自定义iframe；没有前端资源的合法插件也可使用原生会话。只给管理员安装。执行关闭时仍提供历史读取与取消。原生使用POST /api/v1/agent/apps/:appId/workspace，审计使用实际steps/tools及events；DEV仍走/__next。

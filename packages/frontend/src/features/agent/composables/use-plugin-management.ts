@@ -1,4 +1,4 @@
-import { onActivated, onMounted, ref, toRaw } from 'vue';
+import { computed, onActivated, onMounted, ref, toRaw } from 'vue';
 import {
 	acknowledgePluginRuntime,
 	getPluginRuntime,
@@ -32,6 +32,12 @@ export function usePluginManagement() {
 	const stages = ref<PluginStage[]>([]);
 	const versions = ref<PluginVersion[]>([]);
 	const selectedStageId = ref('');
+	const candidate = ref<PluginStage | null>(null);
+	const candidateInstallation = computed(() =>
+		installations.value.find(
+			(item) => item.status !== 'removed' && item.definitionId === candidate.value?.manifest?.id,
+		),
+	);
 	const label = ref('');
 	const publicKeyPem = ref('');
 	const runtime = ref<PluginRuntime | null>(null);
@@ -49,6 +55,7 @@ export function usePluginManagement() {
 		stages.value = [];
 		versions.value = [];
 		selectedStageId.value = '';
+		candidate.value = null;
 		label.value = '';
 		publicKeyPem.value = '';
 		runtime.value = null;
@@ -109,6 +116,9 @@ export function usePluginManagement() {
 				},
 			},
 		);
+		if (operation.notice.value === 'saved') {
+			await load();
+		}
 	}
 
 	async function trust(): Promise<void> {
@@ -144,10 +154,12 @@ export function usePluginManagement() {
 				if (!signal.aborted) {
 					uploadReservation.value = artifact;
 				}
-				return stagePluginArtifact(artifact, signal);
+				const stage = await stagePluginArtifact(artifact, signal);
+				return verifyPluginStage(stage, signal);
 			},
 			(value) => {
 				selectedStageId.value = value.id;
+				candidate.value = value;
 				file.value = null;
 			},
 		);
@@ -160,7 +172,37 @@ export function usePluginManagement() {
 
 	async function install(stage: PluginStage): Promise<void> {
 		const original = structuredClone(toRaw(stage));
-		await write((signal) => installPluginStage(original, signal));
+		await write(
+			(signal) => installPluginStage(original, signal),
+			() => {
+				candidate.value = null;
+			},
+		);
+	}
+
+	async function applyCandidate(): Promise<void> {
+		const stage = candidate.value;
+		if (!stage || stage.status !== 'verified') {
+			return;
+		}
+		const installation = candidateInstallation.value;
+		if (!installation) {
+			await install(stage);
+			return;
+		}
+		if (installation.status !== 'installed' && installation.status !== 'draining') {
+			return;
+		}
+		const original = structuredClone(toRaw(installation));
+		const verified = structuredClone(toRaw(stage));
+		await write(
+			(signal) => upgradePluginInstallation(original, verified, original.status === 'installed', signal),
+			(value) => {
+				if (value.status === 'installed') {
+					candidate.value = null;
+				}
+			},
+		);
 	}
 
 	async function retire(installation: PluginInstallation, cancel: boolean): Promise<void> {
@@ -216,6 +258,7 @@ export function usePluginManagement() {
 		}
 		mutationUnknown.value = false;
 		acknowledged.value = false;
+		candidate.value = null;
 		file.value = null;
 		publicKeyPem.value = '';
 	}
@@ -234,6 +277,9 @@ export function usePluginManagement() {
 		stages,
 		versions,
 		selectedStageId,
+		candidate,
+		candidateInstallation,
+		applyCandidate,
 		label,
 		publicKeyPem,
 		runtime,

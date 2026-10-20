@@ -71,29 +71,36 @@
 
 <template>
 	<section
-		class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs"
+		class="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-header/30 px-3.5 py-2.5 text-xs"
 		:aria-label="t('agent.settings.providers.registryTitle')"
 	>
-		<div class="agent-settings-head border-b border-border bg-header/50 px-4 py-3 sm:px-5 sm:py-3.5">
-			<h3 class="text-sm font-semibold text-foreground">{{ t('agent.settings.providers.registryTitle') }}</h3>
+		<div class="flex flex-wrap items-center gap-2 text-text-secondary">
+			<span class="font-medium text-foreground">{{ t('agent.settings.providers.registryTitle') }}</span>
+			<template v-if="status"
+				><span>{{ status.entryCount }} {{ t('agent.settings.providers.registryModels') }}</span
+				><span v-if="status.generatedAt !== null"
+					>· {{ formatAgentDate(locale, new Date(status.generatedAt)) }}</span
+				><span
+					v-if="status.lastErrorCode"
+					class="rounded bg-error/10 px-1.5 py-0.5 font-mono text-[11px] text-error"
+					>{{ status.lastErrorCode }}</span
+				></template
+			>
+			<p v-if="error" role="alert" class="text-error">{{ error }}</p>
 		</div>
-		<div class="space-y-3 p-4 sm:p-5">
-			<div v-if="status" class="flex flex-wrap gap-2 text-sm text-text-secondary">
-				<span>{{ status.entryCount }} {{ t('agent.settings.providers.registryModels') }}</span>
-				<span v-if="status.generatedAt !== null">{{
-					formatAgentDate(locale, new Date(status.generatedAt))
-				}}</span>
-				<span v-if="status.lastErrorCode" class="text-error">{{ status.lastErrorCode }}</span>
-			</div>
-			<p v-if="error" role="alert" class="text-sm text-error">{{ error }}</p>
-			<div class="flex gap-2">
-				<UiButton v-if="error || refreshBlocked" type="button" :disabled="busy" @click="load(false)">{{
-					t('agent.settings.providers.registryReadStatus')
-				}}</UiButton>
-				<UiButton type="button" :disabled="busy || refreshBlocked" @click="load(true)">{{
-					t('agent.settings.providers.registryRefresh')
-				}}</UiButton>
-			</div>
+		<div class="flex items-center gap-2">
+			<UiButton
+				v-if="error || refreshBlocked"
+				type="button"
+				appearance="soft"
+				:disabled="busy"
+				@click="load(false)"
+				>{{ t('agent.settings.providers.registryReadStatus') }}</UiButton
+			>
+			<UiButton type="button" appearance="soft" :disabled="busy || refreshBlocked" @click="load(true)"
+				><i class="fa-solid fa-arrows-rotate text-[9px]" :class="{ 'fa-spin': busy }" aria-hidden="true"></i
+				>{{ t('agent.settings.providers.registryRefresh') }}</UiButton
+			>
 		</div>
 	</section>
 </template>

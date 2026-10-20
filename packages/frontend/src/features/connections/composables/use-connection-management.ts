@@ -199,20 +199,6 @@ export function useConnectionManagement() {
 		return removeMany([item]);
 	}
 
-	function appendTag(tagId: number): Promise<void> {
-		const ids = [...selected.value];
-		return execute(async (signal) => {
-			await data.addTag(ids, tagId, signal);
-			try {
-				await data.load(true);
-			} catch {
-				if (!signal.aborted) {
-					message.value = t('connections.savedRefreshFailed');
-				}
-			}
-		});
-	}
-
 	function batchSave(command: ConnectionBatchCommand): Promise<void> {
 		const items = batchSnapshots.value.map((item) => item);
 		return execute(async (signal) => {
@@ -321,7 +307,6 @@ export function useConnectionManagement() {
 		deleteSelected,
 		remove,
 		removeMany,
-		appendTag,
 		batchSave,
 		cancelBatch: reset,
 		exportItems,
