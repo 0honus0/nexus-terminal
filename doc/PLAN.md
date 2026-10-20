@@ -61,6 +61,8 @@ canonical Actions [39417865747](https://github.com/0honus0/nexus-terminal/action
 
 本轮四表沿用上表，新增文件与消费者均纳入复审。后端读取应用列表会自动初始化内置应用，因此推荐插件弹窗放在官方卡片首次安装入口，不把可选插件作为总开关依赖。静态结果与本轮SHA归 E2E；不将7/8组通过率解释为UI还原进度。
 
+当前远程为 `a7406e88` 的 [39433921156](https://github.com/0honus0/nexus-terminal/actions/runs/39433921156)：质量／构建和Docker通过，八组运行中。续审同步两个插件测试消费者：官方目录改核对真实自动GET及来源隔离；运行时实例选项从数据页高级维护核对，普通插件页安装记录、完整SDK与持久／隔离断言保留。两轮源码复核完成，静态及远程结果见E2E；未将旧7/8或当前进行中状态算为本批通过。
+
 ### 前一批：Agent ACP 回执观察与轮询竞态（已验收）
 
 [Actions 39415763862](https://github.com/0honus0/nexus-terminal/actions/runs/39415763862)，被测 SHA `1ebaddfc96875770b940fc7d8690b66273938b21`：原导入和归档取消两项均通过；第7组 regular 58项通过，独立 ACP cancelled 场景失败，其余7组、Checks/format/build、Docker 与 runner image 通过。失败 trace 确认创建回执200后立即移除拦截，随后审批读取未交付，界面忙碌且取消按钮禁用；失败收尾取消保留 operation_unknown，重试 reset 被真实清理证据阻断，不绕过此围栏。

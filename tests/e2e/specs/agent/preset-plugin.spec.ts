@@ -243,9 +243,17 @@ test('official plugin source cannot be overridden by a configured third-party re
 		readAgentPluginItems(raw, readAgentPluginInstallation),
 	);
 	expect(installations.items).toEqual([]);
+	const officialRead = page.waitForRequest(
+		(candidate) =>
+			candidate.method() === 'GET' &&
+			new URL(candidate.url()).pathname === '/api/v1/agent/plugins/official/catalog',
+	);
 	await page.goto('/settings?tab=agent');
 	await selectAgentSettingsGroup(page, 'tools');
-	await expect(page.getByRole('button', { name: 'Read official catalog', exact: true })).toBeVisible();
+	expect(new URL((await officialRead).url()).search).toBe('');
+	const section = page.getByRole('region', { name: 'Plugin management', exact: true });
+	await expect(section.getByTitle(repositoryUrl, { exact: true })).toBeVisible();
+	await expect(section.getByRole('button', { name: 'Read official catalog', exact: true })).toHaveCount(0);
 	// D16: actual first-party catalog, pinned publisher and signed download require external acceptance.
 });
 
@@ -344,17 +352,10 @@ test('frontend target owns a full Custom App Surface and connects through the is
 	await page.goto('/settings?tab=agent');
 	await selectAgentSettingsGroup(page, 'tools');
 	const section = page.getByRole('region', { name: 'Plugin management', exact: true });
-	// Installation writes were performed by an independent APIRequestContext.
-	// Explicitly read the product's plugin directory (not the unrelated
-	// scoped-app selector) before asserting the runtime installation picker.
+	// Read the installed records through their management owner before checking
+	// the separate diagnostics consumer in advanced maintenance.
 	await section.getByRole('button', { name: 'Read plugin directories', exact: true }).click();
-	await section.getByText('Runtime observations', { exact: true }).click();
-	const runtimePicker = section.getByRole('combobox', { name: 'App', exact: true });
 	for (const installed of [custom, agent, fullstack]) {
-		await expect(runtimePicker.locator('option[value="' + installed.appId + '"]')).toHaveCount(1);
-		// The native select option is intentionally hidden. Also assert the
-		// visible installed-app record; the old first text match selected the
-		// hidden option and never exercised the management surface.
 		await expect(
 			section
 				.locator('article')
@@ -367,6 +368,17 @@ test('frontend target owns a full Custom App Surface and connects through the is
 	await captureFunctionalScreenshot(page, 'agent-plugins-multiple-installed.png', {
 		viewport: { width: 1440, height: 900 },
 	});
+	await expect(section.getByText('Runtime observations', { exact: true })).toHaveCount(0);
+	await page.goto('/settings?tab=data');
+	const maintenance = page.locator('details').filter({
+		has: page.locator('summary').filter({ hasText: /^Diagnostics and recovery \(advanced\)$/ }),
+	});
+	await maintenance.getByText('Diagnostics and recovery (advanced)', { exact: true }).click();
+	await maintenance.getByText('Runtime observations', { exact: true }).click();
+	const runtimePicker = maintenance.getByRole('combobox', { name: 'App', exact: true });
+	for (const installed of [custom, agent, fullstack]) {
+		await expect(runtimePicker.locator('option[value="' + installed.appId + '"]')).toHaveCount(1);
+	}
 	await page.goto('/connections');
 	const hub = await openAgentHub(page);
 

@@ -515,3 +515,11 @@ Runtime databases, reports, traces, screenshots, videos, logs, PID files, caches
 两轮源码复核覆盖全部本批文件及设置装配、composable、transport、Shared／后端真实调用：第一轮检查展示基线与转换owner；第二轮检查CAS、无效数值、单位精度、候选安装／升级、发布者信任、部分目录失败、视图撤销／晚响应、未知写入围栏与数据原意图保留。额外通过SFC解析扫描66个非Agent既有变更组件的完整template和静态class集合，分类核对新增恢复／契约差异；此静态扫描不等于浏览器外观验收。
 
 本轮静态环境 Node 22.23.1 / pnpm 11.26.0：`pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/frontend build`、`git diff --check` 均退出0。未执行本地行为测试、浏览器、用例收集或线上部署。单位临界值／跨分类草稿、官方安装取消／回执丢失、仓库信任／升级、维护区域生命周期和窄屏布局须由新提交远程Actions及适用实机环境验收，旧7/8不代表本轮通过或UI还原百分比。
+
+### 插件场景跟随真实展示入口（2026-10-20，待远程）
+
+基于 `a7406e88cebf888cce0fa0caae8a2b266a5c0f36` 继续静态审核既有插件场景，发现两个消费者仍依赖已移除的平铺诊断入口。官方目录场景改为观察设置页自动发出的真实官方 GET，并核对没有第三方查询参数、已配置仓库仍可见；原先两个覆盖来源的400及空安装目录断言保留。Custom Surface 场景先检查普通插件页的三条可见安装记录，再从数据页高级维护打开运行时观察并核对三条真实实例选项，随后原 iframe SDK、隔离、存储和跨应用断言保持不变；明确断言普通插件页没有运行时诊断。
+
+两轮源码复核分别核对实际组件入口和完整业务断言；没有新增产品按钮、放宽权限、跳过用例或执行本地行为测试。本批只修改既有测试消费者与验证／规划文档，USAGE 原操作说明仍符合实际，E2E 包无 build 脚本。`a7406e88` 的 [Actions 39433921156](https://github.com/0honus0/nexus-terminal/actions/runs/39433921156) 的 Checks/format/build 和 Docker 已通过；八组运行中，不能据此宣称本批行为通过。
+
+静态环境仍为 Node 22.23.1 / pnpm 11.26.0；根 `pnpm run check`、`pnpm run format:all:check` 均退出0，日志为 `/tmp/nexus-ui-followup-{check,format}.log`。最终定位微调后另检查修改的spec和文档格式、ESLint及`git diff --check`；未修改产品源码，无新增产品构建需求。本批远程行为待新提交验收。
