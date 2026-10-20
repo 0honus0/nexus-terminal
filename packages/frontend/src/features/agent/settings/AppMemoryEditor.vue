@@ -70,55 +70,89 @@
 		</div>
 		<p v-if="items.length === 0" class="text-sm">{{ t('agent.settings.memoryManagement.empty') }}</p>
 		<article v-for="memory in items" :key="memory.id" class="space-y-2 rounded-lg bg-header/25 p-3.5">
-			<h4>
-				{{ t('agent.settings.memoryManagement.' + memory.status) }} · {{ Math.round(memory.confidence * 100) }}%
-			</h4>
-			<p class="whitespace-pre-wrap break-words text-sm">{{ memory.content }}</p>
+			<div class="flex flex-wrap items-center gap-2">
+				<span
+					class="rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+					:class="
+						memory.status === 'candidate'
+							? 'border-warning/30 bg-warning/10 text-warning'
+							: memory.status === 'published'
+								? 'border-success/30 bg-success/10 text-success'
+								: 'border-border bg-header text-text-secondary'
+					"
+				>
+					{{ t('agent.settings.memoryManagement.' + memory.status) }}
+				</span>
+				<span class="text-[11px] text-text-secondary">{{ Math.round(memory.confidence * 100) }}%</span>
+			</div>
+			<p
+				v-if="original?.id !== memory.id"
+				class="whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground"
+			>
+				{{ memory.content }}
+			</p>
 			<p class="text-xs">
 				{{
 					t('agent.settings.memoryManagement.times', {
-						created: formatTime(memory.createdAt),
 						updated: formatTime(memory.updatedAt),
-						reviewed: formatTime(memory.reviewedAt),
 						expires: formatTime(memory.expiresAt),
 					})
 				}}
 			</p>
-			<UiButton type="button" :disabled="blocked" @click="edit(memory)">{{
-				t('agent.settings.memoryManagement.readReview')
-			}}</UiButton>
+			<UiButton
+				v-if="memory.status === 'candidate' || memory.status === 'published'"
+				type="button"
+				appearance="soft"
+				density="compact"
+				:disabled="blocked"
+				@click="edit(memory)"
+				>{{ t('agent.settings.memoryManagement.readReview') }}</UiButton
+			>
+			<form v-if="original?.id === memory.id" class="mt-3 space-y-3" @submit.prevent="review('publish')">
+				<fieldset :disabled="blocked" class="space-y-3">
+					<textarea
+						v-if="original.status === 'candidate'"
+						v-model="reviewContent"
+						rows="4"
+						:aria-label="t('agent.settings.memoryManagement.content')"
+						class="w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-xs leading-relaxed text-foreground"
+					/>
+					<p v-else class="whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground">
+						{{ original.content }}
+					</p>
+					<div class="flex flex-wrap gap-2">
+						<template v-if="original.status === 'candidate'"
+							><UiButton
+								type="submit"
+								appearance="solid"
+								tone="primary"
+								:disabled="!reviewContent.trim()"
+								>{{ t('agent.settings.memoryManagement.publish') }}</UiButton
+							><UiButton type="button" appearance="soft" tone="danger" @click="review('reject')">{{
+								t('agent.settings.memoryManagement.reject')
+							}}</UiButton></template
+						>
+						<UiButton
+							v-if="original.status === 'published'"
+							type="button"
+							appearance="soft"
+							tone="danger"
+							@click="review('revoke')"
+							>{{ t('agent.settings.memoryManagement.revoke') }}</UiButton
+						>
+						<UiButton
+							type="button"
+							@click="
+								original = null;
+								reviewContent = '';
+							"
+							>{{ t('common.cancel') }}</UiButton
+						>
+					</div>
+				</fieldset>
+			</form>
 		</article>
-		<form v-if="original" class="space-y-3 rounded border border-border p-3" @submit.prevent="review('publish')">
-			<h4>{{ t('agent.settings.memoryManagement.readReview') }}</h4>
-			<fieldset :disabled="blocked" class="space-y-3">
-				<textarea
-					v-model="reviewContent"
-					:readonly="original.status !== 'candidate'"
-					rows="5"
-					:aria-label="t('agent.settings.memoryManagement.content')"
-					class="w-full rounded border border-border bg-background p-2"
-				/>
-				<div class="flex flex-wrap gap-2">
-					<template v-if="original.status === 'candidate'"
-						><UiButton type="submit">{{ t('agent.settings.memoryManagement.publish') }}</UiButton
-						><UiButton type="button" @click="review('reject')">{{
-							t('agent.settings.memoryManagement.reject')
-						}}</UiButton></template
-					>
-					<UiButton v-if="original.status === 'published'" type="button" @click="review('revoke')">{{
-						t('agent.settings.memoryManagement.revoke')
-					}}</UiButton>
-					<UiButton
-						type="button"
-						@click="
-							original = null;
-							reviewContent = '';
-						"
-						>{{ t('common.cancel') }}</UiButton
-					>
-				</div>
-			</fieldset>
-		</form>
+
 		<MemoryImportEditor :app-id="appId" :apps="apps" @imported="invalidate" />
 	</div>
 </template>

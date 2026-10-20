@@ -123,6 +123,8 @@ export async function openNativeTask(task: NativeTask) {
 		.getByRole('combobox', { name: 'Model for this execution', exact: true })
 		.selectOption(JSON.stringify([provider.id, 'e2e-model', provider.version]));
 	await page.keyboard.press('Escape');
+	await expect(hub).toBeVisible();
+	await expect(hub.getByRole('textbox', { name: 'Task input', exact: true })).toBeVisible();
 	return hub;
 }
 
@@ -238,6 +240,8 @@ export async function startNativeTask(
 		await box.setChecked(connectionIds.includes(Number(await box.getAttribute('value'))));
 	}
 	await task.page.keyboard.press('Escape');
+	await expect(targets).toBeHidden();
+	await expect(hub).toBeVisible();
 	await hub.getByRole('textbox', { name: 'Task input', exact: true }).fill(prompt);
 	const method = followUp ? 'agent.runs.appendInput' : 'agent.runs.create';
 	const { result } = await captureNativeCommand(task, method, () =>

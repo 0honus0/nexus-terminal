@@ -982,7 +982,7 @@
         "previous": "Previous page",
         "next": "Next page",
         "empty": "No memories on this page.",
-        "times": "Created: {created}; updated: {updated}; reviewed: {reviewed}; expires: {expires}",
+        "times": "Updated: {updated}; expires: {expires}",
         "readReview": "Read current version for review",
         "content": "Content",
         "publish": "Publish current content",
@@ -998,12 +998,13 @@
         "import": "Import from another App",
         "importHelp": "Imported memories need review before they become active.",
         "sourceApp": "Source App instance",
-        "sourceMemory": "Source memory UUID",
+        "sourceMemory": "Source memory",
         "readSources": "Read published sources",
         "preview": "Read source and prepare import confirmation",
         "confirmImport": "Confirm import as candidate",
         "checkImport": "Read allocated memory ID to check result",
-        "importUnknown": "Import confirmation is single-use and never retried automatically. For an unknown result, read the allocated memory ID. A 404 does not prove that nothing committed; keep the unknown state and do not confirm again."
+        "importUnknown": "Import confirmation is single-use and never retried automatically. For an unknown result, read the allocated memory ID. A 404 does not prove that nothing committed; keep the unknown state and do not confirm again.",
+        "confirmationExpires": "Confirmation expires: {date}"
       }
     },
     "launcher": {

@@ -157,8 +157,10 @@
 					{{ t('agent.settings.appManagement.' + operation.notice.value) }}
 				</p>
 				<p v-if="needsReload" class="p-2 text-xs">{{ t('agent.settings.appManagement.refreshRequired') }}</p>
-				<div v-if="uploadUnknown || reservation" class="space-y-2 p-2 text-xs">
-					<p v-if="reservation" class="break-all">{{ reservation.id }} · v{{ reservation.version }}</p>
+				<div
+					v-if="uploadUnknown || (reservation && reservation.status !== 'ready')"
+					class="space-y-2 p-2 text-xs"
+				>
 					<UiButton v-if="reservation" type="button" :disabled="busy" @click="checkUpload">{{
 						t('agent.artifactManagement.checkUpload')
 					}}</UiButton>

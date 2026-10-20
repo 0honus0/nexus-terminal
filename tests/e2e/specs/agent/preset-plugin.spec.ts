@@ -355,7 +355,14 @@ test('frontend target owns a full Custom App Surface and connects through the is
 		// The native select option is intentionally hidden. Also assert the
 		// visible installed-app record; the old first text match selected the
 		// hidden option and never exercised the management surface.
-		await expect(section.locator('article').filter({ hasText: installed.definitionId })).toBeVisible();
+		await expect(
+			section
+				.locator('article')
+				.filter({ hasText: installed.definitionId })
+				.filter({
+					has: page.getByRole('button', { name: 'Uninstall / continue retirement', exact: true }),
+				}),
+		).toBeVisible();
 	}
 	await captureFunctionalScreenshot(page, 'agent-plugins-multiple-installed.png', {
 		viewport: { width: 1440, height: 900 },

@@ -44,7 +44,7 @@ Browser管理归browser-api、model/browser-types与browser-mapper及BrowserRunt
 
 AppScopedSettings持有管理卡片自己的App目录/选择和撤销scope，按实例key安装AppIntegrationEditor/AppMemoryEditor，不依赖旧聚合settings或声明名称。集成transport持真实/api/v1/apps命名空间、UUID创建头、CAS/删除正文与完整目录codec；integration-types/mapper持独立配置/文本草稿/目录，use-app-integrations持原修订、确认及未知创建原输入/键。集成列表与添加／编辑 Modal 分离，editorOpen 和草稿归 use-app-integrations；取消清草稿，原版本更新确认后关闭，创建确认后先只读核对。分类／页面 active 撤销旧等待并关闭 Modal，暂时隐藏保留未知创建的原输入／键，身份失效或销毁清除；读取当前列表不证明原创建未提交。原键重放只触发重新读取当前列表，不将首次回执当当前配置。旧MCP/ACP组件和旧API删除，模型调用/Host另行迁移。
 
-Memory的transport归memory-management-api，独立对象/提案草稿及转换归memory-types/mapper；use-app-memory持offset页、当前审核快照和非幂等创建未知围栏。MemoryImportEditor持来源读取/一次性确认及按分配ID的只读恢复，MemorySourcePicker持已发布来源分页。导入完成推进列表本地修订，较早列表返回不能解除刷新围栏。App切换、身份撤销和离页清正文/确认，毫秒不重复放大；Slot组件不持业务写策略。
+Memory的transport归memory-management-api，独立对象及转换归memory-types/mapper；use-app-memory持offset页及当前审核快照，AppMemoryEditor在对应卡片内展示审核草稿与操作，不另设底部表单。MemoryImportEditor持来源读取/一次性确认及按分配ID的只读恢复，MemorySourcePicker持已发布来源分页与下拉选择；界面不要求手填内部ID，不常驻显示存储修订，CAS仍使用权威读取的原版本。导入完成推进列表本地修订，较早列表返回不能解除刷新围栏。App切换、身份撤销和离页清正文/确认，毫秒不重复放大；Slot组件不持业务写策略。
 
 Artifact正式库归artifact-management-api、artifact-types/mapper、use-artifact-library与files/ArtifactLibraryView；设置及浮窗均直接安装，目录/统计/写入分别持scope。offset分页、CAS、两步上传、完整有界字节校验和Blob URL归真实视图owner；ArtifactAttachmentEditor持单文件原版本与显式引用意图。ArtifactPicker消费同一新transport，独立持私有上传意图、恢复与offset，Conversation/Host附件使用ManagedArtifact，不拼旧Artifact DTO。
 

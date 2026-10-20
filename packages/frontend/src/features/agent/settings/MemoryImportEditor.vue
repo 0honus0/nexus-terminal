@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { computed, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton } from '@/foundation/ui';
+	import { UiButton, UiSelect } from '@/foundation/ui';
 	import type { ManagedApp } from '../model/app-management-types';
 	import type { ManagedMemory, MemoryImportConfirmation } from '../model/memory-types';
 	import {
@@ -105,47 +105,48 @@
 	}
 </script>
 <template>
-	<div class="space-y-3 rounded border border-border p-3">
-		<h4>{{ t('agent.settings.memoryManagement.import') }}</h4>
+	<div class="space-y-3 border-t border-border/60 pt-5">
+		<h4 class="text-sm font-semibold text-foreground">{{ t('agent.settings.memoryManagement.import') }}</h4>
 		<p class="text-sm text-text-secondary">{{ t('agent.settings.memoryManagement.importHelp') }}</p>
 		<p v-if="operation.notice.value" role="status">
 			{{ t('agent.settings.appManagement.' + operation.notice.value) }}
 		</p>
 		<p v-if="unknown" class="text-sm text-warning">{{ t('agent.settings.memoryManagement.importUnknown') }}</p>
 		<fieldset :disabled="operation.busy.value || preview !== null || unknown" class="space-y-3">
-			<label class="block text-sm"
+			<label class="block text-xs text-text-secondary"
 				>{{ t('agent.settings.memoryManagement.sourceApp')
-				}}<select
+				}}<UiSelect
 					v-model="sourceAppId"
-					class="mt-1 w-full rounded border border-border bg-background p-2"
-					@change="sourceMemoryId = ''"
+					class="mt-1 w-full"
+					:disabled="operation.busy.value || preview !== null || unknown"
+					@update:model-value="sourceMemoryId = ''"
 				>
 					<option value="">{{ t('agent.settings.appManagement.chooseApp') }}</option>
 					<option v-for="app in sourceApps" :key="app.id" :value="app.id">
-						{{ app.name }} · {{ app.id }}
+						{{ app.name }}
 					</option>
-				</select></label
+				</UiSelect></label
 			>
 			<MemorySourcePicker
 				v-if="sourceAppId"
 				:key="sourceAppId"
 				:app-id="sourceAppId"
+				:selected-id="sourceMemoryId"
 				:disabled="operation.busy.value || preview !== null || unknown"
 				@select="(id) => (sourceMemoryId = id)"
 			/>
-			<label class="block text-sm"
-				>{{ t('agent.settings.memoryManagement.sourceMemory')
-				}}<input v-model="sourceMemoryId" class="mt-1 w-full rounded border border-border bg-background p-2"
-			/></label>
 			<UiButton type="button" :disabled="!sourceAppId || !sourceMemoryId" @click="prepare">{{
 				t('agent.settings.memoryManagement.preview')
 			}}</UiButton>
 		</fieldset>
 		<template v-if="preview && source">
 			<p class="whitespace-pre-wrap break-words text-sm">{{ source.content }}</p>
-			<p class="break-all text-xs">
-				{{ source.id }} · v{{ preview.sourceVersion }} ·
-				{{ formatAgentDateTime(locale, new Date(preview.expiresAt)) }}
+			<p class="text-[11px] text-text-secondary">
+				{{
+					t('agent.settings.memoryManagement.confirmationExpires', {
+						date: formatAgentDateTime(locale, new Date(preview.expiresAt)),
+					})
+				}}
 			</p>
 			<UiButton
 				type="button"

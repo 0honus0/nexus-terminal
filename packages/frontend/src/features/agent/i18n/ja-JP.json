@@ -982,7 +982,7 @@
         "previous": "前のページ",
         "next": "次のページ",
         "empty": "このページにメモリはありません。",
-        "times": "作成：{created}、更新：{updated}、審査：{reviewed}、期限：{expires}",
+        "times": "更新：{updated}、期限：{expires}",
         "readReview": "現在のバージョンを読み取り審査",
         "content": "本文",
         "publish": "現在の本文を公開",
@@ -998,12 +998,13 @@
         "import": "他のAppから取込",
         "importHelp": "取り込んだメモリは承認後に有効になります。",
         "sourceApp": "元Appインスタンス",
-        "sourceMemory": "元メモリUUID",
+        "sourceMemory": "元メモリ",
         "readSources": "公開済みの元メモリを読込",
         "preview": "元メモリを読込して取込確認を準備",
         "confirmImport": "候補として取込を確定",
         "checkImport": "割当済みメモリIDを読取確認",
-        "importUnknown": "取込確認は一度だけ消費され、自動再試行しません。結果不明時は割当済みメモリIDを読み取ります。404は未確定の証明にならないため、不明状態を保持して再確定しません。"
+        "importUnknown": "取込確認は一度だけ消費され、自動再試行しません。結果不明時は割当済みメモリIDを読み取ります。404は未確定の証明にならないため、不明状態を保持して再確定しません。",
+        "confirmationExpires": "確認の有効期限：{date}"
       }
     },
     "launcher": {

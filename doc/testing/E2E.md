@@ -497,3 +497,11 @@ Runtime databases, reports, traces, screenshots, videos, logs, PID files, caches
 当前工作区恢复原四分类和顶部启停，模型目录并入 Provider，浮窗恢复欢迎卡、消息气泡、配置弹出框、会话内审批和任务侧栏；插件选包串联校验、文件列表紧凑展示。既有 host/performance/settings/plugin/ACP 场景按真实入口同步，保留原 CAS、回执、持久状态和未知结果断言。按 PLAN D17 不执行本地行为测试或用例收集。历史 Actions PASS 只适用于原 SHA；本版仍需远程核对桌面／窄屏弹出框、审批／任务侧栏遮挡、顶部开关、跨分类保存／冲突、插件确认／升级和文件操作。
 
 静态结果：dev 工作区基于 `6e0bc293`，Node 22.23.1 / pnpm 11.26.0；`pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/frontend build` 和 `git diff --check` 均退出 0。未提交工作区不是新的行为验收 SHA。
+
+### 记忆与导入展示续审、远程失败修复（2026-10-20，待远程）
+
+基于 `bcd6a036` 继续按 `75289ef9^` 对照展示：审核草稿回到记忆卡片内，导入恢复应用／来源下拉选择，移除手填 UUID 与常驻存储版本；上传成功不再显示只读核对按钮。权威读取、原版本 CAS、一次性导入确认及未知恢复仍由原 owner 持有。来源页成功翻页时清除原选择，读取失败不把缓存当作空列表。
+
+[Actions 39426039985](https://github.com/0honus0/nexus-terminal/actions/runs/39426039985) 对应 `bcd6a036`，结果 failure：1/3/6/7组共16项失败，2/4/5/8组、Checks/format/build及Docker通过。核对各失败组日志及第3组trace：空目标弹出框按Escape时Host关闭，引起13项输入框缺失；最小化清除标题草稿引起1项；旧说明文案和同时命中暂存／安装article各1项。本轮让外层窗口在配置弹出框打开时交由内层消费Escape，暂停视图保留标题及原选中线程（身份撤销仍清理）；测试显式核对关闭弹出框后Host／输入仍可达，按真实卸载操作定位安装记录，并用实际目标选择后权限不增加代替已移除的技术说明断言。未恢复多余UI、放宽权限或重放写入。
+
+本轮只执行静态检查与构建，按D17不运行本地行为或用例收集。静态结果：`pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/frontend build` 和 `git diff --check` 均退出0；上述修复与记忆／导入显示仍须新提交的远程Actions验收，不继承历史PASS。

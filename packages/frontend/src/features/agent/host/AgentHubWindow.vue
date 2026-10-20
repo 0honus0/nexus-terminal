@@ -162,6 +162,8 @@
 		if (!visible.value || !hubOverlayRegistration?.isTop()) return;
 		if (event.key === 'Escape') {
 			if (event.defaultPrevented) return;
+			// An empty popover may leave focus on its trigger; let its dismissal owner consume Escape first.
+			if (document.querySelector('[data-ui="popover-panel"][data-agent-hub-portal][data-state="open"]')) return;
 			event.preventDefault();
 			event.stopPropagation();
 			agentWindowManager.closeHub();

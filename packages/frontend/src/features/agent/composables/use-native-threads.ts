@@ -40,11 +40,13 @@ export function useNativeThreads(
 
 	const operation = useAgentManagementOperation((reason) => {
 		const intent = pending.value;
+		const draftTitle = title.value;
+		const originalThread = selected.value;
 		clearPrivate();
-		if (reason === 'view' && intent !== null) {
+		if (reason === 'view') {
 			pending.value = intent;
-			title.value = intent.title;
-			selected.value = intent.kind === 'rename' ? intent.thread : null;
+			title.value = draftTitle;
+			selected.value = originalThread;
 		}
 	}, active);
 
@@ -69,7 +71,6 @@ export function useNativeThreads(
 					scope.value = null;
 					items.value = [];
 					nextCursor.value = null;
-					selected.value = null;
 					inspected.value = false;
 					operation.refreshRequired.value = true;
 				},
