@@ -598,12 +598,17 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
 		await step('SSH outage triggers more than one automatic reconnect cycle', async () => {
 			await setTestSshOnline(false);
 
-			// First reconnect is scheduled after 2s and the next after 4s. The clean Workspace
+			// First reconnect is scheduled after 2s and the next after 4s. A failed
+			// SSH dial may itself consume the configured ~20s transport deadline;
+			// two real attempts can therefore require more than 25s before their
+			// requests are observable. This bound covers both actual dials without
+			// changing backoff, omitting attempts, or weakening the expected count.
+			// The clean Workspace
 			// transport may reuse the same already-open /ws/workspace control socket after an
 			// SSH-level connect failure, so business reconnect attempts are counted by their
 			// workspace.connect requests rather than by forcing a new WebSocket per attempt.
 			await expect
-				.poll(() => workspaceConnectRequests, { timeout: 25_000 })
+				.poll(() => workspaceConnectRequests, { timeout: 40_000 })
 				.toBeGreaterThanOrEqual(initialConnectRequestCount + 2);
 			await expect
 				.poll(() => frontendDebugLogs.some((entry) => entry.msg === 'Workspace reconnect scheduled'))
