@@ -846,16 +846,12 @@ for (const fixture of regressionInputs.memoryProposals) {
 	});
 }
 
-test('delegation rejects the retired absolute deadline and an excessive current duration before creating a child', async ({
-	request,
-	page,
-}) => {
-	const task = await prepareNativeTask(request, page, ['app.intents.exchange']);
-	await openNativeTask(task);
-	for (const boundary of ['absolute', 'duration']) {
-		// A provider response has already been dispatched when its untrusted
-		// tool payload is rejected. Preserve the Run's uncertain outcome and
-		// explicitly re-read the thread before an independent next intent.
+for (const boundary of ['absolute', 'duration'] as const) {
+	test(`delegation rejects invalid ${boundary} deadline without creating a child`, async ({ request, page }) => {
+		// Unknown tool effects deliberately fence subsequent Runs in this app.
+		// Each rejected boundary is a separate isolated fixture rather than
+		// retrying a second Run against an app with an unresolved first Run.
+		const task = await prepareNativeTask(request, page, ['app.intents.exchange']);
 		await openNativeTask(task);
 		const created = await startNativeTask(task, `E2E_REGRESSION_DEADLINE_SENTINEL boundary=${boundary}`);
 		const result = await finishNativeTask(task, created.id);
@@ -878,8 +874,8 @@ test('delegation rejects the retired absolute deadline and an excessive current 
 			throw new Error('Unexpected children');
 		}
 		expect(children.value.items).toEqual([]);
-	}
-});
+	});
+}
 
 test('reopening a completed clarification restores history and explicit follow-up preserves the original Run', async ({
 	page,
