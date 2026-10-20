@@ -888,7 +888,9 @@ test('explicit profile models retain unavailable versions instead of silently se
 		{ method: 'DELETE', path: `/ai/providers/${provider.id}?expectedVersion=${provider.version}` },
 		readAgentProviderDeleteResponse,
 	);
-	await execution.getByRole('button', { name: 'Read saved settings (discard draft)', exact: true }).click();
+	// Normal reads load on entry; the recovery button is reserved for failed/unknown state.
+	await page.reload();
+	await selectAgentSettingsGroup(page, 'runtime');
 	await expect(model.locator('option:checked')).toHaveText('e2e-model · v1 — Unavailable / verify version');
 	const current = await requestAgentJson(
 		context.request,

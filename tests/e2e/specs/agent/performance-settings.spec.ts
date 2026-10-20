@@ -71,6 +71,7 @@ test('execution settings validate before dispatch, save the original CAS and rej
 		await expect(rejected.json()).resolves.toEqual({ code: 'invalid_input' });
 	}
 	await page.reload();
+	await selectAgentSettingsGroup(page, 'runtime');
 	await expect(input).toHaveValue(String(original));
 	await expect(enabled).toBeChecked({ checked: !initial.settings.enabled });
 	const unchanged = await requestAgentJson(

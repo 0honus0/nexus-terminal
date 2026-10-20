@@ -74,17 +74,22 @@ test('IP blacklist UI saves policy, activates it after restart, and removes a bl
 			await expect(button).toBeEnabled();
 		}
 
-		await step('toggle only changes the draft until saved explicitly', async () => {
+		await step('toggle saves only its own field and preserves neighbouring drafts', async () => {
 			const before = await getTestSettings(context.request);
-			await toggle.click();
+			await blacklist.locator('#maxLoginAttempts').fill('3');
+			await blacklist.locator('#loginBanDuration').fill('360');
+			await savePolicy(toggle);
 			await expect(toggle).toHaveAttribute('aria-checked', 'false');
 			await expect(blacklist.locator('#maxLoginAttempts')).toHaveCount(0);
-			expect((await getTestSettings(context.request)).version).toBe(before.version);
-			await savePolicy(blacklist.getByRole('button', { name: 'Save', exact: true }));
-			expect((await getTestSettings(context.request)).policy.ipBlacklistEnabled).toBe(false);
-			await toggle.click();
-			await savePolicy(blacklist.getByRole('button', { name: 'Save', exact: true }).first());
-			expect((await getTestSettings(context.request)).policy.ipBlacklistEnabled).toBe(true);
+			const disabled = await getTestSettings(context.request);
+			expect(disabled.version).toBe(before.version + 1);
+			expect(disabled.policy).toEqual({ ...before.policy, ipBlacklistEnabled: false });
+			await savePolicy(toggle);
+			const enabled = await getTestSettings(context.request);
+			expect(enabled.version).toBe(disabled.version + 1);
+			expect(enabled.policy).toEqual(before.policy);
+			await expect(blacklist.locator('#maxLoginAttempts')).toHaveValue('3');
+			await expect(blacklist.locator('#loginBanDuration')).toHaveValue('360');
 		});
 		await step('invalid thresholds do not dispatch a policy mutation', async () => {
 			const before = await getTestSettings(context.request);

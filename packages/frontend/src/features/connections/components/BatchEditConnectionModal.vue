@@ -176,7 +176,10 @@
 								class="mb-1 flex items-center justify-between text-sm font-medium text-text-secondary"
 								><span>{{ t('connections.table.tags') }}</span
 								><span class="flex items-center gap-2 text-xs font-normal"
-									><UiCheckbox v-model="editTags" />{{ t('connections.batchEdit.changeTags') }}</span
+									><UiCheckbox
+										v-model="editTags"
+										:aria-label="t('connections.batchEdit.changeTags')"
+									/>{{ t('connections.batchEdit.changeTags') }}</span
 								></label
 							><ConnectionTagPicker v-if="editTags" v-model="tagIds" />
 						</div>
@@ -185,9 +188,10 @@
 								class="mb-1 flex items-center justify-between text-sm font-medium text-text-secondary"
 								><span>{{ t('connections.form.notes') }}</span
 								><span class="flex items-center gap-2 text-xs font-normal"
-									><UiCheckbox v-model="editNotes" />{{
-										t('connections.batchEdit.changeNotes')
-									}}</span
+									><UiCheckbox
+										v-model="editNotes"
+										:aria-label="t('connections.batchEdit.changeNotes')"
+									/>{{ t('connections.batchEdit.changeNotes') }}</span
 								></label
 							><UiTextarea v-if="editNotes" v-model="notes" :min-rows="3" />
 						</div>

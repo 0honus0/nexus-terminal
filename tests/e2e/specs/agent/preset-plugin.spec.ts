@@ -19,6 +19,7 @@ import {
 import { configureTestPluginRepository, installTestPlugin, stageTestPlugin } from '../../support/plugins';
 import {
 	openAgentConversations,
+	selectAgentSettingsGroup,
 	requestAgentJson,
 	requestAgentWorkspace,
 	enableTestAgentExecution,
@@ -242,6 +243,7 @@ test('official plugin source cannot be overridden by a configured third-party re
 	);
 	expect(installations.items).toEqual([]);
 	await page.goto('/settings?tab=agent');
+	await selectAgentSettingsGroup(page, 'tools');
 	await expect(page.getByRole('button', { name: 'Read official catalog', exact: true })).toBeVisible();
 	// D16: actual first-party catalog, pinned publisher and signed download require external acceptance.
 });
@@ -339,7 +341,8 @@ test('frontend target owns a full Custom App Surface and connects through the is
 		expect(installations.items).toContainEqual(installed);
 	}
 	await page.goto('/settings?tab=agent');
-	const section = page.getByRole('heading', { name: 'Plugin management', exact: true }).locator('..');
+	await selectAgentSettingsGroup(page, 'tools');
+	const section = page.getByRole('region', { name: 'Plugin management', exact: true });
 	// Installation writes were performed by an independent APIRequestContext.
 	// Explicitly read the product's plugin directory (not the unrelated
 	// scoped-app selector) before asserting the runtime installation picker.

@@ -149,7 +149,8 @@
 					>{{ t('agent.nativeRun.states.' + run.status) }}</span
 				>
 			</header>
-			<div class="flex min-h-0 flex-1 flex-col gap-3 p-3 sm:p-4">
+			<!-- Keep composer and details in flow; the pane scrolls when their minimum heights exceed the window. -->
+			<div class="flex flex-1 shrink-0 flex-col gap-3 p-3 sm:p-4">
 				<p v-if="!executionEnabled" role="status">{{ t('agent.nativeRun.executionDisabled') }}</p>
 				<p v-if="operation.notice.value" role="status">
 					{{ t('agent.settings.appManagement.' + operation.notice.value) }}
@@ -175,7 +176,7 @@
 						{{ t('agent.nativeThreads.abandon') }}
 					</UiButton>
 				</section>
-				<section v-if="thread" class="flex min-h-0 flex-1 flex-col gap-3">
+				<section v-if="thread" class="flex flex-1 shrink-0 flex-col gap-3">
 					<p v-if="olderHidden" role="status" class="text-xs">{{ t('agent.nativeRun.windowed') }}</p>
 					<div
 						class="agent-conversation-scroller min-h-48 flex-1 space-y-3 overflow-y-auto overscroll-contain px-2 py-4 touch-pan-y"

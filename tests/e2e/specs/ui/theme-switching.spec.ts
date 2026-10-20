@@ -175,10 +175,16 @@ test('PWA window title bar color updates immediately and persists across reload'
 		markStaleLoadStarted = resolve;
 	});
 	let holdAppearanceLoads = false;
+	let rejectNextSave = false;
 	let heldLoadCount = 0;
 	let fulfilledHeldLoadCount = 0;
 
 	await page.route('**/api/v1/appearance', async (route) => {
+		if (route.request().method() === 'PUT' && rejectNextSave) {
+			rejectNextSave = false;
+			await route.fulfill({ status: 409, json: { code: 'version_conflict' } });
+			return;
+		}
 		if (route.request().method() !== 'GET' || !holdAppearanceLoads) {
 			await route.continue();
 			return;
@@ -198,6 +204,15 @@ test('PWA window title bar color updates immediately and persists across reload'
 		const input = page.getByRole('textbox', { name: 'Title bar color', exact: true });
 		await expect(input).toBeEnabled();
 		await input.fill(targetColor);
+		// A normal load has no refresh control. Enter the real conflict-recovery
+		// state, then retain the delayed read / explicitly queued write regression.
+		rejectNextSave = true;
+		const rejectedSave = page.waitForResponse(
+			(response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
+		);
+		await page.locator('#settings-panel-appearance').getByRole('button', { name: 'Save', exact: true }).click();
+		expect((await rejectedSave).status()).toBe(409);
+		await expect(input).toHaveValue(targetColor);
 		holdAppearanceLoads = true;
 		await page.locator('#settings-panel-appearance').getByRole('button', { name: 'Refresh', exact: true }).click();
 		await staleLoadStarted;

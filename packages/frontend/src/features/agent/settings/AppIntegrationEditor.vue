@@ -91,26 +91,57 @@
 				:key="item.id"
 				class="space-y-3.5 rounded-2xl border border-border/80 bg-card/80 p-4 shadow-2xs"
 			>
-				<h4>
-					{{ item.configuration.name }} · {{ item.configuration.kind.toUpperCase() }} · v{{ item.version }}
-				</h4>
-				<p class="break-all text-xs">
-					{{ item.id }} ·
-					{{
-						t(item.enabled ? 'agent.settings.appManagement.enable' : 'agent.settings.appManagement.disable')
-					}}
-				</p>
-				<p class="text-xs">
-					{{
-						t('agent.settings.integrationManagement.credentialState', {
-							present: item.hasCredential,
-							revision: item.credentialRevision,
-						})
-					}}
-				</p>
-				<p v-if="item.schemaHash" class="break-all text-xs">
-					{{ t('agent.settings.integrationManagement.schemaHash') }}: {{ item.schemaHash }}
-				</p>
+				<div class="flex min-w-0 items-start gap-3 sm:items-center">
+					<div
+						class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/25 bg-primary/10 text-primary shadow-2xs"
+					>
+						<i class="fa-solid fa-plug text-sm" aria-hidden="true"></i>
+					</div>
+					<div class="min-w-0 flex-1 space-y-1.5">
+						<div class="flex flex-wrap items-center gap-2">
+							<h4
+								class="break-words rounded-xl border border-border/90 bg-background/90 px-3 py-1 text-sm font-bold text-foreground shadow-2xs sm:text-base"
+							>
+								{{ item.configuration.name }}
+							</h4>
+							<span
+								class="rounded-full border border-border px-2.5 py-0.5 text-[11px] text-text-secondary"
+							>
+								{{ item.configuration.kind.toUpperCase() }}
+							</span>
+							<span
+								class="rounded-full border px-2.5 py-0.5 text-[11px] font-medium"
+								:class="
+									item.enabled
+										? 'border-success/30 bg-success/10 text-success'
+										: 'border-border text-text-secondary'
+								"
+							>
+								{{
+									t(
+										item.enabled
+											? 'agent.settings.providers.enabled'
+											: 'agent.settings.providers.disabled',
+									)
+								}}
+							</span>
+						</div>
+						<p class="break-all font-mono text-[11px] text-text-secondary">
+							{{
+								item.configuration.kind === 'mcp' ? item.configuration.endpoint : item.configuration.cwd
+							}}
+						</p>
+						<p v-if="item.configuration.kind === 'mcp'" class="text-xs text-text-secondary">
+							{{
+								t(
+									item.hasCredential
+										? 'agent.settings.providers.credentialStored'
+										: 'agent.settings.providers.noCredential',
+								)
+							}}
+						</p>
+					</div>
+				</div>
 				<div class="flex flex-wrap gap-2">
 					<UiButton type="button" @click="edit(item.id)">{{ t('common.edit') }}</UiButton>
 					<UiButton v-if="item.configuration.kind === 'mcp'" type="button" @click="discover(item)">{{
@@ -129,7 +160,6 @@
 
 		<article v-if="discovery" class="space-y-2 rounded border border-border p-3">
 			<h4>{{ discovery.serverName }} · {{ discovery.serverVersion }} · {{ discovery.protocolVersion }}</h4>
-			<p class="break-all text-xs">{{ discovery.integration.id }} · v{{ discovery.integration.version }}</p>
 			<h5>{{ t('agent.settings.integrationManagement.tools') }} ({{ discovery.tools.length }})</h5>
 			<details v-for="tool in discovery.tools" :key="tool.name">
 				<summary>{{ tool.name }}</summary>

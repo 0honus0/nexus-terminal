@@ -10,8 +10,120 @@ import {
 } from '../../support/ssh';
 import { E2E_URLS } from '../../support/test-env';
 import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
+import {
+	readHostKeyConfirmRequest,
+	readHostKeyList,
+} from '../../../../packages/shared/src/targets/host-keys/http-codec';
 import { captureFunctionalScreenshot, functionalScreenshotsEnabled } from '../../support/functional-screenshots';
 import { step, slowStep } from '../../support/steps';
+
+for (const changedKey of [false, true]) {
+	test(`SSH ${changedKey ? 'changed' : 'first'} host key keeps its tab after cancellation and reconnects after confirmation`, async ({
+		page,
+		context,
+	}) => {
+		await loginAsInitialAdmin(context.request);
+		await configureSshE2eSettings(context.request);
+		const fixture = await fetch(E2E_SSH.controlUrl + '/host-key');
+		expect(fixture.ok).toBe(true);
+		const actual = readHostKeyConfirmRequest(await fixture.json());
+		const headers = { Origin: E2E_URLS.frontendOrigin };
+		const removed = await context.request.post('/api/v1/targets/host-keys/remove', {
+			headers,
+			data: { host: actual.host, port: actual.port },
+		});
+		expect(removed.status()).toBe(200);
+		const previousFingerprint = 'SHA256:' + (actual.fingerprint.endsWith('A') ? 'B' : 'A').repeat(43);
+		if (changedKey) {
+			const pinned = await context.request.post('/api/v1/targets/host-keys/confirm', {
+				headers,
+				data: { host: actual.host, port: actual.port, fingerprint: previousFingerprint },
+			});
+			expect(pinned.status()).toBe(201);
+		}
+		const connectionId = await createTestSshConnection(context.request, 'Host key confirmation');
+		let connectRequests = 0;
+		let trustWrites = 0;
+		page.on('websocket', (socket) => {
+			if (new URL(socket.url()).pathname !== '/ws/workspace') return;
+			socket.on('framesent', ({ payload }) => {
+				if (typeof payload !== 'string') return;
+				const message: unknown = JSON.parse(payload);
+				if (
+					message &&
+					typeof message === 'object' &&
+					'type' in message &&
+					message.type === 'workspace.connect'
+				) {
+					connectRequests += 1;
+				}
+			});
+		});
+		page.on('request', (request) => {
+			if (
+				new URL(request.url()).pathname === '/api/v1/targets/host-keys/confirm' &&
+				request.method() === 'POST'
+			) {
+				trustWrites += 1;
+			}
+		});
+		// Drop only the browser receipt after a real write to exercise read-only reconciliation.
+		if (changedKey) {
+			await page.route('**/api/v1/targets/host-keys/confirm', async (route) => {
+				const response = await route.fetch();
+				expect(response.status()).toBe(201);
+				await route.abort('failed');
+			});
+		}
+
+		const readPin = async () => {
+			const response = await context.request.get('/api/v1/targets/host-keys');
+			expect(response.status()).toBe(200);
+			return readHostKeyList(await response.json()).find(
+				(item) => item.host === actual.host && item.port === actual.port,
+			);
+		};
+
+		await page.goto(`/workspace?connectionId=${connectionId}`);
+		const dialog = page.getByRole('dialog', { name: 'SSH Host Keys', exact: true });
+		await expect(dialog).toBeVisible();
+		await expect(dialog).toContainText(actual.fingerprint);
+		if (changedKey) await expect(dialog).toContainText(previousFingerprint);
+		const tabs = page.locator('.terminal-tab-shell').getByRole('tab');
+		await expect(tabs).toHaveCount(1);
+		const sessionId = await tabs.getAttribute('data-session-id');
+		expect(sessionId).toBeTruthy();
+		if (!sessionId) throw new Error('Host key confirmation must belong to a real Workspace tab');
+		await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+		await expect(dialog).toBeHidden();
+		await expect(tabs).toHaveAttribute('data-session-status', 'host_key_untrusted');
+		expect((await readPin())?.fingerprint ?? null).toBe(changedKey ? previousFingerprint : null);
+		// Observe longer than the first reconnect backoff: cancellation must not reopen trust.
+		await page.waitForTimeout(3_000);
+		expect(connectRequests).toBe(1);
+		expect(trustWrites).toBe(0);
+		await expect(tabs).toHaveCount(1);
+		await expect(dialog).toBeHidden();
+		const input = page.locator('.terminal-inner-container:visible .xterm-helper-textarea');
+		await input.focus();
+		await page.keyboard.press('Enter');
+		await expect(dialog).toBeVisible();
+		await dialog.getByRole('button', { name: 'Trust and reconnect', exact: true }).click();
+		await expect(tabs).toHaveAttribute('data-session-state', 'connected', { timeout: 35_000 });
+		await expect(tabs).toHaveCount(1);
+		await expect(tabs).toHaveAttribute('data-session-id', sessionId);
+		expect((await readPin())?.fingerprint).toBe(actual.fingerprint);
+		expect(trustWrites).toBe(1);
+		expect(connectRequests).toBe(3);
+		const command = page.locator('.command-bar-command-input:visible');
+		await expect(command).toBeEnabled();
+		await command.fill("printf '%s%s\\n' 'HOST_KEY_CONFIRMED_' 'E2E'");
+		await command.press('Enter');
+		await expect
+			.poll(() => page.locator('.terminal-inner-container:visible .xterm-rows').innerText())
+			.toContain('HOST_KEY_CONFIRMED_E2E');
+	});
+}
 
 test('adds, tests, and connects to a real SSH server', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);

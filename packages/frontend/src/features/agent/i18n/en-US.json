@@ -947,7 +947,7 @@
       "integrationManagement": {
         "title": "MCP / ACP integrations",
         "help": "Configure integrations for an actual App instance. MCP uses HTTP/HTTPS with explicit host:port private-network exceptions. Discovery saves schemaHash and advances the version; it does not authorize tools. ACP uses a saved SSH connection, a JSON string-array argv and an absolute cwd, without a remote password. Up to 128 integrations per App; name: 128 UTF-8 bytes, MCP URL: 4096 bytes, private exceptions: 32 entries/253 bytes each; ACP argv: 128 entries/8192 bytes total, cwd: 256 bytes; complete request: 32 KiB, response: 16 MiB. Writes and deletion use the original version. Read after conflict or uncertainty; never replay automatically.",
-        "pending": "An uncertain creation retains its exact input and key, including credentials in this editor’s memory only. Reload the list before explicitly retrying that same creation. Its first receipt never replaces current configuration. Switching Apps or leaving clears the private intent and credentials; inspect existing records before creating again.",
+        "pending": "Creation outcome is unknown. Reload the list before explicitly retrying the same creation. Hiding this view retains its original input; switching Apps, signing out or closing the editor’s page clears it. Inspect existing records before creating again.",
         "reload": "Reload list and discard edit draft",
         "empty": "This App has no integrations.",
         "credentialState": "Credential present: {present}; credential revision: {revision}",
