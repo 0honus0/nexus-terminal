@@ -1693,3 +1693,11 @@ cross-session-transfer前两项已通过，第三项刻意禁止/folder-seed/子
 两轮源码复核覆盖普通/空文件、目录递归、链接、最大深度/条目、move源复查与目标确认。产品能力和协议不变，核对USAGE复制/未知结果说明仍成立；静态后留下一轮远程复验，未执行本机行为测试。本条仅完成第8组目录复制子项，下载取消与并发上传仍待修复，不标整组PASS。
 
 目录复制子项静态收口：Backend check/build、根check、完整format:all:check、git diff --check均退出0；两次源码复核完成。当前远程39356651981对应48faea89，不含此项，不用该run证明目录复制修复通过。
+
+## 远程第十九轮：第1组终端缓存子项（2026-10-20）
+
+原39354280150和最新39356651981均在workspace-layout-restore的终端DOM身份断言失败。WorkspaceUiState对view撤销也resetState，将layout.loaded置false并卸载WorkspaceSessionSurface。现只在session/disposed清空，页面失活仍由view scope撤销原请求/未派发保存；保留已加载布局/焦点与原终端。原permission/revision晚响应保护、身份清理和会话关闭owner不变，不放宽DOM/xterm、草稿、后台输出、geometry及额外读取断言。
+
+两轮源码审核覆盖scope失活/激活、初次加载未完成、缓存返回、登出/换用户、组件卸载和旧异步结果。Frontend vue-tsc/build、根check、完整format:all:check退出0，最终文档格式与diff另检查。USAGE和Frontend架构同步；行为等待含此变更的远程SHA。
+
+39356651981 / 48faea89最新已结束子组：第3组、第4组success；第1组failure，仅workspace-layout-restore失败，36项通过，Agent取消本轮未复现。其余组仍运行中，不能把目录复制/缓存的本地静态结果当作该run行为证据。

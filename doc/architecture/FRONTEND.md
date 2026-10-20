@@ -116,6 +116,8 @@ Registry状态卡片由`useAuthenticatedViewScope`隔离身份、卸载及KeepAl
 
 ## 7. 生命周期与失败
 
+WorkspaceUiState 的视图撤销只取消原布局/焦点请求与未派发保存，保留缓存页面已加载的布局、焦点配置与终端树；session/disposed 撤销才清空该状态。晚响应仍核对原 permission/revision，不能因保留缓存继续发布已撤销结果。
+
 明确打开、取消、订阅、解除、关闭和卸载 owner。取消前端请求不证明后端副作用终止；晚返回的资源仍尝试归还给原 owner。错误映射稳定安全码，区分网络失败、协议失败、业务拒绝和未知写入结果；非 JSON、未知状态/错误码及错误 shape 不当作成功。不把失败刷新作为操作已恢复证明。
 
 transport 产生具名失败与受约束 code，controller/view 只消费该契约；Auth 的共用失败从其公开入口消费，不比较普通 Error.message。服务端安全码引用 Shared，本地通信失败留本包；未知异常统一安全兜底，不能把技术正文用于翻译或决定认证/写入结果。
