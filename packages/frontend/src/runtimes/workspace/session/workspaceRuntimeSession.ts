@@ -378,7 +378,26 @@ export class WorkspaceRuntimeSession {
 		this.terminalOffset = 0;
 		// Once sent, absence of a valid receipt does not prove that creation failed.
 		this.recoveryRequired.value = true;
-		const wire = readWorkspaceConnectResponse(await requestAttached('workspace.connect', request));
+		let response: unknown;
+		try {
+			response = await requestAttached('workspace.connect', request);
+		} catch (cause) {
+			// A typed server rejection is an authoritative negative receipt: the
+			// server's Workspace owner has finished its failed-open cleanup before
+			// returning any code other than operation_unknown. A local dispatch
+			// rejection proves that nothing was sent. Neither can strand the
+			// session behind the unknown-result fence during an SSH outage.
+			// Lost transport, deadline expiry, protocol failure, and an explicit
+			// operation_unknown must continue to retain that fence.
+			if (
+				cause instanceof WorkspaceDispatchFailure ||
+				(cause instanceof WorkspaceRequestFailure && cause.code !== 'operation_unknown')
+			) {
+				this.recoveryRequired.value = false;
+			}
+			throw cause;
+		}
+		const wire = readWorkspaceConnectResponse(response);
 		const result = toWorkspaceConnection(wire);
 		this.validateConnectionIdentity(result);
 		this.assertConnectionGeneration(generation);
