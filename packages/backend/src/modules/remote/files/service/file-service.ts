@@ -52,6 +52,7 @@ import {
 import type { RemoteFileModel } from '../model/file-model.js';
 import { searchFiles } from './file-search.js';
 import { DownloadTickets } from './download-tickets.js';
+import { FileMutationQueue } from './file-mutation-queue.js';
 import type { FileUploadStart, FileUploadEvent, FileUploadStreamAttachment } from '../model/file-upload-types.js';
 import type { FileCopyMoveEvent, FileArchiveEvent, FileArchiveOperation } from '../model/file-task-types.js';
 import { copyRemoteEntries } from './file-copy.js';
@@ -69,7 +70,7 @@ interface OwnedResource {
 	expiresAt: number;
 	active: Set<AbortController>;
 	inFlight: Set<Promise<unknown>>;
-	mutationTail: Promise<void>;
+	mutations: FileMutationQueue;
 	closePromise: Promise<void> | null;
 }
 
@@ -470,7 +471,7 @@ export class RemoteFileService {
 				expiresAt: Date.now() + FILE_IDLE_MS,
 				active: new Set(),
 				inFlight: new Set(),
-				mutationTail: Promise.resolve(),
+				mutations: new FileMutationQueue(MAX_WORKSPACE_TRANSFERS),
 				closePromise: null,
 			};
 			this.owners.set(id, record);
@@ -624,6 +625,7 @@ export class RemoteFileService {
 		authorization: 'bound_session' | 'same_user_workspace' | 'download_ticket' = 'bound_session',
 		resourceUse: FileResourceUse = 'direct',
 		mutationPeers: FileResource[] = [],
+		uploadPath?: string,
 	): Promise<T> {
 		return this.track(
 			this.runAdmitted(
@@ -636,6 +638,7 @@ export class RemoteFileService {
 				authorization,
 				resourceUse,
 				mutationPeers,
+				uploadPath,
 			),
 		);
 	}
@@ -650,6 +653,7 @@ export class RemoteFileService {
 		authorization: 'bound_session' | 'same_user_workspace' | 'download_ticket' = 'bound_session',
 		resourceUse: FileResourceUse = 'direct',
 		mutationPeers: FileResource[] = [],
+		uploadPath?: string,
 	): Promise<T> {
 		const controller = new AbortController();
 
@@ -662,7 +666,6 @@ export class RemoteFileService {
 		const started = Date.now();
 		const timer = setTimeout(abort, timeoutMs);
 		let record: OwnedResource | null = null;
-		let unlockMutation: (() => void) | null = null;
 		let operationFinished!: () => void;
 		const lifecycle = new Promise<void>((resolve) => {
 			operationFinished = resolve;
@@ -682,25 +685,13 @@ export class RemoteFileService {
 			}
 			record.active.add(controller);
 			record.inFlight.add(lifecycle);
-			if (mutation) {
-				const previous = record.mutationTail.catch(() => undefined);
-				let unlock!: () => void;
-				const gate = new Promise<void>((resolve) => {
-					unlock = resolve;
-				});
-				record.mutationTail = previous.then(() => gate);
-				unlockMutation = unlock;
-				await this.untilAbort(previous, controller.signal);
-				if (record.closePromise || this.owners.get(id) !== record) {
-					throw new RemoteFileFailure('not_found');
-				}
-			}
+
 			controller.signal.throwIfAborted();
-			executing = true;
 			const activeRecord = record;
 
-			const execute = () =>
-				this.executeOwned(
+			const execute = () => {
+				executing = true;
+				return this.executeOwned(
 					activeRecord,
 					token,
 					id,
@@ -711,16 +702,23 @@ export class RemoteFileService {
 					timeoutMs,
 					authorization,
 				);
+			};
 
 			const operation = mutation
-				? this.mutations.run(
-						randomUUID(),
-						'files',
-						[record.resource, ...mutationPeers].map((resource) => ({
-							targetId: resource.targetId,
-							fingerprint: resource.fingerprint,
-						})),
+				? record.mutations.run(
 						execute,
+						(work) =>
+							this.mutations.run(
+								randomUUID(),
+								'files',
+								[activeRecord.resource, ...mutationPeers].map((resource) => ({
+									targetId: resource.targetId,
+									fingerprint: resource.fingerprint,
+								})),
+								work,
+							),
+						controller.signal,
+						uploadPath,
 					)
 				: execute();
 			try {
@@ -733,7 +731,6 @@ export class RemoteFileService {
 			}
 		} finally {
 			this.authorizing.delete(controller);
-			unlockMutation?.();
 			if (record) {
 				record.active.delete(controller);
 				record.inFlight.delete(lifecycle);
@@ -1574,14 +1571,10 @@ export class RemoteFileService {
 						}
 					}
 					// A prepare record is an allowlist, not proof that its directories are still safe.
-					await this.ensureRemoteDirectory(
-						resource,
-						path.posix.dirname(destination),
-						remaining,
-						abort,
-						() => {
+					await record.mutations.prepare(() =>
+						this.ensureRemoteDirectory(resource, path.posix.dirname(destination), remaining, abort, () => {
 							task.mutationStarted = true;
-						},
+						}),
 					);
 					const stage = await resource.openUploadStage({
 						path: destination,
@@ -1657,6 +1650,8 @@ export class RemoteFileService {
 			FILE_TRANSFER_MS,
 			'bound_session',
 			'dedicated_transfer',
+			[],
+			destination,
 		)
 			.then(
 				(result) => {
