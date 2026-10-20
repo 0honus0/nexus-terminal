@@ -844,10 +844,21 @@ function attachSftp(session, accept) {
 					sftp.status(reqid, STATUS_CODE.EOF);
 					return;
 				}
-				// SFTP NAME packets stay under ssh2's 256 KiB packet bound. Fetch
-				// actual attributes for this packet only, never synthetic metadata.
+				// Keep NAME packets below ssh2's 256 KiB bound while avoiding 20
+				// sequential round trips for an ordinary 5k-entry directory. The
+				// conservative per-name allowance covers both UTF-8 name fields,
+				// attributes, and framing, including maximum-length filenames.
+				const candidates = [];
+				let packetBytes = 64;
+				for (const entry of state.entries.slice(state.offset, state.offset + 512)) {
+					const estimatedBytes = 96 + 2 * Buffer.byteLength(entry.name, 'utf8');
+					if (candidates.length > 0 && packetBytes + estimatedBytes > 160 * 1024) break;
+					packetBytes += estimatedBytes;
+					candidates.push(entry);
+				}
+				// Fetch actual metadata only for the names in this bounded packet.
 				const entries = await Promise.all(
-					state.entries.slice(state.offset, state.offset + 256).map(async (entry) => {
+					candidates.map(async (entry) => {
 						const stats = await fsp.lstat(path.join(state.directoryPath, entry.name));
 						return { filename: entry.name, longname: entry.name, attrs: attrsFromStats(stats) };
 					}),
