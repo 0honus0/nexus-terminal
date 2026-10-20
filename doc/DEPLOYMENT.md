@@ -1,6 +1,6 @@
 # 部署与更新
 
-默认使用 Docker Compose。唯一后端为 `packages/backend`（原 backend-next），启动产物 `dist/main.js`；前后端消费 Shared。旧实现从 Git 历史读取，不提供旧库、旧快照或旧环境变量的兼容层。功能见 [USAGE](USAGE.md)，待验范围见 [实施方案](后端重构下一阶段实施方案.md)。
+默认使用 Docker Compose。唯一后端为 `packages/backend`（原 backend-next），启动产物 `dist/main.js`；前后端消费 Shared。旧实现从 Git 历史读取，不提供旧库、旧快照或旧环境变量的兼容层。功能见 [USAGE](USAGE.md)，待验范围见 [实施方案](PLAN.md)。
 
 ## 部署
 

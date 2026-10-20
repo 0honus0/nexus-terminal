@@ -334,4 +334,4 @@
 - 路径错误传递修复本地送验：check、三包 build、隔离全量格式与 Runner HTTP coding 场景通过；全量场景仅上述 Context 基线失败。准备单独本地提交，无推送或远程验收结论。
 - 路径错误传递修复已本地提交 `901b1468`，未推送。失败 Run 的独立测试 Workspace `206a3a8c-2d79-4de3-a937-4ee06dfb7883` 经管理 API 显式 stop 后确认 succeeded/stopped，再 delete 后确认 succeeded/deleted、retained=false；不复用它执行新 Run，不把 generation 删除当作 persistent project root 已清理。Provider HTTP 400 原始上游正文按现有安全约束未保存，当前日志只能确认状态码，尚不足以判断请求 contract 或上游故障；不凭推测修复 Provider，不重复创建 Run 换绿。
 
-本文件是正式 Agent 的场景设计与历史执行证据入口，不是 backend-next 的当前施工计划。当前重构任务仅由 [下一阶段方案](../后端重构下一阶段实施方案.md) 维护；旧记录中的“当前”“接续”“下一步”和串行提交要求只描述当时任务，不授权恢复已退役 Runner、沿用旧能力或立即执行测试。全部场景完成（或明确说明实际 contract／环境导致的未覆盖范围）、有效回归进入 `tests/e2e/specs/agent/`，且对应 SHA 的 canonical Actions 验收后，删除本文件和 `E2E.md` 中的入口；长期验证命令与覆盖边界仅保留在 `E2E.md`，不留下完成报告。本条记录的是将来的删除要求，当前尚未删除、尚未全部完成。
+本文件是正式 Agent 的场景设计与历史执行证据入口，不是 backend-next 的当前施工计划。当前重构任务仅由 [下一阶段方案](../PLAN.md) 维护；旧记录中的“当前”“接续”“下一步”和串行提交要求只描述当时任务，不授权恢复已退役 Runner、沿用旧能力或立即执行测试。全部场景完成（或明确说明实际 contract／环境导致的未覆盖范围）、有效回归进入 `tests/e2e/specs/agent/`，且对应 SHA 的 canonical Actions 验收后，删除本文件和 `E2E.md` 中的入口；长期验证命令与覆盖边界仅保留在 `E2E.md`，不留下完成报告。本条记录的是将来的删除要求，当前尚未删除、尚未全部完成。

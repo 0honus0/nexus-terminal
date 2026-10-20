@@ -1,5 +1,7 @@
 # Shared 架构
 
+当前验收基线：后端重构、正式前端 Shared 适配及远程八组回归已收口，具体 SHA、覆盖与仍未验证的外部/扩大故障范围统一见 [E2E](../testing/E2E.md#当前验收基线)，后续任务见 [PLAN](../PLAN.md)。下文 B/F 阶段名仅定位设计来源；原阶段的静态或有限行为证据不扩大为当前全量保证，历史“待 B10/F1”不表示重启已完成迁移。
+
 本文按 [模块模板](MODULE_TEMPLATE.md) 定义双端契约职责。人工约束见 [HUMAN](../rules/HUMAN.md)，开发入口见 [AGENTS](../AGENTS.md)。
 
 ## 1. 职责与范围
@@ -175,15 +177,15 @@ B4.1 Access Shared 的codec/类型、后端入口和正式Auth/Security浏览器
 
 B3.1 源码已将 envelope/codec/NXW1 迁到 `remote/workspace`，并接通 terminal/suspend 后端消费者。正式前端NXW1及普通连接/恢复/关闭已迁移，挂起mark/prepare/commit/resumeAck/renew/history及有限事件也已迁移，其余JSON子协议仍在F1-C2；不把后端消费当作整个双端完成。
 
-本轮 `RemoteFileService` 内部为 prepared/upload/copyMove/archive 新增具体 FileResource owner ID，阻断旧附件异步收尾污染新实例；`RemoteSessionService` 对清理失败继续占名额并使用具名聚合错误。这些都是**内部应用生命周期**修复，无新的前后端 wire 字段，故不应凭空添加 Shared DTO 或复制容量常量。正式前端已删除重复NXW1 codec并迁移普通连接/恢复/关闭，挂起HTTP/WS也已迁移，其余子协议仍按F-R10/F1-C2迁移。
+本轮 `RemoteFileService` 内部为 prepared/upload/copyMove/archive 新增具体 FileResource owner ID，阻断旧附件异步收尾污染新实例；`RemoteSessionService` 对清理失败继续占名额并使用具名聚合错误。这些都是**内部应用生命周期**修复，无新的前后端 wire 字段，故不应凭空添加 Shared DTO 或复制容量常量。正式前端已删除重复NXW1 codec并迁移普通连接/恢复/关闭，挂起HTTP/WS也已迁移，其余子协议已由正式前端消费。
 
-**C3/C4 本轮实际协议迁移**：`remote/workspace/workspace.ts`、`workspace-codec.ts`、`workspace-binary.ts`、`values.ts` 唯一拥有 envelope、connect/resume/close、显式 `workspace.resumeAck` 字段与 NXW1 编码；`remote/terminal/workspace.ts` 与 `workspace-codec.ts` 定义输入/尺寸/消费确认和目录事件。C4 已新增 `remote/suspend/workspace.ts`、`workspace-codec.ts`、`http.ts`，唯一拥有挂起 mark/prepare/commit/list、resume 和独立 `suspend.resumeAck`、owner renew、history/管理的安全 DTO 与 unknown 解码；Backend-next WS/HTTP 对它们做精确消费，内部应用 history/checkpoint/lease 类型归 sessions/model，技术类型归 Platform，Service 通过 Model 转换能力消费。Files `workspace.ts` 只余 Files 请求/响应/事件，原共用 envelope/旧 binary encoder 已删除；Shared package exports已同步；正式前端普通连接/Terminal/Files/传输/挂起链已经精确消费，其余status/Docker/桌面按F1-C2继续。独立 Remote PTY 帧容量不等同普通 Workspace terminal 流。以上仅为源码接线，不证明格式/类型/真实行为完整；普通 8 MiB journal 不可冒充挂起 100 MiB 历史或 VT checkpoint。
+**C3/C4 本轮实际协议迁移**：`remote/workspace/workspace.ts`、`workspace-codec.ts`、`workspace-binary.ts`、`values.ts` 唯一拥有 envelope、connect/resume/close、显式 `workspace.resumeAck` 字段与 NXW1 编码；`remote/terminal/workspace.ts` 与 `workspace-codec.ts` 定义输入/尺寸/消费确认和目录事件。C4 已新增 `remote/suspend/workspace.ts`、`workspace-codec.ts`、`http.ts`，唯一拥有挂起 mark/prepare/commit/list、resume 和独立 `suspend.resumeAck`、owner renew、history/管理的安全 DTO 与 unknown 解码；Backend-next WS/HTTP 对它们做精确消费，内部应用 history/checkpoint/lease 类型归 sessions/model，技术类型归 Platform，Service 通过 Model 转换能力消费。Files `workspace.ts` 只余 Files 请求/响应/事件，原共用 envelope/旧 binary encoder 已删除；Shared package exports已同步；正式前端普通连接/Terminal/Files/传输/挂起链已经精确消费，status/Docker/桌面也已接入正式消费者。独立 Remote PTY 帧容量不等同普通 Workspace terminal 流。以上仅为源码接线，不证明格式/类型/真实行为完整；普通 8 MiB journal 不可冒充挂起 100 MiB 历史或 VT checkpoint。
 
 transfers HTTP/WS 请求及任务事件已由新后端消费；基础格式、操作、错误、冲突政策和协议容量集中在 remote/transfers/values.ts；UNSUPPORTED_ENTRY 表示归档入口不接受设备或特权成员；安全符号链接/TAR 硬链接的私有恢复计划属于后端 Model，不新增 Shared 对象，危险链接按安全失败反馈，前端专用反馈归 F1，不能按 generic 失败自动改通道重试。正式前端已消费上述完整协议，行为范围仍按testing记录。后续按 Remote 真正子域增加通信契约，值与对象隔离；后端取消能力、活跃资源 owner 和私有配额不进入 Shared。
 
 核对范围从所有实际功能和端点开始，不仅扫描 Shared 现有目录。每个切片证明 values/model/http/events 的适用归属、实际消费者、编解码和边界投影完整；没有事件协议不预建 events。
 
-Shared check/build、Backend-next check/build、适用消费者编译及对应格式检查通过后才收口源码阶段，真实行为仍独立验收。Remote Files B1 的历史隔离 fixture 仅证明其记录基线，不覆盖 R1 对旧 WS、编码、批量/递归、技术失败边界的修改；R1 按阶段决定不运行行为测试，真实 SSH/SFTP、旧 Workspace Files 全链路与浏览器行为统一留 B10/F1。Agent 实际消费者与具体收口见 [实施方案](../后端重构下一阶段实施方案.md#延后的前端事项未验收不删除)。
+Shared check/build、Backend-next check/build、适用消费者编译及对应格式检查通过后才收口源码阶段，真实行为仍独立验收。Remote Files B1 的历史隔离 fixture 仅证明其记录基线，不覆盖 R1 对旧 WS、编码、批量/递归、技术失败边界的修改；R1 按阶段决定不运行行为测试，真实 SSH/SFTP、旧 Workspace Files 全链路与浏览器行为统一留 B10/F1。Agent 实际消费者与具体收口见 [实施方案](../PLAN.md)。
 
 传输 codec 不使用对象断言、String 强制转换或数组断言通过验证；字符串按 UTF-8 字节检查，有限值严格匹配，数组逐项与可选字段显式投影。upload 单帧 1 MiB、路径 4096 bytes、task ID 512 bytes、单批 prepare 20k 目录、copy/archive 64 sources 归 values；服务端资源名额/缓存和每 Workspace 总配额仍私有。
 
@@ -203,7 +205,7 @@ Agent file_inspect/patch/move/delete 的模型私有命令、树节点及内容�
 
 ## Preferences 个人数据契约
 
-`preferences/{presentation,commands,history,favorites}/{values,model,http,http-codec}` 为新后端真实HTTP的完整协议并精确export。presentation用明确布局联合及完整偏好，不使用任意配置字典；初始未保存version=0，编辑CAS。commands承载命令/标签/变量/版本及批量命令版本；history保持command/path不同wire字段、分页及去重；favorites独立编辑版本和排序。基础值/协议预算唯一归values，错误含unknown和容量。HTTP投影与Storage对象独立，SQLite Adapter只引values。commands/history/favorites 已由正式 Workspace 的快捷命令、命令历史、Files 收藏与路径历史消费：transport 严格解码分页、CAS 与有限失败，前端 mapper 再转独立应用对象；旧裸数组及无版本写入已删除。正式 App/Router/Workspace 有限整页与真实个人数据 HTTP 验收见 [testing](../testing/E2E.md#f1-c2-d-workspace页面与个人目录契约)。presentation也已由正式Preferences/Workspace共同消费，四读统一版本、完整写入快照和CAS；日志设置独立消费operations/logging。外观已在后续独立批次接入；其余功能仍在F1-D，本子集不代表完整Workspace交互验收。
+`preferences/{presentation,commands,history,favorites}/{values,model,http,http-codec}` 为新后端真实HTTP的完整协议并精确export。presentation用明确布局联合及完整偏好，不使用任意配置字典；初始未保存version=0，编辑CAS。commands承载命令/标签/变量/版本及批量命令版本；history保持command/path不同wire字段、分页及去重；favorites独立编辑版本和排序。基础值/协议预算唯一归values，错误含unknown和容量。HTTP投影与Storage对象独立，SQLite Adapter只引values。commands/history/favorites 已由正式 Workspace 的快捷命令、命令历史、Files 收藏与路径历史消费：transport 严格解码分页、CAS 与有限失败，前端 mapper 再转独立应用对象；旧裸数组及无版本写入已删除。正式 App/Router/Workspace 有限整页与真实个人数据 HTTP 验收见 [testing](https://github.com/0honus0/nexus-terminal/blob/558c4b343ba0ef2316309d2e164b9c6075c47efc/doc/testing/E2E.md#f1-c2-d-workspace页面与个人目录契约)。presentation也已由正式Preferences/Workspace共同消费，四读统一版本、完整写入快照和CAS；日志设置独立消费operations/logging。外观已在后续独立批次接入；其余功能仍在F1-D，本子集不代表完整Workspace交互验收。
 
 ### Context 续读权限
 

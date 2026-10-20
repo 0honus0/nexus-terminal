@@ -1,10 +1,12 @@
 # 前端架构
 
+当前验收基线：后端重构、正式前端 Shared 适配及远程八组回归已收口，具体 SHA、覆盖与仍未验证的外部/扩大故障范围统一见 [E2E](../testing/E2E.md#当前验收基线)，后续任务见 [PLAN](../PLAN.md)。下文 B/F 阶段名仅定位设计来源；原阶段的静态或有限行为证据不扩大为当前全量保证，历史“待 B10/F1”不表示重启已完成迁移。
+
 本文按 [模块模板](MODULE_TEMPLATE.md) 维护功能、运行时与界面的职责，开发前读取 [AGENTS](../AGENTS.md)、[人工规则](../rules/HUMAN.md)、[工程经验](../rules/ENGINEERING.md) 及 [编码规范](../rules/CODE_STYLE.md)。产品行为以 [USAGE](../USAGE.md) 为准。
 
 ## 1. 职责与范围
 
-Frontend展示产品状态并驱动用例，服务端事实不在浏览器重建为另一份权威。正式认证、Targets、Workspace/Files/传输/挂起/监控/Docker/桌面、个人设置、审计通知、备份诊断、外观及Agent管理／Host／运行界面源码均已消费Shared；前端源码没有旧Protocol依赖或新旧响应兼容层。源码适配与部署切换、静态与行为验收分别判断；D17最终远程Actions E2E及D16外部验收仍待完成。
+Frontend展示产品状态并驱动用例，服务端事实不在浏览器重建为另一份权威。正式认证、Targets、Workspace/Files/传输/挂起/监控/Docker/桌面、个人设置、审计通知、备份诊断、外观及Agent管理／Host／运行界面源码均已消费Shared；前端源码没有旧Protocol依赖或新旧响应兼容层。源码适配与部署切换、静态与行为验收分别判断；D17 远程 Actions 已通过，D16 外部范围仍未验；精确基线见 E2E。
 
 ## 2. 子功能与目录
 
@@ -146,13 +148,13 @@ Files首次读取等待当前附件的SFTP ready，尚未ACK、已断开/撤销�
 
 第九轮远程日志确认失败登出反馈生命周期缺口：`beginAuthentication` 会卸载 `AppHeader`，因而其局部 `logoutError` 无法在重新读取原身份后继续展示。失败消息改由独立于会话挂载的 `NotificationHost` 承载，并为错误通知设置 `role=alert`；不改变原有先撤销 Workspace/Agent 所有者、再经 `/auth/status` 核实同一身份的围栏。该变更待远程 E2E 复验。
 
-F1-A/B源码已覆盖正式setup/password/status/logout、TOTP/Passkey登录、改密/因素设置、公共CAPTCHA与CAPTCHA/IP安全配置，以及DEV共用认证。Passkey的第三方对象只在Auth adapters/browser-passkey显式投影，Store按实例持有取消能力；session generation变化取消旧ceremony并阻止晚签发。Security的use-passkey-settings持有列表、名称草稿和刷新恢复。其余正式配置与业务源码已接Shared，完整前端行为仍待远程验收。新传输已接源码；真实密码/Cookie/登出与受控TOTP/竞态/失败场景的分项证据归testing。构建或受控响应不替代完整页面/真实因素验收。
+F1-A/B源码已覆盖正式setup/password/status/logout、TOTP/Passkey登录、改密/因素设置、公共CAPTCHA与CAPTCHA/IP安全配置，以及DEV共用认证。Passkey的第三方对象只在Auth adapters/browser-passkey显式投影，Store按实例持有取消能力；session generation变化取消旧ceremony并阻止晚签发。Security的use-passkey-settings持有列表、名称草稿和刷新恢复。其余正式配置与业务源码已接Shared，当前远程验收范围见 E2E，不包含所有物理设备和故障组合。新传输已接源码；真实密码/Cookie/登出与受控TOTP/竞态/失败场景的分项证据归testing。构建或受控响应不替代完整页面/真实因素验收。
 
-第八轮失败登出链核对：AuthStore 发出 POST logout 前先撤销本地可用身份以释放所有已挂载 Workspace/Agent Owner；当 POST 报错而服务器状态未知时，不假定凭据还可用。只允许经独立只读 `/auth/status` 确认**原用户 ID 仍有效**后恢复 UI 身份供用户查看真实错误；如果 GET 同样失败、主体变化或服务器已撤销，则继续封锁原会话，保留失败因果。该局部候选不恢复任何旧兼容层，远程 `ssh/terminal-ui` 和身份安全断言待验。
+第八轮失败登出链核对：AuthStore 发出 POST logout 前先撤销本地可用身份以释放所有已挂载 Workspace/Agent Owner；当 POST 报错而服务器状态未知时，不假定凭据还可用。只允许经独立只读 `/auth/status` 确认**原用户 ID 仍有效**后恢复 UI 身份供用户查看真实错误；如果 GET 同样失败、主体变化或服务器已撤销，则继续封锁原会话，保留失败因果。该局部候选不恢复任何旧兼容层，对应正式入口的远程结果见 E2E 当前基线。
 
 既有产品事实由USAGE与对应源码核对。正式Agent管理与Host/运行已消费Shared，DEV仍是有限诊断消费者，不代替正式界面验收。SOURCE、静态和行为证据分别归testing；既有DEV和独立管理回归不代表当前完整Agent或远程Actions E2E通过。部署切换仍须明确执行授权。
 
-源码已核对错误契约、类型归属、请求上下文校验及响应早退收尾，跨业务行为回归承接到 [前端延期事项](../后端重构下一阶段实施方案.md#延后的前端事项未验收不删除)。当前后端本机B10已收口，外部按D16延期，F1正式源码已接Shared；DEV消费者共用新认证owner。上述边界是开发约束，不能因端点接通和静态通过就声称已全部满足。
+源码已核对错误契约、类型归属、请求上下文校验及响应早退收尾，跨业务行为验收范围见 [E2E](../testing/E2E.md)，后续工作见 [PLAN](../PLAN.md)。当前后端本机 B10、F1 正式 Shared 适配与远程 Actions 已收口，外部按 D16 延期；DEV消费者共用新认证owner。上述边界是开发约束，不能因端点接通和静态通过就声称已全部满足。
 
 执行 Frontend 类型检查、build、ESLint/Prettier 和根检查；桌面/移动端操作、滚动、取消与资源清理通过真实浏览器行为验证，未执行项明确保留。每次发布/行为变更同步 USAGE，不凭静态通过改写真实行为证据。
 
@@ -165,7 +167,7 @@ F1-A/B源码已覆盖正式setup/password/status/logout、TOTP/Passkey登录、�
 5. **入口与安装**：正式Dashboard经Router/KeepAlive安装；认证watch同步处理中间失效状态，同用户重新登录也撤销原实例。注册表加载时安装其认证owner。
 6. **数据、事务与并发**：页面每次刷新绑定原AbortController，停用或新刷新使旧结果和finally失效；注册表撤销同步移出原实例，再等待各自关闭，不让旧关闭修改新标签。
 7. **生命周期与失败**：页面停用取消读取、计时器和监控配置；恢复显式读回。Workspace批量关闭覆盖暂被替换标签隐藏的原实例，以及已移出标签但仍在关闭的任务；独立失败不跳过其它实例，unknown不冒充已释放。Session.dispose共享完整收尾Promise；挂起恢复在异步交付点核对原注册代次和实例，关闭替换标签不恢复旧标签。
-8. **当前能力与验收**：上述链路已实现；正式App/Router/Dashboard有限整页、同用户同tick认证替换、受控Workspace关闭/恢复竞态及真实SSH资源HTTP回退已有[当前证据](../testing/E2E.md#f1-c2-d-整页与认证生命周期首批)。完整Workspace整页、跨业务撤销及桌面扩大交互仍待C2-D，不由本子集宣称阶段完成。
+8. **当前能力与验收**：上述链路已实现；正式App/Router/Dashboard有限整页、同用户同tick认证替换、受控Workspace关闭/恢复竞态及真实SSH资源HTTP回退已有[当前证据](https://github.com/0honus0/nexus-terminal/blob/558c4b343ba0ef2316309d2e164b9c6075c47efc/doc/testing/E2E.md#f1-c2-d-整页与认证生命周期首批)。完整Workspace整页、跨业务撤销及桌面扩大交互仍待C2-D，不由本子集宣称阶段完成。
 
 ## Preferences 后续对接边界
 
@@ -268,7 +270,7 @@ B8跨App的plugin-api/agent-dispatcher/SDK父页已改用Shared plugins/intent-*
 5. **入口与安装**：挂载/激活启用当前页面代次，停用/卸载/认证撤销使原signal失效；确认消费原signal，等待后的派发必须再次核对。
 6. **数据、事务与并发**：批量打开与查询打开绑定原页面，恢复候选绑定原Session实例；在每个await后核对。命令发送后的历史追加也绑定原页面与Session，晚返回不能在新页面追加；进入Store队列后仍在派发前复查原页面signal。旧任务finally仅能清理自己的占位，不能清除新页面恢复任务。
 7. **生命周期与失败**：旧确认、延迟查询和轮询等待不能在新页面派发副作用或提示；重试计时器随原代次撤销。已派发SSH仍追踪真实结果，页面撤销不冒充远端停止。面板渲染失败仅卸载该面板视图，不撤销Session；健康面板不会因激活或路由变化重挂载。快捷命令/历史/收藏协议由本批直接替换，隔离失败不代表契约对接完成。
-8. **当前能力与验收**：正式App/Router/Workspace有限整页、真实SSH与受控延迟查询/命令返回/确认、排队撤销已有[当前证据](../testing/E2E.md#f1-c2-d-workspace页面与个人目录契约)；不替代完整Files/传输/挂起整页、桌面及跨业务验收。
+8. **当前能力与验收**：正式App/Router/Workspace有限整页、真实SSH与受控延迟查询/命令返回/确认、排队撤销已有[当前证据](https://github.com/0honus0/nexus-terminal/blob/558c4b343ba0ef2316309d2e164b9c6075c47efc/doc/testing/E2E.md#f1-c2-d-workspace页面与个人目录契约)；不替代完整Files/传输/挂起整页、桌面及跨业务验收。
 
 ### Workspace 个人目录契约
 
@@ -279,7 +281,7 @@ B8跨App的plugin-api/agent-dispatcher/SDK父页已改用Shared plugins/intent-*
 5. **入口与安装**：替换原实际HTTP消费者与Workspace组件，不新增假页面或旧响应分支。
 6. **数据、事务与并发**：读取完整分页后发布，拒绝跨页重复ID与游标异常；写入串行、推进读取修订，CAS绑定原编辑/确认快照，标签级联后重读权威版本。 快捷命令与标签目录独立读取；标签失败可发布已严格解码的完整命令集合并清空标签投影，命令执行独立于计数保存。任一目录失败阻止管理写入，显式重读两份目录成功后解除，不发布不完整分页或沿用失效标签。
 7. **生命周期与失败**：会话撤销取消原读取/等待并清空缓存；晚结果/finally不修改新状态。未知写入不自动重放，先显式只读核对；已提交与后续读取失败分别表达。
-8. **当前能力与验收**：真实Access/个人数据HTTP的CRUD、分页、CAS、级联版本及提交后丢响应，以及正式Workspace挂载未触发错误边界、认证撤销已有[有限证据](../testing/E2E.md#f1-c2-d-workspace页面与个人目录契约)。旧裸数组明确拒绝，不以面板隔离替代迁移。各项完整UI交互仍随C2-D扩大验收；presentation及其余Preferences/Agent源码已接线，行为单独验收。
+8. **当前能力与验收**：真实Access/个人数据HTTP的CRUD、分页、CAS、级联版本及提交后丢响应，以及正式Workspace挂载未触发错误边界、认证撤销已有[有限证据](https://github.com/0honus0/nexus-terminal/blob/558c4b343ba0ef2316309d2e164b9c6075c47efc/doc/testing/E2E.md#f1-c2-d-workspace页面与个人目录契约)。旧裸数组明确拒绝，不以面板隔离替代迁移。各项完整UI交互仍随C2-D扩大验收；presentation及其余Preferences/Agent源码已接线，行为单独验收。
 
 ### Presentation统一个人状态
 

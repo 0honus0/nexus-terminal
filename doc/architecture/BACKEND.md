@@ -1,5 +1,7 @@
 # 后端架构
 
+当前验收基线：后端重构、正式前端 Shared 适配及远程八组回归已收口，具体 SHA、覆盖与仍未验证的外部/扩大故障范围统一见 [E2E](../testing/E2E.md#当前验收基线)，后续任务见 [PLAN](../PLAN.md)。下文 B/F 阶段名仅定位设计来源；原阶段的静态或有限行为证据不扩大为当前全量保证，历史“待 B10/F1”不表示重启已完成迁移。
+
 本文约束新后端及后续功能的放置和依赖。开发前由 [AGENTS](../AGENTS.md) 读取 [人工规则](../rules/HUMAN.md)、[工程经验](../rules/ENGINEERING.md) 与 [编码规范](../rules/CODE_STYLE.md)。按 [模块模板](MODULE_TEMPLATE.md) 维护下面八个章节，不复制人工规则和编码列表。
 
 ## 1. 职责与范围
@@ -519,7 +521,7 @@ Workspace 的当前源码由唯一 sessions Service 持有：64 项准入覆盖 
 
 日志由技术 Adapter 串行 append/read/compact/delete，绝对 offset 不随 100 MiB 可见窗口裁剪回退；checkpoint 和 renderer 的技术资源通过 Model 隐藏。日志导出在 Service 对每个最多 64 KiB 的块复查身份和实例，技术分块归 renderer Adapter；取消与清理失败分别判断，不能把 allSettled 的完成当作释放成功。历史前页交付成功并复查原 cursor 后才推进。HTTP/WS 管理视图共用 suspend-view 白名单；当前身份、attachment/generation 和 45 秒租约在异步边界复查，2 秒 sweep 不代替实时授权。关闭、背压、导出和失败边界见第 7 节与下述当前范围。
 
-B3.1 源码收口不等于行为验收。实际类型、构建和格式结论以 [B3.1 收口证据](../testing/后端重构待实机验证.md#b31-源码阶段最终收口) 为准；B10 已验证本机 OpenSSH 的普通续接双阶段确认、普通终端消费窗口/暂停后断线回放、journal裁剪/offset拒绝、挂起 ACK/主动接管及 Files 正常链；挂起准备、消费暂停和日志积压分别持有阻断条件，取消挂起标记经WorkspaceService原resumeIfUnblocked计算是否可恢复，不能直接解除独立背压。慢日志 detach、prepared断开、自然租约到期、准备超时、历史帧失败/reset、日志文件系统拒绝向PTY收尾及导出授权/名额/断连已有有限证据；慢日志 rollback、空间耗尽、其余 Shell/VT 与清理故障仍待验证，精确范围归 testing。正式前端普通/挂起独立ACK及Shared挂起契约已接线；标记标签关闭仅脱离传输，明确取消标记后关闭才请求终止Workspace，受控与真实专项范围见testing，完整 Access/IP/2FA 源码已收口、行为待 B10。
+B3.1 源码收口不等于行为验收。实际类型、构建和格式结论以 [B3.1 收口证据](https://github.com/0honus0/nexus-terminal/blob/558c4b343ba0ef2316309d2e164b9c6075c47efc/doc/testing/%E5%90%8E%E7%AB%AF%E9%87%8D%E6%9E%84%E5%BE%85%E5%AE%9E%E6%9C%BA%E9%AA%8C%E8%AF%81.md#b31-源码阶段最终收口) 为准；B10 已验证本机 OpenSSH 的普通续接双阶段确认、普通终端消费窗口/暂停后断线回放、journal裁剪/offset拒绝、挂起 ACK/主动接管及 Files 正常链；挂起准备、消费暂停和日志积压分别持有阻断条件，取消挂起标记经WorkspaceService原resumeIfUnblocked计算是否可恢复，不能直接解除独立背压。慢日志 detach、prepared断开、自然租约到期、准备超时、历史帧失败/reset、日志文件系统拒绝向PTY收尾及导出授权/名额/断连已有有限证据；慢日志 rollback、空间耗尽、其余 Shell/VT 与清理故障仍待验证，精确范围归 testing。正式前端普通/挂起独立ACK及Shared挂起契约已接线；标记标签关闭仅脱离传输，明确取消标记后关闭才请求终止Workspace，受控与真实专项范围见testing，完整 Access/IP/2FA 源码已收口、行为待 B10。
 
 Access/Targets/Remote 与 Agent 的计划后端功能源码及 B9 逐文件审核已收口，当前职责见职责表；行为验收仍待 B10。Remote Files 已同时具备 B1 新 HTTP 读写能力及 R1 旧 Workspace Files 子协议源码：编码写入/独占新建、list/search/stat、binary read/cancel、递归/force 批量删除、rename/chmod/realpath、ready/error 均有真实调用链；A-04 machines owner、SFTP 技术失败边界及 Files Service/Model 职责已收口。R1 行为验证未运行，真实 SSH/SFTP、故障窗口和旧消费者全链路仍待 B10。
 
@@ -527,13 +529,13 @@ R2-01–R2-05 的源码缺口已修补：背压/final 纳入同一操作截止�
 
 B2 下载/上传/copy/move/目录 ZIP、原生归档、密码与进度、属性及链接恢复的源码已收口；D12/D13 的部署取舍已确定，B2-V01–V66 全部待 B10 行为验证。Files 子协议不等于完整 Workspace 已迁移：完整 reconnect/resume、Terminal/挂起恢复的 B3.1 源码已收口、行为待 B10；status/docker 的 B3.2 源码已收口、行为待 B10；RDP/VNC 的 B3.3 源码复审已矫正，本轮最终静态通过，行为待 B10；完整 Access/IP/2FA 源码已收口、行为待 B10。按明确决定，旧 writer 的隐式 metadata 失败容错不在后端保留，正式编辑器的显式失败处理转 F1。Agent Shared、六个 HTTP 与开发前端源码消费者已接入；真实浏览器与故障行为仍待验收，不能因静态通过就声称正式通信迁移完成。
 
-**B3.3 RDP/VNC 新后端源码**：`remote/desktop/service/desktop-service.ts` 持有单次短期 ticket、pending/opening/active 限额与当前 Access/Targets 版本、周期复核及精确关闭实例；`remote/desktop/model` 显式转换 Targets 的可信配置/解密快照与 Platform 技术请求。Targets 的 Desktop resolver 在同一 SQLite 只读事务获取连接/密码密文，Targets Model 持有 `SecretBox` 技术解密与应用转换；初始 Connections 表包含 recent attempt 时间字段，版本不随单纯连接尝试变化；RDP/VNC 的 `credentials.set` 允许密码但拒绝 SSH key。Guacamole 技术 Port/Adapter 独占 guacamole-lite 1.2.0 与 guacd：独立 raw WS 仍由统一 Platform HTTP origin/upgrade owner 接入，内部 AES token 仅含一次 bridge ID，真实密码和远端参数只在适配器私有映射内。`POST /api/v1/connections/:id/{rdp,vnc}-session`、`WS /ws/remote-desktop` 和 Shared `remote/desktop` 均已接线；双端正式消费者仍留 F-R12。B3.3 功能/类型/生命周期详细八节见 [远程桌面专题](REMOTE_DESKTOP.md)，源码/静态进度和 B10 未验证单列实施方案与 testing，不以接线作为验收。
+**B3.3 RDP/VNC 新后端源码**：`remote/desktop/service/desktop-service.ts` 持有单次短期 ticket、pending/opening/active 限额与当前 Access/Targets 版本、周期复核及精确关闭实例；`remote/desktop/model` 显式转换 Targets 的可信配置/解密快照与 Platform 技术请求。Targets 的 Desktop resolver 在同一 SQLite 只读事务获取连接/密码密文，Targets Model 持有 `SecretBox` 技术解密与应用转换；初始 Connections 表包含 recent attempt 时间字段，版本不随单纯连接尝试变化；RDP/VNC 的 `credentials.set` 允许密码但拒绝 SSH key。Guacamole 技术 Port/Adapter 独占 guacamole-lite 1.2.0 与 guacd：独立 raw WS 仍由统一 Platform HTTP origin/upgrade owner 接入，内部 AES token 仅含一次 bridge ID，真实密码和远端参数只在适配器私有映射内。`POST /api/v1/connections/:id/{rdp,vnc}-session`、`WS /ws/remote-desktop` 和 Shared `remote/desktop` 均已接线；正式前端桌面消费者已接入 Shared。B3.3 功能/类型/生命周期详细八节见 [远程桌面专题](REMOTE_DESKTOP.md)，源码/静态进度和 B10 未验证单列实施方案与 testing，不以接线作为验收。
 
-产品行为与容量以 [USAGE](../USAGE.md) 为准，当前工作见 [实施方案](../后端重构下一阶段实施方案.md)，未执行真实专项见 [待实机验证](../testing/后端重构待实机验证.md)。新后端独立 check/build，Shared 与实际双端消费者同步检查；架构审核按模块模板和工程经验执行，静态通过不能证明真实 SSH、并发、清理与浏览器验收完成。
+产品行为与容量以 [USAGE](../USAGE.md) 为准，当前工作见 [实施方案](../PLAN.md)，未执行真实专项见 [待实机验证](https://github.com/0honus0/nexus-terminal/blob/558c4b343ba0ef2316309d2e164b9c6075c47efc/doc/testing/%E5%90%8E%E7%AB%AF%E9%87%8D%E6%9E%84%E5%BE%85%E5%AE%9E%E6%9C%BA%E9%AA%8C%E8%AF%81.md)。新后端独立 check/build，Shared 与实际双端消费者同步检查；架构审核按模块模板和工程经验执行，静态通过不能证明真实 SSH、并发、清理与浏览器验收完成。
 
 B3.3 实施复核已修正实际注入接口：`registerRemote.targets` 精确包含 `desktopTargets`，Desktop Failure 位于同一子功能独立错误 owner；DesktopTargetService只接收无密文的应用快照并判断direct准入；Model在同一次读取的私有密文上解密，不将密文放入应用类型或交由Service回传。Targets 密码凭据内部命名统一为 ConnectionCredential（password 用于 SSH/RDP/VNC，SSH key 仅允许 SSH）。Desktop Service 只消费 Model 创建的 DesktopPeer，WS/HTTP/Port 句柄不越过 Model；Targets 内部 ResolvedDesktopTarget 与 public TrustedDesktopTarget 分别定义并经 public-mappers 白名单转换。Guacamole 原始设置有明确的媒体与 DPI 默认值，第三方自带 SIGTERM/SIGINT 回调撤除，由 Bootstrap 和 Remote Service 统一决定收口；Guacamole Server 的 `close` 不等于底层 guacd TCP `close`，技术 Adapter 在真实 socket close 才通知 Service 可计为终态。共享 vendor 事件用固定监听与原 WS 实例索引分发，避免每连接叠加全局监听；guacd ready 不证明远端认证或画面就绪，B10 另核对真实图像、输入和上游 TCP 释放。Platform HTTP raw WS 在技术 unknown 时不无条件删除 active socket，完整关闭仍保留故障因果。此前 store lock 阻断属于历史环境；本轮按 frozen lockfile 离线安装成功，当前实际静态证据归 testing，不沿用旧 PASS。
 
-当前实施顺序为完成全部保留后端功能及后端最终环境验收，再启动前端对接。后端 HTTP/WS 通过 Shared 与实际协议消费者核对，行为回归按实施决定统一留 B10；已有 DEV 前端未验收，不作为后端功能完整或正式迁移完成的证明。
+后端功能迁移与正式前端 Shared 对接已完成，当前后端 HTTP/WS 及双端消费者经远程 Actions 回归；DEV 入口仅用于有限诊断，不能替代正式入口或扩大环境保证。
 
 B3.1 当前关闭/导出边界：Workspace Service 跟踪导出准入、60 秒完整期限、交付 sink 及实例关联取消；HTTP Interface 持有 response/pipeline，History Model 暴露应用字节源与可等待释放，Platform 只提供技术流/VT 操作。全 Remote 导出最多 2 项，清理失败保留名额。checkpoint dispose 返回共享 Promise，参与关闭确认；临时日志删除及渲染释放的具名技术失败经 Model 转为模块清理失败，HTTP/WS 都输出 operation_unknown。模块各独立 owner 并发关闭，30 秒确认截止不代表真实任务结束，晚任务继续观察；应用整体验收仍待 B10。
 
