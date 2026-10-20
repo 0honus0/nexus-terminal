@@ -1,5 +1,6 @@
 import {
 	readAgentProviderView,
+	readAgentProviderListResponse,
 	readAgentProviderDeleteResponse,
 } from '../../../../packages/shared/src/agent/providers/http-codec';
 import { readAgentExecutionSettingsResponse } from '../../../../packages/shared/src/agent/execution/http-codec';
@@ -709,6 +710,21 @@ test('Agent settings surface exposes the current control plane and saves explici
 		await expect(panel.getByRole('region', { name, exact: true })).toBeVisible();
 	}
 	const providers = panel.getByRole('region', { name: 'Model providers', exact: true });
+
+	const readSavedProvider = async () => {
+		// Save closes/re-renders the browser editor, so the intercepted POST/PATCH
+		// response body is not a durable CDP read target. Read the one persisted
+		// provider instead of replaying a credential-bearing mutation.
+		const items = await requestAgentJson(
+			context.request,
+			{ method: 'GET', path: '/ai/providers' },
+			readAgentProviderListResponse,
+		);
+		const matches = items.filter((item) => item.displayName === 'Settings UI Provider');
+		expect(matches).toHaveLength(1);
+		return matches[0]!;
+	};
+
 	await providers.getByRole('button', { name: 'Add provider', exact: true }).click();
 	const form = providers.locator('form');
 	await form.getByRole('textbox', { name: 'Name', exact: true }).fill('Settings UI Provider');
@@ -731,7 +747,7 @@ test('Agent settings surface exposes the current control plane and saves explici
 	await form.getByRole('button', { name: 'Save', exact: true }).click();
 	const receipt = await creation;
 	expect(receipt.status()).toBe(201);
-	let provider = readAgentProviderView(await receipt.json());
+	let provider = await readSavedProvider();
 	expect(provider.models[0]).toMatchObject({
 		id: 'e2e-model',
 		contextWindow: 131072,
@@ -759,7 +775,9 @@ test('Agent settings surface exposes the current control plane and saves explici
 	await form.getByRole('button', { name: 'Save', exact: true }).click();
 	const updated = await update;
 	expect(updated.status()).toBe(200);
-	provider = readAgentProviderView(await updated.json());
+	const previousVersion = provider.version;
+	provider = await readSavedProvider();
+	expect(provider.version).toBe(previousVersion + 1);
 	expect(provider.protocol).toBe('responses');
 	await expect(form).toHaveCount(0);
 	await card.getByRole('button', { name: 'Edit', exact: true }).click();

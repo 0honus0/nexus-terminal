@@ -641,7 +641,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
 			await draggedEditor.getByRole('button', { name: 'Remove', exact: true }).click();
 			await expect(draggedEditor).toHaveCount(0);
 
-			const horizontal = configurator.locator('[data-node-id="workspace-layout-root"] > [data-layout-direction]');
+			const horizontal = configurator.locator(`[data-node-id="${utilityLayout.id}"] > [data-layout-direction]`);
 			await expect(horizontal).toHaveAttribute('data-layout-direction', 'horizontal');
 			const horizontalChildren = horizontal.locator(':scope > [data-layout-child-id]');
 			await expect(horizontalChildren).toHaveCount(3);
@@ -656,7 +656,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
 			expect(horizontalBoxes[1]!.x).toBeGreaterThan(horizontalBoxes[0]!.x);
 			expect(horizontalBoxes[2]!.x).toBeGreaterThan(horizontalBoxes[1]!.x);
 
-			const vertical = configurator.locator('[data-node-id="left"] > [data-layout-direction]');
+			const vertical = horizontalChildren.first().locator(':scope > [data-node-id] > [data-layout-direction]');
 			await expect(vertical).toHaveAttribute('data-layout-direction', 'vertical');
 			const verticalChildren = vertical.locator(':scope > [data-layout-child-id]');
 			await expect(verticalChildren).toHaveCount(3);

@@ -30,7 +30,10 @@ import { RemoteSessionFailure } from '../../sessions/model/session-failure.js';
 import { RemoteHostKeyUntrustedError } from '../../machines/model/machine-errors.js';
 import type { FileCopyMoveEvent, FileArchiveEvent } from '../../files/model/file-task-types.js';
 import { RemoteFileFailure, type FileEntry, type FileInfo, type FileAttachment } from '../../files/model/file-types.js';
-import { WORKSPACE_FILES_MAX_BINARY_READS } from '@nexus-terminal/shared/remote/files/values';
+import {
+	WORKSPACE_FILES_MAX_BINARY_READS,
+	WORKSPACE_FILES_MAX_LIST_RESPONSE_BYTES,
+} from '@nexus-terminal/shared/remote/files/values';
 import {
 	WORKSPACE_TERMINAL_MAX_IN_FLIGHT_BYTES,
 	WORKSPACE_BINARY_MAX_PAYLOAD_BYTES,
@@ -278,6 +281,16 @@ class WorkspaceFilesSession {
 	private async dispatchRequest(request: WorkspaceProtocolRequest): Promise<void> {
 		try {
 			const result = await this.dispatch(request);
+			if (request.type === 'filesystem.list' && request.requestId) {
+				const envelope: WorkspaceProtocolResponse = {
+					type: 'response',
+					requestId: request.requestId,
+					payload: { ok: true, data: result },
+				};
+				if (Buffer.byteLength(JSON.stringify(envelope), 'utf8') > WORKSPACE_FILES_MAX_LIST_RESPONSE_BYTES) {
+					throw new RemoteFileFailure('limit_exceeded');
+				}
+			}
 			if (request.type.startsWith('docker.') || request.type.startsWith('status.')) {
 				const response: WorkspaceProtocolResponse = {
 					type: 'response',
@@ -1349,6 +1362,16 @@ class WorkspaceFilesSession {
 
 	private async closeWorkspace(payload: unknown): Promise<null> {
 		const input = readWorkspaceCloseRequest(payload);
+		if (this.workspaceId === null && this.attachmentId === null) {
+			await this.workspaces.closeDetachedAuthorized(
+				this.token,
+				input.workspaceId,
+				input.connectionId,
+				input.resumeToken,
+				input.attachmentGeneration,
+			);
+			return null;
+		}
 		if (
 			input.workspaceId !== this.workspaceId ||
 			input.connectionId !== this.connectionId ||
@@ -1774,6 +1797,7 @@ export function createWorkspaceFilesRoute(
 	return {
 		path: ROOT,
 		maxTextMessageBytes: WORKSPACE_SUSPEND_MAX_JSON_BYTES,
+		maxBufferedTextBytes: WORKSPACE_FILES_MAX_LIST_RESPONSE_BYTES,
 
 		async authorize(request: IncomingMessage): Promise<boolean> {
 			const token = readRequestCookie(request, ACCESS_SESSION_COOKIE_NAME);

@@ -1,4 +1,6 @@
 import { readTestConnectionImportId } from '../../support/targets';
+import path from 'node:path';
+import { readServerTransferPage } from '../../../../packages/shared/src/remote/transfers/server-codec';
 import { E2E_URLS } from '../../support/test-env';
 import { expect, test, type BrowserContext, type Locator, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
@@ -13,6 +15,7 @@ import {
 	openDesktopProgressDisplay,
 	reopenConnectedFileManager,
 	resetTestSshFilesystem,
+	trustTestSshHostKey,
 	E2E_SSH,
 } from '../../support/ssh';
 import { slowStep, step } from '../../support/steps';
@@ -97,6 +100,9 @@ test('desktop Progress Display floats above the workspace without resizing the t
 				releaseBackgroundRefresh = resolve;
 			});
 		}
+		// A test-held refresh can be cancelled when its owning view unmounts.
+		// Never forward a request already terminated by the browser.
+		if (route.request().failure()) return;
 		await route.continue();
 	});
 
@@ -204,7 +210,10 @@ test('existing copy progress popup hides and restores through Progress Display',
 	await openFileManager(page, context);
 
 	const sourceName = 'baseline-copy-progress.bin';
-	await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(sourceName)}&size=${4 * 1024 * 1024}`, {
+	// The fixture delays each actual SFTP WRITE by 3 seconds. Four MiB
+	// outlives the UI assertion window; 256 KiB still requires multiple
+	// genuine writes and keeps the popup active for hide/restore.
+	await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(sourceName)}&size=${256 * 1024}`, {
 		method: 'POST',
 	});
 	await refreshFileManager(page);
@@ -249,7 +258,9 @@ test('application modals open above the standalone transfer progress popup', asy
 	await page.setViewportSize({ width: 1024, height: 768 });
 	await openFileManager(page, context);
 	const sourceName = 'modal-layering-progress.bin';
-	await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(sourceName)}&size=${4 * 1024 * 1024}`, {
+	// Preserve a bounded multi-write transfer instead of leaving the
+	// modal-layering test's delayed SFTP stage alive across Backend reset.
+	await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(sourceName)}&size=${256 * 1024}`, {
 		method: 'POST',
 	});
 	await refreshFileManager(page);
@@ -378,9 +389,15 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 				releaseInitialTransferList = resolve;
 			});
 		}
+		if (route.request().failure()) return;
 		await route.continue();
 	});
 	const sourceConnectionId = await ensureTestSshConnection(context.request);
+	await trustTestSshHostKey(context.request, E2E_SSH.transferTargetPort);
+	// Trust is deliberate even for the offline target: this case must create
+	// a task whose connection fails, rather than fail admission for missing trust.
+	await trustTestSshHostKey(context.request, 1);
+	const destinationPath = path.resolve(__dirname, '../../.tmp/ssh-root/server-transfer-e2e');
 	const validTargetName = `E2E Send OK ${crypto.randomUUID().slice(0, 8)}`;
 	const failedTargetName = `E2E Send Fail ${crypto.randomUUID().slice(0, 8)}`;
 	const validTargetResponse = await context.request.post('/api/v1/targets/connections/import', {
@@ -392,7 +409,7 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 						name: validTargetName,
 						type: 'SSH',
 						host: E2E_SSH.host,
-						port: E2E_SSH.port,
+						port: E2E_SSH.transferTargetPort,
 						username: E2E_SSH.username,
 						notes: null,
 						route: 'direct',
@@ -469,7 +486,7 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 				await visibleGroupCheckbox.click();
 				await expect(validTargetRow.locator('input[type="checkbox"]')).toBeChecked();
 				await expect(failedTargetRow.locator('input[type="checkbox"]')).toBeChecked();
-				await targetPath.fill('server-transfer-e2e');
+				await targetPath.fill(destinationPath);
 				await selectUiOption(modal.getByLabel('Transfer Method', { exact: true }), 'rsync');
 
 				// The Workspace transfer catalog can still be loading/refreshed in parallel. That global
@@ -496,7 +513,7 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 
 				const taskCard = display.locator('article').filter({ hasText: 'server-transfer-e2e' });
 				await expect(taskCard).toBeVisible({ timeout: 10_000 });
-				await expect(taskCard).toContainText('Task: E2E SSH (seed.txt -> server-transfer-e2e)');
+				await expect(taskCard).toContainText(`Task: E2E SSH (seed.txt -> ${destinationPath})`);
 				await expect(taskCard).toContainText('Created at:');
 
 				const subTasks = taskCard.locator('details');
@@ -529,13 +546,14 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 	} finally {
 		releaseInitialTransferList?.();
 		await page.unroute('**/api/v1/transfers/status');
-		const tasksResponse = await context.request.get('/api/v1/transfers/status');
-		if (tasksResponse.ok()) {
-			const tasks = (await tasksResponse.json()) as Array<{
-				taskId: string;
-				payload?: { sourceConnectionId?: number; connectionIds?: number[] };
-			}>;
-			for (const task of tasks) {
+		let cursor: string | null = null;
+		do {
+			const tasksResponse = await context.request.get(
+				'/api/v1/transfers/status' + (cursor === null ? '' : '?after=' + encodeURIComponent(cursor)),
+			);
+			expect(tasksResponse.ok(), 'Transfer cleanup must read the real paginated status contract').toBe(true);
+			const tasks = readServerTransferPage(await tasksResponse.json());
+			for (const task of tasks.items) {
 				if (
 					task.payload?.sourceConnectionId === sourceConnectionId &&
 					task.payload.connectionIds?.some((id) =>
@@ -547,7 +565,8 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 					});
 				}
 			}
-		}
+			cursor = tasks.nextCursor;
+		} while (cursor !== null);
 		await context.request.delete(`/api/v1/targets/connections/${validTargetConnectionId}`, {
 			headers: { Origin: E2E_URLS.frontendOrigin },
 		});

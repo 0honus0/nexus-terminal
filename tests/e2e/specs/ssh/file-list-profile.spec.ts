@@ -96,6 +96,9 @@ test('profiles real large-directory navigation and sort while retaining bounded 
 	page,
 	context,
 }) => {
+	// This deliberately performs six full SFTP directory scans, including
+	// three 5,000-entry metadata reads, before measuring each real render.
+	test.setTimeout(240_000);
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
 	await resetTestSshFilesystem();
@@ -130,7 +133,12 @@ test('profiles real large-directory navigation and sort while retaining bounded 
 				await input.fill(`/list-profile-${count}`);
 				const start = performance.now();
 				await input.press('Enter');
-				await expect(rows.first()).toHaveAttribute('data-file-path', `/list-profile-${count}/文件-0.txt`);
+				await expect(rows.first()).toHaveAttribute('data-file-path', `/list-profile-${count}/文件-0.txt`, {
+					// A 5k-entry directory requires thousands of real stat calls on the
+					// CI filesystem; retain the measured latency, not a 10-second
+					// unrelated default assertion budget.
+					timeout: count === 5000 ? 30_000 : 10_000,
+				});
 				const navigationMs = performance.now() - start;
 				const renderedRows = await rows.count();
 				expect(renderedRows).toBeLessThan(200);

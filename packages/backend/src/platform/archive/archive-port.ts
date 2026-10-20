@@ -9,6 +9,7 @@ export interface ArchiveCommandRunner {
 		signal: AbortSignal,
 		timeoutMs: number,
 		onLine: (line: string) => void,
+		beforeWriteMarker?: string,
 	): Promise<NativeCommandOutcome>;
 }
 

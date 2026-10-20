@@ -51,8 +51,11 @@ export const LOG_LEVELS = FRONTEND_LOG_LEVELS;
 
 export type PanelScaleKind = 'status' | 'files' | 'quick-commands';
 
+export type WorkspacePreferenceKey = 'layoutLocked' | 'navBarVisible';
+
 export interface PreferencesController {
 	savePanelScale(kind: PanelScaleKind, scale: number, permission: AbortSignal): Promise<void>;
+	saveWorkspacePreference(key: WorkspacePreferenceKey, value: boolean, permission: AbortSignal): Promise<void>;
 	values: ComputedRef<UserPreferences>;
 	version: ComputedRef<number>;
 	loaded: ComputedRef<boolean>;

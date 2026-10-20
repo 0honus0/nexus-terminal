@@ -3,7 +3,12 @@ import { randomUUID } from 'node:crypto';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import type { FileResource, FileInfo } from '../model/file-types.js';
 import { FileCommandNotStarted, RemoteFileFailure } from '../model/file-types.js';
-import { ArchiveRejection, type ArchiveFormat, type FileArchiveEntry } from '../model/file-task-types.js';
+import {
+	ArchiveRejection,
+	type ArchiveFormat,
+	type FileArchiveEntry,
+	type FileCompressionFootprint,
+} from '../model/file-task-types.js';
 import { FileArchiveModel } from '../model/file-archive-model.js';
 
 import {
@@ -17,6 +22,43 @@ import {
 } from '../file-archive-rules.js';
 
 const CLEANUP_MS = 5_000;
+
+/** Only regular siblings under a canonical parent have an exact, non-recursive conflict set. */
+export async function compressionFootprint(
+	resource: FileResource,
+	paths: readonly string[],
+	destination: string,
+	remaining: () => number,
+	signal: AbortSignal,
+): Promise<FileCompressionFootprint | null> {
+	const directory = path.posix.dirname(destination);
+	if (!paths.length || paths.some((source) => source === destination || path.posix.dirname(source) !== directory)) {
+		return null;
+	}
+	let canonical: string;
+	try {
+		canonical = await resource.realpath({ path: directory, timeoutMs: Math.min(remaining(), 300_000), signal });
+	} catch (cause) {
+		if (cause instanceof RemoteFileFailure && cause.code === 'not_found') {
+			return null;
+		}
+		throw cause;
+	}
+	if (canonical !== directory) {
+		return null;
+	}
+	for (const source of paths) {
+		const metadata = await stat(resource, source, remaining, signal);
+		if (metadata?.kind !== 'file') {
+			return null;
+		}
+	}
+	// Existing outputs (including aliases) retain the exclusive replacement path.
+	if (await stat(resource, destination, remaining, signal)) {
+		return null;
+	}
+	return { directory, sources: paths.map((source) => source), destination };
+}
 
 async function stat(
 	resource: FileResource,
@@ -173,6 +215,7 @@ export async function compressRemoteArchive(
 	const extension = format === 'zip' ? '.part.zip' : format === 'tar.gz' ? '.part.tar.gz' : '.part.tar.bz2';
 	const temporary = path.posix.join(root, '.nexus-archive-' + randomUUID() + extension);
 	const expected = await inspectSources(resource, paths, new Set([temporary, destination]), remaining, signal);
+	await new FileArchiveModel(resource).prepare(format, 'compress', remaining, signal);
 	// Archive entries are emitted relative to the working directory; Info-ZIP
 	// omits the leading "./", while GNU tar retains it. Exclude both variants
 	// so a source tree containing the output never archives the growing file,
@@ -316,6 +359,7 @@ export async function decompressRemoteArchive(
 		timeoutMs: Math.min(remaining(), 300_000),
 		signal,
 	});
+	await new FileArchiveModel(resource).prepare(format, 'decompress', remaining, signal);
 	// Inspect and extract the same private on-host copy, rather than allowing
 	// another SFTP write to swap the original archive between the two commands.
 	// This uses native cp and keeps archive bytes off the Node.js backend.

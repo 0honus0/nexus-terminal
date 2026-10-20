@@ -46,6 +46,7 @@ export function compileHttpBindings(
 			webSockets.has(route.path) ||
 			!!route.connected === !!route.connectedRaw ||
 			(route.maxTextMessageBytes !== undefined && !isFrameBudget(route.maxTextMessageBytes)) ||
+			(route.maxBufferedTextBytes !== undefined && !isFrameBudget(route.maxBufferedTextBytes)) ||
 			(route.maxBinaryMessageBytes !== undefined && !isFrameBudget(route.maxBinaryMessageBytes))
 		) {
 			throw new Error('Invalid or duplicate WebSocket route');

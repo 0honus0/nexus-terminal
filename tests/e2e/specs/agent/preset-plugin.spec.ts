@@ -1,7 +1,3 @@
-import {
-	readAgentWorkspaceRequest,
-	readAgentWorkspaceResponse,
-} from '../../../../packages/shared/src/agent/scope/workspace-http-codec';
 import { readAgentArtifactResponse } from '../../../../packages/shared/src/agent/artifacts/http-codec';
 import { readAgentBrowserConfiguration } from '../../../../packages/shared/src/agent/integrations/browser-http-codec';
 import { readAgentExecutionSettingsResponse } from '../../../../packages/shared/src/agent/execution/http-codec';
@@ -10,6 +6,7 @@ import { readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import {
 	resolveNativeApproval,
+	captureNativeCommand,
 	type NativeTask,
 	prepareNativeTask,
 	openNativeTask,
@@ -71,7 +68,7 @@ async function cancelBrowserPhase<T>(
 		pollingFailure = error;
 	} finally {
 		if (creating) {
-			await browserControl('/creation-barrier/release', 'POST');
+			await releaseBrowserCreationBarrier();
 		}
 	}
 	const result = await pending;
@@ -119,6 +116,13 @@ async function browserControl(path: string, method: 'GET' | 'POST' = 'GET') {
 	const response = await fetch(E2E_URLS.browserControlOrigin + path, { method });
 	expect(response.ok).toBe(true);
 	return response.json();
+}
+
+async function releaseBrowserCreationBarrier(): Promise<void> {
+	// The release fixture intentionally responds 200 with no JSON body.
+	const response = await fetch(E2E_URLS.browserControlOrigin + '/creation-barrier/release', { method: 'POST' });
+	expect(response.ok).toBe(true);
+	expect(await response.text()).toBe('');
 }
 
 async function releaseBrowserModel() {
@@ -430,6 +434,10 @@ test('Nexus Agent Browser lifecycle cases reclaim contexts across cancellation a
 	await openNativeTask(task);
 	for (const phase of ['cancel-creating', 'complete', 'cancel-live', 'repeat', 'cancel-approval', 'approve']) {
 		await step(`Root Browser cleanup: ${phase}`, async () => {
+			// The prior Run is terminated by the separately authenticated API
+			// owner. Re-read the same persisted thread before composing a new Run;
+			// an already-mounted composer can still display the old active fence.
+			await openNativeTask(task);
 			const creating = phase === 'cancel-creating';
 			const approval = phase === 'cancel-approval' || phase === 'approve';
 			const cancel = phase.startsWith('cancel-');
@@ -485,7 +493,7 @@ test('Nexus Agent Browser lifecycle cases reclaim contexts across cancellation a
 					}
 				} finally {
 					if (creating) {
-						await browserControl('/creation-barrier/release', 'POST');
+						await releaseBrowserCreationBarrier();
 					}
 					await releaseBrowserModel();
 				}
@@ -576,6 +584,10 @@ test('Nexus Agent subagent lifecycle preserves tool batches and reclaims child B
 	});
 	for (const phase of ['complete', 'cancel-live', 'cancel-creating', 'child-cancel-live', 'child-cancel-creating']) {
 		await step(`Child Browser resources settle: ${phase}`, async () => {
+			// Refresh the authoritative same-thread view after the previous child
+			// Run finished through the API. The mounted composer may otherwise
+			// remain disabled against the retired active-run fence.
+			await openNativeTask(task);
 			const independent = phase.startsWith('child-');
 			const creating = phase.endsWith('creating');
 			const cancelled = phase !== 'complete';
@@ -660,7 +672,7 @@ test('Nexus Agent subagent lifecycle preserves tool batches and reclaims child B
 					}
 				} finally {
 					if (creating) {
-						await browserControl('/creation-barrier/release', 'POST');
+						await releaseBrowserCreationBarrier();
 					}
 					await releaseBrowserModel();
 				}
@@ -800,6 +812,10 @@ test('remote signed Nexus Agent plugin installs, registers an Agent definition, 
 		await waitNativeApproval(task, run.id, 'shell_execute');
 		await cancelNativeTask(task, run.id);
 		expect((await readNativeRun(task, run.id)).status).toBe('cancelled');
+		// Cancellation was issued by the authenticated API context, outside the
+		// mounted Agent composer. Reopen the same persisted thread so its UI
+		// releases the previous active-Run fence before accepting a new intent.
+		await openNativeTask(task);
 		expect((await execute('E2E_NATIVE_PLUGIN_OK')).text).toBe('OK');
 		expect((await readNativeRun(task, run.id)).status).toBe('cancelled');
 	});
@@ -855,30 +871,24 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 		const panel = hub.getByRole('heading', { name: 'Native threads', exact: true }).locator('..');
 		await panel.getByRole('button', { name: 'New thread', exact: true }).click();
 		await panel.getByRole('textbox', { name: 'Thread title', exact: true }).fill('Plugin surface conversation');
-		const creation = page.waitForResponse(
-			(response) =>
-				response.url().endsWith(`/agent/apps/${app.id}/workspace`) &&
-				response.request().postDataJSON()?.request?.method === 'agent.threads.create',
+		const { result } = await captureNativeCommand(task, 'agent.threads.create', () =>
+			panel.getByRole('button', { name: 'Create thread', exact: true }).click(),
 		);
-		await panel.getByRole('button', { name: 'Create thread', exact: true }).click();
-		const created = await creation;
-		expect(created.status()).toBe(200);
-		const command = readAgentWorkspaceRequest(created.request().postDataJSON());
-		const result = readAgentWorkspaceResponse(await created.json(), app.id, command).result;
 		if (result.method !== 'agent.threads.create') {
 			throw new Error('Unexpected thread creation');
 		}
+		// Successful creation intentionally fences further mutations until the
+		// user explicitly re-reads the versioned thread list. Perform that real
+		// refresh before issuing the next independent rename CAS.
+		await panel.getByRole('button', { name: 'Read current threads', exact: true }).click();
+		await expect(
+			panel.getByRole('button', { name: `Plugin surface conversation · v${result.value.version}`, exact: true }),
+		).toBeVisible();
+		await expect(panel.getByRole('button', { name: 'Save title', exact: true })).toBeEnabled();
 		await panel.getByRole('textbox', { name: 'Thread title', exact: true }).fill('Renamed plugin conversation');
-		const rename = page.waitForResponse(
-			(response) =>
-				response.url().endsWith(`/agent/apps/${app.id}/workspace`) &&
-				response.request().postDataJSON()?.request?.method === 'agent.threads.rename',
+		const { result: renameResult } = await captureNativeCommand(task, 'agent.threads.rename', () =>
+			panel.getByRole('button', { name: 'Save title', exact: true }).click(),
 		);
-		await panel.getByRole('button', { name: 'Save title', exact: true }).click();
-		const renamed = await rename;
-		expect(renamed.status()).toBe(200);
-		const renameCommand = readAgentWorkspaceRequest(renamed.request().postDataJSON());
-		const renameResult = readAgentWorkspaceResponse(await renamed.json(), app.id, renameCommand).result;
 		if (renameResult.method !== 'agent.threads.rename') {
 			throw new Error('Unexpected thread rename');
 		}
@@ -923,15 +933,9 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			const article = hub.locator('article').filter({ hasText: approval.operationHash });
 			await expect(article).toContainText('shell_execute');
 			await expect(article).toContainText('destructive');
-			const resolution = page.waitForResponse(
-				(response) =>
-					response.url().endsWith(`/agent/apps/${app.id}/workspace`) &&
-					response.request().postDataJSON()?.request?.method === 'agent.approvals.resolve',
+			const { command: input } = await captureNativeCommand(task, 'agent.approvals.resolve', () =>
+				article.getByRole('button', { name: 'Approve original operation', exact: true }).click(),
 			);
-			await article.getByRole('button', { name: 'Approve original operation', exact: true }).click();
-			const response = await resolution;
-			expect(response.status()).toBe(200);
-			const input = readAgentWorkspaceRequest(response.request().postDataJSON());
 			if (input.request.method !== 'agent.approvals.resolve') {
 				throw new Error('Unexpected approval command');
 			}
@@ -940,7 +944,6 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 				operationHash: approval.operationHash,
 				decision: 'approved',
 			});
-			readAgentWorkspaceResponse(await response.json(), app.id, input);
 			const result = await finishNativeTask(task, run.id);
 			expect(result.run.status).toBe('completed');
 			expect(JSON.parse(result.text)).toMatchObject({ exitCode: 0, stdout: 'approval-e2e' });
@@ -956,12 +959,15 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			await cancelNativeTask(task, run.id);
 		}
 	});
-	await step('protocol-invalid model tools settle as failed without a fabricated successful response', async () => {
+	await step('protocol-invalid dispatched model tools remain unknown without a fabricated success', async () => {
 		const run = await startNativeTask(task, 'E2E_NATIVE_PLUGIN_FAIL');
 		const result = await finishNativeTask(task, run.id);
-		expect(result.run.status).toBe('failed');
+		// The provider stream was dispatched before the untrusted tool name was
+		// discovered. The durable Run intentionally records an uncertain outcome
+		// instead of claiming that all remote effects are proven to have failed.
+		expect(result.run.status).toBe('unknown');
 		expect(result.text).toBe('');
-		await expect(hub.locator('strong').filter({ hasText: /^Failed$/ })).toBeVisible();
+		await expect(hub.locator('strong').filter({ hasText: /^Unknown$/ })).toBeVisible();
 	});
 	await step(
 		'uploaded Artifact appears in the actual App library and verified download preserves bytes',
@@ -979,7 +985,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 					response.url().endsWith('/content') &&
 					response.request().method() === 'PUT',
 			);
-			await library.getByRole('button', { name: 'Upload to selected App', exact: true }).click();
+			await library.locator('button[type="submit"]').filter({ hasText: 'Upload to selected App' }).click();
 			const uploaded = await publication;
 			expect(uploaded.status()).toBe(200);
 			const artifact = readAgentArtifactResponse(await uploaded.json()).artifact;

@@ -6,6 +6,7 @@ import {
 } from '@nexus-terminal/shared/operations/values';
 import { requestJson, type JsonRequest } from '../http/json-client';
 import { HttpRequestFailure, type RequestOutcome } from '../http/request-failure';
+import { dispatchUnauthorized } from '../http/unauthorized';
 
 type FailureCode = OperationsErrorCode | HttpRequestFailure['code'] | 'refresh_required';
 
@@ -77,6 +78,7 @@ export async function requestOperation<T>(input: {
 		const unknown = ['operation_unknown', 'delivery_unknown', 'storage_unavailable', 'internal_failure'].includes(
 			code,
 		);
+		if (code === 'unauthenticated') dispatchUnauthorized(input.path);
 		throw new OperationsRequestFailure(code, unknown ? 'unknown' : 'confirmed');
 	}
 	try {

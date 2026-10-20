@@ -2383,6 +2383,32 @@ export class WorkspaceService {
 		await this.closeRecord(record);
 	}
 
+	/** A separate authenticated socket may close a *detached* Workspace only
+	 * with its exact resumable capability. It must never revoke an attached
+	 * owner or a retained suspended session through this route.
+	 */
+	async closeDetachedAuthorized(
+		token: string | null,
+		id: string,
+		connectionId: number,
+		resume: string,
+		generation: number,
+	): Promise<void> {
+		const userId = await this.identity(token);
+		if (!token || !this.accepting) {
+			throw new WorkspaceFailure('remote_unavailable');
+		}
+		const record = this.record(id);
+		if (record.userId !== userId || record.connectionId !== connectionId) {
+			throw new WorkspaceFailure('not_found');
+		}
+		this.credentials(record, resume, generation);
+		if (record.phase !== 'detached' || record.attachmentId !== null) {
+			throw new WorkspaceFailure('conflict');
+		}
+		await this.closeRecord(record);
+	}
+
 	/** Only the opening WS owns this exact opaque attachment ID; on failure it
 	 * must close rather than put an unacknowledged shell into the grace pool. */
 	closeFailedAttachment(id: string, attachmentId: string): Promise<void> {

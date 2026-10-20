@@ -135,7 +135,15 @@ test('A07 browser rejects a stale click, then a separate approved Run deploys on
 						endpoints: [
 							{ url: E2E_URLS.browserCdpEndpoint, priority: 1, allowPlaintext: true, verifyTls: true },
 						],
-						allowedUrlPatterns: [E2E_URLS.deploymentPageOrigin],
+						// Browser's URL gate is exact-path by default. The fixture page
+						// loads /state and its approved button POSTs /deploy; without
+						// explicit paths CDP blocks both while a script-text snapshot can
+						// misleadingly contain the expected words.
+						allowedUrlPatterns: [
+							E2E_URLS.deploymentPageOrigin + '/',
+							E2E_URLS.deploymentPageOrigin + '/state',
+							E2E_URLS.deploymentPageOrigin + '/deploy',
+						],
 					},
 				],
 			},
@@ -283,7 +291,6 @@ for (const signedSkill of [false, true]) {
 			runId = run.id;
 			const launch = await waitNativeApproval(task, run.id, 'shell_execute');
 			await resolveNativeApproval(task, launch, 'approved');
-			const healthApproval = await waitNativeApproval(task, run.id, 'shell_execute');
 			await expect.poll(() => tcpPortOpen(port)).toBe(true);
 			pid = await listenerPid(port);
 			expect(pid).not.toBeNull();
@@ -301,18 +308,23 @@ for (const signedSkill of [false, true]) {
 						: JSON.parse(baseline.get('data/catalog.json')!.toString()),
 				);
 			}
-			await resolveNativeApproval(task, healthApproval, 'approved');
-			const stopApproval = await waitNativeApproval(task, run.id, 'shell_execute');
-			await resolveNativeApproval(task, stopApproval, 'approved');
+			// This live background Job owns the target mutation claim until its
+			// process exits. Sending another Agent shell mutation against the same
+			// machine correctly conflicts; prove health/catalog from the separate
+			// test owner above and end the exact observed HTTP process here.
+			const shutdown = await fetch(`http://127.0.0.1:${port}/shutdown`, { method: 'POST' });
+			expect(shutdown.status).toBe(200);
+			expect(await shutdown.json()).toEqual({ stopping: true });
+			await expect.poll(() => tcpPortOpen(port)).toBe(false);
+			await expect.poll(() => processGone(pid!)).toBe(true);
 			const result = await finishNativeTask(task, run.id);
 			expect(result.run.status).toBe('completed');
 			const report = JSON.parse(result.text);
 			expect(report.launch.accepted).toBe(true);
 			readAgentId(report.launch.jobId);
-			expect(report.health).toMatchObject({ status: 'completed', exitCode: 0 });
 			expect(report.status.jobId).toBe(report.launch.jobId);
-			expect(report.stop).toMatchObject({ status: 'completed', exitCode: 0 });
 			expect(report.settled).toMatchObject({ jobId: report.launch.jobId, state: 'completed' });
+			expect(report.settled.result).toMatchObject({ status: 'completed', exitCode: 0 });
 			if (signedSkill) {
 				expect(report.skill.name).toBe('operations');
 				expect(report.skill.body).toContain('begin with bounded read-only inspection');
@@ -710,6 +722,10 @@ test('recorded JSON and marker cases preserve exact output through a later Run i
 		expect(result.run.status).toBe('completed');
 		expect(ids.has(created.id)).toBe(false);
 		ids.add(created.id);
+		// The GET used by finishNativeTask verifies durable execution, but does
+		// not refresh the already-mounted Host view. Re-select the same thread
+		// through its real Read action before checking rendered model output.
+		await openNativeTask(task);
 		await expect(page.getByText(fixture.expected, { exact: true })).toBeVisible();
 	}
 });
@@ -761,6 +777,11 @@ for (const fixture of regressionInputs.memoryProposals) {
 		);
 		expect(managed.confidence).toBe(fixture.confidence);
 		const reviewId = managed.id;
+
+		const readManaged = async () =>
+			(await requestAgentJson(request, { method: 'GET', path: `${path}/${reviewId}` }, readAgentMemoryResponse))
+				.memory;
+
 		await page.goto('/settings?tab=agent');
 		const section = page.getByRole('region', { name: 'Memory management', exact: true });
 		await section
@@ -777,7 +798,7 @@ for (const fixture of regressionInputs.memoryProposals) {
 		await section.getByRole('button', { name: 'Publish current content', exact: true }).click();
 		const publishedResponse = await publishedWaiting;
 		expect(publishedResponse.status()).toBe(200);
-		const { memory: published } = readAgentMemoryResponse(await publishedResponse.json());
+		const published = await readManaged();
 		expect(published).toMatchObject({
 			id: reviewId,
 			status: 'published',
@@ -801,7 +822,9 @@ for (const fixture of regressionInputs.memoryProposals) {
 		await section.getByRole('button', { name: 'Revoke publication', exact: true }).click();
 		const stale = await staleWaiting;
 		expect(stale.status()).toBe(409);
-		expect(readAgentErrorResponse(await stale.json()).code).toBe('version_conflict');
+		// Stale CAS is confirmed by 409 and unchanged persisted revision; the
+		// UI can discard the browser-owned response body when it resets review.
+		expect(await readManaged()).toMatchObject({ id: reviewId, status: 'published', version: 2 });
 		await expect(
 			section.getByRole('button', { name: 'Read current version for review', exact: true }).first(),
 		).toBeDisabled();
@@ -813,7 +836,7 @@ for (const fixture of regressionInputs.memoryProposals) {
 		await section.getByRole('button', { name: 'Revoke publication', exact: true }).click();
 		const revokedResponse = await revokeWaiting;
 		expect(revokedResponse.status()).toBe(200);
-		expect(readAgentMemoryResponse(await revokedResponse.json()).memory).toMatchObject({
+		expect(await readManaged()).toMatchObject({
 			id: reviewId,
 			status: 'revoked',
 			version: 3,
@@ -827,22 +850,26 @@ for (const fixture of regressionInputs.memoryProposals) {
 	});
 }
 
-test('delegation rejects the retired absolute deadline and an excessive current duration before creating a child', async ({
-	request,
-	page,
-}) => {
-	const task = await prepareNativeTask(request, page, ['app.intents.exchange']);
-	await openNativeTask(task);
-	for (const boundary of ['absolute', 'duration']) {
+for (const boundary of ['absolute', 'duration'] as const) {
+	test(`delegation rejects invalid ${boundary} deadline without creating a child`, async ({ request, page }) => {
+		// Unknown tool effects deliberately fence subsequent Runs in this app.
+		// Each rejected boundary is a separate isolated fixture rather than
+		// retrying a second Run against an app with an unresolved first Run.
+		const task = await prepareNativeTask(request, page, ['app.intents.exchange']);
+		await openNativeTask(task);
 		const created = await startNativeTask(task, `E2E_REGRESSION_DEADLINE_SENTINEL boundary=${boundary}`);
 		const result = await finishNativeTask(task, created.id);
-		expect(result.run.status).toBe('failed');
+		expect(result.run.status).toBe('unknown');
 		const step = await requestAgentJson(
 			request,
 			{ method: 'GET', path: `/apps/${task.app.id}/runs/${created.id}/steps/1` },
 			readAgentRunStepResponse,
 		);
-		expect(step).toMatchObject({ state: 'completed', finishReason: 'tool_calls' });
+		// The provider's untrusted delegation payload reached the dispatch
+		// boundary before the invalid deadline was rejected. The step and Run
+		// must both retain the unknown outcome; neither may fabricate a proven
+		// successful provider completion or a child effect.
+		expect(step.state).toBe('unknown');
 		const children = await requestAgentWorkspace(request, task.app, {
 			method: 'agent.subagents.list',
 			params: { runId: created.id },
@@ -851,8 +878,8 @@ test('delegation rejects the retired absolute deadline and an excessive current 
 			throw new Error('Unexpected children');
 		}
 		expect(children.value.items).toEqual([]);
-	}
-});
+	});
+}
 
 test('reopening a completed clarification restores history and explicit follow-up preserves the original Run', async ({
 	page,

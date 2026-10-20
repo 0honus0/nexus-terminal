@@ -18,6 +18,7 @@ import {
 	resetTestSshFilesystem,
 } from '../../support/ssh';
 import {
+	acknowledgeTerminalOutput,
 	closeWebSocket,
 	decodeWorkspaceBinaryFrame,
 	openAuthenticatedWebSocket,
@@ -197,6 +198,10 @@ test('marked attached workspace stays usable and another authorized socket can t
 		// resources have actually entered their authorized ready states.
 		await waitForFilesystemReady(original.socket);
 		await expect(requestWorkspace(original.socket, 'terminal.currentDirectory')).resolves.toBe('/');
+		// The raw WS fixture has no xterm consumer. Acknowledge exactly the PTY
+		// bytes actually received before requiring suspend.prepare to drain its
+		// terminal output window, as the production browser client does.
+		await acknowledgeTerminalOutput(original.socket);
 		await requestWorkspace(original.socket, 'suspend.prepare', {});
 		const marked = await requestWorkspace<{ suspendedSessionId: string }>(original.socket, 'suspend.commit', {});
 		await expect(requestWorkspace(original.socket, 'terminal.currentDirectory')).resolves.toEqual('/');
@@ -453,8 +458,10 @@ test('a marked live SSH session survives WebSocket disconnect and resumes the sa
 			attachedWorkspaceId: resumedWorkspaceId,
 		});
 
-		// Resume does not cancel the suspend mark. Closing the restored Workspace must hand
-		// the same live shell back to the suspend service under the replacement workspace id.
+		// Resume does not cancel the suspend mark. Its originalWorkspaceId is
+		// immutable across attachment generations; the replacement Workspace ID
+		// belongs only to the temporary attachedWorkspaceId field. Closing that
+		// socket must return the *same* suspended shell ID to available ownership.
 		await closeWebSocket(recoverySocket);
 		const verifier = await openAuthenticatedWebSocket(request);
 		try {
@@ -463,13 +470,22 @@ test('a marked live SSH session survives WebSocket disconnect and resumes the sa
 				const list = readSuspendedSessionCatalog(await requestWorkspace(verifier, 'suspend.list'));
 				resuspended = list.find(
 					(session) =>
-						session.originalWorkspaceId === resumedWorkspaceId &&
+						session.id === suspended!.id &&
+						session.originalWorkspaceId === original.workspaceId &&
 						session.status === 'active' &&
 						session.ownershipState === 'available',
 				);
 				if (!resuspended) await new Promise((resolve) => setTimeout(resolve, 100));
 			}
 			expect(resuspended).toBeTruthy();
+			expect(resuspended).toMatchObject({
+				id: suspended!.id,
+				originalWorkspaceId: original.workspaceId,
+				connectionId,
+				status: 'active',
+				ownershipState: 'available',
+			});
+			expect(resuspended!.attachedWorkspaceId).toBeUndefined();
 			await requestWorkspace(verifier, 'suspend.terminate', { suspendedSessionId: resuspended!.id });
 		} finally {
 			await closeWebSocket(verifier);
@@ -704,8 +720,8 @@ test('a second device explicitly takes over an attached suspended SSH owner with
 		expect(resumedB.ownershipGeneration).toBeGreaterThan(resumedA.ownershipGeneration);
 		await expect(revokedA).resolves.toMatchObject({ reason: 'takeover', generation: resumedA.ownershipGeneration });
 		await expect(ownerAClosed).resolves.toMatchObject({
-			code: 4009,
-			reason: 'Suspended session ownership was taken over by another device.',
+			code: 1008,
+			reason: 'Suspended owner revoked',
 		});
 
 		const sameShellOutput = waitForBinaryText(ownerB, `TAKEOVER_STATE=${marker}`);

@@ -834,7 +834,9 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
 				const remoteListResponse = await listRemote;
 				expect(
 					remoteListResponse.ok(),
-					`Remote preset list HTTP ${remoteListResponse.status()}: ${await remoteListResponse.text()}`,
+					// A browser-owned response body may be retired after UI navigation.
+					// The persisted list is independently validated through the remote row.
+					`Remote preset list HTTP ${remoteListResponse.status()}`,
 				).toBeTruthy();
 				await customizer.getByPlaceholder('Search remote themes...', { exact: true }).fill('丝带');
 				const remoteRow = customizer
@@ -842,24 +844,36 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
 					.filter({ has: page.getByText('丝带', { exact: true }) });
 				await expect(remoteRow).toBeVisible();
 
-				const remoteContent = page.waitForResponse(
-					(response) =>
-						response.url().includes('/api/v1/appearance/html-presets/remote/content') &&
-						response.request().method() === 'GET',
-				);
-				const apply = page.waitForResponse(
-					(response) =>
-						response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
-				);
-				await remoteRow.getByRole('button', { name: 'Apply', exact: true }).click();
-				const downloaded = await remoteContent;
-				expect(downloaded.ok()).toBeTruthy();
-				const downloadedHtml = await downloaded.text();
-				expect(downloadedHtml.length).toBeGreaterThan(20);
-				expect((await apply).ok()).toBeTruthy();
-				await expect
-					.poll(async () => (await appearance(context.request)).terminalCustomHtml)
-					.toBe(downloadedHtml);
+				const contentPattern = '**/api/v1/appearance/html-presets/remote/content**';
+				let downloadedHtml: string | null = null;
+				await page.route(contentPattern, async (route) => {
+					const upstream = await route.fetch();
+					if (upstream.ok()) downloadedHtml = await upstream.text();
+					await route.fulfill({ response: upstream });
+				});
+				try {
+					const remoteContent = page.waitForResponse(
+						(response) =>
+							response.url().includes('/api/v1/appearance/html-presets/remote/content') &&
+							response.request().method() === 'GET',
+					);
+					const apply = page.waitForResponse(
+						(response) =>
+							response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
+					);
+					await remoteRow.getByRole('button', { name: 'Apply', exact: true }).click();
+					expect((await remoteContent).ok()).toBeTruthy();
+					// Read the original GET before CDP retires its body after the Apply
+					// navigation; compare that exact payload to the persisted setting.
+					expect(downloadedHtml).not.toBeNull();
+					expect(downloadedHtml!.length).toBeGreaterThan(20);
+					expect((await apply).ok()).toBeTruthy();
+					await expect
+						.poll(async () => (await appearance(context.request)).terminalCustomHtml)
+						.toBe(downloadedHtml);
+				} finally {
+					await page.unroute(contentPattern);
+				}
 			},
 		);
 
@@ -869,6 +883,17 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
 				LEGACY_OFFICIAL_HTML_THEME_REPOSITORY,
 			);
 			await updateTestHtmlRepository(context.request, TESTED_OFFICIAL_HTML_THEME_REPOSITORY);
+			// These mutations bypass the UI's versioned Appearance owner. Reopen
+			// the editor against the authoritative revision before attempting the
+			// next independent Save, rather than submitting a stale expectedVersion.
+			await page.reload({ waitUntil: 'domcontentloaded' });
+			await page.getByTitle('Customize Style').click();
+			await customizer.getByRole('button', { name: 'Background', exact: true }).click();
+			await customizer.getByRole('combobox', { name: 'HTML Background Themes', exact: true }).click();
+			await page.getByRole('option', { name: 'Remote Themes', exact: true }).click();
+			await expect(appearanceField(customizer, 'Remote HTML Themes Repository URL')).toHaveValue(
+				TESTED_OFFICIAL_HTML_THEME_REPOSITORY,
+			);
 		});
 
 		await step(

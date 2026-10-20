@@ -52,12 +52,18 @@ import {
 import type { RemoteFileModel } from '../model/file-model.js';
 import { searchFiles } from './file-search.js';
 import { DownloadTickets } from './download-tickets.js';
+import { FileMutationQueue } from './file-mutation-queue.js';
 import type { FileUploadStart, FileUploadEvent, FileUploadStreamAttachment } from '../model/file-upload-types.js';
 import type { FileCopyMoveEvent, FileArchiveEvent, FileArchiveOperation } from '../model/file-task-types.js';
 import { copyRemoteEntries } from './file-copy.js';
 import { streamRemoteDirectoryZip } from './file-directory-zip.js';
-import { compressRemoteArchive, decompressRemoteArchive } from './file-archive.js';
-import { ArchiveRejection, type FileArchiveRequest, type ArchiveFormat } from '../model/file-task-types.js';
+import { compressRemoteArchive, decompressRemoteArchive, compressionFootprint } from './file-archive.js';
+import {
+	ArchiveRejection,
+	type FileArchiveRequest,
+	type ArchiveFormat,
+	type FileMutationIntent,
+} from '../model/file-task-types.js';
 
 interface OwnedResource {
 	id: string;
@@ -67,9 +73,9 @@ interface OwnedResource {
 	userId: number;
 	resource: FileResource;
 	expiresAt: number;
-	active: Set<AbortController>;
+	active: Map<AbortController, 'upload' | 'other'>;
 	inFlight: Set<Promise<unknown>>;
-	mutationTail: Promise<void>;
+	mutations: FileMutationQueue;
 	closePromise: Promise<void> | null;
 }
 
@@ -90,6 +96,8 @@ const FILE_TRANSFER_MS = 60 * 60 * 1000;
 const FILE_UPLOAD_IDLE_MS = 5 * 60 * 1000;
 const FILE_CLOSE_REPLAY_MS = 2 * 60 * 1000;
 const MAX_RECENTLY_CLOSED_FILES = 128;
+const MAX_UPLOAD_PREPARE_WORKERS = 4;
+const UPLOAD_WRITE_BATCH_BYTES = 512 * 1024;
 
 interface ReleasedFile {
 	userId: number;
@@ -127,8 +135,8 @@ interface RunningUpload extends TransferResourceOwner {
 	stage: FileUploadStage | null;
 	queue: Promise<void>;
 	completion: Promise<void>;
-	settlement: Promise<void> | null;
 	terminal: boolean;
+	discarding: boolean;
 	cancelled: boolean;
 	mutationStarted: boolean;
 	streamAttached: boolean;
@@ -465,9 +473,9 @@ export class RemoteFileService {
 				userId,
 				resource,
 				expiresAt: Date.now() + FILE_IDLE_MS,
-				active: new Set(),
+				active: new Map(),
 				inFlight: new Set(),
-				mutationTail: Promise.resolve(),
+				mutations: new FileMutationQueue(MAX_WORKSPACE_TRANSFERS),
 				closePromise: null,
 			};
 			this.owners.set(id, record);
@@ -621,6 +629,7 @@ export class RemoteFileService {
 		authorization: 'bound_session' | 'same_user_workspace' | 'download_ticket' = 'bound_session',
 		resourceUse: FileResourceUse = 'direct',
 		mutationPeers: FileResource[] = [],
+		writeIntent?: FileMutationIntent,
 	): Promise<T> {
 		return this.track(
 			this.runAdmitted(
@@ -633,6 +642,7 @@ export class RemoteFileService {
 				authorization,
 				resourceUse,
 				mutationPeers,
+				writeIntent,
 			),
 		);
 	}
@@ -647,6 +657,7 @@ export class RemoteFileService {
 		authorization: 'bound_session' | 'same_user_workspace' | 'download_ticket' = 'bound_session',
 		resourceUse: FileResourceUse = 'direct',
 		mutationPeers: FileResource[] = [],
+		writeIntent?: FileMutationIntent,
 	): Promise<T> {
 		const controller = new AbortController();
 
@@ -659,7 +670,6 @@ export class RemoteFileService {
 		const started = Date.now();
 		const timer = setTimeout(abort, timeoutMs);
 		let record: OwnedResource | null = null;
-		let unlockMutation: (() => void) | null = null;
 		let operationFinished!: () => void;
 		const lifecycle = new Promise<void>((resolve) => {
 			operationFinished = resolve;
@@ -677,47 +687,69 @@ export class RemoteFileService {
 			) {
 				throw new RemoteFileFailure('not_found');
 			}
-			record.active.add(controller);
+			record.active.set(controller, writeIntent?.kind === 'upload' ? 'upload' : 'other');
 			record.inFlight.add(lifecycle);
-			if (mutation) {
-				const previous = record.mutationTail.catch(() => undefined);
-				let unlock!: () => void;
-				const gate = new Promise<void>((resolve) => {
-					unlock = resolve;
-				});
-				record.mutationTail = previous.then(() => gate);
-				unlockMutation = unlock;
-				await this.untilAbort(previous, controller.signal);
-				if (record.closePromise || this.owners.get(id) !== record) {
-					throw new RemoteFileFailure('not_found');
-				}
-			}
-			controller.signal.throwIfAborted();
-			executing = true;
-			const activeRecord = record;
 
-			const execute = () =>
-				this.executeOwned(
+			controller.signal.throwIfAborted();
+			const activeRecord = record;
+			const archiveRemaining = this.remaining(timeoutMs - (Date.now() - started), controller.signal, id);
+			const footprint =
+				writeIntent?.kind === 'compression'
+					? await compressionFootprint(
+							record.resource,
+							writeIntent.sources.map((source) => remoteTransferPath(source, true)),
+							remoteTransferPath(writeIntent.destination, true),
+							archiveRemaining,
+							controller.signal,
+						)
+					: null;
+
+			const execute = () => {
+				executing = true;
+				return this.executeOwned(
 					activeRecord,
 					token,
 					id,
-					action,
+					async (resource, ms, signal) => {
+						if (
+							footprint &&
+							!(await compressionFootprint(
+								resource,
+								footprint.sources,
+								footprint.destination,
+								archiveRemaining,
+								signal,
+							))
+						) {
+							// The queue may have changed filesystem facts before claim acquisition.
+							throw new RemoteFileFailure('conflict');
+						}
+						return action(resource, ms, signal);
+					},
 					controller.signal,
 					started,
 					mutation,
 					timeoutMs,
 					authorization,
 				);
+			};
 
 			const operation = mutation
-				? this.mutations.run(
-						randomUUID(),
-						'files',
-						[record.resource, ...mutationPeers].map((resource) => ({
-							targetId: resource.targetId,
-							fingerprint: resource.fingerprint,
-						})),
+				? record.mutations.run(
 						execute,
+						(work) =>
+							this.mutations.run(
+								randomUUID(),
+								'files',
+								[activeRecord.resource, ...mutationPeers].map((resource) => ({
+									targetId: resource.targetId,
+									fingerprint: resource.fingerprint,
+								})),
+								work,
+							),
+						controller.signal,
+						writeIntent?.kind === 'upload' ? writeIntent.destination : undefined,
+						footprint,
 					)
 				: execute();
 			try {
@@ -730,7 +762,6 @@ export class RemoteFileService {
 			}
 		} finally {
 			this.authorizing.delete(controller);
-			unlockMutation?.();
 			if (record) {
 				record.active.delete(controller);
 				record.inFlight.delete(lifecycle);
@@ -1292,11 +1323,9 @@ export class RemoteFileService {
 				const remaining = this.remaining(ms, abort, record.id);
 				let changed = false;
 				try {
-					for (const filePath of [...paths].sort((a, b) => a.length - b.length)) {
-						await this.ensureRemoteDirectory(resource, filePath, remaining, abort, () => {
-							changed = true;
-						});
-					}
+					await this.ensureUploadDirectories(resource, root, paths, remaining, abort, () => {
+						changed = true;
+					});
 					abort.throwIfAborted();
 					if (!this.accepting || record.closePromise || this.owners.get(record.id) !== record) {
 						throw new RemoteFileFailure('not_found');
@@ -1330,6 +1359,66 @@ export class RemoteFileService {
 			throw new RemoteFileFailure('not_found');
 		}
 		return record.resource.targetId;
+	}
+
+	private async ensureUploadDirectories(
+		resource: FileResource,
+		root: string,
+		paths: ReadonlySet<string>,
+		remaining: () => number,
+		signal: AbortSignal,
+		onMutation: () => void,
+	): Promise<void> {
+		await this.ensureRemoteDirectory(resource, root, remaining, signal, onMutation);
+		// Independent root children can be prepared concurrently. Paths sharing
+		// an implicit parent stay serial, avoiding competing mkdir operations.
+		// Each path still checks its full ancestry; no cached stat grants access.
+		const branches = new Map<string, string[]>();
+		for (const filePath of [...paths].sort((a, b) => a.length - b.length)) {
+			if (filePath === root) {
+				continue;
+			}
+			const branch = path.posix.relative(root, filePath).split('/')[0] ?? '';
+			const entries = branches.get(branch) ?? [];
+			entries.push(filePath);
+			branches.set(branch, entries);
+		}
+		const pending = branches.values();
+		const failures: unknown[] = [];
+
+		const work = async (): Promise<void> => {
+			while (!failures.length) {
+				const next = pending.next();
+				if (next.done) {
+					return;
+				}
+				try {
+					for (const filePath of next.value) {
+						if (failures.length) {
+							return;
+						}
+						await this.ensureRemoteDirectory(resource, filePath, remaining, signal, onMutation);
+					}
+				} catch (cause) {
+					failures.push(cause);
+				}
+			}
+		};
+
+		// A first failure stops new work, but every dispatched sibling must drain
+		// before the original mutation claim is settled or its resource closed.
+		await Promise.all(Array.from({ length: Math.min(MAX_UPLOAD_PREPARE_WORKERS, branches.size) }, work));
+		if (failures.length === 1) {
+			throw failures[0];
+		}
+		if (failures.length > 1) {
+			if (failures.some((cause) => cause instanceof RemoteResourceCleanupFailure)) {
+				throw new RemoteResourceCleanupFailure(failures);
+			}
+			throw new RemoteFileFailure(failures.some(isUnknown) ? 'operation_unknown' : 'remote_unavailable', {
+				cause: new AggregateError(failures, 'Upload directory preparation failed'),
+			});
+		}
 	}
 
 	private async ensureRemoteDirectory(
@@ -1462,8 +1551,8 @@ export class RemoteFileService {
 			stage: null,
 			queue: Promise.resolve(),
 			completion,
-			settlement: null,
 			terminal: false,
+			discarding: false,
 			cancelled: false,
 			mutationStarted: false,
 			streamAttached: false,
@@ -1512,14 +1601,10 @@ export class RemoteFileService {
 						}
 					}
 					// A prepare record is an allowlist, not proof that its directories are still safe.
-					await this.ensureRemoteDirectory(
-						resource,
-						path.posix.dirname(destination),
-						remaining,
-						abort,
-						() => {
+					await record.mutations.prepare(() =>
+						this.ensureRemoteDirectory(resource, path.posix.dirname(destination), remaining, abort, () => {
 							task.mutationStarted = true;
-						},
+						}),
 					);
 					const stage = await resource.openUploadStage({
 						path: destination,
@@ -1595,6 +1680,8 @@ export class RemoteFileService {
 			FILE_TRANSFER_MS,
 			'bound_session',
 			'dedicated_transfer',
+			[],
+			{ kind: 'upload', destination },
 		)
 			.then(
 				(result) => {
@@ -1639,7 +1726,6 @@ export class RemoteFileService {
 					this.uploads.delete(key);
 				}
 			});
-		task.settlement = operation;
 		void operation.catch(() => undefined);
 		return { started: true };
 	}
@@ -1694,7 +1780,15 @@ export class RemoteFileService {
 				throw new RemoteFileFailure('invalid_input');
 			}
 			const chunkIndex = task.nextIndex++;
-			await task.stage.append(bytes);
+			// A protocol frame can span multiple write batches. Stop dispatching
+			// the next batch after cancellation, while the current one drains on
+			// the live lease so the upload worker can still discard its stage.
+			for (let offset = 0; offset < bytes.byteLength; offset += UPLOAD_WRITE_BATCH_BYTES) {
+				if (task.discarding) {
+					return false;
+				}
+				await task.stage.append(bytes.subarray(offset, offset + UPLOAD_WRITE_BATCH_BYTES));
+			}
 			if (
 				this.uploads.get(key) !== task ||
 				task.finished ||
@@ -1766,22 +1860,9 @@ export class RemoteFileService {
 			append: (bytes) => this.appendUpload(token, task, bytes),
 
 			abort: () => {
-				if (this.uploads.get(this.uploadKey(workspaceId, uploadId)) !== task || task.finished) {
-					return;
+				if (this.uploads.get(this.uploadKey(workspaceId, uploadId)) === task) {
+					this.stopUpload(task, 'abort');
 				}
-				// Losing the browser's binary WebSocket does not imply the dedicated
-				// SFTP lease is lost. The acknowledged WRITE queue is still owned by
-				// the upload worker. Let that worker drain admitted packets, close
-				// the staging handle, and prove REMOVE before retiring the lease.
-				// The client-side transfer outcome remains unknown, never "cancelled"
-				// or successfully committed, even if the private stage is discarded.
-				if (task.stage && !task.terminal && !task.controller.signal.aborted) {
-					task.terminal = true;
-					task.fail(new RemoteFileFailure('operation_unknown'));
-					return;
-				}
-				task.fail(new RemoteFileFailure('operation_unknown'));
-				task.controller.abort();
 			},
 		};
 	}
@@ -1812,27 +1893,28 @@ export class RemoteFileService {
 		if (this.uploads.get(key) !== task || task.finished) {
 			return false;
 		}
-		// A pre-commit stage can be discarded even if its binary WebSocket was
-		// lost. Aborting its dedicated SFTP signal before the acknowledged WRITE
-		// queue drains makes REMOVE unprovable, cascading into baseline failures.
-		// Keep the client outcome unknown for transport aborts, and do not
-		// take this path after a final frame has admitted a commit.
-		if (task.stage !== null && !task.terminal && !task.controller.signal.aborted) {
-			task.cancelled = mode === 'cancel';
-			task.terminal = true;
-			task.fail(new RemoteFileFailure(mode === 'cancel' ? 'remote_unavailable' : 'operation_unknown'));
-			if (task.settlement) {
-				await task.settlement;
-			}
-			if (task.cleanupFailure) {
-				throw task.cleanupFailure;
-			}
-		} else {
-			task.cancelled = mode === 'cancel';
-			task.fail(new RemoteFileFailure('operation_unknown'));
-			task.controller.abort();
-		}
+		// Acceptance is independent of group settlement: later members must still
+		// be able to accept cancellation while this member drains its WRITE queue.
+		this.stopUpload(task, mode);
 		return true;
+	}
+
+	private stopUpload(task: RunningUpload, mode: 'cancel' | 'abort' | 'close'): void {
+		if (task.finished || task.discarding) {
+			return;
+		}
+		if (mode === 'cancel') {
+			task.cancelled = true;
+		}
+		task.fail(new RemoteFileFailure(mode === 'cancel' ? 'remote_unavailable' : 'operation_unknown'));
+		if (task.stage !== null && !task.terminal && !task.controller.signal.aborted) {
+			// A healthy pre-commit stage owns its acknowledged writes through CLOSE
+			// and REMOVE. Owner shutdown stops dispatch without destroying that lease.
+			task.discarding = true;
+			task.terminal = true;
+			return;
+		}
+		task.controller.abort();
 	}
 
 	startCopyMove(
@@ -2138,6 +2220,10 @@ export class RemoteFileService {
 			FILE_TRANSFER_MS,
 			'bound_session',
 			'dedicated_transfer',
+			[],
+			input.kind === 'compress'
+				? { kind: 'compression', sources: input.sources, destination: input.destination }
+				: undefined,
 		)
 			.then(
 				(result) => {
@@ -2964,8 +3050,7 @@ export class RemoteFileService {
 			}
 			for (const task of this.uploads.values()) {
 				if (task.ownerId === record.id) {
-					task.fail(new RemoteFileFailure('remote_unavailable'));
-					task.controller.abort();
+					this.stopUpload(task, 'close');
 				}
 			}
 			for (const task of this.copyMoves.values()) {
@@ -2979,8 +3064,10 @@ export class RemoteFileService {
 				}
 			}
 		}
-		for (const controller of record.active) {
-			controller.abort();
+		for (const [controller, kind] of record.active) {
+			if (kind !== 'upload') {
+				controller.abort();
+			}
 		}
 		const completion = Promise.resolve().then(async () => {
 			if (record.inFlight.size) {
@@ -3050,8 +3137,7 @@ export class RemoteFileService {
 		this.downloadTickets.close();
 		this.preparedUploads.clear();
 		for (const task of this.uploads.values()) {
-			task.fail(new RemoteFileFailure('remote_unavailable'));
-			task.controller.abort();
+			this.stopUpload(task, 'close');
 		}
 		for (const task of this.copyMoves.values()) {
 			task.controller.abort();
@@ -3069,8 +3155,10 @@ export class RemoteFileService {
 			controller.abort();
 		}
 		for (const record of this.owners.values()) {
-			for (const controller of record.active) {
-				controller.abort();
+			for (const [controller, kind] of record.active) {
+				if (kind !== 'upload') {
+					controller.abort();
+				}
 			}
 		}
 	}

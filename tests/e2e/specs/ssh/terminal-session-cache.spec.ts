@@ -3,7 +3,12 @@ import { E2E_URLS } from '../../support/test-env';
 import { updateTestAppearance } from '../../support/appearance';
 import { writeFile } from 'node:fs/promises';
 import { expect, test } from '../../support/fixtures';
-import { E2E_SSH, configureSshE2eSettings, connectTestSshFromConnectionsPage } from '../../support/ssh';
+import {
+	E2E_SSH,
+	configureSshE2eSettings,
+	connectTestSshFromConnectionsPage,
+	trustTestSshHostKey,
+} from '../../support/ssh';
 import { loginAsInitialAdmin } from '../../support/auth';
 
 test('session switches retain terminal and background instances and skip unchanged resize frames', async ({
@@ -22,6 +27,7 @@ test('session switches retain terminal and background instances and skip unchang
 	);
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
+	await trustTestSshHostKey(context.request);
 	await updateTestAppearance(context.request, (preferences) => {
 		preferences.terminalBackgroundEnabled = true;
 		preferences.terminalCustomHtml = `<canvas id="scene"></canvas><script>

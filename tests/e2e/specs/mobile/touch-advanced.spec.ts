@@ -124,9 +124,12 @@ for (const outcome of ['success', 'cancel', 'failure'] as const) {
 			await expect(fileManagerRow(page, 'direct-picker.txt')).toBeVisible({ timeout: 20_000 });
 		} else {
 			await expect(fileManagerRow(page, 'direct-picker.txt')).toHaveCount(0);
-			if (outcome === 'failure')
-				await expect(page.getByText('Picker access denied', { exact: true })).toBeVisible();
-			else await expect(page.getByText('Selection cancelled', { exact: true })).toHaveCount(0);
+			if (outcome === 'failure') {
+				// Picker errors are intentionally presented through the public,
+				// localized upload failure rather than exposing DOMException details.
+				await expect(page.getByText('Upload failed.', { exact: true })).toBeVisible();
+				await expect(page.getByText('Picker access denied', { exact: true })).toHaveCount(0);
+			} else await expect(page.getByText('Selection cancelled', { exact: true })).toHaveCount(0);
 			await page.evaluate(() =>
 				Object.defineProperty(window, 'showOpenFilePicker', { configurable: true, value: undefined }),
 			);

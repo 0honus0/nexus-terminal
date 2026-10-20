@@ -214,36 +214,24 @@ export function respondFunctionalModel(messages, userText, response, send) {
 						'background',
 					),
 				],
-				[
-					'deploy_check',
-					'shell_execute',
-					shell(
-						`node --input-type=module -e 'const end=Date.now()+5000;for(;;){try{for(const path of ["health","catalog"]){const r=await fetch("http://127.0.0.1:${deployment[1]}/"+path);if(!r.ok)throw Error("HTTP_"+r.status);console.log(path+"="+await r.text())}break}catch(e){if(Date.now()>=end)throw e;await new Promise(r=>setTimeout(r,50))}}'`,
-					),
-				],
+				// A background Shell Job holds the target's exclusive durable mutation
+				// claim until it exits. Its live HTTP endpoints are independently
+				// inspected and shut down by the E2E owner, not another Agent Shell
+				// command that must correctly fail to acquire the same target claim.
 				[
 					'deploy_status',
 					'shell_job_control',
 					() => ({ connectionId, action: 'status', jobId: result('deploy_launch').jobId }),
 				],
 				[
-					'deploy_stop',
-					'shell_execute',
-					shell(
-						`node --input-type=module -e 'const r=await fetch("http://127.0.0.1:${deployment[1]}/shutdown",{method:"POST"});if(!r.ok||!(await r.json()).stopping)process.exit(1)'`,
-					),
-				],
-				[
 					'deploy_wait',
 					'shell_job_control',
-					() => ({ connectionId, action: 'wait', jobId: result('deploy_launch').jobId, waitSeconds: 10 }),
+					() => ({ connectionId, action: 'wait', jobId: result('deploy_launch').jobId, waitSeconds: 30 }),
 				],
 			],
 			() => ({
 				launch: result('deploy_launch'),
-				health: result('deploy_check'),
 				status: result('deploy_status'),
-				stop: result('deploy_stop'),
 				settled: result('deploy_wait'),
 				...(withSkill ? { skill: result('operations_read') } : {}),
 			}),
@@ -256,10 +244,16 @@ export function respondFunctionalModel(messages, userText, response, send) {
 		const session = () => result('browser_open').sessionId;
 
 		const click = (id) => {
-			const snapshot = result(id),
-				button = snapshot.nodes.find(
-					(node) => node.tag === 'button' && node.text.includes('Deploy fixture-v1'),
-				);
+			const snapshot = result(id);
+			// CDP DOM.getDocument retains uppercase nodeName on elements and
+			// places visible button labels in child #text nodes, not BUTTON.nodeValue.
+			const button = snapshot.nodes.find(
+				(node) =>
+					node.tag === 'BUTTON' &&
+					snapshot.nodes.some(
+						(child) => child.parentRef === node.ref && child.text.includes('Deploy fixture-v1'),
+					),
+			);
 			if (!button) {
 				throw new Error('Deployment button missing from actual snapshot');
 			}
@@ -274,6 +268,14 @@ export function respondFunctionalModel(messages, userText, response, send) {
 				['browser_old', 'browser_snapshot', () => ({ sessionId: session() })],
 				...(stale ? [['browser_fresh', 'browser_snapshot', () => ({ sessionId: session() })]] : []),
 				['browser_click', 'browser_click', () => click('browser_old')],
+				// The DOM click starts an asynchronous /deploy mutation. Its CDP
+				// receipt only confirms dispatch; wait for network idle before
+				// taking the committed-state snapshot or closing the Browser.
+				[
+					'browser_wait',
+					'browser_wait',
+					() => ({ sessionId: session(), mode: 'networkIdle', maxMillis: 5000 }),
+				],
 				['browser_after', 'browser_snapshot', () => ({ sessionId: session() })],
 				['browser_capture', 'browser_screenshot', () => ({ sessionId: session() })],
 				['browser_close', 'browser_close', () => ({ sessionId: session() })],

@@ -18,6 +18,11 @@ const MAX_LISTING_BYTES = 8 * 1024 * 1024;
 // the decoded budget while bounding each remote metadata file before reading it.
 const LISTING_FILE_LIMIT_BLOCKS = MAX_LISTING_BYTES / 512;
 
+// Info-ZIP's Unicode Path (0x7075) extra field is locale-sensitive. With
+// LC_ALL=C, legitimate UTF-8 names can become #Uxxxx placeholders. Listing,
+// link reads and extraction must all decode the same member names.
+const ZIP_UTF8_LOCALE = 'LC_ALL=C.UTF-8; export LC_ALL';
+
 function quote(value: string): string {
 	return "'" + value.replaceAll("'", "'\"'\"'") + "'";
 }
@@ -49,6 +54,23 @@ function listingCleanupFailure(result: ListingCleanupResult): NativeArchiveFailu
 export class NativeArchiveCommands {
 	constructor(private readonly runner: ArchiveCommandRunner) {}
 
+	async requireTool(tool: 'zip' | 'unzip' | 'tar', remaining: () => number, signal: AbortSignal): Promise<void> {
+		const outcome = await this.runner.executeLines(
+			'command -v ' + tool + ' >/dev/null 2>&1',
+			signal,
+			remaining(),
+			() => {
+				throw new NativeArchiveFailure('invalid_output');
+			},
+		);
+		if (outcome.status !== 'completed') {
+			throw new NativeArchiveFailure(
+				outcome.exitCode === 1 || outcome.exitCode === 127 ? 'missing_tool' : 'rejected',
+				tool,
+			);
+		}
+	}
+
 	async list(
 		archive: string,
 		format: NativeArchiveFormat,
@@ -74,6 +96,7 @@ export class NativeArchiveCommands {
 			'umask 077',
 			'ulimit -f ' + LISTING_FILE_LIMIT_BLOCKS + ' || exit 78',
 			'LC_MESSAGES=C; export LC_MESSAGES',
+			...(isZip ? [ZIP_UTF8_LOCALE] : []),
 			'command -v ' + (isZip ? 'unzip' : 'tar') + ' >/dev/null 2>&1 || exit 127',
 			'command -v od >/dev/null 2>&1 || { ' + "printf 'NEXUS_ARCHIVE_MISSING:od\\n'; exit 127; }",
 			...(isZip
@@ -222,11 +245,14 @@ export class NativeArchiveCommands {
 					' -- ' +
 					args.join(' ');
 		const sentinel = 'NEXUS_NATIVE_STATUS_' + randomUUID().replaceAll('-', '') + ':';
+		const beforeWriteMarker = 'NEXUS_ARCHIVE_START_' + randomUUID().replaceAll('-', '');
 		const script = [
 			'command -v ' + tool + ' >/dev/null 2>&1 || exit 127',
 			'LC_MESSAGES=C; export LC_MESSAGES',
 			'cd ' + quote(workingDirectory) + ' || exit 78',
 			'umask 077',
+			// A complete, drained remote exit without this marker proves no writer was launched.
+			'printf ' + quote(beforeWriteMarker + '\n') + ' || exit 78',
 			'(' + native + ' 2>&1; printf ' + quote(sentinel + '%s\n') + ' "$?") |',
 			'{ count=0; overflow=0; while IFS= read -r line; do',
 			'  case "$line" in',
@@ -249,26 +275,32 @@ export class NativeArchiveCommands {
 		let count = 0;
 		let finished = false;
 		let writerExited = false;
-		const outcome = await this.runner.executeLines(shell(script), signal, remaining(), (line) => {
-			const progress = /^NEXUS_ARCHIVE_PROGRESS:(\d+)$/u.exec(line);
-			const end = /^NEXUS_ARCHIVE_COUNT:(\d+)$/u.exec(line);
-			if (line === 'NEXUS_ARCHIVE_EXIT' && !writerExited && !finished) {
-				writerExited = true;
-			} else if (
-				progress &&
-				!writerExited &&
-				!finished &&
-				Number(progress[1]) === count + 1 &&
-				count < maxEntries
-			) {
-				count++;
-				onProgress(count);
-			} else if (end && writerExited && !finished && Number(end[1]) === count) {
-				finished = true;
-			} else {
-				throw new NativeArchiveFailure('invalid_output');
-			}
-		});
+		const outcome = await this.runner.executeLines(
+			shell(script),
+			signal,
+			remaining(),
+			(line) => {
+				const progress = /^NEXUS_ARCHIVE_PROGRESS:(\d+)$/u.exec(line);
+				const end = /^NEXUS_ARCHIVE_COUNT:(\d+)$/u.exec(line);
+				if (line === 'NEXUS_ARCHIVE_EXIT' && !writerExited && !finished) {
+					writerExited = true;
+				} else if (
+					progress &&
+					!writerExited &&
+					!finished &&
+					Number(progress[1]) === count + 1 &&
+					count < maxEntries
+				) {
+					count++;
+					onProgress(count);
+				} else if (end && writerExited && !finished && Number(end[1]) === count) {
+					finished = true;
+				} else {
+					throw new NativeArchiveFailure('invalid_output');
+				}
+			},
+			beforeWriteMarker,
+		);
 
 		return { outcome: normalizeOutcome(outcome, tool), count, finished, writerExited };
 	}
@@ -309,6 +341,7 @@ export class NativeArchiveCommands {
 				'; do command -v "$archive_tool" >/dev/null 2>&1 || { ' +
 				'printf \'NEXUS_ARCHIVE_MISSING:%s\\n\' "$archive_tool"; exit 127; }; done',
 			'LC_MESSAGES=C; export LC_MESSAGES',
+			...(format === 'zip' ? [ZIP_UTF8_LOCALE] : []),
 			'umask 077',
 			...(format === 'zip'
 				? [
@@ -366,6 +399,7 @@ export class NativeArchiveCommands {
 			'command -v unzip >/dev/null 2>&1 || exit 127',
 			'command -v od >/dev/null 2>&1 || exit 126',
 			'LC_MESSAGES=C; export LC_MESSAGES',
+			ZIP_UTF8_LOCALE,
 			'(unzip -p ' +
 				(password === undefined ? '' : '-P ' + quote(password) + ' ') +
 				'-- ' +

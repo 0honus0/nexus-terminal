@@ -69,6 +69,16 @@ export type FileArchiveRequest =
 	| { kind: 'compress'; sources: readonly string[]; destination: string; format: ArchiveFormat; password?: string }
 	| { kind: 'decompress'; source: string; password?: string };
 
+/** A bounded compression read/write set; directories and aliases use the exclusive queue. */
+export interface FileCompressionFootprint {
+	directory: string;
+	sources: readonly string[];
+	destination: string;
+}
+
+export type FileMutationIntent =
+	{ kind: 'upload'; destination: string } | { kind: 'compression'; sources: readonly string[]; destination: string };
+
 export class ArchiveRejection extends Error {
 	constructor(
 		readonly code: FileArchiveErrorCode,

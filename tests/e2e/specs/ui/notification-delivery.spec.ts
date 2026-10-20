@@ -11,10 +11,7 @@ import {
 	waitForTestDelivery,
 	NOTIFICATIONS_PATH,
 } from '../../support/notifications';
-import {
-	readNotificationResponse,
-	readNotificationDeliveries,
-} from '../../../../packages/shared/src/operations/http-codec';
+import { readNotificationDeliveries } from '../../../../packages/shared/src/operations/http-codec';
 import type { NotificationDeliveryView } from '../../../../packages/shared/src/operations/notifications/model';
 
 const CRUD_CHANNEL_NAME = 'E2E Notification CRUD Delivery';
@@ -166,7 +163,14 @@ test('notification CRUD persists events and exposes a failed delivery without re
 			await page.getByRole('button', { name: 'Save', exact: true }).click();
 			const response = await pending;
 			expect(response.status()).toBe(200);
-			const created = readNotificationResponse(await response.json()).setting;
+			// The editor can navigate after a successful POST and retire the
+			// browser-owned response body. Verify exactly one persisted channel
+			// instead of issuing a second non-idempotent create.
+			const matches = (await listTestNotifications(context.request)).filter(
+				(item) => item.name === CRUD_CHANNEL_NAME,
+			);
+			expect(matches).toHaveLength(1);
+			const created = matches[0]!;
 			expect(created).toMatchObject({
 				enabled: true,
 				events: ['LOGIN_SUCCESS', 'SSH_CONNECT_FAILURE'],
@@ -196,7 +200,9 @@ test('notification CRUD persists events and exposes a failed delivery without re
 			await page.getByRole('button', { name: 'Save', exact: true }).click();
 			const response = await pending;
 			expect(response.ok()).toBe(true);
-			const updated = readNotificationResponse(await response.json()).setting;
+			const matches = (await listTestNotifications(context.request)).filter((item) => item.id === saved.id);
+			expect(matches).toHaveLength(1);
+			const updated = matches[0]!;
 			expect(updated.version).toBe(saved.version + 1);
 			await expect(page.locator('#setting-name')).toHaveCount(0);
 			await card.getByRole('button', { name: 'Edit', exact: true }).click();

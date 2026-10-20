@@ -116,11 +116,17 @@ Registry状态卡片由`useAuthenticatedViewScope`隔离身份、卸载及KeepAl
 
 ## 7. 生命周期与失败
 
+Workspace upload adapter将取消中的binary close/error交回原cancel控制请求结算，不让字节连接抢先把任务变成unknown；control失败、后端failed事件及任务期限仍按真实结果处理，未确认前不移除任务或归还本地名额。
+
+WorkspaceUiState 的视图撤销只取消原布局/焦点请求与未派发保存，保留缓存页面已加载的布局、焦点配置与终端树；session/disposed 撤销才清空该状态。晚响应仍核对原 permission/revision，不能因保留缓存继续发布已撤销结果。
+
 明确打开、取消、订阅、解除、关闭和卸载 owner。取消前端请求不证明后端副作用终止；晚返回的资源仍尝试归还给原 owner。错误映射稳定安全码，区分网络失败、协议失败、业务拒绝和未知写入结果；非 JSON、未知状态/错误码及错误 shape 不当作成功。不把失败刷新作为操作已恢复证明。
 
 transport 产生具名失败与受约束 code，controller/view 只消费该契约；Auth 的共用失败从其公开入口消费，不比较普通 Error.message。服务端安全码引用 Shared，本地通信失败留本包；未知异常统一安全兜底，不能把技术正文用于翻译或决定认证/写入结果。
 
 普通终端、Files、Agent 各有业务生命周期，共用技术原则而不混用权限与资源。PTY ACK/背压由对应 runtime 消费协议，view 不复制流状态机。资源关闭失败须有可追踪反馈，不能静默伪造关闭成功。
+
+SSH 连接失败的重试围栏以实际 `workspace.connect` 结果为准：服务端返回具名非 `operation_unknown` 拒绝时，Workspace/SSH owner 已完成失败清理，可撤销本次创建的未知标记并遵循原有退避重连；请求未派发也不会留下远端副作用。断流、超时、畸形成功响应或 `operation_unknown` 仍保留未知围栏，禁止自动重复创建远端会话。此区别与后端 `WorkspaceService.openAdmitted` 的关闭结果和 WS 错误投影对应。
 
 WorkspaceSocket的NXW1解码与协议版本已消费Shared remote/workspace，删除本地重复编解码文件。Socket持有请求等待及元数据/final交付条件，畸形消息和重复终态会断开并结束等待；旧socket的消费回调不能确认新附件。正式Session的connect/resume/close已消费Shared严格结果codec，经model/workspace-connection-mapper投影为独立应用对象，lastConnectedAt明确从Unix秒转应用毫秒。新建回执的replayedBytes与journal端点共同定位输出起点，响应前后输出不丢失游标；续接核对资源、原generation+1、换token及完整回放，独立workspace.resumeAck确认后才启用输入/resize/业务能力。connect/close各自共享Promise，关闭在原附件等待确认并清理晚到连接；创建/ACK结果未知阻止自动和手动重放，关闭返回closed/detached/unknown，不把断开当释放。终端结束使在途结果失效，未知所有权在正式终端显示三语恢复提示。终端输入/resize/flow、目录请求/事件和关闭/故障事件已消费Shared严格codec；独立应用TerminalViewport归features/terminal/model/terminal-types，终端适配归adapters/terminal-adapters，协议构造及队列投影归model/workspace-terminal-mapper。目录切换绑定原附件，核对requestId/排队路径，请求确认与完成事件均有效后才成功；本地关闭同样结清事件等待，断线/超时保留unknown。失败回执及protocol.error仅接受Shared有限码，具名WorkspaceRequestFailure保留operation/code；挂起独立ACK已接线；监控/Docker WS与概览HTTP已接Shared；采样配置已接Preferences核心owner；桌面子协议已按C2-C3接线，整体App资源撤销仍在C2-D，不声称整个运行链路完成。
 
@@ -128,11 +134,17 @@ WorkspaceSocket的NXW1解码与协议版本已消费Shared remote/workspace，�
 
 核心Settings已使用Shared preferences/configuration完整配置和expectedVersion，CAPTCHA 使用 keep/clear/replace 且只读取 hasSecret；显示 version/effectiveVersion/requiresRestart。HTTP 失败/断流/unknown 后只读核对，不自动提交新版本；保存后当前认证与监控仍使用启动快照，重启才生效。布局等个人设置使用独立 preferences 契约，不能拼进核心 policy。
 
+FilesystemBrowser独立持有requestedPath与已确认path；新导航立即更新意图，后台完成触发refresh时读取该目标，仍由loadToken保护晚结果。成功后使用实际listing.path，当前读取失败恢复到已确认path；旧失败不覆盖新意图。FileManager读取已加载目录时保留列表节点与aria-busy，首次读取才用加载画面替换列表；后台刷新不在pointerdown/click之间卸载交互目标，确认快照到达后再替换条目。读取时使用独立、不拦截指针的中央spinner覆盖层，不卸载列表；切换终端目录按钮等待browser.loading结束，始终消费已确认的当前路径。
+
 Files的应用对象唯一归features/filesystem/model/filesystem-types；DirectoryListing、RemoteFileEntry、FileSearchResult及嵌套metadata不再借用旧Protocol。runtime/model/workspace-files-mapper逐字段投影，Files metadata沿真实后端使用Unix毫秒，不二次换算。adapters/filesystem-adapters承载11条用例、Document与Preview，WorkspaceSocket只持原附件关联与NXW1交付；Files ready/error用Shared严格codec，失败不携技术正文。
 
 Files首次读取等待当前附件的SFTP ready，尚未ACK、已断开/撤销或dispose时拒绝；有界等待持有timer/abort监听，断开/失败/取消全部结清，重连代次使旧等待失效。写入请求先核对完整1MiB入站控制预算；确定未派发与写后丢回执/畸形回执分别表达，unknown不自动重放。Preview取消同时覆盖stat等待和原binary请求；普通读取不隐式新建连接。上传下载已接Shared与正式能力，Workspace复制/移动/归档已消费Shared；五个跨服务器HTTP任务已独立接Shared，完整页面/三语实际交互仍C2-D。
 
 ## 8. 当前能力与验收
+
+第九轮补充统一未授权响应边界：旧 Axios `httpClient` 与新版有界 JSON 请求各自使用同一防重入 `dispatchUnauthorized`。新版 JSON 只有经对应领域的 Shared 错误解码确认 `unauthenticated` 时才触发，不能把密码输错导致的 `401 invalid_credentials` 当作会话失效；如 2FA 禁用的错误密码应继续展示表单错误。显式 logout 仍不触发全局 401 拦截，以保留先排空资源、再只读确认同一用户的独立不确定结果处理。该项来自 `ssh/terminal-ui` 中 Preferences PUT 已返回 401 但 Workspace 未导航的真实远程日志，待下一轮复验。
+
+第九轮远程日志确认失败登出反馈生命周期缺口：`beginAuthentication` 会卸载 `AppHeader`，因而其局部 `logoutError` 无法在重新读取原身份后继续展示。失败消息改由独立于会话挂载的 `NotificationHost` 承载，并为错误通知设置 `role=alert`；不改变原有先撤销 Workspace/Agent 所有者、再经 `/auth/status` 核实同一身份的围栏。该变更待远程 E2E 复验。
 
 F1-A/B源码已覆盖正式setup/password/status/logout、TOTP/Passkey登录、改密/因素设置、公共CAPTCHA与CAPTCHA/IP安全配置，以及DEV共用认证。Passkey的第三方对象只在Auth adapters/browser-passkey显式投影，Store按实例持有取消能力；session generation变化取消旧ceremony并阻止晚签发。Security的use-passkey-settings持有列表、名称草稿和刷新恢复。其余正式配置与业务源码已接Shared，完整前端行为仍待远程验收。新传输已接源码；真实密码/Cookie/登出与受控TOTP/竞态/失败场景的分项证据归testing。构建或受控响应不替代完整页面/真实因素验收。
 
@@ -276,7 +288,7 @@ B8跨App的plugin-api/agent-dispatcher/SDK父页已改用Shared plugins/intent-*
 3. **依赖方向**：Workspace→Preferences public→唯一Store→API/Shared；功能内部直接消费唯一owner，不从runtime反向借用Preferences类型。
 4. **类型与转换**：所有HTTP严格解码，逐字段转独立应用快照；布局递归投影，焦点shortcuts为字符串。Workspace编辑状态与持久命令显式转换，移除旧Protocol导入及旧路径转导出。
 5. **入口与安装**：沿既有四读取与五写入真实入口，写入消费完整PresentationView；首次未保存version=0，不虚构已保存状态。
-6. **数据、事务与并发**：读取四域须同一version后发布，变更与读取统一排队；旧编辑携原版本，冲突不自动升级，成功整体发布服务端快照。UI变更不先冒充持久成功。
+6. **数据、事务与并发**：读取四域须同一version后发布，变更与读取统一排队；旧编辑携原版本，冲突不自动升级，成功整体发布服务端快照。Workspace尺寸、布局锁/导航开关和面板缩放属于窄交互意图，由Store在实际派发时基于队列前项已确认快照构造完整协议命令；尺寸另校验ID、节点类型、组件、方向及子节点顺序均未改变，不携带旧侧栏或陈旧版本。外部CAS冲突/unknown仍阻断队列，无自动读改重试。UI变更不先冒充持久成功。
 7. **生命周期与失败**：Store持原认证scope，撤销使原队列与回填失效；未知写入阻止后续提交，只能显式只读恢复，不自动重放。Workspace停用撤销未派发保存，已派发结果归原Store追踪。
 8. **当前能力与验收**：源码已替换正式Preferences表单和Workspace布局/焦点/偏好保存，旧HTTP及本地兼容删除；当前版本验证逐项归testing，不沿用前批PASS。外观与Agent/Operations/System源码已接Shared，本轮完整行为留远程回归。
 
@@ -398,13 +410,15 @@ Shared system/backups定义完整请求/回执/错误和容量，应用Export/Re
 
 ## 原生 Agent Host 与工作区
 
+第九轮远程复核修复 Plugin Surface 授权来源：`GET /app-definitions` 仅提供内置可信定义；签名安装的 App 应由精确匹配 `installed` 安装、definition/version、packageHash、publisherKeyId 与已验证 Manifest 的版本记录决定 `agent` 或 `custom` Surface，不可再要求同时存在内置定义。缺失或失配时仍 `unavailable`，不退化为任意 iframe。该修复的真实插件帧/原生线程 E2E 仍待下轮远程验收。
+
 1. **职责与范围**：正式悬浮Host拥有实际App选择、原生线程／Run交互和插件窗口，窗口布局与业务状态分开；不再依赖旧summary、host流或单例Run Store。
 2. **子功能与目录**：host组件保留窗口／焦点／键盘／拖动生命周期；host-mapper/type持目录投影。native-thread-api与native-run-api复用唯一native-workspace-request；native-audit-api持步骤／工具只读HTTP。model/native-*-types、mapper/rules持独立应用对象、白名单和纯判断；use-native-threads/runs持本实例用例及原意图。NativeRunDetails/NativeAuditPanel只展示和发出用户操作，NativeInputArtifacts拥有引用准备，不让模板承担传输或版本策略。
 3. **依赖方向**：组件→composable→API／mapper→Shared与通用同源传输；Connections仅通过capabilities public提供安全目录。正式Host与DEV共用原生线程契约但各持实际入口；插件继续真实descriptor/grant/iframe桥，不借插件凭据调用原生能力。前端包不再依赖Protocol。
 4. **类型与转换**：Shared唯一持工作区17方法及App、Provider、Run、正文、审批、Child、Step、Tool的完整协议／基础值／容量；前端分别转HostApp/NativeThread/NativeRun/Entry/Approval等本地对象，数组与嵌套字段显式投影。App数字CAS、definitionVersion、安装revision分开；请求先规范化解码，再使用同一解码结果验证响应关联。正文offset是Unicode码点，审计textBytes是字节，本地显示窗口以UTF-16长度估算内存，不相互冒充。
 5. **入口与安装**：正式Host读取实际App、定义、安装、版本与执行设置，按受信声明及真实manifest选择通用原生界面／自定义iframe；没有前端资源的合法插件也可使用原生会话。只给管理员安装。执行关闭时仍提供历史读取与取消。原生使用POST /api/v1/agent/apps/:appId/workspace，审计使用实际steps/tools及events；DEV仍走/__next。
 6. **数据、事务与并发**：后端是权威；先读实际App版本，写入冻结原线程／Run／审批版本、输入、operationHash与operationId；原意图不跟随刷新变更。follow-up只基于已收敛Run创建新Root，unknown仍活跃且可取消。事件、正文、Run和消息各持服务端游标；事件显示最近200条、正文显示窗口最多128片／约256 Ki UTF-16单元，省略有明确提示，不删除服务器数据。Step/Tool/消息按页替换展示，不伪造完整统计或原子快照。
-7. **生命周期与失败**：useAuthenticatedViewScope明确区分视图暂停、会话重置和销毁；各owner按generation／signal隔离晚返回与旧finally。可见pending/running每两秒只读刷新，隐藏／unknown／失败／销毁停止轮询；不自动重放写入。原实例隐藏时保留在途／未知写意图，会话重置与销毁清私有数据。未知恢复先只读核对实际资源，重试保留原键／版本／输入，后续拒绝不抹去原未知；明确放弃不表示回滚。附件关联与Run派发是两个动作，关联未知阻断后续，查询文件不冒充已确认引用；确认引用以不可信数据写入实际prompt，工具仍复查权限。
+7. **生命周期与失败**：useAuthenticatedViewScope明确区分视图暂停、会话重置和销毁；各owner按generation／signal隔离晚返回与旧finally。可见pending/running每两秒只读刷新，隐藏／unknown／失败／销毁停止轮询；较新Run状态停止轮询前，从原正文游标再读一次，避免先读正文、后见完成时遗漏最终回复；失败仍显式保留，不自动重放写入。原实例隐藏时保留在途／未知写意图，会话重置与销毁清私有数据。未知恢复先只读核对实际资源，重试保留原键／版本／输入，后续拒绝不抹去原未知；明确放弃不表示回滚。附件关联与Run派发是两个动作，关联未知阻断后续，查询文件不冒充已确认引用；确认引用以不可信数据写入实际prompt，工具仍复查权限。
 8. **当前能力与验收**：正式Host、线程、Run/正文/事件/审批/Child与步骤／工具审计已接Shared；旧API、CSRF、聚合settings、host/Run流、facade/Store和旧Protocol消费删除。旧Goal/Plan、活动输入队列/interrupt、手工增额/checkpoint/resume及历史删除按当前后端Run/上下文/治理重新设计，不提供兼容接口；具体差异归USAGE与当前方案。两轮源码审核及静态结果归testing，D17最终远程Actions E2E未执行，旧行为证据不代表此次界面通过。
 
 ## 终端动态背景
@@ -482,3 +496,5 @@ Appearance 的字体保存、Presentation 的面板比例保存分别在所属�
 6. **数据、事务与并发**：查找/替换的计数、动作和 reveal 保留原 owner；不添加重复监听或异步选区回写。HoverWidget 每次布局计算窗口和实际 overflow hidden/clip/auto/scroll 祖先的垂直交集，上方不足时选择空间更大的一侧，并按剩余高度限制内容。
 7. **生命周期与失败**：继续由 Monaco dispose 清理查询与提示。依赖补丁不增加全局 observer、事件或 timer；保留现有编辑器 scope、滚动记录及缩放生命周期。不能靠抬高 z-index 绕过祖先裁切，也不将提示重挂到无归属的 body 容器。
 8. **当前能力与验收**：普通文本字体资产、搜索焦点与裁切边界的源码修复已接入；实际输入/下一条/上一条/替换/正则错误提示与小面板场景按 D17 待远程回归。静态检查及资产依赖证据归 testing/E2E，产品说明见 USAGE 文件管理器章节。
+
+Terminal background由useTerminalBackground持有文档生命周期：同页会话切换只暂停/恢复；KeepAlive deactivation暂停并清空srcdoc，返回后先确认iframe可见尺寸再加载当前主题，避免脱离DOM期间文档重建以零视口初始化。iframe节点可缓存不代表内部document跨detach保留。

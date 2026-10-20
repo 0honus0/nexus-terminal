@@ -4,10 +4,11 @@ import {
 } from '../../../../platform/archive/adapters/native/archive-commands.js';
 import { NativeArchiveFailure, type NativeArchiveOperationOutcome } from '../../../../platform/archive/archive-port.js';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
-import { RemoteFileFailure, type FileResource } from './file-types.js';
+import { FileCommandNotStarted, RemoteFileFailure, type FileResource } from './file-types.js';
 import {
 	ArchiveRejection,
 	type ArchiveFormat,
+	type FileArchiveOperation,
 	type FileArchiveCommandOutcome,
 	type FileArchiveCompression,
 	type FileArchiveExtraction,
@@ -21,8 +22,14 @@ export class FileArchiveModel {
 
 	constructor(resource: FileResource) {
 		this.commands = new NativeArchiveCommands({
-			executeLines: async (command, signal, timeoutMs, onLine) => {
-				const result = await resource.executeCommandLines(command, signal, timeoutMs, onLine);
+			executeLines: async (command, signal, timeoutMs, onLine, beforeWriteMarker) => {
+				const result = await resource.executeCommandLines(
+					command,
+					signal,
+					timeoutMs,
+					onLine,
+					beforeWriteMarker,
+				);
 				return result.status === 'completed'
 					? { status: 'completed' }
 					: { status: 'nonzero', exitCode: result.exitCode };
@@ -56,6 +63,29 @@ export class FileArchiveModel {
 						: 'operation_unknown',
 				{ cause },
 			);
+		}
+	}
+
+	async prepare(
+		format: ArchiveFormat,
+		operation: FileArchiveOperation,
+		remaining: () => number,
+		signal: AbortSignal,
+	): Promise<void> {
+		try {
+			await this.perform(() =>
+				this.commands.requireTool(
+					format === 'zip' ? (operation === 'compress' ? 'zip' : 'unzip') : 'tar',
+					remaining,
+					signal,
+				),
+			);
+		} catch (cause) {
+			// Only the read-only lookup was dispatched; a lost reply cannot leave an archive writer.
+			if (cause instanceof RemoteFileFailure && cause.code === 'operation_unknown') {
+				throw new FileCommandNotStarted({ cause });
+			}
+			throw cause;
 		}
 	}
 

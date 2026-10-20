@@ -36,7 +36,11 @@ test('registered archive progress supports hide, restore, and real cancel for co
 	await openFileManager(page, context);
 
 	try {
-		await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=4500`, { method: 'POST' });
+		// Cancelling after a native archive command is dispatched makes its
+		// remote effect unknown. Hold the real preflight instead: cancellation
+		// then has a confirmed non-mutating boundary, and the hidden progress
+		// row must leave the UI without ever installing an output ZIP.
+		await fetch(`${E2E_SSH.controlUrl}/archive/preflight-hold?enabled=1`, { method: 'POST' });
 		await slowStep('compress task can hide, restore, hide again, and cancel from the shared list', async () => {
 			await startZipCompression(page, 'archive-source.txt');
 
@@ -61,6 +65,7 @@ test('registered archive progress supports hide, restore, and real cancel for co
 			task = hiddenTask(reopenedModal, 'archive-source.zip');
 			await expect(task).toBeVisible();
 			await task.getByRole('button', { name: 'Cancel', exact: true }).click();
+			await fetch(`${E2E_SSH.controlUrl}/archive/preflight-hold?enabled=0`, { method: 'POST' });
 			// Cancelled tasks are filtered from the hidden source list and then
 			// retired by the transfer controller; they have no visible Remove
 			// button. Also verify the remote archive was not installed below.
@@ -84,7 +89,7 @@ test('registered archive progress supports hide, restore, and real cancel for co
 		});
 
 		await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
-		await fetch(`${E2E_SSH.controlUrl}/archive/exec-hold?enabled=1`, { method: 'POST' });
+		await fetch(`${E2E_SSH.controlUrl}/archive/preflight-hold?enabled=1`, { method: 'POST' });
 		await slowStep(
 			'decompress task registers a real cancel callback and does not extract after cancellation',
 			async () => {
@@ -107,7 +112,7 @@ test('registered archive progress supports hide, restore, and real cancel for co
 				// Hidden cancelled tasks are removed automatically; the functional
 				// outcome is confirmed by absence of extracted files after release.
 				await expect(task).toBeHidden({ timeout: 10_000 });
-				await fetch(`${E2E_SSH.controlUrl}/archive/exec-hold?enabled=0`, { method: 'POST' });
+				await fetch(`${E2E_SSH.controlUrl}/archive/preflight-hold?enabled=0`, { method: 'POST' });
 				await closeProgressDisplay(modal);
 				await reopenConnectedFileManager(page);
 
@@ -123,6 +128,7 @@ test('registered archive progress supports hide, restore, and real cancel for co
 			await expect(page.locator('.transfer-progress-window')).toHaveCount(0);
 		});
 	} finally {
+		await fetch(`${E2E_SSH.controlUrl}/archive/preflight-hold?enabled=0`, { method: 'POST' });
 		await fetch(`${E2E_SSH.controlUrl}/archive/exec-hold?enabled=0`, { method: 'POST' });
 		await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
 	}

@@ -13,7 +13,10 @@ const workspaceUiStateKey: InjectionKey<WorkspaceUiState> = Symbol('workspace-ui
 
 export const provideWorkspaceUiState = (): WorkspaceUiState => {
 	const scope = useAuthenticatedViewScope({
-		onRevoke: () => {
+		onRevoke: (reason) => {
+			// Deactivation revokes pending UI work, but the cached page still owns
+			// its layout and mounted terminal. Identity changes must clear both.
+			if (reason === 'view') return;
 			state.layout.resetState();
 			state.focus.resetState();
 		},

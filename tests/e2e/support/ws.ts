@@ -45,6 +45,11 @@ const repoRoot = path.resolve(__dirname, '../../..');
 const requireFromBackend = createRequire(path.join(repoRoot, 'packages', 'backend', 'package.json'));
 const WebSocket = requireFromBackend('ws') as any;
 
+// Raw Node WebSocket tests do not render terminal frames through xterm. Track
+// actual received PTY bytes from socket creation so suspension tests can ACK
+// the same flow-control evidence as the browser, without synthesizing bytes.
+const receivedTerminalBytes = new WeakMap<object, { bytes: number }>();
+
 export interface JsonWsMessage {
 	type?: string;
 	requestId?: string;
@@ -65,6 +70,18 @@ export async function openAuthenticatedWebSocket(
 		.join('; ');
 
 	const socket = new WebSocket(url, { headers: { Cookie: cookies, Origin: E2E_URLS.frontendOrigin } });
+	const consumed = { bytes: 0 };
+	receivedTerminalBytes.set(socket, consumed);
+	socket.on('message', (data: Buffer, isBinary: boolean) => {
+		if (!isBinary) return;
+		try {
+			const frame = decodeWorkspaceBinaryFrame(Buffer.from(data));
+			if (frame.kind === 'terminal') consumed.bytes += frame.data.byteLength;
+		} catch {
+			// Protocol-failure tests deliberately inject malformed frames; their
+			// own listeners remain responsible for validating those failures.
+		}
+	});
 	await new Promise<void>((resolve, reject) => {
 		const timeout = setTimeout(() => reject(new Error(`WebSocket open timeout: ${url}`)), 10_000);
 		socket.once('open', () => {
@@ -77,6 +94,50 @@ export async function openAuthenticatedWebSocket(
 		});
 	});
 	return socket;
+}
+
+/** ACK only PTY data actually received on this socket; no global auto-ACK. */
+export async function acknowledgeTerminalOutput(socket: E2eWebSocket): Promise<void> {
+	const counter = receivedTerminalBytes.get(socket);
+	if (!counter) throw new Error('Not a tracked E2E Workspace socket');
+	await requestWorkspace(socket, 'terminal.flow', { consumedBytes: counter.bytes });
+}
+
+/** A scoped raw terminal consumer; backpressure tests retain manual ACK control. */
+export async function consumeTerminalOutput(socket: E2eWebSocket, action: () => Promise<void>): Promise<void> {
+	let pending = false;
+	let running: Promise<void> | null = null;
+	const failures: unknown[] = [];
+
+	const consume = (_data: Buffer, isBinary: boolean) => {
+		if (!isBinary || failures.length) return;
+		pending = true;
+		if (running) return;
+		running = (async () => {
+			while (pending) {
+				pending = false;
+				await acknowledgeTerminalOutput(socket);
+			}
+		})()
+			.catch((error: unknown) => {
+				failures.push(error);
+			})
+			.finally(() => {
+				running = null;
+			});
+	};
+
+	socket.on('message', consume);
+	try {
+		await action();
+	} catch (error) {
+		failures.push(error);
+	} finally {
+		socket.off('message', consume);
+		await running;
+	}
+	if (failures.length === 1) throw failures[0];
+	if (failures.length) throw new AggregateError(failures, 'Terminal output consumption failed');
 }
 
 export function sendJson(socket: E2eWebSocket, message: JsonWsMessage): void {

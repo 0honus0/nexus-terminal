@@ -16,6 +16,7 @@ import {
 	ensureTestSshConnection,
 	resetTestSshFilesystem,
 	setTestSshOnline,
+	trustTestSshHostKey,
 } from '../../support/ssh';
 import { step } from '../../support/steps';
 
@@ -55,6 +56,7 @@ async function removeMultiSessionConnections(request: APIRequestContext): Promis
 }
 
 async function createMultiSessionConnections(request: APIRequestContext): Promise<number[]> {
+	await trustTestSshHostKey(request);
 	const ids: number[] = [];
 	for (const name of MULTI_SESSION_NAMES) {
 		const response = await request.post('/api/v1/targets/connections/import', {
@@ -89,6 +91,11 @@ async function createMultiSessionConnections(request: APIRequestContext): Promis
 }
 
 async function openConnectionFromWorkspacePicker(page: Page, connectionId: number): Promise<void> {
+	const response = await page.request.get('/api/v1/targets/connections');
+	expect(response.ok()).toBeTruthy();
+	const connection = readConnectionList(await response.json()).find((item) => item.id === connectionId);
+	expect(connection, `Connection ${connectionId} must be persisted before opening a second Workspace`).toBeTruthy();
+	if (!connection) throw new Error(`Connection ${connectionId} is missing`);
 	await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
 	const picker = page.getByRole('heading', { name: 'Connections & sessions', exact: true });
 	await expect(picker).toBeVisible();
@@ -96,7 +103,13 @@ async function openConnectionFromWorkspacePicker(page: Page, connectionId: numbe
 	await expect(row).toBeVisible();
 	await row.click();
 	await expect(picker).toBeHidden();
-	await expect(page.locator('.command-bar-command-input:visible')).toBeEnabled({ timeout: 20_000 });
+	// An existing Workspace already has an enabled command bar. That cannot
+	// confirm the newly requested session reached SSH ready; wait for the
+	// *requested* connection's selected tab and connected state instead.
+	const selected = page.locator('.terminal-tab-shell').getByRole('tab', { selected: true });
+	await expect(selected).toHaveAttribute('title', connection.name || connection.host, { timeout: 35_000 });
+	await expect(selected).toHaveAttribute('data-session-state', 'connected', { timeout: 35_000 });
+	await expect(page.locator('.command-bar-command-input:visible')).toBeEnabled();
 }
 
 async function xtermGeometry(terminal: Locator): Promise<{ width: string; height: string; rowCount: number }> {
@@ -432,6 +445,10 @@ for (const background of [false, true]) {
 }
 
 test('disconnected SSH retries periodically and any key reconnects immediately', async ({ page, context }) => {
+	// Two real reconnect cycles include the remote SSH connect timeout between
+	// the 2s and 4s backoff periods. Leave enough end-to-end time for both
+	// attempts under CI contention without changing the reconnect policy.
+	test.setTimeout(120_000);
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
 	const settingsResponse = await context.request.get('/api/v1/settings/preferences');
@@ -580,23 +597,32 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
 			await expect(terminal.locator('.xterm')).toHaveClass(/enable-mouse-events/);
 		});
 
-		await step('SSH outage triggers more than one automatic reconnect cycle', async () => {
-			await setTestSshOnline(false);
+		await step(
+			'SSH outage triggers more than one automatic reconnect cycle',
+			async () => {
+				await setTestSshOnline(false);
 
-			// First reconnect is scheduled after 2s and the next after 4s. The clean Workspace
-			// transport may reuse the same already-open /ws/workspace control socket after an
-			// SSH-level connect failure, so business reconnect attempts are counted by their
-			// workspace.connect requests rather than by forcing a new WebSocket per attempt.
-			await expect
-				.poll(() => workspaceConnectRequests, { timeout: 12_000 })
-				.toBeGreaterThanOrEqual(initialConnectRequestCount + 2);
-			await expect
-				.poll(() => frontendDebugLogs.some((entry) => entry.msg === 'Workspace reconnect scheduled'))
-				.toBeTruthy();
-			await expect
-				.poll(() => frontendDebugLogs.some((entry) => entry.msg === 'Workspace reconnect attempt failed'))
-				.toBeTruthy();
-		});
+				// First reconnect is scheduled after 2s and the next after 4s. A failed
+				// SSH dial may itself consume the configured ~20s transport deadline;
+				// two real attempts can therefore require more than 25s before their
+				// requests are observable. This bound covers both actual dials without
+				// changing backoff, omitting attempts, or weakening the expected count.
+				// The clean Workspace
+				// transport may reuse the same already-open /ws/workspace control socket after an
+				// SSH-level connect failure, so business reconnect attempts are counted by their
+				// workspace.connect requests rather than by forcing a new WebSocket per attempt.
+				await expect
+					.poll(() => workspaceConnectRequests, { timeout: 40_000 })
+					.toBeGreaterThanOrEqual(initialConnectRequestCount + 2);
+				await expect
+					.poll(() => frontendDebugLogs.some((entry) => entry.msg === 'Workspace reconnect scheduled'))
+					.toBeTruthy();
+				await expect
+					.poll(() => frontendDebugLogs.some((entry) => entry.msg === 'Workspace reconnect attempt failed'))
+					.toBeTruthy();
+			},
+			60_000,
+		);
 
 		await step('any terminal key interrupts backoff and reconnects immediately', async () => {
 			await setTestSshOnline(true);

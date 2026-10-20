@@ -35,6 +35,7 @@ const envPort = (name, fallback) => {
 };
 
 const SSH_PORT = envPort('NEXUS_E2E_SSH_PORT', 22222);
+const TRANSFER_TARGET_PORT = envPort('NEXUS_E2E_SSH_TRANSFER_TARGET_PORT', 22225);
 const CONTROL_PORT = envPort('NEXUS_E2E_SSH_CONTROL_PORT', 22223);
 const SMTP_PORT = envPort('NEXUS_E2E_SMTP_PORT', 22224);
 const USERNAME = 'e2e';
@@ -145,6 +146,16 @@ function normalizeRemotePath(remotePath = '.') {
 }
 
 function resolveRemotePath(remotePath = '.') {
+	// Native transfer clients create credentials in the remote OS /tmp via
+	// exec and then write them over SFTP. Both channels must address that same
+	// private directory; ordinary fixture files remain inside the virtual root.
+	if (
+		/^\/tmp\/nexus-transfer-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}(?:\/(?:key|known_hosts))?$/.test(
+			remotePath,
+		)
+	) {
+		return remotePath;
+	}
 	const relativePath = normalizeRemotePath(remotePath);
 	const resolved = path.resolve(rootDir, relativePath);
 	const rootWithSeparator = `${path.resolve(rootDir)}${path.sep}`;
@@ -590,8 +601,6 @@ function writeSqlitePreviewFixture(destination) {
 }
 
 async function resetRoot() {
-	dockerContainerPresent = true;
-	dockerContainerState = 'running';
 	await fsp.rm(archiveExecHoldPath, { force: true });
 	await fsp.rm(rootDir, { recursive: true, force: true });
 	await fsp.mkdir(path.join(rootDir, 'folder-seed'), { recursive: true });
@@ -646,14 +655,37 @@ async function resetRoot() {
 	await fsp.symlink('预览-测试.png', path.join(rootDir, 'image-link.png'));
 	await fsp.symlink('missing-target.png', path.join(rootDir, 'stale-image-link.png'));
 	await fsp.chmod(path.join(rootDir, 'seed.txt'), 0o644);
+	resetControls();
+}
+
+function resetControls() {
+	// Only reset policy and observations after the old transport has drained.
+	// Pending I/O counters remain owned by their actual READ/WRITE handlers.
+	dockerContainerPresent = true;
+	dockerContainerState = 'running';
 	statusSample = 0;
 	sftpWriteDelayMs = 0;
+	sftpWriteRequests = 0;
+	sftpWriteBytes = 0;
+	sftpPeakPendingWrites = 0;
 	sftpStatDelayMs = 0;
+	sftpStatDelayPrefix = '';
+	sftpDelayedStatCount = 0;
 	sftpLstatDenyPrefix = '';
 	sftpReadDirDelayMs = 0;
 	sftpDelayedDirectoryOpens = 0;
+	prepareOperationDelayMs = 0;
+	prepareStatRequests = 0;
+	prepareMkdirRequests = 0;
+	sftpSlowDirectory = '';
+	sftpSlowDirectoryDelayMs = 0;
 	sftpReadDelayMs = 0;
 	sftpDelayedReadCount = 0;
+	sftpReadBytesPerSecond = 0;
+	sftpReadNextDeliveryAt = 0;
+	sftpReadRequests = 0;
+	sftpReadResponseBytes = 0;
+	sftpReadPeakPending = 0;
 	sftpOpenDelayMs = 0;
 	sftpDelayedOpenCount = 0;
 	sftpReadHandlesOpened = 0;
@@ -661,6 +693,7 @@ async function resetRoot() {
 	archiveExecDelayMs = 0;
 	archiveCommandsStarted = 0;
 	archiveCommandsExited = 0;
+	openedSftpChannels = 0;
 }
 
 function openModeToFsFlags(flags) {
@@ -813,24 +846,16 @@ function attachSftp(session, accept) {
 			}
 			const fullPath = resolveRemotePath(remotePath);
 			const entries = await fsp.readdir(fullPath, { withFileTypes: true });
-			const names = [];
-			// Preserve the requested directory order while bounding metadata
-			// concurrency. A sequential lstat per entry was fixture-only latency
-			// unrelated to SFTP pagination or the product's large-list budget.
-			for (let start = 0; start < entries.length; start += 256) {
-				const batch = await Promise.all(
-					entries.slice(start, start + 256).map(async (entry) => {
-						const stats = await fsp.lstat(path.join(fullPath, entry.name));
-						return {
-							filename: entry.name,
-							longname: entry.name,
-							attrs: attrsFromStats(stats),
-						};
-					}),
-				);
-				names.push(...batch);
-			}
-			const handle = registry.add({ type: 'dir', entries: names, offset: 0 });
+			// OPENDIR opens the directory; it must not stat all 5,000 members
+			// before acknowledging the handle. Defer real lstat metadata to each
+			// bounded READDIR packet, preserving ordering, mode and file size.
+			const handle = registry.add({
+				type: 'dir',
+				directoryPath: fullPath,
+				entries,
+				offset: 0,
+				pending: Promise.resolve(),
+			});
 			sftp.handle(reqid, handle);
 		} catch (error) {
 			respondError(reqid, error);
@@ -843,17 +868,39 @@ function attachSftp(session, accept) {
 			sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid directory handle');
 			return;
 		}
-		if (state.offset >= state.entries.length) {
-			sftp.status(reqid, STATUS_CODE.EOF);
-			return;
-		}
-		// Real servers split directory listings across NAME packets. Sending the
-		// whole fixture in one packet can exceed the client's 256 KiB packet limit.
-		// Keep a NAME packet well below ssh2's 256 KiB frame bound while
-		// avoiding dozens of round trips for the 5,000-file profile fixture.
-		const entries = state.entries.slice(state.offset, state.offset + 256);
-		state.offset += entries.length;
-		sftp.name(reqid, entries);
+		// Pipelined READDIR requests must not race the shared offset or send
+		// out-of-order responses for one directory handle.
+		state.pending = state.pending
+			.then(async () => {
+				if (channelClosed || registry.get(handle) !== state) return;
+				if (state.offset >= state.entries.length) {
+					sftp.status(reqid, STATUS_CODE.EOF);
+					return;
+				}
+				// Keep NAME packets below ssh2's 256 KiB bound while avoiding 20
+				// sequential round trips for an ordinary 5k-entry directory. The
+				// conservative per-name allowance covers both UTF-8 name fields,
+				// attributes, and framing, including maximum-length filenames.
+				const candidates = [];
+				let packetBytes = 64;
+				for (const entry of state.entries.slice(state.offset, state.offset + 512)) {
+					const estimatedBytes = 96 + 2 * Buffer.byteLength(entry.name, 'utf8');
+					if (candidates.length > 0 && packetBytes + estimatedBytes > 160 * 1024) break;
+					packetBytes += estimatedBytes;
+					candidates.push(entry);
+				}
+				// Fetch actual metadata only for the names in this bounded packet.
+				const entries = await Promise.all(
+					candidates.map(async (entry) => {
+						const stats = await fsp.lstat(path.join(state.directoryPath, entry.name));
+						return { filename: entry.name, longname: entry.name, attrs: attrsFromStats(stats) };
+					}),
+				);
+				if (channelClosed || registry.get(handle) !== state) return;
+				state.offset += entries.length;
+				sftp.name(reqid, entries);
+			})
+			.catch((error) => respondError(reqid, error));
 	});
 
 	sftp.on('OPEN', async (reqid, remotePath, flags, attrs) => {
@@ -1182,10 +1229,12 @@ function runRemoteCommand(command, stream, session) {
 		);
 		return;
 	}
-	const dockerAction = command.match(/^docker\s+(start|stop|restart|pause|unpause|rm(?:\s+-f)?)\s+([a-f0-9]+)\s*$/);
+	const dockerAction = command.match(
+		/^docker\s+(start|stop|restart|pause|unpause|rm(?:\s+-f)?)\s+(?:'([a-f0-9]+)'|([a-f0-9]+))\s*$/,
+	);
 	if (dockerAction) {
 		const action = dockerAction[1];
-		const containerId = dockerAction[2];
+		const containerId = dockerAction[2] ?? dockerAction[3];
 		if (!dockerContainerPresent || containerId !== DOCKER_CONTAINER_ID) {
 			finishExec(stream, '', `Error: No such container: ${containerId}\n`, 1);
 			return;
@@ -1207,9 +1256,7 @@ function runRemoteCommand(command, stream, session) {
 		.replace(/\s+>\s*\/dev\/null\s+2>&1\s*$/, '')
 		.replace(/["']/g, '')
 		.trim();
-	const isArchivePreflightCommand =
-		/^(?:command -v|which)\s+(?:zip|tar|unzip)\s*$/.test(normalizedArchivePreflight) ||
-		(isArchiveCommand && command.includes('command -v '));
+	const isArchivePreflightCommand = /^(?:command -v|which)\s+(?:zip|tar|unzip)\s*$/.test(normalizedArchivePreflight);
 	const preflightHoldPrefix = isArchivePreflightCommand
 		? `while [ -f ${JSON.stringify(archivePreflightHoldPath)} ]; do sleep 0.05; done; `
 		: '';
@@ -1457,27 +1504,14 @@ const controlServer = http.createServer(async (req, res) => {
 			for (const resolve of sftpRealpathWaiters) resolve();
 			sftpRealpathWaiters.clear();
 			await stopSshServer();
-			sftpWriteDelayMs = 0;
-			sftpWriteRequests = 0;
-			sftpWriteBytes = 0;
-			sftpPeakPendingWrites = 0;
-			sftpStatDelayMs = 0;
-			sftpStatDelayPrefix = '';
-			sftpDelayedStatCount = 0;
-			sftpLstatDenyPrefix = '';
-			sftpReadDirDelayMs = 0;
-			sftpDelayedDirectoryOpens = 0;
-			sftpReadDelayMs = 0;
-			sftpDelayedReadCount = 0;
-			sftpOpenDelayMs = 0;
-			sftpDelayedOpenCount = 0;
-			sftpReadHandlesOpened = 0;
-			sftpReadHandlesClosed = 0;
-			archiveExecDelayMs = 0;
-			archiveCommandsStarted = 0;
-			archiveCommandsExited = 0;
-			activeSftpChannels.clear();
-			openedSftpChannels = 0;
+			// Closing the listener does not prove delayed READ/WRITE callbacks exited.
+			const deadline = performance.now() + 15_000;
+			while (sftpReadPending || sftpPendingWrites || activeSftpChannels.size) {
+				if (performance.now() >= deadline) {
+					throw new Error('Previous SFTP operations have not drained');
+				}
+				await new Promise((resolve) => setTimeout(resolve, 10));
+			}
 			await fsp.rm(archiveExecHoldPath, { force: true });
 			await fsp.rm(archivePreflightHoldPath, { force: true });
 			await resetRoot();
@@ -1854,14 +1888,40 @@ controlServer.on('connect', (req, clientSocket, head) => {
 	clientSocket.once('error', () => upstream.destroy());
 });
 
+// A distinct TCP endpoint exercises the transfer admission policy without
+// treating two connection IDs for the source endpoint as different servers.
+const transferSockets = new Set();
+const transferTargetServer = net.createServer((socket) => {
+	const upstream = net.connect(SSH_PORT, SSH_HOST);
+	transferSockets.add(socket);
+	transferSockets.add(upstream);
+	socket.pipe(upstream).pipe(socket);
+	socket.once('error', () => upstream.destroy());
+	upstream.once('error', () => socket.destroy());
+	socket.once('close', () => {
+		transferSockets.delete(socket);
+		upstream.destroy();
+	});
+	upstream.once('close', () => {
+		transferSockets.delete(upstream);
+		socket.destroy();
+	});
+});
+
 await startSshServer();
+await new Promise((resolve, reject) => {
+	transferTargetServer.once('error', reject);
+	transferTargetServer.listen(TRANSFER_TARGET_PORT, SSH_HOST, resolve);
+});
 await new Promise((resolve) => controlServer.listen(CONTROL_PORT, SSH_HOST, resolve));
 await new Promise((resolve) => smtpServer.listen(SMTP_PORT, SSH_HOST, resolve));
 console.log(
-	`[E2E SSH] listening on ${SSH_HOST}:${SSH_PORT}, control ${CONTROL_PORT}, smtp ${SMTP_PORT}, root ${rootDir}`,
+	`[E2E SSH] listening on ${SSH_HOST}:${SSH_PORT}, transfer ${TRANSFER_TARGET_PORT}, control ${CONTROL_PORT}, smtp ${SMTP_PORT}, root ${rootDir}`,
 );
 
 const shutdown = () => {
+	for (const socket of transferSockets) socket.destroy();
+	transferTargetServer.close();
 	controlServer.close();
 	smtpServer.close();
 	sshServer.close();

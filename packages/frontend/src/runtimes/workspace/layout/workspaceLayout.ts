@@ -3,7 +3,7 @@ import { WORKSPACE_PANES, type WorkspacePane } from '@nexus-terminal/shared/pref
 import { logger } from '@/client/logging/logger';
 import { createLatestValueSaver } from '@/foundation/async';
 import type { WorkspaceSettingsRepository } from '../ports/workspace-settings-repository';
-import type { WorkspaceLayoutNodeState, WorkspaceSidebar, WorkspaceLayoutSnapshot } from '../model/presentation-types';
+import type { WorkspaceLayoutNodeState, WorkspaceSidebar } from '../model/presentation-types';
 
 export const WORKSPACE_LAYOUT_MIN_SIZE = 5;
 
@@ -196,13 +196,13 @@ export const createWorkspaceLayoutController = (
 		return changed ? { ...node, children } : node;
 	};
 
-	const resizeSaver = createLatestValueSaver<{ snapshot: WorkspaceLayoutSnapshot; permission: AbortSignal }>({
+	const resizeSaver = createLatestValueSaver<{ layout: WorkspaceLayoutNodeState; permission: AbortSignal }>({
 		delayMs: 1000,
 
-		async save({ snapshot, permission }) {
+		async save({ layout, permission }) {
 			if (permission.aborted) return;
 			const result = await settingsRepository.saveResizedLayout(
-				snapshot,
+				layout,
 				AbortSignal.any([permission, scope.signal]),
 			);
 			if (!scope.signal.aborted && !permission.aborted) {
@@ -296,14 +296,7 @@ export const createWorkspaceLayoutController = (
 			loaded.value = true;
 			resizeSaver.schedule({
 				permission: capturePermission(),
-				snapshot: {
-					version: version.value,
-					layout: cloneWorkspaceLayout(nextTree),
-					sidebar: {
-						left: sidebars.value.left.map((pane) => pane),
-						right: sidebars.value.right.map((pane) => pane),
-					},
-				},
+				layout: cloneWorkspaceLayout(nextTree),
 			});
 		},
 

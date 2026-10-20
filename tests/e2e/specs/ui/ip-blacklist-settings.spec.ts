@@ -150,7 +150,14 @@ test('IP blacklist UI saves policy, activates it after restart, and removes a bl
 			await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
 			const result = await removed;
 			expect(result.ok()).toBe(true);
-			readAccessIpBlacklistRemove(await result.json());
+			// The Settings panel reloads after removal, which can retire the
+			// browser-owned DELETE body. Confirm the original 2xx receipt and
+			// independently verify the ban is absent in the persisted list.
+			const persisted = await context.request.get('/api/v1/settings/ip-blacklist');
+			expect(persisted.ok()).toBe(true);
+			expect(
+				readAccessIpBlacklist(await persisted.json()).entries.some((entry) => entry.ip === TEST_BLOCKED_IP),
+			).toBe(false);
 			await expect(blacklist).toContainText('No IP addresses are currently in the blacklist.');
 		});
 		await page.reload();

@@ -8,6 +8,11 @@ import {
 	readAgentWorkspaceRequest,
 	readAgentWorkspaceResponse,
 } from '../../../../packages/shared/src/agent/scope/workspace-http-codec';
+import type {
+	AgentWorkspaceInput,
+	AgentWorkspaceRequest,
+	AgentWorkspaceResult,
+} from '../../../../packages/shared/src/agent/scope/workspace-http';
 import { AGENT_THREAD_ENTRY_MAX_PAGE, AGENT_THREAD_MAX_PAGE } from '../../../../packages/shared/src/agent/scope/values';
 import type { AgentThreadEntry, AgentThreadEntryCursor } from '../../../../packages/shared/src/agent/scope/model';
 import type { AgentAppView } from '../../../../packages/shared/src/agent/scope/model';
@@ -118,6 +123,88 @@ export async function openNativeTask(task: NativeTask) {
 	return hub;
 }
 
+type NativeCommandReceipt = { command: AgentWorkspaceRequest; result: AgentWorkspaceResult };
+
+type NativeCommandCapture = {
+	appId: string;
+	method: AgentWorkspaceInput['method'];
+	receipt?: NativeCommandReceipt;
+	claimed: boolean;
+};
+
+type NativeCommandRouter = { active?: NativeCommandCapture; ready: Promise<void> };
+
+const nativeCommandRouters = new WeakMap<Page, NativeCommandRouter>();
+
+async function getNativeCommandRouter(page: Page): Promise<NativeCommandRouter> {
+	const existing = nativeCommandRouters.get(page);
+	if (existing) {
+		await existing.ready;
+		return existing;
+	}
+	// Keep one handler for the Page lifetime. Changing interception patterns
+	// while a write or its follow-up reads are paused can resume them early.
+	const router: NativeCommandRouter = { ready: Promise.resolve() };
+	nativeCommandRouters.set(page, router);
+	router.ready = page
+		.route('**/agent/apps/*/workspace', async (route) => {
+			const request = route.request();
+			const active = router.active;
+			if (
+				!active ||
+				active.claimed ||
+				request.method() !== 'POST' ||
+				!request.url().endsWith(`/agent/apps/${active.appId}/workspace`)
+			) {
+				await route.fallback();
+				return;
+			}
+			const command = readAgentWorkspaceRequest(request.postDataJSON());
+			if (command.request.method !== active.method) {
+				await route.fallback();
+				return;
+			}
+			active.claimed = true;
+			const upstream = await route.fetch({ maxRetries: 0 });
+			expect(upstream.status()).toBe(200);
+			const response = readAgentWorkspaceResponse(await upstream.json(), active.appId, command);
+			active.receipt = { command, result: response.result };
+			await route.fulfill({ response: upstream });
+		})
+		.then(() => undefined);
+	await router.ready;
+	return router;
+}
+
+/** Capture the original write receipt before the UI can navigate; never replay it. */
+export async function captureNativeCommand(
+	task: NativeTask,
+	method: AgentWorkspaceInput['method'],
+	action: () => Promise<void>,
+): Promise<NativeCommandReceipt> {
+	const router = await getNativeCommandRouter(task.page);
+	if (router.active) throw new Error('An Agent command capture is already active on this Page');
+	const active: NativeCommandCapture = { appId: task.app.id, method, claimed: false };
+	router.active = active;
+	const waiting = task.page.waitForResponse((response) => {
+		if (
+			!response.url().endsWith(`/agent/apps/${task.app.id}/workspace`) ||
+			response.request().method() !== 'POST'
+		) {
+			return false;
+		}
+		return readAgentWorkspaceRequest(response.request().postDataJSON()).request.method === method;
+	});
+	try {
+		const [, response] = await Promise.all([action(), waiting]);
+		expect(response.status()).toBe(200);
+		if (!active.receipt) throw new Error('Original Agent response was not captured');
+		return active.receipt;
+	} finally {
+		router.active = undefined;
+	}
+}
+
 export async function startNativeTask(
 	task: NativeTask,
 	prompt: string,
@@ -133,50 +220,16 @@ export async function startNativeTask(
 	}
 	await hub.getByRole('textbox', { name: 'Task input', exact: true }).fill(prompt);
 	const method = followUp ? 'agent.runs.appendInput' : 'agent.runs.create';
-	const workspaceUrl = `**/agent/apps/${task.app.id}/workspace`;
-	let captured: unknown;
-	let didCapture = false;
-	// The Agent UI can navigate away on an accepted Run while the browser is
-	// still handing the POST response to DevTools. Capture the *same* request's
-	// real response before fulfilling it; never replay an Agent write to read
-	// its receipt after navigation.
-	await task.page.route(workspaceUrl, async (route) => {
-		const request = route.request();
-		if (request.method() !== 'POST' || request.postDataJSON().request?.method !== method) {
-			await route.continue();
-			return;
-		}
-		const upstream = await route.fetch();
-		captured = await upstream.json();
-		didCapture = true;
-		await route.fulfill({ response: upstream });
-	});
-	const waiting = task.page.waitForResponse((response) => {
-		if (
-			!response.url().endsWith(`/agent/apps/${task.app.id}/workspace`) ||
-			response.request().method() !== 'POST'
-		) {
-			return false;
-		}
-		return response.request().postDataJSON().request?.method === method;
-	});
-	try {
-		await hub
+	const { result } = await captureNativeCommand(task, method, () =>
+		hub
 			.getByRole('button', { name: followUp ? 'Follow up this terminal Run' : 'Create a new Run', exact: true })
-			.click();
-		const response = await waiting;
-		expect(response.status()).toBe(200);
-		expect(didCapture, 'Browser forwarded the original Agent response').toBe(true);
-		const command = readAgentWorkspaceRequest(response.request().postDataJSON());
-		const result = readAgentWorkspaceResponse(captured, task.app.id, command).result;
-		if (result.method !== 'agent.runs.create' && result.method !== 'agent.runs.appendInput') {
-			throw new Error('Unexpected Run receipt');
-		}
-		expect(result.value.run.threadId).toBe(task.thread.id);
-		return result.value.run;
-	} finally {
-		await task.page.unroute(workspaceUrl);
+			.click(),
+	);
+	if (result.method !== 'agent.runs.create' && result.method !== 'agent.runs.appendInput') {
+		throw new Error('Unexpected Run receipt');
 	}
+	expect(result.value.run.threadId).toBe(task.thread.id);
+	return result.value.run;
 }
 
 export async function readNativeRun(task: NativeTask, runId: string): Promise<AgentRunView> {

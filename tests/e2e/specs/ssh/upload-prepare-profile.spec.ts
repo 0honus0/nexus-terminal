@@ -1,10 +1,12 @@
+import { readWorkspaceUploadEvent } from '../../../../packages/shared/src/remote/transfers/workspace-codec';
+import { readMutationList } from '../../../../packages/shared/src/remote/mutations/http-codec';
 import { readTestConnectionImportId } from '../../support/targets';
 import { E2E_URLS } from '../../support/test-env';
-import { mkdir, stat, writeFile, unlink } from 'node:fs/promises';
+import { mkdir, readdir, stat, writeFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
-import { E2E_SSH, ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
+import { E2E_SSH, ensureTestSshConnection, resetTestSshFilesystem, trustTestSshHostKey } from '../../support/ssh';
 import {
 	closeWebSocket,
 	openWorkspaceSession,
@@ -77,7 +79,9 @@ test('profile upload directory preparation and verify every requested directory'
 test('unclassified preparation failure retains quarantine after the remote error is removed', async ({ request }) => {
 	await loginAsInitialAdmin(request);
 	await resetTestSshFilesystem();
-	// Dedicated fixture connection prevents intentional quarantine affecting other tests.
+	// The isolated baseline owns this deliberate persistent fence; a second
+	// Workspace on the same host must not bypass it.
+	await trustTestSshHostKey(request);
 	const connection = await request.post('/api/v1/targets/connections/import', {
 		headers: { Origin: E2E_URLS.frontendOrigin },
 		data: {
@@ -104,28 +108,45 @@ test('unclassified preparation failure retains quarantine after the remote error
 		},
 	});
 	expect(connection.status()).toBe(200);
-	const workspace = await openWorkspaceSession(request, readTestConnectionImportId(await connection.json()));
+	const connectionId = readTestConnectionImportId(await connection.json());
+	const workspace = await openWorkspaceSession(request, connectionId);
 	const control = `${E2E_SSH.controlUrl}/sftp/lstat-deny-prefix`;
+	const localRoot = path.resolve('.tmp/ssh-root/prepare-profile-unknown');
+	let retryWorkspace: Awaited<ReturnType<typeof openWorkspaceSession>> | undefined;
 	try {
 		await waitForFilesystemReady(workspace.socket);
-		expect((await fetch(`${control}?path=%2Fprepare-profile-unknown`, { method: 'POST' })).ok).toBe(true);
+		await mkdir(localRoot, { recursive: true });
+		expect((await fetch(`${control}?path=%2Fprepare-profile-unknown%2Fdenied`, { method: 'POST' })).ok).toBe(true);
 		await expect(
 			requestWorkspace(workspace.socket, 'upload.prepare', {
 				prepareId: crypto.randomUUID(),
 				basePath: '/prepare-profile-unknown',
-				directories: ['child'],
+				directories: ['aaa-created', 'denied'],
 			}),
-		).rejects.toThrow();
+		).rejects.toMatchObject({ code: 'operation_unknown' });
+		expect((await stat(path.join(localRoot, 'aaa-created'))).isDirectory()).toBe(true);
 		expect((await fetch(`${control}?path=`, { method: 'POST' })).ok).toBe(true);
+		retryWorkspace = await openWorkspaceSession(request, connectionId);
+		await waitForFilesystemReady(retryWorkspace.socket);
+		const query = { after: null, limit: 50 };
+		const claims = await request.get('/api/v1/remote/mutations?limit=50');
+		expect(claims.status()).toBe(200);
+		expect(
+			readMutationList(await claims.json(), query).items.some(
+				(claim) =>
+					claim.state === 'blocked' && claim.targets.some((target) => target.targetId === connectionId),
+			),
+		).toBe(true);
 		await expect(
-			requestWorkspace(workspace.socket, 'upload.prepare', {
+			requestWorkspace(retryWorkspace.socket, 'upload.prepare', {
 				prepareId: crypto.randomUUID(),
 				basePath: '/prepare-profile-unknown',
 				directories: ['child'],
 			}),
-		).rejects.toThrow('RESOURCE_QUARANTINED');
+		).rejects.toMatchObject({ code: 'conflict' });
 	} finally {
 		expect((await fetch(`${control}?path=`, { method: 'POST' })).ok).toBe(true);
+		if (retryWorkspace) await closeWebSocket(retryWorkspace.socket);
 		await closeWebSocket(workspace.socket);
 	}
 });
@@ -147,17 +168,16 @@ test('implicit preparation parents stay outside destination allowlist and failed
 			requestWorkspace(workspace.socket, 'upload.prepare', {
 				prepareId,
 				basePath,
-				directories: ['aaa-created', 'parent/child'],
+				directories: ['parent/child'],
 			}),
 		).rejects.toThrow();
-		// A sibling worker may already have created a directory: its acknowledged
-		// outcome must drain before the known conflict is released, not be rolled back.
-		expect((await stat(path.join(localRoot, 'aaa-created'))).isDirectory()).toBe(true);
+		// This conflict precedes every mkdir. Partial mutations are separately
+		// fenced above and cannot use this known non-mutating retry path.
 		await unlink(path.join(localRoot, 'parent'));
 		await requestWorkspace(workspace.socket, 'upload.prepare', {
 			prepareId,
 			basePath,
-			directories: ['aaa-created', 'parent/child'],
+			directories: ['parent/child'],
 		});
 		expect((await stat(path.join(localRoot, 'parent/child'))).isDirectory()).toBe(true);
 		for (const destinationPath of [
@@ -180,7 +200,10 @@ test('implicit preparation parents stay outside destination allowlist and failed
 				size: 1,
 				conflictPolicy: 'overwrite',
 			});
-			expect((await failed).payload.message).toContain('outside prepared directories');
+			expect(readWorkspaceUploadEvent((await failed).payload)).toMatchObject({
+				type: 'failed',
+				message: 'conflict',
+			});
 		}
 		const uploadId = crypto.randomUUID();
 		const ready = waitForJson(
@@ -207,7 +230,7 @@ test('implicit preparation parents stay outside destination allowlist and failed
 		);
 		await requestWorkspace(workspace.socket, 'upload.cancel', { uploadId });
 		await cancelled;
-		await expect(stat(path.join(localRoot, 'parent/child', `.nexus-upload-${uploadId}.part`))).rejects.toThrow();
+		expect(await readdir(path.join(localRoot, 'parent/child'))).toEqual([]);
 	} finally {
 		await closeWebSocket(workspace.socket);
 	}

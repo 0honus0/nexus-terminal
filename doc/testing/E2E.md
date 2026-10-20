@@ -22,6 +22,12 @@ Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end
 - 失败清单中的 Agent、HTTP、UI、Workspace/SSH 与移动端消费者已按当前 Shared 迁移或核对；精确修复、静态结果和外部待验分别见本文第四轮记录与实施方案。D18 下整批复审和门禁完成后统一交付，不以编译通过宣称远程验收完成。
 - D17：当前仅源码、类型/语法、构建与格式检查，不执行Playwright、浏览器或本地行为专项。迁移完成后再按授权运行远程Actions；历史PASS不代表本轮用例已通过。
 
+### 用例顺序与夹具隔离
+
+按 E-10.5，统一自动 fixture 对每个用例和重试依次重建 Backend、SSH 与外部夹具基线。只有原 App 成功关闭，才允许重置部署状态、模型响应计数、插件目录开关和浏览器故障屏障；未关闭的浏览器上下文或挂起响应明确拒绝重置。SSH 初始化集中恢复延迟、限速、准备操作和观察计数，旧 READ/WRITE 与通道先有界排空，在途计数由实际处理器归还。各独立外部重置全部等待并汇总失败，不重放丢失回执的重置。
+
+rebalance 只改变 spec 分配，不承担状态清理。刻意产生未知副作用的三个 Agent 场景继续由 balanced-shards 启动独立 Playwright/服务生命周期，与所在 shard 无关；不通过调换文件名、固定 shard 或强制清理绕过围栏。本约定仍使用单 worker，共享夹具不支持同一运行中的并发用例。
+
 ### B10 重构后端执行入口（本机范围收口）
 
 第三十二批最终统一66文件584/584、0失败/取消/跳过，725536.636675ms、exit0；独立真实五分钟自然到期1/1（三业务分支）、总耗时301570ms通过。冻结1507项、720产品摘要、Backend-next/根check、全仓格式及资源核验通过，日志/tmp/nexus-b10-batch32-unified-final.log、/tmp/nexus-b10-batch32-natural-final.log与/tmp/nexus-b10-batch32-final-verification.log。[本批证据](后端重构待实机验证.md#b10-第三十二批-认证交付自然到期与资源期限2026-10-17)。当前本机必验项收口，外部依赖按D16继续待验；后续F1源码有独立检查，不复用此冻结PASS。历史各批“待验”为当时快照，以本节当前结果和精确证据为准。
@@ -184,7 +190,7 @@ Foreground liveness tests wait for successful probe responses to finish browser-
 
 Mobile automatic-input investigation uses a real remote read loop to consume DSR replies without contaminating shell command editing. It verifies connected status replies, captures actual query output and delivers it on the replacement WebSocket while workspace resume is held, checks disabled input and absence of replies/rejection logs, then verifies the separately observed server-output replay, its new protocol reply, a fresh query and loop exit after recovery. A reply to a replayed server query is not cached user input. This covers automatic status replies in that controlled recovery window, not physical-device IME composition or every unsolicited-input error source.
 
-CI shards enable `DEBUG=pw:webserver` and retain combined output in `.tmp/shard-server.log` with failure diagnostics. This includes managed-service output needed to investigate backend exits before cascading ECONNRESET/ECONNREFUSED failures. The shell pipeline uses pipefail so collecting logs cannot hide a failing test exit status.
+CI shards leave `pw:webserver` debug logging disabled; service readiness polling still runs. Combined test output remains in `.tmp/shard-server.log` with failure diagnostics. The shell pipeline uses pipefail so collecting logs cannot hide a failing test exit status.
 
 The canonical GitHub workflow is `.github/workflows/e2e.yml`. It runs standard lint/type checks, formatting and production builds, eight duration-balanced Playwright shards on isolated GitHub-hosted runners with the latest Node.js Current and the repository-pinned Playwright version, and production-style Docker smoke tests.
 
@@ -244,6 +250,8 @@ node tests/backend/remote/backend-next-frontend.integration.mjs
 The main E2E projects do not depend on `auth` to create shared state. Normal specs start from the committed seeded database, while the first-run setup regression explicitly requests an empty database. This keeps project and spec scheduling independent from first-run setup order.
 
 The SSH project starts a real `ssh2.Server` on `127.0.0.1:22222`. Its SFTP filesystem is isolated under `tests/e2e/.tmp/ssh-root`, so GitHub Actions does not depend on any external SSH host.
+
+The controlled transfer target forwards `127.0.0.1:22225` to that SSH server; override it with `NEXUS_E2E_SSH_TRANSFER_TARGET_PORT`. It provides a distinct endpoint with the same fixture key and filesystem. Native transfer credentials alone use their real private `/tmp/nexus-transfer-<UUID>` directory so exec and SFTP address the same files.
 
 Local cross-server transfer scenarios require `ssh`, `scp`, `rsync` and `sshpass` on the host PATH, matching the E2E runner image. Missing tools must be supplied before running these scenarios, not worked around by weakening transfer assertions.
 
@@ -1657,3 +1665,253 @@ dev / `8fa1713c` 未提交工作区，沿用本页 Node/pnpm 环境。状态面�
 源码审核覆盖等待/错误/正常三个分支、窄栏换行、固定尺寸 spinner 不拉伸、比例样式和既有状态切换。USAGE 状态监控章节已同步。按 D17 不新增/运行本地行为测试或浏览器测试，未提交/推送；真实宽窄面板、比例上下限及小高度视觉效果待远程验收。
 
 静态结果均退出 0：Frontend build `/tmp/nexus-status-loading-build.log`、根 check `/tmp/nexus-status-loading-check.log`、全仓格式 `/tmp/nexus-status-loading-format.log`；`git diff --check` 通过。文档回填后再执行本轮专项 Prettier，日志 `/tmp/nexus-status-loading-focused-format.log`。静态结果不作为视觉验收证据。
+
+## 远程第十九轮：第4组取消清理竞态（2026-10-20）
+
+基线 `7d866e21`，Actions [39354280150](https://github.com/0honus0/nexus-terminal/actions/runs/39354280150)。第4组236秒、22项失败；首个直接失败是 `upload-protocol` 在途WRITE取消返回operation_unknown，随后reset出现500/503。重置错误cause指向stage.discard期间SFTP abortLease；其余21项的基线失败不等于各自功能已经执行失败。第8组140秒，按本轮人工指示先修耗时较长的第4组。
+
+调用链：finishUpload设置terminal并等待WRITE队列；队列中的append因此拒绝，upload-stream关闭字节WS，attachment.abort再调用controller.abort，中断了正在等待的stage清理。补修RunningUpload.discarding，首次取消/断流登记该状态；重复取消共享settlement、保留首次结果分类，字节WS关闭不再次取消清理。已进入提交、权限撤销、总任务超时及真实清理失败仍保留原中止/unknown规则。
+
+两轮源码复核分别覆盖取消→队列拒绝→WS关闭→discard，以及重复cancel/abort、首次断流、最终块接纳后取消与实际释放。顺带修正原测试使用uploadId猜测随机stage路径的无效检查：严格解码根目录列表，确认不存在任何上传.part暂存文件；待open取消场景复用同一检查。既有远程测试保留，未在本机执行或收集测试。
+
+当前静态：Node v22.23.1、pnpm11.26.0；Backend check/build、根check、完整format:all:check及git diff --check均退出0；最后文档追加后再次执行六个变更文件Prettier检查及diff检查通过。USAGE和Backend架构同步。补修行为尚未远程运行，第4组不标PASS；全组完成率仍以相同SHA的下一轮实际结果为准。
+
+## 远程第十九轮：第7组多会话夹具准入（2026-10-20）
+
+原Actions39354280150，第7组890秒后超时。7项reconnect-ui多会话用例均在首个SSH标签创建后消失，继而35秒connected等待失败；诊断再等待缺失标签15秒，导致反复55秒超时并中断后续upload-prepare-profile。artifact12235231345的hidden-desktop首次trace明确记录WorkspaceRequestFailure: host_key_untrusted。每例隔离基线重置，createMultiSessionConnections仅导入三个连接，没有调用ensureTestSshConnection所含的信任步骤；不能依赖前例的Host Key。
+
+补修该入口使用既有trustTestSshHostKey，真实读取fixture公钥并通过Shared codec确认，再创建三连接；不自动信任产品侧未知主机。通用support诊断以evaluateAll读取现存标签快照，缺失立即标missing，原cause保留；35秒连通性判据不放宽。两轮源码复核覆盖全部7项调用点、初次失败测试的独立入口及目录准备测试；USAGE产品说明不变，核对既有Host Key约束仍成立。当前修复未运行本机行为测试；远程多会话完整执行及目录准备性能仍待验。
+
+第4组修复ce06c07f已推dev，对应Actions39355923799；本条第7组补修在其等待期间完成，按照2026-10-20更新D18逐组迭代，不能把该run当作已包含第7组补修的证据。
+
+第7组补修静态收口：Node v22.23.1/pnpm11.26.0，根check、完整format:all:check及git diff --check通过；最后文档追加后重查格式。生产代码未改，不重复构建；实际SSH/页面行为只交给推送后的远程Actions。
+
+## 远程第十九轮：第3组大目录发送预算安装（2026-10-20）
+
+原Actions39354280150，第3组唯一直接失败为file-list-profile的5000项导航，1000项三次正常，5000项收到控制WS closeCode1011后仍展示旧根目录；artifact12234817099的trace控制台可定位。Shared和Workspace route已定义8MiB列表响应及发送缓存，但bootstrap/module-manifest admitWebSocket只投影maxTextMessageBytes/maxBinaryMessageBytes，丢失maxBufferedTextBytes；实际channel按默认1MiB拒绝发送完整列表。该链不是夹具NAME帧或30秒断言不足，不扩大断言时间。
+
+修补Bootstrap显式投影既有发送预算，Platform HTTP bindings安装时同步校验该容量为安全整数且不超过32MiB技术硬上限。入站预算、其他路由默认1MiB、Shared8MiB及业务项数均不变；USAGE目录列表章节同步。两轮源码复核覆盖声明→admit包装→bindings校验→http-server装配→channel发送及拒绝路径。既有大目录/排序/虚拟行回归留远程，不运行本机测试；静态结果另记。
+
+第3组补修静态收口：Node v22.23.1/pnpm11.26.0，Backend check/build、根check、完整format:all:check及diff检查退出0；最终追加证据和Backend架构后再检查变更文件格式。无Shared或前端契约改动；已复核默认小预算、明确8MiB、非法预算拒绝及32MiB硬上限分支，行为仍待远程。
+
+## 远程第十九轮：第8组目录复制子项（2026-10-20）
+
+cross-session-transfer前两项已通过，第三项刻意禁止/folder-seed/子项LSTAT以验证READDIR metadata复用；copyOne此前扫描后仍逐项重新stat，正常文件复制返回operation_unknown。Service递归现接收已解码的entry.info；根节点仍stat，字节源按原size精确校验，目标mode/mtime与内容大小仍检查，move删除源前与逐项删除时仍重新读取源事实。该调整不把READDIR观察说成原子快照，不删除未知或清理失败分支。
+
+两轮源码复核覆盖普通/空文件、目录递归、链接、最大深度/条目、move源复查与目标确认。产品能力和协议不变，核对USAGE复制/未知结果说明仍成立；静态后留下一轮远程复验，未执行本机行为测试。本条仅完成第8组目录复制子项，下载取消与并发上传仍待修复，不标整组PASS。
+
+目录复制子项静态收口：Backend check/build、根check、完整format:all:check、git diff --check均退出0；两次源码复核完成。当前远程39356651981对应48faea89，不含此项，不用该run证明目录复制修复通过。
+
+## 远程第十九轮：第1组终端缓存子项（2026-10-20）
+
+原39354280150和最新39356651981均在workspace-layout-restore的终端DOM身份断言失败。WorkspaceUiState对view撤销也resetState，将layout.loaded置false并卸载WorkspaceSessionSurface。现只在session/disposed清空，页面失活仍由view scope撤销原请求/未派发保存；保留已加载布局/焦点与原终端。原permission/revision晚响应保护、身份清理和会话关闭owner不变，不放宽DOM/xterm、草稿、后台输出、geometry及额外读取断言。
+
+两轮源码审核覆盖scope失活/激活、初次加载未完成、缓存返回、登出/换用户、组件卸载和旧异步结果。Frontend vue-tsc/build、根check、完整format:all:check退出0，最终文档格式与diff另检查。USAGE和Frontend架构同步；行为等待含此变更的远程SHA。
+
+39356651981 / 48faea89最新已结束子组：第3组、第4组success；第1组failure，仅workspace-layout-restore失败，36项通过，Agent取消本轮未复现。其余组仍运行中，不能把目录复制/缓存的本地静态结果当作该run行为证据。
+
+## 远程第十九轮：第2组原生插件写回执（2026-10-20）
+
+原39354280150的installed Nexus Agent plugin两次分别在批准/创建线程的response.json失败，DevTools提示响应正文已不可读取。复用原Run夹具的“读取原响应后再交给浏览器”方案，提取captureNativeCommand供Run创建/追加、线程创建/重命名及批准共用。仅转发一次原请求，maxRetries=0，不补发副作用、不伪造回执；按Shared严格解码原请求与响应并保留200、method、版本、批准hash和真实执行断言。路由卸载仅移除本次handler，其他监听保留。
+
+两轮源码复核覆盖三个迁移入口及原Run创建/追加消费者。USAGE产品流程不变，核对现有原生会话、批准及版本冲突说明仍适用；本机未运行行为测试，待含此变更的远程版本验证。第2组其他Dashboard/归档并发/Docker/布局问题仍分别跟进，不标整组完成。
+
+插件回执子项静态：根check、完整format:all:check退出0；最终变更文件格式与diff检查通过。无产品/Shared源码变更，不重复应用构建；行为未在本机执行。
+
+## 远程第十九轮：第6/8组上传取消流竞态（2026-10-20）
+
+upload-adapters在用户已请求cancel时，binary close仍立即fail并删除任务、触发额外abort，随后的控制cancelled事件因任务不存在被丢弃。这解释了隐藏上传/移动端进度显示unknown、不自动清除及重复abort的路径。新增failStream仅在cancelling期间将流失败留原控制链结算；正常运行断流仍unknown，cancel拒绝/控制失败、服务端failed与总期限仍失败，不提前发布取消成功或释放任务。
+
+两轮源码审核覆盖取消前断流、取消中close/error/发送失败、取消回执拒绝、服务端cancelled/failed/先completed、旧流晚拒绝和控制连接断开。Frontend build、根check、完整format:all:check退出0；最终文档格式与diff再查。USAGE/Frontend架构同步；行为只由含此变更的远程版本确认，上传并发和归档并发围栏未修改。
+
+39356651981 / 48faea89完整结果：第3/4/5组success，第1/2/6/7/8组failure，检查/构建与Docker smoke成功。第7组75项通过，原7项多会话均已通过；剩3项集中upload-prepare-profile（全量性能120秒期限、独立连接缺Host Key、已知目录冲突后的恢复）。第8组51项通过、4项失败，目录复制/并发上传/隐藏取消/移动端取消；文件下载本轮通过，不能据此宣布历史偶发彻底解决。第1组36项通过，仅终端缓存失败。最新已推送cb3e7a22 / Actions39357785902包含目录复制和终端缓存；本条客户端取消及插件回执补修尚未包含。
+
+## 远程第十九轮：第2组Dashboard/Docker/布局夹具（2026-10-20）
+
+39356651981重复出现最近连接时间不变、Docker Stop不可用、旧布局ID定位失败。Dashboard用例阻塞的是尚未启动runtime的详情读取，离开页后正确撤销旧query；现把门闩放在已由runtime发出的workspace.connect上，仍走真实WS及SSH，严格验证时间增加/不回跳/连接可用。NativeDockerAdapter将已验证ID包单引号，夹具裸hex regex未匹配，落入真实shell执行失败；regex现精确支持裸/单引号hex，动作及目标验证不放宽。布局预览取当前安装树root id及首子容器，保留子项数/方向/geometry/锁定与持久化断言。
+
+两轮源码审核覆盖WS门闩释放/测试失败finally、CLI start/stop/restart/remove及拒绝未知ID、实际递归DOM。产品代码不变，核对USAGE原后台连接/页面撤销、Docker动作与布局操作说明；待静态收口，行为交远程。
+
+第2组夹具子项静态：node --check test-ssh-server.mjs、根check、完整format:all:check通过，最终文档格式与diff复查通过；未执行本机行为测试。当前远程39358034424 / 2a577341包含先前目录复制、缓存、插件回执及上传取消客户端补修，尚不含本条三个夹具变更。
+
+## 远程第二十一轮：第1组缓存读取计数范围（2026-10-20）
+
+Actions39358034424 / 2a577341，第3/4/5组已success，第1组只剩workspace-layout-restore的额外读取断言（expected0、actual2）。此前终端/xterm DOM身份、草稿、后台输出及geometry断言本轮均已通过。实际/settings默认加载Workspace偏好编辑器，需独立读layout/sidebar的当前版本，不能记作缓存Workspace重载。计数器现只记录/workspace活跃时的这两条GET；返回页面仍严格要求0，不删除读取/身份/geometry断言，不阻止Settings获取真实版本。
+
+源码两次复核覆盖离开Settings/Connections与返回Workspace、路由监听安装点以及Settings默认页；USAGE缓存说明仍成立，无产品代码修改。受影响静态与后续真实行为另记。
+
+## 远程第二十一轮：第7组目录准备（2026-10-20）
+
+原upload-prepare-profile的24组采样在120秒期限内未结束；原ensureRemoteDirectory对全部请求逐条串行。现根先处理，以根下第一段隔离独立分支，最多4个worker；共享隐式父目录的路径仍串行，每个路径仍完整检查父链，不引入陈旧stat缓存或展开无界祖先集合。首个失败停止后续派发，在途worker全部排空后再结算原单一持久claim。公开配额、请求预算、120秒整例期限、32目录/24组采样及实际目录核验均不变。
+
+夹具独立连接补显式Host Key；未知场景改为真实发生部分创建后注入另一分支读取失败，移除故障后以新Workspace验证持久operation_unknown围栏，保留已确认目录，不自动重试。无副作用的确定冲突在独立原场景验证可恢复。allowlist拒绝经Shared event严格解码并精确断言conflict，取消后检查实际目录为空，不依赖随机临时文件名。旧RESOURCE_QUARANTINED文本已无生产者，不恢复兼容错误。
+
+两轮源码复核覆盖root=/、空目录集、共同父路径、四worker共享iterator、首失败停止、并发已派发mkdir继续排空、混合unknown/cleanup因果及最终allowlist。USAGE/Backend架构同步，静态与真实远程结果另记。
+
+第7组目录准备本批静态收口：Backend check/build、根 `pnpm run check`、`pnpm run format:all:check` 和 `git diff --check` 均exit 0；已完成两轮源码复核。未执行本地行为测试，性能与故障分支等待推送后的Actions。
+
+### Agent回执路由与传输夹具补修（2026-10-20）
+
+39358034424第2组trace显示：创建线程回执200后，测试在UI派发后续读取期间撤销拦截，存在一条workspace读取未完成（status -1），线程面板持续busy。原写回执捕获改为在交付回执之前移除自身handler，使派生读取使用正常网络路径；不重放写入、不移除其他handler。Artifact上传精确定位实际submit按钮，避免file input也被Chromium识别为同名button。第6组Send Files实际显示invalid_input：夹具传相对路径，Shared/USAGE要求绝对目标路径，改为/server-transfer-e2e并同步任务摘要断言，不放宽解码。额外E2E严格TS发现upload-protocol从tests无法解析包级Shared导入，统一为现有直接源码路径。
+
+四表：功能覆盖保留线程创建/重命名、Artifact发布和真实多目标部分完成；职责归测试消费者，不修改产品准入或并发围栏；类型沿用Shared codec，无新契约；已完成两轮源码复核，E2E严格TS通过，完整静态门禁另记，行为待Actions。USAGE既有绝对目标目录与版本化线程说明仍符合实际。
+
+Agent/夹具本批门禁：E2E严格TS、根check、全仓format:all:check和diff检查通过；未执行本地行为测试。复制写入批次优化为后续独立变更，不计入本次测试消费者提交。
+
+### 复制背压与大帧取消（2026-10-20）
+
+39358034424第6组6 MiB/120ms WRITE延迟复制在20秒仍running；源码每个32KiB READ后立即等待一次append，使底层WRITE窗口无法利用。改为有界256KiB聚合，每窗等待确认后计进度，零字节/尾块/大块切片/短读失败及迭代器关闭保留，commit、metadata复核、move删除与unknown规则不变。
+
+第8组移动端取消15秒延迟的1MiB协议帧时，Model原append会依次派发两窗512KiB，取消期间第二窗仍派发，超过原20秒判据。Service按512KiB批次调用stage，每批前检查discarding；保持完整帧才发progress，不在途abort租约，不提前释放claim，原worker仍排空已派发写入并确认discard。两个改动均保留原用例时限，不以本地取消当远端停止。
+
+四表：保留复制真实字节/metadata与取消后文件不存在断言；策略归Files Service，Model/SSH Adapter既有ack与失败转换不变；无新增协议/Shared类型；两轮源码复核覆盖0/整窗/尾块、背压、read失败、取消前中后、原队列/claim及临时项收敛。静态和下一轮行为结果另记。
+
+### 文件浏览导航与后台刷新竞争（2026-10-20）
+
+39358034424第8组上传期间返回父目录后，trace最终仍停留/folder-seed。完整调用链显示后台上传完成调用同一个browser.refresh；load等待期间path仍是上一个已确认目录，refresh会以该旧目录发起更新并提升loadToken，从而覆盖正在进行的导航。Browser增加私有requestedPath，refresh及默认load使用最新导航意图，成功按listing规范路径收口，当前失败恢复到已确认目录；旧token失败不能重置新意图。保留原文件可见、搜索与30秒断言，具体失败是否完全消失仍待远程。
+
+四表：范围是用户导航/后台刷新竞争；状态归FilesystemBrowser，不在Workspace复制意图；无新wire对象或Shared契约；两轮源码复核覆盖导航→刷新、刷新→导航、旧成功/失败及最新失败，静态后等待Actions。USAGE/Frontend架构同版维护。
+
+### 39359401469完整结果与第7组补修（2026-10-20）
+
+本轮SHA d6fa14e7：质量/构建、Docker smoke和第1/3/4/5组通过，第2/6/7/8组失败。第7组目录准备原120秒超时场景现46秒通过，allowlist/取消清理场景通过；剩余新Workspace围栏断言与HTML背景恢复。新Workspace拒绝是现有MachineMutation acquire的conflict（原失败仍operation_unknown），夹具补Shared严格解码的管理列表state=blocked及同目标断言，再精确确认conflict；不把二次准入冲突改成原操作结果，不解除围栏。HTML一次性canvas脚本在跨页返回后空白：KeepAlive detach会重建iframe文档，保留srcdoc可能在隐藏零视口运行。deactivate先暂停再移除srcdoc，activate/实际可见尺寸确认后重新加载文档；同页切换不触发此重置，继续保留iframe/主题实例。
+
+四表：保留真实blocked记录、原unknown、二次拒绝及全部红色像素断言；持久规则owner不变，sandbox文档生命周期归Terminal background composable；类型使用Shared MutationList；两轮源码复核检查多会话、隐藏/恢复、晚load及主题更新，静态结果与后续Actions另记。
+
+本批最终门禁：根check、E2E严格TypeScript、前后端build、format:all:check、git diff --check均exit 0。复制/分帧取消、目录导航和第7组背景/围栏补修已完成两轮源码复核；未执行本地行为测试，等待后续Actions。归档运行中取消与真正并行归档仍未修复，不通过放宽unknown、移除持久claim或修改断言规避。
+
+### Agent拦截生命周期与Send Files端点夹具（2026-10-20）
+
+远程177cba3e第1组确认24项失败，首因均为native-task先unroute再fulfill导致Route is already handled；不能把前一批静态通过当行为通过。本批每Page安装一个稳定workspace拦截器，当前捕获按App/method匹配且只认领一次，读取或其余请求fallback；原回执严格解码后交付，不切换拦截模式、不重发写入。结束只清除捕获意图，页面关闭释放handler；同Page并发捕获明确拒绝。
+
+第6组Send Files夹具原先以同一host/port的两个连接ID模拟独立服务器，触发真实重复资源拒绝；此外离线目标也须显式确认Host Key，密码传输的known_hosts须与exec创建的私有目录一致。新增受控22225 TCP转发端点及环境端口，成功/离线目标分别显式确认受控指纹，目标使用夹具真实绝对目录以匹配rsync -s协议。SFTP仅对精确UUID命名的/tmp/nexus-transfer目录和key/known_hosts放行原OS路径，其余仍在虚拟根。原部分成功、失败详情、目标文件及任务删除断言不变；不修改生产准入和安全围栏。
+
+| 审核表   | 本批结论                                                                                                                                                                                                                  |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | Agent原写回执与派生读取；Send Files真实双目标部分成功，不放宽超时或结果断言。                                                                                                                                             |
+| 职责归属 | 仅测试消费者/受控SSH夹具；页面持有唯一拦截器，转发夹具追踪两端socket并在关闭时排空。                                                                                                                                      |
+| 类型归属 | 原Shared workspace和Host Key严格codec继续使用；不新增协议或业务类型到Platform。                                                                                                                                           |
+| 完成证据 | 两轮源码复核覆盖一次认领、连续调用、失败清意图、代理断连/停机、私有凭据及绝对目标；根check/build已通过，严格E2E TS曾发现route返回Disposable，已调整并重跑；最终静态结果另记。行为仅等待新SHA的远程Actions，不在本地执行。 |
+
+USAGE既有绝对目标、显式信任与任务结果说明仍符合产品行为，本批无产品变更。归档取消/并行为独立未完成项，不以此补丁销项。
+
+本批最终静态门禁：根check、前后端build、严格E2E TypeScript、全仓format:all:check、SSH夹具node --check和git diff --check均exit 0（/tmp/nexus-round24-*.log）。两轮源码复核完成；没有运行本地行为测试，待推送后远程验收。177cba3e第6组现43通过、4失败：复制性能与其后续上传/复制用例已通过；剩归档取消、Send Files、挂起压实及终端缓存，后两项为本轮独立排查范围。
+
+### 177cba3e后续失败与夹具消费修正（2026-10-20）
+
+本批a8bed777已推送dev，新运行[39361569436](https://github.com/0honus0/nexus-terminal/actions/runs/39361569436)；原177cba3e第2组因此取消，不记PASS或FAIL。原第3/4/5/7组通过，第1/6/8组失败；第6组复制性能和第8组移动端取消已通过，不再沿用旧版本失败判断。
+
+第6组terminal-session-cache手工导入连接后漏Host Key确认，两次均KEY_EXCHANGE_FAILED并无已连接tab；补显式确认原夹具指纹。suspend-log-compaction的约2MiB输出超过未确认窗口，Node消费者只收字节、没有terminal.flow；增加仅本场景启用的有界串行ACK消费，累计量来自真实终端帧，操作结束移除监听并排空最后ACK，失败不吞；不对其他背压场景全局auto-ACK。
+
+第8组backup-ui离线trace显示恢复200且回执正确，点击reload后才unroute，模块图中的vue.js请求status=-1，DOMContentLoaded超时；改为先撤销原import handler，再同时等待真实DOMContentLoaded与点击reload，不增加期限、不重复import，保留认证/表行/文件/清理回执断言。原用例重试通过仍不能掩盖首轮失败。
+
+四表：功能对应保留三会话实例/resize、真实压实大小/同shell恢复、完整备份恢复；职责归测试生产者/消费者和真实生命周期；无新增产品/Shared类型，ACK沿既有Shared解码边界；两轮源码复核检查确认顺序、累计真实字节、单个在途ACK、失败汇总/监听退出、回执与重载顺序，静态结果另记。USAGE原Host Key、流控和备份说明仍适用。
+
+仍未修复：归档运行中取消/真正并行；第8组6文件上传同样被Files mutationTail整段串行化，首波只开1个上传stream。后者与归档并行共有持久host/port独占claim限制，不能只删除本地队列或跳过claim；需要同owner有界分组、路径冲突准入和整组排空后结算，unknown仍阻断外部准入。保持现有并发/性能断言，不标记已完成。
+
+本批最终静态：根check、严格E2E TypeScript、全仓format:all:check及git diff --check均exit 0（/tmp/nexus-round25-*.log）；两轮源码复核已完成。仅测试与证据文档变化，产品源码未改；前后端build沿a8bed777基线已通过，本批无构建输入变化。行为待后续远程SHA，不运行本地测试。
+
+### Dashboard重连拦截安装顺序（2026-10-20）
+
+177cba3e第2组Dashboard reconnect两次均120秒等待。源码核对Playwright 1.63.0的WebSocketRouteDispatcher.install→addInitScript→Page.addScriptToEvaluateOnNewDocument：首次routeWebSocket在SPA已加载后安装，当前文档不会获得WebSocket包装，因此connectStarted永不触发。现将路由安装移到初次connectTestSshFromConnectionsPage导航之前，初次连接不阻塞，仅第二次Reconnect启用gate；仍等待runtime派发workspace.connect后离开Workspace，并核对后台完成刷新原Dashboard时间和稍后原session已连接。不更改产品逻辑、120秒期限或断言。
+
+四表：功能为原后台重连完成不导航/刷新recent；owner仅测试故障注入；无新类型或Shared修改；两轮源码复核覆盖首次直通/第二次阻塞/原finally释放/跨页runtime，严格E2E TS通过，格式和最终静态另记。a8bed777新远程39361569436第1/3/4组已通过，其他尚在运行；3117909a后续三项夹具修复已提交，保留现轮证据后一起推送。USAGE原后台Workspace与recent说明适用。
+
+本批门禁最终：根check、严格E2E TypeScript、format:all:check、git diff --check均exit 0（/tmp/nexus-round26-*.log）。远程a8bed777的39361569436现第1/3/4/5/7组PASS，第6组44通过/3失败（Send Files真实传输已PASS，剩归档取消、压实ACK及缓存Host Key），第8组54通过/1失败（仅多上传stream串行化）；第2组尚在运行，下一推送如取消须保留未验范围。3117909a与本批Dashboard修复等待新SHA验证。
+
+### 上传并发与持久围栏分组（2026-10-20）
+
+当前远程 f90321ba / 39362436592 的质量/构建与Docker smoke通过，第1/4组通过，其余仍待结果。第8组上一SHA六上传只开一路的源码根因已在本批修正，尚无本批行为PASS。
+
+Files原整段mutationTail替换为本Workspace的FileMutationQueue：仅同一目录、不同目标的上传最多16项并行，其他写操作及同名/不同目录任务保持队列顺序。整组共享一个原MachineMutation持久endpoint claim，保留跨Workspace/Agent互斥；父目录检查/创建另行串行，拒绝链接祖先，各文件仍有独立stage、专属连接、准入/交付复查与清理owner。任何成员失败立即停止组内新准入，既有成员排空后按原MachineMutation未知分类结算；回执等持久结算完成，结算失败所有成员报失败，不以某个成员完成提前释放围栏。排队未派发取消立即拒绝，后续不会再派发；运行中取消仍等待真实资源收敛。
+
+| 审核表   | 本批结论                                                                                                                                        |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 保留六路真实WS/慢WRITE断言，修复后端串行阻塞；归档运行中取消/并行尚未修复。                                                                     |
+| 职责归属 | 调度政策仅在Files Service；MachineMutation原持久claim、Model/Storage/Adapter及恢复规则未变。                                                    |
+| 类型归属 | 队列类型仅本实现使用，无新Shared/公开契约；已有Model转换与每项协议解码不变。                                                                    |
+| 完成证据 | 两轮源码复核覆盖动态加入、同名/其他写排队、公平封组、派发前取消、Acquire/结算失败、全部成员排空及关闭等待；静态结果待本批命令，行为仅后续远程。 |
+
+USAGE上传章节及Backend并发边界已同步。本地不运行行为测试。后续继续归档真实退出证明及其独立取消，不能以关闭SSH channel冒充writer退出。
+
+本批静态门禁：根check、前后端build、全仓format:all:check及git diff --check均exit 0（/tmp/nexus-round27-*.log）。两轮源码复核完成，未运行本地行为测试。远程f90321ba最终第1/3/4/5/7组通过，第8组54通过/1失败（上传并发），第6组45通过/2失败（归档取消、压实恢复后目录查询），第2组36通过/2失败（归档取消与并行）；第6组缓存Host Key及第2组Dashboard重连本轮已通过。布局锁另有首轮失败/重试通过，仍需检查持久化竞态。
+
+### Shell探测时机与布局保存竞态（2026-10-20）
+
+上传分组77837576已推送，新远程39363448188运行中，质量/构建与Docker smoke通过；本批不混用其结果。离线核对f90321ba失败：压实用例在首次目录探测前已发送前台命令，NativeShellIntegration按既有保护拒绝运行中探测。用例现在于输入前通过真实terminal.currentDirectory初始化并断言原Shell目录，恢复后仍核对相同目录及Shell PID，不放宽生产保护或原断言。
+
+布局锁首轮失败/重试通过的trace显示先前settings/layout返回409、Presentation Store进入blocked，点击锁并无新的PUT。根因为尺寸controller缓存全局version，延迟保存携旧版本；改为Workspace→Preferences唯一Store的窄尺寸意图，队列实际派发时消费本地最新已确认快照并验证完整布局结构相同。锁/导航的有限字段也由同一队列构造，不覆盖其余偏好；完整表单/布局编辑仍使用原版本CAS。没有网络重试或外部冲突自动升级；未知写入仍要求显式只读恢复。
+
+| 审核表   | 本批结论                                                                                                                      |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 保留原目录、压实大小、同Shell恢复、锁定持久化及布局尺寸断言；修正探测初始化与真实保存竞态。                                   |
+| 职责归属 | Shell初始化只改测试消费者；Preferences Store拥有串行状态，Workspace保留独立UI类型及Adapter转换，不改Backend契约。             |
+| 类型归属 | 新有限WorkspacePreferenceKey属于Preferences内部应用类型；尺寸端口只传真正需要的布局，不再传无消费者的旧version/侧栏。         |
+| 完成证据 | 两轮复核涵盖权限撤销、冻结输入、结构改变、外部CAS/unknown阻断、队列前项确认、已发请求追踪；静态结果随后记录，无本地行为测试。 |
+
+USAGE对应偏好/布局章节和Frontend并发边界已同步。归档实际取消/并行仍待修复；不能通过隐藏unknown进度、撤销持久围栏或放宽断言销项。
+
+### 并发上传取消与关闭收尾补修（2026-10-20）
+
+77837576 / 39363448188第1/3/4/5/7组通过，第2/6组原归档/压实失败仍在；第8组六路真实stream断言已PASS，但随后reset失败导致35项失败，不记整组通过。首因是多上传取消/页面结束期间，closeOwned/quiesce再次硬abort正在排空的stage，导致discard报告operation_unknown并真实保留cleanup_failed。另有目录上传下载首轮/重试取消，以及目录浏览一次首轮失败。
+
+本批取消受理与终态分开：finishUpload不等待整组settlement，允许其余成员继续受理取消；取消/字节断流/关闭统一stopUpload。healthy pre-commit stage保留原SFTP signal排空WRITE并执行CLOSE/REMOVE，关闭等待原inFlight；没有stage、已准入commit或信号已失效仍走未知分支。active操作仅区分upload/other，Workspace关闭和quiesce不再次硬abort上传owner已经接管的清理；真正清理失败继续留存并使关闭失败，未吞错或修改reset断言。删除已无消费者的task.settlement。
+
+目录覆盖用例原只等新兄弟文件可见就读取旧文件，原文件仍可能在替换，已签发size/mtime下载票据随后失效是正确保护；增加原控制WS两项completed回执的Shared严格解码/目标路径核对，再保留原真实下载和字节断言，CDP仅被动观察并finally detach，不重发上传或放宽票据。目录浏览首轮偶发仍待进一步核对。
+
+四表：功能保留六并发、取消/关闭/整组结算与文件字节；职责归Files Service原owner，不新增存储/Platform业务；类型归属沿原应用/Shared转换，队列技术未穿透；两轮复核覆盖取消与WRITE并发、先断流后取消、关闭时重复清理、已commit/未知分支、队列未派发取消及真实故障留存。静态结果随后记录；行为只待后续远程，当前未运行本地测试。
+
+本批最终静态门禁：根 check、严格 E2E TypeScript、前后端 build、全仓 format:all:check 及 git diff --check 均通过（/tmp/nexus-round29-*.log）。两轮源码复核完成，未运行本地行为测试；上传取消/关闭、布局持久化及两处测试消费修正等待新 SHA 的远程 Actions 验收。
+
+### 上传完成刷新与目录点击（2026-10-20）
+
+77837576 的第8组目录浏览首轮失败、重试通过。离线 trace 的 call@761 显示父目录行点击派发期间上传由排队进入完成，action 快照仍有父目录行，after 快照已经卸载整个列表，最终仍在 /folder-seed，无错误提示。源码确认 FileManager 对任何 browser.loading 都替换整个列表，后台完成刷新能够在 pointerdown/click 之间销毁目标。现已有目录读取期间保留列表，以工具栏及 aria-busy 表达读取，首读仍显示加载画面；原 requestedPath/loadToken 和失败提示不变，不增加重试或放宽场景断言。
+
+四表：功能保留原父目录点击、并行上传及递归搜索；职责仅 FileManager 展示生命周期；无 Shared/协议类型变化；两轮源码复核覆盖首读、后台刷新、导航晚响应、错误及搜索分支，静态结果随后记录。501ceb1b 已推送，新运行39364862620等待结果，本项尚无远程PASS。USAGE原文件管理章节及Frontend当前设计同步。
+
+本批最终静态：根 check、前后端 build、全仓 format:all:check、git diff --check 均通过（/tmp/nexus-round30-*.log）；两轮源码复核完成。未运行本地行为测试；目录点击修正待后续远程 SHA 验收。
+
+501ceb1b / [39364862620](https://github.com/0honus0/nexus-terminal/actions/runs/39364862620) 已结束：质量/构建、Docker smoke 与第1/3/4/5/7/8组通过，第8组55 passed，原上传取消/关闭导致的reset级联已消失。第6组46 passed/1 failed，压实恢复及缓存通过，仅归档进度取消失败；第2组37 passed/2 failed，仍为归档取消、并行，布局锁本轮通过。目录浏览本轮通过，仍保留上一SHA的首轮失效证据，ccf82d64修复的列表节点稳定性需下一SHA回归，不以重试/本轮偶然通过销项。剩余已知失败合计3项，全部归档链路。
+
+### rebalance 后的夹具基线补强（2026-10-20）
+
+基线 e2e-followup-20261020-round19 / be8e7de8，本批只改6个验证源码及3份文档。自动 fixture 在原 Backend 和 SSH 成功 reset 后，对模型、插件仓库、部署页面、Browser 控制服务执行一次有期限 reset，独立失败全部汇总；挂起响应或遗留 BrowserContext 仍返回409。Browser 代理丢弃已关闭客户端的晚响应，不再将其挂为新屏障。SSH 将原重复初始化合并为 resetControls，补齐准备延迟、慢目录、读带宽/调度与计数；删除 activeSftpChannels.clear，等待真实 READ/WRITE/通道排空后才重建根目录，超时明确失败。
+
+两轮源码复核覆盖全部最终变更文件及 playwright.config、balanced-shards、SSH/Agent 调用者：第一轮核对状态 owner、每用例/重试的初始化顺序和独立 unknown 生命周期；第二轮核对后台晚响应、真实未收敛拒绝、重复列表消除、失败汇总及未放宽产品断言。USAGE 原章节仍符合实际，未修改产品逻辑、Shared、分片算法或重试次数。
+
+Node22.23.1 / pnpm11.26.0：根check、严格E2E TypeScript、全仓format:all:check、5个修改mjs的node --check、补充验证源码ESLint及git diff --check均exit0；日志 /tmp/nexus-round31-{check,e2e-types,format}.log。测试基础设施未改变产品构建输入，本批不重复产品build，上一远程 be8e7de8 质量/构建已通过。没有运行本地行为、浏览器或用例收集；新基线的顺序独立性待远程验收，现轮39365646059仍运行，不能记本批PASS。既有3项归档取消/并行缺陷保持待修。
+
+### 上轮第2/6/7组核对与文件管理补修（2026-10-20）
+
+be8e7de8 / 39365646059 第1/3/4/5/8组通过，第2组36 passed/3 failed，第6组46 passed/1 failed，第7组1项失败：合计5项，包括原3项归档取消/并行、刷新中央加载提示缺失、切换目录后同步终端仍消费旧路径。运行中的6a00aa28只增加夹具隔离和关闭DEBUG，尚不含这5项修复。
+
+本批先修Files展示链：读取保留列表，并在独立相对定位容器中显示pointer-events-none中央spinner；不再通过卸载列表显示loading。“切换终端到当前目录”在目录读取期间禁用，避免两个目录含同名inside.txt时，在新listing返回前消费旧path。保留原布局/中心位置/真实终端目录断言，不增加期限或测试重试。
+
+四表：功能对应原刷新加载与真实Shell目录切换；职责仅FileManager展示/已确认路径准入，Browser导航owner不变；无新增Shared或公开类型；两轮源码复核覆盖初读/背景读取、搜索/错误、列表滚动与ref、同名文件旧快照及新目录确认。静态结果另记，行为待新SHA远程，3项归档缺陷继续修改。USAGE与Frontend对应段落同步。
+
+归档补修：Files 在首次写入前经 Model/Native Adapter 安装独立 command -v 只读检查；仅该阶段回执丢失可映射为归档写入未派发，真实清理失败仍传播。夹具 preflight-hold 仅匹配独立查找，不再包住包含 command -v 的压缩/列表写入；进度UI的压缩与解压取消均在这条真实只读阶段验证，原隐藏/恢复、终态退场与输出不存在断言保留。另有专门运行中取消/并发用例原样保留，不用进度UI场景替代它们。
+
+补充四表：功能为归档工具预检查与派发前取消；决策/执行分别归Service、Model安全转换、Native Adapter真实命令；无新增Shared/公开契约；两轮源码复核覆盖工具缺失、查找回执丢失、检查后取消、私有快照前取消、清理失败和原生写入的unknown分类。后续仍待修运行中归档取消与独立归档并发两项，不宣称本批已修或远程已验。
+
+当前6a00aa28 / 39367031982已结束：质量/构建、Docker smoke和第3/4/5/8组通过；第2/6/7组仍为上述5项失败，第1组另有clarification首轮失败/重试通过（36 passed/1 flaky，门禁仍FAIL）。离线artifact确认Run已Completed但页面只有User正文和“Read next body page”；源码refreshRun先读body再getRun，Run在其间结束后schedulePoll停止。现只在较新状态停止轮询前从原正文游标再读取一次，失败仍进入原operation处理，不刷新页面、不重派Run或改变断言。两轮复核覆盖快完成/慢完成、同版本终态、unknown、分页及失效scope；USAGE、Frontend和E-13.1同步，行为待新SHA远程。归档运行中取消与并发仍未修复；不以本批只读预检查修复替代。
+
+本批最终门禁：Node22.23.1/pnpm11.26.0，根check、严格E2E TypeScript、前后端build、全仓format:all:check、最终两份Frontend源码ESLint、SSH夹具node --check与git diff --check均exit0；日志 /tmp/nexus-round33-types.log、/tmp/nexus-round34-{check,final-build,format,final-eslint}.log。最终guard调整已重新格式化并执行ESLint/vue-tsc与build。两轮源码复核覆盖本批13份变更及真实消费者，无本地行为测试。待推送新SHA验证，本批不把源码修补算作远程PASS；剩余运行中归档取消/并发明确继续保留。
+
+### 压缩派发取消与无冲突并发补修（2026-10-20）
+
+远程1ec9b523 / 39368185067已结束：质量/构建、Docker smoke和第1/3/4/5/6/7/8组通过；第2组仅2项失败，分别是已派发归档取消收到failed，以及独立压缩只派发1项。上一轮四项附加缺陷在该SHA未复现。
+
+本批保留原专门用例、exec-hold、真实started/exited计数及后续解压字节断言，不调整夹具、测试断言或期限。Native压缩在首次写入前发送随机标记；Model选择SSH的TERM排空模式，只有完整输出未含该标记且收到实际远端TERM退出才映射FileCommandNotStarted。标记已到、输出损坏/断流、退出缺失或清理失败仍unknown；这不承诺已经启动的writer可安全中断。exec派发等待中取消继续接管晚到channel，请求TERM并有界等待，原通用execute/Agent结果仍保守unknown。
+
+FileMutationQueue新增独立compression组：仅同一canonical父目录、普通文件源、不同且不存在的新目标，读写集合无冲突才共享原endpoint claim，最多16项；资格在准入与认证后派发时重查。目录/链接源、覆盖、解压和不合格任务仍走独占队列，不混上传组。仅确定未启动writer且独立资源已排空的取消，在仍有其他成员持有claim时可先退场；正常写入和unknown仍等整组结算，跨Workspace/Agent互斥与故障blocked不变。
+
+| 审核表   | 本批结论                                                                                                                                           |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 修复原两项派发/并发链路；保留真实取消、进程退出、后续同Workspace压缩和并行任务字节判据，行为仍待新SHA。                                            |
+| 职责归属 | Service持有分组资格/冲突/任务政策，Model转换命令事实，Native Adapter持有首写标记，SSH Adapter持有信号/晚channel/收尾期限；原持久claim与SQL不变。   |
+| 类型归属 | FileCompressionFootprint/FileMutationIntent归Remote Files Model，命令取消模式与信号事实归Platform；无新Shared或公开对象，不穿透技术句柄。          |
+| 完成证据 | 两轮源码复核覆盖首写前后、信号拒绝/丢失、晚channel、协议与清理失败、分组排空/结算、路径别名/读写重叠及授权撤销；静态门禁随后记录，未运行本地行为。 |
+
+USAGE、Backend与实施方案当前基线同步。当前任务仍为新SHA的完整八组回归；如果两项仍失败，按真实日志继续修复，不按源码推定通过。
+
+本批最终静态：Node22.23.1/pnpm11.26.0，根check、严格E2E TypeScript、前后端build、全仓format:all:check、最终Backend check/build、受影响源码ESLint及git diff --check均exit0（/tmp/nexus-round35-*.log）。两轮复核完成，最终补充拒绝首写标记之前的异常stdout；未运行本地行为或用例收集。E-05.4仅提炼共享围栏下读写冲突与确定无副作用取消的共性规则，具体缺陷仍在实施/验证文档，HUMAN/AGENTS不变。下一步为新SHA远程八组，不能以本批静态结果销掉原两项失败。

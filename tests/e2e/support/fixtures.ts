@@ -25,12 +25,38 @@ export const resetE2EBaseline = async (mode: E2EDatabaseMode) => {
 	await baseExpect(response.json()).resolves.toEqual({ reset: true, mode });
 };
 
+async function resetExternalFixtures(): Promise<void> {
+	// The previous application must close successfully before these shared
+	// controls change. Never erase an unknown-effect or resource-cleanup fence.
+	const origins = [
+		E2E_URLS.openAiProviderOrigin,
+		E2E_URLS.pluginRepositoryOrigin,
+		E2E_URLS.deploymentPageOrigin,
+		E2E_URLS.browserControlOrigin,
+	];
+	const results = await Promise.allSettled(
+		origins.map(async (origin) => {
+			const response = await fetch(origin + '/reset', {
+				method: 'POST',
+				signal: AbortSignal.timeout(10_000),
+			});
+			await response.arrayBuffer();
+			baseExpect(response.status, 'External fixture reset failed: ' + origin).toBe(204);
+		}),
+	);
+	const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+	if (failures.length) {
+		throw new AggregateError(failures, 'External E2E baseline reset failed');
+	}
+}
+
 export const test = base.extend<E2EFixtures>({
 	e2eDatabaseMode: ['seed', { option: true }],
 	_e2eTestReset: [
 		async ({ e2eDatabaseMode }, use) => {
 			await resetE2EBaseline(e2eDatabaseMode);
 			await resetTestSshFilesystem();
+			await resetExternalFixtures();
 
 			await use();
 		},

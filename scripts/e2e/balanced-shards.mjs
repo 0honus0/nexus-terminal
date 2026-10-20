@@ -10,6 +10,17 @@ const specsRoot = path.join(e2eRoot, 'specs');
 const estimatesPath = path.join(scriptDir, 'duration-estimates.json');
 const projectNames = ['auth', 'http', 'agent', 'websocket', 'ui', 'ssh', 'mobile'];
 const defaultDurationMs = 10_000;
+// Deliberate unknown descendant effects must retain their backend shutdown
+// fence. Give that full E2E scenario its own application lifetime instead of
+// trying to reset or force-close a backend with unconfirmed Run effects.
+const isolatedUnknownSpec = 'specs/agent/preset-plugin.spec.ts';
+const isolatedUnknownTitle =
+	'Nexus Agent subagent lifecycle preserves tool batches and reclaims child Browser contexts';
+const isolatedInvalidToolTitle =
+	'installed Nexus Agent plugin uses the host-owned Agent surface and captures functional evidence';
+const isolatedAcpSpec = 'specs/agent/ssh-acp-settings.spec.ts';
+const isolatedAcpCancelledTitle =
+	'SSH ACP settings product chain: cancelled inner permission without a Workspace profile';
 
 function parseArgs(argv) {
 	const args = { command: argv[0] ?? 'plan' };
@@ -142,13 +153,77 @@ function run(plan, rawShard) {
 		'.bin',
 		process.platform === 'win32' ? 'playwright.cmd' : 'playwright',
 	);
-	const result = spawnSync(playwright, ['test', ...shard.specs], {
-		cwd: e2eRoot,
-		env: process.env,
-		stdio: 'inherit',
-	});
-	if (result.error) throw result.error;
-	process.exitCode = result.status ?? 1;
+	const isolatedPlugin = shard.specs.includes(isolatedUnknownSpec);
+	const isolatedAcp = shard.specs.includes(isolatedAcpSpec);
+	const suffixes = [
+		'regular',
+		...(isolatedPlugin ? ['invalid-tool', 'unknown'] : []),
+		...(isolatedAcp ? ['acp-cancelled'] : []),
+	];
+	const isolatedTitles = [
+		...(isolatedPlugin ? [isolatedInvalidToolTitle, isolatedUnknownTitle] : []),
+		...(isolatedAcp ? [isolatedAcpCancelledTitle] : []),
+	];
+	const outcomes = [];
+	const durations = [];
+	const capturedLogs = [];
+	for (const suffix of suffixes) {
+		const selected =
+			suffix === 'unknown'
+				? [isolatedUnknownSpec, '--grep', isolatedUnknownTitle]
+				: suffix === 'invalid-tool'
+					? [isolatedUnknownSpec, '--grep', isolatedInvalidToolTitle]
+					: suffix === 'acp-cancelled'
+						? [isolatedAcpSpec, '--grep', isolatedAcpCancelledTitle]
+						: [
+								...shard.specs,
+								...(isolatedTitles.length ? ['--grep-invert', isolatedTitles.join('|')] : []),
+							];
+		const timingsPath = path.join(e2eRoot, 'test-results', `spec-durations-${suffix}.json`);
+		console.log(`[E2E shards] ${suffix}: ${selected.join(' ')}`);
+		const result = spawnSync(playwright, ['test', ...selected, '--output', `test-results/${suffix}`], {
+			cwd: e2eRoot,
+			env: {
+				...process.env,
+				E2E_SPEC_DURATIONS_PATH: `test-results/spec-durations-${suffix}.json`,
+				PLAYWRIGHT_HTML_OUTPUT_DIR: path.join(e2eRoot, 'playwright-report', suffix),
+			},
+			stdio: 'inherit',
+		});
+		if (result.error) throw result.error;
+		outcomes.push(result.status ?? 1);
+		if (!fs.existsSync(timingsPath)) throw new Error(`Missing E2E duration record: ${timingsPath}`);
+		durations.push(JSON.parse(fs.readFileSync(timingsPath, 'utf8')).specs);
+		if (suffixes.length > 1 && suffix !== suffixes[suffixes.length - 1]) {
+			// Playwright recreates the log directory on each new backend lifetime.
+			// Preserve real failures and timing evidence from every earlier phase.
+			const location = path.join(e2eRoot, '.tmp', `balanced-shard-${suffix}-logs`);
+			fs.rmSync(location, { recursive: true, force: true });
+			fs.cpSync(path.join(e2eRoot, 'logs'), location, { recursive: true });
+			capturedLogs.push({ suffix, location });
+		}
+	}
+	if (suffixes.length > 1) {
+		for (const { suffix, location } of capturedLogs) {
+			fs.cpSync(location, path.join(e2eRoot, 'logs', suffix), { recursive: true });
+			fs.rmSync(location, { recursive: true, force: true });
+		}
+	}
+	const merged = Object.assign({}, ...durations);
+	for (const spec of [...(isolatedPlugin ? [isolatedUnknownSpec] : []), ...(isolatedAcp ? [isolatedAcpSpec] : [])]) {
+		// Isolating one case must preserve all actual runs and their combined
+		// timing, rather than overwriting the spec with the final phase's time.
+		const timings = durations.map((part) => part[spec]).filter((value) => Number.isFinite(value));
+		if (timings.length) {
+			merged[spec] = timings.reduce((total, value) => total + value, 0);
+		}
+	}
+	fs.writeFileSync(
+		path.join(e2eRoot, 'test-results', 'spec-durations.json'),
+		`${JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), specs: merged }, null, 2)}\n`,
+		'utf8',
+	);
+	process.exitCode = outcomes.every((status) => status === 0) ? 0 : 1;
 }
 
 const args = parseArgs(process.argv.slice(2));

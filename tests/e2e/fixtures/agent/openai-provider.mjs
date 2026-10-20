@@ -37,6 +37,16 @@ const regressionResponse = (response, delta, finishReason = 'stop') => {
 };
 
 const server = http.createServer(async (request, response) => {
+	if (request.method === 'POST' && request.url === '/reset') {
+		if (browserCompletionHeld) {
+			response.writeHead(409).end();
+			return;
+		}
+		checkpointResponses = 0;
+		browserCompletionReleased = false;
+		response.writeHead(204).end();
+		return;
+	}
 	if (request.method === 'GET' && request.url === '/browser-lifecycle') {
 		response.writeHead(200, { 'Content-Type': 'application/json' });
 		response.end(JSON.stringify({ held: browserCompletionHeld }));
@@ -244,8 +254,21 @@ const server = http.createServer(async (request, response) => {
 			return;
 		}
 	}
-	if (respondFunctionalModel(messages, latestUserText, response, regressionResponse)) return;
-	if (respondPresetModel(messages, latestUserText, response, regressionResponse)) return;
+	try {
+		if (respondFunctionalModel(messages, latestUserText, response, regressionResponse)) return;
+		if (respondPresetModel(messages, latestUserText, response, regressionResponse)) return;
+	} catch (error) {
+		// A deliberately strict model fixture should fail its one Run, never
+		// terminate the shared provider and poison later isolated E2E scenarios.
+		console.error('[E2E Agent Provider] Fixture scenario failed', error);
+		if (!response.headersSent) {
+			response.writeHead(422, { 'Content-Type': 'application/json' });
+			response.end(JSON.stringify({ error: { message: 'E2E model fixture failed validation' } }));
+		} else {
+			response.destroy(error);
+		}
+		return;
+	}
 	const acpExecution = latestUserText.match(/E2E_ACP_EXECUTE integration=([a-f0-9-]+) version=(\d+)/);
 	if (acpExecution) {
 		const result = messages.find(

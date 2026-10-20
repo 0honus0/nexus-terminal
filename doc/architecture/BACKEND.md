@@ -321,6 +321,8 @@ register 安装 Provider/Registry/Run owners；管理员接口前缀 `/api/v1/ag
 
 main 读取环境和启动；Bootstrap 安装实例与全库迁移；模块 register 组装内部 Model/Service/Adapter，并返回消费者需要的能力、HTTP/WS 安装及 quiesce/close。Bootstrap 不逐个构造所有业务 Repository，也不引用私有配置类型。
 
+WebSocket来源准入包装显式保留route的文本/二进制入站预算和文本发送缓存预算。Workspace目录列表使用Shared的8MiB发送预算，其它路由继续使用各自声明或默认值；HTTP bindings在安装时核对三类容量均为合法整数且不超技术帧上限。入站控制限制与出站列表预算分别执行，不用默认发送缓存误拒绝合法列表。
+
 Targets 导入仅公开 importMany；单项使用一元素集合，每项仍有独立事务与安全结果。importOne 保留为模块内部实现，不因测试方便扩大出口。管理类型为区分模块保留 Shared 别名，不复制字段定义。
 
 待实施：模块 interfaces 将 Shared 协议 schema 绑定到真实 HTTP 路由，Platform 提供通用元数据契约，Bootstrap 汇总已安装路由生成 OpenAPI；WS 契约另行汇总。当前 HttpRoute 尚无完整 schema 关联，此设计不能写成已完成。
@@ -369,6 +371,8 @@ Access 登录失败记录的 `last_attempt_at` 及其索引直接在第一版初
 
 无新增业务持久化，不创建空 storage。缓存仍为本进程状态；Docker 控制与 Agent/Files 共用 Remote machines 持久突变占用，Preferences 已接入状态间隔/资源刷新持久配置。Workspace 操作绑定具体 attachment、配置 fingerprint 与原 owner；后台主机缓存当前仅供 userId=1，按 host/port 及完整可信配置指纹隔离，同配置在途采样共享，TTL 从开始计算。删除/改配置及 reset 后旧任务不可回填。首次初始化默认状态间隔 3 秒、后台 TTL 30 秒；Preferences 保存的配置在下次启动统一安装，独立 Service 的技术安装默认不覆盖持久设置。Docker 按规范化文本 endpoint 与全部受管突变互斥，覆盖容器名称与短/完整 ID 别名；unknown/清理失败保持持久 blocked，重启不解除，恢复能力已由下述B9机器突变恢复接线，行为待B10。
 
+归档在 Files Service 的首次私有文件写入前，通过 FileArchiveModel.prepare → NativeArchiveCommands.requireTool 执行独立只读工具查找；Model 仅在该边界将丢失的查找回执转换为尚未派发归档写入，清理失败仍独立传播。原生写入仍执行自身工具检查，预检不是后续执行的永久保证；写入取消不能借用此只读分类。
+
 ### B3.1 权威状态与竞态
 
 活跃 SSH/PTY、attachment/generation、lease、ACK 等由进程内唯一 Workspace Service 状态机权威持有，重启不持久化技术句柄。64 个普通 Workspace 名额在首次异步身份/目标解析前原子预留，覆盖排队、opening、attached/detached、closing 和未确认清理；重复 ID 不能抢占或重复计数。挂起目录另按用户 32/进程 64 限额与 24h 生存期，重附着同一 Workspace 不再占第二槽。每次 await/WS delivery/ACK 都复查记录实例与 generation；过期/旧 attachment 不能归还新实例或恢复旧 input。技术日志在私有本机临时目录，可重启清理，无持久活跃 shell。文件记录若无需 SQL 则不创建数据库层；任何未来持久变更仍经 Model/Storage/Adapter 执行。
@@ -384,6 +388,8 @@ B1 Files mutation 不新增数据库或 SQL。单个文件资源由 Service 串�
 Access 的失败窗口/封禁计算在 sessions/login-failure-rules，Adapter 只读取、解码计数并原子写回。Targets 的 connections/ssh-graph-rules 根据同事务图快照覆盖拟修改边，再校验成环、深度、展开数量及受影响祖先；Adapter 读图及写关系，Model 持有回调转换，register 同时装配普通写入与导入/克隆路径。Agent 的 runs/run-rules 同样独立于 Model，版本/状态判断继续在事务内执行。Targets 可信解析在同一 SQL 快照读取目标、凭据与路由，Model 计算指纹并在解密前核对 expectedFingerprint；先读指纹后重新解析不能替代同快照检查。指纹不替代 Host Key 信任，也不证明后续配置永不变化。
 
 ## 7. 生命周期与失败
+
+Remote Files 的 upload.prepare 在单一原机器突变claim内先准备根目录，再按根下第一段分组；最多4个worker处理互不重叠的分支，同一分支按路径长度串行。每次创建仍由ensureRemoteDirectory检查完整父链，不缓存stat作后续授权。首个失败停止未派发路径，所有在途worker排空后才结算；混合失败保留全部cause、清理失败类别和unknown，部分创建失败仍保留原保守围栏。allowlist只包含请求路径及根，不把隐式父目录加入可上传范围。
 
 取消/禁用/来源或名单撤销与模型步骤、ToolCall 的持久围栏同事务：inspected → cancelled，dispatched → unknown，状态事件同时写入。重启通过同一 SQLite owner 收敛，不重新执行。审批内部期限/消费时间为 Unix 秒，工具账本时间为毫秒；消费从同一个事务内时钟样本投影两种表示，不能把截断的秒直接作为毫秒更新时间。当前文件/Shell/Docker工具资源关闭已接线，ACP等待/关闭已接线，直接 Child/族收尾已接线，剩余跨 Run 资源由后续 B6/B8 承接。
 
@@ -459,9 +465,11 @@ Files Service 区分直接借用 Workspace 与独立传输：direct 操作取消
 
 file-copy 由 Service 在首次副作用前预检整批目标与源的重叠。同 target/fingerprint 用源父目录 realpath 保留叶节点链接语义，目标的缺失后缀基于现有祖先解析，不为预检创建目录；检测相等/祖先/后代及规范位置的嵌套源。原始同路径 move 仍 no-op，别名解析与 metadata 只是变化检测，不是远端原子隔离。move 删除目录后的复查豁免自身删除引起的 mtime/size 变化，但 mode 仍须一致。ZIP 技术 Adapter 在 append 同步拒绝时同样停止并等待 reader finished，保证其拒绝被观察且原 producer/consumer 因果保留。
 
+file-copy以256 KiB固定窗口聚合读取，逐窗等待stage append确认，保持顺序、背压与失败时原迭代器排空/关闭，不并发调用stage。upload协议帧仍最多1 MiB，Service内部按512 KiB批次写入，每批开始前检查discarding；取消不abort独立lease，只停止后续批次，当前批次确认后由原worker清理stage，不将部分帧计为完整progress。
+
 Files Service 统一维护每 Workspace 16 个 prepare/upload/copy-move/archive 活跃名额，排队与清理失败任务计入总数；同步检查后立即登记，prepare 收尾释放名额，已完成 allowlist 独立缓存。FileArchiveModel 将 NativeArchiveFailure.cleanup_failed 显式转换为模块具名清理失败，不以普通 unknown 抹除生命周期事实。
 
-Files 操作在准入后、串行排队前登记 active/inFlight，关闭和 quiesce 覆盖排队与执行，追踪到 finally 退订和解锁完成。尚未执行的排队请求取消不退役健康 Workspace，也不提前解除前序门禁；入场认证等待归既有 authorizing owner。跨 Workspace copy/move 的私有任务记录双端归属，任一端关闭取消任务，双端关闭都汇总关联清理失败；控制协议、任务 ID 和授权仍归原目标端。
+Files 操作在准入后、串行排队前登记 active/inFlight，关闭和 quiesce 覆盖排队与执行，追踪到 finally 退订和解锁完成。尚未执行的排队请求取消不退役健康 Workspace，也不提前解除前序门禁；入场认证等待归既有 authorizing owner。跨 Workspace copy/move 的私有任务记录双端归属，任一端关闭取消任务，双端关闭都汇总关联清理失败；控制协议、任务 ID 和授权仍归原目标端。上传任务用独立discarding状态区分清理已开始与最终块已接纳：取消/断流先停止接纳，原worker排空WRITE、关闭并删除stage，重复取消等待同一settlement，字节通道关闭不再次中断租约。首次断流仍为unknown；提交后的取消与真实清理失败不因该状态放宽。
 
 Files 内部 FileDownloadSink<TPlan> 由 files/model/file-types 唯一定义，表达 plan/write/finish 应用能力。HTTP 构造 sink 并持有 response/drain/finished；Service 将 finish 放在原操作期限和 inFlight 内，交付前复查当前身份/owner/指纹，交付后原 run 再确认当前权威状态，ticket 只在完整操作成功后续期并随后释放 claim。不以 Service 字节迭代结束代替响应收尾。票据登记在读取及最终授权成功后，登记前再次同步核对具体 owner/取消；HTTP ticket 响应按 Shared 白名单投影，inline 20 MiB 硬预算只引用 Shared，技术对象不穿透应用 sink。
 
@@ -1321,9 +1329,11 @@ Targets每条连接的直接跳板协议容量16项归Shared，与递归深度/�
 3. **依赖方向**：Service→所属Model→Platform SessionTokens/SSH/Terminal；register安装SecureSessionTokens，Platform不定义业务对象。
 4. **类型与转换**：应用内摘要为不透明字符串，Model转换字节和技术异常；HTTP/WS保留逐字段映射，Docker labels保留原生CLI返回的字符串语义，不将标量展开成字符索引对象；数组及嵌套对象仍逐字段投影。Cookie及终端流控窗口引用Shared唯一取值。
 5. **入口与安装**：Files/PTY开启HTTP在真实finish前保留失败撤销路径，取得资源后交付等待最多15秒，Files使用已绑定release，PTY由原SessionOwner释放；按ID的外部关闭仍认证。事件发布后重新核对PTY身份、实例及存活，失败不交付旧资源。
-6. **数据、事务与并发**：本边界不新增存储；搜索限制已扫描及待遍历目录、单目录条目；列目录/递归删除的私有预算由Files Service持有，不替代Shared编码预算。
-7. **生命周期与失败**：上传stage取得后如取消或资源关闭，仍执行绑定discard；无法确认远端清理保留unknown。WS退订失败继续其余清理。Workspace丢弃撤销attachment的待发输入，drain退订从活跃列表移除；退订/集成释放异常转入原owner关闭。长期清理诊断保留16个样本及总数，同一Error去重，未确认资源事实仍保留。
+6. **数据、事务与并发**：Files Service 的 FileMutationQueue 按原 Workspace 排队；同一目录、不同目标的有界上传组，或同一真实目录中普通文件到不同新目标的无冲突压缩组，共享一个原 MachineMutation 持久 endpoint claim，最多16项，两类不混组。压缩组按读写集合拒绝输出与其他输入/输出重叠，准入与派发均核对真实父目录、普通文件和目标不存在；目录/链接源、覆盖、解压及其他写操作封组排队。父目录检查/创建串行且拒绝链接祖先，私有stage与替换各自独立；同名/不同目录也封组排队。成员执行前后仍逐项验证原身份、指纹及Workspace权限。全部成员与专属资源排空后统一结算claim，任一unknown保留blocked；结算失败影响所有写入结果回执；明确没有启动writer且独立资源已排空的取消，在仍有其他成员持有该claim时可先退场，不能据此释放持久claim或提前交付写入结果。已排队且未派发的取消可立即结束且不会后来执行。不同Workspace、Agent与后台传输不共享此组。本边界不新增存储；搜索限制已扫描及待遍历目录、单目录条目；列目录/递归删除的私有预算由Files Service持有，不替代Shared编码预算。
+7. **生命周期与失败**：上传stage取得后如取消或资源关闭，仍执行绑定discard；健康且未commit的stage在取消、断流、Workspace关闭和quiesce期间停止接纳新块，保留原signal排空已派发WRITE，再关闭句柄/删除暂存/释放专属连接。active操作标明upload或other，关闭不重复硬取消已由上传owner接管的排空；未取得stage/已commit准入或原signal失效仍取消并保留unknown。取消只受理，不等待同组结算，终态回执仍等待整组claim。无法确认远端清理保留unknown。WS退订失败继续其余清理。Workspace丢弃撤销attachment的待发输入，drain退订从活跃列表移除；退订/集成释放异常转入原owner关闭。长期清理诊断保留16个样本及总数，同一Error去重，未确认资源事实仍保留。
 8. **当前能力与验收**：源码规则见H-06、E-01.1/E-05.1/E-06.3/E-08.1；行为/容量和未知结果说明见USAGE，静态与待B10场景见testing，不将源码审查作为行为通过。
+
+压缩Adapter在首个写入前同步发送随机标记，发送失败不启动writer。Files Model选择SSH的TERM排空模式，完整读取stdout后仅将实际远端TERM退出且没有该标记映射为FileCommandNotStarted；已见标记、断流、协议失败或5秒收尾期限内未得到退出均保持unknown。Platform归一ssh2的信号名称，远端exit-signal本身仍是副作用unknown，不为Agent或其他命令改变结果分类。派发期间取消保留晚到channel并请求终止，连接关闭与信号受理不冒充实际退出；不新增远端helper或工具。
 
 ### Platform 传输与观测资源边界
 

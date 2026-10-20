@@ -4,6 +4,12 @@ const port = Number(process.env.NEXUS_E2E_DEPLOYMENT_PAGE_PORT ?? '29202');
 let deployed = false;
 let deployments = 0;
 const server = http.createServer((request, response) => {
+	if (request.method === 'POST' && request.url === '/reset') {
+		deployed = false;
+		deployments = 0;
+		response.writeHead(204).end();
+		return;
+	}
 	if (request.method === 'GET' && request.url === '/state') {
 		response.setHeader('Content-Type', 'application/json');
 		response.end(JSON.stringify({ deployed, deployments, release: 'fixture-v1' }));

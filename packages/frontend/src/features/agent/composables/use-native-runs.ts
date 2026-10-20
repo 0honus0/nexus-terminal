@@ -270,7 +270,7 @@ export function useNativeRuns(
 		if (!current || !selected || !selectedThread) return;
 		await operation.execute(
 			async (signal) => {
-				const [page, permits, descendants, body] = await Promise.all([
+				const [page, permits, descendants, initialBody] = await Promise.all([
 					listNativeEvents(current, selected.id, eventCursor.value, signal),
 					listNativeApprovals(current, selected.id, signal),
 					listNativeChildren(current, selected.id, signal),
@@ -281,6 +281,13 @@ export function useNativeRuns(
 					throw new AgentManagementFailure('not_found', 'confirmed');
 				if (latest.version < selected.version || page.items.some((item) => item.runVersion > latest.version))
 					throw new AgentManagementFailure('protocol_failure', 'unknown');
+				// A Run can finish after the body read but before the status read. Once polling stops,
+				// read the final durable entries again instead of leaving the reply behind its cursor.
+				const stopped = !isNativeRunActive(latest) || latest.status === 'unknown';
+				const body =
+					stopped && latest.version > selected.version
+						? await listNativeEntries(current, selectedThread.id, entryCursor.value, signal)
+						: initialBody;
 				return { latest, page, permits, descendants, body };
 			},
 			(value) => {

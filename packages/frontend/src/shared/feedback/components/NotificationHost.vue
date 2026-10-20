@@ -29,6 +29,7 @@
 			<div
 				v-for="notification in notifications"
 				:key="notification.id"
+				:role="notification.kind === 'error' ? 'alert' : undefined"
 				class="mb-2 flex min-w-[250px] max-w-[400px] items-center rounded p-3 text-white opacity-95 shadow-md"
 				:class="{
 					'bg-green-600': notification.kind === 'success',

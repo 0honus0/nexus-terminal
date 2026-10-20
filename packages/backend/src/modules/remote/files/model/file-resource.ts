@@ -190,18 +190,31 @@ export class SftpFileResource implements FileResource {
 		return staged;
 	}
 
-	create(request: FileCreateRequest): Promise<void> {
-		return this.perform(
-			() =>
-				this.#lease.writeFile(request.path, request.bytes, {
-					flags: 'wx',
-					mode: request.mode,
-					signal: request.signal,
-					timeoutMs: request.timeoutMs,
-				}),
-			request.signal,
-			true,
-		);
+	async create(request: FileCreateRequest): Promise<void> {
+		// SFTP v3 often answers an exclusive OPEN of an existing file with the
+		// generic FAILURE status. That write failure cannot prove if the server
+		// dispatched an effect, so it would fence the healthy Workspace lease.
+		// First establish an existing entry with a read-only LSTAT: this is a
+		// confirmed conflict without opening the destination for writing.
+		try {
+			await this.perform(() => this.#lease.lstat(request.path, this.options(request)), request.signal);
+		} catch (error) {
+			if (!(error instanceof RemoteFileFailure) || error.code !== 'not_found') {
+				throw error;
+			}
+			return this.perform(
+				() =>
+					this.#lease.writeFile(request.path, request.bytes, {
+						flags: 'wx',
+						mode: request.mode,
+						signal: request.signal,
+						timeoutMs: request.timeoutMs,
+					}),
+				request.signal,
+				true,
+			);
+		}
+		throw new RemoteFileFailure('conflict');
 	}
 
 	rename(request: FileRenameRequest): Promise<void> {
@@ -307,6 +320,7 @@ export class SftpFileResource implements FileResource {
 		signal: AbortSignal,
 		timeoutMs: number,
 		onLine: (line: string) => void,
+		beforeWriteMarker?: string,
 	): Promise<FileLineCommandOutcome> {
 		if (!this.isOpen || signal.aborted || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
 			throw new FileCommandNotStarted();
@@ -323,8 +337,28 @@ export class SftpFileResource implements FileResource {
 		let channel: Awaited<ReturnType<MachineConnection['openRawCommand']>> | null = null;
 		let stopStderr: (() => void) | null = null;
 		let commandFailure: unknown = null;
+		let writerStarted = false;
+
+		const consumeLine = (line: string) => {
+			if (line === beforeWriteMarker) {
+				if (writerStarted) {
+					throw new RemoteFileFailure('operation_unknown');
+				}
+				writerStarted = true;
+				return;
+			}
+			if (beforeWriteMarker !== undefined && !writerStarted) {
+				throw new RemoteFileFailure('operation_unknown');
+			}
+			onLine(line);
+		};
+
 		try {
-			channel = await this.#machine.openRawCommand(command, controller.signal);
+			channel = await this.#machine.openRawCommand(
+				command,
+				controller.signal,
+				beforeWriteMarker ? 'signal' : 'close',
+			);
 			// ssh2 keeps extended stderr paused until someone subscribes. Native
 			// zip/tar diagnostics can otherwise fill the remote SSH window and
 			// deadlock the command while stdout is being consumed. Drain without
@@ -334,7 +368,7 @@ export class SftpFileResource implements FileResource {
 			const inputFinished = finished(channel.writable, {
 				readable: false,
 				cleanup: true,
-				signal: controller.signal,
+				signal: beforeWriteMarker === undefined ? controller.signal : undefined,
 			});
 			channel.writable.end();
 			await inputFinished;
@@ -353,7 +387,7 @@ export class SftpFileResource implements FileResource {
 					if (Buffer.byteLength(line, 'utf8') > 8192) {
 						throw new RemoteFileFailure('operation_unknown');
 					}
-					onLine(line);
+					consumeLine(line);
 					pending = pending.slice(newline + 1);
 					newline = pending.indexOf('\n');
 				}
@@ -363,9 +397,19 @@ export class SftpFileResource implements FileResource {
 			}
 			pending += decoder.decode();
 			if (pending) {
-				onLine(pending);
+				consumeLine(pending);
 			}
 			const outcome = await channel.outcome;
+			if (
+				beforeWriteMarker !== undefined &&
+				!writerStarted &&
+				controller.signal.aborted &&
+				outcome.status === 'unknown' &&
+				outcome.reason === 'remote_signal' &&
+				outcome.signal === 'TERM'
+			) {
+				throw new FileCommandNotStarted();
+			}
 			if (outcome.status === 'unknown' || controller.signal.aborted) {
 				throw new RemoteFileFailure('operation_unknown');
 			}
@@ -374,6 +418,9 @@ export class SftpFileResource implements FileResource {
 				: { status: 'nonzero', exitCode: outcome.exitCode };
 		} catch (cause) {
 			commandFailure = cause;
+			if (cause instanceof FileCommandNotStarted) {
+				throw cause;
+			}
 			if (cause instanceof MachineDispatchFailure && cause.outcome !== 'unknown') {
 				throw new FileCommandNotStarted({ cause });
 			}

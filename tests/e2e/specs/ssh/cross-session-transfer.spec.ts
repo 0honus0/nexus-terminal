@@ -63,30 +63,22 @@ async function runTransfer(
 			message.type === 'transfer.copyMove' &&
 			message.payload?.requestId === requestId &&
 			message.payload?.type === 'progress' &&
-			message.payload?.totalKnown === true,
+			message.payload?.totalKnown === false,
 		20_000,
 	);
-	const completedPromise = waitForJson(
+	const terminalPromise = waitForJson(
 		socket,
 		(message) =>
 			message.type === 'transfer.copyMove' &&
 			message.payload?.requestId === requestId &&
-			message.payload?.type === 'completed',
+			['completed', 'failed'].includes(String(message.payload?.type)),
 		30_000,
 	);
-	const failedPromise = waitForJson(
-		socket,
-		(message) =>
-			message.type === 'transfer.copyMove' &&
-			message.payload?.requestId === requestId &&
-			message.payload?.type === 'failed',
-		30_000,
-	).then((message) => {
-		throw new Error(`Transfer failed: ${String(message.payload?.message ?? 'unknown error')}`);
-	});
 	await requestWorkspace(socket, 'transfer.copyMove', payload, requestId, 30_000);
-	await Promise.race([completedPromise, failedPromise]);
+	const terminal = await terminalPromise;
+	expect(terminal.payload?.type, JSON.stringify(terminal.payload)).toBe('completed');
 	const progress = await progressPromise;
+	expect(progress.payload?.totalBytes).toBe(progress.payload?.transferredBytes);
 	return progress.payload;
 }
 
@@ -110,7 +102,7 @@ test('cross-session copy and move transfer data and progress over real SFTP', as
 				sources: ['/cross-copy.txt'],
 				destination: '/cross-target',
 			});
-			expect(progress).toMatchObject({ totalKnown: true });
+			expect(progress).toMatchObject({ totalKnown: false });
 			expect(Number(progress?.totalBytes)).toBeGreaterThan(0);
 			await expect(readRemoteFile(destination.socket, '/cross-target/cross-copy.txt')).resolves.toContain(
 				'cross-copy-body',
@@ -124,7 +116,7 @@ test('cross-session copy and move transfer data and progress over real SFTP', as
 				sources: ['/folder-seed'],
 				destination: '/',
 			});
-			expect(progress).toMatchObject({ totalKnown: true });
+			expect(progress).toMatchObject({ totalKnown: false });
 			expect(Number(progress?.totalFiles)).toBeGreaterThan(0);
 			expect(Number(progress?.totalBytes)).toBeGreaterThan(0);
 			await expect(readRemoteFile(destination.socket, '/folder-seed/nested.txt')).resolves.toContain('nested');
@@ -139,7 +131,7 @@ test('cross-session copy and move transfer data and progress over real SFTP', as
 					sources: ['/folder-seed'],
 					destination: '/cross-target',
 				});
-				expect(progress).toMatchObject({ totalKnown: true });
+				expect(progress).toMatchObject({ totalKnown: false });
 				expect(Number(progress?.totalFiles)).toBeGreaterThan(0);
 				expect(Number(progress?.totalBytes)).toBeGreaterThan(0);
 				await expect(

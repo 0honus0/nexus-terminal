@@ -24,6 +24,7 @@ import {
 	waitForBinaryText,
 	waitForJson,
 	waitForFilesystemReady,
+	WorkspaceRequestFailure,
 } from '../../support/ws';
 import { step } from '../../support/steps';
 
@@ -248,7 +249,9 @@ test('detached workspace resumes only with its credential and replays missed ter
 	}
 });
 
-test('detached workspace keeps archive work running and replays its outcome on resume', async ({ request }) => {
+test('detached workspace keeps archive work running and publishes its verified result on resume', async ({
+	request,
+}) => {
 	await loginAsInitialAdmin(request);
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(request);
@@ -273,11 +276,6 @@ test('detached workspace keeps archive work running and replays its outcome on r
 
 		const resumed = await openAuthenticatedWebSocket(request);
 		try {
-			const outcome = waitForJson(
-				resumed,
-				(message) => message.type === 'transfer.archive' && message.payload?.requestId === requestId,
-				10_000,
-			);
 			const result = await resumeWorkspaceSession(resumed, {
 				workspaceId: workspace.workspaceId,
 				connectionId,
@@ -285,14 +283,28 @@ test('detached workspace keeps archive work running and replays its outcome on r
 				attachmentGeneration: workspace.attachmentGeneration,
 				terminalOffset: workspace.terminalOffset,
 			});
-			const event = (await outcome).payload as ArchiveResult;
-			test.skip(event.code === 'COMMAND_NOT_FOUND', 'zip is not installed in this test environment');
-			expect(event.type, JSON.stringify(event)).toBe('completed');
-			const archive = await requestWorkspaceBinary(resumed, 'filesystem.readBinary', {
-				path: destination,
-				maxBytes: 64 * 1024 * 1024,
-			});
-			expect(archive.bytes.byteLength).toBeGreaterThan(0);
+			// Terminal PTY output is replayable, but transfer event listeners are
+			// attached to an exact WebSocket and must not deliver onto its successor.
+			// Confirm the detached archive by its actual published ZIP bytes instead
+			// of waiting for a stale socket's non-replayable completion event.
+			await expect
+				.poll(
+					async () => {
+						try {
+							const archive = await requestWorkspaceBinary(resumed, 'filesystem.readBinary', {
+								path: destination,
+								maxBytes: 64 * 1024 * 1024,
+							});
+							expect(archive.bytes.subarray(0, 4)).toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+							return archive.bytes.includes(Buffer.from('archive-source.txt'));
+						} catch (error) {
+							if (error instanceof WorkspaceRequestFailure && error.code === 'not_found') return false;
+							throw error;
+						}
+					},
+					{ timeout: 30_000 },
+				)
+				.toBe(true);
 			await requestWorkspace(resumed, 'workspace.close', {
 				workspaceId: workspace.workspaceId,
 				connectionId,

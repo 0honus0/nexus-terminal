@@ -1,5 +1,6 @@
 import { expect, test } from '../../support/fixtures';
 import { createHash } from 'node:crypto';
+import { readWorkspaceFileListResponse } from '../../../../packages/shared/src/remote/files/workspace-codec';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { E2E_SSH, ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
 import {
@@ -19,6 +20,14 @@ async function readRemoteFile(socket: any, remotePath: string): Promise<Buffer> 
 		maxBytes: 64 * 1024 * 1024,
 	});
 	return response.bytes;
+}
+
+async function expectNoUploadStages(socket: Parameters<typeof requestWorkspace>[0]): Promise<void> {
+	const listing = readWorkspaceFileListResponse(await requestWorkspace(socket, 'filesystem.list', { path: '/' }));
+	expect(listing.path).toBe('/');
+	expect(
+		listing.entries.filter((entry) => entry.name.startsWith('.nexus-upload-') && entry.name.endsWith('.part')),
+	).toEqual([]);
 }
 
 test('pipelined upload and HTTP download stay fast under SFTP latency and preserve every byte', async ({ request }) => {
@@ -306,9 +315,7 @@ test('cancelling pipelined remote writes preserves the destination and permits a
 					return (await state.json()).sftpPendingWrites;
 				})
 				.toBe(0);
-			await expect(
-				requestWorkspace(workspace.socket, 'filesystem.stat', { path: `/.nexus-upload-${uploadId}.part` }),
-			).rejects.toThrow();
+			await expectNoUploadStages(workspace.socket);
 			expect(await readRemoteFile(workspace.socket, destinationPath)).toEqual(
 				cancel ? Buffer.from(original) : payload,
 			);
@@ -337,7 +344,6 @@ test('upload cancelled during pending start never becomes active after delayed r
 	const workspace = await openWorkspaceSession(request, connectionId, `upload-pending-cancel-${crypto.randomUUID()}`);
 	const uploadId = `pending-cancel-${crypto.randomUUID()}`;
 	const remotePath = '/pending-start-cancel.bin';
-	const temporaryPath = `/.nexus-upload-${uploadId}.part`;
 
 	await fetch(`${E2E_SSH.controlUrl}/sftp/stat-delay?ms=1500`, { method: 'POST' });
 	try {
@@ -381,7 +387,7 @@ test('upload cancelled during pending start never becomes active after delayed r
 		await expect(startPromise).resolves.toEqual({ started: true });
 		await expect(forbiddenTerminalEvent).resolves.toBe(false);
 		await expect(requestWorkspace(workspace.socket, 'filesystem.stat', { path: remotePath })).rejects.toThrow();
-		await expect(requestWorkspace(workspace.socket, 'filesystem.stat', { path: temporaryPath })).rejects.toThrow();
+		await expectNoUploadStages(workspace.socket);
 	} finally {
 		await fetch(`${E2E_SSH.controlUrl}/sftp/stat-delay?ms=0`, { method: 'POST' });
 		await closeWebSocket(workspace.socket);

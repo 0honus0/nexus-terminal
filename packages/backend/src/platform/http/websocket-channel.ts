@@ -1,4 +1,9 @@
-import { MAX_WEBSOCKET_INPUT_MESSAGES, MAX_WEBSOCKET_INPUT_BYTES, MAX_WEBSOCKET_BUFFER_BYTES } from './http-limits.js';
+import {
+	MAX_WEBSOCKET_INPUT_MESSAGES,
+	MAX_WEBSOCKET_INPUT_BYTES,
+	MAX_WEBSOCKET_BUFFER_BYTES,
+	MAX_WEBSOCKET_FRAME_BYTES,
+} from './http-limits.js';
 import { WebSocket } from 'ws';
 import type { HttpWebSocketChannel } from './http-types.js';
 
@@ -6,12 +11,17 @@ interface WebSocketChannelOptions {
 	isAccepting(): boolean;
 	maxBinaryMessageBytes?: number;
 	maxTextMessageBytes?: number;
+	maxBufferedTextBytes?: number;
 	trackTask(task: Promise<unknown>, observeFailure?: boolean): void;
 	onClosed(): void;
 }
 
 /** One socket owns its queue, callbacks, flow control and graceful completion. */
 export function createWebSocketChannel(ws: WebSocket, options: WebSocketChannelOptions): HttpWebSocketChannel {
+	const textSendBudget = Math.min(
+		MAX_WEBSOCKET_FRAME_BYTES,
+		Math.max(MAX_WEBSOCKET_BUFFER_BYTES, options.maxBufferedTextBytes ?? MAX_WEBSOCKET_BUFFER_BYTES),
+	);
 	let listener: ((value: string) => Promise<void>) | null = null;
 	let binaryListener: ((value: Uint8Array) => Promise<void>) | null = null;
 	let closing: (() => Promise<void>) | null = null;
@@ -72,7 +82,16 @@ export function createWebSocketChannel(ws: WebSocket, options: WebSocketChannelO
 			} finally {
 				queuedMessages -= 1;
 				queuedBytes -= bytes;
-				if (binaryListener && queuedBytes < MAX_WEBSOCKET_INPUT_BYTES / 4 && ws.readyState === WebSocket.OPEN) {
+				// A successful final upload chunk may close the socket *inside* its
+				// append callback while the ingress reader remains paused at high
+				// water. A paused WebSocket cannot consume the peer's Close frame,
+				// so resume in CLOSING too; otherwise a completed upload can hang
+				// until the close watchdog times out despite committed file bytes.
+				if (
+					binaryListener &&
+					queuedBytes < MAX_WEBSOCKET_INPUT_BYTES / 4 &&
+					ws.readyState !== WebSocket.CLOSED
+				) {
 					ws.resume();
 				}
 			}
@@ -89,10 +108,7 @@ export function createWebSocketChannel(ws: WebSocket, options: WebSocketChannelO
 	});
 	const channel: HttpWebSocketChannel = {
 		send(value) {
-			if (
-				ws.readyState !== WebSocket.OPEN ||
-				ws.bufferedAmount + Buffer.byteLength(value) > MAX_WEBSOCKET_BUFFER_BYTES
-			) {
+			if (ws.readyState !== WebSocket.OPEN || ws.bufferedAmount + Buffer.byteLength(value) > textSendBudget) {
 				return false;
 			}
 			ws.send(value, (error) => {

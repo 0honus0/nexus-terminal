@@ -11,6 +11,7 @@ export function usePreferences(): PreferencesController {
 		load: store.load.bind(store),
 		update: store.update.bind(store),
 		savePanelScale: store.savePanelScale.bind(store),
+		saveWorkspacePreference: store.saveWorkspacePreference.bind(store),
 		reset: store.reset.bind(store),
 	};
 }
