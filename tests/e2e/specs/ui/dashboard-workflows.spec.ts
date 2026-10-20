@@ -288,12 +288,6 @@ test('dashboard reconnect completion refreshes recent connection without navigat
 	await resetTestSshFilesystem();
 	const connectionId = await ensureTestSshConnection(context.request);
 
-	// Recent connections are owned by the mounted frontend store, so prime through the UI.
-	await connectTestSshFromConnectionsPage(page, connectionId);
-	await page.getByRole('button', { name: 'Close Tab', exact: true }).click();
-	await page.locator('.app-nav-links').getByRole('link', { name: 'Dashboard', exact: true }).click();
-	await expect(page).toHaveURL(/\/$/);
-
 	// Workspace SSH sessions use WorkspaceService, not the legacy HTTP
 	// SessionOwner. Only the latter emits SSH_CONNECT_SUCCESS audit records;
 	// asserting that event here incorrectly couples two different producers.
@@ -308,12 +302,14 @@ test('dashboard reconnect completion refreshes recent connection without navigat
 	const connectStarted = new Promise<void>((resolve) => {
 		markConnectStarted = resolve;
 	});
+	let holdConnect = false;
 	// Hold work already owned by the runtime, not the page's preflight detail
-	// read. Navigating away correctly revokes an unstarted page intention.
+	// read. Install before navigation: Playwright instruments WebSocket through
+	// an init script, so registering it in an already mounted SPA is too late.
 	await page.routeWebSocket('**/ws/workspace', (socket) => {
 		const server = socket.connectToServer();
 		socket.onMessage(async (message) => {
-			if (typeof message === 'string' && JSON.parse(message).type === 'workspace.connect') {
+			if (holdConnect && typeof message === 'string' && JSON.parse(message).type === 'workspace.connect') {
 				markConnectStarted?.();
 				await connectGate;
 			}
@@ -322,6 +318,12 @@ test('dashboard reconnect completion refreshes recent connection without navigat
 	});
 
 	try {
+		// Recent connections are owned by the mounted frontend store, so prime through the UI.
+		await connectTestSshFromConnectionsPage(page, connectionId);
+		await page.getByRole('button', { name: 'Close Tab', exact: true }).click();
+		await page.locator('.app-nav-links').getByRole('link', { name: 'Dashboard', exact: true }).click();
+		await expect(page).toHaveURL(/\/$/);
+
 		const reconnect = page.getByRole('button', { name: 'Reconnect', exact: true });
 		const row = connectionRow(page, 'E2E SSH');
 		await expect(reconnect).toBeVisible();
@@ -335,6 +337,7 @@ test('dashboard reconnect completion refreshes recent connection without navigat
 		// weakening the strict greater-than assertion on the refreshed row.
 		await expect.poll(() => Date.now()).toBeGreaterThan(previousLastConnectedAt + 1_000);
 
+		holdConnect = true;
 		await reconnect.click();
 		await connectStarted;
 

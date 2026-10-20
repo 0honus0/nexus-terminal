@@ -245,6 +245,8 @@ The main E2E projects do not depend on `auth` to create shared state. Normal spe
 
 The SSH project starts a real `ssh2.Server` on `127.0.0.1:22222`. Its SFTP filesystem is isolated under `tests/e2e/.tmp/ssh-root`, so GitHub Actions does not depend on any external SSH host.
 
+The controlled transfer target forwards `127.0.0.1:22225` to that SSH server; override it with `NEXUS_E2E_SSH_TRANSFER_TARGET_PORT`. It provides a distinct endpoint with the same fixture key and filesystem. Native transfer credentials alone use their real private `/tmp/nexus-transfer-<UUID>` directory so exec and SFTP address the same files.
+
 Local cross-server transfer scenarios require `ssh`, `scp`, `rsync` and `sshpass` on the host PATH, matching the E2E runner image. Missing tools must be supplied before running these scenarios, not worked around by weakening transfer assertions.
 
 Run local Playwright invocations sequentially within a checkout: they share fixture services and the report/artifact directories. Select multiple spec files in one invocation rather than overlapping commands; isolated GitHub shard jobs do not share these resources.
@@ -1802,3 +1804,11 @@ USAGE既有绝对目标、显式信任与任务结果说明仍符合产品行为
 仍未修复：归档运行中取消/真正并行；第8组6文件上传同样被Files mutationTail整段串行化，首波只开1个上传stream。后者与归档并行共有持久host/port独占claim限制，不能只删除本地队列或跳过claim；需要同owner有界分组、路径冲突准入和整组排空后结算，unknown仍阻断外部准入。保持现有并发/性能断言，不标记已完成。
 
 本批最终静态：根check、严格E2E TypeScript、全仓format:all:check及git diff --check均exit 0（/tmp/nexus-round25-*.log）；两轮源码复核已完成。仅测试与证据文档变化，产品源码未改；前后端build沿a8bed777基线已通过，本批无构建输入变化。行为待后续远程SHA，不运行本地测试。
+
+### Dashboard重连拦截安装顺序（2026-10-20）
+
+177cba3e第2组Dashboard reconnect两次均120秒等待。源码核对Playwright 1.63.0的WebSocketRouteDispatcher.install→addInitScript→Page.addScriptToEvaluateOnNewDocument：首次routeWebSocket在SPA已加载后安装，当前文档不会获得WebSocket包装，因此connectStarted永不触发。现将路由安装移到初次connectTestSshFromConnectionsPage导航之前，初次连接不阻塞，仅第二次Reconnect启用gate；仍等待runtime派发workspace.connect后离开Workspace，并核对后台完成刷新原Dashboard时间和稍后原session已连接。不更改产品逻辑、120秒期限或断言。
+
+四表：功能为原后台重连完成不导航/刷新recent；owner仅测试故障注入；无新类型或Shared修改；两轮源码复核覆盖首次直通/第二次阻塞/原finally释放/跨页runtime，严格E2E TS通过，格式和最终静态另记。a8bed777新远程39361569436第1/3/4组已通过，其他尚在运行；3117909a后续三项夹具修复已提交，保留现轮证据后一起推送。USAGE原后台Workspace与recent说明适用。
+
+本批门禁最终：根check、严格E2E TypeScript、format:all:check、git diff --check均exit 0（/tmp/nexus-round26-*.log）。远程a8bed777的39361569436现第1/3/4/5/7组PASS，第6组44通过/3失败（Send Files真实传输已PASS，剩归档取消、压实ACK及缓存Host Key），第8组54通过/1失败（仅多上传stream串行化）；第2组尚在运行，下一推送如取消须保留未验范围。3117909a与本批Dashboard修复等待新SHA验证。
