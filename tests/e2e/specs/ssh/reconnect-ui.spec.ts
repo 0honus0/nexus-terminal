@@ -89,6 +89,11 @@ async function createMultiSessionConnections(request: APIRequestContext): Promis
 }
 
 async function openConnectionFromWorkspacePicker(page: Page, connectionId: number): Promise<void> {
+	const response = await page.request.get('/api/v1/targets/connections');
+	expect(response.ok()).toBeTruthy();
+	const connection = readConnectionList(await response.json()).find((item) => item.id === connectionId);
+	expect(connection, `Connection ${connectionId} must be persisted before opening a second Workspace`).toBeTruthy();
+	if (!connection) throw new Error(`Connection ${connectionId} is missing`);
 	await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
 	const picker = page.getByRole('heading', { name: 'Connections & sessions', exact: true });
 	await expect(picker).toBeVisible();
@@ -96,7 +101,13 @@ async function openConnectionFromWorkspacePicker(page: Page, connectionId: numbe
 	await expect(row).toBeVisible();
 	await row.click();
 	await expect(picker).toBeHidden();
-	await expect(page.locator('.command-bar-command-input:visible')).toBeEnabled({ timeout: 20_000 });
+	// An existing Workspace already has an enabled command bar. That cannot
+	// confirm the newly requested session reached SSH ready; wait for the
+	// *requested* connection's selected tab and connected state instead.
+	const selected = page.locator('.terminal-tab-shell').getByRole('tab', { selected: true });
+	await expect(selected).toHaveAttribute('title', connection.name || connection.host, { timeout: 35_000 });
+	await expect(selected).toHaveAttribute('data-session-state', 'connected', { timeout: 35_000 });
+	await expect(page.locator('.command-bar-command-input:visible')).toBeEnabled();
 }
 
 async function xtermGeometry(terminal: Locator): Promise<{ width: string; height: string; rowCount: number }> {
