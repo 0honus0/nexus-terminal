@@ -8,6 +8,7 @@ import {
 	type PreferencesPatch,
 	type UserPreferences,
 	type PanelScaleKind,
+	type WorkspacePreferenceKey,
 } from '../model/preferences-types';
 import { projectPreferences } from '../model/presentation-mapper';
 
@@ -43,5 +44,22 @@ export const usePreferencesStore = defineStore('preferences', () => {
 		await presentation.savePanelScale(kind, scale, permission);
 	}
 
-	return { values, version, loaded, load, update, savePanelScale, reset: presentation.reset };
+	async function saveWorkspacePreference(
+		key: WorkspacePreferenceKey,
+		value: boolean,
+		permission: AbortSignal,
+	): Promise<void> {
+		await presentation.saveWorkspacePreference(key, value, permission);
+	}
+
+	return {
+		values,
+		version,
+		loaded,
+		load,
+		update,
+		savePanelScale,
+		saveWorkspacePreference,
+		reset: presentation.reset,
+	};
 });

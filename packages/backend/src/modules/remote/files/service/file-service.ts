@@ -68,7 +68,7 @@ interface OwnedResource {
 	userId: number;
 	resource: FileResource;
 	expiresAt: number;
-	active: Set<AbortController>;
+	active: Map<AbortController, 'upload' | 'other'>;
 	inFlight: Set<Promise<unknown>>;
 	mutations: FileMutationQueue;
 	closePromise: Promise<void> | null;
@@ -130,7 +130,6 @@ interface RunningUpload extends TransferResourceOwner {
 	stage: FileUploadStage | null;
 	queue: Promise<void>;
 	completion: Promise<void>;
-	settlement: Promise<void> | null;
 	terminal: boolean;
 	discarding: boolean;
 	cancelled: boolean;
@@ -469,7 +468,7 @@ export class RemoteFileService {
 				userId,
 				resource,
 				expiresAt: Date.now() + FILE_IDLE_MS,
-				active: new Set(),
+				active: new Map(),
 				inFlight: new Set(),
 				mutations: new FileMutationQueue(MAX_WORKSPACE_TRANSFERS),
 				closePromise: null,
@@ -683,7 +682,7 @@ export class RemoteFileService {
 			) {
 				throw new RemoteFileFailure('not_found');
 			}
-			record.active.add(controller);
+			record.active.set(controller, uploadPath === undefined ? 'other' : 'upload');
 			record.inFlight.add(lifecycle);
 
 			controller.signal.throwIfAborted();
@@ -1520,7 +1519,6 @@ export class RemoteFileService {
 			stage: null,
 			queue: Promise.resolve(),
 			completion,
-			settlement: null,
 			terminal: false,
 			discarding: false,
 			cancelled: false,
@@ -1696,7 +1694,6 @@ export class RemoteFileService {
 					this.uploads.delete(key);
 				}
 			});
-		task.settlement = operation;
 		void operation.catch(() => undefined);
 		return { started: true };
 	}
@@ -1831,27 +1828,9 @@ export class RemoteFileService {
 			append: (bytes) => this.appendUpload(token, task, bytes),
 
 			abort: () => {
-				if (
-					this.uploads.get(this.uploadKey(workspaceId, uploadId)) !== task ||
-					task.finished ||
-					task.discarding
-				) {
-					return;
+				if (this.uploads.get(this.uploadKey(workspaceId, uploadId)) === task) {
+					this.stopUpload(task, 'abort');
 				}
-				// Losing the browser's binary WebSocket does not imply the dedicated
-				// SFTP lease is lost. The acknowledged WRITE queue is still owned by
-				// the upload worker. Let that worker drain admitted packets, close
-				// the staging handle, and prove REMOVE before retiring the lease.
-				// The client-side transfer outcome remains unknown, never "cancelled"
-				// or successfully committed, even if the private stage is discarded.
-				if (task.stage && !task.terminal && !task.controller.signal.aborted) {
-					task.discarding = true;
-					task.terminal = true;
-					task.fail(new RemoteFileFailure('operation_unknown'));
-					return;
-				}
-				task.fail(new RemoteFileFailure('operation_unknown'));
-				task.controller.abort();
 			},
 		};
 	}
@@ -1882,30 +1861,28 @@ export class RemoteFileService {
 		if (this.uploads.get(key) !== task || task.finished) {
 			return false;
 		}
-		// A pre-commit stage can be discarded even if its binary WebSocket was
-		// lost. Aborting its dedicated SFTP signal before the acknowledged WRITE
-		// queue drains makes REMOVE unprovable, cascading into baseline failures.
-		// Keep the client outcome unknown for transport aborts, and do not
-		// take this path after a final frame has admitted a commit.
-		if (task.discarding || (task.stage !== null && !task.terminal && !task.controller.signal.aborted)) {
-			if (!task.discarding) {
-				task.discarding = true;
-				task.cancelled = mode === 'cancel';
-				task.terminal = true;
-				task.fail(new RemoteFileFailure(mode === 'cancel' ? 'remote_unavailable' : 'operation_unknown'));
-			}
-			if (task.settlement) {
-				await task.settlement;
-			}
-			if (task.cleanupFailure) {
-				throw task.cleanupFailure;
-			}
-		} else {
-			task.cancelled = mode === 'cancel';
-			task.fail(new RemoteFileFailure('operation_unknown'));
-			task.controller.abort();
-		}
+		// Acceptance is independent of group settlement: later members must still
+		// be able to accept cancellation while this member drains its WRITE queue.
+		this.stopUpload(task, mode);
 		return true;
+	}
+
+	private stopUpload(task: RunningUpload, mode: 'cancel' | 'abort' | 'close'): void {
+		if (task.finished || task.discarding) {
+			return;
+		}
+		if (mode === 'cancel') {
+			task.cancelled = true;
+		}
+		task.fail(new RemoteFileFailure(mode === 'cancel' ? 'remote_unavailable' : 'operation_unknown'));
+		if (task.stage !== null && !task.terminal && !task.controller.signal.aborted) {
+			// A healthy pre-commit stage owns its acknowledged writes through CLOSE
+			// and REMOVE. Owner shutdown stops dispatch without destroying that lease.
+			task.discarding = true;
+			task.terminal = true;
+			return;
+		}
+		task.controller.abort();
 	}
 
 	startCopyMove(
@@ -3037,8 +3014,7 @@ export class RemoteFileService {
 			}
 			for (const task of this.uploads.values()) {
 				if (task.ownerId === record.id) {
-					task.fail(new RemoteFileFailure('remote_unavailable'));
-					task.controller.abort();
+					this.stopUpload(task, 'close');
 				}
 			}
 			for (const task of this.copyMoves.values()) {
@@ -3052,8 +3028,10 @@ export class RemoteFileService {
 				}
 			}
 		}
-		for (const controller of record.active) {
-			controller.abort();
+		for (const [controller, kind] of record.active) {
+			if (kind !== 'upload') {
+				controller.abort();
+			}
 		}
 		const completion = Promise.resolve().then(async () => {
 			if (record.inFlight.size) {
@@ -3123,8 +3101,7 @@ export class RemoteFileService {
 		this.downloadTickets.close();
 		this.preparedUploads.clear();
 		for (const task of this.uploads.values()) {
-			task.fail(new RemoteFileFailure('remote_unavailable'));
-			task.controller.abort();
+			this.stopUpload(task, 'close');
 		}
 		for (const task of this.copyMoves.values()) {
 			task.controller.abort();
@@ -3142,8 +3119,10 @@ export class RemoteFileService {
 			controller.abort();
 		}
 		for (const record of this.owners.values()) {
-			for (const controller of record.active) {
-				controller.abort();
+			for (const [controller, kind] of record.active) {
+				if (kind !== 'upload') {
+					controller.abort();
+				}
 			}
 		}
 	}

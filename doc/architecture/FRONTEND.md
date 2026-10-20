@@ -288,7 +288,7 @@ B8跨App的plugin-api/agent-dispatcher/SDK父页已改用Shared plugins/intent-*
 3. **依赖方向**：Workspace→Preferences public→唯一Store→API/Shared；功能内部直接消费唯一owner，不从runtime反向借用Preferences类型。
 4. **类型与转换**：所有HTTP严格解码，逐字段转独立应用快照；布局递归投影，焦点shortcuts为字符串。Workspace编辑状态与持久命令显式转换，移除旧Protocol导入及旧路径转导出。
 5. **入口与安装**：沿既有四读取与五写入真实入口，写入消费完整PresentationView；首次未保存version=0，不虚构已保存状态。
-6. **数据、事务与并发**：读取四域须同一version后发布，变更与读取统一排队；旧编辑携原版本，冲突不自动升级，成功整体发布服务端快照。UI变更不先冒充持久成功。
+6. **数据、事务与并发**：读取四域须同一version后发布，变更与读取统一排队；旧编辑携原版本，冲突不自动升级，成功整体发布服务端快照。Workspace尺寸、布局锁/导航开关和面板缩放属于窄交互意图，由Store在实际派发时基于队列前项已确认快照构造完整协议命令；尺寸另校验ID、节点类型、组件、方向及子节点顺序均未改变，不携带旧侧栏或陈旧版本。外部CAS冲突/unknown仍阻断队列，无自动读改重试。UI变更不先冒充持久成功。
 7. **生命周期与失败**：Store持原认证scope，撤销使原队列与回填失效；未知写入阻止后续提交，只能显式只读恢复，不自动重放。Workspace停用撤销未派发保存，已派发结果归原Store追踪。
 8. **当前能力与验收**：源码已替换正式Preferences表单和Workspace布局/焦点/偏好保存，旧HTTP及本地兼容删除；当前版本验证逐项归testing，不沿用前批PASS。外观与Agent/Operations/System源码已接Shared，本轮完整行为留远程回归。
 

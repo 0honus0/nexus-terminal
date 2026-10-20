@@ -39,11 +39,8 @@ export const workspaceSettingsAdapter: WorkspaceSettingsRepository = {
 		};
 	},
 
-	async saveResizedLayout(snapshot, permission) {
-		const value = await usePresentationStore().update(
-			{ action: 'layout', expectedVersion: snapshot.version, layout: toPersonalLayout(snapshot.layout) },
-			permission,
-		);
+	async saveResizedLayout(layout, permission) {
+		const value = await usePresentationStore().saveLayoutSizes(toPersonalLayout(layout), permission);
 		return value.version;
 	},
 

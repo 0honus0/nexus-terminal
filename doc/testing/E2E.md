@@ -1829,3 +1829,30 @@ Files原整段mutationTail替换为本Workspace的FileMutationQueue：仅同一�
 USAGE上传章节及Backend并发边界已同步。本地不运行行为测试。后续继续归档真实退出证明及其独立取消，不能以关闭SSH channel冒充writer退出。
 
 本批静态门禁：根check、前后端build、全仓format:all:check及git diff --check均exit 0（/tmp/nexus-round27-*.log）。两轮源码复核完成，未运行本地行为测试。远程f90321ba最终第1/3/4/5/7组通过，第8组54通过/1失败（上传并发），第6组45通过/2失败（归档取消、压实恢复后目录查询），第2组36通过/2失败（归档取消与并行）；第6组缓存Host Key及第2组Dashboard重连本轮已通过。布局锁另有首轮失败/重试通过，仍需检查持久化竞态。
+
+### Shell探测时机与布局保存竞态（2026-10-20）
+
+上传分组77837576已推送，新远程39363448188运行中，质量/构建与Docker smoke通过；本批不混用其结果。离线核对f90321ba失败：压实用例在首次目录探测前已发送前台命令，NativeShellIntegration按既有保护拒绝运行中探测。用例现在于输入前通过真实terminal.currentDirectory初始化并断言原Shell目录，恢复后仍核对相同目录及Shell PID，不放宽生产保护或原断言。
+
+布局锁首轮失败/重试通过的trace显示先前settings/layout返回409、Presentation Store进入blocked，点击锁并无新的PUT。根因为尺寸controller缓存全局version，延迟保存携旧版本；改为Workspace→Preferences唯一Store的窄尺寸意图，队列实际派发时消费本地最新已确认快照并验证完整布局结构相同。锁/导航的有限字段也由同一队列构造，不覆盖其余偏好；完整表单/布局编辑仍使用原版本CAS。没有网络重试或外部冲突自动升级；未知写入仍要求显式只读恢复。
+
+| 审核表   | 本批结论                                                                                                                      |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 保留原目录、压实大小、同Shell恢复、锁定持久化及布局尺寸断言；修正探测初始化与真实保存竞态。                                   |
+| 职责归属 | Shell初始化只改测试消费者；Preferences Store拥有串行状态，Workspace保留独立UI类型及Adapter转换，不改Backend契约。             |
+| 类型归属 | 新有限WorkspacePreferenceKey属于Preferences内部应用类型；尺寸端口只传真正需要的布局，不再传无消费者的旧version/侧栏。         |
+| 完成证据 | 两轮复核涵盖权限撤销、冻结输入、结构改变、外部CAS/unknown阻断、队列前项确认、已发请求追踪；静态结果随后记录，无本地行为测试。 |
+
+USAGE对应偏好/布局章节和Frontend并发边界已同步。归档实际取消/并行仍待修复；不能通过隐藏unknown进度、撤销持久围栏或放宽断言销项。
+
+### 并发上传取消与关闭收尾补修（2026-10-20）
+
+77837576 / 39363448188第1/3/4/5/7组通过，第2/6组原归档/压实失败仍在；第8组六路真实stream断言已PASS，但随后reset失败导致35项失败，不记整组通过。首因是多上传取消/页面结束期间，closeOwned/quiesce再次硬abort正在排空的stage，导致discard报告operation_unknown并真实保留cleanup_failed。另有目录上传下载首轮/重试取消，以及目录浏览一次首轮失败。
+
+本批取消受理与终态分开：finishUpload不等待整组settlement，允许其余成员继续受理取消；取消/字节断流/关闭统一stopUpload。healthy pre-commit stage保留原SFTP signal排空WRITE并执行CLOSE/REMOVE，关闭等待原inFlight；没有stage、已准入commit或信号已失效仍走未知分支。active操作仅区分upload/other，Workspace关闭和quiesce不再次硬abort上传owner已经接管的清理；真正清理失败继续留存并使关闭失败，未吞错或修改reset断言。删除已无消费者的task.settlement。
+
+目录覆盖用例原只等新兄弟文件可见就读取旧文件，原文件仍可能在替换，已签发size/mtime下载票据随后失效是正确保护；增加原控制WS两项completed回执的Shared严格解码/目标路径核对，再保留原真实下载和字节断言，CDP仅被动观察并finally detach，不重发上传或放宽票据。目录浏览首轮偶发仍待进一步核对。
+
+四表：功能保留六并发、取消/关闭/整组结算与文件字节；职责归Files Service原owner，不新增存储/Platform业务；类型归属沿原应用/Shared转换，队列技术未穿透；两轮复核覆盖取消与WRITE并发、先断流后取消、关闭时重复清理、已commit/未知分支、队列未派发取消及真实故障留存。静态结果随后记录；行为只待后续远程，当前未运行本地测试。
+
+本批最终静态门禁：根 check、严格 E2E TypeScript、前后端 build、全仓 format:all:check 及 git diff --check 均通过（/tmp/nexus-round29-*.log）。两轮源码复核完成，未运行本地行为测试；上传取消/关闭、布局持久化及两处测试消费修正等待新 SHA 的远程 Actions 验收。

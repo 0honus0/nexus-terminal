@@ -26,6 +26,9 @@ test('saturated suspended history compacts in batches and resumes the original l
 	const maxBytes = 100 * 1024 * 1024;
 	try {
 		await fs.rm(gate, { force: true });
+		// Discover the interactive shell before foreground input. Restoring a busy
+		// shell must reuse that identity rather than inject a new discovery command.
+		await expect(requestWorkspace(original.socket, 'terminal.currentDirectory')).resolves.toBe('/');
 		const ready = waitForBinaryText(original.socket, 'COMPACTION_GATE_READY');
 		await requestWorkspace(original.socket, 'terminal.input', {
 			data: "COMPACTION_SHELL=$$; printf 'COMPACTION_%s\\n' GATE_READY; while [ ! -f \"$NEXUS_E2E_ROOT/compaction-release\" ]; do sleep 0.05; done; i=0; while [ $i -lt 4096 ]; do printf '%0512d\\n' \"$i\"; i=$((i+1)); done; printf 'COMPACTION_%s\\n' OUTPUT_DONE; (while :; do printf 'CONTINUOUS_COMPACTION_OUTPUT\\n'; sleep 0.01; done) & COMPACTION_PRODUCER=$!\r",

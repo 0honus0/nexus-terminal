@@ -1,3 +1,4 @@
+import { readWorkspaceUploadEvent } from '../../../../packages/shared/src/remote/transfers/workspace-codec';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { expect, test, type Locator, type Page } from '../../support/fixtures';
@@ -356,26 +357,63 @@ test('folder upload into an existing directory overwrites only conflicting files
 		.click();
 	await expect(fileManagerRow(page, folderName)).toBeVisible();
 
-	await dragLocalFolder(page, folderName, [
-		{ name: '01-first.bin', text: replacement },
-		{ name: 'new-from-local.txt', text: fresh },
-	]);
+	const cdp = await context.newCDPSession(page);
+	const completedPaths = new Set<string>();
+	let protocolFailure: unknown = null;
+	await cdp.send('Network.enable');
+	cdp.on('Network.webSocketFrameReceived', ({ response }) => {
+		if (response.opcode !== 1) return;
+		try {
+			const envelope: unknown = JSON.parse(response.payloadData);
+			if (
+				typeof envelope !== 'object' ||
+				envelope === null ||
+				!('type' in envelope) ||
+				envelope.type !== 'transfer.upload' ||
+				!('payload' in envelope)
+			)
+				return;
+			const event = readWorkspaceUploadEvent(envelope.payload);
+			if (event.type === 'completed') completedPaths.add(event.destinationPath);
+		} catch (cause) {
+			protocolFailure = cause;
+		}
+	});
+	try {
+		await dragLocalFolder(page, folderName, [
+			{ name: '01-first.bin', text: replacement },
+			{ name: 'new-from-local.txt', text: fresh },
+		]);
 
-	const conflictModal = page.getByRole('dialog', { name: 'File already exists', exact: true });
-	await expect(conflictModal).toBeVisible({ timeout: 20_000 });
-	await expect(conflictModal.getByTitle('01-first.bin', { exact: true })).toHaveText('01-first.bin');
-	await conflictModal
-		.getByRole('checkbox', { name: 'Use this choice for all remaining conflicts in this upload', exact: true })
-		.check();
-	await conflictModal.getByRole('button', { name: 'Overwrite', exact: true }).click();
-	await expect(conflictModal).toBeHidden();
+		const conflictModal = page.getByRole('dialog', { name: 'File already exists', exact: true });
+		await expect(conflictModal).toBeVisible({ timeout: 20_000 });
+		await expect(conflictModal.getByTitle('01-first.bin', { exact: true })).toHaveText('01-first.bin');
+		await conflictModal
+			.getByRole('checkbox', { name: 'Use this choice for all remaining conflicts in this upload', exact: true })
+			.check();
+		await conflictModal.getByRole('button', { name: 'Overwrite', exact: true }).click();
+		await expect(conflictModal).toBeHidden();
+		// A newly visible sibling is not proof that the overwritten file has committed.
+		// Verify both original terminal receipts before issuing size/mtime-bound tickets.
+		await expect
+			.poll(
+				() => {
+					if (protocolFailure !== null) throw protocolFailure;
+					return [...completedPaths].sort();
+				},
+				{ timeout: 30_000 },
+			)
+			.toEqual(['/' + folderName + '/01-first.bin', '/' + folderName + '/new-from-local.txt'].sort());
 
-	await expect(fileManagerRow(page, folderName)).toBeVisible({ timeout: 30_000 });
-	await expect(fileManagerRow(page, folderName).locator('.file-row-icon.fa-folder').first()).toBeVisible();
-	await fileManagerRow(page, folderName).dblclick();
-	await expect(fileManagerRow(page, 'new-from-local.txt')).toBeVisible({ timeout: 30_000 });
-	await expect.poll(() => readRemoteText(page, '01-first.bin'), { timeout: 30_000 }).toBe(replacement);
-	await expect.poll(() => readRemoteText(page, 'new-from-local.txt'), { timeout: 30_000 }).toBe(fresh);
+		await expect(fileManagerRow(page, folderName)).toBeVisible({ timeout: 30_000 });
+		await expect(fileManagerRow(page, folderName).locator('.file-row-icon.fa-folder').first()).toBeVisible();
+		await fileManagerRow(page, folderName).dblclick();
+		await expect(fileManagerRow(page, 'new-from-local.txt')).toBeVisible({ timeout: 30_000 });
+		await expect.poll(() => readRemoteText(page, '01-first.bin'), { timeout: 30_000 }).toBe(replacement);
+		await expect.poll(() => readRemoteText(page, 'new-from-local.txt'), { timeout: 30_000 }).toBe(fresh);
+	} finally {
+		await cdp.detach();
+	}
 });
 
 test('multi-file upload remains usable and byte-complete on moderate-latency links', async ({ page, context }) => {

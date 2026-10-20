@@ -984,16 +984,16 @@
 
 	const updateLayoutLocked = async (locked: boolean) => {
 		try {
-			await preferences.update({ layoutLocked: locked }, preferences.version.value, pageScope.signal);
+			await preferences.saveWorkspacePreference('layoutLocked', locked, pageScope.signal);
 		} catch {
 			feedback.notifyError(t('layoutConfigurator.lockUpdateError'));
 		}
 	};
 
 	const toggleHeader = async () => {
-		await preferences.update(
-			{ navBarVisible: !preferences.values.value.navBarVisible },
-			preferences.version.value,
+		await preferences.saveWorkspacePreference(
+			'navBarVisible',
+			!preferences.values.value.navBarVisible,
 			pageScope.signal,
 		);
 	};

@@ -3,8 +3,28 @@ import { shallowRef, ref } from 'vue';
 import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 import { PreferenceRequestFailure } from '@/client/preferences/preference-request';
 import { presentationApi } from '../api/presentation-api';
-import { snapshotPresentationChange, projectPreferences } from '../model/presentation-mapper';
-import type { UserPresentation, PresentationChange, PanelScaleKind } from '../model/preferences-types';
+import { snapshotPresentationChange, projectPreferences, projectLayout } from '../model/presentation-mapper';
+import type {
+	UserPresentation,
+	PresentationChange,
+	PanelScaleKind,
+	PersonalLayout,
+	WorkspacePreferenceKey,
+} from '../model/preferences-types';
+
+function sameLayoutStructure(left: PersonalLayout, right: PersonalLayout): boolean {
+	if (left.id !== right.id) return false;
+	if (left.type === 'pane' && right.type === 'pane') return left.component === right.component;
+	if (left.type !== 'container' || right.type !== 'container') return false;
+	return (
+		left.direction === right.direction &&
+		left.children.length === right.children.length &&
+		left.children.every((child, index) => {
+			const other = right.children[index];
+			return other !== undefined && sameLayoutStructure(child, other);
+		})
+	);
+}
 
 export const usePresentationStore = defineStore('presentation', () => {
 	const snapshot = shallowRef<UserPresentation | null>(null);
@@ -119,7 +139,33 @@ export const usePresentationStore = defineStore('presentation', () => {
 		}, permission);
 	}
 
-	return { snapshot, error, blocked, load, update, savePanelScale, reset };
+	function saveLayoutSizes(layout: PersonalLayout, permission?: AbortSignal): Promise<UserPresentation> {
+		const frozen = projectLayout(layout);
+		return mutate(() => {
+			const current = snapshot.value;
+			if (!current) throw new PreferenceRequestFailure('refresh_required', 'not_dispatched');
+			if (!sameLayoutStructure(current.layout, frozen)) {
+				throw new PreferenceRequestFailure('version_conflict', 'not_dispatched');
+			}
+			return { action: 'layout', expectedVersion: current.version, layout: projectLayout(frozen) };
+		}, permission);
+	}
+
+	function saveWorkspacePreference(
+		key: WorkspacePreferenceKey,
+		value: boolean,
+		permission: AbortSignal,
+	): Promise<UserPresentation> {
+		return mutate(() => {
+			const current = snapshot.value;
+			if (!current) throw new PreferenceRequestFailure('refresh_required', 'not_dispatched');
+			const preferences = projectPreferences(current.preferences);
+			preferences[key] = value;
+			return { action: 'preferences', expectedVersion: current.version, preferences };
+		}, permission);
+	}
+
+	return { snapshot, error, blocked, load, update, savePanelScale, saveLayoutSizes, saveWorkspacePreference, reset };
 });
 
 registerAuthenticatedSessionReset('presentation', () => usePresentationStore().reset());
