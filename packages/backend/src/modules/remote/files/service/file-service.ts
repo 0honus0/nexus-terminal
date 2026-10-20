@@ -90,6 +90,7 @@ const FILE_TRANSFER_MS = 60 * 60 * 1000;
 const FILE_UPLOAD_IDLE_MS = 5 * 60 * 1000;
 const FILE_CLOSE_REPLAY_MS = 2 * 60 * 1000;
 const MAX_RECENTLY_CLOSED_FILES = 128;
+const MAX_UPLOAD_PREPARE_WORKERS = 4;
 
 interface ReleasedFile {
 	userId: number;
@@ -1293,11 +1294,9 @@ export class RemoteFileService {
 				const remaining = this.remaining(ms, abort, record.id);
 				let changed = false;
 				try {
-					for (const filePath of [...paths].sort((a, b) => a.length - b.length)) {
-						await this.ensureRemoteDirectory(resource, filePath, remaining, abort, () => {
-							changed = true;
-						});
-					}
+					await this.ensureUploadDirectories(resource, root, paths, remaining, abort, () => {
+						changed = true;
+					});
 					abort.throwIfAborted();
 					if (!this.accepting || record.closePromise || this.owners.get(record.id) !== record) {
 						throw new RemoteFileFailure('not_found');
@@ -1331,6 +1330,66 @@ export class RemoteFileService {
 			throw new RemoteFileFailure('not_found');
 		}
 		return record.resource.targetId;
+	}
+
+	private async ensureUploadDirectories(
+		resource: FileResource,
+		root: string,
+		paths: ReadonlySet<string>,
+		remaining: () => number,
+		signal: AbortSignal,
+		onMutation: () => void,
+	): Promise<void> {
+		await this.ensureRemoteDirectory(resource, root, remaining, signal, onMutation);
+		// Independent root children can be prepared concurrently. Paths sharing
+		// an implicit parent stay serial, avoiding competing mkdir operations.
+		// Each path still checks its full ancestry; no cached stat grants access.
+		const branches = new Map<string, string[]>();
+		for (const filePath of [...paths].sort((a, b) => a.length - b.length)) {
+			if (filePath === root) {
+				continue;
+			}
+			const branch = path.posix.relative(root, filePath).split('/')[0] ?? '';
+			const entries = branches.get(branch) ?? [];
+			entries.push(filePath);
+			branches.set(branch, entries);
+		}
+		const pending = branches.values();
+		const failures: unknown[] = [];
+
+		const work = async (): Promise<void> => {
+			while (!failures.length) {
+				const next = pending.next();
+				if (next.done) {
+					return;
+				}
+				try {
+					for (const filePath of next.value) {
+						if (failures.length) {
+							return;
+						}
+						await this.ensureRemoteDirectory(resource, filePath, remaining, signal, onMutation);
+					}
+				} catch (cause) {
+					failures.push(cause);
+				}
+			}
+		};
+
+		// A first failure stops new work, but every dispatched sibling must drain
+		// before the original mutation claim is settled or its resource closed.
+		await Promise.all(Array.from({ length: Math.min(MAX_UPLOAD_PREPARE_WORKERS, branches.size) }, work));
+		if (failures.length === 1) {
+			throw failures[0];
+		}
+		if (failures.length > 1) {
+			if (failures.some((cause) => cause instanceof RemoteResourceCleanupFailure)) {
+				throw new RemoteResourceCleanupFailure(failures);
+			}
+			throw new RemoteFileFailure(failures.some(isUnknown) ? 'operation_unknown' : 'remote_unavailable', {
+				cause: new AggregateError(failures, 'Upload directory preparation failed'),
+			});
+		}
 	}
 
 	private async ensureRemoteDirectory(

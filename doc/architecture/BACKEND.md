@@ -387,6 +387,8 @@ Access 的失败窗口/封禁计算在 sessions/login-failure-rules，Adapter �
 
 ## 7. 生命周期与失败
 
+Remote Files 的 upload.prepare 在单一原机器突变claim内先准备根目录，再按根下第一段分组；最多4个worker处理互不重叠的分支，同一分支按路径长度串行。每次创建仍由ensureRemoteDirectory检查完整父链，不缓存stat作后续授权。首个失败停止未派发路径，所有在途worker排空后才结算；混合失败保留全部cause、清理失败类别和unknown，部分创建失败仍保留原保守围栏。allowlist只包含请求路径及根，不把隐式父目录加入可上传范围。
+
 取消/禁用/来源或名单撤销与模型步骤、ToolCall 的持久围栏同事务：inspected → cancelled，dispatched → unknown，状态事件同时写入。重启通过同一 SQLite owner 收敛，不重新执行。审批内部期限/消费时间为 Unix 秒，工具账本时间为毫秒；消费从同一个事务内时钟样本投影两种表示，不能把截断的秒直接作为毫秒更新时间。当前文件/Shell/Docker工具资源关闭已接线，ACP等待/关闭已接线，直接 Child/族收尾已接线，剩余跨 Run 资源由后续 B6/B8 承接。
 
 ### B5.2 增量执行流生命周期

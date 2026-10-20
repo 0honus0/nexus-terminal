@@ -1731,3 +1731,13 @@ upload-adapters在用户已请求cancel时，binary close仍立即fail并删除�
 Actions39358034424 / 2a577341，第3/4/5组已success，第1组只剩workspace-layout-restore的额外读取断言（expected0、actual2）。此前终端/xterm DOM身份、草稿、后台输出及geometry断言本轮均已通过。实际/settings默认加载Workspace偏好编辑器，需独立读layout/sidebar的当前版本，不能记作缓存Workspace重载。计数器现只记录/workspace活跃时的这两条GET；返回页面仍严格要求0，不删除读取/身份/geometry断言，不阻止Settings获取真实版本。
 
 源码两次复核覆盖离开Settings/Connections与返回Workspace、路由监听安装点以及Settings默认页；USAGE缓存说明仍成立，无产品代码修改。受影响静态与后续真实行为另记。
+
+## 远程第二十一轮：第7组目录准备（2026-10-20）
+
+原upload-prepare-profile的24组采样在120秒期限内未结束；原ensureRemoteDirectory对全部请求逐条串行。现根先处理，以根下第一段隔离独立分支，最多4个worker；共享隐式父目录的路径仍串行，每个路径仍完整检查父链，不引入陈旧stat缓存或展开无界祖先集合。首个失败停止后续派发，在途worker全部排空后再结算原单一持久claim。公开配额、请求预算、120秒整例期限、32目录/24组采样及实际目录核验均不变。
+
+夹具独立连接补显式Host Key；未知场景改为真实发生部分创建后注入另一分支读取失败，移除故障后以新Workspace验证持久operation_unknown围栏，保留已确认目录，不自动重试。无副作用的确定冲突在独立原场景验证可恢复。allowlist拒绝经Shared event严格解码并精确断言conflict，取消后检查实际目录为空，不依赖随机临时文件名。旧RESOURCE_QUARANTINED文本已无生产者，不恢复兼容错误。
+
+两轮源码复核覆盖root=/、空目录集、共同父路径、四worker共享iterator、首失败停止、并发已派发mkdir继续排空、混合unknown/cleanup因果及最终allowlist。USAGE/Backend架构同步，静态与真实远程结果另记。
+
+第7组目录准备本批静态收口：Backend check/build、根 `pnpm run check`、`pnpm run format:all:check` 和 `git diff --check` 均exit 0；已完成两轮源码复核。未执行本地行为测试，性能与故障分支等待推送后的Actions。
