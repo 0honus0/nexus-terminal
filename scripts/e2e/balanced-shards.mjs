@@ -18,6 +18,9 @@ const isolatedUnknownTitle =
 	'Nexus Agent subagent lifecycle preserves tool batches and reclaims child Browser contexts';
 const isolatedInvalidToolTitle =
 	'installed Nexus Agent plugin uses the host-owned Agent surface and captures functional evidence';
+const isolatedAcpSpec = 'specs/agent/ssh-acp-settings.spec.ts';
+const isolatedAcpCancelledTitle =
+	'SSH ACP settings product chain: cancelled inner permission without a Workspace profile';
 
 function parseArgs(argv) {
 	const args = { command: argv[0] ?? 'plan' };
@@ -150,8 +153,17 @@ function run(plan, rawShard) {
 		'.bin',
 		process.platform === 'win32' ? 'playwright.cmd' : 'playwright',
 	);
-	const isolated = shard.specs.includes(isolatedUnknownSpec);
-	const suffixes = isolated ? ['regular', 'invalid-tool', 'unknown'] : ['regular'];
+	const isolatedPlugin = shard.specs.includes(isolatedUnknownSpec);
+	const isolatedAcp = shard.specs.includes(isolatedAcpSpec);
+	const suffixes = [
+		'regular',
+		...(isolatedPlugin ? ['invalid-tool', 'unknown'] : []),
+		...(isolatedAcp ? ['acp-cancelled'] : []),
+	];
+	const isolatedTitles = [
+		...(isolatedPlugin ? [isolatedInvalidToolTitle, isolatedUnknownTitle] : []),
+		...(isolatedAcp ? [isolatedAcpCancelledTitle] : []),
+	];
 	const outcomes = [];
 	const durations = [];
 	const capturedLogs = [];
@@ -161,12 +173,12 @@ function run(plan, rawShard) {
 				? [isolatedUnknownSpec, '--grep', isolatedUnknownTitle]
 				: suffix === 'invalid-tool'
 					? [isolatedUnknownSpec, '--grep', isolatedInvalidToolTitle]
-					: [
-							...shard.specs,
-							...(isolated
-								? ['--grep-invert', `${isolatedUnknownTitle}|${isolatedInvalidToolTitle}`]
-								: []),
-						];
+					: suffix === 'acp-cancelled'
+						? [isolatedAcpSpec, '--grep', isolatedAcpCancelledTitle]
+						: [
+								...shard.specs,
+								...(isolatedTitles.length ? ['--grep-invert', isolatedTitles.join('|')] : []),
+							];
 		const timingsPath = path.join(e2eRoot, 'test-results', `spec-durations-${suffix}.json`);
 		console.log(`[E2E shards] ${suffix}: ${selected.join(' ')}`);
 		const result = spawnSync(playwright, ['test', ...selected, '--output', `test-results/${suffix}`], {
@@ -182,7 +194,7 @@ function run(plan, rawShard) {
 		outcomes.push(result.status ?? 1);
 		if (!fs.existsSync(timingsPath)) throw new Error(`Missing E2E duration record: ${timingsPath}`);
 		durations.push(JSON.parse(fs.readFileSync(timingsPath, 'utf8')).specs);
-		if (isolated && suffix !== suffixes[suffixes.length - 1]) {
+		if (suffixes.length > 1 && suffix !== suffixes[suffixes.length - 1]) {
 			// Playwright recreates the log directory on each new backend lifetime.
 			// Preserve real failures and timing evidence from every earlier phase.
 			const location = path.join(e2eRoot, '.tmp', `balanced-shard-${suffix}-logs`);
@@ -191,19 +203,19 @@ function run(plan, rawShard) {
 			capturedLogs.push({ suffix, location });
 		}
 	}
-	if (isolated) {
+	if (suffixes.length > 1) {
 		for (const { suffix, location } of capturedLogs) {
 			fs.cpSync(location, path.join(e2eRoot, 'logs', suffix), { recursive: true });
 			fs.rmSync(location, { recursive: true, force: true });
 		}
 	}
 	const merged = Object.assign({}, ...durations);
-	if (isolated) {
-		// A spec is eligible for duration rebalancing only when both halves pass.
-		if (durations.every((part) => Number.isFinite(part[isolatedUnknownSpec]))) {
-			merged[isolatedUnknownSpec] = durations.reduce((total, part) => total + part[isolatedUnknownSpec], 0);
-		} else {
-			delete merged[isolatedUnknownSpec];
+	for (const spec of [...(isolatedPlugin ? [isolatedUnknownSpec] : []), ...(isolatedAcp ? [isolatedAcpSpec] : [])]) {
+		// Isolating one case must preserve all actual runs and their combined
+		// timing, rather than overwriting the spec with the final phase's time.
+		const timings = durations.map((part) => part[spec]).filter((value) => Number.isFinite(value));
+		if (timings.length) {
+			merged[spec] = timings.reduce((total, value) => total + value, 0);
 		}
 	}
 	fs.writeFileSync(
