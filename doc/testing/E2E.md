@@ -537,3 +537,5 @@ Runtime databases, reports, traces, screenshots, videos, logs, PID files, caches
 Files续审补充：旧模板只有保留／删除／下载，重构新增的逐行ArtifactAttachmentEditor要求手填Thread/Run，属于H-13下无依据的技术表单。本批移除该表单、无人消费的组件及前端detach包装，清理三语专属文案；真实会话仍由NativeInputArtifacts使用Shared／Model的版本读取、当前线程绑定及未知结果围栏。后端HTTP、Shared及SDK不变。USAGE和Frontend架构同步真实owner。此修改晚于396728e2，不计入该轮远程结果；两个源码复核分别确认无旧版依据及全部消费者，静态和新SHA行为结果单独记录。
 
 引用表单清理后的根 `pnpm run check`、`pnpm --filter @nexus-terminal/frontend build`、`pnpm run format:all:check` 均退出0，日志为 `/tmp/nexus-files-reference-{check,build,format}.log`；`git diff --check`通过。前端源码无ArtifactAttachmentEditor／detachManagedArtifact消费者或孤立引用；仍保留NativeInputArtifacts真实attach调用。当前只改源码／静态，没有本地行为验证；后续远程以该补充提交SHA为准。
+
+396728e299bf4a734aa92bc43448404bdb31b527 的 [Actions 39437631131](https://github.com/0honus0/nexus-terminal/actions/runs/39437631131) 整体success：八组共448项，无失败／flaky／skipped用例；质量／构建、Docker、runner image和耗时统计通过，可选截图任务skipped。逐组日志保存为 `/tmp/nexus-files-ui-job-<jobId>.log`；真实Files切换UiSelect、上传、列表及校验下载场景所在第3组的独立场景通过。本轮未包含8735d59f的引用表单清理，后者仍待独立远程验收；源码／静态和当前像素保证范围不扩大。
