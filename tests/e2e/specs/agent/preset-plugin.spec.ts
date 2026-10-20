@@ -1,7 +1,3 @@
-import {
-	readAgentWorkspaceRequest,
-	readAgentWorkspaceResponse,
-} from '../../../../packages/shared/src/agent/scope/workspace-http-codec';
 import { readAgentArtifactResponse } from '../../../../packages/shared/src/agent/artifacts/http-codec';
 import { readAgentBrowserConfiguration } from '../../../../packages/shared/src/agent/integrations/browser-http-codec';
 import { readAgentExecutionSettingsResponse } from '../../../../packages/shared/src/agent/execution/http-codec';
@@ -10,6 +6,7 @@ import { readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import {
 	resolveNativeApproval,
+	captureNativeCommand,
 	type NativeTask,
 	prepareNativeTask,
 	openNativeTask,
@@ -874,16 +871,9 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 		const panel = hub.getByRole('heading', { name: 'Native threads', exact: true }).locator('..');
 		await panel.getByRole('button', { name: 'New thread', exact: true }).click();
 		await panel.getByRole('textbox', { name: 'Thread title', exact: true }).fill('Plugin surface conversation');
-		const creation = page.waitForResponse(
-			(response) =>
-				response.url().endsWith(`/agent/apps/${app.id}/workspace`) &&
-				response.request().postDataJSON()?.request?.method === 'agent.threads.create',
+		const { result } = await captureNativeCommand(task, 'agent.threads.create', () =>
+			panel.getByRole('button', { name: 'Create thread', exact: true }).click(),
 		);
-		await panel.getByRole('button', { name: 'Create thread', exact: true }).click();
-		const created = await creation;
-		expect(created.status()).toBe(200);
-		const command = readAgentWorkspaceRequest(created.request().postDataJSON());
-		const result = readAgentWorkspaceResponse(await created.json(), app.id, command).result;
 		if (result.method !== 'agent.threads.create') {
 			throw new Error('Unexpected thread creation');
 		}
@@ -896,16 +886,9 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 		).toBeVisible();
 		await expect(panel.getByRole('button', { name: 'Save title', exact: true })).toBeEnabled();
 		await panel.getByRole('textbox', { name: 'Thread title', exact: true }).fill('Renamed plugin conversation');
-		const rename = page.waitForResponse(
-			(response) =>
-				response.url().endsWith(`/agent/apps/${app.id}/workspace`) &&
-				response.request().postDataJSON()?.request?.method === 'agent.threads.rename',
+		const { result: renameResult } = await captureNativeCommand(task, 'agent.threads.rename', () =>
+			panel.getByRole('button', { name: 'Save title', exact: true }).click(),
 		);
-		await panel.getByRole('button', { name: 'Save title', exact: true }).click();
-		const renamed = await rename;
-		expect(renamed.status()).toBe(200);
-		const renameCommand = readAgentWorkspaceRequest(renamed.request().postDataJSON());
-		const renameResult = readAgentWorkspaceResponse(await renamed.json(), app.id, renameCommand).result;
 		if (renameResult.method !== 'agent.threads.rename') {
 			throw new Error('Unexpected thread rename');
 		}
@@ -950,15 +933,9 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			const article = hub.locator('article').filter({ hasText: approval.operationHash });
 			await expect(article).toContainText('shell_execute');
 			await expect(article).toContainText('destructive');
-			const resolution = page.waitForResponse(
-				(response) =>
-					response.url().endsWith(`/agent/apps/${app.id}/workspace`) &&
-					response.request().postDataJSON()?.request?.method === 'agent.approvals.resolve',
+			const { command: input } = await captureNativeCommand(task, 'agent.approvals.resolve', () =>
+				article.getByRole('button', { name: 'Approve original operation', exact: true }).click(),
 			);
-			await article.getByRole('button', { name: 'Approve original operation', exact: true }).click();
-			const response = await resolution;
-			expect(response.status()).toBe(200);
-			const input = readAgentWorkspaceRequest(response.request().postDataJSON());
 			if (input.request.method !== 'agent.approvals.resolve') {
 				throw new Error('Unexpected approval command');
 			}
@@ -967,7 +944,6 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 				operationHash: approval.operationHash,
 				decision: 'approved',
 			});
-			readAgentWorkspaceResponse(await response.json(), app.id, input);
 			const result = await finishNativeTask(task, run.id);
 			expect(result.run.status).toBe('completed');
 			expect(JSON.parse(result.text)).toMatchObject({ exitCode: 0, stdout: 'approval-e2e' });

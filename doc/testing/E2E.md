@@ -1701,3 +1701,11 @@ cross-session-transfer前两项已通过，第三项刻意禁止/folder-seed/子
 两轮源码审核覆盖scope失活/激活、初次加载未完成、缓存返回、登出/换用户、组件卸载和旧异步结果。Frontend vue-tsc/build、根check、完整format:all:check退出0，最终文档格式与diff另检查。USAGE和Frontend架构同步；行为等待含此变更的远程SHA。
 
 39356651981 / 48faea89最新已结束子组：第3组、第4组success；第1组failure，仅workspace-layout-restore失败，36项通过，Agent取消本轮未复现。其余组仍运行中，不能把目录复制/缓存的本地静态结果当作该run行为证据。
+
+## 远程第十九轮：第2组原生插件写回执（2026-10-20）
+
+原39354280150的installed Nexus Agent plugin两次分别在批准/创建线程的response.json失败，DevTools提示响应正文已不可读取。复用原Run夹具的“读取原响应后再交给浏览器”方案，提取captureNativeCommand供Run创建/追加、线程创建/重命名及批准共用。仅转发一次原请求，maxRetries=0，不补发副作用、不伪造回执；按Shared严格解码原请求与响应并保留200、method、版本、批准hash和真实执行断言。路由卸载仅移除本次handler，其他监听保留。
+
+两轮源码复核覆盖三个迁移入口及原Run创建/追加消费者。USAGE产品流程不变，核对现有原生会话、批准及版本冲突说明仍适用；本机未运行行为测试，待含此变更的远程版本验证。第2组其他Dashboard/归档并发/Docker/布局问题仍分别跟进，不标整组完成。
+
+插件回执子项静态：根check、完整format:all:check退出0；最终变更文件格式与diff检查通过。无产品/Shared源码变更，不重复应用构建；行为未在本机执行。
