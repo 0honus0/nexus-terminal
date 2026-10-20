@@ -6,7 +6,6 @@
 	import { useArtifactLibrary } from '../composables/use-artifact-library';
 	import { formatAgentDateTime } from '../locale-format';
 	import type { ManagedArtifact } from '../model/artifact-types';
-	import ArtifactAttachmentEditor from './ArtifactAttachmentEditor.vue';
 	const props = withDefaults(defineProps<{ active?: boolean }>(), { active: true });
 
 	const { t, locale } = useI18n();
@@ -487,18 +486,6 @@
 					</button>
 				</div>
 			</div>
-			<details class="text-xs">
-				<summary class="cursor-pointer py-1 text-text-secondary">
-					{{ t('agent.artifactManagement.attachments') }}
-				</summary>
-				<ArtifactAttachmentEditor
-					:key="item.id"
-					:artifact="item"
-					:apps="apps"
-					:disabled="blocked"
-					@changed="load()"
-				/>
-			</details>
 		</article>
 		<div class="flex flex-wrap gap-2">
 			<UiButton

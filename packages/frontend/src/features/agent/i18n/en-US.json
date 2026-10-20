@@ -1675,18 +1675,7 @@
         "unavailableBytes": "Unavailable",
         "reservedBytes": "Reserved",
         "limitBytes": "Limit"
-      },
-      "attachments": "File references",
-      "attachmentHelp": "Attach a file to a conversation or remove its reference. The file itself is kept.",
-      "readAttachmentVersion": "Read current file version",
-      "targetApp": "Target App",
-      "threadId": "Thread ID",
-      "runId": "Run ID (optional)",
-      "attach": "Attach reference",
-      "detach": "Detach reference",
-      "attachmentUnknown": "Reference change outcome is unknown. Reading the file checks its version, not whether a reference exists. Do not replay automatically.",
-      "acknowledgeAttachment": "I checked the target thread and understand a new intent may conflict with a committed operation.",
-      "newAttachmentIntent": "Start a new reference intent"
+      }
     },
     "pluginManagement": {
       "title": "Plugin management",

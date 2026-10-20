@@ -1675,18 +1675,7 @@
         "unavailableBytes": "利用不可量",
         "reservedBytes": "予約量",
         "limitBytes": "上限"
-      },
-      "attachments": "ファイル参照",
-      "attachmentHelp": "ファイルを会話に添付するか参照を解除します。ファイル自体は保持されます。",
-      "readAttachmentVersion": "現在のファイルバージョンを取得",
-      "targetApp": "対象 App",
-      "threadId": "Thread ID",
-      "runId": "Run ID（任意）",
-      "attach": "参照を追加",
-      "detach": "参照を解除",
-      "attachmentUnknown": "参照変更の結果は不明です。ファイル取得で確認できるのはバージョンのみで、参照の存在は確認できません。自動再送しないでください。",
-      "acknowledgeAttachment": "対象 Thread を確認し、新しい操作が確定済みの操作と競合する可能性を理解しました。",
-      "newAttachmentIntent": "新しい参照操作を開始"
+      }
     },
     "pluginManagement": {
       "title": "プラグイン管理",

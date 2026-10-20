@@ -533,3 +533,7 @@ Runtime databases, reports, traces, screenshots, videos, logs, PID files, caches
 两轮源码复核覆盖展示基线、Shared有限取值、父窗口安装、筛选互斥、上传恢复按钮条件、删除和原清理确认；没有新增行为测试或本地收集／浏览器运行。原448项只对应 `9808dbdc`，不代表本批已通过。静态环境 Node 22.23.1 / pnpm 11.26.0；根check和frontend build退出0（`/tmp/nexus-files-ui-{check,build}.log`），完整format及最终diff结果按本批收口补充。窄屏筛选条和Files完整交互待新提交远程／对应现场验收，不宣称像素一致。
 
 本批最终全量format退出0（`/tmp/nexus-files-ui-format.log`），修改组件／spec的ESLint、文档与源码Prettier、`git diff --check`通过。第二轮父窗口复核发现Files没有独立滚动容器，补回有界窗口内的纵向滚动，避免新协议上传／清理区域越出浮窗不可达；该布局仍须远程核对。
+
+Files续审补充：旧模板只有保留／删除／下载，重构新增的逐行ArtifactAttachmentEditor要求手填Thread/Run，属于H-13下无依据的技术表单。本批移除该表单、无人消费的组件及前端detach包装，清理三语专属文案；真实会话仍由NativeInputArtifacts使用Shared／Model的版本读取、当前线程绑定及未知结果围栏。后端HTTP、Shared及SDK不变。USAGE和Frontend架构同步真实owner。此修改晚于396728e2，不计入该轮远程结果；两个源码复核分别确认无旧版依据及全部消费者，静态和新SHA行为结果单独记录。
+
+引用表单清理后的根 `pnpm run check`、`pnpm --filter @nexus-terminal/frontend build`、`pnpm run format:all:check` 均退出0，日志为 `/tmp/nexus-files-reference-{check,build,format}.log`；`git diff --check`通过。前端源码无ArtifactAttachmentEditor／detachManagedArtifact消费者或孤立引用；仍保留NativeInputArtifacts真实attach调用。当前只改源码／静态，没有本地行为验证；后续远程以该补充提交SHA为准。

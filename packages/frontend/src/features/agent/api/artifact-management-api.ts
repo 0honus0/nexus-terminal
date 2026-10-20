@@ -410,37 +410,3 @@ export async function attachManagedArtifact(
 	});
 	return fromArtifactAttachment(value);
 }
-
-export async function detachManagedArtifact(
-	original: ManagedArtifact,
-	threadId: string,
-	signal?: AbortSignal,
-): Promise<ManagedArtifact> {
-	let path: string;
-	try {
-		path = artifactPath(original.appId, original.id) + '/attachments/' + encodeURIComponent(readAgentId(threadId));
-	} catch (cause) {
-		throw new AgentManagementFailure('invalid_input', 'not_dispatched', { cause });
-	}
-	const value = await requestAgentManagement({
-		...budgets,
-		method: 'DELETE',
-		path,
-		signal,
-
-		input: () => readAgentArtifactVersion({ expectedVersion: original.version }),
-
-		decode(value) {
-			const artifact = readAgentArtifactResponse(value).artifact;
-			if (
-				artifact.id !== original.id ||
-				artifact.appId !== original.appId ||
-				artifact.version !== original.version + 1
-			) {
-				throw new Error('Artifact detach confirmation mismatch');
-			}
-			return artifact;
-		},
-	});
-	return fromArtifact(value);
-}

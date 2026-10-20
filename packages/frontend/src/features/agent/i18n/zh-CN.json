@@ -1675,18 +1675,7 @@
         "unavailableBytes": "不可用量",
         "reservedBytes": "预留量",
         "limitBytes": "额度"
-      },
-      "attachments": "文件引用",
-      "attachmentHelp": "将文件关联到会话或移除引用，文件本身会保留。",
-      "readAttachmentVersion": "读取当前文件版本",
-      "targetApp": "目标 App",
-      "threadId": "Thread ID",
-      "runId": "Run ID（可选）",
-      "attach": "添加引用",
-      "detach": "解除引用",
-      "attachmentUnknown": "引用修改结果未知。文件读取只能核对版本，不能证明引用是否存在；不要自动重放。",
-      "acknowledgeAttachment": "我已核对目标 Thread，理解新意图可能与已提交操作冲突。",
-      "newAttachmentIntent": "开始新的引用意图"
+      }
     },
     "pluginManagement": {
       "title": "插件管理",
