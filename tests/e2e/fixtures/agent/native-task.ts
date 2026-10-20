@@ -147,6 +147,9 @@ export async function captureNativeCommand(
 		expect(upstream.status()).toBe(200);
 		const response = readAgentWorkspaceResponse(await upstream.json(), task.app.id, command);
 		captured = { command, result: response.result };
+		// Restore normal routing before delivery: accepting this write may
+		// immediately launch reads, which must not race interception teardown.
+		await task.page.unroute(workspaceUrl, capture);
 		await route.fulfill({ response: upstream });
 	};
 

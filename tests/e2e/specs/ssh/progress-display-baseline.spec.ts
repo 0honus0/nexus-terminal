@@ -479,7 +479,7 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 				await visibleGroupCheckbox.click();
 				await expect(validTargetRow.locator('input[type="checkbox"]')).toBeChecked();
 				await expect(failedTargetRow.locator('input[type="checkbox"]')).toBeChecked();
-				await targetPath.fill('server-transfer-e2e');
+				await targetPath.fill('/server-transfer-e2e');
 				await selectUiOption(modal.getByLabel('Transfer Method', { exact: true }), 'rsync');
 
 				// The Workspace transfer catalog can still be loading/refreshed in parallel. That global
@@ -506,7 +506,7 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 
 				const taskCard = display.locator('article').filter({ hasText: 'server-transfer-e2e' });
 				await expect(taskCard).toBeVisible({ timeout: 10_000 });
-				await expect(taskCard).toContainText('Task: E2E SSH (seed.txt -> server-transfer-e2e)');
+				await expect(taskCard).toContainText('Task: E2E SSH (seed.txt -> /server-transfer-e2e)');
 				await expect(taskCard).toContainText('Created at:');
 
 				const subTasks = taskCard.locator('details');

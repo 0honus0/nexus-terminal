@@ -1,6 +1,6 @@
 import { expect, test } from '../../support/fixtures';
 import { createHash } from 'node:crypto';
-import { readWorkspaceFileListResponse } from '@nexus-terminal/shared/remote/files/workspace-codec';
+import { readWorkspaceFileListResponse } from '../../../../packages/shared/src/remote/files/workspace-codec';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { E2E_SSH, ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
 import {

@@ -985,7 +985,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 					response.url().endsWith('/content') &&
 					response.request().method() === 'PUT',
 			);
-			await library.getByRole('button', { name: 'Upload to selected App', exact: true }).click();
+			await library.locator('button[type="submit"]').filter({ hasText: 'Upload to selected App' }).click();
 			const uploaded = await publication;
 			expect(uploaded.status()).toBe(200);
 			const artifact = readAgentArtifactResponse(await uploaded.json()).artifact;

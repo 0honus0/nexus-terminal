@@ -1741,3 +1741,11 @@ Actions39358034424 / 2a577341，第3/4/5组已success，第1组只剩workspace-l
 两轮源码复核覆盖root=/、空目录集、共同父路径、四worker共享iterator、首失败停止、并发已派发mkdir继续排空、混合unknown/cleanup因果及最终allowlist。USAGE/Backend架构同步，静态与真实远程结果另记。
 
 第7组目录准备本批静态收口：Backend check/build、根 `pnpm run check`、`pnpm run format:all:check` 和 `git diff --check` 均exit 0；已完成两轮源码复核。未执行本地行为测试，性能与故障分支等待推送后的Actions。
+
+### Agent回执路由与传输夹具补修（2026-10-20）
+
+39358034424第2组trace显示：创建线程回执200后，测试在UI派发后续读取期间撤销拦截，存在一条workspace读取未完成（status -1），线程面板持续busy。原写回执捕获改为在交付回执之前移除自身handler，使派生读取使用正常网络路径；不重放写入、不移除其他handler。Artifact上传精确定位实际submit按钮，避免file input也被Chromium识别为同名button。第6组Send Files实际显示invalid_input：夹具传相对路径，Shared/USAGE要求绝对目标路径，改为/server-transfer-e2e并同步任务摘要断言，不放宽解码。额外E2E严格TS发现upload-protocol从tests无法解析包级Shared导入，统一为现有直接源码路径。
+
+四表：功能覆盖保留线程创建/重命名、Artifact发布和真实多目标部分完成；职责归测试消费者，不修改产品准入或并发围栏；类型沿用Shared codec，无新契约；已完成两轮源码复核，E2E严格TS通过，完整静态门禁另记，行为待Actions。USAGE既有绝对目标目录与版本化线程说明仍符合实际。
+
+Agent/夹具本批门禁：E2E严格TS、根check、全仓format:all:check和diff检查通过；未执行本地行为测试。复制写入批次优化为后续独立变更，不计入本次测试消费者提交。
