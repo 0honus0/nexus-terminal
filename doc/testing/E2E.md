@@ -539,3 +539,13 @@ Files续审补充：旧模板只有保留／删除／下载，重构新增的逐
 引用表单清理后的根 `pnpm run check`、`pnpm --filter @nexus-terminal/frontend build`、`pnpm run format:all:check` 均退出0，日志为 `/tmp/nexus-files-reference-{check,build,format}.log`；`git diff --check`通过。前端源码无ArtifactAttachmentEditor／detachManagedArtifact消费者或孤立引用；仍保留NativeInputArtifacts真实attach调用。当前只改源码／静态，没有本地行为验证；后续远程以该补充提交SHA为准。
 
 396728e299bf4a734aa92bc43448404bdb31b527 的 [Actions 39437631131](https://github.com/0honus0/nexus-terminal/actions/runs/39437631131) 整体success：八组共448项，无失败／flaky／skipped用例；质量／构建、Docker、runner image和耗时统计通过，可选截图任务skipped。逐组日志保存为 `/tmp/nexus-files-ui-job-<jobId>.log`；真实Files切换UiSelect、上传、列表及校验下载场景所在第3组的独立场景通过。本轮未包含8735d59f的引用表单清理，后者仍待独立远程验收；源码／静态和当前像素保证范围不扩大。
+
+附件选择续审：原ArtifactPicker支持multiple及最多10个文件，重构后仅取files[0]。现恢复多选并按剩余额度裁剪，由原use-artifact-picker在单一busy／scope内串行完成每个独立预留和上传；每次await后核对原App、signal和可见性，首个失败／未知停止后续，不自动重试。每项开始前清除前一预留，避免把后项无ID未知错误地恢复为前项成功；前项已确认即加入选择并标目录失效，后项确定拒绝也不会丢掉这一事实。两轮源码复核覆盖正常多项、部分成功后拒绝／未知、下一预留丢回执、离页／切App及容量裁剪；本段是源码分析，未执行这些行为场景。USAGE与Frontend同步。晚于a758e243，不计入其远程结果；静态及新SHA结果另记。
+
+### 2026-10-20 ACP取消点击与后台读取竞争（待新SHA）
+
+a758e2431baedcd4143272e6e09f09271eb41a9f 的 [Actions 39438940586](https://github.com/0honus0/nexus-terminal/actions/runs/39438940586) 整体failure：7/8组通过，第4组独立ACP cancelled失败；质量、Docker及runner通过。首次trace中点击取消与两秒轮询同时发生，按钮在pointer按下后被busy禁用，页面无agent.runs.cancel请求；10秒后finally的API取消与用户点击分开。重试reset500来自原执行未知清理，未删除或绕过围栏。trace位于 `/tmp/nexus-acp-cancelled-trace`，原日志 `/tmp/nexus-files-reference-shard4.log`。
+
+修复由原operation owner标记可被取代的只读background请求，不周期性切换交互busy；新交互取消原读取等待并推进generation，旧accept/catch/finally不能覆盖新状态。自动轮询之外的读取与写入仍串行，写入CAS及unknown不变。既有ACP取消用例增加实际取消HTTP回执与Shared关联解码，再核对Run取消、晚审批拒绝、进程及工具账本；未放宽原断言。两轮源码复核覆盖轮询被写入／手动读取取代、会话撤销、晚成功/失败及旧finally。此为源码分析，按D17未本地执行行为；附件多选故障分支也不冒充已验。静态及推送后的八组结果另记。
+
+本批最终静态门禁：Node 22.23.1／pnpm 11.26.0，根 `pnpm run check`、`pnpm --filter @nexus-terminal/frontend build`、`pnpm run format:all:check` 均exit0，日志为 `/tmp/nexus-ui-poll-{check,build,format}.log`；`git diff --check`通过。包含附件多选与可取代的后台读取，未运行本地行为测试。最终diff第二次复核确认后台仅用于只读轮询、原写入保护及全部ACP业务断言保留。

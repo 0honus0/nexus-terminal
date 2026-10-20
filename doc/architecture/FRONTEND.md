@@ -46,7 +46,7 @@ AppScopedSettings持有管理卡片自己的App目录/选择和撤销scope，按
 
 Memory的transport归memory-management-api，独立对象及转换归memory-types/mapper；use-app-memory持offset页及当前审核快照，AppMemoryEditor在对应卡片内展示审核草稿与操作，不另设底部表单。MemoryImportEditor持来源读取/一次性确认及按分配ID的只读恢复，MemorySourcePicker持已发布来源分页与下拉选择；界面不要求手填内部ID，不常驻显示存储修订，CAS仍使用权威读取的原版本。导入完成推进列表本地修订，较早列表返回不能解除刷新围栏。App切换、身份撤销和离页清正文/确认，毫秒不重复放大；Slot组件不持业务写策略。
 
-Artifact正式库归artifact-management-api、artifact-types/mapper、use-artifact-library与files/ArtifactLibraryView；由浮窗文件入口安装，目录/统计/写入分别持scope。offset分页、CAS、两步上传、完整有界字节校验和Blob URL归真实视图owner；文件库不提供手填Thread/Run的技术引用表单；NativeInputArtifacts持当前会话附件的版本读取、显式关联及未知结果围栏。ArtifactPicker消费同一新transport，独立持私有上传意图、恢复与offset，Conversation/Host附件使用ManagedArtifact，不拼旧Artifact DTO。
+Artifact正式库归artifact-management-api、artifact-types/mapper、use-artifact-library与files/ArtifactLibraryView；由浮窗文件入口安装，目录/统计/写入分别持scope。offset分页、CAS、两步上传、完整有界字节校验和Blob URL归真实视图owner；文件库不提供手填Thread/Run的技术引用表单；NativeInputArtifacts持当前会话附件的版本读取、显式关联及未知结果围栏。ArtifactPicker消费同一新transport，独立持私有上传意图、恢复与offset；文件选择保留原多选，容量由当前已选数量裁剪，use-artifact-picker串行上传并在每个异步阶段核对原App／视图。逐个确认后加入选择，首项失败即停止后续，未知只恢复当前预留，不自动重放；前面已确认项仍保留且使目录失效。Conversation/Host附件使用ManagedArtifact，不拼旧Artifact DTO。
 
 插件正式管理归plugin-management-api、plugin-data-api、plugin-types/mapper、use-plugin-management以及PluginManagementSettings/PluginRepositorySettings/PluginDataEditor；设置父页仅装配独立卡片，旧聚合settings、假安装进度与旧管理transport已删除。发布者version、包version、安装revision独立；数据原意图/operationId在未知后保持不变。快照仅在已准备升级的draining状态读取；普通单键读取与已移除数据清除不借用迁移快照。
 
@@ -424,7 +424,7 @@ Agent 设置按原四分类组织：AgentSettingsPanel 持唯一 useExecutionSet
 4. **类型与转换**：Shared唯一持工作区17方法及App、Provider、Run、正文、审批、Child、Step、Tool的完整协议／基础值／容量；前端分别转HostApp/NativeThread/NativeRun/Entry/Approval等本地对象，数组与嵌套字段显式投影。App数字CAS、definitionVersion、安装revision分开；请求先规范化解码，再使用同一解码结果验证响应关联。正文offset是Unicode码点，审计textBytes是字节，本地显示窗口以UTF-16长度估算内存，不相互冒充。
 5. **入口与安装**：正式Host读取实际App、定义、安装、版本与执行设置，按受信声明及真实manifest选择通用原生界面／自定义iframe；没有前端资源的合法插件也可使用原生会话。只给管理员安装。执行关闭时仍提供历史读取与取消。原生使用POST /api/v1/agent/apps/:appId/workspace，审计使用实际steps/tools及events；DEV仍走/__next。
 6. **数据、事务与并发**：后端是权威；先读实际App版本，写入冻结原线程／Run／审批版本、输入、operationHash与operationId；原意图不跟随刷新变更。follow-up只基于已收敛Run创建新Root，unknown仍活跃且可取消。事件、正文、Run和消息各持服务端游标；事件显示最近200条、正文显示窗口最多128片／约256 Ki UTF-16单元，省略有明确提示，不删除服务器数据。Step/Tool/消息按页替换展示，不伪造完整统计或原子快照。
-7. **生命周期与失败**：useAuthenticatedViewScope明确区分视图暂停、会话重置和销毁；各owner按generation／signal隔离晚返回与旧finally。可见pending/running每两秒只读刷新，隐藏／unknown／失败／销毁停止轮询；较新Run状态停止轮询前，从原正文游标再读一次，避免先读正文、后见完成时遗漏最终回复；失败仍显式保留，不自动重放写入。原实例隐藏时保留在途／未知写意图，会话重置与销毁清私有数据。未知恢复先只读核对实际资源，重试保留原键／版本／输入，后续拒绝不抹去原未知；明确放弃不表示回滚。附件关联与Run派发是两个动作，关联未知阻断后续，查询文件不冒充已确认引用；确认引用以不可信数据写入实际prompt，工具仍复查权限。
+7. **生命周期与失败**：useAuthenticatedViewScope明确区分视图暂停、会话重置和销毁；各owner按generation／signal隔离晚返回与旧finally。可见pending/running每两秒只读刷新，隐藏／unknown／失败／销毁停止轮询；后台读取不占交互busy，用户操作取消其等待并推进generation，旧结果／错误／finally不能覆盖新操作，写入仍串行且保留CAS／unknown保护；较新Run状态停止轮询前，从原正文游标再读一次，避免先读正文、后见完成时遗漏最终回复；失败仍显式保留，不自动重放写入。原实例隐藏时保留在途／未知写意图，会话重置与销毁清私有数据。未知恢复先只读核对实际资源，重试保留原键／版本／输入，后续拒绝不抹去原未知；明确放弃不表示回滚。附件关联与Run派发是两个动作，关联未知阻断后续，查询文件不冒充已确认引用；确认引用以不可信数据写入实际prompt，工具仍复查权限。
 8. **当前能力与验收**：正式Host、线程、Run/正文/事件/审批/Child与步骤／工具审计已接Shared；旧API、CSRF、聚合settings、host/Run流、facade/Store和旧Protocol消费删除。旧Goal/Plan、活动输入队列/interrupt、手工增额/checkpoint/resume及历史删除按当前后端Run/上下文/治理重新设计，不提供兼容接口；具体差异归USAGE与当前方案。两轮源码审核及静态结果归testing，D17最终远程Actions E2E未执行，旧行为证据不代表此次界面通过。
 
 ## 终端动态背景

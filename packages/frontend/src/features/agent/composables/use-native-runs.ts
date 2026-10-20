@@ -264,6 +264,10 @@ export function useNativeRuns(
 	}
 
 	async function refreshRun(): Promise<void> {
+		await readRun(false);
+	}
+
+	async function readRun(background: boolean): Promise<void> {
 		const current = scope.value;
 		const selected = run.value;
 		const selectedThread = thread.value;
@@ -300,7 +304,7 @@ export function useNativeRuns(
 				children.value = value.descendants;
 				inspected.value = pending.value !== null;
 			},
-			{ write: false, onFailure: fail },
+			{ write: false, background, onFailure: fail },
 		);
 		schedulePoll();
 	}
@@ -320,7 +324,7 @@ export function useNativeRuns(
 			return;
 		timer = setTimeout(() => {
 			timer = null;
-			void refreshRun();
+			void readRun(true);
 		}, 2000);
 	}
 

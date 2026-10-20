@@ -23,11 +23,14 @@ export function useAgentManagementOperation(onRevoke?: (reason: ViewRevocation) 
 	const refreshRequired = ref(true);
 	const notice = ref('');
 	let generation = 0;
+	let backgroundRequest: AbortController | null = null;
 	const scope = useAuthenticatedViewScope({
 		available,
 
 		onRevoke(reason) {
 			generation += 1;
+			backgroundRequest?.abort();
+			backgroundRequest = null;
 			busy.value = false;
 			refreshRequired.value = true;
 			notice.value = '';
@@ -38,20 +41,26 @@ export function useAgentManagementOperation(onRevoke?: (reason: ViewRevocation) 
 	async function execute<T>(
 		action: (signal: AbortSignal) => Promise<T>,
 		accept: (result: T) => void,
-		options: { write: boolean; refreshAfterSuccess?: boolean; onFailure?: (cause: unknown) => void },
+		options: { refreshAfterSuccess?: boolean; onFailure?: (cause: unknown) => void } & (
+			{ write: true; background?: never } | { write: false; background?: boolean }
+		),
 	): Promise<void> {
-		if (busy.value || (options.write && refreshRequired.value)) {
+		if (busy.value || (options.background && backgroundRequest) || (options.write && refreshRequired.value)) {
 			return;
 		}
 		const signal = scope.capture();
 		if (!scope.isCurrent(signal)) {
 			return;
 		}
+		// Interactive work supersedes polling; an aborted read cannot publish late state.
+		backgroundRequest?.abort();
+		backgroundRequest = options.background ? new AbortController() : null;
+		const requestSignal = backgroundRequest ? AbortSignal.any([signal, backgroundRequest.signal]) : signal;
 		const current = ++generation;
-		busy.value = true;
+		busy.value = !options.background;
 		notice.value = '';
 		try {
-			const result = await action(signal);
+			const result = await action(requestSignal);
 			if (generation !== current || !scope.isCurrent(signal)) {
 				return;
 			}
@@ -73,6 +82,7 @@ export function useAgentManagementOperation(onRevoke?: (reason: ViewRevocation) 
 		} finally {
 			if (generation === current && scope.isCurrent(signal)) {
 				busy.value = false;
+				backgroundRequest = null;
 			}
 		}
 	}

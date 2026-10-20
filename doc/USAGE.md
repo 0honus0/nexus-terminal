@@ -517,7 +517,7 @@ Run状态为pending/running/completed/failed/unknown/cancelled。执行、预算
 
 ### Artifact 容量与清理
 
-Host文件库使用当前Shared协议，提供目录、两步上传、有界下载、保留、删除和清理。原生输入选择附件后先读取当前版本，再明确关联当前线程；全部确认后才把artifactId及不可信名称写入prompt，Run不会自动派发。关联不授予`artifacts.read`，执行时仍核对权限、版本和精确Thread/Run范围。
+Host文件库使用当前Shared协议，提供目录、两步上传、有界下载、保留、删除和清理。会话附件选择支持一次选择多个文件，最多补足10个附件，串行上传；失败或结果未知停止后续文件，已确认的文件保留，不自动重试。原生输入选择附件后先读取当前版本，再明确关联当前线程；全部确认后才把artifactId及不可信名称写入prompt，Run不会自动派发。关联不授予`artifacts.read`，执行时仍核对权限、版本和精确Thread/Run范围。
 
 关联结果未知时停止后续关联和Run派发，先只读核对附件；读取文件对象不证明引用已确认，须承认旧关联可能已提交后再明确发起新意图。已确认关联不因后来Run创建失败回滚。完整prompt（含引用）仍受16 KiB预算。
 
@@ -751,7 +751,7 @@ Provider 配置包含名称、HTTP(S) 端点、启用状态、协议及显式模
 
 Run 创建必传 model:{providerId,modelId,configurationVersion} 及 connectionIds（最多 50 个唯一正整数，空数组表示未选中目标），与 Run、初始事件、幂等记录同事务冻结模型配置和凭据代际。冻结输入不含密钥；Provider 版本失效/禁用拒绝创建，关联 pending/running/unknown Run 时拒绝删除 Provider。同意图重放保持原 key 和输入及**原提交快照**，不会因后续状态变化修改历史幂等响应；operation_unknown 不代表回滚。当前已有目录、诊断、文件只读及受审批 file_write/patch/move/delete、Shell/后台 Job/Docker 的执行源码，实际执行须 governed 准入。
 
-新后端已有独立 Chat Completions/Responses 增量模型流、Run 执行 owner、持久步骤与恢复源码。当前政策为 `governed`，执行设置默认关闭；开启后仅新建且已确认提交的 Run 可进入原执行 owner，权限、版本、预算逐阶段复查。Run 创建时间和持久期限从实际事务读取完成后计算，不使用请求排队前的时间。Run/Step/Tool 及审批递增耗尽拒绝写入；派发和流式累积预留最终结算空间，恢复/级联写入同事务回滚。pending 不表示已派发；重放和未知结果不触发第二次调用。正式界面已消费当前状态、正文及审计协议；较新Run状态停止轮询前再读取当前正文页，避免完成状态先于最终回复显示。真实行为仍按原证据范围及D17验收。DEV 页可选择 Provider 模型和配置版本；候选不保证提交时仍有效，后端按当前配置校验。
+新后端已有独立 Chat Completions/Responses 增量模型流、Run 执行 owner、持久步骤与恢复源码。当前政策为 `governed`，执行设置默认关闭；开启后仅新建且已确认提交的 Run 可进入原执行 owner，权限、版本、预算逐阶段复查。Run 创建时间和持久期限从实际事务读取完成后计算，不使用请求排队前的时间。Run/Step/Tool 及审批递增耗尽拒绝写入；派发和流式累积预留最终结算空间，恢复/级联写入同事务回滚。pending 不表示已派发；重放和未知结果不触发第二次调用。正式界面已消费当前状态、正文及审计协议；后台状态刷新不禁用取消等可用操作，写入仍串行，版本冲突或未知结果需先核对，不自动重试；较新Run状态停止轮询前再读取当前正文页，避免完成状态先于最终回复显示。真实行为仍按原证据范围及D17验收。DEV 页可选择 Provider 模型和配置版本；候选不保证提交时仍有效，后端按当前配置校验。
 
 Provider/Registry公开失败只使用已定义的安全码，步骤未派发失败码为`DISPATCH_NOT_STARTED`；不返回供应商错误正文。管理接口在异步结果交付前复查会话；创建、更新、删除、发现回写及Registry刷新已写入后，若登录复查、响应编码或交付失败，按operation_unknown处理；先重新登录并查询配置，不能据错误响应推断写入已回滚。Registry resolve的modelId最多256 UTF-8字节；重复或未知query参数拒绝。
 

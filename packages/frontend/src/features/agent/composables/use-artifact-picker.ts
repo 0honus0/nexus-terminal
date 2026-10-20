@@ -8,7 +8,7 @@ import {
 import type { ManagedArtifact } from '../model/artifact-types';
 import { useAgentManagementOperation } from './use-agent-management-operation';
 
-/** The picker owns one upload intent; closing it drops private drafts, never replays a write. */
+/** The picker serializes uploads and stops at the first failure; it never replays a write. */
 export function useArtifactPicker(
 	available: () => boolean,
 	appId: () => string,
@@ -62,25 +62,28 @@ export function useArtifactPicker(
 		);
 	}
 
-	async function upload(file: File): Promise<void> {
-		if (blocked.value || uploadUnknown.value) {
+	async function uploadFiles(files: readonly File[]): Promise<void> {
+		if (blocked.value || uploadUnknown.value || !files.length) {
 			return;
 		}
 		const owner = appId();
 		reservation.value = null;
 		await operation.execute(
 			async (signal) => {
-				const value = await beginManagedArtifact(owner, file, signal);
-				if (!signal.aborted && owner === appId()) {
+				for (const file of files) {
+					if (signal.aborted || owner !== appId() || !available()) return;
+					reservation.value = null;
+					const value = await beginManagedArtifact(owner, file, signal);
+					if (signal.aborted || owner !== appId() || !available()) return;
 					reservation.value = value;
-				}
-				return uploadManagedArtifact(value, file, signal);
-			},
-			(item) => {
-				reservation.value = item;
-				if (owner === appId()) {
+					const item = await uploadManagedArtifact(value, file, signal);
+					if (signal.aborted || owner !== appId() || !available()) return;
+					reservation.value = item;
+					needsReload.value = true;
 					accept(item);
 				}
+			},
+			() => {
 				needsReload.value = true;
 			},
 			{
@@ -143,7 +146,7 @@ export function useArtifactPicker(
 		operation,
 		blocked,
 		load,
-		upload,
+		uploadFiles,
 		checkUpload,
 		newIntent,
 	};

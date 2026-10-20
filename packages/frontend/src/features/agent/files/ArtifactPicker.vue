@@ -44,7 +44,7 @@
 		operation,
 		blocked,
 		load,
-		upload,
+		uploadFiles,
 		checkUpload,
 		newIntent,
 	} = useArtifactPicker(
@@ -72,10 +72,10 @@
 		if (!(event.target instanceof HTMLInputElement)) {
 			return;
 		}
-		const file = event.target.files?.[0];
+		const files = Array.from(event.target.files ?? []);
 		event.target.value = '';
-		if (file && !props.disabled && props.modelValue.length < selectionLimit) {
-			void upload(file);
+		if (!props.disabled && props.modelValue.length < selectionLimit) {
+			void uploadFiles(files.slice(0, selectionLimit - props.modelValue.length));
 		}
 	}
 
@@ -151,7 +151,7 @@
 					>
 						{{ $t('agent.attachments.upload') }}
 					</button>
-					<input ref="input" type="file" class="hidden" @change="chooseFile" />
+					<input ref="input" type="file" multiple class="hidden" @change="chooseFile" />
 				</div>
 				<p v-if="operation.notice.value" class="p-2 text-xs" role="status">
 					{{ t('agent.settings.appManagement.' + operation.notice.value) }}

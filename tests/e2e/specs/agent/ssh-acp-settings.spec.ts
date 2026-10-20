@@ -289,7 +289,20 @@ for (const decision of ['denied', 'cancelled'] as const) {
 			const pid = before.find((item) => item.event === 'started').pid;
 
 			if (decision === 'cancelled') {
+				const cancellation = page.waitForResponse(
+					(item) =>
+						new URL(item.url()).pathname === `/api/v1/agent/apps/${app.id}/workspace` &&
+						item.request().postDataJSON()?.request?.method === 'agent.runs.cancel',
+				);
 				await hub.getByRole('button', { name: 'Request cancellation', exact: true }).click();
+				const cancellationResponse = await cancellation;
+				expect(cancellationResponse.status()).toBe(200);
+				const cancellationResult = readAgentWorkspaceResponse(
+					await cancellationResponse.json(),
+					app.id,
+					readAgentWorkspaceRequest(cancellationResponse.request().postDataJSON()),
+				).result;
+				expect(cancellationResult.method).toBe('agent.runs.cancel');
 				await expect.poll(async () => (await readRun()).status).toBe('cancelled');
 				const late = await request.post(`/api/v1/agent/apps/${app.id}/workspace`, {
 					headers: { Origin: E2E_URLS.frontendOrigin },
