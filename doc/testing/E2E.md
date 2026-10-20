@@ -1880,3 +1880,19 @@ USAGE对应偏好/布局章节和Frontend并发边界已同步。归档实际取
 两轮源码复核覆盖全部最终变更文件及 playwright.config、balanced-shards、SSH/Agent 调用者：第一轮核对状态 owner、每用例/重试的初始化顺序和独立 unknown 生命周期；第二轮核对后台晚响应、真实未收敛拒绝、重复列表消除、失败汇总及未放宽产品断言。USAGE 原章节仍符合实际，未修改产品逻辑、Shared、分片算法或重试次数。
 
 Node22.23.1 / pnpm11.26.0：根check、严格E2E TypeScript、全仓format:all:check、5个修改mjs的node --check、补充验证源码ESLint及git diff --check均exit0；日志 /tmp/nexus-round31-{check,e2e-types,format}.log。测试基础设施未改变产品构建输入，本批不重复产品build，上一远程 be8e7de8 质量/构建已通过。没有运行本地行为、浏览器或用例收集；新基线的顺序独立性待远程验收，现轮39365646059仍运行，不能记本批PASS。既有3项归档取消/并行缺陷保持待修。
+
+### 上轮第2/6/7组核对与文件管理补修（2026-10-20）
+
+be8e7de8 / 39365646059 第1/3/4/5/8组通过，第2组36 passed/3 failed，第6组46 passed/1 failed，第7组1项失败：合计5项，包括原3项归档取消/并行、刷新中央加载提示缺失、切换目录后同步终端仍消费旧路径。运行中的6a00aa28只增加夹具隔离和关闭DEBUG，尚不含这5项修复。
+
+本批先修Files展示链：读取保留列表，并在独立相对定位容器中显示pointer-events-none中央spinner；不再通过卸载列表显示loading。“切换终端到当前目录”在目录读取期间禁用，避免两个目录含同名inside.txt时，在新listing返回前消费旧path。保留原布局/中心位置/真实终端目录断言，不增加期限或测试重试。
+
+四表：功能对应原刷新加载与真实Shell目录切换；职责仅FileManager展示/已确认路径准入，Browser导航owner不变；无新增Shared或公开类型；两轮源码复核覆盖初读/背景读取、搜索/错误、列表滚动与ref、同名文件旧快照及新目录确认。静态结果另记，行为待新SHA远程，3项归档缺陷继续修改。USAGE与Frontend对应段落同步。
+
+归档补修：Files 在首次写入前经 Model/Native Adapter 安装独立 command -v 只读检查；仅该阶段回执丢失可映射为归档写入未派发，真实清理失败仍传播。夹具 preflight-hold 仅匹配独立查找，不再包住包含 command -v 的压缩/列表写入；进度UI的压缩与解压取消均在这条真实只读阶段验证，原隐藏/恢复、终态退场与输出不存在断言保留。另有专门运行中取消/并发用例原样保留，不用进度UI场景替代它们。
+
+补充四表：功能为归档工具预检查与派发前取消；决策/执行分别归Service、Model安全转换、Native Adapter真实命令；无新增Shared/公开契约；两轮源码复核覆盖工具缺失、查找回执丢失、检查后取消、私有快照前取消、清理失败和原生写入的unknown分类。后续仍待修运行中归档取消与独立归档并发两项，不宣称本批已修或远程已验。
+
+当前6a00aa28 / 39367031982已结束：质量/构建、Docker smoke和第3/4/5/8组通过；第2/6/7组仍为上述5项失败，第1组另有clarification首轮失败/重试通过（36 passed/1 flaky，门禁仍FAIL）。离线artifact确认Run已Completed但页面只有User正文和“Read next body page”；源码refreshRun先读body再getRun，Run在其间结束后schedulePoll停止。现只在较新状态停止轮询前从原正文游标再读取一次，失败仍进入原operation处理，不刷新页面、不重派Run或改变断言。两轮复核覆盖快完成/慢完成、同版本终态、unknown、分页及失效scope；USAGE、Frontend和E-13.1同步，行为待新SHA远程。归档运行中取消与并发仍未修复；不以本批只读预检查修复替代。
+
+本批最终门禁：Node22.23.1/pnpm11.26.0，根check、严格E2E TypeScript、前后端build、全仓format:all:check、最终两份Frontend源码ESLint、SSH夹具node --check与git diff --check均exit0；日志 /tmp/nexus-round33-types.log、/tmp/nexus-round34-{check,final-build,format,final-eslint}.log。最终guard调整已重新格式化并执行ESLint/vue-tsc与build。两轮源码复核覆盖本批13份变更及真实消费者，无本地行为测试。待推送新SHA验证，本批不把源码修补算作远程PASS；剩余运行中归档取消/并发明确继续保留。

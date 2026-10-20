@@ -54,6 +54,23 @@ function listingCleanupFailure(result: ListingCleanupResult): NativeArchiveFailu
 export class NativeArchiveCommands {
 	constructor(private readonly runner: ArchiveCommandRunner) {}
 
+	async requireTool(tool: 'zip' | 'unzip' | 'tar', remaining: () => number, signal: AbortSignal): Promise<void> {
+		const outcome = await this.runner.executeLines(
+			'command -v ' + tool + ' >/dev/null 2>&1',
+			signal,
+			remaining(),
+			() => {
+				throw new NativeArchiveFailure('invalid_output');
+			},
+		);
+		if (outcome.status !== 'completed') {
+			throw new NativeArchiveFailure(
+				outcome.exitCode === 1 || outcome.exitCode === 127 ? 'missing_tool' : 'rejected',
+				tool,
+			);
+		}
+	}
+
 	async list(
 		archive: string,
 		format: NativeArchiveFormat,

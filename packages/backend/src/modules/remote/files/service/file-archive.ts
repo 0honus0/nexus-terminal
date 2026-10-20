@@ -173,6 +173,7 @@ export async function compressRemoteArchive(
 	const extension = format === 'zip' ? '.part.zip' : format === 'tar.gz' ? '.part.tar.gz' : '.part.tar.bz2';
 	const temporary = path.posix.join(root, '.nexus-archive-' + randomUUID() + extension);
 	const expected = await inspectSources(resource, paths, new Set([temporary, destination]), remaining, signal);
+	await new FileArchiveModel(resource).prepare(format, 'compress', remaining, signal);
 	// Archive entries are emitted relative to the working directory; Info-ZIP
 	// omits the leading "./", while GNU tar retains it. Exclude both variants
 	// so a source tree containing the output never archives the growing file,
@@ -316,6 +317,7 @@ export async function decompressRemoteArchive(
 		timeoutMs: Math.min(remaining(), 300_000),
 		signal,
 	});
+	await new FileArchiveModel(resource).prepare(format, 'decompress', remaining, signal);
 	// Inspect and extract the same private on-host copy, rather than allowing
 	// another SFTP write to swap the original archive between the two commands.
 	// This uses native cp and keeps archive bytes off the Node.js backend.

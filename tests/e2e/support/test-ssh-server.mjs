@@ -1256,9 +1256,7 @@ function runRemoteCommand(command, stream, session) {
 		.replace(/\s+>\s*\/dev\/null\s+2>&1\s*$/, '')
 		.replace(/["']/g, '')
 		.trim();
-	const isArchivePreflightCommand =
-		/^(?:command -v|which)\s+(?:zip|tar|unzip)\s*$/.test(normalizedArchivePreflight) ||
-		(isArchiveCommand && command.includes('command -v '));
+	const isArchivePreflightCommand = /^(?:command -v|which)\s+(?:zip|tar|unzip)\s*$/.test(normalizedArchivePreflight);
 	const preflightHoldPrefix = isArchivePreflightCommand
 		? `while [ -f ${JSON.stringify(archivePreflightHoldPath)} ]; do sleep 0.05; done; `
 		: '';

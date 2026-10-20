@@ -89,7 +89,7 @@ test('registered archive progress supports hide, restore, and real cancel for co
 		});
 
 		await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
-		await fetch(`${E2E_SSH.controlUrl}/archive/exec-hold?enabled=1`, { method: 'POST' });
+		await fetch(`${E2E_SSH.controlUrl}/archive/preflight-hold?enabled=1`, { method: 'POST' });
 		await slowStep(
 			'decompress task registers a real cancel callback and does not extract after cancellation',
 			async () => {
@@ -112,7 +112,7 @@ test('registered archive progress supports hide, restore, and real cancel for co
 				// Hidden cancelled tasks are removed automatically; the functional
 				// outcome is confirmed by absence of extracted files after release.
 				await expect(task).toBeHidden({ timeout: 10_000 });
-				await fetch(`${E2E_SSH.controlUrl}/archive/exec-hold?enabled=0`, { method: 'POST' });
+				await fetch(`${E2E_SSH.controlUrl}/archive/preflight-hold?enabled=0`, { method: 'POST' });
 				await closeProgressDisplay(modal);
 				await reopenConnectedFileManager(page);
 

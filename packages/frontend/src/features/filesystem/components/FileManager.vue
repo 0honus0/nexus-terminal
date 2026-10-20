@@ -1348,7 +1348,12 @@
 		}
 	};
 
-	const changeTerminalToCurrent = () => changeTerminalPath(browser.path.value, true);
+	const changeTerminalToCurrent = () => {
+		if (browser.loading.value) {
+			return;
+		}
+		return changeTerminalPath(browser.path.value, true);
+	};
 
 	const openPathHistory = async () => {
 		catalogVisible.value = false;
@@ -1671,7 +1676,7 @@
 					v-if="!searchExpanded"
 					type="button"
 					class="file-manager-action-button"
-					:disabled="!props.terminalDirectory || changingTerminalPath"
+					:disabled="!props.terminalDirectory || changingTerminalPath || browser.loading.value"
 					:title="t('fileManager.actions.cdToTerminal')"
 					:aria-label="t('fileManager.actions.cdToTerminal')"
 					@click.stop="changeTerminalToCurrent"
@@ -1868,242 +1873,254 @@
 		<p v-else-if="browser.error.value" class="p-4 text-error">
 			{{ filesystemFailureMessage(browser.error.value, t) }}
 		</p>
-		<div
-			v-else
-			ref="listScroller"
-			tabindex="0"
-			:aria-label="t('fileManager.modalTitle')"
-			:aria-busy="browser.loading.value"
-			class="min-h-0 flex-1 overflow-auto outline-none"
-			:style="[rowStyle, { overflowAnchor: shouldVirtualize ? 'none' : undefined }]"
-			:data-row-scale="renderedRowScale.toFixed(2)"
-			@scroll="handleListScroll"
-			@pointerdown="focusFileListFromPointer"
-			@contextmenu="openDirectoryContext($event, 'current-directory', browser.path.value)"
-		>
-			<p
-				v-if="browser.searchError.value"
-				class="border-b border-error/30 bg-error/10 px-3 py-2 text-sm text-error"
+		<div v-else class="relative flex min-h-0 flex-1 flex-col">
+			<div
+				ref="listScroller"
+				tabindex="0"
+				:aria-label="t('fileManager.modalTitle')"
+				:aria-busy="browser.loading.value"
+				class="min-h-0 flex-1 overflow-auto outline-none"
+				:style="[rowStyle, { overflowAnchor: shouldVirtualize ? 'none' : undefined }]"
+				:data-row-scale="renderedRowScale.toFixed(2)"
+				@scroll="handleListScroll"
+				@pointerdown="focusFileListFromPointer"
+				@contextmenu="openDirectoryContext($event, 'current-directory', browser.path.value)"
 			>
-				{{ filesystemFailureMessage(browser.searchError.value, t) }}
-			</p>
-			<p
-				v-if="browser.searchActive.value && browser.searchTruncated.value"
-				class="sticky top-0 z-20 border-b border-warning/30 bg-warning/10 px-3 py-1.5 text-xs text-warning"
-			>
-				{{ t('fileManager.searchTruncated') }}
-			</p>
-			<table
-				class="file-table w-full table-fixed border-collapse border-border"
-				:class="{ 'is-virtualized': shouldVirtualize }"
-				:style="{ minWidth: isCustomResized && showModified ? `${totalColumnWidth}px` : '100%' }"
-			>
-				<colgroup>
-					<col class="file-col-name" :style="columnStyle('name')" />
-					<col v-if="showPermissions" class="file-col-permissions" :style="columnStyle('permissions')" />
-					<col v-if="showModified" class="file-col-modified" :style="columnStyle('modified')" />
-				</colgroup>
-				<thead class="sticky top-0 z-10 bg-header">
-					<tr>
-						<th
-							class="file-table-header file-table-header-name relative whitespace-nowrap text-left"
-							:style="columnStyle('name')"
-						>
-							<button
-								type="button"
-								class="file-table-sort-trigger inline-flex items-center gap-1 font-semibold transition-colors hover:text-foreground"
-								:class="{ '!text-primary font-bold': browser.sortKey.value === 'name' }"
-								@click="browser.setSort('name')"
+				<p
+					v-if="browser.searchError.value"
+					class="border-b border-error/30 bg-error/10 px-3 py-2 text-sm text-error"
+				>
+					{{ filesystemFailureMessage(browser.searchError.value, t) }}
+				</p>
+				<p
+					v-if="browser.searchActive.value && browser.searchTruncated.value"
+					class="sticky top-0 z-20 border-b border-warning/30 bg-warning/10 px-3 py-1.5 text-xs text-warning"
+				>
+					{{ t('fileManager.searchTruncated') }}
+				</p>
+				<table
+					class="file-table w-full table-fixed border-collapse border-border"
+					:class="{ 'is-virtualized': shouldVirtualize }"
+					:style="{ minWidth: isCustomResized && showModified ? `${totalColumnWidth}px` : '100%' }"
+				>
+					<colgroup>
+						<col class="file-col-name" :style="columnStyle('name')" />
+						<col v-if="showPermissions" class="file-col-permissions" :style="columnStyle('permissions')" />
+						<col v-if="showModified" class="file-col-modified" :style="columnStyle('modified')" />
+					</colgroup>
+					<thead class="sticky top-0 z-10 bg-header">
+						<tr>
+							<th
+								class="file-table-header file-table-header-name relative whitespace-nowrap text-left"
+								:style="columnStyle('name')"
 							>
-								<span>{{ t('fileManager.headers.name') }}</span>
-								<span v-if="browser.sortKey.value === 'name'" class="text-[10px]">{{
-									sortMark('name')
-								}}</span>
-							</button>
-							<span
-								v-if="canResizeName"
-								class="absolute right-[-4px] top-0 z-20 h-full w-[9px] cursor-col-resize hover:bg-primary/20"
-								@pointerdown="startColumnResize($event, 'name')"
-							></span>
-						</th>
-						<th
-							v-if="showPermissions"
-							class="file-table-header file-table-header-permissions relative whitespace-nowrap text-left"
-							:style="columnStyle('permissions')"
-						>
-							<button
-								type="button"
-								class="file-table-sort-trigger inline-flex items-center gap-1 font-semibold transition-colors hover:text-foreground"
-								:class="{ '!text-primary font-bold': browser.sortKey.value === 'permissions' }"
-								@click="browser.setSort('permissions')"
-							>
-								<span>{{ t('fileManager.headers.permissions') }}</span>
-								<span v-if="browser.sortKey.value === 'permissions'" class="text-[10px]">{{
-									sortMark('permissions')
-								}}</span>
-							</button>
-							<span
-								v-if="canResizePermissions"
-								class="absolute right-[-4px] top-0 z-20 h-full w-[9px] cursor-col-resize hover:bg-primary/20"
-								@pointerdown="startColumnResize($event, 'permissions')"
-							></span>
-						</th>
-						<th
-							v-if="showModified"
-							class="file-table-header file-table-header-modified relative whitespace-nowrap text-left"
-							:style="columnStyle('modified')"
-						>
-							<button
-								type="button"
-								class="file-table-sort-trigger inline-flex items-center gap-1 font-semibold transition-colors hover:text-foreground"
-								:class="{ '!text-primary font-bold': browser.sortKey.value === 'modified' }"
-								@click="browser.setSort('modified')"
-							>
-								<span>{{ t('fileManager.headers.modified') }}</span>
-								<span v-if="browser.sortKey.value === 'modified'" class="text-[10px]">{{
-									sortMark('modified')
-								}}</span>
-							</button>
-						</th>
-					</tr>
-				</thead>
-				<tbody>
-					<tr
-						v-if="browser.path.value !== '/'"
-						data-filename=".."
-						data-file-parent
-						tabindex="-1"
-						class="cursor-pointer select-none transition-colors duration-150 hover:bg-header/50"
-						:class="[
-							keyboardCursor === PARENT_CURSOR ? 'bg-primary/10' : '',
-							remoteDragTarget === parentOf(browser.path.value)
-								? 'outline-dashed outline-2 outline-offset-[-1px] outline-primary'
-								: '',
-						]"
-						@click="
-							keyboardCursor = PARENT_CURSOR;
-							browser.goParent();
-						"
-						@dragover="handleRemoteTargetDragOver($event, parentOf(browser.path.value))"
-						@dragleave="clearRemoteDragTarget(parentOf(browser.path.value))"
-						@drop="dropRemote($event, parentOf(browser.path.value))"
-						@contextmenu.stop="
-							openDirectoryContext($event, 'parent-directory', parentOf(browser.path.value))
-						"
-					>
-						<td class="file-row-cell file-row-name text-left">
-							<span class="file-row-parent-content inline-flex min-w-0 items-center gap-2.5">
-								<i
-									class="file-row-icon fas fa-level-up-alt shrink-0 text-text-secondary"
-									aria-hidden="true"
-								></i>
-								<span class="file-row-name-label font-medium">..</span>
-							</span>
-						</td>
-						<td v-if="showPermissions" class="file-row-cell file-row-permissions font-mono text-left"></td>
-						<td v-if="showModified" class="file-row-cell file-row-modified text-left"></td>
-					</tr>
-					<tr v-if="browser.visible.value.length === 0">
-						<td :colspan="visibleColumnCount" class="px-4 py-6 text-center italic text-text-secondary">
-							{{
-								browser.searchQuery.value
-									? t('fileManager.noSearchResults')
-									: t('fileManager.emptyDirectory')
-							}}
-						</td>
-					</tr>
-					<tr v-if="virtualTopPadding" aria-hidden="true">
-						<td
-							:colspan="visibleColumnCount"
-							class="border-0 p-0"
-							:style="{ height: `${virtualTopPadding}px` }"
-						></td>
-					</tr>
-					<tr
-						v-for="entry in virtualEntries"
-						:key="entry.path"
-						:data-filename="entry.name"
-						:data-file-path="entry.path"
-						tabindex="-1"
-						class="file-row select-none touch-pan-y transition-colors duration-150"
-						:class="[
-							browser.selected.value.has(entry.path)
-								? 'bg-primary/10 text-primary'
-								: 'hover:bg-header/50',
-							remoteDragTarget === entry.path
-								? 'outline-dashed outline-2 outline-offset-[-1px] outline-primary'
-								: '',
-							entry.metadata.isDirectory || entry.metadata.isFile || entry.metadata.isSymbolicLink
-								? 'cursor-pointer'
-								: '',
-						]"
-						:draggable="!device.isMobile.value"
-						@dragstart="startRemoteDrag($event, entry)"
-						@dragend="endRemoteDrag"
-						@dragover="entry.metadata.isDirectory && handleRemoteTargetDragOver($event, entry.path)"
-						@dragleave="clearRemoteDragTarget(entry.path)"
-						@drop="entry.metadata.isDirectory && dropRemote($event, entry.path)"
-						@contextmenu.stop="openContext($event, entry)"
-						@mousedown="preserveListFocusOnMouseOpen"
-						@click="clickEntry($event, entry)"
-						@dblclick="doubleClickEntry($event, entry)"
-						@pointerdown="longPress.start($event, entry)"
-						@pointermove="longPress.move"
-						@pointerup="longPress.end"
-						@pointercancel="longPress.cancel"
-					>
-						<td
-							class="file-row-cell file-row-name truncate text-left"
-							:class="entry.metadata.isDirectory ? 'font-medium' : ''"
-						>
-							<div class="file-row-name-container flex min-w-0 items-center gap-2.5">
-								<i
-									:class="[
-										'file-row-icon shrink-0 transition-colors duration-150',
-										entry.metadata.isDirectory
-											? 'fas fa-folder'
-											: entry.metadata.isSymbolicLink
-												? 'fas fa-link'
-												: getFileIconClass(entry.name),
-										browser.selected.value.has(entry.path) ? 'text-primary' : 'text-text-secondary',
-									]"
-									aria-hidden="true"
-								></i>
 								<button
 									type="button"
-									class="file-row-name-button min-w-0 flex-1 text-left"
-									:data-file-path="entry.path"
-									@mousedown="preserveListFocusOnMouseOpen"
+									class="file-table-sort-trigger inline-flex items-center gap-1 font-semibold transition-colors hover:text-foreground"
+									:class="{ '!text-primary font-bold': browser.sortKey.value === 'name' }"
+									@click="browser.setSort('name')"
 								>
-									<span class="file-row-name-label truncate">{{ displayEntryName(entry) }}</span>
+									<span>{{ t('fileManager.headers.name') }}</span>
+									<span v-if="browser.sortKey.value === 'name'" class="text-[10px]">{{
+										sortMark('name')
+									}}</span>
 								</button>
-							</div>
-						</td>
-						<td
-							v-if="showPermissions"
-							class="file-row-cell file-row-permissions truncate font-mono text-left"
-							:class="browser.selected.value.has(entry.path) ? 'text-primary' : 'text-text-secondary'"
+								<span
+									v-if="canResizeName"
+									class="absolute right-[-4px] top-0 z-20 h-full w-[9px] cursor-col-resize hover:bg-primary/20"
+									@pointerdown="startColumnResize($event, 'name')"
+								></span>
+							</th>
+							<th
+								v-if="showPermissions"
+								class="file-table-header file-table-header-permissions relative whitespace-nowrap text-left"
+								:style="columnStyle('permissions')"
+							>
+								<button
+									type="button"
+									class="file-table-sort-trigger inline-flex items-center gap-1 font-semibold transition-colors hover:text-foreground"
+									:class="{ '!text-primary font-bold': browser.sortKey.value === 'permissions' }"
+									@click="browser.setSort('permissions')"
+								>
+									<span>{{ t('fileManager.headers.permissions') }}</span>
+									<span v-if="browser.sortKey.value === 'permissions'" class="text-[10px]">{{
+										sortMark('permissions')
+									}}</span>
+								</button>
+								<span
+									v-if="canResizePermissions"
+									class="absolute right-[-4px] top-0 z-20 h-full w-[9px] cursor-col-resize hover:bg-primary/20"
+									@pointerdown="startColumnResize($event, 'permissions')"
+								></span>
+							</th>
+							<th
+								v-if="showModified"
+								class="file-table-header file-table-header-modified relative whitespace-nowrap text-left"
+								:style="columnStyle('modified')"
+							>
+								<button
+									type="button"
+									class="file-table-sort-trigger inline-flex items-center gap-1 font-semibold transition-colors hover:text-foreground"
+									:class="{ '!text-primary font-bold': browser.sortKey.value === 'modified' }"
+									@click="browser.setSort('modified')"
+								>
+									<span>{{ t('fileManager.headers.modified') }}</span>
+									<span v-if="browser.sortKey.value === 'modified'" class="text-[10px]">{{
+										sortMark('modified')
+									}}</span>
+								</button>
+							</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr
+							v-if="browser.path.value !== '/'"
+							data-filename=".."
+							data-file-parent
+							tabindex="-1"
+							class="cursor-pointer select-none transition-colors duration-150 hover:bg-header/50"
+							:class="[
+								keyboardCursor === PARENT_CURSOR ? 'bg-primary/10' : '',
+								remoteDragTarget === parentOf(browser.path.value)
+									? 'outline-dashed outline-2 outline-offset-[-1px] outline-primary'
+									: '',
+							]"
+							@click="
+								keyboardCursor = PARENT_CURSOR;
+								browser.goParent();
+							"
+							@dragover="handleRemoteTargetDragOver($event, parentOf(browser.path.value))"
+							@dragleave="clearRemoteDragTarget(parentOf(browser.path.value))"
+							@drop="dropRemote($event, parentOf(browser.path.value))"
+							@contextmenu.stop="
+								openDirectoryContext($event, 'parent-directory', parentOf(browser.path.value))
+							"
 						>
-							{{ formatMode(entry.metadata.mode) }}
-						</td>
-						<td
-							v-if="showModified"
-							class="file-row-cell file-row-modified truncate text-left tabular-nums"
-							:class="browser.selected.value.has(entry.path) ? 'text-primary' : 'text-text-secondary'"
-							:title="new Date(entry.metadata.modifiedAt).toLocaleString()"
+							<td class="file-row-cell file-row-name text-left">
+								<span class="file-row-parent-content inline-flex min-w-0 items-center gap-2.5">
+									<i
+										class="file-row-icon fas fa-level-up-alt shrink-0 text-text-secondary"
+										aria-hidden="true"
+									></i>
+									<span class="file-row-name-label font-medium">..</span>
+								</span>
+							</td>
+							<td
+								v-if="showPermissions"
+								class="file-row-cell file-row-permissions font-mono text-left"
+							></td>
+							<td v-if="showModified" class="file-row-cell file-row-modified text-left"></td>
+						</tr>
+						<tr v-if="browser.visible.value.length === 0">
+							<td :colspan="visibleColumnCount" class="px-4 py-6 text-center italic text-text-secondary">
+								{{
+									browser.searchQuery.value
+										? t('fileManager.noSearchResults')
+										: t('fileManager.emptyDirectory')
+								}}
+							</td>
+						</tr>
+						<tr v-if="virtualTopPadding" aria-hidden="true">
+							<td
+								:colspan="visibleColumnCount"
+								class="border-0 p-0"
+								:style="{ height: `${virtualTopPadding}px` }"
+							></td>
+						</tr>
+						<tr
+							v-for="entry in virtualEntries"
+							:key="entry.path"
+							:data-filename="entry.name"
+							:data-file-path="entry.path"
+							tabindex="-1"
+							class="file-row select-none touch-pan-y transition-colors duration-150"
+							:class="[
+								browser.selected.value.has(entry.path)
+									? 'bg-primary/10 text-primary'
+									: 'hover:bg-header/50',
+								remoteDragTarget === entry.path
+									? 'outline-dashed outline-2 outline-offset-[-1px] outline-primary'
+									: '',
+								entry.metadata.isDirectory || entry.metadata.isFile || entry.metadata.isSymbolicLink
+									? 'cursor-pointer'
+									: '',
+							]"
+							:draggable="!device.isMobile.value"
+							@dragstart="startRemoteDrag($event, entry)"
+							@dragend="endRemoteDrag"
+							@dragover="entry.metadata.isDirectory && handleRemoteTargetDragOver($event, entry.path)"
+							@dragleave="clearRemoteDragTarget(entry.path)"
+							@drop="entry.metadata.isDirectory && dropRemote($event, entry.path)"
+							@contextmenu.stop="openContext($event, entry)"
+							@mousedown="preserveListFocusOnMouseOpen"
+							@click="clickEntry($event, entry)"
+							@dblclick="doubleClickEntry($event, entry)"
+							@pointerdown="longPress.start($event, entry)"
+							@pointermove="longPress.move"
+							@pointerup="longPress.end"
+							@pointercancel="longPress.cancel"
 						>
-							{{ formatCompactModified(entry.metadata.modifiedAt) }}
-						</td>
-					</tr>
-					<tr v-if="virtualBottomPadding" aria-hidden="true">
-						<td
-							:colspan="visibleColumnCount"
-							class="border-0 p-0"
-							:style="{ height: `${virtualBottomPadding}px` }"
-						></td>
-					</tr>
-				</tbody>
-			</table>
+							<td
+								class="file-row-cell file-row-name truncate text-left"
+								:class="entry.metadata.isDirectory ? 'font-medium' : ''"
+							>
+								<div class="file-row-name-container flex min-w-0 items-center gap-2.5">
+									<i
+										:class="[
+											'file-row-icon shrink-0 transition-colors duration-150',
+											entry.metadata.isDirectory
+												? 'fas fa-folder'
+												: entry.metadata.isSymbolicLink
+													? 'fas fa-link'
+													: getFileIconClass(entry.name),
+											browser.selected.value.has(entry.path)
+												? 'text-primary'
+												: 'text-text-secondary',
+										]"
+										aria-hidden="true"
+									></i>
+									<button
+										type="button"
+										class="file-row-name-button min-w-0 flex-1 text-left"
+										:data-file-path="entry.path"
+										@mousedown="preserveListFocusOnMouseOpen"
+									>
+										<span class="file-row-name-label truncate">{{ displayEntryName(entry) }}</span>
+									</button>
+								</div>
+							</td>
+							<td
+								v-if="showPermissions"
+								class="file-row-cell file-row-permissions truncate font-mono text-left"
+								:class="browser.selected.value.has(entry.path) ? 'text-primary' : 'text-text-secondary'"
+							>
+								{{ formatMode(entry.metadata.mode) }}
+							</td>
+							<td
+								v-if="showModified"
+								class="file-row-cell file-row-modified truncate text-left tabular-nums"
+								:class="browser.selected.value.has(entry.path) ? 'text-primary' : 'text-text-secondary'"
+								:title="new Date(entry.metadata.modifiedAt).toLocaleString()"
+							>
+								{{ formatCompactModified(entry.metadata.modifiedAt) }}
+							</td>
+						</tr>
+						<tr v-if="virtualBottomPadding" aria-hidden="true">
+							<td
+								:colspan="visibleColumnCount"
+								class="border-0 p-0"
+								:style="{ height: `${virtualBottomPadding}px` }"
+							></td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+			<div
+				v-if="browser.loading.value"
+				class="file-manager-loading-state pointer-events-none absolute inset-0 z-30 flex items-center justify-center"
+			>
+				<UiSpinner />
+			</div>
 		</div>
 
 		<div
