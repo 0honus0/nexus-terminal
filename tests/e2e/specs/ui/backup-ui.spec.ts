@@ -149,27 +149,47 @@ test('data management UI exports a real backup file and imports it through the f
 
 	await slowStep('import submits the downloaded backup through the real UI file picker', async () => {
 		await section.locator('input[type="file"]').setInputFiles(backupPath);
-		const importPromise = page.waitForResponse(
-			(response) =>
-				response.url().endsWith('/api/v1/settings/backup/import') && response.request().method() === 'POST',
-		);
-		await section.getByRole('button', { name: 'Import backup', exact: true }).click();
-		// Restoring replaces business data and closes active resources. The UI
-		// must obtain the separate destructive confirmation before dispatching
-		// the import; merely clicking the form's submit never sends the POST.
-		const confirm = page.getByRole('dialog', { name: 'Please confirm' });
-		await expect(confirm).toContainText('Restore this backup and replace all backed-up business data?');
-		await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
-		const response = await importPromise;
-		expect(response.ok()).toBeTruthy();
-		const body = readBackupImportResponse(await response.json());
-		expect(body.restoredTables).toBeGreaterThan(0);
-		expect(body.cleanupPending).toBe(false);
-		const recovery = page.locator('[data-backup-recovery]');
-		await expect(recovery).toContainText(
-			`Backup restored: ${body.restoredRows} rows and ${body.restoredFiles} files.`,
-		);
-		await recovery.getByRole('button', { name: 'Reload application', exact: true }).click();
+		// A successful import replaces persisted state and re-renders the UI;
+		// its browser-owned response body can be retired before Playwright reads
+		// it. Capture the *same* original POST via the routing owner, without
+		// repeating this destructive mutation or weakening its value assertions.
+		let verifiedBody: ReturnType<typeof readBackupImportResponse> | undefined;
+		const importRoute = '**/api/v1/settings/backup/import';
+		await page.route(importRoute, async (route) => {
+			if (route.request().method() !== 'POST') {
+				await route.continue();
+				return;
+			}
+			const upstream = await route.fetch();
+			if (upstream.ok()) verifiedBody = readBackupImportResponse(await upstream.json());
+			await route.fulfill({ response: upstream });
+		});
+		try {
+			const importPromise = page.waitForResponse(
+				(response) =>
+					response.url().endsWith('/api/v1/settings/backup/import') && response.request().method() === 'POST',
+			);
+			await section.getByRole('button', { name: 'Import backup', exact: true }).click();
+			// Restoring replaces business data and closes active resources. The UI
+			// must obtain the separate destructive confirmation before dispatching
+			// the import; merely clicking the form's submit never sends the POST.
+			const confirm = page.getByRole('dialog', { name: 'Please confirm' });
+			await expect(confirm).toContainText('Restore this backup and replace all backed-up business data?');
+			await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
+			const response = await importPromise;
+			expect(response.ok()).toBeTruthy();
+			expect(verifiedBody, 'Backup import must return its persisted receipt').toBeDefined();
+			const body = verifiedBody!;
+			expect(body.restoredTables).toBeGreaterThan(0);
+			expect(body.cleanupPending).toBe(false);
+			const recovery = page.locator('[data-backup-recovery]');
+			await expect(recovery).toContainText(
+				`Backup restored: ${body.restoredRows} rows and ${body.restoredFiles} files.`,
+			);
+			await recovery.getByRole('button', { name: 'Reload application', exact: true }).click();
+		} finally {
+			await page.unroute(importRoute);
+		}
 	});
 
 	await step('the browser remains authenticated after the import-triggered reload', async () => {
