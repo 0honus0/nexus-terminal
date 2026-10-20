@@ -255,7 +255,17 @@ test('file browsing and recursive search remain responsive while upload writes a
 		await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
 	}
 
+	// Browsing was intentionally exercised before the delayed remote writes
+	// settled. Do not mistake the earlier directory snapshot for the final
+	// upload result: wait for the real transfer receipt, then reload the root.
+	// Failed/unknown transfers retain their progress row and must fail here.
+	await expect(uploadProgressTask(page, fileName)).toBeHidden({ timeout: 60_000 });
 	await page.getByRole('dialog', { name: 'File Manager', exact: true }).locator('[data-file-parent]').click();
+	await expect(fileManagerRow(page, 'seed.txt')).toBeVisible();
+	await page
+		.getByRole('dialog', { name: 'File Manager', exact: true })
+		.getByTitle('Refresh', { exact: true })
+		.click();
 	await expect(fileManagerRow(page, fileName)).toBeVisible({ timeout: 30_000 });
 
 	await step('recursive search returns the real nested remote file after the concurrent upload', async () => {
