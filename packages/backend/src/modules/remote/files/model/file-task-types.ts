@@ -6,6 +6,7 @@ import type {
 } from '@nexus-terminal/shared/remote/transfers/values';
 import type { RemoteFileErrorCode } from '@nexus-terminal/shared/remote/files/values';
 import type { FilePathEntry, RemoteFileFailure } from './file-types.js';
+import type { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 
 export type FileCopyMoveEvent =
 	| {
@@ -76,8 +77,15 @@ export interface FileCompressionFootprint {
 	destination: string;
 }
 
+export interface TransferResourceOwner {
+	finished: boolean;
+	cleanupFailure: RemoteResourceCleanupFailure | null;
+	readonly cleanupOwnerIds: readonly string[];
+}
+
 export type FileMutationIntent =
-	{ kind: 'upload'; destination: string } | { kind: 'compression'; sources: readonly string[]; destination: string };
+	| { kind: 'upload'; destination: string }
+	| { kind: 'compression'; sources: readonly string[]; destination: string; owner: TransferResourceOwner };
 
 export class ArchiveRejection extends Error {
 	constructor(

@@ -419,6 +419,7 @@ await test('Files independent transfer ownership and mixed admission at controll
 
 		const emit = (event) => events.push(event);
 
+		// Extraction has no pre-admission compression footprint reads; this fixture checks queued task capacity.
 		for (let index = 0; index < 5; index += 1) {
 			f.files.startUpload(
 				token,
@@ -445,7 +446,7 @@ await test('Files independent transfer ownership and mixed admission at controll
 				token,
 				'mixed-workspace',
 				'archive-' + index,
-				{ kind: 'compress', sources: ['/source'], destination: '/archive.zip', format: 'zip' },
+				{ kind: 'decompress', source: '/archive.zip' },
 				emit,
 			);
 		}
@@ -479,7 +480,7 @@ await test('Files independent transfer ownership and mixed admission at controll
 					token,
 					'mixed-workspace',
 					'overflow-archive',
-					{ kind: 'compress', sources: ['/source'], destination: '/overflow.zip', format: 'zip' },
+					{ kind: 'decompress', source: '/overflow.zip' },
 					emit,
 				),
 			failure('limit_exceeded'),
@@ -501,7 +502,7 @@ await test('Files independent transfer ownership and mixed admission at controll
 				token,
 				'mixed-workspace',
 				'replacement-archive',
-				{ kind: 'compress', sources: ['/source'], destination: '/replacement.zip', format: 'zip' },
+				{ kind: 'decompress', source: '/replacement.zip' },
 				emit,
 			).started,
 			true,

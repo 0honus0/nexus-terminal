@@ -63,6 +63,7 @@ import {
 	type FileArchiveRequest,
 	type ArchiveFormat,
 	type FileMutationIntent,
+	type TransferResourceOwner,
 } from '../model/file-task-types.js';
 
 interface OwnedResource {
@@ -112,12 +113,6 @@ interface PreparedUpload {
 	root: string;
 	directories: ReadonlySet<string>;
 	expiresAt: number;
-}
-
-interface TransferResourceOwner {
-	finished: boolean;
-	cleanupFailure: RemoteResourceCleanupFailure | null;
-	readonly cleanupOwnerIds: readonly string[];
 }
 
 type FileResourceUse = 'direct' | 'dedicated_transfer';
@@ -693,16 +688,27 @@ export class RemoteFileService {
 			controller.signal.throwIfAborted();
 			const activeRecord = record;
 			const archiveRemaining = this.remaining(timeoutMs - (Date.now() - started), controller.signal, id);
-			const footprint =
+			// Metadata admission and claim revalidation belong to the transfer too: cancelling
+			// either read must not retire the Workspace's shared SFTP lease.
+			const inspectFootprint =
 				writeIntent?.kind === 'compression'
-					? await compressionFootprint(
-							record.resource,
-							writeIntent.sources.map((source) => remoteTransferPath(source, true)),
-							remoteTransferPath(writeIntent.destination, true),
-							archiveRemaining,
-							controller.signal,
-						)
+					? () =>
+							this.withUploadResource(
+								activeRecord.resource,
+								archiveRemaining(),
+								controller.signal,
+								writeIntent.owner,
+								(resource) =>
+									compressionFootprint(
+										resource,
+										writeIntent.sources.map((source) => remoteTransferPath(source, true)),
+										remoteTransferPath(writeIntent.destination, true),
+										archiveRemaining,
+										controller.signal,
+									),
+							)
 					: null;
+			const footprint = inspectFootprint ? await inspectFootprint() : null;
 
 			const execute = () => {
 				executing = true;
@@ -711,16 +717,7 @@ export class RemoteFileService {
 					token,
 					id,
 					async (resource, ms, signal) => {
-						if (
-							footprint &&
-							!(await compressionFootprint(
-								resource,
-								footprint.sources,
-								footprint.destination,
-								archiveRemaining,
-								signal,
-							))
-						) {
+						if (footprint && inspectFootprint && !(await inspectFootprint())) {
 							// The queue may have changed filesystem facts before claim acquisition.
 							throw new RemoteFileFailure('conflict');
 						}
@@ -2222,7 +2219,7 @@ export class RemoteFileService {
 			'dedicated_transfer',
 			[],
 			input.kind === 'compress'
-				? { kind: 'compression', sources: input.sources, destination: input.destination }
+				? { kind: 'compression', sources: input.sources, destination: input.destination, owner: task }
 				: undefined,
 		)
 			.then(

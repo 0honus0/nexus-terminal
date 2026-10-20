@@ -60,17 +60,18 @@ async function createNonSshConnection(
 		);
 		await form.locator('button[type="submit"]').click();
 		expect((await createPromise).status()).toBe(200);
+		const imported = readConnectionImportResponse(importBody).items;
+		expect(imported).toHaveLength(1);
+		const result = imported[0];
+		if (!result || result.status !== 'ok') throw new Error('Non-SSH import failed');
+		// Keep interception stable until the UI has consumed the receipt and refreshed related catalogs.
+		// Removing it as soon as headers arrive can strand a concurrently starting browser request.
+		await expect(form).toBeHidden({ timeout: 15_000 });
+		await expect(page.locator('.connection-card').filter({ hasText: name })).toBeVisible();
+		return result.id;
 	} finally {
 		await page.unroute(importRoute);
 	}
-	const imported = readConnectionImportResponse(importBody).items;
-	expect(imported).toHaveLength(1);
-	const result = imported[0];
-	if (!result || result.status !== 'ok') throw new Error('Non-SSH import failed');
-	const id = result.id;
-	await expect(form).toBeHidden({ timeout: 15_000 });
-	await expect(page.locator('.connection-card').filter({ hasText: name })).toBeVisible();
-	return id;
 }
 
 test('RDP and VNC form branches persist correctly and filtered batch selection deletes exactly the intended connections', async ({

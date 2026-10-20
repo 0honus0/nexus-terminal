@@ -75,11 +75,20 @@
 
 本批行为验收仅使用获准的远程 Actions，未运行本地行为测试或用例收集；未覆盖组合继续保留，不恢复已通过的旧失败清单。
 
-## 后续本地展示清理（待远程）
+## 展示清理与后续远程修复
 
-本轮另收窄工作区／系统偏好、监控、后端日志、布局／焦点、工作区连接列表、导入、主机信任和记忆源选择器的新增刷新入口：正常／初始读取不常驻，失败或待核对时可恢复。保留旧版记忆刷新、插件同步、文件／预览／历史及其他正常操作。监控脚本不再依赖刷新按钮存在判断保存完成；新增按钮变更的根 check、Frontend build、两份前端脚本语法及 diff 检查已通过，日志在 `/tmp/nexus-ui-refresh-{check,build}.log`；完整格式检查通过（`/tmp/nexus-ui-refresh-format.log`），行为未远程验证。
+本轮另收窄工作区／系统偏好、监控、后端日志、布局／焦点、工作区连接列表、导入、主机信任和记忆源选择器的新增刷新入口：正常／初始读取不常驻，失败或待核对时可恢复。保留旧版记忆刷新、插件同步、文件／预览／历史及其他正常操作。监控脚本不再依赖刷新按钮存在判断保存完成；新增按钮变更的根 check、Frontend build、两份前端脚本语法及 diff 检查已通过，日志在 `/tmp/nexus-ui-refresh-{check,build}.log`；完整格式检查通过（`/tmp/nexus-ui-refresh-format.log`），提交前尚未远程验证，后续实际结果见下方失败轮次。
 
-当前工作区移除重构额外增加的常驻技术说明、设置修订展示，并将必要帮助精简为用户操作文字；三语及既有 Targets 隔离脚本的展示断言同步。未改 API／Shared、写入与恢复策略。上一版成功不代表本批已通过行为验收；重点为连接列表／导入、Browser／集成／记忆／Artifact／插件及安全／监控设置的常规、失败恢复与待重启状态。本批 `pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/frontend build`、`node --check tests/frontend/targets.integration.mjs` 和 `git diff --check` 均 exit 0；日志在 `/tmp/nexus-ui-prose-{check,format,build}.log`。不运行本地行为测试或用例收集，本批远程行为验收等待新一轮 Actions 结果。
+当前工作区移除重构额外增加的常驻技术说明、设置修订展示，并将必要帮助精简为用户操作文字；三语及既有 Targets 隔离脚本的展示断言同步。未改 API／Shared、写入与恢复策略。上一版成功不代表本批已通过行为验收；重点为连接列表／导入、Browser／集成／记忆／Artifact／插件及安全／监控设置的常规、失败恢复与待重启状态。本批 `pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/frontend build`、`node --check tests/frontend/targets.integration.mjs` 和 `git diff --check` 均 exit 0；日志在 `/tmp/nexus-ui-prose-{check,format,build}.log`。不运行本地行为测试或用例收集，该提交的远程结果及后续修复见下方。
+
+### 展示清理后的失败轮次与修复
+
+[Actions 39413492909](https://github.com/0honus0/nexus-terminal/actions/runs/39413492909)，SHA `90d5bb6c5a42eaedfedc75a1e1f85e40bc961613`：第7组失败，其余7组、Checks/format/build、Docker deployment smoke 和 runner image 均 success。仅两项失败：
+
+- `ui/connection-non-ssh-bulk.spec.ts`：导入响应200后表单未关闭；trace 显示紧随移除拦截启动的标签请求未完成。现保留原请求拦截直至 UI 消费回执并完成依赖读取，不重发写入。
+- `ssh/progress-display-archive-cancel.spec.ts` 的准备阻塞取消场景：取消后目录刷新被拒绝。源码查出压缩准备/声明复查仍使用共享 SFTP，现两处都使用原任务追踪的独立传输资源。失败 trace 无 WS 帧，不能宣称已证明全部运行因果。
+
+修复工作区的 `pnpm run check`、`pnpm run build` 已 exit 0（`/tmp/nexus-refresh-e2e-fix-{check,build}.log`）；完整 `pnpm run format:all:check`、既有配额夹具的 `node --check` 和 diff 检查通过（格式日志 `/tmp/nexus-refresh-e2e-fix-format.log`）。未运行本地行为测试、E2E 或用例收集。当前修复仍待提交后的远程验收；原压缩取消、真实远端目录读取、RDP/VNC 持久化与精确删除断言均保留。
 
 ## 历史证据追溯
 
