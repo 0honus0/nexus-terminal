@@ -9,6 +9,7 @@ import {
 	type MachinePty,
 	type MachineShell,
 	type MachineCommand,
+	type MachineCommandAbortMode,
 	type MachineCommandResult,
 	type MachineSftpLease,
 	type MachineExecuteOptions,
@@ -20,9 +21,11 @@ import { SshSftpLease } from './ssh-sftp.js';
 interface CommandChannelOptions {
 	signal?: AbortSignal;
 	cancelWhenAborted?: boolean;
+	abortMode?: MachineCommandAbortMode;
 }
 
 const CHANNEL_OPEN_TIMEOUT_MS = 30000;
+const COMMAND_TERMINATION_TIMEOUT_MS = 5000;
 const CLIENT_CLOSE_TIMEOUT_MS = 2000;
 
 function closeClient(client: Client, isClosed: () => boolean): Promise<void> {
@@ -242,21 +245,41 @@ class ConnectedMachine implements MachineConnection {
 
 	private async createCommandChannel(
 		command: string,
-		{ signal, cancelWhenAborted = true }: CommandChannelOptions,
+		{ signal, cancelWhenAborted = true, abortMode = 'close' }: CommandChannelOptions,
 	): Promise<SshCommandChannel> {
 		if (!command) {
 			throw new Error('Empty SSH command');
 		}
+		if (signal?.aborted) {
+			throw new MachineDispatchFailure('not_started', { cause: signal.reason });
+		}
 		const channel = await this.openChannel(
 			(client, callback) => client.exec(command, { pty: false }, callback),
-			signal,
+			// A pending exec may already be remote. Signal mode must retain its late
+			// channel to request termination and drain the result, rather than discard it.
+			abortMode === 'signal' ? undefined : signal,
 		);
 		const result = new SshCommandChannel(channel, () => this.channels.delete(result));
 		this.channels.add(result);
 		if (signal && cancelWhenAborted) {
-			const abort = () => result.cancel();
+			let terminationTimer: ReturnType<typeof setTimeout> | undefined;
+
+			const abort = () => {
+				if (abortMode === 'close') {
+					result.cancel();
+					return;
+				}
+				// Keep receiving stdout and the actual exit result; refusal or silence stays unknown.
+				terminationTimer = setTimeout(() => result.cancel(), COMMAND_TERMINATION_TIMEOUT_MS);
+				try {
+					result.terminate();
+				} catch {
+					result.cancel();
+				}
+			};
 
 			const offClose = result.onClose(() => {
+				clearTimeout(terminationTimer);
 				signal.removeEventListener('abort', abort);
 				offClose();
 			});
@@ -268,8 +291,12 @@ class ConnectedMachine implements MachineConnection {
 		return result;
 	}
 
-	openRawCommand(command: string, signal?: AbortSignal): Promise<MachineCommand> {
-		return this.createCommandChannel(command, { signal });
+	openRawCommand(
+		command: string,
+		signal?: AbortSignal,
+		abortMode: MachineCommandAbortMode = 'close',
+	): Promise<MachineCommand> {
+		return this.createCommandChannel(command, { signal, abortMode });
 	}
 
 	async execute(command: string, options: MachineExecuteOptions): Promise<MachineCommandResult> {

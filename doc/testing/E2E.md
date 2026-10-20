@@ -1896,3 +1896,22 @@ be8e7de8 / 39365646059 第1/3/4/5/8组通过，第2组36 passed/3 failed，第6�
 当前6a00aa28 / 39367031982已结束：质量/构建、Docker smoke和第3/4/5/8组通过；第2/6/7组仍为上述5项失败，第1组另有clarification首轮失败/重试通过（36 passed/1 flaky，门禁仍FAIL）。离线artifact确认Run已Completed但页面只有User正文和“Read next body page”；源码refreshRun先读body再getRun，Run在其间结束后schedulePoll停止。现只在较新状态停止轮询前从原正文游标再读取一次，失败仍进入原operation处理，不刷新页面、不重派Run或改变断言。两轮复核覆盖快完成/慢完成、同版本终态、unknown、分页及失效scope；USAGE、Frontend和E-13.1同步，行为待新SHA远程。归档运行中取消与并发仍未修复；不以本批只读预检查修复替代。
 
 本批最终门禁：Node22.23.1/pnpm11.26.0，根check、严格E2E TypeScript、前后端build、全仓format:all:check、最终两份Frontend源码ESLint、SSH夹具node --check与git diff --check均exit0；日志 /tmp/nexus-round33-types.log、/tmp/nexus-round34-{check,final-build,format,final-eslint}.log。最终guard调整已重新格式化并执行ESLint/vue-tsc与build。两轮源码复核覆盖本批13份变更及真实消费者，无本地行为测试。待推送新SHA验证，本批不把源码修补算作远程PASS；剩余运行中归档取消/并发明确继续保留。
+
+### 压缩派发取消与无冲突并发补修（2026-10-20）
+
+远程1ec9b523 / 39368185067已结束：质量/构建、Docker smoke和第1/3/4/5/6/7/8组通过；第2组仅2项失败，分别是已派发归档取消收到failed，以及独立压缩只派发1项。上一轮四项附加缺陷在该SHA未复现。
+
+本批保留原专门用例、exec-hold、真实started/exited计数及后续解压字节断言，不调整夹具、测试断言或期限。Native压缩在首次写入前发送随机标记；Model选择SSH的TERM排空模式，只有完整输出未含该标记且收到实际远端TERM退出才映射FileCommandNotStarted。标记已到、输出损坏/断流、退出缺失或清理失败仍unknown；这不承诺已经启动的writer可安全中断。exec派发等待中取消继续接管晚到channel，请求TERM并有界等待，原通用execute/Agent结果仍保守unknown。
+
+FileMutationQueue新增独立compression组：仅同一canonical父目录、普通文件源、不同且不存在的新目标，读写集合无冲突才共享原endpoint claim，最多16项；资格在准入与认证后派发时重查。目录/链接源、覆盖、解压和不合格任务仍走独占队列，不混上传组。仅确定未启动writer且独立资源已排空的取消，在仍有其他成员持有claim时可先退场；正常写入和unknown仍等整组结算，跨Workspace/Agent互斥与故障blocked不变。
+
+| 审核表   | 本批结论                                                                                                                                           |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 修复原两项派发/并发链路；保留真实取消、进程退出、后续同Workspace压缩和并行任务字节判据，行为仍待新SHA。                                            |
+| 职责归属 | Service持有分组资格/冲突/任务政策，Model转换命令事实，Native Adapter持有首写标记，SSH Adapter持有信号/晚channel/收尾期限；原持久claim与SQL不变。   |
+| 类型归属 | FileCompressionFootprint/FileMutationIntent归Remote Files Model，命令取消模式与信号事实归Platform；无新Shared或公开对象，不穿透技术句柄。          |
+| 完成证据 | 两轮源码复核覆盖首写前后、信号拒绝/丢失、晚channel、协议与清理失败、分组排空/结算、路径别名/读写重叠及授权撤销；静态门禁随后记录，未运行本地行为。 |
+
+USAGE、Backend与实施方案当前基线同步。当前任务仍为新SHA的完整八组回归；如果两项仍失败，按真实日志继续修复，不按源码推定通过。
+
+本批最终静态：Node22.23.1/pnpm11.26.0，根check、严格E2E TypeScript、前后端build、全仓format:all:check、最终Backend check/build、受影响源码ESLint及git diff --check均exit0（/tmp/nexus-round35-*.log）。两轮复核完成，最终补充拒绝首写标记之前的异常stdout；未运行本地行为或用例收集。E-05.4仅提炼共享围栏下读写冲突与确定无副作用取消的共性规则，具体缺陷仍在实施/验证文档，HUMAN/AGENTS不变。下一步为新SHA远程八组，不能以本批静态结果销掉原两项失败。

@@ -57,8 +57,13 @@ import type { FileUploadStart, FileUploadEvent, FileUploadStreamAttachment } fro
 import type { FileCopyMoveEvent, FileArchiveEvent, FileArchiveOperation } from '../model/file-task-types.js';
 import { copyRemoteEntries } from './file-copy.js';
 import { streamRemoteDirectoryZip } from './file-directory-zip.js';
-import { compressRemoteArchive, decompressRemoteArchive } from './file-archive.js';
-import { ArchiveRejection, type FileArchiveRequest, type ArchiveFormat } from '../model/file-task-types.js';
+import { compressRemoteArchive, decompressRemoteArchive, compressionFootprint } from './file-archive.js';
+import {
+	ArchiveRejection,
+	type FileArchiveRequest,
+	type ArchiveFormat,
+	type FileMutationIntent,
+} from '../model/file-task-types.js';
 
 interface OwnedResource {
 	id: string;
@@ -624,7 +629,7 @@ export class RemoteFileService {
 		authorization: 'bound_session' | 'same_user_workspace' | 'download_ticket' = 'bound_session',
 		resourceUse: FileResourceUse = 'direct',
 		mutationPeers: FileResource[] = [],
-		uploadPath?: string,
+		writeIntent?: FileMutationIntent,
 	): Promise<T> {
 		return this.track(
 			this.runAdmitted(
@@ -637,7 +642,7 @@ export class RemoteFileService {
 				authorization,
 				resourceUse,
 				mutationPeers,
-				uploadPath,
+				writeIntent,
 			),
 		);
 	}
@@ -652,7 +657,7 @@ export class RemoteFileService {
 		authorization: 'bound_session' | 'same_user_workspace' | 'download_ticket' = 'bound_session',
 		resourceUse: FileResourceUse = 'direct',
 		mutationPeers: FileResource[] = [],
-		uploadPath?: string,
+		writeIntent?: FileMutationIntent,
 	): Promise<T> {
 		const controller = new AbortController();
 
@@ -682,11 +687,22 @@ export class RemoteFileService {
 			) {
 				throw new RemoteFileFailure('not_found');
 			}
-			record.active.set(controller, uploadPath === undefined ? 'other' : 'upload');
+			record.active.set(controller, writeIntent?.kind === 'upload' ? 'upload' : 'other');
 			record.inFlight.add(lifecycle);
 
 			controller.signal.throwIfAborted();
 			const activeRecord = record;
+			const archiveRemaining = this.remaining(timeoutMs - (Date.now() - started), controller.signal, id);
+			const footprint =
+				writeIntent?.kind === 'compression'
+					? await compressionFootprint(
+							record.resource,
+							writeIntent.sources.map((source) => remoteTransferPath(source, true)),
+							remoteTransferPath(writeIntent.destination, true),
+							archiveRemaining,
+							controller.signal,
+						)
+					: null;
 
 			const execute = () => {
 				executing = true;
@@ -694,7 +710,22 @@ export class RemoteFileService {
 					activeRecord,
 					token,
 					id,
-					action,
+					async (resource, ms, signal) => {
+						if (
+							footprint &&
+							!(await compressionFootprint(
+								resource,
+								footprint.sources,
+								footprint.destination,
+								archiveRemaining,
+								signal,
+							))
+						) {
+							// The queue may have changed filesystem facts before claim acquisition.
+							throw new RemoteFileFailure('conflict');
+						}
+						return action(resource, ms, signal);
+					},
 					controller.signal,
 					started,
 					mutation,
@@ -717,7 +748,8 @@ export class RemoteFileService {
 								work,
 							),
 						controller.signal,
-						uploadPath,
+						writeIntent?.kind === 'upload' ? writeIntent.destination : undefined,
+						footprint,
 					)
 				: execute();
 			try {
@@ -1649,7 +1681,7 @@ export class RemoteFileService {
 			'bound_session',
 			'dedicated_transfer',
 			[],
-			destination,
+			{ kind: 'upload', destination },
 		)
 			.then(
 				(result) => {
@@ -2188,6 +2220,10 @@ export class RemoteFileService {
 			FILE_TRANSFER_MS,
 			'bound_session',
 			'dedicated_transfer',
+			[],
+			input.kind === 'compress'
+				? { kind: 'compression', sources: input.sources, destination: input.destination }
+				: undefined,
 		)
 			.then(
 				(result) => {

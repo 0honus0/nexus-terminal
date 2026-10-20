@@ -149,6 +149,11 @@ export class SshCommandChannel extends ByteChannel implements MachineCommand {
 			this.settle = resolve;
 		});
 		channel.on('close', (code: number | null, signal?: string | null) => {
+			if (code == null && typeof signal === 'string' && /^SIG[A-Z][A-Z0-9]{0,28}$/u.test(signal)) {
+				// A remote exit-signal confirms command exit, not the outcome of its effects.
+				this.finish({ status: 'unknown', reason: 'remote_signal', signal: signal.slice(3) });
+				return;
+			}
 			if (
 				typeof code !== 'number' ||
 				!Number.isSafeInteger(code) ||
@@ -179,5 +184,11 @@ export class SshCommandChannel extends ByteChannel implements MachineCommand {
 	cancel(reason: 'cancelled' | 'timeout' = 'cancelled'): void {
 		this.finish({ status: 'unknown', reason });
 		this.close();
+	}
+
+	terminate(): void {
+		if (!this.settled) {
+			this.channel.signal('TERM');
+		}
 	}
 }

@@ -43,9 +43,12 @@ export interface MachinePty {
 	readonly rows: number;
 }
 
+export type MachineCommandAbortMode = 'close' | 'signal';
+
 export type MachineCommandOutcome =
 	| { status: 'completed'; exitCode: 0; signal: string | null }
 	| { status: 'nonzero'; exitCode: number; signal: string | null }
+	| { status: 'unknown'; reason: 'remote_signal'; signal: string }
 	| { status: 'unknown'; reason: 'disconnect' | 'timeout' | 'cancelled' | 'channel_error' };
 
 export class MachineDispatchFailure extends Error {
@@ -184,7 +187,7 @@ export interface MachineSftpLease {
 export interface MachineConnection {
 	readonly isOpen: boolean;
 	openShell(pty: MachinePty, signal?: AbortSignal): Promise<MachineShell>;
-	openRawCommand(command: string, signal?: AbortSignal): Promise<MachineCommand>;
+	openRawCommand(command: string, signal?: AbortSignal, abortMode?: MachineCommandAbortMode): Promise<MachineCommand>;
 	execute(command: string, options: MachineExecuteOptions): Promise<MachineCommandResult>;
 	openSftp(signal?: AbortSignal): Promise<MachineSftpLease>;
 	onClose(listener: (reason: 'disconnected') => void): () => void;

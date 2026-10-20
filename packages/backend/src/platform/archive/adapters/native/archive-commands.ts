@@ -245,11 +245,14 @@ export class NativeArchiveCommands {
 					' -- ' +
 					args.join(' ');
 		const sentinel = 'NEXUS_NATIVE_STATUS_' + randomUUID().replaceAll('-', '') + ':';
+		const beforeWriteMarker = 'NEXUS_ARCHIVE_START_' + randomUUID().replaceAll('-', '');
 		const script = [
 			'command -v ' + tool + ' >/dev/null 2>&1 || exit 127',
 			'LC_MESSAGES=C; export LC_MESSAGES',
 			'cd ' + quote(workingDirectory) + ' || exit 78',
 			'umask 077',
+			// A complete, drained remote exit without this marker proves no writer was launched.
+			'printf ' + quote(beforeWriteMarker + '\n') + ' || exit 78',
 			'(' + native + ' 2>&1; printf ' + quote(sentinel + '%s\n') + ' "$?") |',
 			'{ count=0; overflow=0; while IFS= read -r line; do',
 			'  case "$line" in',
@@ -272,26 +275,32 @@ export class NativeArchiveCommands {
 		let count = 0;
 		let finished = false;
 		let writerExited = false;
-		const outcome = await this.runner.executeLines(shell(script), signal, remaining(), (line) => {
-			const progress = /^NEXUS_ARCHIVE_PROGRESS:(\d+)$/u.exec(line);
-			const end = /^NEXUS_ARCHIVE_COUNT:(\d+)$/u.exec(line);
-			if (line === 'NEXUS_ARCHIVE_EXIT' && !writerExited && !finished) {
-				writerExited = true;
-			} else if (
-				progress &&
-				!writerExited &&
-				!finished &&
-				Number(progress[1]) === count + 1 &&
-				count < maxEntries
-			) {
-				count++;
-				onProgress(count);
-			} else if (end && writerExited && !finished && Number(end[1]) === count) {
-				finished = true;
-			} else {
-				throw new NativeArchiveFailure('invalid_output');
-			}
-		});
+		const outcome = await this.runner.executeLines(
+			shell(script),
+			signal,
+			remaining(),
+			(line) => {
+				const progress = /^NEXUS_ARCHIVE_PROGRESS:(\d+)$/u.exec(line);
+				const end = /^NEXUS_ARCHIVE_COUNT:(\d+)$/u.exec(line);
+				if (line === 'NEXUS_ARCHIVE_EXIT' && !writerExited && !finished) {
+					writerExited = true;
+				} else if (
+					progress &&
+					!writerExited &&
+					!finished &&
+					Number(progress[1]) === count + 1 &&
+					count < maxEntries
+				) {
+					count++;
+					onProgress(count);
+				} else if (end && writerExited && !finished && Number(end[1]) === count) {
+					finished = true;
+				} else {
+					throw new NativeArchiveFailure('invalid_output');
+				}
+			},
+			beforeWriteMarker,
+		);
 
 		return { outcome: normalizeOutcome(outcome, tool), count, finished, writerExited };
 	}

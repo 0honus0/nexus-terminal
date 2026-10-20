@@ -1,14 +1,17 @@
 import path from 'node:path';
-import { RemoteFileFailure } from '../model/file-types.js';
+import { FileCommandNotStarted, RemoteFileFailure } from '../model/file-types.js';
+import type { FileCompressionFootprint } from '../model/file-task-types.js';
 
 interface MutationMember {
 	start(): Promise<void>;
 	finish(failure: { cause: unknown } | null): void;
 }
 
-interface UploadBatch {
+interface MutationBatch {
+	kind: 'upload' | 'compression' | null;
 	directory: string | null;
 	paths: Set<string>;
+	reads: Set<string>;
 	members: MutationMember[];
 	accepting: boolean;
 	started: boolean;
@@ -18,13 +21,13 @@ interface UploadBatch {
 	drain(): void;
 }
 
-/** One Workspace keeps one durable endpoint claim until all admitted uploads and their cleanup drain. */
+/** One Workspace keeps one durable endpoint claim until all admitted writes and their cleanup drain. */
 export class FileMutationQueue {
 	private tail = Promise.resolve();
 	private preparation = Promise.resolve();
-	private batch: UploadBatch | null = null;
+	private batch: MutationBatch | null = null;
 
-	constructor(private readonly maxUploads: number) {}
+	constructor(private readonly maxMembers: number) {}
 
 	prepare<T>(work: () => Promise<T>): Promise<T> {
 		const result = this.preparation.then(work);
@@ -40,25 +43,34 @@ export class FileMutationQueue {
 		claim: (work: () => Promise<void>) => Promise<void>,
 		signal: AbortSignal,
 		uploadPath?: string,
+		compression?: FileCompressionFootprint | null,
 	): Promise<T> {
-		const directory = uploadPath === undefined ? null : path.posix.dirname(uploadPath);
-		let batch = this.batch;
+		const directory = compression?.directory ?? (uploadPath === undefined ? null : path.posix.dirname(uploadPath));
+		const destination = compression?.destination ?? uploadPath;
+		const kind = compression ? 'compression' : uploadPath === undefined ? null : 'upload';
+		const current = this.batch;
 		const canJoin =
-			batch !== null &&
-			batch.accepting &&
+			current !== null &&
+			current.accepting &&
+			current.kind === kind &&
 			directory !== null &&
-			batch.directory === directory &&
-			uploadPath !== undefined &&
-			!batch.paths.has(uploadPath) &&
-			batch.paths.size < this.maxUploads;
+			current.directory === directory &&
+			destination !== undefined &&
+			!current.paths.has(destination) &&
+			!current.reads.has(destination) &&
+			!compression?.sources.some((source) => current.paths.has(source)) &&
+			current.paths.size < this.maxMembers;
+		let batch = current;
 		if (!canJoin || batch === null) {
 			if (batch) {
 				batch.accepting = false;
 			}
 			let drain!: () => void;
 			batch = {
+				kind,
 				directory,
 				paths: new Set(),
+				reads: new Set(),
 				members: [],
 				accepting: directory !== null,
 				started: false,
@@ -74,8 +86,11 @@ export class FileMutationQueue {
 			this.tail = this.tail.then(() => this.execute(next, claim));
 		}
 		const owner = batch;
-		if (uploadPath !== undefined) {
-			owner.paths.add(uploadPath);
+		if (destination !== undefined) {
+			owner.paths.add(destination);
+		}
+		for (const source of compression?.sources ?? []) {
+			owner.reads.add(source);
 		}
 		owner.pending++;
 		return new Promise<T>((resolve, reject) => {
@@ -119,6 +134,17 @@ export class FileMutationQueue {
 					} finally {
 						completed();
 					}
+					// No writer was launched and this member's resources have drained. Its
+					// cancellation can retire while peers keep the durable endpoint claim.
+					// Mutating results and unknown failures still await the whole settlement.
+					if (
+						owner.kind === 'compression' &&
+						owner.pending > 0 &&
+						signal.aborted &&
+						error instanceof FileCommandNotStarted
+					) {
+						reject(error);
+					}
 				},
 
 				finish(failure) {
@@ -143,7 +169,7 @@ export class FileMutationQueue {
 		});
 	}
 
-	private async execute(batch: UploadBatch, claim: (work: () => Promise<void>) => Promise<void>): Promise<void> {
+	private async execute(batch: MutationBatch, claim: (work: () => Promise<void>) => Promise<void>): Promise<void> {
 		let executionFailure: AggregateError | null = null;
 		let settlementFailure: { cause: unknown } | null = null;
 		try {

@@ -63,6 +63,7 @@ export interface FileResource {
 		signal: AbortSignal,
 		timeoutMs: number,
 		onLine: (line: string) => void,
+		beforeWriteMarker?: string,
 	): Promise<FileLineCommandOutcome>;
 	close(): Promise<void>;
 }

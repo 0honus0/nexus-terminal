@@ -22,8 +22,14 @@ export class FileArchiveModel {
 
 	constructor(resource: FileResource) {
 		this.commands = new NativeArchiveCommands({
-			executeLines: async (command, signal, timeoutMs, onLine) => {
-				const result = await resource.executeCommandLines(command, signal, timeoutMs, onLine);
+			executeLines: async (command, signal, timeoutMs, onLine, beforeWriteMarker) => {
+				const result = await resource.executeCommandLines(
+					command,
+					signal,
+					timeoutMs,
+					onLine,
+					beforeWriteMarker,
+				);
 				return result.status === 'completed'
 					? { status: 'completed' }
 					: { status: 'nonzero', exitCode: result.exitCode };
