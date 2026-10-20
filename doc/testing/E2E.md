@@ -190,7 +190,7 @@ Foreground liveness tests wait for successful probe responses to finish browser-
 
 Mobile automatic-input investigation uses a real remote read loop to consume DSR replies without contaminating shell command editing. It verifies connected status replies, captures actual query output and delivers it on the replacement WebSocket while workspace resume is held, checks disabled input and absence of replies/rejection logs, then verifies the separately observed server-output replay, its new protocol reply, a fresh query and loop exit after recovery. A reply to a replayed server query is not cached user input. This covers automatic status replies in that controlled recovery window, not physical-device IME composition or every unsolicited-input error source.
 
-CI shards enable `DEBUG=pw:webserver` and retain combined output in `.tmp/shard-server.log` with failure diagnostics. This includes managed-service output needed to investigate backend exits before cascading ECONNRESET/ECONNREFUSED failures. The shell pipeline uses pipefail so collecting logs cannot hide a failing test exit status.
+CI shards leave `pw:webserver` debug logging disabled; service readiness polling still runs. Combined test output remains in `.tmp/shard-server.log` with failure diagnostics. The shell pipeline uses pipefail so collecting logs cannot hide a failing test exit status.
 
 The canonical GitHub workflow is `.github/workflows/e2e.yml`. It runs standard lint/type checks, formatting and production builds, eight duration-balanced Playwright shards on isolated GitHub-hosted runners with the latest Node.js Current and the repository-pinned Playwright version, and production-style Docker smoke tests.
 
