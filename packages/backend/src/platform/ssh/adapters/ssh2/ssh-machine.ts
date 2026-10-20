@@ -259,7 +259,7 @@ class ConnectedMachine implements MachineConnection {
 			// channel to request termination and drain the result, rather than discard it.
 			abortMode === 'signal' ? undefined : signal,
 		);
-		const result = new SshCommandChannel(channel, () => this.channels.delete(result));
+		const result = new SshCommandChannel(channel, () => this.channels.delete(result), abortMode === 'signal');
 		this.channels.add(result);
 		if (signal && cancelWhenAborted) {
 			let terminationTimer: ReturnType<typeof setTimeout> | undefined;

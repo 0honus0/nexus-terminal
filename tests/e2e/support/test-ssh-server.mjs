@@ -1273,6 +1273,7 @@ function runRemoteCommand(command, stream, session) {
 	});
 
 	let acknowledgedTerminationSignal = null;
+
 	const onSignal = (accept, reject, info) => {
 		if (!['TERM', 'KILL', 'INT', 'HUP'].includes(info.name)) return reject?.();
 		try {
@@ -1302,8 +1303,13 @@ function runRemoteCommand(command, stream, session) {
 		// accepted signal even if bash converted the terminated wait to code 143.
 		// This is only an exit fact: production still checks the before-write
 		// marker before declaring a cancellation free of archive side effects.
-		stream.exit(acknowledgedTerminationSignal ?? signal ?? (code ?? 0));
+		stream.exit(acknowledgedTerminationSignal ?? signal ?? code ?? 0);
 		stream.end();
+		if (acknowledgedTerminationSignal) {
+			// A forced-exit fixture must complete the SSH channel handshake even
+			// when the client still holds stdin open to send its cancellation.
+			stream.close();
+		}
 	});
 }
 

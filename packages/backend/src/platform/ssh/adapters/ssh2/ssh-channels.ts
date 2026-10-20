@@ -143,11 +143,18 @@ export class SshCommandChannel extends ByteChannel implements MachineCommand {
 	private settle!: (value: MachineCommandOutcome) => void;
 	private settled = false;
 
-	constructor(channel: ClientChannel, onEnded: () => void) {
+	constructor(channel: ClientChannel, onEnded: () => void, keepStdinOpenForTermination = false) {
 		super(channel, onEnded);
 		this.outcome = new Promise((resolve) => {
 			this.settle = resolve;
 		});
+		if (keepStdinOpenForTermination) {
+			// ssh2 refuses to send channel.signal() after its local stdin EOF.
+			// Archive commands never read stdin: keep that direction open until
+			// the remote exit proves the command has stopped, then send EOF to
+			// complete the SSH channel handshake without disabling SIGTERM.
+			channel.once('exit', () => channel.end());
+		}
 		channel.on('close', (code: number | null, signal?: string | null) => {
 			if (code == null && typeof signal === 'string' && /^SIG[A-Z][A-Z0-9]{0,28}$/u.test(signal)) {
 				// A remote exit-signal confirms command exit, not the outcome of its effects.

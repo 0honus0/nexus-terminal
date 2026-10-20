@@ -364,14 +364,20 @@ export class SftpFileResource implements FileResource {
 			// deadlock the command while stdout is being consumed. Drain without
 			// collecting or exposing secret-bearing remote diagnostic text.
 			stopStderr = channel.onStderr(() => undefined);
-			// Native archive commands take no stdin input. End the stream explicitly.
-			const inputFinished = finished(channel.writable, {
-				readable: false,
-				cleanup: true,
-				signal: beforeWriteMarker === undefined ? controller.signal : undefined,
-			});
-			channel.writable.end();
-			await inputFinished;
+			// Commands without a before-write marker keep their legacy EOF-first
+			// behavior; their cancellation cannot prove a writer was absent.
+			// ssh2 silently ignores channel.signal('TERM') once the outgoing
+			// direction has sent EOF. Archive writers must retain that direction
+			// until the remote exit; SshCommandChannel sends EOF on exit instead.
+			if (beforeWriteMarker === undefined) {
+				const inputFinished = finished(channel.writable, {
+					readable: false,
+					cleanup: true,
+					signal: controller.signal,
+				});
+				channel.writable.end();
+				await inputFinished;
+			}
 			let pending = '';
 			const decoder = new TextDecoder('utf-8', { fatal: true });
 			// Only bounded lines cross this Model boundary. Remote stderr never
