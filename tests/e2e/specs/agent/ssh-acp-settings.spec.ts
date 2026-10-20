@@ -186,25 +186,24 @@ for (const decision of ['denied', 'cancelled'] as const) {
 			.getByRole('textbox', { name: 'Task input', exact: true })
 			.fill(`E2E_ACP_EXECUTE integration=${integration.id} version=${integration.version}`);
 		// Hub navigation can retire the browser's CDP copy of a successful
-		// Run POST. Capture the original response through this exact route,
-		// then fulfill that same request; never replay a non-idempotent Run.
+		// Run mutation. Capture the original response through this exact route,
+		// then fulfill that same request; never replay a write to read its receipt.
 		// Keep the page-owned route until fixture teardown: Run creation starts
 		// concurrent reads and continuous polling, so removing it can strand a read.
 		const workspacePath = `/api/v1/agent/apps/${app.id}/workspace`;
-		let acceptedRunBody: unknown;
-		let capturedRunBody = false;
+		const acceptedBodies = new Map<string, unknown>();
 		const routePattern = `**${workspacePath}`;
 		await page.route(routePattern, async (route) => {
+			const method = route.request().postDataJSON()?.request?.method;
 			if (
 				route.request().method() !== 'POST' ||
-				route.request().postDataJSON()?.request?.method !== 'agent.runs.create'
+				(method !== 'agent.runs.create' && method !== 'agent.runs.cancel')
 			) {
 				await route.continue();
 				return;
 			}
 			const upstream = await route.fetch();
-			acceptedRunBody = await upstream.json();
-			capturedRunBody = true;
+			acceptedBodies.set(method, await upstream.json());
 			await route.fulfill({ response: upstream });
 		});
 		const runCreation = page.waitForResponse(
@@ -215,10 +214,10 @@ for (const decision of ['denied', 'cancelled'] as const) {
 		await hub.getByRole('button', { name: 'Send', exact: true }).click();
 		const runResponse = await runCreation;
 		expect(runResponse.status()).toBe(200);
-		expect(capturedRunBody).toBe(true);
+		expect(acceptedBodies.has('agent.runs.create')).toBe(true);
 		// Correlate the actual receipt through the same Shared decoder.
 		const runResult = readAgentWorkspaceResponse(
-			acceptedRunBody,
+			acceptedBodies.get('agent.runs.create'),
 			app.id,
 			readAgentWorkspaceRequest(runResponse.request().postDataJSON()),
 		).result;
@@ -297,8 +296,9 @@ for (const decision of ['denied', 'cancelled'] as const) {
 				await hub.getByRole('button', { name: 'Request cancellation', exact: true }).click();
 				const cancellationResponse = await cancellation;
 				expect(cancellationResponse.status()).toBe(200);
+				expect(acceptedBodies.has('agent.runs.cancel')).toBe(true);
 				const cancellationResult = readAgentWorkspaceResponse(
-					await cancellationResponse.json(),
+					acceptedBodies.get('agent.runs.cancel'),
 					app.id,
 					readAgentWorkspaceRequest(cancellationResponse.request().postDataJSON()),
 				).result;

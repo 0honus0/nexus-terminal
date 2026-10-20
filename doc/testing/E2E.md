@@ -557,3 +557,13 @@ f0acd1d78433872dc1b8d08eb210a21dd5928aa8 的 [Actions 39441269931](https://githu
 trace显示Save后为saving，测试已从磁盘读到新字节，但关闭时原保存回执仍未完成，closeDocuments正确拒绝，随后才显示Save successful。修复FileEditor：关闭窗口按全部文档saveState，关闭标签和右键批量菜单按涉及集合禁用；Model的在途保存、确认后草稿复核及生命周期不变。既有测试在磁盘内容断言之后额外等可见保存回执，再保留关闭／重开及全部后续预览断言，不增加固定延迟。两轮源码复核覆盖活动／非活动保存、桌面／移动关闭、左右／其他标签及失效草稿保护；USAGE／Frontend同步。此为源码复核，D17下无本地行为执行，新SHA结果另记。
 
 编辑器补修静态门禁：Node 22.23.1／pnpm 11.26.0，根check、frontend build及全量format均exit0，日志 `/tmp/nexus-editor-close-{check,build,format}.log`；diff检查通过。最终第二次源码复核确认单标签／左右／其他集合及桌面／移动窗口均消费同一文档saveState，Model实际准入与UI禁用分开保留；未运行本地行为。
+
+等待603303ed期间补核UI源码：ArtifactPicker完整模板／样式及AgentConfigPopover、AgentHubWindow、AgentAppSwitcher、AgentLauncher、AgentSurfaceHost、PluginAppFrame的旧版diff；未新增源码修改。除已记录的新契约绑定、缺少真实来源的统计徽标和失败恢复外，未发现新的无依据展示改动。该结果是源码对照，未执行像素比对或新增浏览器场景。
+
+### 2026-10-20 ACP取消回执采集补修（待新SHA）
+
+603303edb6904c52b77d39f8dedb84d599699fc8的[Actions 39443340321](https://github.com/0honus0/nexus-terminal/actions/runs/39443340321)为failure：447项通过／1项失败，无其他重试或flaky；第5组文件编辑历史回归首次通过（26秒），第4组独立ACP取消停在新增cancellationResponse.json，报Network.getResponseBody无数据。取消已收到HTTP200，此轮尚未执行后续终态断言，不能据此认定完整链通过；重试reset500仍保留unknown因果。原日志`/tmp/nexus-editor-close-job-118698763023.log`及`/tmp/nexus-editor-close-job-118698763219.log`。
+
+按既有E-10.6，原页面route现在对create和cancel都只转发一次上游请求，先保存unknown回执再fulfill同一响应，断言使用同一Shared decoder及原请求关联；其他读取继续交付，route持续到页面销毁，不重新派发写入、不删除清理围栏。两轮源码复核覆盖实际等待／捕获先后、两个写入方法、全部只读continuation和fixture teardown。仅修改测试与文档，无产品改动，未本地运行行为或收集用例。
+
+取消回执补修最终静态：根check及全量format均exit0（`/tmp/nexus-acp-receipt-{check,format}.log`），diff检查通过；仅测试／文档改动，不重建未变产品，不运行本地行为。最终diff复核：create/cancel各取一次上游回执，其他方法continue，Map保存unknown且仅由Shared关联解码消费，原取消后的全部业务断言保留。
