@@ -1,3 +1,4 @@
+import { WorkspaceRequestFailure } from '../model/workspace-error-types';
 import type { WorkspaceSuspendResumeOptions } from '../model/workspace-suspend-types';
 import type { SuspendedAutoTermination } from '@/features/ssh-suspend/public';
 import { computed, nextTick, ref, shallowReactive } from 'vue';
@@ -278,7 +279,11 @@ export const workspaceRuntimeRegistry = {
 			if (sessions.get(session.id) !== session) {
 				throw new DOMException('Workspace closed', 'AbortError');
 			}
-			// The provisional tab is visible while connecting, then removed if the first bind fails.
+			// Keep a refused host's tab available for an explicit reconnect after confirmation/cancellation.
+			if (error instanceof WorkspaceRequestFailure && error.code === 'host_key_untrusted') {
+				return session;
+			}
+			// Other failed initial bindings still release the provisional tab.
 			removeRuntime(session.id, 'Initial Workspace connection failed');
 			throw error;
 		}

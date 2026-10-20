@@ -15,7 +15,7 @@
 </script>
 <template>
 	<div class="space-y-2 text-sm" role="status">
-		<p v-if="revision">
+		<p v-if="revision && pendingRestart">
 			{{ t('settings.configuration.versions', { saved: revision, effective: effectiveRevision }) }}
 		</p>
 		<p v-if="pendingRestart" class="text-warning">{{ t('settings.configuration.restart') }}</p>

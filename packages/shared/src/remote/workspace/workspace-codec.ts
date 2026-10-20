@@ -1,3 +1,4 @@
+import { readHostKeyChallenge } from '../../targets/host-keys/http-codec.js';
 import { isWellFormedFileText } from '../files/text-codec.js';
 import { TARGET_CONNECTION_NAME_MAX_BYTES } from '../../targets/connections/values.js';
 import {
@@ -51,11 +52,22 @@ export function readWorkspaceMessage(input: unknown): WorkspaceProtocolResponse 
 		throw new InvalidWorkspacePayload();
 	}
 	const payload = object(row.payload, ['ok']);
-	if (payload.ok === true && payload.error === undefined) {
+	if (payload.ok === true && payload.error === undefined && payload.hostKey === undefined) {
 		return { type: 'response', requestId, payload: { ok: true, data: payload.data } };
 	}
 	if (payload.ok === false && payload.data === undefined) {
-		return { type: 'response', requestId, payload: { ok: false, error: errorCode(payload.error) } };
+		const error = errorCode(payload.error);
+		if (payload.hostKey !== undefined) {
+			if (error !== 'host_key_untrusted') {
+				throw new InvalidWorkspacePayload();
+			}
+			return {
+				type: 'response',
+				requestId,
+				payload: { ok: false, error, hostKey: readHostKeyChallenge(payload.hostKey) },
+			};
+		}
+		return { type: 'response', requestId, payload: { ok: false, error } };
 	}
 	throw new InvalidWorkspacePayload();
 }

@@ -1,6 +1,10 @@
 import { ref, type Ref } from 'vue';
 import { logger } from '@/client/logging/logger';
-import { markConnectionConnected, type ConnectionSummary } from '@/features/connections/public';
+import {
+	markConnectionConnected,
+	confirmConnectionHostKey,
+	type ConnectionSummary,
+} from '@/features/connections/public';
 import {
 	createTerminalSessionState,
 	type TerminalSessionState,
@@ -87,6 +91,8 @@ export class WorkspaceRuntimeSession {
 		this.terminalState.searchTerm.value = value;
 	}
 
+	private hostKeyConfirmation?: AbortController;
+	private hostKeyRejected = false;
 	private connecting?: Promise<WorkspaceConnectionState>;
 	private suspendedResume?: Promise<WorkspaceSuspendedConnection>;
 	private suspendMutation?: Promise<unknown>;
@@ -272,6 +278,7 @@ export class WorkspaceRuntimeSession {
 			this.lastViewport = latestViewport;
 		}
 		this.clearReconnectTimer();
+		this.hostKeyRejected = false;
 		this.markCapabilitiesDisconnected();
 		const reconnectAttempt = this.reconnectAttempt;
 		const phase = this.hasConnected.value ? 'reconnect' : 'initial';
@@ -292,7 +299,7 @@ export class WorkspaceRuntimeSession {
 		try {
 			const result =
 				!this.resumeToken || this.freshConnectionRequired
-					? await this.connectWorkspace()
+					? await this.connectWithHostKeyConfirmation()
 					: await this.resumeWorkspace();
 			if (this.disposed || this.closing) {
 				throw new DOMException('Workspace closed', 'AbortError');
@@ -360,6 +367,50 @@ export class WorkspaceRuntimeSession {
 				this.statusMessage.value = error.message;
 			}
 			throw error;
+		}
+	}
+
+	private async connectWithHostKeyConfirmation(): Promise<WorkspaceConnection> {
+		const confirmed = new Set<string>();
+		while (true) {
+			try {
+				return await this.connectWorkspace();
+			} catch (cause) {
+				if (!(cause instanceof WorkspaceRequestFailure) || cause.code !== 'host_key_untrusted') {
+					throw cause;
+				}
+				this.hostKeyRejected = true;
+				if (!cause.hostKey) {
+					throw cause;
+				}
+				const key = cause.hostKey;
+				const identity = JSON.stringify([key.host, key.port]);
+				// A route may contain several hops. Each gets one explicit confirmation;
+				// a changing key or an additional verifier rejection never loops automatically.
+				if (
+					confirmed.has(identity) ||
+					key.fingerprint === key.expectedFingerprint ||
+					this.disposed ||
+					this.closing
+				) {
+					throw cause;
+				}
+				const controller = new AbortController();
+				this.hostKeyConfirmation = controller;
+				try {
+					const accepted = await confirmConnectionHostKey(key, controller.signal);
+					if (!accepted || controller.signal.aborted || this.disposed || this.closing) {
+						throw cause;
+					}
+				} finally {
+					if (this.hostKeyConfirmation === controller) {
+						this.hostKeyConfirmation = undefined;
+					}
+				}
+				confirmed.add(identity);
+				this.hostKeyRejected = false;
+				this.statusMessage.value = '';
+			}
 		}
 	}
 
@@ -693,8 +744,14 @@ export class WorkspaceRuntimeSession {
 		this.statusMessage.value = 'operation_unknown';
 	}
 
-	reconnectNow(): void {
-		if (this.disposed || this.closing || this.markedForSuspend.value || this.state.value === 'connected') {
+	reconnectNow(options: { automatic?: boolean } = {}): void {
+		if (
+			this.disposed ||
+			this.closing ||
+			this.markedForSuspend.value ||
+			this.state.value === 'connected' ||
+			(options.automatic && this.hostKeyRejected)
+		) {
 			return;
 		}
 		if (this.reconnectInFlight || this.state.value === 'connecting') {
@@ -711,6 +768,7 @@ export class WorkspaceRuntimeSession {
 			},
 			'Workspace reconnect requested immediately',
 		);
+		this.hostKeyRejected = false;
 		this.clearReconnectTimer();
 		void this.reconnect();
 	}
@@ -726,7 +784,7 @@ export class WorkspaceRuntimeSession {
 			return;
 		}
 		if (this.state.value !== 'connected') {
-			this.reconnectNow();
+			this.reconnectNow({ automatic: true });
 		}
 	}
 
@@ -751,6 +809,7 @@ export class WorkspaceRuntimeSession {
 			logger.debug(context, 'Workspace runtime close requested');
 		}
 		this.closing = true;
+		this.hostKeyConfirmation?.abort();
 		this.clearReconnectTimer();
 		this.clearSuspendOwnerHeartbeat();
 		this.markCapabilitiesDisconnected();
@@ -934,6 +993,7 @@ export class WorkspaceRuntimeSession {
 			this.disposed ||
 			this.closing ||
 			this.recoveryRequired.value ||
+			this.hostKeyRejected ||
 			this.markedForSuspend.value
 		) {
 			return;
@@ -985,6 +1045,7 @@ export class WorkspaceRuntimeSession {
 			this.disposed ||
 			this.closing ||
 			this.recoveryRequired.value ||
+			this.hostKeyRejected ||
 			this.markedForSuspend.value ||
 			this.reconnectInFlight
 		) {

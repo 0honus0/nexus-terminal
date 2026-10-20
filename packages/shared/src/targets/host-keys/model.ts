@@ -5,3 +5,11 @@ export interface TargetHostKeyView {
 	fingerprint: string;
 	confirmedAt: number;
 }
+
+/** Actual handshake observation; never establishes trust without operator confirmation. */
+export interface TargetHostKeyChallenge {
+	host: string;
+	port: number;
+	fingerprint: string;
+	expectedFingerprint: string | null;
+}

@@ -792,7 +792,20 @@ export class WorkspaceSocket {
 					}),
 					'Workspace request rejected',
 				);
-				pending.reject(new WorkspaceRequestFailure(pending.operation, reason));
+				const key = response.payload.hostKey;
+				const hostKey = key
+					? {
+							host: key.host,
+							port: key.port,
+							fingerprint: key.fingerprint,
+							expectedFingerprint: key.expectedFingerprint,
+						}
+					: undefined;
+				if (hostKey && pending.operation !== 'workspace.connect') {
+					pending.reject(new Error('Unexpected SSH host key challenge'));
+					return;
+				}
+				pending.reject(new WorkspaceRequestFailure(pending.operation, reason, hostKey));
 				return;
 			}
 			if (!pending.expectBinary) {

@@ -1,3 +1,4 @@
+import type { TargetHostKeyChallenge } from '../../targets/host-keys/model.js';
 import type { WorkspaceErrorCode } from './values.js';
 
 /** Common JSON envelope for Files, Terminal, Transfers and Suspend. */
@@ -8,7 +9,9 @@ export interface WorkspaceProtocolRequest<TPayload = unknown> {
 }
 
 export type WorkspaceProtocolResponsePayload<T = unknown> =
-	{ ok: true; data?: T; error?: never } | { ok: false; error: WorkspaceErrorCode; data?: never };
+	| { ok: true; data?: T; error?: never }
+	| { ok: false; error: 'host_key_untrusted'; hostKey?: TargetHostKeyChallenge; data?: never }
+	| { ok: false; error: Exclude<WorkspaceErrorCode, 'host_key_untrusted'>; hostKey?: never; data?: never };
 
 export interface WorkspaceProtocolResponse<T = unknown> {
 	type: 'response';

@@ -523,16 +523,17 @@
 							role="tabpanel"
 							:aria-label="tabLabel('data')"
 						/>
-						<HostDiagnosticsPanel
+						<details
 							v-if="visited.has('data')"
 							v-show="active === 'data'"
-							:active="active === 'data'"
-						/>
-						<MutationRecoveryPanel
-							v-if="visited.has('data')"
-							v-show="active === 'data'"
-							:active="active === 'data'"
-						/>
+							class="rounded-xl border border-border bg-card p-4"
+						>
+							<summary class="cursor-pointer text-sm font-medium">
+								{{ t('settings.advancedMaintenance') }}
+							</summary>
+							<HostDiagnosticsPanel :active="active === 'data'" />
+							<MutationRecoveryPanel :active="active === 'data'" />
+						</details>
 						<AppearanceSettingsPanel
 							:active="active === 'appearance'"
 							v-if="visited.has('appearance')"
@@ -543,6 +544,7 @@
 							@customize="appearance.openCustomizer()"
 						/>
 						<AgentSettingsPanel
+							:active="active === 'agent'"
 							v-if="visited.has('agent')"
 							v-show="active === 'agent'"
 							id="settings-panel-agent"

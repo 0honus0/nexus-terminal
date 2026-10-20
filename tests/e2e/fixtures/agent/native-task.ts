@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { expect, type APIRequestContext, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
-import { prepareAgentRun, requestAgentJson, requestAgentWorkspace } from '../../support/agent';
+import { openAgentConversations, prepareAgentRun, requestAgentJson, requestAgentWorkspace } from '../../support/agent';
 import { readAgentAppResponse } from '../../../../packages/shared/src/agent/scope/http-codec';
 import { readAgentGrantView } from '../../../../packages/shared/src/agent/governance/http-codec';
 import {
@@ -96,6 +96,7 @@ export async function openNativeTask(task: NativeTask) {
 		.getByRole('button')
 		.filter({ has: page.getByText(task.app.id, { exact: true }) })
 		.click();
+	await openAgentConversations(page);
 	const threads = hub.getByRole('heading', { name: 'Native threads', exact: true }).locator('..');
 	await threads.getByRole('button', { name: 'Read current threads', exact: true }).click();
 	let after: string | null = null;
@@ -112,7 +113,7 @@ export async function openNativeTask(task: NativeTask) {
 	}
 	if (!selectedThread) throw new Error('Prepared Agent thread missing from its current App');
 	const option = threads.getByRole('button', {
-		name: `${selectedThread.title} · v${selectedThread.version}`,
+		name: selectedThread.title,
 		exact: true,
 	});
 	await expect(option).toHaveCount(1);

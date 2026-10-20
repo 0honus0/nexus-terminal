@@ -1,7 +1,12 @@
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import { createHash } from 'node:crypto';
 import { RemoteHostKeyUntrustedError } from './machine-errors.js';
-import type { RemoteMachineOpenRequest, RemoteMachineOpenOptions, OpenedRemoteMachine } from './machine-types.js';
+import type {
+	RemoteMachineOpenRequest,
+	RemoteMachineOpenOptions,
+	OpenedRemoteMachine,
+	RemoteHostKeyChallenge,
+} from './machine-types.js';
 import type {
 	TrustedResolvedSshTarget,
 	TrustedSshTargetResolver,
@@ -98,7 +103,7 @@ export class RemoteMachineModel {
 		const trusts = await this.hostKeys.list();
 		request.signal.throwIfAborted();
 		const pinned = new Map(trusts.map((key) => [key.host.toLowerCase() + ':' + key.port, key.fingerprint]));
-		let hostKeyRejected = false;
+		let rejectedHostKey: RemoteHostKeyChallenge | null = null;
 		let hostPublicKey: Uint8Array | null = null;
 
 		const verify: MachineConnectOptions['verifyHostKey'] = (host, port, publicKey) => {
@@ -107,7 +112,12 @@ export class RemoteMachineModel {
 			const trusted =
 				expected === fingerprint && (this.verifyHostKey === null || this.verifyHostKey(host, port, publicKey));
 			if (!trusted) {
-				hostKeyRejected = true;
+				rejectedHostKey = {
+					host: host.toLowerCase(),
+					port,
+					fingerprint,
+					expectedFingerprint: expected ?? null,
+				};
 			} else if (host.toLowerCase() === target.host.toLowerCase() && port === target.port) {
 				hostPublicKey = Uint8Array.from(publicKey);
 			}
@@ -135,8 +145,8 @@ export class RemoteMachineModel {
 			}
 			return { machine, hostPublicKey };
 		} catch (error) {
-			if (hostKeyRejected && !request.signal.aborted && !(error instanceof AggregateError)) {
-				throw new RemoteHostKeyUntrustedError(error);
+			if (rejectedHostKey && !request.signal.aborted && !(error instanceof AggregateError)) {
+				throw new RemoteHostKeyUntrustedError(rejectedHostKey, error);
 			}
 			throw error;
 		}

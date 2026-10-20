@@ -1,6 +1,6 @@
 import { TARGET_HOST_KEY_HOST_MAX_BYTES, TARGET_HOST_KEY_FINGERPRINT_PATTERN } from './values.js';
 import { TARGET_MANAGEMENT_MAX_ITEMS } from '../values.js';
-import type { TargetHostKeyView } from './model.js';
+import type { TargetHostKeyView, TargetHostKeyChallenge } from './model.js';
 import type { TargetHostKeyConfirmRequest, TargetHostKeyRequest, TargetHostKeyRemoveResponse } from './http.js';
 import { targetObject, targetText, targetNumber, targetArray, InvalidTargetPayload } from '../http.js';
 
@@ -63,4 +63,14 @@ export function readHostKeyRemoveResponse(input: unknown): TargetHostKeyRemoveRe
 		throw new InvalidTargetPayload();
 	}
 	return { removed: true };
+}
+
+export function readHostKeyChallenge(input: unknown): TargetHostKeyChallenge {
+	const row = targetObject(input, ['host', 'port', 'fingerprint', 'expectedFingerprint']);
+	return {
+		host: readHost(row.host),
+		port: targetNumber(row.port, 65535),
+		fingerprint: readFingerprint(row.fingerprint),
+		expectedFingerprint: row.expectedFingerprint === null ? null : readFingerprint(row.expectedFingerprint),
+	};
 }

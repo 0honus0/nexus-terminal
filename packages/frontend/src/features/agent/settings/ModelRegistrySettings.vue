@@ -71,23 +71,29 @@
 
 <template>
 	<section
-		class="space-y-3 rounded-xl border border-border bg-card p-4"
+		class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs"
 		:aria-label="t('agent.settings.providers.registryTitle')"
 	>
-		<h3 class="font-medium">{{ t('agent.settings.providers.registryTitle') }}</h3>
-		<div v-if="status" class="flex flex-wrap gap-2 text-sm text-text-secondary">
-			<span>{{ status.entryCount }} {{ t('agent.settings.providers.registryModels') }}</span>
-			<span v-if="status.generatedAt !== null">{{ formatAgentDate(locale, new Date(status.generatedAt)) }}</span>
-			<span v-if="status.lastErrorCode" class="text-error">{{ status.lastErrorCode }}</span>
+		<div class="agent-settings-head border-b border-border bg-header/50 px-4 py-3 sm:px-5 sm:py-3.5">
+			<h3 class="text-sm font-semibold text-foreground">{{ t('agent.settings.providers.registryTitle') }}</h3>
 		</div>
-		<p v-if="error" role="alert" class="text-sm text-error">{{ error }}</p>
-		<div class="flex gap-2">
-			<UiButton type="button" :disabled="busy" @click="load(false)">{{
-				t('agent.settings.providers.registryReadStatus')
-			}}</UiButton>
-			<UiButton type="button" :disabled="busy || refreshBlocked" @click="load(true)">{{
-				t('agent.settings.providers.registryRefresh')
-			}}</UiButton>
+		<div class="space-y-3 p-4 sm:p-5">
+			<div v-if="status" class="flex flex-wrap gap-2 text-sm text-text-secondary">
+				<span>{{ status.entryCount }} {{ t('agent.settings.providers.registryModels') }}</span>
+				<span v-if="status.generatedAt !== null">{{
+					formatAgentDate(locale, new Date(status.generatedAt))
+				}}</span>
+				<span v-if="status.lastErrorCode" class="text-error">{{ status.lastErrorCode }}</span>
+			</div>
+			<p v-if="error" role="alert" class="text-sm text-error">{{ error }}</p>
+			<div class="flex gap-2">
+				<UiButton v-if="error || refreshBlocked" type="button" :disabled="busy" @click="load(false)">{{
+					t('agent.settings.providers.registryReadStatus')
+				}}</UiButton>
+				<UiButton type="button" :disabled="busy || refreshBlocked" @click="load(true)">{{
+					t('agent.settings.providers.registryRefresh')
+				}}</UiButton>
+			</div>
 		</div>
 	</section>
 </template>

@@ -826,7 +826,7 @@
 						session.state.value === 'error' ||
 						session.state.value === 'reconnecting')
 				) {
-					session.reconnectNow();
+					session.reconnectNow({ automatic: true });
 				}
 			}
 		}

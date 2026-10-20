@@ -328,6 +328,9 @@
       "recovery_required": "変更前に現在の一覧全体を読み込んでください。",
       "request_pending": "実行中のリクエストをお待ちください。",
       "limit_exceeded": "信頼一覧が応答容量を超えています。"
-    }
+    },
+    "firstConnection": "{host}:{port} のホスト鍵は未確認です。\nSHA-256 指紋：{fingerprint}\n信頼できる経路で照合してから、信頼を保存して再接続してください。",
+    "changedConnection": "警告：{host}:{port} のホスト鍵が変更されています！\n保存済み：{expectedFingerprint}\n提示された指紋：{fingerprint}\n再インストールやなりすましの可能性があります。別の経路で確認してから信頼を置き換えて再接続してください。",
+    "confirmAndConnect": "信頼して再接続"
   }
 }

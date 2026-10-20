@@ -17,7 +17,12 @@ import {
 	waitNativeApproval,
 } from '../../fixtures/agent/native-task';
 import { configureTestPluginRepository, installTestPlugin, stageTestPlugin } from '../../support/plugins';
-import { requestAgentJson, requestAgentWorkspace, enableTestAgentExecution } from '../../support/agent';
+import {
+	openAgentConversations,
+	requestAgentJson,
+	requestAgentWorkspace,
+	enableTestAgentExecution,
+} from '../../support/agent';
 import { readAgentAppListResponse, readAgentAppResponse } from '../../../../packages/shared/src/agent/scope/http-codec';
 import {
 	readAgentPluginItems,
@@ -868,6 +873,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 		await expect.poll(async () => Math.abs((await hub.boundingBox())!.width - changed!.width)).toBeLessThan(2);
 	});
 	await step('create, rename and switch threads through versioned native commands', async () => {
+		await openAgentConversations(page);
 		const panel = hub.getByRole('heading', { name: 'Native threads', exact: true }).locator('..');
 		await panel.getByRole('button', { name: 'New thread', exact: true }).click();
 		await panel.getByRole('textbox', { name: 'Thread title', exact: true }).fill('Plugin surface conversation');
@@ -881,9 +887,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 		// user explicitly re-reads the versioned thread list. Perform that real
 		// refresh before issuing the next independent rename CAS.
 		await panel.getByRole('button', { name: 'Read current threads', exact: true }).click();
-		await expect(
-			panel.getByRole('button', { name: `Plugin surface conversation · v${result.value.version}`, exact: true }),
-		).toBeVisible();
+		await expect(panel.getByRole('button', { name: 'Plugin surface conversation', exact: true })).toBeVisible();
 		await expect(panel.getByRole('button', { name: 'Save title', exact: true })).toBeEnabled();
 		await panel.getByRole('textbox', { name: 'Thread title', exact: true }).fill('Renamed plugin conversation');
 		const { result: renameResult } = await captureNativeCommand(task, 'agent.threads.rename', () =>
@@ -897,9 +901,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			title: 'Renamed plugin conversation',
 			version: result.value.version + 1,
 		});
-		await panel
-			.getByRole('button', { name: `${task.thread.title} · v${task.thread.version}`, exact: true })
-			.click();
+		await panel.getByRole('button', { name: task.thread.title, exact: true }).click();
 		await expect(hub.getByText('OK', { exact: true })).toBeVisible();
 	});
 	await step(

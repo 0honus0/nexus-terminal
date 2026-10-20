@@ -340,7 +340,7 @@ try {
 			setLocale('en-US');
 			await nextTick();
 			window.fetch = nativeFetch;
-			const hardInput = node.querySelector('details input[type=number]');
+			let hardInput = node.querySelector('details input[type=number]');
 			hardInput.value = '158';
 			hardInput.dispatchEvent(new Event('input', { bubbles: true }));
 			await nextTick();
@@ -354,7 +354,7 @@ try {
 			button('agent.settings.execution.preview').click();
 			await until(() => button('agent.settings.execution.confirm'));
 			button('agent.settings.execution.confirm').click();
-			await until(() => !button('agent.settings.execution.confirm') && !read().disabled);
+			await until(() => !button('agent.settings.execution.confirm') && !node.querySelector('fieldset').disabled);
 			check(
 				(await getExecutionSettings()).hardLimits.maxModelRequests === 157,
 				'actual component preview and confirm persist intended limits',
@@ -363,13 +363,18 @@ try {
 				String(url).endsWith('/ai/providers')
 					? json({ code: 'storage_unavailable' }, 503)
 					: nativeFetch(url, init);
-			button('agent.settings.execution.readModels').click();
+			// Re-mount runs the normal automatic directory load; the retry is shown only after failure.
+			mounted.unmount();
+			mounted = createApp({ render: () => h(ExecutionSettings) }).use(i18n);
+			mounted.mount(node);
+			await nextTick();
 			await until(() => node.textContent.includes(i18n.global.t('agent.settings.execution.modelsFailed')));
 			check(
 				!node.querySelector('fieldset').disabled && node.querySelector('select').value !== '',
 				'model directory failure remains independent and preserves existing selection',
 			);
 			window.fetch = nativeFetch;
+			hardInput = node.querySelector('details input[type=number]');
 			const latest = await getExecutionSettings();
 			let confirmations = 0;
 			window.fetch = async (url, init) => {
@@ -418,20 +423,22 @@ try {
 			await nextTick();
 			await until(() => !node.querySelector('fieldset').disabled);
 
-			let release;
+			const pendingReads = [];
 			let held = false;
 			window.fetch = () => {
 				held = true;
 				return new Promise((resolve) => {
-					release = () => resolve(json(wire));
+					pendingReads.push(() => resolve(json(wire)));
 				});
 			};
-			read().click();
+			mounted.unmount();
+			mounted = createApp({ render: () => h(ExecutionSettings) }).use(i18n);
+			mounted.mount(node);
 			await nextTick();
 			await until(() => held);
 			authenticatedSessionLifecycle.logout();
 			await nextTick();
-			release();
+			for (const release of pendingReads) release();
 			await new Promise((resolve) => setTimeout(resolve, 30));
 			check(
 				node.querySelectorAll('input').length === 0 && !node.querySelector('[role=alert]'),
@@ -444,6 +451,10 @@ try {
 				.use(createPinia())
 				.use(i18n);
 			mounted.mount(node);
+			Array.from(node.querySelectorAll('nav button'))
+				.find((button) => button.textContent.trim() === 'Execution & Integrations')
+				.click();
+			await nextTick();
 			await until(
 				() =>
 					node.querySelectorAll('input[type=number]').length === 38 &&

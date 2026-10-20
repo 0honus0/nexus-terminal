@@ -1,3 +1,4 @@
+import { selectAgentSettingsGroup } from '../../support/agent';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { requestAgentJson } from '../../support/agent';
@@ -19,6 +20,7 @@ test('execution settings validate before dispatch, save the original CAS and rej
 		readAgentExecutionSettingsResponse,
 	);
 	await page.goto('/settings?tab=agent');
+	await selectAgentSettingsGroup(page, 'runtime');
 	const section = page.getByRole('region', { name: 'Execution settings', exact: true });
 	const input = section.getByRole('spinbutton', { name: 'Concurrent Runs', exact: true });
 	const save = section.getByRole('button', { name: 'Save', exact: true });

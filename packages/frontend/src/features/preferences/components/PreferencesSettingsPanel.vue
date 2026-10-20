@@ -93,9 +93,13 @@
 			{{ props.section === 'system' ? t('settings.category.system') : t('settings.workspace.title') }}
 		</h2>
 
-		<UiButton class="m-6" :disabled="loading || editor.saving.value" @click="editor.refresh">{{
-			t('common.refresh')
-		}}</UiButton>
+		<UiButton
+			v-if="needsRefresh || loadError"
+			class="m-6"
+			:disabled="loading || editor.saving.value"
+			@click="editor.refresh"
+			>{{ t('common.refresh') }}</UiButton
+		>
 		<MonitoringConfigurationPanel v-if="props.section !== 'system'" class="m-6" />
 
 		<div v-if="loading" class="p-4 text-center text-text-secondary">

@@ -144,14 +144,35 @@ export function useSecurityConfiguration(): SecurityConfigurationController {
 		return execute();
 	}
 
-	function saveNetwork(): Promise<void> {
-		return execute((signal) => {
-			const original = snapshot.value;
-			if (!original) {
-				throw new ConfigurationFailure('invalid_input', 'not_dispatched');
-			}
-			return configurationApi.saveNetwork(original, network.value, signal);
-		});
+	async function saveNetwork(changes?: Partial<NetworkPolicy>): Promise<void> {
+		const original = snapshot.value;
+		if (!original) {
+			return;
+		}
+		const draft = network.value;
+		const input: NetworkPolicy = {
+			whitelist: changes ? (changes.whitelist ?? original.network.whitelist) : draft.whitelist,
+			blacklistEnabled: changes
+				? (changes.blacklistEnabled ?? original.network.blacklistEnabled)
+				: draft.blacklistEnabled,
+			maxLoginAttempts: changes
+				? (changes.maxLoginAttempts ?? original.network.maxLoginAttempts)
+				: draft.maxLoginAttempts,
+			loginBanDuration: changes
+				? (changes.loginBanDuration ?? original.network.loginBanDuration)
+				: draft.loginBanDuration,
+		};
+		const current = generation;
+		await execute((signal) => configurationApi.saveNetwork(original, input, signal));
+		if (changes && generation === current + 1 && success.value) {
+			// A switch saves its own field without submitting or clearing neighbouring drafts.
+			network.value = {
+				whitelist: changes.whitelist ?? draft.whitelist,
+				blacklistEnabled: changes.blacklistEnabled ?? draft.blacklistEnabled,
+				maxLoginAttempts: changes.maxLoginAttempts ?? draft.maxLoginAttempts,
+				loginBanDuration: changes.loginBanDuration ?? draft.loginBanDuration,
+			};
+		}
 	}
 
 	function saveCaptcha(): Promise<void> {

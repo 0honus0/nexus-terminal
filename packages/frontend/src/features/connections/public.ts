@@ -12,3 +12,7 @@ export {
 export type { ConnectionSummary, ConnectionsController } from './model/connection-types';
 
 export { useConnectionManagement } from './composables/use-connection-management';
+
+export { confirmConnectionHostKey } from './model/host-key-trust';
+
+export type { HostKeyTrustRequest } from './model/host-key-types';

@@ -10,3 +10,10 @@ export interface HostKeyDraft {
 	port: string;
 	fingerprint: string;
 }
+
+export interface HostKeyTrustRequest {
+	host: string;
+	port: number;
+	fingerprint: string;
+	expectedFingerprint: string | null;
+}

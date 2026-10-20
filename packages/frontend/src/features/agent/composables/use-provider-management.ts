@@ -1,4 +1,4 @@
-import { computed, onActivated, onMounted, ref, toRaw } from 'vue';
+import { computed, onActivated, onMounted, ref, toRaw, watch } from 'vue';
 import { useAuthenticatedViewScope } from '@/shared/session/use-authenticated-view-scope';
 import {
 	deleteManagedProvider,
@@ -20,7 +20,7 @@ import type {
 } from '../model/provider-types';
 import { agentHostEvents } from '../events/agent-host-events';
 
-export function useProviderManagement() {
+export function useProviderManagement(options: { available?: () => boolean } = {}) {
 	const providers = ref<Provider[]>([]);
 	const draft = ref<ProviderDraft | null>(null);
 	const discovered = ref<DiscoveredProviderModel[]>([]);
@@ -31,6 +31,8 @@ export function useProviderManagement() {
 	const loaded = ref(false);
 	let generation = 0;
 	const scope = useAuthenticatedViewScope({
+		available: options.available,
+
 		onRevoke() {
 			generation += 1;
 			providers.value = [];
@@ -248,11 +250,12 @@ export function useProviderManagement() {
 	}
 
 	function loadInitial(): void {
-		if (!loaded.value) {
+		if (!loaded.value && (options.available?.() ?? true)) {
 			void load();
 		}
 	}
 
+	watch(() => options.available?.() ?? true, loadInitial);
 	onMounted(loadInitial);
 	onActivated(loadInitial);
 	return {

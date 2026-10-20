@@ -154,9 +154,13 @@
 			<p v-if="grantOperation.refreshRequired.value" class="text-sm text-warning">
 				{{ t('agent.settings.appManagement.refreshRequired') }}
 			</p>
-			<UiButton type="button" :disabled="grantOperation.busy.value" @click="loadGrants">{{
-				t('agent.settings.appManagement.readGrants')
-			}}</UiButton>
+			<UiButton
+				v-if="grantOperation.refreshRequired.value || grantOperation.notice.value === 'failed'"
+				type="button"
+				:disabled="grantOperation.busy.value"
+				@click="loadGrants"
+				>{{ t('agent.settings.appManagement.readGrants') }}</UiButton
+			>
 			<fieldset :disabled="grantBlocked" class="space-y-3">
 				<div v-for="grant in unavailableGrants" :key="grant.capability" class="space-y-2 text-warning">
 					<p>{{ t('agent.settings.appManagement.unavailableGrant', { capability: grant.capability }) }}</p>
@@ -216,9 +220,13 @@
 			<p v-if="policyOperation.refreshRequired.value" class="text-sm text-warning">
 				{{ t('agent.settings.appManagement.refreshRequired') }}
 			</p>
-			<UiButton type="button" :disabled="policyOperation.busy.value" @click="loadPolicy">{{
-				t('agent.settings.appManagement.readPolicy')
-			}}</UiButton>
+			<UiButton
+				v-if="policyOperation.refreshRequired.value || policyOperation.notice.value === 'failed'"
+				type="button"
+				:disabled="policyOperation.busy.value"
+				@click="loadPolicy"
+				>{{ t('agent.settings.appManagement.readPolicy') }}</UiButton
+			>
 			<fieldset v-if="policy" :disabled="policyBlocked" class="space-y-3">
 				<div v-for="key in AGENT_EXECUTION_INTEGER_KEYS" :key="key" class="space-y-1 text-sm">
 					<label class="flex items-center gap-2"

@@ -59,8 +59,19 @@
 		class="space-y-4 rounded-xl border border-border bg-card p-4"
 		:aria-label="t('agent.artifactManagement.title')"
 	>
-		<h3 class="font-medium">{{ t('agent.artifactManagement.title') }}</h3>
-		<p class="text-sm text-text-secondary">{{ t('agent.artifactManagement.help') }}</p>
+		<header class="flex flex-wrap items-center gap-3 border-b border-border/70 pb-3">
+			<div
+				class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-card text-[11px] text-text-secondary"
+			>
+				<i class="fa-regular fa-folder-open" aria-hidden="true"></i>
+			</div>
+			<div class="min-w-0">
+				<h3 class="text-sm font-semibold tracking-tight text-foreground">
+					{{ t('agent.artifactManagement.title') }}
+				</h3>
+				<p class="mt-0.5 text-[11px] leading-4 text-text-secondary">{{ t('agent.artifactManagement.help') }}</p>
+			</div>
+		</header>
 		<p v-if="operation.notice.value" role="status">
 			{{ t('agent.settings.appManagement.' + operation.notice.value) }}
 		</p>
@@ -68,15 +79,31 @@
 			{{ t('agent.settings.appManagement.refreshRequired') }}
 		</p>
 		<div class="flex flex-wrap gap-2">
-			<UiButton type="button" :disabled="operation.busy.value" @click="load()">{{
-				t('agent.artifactManagement.reload')
-			}}</UiButton>
-			<UiButton type="button" :disabled="storageOperation.busy.value" @click="loadStorage">{{
-				t('agent.artifactManagement.readStorage')
-			}}</UiButton>
-			<UiButton type="button" :disabled="appOperation.busy.value" @click="loadApps">{{
-				t('agent.settings.appManagement.readApps')
-			}}</UiButton>
+			<UiButton
+				v-if="needsReload || operation.refreshRequired.value || operation.notice.value === 'failed'"
+				type="button"
+				:disabled="operation.busy.value"
+				@click="load()"
+				>{{ t('agent.artifactManagement.reload') }}</UiButton
+			>
+			<UiButton
+				v-if="
+					statsRequired ||
+					storageOperation.refreshRequired.value ||
+					storageOperation.notice.value === 'failed'
+				"
+				type="button"
+				:disabled="storageOperation.busy.value"
+				@click="loadStorage"
+				>{{ t('agent.artifactManagement.readStorage') }}</UiButton
+			>
+			<UiButton
+				v-if="appOperation.refreshRequired.value || appOperation.notice.value === 'failed'"
+				type="button"
+				:disabled="appOperation.busy.value"
+				@click="loadApps"
+				>{{ t('agent.settings.appManagement.readApps') }}</UiButton
+			>
 		</div>
 		<p v-if="appOperation.notice.value" role="alert">
 			{{ t('agent.settings.appManagement.' + appOperation.notice.value) }}

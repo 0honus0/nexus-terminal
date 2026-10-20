@@ -307,7 +307,26 @@ class WorkspaceFilesSession {
 		} catch (error) {
 			const message = safeError(error);
 			if (request.requestId) {
-				this.sendResponse(request.requestId, { ok: false, error: message });
+				if (error instanceof RemoteHostKeyUntrustedError && request.type === 'workspace.connect') {
+					const key = error.hostKey;
+					const response: WorkspaceProtocolResponse = {
+						type: 'response',
+						requestId: request.requestId,
+						payload: {
+							ok: false,
+							error: 'host_key_untrusted',
+							hostKey: {
+								host: key.host,
+								port: key.port,
+								fingerprint: key.fingerprint,
+								expectedFingerprint: key.expectedFingerprint,
+							},
+						},
+					};
+					this.sendJson(response);
+				} else {
+					this.sendResponse(request.requestId, { ok: false, error: message });
+				}
 			} else {
 				this.sendEvent('protocol.error', { operation: request.type, message });
 			}

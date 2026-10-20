@@ -34,9 +34,13 @@
 			<p v-if="keys.needsRefresh.value" class="mb-3 text-text-secondary">
 				{{ t('sshKeys.failures.recovery_required') }}
 			</p>
-			<UiButton class="mb-3" :disabled="loading || keys.busy.value" @click="refresh">{{
-				t('sshKeys.refresh')
-			}}</UiButton>
+			<UiButton
+				v-if="message || keys.needsRefresh.value"
+				class="mb-3"
+				:disabled="loading || keys.busy.value"
+				@click="refresh"
+				>{{ t('sshKeys.refresh') }}</UiButton
+			>
 			<template v-if="!showForm">
 				<h3 class="mb-4 shrink-0 text-center text-xl font-semibold">{{ t('sshKeys.modal.title') }}</h3>
 				<div class="mb-4 flex shrink-0 justify-end">

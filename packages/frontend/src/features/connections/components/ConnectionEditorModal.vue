@@ -41,7 +41,12 @@
 				}}
 			</li>
 		</ol>
-		<UiButton :disabled="loading" @click="refresh">{{ t('connections.refresh') }}</UiButton>
+		<UiButton
+			v-if="message || data.needsRefresh.value || (!ready && !loading)"
+			:disabled="loading"
+			@click="refresh"
+			>{{ t('connections.refresh') }}</UiButton
+		>
 		<p v-if="data.needsRefresh.value" class="my-2 text-text-secondary">
 			{{ t('connections.failures.recovery_required') }}
 		</p>

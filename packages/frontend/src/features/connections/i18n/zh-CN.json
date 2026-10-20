@@ -328,6 +328,9 @@
       "recovery_required": "修改信任前请读取完整当前列表。",
       "request_pending": "请等待当前请求完成。",
       "limit_exceeded": "信任列表超过响应容量。"
-    }
+    },
+    "firstConnection": "首次连接 {host}:{port}，尚未确认此主机密钥。\nSHA-256 指纹：{fingerprint}\n请通过可信渠道核对，确认后保存信任并重新连接。",
+    "changedConnection": "警告：{host}:{port} 的主机密钥与已保存的信任不一致！\n原指纹：{expectedFingerprint}\n当前指纹：{fingerprint}\n可能是服务器重装或遭到冒充。请独立核实后再替换信任并重新连接。",
+    "confirmAndConnect": "确认信任并重新连接"
   }
 }

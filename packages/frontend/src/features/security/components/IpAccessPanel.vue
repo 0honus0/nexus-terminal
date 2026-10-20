@@ -28,6 +28,19 @@
 		next,
 		remove,
 	} = useIpBlacklist();
+
+	async function toggleBlacklist(enabled: boolean): Promise<void> {
+		if (loading.value || needsRefresh.value || enabled === policy.value.blacklistEnabled) {
+			return;
+		}
+		const original = snapshot.value;
+		const previous = policy.value.blacklistEnabled;
+		policy.value.blacklistEnabled = enabled;
+		await saveNetwork({ blacklistEnabled: enabled });
+		if (!success.value && snapshot.value === original) {
+			policy.value.blacklistEnabled = previous;
+		}
+	}
 </script>
 <template>
 	<div class="space-y-6">
@@ -47,7 +60,7 @@
 			</h2>
 			<div class="p-6">
 				<p class="mb-4 text-sm text-text-secondary">{{ t('settings.ipWhitelist.description') }}</p>
-				<form class="space-y-4" @submit.prevent="saveNetwork">
+				<form class="space-y-4" @submit.prevent="saveNetwork()">
 					<UiFormField :label="t('settings.ipWhitelist.label')" for-id="ipWhitelist">
 						<UiTextarea
 							id="ipWhitelist"
@@ -84,16 +97,15 @@
 						:disabled="loading || needsRefresh"
 						role="switch"
 						:aria-checked="String(policy.blacklistEnabled)"
-						@update:model-value="policy.blacklistEnabled = $event"
+						@update:model-value="toggleBlacklist"
 					/>
-					<UiButton :disabled="loading || needsRefresh" @click="saveNetwork">{{ t('common.save') }}</UiButton
-					><span>{{ policy.blacklistEnabled ? t('common.enabled') : t('common.disabled') }}</span>
+					<span>{{ policy.blacklistEnabled ? t('common.enabled') : t('common.disabled') }}</span>
 				</label>
 			</div>
 			<div class="space-y-6 p-6">
 				<template v-if="policy.blacklistEnabled">
 					<p class="text-sm text-text-secondary">{{ t('settings.ipBlacklist.description') }}</p>
-					<form class="flex flex-wrap items-end gap-4" @submit.prevent="saveNetwork">
+					<form class="flex flex-wrap items-end gap-4" @submit.prevent="saveNetwork()">
 						<UiFormField
 							:label="t('settings.ipBlacklist.maxAttemptsLabel')"
 							for-id="maxLoginAttempts"

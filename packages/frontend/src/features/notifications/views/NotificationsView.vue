@@ -138,9 +138,13 @@
 				<UiButton type="button" appearance="solid" :disabled="loading || needsRefresh" @click="openAdd">{{
 					t('settings.notifications.addChannel')
 				}}</UiButton>
-				<UiButton type="button" :disabled="loading" @click="load(true)">{{
-					t('settings.notifications.refresh')
-				}}</UiButton>
+				<UiButton
+					v-if="needsRefresh || error || message"
+					type="button"
+					:disabled="loading"
+					@click="load(true)"
+					>{{ t('settings.notifications.refresh') }}</UiButton
+				>
 			</div>
 			<UiSpinner v-if="loading && !items.length" class="mx-auto" />
 			<UiEmptyState
@@ -155,26 +159,47 @@
 					:data-notification-id="item.id"
 					class="notifications-channel-card"
 				>
-					<div class="min-w-0 space-y-2">
-						<strong class="break-words">{{ item.name }}</strong>
-						<span class="mx-3 text-sm">{{ t('settings.notifications.types.' + item.config.kind) }}</span>
-						<span class="text-sm">{{ t(item.enabled ? 'common.enabled' : 'common.disabled') }}</span>
-						<small class="block break-words text-text-secondary">{{
+					<div class="min-w-0 flex-grow">
+						<div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+							<strong class="min-w-0 break-words text-base font-semibold text-foreground">{{
+								item.name
+							}}</strong>
+							<span
+								class="rounded-full border border-border/60 bg-card/20 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-text-secondary"
+								>{{ t('settings.notifications.types.' + item.config.kind) }}</span
+							>
+							<span
+								class="rounded-full border px-2 py-0.5 text-xs font-semibold uppercase tracking-wider"
+								:class="
+									item.enabled
+										? 'border-success/30 bg-success/10 text-success'
+										: 'border-warning/30 bg-warning/10 text-warning'
+								"
+								>{{ t(item.enabled ? 'common.enabled' : 'common.disabled') }}</span
+							>
+						</div>
+						<small class="mt-1 block break-words text-sm text-text-secondary">{{
 							item.events.length
 								? item.events.map(eventLabel).join(', ')
 								: t('settings.notifications.noEventsEnabled')
 						}}</small>
 					</div>
 					<template #actions>
-						<UiButton type="button" :disabled="loading || needsRefresh" @click="openEdit(item)">{{
-							t('common.edit')
-						}}</UiButton>
+						<UiButton
+							type="button"
+							appearance="soft"
+							:disabled="loading || needsRefresh"
+							@click="openEdit(item)"
+							><i class="fas fa-pencil-alt mr-1 text-xs" aria-hidden="true"></i
+							>{{ t('common.edit') }}</UiButton
+						>
 						<UiButton
 							type="button"
 							appearance="ghost"
 							tone="danger"
 							:disabled="loading || needsRefresh"
 							@click="remove(item)"
+							><i class="fas fa-trash-alt mr-1 text-xs" aria-hidden="true"></i
 							>{{ t('common.delete') }}</UiButton
 						>
 					</template>

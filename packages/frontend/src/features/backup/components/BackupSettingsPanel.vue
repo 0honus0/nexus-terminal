@@ -113,15 +113,19 @@
 
 <template>
 	<section class="overflow-hidden rounded-xl border border-border bg-card shadow-sm" data-backup-settings>
-		<h2 class="border-b border-border bg-header/60 px-6 py-4 text-lg font-semibold">
+		<h2 class="border-b border-border bg-header/60 px-6 py-4 text-lg font-semibold text-foreground">
 			{{ t('settings.category.dataManagement') }}
 		</h2>
 		<div class="space-y-8 p-6">
 			<section>
-				<h3 class="mb-2 font-semibold">{{ t('settings.backup.title') }}</h3>
-				<p class="mb-4 text-sm text-text-secondary">{{ t('settings.backup.description') }}</p>
+				<h3 class="mb-2 text-base font-semibold text-foreground">{{ t('settings.backup.title') }}</h3>
+				<p class="mb-4 max-w-3xl text-sm text-text-secondary">{{ t('settings.backup.description') }}</p>
 				<form class="space-y-3" data-backup-export @submit.prevent="exportBackup">
-					<UiFormField :label="t('settings.backup.currentPassword')" for-id="backup-export-password">
+					<UiFormField
+						:label="t('settings.backup.currentPassword')"
+						for-id="backup-export-password"
+						class="max-w-md"
+					>
 						<UiInput
 							id="backup-export-password"
 							v-model="exportPassword"
@@ -133,17 +137,20 @@
 					</UiFormField>
 					<UiButton
 						type="submit"
+						appearance="solid"
+						tone="primary"
 						:loading="backup.busy"
 						:disabled="!exportPassword || backup.busy || backup.blocked"
+						><template #leading><i class="fas fa-download" aria-hidden="true"></i></template
 						>{{ t('settings.backup.export') }}</UiButton
 					>
 				</form>
 			</section>
-			<section class="border-t border-border pt-6">
-				<h3 class="mb-2 font-semibold">{{ t('settings.backup.import') }}</h3>
-				<p class="mb-4 text-sm text-text-secondary">{{ t('settings.backup.importDescription') }}</p>
+			<section class="border-t border-border/60 pt-6">
+				<h3 class="mb-2 text-base font-semibold text-foreground">{{ t('settings.backup.import') }}</h3>
+				<p class="mb-4 max-w-3xl text-sm text-text-secondary">{{ t('settings.backup.importDescription') }}</p>
 				<form class="space-y-3" data-backup-import @submit.prevent="importBackup">
-					<UiFormField :label="t('settings.backup.backupFile')" for-id="backup-import-file">
+					<UiFormField :label="t('settings.backup.backupFile')" for-id="backup-import-file" class="max-w-xl">
 						<input
 							id="backup-import-file"
 							ref="importInput"
@@ -155,7 +162,11 @@
 							@change="selectFile"
 						/>
 					</UiFormField>
-					<UiFormField :label="t('settings.backup.backupPassword')" for-id="backup-import-password">
+					<UiFormField
+						:label="t('settings.backup.backupPassword')"
+						for-id="backup-import-password"
+						class="max-w-md"
+					>
 						<UiInput
 							id="backup-import-password"
 							v-model="importPassword"
@@ -165,9 +176,15 @@
 						/>
 						<p class="text-xs text-text-secondary">{{ t('settings.backup.backupPasswordHelp') }}</p>
 					</UiFormField>
-					<UiButton type="submit" :disabled="!importFile || backup.busy || backup.blocked">{{
-						t('settings.backup.import')
-					}}</UiButton>
+					<UiButton
+						type="submit"
+						appearance="solid"
+						tone="primary"
+						:loading="backup.busy"
+						:disabled="!importFile || backup.busy || backup.blocked"
+						><template #leading><i class="fas fa-upload" aria-hidden="true"></i></template
+						>{{ t('settings.backup.import') }}</UiButton
+					>
 				</form>
 			</section>
 			<p v-if="message" role="status" :class="success ? 'text-success' : 'text-error'">{{ message }}</p>

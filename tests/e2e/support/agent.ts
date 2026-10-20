@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { APIRequestContext } from '@playwright/test';
+import type { APIRequestContext, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { E2E_URLS } from './test-env';
 import { readAgentCreateAppResponse } from '../../../packages/shared/src/agent/scope/http-codec';
@@ -131,4 +131,30 @@ export async function enableTestAgentExecution(request: APIRequestContext): Prom
 	);
 	expect(saved.settings.enabled).toBe(true);
 	expect(saved.settings.version).toBe(current.settings.version + 1);
+}
+
+export async function selectAgentSettingsGroup(
+	page: Page,
+	group: 'models' | 'tools' | 'runtime' | 'safety',
+): Promise<void> {
+	const labels = {
+		models: 'Models & Budget',
+		tools: 'Apps and extensions',
+		runtime: 'Execution & Integrations',
+		safety: 'Safety and system',
+	};
+	await page
+		.getByRole('navigation', { name: 'Agent settings sections', exact: true })
+		.getByRole('button', { name: labels[group], exact: true })
+		.click();
+}
+
+/** Open the existing docked sidebar or narrow-window drawer through its visible control. */
+export async function openAgentConversations(page: Page): Promise<void> {
+	const toggle = page.locator('.agent-hub-window').getByRole('button', { name: 'Open conversations', exact: true });
+	await expect(toggle).toHaveAttribute('aria-expanded', /^(true|false)$/);
+	if ((await toggle.getAttribute('aria-expanded')) === 'false') {
+		await toggle.click();
+	}
+	await expect(toggle).toHaveAttribute('aria-expanded', 'true');
 }

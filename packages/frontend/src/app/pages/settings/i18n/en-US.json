@@ -50,6 +50,7 @@
     "mobile": {
       "allSettings": "All Settings",
       "settingsOverview": "Settings Overview"
-    }
+    },
+    "advancedMaintenance": "Diagnostics and recovery (advanced)"
   }
 }

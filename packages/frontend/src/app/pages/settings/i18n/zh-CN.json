@@ -50,6 +50,7 @@
     "mobile": {
       "allSettings": "所有设置",
       "settingsOverview": "设置中心"
-    }
+    },
+    "advancedMaintenance": "诊断与恢复（高级）"
   }
 }

@@ -23,9 +23,13 @@
 				{{ t('proxies.addProxy') }}
 			</UiButton>
 
-			<UiButton class="mb-4 ml-2" :disabled="loading || data.busy.value" @click="refresh">{{
-				t('proxies.refresh')
-			}}</UiButton>
+			<UiButton
+				v-if="message || data.needsRefresh.value"
+				class="mb-4 ml-2"
+				:disabled="loading || data.busy.value"
+				@click="refresh"
+				>{{ t('proxies.refresh') }}</UiButton
+			>
 			<p v-if="data.needsRefresh.value" class="mb-3 text-text-secondary">
 				{{ t('proxies.failures.recovery_required') }}
 			</p>

@@ -1011,12 +1011,27 @@ try {
 
 		try {
 			mounted.use(pinia).use(i18n).mount(node);
+			await until(() => node.querySelector('#captcha-provider') && !node.querySelector('fieldset').disabled);
+			const toggle = node.querySelector('#captcha-provider').closest('fieldset').querySelector('[role=checkbox]');
+			if (toggle.getAttribute('aria-checked') !== 'true') toggle.click();
+			node.querySelector('#captcha-provider').click();
+			await nextTick();
+			await until(() => document.querySelector('[role=option][data-value=hcaptcha]'));
+			document.querySelector('[role=option][data-value=hcaptcha]').click();
+			await nextTick();
 			await until(
 				() =>
 					node.querySelector('#captcha-site') &&
 					!node.querySelector('fieldset').disabled &&
 					!node.querySelector('#ipWhitelist').disabled,
 			);
+			await input('captcha-hostname', 'localhost');
+			node.querySelector('#captcha-secret-action').click();
+			await nextTick();
+			await until(() => document.querySelector('[role=option][data-value=replace]'));
+			document.querySelector('[role=option][data-value=replace]').click();
+			await nextTick();
+			await input('captcha-secret', 'security-ui-fixture-secret');
 			const field = await input('captcha-site', 'updated-ui-site');
 			submit(field.closest('form'));
 			submit(field.closest('form'));

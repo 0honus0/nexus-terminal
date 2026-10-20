@@ -18,6 +18,8 @@ import {
 } from '../../../../packages/shared/src/agent/scope/workspace-http-codec';
 import type { AgentWorkspaceRequest } from '../../../../packages/shared/src/agent/scope/workspace-http';
 import {
+	openAgentConversations,
+	selectAgentSettingsGroup,
 	createTestAgentApp,
 	enableTestAgentExecution,
 	requestAgentWorkspace,
@@ -537,20 +539,29 @@ test('Agent thread selection retains its identity while authoritative history is
 		await page.goto('/connections');
 		await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
 		const hub = page.locator('section[aria-label="Agent"]');
-		const firstButton = hub.getByRole('button', { name: first.title + ' · v1', exact: true });
-		const secondButton = hub.getByRole('button', { name: second.title + ' · v1', exact: true });
+		await openAgentConversations(page);
+		const firstButton = hub.getByRole('button', { name: first.title, exact: true });
+		const secondButton = hub.getByRole('button', { name: second.title, exact: true });
 		await secondButton.click();
-		await expect(hub.getByText(second.title + ' · ' + second.id, { exact: true })).toBeVisible();
+		await expect(
+			hub.locator('.agent-conversation-pane > header').getByText(second.title, { exact: true }),
+		).toBeVisible();
 		await expect(firstButton).toBeEnabled();
 		hold = true;
+		await openAgentConversations(page);
 		await firstButton.click();
 		await expect.poll(() => held).toBe(2);
-		await expect(hub.getByText(first.title + ' · ' + first.id, { exact: true })).toBeVisible();
+		await expect(
+			hub.locator('.agent-conversation-pane > header').getByText(first.title, { exact: true }),
+		).toBeVisible();
 		await expect(secondButton).toBeDisabled();
 		release();
+		await openAgentConversations(page);
 		await expect(secondButton).toBeEnabled();
 		await secondButton.click();
-		await expect(hub.getByText(second.title + ' · ' + second.id, { exact: true })).toBeVisible();
+		await expect(
+			hub.locator('.agent-conversation-pane > header').getByText(second.title, { exact: true }),
+		).toBeVisible();
 	} finally {
 		release();
 		await page.unroute(workspacePath);
@@ -596,6 +607,7 @@ test('Agent create-thread Retry retains the exact operation after an unknown out
 	await page.goto('/connections');
 	await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
 	const hub = page.locator('section[aria-label="Agent"]');
+	await openAgentConversations(page);
 	const threads = hub
 		.locator('section')
 		.filter({ has: page.getByRole('heading', { name: 'Native threads', exact: true }) });
@@ -626,6 +638,7 @@ test('Agent execution enable is independent of the launcher and its global windo
 	await setUiLanguage(context.request);
 	const app = await createTestAgentApp(context.request);
 	await page.goto('/settings?tab=agent');
+	await selectAgentSettingsGroup(page, 'runtime');
 	const panel = page.getByRole('region', { name: 'Execution settings', exact: true });
 	const enabled = panel.getByRole('checkbox', { name: 'Allow new Agent execution', exact: true });
 	await expect(enabled).not.toBeChecked();
@@ -682,9 +695,15 @@ test('Agent settings load independently of retired Runner endpoints and expose c
 	});
 	await page.goto('/settings?tab=agent');
 	const panel = page.locator('#settings-panel-agent');
-	for (const name of ['Model providers', 'Execution settings', 'MCP / ACP integrations']) {
+	for (const [group, name] of [
+		['models', 'Model providers'],
+		['runtime', 'Execution settings'],
+		['tools', 'MCP / ACP integrations'],
+	] as const) {
+		await selectAgentSettingsGroup(page, group);
 		await expect(panel.getByRole('region', { name, exact: true })).toBeVisible();
 	}
+	await selectAgentSettingsGroup(page, 'runtime');
 	await expect(panel.getByRole('region', { name: 'CDP', exact: true })).toBeVisible();
 	await expect(panel.getByRole('heading', { name: 'Workspace dev environment', exact: true })).toHaveCount(0);
 	expect(obsoleteRequests).toEqual([]);
@@ -699,16 +718,18 @@ test('Agent settings surface exposes the current control plane and saves explici
 	await createTestAgentApp(context.request);
 	await page.goto('/settings?tab=agent');
 	const panel = page.locator('#settings-panel-agent');
-	for (const name of [
-		'Model providers',
-		'Execution settings',
-		'Agent apps and permissions',
-		'CDP',
-		'MCP / ACP integrations',
-		'Memory management',
-	]) {
+	for (const [group, name] of [
+		['models', 'Model providers'],
+		['runtime', 'Execution settings'],
+		['tools', 'Agent apps and permissions'],
+		['runtime', 'CDP'],
+		['tools', 'MCP / ACP integrations'],
+		['safety', 'Memory management'],
+	] as const) {
+		await selectAgentSettingsGroup(page, group);
 		await expect(panel.getByRole('region', { name, exact: true })).toBeVisible();
 	}
+	await selectAgentSettingsGroup(page, 'models');
 	const providers = panel.getByRole('region', { name: 'Model providers', exact: true });
 
 	const readSavedProvider = async () => {
@@ -726,7 +747,8 @@ test('Agent settings surface exposes the current control plane and saves explici
 	};
 
 	await providers.getByRole('button', { name: 'Add provider', exact: true }).click();
-	const form = providers.locator('form');
+	const editor = page.getByRole('dialog').filter({ has: page.locator('#provider-editor') });
+	const form = editor.locator('form');
 	await form.getByRole('textbox', { name: 'Name', exact: true }).fill('Settings UI Provider');
 	await form.getByRole('textbox', { name: 'API endpoint', exact: true }).fill(E2E_URLS.openAiProviderOrigin + '/v1');
 	await form.getByRole('combobox', { name: 'API credential', exact: true }).selectOption('replace');
@@ -744,7 +766,7 @@ test('Agent settings surface exposes the current control plane and saves explici
 		(response) =>
 			new URL(response.url()).pathname === '/api/v1/agent/ai/providers' && response.request().method() === 'POST',
 	);
-	await form.getByRole('button', { name: 'Save', exact: true }).click();
+	await editor.getByRole('button', { name: 'Save', exact: true }).click();
 	const receipt = await creation;
 	expect(receipt.status()).toBe(201);
 	let provider = await readSavedProvider();
@@ -760,11 +782,14 @@ test('Agent settings surface exposes the current control plane and saves explici
 	await expect(form).toHaveCount(0);
 	const card = providers
 		.locator('article')
-		.filter({ has: page.getByRole('heading', { name: /Settings UI Provider v/ }) });
-	await card.getByRole('button', { name: 'Send real connection test', exact: true }).click();
-	await expect(providers.getByRole('status').filter({ hasText: /^Test succeeded in/ })).toBeVisible();
+		.filter({ has: page.getByRole('heading', { name: 'Settings UI Provider', exact: true }) });
+	await card.getByRole('button', { name: 'Models & test (1)', exact: true }).click();
+	const testDialog = page.getByRole('dialog', { name: 'Configured models & test', exact: true });
+	await testDialog.getByRole('button', { name: 'Send real connection test', exact: true }).click();
+	await expect(testDialog.getByRole('status').filter({ hasText: /^Test succeeded in/ })).toBeVisible();
+	await testDialog.getByRole('button', { name: 'Close', exact: true }).click();
 	await card.getByRole('button', { name: 'Discover and record models', exact: true }).click();
-	await expect(providers.getByRole('textbox', { name: 'Filter discovered models', exact: true })).toBeVisible();
+	await expect(editor.getByRole('textbox', { name: 'Filter discovered models', exact: true })).toBeVisible();
 	const protocol = form.getByRole('combobox', { name: 'Protocol', exact: true }).first();
 	await protocol.selectOption('responses');
 	const update = page.waitForResponse(
@@ -772,7 +797,7 @@ test('Agent settings surface exposes the current control plane and saves explici
 			new URL(response.url()).pathname === `/api/v1/agent/ai/providers/${provider.id}` &&
 			response.request().method() === 'PATCH',
 	);
-	await form.getByRole('button', { name: 'Save', exact: true }).click();
+	await editor.getByRole('button', { name: 'Save', exact: true }).click();
 	const updated = await update;
 	expect(updated.status()).toBe(200);
 	const previousVersion = provider.version;
@@ -788,19 +813,20 @@ test('Agent settings surface exposes the current control plane and saves explici
 			await route.fulfill({ status: 500, json: { code: 'internal_failure' } });
 		else await route.continue();
 	});
-	await form.getByRole('button', { name: 'Save', exact: true }).click();
+	await editor.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(
-		providers.getByText('Outcome unknown. Read current state; do not repeat creation, discovery or paid tests.', {
+		editor.getByText('Outcome unknown. Read current state; do not repeat creation, discovery or paid tests.', {
 			exact: true,
 		}),
 	).toBeVisible();
-	await expect(form.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
 	await page.unroute(providerPath);
-	await providers.getByRole('button', { name: 'Read again (discard draft)', exact: true }).click();
+	await editor.getByRole('button', { name: 'Read again (discard draft)', exact: true }).click();
 	await card.getByRole('button', { name: 'Edit', exact: true }).click();
 	await expect(protocol).toHaveValue('responses');
-	await form.getByRole('button', { name: 'Cancel', exact: true }).click();
+	await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
 	await captureFunctionalScreenshot(page, 'agent-settings-models.png', { viewport: { width: 1440, height: 900 } });
+	await selectAgentSettingsGroup(page, 'runtime');
 	await panel.getByRole('region', { name: 'Execution settings', exact: true }).scrollIntoViewIfNeeded();
 	await captureFunctionalScreenshot(page, 'agent-settings-runtime.png', { viewport: { width: 1440, height: 900 } });
 });
@@ -853,6 +879,7 @@ test('explicit profile models retain unavailable versions instead of silently se
 		readAgentProviderView,
 	);
 	await page.goto('/settings?tab=agent');
+	await selectAgentSettingsGroup(page, 'runtime');
 	const execution = page.getByRole('region', { name: 'Execution settings', exact: true });
 	const model = execution.getByRole('combobox', { name: 'Model and configuration version', exact: true }).first();
 	await expect(model.locator('option:checked')).toHaveText('e2e-model · v1 — Unavailable / verify version');
@@ -882,6 +909,7 @@ test('Agent Host preserves an open surface when a directory refresh fails and re
 	await page.goto('/connections');
 	await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
 	const hub = page.locator('section[aria-label="Agent"]');
+	await openAgentConversations(page);
 	const threads = hub.getByRole('heading', { name: 'Native threads', exact: true }).locator('..');
 	await threads.getByRole('textbox', { name: 'Thread title', exact: true }).fill('Unsaved local title');
 	const appsPath = '**/api/v1/agent/apps';
@@ -962,6 +990,8 @@ test('Agent tabs own independent local drafts and observe external threads throu
 	try {
 		await follower.goto('/connections');
 		await follower.getByRole('button', { name: 'Open Agent', exact: true }).click();
+		await openAgentConversations(page);
+		await openAgentConversations(follower);
 		const firstThreads = page.getByRole('heading', { name: 'Native threads', exact: true }).locator('..');
 		const secondThreads = follower.getByRole('heading', { name: 'Native threads', exact: true }).locator('..');
 		await secondThreads.getByRole('textbox', { name: 'Thread title', exact: true }).fill('Follower draft');
@@ -972,7 +1002,7 @@ test('Agent tabs own independent local drafts and observe external threads throu
 		});
 		if (result.method !== 'agent.threads.create') throw new Error('Unexpected thread');
 		await secondThreads.getByRole('button', { name: 'Read current threads', exact: true }).click();
-		await expect(secondThreads.getByRole('button', { name: 'External thread · v1', exact: true })).toBeVisible();
+		await expect(secondThreads.getByRole('button', { name: 'External thread', exact: true })).toBeVisible();
 		await expect(secondThreads.getByRole('textbox', { name: 'Thread title', exact: true })).toHaveValue(
 			'Follower draft',
 		);
@@ -995,6 +1025,8 @@ test('concurrent Agent settings preserve dirty drafts and reject their original 
 	const follower = await context.newPage();
 	try {
 		await follower.goto('/settings?tab=agent');
+		await selectAgentSettingsGroup(page, 'runtime');
+		await selectAgentSettingsGroup(follower, 'runtime');
 		const leader = page.getByRole('region', { name: 'Execution settings', exact: true });
 		const other = follower.getByRole('region', { name: 'Execution settings', exact: true });
 		// Lowering Concurrent Runs alone violates the execution contract if

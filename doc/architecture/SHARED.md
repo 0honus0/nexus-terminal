@@ -278,6 +278,8 @@ tags/values唯一维护128-byte名称，管理与导入校验共用；tags/http�
 
 Targets的unauthenticated/forbidden现在归TARGET_ERROR_CODES唯一基础定义，HTTP联合不再重复定义；导入使用独立TARGET_IMPORT_ERROR_CODES/TargetImportErrorCode排除两者，严格codec不接收认证失效作为普通单项结果。Backend批次遇到身份失效向外传播，不能继续写入；当前完整HTTP失败/前端安全解码仍使用原401/403，正式F1处理已有部分提交，不自动重传。管理actor/token/digest/事务准入类型只在Backend各自owner，Shared不持有身份句柄或权限回调。
 
+Targets Host Key challenge 唯一归 targets/host-keys/model：host/port、实际 fingerprint 与可空 expectedFingerprint；严格 codec 校验，Workspace 失败信封仅 host_key_untrusted 可带此对象，成功或其他错误携带 challenge 拒绝。它仅是握手观察，不授予信任；没有原始公钥、凭据或技术 cause。
+
 Targets Host Key的列表codec严格核对小写host/port唯一性、完整指纹和安全毫秒时间；确认响应还由客户端核对请求身份及指纹。基础指纹取值模式和主机名UTF-8容量归 `targets/host-keys/values.ts`，由Shared codec及后端应用/存储边界共同消费；规范化和业务准入仍归后端Service，不把纯协议解码器当业务规则。
 
 SSH Key 名称/私钥/口令容量唯一归 `targets/ssh-keys/values.ts`（128 bytes/64 KiB/8 KiB），独立管理、连接导入、未保存测试和可信应用入口复用；移除connections中旧私钥容量导出，不保留别名。Proxy字段容量归 `targets/proxies/values.ts`，连接名称容量归 `targets/connections/values.ts`；Service应用校验不引用HTTP codec，持久行只引用values校验编码与范围。

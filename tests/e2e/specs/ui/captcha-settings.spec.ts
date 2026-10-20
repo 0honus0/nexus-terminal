@@ -104,11 +104,11 @@ test('CAPTCHA UI saves provider configuration and explicit secrets without activ
 			await expect(captcha.locator('#captcha-secret')).toHaveCount(0);
 		});
 		await step('disable CAPTCHA and explicitly clear the stored secret', async () => {
-			await captcha.getByRole('checkbox', { name: 'Enable CAPTCHA on Login Page' }).uncheck();
-			await selectUiOption(captcha.locator('#captcha-provider'), 'none');
 			await captcha.locator('#captcha-site').fill('');
 			await captcha.locator('#captcha-hostname').fill('');
 			await selectUiOption(captcha.locator('#captcha-secret-action'), 'clear');
+			await captcha.getByRole('checkbox', { name: 'Enable CAPTCHA on Login Page' }).uncheck();
+			await selectUiOption(captcha.locator('#captcha-provider'), 'none');
 			await saveCaptcha();
 			expect((await getTestSettings(context.request)).captcha).toEqual({
 				enabled: false,

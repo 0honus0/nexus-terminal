@@ -1,3 +1,5 @@
+import { selectUiOption } from '../../support/ui-select';
+import { selectAgentSettingsGroup } from '../../support/agent';
 import { randomUUID, createHash } from 'node:crypto';
 import { cp, mkdir, readFile, readdir, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
@@ -783,10 +785,12 @@ for (const fixture of regressionInputs.memoryProposals) {
 				.memory;
 
 		await page.goto('/settings?tab=agent');
+		await selectAgentSettingsGroup(page, 'safety');
 		const section = page.getByRole('region', { name: 'Memory management', exact: true });
-		await section
-			.getByRole('combobox', { name: 'Edit app permissions and policy', exact: true })
-			.selectOption(task.app.id);
+		await selectUiOption(
+			section.getByRole('combobox', { name: 'Edit app permissions and policy', exact: true }),
+			task.app.id,
+		);
 
 		const row = () => section.locator('article').filter({ has: page.getByText(reviewId, { exact: true }) });
 

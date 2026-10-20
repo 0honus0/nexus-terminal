@@ -1,5 +1,6 @@
 <script setup lang="ts">
-	import { ref } from 'vue';
+	import { onBeforeUnmount, onMounted, ref } from 'vue';
+	import { UiButton } from '@/foundation/ui';
 	import { useI18n } from 'vue-i18n';
 	import { useNativeRuns } from '../composables/use-native-runs';
 	import { isNativeRunActive, nativeModelKey } from '../model/native-run-rules';
@@ -10,6 +11,27 @@
 
 	const props = defineProps<{ appId: string; appVersion: number; executionEnabled: boolean; active: boolean }>();
 	const { t } = useI18n();
+	const layoutRoot = ref<HTMLElement | null>(null);
+	const threadsOverlay = ref(false);
+	const threadSidebarVisible = ref(true);
+	const threadDrawerOpen = ref(false);
+	let layoutObserver: ResizeObserver | null = null;
+
+	onMounted(() => {
+		if (!layoutRoot.value) {
+			return;
+		}
+		threadsOverlay.value = layoutRoot.value.clientWidth <= 760;
+		layoutObserver = new ResizeObserver((entries) => {
+			const entry = entries[0];
+			if (entry) {
+				threadsOverlay.value = entry.contentRect.width <= 760;
+			}
+		});
+		layoutObserver.observe(layoutRoot.value);
+	});
+	onBeforeUnmount(() => layoutObserver?.disconnect());
+
 	const threadBusy = ref(false);
 	const bindingBusy = ref(false);
 	const runtime = useNativeRuns(
@@ -46,44 +68,88 @@
 	} = runtime;
 </script>
 <template>
-	<div class="flex h-full min-h-0 flex-col overflow-auto bg-background p-3 sm:p-4">
-		<div class="grid min-h-0 gap-4 lg:grid-cols-[250px_minmax(0,1fr)]">
-			<aside class="space-y-3">
-				<NativeThreadPanel
-					:app-id="appId"
-					:active="active"
-					:disabled="operation.busy.value || bindingBusy || !!pending || !attachmentsReady"
-					auto-load
-					@select="runtime.selectThread"
-					@working="threadBusy = $event"
-				/>
-				<p v-if="thread" class="break-all text-xs">{{ thread.title }} · {{ thread.id }}</p>
-				<button :disabled="operation.busy.value || threadBusy" @click="runtime.readScope">
-					{{ t('agent.nativeRun.readConfiguration') }}
-				</button>
-				<button v-if="thread" :disabled="operation.busy.value || threadBusy" @click="runtime.refreshThread()">
-					{{ t('agent.nativeRun.readRuns') }}
-				</button>
-				<ul class="max-h-60 space-y-1 overflow-auto text-xs">
-					<li v-for="item in runs" :key="item.id">
-						<button
-							class="w-full break-all rounded border p-2 text-left"
-							:disabled="operation.busy.value || !!pending"
-							@click="runtime.selectRun(item)"
-						>
-							{{ t('agent.nativeRun.states.' + item.status) }} · {{ item.id }}
-						</button>
-					</li>
-				</ul>
+	<div
+		ref="layoutRoot"
+		class="agent-surface-layout relative grid h-full min-h-0"
+		:class="{ 'is-threads-hidden': !threadSidebarVisible }"
+	>
+		<aside
+			id="agent-thread-sidebar"
+			class="agent-thread-sidebar flex min-h-0 flex-col gap-3 overflow-y-auto border-r border-border/45 bg-header/30 p-3 backdrop-blur-xs"
+			:class="{ 'is-open': threadDrawerOpen }"
+			:inert="threadsOverlay ? !threadDrawerOpen : !threadSidebarVisible"
+		>
+			<NativeThreadPanel
+				:app-id="appId"
+				:active="active"
+				:disabled="operation.busy.value || bindingBusy || !!pending || !attachmentsReady"
+				auto-load
+				@select="
+					(selected) => {
+						threadDrawerOpen = false;
+						runtime.selectThread(selected);
+					}
+				"
+				@working="threadBusy = $event"
+			/>
+
+			<UiButton
+				v-if="operation.refreshRequired.value || operation.notice.value === 'failed'"
+				:disabled="operation.busy.value || threadBusy"
+				@click="runtime.readScope"
+			>
+				{{ t('agent.nativeRun.readConfiguration') }}
+			</UiButton>
+			<UiButton v-if="thread" :disabled="operation.busy.value || threadBusy" @click="runtime.refreshThread()">
+				{{ t('agent.nativeRun.readRuns') }}
+			</UiButton>
+			<ul class="max-h-60 space-y-1 overflow-auto text-xs">
+				<li v-for="item in runs" :key="item.id">
+					<UiButton
+						class="w-full break-all rounded border p-2 text-left"
+						:disabled="operation.busy.value || !!pending"
+						@click="runtime.selectRun(item)"
+					>
+						{{ t('agent.nativeRun.states.' + item.status) }} · {{ item.id }}
+					</UiButton>
+				</li>
+			</ul>
+			<UiButton
+				v-if="hasMoreRuns"
+				:disabled="operation.busy.value || !!pending"
+				@click="runtime.refreshThread(true)"
+			>
+				{{ t('agent.nativeRun.moreRuns') }}
+			</UiButton>
+		</aside>
+		<main class="agent-conversation-pane flex min-h-0 min-w-0 flex-col overflow-y-auto bg-background">
+			<header
+				class="flex h-10 shrink-0 items-center gap-2 border-b border-border/50 bg-header/40 px-3.5 backdrop-blur-xs"
+			>
 				<button
-					v-if="hasMoreRuns"
-					:disabled="operation.busy.value || !!pending"
-					@click="runtime.refreshThread(true)"
+					type="button"
+					class="agent-thread-toggle flex h-7.5 w-7.5 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-card/60 text-text-secondary hover:bg-header hover:text-foreground"
+					:aria-expanded="threadsOverlay ? threadDrawerOpen : threadSidebarVisible"
+					aria-controls="agent-thread-sidebar"
+					:aria-label="t('agent.operations.openThreads')"
+					@click="
+						threadsOverlay
+							? (threadDrawerOpen = !threadDrawerOpen)
+							: (threadSidebarVisible = !threadSidebarVisible)
+					"
 				>
-					{{ t('agent.nativeRun.moreRuns') }}
+					<i class="fa-regular fa-comments text-xs" aria-hidden="true"></i>
 				</button>
-			</aside>
-			<main class="min-w-0 space-y-4">
+				<span class="truncate text-xs font-semibold tracking-tight text-foreground">{{
+					thread?.title || t('agent.operations.untitledThread')
+				}}</span>
+				<span
+					v-if="run"
+					class="ml-auto shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary"
+					>{{ t('agent.nativeRun.states.' + run.status) }}</span
+				>
+			</header>
+			<div class="flex min-h-0 flex-1 flex-col gap-3 p-3 sm:p-4">
 				<p v-if="!executionEnabled" role="status">{{ t('agent.nativeRun.executionDisabled') }}</p>
 				<p v-if="operation.notice.value" role="status">
 					{{ t('agent.settings.appManagement.' + operation.notice.value) }}
@@ -92,27 +158,29 @@
 					<p>{{ t('agent.nativeRun.unknown') }}</p>
 					<code class="break-all text-xs">{{ pending.operationId }}</code>
 					<div class="flex flex-wrap gap-3">
-						<button :disabled="operation.busy.value" @click="runtime.inspectIntent">
-							{{ t('agent.nativeRun.inspect') }}</button
-						><button
+						<UiButton :disabled="operation.busy.value" @click="runtime.inspectIntent">
+							{{ t('agent.nativeRun.inspect') }}</UiButton
+						><UiButton
 							:disabled="operation.busy.value || !inspected || operation.refreshRequired.value"
 							@click="runtime.mutate(null, true)"
 						>
 							{{ t('agent.nativeThreads.retry') }}
-						</button>
+						</UiButton>
 					</div>
 					<label class="flex gap-2"
 						><input v-model="acknowledged" type="checkbox" :disabled="operation.busy.value" />{{
 							t('agent.nativeRun.acknowledge')
 						}}</label
-					><button :disabled="operation.busy.value || !inspected || !acknowledged" @click="runtime.abandon">
+					><UiButton :disabled="operation.busy.value || !inspected || !acknowledged" @click="runtime.abandon">
 						{{ t('agent.nativeThreads.abandon') }}
-					</button>
+					</UiButton>
 				</section>
-				<section v-if="thread" class="space-y-3">
-					<h3 class="font-medium">{{ t('agent.nativeRun.conversation') }}</h3>
+				<section v-if="thread" class="flex min-h-0 flex-1 flex-col gap-3">
 					<p v-if="olderHidden" role="status" class="text-xs">{{ t('agent.nativeRun.windowed') }}</p>
-					<div class="max-h-[50vh] space-y-3 overflow-auto" aria-live="polite">
+					<div
+						class="agent-conversation-scroller min-h-48 flex-1 space-y-3 overflow-y-auto overscroll-contain px-2 py-4 touch-pan-y"
+						aria-live="polite"
+					>
 						<article
 							v-for="entry in entries"
 							:key="
@@ -123,18 +191,21 @@
 									entry.position.textOffset,
 								].join(':')
 							"
-							class="rounded border border-border p-3"
+							class="mx-auto max-w-3xl rounded-2xl border border-border/60 bg-card/70 p-4 shadow-2xs"
 						>
 							<p class="mb-1 text-xs text-text-secondary">
-								{{ t('agent.nativeRun.roles.' + entry.role) }} · {{ entry.runId }}
+								{{ t('agent.nativeRun.roles.' + entry.role) }}
 							</p>
 							<AgentMessageBody :text="entry.text" />
 						</article>
 					</div>
-					<button :disabled="operation.busy.value || threadBusy" @click="runtime.readEntries">
+					<UiButton :disabled="operation.busy.value || threadBusy" @click="runtime.readEntries">
 						{{ t('agent.nativeRun.moreBody') }}
-					</button>
-					<form class="space-y-2 rounded border border-border p-3" @submit.prevent="runtime.send(false)">
+					</UiButton>
+					<form
+						class="agent-composer-shell shrink-0 space-y-2 rounded-2xl border border-border/70 bg-card/80 p-3 shadow-sm"
+						@submit.prevent="runtime.send(false)"
+					>
 						<label class="block text-sm"
 							>{{ t('agent.nativeRun.model')
 							}}<select
@@ -185,7 +256,10 @@
 							"
 						/>
 						<div class="flex flex-wrap gap-3">
-							<button
+							<UiButton
+								type="submit"
+								appearance="solid"
+								tone="primary"
 								:disabled="
 									blocked ||
 									!executionEnabled ||
@@ -195,8 +269,8 @@
 									!draft.trim()
 								"
 							>
-								{{ t('agent.nativeRun.create') }}</button
-							><button
+								{{ t('agent.nativeRun.create') }}</UiButton
+							><UiButton
 								v-if="run && !isNativeRunActive(run)"
 								type="button"
 								:disabled="
@@ -205,27 +279,38 @@
 								@click="runtime.send(true)"
 							>
 								{{ t('agent.nativeRun.followUp') }}
-							</button>
+							</UiButton>
 						</div>
 					</form>
 				</section>
-				<NativeRunDetails
-					v-if="run"
-					:key="run.id"
-					:app-id="appId"
-					:run="run"
-					:events="events"
-					:approvals="approvals"
-					:children="children"
-					:child="child"
-					:messages="messages"
-					:active="active"
-					:disabled="blocked"
-					@refresh="runtime.refreshRun"
-					@mutate="runtime.mutate($event)"
-					@messages="runtime.readMessages"
-				/>
-			</main>
-		</div>
+				<div class="max-h-[45vh] shrink-0 overflow-y-auto">
+					<NativeRunDetails
+						v-if="run"
+						:key="run.id"
+						:app-id="appId"
+						:run="run"
+						:events="events"
+						:approvals="approvals"
+						:children="children"
+						:child="child"
+						:messages="messages"
+						:active="active"
+						:disabled="blocked"
+						@refresh="runtime.refreshRun"
+						@mutate="runtime.mutate($event)"
+						@messages="runtime.readMessages"
+					/>
+				</div>
+			</div>
+		</main>
+		<button
+			v-if="threadsOverlay && threadDrawerOpen"
+			type="button"
+			class="agent-thread-backdrop absolute inset-0 z-20 bg-black/20"
+			:aria-label="t('common.close')"
+			@click="threadDrawerOpen = false"
+		></button>
 	</div>
 </template>
+
+<style scoped src="./AgentAppSurface.css"></style>

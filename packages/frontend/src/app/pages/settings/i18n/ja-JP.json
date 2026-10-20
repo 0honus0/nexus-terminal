@@ -50,6 +50,7 @@
     "mobile": {
       "allSettings": "すべての設定",
       "settingsOverview": "設定センター"
-    }
+    },
+    "advancedMaintenance": "診断と復旧（詳細）"
   }
 }

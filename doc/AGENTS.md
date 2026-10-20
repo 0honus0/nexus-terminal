@@ -20,7 +20,7 @@
 | 类型、边界与 SQL     | [HUMAN](rules/HUMAN.md)、对应架构   | H-04–H-08、H-12       |
 | AI 工程经验          | [ENGINEERING](rules/ENGINEERING.md) | 适用 E-xx 及细则      |
 | 编码规范             | [CODE_STYLE](rules/CODE_STYLE.md)   | C-01–C-04、适用专题   |
-| 产品行为             | [USAGE](USAGE.md)                   | H-09、E-12            |
+| 产品行为             | [USAGE](USAGE.md)                   | H-09、H-13、E-12      |
 | 实施规划与提示词     | [当前实施方案](PLAN.md)             | H-11、E-10            |
 | 规则维护             | HUMAN、ENGINEERING                  | H-01–H-03、H-10、E-14 |
 | 验证场景、命令和证据 | [testing](testing/E2E.md)           | E-10、E-10.1          |

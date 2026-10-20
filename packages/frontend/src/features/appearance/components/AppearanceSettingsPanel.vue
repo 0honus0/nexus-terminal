@@ -121,7 +121,9 @@
 		</h2>
 		<div class="space-y-6 p-6">
 			<p v-if="store.blocked" role="status">{{ t('appearanceNext.refreshRequired') }}</p>
-			<UiButton :disabled="store.busy" @click="refresh">{{ t('appearanceNext.refresh') }}</UiButton>
+			<UiButton v-if="store.blocked || loadError" :disabled="store.busy" @click="refresh">{{
+				t('appearanceNext.refresh')
+			}}</UiButton>
 			<p v-if="loadError" class="rounded border border-error/40 bg-error/5 p-3 text-sm text-error">
 				{{ t('settings.appearance.loadFailed') }}
 			</p>

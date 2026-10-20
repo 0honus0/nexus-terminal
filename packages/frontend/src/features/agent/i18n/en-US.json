@@ -894,7 +894,8 @@
         "deleteTitle": "Delete provider",
         "deleteConfirm": "Delete “{name}”? The server rejects deletion when active runs reference it.",
         "capacity": "Selected models exceed remaining capacity. Select fewer models.",
-        "applyObservation": "Apply provider observation to draft"
+        "applyObservation": "Apply provider observation to draft",
+        "capabilityDetails": "Capability details"
       },
       "appManagement": {
         "title": "Agent apps and permissions",

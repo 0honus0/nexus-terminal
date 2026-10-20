@@ -1,4 +1,4 @@
-import { computed, onActivated, onMounted, ref, toRaw } from 'vue';
+import { computed, onActivated, onMounted, ref, toRaw, watch } from 'vue';
 import {
 	createManagedIntegration,
 	deleteManagedIntegration,
@@ -8,29 +8,34 @@ import {
 	updateManagedIntegration,
 } from '../api/integration-management-api';
 import type { IntegrationDraft, IntegrationDiscovery, ManagedIntegration } from '../model/integration-types';
+import { AgentManagementFailure } from '../model/management-failure';
 import { newIntegrationDraft, toIntegrationDraft } from '../model/integration-mapper';
 import { useAgentManagementOperation } from './use-agent-management-operation';
 
-export function useAppIntegrations(appId: string) {
+export function useAppIntegrations(appId: string, available: () => boolean = () => true) {
 	const items = ref<ManagedIntegration[]>([]);
+	const editorOpen = ref(false);
 	const original = ref<ManagedIntegration | null>(null);
 	const draft = ref(newIntegrationDraft());
 	const discovery = ref<IntegrationDiscovery | null>(null);
 	const deleteId = ref<string | null>(null);
 	const pendingCreate = ref(false);
 	const needsReload = ref(true);
-	// Keep an uncertain creation's exact input and key for explicit replay only; revoke clears both, including its secret.
+	// View hiding retains an uncertain creation; identity loss or disposal clears its input and key.
 	let createIntent: { key: string; draft: IntegrationDraft } | null = null;
-	const operation = useAgentManagementOperation(() => {
+	const operation = useAgentManagementOperation((reason) => {
 		items.value = [];
 		original.value = null;
 		draft.value = newIntegrationDraft();
 		discovery.value = null;
 		deleteId.value = null;
-		pendingCreate.value = false;
-		createIntent = null;
+		editorOpen.value = false;
+		if (reason !== 'view') {
+			createIntent = null;
+		}
+		pendingCreate.value = createIntent !== null;
 		needsReload.value = true;
-	});
+	}, available);
 	const blocked = computed(() => operation.busy.value || operation.refreshRequired.value || needsReload.value);
 
 	async function load(): Promise<void> {
@@ -40,6 +45,9 @@ export function useAppIntegrations(appId: string) {
 				items.value = value;
 				needsReload.value = false;
 				original.value = null;
+				if (createIntent === null) {
+					editorOpen.value = false;
+				}
 				draft.value = createIntent === null ? newIntegrationDraft() : structuredClone(createIntent.draft);
 				draft.value.credential = '';
 				discovery.value = null;
@@ -49,12 +57,22 @@ export function useAppIntegrations(appId: string) {
 		);
 	}
 
+	function closeEditor(): void {
+		if (operation.busy.value || pendingCreate.value) {
+			return;
+		}
+		editorOpen.value = false;
+		original.value = null;
+		draft.value = newIntegrationDraft();
+	}
+
 	function resetDraft(): void {
 		if (blocked.value || pendingCreate.value) {
 			return;
 		}
 		original.value = null;
 		draft.value = newIntegrationDraft();
+		editorOpen.value = true;
 	}
 
 	async function edit(id: string): Promise<void> {
@@ -66,6 +84,7 @@ export function useAppIntegrations(appId: string) {
 			(value) => {
 				original.value = value;
 				draft.value = toIntegrationDraft(value);
+				editorOpen.value = true;
 			},
 			{ write: false },
 		);
@@ -83,9 +102,10 @@ export function useAppIntegrations(appId: string) {
 				(signal) => updateManagedIntegration(appId, baseline, input, signal),
 				(value) => {
 					items.value = items.value.map((item) => (item.id === value.id ? value : item));
-					original.value = value;
-					draft.value = toIntegrationDraft(value);
+					original.value = null;
+					draft.value = newIntegrationDraft();
 					discovery.value = null;
+					editorOpen.value = false;
 				},
 				{ write: true },
 			);
@@ -100,16 +120,26 @@ export function useAppIntegrations(appId: string) {
 			() => {
 				createIntent = null;
 				pendingCreate.value = false;
+				editorOpen.value = false;
 				draft.value = newIntegrationDraft();
 				// A replay returns the first receipt; only a fresh list can establish current configuration.
 				needsReload.value = true;
 			},
-			{ write: true },
+			{
+				write: true,
+
+				onFailure(cause) {
+					if (
+						createIntent === intent &&
+						cause instanceof AgentManagementFailure &&
+						cause.outcome !== 'unknown'
+					) {
+						createIntent = null;
+						pendingCreate.value = false;
+					}
+				},
+			},
 		);
-		if (createIntent === intent && ['invalid', 'failed', 'conflict'].includes(operation.notice.value)) {
-			createIntent = null;
-			pendingCreate.value = false;
-		}
 	}
 
 	async function remove(item: ManagedIntegration): Promise<void> {
@@ -154,15 +184,18 @@ export function useAppIntegrations(appId: string) {
 	}
 
 	function initial(): void {
-		if (needsReload.value) {
+		if (available() && needsReload.value) {
 			void load();
 		}
 	}
 
+	watch(available, initial);
 	onMounted(initial);
 	onActivated(initial);
 	return {
 		items,
+		editorOpen,
+		closeEditor,
 		original,
 		draft,
 		discovery,

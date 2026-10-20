@@ -1,9 +1,11 @@
+import { openAgentConversations, selectAgentSettingsGroup } from '../../support/agent';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { ensureTestSshConnection } from '../../support/ssh';
+import { selectUiOption } from '../../support/ui-select';
 import { E2E_URLS } from '../../support/test-env';
 import { prepareAgentRun, requestAgentJson, requestAgentWorkspace } from '../../support/agent';
 import { readAgentGrantView } from '../../../../packages/shared/src/agent/governance/http-codec';
@@ -80,18 +82,22 @@ for (const decision of ['denied', 'cancelled'] as const) {
 		const argv = [process.execPath, path.resolve(__dirname, '../../fixtures/agent/acp-process.mjs'), evidencePath];
 
 		await page.goto('/settings?tab=agent');
+		await selectAgentSettingsGroup(page, 'tools');
 		const section = page.getByRole('region', { name: 'MCP / ACP integrations', exact: true });
-		await section
-			.getByRole('combobox', { name: 'Edit app permissions and policy', exact: true })
-			.selectOption(app.id);
-		await section.getByRole('combobox', { name: 'Kind', exact: true }).selectOption('acp');
-		await section.getByRole('textbox', { name: 'Name', exact: true }).fill('SSH ACP settings fixture');
-		await section.getByRole('combobox', { name: 'SSH connection', exact: true }).selectOption(String(connectionId));
-		await section
+		await selectUiOption(
+			section.getByRole('combobox', { name: 'Edit app permissions and policy', exact: true }),
+			app.id,
+		);
+		await section.getByRole('button', { name: 'Create integration', exact: true }).click();
+		const editor = page.getByRole('dialog', { name: 'Create integration', exact: true });
+		await editor.getByRole('combobox', { name: 'Kind', exact: true }).selectOption('acp');
+		await editor.getByRole('textbox', { name: 'Name', exact: true }).fill('SSH ACP settings fixture');
+		await editor.getByRole('combobox', { name: 'SSH connection', exact: true }).selectOption(String(connectionId));
+		await editor
 			.getByRole('textbox', { name: 'argv (JSON string array, executable first)', exact: true })
 			.fill(JSON.stringify(argv));
-		await section.getByRole('textbox', { name: 'Absolute working directory', exact: true }).fill(directory);
-		const enabled = section.getByRole('checkbox', { name: 'Enable integration', exact: true });
+		await editor.getByRole('textbox', { name: 'Absolute working directory', exact: true }).fill(directory);
+		const enabled = editor.getByRole('checkbox', { name: 'Enable integration', exact: true });
 		if ((await enabled.getAttribute('aria-checked')) !== 'true') await enabled.click();
 		await expect(enabled).toHaveAttribute('aria-checked', 'true');
 		const integrationPath = `/api/v1/apps/${app.id}/integrations`;
@@ -99,7 +105,7 @@ for (const decision of ['denied', 'cancelled'] as const) {
 			(response) =>
 				new URL(response.url()).pathname === integrationPath && response.request().method() === 'POST',
 		);
-		await section.getByRole('button', { name: 'Save', exact: true }).click();
+		await editor.getByRole('button', { name: 'Save', exact: true }).click();
 		const response = await creation;
 		expect(response.status()).toBe(201);
 		// Saving the integration re-renders the app-scoped editor; the same
@@ -147,9 +153,11 @@ for (const decision of ['denied', 'cancelled'] as const) {
 		expect(listResponse.status()).toBe(200);
 		expect(readAgentIntegrationList(await listResponse.json()).items).toContainEqual(integration);
 		await page.reload();
-		await section
-			.getByRole('combobox', { name: 'Edit app permissions and policy', exact: true })
-			.selectOption(app.id);
+		await selectAgentSettingsGroup(page, 'tools');
+		await selectUiOption(
+			section.getByRole('combobox', { name: 'Edit app permissions and policy', exact: true }),
+			app.id,
+		);
 		await expect(
 			section.getByRole('heading', { name: 'SSH ACP settings fixture · ACP · v1', exact: true }),
 		).toBeVisible();
@@ -157,7 +165,8 @@ for (const decision of ['denied', 'cancelled'] as const) {
 		await page.goto('/connections');
 		await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
 		const hub = page.locator('section[aria-label="Agent"]');
-		await hub.getByRole('button', { name: thread.title + ' · v' + thread.version, exact: true }).click();
+		await openAgentConversations(page);
+		await hub.getByRole('button', { name: thread.title, exact: true }).click();
 		await hub
 			.getByRole('combobox', { name: 'Model for this execution', exact: true })
 			.selectOption({ label: `${provider.displayName} / e2e-model · v${provider.version}` });

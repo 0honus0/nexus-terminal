@@ -1,16 +1,18 @@
 <script setup lang="ts">
-	import { computed, onMounted } from 'vue';
+	import { computed, onActivated, onMounted, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiCheckbox } from '@/foundation/ui';
+	import { UiButton, UiCheckbox, UiModal } from '@/foundation/ui';
 	import { useConnections } from '@/features/connections/public';
 	import { AGENT_INTEGRATION_MAX_ITEMS } from '@nexus-terminal/shared/agent/integrations/values';
 	import { useAppIntegrations } from '../composables/use-app-integrations';
 	import { useAgentManagementOperation } from '../composables/use-agent-management-operation';
 
-	const props = defineProps<{ appId: string }>();
+	const props = withDefaults(defineProps<{ appId: string; active?: boolean }>(), { active: true });
 	const { t } = useI18n();
 	const {
 		items,
+		editorOpen,
+		closeEditor,
 		original,
 		draft,
 		discovery,
@@ -25,9 +27,9 @@
 		save,
 		remove,
 		discover,
-	} = useAppIntegrations(props.appId);
+	} = useAppIntegrations(props.appId, () => props.active);
 	const connections = useConnections();
-	const directoryOperation = useAgentManagementOperation();
+	const directoryOperation = useAgentManagementOperation(undefined, () => props.active);
 	const sshTargets = computed(() => connections.connections.value.filter((item) => item.type === 'SSH'));
 	const missingTarget = computed(
 		() => draft.value.connectionId > 0 && !sshTargets.value.some((item) => item.id === draft.value.connectionId),
@@ -41,7 +43,15 @@
 		);
 	}
 
-	onMounted(() => void loadTargets());
+	function initialTargets(): void {
+		if (props.active && directoryOperation.refreshRequired.value) {
+			void loadTargets();
+		}
+	}
+
+	watch(() => props.active, initialTargets);
+	onMounted(initialTargets);
+	onActivated(initialTargets);
 </script>
 <template>
 	<div class="space-y-4">
@@ -53,12 +63,34 @@
 			{{ t('agent.settings.appManagement.refreshRequired') }}
 		</p>
 		<p v-if="pendingCreate" class="text-sm text-warning">{{ t('agent.settings.integrationManagement.pending') }}</p>
-		<UiButton type="button" :disabled="operation.busy.value" @click="load">{{
-			t('agent.settings.integrationManagement.reload')
-		}}</UiButton>
+		<div class="flex justify-end gap-2">
+			<UiButton v-if="pendingCreate" type="button" :disabled="operation.busy.value" @click="editorOpen = true">{{
+				t('common.edit')
+			}}</UiButton>
+			<UiButton
+				v-else
+				type="button"
+				appearance="soft"
+				:disabled="blocked || items.length >= AGENT_INTEGRATION_MAX_ITEMS"
+				@click="resetDraft"
+				><i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i
+				>{{ t('agent.settings.integrationManagement.create') }}</UiButton
+			>
+		</div>
+		<UiButton
+			v-if="operation.refreshRequired.value || needsReload || operation.notice.value === 'failed'"
+			type="button"
+			:disabled="operation.busy.value"
+			@click="load"
+			>{{ t('agent.settings.integrationManagement.reload') }}</UiButton
+		>
 		<fieldset :disabled="blocked || pendingCreate || original !== null" class="space-y-3">
 			<p v-if="items.length === 0" class="text-sm">{{ t('agent.settings.integrationManagement.empty') }}</p>
-			<article v-for="item in items" :key="item.id" class="space-y-2 rounded border border-border p-3">
+			<article
+				v-for="item in items"
+				:key="item.id"
+				class="space-y-3.5 rounded-2xl border border-border/80 bg-card/80 p-4 shadow-2xs"
+			>
 				<h4>
 					{{ item.configuration.name }} · {{ item.configuration.kind.toUpperCase() }} · v{{ item.version }}
 				</h4>
@@ -94,14 +126,51 @@
 				</div>
 			</article>
 		</fieldset>
-		<form class="space-y-3 rounded border border-border p-3" @submit.prevent="save">
-			<h4>
-				{{
-					original
-						? t('common.edit') + ' · v' + original.version
-						: t('agent.settings.integrationManagement.create')
-				}}
-			</h4>
+
+		<article v-if="discovery" class="space-y-2 rounded border border-border p-3">
+			<h4>{{ discovery.serverName }} · {{ discovery.serverVersion }} · {{ discovery.protocolVersion }}</h4>
+			<p class="break-all text-xs">{{ discovery.integration.id }} · v{{ discovery.integration.version }}</p>
+			<h5>{{ t('agent.settings.integrationManagement.tools') }} ({{ discovery.tools.length }})</h5>
+			<details v-for="tool in discovery.tools" :key="tool.name">
+				<summary>{{ tool.name }}</summary>
+				<p class="whitespace-pre-wrap break-words text-sm">{{ tool.description }}</p>
+				<pre class="max-h-56 overflow-auto whitespace-pre-wrap break-all text-xs">{{
+					tool.inputSchemaJson
+				}}</pre>
+			</details>
+			<h5>{{ t('agent.settings.integrationManagement.resources') }} ({{ discovery.resources.length }})</h5>
+			<p v-for="(resource, index) in discovery.resources" :key="index" class="break-all text-xs">
+				{{ resource.name }} · {{ resource.uri }}
+			</p>
+			<h5>{{ t('agent.settings.integrationManagement.prompts') }} ({{ discovery.prompts.length }})</h5>
+			<details v-for="(prompt, index) in discovery.prompts" :key="index">
+				<summary>{{ prompt.name }}</summary>
+				<p class="whitespace-pre-wrap break-words text-sm">{{ prompt.description }}</p>
+			</details>
+		</article>
+	</div>
+	<UiModal
+		:visible="active && editorOpen"
+		:title="original ? t('common.edit') : t('agent.settings.integrationManagement.create')"
+		:close-on-backdrop="!operation.busy.value && !pendingCreate"
+		:close-on-escape="!operation.busy.value && !pendingCreate"
+		panel-class="max-w-xl p-5 sm:p-6 rounded-2xl"
+		@close="closeEditor"
+	>
+		<form id="integration-editor" class="space-y-4" @submit.prevent="save">
+			<p v-if="operation.notice.value" role="status" class="text-sm">
+				{{ t('agent.settings.appManagement.' + operation.notice.value) }}
+			</p>
+			<p v-if="pendingCreate" role="status" class="text-sm text-warning">
+				{{ t('agent.settings.integrationManagement.pending') }}
+			</p>
+			<UiButton
+				v-if="operation.refreshRequired.value || needsReload"
+				type="button"
+				:disabled="operation.busy.value"
+				@click="load"
+				>{{ t('agent.settings.integrationManagement.reload') }}</UiButton
+			>
 			<fieldset :disabled="blocked || pendingCreate" class="space-y-3">
 				<label class="block text-sm"
 					>{{ t('agent.settings.integrationManagement.kind')
@@ -163,9 +232,13 @@
 					/>
 				</template>
 				<template v-else>
-					<UiButton type="button" :disabled="directoryOperation.busy.value" @click="loadTargets">{{
-						t('agent.settings.appManagement.readTargets')
-					}}</UiButton>
+					<UiButton
+						v-if="directoryOperation.refreshRequired.value || directoryOperation.notice.value === 'failed'"
+						type="button"
+						:disabled="directoryOperation.busy.value"
+						@click="loadTargets"
+						>{{ t('agent.settings.appManagement.readTargets') }}</UiButton
+					>
 					<p v-if="directoryOperation.notice.value" role="alert">
 						{{ t('agent.settings.appManagement.targetsFailed') }}
 					</p>
@@ -198,39 +271,23 @@
 					/></label>
 				</template>
 			</fieldset>
-			<div class="flex flex-wrap gap-2">
+		</form>
+		<template #footer>
+			<div class="flex justify-end gap-2">
+				<UiButton type="button" :disabled="operation.busy.value || pendingCreate" @click="closeEditor">{{
+					t('common.cancel')
+				}}</UiButton>
 				<UiButton
 					type="submit"
+					form="integration-editor"
+					appearance="solid"
+					tone="primary"
 					:disabled="blocked || (!original && !pendingCreate && items.length >= AGENT_INTEGRATION_MAX_ITEMS)"
 					>{{
 						pendingCreate ? t('agent.settings.integrationManagement.retryCreation') : t('common.save')
 					}}</UiButton
 				>
-				<UiButton type="button" :disabled="blocked || pendingCreate" @click="resetDraft">{{
-					t('agent.settings.integrationManagement.newDraft')
-				}}</UiButton>
 			</div>
-		</form>
-		<article v-if="discovery" class="space-y-2 rounded border border-border p-3">
-			<h4>{{ discovery.serverName }} · {{ discovery.serverVersion }} · {{ discovery.protocolVersion }}</h4>
-			<p class="break-all text-xs">{{ discovery.integration.id }} · v{{ discovery.integration.version }}</p>
-			<h5>{{ t('agent.settings.integrationManagement.tools') }} ({{ discovery.tools.length }})</h5>
-			<details v-for="tool in discovery.tools" :key="tool.name">
-				<summary>{{ tool.name }}</summary>
-				<p class="whitespace-pre-wrap break-words text-sm">{{ tool.description }}</p>
-				<pre class="max-h-56 overflow-auto whitespace-pre-wrap break-all text-xs">{{
-					tool.inputSchemaJson
-				}}</pre>
-			</details>
-			<h5>{{ t('agent.settings.integrationManagement.resources') }} ({{ discovery.resources.length }})</h5>
-			<p v-for="(resource, index) in discovery.resources" :key="index" class="break-all text-xs">
-				{{ resource.name }} · {{ resource.uri }}
-			</p>
-			<h5>{{ t('agent.settings.integrationManagement.prompts') }} ({{ discovery.prompts.length }})</h5>
-			<details v-for="(prompt, index) in discovery.prompts" :key="index">
-				<summary>{{ prompt.name }}</summary>
-				<p class="whitespace-pre-wrap break-words text-sm">{{ prompt.description }}</p>
-			</details>
-		</article>
-	</div>
+		</template>
+	</UiModal>
 </template>

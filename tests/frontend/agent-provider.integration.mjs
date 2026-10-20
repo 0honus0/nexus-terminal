@@ -402,7 +402,8 @@ try {
 				const add = Array.from(node.querySelectorAll('button')).find((b) => b.textContent === 'Add provider');
 				add.click();
 				await nextTick();
-				const form = node.querySelector('form');
+				const form = document.querySelector('#provider-editor');
+				check(form?.closest('[role=dialog]'), 'provider creation uses the modal interaction');
 
 				function input(label, value) {
 					const el = Array.from(form.querySelectorAll('label'))
@@ -438,6 +439,9 @@ try {
 				]) {
 					await setLocale(locale);
 					window.fetch = async () => json({ code: 'internal_failure' }, 500);
+					// Reopening mounts the real automatic read, exposing recovery only after failure.
+					mount({ render: () => h(ProviderSettings) });
+					await until(() => node.textContent.includes(expected));
 					const read = Array.from(node.querySelectorAll('button')).find((b) =>
 						b.textContent.includes(
 							locale === 'zh-CN' ? '重新读取' : locale === 'ja-JP' ? '再読み込み' : 'Read again',
@@ -457,7 +461,7 @@ try {
 				);
 				check(
 					node.querySelector('section[aria-label="Model providers"]') &&
-						node.textContent.includes('Read again'),
+						node.querySelectorAll('nav button').length === 4,
 					'formal panel installs provider card independently from legacy aggregate',
 				);
 				mounted.unmount();

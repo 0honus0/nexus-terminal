@@ -68,7 +68,7 @@ export interface SecurityConfigurationController {
 	message: Ref<string>;
 	success: Ref<boolean>;
 	refresh(): Promise<void>;
-	saveNetwork(): Promise<void>;
+	saveNetwork(changes?: Partial<NetworkPolicy>): Promise<void>;
 	saveCaptcha(): Promise<void>;
 }
 

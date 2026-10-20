@@ -23,3 +23,10 @@ export interface OpenedRemoteMachine {
 	/** Actual pinned handshake key; consumed only by technical conversion Models. */
 	hostPublicKey: Uint8Array;
 }
+
+export interface RemoteHostKeyChallenge {
+	host: string;
+	port: number;
+	fingerprint: string;
+	expectedFingerprint: string | null;
+}

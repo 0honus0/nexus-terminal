@@ -1,3 +1,4 @@
+import { installUiTranslator } from '@/shared/i18n/public';
 import { createI18n, type Composer } from 'vue-i18n';
 import { readStoredValue, stringStorageCodec, writeStoredValue } from '@/foundation/browser';
 
@@ -108,6 +109,8 @@ const i18n = createI18n({
 	fallbackLocale: defaultLocale,
 	messages,
 });
+
+installUiTranslator((key, parameters) => (parameters ? i18n.global.t(key, parameters) : i18n.global.t(key)));
 
 export const setLocale = (candidate: string): boolean => {
 	const locale = resolveSupportedLocale(candidate);

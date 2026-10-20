@@ -894,7 +894,8 @@
         "deleteTitle": "删除供应商",
         "deleteConfirm": "确定删除“{name}”？服务端会拒绝活跃运行引用的供应商。",
         "capacity": "所选模型超过剩余容量，请减少选择后再添加。",
-        "applyObservation": "应用供应商观察到草稿"
+        "applyObservation": "应用供应商观察到草稿",
+        "capabilityDetails": "能力详情"
       },
       "appManagement": {
         "title": "Agent 应用与授权",

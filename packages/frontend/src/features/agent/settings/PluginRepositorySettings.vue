@@ -159,9 +159,13 @@
 		<p v-if="operation.refreshRequired.value" class="text-warning">
 			{{ t('agent.settings.appManagement.refreshRequired') }}
 		</p>
-		<UiButton type="button" :disabled="operation.busy.value" @click="load">{{
-			t('agent.pluginManagement.readRepositories')
-		}}</UiButton>
+		<UiButton
+			v-if="operation.refreshRequired.value || operation.notice.value === 'failed'"
+			type="button"
+			:disabled="operation.busy.value"
+			@click="load"
+			>{{ t('agent.pluginManagement.readRepositories') }}</UiButton
+		>
 		<fieldset :disabled="operation.busy.value || operation.refreshRequired.value || unknown" class="space-y-2">
 			<label class="block text-sm"
 				>{{ t('agent.pluginManagement.repositoryLines')

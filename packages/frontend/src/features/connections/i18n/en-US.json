@@ -328,6 +328,9 @@
       "recovery_required": "Read the full current list before changing trust.",
       "request_pending": "Wait for the current request.",
       "limit_exceeded": "The trust list exceeds its response capacity."
-    }
+    },
+    "firstConnection": "The host key for {host}:{port} has not been trusted.\nSHA-256 fingerprint: {fingerprint}\nVerify it through a trusted channel before saving trust and reconnecting.",
+    "changedConnection": "Warning: the host key for {host}:{port} has changed!\nSaved: {expectedFingerprint}\nPresented: {fingerprint}\nThis may indicate a reinstalled server or impersonation. Verify independently before replacing trust and reconnecting.",
+    "confirmAndConnect": "Trust and reconnect"
   }
 }

@@ -126,9 +126,13 @@
 
 <template>
 	<section class="workspace-preferences min-w-0">
-		<UiButton class="mb-3" :disabled="loading || editor.saving.value" @click="editor.refresh">{{
-			t('common.refresh')
-		}}</UiButton>
+		<UiButton
+			v-if="needsRefresh || loadError"
+			class="mb-3"
+			:disabled="loading || editor.saving.value"
+			@click="editor.refresh"
+			>{{ t('common.refresh') }}</UiButton
+		>
 		<header class="flex flex-col gap-2 px-1 py-3 sm:flex-row sm:items-center sm:justify-between">
 			<div class="min-w-0">
 				<h2 class="text-lg font-semibold text-foreground">{{ t('settings.workspace.title') }}</h2>
