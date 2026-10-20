@@ -183,6 +183,8 @@ for (const decision of ['denied', 'cancelled'] as const) {
 		// Hub navigation can retire the browser's CDP copy of a successful
 		// Run POST. Capture the original response through this exact route,
 		// then fulfill that same request; never replay a non-idempotent Run.
+		// Keep the page-owned route until fixture teardown: Run creation starts
+		// concurrent reads and continuous polling, so removing it can strand a read.
 		const workspacePath = `/api/v1/agent/apps/${app.id}/workspace`;
 		let acceptedRunBody: unknown;
 		let capturedRunBody = false;
@@ -205,23 +207,20 @@ for (const decision of ['denied', 'cancelled'] as const) {
 				new URL(item.url()).pathname === `/api/v1/agent/apps/${app.id}/workspace` &&
 				item.request().postDataJSON()?.request?.method === 'agent.runs.create',
 		);
-		let runResult: ReturnType<typeof readAgentWorkspaceResponse>['result'];
-		try {
-			await hub.getByRole('button', { name: 'Create a new Run', exact: true }).click();
-			const runResponse = await runCreation;
-			expect(runResponse.status()).toBe(200);
-			expect(capturedRunBody).toBe(true);
-			// Correlate the actual receipt through the same Shared decoder.
-			runResult = readAgentWorkspaceResponse(
-				acceptedRunBody,
-				app.id,
-				readAgentWorkspaceRequest(runResponse.request().postDataJSON()),
-			).result;
-		} finally {
-			await page.unroute(routePattern);
-		}
+		await hub.getByRole('button', { name: 'Create a new Run', exact: true }).click();
+		const runResponse = await runCreation;
+		expect(runResponse.status()).toBe(200);
+		expect(capturedRunBody).toBe(true);
+		// Correlate the actual receipt through the same Shared decoder.
+		const runResult = readAgentWorkspaceResponse(
+			acceptedRunBody,
+			app.id,
+			readAgentWorkspaceRequest(runResponse.request().postDataJSON()),
+		).result;
 		if (runResult.method !== 'agent.runs.create') throw new Error('Unexpected Run receipt');
 		const runId = runResult.value.run.id;
+		await expect(hub.locator('code').filter({ hasText: runId })).toBeVisible();
+		await expect(hub.getByRole('button', { name: 'Request cancellation', exact: true })).toBeEnabled();
 
 		const readRun = async () => {
 			const result = await requestAgentWorkspace(request, app, { method: 'agent.runs.get', params: { runId } });

@@ -987,6 +987,8 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			// Hub navigation can retire Chromium's CDP response body after a
 			// successful PUT. Capture and decode the original request in the route
 			// before allowing the UI to navigate; never replay this mutation.
+			// The page fixture owns interception until teardown; background Host
+			// polling must not race a network-pattern change after this receipt.
 			const uploadRoute = `**/api/v1/agent/apps/${app.id}/artifacts/*/content`;
 			let uploadedArtifactBody: unknown;
 			let capturedArtifactBody = false;
@@ -1006,16 +1008,11 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 					response.url().endsWith('/content') &&
 					response.request().method() === 'PUT',
 			);
-			let artifact: ReturnType<typeof readAgentArtifactResponse>['artifact'];
-			try {
-				await library.locator('button[type="submit"]').filter({ hasText: 'Upload to selected App' }).click();
-				const uploaded = await publication;
-				expect(uploaded.status()).toBe(200);
-				expect(capturedArtifactBody).toBe(true);
-				artifact = readAgentArtifactResponse(uploadedArtifactBody).artifact;
-			} finally {
-				await page.unroute(uploadRoute);
-			}
+			await library.locator('button[type="submit"]').filter({ hasText: 'Upload to selected App' }).click();
+			const uploaded = await publication;
+			expect(uploaded.status()).toBe(200);
+			expect(capturedArtifactBody).toBe(true);
+			const artifact = readAgentArtifactResponse(uploadedArtifactBody).artifact;
 			expect(artifact).toMatchObject({
 				appId: app.id,
 				name: 'plugin-evidence.txt',

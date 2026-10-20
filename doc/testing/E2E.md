@@ -88,7 +88,15 @@
 - `ui/connection-non-ssh-bulk.spec.ts`：导入响应200后表单未关闭；trace 显示紧随移除拦截启动的标签请求未完成。现保留原请求拦截直至 UI 消费回执并完成依赖读取，不重发写入。
 - `ssh/progress-display-archive-cancel.spec.ts` 的准备阻塞取消场景：取消后目录刷新被拒绝。源码查出压缩准备/声明复查仍使用共享 SFTP，现两处都使用原任务追踪的独立传输资源。失败 trace 无 WS 帧，不能宣称已证明全部运行因果。
 
-修复工作区的 `pnpm run check`、`pnpm run build` 已 exit 0（`/tmp/nexus-refresh-e2e-fix-{check,build}.log`）；完整 `pnpm run format:all:check`、既有配额夹具的 `node --check` 和 diff 检查通过（格式日志 `/tmp/nexus-refresh-e2e-fix-format.log`）。未运行本地行为测试、E2E 或用例收集。当前修复仍待提交后的远程验收；原压缩取消、真实远端目录读取、RDP/VNC 持久化与精确删除断言均保留。
+修复工作区的 `pnpm run check`、`pnpm run build` 已 exit 0（`/tmp/nexus-refresh-e2e-fix-{check,build}.log`）；完整 `pnpm run format:all:check`、既有配额夹具的 `node --check` 和 diff 检查通过（格式日志 `/tmp/nexus-refresh-e2e-fix-format.log`）。未运行本地行为测试、E2E 或用例收集。修复提交为 `1ebaddfc96875770b940fc7d8690b66273938b21`，下轮这两项均通过；原压缩取消、真实远端目录读取、RDP/VNC 持久化与精确删除断言均保留。
+
+### Agent ACP 取消场景轮次
+
+[Actions 39415763862](https://github.com/0honus0/nexus-terminal/actions/runs/39415763862)，SHA `1ebaddfc96875770b940fc7d8690b66273938b21`：第7组 regular 58项通过（包括上一轮两项修复），独立 ACP cancelled 场景失败；其余7组、Checks/format/build、Docker deployment smoke、runner image 均success。独立场景重试被原实例清理失败阻断，不计成另一个产品场景失败。
+
+trace中原Run创建200，移除拦截发生在18404.925ms；18413.625ms启动的`agent.approvals.list`始终未完成，其他并行读取有响应，UI保留Pending v1且全部运行操作禁用。测试finally另行取消Run之后产生具名执行未知，重试reset据此拒绝；不通过忽略清理或删除隔离来绕过。证据为Actions第7组job `118604334779`及artifact `e2e-shard-7-1`（本地解压`/tmp/nexus-acp-failure-trace`）。
+
+当前修复让ACP创建及Artifact上传的纯回执观察拦截随页面fixture销毁，避免持续轮询期间切换网络匹配；ACP另确认回执对应Run已渲染且取消按钮可用，再推进外部审批。核对其余20处拦截移除的用途；不改产品协议、按钮状态或后台失败语义。全部取消/409/退出及无副作用断言保留。本轮`pnpm run check`、`pnpm run format:all:check`与`git diff --check`均exit 0，日志为`/tmp/nexus-acp-route-{check,format}.log`；仅测试与文档变更，E2E包无build步骤。新远程回归待推送，不运行本地行为测试或用例收集。
 
 ## 历史证据追溯
 
