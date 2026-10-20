@@ -1667,3 +1667,13 @@ dev / `8fa1713c` 未提交工作区，沿用本页 Node/pnpm 环境。状态面�
 两轮源码复核分别覆盖取消→队列拒绝→WS关闭→discard，以及重复cancel/abort、首次断流、最终块接纳后取消与实际释放。顺带修正原测试使用uploadId猜测随机stage路径的无效检查：严格解码根目录列表，确认不存在任何上传.part暂存文件；待open取消场景复用同一检查。既有远程测试保留，未在本机执行或收集测试。
 
 当前静态：Node v22.23.1、pnpm11.26.0；Backend check/build、根check、完整format:all:check及git diff --check均退出0；最后文档追加后再次执行六个变更文件Prettier检查及diff检查通过。USAGE和Backend架构同步。补修行为尚未远程运行，第4组不标PASS；全组完成率仍以相同SHA的下一轮实际结果为准。
+
+## 远程第十九轮：第7组多会话夹具准入（2026-10-20）
+
+原Actions39354280150，第7组890秒后超时。7项reconnect-ui多会话用例均在首个SSH标签创建后消失，继而35秒connected等待失败；诊断再等待缺失标签15秒，导致反复55秒超时并中断后续upload-prepare-profile。artifact12235231345的hidden-desktop首次trace明确记录WorkspaceRequestFailure: host_key_untrusted。每例隔离基线重置，createMultiSessionConnections仅导入三个连接，没有调用ensureTestSshConnection所含的信任步骤；不能依赖前例的Host Key。
+
+补修该入口使用既有trustTestSshHostKey，真实读取fixture公钥并通过Shared codec确认，再创建三连接；不自动信任产品侧未知主机。通用support诊断以evaluateAll读取现存标签快照，缺失立即标missing，原cause保留；35秒连通性判据不放宽。两轮源码复核覆盖全部7项调用点、初次失败测试的独立入口及目录准备测试；USAGE产品说明不变，核对既有Host Key约束仍成立。当前修复未运行本机行为测试；远程多会话完整执行及目录准备性能仍待验。
+
+第4组修复ce06c07f已推dev，对应Actions39355923799；本条第7组补修在其等待期间完成，按照2026-10-20更新D18逐组迭代，不能把该run当作已包含第7组补修的证据。
+
+第7组补修静态收口：Node v22.23.1/pnpm11.26.0，根check、完整format:all:check及git diff --check通过；最后文档追加后重查格式。生产代码未改，不重复构建；实际SSH/页面行为只交给推送后的远程Actions。

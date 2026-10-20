@@ -16,6 +16,7 @@ import {
 	ensureTestSshConnection,
 	resetTestSshFilesystem,
 	setTestSshOnline,
+	trustTestSshHostKey,
 } from '../../support/ssh';
 import { step } from '../../support/steps';
 
@@ -55,6 +56,7 @@ async function removeMultiSessionConnections(request: APIRequestContext): Promis
 }
 
 async function createMultiSessionConnections(request: APIRequestContext): Promise<number[]> {
+	await trustTestSshHostKey(request);
 	const ids: number[] = [];
 	for (const name of MULTI_SESSION_NAMES) {
 		const response = await request.post('/api/v1/targets/connections/import', {

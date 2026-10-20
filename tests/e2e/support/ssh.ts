@@ -139,12 +139,19 @@ export async function connectTestSshFromConnectionsPage(page: Page, connectionId
 	try {
 		await expect(activeTab).toHaveAttribute('data-session-state', 'connected', { timeout: 35_000 });
 	} catch (error) {
-		const state = (await activeTab.getAttribute('data-session-state')) ?? 'missing';
-		const status = (await activeTab.getAttribute('data-session-status')) ?? '';
+		const tabs = await activeTab.evaluateAll((elements) =>
+			elements.map((element) => ({
+				state: element.getAttribute('data-session-state'),
+				status: element.getAttribute('data-session-status'),
+			})),
+		);
+		const state = tabs[0]?.state ?? 'missing';
+		const status = tabs[0]?.status ?? '';
 		throw new Error(
 			`Workspace SSH did not reach connected state (state=${state}${status ? `, status=${status}` : ''}). ${
 				error instanceof Error ? error.message : String(error)
 			}`,
+			{ cause: error },
 		);
 	}
 	await expect(page.locator('.command-bar-command-input:visible')).toBeEnabled();
