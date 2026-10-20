@@ -32,22 +32,22 @@
 
 2026-10-20：B1–B9 后端功能与源码审核、B10 本机可执行范围、F1 正式前端 Shared 适配及远程失败修复已收口。唯一后端为 `packages/backend`，旧 Backend/Protocol 不再保留。D2/D3/D4/D7/D9/D11/D15/D17 中的源码优先、阶段顺序描述保留为本次重构的决定，不表示重启已完成阶段；继续遵守 D17 的本地测试限制。
 
-canonical Actions [39401405110](https://github.com/0honus0/nexus-terminal/actions/runs/39401405110) 在 `d6b73d254794fed0f76a7ba92e9000248996851d` 上成功：8/8 Playwright 分组、Checks/format/build 与 Docker deployment smoke 均通过。该结论只适用于实际执行的范围；不将外部依赖、未配置能力或未执行的故障组合算作通过。证据与覆盖边界见 [E2E](testing/E2E.md)。
+canonical Actions [39417865747](https://github.com/0honus0/nexus-terminal/actions/runs/39417865747) 在 `0e425fe20189e8e2079b575af70ec0657c269b67` 上成功：8/8 Playwright 分组、Checks/format/build 与 Docker deployment smoke 均通过。该结论只适用于实际执行的范围；不将外部依赖、未配置能力或未执行的故障组合算作通过。证据与覆盖边界见 [E2E](testing/E2E.md)。
 
 已完成阶段的施工清单已擦除。长期设计见 [Backend](architecture/BACKEND.md)、[Frontend](architecture/FRONTEND.md)、[Shared](architecture/SHARED.md)，产品行为见 [USAGE](USAGE.md)。
 
 ## 后续规划（可擦写区）
 
-### 当前批次：Agent ACP 回执观察与轮询竞态
+### 当前批次：Agent ACP 回执观察与轮询竞态（已验收）
 
 [Actions 39415763862](https://github.com/0honus0/nexus-terminal/actions/runs/39415763862)，被测 SHA `1ebaddfc96875770b940fc7d8690b66273938b21`：原导入和归档取消两项均通过；第7组 regular 58项通过，独立 ACP cancelled 场景失败，其余7组、Checks/format/build、Docker 与 runner image 通过。失败 trace 确认创建回执200后立即移除拦截，随后审批读取未交付，界面忙碌且取消按钮禁用；失败收尾取消保留 operation_unknown，重试 reset 被真实清理证据阻断，不绕过此围栏。
 
-| 审核表   | 范围与实现                                                                      | 当前结论                                                                                                                 |
-| -------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| 功能覆盖 | Agent ACP 内层权限取消；同类 Artifact 上传回执观察。                            | 保留真实创建、审批、取消、晚审批409、进程退出、工具unknown及远端无副作用断言；新增创建后真实UI就绪断言。                 |
-| 架构边界 | 仅修改测试页面持有的网络拦截生命周期。                                          | 拦截随页面销毁，不在持续轮询中移除；后端、Shared、UI及unknown/清理策略不变。核对USAGE原Agent取消/审批说明仍适用。        |
-| 实现质量 | 逐项核对22处 unroute，ACP创建与Artifact上传原回执处存在立即移除模式，均已修正。 | 原请求仍只转发一次并交付同一响应；删除无用try/finally，不增加超时、重试或通用包装。其他故障恢复/有限交互移除保留其场景。 |
-| 验证证据 | 根 check、完整格式及diff；无产品源码变化，E2E包无build脚本。                    | 本轮check、完整格式及diff均通过，行为回归待提交后的远程Actions。按D17不运行本地行为或用例收集。                          |
+| 审核表   | 范围与实现                                                                      | 当前结论                                                                                                                              |
+| -------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能覆盖 | Agent ACP 内层权限取消；同类 Artifact 上传回执观察。                            | 保留真实创建、审批、取消、晚审批409、进程退出、工具unknown及远端无副作用断言；新增创建后真实UI就绪断言。                              |
+| 架构边界 | 仅修改测试页面持有的网络拦截生命周期。                                          | 拦截随页面销毁，不在持续轮询中移除；后端、Shared、UI及unknown/清理策略不变。核对USAGE原Agent取消/审批说明仍适用。                     |
+| 实现质量 | 逐项核对22处 unroute，ACP创建与Artifact上传原回执处存在立即移除模式，均已修正。 | 原请求仍只转发一次并交付同一响应；删除无用try/finally，不增加超时、重试或通用包装。其他故障恢复/有限交互移除保留其场景。              |
+| 验证证据 | 根 check、完整格式及diff；无产品源码变化，E2E包无build脚本。                    | 本轮check、完整格式及diff均通过；0e425fe2的Actions 39417865747整体success，8/8组及质量、Docker均通过。按D17不运行本地行为或用例收集。 |
 
 ### 上一批：UI 还原与远程 E2E 已收口
 
@@ -97,4 +97,4 @@ canonical Actions [39401405110](https://github.com/0honus0/nexus-terminal/action
 
 ### 下一批启动提示词
 
-从根AGENTS.md进入，按doc/AGENTS.md顺序和八步流程执行。核对dev SHA、工作区和最新Actions，按本批四表继续；上一轮导入与归档修复已在1ebaddfc通过，不能重新列为失败。当前ACP取消失败源于创建回执后移除拦截使审批读取失去交付，现ACP及Artifact纯回执观察拦截随页面销毁。引用E-10.6/E-10.1/E-11、H-09/H-10/H-13及C-01–C-04：保留原请求和全部真实断言，不重放副作用、不放宽按钮/超时或屏蔽清理未知；同步排查同类调用点。遵守D17/D18，本地只静态检查，修复并复审后提交推送，逐组核对远程实际结果，不继承历史PASS。不部署、不进入P1；具体轮次写PLAN/testing，共性经验归ENGINEERING。
+从根AGENTS.md进入，按doc/AGENTS.md阅读顺序和八步流程执行。先核对dev SHA、工作区和最新Actions；当前修复已由0e425fe20189e8e2079b575af70ec0657c269b67的Actions 39417865747验收，8/8组、质量及Docker均通过，具体覆盖见testing。79d7b97d仅是耗时估计更新，不是新的行为验收SHA。没有已知待修远程失败；按用户下一次指定范围工作，不重启旧失败或自动进入P1。引用E-10.6核对原回执、完整交互和持续轮询的拦截生命周期，H-13保持原UI，遵守D17本地测试限制。未知.tmp内容不动；不部署。

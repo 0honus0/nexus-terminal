@@ -4,7 +4,7 @@
 
 ## 当前验收基线
 
-2026-10-20，canonical [Actions 39401405110](https://github.com/0honus0/nexus-terminal/actions/runs/39401405110)，SHA `d6b73d254794fed0f76a7ba92e9000248996851d`：
+2026-10-20，canonical [Actions 39417865747](https://github.com/0honus0/nexus-terminal/actions/runs/39417865747)，SHA `0e425fe20189e8e2079b575af70ec0657c269b67`：
 
 | 检查                                                          | 结果                                  |
 | ------------------------------------------------------------- | ------------------------------------- |
@@ -96,7 +96,7 @@
 
 trace中原Run创建200，移除拦截发生在18404.925ms；18413.625ms启动的`agent.approvals.list`始终未完成，其他并行读取有响应，UI保留Pending v1且全部运行操作禁用。测试finally另行取消Run之后产生具名执行未知，重试reset据此拒绝；不通过忽略清理或删除隔离来绕过。证据为Actions第7组job `118604334779`及artifact `e2e-shard-7-1`（本地解压`/tmp/nexus-acp-failure-trace`）。
 
-当前修复让ACP创建及Artifact上传的纯回执观察拦截随页面fixture销毁，避免持续轮询期间切换网络匹配；ACP另确认回执对应Run已渲染且取消按钮可用，再推进外部审批。核对其余20处拦截移除的用途；不改产品协议、按钮状态或后台失败语义。全部取消/409/退出及无副作用断言保留。本轮`pnpm run check`、`pnpm run format:all:check`与`git diff --check`均exit 0，日志为`/tmp/nexus-acp-route-{check,format}.log`；仅测试与文档变更，E2E包无build步骤。新远程回归待推送，不运行本地行为测试或用例收集。
+当前修复让ACP创建及Artifact上传的纯回执观察拦截随页面fixture销毁，避免持续轮询期间切换网络匹配；ACP另确认回执对应Run已渲染且取消按钮可用，再推进外部审批。核对其余20处拦截移除的用途；不改产品协议、按钮状态或后台失败语义。全部取消/409/退出及无副作用断言保留。本轮`pnpm run check`、`pnpm run format:all:check`与`git diff --check`均exit 0，日志为`/tmp/nexus-acp-route-{check,format}.log`；仅测试与文档变更，E2E包无build步骤。修复提交`0e425fe20189e8e2079b575af70ec0657c269b67`的[Actions 39417865747](https://github.com/0honus0/nexus-terminal/actions/runs/39417865747)整体success：8/8 Playwright、Checks/format/build、Docker、runner image及耗时统计均通过。第7组regular 58项通过，独立ACP cancelled 1项通过（场景14秒），取消及清理断言未放宽。未运行本地行为测试或用例收集。耗时统计另提交`79d7b97d`，仅更新下一轮分配估计，不作为重新执行的被测SHA。
 
 ## 历史证据追溯
 
