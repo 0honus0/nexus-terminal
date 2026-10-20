@@ -103,6 +103,43 @@ export async function acknowledgeTerminalOutput(socket: E2eWebSocket): Promise<v
 	await requestWorkspace(socket, 'terminal.flow', { consumedBytes: counter.bytes });
 }
 
+/** A scoped raw terminal consumer; backpressure tests retain manual ACK control. */
+export async function consumeTerminalOutput(socket: E2eWebSocket, action: () => Promise<void>): Promise<void> {
+	let pending = false;
+	let running: Promise<void> | null = null;
+	const failures: unknown[] = [];
+
+	const consume = (_data: Buffer, isBinary: boolean) => {
+		if (!isBinary || failures.length) return;
+		pending = true;
+		if (running) return;
+		running = (async () => {
+			while (pending) {
+				pending = false;
+				await acknowledgeTerminalOutput(socket);
+			}
+		})()
+			.catch((error: unknown) => {
+				failures.push(error);
+			})
+			.finally(() => {
+				running = null;
+			});
+	};
+
+	socket.on('message', consume);
+	try {
+		await action();
+	} catch (error) {
+		failures.push(error);
+	} finally {
+		socket.off('message', consume);
+		await running;
+	}
+	if (failures.length === 1) throw failures[0];
+	if (failures.length) throw new AggregateError(failures, 'Terminal output consumption failed');
+}
+
 export function sendJson(socket: E2eWebSocket, message: JsonWsMessage): void {
 	socket.send(JSON.stringify(message));
 }

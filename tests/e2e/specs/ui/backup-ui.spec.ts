@@ -160,7 +160,7 @@ test('data management UI exports a real backup file and imports it through the f
 				await route.continue();
 				return;
 			}
-			const upstream = await route.fetch();
+			const upstream = await route.fetch({ maxRetries: 0 });
 			if (upstream.ok()) verifiedBody = readBackupImportResponse(await upstream.json());
 			await route.fulfill({ response: upstream });
 		});
@@ -186,10 +186,18 @@ test('data management UI exports a real backup file and imports it through the f
 			await expect(recovery).toContainText(
 				`Backup restored: ${body.restoredRows} rows and ${body.restoredFiles} files.`,
 			);
-			await recovery.getByRole('button', { name: 'Reload application', exact: true }).click();
 		} finally {
 			await page.unroute(importRoute);
 		}
+		// Finish interception teardown before reload starts fetching its module
+		// graph; changing patterns mid-navigation can retire a paused script.
+		await Promise.all([
+			page.waitForEvent('domcontentloaded'),
+			page
+				.locator('[data-backup-recovery]')
+				.getByRole('button', { name: 'Reload application', exact: true })
+				.click(),
+		]);
 	});
 
 	await step('the browser remains authenticated after the import-triggered reload', async () => {

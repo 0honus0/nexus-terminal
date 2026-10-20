@@ -8,6 +8,7 @@ import { loginAsInitialAdmin } from '../../support/auth';
 import { ensureTestSshConnection } from '../../support/ssh';
 import {
 	closeWebSocket,
+	consumeTerminalOutput,
 	openAuthenticatedWebSocket,
 	openWorkspaceSession,
 	requestWorkspace,
@@ -43,9 +44,11 @@ test('saturated suspended history compacts in batches and resumes the original l
 		} finally {
 			await handle.close();
 		}
-		const output = waitForBinaryText(original.socket, 'COMPACTION_OUTPUT_DONE', 20_000);
-		await fs.writeFile(gate, 'release');
-		await output;
+		await consumeTerminalOutput(original.socket, async () => {
+			const output = waitForBinaryText(original.socket, 'COMPACTION_OUTPUT_DONE', 20_000);
+			await fs.writeFile(gate, 'release');
+			await output;
+		});
 		await closeWebSocket(original.socket);
 		let suspendedId = '';
 		await expect

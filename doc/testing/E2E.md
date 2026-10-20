@@ -1788,3 +1788,17 @@ Agent/夹具本批门禁：E2E严格TS、根check、全仓format:all:check和dif
 USAGE既有绝对目标、显式信任与任务结果说明仍符合产品行为，本批无产品变更。归档取消/并行为独立未完成项，不以此补丁销项。
 
 本批最终静态门禁：根check、前后端build、严格E2E TypeScript、全仓format:all:check、SSH夹具node --check和git diff --check均exit 0（/tmp/nexus-round24-*.log）。两轮源码复核完成；没有运行本地行为测试，待推送后远程验收。177cba3e第6组现43通过、4失败：复制性能与其后续上传/复制用例已通过；剩归档取消、Send Files、挂起压实及终端缓存，后两项为本轮独立排查范围。
+
+### 177cba3e后续失败与夹具消费修正（2026-10-20）
+
+本批a8bed777已推送dev，新运行[39361569436](https://github.com/0honus0/nexus-terminal/actions/runs/39361569436)；原177cba3e第2组因此取消，不记PASS或FAIL。原第3/4/5/7组通过，第1/6/8组失败；第6组复制性能和第8组移动端取消已通过，不再沿用旧版本失败判断。
+
+第6组terminal-session-cache手工导入连接后漏Host Key确认，两次均KEY_EXCHANGE_FAILED并无已连接tab；补显式确认原夹具指纹。suspend-log-compaction的约2MiB输出超过未确认窗口，Node消费者只收字节、没有terminal.flow；增加仅本场景启用的有界串行ACK消费，累计量来自真实终端帧，操作结束移除监听并排空最后ACK，失败不吞；不对其他背压场景全局auto-ACK。
+
+第8组backup-ui离线trace显示恢复200且回执正确，点击reload后才unroute，模块图中的vue.js请求status=-1，DOMContentLoaded超时；改为先撤销原import handler，再同时等待真实DOMContentLoaded与点击reload，不增加期限、不重复import，保留认证/表行/文件/清理回执断言。原用例重试通过仍不能掩盖首轮失败。
+
+四表：功能对应保留三会话实例/resize、真实压实大小/同shell恢复、完整备份恢复；职责归测试生产者/消费者和真实生命周期；无新增产品/Shared类型，ACK沿既有Shared解码边界；两轮源码复核检查确认顺序、累计真实字节、单个在途ACK、失败汇总/监听退出、回执与重载顺序，静态结果另记。USAGE原Host Key、流控和备份说明仍适用。
+
+仍未修复：归档运行中取消/真正并行；第8组6文件上传同样被Files mutationTail整段串行化，首波只开1个上传stream。后者与归档并行共有持久host/port独占claim限制，不能只删除本地队列或跳过claim；需要同owner有界分组、路径冲突准入和整组排空后结算，unknown仍阻断外部准入。保持现有并发/性能断言，不标记已完成。
+
+本批最终静态：根check、严格E2E TypeScript、全仓format:all:check及git diff --check均exit 0（/tmp/nexus-round25-*.log）；两轮源码复核已完成。仅测试与证据文档变化，产品源码未改；前后端build沿a8bed777基线已通过，本批无构建输入变化。行为待后续远程SHA，不运行本地测试。
