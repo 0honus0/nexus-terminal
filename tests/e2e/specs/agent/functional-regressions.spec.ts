@@ -722,6 +722,10 @@ test('recorded JSON and marker cases preserve exact output through a later Run i
 		expect(result.run.status).toBe('completed');
 		expect(ids.has(created.id)).toBe(false);
 		ids.add(created.id);
+		// The GET used by finishNativeTask verifies durable execution, but does
+		// not refresh the already-mounted Host view. Re-select the same thread
+		// through its real Read action before checking rendered model output.
+		await openNativeTask(task);
 		await expect(page.getByText(fixture.expected, { exact: true })).toBeVisible();
 	}
 });
