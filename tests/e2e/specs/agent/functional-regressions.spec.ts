@@ -865,7 +865,11 @@ test('delegation rejects the retired absolute deadline and an excessive current 
 			{ method: 'GET', path: `/apps/${task.app.id}/runs/${created.id}/steps/1` },
 			readAgentRunStepResponse,
 		);
-		expect(step).toMatchObject({ state: 'completed', finishReason: 'tool_calls' });
+		// The provider's untrusted delegation payload reached the dispatch
+		// boundary before the invalid deadline was rejected. The step and Run
+		// must both retain the unknown outcome; neither may fabricate a proven
+		// successful provider completion or a child effect.
+		expect(step.state).toBe('unknown');
 		const children = await requestAgentWorkspace(request, task.app, {
 			method: 'agent.subagents.list',
 			params: { runId: created.id },
