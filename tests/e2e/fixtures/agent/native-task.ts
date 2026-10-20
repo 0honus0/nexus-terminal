@@ -123,37 +123,69 @@ export async function openNativeTask(task: NativeTask) {
 	return hub;
 }
 
+type NativeCommandReceipt = { command: AgentWorkspaceRequest; result: AgentWorkspaceResult };
+
+type NativeCommandCapture = {
+	appId: string;
+	method: AgentWorkspaceInput['method'];
+	receipt?: NativeCommandReceipt;
+	claimed: boolean;
+};
+
+type NativeCommandRouter = { active?: NativeCommandCapture; ready: Promise<void> };
+
+const nativeCommandRouters = new WeakMap<Page, NativeCommandRouter>();
+
+async function getNativeCommandRouter(page: Page): Promise<NativeCommandRouter> {
+	const existing = nativeCommandRouters.get(page);
+	if (existing) {
+		await existing.ready;
+		return existing;
+	}
+	// Keep one handler for the Page lifetime. Changing interception patterns
+	// while a write or its follow-up reads are paused can resume them early.
+	const router: NativeCommandRouter = { ready: Promise.resolve() };
+	nativeCommandRouters.set(page, router);
+	router.ready = page
+		.route('**/agent/apps/*/workspace', async (route) => {
+			const request = route.request();
+			const active = router.active;
+			if (
+				!active ||
+				active.claimed ||
+				request.method() !== 'POST' ||
+				!request.url().endsWith(`/agent/apps/${active.appId}/workspace`)
+			) {
+				await route.fallback();
+				return;
+			}
+			const command = readAgentWorkspaceRequest(request.postDataJSON());
+			if (command.request.method !== active.method) {
+				await route.fallback();
+				return;
+			}
+			active.claimed = true;
+			const upstream = await route.fetch({ maxRetries: 0 });
+			expect(upstream.status()).toBe(200);
+			const response = readAgentWorkspaceResponse(await upstream.json(), active.appId, command);
+			active.receipt = { command, result: response.result };
+			await route.fulfill({ response: upstream });
+		})
+		.then(() => undefined);
+	await router.ready;
+	return router;
+}
+
 /** Capture the original write receipt before the UI can navigate; never replay it. */
 export async function captureNativeCommand(
 	task: NativeTask,
 	method: AgentWorkspaceInput['method'],
 	action: () => Promise<void>,
-): Promise<{ command: AgentWorkspaceRequest; result: AgentWorkspaceResult }> {
-	const workspaceUrl = `**/agent/apps/${task.app.id}/workspace`;
-	let captured: { command: AgentWorkspaceRequest; result: AgentWorkspaceResult } | undefined;
-
-	const capture: Parameters<Page['route']>[1] = async (route) => {
-		const request = route.request();
-		if (request.method() !== 'POST') {
-			await route.fallback();
-			return;
-		}
-		const command = readAgentWorkspaceRequest(request.postDataJSON());
-		if (command.request.method !== method) {
-			await route.fallback();
-			return;
-		}
-		const upstream = await route.fetch({ maxRetries: 0 });
-		expect(upstream.status()).toBe(200);
-		const response = readAgentWorkspaceResponse(await upstream.json(), task.app.id, command);
-		captured = { command, result: response.result };
-		// Restore normal routing before delivery: accepting this write may
-		// immediately launch reads, which must not race interception teardown.
-		await task.page.unroute(workspaceUrl, capture);
-		await route.fulfill({ response: upstream });
-	};
-
-	await task.page.route(workspaceUrl, capture);
+): Promise<NativeCommandReceipt> {
+	const router = await getNativeCommandRouter(task.page);
+	if (router.active) throw new Error('An Agent command capture is already active on this Page');
+	const active: NativeCommandCapture = { appId: task.app.id, method, claimed: false };
+	router.active = active;
 	const waiting = task.page.waitForResponse((response) => {
 		if (
 			!response.url().endsWith(`/agent/apps/${task.app.id}/workspace`) ||
@@ -166,10 +198,10 @@ export async function captureNativeCommand(
 	try {
 		const [, response] = await Promise.all([action(), waiting]);
 		expect(response.status()).toBe(200);
-		if (!captured) throw new Error('Original Agent response was not captured');
-		return captured;
+		if (!active.receipt) throw new Error('Original Agent response was not captured');
+		return active.receipt;
 	} finally {
-		await task.page.unroute(workspaceUrl, capture);
+		router.active = undefined;
 	}
 }
 

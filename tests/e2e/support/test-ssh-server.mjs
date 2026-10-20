@@ -35,6 +35,7 @@ const envPort = (name, fallback) => {
 };
 
 const SSH_PORT = envPort('NEXUS_E2E_SSH_PORT', 22222);
+const TRANSFER_TARGET_PORT = envPort('NEXUS_E2E_SSH_TRANSFER_TARGET_PORT', 22225);
 const CONTROL_PORT = envPort('NEXUS_E2E_SSH_CONTROL_PORT', 22223);
 const SMTP_PORT = envPort('NEXUS_E2E_SMTP_PORT', 22224);
 const USERNAME = 'e2e';
@@ -145,6 +146,16 @@ function normalizeRemotePath(remotePath = '.') {
 }
 
 function resolveRemotePath(remotePath = '.') {
+	// Native transfer clients create credentials in the remote OS /tmp via
+	// exec and then write them over SFTP. Both channels must address that same
+	// private directory; ordinary fixture files remain inside the virtual root.
+	if (
+		/^\/tmp\/nexus-transfer-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}(?:\/(?:key|known_hosts))?$/.test(
+			remotePath,
+		)
+	) {
+		return remotePath;
+	}
 	const relativePath = normalizeRemotePath(remotePath);
 	const resolved = path.resolve(rootDir, relativePath);
 	const rootWithSeparator = `${path.resolve(rootDir)}${path.sep}`;
@@ -1870,14 +1881,40 @@ controlServer.on('connect', (req, clientSocket, head) => {
 	clientSocket.once('error', () => upstream.destroy());
 });
 
+// A distinct TCP endpoint exercises the transfer admission policy without
+// treating two connection IDs for the source endpoint as different servers.
+const transferSockets = new Set();
+const transferTargetServer = net.createServer((socket) => {
+	const upstream = net.connect(SSH_PORT, SSH_HOST);
+	transferSockets.add(socket);
+	transferSockets.add(upstream);
+	socket.pipe(upstream).pipe(socket);
+	socket.once('error', () => upstream.destroy());
+	upstream.once('error', () => socket.destroy());
+	socket.once('close', () => {
+		transferSockets.delete(socket);
+		upstream.destroy();
+	});
+	upstream.once('close', () => {
+		transferSockets.delete(upstream);
+		socket.destroy();
+	});
+});
+
 await startSshServer();
+await new Promise((resolve, reject) => {
+	transferTargetServer.once('error', reject);
+	transferTargetServer.listen(TRANSFER_TARGET_PORT, SSH_HOST, resolve);
+});
 await new Promise((resolve) => controlServer.listen(CONTROL_PORT, SSH_HOST, resolve));
 await new Promise((resolve) => smtpServer.listen(SMTP_PORT, SSH_HOST, resolve));
 console.log(
-	`[E2E SSH] listening on ${SSH_HOST}:${SSH_PORT}, control ${CONTROL_PORT}, smtp ${SMTP_PORT}, root ${rootDir}`,
+	`[E2E SSH] listening on ${SSH_HOST}:${SSH_PORT}, transfer ${TRANSFER_TARGET_PORT}, control ${CONTROL_PORT}, smtp ${SMTP_PORT}, root ${rootDir}`,
 );
 
 const shutdown = () => {
+	for (const socket of transferSockets) socket.destroy();
+	transferTargetServer.close();
 	controlServer.close();
 	smtpServer.close();
 	sshServer.close();

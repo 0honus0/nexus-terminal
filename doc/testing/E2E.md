@@ -1771,3 +1771,20 @@ Agent/夹具本批门禁：E2E严格TS、根check、全仓format:all:check和dif
 四表：保留真实blocked记录、原unknown、二次拒绝及全部红色像素断言；持久规则owner不变，sandbox文档生命周期归Terminal background composable；类型使用Shared MutationList；两轮源码复核检查多会话、隐藏/恢复、晚load及主题更新，静态结果与后续Actions另记。
 
 本批最终门禁：根check、E2E严格TypeScript、前后端build、format:all:check、git diff --check均exit 0。复制/分帧取消、目录导航和第7组背景/围栏补修已完成两轮源码复核；未执行本地行为测试，等待后续Actions。归档运行中取消与真正并行归档仍未修复，不通过放宽unknown、移除持久claim或修改断言规避。
+
+### Agent拦截生命周期与Send Files端点夹具（2026-10-20）
+
+远程177cba3e第1组确认24项失败，首因均为native-task先unroute再fulfill导致Route is already handled；不能把前一批静态通过当行为通过。本批每Page安装一个稳定workspace拦截器，当前捕获按App/method匹配且只认领一次，读取或其余请求fallback；原回执严格解码后交付，不切换拦截模式、不重发写入。结束只清除捕获意图，页面关闭释放handler；同Page并发捕获明确拒绝。
+
+第6组Send Files夹具原先以同一host/port的两个连接ID模拟独立服务器，触发真实重复资源拒绝；此外离线目标也须显式确认Host Key，密码传输的known_hosts须与exec创建的私有目录一致。新增受控22225 TCP转发端点及环境端口，成功/离线目标分别显式确认受控指纹，目标使用夹具真实绝对目录以匹配rsync -s协议。SFTP仅对精确UUID命名的/tmp/nexus-transfer目录和key/known_hosts放行原OS路径，其余仍在虚拟根。原部分成功、失败详情、目标文件及任务删除断言不变；不修改生产准入和安全围栏。
+
+| 审核表   | 本批结论                                                                                                                                                                                                                  |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | Agent原写回执与派生读取；Send Files真实双目标部分成功，不放宽超时或结果断言。                                                                                                                                             |
+| 职责归属 | 仅测试消费者/受控SSH夹具；页面持有唯一拦截器，转发夹具追踪两端socket并在关闭时排空。                                                                                                                                      |
+| 类型归属 | 原Shared workspace和Host Key严格codec继续使用；不新增协议或业务类型到Platform。                                                                                                                                           |
+| 完成证据 | 两轮源码复核覆盖一次认领、连续调用、失败清意图、代理断连/停机、私有凭据及绝对目标；根check/build已通过，严格E2E TS曾发现route返回Disposable，已调整并重跑；最终静态结果另记。行为仅等待新SHA的远程Actions，不在本地执行。 |
+
+USAGE既有绝对目标、显式信任与任务结果说明仍符合产品行为，本批无产品变更。归档取消/并行为独立未完成项，不以此补丁销项。
+
+本批最终静态门禁：根check、前后端build、严格E2E TypeScript、全仓format:all:check、SSH夹具node --check和git diff --check均exit 0（/tmp/nexus-round24-*.log）。两轮源码复核完成；没有运行本地行为测试，待推送后远程验收。177cba3e第6组现43通过、4失败：复制性能与其后续上传/复制用例已通过；剩归档取消、Send Files、挂起压实及终端缓存，后两项为本轮独立排查范围。

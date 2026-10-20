@@ -15,6 +15,7 @@ export const E2E_SSH = {
 	name: 'E2E SSH',
 	host: '127.0.0.1',
 	port: E2E_PORTS.ssh,
+	transferTargetPort: E2E_PORTS.sshTransferTarget,
 	username: 'e2e',
 	password: 'e2e-password',
 	controlPort: E2E_PORTS.sshControl,
@@ -61,7 +62,7 @@ export async function removeNamedSshConnections(request: APIRequestContext): Pro
 	}
 }
 
-export async function trustTestSshHostKey(request: APIRequestContext): Promise<void> {
+export async function trustTestSshHostKey(request: APIRequestContext, port: number = E2E_SSH.port): Promise<void> {
 	const fixtureResponse = await fetch(E2E_SSH.controlUrl + '/host-key');
 	expect(fixtureResponse.ok).toBeTruthy();
 	const trusted = readHostKeyConfirmRequest(await fixtureResponse.json());
@@ -69,7 +70,7 @@ export async function trustTestSshHostKey(request: APIRequestContext): Promise<v
 	expect(trusted.port).toBe(E2E_SSH.port);
 	const confirmed = await request.post('/api/v1/targets/host-keys/confirm', {
 		headers: targetHeaders,
-		data: trusted,
+		data: readHostKeyConfirmRequest({ host: trusted.host, port, fingerprint: trusted.fingerprint }),
 	});
 	expect(confirmed.status()).toBe(201);
 }

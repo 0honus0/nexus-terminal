@@ -1,4 +1,5 @@
 import { readTestConnectionImportId } from '../../support/targets';
+import path from 'node:path';
 import { readServerTransferPage } from '../../../../packages/shared/src/remote/transfers/server-codec';
 import { E2E_URLS } from '../../support/test-env';
 import { expect, test, type BrowserContext, type Locator, type Page } from '../../support/fixtures';
@@ -14,6 +15,7 @@ import {
 	openDesktopProgressDisplay,
 	reopenConnectedFileManager,
 	resetTestSshFilesystem,
+	trustTestSshHostKey,
 	E2E_SSH,
 } from '../../support/ssh';
 import { slowStep, step } from '../../support/steps';
@@ -391,6 +393,11 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 		await route.continue();
 	});
 	const sourceConnectionId = await ensureTestSshConnection(context.request);
+	await trustTestSshHostKey(context.request, E2E_SSH.transferTargetPort);
+	// Trust is deliberate even for the offline target: this case must create
+	// a task whose connection fails, rather than fail admission for missing trust.
+	await trustTestSshHostKey(context.request, 1);
+	const destinationPath = path.resolve(__dirname, '../../.tmp/ssh-root/server-transfer-e2e');
 	const validTargetName = `E2E Send OK ${crypto.randomUUID().slice(0, 8)}`;
 	const failedTargetName = `E2E Send Fail ${crypto.randomUUID().slice(0, 8)}`;
 	const validTargetResponse = await context.request.post('/api/v1/targets/connections/import', {
@@ -402,7 +409,7 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 						name: validTargetName,
 						type: 'SSH',
 						host: E2E_SSH.host,
-						port: E2E_SSH.port,
+						port: E2E_SSH.transferTargetPort,
 						username: E2E_SSH.username,
 						notes: null,
 						route: 'direct',
@@ -479,7 +486,7 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 				await visibleGroupCheckbox.click();
 				await expect(validTargetRow.locator('input[type="checkbox"]')).toBeChecked();
 				await expect(failedTargetRow.locator('input[type="checkbox"]')).toBeChecked();
-				await targetPath.fill('/server-transfer-e2e');
+				await targetPath.fill(destinationPath);
 				await selectUiOption(modal.getByLabel('Transfer Method', { exact: true }), 'rsync');
 
 				// The Workspace transfer catalog can still be loading/refreshed in parallel. That global
@@ -506,7 +513,7 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 
 				const taskCard = display.locator('article').filter({ hasText: 'server-transfer-e2e' });
 				await expect(taskCard).toBeVisible({ timeout: 10_000 });
-				await expect(taskCard).toContainText('Task: E2E SSH (seed.txt -> /server-transfer-e2e)');
+				await expect(taskCard).toContainText(`Task: E2E SSH (seed.txt -> ${destinationPath})`);
 				await expect(taskCard).toContainText('Created at:');
 
 				const subTasks = taskCard.locator('details');

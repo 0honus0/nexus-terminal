@@ -15,6 +15,7 @@ export const E2E_PORTS = {
 	guacd: parsePort('NEXUS_E2E_GUACD_PORT', 24822),
 	guacdControl: parsePort('NEXUS_E2E_GUACD_CONTROL_PORT', 29090),
 	ssh: parsePort('NEXUS_E2E_SSH_PORT', 22222),
+	sshTransferTarget: parsePort('NEXUS_E2E_SSH_TRANSFER_TARGET_PORT', 22225),
 	sshControl: parsePort('NEXUS_E2E_SSH_CONTROL_PORT', 22223),
 	smtp: parsePort('NEXUS_E2E_SMTP_PORT', 22224),
 	pluginRepository: parsePort('NEXUS_E2E_PLUGIN_REPOSITORY_PORT', 29092),
