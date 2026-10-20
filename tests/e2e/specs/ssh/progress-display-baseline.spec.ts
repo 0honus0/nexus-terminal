@@ -1,4 +1,5 @@
 import { readTestConnectionImportId } from '../../support/targets';
+import { readServerTransferPage } from '../../../../packages/shared/src/remote/transfers/server-codec';
 import { E2E_URLS } from '../../support/test-env';
 import { expect, test, type BrowserContext, type Locator, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
@@ -538,13 +539,14 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 	} finally {
 		releaseInitialTransferList?.();
 		await page.unroute('**/api/v1/transfers/status');
-		const tasksResponse = await context.request.get('/api/v1/transfers/status');
-		if (tasksResponse.ok()) {
-			const tasks = (await tasksResponse.json()) as Array<{
-				taskId: string;
-				payload?: { sourceConnectionId?: number; connectionIds?: number[] };
-			}>;
-			for (const task of tasks) {
+		let cursor: string | null = null;
+		do {
+			const tasksResponse = await context.request.get(
+				'/api/v1/transfers/status' + (cursor === null ? '' : '?after=' + encodeURIComponent(cursor)),
+			);
+			expect(tasksResponse.ok(), 'Transfer cleanup must read the real paginated status contract').toBe(true);
+			const tasks = readServerTransferPage(await tasksResponse.json());
+			for (const task of tasks.items) {
 				if (
 					task.payload?.sourceConnectionId === sourceConnectionId &&
 					task.payload.connectionIds?.some((id) =>
@@ -556,7 +558,8 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 					});
 				}
 			}
-		}
+			cursor = tasks.nextCursor;
+		} while (cursor !== null);
 		await context.request.delete(`/api/v1/targets/connections/${validTargetConnectionId}`, {
 			headers: { Origin: E2E_URLS.frontendOrigin },
 		});
