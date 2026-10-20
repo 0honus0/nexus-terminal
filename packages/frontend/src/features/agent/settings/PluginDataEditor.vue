@@ -20,7 +20,15 @@
 	import { listPluginInstallations } from '../api/plugin-management-api';
 	import { AgentManagementFailure } from '../model/management-failure';
 
-	const props = defineProps<{ installation: PluginInstallation; disabled: boolean }>();
+	const props = withDefaults(
+		defineProps<{
+			installation: PluginInstallation;
+			disabled: boolean;
+			retainedOnly?: boolean;
+			active?: boolean;
+		}>(),
+		{ retainedOnly: false, active: true },
+	);
 	const emit = defineEmits<{ changed: [] }>();
 	const { t } = useI18n();
 	const snapshot = ref<PluginDataSnapshot | null>(null);
@@ -36,19 +44,42 @@
 	>(null);
 	const pendingAction = ref<'migration' | 'write' | 'purge' | null>(null);
 	const observedData = ref<string | null>(null);
-	const operation = useAgentManagementOperation(() => {
-		snapshot.value = null;
-		loadedKey.value = null;
-		keyVersion.value = 0;
-		abandonAcknowledged.value = false;
-		key.value = '';
-		valueJson.value = '';
-		migrationJson.value = '';
-		pending.value = null;
-		pendingAction.value = null;
-		purgeAcknowledged.value = false;
-		observedData.value = null;
-	});
+	const operation = useAgentManagementOperation(
+		(reason) => {
+			snapshot.value = null;
+			loadedKey.value = null;
+			keyVersion.value = 0;
+			abandonAcknowledged.value = false;
+			key.value = '';
+			valueJson.value = '';
+			migrationJson.value = '';
+			if (reason !== 'view') {
+				pending.value = null;
+				pendingAction.value = null;
+			}
+			purgeAcknowledged.value = false;
+			observedData.value = null;
+		},
+		() => props.active,
+	);
+
+	function onToggle(event: Event): void {
+		if (
+			props.retainedOnly &&
+			event.target instanceof HTMLDetailsElement &&
+			event.target.open &&
+			operation.refreshRequired.value &&
+			!operation.busy.value
+		)
+			void read();
+	}
+
+	watch(
+		() => props.active,
+		(active) => {
+			if (active && props.retainedOnly && operation.refreshRequired.value) void read();
+		},
+	);
 
 	async function read(): Promise<void> {
 		if (props.disabled || operation.busy.value) {
@@ -244,16 +275,22 @@
 	}
 </script>
 <template>
-	<details class="space-y-2 rounded border border-border p-2">
-		<summary>{{ t('agent.pluginManagement.data') }}</summary>
-		<p class="text-xs">{{ t('agent.pluginManagement.dataHelp') }}</p>
+	<details class="space-y-2 rounded border border-border p-2" @toggle="onToggle">
+		<summary>{{ t(retainedOnly ? 'agent.settings.plugins.deleteData' : 'agent.pluginManagement.data') }}</summary>
+		<p class="text-xs">
+			{{ t(retainedOnly ? 'agent.settings.plugins.deleteDataWarning' : 'agent.pluginManagement.dataHelp') }}
+		</p>
 		<p v-if="operation.notice.value" role="status">
 			{{ t('agent.settings.appManagement.' + operation.notice.value) }}
 		</p>
-		<UiButton type="button" :disabled="disabled || operation.busy.value" @click="read">{{
-			t('agent.pluginManagement.readData')
-		}}</UiButton>
-		<template v-if="snapshot">
+		<UiButton
+			v-if="!retainedOnly || operation.notice.value"
+			type="button"
+			:disabled="disabled || operation.busy.value"
+			@click="read"
+			>{{ t('agent.pluginManagement.readData') }}</UiButton
+		>
+		<template v-if="snapshot && !retainedOnly">
 			<p class="text-xs">r{{ snapshot.revision }} · {{ snapshot.items.length }}</p>
 			<p v-for="item in snapshot.items" :key="item.key" class="break-all text-xs">
 				{{ item.key }} · v{{ item.version }} ·
@@ -261,47 +298,52 @@
 			</p>
 		</template>
 		<fieldset :disabled="disabled || operation.busy.value || pending !== null" class="space-y-2">
-			<label class="block"
-				>{{ t('agent.pluginManagement.dataKey')
-				}}<input v-model="key" class="ml-2 rounded border border-border bg-background p-2"
-			/></label>
-			<UiButton type="button" :disabled="!key" @click="readKey">{{
-				t('agent.pluginManagement.readKey')
-			}}</UiButton>
-			<label class="block"
-				>JSON<textarea v-model="valueJson" class="mt-1 w-full rounded border border-border bg-background p-2" />
-			</label>
-			<UiButton
-				type="button"
-				:disabled="operation.refreshRequired.value || loadedKey !== key || !key || !valueJson"
-				@click="save(false)"
-				>{{ t('common.save') }}</UiButton
-			>
-			<UiButton
-				type="button"
-				:disabled="operation.refreshRequired.value || loadedKey !== key || !key"
-				@click="save(true)"
-				>{{ t('common.delete') }}</UiButton
-			>
-			<label class="block"
-				>{{ t('agent.pluginManagement.migrationItems')
-				}}<textarea
-					v-model="migrationJson"
-					class="mt-1 w-full rounded border border-border bg-background p-2"
-				/>
-			</label>
-			<UiButton
-				type="button"
-				:disabled="operation.refreshRequired.value || snapshot === null || !migrationJson"
-				@click="migrate"
-				>{{ t('agent.pluginManagement.migrate') }}</UiButton
-			>
-			<label v-if="installation.status === 'removed'" class="block"
+			<template v-if="!retainedOnly"
+				><label class="block"
+					>{{ t('agent.pluginManagement.dataKey')
+					}}<input v-model="key" class="ml-2 rounded border border-border bg-background p-2"
+				/></label>
+				<UiButton type="button" :disabled="!key" @click="readKey">{{
+					t('agent.pluginManagement.readKey')
+				}}</UiButton>
+				<label class="block"
+					>JSON<textarea
+						v-model="valueJson"
+						class="mt-1 w-full rounded border border-border bg-background p-2"
+					/>
+				</label>
+				<UiButton
+					type="button"
+					:disabled="operation.refreshRequired.value || loadedKey !== key || !key || !valueJson"
+					@click="save(false)"
+					>{{ t('common.save') }}</UiButton
+				>
+				<UiButton
+					type="button"
+					:disabled="operation.refreshRequired.value || loadedKey !== key || !key"
+					@click="save(true)"
+					>{{ t('common.delete') }}</UiButton
+				>
+				<label class="block"
+					>{{ t('agent.pluginManagement.migrationItems')
+					}}<textarea
+						v-model="migrationJson"
+						class="mt-1 w-full rounded border border-border bg-background p-2"
+					/>
+				</label>
+				<UiButton
+					type="button"
+					:disabled="operation.refreshRequired.value || snapshot === null || !migrationJson"
+					@click="migrate"
+					>{{ t('agent.pluginManagement.migrate') }}</UiButton
+				> </template
+			><label v-if="installation.status === 'removed'" class="block"
 				><input v-model="purgeAcknowledged" type="checkbox" />{{
 					t('agent.pluginManagement.confirmPurge')
 				}}</label
 			>
 			<UiButton
+				v-if="installation.status === 'removed'"
 				type="button"
 				:disabled="operation.refreshRequired.value || installation.status !== 'removed' || !purgeAcknowledged"
 				@click="purge"
@@ -309,7 +351,10 @@
 			>
 		</fieldset>
 		<template v-if="pending"
-			><p class="break-all text-xs">{{ t('agent.pluginManagement.pendingData') }} · {{ pending.operationId }}</p>
+			><p class="break-all text-xs">
+				{{ t('agent.pluginManagement.pendingData')
+				}}<template v-if="!retainedOnly"> · {{ pending.operationId }}</template>
+			</p>
 			<UiButton
 				v-if="pendingAction === 'write'"
 				type="button"

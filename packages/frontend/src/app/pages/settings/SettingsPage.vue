@@ -3,7 +3,7 @@
 	import { useI18n } from 'vue-i18n';
 	import { useRoute, useRouter } from 'vue-router';
 	import { loadAppearanceSettingsPanel, useAppearance } from '@/features/appearance/public';
-	import { AgentSettingsPanel } from '@/features/agent/public';
+	import { AgentSettingsPanel, AgentMaintenancePanel } from '@/features/agent/public';
 	import { BackupSettingsPanel } from '@/features/backup/public';
 	import { MutationRecoveryPanel } from '@/features/mutation-recovery/public';
 	import { HostDiagnosticsPanel } from '@/features/system-overview/public';
@@ -26,6 +26,12 @@
 	const auth = useAuthSession();
 	const appearance = useAppearance();
 	const active = ref<SettingsTab>('workspace');
+	const maintenanceExpanded = ref(false);
+
+	function toggleMaintenance(event: Event): void {
+		if (event.target instanceof HTMLDetailsElement) maintenanceExpanded.value = event.target.open;
+	}
+
 	const visited = reactive(new Set<SettingsTab>(['workspace']));
 	const mobileView = ref<'menu' | 'detail'>('detail');
 	const currentVersion = packageJson.version;
@@ -527,12 +533,14 @@
 							v-if="visited.has('data')"
 							v-show="active === 'data'"
 							class="rounded-xl border border-border bg-card p-4"
+							@toggle="toggleMaintenance"
 						>
 							<summary class="cursor-pointer text-sm font-medium">
 								{{ t('settings.advancedMaintenance') }}
 							</summary>
 							<HostDiagnosticsPanel :active="active === 'data'" />
 							<MutationRecoveryPanel :active="active === 'data'" />
+							<AgentMaintenancePanel :active="active === 'data' && maintenanceExpanded" />
 						</details>
 						<AppearanceSettingsPanel
 							:active="active === 'appearance'"

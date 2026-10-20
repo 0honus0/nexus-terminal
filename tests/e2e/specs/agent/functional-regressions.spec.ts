@@ -899,7 +899,7 @@ test('reopening a completed clarification restores history and explicit follow-u
 	expect(question.text).toBe('Choose deployment color: blue or green.');
 	await openNativeTask(task);
 	await expect(page.getByText(question.text, { exact: true })).toBeVisible();
-	await page.getByRole('button', { name: `Completed · ${created.id}`, exact: true }).click();
+	await page.getByRole('button', { name: /^Completed · / }).click();
 	const followUp = await startNativeTask(task, 'deployment_color: green', [], true);
 	const answer = await finishNativeTask(task, followUp.id);
 	expect(answer.run.status).toBe('completed');

@@ -13,6 +13,8 @@
 	import ExecutionSettings from './ExecutionSettings.vue';
 	import PluginManagementSettings from './PluginManagementSettings.vue';
 	import SafetyNetworkSettings from './SafetyNetworkSettings.vue';
+	import AgentOnboardingModal from './AgentOnboardingModal.vue';
+	import { useAgentOnboarding } from '../composables/use-agent-onboarding';
 
 	const { t } = useI18n();
 	const props = withDefaults(defineProps<{ active?: boolean }>(), { active: true });
@@ -28,6 +30,28 @@
 	const management = useAppManagement();
 	const enabledApps = computed(() => management.apps.value.filter((app) => app.enabled).length);
 	const visitedGroups = reactive(new Set<SettingsGroup>(['models']));
+	const pluginRevision = ref(0);
+	const onboarding = useAgentOnboarding({
+		available: () => props.active,
+
+		canEnable: () =>
+			props.active &&
+			!execution.blocked.value &&
+			!execution.dirty.value &&
+			!execution.hardChanged.value &&
+			!execution.confirmation.value,
+
+		onReady() {
+			pluginRevision.value += 1;
+			if (execution.saved.value?.enabled === false) void execution.toggleEnabled();
+			void management.loadApps();
+		},
+	});
+
+	async function toggleAgent(): Promise<void> {
+		if (onboarding.operation.busy.value || onboarding.visible.value) return;
+		if (props.active) await execution.toggleEnabled();
+	}
 
 	function selectGroup(id: SettingsGroup): void {
 		activeGroup.value = id;
@@ -70,12 +94,15 @@
 				:appearance="execution.saved.value.enabled ? 'soft' : 'solid'"
 				:tone="execution.saved.value.enabled ? 'danger' : 'neutral'"
 				:disabled="
+					onboarding.operation.busy.value ||
+					management.appOperation.busy.value ||
+					onboarding.visible.value ||
 					execution.blocked.value ||
 					execution.dirty.value ||
 					execution.hardChanged.value ||
 					execution.confirmation.value !== null
 				"
-				@click="execution.toggleEnabled"
+				@click="toggleAgent"
 				><i
 					:class="execution.saved.value.enabled ? 'fa-solid fa-power-off' : 'fa-solid fa-play'"
 					aria-hidden="true"
@@ -89,6 +116,38 @@
 				}}</UiButton
 			>
 		</div>
+		<p
+			v-if="onboarding.operation.notice.value && onboarding.operation.notice.value !== 'saved'"
+			role="alert"
+			class="text-sm text-warning"
+		>
+			{{ t('agent.settings.appManagement.' + onboarding.operation.notice.value) }}
+		</p>
+		<AgentOnboardingModal
+			v-if="onboarding.entry.value"
+			:entry="onboarding.entry.value"
+			:visible="onboarding.visible.value"
+			:busy="onboarding.operation.busy.value"
+			:notice="
+				onboarding.uncertain.value
+					? 'unknown'
+					: onboarding.operation.notice.value === 'saved'
+						? ''
+						: onboarding.operation.notice.value
+			"
+			:needs-read="onboarding.operation.refreshRequired.value"
+			:confirm-disabled="
+				onboarding.uncertain.value ||
+				onboarding.operation.refreshRequired.value ||
+				!onboarding.entry.value.compatible ||
+				execution.blocked.value ||
+				execution.dirty.value ||
+				execution.hardChanged.value
+			"
+			@close="onboarding.close"
+			@confirm="onboarding.confirm"
+			@read="onboarding.request"
+		/>
 		<template
 			v-if="
 				(execution.saved.value && execution.refreshRequired.value) ||
@@ -136,7 +195,11 @@
 						:active="props.active && activeGroup === 'tools'"
 				/></template>
 			</AppScopedSettings>
-			<PluginManagementSettings />
+			<PluginManagementSettings
+				:active="props.active && activeGroup === 'tools'"
+				:revision="pluginRevision"
+				@recommend="onboarding.request"
+			/>
 		</div>
 		<div v-if="visitedGroups.has('runtime')" v-show="activeGroup === 'runtime'" class="space-y-5">
 			<ExecutionSettings :editor="execution" section="runtime" />

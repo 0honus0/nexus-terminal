@@ -505,3 +505,13 @@ Runtime databases, reports, traces, screenshots, videos, logs, PID files, caches
 [Actions 39426039985](https://github.com/0honus0/nexus-terminal/actions/runs/39426039985) 对应 `bcd6a036`，结果 failure：1/3/6/7组共16项失败，2/4/5/8组、Checks/format/build及Docker通过。核对各失败组日志及第3组trace：空目标弹出框按Escape时Host关闭，引起13项输入框缺失；最小化清除标题草稿引起1项；旧说明文案和同时命中暂存／安装article各1项。本轮让外层窗口在配置弹出框打开时交由内层消费Escape，暂停视图保留标题及原选中线程（身份撤销仍清理）；测试显式核对关闭弹出框后Host／输入仍可达，按真实卸载操作定位安装记录，并用实际目标选择后权限不增加代替已移除的技术说明断言。未恢复多余UI、放宽权限或重放写入。
 
 本轮只执行静态检查与构建，按D17不运行本地行为或用例收集。静态结果：`pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/frontend build` 和 `git diff --check` 均退出0；上述修复与记忆／导入显示仍须新提交的远程Actions验收，不继承历史PASS。
+
+### 单位输入、插件确认与维护入口续审（2026-10-20）
+
+[Actions 39428185902](https://github.com/0honus0/nexus-terminal/actions/runs/39428185902) 被测 SHA `bab9129aaaf1e19806dc2454c9b66ff75530e0b1`，已完成且 failure：7/8 Playwright组通过；第1组仅1项旧 `Completed · UUID` 定位失败，Checks/format/build、Docker及runner image成功。本轮按真实完成时间标签定位，仍检查follow-up创建的新ID、原Run不变与回复，不恢复UUID展示或放宽业务断言。
+
+本轮基于该SHA恢复预算／存储单位控件和底部保存栏、插件仓库添加／搜索／来源卡片与候选确认、官方卡片首次安装弹窗、通知分区与保存栏、SSH Key管理按钮样式。手工AppStorage／暂存／运行时诊断移到已有数据页高级维护，卸载后的显式删除仍留插件页。后端会自动创建内置应用，故总开关不依赖可选插件；推荐插件安装不自动启用插件App或授予能力，三语说明同步真实语义。
+
+两轮源码复核覆盖全部本批文件及设置装配、composable、transport、Shared／后端真实调用：第一轮检查展示基线与转换owner；第二轮检查CAS、无效数值、单位精度、候选安装／升级、发布者信任、部分目录失败、视图撤销／晚响应、未知写入围栏与数据原意图保留。额外通过SFC解析扫描66个非Agent既有变更组件的完整template和静态class集合，分类核对新增恢复／契约差异；此静态扫描不等于浏览器外观验收。
+
+本轮静态环境 Node 22.23.1 / pnpm 11.26.0：`pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/frontend build`、`git diff --check` 均退出0。未执行本地行为测试、浏览器、用例收集或线上部署。单位临界值／跨分类草稿、官方安装取消／回执丢失、仓库信任／升级、维护区域生命周期和窄屏布局须由新提交远程Actions及适用实机环境验收，旧7/8不代表本轮通过或UI还原百分比。

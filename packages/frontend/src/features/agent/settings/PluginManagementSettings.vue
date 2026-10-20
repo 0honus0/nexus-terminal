@@ -1,31 +1,27 @@
 <script setup lang="ts">
-	import { computed, ref } from 'vue';
+	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
 	import { usePluginManagement } from '../composables/use-plugin-management';
 	import AppScopedSettings from './AppScopedSettings.vue';
 	import PluginRepositorySettings from './PluginRepositorySettings.vue';
 	import PluginDataEditor from './PluginDataEditor.vue';
+	import type { PluginInstallation } from '../model/plugin-types';
 
 	const { t } = useI18n();
+	const props = withDefaults(defineProps<{ active?: boolean; revision?: number }>(), { active: true, revision: 0 });
+	const emit = defineEmits<{ recommend: [] }>();
 	const {
 		publishers,
 		installations,
-		stages,
 		versions,
-		selectedStageId,
 		candidate,
 		candidateInstallation,
 		applyCandidate,
 		label,
 		publicKeyPem,
-		runtime,
-		runtimeAppId,
-		runtimeInstanceId,
-		runtimeAcknowledged,
 		mutationUnknown,
 		acknowledged,
-		uploadReservation,
 		uploadAppId,
 		file,
 		operation,
@@ -34,16 +30,28 @@
 		trust,
 		revoke,
 		preparePackage,
-		verify,
-		install,
+		prepareCatalogEntry,
+		trustCatalogPublisher,
 		retire,
-		upgrade,
-		readRuntime,
-		acknowledgeRuntime,
 		newIntent,
-	} = usePluginManagement();
+	} = usePluginManagement(() => props.active);
 	const showPublishers = ref(false);
-	const blocked = computed(() => !canWrite());
+	const blocked = computed(() => !props.active || !canWrite());
+	watch(
+		() => props.revision,
+		() => {
+			if (props.active) void load();
+		},
+	);
+	const activeInstallations = computed(() => installations.value.filter((item) => item.status !== 'removed'));
+	const removedInstallations = computed(() => installations.value.filter((item) => item.status === 'removed'));
+
+	function installationName(installation: PluginInstallation): string {
+		return (
+			versions.value.find((item) => item.packageHash === installation.packageHash)?.manifest.displayName ??
+			installation.definitionId
+		);
+	}
 
 	async function choosePackage(event: Event, appId: string): Promise<void> {
 		if (event.target instanceof HTMLInputElement) {
@@ -159,155 +167,84 @@
 					</div>
 				</div>
 			</div>
-			<details class="space-y-2">
-				<summary class="cursor-pointer text-sm text-text-secondary">
-					{{ t('agent.pluginManagement.stages') }}
-				</summary>
-				<p v-if="uploadReservation" class="break-all text-xs">
-					{{ t('agent.pluginManagement.reservation') }}: {{ uploadReservation.appId }} /
-					{{ uploadReservation.id }} · v{{ uploadReservation.version }}
+
+			<div class="space-y-3">
+				<h4 class="text-sm font-semibold">{{ t('agent.settings.plugins.installed') }}</h4>
+				<p v-if="!activeInstallations.length" class="text-xs text-text-secondary">
+					{{ t('agent.settings.plugins.noneInstalled') }}
 				</p>
-				<div class="space-y-2 rounded border border-border p-3">
-					<h4>{{ t('agent.pluginManagement.stages') }}</h4>
-					<label class="block text-sm"
-						>{{ t('agent.pluginManagement.selectedStage')
-						}}<select
-							v-model="selectedStageId"
-							:disabled="operation.busy.value"
-							class="ml-2 rounded border border-border bg-background p-2"
-						>
-							<option value="">—</option>
-							<option
-								v-for="stage in stages.filter((item) => item.status === 'verified')"
-								:key="stage.id"
-								:value="stage.id"
-							>
-								{{ stage.manifest?.displayName }} · {{ stage.manifest?.version }}
-							</option>
-						</select></label
-					>
-					<article
-						v-for="stage in stages"
-						:key="stage.id"
-						class="space-y-1 border-t border-border py-2 text-xs"
-					>
-						<p class="break-all">
-							{{ stage.id }} · v{{ stage.version }} · {{ stage.status }} · {{ stage.sizeBytes }} B
-						</p>
-						<p class="break-all">
-							{{ stage.manifest?.id }} · {{ stage.manifest?.version }} · {{ stage.packageHash }}
-						</p>
-						<UiButton
-							type="button"
-							:disabled="blocked || stage.status !== 'staged'"
-							@click="verify(stage)"
-							>{{ t('agent.pluginManagement.verify') }}</UiButton
-						>
-						<UiButton
-							type="button"
-							:disabled="blocked || stage.status !== 'verified'"
-							@click="install(stage)"
-							>{{ t('agent.pluginManagement.install') }}</UiButton
-						>
-					</article>
-				</div>
-			</details>
-			<div class="space-y-2 rounded border border-border p-3">
-				<h4>{{ t('agent.pluginManagement.installations') }}</h4>
 				<article
-					v-for="installation in installations"
+					v-for="installation in activeInstallations"
 					:key="installation.appId"
-					class="space-y-2 border-t border-border py-2 text-xs"
+					class="rounded-xl border border-border bg-header/20 p-4 shadow-2xs"
 				>
-					<p class="break-all">
-						{{ installation.definitionId }} · {{ installation.version }} · {{ installation.status }}
-					</p>
-					<div class="flex flex-wrap gap-2">
-						<UiButton
-							type="button"
-							:disabled="blocked || installation.status === 'removed'"
-							@click="retire(installation, false)"
-							>{{ t('agent.pluginManagement.remove') }}</UiButton
-						>
-						<UiButton
-							type="button"
-							:disabled="blocked || installation.status !== 'draining'"
-							@click="retire(installation, true)"
-							>{{ t('agent.pluginManagement.cancelRetirement') }}</UiButton
-						>
-						<UiButton
-							type="button"
-							:disabled="blocked || installation.status !== 'installed' || !selectedStageId"
-							@click="upgrade(installation, true)"
-							>{{ t('agent.pluginManagement.prepareUpgrade') }}</UiButton
-						>
-						<UiButton
-							type="button"
-							:disabled="blocked || installation.status !== 'draining' || !selectedStageId"
-							@click="upgrade(installation, false)"
-							>{{ t('agent.pluginManagement.upgrade') }}</UiButton
-						>
+					<div class="flex flex-wrap items-center justify-between gap-3">
+						<div class="min-w-0">
+							<p class="break-words text-sm font-semibold">{{ installationName(installation) }}</p>
+							<p class="mt-1 break-all font-mono text-xs text-text-secondary">
+								{{ installation.definitionId }} · v{{ installation.version }}
+							</p>
+						</div>
+						<div class="flex flex-wrap gap-2">
+							<UiButton
+								type="button"
+								appearance="soft"
+								tone="danger"
+								:disabled="blocked"
+								@click="retire(installation, false)"
+								>{{
+									t(
+										installation.status === 'draining'
+											? 'agent.settings.plugins.continueUninstall'
+											: 'agent.pluginManagement.remove',
+									)
+								}}</UiButton
+							>
+							<UiButton
+								v-if="installation.status === 'draining'"
+								type="button"
+								:disabled="blocked"
+								@click="retire(installation, true)"
+								>{{ t('agent.pluginManagement.cancelRetirement') }}</UiButton
+							>
+						</div>
 					</div>
-					<PluginDataEditor
-						:key="installation.appId + ':' + installation.revision"
-						:installation="installation"
-						:disabled="blocked"
-						@changed="load"
-					/>
 				</article>
 			</div>
-			<details>
-				<summary>{{ t('agent.pluginManagement.versions') }}</summary>
-				<p v-for="version in versions" :key="version.packageHash" class="break-all text-xs">
-					{{ version.manifest.id }} · {{ version.manifest.version }} · {{ version.packageHash }}
-				</p>
-			</details>
-			<details class="space-y-2 rounded border border-border p-3">
-				<summary class="cursor-pointer text-sm text-text-secondary">
-					{{ t('agent.pluginManagement.runtime') }}
-				</summary>
-				<label class="block text-sm"
-					>App<select
-						v-model="runtimeAppId"
-						:disabled="operation.busy.value"
-						class="ml-2 rounded border border-border bg-background p-2"
-						@change="runtime = null"
+			<div v-if="removedInstallations.length" class="rounded-xl border border-error/30 bg-error/5 p-4">
+				<div class="flex items-center gap-2 text-xs font-semibold text-error">
+					<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i
+					><span>{{ t('agent.settings.plugins.retainedData') }}</span>
+				</div>
+				<p class="mt-1 text-[11px] text-text-secondary">{{ t('agent.settings.plugins.retainedDataHint') }}</p>
+				<div class="mt-3 space-y-2">
+					<div
+						v-for="installation in removedInstallations"
+						:key="installation.appId"
+						class="rounded-lg bg-header/25 p-3"
 					>
-						<option value="">—</option>
-						<option v-for="item in installations" :key="item.appId" :value="item.appId">
-							{{ item.definitionId }} · {{ item.appId }}
-						</option>
-					</select></label
-				>
-				<label class="block text-sm"
-					>{{ t('agent.pluginManagement.instanceId')
-					}}<input
-						v-model="runtimeInstanceId"
-						:disabled="operation.busy.value"
-						class="ml-2 rounded border border-border bg-background p-2"
-						@input="runtime = null"
-				/></label>
-				<UiButton
-					type="button"
-					:disabled="operation.busy.value || operation.refreshRequired.value || !runtimeAppId"
-					@click="readRuntime"
-					>{{ t('agent.pluginManagement.readRuntime') }}</UiButton
-				>
-				<p v-if="runtime" class="break-all text-xs">
-					{{ runtime.appId }} · {{ runtime.instanceId }} · r{{ runtime.revision }} · {{ runtime.state }}
-				</p>
-				<UiCheckbox v-if="runtime?.state === 'unknown'" v-model="runtimeAcknowledged">{{
-					t('agent.pluginManagement.runtimeAcknowledgement')
-				}}</UiCheckbox>
-				<UiButton
-					v-if="runtime?.state === 'unknown'"
-					type="button"
-					:disabled="blocked || !runtimeAcknowledged"
-					@click="acknowledgeRuntime"
-					>{{ t('agent.pluginManagement.acknowledgeRuntime') }}</UiButton
-				>
-			</details>
-			<PluginRepositorySettings />
+						<p class="break-words text-xs">{{ installationName(installation) }}</p>
+						<PluginDataEditor
+							retained-only
+							:key="installation.appId + ':' + installation.revision"
+							:installation="installation"
+							:disabled="blocked"
+							:active="active"
+							@changed="load"
+						/>
+					</div>
+				</div>
+			</div>
+
+			<PluginRepositorySettings
+				:publishers="publishers"
+				:installations="installations"
+				:active="active"
+				:blocked="blocked || candidate !== null"
+				@prepare="prepareCatalogEntry"
+				@trust="trustCatalogPublisher"
+				@recommend="emit('recommend')"
+			/>
 			<div class="overflow-hidden rounded-xl border border-border bg-header/20 shadow-2xs">
 				<button
 					type="button"

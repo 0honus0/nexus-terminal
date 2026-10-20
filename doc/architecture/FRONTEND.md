@@ -50,6 +50,8 @@ Artifact正式库归artifact-management-api、artifact-types/mapper、use-artifa
 
 插件正式管理归plugin-management-api、plugin-data-api、plugin-types/mapper、use-plugin-management以及PluginManagementSettings/PluginRepositorySettings/PluginDataEditor；设置父页仅装配独立卡片，旧聚合settings、假安装进度与旧管理transport已删除。发布者version、包version、安装revision独立；数据原意图/operationId在未知后保持不变。快照仅在已准备升级的draining状态读取；普通单键读取与已移除数据清除不借用迁移快照。
 
+官方仓库卡片首次安装的推荐读取／安装归 use-agent-onboarding，AgentOnboardingModal 只展示原确认界面；总开关不要求安装可选官方插件。安装成功才请求唯一 Execution owner 修改总开关，不自动授予插件权限；离页撤销回调，未知安装不自动重放。PluginRepositorySettings 只持仓库 CAS 与目录读取，来源失败分别处理；目录选包与信任发布者经事件交给 use-plugin-management，复用本地选包的候选确认、安装／升级和未知结果围栏，不复制写入 owner。预算与存储复用 QuantityInput；无效输入状态归父级 use-execution-settings，阻止保存旧有效值，显示缩写必须可精确往返。
+
 descriptor声明的消息容量与真实前端RPC预算同源；父桥在请求解码及响应派发前同时检查descriptor上限，核心子协议继续由各自严格codec限定。
 
 插件运行协议归plugin-runtime-api与plugin-sdk/host-bridge。descriptor严格解码后投影独立本地对象，grant从经验证的短期URL取得；桥只在真实iframe source的ready/init/ack后转发Shared RPC envelope，全方法由新后端执行授权，不保留旧agent-dispatcher与旧SDK协议转换。RPC完整响应关联nonce/id/seq/request并核对HTTP状态；本地取消不证明远端未执行。隐藏/切换/身份撤销、过期和异常消息关闭端口、计时器与等待；PluginAppFrame按真实visible控制scope。原生Host也已接入Scope工作区协议，与插件桥各自保留授权及生命周期。
@@ -502,3 +504,5 @@ Appearance 的字体保存、Presentation 的面板比例保存分别在所属�
 8. **当前能力与验收**：普通文本字体资产、搜索焦点与裁切边界的源码修复已接入；实际输入/下一条/上一条/替换/正则错误提示与小面板场景按 D17 待远程回归。静态检查及资产依赖证据归 testing/E2E，产品说明见 USAGE 文件管理器章节。
 
 Terminal background由useTerminalBackground持有文档生命周期：同页会话切换只暂停/恢复；KeepAlive deactivation暂停并清空srcdoc，返回后先确认iframe可见尺寸再加载当前主题，避免脱离DOM期间文档重建以零视口初始化。iframe节点可缓存不代表内部document跨detach保留。
+
+AgentMaintenancePanel 通过 Agent public 由数据页高级维护装配，暂存核验／版本／手工数据与运行时管理只在该入口展示；沿用 use-plugin-management 和 PluginDataEditor 的原契约，不复制transport。active 绑定页面与维护展开状态，离页撤销回调，保留未知写入围栏和原数据意图，身份撤销清理。普通插件页只展示安装／升级／卸载与已卸载数据删除。

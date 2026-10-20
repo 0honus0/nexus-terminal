@@ -1,4 +1,4 @@
-import { computed, onActivated, onMounted, ref, toRaw } from 'vue';
+import { computed, onActivated, onMounted, ref, toRaw, watch } from 'vue';
 import {
 	acknowledgePluginRuntime,
 	getPluginRuntime,
@@ -10,6 +10,7 @@ import {
 	retirePluginInstallation,
 	revokePluginPublisher,
 	stagePluginArtifact,
+	stagePluginCatalogEntry,
 	trustPluginPublisher,
 	upgradePluginInstallation,
 	verifyPluginStage,
@@ -21,12 +22,13 @@ import type {
 	PluginRuntime,
 	PluginStage,
 	PluginVersion,
+	PluginCatalogEntry,
 } from '../model/plugin-types';
 import type { ManagedArtifact } from '../model/artifact-types';
 import { agentHostEvents } from '../events/agent-host-events';
 import { useAgentManagementOperation } from './use-agent-management-operation';
 
-export function usePluginManagement() {
+export function usePluginManagement(available: () => boolean = () => true) {
 	const publishers = ref<PluginPublisher[]>([]);
 	const installations = ref<PluginInstallation[]>([]);
 	const stages = ref<PluginStage[]>([]);
@@ -49,7 +51,8 @@ export function usePluginManagement() {
 	const uploadReservation = ref<ManagedArtifact | null>(null);
 	const uploadAppId = ref('');
 	const file = ref<File | null>(null);
-	const operation = useAgentManagementOperation(() => {
+	let writeIntent: symbol | null = null;
+	const operation = useAgentManagementOperation((reason) => {
 		publishers.value = [];
 		installations.value = [];
 		stages.value = [];
@@ -62,12 +65,12 @@ export function usePluginManagement() {
 		runtimeAppId.value = '';
 		runtimeInstanceId.value = '';
 		runtimeAcknowledged.value = false;
-		mutationUnknown.value = false;
+		mutationUnknown.value = reason === 'view' && (mutationUnknown.value || writeIntent !== null);
 		acknowledged.value = false;
 		uploadReservation.value = null;
 		uploadAppId.value = '';
 		file.value = null;
-	});
+	}, available);
 
 	async function load(): Promise<void> {
 		await operation.execute(
@@ -101,6 +104,8 @@ export function usePluginManagement() {
 		if (!canWrite()) {
 			return;
 		}
+		const intent = Symbol();
+		writeIntent = intent;
 		await operation.execute(
 			action,
 			(value) => {
@@ -116,6 +121,7 @@ export function usePluginManagement() {
 				},
 			},
 		);
+		if (writeIntent === intent) writeIntent = null;
 		if (operation.notice.value === 'saved') {
 			await load();
 		}
@@ -163,6 +169,21 @@ export function usePluginManagement() {
 				file.value = null;
 			},
 		);
+	}
+
+	async function prepareCatalogEntry(entry: PluginCatalogEntry, source: string | null): Promise<void> {
+		const original = structuredClone(toRaw(entry));
+		await write(
+			(signal) => stagePluginCatalogEntry(original, source, signal),
+			(value) => {
+				selectedStageId.value = value.id;
+				candidate.value = value;
+			},
+		);
+	}
+
+	async function trustCatalogPublisher(name: string, pem: string): Promise<void> {
+		await write((signal) => trustPluginPublisher(name, pem, signal));
 	}
 
 	async function verify(stage: PluginStage): Promise<void> {
@@ -271,6 +292,9 @@ export function usePluginManagement() {
 
 	onMounted(initial);
 	onActivated(initial);
+	watch(available, (active) => {
+		if (active) initial();
+	});
 	return {
 		publishers,
 		installations,
@@ -298,6 +322,8 @@ export function usePluginManagement() {
 		trust,
 		revoke,
 		preparePackage,
+		prepareCatalogEntry,
+		trustCatalogPublisher,
 		verify,
 		install,
 		retire,

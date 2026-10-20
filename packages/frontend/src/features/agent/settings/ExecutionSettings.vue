@@ -10,6 +10,9 @@
 	import type { useExecutionSettings } from '../composables/use-execution-settings';
 	import type { ExecutionModel, ExecutionModelChoice } from '../model/execution-types';
 	import { formatAgentDate } from '../locale-format';
+	import QuantityInput from './QuantityInput.vue';
+	import type { QuantityType } from './quantity-format';
+	import type { ExecutionLimits } from '../model/execution-types';
 
 	const props = defineProps<{
 		editor: ReturnType<typeof useExecutionSettings>;
@@ -55,11 +58,19 @@
 		refreshRequired,
 		notice,
 		dirty,
+		invalidLimits,
+		setLimit,
 		blocked,
 		hardChanged,
 		perform,
 		loadModels,
 	} = props.editor;
+
+	function quantityType(key: keyof ExecutionLimits): QuantityType {
+		if (key.endsWith('Bytes')) return 'bytes';
+		if (key.endsWith('Seconds')) return 'seconds';
+		return key === 'maxTokenReservations' ? 'tokens' : 'number';
+	}
 
 	function explicitModel(choice: ExecutionModelChoice): ExecutionModel {
 		return {
@@ -123,14 +134,25 @@
 							<span class="block text-xs font-semibold text-foreground">{{
 								t('agent.settings.execution.limits.' + key)
 							}}</span>
+							<QuantityInput
+								v-if="section === 'budget' || section === 'storage'"
+								:model-value="invalidLimits.has(key) ? null : draft.limits[key]"
+								:type="quantityType(key)"
+								:min="1"
+								:max="draft.hardLimits[key]"
+								:aria-label="t('agent.settings.execution.limits.' + key)"
+								:disabled="blocked || confirmation !== null"
+								@update:model-value="setLimit(key, $event)"
+							/>
 							<input
+								v-else
 								v-model.number="draft.limits[key]"
 								type="number"
 								min="1"
 								:max="draft.hardLimits[key]"
 								step="1"
 								:aria-label="t('agent.settings.execution.limits.' + key)"
-								class="w-full rounded border border-border bg-background p-2"
+								class="h-9 w-full rounded-lg border border-border bg-card px-3 text-xs text-foreground outline-none transition-colors focus:border-primary"
 							/>
 							<span class="block text-xs text-text-secondary">{{
 								t('agent.settings.execution.currentHard', { value: draft.hardLimits[key] })
@@ -217,14 +239,6 @@
 							</div>
 						</div>
 					</template>
-					<UiButton
-						type="button"
-						:appearance="dirty ? 'solid' : 'soft'"
-						:tone="dirty ? 'primary' : 'neutral'"
-						:disabled="!dirty"
-						@click="perform('save')"
-						>{{ t('common.save') }}</UiButton
-					>
 				</fieldset>
 				<details v-if="section === 'budget'" class="space-y-3 border-t border-border pt-3">
 					<summary class="cursor-pointer font-medium">{{ t('agent.settings.execution.hardLimits') }}</summary>
@@ -270,6 +284,24 @@
 					</div>
 				</details>
 			</template>
+		</div>
+		<div
+			v-if="draft && hardDraft"
+			class="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-header/20 px-4 py-3 sm:px-5"
+		>
+			<span class="text-xs" :class="dirty ? 'text-warning' : 'text-text-secondary'">{{
+				t(dirty ? 'agent.settings.budget.unsavedChanges' : 'agent.settings.budget.readyNotice')
+			}}</span>
+			<UiButton
+				type="button"
+				:appearance="dirty ? 'solid' : 'soft'"
+				:tone="dirty ? 'primary' : 'neutral'"
+				:disabled="blocked || confirmation !== null || !dirty"
+				@click="perform('save')"
+			>
+				<i v-if="busy" class="fa-solid fa-spinner fa-spin text-xs" aria-hidden="true"></i>
+				{{ t('common.save') }}
+			</UiButton>
 		</div>
 	</section>
 </template>

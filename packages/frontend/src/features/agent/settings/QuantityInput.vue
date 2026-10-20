@@ -20,6 +20,8 @@
 			placeholder?: string;
 			disabled?: boolean;
 			min?: number;
+			max?: number;
+			ariaLabel?: string;
 			showFeedback?: boolean;
 			showPills?: boolean;
 			compact?: boolean;
@@ -29,6 +31,8 @@
 			placeholder: '',
 			disabled: false,
 			min: 0,
+			max: Number.MAX_SAFE_INTEGER,
+			ariaLabel: '',
 			showFeedback: true,
 			showPills: true,
 			compact: false,
@@ -78,21 +82,22 @@
 
 	const parsedNumber = computed(() => {
 		const parsed = parseQuantity(textValue.value, props.type);
-		if (parsed === null || parsed < props.min) return null;
+		if (parsed === null || parsed < props.min || parsed > props.max) return null;
 		return parsed;
 	});
 
 	const feedback = computed(() => {
 		if (!textValue.value.trim()) return null;
 		const result = getQuantityFeedback(textValue.value, props.type, quantityLabels.value);
-		if (result.valid && result.value !== null && result.value < props.min) {
+		if (result.valid && result.value !== null && (result.value < props.min || result.value > props.max)) {
 			return { ...result, valid: false };
 		}
 		return result;
 	});
 
 	const onInput = (event: Event) => {
-		const target = event.target as HTMLInputElement;
+		const target = event.target;
+		if (!(target instanceof HTMLInputElement)) return;
 		textValue.value = target.value;
 		emit('update:modelValue', parsedNumber.value);
 	};
@@ -166,6 +171,8 @@
 				:value="textValue"
 				:placeholder="inputPlaceholder"
 				:disabled="disabled"
+				:aria-label="ariaLabel || undefined"
+				:aria-invalid="feedback && !feedback.valid ? true : undefined"
 				data-no-highlight
 				class="h-8.5 w-full rounded-lg border border-border/80 bg-card px-2.5 font-mono text-xs text-foreground placeholder:text-text-secondary/50 focus:border-border-hover focus:outline-none transition-all disabled:opacity-50"
 				:class="[

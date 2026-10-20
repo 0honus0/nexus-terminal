@@ -205,7 +205,7 @@
 
 <template>
 	<form v-if="visible" class="space-y-6 text-foreground" @submit.prevent="submit">
-		<h3 class="text-lg font-semibold">
+		<h3 class="mb-4 text-lg font-semibold">
 			{{ t(setting ? 'settings.notifications.form.editTitle' : 'settings.notifications.form.addTitle') }}
 		</h3>
 		<fieldset :disabled="store.loading || store.needsRefresh" class="space-y-4">
@@ -219,114 +219,129 @@
 					<option value="email">{{ t('settings.notifications.types.email') }}</option>
 					<option value="telegram">{{ t('settings.notifications.types.telegram') }}</option>
 				</UiSelect>
-			</UiFormField>
-			<template v-if="channel === 'webhook'">
-				<UiFormField label="URL" for-id="webhook-url"
-					><UiInput id="webhook-url" v-model="form.url" type="url" required
-				/></UiFormField>
-				<UiFormField :label="t('settings.notifications.form.webhookMethod')" for-id="webhook-method">
-					<UiSelect id="webhook-method" v-model="method"
-						><option>POST</option>
-						<option>GET</option>
-						<option>PUT</option></UiSelect
-					>
-				</UiFormField>
-				<div class="space-y-3">
-					<h4>{{ t('settings.notifications.form.webhookHeaders') }}</h4>
-					<div v-for="(header, index) in headers" :key="index" class="grid gap-2 sm:grid-cols-4">
-						<UiInput
-							v-model="header.name"
-							:aria-label="t('settings.notifications.form.headerName')"
-							required
-						/>
-						<UiSelect
-							v-model="header.action"
-							:options="actions"
-							:aria-label="t('settings.notifications.form.secretAction')"
-							@update:model-value="header.value = ''"
-						/>
-						<UiInput
-							v-if="header.action === 'replace'"
-							v-model="header.value"
-							type="password"
-							autocomplete="new-password"
-							:aria-label="t('settings.notifications.form.headerValue')"
-							required
-						/>
-						<span v-else>{{
-							t(
-								header.hasValue
-									? 'settings.notifications.form.secretPresent'
-									: 'settings.notifications.form.secretAbsent',
-							)
-						}}</span>
-						<UiButton type="button" @click="headers.splice(index, 1)">{{ t('common.delete') }}</UiButton>
-					</div>
-					<UiButton
-						type="button"
-						:disabled="headers.length >= NOTIFICATION_MAX_HEADERS"
-						@click="headers.push({ name: '', action: 'replace', value: '', hasValue: false })"
-						>{{ t('settings.notifications.form.addHeader') }}</UiButton
-					>
-				</div>
-			</template>
-			<template v-else-if="channel === 'email'">
-				<UiFormField :label="t('settings.notifications.form.emailTo')" for-id="notification-to"
-					><UiInput id="notification-to" v-model="form.to" type="email" multiple required
-				/></UiFormField>
-				<UiFormField :label="t('settings.notifications.form.smtpFrom')" for-id="notification-from"
-					><UiInput id="notification-from" v-model="form.from" type="email" required
-				/></UiFormField>
-				<UiFormField :label="t('settings.notifications.form.smtpHost')" for-id="notification-host"
-					><UiInput id="notification-host" v-model="form.host" required
-				/></UiFormField>
-				<UiFormField :label="t('settings.notifications.form.smtpPort')" for-id="notification-port"
-					><UiInput id="notification-port" v-model="form.port" type="number" min="1" max="65535" required
-				/></UiFormField>
-				<label class="flex gap-2"
-					><UiCheckbox v-model="form.secure" />{{ t('settings.notifications.form.smtpSecure') }}</label
-				>
-				<UiFormField :label="t('settings.notifications.form.smtpUser')" for-id="notification-user"
-					><UiInput id="notification-user" v-model="form.username"
-				/></UiFormField>
-			</template>
-			<template v-else>
-				<UiFormField :label="t('settings.notifications.form.telegramCustomDomain')" for-id="notification-origin"
-					><UiInput id="notification-origin" v-model="form.origin" type="url" required
-				/></UiFormField>
-				<UiFormField :label="t('settings.notifications.form.telegramChatId')" for-id="notification-chat"
-					><UiInput id="notification-chat" v-model="form.chatId" required
-				/></UiFormField>
-			</template>
-			<template v-if="channel !== 'webhook'">
-				<UiFormField
-					:label="
-						t(
-							channel === 'email'
-								? 'settings.notifications.form.smtpPass'
-								: 'settings.notifications.form.telegramToken',
-						)
-					"
-					for-id="notification-secret-action"
-				>
-					<UiSelect id="notification-secret-action" v-model="secretAction" :options="actions" />
-				</UiFormField>
-				<UiInput
-					v-if="secretAction === 'replace'"
-					v-model="form.secret"
-					type="password"
-					autocomplete="new-password"
-					:aria-label="t('settings.notifications.form.headerValue')"
-					required
-				/>
-				<p v-else class="text-sm text-text-secondary">{{ t('settings.notifications.form.secretHint') }}</p>
-			</template>
-			<UiFormField :label="t('settings.notifications.form.webhookBodyTemplate')" for-id="notification-template">
-				<UiTextarea id="notification-template" v-model="form.bodyTemplate" :min-rows="3" />
-				<p class="text-xs text-text-secondary">
-					{{ t('settings.notifications.form.templateHelp') }} {event}, {subjectId}, {time}
+				<p v-if="setting" class="mt-1 text-xs text-text-secondary">
+					{{ t('settings.notifications.form.channelTypeEditNote') }}
 				</p>
 			</UiFormField>
+			<section class="ui-form-section mt-4 space-y-4">
+				<h4 class="mb-3 text-sm font-semibold">
+					{{ t('settings.notifications.types.' + channel) }} {{ t('common.settings') }}
+				</h4>
+				<template v-if="channel === 'webhook'">
+					<UiFormField label="URL" for-id="webhook-url"
+						><UiInput id="webhook-url" v-model="form.url" type="url" required
+					/></UiFormField>
+					<UiFormField :label="t('settings.notifications.form.webhookMethod')" for-id="webhook-method">
+						<UiSelect id="webhook-method" v-model="method"
+							><option>POST</option>
+							<option>GET</option>
+							<option>PUT</option></UiSelect
+						>
+					</UiFormField>
+					<div class="space-y-3">
+						<h4>{{ t('settings.notifications.form.webhookHeaders') }}</h4>
+						<div v-for="(header, index) in headers" :key="index" class="grid gap-2 sm:grid-cols-4">
+							<UiInput
+								v-model="header.name"
+								:aria-label="t('settings.notifications.form.headerName')"
+								required
+							/>
+							<UiSelect
+								v-model="header.action"
+								:options="actions"
+								:aria-label="t('settings.notifications.form.secretAction')"
+								@update:model-value="header.value = ''"
+							/>
+							<UiInput
+								v-if="header.action === 'replace'"
+								v-model="header.value"
+								type="password"
+								autocomplete="new-password"
+								:aria-label="t('settings.notifications.form.headerValue')"
+								required
+							/>
+							<span v-else>{{
+								t(
+									header.hasValue
+										? 'settings.notifications.form.secretPresent'
+										: 'settings.notifications.form.secretAbsent',
+								)
+							}}</span>
+							<UiButton type="button" @click="headers.splice(index, 1)">{{
+								t('common.delete')
+							}}</UiButton>
+						</div>
+						<UiButton
+							type="button"
+							:disabled="headers.length >= NOTIFICATION_MAX_HEADERS"
+							@click="headers.push({ name: '', action: 'replace', value: '', hasValue: false })"
+							>{{ t('settings.notifications.form.addHeader') }}</UiButton
+						>
+					</div>
+				</template>
+				<template v-else-if="channel === 'email'">
+					<UiFormField :label="t('settings.notifications.form.emailTo')" for-id="notification-to"
+						><UiInput id="notification-to" v-model="form.to" type="email" multiple required
+					/></UiFormField>
+					<UiFormField :label="t('settings.notifications.form.smtpFrom')" for-id="notification-from"
+						><UiInput id="notification-from" v-model="form.from" type="email" required
+					/></UiFormField>
+					<UiFormField :label="t('settings.notifications.form.smtpHost')" for-id="notification-host"
+						><UiInput id="notification-host" v-model="form.host" required
+					/></UiFormField>
+					<UiFormField :label="t('settings.notifications.form.smtpPort')" for-id="notification-port"
+						><UiInput id="notification-port" v-model="form.port" type="number" min="1" max="65535" required
+					/></UiFormField>
+					<label class="flex gap-2"
+						><UiCheckbox v-model="form.secure" />{{ t('settings.notifications.form.smtpSecure') }}</label
+					>
+					<UiFormField :label="t('settings.notifications.form.smtpUser')" for-id="notification-user"
+						><UiInput id="notification-user" v-model="form.username"
+					/></UiFormField>
+				</template>
+				<template v-else>
+					<UiFormField
+						:label="t('settings.notifications.form.telegramCustomDomain')"
+						for-id="notification-origin"
+						><UiInput id="notification-origin" v-model="form.origin" type="url" required
+					/></UiFormField>
+					<UiFormField :label="t('settings.notifications.form.telegramChatId')" for-id="notification-chat"
+						><UiInput id="notification-chat" v-model="form.chatId" required
+					/></UiFormField>
+				</template>
+				<template v-if="channel !== 'webhook'">
+					<UiFormField
+						:label="
+							t(
+								channel === 'email'
+									? 'settings.notifications.form.smtpPass'
+									: 'settings.notifications.form.telegramToken',
+							)
+						"
+						for-id="notification-secret-action"
+					>
+						<UiSelect id="notification-secret-action" v-model="secretAction" :options="actions" />
+					</UiFormField>
+					<UiInput
+						v-if="secretAction === 'replace'"
+						v-model="form.secret"
+						type="password"
+						autocomplete="new-password"
+						:aria-label="t('settings.notifications.form.headerValue')"
+						required
+					/>
+					<p v-else class="text-sm text-text-secondary">{{ t('settings.notifications.form.secretHint') }}</p>
+				</template>
+				<UiFormField
+					:label="t('settings.notifications.form.webhookBodyTemplate')"
+					for-id="notification-template"
+				>
+					<UiTextarea id="notification-template" v-model="form.bodyTemplate" :min-rows="3" />
+					<p class="text-xs text-text-secondary">
+						{{ t('settings.notifications.form.templateHelp') }} {event}, {subjectId}, {time}
+					</p>
+				</UiFormField>
+			</section>
 			<div class="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-3">
 				<label v-for="event in OPERATION_EVENTS" :key="event" class="flex min-w-0 max-w-full gap-2 text-sm">
 					<UiCheckbox
@@ -342,7 +357,7 @@
 			}}</UiButton>
 		</fieldset>
 		<p v-if="message" role="status">{{ message }}</p>
-		<div class="flex justify-end gap-3">
+		<div class="mt-6 flex justify-end space-x-3 border-t border-border pt-5">
 			<UiButton type="button" @click="emit('close')">{{ t('common.cancel') }}</UiButton>
 			<UiButton type="submit" appearance="solid" :disabled="store.loading || store.needsRefresh">{{
 				t('common.save')

@@ -19,6 +19,10 @@ export interface QuantityLabels {
 	exactSeconds: (value: string) => string;
 }
 
+function wholeQuantity(value: number): number | null {
+	return Number.isSafeInteger(value) ? value : null;
+}
+
 /**
  * 将用户输入的带有 K, M, G, B 等单位的文本或数字解析为精确的数值。
  *
@@ -44,8 +48,7 @@ export interface QuantityLabels {
 export function parseQuantity(raw: string | number | null | undefined, type: QuantityType = 'bytes'): number | null {
 	if (raw === null || raw === undefined) return null;
 	if (typeof raw === 'number') {
-		if (Number.isNaN(raw)) return null;
-		return Number.isFinite(raw) ? Math.round(raw) : null;
+		return wholeQuantity(raw);
 	}
 
 	const trimmed = raw.trim().toLowerCase().replace(/,/g, '');
@@ -77,7 +80,7 @@ export function parseQuantity(raw: string | number | null | undefined, type: Qua
 		} else {
 			return null;
 		}
-		return Math.round(num * multiplier);
+		return wholeQuantity(num * multiplier);
 	}
 
 	if (type === 'tokens') {
@@ -94,7 +97,7 @@ export function parseQuantity(raw: string | number | null | undefined, type: Qua
 		} else {
 			return null;
 		}
-		return Math.round(num * multiplier);
+		return wholeQuantity(num * multiplier);
 	}
 
 	if (type === 'seconds') {
@@ -110,7 +113,7 @@ export function parseQuantity(raw: string | number | null | undefined, type: Qua
 		} else {
 			return null;
 		}
-		return Math.round(num * multiplier);
+		return wholeQuantity(num * multiplier);
 	}
 
 	// Generic number
@@ -120,7 +123,7 @@ export function parseQuantity(raw: string | number | null | undefined, type: Qua
 	else if (unit === 'g') multiplier = 1000000000;
 	else if (unit !== '') return null;
 
-	return Math.round(num * multiplier);
+	return wholeQuantity(num * multiplier);
 }
 
 /**
@@ -250,19 +253,12 @@ export function toCompactQuantityString(
 	}
 
 	if (type === 'bytes') {
-		const absVal = Math.abs(num);
-		const sign = num < 0 ? '-' : '';
-		if (absVal >= 1024 * 1024 * 1024) {
-			const g = absVal / (1024 * 1024 * 1024);
-			return `${sign}${Number.isInteger(g) ? g : Number(g.toFixed(1))}G`;
-		}
-		if (absVal >= 1024 * 1024) {
-			const m = absVal / (1024 * 1024);
-			return `${sign}${Number.isInteger(m) ? m : Number(m.toFixed(1))}M`;
-		}
-		if (absVal >= 1024) {
-			const k = absVal / 1024;
-			return `${sign}${Number.isInteger(k) ? k : Number(k.toFixed(1))}K`;
+		for (const [unit, multiplier] of [
+			['G', 1024 ** 3],
+			['M', 1024 ** 2],
+			['K', 1024],
+		] as const) {
+			if (Math.abs(num) >= multiplier && num % multiplier === 0) return String(num / multiplier) + unit;
 		}
 		return String(num);
 	}

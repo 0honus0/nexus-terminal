@@ -41,6 +41,7 @@ export function useExecutionSettings() {
 	const modelsFailed = ref(false);
 	const refreshRequired = ref(true);
 	const notice = ref('');
+	const invalidLimits = ref(new Set<keyof ExecutionLimits>());
 	let generation = 0;
 	let modelsGeneration = 0;
 	const scope = useAuthenticatedViewScope({
@@ -57,9 +58,12 @@ export function useExecutionSettings() {
 			modelsFailed.value = false;
 			refreshRequired.value = true;
 			notice.value = '';
+			invalidLimits.value.clear();
 		},
 	});
-	const dirty = computed(() => JSON.stringify(draft.value) !== JSON.stringify(saved.value));
+	const dirty = computed(
+		() => invalidLimits.value.size > 0 || JSON.stringify(draft.value) !== JSON.stringify(saved.value),
+	);
 	const blocked = computed(() => busy.value || refreshRequired.value || draft.value === null);
 	const hardChanged = computed(
 		() =>
@@ -82,7 +86,18 @@ export function useExecutionSettings() {
 		draft.value = structuredClone(toRaw(value));
 		hardDraft.value = structuredClone(toRaw(value.hardLimits));
 		confirmation.value = null;
+		invalidLimits.value.clear();
 		refreshRequired.value = false;
+	}
+
+	function setLimit(key: keyof ExecutionLimits, value: number | null): void {
+		if (blocked.value || confirmation.value || !draft.value) return;
+		if (value === null) {
+			invalidLimits.value.add(key);
+			return;
+		}
+		invalidLimits.value.delete(key);
+		draft.value.limits[key] = value;
 	}
 
 	async function loadModels(): Promise<void> {
@@ -115,6 +130,10 @@ export function useExecutionSettings() {
 
 	async function perform(operation: 'read' | 'save' | 'preview' | 'confirm'): Promise<void> {
 		if (busy.value || (operation !== 'read' && blocked.value)) {
+			return;
+		}
+		if (operation === 'save' && invalidLimits.value.size > 0) {
+			notice.value = 'invalid';
 			return;
 		}
 		const signal = scope.capture();
@@ -225,6 +244,8 @@ export function useExecutionSettings() {
 		refreshRequired,
 		notice,
 		dirty,
+		invalidLimits,
+		setLimit,
 		blocked,
 		hardChanged,
 		perform,
