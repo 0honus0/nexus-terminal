@@ -97,6 +97,9 @@ test('desktop Progress Display floats above the workspace without resizing the t
 				releaseBackgroundRefresh = resolve;
 			});
 		}
+		// A test-held refresh can be cancelled when its owning view unmounts.
+		// Never forward a request already terminated by the browser.
+		if (route.request().failure()) return;
 		await route.continue();
 	});
 
@@ -383,6 +386,7 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 				releaseInitialTransferList = resolve;
 			});
 		}
+		if (route.request().failure()) return;
 		await route.continue();
 	});
 	const sourceConnectionId = await ensureTestSshConnection(context.request);
