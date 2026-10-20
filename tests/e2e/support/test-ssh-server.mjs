@@ -813,28 +813,16 @@ function attachSftp(session, accept) {
 			}
 			const fullPath = resolveRemotePath(remotePath);
 			const entries = await fsp.readdir(fullPath, { withFileTypes: true });
-			const names = [];
-			// Preserve the requested directory order while bounding metadata
-			// concurrency. A sequential lstat per entry was fixture-only latency
-			// unrelated to SFTP pagination or the product's large-list budget.
-			// The 5k-entry profile visits this directory repeatedly. Keep stat
-			// concurrency bounded while reducing the number of sequential batches
-			// under CI disk contention; SFTP READDIR packet framing stays unchanged.
-			const metadataBatchSize = 512;
-			for (let start = 0; start < entries.length; start += metadataBatchSize) {
-				const batch = await Promise.all(
-					entries.slice(start, start + metadataBatchSize).map(async (entry) => {
-						const stats = await fsp.lstat(path.join(fullPath, entry.name));
-						return {
-							filename: entry.name,
-							longname: entry.name,
-							attrs: attrsFromStats(stats),
-						};
-					}),
-				);
-				names.push(...batch);
-			}
-			const handle = registry.add({ type: 'dir', entries: names, offset: 0 });
+			// OPENDIR opens the directory; it must not stat all 5,000 members
+			// before acknowledging the handle. Defer real lstat metadata to each
+			// bounded READDIR packet, preserving ordering, mode and file size.
+			const handle = registry.add({
+				type: 'dir',
+				directoryPath: fullPath,
+				entries,
+				offset: 0,
+				pending: Promise.resolve(),
+			});
 			sftp.handle(reqid, handle);
 		} catch (error) {
 			respondError(reqid, error);
@@ -847,17 +835,28 @@ function attachSftp(session, accept) {
 			sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid directory handle');
 			return;
 		}
-		if (state.offset >= state.entries.length) {
-			sftp.status(reqid, STATUS_CODE.EOF);
-			return;
-		}
-		// Real servers split directory listings across NAME packets. Sending the
-		// whole fixture in one packet can exceed the client's 256 KiB packet limit.
-		// Keep a NAME packet well below ssh2's 256 KiB frame bound while
-		// avoiding dozens of round trips for the 5,000-file profile fixture.
-		const entries = state.entries.slice(state.offset, state.offset + 256);
-		state.offset += entries.length;
-		sftp.name(reqid, entries);
+		// Pipelined READDIR requests must not race the shared offset or send
+		// out-of-order responses for one directory handle.
+		state.pending = state.pending
+			.then(async () => {
+				if (channelClosed || registry.get(handle) !== state) return;
+				if (state.offset >= state.entries.length) {
+					sftp.status(reqid, STATUS_CODE.EOF);
+					return;
+				}
+				// SFTP NAME packets stay under ssh2's 256 KiB packet bound. Fetch
+				// actual attributes for this packet only, never synthetic metadata.
+				const entries = await Promise.all(
+					state.entries.slice(state.offset, state.offset + 256).map(async (entry) => {
+						const stats = await fsp.lstat(path.join(state.directoryPath, entry.name));
+						return { filename: entry.name, longname: entry.name, attrs: attrsFromStats(stats) };
+					}),
+				);
+				if (channelClosed || registry.get(handle) !== state) return;
+				state.offset += entries.length;
+				sftp.name(reqid, entries);
+			})
+			.catch((error) => respondError(reqid, error));
 	});
 
 	sftp.on('OPEN', async (reqid, remotePath, flags, attrs) => {
