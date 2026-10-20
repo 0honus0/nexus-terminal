@@ -1,5 +1,5 @@
 import type { PresentationLayout } from '../../../../packages/shared/src/preferences/presentation/model';
-import { getTestLayout, updateTestLayout } from '../../support/presentation';
+import { getTestLayout, restoreTestLayout, updateTestLayout } from '../../support/presentation';
 import { E2E_URLS } from '../../support/test-env';
 import { readSuspendedSessionCatalog } from '../../../../packages/shared/src/remote/suspend/http-codec';
 import { readPreferencesResponse } from '../../../../packages/shared/src/preferences/presentation/http-codec';
@@ -756,7 +756,9 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
 			});
 			expect([200, 404]).toContain(cleanup.status());
 		}
-		await updateTestLayout(context.request, originalLayout);
+		// Stop the live Workspace's autosaves before restoring the baseline.
+		await page.close();
+		await restoreTestLayout(context.request, originalLayout);
 		await updateUiPreferences(context.request, (preferences) => {
 			preferences.layoutLocked = false;
 		});

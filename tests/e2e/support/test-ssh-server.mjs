@@ -1291,7 +1291,11 @@ function runRemoteCommand(command, stream, session) {
 	child.on('close', (code, signal) => {
 		if (isArchiveCommand) archiveCommandsExited += 1;
 		session.off('signal', onSignal);
-		stream.exit(signal ? signal.replace(/^SIG/, '') : (code ?? 0));
+		// ssh2's exit-signal wire API requires the POSIX SIG prefix (e.g.
+		// SIGTERM). Stripping it turns a confirmed remote termination into an
+		// unrecognized/disconnected outcome at the production SSH adapter,
+		// hiding the pre-writer cancellation proof from archive E2E tests.
+		stream.exit(signal ?? (code ?? 0));
 		stream.end();
 	});
 }

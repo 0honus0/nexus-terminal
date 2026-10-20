@@ -35,6 +35,25 @@ export async function updateTestLayout(request: APIRequestContext, layout: Prese
 	expect(readPresentationUpdateResponse(await response.json()).version).toBe(current.version + 1);
 }
 
+/** Restore an E2E layout after the browser is closed, without masking real CAS failures. */
+export async function restoreTestLayout(request: APIRequestContext, layout: PresentationLayout): Promise<void> {
+	for (let attempt = 0; attempt < 5; attempt++) {
+		const current = await getTestLayout(request);
+		const response = await request.put('/api/v1/settings/layout', {
+			headers,
+			data: { expectedVersion: current.version, layout },
+		});
+		// A final in-flight UI save can race cleanup. Only a documented version
+		// conflict is retryable; every other response still fails the test.
+		if (response.status() === 409) continue;
+		expect(response.status()).toBe(200);
+		expect(readPresentationUpdateResponse(await response.json()).version).toBe(current.version + 1);
+		expect((await getTestLayout(request)).layout).toEqual(layout);
+		return;
+	}
+	throw new Error('Unable to restore E2E layout: concurrent writes did not settle');
+}
+
 export async function getTestSidebar(request: APIRequestContext): Promise<SidebarResponse> {
 	const response = await request.get('/api/v1/settings/sidebar');
 	expect(response.status()).toBe(200);
