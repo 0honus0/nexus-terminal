@@ -141,6 +141,15 @@ const packageByUrl = new Map([
 ]);
 
 const server = http.createServer((request, response) => {
+	if (request.method === 'POST' && request.url === '/reset') {
+		if (hangingProviderResponses.size) {
+			response.writeHead(409).end();
+			return;
+		}
+		officialCatalogEnabled = true;
+		response.writeHead(204).end();
+		return;
+	}
 	if (hangOpenAiRequests && request.method === 'POST' && request.url === '/v1/chat/completions') {
 		let body = '';
 		request.on('data', (chunk) => {

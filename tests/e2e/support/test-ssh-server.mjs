@@ -601,8 +601,6 @@ function writeSqlitePreviewFixture(destination) {
 }
 
 async function resetRoot() {
-	dockerContainerPresent = true;
-	dockerContainerState = 'running';
 	await fsp.rm(archiveExecHoldPath, { force: true });
 	await fsp.rm(rootDir, { recursive: true, force: true });
 	await fsp.mkdir(path.join(rootDir, 'folder-seed'), { recursive: true });
@@ -657,14 +655,37 @@ async function resetRoot() {
 	await fsp.symlink('预览-测试.png', path.join(rootDir, 'image-link.png'));
 	await fsp.symlink('missing-target.png', path.join(rootDir, 'stale-image-link.png'));
 	await fsp.chmod(path.join(rootDir, 'seed.txt'), 0o644);
+	resetControls();
+}
+
+function resetControls() {
+	// Only reset policy and observations after the old transport has drained.
+	// Pending I/O counters remain owned by their actual READ/WRITE handlers.
+	dockerContainerPresent = true;
+	dockerContainerState = 'running';
 	statusSample = 0;
 	sftpWriteDelayMs = 0;
+	sftpWriteRequests = 0;
+	sftpWriteBytes = 0;
+	sftpPeakPendingWrites = 0;
 	sftpStatDelayMs = 0;
+	sftpStatDelayPrefix = '';
+	sftpDelayedStatCount = 0;
 	sftpLstatDenyPrefix = '';
 	sftpReadDirDelayMs = 0;
 	sftpDelayedDirectoryOpens = 0;
+	prepareOperationDelayMs = 0;
+	prepareStatRequests = 0;
+	prepareMkdirRequests = 0;
+	sftpSlowDirectory = '';
+	sftpSlowDirectoryDelayMs = 0;
 	sftpReadDelayMs = 0;
 	sftpDelayedReadCount = 0;
+	sftpReadBytesPerSecond = 0;
+	sftpReadNextDeliveryAt = 0;
+	sftpReadRequests = 0;
+	sftpReadResponseBytes = 0;
+	sftpReadPeakPending = 0;
 	sftpOpenDelayMs = 0;
 	sftpDelayedOpenCount = 0;
 	sftpReadHandlesOpened = 0;
@@ -672,6 +693,7 @@ async function resetRoot() {
 	archiveExecDelayMs = 0;
 	archiveCommandsStarted = 0;
 	archiveCommandsExited = 0;
+	openedSftpChannels = 0;
 }
 
 function openModeToFsFlags(flags) {
@@ -1484,27 +1506,14 @@ const controlServer = http.createServer(async (req, res) => {
 			for (const resolve of sftpRealpathWaiters) resolve();
 			sftpRealpathWaiters.clear();
 			await stopSshServer();
-			sftpWriteDelayMs = 0;
-			sftpWriteRequests = 0;
-			sftpWriteBytes = 0;
-			sftpPeakPendingWrites = 0;
-			sftpStatDelayMs = 0;
-			sftpStatDelayPrefix = '';
-			sftpDelayedStatCount = 0;
-			sftpLstatDenyPrefix = '';
-			sftpReadDirDelayMs = 0;
-			sftpDelayedDirectoryOpens = 0;
-			sftpReadDelayMs = 0;
-			sftpDelayedReadCount = 0;
-			sftpOpenDelayMs = 0;
-			sftpDelayedOpenCount = 0;
-			sftpReadHandlesOpened = 0;
-			sftpReadHandlesClosed = 0;
-			archiveExecDelayMs = 0;
-			archiveCommandsStarted = 0;
-			archiveCommandsExited = 0;
-			activeSftpChannels.clear();
-			openedSftpChannels = 0;
+			// Closing the listener does not prove delayed READ/WRITE callbacks exited.
+			const deadline = performance.now() + 15_000;
+			while (sftpReadPending || sftpPendingWrites || activeSftpChannels.size) {
+				if (performance.now() >= deadline) {
+					throw new Error('Previous SFTP operations have not drained');
+				}
+				await new Promise((resolve) => setTimeout(resolve, 10));
+			}
 			await fsp.rm(archiveExecHoldPath, { force: true });
 			await fsp.rm(archivePreflightHoldPath, { force: true });
 			await resetRoot();

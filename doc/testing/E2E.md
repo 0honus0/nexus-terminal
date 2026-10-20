@@ -22,6 +22,12 @@ Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end
 - 失败清单中的 Agent、HTTP、UI、Workspace/SSH 与移动端消费者已按当前 Shared 迁移或核对；精确修复、静态结果和外部待验分别见本文第四轮记录与实施方案。D18 下整批复审和门禁完成后统一交付，不以编译通过宣称远程验收完成。
 - D17：当前仅源码、类型/语法、构建与格式检查，不执行Playwright、浏览器或本地行为专项。迁移完成后再按授权运行远程Actions；历史PASS不代表本轮用例已通过。
 
+### 用例顺序与夹具隔离
+
+按 E-10.5，统一自动 fixture 对每个用例和重试依次重建 Backend、SSH 与外部夹具基线。只有原 App 成功关闭，才允许重置部署状态、模型响应计数、插件目录开关和浏览器故障屏障；未关闭的浏览器上下文或挂起响应明确拒绝重置。SSH 初始化集中恢复延迟、限速、准备操作和观察计数，旧 READ/WRITE 与通道先有界排空，在途计数由实际处理器归还。各独立外部重置全部等待并汇总失败，不重放丢失回执的重置。
+
+rebalance 只改变 spec 分配，不承担状态清理。刻意产生未知副作用的三个 Agent 场景继续由 balanced-shards 启动独立 Playwright/服务生命周期，与所在 shard 无关；不通过调换文件名、固定 shard 或强制清理绕过围栏。本约定仍使用单 worker，共享夹具不支持同一运行中的并发用例。
+
 ### B10 重构后端执行入口（本机范围收口）
 
 第三十二批最终统一66文件584/584、0失败/取消/跳过，725536.636675ms、exit0；独立真实五分钟自然到期1/1（三业务分支）、总耗时301570ms通过。冻结1507项、720产品摘要、Backend-next/根check、全仓格式及资源核验通过，日志/tmp/nexus-b10-batch32-unified-final.log、/tmp/nexus-b10-batch32-natural-final.log与/tmp/nexus-b10-batch32-final-verification.log。[本批证据](后端重构待实机验证.md#b10-第三十二批-认证交付自然到期与资源期限2026-10-17)。当前本机必验项收口，外部依赖按D16继续待验；后续F1源码有独立检查，不复用此冻结PASS。历史各批“待验”为当时快照，以本节当前结果和精确证据为准。
@@ -1866,3 +1872,11 @@ USAGE对应偏好/布局章节和Frontend并发边界已同步。归档实际取
 本批最终静态：根 check、前后端 build、全仓 format:all:check、git diff --check 均通过（/tmp/nexus-round30-*.log）；两轮源码复核完成。未运行本地行为测试；目录点击修正待后续远程 SHA 验收。
 
 501ceb1b / [39364862620](https://github.com/0honus0/nexus-terminal/actions/runs/39364862620) 已结束：质量/构建、Docker smoke 与第1/3/4/5/7/8组通过，第8组55 passed，原上传取消/关闭导致的reset级联已消失。第6组46 passed/1 failed，压实恢复及缓存通过，仅归档进度取消失败；第2组37 passed/2 failed，仍为归档取消、并行，布局锁本轮通过。目录浏览本轮通过，仍保留上一SHA的首轮失效证据，ccf82d64修复的列表节点稳定性需下一SHA回归，不以重试/本轮偶然通过销项。剩余已知失败合计3项，全部归档链路。
+
+### rebalance 后的夹具基线补强（2026-10-20）
+
+基线 e2e-followup-20261020-round19 / be8e7de8，本批只改6个验证源码及3份文档。自动 fixture 在原 Backend 和 SSH 成功 reset 后，对模型、插件仓库、部署页面、Browser 控制服务执行一次有期限 reset，独立失败全部汇总；挂起响应或遗留 BrowserContext 仍返回409。Browser 代理丢弃已关闭客户端的晚响应，不再将其挂为新屏障。SSH 将原重复初始化合并为 resetControls，补齐准备延迟、慢目录、读带宽/调度与计数；删除 activeSftpChannels.clear，等待真实 READ/WRITE/通道排空后才重建根目录，超时明确失败。
+
+两轮源码复核覆盖全部最终变更文件及 playwright.config、balanced-shards、SSH/Agent 调用者：第一轮核对状态 owner、每用例/重试的初始化顺序和独立 unknown 生命周期；第二轮核对后台晚响应、真实未收敛拒绝、重复列表消除、失败汇总及未放宽产品断言。USAGE 原章节仍符合实际，未修改产品逻辑、Shared、分片算法或重试次数。
+
+Node22.23.1 / pnpm11.26.0：根check、严格E2E TypeScript、全仓format:all:check、5个修改mjs的node --check、补充验证源码ESLint及git diff --check均exit0；日志 /tmp/nexus-round31-{check,e2e-types,format}.log。测试基础设施未改变产品构建输入，本批不重复产品build，上一远程 be8e7de8 质量/构建已通过。没有运行本地行为、浏览器或用例收集；新基线的顺序独立性待远程验收，现轮39365646059仍运行，不能记本批PASS。既有3项归档取消/并行缺陷保持待修。

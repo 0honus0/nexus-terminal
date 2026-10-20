@@ -37,6 +37,16 @@ const regressionResponse = (response, delta, finishReason = 'stop') => {
 };
 
 const server = http.createServer(async (request, response) => {
+	if (request.method === 'POST' && request.url === '/reset') {
+		if (browserCompletionHeld) {
+			response.writeHead(409).end();
+			return;
+		}
+		checkpointResponses = 0;
+		browserCompletionReleased = false;
+		response.writeHead(204).end();
+		return;
+	}
 	if (request.method === 'GET' && request.url === '/browser-lifecycle') {
 		response.writeHead(200, { 'Content-Type': 'application/json' });
 		response.end(JSON.stringify({ held: browserCompletionHeld }));

@@ -48,6 +48,8 @@ sockets.on('connection', (client) => {
 	});
 	upstream.on('open', () => queued.splice(0).forEach((bytes) => upstream.send(bytes, { binary: false })));
 	upstream.on('message', (bytes) => {
+		// A late upstream reply belongs to the closed connection, not the next test.
+		if (client.readyState !== WebSocket.OPEN) return;
 		const message = JSON.parse(bytes.toString());
 		if (heldId !== null && message.id === heldId) {
 			heldId = null;
@@ -69,6 +71,17 @@ proxy.listen(cdpPort, '127.0.0.1');
 await once(proxy, 'listening');
 const server = http.createServer(async (request, response) => {
 	try {
+		if (request.url === '/reset' && request.method === 'POST') {
+			const { browserContextIds } = await session.send('Target.getBrowserContexts');
+			if (browserContextIds.length || heldResponse !== null) {
+				response.writeHead(409).end();
+				return;
+			}
+			holdNextCreation = false;
+			release();
+			response.writeHead(204).end();
+			return;
+		}
 		if (request.url === '/creation-barrier') {
 			if (request.method === 'POST') {
 				if (holdNextCreation || heldResponse) {
