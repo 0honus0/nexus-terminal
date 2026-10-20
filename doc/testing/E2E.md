@@ -1725,3 +1725,9 @@ upload-adapters在用户已请求cancel时，binary close仍立即fail并删除�
 两轮源码审核覆盖WS门闩释放/测试失败finally、CLI start/stop/restart/remove及拒绝未知ID、实际递归DOM。产品代码不变，核对USAGE原后台连接/页面撤销、Docker动作与布局操作说明；待静态收口，行为交远程。
 
 第2组夹具子项静态：node --check test-ssh-server.mjs、根check、完整format:all:check通过，最终文档格式与diff复查通过；未执行本机行为测试。当前远程39358034424 / 2a577341包含先前目录复制、缓存、插件回执及上传取消客户端补修，尚不含本条三个夹具变更。
+
+## 远程第二十一轮：第1组缓存读取计数范围（2026-10-20）
+
+Actions39358034424 / 2a577341，第3/4/5组已success，第1组只剩workspace-layout-restore的额外读取断言（expected0、actual2）。此前终端/xterm DOM身份、草稿、后台输出及geometry断言本轮均已通过。实际/settings默认加载Workspace偏好编辑器，需独立读layout/sidebar的当前版本，不能记作缓存Workspace重载。计数器现只记录/workspace活跃时的这两条GET；返回页面仍严格要求0，不删除读取/身份/geometry断言，不阻止Settings获取真实版本。
+
+源码两次复核覆盖离开Settings/Connections与返回Workspace、路由监听安装点以及Settings默认页；USAGE缓存说明仍成立，无产品代码修改。受影响静态与后续真实行为另记。

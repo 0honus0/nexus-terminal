@@ -65,9 +65,12 @@ test('workspace keeps the live terminal and draft cached across page navigation'
 
 	const originalTerminal = await terminal.elementHandle();
 	const originalScreen = await terminal.locator('.xterm-screen').elementHandle();
-	let settingsReads = 0;
+	let workspaceLayoutReads = 0;
 	await page.route('**/api/v1/settings/{layout,sidebar}', async (route) => {
-		if (route.request().method() === 'GET') settingsReads += 1;
+		// Settings owns its own versioned editor reads. Count only requests
+		// made while the cached Workspace is active.
+		if (route.request().method() === 'GET' && new URL(page.url()).pathname === '/workspace')
+			workspaceLayoutReads += 1;
 		await route.continue();
 	});
 	for (const destination of ['settings', 'connections']) {
@@ -99,7 +102,7 @@ test('workspace keeps the live terminal and draft cached across page navigation'
 				(viewport) => viewport.columns === savedGeometry.columns && viewport.rows === savedGeometry.rows,
 			),
 		).toBe(true);
-		expect(settingsReads).toBe(0);
+		expect(workspaceLayoutReads).toBe(0);
 		await command.fill(`printf 'CACHE_INPUT_${destination}\\n'`);
 		await command.press('Enter');
 		await expect(terminal).toContainText(`CACHE_INPUT_${destination}`);
