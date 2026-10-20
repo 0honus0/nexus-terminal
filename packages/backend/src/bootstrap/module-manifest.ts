@@ -277,6 +277,9 @@ export async function registerModules({
 				...(route.maxBinaryMessageBytes === undefined
 					? {}
 					: { maxBinaryMessageBytes: route.maxBinaryMessageBytes }),
+				...(route.maxBufferedTextBytes === undefined
+					? {}
+					: { maxBufferedTextBytes: route.maxBufferedTextBytes }),
 
 				authorize: async (request, url, sourceIp) =>
 					(await access.publicApi.admitSource(sourceIp)) && route.authorize(request, url, sourceIp),

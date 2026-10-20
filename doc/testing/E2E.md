@@ -1677,3 +1677,11 @@ dev / `8fa1713c` 未提交工作区，沿用本页 Node/pnpm 环境。状态面�
 第4组修复ce06c07f已推dev，对应Actions39355923799；本条第7组补修在其等待期间完成，按照2026-10-20更新D18逐组迭代，不能把该run当作已包含第7组补修的证据。
 
 第7组补修静态收口：Node v22.23.1/pnpm11.26.0，根check、完整format:all:check及git diff --check通过；最后文档追加后重查格式。生产代码未改，不重复构建；实际SSH/页面行为只交给推送后的远程Actions。
+
+## 远程第十九轮：第3组大目录发送预算安装（2026-10-20）
+
+原Actions39354280150，第3组唯一直接失败为file-list-profile的5000项导航，1000项三次正常，5000项收到控制WS closeCode1011后仍展示旧根目录；artifact12234817099的trace控制台可定位。Shared和Workspace route已定义8MiB列表响应及发送缓存，但bootstrap/module-manifest admitWebSocket只投影maxTextMessageBytes/maxBinaryMessageBytes，丢失maxBufferedTextBytes；实际channel按默认1MiB拒绝发送完整列表。该链不是夹具NAME帧或30秒断言不足，不扩大断言时间。
+
+修补Bootstrap显式投影既有发送预算，Platform HTTP bindings安装时同步校验该容量为安全整数且不超过32MiB技术硬上限。入站预算、其他路由默认1MiB、Shared8MiB及业务项数均不变；USAGE目录列表章节同步。两轮源码复核覆盖声明→admit包装→bindings校验→http-server装配→channel发送及拒绝路径。既有大目录/排序/虚拟行回归留远程，不运行本机测试；静态结果另记。
+
+第3组补修静态收口：Node v22.23.1/pnpm11.26.0，Backend check/build、根check、完整format:all:check及diff检查退出0；最终追加证据和Backend架构后再检查变更文件格式。无Shared或前端契约改动；已复核默认小预算、明确8MiB、非法预算拒绝及32MiB硬上限分支，行为仍待远程。
