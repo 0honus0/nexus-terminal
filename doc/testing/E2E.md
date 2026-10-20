@@ -4,7 +4,7 @@
 
 ## 当前验收基线
 
-2026-10-20，canonical [Actions 39434833396](https://github.com/0honus0/nexus-terminal/actions/runs/39434833396)，SHA `9808dbdc0d67dc982bbaed11132a28b25275dc40`：
+2026-10-20，canonical [Actions 39445026926](https://github.com/0honus0/nexus-terminal/actions/runs/39445026926)，SHA `ddf5ce0e95c39367977cf08c951ce1e4d63b34ef`：
 
 | 检查                                                          | 结果                                  |
 | ------------------------------------------------------------- | ------------------------------------- |
@@ -567,3 +567,9 @@ trace显示Save后为saving，测试已从磁盘读到新字节，但关闭时�
 按既有E-10.6，原页面route现在对create和cancel都只转发一次上游请求，先保存unknown回执再fulfill同一响应，断言使用同一Shared decoder及原请求关联；其他读取继续交付，route持续到页面销毁，不重新派发写入、不删除清理围栏。两轮源码复核覆盖实际等待／捕获先后、两个写入方法、全部只读continuation和fixture teardown。仅修改测试与文档，无产品改动，未本地运行行为或收集用例。
 
 取消回执补修最终静态：根check及全量format均exit0（`/tmp/nexus-acp-receipt-{check,format}.log`），diff检查通过；仅测试／文档改动，不重建未变产品，不运行本地行为。最终diff复核：create/cancel各取一次上游回执，其他方法continue，Map保存unknown且仅由Shared关联解码消费，原取消后的全部业务断言保留。
+
+### 2026-10-20 本批最终远程收口
+
+[Actions 39445026926](https://github.com/0honus0/nexus-terminal/actions/runs/39445026926)整体success，被测ddf5ce0e95c39367977cf08c951ce1e4d63b34ef。逐组读取原日志，各组通过数为53／38／54（52+1+1）／57（56+1）／46／60／74／66，共448项，无失败、flaky、重试或跳过用例；质量／格式／构建、Docker、runner及耗时统计success，可选截图任务skipped。原日志`/tmp/nexus-acp-receipt-job-<jobId>.log`。ACP取消首次11秒通过，文件预览编辑历史回归首次27秒通过；Files／插件独立场景通过。未扩大为多文件故障、完整像素或全部窄屏已验。
+
+随后bot的68397774仅更新duration-estimates；文档收口只刷新当前基线、擦除已完成施工记录并保留V-UI-01／02和独立V-THREAD等后续，不改变被测产品。没有本地行为测试或线上部署，未知.tmp保持。
