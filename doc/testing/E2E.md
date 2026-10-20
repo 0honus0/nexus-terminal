@@ -1657,3 +1657,13 @@ dev / `8fa1713c` 未提交工作区，沿用本页 Node/pnpm 环境。状态面�
 源码审核覆盖等待/错误/正常三个分支、窄栏换行、固定尺寸 spinner 不拉伸、比例样式和既有状态切换。USAGE 状态监控章节已同步。按 D17 不新增/运行本地行为测试或浏览器测试，未提交/推送；真实宽窄面板、比例上下限及小高度视觉效果待远程验收。
 
 静态结果均退出 0：Frontend build `/tmp/nexus-status-loading-build.log`、根 check `/tmp/nexus-status-loading-check.log`、全仓格式 `/tmp/nexus-status-loading-format.log`；`git diff --check` 通过。文档回填后再执行本轮专项 Prettier，日志 `/tmp/nexus-status-loading-focused-format.log`。静态结果不作为视觉验收证据。
+
+## 远程第十九轮：第4组取消清理竞态（2026-10-20）
+
+基线 `7d866e21`，Actions [39354280150](https://github.com/0honus0/nexus-terminal/actions/runs/39354280150)。第4组236秒、22项失败；首个直接失败是 `upload-protocol` 在途WRITE取消返回operation_unknown，随后reset出现500/503。重置错误cause指向stage.discard期间SFTP abortLease；其余21项的基线失败不等于各自功能已经执行失败。第8组140秒，按本轮人工指示先修耗时较长的第4组。
+
+调用链：finishUpload设置terminal并等待WRITE队列；队列中的append因此拒绝，upload-stream关闭字节WS，attachment.abort再调用controller.abort，中断了正在等待的stage清理。补修RunningUpload.discarding，首次取消/断流登记该状态；重复取消共享settlement、保留首次结果分类，字节WS关闭不再次取消清理。已进入提交、权限撤销、总任务超时及真实清理失败仍保留原中止/unknown规则。
+
+两轮源码复核分别覆盖取消→队列拒绝→WS关闭→discard，以及重复cancel/abort、首次断流、最终块接纳后取消与实际释放。顺带修正原测试使用uploadId猜测随机stage路径的无效检查：严格解码根目录列表，确认不存在任何上传.part暂存文件；待open取消场景复用同一检查。既有远程测试保留，未在本机执行或收集测试。
+
+当前静态：Node v22.23.1、pnpm11.26.0；Backend check/build、根check、完整format:all:check及git diff --check均退出0；最后文档追加后再次执行六个变更文件Prettier检查及diff检查通过。USAGE和Backend架构同步。补修行为尚未远程运行，第4组不标PASS；全组完成率仍以相同SHA的下一轮实际结果为准。

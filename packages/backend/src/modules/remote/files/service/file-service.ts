@@ -129,6 +129,7 @@ interface RunningUpload extends TransferResourceOwner {
 	completion: Promise<void>;
 	settlement: Promise<void> | null;
 	terminal: boolean;
+	discarding: boolean;
 	cancelled: boolean;
 	mutationStarted: boolean;
 	streamAttached: boolean;
@@ -1464,6 +1465,7 @@ export class RemoteFileService {
 			completion,
 			settlement: null,
 			terminal: false,
+			discarding: false,
 			cancelled: false,
 			mutationStarted: false,
 			streamAttached: false,
@@ -1766,7 +1768,11 @@ export class RemoteFileService {
 			append: (bytes) => this.appendUpload(token, task, bytes),
 
 			abort: () => {
-				if (this.uploads.get(this.uploadKey(workspaceId, uploadId)) !== task || task.finished) {
+				if (
+					this.uploads.get(this.uploadKey(workspaceId, uploadId)) !== task ||
+					task.finished ||
+					task.discarding
+				) {
 					return;
 				}
 				// Losing the browser's binary WebSocket does not imply the dedicated
@@ -1776,6 +1782,7 @@ export class RemoteFileService {
 				// The client-side transfer outcome remains unknown, never "cancelled"
 				// or successfully committed, even if the private stage is discarded.
 				if (task.stage && !task.terminal && !task.controller.signal.aborted) {
+					task.discarding = true;
 					task.terminal = true;
 					task.fail(new RemoteFileFailure('operation_unknown'));
 					return;
@@ -1817,10 +1824,13 @@ export class RemoteFileService {
 		// queue drains makes REMOVE unprovable, cascading into baseline failures.
 		// Keep the client outcome unknown for transport aborts, and do not
 		// take this path after a final frame has admitted a commit.
-		if (task.stage !== null && !task.terminal && !task.controller.signal.aborted) {
-			task.cancelled = mode === 'cancel';
-			task.terminal = true;
-			task.fail(new RemoteFileFailure(mode === 'cancel' ? 'remote_unavailable' : 'operation_unknown'));
+		if (task.discarding || (task.stage !== null && !task.terminal && !task.controller.signal.aborted)) {
+			if (!task.discarding) {
+				task.discarding = true;
+				task.cancelled = mode === 'cancel';
+				task.terminal = true;
+				task.fail(new RemoteFileFailure(mode === 'cancel' ? 'remote_unavailable' : 'operation_unknown'));
+			}
 			if (task.settlement) {
 				await task.settlement;
 			}
