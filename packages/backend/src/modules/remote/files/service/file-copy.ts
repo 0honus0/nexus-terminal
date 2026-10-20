@@ -226,17 +226,28 @@ async function copyOneLink(ctx: CopyContext, from: string, to: string, info: Fil
 	return { path: to, name: path.posix.basename(to), info: result };
 }
 
-async function copyOne(ctx: CopyContext, from: string, to: string, depth: number): Promise<FilePathEntry> {
+async function copyOne(
+	ctx: CopyContext,
+	from: string,
+	to: string,
+	depth: number,
+	scannedInfo?: FileInfo,
+): Promise<FilePathEntry> {
 	ctx.signal.throwIfAborted();
 	if (depth > MAX_TREE_DEPTH || ++ctx.visitedEntries > MAX_TRANSFER_ENTRIES) {
 		throw new RemoteFileFailure('limit_exceeded');
 	}
-	const info = await ctx.source.stat({
-		path: from,
-		timeoutMs: Math.min(ctx.remaining(), RPC_TIMEOUT_MS),
-		signal: ctx.signal,
-		followLinks: false,
-	});
+	// READDIR already provides lstat metadata for each child. Reuse that
+	// observation; a second lstat is another race, not a file snapshot.
+	// Move still revalidates every source before beginning deletion.
+	const info =
+		scannedInfo ??
+		(await ctx.source.stat({
+			path: from,
+			timeoutMs: Math.min(ctx.remaining(), RPC_TIMEOUT_MS),
+			signal: ctx.signal,
+			followLinks: false,
+		}));
 	if (info.kind === 'file') {
 		return copyOneFile(ctx, from, to, info);
 	}
@@ -266,7 +277,7 @@ async function copyOne(ctx: CopyContext, from: string, to: string, depth: number
 		if (entry.name === '.' || entry.name === '..' || entry.name.includes('/')) {
 			throw new RemoteFileFailure('invalid_input');
 		}
-		await copyOne(ctx, path.posix.join(from, entry.name), path.posix.join(to, entry.name), depth + 1);
+		await copyOne(ctx, path.posix.join(from, entry.name), path.posix.join(to, entry.name), depth + 1, entry.info);
 	}
 	// SFTP mkdir obeys remote umask; restore the source permissions after
 	// creating children rather than reporting a directory with changed mode.

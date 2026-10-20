@@ -1685,3 +1685,11 @@ dev / `8fa1713c` 未提交工作区，沿用本页 Node/pnpm 环境。状态面�
 修补Bootstrap显式投影既有发送预算，Platform HTTP bindings安装时同步校验该容量为安全整数且不超过32MiB技术硬上限。入站预算、其他路由默认1MiB、Shared8MiB及业务项数均不变；USAGE目录列表章节同步。两轮源码复核覆盖声明→admit包装→bindings校验→http-server装配→channel发送及拒绝路径。既有大目录/排序/虚拟行回归留远程，不运行本机测试；静态结果另记。
 
 第3组补修静态收口：Node v22.23.1/pnpm11.26.0，Backend check/build、根check、完整format:all:check及diff检查退出0；最终追加证据和Backend架构后再检查变更文件格式。无Shared或前端契约改动；已复核默认小预算、明确8MiB、非法预算拒绝及32MiB硬上限分支，行为仍待远程。
+
+## 远程第十九轮：第8组目录复制子项（2026-10-20）
+
+cross-session-transfer前两项已通过，第三项刻意禁止/folder-seed/子项LSTAT以验证READDIR metadata复用；copyOne此前扫描后仍逐项重新stat，正常文件复制返回operation_unknown。Service递归现接收已解码的entry.info；根节点仍stat，字节源按原size精确校验，目标mode/mtime与内容大小仍检查，move删除源前与逐项删除时仍重新读取源事实。该调整不把READDIR观察说成原子快照，不删除未知或清理失败分支。
+
+两轮源码复核覆盖普通/空文件、目录递归、链接、最大深度/条目、move源复查与目标确认。产品能力和协议不变，核对USAGE复制/未知结果说明仍成立；静态后留下一轮远程复验，未执行本机行为测试。本条仅完成第8组目录复制子项，下载取消与并发上传仍待修复，不标整组PASS。
+
+目录复制子项静态收口：Backend check/build、根check、完整format:all:check、git diff --check均退出0；两次源码复核完成。当前远程39356651981对应48faea89，不含此项，不用该run证明目录复制修复通过。
