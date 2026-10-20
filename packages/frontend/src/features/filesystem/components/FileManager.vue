@@ -1860,7 +1860,7 @@
 		</header>
 
 		<div
-			v-if="(!browser.loaded.value && !browser.error.value) || browser.loading.value || browser.searching.value"
+			v-if="(!browser.loaded.value && !browser.error.value) || browser.searching.value"
 			class="file-manager-loading-state flex min-h-0 flex-1 items-center justify-center"
 		>
 			<UiSpinner />
@@ -1873,6 +1873,7 @@
 			ref="listScroller"
 			tabindex="0"
 			:aria-label="t('fileManager.modalTitle')"
+			:aria-busy="browser.loading.value"
 			class="min-h-0 flex-1 overflow-auto outline-none"
 			:style="[rowStyle, { overflowAnchor: shouldVirtualize ? 'none' : undefined }]"
 			:data-row-scale="renderedRowScale.toFixed(2)"

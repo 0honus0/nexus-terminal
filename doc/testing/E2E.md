@@ -1856,3 +1856,11 @@ USAGE对应偏好/布局章节和Frontend并发边界已同步。归档实际取
 四表：功能保留六并发、取消/关闭/整组结算与文件字节；职责归Files Service原owner，不新增存储/Platform业务；类型归属沿原应用/Shared转换，队列技术未穿透；两轮复核覆盖取消与WRITE并发、先断流后取消、关闭时重复清理、已commit/未知分支、队列未派发取消及真实故障留存。静态结果随后记录；行为只待后续远程，当前未运行本地测试。
 
 本批最终静态门禁：根 check、严格 E2E TypeScript、前后端 build、全仓 format:all:check 及 git diff --check 均通过（/tmp/nexus-round29-*.log）。两轮源码复核完成，未运行本地行为测试；上传取消/关闭、布局持久化及两处测试消费修正等待新 SHA 的远程 Actions 验收。
+
+### 上传完成刷新与目录点击（2026-10-20）
+
+77837576 的第8组目录浏览首轮失败、重试通过。离线 trace 的 call@761 显示父目录行点击派发期间上传由排队进入完成，action 快照仍有父目录行，after 快照已经卸载整个列表，最终仍在 /folder-seed，无错误提示。源码确认 FileManager 对任何 browser.loading 都替换整个列表，后台完成刷新能够在 pointerdown/click 之间销毁目标。现已有目录读取期间保留列表，以工具栏及 aria-busy 表达读取，首读仍显示加载画面；原 requestedPath/loadToken 和失败提示不变，不增加重试或放宽场景断言。
+
+四表：功能保留原父目录点击、并行上传及递归搜索；职责仅 FileManager 展示生命周期；无 Shared/协议类型变化；两轮源码复核覆盖首读、后台刷新、导航晚响应、错误及搜索分支，静态结果随后记录。501ceb1b 已推送，新运行39364862620等待结果，本项尚无远程PASS。USAGE原文件管理章节及Frontend当前设计同步。
+
+本批最终静态：根 check、前后端 build、全仓 format:all:check、git diff --check 均通过（/tmp/nexus-round30-*.log）；两轮源码复核完成。未运行本地行为测试；目录点击修正待后续远程 SHA 验收。
