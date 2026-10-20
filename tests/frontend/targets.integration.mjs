@@ -2065,8 +2065,10 @@ try {
 					viewApp.mount(viewNode);
 					await until(() => viewNode.textContent.includes('formal connection'));
 					check(
-						viewNode.textContent.includes(i18n.global.t('connections.exportHelp')),
-						'formal Connections view renders migrated list and safe export scope',
+						Array.from(viewNode.querySelectorAll('button')).some(
+							(button) => button.textContent.trim() === i18n.global.t('connections.exportTitle'),
+						),
+						'formal Connections view renders the migrated list and export action',
 					);
 					viewApp.unmount();
 					viewNode.remove();

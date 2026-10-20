@@ -149,7 +149,6 @@
     },
     "configuration": {
       "saved": "Saved. Restart the server to apply this configuration.",
-      "versions": "Saved version {saved}; active version {effective}.",
       "restart": "Changes take effect after a server restart.",
       "conflict": "The configuration has changed. Reload it and review before saving again.",
       "unknown": "The result is unknown. Reload the saved configuration before making another change.",

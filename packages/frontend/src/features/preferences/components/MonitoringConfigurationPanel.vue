@@ -17,15 +17,7 @@
 	<section class="rounded-lg border border-border p-4" data-monitoring-configuration>
 		<h3 class="font-semibold">{{ t('settings.monitoring.title') }}</h3>
 		<p class="mt-1 text-xs text-text-secondary">{{ t('settings.monitoring.hint') }}</p>
-		<p v-if="configuration.snapshot.value" class="mt-2 text-xs" data-monitoring-versions>
-			{{
-				t('settings.monitoring.versions', {
-					saved: configuration.snapshot.value.revision,
-					effective: configuration.snapshot.value.effectiveRevision,
-				})
-			}}
-		</p>
-		<p v-if="configuration.snapshot.value" class="mt-1 text-xs" data-monitoring-effective>
+		<p v-if="configuration.snapshot.value?.pendingRestart" class="mt-1 text-xs" data-monitoring-effective>
 			{{
 				t('settings.monitoring.effective', {
 					status: configuration.snapshot.value.effectiveMonitoring.statusIntervalSeconds,
@@ -71,8 +63,8 @@
 			>
 		</form>
 		<UiButton
+			v-if="configuration.needsRefresh.value && configuration.feedback.value && !configuration.loading.value"
 			class="mt-3"
-			:disabled="configuration.loading.value"
 			@click="configuration.refresh"
 			data-monitoring-refresh
 			>{{ t('settings.monitoring.refresh') }}</UiButton

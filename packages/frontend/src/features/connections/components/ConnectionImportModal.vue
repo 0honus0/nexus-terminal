@@ -90,7 +90,6 @@
 </script>
 <template>
 	<UiModal :visible="visible" :title="t('connections.importTitle')" panel-class="!max-w-3xl" @close="emit('close')">
-		<p class="mb-3 text-sm text-text-secondary">{{ t('connections.importHelp') }}</p>
 		<p v-if="message || fileError" role="status">{{ fileError || message }}</p>
 		<ol v-if="receipts.length" class="my-3 max-h-48 overflow-y-auto" aria-live="polite">
 			<li v-for="item in receipts" :key="item.index">
@@ -116,7 +115,9 @@
 			</fieldset>
 		</form>
 		<template #footer
-			><UiButton :disabled="loading || reading" @click="refresh">{{ t('connections.refresh') }}</UiButton
+			><UiButton v-if="!loading && (message || data.needsRefresh.value)" :disabled="reading" @click="refresh">{{
+				t('connections.refresh')
+			}}</UiButton
 			><UiButton @click="emit('close')">{{ t('common.close') }}</UiButton></template
 		>
 	</UiModal>

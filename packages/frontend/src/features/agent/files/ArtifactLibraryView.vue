@@ -69,7 +69,6 @@
 				<h3 class="text-sm font-semibold tracking-tight text-foreground">
 					{{ t('agent.artifactManagement.title') }}
 				</h3>
-				<p class="mt-0.5 text-[11px] leading-4 text-text-secondary">{{ t('agent.artifactManagement.help') }}</p>
 			</div>
 		</header>
 		<p v-if="operation.notice.value" role="status">

@@ -23,7 +23,7 @@
 				t('common.save')
 			}}</UiButton>
 		</form>
-		<UiButton :disabled="busy" @click="execute()">{{ t('common.refresh') }}</UiButton>
+		<UiButton v-if="needsRefresh && !busy && message" @click="execute()">{{ t('common.refresh') }}</UiButton>
 		<p v-if="message" role="status" class="text-sm">{{ message }}</p>
 	</section>
 </template>

@@ -21,6 +21,7 @@
 	const draft = ref<WorkspaceFocusConfig>({ sequence: [], shortcuts: {} });
 	const original = ref<WorkspaceFocusConfig>({ sequence: [], shortcuts: {} });
 	const saving = ref(false);
+	const needsRefresh = ref(false);
 	const originalVersion = ref(0);
 	const view = useAuthenticatedViewScope({
 		available: () => props.visible,
@@ -129,8 +130,12 @@
 			originalVersion.value = workspaceFocus.version.value;
 			draft.value = cloneWorkspaceFocus(workspaceFocus.config.value);
 			original.value = cloneWorkspaceFocus(draft.value);
+			needsRefresh.value = false;
 		} catch (cause) {
-			if (view.isCurrent(signal)) feedback.notifyError(preferenceFailureMessage(cause, t));
+			if (view.isCurrent(signal)) {
+				needsRefresh.value = true;
+				feedback.notifyError(preferenceFailureMessage(cause, t));
+			}
 		} finally {
 			if (view.isCurrent(signal)) saving.value = false;
 		}
@@ -145,9 +150,13 @@
 			await workspaceFocus.save(cloneWorkspaceFocus(draft.value), originalVersion.value, signal);
 			if (!view.isCurrent(signal)) return;
 			original.value = cloneWorkspaceFocus(draft.value);
+			needsRefresh.value = false;
 			emit('close');
 		} catch (cause) {
-			if (view.isCurrent(signal)) feedback.notifyError(preferenceFailureMessage(cause, t));
+			if (view.isCurrent(signal)) {
+				needsRefresh.value = true;
+				feedback.notifyError(preferenceFailureMessage(cause, t));
+			}
 		} finally {
 			if (view.isCurrent(signal)) saving.value = false;
 		}
@@ -288,7 +297,7 @@
 
 		<template #footer>
 			<div class="flex justify-end gap-3">
-				<UiButton :disabled="saving" @click="refresh">{{ t('common.refresh') }}</UiButton>
+				<UiButton v-if="needsRefresh" :disabled="saving" @click="refresh">{{ t('common.refresh') }}</UiButton>
 				<UiButton @click="attemptClose">{{ t('common.cancel') }}</UiButton>
 				<UiButton appearance="solid" tone="primary" :loading="saving" :disabled="!hasChanges" @click="save">
 					{{ t('common.save') }}{{ hasChanges ? ' *' : '' }}

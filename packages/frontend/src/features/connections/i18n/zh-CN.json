@@ -216,9 +216,7 @@
     "completed": "已完成 {count} 项操作。",
     "importTitle": "导入连接",
     "exportTitle": "导出配置",
-    "importHelp": "仅接受新 TargetImportInput JSON 数组，最多 500 项 / 1 MiB，每批最多 50 项独立提交。失败后保留此前提交，结果未知需先核对，不自动重放。",
     "appendTag": "追加标签",
-    "exportHelp": "仅导出配置，不含密码和私钥；关联使用当前实例的 ID。最多 500 项 / 1 MiB。",
     "failures": {
       "failed": "操作失败，请稍后重试。",
       "unknown": "结果未知，可能已经保存。请先刷新并核对，勿重复提交。",

@@ -64,6 +64,7 @@
 	let unregisterFocus: (() => void) | undefined;
 	const loading = ref(true);
 	const loadError = ref('');
+	const tagLoadFailed = ref(false);
 	const auth = useAuthSession();
 	let loadGeneration = 0;
 
@@ -71,6 +72,7 @@
 		loadGeneration++;
 		loading.value = false;
 		loadError.value = '';
+		tagLoadFailed.value = false;
 		editorVisible.value = false;
 		editorConnection.value = null;
 		managerTag.value = null;
@@ -83,6 +85,7 @@
 		const current = ++loadGeneration;
 		loading.value = true;
 		loadError.value = '';
+		tagLoadFailed.value = false;
 		try {
 			await data.load(force);
 		} catch (cause) {
@@ -100,6 +103,7 @@
 				await tags.load();
 			} catch {
 				if (current === loadGeneration) {
+					tagLoadFailed.value = true;
 					reportTagLoadFailure();
 				}
 			}
@@ -279,7 +283,12 @@
 		:class="props.pageScroll ? 'workspace-connection-list--page' : 'h-full overflow-hidden'"
 	>
 		<p v-if="management.message.value" role="status">{{ management.message.value }}</p>
-		<button type="button" :disabled="loading || management.loading.value" @click="load(true)">
+		<button
+			v-if="!loading && (loadError || tagLoadFailed || data.needsRefresh.value)"
+			type="button"
+			:disabled="management.loading.value"
+			@click="load(true)"
+		>
 			{{ t('connections.refresh') }}
 		</button>
 		<div class="workspace-connection-toolbar flex items-center gap-2" :class="props.pageScroll ? 'mb-3' : 'p-2'">

@@ -210,7 +210,6 @@
 		<p v-if="data.needsRefresh.value" class="my-3 text-text-secondary">
 			{{ t('connections.failures.recovery_required') }}
 		</p>
-		<p class="my-3 text-sm text-text-secondary">{{ t('connections.exportHelp') }}</p>
 		<div class="mx-auto max-w-screen-lg">
 			<h1 class="mb-6 text-2xl font-semibold">{{ t('nav.connections') }}</h1>
 

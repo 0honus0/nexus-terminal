@@ -2,8 +2,6 @@
 	import { useI18n } from 'vue-i18n';
 	import { UiButton } from '@/foundation/ui';
 	defineProps<{
-		revision?: number;
-		effectiveRevision?: number;
 		pendingRestart?: boolean;
 		needsRefresh: boolean;
 		loading: boolean;
@@ -15,9 +13,6 @@
 </script>
 <template>
 	<div class="space-y-2 text-sm" role="status">
-		<p v-if="revision && pendingRestart">
-			{{ t('settings.configuration.versions', { saved: revision, effective: effectiveRevision }) }}
-		</p>
 		<p v-if="pendingRestart" class="text-warning">{{ t('settings.configuration.restart') }}</p>
 		<p v-if="message" :class="success ? 'text-success' : 'text-error'">{{ message }}</p>
 		<UiButton v-if="needsRefresh" :loading="loading" @click="$emit('refresh')">{{ t('common.retry') }}</UiButton>

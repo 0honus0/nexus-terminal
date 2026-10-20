@@ -149,7 +149,6 @@
     },
     "configuration": {
       "saved": "已保存，重启服务器后生效。",
-      "versions": "保存版本 {saved}；当前生效版本 {effective}。",
       "restart": "配置将在服务器重启后生效。",
       "conflict": "配置已被其他操作修改，请重新读取并核对后再保存。",
       "unknown": "结果未知，请重新读取已保存配置后再修改。",

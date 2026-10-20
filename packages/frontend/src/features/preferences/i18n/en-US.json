@@ -211,7 +211,6 @@
     "monitoring": {
       "title": "Core monitoring settings",
       "hint": "Administrators only. Intervals are 1–86400 seconds and take effect together after restart. Display toggles and charts do not control remote sampling.",
-      "versions": "Saved version {saved} · Effective version {effective}",
       "effective": "Effective: sample interval {status}s · host cache TTL / overview refresh {host}s",
       "restart": "Settings saved. Restart to apply.",
       "status": "Sampling interval (seconds)",

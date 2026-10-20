@@ -211,7 +211,6 @@
     "monitoring": {
       "title": "监控核心配置",
       "hint": "仅管理员可修改。周期为1–86400秒，保存后下次重启统一生效；显示开关和图表不改变远端采样。",
-      "versions": "已保存版本 {saved} · 当前生效版本 {effective}",
       "effective": "当前生效：采样间隔 {status} 秒 · 主机缓存 TTL / 概览刷新 {host} 秒",
       "restart": "配置已保存，重启后生效。",
       "status": "监控采样间隔（秒）",

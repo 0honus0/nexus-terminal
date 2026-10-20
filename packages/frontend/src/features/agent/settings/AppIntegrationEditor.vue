@@ -55,7 +55,6 @@
 </script>
 <template>
 	<div class="space-y-4">
-		<p class="text-sm text-text-secondary">{{ t('agent.settings.integrationManagement.help') }}</p>
 		<p v-if="operation.notice.value" role="status">
 			{{ t('agent.settings.appManagement.' + operation.notice.value) }}
 		</p>

@@ -31,8 +31,6 @@
 		<h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.captcha.title') }}</h3>
 		<p class="mb-4 text-sm text-text-secondary">{{ t('settings.captcha.description') }}</p>
 		<ConfigurationStatus
-			:revision="snapshot?.revision"
-			:effective-revision="snapshot?.effectiveRevision"
 			:pending-restart="snapshot?.pendingRestart"
 			:loading="loading"
 			:needs-refresh="needsRefresh"

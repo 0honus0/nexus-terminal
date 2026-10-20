@@ -45,8 +45,6 @@
 <template>
 	<div class="space-y-6">
 		<ConfigurationStatus
-			:revision="snapshot?.revision"
-			:effective-revision="snapshot?.effectiveRevision"
 			:pending-restart="snapshot?.pendingRestart"
 			:loading="loading"
 			:needs-refresh="needsRefresh"

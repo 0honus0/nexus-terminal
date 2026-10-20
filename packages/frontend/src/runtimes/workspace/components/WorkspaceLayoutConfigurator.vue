@@ -26,6 +26,7 @@
 	const originalDraft = ref<WorkspaceLayoutNodeState>(createDefaultWorkspaceLayout());
 	const originalSidebar = ref<WorkspaceSidebar>({ left: [], right: [] });
 	const saving = ref(false);
+	const needsRefresh = ref(false);
 	const originalVersion = ref(0);
 	const view = useAuthenticatedViewScope({
 		available: () => props.visible,
@@ -159,8 +160,12 @@
 				right: [...workspaceLayout.sidebars.value.right],
 			};
 			originalSidebar.value = { left: [...sidebar.value.left], right: [...sidebar.value.right] };
+			needsRefresh.value = false;
 		} catch (cause) {
-			if (view.isCurrent(signal)) feedback.notifyError(preferenceFailureMessage(cause, t));
+			if (view.isCurrent(signal)) {
+				needsRefresh.value = true;
+				feedback.notifyError(preferenceFailureMessage(cause, t));
+			}
 		} finally {
 			if (view.isCurrent(signal)) saving.value = false;
 		}
@@ -179,9 +184,13 @@
 				signal,
 			);
 			if (!view.isCurrent(signal)) return;
+			needsRefresh.value = false;
 			emit('close');
 		} catch (cause) {
-			if (view.isCurrent(signal)) feedback.notifyError(preferenceFailureMessage(cause, t));
+			if (view.isCurrent(signal)) {
+				needsRefresh.value = true;
+				feedback.notifyError(preferenceFailureMessage(cause, t));
+			}
 		} finally {
 			if (view.isCurrent(signal)) saving.value = false;
 		}
@@ -398,7 +407,13 @@
 			</main>
 
 			<footer class="flex justify-end gap-3 border-t border-border bg-header p-4">
-				<button type="button" class="secondary-action" :disabled="saving" @click="refresh">
+				<button
+					type="button"
+					v-if="needsRefresh || workspaceLayout.error.value"
+					class="secondary-action"
+					:disabled="saving"
+					@click="refresh"
+				>
 					{{ t('common.refresh') }}
 				</button>
 				<button type="button" class="secondary-action" @click="attemptClose">{{ t('common.cancel') }}</button>

@@ -127,7 +127,7 @@
 <template>
 	<section class="workspace-preferences min-w-0">
 		<UiButton
-			v-if="needsRefresh || loadError"
+			v-if="!loading && (needsRefresh || loadError)"
 			class="mb-3"
 			:disabled="loading || editor.saving.value"
 			@click="editor.refresh"

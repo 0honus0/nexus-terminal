@@ -94,7 +94,7 @@
 		</h2>
 
 		<UiButton
-			v-if="needsRefresh || loadError"
+			v-if="!loading && (needsRefresh || loadError)"
 			class="m-6"
 			:disabled="loading || editor.saving.value"
 			@click="editor.refresh"

@@ -145,7 +145,7 @@
 	<div class="space-y-4">
 		<section class="space-y-3 rounded border border-border p-3">
 			<h4 class="font-medium">
-				{{ t('agent.settings.appManagement.grants') }} <span v-if="grants">v{{ grants.revision }}</span>
+				{{ t('agent.settings.appManagement.grants') }}
 			</h4>
 			<p class="text-xs text-text-secondary">{{ t('agent.settings.appManagement.grantHelp') }}</p>
 			<p v-if="grantOperation.notice.value" role="status">
@@ -211,7 +211,7 @@
 		</section>
 		<section class="space-y-3 rounded border border-border p-3">
 			<h4 class="font-medium">
-				{{ t('agent.settings.appManagement.policy') }} <span v-if="policy">v{{ policy.version }}</span>
+				{{ t('agent.settings.appManagement.policy') }}
 			</h4>
 			<p class="text-xs text-text-secondary">{{ t('agent.settings.appManagement.policyHelp') }}</p>
 			<p v-if="policyOperation.notice.value" role="status">

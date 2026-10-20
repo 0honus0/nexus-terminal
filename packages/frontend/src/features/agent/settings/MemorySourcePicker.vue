@@ -48,7 +48,12 @@
 			{{ t('agent.settings.appManagement.' + operation.notice.value) }}
 		</p>
 		<div class="flex flex-wrap gap-2">
-			<UiButton type="button" @click="load()">{{ t('agent.settings.memoryManagement.readSources') }}</UiButton>
+			<UiButton
+				v-if="!operation.busy.value && (operation.refreshRequired.value || operation.notice.value === 'failed')"
+				type="button"
+				@click="load()"
+				>{{ t('agent.settings.memoryManagement.readSources') }}</UiButton
+			>
 			<UiButton type="button" :disabled="offset === 0" @click="load(Math.max(0, offset - 20))">{{
 				t('agent.settings.memoryManagement.previous')
 			}}</UiButton>

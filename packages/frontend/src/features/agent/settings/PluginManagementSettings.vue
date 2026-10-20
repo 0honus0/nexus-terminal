@@ -152,7 +152,6 @@
 			</div>
 			<div class="space-y-2 rounded border border-border p-3">
 				<h4>{{ t('agent.pluginManagement.installations') }}</h4>
-				<p class="text-sm text-text-secondary">{{ t('agent.pluginManagement.retirementHelp') }}</p>
 				<article
 					v-for="installation in installations"
 					:key="installation.appId"

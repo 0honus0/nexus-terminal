@@ -19,7 +19,7 @@
 		@close="emit('close')"
 	>
 		<p class="mb-3 text-sm text-text-secondary">{{ t('hostKeys.warning') }}</p>
-		<UiButton :disabled="loading" @click="refresh">{{ t('hostKeys.refresh') }}</UiButton>
+		<UiButton v-if="!loading && needsRefresh" @click="refresh">{{ t('hostKeys.refresh') }}</UiButton>
 		<p v-if="needsRefresh" class="mt-2 text-text-secondary">{{ t('hostKeys.failures.recovery_required') }}</p>
 		<p v-if="message" role="status" class="my-3">{{ message }}</p>
 		<ul class="my-4 space-y-3">

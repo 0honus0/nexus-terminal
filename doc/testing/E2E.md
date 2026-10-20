@@ -75,6 +75,12 @@
 
 本批行为验收仅使用获准的远程 Actions，未运行本地行为测试或用例收集；未覆盖组合继续保留，不恢复已通过的旧失败清单。
 
+## 后续本地展示清理（待远程）
+
+本轮另收窄工作区／系统偏好、监控、后端日志、布局／焦点、工作区连接列表、导入、主机信任和记忆源选择器的新增刷新入口：正常／初始读取不常驻，失败或待核对时可恢复。保留旧版记忆刷新、插件同步、文件／预览／历史及其他正常操作。监控脚本不再依赖刷新按钮存在判断保存完成；新增按钮变更的根 check、Frontend build、两份前端脚本语法及 diff 检查已通过，日志在 `/tmp/nexus-ui-refresh-{check,build}.log`；完整格式检查通过（`/tmp/nexus-ui-refresh-format.log`），行为未远程验证。
+
+当前工作区移除重构额外增加的常驻技术说明、设置修订展示，并将必要帮助精简为用户操作文字；三语及既有 Targets 隔离脚本的展示断言同步。未改 API／Shared、写入与恢复策略。上一版成功不代表本批已通过行为验收；重点为连接列表／导入、Browser／集成／记忆／Artifact／插件及安全／监控设置的常规、失败恢复与待重启状态。本批 `pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/frontend build`、`node --check tests/frontend/targets.integration.mjs` 和 `git diff --check` 均 exit 0；日志在 `/tmp/nexus-ui-prose-{check,format,build}.log`。不运行本地行为测试或用例收集，本批远程行为验收等待新一轮 Actions 结果。
+
 ## 历史证据追溯
 
 已完成施工记录不再作为当前任务。以下链接固定在删除前的已验收 SHA；历史静态、源码审核和行为结果各自只代表原范围：

@@ -216,9 +216,7 @@
     "completed": "Completed {count} operations.",
     "importTitle": "Import connections",
     "exportTitle": "Export configuration",
-    "importHelp": "New TargetImportInput JSON array only. Maximum 500 items / 1 MiB; dispatched in independent batches of at most 50. Earlier commits remain after failure; unknown results require review, never automatic replay.",
     "appendTag": "Append tag",
-    "exportHelp": "Exports configuration only, without passwords or private keys. References use IDs from the current instance. Maximum 500 items / 1 MiB.",
     "failures": {
       "failed": "The operation failed. Please try again later.",
       "unknown": "The result is unknown and may already be saved. Refresh and review before submitting again.",

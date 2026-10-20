@@ -228,7 +228,6 @@
 		@close="closeEditor"
 	>
 		<form v-if="targetDraft" id="browser-target-editor" class="space-y-4" @submit.prevent="saveTarget">
-			<p class="text-sm text-text-secondary">{{ t('agent.settings.browserRuntime.configurationHelp') }}</p>
 			<p v-if="operation.notice.value" role="status" class="text-sm">
 				{{ t('agent.settings.appManagement.' + operation.notice.value) }}
 			</p>

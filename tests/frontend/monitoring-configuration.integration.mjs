@@ -365,7 +365,11 @@ try {
 					new Event('submit', { bubbles: true, cancelable: true }),
 				);
 				await nextTick();
-				await until(() => writes > count && !node.querySelector('[data-monitoring-refresh]').disabled);
+				await until(() => writes > count && node.querySelector('[data-monitoring-feedback]'));
+				check(
+					!node.querySelector('[data-monitoring-refresh]'),
+					component.__name + ' hides recovery refresh after a confirmed save',
+				);
 				check(
 					writes === count + 1 && node.querySelector('[data-monitoring-feedback]'),
 					component.__name + ' performs one write and renders feedback',
