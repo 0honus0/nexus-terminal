@@ -4,11 +4,11 @@
 
 ## 当前验收基线
 
-2026-10-20，canonical [Actions 39417865747](https://github.com/0honus0/nexus-terminal/actions/runs/39417865747)，SHA `0e425fe20189e8e2079b575af70ec0657c269b67`：
+2026-10-20，canonical [Actions 39434833396](https://github.com/0honus0/nexus-terminal/actions/runs/39434833396)，SHA `9808dbdc0d67dc982bbaed11132a28b25275dc40`：
 
 | 检查                                                          | 结果                                  |
 | ------------------------------------------------------------- | ------------------------------------- |
-| Playwright shard 1–8                                          | 全部 success                          |
+| Playwright shard 1–8                                          | 全部 success，共448项，无flaky        |
 | Checks, format, and build                                     | success                               |
 | Docker deployment smoke                                       | success                               |
 | Prepare E2E runner image / Update Playwright duration balance | success                               |
@@ -523,3 +523,5 @@ Runtime databases, reports, traces, screenshots, videos, logs, PID files, caches
 两轮源码复核分别核对实际组件入口和完整业务断言；没有新增产品按钮、放宽权限、跳过用例或执行本地行为测试。本批只修改既有测试消费者与验证／规划文档，USAGE 原操作说明仍符合实际，E2E 包无 build 脚本。`a7406e88` 的 [Actions 39433921156](https://github.com/0honus0/nexus-terminal/actions/runs/39433921156) 的 Checks/format/build 和 Docker 已通过；八组运行中，不能据此宣称本批行为通过。
 
 静态环境仍为 Node 22.23.1 / pnpm 11.26.0；根 `pnpm run check`、`pnpm run format:all:check` 均退出0，日志为 `/tmp/nexus-ui-followup-{check,format}.log`。最终定位微调后另检查修改的spec和文档格式、ESLint及`git diff --check`；未修改产品源码，无新增产品构建需求。本批远程行为待新提交验收。
+
+本批远程证据：`a7406e88` 的 Actions 39433921156 被新推送按已有 `cancel-in-progress` 策略自动取消，原日志 `/tmp/nexus-ui-a7406e88.log` 保留两项第3组旧入口失败；不得算作完整验收。`9808dbdc0d67dc982bbaed11132a28b25275dc40` 的 [Actions 39434833396](https://github.com/0honus0/nexus-terminal/actions/runs/39434833396) 八组全部success：各组通过数依次为55、37、48（含两个独立1项）、46、58（含独立1项）、76、77、51，共448项。逐组读取原job日志，无failed、flaky或skipped用例；两个修复场景分别3.9秒及8.8秒通过。Checks/format/build、Docker及runner image也通过。该范围不包含完整像素比对、全部单位临界值／未知安装故障和扩大的窄屏／生命周期组合，既有未覆盖说明继续有效。
