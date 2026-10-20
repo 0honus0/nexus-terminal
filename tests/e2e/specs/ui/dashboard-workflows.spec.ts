@@ -300,20 +300,25 @@ test('dashboard reconnect completion refreshes recent connection without navigat
 	// The actual contract is the active Workspace binding and Dashboard's
 	// recent-connection timestamp, which are both checked below.
 
-	let releaseConnectionDetail: (() => void) | undefined;
-	const connectionDetailGate = new Promise<void>((resolve) => {
-		releaseConnectionDetail = resolve;
+	let releaseConnect: (() => void) | undefined;
+	const connectGate = new Promise<void>((resolve) => {
+		releaseConnect = resolve;
 	});
-	let markConnectionDetailStarted: (() => void) | undefined;
-	const connectionDetailStarted = new Promise<void>((resolve) => {
-		markConnectionDetailStarted = resolve;
+	let markConnectStarted: (() => void) | undefined;
+	const connectStarted = new Promise<void>((resolve) => {
+		markConnectStarted = resolve;
 	});
-
-	await page.route(`**/api/v1/targets/connections/${connectionId}`, async (route) => {
-		const response = await route.fetch();
-		markConnectionDetailStarted?.();
-		await connectionDetailGate;
-		await route.fulfill({ response });
+	// Hold work already owned by the runtime, not the page's preflight detail
+	// read. Navigating away correctly revokes an unstarted page intention.
+	await page.routeWebSocket('**/ws/workspace', (socket) => {
+		const server = socket.connectToServer();
+		socket.onMessage(async (message) => {
+			if (typeof message === 'string' && JSON.parse(message).type === 'workspace.connect') {
+				markConnectStarted?.();
+				await connectGate;
+			}
+			server.send(message);
+		});
 	});
 
 	try {
@@ -331,14 +336,14 @@ test('dashboard reconnect completion refreshes recent connection without navigat
 		await expect.poll(() => Date.now()).toBeGreaterThan(previousLastConnectedAt + 1_000);
 
 		await reconnect.click();
-		await connectionDetailStarted;
+		await connectStarted;
 
 		// The one-shot connectionId query is consumed immediately, before SSH finishes connecting.
 		await expect(page).toHaveURL(/\/workspace$/);
 		await page.locator('.app-nav-links').getByRole('link', { name: 'Dashboard', exact: true }).click();
 		await expect(page).toHaveURL(/\/$/);
 
-		releaseConnectionDetail?.();
+		releaseConnect?.();
 		// Successful background completion must update the already-mounted Dashboard store without a page reload.
 		await expect
 			.poll(async () => Number(await row.getAttribute('data-last-connected-at')), { timeout: 10_000 })
@@ -353,7 +358,7 @@ test('dashboard reconnect completion refreshes recent connection without navigat
 			'connected',
 		);
 	} finally {
-		releaseConnectionDetail?.();
+		releaseConnect?.();
 		await page.unrouteAll({ behavior: 'wait' });
 	}
 });

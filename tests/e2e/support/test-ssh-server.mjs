@@ -1196,10 +1196,12 @@ function runRemoteCommand(command, stream, session) {
 		);
 		return;
 	}
-	const dockerAction = command.match(/^docker\s+(start|stop|restart|pause|unpause|rm(?:\s+-f)?)\s+([a-f0-9]+)\s*$/);
+	const dockerAction = command.match(
+		/^docker\s+(start|stop|restart|pause|unpause|rm(?:\s+-f)?)\s+(?:'([a-f0-9]+)'|([a-f0-9]+))\s*$/,
+	);
 	if (dockerAction) {
 		const action = dockerAction[1];
-		const containerId = dockerAction[2];
+		const containerId = dockerAction[2] ?? dockerAction[3];
 		if (!dockerContainerPresent || containerId !== DOCKER_CONTAINER_ID) {
 			finishExec(stream, '', `Error: No such container: ${containerId}\n`, 1);
 			return;

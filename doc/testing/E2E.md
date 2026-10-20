@@ -1717,3 +1717,11 @@ upload-adapters在用户已请求cancel时，binary close仍立即fail并删除�
 两轮源码审核覆盖取消前断流、取消中close/error/发送失败、取消回执拒绝、服务端cancelled/failed/先completed、旧流晚拒绝和控制连接断开。Frontend build、根check、完整format:all:check退出0；最终文档格式与diff再查。USAGE/Frontend架构同步；行为只由含此变更的远程版本确认，上传并发和归档并发围栏未修改。
 
 39356651981 / 48faea89完整结果：第3/4/5组success，第1/2/6/7/8组failure，检查/构建与Docker smoke成功。第7组75项通过，原7项多会话均已通过；剩3项集中upload-prepare-profile（全量性能120秒期限、独立连接缺Host Key、已知目录冲突后的恢复）。第8组51项通过、4项失败，目录复制/并发上传/隐藏取消/移动端取消；文件下载本轮通过，不能据此宣布历史偶发彻底解决。第1组36项通过，仅终端缓存失败。最新已推送cb3e7a22 / Actions39357785902包含目录复制和终端缓存；本条客户端取消及插件回执补修尚未包含。
+
+## 远程第十九轮：第2组Dashboard/Docker/布局夹具（2026-10-20）
+
+39356651981重复出现最近连接时间不变、Docker Stop不可用、旧布局ID定位失败。Dashboard用例阻塞的是尚未启动runtime的详情读取，离开页后正确撤销旧query；现把门闩放在已由runtime发出的workspace.connect上，仍走真实WS及SSH，严格验证时间增加/不回跳/连接可用。NativeDockerAdapter将已验证ID包单引号，夹具裸hex regex未匹配，落入真实shell执行失败；regex现精确支持裸/单引号hex，动作及目标验证不放宽。布局预览取当前安装树root id及首子容器，保留子项数/方向/geometry/锁定与持久化断言。
+
+两轮源码审核覆盖WS门闩释放/测试失败finally、CLI start/stop/restart/remove及拒绝未知ID、实际递归DOM。产品代码不变，核对USAGE原后台连接/页面撤销、Docker动作与布局操作说明；待静态收口，行为交远程。
+
+第2组夹具子项静态：node --check test-ssh-server.mjs、根check、完整format:all:check通过，最终文档格式与diff复查通过；未执行本机行为测试。当前远程39358034424 / 2a577341包含先前目录复制、缓存、插件回执及上传取消客户端补修，尚不含本条三个夹具变更。
