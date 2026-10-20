@@ -517,7 +517,7 @@ Run状态为pending/running/completed/failed/unknown/cancelled。执行、预算
 
 ### Artifact 容量与清理
 
-设置与Host文件库均使用当前Shared协议，提供目录、两步上传、有界下载、保留、删除和清理。原生输入选择附件后先读取当前版本，再明确关联当前线程；全部确认后才把artifactId及不可信名称写入prompt，Run不会自动派发。关联不授予`artifacts.read`，执行时仍核对权限、版本和精确Thread/Run范围。
+Host文件库使用当前Shared协议，提供目录、两步上传、有界下载、保留、删除和清理。原生输入选择附件后先读取当前版本，再明确关联当前线程；全部确认后才把artifactId及不可信名称写入prompt，Run不会自动派发。关联不授予`artifacts.read`，执行时仍核对权限、版本和精确Thread/Run范围。
 
 关联结果未知时停止后续关联和Run派发，先只读核对附件；读取文件对象不证明引用已确认，须承认旧关联可能已提交后再明确发起新意图。已确认关联不因后来Run创建失败回滚。完整prompt（含引用）仍受16 KiB预算。
 
@@ -702,7 +702,7 @@ ACP执行初始化、创建新会话、提交prompt并收集文本更新；输�
 
 Memory 管理归 /api/v1/agent/apps/:appId/memories：列表 status/limit/offset、POST 候选、GET 单项、POST /:memoryId/review、POST /imports/preview 和 /confirm。正文最多 16 KiB，审核带 expectedVersion，只有人工 publish 才进入 Recall；模型提案绑定真实 Run。跨 App 导入限同一用户、已发布且未过期的来源，确认重新核对版本，目标仍为候选。确认一次消费，未知结果按 preview.memoryId 只读查询，不重发。
 
-正式文件库可从 Agent 设置或浮窗“文件”打开，独立读取真实 App、offset 分页列表和存储统计，支持名称/类型/保留状态筛选、原版本保留/删除、上传和下载。上传按预留→字节 PUT 完成；下载核对 ETag、长度和 SHA-256 后作为文件交给浏览器。写入后须重新读取列表，读取统计不能解除写入围栏。上传结果未知时保留已知预留 ID，只读核对；无 ID 时先核对列表，明确承认可能重复后才能开始新上传意图。清理预览按当前用户全库计算，分 App 展示候选，并非仅清理选中 App；确认未知不重发。引用编辑器先读原文件版本，填写真实目标 App/Thread 和可选 Run，按原版本添加或解除引用；文件读取仅证明版本，不能证明引用是否存在。切换页面或身份清除私有草稿和确认。
+正式文件库从 Agent 浮窗“文件”打开，独立读取真实 App、offset 分页列表和存储统计。用量概览展示已用／上限、保护、可回收和剩余空间；搜索条按名称、类型、应用和保留状态筛选，可重置筛选。保留／删除使用原版本，删除确认显示文件名和大小。上传按预留→字节 PUT 完成，成功后不显示核对按钮；下载核对 ETag、长度和 SHA-256 后作为文件交给浏览器。写入后须重新读取列表，读取统计不能解除写入围栏。上传结果未知时保留已知预留 ID，只读核对；无 ID 时先核对列表，明确承认可能重复后才能开始新上传意图。清理预览按当前用户全库计算，分 App 展示候选，并非仅清理选中 App；确认未知不重发。引用编辑器先读原文件版本，填写真实目标 App/Thread 和可选 Run，按原版本添加或解除引用；文件读取仅证明版本，不能证明引用是否存在。切换页面或身份清除私有草稿和确认。
 
 Artifact 位于 /api/v1/agent/apps/:appId/artifacts；先 POST name/mediaType/declaredBytes，再 PUT /:artifactId/content，以 application/octet-stream 发送真实字节并带 If-Match 的带引号版本。单项最多 16 MiB，服务端校验实际长度，GET 内容支持单个 bytes=start-end Range，下载不内联执行。新后端普通下载、插件包暂存和消息授权读取在分块交付及结束前复查原授权、ready/有效期及版本；空文件同样检查，不绕过认证。短读或超出声明范围终止交付，已交付字节不能撤回。库 /api/v1/agent/files 与 /files/storage；App 内支持 retain、带版本删除、attachments/解除引用及 cleanup/preview、confirm。被引用或保留的文件不能清理；确认绑定资源版本、十分钟期限并只消费一次。文件发布后 SQL 失败是未知结果，预留额度不因此释放，不能自动重传或删除。
 

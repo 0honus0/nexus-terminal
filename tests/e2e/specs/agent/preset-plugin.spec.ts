@@ -18,6 +18,7 @@ import {
 	waitNativeApproval,
 } from '../../fixtures/agent/native-task';
 import { configureTestPluginRepository, installTestPlugin, stageTestPlugin } from '../../support/plugins';
+import { selectUiOption } from '../../support/ui-select';
 import {
 	openAgentConversations,
 	selectAgentSettingsGroup,
@@ -1012,7 +1013,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 		async () => {
 			await hub.getByRole('button', { name: 'Files', exact: true }).click();
 			const library = hub.getByRole('region', { name: 'Files and Artifact library', exact: true });
-			await library.getByRole('combobox', { name: 'App', exact: true }).selectOption(app.id);
+			await selectUiOption(library.getByRole('combobox', { name: 'App', exact: true }), app.id);
 			const bytes = Buffer.from('Plugin native Artifact evidence\n');
 			await library
 				.getByLabel('Upload to selected App', { exact: true })

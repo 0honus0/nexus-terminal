@@ -525,3 +525,11 @@ Runtime databases, reports, traces, screenshots, videos, logs, PID files, caches
 静态环境仍为 Node 22.23.1 / pnpm 11.26.0；根 `pnpm run check`、`pnpm run format:all:check` 均退出0，日志为 `/tmp/nexus-ui-followup-{check,format}.log`。最终定位微调后另检查修改的spec和文档格式、ESLint及`git diff --check`；未修改产品源码，无新增产品构建需求。本批远程行为待新提交验收。
 
 本批远程证据：`a7406e88` 的 Actions 39433921156 被新推送按已有 `cancel-in-progress` 策略自动取消，原日志 `/tmp/nexus-ui-a7406e88.log` 保留两项第3组旧入口失败；不得算作完整验收。`9808dbdc0d67dc982bbaed11132a28b25275dc40` 的 [Actions 39434833396](https://github.com/0honus0/nexus-terminal/actions/runs/39434833396) 八组全部success：各组通过数依次为55、37、48（含两个独立1项）、46、58（含独立1项）、76、77、51，共448项。逐组读取原job日志，无failed、flaky或skipped用例；两个修复场景分别3.9秒及8.8秒通过。Checks/format/build、Docker及runner image也通过。该范围不包含完整像素比对、全部单位临界值／未知安装故障和扩大的窄屏／生命周期组合，既有未覆盖说明继续有效。
+
+### Files 库展示续审（2026-10-20，待远程）
+
+基于 `9e56d456`，按 `75289ef9^` 完整 ArtifactLibraryView 模板还原用量条与保护／回收／剩余统计、紧凑搜索／UiSelect筛选及重置、空列表、原文件图标／扩展名／状态和动作顺序。删除确认与上传状态不常驻显示内部ID／版本；成功上传隐藏核对按钮，未知或staging仍保留恢复入口。实际kind来自已验证应用对象，不恢复旧媒体推断或旧API；时间仍为毫秒。新协议的offset分页、真实App、上传／引用／清理、权限／CAS和未知结果仍归原owner。USAGE同步真实浮窗入口与对应操作。既有插件场景只把原生select操作换为现有UiSelect helper，原上传、下载和持久数据断言不变。
+
+两轮源码复核覆盖展示基线、Shared有限取值、父窗口安装、筛选互斥、上传恢复按钮条件、删除和原清理确认；没有新增行为测试或本地收集／浏览器运行。原448项只对应 `9808dbdc`，不代表本批已通过。静态环境 Node 22.23.1 / pnpm 11.26.0；根check和frontend build退出0（`/tmp/nexus-files-ui-{check,build}.log`），完整format及最终diff结果按本批收口补充。窄屏筛选条和Files完整交互待新提交远程／对应现场验收，不宣称像素一致。
+
+本批最终全量format退出0（`/tmp/nexus-files-ui-format.log`），修改组件／spec的ESLint、文档与源码Prettier、`git diff --check`通过。第二轮父窗口复核发现Files没有独立滚动容器，补回有界窗口内的纵向滚动，避免新协议上传／清理区域越出浮窗不可达；该布局仍须远程核对。
