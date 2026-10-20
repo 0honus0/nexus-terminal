@@ -512,6 +512,8 @@ test('file previews and text editor protect historical file-opening regressions'
 		} finally {
 			expect((await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' })).ok).toBe(true);
 		}
+		// Durable bytes can appear before the original save receipt finishes cleanup.
+		await expect(editor).toContainText('Save successful');
 		await documentPopup(page).getByTitle('Close Editor', { exact: true }).first().click();
 		await expect(editor).toBeHidden();
 

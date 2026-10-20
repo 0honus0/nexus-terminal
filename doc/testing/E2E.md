@@ -549,3 +549,11 @@ a758e2431baedcd4143272e6e09f09271eb41a9f 的 [Actions 39438940586](https://githu
 修复由原operation owner标记可被取代的只读background请求，不周期性切换交互busy；新交互取消原读取等待并推进generation，旧accept/catch/finally不能覆盖新状态。自动轮询之外的读取与写入仍串行，写入CAS及unknown不变。既有ACP取消用例增加实际取消HTTP回执与Shared关联解码，再核对Run取消、晚审批拒绝、进程及工具账本；未放宽原断言。两轮源码复核覆盖轮询被写入／手动读取取代、会话撤销、晚成功/失败及旧finally。此为源码分析，按D17未本地执行行为；附件多选故障分支也不冒充已验。静态及推送后的八组结果另记。
 
 本批最终静态门禁：Node 22.23.1／pnpm 11.26.0，根 `pnpm run check`、`pnpm --filter @nexus-terminal/frontend build`、`pnpm run format:all:check` 均exit0，日志为 `/tmp/nexus-ui-poll-{check,build,format}.log`；`git diff --check`通过。包含附件多选与可取代的后台读取，未运行本地行为测试。最终diff第二次复核确认后台仅用于只读轮询、原写入保护及全部ACP业务断言保留。
+
+### 2026-10-20 编辑器保存关闭准入（待新SHA）
+
+f0acd1d78433872dc1b8d08eb210a21dd5928aa8 的 [Actions 39441269931](https://github.com/0honus0/nexus-terminal/actions/runs/39441269931) 为failure：七组成功、447项通过／1项失败，无flaky；质量／构建、Docker及runner通过。第4组原ACP取消首次通过（9.5秒），第3组Files／插件场景通过。第5组file-preview-editor在保存后关闭失败，两次均如此。原始逐组日志 `/tmp/nexus-ui-poll-job-<jobId>.log`；trace `/tmp/nexus-editor-close-trace`。
+
+trace显示Save后为saving，测试已从磁盘读到新字节，但关闭时原保存回执仍未完成，closeDocuments正确拒绝，随后才显示Save successful。修复FileEditor：关闭窗口按全部文档saveState，关闭标签和右键批量菜单按涉及集合禁用；Model的在途保存、确认后草稿复核及生命周期不变。既有测试在磁盘内容断言之后额外等可见保存回执，再保留关闭／重开及全部后续预览断言，不增加固定延迟。两轮源码复核覆盖活动／非活动保存、桌面／移动关闭、左右／其他标签及失效草稿保护；USAGE／Frontend同步。此为源码复核，D17下无本地行为执行，新SHA结果另记。
+
+编辑器补修静态门禁：Node 22.23.1／pnpm 11.26.0，根check、frontend build及全量format均exit0，日志 `/tmp/nexus-editor-close-{check,build,format}.log`；diff检查通过。最终第二次源码复核确认单标签／左右／其他集合及桌面／移动窗口均消费同一文档saveState，Model实际准入与UI禁用分开保留；未运行本地行为。

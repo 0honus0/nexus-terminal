@@ -107,6 +107,7 @@
 			editorSession.loading.value || active.saveState === 'saving' || (!props.showCloseButton && !active.dirty)
 		);
 	});
+	const closeDisabled = computed(() => editorSession.tabs.value.some((tab) => tab.saveState === 'saving'));
 	const contextIndex = computed(() =>
 		context.value ? editorSession.tabs.value.findIndex((tab) => tab.id === context.value!.id) : -1,
 	);
@@ -115,6 +116,16 @@
 		() => contextIndex.value >= 0 && contextIndex.value < editorSession.tabs.value.length - 1,
 	);
 	const contextCanCloseLeft = computed(() => contextIndex.value > 0);
+	const contextSaving = computed(() => {
+		const tabs = editorSession.tabs.value;
+		const index = contextIndex.value;
+		return {
+			close: tabs[index]?.saveState === 'saving',
+			others: tabs.some((tab, position) => position !== index && tab.saveState === 'saving'),
+			right: tabs.some((tab, position) => position > index && tab.saveState === 'saving'),
+			left: tabs.some((tab, position) => position < index && tab.saveState === 'saving'),
+		};
+	});
 
 	const save = () => editorSession.save();
 
@@ -255,6 +266,7 @@
 					class="close-tab-btn"
 					:title="t('fileManager.actions.closeTab')"
 					:aria-label="t('fileManager.actions.closeTab')"
+					:disabled="tab.saveState === 'saving'"
 					@click.stop="editorSession.close(tab.id)"
 				>
 					×
@@ -352,6 +364,7 @@
 					class="close-editor-btn"
 					:title="t('fileManager.actions.closeEditor')"
 					:aria-label="t('fileManager.actions.closeEditor')"
+					:disabled="closeDisabled"
 					@click="emit('close')"
 				>
 					✖
@@ -364,6 +377,7 @@
 				class="close-editor-btn mobile-close"
 				:title="t('fileManager.actions.closeEditor')"
 				:aria-label="t('fileManager.actions.closeEditor')"
+				:disabled="closeDisabled"
 				@click="emit('close')"
 			>
 				✖
@@ -378,6 +392,7 @@
 				:class="{ 'mobile-close': device.isMobile.value }"
 				:title="t('fileManager.actions.closeEditor')"
 				:aria-label="t('fileManager.actions.closeEditor')"
+				:disabled="closeDisabled"
 				@click="emit('close')"
 			>
 				✖
@@ -433,6 +448,7 @@
 			<button
 				class="mx-1 flex w-[calc(100%-0.5rem)] items-center rounded-md px-4 py-1.5 text-left text-sm transition-colors duration-150 hover:bg-primary/10 hover:text-primary"
 				role="menuitem"
+				:disabled="contextSaving.close"
 				@click="contextAction('close')"
 			>
 				{{ t('fileEditor.contextMenu.close') }}
@@ -441,6 +457,7 @@
 				v-if="contextCanCloseOthers"
 				class="mx-1 flex w-[calc(100%-0.5rem)] items-center rounded-md px-4 py-1.5 text-left text-sm transition-colors duration-150 hover:bg-primary/10 hover:text-primary"
 				role="menuitem"
+				:disabled="contextSaving.others"
 				@click="contextAction('others')"
 			>
 				{{ t('fileEditor.contextMenu.closeOthers') }}
@@ -449,6 +466,7 @@
 				v-if="contextCanCloseRight"
 				class="mx-1 flex w-[calc(100%-0.5rem)] items-center rounded-md px-4 py-1.5 text-left text-sm transition-colors duration-150 hover:bg-primary/10 hover:text-primary"
 				role="menuitem"
+				:disabled="contextSaving.right"
 				@click="contextAction('right')"
 			>
 				{{ t('fileEditor.contextMenu.closeRight') }}
@@ -457,6 +475,7 @@
 				v-if="contextCanCloseLeft"
 				class="mx-1 flex w-[calc(100%-0.5rem)] items-center rounded-md px-4 py-1.5 text-left text-sm transition-colors duration-150 hover:bg-primary/10 hover:text-primary"
 				role="menuitem"
+				:disabled="contextSaving.left"
 				@click="contextAction('left')"
 			>
 				{{ t('fileEditor.contextMenu.closeLeft') }}
