@@ -116,6 +116,8 @@ Registry状态卡片由`useAuthenticatedViewScope`隔离身份、卸载及KeepAl
 
 ## 7. 生命周期与失败
 
+Workspace upload adapter将取消中的binary close/error交回原cancel控制请求结算，不让字节连接抢先把任务变成unknown；control失败、后端failed事件及任务期限仍按真实结果处理，未确认前不移除任务或归还本地名额。
+
 WorkspaceUiState 的视图撤销只取消原布局/焦点请求与未派发保存，保留缓存页面已加载的布局、焦点配置与终端树；session/disposed 撤销才清空该状态。晚响应仍核对原 permission/revision，不能因保留缓存继续发布已撤销结果。
 
 明确打开、取消、订阅、解除、关闭和卸载 owner。取消前端请求不证明后端副作用终止；晚返回的资源仍尝试归还给原 owner。错误映射稳定安全码，区分网络失败、协议失败、业务拒绝和未知写入结果；非 JSON、未知状态/错误码及错误 shape 不当作成功。不把失败刷新作为操作已恢复证明。

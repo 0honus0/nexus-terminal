@@ -1709,3 +1709,11 @@ cross-session-transfer前两项已通过，第三项刻意禁止/folder-seed/子
 两轮源码复核覆盖三个迁移入口及原Run创建/追加消费者。USAGE产品流程不变，核对现有原生会话、批准及版本冲突说明仍适用；本机未运行行为测试，待含此变更的远程版本验证。第2组其他Dashboard/归档并发/Docker/布局问题仍分别跟进，不标整组完成。
 
 插件回执子项静态：根check、完整format:all:check退出0；最终变更文件格式与diff检查通过。无产品/Shared源码变更，不重复应用构建；行为未在本机执行。
+
+## 远程第十九轮：第6/8组上传取消流竞态（2026-10-20）
+
+upload-adapters在用户已请求cancel时，binary close仍立即fail并删除任务、触发额外abort，随后的控制cancelled事件因任务不存在被丢弃。这解释了隐藏上传/移动端进度显示unknown、不自动清除及重复abort的路径。新增failStream仅在cancelling期间将流失败留原控制链结算；正常运行断流仍unknown，cancel拒绝/控制失败、服务端failed与总期限仍失败，不提前发布取消成功或释放任务。
+
+两轮源码审核覆盖取消前断流、取消中close/error/发送失败、取消回执拒绝、服务端cancelled/failed/先completed、旧流晚拒绝和控制连接断开。Frontend build、根check、完整format:all:check退出0；最终文档格式与diff再查。USAGE/Frontend架构同步；行为只由含此变更的远程版本确认，上传并发和归档并发围栏未修改。
+
+39356651981 / 48faea89完整结果：第3/4/5组success，第1/2/6/7/8组failure，检查/构建与Docker smoke成功。第7组75项通过，原7项多会话均已通过；剩3项集中upload-prepare-profile（全量性能120秒期限、独立连接缺Host Key、已知目录冲突后的恢复）。第8组51项通过、4项失败，目录复制/并发上传/隐藏取消/移动端取消；文件下载本轮通过，不能据此宣布历史偶发彻底解决。第1组36项通过，仅终端缓存失败。最新已推送cb3e7a22 / Actions39357785902包含目录复制和终端缓存；本条客户端取消及插件回执补修尚未包含。

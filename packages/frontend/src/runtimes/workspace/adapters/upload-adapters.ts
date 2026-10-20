@@ -259,6 +259,15 @@ export function createWorkspaceUploadAdapter(
 			poll();
 		});
 
+	const failStream = (task: UploadTask, error: TransferFailure): void => {
+		// Cancellation closes the binary stream before its control receipt can
+		// arrive. The original cancel request still owns that settlement; only
+		// its result or the control event can confirm cleanup or report unknown.
+		if (task.phase !== 'cancelling') {
+			fail(task, error);
+		}
+	};
+
 	const streamUpload = async (task: UploadTask): Promise<void> => {
 		if (!current(task) || task.stream || task.input.size === 0) {
 			throw new TransferFailure('protocol_error', true);
@@ -279,7 +288,7 @@ export function createWorkspaceUploadAdapter(
 			const lost = (): void => {
 				const error = new TransferFailure('operation_unknown', true);
 				reject(error);
-				fail(task, error);
+				failStream(task, error);
 			};
 
 			const open = (): void => {
@@ -357,7 +366,7 @@ export function createWorkspaceUploadAdapter(
 					throw new TransferFailure('protocol_error', true);
 				}
 				task.phase = 'running';
-				void streamUpload(task).catch((cause) => fail(task, failure(cause, true)));
+				void streamUpload(task).catch((cause) => failStream(task, failure(cause, true)));
 				return;
 			case 'progress':
 				if (
