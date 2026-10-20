@@ -28,11 +28,17 @@ for (const changedKey of [false, true]) {
 		expect(fixture.ok).toBe(true);
 		const actual = readHostKeyConfirmRequest(await fixture.json());
 		const headers = { Origin: E2E_URLS.frontendOrigin };
-		const removed = await context.request.post('/api/v1/targets/host-keys/remove', {
-			headers,
-			data: { host: actual.host, port: actual.port },
-		});
-		expect(removed.status()).toBe(200);
+
+		const readPin = async () => {
+			const response = await context.request.get('/api/v1/targets/host-keys');
+			expect(response.status()).toBe(200);
+			return readHostKeyList(await response.json()).find(
+				(item) => item.host === actual.host && item.port === actual.port,
+			);
+		};
+
+		// The per-test reset starts without trust; do not assume deleting a missing pin succeeds.
+		expect(await readPin()).toBeUndefined();
 		const previousFingerprint = 'SHA256:' + (actual.fingerprint.endsWith('A') ? 'B' : 'A').repeat(43);
 		if (changedKey) {
 			const pinned = await context.request.post('/api/v1/targets/host-keys/confirm', {
@@ -75,14 +81,6 @@ for (const changedKey of [false, true]) {
 				await route.abort('failed');
 			});
 		}
-
-		const readPin = async () => {
-			const response = await context.request.get('/api/v1/targets/host-keys');
-			expect(response.status()).toBe(200);
-			return readHostKeyList(await response.json()).find(
-				(item) => item.host === actual.host && item.port === actual.port,
-			);
-		};
 
 		await page.goto(`/workspace?connectionId=${connectionId}`);
 		const dialog = page.getByRole('dialog', { name: 'SSH Host Keys', exact: true });

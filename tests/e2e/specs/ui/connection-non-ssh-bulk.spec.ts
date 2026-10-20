@@ -40,14 +40,30 @@ async function createNonSshConnection(
 	await password.fill(`${type}-e2e-password`);
 	await form.locator('#conn-notes').fill(`${type} created through conditional browser form`);
 
-	const createPromise = page.waitForResponse(
-		(response) =>
-			response.url().endsWith('/api/v1/targets/connections/import') && response.request().method() === 'POST',
-	);
-	await form.locator('button[type="submit"]').click();
-	const create = await createPromise;
-	expect(create.status()).toBe(200);
-	const imported = readConnectionImportResponse(await create.json()).items;
+	const importRoute = '**/api/v1/targets/connections/import';
+	let importBody: unknown;
+	// Capture the original receipt before navigation can retire its browser-side body.
+	// Fulfill that same request; never replay a connection import to recover its response.
+	await page.route(importRoute, async (route) => {
+		if (route.request().method() !== 'POST') {
+			await route.continue();
+			return;
+		}
+		const response = await route.fetch();
+		importBody = await response.json();
+		await route.fulfill({ response });
+	});
+	try {
+		const createPromise = page.waitForResponse(
+			(response) =>
+				response.url().endsWith('/api/v1/targets/connections/import') && response.request().method() === 'POST',
+		);
+		await form.locator('button[type="submit"]').click();
+		expect((await createPromise).status()).toBe(200);
+	} finally {
+		await page.unroute(importRoute);
+	}
+	const imported = readConnectionImportResponse(importBody).items;
 	expect(imported).toHaveLength(1);
 	const result = imported[0];
 	if (!result || result.status !== 'ok') throw new Error('Non-SSH import failed');

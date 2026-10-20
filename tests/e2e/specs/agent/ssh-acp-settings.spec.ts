@@ -158,9 +158,12 @@ for (const decision of ['denied', 'cancelled'] as const) {
 			section.getByRole('combobox', { name: 'Edit app permissions and policy', exact: true }),
 			app.id,
 		);
-		await expect(
-			section.getByRole('heading', { name: 'SSH ACP settings fixture · ACP · v1', exact: true }),
-		).toBeVisible();
+		const integrationCard = section.getByRole('article').filter({
+			has: page.getByRole('heading', { name: 'SSH ACP settings fixture', exact: true }),
+		});
+		await expect(integrationCard).toBeVisible();
+		await expect(integrationCard).toContainText('ACP');
+		await expect(integrationCard).toContainText(directory);
 
 		await page.goto('/connections');
 		await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
