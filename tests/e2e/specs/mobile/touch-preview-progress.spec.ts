@@ -438,18 +438,31 @@ test('mobile upload progress stays inside the viewport and restores from Progres
 		await slowStep(
 			'throttled uploads expose all floating controls without overflowing the Pixel viewport',
 			async () => {
-				// Hidden upload input belongs to the active Workspace surface, not
-				// the teleported File Manager dialog. Inactive Workspace surfaces
-				// keep their own inputs mounted, so never select a global last input.
-				const surface = page.locator('[data-workspace-surface][data-workspace-active="true"]');
-				const fileInput = surface.locator('input[type="file"][multiple]').last();
-				await fileInput.setInputFiles(
+				// Upload must start through the real File Manager action. Setting
+				// files on the hidden input alone leaves the authenticated uploadIntent
+				// unset, so the change handler intentionally ignores the selection.
+				// Exercise the same mobile file chooser path as touch-advanced.
+				await page.evaluate(() =>
+					Object.defineProperty(window, 'showOpenFilePicker', { configurable: true, value: undefined }),
+				);
+				await page
+					.getByRole('dialog', { name: 'File Manager', exact: true })
+					.getByRole('button', { name: 'Upload File', exact: true })
+					.click();
+				const chooser = page.getByRole('dialog', { name: 'Upload files', exact: true });
+				await expect(chooser).toBeVisible();
+				const fileChooser = page.waitForEvent('filechooser');
+				await chooser.getByRole('button', { name: 'Choose files (any type)', exact: true }).click();
+				await (
+					await fileChooser
+				).setFiles(
 					filenames.map((name, index) => ({
 						name,
 						mimeType: 'application/octet-stream',
 						buffer: Buffer.alloc(8 * 1024 * 1024, 0x5a + index),
 					})),
 				);
+				await expect(chooser).toBeHidden();
 
 				const popup = page.locator('.transfer-progress-window:visible').first();
 				await expect(popup).toBeVisible({ timeout: 10_000 });
