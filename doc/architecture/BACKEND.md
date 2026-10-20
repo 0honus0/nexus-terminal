@@ -463,6 +463,8 @@ Files Service 区分直接借用 Workspace 与独立传输：direct 操作取消
 
 file-copy 由 Service 在首次副作用前预检整批目标与源的重叠。同 target/fingerprint 用源父目录 realpath 保留叶节点链接语义，目标的缺失后缀基于现有祖先解析，不为预检创建目录；检测相等/祖先/后代及规范位置的嵌套源。原始同路径 move 仍 no-op，别名解析与 metadata 只是变化检测，不是远端原子隔离。move 删除目录后的复查豁免自身删除引起的 mtime/size 变化，但 mode 仍须一致。ZIP 技术 Adapter 在 append 同步拒绝时同样停止并等待 reader finished，保证其拒绝被观察且原 producer/consumer 因果保留。
 
+file-copy以256 KiB固定窗口聚合读取，逐窗等待stage append确认，保持顺序、背压与失败时原迭代器排空/关闭，不并发调用stage。upload协议帧仍最多1 MiB，Service内部按512 KiB批次写入，每批开始前检查discarding；取消不abort独立lease，只停止后续批次，当前批次确认后由原worker清理stage，不将部分帧计为完整progress。
+
 Files Service 统一维护每 Workspace 16 个 prepare/upload/copy-move/archive 活跃名额，排队与清理失败任务计入总数；同步检查后立即登记，prepare 收尾释放名额，已完成 allowlist 独立缓存。FileArchiveModel 将 NativeArchiveFailure.cleanup_failed 显式转换为模块具名清理失败，不以普通 unknown 抹除生命周期事实。
 
 Files 操作在准入后、串行排队前登记 active/inFlight，关闭和 quiesce 覆盖排队与执行，追踪到 finally 退订和解锁完成。尚未执行的排队请求取消不退役健康 Workspace，也不提前解除前序门禁；入场认证等待归既有 authorizing owner。跨 Workspace copy/move 的私有任务记录双端归属，任一端关闭取消任务，双端关闭都汇总关联清理失败；控制协议、任务 ID 和授权仍归原目标端。上传任务用独立discarding状态区分清理已开始与最终块已接纳：取消/断流先停止接纳，原worker排空WRITE、关闭并删除stage，重复取消等待同一settlement，字节通道关闭不再次中断租约。首次断流仍为unknown；提交后的取消与真实清理失败不因该状态放宽。

@@ -1,4 +1,5 @@
 import { readWorkspaceUploadEvent } from '../../../../packages/shared/src/remote/transfers/workspace-codec';
+import { readMutationList } from '../../../../packages/shared/src/remote/mutations/http-codec';
 import { readTestConnectionImportId } from '../../support/targets';
 import { E2E_URLS } from '../../support/test-env';
 import { mkdir, readdir, stat, writeFile, unlink } from 'node:fs/promises';
@@ -127,13 +128,22 @@ test('unclassified preparation failure retains quarantine after the remote error
 		expect((await fetch(`${control}?path=`, { method: 'POST' })).ok).toBe(true);
 		retryWorkspace = await openWorkspaceSession(request, connectionId);
 		await waitForFilesystemReady(retryWorkspace.socket);
+		const query = { after: null, limit: 50 };
+		const claims = await request.get('/api/v1/remote/mutations?limit=50');
+		expect(claims.status()).toBe(200);
+		expect(
+			readMutationList(await claims.json(), query).items.some(
+				(claim) =>
+					claim.state === 'blocked' && claim.targets.some((target) => target.targetId === connectionId),
+			),
+		).toBe(true);
 		await expect(
 			requestWorkspace(retryWorkspace.socket, 'upload.prepare', {
 				prepareId: crypto.randomUUID(),
 				basePath: '/prepare-profile-unknown',
 				directories: ['child'],
 			}),
-		).rejects.toMatchObject({ code: 'operation_unknown' });
+		).rejects.toMatchObject({ code: 'conflict' });
 	} finally {
 		expect((await fetch(`${control}?path=`, { method: 'POST' })).ok).toBe(true);
 		if (retryWorkspace) await closeWebSocket(retryWorkspace.socket);

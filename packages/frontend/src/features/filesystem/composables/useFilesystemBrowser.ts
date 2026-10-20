@@ -82,6 +82,7 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
 	let searchTimer: number | undefined;
 	let searchToken = 0;
 	let loadToken = 0;
+	let requestedPath = initialPath;
 
 	const searchActive = computed(() => Boolean(searchQuery.value.trim()));
 
@@ -141,14 +142,16 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
 		}, delayMs);
 	};
 
-	const load = async (target = path.value): Promise<boolean | undefined> => {
+	const load = async (target = requestedPath): Promise<boolean | undefined> => {
 		const token = ++loadToken;
+		requestedPath = target;
 		loading.value = true;
 		error.value = null;
 		try {
 			const listing = await channel.listDirectory(target);
 			if (token !== loadToken) return undefined;
 			path.value = listing.path;
+			requestedPath = listing.path;
 			entries.value = listing.entries;
 			loaded.value = true;
 			selected.value = new Set();
@@ -157,6 +160,7 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
 			return true;
 		} catch (cause) {
 			if (token !== loadToken) return undefined;
+			requestedPath = path.value;
 			error.value = cause instanceof Error ? cause.message : String(cause);
 			return false;
 		} finally {
@@ -165,7 +169,9 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
 	};
 
 	const refresh = async () => {
-		let candidate = path.value;
+		// A transfer can finish while navigation is awaiting its listing.
+		// Refresh that requested destination rather than restoring the old page.
+		let candidate = requestedPath;
 		while (true) {
 			const result = await load(candidate);
 			if (result !== false || candidate === '/') return;

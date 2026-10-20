@@ -71,6 +71,10 @@ export function useTerminalBackground(options: TerminalBackgroundOptions) {
 	onDeactivated(() => {
 		viewActive.value = false;
 		refresh();
+		// KeepAlive detaches the iframe. Browsers can recreate its document
+		// while the cached page has a zero viewport; one-shot themes then stay
+		// blank. Clear only the document and load it again once visibly sized.
+		frame.value?.removeAttribute('srcdoc');
 	});
 	onBeforeUnmount(() => {
 		disposed = true;

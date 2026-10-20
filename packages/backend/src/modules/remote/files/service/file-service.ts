@@ -91,6 +91,7 @@ const FILE_UPLOAD_IDLE_MS = 5 * 60 * 1000;
 const FILE_CLOSE_REPLAY_MS = 2 * 60 * 1000;
 const MAX_RECENTLY_CLOSED_FILES = 128;
 const MAX_UPLOAD_PREPARE_WORKERS = 4;
+const UPLOAD_WRITE_BATCH_BYTES = 512 * 1024;
 
 interface ReleasedFile {
 	userId: number;
@@ -1755,7 +1756,15 @@ export class RemoteFileService {
 				throw new RemoteFileFailure('invalid_input');
 			}
 			const chunkIndex = task.nextIndex++;
-			await task.stage.append(bytes);
+			// A protocol frame can span multiple write batches. Stop dispatching
+			// the next batch after cancellation, while the current one drains on
+			// the live lease so the upload worker can still discard its stage.
+			for (let offset = 0; offset < bytes.byteLength; offset += UPLOAD_WRITE_BATCH_BYTES) {
+				if (task.discarding) {
+					return false;
+				}
+				await task.stage.append(bytes.subarray(offset, offset + UPLOAD_WRITE_BATCH_BYTES));
+			}
 			if (
 				this.uploads.get(key) !== task ||
 				task.finished ||

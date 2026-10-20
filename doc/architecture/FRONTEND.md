@@ -134,6 +134,8 @@ WorkspaceSocket的NXW1解码与协议版本已消费Shared remote/workspace，�
 
 核心Settings已使用Shared preferences/configuration完整配置和expectedVersion，CAPTCHA 使用 keep/clear/replace 且只读取 hasSecret；显示 version/effectiveVersion/requiresRestart。HTTP 失败/断流/unknown 后只读核对，不自动提交新版本；保存后当前认证与监控仍使用启动快照，重启才生效。布局等个人设置使用独立 preferences 契约，不能拼进核心 policy。
 
+FilesystemBrowser独立持有requestedPath与已确认path；新导航立即更新意图，后台完成触发refresh时读取该目标，仍由loadToken保护晚结果。成功后使用实际listing.path，当前读取失败恢复到已确认path；旧失败不覆盖新意图。
+
 Files的应用对象唯一归features/filesystem/model/filesystem-types；DirectoryListing、RemoteFileEntry、FileSearchResult及嵌套metadata不再借用旧Protocol。runtime/model/workspace-files-mapper逐字段投影，Files metadata沿真实后端使用Unix毫秒，不二次换算。adapters/filesystem-adapters承载11条用例、Document与Preview，WorkspaceSocket只持原附件关联与NXW1交付；Files ready/error用Shared严格codec，失败不携技术正文。
 
 Files首次读取等待当前附件的SFTP ready，尚未ACK、已断开/撤销或dispose时拒绝；有界等待持有timer/abort监听，断开/失败/取消全部结清，重连代次使旧等待失效。写入请求先核对完整1MiB入站控制预算；确定未派发与写后丢回执/畸形回执分别表达，unknown不自动重放。Preview取消同时覆盖stat等待和原binary请求；普通读取不隐式新建连接。上传下载已接Shared与正式能力，Workspace复制/移动/归档已消费Shared；五个跨服务器HTTP任务已独立接Shared，完整页面/三语实际交互仍C2-D。
@@ -494,3 +496,5 @@ Appearance 的字体保存、Presentation 的面板比例保存分别在所属�
 6. **数据、事务与并发**：查找/替换的计数、动作和 reveal 保留原 owner；不添加重复监听或异步选区回写。HoverWidget 每次布局计算窗口和实际 overflow hidden/clip/auto/scroll 祖先的垂直交集，上方不足时选择空间更大的一侧，并按剩余高度限制内容。
 7. **生命周期与失败**：继续由 Monaco dispose 清理查询与提示。依赖补丁不增加全局 observer、事件或 timer；保留现有编辑器 scope、滚动记录及缩放生命周期。不能靠抬高 z-index 绕过祖先裁切，也不将提示重挂到无归属的 body 容器。
 8. **当前能力与验收**：普通文本字体资产、搜索焦点与裁切边界的源码修复已接入；实际输入/下一条/上一条/替换/正则错误提示与小面板场景按 D17 待远程回归。静态检查及资产依赖证据归 testing/E2E，产品说明见 USAGE 文件管理器章节。
+
+Terminal background由useTerminalBackground持有文档生命周期：同页会话切换只暂停/恢复；KeepAlive deactivation暂停并清空srcdoc，返回后先确认iframe可见尺寸再加载当前主题，避免脱离DOM期间文档重建以零视口初始化。iframe节点可缓存不代表内部document跨detach保留。

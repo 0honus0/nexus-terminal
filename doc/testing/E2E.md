@@ -1749,3 +1749,25 @@ Actions39358034424 / 2a577341，第3/4/5组已success，第1组只剩workspace-l
 四表：功能覆盖保留线程创建/重命名、Artifact发布和真实多目标部分完成；职责归测试消费者，不修改产品准入或并发围栏；类型沿用Shared codec，无新契约；已完成两轮源码复核，E2E严格TS通过，完整静态门禁另记，行为待Actions。USAGE既有绝对目标目录与版本化线程说明仍符合实际。
 
 Agent/夹具本批门禁：E2E严格TS、根check、全仓format:all:check和diff检查通过；未执行本地行为测试。复制写入批次优化为后续独立变更，不计入本次测试消费者提交。
+
+### 复制背压与大帧取消（2026-10-20）
+
+39358034424第6组6 MiB/120ms WRITE延迟复制在20秒仍running；源码每个32KiB READ后立即等待一次append，使底层WRITE窗口无法利用。改为有界256KiB聚合，每窗等待确认后计进度，零字节/尾块/大块切片/短读失败及迭代器关闭保留，commit、metadata复核、move删除与unknown规则不变。
+
+第8组移动端取消15秒延迟的1MiB协议帧时，Model原append会依次派发两窗512KiB，取消期间第二窗仍派发，超过原20秒判据。Service按512KiB批次调用stage，每批前检查discarding；保持完整帧才发progress，不在途abort租约，不提前释放claim，原worker仍排空已派发写入并确认discard。两个改动均保留原用例时限，不以本地取消当远端停止。
+
+四表：保留复制真实字节/metadata与取消后文件不存在断言；策略归Files Service，Model/SSH Adapter既有ack与失败转换不变；无新增协议/Shared类型；两轮源码复核覆盖0/整窗/尾块、背压、read失败、取消前中后、原队列/claim及临时项收敛。静态和下一轮行为结果另记。
+
+### 文件浏览导航与后台刷新竞争（2026-10-20）
+
+39358034424第8组上传期间返回父目录后，trace最终仍停留/folder-seed。完整调用链显示后台上传完成调用同一个browser.refresh；load等待期间path仍是上一个已确认目录，refresh会以该旧目录发起更新并提升loadToken，从而覆盖正在进行的导航。Browser增加私有requestedPath，refresh及默认load使用最新导航意图，成功按listing规范路径收口，当前失败恢复到已确认目录；旧token失败不能重置新意图。保留原文件可见、搜索与30秒断言，具体失败是否完全消失仍待远程。
+
+四表：范围是用户导航/后台刷新竞争；状态归FilesystemBrowser，不在Workspace复制意图；无新wire对象或Shared契约；两轮源码复核覆盖导航→刷新、刷新→导航、旧成功/失败及最新失败，静态后等待Actions。USAGE/Frontend架构同版维护。
+
+### 39359401469完整结果与第7组补修（2026-10-20）
+
+本轮SHA d6fa14e7：质量/构建、Docker smoke和第1/3/4/5组通过，第2/6/7/8组失败。第7组目录准备原120秒超时场景现46秒通过，allowlist/取消清理场景通过；剩余新Workspace围栏断言与HTML背景恢复。新Workspace拒绝是现有MachineMutation acquire的conflict（原失败仍operation_unknown），夹具补Shared严格解码的管理列表state=blocked及同目标断言，再精确确认conflict；不把二次准入冲突改成原操作结果，不解除围栏。HTML一次性canvas脚本在跨页返回后空白：KeepAlive detach会重建iframe文档，保留srcdoc可能在隐藏零视口运行。deactivate先暂停再移除srcdoc，activate/实际可见尺寸确认后重新加载文档；同页切换不触发此重置，继续保留iframe/主题实例。
+
+四表：保留真实blocked记录、原unknown、二次拒绝及全部红色像素断言；持久规则owner不变，sandbox文档生命周期归Terminal background composable；类型使用Shared MutationList；两轮源码复核检查多会话、隐藏/恢复、晚load及主题更新，静态结果与后续Actions另记。
+
+本批最终门禁：根check、E2E严格TypeScript、前后端build、format:all:check、git diff --check均exit 0。复制/分帧取消、目录导航和第7组背景/围栏补修已完成两轮源码复核；未执行本地行为测试，等待后续Actions。归档运行中取消与真正并行归档仍未修复，不通过放宽unknown、移除持久claim或修改断言规避。

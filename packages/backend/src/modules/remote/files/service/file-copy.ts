@@ -7,11 +7,13 @@ import {
 	type FileInfo,
 	type FileResource,
 	type FilePathEntry,
+	type FileByteSource,
 } from '../model/file-types.js';
 
 const MAX_TREE_DEPTH = 64;
 const MAX_TRANSFER_ENTRIES = 20_000;
 const RPC_TIMEOUT_MS = 300_000;
+const COPY_WRITE_WINDOW_BYTES = 256 * 1024;
 
 interface CopyContext {
 	source: FileResource;
@@ -89,6 +91,29 @@ async function mkdirParents(ctx: CopyContext, absolutePath: string): Promise<voi
 	}
 }
 
+/** Bound copy buffering while allowing the stage to pipeline a full write window. */
+async function* copyWriteWindows(source: FileByteSource): AsyncIterable<Uint8Array> {
+	let buffer = new Uint8Array(COPY_WRITE_WINDOW_BYTES);
+	let length = 0;
+	for await (const chunk of source) {
+		let offset = 0;
+		while (offset < chunk.byteLength) {
+			const size = Math.min(buffer.byteLength - length, chunk.byteLength - offset);
+			buffer.set(chunk.subarray(offset, offset + size), length);
+			length += size;
+			offset += size;
+			if (length === buffer.byteLength) {
+				yield buffer;
+				buffer = new Uint8Array(COPY_WRITE_WINDOW_BYTES);
+				length = 0;
+			}
+		}
+	}
+	if (length > 0) {
+		yield buffer.subarray(0, length);
+	}
+}
+
 async function copyOneFile(ctx: CopyContext, from: string, to: string, info: FileInfo): Promise<FilePathEntry> {
 	if (!Number.isSafeInteger(info.size) || info.size < 0) {
 		throw new RemoteFileFailure('invalid_input');
@@ -117,7 +142,7 @@ async function copyOneFile(ctx: CopyContext, from: string, to: string, info: Fil
 			start: 0,
 		});
 		let lastReportedBytes = ctx.transferredBytes;
-		for await (const chunk of source) {
+		for await (const chunk of copyWriteWindows(source)) {
 			ctx.signal.throwIfAborted();
 			ctx.remaining();
 			await stage.append(chunk);
