@@ -1272,10 +1272,17 @@ function runRemoteCommand(command, stream, session) {
 		detached: true,
 	});
 
+	let acknowledgedTerminationSignal = null;
 	const onSignal = (accept, reject, info) => {
 		if (!['TERM', 'KILL', 'INT', 'HUP'].includes(info.name)) return reject?.();
 		try {
 			process.kill(-child.pid, `SIG${info.name}`);
+			// A shell waiting on the deterministic pre-writer gate may convert
+			// SIGTERM to exit status 143. The fixture has nevertheless signalled
+			// the entire process group; once all inherited stdio has drained,
+			// report its confirmed termination as an SSH exit-signal instead of
+			// pretending that exit 143 was an ordinary archive command failure.
+			acknowledgedTerminationSignal = `SIG${info.name}`;
 			accept?.();
 		} catch {
 			reject?.();
@@ -1291,11 +1298,11 @@ function runRemoteCommand(command, stream, session) {
 	child.on('close', (code, signal) => {
 		if (isArchiveCommand) archiveCommandsExited += 1;
 		session.off('signal', onSignal);
-		// ssh2's exit-signal wire API requires the POSIX SIG prefix (e.g.
-		// SIGTERM). Stripping it turns a confirmed remote termination into an
-		// unrecognized/disconnected outcome at the production SSH adapter,
-		// hiding the pre-writer cancellation proof from archive E2E tests.
-		stream.exit(signal ?? (code ?? 0));
+		// The SSH wire strips SIG and the ssh2 client restores it. Preserve the
+		// accepted signal even if bash converted the terminated wait to code 143.
+		// This is only an exit fact: production still checks the before-write
+		// marker before declaring a cancellation free of archive side effects.
+		stream.exit(acknowledgedTerminationSignal ?? signal ?? (code ?? 0));
 		stream.end();
 	});
 }
