@@ -1,5 +1,6 @@
 import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.js';
 import { randomUUID } from 'node:crypto';
+import { setMaxListeners } from 'node:events';
 import type { AccessPublicApi } from '../../../access/public.js';
 import type { ObservationModel } from '../model/observation-model.js';
 import type { RemoteObservationService } from './observation-service.js';
@@ -25,7 +26,6 @@ export class ResourceStatusService {
 	private readonly controller = new AbortController();
 	private readonly failures = new FailureSummary();
 	private accepting = true;
-	private requests = 0;
 	private closePromise: Promise<void> | null = null;
 
 	constructor(
@@ -37,6 +37,7 @@ export class ResourceStatusService {
 		if (!Number.isSafeInteger(refreshSeconds) || refreshSeconds < 1 || refreshSeconds > 86400) {
 			throw new Error('Invalid resource refresh interval');
 		}
+		setMaxListeners(0, this.controller.signal);
 	}
 
 	private async authorize(token: string | null): Promise<number> {
@@ -134,7 +135,6 @@ export class ResourceStatusService {
 		if (active?.fingerprint === fingerprint) {
 			return active.task;
 		}
-		const startedAt = Date.now();
 		const entry: ActiveSample = {
 			fingerprint,
 			task: Promise.resolve().then(() => this.collect(token, key, candidates)),
@@ -143,7 +143,7 @@ export class ResourceStatusService {
 		const task = entry.task
 			.then((value) => {
 				if (this.accepting && this.inFlight.get(key) === entry) {
-					this.cache.set(key, { fingerprint, value, expiresAt: startedAt + this.refreshSeconds * 1000 });
+					this.cache.set(key, { fingerprint, value, expiresAt: Date.now() + this.refreshSeconds * 1000 });
 				}
 				return value;
 			})
@@ -168,10 +168,6 @@ export class ResourceStatusService {
 		if (!this.accepting) {
 			throw new ObservationFailure('remote_unavailable');
 		}
-		if (this.requests >= 4) {
-			throw new ObservationFailure('limit_exceeded');
-		}
-		this.requests += 1;
 		const controller = new AbortController();
 
 		const abort = () => controller.abort(new ObservationFailure('remote_unavailable'));
@@ -189,7 +185,6 @@ export class ResourceStatusService {
 				clearTimeout(timer);
 				this.controller.signal.removeEventListener('abort', abort);
 				signal?.removeEventListener('abort', abort);
-				this.requests -= 1;
 				this.tasks.delete(task);
 			});
 		this.tasks.add(task);

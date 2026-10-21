@@ -373,7 +373,9 @@ Access 登录失败记录的 `last_attempt_at` 及其索引直接在第一版初
 
 ### B3.2 并发与缓存
 
-无新增业务持久化，不创建空 storage。缓存仍为本进程状态；Docker 控制与 Agent/Files 共用 Remote machines 持久突变占用，Preferences 已接入状态间隔/资源刷新持久配置。Workspace 操作绑定具体 attachment、配置 fingerprint 与原 owner；后台主机缓存当前仅供 userId=1，按 host/port 及完整可信配置指纹隔离，同配置在途采样共享，TTL 从开始计算。删除/改配置及 reset 后旧任务不可回填。首次初始化默认状态间隔 3 秒、后台 TTL 30 秒；Preferences 保存的配置在下次启动统一安装，独立 Service 的技术安装默认不覆盖持久设置。Docker 按规范化文本 endpoint 与全部受管突变互斥，覆盖容器名称与短/完整 ID 别名；unknown/清理失败保持持久 blocked，重启不解除，恢复能力已由下述B9机器突变恢复接线，行为待B10。
+无新增业务持久化，不创建空 storage。缓存仍为本进程状态；Docker 控制与 Agent/Files 共用 Remote machines 持久突变占用，Preferences 已接入状态间隔/资源刷新持久配置。Workspace 操作绑定具体 attachment、配置 fingerprint 与原 owner；后台主机缓存当前仅供 userId=1，按 host/port 及完整可信配置指纹隔离，同配置在途采样共享，TTL 从采样完成计算。删除/改配置及 reset 后旧任务不可回填。首次初始化默认状态间隔 3 秒、后台 TTL 30 秒；Preferences 保存的配置在下次启动统一安装，独立 Service 的技术安装默认不覆盖持久设置。Docker 按规范化文本 endpoint 与全部受管突变互斥，覆盖容器名称与短/完整 ID 别名；unknown/清理失败保持持久 blocked，重启不解除，恢复能力已由下述B9机器突变恢复接线，行为待B10。
+
+Dashboard的ResourceStatusService与SystemStatusService不设全局4请求准入上限。前者复用上述主机缓存、保留单请求2主机并行与120秒等待，每次交付前复核会话及当前配置；模块自己的取消signal允许多个等待监听，退出时仍逐请求退订。后者由原Service共享一次本机采样，成功结果完成后缓存3秒，失败不缓存，逐请求在取缓存/采样前后验证管理员会话，等待最多10秒。超时只结束调用方等待，真实采样仍登记到原tasks并参与停机排空；quiesce清除缓存且晚结果不可回填。Shared、HTTP白名单映射、前端、协议容量及独立诊断入口政策不变。
 
 归档在 Files Service 的首次私有文件写入前，通过 FileArchiveModel.prepare → NativeArchiveCommands.requireTool 执行独立只读工具查找；Model 仅在该边界将丢失的查找回执转换为尚未派发归档写入，清理失败仍独立传播。原生写入仍执行自身工具检查，预检不是后续执行的永久保证；写入取消不能借用此只读分类。
 

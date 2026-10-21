@@ -7,6 +7,8 @@ import { SYSTEM_HEALTH_STATUS, SYSTEM_SERVICE_NAME } from '@nexus-terminal/share
 export class SystemStatusService {
 	private accepting = true;
 	private readonly tasks = new Set<Promise<LocalSystemStatus>>();
+	private cache: { value: LocalSystemStatus; expiresAt: number } | null = null;
+	private inFlight: Promise<LocalSystemStatus> | null = null;
 	private closePromise: Promise<void> | null = null;
 
 	constructor(
@@ -22,7 +24,7 @@ export class SystemStatusService {
 	}
 
 	collect(token: string | null): Promise<LocalSystemStatus> {
-		if (!this.accepting || this.tasks.size >= 4) {
+		if (!this.accepting) {
 			return Promise.reject(new SystemStatusFailure('remote_unavailable'));
 		}
 		const task = Promise.resolve().then(async () => {
@@ -36,7 +38,7 @@ export class SystemStatusService {
 			if (!this.accepting) {
 				throw new SystemStatusFailure('remote_unavailable');
 			}
-			const value = await this.model.collect();
+			const value = await this.sample();
 			const current = await this.access.authenticate(token);
 			if (!this.accepting || current?.userId !== identity.userId) {
 				throw new SystemStatusFailure('unauthenticated');
@@ -46,6 +48,35 @@ export class SystemStatusService {
 		this.tasks.add(task);
 		void task.finally(() => this.tasks.delete(task)).catch(() => undefined);
 		return this.waitForTask(task, 10000);
+	}
+
+	private sample(): Promise<LocalSystemStatus> {
+		if (this.cache && this.cache.expiresAt > Date.now()) {
+			return Promise.resolve(this.cache.value);
+		}
+		if (this.inFlight) {
+			return this.inFlight;
+		}
+		const task = Promise.resolve()
+			.then(() => {
+				if (!this.accepting) {
+					throw new SystemStatusFailure('remote_unavailable');
+				}
+				return this.model.collect();
+			})
+			.then((value) => {
+				if (this.accepting) {
+					this.cache = { value, expiresAt: Date.now() + 3000 };
+				}
+				return value;
+			})
+			.finally(() => {
+				this.inFlight = null;
+				this.tasks.delete(task);
+			});
+		this.inFlight = task;
+		this.tasks.add(task);
+		return task;
 	}
 
 	private waitForTask<T>(task: Promise<T>, milliseconds: number): Promise<T> {
@@ -59,13 +90,14 @@ export class SystemStatusService {
 
 	quiesce(): void {
 		this.accepting = false;
+		this.cache = null;
 	}
 
 	close(): Promise<void> {
 		if (this.closePromise) {
 			return this.closePromise;
 		}
-		this.accepting = false;
+		this.quiesce();
 		const admitted = [...this.tasks];
 		this.closePromise = Promise.resolve().then(async () => {
 			const results = await this.waitForTask(Promise.allSettled(admitted), 30000);
