@@ -24,7 +24,7 @@ import {
 	WORKSPACE_MAX_IN_FLIGHT_REQUESTS,
 	WORKSPACE_MAX_JSON_MESSAGE_BYTES,
 } from '@nexus-terminal/shared/remote/workspace/values';
-import { FilesystemFailure, type FilesystemChannel } from '@/features/filesystem/public';
+import { FilesystemFailure, type FilesystemChannel, type FilesystemInvalidation } from '@/features/filesystem/public';
 import { decodeEditorDocument, type FileDocumentPort } from '@/features/file-editor/public';
 import type { FilePreviewSource } from '@/features/file-preview/public';
 import { WorkspaceSocket } from '../protocol/workspaceSocket';
@@ -85,6 +85,7 @@ function childEntries(root: string, entries: { path: string; name: string }[], r
 }
 
 interface WorkspaceFilesystemChannel extends FilesystemChannel {
+	invalidate(): void;
 	disconnect(): void;
 	dispose(): void;
 }
@@ -97,6 +98,11 @@ export function createFilesystemChannel(
 	let disposed = false;
 	let availability: 'pending' | 'ready' | { code: WorkspaceErrorCode } = 'pending';
 	const waiters = new Set<(error?: Error) => void>();
+	const invalidationHandlers = new Set<(reason: FilesystemInvalidation) => void>();
+
+	const invalidate = (reason: FilesystemInvalidation): void => {
+		for (const handler of invalidationHandlers) handler(reason);
+	};
 
 	const finishWaiting = (error?: FilesystemFailure): void => {
 		for (const finish of [...waiters]) {
@@ -107,6 +113,7 @@ export function createFilesystemChannel(
 	const disconnect = (): void => {
 		generation += 1;
 		availability = 'pending';
+		invalidate({ type: 'unavailable', code: 'not_connected' });
 		finishWaiting(new FilesystemFailure('not_connected', false));
 	};
 
@@ -119,6 +126,7 @@ export function createFilesystemChannel(
 	});
 	const offError = socket.on('filesystem.error', ({ message }) => {
 		availability = { code: message };
+		invalidate({ type: 'unavailable', code: message });
 		finishWaiting(new FilesystemFailure(message, false));
 	});
 	const offClose = socket.onClose(disconnect);
@@ -176,6 +184,7 @@ export function createFilesystemChannel(
 		validateRequest(type, input, requestId);
 		const current = await waitForReady(signal);
 		assertCurrent(current);
+		if (mutation) invalidate({ type: 'mutation' });
 		try {
 			const result = decode(await socket.bindRequests()(type, input, requestId, signal));
 			if (!mutation) {
@@ -193,11 +202,20 @@ export function createFilesystemChannel(
 				throw new FilesystemFailure(cause.code, cause.code === 'operation_unknown', { cause });
 			}
 			throw new FilesystemFailure(mutation ? 'operation_unknown' : 'protocol_error', mutation, { cause });
+		} finally {
+			if (mutation && !disposed && current === generation) invalidate({ type: 'mutation' });
 		}
 	}
 
 	return {
 		disconnect,
+
+		invalidate: () => invalidate({ type: 'mutation' }),
+
+		onInvalidate(handler) {
+			invalidationHandlers.add(handler);
+			return () => invalidationHandlers.delete(handler);
+		},
 
 		dispose() {
 			disposed = true;
@@ -205,6 +223,7 @@ export function createFilesystemChannel(
 			offReady();
 			offError();
 			offClose();
+			invalidationHandlers.clear();
 		},
 
 		async listDirectory(path) {

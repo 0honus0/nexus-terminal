@@ -200,8 +200,18 @@
       "operationUnknown": "The operation may have changed remote files. Refresh and check the actual paths before trying again.",
       "notConnected": "The file session is not ready. Reconnect before operating on files.",
       "invalidResponse": "The file response could not be verified. Refresh to read the current state.",
-      "capacityExceeded": "The file operation exceeds its capacity. Save requests, including JSON encoding, must fit within 1 MiB.",
-      "requestRejected": "The file operation was rejected. Check access and the current file state."
+      "capacityExceeded": "The file, directory, or request exceeds its capacity. Read a smaller scope or split the operation.",
+      "requestRejected": "The file operation was rejected. Check access and the current file state.",
+      "notFound": "The file or active file session was not found. Refresh the directory; if this persists, reconnect the SSH session.",
+      "permissionDenied": "Access to this path was denied. Check remote file and directory permissions.",
+      "sessionExpired": "Your login session has expired. Sign in again.",
+      "fileConflict": "The file changed or the destination already exists. Refresh and check before continuing.",
+      "targetChanged": "The connection configuration changed. Reconnect the SSH session.",
+      "hostKeyUntrusted": "The remote host key needs confirmation. Reconnect and verify the host key.",
+      "remoteUnavailable": "The remote file service is unavailable or the read timed out. Retry reading; if this persists, reconnect the SSH session.",
+      "invalidInput": "The file path, content, or operation parameters are invalid. Check them and try again.",
+      "notText": "This file cannot be read as text.",
+      "commandFailed": "The remote file command failed. Check directory permissions and required commands."
     },
     "notifications": {
       "terminalPathQueued": "A foreground command is running. The directory change is safely queued until the shell prompt returns.",

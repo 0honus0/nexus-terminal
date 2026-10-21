@@ -598,7 +598,7 @@ export class RemoteFileService {
 			record.closePromise ||
 			!record.resource.isOpen ||
 			!this.isWorkspaceCurrent(record) ||
-			record.expiresAt <= Date.now() ||
+			(record.workspaceId === undefined && record.expiresAt <= Date.now()) ||
 			!this.accepting
 		) {
 			throw new RemoteFileFailure('not_found');
@@ -678,7 +678,7 @@ export class RemoteFileService {
 				!this.accepting ||
 				record.closePromise ||
 				this.owners.get(id) !== record ||
-				record.expiresAt <= Date.now()
+				(record.workspaceId === undefined && record.expiresAt <= Date.now())
 			) {
 				throw new RemoteFileFailure('not_found');
 			}
@@ -969,7 +969,7 @@ export class RemoteFileService {
 	): Promise<{ url: string; expiresInSeconds: number }> {
 		const record = this.workspaceRecord(token, workspaceId, targetId);
 		const normalized = remotePath(filePath);
-		const binding = await this.run<FileDownloadTicketBinding>(
+		const binding = await this.runTransferRead<FileDownloadTicketBinding>(
 			token,
 			record.id,
 			async (resource, ms, abort) => {
@@ -1183,7 +1183,7 @@ export class RemoteFileService {
 	): Promise<'file' | 'directory' | 'other'> {
 		const normalized = remotePath(filePath);
 		const record = this.workspaceRecord(token, workspaceId, targetId);
-		return this.run(
+		return this.runTransferRead(
 			token,
 			record.id,
 			async (resource, ms, abort) => {
@@ -1213,7 +1213,7 @@ export class RemoteFileService {
 	): Promise<void> {
 		const normalized = remotePath(filePath);
 		const record = this.workspaceRecord(token, workspaceId, targetId);
-		return this.run(
+		return this.runTransferRead(
 			token,
 			record.id,
 			async (resource, ms, abort) => {
@@ -1241,8 +1241,32 @@ export class RemoteFileService {
 				await sink.finish(abort);
 			},
 			signal,
-			false,
 			FILE_TRANSFER_MS,
+		);
+	}
+
+	private runTransferRead<T>(
+		token: string | null,
+		id: string,
+		action: (resource: FileResource, remainingMs: number, signal: AbortSignal) => Promise<T>,
+		signal?: AbortSignal,
+		timeoutMs = FILE_OPERATION_MS,
+	): Promise<T> {
+		const owner: TransferResourceOwner = {
+			finished: false,
+			cleanupFailure: null,
+			cleanupOwnerIds: [id],
+		};
+		return this.run(
+			token,
+			id,
+			(workspace, ms, abort) =>
+				this.withUploadResource(workspace, ms, abort, owner, (resource) => action(resource, ms, abort)),
+			signal,
+			false,
+			timeoutMs,
+			'bound_session',
+			'dedicated_transfer',
 		);
 	}
 
@@ -2707,7 +2731,7 @@ export class RemoteFileService {
 		if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > WORKSPACE_FILES_MAX_BINARY_READ_BYTES) {
 			throw new RemoteFileFailure('invalid_input');
 		}
-		return this.run(
+		return this.runTransferRead(
 			token,
 			id,
 			async (resource, ms, abort) => {

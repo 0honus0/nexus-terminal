@@ -1,6 +1,7 @@
 import { computed, ref, shallowRef, watch, type ComputedRef, type Ref } from 'vue';
 import type { FilesystemChannel } from '../ports/filesystem-channel';
 import type { RemoteFileSearchEntry, RemoteFileEntry } from '../model/filesystem-types';
+import { createDirectoryCache } from '../model/directory-cache';
 
 export type FilesystemSortKey = 'name' | 'size' | 'permissions' | 'modified';
 
@@ -24,6 +25,8 @@ export interface FilesystemBrowserController {
 	sortKey: Ref<FilesystemSortKey>;
 	sortDirection: Ref<FilesystemSortDirection>;
 	load(path?: string): Promise<boolean | undefined>;
+	prefetch(path: string): void;
+	cancelPrefetch(): void;
 	refresh(): Promise<void>;
 	open(entry: RemoteFileEntry): Promise<void>;
 	goParent(): Promise<boolean | undefined>;
@@ -83,6 +86,68 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
 	let searchToken = 0;
 	let loadToken = 0;
 	let requestedPath = initialPath;
+	let disposed = false;
+	const directoryCache = createDirectoryCache(channel);
+	let prefetchTimer: number | undefined;
+	let prefetchTarget: string | undefined;
+	let prefetchRunning = false;
+	let prefetchRevision = 0;
+	let rejectedPrefetchTarget: string | undefined;
+
+	const cancelPrefetch = (): void => {
+		prefetchRevision++;
+		prefetchTarget = undefined;
+		if (prefetchTimer !== undefined) window.clearTimeout(prefetchTimer);
+		prefetchTimer = undefined;
+	};
+
+	const runPrefetch = (): void => {
+		prefetchTimer = undefined;
+		const target = prefetchTarget;
+		if (disposed || !target || prefetchRunning || loading.value) return;
+		prefetchTarget = undefined;
+		if (directoryCache.get(target) || !directoryCache.canPrefetch()) return;
+		const revision = prefetchRevision;
+		prefetchRunning = true;
+		void directoryCache
+			.read(target)
+			.catch(() => {
+				if (!disposed && revision === prefetchRevision) rejectedPrefetchTarget = target;
+			})
+			.finally(() => {
+				prefetchRunning = false;
+				if (!disposed && prefetchTarget) prefetchTimer = window.setTimeout(runPrefetch, 100);
+			});
+	};
+
+	const prefetch = (target: string): void => {
+		if (disposed || target === path.value || target === rejectedPrefetchTarget || directoryCache.get(target))
+			return;
+		prefetchTarget = target;
+		if (prefetchTimer !== undefined) window.clearTimeout(prefetchTimer);
+		prefetchTimer = window.setTimeout(runPrefetch, 100);
+	};
+
+	const stopInvalidation = channel.onInvalidate((reason) => {
+		directoryCache.invalidate();
+		rejectedPrefetchTarget = undefined;
+		cancelPrefetch();
+		if (reason.type !== 'unavailable') return;
+		loadToken++;
+		searchToken++;
+		if (searchTimer !== undefined) window.clearTimeout(searchTimer);
+		searchTimer = undefined;
+		loading.value = false;
+		loaded.value = false;
+		error.value = reason.code;
+		entries.value = [];
+		searchEntries.value = [];
+		searching.value = false;
+		searchTruncated.value = false;
+		searchError.value = null;
+		selected.value = new Set();
+		selectionAnchor.value = null;
+	});
 
 	const searchActive = computed(() => Boolean(searchQuery.value.trim()));
 
@@ -142,14 +207,20 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
 		}, delayMs);
 	};
 
-	const load = async (target = requestedPath): Promise<boolean | undefined> => {
+	const loadDirectory = async (target: string, force = false): Promise<boolean | undefined> => {
+		if (disposed) return undefined;
+		cancelPrefetch();
+		if (force) directoryCache.invalidate();
 		const token = ++loadToken;
 		requestedPath = target;
-		loading.value = true;
+		const cached = directoryCache.get(target);
+		loading.value = !cached;
 		error.value = null;
 		try {
-			const listing = await channel.listDirectory(target);
+			let listing = cached;
+			while (!listing && token === loadToken && !disposed) listing = await directoryCache.read(target);
 			if (token !== loadToken) return undefined;
+			if (!listing || disposed) return undefined;
 			path.value = listing.path;
 			requestedPath = listing.path;
 			entries.value = listing.entries;
@@ -168,12 +239,15 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
 		}
 	};
 
+	const load = (target?: string): Promise<boolean | undefined> =>
+		loadDirectory(target ?? requestedPath, target === undefined);
+
 	const refresh = async () => {
 		// A transfer can finish while navigation is awaiting its listing.
 		// Refresh that requested destination rather than restoring the old page.
 		let candidate = requestedPath;
 		while (true) {
-			const result = await load(candidate);
+			const result = await loadDirectory(candidate, true);
 			if (result !== false || candidate === '/') return;
 			candidate = parentPath(candidate);
 		}
@@ -259,6 +333,10 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
 	});
 
 	const dispose = () => {
+		disposed = true;
+		stopInvalidation();
+		cancelPrefetch();
+		directoryCache.dispose();
 		stopSearchWatch();
 		clearSearchTimer();
 		searchToken += 1;
@@ -283,6 +361,8 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
 		sortKey,
 		sortDirection,
 		load,
+		prefetch,
+		cancelPrefetch,
 		refresh,
 		open,
 		goParent,

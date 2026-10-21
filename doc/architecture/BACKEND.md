@@ -1328,6 +1328,10 @@ Targets每条连接的直接跳板协议容量16项归Shared，与递归深度/�
 
 ### Remote 会话与文件资源转换边界
 
+Workspace FileResource 的有效性由 workspaceAuthority 与原 SSH owner 管理；两分钟 idle TTL 只适用于 workspaceId 缺失的独立 HTTP 文件资源。定时回收、owned 与 runAdmitted 三处采用同一适用范围，不能让仍连接的 Workspace 因文件面板闲置而在下次操作时被拒绝。身份、指纹、资源存活、关闭状态及 Workspace 当前实例校验仍逐次执行。
+
+Files 的二进制读取、目录 ZIP、下载类型探测及票据准备由 RemoteFileService.runTransferRead 统一绑定原 Workspace owner，复用 withUploadResource 取得同目标/指纹的独立 FileResource。读取的取消与清理只作用于该临时资源；原 Workspace 的主 SFTP 不因读取取消而退役。任务沿原 run 的 active/inFlight、身份/指纹复查、总期限及模块停机链追踪，关闭失败仍记录到原 owner 的 transferCleanupByOwner。协议入口和 Model 白名单投影不变；SFTP permission_denied 在 Model 映射为已有 forbidden，不把确定权限拒绝当远端不可用。普通目录元数据仍使用主资源；隔离不宣称 SSH 路径快照或远端回滚。当前源码与静态证据见 testing，真实 HTML、ZIP 和取消组合仍待远程验收。
+
 1. **职责与范围**：Files、独立PTY和Workspace共用技术凭据能力，各自Service持有身份、归属、期限及准入政策；凭据不进入公开结果之外的额外通道。
 2. **子功能与目录**：files/model/file-model持有文件票据随机值/摘要；sessions/model/session-token-model持有会话凭据表示。Shell与History Model封装终端集成/检查点，Service不操作技术Port。
 3. **依赖方向**：Service→所属Model→Platform SessionTokens/SSH/Terminal；register安装SecureSessionTokens，Platform不定义业务对象。

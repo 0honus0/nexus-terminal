@@ -67,6 +67,22 @@
 	const ownsFilesystemState = !props.state;
 	const filesystemState = props.state ?? createFilesystemSessionState(props.channel, props.initialPath ?? '/');
 	const browser = filesystemState.browser;
+	const showLoading = ref(false);
+	let loadingIndicatorTimer: number | undefined;
+	const stopLoadingWatch = watch(
+		browser.loading,
+		(loading) => {
+			if (loadingIndicatorTimer !== undefined) window.clearTimeout(loadingIndicatorTimer);
+			loadingIndicatorTimer = undefined;
+			if (!loading) showLoading.value = false;
+			else
+				loadingIndicatorTimer = window.setTimeout(() => {
+					loadingIndicatorTimer = undefined;
+					showLoading.value = true;
+				}, 150);
+		},
+		{ immediate: true },
+	);
 	const catalog = useFilesystemCatalog();
 	const action = ref<'mkdir' | 'file' | 'rename' | 'chmod' | null>(null);
 	const actionBusy = ref(false);
@@ -230,6 +246,7 @@
 	});
 
 	function clearIntents(): void {
+		browser.cancelPrefetch();
 		pendingDelete = undefined;
 		clipboardPasteSerial++;
 		changingTerminalPath.value = false;
@@ -647,10 +664,14 @@
 	});
 	onDeactivated(() => {
 		downloadsActive = false;
+		browser.cancelPrefetch();
 		invalidateDownloads();
 	});
 
 	onBeforeUnmount(() => {
+		browser.cancelPrefetch();
+		stopLoadingWatch();
+		if (loadingIndicatorTimer !== undefined) window.clearTimeout(loadingIndicatorTimer);
 		downloadsActive = false;
 		invalidateDownloads();
 		document.removeEventListener('mousedown', handleOutsideHistory);
@@ -731,6 +752,17 @@
 			);
 		}
 	};
+
+	const prefetchEntry = (entry: RemoteFileEntry): void => {
+		if (!view.capture().aborted && entry.metadata.isDirectory && !entry.metadata.isSymbolicLink) {
+			browser.prefetch(entry.path);
+		}
+	};
+
+	watch(keyboardCursor, (path) => {
+		const entry = browser.visible.value.find((item) => item.path === path);
+		if (entry) prefetchEntry(entry);
+	});
 
 	const openContextAt = (clientX: number, clientY: number, entry: RemoteFileEntry): void => {
 		if (!browser.selected.value.has(entry.path)) browser.select(entry, 'only');
@@ -1702,7 +1734,7 @@
 					:aria-label="t('fileManager.actions.refresh')"
 					@click.stop="refresh"
 				>
-					<i :class="['fas text-xs', browser.loading.value ? 'fa-spinner fa-spin' : 'fa-sync-alt']"></i>
+					<i :class="['fas text-xs', showLoading ? 'fa-spinner fa-spin' : 'fa-sync-alt']"></i>
 				</button>
 				<div
 					class="file-manager-search-slot flex shrink-0 items-center"
@@ -1868,7 +1900,7 @@
 			v-if="(!browser.loaded.value && !browser.error.value) || browser.searching.value"
 			class="file-manager-loading-state flex min-h-0 flex-1 items-center justify-center"
 		>
-			<UiSpinner />
+			<UiSpinner v-if="showLoading || browser.searching.value" />
 		</div>
 		<p v-else-if="browser.error.value" class="p-4 text-error">
 			{{ filesystemFailureMessage(browser.error.value, t) }}
@@ -2056,6 +2088,8 @@
 							@click="clickEntry($event, entry)"
 							@dblclick="doubleClickEntry($event, entry)"
 							@pointerdown="longPress.start($event, entry)"
+							@pointerenter="prefetchEntry(entry)"
+							@pointerleave="browser.cancelPrefetch()"
 							@pointermove="longPress.move"
 							@pointerup="longPress.end"
 							@pointercancel="longPress.cancel"
@@ -2116,7 +2150,7 @@
 				</table>
 			</div>
 			<div
-				v-if="browser.loading.value"
+				v-if="showLoading"
 				class="file-manager-loading-state pointer-events-none absolute inset-0 z-30 flex items-center justify-center"
 			>
 				<UiSpinner />

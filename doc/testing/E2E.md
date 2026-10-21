@@ -2,7 +2,44 @@
 
 开发前读取 [AGENTS](../AGENTS.md)，产品要求见 [USAGE](../USAGE.md)，当前工作见 [PLAN](../PLAN.md)。本文维护实际验证入口、覆盖边界和验收证据。
 
+## 目录切换缓存回归（待远程）
+
+2026-10-21 按用户要求新增会话内5分钟目录快照与意图预读，默认容量20目录/20,000项/约8MiB估算数据；不改Shared/Backend协议、不持久化。新增 `tests/e2e/specs/ssh/file-manager-cache.spec.ts`，3项真实浏览器/SSH回归，尚未执行：
+
+| 场景                          | 有效断言                                                                                                                                                                                                                                                            |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 缓存命中、五分钟TTL和显式刷新 | 第一次目录访问捕获真实WS列表请求及成功列表回执；返回新鲜目录不增请求、不显示转圈；手动刷新确实新增请求并显示外部创建文件。浏览器时钟推进121秒仍命中缓存，再推进181秒后必须重新读取并显示外部新增文件；推进前等待已派发Workspace请求结算，不伪造响应或推进后端时钟。 |
+| 真实预读与前台在途合并        | 悬停目标目录，受控OPENDIR延迟计数证明预读已派发；当前路径/列表不变且不转圈，其他目录不预读；在途点击只使用同一列表请求，随后进入和返回均显示正确条目。                                                                                                              |
+| 写入失效与晚返回隔离          | 先缓存另一目录，启动真实延迟预读，再经New File界面创建文件；核对成功刷新及磁盘精确零字节内容。等预读实际返回后，当前目录仍不变，再进入两目录均要求新增列表请求，证明旧缓存和晚预读未复活。                                                                          |
+
+已有 `file-list-profile.spec.ts` 的大目录场景在每个冷导航样本前显式刷新根目录使缓存失效；仍要求两个大目录各有3次完整列表请求，根目录每样本真实刷新，成功回执全部收敛。延迟OPENDIR计数与捕获的实际请求总数精确相等，避免TTL影响根目录返回次数，也不将缓存命中误算成真实SFTP性能改善；既有虚拟行、排序和末行可达断言不变。
+
+源码复核覆盖：写入派发前/结算后及传输接纳/终态失效、未知结果不重放、旧代次成功和失败不发布、缓存失败抑制重复预读、断线/Files错误清展示并保留具名错误码、预读最大1项/最新候选、在途共用上限8项（含失效代次）、停用/卸载清排队及订阅。已派发只读任务仍跟踪至原Channel结算，前台可复用，不因预读取消破坏共用SFTP。
+
+最终静态验证：根 `pnpm run check`、`pnpm run format:all:check`、Frontend build、变更spec的独立TypeScript及 `git diff --check` 均 exit 0；日志为 `/tmp/nexus-directory-cache-{check,format,build,e2e-types}.log`。实际远程执行、LRU/容量边界、断线重连、外部权限变更及传输未知组合仍待验，静态不等于行为PASS；遵守D17，未运行本地E2E/用例收集、未触发远程任务、未重启或部署。
+
 ## 当前验收基线
+
+2026-10-21 文件管理器修复工作区不继承下方旧 SHA 的行为 PASS。源码对照 `75289ef9^` 的 Workspace Files、文本 Document port、SFTP 下载和 ZipDirectoryArchiveAdapter：旧实现保留 16 MiB 文本读取、目录流式 ZIP 和按读任务持有句柄；新实现此前的 readBinary/cancelRead 与目录 ZIP 仍取消共用 SFTP，runAdmitted 随后关闭主 owner，使后续列表、编辑和下载可能变成 not_found。现将二进制读取、目录 ZIP、票据准备及类型探测放入原 owner 跟踪的独立资源，权限拒绝在 Model 映射为 forbidden，前端区分具名失败并捕获打开动作的读取拒绝。
+
+继续沿有效性检查定位到更直接的共因：owned 和 runAdmitted 对 Workspace 也检查 expiresAt，导致两分钟没有文件操作后的首次读取/写入被拒绝；定时回收本已排除 Workspace，两处准入与其政策不一致。现仅独立 HTTP Files 检查 idle TTL，Workspace 保留原生命周期、身份、指纹及关闭检查。这条源码链可解释 HTML 读取拒绝落入错误边界和目录下载 not_found；HTML 现场具体文件/设备及异常尚未提供，不能据此认定语言组件故障或所有现场组合已恢复。
+
+用户随后明确要求补充 E2E，已新增 `tests/e2e/specs/ssh/file-manager-regressions.spec.ts`，4 项用例纳入既有 ssh project 和远程分组，尚未执行：
+
+| 用例                             | 有效断言                                                                                                                                                                                                                                                                              |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTML/HTM、读取拒绝与目录右键下载 | 浏览器编辑器实际显示 HTML 内容；从已加载列表删除文件后打开，显示 not_found 产品提示；受控 SSH STAT/LSTAT 返回 permission denied 后显示权限提示。失败后仍能刷新目录、右键 Download Folder 并再次打开 HTML；下载成功且 ZIP 解压后的文件名与内容逐项一致，包含嵌套中文路径和零字节文件。 |
+| Workspace 闲置超过两分钟         | 实际等待 125 秒，不发送会续期的 workspace.ping、不模拟浏览器时钟、不重连；随后原 Workspace 列目录、读取 HTML、保存并读回精确内容、申请票据并下载精确内容、解压目录并核对内容，最后句柄清零。该例单独设置 180 秒超时。                                                                 |
+| 取消在途二进制读取               | SSH READ 延迟计数证明已派发，再取消指定 requestId；要求 cancelRead 返回 true、原读取返回 remote_unavailable、句柄关闭，随后同一原 Workspace 完成完整读写及下载链。                                                                                                                    |
+| 中断在途目录 ZIP                 | 通过认证 HTTP 客户端请求真实目录 ZIP，等待 SSH READ 派发后 AbortController 中断；要求 AbortError、句柄关闭，随后同一原 Workspace 完成完整读写及下载链。                                                                                                                               |
+
+fixture 仅新增 `/sftp/stat-deny-prefix`，对指定路径的 STAT/LSTAT 返回真实 SFTP 权限拒绝，finally 清除且隔离基线 reset 同样清除；不改变已有 lstat 专项控制语义。取消用例 finally 恢复 READ 延迟并关闭原 socket、收尾原请求，不通过新会话恢复来掩盖主资源损坏。
+
+新增用例静态验证：根 `pnpm run check`、`pnpm run format:all:check`、变更测试/fixture 的 ESLint、fixture `node --check` 和 `git diff --check` 均 exit 0；另以 Backend 的 TypeScript 对新增 spec 及其依赖执行 `tsc --ignoreConfig --noEmit --skipLibCheck --types node --module nodenext --moduleResolution nodenext --esModuleInterop --target es2022`，exit 0。日志为 `/tmp/nexus-files-e2e-{check,format,lint,types}.log`。未运行用例收集或服务，不替换既有开发进程。
+
+待远程执行上述新增用例，并补充尚未新增的独立资源 TTL、真实预览关闭的 UI 取消链、普通文本组合、三语提示、身份撤销及独立资源关闭失败。遵守 D17，未运行本地行为测试、浏览器专项及 E2E，也未触发远程任务；新增测试不等于已验证通过。
+
+本批 `pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/backend build`、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check` 均 exit 0；日志为 `/tmp/nexus-files-repair-{check,format,backend-build,frontend-build}.log`。源码复审覆盖独立/Workspace TTL 准入、原身份/指纹检查、读取取消、临时资源关闭及失败追踪、打开动作 permission/Session 晚返回保护和三语错误消费者。用户随后明确授权提交与推送；未重启或部署，静态证据不代替上述现场及远程验收。
 
 2026-10-20，canonical [Actions 39445026926](https://github.com/0honus0/nexus-terminal/actions/runs/39445026926)，SHA `ddf5ce0e95c39367977cf08c951ce1e4d63b34ef`：
 

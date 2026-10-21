@@ -49,6 +49,7 @@
 	} from '@/features/transfers/public';
 	import {
 		loadFileManager,
+		filesystemFailureMessage,
 		type ArchiveCompressionFormat,
 		type ArchiveCompressionIntent,
 		type LocalUploadFile,
@@ -690,12 +691,21 @@
 		if (props.showPopupFileManager) fileManagerPopupVisible.value = false;
 	};
 
-	const openEditorDocument = (path: string) =>
-		editorSession.value.open(path, {
-			scopeId: props.session.id,
-			scopeLabel: editorScopeLabel.value,
-			port: props.session.adapters.documents,
-		});
+	const openEditorDocument = async (path: string): Promise<void> => {
+		const permission = fileView.capture();
+		const session = props.session;
+		try {
+			await editorSession.value.open(path, {
+				scopeId: session.id,
+				scopeLabel: editorScopeLabel.value,
+				port: session.adapters.documents,
+			});
+		} catch (cause) {
+			if (fileView.isCurrent(permission) && props.session === session) {
+				feedback.notifyError(filesystemFailureMessage(cause, t));
+			}
+		}
+	};
 
 	const openPreviewDocument = (path: string) =>
 		previewSession.open(path, { scopeId: props.session.id, source: props.session.adapters.preview });

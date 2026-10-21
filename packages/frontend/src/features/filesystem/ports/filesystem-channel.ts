@@ -3,10 +3,12 @@ import type {
 	FileSearchResult,
 	RemoteFileEntry,
 	ResolvedRemotePath,
+	FilesystemInvalidation,
 } from '../model/filesystem-types';
 import type { TerminalDirectoryQueueState } from '../model/terminal-directory-types';
 
 export interface FilesystemChannel {
+	onInvalidate(handler: (reason: FilesystemInvalidation) => void): () => void;
 	listDirectory(path: string): Promise<DirectoryListing>;
 	search(path: string, query: string): Promise<FileSearchResult>;
 	stat(path: string, signal?: AbortSignal): Promise<RemoteFileEntry>;

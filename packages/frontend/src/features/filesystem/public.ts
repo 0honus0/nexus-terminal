@@ -35,6 +35,7 @@ export type {
 	LocalUploadBatch,
 	LocalUploadFile,
 	FilesystemMutation,
+	FilesystemInvalidation,
 	RemoteFileEntry,
 	RemoteFileMetadata,
 	ResolvedRemotePath,

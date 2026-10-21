@@ -1,5 +1,10 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { readWorkspaceFilePathRequest } from '../../../../packages/shared/src/remote/files/workspace-codec';
+import {
+	readWorkspaceMessage,
+	readWorkspaceRequest,
+} from '../../../../packages/shared/src/remote/workspace/workspace-codec';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
@@ -121,6 +126,25 @@ test('profiles real large-directory navigation and sort while retaining bounded 
 	const list = activeFileManagerList(page);
 	const rows = list.locator('tbody tr[data-file-path]');
 	const header = manager.getByRole('columnheader').filter({ hasText: 'Name' }).first();
+	const cdp = await context.newCDPSession(page);
+	await cdp.send('Network.enable');
+	const listingRequests = new Map<string, number>();
+	const pendingListings = new Set<string>();
+	cdp.on('Network.webSocketFrameSent', ({ response }) => {
+		if (response.opcode !== 1) return;
+		const message = readWorkspaceRequest(JSON.parse(response.payloadData));
+		if (message.type !== 'filesystem.list' || !message.requestId) return;
+		const { path } = readWorkspaceFilePathRequest(message.payload);
+		listingRequests.set(path, (listingRequests.get(path) ?? 0) + 1);
+		pendingListings.add(message.requestId);
+	});
+	cdp.on('Network.webSocketFrameReceived', ({ response }) => {
+		if (response.opcode !== 1) return;
+		const message = readWorkspaceMessage(JSON.parse(response.payloadData));
+		if (!('requestId' in message) || !pendingListings.has(message.requestId)) return;
+		expect(message.payload.ok).toBe(true);
+		pendingListings.delete(message.requestId);
+	});
 	const samples = [];
 	const directoryDelayMs = process.env.NEXUS_E2E_DIRECTORY_OPEN_DELAY === '1' ? 60 : 0;
 	const delayResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay?ms=${directoryDelayMs}`, {
@@ -130,6 +154,10 @@ test('profiles real large-directory navigation and sort while retaining bounded 
 	try {
 		for (const count of [1000, 5000]) {
 			for (let sample = 0; sample < 3; sample++) {
+				const rootRequests = listingRequests.get('/') ?? 0;
+				await manager.getByTitle('Refresh', { exact: true }).click();
+				await expect.poll(() => listingRequests.get('/')).toBe(rootRequests + 1);
+				await expect.poll(() => pendingListings.size).toBe(0);
 				await input.fill(`/list-profile-${count}`);
 				const start = performance.now();
 				await input.press('Enter');
@@ -171,7 +199,6 @@ test('profiles real large-directory navigation and sort while retaining bounded 
 				).toBeVisible();
 				expect(await rows.count()).toBeLessThan(200);
 				samples.push({ directoryDelayMs, count, sample, navigationMs, sortMs, renderedRows });
-				// Leave the directory to force the next sample through a real list request.
 				await input.fill('/');
 				await input.press('Enter');
 				await expect(input).toHaveValue('/');
@@ -179,12 +206,21 @@ test('profiles real large-directory navigation and sort while retaining bounded 
 			}
 		}
 		console.log('[file-list end-to-end profile]', JSON.stringify(samples));
+		expect(listingRequests.get('/list-profile-1000')).toBe(3);
+		expect(listingRequests.get('/list-profile-5000')).toBe(3);
+		expect(listingRequests.get('/')).toBeGreaterThanOrEqual(6);
+		expect(pendingListings.size).toBe(0);
 		const metricsResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay`);
 		expect(metricsResponse.ok).toBe(true);
 		const metrics = await metricsResponse.json();
-		expect(metrics.sftpDelayedDirectoryOpens).toBe(directoryDelayMs ? 12 : 0);
+		const requestCount = [...listingRequests.values()].reduce((total, count) => total + count, 0);
+		expect(metrics.sftpDelayedDirectoryOpens).toBe(directoryDelayMs ? requestCount : 0);
 		console.log('[directory open delay profile]', JSON.stringify(metrics));
 	} finally {
-		expect((await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay?ms=0`, { method: 'POST' })).ok).toBe(true);
+		try {
+			await cdp.detach();
+		} finally {
+			expect((await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay?ms=0`, { method: 'POST' })).ok).toBe(true);
+		}
 	}
 });

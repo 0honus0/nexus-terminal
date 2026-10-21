@@ -96,6 +96,9 @@ export class SftpFileResource implements FileResource {
 			if (error.remoteStatus === 'not_found') {
 				return new RemoteFileFailure('not_found', { cause: error });
 			}
+			if (error.remoteStatus === 'permission_denied') {
+				return new RemoteFileFailure('forbidden', { cause: error });
+			}
 			if (error.reason === 'cancelled' || error.reason === 'timeout' || error.reason === 'closed') {
 				this.usable = false;
 			}

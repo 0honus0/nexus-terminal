@@ -138,11 +138,24 @@ WorkspaceSocket的NXW1解码与协议版本已消费Shared remote/workspace，�
 
 核心Settings已使用Shared preferences/configuration完整配置和expectedVersion，CAPTCHA 使用 keep/clear/replace 且只读取 hasSecret；界面按已启用供应商展开字段和帮助，切换／停用清未提交密钥；配置版本仍留状态 owner，重启提示按 requiresRestart 显示。HTTP 失败/断流/unknown 后只读核对，不自动提交新版本；保存后当前认证与监控仍使用启动快照，重启才生效。布局等个人设置使用独立 preferences 契约，不能拼进核心 policy。
 
-FilesystemBrowser独立持有requestedPath与已确认path；新导航立即更新意图，后台完成触发refresh时读取该目标，仍由loadToken保护晚结果。成功后使用实际listing.path，当前读取失败恢复到已确认path；旧失败不覆盖新意图。FileManager读取已加载目录时保留列表节点与aria-busy，首次读取才用加载画面替换列表；后台刷新不在pointerdown/click之间卸载交互目标，确认快照到达后再替换条目。读取时使用独立、不拦截指针的中央spinner覆盖层，不卸载列表；切换终端目录按钮等待browser.loading结束，始终消费已确认的当前路径。
+FilesystemBrowser独立持有requestedPath与已确认path；新导航立即更新意图，后台完成触发refresh时读取该目标，仍由loadToken保护晚结果。成功后使用实际listing.path，当前读取失败恢复到已确认path；旧失败不覆盖新意图。FileManager读取已加载目录时保留列表节点与aria-busy，首次读取才用加载画面替换列表；后台刷新不在pointerdown/click之间卸载交互目标，确认快照到达后再替换条目。未缓存的读取超过150ms才显示独立、不拦截指针的中央spinner覆盖层，不卸载列表；缓存命中同步展示，不置loading。切换终端目录按钮等待browser.loading结束，始终消费已确认的当前路径。
+
+### Files 目录快照与预读
+
+1. **职责与范围**：目录快照归当前 FilesystemBrowser/Session，不是远端权威或操作授权；不持久化、不跨会话、仅缓存完整成功列表，不缓存文件正文及搜索结果。
+2. **子功能与目录**：features/filesystem/model/directory-cache 持有5分钟TTL、LRU及在途合并，最多20目录/20,000项/8MiB估算量；条目估算包含固定元数据及UTF-16名称/路径/longName，不宣称浏览器堆硬上限，超限列表仍可正常展示但不缓存。Browser持导航及单个预读/最新候选，FileManager提供普通目录悬停/键盘定位意图；100ms防抖，离开/停用/卸载清理排队timer，不递归预读。
+3. **依赖方向**：Cache只消费FilesystemChannel的应用列表；Browser消费Cache；Workspace Files adapter负责真实通信及失效通知，capabilityAdapters把传输接纳和终态事件接入失效。不在feature深层引用runtime，不增加后端测试开关或Shared协议。
+4. **类型与转换**：DirectoryListing/RemoteFileEntry与判别联合FilesystemInvalidation唯一归filesystem/model/filesystem-types；onInvalidate为应用port，mutation与unavailable/code分支分开。缓存记录、pending和revision仅本文件使用，既有wire→应用白名单mapper不变。
+5. **入口与安装**：createFilesystemSessionState安装Browser；load显式目标允许命中，原有无参load/refresh强制读取并清缓存，保留新建/删除/手动刷新等真实消费者行为。Document保存共用同一Channel，故同样触发失效；无需组件另发缓存事件。
+6. **数据、事务与并发**：缓存按确认的listing.path保存；相同精确路径/代次的前台和预读共用Promise。最多8项真实未收敛读取，旧代次也计数；最多一个预读，且其他读取忙时不新增预读。写入派发前及结算后失效，成功、确定失败和unknown均处理；前台遇失效读取会在原loadToken下重新获取，不复活旧快照。
+7. **生命周期与失败**：刷新、写入和传输事件推进cache revision，旧成功/失败均不能污染新代次；失效不重放写入。disconnect/filesystem.error清缓存、展示与选择并保留原有限失败码；销毁注销订阅、清缓存和timer，已派发只读任务仍由原cache/Channel持有并观察结算，不能因取消预读而关闭共用SFTP。预读失败不缓存、不替换当前目录或显示动作成功，并抑制同一候选反复预读；用户明确进入时仍读取并显示真实失败。
+8. **当前能力与验收**：USAGE「上传、下载与搜索」说明短期快照、容量和外部更改的刷新方式；新增远程E2E覆盖无请求切换、TTL/强制刷新、真实预读派发/前台合并及写入后的晚预读失效。既有大目录profile显式刷新保持真实冷扫描，统计实际WS请求与SFTP打开数，不将缓存命中冒充远端性能。静态和行为证据分别归testing/E2E，未运行不称PASS。
 
 Files的应用对象唯一归features/filesystem/model/filesystem-types；DirectoryListing、RemoteFileEntry、FileSearchResult及嵌套metadata不再借用旧Protocol。runtime/model/workspace-files-mapper逐字段投影，Files metadata沿真实后端使用Unix毫秒，不二次换算。adapters/filesystem-adapters承载11条用例、Document与Preview，WorkspaceSocket只持原附件关联与NXW1交付；Files ready/error用Shared严格codec，失败不携技术正文。
 
-Files首次读取等待当前附件的SFTP ready，尚未ACK、已断开/撤销或dispose时拒绝；有界等待持有timer/abort监听，断开/失败/取消全部结清，重连代次使旧等待失效。写入请求先核对完整1MiB入站控制预算；确定未派发与写后丢回执/畸形回执分别表达，unknown不自动重放。Preview取消同时覆盖stat等待和原binary请求；普通读取不隐式新建连接。上传下载已接Shared与正式能力，Workspace复制/移动/归档已消费Shared；五个跨服务器HTTP任务已独立接Shared，完整页面/三语实际交互仍C2-D。
+WorkspaceSessionSurface 的 openEditorDocument 接收编辑器 load 的拒绝，在原 fileView permission 与 Session 仍有效时通过 Filesystem feedback 提示；预期读取失败不传播到 Workspace 的 RuntimeErrorBoundary。已打开文档和草稿仍归原 editorSession，不因新文件打开失败清空。filesystem-feedback 按现有有限 code 分别翻译不存在、权限、登录、冲突、配置变化及远端不可用等原因，中英日资源同批维护，不解析技术正文。
+
+Files首次读取等待当前附件的SFTP ready，尚未ACK、已断开/撤销或dispose时拒绝；有界等待持有timer/abort监听，断开/失败/取消全部结清，重连代次使旧等待失效。写入请求先核对完整1MiB入站控制预算；确定未派发与写后丢回执/畸形回执分别表达，unknown不自动重放。Preview取消同时覆盖stat等待和原binary请求；普通读取不隐式重建 Workspace 或控制 socket，后端可在原 owner 下取得独立读取资源。上传下载已接Shared与正式能力，Workspace复制/移动/归档已消费Shared；五个跨服务器HTTP任务已独立接Shared，完整页面/三语实际交互仍C2-D。
 
 ## 8. 当前能力与验收
 

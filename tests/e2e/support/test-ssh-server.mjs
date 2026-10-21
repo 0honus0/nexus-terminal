@@ -54,6 +54,7 @@ let sftpStatDelayMs = 0;
 let sftpStatDelayPrefix = '';
 let sftpDelayedStatCount = 0;
 let sftpLstatDenyPrefix = '';
+let sftpStatDenyPrefix = '';
 let sftpReadDirDelayMs = 0;
 let sftpDelayedDirectoryOpens = 0;
 let prepareOperationDelayMs = 0;
@@ -672,6 +673,7 @@ function resetControls() {
 	sftpStatDelayPrefix = '';
 	sftpDelayedStatCount = 0;
 	sftpLstatDenyPrefix = '';
+	sftpStatDenyPrefix = '';
 	sftpReadDirDelayMs = 0;
 	sftpDelayedDirectoryOpens = 0;
 	prepareOperationDelayMs = 0;
@@ -803,6 +805,11 @@ function attachSftp(session, accept) {
 			}
 			if (useLstat && sftpLstatDenyPrefix && remotePath.startsWith(sftpLstatDenyPrefix)) {
 				const error = new Error(`LSTAT denied for ${remotePath}`);
+				error.code = 'EACCES';
+				throw error;
+			}
+			if (sftpStatDenyPrefix && remotePath.startsWith(sftpStatDenyPrefix)) {
+				const error = new Error(`STAT denied for ${remotePath}`);
 				error.code = 'EACCES';
 				throw error;
 			}
@@ -1598,6 +1605,12 @@ const controlServer = http.createServer(async (req, res) => {
 			sftpLstatDenyPrefix = requestUrl.searchParams.get('path') || '';
 			res.writeHead(200, { 'content-type': 'application/json' });
 			res.end(JSON.stringify({ sftpLstatDenyPrefix }));
+			return;
+		}
+		if (req.method === 'POST' && requestUrl.pathname === '/sftp/stat-deny-prefix') {
+			sftpStatDenyPrefix = requestUrl.searchParams.get('path') || '';
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ sftpStatDenyPrefix }));
 			return;
 		}
 		if (requestUrl.pathname === '/sftp/prepare-profile' && (req.method === 'POST' || req.method === 'GET')) {

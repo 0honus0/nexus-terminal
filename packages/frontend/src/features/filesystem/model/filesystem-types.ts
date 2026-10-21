@@ -30,6 +30,9 @@ export interface DirectoryListing {
 	entries: RemoteFileEntry[];
 }
 
+export type FilesystemInvalidation =
+	{ type: 'mutation' } | { type: 'unavailable'; code: WorkspaceErrorCode | 'not_connected' };
+
 export interface FileSearchResult {
 	entries: RemoteFileSearchEntry[];
 	truncated: boolean;

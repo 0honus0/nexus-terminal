@@ -21,13 +21,34 @@ interface TransferChannelAdapter extends TransferChannel {
 	dispose(): void;
 }
 
-export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: string): TransferChannelAdapter => {
+export const createTransferChannel = (
+	socket: WorkspaceSocket,
+	workspaceId: string,
+	invalidateFiles?: () => void,
+): TransferChannelAdapter => {
 	const handlers = new Set<(event: TransferEvent) => void>();
 	let workspaceAvailable = false;
 
 	const emit = (event: TransferEvent): void => {
+		if (
+			event.type === 'completed' ||
+			event.type === 'error' ||
+			event.type === 'cancelled' ||
+			event.type === 'skipped'
+		) {
+			invalidateFiles?.();
+		}
 		for (const handler of handlers) {
 			handler(event);
+		}
+	};
+
+	const mutate = async <T>(operation: () => Promise<T>): Promise<T> => {
+		invalidateFiles?.();
+		try {
+			return await operation();
+		} finally {
+			invalidateFiles?.();
 		}
 	};
 
@@ -35,13 +56,13 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
 
 	const operations = createWorkspaceTransferAdapter(socket, workspaceId, () => workspaceAvailable, emit);
 	return {
-		prepareUpload: (request) => uploads.prepare(request),
+		prepareUpload: (request) => mutate(() => uploads.prepare(request)),
 
-		upload: (request) => uploads.upload(request),
+		upload: (request) => mutate(() => uploads.upload(request)),
 
-		copyMove: (request) => operations.copyMove(request),
+		copyMove: (request) => mutate(() => operations.copyMove(request)),
 
-		archive: (request) => operations.archive(request),
+		archive: (request) => mutate(() => operations.archive(request)),
 
 		cancel: (id) => (uploads.owns(id) ? uploads.cancel(id) : operations.cancel(id)),
 
@@ -99,7 +120,7 @@ export const createWorkspaceCapabilityAdapters = (
 	const connectedHandlers = new Set<() => void>();
 	const status = createStatusChannel(socket, () => workspaceBound && socket.connected);
 	const filesystem = createFilesystemChannel(socket, () => workspaceBound);
-	const transfers = createTransferChannel(socket, workspaceId);
+	const transfers = createTransferChannel(socket, workspaceId, filesystem.invalidate);
 	const download = createFilesystemDownloadPort(workspaceId, connectionId, () => workspaceBound && socket.connected);
 	const terminal = createTerminalChannel(socket, {
 		canSend: () => workspaceBound && socket.connected,

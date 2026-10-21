@@ -1,4 +1,3 @@
-import { WORKSPACE_ERROR_CODES } from '@nexus-terminal/shared/remote/workspace/values';
 import { FilesystemFailure } from './filesystem-types';
 
 /** Translate finite application failures; locally authored UI messages remain local. */
@@ -16,8 +15,27 @@ export function filesystemFailureMessage(value: unknown, translate: (key: string
 	if (code === 'limit_exceeded') {
 		return translate('fileManager.errors.capacityExceeded');
 	}
-	if (WORKSPACE_ERROR_CODES.some((known) => known === code)) {
-		return translate('fileManager.errors.requestRejected');
+	switch (code) {
+		case 'not_found':
+			return translate('fileManager.errors.notFound');
+		case 'forbidden':
+			return translate('fileManager.errors.permissionDenied');
+		case 'unauthenticated':
+			return translate('fileManager.errors.sessionExpired');
+		case 'conflict':
+			return translate('fileManager.errors.fileConflict');
+		case 'stale_target':
+			return translate('fileManager.errors.targetChanged');
+		case 'host_key_untrusted':
+			return translate('fileManager.errors.hostKeyUntrusted');
+		case 'remote_unavailable':
+			return translate('fileManager.errors.remoteUnavailable');
+		case 'invalid_input':
+			return translate('fileManager.errors.invalidInput');
+		case 'not_text':
+			return translate('fileManager.errors.notText');
+		case 'command_failed':
+			return translate('fileManager.errors.commandFailed');
 	}
 	return value instanceof Error
 		? value.message
