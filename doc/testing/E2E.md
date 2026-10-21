@@ -2,9 +2,19 @@
 
 开发前读取 [AGENTS](../AGENTS.md)，产品要求见 [USAGE](../USAGE.md)，当前工作见 [PLAN](../PLAN.md)。本文维护实际验证入口、覆盖边界和验收证据。
 
-## 目录切换缓存回归（待远程）
+## 镜像发布依赖审计（2026-10-21）
 
-2026-10-21 按用户要求新增会话内5分钟目录快照与意图预读，默认容量20目录/20,000项/约8MiB估算数据；不改Shared/Backend协议、不持久化。新增 `tests/e2e/specs/ssh/file-manager-cache.spec.ts`，3项真实浏览器/SSH回归，尚未执行：
+[E2E Actions 39528858672](https://github.com/0honus0/nexus-terminal/actions/runs/39528858672) 的被测 SHA 为 `1df0ee036e66d253c0bdeb812f1934f7a98e0391`，八组 Playwright、检查/格式/构建、Docker smoke、runner image 与耗时统计均 success；可选截图 skipped。逐组原日志的通过数为48（47+1）／42／54（52+1+1）／61／46／56／79／69，合计455项；新增的4项文件管理器修复用例及3项缓存用例全部通过。原日志保存在 `/tmp/nexus-e2e-39528858672.log`，不扩大为未执行的权限/断线等组合或本地未提交 UI/Agent 修改已验收。
+
+[Publish Actions 39529899552](https://github.com/0honus0/nexus-terminal/actions/runs/39529899552) 使用 `164823c2e8b5bf26e04e909de066e5b73aec27bd`，相对被测提交只更新 `scripts/e2e/duration-estimates.json`。失败发生于 `Prepare publication / Audit production dependencies`，`pnpm audit --prod --audit-level=high` 返回1；镜像构建和推送 job 均未启动，不是 E2E、GHCR 登录或 Docker 构建失败。
+
+实际阻断项为 `follow-redirects@1.16.0` 的 GHSA-q3jh-wrc6-jgq8、GHSA-8r9p-f939-6h3c，以及 `vite@8.3.2` 的 GHSA-587h-7wmj-h5pm。Vite 虽声明为开发依赖，也通过 Tailwind/Vue Router 的依赖图进入生产审计，不能简单用调整依赖分类绕过。失败日志为 `/tmp/nexus-publish-39529899552-failed.log`。
+
+本批将 Vite 最低版本提高为 `^8.3.4`，目标更新锁定 `vite@8.3.4`、`follow-redirects@1.16.1` 及 Vite 的实际 PostCSS/nanoid 子依赖；保留原发布审计等级和 workflow。`pnpm audit --prod --audit-level=high`、`pnpm install --frozen-lockfile`、根 `pnpm run check`、`pnpm run format:all:check`、Frontend build 与 `git diff --check` 均 exit 0。审计仍有1项 moderate（`@modelcontextprotocol/client`），high/critical 为0，不宣称全部漏洞清零。日志为 `/tmp/nexus-publish-{deps-update,audit,install,check,format,build}.log`，结构化审计为 `/tmp/nexus-publish-audit.json`。本轮已获提交与推送授权；未额外触发远程工作流或部署，新依赖图不继承旧 E2E 的行为结论。
+
+## 目录切换缓存回归（已远程验收）
+
+2026-10-21 按用户要求新增会话内5分钟目录快照与意图预读，默认容量20目录/20,000项/约8MiB估算数据；不改Shared/Backend协议、不持久化。新增 `tests/e2e/specs/ssh/file-manager-cache.spec.ts` 的3项真实浏览器/SSH回归已在上述 Actions 的第6组全部通过：
 
 | 场景                          | 有效断言                                                                                                                                                                                                                                                            |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -16,7 +26,7 @@
 
 源码复核覆盖：写入派发前/结算后及传输接纳/终态失效、未知结果不重放、旧代次成功和失败不发布、缓存失败抑制重复预读、断线/Files错误清展示并保留具名错误码、预读最大1项/最新候选、在途共用上限8项（含失效代次）、停用/卸载清排队及订阅。已派发只读任务仍跟踪至原Channel结算，前台可复用，不因预读取消破坏共用SFTP。
 
-最终静态验证：根 `pnpm run check`、`pnpm run format:all:check`、Frontend build、变更spec的独立TypeScript及 `git diff --check` 均 exit 0；日志为 `/tmp/nexus-directory-cache-{check,format,build,e2e-types}.log`。实际远程执行、LRU/容量边界、断线重连、外部权限变更及传输未知组合仍待验，静态不等于行为PASS；遵守D17，未运行本地E2E/用例收集、未触发远程任务、未重启或部署。
+最终静态验证：根 `pnpm run check`、`pnpm run format:all:check`、Frontend build、变更spec的独立TypeScript及 `git diff --check` 均 exit 0；日志为 `/tmp/nexus-directory-cache-{check,format,build,e2e-types}.log`。上述远程3项场景已通过，LRU/容量边界、断线重连、外部权限变更及传输未知组合仍待验。遵守D17，未运行本地E2E/用例收集；提交推送后的远程 Actions 证据与镜像发布状态见本页上方，不混同为部署已完成。
 
 ## 当前验收基线
 
@@ -24,7 +34,7 @@
 
 继续沿有效性检查定位到更直接的共因：owned 和 runAdmitted 对 Workspace 也检查 expiresAt，导致两分钟没有文件操作后的首次读取/写入被拒绝；定时回收本已排除 Workspace，两处准入与其政策不一致。现仅独立 HTTP Files 检查 idle TTL，Workspace 保留原生命周期、身份、指纹及关闭检查。这条源码链可解释 HTML 读取拒绝落入错误边界和目录下载 not_found；HTML 现场具体文件/设备及异常尚未提供，不能据此认定语言组件故障或所有现场组合已恢复。
 
-用户随后明确要求补充 E2E，已新增 `tests/e2e/specs/ssh/file-manager-regressions.spec.ts`，4 项用例纳入既有 ssh project 和远程分组，尚未执行：
+用户随后明确要求补充 E2E，已新增 `tests/e2e/specs/ssh/file-manager-regressions.spec.ts`，4 项用例已在上述 Actions 的第1组全部通过：
 
 | 用例                             | 有效断言                                                                                                                                                                                                                                                                              |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -37,7 +47,7 @@ fixture 仅新增 `/sftp/stat-deny-prefix`，对指定路径的 STAT/LSTAT 返�
 
 新增用例静态验证：根 `pnpm run check`、`pnpm run format:all:check`、变更测试/fixture 的 ESLint、fixture `node --check` 和 `git diff --check` 均 exit 0；另以 Backend 的 TypeScript 对新增 spec 及其依赖执行 `tsc --ignoreConfig --noEmit --skipLibCheck --types node --module nodenext --moduleResolution nodenext --esModuleInterop --target es2022`，exit 0。日志为 `/tmp/nexus-files-e2e-{check,format,lint,types}.log`。未运行用例收集或服务，不替换既有开发进程。
 
-待远程执行上述新增用例，并补充尚未新增的独立资源 TTL、真实预览关闭的 UI 取消链、普通文本组合、三语提示、身份撤销及独立资源关闭失败。遵守 D17，未运行本地行为测试、浏览器专项及 E2E，也未触发远程任务；新增测试不等于已验证通过。
+上述4项新增用例已远程通过，仍待补充尚未新增的独立资源 TTL、真实预览关闭的 UI 取消链、普通文本组合、三语提示、身份撤销及独立资源关闭失败。遵守 D17，未运行本地行为测试、浏览器专项及 E2E；远程通过只覆盖实际断言，不代表这些剩余组合已验。
 
 本批 `pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/backend build`、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check` 均 exit 0；日志为 `/tmp/nexus-files-repair-{check,format,backend-build,frontend-build}.log`。源码复审覆盖独立/Workspace TTL 准入、原身份/指纹检查、读取取消、临时资源关闭及失败追踪、打开动作 permission/Session 晚返回保护和三语错误消费者。用户随后明确授权提交与推送；未重启或部署，静态证据不代替上述现场及远程验收。
 
