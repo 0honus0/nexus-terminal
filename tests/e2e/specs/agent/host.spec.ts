@@ -540,12 +540,14 @@ test('Agent thread selection retains its identity while authoritative history is
 		await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
 		const hub = page.locator('section[aria-label="Agent"]');
 		await openAgentConversations(page);
-		const firstButton = hub.getByRole('button', { name: first.title, exact: true });
-		const secondButton = hub.getByRole('button', { name: second.title, exact: true });
+		const threads = hub.locator('#agent-thread-sidebar');
+		const firstButton = threads.getByRole('button').filter({ has: page.getByText(first.title, { exact: true }) });
+		const secondButton = threads.getByRole('button').filter({ has: page.getByText(second.title, { exact: true }) });
 		await secondButton.click();
 		await expect(
 			hub.locator('.agent-conversation-pane > header').getByText(second.title, { exact: true }),
 		).toBeVisible();
+		await openAgentConversations(page);
 		await expect(firstButton).toBeEnabled();
 		hold = true;
 		await openAgentConversations(page);
@@ -554,6 +556,7 @@ test('Agent thread selection retains its identity while authoritative history is
 		await expect(
 			hub.locator('.agent-conversation-pane > header').getByText(first.title, { exact: true }),
 		).toBeVisible();
+		await openAgentConversations(page);
 		await expect(secondButton).toBeDisabled();
 		release();
 		await openAgentConversations(page);
@@ -608,15 +611,12 @@ test('Agent create-thread Retry retains the exact operation after an unknown out
 	await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
 	const hub = page.locator('section[aria-label="Agent"]');
 	await openAgentConversations(page);
-	const threads = hub
-		.locator('section')
-		.filter({ has: page.getByRole('heading', { name: 'Conversations', exact: true }) });
-	await threads.getByRole('textbox', { name: 'Thread title', exact: true }).fill('E2E retained intent');
-	await threads.getByRole('button', { name: 'Create thread', exact: true }).click();
+	const threads = hub.locator('#agent-thread-sidebar');
+	await threads.getByRole('button', { name: 'New', exact: true }).click();
 	await expect.poll(() => attempts.length).toBe(1);
-	const retry = threads.getByRole('button', { name: 'Explicitly retry the original key and version', exact: true });
+	const retry = threads.getByRole('button', { name: 'Retry after checking state', exact: true });
 	await expect(retry).toBeDisabled();
-	await threads.getByRole('button', { name: 'Read current threads', exact: true }).click();
+	await threads.getByRole('button', { name: 'Inspect original intention', exact: true }).click();
 	await expect(retry).toBeEnabled();
 	expect(await list()).toHaveLength(before.length + 1);
 	await retry.click();
@@ -624,6 +624,7 @@ test('Agent create-thread Retry retains the exact operation after an unknown out
 	expect(attempts[1]).toEqual(attempts[0]);
 	expect(attempts[0].request.method).toBe('agent.threads.create');
 	if (attempts[0].request.method !== 'agent.threads.create') throw new Error('Unexpected operation');
+	expect(attempts[0].request.params.title).toBe('Untitled thread');
 	expect(attempts[0].request.params.operationId).toMatch(/^[0-9a-f-]{36}$/u);
 	await expect(retry).toHaveCount(0);
 	expect(await list()).toHaveLength(before.length + 1);
@@ -911,29 +912,25 @@ test('Agent Host preserves an open surface when a directory refresh fails and re
 	await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
 	const hub = page.locator('section[aria-label="Agent"]');
 	await openAgentConversations(page);
-	const threads = hub.getByRole('heading', { name: 'Conversations', exact: true }).locator('..');
-	await threads.getByRole('textbox', { name: 'Thread title', exact: true }).fill('Unsaved local title');
+	await hub.locator('#agent-thread-sidebar').getByRole('button', { name: 'New', exact: true }).click();
+	const prompt = hub.getByRole('textbox', { name: 'Task input', exact: true });
+	await prompt.fill('Unsaved local prompt');
 	const appsPath = '**/api/v1/agent/apps';
 	await page.route(appsPath, (route) => route.fulfill({ status: 503, json: { code: 'storage_unavailable' } }));
 	await hub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
 	await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
-	await expect(
-		page.getByRole('status').filter({ hasText: 'Request failed. Check your session or read again.' }),
-	).toBeVisible();
+	await expect(page.getByRole('alert').filter({ hasText: 'Unable to load Agent services' })).toBeVisible();
 	await expect(hub).toBeVisible();
-	await expect(threads.getByRole('textbox', { name: 'Thread title', exact: true })).toHaveValue(
-		'Unsaved local title',
-	);
+	await expect(prompt).toHaveValue('Unsaved local prompt');
 	await page.unroute(appsPath);
 	await page
-		.getByRole('status')
-		.filter({ hasText: 'Request failed. Check your session or read again.' })
-		.getByRole('button', { name: 'Read current threads', exact: true })
+		.getByRole('alert')
+		.filter({ hasText: 'Unable to load Agent services' })
+		.getByRole('button', { name: 'Retry', exact: true })
 		.click();
-	await expect(
-		page.getByRole('status').filter({ hasText: 'Request failed. Check your session or read again.' }),
-	).toHaveCount(0);
+	await expect(page.getByRole('alert').filter({ hasText: 'Unable to load Agent services' })).toHaveCount(0);
 	await expect(hub).toContainText(app.name);
+	await expect(prompt).toHaveValue('Unsaved local prompt');
 });
 
 test('durable Run events catch up over authenticated workspace reads without a Host subscription', async ({
@@ -981,6 +978,11 @@ test('Agent tabs own independent local drafts and observe external threads throu
 	await loginAsInitialAdmin(context.request);
 	await setUiLanguage(context.request);
 	const app = await createTestAgentApp(context.request);
+	const initialThread = await requestAgentWorkspace(context.request, app, {
+		method: 'agent.threads.create',
+		params: { operationId: randomUUID(), title: 'Shared initial conversation' },
+	});
+	if (initialThread.method !== 'agent.threads.create') throw new Error('Unexpected initial thread');
 	let sockets = 0;
 	context.on('page', (opened) =>
 		opened.on('websocket', (socket) => {
@@ -998,23 +1000,35 @@ test('Agent tabs own independent local drafts and observe external threads throu
 		await follower.getByRole('button', { name: 'Open Agent', exact: true }).click();
 		await openAgentConversations(page);
 		await openAgentConversations(follower);
-		const firstThreads = page.getByRole('heading', { name: 'Conversations', exact: true }).locator('..');
-		const secondThreads = follower.getByRole('heading', { name: 'Conversations', exact: true }).locator('..');
-		await secondThreads.getByRole('textbox', { name: 'Thread title', exact: true }).fill('Follower draft');
-		await firstThreads.getByRole('textbox', { name: 'Thread title', exact: true }).fill('Leader draft');
+		const firstHub = page.locator('section[aria-label="Agent"]');
+		const secondHub = follower.locator('section[aria-label="Agent"]');
+		const secondThreads = secondHub.locator('#agent-thread-sidebar');
+		await firstHub
+			.locator('#agent-thread-sidebar')
+			.getByRole('button')
+			.filter({ has: page.getByText(initialThread.value.title, { exact: true }) })
+			.click();
+		await secondThreads
+			.getByRole('button')
+			.filter({ has: follower.getByText(initialThread.value.title, { exact: true }) })
+			.click();
+		const firstDraft = firstHub.getByRole('textbox', { name: 'Task input', exact: true });
+		const secondDraft = secondHub.getByRole('textbox', { name: 'Task input', exact: true });
+		await secondDraft.fill('Follower draft');
+		await firstDraft.fill('Leader draft');
 		const result = await requestAgentWorkspace(context.request, app, {
 			method: 'agent.threads.create',
 			params: { operationId: randomUUID(), title: 'External thread' },
 		});
 		if (result.method !== 'agent.threads.create') throw new Error('Unexpected thread');
-		await secondThreads.getByRole('button', { name: 'Read current threads', exact: true }).click();
-		await expect(secondThreads.getByRole('button', { name: 'External thread', exact: true })).toBeVisible();
-		await expect(secondThreads.getByRole('textbox', { name: 'Thread title', exact: true })).toHaveValue(
-			'Follower draft',
-		);
-		await expect(firstThreads.getByRole('textbox', { name: 'Thread title', exact: true })).toHaveValue(
-			'Leader draft',
-		);
+		await secondHub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
+		await follower.getByRole('button', { name: 'Open Agent', exact: true }).click();
+		await openAgentConversations(follower);
+		await expect(
+			secondThreads.getByRole('button').filter({ has: follower.getByText('External thread', { exact: true }) }),
+		).toBeVisible();
+		await expect(secondDraft).toHaveValue('Follower draft');
+		await expect(firstDraft).toHaveValue('Leader draft');
 		expect(sockets).toBe(0);
 	} finally {
 		await follower.close();

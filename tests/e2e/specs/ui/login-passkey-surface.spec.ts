@@ -196,7 +196,8 @@ test('Login passkey succeeds, reports credential failure, and falls back to pass
 		await page.setViewportSize({ width: LOGIN_VIEWPORTS[0].width, height: LOGIN_VIEWPORTS[0].height });
 		await page.goto(`${BASE_URL}/login`);
 		expect(new URL(page.url()).origin).toBe(BASE_URL);
-		await expect(page.getByRole('button', { name: 'Login with Passkey', exact: true })).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'Login with Passkey', exact: true })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Login with Passkey', exact: true })).toBeEnabled();
 
 		await step('register a real passkey for the Login surface', async () => {
 			await page.locator('#username').fill(E2E_ADMIN.username);

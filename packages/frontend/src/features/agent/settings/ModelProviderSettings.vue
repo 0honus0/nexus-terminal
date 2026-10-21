@@ -869,6 +869,7 @@
 							</h4>
 							<select
 								:value="draft.credential.action"
+								:aria-label="t('agent.settings.providerManagement.credential')"
 								class="provider-modal-input h-8 rounded-lg px-2.5 text-xs outline-none"
 								@change="setCredential"
 							>

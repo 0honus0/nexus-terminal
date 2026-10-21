@@ -1280,6 +1280,6 @@ test('a protected API 401 invalidates the local session and releases the live Wo
 	await unauthorized;
 
 	await expect(page).toHaveURL(/\/login$/);
-	await expect(page.getByRole('heading', { name: 'User Login', exact: true })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Welcome back', exact: true })).toBeVisible();
 	await expect.poll(() => workspaceSocketClosed, { timeout: 15_000 }).toBe(true);
 });

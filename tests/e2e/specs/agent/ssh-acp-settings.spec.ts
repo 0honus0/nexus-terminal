@@ -170,7 +170,11 @@ for (const decision of ['denied', 'cancelled'] as const) {
 		await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
 		const hub = page.locator('section[aria-label="Agent"]');
 		await openAgentConversations(page);
-		await hub.getByRole('button', { name: thread.title, exact: true }).click();
+		await hub
+			.locator('#agent-thread-sidebar')
+			.getByRole('button')
+			.filter({ has: page.getByText(thread.title, { exact: true }) })
+			.click();
 		await hub.getByRole('button', { name: 'Model for this execution', exact: true }).click();
 		await page
 			.getByRole('combobox', { name: 'Model for this execution', exact: true })

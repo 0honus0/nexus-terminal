@@ -115,7 +115,7 @@ test('notification settings create, edit, persist, and delete a webhook channel 
 		await selectUiOption(page.locator('#setting-channel-type'), 'webhook');
 		await page.locator('#webhook-url').fill(`${E2E_SSH.controlUrl}/e2e-notification-webhook`);
 		await selectUiOption(page.locator('#webhook-method'), 'POST');
-		await page.locator('#notification-template').fill('{"event":"{event}"}');
+		await page.locator('#webhook-body').fill('{"event":"{event}"}');
 		await page
 			.locator('form')
 			.filter({ has: page.locator('#setting-name') })
@@ -204,7 +204,7 @@ test('notification settings keep long provider and event content readable on a n
 	await expect(card.getByRole('button', { name: 'Edit', exact: true })).toBeVisible();
 	await card.getByRole('button', { name: 'Edit', exact: true }).click();
 	await expect(page.locator('#webhook-url')).toHaveValue(longUrl);
-	await expect(page.locator('#notification-template')).toBeVisible();
+	await expect(page.locator('#webhook-body')).toBeVisible();
 	await expect(page.locator('#setting-name')).toHaveValue(longName);
 	const editMetrics = await page.evaluate(() => {
 		const viewportWidth = document.documentElement.clientWidth;
@@ -252,7 +252,8 @@ test('notification settings empty and error states stay within a narrow viewport
 	await page.route('**/api/v1/settings/notifications', (route) => route.abort('failed'));
 	await page.reload();
 	await expect(settings.getByRole('alert')).toContainText('The result is unknown');
-	await expect(settings.getByRole('button', { name: 'Add Notification Channel', exact: true })).toBeDisabled();
+	await expect(settings.getByRole('button', { name: 'Add Notification Channel', exact: true })).toHaveCount(0);
+	await expect(settings.getByRole('button', { name: 'Refresh and review', exact: true })).toBeEnabled();
 	const errorMetrics = await page.evaluate(() => ({
 		viewportWidth: document.documentElement.clientWidth,
 		pageScrollWidth: document.documentElement.scrollWidth,

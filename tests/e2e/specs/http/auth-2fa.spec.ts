@@ -409,7 +409,7 @@ test('Login 2FA challenge supports invalid-token retry and expired-session recov
 				provider: 'none',
 			});
 			await expect(page).toHaveURL(/\/login$/);
-			await expect(page.getByRole('heading', { name: 'User Login', exact: true })).toBeVisible();
+			await expect(page.getByRole('heading', { name: 'Welcome back', exact: true })).toBeVisible();
 
 			const username = page.locator('#username');
 			const password = page.locator('#password');

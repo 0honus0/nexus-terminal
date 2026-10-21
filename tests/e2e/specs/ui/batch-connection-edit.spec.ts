@@ -17,6 +17,7 @@ const batchModal = (page: Page) =>
 
 async function editNotes(page: Page, notes: string): Promise<void> {
 	const modal = batchModal(page);
+	await modal.getByRole('checkbox', { name: 'Advanced Options', exact: true }).check();
 	await modal.getByRole('checkbox', { name: 'Change notes', exact: true }).check();
 	await modal.locator('textarea').fill(notes);
 	await modal.getByRole('button', { name: 'Save', exact: true }).click();

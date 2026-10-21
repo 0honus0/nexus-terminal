@@ -39,7 +39,7 @@ async function webhookForm(page: Page, name: string): Promise<void> {
 			.last()
 			.fill(value);
 	}
-	await page.locator('#notification-template').fill(TEMPLATE);
+	await page.locator('#webhook-body').fill(TEMPLATE);
 }
 
 async function trigger(page: Page, path: string) {
@@ -135,7 +135,7 @@ test('email notification sends a plain-text template through the real SMTP recei
 	await page.locator('#notification-host').fill('127.0.0.1');
 	await page.locator('#notification-port').fill(String(E2E_PORTS.smtp));
 	await page.getByRole('checkbox', { name: 'Use TLS/SSL', exact: true }).uncheck();
-	await page.locator('#notification-template').fill('NEXUS-E2E-TEXT {event} {time}');
+	await page.locator('#notification-body').fill('NEXUS-E2E-TEXT {event} {time}');
 	const delivery = await trigger(page, NOTIFICATIONS_PATH + '/test-unsaved');
 	await waitForTestDelivery(context.request, delivery.id, 'sent');
 });

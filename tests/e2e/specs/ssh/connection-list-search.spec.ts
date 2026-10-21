@@ -137,7 +137,9 @@ test('workspace connection list remains usable when connection tags fail to load
 	const list = await openWorkspaceConnectionPicker(page);
 	await expect(list.locator(`li[data-connection-id="${primaryId}"]`)).toBeVisible();
 	await expect(
-		page.getByText('Failed to load connection tags. Connections are still available.', { exact: true }),
+		list
+			.getByRole('alert')
+			.getByText('Failed to load connection tags. Connections are still available.', { exact: true }),
 	).toBeVisible();
 });
 

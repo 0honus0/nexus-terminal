@@ -913,6 +913,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			throw new Error('Unexpected thread creation');
 		}
 		expect(result.value.title).toBe('Untitled thread');
+		await openAgentConversations(page);
 		await expect(
 			panel.getByRole('button').filter({ has: page.getByText('Untitled thread', { exact: true }) }),
 		).toBeVisible();

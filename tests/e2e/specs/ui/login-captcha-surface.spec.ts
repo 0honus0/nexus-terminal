@@ -212,7 +212,7 @@ test('login CAPTCHA fails closed for invalid configuration', async ({ page, requ
 	try {
 		await step('a malformed public configuration fences first-factor submission', async () => {
 			await loadLoginWithCaptcha(page, { enabled: true, provider: 'none' }, { intercepted: true });
-			await expect(page.getByRole('heading', { name: 'User Login', exact: true })).toBeVisible();
+			await expect(page.getByRole('heading', { name: 'Welcome back', exact: true })).toBeVisible();
 			await expect(page.getByText(CAPTCHA_INVALID_MESSAGE, { exact: true })).toBeVisible();
 			await expect(page.getByRole('button', { name: 'Login', exact: true })).toBeDisabled();
 		});
@@ -251,7 +251,7 @@ test('login CAPTCHA requires a token before sending first-factor credentials', a
 	try {
 		await step('load the login page with the real valid hCaptcha configuration', async () => {
 			await loadLoginWithCaptcha(page, { enabled: true, provider: 'hcaptcha' });
-			await expect(page.getByRole('heading', { name: 'User Login', exact: true })).toBeVisible();
+			await expect(page.getByRole('heading', { name: 'Welcome back', exact: true })).toBeVisible();
 			await expect(page.getByText('Please complete the verification below:', { exact: true })).toBeVisible();
 			await expect(page.getByRole('button', { name: 'Login', exact: true })).toBeEnabled();
 		});

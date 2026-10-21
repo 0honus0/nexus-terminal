@@ -114,11 +114,15 @@ export function useNativeRuns(
 	}
 
 	const operation = useAgentManagementOperation((reason) => {
+		const originalDraft = draft.value;
 		const intent = pending.value;
 		const originalThread = thread.value;
 		const originalRun = run.value;
 		const keep = reason === 'view' && (intent !== null || !attachmentsReady.value || threadBusy());
 		clearPrivate();
+		if (reason === 'view') {
+			draft.value = originalDraft;
+		}
 		if (keep) {
 			pending.value = intent;
 			thread.value = originalThread;

@@ -663,6 +663,8 @@ trace显示Save后为saving，测试已从磁盘读到新字节，但关闭时�
 
 原始失败为[Actions 39568515716](https://github.com/0honus0/nexus-terminal/actions/runs/39568515716)，被测81aa1a0da26e11f609ca961e683c5332c20dde36；第1–7组失败，第8组通过，原日志保存在`/tmp/nexus-e2e-39568515716-shard-*.log`。首批按耗时优先修复Agent公共App选择、会话列表与插件新建／版本重命名场景，保留真实回执、版本与历史断言，不恢复已删除的调试表单。对应三个测试文件ESLint、Prettier与diff静态检查通过；未执行本地行为测试，远程修复结果待新SHA核对。
 
+首批b251f1f7已推送，触发[Actions 39571411450](https://github.com/0honus0/nexus-terminal/actions/runs/39571411450)。第二批修复其余旧入口并补上凭据选择器可访问名称、临时隐藏保留未发送任务文本；保留通知真实投递、精确请求重试、版本、权限与跨页隔离断言。根`pnpm run check`、正式前端build及本批ESLint通过（`/tmp/nexus-e2e-fix-{check,build,eslint}.log`）；按D17未执行本地行为。原第1组27失败后耗尽900秒整组期限，上传用例被中断，不将其误报为已确认上传缺陷。产品章节已修正旧标题草稿与常驻刷新描述；最新SHA远程结果待验。
+
 ### 2026-10-20 本批最终远程收口
 
 [Actions 39445026926](https://github.com/0honus0/nexus-terminal/actions/runs/39445026926)整体success，被测ddf5ce0e95c39367977cf08c951ce1e4d63b34ef。逐组读取原日志，各组通过数为53／38／54（52+1+1）／57（56+1）／46／60／74／66，共448项，无失败、flaky、重试或跳过用例；质量／格式／构建、Docker、runner及耗时统计success，可选截图任务skipped。原日志`/tmp/nexus-acp-receipt-job-<jobId>.log`。ACP取消首次11秒通过，文件预览编辑历史回归首次27秒通过；Files／插件独立场景通过。未扩大为多文件故障、完整像素或全部窄屏已验。
