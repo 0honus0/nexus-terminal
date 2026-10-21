@@ -98,7 +98,10 @@ export async function prepareAgentRun(
 	};
 }
 
-export async function createTestAgentApp(request: APIRequestContext, name = 'E2E native Agent'): Promise<AgentAppView> {
+export async function createTestAgentApp(
+	request: APIRequestContext,
+	name = 'E2E native Agent ' + randomUUID(),
+): Promise<AgentAppView> {
 	return requestAgentJson(
 		request,
 		{ method: 'POST', path: '/apps', data: { name }, status: 201 },

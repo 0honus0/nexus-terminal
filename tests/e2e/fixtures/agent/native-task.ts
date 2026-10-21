@@ -239,10 +239,12 @@ export async function startNativeTask(
 	await expect(targets).toBeHidden();
 	await expect(hub).toBeVisible();
 	await hub.getByRole('textbox', { name: 'Task input', exact: true }).fill(prompt);
-	const method = followUp ? 'agent.runs.appendInput' : 'agent.runs.create';
-	const { result } = await captureNativeCommand(task, method, () =>
-		hub.getByRole('button', { name: followUp ? 'Continue' : 'Send', exact: true }).click(),
-	);
+	const send = hub.getByRole('button', { name: 'Send', exact: true });
+	await expect(send).toBeEnabled();
+	const hasRun = await hub.getByRole('button', { name: 'Show or hide task panel', exact: true }).isVisible();
+	if (followUp) expect(hasRun).toBe(true);
+	const method = hasRun ? 'agent.runs.appendInput' : 'agent.runs.create';
+	const { result } = await captureNativeCommand(task, method, () => send.click());
 	if (result.method !== 'agent.runs.create' && result.method !== 'agent.runs.appendInput') {
 		throw new Error('Unexpected Run receipt');
 	}
