@@ -4,6 +4,7 @@
     "resizePopup": "ファイルマネージャーのウィンドウサイズを変更",
     "currentPath": "現在のパス",
     "loading": "ディレクトリをロード中...",
+    "connecting": "接続中…",
     "emptyDirectory": "ディレクトリは空です",
     "uploadTasks": "アップロードタスク",
     "uploadSpeed": "合計速度",

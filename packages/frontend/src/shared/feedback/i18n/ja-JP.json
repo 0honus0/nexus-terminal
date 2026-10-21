@@ -2,6 +2,7 @@
   "feedback": {
     "confirmTitle": "確認してください",
     "alertTitle": "お知らせ",
-    "close": "閉じる"
+    "close": "閉じる",
+    "networkUnavailable": "接続が不安定か、サービスを利用できません。接続を確認してください。操作を送信した場合は、再実行する前に結果を確認してください。"
   }
 }

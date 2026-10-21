@@ -1,6 +1,7 @@
 import { ref } from 'vue';
 import { useAuthenticatedViewScope, type ViewRevocation } from '@/shared/session/use-authenticated-view-scope';
 import { AgentManagementFailure } from '../model/management-failure';
+import { isNetworkFailure } from '@/client/http/network-failure';
 
 function failureNotice(cause: unknown, writing: boolean): string {
 	if (cause instanceof AgentManagementFailure) {
@@ -74,7 +75,7 @@ export function useAgentManagementOperation(onRevoke?: (reason: ViewRevocation) 
 				return;
 			}
 			const failure = cause instanceof AgentManagementFailure ? cause : null;
-			notice.value = failureNotice(cause, options.write);
+			notice.value = !options.write && isNetworkFailure(cause) ? '' : failureNotice(cause, options.write);
 			if (options.write && (!failure || failure.outcome !== 'not_dispatched')) {
 				refreshRequired.value = true;
 			}

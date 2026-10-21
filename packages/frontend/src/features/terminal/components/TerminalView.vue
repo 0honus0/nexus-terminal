@@ -28,6 +28,7 @@
 			channel: TerminalChannel;
 			active?: boolean;
 			inputEnabled?: boolean;
+			connectionFailure?: string;
 			fontFamily?: string;
 			fontSize?: number;
 			theme?: Record<string, string>;
@@ -54,6 +55,22 @@
 	const searchTerm = terminalState.searchTerm;
 	const renderedFontSize = ref(props.fontSize);
 	let terminal: Terminal | undefined;
+	let renderedConnectionFailure: string | undefined;
+
+	const renderConnectionFailure = (): void => {
+		if (!props.connectionFailure) {
+			renderedConnectionFailure = undefined;
+			return;
+		}
+		if (!terminal || renderedConnectionFailure === props.connectionFailure) return;
+		renderedConnectionFailure = props.connectionFailure;
+		const reason = props.connectionFailure.replace(/[\x00-\x1f\x7f-\x9f]/gu, ' ').slice(0, 1000);
+		terminal.write(
+			`\r\n\x1b[31m${t('terminal.connectionFailed', { reason })}\x1b[0m\r\n\r\n${t('terminal.retryConnection')}\r\n`,
+		);
+	};
+
+	watch(() => props.connectionFailure, renderConnectionFailure);
 	let fit: FitAddon | undefined;
 	let searchAddon: SearchAddon | undefined;
 	let serializeAddon: SerializeAddon | undefined;
@@ -1378,7 +1395,17 @@
 			if (!canInteract()) return false;
 			// Keep an explicit key press able to kick reconnect without forwarding
 			// that key to a transport whose current attachment is not ready.
-			if (!props.inputEnabled && event.type === 'keydown') emit('interaction');
+			if (!props.inputEnabled) {
+				if (
+					event.type === 'keydown' &&
+					!event.repeat &&
+					!['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)
+				) {
+					event.preventDefault();
+					emit('interaction');
+				}
+				return false;
+			}
 			if (event.type === 'keydown' && !['Shift', 'Control', 'Alt', 'Meta'].includes(event.key))
 				recordClipboardGesture();
 			if (event.type === 'keydown' && (event.ctrlKey || event.metaKey) && !event.altKey) {
@@ -1496,6 +1523,7 @@
 		void document.fonts.ready.then(() => {
 			if (terminal && root.value?.isConnected) scheduleGeometrySync();
 		});
+		renderConnectionFailure();
 		emit('ready');
 	});
 

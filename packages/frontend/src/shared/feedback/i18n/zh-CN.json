@@ -2,6 +2,7 @@
   "feedback": {
     "confirmTitle": "请确认",
     "alertTitle": "提示",
-    "close": "关闭"
+    "close": "关闭",
+    "networkUnavailable": "网络连接不稳定或服务暂时不可用，请检查连接后重试。若刚才提交了操作，请先核对结果，避免重复执行。"
   }
 }

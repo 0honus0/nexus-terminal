@@ -28,12 +28,14 @@
 	const props = withDefaults(
 		defineProps<{
 			session: StatusMonitorSessionController;
+			connected: boolean;
+			connecting?: boolean;
 
 			showIp?: boolean;
 			host?: string;
 			scale?: number;
 		}>(),
-		{ showIp: true, scale: 1 },
+		{ showIp: true, scale: 1, connecting: false },
 	);
 	const emit = defineEmits<{ 'update:scale': [scale: number] }>();
 	const { t } = useI18n();
@@ -45,6 +47,7 @@
 	const historyRange = ref<1 | 5 | 10 | 30>(5);
 	const ranges = [1, 5, 10, 30] as const;
 	const hasVisibleData = computed(() => Boolean(monitor.current.value && !monitor.error.value));
+	const awaitingSample = computed(() => props.connected && !monitor.current.value && !monitor.error.value);
 	useWheelScale({
 		target: () => scaleRoot.value,
 
@@ -256,6 +259,16 @@
 <template>
 	<section ref="scaleRoot" :data-status-scale="localScale.toFixed(2)" class="status-monitor h-full min-h-0">
 		<div
+			v-if="props.connecting || awaitingSample"
+			class="flex items-center gap-2 px-3 py-3 text-xs text-text-secondary"
+			role="status"
+			:aria-busy="props.connecting || awaitingSample"
+		>
+			<UiSpinner v-if="props.connecting || awaitingSample" density="compact" />
+			<span>{{ props.connecting ? t('statusMonitor.connecting') : t('statusMonitor.loading') }}</span>
+		</div>
+		<div
+			v-else-if="props.connected"
 			:style="scaleStyle"
 			:data-status-scale="localScale.toFixed(2)"
 			class="status-surface"
@@ -265,11 +278,7 @@
 				<i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
 				<span class="empty-state-message">{{ t('statusMonitor.failures.' + monitor.error.value) }}</span>
 			</div>
-			<div v-else-if="!monitor.current.value" class="empty-state" role="status">
-				<UiSpinner density="comfortable" />
-				<span class="empty-state-message">{{ t('statusMonitor.loading') }}</span>
-			</div>
-			<section v-else class="monitor-panel">
+			<section v-else-if="monitor.current.value" class="monitor-panel">
 				<header class="monitor-header">
 					<span class="header-main">
 						<strong>{{ t('statusMonitor.title') }}</strong>

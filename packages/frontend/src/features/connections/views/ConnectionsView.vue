@@ -3,6 +3,7 @@
 	import { useAuthSession } from '@/features/auth/public';
 	import { useRouter } from 'vue-router';
 	import { useI18n } from 'vue-i18n';
+	import { isNetworkFailure } from '@/client/http/network-failure';
 	import { formatDistanceToNow } from 'date-fns';
 	import { enUS, ja, zhCN } from 'date-fns/locale';
 	import {
@@ -94,10 +95,10 @@
 		if (current !== loadGeneration) {
 			return;
 		}
-		if (connectionsResult.status === 'rejected') {
+		if (connectionsResult.status === 'rejected' && !isNetworkFailure(connectionsResult.reason)) {
 			feedback.notifyError(t('connections.loadFailed'));
 		}
-		if (tagsResult.status === 'rejected') {
+		if (tagsResult.status === 'rejected' && !isNetworkFailure(tagsResult.reason)) {
 			feedback.notifyError(t('connections.tagLoadFailed'));
 		}
 	};

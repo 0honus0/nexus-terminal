@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n';
 import { useFeedback } from '@/shared/feedback/public';
 import { useAuthenticatedViewScope } from '@/shared/session/public';
 import { appearanceFailureKey } from '../model/appearance-failure';
+import { isNetworkFailure } from '@/client/http/network-failure';
 
 /** Owns feedback and temporary editor intent; accepted work remains owned by the store. */
 export function useAppearanceEditor(options: { available?: () => boolean } = {}): {
@@ -44,7 +45,7 @@ export function useAppearanceEditor(options: { available?: () => boolean } = {})
 			}
 			return false;
 		} catch (cause) {
-			if (scope.isCurrent(signal)) {
+			if (scope.isCurrent(signal) && !isNetworkFailure(cause)) {
 				feedback.notifyError(t(appearanceFailureKey(cause)));
 			}
 			return false;

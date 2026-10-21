@@ -93,6 +93,7 @@ export class WorkspaceRuntimeSession {
 
 	private hostKeyConfirmation?: AbortController;
 	private hostKeyRejected = false;
+	private waitingForRetry = false;
 	private connecting?: Promise<WorkspaceConnectionState>;
 	private suspendedResume?: Promise<WorkspaceSuspendedConnection>;
 	private suspendMutation?: Promise<unknown>;
@@ -150,7 +151,7 @@ export class WorkspaceRuntimeSession {
 		this.cleanup.push(
 			this.socket.onClose((reason) => this.handleTransportClosed(reason)),
 			this.socket.onError((message) => {
-				if (this.disposed || this.closing) {
+				if (this.disposed || this.closing || this.waitingForRetry) {
 					return;
 				}
 				logger.debug(
@@ -280,6 +281,7 @@ export class WorkspaceRuntimeSession {
 		this.clearReconnectTimer();
 		this.hostKeyRejected = false;
 		this.markCapabilitiesDisconnected();
+		this.waitingForRetry = false;
 		const reconnectAttempt = this.reconnectAttempt;
 		const phase = this.hasConnected.value ? 'reconnect' : 'initial';
 		const startedAt = performance.now();
@@ -359,6 +361,9 @@ export class WorkspaceRuntimeSession {
 				'Workspace runtime connection failed',
 			);
 			this.markCapabilitiesDisconnected();
+			this.waitingForRetry = true;
+			this.immediateReconnectRequested = false;
+			this.clearReconnectTimer();
 			if (!this.closing) {
 				this.socket.close('Workspace connection failed');
 			}
@@ -750,7 +755,7 @@ export class WorkspaceRuntimeSession {
 			this.closing ||
 			this.markedForSuspend.value ||
 			this.state.value === 'connected' ||
-			(options.automatic && this.hostKeyRejected)
+			(options.automatic && (this.hostKeyRejected || this.waitingForRetry))
 		) {
 			return;
 		}
@@ -914,6 +919,7 @@ export class WorkspaceRuntimeSession {
 		} else {
 			logger.debug(context, 'Workspace transport closed');
 		}
+		if (this.waitingForRetry) return;
 		this.markCapabilitiesDisconnected();
 		this.state.value = this.recoveryRequired.value ? 'error' : 'disconnected';
 		if (reason && !this.recoveryRequired.value) {
@@ -994,6 +1000,7 @@ export class WorkspaceRuntimeSession {
 			this.closing ||
 			this.recoveryRequired.value ||
 			this.hostKeyRejected ||
+			this.waitingForRetry ||
 			this.markedForSuspend.value
 		) {
 			return;

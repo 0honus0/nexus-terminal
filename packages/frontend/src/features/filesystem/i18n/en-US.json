@@ -4,6 +4,7 @@
     "resizePopup": "Resize file manager window",
     "currentPath": "Current Path",
     "loading": "Loading directory...",
+    "connecting": "Connecting…",
     "emptyDirectory": "Directory is empty",
     "uploadTasks": "Upload Tasks",
     "uploadSpeed": "Total speed",

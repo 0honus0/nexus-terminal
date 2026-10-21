@@ -36,6 +36,8 @@
 		terminalApi: MobileTerminalApi | null;
 		terminalChannel: TerminalChannel;
 		statusSession: StatusMonitorSessionController;
+		connected: boolean;
+		connecting: boolean;
 
 		statusScale?: number;
 		statusShowIp?: boolean;
@@ -231,6 +233,8 @@
 		<StatusMonitor
 			class="h-full min-h-0 overflow-hidden"
 			:session="statusSession"
+			:connected="connected"
+			:connecting="connecting"
 			:scale="statusScale"
 			:show-ip="statusShowIp"
 			:host="statusHost"

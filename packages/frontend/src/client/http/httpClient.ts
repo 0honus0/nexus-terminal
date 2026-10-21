@@ -1,6 +1,7 @@
 import axios, { type AxiosInstance } from 'axios';
 import { logger } from '../logging/logger';
 import { dispatchUnauthorized } from './unauthorized';
+import { isNetworkFailure, reportNetworkFailure } from './network-failure';
 
 export { setUnauthorizedHandler } from './unauthorized';
 
@@ -30,6 +31,7 @@ httpClient.interceptors.response.use(
 	(response) => response,
 	(error: unknown) => {
 		if (axios.isAxiosError(error)) {
+			if (isNetworkFailure(error)) reportNetworkFailure();
 			const context = {
 				method: requestMethod(error.config?.method),
 				path: requestPath(error.config?.url),

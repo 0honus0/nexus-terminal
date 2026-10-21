@@ -58,6 +58,10 @@ descriptor声明的消息容量与真实前端RPC预算同源；父桥在请求�
 
 ## 3. 依赖方向
 
+Workspace连接事实仍唯一归RuntimeSession.state；LayoutRenderer与SessionSurface将connected/connecting投影给内嵌/浮窗FileManager，LayoutRenderer及SessionSurface→MobileTools同样传入StatusMonitor，connected为组件必填输入。连接中仅渲染紧凑加载行，idle/error/disconnected面板内容留白、不发布旧目录/指标，Files操作scope暂停并撤销旧意图。RuntimeSession在建连失败后保留原因并停止自动派发，foreground自动恢复不越过waitingForRetry；显式重试仍重新核对主机信任与所有权。TerminalView只消费原失败文字，剥离控制字符、限制1000字符后红色输出，与任意键重试提示间空一行；禁用输入时重试键不走远端输入。所有权未知继续原恢复UI，不显示可任意键重试。已连接后的真实文件及采样错误保留原安全映射。中英日文案由各feature持有，无Shared/HTTP变更。
+
+HTTP network-failure持有单一应用安装回调和具名cause分类，JSON/binary/Axios transport仅报告非主动取消的传输失败；App/main通过Feedback安装统一网络Toast，不让client依赖feature或UI。Feedback只对当前可见的同类同文案去重，错误默认常驻、成功/信息/警告仍3秒；关闭后后续失败可再次提示。Agent目录取消自绘浮层、共享操作反馈及连接/偏好/外观的已识别网络失败不重复提示；写入unknown/refreshRequired与原cause/outcome保留，业务拒绝仍使用原安全反馈。NotificationHost统一44px关闭按钮和窄屏容器，不自动重试任何写入，不把网络恢复当作原操作成功。
+
 app 装配 feature/runtime；feature 通过窄公开能力消费 runtime 和 foundation。跨功能通过公开入口/明确能力，不深层引用私有组件、Store 或实现。foundation 不反向依赖业务。新 Shared 契约按 [SHARED](SHARED.md) 消费，不在前端手写同义 DTO。
 
 DEV transport 创建 Run 明确传 connectionIds:[]，不声称已有选中器；controller 消费 Shared stop/tool_calls 基础值，但 DEV view 仍只读取步骤 1。正式Host另有实际模型／SSH选择、正文游标及Step/Tool审计，不扩充DEV页面冒充正式消费。

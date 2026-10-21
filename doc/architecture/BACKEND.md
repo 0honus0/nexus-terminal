@@ -1026,6 +1026,8 @@ B7.2 的个人偏好、命令/标签、历史及收藏源码已接线，功能�
 
 ### Operations 日志、审计与通知
 
+Platform logging/pino-logger唯一实现原Logger契约，registerOperations安装PinoLogger，替换NativeLogger，不保留转导出或旧路径。前后端依赖同一catalog的Pino9；后端采用stderr同步destination、禁用默认base/timestamp，由白名单对象与severity formatter保留time/severity/code/facts单行JSON。原32facts、16KiB编码预算及debug/info/warn/error/silent过滤不变，LoggingModel只转换安全auditId，Service仍拥有持久级别CAS及激活。没有worker、异步传输队列或新的公开类型，正常同步写入无需新增flush owner；审计持久化、写入失败与关闭汇总沿原链路，不因换库改变为日志失败可忽略。
+
 1. **职责与范围**：Operations 拥有 backendLogLevel、受限审计记录、通知配置与投递账本。Access/Targets/Remote/Agent 仍各自持有业务状态；Operations 不成为授权 owner。仅已实现的事件进入 Shared 可选列表。
 2. **子功能与目录**：logging/audit/notifications 各按 service/model/storage/adapters/sqlite 放置；HTTP 和安全投影集中 interfaces/http；audit/service/audit-event-owner.ts 持有发布、请求/事件准入及停机排空，register 只装配和公开投影；operations-storage-refusal 是独立存储拒绝，Model 的 operationsStorage 负责映射应用失败。Service 管保留数、订阅选择、队列容量和激活时机；Model 管对象、秘密与技术失败转换；Adapter 管 SQL、行/JSON 解码和事务。
 3. **依赖方向**：业务 owner 经 Operations public.publish 提交有限安全事实，出口将同步准入/异步任务失败统一转为 public-errors.ts 的安全 OperationsError，内部原始 cause 由真实任务 owner 留存，已安装 HTTP 经 observer 直接调用内部发布 owner 记录结果，不绕公开安全包装；通知 Service → Model → Platform delivery。Platform logging/delivery 不引用业务事件、用户或通知配置对象。Shared common/http-codec 仅复用通用 JSON 原语，不反向依赖 Agent。

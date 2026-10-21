@@ -2,7 +2,8 @@
   "statusMonitor": {
     "title": "服务器状态",
     "errorPrefix": "错误:",
-    "loading": "等待数据...",
+    "loading": "正在读取状态…",
+    "connecting": "正在连接…",
     "cpuModelLabel": "CPU 型号:",
     "osLabel": "系统:",
     "cpuLabel": "CPU:",

@@ -5,6 +5,7 @@ import { useFeedback, preferenceFailureMessage } from '@/shared/feedback/public'
 import { usePreferences } from './usePreferences';
 import { projectPreferences } from '../model/presentation-mapper';
 import type { PreferencesPatch } from '../model/preferences-types';
+import { isNetworkFailure } from '@/client/http/network-failure';
 
 /** A form retains the version of its own baseline while other consumers update the cache. */
 export function usePreferencesEditor(translate: (key: string) => string) {
@@ -56,7 +57,7 @@ export function usePreferencesEditor(translate: (key: string) => string) {
 			if (!view.isCurrent(signal)) return;
 			needsRefresh.value = true;
 			loadError.value = preferenceFailureMessage(cause, translate);
-			feedback.notifyError(loadError.value);
+			if (!isNetworkFailure(cause)) feedback.notifyError(loadError.value);
 		} finally {
 			if (view.isCurrent(signal)) loading.value = false;
 		}
@@ -78,7 +79,7 @@ export function usePreferencesEditor(translate: (key: string) => string) {
 			if (!view.isCurrent(signal)) return false;
 			needsRefresh.value = true;
 			loadError.value = preferenceFailureMessage(cause, translate);
-			feedback.notifyError(loadError.value);
+			if (!isNetworkFailure(cause)) feedback.notifyError(loadError.value);
 			return false;
 		} finally {
 			if (view.isCurrent(signal)) saving.value = false;

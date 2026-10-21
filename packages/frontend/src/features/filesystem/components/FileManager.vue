@@ -31,6 +31,7 @@
 		defineProps<{
 			active?: boolean;
 			connecting?: boolean;
+			connected: boolean;
 			channel: FilesystemChannel;
 			beforeFileMutation?: (paths: readonly string[]) => boolean;
 			download?: FilesystemDownloadPort;
@@ -68,7 +69,7 @@
 	const ownsFilesystemState = !props.state;
 	const filesystemState = props.state ?? createFilesystemSessionState(props.channel, props.initialPath ?? '/');
 	const browser = filesystemState.browser;
-	const loading = computed(() => props.connecting || browser.loading.value);
+	const loading = computed(() => props.connecting || (props.connected && browser.loading.value));
 	const showLoading = ref(false);
 	let loadingIndicatorTimer: number | undefined;
 	const stopLoadingWatch = watch(
@@ -242,7 +243,7 @@
 	let pendingDelete: symbol | undefined;
 	let clipboardPasteTimer: number | undefined;
 	const view = useAuthenticatedViewScope({
-		available: () => props.active && !props.connecting,
+		available: () => props.active && props.connected && !props.connecting,
 
 		onRevoke: clearIntents,
 	});
@@ -288,7 +289,7 @@
 	};
 
 	const refresh = async (): Promise<void> => {
-		if (props.connecting) return;
+		if (!props.connected || props.connecting) return;
 		if (queuedRefresh) {
 			queuedRefresh.draftRevision = pathDraftRevision;
 			await queuedRefresh.promise;
@@ -1719,7 +1720,11 @@
 		@dragleave="handleDragLeave"
 		@drop.prevent="dropFiles"
 	>
-		<header class="file-manager-toolbar flex shrink-0 flex-col gap-1.5 bg-header p-2" :inert="props.connecting">
+		<header
+			v-if="props.connected || props.connecting"
+			class="file-manager-toolbar flex shrink-0 flex-col gap-1.5 bg-header p-2"
+			:inert="!props.connected || props.connecting"
+		>
 			<div class="file-manager-actions flex min-w-0 items-center" :class="{ 'is-searching': searchExpanded }">
 				<button
 					v-if="!searchExpanded"
@@ -1914,15 +1919,24 @@
 		</header>
 
 		<div
-			v-if="props.connecting || (!browser.loaded.value && !browser.error.value) || browser.searching.value"
-			class="file-manager-loading-state flex min-h-0 flex-1 items-center justify-center"
+			v-if="
+				props.connecting ||
+				(props.connected && ((!browser.loaded.value && !browser.error.value) || browser.searching.value))
+			"
+			class="file-manager-connection-state flex items-center gap-2 px-3 py-3 text-xs text-text-secondary"
+			role="status"
 		>
-			<UiSpinner v-if="showLoading || browser.searching.value" />
+			<UiSpinner
+				v-if="props.connecting || (props.connected && (showLoading || browser.searching.value))"
+				density="compact"
+			/>
+			<i v-else class="far fa-folder shrink-0" aria-hidden="true"></i>
+			<span>{{ props.connecting ? t('fileManager.connecting') : t('fileManager.loading') }}</span>
 		</div>
-		<p v-else-if="browser.error.value" class="p-4 text-error">
+		<p v-else-if="props.connected && browser.error.value" class="p-4 text-error">
 			{{ filesystemFailureMessage(browser.error.value, t) }}
 		</p>
-		<div v-else class="relative flex min-h-0 flex-1 flex-col">
+		<div v-else-if="props.connected" class="relative flex min-h-0 flex-1 flex-col">
 			<div
 				ref="listScroller"
 				tabindex="0"

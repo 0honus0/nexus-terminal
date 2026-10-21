@@ -1587,6 +1587,8 @@
 			:terminal-channel="presentationTerminalChannel"
 			:modifiers="mobileModifiers.levels"
 			:status-session="session.statusController"
+			:connected="session.state.value === 'connected'"
+			:connecting="['connecting', 'reconnecting'].includes(session.state.value)"
 			:status-scale="statusScale"
 			:status-show-ip="statusShowIp"
 			:status-host="session.connection.host"
@@ -1708,7 +1710,8 @@
 			<div class="min-h-0 flex-grow overflow-hidden">
 				<FileManager
 					:active="active !== false && fileManagerPopupVisible"
-					:connecting="['idle', 'connecting', 'reconnecting'].includes(session.state.value)"
+					:connecting="['connecting', 'reconnecting'].includes(session.state.value)"
+					:connected="session.state.value === 'connected'"
 					:before-file-mutation="(paths) => editorSession.invalidatePaths(session.id, paths)"
 					class="h-full min-h-0"
 					:channel="session.adapters.filesystem"

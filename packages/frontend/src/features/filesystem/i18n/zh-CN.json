@@ -4,6 +4,7 @@
     "resizePopup": "调整文件管理器窗口大小",
     "currentPath": "当前路径",
     "loading": "正在加载目录...",
+    "connecting": "正在连接…",
     "emptyDirectory": "目录为空",
     "uploadTasks": "上传任务",
     "uploadSpeed": "总速度",

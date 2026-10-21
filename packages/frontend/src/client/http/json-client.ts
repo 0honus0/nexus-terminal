@@ -1,5 +1,6 @@
 import { HttpRequestFailure } from './request-failure';
 import { readResponseBytes, rejectResponse } from './response-body';
+import { isNetworkFailure, reportNetworkFailure } from './network-failure';
 
 export interface JsonRequest {
 	method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -80,6 +81,7 @@ export async function requestJson(input: JsonRequest): Promise<{ status: number;
 			body,
 		});
 	} catch (cause) {
+		if (!input.signal?.aborted) reportNetworkFailure();
 		throw new HttpRequestFailure(input.signal?.aborted ? 'cancelled' : 'request_failed', 'unknown', { cause });
 	}
 	try {
@@ -88,6 +90,7 @@ export async function requestJson(input: JsonRequest): Promise<{ status: number;
 		if (input.signal?.aborted) {
 			throw new HttpRequestFailure('cancelled', 'unknown', { cause });
 		}
+		if (isNetworkFailure(cause)) reportNetworkFailure();
 		throw cause;
 	}
 }

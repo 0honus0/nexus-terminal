@@ -292,6 +292,11 @@
 				:active="active !== false"
 				class="min-h-0 flex-1"
 				:input-enabled="session.state.value === 'connected'"
+				:connection-failure="
+					!session.recoveryRequired.value && ['error', 'disconnected'].includes(session.state.value)
+						? session.statusMessage.value || t('terminal.connectionClosed')
+						: undefined
+				"
 				:channel="terminalChannel ?? session.adapters.terminal"
 				:font-family="terminalFontFamily"
 				:font-size="terminalFontSize"
@@ -330,7 +335,8 @@
 			<template v-else-if="node.component === 'fileManager'">
 				<FileManager
 					:active="active !== false"
-					:connecting="['idle', 'connecting', 'reconnecting'].includes(session.state.value)"
+					:connecting="['connecting', 'reconnecting'].includes(session.state.value)"
+					:connected="session.state.value === 'connected'"
 					:channel="session.adapters.filesystem"
 					:before-file-mutation="
 						(paths) => (editorSession ?? session.editorController).invalidatePaths(session.id, paths)
@@ -398,6 +404,8 @@
 				v-else-if="node.component === 'statusMonitor' && active !== false"
 				class="min-h-0 flex-1 overflow-hidden"
 				:session="session.statusController"
+				:connecting="['connecting', 'reconnecting'].includes(session.state.value)"
+				:connected="session.state.value === 'connected'"
 				:scale="statusScale"
 				:show-ip="statusShowIp"
 				:host="statusHost"

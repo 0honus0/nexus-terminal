@@ -1,5 +1,31 @@
 # Nexus Terminal E2E
 
+## Backend Pino与网络Toast/终端失败等待（2026-10-21，待远程）
+
+Backend由NativeLogger切换Platform PinoLogger，原Logger及Operations应用链不变；前后端均为catalog Pino9.14.0。后端同步stderr、白名单time/severity/code/facts、32facts/16KiB及级别过滤保持，移除旧实现和安装路径，lock仅新增backend对已有Pino的依赖。
+
+本次源码核对确认日志等级设置没有移除：PreferencesSettingsPanel保留前端选择/保存与BackendLoggingPanel；前端Preferences watcher调用setFrontendLogLevel设置Pino.level，后端GET/PUT /settings/logging经LoggingService的原版本CAS和单调激活调用PinoLogger.setThreshold。后端启动加载持久级别及effectiveLevel读取保留，前端trace/debug/info/warn/error/silent、后端debug/info/warn/error/silent不变。真实保存、重启和冲突/unknown交互仍待远程验证；用户已授权本批相关改动提交推送，无关工作区变更不纳入。
+
+Frontend HTTP传输失败集中由App安装回调汇入一条驻留网络Toast，主动取消不报告；相同种类/文案可见期间去重，关闭后后续错误仍可再提示。失败Toast默认不自动消失，成功/信息/警告仍3秒，显式时长优先。Agent目录自绘失败卡取消；共享操作反馈、Connections初始读取、Preferences及Appearance保留状态围栏，但不对已识别网络故障重复Toast。关闭按钮44×44px、标签/悬停/焦点，窄屏通知容器受视口约束。权限/业务拒绝与unknown写入不改成成功，不自动重放。
+
+按用户后续明确要求，原“未连接”中性行改为Files/Status留白（含内嵌、浮窗及移动状态弹层）。建连失败后Runtime停止自动重复建连及foreground自动重试，保留原原因；Terminal过滤控制字符及1000字符后红字输出原因，空一行显示任意键重试，重试按键不发送远端。显式重试仍核对主机指纹，recoveryRequired的未知所有权继续原恢复限制、不显示任意键提示；晚close/error不覆盖等待重试的原失败原因。
+
+按D17不新增或运行本地行为测试/浏览器/E2E。待远程：并发JSON/binary/Axios超时/断流只有一条网络Toast；取消/路由隐藏不误报；持续15秒以上仍只有一条、手动关闭后后续失败可再提示；非网络拒绝和写入unknown仍可见且不重放；Agent失败后由既有launcher/重新打开触发只读刷新；Toast窄屏/长文本/44px触控/键盘关闭；失败终端红字及空行、任意非修饰键只发起一次重连且不泄露按键、相同失败再次可输出；失败后可长期等待、foreground/晚socket关闭不重连或覆盖原因；主机信任及所有权未知仍安全。Pino真实stderr JSON、无pid/hostname/level额外字段、阈值/silent、边界、多owner恢复及写入失败待远程核对。不把构建当行为通过；未提交推送。
+
+静态结果：根pnpm run check（双端ESLint/类型及Shared构建）、Backend build与Frontend build通过，日志 `/tmp/nexus-toast-pino-{check,backend-build,frontend-build}.log`。全量format:all:check仅由工作区既有 `packages/frontend/src/app/shell/AppHeader.vue` 的Prettier格式问题阻断（`/tmp/nexus-toast-pino-format.log`），未更改该无关文件。最终Toast/终端/Runtime/Pino组件ESLint、最终Frontend重建和涉及文件Prettier均通过，日志 `/tmp/nexus-toast-pino-{final-eslint,final-frontend-build,targeted-format}.log`；git diff --check通过。本批没有行为测试、提交、推送或部署。
+
+用户授权提交推送后，重新执行工作区pnpm run check通过（`/tmp/nexus-pino-precommit-check.log`）；仅暂存本批代码及相关文档段落，排除其它页面、最近连接与测试改动。将暂存区完整导出至 `/tmp/nexus-pino-submit-F0ydjV`，使用独立Shared构建及现有依赖检查实际提交快照，pnpm run check、pnpm run build与pnpm run format:all:check全部通过（`/tmp/nexus-pino-submit-validation.log`）；工作区无关AppHeader格式问题不在提交快照内。日志设置保存、真实网络与终端交互仍按D17待远程回归，不将静态通过称为行为验收。
+
+## Workspace 未连接面板紧凑状态（2026-10-21，待远程）
+
+后续用户已将此处中性未连接提示改为留白，并要求终端红字/空行/任意键重试；当前实现和待验范围以上一节为准，以下为首轮修改和静态证据。
+
+内嵌和浮窗FileManager及桌面/移动弹层StatusMonitor消费原session.state的connected/connecting事实；connected为组件必填输入，全部实际宿主显式传入。未连接时只显示小型中性图标/提示，不显示文件not_connected红字、大块等待数据或持续spinner；连接中与首轮读取为12px小型加载行，不经过Status缩放容器放大。连接后原目录、指标、趋势、错误映射不变；未连接时Files工具栏与scope暂停，终端仍负责具体连接失败和手动重连。拒绝主机信任不会自动信任或重新连接，新增文案同步中英日。
+
+按D17不新增或运行本地行为测试/浏览器专项/E2E。待远程核对：首次未信任主机弹窗等待、拒绝与取消后两个面板均停止加载；idle/error/disconnected中性提示；手动重连等待及成功首轮数据恢复；原有成功连接断线不保留旧目录/指标，失败由终端保留；已连接的文件权限/Files失败与采样失败不被中性状态掩盖；浮窗/内嵌及移动弹层一致，未连接工具栏不可操作，晚到下载/写入意图不交付；窄面板及Status缩放下提示保持紧凑，深浅主题及辅助技术可读。不宣称视觉或真实时序通过；本批未提交推送。
+
+静态结果：根check、Frontend build、最终前端vue-tsc、五组件ESLint、全量format:all:check及git diff --check通过。日志为 `/tmp/nexus-workspace-idle-{check,build,final-types,final-eslint,format}.log`。未运行行为测试，未提交推送。
+
 ## Dashboard 多端请求与后端缓存（2026-10-21，待远程）
 
 本地dev删除SSH资源HTTP与本机状态的全局4请求门槛；SSH复用既有按主机/配置的共享在途及结果缓存，TTL改为完成后起算，本机新增成功结果3秒缓存与单一共享采样。SSH资源错误对象仍按原结果缓存策略处理，抛出的失败不缓存；本机采样失败不缓存。每个调用的会话复核、SSH配置复核、真实任务追踪和关闭失败语义保留。不新增整响应缓存，不改前端及诊断接口。

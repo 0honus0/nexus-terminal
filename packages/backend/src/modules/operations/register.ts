@@ -9,7 +9,7 @@ import type { SecretBox } from '../../platform/security/secret-box.js';
 import type { HttpRoute } from '../../platform/http/http-types.js';
 import type { AccessPublicApi } from '../access/public.js';
 import type { OperationsEvents } from './public.js';
-import { NativeLogger } from '../../platform/logging/native-logger.js';
+import { PinoLogger } from '../../platform/logging/pino-logger.js';
 import { NativeDelivery } from '../../platform/delivery/adapters/native-delivery.js';
 import { SecureSessionTokens } from '../../platform/security/adapters/secure-session-tokens.js';
 import { SqliteAuditStorage } from './audit/adapters/sqlite/audit-sql.js';
@@ -38,7 +38,7 @@ export interface OperationsRegistration {
 export function registerOperations(sqlite: SqliteRuntime, secrets: SecretBox | null): OperationsRegistration {
 	const loggingStorage = new SqliteLoggingStorage(sqlite);
 	const notificationStorage = new SqliteNotificationStorage(sqlite);
-	const logging = new LoggingService(new LoggingModel(loggingStorage, new SecureSessionTokens(), new NativeLogger()));
+	const logging = new LoggingService(new LoggingModel(loggingStorage, new SecureSessionTokens(), new PinoLogger()));
 	const audit = new AuditService(new AuditModel(new SqliteAuditStorage(sqlite)));
 	const notifications = new NotificationService(
 		new NotificationModel(notificationStorage, secrets, new SecureSessionTokens(), new NativeDelivery()),

@@ -2,6 +2,7 @@
   "feedback": {
     "confirmTitle": "Please confirm",
     "alertTitle": "Notice",
-    "close": "Close"
+    "close": "Close",
+    "networkUnavailable": "The connection is unstable or the service is unavailable. Check your connection and try again. If you submitted an operation, verify its result before repeating it."
   }
 }

@@ -36,6 +36,47 @@
 
 ## 后续规划（可擦写区）
 
+### Backend 日志切换 Pino（2026-10-21）
+
+用户明确要求后端与前端同用Pino；仅替换Platform日志技术实现，Operations继续消费原Logger接口。PinoLogger使用同catalog版本，级别与time/severity/code/facts白名单JSON、16KiB/32facts限制不变，stderr使用同步destination，不新增worker或后台缓冲队列。
+
+| 审核表 | 判据                                                                                                 |
+| ------ | ---------------------------------------------------------------------------------------------------- |
+| 功能   | debug/info/warn/error/silent与设置CAS/实际生效读取不变，日志仍为单行JSON，不增加pid/hostname或凭据。 |
+| 职责   | 技术库只进入Platform adapter及安装点，LoggingModel/Service不引用Pino类型。                           |
+| 类型   | 原Logger/LogFact独立契约不变；移除NativeLogger与旧安装路径，不保留双轨。                             |
+| 证据   | D17静态/构建；真实stderr、阈值、silent、边界及恢复/关闭仍待远程。                                    |
+
+四表源码复审完成：已同步package/lock、USAGE与Backend架构，Platform保持独立Logger契约、白名单/预算与同步stderr；NativeLogger真实消费者已全部迁移。系统设置的前端日志保存→Preferences watcher→Pino.level、后端独立保存→LoggingService版本激活→PinoLogger.setThreshold链路均保留，后端启动加载和实际生效级别读取不变。根check、Backend/Frontend build通过；全量格式被既有AppHeader.vue格式问题阻断，未修改无关文件。详细证据与待远程范围见testing对应章节；用户已授权仅本批相关修改提交推送，未运行本地行为测试。
+
+### 网络失败统一驻留Toast与终端失败等待（2026-10-21）
+
+用户要求网络不佳时合并失败浮层，Toast驻留到手动关闭，关闭按钮规范化；随后明确连接失败后Files/Status留白，失败原因仅终端输出、任意键重试。客户端HTTP仅发布具名传输失败信号，App装配Feedback驻留通知，保留取消/鉴权/业务失败与写入unknown围栏；Agent目录不再自绘失败浮层。终端提示过滤控制字符，重试按键不转发到远端，所有权未知仍禁止重试。
+
+| 审核表 | 判据                                                                                                                     |
+| ------ | ------------------------------------------------------------------------------------------------------------------------ |
+| 功能   | 并发网络失败合并为一条驻留Toast；关闭按钮44px、可键盘操作；两个侧面板失败时空白，终端显示原因和重试提示。                |
+| 职责   | transport发布技术失败，App安装回调，Feedback持有Toast去重及生命周期；Runtime保留连接重试与信任权威，Terminal仅投影文字。 |
+| 类型   | 不改Shared/后端协议；HTTP失败仍有原cause/outcome，组件props和既有Feedback类型由原owner持有。                             |
+| 证据   | D17仅静态/构建；弱网并发、关闭/再次失败、取消、真实业务拒绝、未知写入与终端重试待远程。                                  |
+
+四表源码复审完成：JSON/binary/Axios主动取消不误报，仍可见的相同Toast复用原id；只抑制已识别网络故障的重复提示，写入unknown围栏保留。Files/Status失败留白，终端红字/空行/重试键隔离及Runtime等待状态已接原owner。USAGE/架构已同步，根check与双端构建通过，静态及全量格式的无关阻断见testing。用户已授权本地dev仅本批相关修改提交推送，D17不运行本地行为测试。
+
+### Workspace 未连接面板紧凑状态（2026-10-21）
+
+后续用户明确将未连接中性图标/文案改为面板留白，并由终端红字显示原因、空行后任意键重试；当前行为以本页“网络失败统一驻留Toast与终端失败等待”及USAGE为准，下文保留首轮静态证据。
+
+按用户要求局部优化文件管理器与服务器状态，不调整工作区布局、连接安全或重试政策。两个Files宿主、Status布局宿主与移动端弹层从原session.state传入connected/connecting；idle、error及disconnected不再无限等待，拒绝信任后显示中性未连接提示，连接中使用小型加载行；真实已连接后的文件/采样失败仍展示安全错误。
+
+| 审核表 | 设计与判据                                                                                   |
+| ------ | -------------------------------------------------------------------------------------------- |
+| 功能   | 内嵌/浮窗Files、Status一致区分未连接、连接中、首轮读取、正常与真实失败；不新增重复重连按钮。 |
+| 职责   | Workspace持有连接事实，feature组件仅投影状态；文件操作scope随连接撤销，不改采样/信任owner。  |
+| 类型   | 局部组件props，不新增Shared协议或跨功能私有依赖；新增文案同步中英日。                        |
+| 证据   | D17只做静态/构建；拒绝/取消、成功、重连、真正失败及窄面板/缩放待远程回归。                   |
+
+四表源码复审完成，全部实际宿主（含移动Status弹层）均传入原连接事实；Files scope撤销、既有安全错误及主机信任链保留，USAGE与前端架构已同步。根check、Frontend build、最终前端类型检查、五组件ESLint及diff检查通过；全量格式与完整证据归testing对应章节。D17下视觉/真实时序仍待远程验证，本批不自行提交推送。
+
 ### Dashboard 多端状态请求与后端缓存（本地 dev）
 
 本批在本地dev修改，用户随后授权提交，不推送。Remote ResourceStatusService 删除全局4个HTTP请求门槛，复用按主机/配置的缓存及在途合并，TTL从采样完成起算；SystemStatusService 删除4任务门槛，由原Service共享一次本机采样并缓存成功结果3秒。不调整诊断接口、协议容量、单请求2主机并行、超时或UI。

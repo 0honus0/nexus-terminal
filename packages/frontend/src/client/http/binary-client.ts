@@ -1,5 +1,6 @@
 import { HttpRequestFailure } from './request-failure';
 import { readResponseBytes } from './response-body';
+import { isNetworkFailure, reportNetworkFailure } from './network-failure';
 
 interface BinaryRequest {
 	method: 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -79,6 +80,7 @@ export async function requestBinary(
 	try {
 		response = await fetch(request);
 	} catch (cause) {
+		if (!input.signal?.aborted) reportNetworkFailure();
 		throw new HttpRequestFailure(input.signal?.aborted ? 'cancelled' : 'request_failed', 'unknown', { cause });
 	}
 	try {
@@ -91,6 +93,7 @@ export async function requestBinary(
 		if (input.signal?.aborted) {
 			throw new HttpRequestFailure('cancelled', 'unknown', { cause });
 		}
+		if (isNetworkFailure(cause)) reportNetworkFailure();
 		throw cause;
 	}
 }
