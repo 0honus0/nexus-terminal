@@ -1,5 +1,17 @@
 # Nexus Terminal E2E
 
+## SSH 长连接观测容量（待远程）
+
+交付授权：用户随后明确要求提交与推送本批监控修改；既有未验范围不变，不部署或额外触发远程任务。
+
+2026-10-21 首轮源码核对发现，状态采样清理失败后 run 和 Workspace 正确保留原任务，但 startStatus 的 finally 仍按周期继续采样；连续清理失败会占满原有8个共享名额并以 limit_exceeded 覆盖原始 operation_unknown。先在具名清理失败分支停止订阅后再报告原始安全失败，保留原资源、任务及关闭失败汇总。随后用户明确要求9个终端不能因观测总数被拒绝，本轮删除 run 的 tasks.size >= 8 准入分支，不提高为另一个固定数字；保留原45秒期限、串行采样、授权、取消和清理证据。Dashboard请求级并发、协议输出容量和Agent机器操作预算不变。
+
+按 D17 本地只进行源码、类型、格式和构建检查，不新增或执行行为测试。待远程覆盖：至少9个真实Workspace同步发起并保持采样，须确保9个采样实际同时在途而非只有9条空闲终端连接；9路与Dashboard/Docker混合不因全局任务数拒绝；单Workspace长时间串行不重叠；首次清理失败后只报告一次operation_unknown、不再自动派发采样，其它Workspace仍可采样；stop/断开/停机与失败并发时baseline仅在原采样结算后清除、未确认任务保留且停机仍汇总失败；普通读取失败后恢复及输出容量拒绝仍正常。现场触发条件及SSH关闭失败技术原因尚未复现，不以静态检查宣称真实长连接验收通过。代码生效需正常交付及重启，不自动修改运行中进程或释放未知资源。
+
+静态结果：Backend check/build（含 Shared build）、变更代码 ESLint、涉及文件 Prettier 与 git diff --check 通过。根 check 与全量格式均被既有 DashboardPage.vue 的133/137/149行声明空行错误阻断，未修改其它工作区代码。日志为 `/tmp/nexus-observation-capacity-{check,format,backend-check,build}.log`；本批未提交、推送、部署或触发远程任务。
+
+取消全局任务上限后重新执行：Backend check/build（含Shared build）、变更代码ESLint、涉及文件Prettier及git diff --check均通过；根check/全量格式仍由上述无关DashboardPage.vue的三处空行错误阻断。新日志为 `/tmp/nexus-observation-unlimited-{check,format,backend-check,build}.log`。未运行行为测试，尚未提交、推送或部署。
+
 开发前读取 [AGENTS](../AGENTS.md)，产品要求见 [USAGE](../USAGE.md)，当前工作见 [PLAN](../PLAN.md)。本文维护实际验证入口、覆盖边界和验收证据。
 
 ## 登录页正式 UI 重构（2026-10-21，本地 CDP）

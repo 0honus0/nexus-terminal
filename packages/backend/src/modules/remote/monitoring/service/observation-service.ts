@@ -56,9 +56,6 @@ export class RemoteObservationService {
 		if (!this.accepting) {
 			throw new ObservationFailure('remote_unavailable');
 		}
-		if (this.tasks.size >= 8) {
-			throw new ObservationFailure('limit_exceeded');
-		}
 		const controller = new AbortController();
 
 		const abort = () =>
@@ -214,6 +211,7 @@ export class RemoteObservationService {
 							code = error.code;
 						} else if (error instanceof RemoteResourceCleanupFailure) {
 							code = 'operation_unknown';
+							stop();
 						}
 						listener({ kind: 'error', code });
 					}

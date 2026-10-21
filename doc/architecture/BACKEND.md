@@ -56,6 +56,8 @@ Access 统一拥有初始管理员、密码身份认证、token 摘要会话、�
 
 Remote 的 monitoring 子功能负责普通 Workspace 状态订阅、Docker 查询/控制和后台 SSH 资源采样；不执行任意用户命令、不复制 Workspace registry。System 负责本机状态。cwd 已归 sessions，快捷命令/命令历史已归 Preferences commands/history。SSH/Agent 可分别消费通用 Linux/Docker 技术能力，不能复用普通用户权限和活跃会话。
 
+RemoteObservationService.run 不设普通观测的全局任务数量上限；tasks 只追踪真实在途和清理未确认的任务，不以数量拒绝第9个或更多已接纳 Workspace 的采样、Docker及后台采样操作。原45秒期限、授权、取消和停机等待保留；Dashboard请求级并发、输出容量及Agent机器操作预算保持各自owner政策，移除观测计数不承诺无限服务器资源。状态订阅由 startStatus 串行采样；遇到具名 RemoteResourceCleanupFailure 时先停止原订阅，再交付 operation_unknown，禁止定时重建 SSH 累积未释放任务。stop 继续追踪本轮真实结算后清除 collector baseline；run 与 Workspace 的未确认任务及停机失败证据不删除、不重置。普通读取失败仍可按周期重试；Shared及前端契约不变。
+
 ### 服务器传输与Workspace任务的范围
 
 Workspace的copy/move/archive已归Remote Files，按原附件准入和原任务生命周期执行。旧正式 /api/v1/transfers 的send、列表、详情、cancel、remove是独立后台服务器任务，源机器执行rsync/scp并交付目标凭据；当前register已安装这五个HTTP，Shared server-*契约及正式API/store/UI消费者同步迁移。两条链独立验收，后台任务不借用Workspace授权；设计见本文“Remote 后台服务器传输”，当前证据见testing。
