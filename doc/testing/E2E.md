@@ -2,6 +2,14 @@
 
 开发前读取 [AGENTS](../AGENTS.md)，产品要求见 [USAGE](../USAGE.md)，当前工作见 [PLAN](../PLAN.md)。本文维护实际验证入口、覆盖边界和验收证据。
 
+## 目录预读50ms与上级目录（待远程）
+
+2026-10-21 将 Browser 两处预读定时统一到50ms常量；“..”行的鼠标进入和键盘定位调用同一预读队列，离开行取消排队。父路径复用既有parentOf，根目录不预读自身；点击仍走原goParent，缓存、在途合并、失败/失效隔离和150ms spinner不变。
+
+待远程验证直接进入深目录后对未缓存父目录的悬停/键盘预读、50ms前离开不派发、返回父目录复用在途请求/缓存、根目录不增加读取，以及普通目录原回归。既有3项缓存E2E可覆盖通用预读和合并，但尚无本次上级目录专项的执行证据。D17仅静态，不新增或运行本地行为测试，本轮已获提交推送授权，不额外触发远程任务或部署。
+
+静态结果：根 `pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/frontend build` 和 `git diff --check` 均 exit 0；日志为 `/tmp/nexus-parent-prefetch-{check,format,build}.log`。源码核对两个调度入口共用50ms、父路径与点击目标一致、鼠标/键盘均接入、根目录不预读自身，以及原权限/单任务/缓存失效约束不变。静态不等于已验证真实交互时序。
+
 ## 文件管理器连接中展示（待远程）
 
 2026-10-21 源码定位：WorkspaceRuntimeSession.runConnect 在首次握手前调用 markCapabilitiesDisconnected，Files 缓存失效订阅因 not_connected 清列表并设置错误；此时 FileManager 原先仅判断 browser.loading/error，无法区分真正失败与 SSH 正在连接。连接成功后的目录预热仍会正常清错加载，因此现场表现为刚连接期间短暂显示错误。

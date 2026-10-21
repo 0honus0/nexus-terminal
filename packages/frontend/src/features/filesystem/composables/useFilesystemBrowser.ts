@@ -41,6 +41,8 @@ export interface FilesystemBrowserController {
 	dispose(): void;
 }
 
+const PREFETCH_DELAY_MS = 50;
+
 const parentPath = (path: string) => {
 	const normalized = path.replace(/\/+$/, '') || '/';
 	if (normalized === '/') return '/';
@@ -116,7 +118,7 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
 			})
 			.finally(() => {
 				prefetchRunning = false;
-				if (!disposed && prefetchTarget) prefetchTimer = window.setTimeout(runPrefetch, 100);
+				if (!disposed && prefetchTarget) prefetchTimer = window.setTimeout(runPrefetch, PREFETCH_DELAY_MS);
 			});
 	};
 
@@ -125,7 +127,7 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
 			return;
 		prefetchTarget = target;
 		if (prefetchTimer !== undefined) window.clearTimeout(prefetchTimer);
-		prefetchTimer = window.setTimeout(runPrefetch, 100);
+		prefetchTimer = window.setTimeout(runPrefetch, PREFETCH_DELAY_MS);
 	};
 
 	const stopInvalidation = channel.onInvalidate((reason) => {

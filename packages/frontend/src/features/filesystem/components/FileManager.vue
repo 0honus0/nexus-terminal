@@ -762,7 +762,17 @@
 		}
 	};
 
+	const prefetchParent = (): void => {
+		if (!view.capture().aborted && browser.path.value !== '/') {
+			browser.prefetch(parentOf(browser.path.value));
+		}
+	};
+
 	watch(keyboardCursor, (path) => {
+		if (path === PARENT_CURSOR) {
+			prefetchParent();
+			return;
+		}
 		const entry = browser.visible.value.find((item) => item.path === path);
 		if (entry) prefetchEntry(entry);
 	});
@@ -2017,6 +2027,8 @@
 							data-filename=".."
 							data-file-parent
 							tabindex="-1"
+							@pointerenter="prefetchParent"
+							@pointerleave="browser.cancelPrefetch()"
 							class="cursor-pointer select-none transition-colors duration-150 hover:bg-header/50"
 							:class="[
 								keyboardCursor === PARENT_CURSOR ? 'bg-primary/10' : '',
