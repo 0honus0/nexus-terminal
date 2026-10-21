@@ -330,6 +330,7 @@
 			<template v-else-if="node.component === 'fileManager'">
 				<FileManager
 					:active="active !== false"
+					:connecting="['idle', 'connecting', 'reconnecting'].includes(session.state.value)"
 					:channel="session.adapters.filesystem"
 					:before-file-mutation="
 						(paths) => (editorSession ?? session.editorController).invalidatePaths(session.id, paths)

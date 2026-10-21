@@ -30,6 +30,7 @@
 	const props = withDefaults(
 		defineProps<{
 			active?: boolean;
+			connecting?: boolean;
 			channel: FilesystemChannel;
 			beforeFileMutation?: (paths: readonly string[]) => boolean;
 			download?: FilesystemDownloadPort;
@@ -42,7 +43,7 @@
 			state?: FilesystemSessionState;
 			showEditorButton?: boolean;
 		}>(),
-		{ active: true, confirmDelete: true, rowScale: 1, showEditorButton: false },
+		{ active: true, connecting: false, confirmDelete: true, rowScale: 1, showEditorButton: false },
 	);
 	const emit = defineEmits<{
 		openFile: [entry: RemoteFileEntry];
@@ -67,10 +68,11 @@
 	const ownsFilesystemState = !props.state;
 	const filesystemState = props.state ?? createFilesystemSessionState(props.channel, props.initialPath ?? '/');
 	const browser = filesystemState.browser;
+	const loading = computed(() => props.connecting || browser.loading.value);
 	const showLoading = ref(false);
 	let loadingIndicatorTimer: number | undefined;
 	const stopLoadingWatch = watch(
-		browser.loading,
+		loading,
 		(loading) => {
 			if (loadingIndicatorTimer !== undefined) window.clearTimeout(loadingIndicatorTimer);
 			loadingIndicatorTimer = undefined;
@@ -240,7 +242,7 @@
 	let pendingDelete: symbol | undefined;
 	let clipboardPasteTimer: number | undefined;
 	const view = useAuthenticatedViewScope({
-		available: () => props.active,
+		available: () => props.active && !props.connecting,
 
 		onRevoke: clearIntents,
 	});
@@ -286,6 +288,7 @@
 	};
 
 	const refresh = async (): Promise<void> => {
+		if (props.connecting) return;
 		if (queuedRefresh) {
 			queuedRefresh.draftRevision = pathDraftRevision;
 			await queuedRefresh.promise;
@@ -1666,6 +1669,8 @@
 	};
 
 	const dropFiles = async (event: DragEvent) => {
+		const permission = view.capture();
+		if (permission.aborted) return;
 		if (draggedRemoteEntries.value.length) {
 			endRemoteDrag();
 			return;
@@ -1675,11 +1680,12 @@
 		if (!dataTransfer) return;
 		try {
 			const batch = await collectDroppedLocalFiles(dataTransfer);
+			if (!view.isCurrent(permission)) return;
 			if (batch.files.length || batch.directories.length) {
 				emit('uploadFiles', browser.path.value, batch.files, batch.directories);
 			}
 		} catch (cause) {
-			feedback.notifyError(filesystemFailureMessage(cause, t));
+			if (view.isCurrent(permission)) feedback.notifyError(filesystemFailureMessage(cause, t));
 		}
 	};
 </script>
@@ -1687,6 +1693,7 @@
 <template>
 	<section
 		ref="root"
+		:aria-busy="loading"
 		class="file-manager-root relative flex h-full min-h-0 flex-col overflow-hidden bg-background text-sm text-foreground"
 		:class="{
 			'is-mobile': device.isMobile.value,
@@ -1702,7 +1709,7 @@
 		@dragleave="handleDragLeave"
 		@drop.prevent="dropFiles"
 	>
-		<header class="file-manager-toolbar flex shrink-0 flex-col gap-1.5 bg-header p-2">
+		<header class="file-manager-toolbar flex shrink-0 flex-col gap-1.5 bg-header p-2" :inert="props.connecting">
 			<div class="file-manager-actions flex min-w-0 items-center" :class="{ 'is-searching': searchExpanded }">
 				<button
 					v-if="!searchExpanded"
@@ -1897,7 +1904,7 @@
 		</header>
 
 		<div
-			v-if="(!browser.loaded.value && !browser.error.value) || browser.searching.value"
+			v-if="props.connecting || (!browser.loaded.value && !browser.error.value) || browser.searching.value"
 			class="file-manager-loading-state flex min-h-0 flex-1 items-center justify-center"
 		>
 			<UiSpinner v-if="showLoading || browser.searching.value" />

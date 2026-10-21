@@ -1708,6 +1708,7 @@
 			<div class="min-h-0 flex-grow overflow-hidden">
 				<FileManager
 					:active="active !== false && fileManagerPopupVisible"
+					:connecting="['idle', 'connecting', 'reconnecting'].includes(session.state.value)"
 					:before-file-mutation="(paths) => editorSession.invalidatePaths(session.id, paths)"
 					class="h-full min-h-0"
 					:channel="session.adapters.filesystem"

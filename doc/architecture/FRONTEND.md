@@ -142,6 +142,8 @@ FilesystemBrowser独立持有requestedPath与已确认path；新导航立即更�
 
 ### Files 目录快照与预读
 
+连接等待的展示输入由 WorkspaceSessionSurface 与 WorkspaceLayoutRenderer 从真实 session.state 的 idle/connecting/reconnecting 投影为 FileManager.connecting；filesystem 不依赖 runtime 的私有生命周期类型。FileManager 合并 connecting 与 browser.loading 驱动150ms延迟 spinner 和 aria-busy，连接等待优先于暂时不可用的文件错误；文件工具栏暂停交互，原 view scope 同步暂停并清理未派发意图。连接成功后仍由原 ensureLoaded/refresh 等待 Files ready 并读取目录；error/disconnected 不算 connecting，原有限错误映射与超时不变，不吞真实失败或放宽 Channel 准入。嵌入/浮窗消费一致，布局与协议不变。
+
 1. **职责与范围**：目录快照归当前 FilesystemBrowser/Session，不是远端权威或操作授权；不持久化、不跨会话、仅缓存完整成功列表，不缓存文件正文及搜索结果。
 2. **子功能与目录**：features/filesystem/model/directory-cache 持有5分钟TTL、LRU及在途合并，最多20目录/20,000项/8MiB估算量；条目估算包含固定元数据及UTF-16名称/路径/longName，不宣称浏览器堆硬上限，超限列表仍可正常展示但不缓存。Browser持导航及单个预读/最新候选，FileManager提供普通目录悬停/键盘定位意图；100ms防抖，离开/停用/卸载清理排队timer，不递归预读。
 3. **依赖方向**：Cache只消费FilesystemChannel的应用列表；Browser消费Cache；Workspace Files adapter负责真实通信及失效通知，capabilityAdapters把传输接纳和终态事件接入失效。不在feature深层引用runtime，不增加后端测试开关或Shared协议。

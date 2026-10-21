@@ -2,6 +2,16 @@
 
 开发前读取 [AGENTS](../AGENTS.md)，产品要求见 [USAGE](../USAGE.md)，当前工作见 [PLAN](../PLAN.md)。本文维护实际验证入口、覆盖边界和验收证据。
 
+## 文件管理器连接中展示（待远程）
+
+2026-10-21 源码定位：WorkspaceRuntimeSession.runConnect 在首次握手前调用 markCapabilitiesDisconnected，Files 缓存失效订阅因 not_connected 清列表并设置错误；此时 FileManager 原先仅判断 browser.loading/error，无法区分真正失败与 SSH 正在连接。连接成功后的目录预热仍会正常清错加载，因此现场表现为刚连接期间短暂显示错误。
+
+现由两个实际宿主同步传入 idle/connecting/reconnecting 的连接等待状态，FileManager 将其与目录读取合并展示加载，连接中暂停工具栏和原 view scope。连接成功后继续使用原目录读取，error/disconnected 与真实 Files 错误仍走原失败提示；不修改 Channel 准入、超时、缓存失效或服务端协议。
+
+待远程覆盖慢首次连接/主机密钥确认等待时只显示加载且不派发文件操作、成功后展示目录、连接失败/取消后不常驻加载、内嵌与浮窗一致、重连和 Files ready 延迟/失败。按 D17 本批仅做源码、类型、格式和构建检查，不新增或运行本地行为测试；本轮已获提交推送授权，不额外触发远程任务；旧提交 E2E 不自动证明本次展示修复已通过。
+
+静态验收：根 `pnpm run check`、`pnpm run format:all:check`、变更组件 ESLint、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check` 均 exit 0；日志为 `/tmp/nexus-files-connecting-{check,format,build}.log`。源码复审覆盖两个宿主、连接与目录读取的合并加载、真实失败不被吞掉、视图暂停及拖放异步结果/失败在原 permission 下交付。产品说明已同步 USAGE，未将静态结果扩大为现场或远程行为 PASS。
+
 ## 镜像发布依赖审计（2026-10-21）
 
 [E2E Actions 39528858672](https://github.com/0honus0/nexus-terminal/actions/runs/39528858672) 的被测 SHA 为 `1df0ee036e66d253c0bdeb812f1934f7a98e0391`，八组 Playwright、检查/格式/构建、Docker smoke、runner image 与耗时统计均 success；可选截图 skipped。逐组原日志的通过数为48（47+1）／42／54（52+1+1）／61／46／56／79／69，合计455项；新增的4项文件管理器修复用例及3项缓存用例全部通过。原日志保存在 `/tmp/nexus-e2e-39528858672.log`，不扩大为未执行的权限/断线等组合或本地未提交 UI/Agent 修改已验收。
