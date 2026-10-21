@@ -659,6 +659,10 @@ trace显示Save后为saving，测试已从磁盘读到新字节，但关闭时�
 
 取消回执补修最终静态：根check及全量format均exit0（`/tmp/nexus-acp-receipt-{check,format}.log`），diff检查通过；仅测试／文档改动，不重建未变产品，不运行本地行为。最终diff复核：create/cancel各取一次上游回执，其他方法continue，Map保存unknown且仅由Shared关联解码消费，原取消后的全部业务断言保留。
 
+### 2026-10-21 远程 UI 还原后 E2E 修复
+
+原始失败为[Actions 39568515716](https://github.com/0honus0/nexus-terminal/actions/runs/39568515716)，被测81aa1a0da26e11f609ca961e683c5332c20dde36；第1–7组失败，第8组通过，原日志保存在`/tmp/nexus-e2e-39568515716-shard-*.log`。首批按耗时优先修复Agent公共App选择、会话列表与插件新建／版本重命名场景，保留真实回执、版本与历史断言，不恢复已删除的调试表单。对应三个测试文件ESLint、Prettier与diff静态检查通过；未执行本地行为测试，远程修复结果待新SHA核对。
+
 ### 2026-10-20 本批最终远程收口
 
 [Actions 39445026926](https://github.com/0honus0/nexus-terminal/actions/runs/39445026926)整体success，被测ddf5ce0e95c39367977cf08c951ce1e4d63b34ef。逐组读取原日志，各组通过数为53／38／54（52+1+1）／57（56+1）／46／60／74／66，共448项，无失败、flaky、重试或跳过用例；质量／格式／构建、Docker、runner及耗时统计success，可选截图任务skipped。原日志`/tmp/nexus-acp-receipt-job-<jobId>.log`。ACP取消首次11秒通过，文件预览编辑历史回归首次27秒通过；Files／插件独立场景通过。未扩大为多文件故障、完整像素或全部窄屏已验。

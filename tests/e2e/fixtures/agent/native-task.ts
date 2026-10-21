@@ -94,11 +94,10 @@ export async function openNativeTask(task: NativeTask) {
 	await page
 		.locator('[data-agent-hub-portal]')
 		.getByRole('button')
-		.filter({ has: page.getByText(task.app.id, { exact: true }) })
+		.filter({ has: page.getByText(task.app.name, { exact: true }) })
 		.click();
 	await openAgentConversations(page);
-	const threads = hub.getByRole('heading', { name: 'Conversations', exact: true }).locator('..');
-	await threads.getByRole('button', { name: 'Read current threads', exact: true }).click();
+	const threads = hub.locator('#agent-thread-sidebar');
 	let after: string | null = null;
 	let selectedThread: { title: string; version: number } | undefined;
 	for (;;) {
@@ -112,10 +111,7 @@ export async function openNativeTask(task: NativeTask) {
 		after = listed.value.nextCursor;
 	}
 	if (!selectedThread) throw new Error('Prepared Agent thread missing from its current App');
-	const option = threads.getByRole('button', {
-		name: selectedThread.title,
-		exact: true,
-	});
+	const option = threads.getByRole('button').filter({ has: page.getByText(selectedThread.title, { exact: true }) });
 	await expect(option).toHaveCount(1);
 	await option.click();
 	await hub.getByRole('button', { name: 'Model for this execution', exact: true }).click();

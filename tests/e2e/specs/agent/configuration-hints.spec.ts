@@ -29,12 +29,12 @@ test('native target selection preserves grants and uses the authenticated App wi
 	await page
 		.locator('[data-agent-hub-portal]')
 		.getByRole('button')
-		.filter({ has: page.getByText(app.id, { exact: true }) })
+		.filter({ has: page.getByText(app.name, { exact: true }) })
 		.click();
 	await openAgentConversations(page);
-	await expect(hub.getByRole('heading', { name: 'Conversations', exact: true })).toBeVisible();
-	await hub.getByRole('textbox', { name: 'Thread title', exact: true }).fill('Configuration thread');
-	await hub.getByRole('button', { name: 'Create thread', exact: true }).click();
+	const threads = hub.locator('#agent-thread-sidebar');
+	await expect(threads.getByText('Conversations', { exact: true })).toBeVisible();
+	await threads.getByRole('button', { name: 'New', exact: true }).click();
 	await expect(hub.getByRole('textbox', { name: 'Task input', exact: true })).toBeVisible();
 	await expect(hub.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
 	await hub.getByRole('button', { name: 'Select SSH targets', exact: true }).click();
