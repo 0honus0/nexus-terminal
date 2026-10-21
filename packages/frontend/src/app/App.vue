@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import { computed, defineAsyncComponent, markRaw, onBeforeUnmount, ref, watch } from 'vue';
-	import { RouterView } from 'vue-router';
+	import { RouterView, useRoute } from 'vue-router';
 	import { useI18n } from 'vue-i18n';
 	import { preloadAuthenticatedRoutes } from './router';
 	import { logger } from '@/client/logging/logger';
@@ -30,6 +30,7 @@
 	const RemoteDesktopModal = defineAsyncComponent(loadRemoteDesktopModal);
 	const AppearanceCustomizerModal = defineAsyncComponent(loadAppearanceCustomizerModal);
 	const auth = useAuthSession();
+	const route = useRoute();
 	const { t } = useI18n();
 	const desktopFeedback = useOperationFeedback('remote-desktop.size');
 	const desktopSizeSaving = ref(false);
@@ -76,6 +77,9 @@
 		{ immediate: true },
 	);
 	const authenticatedPageCacheGeneration = ref(0);
+	// Authentication changes before the destination route finishes loading. Bind the
+	// authenticated chrome to the committed route so public pages never render under it.
+	const authenticatedShellVisible = computed(() => auth.isAuthenticated.value && route.meta.public !== true);
 	const remoteDesktopConnection = remoteDesktopLauncher.connection;
 	const remoteDesktopVisible = remoteDesktopLauncher.visible;
 	const remoteDesktopWidth = computed(() =>
@@ -172,7 +176,7 @@
 <template>
 	<div class="flex min-h-dvh flex-col text-foreground" :inert="backup.blocked">
 		<BackupRecoveryOverlay />
-		<AppHeader v-if="auth.isAuthenticated.value" @customize-appearance="appearance.openCustomizer()" />
+		<AppHeader v-if="authenticatedShellVisible" @customize-appearance="appearance.openCustomizer()" />
 		<div class="min-h-0 flex-1">
 			<RouterView v-slot="{ Component, route }">
 				<RuntimeErrorBoundary scope="route" :reset-key="route.fullPath">
@@ -183,7 +187,7 @@
 				</RuntimeErrorBoundary>
 			</RouterView>
 		</div>
-		<RuntimeErrorBoundary v-if="auth.isAuthenticated.value" scope="agent" :reset-key="auth.user.value?.id ?? null">
+		<RuntimeErrorBoundary v-if="authenticatedShellVisible" scope="agent" :reset-key="auth.user.value?.id ?? null">
 			<AgentSurfaceHost />
 		</RuntimeErrorBoundary>
 		<RemoteDesktopModal

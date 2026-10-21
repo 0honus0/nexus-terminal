@@ -275,7 +275,7 @@
 				<p class="mt-1.5 text-xs">{{ t('suspendedSshSessions.loading') }}</p>
 			</div>
 			<div
-				v-else-if="!hasResults"
+				v-else-if="!hasResults && !data.error.value"
 				class="suspended-session-empty flex flex-col items-center justify-center py-6 px-3 text-center"
 			>
 				<i class="fas fa-inbox text-base text-text-secondary/40 mb-1" aria-hidden="true"></i>

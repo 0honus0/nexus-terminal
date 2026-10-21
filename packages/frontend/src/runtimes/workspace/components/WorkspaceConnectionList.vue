@@ -11,7 +11,7 @@
 	} from 'vue';
 	import { useAuthSession } from '@/features/auth/public';
 	import { useI18n } from 'vue-i18n';
-	import { UiContextMenu, UiInput } from '@/foundation/ui';
+	import { UiButton, UiContextMenu, UiInput } from '@/foundation/ui';
 	import { jsonStorageCodec, readStoredValue, writeStoredValue } from '@/foundation/browser';
 	import {
 		loadConnectionEditorModal,
@@ -59,6 +59,7 @@
 			}
 			return Object.fromEntries(result);
 		}),
+		legacyKeys: ['nexus.workspace.connectionGroups'],
 	} as const;
 	const expanded = ref<Record<string, boolean>>(readStoredValue(expandedGroupsStorage) ?? {});
 	let unregisterFocus: (() => void) | undefined;
@@ -274,7 +275,15 @@
 	};
 
 	const deleteGroupConnections = (group: { tagId: number | null; name: string; connections: ConnectionSummary[] }) =>
-		group.tagId === null ? Promise.resolve() : management.removeMany(group.connections);
+		group.tagId === null || !group.connections.length
+			? Promise.resolve()
+			: management.removeMany(
+					group.connections,
+					t('workspaceConnectionList.confirmDeleteAllConnectionsInGroup', {
+						count: group.connections.length,
+						groupName: group.name,
+					}),
+				);
 </script>
 <template>
 	<section
@@ -282,15 +291,26 @@
 		class="workspace-connection-list flex min-h-0 flex-col text-foreground"
 		:class="props.pageScroll ? 'workspace-connection-list--page' : 'h-full overflow-hidden'"
 	>
-		<p v-if="management.message.value" role="status">{{ management.message.value }}</p>
-		<button
+		<p v-if="management.message.value" role="status" class="break-words px-2 pt-2 text-xs text-text-secondary">
+			{{ management.message.value }}
+		</p>
+		<div
 			v-if="!loading && (loadError || tagLoadFailed || data.needsRefresh.value)"
-			type="button"
-			:disabled="management.loading.value"
-			@click="load(true)"
+			role="alert"
+			class="m-2 flex flex-wrap items-center gap-2 rounded-md border border-warning/25 bg-warning/10 px-2 py-1.5 text-xs text-warning"
 		>
-			{{ t('connections.refresh') }}
-		</button>
+			<span class="min-w-0 flex-1">
+				{{
+					loadError ||
+					(data.needsRefresh.value
+						? t('connections.failures.recovery_required')
+						: t('workspaceConnectionList.tagLoadFailed'))
+				}}
+			</span>
+			<UiButton type="button" density="compact" :disabled="management.loading.value" @click="load(true)">{{
+				t('connections.refresh')
+			}}</UiButton>
+		</div>
 		<div class="workspace-connection-toolbar flex items-center gap-2" :class="props.pageScroll ? 'mb-3' : 'p-2'">
 			<UiInput
 				v-model="search"
@@ -313,15 +333,18 @@
 					</button>
 				</template>
 			</UiInput>
-			<button
+			<UiButton
 				type="button"
-				class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-0 bg-primary text-sm font-semibold text-white transition-colors duration-200 hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+				appearance="solid"
+				tone="primary"
+				icon-only
+				class="!h-8 !w-8 shrink-0"
 				:title="t('connections.addConnection')"
 				:aria-label="t('connections.addConnection')"
 				@click="addConnection"
 			>
 				<i class="fas fa-plus" aria-hidden="true"></i>
-			</button>
+			</UiButton>
 		</div>
 
 		<div v-if="loading" class="flex h-full items-center justify-center text-text-secondary">
@@ -346,13 +369,9 @@
 			<div v-else-if="!data.connections.value.length" class="p-6 text-center text-text-secondary">
 				<i class="fas fa-plug mb-2 text-xl" aria-hidden="true"></i>
 				<p>{{ t('connections.noConnections') }}</p>
-				<button
-					type="button"
-					class="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-md transition-colors duration-200 hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-					@click="addConnection"
-				>
+				<UiButton type="button" appearance="solid" tone="primary" class="mt-4" @click="addConnection">
 					{{ t('connections.addFirstConnection') }}
-				</button>
+				</UiButton>
 			</div>
 
 			<template v-else-if="showTags">
@@ -375,33 +394,46 @@
 							>({{ group.connections.length }})</span
 						>
 						<div class="min-w-0 flex-1"></div>
-						<button
+						<UiButton
 							v-if="group.connections.some((connection) => connection.type === 'SSH')"
 							type="button"
-							class="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-black/10 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary"
+							appearance="ghost"
+							density="compact"
+							icon-only
+							class="ml-1 !h-8 !w-8 shrink-0"
 							:title="t('workspaceConnectionList.connectAllSshInGroupMenu')"
+							:aria-label="t('workspaceConnectionList.connectAllSshInGroupMenu')"
 							@click.stop="connectGroup(group.connections)"
 						>
 							<i class="fas fa-network-wired fa-xs" aria-hidden="true"></i>
-						</button>
-						<button
+						</UiButton>
+						<UiButton
 							v-if="group.tagId !== null"
 							type="button"
-							class="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-black/10 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary"
+							appearance="ghost"
+							density="compact"
+							icon-only
+							class="ml-1 !h-8 !w-8 shrink-0"
 							:title="t('workspaceConnectionList.manageTags.menuItem')"
+							:aria-label="t('workspaceConnectionList.manageTags.menuItem')"
 							@click.stop="manageGroup(group.tagId)"
 						>
 							<i class="fas fa-edit fa-xs" aria-hidden="true"></i>
-						</button>
-						<button
+						</UiButton>
+						<UiButton
 							v-if="group.tagId !== null && group.connections.length"
 							type="button"
-							class="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-error/80 transition-colors hover:bg-error/10 hover:text-error focus-visible:ring-2 focus-visible:ring-primary"
+							appearance="ghost"
+							tone="danger"
+							density="compact"
+							icon-only
+							class="ml-1 !h-8 !w-8 shrink-0"
 							:title="t('workspaceConnectionList.deleteAllConnectionsInGroupMenu')"
+							:aria-label="t('workspaceConnectionList.deleteAllConnectionsInGroupMenu')"
 							@click.stop="deleteGroupConnections(group)"
 						>
 							<i class="fas fa-trash-alt fa-xs" aria-hidden="true"></i>
-						</button>
+						</UiButton>
 					</header>
 
 					<ul v-show="isExpanded(group.key)" class="workspace-connection-group-items m-0 list-none p-0">

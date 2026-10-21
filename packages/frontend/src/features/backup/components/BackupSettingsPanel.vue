@@ -16,8 +16,10 @@
 	const importPassword = ref('');
 	const importFile = ref<File | null>(null);
 	const importInput = ref<HTMLInputElement | null>(null);
-	const message = ref('');
-	const success = ref(false);
+	const exportMessage = ref('');
+	const exportSuccess = ref(false);
+	const importMessage = ref('');
+	const importSuccess = ref(false);
 	const view = useAuthenticatedViewScope({
 		available: () => props.active,
 
@@ -31,7 +33,10 @@
 		if (importInput.value) {
 			importInput.value.value = '';
 		}
-		message.value = '';
+		exportMessage.value = '';
+		exportSuccess.value = false;
+		importMessage.value = '';
+		importSuccess.value = false;
 	}
 
 	function failureMessage(cause: unknown, importing = false): string {
@@ -57,17 +62,18 @@
 		}
 		const password = exportPassword.value;
 		exportPassword.value = '';
-		message.value = '';
-		success.value = false;
+		exportMessage.value = '';
+		exportSuccess.value = false;
 		try {
 			await backup.exportFull(password, signal);
 			if (view.isCurrent(signal)) {
-				success.value = true;
-				message.value = t('settings.backup.exported');
+				exportSuccess.value = true;
+				exportMessage.value = t('settings.backup.exported');
 			}
 		} catch (cause) {
 			if (view.isCurrent(signal)) {
-				message.value = failureMessage(cause);
+				exportSuccess.value = false;
+				exportMessage.value = failureMessage(cause);
 			}
 		}
 	}
@@ -80,8 +86,8 @@
 			return;
 		}
 		if (!file || file.size < 1 || file.size > BACKUP_MAX_FILE_BYTES) {
-			message.value = t('settings.backup.invalidInput');
-			success.value = false;
+			importMessage.value = t('settings.backup.invalidInput');
+			importSuccess.value = false;
 			return;
 		}
 		const confirmed = await feedback.confirm({
@@ -93,12 +99,19 @@
 			return;
 		}
 		clearDraft();
-		success.value = false;
 		try {
 			await backup.importFull(file, password, signal);
+			if (view.isCurrent(signal) && backup.state.status === 'restored') {
+				importSuccess.value = true;
+				importMessage.value = t('settings.backup.importedWithCounts', {
+					rows: backup.state.receipt.restoredRows,
+					files: backup.state.receipt.restoredFiles,
+				});
+			}
 		} catch (cause) {
 			if (view.isCurrent(signal)) {
-				message.value = failureMessage(cause, true);
+				importSuccess.value = false;
+				importMessage.value = failureMessage(cause, true);
 			}
 		}
 	}
@@ -106,7 +119,8 @@
 	function selectFile(event: Event): void {
 		if (event.target instanceof HTMLInputElement) {
 			importFile.value = event.target.files?.[0] ?? null;
-			message.value = '';
+			importMessage.value = '';
+			importSuccess.value = false;
 		}
 	}
 </script>
@@ -135,15 +149,31 @@
 							:disabled="backup.busy || backup.blocked"
 						/>
 					</UiFormField>
-					<UiButton
-						type="submit"
-						appearance="solid"
-						tone="primary"
-						:loading="backup.busy"
-						:disabled="!exportPassword || backup.busy || backup.blocked"
-						><template #leading><i class="fas fa-download" aria-hidden="true"></i></template
-						>{{ t('settings.backup.export') }}</UiButton
-					>
+					<div class="flex flex-wrap items-center gap-3">
+						<UiButton
+							type="submit"
+							appearance="solid"
+							tone="primary"
+							:loading="backup.busy"
+							:disabled="!exportPassword || backup.busy || backup.blocked"
+						>
+							<template #leading
+								><i
+									:class="backup.busy ? 'fas fa-spinner fa-spin' : 'fas fa-download'"
+									aria-hidden="true"
+								></i
+							></template>
+							{{ backup.busy ? t('common.loading') : t('settings.backup.export') }}
+						</UiButton>
+						<p
+							v-if="exportMessage"
+							:class="exportSuccess ? 'text-success' : 'text-error'"
+							class="text-sm"
+							role="status"
+						>
+							{{ exportMessage }}
+						</p>
+					</div>
 				</form>
 			</section>
 			<section class="border-t border-border/60 pt-6">
@@ -176,18 +206,33 @@
 						/>
 						<p class="text-xs text-text-secondary">{{ t('settings.backup.backupPasswordHelp') }}</p>
 					</UiFormField>
-					<UiButton
-						type="submit"
-						appearance="solid"
-						tone="primary"
-						:loading="backup.busy"
-						:disabled="!importFile || backup.busy || backup.blocked"
-						><template #leading><i class="fas fa-upload" aria-hidden="true"></i></template
-						>{{ t('settings.backup.import') }}</UiButton
-					>
+					<div class="flex flex-wrap items-center gap-3">
+						<UiButton
+							type="submit"
+							appearance="solid"
+							tone="primary"
+							:loading="backup.busy"
+							:disabled="!importFile || backup.busy || backup.blocked"
+						>
+							<template #leading
+								><i
+									:class="backup.busy ? 'fas fa-spinner fa-spin' : 'fas fa-upload'"
+									aria-hidden="true"
+								></i
+							></template>
+							{{ backup.busy ? t('common.loading') : t('settings.backup.import') }}
+						</UiButton>
+						<p
+							v-if="importMessage"
+							:class="importSuccess ? 'text-success' : 'text-error'"
+							class="text-sm"
+							role="status"
+						>
+							{{ importMessage }}
+						</p>
+					</div>
 				</form>
 			</section>
-			<p v-if="message" role="status" :class="success ? 'text-success' : 'text-error'">{{ message }}</p>
 		</div>
 	</section>
 </template>

@@ -140,8 +140,8 @@
 						{{ t('settings.ipBlacklist.currentBannedTitle') }}
 					</h3>
 					<p v-if="blacklistMessage" class="text-sm text-error" role="alert">{{ blacklistMessage }}</p>
-					<UiButton :loading="blacklistLoading" @click="refreshBlacklist">{{
-						t(blacklistNeedsRefresh ? 'common.retry' : 'common.refresh')
+					<UiButton v-if="blacklistNeedsRefresh && !blacklistLoading" @click="refreshBlacklist">{{
+						t('common.retry')
 					}}</UiButton>
 					<UiTable
 						v-if="!blacklistNeedsRefresh"

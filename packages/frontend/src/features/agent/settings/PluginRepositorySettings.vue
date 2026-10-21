@@ -11,6 +11,7 @@
 		PluginPublisher,
 		PluginInstallation,
 	} from '../model/plugin-types';
+	import type { ManagedApp } from '../model/app-management-types';
 
 	interface CatalogSource {
 		source: string | null;
@@ -21,6 +22,7 @@
 		blocked: boolean;
 		publishers: PluginPublisher[];
 		installations: PluginInstallation[];
+		apps: ManagedApp[];
 		active: boolean;
 	}>();
 	const emit = defineEmits<{
@@ -79,6 +81,43 @@
 		)
 			emit('recommend');
 		else emit('prepare', entry, source);
+	}
+
+	function installedFor(entry: PluginCatalogEntry): PluginInstallation | undefined {
+		return props.installations.find(
+			(installation) => installation.definitionId === entry.definitionId && installation.status !== 'removed',
+		);
+	}
+
+	function catalogEntryState(entry: PluginCatalogEntry): { label: string; tone: string } {
+		if (!entry.compatible) {
+			return { label: t('agent.settings.plugins.incompatible'), tone: 'bg-warning/10 text-warning' };
+		}
+		const installation = installedFor(entry);
+		if (!installation) {
+			return { label: t('agent.settings.plugins.stateNotInstalled'), tone: 'bg-header text-text-secondary' };
+		}
+		if (installation.status === 'draining') {
+			return { label: t('agent.settings.plugins.stateDraining'), tone: 'bg-warning/10 text-warning' };
+		}
+		if (installation.version !== entry.version) {
+			return { label: t('agent.settings.plugins.stateUpgrade'), tone: 'bg-primary/10 text-primary' };
+		}
+		const app = props.apps.find((item) => item.id === installation.appId);
+		if (app?.enabled) {
+			return { label: t('agent.settings.plugins.stateEnabled'), tone: 'bg-success/10 text-success' };
+		}
+		if (app) {
+			return { label: t('agent.settings.plugins.stateDisabled'), tone: 'bg-header text-text-secondary' };
+		}
+		return { label: t('agent.settings.plugins.stateInstalled'), tone: 'bg-success/10 text-success' };
+	}
+
+	function catalogEntryAction(entry: PluginCatalogEntry): string {
+		const installation = installedFor(entry);
+		if (!installation) return t('agent.settings.plugins.prepareRemote');
+		if (installation.version !== entry.version) return t('agent.settings.plugins.prepareUpgrade');
+		return t('agent.settings.plugins.reverifyPackage');
 	}
 
 	async function load(): Promise<void> {
@@ -291,25 +330,40 @@
 					<article
 						v-for="entry in group.entries"
 						:key="entry.definitionId + ':' + entry.version"
-						class="space-y-2 rounded-lg border border-border bg-background p-3 text-xs"
+						class="space-y-2.5 rounded-lg border border-border bg-background p-3 text-xs shadow-2xs transition-colors hover:border-primary/40"
 					>
 						<div class="flex flex-wrap items-center justify-between gap-2">
-							<span class="font-semibold">{{ entry.displayName }}</span
-							><span class="font-mono text-text-secondary">v{{ entry.version }}</span>
+							<div class="flex min-w-0 flex-wrap items-center gap-2">
+								<span class="font-semibold">{{ entry.displayName }}</span>
+								<span class="font-mono text-text-secondary">v{{ entry.version }}</span>
+								<span
+									class="rounded-full px-2 py-0.5 text-[10px] font-medium"
+									:class="catalogEntryState(entry).tone"
+									>{{ catalogEntryState(entry).label }}</span
+								>
+							</div>
 						</div>
-						<p class="text-text-secondary">{{ entry.description }}</p>
+						<p class="leading-relaxed text-text-secondary">{{ entry.description }}</p>
+						<p v-if="!entry.compatible" class="text-[11px] text-warning">
+							{{
+								t('agent.settings.plugins.compatibilityShort', {
+									min: entry.minVersion,
+									max: entry.maxVersion,
+								})
+							}}
+						</p>
 						<div class="flex justify-end">
 							<UiButton
 								type="button"
-								appearance="solid"
-								tone="primary"
+								:appearance="installedFor(entry) ? 'soft' : 'solid'"
+								:tone="installedFor(entry) ? 'neutral' : 'primary'"
 								:disabled="
 									locked ||
 									!entry.compatible ||
 									(group.source !== null && !publisherTrusted(entry.publisherKeyId))
 								"
 								@click="prepare(entry, group.source)"
-								>{{ t('agent.settings.plugins.prepareRemote') }}</UiButton
+								>{{ catalogEntryAction(entry) }}</UiButton
 							>
 						</div>
 					</article>

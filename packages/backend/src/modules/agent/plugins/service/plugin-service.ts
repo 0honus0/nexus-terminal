@@ -307,6 +307,7 @@ export class PluginService {
 					if (
 						input.method === 'agent.threads.create' ||
 						input.method === 'agent.threads.rename' ||
+						input.method === 'agent.threads.delete' ||
 						input.method === 'agent.runs.create' ||
 						input.method === 'agent.runs.appendInput' ||
 						input.method === 'agent.runs.cancel' ||

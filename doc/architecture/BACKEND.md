@@ -1207,11 +1207,11 @@ Access已经提供窄provePassword公开能力，内部PasswordProof归authentic
 1. **职责与范围**：Scope 的 WorkspaceService 复用原 Scope/Thread/Provider/Run/Context/Governance 用例，供原生会话与插件入口调用。插件 owner 仅持有插件安装与短期 grant 授权，通用工作区不反向依赖插件私有应用类型。
 2. **子功能与目录**：scope/model/workspace-types 持内部命令/结果，scope/service/workspace-service 持用例派发；ThreadService/Model/SQLite 持当前入场事实、转换及实际事务。interfaces/http/workspace-http 与 workspace-mapper 持原生协议及唯一双向白名单。
 3. **依赖方向**：原生 HTTP → Scope Workspace/Thread → 各真实能力 owner；插件 RPC → 原插件授权 → 同一 Scope Workspace。Platform 仅提供事务与准入机制；不包含 App 或 grant 类型。
-4. **类型与转换**：Shared scope/workspace-http 与 workspace-http-codec 唯一定义通用17方法及严格解码；插件 frontend-events 组合该联合与自身九方法，不复制定义。ThreadAccess/事实使用 plugin/session 可辨识联合；原生使用真实 App version，不填写 installed/trusted 或虚构 grant。
+4. **类型与转换**：Shared scope/workspace-http 与 workspace-http-codec 唯一定义通用18方法及严格解码；插件 frontend-events 组合该联合与自身九方法，不复制定义。新增 agent.threads.delete 仅接受 {threadId,expectedVersion}，返回 {appId,threadId}；HTTP workspace-mapper 逐字段转换独立应用命令和 DeletedThread 结果，codec 关联方法、线程及原生外壳的 App/version。ThreadAccess/事实使用 plugin/session 可辨识联合；原生使用真实 App version，不填写 installed/trusted 或虚构 grant。
 5. **入口与安装**：POST /api/v1/agent/apps/:appId/workspace 要求当前完整管理员会话、真实 App UUID、appVersion 和 request。register 安装事务身份读取及原生路由；插件继续走原 descriptor/grant 入口。正式Host与DEV原生线程／运行消费者均使用该入口，正式Host不借用插件grant。
-6. **数据、事务与并发**：原生当前会话、App 所属用户、启用/受信声明及原 App version 在实际事务前后核对；Thread 变更仍使用原线程 version、稳定 operationId 与不可变回执。组合调用经 ThreadModel 的事务准入能力消费同一规则，不在接口层复制 SQL 或业务判断；后台执行仍由原 Run owner 明确脱离临时请求准入并持续复验自身授权。
-7. **生命周期与失败**：Scope 入口和交付前保留当前事实复查；已成功写入后交付或复查失败返回 operation_unknown。读操作不授予执行权限；读列表不证明未知写入未提交。完整工作区编码预算8 MiB+1 KiB，Thread 列表最多50项，正文页遵守各自更窄预算。资源已销毁时不继续接纳新的请求步骤。
-8. **当前能力与验收**：原生17方法生产者及Shared、正式Host/Run/正文/审批/Child和独立应用转换已接线，步骤／工具审计继续消费各自只读HTTP。D17 当前只做静态检查，原生授权竞争、幂等/冲突及未知结果行为留最终远程 Actions E2E。
+6. **数据、事务与并发**：原生当前会话、App 所属用户、启用/受信声明及原 App version 在实际事务前后核对；Thread 创建/改名使用稳定 operationId 与不可变回执，改名和删除绑定原线程 version。删除由 ThreadService → ThreadModel → SqliteThreadStorage.remove 执行：Adapter 在同一写事务读取全部 Root/Child 的不同状态和关联 Memory 最大版本，Model 白名单转换 ThreadRemovalFacts，Service 同步拒绝任何 pending/running/unknown（active_run_conflict）以及记忆版本耗尽（version_conflict），并提供事务实际决策时的更新时间；Adapter 不选择业务准入状态。事务依次将关联 agent_memories.source_run_id 置 NULL、版本加一且时间不倒退，删除线程或 Run 的 artifact attachments，显式移除 agent_run_children / facts / mailbox / budget_reservations 的 NO ACTION 引用，再删除全部 Run；步骤、事件、工具体、Job、审批、上下文及幂等结果按真实 FK CASCADE。协作表同时覆盖 operation_id/message_id 对待删工具的引用。最后删除该线程的 agent_thread_commands，并以 user/app/thread/version CAS 删除 agent_threads，提交前复核原身份/App。任一步拒绝或失败均回滚，不关闭 FK、不依赖延迟约束；Artifact 对象元数据和文件均不删除，Memory 正文及审核状态保留。删除不递增线程版本，允许最大安全整数的当前 CAS；不新增 schema/旧库兼容。组合调用经 ThreadModel 的事务准入能力消费同一规则，不在接口层复制 SQL 或业务判断；后台执行仍由原 Run owner 明确脱离临时请求准入并持续复验自身授权。
+7. **生命周期与失败**：Scope 入口和交付前保留当前事实复查；已成功写入后交付或复查失败返回 operation_unknown。删除也纳入原生 HTTP、插件 Service/HTTP 及交付 SDK 的写入分类：没有 operationId 仍是副作用，取消/超时/畸形或错 App 回执不能解释成未提交。读操作不授予执行权限；读列表不证明未知写入未提交。删除没有额外幂等回执或墓碑，确认后再次删除返回 not_found，不自动重放旧创建/改名或套新版本重试；未知结果保留原 threadId/expectedVersion，先只读核对。完整工作区编码预算8 MiB+1 KiB，Thread 列表最多50项，正文页遵守各自更窄预算。资源已销毁时不继续接纳新的请求步骤。
+8. **当前能力与验收**：原生18方法生产者及Shared已接线；正式Host/Run/正文/审批/Child的原消费者和独立应用转换保留，删除 UI 由前端批次接入，步骤／工具审计继续消费各自只读HTTP。删除验收覆盖严格请求/回执关联、原线程/App CAS、Root及Child三种活跃状态、关联记忆版本耗尽、提交前撤权/末步SQL失败整批回滚、工具/审批等级联、记忆/Artifact保留、其他线程隔离和 foreign_key_check。当前限定隔离 SQLite 实测不代表浏览器/插件整链已验收；真实并发、提交/交付确认丢失及资源清理故障仍待对应远程或现场验证，不沿用旧 Actions PASS。
 
 ### B8 前端SDK与显式迁移当前边界
 
@@ -1219,7 +1219,7 @@ ThreadService持有名称归一、线程/意图容量及明确区分的插件/�
 
 WorkspaceService使用原RunService与ContextHistoryService：Root列表按thread_sequence续页；entries只读Root用户输入和模型文字事件，按码点分片，不读工具/私有reasoning。SQLite技术函数nexus_text_length/slice保留NUL和Unicode；片段未完不推进后项。appendInput在原Root终态/version同事务校验后创建同Thread后续Root，原身份/version纳入幂等hash，模型/连接重新显式选择，不注入活跃上下文。
 
-前端RPC由Shared frontend-events/frontend-rpc-codec定义26方法；core events/rpc-codec/backend-sdk仍只有九方法。前端完整预算8MiB+1KiB，descriptor的maxMessageBytes同源声明；核心子预算/IPC仍512KiB。SDK交付依赖图按白名单安装。frontend-sdk仅持有纯类型，窗口/MessagePort/计时器归原Frontend Adapter；Run订阅是500ms有限轮询原事件分页，不是新增WS/事件中心。退订取消原读取并等待，close共享Promise，异步回调由原订阅追踪，过期结果不发布。正式父页F1。
+前端RPC由Shared frontend-events/frontend-rpc-codec定义27方法；core events/rpc-codec/backend-sdk仍只有九方法。前端完整预算8MiB+1KiB，descriptor的maxMessageBytes同源声明；核心子预算/IPC仍512KiB。SDK交付依赖图按白名单安装。frontend-sdk仅持有纯类型，窗口/MessagePort/计时器归原Frontend Adapter；Run订阅是500ms有限轮询原事件分页，不是新增WS/事件中心。退订取消原读取并等待，close共享Promise，异步回调由原订阅追踪，过期结果不发布。正式父页F1。
 
 组合写入经PluginModel→Storage→SQLite技术admission scope，在实际事务前后复核原会话、安装revision、启用、publisher与期限。排队操作捕获原scope；原RunExecutionOwner通过RunModel的应用任务能力明确脱离请求临时scope，再按自身持久权限执行，不意外继承浏览器grant的生命周期。最终响应前再次复查，已提交变更失去确认时返回unknown，不换意图重发。
 

@@ -1,9 +1,16 @@
 <script setup lang="ts">
-	import { computed, ref, watch } from 'vue';
+	import { computed, onBeforeUnmount, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiButton, UiModal, UiInfoHint, UiEmptyState, UiResizeHandle } from '@/foundation/ui';
 	import { useAuthenticatedViewScope } from '@/shared/session/use-authenticated-view-scope';
-	import { AGENT_PROVIDER_MODEL_LIMIT } from '@nexus-terminal/shared/agent/providers/values';
+	import {
+		AGENT_MODEL_CAPABILITY_FIELDS,
+		AGENT_PROVIDER_MODEL_LIMIT,
+	} from '@nexus-terminal/shared/agent/providers/values';
+	import type {
+		AgentModelCapabilityField,
+		AgentModelCapabilitySource,
+	} from '@nexus-terminal/shared/agent/providers/values';
 	import { useResizeHandle } from '@/foundation/interaction';
 	import { useProviderManagement } from '../composables/use-provider-management';
 	import type { DiscoveredProviderModel, Provider, ProviderModelDraft } from '../model/provider-types';
@@ -26,6 +33,7 @@
 		cancel,
 		load,
 		save,
+		setEnabled,
 		remove,
 		discover,
 		test,
@@ -33,11 +41,14 @@
 	} = useProviderManagement({ available: () => props.active });
 	const deleting = ref<Provider | null>(null);
 	const testingProviderId = ref<string | null>(null);
+	const testingModelId = ref<string | null>(null);
 	const testingProvider = computed(
 		() => providers.value.find((provider) => provider.id === testingProviderId.value) ?? null,
 	);
 	const modelCount = computed(() => providers.value.reduce((total, provider) => total + provider.models.length, 0));
 	const showApiKey = ref(false);
+	const copiedUrl = ref<string | null>(null);
+	let copiedTimer: ReturnType<typeof setTimeout> | undefined;
 	const panelWidth = ref(576);
 	const panelHeight = ref(600);
 	const resized = ref(false);
@@ -86,6 +97,10 @@
 		discovered.value.filter((item) => item.id.toLowerCase().includes(query.value.toLowerCase())),
 	);
 	const currentProvider = computed(() => providers.value.find((provider) => provider.id === draft.value?.id));
+
+	onBeforeUnmount(() => {
+		if (copiedTimer !== undefined) clearTimeout(copiedTimer);
+	});
 
 	function addModel(found?: DiscoveredProviderModel): void {
 		if (!draft.value || blocked.value || draft.value.models.length >= AGENT_PROVIDER_MODEL_LIMIT) {
@@ -210,7 +225,103 @@
 
 	function openTests(provider: Provider): void {
 		testResult.value = null;
+		testingModelId.value = null;
 		testingProviderId.value = provider.id;
+	}
+
+	async function testModel(provider: Provider, modelId: string): Promise<void> {
+		testingModelId.value = modelId;
+		await test(provider, modelId);
+	}
+
+	function closeTests(): void {
+		if (!busy.value) {
+			testingProviderId.value = null;
+			testingModelId.value = null;
+			testResult.value = null;
+		}
+	}
+
+	function providerUpdatedAt(provider: Provider): string {
+		return formatAgentDate(locale.value, new Date(provider.updatedAt), { dateStyle: 'medium' });
+	}
+
+	function protocolLabel(protocol: Provider['protocol']): string {
+		return t(
+			protocol === 'responses'
+				? 'agent.settings.providers.protocolResponses'
+				: 'agent.settings.providers.protocolChat',
+		);
+	}
+
+	function capabilityFieldLabel(field: AgentModelCapabilityField): string {
+		const keys: Partial<Record<AgentModelCapabilityField, string>> = {
+			contextWindow: 'agent.settings.providers.contextWindow',
+			maxOutputTokens: 'agent.settings.providers.maxOutputTokens',
+			supportsTools: 'agent.settings.providers.tools',
+			supportsImageInput: 'agent.settings.providerManagement.supportsImageInput',
+			supportsFileInput: 'agent.settings.providerManagement.supportsFileInput',
+			supportsPromptCacheKey: 'agent.settings.providerManagement.supportsPromptCacheKey',
+			reasoningEfforts: 'agent.settings.providers.reasoningCapability',
+			defaultReasoningEffort: 'agent.settings.providers.reasoningDefault',
+			reasoningMandatory: 'agent.settings.providerManagement.reasoningMandatory',
+		};
+		return keys[field] ? t(keys[field]) : t('agent.settings.providerManagement.capabilityDetails');
+	}
+
+	function capabilitySourceLabel(source: AgentModelCapabilitySource): string {
+		if (source === 'manual') return t('agent.settings.providers.manualOverride');
+		if (source === 'provider') return t('agent.settings.providers.providerLive');
+		return t('agent.settings.providers.registryDefault');
+	}
+
+	function capabilitySourceEntries(
+		sources: Provider['models'][number]['sources'],
+	): Array<{ field: AgentModelCapabilityField; source: AgentModelCapabilitySource }> {
+		return AGENT_MODEL_CAPABILITY_FIELDS.flatMap((field) => {
+			const source = sources[field];
+			return source === undefined ? [] : [{ field, source }];
+		});
+	}
+
+	function capabilityValue(value: unknown): string {
+		if (Array.isArray(value)) return value.join(', ');
+		if (typeof value === 'boolean') {
+			return t(value ? 'agent.settings.providerManagement.yes' : 'agent.settings.providerManagement.no');
+		}
+		return String(value);
+	}
+
+	function testFailureMessage(code: string): string {
+		if (code.startsWith('PROVIDER_HTTP_')) return t('agent.apiErrors.providerUpstream');
+		const key: Record<string, string> = {
+			PROVIDER_DNS_FAILED: 'providerDns',
+			PROVIDER_TLS_FAILED: 'providerTls',
+			PROVIDER_NETWORK_TIMEOUT: 'providerNetwork',
+			PROVIDER_NETWORK_FAILED: 'providerNetwork',
+			PROVIDER_STREAM_CLEANUP_FAILED: 'providerNetwork',
+			PROVIDER_RESPONSE_INVALID: 'providerResponse',
+			PROVIDER_RESPONSE_TOO_LARGE: 'providerResponse',
+			PROVIDER_RESPONSE_EMPTY: 'providerResponse',
+			PROVIDER_STREAM_TRUNCATED: 'providerResponse',
+			PROVIDER_OUTPUT_TRUNCATED: 'providerResponse',
+			PROVIDER_CONTENT_FILTERED: 'providerRejected',
+			PROVIDER_HTTP_ERROR: 'providerUpstream',
+		};
+		return t('agent.apiErrors.' + (key[code] ?? 'providerRequest'));
+	}
+
+	async function copyBaseUrl(url: string): Promise<void> {
+		try {
+			await navigator.clipboard.writeText(url);
+			copiedUrl.value = url;
+			if (copiedTimer !== undefined) clearTimeout(copiedTimer);
+			copiedTimer = setTimeout(() => {
+				if (copiedUrl.value === url) copiedUrl.value = null;
+			}, 1600);
+		} catch {
+			copiedUrl.value = null;
+		}
 	}
 
 	async function confirmDelete(): Promise<void> {
@@ -224,7 +335,7 @@
 
 <template>
 	<section
-		class="relative rounded-2xl border border-border bg-card shadow-xs transition-all"
+		class="relative z-20 rounded-2xl border border-border bg-card shadow-xs transition-all"
 		:aria-label="t('agent.settings.providerManagement.title')"
 	>
 		<div
@@ -235,15 +346,27 @@
 					{{ t('agent.settings.providers.title') }}
 				</h3>
 				<span
-					class="whitespace-nowrap rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-[11px] text-text-secondary"
-					>{{
-						t('agent.settings.providers.counts', { providers: providers.length, models: modelCount })
-					}}</span
+					class="whitespace-nowrap rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-[11px] font-medium text-text-secondary sm:px-2.5"
 				>
-				<UiInfoHint :text="t('agent.settings.providers.description')" />
+					<span class="hidden sm:inline">{{
+						t('agent.settings.providers.counts', { providers: providers.length, models: modelCount })
+					}}</span>
+					<span class="sm:hidden">{{ providers.length }} / {{ modelCount }}</span>
+				</span>
+				<UiInfoHint :text="t('agent.settings.providers.description')" class="shrink-0" />
 			</div>
-			<UiButton type="button" appearance="soft" :disabled="blocked || draft !== null" @click="edit(null)">
-				<i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>{{ t('agent.settings.providers.add') }}
+			<UiButton
+				type="button"
+				appearance="soft"
+				tone="neutral"
+				:disabled="blocked || draft !== null"
+				class="w-auto shrink-0 whitespace-nowrap px-3.5"
+				@click="edit(null)"
+			>
+				<span class="inline-flex items-center gap-1.5 text-xs"
+					><i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
+					<span>{{ t('agent.settings.providers.add') }}</span></span
+				>
 			</UiButton>
 		</div>
 		<div class="space-y-4 p-4 sm:p-5">
@@ -259,53 +382,226 @@
 			</div>
 			<UiEmptyState
 				v-if="!providers.length && !refreshRequired && !busy"
+				icon="fa-solid fa-server"
 				:title="t('agent.settings.providers.empty')"
 			/>
 			<article
 				v-for="provider in providers"
 				:key="provider.id"
-				class="space-y-3 overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-xs transition-all hover:border-primary/60"
+				class="group overflow-hidden rounded-2xl border border-border/80 bg-card/80 shadow-2xs transition-all hover:border-primary/45 hover:bg-card/95"
 			>
-				<h4 class="font-medium">
-					{{ provider.name }}
-				</h4>
-				<p class="break-all text-xs">
-					{{ provider.baseUrl }} · {{ provider.protocol }} ·
-					{{
-						t(
-							provider.enabled
-								? 'agent.settings.providerManagement.enabled'
-								: 'agent.settings.providerManagement.disabled',
-						)
-					}}
-				</p>
-				<p class="text-xs text-text-secondary">
-					{{
-						t(
-							provider.hasCredential
-								? 'agent.settings.providerManagement.hasCredential'
-								: 'agent.settings.providerManagement.noCredential',
-						)
-					}}
-				</p>
-				<div class="flex flex-wrap gap-2">
-					<UiButton
-						type="button"
-						appearance="soft"
-						:disabled="blocked || draft !== null"
-						@click="openTests(provider)"
-						>{{ t('agent.settings.providers.testModalBtn', { count: provider.models.length }) }}</UiButton
-					>
-					<UiButton type="button" :disabled="blocked || draft !== null" @click="edit(provider)">{{
-						t('common.edit')
-					}}</UiButton>
-					<UiButton type="button" :disabled="blocked || draft !== null" @click="discover(provider)">{{
-						t('agent.settings.providerManagement.discover')
-					}}</UiButton>
-					<UiButton type="button" :disabled="blocked || draft !== null" @click="deleting = provider">{{
-						t('common.delete')
-					}}</UiButton>
+				<div class="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+					<div class="flex min-w-0 flex-1 items-start gap-3.5">
+						<div
+							class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-primary/25 bg-gradient-to-br from-primary/15 via-primary/10 to-transparent text-primary shadow-xs"
+						>
+							<i class="fa-solid fa-server text-lg" aria-hidden="true"></i>
+						</div>
+						<div class="min-w-0 flex-1">
+							<div class="flex flex-wrap items-center gap-2">
+								<h4 class="text-sm font-bold tracking-tight text-foreground">{{ provider.name }}</h4>
+								<span
+									class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium"
+									:class="
+										provider.enabled
+											? 'border-success/30 bg-success/10 text-success'
+											: 'border-border bg-header text-text-secondary'
+									"
+								>
+									<span
+										class="h-1.5 w-1.5 rounded-full"
+										:class="provider.enabled ? 'bg-success' : 'bg-text-secondary/60'"
+									></span>
+									{{
+										t(
+											provider.enabled
+												? 'agent.settings.providerManagement.enabled'
+												: 'agent.settings.providerManagement.disabled',
+										)
+									}}
+								</span>
+								<span
+									class="inline-flex items-center gap-1 rounded-md border border-border/70 bg-background/80 px-2 py-0.5 text-[11px] text-text-secondary"
+									><i class="fa-solid fa-key text-[9px] text-primary/75" aria-hidden="true"></i
+									>{{
+										t(
+											provider.hasCredential
+												? 'agent.settings.providers.credentialStored'
+												: 'agent.settings.providers.noCredential',
+										)
+									}}</span
+								>
+							</div>
+							<button
+								type="button"
+								class="group/url mt-1.5 inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md text-left text-xs text-text-secondary transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+								:title="
+									copiedUrl === provider.baseUrl
+										? t('agent.settings.providers.copyUrlSuccess')
+										: provider.baseUrl + ' · ' + t('agent.settings.providers.copyUrl')
+								"
+								:aria-label="t('agent.settings.providers.copyUrl')"
+								@click="copyBaseUrl(provider.baseUrl)"
+							>
+								<i
+									class="fa-solid fa-link shrink-0 text-[9px] text-text-secondary/60 group-hover/url:text-primary"
+									aria-hidden="true"
+								></i>
+								<span class="truncate font-mono">{{ provider.baseUrl }}</span>
+								<i
+									:class="
+										copiedUrl === provider.baseUrl
+											? 'fa-solid fa-check text-success'
+											: 'fa-regular fa-copy text-text-secondary/45 group-hover/url:text-primary'
+									"
+									class="shrink-0 text-[10px]"
+									aria-hidden="true"
+								></i>
+							</button>
+							<div
+								class="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-text-secondary"
+							>
+								<span>{{ protocolLabel(provider.protocol) }}</span>
+								<span class="text-text-secondary/35">·</span>
+								<span>{{
+									t('agent.settings.providers.modelCount', { count: provider.models.length })
+								}}</span>
+							</div>
+						</div>
+					</div>
+					<div class="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+						<UiButton
+							type="button"
+							appearance="soft"
+							:density="'compact'"
+							:icon-only="true"
+							:tone="provider.enabled ? 'danger' : 'success'"
+							:disabled="blocked || draft !== null"
+							:title="
+								provider.enabled
+									? t('agent.settings.providers.disable')
+									: t('agent.settings.providers.enable')
+							"
+							:aria-label="
+								provider.enabled
+									? t('agent.settings.providers.disable')
+									: t('agent.settings.providers.enable')
+							"
+							@click="setEnabled(provider, !provider.enabled)"
+						>
+							<i
+								:class="provider.enabled ? 'fa-solid fa-power-off' : 'fa-solid fa-play'"
+								class="text-xs"
+								aria-hidden="true"
+							></i>
+						</UiButton>
+						<UiButton
+							type="button"
+							appearance="soft"
+							tone="neutral"
+							:disabled="blocked || draft !== null"
+							@click="openTests(provider)"
+						>
+							<i class="fa-solid fa-vial text-[10px]" aria-hidden="true"></i>
+							{{ t('agent.settings.providers.testModalBtn', { count: provider.models.length }) }}
+						</UiButton>
+						<UiButton
+							type="button"
+							appearance="soft"
+							tone="neutral"
+							icon-only
+							:disabled="blocked || draft !== null"
+							:title="t('agent.settings.providerManagement.discover')"
+							:aria-label="t('agent.settings.providerManagement.discover')"
+							@click="discover(provider)"
+						>
+							<i class="fa-solid fa-arrows-rotate text-xs" aria-hidden="true"></i>
+						</UiButton>
+						<UiButton
+							type="button"
+							appearance="soft"
+							tone="neutral"
+							icon-only
+							:disabled="blocked || draft !== null"
+							:title="t('common.edit')"
+							:aria-label="t('common.edit')"
+							@click="edit(provider)"
+						>
+							<i class="fa-solid fa-pen text-xs" aria-hidden="true"></i>
+						</UiButton>
+						<UiButton
+							type="button"
+							appearance="ghost"
+							tone="danger"
+							icon-only
+							:disabled="blocked || draft !== null"
+							:title="t('common.delete')"
+							:aria-label="t('common.delete')"
+							@click="deleting = provider"
+						>
+							<i class="fa-regular fa-trash-can text-xs" aria-hidden="true"></i>
+						</UiButton>
+					</div>
 				</div>
+				<details class="group border-t border-border/45 bg-header/15 text-[11px] text-text-secondary">
+					<summary
+						class="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 font-medium transition-colors hover:text-foreground sm:px-5 [&::-webkit-details-marker]:hidden"
+					>
+						<i class="fa-solid fa-layer-group text-[10px] text-text-secondary/65" aria-hidden="true"></i>
+						<span>{{ t('agent.settings.providers.configuredModels') }}</span>
+						<span class="rounded-full border border-border/60 bg-card px-2 py-0.5 font-mono text-[10px]">{{
+							provider.models.length
+						}}</span>
+						<i
+							class="fa-solid fa-chevron-down ml-auto text-[9px] transition-transform group-open:rotate-180"
+							aria-hidden="true"
+						></i>
+					</summary>
+					<div class="flex flex-wrap items-center gap-1.5 px-4 pb-3 sm:px-5">
+						<span
+							v-for="model in provider.models"
+							:key="model.id"
+							class="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border/60 bg-card px-2 py-1 text-[11px] shadow-2xs"
+						>
+							<span class="truncate font-mono text-foreground">{{ model.id }}</span>
+							<span class="shrink-0 font-mono text-[10px] text-text-secondary">{{
+								t('agent.settings.providers.contextShort', { value: model.contextWindow })
+							}}</span>
+						</span>
+						<span v-if="!provider.models.length">{{ t('agent.settings.providers.empty') }}</span>
+					</div>
+				</details>
+				<details class="border-t border-border/45 px-4 py-2.5 text-[11px] text-text-secondary sm:px-5">
+					<summary class="cursor-pointer font-medium">
+						{{ t('agent.settings.providerManagement.technicalDetails') }}
+					</summary>
+					<dl class="mt-2 grid gap-x-4 gap-y-1 font-mono text-[10px] sm:grid-cols-2">
+						<div class="flex gap-2">
+							<dt class="shrink-0 text-text-secondary/70">ID</dt>
+							<dd class="break-all">{{ provider.id }}</dd>
+						</div>
+						<div class="flex gap-2">
+							<dt class="shrink-0 text-text-secondary/70">v</dt>
+							<dd>{{ provider.version }}</dd>
+						</div>
+						<div class="flex gap-2">
+							<dt class="shrink-0 text-text-secondary/70">credential</dt>
+							<dd>{{ provider.credentialRevision }}</dd>
+						</div>
+						<div class="flex gap-2">
+							<dt class="shrink-0 text-text-secondary/70">protocol</dt>
+							<dd>{{ provider.protocol }}</dd>
+						</div>
+						<div class="flex gap-2">
+							<dt class="shrink-0 text-text-secondary/70">created</dt>
+							<dd>{{ formatAgentDate(locale, new Date(provider.createdAt)) }}</dd>
+						</div>
+						<div class="flex gap-2">
+							<dt class="shrink-0 text-text-secondary/70">updated</dt>
+							<dd>{{ providerUpdatedAt(provider) }}</dd>
+						</div>
+					</dl>
+				</details>
 			</article>
 		</div>
 		<UiModal
@@ -315,78 +611,171 @@
 			:close-on-backdrop="!busy"
 			focus-on-open
 			restore-focus
-			panel-class="max-w-2xl rounded-2xl p-5 sm:p-6"
-			@close="testingProviderId = busy ? testingProviderId : null"
+			panel-class="max-w-3xl rounded-2xl p-5 sm:p-6"
+			@close="closeTests"
 		>
 			<div v-if="testingProvider" class="space-y-4">
-				<p class="text-sm font-medium">{{ testingProvider.name }}</p>
+				<div class="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-header/25 p-3.5">
+					<div class="flex min-w-0 items-center gap-3">
+						<div
+							class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary"
+						>
+							<i class="fa-solid fa-server text-sm" aria-hidden="true"></i>
+						</div>
+						<div class="min-w-0">
+							<p class="truncate text-sm font-semibold text-foreground">{{ testingProvider.name }}</p>
+							<p class="mt-0.5 break-all font-mono text-[11px] text-text-secondary">
+								{{ testingProvider.baseUrl }}
+							</p>
+						</div>
+					</div>
+					<p class="text-xs text-text-secondary">{{ t('agent.settings.providers.testModalDesc') }}</p>
+				</div>
 				<p v-if="notice" role="status" class="text-sm">
 					{{ t('agent.settings.providerManagement.' + notice) }}
 				</p>
-				<div v-if="refreshRequired" class="space-y-2 text-sm text-warning">
+				<div
+					v-if="refreshRequired"
+					class="space-y-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-warning"
+				>
 					<p>{{ t('agent.settings.providerManagement.refreshRequired') }}</p>
 					<UiButton type="button" :disabled="busy" @click="load">{{
 						t('agent.settings.providerManagement.read')
 					}}</UiButton>
 				</div>
-				<div v-if="testResult" role="status" class="text-sm">
-					{{
-						t(
-							testResult.ok
-								? 'agent.settings.providerManagement.testOk'
-								: 'agent.settings.providerManagement.testFailed',
-							{ ms: testResult.latencyMs },
-						)
-					}}
-					<span v-if="!testResult.ok">{{ testResult.errorCode }}</span>
+				<div
+					v-if="testResult && testingModelId"
+					role="status"
+					class="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs"
+					:class="
+						testResult.ok
+							? 'border-success/25 bg-success/10 text-success'
+							: 'border-error/25 bg-error/10 text-error'
+					"
+				>
+					<i
+						:class="testResult.ok ? 'fa-solid fa-check' : 'fa-solid fa-circle-exclamation'"
+						aria-hidden="true"
+					></i>
+					<span
+						>{{ testingModelId }} ·
+						{{
+							t(
+								testResult.ok
+									? 'agent.settings.providerManagement.testOk'
+									: 'agent.settings.providerManagement.testFailed',
+								{ ms: testResult.latencyMs },
+							)
+						}}</span
+					>
+					<span v-if="!testResult.ok">{{ testFailureMessage(testResult.errorCode) }}</span>
 					<span v-else-if="testResult.usage">{{
 						t('agent.settings.providerManagement.usage', {
 							input: testResult.usage.inputTokens,
 							output: testResult.usage.outputTokens,
 						})
 					}}</span>
-				</div>
-				<div
-					v-for="model in testingProvider.models"
-					:key="model.id"
-					class="space-y-1 border-t border-border pt-2 text-xs"
-				>
-					<div class="flex items-center justify-between gap-2">
-						<span class="break-all font-mono">{{ model.id }}</span>
-						<UiButton
-							type="button"
-							:disabled="blocked || draft !== null || !testingProvider.enabled"
-							@click="test(testingProvider, model.id)"
-							>{{ t('agent.settings.providerManagement.test') }}</UiButton
-						>
-					</div>
-					<div>
-						{{ t('agent.settings.providers.contextWindow') }}: {{ model.contextWindow }} ·
-						{{ t('agent.settings.providers.maxOutputTokens') }}: {{ model.maxOutputTokens }}
-					</div>
-					<details class="text-text-secondary">
+					<details v-if="!testResult.ok" class="w-full text-[10px] text-text-secondary">
 						<summary class="cursor-pointer">
-							{{ t('agent.settings.providerManagement.capabilityDetails') }}
+							{{ t('agent.settings.providerManagement.technicalDetails') }}
 						</summary>
-						<div v-for="(source, field) in model.sources" :key="field">
-							<template v-if="source">{{ field }}: {{ source }}</template>
-						</div>
-						<div v-if="model.observation">
-							{{ model.observation.source }} · {{ model.observation.revision }} ·
-							{{ formatAgentDate(locale, new Date(model.observation.observedAt)) }}
-							<div v-for="(value, field) in model.observation.capabilities" :key="field">
-								<template v-if="value !== undefined">{{ field }}: {{ value }}</template>
-							</div>
-						</div>
+						<code class="mt-1 block break-all rounded bg-error/5 px-2 py-1">{{
+							testResult.errorCode
+						}}</code>
 					</details>
-					<p v-if="model.conflicts.length" class="text-warning">
-						{{ t('agent.settings.providers.capabilityConflict', { fields: model.conflicts.join(', ') }) }}
-					</p>
+				</div>
+				<div class="configured-models-pane space-y-3">
+					<article
+						v-for="model in testingProvider.models"
+						:key="model.id"
+						class="rounded-xl border border-border/70 bg-card p-3.5 shadow-2xs"
+					>
+						<div class="flex flex-wrap items-center justify-between gap-2">
+							<span class="min-w-0 break-all font-mono text-xs font-medium text-foreground">{{
+								model.id
+							}}</span>
+							<UiButton
+								type="button"
+								appearance="soft"
+								density="compact"
+								:disabled="blocked || draft !== null || !testingProvider.enabled"
+								@click="testModel(testingProvider, model.id)"
+								><i
+									:class="
+										busy && testingModelId === model.id
+											? 'fa-solid fa-circle-notch fa-spin'
+											: 'fa-solid fa-vial'
+									"
+									class="text-[10px]"
+									aria-hidden="true"
+								></i
+								>{{ t('agent.settings.providerManagement.test') }}</UiButton
+							>
+						</div>
+						<div class="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+							<span
+								class="rounded-md border border-border/60 bg-header/35 px-2 py-0.5 font-mono text-text-secondary"
+								>{{ t('agent.settings.providers.contextShort', { value: model.contextWindow }) }}</span
+							>
+							<span
+								class="rounded-md border border-border/60 bg-header/35 px-2 py-0.5 font-mono text-text-secondary"
+								>{{ t('agent.settings.providers.outputShort', { value: model.maxOutputTokens }) }}</span
+							>
+							<span
+								v-if="model.supportsTools"
+								class="rounded-md border border-primary/20 bg-primary/10 px-2 py-0.5 text-primary"
+								>{{ t('agent.settings.providers.toolCapable') }}</span
+							>
+						</div>
+						<details class="mt-2 text-[11px] text-text-secondary">
+							<summary class="cursor-pointer">
+								{{ t('agent.settings.providerManagement.capabilityDetails') }}
+							</summary>
+							<div class="mt-2 space-y-1.5 rounded-lg bg-header/20 p-2.5">
+								<div class="space-y-1">
+									<div
+										v-for="entry in capabilitySourceEntries(model.sources)"
+										:key="entry.field"
+										class="flex items-center justify-between gap-3"
+									>
+										<span>{{ capabilityFieldLabel(entry.field) }}</span>
+										<span class="shrink-0 text-foreground/70">{{
+											capabilitySourceLabel(entry.source)
+										}}</span>
+									</div>
+								</div>
+								<details v-if="model.observation" class="border-t border-border/40 pt-2">
+									<summary class="cursor-pointer font-medium text-foreground/75">
+										{{ t('agent.settings.providerManagement.technicalDetails') }}
+									</summary>
+									<div class="mt-1.5 space-y-1 font-mono text-[10px]">
+										<div class="break-all">
+											{{ model.observation.source }} · {{ model.observation.revision }}
+										</div>
+										<div>{{ formatAgentDate(locale, new Date(model.observation.observedAt)) }}</div>
+										<div v-for="field in AGENT_MODEL_CAPABILITY_FIELDS" :key="field">
+											<template v-if="model.observation.capabilities[field] !== undefined">
+												{{ capabilityFieldLabel(field) }}:
+												{{ capabilityValue(model.observation.capabilities[field]) }}
+											</template>
+										</div>
+									</div>
+								</details>
+							</div>
+						</details>
+						<p v-if="model.conflicts.length" class="mt-2 text-[11px] text-warning">
+							{{
+								t('agent.settings.providers.capabilityConflict', {
+									fields: model.conflicts.map(capabilityFieldLabel).join('、'),
+								})
+							}}
+						</p>
+					</article>
 				</div>
 			</div>
 			<template #footer
 				><div class="flex justify-end">
-					<UiButton type="button" :disabled="busy" @click="testingProviderId = null">{{
+					<UiButton type="button" appearance="soft" tone="neutral" :disabled="busy" @click="closeTests">{{
 						t('common.close')
 					}}</UiButton>
 				</div></template
@@ -411,148 +800,236 @@
 					@pointerdown.stop="startResize"
 				/>
 			</template>
+			<p class="mb-4 text-xs leading-relaxed text-text-secondary">
+				{{ t('agent.settings.providers.modalDescription') }}
+			</p>
+			<p v-if="notice" role="status" class="mb-3 text-sm">
+				{{ t('agent.settings.providerManagement.' + notice) }}
+			</p>
+			<div
+				v-if="refreshRequired"
+				role="alert"
+				class="mb-3 space-y-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-warning"
+			>
+				<p>{{ t('agent.settings.providerManagement.refreshRequired') }}</p>
+				<UiButton type="button" :disabled="busy" @click="load">{{
+					t('agent.settings.providerManagement.read')
+				}}</UiButton>
+			</div>
 			<form v-if="draft" id="provider-editor" class="space-y-4" @submit.prevent="save">
-				<p v-if="notice" role="status" class="text-sm">
-					{{ t('agent.settings.providerManagement.' + notice) }}
-				</p>
-				<div v-if="refreshRequired" role="alert" class="space-y-2 text-sm text-warning">
-					<p>{{ t('agent.settings.providerManagement.refreshRequired') }}</p>
-					<UiButton type="button" :disabled="busy" @click="load">{{
-						t('agent.settings.providerManagement.read')
-					}}</UiButton>
-				</div>
-				<fieldset :disabled="blocked" class="space-y-3">
-					<label class="block text-sm"
-						>{{ t('agent.settings.providerManagement.name')
-						}}<input
-							required
-							v-model="draft.name"
-							class="provider-modal-input mt-1 w-full rounded-lg px-3 py-2 text-sm outline-none"
-					/></label>
-					<label class="block text-sm"
-						>{{ t('agent.settings.providerManagement.endpoint')
-						}}<input
-							required
-							v-model="draft.baseUrl"
-							type="url"
-							class="provider-modal-input mt-1 w-full rounded-lg px-3 py-2 text-sm outline-none"
-					/></label>
-					<label class="block text-sm"
-						>{{ t('agent.settings.providers.protocol') }}
-						<select
-							:value="draft.protocol"
-							class="ml-2 rounded border border-border bg-background p-2"
-							@change="setProtocol"
-						>
-							<option value="chat-completions">Chat Completions</option>
-							<option value="responses">Responses</option>
-						</select>
-					</label>
-					<label class="flex items-center gap-2 text-sm"
-						><input v-model="draft.enabled" type="checkbox" />{{
-							t('agent.settings.providerManagement.enabled')
-						}}</label
-					>
-					<label class="block text-sm"
-						>{{ t('agent.settings.providerManagement.credential') }}
-						<select
-							:value="draft.credential.action"
-							class="ml-2 rounded border border-border bg-background p-2"
-							@change="setCredential"
-						>
-							<option value="keep">{{ t('agent.settings.providerManagement.keep') }}</option>
-							<option value="replace">{{ t('agent.settings.providerManagement.replace') }}</option>
-							<option v-if="draft.id" value="clear">
-								{{ t('agent.settings.providerManagement.clear') }}
-							</option>
-						</select>
-						<input
-							v-if="draft.credential.action === 'replace'"
-							v-model="draft.credential.value"
-							:type="showApiKey ? 'text' : 'password'"
-							autocomplete="new-password"
-							:aria-label="t('agent.settings.providerManagement.credential')"
-							class="mt-2 w-full rounded border border-border bg-background p-2"
-						/>
-					</label>
-					<UiButton
-						v-if="draft.credential.action === 'replace'"
-						type="button"
-						appearance="ghost"
-						@click="showApiKey = !showApiKey"
-						>{{
-							t(
-								showApiKey
-									? 'agent.settings.providers.hideCredential'
-									: 'agent.settings.providers.showCredential',
-							)
-						}}</UiButton
-					>
-					<p class="text-xs text-text-secondary">{{ t('agent.settings.providerManagement.secretHelp') }}</p>
-					<UiButton v-if="draft.id === null" type="button" @click="discover(null)">{{
-						t('agent.settings.providerManagement.discoverEndpoint')
-					}}</UiButton>
-					<div
-						v-for="(model, index) in draft.models"
-						:key="index"
-						class="space-y-3 rounded border border-border p-3"
-					>
-						<ProviderModelEditor
-							:model-value="model"
-							@update:model-value="(value) => draft?.models.splice(index, 1, value)"
-						/>
+				<fieldset :disabled="blocked" class="space-y-4">
+					<section class="space-y-3 rounded-xl border border-border/70 bg-header/15 p-3.5 sm:p-4">
+						<h4 class="flex items-center gap-2 text-xs font-semibold text-foreground">
+							<i class="fa-solid fa-server text-[11px] text-primary" aria-hidden="true"></i>
+							{{ t('agent.settings.providers.title') }}
+						</h4>
+						<label class="block text-xs font-medium text-foreground"
+							><span class="mb-1 block">{{ t('agent.settings.providerManagement.name') }}</span>
+							<input
+								required
+								v-model="draft.name"
+								class="provider-modal-input h-9 w-full rounded-lg px-3 text-sm outline-none"
+							/>
+						</label>
+						<label class="block text-xs font-medium text-foreground"
+							><span class="mb-1 block">{{ t('agent.settings.providerManagement.endpoint') }}</span>
+							<input
+								required
+								v-model="draft.baseUrl"
+								type="url"
+								class="provider-modal-input h-9 w-full rounded-lg px-3 font-mono text-xs outline-none"
+							/>
+						</label>
+						<div class="grid gap-3 sm:grid-cols-2">
+							<label class="block text-xs font-medium text-foreground"
+								><span class="mb-1 block">{{ t('agent.settings.providers.protocol') }}</span>
+								<select
+									:value="draft.protocol"
+									class="provider-modal-input h-9 w-full rounded-lg px-3 text-xs outline-none"
+									@change="setProtocol"
+								>
+									<option value="chat-completions">Chat Completions</option>
+									<option value="responses">Responses</option>
+								</select>
+							</label>
+							<label
+								class="flex items-center gap-2 self-end rounded-lg border border-border/60 bg-card px-3 py-2 text-xs"
+							>
+								<input v-model="draft.enabled" type="checkbox" />
+								<span>{{ t('agent.settings.providerManagement.enabled') }}</span>
+							</label>
+						</div>
+					</section>
+
+					<section class="space-y-3 rounded-xl border border-border/70 bg-header/15 p-3.5 sm:p-4">
+						<div class="flex flex-wrap items-center justify-between gap-2">
+							<h4 class="flex items-center gap-2 text-xs font-semibold text-foreground">
+								<i class="fa-solid fa-key text-[11px] text-primary" aria-hidden="true"></i>
+								{{ t('agent.settings.providerManagement.credential') }}
+							</h4>
+							<select
+								:value="draft.credential.action"
+								class="provider-modal-input h-8 rounded-lg px-2.5 text-xs outline-none"
+								@change="setCredential"
+							>
+								<option value="keep">{{ t('agent.settings.providerManagement.keep') }}</option>
+								<option value="replace">{{ t('agent.settings.providerManagement.replace') }}</option>
+								<option v-if="draft.id" value="clear">
+									{{ t('agent.settings.providerManagement.clear') }}
+								</option>
+							</select>
+						</div>
+						<div v-if="draft.credential.action === 'replace'" class="flex gap-2">
+							<input
+								v-model="draft.credential.value"
+								:type="showApiKey ? 'text' : 'password'"
+								autocomplete="new-password"
+								:aria-label="t('agent.settings.providerManagement.credential')"
+								class="provider-modal-input h-9 min-w-0 flex-1 rounded-lg px-3 font-mono text-xs outline-none"
+							/>
+							<UiButton type="button" appearance="ghost" @click="showApiKey = !showApiKey">
+								<i
+									:class="showApiKey ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'"
+									class="text-[10px]"
+									aria-hidden="true"
+								></i
+								>{{
+									t(
+										showApiKey
+											? 'agent.settings.providers.hideCredential'
+											: 'agent.settings.providers.showCredential',
+									)
+								}}
+							</UiButton>
+						</div>
+						<p class="text-[11px] leading-relaxed text-text-secondary">
+							{{ t('agent.settings.providerManagement.secretHelp') }}
+						</p>
+					</section>
+
+					<section class="space-y-3 rounded-xl border border-border/70 bg-header/15 p-3.5 sm:p-4">
+						<div class="flex flex-wrap items-center justify-between gap-2">
+							<h4 class="flex items-center gap-2 text-xs font-semibold text-foreground">
+								<i class="fa-solid fa-brain text-[11px] text-primary" aria-hidden="true"></i>
+								{{ t('agent.settings.providers.configuredModels') }}
+								<span
+									class="rounded-full border border-border/60 bg-card px-2 py-0.5 font-mono text-[10px] text-text-secondary"
+									>{{ draft.models.length }} / {{ AGENT_PROVIDER_MODEL_LIMIT }}</span
+								>
+							</h4>
+							<UiButton
+								v-if="draft.id === null"
+								type="button"
+								appearance="soft"
+								density="compact"
+								@click="discover(null)"
+								><i class="fa-solid fa-magnifying-glass text-[10px]" aria-hidden="true"></i
+								>{{ t('agent.settings.providerManagement.discoverEndpoint') }}</UiButton
+							>
+						</div>
 						<div
-							v-if="currentProvider?.models.find((item) => item.id === model.id)?.observation"
-							class="space-y-2 text-xs text-text-secondary"
+							v-for="(model, index) in draft.models"
+							:key="index"
+							class="space-y-3 rounded-lg border border-border/60 bg-card p-3"
 						>
-							<p>{{ t('agent.settings.providerManagement.observationHelp') }}</p>
-							<UiButton type="button" @click="applyObservation(model)">{{
-								t('agent.settings.providerManagement.applyObservation')
-							}}</UiButton>
-						</div>
-						<div class="flex flex-wrap gap-2">
-							<UiButton type="button" @click="lookup(model)">{{
+							<div class="flex items-center justify-between gap-2">
+								<span class="text-[11px] font-semibold text-foreground">{{
+									model.id || t('agent.settings.providerManagement.modelId')
+								}}</span>
+								<UiButton
+									type="button"
+									appearance="ghost"
+									tone="danger"
+									icon-only
+									:title="t('common.delete')"
+									:aria-label="t('common.delete')"
+									@click="draft.models.splice(index, 1)"
+									><i class="fa-regular fa-trash-can text-[10px]" aria-hidden="true"></i
+								></UiButton>
+							</div>
+							<ProviderModelEditor
+								:model-value="model"
+								@update:model-value="(value) => draft?.models.splice(index, 1, value)"
+							/>
+							<div
+								v-if="currentProvider?.models.find((item) => item.id === model.id)?.observation"
+								class="space-y-2 rounded-md bg-header/25 p-2.5 text-[11px] text-text-secondary"
+							>
+								<p>{{ t('agent.settings.providerManagement.observationHelp') }}</p>
+								<div class="flex flex-wrap gap-2">
+									<UiButton type="button" density="compact" @click="applyObservation(model)">{{
+										t('agent.settings.providerManagement.applyObservation')
+									}}</UiButton>
+									<UiButton type="button" density="compact" @click="lookup(model)">{{
+										t('agent.settings.providerManagement.registry')
+									}}</UiButton>
+								</div>
+							</div>
+							<UiButton v-else type="button" density="compact" @click="lookup(model)">{{
 								t('agent.settings.providerManagement.registry')
-							}}</UiButton
-							><UiButton type="button" @click="draft.models.splice(index, 1)">{{
-								t('common.delete')
 							}}</UiButton>
 						</div>
-					</div>
-					<p class="text-xs text-text-secondary">
-						{{ t('agent.settings.providerManagement.modelHelp', { max: AGENT_PROVIDER_MODEL_LIMIT }) }}
-					</p>
-					<UiButton
-						type="button"
-						:disabled="draft.models.length >= AGENT_PROVIDER_MODEL_LIMIT"
-						@click="addModel()"
-						>{{ t('agent.settings.providerManagement.addModel') }}</UiButton
-					>
+						<p class="text-[11px] leading-relaxed text-text-secondary">
+							{{ t('agent.settings.providerManagement.modelHelp', { max: AGENT_PROVIDER_MODEL_LIMIT }) }}
+						</p>
+						<UiButton
+							type="button"
+							appearance="soft"
+							:disabled="draft.models.length >= AGENT_PROVIDER_MODEL_LIMIT"
+							@click="addModel()"
+							><i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i
+							>{{ t('agent.settings.providerManagement.addModel') }}</UiButton
+						>
+					</section>
 				</fieldset>
 			</form>
-			<div v-if="draft && discovered.length" class="space-y-3 rounded border border-border p-3">
-				<label class="block text-sm"
-					>{{ t('agent.settings.providerManagement.filter')
-					}}<input
+			<div
+				v-if="draft && discovered.length"
+				class="mt-4 space-y-3 rounded-xl border border-primary/25 bg-primary/5 p-3.5"
+			>
+				<div class="flex flex-wrap items-center justify-between gap-2">
+					<h4 class="text-xs font-semibold text-foreground">
+						{{ t('agent.settings.providers.discoveredModels') }}
+					</h4>
+					<span class="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">{{
+						t('agent.settings.providers.discoveryCount', { count: discovered.length })
+					}}</span>
+				</div>
+				<label class="block text-xs font-medium text-foreground"
+					><span class="mb-1 block">{{ t('agent.settings.providerManagement.filter') }}</span>
+					<input
 						v-model="query"
-						class="provider-modal-input mt-1 w-full rounded-lg px-3 py-2 text-sm outline-none"
-				/></label>
-				<label v-for="found in visibleDiscovered" :key="found.id" class="flex items-center gap-2 text-sm"
-					><input
-						v-model="selected"
-						type="checkbox"
-						:value="found.id"
-						:disabled="blocked || !draft || draft.models.some((model) => model.id === found.id)"
-					/><span class="break-all">{{ found.id }}</span></label
-				>
-				<UiButton
-					type="button"
-					:disabled="
-						blocked || !draft || selected.length === 0 || draft.models.length >= AGENT_PROVIDER_MODEL_LIMIT
-					"
-					@click="addSelected"
-					>{{ t('agent.settings.providerManagement.addSelected') }}</UiButton
-				>
+						class="provider-modal-input h-9 w-full rounded-lg px-3 text-xs outline-none"
+					/>
+				</label>
+				<div class="grid max-h-48 gap-1.5 overflow-auto sm:grid-cols-2">
+					<label
+						v-for="found in visibleDiscovered"
+						:key="found.id"
+						class="flex min-w-0 items-center gap-2 rounded-md bg-card/70 px-2.5 py-1.5 text-xs"
+						><input
+							v-model="selected"
+							type="checkbox"
+							:value="found.id"
+							:disabled="blocked || !draft || draft.models.some((model) => model.id === found.id)"
+						/><span class="truncate font-mono">{{ found.id }}</span></label
+					>
+				</div>
+				<div class="flex justify-end">
+					<UiButton
+						type="button"
+						appearance="solid"
+						tone="primary"
+						:disabled="
+							blocked ||
+							!draft ||
+							selected.length === 0 ||
+							draft.models.length >= AGENT_PROVIDER_MODEL_LIMIT
+						"
+						@click="addSelected"
+						>{{ t('agent.settings.providers.addSelected', { count: selected.length }) }}</UiButton
+					>
+				</div>
 			</div>
 			<template #footer>
 				<div class="flex justify-end gap-2">
@@ -564,14 +1041,31 @@
 		<UiModal
 			:visible="deleting !== null"
 			:title="t('agent.settings.providerManagement.deleteTitle')"
+			panel-class="max-w-md rounded-2xl p-5"
 			@close="deleting = null"
 		>
-			<p>{{ t('agent.settings.providerManagement.deleteConfirm', { name: deleting?.name }) }}</p>
+			<div class="flex items-start gap-3">
+				<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-error/10 text-error">
+					<i class="fa-solid fa-triangle-exclamation text-base" aria-hidden="true"></i>
+				</div>
+				<p class="text-sm leading-relaxed">
+					{{ t('agent.settings.providerManagement.deleteConfirm', { name: deleting?.name }) }}
+				</p>
+			</div>
 			<template #footer
-				><UiButton type="button" @click="deleting = null">{{ t('common.cancel') }}</UiButton
-				><UiButton type="button" :disabled="blocked" @click="confirmDelete">{{
-					t('common.delete')
-				}}</UiButton></template
+				><div class="flex justify-end gap-2">
+					<UiButton type="button" appearance="soft" tone="neutral" @click="deleting = null">{{
+						t('common.cancel')
+					}}</UiButton>
+					<UiButton
+						type="button"
+						appearance="solid"
+						tone="danger"
+						:disabled="blocked"
+						@click="confirmDelete"
+						>{{ t('common.delete') }}</UiButton
+					>
+				</div></template
 			>
 		</UiModal>
 	</section>

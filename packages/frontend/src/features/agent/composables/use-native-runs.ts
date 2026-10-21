@@ -210,6 +210,23 @@ export function useNativeRuns(
 		olderHidden.value = false;
 		clearRun();
 		await refreshThread();
+		const latest = runs.value.at(-1);
+		if (!run.value && latest) await selectRun(latest);
+	}
+
+	function clearThread(): void {
+		if (operation.busy.value || pending.value !== null) return;
+		stopPolling();
+		thread.value = null;
+		runs.value = [];
+		runCursor.value = 0;
+		hasMoreRuns.value = false;
+		entries.value = [];
+		entryCursor.value = { runSequence: 0, stepIndex: 0, eventSequence: 0, textOffset: 0 };
+		olderHidden.value = false;
+		inputArtifacts.value = [];
+		attachmentsReady.value = true;
+		clearRun();
 	}
 
 	async function refreshThread(more = false): Promise<void> {
@@ -483,6 +500,7 @@ export function useNativeRuns(
 		hasMoreRuns,
 		run,
 		entries,
+		entryCursor,
 		events,
 		approvals,
 		children,
@@ -495,6 +513,7 @@ export function useNativeRuns(
 		feedback,
 		readScope,
 		selectThread,
+		clearThread,
 		refreshThread,
 		readEntries,
 		selectRun,

@@ -148,8 +148,6 @@
 			</span>
 		</header>
 
-		<MonitoringConfigurationPanel class="mb-5" />
-
 		<div v-if="loading" class="p-6 text-center text-sm text-text-secondary">{{ t('common.loading') }}</div>
 		<div v-else class="space-y-5">
 			<p v-if="loadError" class="rounded-lg border border-error/40 bg-error/5 p-3 text-sm text-error">
@@ -434,94 +432,97 @@
 				</div>
 			</form>
 
-			<form class="workspace-preferences__group" @submit.prevent="saveGroup('monitoring', monitoringKeys)">
+			<section class="workspace-preferences__group">
 				<div class="border-b border-border/60 px-4 py-3">
 					<h3 class="text-sm font-semibold text-foreground">
 						{{ t('settings.workspace.groups.monitoring') }}
 					</h3>
 					<p class="mt-1 text-xs text-text-secondary">{{ t('settings.workspace.groups.monitoringHint') }}</p>
 				</div>
-				<div class="grid gap-3 p-3 lg:grid-cols-2">
-					<div class="workspace-preferences__field">
-						<div class="space-y-2">
+				<MonitoringConfigurationPanel class="mx-3 mt-3" />
+				<form class="border-t border-border/60" @submit.prevent="saveGroup('monitoring', monitoringKeys)">
+					<div class="grid gap-3 p-3 lg:grid-cols-2">
+						<div class="workspace-preferences__field">
+							<div class="space-y-2">
+								<label
+									for="dashboardShowLocalResources"
+									class="flex cursor-pointer items-start gap-2 text-sm font-medium"
+									><UiCheckbox
+										id="dashboardShowLocalResources"
+										v-model="form.dashboardShowLocalResources"
+										:aria-label="t('settings.dashboardResources.localLabel')"
+										:disabled="savingGroup !== null || needsRefresh || loading"
+										class="mt-0.5"
+									/><span>{{ t('settings.dashboardResources.localLabel') }}</span></label
+								>
+								<label
+									for="dashboardShowRemoteResources"
+									class="flex cursor-pointer items-start gap-2 text-sm font-medium"
+									><UiCheckbox
+										id="dashboardShowRemoteResources"
+										v-model="form.dashboardShowRemoteResources"
+										:aria-label="t('settings.dashboardResources.remoteLabel')"
+										:disabled="savingGroup !== null || needsRefresh || loading"
+										class="mt-0.5"
+									/><span>{{ t('settings.dashboardResources.remoteLabel') }}</span></label
+								>
+							</div>
+						</div>
+						<div class="workspace-preferences__field">
 							<label
-								for="dashboardShowLocalResources"
+								for="showStatusMonitorIpAddress"
 								class="flex cursor-pointer items-start gap-2 text-sm font-medium"
 								><UiCheckbox
-									id="dashboardShowLocalResources"
-									v-model="form.dashboardShowLocalResources"
-									:aria-label="t('settings.dashboardResources.localLabel')"
+									id="showStatusMonitorIpAddress"
+									v-model="form.showStatusMonitorIpAddress"
 									:disabled="savingGroup !== null || needsRefresh || loading"
 									class="mt-0.5"
-								/><span>{{ t('settings.dashboardResources.localLabel') }}</span></label
+								/><span>{{ t('settings.statusMonitorShowIp.enableLabel') }}</span></label
 							>
+						</div>
+						<div class="workspace-preferences__field">
+							<UiFormField
+								:label="t('settings.docker.refreshIntervalLabel')"
+								for-id="dockerStatusIntervalSeconds"
+								><UiInput
+									id="dockerStatusIntervalSeconds"
+									v-model="form.dockerStatusIntervalSeconds"
+									type="number"
+									min="1"
+									max="86400"
+									step="1"
+									:disabled="savingGroup !== null || needsRefresh || loading"
+							/></UiFormField>
 							<label
-								for="dashboardShowRemoteResources"
-								class="flex cursor-pointer items-start gap-2 text-sm font-medium"
+								for="dockerDefaultExpand"
+								class="mt-3 flex cursor-pointer items-start gap-2 text-sm font-medium"
 								><UiCheckbox
-									id="dashboardShowRemoteResources"
-									v-model="form.dashboardShowRemoteResources"
-									:aria-label="t('settings.dashboardResources.remoteLabel')"
+									id="dockerDefaultExpand"
+									v-model="form.dockerDefaultExpand"
 									:disabled="savingGroup !== null || needsRefresh || loading"
 									class="mt-0.5"
-								/><span>{{ t('settings.dashboardResources.remoteLabel') }}</span></label
+								/><span>{{ t('settings.docker.defaultExpandLabel') }}</span></label
 							>
 						</div>
 					</div>
-					<div class="workspace-preferences__field">
-						<label
-							for="showStatusMonitorIpAddress"
-							class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-							><UiCheckbox
-								id="showStatusMonitorIpAddress"
-								v-model="form.showStatusMonitorIpAddress"
-								:disabled="savingGroup !== null || needsRefresh || loading"
-								class="mt-0.5"
-							/><span>{{ t('settings.statusMonitorShowIp.enableLabel') }}</span></label
+					<div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-3">
+						<p
+							class="min-h-4 text-xs"
+							:class="groupMessages.monitoring?.success ? 'text-success' : 'text-error'"
+						>
+							{{ groupMessages.monitoring?.text }}
+						</p>
+						<UiButton
+							type="submit"
+							appearance="solid"
+							tone="primary"
+							:disabled="!monitoringDirty"
+							:loading="savingGroup === 'monitoring'"
+							>{{ t('settings.workspace.saveGroup') }}</UiButton
 						>
 					</div>
-					<div class="workspace-preferences__field">
-						<UiFormField
-							:label="t('settings.docker.refreshIntervalLabel')"
-							for-id="dockerStatusIntervalSeconds"
-							><UiInput
-								id="dockerStatusIntervalSeconds"
-								v-model="form.dockerStatusIntervalSeconds"
-								type="number"
-								min="1"
-								max="86400"
-								step="1"
-								:disabled="savingGroup !== null || needsRefresh || loading"
-						/></UiFormField>
-						<label
-							for="dockerDefaultExpand"
-							class="mt-3 flex cursor-pointer items-start gap-2 text-sm font-medium"
-							><UiCheckbox
-								id="dockerDefaultExpand"
-								v-model="form.dockerDefaultExpand"
-								:disabled="savingGroup !== null || needsRefresh || loading"
-								class="mt-0.5"
-							/><span>{{ t('settings.docker.defaultExpandLabel') }}</span></label
-						>
-					</div>
-				</div>
-				<div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-3">
-					<p
-						class="min-h-4 text-xs"
-						:class="groupMessages.monitoring?.success ? 'text-success' : 'text-error'"
-					>
-						{{ groupMessages.monitoring?.text }}
-					</p>
-					<UiButton
-						type="submit"
-						appearance="solid"
-						tone="primary"
-						:disabled="!monitoringDirty"
-						:loading="savingGroup === 'monitoring'"
-						>{{ t('settings.workspace.saveGroup') }}</UiButton
-					>
-				</div>
-			</form>
+				</form>
+			</section>
 
 			<details class="workspace-preferences__group">
 				<summary

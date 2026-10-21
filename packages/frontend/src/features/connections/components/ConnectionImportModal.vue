@@ -1,7 +1,7 @@
 <script setup lang="ts">
-	import { onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
+	import { computed, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiModal, UiTextarea } from '@/foundation/ui';
+	import { UiButton, UiModal, UiSpinner, UiTextarea } from '@/foundation/ui';
 	import { targetArray, InvalidTargetPayload } from '@nexus-terminal/shared/targets/http';
 	import { TARGET_CONNECTION_IMPORT_FILE_MAX_BYTES } from '@nexus-terminal/shared/targets/connections/values';
 	import { readConnectionImportInput } from '@nexus-terminal/shared/targets/connections/http-codec';
@@ -23,13 +23,25 @@
 		},
 	);
 	const source = ref('');
+	const fileInput = ref<HTMLInputElement | null>(null);
+	const fileName = ref('');
+	const showJson = ref(false);
 	const reading = ref(false);
 	const fileError = ref('');
 	let generation = 0;
+	const failureReasons = computed(() => [
+		...new Set(
+			receipts.value
+				.filter((item) => item.status === 'error')
+				.map((item) => t('connections.failures.' + item.code)),
+		),
+	]);
 
 	function resetSource(): void {
 		generation++;
 		source.value = '';
+		fileName.value = '';
+		showJson.value = false;
 		fileError.value = '';
 		reading.value = false;
 	}
@@ -60,6 +72,7 @@
 				return;
 			}
 			source.value = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+			fileName.value = file.name;
 		} catch {
 			if (current === generation) {
 				fileError.value = t('connections.failures.invalid_input');
@@ -87,37 +100,102 @@
 			fileError.value = t('connections.failures.' + targetErrorKey(cause));
 		}
 	}
+
+	function requestFile(): void {
+		fileInput.value?.click();
+	}
+
+	function clearSource(): void {
+		source.value = '';
+		fileName.value = '';
+		fileError.value = '';
+	}
 </script>
 <template>
 	<UiModal :visible="visible" :title="t('connections.importTitle')" panel-class="!max-w-3xl" @close="emit('close')">
-		<p v-if="message || fileError" role="status">{{ fileError || message }}</p>
-		<ol v-if="receipts.length" class="my-3 max-h-48 overflow-y-auto" aria-live="polite">
-			<li v-for="item in receipts" :key="item.index">
-				#{{ item.index }}:
-				{{
-					item.status === 'ok'
-						? `${t('connections.saved')} (${item.id})`
-						: t('connections.failures.' + item.code)
-				}}
-			</li>
-		</ol>
-		<form @submit.prevent="submit">
-			<fieldset :disabled="loading || reading || data.needsRefresh.value" class="space-y-3">
+		<form id="connection-import-form" class="space-y-4" @submit.prevent="submit">
+			<fieldset :disabled="loading || reading || data.needsRefresh.value" class="space-y-4">
 				<input
+					ref="fileInput"
 					type="file"
 					accept="application/json,.json"
-					:aria-label="t('connections.importTitle')"
+					class="sr-only"
+					:aria-label="t('connections.selectFile')"
 					@change="read"
-				/><UiTextarea v-model="source" :min-rows="10" :aria-label="t('connections.importTitle')" /><UiButton
-					type="submit"
-					>{{ t('connections.importTitle') }}</UiButton
+				/>
+				<div class="rounded-lg border border-border/70 bg-background/45 p-4">
+					<div class="flex flex-wrap items-center gap-3">
+						<UiButton type="button" appearance="soft" @click="requestFile">
+							<template #leading><i class="fas fa-file-import" aria-hidden="true" /></template>
+							{{ t('connections.selectFile') }}
+						</UiButton>
+						<p v-if="fileName" class="min-w-0 flex-1 break-all text-sm text-text-secondary">
+							{{ t('connections.fileLoaded', { name: fileName }) }}
+						</p>
+						<p v-else class="min-w-0 flex-1 text-sm text-text-secondary">
+							{{ t('connections.fileHint') }}
+						</p>
+						<UiButton
+							v-if="source"
+							type="button"
+							appearance="ghost"
+							density="compact"
+							:disabled="reading"
+							@click="clearSource"
+							>{{ t('common.clear') }}</UiButton
+						>
+					</div>
+				</div>
+
+				<div>
+					<UiButton
+						type="button"
+						appearance="ghost"
+						density="compact"
+						:aria-expanded="showJson"
+						@click="showJson = !showJson"
+					>
+						<i
+							:class="['fas', showJson ? 'fa-chevron-down' : 'fa-chevron-right', 'mr-1']"
+							aria-hidden="true"
+						/>
+						{{ t('connections.pasteJson') }}
+					</UiButton>
+					<div v-if="showJson" class="mt-2">
+						<UiTextarea v-model="source" :min-rows="10" :aria-label="t('connections.pasteJson')" />
+					</div>
+				</div>
+
+				<div v-if="reading" class="flex items-center gap-2 text-sm text-text-secondary" role="status">
+					<UiSpinner />
+					{{ t('common.loading') }}
+				</div>
+				<div
+					v-if="fileError || message"
+					role="alert"
+					class="rounded-md border border-error/30 bg-error/10 p-3 text-sm text-error"
 				>
+					{{ fileError || message }}
+				</div>
+				<div v-if="failureReasons.length" class="rounded-md border border-error/25 p-3 text-sm text-error">
+					<p class="font-medium">{{ t('connections.failedItems') }}</p>
+					<ul class="mt-1 list-disc space-y-1 pl-5">
+						<li v-for="reason in failureReasons" :key="reason">{{ reason }}</li>
+					</ul>
+				</div>
 			</fieldset>
 		</form>
 		<template #footer
-			><UiButton v-if="!loading && (message || data.needsRefresh.value)" :disabled="reading" @click="refresh">{{
+			><UiButton v-if="!loading && data.needsRefresh.value" :disabled="reading" @click="refresh">{{
 				t('connections.refresh')
 			}}</UiButton
+			><UiButton
+				type="submit"
+				form="connection-import-form"
+				appearance="solid"
+				tone="primary"
+				:disabled="loading || reading || data.needsRefresh.value || !source.trim()"
+				>{{ t('connections.importTitle') }}</UiButton
 			><UiButton @click="emit('close')">{{ t('common.close') }}</UiButton></template
 		>
 	</UiModal>

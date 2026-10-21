@@ -2,7 +2,6 @@
 	import { onBeforeUnmount, onMounted, ref } from 'vue';
 	import { useRouter } from 'vue-router';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton } from '@/foundation/ui';
 	import { authErrorKey, LoginView, type PasskeyLoginInput } from '@/features/auth/public';
 	import { LoginCaptchaChallenge, useLoginSecurity } from '@/features/security/public';
 
@@ -50,7 +49,6 @@
 		:captcha-required="security.captchaConfig.value.enabled"
 		:captcha-token="captchaToken"
 		:captcha-status="security.captchaStatus.value"
-		:passkey-available="security.hasPasskeys.value"
 		:passkey-loading="security.loading.value"
 		@passkey="loginWithPasskey"
 		@login-attempted="handleLoginAttempted"
@@ -65,10 +63,6 @@
 				:feedback="captchaFeedback"
 				@token="handleCaptchaToken"
 			/>
-			<div v-if="security.passkeyLoadError.value" class="text-center text-sm text-error" role="alert">
-				{{ t('settings.passkey.error.discoveryFailed')
-				}}<UiButton @click="security.refresh()">{{ t('common.retry') }}</UiButton>
-			</div>
 			<p v-if="passkeyError" class="mt-2 text-center text-sm text-error" role="alert">{{ passkeyError }}</p>
 		</template>
 	</LoginView>

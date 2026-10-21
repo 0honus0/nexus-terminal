@@ -136,7 +136,7 @@
 
 					<main :key="editorGeneration" class="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 md:px-6 md:py-4">
 						<p v-if="store.blocked" role="status">{{ t('appearanceNext.refreshRequired') }}</p>
-						<UiButton v-if="store.blocked || !store.loaded" :disabled="store.busy" @click="refresh">{{
+						<UiButton v-if="store.blocked" :disabled="store.busy" @click="refresh">{{
 							t('appearanceNext.refresh')
 						}}</UiButton>
 						<UiSurface v-if="activeTab === 'ui'" class="min-w-0 p-4"

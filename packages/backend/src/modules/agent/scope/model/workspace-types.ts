@@ -23,6 +23,11 @@ export interface WorkspaceApprovalInput {
 	feedback?: string;
 }
 
+export interface DeletedThread {
+	appId: string;
+	threadId: string;
+}
+
 export type WorkspaceInput =
 	| {
 			method: 'agent.runs.appendInput';
@@ -41,6 +46,7 @@ export type WorkspaceInput =
 	| { method: 'agent.threads.list'; after: string | null; limit: number }
 	| { method: 'agent.threads.create'; operationId: string; title: string }
 	| { method: 'agent.threads.rename'; threadId: string; expectedVersion: number; operationId: string; title: string }
+	| { method: 'agent.threads.delete'; threadId: string; expectedVersion: number }
 	| { method: 'agent.runs.list'; threadId: string; after: number; limit: number }
 	| { method: 'agent.runs.get'; runId: string }
 	| { method: 'agent.runs.events'; runId: string; after: number; limit: number }
@@ -56,6 +62,7 @@ export type WorkspaceResult =
 	| { method: 'agent.providers.list'; value: AvailableModel[] }
 	| { method: 'agent.threads.list'; value: ThreadPage }
 	| { method: 'agent.threads.create' | 'agent.threads.rename'; value: AgentThread }
+	| { method: 'agent.threads.delete'; value: DeletedThread }
 	| { method: 'agent.runs.list'; threadId: string; value: RunPage }
 	| { method: 'agent.runs.get'; value: AgentRun | null }
 	| { method: 'agent.runs.events'; value: RunEventPage }

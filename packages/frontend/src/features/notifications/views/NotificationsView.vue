@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { onActivated, onMounted, ref, shallowRef } from 'vue';
+	import { computed, onActivated, onMounted, ref, shallowRef } from 'vue';
 	import { storeToRefs } from 'pinia';
 	import { useI18n } from 'vue-i18n';
 	import { UiButton, UiEmptyState, UiManagementCard, UiSpinner } from '@/foundation/ui';
@@ -17,7 +17,11 @@
 	const editing = shallowRef<NotificationSetting | null>(null);
 	const formVisible = ref(false);
 	const message = ref('');
+	const deliveriesOpen = ref(false);
 	const view = useAuthenticatedViewScope({ onRevoke: closeForm });
+	const unknownDeliveryCount = computed(
+		() => deliveries.value.filter((delivery) => delivery.status === 'unknown').length,
+	);
 
 	function closeForm(): void {
 		formVisible.value = false;
@@ -110,7 +114,9 @@
 	}
 
 	const eventLabel = (event: string) =>
-		te('settings.notifications.events.' + event) ? t('settings.notifications.events.' + event) : event;
+		te('settings.notifications.events.' + event)
+			? t('settings.notifications.events.' + event)
+			: t('settings.notifications.unknownEvent');
 
 	onMounted(() => void load());
 	let initialActivation = true;
@@ -125,34 +131,44 @@
 
 <template>
 	<div class="p-4 text-foreground">
-		<div class="mx-auto max-w-6xl space-y-4">
-			<h2 class="border-b border-border pb-2 text-xl font-semibold">{{ t('settings.notifications.title') }}</h2>
+		<div class="mx-auto max-w-6xl p-0">
+			<h2 class="mb-4 border-b border-border pb-2 text-xl font-semibold text-foreground">
+				{{ t('settings.notifications.title') }}
+			</h2>
 			<div
 				v-if="error || message"
 				role="alert"
-				class="rounded border-l-4 border-error bg-error/10 p-4 text-error"
+				class="mb-4 rounded border-l-4 border-error bg-error/10 p-4 text-error"
 			>
 				{{ message || t(notificationFailureKey(error)) }}
 			</div>
-			<div class="flex gap-3">
-				<UiButton type="button" appearance="solid" :disabled="loading || needsRefresh" @click="openAdd">{{
-					t('settings.notifications.addChannel')
-				}}</UiButton>
+			<div class="mb-4 flex flex-wrap gap-3">
 				<UiButton
-					v-if="needsRefresh || error || message"
+					v-if="!error && !message"
+					type="button"
+					appearance="solid"
+					:disabled="loading || needsRefresh"
+					@click="openAdd"
+					>{{ t('settings.notifications.addChannel') }}</UiButton
+				>
+				<UiButton
+					v-if="!loading && (needsRefresh || error || message)"
 					type="button"
 					:disabled="loading"
 					@click="load(true)"
 					>{{ t('settings.notifications.refresh') }}</UiButton
 				>
 			</div>
-			<UiSpinner v-if="loading && !items.length" class="mx-auto" />
+			<div v-if="loading && !items.length && !error" class="p-4 text-center text-text-secondary italic">
+				<UiSpinner class="mx-auto" />
+			</div>
 			<UiEmptyState
-				v-else-if="!items.length && !error"
+				v-else-if="!loading && !error && !items.length"
+				class="mb-4"
 				icon="fa-solid fa-bell-slash"
 				:description="t('settings.notifications.noChannels')"
 			/>
-			<div class="grid gap-4">
+			<div v-else-if="!loading && !error && items.length > 0" class="mt-4 grid gap-4">
 				<UiManagementCard
 					v-for="item in items"
 					:key="item.id"
@@ -180,7 +196,7 @@
 						</div>
 						<small class="mt-1 block break-words text-sm text-text-secondary">{{
 							item.events.length
-								? item.events.map(eventLabel).join(', ')
+								? t('settings.notifications.triggers') + ': ' + item.events.map(eventLabel).join(', ')
 								: t('settings.notifications.noEventsEnabled')
 						}}</small>
 					</div>
@@ -214,29 +230,68 @@
 					@save="save"
 				/>
 			</div>
-			<section class="space-y-3 border-t border-border pt-4">
-				<div class="flex items-center gap-3">
+			<section class="mt-6 border-t border-border pt-4">
+				<button
+					type="button"
+					class="flex w-full flex-wrap items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-header/50 focus-visible:ring-2 focus-visible:ring-primary"
+					:aria-expanded="deliveriesOpen"
+					aria-controls="notification-deliveries"
+					@click="deliveriesOpen = !deliveriesOpen"
+				>
+					<i
+						:class="[
+							'fas',
+							deliveriesOpen ? 'fa-chevron-down' : 'fa-chevron-right',
+							'w-3 text-xs text-text-secondary',
+						]"
+						aria-hidden="true"
+					/>
 					<h3 class="font-semibold">{{ t('settings.notifications.deliveries') }}</h3>
-					<UiButton type="button" :disabled="loading" @click="loadDeliveries(false)">{{
-						t('common.refresh')
-					}}</UiButton>
-				</div>
-				<p class="text-sm text-text-secondary">{{ t('settings.notifications.deliveryHint') }}</p>
-				<ul class="space-y-2">
-					<li
-						v-for="delivery in deliveries"
-						:key="delivery.id"
-						class="break-words rounded border border-border p-3 text-sm"
-						:data-delivery-id="delivery.id"
+					<span
+						v-if="unknownDeliveryCount"
+						class="rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning"
 					>
-						{{ eventLabel(delivery.event) }} ·
-						{{ t('settings.notifications.deliveryStatus.' + delivery.status) }} ·
-						{{ new Date(delivery.createdAt).toLocaleString() }}
-					</li>
-				</ul>
-				<UiButton v-if="nextOffset !== null" type="button" :disabled="loading" @click="loadDeliveries(true)">{{
-					t('settings.notifications.loadMore')
-				}}</UiButton>
+						{{ t('settings.notifications.unknownDeliveries', { count: unknownDeliveryCount }) }}
+					</span>
+					<span class="ml-auto text-xs text-text-secondary">
+						{{ t(deliveriesOpen ? 'common.collapse' : 'common.expand') }}
+					</span>
+				</button>
+				<div v-if="deliveriesOpen" id="notification-deliveries" class="mt-3 space-y-3 px-2">
+					<div class="flex flex-wrap items-start gap-3">
+						<p class="min-w-0 flex-1 text-sm text-text-secondary">
+							{{ t('settings.notifications.deliveryHint') }}
+						</p>
+						<UiButton type="button" density="compact" :disabled="loading" @click="loadDeliveries(false)">{{
+							t('common.refresh')
+						}}</UiButton>
+					</div>
+					<ul v-if="deliveries.length" class="space-y-2">
+						<li
+							v-for="delivery in deliveries"
+							:key="delivery.id"
+							class="break-words rounded border p-3 text-sm"
+							:class="
+								delivery.status === 'unknown'
+									? 'border-warning/30 bg-warning/[0.06] text-warning'
+									: 'border-border'
+							"
+							:data-delivery-id="delivery.id"
+						>
+							{{ eventLabel(delivery.event) }} ·
+							{{ t('settings.notifications.deliveryStatus.' + delivery.status) }} ·
+							{{ new Date(delivery.createdAt).toLocaleString() }}
+						</li>
+					</ul>
+					<p v-else class="text-sm text-text-secondary">{{ t('settings.notifications.noDeliveries') }}</p>
+					<UiButton
+						v-if="nextOffset !== null"
+						type="button"
+						:disabled="loading"
+						@click="loadDeliveries(true)"
+						>{{ t('settings.notifications.loadMore') }}</UiButton
+					>
+				</div>
 			</section>
 		</div>
 	</div>

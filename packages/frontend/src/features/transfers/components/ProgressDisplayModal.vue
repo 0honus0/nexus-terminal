@@ -414,18 +414,15 @@
 							<i class="fas fa-spinner fa-spin mb-2 text-2xl text-primary" aria-hidden="true"></i>
 							<div>{{ t('transferProgressModal.loading') }}</div>
 						</div>
-						<div v-if="serverTransfersError" class="rounded-md bg-red-50 p-4 text-center text-red-500">
+						<div v-else-if="serverTransfersError" class="rounded-md bg-red-50 p-4 text-center text-red-500">
 							<p class="font-semibold">{{ t('transferProgressModal.errorLoadingTitle') }}</p>
 							<p>{{ t('transferProgressModal.errorLoading', { error: t(serverTransfersError) }) }}</p>
 						</div>
-						<div
-							v-if="!serverTransfersLoading && !serverTransfers.length"
-							class="py-10 text-center text-text-secondary"
-						>
+						<div v-else-if="!serverTransfers.length" class="py-10 text-center text-text-secondary">
 							<i class="far fa-file-lines mb-2 text-4xl text-gray-400" aria-hidden="true"></i>
 							<div>{{ t('transferProgressModal.noTasks') }}</div>
 						</div>
-						<div v-if="serverTransfers.length" class="space-y-3">
+						<div v-else class="space-y-3">
 							<article
 								v-for="task in displayedServerTransfers"
 								:key="task.taskId"

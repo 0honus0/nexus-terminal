@@ -1,4 +1,5 @@
 import type { ThreadRecord } from './scope-storage.js';
+import type { AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
 
 export interface StoredThreadAccess {
 	kind: 'plugin' | 'session';
@@ -36,6 +37,20 @@ export type StoredThreadMutation =
 			now: number;
 	  };
 
+export interface StoredThreadRemoval {
+	threadId: string;
+	expectedVersion: number;
+}
+
+export interface StoredThreadRemovalFacts {
+	runStatuses: AgentRunStatus[];
+	maxMemoryVersion: number | null;
+}
+
+export interface StoredThreadRemovalDecision {
+	updatedAt: number;
+}
+
 export class ThreadStorageRefusal extends Error {
 	constructor(readonly code: 'not_found' | 'version_conflict' | 'idempotency_conflict') {
 		super(code);
@@ -59,5 +74,11 @@ export interface ThreadStorage {
 		input: StoredThreadMutation,
 		admit: (facts: StoredThreadAccessFacts) => void,
 		admitCapacity: (threads: number, commands: number) => void,
+	): Promise<ThreadRecord>;
+	remove(
+		access: StoredThreadAccess,
+		input: StoredThreadRemoval,
+		admit: (facts: StoredThreadAccessFacts) => void,
+		admitRemoval: (facts: StoredThreadRemovalFacts) => StoredThreadRemovalDecision,
 	): Promise<ThreadRecord>;
 }

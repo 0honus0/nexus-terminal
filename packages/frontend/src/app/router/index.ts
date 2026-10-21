@@ -56,11 +56,13 @@ const routes: RouteRecordRaw[] = [
 	{
 		path: '/login',
 		name: 'Login',
+		meta: { public: true },
 		component: loadLogin,
 	},
 	{
 		path: '/setup',
 		name: 'Setup',
+		meta: { public: true },
 		component: loadSetupView,
 	},
 	{ path: '/workspace', name: 'Workspace', component: loadWorkspacePage, meta: { keepAlive: true } },
@@ -126,7 +128,6 @@ export const createAppRouter = (pinia: Pinia) => {
 		routes,
 	});
 	const auth = createAuthNavigationFacade(pinia);
-	const publicRoutes = new Set(['Login', 'Setup']);
 
 	router.onError(async (error, to) => {
 		const reloadTarget = to.fullPath || window.location.pathname;
@@ -153,7 +154,7 @@ export const createAppRouter = (pinia: Pinia) => {
 		}
 
 		await auth.resolveSession();
-		const isPublic = publicRoutes.has(String(to.name));
+		const isPublic = to.meta.public === true;
 
 		if (!isPublic && !auth.authenticated) return { name: 'Login' };
 		if (to.name === 'Login' && auth.authenticated) return { name: 'Dashboard' };

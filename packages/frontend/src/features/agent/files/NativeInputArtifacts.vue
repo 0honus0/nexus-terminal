@@ -3,6 +3,7 @@
 	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import ArtifactPicker from './ArtifactPicker.vue';
+	import AgentConfigPopover from './AgentConfigPopover.vue';
 	import { attachManagedArtifact, getManagedArtifact } from '../api/artifact-management-api';
 	import { useAgentManagementOperation } from '../composables/use-agent-management-operation';
 	import { fromArtifact } from '../model/artifact-mapper';
@@ -10,7 +11,13 @@
 	import type { ManagedArtifact } from '../model/artifact-types';
 	import type { NativeArtifactReference } from '../model/native-input-types';
 
-	const props = defineProps<{ appId: string; threadId: string; active: boolean; disabled: boolean }>();
+	const props = defineProps<{
+		appId: string;
+		appNames?: Record<string, string>;
+		threadId: string;
+		active: boolean;
+		disabled: boolean;
+	}>();
 	const emit = defineEmits<{
 		ready: [value: boolean, references: NativeArtifactReference[]];
 		working: [value: boolean];
@@ -49,6 +56,14 @@
 	const operation = useAgentManagementOperation(revoke, () => props.active);
 
 	const locked = computed(() => props.disabled || operation.busy.value || unknown.value);
+	const needsAttention = computed(
+		() =>
+			unknown.value ||
+			(!prepared.value &&
+				items.value.length > 0 &&
+				((operation.notice.value !== '' && operation.notice.value !== 'saved') ||
+					operation.refreshRequired.value)),
+	);
 
 	watch(
 		() => items.value.map((item) => item.id + ':' + item.version).join('|'),
@@ -61,7 +76,11 @@
 		() => [prepared.value, items.value.length, unknown.value, props.active] as const,
 		() => {
 			const value = (prepared.value || items.value.length === 0) && !unknown.value;
-			emit('ready', value, value ? items.value.map((item) => ({ id: item.id, name: item.name })) : []);
+			emit(
+				'ready',
+				value,
+				items.value.map((item) => ({ id: item.id, name: item.name })),
+			);
 		},
 		{ immediate: true, flush: 'post' },
 	);
@@ -127,43 +146,105 @@
 		prepared.value = false;
 		emit('ready', items.value.length === 0, []);
 	}
+
+	function remove(value: ManagedArtifact): void {
+		if (locked.value || prepared.value) return;
+		items.value = items.value.filter((item) => item.id !== value.id);
+	}
+
+	function removeById(id: string): void {
+		const value = items.value.find((item) => item.id === id);
+		if (value) remove(value);
+	}
+
+	defineExpose({ removeById });
 </script>
 <template>
-	<div class="space-y-2 text-xs">
-		<ArtifactPicker v-model="items" :app-id="appId" :active="active" :disabled="locked" />
-		<div v-if="items.length" class="flex flex-wrap gap-2">
-			<span v-for="item in items" :key="item.id">{{ item.name }}</span
-			><button type="button" :disabled="locked" @click="items = []">
-				{{ t('agent.nativeRun.clearAttachments') }}
-			</button>
-		</div>
-		<button v-if="items.length" type="button" :disabled="disabled || operation.busy.value" @click="read">
-			{{ t('agent.nativeRun.readAttachments') }}
-		</button>
+	<div class="flex min-w-0 flex-1 items-center gap-1">
+		<ArtifactPicker
+			v-model="items"
+			:app-id="appId"
+			:app-names="appNames"
+			:active="active"
+			:disabled="locked"
+			compact
+		/>
 		<button
 			v-if="items.length && !prepared"
 			type="button"
+			class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-header hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+			:title="t('agent.nativeRun.bindAttachments')"
+			:aria-label="t('agent.nativeRun.bindAttachments')"
 			:disabled="locked || operation.refreshRequired.value"
 			@click="prepare"
 		>
-			{{ t('agent.nativeRun.bindAttachments') }}
+			<i
+				class="fa-solid text-[9px]"
+				:class="operation.busy.value ? 'fa-circle-notch fa-spin' : 'fa-paperclip'"
+				aria-hidden="true"
+			></i>
 		</button>
-		<p v-if="prepared">{{ t('agent.nativeRun.attachmentsReady') }}</p>
-		<p v-if="operation.notice.value" role="status">
-			{{ t('agent.settings.appManagement.' + operation.notice.value) }}
-		</p>
-		<template v-if="unknown"
-			><p>{{ t('agent.nativeRun.attachmentUnknown') }}</p>
-			<label><input v-model="acknowledged" type="checkbox" />{{ t('agent.nativeRun.acknowledge') }}</label
-			><button
-				type="button"
-				:disabled="
-					disabled || operation.busy.value || !inspected || !acknowledged || operation.refreshRequired.value
-				"
-				@click="newIntent"
-			>
-				{{ t('agent.nativeThreads.abandon') }}
-			</button></template
+		<span
+			v-if="prepared"
+			class="flex h-7 w-7 shrink-0 items-center justify-center text-success"
+			:title="t('agent.nativeRun.attachmentsReady')"
 		>
+			<i class="fa-solid fa-circle-check text-[10px]" aria-hidden="true"></i>
+		</span>
+		<AgentConfigPopover
+			v-if="needsAttention"
+			:ariaLabel="t('agent.nativeRun.attachmentUnknown')"
+			:title="t('agent.nativeRun.attachmentUnknown')"
+			align="right"
+			panel-class="w-72"
+			trigger-variant="square"
+			trigger-class="!text-warning"
+		>
+			<template #trigger>
+				<i class="fa-solid fa-triangle-exclamation text-[10px]" aria-hidden="true"></i>
+			</template>
+			<template #panel>
+				<div class="space-y-2 text-xs">
+					<p class="leading-4 text-warning">
+						{{
+							unknown
+								? t('agent.nativeRun.attachmentUnknown')
+								: t('agent.settings.appManagement.' + (operation.notice.value || 'refreshRequired'))
+						}}
+					</p>
+					<button
+						type="button"
+						class="h-7 rounded-lg border border-border/70 px-2.5 text-[11px] text-text-secondary hover:bg-header disabled:opacity-50"
+						:disabled="disabled || operation.busy.value"
+						@click="read"
+					>
+						{{ t('agent.nativeRun.inspect') }}
+					</button>
+					<template v-if="unknown">
+						<label class="flex items-start gap-2 leading-4 text-text-secondary">
+							<input v-model="acknowledged" type="checkbox" :disabled="operation.busy.value" />
+							<span>{{ t('agent.nativeRun.acknowledge') }}</span>
+						</label>
+						<button
+							type="button"
+							class="h-7 rounded-lg border border-border/70 px-2.5 text-[11px] text-text-secondary hover:bg-header disabled:opacity-50"
+							:disabled="
+								disabled ||
+								operation.busy.value ||
+								!inspected ||
+								!acknowledged ||
+								operation.refreshRequired.value
+							"
+							@click="newIntent"
+						>
+							{{ t('agent.nativeThreads.abandon') }}
+						</button>
+					</template>
+				</div>
+			</template>
+		</AgentConfigPopover>
+		<span v-if="operation.notice.value === 'saved' && !unknown" class="sr-only" role="status">
+			{{ t('agent.settings.appManagement.saved') }}
+		</span>
 	</div>
 </template>

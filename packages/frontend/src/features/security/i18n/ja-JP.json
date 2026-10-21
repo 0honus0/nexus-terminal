@@ -83,8 +83,7 @@
         "deleteFailedGeneral": "Passkey の削除に失敗しました。もう一度お試しください。",
         "fetchFailed": "パスキーの読み込みに失敗しました。",
         "nameUpdateFailed": "パスキー名の更新に失敗しました。",
-        "refreshAfterChange": "変更は確認済みですが一覧を更新できません。次の変更前に最新の一覧を読み込んでください。",
-        "discoveryFailed": "Passkey の利用可否を確認できませんでした。再試行してください。"
+        "refreshAfterChange": "変更は確認済みですが一覧を更新できません。次の変更前に最新の一覧を読み込んでください。"
       },
       "success": {
         "registered": "新しい Passkey が正常に登録されました！",

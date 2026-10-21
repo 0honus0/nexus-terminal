@@ -23,8 +23,6 @@ export function useLoginSecurity(): LoginSecurityController {
 	const captchaConfig = ref<LoginCaptchaConfig>(DEFAULT_CAPTCHA_CONFIG);
 	const captchaLoading = ref(true);
 	const captchaLoadError = ref(false);
-	const hasPasskeys = ref(false);
-	const passkeyLoadError = ref(false);
 	let refreshController: AbortController | null = null;
 	const loading = ref(false);
 	const auth = useAuthSession();
@@ -38,7 +36,7 @@ export function useLoginSecurity(): LoginSecurityController {
 		refreshController?.abort();
 	});
 
-	const refresh = async (username?: string): Promise<void> => {
+	const refresh = async (): Promise<void> => {
 		if (disposed) {
 			return;
 		}
@@ -46,7 +44,6 @@ export function useLoginSecurity(): LoginSecurityController {
 		refreshController?.abort();
 		refreshController = new AbortController();
 		const signal = refreshController.signal;
-		passkeyLoadError.value = false;
 		captchaLoading.value = true;
 		captchaLoadError.value = false;
 		const captcha = createAccessApi()
@@ -73,20 +70,7 @@ export function useLoginSecurity(): LoginSecurityController {
 					captchaLoading.value = false;
 				}
 			});
-		const passkeys = createAccessApi()
-			.passkeys.hasConfigured(username, signal)
-			.catch(() => {
-				if (current === generation) {
-					passkeyLoadError.value = true;
-				}
-				return null;
-			});
-		const [, passkeyAvailable] = await Promise.all([captcha, passkeys]);
-		if (current === generation) {
-			if (passkeyAvailable !== null) {
-				hasPasskeys.value = passkeyAvailable;
-			}
-		}
+		await captcha;
 	};
 
 	const loginWithPasskey = async (input: PasskeyLoginInput): Promise<void> => {
@@ -123,8 +107,6 @@ export function useLoginSecurity(): LoginSecurityController {
 			}
 			return 'ready';
 		}),
-		hasPasskeys: computed(() => hasPasskeys.value && !passkeyLoadError.value),
-		passkeyLoadError: computed(() => passkeyLoadError.value),
 		loading: computed(() => loading.value),
 		refresh,
 		loginWithPasskey,

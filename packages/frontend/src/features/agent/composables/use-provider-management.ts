@@ -149,6 +149,23 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 		}
 	}
 
+	async function setEnabled(provider: Provider, enabled: boolean): Promise<void> {
+		if (blocked.value || draft.value !== null || provider.enabled === enabled) {
+			return;
+		}
+		const input = createProviderDraft(provider);
+		input.enabled = enabled;
+		await perform(
+			(signal) => saveManagedProvider(input, signal),
+			(value) => {
+				providers.value = providers.value.map((item) => (item.id === value.id ? value : item));
+				notice.value = 'saved';
+				agentHostEvents.emit('configuration-changed', { origin: 'local' });
+			},
+			true,
+		);
+	}
+
 	async function remove(provider: Provider): Promise<void> {
 		if (draft.value !== null) {
 			return;
@@ -271,6 +288,7 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 		cancel,
 		load,
 		save,
+		setEnabled,
 		remove,
 		discover,
 		test,

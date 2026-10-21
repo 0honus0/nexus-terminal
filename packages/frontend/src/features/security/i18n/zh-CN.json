@@ -83,8 +83,7 @@
         "deleteFailedGeneral": "删除 Passkey 失败。请重试。",
         "fetchFailed": "加载通行密钥失败。",
         "nameUpdateFailed": "更新通行密钥名称失败。",
-        "refreshAfterChange": "变更已确认，但列表刷新失败。请先读取最新列表，再进行其他变更。",
-        "discoveryFailed": "无法确认 Passkey 是否可用，请重试查询。"
+        "refreshAfterChange": "变更已确认，但列表刷新失败。请先读取最新列表，再进行其他变更。"
       },
       "success": {
         "registered": "新的 Passkey 已成功注册！",

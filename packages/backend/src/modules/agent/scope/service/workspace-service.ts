@@ -135,6 +135,13 @@ export class WorkspaceService {
 						title: input.title,
 					}),
 				};
+			case 'agent.threads.delete': {
+				const value = await this.threads.remove(access, {
+					threadId: input.threadId,
+					expectedVersion: input.expectedVersion,
+				});
+				return { method: input.method, value: { appId: value.appId, threadId: value.id } };
+			}
 			case 'agent.runs.list':
 				return {
 					method: input.method,

@@ -9,6 +9,7 @@
 
 	const props = defineProps<{
 		appId: string;
+		appNames?: Record<string, string>;
 		active?: boolean;
 		modelValue: ManagedArtifact[];
 		disabled?: boolean;
@@ -21,6 +22,10 @@
 	const error = ref('');
 	const selectedIds = computed(() => new Set(props.modelValue.map((item) => item.id)));
 	const selectionLimit = 10;
+
+	function appName(item: ManagedArtifact): string {
+		return props.appNames?.[item.appId] ?? t('agent.files.unknownApp');
+	}
 
 	function select(item: ManagedArtifact): void {
 		if (props.disabled || selectedIds.value.has(item.id)) {
@@ -194,7 +199,7 @@
 							<span class="min-w-0 flex-1">
 								<span class="block truncate text-xs font-medium text-foreground">{{ item.name }}</span>
 								<span class="mt-0.5 block truncate text-[11px] text-text-secondary"
-									>{{ item.appId }} · {{ item.mediaType }}</span
+									>{{ appName(item) }} · {{ item.mediaType }}</span
 								>
 							</span>
 						</button>

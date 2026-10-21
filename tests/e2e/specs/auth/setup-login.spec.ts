@@ -3,6 +3,12 @@ import { expect, test } from '../../support/fixtures';
 import { E2E_ADMIN, setUiLanguage } from '../../support/auth';
 import { readPreferencesResponse } from '../../../../packages/shared/src/preferences/presentation/http-codec';
 
+type LoginTransitionSample = {
+	pathname: string;
+	header: boolean;
+	login: boolean;
+};
+
 test.describe('initial setup', () => {
 	test.use({ e2eDatabaseMode: 'empty' });
 	for (const { browserLocale, storedLocale, expectedLocale } of [
@@ -219,6 +225,31 @@ test('logs in, establishes a server session, and opens the dashboard', async ({ 
 
 	await page.locator('#username').fill(E2E_ADMIN.username);
 	await page.locator('#password').fill(E2E_ADMIN.password);
+	// Authentication state commits before this lazy route finishes loading.
+	await page.route(/\/pages\/dashboard\/DashboardPage\.vue(?:\?|$)/, async (route) => {
+		await new Promise((resolve) => setTimeout(resolve, 500));
+		await route.continue();
+	});
+	await page.evaluate(() => {
+		const samples: LoginTransitionSample[] = [];
+		const state = window as Window & {
+			__loginTransitionSamples?: LoginTransitionSample[];
+			__loginTransitionStopped?: boolean;
+		};
+		state.__loginTransitionSamples = samples;
+		state.__loginTransitionStopped = false;
+
+		const sample = () => {
+			samples.push({
+				pathname: location.pathname,
+				header: Boolean(document.querySelector('header.app-header')),
+				login: Boolean(document.querySelector('.auth-page')),
+			});
+			if (!state.__loginTransitionStopped) requestAnimationFrame(sample);
+		};
+
+		requestAnimationFrame(sample);
+	});
 
 	const loginResponsePromise = page.waitForResponse(
 		(response) => response.url().endsWith('/api/v1/auth/login') && response.request().method() === 'POST',
@@ -229,6 +260,20 @@ test('logs in, establishes a server session, and opens the dashboard', async ({ 
 	expect(loginResponse.status()).toBe(200);
 	await expect(page).toHaveURL(/\/$/);
 	await expect(page.getByRole('banner')).toBeVisible();
+	await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+	const transitionSamples = await page.evaluate(() => {
+		const state = window as Window & {
+			__loginTransitionSamples?: LoginTransitionSample[];
+			__loginTransitionStopped?: boolean;
+		};
+		state.__loginTransitionStopped = true;
+		return state.__loginTransitionSamples ?? [];
+	});
+	expect(
+		transitionSamples.some((sample) => sample.pathname === '/login' && sample.login && !sample.header),
+	).toBeTruthy();
+	expect(transitionSamples.filter((sample) => sample.header && sample.login)).toHaveLength(0);
+	expect(transitionSamples.some((sample) => sample.pathname === '/' && sample.header && !sample.login)).toBeTruthy();
 
 	const authStatus = await context.request.get('/api/v1/auth/status');
 	expect(authStatus.ok()).toBeTruthy();

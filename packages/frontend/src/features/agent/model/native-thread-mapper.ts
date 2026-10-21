@@ -1,6 +1,6 @@
 import type { AgentThreadView } from '@nexus-terminal/shared/agent/scope/model';
 import type { AgentWorkspaceRequest } from '@nexus-terminal/shared/agent/scope/workspace-http';
-import type { NativeThread, NativeThreadIntent } from './native-thread-types';
+import type { NativeThread, NativeThreadDeleteIntent, NativeThreadIntent } from './native-thread-types';
 
 export function fromNativeThread(value: AgentThreadView): NativeThread {
 	return {
@@ -30,6 +30,16 @@ export function toNativeThreadMutation(value: NativeThreadIntent): AgentWorkspac
 				operationId: value.operationId,
 				title: value.title,
 			},
+		},
+	};
+}
+
+export function toNativeThreadDeleteRequest(value: NativeThreadDeleteIntent): AgentWorkspaceRequest {
+	return {
+		appVersion: value.scope.appVersion,
+		request: {
+			method: 'agent.threads.delete',
+			params: { threadId: value.thread.id, expectedVersion: value.thread.version },
 		},
 	};
 }

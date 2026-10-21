@@ -46,6 +46,7 @@ function belongsToApp(result: AgentPluginFrontendResult, appId: string): boolean
 			return result.value.items.every((item) => item.appId === appId);
 		case 'agent.threads.create':
 		case 'agent.threads.rename':
+		case 'agent.threads.delete':
 		case 'agent.approvals.resolve':
 		case 'agent.threads.entries':
 			return result.value.appId === appId;
@@ -200,7 +201,7 @@ export async function connectNexusPlugin(): Promise<AgentPluginFrontendSdk> {
 				: normalized.method === 'intents.revoke'
 					? normalized.params.receiptId
 					: null;
-		const mutation = operationId !== null;
+		const mutation = operationId !== null || normalized.method === 'agent.threads.delete';
 		const id = crypto.randomUUID(),
 			seq = ++sequence;
 		const envelope: AgentPluginRpcEnvelope = {

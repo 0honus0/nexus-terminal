@@ -165,42 +165,49 @@
 
 			<hr class="border-border/50" />
 
-			<form
-				class="space-y-4"
-				@submit.prevent="
-					savePatch('logging', {
-						frontendLogLevel: form.frontendLogLevel,
-					})
-				"
-			>
+			<section class="space-y-4">
 				<h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.logging.title') }}</h3>
 				<div class="grid gap-4 md:grid-cols-2">
-					<UiFormField :label="t('settings.logging.frontendLabel')" for-id="frontendLogLevelSelect">
-						<UiSelect
-							id="frontendLogLevelSelect"
-							v-model="form.frontendLogLevel"
-							:disabled="savingSection !== null"
-						>
-							<option v-for="level in LOG_LEVELS" :key="level" :value="level">
-								{{ level.toUpperCase() }}
-							</option>
-						</UiSelect>
-					</UiFormField>
+					<form
+						class="space-y-4"
+						@submit.prevent="
+							savePatch('logging', {
+								frontendLogLevel: form.frontendLogLevel,
+							})
+						"
+					>
+						<UiFormField :label="t('settings.logging.frontendLabel')" for-id="frontendLogLevelSelect">
+							<UiSelect
+								id="frontendLogLevelSelect"
+								v-model="form.frontendLogLevel"
+								:disabled="savingSection !== null"
+							>
+								<option v-for="level in LOG_LEVELS" :key="level" :value="level">
+									{{ level.toUpperCase() }}
+								</option>
+							</UiSelect>
+						</UiFormField>
+						<div class="flex flex-wrap items-center justify-between gap-3">
+							<UiButton
+								type="submit"
+								appearance="solid"
+								tone="primary"
+								:loading="savingSection === 'logging'"
+								>{{ t('common.save') }}</UiButton
+							>
+							<p
+								v-if="sectionMessages.logging?.text"
+								class="text-sm"
+								:class="sectionMessages.logging.success ? 'text-success' : 'text-error'"
+							>
+								{{ sectionMessages.logging.text }}
+							</p>
+						</div>
+					</form>
+					<BackendLoggingPanel />
 				</div>
 				<p class="text-xs text-text-secondary">{{ t('settings.logging.description') }}</p>
-				<div class="flex flex-wrap items-center justify-between gap-3">
-					<UiButton type="submit" appearance="solid" tone="primary" :loading="savingSection === 'logging'">{{
-						t('common.save')
-					}}</UiButton>
-					<p
-						v-if="sectionMessages.logging?.text"
-						class="text-sm"
-						:class="sectionMessages.logging.success ? 'text-success' : 'text-error'"
-					>
-						{{ sectionMessages.logging.text }}
-					</p>
-				</div>
-			</form>
+			</section>
 		</fieldset>
 		<fieldset v-else :disabled="needsRefresh || editor.saving.value" class="space-y-6 p-6">
 			<p v-if="loadError" class="rounded border border-error/40 bg-error/5 p-3 text-sm text-error">
@@ -1042,6 +1049,5 @@
 				</form>
 			</section>
 		</fieldset>
-		<BackendLoggingPanel v-if="props.section === 'system'" class="p-6" />
 	</section>
 </template>

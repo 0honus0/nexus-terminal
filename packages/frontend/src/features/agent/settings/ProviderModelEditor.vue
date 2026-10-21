@@ -67,8 +67,8 @@
 				@change="setProtocol"
 			>
 				<option value="inherit">{{ t('agent.settings.providerManagement.inherit') }}</option>
-				<option value="chat-completions">Chat Completions</option>
-				<option value="responses">Responses</option>
+				<option value="chat-completions">{{ t('agent.settings.providers.protocolChat') }}</option>
+				<option value="responses">{{ t('agent.settings.providers.protocolResponses') }}</option>
 			</select>
 		</label>
 		<label v-for="field in ['contextWindow', 'maxOutputTokens'] as const" :key="field" class="space-y-1 text-sm">
@@ -104,7 +104,7 @@
 						type="checkbox"
 						:checked="model.reasoningEfforts?.includes(effort) ?? false"
 						@change="toggleEffort(effort)"
-					/>{{ effort }}
+					/>{{ t('agent.ui.reasoningLevels.' + effort) }}
 				</label>
 			</div>
 			<label class="block"
@@ -115,7 +115,9 @@
 					@change="setDefaultEffort"
 				>
 					<option value="">{{ t('agent.settings.providers.reasoningNoDefault') }}</option>
-					<option v-for="effort in model.reasoningEfforts" :key="effort" :value="effort">{{ effort }}</option>
+					<option v-for="effort in model.reasoningEfforts" :key="effort" :value="effort">
+						{{ t('agent.ui.reasoningLevels.' + effort) }}
+					</option>
 				</select>
 			</label>
 		</fieldset>

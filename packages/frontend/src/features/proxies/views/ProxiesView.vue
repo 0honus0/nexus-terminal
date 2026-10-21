@@ -24,13 +24,13 @@
 			</UiButton>
 
 			<UiButton
-				v-if="message || data.needsRefresh.value"
+				v-if="!loading && (message || data.needsRefresh.value)"
 				class="mb-4 ml-2"
 				:disabled="loading || data.busy.value"
 				@click="refresh"
 				>{{ t('proxies.refresh') }}</UiButton
 			>
-			<p v-if="data.needsRefresh.value" class="mb-3 text-text-secondary">
+			<p v-if="!loading && data.needsRefresh.value && !message" class="mb-3 text-text-secondary">
 				{{ t('proxies.failures.recovery_required') }}
 			</p>
 			<!-- A failed mutation must not unmount the last confirmed proxy list:

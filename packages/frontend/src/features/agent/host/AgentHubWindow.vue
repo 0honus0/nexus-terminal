@@ -550,6 +550,10 @@
 		return list.length > 0 ? list : enabledApps.value;
 	});
 
+	const appNames = computed<Record<string, string>>(() =>
+		Object.fromEntries(props.directory.apps.map((app) => [app.id, app.displayName])),
+	);
+
 	const switchApp = (appId: string) => {
 		if (!appId) return;
 		if (!openAppIds.value.includes(appId)) {
@@ -879,6 +883,7 @@
 					:app-id="resident.appId"
 					:active="visible && state.hubView !== 'files' && state.activeAppId === resident.appId"
 					:app-version="resident.version"
+					:app-names="appNames"
 					:execution-enabled="directory.executionEnabled"
 				/>
 				<PluginAppFrame

@@ -30,17 +30,6 @@
 		@close="visible = false"
 	>
 		<div class="flex max-h-[68vh] min-h-0 flex-col">
-			<p v-if="message" role="alert" class="mb-3 break-words text-error">{{ message }}</p>
-			<p v-if="keys.needsRefresh.value" class="mb-3 text-text-secondary">
-				{{ t('sshKeys.failures.recovery_required') }}
-			</p>
-			<UiButton
-				v-if="message || keys.needsRefresh.value"
-				class="mb-3"
-				:disabled="loading || keys.busy.value"
-				@click="refresh"
-				>{{ t('sshKeys.refresh') }}</UiButton
-			>
 			<template v-if="!showForm">
 				<h3 class="mb-4 shrink-0 text-center text-xl font-semibold">{{ t('sshKeys.modal.title') }}</h3>
 				<div class="mb-4 flex shrink-0 justify-end">
@@ -52,6 +41,22 @@
 						><template #leading><i class="fas fa-plus !text-white" aria-hidden="true" /></template
 						>{{ t('sshKeys.modal.addKey') }}</UiButton
 					>
+				</div>
+				<p
+					v-if="message"
+					role="alert"
+					class="mb-3 shrink-0 break-words rounded-md border border-error/30 bg-error/10 p-3 text-sm font-medium text-error"
+				>
+					{{ message }}
+				</p>
+				<div
+					v-if="keys.needsRefresh.value"
+					class="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-md border border-warning/30 bg-warning/5 p-3 text-sm text-warning"
+				>
+					<p>{{ t('sshKeys.failures.recovery_required') }}</p>
+					<UiButton :disabled="loading || keys.busy.value" @click="refresh">{{
+						t('sshKeys.refresh')
+					}}</UiButton>
 				</div>
 				<div class="max-h-[50vh] flex-grow overflow-y-auto rounded-md border border-border">
 					<table class="w-full table-fixed divide-y divide-border">
@@ -118,6 +123,16 @@
 				<h3 class="mb-6 shrink-0 text-center text-xl font-semibold">
 					{{ editing ? t('sshKeys.modal.editTitle') : t('sshKeys.modal.addTitle') }}
 				</h3>
+				<p v-if="message" role="alert" class="mb-3 shrink-0 break-words text-sm text-error">{{ message }}</p>
+				<div
+					v-if="keys.needsRefresh.value"
+					class="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-md border border-warning/30 bg-warning/5 p-3 text-sm text-warning"
+				>
+					<p>{{ t('sshKeys.failures.recovery_required') }}</p>
+					<UiButton :disabled="loading || keys.busy.value" @click="refresh">{{
+						t('sshKeys.refresh')
+					}}</UiButton>
+				</div>
 				<form class="flex-grow overflow-y-auto pr-2" @submit.prevent="submit">
 					<fieldset class="space-y-4" :disabled="loading || keys.busy.value || keys.needsRefresh.value">
 						<UiFormField :label="t('sshKeys.modal.keyName')"

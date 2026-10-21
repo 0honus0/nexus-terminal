@@ -33,6 +33,8 @@
       "changeNotes": "修改备注",
       "leaveBlankNoChange": "留空表示不修改",
       "noChanges": "未选择任何修改内容。",
+      "saveMetadata": "保存连接配置",
+      "saveCredential": "更新凭据",
       "partialDeleteMessage": "批量删除：{successCount} 个成功，{errorCount} 个失败。失败项将保持选中。",
       "partialUpdateMessage": "批量更新：{successCount} 个成功，{errorCount} 个失败。失败项将保持选中。",
       "updateSuccessMessage": "已成功更新选中的 {count} 个连接。"
@@ -214,8 +216,14 @@
     "partialCreation": "已确认创建 {count} 项。",
     "importRefused": "{count} 项被拒绝，请核对结果后重新制定批次。",
     "completed": "已完成 {count} 项操作。",
+    "moreActions": "更多操作",
     "importTitle": "导入连接",
     "exportTitle": "导出配置",
+    "selectFile": "选择 JSON 文件",
+    "fileHint": "选择由本应用导出的连接配置。",
+    "fileLoaded": "已读取 {name}",
+    "pasteJson": "粘贴 JSON",
+    "failedItems": "以下项目未能导入：",
     "failures": {
       "failed": "操作失败，请稍后重试。",
       "unknown": "结果未知，可能已经保存。请先刷新并核对，勿重复提交。",

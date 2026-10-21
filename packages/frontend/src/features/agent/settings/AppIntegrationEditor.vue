@@ -278,9 +278,11 @@
 							class="mt-1 w-full rounded border border-border bg-background p-2"
 						>
 							<option :value="0">{{ t('agent.settings.integrationManagement.chooseConnection') }}</option>
-							<option v-if="missingTarget" :value="draft.connectionId">#{{ draft.connectionId }}</option>
+							<option v-if="missingTarget" :value="draft.connectionId">
+								{{ t('agent.settings.integrationManagement.unavailableConnection') }}
+							</option>
 							<option v-for="target in sshTargets" :key="target.id" :value="target.id">
-								{{ target.name }} · #{{ target.id }}
+								{{ target.name }} · {{ target.host }}
 							</option>
 						</select></label
 					>

@@ -6,7 +6,14 @@ import type { ThreadStorage, StoredThreadAccessFacts } from '../storage/thread-s
 import { ThreadStorageRefusal } from '../storage/thread-storage.js';
 import { fromThreadRecord } from './thread-mapper.js';
 import type { AgentThread } from './scope-types.js';
-import type { ThreadAccess, ThreadMutation, ThreadAccessFacts } from './thread-types.js';
+import type {
+	ThreadAccess,
+	ThreadMutation,
+	ThreadAccessFacts,
+	ThreadRemoval,
+	ThreadRemovalFacts,
+	ThreadRemovalDecision,
+} from './thread-types.js';
 
 function fromAccessFacts(value: StoredThreadAccessFacts): ThreadAccessFacts {
 	if (value.kind === 'session') {
@@ -123,6 +130,44 @@ export class ThreadModel {
 							},
 					(facts) => admit(fromAccessFacts(facts)),
 					admitCapacity,
+				);
+			} catch (error) {
+				if (error instanceof ThreadStorageRefusal) {
+					throw new AgentFailure(error.code);
+				}
+				throw error;
+			}
+		});
+		return fromThreadRecord(value);
+	}
+
+	async remove(
+		access: ThreadAccess,
+		input: ThreadRemoval,
+		admitRemoval: (facts: ThreadRemovalFacts) => ThreadRemovalDecision,
+		admit: (facts: ThreadAccessFacts) => void,
+	): Promise<AgentThread> {
+		const value = await agentStorage(async () => {
+			try {
+				return await this.storage.remove(
+					{
+						kind: access.kind,
+						userId: access.userId,
+						appId: access.appId,
+						digest: this.tokens.digest(access.token),
+					},
+					{
+						threadId: input.threadId,
+						expectedVersion: input.expectedVersion,
+					},
+					(facts) => admit(fromAccessFacts(facts)),
+					(facts) => {
+						const decision = admitRemoval({
+							runStatuses: [...facts.runStatuses],
+							maxMemoryVersion: facts.maxMemoryVersion,
+						});
+						return { updatedAt: decision.updatedAt };
+					},
 				);
 			} catch (error) {
 				if (error instanceof ThreadStorageRefusal) {

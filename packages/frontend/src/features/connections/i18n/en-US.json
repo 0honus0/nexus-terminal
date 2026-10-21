@@ -33,6 +33,8 @@
       "changeNotes": "Change notes",
       "leaveBlankNoChange": "Leave blank for no change",
       "noChanges": "No changes selected.",
+      "saveMetadata": "Save connection settings",
+      "saveCredential": "Update credentials",
       "partialDeleteMessage": "Batch delete: {successCount} succeeded, {errorCount} failed. Failed items remain selected.",
       "partialUpdateMessage": "Batch update: {successCount} succeeded, {errorCount} failed. Failed items remain selected.",
       "updateSuccessMessage": "Updated {count} selected connections successfully."
@@ -214,8 +216,14 @@
     "partialCreation": "Confirmed {count} creations.",
     "importRefused": "{count} items were refused. Review the results before creating a new batch.",
     "completed": "Completed {count} operations.",
+    "moreActions": "More actions",
     "importTitle": "Import connections",
     "exportTitle": "Export configuration",
+    "selectFile": "Choose JSON file",
+    "fileHint": "Choose a connection configuration exported from this app.",
+    "fileLoaded": "Loaded {name}",
+    "pasteJson": "Paste JSON",
+    "failedItems": "These items could not be imported:",
     "failures": {
       "failed": "The operation failed. Please try again later.",
       "unknown": "The result is unknown and may already be saved. Refresh and review before submitting again.",

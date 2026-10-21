@@ -175,13 +175,18 @@ export function useConnectionManagement() {
 		batchModal.value = false;
 	}
 
-	function removeMany(items: readonly ConnectionSummary[]): Promise<void> {
+	function removeMany(items: readonly ConnectionSummary[], confirmMessage?: string): Promise<void> {
 		return execute(async (signal) => {
+			const message =
+				confirmMessage ??
+				(items.length === 1 && items[0]
+					? t('connections.prompts.confirmDelete', { name: items[0].name || items[0].host })
+					: t('connections.batchEdit.confirmMessage', { count: items.length }));
 			if (
 				!items.length ||
 				!(await feedback.confirm({
 					signal,
-					message: t('connections.batchEdit.confirmMessage', { count: items.length }),
+					message,
 					destructive: true,
 				}))
 			) {

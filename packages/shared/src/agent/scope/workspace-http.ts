@@ -16,6 +16,11 @@ export interface AgentSelectableModel {
 	protocol: AgentProviderProtocol;
 }
 
+export interface AgentDeleteThreadResponse {
+	appId: string;
+	threadId: string;
+}
+
 export type AgentWorkspaceInput =
 	| {
 			method: 'agent.runs.appendInput';
@@ -45,6 +50,7 @@ export type AgentWorkspaceInput =
 			method: 'agent.threads.rename';
 			params: { threadId: string; expectedVersion: number; operationId: string; title: string };
 	  }
+	| { method: 'agent.threads.delete'; params: { threadId: string; expectedVersion: number } }
 	| { method: 'agent.runs.list'; params: { threadId: string; after: number; limit: number } }
 	| { method: 'agent.runs.get'; params: { runId: string } }
 	| { method: 'agent.runs.events'; params: { runId: string; after: number; limit: number } }
@@ -60,6 +66,7 @@ export type AgentWorkspaceResult =
 	| { method: 'agent.providers.list'; value: AgentSelectableModel[] }
 	| { method: 'agent.threads.list'; value: { items: AgentThreadView[]; nextCursor: string | null } }
 	| { method: 'agent.threads.create' | 'agent.threads.rename'; value: AgentThreadView }
+	| { method: 'agent.threads.delete'; value: AgentDeleteThreadResponse }
 	| { method: 'agent.runs.list'; value: { threadId: string; items: AgentRunView[]; nextCursor: number } }
 	| { method: 'agent.runs.get'; value: AgentRunView | null }
 	| { method: 'agent.runs.events'; value: AgentRunEventsResponse }

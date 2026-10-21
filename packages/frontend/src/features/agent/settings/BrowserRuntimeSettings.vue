@@ -11,17 +11,25 @@
 	import { useAgentManagementOperation } from '../composables/use-agent-management-operation';
 	import type { BrowserConfiguration, BrowserTargetDraft, BrowserEndpointDraft } from '../model/browser-types';
 
+	interface EndpointEditor {
+		targetIndex: number;
+		endpointIndex: number | null;
+		draft: BrowserEndpointDraft;
+	}
+
 	const props = withDefaults(defineProps<{ active?: boolean }>(), { active: true });
 	const { t } = useI18n();
 	const version = ref<number | null>(null);
 	const targets = ref<BrowserTargetDraft[]>([]);
 	const targetDraft = ref<BrowserTargetDraft | null>(null);
+	const endpointEditor = ref<EndpointEditor | null>(null);
 	const editingIndex = ref<number | null>(null);
 	const operation = useAgentManagementOperation(
 		() => {
 			version.value = null;
 			targets.value = [];
 			targetDraft.value = null;
+			endpointEditor.value = null;
 			editingIndex.value = null;
 		},
 		() => props.active,
@@ -52,14 +60,15 @@
 		await operation.execute(getBrowserConfiguration, accept, { write: false });
 	}
 
-	async function persist(next: BrowserTargetDraft[]): Promise<void> {
+	async function persist(next: BrowserTargetDraft[]): Promise<boolean> {
 		if (blocked.value || version.value === null) {
-			return;
+			return false;
 		}
 		const expectedVersion = version.value;
 		await operation.execute((signal) => saveBrowserConfiguration(expectedVersion, next, signal), accept, {
 			write: true,
 		});
+		return version.value !== expectedVersion;
 	}
 
 	function newEndpoint(): BrowserEndpointDraft {
@@ -93,6 +102,13 @@
 		editingIndex.value = index;
 	}
 
+	function targetPatterns(target: BrowserTargetDraft): string[] {
+		return target.patternsText
+			.split(/\r?\n/u)
+			.map((pattern) => pattern.trim())
+			.filter((pattern) => pattern !== '');
+	}
+
 	function closeEditor(): void {
 		if (!operation.busy.value) {
 			targetDraft.value = null;
@@ -114,8 +130,59 @@
 		await persist(next);
 	}
 
-	function removeTarget(index: number): Promise<void> {
-		return persist(targets.value.filter((_, position) => position !== index).map(copyTarget));
+	async function removeTarget(index: number): Promise<void> {
+		await persist(targets.value.filter((_, position) => position !== index).map(copyTarget));
+	}
+
+	async function removeEndpoint(targetIndex: number, endpointIndex: number): Promise<void> {
+		const next = targets.value.map(copyTarget);
+		next[targetIndex]?.endpoints.splice(endpointIndex, 1);
+		await persist(next);
+	}
+
+	function openEndpointEditor(targetIndex: number, endpointIndex: number | null = null): void {
+		if (blocked.value) return;
+		const target = targets.value[targetIndex];
+		if (!target) return;
+		if (endpointIndex === null && target.endpoints.length >= AGENT_BROWSER_MAX_ENDPOINTS) return;
+		const endpoint = endpointIndex === null ? newEndpoint() : target.endpoints[endpointIndex];
+		if (!endpoint) return;
+		endpointEditor.value = {
+			targetIndex,
+			endpointIndex,
+			draft: {
+				url: endpoint.url,
+				priority: endpoint.priority,
+				allowPlaintext: endpoint.allowPlaintext,
+				verifyTls: endpoint.verifyTls,
+			},
+		};
+	}
+
+	function closeEndpointEditor(): void {
+		if (!operation.busy.value) endpointEditor.value = null;
+	}
+
+	async function saveEndpoint(): Promise<void> {
+		const editor = endpointEditor.value;
+		if (!editor) return;
+		const target = targets.value[editor.targetIndex];
+		if (!target) return;
+		const next = targets.value.map(copyTarget);
+		const nextTarget = next[editor.targetIndex];
+		if (!nextTarget) return;
+		const draft = {
+			url: editor.draft.url,
+			priority: editor.draft.priority,
+			allowPlaintext: editor.draft.allowPlaintext,
+			verifyTls: editor.draft.verifyTls,
+		};
+		if (editor.endpointIndex === null) {
+			nextTarget.endpoints.push(draft);
+		} else {
+			nextTarget.endpoints[editor.endpointIndex] = draft;
+		}
+		if (await persist(next)) endpointEditor.value = null;
 	}
 
 	function initial(): void {
@@ -182,43 +249,207 @@
 				<div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
 					<div class="flex min-w-0 flex-1 items-start gap-3 sm:items-center">
 						<div
-							class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/25 bg-primary/10 text-primary shadow-2xs"
+							class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/25 bg-gradient-to-br from-primary/15 via-primary/10 to-primary/5 text-primary shadow-2xs"
 						>
 							<i class="fa-solid fa-globe text-sm" aria-hidden="true"></i>
 						</div>
 						<div class="min-w-0 flex-1 space-y-1.5">
-							<span
-								class="inline-flex rounded-xl border border-border/90 bg-background/90 px-3 py-1 text-sm font-bold tracking-tight text-foreground shadow-2xs"
-								>{{ target.id }}</span
-							>
-							<p class="break-words text-xs text-text-secondary">{{ target.patternsText }}</p>
-							<p
-								v-for="endpoint in target.endpoints"
-								:key="endpoint.url"
-								class="break-all font-mono text-xs text-text-secondary"
-							>
-								{{ endpoint.url }}
-							</p>
+							<div class="flex flex-wrap items-center gap-2">
+								<span
+									class="inline-flex rounded-xl border border-border/90 bg-background/90 px-3 py-1 text-sm font-bold tracking-tight text-foreground shadow-2xs sm:text-base"
+									>{{ target.id }}</span
+								>
+								<span
+									class="inline-flex items-center gap-1 rounded-full border border-border/70 bg-header/50 px-2.5 py-0.5 font-mono text-[11px] text-text-secondary"
+									><i
+										class="fa-solid fa-network-wired text-[9px] text-text-secondary/60"
+										aria-hidden="true"
+									></i>
+									{{ target.endpoints.length }}
+									{{ t('agent.settings.browserRuntime.endpoints') }}</span
+								>
+							</div>
+							<div class="flex flex-wrap items-center gap-1.5 text-xs text-text-secondary">
+								<span class="text-[11px] text-text-secondary/70">{{
+									t('agent.settings.browserRuntime.allowedUrls')
+								}}</span>
+								<span
+									v-for="pattern in targetPatterns(target).slice(0, 3)"
+									:key="pattern"
+									class="max-w-[200px] truncate rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 font-mono text-[11px] text-text-secondary"
+									>{{ pattern }}</span
+								>
+								<span
+									v-if="targetPatterns(target).length > 3"
+									class="font-mono text-[11px] text-text-secondary/60"
+									>+{{ targetPatterns(target).length - 3 }}</span
+								>
+							</div>
 						</div>
 					</div>
-					<div class="flex shrink-0 justify-end gap-1.5">
-						<UiButton type="button" appearance="soft" :disabled="blocked" @click="openTarget(index)"
-							><i class="fa-solid fa-pen text-xs" aria-hidden="true"></i>{{ t('common.edit') }}</UiButton
+					<div
+						class="flex shrink-0 items-center justify-end gap-1.5 border-t border-border/30 pt-2 sm:border-0 sm:pt-0"
+					>
+						<UiButton
+							type="button"
+							appearance="soft"
+							tone="neutral"
+							density="compact"
+							:disabled="blocked || target.endpoints.length >= AGENT_BROWSER_MAX_ENDPOINTS"
+							@click="openEndpointEditor(index)"
+							><i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
+							{{ t('agent.settings.browserRuntime.addEndpoint') }}</UiButton
 						>
 						<UiButton
 							type="button"
-							appearance="ghost"
-							tone="danger"
+							appearance="soft"
+							tone="neutral"
+							density="compact"
+							icon-only
 							:disabled="blocked"
+							:title="t('common.edit')"
+							:aria-label="t('common.edit')"
+							@click="openTarget(index)"
+							><i class="fa-solid fa-pen text-xs" aria-hidden="true"></i
+						></UiButton>
+						<UiButton
+							type="button"
+							appearance="soft"
+							tone="danger"
+							density="compact"
+							icon-only
+							:disabled="blocked"
+							:title="t('agent.settings.browserRuntime.remove')"
+							:aria-label="t('agent.settings.browserRuntime.remove')"
 							@click="removeTarget(index)"
 							><i class="fa-regular fa-trash-can text-xs" aria-hidden="true"></i
-							>{{ t('common.delete') }}</UiButton
-						>
+						></UiButton>
+					</div>
+				</div>
+				<div v-if="target.endpoints.length" class="space-y-2 border-t border-border/40 pt-2.5">
+					<div
+						v-for="(endpoint, endpointIndex) in target.endpoints"
+						:key="endpointIndex"
+						class="flex flex-col justify-between gap-2.5 rounded-xl border border-border/60 bg-header/20 p-2.5 text-xs transition-all hover:bg-header/35 sm:flex-row sm:items-center"
+					>
+						<div class="flex min-w-0 flex-1 items-center gap-2">
+							<i
+								class="fa-solid fa-link shrink-0 text-[10px] text-text-secondary/60"
+								aria-hidden="true"
+							></i>
+							<span class="max-w-[280px] truncate font-mono text-xs text-foreground sm:max-w-[360px]">{{
+								endpoint.url
+							}}</span>
+							<span
+								class="shrink-0 rounded-md border border-border/70 bg-card px-1.5 py-0.5 font-mono text-[10px] text-text-secondary"
+								>P{{ endpoint.priority }}</span
+							>
+						</div>
+						<div class="flex shrink-0 items-center justify-end gap-2">
+							<span v-if="endpoint.allowPlaintext" class="text-[10px] text-text-secondary/80"
+								>HTTP/WS</span
+							>
+							<span v-if="endpoint.verifyTls" class="text-[10px] text-success">TLS</span>
+							<UiButton
+								type="button"
+								appearance="ghost"
+								tone="neutral"
+								density="compact"
+								icon-only
+								:disabled="blocked"
+								:title="t('common.edit')"
+								:aria-label="t('common.edit')"
+								@click="openEndpointEditor(index, endpointIndex)"
+								><i class="fa-solid fa-pen text-xs" aria-hidden="true"></i
+							></UiButton>
+							<UiButton
+								type="button"
+								appearance="ghost"
+								tone="danger"
+								density="compact"
+								icon-only
+								:disabled="blocked"
+								:title="t('agent.settings.browserRuntime.removeEndpoint')"
+								:aria-label="t('agent.settings.browserRuntime.removeEndpoint')"
+								@click="removeEndpoint(index, endpointIndex)"
+								><i class="fa-solid fa-xmark text-xs" aria-hidden="true"></i
+							></UiButton>
+						</div>
 					</div>
 				</div>
 			</article>
+			<button
+				type="button"
+				:disabled="blocked || targets.length >= AGENT_BROWSER_MAX_TARGETS"
+				class="group flex w-full cursor-pointer select-none items-center justify-center gap-2 rounded-xl border border-dashed border-border/80 bg-header/10 py-2.5 text-xs text-text-secondary transition-colors duration-200 hover:border-border-hover hover:bg-header/25 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+				@click="openTarget(null)"
+			>
+				<i
+					class="fa-solid fa-plus text-[10px] text-text-secondary/70 transition-colors group-hover:text-foreground"
+					aria-hidden="true"
+				></i>
+				<span class="font-medium">{{ t('agent.settings.browserRuntime.addTarget') }}</span>
+			</button>
 		</div>
 	</section>
+	<UiModal
+		:visible="endpointEditor !== null"
+		:title="
+			t(
+				endpointEditor?.endpointIndex === null
+					? 'agent.settings.browserRuntime.addEndpoint'
+					: 'agent.settings.browserRuntime.editEndpoint',
+			)
+		"
+		panel-class="w-[min(560px,94vw)]"
+		:close-on-backdrop="!operation.busy.value"
+		:close-on-escape="!operation.busy.value"
+		@close="closeEndpointEditor"
+	>
+		<form v-if="endpointEditor" id="browser-endpoint-editor" class="space-y-4" @submit.prevent="saveEndpoint">
+			<p v-if="operation.notice.value" role="status" class="text-sm">
+				{{ t('agent.settings.appManagement.' + operation.notice.value) }}
+			</p>
+			<fieldset :disabled="blocked" class="space-y-4">
+				<label class="block space-y-1 text-sm">
+					<span>{{ t('agent.settings.browserRuntime.url') }}</span>
+					<UiInput v-model="endpointEditor.draft.url" required />
+				</label>
+				<label class="block space-y-1 text-sm">
+					<span>{{ t('agent.settings.browserRuntime.priority') }}</span>
+					<input
+						v-model.number="endpointEditor.draft.priority"
+						type="number"
+						min="0"
+						:max="AGENT_BROWSER_MAX_PRIORITY"
+						step="1"
+						class="w-full rounded border border-border bg-background p-2"
+					/>
+				</label>
+				<UiCheckbox v-model="endpointEditor.draft.allowPlaintext">{{
+					t('agent.settings.browserRuntime.allowPlaintext')
+				}}</UiCheckbox>
+				<UiCheckbox v-model="endpointEditor.draft.verifyTls">{{
+					t('agent.settings.browserRuntime.verifyTls')
+				}}</UiCheckbox>
+			</fieldset>
+		</form>
+		<template #footer>
+			<div class="flex justify-end gap-2">
+				<UiButton type="button" :disabled="operation.busy.value" @click="closeEndpointEditor">{{
+					t('common.cancel')
+				}}</UiButton>
+				<UiButton
+					type="submit"
+					form="browser-endpoint-editor"
+					appearance="solid"
+					tone="primary"
+					:disabled="blocked"
+					>{{ t('common.save') }}</UiButton
+				>
+			</div>
+		</template>
+	</UiModal>
 	<UiModal
 		:visible="targetDraft !== null"
 		:title="t(editingIndex === null ? 'agent.settings.browserRuntime.addTarget' : 'common.edit')"
@@ -247,46 +478,6 @@
 					><span>{{ t('agent.settings.browserRuntime.allowedUrls') }}</span
 					><UiTextarea v-model="targetDraft.patternsText" :min-rows="3"
 				/></label>
-				<div
-					v-for="(endpoint, index) in targetDraft.endpoints"
-					:key="index"
-					class="space-y-3 rounded-xl border border-border bg-header/20 p-3"
-				>
-					<label class="block space-y-1 text-sm"
-						><span>{{ t('agent.settings.browserRuntime.url') }}</span
-						><UiInput v-model="endpoint.url" required
-					/></label>
-					<label class="block space-y-1 text-sm"
-						><span>{{ t('agent.settings.browserRuntime.priority') }}</span
-						><input
-							v-model.number="endpoint.priority"
-							type="number"
-							min="0"
-							:max="AGENT_BROWSER_MAX_PRIORITY"
-							step="1"
-							class="w-full rounded border border-border bg-background p-2"
-					/></label>
-					<UiCheckbox v-model="endpoint.allowPlaintext">{{
-						t('agent.settings.browserRuntime.allowPlaintext')
-					}}</UiCheckbox>
-					<UiCheckbox v-model="endpoint.verifyTls">{{
-						t('agent.settings.browserRuntime.verifyTls')
-					}}</UiCheckbox>
-					<UiButton
-						type="button"
-						appearance="ghost"
-						tone="danger"
-						:disabled="targetDraft.endpoints.length <= 1"
-						@click="targetDraft.endpoints.splice(index, 1)"
-						>{{ t('agent.settings.browserRuntime.removeEndpoint') }}</UiButton
-					>
-				</div>
-				<UiButton
-					type="button"
-					:disabled="targetDraft.endpoints.length >= AGENT_BROWSER_MAX_ENDPOINTS"
-					@click="targetDraft.endpoints.push(newEndpoint())"
-					>{{ t('agent.settings.browserRuntime.addEndpoint') }}</UiButton
-				>
 			</fieldset>
 		</form>
 		<template #footer>

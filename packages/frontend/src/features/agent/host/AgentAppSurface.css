@@ -48,6 +48,38 @@
 	container-type: inline-size;
 	container-name: agent-conversation-pane;
 }
+.agent-conversation-ambient {
+	background: radial-gradient(
+		circle at 50% 30%,
+		color-mix(in srgb, var(--color-primary) 10%, transparent) 0%,
+		color-mix(in srgb, var(--color-primary) 2%, transparent) 40%,
+		transparent 70%
+	);
+}
+.agent-conversation-scroller {
+	touch-action: pan-y;
+	-webkit-overflow-scrolling: touch;
+}
+.agent-composer-shell {
+	container-type: inline-size;
+	container-name: agent-composer;
+}
+#agent-composer {
+	font-size: 13px;
+}
+.agent-send-button {
+	font-size: 11px;
+	line-height: 1;
+}
+
+/*
+   * global.css colours `i` as icons, so the stop control must explicitly keep
+   * the error colour in both its normal and hover states.
+   */
+.agent-stop-button i,
+.agent-stop-button:hover i {
+	color: var(--color-error);
+}
 .agent-task-rail {
 	position: relative;
 }
@@ -143,6 +175,16 @@
    * declares the `agent-composer` container), never the conversation pane.
    */
 @container agent-composer (max-width: 730px) {
+	.agent-composer-toolbar {
+		min-height: 36px;
+		gap: 4px;
+		padding: 4px 6px;
+	}
+
+	.agent-toolbar-controls {
+		gap: 3px;
+	}
+
 	.agent-run-config {
 		min-width: 0;
 		gap: 0.2rem;
@@ -167,6 +209,25 @@
 }
 
 @container agent-composer (max-width: 620px) {
+	.agent-composer-status {
+		gap: 4px;
+	}
+
+	.agent-jump-latest {
+		padding-inline: 6px;
+	}
+
+	.agent-send-button {
+		width: 28px;
+		height: 28px;
+		justify-content: center;
+		padding-inline: 0;
+	}
+
+	.agent-send-label {
+		display: none;
+	}
+
 	.agent-config-verbose,
 	.agent-config-affordance,
 	:deep(.agent-config-verbose),
@@ -195,6 +256,43 @@
 		min-width: 0.75rem;
 		font-size: 11px;
 		line-height: 1.25;
+	}
+}
+
+@container agent-composer (max-width: 520px) {
+	.agent-composer-shell {
+		border-radius: 12px;
+	}
+
+	#agent-composer {
+		min-height: 72px;
+		padding: 10px 12px 6px;
+		font-size: 12px;
+		line-height: 1.55;
+	}
+
+	.agent-jump-latest-label {
+		display: none;
+	}
+}
+
+@container agent-conversation-pane (max-width: 700px) {
+	.agent-conversation-scroller {
+		padding-inline: 14px;
+	}
+
+	.agent-composer-footer {
+		padding: 6px 10px 10px;
+	}
+}
+
+@container agent-conversation-pane (max-width: 560px) {
+	.agent-conversation-scroller {
+		padding-inline: 10px;
+	}
+
+	.agent-composer-footer {
+		padding: 5px 8px 8px;
 	}
 }
 
@@ -237,6 +335,26 @@
 	.agent-config-label {
 		display: none;
 	}
+}
+
+/* Keep the transcript usable in a short hub window. */
+.agent-hub-window[data-hub-compact] .agent-composer-footer {
+	padding: 4px 8px 8px;
+}
+
+.agent-hub-window[data-hub-compact] #agent-composer {
+	min-height: 56px;
+	max-height: 96px;
+	padding: 8px 12px 4px;
+}
+
+#agent-composer,
+#agent-composer:focus,
+#agent-composer:focus-visible {
+	border: 0 !important;
+	border-color: transparent !important;
+	outline: none !important;
+	box-shadow: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

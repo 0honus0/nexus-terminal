@@ -91,9 +91,7 @@ export type CaptchaStatus = 'loading' | 'ready' | 'error' | 'invalid';
 export interface LoginSecurityController {
 	captchaConfig: ComputedRef<LoginCaptchaConfig>;
 	captchaStatus: ComputedRef<CaptchaStatus>;
-	hasPasskeys: ComputedRef<boolean>;
-	passkeyLoadError: ComputedRef<boolean>;
 	loading: ComputedRef<boolean>;
-	refresh(username?: string): Promise<void>;
+	refresh(): Promise<void>;
 	loginWithPasskey(input: PasskeyLoginInput): Promise<void>;
 }

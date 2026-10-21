@@ -12,7 +12,7 @@
 		stringStorageCodec,
 		writeStoredValue,
 	} from '@/foundation/browser';
-	import { UiActionGroup, UiButton, UiInput, UiSelect, UiSwitch } from '@/foundation/ui';
+	import { UiActionGroup, UiButton, UiInput, UiPopover, UiSelect, UiSwitch } from '@/foundation/ui';
 	import { useFeedback } from '@/shared/feedback/public';
 	import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
 	import { preloadWorkspaceTerminalSurface } from '@/runtimes/workspace/public';
@@ -44,6 +44,7 @@
 		exportItems,
 	} = useConnectionManagement();
 	const importVisible = ref(false);
+	const moreVisible = ref(false);
 	const capabilities = useRuntimeFeatureCapabilities();
 	const tags = capabilities.tags;
 	const search = ref('');
@@ -158,6 +159,11 @@
 
 	const testAllFiltered = () => testAll(filtered.value.filter((item) => item.type === 'SSH'));
 
+	const exportCurrent = () =>
+		exportItems(
+			selected.value.size ? filtered.value.filter((item) => selected.value.has(item.id)) : filtered.value,
+		);
+
 	const connectAllFiltered = () => {
 		const ids = filtered.value
 			.filter((connection) => connection.type === 'SSH')
@@ -203,10 +209,6 @@
 </script>
 <template>
 	<main class="p-4 text-foreground md:p-6 lg:p-8">
-		<p v-if="message" role="status" class="my-3">{{ message }}</p>
-		<p v-if="data.needsRefresh.value" class="my-3 text-text-secondary">
-			{{ t('connections.failures.recovery_required') }}
-		</p>
 		<div class="mx-auto max-w-screen-lg">
 			<h1 class="mb-6 text-2xl font-semibold">{{ t('nav.connections') }}</h1>
 
@@ -252,25 +254,7 @@
 								<option value="created">{{ t('dashboard.sortOptions.created') }}</option>
 							</UiSelect>
 						</div>
-						<div class="ml-auto flex flex-wrap shrink-0 items-center gap-2">
-							<UiButton :disabled="loading || data.busy.value" @click="refresh">{{
-								t('connections.refresh')
-							}}</UiButton
-							><UiButton :disabled="loading" @click="importVisible = true">{{
-								t('connections.importTitle')
-							}}</UiButton
-							><UiButton
-								:disabled="data.needsRefresh.value || loading"
-								@click="
-									exportItems(
-										selected.size ? filtered.filter((item) => selected.has(item.id)) : filtered,
-									)
-								"
-								>{{ t('connections.exportTitle') }}</UiButton
-							>
-							<UiButton type="button" appearance="soft" @click="hostKeysVisible = true">{{
-								t('hostKeys.title')
-							}}</UiButton>
+						<div class="ml-auto flex shrink-0 items-center gap-2">
 							<UiButton
 								appearance="soft"
 								icon-only
@@ -319,9 +303,77 @@
 									t('connections.actions.connectAllFiltered')
 								}}</span>
 							</UiButton>
+							<UiPopover
+								v-model:open="moreVisible"
+								:ariaLabel="t('connections.moreActions')"
+								:title="t('connections.moreActions')"
+								align="end"
+								icon-only
+								panel-class="!w-56 !p-1.5"
+							>
+								<template #trigger>
+									<i class="fas fa-ellipsis-h" aria-hidden="true" />
+								</template>
+								<template #panel="{ close }">
+									<div class="flex flex-col gap-1">
+										<UiButton
+											type="button"
+											appearance="ghost"
+											class="w-full !justify-start gap-2"
+											:disabled="loading || data.needsRefresh.value"
+											@click="
+												close();
+												importVisible = true;
+											"
+										>
+											<i class="fas fa-file-import w-4 text-center" aria-hidden="true" />
+											{{ t('connections.importTitle') }}
+										</UiButton>
+										<UiButton
+											type="button"
+											appearance="ghost"
+											class="w-full !justify-start gap-2"
+											:disabled="loading || data.needsRefresh.value || !filtered.length"
+											@click="
+												close();
+												exportCurrent();
+											"
+										>
+											<i class="fas fa-file-export w-4 text-center" aria-hidden="true" />
+											{{ t('connections.exportTitle') }}
+										</UiButton>
+										<UiButton
+											type="button"
+											appearance="ghost"
+											class="w-full !justify-start gap-2"
+											@click="
+												close();
+												hostKeysVisible = true;
+											"
+										>
+											<i class="fas fa-key w-4 text-center" aria-hidden="true" />
+											{{ t('hostKeys.title') }}
+										</UiButton>
+									</div>
+								</template>
+							</UiPopover>
 						</div>
 					</div>
 				</header>
+
+				<div v-if="message" role="status" class="border-b border-border/60 px-4 py-3 text-sm">
+					{{ message }}
+				</div>
+				<div
+					v-if="data.needsRefresh.value"
+					role="alert"
+					class="flex flex-wrap items-center gap-3 border-b border-warning/25 bg-warning/10 px-4 py-3 text-sm text-warning"
+				>
+					<span class="min-w-0 flex-1">{{ t('connections.failures.recovery_required') }}</span>
+					<UiButton type="button" density="compact" :disabled="loading || data.busy.value" @click="refresh">{{
+						t('connections.refresh')
+					}}</UiButton>
+				</div>
 
 				<UiActionGroup v-if="batch" layout="batch" class="border-b border-border/60 px-4 py-3">
 					<UiButton type="button" appearance="soft" density="compact" @click="selectAll">

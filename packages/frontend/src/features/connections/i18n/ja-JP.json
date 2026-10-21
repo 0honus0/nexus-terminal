@@ -33,6 +33,8 @@
       "changeNotes": "メモを変更",
       "leaveBlankNoChange": "空欄の場合は変更しません",
       "noChanges": "変更内容が選択されていません。",
+      "saveMetadata": "接続設定を保存",
+      "saveCredential": "認証情報を更新",
       "partialDeleteMessage": "一括削除: {successCount} 件成功、{errorCount} 件失敗。失敗した項目は選択されたままです。",
       "partialUpdateMessage": "一括更新: {successCount} 件成功、{errorCount} 件失敗。失敗した項目は選択されたままです。",
       "updateSuccessMessage": "選択した {count} 件の接続を正常に更新しました。"
@@ -214,8 +216,14 @@
     "partialCreation": "{count} 件の作成を確認しました。",
     "importRefused": "{count} 件が拒否されました。結果を確認してください。",
     "completed": "{count} 件の操作が完了しました。",
+    "moreActions": "その他の操作",
     "importTitle": "接続をインポート",
     "exportTitle": "設定をエクスポート",
+    "selectFile": "JSON ファイルを選択",
+    "fileHint": "このアプリからエクスポートした接続設定を選択してください。",
+    "fileLoaded": "{name} を読み込みました",
+    "pasteJson": "JSON を貼り付け",
+    "failedItems": "次の項目をインポートできませんでした:",
     "failures": {
       "failed": "操作に失敗しました。しばらくしてから再試行してください。",
       "unknown": "結果は不明で、保存済みの可能性があります。再送信せず、更新して確認してください。",

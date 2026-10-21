@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import { useI18n } from 'vue-i18n';
-	import { UiInput, UiModal } from '@/foundation/ui';
+	import { UiButton, UiInput, UiModal } from '@/foundation/ui';
 	import type { ConnectionSummary } from '@/features/connections/public';
 	import type { TagGroupInput } from '../model/tag-group-types';
 	import { useTagGroupManagement } from '../composables/use-tag-group-management';
@@ -56,15 +56,18 @@
 			<p v-if="message" role="alert" class="px-4 text-sm text-error">{{ message }}</p>
 			<p v-if="requiresReview || tags.needsRefresh.value" class="px-4 text-sm">{{ t('tags.reopenToRefresh') }}</p>
 			<div class="space-y-3 border-b border-border/50 px-4 pb-4">
-				<label class="grid gap-1.5 text-sm text-text-secondary">
+				<div class="grid gap-1.5 text-sm text-text-secondary">
 					<span>{{ t('workspaceConnectionList.manageTags.tagName') }}</span>
 					<UiInput
 						v-model="name"
 						:disabled="saving"
 						:aria-label="t('workspaceConnectionList.manageTags.tagName')"
 					/>
-					<button
+					<UiButton
 						type="button"
+						appearance="soft"
+						density="compact"
+						class="justify-self-start"
 						:disabled="
 							saving ||
 							requiresReview ||
@@ -74,27 +77,31 @@
 						"
 						@click="rename"
 					>
+						<i class="fas fa-pen mr-1" aria-hidden="true" />
 						{{ t('tags.renameOnly') }}
-					</button>
-				</label>
+					</UiButton>
+				</div>
 
 				<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-					<input
+					<UiInput
 						v-model="search"
 						type="text"
 						:placeholder="t('workspaceConnectionList.manageTags.searchPlaceholder')"
-						class="min-w-0 w-full flex-1 rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-					/>
+						:aria-label="t('workspaceConnectionList.manageTags.searchPlaceholder')"
+						class="min-w-0 w-full flex-1"
+					>
+						<template #leading><i class="fas fa-search text-xs" aria-hidden="true" /></template>
+					</UiInput>
 					<div class="grid min-w-0 grid-cols-3 gap-2 sm:flex sm:shrink-0">
-						<button type="button" class="selection-action" @click="selectVisible">
+						<UiButton type="button" appearance="soft" density="compact" @click="selectVisible">
 							{{ t('workspaceConnectionList.manageTags.selectAll') }}
-						</button>
-						<button type="button" class="selection-action" @click="deselectVisible">
+						</UiButton>
+						<UiButton type="button" appearance="soft" density="compact" @click="deselectVisible">
 							{{ t('workspaceConnectionList.manageTags.deselectAll') }}
-						</button>
-						<button type="button" class="selection-action" @click="invertVisible">
+						</UiButton>
+						<UiButton type="button" appearance="soft" density="compact" @click="invertVisible">
 							{{ t('workspaceConnectionList.manageTags.invertSelection') }}
-						</button>
+						</UiButton>
 					</div>
 				</div>
 			</div>
@@ -143,18 +150,21 @@
 
 		<template #footer>
 			<div v-if="tag" class="flex flex-wrap justify-end gap-2 sm:gap-3">
-				<button
+				<UiButton
 					type="button"
-					class="footer-action footer-action--danger"
+					appearance="ghost"
+					tone="danger"
 					:disabled="saving || requiresReview || tags.busy.value || tags.needsRefresh.value"
 					@click="removeTag"
 				>
 					{{ t('common.delete') }}
-				</button>
-				<button type="button" class="footer-action" @click="emit('close')">{{ t('common.cancel') }}</button>
-				<button
+				</UiButton>
+				<UiButton type="button" @click="emit('close')">{{ t('common.cancel') }}</UiButton>
+				<UiButton
 					type="button"
-					class="footer-action footer-action--primary"
+					appearance="solid"
+					tone="primary"
+					:loading="saving"
 					:disabled="
 						saving ||
 						requiresReview ||
@@ -164,63 +174,9 @@
 					"
 					@click="save"
 				>
-					<i v-if="saving" class="fas fa-spinner fa-spin mr-1" aria-hidden="true"></i
-					>{{ t('tags.saveAssociations') }}
-				</button>
+					{{ t('tags.saveAssociations') }}
+				</UiButton>
 			</div>
 		</template>
 	</UiModal>
 </template>
-
-<style scoped>
-	.selection-action,
-	.footer-action {
-		border: 1px solid var(--border-color);
-		border-radius: 0.375rem;
-		padding: 0.5rem 1rem;
-		color: var(--text-color-secondary);
-		font-size: 0.875rem;
-		box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
-		transition:
-			background-color 0.15s ease,
-			color 0.15s ease,
-			border-color 0.15s ease;
-	}
-	.selection-action {
-		min-width: 0;
-		padding-inline: 0.5rem;
-		font-size: 0.75rem;
-	}
-	@media (min-width: 640px) {
-		.selection-action {
-			padding-inline: 1rem;
-			font-size: 0.875rem;
-		}
-	}
-	.selection-action:hover,
-	.footer-action:hover:not(:disabled) {
-		background: var(--border-color);
-		color: var(--text-color);
-	}
-	.footer-action--danger {
-		border-color: color-mix(in srgb, var(--status-error-color) 70%, transparent);
-		color: var(--status-error-color);
-	}
-	.footer-action--danger:hover:not(:disabled) {
-		background: color-mix(in srgb, var(--status-error-color) 10%, transparent);
-		color: var(--status-error-color);
-	}
-	.footer-action--primary {
-		border-color: transparent;
-		background: var(--button-bg-color);
-		color: var(--button-text-color);
-	}
-	.footer-action--primary:hover:not(:disabled) {
-		background: var(--button-hover-bg-color);
-		color: var(--button-text-color);
-	}
-	.footer-action:disabled {
-		cursor: not-allowed;
-		opacity: 0.55;
-	}
-</style>

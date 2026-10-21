@@ -584,7 +584,6 @@ try {
 		}
 
 		await store.login({ username: 'admin', password: 'final-password-789' });
-		check(!(await api.passkeys.hasConfigured('admin')), 'real Passkey discovery before registration');
 		const options = await api.passkeys.registrationOptions();
 		check(
 			options.authenticatorSelection.userVerification === 'required' && options.rp.id === 'localhost',
@@ -600,7 +599,6 @@ try {
 		await api.passkeys.rename(credential.id, 'Fixture device');
 		check((await api.passkeys.list())[0].name === 'Fixture device', 'real Passkey rename');
 		await store.logout();
-		check(await api.passkeys.hasConfigured('admin'), 'real anonymous Passkey discovery');
 		await store.loginWithPasskey({ username: 'admin', rememberMe: true });
 		check(
 			store.sessionState === 'authenticated' &&
@@ -611,10 +609,7 @@ try {
 		list = await api.passkeys.list();
 		check(list[0].lastUsedAt !== null && list[0].lastUsedAt >= list[0].createdAt, 'real Passkey use timestamp');
 		await api.passkeys.remove(credential.id);
-		check(
-			(await api.passkeys.list()).length === 0 && !(await api.passkeys.hasConfigured('admin')),
-			'real Passkey removal',
-		);
+		check((await api.passkeys.list()).length === 0, 'real Passkey removal');
 		const original = window.fetch;
 
 		const json = (body, status = 200) =>
@@ -676,7 +671,7 @@ try {
 		}
 		return checks;
 	});
-	assert.equal(passkeyChecks.length, 14);
+	assert.equal(passkeyChecks.length, 12);
 	console.log('F1 Passkey checks PASS:', passkeyChecks.join('; '));
 	const persistentSession = (await page.context().cookies()).find((cookie) => cookie.name === 'nexus_session');
 	assert.ok(
@@ -827,6 +822,7 @@ try {
 			captcha: { enabled: false, provider: 'none', siteKey: '', hasSecret: false, expectedHostname: null },
 		};
 		let writes = 0;
+		let passkeyDiscoveryRequests = 0;
 		let mode = 'normal';
 		let finish;
 		window.fetch = async (url, options) => {
@@ -852,7 +848,8 @@ try {
 				return json([{ credentialId: 'AAAA', name: null, transports: [], createdAt: 10, lastUsedAt: null }]);
 			}
 			if (String(url).includes('has-configured')) {
-				throw Error('controlled discovery failure');
+				passkeyDiscoveryRequests += 1;
+				throw Error('Passkey discovery must not run from login security');
 			}
 			if (String(url).endsWith('/captcha')) {
 				return json({ enabled: false, provider: 'none', hcaptchaSiteKey: '', recaptchaSiteKey: '' });
@@ -943,8 +940,8 @@ try {
 			await nextTick();
 			await login.refresh();
 			check(
-				login.passkeyLoadError.value && !login.hasPasskeys.value,
-				'Passkey discovery failure exposes retry state',
+				!login.loading.value && login.captchaStatus.value === 'ready' && passkeyDiscoveryRequests === 0,
+				'login security refreshes CAPTCHA without Passkey discovery',
 			);
 		} finally {
 			mounted.unmount();

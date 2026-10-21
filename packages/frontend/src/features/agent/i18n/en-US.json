@@ -74,6 +74,12 @@
         "healthHealthy": "Healthy",
         "healthDegraded": "Degraded",
         "healthDisabled": "Disabled",
+        "statusEnabled": "Enabled",
+        "statusDisabled": "Disabled",
+        "declaredCapabilities": "Declared capabilities",
+        "unknownDefinition": "Unknown app",
+        "capabilityUnknownName": "Extension capability",
+        "technicalDetails": "Instance details",
         "runsMetric": "Active Runs",
         "approvalsMetric": "Approvals",
         "grantsMetric": "Granted Capabilities",
@@ -138,6 +144,12 @@
               }
             }
           },
+          "host": {
+            "inspect": {
+              "name": "Inspect Host state",
+              "desc": "Read Host runtime state, capacity and controlled diagnostics"
+            }
+          },
           "shell": {
             "execute": {
               "name": "Execute commands",
@@ -176,6 +188,30 @@
             "read": {
               "name": "Read task artifacts",
               "desc": "Read persisted artifacts reachable by the current app"
+            },
+            "write": {
+              "name": "Write task artifacts",
+              "desc": "Create or update persisted artifacts for the current app"
+            }
+          },
+          "context": {
+            "read": {
+              "name": "Read context",
+              "desc": "Read context material authorized for the current Run"
+            },
+            "compact": {
+              "name": "Compact context",
+              "desc": "Reorganize and compact Run context within capacity limits"
+            }
+          },
+          "memory": {
+            "read": {
+              "name": "Read memory",
+              "desc": "Read saved memory available to the current app"
+            },
+            "propose": {
+              "name": "Propose memory",
+              "desc": "Create a memory candidate that waits for user confirmation"
             }
           },
           "app": {
@@ -246,6 +282,12 @@
         "stateEnabled": "Enabled",
         "stateInstalled": "Installed",
         "stateNotInstalled": "Not installed",
+        "stateDisabled": "Disabled",
+        "stateUpgrade": "Upgrade available",
+        "stateDraining": "Waiting for active runs",
+        "unknownPlugin": "Unknown plugin",
+        "intentCount": "Intents: {count}",
+        "prepareUpgrade": "Verify upgrade package",
         "summaryNexusAgent": "Official general-purpose agent core for operations diagnostics and engineering collaboration, executed inside a controlled sandbox.",
         "summaryNexusFullstack": "Full-stack delivery suite covering microservice governance, complex dependency integration and deployment verification.",
         "compatibilityShort": "(requires Nexus {min}–{max})",
@@ -448,6 +490,8 @@
         "reasonPlaceholder": "Enter the reason for updating this safety policy (e.g. Production isolation, Audit compliance)",
         "emptyConnectionsDetail": "No host or device connections are configured, so Agents cannot reach private machines by default.",
         "orphanIds": "Deleted connection IDs still present:",
+        "orphanIdsCount": "{count} deleted connections remain in the denylist",
+        "technicalDetails": "Technical details",
         "clearOrphanIds": "Clear all invalid IDs",
         "scopeHint": "This is a global hard restriction across conversations and Runs, not the SSH selection for the current chat.",
         "manageTargets": "Manage blocked targets",
@@ -618,7 +662,16 @@
         "description": "Configure OpenAI-compatible providers. Credentials are stored separately and are never returned by the API.",
         "registryReadStatus": "Read current status",
         "registryRequestFailed": "Unable to read the model registry. Check your session and try reading its status again.",
-        "registryUnknown": "The refresh result is unknown. Read the current status before trying another refresh."
+        "registryUnknown": "The refresh result is unknown. Read the current status before trying another refresh.",
+        "registryErrorFallback": "The model registry is temporarily unavailable.",
+        "registryErrors": {
+          "MODEL_REGISTRY_HTTP": "The model registry returned an unusable response.",
+          "MODEL_REGISTRY_NETWORK": "The model registry service cannot be reached right now.",
+          "MODEL_REGISTRY_RESPONSE_INVALID": "The model registry contains an unsupported format.",
+          "MODEL_REGISTRY_TOO_LARGE": "The model registry exceeds the size limit.",
+          "MODEL_REGISTRY_CLEANUP_FAILED": "The model registry update did not finish cleanly.",
+          "MODEL_REGISTRY_CACHE_INVALID": "The local model registry cache is invalid and will be fetched again."
+        }
       },
       "guardrails": {
         "title": "System guardrails",
@@ -690,6 +743,7 @@
         "allowedUrls": "Allowed page URL patterns (one per line)",
         "endpoints": "CDP Endpoints",
         "addEndpoint": "Add endpoint",
+        "editEndpoint": "Edit CDP endpoint",
         "priority": "Priority",
         "removeEndpoint": "Remove",
         "url": "CDP URL (ws/wss)",
@@ -894,7 +948,8 @@
         "deleteConfirm": "Delete “{name}”? The server rejects deletion when active runs reference it.",
         "capacity": "Selected models exceed remaining capacity. Select fewer models.",
         "applyObservation": "Apply provider observation to draft",
-        "capabilityDetails": "Capability details"
+        "capabilityDetails": "Capability details",
+        "technicalDetails": "Technical details"
       },
       "appManagement": {
         "title": "Agent apps and permissions",
@@ -922,7 +977,7 @@
         "targetCount": "Selected {count} / {max}",
         "selectVisible": "Select visible results",
         "clearVisible": "Remove visible results",
-        "missingTarget": "Unresolved connection #{id} (selection retained)",
+        "missingTarget": "Unresolved selected connection (selection retained)",
         "targetsFailed": "Connection directory failed. Existing selections are retained; read again to check.",
         "readTargets": "Read connection directory",
         "policy": "App execution policy",
@@ -963,6 +1018,7 @@
         "replace": "Replace",
         "connection": "SSH connection",
         "chooseConnection": "Choose an SSH connection",
+        "unavailableConnection": "Unavailable connection (selection retained)",
         "argv": "argv (JSON string array, executable first)",
         "cwd": "Absolute working directory",
         "retryCreation": "Retry same creation with original key",
@@ -1032,7 +1088,12 @@
       "runningRuns": "Running runs",
       "pendingApprovals": "Pending approvals",
       "pendingBudget": "Pending budget requests",
-      "closeApp": "Close {app}"
+      "closeApp": "Close {app}",
+      "agentSurface": "Agent conversation",
+      "customSurface": "Extension UI",
+      "directoryError": "Unable to load Agent services",
+      "directoryErrorHint": "Conversations and App information are temporarily unavailable. Check your connection and try again.",
+      "retryDirectory": "Retry"
     },
     "pluginFrontend": {
       "frameTitle": "Agent plugin UI",
@@ -1044,7 +1105,7 @@
       "threads": "Conversations",
       "newThread": "New",
       "deleteThread": "Delete conversation",
-      "confirmDeleteThread": "Click again to delete this conversation",
+      "confirmDeleteThread": "Click again to confirm deletion",
       "deleteThreadActiveHint": "Stop the active Run before deleting this conversation.",
       "deleteAllThreads": "Delete all conversations",
       "confirmDeleteAllThreads": "Click again to delete all conversations",
@@ -1133,6 +1194,7 @@
       },
       "searchAction": "Search",
       "cleanup": "Clean reclaimable files",
+      "cleanupSelectApp": "Select a source App in the filters before cleaning that App's reclaimable files.",
       "protected": "Protected",
       "reclaimable": "Reclaimable",
       "cleanupPreview": "Delete {count} reclaimable files ({bytes}). {protected} protected files will not be deleted.",
@@ -1150,6 +1212,7 @@
       "deleteProtected": "This file is retained or protected by an active reference and cannot be deleted. The library was refreshed.",
       "loadMore": "Load more",
       "libraryHint": "Durable artifacts, evidence, and files shared with Agent runs.",
+      "unknownApp": "Unknown App",
       "storageOverview": "Storage overview",
       "storageUsedPercent": "{percent}% used",
       "available": "Available",
@@ -1500,6 +1563,8 @@
       "checkpointWatermark": "Ledger #{ledger} · event #{event}",
       "resumeCheckpoint": "Resume as new run",
       "runOverview": "Run overview",
+      "startedAt": "Started",
+      "updatedAt": "Updated",
       "history": "Run history",
       "deleteRun": "Delete run",
       "confirmDeleteRun": "Confirm delete",
@@ -1691,6 +1756,7 @@
       "revoke": "Revoke trust",
       "upload": "Upload plugin package",
       "uploadHelp": "Choose a plugin package, then confirm installation after verification.",
+      "technicalDetails": "Technical details",
       "stage": "Stage package",
       "reservation": "Upload record",
       "stages": "Installation recovery and upgrade packages",
@@ -1739,9 +1805,10 @@
       "name": "Thread title",
       "rename": "Save title",
       "create": "Create thread",
-      "unknown": "The original outcome is unknown. Inspect first; listing threads does not prove that the operation failed to commit.",
-      "retry": "Explicitly retry the original key and version",
-      "abandon": "Abandon intent, acknowledging it may have committed"
+      "unknown": "The result is unknown. Check the conversation list before deciding whether to retry.",
+      "deleteUnknown": "The deletion result is unknown. Check the conversation list before deciding whether to retry.",
+      "retry": "Retry after checking state",
+      "abandon": "Stop tracking without undoing a possible change"
     },
     "nativeRun": {
       "audit": "Step and tool audit",
@@ -1767,7 +1834,8 @@
       "readConfiguration": "Read App, model and target directories",
       "readRuns": "Refresh tasks",
       "moreRuns": "More tasks",
-      "unknown": "The result is unknown. Inspect read-only state before explicitly retrying the original key and versions. A successful read does not prove the earlier operation did not commit.",
+      "unknown": "The result is unknown. Check the current state before deciding whether to retry the operation.",
+      "technicalDetails": "Technical details",
       "inspect": "Inspect original intention",
       "acknowledge": "I understand the original operation may have committed; abandoning tracking does not undo it.",
       "conversation": "Thread conversation",

@@ -15,9 +15,7 @@
 	});
 	const visible = computed(() =>
 		props.items.filter((item) =>
-			[item.name, item.host, String(item.id)].some((text) =>
-				text.toLowerCase().includes(query.value.toLowerCase()),
-			),
+			[item.name, item.host].some((text) => text.toLowerCase().includes(query.value.toLowerCase())),
 		),
 	);
 	const missing = computed(() =>
@@ -74,11 +72,11 @@
 					:checked="modelValue.includes(String(item.id))"
 					:disabled="full && !modelValue.includes(String(item.id))"
 					@change="toggle(String(item.id))"
-				/>{{ item.name }} · {{ item.host }} · #{{ item.id }}</label
+				/>{{ item.name }} · {{ item.host }}</label
 			>
 			<label v-for="id in missing" :key="id" class="flex items-center gap-2 text-warning"
 				><input type="checkbox" checked @change="toggle(id)" />{{
-					t('agent.settings.appManagement.missingTarget', { id })
+					t('agent.settings.appManagement.missingTarget')
 				}}</label
 			>
 		</div>

@@ -83,8 +83,7 @@
         "deleteFailedGeneral": "Failed to delete Passkey. Please try again.",
         "fetchFailed": "Failed to load Passkeys.",
         "nameUpdateFailed": "Failed to update Passkey name.",
-        "refreshAfterChange": "Change confirmed, but the key list could not be refreshed. Read the latest list before another change.",
-        "discoveryFailed": "Passkey availability could not be checked. Retry the check."
+        "refreshAfterChange": "Change confirmed, but the key list could not be refreshed. Read the latest list before another change."
       },
       "success": {
         "registered": "New Passkey registered successfully!",

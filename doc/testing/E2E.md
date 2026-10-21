@@ -2,6 +2,20 @@
 
 开发前读取 [AGENTS](../AGENTS.md)，产品要求见 [USAGE](../USAGE.md)，当前工作见 [PLAN](../PLAN.md)。本文维护实际验证入口、覆盖边界和验收证据。
 
+## 登录页正式 UI 重构（2026-10-21，本地 CDP）
+
+按用户明确要求将正式 `LoginView` 重构为 `doc/mockups/login.html` 当前设计，保留密码登录、TOTP 二阶段、Passkey、CAPTCHA 插槽、安全错误映射和原路由跳转。右侧取消独立卡片边框、底色与阴影；主题按钮移到右侧面板右上角；普通登录不再显示工作区副标题；登录主按钮改为品牌粉紫纯色、无渐变和位移动效；Passkey 入口始终显示，并移除登录页的 `has-configured` 预探测及对应前端 API/状态。新增文案同步中英日三语。
+
+`https://api.honus.top` 本地 CDP 已验证 1440×900、1024×768、1024×600、768×1024、390×844、320×568 和 844×390 均无页面级横向/纵向溢出；矮横屏使用紧凑双栏，主题按钮与 Passkey 入口完整可见。登录页网络记录只有 needs-setup、status、captcha config，未发起 `/passkey/has-configured`。错误密码返回 401 并显示“用户名、密码或验证码不正确。”且停留登录页；`honus` / `honustest` 返回 200 后跳转仪表盘。密码显隐、记住我、主题切换和 localStorage 持久化均正常。Passkey 点击后 authentication-options 返回 200 并进入浏览器认证等待；本次未配置虚拟凭据，不把该结果扩大为 Passkey 登录成功。测试环境未启用 2FA/CAPTCHA，二者只核对原调用链与插槽保留。
+
+证据：`/tmp/login-passkey-1440x900.png`、`/tmp/login-passkey-390x844.png`、`/tmp/login-passkey-844x390.png`、`/tmp/login-button-1440-light.png`、`/tmp/login-button-1440-dark.png`、`/tmp/login-button-390-light.png`、`/tmp/login-final-1440-light.png`、`/tmp/login-final-1440-dark.png`、`/tmp/login-final-390-light.png`、`/tmp/login-final-844x390-light.png`、`/tmp/login-wrong-password.png`、`/tmp/login-correct-password.png`。移除 discovery 后再次执行 `honus` / `honustest` 登录，401/200 分支与跳转保持。静态结果：Node 22.23.1 / pnpm 11.26.0，根 `pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check` 均 exit 0；未运行 `tests/frontend/auth.integration.mjs`，不把静态与本次 CDP 结果扩大为完整认证回归。
+
+窄屏自适应补测：使用同一 `https://api.honus.top` CDP 环境，在不超过 560px 的窄屏隐藏品牌图片区，仅保留垂直居中的登录表单，并在标题上方显示 64px 项目图标；主题按钮固定在右上角。430×932、390×844、360×780、320×568 的登录卡顶部位于 222.9、178.9、151.4、58.4px，卡高为 486.2、486.2、477.2、449.2px，深浅色均无横向溢出或控件裁切；320×568 错误密码态文档高 568px，无需额外滚动。560×800 仍显示图标，561×800 起隐藏图标并恢复品牌区；600×760、768×1024、900×800、844×390、812×375 保持品牌区与原布局。布局调整后以 `honus` / `honustest` 登录仍成功跳转。该轮只调整 `LoginView` 响应式样式与产品说明，未改认证请求、Shared 契约或登录逻辑。
+
+证据：`/tmp/narrow-inspect-430.png`、`/tmp/narrow-inspect-390.png`、`/tmp/narrow-inspect-360.png`、`/tmp/narrow-inspect-320.png`、`/tmp/narrow-inspect-768.png`、`/tmp/narrow-inspect-844.png`、`/tmp/narrow-dark-430x932.png`、`/tmp/narrow-dark-390x844.png`、`/tmp/narrow-dark-320x568.png`、`/tmp/narrow-dark-768x1024.png`、`/tmp/narrow-dark-844x390.png`、`/tmp/narrow-error-320x568.png`、`/tmp/login-success-390x844.png`、`/tmp/login-breakpoint-560x800.png`、`/tmp/login-breakpoint-561x800.png`、`/tmp/login-breakpoint-600x760.png`、`/tmp/login-breakpoint-900x800.png`。
+
+登录切换补测：在 `https://api.honus.top` 用 CDP 将 DashboardPage 懒加载延迟 900ms。修复前导航栏在 `/login` 上提前出现，逐帧记录到约 1.8 秒登录页与导航栏共存；修复后 148 个登录页帧均只有登录界面，首个 `/` 帧才同时出现仪表盘与导航栏。`tests/e2e/specs/auth/setup-login.spec.ts` 的登录用例加入同样的延迟与逐帧断言；因默认 `3001` 已被现有测试环境占用，改用独立端口运行完整 `setup-login.spec.ts`，6 项全部通过（23.6s）。证据：`/tmp/login-transition-after-baseline.png`、`/tmp/login-transition-fixed.png`。
+
 ## 目录预读50ms与上级目录（待远程）
 
 2026-10-21 将 Browser 两处预读定时统一到50ms常量；“..”行的鼠标进入和键盘定位调用同一预读队列，离开行取消排队。父路径复用既有parentOf，根目录不预读自身；点击仍走原goParent，缓存、在途合并、失败/失效隔离和150ms spinner不变。
@@ -638,3 +652,23 @@ trace显示Save后为saving，测试已从磁盘读到新字节，但关闭时�
 [Actions 39445026926](https://github.com/0honus0/nexus-terminal/actions/runs/39445026926)整体success，被测ddf5ce0e95c39367977cf08c951ce1e4d63b34ef。逐组读取原日志，各组通过数为53／38／54（52+1+1）／57（56+1）／46／60／74／66，共448项，无失败、flaky、重试或跳过用例；质量／格式／构建、Docker、runner及耗时统计success，可选截图任务skipped。原日志`/tmp/nexus-acp-receipt-job-<jobId>.log`。ACP取消首次11秒通过，文件预览编辑历史回归首次27秒通过；Files／插件独立场景通过。未扩大为多文件故障、完整像素或全部窄屏已验。
 
 随后bot的68397774仅更新duration-estimates；文档收口只刷新当前基线、擦除已完成施工记录并保留V-UI-01／02和独立V-THREAD等后续，不改变被测产品。没有本地行为测试或线上部署，未知.tmp保持。
+
+### 2026-10-20 设置与通知跨页 UI 回退（本地 CDP）
+
+基于当前未提交工作区，按 `75289ef9^` 继续核对展示差异。设置页恢复 Provider／App／插件／Browser／安全的卡片层级；通知页恢复列表标题、按钮、渠道分区、事件网格和底部测试／保存区，同时保留当前结构化 Header、SMTP／Telegram 秘密意图、CAS 和失败围栏。批量连接编辑恢复高级选项折叠，SSH 密钥错误回到列表内，备份导出／导入恢复各自按钮行与就地消息；三语补齐 19 个新操作事件名称。
+
+本地 `https://api.honus.top` CDP 证据：`/tmp/settings-models-restored.png`、`/tmp/settings-tools-restored.png`、`/tmp/settings-runtime-restored.png`、`/tmp/settings-safety-expanded2.png`、`/tmp/notifications-restored.png`、`/tmp/notification-form-final.png`、`/tmp/settings-data-restored.png`、`/tmp/settings-security-restored.png`。通知页与设置页控制台均无 error；通知事件网格未出现未翻译大写枚举。测试环境没有 Provider 和连接，Provider 仅核对空态，批量编辑、真实通知投递和 SSH 密钥保存未执行；未做完整像素或窄屏专项。
+
+静态结果：Node 22.23.1／pnpm 11.26.0，根 `pnpm run check`、`pnpm run format:all:check`、`pnpm --filter @nexus-terminal/frontend build` 和 `git diff --check` 均退出 0。该结果只证明当前工作区的静态与本地展示核对，不代表远程 448 项回归或部署验收。
+
+### 2026-10-20 Agent 与文件库窄屏 CDP 回归
+
+使用本地 CDP（`https://api.honus.top`，未使用 9998）在 390×844 与 768×900 检查当前工作区。Agent 设置页和通知编辑器页面级 `scrollWidth` 与视口同为 390；文件页修复前 header 内容宽 447px、容器 388px，筛选栏改为移动端分行后溢出项消失。会话页修复前只有标题和空主区；在线程列表已有 7 项时，修复后自动选中最近更新会话并渲染欢迎卡、输入区和单行工具栏。768px 最大化窗口为 256px 会话侧栏加 512px 主区，工具栏未裁切。
+
+证据：`/tmp/ui-audit-agent-settings-390.png`、`/tmp/ui-audit-notifications-390.png`、`/tmp/ui-audit-agent-mobile.png`（修复前）、`/tmp/ui-audit-agent-mobile-fixed.png`、`/tmp/ui-audit-agent-chat-390.png`（修复前空主区）、`/tmp/ui-audit-agent-chat-390-fixed.png`、`/tmp/ui-audit-agent-768-max.png`。本次未执行真实 Run、附件上传、删除、通知保存或 Provider 数据态；完整像素与全部视口组合仍按 V-UI-01 待验。
+
+### 2026-10-20 Agent 悬浮会话、附件与错误态 UI 收口（本地 CDP）
+
+使用本地 CDP（`https://api.honus.top`，未使用 9998）核对当前工作区。会话侧栏恢复标题／更新时间行，App 切换器、会话附件选择器、文件来源、Agent 设置与通知页均未出现裸 UUID、模型目录错误码或已知通知事件枚举。真实接口回归中会话列表从 7 新建到 8，首次删除只进入确认态，第二次删除返回成功后回到 7；等待 3.7 秒未确认时列表不变，控制台无 error。注入 `/api/v1/agent/apps` 503 后，390×844 显示“无法加载 Agent 服务”和“重试”，没有原始操作／错误文本；设置、通知、Agent 会话和文件页均无页面级横向溢出（`scrollWidth=382`，视口 390）。
+
+证据：`/tmp/ui-final-directory-failure-390.png`、`/tmp/ui-continue2-agent-delete-confirm.png`、`/tmp/ui-continue2-agent-after-delete.png`、`/tmp/ui-continue2-agent-chat-390.png`、`/tmp/ui-continue2-agent-files-390.png`、`/tmp/ui-continue2-settings-agent-390.png`、`/tmp/ui-continue2-notifications-390.png`。测试环境没有 Provider、连接和 Artifact，真实 Run 发送、附件上传／关联／下载、文件清理、通知保存与外部投递未执行；这些场景和完整像素比对仍待验。

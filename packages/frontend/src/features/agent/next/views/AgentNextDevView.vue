@@ -329,7 +329,7 @@
 					:app-id="appId"
 					:active="loggedIn"
 					api-base="/__next/api/v1/agent"
-					@select="threadId = $event.id"
+					@select="threadId = $event?.id ?? ''"
 				/>
 			</section>
 

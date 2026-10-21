@@ -1,6 +1,5 @@
 import {
 	readPasskeyAuthenticationOptions,
-	readPasskeyHasConfigured,
 	readPasskeyAuthenticate,
 	readPasskeyRegister,
 	readPasskeyName,
@@ -19,7 +18,6 @@ import {
 	readPasskeyCredentialId,
 	readPasskeyList,
 	readPasskeyLogin,
-	readPasskeyConfigured,
 	readPasskeyVerified,
 	readPasskeyRemoved,
 	readPasskeyRenamed,
@@ -31,7 +29,6 @@ import {
 import type { SendAccessRequest } from './access-request';
 
 export interface PasskeyApi {
-	hasConfigured(username?: string, signal?: AbortSignal): Promise<boolean>;
 	authenticationOptions(username?: string, signal?: AbortSignal): Promise<AccessPasskeyAuthenticationOptionsResponse>;
 	registrationOptions(signal?: AbortSignal): Promise<AccessPasskeyRegistrationOptionsResponse>;
 	authenticate(
@@ -47,28 +44,6 @@ export interface PasskeyApi {
 
 export function createPasskeyApi(send: SendAccessRequest): PasskeyApi {
 	return {
-		async hasConfigured(username, signal) {
-			const query = new URLSearchParams();
-			if (username !== undefined) {
-				query.set('username', username);
-			}
-			return (
-				await send({
-					method: 'GET',
-					path: '/passkey/has-configured' + (query.size ? '?' + query.toString() : ''),
-					status: 200,
-					decode: readPasskeyConfigured,
-
-					input: () => {
-						readPasskeyHasConfigured(query);
-						return undefined;
-					},
-
-					signal,
-				})
-			).hasPasskeys;
-		},
-
 		authenticationOptions: (username, signal) =>
 			send({
 				method: 'POST',

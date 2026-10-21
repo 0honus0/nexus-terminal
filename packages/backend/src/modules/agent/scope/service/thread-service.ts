@@ -3,7 +3,13 @@ import { AGENT_SCOPE_MAX_NAME_BYTES } from '@nexus-terminal/shared/agent/scope/v
 import { validateAgentId, validateUserId } from '../../agent-validation.js';
 import { AgentFailure } from '../../agent-failure.js';
 import type { ThreadModel } from '../model/thread-model.js';
-import type { ThreadAccess, ThreadPage, ThreadMutation, ThreadAccessFacts } from '../model/thread-types.js';
+import type {
+	ThreadAccess,
+	ThreadPage,
+	ThreadMutation,
+	ThreadAccessFacts,
+	ThreadRemoval,
+} from '../model/thread-types.js';
 import type { AgentThread } from '../model/scope-types.js';
 
 function admission(access: ThreadAccess, facts: ThreadAccessFacts): void {
@@ -101,6 +107,32 @@ export class ThreadService {
 				if ((input.kind === 'create' && threads >= 512) || commands >= 4096) {
 					throw new AgentFailure('limit_exceeded');
 				}
+			},
+			(facts) => admission(access, facts),
+		);
+	}
+
+	remove(access: ThreadAccess, input: ThreadRemoval): Promise<AgentThread> {
+		this.validateAccess(access);
+		validateAgentId(input.threadId);
+		if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1) {
+			throw new AgentFailure('invalid_input');
+		}
+		return this.model.remove(
+			access,
+			{ threadId: input.threadId, expectedVersion: input.expectedVersion },
+			(facts) => {
+				if (
+					facts.runStatuses.some(
+						(status) => status === 'pending' || status === 'running' || status === 'unknown',
+					)
+				) {
+					throw new AgentFailure('active_run_conflict');
+				}
+				if (facts.maxMemoryVersion !== null && facts.maxMemoryVersion >= Number.MAX_SAFE_INTEGER) {
+					throw new AgentFailure('version_conflict');
+				}
+				return { updatedAt: Date.now() };
 			},
 			(facts) => admission(access, facts),
 		);

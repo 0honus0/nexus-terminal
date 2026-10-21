@@ -4,11 +4,13 @@ import { AGENT_MAX_JSON_BODY_BYTES } from '@nexus-terminal/shared/agent/values';
 import { AGENT_WORKSPACE_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/scope/values';
 import type {
 	NativeThread,
+	NativeThreadDeleteIntent,
+	NativeThreadDeleteReceipt,
 	NativeThreadIntent,
 	NativeThreadPage,
 	NativeThreadScope,
 } from '../model/native-thread-types';
-import { fromNativeThread, toNativeThreadMutation } from '../model/native-thread-mapper';
+import { fromNativeThread, toNativeThreadDeleteRequest, toNativeThreadMutation } from '../model/native-thread-mapper';
 import { AgentManagementFailure } from '../model/management-failure';
 import { requestAgentManagement } from './management-request';
 import { requestNativeWorkspace } from './native-workspace-request';
@@ -72,6 +74,19 @@ export function createNativeThreadApi(apiBase: '/api/v1/agent' | '/__next/api/v1
 				throw new AgentManagementFailure('protocol_failure', 'unknown');
 			}
 			return fromNativeThread(result.value);
+		},
+
+		async remove(intent: NativeThreadDeleteIntent, signal?: AbortSignal): Promise<NativeThreadDeleteReceipt> {
+			const result = await requestNativeWorkspace(
+				intent.scope,
+				toNativeThreadDeleteRequest(intent),
+				signal,
+				apiBase,
+			);
+			if (result.method !== 'agent.threads.delete') {
+				throw new AgentManagementFailure('protocol_failure', 'unknown');
+			}
+			return { appId: result.value.appId, threadId: result.value.threadId };
 		},
 	};
 }

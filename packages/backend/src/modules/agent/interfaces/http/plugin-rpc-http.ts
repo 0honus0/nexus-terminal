@@ -79,6 +79,7 @@ export function createPluginRpcHttpRoute(
 					result.method === 'intents.revoke' ||
 					result.method === 'agent.threads.create' ||
 					result.method === 'agent.threads.rename' ||
+					result.method === 'agent.threads.delete' ||
 					result.method === 'agent.runs.create' ||
 					result.method === 'agent.runs.appendInput' ||
 					result.method === 'agent.runs.cancel' ||

@@ -25,6 +25,7 @@
 		namespace: 'remote-desktop.touch-mode',
 		version: 1,
 		codec: stringStorageCodec((value) => value === 'touchpad' || value === 'direct'),
+		legacyKeys: ['nexus.rdp.touch-mode'],
 	} as const;
 
 	const readTouchMode = (): RemoteTouchMode =>

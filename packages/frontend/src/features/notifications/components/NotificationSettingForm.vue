@@ -49,6 +49,8 @@
 		chatId: '',
 	});
 	const message = ref('');
+	const testSuccess = ref(false);
+	const testLoading = ref(false);
 	const view = useAuthenticatedViewScope({
 		available: () => props.visible,
 
@@ -59,6 +61,7 @@
 		form.secret = '';
 		headers.value = [];
 		message.value = '';
+		testSuccess.value = false;
 	}
 
 	function resetDraft(): void {
@@ -93,6 +96,7 @@
 					}))
 				: [];
 		message.value = '';
+		testSuccess.value = false;
 	}
 
 	watch(
@@ -173,17 +177,22 @@
 			return;
 		}
 		message.value = '';
+		testSuccess.value = false;
+		testLoading.value = true;
 		try {
 			const result = props.setting
 				? await store.testSaved(props.setting.id, signal)
 				: await store.testUnsaved(buildConfig(), signal);
 			if (view.isCurrent(signal)) {
 				message.value = t('settings.notifications.deliveryStatus.' + result.status);
+				testSuccess.value = result.status === 'sent';
 			}
 		} catch (cause) {
 			if (view.isCurrent(signal)) {
 				message.value = t(notificationFailureKey(cause));
 			}
+		} finally {
+			testLoading.value = false;
 		}
 	}
 
@@ -194,7 +203,30 @@
 	]);
 
 	const eventLabel = (event: OperationEvent) =>
-		te('settings.notifications.events.' + event) ? t('settings.notifications.events.' + event) : event;
+		te('settings.notifications.events.' + event)
+			? t('settings.notifications.events.' + event)
+			: t('settings.notifications.unknownEvent');
+
+	const canTest = computed(() => {
+		if (props.setting) return true;
+		if (channel.value === 'webhook') {
+			return (
+				form.url.trim() !== '' &&
+				headers.value.every(
+					(header) => header.name.trim() !== '' && (header.action !== 'replace' || header.value !== ''),
+				)
+			);
+		}
+		if (channel.value === 'email') {
+			return form.to.trim() !== '' && form.from.trim() !== '' && form.host.trim() !== '' && Number(form.port) > 0;
+		}
+		return (
+			form.origin.trim() !== '' &&
+			form.chatId.trim() !== '' &&
+			secretAction.value === 'replace' &&
+			form.secret.trim() !== ''
+		);
+	});
 
 	function toggleEvent(event: OperationEvent): void {
 		events.value = events.value.includes(event)
@@ -208,21 +240,29 @@
 		<h3 class="mb-4 text-lg font-semibold">
 			{{ t(setting ? 'settings.notifications.form.editTitle' : 'settings.notifications.form.addTitle') }}
 		</h3>
-		<fieldset :disabled="store.loading || store.needsRefresh" class="space-y-4">
-			<UiFormField :label="t('settings.notifications.form.name')" for-id="setting-name">
-				<UiInput id="setting-name" v-model="form.name" required />
-			</UiFormField>
-			<label class="flex gap-2"><UiCheckbox v-model="form.enabled" />{{ t('common.enabled') }}</label>
-			<UiFormField :label="t('settings.notifications.form.channelType')" for-id="setting-channel-type">
-				<UiSelect id="setting-channel-type" v-model="channel" :disabled="Boolean(setting)">
-					<option value="webhook">{{ t('settings.notifications.types.webhook') }}</option>
-					<option value="email">{{ t('settings.notifications.types.email') }}</option>
-					<option value="telegram">{{ t('settings.notifications.types.telegram') }}</option>
-				</UiSelect>
-				<p v-if="setting" class="mt-1 text-xs text-text-secondary">
-					{{ t('settings.notifications.form.channelTypeEditNote') }}
-				</p>
-			</UiFormField>
+		<fieldset :disabled="store.loading || store.needsRefresh" class="m-0 min-w-0 space-y-6 border-0 p-0">
+			<div class="space-y-4">
+				<UiFormField :label="t('settings.notifications.form.name')" for-id="setting-name"
+					><UiInput id="setting-name" v-model="form.name" required
+				/></UiFormField>
+				<label class="flex items-center"
+					><UiCheckbox id="setting-enabled" v-model="form.enabled" class="mr-2" /><span
+						class="text-sm text-foreground"
+						>{{ t('common.enabled') }}</span
+					></label
+				>
+				<UiFormField :label="t('settings.notifications.form.channelType')" for-id="setting-channel-type">
+					<UiSelect id="setting-channel-type" v-model="channel" :disabled="Boolean(setting)"
+						><option value="webhook">{{ t('settings.notifications.types.webhook') }}</option>
+						<option value="email">{{ t('settings.notifications.types.email') }}</option>
+						<option value="telegram">{{ t('settings.notifications.types.telegram') }}</option></UiSelect
+					>
+					<p v-if="setting" class="mt-1 text-xs text-text-secondary">
+						{{ t('settings.notifications.form.channelTypeEditNote') }}
+					</p>
+				</UiFormField>
+			</div>
+
 			<section class="ui-form-section mt-4 space-y-4">
 				<h4 class="mb-3 text-sm font-semibold">
 					{{ t('settings.notifications.types.' + channel) }} {{ t('common.settings') }}
@@ -231,15 +271,17 @@
 					<UiFormField label="URL" for-id="webhook-url"
 						><UiInput id="webhook-url" v-model="form.url" type="url" required
 					/></UiFormField>
-					<UiFormField :label="t('settings.notifications.form.webhookMethod')" for-id="webhook-method">
-						<UiSelect id="webhook-method" v-model="method"
+					<UiFormField :label="t('settings.notifications.form.webhookMethod')"
+						><UiSelect id="webhook-method" v-model="method"
 							><option>POST</option>
 							<option>GET</option>
 							<option>PUT</option></UiSelect
-						>
-					</UiFormField>
+						></UiFormField
+					>
 					<div class="space-y-3">
-						<h4>{{ t('settings.notifications.form.webhookHeaders') }}</h4>
+						<span class="block text-sm font-medium text-text-secondary">{{
+							t('settings.notifications.form.webhookHeaders')
+						}}</span>
 						<div v-for="(header, index) in headers" :key="index" class="grid gap-2 sm:grid-cols-4">
 							<UiInput
 								v-model="header.name"
@@ -260,7 +302,7 @@
 								:aria-label="t('settings.notifications.form.headerValue')"
 								required
 							/>
-							<span v-else>{{
+							<span v-else class="self-center text-xs text-text-secondary">{{
 								t(
 									header.hasValue
 										? 'settings.notifications.form.secretPresent'
@@ -277,86 +319,165 @@
 							@click="headers.push({ name: '', action: 'replace', value: '', hasValue: false })"
 							>{{ t('settings.notifications.form.addHeader') }}</UiButton
 						>
+						<p class="text-xs text-text-secondary">{{ t('settings.notifications.form.secretHint') }}</p>
 					</div>
+					<UiFormField :label="t('settings.notifications.form.webhookBodyTemplate')" for-id="webhook-body"
+						><UiTextarea
+							id="webhook-body"
+							v-model="form.bodyTemplate"
+							:min-rows="3"
+							class="font-mono text-sm"
+							:placeholder="t('settings.notifications.form.webhookBodyPlaceholder')"
+						/>
+						<p class="mt-1 text-xs text-text-secondary">
+							{{ t('settings.notifications.form.templateHelp') }} {event}, {subjectId}, {time}
+						</p></UiFormField
+					>
 				</template>
 				<template v-else-if="channel === 'email'">
 					<UiFormField :label="t('settings.notifications.form.emailTo')" for-id="notification-to"
-						><UiInput id="notification-to" v-model="form.to" type="email" multiple required
-					/></UiFormField>
-					<UiFormField :label="t('settings.notifications.form.smtpFrom')" for-id="notification-from"
-						><UiInput id="notification-from" v-model="form.from" type="email" required
-					/></UiFormField>
+						><UiInput id="notification-to" v-model="form.to" type="email" multiple required />
+						<p class="mt-1 text-xs text-text-secondary">
+							{{ t('settings.notifications.form.emailToHelp') }}
+						</p></UiFormField
+					>
+					<UiFormField :label="t('settings.notifications.form.emailBodyTemplate')" for-id="notification-body"
+						><UiTextarea
+							id="notification-body"
+							v-model="form.bodyTemplate"
+							:min-rows="3"
+							:placeholder="t('settings.notifications.form.emailBodyPlaceholder')"
+						/>
+						<p class="mt-1 text-xs text-text-secondary">
+							{{ t('settings.notifications.form.templateHelp') }} {event}, {subjectId}, {time}
+						</p></UiFormField
+					>
 					<UiFormField :label="t('settings.notifications.form.smtpHost')" for-id="notification-host"
 						><UiInput id="notification-host" v-model="form.host" required
 					/></UiFormField>
-					<UiFormField :label="t('settings.notifications.form.smtpPort')" for-id="notification-port"
-						><UiInput id="notification-port" v-model="form.port" type="number" min="1" max="65535" required
-					/></UiFormField>
-					<label class="flex gap-2"
-						><UiCheckbox v-model="form.secure" />{{ t('settings.notifications.form.smtpSecure') }}</label
-					>
+					<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+						<UiFormField :label="t('settings.notifications.form.smtpPort')" for-id="notification-port"
+							><UiInput
+								id="notification-port"
+								v-model="form.port"
+								type="number"
+								min="1"
+								max="65535"
+								required
+						/></UiFormField>
+						<label class="flex items-end pb-2 text-sm"
+							><UiCheckbox v-model="form.secure" class="mr-2" />{{
+								t('settings.notifications.form.smtpSecure')
+							}}</label
+						>
+					</div>
 					<UiFormField :label="t('settings.notifications.form.smtpUser')" for-id="notification-user"
 						><UiInput id="notification-user" v-model="form.username"
 					/></UiFormField>
+					<UiFormField :label="t('settings.notifications.form.smtpPass')" for-id="notification-secret-action">
+						<UiSelect id="notification-secret-action" v-model="secretAction" :options="actions" />
+						<UiInput
+							v-if="secretAction === 'replace'"
+							v-model="form.secret"
+							type="password"
+							autocomplete="new-password"
+							:aria-label="t('settings.notifications.form.smtpPass')"
+							required
+						/>
+						<p v-else class="mt-1 text-xs text-text-secondary">
+							{{ t('settings.notifications.form.secretHint') }}
+						</p>
+					</UiFormField>
+					<UiFormField :label="t('settings.notifications.form.smtpFrom')" for-id="notification-from"
+						><UiInput id="notification-from" v-model="form.from" type="email" required />
+						<p class="mt-1 text-xs text-text-secondary">
+							{{ t('settings.notifications.form.smtpFromHelp') }}
+						</p></UiFormField
+					>
 				</template>
 				<template v-else>
+					<UiFormField
+						:label="t('settings.notifications.form.telegramToken')"
+						for-id="notification-secret-action"
+					>
+						<UiSelect id="notification-secret-action" v-model="secretAction" :options="actions" />
+						<UiInput
+							v-if="secretAction === 'replace'"
+							v-model="form.secret"
+							type="password"
+							autocomplete="new-password"
+							:aria-label="t('settings.notifications.form.telegramToken')"
+							required
+						/>
+						<p v-else class="mt-1 text-xs text-text-secondary">
+							{{ t('settings.notifications.form.secretHint') }}
+						</p>
+					</UiFormField>
+					<UiFormField :label="t('settings.notifications.form.telegramChatId')" for-id="notification-chat"
+						><UiInput id="notification-chat" v-model="form.chatId" required
+					/></UiFormField>
 					<UiFormField
 						:label="t('settings.notifications.form.telegramCustomDomain')"
 						for-id="notification-origin"
 						><UiInput id="notification-origin" v-model="form.origin" type="url" required
 					/></UiFormField>
-					<UiFormField :label="t('settings.notifications.form.telegramChatId')" for-id="notification-chat"
-						><UiInput id="notification-chat" v-model="form.chatId" required
+					<UiFormField
+						:label="t('settings.notifications.form.telegramMessageTemplate')"
+						for-id="notification-body"
+						><UiTextarea
+							id="notification-body"
+							v-model="form.bodyTemplate"
+							:min-rows="3"
+							:placeholder="t('settings.notifications.form.telegramMessagePlaceholder')"
 					/></UiFormField>
 				</template>
-				<template v-if="channel !== 'webhook'">
-					<UiFormField
-						:label="
+				<div class="border-t border-border/50 pt-4 text-center">
+					<UiButton
+						v-if="setting || canTest"
+						type="button"
+						density="compact"
+						:disabled="!canTest && !setting"
+						:loading="testLoading"
+						@click="testChannel"
+						>{{
 							t(
-								channel === 'email'
-									? 'settings.notifications.form.smtpPass'
-									: 'settings.notifications.form.telegramToken',
+								setting
+									? 'settings.notifications.form.testSaved'
+									: 'settings.notifications.form.testButton',
 							)
-						"
-						for-id="notification-secret-action"
+						}}</UiButton
 					>
-						<UiSelect id="notification-secret-action" v-model="secretAction" :options="actions" />
-					</UiFormField>
-					<UiInput
-						v-if="secretAction === 'replace'"
-						v-model="form.secret"
-						type="password"
-						autocomplete="new-password"
-						:aria-label="t('settings.notifications.form.headerValue')"
-						required
-					/>
-					<p v-else class="text-sm text-text-secondary">{{ t('settings.notifications.form.secretHint') }}</p>
-				</template>
-				<UiFormField
-					:label="t('settings.notifications.form.webhookBodyTemplate')"
-					for-id="notification-template"
-				>
-					<UiTextarea id="notification-template" v-model="form.bodyTemplate" :min-rows="3" />
-					<p class="text-xs text-text-secondary">
-						{{ t('settings.notifications.form.templateHelp') }} {event}, {subjectId}, {time}
-					</p>
-				</UiFormField>
+					<small v-else class="mt-2 block text-xs text-text-secondary">{{
+						t('settings.notifications.form.fillRequiredToTest')
+					}}</small>
+					<small
+						v-if="message"
+						role="status"
+						:class="['mt-2 block text-xs', testSuccess ? 'text-success' : 'text-error']"
+						>{{ message }}</small
+					>
+				</div>
 			</section>
-			<div class="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-				<label v-for="event in OPERATION_EVENTS" :key="event" class="flex min-w-0 max-w-full gap-2 text-sm">
-					<UiCheckbox
-						class="shrink-0"
-						:model-value="events.includes(event)"
-						@update:model-value="toggleEvent(event)"
-					/>
-					<span class="min-w-0 break-words [overflow-wrap:anywhere]">{{ eventLabel(event) }}</span>
-				</label>
+
+			<div>
+				<label class="mb-2 block text-sm font-medium text-text-secondary">{{
+					t('settings.notifications.form.enabledEvents')
+				}}</label>
+				<div class="grid min-w-0 grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+					<label
+						v-for="event in OPERATION_EVENTS"
+						:key="event"
+						class="flex min-w-0 max-w-full cursor-pointer select-none items-start gap-2 text-sm text-foreground"
+						><UiCheckbox
+							class="shrink-0"
+							:model-value="events.includes(event)"
+							@update:model-value="toggleEvent(event)"
+						/>
+						<span class="min-w-0 break-words [overflow-wrap:anywhere]">{{ eventLabel(event) }}</span></label
+					>
+				</div>
 			</div>
-			<UiButton type="button" @click="testChannel">{{
-				t(setting ? 'settings.notifications.form.testSaved' : 'settings.notifications.form.testButton')
-			}}</UiButton>
 		</fieldset>
-		<p v-if="message" role="status">{{ message }}</p>
 		<div class="mt-6 flex justify-end space-x-3 border-t border-border pt-5">
 			<UiButton type="button" @click="emit('close')">{{ t('common.cancel') }}</UiButton>
 			<UiButton type="submit" appearance="solid" :disabled="store.loading || store.needsRefresh">{{

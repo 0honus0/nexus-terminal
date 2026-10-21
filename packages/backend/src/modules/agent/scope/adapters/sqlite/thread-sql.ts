@@ -1,11 +1,15 @@
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
+import { AGENT_RUN_STATUSES } from '@nexus-terminal/shared/agent/runs/values';
 import type { ThreadRecord } from '../../storage/scope-storage.js';
 import type {
 	ThreadStorage,
 	StoredThreadAccess,
 	StoredThreadAccessFacts,
 	StoredThreadMutation,
+	StoredThreadRemoval,
+	StoredThreadRemovalFacts,
+	StoredThreadRemovalDecision,
 } from '../../storage/thread-storage.js';
 import { ThreadStorageRefusal } from '../../storage/thread-storage.js';
 import { threadRow } from './thread-row.js';
@@ -199,6 +203,99 @@ export class SqliteThreadStorage implements ThreadStorage {
 					value.updatedAt,
 				],
 			);
+			await this.check(tx, access, admit);
+			return value;
+		});
+	}
+
+	remove(
+		access: StoredThreadAccess,
+		input: StoredThreadRemoval,
+		admit: (facts: StoredThreadAccessFacts) => void,
+		admitRemoval: (facts: StoredThreadRemovalFacts) => StoredThreadRemovalDecision,
+	): Promise<ThreadRecord> {
+		return this.db.transaction(async (tx) => {
+			await this.check(tx, access, admit);
+			const row = await tx.one('SELECT * FROM agent_threads WHERE user_id=? AND app_id=? AND id=?', [
+				access.userId,
+				access.appId,
+				input.threadId,
+			]);
+			if (!row) {
+				throw new ThreadStorageRefusal('not_found');
+			}
+			const value = threadRow(row);
+			if (value.version !== input.expectedVersion) {
+				throw new ThreadStorageRefusal('version_conflict');
+			}
+			const runScope = 'SELECT id FROM agent_runs WHERE user_id=? AND app_id=? AND thread_id=?';
+			const runParams = [access.userId, access.appId, input.threadId];
+			const statuses = await tx.all(
+				'SELECT DISTINCT status FROM agent_runs WHERE user_id=? AND app_id=? AND thread_id=?',
+				runParams,
+			);
+			const runStatuses = statuses.map((row) => {
+				const status = AGENT_RUN_STATUSES.find((value) => value === row.status);
+				if (status === undefined) {
+					throw new Error('Corrupt Run status');
+				}
+				return status;
+			});
+			const memories = await tx.one(
+				`SELECT MAX(version) AS max_version FROM agent_memories
+				 WHERE user_id=? AND app_id=? AND source_run_id IN (${runScope})`,
+				[access.userId, access.appId, ...runParams],
+			);
+			if (
+				memories === null ||
+				(memories.max_version !== null &&
+					(typeof memories.max_version !== 'number' ||
+						!Number.isSafeInteger(memories.max_version) ||
+						memories.max_version < 1))
+			) {
+				throw new Error('Corrupt memory version');
+			}
+			const decision = admitRemoval({ runStatuses, maxMemoryVersion: memories.max_version });
+			await tx.run(
+				`UPDATE agent_memories SET source_run_id=NULL,version=version+1,updated_at=MAX(updated_at,?)
+				 WHERE user_id=? AND app_id=? AND source_run_id IN (${runScope})`,
+				[decision.updatedAt, access.userId, access.appId, ...runParams],
+			);
+			await tx.run(
+				`DELETE FROM agent_artifact_attachments WHERE user_id=? AND target_app_id=?
+				 AND (thread_id=? OR run_id IN (${runScope}))`,
+				[access.userId, access.appId, input.threadId, ...runParams],
+			);
+			const toolScope = `SELECT id FROM agent_run_tools WHERE run_id IN (${runScope})`;
+			await tx.run(
+				`DELETE FROM agent_run_children WHERE run_id IN (${runScope}) OR parent_id IN (${runScope}) OR operation_id IN (${toolScope})`,
+				[...runParams, ...runParams, ...runParams],
+			);
+			await tx.run(`DELETE FROM agent_run_facts WHERE root_id IN (${runScope}) OR author_id IN (${runScope})`, [
+				...runParams,
+				...runParams,
+			]);
+			await tx.run(
+				`DELETE FROM agent_run_mailbox WHERE root_id IN (${runScope}) OR recipient_id IN (${runScope}) OR sender_id IN (${runScope}) OR message_id IN (${toolScope})`,
+				[...runParams, ...runParams, ...runParams, ...runParams],
+			);
+			await tx.run(
+				`DELETE FROM agent_run_budget_reservations WHERE root_id IN (${runScope}) OR run_id IN (${runScope})`,
+				[...runParams, ...runParams],
+			);
+			await tx.run('DELETE FROM agent_runs WHERE user_id=? AND app_id=? AND thread_id=?', runParams);
+			await tx.run('DELETE FROM agent_thread_commands WHERE user_id=? AND app_id=? AND thread_id=?', [
+				access.userId,
+				access.appId,
+				input.threadId,
+			]);
+			const deleted = await tx.run(
+				'DELETE FROM agent_threads WHERE user_id=? AND app_id=? AND id=? AND version=?',
+				[access.userId, access.appId, input.threadId, input.expectedVersion],
+			);
+			if (deleted.changes !== 1) {
+				throw new Error('Lost thread delete CAS');
+			}
 			await this.check(tx, access, admit);
 			return value;
 		});

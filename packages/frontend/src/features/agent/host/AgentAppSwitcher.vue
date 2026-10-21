@@ -1,9 +1,11 @@
 <script setup lang="ts">
 	import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+	import { useI18n } from 'vue-i18n';
 	import type { HostApp } from '../model/host-types';
 
 	const props = defineProps<{ apps: HostApp[]; activeAppId: string | null }>();
 	const emit = defineEmits<{ switch: [appId: string] }>();
+	const { t } = useI18n();
 
 	const open = ref(false);
 	const query = ref('');
@@ -55,6 +57,10 @@
 		if (!needle) return candidateApps.value;
 		return candidateApps.value.filter((app) => `${app.displayName} ${app.id}`.toLowerCase().includes(needle));
 	});
+
+	function surfaceLabel(app: HostApp): string {
+		return t(app.surface === 'custom' ? 'agent.hub.customSurface' : 'agent.hub.agentSurface');
+	}
 
 	const positionPanel = (): boolean => {
 		const anchor = triggerRef.value?.getBoundingClientRect();
@@ -222,7 +228,7 @@
 							<div class="min-w-0">
 								<div class="truncate text-xs font-medium leading-none">{{ app.displayName }}</div>
 								<div class="mt-1 truncate text-[11px] text-text-secondary">
-									{{ app.id }}
+									{{ surfaceLabel(app) }}
 								</div>
 							</div>
 						</div>

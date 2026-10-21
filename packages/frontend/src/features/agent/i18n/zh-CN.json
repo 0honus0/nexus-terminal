@@ -74,6 +74,12 @@
         "healthHealthy": "运行正常",
         "healthDegraded": "受控降级",
         "healthDisabled": "已停用",
+        "statusEnabled": "已启用",
+        "statusDisabled": "已停用",
+        "declaredCapabilities": "已声明能力",
+        "unknownDefinition": "未知应用",
+        "capabilityUnknownName": "扩展能力",
+        "technicalDetails": "实例详情",
         "runsMetric": "运行中",
         "approvalsMetric": "待审批",
         "grantsMetric": "已授权能力",
@@ -138,6 +144,12 @@
               }
             }
           },
+          "host": {
+            "inspect": {
+              "name": "检查 Host 状态",
+              "desc": "读取 Host 运行状态、容量与受控诊断信息"
+            }
+          },
           "shell": {
             "execute": {
               "name": "执行命令",
@@ -176,6 +188,30 @@
             "read": {
               "name": "读取任务产物",
               "desc": "读取当前 App 可访问的持久化产物"
+            },
+            "write": {
+              "name": "写入任务产物",
+              "desc": "创建或更新当前 App 可使用的持久化产物"
+            }
+          },
+          "context": {
+            "read": {
+              "name": "读取上下文",
+              "desc": "读取当前 Run 已授权的上下文资料"
+            },
+            "compact": {
+              "name": "压缩上下文",
+              "desc": "在容量边界内整理并压缩 Run 上下文"
+            }
+          },
+          "memory": {
+            "read": {
+              "name": "读取记忆",
+              "desc": "读取当前 App 已保存且可用的记忆"
+            },
+            "propose": {
+              "name": "提出记忆候选",
+              "desc": "创建等待用户确认的记忆候选"
             }
           },
           "app": {
@@ -246,6 +282,12 @@
         "stateEnabled": "已启用",
         "stateInstalled": "已安装",
         "stateNotInstalled": "未安装",
+        "stateDisabled": "已停用",
+        "stateUpgrade": "可升级",
+        "stateDraining": "等待现有任务结束",
+        "unknownPlugin": "未知插件",
+        "intentCount": "Intents {count} 个",
+        "prepareUpgrade": "校验升级包",
         "summaryNexusAgent": "官方通用智能体核心，支持运维诊断与工程协作，在受控沙箱内安全执行。",
         "summaryNexusFullstack": "全栈应用交付套件，支持微服务治理、复杂依赖联调与部署验证。",
         "compatibilityShort": "(兼容要求: Nexus {min}~{max})",
@@ -448,6 +490,8 @@
         "reasonPlaceholder": "请填写本次调整安全策略的原因（例如：生产环境保护、安全审计隔离）",
         "emptyConnectionsDetail": "系统内尚未录入任何主机或设备连接，Agent 当前默认无法外联任何私有机器。",
         "orphanIds": "包含已被删除的历史连接 ID：",
+        "orphanIdsCount": "黑名单中有 {count} 个已删除连接",
+        "technicalDetails": "技术详情",
         "clearOrphanIds": "清理全部无效 ID",
         "scopeHint": "这是跨会话、跨 Run 的全局硬限制，不是本次对话的 SSH 选择。",
         "manageTargets": "管理禁用目标",
@@ -618,7 +662,16 @@
         "description": "配置 OpenAI-compatible 模型服务商与接入端点。凭据单独安全保存，不会明文泄露。",
         "registryReadStatus": "读取当前状态",
         "registryRequestFailed": "无法读取模型目录，请核对登录状态后重新读取。",
-        "registryUnknown": "刷新结果未知，请先读取当前状态，再决定是否重新刷新。"
+        "registryUnknown": "刷新结果未知，请先读取当前状态，再决定是否重新刷新。",
+        "registryErrorFallback": "模型目录暂时不可用。",
+        "registryErrors": {
+          "MODEL_REGISTRY_HTTP": "模型目录返回了无法使用的响应。",
+          "MODEL_REGISTRY_NETWORK": "暂时无法连接模型目录服务。",
+          "MODEL_REGISTRY_RESPONSE_INVALID": "模型目录内容格式不受支持。",
+          "MODEL_REGISTRY_TOO_LARGE": "模型目录超出容量限制。",
+          "MODEL_REGISTRY_CLEANUP_FAILED": "模型目录更新后的收尾未完成。",
+          "MODEL_REGISTRY_CACHE_INVALID": "本地模型目录缓存已失效，将尝试重新获取。"
+        }
       },
       "guardrails": {
         "title": "系统保护边界",
@@ -690,6 +743,7 @@
         "allowedUrls": "允许访问的页面 URL Pattern（每行一个）",
         "endpoints": "CDP 端点",
         "addEndpoint": "添加 Endpoint",
+        "editEndpoint": "编辑 CDP Endpoint",
         "priority": "优先级",
         "removeEndpoint": "删除",
         "url": "CDP URL（ws/wss）",
@@ -894,7 +948,8 @@
         "deleteConfirm": "确定删除“{name}”？服务端会拒绝活跃运行引用的供应商。",
         "capacity": "所选模型超过剩余容量，请减少选择后再添加。",
         "applyObservation": "应用供应商观察到草稿",
-        "capabilityDetails": "能力详情"
+        "capabilityDetails": "能力详情",
+        "technicalDetails": "技术详情"
       },
       "appManagement": {
         "title": "Agent 应用与授权",
@@ -922,7 +977,7 @@
         "targetCount": "已选择 {count} / {max}",
         "selectVisible": "选择当前结果",
         "clearVisible": "移除当前结果",
-        "missingTarget": "未解析连接 #{id}（选择仍保留）",
+        "missingTarget": "无法解析已选连接（选择仍保留）",
         "targetsFailed": "连接目录读取失败。现有选择保持，重试读取后核对。",
         "readTargets": "重新读取连接目录",
         "policy": "应用执行策略",
@@ -963,6 +1018,7 @@
         "replace": "替换",
         "connection": "SSH连接",
         "chooseConnection": "选择SSH连接",
+        "unavailableConnection": "不可用连接（选择仍保留）",
         "argv": "argv（JSON字符串数组，首项为程序）",
         "cwd": "绝对工作目录",
         "retryCreation": "使用原键重试同一创建",
@@ -1032,7 +1088,12 @@
       "runningRuns": "运行中的 Run",
       "pendingApprovals": "待审批",
       "pendingBudget": "待处理预算请求",
-      "closeApp": "关闭 {app}"
+      "closeApp": "关闭 {app}",
+      "agentSurface": "Agent 会话",
+      "customSurface": "扩展界面",
+      "directoryError": "无法加载 Agent 服务",
+      "directoryErrorHint": "会话与 App 信息暂时不可用，请检查网络连接后重试。",
+      "retryDirectory": "重试"
     },
     "pluginFrontend": {
       "frameTitle": "Agent 插件界面",
@@ -1043,8 +1104,8 @@
     "operations": {
       "threads": "会话",
       "newThread": "新建",
-      "deleteThread": "删除当前会话",
-      "confirmDeleteThread": "再次点击删除当前会话",
+      "deleteThread": "删除会话",
+      "confirmDeleteThread": "再次点击确认删除",
       "deleteThreadActiveHint": "请先结束当前 Run，再删除此会话。",
       "deleteAllThreads": "删除全部会话",
       "confirmDeleteAllThreads": "再次点击删除全部会话",
@@ -1133,6 +1194,7 @@
       },
       "searchAction": "搜索",
       "cleanup": "清理可回收文件",
+      "cleanupSelectApp": "请先从筛选栏选择来源 App，再清理该 App 的可回收文件。",
       "protected": "受保护",
       "reclaimable": "可回收",
       "cleanupPreview": "将删除 {count} 个可回收文件（{bytes}）。{protected} 个受保护文件不会被删除。",
@@ -1150,6 +1212,7 @@
       "deleteProtected": "该文件已保留或正被活动引用保护，无法删除。文件库已刷新。",
       "loadMore": "加载更多",
       "libraryHint": "管理 Agent Run 使用的持久文件、证据与产物。",
+      "unknownApp": "未知 App",
       "storageOverview": "存储概览",
       "storageUsedPercent": "已使用 {percent}%",
       "available": "可用",
@@ -1500,6 +1563,8 @@
       "checkpointWatermark": "Ledger #{ledger} · 事件 #{event}",
       "resumeCheckpoint": "恢复为新 Run",
       "runOverview": "Run 概览",
+      "startedAt": "开始时间",
+      "updatedAt": "最近更新",
       "history": "Run 历史",
       "deleteRun": "删除 Run",
       "confirmDeleteRun": "确认删除",
@@ -1691,6 +1756,7 @@
       "revoke": "撤销信任",
       "upload": "上传插件包",
       "uploadHelp": "选择插件包，校验通过后确认安装。",
+      "technicalDetails": "技术详情",
       "stage": "暂存包",
       "reservation": "上传记录",
       "stages": "安装恢复与升级包",
@@ -1739,9 +1805,10 @@
       "name": "线程名称",
       "rename": "保存改名",
       "create": "创建线程",
-      "unknown": "原操作结果未知。先只读核对；读取列表不证明原操作未提交。",
-      "retry": "明确使用原键及原版本重试",
-      "abandon": "承认原操作可能已提交，放弃原意图"
+      "unknown": "操作结果未知。请先检查会话列表，再决定是否重试。",
+      "deleteUnknown": "删除结果未知。请先检查会话列表，再决定是否重试删除。",
+      "retry": "检查状态后重试",
+      "abandon": "停止跟踪，不撤销可能已发生的结果"
     },
     "nativeRun": {
       "audit": "步骤与工具审计",
@@ -1767,7 +1834,8 @@
       "readConfiguration": "读取 App、模型与目标目录",
       "readRuns": "刷新任务",
       "moreRuns": "更多任务",
-      "unknown": "操作结果未知。先只读核对，再决定是否使用原键和原版本重试；读取成功不证明原操作未提交。",
+      "unknown": "操作结果未知。请先检查当前状态，再决定是否重试原操作。",
+      "technicalDetails": "技术详情",
       "inspect": "只读核对原意图",
       "acknowledge": "我理解原操作可能已提交，放弃跟踪不会撤销原效果。",
       "conversation": "线程正文",

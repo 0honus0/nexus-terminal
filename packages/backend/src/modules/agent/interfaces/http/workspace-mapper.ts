@@ -98,6 +98,12 @@ export function fromWorkspace(value: AgentWorkspaceInput): WorkspaceInput {
 				threadId: value.params.threadId,
 				expectedVersion: value.params.expectedVersion,
 			};
+		case 'agent.threads.delete':
+			return {
+				method: value.method,
+				threadId: value.params.threadId,
+				expectedVersion: value.params.expectedVersion,
+			};
 		case 'agent.runs.list':
 			return {
 				method: value.method,
@@ -205,6 +211,8 @@ export function toWorkspace(value: WorkspaceResult): AgentWorkspaceResult {
 		case 'agent.threads.create':
 		case 'agent.threads.rename':
 			return { method: value.method, value: toThreadView(value.value) };
+		case 'agent.threads.delete':
+			return { method: value.method, value: { appId: value.value.appId, threadId: value.value.threadId } };
 		case 'agent.runs.list':
 			return {
 				method: value.method,

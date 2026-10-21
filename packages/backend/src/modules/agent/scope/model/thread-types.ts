@@ -1,4 +1,5 @@
 import type { AgentThread } from './scope-types.js';
+import type { AgentRunStatus } from '@nexus-terminal/shared/agent/runs/values';
 
 export interface PluginThreadAccess {
 	kind: 'plugin';
@@ -29,6 +30,20 @@ export interface ThreadPage {
 export type ThreadMutation =
 	| { kind: 'create'; operationId: string; title: string }
 	| { kind: 'rename'; operationId: string; threadId: string; expectedVersion: number; title: string };
+
+export interface ThreadRemoval {
+	threadId: string;
+	expectedVersion: number;
+}
+
+export interface ThreadRemovalFacts {
+	runStatuses: AgentRunStatus[];
+	maxMemoryVersion: number | null;
+}
+
+export interface ThreadRemovalDecision {
+	updatedAt: number;
+}
 
 export interface PluginThreadAccessFacts {
 	kind: 'plugin';

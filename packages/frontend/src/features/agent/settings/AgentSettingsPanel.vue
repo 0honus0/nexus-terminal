@@ -198,6 +198,7 @@
 			<PluginManagementSettings
 				:active="props.active && activeGroup === 'tools'"
 				:revision="pluginRevision"
+				:apps="management.apps.value"
 				@recommend="onboarding.request"
 			/>
 		</div>

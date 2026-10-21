@@ -117,11 +117,22 @@
 			/>
 			<div
 				v-if="operation.notice.value"
-				class="fixed bottom-20 right-4 z-50 rounded border bg-card p-3"
-				role="status"
+				class="fixed bottom-20 right-4 z-50 flex max-w-sm items-start gap-3 rounded-xl border border-warning/40 bg-card p-3 text-sm shadow-lg"
+				role="alert"
 			>
-				{{ $t('agent.settings.appManagement.' + operation.notice.value) }}
-				<button :disabled="operation.busy.value" @click="refresh">{{ $t('agent.nativeThreads.read') }}</button>
+				<i class="fa-solid fa-triangle-exclamation mt-0.5 text-warning" aria-hidden="true"></i>
+				<div class="min-w-0 flex-1">
+					<p class="font-medium text-foreground">{{ $t('agent.hub.directoryError') }}</p>
+					<p class="mt-1 text-xs leading-5 text-text-secondary">{{ $t('agent.hub.directoryErrorHint') }}</p>
+				</div>
+				<button
+					type="button"
+					class="shrink-0 rounded-lg border border-border/70 px-2.5 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-header hover:text-foreground disabled:opacity-50"
+					:disabled="operation.busy.value"
+					@click="refresh"
+				>
+					{{ $t('agent.hub.retryDirectory') }}
+				</button>
 			</div>
 		</template>
 	</Teleport>

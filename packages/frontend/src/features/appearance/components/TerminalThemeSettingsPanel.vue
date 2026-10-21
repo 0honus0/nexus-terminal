@@ -35,7 +35,7 @@
 	const filteredThemes = computed(() =>
 		sortedThemes.value.filter((theme) => theme.name.toLowerCase().includes(search.value.trim().toLowerCase())),
 	);
-	const themeFields = computed(() => Object.keys(themeDraft));
+	const themeFields = computed(() => Object.keys(themeDraft).sort((left, right) => left.localeCompare(right)));
 
 	function replaceThemeDraft(value: Record<string, string>): void {
 		for (const key of Object.keys(themeDraft)) {
@@ -191,7 +191,8 @@
 		}
 	}
 
-	const labelForThemeField = (key: string): string => key;
+	const labelForThemeField = (key: string): string =>
+		key.replace(/([A-Z])/g, ' $1').replace(/^./, (value) => value.toUpperCase());
 </script>
 
 <template>

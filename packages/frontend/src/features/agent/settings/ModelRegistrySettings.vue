@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { onActivated, onMounted, ref } from 'vue';
+	import { computed, onActivated, onMounted, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiButton } from '@/foundation/ui';
 	import { useAuthenticatedViewScope } from '@/shared/session/use-authenticated-view-scope';
@@ -8,11 +8,17 @@
 	import type { ModelRegistryStatus } from '../model/registry-types';
 	import { formatAgentDate } from '../locale-format';
 
-	const { t, locale } = useI18n();
+	const { t, te, locale } = useI18n();
 	const status = ref<ModelRegistryStatus | null>(null);
 	const busy = ref(false);
 	const error = ref('');
 	const refreshBlocked = ref(false);
+	const statusError = computed(() => {
+		const code = status.value?.lastErrorCode;
+		if (!code) return '';
+		const key = 'agent.settings.providers.registryErrors.' + code;
+		return te(key) ? t(key) : t('agent.settings.providers.registryErrorFallback');
+	});
 	let generation = 0;
 	const scope = useAuthenticatedViewScope({
 		onRevoke() {
@@ -80,11 +86,13 @@
 				><span>{{ status.entryCount }} {{ t('agent.settings.providers.registryModels') }}</span
 				><span v-if="status.generatedAt !== null"
 					>· {{ formatAgentDate(locale, new Date(status.generatedAt)) }}</span
-				><span
-					v-if="status.lastErrorCode"
-					class="rounded bg-error/10 px-1.5 py-0.5 font-mono text-[11px] text-error"
-					>{{ status.lastErrorCode }}</span
-				></template
+				><span v-if="status.lastErrorCode" class="rounded bg-warning/10 px-1.5 py-0.5 text-[11px] text-warning">
+					{{ statusError }}
+				</span>
+				<details v-if="status.lastErrorCode" class="text-[10px] text-text-secondary">
+					<summary class="cursor-pointer select-none">{{ t('agent.nativeRun.technicalDetails') }}</summary>
+					<code class="mt-1 block break-all">{{ status.lastErrorCode }}</code>
+				</details></template
 			>
 			<p v-if="error" role="alert" class="text-error">{{ error }}</p>
 		</div>

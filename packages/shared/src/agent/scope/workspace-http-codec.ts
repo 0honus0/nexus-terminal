@@ -33,6 +33,7 @@ export function isAgentWorkspaceMutation(input: AgentWorkspaceInput): boolean {
 	switch (input.method) {
 		case 'agent.threads.create':
 		case 'agent.threads.rename':
+		case 'agent.threads.delete':
 		case 'agent.runs.create':
 		case 'agent.runs.appendInput':
 		case 'agent.runs.cancel':
@@ -153,6 +154,16 @@ export function readAgentWorkspaceInput(input: unknown): AgentWorkspaceInput {
 					expectedVersion: agentInteger(p.expectedVersion, 1, Number.MAX_SAFE_INTEGER - 1),
 					operationId: readAgentId(p.operationId),
 					title: agentText(p.title, AGENT_SCOPE_MAX_NAME_BYTES),
+				},
+			};
+		}
+		case 'agent.threads.delete': {
+			const p = agentRecord(row.params, ['threadId', 'expectedVersion']);
+			return {
+				method: row.method,
+				params: {
+					threadId: readAgentId(p.threadId),
+					expectedVersion: agentInteger(p.expectedVersion, 1),
 				},
 			};
 		}
@@ -327,6 +338,14 @@ export function readAgentWorkspaceResult(input: unknown, request: AgentWorkspace
 			}
 			return { method: request.method, value };
 		}
+		case 'agent.threads.delete': {
+			const p = agentRecord(row.value, ['appId', 'threadId']);
+			const value = { appId: readAgentId(p.appId), threadId: readAgentId(p.threadId) };
+			if (value.threadId !== request.params.threadId) {
+				throw new InvalidAgentPayload();
+			}
+			return { method: request.method, value };
+		}
 		case 'agent.runs.list': {
 			const p = agentRecord(row.value, ['threadId', 'items', 'nextCursor'], AGENT_WORKSPACE_MAX_RESPONSE_BYTES);
 			const items = requireArray(p.items, request.params.limit).map(readAgentRunResponse);
@@ -403,6 +422,7 @@ function belongsToApp(value: AgentWorkspaceResult, appId: string): boolean {
 		case 'agent.threads.entries':
 		case 'agent.threads.create':
 		case 'agent.threads.rename':
+		case 'agent.threads.delete':
 		case 'agent.approvals.resolve':
 			return value.value.appId === appId;
 		case 'agent.threads.list':

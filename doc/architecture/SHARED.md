@@ -242,7 +242,7 @@ html-themes 的四个精确出口包含来源取值、名称/正文/完整编码
 
 ### B8 集成与插件源码边界
 
-Shared agent/integrations的model/http/http-codec/values及browser-*契约由新管理HTTP和模型工具消费者消费；内部配置、存储对象和技术资源保持独立类型并显式投影。秘密只定义写意图与存在标志。Shared agent/plugins已有publisher/stage/verify/install、升级/卸载/取消退役请求、安装/不可变版本/descriptor及严格响应codec。基础预算、entry命名空间和取值归values；32 MiB完整响应容纳当前用户256个stage/版本。新增独立数据/清除请求和安全对象，JSON文本128 KiB、key128 bytes；完整数据写入与RPC消息512 KiB，管理列表仍32 MiB。events/rpc-codec持有两端核心九方法；frontend-events/frontend-rpc-codec精确导出iframe握手、前端26方法及纯解码，实际消费者是Backend HTTP与交付的有限SDK。SDK窗口/MessagePort/计时器归Backend插件frontend Adapter，不进入Shared；host.appInfo和storage.get/put/delete与intents五方法均已有两端实际消费者，前端Agent管理/Run/订阅已有SDK消费者，正式父页的Shared RPC桥已消费，原生Host仍待迁移。不能从导出文件存在推断消费者完备。新manifest与正式前端迁移差异归实施方案F1，当前不保留旧Protocol桥。
+Shared agent/integrations的model/http/http-codec/values及browser-*契约由新管理HTTP和模型工具消费者消费；内部配置、存储对象和技术资源保持独立类型并显式投影。秘密只定义写意图与存在标志。Shared agent/plugins已有publisher/stage/verify/install、升级/卸载/取消退役请求、安装/不可变版本/descriptor及严格响应codec。基础预算、entry命名空间和取值归values；32 MiB完整响应容纳当前用户256个stage/版本。新增独立数据/清除请求和安全对象，JSON文本128 KiB、key128 bytes；完整数据写入与RPC消息512 KiB，管理列表仍32 MiB。events/rpc-codec持有两端核心九方法；frontend-events/frontend-rpc-codec精确导出iframe握手、前端27方法及纯解码，实际消费者是Backend HTTP与交付的有限SDK。SDK窗口/MessagePort/计时器归Backend插件frontend Adapter，不进入Shared；host.appInfo和storage.get/put/delete与intents五方法均已有两端实际消费者，前端Agent管理/Run/订阅已有SDK消费者，正式父页的Shared RPC桥已消费，原生Host仍待迁移。不能从导出文件存在推断消费者完备。新manifest与正式前端迁移差异归实施方案F1，当前不保留旧Protocol桥。
 
 插件backend-sdk提供纯后端扩展context/请求/安全回复和生命周期类型；NativePluginBackendRuntime是实际consumer，NodeWorker不依赖App类型。repository-model/http/http-codec提供完整仓库设置CAS、目录、stage及推荐响应；版本格式、完整目录容量和源数量在values唯一维护，Shared与包/目录Adapter消费同一版本取值。所有新出口精确列入package.json；后端与正式插件管理已接HTTP/Source管理，整体Agent前端对接仍未完成；B10已验证交付SDK在真实Chromium中的有限依赖/握手/订阅链，未代替正式父页或完整仓库验收；B10另有实际仓库HTTP/目录/下载和子进程backend-sdk九方法的有限行为证据，未新增类型或扩大权限。
 
@@ -316,4 +316,10 @@ Memory六HTTP的完整codec由正式记忆管理消费；offset分页、原版�
 
 ### 原生与插件共用工作区契约
 
-scope/workspace-http 及 workspace-http-codec 唯一定义17项工作区请求/安全结果、严格codec、原生appVersion外壳和App响应关联；基础完整预算8MiB+1KiB与可选模型上限1024归scope/values。插件frontend-events/frontend-rpc-codec组合并消费该契约，原核心九方法不变；SDK交付白名单包含新增codec运行依赖。不再把通用工作区对象定义在plugins中。Backend原生会话HTTP和插件RPC、Frontend正式Host/Run/正文/审批/Child、DEV线程组件及插件桥均为真实消费者。前端mapper逐字段转换独立NativeThread/Scope/Run/Entry/Approval/Child/Step/Tool对象，不直接把wire当UI状态；前端包已移除旧Protocol依赖。
+scope/workspace-http 及 workspace-http-codec 唯一定义18项工作区请求/安全结果、严格codec、原生appVersion外壳和App响应关联；基础完整预算8MiB+1KiB与可选模型上限1024归scope/values。插件frontend-events/frontend-rpc-codec组合并消费该契约，原核心九方法不变；SDK交付白名单包含新增codec运行依赖。不再把通用工作区对象定义在plugins中。Backend原生会话HTTP和插件RPC、Frontend正式Host/Run/正文/审批/Child、DEV线程组件及插件桥均为真实消费者。前端mapper逐字段转换独立NativeThread/Scope/Run/Entry/Approval/Child/Step/Tool对象，不直接把wire当UI状态；前端包已移除旧Protocol依赖。
+
+新增 agent.threads.delete 的完整参数为 {threadId,expectedVersion}，成功 value 为 AgentDeleteThreadResponse {appId,threadId}；不接受 operationId、额外字段、缺字段、非 UUID 或非正安全整数版本。删除不递增线程版本，因此当前最大安全整数版本仍合法。结果 decoder 严格验证方法和原 threadId，原生响应还验证外壳 App/version 以及内层 appId；插件响应复用工作区 codec 关联线程与 envelope 的 nonce/id/seq，交付 SDK 按已绑定 App 检查结果归属。Backend workspace-mapper 为唯一协议↔应用白名单转换；删除属于 mutation，即使没有 operationId，丢失确认、超时或本地取消也保持未知副作用语义。
+
+pending/running/unknown 的 Root 或 Child 阻止删除，安全失败复用 agent/values 的 active_run_conflict（HTTP 409）；线程/App版本冲突使用 version_conflict，缺失/异 App线程使用 not_found，不根据错误正文归类。事务删除线程、全部 Run 和所属持久子表及附件引用，Memory 保留并清除 sourceRunId、推进自身版本；Artifact 元数据和文件保留。SQL、事务、状态准入和记忆版本耗尽判断均由 Backend 各自 owner 持有，Shared 不定义存储事实或删除策略对象。没有删除回执重放或墓碑兼容层，重复删除为 not_found；未知结果应保留原 threadId/expectedVersion 并先只读核对，不自动重放旧创建意图。
+
+验收边界为严格 unknown 输入、方法/线程/App/version/envelope 响应关联、现有消费者编译，以及 Backend 当前 v1 隔离 SQLite 的 FK/级联、拒绝和回滚验证；正式删除 UI、真实插件/原生 HTTP 交付丢失与并发竞争仍须各自整链验收，静态和隔离证据不扩大为全量行为通过。

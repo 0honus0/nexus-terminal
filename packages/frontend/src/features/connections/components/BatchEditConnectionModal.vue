@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
+	import { computed, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
 	import { useAuthSession } from '@/features/auth/public';
 	import { useI18n } from 'vue-i18n';
 	import { UiButton, UiCheckbox, UiFormField, UiInput, UiModal, UiSelect, UiTextarea } from '@/foundation/ui';
@@ -16,7 +16,6 @@
 	const proxies = capabilities.proxies;
 	const sshKeys = capabilities.sshKeys;
 	const ConnectionTagPicker = capabilities.tags.picker;
-	const kind = ref<'metadata' | 'credential'>('metadata');
 	const port = ref('');
 	const username = ref('');
 	const password = ref('');
@@ -26,15 +25,21 @@
 	const tagIds = ref<number[]>([]);
 	const editPort = ref(false);
 	const editUsername = ref(false);
+	const editAdvanced = ref(false);
 	const editTags = ref(false);
 	const editNotes = ref(false);
 	const auth = ref('password');
 	const error = ref('');
 	let generation = 0;
+	const hasMetadataChanges = computed(
+		() =>
+			editPort.value ||
+			editUsername.value ||
+			(editAdvanced.value && (proxyId.value !== '__nochange__' || editTags.value || editNotes.value)),
+	);
 
 	function reset(): void {
 		generation++;
-		kind.value = 'metadata';
 		port.value = '';
 		username.value = '';
 		password.value = '';
@@ -44,6 +49,7 @@
 		tagIds.value = [];
 		editPort.value = false;
 		editUsername.value = false;
+		editAdvanced.value = false;
 		editTags.value = false;
 		editNotes.value = false;
 		error.value = '';
@@ -65,10 +71,6 @@
 		},
 		{ immediate: true },
 	);
-	watch(kind, () => {
-		password.value = '';
-		sshKeyId.value = '';
-	});
 	onBeforeUnmount(reset);
 	onDeactivated(reset);
 	watch(
@@ -80,24 +82,13 @@
 		{ flush: 'sync' },
 	);
 
-	function save(): void {
+	function saveMetadata(): void {
 		if (props.loading) {
 			return;
 		}
 		error.value = '';
 		try {
-			if (kind.value === 'credential') {
-				const credential =
-					auth.value === 'none'
-						? null
-						: readCredentialInput(
-								auth.value === 'key'
-									? { kind: 'ssh_key', sshKeyId: Number(sshKeyId.value) }
-									: { kind: 'password', password: password.value },
-							);
-				emit('save', { kind: 'credential', credential });
-				return;
-			}
+			if (!hasMetadataChanges.value) return;
 			const changes: TargetConnectionChanges = {};
 			if (editPort.value) {
 				changes.port = Number(port.value);
@@ -105,18 +96,36 @@
 			if (editUsername.value) {
 				changes.username = username.value.trim();
 			}
-			if (proxyId.value !== '__nochange__') {
+			if (editAdvanced.value && proxyId.value !== '__nochange__') {
 				changes.route = proxyId.value === '__none__' ? 'direct' : 'proxy';
 				changes.proxyId = proxyId.value === '__none__' ? null : Number(proxyId.value);
 				changes.jumpIds = [];
 			}
-			if (editTags.value) {
+			if (editAdvanced.value && editTags.value) {
 				changes.tagIds = tagIds.value.map((id) => id);
 			}
-			if (editNotes.value) {
+			if (editAdvanced.value && editNotes.value) {
 				changes.notes = notes.value || null;
 			}
 			emit('save', { kind: 'metadata', changes: readConnectionChanges(changes) });
+		} catch (cause) {
+			error.value = t('connections.failures.' + targetErrorKey(cause));
+		}
+	}
+
+	function saveCredential(): void {
+		if (props.loading) return;
+		error.value = '';
+		try {
+			const credential =
+				auth.value === 'none'
+					? null
+					: readCredentialInput(
+							auth.value === 'key'
+								? { kind: 'ssh_key', sshKeyId: Number(sshKeyId.value) }
+								: { kind: 'password', password: password.value },
+						);
+			emit('save', { kind: 'credential', credential });
 		} catch (cause) {
 			error.value = t('connections.failures.' + targetErrorKey(cause));
 		}
@@ -129,39 +138,36 @@
 		content-class="!overflow-hidden !py-0"
 		@close="emit('close')"
 	>
-		<form id="batch-connection-editor" class="flex max-h-[78vh] min-h-0 flex-col" @submit.prevent="save">
+		<form id="batch-connection-editor" class="flex max-h-[78vh] min-h-0 flex-col" @submit.prevent="saveMetadata">
 			<h3 class="mb-6 shrink-0 text-center text-xl font-semibold">
 				{{ t('connections.batchEdit.title') }} ({{ t('connections.batchEdit.selectedItems', { count }) }})
 			</h3>
 			<fieldset :disabled="loading" class="flex-grow space-y-4 overflow-y-auto pr-2">
-				<UiFormField :label="t('connections.batchMode')"
-					><UiSelect v-model="kind"
-						><option value="metadata">{{ t('connections.metadata') }}</option>
-						<option value="credential">{{ t('connections.credentials') }}</option></UiSelect
-					></UiFormField
-				>
 				<p class="text-sm text-text-secondary">{{ t('connections.separateSaves') }}</p>
-				<template v-if="kind === 'metadata'">
-					<section class="rounded-md border border-border bg-background p-4">
-						<div class="mb-2 flex items-center justify-between">
-							<h4 class="text-base font-semibold">{{ t('connections.table.port') }}</h4>
-							<UiCheckbox v-model="editPort" :aria-label="t('connections.form.port')" />
-						</div>
-						<UiFormField v-if="editPort" :label="t('connections.form.port')"
-							><UiInput v-model="port" type="number" min="1" max="65535"
-						/></UiFormField>
-					</section>
-					<section class="rounded-md border border-border bg-background p-4">
-						<div class="mb-2 flex items-center justify-between">
-							<h4 class="text-base font-semibold">{{ t('connections.form.username') }}</h4>
-							<UiCheckbox v-model="editUsername" :aria-label="t('connections.form.username')" />
-						</div>
-						<UiFormField v-if="editUsername" :label="t('connections.form.username')"
-							><UiInput v-model="username" :placeholder="t('connections.batchEdit.leaveBlankNoChange')"
-						/></UiFormField>
-					</section>
-					<section class="space-y-3 rounded-md border border-border bg-background p-4">
+				<section class="rounded-md border border-border bg-background p-4">
+					<div class="mb-2 flex items-center justify-between">
+						<h4 class="text-base font-semibold">{{ t('connections.table.port') }}</h4>
+						<UiCheckbox v-model="editPort" :aria-label="t('connections.form.port')" />
+					</div>
+					<UiFormField v-if="editPort" :label="t('connections.form.port')"
+						><UiInput v-model="port" type="number" min="1" max="65535"
+					/></UiFormField>
+				</section>
+				<section class="rounded-md border border-border bg-background p-4">
+					<div class="mb-2 flex items-center justify-between">
+						<h4 class="text-base font-semibold">{{ t('connections.form.sectionAuth') }}</h4>
+						<UiCheckbox v-model="editUsername" :aria-label="t('connections.form.username')" />
+					</div>
+					<UiFormField v-if="editUsername" :label="t('connections.form.username')"
+						><UiInput v-model="username" :placeholder="t('connections.batchEdit.leaveBlankNoChange')"
+					/></UiFormField>
+				</section>
+				<section class="rounded-md border border-border bg-background p-4">
+					<div class="mb-2 flex items-center justify-between">
 						<h4 class="text-base font-semibold">{{ t('connections.form.sectionAdvanced') }}</h4>
+						<UiCheckbox v-model="editAdvanced" :aria-label="t('connections.form.sectionAdvanced')" />
+					</div>
+					<div v-if="editAdvanced" class="space-y-3">
 						<UiFormField :label="t('connections.form.proxy')"
 							><UiSelect v-model="proxyId"
 								><option value="__nochange__">{{ t('connections.batchEdit.noChange') }}</option>
@@ -195,9 +201,9 @@
 								></label
 							><UiTextarea v-if="editNotes" v-model="notes" :min-rows="3" />
 						</div>
-					</section>
-				</template>
-				<section v-else class="space-y-3 rounded-md border border-border bg-background p-4">
+					</div>
+				</section>
+				<section class="space-y-3 rounded-md border border-border bg-background p-4">
 					<h4 class="text-base font-semibold">{{ t('connections.form.sectionAuth') }}</h4>
 					<UiFormField :label="t('connections.form.authMethod')"
 						><UiSelect v-model="auth"
@@ -228,9 +234,13 @@
 			</fieldset>
 			<footer class="mt-4 flex shrink-0 justify-end space-x-3 border-t border-border/50 pt-5">
 				<UiButton type="button" @click="emit('close')">{{ t('common.cancel') }}</UiButton>
-				<UiButton type="submit" appearance="solid" tone="primary" :disabled="loading"
+				<UiButton type="button" appearance="soft" tone="warning" :disabled="loading" @click="saveCredential"
+					><template #leading><i class="fas fa-key" aria-hidden="true"></i></template
+					>{{ t('connections.batchEdit.saveCredential') }}</UiButton
+				>
+				<UiButton type="submit" appearance="solid" tone="primary" :disabled="loading || !hasMetadataChanges"
 					><template #leading><i class="fas fa-save" aria-hidden="true"></i></template
-					>{{ t('common.save') }}</UiButton
+					>{{ t('connections.batchEdit.saveMetadata') }}</UiButton
 				>
 			</footer>
 		</form>

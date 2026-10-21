@@ -74,6 +74,12 @@
         "healthHealthy": "正常稼働",
         "healthDegraded": "機能制限",
         "healthDisabled": "停止中",
+        "statusEnabled": "有効",
+        "statusDisabled": "停止中",
+        "declaredCapabilities": "宣言済み能力",
+        "unknownDefinition": "不明なアプリ",
+        "capabilityUnknownName": "拡張能力",
+        "technicalDetails": "インスタンス詳細",
         "runsMetric": "実行中",
         "approvalsMetric": "承認待ち",
         "grantsMetric": "付与済み権限",
@@ -138,6 +144,12 @@
               }
             }
           },
+          "host": {
+            "inspect": {
+              "name": "Host 状態を確認",
+              "desc": "Host の実行状態、容量、制御された診断情報を読み取ります"
+            }
+          },
           "shell": {
             "execute": {
               "name": "コマンドを実行",
@@ -176,6 +188,30 @@
             "read": {
               "name": "タスク成果物を読む",
               "desc": "現在の App がアクセスできる永続成果物を読み取ります"
+            },
+            "write": {
+              "name": "タスク成果物を書き込む",
+              "desc": "現在の App が利用する永続成果物を作成または更新します"
+            }
+          },
+          "context": {
+            "read": {
+              "name": "コンテキストを読む",
+              "desc": "現在の Run に許可されたコンテキスト資料を読み取ります"
+            },
+            "compact": {
+              "name": "コンテキストを圧縮",
+              "desc": "容量制限内で Run のコンテキストを整理・圧縮します"
+            }
+          },
+          "memory": {
+            "read": {
+              "name": "メモリを読む",
+              "desc": "現在の App が利用できる保存済みメモリを読み取ります"
+            },
+            "propose": {
+              "name": "メモリ候補を提案",
+              "desc": "ユーザーの確認を待つメモリ候補を作成します"
             }
           },
           "app": {
@@ -246,6 +282,12 @@
         "stateEnabled": "有効",
         "stateInstalled": "インストール済み",
         "stateNotInstalled": "未インストール",
+        "stateDisabled": "無効",
+        "stateUpgrade": "更新可能",
+        "stateDraining": "実行中のタスク終了待ち",
+        "unknownPlugin": "不明なプラグイン",
+        "intentCount": "Intent {count} 件",
+        "prepareUpgrade": "更新パッケージを検証",
         "summaryNexusAgent": "公式の汎用エージェントコア。運用診断とエンジニアリング協業に対応し、制御されたサンドボックス内で安全に実行します。",
         "summaryNexusFullstack": "フルスタック納品スイート。マイクロサービス運用、複雑な依存関係の結合検証、デプロイ検証に対応します。",
         "compatibilityShort": "(要件: Nexus {min}〜{max})",
@@ -448,6 +490,8 @@
         "reasonPlaceholder": "安全ポリシーの変更理由を入力してください",
         "emptyConnectionsDetail": "ホストやデバイス接続が未登録のため、Agent は既定でプライベートマシンへ接続できません。",
         "orphanIds": "削除済みの接続 ID が残っています：",
+        "orphanIdsCount": "拒否リストに削除済み接続が {count} 件あります",
+        "technicalDetails": "技術詳細",
         "clearOrphanIds": "無効な ID をすべて削除",
         "scopeHint": "これは会話や Run をまたぐグローバルな強制制限で、現在のチャット用 SSH 選択ではありません。",
         "manageTargets": "禁止ターゲットを管理",
@@ -618,7 +662,16 @@
         "description": "OpenAI-compatible Provider と接続エンドポイントを設定します。認証情報は別管理され、平文で漏洩することはありません。",
         "registryReadStatus": "現在の状態を取得",
         "registryRequestFailed": "モデルレジストリを取得できません。ログイン状態を確認してから再取得してください。",
-        "registryUnknown": "更新結果は不明です。現在の状態を取得してから再更新を判断してください。"
+        "registryUnknown": "更新結果は不明です。現在の状態を取得してから再更新を判断してください。",
+        "registryErrorFallback": "モデルレジストリは一時的に利用できません。",
+        "registryErrors": {
+          "MODEL_REGISTRY_HTTP": "モデルレジストリから利用できない応答が返されました。",
+          "MODEL_REGISTRY_NETWORK": "現在モデルレジストリサービスに接続できません。",
+          "MODEL_REGISTRY_RESPONSE_INVALID": "モデルレジストリの形式がサポートされていません。",
+          "MODEL_REGISTRY_TOO_LARGE": "モデルレジストリが容量上限を超えています。",
+          "MODEL_REGISTRY_CLEANUP_FAILED": "モデルレジストリ更新後の後処理が完了しませんでした。",
+          "MODEL_REGISTRY_CACHE_INVALID": "ローカルモデルレジストリのキャッシュが無効なため、再取得します。"
+        }
       },
       "guardrails": {
         "title": "システムガードレール",
@@ -690,6 +743,7 @@
         "allowedUrls": "許可するページ URL Pattern（1 行 1 件）",
         "endpoints": "CDP エンドポイント",
         "addEndpoint": "Endpoint を追加",
+        "editEndpoint": "CDP Endpoint を編集",
         "priority": "優先度",
         "removeEndpoint": "削除",
         "url": "CDP URL（ws/wss）",
@@ -894,7 +948,8 @@
         "deleteConfirm": "「{name}」を削除しますか？実行中の参照がある場合は拒否されます。",
         "capacity": "選択モデルが残り容量を超えています。選択数を減らしてください。",
         "applyObservation": "プロバイダーの観測を下書きに適用",
-        "capabilityDetails": "機能の詳細"
+        "capabilityDetails": "機能の詳細",
+        "technicalDetails": "技術詳細"
       },
       "appManagement": {
         "title": "Agent アプリと権限",
@@ -922,7 +977,7 @@
         "targetCount": "選択済み {count} / {max}",
         "selectVisible": "表示中を選択",
         "clearVisible": "表示中を解除",
-        "missingTarget": "未解決の接続 #{id}（選択を保持）",
+        "missingTarget": "選択した接続を解決できません（選択を保持）",
         "targetsFailed": "接続一覧を取得できません。既存の選択は保持します。再読み込みしてください。",
         "readTargets": "接続一覧を再読み込み",
         "policy": "アプリ実行方針",
@@ -963,6 +1018,7 @@
         "replace": "置換",
         "connection": "SSH接続",
         "chooseConnection": "SSH接続を選択",
+        "unavailableConnection": "利用できない接続（選択を保持）",
         "argv": "argv（JSON文字列配列、先頭はプログラム）",
         "cwd": "絶対作業ディレクトリ",
         "retryCreation": "元のキーで同じ作成を再試行",
@@ -1032,7 +1088,12 @@
       "runningRuns": "実行中の Run",
       "pendingApprovals": "承認待ち",
       "pendingBudget": "予算要求待ち",
-      "closeApp": "{app} を閉じる"
+      "closeApp": "{app} を閉じる",
+      "agentSurface": "Agent 会話",
+      "customSurface": "拡張インターフェース",
+      "directoryError": "Agent サービスを読み込めません",
+      "directoryErrorHint": "会話と App 情報を一時的に利用できません。接続を確認して再試行してください。",
+      "retryDirectory": "再試行"
     },
     "pluginFrontend": {
       "frameTitle": "Agent プラグイン UI",
@@ -1043,8 +1104,8 @@
     "operations": {
       "threads": "会話",
       "newThread": "新規",
-      "deleteThread": "現在の会話を削除",
-      "confirmDeleteThread": "もう一度クリックして現在の会話を削除",
+      "deleteThread": "会話を削除",
+      "confirmDeleteThread": "もう一度クリックして削除を確認",
       "deleteThreadActiveHint": "この会話を削除する前に、アクティブな Run を終了してください。",
       "deleteAllThreads": "すべての会話を削除",
       "confirmDeleteAllThreads": "もう一度クリックしてすべての会話を削除",
@@ -1133,6 +1194,7 @@
       },
       "searchAction": "検索",
       "cleanup": "回収可能ファイルを削除",
+      "cleanupSelectApp": "先にフィルターでソース App を選択してから、その App の回収可能ファイルを整理してください。",
       "protected": "保護済み",
       "reclaimable": "回収可能",
       "cleanupPreview": "回収可能な {count} ファイル（{bytes}）を削除します。保護中の {protected} ファイルは削除されません。",
@@ -1150,6 +1212,7 @@
       "deleteProtected": "このファイルは保持中、またはアクティブな参照で保護されているため削除できません。ライブラリを更新しました。",
       "loadMore": "さらに読み込む",
       "libraryHint": "Agent Run で使用する永続ファイル、証拠、成果物を管理します。",
+      "unknownApp": "不明な App",
       "storageOverview": "ストレージ概要",
       "storageUsedPercent": "{percent}% 使用中",
       "available": "空き容量",
@@ -1500,6 +1563,8 @@
       "checkpointWatermark": "Ledger #{ledger} · イベント #{event}",
       "resumeCheckpoint": "新しい Run として再開",
       "runOverview": "Run 概要",
+      "startedAt": "開始時刻",
+      "updatedAt": "最終更新",
       "history": "Run 履歴",
       "deleteRun": "Run を削除",
       "confirmDeleteRun": "削除を確認",
@@ -1691,6 +1756,7 @@
       "revoke": "信頼を取り消す",
       "upload": "プラグインをアップロード",
       "uploadHelp": "プラグインパッケージを選択し、検証後にインストールを確認します。",
+      "technicalDetails": "技術詳細",
       "stage": "パッケージを一時保存",
       "reservation": "アップロード記録",
       "stages": "インストールの復旧と更新パッケージ",
@@ -1739,9 +1805,10 @@
       "name": "スレッド名",
       "rename": "名前を保存",
       "create": "スレッドを作成",
-      "unknown": "元の操作結果は不明です。まず読み取りで確認してください。一覧の取得は未コミットの証明にはなりません。",
-      "retry": "元のキーとバージョンで明示的に再試行",
-      "abandon": "コミット済みの可能性を認めて意図を破棄"
+      "unknown": "操作結果は不明です。会話一覧を確認してから、再試行するか判断してください。",
+      "deleteUnknown": "削除結果は不明です。会話一覧を確認してから、再試行するか判断してください。",
+      "retry": "状態を確認して再試行",
+      "abandon": "追跡を終了し、発生した可能性のある変更は取り消さない"
     },
     "nativeRun": {
       "audit": "ステップとツールの監査",
@@ -1767,7 +1834,8 @@
       "readConfiguration": "App・モデル・対象の一覧を取得",
       "readRuns": "タスクを更新",
       "moreRuns": "その他のタスク",
-      "unknown": "結果が不明です。読み取りで確認してから、元のキーとバージョンで再試行してください。読み取り成功は未確定を意味しません。",
+      "unknown": "操作結果は不明です。現在の状態を確認してから、再試行するか判断してください。",
+      "technicalDetails": "技術詳細",
       "inspect": "元の操作を読み取りで確認",
       "acknowledge": "元の操作が確定済みの可能性があり、追跡を終了しても取り消されないことを理解しました。",
       "conversation": "スレッド本文",
