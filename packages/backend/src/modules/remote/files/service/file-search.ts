@@ -62,7 +62,7 @@ export async function searchFiles(
 				if (
 					result.directory === root ||
 					!(result.error instanceof RemoteFileFailure) ||
-					result.error.code !== 'not_found'
+					(result.error.code !== 'not_found' && result.error.code !== 'forbidden')
 				) {
 					throw result.error;
 				}

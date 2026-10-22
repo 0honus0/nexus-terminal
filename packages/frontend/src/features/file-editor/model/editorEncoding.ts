@@ -70,15 +70,15 @@ export const detectEditorEncoding = async (rawContent: Uint8Array): Promise<stri
 	if (rawContent.byteLength >= 2 && rawContent[0] === 0xff && rawContent[1] === 0xfe) return 'utf-16le';
 	if (rawContent.byteLength >= 2 && rawContent[0] === 0xfe && rawContent[1] === 0xff) return 'utf-16be';
 
-	const sample = encodingDetectionSample(rawContent);
-	if (!sample.includes(0)) {
+	if (!rawContent.includes(0)) {
 		try {
-			new TextDecoder('utf-8', { fatal: true }).decode(sample);
+			new TextDecoder('utf-8', { fatal: true }).decode(rawContent);
 			return 'utf-8';
 		} catch {
 			// Non-UTF-8 content falls through to the broader detector.
 		}
 	}
+	const sample = encodingDetectionSample(rawContent);
 	const [jschardet, { iconv, Buffer }] = await Promise.all([import('jschardet'), loadEditorCodec()]);
 	const detection = jschardet.detect(Buffer.from(sample).toString('latin1'));
 	let detected = normalizeEditorEncoding(detection.encoding || 'utf-8');

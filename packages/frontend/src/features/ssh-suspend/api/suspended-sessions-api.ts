@@ -135,7 +135,7 @@ async function logBytes(response: Response, filename: string, signal: AbortSigna
 			}
 			chunks.push(Uint8Array.from(next.value));
 		}
-		if (declared !== null && Number(declared) !== size) {
+		if (declared !== null && Number(declared) !== size && !response.headers.has('content-encoding')) {
 			throw new SuspendedRequestFailure('protocol_failure', 'unknown', response.status);
 		}
 	} catch (cause) {

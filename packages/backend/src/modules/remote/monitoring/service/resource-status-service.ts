@@ -294,7 +294,13 @@ export class ResourceStatusService {
 				if (causes.some((cause) => cause instanceof RemoteResourceCleanupFailure)) {
 					throw new RemoteResourceCleanupFailure(causes);
 				}
-				throw new ObservationFailure('remote_unavailable', { cause: new AggregateError(causes) });
+				const first = causes[0];
+				const code =
+					first instanceof ObservationFailure &&
+					causes.every((cause) => cause instanceof ObservationFailure && cause.code === first.code)
+						? first.code
+						: 'remote_unavailable';
+				throw new ObservationFailure(code, { cause: new AggregateError(causes) });
 			}
 			throw failures[0]?.reason;
 		}

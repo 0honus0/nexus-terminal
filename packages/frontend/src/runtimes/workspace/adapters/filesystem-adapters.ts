@@ -125,6 +125,10 @@ export function createFilesystemChannel(
 		finishWaiting();
 	});
 	const offError = socket.on('filesystem.error', ({ message }) => {
+		if (disposed) {
+			return;
+		}
+		generation += 1;
 		availability = { code: message };
 		invalidate({ type: 'unavailable', code: message });
 		finishWaiting(new FilesystemFailure(message, false));
@@ -194,6 +198,9 @@ export function createFilesystemChannel(
 		} catch (cause) {
 			if (signal?.aborted) {
 				throw new DOMException('File request aborted', 'AbortError');
+			}
+			if (cause instanceof FilesystemFailure) {
+				throw cause;
 			}
 			if (cause instanceof WorkspaceDispatchFailure) {
 				throw new FilesystemFailure(cause.code, false, { cause });
@@ -276,6 +283,9 @@ export function createFilesystemChannel(
 			} catch (cause) {
 				if (signal?.aborted) {
 					throw new DOMException('File read aborted', 'AbortError');
+				}
+				if (cause instanceof FilesystemFailure) {
+					throw cause;
 				}
 				if (cause instanceof WorkspaceDispatchFailure) {
 					throw new FilesystemFailure(cause.code, false, { cause });

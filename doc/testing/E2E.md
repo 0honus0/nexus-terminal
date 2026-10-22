@@ -1,5 +1,35 @@
 # Nexus Terminal E2E
 
+## 两轮逻辑修复提交收口（2026-10-22）
+
+用户最新授权“修改提交”，本次仅提交下方两轮逻辑修复和对应 PLAN/USAGE/验证记录；并行 UI 代码、UI 验证记录及未跟踪设计产物保留在工作区，不代为提交。最近的根 check、build、全量格式检查结果见下方本轮证据；提交前追加核对暂存文件、格式及 diff，不运行行为测试或 E2E，不推送、部署或重启。
+
+## 文件编辑与搜索链路续审（2026-10-22，不改 UI）
+
+基于 `dev`、`f9e11e03` 和上一轮未提交逻辑修复继续核对；保留并行 UI 改动，不修改组件、模板、样式或布局。本轮按源码确认并修复以下问题，未运行行为复现：
+
+- `editorEncoding.ts` 对大于 256 KiB 的内容拼接头/中/尾字节样本，再按 UTF-8 校验；切片可能从中文或表情的多字节序列中间开始/结束，导致合法 UTF-8 误入其他编码检测，也可能漏掉未采样区域的非法字节。现 UTF-8 校验消费完整连续原文，包含 NUL 的内容仍进入既有检测，其他编码继续沿用有界样本及 BOM 优先级。
+- `file-search.ts` 只跳过子目录 not_found；SFTP 的 permission_denied 经 `SftpFileResource.translate` 转成 forbidden 后，会令整次递归搜索失败。现对子目录 forbidden 同样跳过并标记 truncated；根目录失败、容量/连接/取消及未知错误仍传播，保留全部在途 scan 的 finally 等待，不减少授权检查。
+- 文件 Adapter 在请求返回后因代际失效抛出 FilesystemFailure(not_connected)，又被自身通用 catch 包成 protocol_error。现普通读取和二进制读取保留已归一的 FilesystemFailure，仍拒绝旧结果；真正的 WS 拒绝、解码失败与未知写入仍保留原分类。
+
+消费者复核范围：文件编辑器检测/解码 → DocumentPort → 编辑器 open/reload/changeEncoding；RemoteFileService.search → searchFiles → FileResource.scan/SFTP 错误转换 → Workspace 搜索投影；Workspace 读取 → assertCurrent → 目录缓存、编辑器/预览及 filesystemFailureMessage。没有新增 Shared 字段、资源 owner 或架构边界；核对 Frontend/Backend 既有文件生命周期设计仍适用。
+
+按 D17 未新增或运行行为测试、浏览器或 E2E。待远程覆盖：超过样本窗口的连续中文/表情与混合文本、未采样区非法 UTF-8、UTF-16/BOM 与传统编码；无权限/被删除子目录和可读兄弟目录并存、根目录无权限、扫描容量/取消；普通及二进制读取等待期间断线/代际替换、畸形响应仍拒绝。未提交、推送、部署或重启。
+
+本轮实际执行 `pnpm run check`、`pnpm run build`、`pnpm run format:all:check` 均退出 0，日志分别为 `/tmp/nexus-files-review-check.log`、`/tmp/nexus-files-review-build.log`、`/tmp/nexus-files-review-format.log`；构建仍有既有大 chunk 提示。环境为 Node v22.23.1、pnpm 11.26.0；`git diff --check` 通过，没有暂存变更。检查覆盖当前完整工作区，但本轮不修改或代为提交并行 UI 文件；静态通过不表示本轮行为场景或 E2E 已通过。
+
+## 功能逻辑续审（2026-10-22，不改 UI）
+
+基于 `f9e11e03` 继续核对文件会话/缓存、挂起 WS/HTTP 和日志、文件库下载及资源采样；本轮不修改模板、样式、UI 布局或并行设计代码。
+
+- Workspace 文件 Adapter 的 `filesystem.error` 原来只更新可用状态，不推进代际；旧只读请求的异步返回只核对 generation，因此在错误后乃至再次 ready 后仍可能交付。现错误事件推进代际，失效旧读取，保留写入回执/未知语义。
+- ResourceStatus 两个 worker 同时失败时原来一律聚合为 remote_unavailable；注销/到期同时导致两个 unauthenticated 时，HTTP 错误从 401 变成 503。现所有子失败为同一具名 ObservationFailure 时保留原 code，并保留全部 cause；混合故障仍安全兜底，清理失败仍优先处理。
+- 日志下载直接把 Content-Length 与 Fetch 解码后的正文比较，文件库还强制存在该头；代理压缩保留压缩长度、或合法 chunked 响应省略长度时会误拒绝。现分别按传输编码核对长度，始终保留实际正文上限、文件库 ID/版本/字节数/SHA-256、日志媒体类型/文件名及流清理。
+
+源码复核覆盖 filesystem.error/ready/close → request/assertCurrent → 目录/预览/编辑器消费者，以及采样 worker → Service 聚合 → resource-status HTTP 状态映射；下载沿通用有界 Binary/Response reader 与独立日志 reader 核对，不增加自动重试。待远程回归：读取未返回时失败再恢复、并行注销/权限/容量失败与混合清理错误、gzip/br 日志及文件库下载、无 Content-Length 完整文件、截断/超量/错误 hash 拒绝。按 D17 不新增或运行本地行为测试、浏览器或 E2E；不提交、推送、部署或重启。
+
+本轮重新执行 `pnpm run check`、`pnpm run build`、`pnpm run format:all:check`，均退出 0；日志分别为 `/tmp/nexus-logic-followup-check.log`、`/tmp/nexus-logic-followup-build.log`、`/tmp/nexus-logic-followup-format.log`。构建仍有既有大 chunk 提示；`git diff --check` 通过。本轮没有暂存或提交变更，保留并行 UI 修改及未跟踪产物。以上仅为源码和静态验证，不代表待远程场景或 E2E 已通过。
+
 ## 累计配额修复续审与提交（2026-10-22）
 
 用户授权修复后提交。复查 stage 回收与引用/退役 CAS、同包复用的内容和身份复核、插件墓碑/历史回执退役、有效容量与备份注册、完整历史后缀及首轮模型预算；保留未知状态、不可变版本和防重放证据。追加修复历史读取成本：先物化最近有限候选，再做步骤/工具及正文体积关联聚合，不再让全部旧对话参与候选统计；完整对话仍持久保留。

@@ -272,13 +272,16 @@ export async function downloadManagedArtifact(original: ManagedArtifact, signal?
 		signal,
 	});
 	try {
+		const declared = response.headers.get('content-length');
 		if (
 			response.status !== 200 ||
 			response.headers.get('content-type') !== 'application/octet-stream' ||
 			response.headers.get('etag') !== '"' + original.version + '"' ||
 			response.headers.get('content-range') !== null ||
 			response.bytes.byteLength !== original.sizeBytes ||
-			response.headers.get('content-length') !== String(original.sizeBytes) ||
+			(declared !== null &&
+				!response.headers.has('content-encoding') &&
+				declared !== String(original.sizeBytes)) ||
 			(await sha256(response.bytes.buffer)) !== original.sha256
 		) {
 			throw new Error('Artifact content confirmation mismatch');
