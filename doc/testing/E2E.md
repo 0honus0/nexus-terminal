@@ -1,5 +1,15 @@
 # Nexus Terminal E2E
 
+## 远程 Actions 修复第三批（2026-10-22）
+
+第二批被测 SHA `b010273fbdb0552c3557c6c30323df59817b6cb1`，[39827272148](https://github.com/0honus0/nexus-terminal/actions/runs/39827272148)。Agent 的真实 SSH 部署、修复、文件生命周期与搜索原失败场景已通过；分片 4 普通组 56 项通过，但随后特殊工具组的桌面夹具重启失败，不能记作该分片通过。
+
+第三批修复：记忆审核从已移除的设置页迁移到当前对话卡片，保留 confidence、管理发布/撤销和原版本 CAS 冲突核验；失效挂起恢复测试受控延迟 WS 投影，取消挂起核对 WS 回执及独立目录事实，健康前台断言不重复 HTTP。Toast 关闭等待原 DOM 节点退场，避免 `.last()` 重绑定到剩余通知；显式关闭前一错误后继续密码/外观操作，恢复入口使用 Reload settings。
+
+RDP 失败截图 `/tmp/nexus-rdp-ci.png` 显示实际停在 xrdp 登录画面；SDK 当前 autologon 为 false，不以 Connected 标签冒充桌面认证。夹具预填固定测试密码，通过真实 RDP Enter 确认登录并核对服务端 VNC 成功次数，再执行原双向剪贴板和输入断言。VNC 单行文本框不再尝试填入被浏览器剥除的换行，发送文本后通过远端键盘 Enter 提交。Xvnc 改用 displayfd 分配空闲 display，并为桌面 webServer 配置 SIGTERM 清理，避免同分片串行特殊组复用被强制终止的固定 X display。
+
+窄屏离线 DOM 显示底层连接页头仍保留完整添加按钮，310px 的图标化断点未覆盖 320px，导致页面多出 73px；仅将已有紧凑页头断点修正为 420px，不改弹窗或整体视觉设计，原溢出断言不放宽。根 check/build 通过，日志 `/tmp/nexus-e2e-repair3-final2-{check,build}.log`；新增测试交互后补充目标 ESLint、改动 E2E TypeScript 编译（零诊断）、全量格式、diff 与桌面脚本语法检查通过，最终格式日志 `/tmp/nexus-e2e-repair3-final3-format.log`。未运行本地行为测试或 E2E；新远程结果待验。
+
 ## 远程 Actions 修复第二批（2026-10-22，不改 UI）
 
 `3ec0f570` 的 [39823945737](https://github.com/0honus0/nexus-terminal/actions/runs/39823945737) 静态、构建及 Docker smoke 通过，八个行为分片仍失败。离线 trace 已确认 Agent Run 的 `input.connectionIds` 为空；Reka checkbox 的交互节点不提供原生 input value，夹具改按控件 ID 选择并同时断言选中状态及实际派发目标，不放宽后端授权。

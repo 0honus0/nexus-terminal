@@ -1,4 +1,5 @@
 import { writeFile } from 'node:fs/promises';
+import { dismissToasts } from '../../support/feedback';
 import { expect, test, type APIRequestContext, type BrowserContext } from '../../support/fixtures';
 import { E2E_ADMIN, loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
@@ -147,6 +148,7 @@ test('password change UI updates the real login credential and can restore the t
 					.filter({ hasText: 'New password and confirmation do not match.' }),
 			).toBeVisible();
 			expect(await mismatchRequest).toBeUndefined();
+			await dismissToasts(page);
 		});
 
 		await step('the API rejects a wrong current password and clears secret inputs', async () => {
@@ -163,6 +165,7 @@ test('password change UI updates the real login credential and can restore the t
 					.filter({ hasText: 'The username, password or verification code is incorrect.' }),
 			).toBeVisible();
 			await expect(currentPassword).toHaveValue('');
+			await dismissToasts(page);
 			await expect(newPassword).toHaveValue('');
 			await expect(confirmPassword).toHaveValue('');
 		});

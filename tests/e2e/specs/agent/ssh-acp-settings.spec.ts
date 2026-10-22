@@ -15,6 +15,7 @@ import { selectUiOption } from '../../support/ui-select';
 import { E2E_URLS } from '../../support/test-env';
 import { prepareAgentRun, requestAgentJson, requestAgentWorkspace } from '../../support/agent';
 import { readAgentGrantView } from '../../../../packages/shared/src/agent/governance/http-codec';
+import { readAgentAppListResponse } from '../../../../packages/shared/src/agent/scope/http-codec';
 import {
 	readAgentIntegrationList,
 	readAgentIntegrationView,
@@ -90,10 +91,15 @@ for (const decision of ['denied', 'cancelled'] as const) {
 		await page.goto('/settings?tab=agent');
 		await selectAgentExtensionsSection(page, 'integrations');
 		const section = page.getByRole('region', { name: 'MCP / ACP integrations', exact: true });
-		await selectUiOption(
-			section.getByRole('combobox', { name: 'Edit app permissions and policy', exact: true }),
-			app.id,
-		);
+		const apps = await requestAgentJson(request, { method: 'GET', path: '/apps' }, readAgentAppListResponse);
+		if (apps.length > 1) {
+			await selectUiOption(
+				section.getByRole('combobox', { name: 'Choose an App instance', exact: true }),
+				app.id,
+			);
+		} else {
+			expect(apps.map((item) => item.id)).toEqual([app.id]);
+		}
 		await section.getByRole('button', { name: 'Create integration', exact: true }).click();
 		const editor = page.getByRole('dialog', { name: 'Create integration', exact: true });
 		await selectUiOption(editor.getByRole('combobox', { name: 'Kind', exact: true }), 'acp');

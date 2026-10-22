@@ -1682,7 +1682,7 @@
 		}
 	}
 
-	@media (max-width: 310px) {
+	@media (max-width: 420px) {
 		.connections-head__top {
 			gap: 8px;
 		}
@@ -1703,7 +1703,9 @@
 		.connection-add-button i {
 			font-size: 12px;
 		}
+	}
 
+	@media (max-width: 310px) {
 		.catalog-toolbar {
 			grid-template-areas:
 				'search search'

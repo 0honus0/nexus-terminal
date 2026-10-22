@@ -1,3 +1,4 @@
+import { dismissToasts } from '../../support/feedback';
 import {
 	readAgentProviderView,
 	readAgentProviderListResponse,
@@ -693,11 +694,16 @@ test('Agent execution setting gates the launcher and its global window', async (
 			})),
 		)
 		.toEqual({ root: 'hidden', body: 'hidden' });
-	for (const name of ['Connections', 'Dashboard', 'Settings']) {
+	for (const [name, pathname] of [
+		['Connections', '/connections'],
+		['Dashboard', '/'],
+		['Settings', '/settings'],
+	]) {
 		await page
 			.locator('.app-nav-links')
 			.getByRole('link', { name, exact: true })
 			.evaluate((element) => (element as HTMLAnchorElement).click());
+		await expect.poll(() => new URL(page.url()).pathname).toBe(pathname);
 		await expect(hub).toBeVisible();
 		await expect(launcher).toHaveCount(0);
 		expect(await hub.boundingBox()).toEqual(bounds);
@@ -792,7 +798,7 @@ test('Agent settings surface exposes the current control plane and saves explici
 	const form = editor.locator('form');
 	await form.getByRole('textbox', { name: 'Name', exact: true }).fill('Settings UI Provider');
 	await form.getByRole('textbox', { name: 'API endpoint', exact: true }).fill(E2E_URLS.openAiProviderOrigin + '/v1');
-	await selectUiOption(form.getByRole('combobox', { name: 'Credential action', exact: true }), 'replace');
+	await expect(form.getByRole('combobox', { name: 'Credential action', exact: true })).toHaveCount(0);
 	await form.locator('input[type="password"]').fill('e2e-provider-secret');
 	const enabled = form.getByRole('switch', { name: 'Enabled', exact: true });
 	if ((await enabled.getAttribute('aria-checked')) !== 'true') await enabled.click();
@@ -831,6 +837,7 @@ test('Agent settings surface exposes the current control plane and saves explici
 	await expect(
 		page.locator('.ui-notification[data-kind="success"]').filter({ hasText: /Test succeeded in/ }),
 	).toBeVisible();
+	await dismissToasts(page);
 	await testDialog.getByRole('button', { name: 'Close', exact: true }).click();
 	await card.getByRole('button', { name: 'Discover and record models', exact: true }).click();
 	await expect(editor.getByRole('textbox', { name: 'Filter discovered models', exact: true })).toBeVisible();
@@ -859,11 +866,12 @@ test('Agent settings surface exposes the current control plane and saves explici
 	});
 	await editor.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(
-		editor.getByText('Outcome unknown. Read current state; do not repeat creation, discovery or paid tests.', {
-			exact: true,
+		page.locator('.ui-notification[data-kind="error"]').filter({
+			hasText: 'Outcome unknown. Read current state; do not repeat creation, discovery or paid tests.',
 		}),
 	).toBeVisible();
 	await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await dismissToasts(page);
 	await page.unroute(providerPath);
 	await editor.getByRole('button', { name: 'Read again (discard draft)', exact: true }).click();
 	await card.getByRole('button', { name: 'Edit', exact: true }).click();
@@ -939,16 +947,22 @@ test('Agent Host preserves an open surface when a directory refresh fails and re
 	await page.route(appsPath, (route) => route.fulfill({ status: 503, json: { code: 'storage_unavailable' } }));
 	await hub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
 	await openAgentHub(page);
-	await expect(page.getByRole('alert').filter({ hasText: 'Unable to load Agent services' })).toBeVisible();
+	const failure = page.getByRole('alert').filter({
+		hasText: 'Conversations and App information are temporarily unavailable. Check your connection and try again.',
+	});
+	await expect(failure).toBeVisible();
 	await expect(hub).toBeVisible();
 	await expect(prompt).toHaveValue('Unsaved local prompt');
 	await page.unroute(appsPath);
-	await page
-		.getByRole('alert')
-		.filter({ hasText: 'Unable to load Agent services' })
-		.getByRole('button', { name: 'Retry', exact: true })
-		.click();
-	await expect(page.getByRole('alert').filter({ hasText: 'Unable to load Agent services' })).toHaveCount(0);
+	await dismissToasts(page);
+	await hub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
+	const recovered = page.waitForResponse(
+		(response) =>
+			new URL(response.url()).pathname === '/api/v1/agent/apps' && response.request().method() === 'GET',
+	);
+	await openAgentHub(page);
+	expect((await recovered).ok()).toBe(true);
+	await expect(failure).toHaveCount(0);
 	await expect(hub).toContainText(app.name);
 	await expect(prompt).toHaveValue('Unsaved local prompt');
 });

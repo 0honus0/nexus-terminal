@@ -8,7 +8,10 @@ export async function dismissToasts(page: Page): Promise<void> {
 	const notifications = page.locator('.ui-notification');
 	while (await notifications.count()) {
 		const notification = notifications.last();
+		const original = await notification.elementHandle();
+		if (!original) continue;
 		await notification.getByRole('button', { name: 'Close', exact: true }).click();
-		await expect(notification).toBeHidden();
+		await expect.poll(() => original.evaluate((element) => element.isConnected)).toBe(false);
+		await original.dispose();
 	}
 }

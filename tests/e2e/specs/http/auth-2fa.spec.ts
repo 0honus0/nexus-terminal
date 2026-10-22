@@ -336,7 +336,9 @@ test('2FA settings UI completes setup, reports errors, reloads, and disables the
 			expect((await verifyPromise).ok()).toBeTruthy();
 			await expect(panel).toContainText('Two-factor authentication is enabled.');
 			await expect(
-				page.getByRole('alert').filter({ hasText: 'Two-factor authentication activated successfully!' }),
+				page
+					.locator('.ui-notification[data-kind="success"]')
+					.filter({ hasText: 'Two-factor authentication activated successfully!' }),
 			).toBeVisible();
 		});
 
@@ -371,7 +373,9 @@ test('2FA settings UI completes setup, reports errors, reloads, and disables the
 			await reloadedPanel.getByRole('button', { name: 'Disable Two-Factor Authentication', exact: true }).click();
 			expect((await disablePromise).ok()).toBeTruthy();
 			await expect(
-				page.getByRole('alert').filter({ hasText: 'Two-factor authentication disabled successfully.' }),
+				page
+					.locator('.ui-notification[data-kind="success"]')
+					.filter({ hasText: 'Two-factor authentication disabled successfully.' }),
 			).toBeVisible();
 			await expect
 				.poll(

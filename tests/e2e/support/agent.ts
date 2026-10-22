@@ -202,6 +202,9 @@ export async function selectAgentExtensionsSection(
 
 /** Open the existing docked sidebar or narrow-window drawer through its visible control. */
 export async function openAgentConversations(page: Page): Promise<void> {
+	await page.evaluate(
+		() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+	);
 	const toggle = page.locator('.agent-hub-window').getByRole('button', { name: 'Open conversations', exact: true });
 	await expect(toggle).toHaveAttribute('aria-expanded', /^(true|false)$/);
 	if ((await toggle.getAttribute('aria-expanded')) === 'false') {

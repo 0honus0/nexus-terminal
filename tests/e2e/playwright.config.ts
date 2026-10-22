@@ -140,6 +140,7 @@ export default defineConfig({
 		},
 		{
 			command: 'node support/test-desktop-server.mjs',
+			gracefulShutdown: { signal: 'SIGTERM', timeout: 5_000 },
 			cwd: e2eRoot,
 			url: `${E2E_URLS.desktopControlOrigin}/health`,
 			reuseExistingServer: false,

@@ -1,4 +1,4 @@
-import { networkFailureToast, dismissToasts } from '../../support/feedback';
+import { dismissToasts } from '../../support/feedback';
 import { E2E_URLS } from '../../support/test-env';
 import { expect, test, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
@@ -390,17 +390,19 @@ test('foreground probes preserve healthy SSH and resume a half-open transport wi
 
 	const foreground = () => page.evaluate(() => window.dispatchEvent(new Event('pageshow')));
 
-	const refreshed = page.waitForResponse(
-		(response) =>
-			response.url().includes('/ssh-suspend/suspended-sessions') && response.request().method() === 'GET',
-	);
+	let healthyCatalogRequests = 0;
+	page.on('request', (request) => {
+		if (request.method() === 'GET' && request.url().includes('/ssh-suspend/suspended-sessions')) {
+			healthyCatalogRequests += 1;
+		}
+	});
 	await foreground();
 	await expect.poll(() => probes).toBeGreaterThan(0);
-	await refreshed;
 	await page.waitForFunction((expected) => {
 		const state = (window as typeof window & { __e2eLiveness?: { completedProbes: number } }).__e2eLiveness;
 		return (state?.completedProbes ?? 0) >= expected;
 	}, probes);
+	expect(healthyCatalogRequests).toBe(0);
 	expect(resumes).toBe(0);
 	const initialConnects = connects;
 	const healthyProbes = probes;
@@ -591,15 +593,25 @@ test('mobile resumed terminal loads older suspended output when dragged downward
 		.toBeTruthy();
 
 	let historyRequests = 0;
+	let unmarkRequestId: string | undefined;
+	let unmarkConfirmed = false;
 	page.on('websocket', (socket) => {
 		if (new URL(socket.url()).pathname !== '/ws/workspace') return;
 		socket.on('framesent', (event) => {
 			if (typeof event.payload !== 'string') return;
 			try {
-				if ((JSON.parse(event.payload) as { type?: string }).type === 'suspend.history.previous')
-					historyRequests += 1;
+				const frame = JSON.parse(event.payload);
+				if (frame.type === 'suspend.history.previous') historyRequests += 1;
+				if (frame.type === 'suspend.unmark') unmarkRequestId = frame.requestId;
 			} catch {
 				return;
+			}
+		});
+		socket.on('framereceived', (event) => {
+			if (typeof event.payload !== 'string') return;
+			const frame = JSON.parse(event.payload);
+			if (frame.type === 'response' && unmarkRequestId && frame.requestId === unmarkRequestId) {
+				unmarkConfirmed = frame.payload?.ok === true;
 			}
 		});
 	});
@@ -641,12 +653,11 @@ test('mobile resumed terminal loads older suspended output when dragged downward
 	const resumedTab = page.getByRole('tablist').locator('[data-session-id]').filter({ hasText: 'E2E SSH' }).first();
 	await resumedTab.click({ button: 'right' });
 	await expect(page.getByText('Unmark Suspend', { exact: true })).toBeVisible({ timeout: 10_000 });
-	const catalogRefresh = page.waitForResponse(
-		(response) =>
-			response.request().method() === 'GET' && response.url().includes('/ssh-suspend/suspended-sessions'),
-	);
 	await page.getByText('Unmark Suspend', { exact: true }).click();
-	await catalogRefresh;
+	await expect.poll(() => unmarkConfirmed).toBe(true);
+	await expect
+		.poll(async () => (await suspendedSessions(context.request)).some((session) => session.id === suspended!.id))
+		.toBe(false);
 	await resumedTab.click({ button: 'right' });
 	await expect(page.getByText('Suspend Session', { exact: true })).toBeVisible();
 });
@@ -1006,7 +1017,9 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
 		const exportUrl = `**/api/v1/ssh-suspend/log/${primary!.id}`;
 		await page.route(exportUrl, (route) => route.abort());
 		await hanging.getByRole('button', { name: 'Export Log', exact: true }).click();
-		await expect(networkFailureToast(page)).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByRole('alert').filter({ hasText: 'Request failed. Read the latest state.' })).toBeVisible(
+			{ timeout: 15_000 },
+		);
 		await dismissToasts(page);
 		await page.unroute(exportUrl);
 		expect((await suspendedSessions(context.request)).some((session) => session.id === primary!.id)).toBeTruthy();

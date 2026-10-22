@@ -19,8 +19,7 @@ const rdpPort = port('NEXUS_E2E_RDP_PORT', 23389);
 const vncPort = port('NEXUS_E2E_VNC_PORT', 25900);
 const controlPort = port('NEXUS_E2E_DESKTOP_CONTROL_PORT', 29090);
 const directory = await mkdtemp(path.join(tmpdir(), 'nexus-e2e-desktop-'));
-const display = ':197';
-const env = { ...process.env, DISPLAY: display };
+const env = { ...process.env };
 const children = new Set();
 let shuttingDown = false;
 
@@ -80,6 +79,12 @@ const control = http.createServer(async (req, res) => {
 		}
 		if (req.method === 'GET' && req.url === '/e2e/desktop/input') {
 			return send(res, 200, { text: await readFile(path.join(directory, 'typed.txt'), 'utf8').catch(() => '') });
+		}
+		if (req.method === 'GET' && req.url === '/e2e/desktop/rdp-authentication') {
+			const log = await readFile(path.join(directory, 'xrdp.log'), 'utf8');
+			return send(res, 200, {
+				authenticatedSessions: log.split('VNC connection complete, connected ok').length - 1,
+			});
 		}
 		if (req.method === 'GET' && req.url === '/e2e/desktop/pointer') {
 			return send(res, 200, { position: x('getmouselocation', '--shell') });
@@ -165,22 +170,37 @@ try {
 		{ stdio: 'ignore' },
 	);
 	const xvnc = existsSync('/usr/bin/Xtigervnc') ? 'Xtigervnc' : 'Xvnc';
-	run(xvnc, [
-		display,
-		'-geometry',
-		'2400x1400',
-		'-depth',
-		'24',
-		'-rfbport',
-		String(vncPort),
-		'-localhost',
-		'yes',
-		'-AlwaysShared',
-		'-SecurityTypes',
-		'VncAuth',
-		'-PasswordFile',
-		path.join(directory, 'passwd'),
-	]);
+	const xvncProcess = run(
+		xvnc,
+		[
+			'-displayfd',
+			'3',
+			'-geometry',
+			'2400x1400',
+			'-depth',
+			'24',
+			'-rfbport',
+			String(vncPort),
+			'-localhost',
+			'yes',
+			'-AlwaysShared',
+			'-SecurityTypes',
+			'VncAuth',
+			'-PasswordFile',
+			path.join(directory, 'passwd'),
+		],
+		{ stdio: ['pipe', 'ignore', 'pipe', 'pipe'] },
+	);
+	let displayOutput = '';
+	xvncProcess.stdio[3].setEncoding('utf8');
+	xvncProcess.stdio[3].on('data', (chunk) => {
+		displayOutput += chunk;
+	});
+	await waitFor(
+		() => displayOutput,
+		(value) => /^\d+\n$/.test(value),
+	);
+	env.DISPLAY = ':' + displayOutput.trim();
 	await waitFor(
 		() => x('getmouselocation'),
 		(value) => value.length > 0,
@@ -205,7 +225,7 @@ try {
 	x('windowfocus', x('search', '--name', 'Nexus-E2E-Desktop').split('\n')[0]);
 	await writeFile(
 		path.join(directory, 'xrdp.ini'),
-		`[Globals]\nini_version=1\nfork=true\nport=tcp://127.0.0.1:${rdpPort}\nsecurity_layer=tls\ncertificate=${directory}/cert.pem\nkey_file=${directory}/key.pem\ncrypt_level=high\nmax_bpp=32\nbitmap_cache=true\nbitmap_compression=true\nallow_channels=true\nautorun=vnc\n[Logging]\nLogFile=${directory}/xrdp.log\nLogLevel=ERROR\nEnableSyslog=false\n[Channels]\nrdpdr=true\nrdpsnd=true\ncliprdr=true\ndrdynvc=true\n[vnc]\nname=Fixture\nlib=libvnc.so\nusername=na\npassword=ask\nip=127.0.0.1\nport=${vncPort}\n`,
+		`[Globals]\nini_version=1\nfork=true\nport=tcp://127.0.0.1:${rdpPort}\nsecurity_layer=tls\ncertificate=${directory}/cert.pem\nkey_file=${directory}/key.pem\ncrypt_level=high\nmax_bpp=32\nbitmap_cache=true\nbitmap_compression=true\nallow_channels=true\nautorun=vnc\n[Logging]\nLogFile=${directory}/xrdp.log\nLogLevel=DEBUG\nEnableSyslog=false\n[Channels]\nrdpdr=true\nrdpsnd=true\ncliprdr=true\ndrdynvc=true\n[vnc]\nname=Fixture\nlib=libvnc.so\nusername=na\npassword=askb10-pass\nip=127.0.0.1\nport=${vncPort}\n`,
 	);
 	run('xrdp', ['--nodaemon', '--config', path.join(directory, 'xrdp.ini')]);
 	await waitFor(

@@ -1,3 +1,4 @@
+import { authenticateTestRdp } from '../../support/desktop';
 import { readTestConnectionImportId } from '../../support/targets';
 import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
 import { E2E_URLS, E2E_PORTS } from '../../support/test-env';
@@ -346,6 +347,7 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 		await expect(page.getByRole('dialog', { name: connectionName, exact: true })).toContainText('Connected', {
 			timeout: 15_000,
 		});
+		await authenticateTestRdp(page);
 	};
 
 	try {

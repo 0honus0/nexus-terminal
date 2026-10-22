@@ -358,6 +358,18 @@ test('stale suspended-session resume logs structured not-found diagnostics', asy
 		}
 	});
 
+	let releaseSnapshot: (() => void) | undefined;
+	const snapshotBarrier = new Promise<void>((resolve) => {
+		releaseSnapshot = resolve;
+	});
+	let holdSnapshots = false;
+	await page.routeWebSocket('**/ws/suspended-sessions', (socket) => {
+		const server = socket.connectToServer();
+		server.onMessage(async (message) => {
+			if (holdSnapshots) await snapshotBarrier;
+			socket.send(message);
+		});
+	});
 	try {
 		await page.goto('/workspace?openSuspended=1');
 		const modal = page.getByRole('region', { name: 'Suspended SSH Sessions', exact: true });
@@ -367,6 +379,7 @@ test('stale suspended-session resume logs structured not-found diagnostics', asy
 		const resumeButton = row.getByRole('button', { name: 'Resume', exact: true });
 		await expect(resumeButton).toBeVisible();
 
+		holdSnapshots = true;
 		const terminate = await context.request.delete(`/api/v1/ssh-suspend/terminate/${suspended!.id}`, { headers });
 		expect(terminate.ok(), await terminate.text()).toBeTruthy();
 		await resumeButton.click();
@@ -395,6 +408,7 @@ test('stale suspended-session resume logs structured not-found diagnostics', asy
 			.toBeTruthy();
 		expect(JSON.stringify(frontendDebugLogs)).not.toContain(E2E_SSH.password);
 	} finally {
+		releaseSnapshot?.();
 		if (suspended)
 			await context.request
 				.delete(`/api/v1/ssh-suspend/terminate/${suspended.id}`, { headers })

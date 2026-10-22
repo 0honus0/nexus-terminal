@@ -1,5 +1,3 @@
-import { selectUiOption } from '../../support/ui-select';
-import { selectAgentSettingsGroup } from '../../support/agent';
 import { randomUUID, createHash } from 'node:crypto';
 import { cp, mkdir, readFile, readdir, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
@@ -786,67 +784,85 @@ for (const fixture of regressionInputs.memoryProposals) {
 			(await requestAgentJson(request, { method: 'GET', path: `${path}/${reviewId}` }, readAgentMemoryResponse))
 				.memory;
 
-		await page.goto('/settings?tab=agent');
-		await selectAgentSettingsGroup(page, 'safety');
-		const section = page.getByRole('region', { name: 'Memory management', exact: true });
-		await selectUiOption(
-			section.getByRole('combobox', { name: 'Edit app permissions and policy', exact: true }),
-			task.app.id,
-		);
-
-		const row = () => section.locator('article').filter({ has: page.getByText(managed.content, { exact: true }) });
-
-		await row().getByRole('button', { name: 'Read current version for review', exact: true }).click();
-		const endpoint = `/api/v1/agent${path}/${reviewId}/review`;
+		const section = page.getByRole('complementary', { name: 'Memory review', exact: true });
+		if (!modelCandidate) throw new Error('Model memory candidate missing');
+		const row = section.locator('article').filter({ has: page.getByText(modelCandidate.content, { exact: true }) });
+		await expect(section).toBeVisible();
+		await expect(row).toBeVisible();
+		await expect(section.getByText(managed.content, { exact: true })).toHaveCount(0);
+		const endpoint = `/api/v1/agent${path}/${modelCandidate.id}/review`;
 		const publishedWaiting = page.waitForResponse(
 			(response) => response.url().endsWith(endpoint) && response.request().method() === 'POST',
 		);
-		await section.getByRole('button', { name: 'Publish current content', exact: true }).click();
+		await row.getByRole('button', { name: 'Save memory', exact: true }).click();
 		const publishedResponse = await publishedWaiting;
 		expect(publishedResponse.status()).toBe(200);
-		const published = await readManaged();
-		expect(published).toMatchObject({
+		expect(publishedResponse.request().postDataJSON()).toEqual({
+			expectedVersion: modelCandidate.version,
+			decision: 'publish',
+			content: modelCandidate.content,
+		});
+		await expect(row).toHaveCount(0);
+		const publishedModel = (
+			await requestAgentJson(
+				request,
+				{ method: 'GET', path: `${path}/${modelCandidate.id}` },
+				readAgentMemoryResponse,
+			)
+		).memory;
+		expect(publishedModel).toMatchObject({
+			id: modelCandidate.id,
+			status: 'published',
+			version: 2,
+			confidence: 0.5,
+			sourceRunId: created.id,
+		});
+		expect(await readManaged()).toMatchObject({
+			id: reviewId,
+			status: 'candidate',
+			version: 1,
+			confidence: fixture.confidence,
+		});
+
+		const managedEndpoint = `${path}/${reviewId}/review`;
+		const published = await requestAgentJson(
+			request,
+			{
+				method: 'POST',
+				path: managedEndpoint,
+				data: { expectedVersion: managed.version, decision: 'publish', content: managed.content },
+			},
+			readAgentMemoryResponse,
+		);
+		expect(published.memory).toMatchObject({
 			id: reviewId,
 			status: 'published',
 			version: 2,
 			confidence: fixture.confidence,
 		});
-		// Review from an explicit authoritative read; inject a stale original revision once.
-		await section.getByRole('button', { name: 'Reload and discard review draft', exact: true }).click();
-		await row().getByRole('button', { name: 'Read current version for review', exact: true }).click();
-		await page.route(
-			'**' + endpoint,
-			async (route) => {
-				const body = route.request().postDataJSON();
-				await route.continue({ postData: JSON.stringify({ ...body, expectedVersion: 1 }) });
+		const stale = await requestAgentJson(
+			request,
+			{
+				method: 'POST',
+				path: managedEndpoint,
+				status: 409,
+				data: { expectedVersion: managed.version, decision: 'revoke', content: null },
 			},
-			{ times: 1 },
+			readAgentErrorResponse,
 		);
-		const staleWaiting = page.waitForResponse(
-			(response) => response.url().endsWith(endpoint) && response.request().method() === 'POST',
-		);
-		await section.getByRole('button', { name: 'Revoke publication', exact: true }).click();
-		const stale = await staleWaiting;
-		expect(stale.status()).toBe(409);
-		// Stale CAS is confirmed by 409 and unchanged persisted revision; the
-		// UI can discard the browser-owned response body when it resets review.
+		expect(stale.code).toBe('version_conflict');
 		expect(await readManaged()).toMatchObject({ id: reviewId, status: 'published', version: 2 });
-		await expect(
-			section.getByRole('button', { name: 'Read current version for review', exact: true }).first(),
-		).toBeDisabled();
-		await section.getByRole('button', { name: 'Reload and discard review draft', exact: true }).click();
-		await row().getByRole('button', { name: 'Read current version for review', exact: true }).click();
-		const revokeWaiting = page.waitForResponse(
-			(response) => response.url().endsWith(endpoint) && response.request().method() === 'POST',
+		const current = await readManaged();
+		const revoked = await requestAgentJson(
+			request,
+			{
+				method: 'POST',
+				path: managedEndpoint,
+				data: { expectedVersion: current.version, decision: 'revoke', content: null },
+			},
+			readAgentMemoryResponse,
 		);
-		await section.getByRole('button', { name: 'Revoke publication', exact: true }).click();
-		const revokedResponse = await revokeWaiting;
-		expect(revokedResponse.status()).toBe(200);
-		expect(await readManaged()).toMatchObject({
-			id: reviewId,
-			status: 'revoked',
-			version: 3,
-		});
+		expect(revoked.memory).toMatchObject({ id: reviewId, status: 'revoked', version: 3 });
 		const recallable = await requestAgentJson(
 			request,
 			{ method: 'GET', path: path + '?status=published&limit=20&offset=0' },
@@ -899,7 +915,7 @@ test('reopening a completed clarification restores history and explicit follow-u
 	expect(question.text).toBe('Choose deployment color: blue or green.');
 	await openNativeTask(task);
 	await expect(page.getByText(question.text, { exact: true })).toBeVisible();
-	await page.getByRole('button', { name: /^Completed · / }).click();
+	await openNativeTaskPanel(page);
 	const followUp = await startNativeTask(task, 'deployment_color: green', [], true);
 	const answer = await finishNativeTask(task, followUp.id);
 	expect(answer.run.status).toBe('completed');

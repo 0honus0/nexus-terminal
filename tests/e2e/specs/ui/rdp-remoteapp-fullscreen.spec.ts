@@ -1,3 +1,4 @@
+import { authenticateTestRdp } from '../../support/desktop';
 import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
 import { readTestConnectionImportId } from '../../support/targets';
 import { expect, test, type APIRequestContext, type Locator, type Page } from '../../support/fixtures';
@@ -139,6 +140,7 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 				const modal = remoteWindow(page);
 				await expect(modal).toBeVisible();
 				await expect(modal).toContainText('Connected', { timeout: 15_000 });
+				await authenticateTestRdp(page);
 				const display = modal.locator('.remote-display-container');
 				const canvas = display.locator('canvas').first();
 				await expect(canvas).toBeAttached();
@@ -174,6 +176,7 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 			const modal = remoteWindow(page);
 			await expect(modal).toBeVisible();
 			await expect(modal).toContainText('Connected', { timeout: 15_000 });
+			await authenticateTestRdp(page);
 			await expect
 				.poll(async () => Number(await connectionRow.getAttribute('data-last-connected-at')), {
 					timeout: 10_000,
@@ -199,6 +202,7 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 			await expect(modal.locator('i.fa-times')).toBeVisible();
 			await expect(page.getByRole('dialog', { name: 'Progress Display', exact: true })).toHaveCount(0);
 			await expect(modal).toContainText('Connected', { timeout: 15_000 });
+			await authenticateTestRdp(page);
 		});
 
 		await step(
@@ -366,6 +370,7 @@ test('wide RDP restores the legacy 120 DPI connection rule', async ({ page, cont
 		expect(tunnelUrl.searchParams.has('width')).toBe(false);
 		expect(tunnelUrl.searchParams.has('dpi')).toBe(false);
 		await expect(remoteWindow(page)).toContainText('Connected', { timeout: 15_000 });
+		await authenticateTestRdp(page);
 	} finally {
 		await context.request.delete(`/api/v1/targets/connections/${connectionId}`, {
 			headers: { Origin: E2E_URLS.frontendOrigin },
@@ -556,9 +561,11 @@ test('VNC pointer resize and restore-button dragging share the same window seman
 		await expect(vncText).toBeVisible();
 		await expect(send).toBeDisabled();
 		const inputText = 'VNC_E2E_INPUT_' + crypto.randomUUID();
-		await vncText.fill(inputText + '\n');
+		await vncText.fill(inputText);
 		await expect(send).toBeEnabled();
 		await send.click();
+		await vncModal.locator('canvas').click({ position: { x: 40, y: 40 } });
+		await page.keyboard.press('Enter');
 		await expect
 			.poll(
 				async () =>

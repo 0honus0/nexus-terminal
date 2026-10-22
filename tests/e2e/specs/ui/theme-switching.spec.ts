@@ -123,7 +123,7 @@ test('appearance writes stay fenced after a catalog failure and recover through 
 		await expect(input).toBeDisabled();
 		expect((await appearance(context.request)).windowThemeColor).toBe(targetColor);
 		await page.unroute('**/api/v1/terminal-themes');
-		await page.locator('#settings-panel-appearance').getByRole('button', { name: 'Refresh', exact: true }).click();
+		await page.getByRole('button', { name: 'Reload settings', exact: true }).click();
 		await expect(input).toBeEnabled();
 		await expect(input).toHaveValue(targetColor);
 		await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
@@ -215,8 +215,9 @@ test('PWA window title bar color updates immediately and persists across reload'
 		expect((await rejectedSave).status()).toBe(409);
 		await expect(input).toHaveValue(targetColor);
 		holdAppearanceLoads = true;
-		await page.locator('#settings-panel-appearance').getByRole('button', { name: 'Refresh', exact: true }).click();
+		await page.getByRole('button', { name: 'Reload settings', exact: true }).click();
 		await staleLoadStarted;
+		await dismissToasts(page);
 
 		const savePromise = page.waitForResponse(
 			(response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
