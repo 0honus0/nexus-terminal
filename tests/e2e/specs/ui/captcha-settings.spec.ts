@@ -29,9 +29,11 @@ test('CAPTCHA UI saves provider configuration and explicit secrets without activ
 	try {
 		await page.goto('/settings');
 		await page.getByRole('tab', { name: 'Security', exact: true }).click();
-		const captcha = page.getByRole('heading', { name: 'CAPTCHA Settings', exact: true }).locator('..');
+		const captcha = page
+			.getByRole('heading', { name: 'CAPTCHA Settings', exact: true })
+			.locator('xpath=ancestor::section[1]');
 		await expect(captcha).toBeVisible();
-		await expect(captcha.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+		await expect(captcha.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
 		await expect(page.getByRole('heading', { name: 'Change Password', exact: true })).toBeVisible();
 		await captureFunctionalScreenshot(page, 'security-settings.png', { viewport: { width: 1440, height: 900 } });
 
@@ -50,7 +52,7 @@ test('CAPTCHA UI saves provider configuration and explicit secrets without activ
 			expect(saved.version).toBe(current.version + 1);
 			expect(saved.effectiveVersion).toBe(baseline.effectiveVersion);
 			expect(saved.requiresRestart).toBe(true);
-			await expect(captcha.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+			await expect(captcha.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
 			const config = await context.request.get('/api/v1/auth/captcha/config');
 			expect(config.ok()).toBe(true);
 			expect(readAccessCaptchaConfig(await config.json())).toEqual(effective);

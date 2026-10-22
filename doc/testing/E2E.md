@@ -1,5 +1,13 @@
 # Nexus Terminal E2E
 
+## 远程 Actions 修复首批（2026-10-22，不改 UI）
+
+失败基线为 [39789022254](https://github.com/0honus0/nexus-terminal/actions/runs/39789022254)，被测 SHA `7151fca95bf9951b3739f8674e19e37bbde14672`。8 个分片均有失败；最长分片的 24 个原生 Agent 场景首先卡在已移除的原生模型 select，末尾上传场景被 15 分钟整组期限中断，不能据此判定上传本身失败。当前尚无新的远程通过证据。
+
+首批只修改测试：模型列表通过真实 listbox/option 选择唯一供应商并验证选中态；共用 Hub 打开入口支持已打开窗口；SSH 目标使用真实 checkbox；安全设置定位完整 UiSettingsGroup 而非标题容器；偏好保存后验证 dirty 清零、日志使用统一保存入口，失败恢复走全局 Reload settings Toast；SSH 资源缓存按首轮 checkedAt（采样完成）起算等待下一轮，保留真实新采样和持久化断言。已核对 USAGE 的模型选择、设置保存/Toast 与资源缓存说明，无产品行为变更。
+
+本地按 D17 不运行行为测试、浏览器或 E2E。根 `pnpm run check` 与 `pnpm run build` 通过，日志 `/tmp/nexus-e2e-repair-check.log`、`/tmp/nexus-e2e-repair-build.log`；构建保留既有大 chunk 提示。全量格式首次发现本轮测试排版，修正后 `pnpm run format:all:check` 与 `git diff --check` 通过，日志 `/tmp/nexus-e2e-repair-format-final.log`；按 D18 分批提交推送后继续修复其余失败，不提交并行 UI 或设计产物。
+
 ## 两轮逻辑修复提交收口（2026-10-22）
 
 用户最新授权“修改提交”，本次仅提交下方两轮逻辑修复和对应 PLAN/USAGE/验证记录；并行 UI 代码、UI 验证记录及未跟踪设计产物保留在工作区，不代为提交。最近的根 check、build、全量格式检查结果见下方本轮证据；提交前追加核对暂存文件、格式及 diff，不运行行为测试或 E2E，不推送、部署或重启。

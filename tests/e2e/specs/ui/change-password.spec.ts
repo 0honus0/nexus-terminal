@@ -60,7 +60,9 @@ test('password change UI updates the real login credential and can restore the t
 	try {
 		await page.goto('/settings');
 		await page.getByRole('tab', { name: 'Security', exact: true }).click();
-		const form = page.getByRole('heading', { name: 'Change Password', exact: true }).locator('..');
+		const form = page
+			.getByRole('heading', { name: 'Change Password', exact: true })
+			.locator('xpath=ancestor::section[1]');
 		const currentPassword = form.getByLabel('Current Password:', { exact: true });
 		const newPassword = form.getByLabel('New Password:', { exact: true });
 		const confirmPassword = form.getByLabel('Confirm New Password:', { exact: true });
@@ -243,7 +245,9 @@ test('passkey settings UI registers, renames, reloads, and deletes a real creden
 	try {
 		await page.goto('/settings');
 		await page.getByRole('tab', { name: 'Security', exact: true }).click();
-		const panel = page.getByRole('heading', { name: 'Passkey Management', exact: true }).locator('..');
+		const panel = page
+			.getByRole('heading', { name: 'Passkey Management', exact: true })
+			.locator('xpath=ancestor::section[1]');
 		await expect(panel).toBeVisible();
 		await expect(panel).toContainText('No Passkeys registered yet.');
 		await panel.scrollIntoViewIfNeeded();
@@ -365,7 +369,9 @@ test('passkey settings UI registers, renames, reloads, and deletes a real creden
 		await step('reload keeps the renamed passkey visible', async () => {
 			await page.reload();
 			await page.getByRole('tab', { name: 'Security', exact: true }).click();
-			const reloadedPanel = page.getByRole('heading', { name: 'Passkey Management', exact: true }).locator('..');
+			const reloadedPanel = page
+				.getByRole('heading', { name: 'Passkey Management', exact: true })
+				.locator('xpath=ancestor::section[1]');
 			await expect(reloadedPanel.locator('li').first()).toContainText(renamedPasskeyName);
 			await reloadedPanel.scrollIntoViewIfNeeded();
 			await collectPasskeyMetrics('after');
@@ -375,7 +381,9 @@ test('passkey settings UI registers, renames, reloads, and deletes a real creden
 		});
 
 		await step('delete the registered passkey and persist the empty state', async () => {
-			const reloadedPanel = page.getByRole('heading', { name: 'Passkey Management', exact: true }).locator('..');
+			const reloadedPanel = page
+				.getByRole('heading', { name: 'Passkey Management', exact: true })
+				.locator('xpath=ancestor::section[1]');
 			const deletePromise = page.waitForResponse(
 				(response) =>
 					response.url().endsWith(`/api/v1/auth/user/passkeys/${credentialId}`) &&

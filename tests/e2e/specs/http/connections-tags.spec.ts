@@ -193,7 +193,9 @@ test('SSH resource cache expires at the effective startup cadence including coll
 		const first = readSshResourceStatus(await firstResponse.json());
 		expect(first.status).toBeDefined();
 		expect(Date.now() - startedAt).toBeGreaterThan(50);
-		await new Promise((resolve) => setTimeout(resolve, Math.max(0, startedAt + intervalMs + 100 - Date.now())));
+		await new Promise((resolve) =>
+			setTimeout(resolve, Math.max(0, first.checkedAt + intervalMs + 100 - Date.now())),
+		);
 		const secondResponse = await request.get('/api/v1/system/ssh-resources/' + id);
 		expect(secondResponse.ok()).toBe(true);
 		const second = readSshResourceStatus(await secondResponse.json());

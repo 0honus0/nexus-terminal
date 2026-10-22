@@ -56,7 +56,7 @@ export async function createAgentProvider(request: APIRequestContext): Promise<A
 			status: 201,
 			data: {
 				kind: 'openai-compatible',
-				displayName: 'E2E local model',
+				displayName: 'E2E local model ' + randomUUID(),
 				baseUrl: E2E_URLS.openAiProviderOrigin + '/v1',
 				protocol: 'chat-completions',
 				// Include the current server-owned tool catalog in the request budget.
@@ -133,6 +133,37 @@ export async function enableTestAgentExecution(request: APIRequestContext): Prom
 	);
 	expect(saved.settings.enabled).toBe(true);
 	expect(saved.settings.version).toBe(current.settings.version + 1);
+}
+
+export async function openAgentHub(page: Page): Promise<void> {
+	const hub = page.getByRole('dialog', { name: 'Agent', exact: true });
+	const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
+	await expect.poll(async () => (await hub.isVisible()) || (await launcher.isVisible())).toBe(true);
+	if (!(await hub.isVisible())) {
+		await launcher.click();
+	}
+	await expect(hub).toBeVisible();
+}
+
+export async function selectAgentModel(page: Page, provider: AgentProviderView, modelId = 'e2e-model'): Promise<void> {
+	const hub = page.getByRole('dialog', { name: 'Agent', exact: true });
+	const trigger = hub.getByRole('button', { name: 'Model for this execution', exact: true });
+	const models = page.getByRole('listbox', { name: 'Model for this execution', exact: true });
+	await trigger.click();
+	const option = models
+		.getByRole('option')
+		.filter({
+			has: page.getByText(provider.displayName + ' · ' + provider.protocol, { exact: true }),
+		})
+		.filter({ has: page.getByText(modelId, { exact: true }) });
+	await expect(option).toHaveCount(1);
+	await option.click();
+	await expect(models).toBeHidden();
+	await expect(trigger).toContainText(modelId);
+	await trigger.click();
+	await expect(option).toHaveAttribute('aria-selected', 'true');
+	await page.keyboard.press('Escape');
+	await expect(models).toBeHidden();
 }
 
 export async function selectAgentSettingsGroup(

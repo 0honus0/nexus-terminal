@@ -211,7 +211,9 @@ test('Login passkey succeeds, reports credential failure, and falls back to pass
 
 			await page.goto(`${BASE_URL}/settings`);
 			await page.getByRole('tab', { name: 'Security', exact: true }).click();
-			const panel = page.getByRole('heading', { name: 'Passkey Management', exact: true }).locator('..');
+			const panel = page
+				.getByRole('heading', { name: 'Passkey Management', exact: true })
+				.locator('xpath=ancestor::section[1]');
 			await expect(panel).toBeVisible();
 			await expect(panel).toContainText('No Passkeys registered yet.');
 

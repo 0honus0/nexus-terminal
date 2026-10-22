@@ -1,6 +1,6 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
-import { enableTestAgentExecution, openAgentConversations, requestAgentJson } from '../../support/agent';
+import { enableTestAgentExecution, openAgentConversations, openAgentHub, requestAgentJson } from '../../support/agent';
 import { readAgentCreateAppResponse } from '../../../../packages/shared/src/agent/scope/http-codec';
 import { createTestSshConnection, ensureTestSshConnection } from '../../support/ssh';
 import { readAgentGrantView } from '../../../../packages/shared/src/agent/governance/http-codec';
@@ -25,7 +25,7 @@ test('native target selection preserves grants and uses the authenticated App wi
 	const secondConnectionId = await createTestSshConnection(context.request, 'Configuration boundaries secondary');
 	await enableTestAgentExecution(context.request);
 	await page.goto('/connections');
-	await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
+	await openAgentHub(page);
 	const hub = page.locator('.agent-hub-window');
 	await hub.getByRole('button', { name: 'Choose an Agent app', exact: true }).click();
 	await page
@@ -43,8 +43,8 @@ test('native target selection preserves grants and uses the authenticated App wi
 	await expect(hub.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
 	await hub.getByRole('button', { name: 'Select SSH targets', exact: true }).click();
 	const targets = page.locator('fieldset').filter({ has: page.locator('legend', { hasText: 'Select SSH targets' }) });
-	const target = targets.locator('input[type="checkbox"][value="' + connectionId + '"]');
-	const secondTarget = targets.locator('input[type="checkbox"][value="' + secondConnectionId + '"]');
+	const target = targets.getByRole('checkbox').and(page.locator('#agent-target-' + connectionId));
+	const secondTarget = targets.getByRole('checkbox').and(page.locator('#agent-target-' + secondConnectionId));
 	const enableAll = targets.getByRole('button', { name: 'Enable all', exact: true });
 	const disableAll = targets.getByRole('button', { name: 'Disable all', exact: true });
 	await expect(disableAll).toBeDisabled();

@@ -309,7 +309,7 @@ test('2FA settings UI completes setup, reports errors, reloads, and disables the
 		await page.getByRole('tab', { name: 'Security', exact: true }).click();
 		const panel = page
 			.getByRole('heading', { name: 'Two-Factor Authentication (TOTP)', exact: true })
-			.locator('..');
+			.locator('xpath=ancestor::section[1]');
 		await expect(panel).toBeVisible();
 		await expect(panel).toContainText('Two-factor authentication is currently disabled.');
 
@@ -343,7 +343,7 @@ test('2FA settings UI completes setup, reports errors, reloads, and disables the
 			await page.getByRole('tab', { name: 'Security', exact: true }).click();
 			const reloadedPanel = page
 				.getByRole('heading', { name: 'Two-Factor Authentication (TOTP)', exact: true })
-				.locator('..');
+				.locator('xpath=ancestor::section[1]');
 			await expect(reloadedPanel).toContainText('Two-factor authentication is enabled.');
 			await reloadedPanel.locator('#disablePassword').fill('not-the-password');
 			const wrongPasswordPromise = page.waitForResponse(
@@ -357,7 +357,7 @@ test('2FA settings UI completes setup, reports errors, reloads, and disables the
 		await step('disable 2FA through the Security UI and verify the real server state', async () => {
 			const reloadedPanel = page
 				.getByRole('heading', { name: 'Two-Factor Authentication (TOTP)', exact: true })
-				.locator('..');
+				.locator('xpath=ancestor::section[1]');
 			await reloadedPanel.locator('#disablePassword').fill(E2E_ADMIN.password);
 			const disablePromise = page.waitForResponse(
 				(response) => response.url().endsWith('/api/v1/auth/2fa') && response.request().method() === 'DELETE',

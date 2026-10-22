@@ -67,7 +67,7 @@ test('quick command search stays visible by default and can be collapsed behind 
 		await step('workspace settings enables collapsed search and persists it on the backend', async () => {
 			await page.goto('/settings');
 			const settings = page
-				.locator('form')
+				.locator('.ui-settings-group')
 				.filter({ has: page.getByRole('heading', { name: 'Terminal & commands', exact: true }) });
 			await expect(settings).toBeVisible();
 
@@ -82,7 +82,7 @@ test('quick command search stays visible by default and can be collapsed behind 
 				(response) =>
 					response.url().endsWith('/api/v1/settings/preferences') && response.request().method() === 'PUT',
 			);
-			await settings.getByRole('button', { name: 'Save group', exact: true }).click();
+			await settings.getByRole('button', { name: 'Save', exact: true }).click();
 			expect((await responsePromise).ok()).toBeTruthy();
 
 			const persisted = await context.request.get('/api/v1/settings/preferences');

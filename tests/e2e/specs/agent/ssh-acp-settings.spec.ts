@@ -1,5 +1,5 @@
 import { openNativeTaskPanel } from '../../fixtures/agent/native-task';
-import { openAgentConversations, selectAgentSettingsGroup } from '../../support/agent';
+import { openAgentConversations, openAgentHub, selectAgentModel, selectAgentSettingsGroup } from '../../support/agent';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -170,7 +170,7 @@ for (const decision of ['denied', 'cancelled'] as const) {
 		await expect(integrationCard).toContainText(directory);
 
 		await page.goto('/connections');
-		await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
+		await openAgentHub(page);
 		const hub = page.locator('section[aria-label="Agent"]');
 		await openAgentConversations(page);
 		await hub
@@ -178,16 +178,15 @@ for (const decision of ['denied', 'cancelled'] as const) {
 			.getByRole('button')
 			.filter({ has: page.getByText(thread.title, { exact: true }) })
 			.click();
-		await hub.getByRole('button', { name: 'Model for this execution', exact: true }).click();
-		await page
-			.getByRole('combobox', { name: 'Model for this execution', exact: true })
-			.selectOption({ label: `${provider.displayName} / e2e-model` });
-		await page.keyboard.press('Escape');
+		await selectAgentModel(page, provider);
 		await hub.getByRole('button', { name: 'Select SSH targets', exact: true }).click();
 		const target = page
 			.locator('fieldset')
 			.filter({ has: page.locator('legend', { hasText: 'Select SSH targets' }) });
-		await target.locator(`input[value="${connectionId}"]`).check();
+		await target
+			.getByRole('checkbox')
+			.and(page.locator(`#agent-target-${connectionId}`))
+			.check();
 		await page.keyboard.press('Escape');
 		await hub
 			.getByRole('textbox', { name: 'Task input', exact: true })

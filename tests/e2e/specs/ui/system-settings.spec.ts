@@ -17,7 +17,7 @@ async function preferences(request: APIRequestContext) {
 	return readPreferencesResponse(await response.json()).preferences;
 }
 
-async function saveForm(page: Page, form: Locator, postSave: 'enabled' | 'disabled' = 'disabled'): Promise<void> {
+async function saveForm(page: Page, form: Locator): Promise<void> {
 	const formId = await form.getAttribute('id');
 	const submit = formId ? page.locator(`button[form="${formId}"]`) : form.locator('button[type="submit"]');
 	const response = page.waitForResponse(
@@ -25,10 +25,7 @@ async function saveForm(page: Page, form: Locator, postSave: 'enabled' | 'disabl
 	);
 	await submit.click();
 	expect((await response).ok()).toBe(true);
-	// System forms keep Save available. Workspace forms disable it when no dirty
-	// draft remains. Both still require an independently verified API value.
-	if (postSave === 'enabled') await expect(submit).toBeEnabled();
-	else await expect(submit).toBeDisabled();
+	await expect(submit).toBeDisabled();
 }
 
 async function systemTab(page: Page): Promise<void> {
@@ -57,11 +54,11 @@ test('system settings persist timezone and language changes through the UI', asy
 		await step('save timezone and language through their preference forms', async () => {
 			const timezone = page.locator('#timezoneSelect');
 			await selectUiOption(timezone, 'Asia/Shanghai');
-			await saveForm(page, page.locator('form').filter({ has: timezone }), 'enabled');
+			await saveForm(page, page.locator('form').filter({ has: timezone }));
 			expect((await preferences(context.request)).timezone).toBe('Asia/Shanghai');
 			const language = page.locator('#languageSelect');
 			await selectUiOption(language, 'zh-CN');
-			await saveForm(page, page.locator('form').filter({ has: language }), 'enabled');
+			await saveForm(page, page.locator('form').filter({ has: language }));
 			expect((await preferences(context.request)).language).toBe('zh-CN');
 			await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
 		});
@@ -138,17 +135,13 @@ test('preferences load failure fences writes until an explicit successful refres
 	});
 	await page.goto('/settings');
 	await workspaceTab(page);
-	const panel = page.locator('#settings-panel-workspace');
 	await expect(
-		panel.getByText(
-			'The result is unknown. Read the list again and verify before editing or repeating the action.',
-			{ exact: true },
-		),
+		page.locator('.ui-notification').filter({ hasText: 'Reloading will not replay unconfirmed writes.' }),
 	).toBeVisible();
 	await expect(page.locator('#showPopupFileManager')).toBeDisabled();
 	expect(writes).toBe(0);
 	await page.unroute('**/api/v1/settings/preferences');
-	await panel.getByRole('button', { name: 'Refresh', exact: true }).click();
+	await page.getByRole('button', { name: 'Reload settings', exact: true }).click();
 	await expect(page.locator('#showPopupFileManager')).toBeEnabled();
 	expect(writes).toBe(0);
 });
@@ -298,10 +291,10 @@ test('frontend preferences and backend logging persist independently through the
 		await expectUiSelectValue(frontend, 'info');
 		await expectUiSelectValue(backend, logging.level);
 		await selectUiOption(frontend, 'debug');
-		await saveForm(page, page.locator('form').filter({ has: frontend }), 'enabled');
+		await saveForm(page, page.locator('form').filter({ has: frontend }));
 		expect((await preferences(context.request)).frontendLogLevel).toBe('debug');
 		await selectUiOption(backend, targetLevel);
-		const backendSave = page.locator('[data-backend-logging] button[type="submit"]');
+		const backendSave = page.locator('button[form="logging-settings-form"]');
 		await expect(page.locator('[data-backend-logging] label span')).toBeHidden();
 		await expect(backendSave).toBeEnabled();
 		await expect(backendSave).toHaveAttribute('data-appearance', 'solid');

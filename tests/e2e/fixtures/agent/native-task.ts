@@ -1,7 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { expect, type APIRequestContext, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
-import { openAgentConversations, prepareAgentRun, requestAgentJson, requestAgentWorkspace } from '../../support/agent';
+import {
+	openAgentConversations,
+	openAgentHub,
+	prepareAgentRun,
+	requestAgentJson,
+	requestAgentWorkspace,
+	selectAgentModel,
+} from '../../support/agent';
 import { readAgentAppResponse } from '../../../../packages/shared/src/agent/scope/http-codec';
 import { readAgentGrantView } from '../../../../packages/shared/src/agent/governance/http-codec';
 import {
@@ -84,12 +91,7 @@ export async function openNativeTask(task: NativeTask) {
 	const { page, thread, provider } = task;
 	await page.goto('/connections');
 	const hub = page.getByRole('dialog', { name: 'Agent', exact: true });
-	const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
-	await expect.poll(async () => (await hub.isVisible()) || (await launcher.isVisible())).toBe(true);
-	if (!(await hub.isVisible())) {
-		await launcher.click();
-	}
-	await expect(hub).toBeVisible();
+	await openAgentHub(page);
 	await hub.getByRole('button', { name: 'Choose an Agent app', exact: true }).click();
 	await page
 		.locator('[data-agent-hub-portal]')
@@ -114,11 +116,7 @@ export async function openNativeTask(task: NativeTask) {
 	const option = threads.getByRole('button').filter({ has: page.getByText(selectedThread.title, { exact: true }) });
 	await expect(option).toHaveCount(1);
 	await option.click();
-	await hub.getByRole('button', { name: 'Model for this execution', exact: true }).click();
-	await page
-		.getByRole('combobox', { name: 'Model for this execution', exact: true })
-		.selectOption(JSON.stringify([provider.id, 'e2e-model', provider.version]));
-	await page.keyboard.press('Escape');
+	await selectAgentModel(page, provider);
 	await expect(hub).toBeVisible();
 	await expect(hub.getByRole('textbox', { name: 'Task input', exact: true })).toBeVisible();
 	return hub;
