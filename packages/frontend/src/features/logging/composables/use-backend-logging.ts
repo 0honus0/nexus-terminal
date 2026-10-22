@@ -1,3 +1,5 @@
+import { useFeedback } from '@/shared/feedback/public';
+import { isNetworkFailure } from '@/client/http/network-failure';
 import { onMounted, ref, shallowRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { type BackendLogLevel } from '@nexus-terminal/shared/operations/logging/values';
@@ -8,6 +10,7 @@ import type { BackendLogging } from '../model/logging-types';
 
 export function useBackendLogging() {
 	const { t } = useI18n();
+	const feedback = useFeedback();
 	const snapshot = shallowRef<BackendLogging | null>(null);
 	const level = ref<BackendLogLevel>('info');
 	const busy = ref(false);
@@ -52,6 +55,7 @@ export function useBackendLogging() {
 						? 'common.personalDataConflict'
 						: 'common.personalDataFailure',
 			);
+			if (!isNetworkFailure(cause)) feedback.notifyError(message.value);
 		} finally {
 			if (view.isCurrent(signal)) busy.value = false;
 		}

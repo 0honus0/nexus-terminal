@@ -54,7 +54,19 @@ try {
 					export { createApp, h, nextTick } from 'vue';
 					export { createPinia } from 'pinia';
 					export { default as AgentSettingsPanel } from '/src/features/agent/settings/AgentSettingsPanel.vue';
-					export { default as ExecutionSettings } from '/src/features/agent/settings/ExecutionSettings.vue';
+					import { defineComponent, h } from 'vue';
+					import i18n from '/src/app/i18n/index.ts';
+					import ExecutionSettingsCard from '/src/features/agent/settings/ExecutionSettings.vue';
+					import { useExecutionSettings } from '/src/features/agent/composables/use-execution-settings.ts';
+					export const ExecutionSettings = defineComponent({
+						setup() {
+							const editor = useExecutionSettings();
+							return () => h('div', [
+								h('button', { disabled: editor.busy.value, onClick: () => editor.perform('read') }, i18n.global.t('agent.settings.execution.read')),
+								...['budget', 'runtime', 'storage', 'subagents'].map((section) => h(ExecutionSettingsCard, { editor, section })),
+							]);
+						}
+					});
 					export { default as i18n, setLocale } from '/src/app/i18n/index.ts';
 					export { authenticatedSessionLifecycle } from '/src/shared/session/authenticatedSessionLifecycle.ts';
 				`;
@@ -74,13 +86,8 @@ try {
 	const page = await browser.newPage();
 	await page.goto(origin + '/__execution');
 	const results = await page.evaluate(async () => {
-		const {
-			getExecutionSettings,
-			saveExecutionSettings,
-			previewExecutionHardLimits,
-			confirmExecutionHardLimits,
-			getExecutionModelChoices,
-		} = await import('/src/features/agent/api/execution-api.ts');
+		const { getExecutionSettings, saveExecutionSettings, saveExecutionHardLimits } =
+			await import('/src/features/agent/api/execution-api.ts');
 		const { AgentManagementFailure } = await import('/src/features/agent/model/management-failure.ts');
 		const { createAccessApi } = await import('/src/features/auth/api/access-api.ts');
 		const {
@@ -94,6 +101,12 @@ try {
 			setLocale,
 			authenticatedSessionLifecycle,
 		} = await import('/@id/__x00__virtual:agent-execution-fixture');
+		const { useNotificationStore } = await import('/src/shared/feedback/store/notification.store.ts');
+		const pinia = createPinia();
+		const notifications = useNotificationStore(pinia);
+
+		const hasFeedback = (message) => notifications.notifications.some((item) => item.message === message);
+
 		const nativeFetch = window.fetch;
 		const checks = [];
 		let mounted;
@@ -140,56 +153,25 @@ try {
 			await access.login({ username: 'admin', password: 'execution-fixture-password' });
 			const initial = await getExecutionSettings();
 			check(
-				initial.version === 0 && initial.enabled === false && initial.profiles.length === 3,
-				'real defaults and three profiles',
-			);
-			const providerResponse = await nativeFetch('/api/v1/agent/ai/providers', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					kind: 'openai-compatible',
-					displayName: 'Execution fixture',
-					baseUrl: 'http://127.0.0.1:1/v1',
-					protocol: 'chat-completions',
-					enabled: true,
-					models: [{ id: 'fixture-model', contextWindow: 131072, maxOutputTokens: 256, supportsTools: true }],
-				}),
-			});
-			check(providerResponse.status === 201, 'real provider configuration created without vendor dispatch');
-			const options = await getExecutionModelChoices();
-			check(
-				options.length === 1 && options[0].configurationVersion === 1,
-				'real enabled model choices retain configuration version',
+				initial.version === 0 && initial.enabled === false && !('profiles' in initial),
+				'real defaults without independent child profiles',
 			);
 			const input = structuredClone(initial);
 			input.limits.maxModelRequests = 79;
-			input.profiles[0].model = {
-				kind: 'explicit',
-				providerId: options[0].providerId,
-				modelId: options[0].modelId,
-				configurationVersion: options[0].configurationVersion,
-			};
 			let current = await saveExecutionSettings(input);
 			check(
-				current.version === 1 &&
-					current.limits.maxModelRequests === 79 &&
-					current.profiles[0].model.kind === 'explicit',
-				'real PUT persists budget and versioned profile model',
+				current.version === 1 && current.limits.maxModelRequests === 79,
+				'real PUT persists shared execution budget',
 			);
 			await failure(() => saveExecutionSettings(input), 'version_conflict', 'confirmed');
 			const hard = structuredClone(current.hardLimits);
 			hard.maxModelRequests = 159;
-			const preview = await previewExecutionHardLimits(current.version, hard);
-			check(
-				preview.expectedVersion === 1 && preview.expiresAt > Date.now() && preview.activeRuns === 0,
-				'real hard-limit preview binds current version and occupancy',
-			);
-			current = await confirmExecutionHardLimits(preview);
+			current = await saveExecutionHardLimits(current.version, hard);
 			check(
 				current.version === 2 &&
 					current.hardLimits.maxModelRequests === 159 &&
 					current.limits.maxModelRequests === 79,
-				'real confirm changes only hard limits',
+				'real hard-limit save changes only hard limits',
 			);
 			check((await getExecutionSettings()).version === 2, 'real read confirms persisted update');
 			let dispatched = 0;
@@ -198,21 +180,10 @@ try {
 				return nativeFetch(...args);
 			};
 			const invalid = structuredClone(current);
-			invalid.profiles[0].toolsText = 'tool,tool';
+			invalid.limits.maxModelRequests = 161;
 			await failure(() => saveExecutionSettings(invalid), 'invalid_input', 'not_dispatched');
-			check(dispatched === 0, 'duplicate tools rejected before dispatch');
-			const wire = {
-				settings: {
-					...current,
-					profiles: current.profiles.map(({ toolsText, ...profile }) => ({
-						...profile,
-						tools: toolsText
-							.split(',')
-							.map((v) => v.trim())
-							.filter(Boolean),
-					})),
-				},
-			};
+			check(dispatched === 0, 'invalid execution limits rejected before dispatch');
+			const wire = { settings: current };
 			window.fetch = async () => json({ ...wire, secret: 'private' });
 			await failure(() => getExecutionSettings(), 'protocol_failure', 'unknown');
 			window.fetch = async () =>
@@ -229,12 +200,15 @@ try {
 			window.fetch = async () =>
 				json({
 					confirmation: {
-						...preview,
 						id: crypto.randomUUID(),
-						proposed: { ...preview.proposed, maxModelRequests: 158 },
+						expectedVersion: 1,
+						expiresAt: Date.now() + 60000,
+						proposed: { ...hard, maxModelRequests: 158 },
+						occupiedArtifactBytes: 0,
+						activeRuns: 0,
 					},
 				});
-			await failure(() => previewExecutionHardLimits(1, hard), 'protocol_failure', 'unknown');
+			await failure(() => saveExecutionHardLimits(1, hard), 'protocol_failure', 'unknown');
 			window.fetch = async () =>
 				new Response(
 					new ReadableStream({
@@ -251,16 +225,14 @@ try {
 			setLocale('en-US');
 			node = document.createElement('div');
 			document.body.append(node);
-			mounted = createApp({ render: () => h(ExecutionSettings) }).use(i18n);
+			mounted = createApp({ render: () => h(ExecutionSettings) })
+				.use(pinia)
+				.use(i18n);
 			mounted.mount(node);
-			await until(
-				() =>
-					node.querySelectorAll('input[type=number]').length === 38 &&
-					node.querySelector('select')?.options.length === 2,
-			);
+			await until(() => node.querySelectorAll('input').length === 32);
 			check(
-				node.querySelectorAll('textarea').length === 3,
-				'actual component renders sixteen budgets, sixteen hard limits and three profiles',
+				node.querySelectorAll('textarea').length === 0 && node.querySelectorAll('select').length === 0,
+				'actual components render shared budgets and hard limits without child overrides',
 			);
 
 			function button(key) {
@@ -268,7 +240,7 @@ try {
 			}
 
 			function editBudget(value) {
-				const field = node.querySelector('input[type=number]');
+				const field = node.querySelector('input');
 				field.value = String(value);
 				field.dispatchEvent(new Event('input', { bubbles: true }));
 			}
@@ -284,7 +256,7 @@ try {
 			editBudget(78);
 			await nextTick();
 			save().click();
-			await until(() => node.querySelector('[role=status]'));
+			await until(() => hasFeedback(i18n.global.t('agent.settings.execution.saved')));
 			check(
 				(await getExecutionSettings()).limits.maxModelRequests === 78,
 				'actual component saves through real Access and backend',
@@ -303,7 +275,7 @@ try {
 			editBudget(77);
 			await nextTick();
 			save().click();
-			await until(() => node.querySelector('[role=alert]'));
+			await until(() => hasFeedback(i18n.global.t('agent.settings.execution.unknown')));
 			check(node.querySelector('fieldset').disabled && writes === 1, 'unknown write fences editing and replay');
 			save().click();
 			await nextTick();
@@ -318,7 +290,7 @@ try {
 			await nextTick();
 			await until(() => !node.querySelector('fieldset').disabled);
 			check(
-				writes === 1 && node.querySelector('input[type=number]').value === '78',
+				writes === 1 && node.querySelector('input').value === '78',
 				'successful read recovers actual saved state without replay',
 			);
 			for (const locale of ['zh-CN', 'ja-JP']) {
@@ -327,12 +299,8 @@ try {
 				editBudget(77);
 				await nextTick();
 				save().click();
-				await until(() => node.querySelector('[role=alert]'));
-				check(
-					node.querySelector('[role=alert]').textContent ===
-						i18n.global.t('agent.settings.execution.unknown'),
-					locale + ' safe unknown message',
-				);
+				await until(() => hasFeedback(i18n.global.t('agent.settings.execution.unknown')));
+				check(hasFeedback(i18n.global.t('agent.settings.execution.unknown')), locale + ' safe unknown message');
 				read().click();
 				await nextTick();
 				await until(() => !node.querySelector('fieldset').disabled);
@@ -340,75 +308,39 @@ try {
 			setLocale('en-US');
 			await nextTick();
 			window.fetch = nativeFetch;
-			let hardInput = node.querySelector('details input[type=number]');
+			let hardInput = node.querySelector('details input');
 			hardInput.value = '158';
 			hardInput.dispatchEvent(new Event('input', { bubbles: true }));
 			await nextTick();
-			button('agent.settings.execution.preview').click();
-			await until(() => button('agent.settings.execution.confirm'));
-			check(node.querySelector('fieldset').disabled, 'pending confirmation freezes ordinary settings draft');
+			check(!button('agent.settings.execution.preview'), 'hard limits have no preview action');
+			check(node.querySelector('fieldset').disabled, 'hard-limit edits freeze ordinary settings draft');
 			hardInput.value = '157';
 			hardInput.dispatchEvent(new Event('input', { bubbles: true }));
 			await nextTick();
-			check(!button('agent.settings.execution.confirm'), 'editing proposed limits invalidates old confirmation');
-			button('agent.settings.execution.preview').click();
-			await until(() => button('agent.settings.execution.confirm'));
-			button('agent.settings.execution.confirm').click();
-			await until(() => !button('agent.settings.execution.confirm') && !node.querySelector('fieldset').disabled);
+			save().click();
+			await until(
+				() =>
+					hasFeedback(i18n.global.t('agent.settings.execution.saved')) &&
+					!node.querySelector('fieldset').disabled,
+			);
 			check(
 				(await getExecutionSettings()).hardLimits.maxModelRequests === 157,
-				'actual component preview and confirm persist intended limits',
+				'actual component saves hard limits without a preview step',
 			);
-			window.fetch = async (url, init) =>
-				String(url).endsWith('/ai/providers')
-					? json({ code: 'storage_unavailable' }, 503)
-					: nativeFetch(url, init);
-			// Re-mount runs the normal automatic directory load; the retry is shown only after failure.
-			mounted.unmount();
-			mounted = createApp({ render: () => h(ExecutionSettings) }).use(i18n);
-			mounted.mount(node);
-			await nextTick();
-			await until(() => node.textContent.includes(i18n.global.t('agent.settings.execution.modelsFailed')));
-			check(
-				!node.querySelector('fieldset').disabled && node.querySelector('select').value !== '',
-				'model directory failure remains independent and preserves existing selection',
-			);
-			window.fetch = nativeFetch;
-			hardInput = node.querySelector('details input[type=number]');
-			const latest = await getExecutionSettings();
-			let confirmations = 0;
+			let modelReads = 0;
 			window.fetch = async (url, init) => {
-				if (String(url).endsWith('/hard-limits/preview')) {
-					const request = JSON.parse(init.body);
-					return json({
-						confirmation: {
-							id: crypto.randomUUID(),
-							expectedVersion: latest.version,
-							expiresAt: Date.now() - 1,
-							proposed: request.proposed,
-							occupiedArtifactBytes: 0,
-							activeRuns: 0,
-						},
-					});
-				}
-				if (String(url).endsWith('/hard-limits/confirm')) {
-					confirmations += 1;
-				}
+				if (String(url).includes('/ai/')) modelReads += 1;
 				return nativeFetch(url, init);
 			};
-			hardInput.value = '156';
-			hardInput.dispatchEvent(new Event('input', { bubbles: true }));
-			await nextTick();
-			button('agent.settings.execution.preview').click();
-			await until(() => button('agent.settings.execution.confirm'));
-			button('agent.settings.execution.confirm').click();
-			await nextTick();
-			check(
-				confirmations === 0 &&
-					node.querySelector('[role=alert]')?.textContent ===
-						i18n.global.t('agent.settings.execution.expired'),
-				'expired preview cannot dispatch confirmation',
-			);
+			mounted.unmount();
+			mounted = createApp({ render: () => h(ExecutionSettings) })
+				.use(pinia)
+				.use(i18n);
+			mounted.mount(node);
+			await until(() => node.querySelectorAll('input').length === 32);
+			check(modelReads === 0, 'inherited Subagent settings do not load a separate model directory');
+			window.fetch = nativeFetch;
+			hardInput = node.querySelector('details input');
 			window.fetch = async (url, init) =>
 				init?.method === 'PUT' ? json({ code: 'version_conflict' }, 409) : nativeFetch(url, init);
 			editBudget(77);
@@ -416,7 +348,7 @@ try {
 			save().click();
 			await until(() => node.querySelector('fieldset').disabled && !read().disabled);
 			check(
-				node.querySelector('[role=alert]')?.textContent === i18n.global.t('agent.settings.execution.conflict'),
+				hasFeedback(i18n.global.t('agent.settings.execution.conflict')),
 				'UI conflict requires explicit read and a new draft',
 			);
 			read().click();
@@ -432,7 +364,9 @@ try {
 				});
 			};
 			mounted.unmount();
-			mounted = createApp({ render: () => h(ExecutionSettings) }).use(i18n);
+			mounted = createApp({ render: () => h(ExecutionSettings) })
+				.use(pinia)
+				.use(i18n);
 			mounted.mount(node);
 			await nextTick();
 			await until(() => held);
@@ -447,23 +381,23 @@ try {
 			window.fetch = nativeFetch;
 			mounted.unmount();
 			authenticatedSessionLifecycle.attach(1);
+			window.fetch = async (url, init) =>
+				String(url).endsWith('/ai/providers')
+					? json({ code: 'storage_unavailable' }, 503)
+					: nativeFetch(url, init);
 			mounted = createApp({ render: () => h(AgentSettingsPanel) })
-				.use(createPinia())
+				.use(pinia)
 				.use(i18n);
 			mounted.mount(node);
+			await until(() => hasFeedback(i18n.global.t('agent.settings.providerManagement.failed')));
 			Array.from(node.querySelectorAll('nav button'))
 				.find((button) => button.textContent.trim() === 'Execution & Integrations')
 				.click();
 			await nextTick();
-			await until(
-				() =>
-					node.querySelectorAll('input[type=number]').length === 38 &&
-					node.textContent.includes('Request failed'),
-			);
+			await until(() => node.querySelector('section[aria-label="Execution and performance"] input'));
 			check(
-				node.querySelector('section[aria-label="Execution settings"]') &&
-					!node.querySelector('fieldset').disabled,
-				'formal settings panel keeps execution usable while legacy aggregate load fails',
+				!node.querySelector('section[aria-label="Execution and performance"] fieldset').disabled,
+				'formal settings panel keeps shared execution limits usable while provider loading fails',
 			);
 
 			await access.logout();

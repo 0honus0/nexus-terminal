@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { useFeedbackMessage } from '@/shared/feedback/public';
 	import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiSelect, UiButton } from '@/foundation/ui';
@@ -13,6 +14,12 @@
 	const manage = ref(false);
 	const loading = ref(false);
 	const loadError = ref('');
+	let failureCause: unknown;
+	useFeedbackMessage(
+		() => loadError.value,
+		undefined,
+		() => failureCause,
+	);
 	let generation = 0;
 	let active = true;
 	let disposed = false;
@@ -35,6 +42,7 @@
 			await keys.load(true);
 		} catch (cause) {
 			if (current === generation && !disposed) {
+				failureCause = cause;
 				loadError.value = t('sshKeys.failures.' + targetErrorKey(cause, 'read'));
 			}
 		} finally {
@@ -104,7 +112,6 @@
 			>
 		</div>
 		<div v-if="loading" class="text-xs text-text-secondary">{{ t('sshKeys.selector.loadingKeys') }}</div>
-		<div v-else-if="loadError" role="alert" class="break-words text-xs text-error">{{ loadError }}</div>
 		<SshKeyManagementModal v-model="manage" />
 	</div>
 </template>

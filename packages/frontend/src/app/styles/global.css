@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import './tokens.css';
 @import '../../foundation/ui/uiGen2.css';
+@import '../../foundation/ui/uiCatalog.css';
 
 html {
 	scrollbar-gutter: stable;

@@ -3,24 +3,17 @@ import { AGENT_ARTIFACT_MAX_BYTES } from '@nexus-terminal/shared/agent/artifacts
 import { listManagedApps } from '../api/app-management-api';
 import {
 	beginManagedArtifact,
-	confirmArtifactCleanup,
+	cleanupManagedArtifacts,
 	deleteManagedArtifact,
 	downloadManagedArtifact,
 	getArtifactStorage,
 	getManagedArtifact,
 	listManagedArtifacts,
-	previewArtifactCleanup,
 	retainManagedArtifact,
 	uploadManagedArtifact,
 } from '../api/artifact-management-api';
 import type { ManagedApp } from '../model/app-management-types';
-import type {
-	ArtifactCleanupPlan,
-	ArtifactCleanupResult,
-	ArtifactFilters,
-	ArtifactStorage,
-	ManagedArtifact,
-} from '../model/artifact-types';
+import type { ArtifactCleanupResult, ArtifactFilters, ArtifactStorage, ManagedArtifact } from '../model/artifact-types';
 import { AgentManagementFailure } from '../model/management-failure';
 import { useAgentManagementOperation } from './use-agent-management-operation';
 
@@ -42,10 +35,8 @@ export function useArtifactLibrary(available: () => boolean) {
 	const uploadRecord = ref<ManagedArtifact | null>(null);
 	const uploadUnknown = ref(false);
 	const uploadAcknowledged = ref(false);
-	const cleanupPlan = ref<ArtifactCleanupPlan | null>(null);
 	const cleanupResult = ref<ArtifactCleanupResult | null>(null);
 	const cleanupUnknown = ref(false);
-	let cleanupAppId = '';
 	let revision = 0;
 	const downloadUrls = new Map<string, ReturnType<typeof setTimeout>>();
 	const operation = useAgentManagementOperation(() => {
@@ -60,10 +51,8 @@ export function useArtifactLibrary(available: () => boolean) {
 		uploadRecord.value = null;
 		uploadUnknown.value = false;
 		uploadAcknowledged.value = false;
-		cleanupPlan.value = null;
 		cleanupResult.value = null;
 		cleanupUnknown.value = false;
-		cleanupAppId = '';
 		for (const [url, timer] of downloadUrls) {
 			clearTimeout(timer);
 			URL.revokeObjectURL(url);
@@ -253,33 +242,15 @@ export function useArtifactLibrary(available: () => boolean) {
 		);
 	}
 
-	async function prepareCleanup(): Promise<void> {
-		if (blocked.value || cleanupUnknown.value || cleanupPlan.value !== null || !filters.value.appId) {
+	async function cleanup(appId: string): Promise<void> {
+		if (blocked.value || cleanupUnknown.value) {
 			return;
 		}
-		const appId = filters.value.appId;
+		cleanupResult.value = null;
 		await operation.execute(
-			(signal) => previewArtifactCleanup(appId, signal),
-			(value) => {
-				cleanupPlan.value = value;
-				cleanupAppId = appId;
-				cleanupResult.value = null;
-			},
-			{ write: true },
-		);
-	}
-
-	async function confirmCleanup(): Promise<void> {
-		if (blocked.value || cleanupUnknown.value || cleanupPlan.value === null) {
-			return;
-		}
-		const plan = structuredClone(toRaw(cleanupPlan.value));
-		const appId = cleanupAppId;
-		await operation.execute(
-			(signal) => confirmArtifactCleanup(appId, plan, signal),
+			(signal) => cleanupManagedArtifacts(appId, signal),
 			(value) => {
 				cleanupResult.value = value;
-				cleanupPlan.value = null;
 				invalidate();
 			},
 			{
@@ -293,12 +264,6 @@ export function useArtifactLibrary(available: () => boolean) {
 				},
 			},
 		);
-	}
-
-	function discardCleanup(): void {
-		if (!operation.busy.value && !cleanupUnknown.value) {
-			cleanupPlan.value = null;
-		}
 	}
 
 	function initial(): void {
@@ -337,7 +302,6 @@ export function useArtifactLibrary(available: () => boolean) {
 		uploadRecord,
 		uploadUnknown,
 		uploadAcknowledged,
-		cleanupPlan,
 		cleanupResult,
 		cleanupUnknown,
 		operation,
@@ -353,8 +317,6 @@ export function useArtifactLibrary(available: () => boolean) {
 		checkUpload,
 		newUploadIntent,
 		download,
-		prepareCleanup,
-		confirmCleanup,
-		discardCleanup,
+		cleanup,
 	};
 }

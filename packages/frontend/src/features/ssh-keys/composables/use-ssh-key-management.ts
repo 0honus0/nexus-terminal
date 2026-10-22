@@ -3,7 +3,7 @@ import { useI18n } from 'vue-i18n';
 import { TARGET_SSH_PRIVATE_KEY_MAX_BYTES } from '@nexus-terminal/shared/targets/ssh-keys/values';
 import { useAuthSession } from '@/features/auth/public';
 import { TargetRequestFailure, targetErrorKey } from '@/client/targets/target-types';
-import { useFeedback } from '@/shared/feedback/public';
+import { useFeedback, useFeedbackMessage } from '@/shared/feedback/public';
 import type { SshKeyDraft, SshKeySummary } from '../model/ssh-key-types';
 import { toSshKeyChanges, toSshKeyInput } from '../model/ssh-key-mapper';
 import { useSshKeys } from './useSshKeys';
@@ -17,6 +17,13 @@ export function useSshKeyManagement(visible: Ref<boolean>) {
 	const showForm = ref(false);
 	const form = reactive<SshKeyDraft>({ name: '', privateKey: '', passphrase: '', clearPassphrase: false });
 	const message = ref('');
+	let failureCause: unknown;
+	const messageSuccess = ref(false);
+	useFeedbackMessage(
+		() => message.value,
+		() => (messageSuccess.value ? 'success' : 'error'),
+		() => failureCause,
+	);
 	const loading = ref(false);
 	const keyFileInput = ref<HTMLInputElement | null>(null);
 	let active = true;
@@ -42,6 +49,8 @@ export function useSshKeyManagement(visible: Ref<boolean>) {
 		controller = null;
 		loading.value = false;
 		message.value = '';
+		failureCause = undefined;
+		messageSuccess.value = false;
 		clearDraft();
 	}
 
@@ -57,10 +66,13 @@ export function useSshKeyManagement(visible: Ref<boolean>) {
 		const signal = controller.signal;
 		loading.value = true;
 		message.value = '';
+		failureCause = undefined;
+		messageSuccess.value = false;
 		try {
 			await work(signal);
 		} catch (cause) {
 			if (current === generation && !disposed) {
+				failureCause = cause;
 				message.value = t('sshKeys.failures.' + targetErrorKey(cause, operation));
 				if (keys.needsRefresh.value) {
 					clearDraft();

@@ -5,7 +5,14 @@ import type {
 import type { RemoteDesktopDisplay, RemoteDesktopSession } from './remote-desktop-types';
 
 export function toSession(value: RemoteDesktopSessionResponse): RemoteDesktopSession {
-	return { ticket: value.ticket, lastConnectedAt: value.lastConnectedAt * 1000 };
+	return {
+		ticket: value.ticket,
+		protocol: value.protocol,
+		host: value.host,
+		port: value.port,
+		username: value.username,
+		password: value.password,
+	};
 }
 
 export function toDisplayRequest(value: RemoteDesktopDisplay): RemoteDesktopDisplayRequest {

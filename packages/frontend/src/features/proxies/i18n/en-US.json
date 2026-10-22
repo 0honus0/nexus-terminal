@@ -2,6 +2,17 @@
   "proxies": {
     "title": "Proxy Management",
     "addProxy": "Add New Proxy",
+    "listTitle": "Proxy List",
+    "searchPlaceholder": "Search name, host or username",
+    "filterType": "Filter by proxy type",
+    "allTypes": "All types",
+    "authenticated": "Authenticated",
+    "noAuthentication": "No authentication",
+    "noMatches": "No proxies match the current search or filter.",
+    "summary": {
+      "label": "Proxy overview",
+      "total": "Total Proxies"
+    },
     "loading": "Loading proxies...",
     "error": "Failed to load proxies: {error}",
     "noProxies": "No proxies yet. Click 'Add New Proxy' to create one!",
@@ -12,6 +23,9 @@
     "form": {
       "title": "Add New Proxy",
       "titleEdit": "Edit Proxy",
+      "sectionBasic": "Basic information",
+      "sectionEndpoint": "Network address",
+      "sectionCredentials": "Authentication",
       "name": "Name:",
       "type": "Type:",
       "host": "Host/IP:",

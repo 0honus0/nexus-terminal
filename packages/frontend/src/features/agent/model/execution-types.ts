@@ -1,5 +1,3 @@
-import type { AgentChildProfile } from '@nexus-terminal/shared/agent/collaboration/values';
-
 export interface ExecutionLimits {
 	maxModelRequests: number;
 	maxToolExecutions: number;
@@ -19,24 +17,12 @@ export interface ExecutionLimits {
 	artifactTtlSeconds: number;
 }
 
-export type ExecutionModel =
-	{ kind: 'inherit' } | { kind: 'explicit'; providerId: string; modelId: string; configurationVersion: number };
-
-export interface ExecutionProfileDraft {
-	name: AgentChildProfile;
-	enabled: boolean;
-	model: ExecutionModel;
-	maxRequests: number;
-	maxSeconds: number;
-	toolsText: string;
-}
-
 export interface ExecutionSettings {
 	version: number;
 	enabled: boolean;
 	limits: ExecutionLimits;
 	hardLimits: ExecutionLimits;
-	profiles: ExecutionProfileDraft[];
+
 	updatedAt: number;
 }
 
@@ -47,12 +33,4 @@ export interface HardLimitConfirmation {
 	proposed: ExecutionLimits;
 	occupiedArtifactBytes: number;
 	activeRuns: number;
-}
-
-export interface ExecutionModelChoice {
-	key: string;
-	label: string;
-	providerId: string;
-	modelId: string;
-	configurationVersion: number;
 }

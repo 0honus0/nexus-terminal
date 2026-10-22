@@ -12,17 +12,11 @@
 </script>
 
 <template>
-	<div v-if="props.section === 'security'" class="ui-solid-panel overflow-hidden rounded-xl">
-		<h2 class="border-b border-border/60 px-6 py-4 text-lg font-semibold text-foreground">
-			{{ $t('settings.category.security') }}
-		</h2>
-		<div class="space-y-6 p-6">
+	<div v-if="props.section === 'security'" class="settings-surface">
+		<div class="ui-settings-groups">
 			<ChangePasswordPanel />
-			<hr class="border-border/50" />
 			<PasskeyPanel />
-			<hr class="border-border/50" />
 			<TwoFactorPanel :enabled="props.twoFactorEnabled ?? false" @changed="emit('authChanged')" />
-			<hr class="border-border/50" />
 			<CaptchaPanel />
 		</div>
 	</div>

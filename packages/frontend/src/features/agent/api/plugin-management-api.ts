@@ -6,7 +6,6 @@ import {
 	readAgentPluginPublisher,
 	readAgentPluginPublisherView,
 	readAgentPluginRetirement,
-	readAgentPluginStage,
 	readAgentPluginStageView,
 	readAgentPluginUpgrade,
 	readAgentPluginVersion,
@@ -30,7 +29,6 @@ import {
 	AGENT_PLUGIN_MAX_BODY_BYTES,
 	AGENT_PLUGIN_MAX_RESPONSE_BYTES,
 } from '@nexus-terminal/shared/agent/plugins/values';
-import type { ManagedArtifact } from '../model/artifact-types';
 import type {
 	PluginCatalog,
 	PluginCatalogEntry,
@@ -161,35 +159,6 @@ export async function listPluginVersions(signal?: AbortSignal): Promise<PluginVe
 		decode: (value) => readAgentPluginItems(value, readAgentPluginVersionView),
 	});
 	return value.items.map(fromPluginVersion);
-}
-
-export async function stagePluginArtifact(original: ManagedArtifact, signal?: AbortSignal): Promise<PluginStage> {
-	const value = await requestAgentManagement({
-		...budgets,
-		method: 'POST',
-		path: '/plugins/stage',
-		signal,
-
-		input: () =>
-			readAgentPluginStage({
-				artifactAppId: original.appId,
-				artifactId: original.id,
-				expectedVersion: original.version,
-			}),
-
-		decode(value) {
-			const stage = readAgentPluginStageView(value);
-			if (
-				stage.status !== 'staged' ||
-				stage.packageHash !== original.sha256 ||
-				stage.sizeBytes !== original.sizeBytes
-			) {
-				throw new Error('Plugin stage confirmation mismatch');
-			}
-			return stage;
-		},
-	});
-	return fromPluginStage(value);
 }
 
 export async function verifyPluginStage(original: PluginStage, signal?: AbortSignal): Promise<PluginStage> {

@@ -434,7 +434,8 @@
 }
 
 .ui-info-hint__panel {
-	z-index: 100;
+	/* Tooltips portal to body, so they must sit above modal/confirmation layers. */
+	z-index: 200;
 	max-width: min(340px, calc(100vw - 24px));
 	padding: 8px 12px;
 	border-radius: 8px;
@@ -710,6 +711,17 @@
 	border-color: color-mix(in srgb, var(--status-success-color) 55%, var(--border-color));
 }
 
+.ui-button[data-tone='warning'] {
+	--ui-button-glass-fill: color-mix(in srgb, var(--status-warning-color) 10%, transparent);
+	--ui-button-glass-fill-hover: color-mix(in srgb, var(--status-warning-color) 17%, transparent);
+	color: var(--status-warning-color);
+	border-color: color-mix(in srgb, var(--status-warning-color) 35%, var(--border-color));
+}
+
+.ui-button[data-tone='warning']:not(:disabled):hover {
+	border-color: color-mix(in srgb, var(--status-warning-color) 55%, var(--border-color));
+}
+
 /* Soft and glass primary actions keep the quiet neutral treatment. Solid primary actions use
    the theme's action color so the main action stays consistent across product surfaces. */
 [data-ui-gen='2'][data-ui='button'][data-tone='primary']:not(.ui-button--solid) {
@@ -737,18 +749,24 @@
 }
 
 .ui-button--ghost {
-	border-color: color-mix(in srgb, var(--border-color) 18%, transparent);
-	background: color-mix(in srgb, var(--card-bg-color) 6%, transparent);
+	border-color: transparent;
+	background: transparent;
 	color: var(--ui-tone-ink);
-	box-shadow: inset 0 1px 0 rgb(255 255 255 / 18%);
-	-webkit-backdrop-filter: var(--ui-glass-control-filter);
-	backdrop-filter: var(--ui-glass-control-filter);
+	box-shadow: none;
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
 }
 
 .ui-button--ghost:not(:disabled):hover {
-	border-color: var(--ui-hairline);
-	background: var(--ui-tone-soft);
-	box-shadow: var(--ui-glass-highlight);
+	border-color: transparent;
+	background: color-mix(in srgb, var(--text-color) 6%, transparent);
+	box-shadow: none;
+}
+
+.ui-button--ghost:not(:disabled):active {
+	border-color: transparent;
+	background: color-mix(in srgb, var(--text-color) 9%, transparent);
+	box-shadow: none;
 }
 
 [data-ui-gen='2'][data-ui='button'] i,
@@ -892,6 +910,83 @@
 	font: inherit;
 	font-size: var(--ui-control-font-size);
 	box-shadow: none;
+}
+
+.ui-input__control[type='number'] {
+	-moz-appearance: textfield;
+	appearance: textfield;
+}
+
+.ui-input__control[type='number']::-webkit-inner-spin-button,
+.ui-input__control[type='number']::-webkit-outer-spin-button {
+	margin: 0;
+	-webkit-appearance: none;
+}
+
+.ui-input[data-number] {
+	padding-inline-end: 4px;
+}
+
+.ui-input[data-number] .ui-input__control {
+	font-variant-numeric: tabular-nums;
+}
+
+.ui-input__number-stepper {
+	display: grid;
+	width: 25px;
+	height: min(26px, calc(100% - 6px));
+	flex: none;
+	grid-template-rows: repeat(2, minmax(0, 1fr));
+	overflow: hidden;
+	border: 1px solid var(--ui-hairline);
+	border-radius: 7px;
+	background: color-mix(in srgb, var(--input-bg-color) 74%, transparent);
+}
+
+.ui-input__number-button {
+	display: grid;
+	min-height: 0;
+	place-items: center;
+	border: 0;
+	padding: 0;
+	background: transparent;
+	color: var(--ui-text-muted);
+	cursor: pointer;
+}
+
+.ui-input__number-button + .ui-input__number-button {
+	border-top: 1px solid color-mix(in srgb, var(--ui-hairline) 72%, transparent);
+}
+
+.ui-input__number-button:hover:not(:disabled) {
+	background: var(--ui-fill-soft-hover);
+	color: var(--ui-text);
+}
+
+.ui-input__number-button:focus-visible {
+	position: relative;
+	outline: none;
+	background: var(--ui-fill-soft-hover);
+	box-shadow: inset 0 0 0 1px var(--ui-focus-color);
+}
+
+.ui-input__number-button:disabled {
+	color: var(--ui-disabled-text);
+	cursor: not-allowed;
+}
+
+.ui-input__number-button svg {
+	width: 7px;
+	height: 4px;
+	overflow: visible;
+}
+
+.ui-input__number-button path {
+	fill: none;
+	stroke: currentColor;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	stroke-width: 1.35;
 }
 
 .ui-input__control:autofill,
@@ -1359,6 +1454,15 @@
 	overscroll-behavior: contain;
 }
 
+.ui-popover__panel--solid {
+	border-color: var(--border-color);
+	background-color: var(--app-bg-color);
+	background-image: none;
+	box-shadow: 0 18px 44px -26px rgb(0 0 0 / 42%);
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
+}
+
 .ui-popover__panel:focus-visible {
 	box-shadow: var(--ui-focus-ring), var(--ui-shadow-raised);
 }
@@ -1804,6 +1908,7 @@
 	inset: 0;
 	z-index: 91;
 	display: flex;
+	height: fit-content;
 	width: 100%;
 	max-width: min(560px, calc(100vw - 32px));
 	max-height: calc(100dvh - 32px);
@@ -1836,8 +1941,49 @@
 }
 
 .ui-dialog__heading {
+	display: flex;
 	min-width: 0;
 	flex: 1;
+	align-items: flex-start;
+	gap: 12px;
+}
+
+.ui-dialog__heading-text {
+	min-width: 0;
+	flex: 1;
+}
+
+.ui-dialog__icon {
+	display: grid;
+	width: 36px;
+	height: 36px;
+	flex: none;
+	place-items: center;
+	border: 1px solid color-mix(in srgb, var(--link-active-color) 24%, var(--ui-hairline));
+	border-radius: 12px;
+	color: var(--link-active-color);
+	background: color-mix(in srgb, var(--link-active-color) 10%, var(--ui-fill-inset));
+	box-shadow: var(--ui-glass-highlight), var(--ui-shadow-inset);
+	font-size: 13px;
+}
+
+.ui-dialog__icon[data-tone='warning'] {
+	border-color: color-mix(in srgb, var(--status-warning-color) 32%, var(--ui-hairline));
+	color: var(--status-warning-color);
+	background: color-mix(in srgb, var(--status-warning-color) 12%, var(--ui-fill-inset));
+}
+
+.ui-dialog__icon[data-tone='danger'] {
+	border-color: color-mix(in srgb, var(--status-error-color) 32%, var(--ui-hairline));
+	color: var(--status-error-color);
+	background: color-mix(in srgb, var(--status-error-color) 11%, var(--ui-fill-inset));
+}
+
+.ui-dialog__panel[data-density='comfortable'] .ui-dialog__icon {
+	width: 40px;
+	height: 40px;
+	border-radius: 13px;
+	font-size: 15px;
 }
 
 .ui-dialog__title {
@@ -1882,6 +2028,180 @@
 	gap: 8px;
 	padding: 12px 16px;
 	border-top: 1px solid var(--ui-hairline);
+}
+
+.ui-update-prompt {
+	width: min(420px, calc(100vw - 32px));
+	max-width: none;
+	background-image: radial-gradient(
+		120% 90% at 8% 0%,
+		color-mix(in srgb, var(--link-active-color) 10%, transparent),
+		transparent 62%
+	);
+}
+
+.ui-update-prompt .ui-dialog__header {
+	padding: 20px 22px 15px;
+	border-bottom: 0;
+}
+
+.ui-update-prompt .ui-dialog__title {
+	font-size: 16px;
+}
+
+.ui-update-prompt .ui-dialog__description {
+	max-width: 34em;
+	margin-top: 5px;
+	font-size: 12.5px;
+	line-height: 1.55;
+	text-wrap: pretty;
+}
+
+.ui-update-prompt .ui-dialog__footer {
+	padding: 0 22px 20px;
+	border-top: 0;
+}
+
+.ui-notification-host {
+	top: 1rem;
+}
+
+body:has(.app-header) .ui-notification-host {
+	top: calc(var(--app-header-height) + 0.75rem);
+}
+
+.ui-notification {
+	--ui-notification-accent: var(--link-active-color);
+	position: relative;
+	display: flex;
+	box-sizing: border-box;
+	width: 100%;
+	flex-direction: column;
+	overflow: hidden;
+	padding: 12px 13px 11px;
+	border: 1px solid color-mix(in srgb, var(--ui-notification-accent) 20%, var(--border-color));
+	border-radius: 14px;
+	color: var(--ui-text);
+	background:
+		linear-gradient(180deg, color-mix(in srgb, var(--ui-notification-accent) 5%, transparent), transparent 72%),
+		color-mix(in srgb, var(--app-bg-color) 88%, var(--card-bg-color));
+	box-shadow:
+		inset 0 1px 0 color-mix(in srgb, white 9%, transparent),
+		0 16px 32px -26px rgb(0 0 0 / 58%);
+}
+
+.ui-notification[data-kind='success'] {
+	--ui-notification-accent: var(--status-success-color);
+}
+
+.ui-notification[data-kind='error'] {
+	--ui-notification-accent: var(--status-error-color);
+}
+
+.ui-notification[data-kind='warning'] {
+	--ui-notification-accent: var(--status-warning-color);
+}
+
+.ui-notification[data-kind='info'] {
+	--ui-notification-accent: var(--link-active-color);
+}
+
+.ui-notification__header {
+	display: flex;
+	min-width: 0;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 10px;
+	padding-left: 1px;
+}
+
+.ui-notification__title {
+	min-width: 0;
+	color: color-mix(in srgb, var(--ui-notification-accent) 82%, var(--ui-text));
+	font-size: 13px;
+	font-weight: 650;
+	line-height: 1.4;
+	letter-spacing: 0.01em;
+}
+
+.ui-notification__message {
+	margin: 5px 0 0;
+	padding-left: 1px;
+	color: color-mix(in srgb, var(--ui-text) 92%, transparent);
+	font-size: 12.5px;
+	font-weight: 450;
+	line-height: 1.52;
+	overflow-wrap: anywhere;
+	text-wrap: pretty;
+}
+
+.ui-notification__action-row {
+	display: flex;
+	justify-content: flex-end;
+	margin-top: 9px;
+	padding-top: 8px;
+	border-top: 1px solid color-mix(in srgb, var(--ui-notification-accent) 12%, var(--border-color));
+}
+
+.ui-notification__action {
+	min-width: 84px;
+	height: 28px;
+	padding-inline: 14px;
+	border-radius: 8px;
+	font-size: 12px;
+	font-weight: 600;
+	box-shadow: none;
+}
+
+.ui-notification__close {
+	position: relative;
+	display: grid;
+	width: 28px;
+	height: 28px;
+	margin-top: -3px;
+	flex: none;
+	place-items: center;
+	border: 0;
+	border-radius: 9px;
+	background: transparent;
+	color: var(--ui-text-muted);
+	font-size: 12px;
+	cursor: pointer;
+	opacity: 0.76;
+	touch-action: manipulation;
+	transition:
+		background-color var(--ui-motion-duration) var(--ui-motion-ease),
+		color var(--ui-motion-duration) var(--ui-motion-ease),
+		opacity var(--ui-motion-duration) var(--ui-motion-ease);
+}
+
+.ui-notification__close::after {
+	position: absolute;
+	inset: -7px;
+	content: '';
+}
+
+.ui-notification__close:hover {
+	background: color-mix(in srgb, var(--ui-notification-accent) 14%, transparent);
+	color: var(--ui-notification-accent);
+	opacity: 1;
+}
+
+.ui-notification__close:focus-visible {
+	outline: 2px solid var(--ui-focus-color);
+	outline-offset: -2px;
+}
+
+@media (max-width: 639px) {
+	.ui-notification {
+		padding: 12px 13px 11px;
+		border-radius: 14px;
+	}
+
+	.ui-notification__action {
+		height: 30px;
+		min-width: 88px;
+	}
 }
 
 @keyframes ui-gen2-spin {
@@ -2005,17 +2325,22 @@
 	}
 }
 .ui-confirmation-panel {
-	max-width: 440px;
+	width: min(500px, calc(100vw - 32px));
 	max-height: calc(100dvh - 32px);
 	overflow-y: auto;
-	border-radius: 16px;
+	border-radius: var(--ui-panel-radius);
+	background-image: radial-gradient(
+		120% 90% at 5% 0%,
+		color-mix(in srgb, var(--link-active-color) 7%, transparent),
+		transparent 58%
+	);
 }
 
 .ui-confirmation-panel__body {
 	display: flex;
 	align-items: flex-start;
 	gap: 14px;
-	padding: 24px;
+	padding: 22px 22px 16px;
 	overflow-wrap: anywhere;
 }
 
@@ -2023,8 +2348,8 @@
 	display: flex;
 	justify-content: flex-end;
 	gap: 10px;
-	padding: 16px 24px;
-	border-top: 1px solid var(--border-color);
+	padding: 14px 22px 18px;
+	border-top: 1px solid color-mix(in srgb, var(--glass-border-color) 72%, transparent);
 }
 
 .ui-button--action-confirmation {
@@ -2032,28 +2357,67 @@
 	min-width: 96px;
 }
 
+.ui-form-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 10px;
+}
+
+.ui-form-actions > .ui-button {
+	min-width: 88px;
+}
+
 @media (max-width: 639px) {
+	.ui-update-prompt .ui-dialog__header {
+		padding: 18px 18px 14px;
+	}
+	.ui-update-prompt .ui-dialog__footer {
+		padding: 0 18px 18px;
+	}
+	.ui-update-prompt .ui-dialog__footer .ui-button {
+		flex: 1;
+		min-height: 44px;
+	}
 	.ui-confirmation-panel__body {
-		padding: 20px;
+		padding: 19px 18px 15px;
+	}
+	.ui-confirmation-panel__details {
+		margin: 0;
+		padding: 13px;
+	}
+	.ui-confirmation-panel__content {
+		padding: 0 18px 16px;
 	}
 	.ui-action-group[data-layout='confirmation'] {
-		padding: 16px 20px;
+		padding: 13px 18px 17px;
 	}
 	.ui-button--action-confirmation {
 		flex: 1;
 		min-width: 0;
 	}
+	.ui-form-actions {
+		width: 100%;
+	}
+	.ui-form-actions > .ui-button {
+		min-width: 0;
+		flex: 1 1 0;
+	}
 }
 
 .ui-confirmation-panel__icon {
 	display: grid;
-	width: 44px;
-	height: 44px;
+	width: 42px;
+	height: 42px;
 	flex-shrink: 0;
 	place-items: center;
-	border-radius: 12px;
+	border: 1px solid color-mix(in srgb, currentColor 22%, var(--glass-border-color));
+	border-radius: 14px;
 	color: var(--link-active-color);
-	background: color-mix(in srgb, currentColor 10%, transparent);
+	background: color-mix(in srgb, currentColor 9%, var(--ui-fill-raised));
+	box-shadow: var(--ui-glass-highlight), var(--ui-shadow-inset);
+	font-size: 15px;
 }
 .ui-confirmation-panel__icon[data-tone='danger'] {
 	color: var(--status-error-color);
@@ -2066,19 +2430,64 @@
 }
 .ui-confirmation-panel__title {
 	font-size: 16px;
-	font-weight: 600;
-	line-height: 1.4;
+	font-weight: 620;
+	line-height: 1.35;
 }
 .ui-confirmation-panel__description {
-	margin-top: 8px;
-	font-size: 14px;
-	line-height: 1.6;
+	margin-top: 6px;
+	font-size: 12.5px;
+	line-height: 1.55;
 	color: var(--ui-text-muted);
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
+	text-wrap: pretty;
 }
 .ui-confirmation-panel__content {
-	padding: 0 24px 20px;
+	padding: 0 22px 18px;
+}
+.ui-confirmation-panel__details {
+	display: grid;
+	gap: 10px;
+	margin: 0;
+	padding: 14px;
+	border-radius: 15px;
+	background: color-mix(in srgb, var(--card-bg-color) 32%, transparent);
+	box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 9%, transparent);
+}
+.ui-confirmation-panel__detail {
+	display: grid;
+	grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
+	align-items: baseline;
+	gap: 12px;
+	min-width: 0;
+}
+.ui-confirmation-panel__detail-label {
+	color: var(--ui-text-muted);
+	font-size: 10px;
+	font-weight: 620;
+	letter-spacing: 0.04em;
+	line-height: 1.45;
+}
+.ui-confirmation-panel__detail-value {
+	min-width: 0;
+	color: var(--ui-text);
+	font-size: 12.5px;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+}
+.ui-confirmation-panel__detail[data-mono='true'] .ui-confirmation-panel__detail-value {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+	font-size: 11.5px;
+	letter-spacing: -0.015em;
+}
+.ui-confirmation-panel__detail[data-tone='primary'] .ui-confirmation-panel__detail-value {
+	color: var(--link-active-color);
+}
+.ui-confirmation-panel__detail[data-tone='warning'] .ui-confirmation-panel__detail-value {
+	color: var(--status-warning-color);
+}
+.ui-confirmation-panel__detail[data-tone='danger'] .ui-confirmation-panel__detail-value {
+	color: var(--status-error-color);
 }
 .ui-action-group[data-layout='management'] {
 	display: grid;

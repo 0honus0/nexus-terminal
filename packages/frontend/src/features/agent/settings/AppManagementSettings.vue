@@ -1,26 +1,41 @@
 <script setup lang="ts">
-	import { computed } from 'vue';
+	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiEmptyState, UiInfoHint, UiSelect } from '@/foundation/ui';
+	import { UiButton, UiEmptyState, UiFormActions, UiInfoHint, UiModal } from '@/foundation/ui';
 	import type { useAppManagement } from '../composables/use-app-management';
+	import type { usePluginManagement } from '../composables/use-plugin-management';
+	import type { ManagedApp } from '../model/app-management-types';
+	import PluginDataEditor from './PluginDataEditor.vue';
 	import AppGovernanceEditor from './AppGovernanceEditor.vue';
 	const { t } = useI18n();
-	const props = defineProps<{ model: ReturnType<typeof useAppManagement> }>();
-	const {
-		apps,
-		definitions,
-		name,
-		definitionId,
-		selectedId,
-		appOperation,
-		definitionOperation,
-		loadApps,
-		loadDefinitions,
-		create,
-		toggle,
-	} = props.model;
+	const props = withDefaults(
+		defineProps<{
+			model: ReturnType<typeof useAppManagement>;
+			plugins: ReturnType<typeof usePluginManagement>;
+			active: boolean;
+			embedded?: boolean;
+		}>(),
+		{ embedded: false },
+	);
+	const { apps, definitions, selectedId, appOperation, loadApps, toggle } = props.model;
+	const uninstallAppId = ref('');
+	watch(
+		() => props.active,
+		(active) => {
+			if (!active) uninstallAppId.value = '';
+		},
+	);
+	const uninstallApp = computed(() => apps.value.find((app) => app.id === uninstallAppId.value));
+	const uninstallInstallation = computed(() =>
+		props.plugins.installations.value.find(
+			(installation) => installation.appId === uninstallAppId.value && installation.status !== 'removed',
+		),
+	);
 	const enabledCount = computed(() => apps.value.filter((app) => app.enabled).length);
-	const blocked = computed(() => appOperation.busy.value || appOperation.refreshRequired.value);
+	const blocked = computed(
+		() =>
+			appOperation.busy.value || appOperation.refreshRequired.value || !props.active || !props.plugins.canWrite(),
+	);
 	const definitionNames = computed(
 		() => new Map(definitions.value.map((definition) => [definition.id, definition.name])),
 	);
@@ -50,16 +65,35 @@
 		};
 	}
 
+	function installationFor(app: ManagedApp) {
+		return props.plugins.installations.value.find((item) => item.appId === app.id && item.status !== 'removed');
+	}
+
+	function isOfficial(app: ManagedApp): boolean {
+		const installation = installationFor(app);
+		return (
+			installation !== undefined && props.plugins.officialPublisherIds.value.includes(installation.publisherKeyId)
+		);
+	}
+
+	async function confirmUninstall(cancel = false): Promise<void> {
+		const installation = uninstallInstallation.value;
+		if (blocked.value || !installation || uninstallApp.value?.enabled) return;
+		await props.plugins.retire(installation, cancel);
+		if (!uninstallInstallation.value || cancel) uninstallAppId.value = '';
+	}
+
 	function definitionName(definitionId: string): string {
 		return definitionNames.value.get(definitionId) ?? t('agent.settings.apps.unknownDefinition');
 	}
 </script>
 <template>
 	<section
-		class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs"
-		:aria-label="t('agent.settings.appManagement.title')"
+		:class="embedded ? 'min-w-0' : 'overflow-hidden rounded-2xl border border-border bg-card shadow-xs'"
+		:aria-label="t('agent.settings.apps.title')"
 	>
 		<div
+			v-if="!embedded"
 			class="agent-settings-head flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3.5 sm:px-5 sm:py-4"
 		>
 			<div class="flex items-center gap-2.5">
@@ -67,8 +101,8 @@
 					<i class="fa-solid fa-puzzle-piece text-sm" aria-hidden="true"></i>
 				</div>
 				<div class="flex items-center gap-1.5">
-					<h3 class="text-sm font-bold text-foreground">{{ t('agent.settings.appManagement.title') }}</h3>
-					<UiInfoHint :text="t('agent.settings.appManagement.description')" />
+					<h3 class="text-sm font-bold text-foreground">{{ t('agent.settings.apps.title') }}</h3>
+					<UiInfoHint :text="t('agent.settings.apps.description')" />
 				</div>
 			</div>
 			<span
@@ -77,13 +111,7 @@
 				>{{ t('agent.settings.apps.enabledCount', { enabled: enabledCount, total: apps.length }) }}</span
 			>
 		</div>
-		<div class="space-y-4 p-4 sm:p-5">
-			<p v-if="appOperation.notice.value" role="status" class="text-sm">
-				{{ t('agent.settings.appManagement.' + appOperation.notice.value) }}
-			</p>
-			<p v-if="appOperation.refreshRequired.value" class="text-sm text-warning">
-				{{ t('agent.settings.appManagement.refreshRequired') }}
-			</p>
+		<div :class="embedded ? 'space-y-1' : 'space-y-4 p-4 sm:p-5'">
 			<UiButton
 				v-if="appOperation.refreshRequired.value || appOperation.notice.value === 'failed'"
 				type="button"
@@ -94,32 +122,33 @@
 			<article
 				v-for="app in apps"
 				:key="app.id"
-				class="overflow-hidden rounded-xl transition-colors duration-200"
-				:class="app.enabled ? 'bg-header/20 hover:bg-header/35' : 'bg-header/40 opacity-85'"
+				:data-app-id="app.id"
+				class="border-b border-border/35 transition-colors duration-200 last:border-b-0"
+				:class="[
+					embedded ? 'px-1 py-3.5' : 'overflow-hidden rounded-xl bg-header/20 p-4 sm:p-5',
+					app.enabled ? 'hover:bg-header/20' : 'opacity-80',
+				]"
 			>
-				<div class="p-4 sm:p-5">
+				<div :class="embedded ? '' : 'p-0'">
 					<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 						<div class="flex min-w-0 items-start gap-3.5">
 							<div
-								class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl shadow-xs"
+								class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-xs"
 								:class="appVisuals(app.definitionId).iconBg"
 							>
-								<i :class="appVisuals(app.definitionId).icon" class="text-xl" aria-hidden="true"></i>
+								<i :class="appVisuals(app.definitionId).icon" class="text-lg" aria-hidden="true"></i>
 							</div>
 							<div class="min-w-0 flex-1">
-								<div class="flex flex-wrap items-center gap-2">
-									<span class="text-sm font-bold tracking-tight text-foreground">{{ app.name }}</span>
-									<span
-										class="rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary"
-										>{{ t(appVisuals(app.definitionId).badge) }}</span
+								<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+									<span class="text-sm font-semibold tracking-tight text-foreground">{{
+										app.name
+									}}</span>
+									<span class="font-mono text-[11px] text-text-secondary"
+										>v{{ app.definitionVersion }}</span
 									>
 									<span
-										class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium"
-										:class="
-											app.enabled
-												? 'border-success/30 bg-success/10 text-success'
-												: 'border-border bg-header text-text-secondary'
-										"
+										class="inline-flex items-center gap-1 text-[11px] font-medium"
+										:class="app.enabled ? 'text-success' : 'text-text-secondary'"
 									>
 										<span
 											class="h-1.5 w-1.5 rounded-full"
@@ -137,37 +166,29 @@
 								<p class="mt-1 line-clamp-1 text-xs leading-relaxed text-text-secondary">
 									{{ t(appVisuals(app.definitionId).summary) }}
 								</p>
-								<div class="mt-2.5 flex flex-wrap items-center gap-2 text-xs">
+								<div
+									class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-text-secondary"
+								>
+									<span>{{ definitionName(app.definitionId) }}</span>
+									<span aria-hidden="true">·</span>
 									<span
-										class="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-[11px] text-text-secondary shadow-2xs"
+										>{{ t('agent.settings.apps.declaredCapabilities') }}
+										{{ app.capabilities.length }}</span
 									>
-										<i
-											class="fa-solid fa-cube text-[9px] text-text-secondary/70"
-											aria-hidden="true"
-										></i>
-										{{ definitionName(app.definitionId) }}
-									</span>
-									<span
-										class="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-[11px] text-text-secondary shadow-2xs"
-									>
-										<i class="fa-solid fa-key text-[9px] text-primary" aria-hidden="true"></i>
-										{{ t('agent.settings.apps.declaredCapabilities') }}:
-										<strong class="font-mono text-foreground">{{ app.capabilities.length }}</strong>
-									</span>
+									<template v-if="installationFor(app)">
+										<span aria-hidden="true">·</span>
+										<span class="text-primary">{{
+											t(
+												isOfficial(app)
+													? appVisuals(app.definitionId).badge
+													: 'agent.settings.plugins.signatureVerified',
+											)
+										}}</span>
+									</template>
 								</div>
-								<details class="mt-2 text-[10px] text-text-secondary">
-									<summary class="cursor-pointer select-none">
-										{{ t('agent.settings.apps.technicalDetails') }}
-									</summary>
-									<code class="mt-1 block break-all">
-										{{ app.id }} · {{ app.definitionId }}@{{ app.definitionVersion }} · v{{
-											app.version
-										}}
-									</code>
-								</details>
 							</div>
 						</div>
-						<div class="flex shrink-0 items-center justify-end gap-2 self-end sm:self-center">
+						<div class="flex shrink-0 flex-wrap items-center justify-end gap-2 self-end sm:self-center">
 							<UiButton
 								appearance="soft"
 								tone="neutral"
@@ -200,11 +221,30 @@
 									)
 								}}</UiButton
 							>
+							<UiButton
+								type="button"
+								appearance="soft"
+								:tone="app.enabled || !installationFor(app) ? 'neutral' : 'danger'"
+								:disabled="blocked || app.enabled || !installationFor(app)"
+								:title="
+									t(
+										!installationFor(app)
+											? 'agent.settings.apps.coreAppCannotUninstall'
+											: app.enabled
+												? 'agent.settings.apps.uninstallDisabledHint'
+												: 'agent.settings.apps.uninstall',
+									)
+								"
+								@click="uninstallAppId = app.id"
+							>
+								<i class="fa-regular fa-trash-can text-xs" aria-hidden="true"></i>
+								{{ t('agent.settings.apps.uninstall') }}
+							</UiButton>
 						</div>
 					</div>
 				</div>
-				<div v-if="selectedId === app.id" class="border-t border-border bg-header/20 p-4 sm:p-5">
-					<AppGovernanceEditor :key="app.id" :app="app" />
+				<div v-if="selectedId === app.id" class="mt-3 border-t border-border/40 pt-4">
+					<AppGovernanceEditor :key="app.id" :app="app" :active="active" />
 				</div>
 			</article>
 			<UiEmptyState
@@ -212,57 +252,88 @@
 				icon="fa-solid fa-box-open"
 				:title="t('agent.settings.apps.empty')"
 			/>
-			<details class="overflow-hidden rounded-xl border border-border bg-header/15">
-				<summary
-					class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium"
-				>
-					<span class="flex items-center gap-2"
-						><i class="fa-solid fa-plus text-[10px] text-primary" aria-hidden="true"></i
-						>{{ t('agent.settings.appManagement.create') }}</span
-					>
-					<i class="fa-solid fa-chevron-down text-[10px] text-text-secondary" aria-hidden="true"></i>
-				</summary>
-				<form class="space-y-3 border-t border-border bg-background/40 p-4" @submit.prevent="create">
-					<p v-if="definitionOperation.notice.value" role="alert">
-						{{ t('agent.settings.appManagement.definitionsFailed') }}
-					</p>
-					<UiButton
-						v-if="
-							definitionOperation.refreshRequired.value || definitionOperation.notice.value === 'failed'
-						"
-						type="button"
-						:disabled="definitionOperation.busy.value"
-						@click="loadDefinitions"
-						>{{ t('agent.settings.appManagement.readDefinitions') }}</UiButton
-					>
-					<fieldset
-						:disabled="
-							blocked || definitionOperation.busy.value || definitionOperation.refreshRequired.value
-						"
-						class="space-y-3"
-					>
-						<label class="block space-y-1 text-xs font-medium text-foreground"
-							><span>{{ t('agent.settings.appManagement.name') }}</span
-							><input
-								v-model="name"
-								class="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:border-border-hover"
-						/></label>
-						<label class="block space-y-1 text-xs font-medium text-foreground"
-							><span>{{ t('agent.settings.appManagement.definition') }}</span
-							><UiSelect
-								v-model="definitionId"
-								:placeholder="t('agent.settings.appManagement.chooseDefinition')"
-								><option v-for="definition in definitions" :key="definition.id" :value="definition.id">
-									{{ definition.name }}
-								</option></UiSelect
-							></label
-						>
-						<UiButton type="submit" appearance="solid" tone="primary" :disabled="!definitionId">{{
-							t('agent.settings.appManagement.create')
-						}}</UiButton>
-					</fieldset>
-				</form>
-			</details>
 		</div>
 	</section>
+	<UiModal
+		:visible="active && Boolean(uninstallApp && uninstallInstallation)"
+		:title="t('agent.settings.apps.uninstallConfirmTitle')"
+		panel-class="max-w-md p-5 rounded-2xl"
+		:close-on-backdrop="!props.plugins.operation.busy.value"
+		:close-on-escape="!props.plugins.operation.busy.value"
+		@close="uninstallAppId = ''"
+	>
+		<div class="space-y-4">
+			<div class="flex items-center gap-3 rounded-xl border border-error/20 bg-error/5 p-3">
+				<i class="fa-solid fa-triangle-exclamation text-error" aria-hidden="true"></i>
+				<div>
+					<p class="text-sm font-semibold">{{ uninstallApp?.name }}</p>
+					<p class="font-mono text-xs text-text-secondary">v{{ uninstallApp?.definitionVersion }}</p>
+				</div>
+			</div>
+			<p class="text-xs leading-relaxed text-text-secondary">
+				{{
+					t('agent.settings.apps.uninstallConfirmPrompt', {
+						name: uninstallApp?.name,
+						version: uninstallApp?.definitionVersion,
+					})
+				}}
+			</p>
+			<p class="text-xs leading-relaxed text-text-secondary">
+				{{ t('agent.settings.plugins.uninstallDataHint') }}
+			</p>
+			<PluginDataEditor
+				v-if="uninstallInstallation?.status === 'draining'"
+				:key="uninstallInstallation.appId + ':' + uninstallInstallation.revision"
+				retained-only
+				:installation="uninstallInstallation"
+				:disabled="blocked"
+				:active="active"
+				@changed="props.plugins.load"
+			/>
+		</div>
+		<template #footer>
+			<UiFormActions>
+				<UiButton
+					type="button"
+					appearance="solid"
+					tone="danger"
+					:disabled="blocked || uninstallApp?.enabled"
+					@click="confirmUninstall()"
+				>
+					<i
+						:class="
+							props.plugins.operation.busy.value
+								? 'fa-solid fa-circle-notch fa-spin'
+								: 'fa-regular fa-trash-can'
+						"
+						aria-hidden="true"
+					></i>
+					{{
+						t(
+							uninstallInstallation?.status === 'draining'
+								? 'agent.settings.plugins.continueUninstall'
+								: 'agent.settings.apps.uninstall',
+						)
+					}}
+				</UiButton>
+				<UiButton
+					v-if="uninstallInstallation?.status === 'draining'"
+					type="button"
+					appearance="soft"
+					tone="neutral"
+					:disabled="blocked"
+					@click="confirmUninstall(true)"
+					>{{ t('agent.pluginManagement.cancelRetirement') }}</UiButton
+				>
+				<UiButton
+					type="button"
+					appearance="soft"
+					tone="neutral"
+					:disabled="props.plugins.operation.busy.value"
+					@click="uninstallAppId = ''"
+					>{{ t('common.cancel') }}</UiButton
+				>
+			</UiFormActions>
+		</template>
+	</UiModal>
 </template>

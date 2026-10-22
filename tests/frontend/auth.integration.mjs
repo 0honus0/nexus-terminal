@@ -708,8 +708,8 @@ try {
 		const saved = await configurationApi.saveNetwork(original, network);
 		check(
 			saved.revision === original.revision + 1 &&
-				saved.pendingRestart &&
-				saved.effectiveRevision === original.effectiveRevision,
+				saved.pendingRestart === original.pendingRestart &&
+				saved.effectiveRevision === (original.pendingRestart ? original.effectiveRevision : saved.revision),
 			'real network CAS and saved versus effective revision',
 		);
 		check(
@@ -863,7 +863,7 @@ try {
 		const child = {
 			setup() {
 				passkeys = usePasskeySettings();
-				configuration = useSecurityConfiguration();
+				configuration = useSecurityConfiguration('captcha');
 				login = useLoginSecurity();
 				return () => h('div');
 			},
@@ -962,9 +962,11 @@ try {
 		const { default: PasskeyPanel } = await import('/src/features/security/components/PasskeyPanel.vue');
 		const { configurationApi } = await import('/src/features/preferences/api/configuration-api.ts');
 		const { createAccessApi } = await import('/src/features/auth/api/access-api.ts');
+		const { useNotificationStore } = await import('/src/shared/feedback/store/notification.store.ts');
 		const api = createAccessApi();
 		const pinia = createPinia();
 		const store = useAuthStore(pinia);
+		const notifications = useNotificationStore(pinia);
 		await store.login({ username: 'admin', password: 'final-password-789' });
 		const node = document.createElement('div');
 		document.body.append(node);
@@ -996,6 +998,8 @@ try {
 			checks.push(name);
 		}
 
+		const hasNotice = (message) => notifications.notifications.some((notice) => notice.message === message);
+
 		async function input(id, value) {
 			const control = node.querySelector('#' + id);
 			control.value = value;
@@ -1009,6 +1013,7 @@ try {
 		try {
 			mounted.use(pinia).use(i18n).mount(node);
 			await until(() => node.querySelector('#captcha-provider') && !node.querySelector('fieldset').disabled);
+			await until(() => hasNotice(i18n.global.t('settings.configuration.restart')));
 			const toggle = node.querySelector('#captcha-provider').closest('fieldset').querySelector('[role=checkbox]');
 			if (toggle.getAttribute('aria-checked') !== 'true') toggle.click();
 			node.querySelector('#captcha-provider').click();
@@ -1035,15 +1040,17 @@ try {
 			await until(
 				() =>
 					!node.querySelector('fieldset').disabled &&
-					node.textContent.includes(i18n.global.t('settings.configuration.saved')),
+					hasNotice(i18n.global.t('settings.configuration.saved')),
 			);
 			check(
-				writes === 1 && (await configurationApi.get()).captcha.siteKey === 'updated-ui-site',
+				writes === 1 &&
+					(await configurationApi.get()).captcha.siteKey === 'updated-ui-site' &&
+					!node.textContent.includes(i18n.global.t('settings.configuration.restart')),
 				'real CAPTCHA form prevents duplicates and persists explicit draft',
 			);
 			const networkField = await input('maxLoginAttempts', '8');
 			submit(networkField.closest('form'));
-			await until(() => node.textContent.includes(i18n.global.t('settings.configuration.conflict')));
+			await until(() => hasNotice(i18n.global.t('settings.configuration.conflict')));
 			check(
 				writes === 2 && node.querySelector('#ipWhitelist').disabled,
 				'real independent panels expose stale CAS and block further writes',
@@ -1057,7 +1064,7 @@ try {
 			submit(networkField.closest('form'));
 			await until(async () => (await configurationApi.get()).network.maxLoginAttempts === 8);
 			check(
-				writes === 3 && node.textContent.includes(i18n.global.t('settings.configuration.restart')),
+				writes === 3 && hasNotice(i18n.global.t('settings.configuration.savedLive')),
 				'real network form converts numeric input after deliberate conflict recovery',
 			);
 			const register = [...node.querySelectorAll('button')].find(

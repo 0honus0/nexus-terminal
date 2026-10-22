@@ -4,7 +4,6 @@ import type {
 	TargetCredentialInput,
 } from '@nexus-terminal/shared/targets/connections/http';
 import { computed } from 'vue';
-import { toConnectionSummary } from '../model/connection-mapper';
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import type { TargetConnectionChanges } from '@nexus-terminal/shared/targets/connections/http';
@@ -17,10 +16,7 @@ export const useConnectionsStore = defineStore('connections', () => {
 	const items = ref<ConnectionSummary[]>([]);
 	const loaded = ref(false);
 	const loadedAt = ref(0);
-	const recent = ref(new Map<number, number>());
-	const connections = computed(() =>
-		items.value.map((item) => toConnectionSummary(item, recent.value.get(item.id) ?? null)),
-	);
+	const connections = computed(() => items.value);
 	const busy = ref(false);
 	const needsRefresh = ref(true);
 	let generation = 0;
@@ -28,6 +24,13 @@ export const useConnectionsStore = defineStore('connections', () => {
 	let session = new AbortController();
 	let read: AbortController | null = null;
 	let loadPromise: Promise<ConnectionSummary[]> | null = null;
+	const refreshes = new Map<number, AbortController>();
+
+	function cancelListRead(): void {
+		read?.abort();
+		read = null;
+		loadPromise = null;
+	}
 
 	function reset(): void {
 		generation += 1;
@@ -40,7 +43,7 @@ export const useConnectionsStore = defineStore('connections', () => {
 		items.value = [];
 		loaded.value = false;
 		loadedAt.value = 0;
-		recent.value = new Map();
+		refreshes.clear();
 		busy.value = false;
 		needsRefresh.value = true;
 	}
@@ -63,6 +66,7 @@ export const useConnectionsStore = defineStore('connections', () => {
 			if (current !== generation || snapshot !== revision || controller.signal.aborted) {
 				throw new TargetRequestFailure('cancelled', 'confirmed');
 			}
+			revision += 1;
 			items.value = incoming.sort((a, b) => a.name.localeCompare(b.name));
 			loaded.value = true;
 			loadedAt.value = Date.now();
@@ -73,7 +77,7 @@ export const useConnectionsStore = defineStore('connections', () => {
 		try {
 			return await request;
 		} catch (cause) {
-			if (current === generation && snapshot === revision) {
+			if (current === generation && snapshot === revision && !controller.signal.aborted) {
 				needsRefresh.value = true;
 			}
 			throw cause;
@@ -154,20 +158,29 @@ export const useConnectionsStore = defineStore('connections', () => {
 		}
 		const current = generation;
 		const snapshot = revision;
-		const scope = session.signal;
-		const item = await connectionsApi.get(id, scope);
-		if (current !== generation || snapshot !== revision || scope.aborted) {
-			throw new TargetRequestFailure('cancelled', 'confirmed');
+		cancelListRead();
+		refreshes.get(id)?.abort();
+		const controller = new AbortController();
+		refreshes.set(id, controller);
+		const scope = AbortSignal.any([session.signal, controller.signal]);
+		try {
+			const item = await connectionsApi.get(id, scope);
+			if (current !== generation || snapshot !== revision || scope.aborted) {
+				throw new TargetRequestFailure('cancelled', 'confirmed');
+			}
+			cancelListRead();
+			save(item);
+			return item;
+		} catch (cause) {
+			if (current === generation && snapshot === revision && refreshes.get(id) === controller) {
+				needsRefresh.value = true;
+			}
+			throw cause;
+		} finally {
+			if (refreshes.get(id) === controller) {
+				refreshes.delete(id);
+			}
 		}
-		save(item);
-		return item;
-	}
-
-	function markConnected(id: number, timestamp: number): void {
-		if (!Number.isSafeInteger(timestamp) || timestamp < 0 || !items.value.some((item) => item.id === id)) {
-			return;
-		}
-		recent.value.set(id, Math.max(timestamp, recent.value.get(id) ?? 0));
 	}
 
 	function clone(id: number, name: string, signal?: AbortSignal): Promise<ConnectionSummary> {
@@ -215,7 +228,6 @@ export const useConnectionsStore = defineStore('connections', () => {
 		load,
 		revalidate,
 		refresh,
-		markConnected,
 		create,
 		importMany,
 		update,

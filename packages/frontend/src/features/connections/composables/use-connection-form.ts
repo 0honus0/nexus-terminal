@@ -43,7 +43,6 @@ export function useConnectionForm(
 	const proxies = capabilities.proxies;
 	const sshKeys = capabilities.sshKeys;
 	const form = ref(toConnectionDraft(props.connection ?? null));
-	const remoteAppEnabled = ref(false);
 	const scriptMode = ref(false);
 	const script = ref('');
 	const testing = ref(false);
@@ -62,7 +61,6 @@ export function useConnectionForm(
 			form.value.authMethod = 'key';
 			form.value.sshKeyId = props.credential.credential.sshKeyId;
 		}
-		remoteAppEnabled.value = Boolean(props.connection?.rdpRemoteApp);
 		scriptMode.value = false;
 		script.value = '';
 		testing.value = false;
@@ -120,7 +118,7 @@ export function useConnectionForm(
 				if (hosts.length !== 1) {
 					throw new InvalidTargetPayload();
 				}
-				emit('submit', { kind: 'update', changes: toConnectionInput(form.value, remoteAppEnabled.value) });
+				emit('submit', { kind: 'update', changes: toConnectionInput(form.value) });
 				return;
 			}
 			const credential = toConnectionCredential(form.value);
@@ -140,11 +138,8 @@ export function useConnectionForm(
 				draft.tagIds = form.value.tagIds.map((id) => id);
 				draft.notes = form.value.notes;
 				draft.jumpIds = form.value.jumpIds.map((id) => id);
-				draft.remoteApp = form.value.remoteApp;
-				draft.remoteAppDirectory = form.value.remoteAppDirectory;
-				draft.remoteAppArguments = form.value.remoteAppArguments;
 				return readConnectionImportInput({
-					connection: toConnectionInput(draft, remoteAppEnabled.value),
+					connection: toConnectionInput(draft),
 					credential,
 				});
 			});
@@ -248,7 +243,6 @@ export function useConnectionForm(
 	});
 	return {
 		form,
-		remoteAppEnabled,
 		scriptMode,
 		script,
 		testing,

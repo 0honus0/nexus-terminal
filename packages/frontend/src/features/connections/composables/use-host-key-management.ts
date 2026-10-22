@@ -1,7 +1,7 @@
 import { computed, onBeforeUnmount, onDeactivated, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAuthSession } from '@/features/auth/public';
-import { useFeedback } from '@/shared/feedback/public';
+import { useFeedback, useFeedbackMessage } from '@/shared/feedback/public';
 import { InvalidTargetPayload } from '@nexus-terminal/shared/targets/http';
 import { targetErrorKey, TargetRequestFailure } from '@/client/targets/target-types';
 import { hostKeysApi } from '../api/host-keys-api';
@@ -17,6 +17,13 @@ export function useHostKeyManagement(props: Readonly<{ visible: boolean }>, clos
 	const loading = ref(false);
 	const needsRefresh = ref(true);
 	const message = ref('');
+	let failureCause: unknown;
+	const messageSuccess = ref(false);
+	useFeedbackMessage(
+		() => message.value,
+		() => (messageSuccess.value ? 'success' : 'error'),
+		() => failureCause,
+	);
 	const canWrite = computed(() => props.visible && !loading.value && !needsRefresh.value);
 	let generation = 0;
 	let disposed = false;
@@ -33,6 +40,8 @@ export function useHostKeyManagement(props: Readonly<{ visible: boolean }>, clos
 		loading.value = false;
 		needsRefresh.value = true;
 		message.value = '';
+		failureCause = undefined;
+		messageSuccess.value = false;
 	}
 
 	async function execute(work: (signal: AbortSignal) => Promise<void>, operation: 'read' | 'write'): Promise<void> {
@@ -44,10 +53,13 @@ export function useHostKeyManagement(props: Readonly<{ visible: boolean }>, clos
 		const signal = controller.signal;
 		loading.value = true;
 		message.value = '';
+		failureCause = undefined;
+		messageSuccess.value = false;
 		try {
 			await work(signal);
 		} catch (cause) {
 			if (current === generation && !signal.aborted) {
+				failureCause = cause;
 				message.value = t('hostKeys.failures.' + targetErrorKey(cause, operation));
 				const notDispatched =
 					cause instanceof InvalidTargetPayload ||
@@ -101,6 +113,7 @@ export function useHostKeyManagement(props: Readonly<{ visible: boolean }>, clos
 				.concat(result);
 			draft.host = '';
 			draft.fingerprint = '';
+			messageSuccess.value = true;
 			message.value = t('hostKeys.saved');
 		}, 'write');
 	}
@@ -120,6 +133,7 @@ export function useHostKeyManagement(props: Readonly<{ visible: boolean }>, clos
 			await hostKeysApi.remove(item, signal);
 			if (!signal.aborted) {
 				items.value = items.value.filter((row) => row.host !== host || row.port !== port);
+				messageSuccess.value = true;
 				message.value = t('hostKeys.removed');
 			}
 		}, 'write');

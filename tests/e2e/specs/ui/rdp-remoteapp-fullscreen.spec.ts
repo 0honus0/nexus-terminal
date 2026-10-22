@@ -3,20 +3,14 @@ import { readTestConnectionImportId } from '../../support/targets';
 import { expect, test, type APIRequestContext, type Locator, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import { step } from '../../support/steps';
-import { E2E_URLS } from '../../support/test-env';
+import { E2E_URLS, E2E_PORTS } from '../../support/test-env';
 
-const CONNECTION_NAME = 'E2E RDP RemoteApp';
+const CONNECTION_NAME = 'E2E RDP Browser';
 
 const remoteWindow = (page: Page): Locator => page.locator('.remote-desktop-panel');
 
 const connectionCard = (page: Page, name: string): Locator =>
 	page.locator('.connection-card').filter({ has: page.getByText(name, { exact: true }) });
-
-const formField = (form: Locator, label: string): Locator =>
-	form
-		.locator('[data-ui="form-field"]')
-		.filter({ has: form.page().getByText(label, { exact: true }) })
-		.locator('input');
 
 async function openWorkspaceConnectionList(page: Page) {
 	await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
@@ -40,15 +34,10 @@ async function cleanupConnection(request: APIRequestContext): Promise<void> {
 	}
 }
 
-test('RDP RemoteApp persists cleanly, forwards display-update settings, and supports browser fullscreen', async ({
-	page,
-	context,
-}) => {
-	const remoteFrames: string[] = [];
+test('RDP browser client preserves settings, clipboard and browser fullscreen', async ({ page, context }) => {
+	const remoteFrames: Array<string | Buffer> = [];
 	page.on('websocket', (socket) => {
-		socket.on('framesent', (event) => {
-			if (typeof event.payload === 'string') remoteFrames.push(event.payload);
-		});
+		socket.on('framesent', (event) => remoteFrames.push(event.payload));
 	});
 	await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: E2E_URLS.frontendOrigin });
 	await loginAsInitialAdmin(context.request);
@@ -88,30 +77,19 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
 	try {
 		await page.goto('/connections');
 
-		await step('RemoteApp stays out of the normal RDP path until explicitly enabled', async () => {
+		await step('normal RDP configuration has no removed RemoteApp controls', async () => {
 			await page.getByRole('button', { name: 'Add New Connection', exact: true }).click();
 			const form = page.locator('form');
 			await expect(form).toBeVisible();
 			await form.getByRole('button', { name: 'RDP', exact: true }).click();
-			await expect(form.getByRole('switch', { name: 'Launch RemoteApp', exact: true })).toBeVisible();
-			await expect(formField(form, 'RemoteApp alias')).toHaveCount(0);
+			await expect(form.getByRole('switch', { name: 'Launch RemoteApp', exact: true })).toHaveCount(0);
+			await expect(form.getByText('RemoteApp alias', { exact: true })).toHaveCount(0);
 
 			await form.locator('#conn-name').fill(CONNECTION_NAME);
-			await form.locator('#conn-host').fill('192.0.2.77');
-			await form.locator('#conn-port').fill('3389');
+			await form.locator('#conn-host').fill('127.0.0.1');
+			await form.locator('#conn-port').fill(String(E2E_PORTS.rdp));
 			await form.locator('#conn-username').fill('rdp-remoteapp-user');
-			await form.locator('#conn-password-rdp').fill('rdp-remoteapp-password');
-
-			await form.getByRole('switch', { name: 'Launch RemoteApp', exact: true }).click();
-			await expect(form.getByRole('switch', { name: 'Launch RemoteApp', exact: true })).toHaveAttribute(
-				'aria-checked',
-				'true',
-			);
-			const remoteAppFields = formField(form, 'RemoteApp alias').locator('..').locator('..');
-			await expect(remoteAppFields).toBeVisible();
-			await formField(form, 'RemoteApp alias').fill('notepad');
-			await formField(form, 'Working directory (Optional)').fill('C:\\Work');
-			await formField(form, 'Arguments (Optional)').fill('/A readme.txt');
+			await form.locator('#conn-password-rdp').fill('b10-pass');
 
 			const createPromise = page.waitForResponse(
 				(response) =>
@@ -129,28 +107,19 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
 			await expect(persisted.json()).resolves.toMatchObject({
 				id: connectionId,
 				type: 'RDP',
-				rdpRemoteApp: 'notepad',
-				rdpRemoteAppDirectory: 'C:\\Work',
-				rdpRemoteAppArguments: '/A readme.txt',
 			});
 		});
 
-		await step('editing the RDP connection restores the optional RemoteApp controls', async () => {
-			const row = connectionCard(page, CONNECTION_NAME);
-			await row.getByRole('button', { name: 'Edit', exact: true }).click();
+		await step('editing preserves normal RDP fields without RemoteApp controls', async () => {
+			await connectionCard(page, CONNECTION_NAME).getByRole('button', { name: 'Edit', exact: true }).click();
 			const form = page.locator('form');
-			await expect(form.getByRole('switch', { name: 'Launch RemoteApp', exact: true })).toHaveAttribute(
-				'aria-checked',
-				'true',
-			);
-			await expect(formField(form, 'RemoteApp alias')).toHaveValue('notepad');
-			await expect(formField(form, 'Working directory (Optional)')).toHaveValue('C:\\Work');
-			await expect(formField(form, 'Arguments (Optional)')).toHaveValue('/A readme.txt');
+			await expect(form.locator('#conn-host')).toHaveValue('127.0.0.1');
+			await expect(form.getByRole('switch', { name: 'Launch RemoteApp', exact: true })).toHaveCount(0);
 			await form.getByRole('button', { name: /cancel/i }).click();
 			await expect(form).toBeHidden();
 		});
 
-		await step('RDP ticket generation succeeds with the persisted RemoteApp settings', async () => {
+		await step('RDP session configuration is delivered without caching', async () => {
 			const session = await context.request.post(
 				`/api/v1/connections/${connectionId}/rdp-session?width=1440&height=900&dpi=120`,
 				{ headers: { Origin: E2E_URLS.frontendOrigin } },
@@ -235,22 +204,26 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
 		await step(
 			'RDP clipboard synchronizes plain text in both directions without replacing the session',
 			async () => {
-				const hostText = 'NEXUS_RDP_HOST_CLIPBOARD_E2E';
+				const hostText = 'NEXUS_RDP_HOST_CLIPBOARD_E2E_' + crypto.randomUUID();
 				await page.evaluate((text) => navigator.clipboard.writeText(text), hostText);
 				const displayElement = remoteWindow(page).locator('.remote-display-container [tabindex="0"]').first();
 				await expect(displayElement).toBeAttached({ timeout: 15_000 });
 				await displayElement.dispatchEvent('focus');
-				const hostBase64 = Buffer.from(hostText, 'utf8').toString('base64');
 				await expect
-					.poll(() =>
-						remoteFrames.some((frame) => frame.includes('9.clipboard') || frame.includes(hostBase64)),
+					.poll(
+						async () =>
+							(
+								await (
+									await context.request.get(E2E_URLS.desktopControlOrigin + '/e2e/desktop/clipboard')
+								).json()
+							).text,
 					)
-					.toBeTruthy();
-				await expect.poll(() => remoteFrames.some((frame) => frame.includes(hostBase64))).toBeTruthy();
+					.toBe(hostText);
+				expect(remoteFrames.some((frame) => Buffer.isBuffer(frame))).toBeTruthy();
 
-				const remoteText = 'NEXUS_RDP_REMOTE_CLIPBOARD_E2E';
+				const remoteText = 'NEXUS_RDP_REMOTE_CLIPBOARD_E2E_' + crypto.randomUUID();
 				const remoteClipboard = await context.request.post(
-					`${E2E_URLS.guacdControlOrigin}/e2e/guacamole/clipboard`,
+					`${E2E_URLS.desktopControlOrigin}/e2e/desktop/clipboard`,
 					{
 						data: { text: remoteText },
 					},
@@ -338,13 +311,10 @@ async function createRemoteConnection(
 						notes: null,
 						route: 'direct',
 						proxyId: null,
-						rdpRemoteApp: null,
-						rdpRemoteAppDirectory: null,
-						rdpRemoteAppArguments: null,
 						tagIds: [],
 						jumpIds: [],
 					},
-					credential: { kind: 'password', password: `${type.toLowerCase()}-pointer-password` },
+					credential: { kind: 'password', password: 'b10-pass' },
 				},
 			],
 		},
@@ -370,7 +340,7 @@ test('wide RDP restores the legacy 120 DPI connection rule', async ({ page, cont
 	});
 
 	const name = 'E2E RDP Wide DPI';
-	const connectionId = await createRemoteConnection(context.request, 'RDP', name, '192.0.2.93', 3389);
+	const connectionId = await createRemoteConnection(context.request, 'RDP', name, '127.0.0.1', E2E_PORTS.rdp);
 	try {
 		await page.goto('/workspace');
 		const connectionList = await openWorkspaceConnectionList(page);
@@ -519,7 +489,13 @@ test('RDP pointer resize and restore-button dragging preserve minimized window b
 		preferences.rdpModalHeight = 560;
 	});
 
-	const connectionId = await createRemoteConnection(context.request, 'RDP', POINTER_RDP_NAME, '192.0.2.91', 3389);
+	const connectionId = await createRemoteConnection(
+		context.request,
+		'RDP',
+		POINTER_RDP_NAME,
+		'127.0.0.1',
+		E2E_PORTS.rdp,
+	);
 	try {
 		await openRemoteConnection(page, POINTER_RDP_NAME);
 		await expect(remoteWindow(page)).toHaveCSS('width', '900px');
@@ -536,11 +512,9 @@ test('RDP pointer resize and restore-button dragging preserve minimized window b
 });
 
 test('VNC pointer resize and restore-button dragging share the same window semantics', async ({ page, context }) => {
-	const remoteFrames: string[] = [];
+	const remoteFrames: Array<string | Buffer> = [];
 	page.on('websocket', (socket) => {
-		socket.on('framesent', (event) => {
-			if (typeof event.payload === 'string') remoteFrames.push(event.payload);
-		});
+		socket.on('framesent', (event) => remoteFrames.push(event.payload));
 	});
 	await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: E2E_URLS.frontendOrigin });
 	await loginAsInitialAdmin(context.request);
@@ -575,28 +549,34 @@ test('VNC pointer resize and restore-button dragging share the same window seman
 		const send = vncModal.getByRole('button', { name: 'Send', exact: true });
 		await expect(vncText).toBeVisible();
 		await expect(send).toBeDisabled();
-		await vncText.fill('VNC');
+		const inputText = 'VNC_E2E_INPUT_' + crypto.randomUUID();
+		await vncText.fill(inputText + '\n');
 		await expect(send).toBeEnabled();
 		await send.click();
-		for (const keysym of [86, 78, 67]) {
-			await expect
-				.poll(() => remoteFrames.some((frame) => frame.includes(`3.key,2.${keysym},1.1;`)))
-				.toBeTruthy();
-			await expect
-				.poll(() => remoteFrames.some((frame) => frame.includes(`3.key,2.${keysym},1.0;`)))
-				.toBeTruthy();
-		}
+		await expect
+			.poll(
+				async () =>
+					(await (await context.request.get(E2E_URLS.desktopControlOrigin + '/e2e/desktop/input')).json())
+						.text,
+			)
+			.toContain(inputText);
 
-		const hostText = 'NEXUS_VNC_HOST_CLIPBOARD_E2E';
+		const hostText = 'NEXUS_VNC_HOST_CLIPBOARD_E2E_' + crypto.randomUUID();
 		await page.evaluate((text) => navigator.clipboard.writeText(text), hostText);
 		const displayElement = vncModal.locator('.remote-display-container [tabindex="0"]').first();
 		await expect(displayElement).toBeAttached();
 		await displayElement.dispatchEvent('focus');
-		const hostBase64 = Buffer.from(hostText, 'utf8').toString('base64');
-		await expect.poll(() => remoteFrames.some((frame) => frame.includes(hostBase64))).toBeTruthy();
+		await expect
+			.poll(
+				async () =>
+					(await (await context.request.get(E2E_URLS.desktopControlOrigin + '/e2e/desktop/clipboard')).json())
+						.text,
+			)
+			.toBe(hostText);
+		expect(remoteFrames.some((frame) => Buffer.isBuffer(frame))).toBeTruthy();
 
-		const remoteText = 'NEXUS_VNC_REMOTE_CLIPBOARD_E2E';
-		const remoteClipboard = await context.request.post(`${E2E_URLS.guacdControlOrigin}/e2e/guacamole/clipboard`, {
+		const remoteText = 'NEXUS_VNC_REMOTE_CLIPBOARD_E2E_' + crypto.randomUUID();
+		const remoteClipboard = await context.request.post(`${E2E_URLS.desktopControlOrigin}/e2e/desktop/clipboard`, {
 			data: { text: remoteText },
 		});
 		expect(remoteClipboard.ok()).toBeTruthy();

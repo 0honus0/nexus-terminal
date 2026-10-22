@@ -67,6 +67,7 @@ try {
 			await import('/src/features/ssh-suspend/composables/useSuspendedSessions.ts');
 		const { SuspendedRequestFailure } = await import('/src/features/ssh-suspend/model/suspended-session-types.ts');
 		const { useDialogStore } = await import('/src/shared/feedback/store/dialog.store.ts');
+		const { useNotificationStore } = await import('/src/shared/feedback/store/notification.store.ts');
 		const { authenticatedSessionLifecycle } = await import('/src/shared/session/public.ts');
 		const { default: Panel } = await import('/src/features/ssh-suspend/components/SuspendedSessionsPanel.vue');
 		const { default: en } = await import('/src/features/ssh-suspend/i18n/en-US.json');
@@ -106,6 +107,7 @@ try {
 		let respond = () => json([make()]);
 
 		const originalFetch = window.fetch;
+		const originalWebSocket = window.WebSocket;
 		window.fetch = (url, options) => {
 			calls.push({ url, options });
 			return Promise.resolve().then(() => respond(url, options));
@@ -192,6 +194,13 @@ try {
 			respond = () => {
 				throw new TypeError('lost response');
 			};
+			await store.load({ force: true });
+			expect(
+				store.error === 'sshSuspend.errors.request_failed' &&
+					!store.blockedIds.size &&
+					store.sessions.length === 1,
+				'failed catalog read preserves entries without claiming an unknown mutation or blocking writes',
+			);
 			await rejects(
 				() => store.rename(store.sessions[0], 'new'),
 				'request_failed',
@@ -284,6 +293,21 @@ try {
 			}
 			respond = () => json([make()]);
 			const visible = ref(true);
+			await store.load({ force: true });
+			const sockets = [];
+			window.WebSocket = class {
+				constructor(url) {
+					if (!String(url).includes('/ws/suspended-sessions')) throw new Error('Unexpected WebSocket');
+					sockets.push(this);
+					queueMicrotask(() => this.push(1, [make()]));
+				}
+
+				push(revision, sessions) {
+					this.onmessage?.({ data: JSON.stringify({ type: 'snapshot', revision, sessions }) });
+				}
+
+				close() {}
+			};
 			container = document.createElement('div');
 			document.body.appendChild(container);
 			app = createApp({ render: () => h(KeepAlive, null, { default: () => (visible.value ? h(Panel) : null) }) });
@@ -294,6 +318,19 @@ try {
 			await nextTick();
 			const remove = container.querySelector('.action-remove');
 			expect(remove !== null, 'formal panel renders catalog record');
+			count = calls.length;
+			sockets.at(-1).push(2, [{ ...make(), name: 'external rename' }]);
+			await nextTick();
+			expect(
+				calls.length === count && store.sessions[0].name === 'external rename',
+				'WS snapshot changes shared directory without HTTP',
+			);
+			sockets.at(-1).push(1, [make()]);
+			await nextTick();
+			expect(
+				store.sessions[0].name === 'external rename',
+				'older connection revision does not overwrite latest directory',
+			);
 			remove.click();
 			await nextTick();
 			expect(useDialogStore().state.visible, 'remove opens a confirmation before dispatch');
@@ -316,8 +353,10 @@ try {
 			await nextTick();
 			expect(
 				container.querySelector('.action-remove') !== null &&
-					container.querySelector('[role=alert]')?.textContent.includes('Permission denied'),
-				'read failure preserves existing entries and uses finite localized error',
+					container.querySelector('[role=alert]') === null &&
+					useNotificationStore().notifications.some((item) => item.message.includes('Permission denied')) &&
+					container.querySelector('button[aria-label="Read latest state and verify"]') !== null,
+				'read failure preserves entries, uses a finite localized Toast and retains read-back access',
 			);
 			expect(calls.length === oldCount + 1, 'read failure has no implicit retry');
 			respond = () => json([make()]);
@@ -340,6 +379,7 @@ try {
 			container?.remove();
 			store.resetSuspendedSessionsCatalog();
 			window.fetch = originalFetch;
+			window.WebSocket = originalWebSocket;
 		}
 	});
 	assert.ok(checks.length >= 35);

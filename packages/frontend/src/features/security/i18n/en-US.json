@@ -148,7 +148,8 @@
     },
     "configuration": {
       "saved": "Saved. Restart the server to apply this configuration.",
-      "restart": "Changes take effect after a server restart.",
+      "savedLive": "Saved and applied.",
+      "restart": "CAPTCHA or Passkey site changes take effect after a server restart.",
       "conflict": "The configuration has changed. Reload it and review before saving again.",
       "unknown": "The result is unknown. Reload the saved configuration before making another change.",
       "refreshAfterChange": "The change was confirmed, but refreshing failed. Reload to check the current state.",

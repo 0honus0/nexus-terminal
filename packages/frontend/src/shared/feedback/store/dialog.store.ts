@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { reactive } from 'vue';
-import type { AlertDialogOptions, ConfirmDialogOptions } from '../model';
+import type { AlertDialogOptions, ConfirmDialogOptions, DialogDetail, DialogTone } from '../model';
 
 type DialogKind = 'confirm' | 'alert';
 
@@ -12,6 +12,9 @@ interface DialogState {
 	confirmText?: string;
 	cancelText?: string;
 	destructive: boolean;
+	tone?: DialogTone;
+	icon?: string;
+	details: DialogDetail[];
 	loading: boolean;
 }
 
@@ -24,6 +27,9 @@ export const useDialogStore = defineStore('shared-dialog', () => {
 		confirmText: undefined,
 		cancelText: undefined,
 		destructive: false,
+		tone: undefined,
+		icon: undefined,
+		details: [],
 		loading: false,
 	});
 
@@ -65,6 +71,9 @@ export const useDialogStore = defineStore('shared-dialog', () => {
 		state.confirmText = options.confirmText;
 		state.cancelText = options.cancelText;
 		state.destructive = Boolean(options.destructive);
+		state.tone = options.tone;
+		state.icon = options.icon;
+		state.details = options.details?.map(({ label, value, mono, tone }) => ({ label, value, mono, tone })) ?? [];
 		return begin(options.signal);
 	};
 
@@ -75,6 +84,9 @@ export const useDialogStore = defineStore('shared-dialog', () => {
 		state.confirmText = options.okText;
 		state.cancelText = undefined;
 		state.destructive = false;
+		state.tone = undefined;
+		state.icon = undefined;
+		state.details = [];
 		await begin();
 	};
 
@@ -85,6 +97,9 @@ export const useDialogStore = defineStore('shared-dialog', () => {
 		resolveCurrent = undefined;
 		state.visible = false;
 		state.loading = false;
+		state.tone = undefined;
+		state.icon = undefined;
+		state.details = [];
 	};
 
 	return {

@@ -10,7 +10,7 @@
 	} from 'reka-ui';
 	import { computed, useAttrs } from 'vue';
 	import UiButton from './UiButton.vue';
-	import type { UiDensity, UiSurfaceKind } from './uiTypes';
+	import type { UiDensity, UiSurfaceKind, UiTone } from './uiTypes';
 
 	// The host is a `display: contents` marker so the portaled panel can live in
 	// the accessibility dialog tree without adding a layout box at the call site.
@@ -24,6 +24,8 @@
 		defineProps<{
 			title?: string;
 			description?: string;
+			icon?: string;
+			tone?: UiTone;
 			density?: UiDensity;
 			surface?: UiSurfaceKind;
 			closeOnEscape?: boolean;
@@ -35,6 +37,7 @@
 		}>(),
 		{
 			density: 'default',
+			tone: 'primary',
 			surface: 'raised',
 			closeOnEscape: true,
 			closeOnInteractOutside: true,
@@ -94,6 +97,7 @@
 					data-ui-gen="2"
 					:data-density="props.density"
 					:data-surface="props.surface"
+					:data-tone="props.icon ? props.tone : undefined"
 					class="ui-surface ui-radius--panel ui-dialog__panel"
 					:class="[surfaceClass, props.panelClass]"
 					@escape-key-down="onEscapeKeyDown"
@@ -106,10 +110,22 @@
 					>
 						<div class="ui-dialog__heading">
 							<slot name="header">
-								<DialogTitle v-if="props.title" class="ui-dialog__title">{{ props.title }}</DialogTitle>
-								<DialogDescription v-if="props.description" class="ui-dialog__description">
-									{{ props.description }}
-								</DialogDescription>
+								<span
+									v-if="props.icon"
+									class="ui-dialog__icon"
+									:data-tone="props.tone"
+									aria-hidden="true"
+								>
+									<i :class="props.icon" />
+								</span>
+								<div class="ui-dialog__heading-text">
+									<DialogTitle v-if="props.title" class="ui-dialog__title">{{
+										props.title
+									}}</DialogTitle>
+									<DialogDescription v-if="props.description" class="ui-dialog__description">
+										{{ props.description }}
+									</DialogDescription>
+								</div>
 							</slot>
 						</div>
 						<DialogClose v-if="props.showClose" as-child>
@@ -131,7 +147,7 @@
 							</UiButton>
 						</DialogClose>
 					</header>
-					<div class="ui-dialog__content" :class="props.contentClass">
+					<div v-if="$slots.default" class="ui-dialog__content" :class="props.contentClass">
 						<slot :close="close" />
 					</div>
 					<footer v-if="$slots.footer" class="ui-dialog__footer">

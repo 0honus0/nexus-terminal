@@ -1,30 +1,33 @@
 <script setup lang="ts">
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiInput } from '@/foundation/ui';
+	import { UiButton, UiInput, UiSettingsGroup } from '@/foundation/ui';
+	import { useSettingsReloadSource } from '@/shared/feedback/public';
 	import { usePasskeySettings } from '../composables/use-passkey-settings';
 
 	const { t } = useI18n();
-	const { passkeys, names, editing, loading, needsRefresh, message, success, refresh, register, saveName, remove } =
+	const { passkeys, names, editing, loading, needsRefresh, refresh, register, saveName, remove } =
 		usePasskeySettings();
+	useSettingsReloadSource({
+		id: 'security-passkeys',
+
+		pending: () => !loading.value && needsRefresh.value,
+
+		reload: refresh,
+	});
 
 	const formatDate = (value: number | null) => (value === null ? '—' : new Date(value).toLocaleString());
 </script>
 
 <template>
-	<section>
-		<h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.passkey.title') }}</h3>
-		<p class="mb-4 text-sm text-text-secondary">{{ t('settings.passkey.description') }}</p>
-		<UiButton appearance="solid" tone="primary" :loading="loading" :disabled="needsRefresh" @click="register">{{
-			t('settings.passkey.registerNewButton')
-		}}</UiButton>
-		<p v-if="message" :class="success ? 'text-success' : 'text-error'" class="mt-3 text-sm" role="status">
-			{{ message }}
-		</p>
+	<UiSettingsGroup :title="t('settings.passkey.title')" icon="fa-solid fa-fingerprint" tone="primary">
+		<template #actions>
+			<UiButton appearance="solid" tone="primary" :loading="loading" :disabled="needsRefresh" @click="register">{{
+				t('settings.passkey.registerNewButton')
+			}}</UiButton>
+		</template>
 
-		<UiButton v-if="needsRefresh" :loading="loading" @click="refresh">{{ t('common.retry') }}</UiButton>
-
-		<div class="mt-6">
-			<h4 class="mb-3 text-base font-semibold text-foreground">
+		<div class="mt-5">
+			<h4 class="mb-3 text-xs font-semibold text-foreground">
 				{{ t('settings.passkey.registeredKeysTitle') }}
 			</h4>
 			<div v-if="loading && passkeys.length === 0" class="p-4 text-center text-text-secondary italic">
@@ -45,30 +48,19 @@
 										>(ID: ...{{ key.credentialId.slice(-8) }})</span
 									>
 								</span>
-								<button
+								<UiButton
 									type="button"
-									class="ml-2 p-1 text-text-secondary transition hover:text-foreground"
+									appearance="ghost"
+									density="compact"
+									icon-only
+									class="ml-2"
 									:title="t('common.edit')"
+									:aria-label="t('common.edit')"
 									:disabled="loading || needsRefresh"
 									@click="editing = key.credentialId"
 								>
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										width="14"
-										height="14"
-										fill="currentColor"
-										viewBox="0 0 16 16"
-										aria-hidden="true"
-									>
-										<path
-											d="M15.502 1.94a.5.5 0 0 1 0 .706L14.459 3.69l-2-2L13.502.646a.5.5 0 0 1 .707 0l1.293 1.293zm-1.75 2.456-2-2L4.939 9.21a.5.5 0 0 0-.121.196l-.805 2.414a.25.25 0 0 0 .316.316l2.414-.805a.5.5 0 0 0 .196-.12l6.813-6.814z"
-										/>
-										<path
-											fill-rule="evenodd"
-											d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5H9a.5.5 0 0 0 0-1H2.5A1.5 1.5 0 0 0 1 2.5v11z"
-										/>
-									</svg>
-								</button>
+									<i class="fa-solid fa-pen text-[10px]" aria-hidden="true"></i>
+								</UiButton>
 							</template>
 							<div v-else class="flex flex-grow items-center">
 								<UiInput
@@ -121,5 +113,5 @@
 				{{ t('settings.passkey.noKeysRegistered') }}
 			</p>
 		</div>
-	</section>
+	</UiSettingsGroup>
 </template>

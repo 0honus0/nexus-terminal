@@ -148,7 +148,8 @@
     },
     "configuration": {
       "saved": "已保存，重启服务器后生效。",
-      "restart": "配置将在服务器重启后生效。",
+      "savedLive": "已保存并生效。",
+      "restart": "验证码或 Passkey 站点配置将在服务器重启后生效。",
       "conflict": "配置已被其他操作修改，请重新读取并核对后再保存。",
       "unknown": "结果未知，请重新读取已保存配置后再修改。",
       "refreshAfterChange": "修改已确认，但刷新失败，请重新读取核对当前状态。",

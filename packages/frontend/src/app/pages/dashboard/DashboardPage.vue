@@ -4,8 +4,9 @@
 	import { useRouter } from 'vue-router';
 	import { useI18n } from 'vue-i18n';
 	import { UiButton, UiSelect, UiSpinner, UiScrollArea } from '@/foundation/ui';
-	import DashboardHostCard from './DashboardHostCard.vue';
+	import DashboardResourceGauge from './DashboardResourceGauge.vue';
 	import {
+		jsonStorageCodec,
 		numberStorageCodec,
 		readStoredValue,
 		removeStoredValue,
@@ -14,7 +15,6 @@
 	} from '@/foundation/browser';
 	import { useConnections, type ConnectionSummary } from '@/features/connections/public';
 	import { useConnectionTags } from '@/features/tags/public';
-	import { auditApi, auditSummary, type AuditEntry } from '@/features/audit/public';
 	import { useSystemOverview } from '@/features/system-overview/public';
 	import { usePreferences, useMonitoringConfiguration } from '@/features/preferences/public';
 	import { remoteDesktopLauncher } from '@/features/remote-desktop/public';
@@ -32,10 +32,10 @@
 		monitoring.needsRefresh.value ? null : (monitoring.snapshot.value?.effectiveMonitoring ?? null),
 	);
 	const suspended = useSuspendedSessions();
-	const activity = ref<AuditEntry[]>([]);
 	const search = ref('');
 	type DashboardSort = 'lastConnected' | 'name' | 'type' | 'updated' | 'created';
 	type DashboardSortOrder = 'asc' | 'desc';
+	type DashboardConnectionType = 'SSH' | 'RDP' | 'VNC';
 	const validSorts = new Set<DashboardSort>(['lastConnected', 'name', 'type', 'updated', 'created']);
 	const dashboardTagStorage = {
 		namespace: 'dashboard.tag',
@@ -55,6 +55,20 @@
 		codec: stringStorageCodec((value) => value === 'asc' || value === 'desc'),
 		legacyKeys: ['nexus.dashboard.sortOrder'],
 	} as const;
+	const dashboardSectionStorage = {
+		namespace: 'dashboard.section-expansion',
+		version: 1,
+		codec: jsonStorageCodec<Partial<Record<DashboardConnectionType, boolean>>>((value) => {
+			if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+			const result: Partial<Record<DashboardConnectionType, boolean>> = {};
+			for (const [key, expanded] of Object.entries(value)) {
+				if (typeof expanded !== 'boolean') return undefined;
+				if (key !== 'SSH' && key !== 'RDP' && key !== 'VNC') return undefined;
+				result[key] = expanded;
+			}
+			return result;
+		}),
+	} as const;
 	const tagId = ref<number | ''>(readStoredValue(dashboardTagStorage) ?? '');
 	const sort = ref<DashboardSort>(
 		(readStoredValue(dashboardSortStorage) as DashboardSort | undefined) ?? 'lastConnected',
@@ -62,6 +76,12 @@
 	const sortOrder = ref<DashboardSortOrder>(
 		(readStoredValue(dashboardSortOrderStorage) as DashboardSortOrder | undefined) ?? 'desc',
 	);
+	const storedSectionExpansion = readStoredValue(dashboardSectionStorage) ?? {};
+	const expandedSections = ref<Record<DashboardConnectionType, boolean>>({
+		SSH: storedSectionExpansion.SSH !== false,
+		RDP: storedSectionExpansion.RDP !== false,
+		VNC: storedSectionExpansion.VNC !== false,
+	});
 	const loading = ref(true);
 	const tagFilterOptions = computed(() => [
 		{ value: '', label: t('dashboard.filterTags.all') },
@@ -94,17 +114,45 @@
 			return (aTime - bTime) * direction;
 		});
 	});
-	const MAX_RECENT_LOGS = 5;
-	const latestConnection = computed(() => {
-		let latest: ConnectionSummary | null = null;
-		let latestTimestamp = -1;
-		for (const item of connections.connections.value) {
-			if (!item.lastConnectedAt || item.lastConnectedAt <= latestTimestamp) continue;
-			latestTimestamp = item.lastConnectedAt;
-			latest = item;
+	const remoteResourceIndex = computed(() => {
+		const byConnectionId = new Map<number, (typeof resources.remote.value)[number]>();
+		const byEndpoint = new Map<string, (typeof resources.remote.value)[number]>();
+		for (const resource of resources.remote.value) {
+			byConnectionId.set(resource.connectionId, resource);
+			const endpoint = `${resource.host.trim().toLowerCase()}:${resource.port}`;
+			if (!byEndpoint.has(endpoint)) byEndpoint.set(endpoint, resource);
 		}
-		return latest;
+		return { byConnectionId, byEndpoint };
 	});
+	const filteredEntries = computed(() =>
+		filtered.value.map((connection) => {
+			const resource =
+				preferences.values.value.dashboardShowRemoteResources && connection.type === 'SSH'
+					? (remoteResourceIndex.value.byConnectionId.get(connection.id) ??
+						remoteResourceIndex.value.byEndpoint.get(
+							`${connection.host.trim().toLowerCase()}:${connection.port}`,
+						))
+					: undefined;
+			return { connection, resource };
+		}),
+	);
+	const connectionGroups = computed(() =>
+		(['SSH', 'RDP', 'VNC'] as const satisfies readonly DashboardConnectionType[])
+			.map((type) => ({
+				type,
+				entries: filteredEntries.value.filter((entry) => entry.connection.type === type),
+			}))
+			.filter((group) => group.entries.length > 0),
+	);
+
+	const isSectionExpanded = (type: DashboardConnectionType): boolean => expandedSections.value[type];
+
+	const toggleSection = (type: DashboardConnectionType) => {
+		const next = { ...expandedSections.value, [type]: !expandedSections.value[type] };
+		expandedSections.value = next;
+		writeStoredValue(dashboardSectionStorage, next);
+	};
+
 	const activeSuspendedSessions = computed(() =>
 		suspended.sessions.value
 			.filter((session) => session.status === 'active')
@@ -129,6 +177,15 @@
 	const openSuspendedSessions = () => router.push({ name: 'Workspace', query: { openSuspended: '1' } });
 
 	const relativeTimeFormatter = computed(() => new Intl.RelativeTimeFormat(locale.value, { numeric: 'auto' }));
+	const refreshTimeFormatter = computed(
+		() =>
+			new Intl.DateTimeFormat(locale.value, {
+				hour: '2-digit',
+				minute: '2-digit',
+				second: '2-digit',
+				hour12: false,
+			}),
+	);
 
 	const formatRelativeTime = (timestamp: number | null | undefined): string => {
 		if (!timestamp) return t('connections.status.never');
@@ -155,17 +212,19 @@
 		}
 	};
 
+	const formatRefreshTime = (timestamp: number | null | undefined): string => {
+		if (!timestamp || !Number.isFinite(timestamp)) return '—';
+		try {
+			return refreshTimeFormatter.value.format(timestamp);
+		} catch {
+			return new Date(timestamp).toLocaleTimeString();
+		}
+	};
+
 	const tagNameById = computed(() => new Map(tags.tags.value.map((tag) => [tag.id, tag.name] as const)));
 
 	const tagNames = (item: ConnectionSummary): string[] =>
 		item.tagIds.map((id) => tagNameById.value.get(id)).filter((name): name is string => Boolean(name));
-
-	const actionLabel = (actionType: string): string => t(`auditLog.actions.${actionType}`, actionType);
-
-	const isFailedAction = (actionType: string): boolean => {
-		const normalized = actionType.toLowerCase();
-		return normalized.includes('fail') || normalized.includes('error') || normalized.includes('denied');
-	};
 
 	let dashboardActive = false;
 	let hasActivatedOnce = false;
@@ -173,22 +232,77 @@
 	let remoteRefreshTimer: number | undefined;
 	let remoteInitialTimer: number | undefined;
 	let dashboardRequest: AbortController | null = null;
+	let localRefreshRequest: object | null = null;
+	let remoteRefreshRequest: object | null = null;
+	let lastLocalLoadedAt = 0;
+	let lastRemoteLoadedAt = 0;
 
-	const refreshLocal = () => {
-		if (!document.hidden && effectiveMonitoring.value) void resources.loadLocal();
+	const isDashboardVisible = () =>
+		dashboardActive && router.currentRoute.value.name === 'Dashboard' && !document.hidden;
+
+	const refreshLocal = async () => {
+		if (
+			!isDashboardVisible() ||
+			!preferences.values.value.dashboardShowLocalResources ||
+			!effectiveMonitoring.value ||
+			localRefreshRequest
+		)
+			return;
+		const interval = effectiveMonitoring.value.statusIntervalSeconds * 1000;
+		if (lastLocalLoadedAt && Date.now() - lastLocalLoadedAt < interval) return;
+		const request = {};
+		localRefreshRequest = request;
+		try {
+			await resources.loadLocal();
+			if (
+				localRefreshRequest === request &&
+				isDashboardVisible() &&
+				resources.local.value &&
+				!resources.localError.value
+			)
+				lastLocalLoadedAt = Date.now();
+		} finally {
+			if (localRefreshRequest === request) localRefreshRequest = null;
+		}
 	};
 
-	const refreshRemote = () => {
-		if (!document.hidden && effectiveMonitoring.value)
-			void resources.loadRemote(() =>
+	const refreshRemote = async () => {
+		if (
+			!isDashboardVisible() ||
+			!preferences.values.value.dashboardShowRemoteResources ||
+			!effectiveMonitoring.value ||
+			remoteRefreshRequest
+		)
+			return;
+		const interval = effectiveMonitoring.value.hostIntervalSeconds * 1000;
+		if (lastRemoteLoadedAt && Date.now() - lastRemoteLoadedAt < interval) return;
+		const request = {};
+		remoteRefreshRequest = request;
+		try {
+			await resources.loadRemote(() =>
 				connections.load().then((items) => items.filter((item) => item.type === 'SSH')),
 			);
+			if (
+				remoteRefreshRequest === request &&
+				isDashboardVisible() &&
+				resources.remote.value.length &&
+				!resources.remoteError.value
+			)
+				lastRemoteLoadedAt = Date.now();
+		} finally {
+			if (remoteRefreshRequest === request) remoteRefreshRequest = null;
+		}
 	};
 
 	const scheduleLocalRefresh = () => {
 		window.clearInterval(localRefreshTimer);
 		localRefreshTimer = undefined;
-		if (!preferences.values.value.dashboardShowLocalResources || !effectiveMonitoring.value) return;
+		if (
+			!isDashboardVisible() ||
+			!preferences.values.value.dashboardShowLocalResources ||
+			!effectiveMonitoring.value
+		)
+			return;
 		const seconds = effectiveMonitoring.value.statusIntervalSeconds;
 		localRefreshTimer = window.setInterval(refreshLocal, seconds * 1000);
 	};
@@ -196,37 +310,28 @@
 	const scheduleRemoteRefresh = () => {
 		window.clearInterval(remoteRefreshTimer);
 		remoteRefreshTimer = undefined;
-		if (!preferences.values.value.dashboardShowRemoteResources || !effectiveMonitoring.value) return;
+		if (
+			!isDashboardVisible() ||
+			!preferences.values.value.dashboardShowRemoteResources ||
+			!effectiveMonitoring.value
+		)
+			return;
 		const seconds = effectiveMonitoring.value.hostIntervalSeconds;
 		remoteRefreshTimer = window.setInterval(refreshRemote, seconds * 1000);
 	};
 
 	const syncLocalRefresh = () => {
-		if (
-			!dashboardActive ||
-			document.hidden ||
-			!preferences.values.value.dashboardShowLocalResources ||
-			!effectiveMonitoring.value
-		)
-			resources.stopLocal();
-		if (!dashboardActive || document.hidden) {
+		if (!isDashboardVisible()) {
 			window.clearInterval(localRefreshTimer);
 			localRefreshTimer = undefined;
 			return;
 		}
 		scheduleLocalRefresh();
-		if (preferences.values.value.dashboardShowLocalResources) refreshLocal();
+		if (preferences.values.value.dashboardShowLocalResources) void refreshLocal();
 	};
 
 	const syncRemoteRefresh = () => {
-		if (
-			!dashboardActive ||
-			document.hidden ||
-			!preferences.values.value.dashboardShowRemoteResources ||
-			!effectiveMonitoring.value
-		)
-			resources.stopRemote();
-		if (!dashboardActive || document.hidden) {
+		if (!isDashboardVisible()) {
 			window.clearInterval(remoteRefreshTimer);
 			remoteRefreshTimer = undefined;
 			window.clearTimeout(remoteInitialTimer);
@@ -239,7 +344,7 @@
 		if (!preferences.values.value.dashboardShowRemoteResources || !effectiveMonitoring.value) return;
 		remoteInitialTimer = window.setTimeout(() => {
 			remoteInitialTimer = undefined;
-			refreshRemote();
+			void refreshRemote();
 		}, 800);
 	};
 
@@ -261,6 +366,8 @@
 	const handleVisibilityChange = () => {
 		if (!dashboardActive) return;
 		if (document.hidden) {
+			localRefreshRequest = null;
+			remoteRefreshRequest = null;
 			resources.deactivate();
 			monitoring.deactivate();
 		} else {
@@ -276,32 +383,24 @@
 		const request = new AbortController();
 		dashboardRequest = request;
 		if (initial) loading.value = !connections.loaded.value || !tags.loaded.value;
-		const catalog = Promise.allSettled([
+		await Promise.allSettled([
 			initial ? connections.load() : connections.revalidate(),
 			initial ? tags.load() : tags.revalidate(),
-		]).then(() => {
-			if (dashboardRequest === request && initial) loading.value = false;
-		});
-		const [, , audit] = await Promise.allSettled([
-			catalog,
 			preferences.load(),
-			auditApi.list({ limit: MAX_RECENT_LOGS, offset: 0 }, request.signal),
-			suspended.load({ silent: true, force: true }),
 		]);
 		if (dashboardRequest !== request) return;
-		if (audit.status === 'fulfilled') activity.value = audit.value.items.slice(0, MAX_RECENT_LOGS);
+		loading.value = false;
 		dashboardRequest = null;
 	};
 
 	const activateDashboard = () => {
-		if (dashboardActive) return;
+		if (dashboardActive || router.currentRoute.value.name !== 'Dashboard') return;
 		dashboardActive = true;
 		if (!document.hidden) {
 			resources.activate();
-			monitoring.activate();
-		} else monitoring.deactivate();
+		}
+		monitoring.activate();
 		document.addEventListener('visibilitychange', handleVisibilityChange);
-		suspended.startPolling();
 		syncLocalRefresh();
 		syncRemoteRefresh();
 		void refreshDashboardData(!hasActivatedOnce);
@@ -314,6 +413,8 @@
 		dashboardRequest = null;
 		loading.value = false;
 		resources.deactivate();
+		localRefreshRequest = null;
+		remoteRefreshRequest = null;
 		monitoring.deactivate();
 		window.clearInterval(localRefreshTimer);
 		localRefreshTimer = undefined;
@@ -322,8 +423,16 @@
 		window.clearTimeout(remoteInitialTimer);
 		remoteInitialTimer = undefined;
 		document.removeEventListener('visibilitychange', handleVisibilityChange);
-		suspended.stopPolling();
 	};
+
+	watch(
+		() => router.currentRoute.value.name,
+		(name) => {
+			if (name !== 'Dashboard') deactivateDashboard();
+			else if (hasActivatedOnce) activateDashboard();
+		},
+		{ flush: 'sync' },
+	);
 
 	onActivated(activateDashboard);
 	onDeactivated(deactivateDashboard);
@@ -349,6 +458,39 @@
 		if (gibibytes >= 1024) return `${(gibibytes / 1024).toFixed(gibibytes >= 10240 ? 0 : 1)} TB`;
 		return `${gibibytes.toFixed(gibibytes >= 100 ? 0 : 1)} GB`;
 	};
+
+	const resourceMetric = (
+		resource: (typeof resources.remote.value)[number] | undefined,
+		metric: 'cpuPercent' | 'memPercent' | 'memUsed' | 'memTotal' | 'diskPercent' | 'diskUsed' | 'diskTotal',
+	): number | undefined => (resource?.state === 'ready' ? resource.status[metric] : undefined);
+
+	const resourceErrorKey = (resource: (typeof resources.remote.value)[number] | undefined): string =>
+		resource?.state === 'failed' ? `systemOverview.errors.${resource.error}` : 'dashboard.resources.unavailable';
+
+	const resourceStatusKey = (resource: (typeof resources.remote.value)[number] | undefined): string => {
+		if (resource?.state === 'ready') {
+			return resource.refreshError ? 'dashboard.resources.refreshFailed' : 'dashboard.resources.live';
+		}
+		if (resource?.state === 'failed') return 'dashboard.resources.unavailable';
+		if (resource?.state === 'waiting') return 'dashboard.resources.waiting';
+		return 'dashboard.configured';
+	};
+
+	const resourceStatusTone = (resource: (typeof resources.remote.value)[number] | undefined): string => {
+		if (resource?.state === 'ready') return resource.refreshError ? 'bg-warning' : 'bg-success';
+		if (resource?.state === 'failed') return 'bg-error';
+		return 'bg-text-secondary/50';
+	};
+
+	const localResourceStatusKey = computed(() => {
+		if (!resources.localError.value) return 'dashboard.resources.live';
+		return resources.local.value ? 'dashboard.resources.refreshFailed' : 'dashboard.resources.unavailable';
+	});
+
+	const localResourceStatusTone = computed(() => {
+		if (!resources.localError.value) return 'bg-success';
+		return resources.local.value ? 'bg-warning' : 'bg-error';
+	});
 </script>
 
 <template>
@@ -374,55 +516,7 @@
 							<span class="h-4 w-px bg-border" aria-hidden="true"></span>
 							<h1 class="truncate text-xl font-semibold tracking-tight">{{ t('nav.dashboard') }}</h1>
 						</div>
-						<div
-							v-if="latestConnection"
-							class="mt-3 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px]"
-						>
-							<span class="text-text-secondary">{{ t('dashboard.latestConnection') }}</span>
-							<strong
-								class="max-w-48 truncate text-foreground"
-								:title="latestConnection.name || latestConnection.host"
-								>{{ latestConnection.name || latestConnection.host }}</strong
-							>
-							<span class="hidden max-w-64 truncate font-mono text-text-secondary md:inline"
-								>{{ latestConnection.username }}@{{ latestConnection.host }}:{{
-									latestConnection.port
-								}}</span
-							>
-							<span class="text-text-secondary">{{
-								formatRelativeTime(latestConnection.lastConnectedAt)
-							}}</span>
-							<UiButton
-								density="compact"
-								appearance="soft"
-								tone="neutral"
-								class="px-2.5"
-								@click="connect(latestConnection)"
-							>
-								<span class="inline-flex items-center gap-1 text-[11px] font-medium">
-									<i class="fa-solid fa-rotate-right text-[9px]" aria-hidden="true"></i>
-									<span>{{ t('dashboard.reconnect') }}</span>
-								</span>
-							</UiButton>
-							<UiButton
-								v-if="activeSuspendedSessions.length"
-								density="compact"
-								appearance="soft"
-								tone="neutral"
-								class="hidden lg:inline-flex"
-								:title="suspendedSessionsTitle || t('dashboard.suspendedSessions')"
-								@click="openSuspendedSessions"
-							>
-								<template #leading
-									><i class="fas fa-pause-circle text-[10px]" aria-hidden="true"></i
-								></template>
-								<span>{{ t('dashboard.suspendedSessions') }}</span>
-								<span class="rounded-full bg-primary/15 px-1.5 tabular-nums">{{
-									activeSuspendedSessions.length
-								}}</span>
-							</UiButton>
-						</div>
-						<div v-else-if="activeSuspendedSessions.length" class="mt-3 hidden lg:flex">
+						<div v-if="activeSuspendedSessions.length" class="mt-3 hidden lg:flex">
 							<UiButton
 								density="compact"
 								appearance="soft"
@@ -472,16 +566,23 @@
 									>
 										{{ t('dashboard.resources.local') }}
 									</div>
-									<span class="flex items-center gap-1.5 text-[11px] text-text-secondary"
-										><span class="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true"></span
-										>{{
-											t(
-												resources.localError.value
-													? 'dashboard.resources.unavailable'
-													: 'dashboard.resources.live',
-											)
-										}}</span
-									>
+									<div class="dashboard-overview-local__status">
+										<span class="flex items-center gap-1.5 text-[11px] text-text-secondary"
+											><span
+												class="h-1.5 w-1.5 rounded-full"
+												:class="localResourceStatusTone"
+												aria-hidden="true"
+											></span
+											>{{ t(localResourceStatusKey) }}</span
+										>
+										<span v-if="resources.local.value" class="dashboard-overview-local__updated">
+											{{
+												t('dashboard.resources.updatedAt', {
+													time: formatRefreshTime(resources.local.value.checkedAt),
+												})
+											}}
+										</span>
+									</div>
 								</div>
 								<div v-if="resources.local.value" class="mt-2 grid grid-cols-3 gap-4">
 									<div>
@@ -552,55 +653,18 @@
 				</div>
 			</section>
 
-			<div
-				class="dashboard-workspace"
-				:class="
-					preferences.values.value.dashboardShowRemoteResources
-						? 'grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,.85fr)] xl:items-start xl:gap-0'
-						: 'grid grid-cols-1'
-				"
+			<section
+				class="dashboard-surface dashboard-status-surface flex min-w-0 flex-col overflow-hidden"
+				aria-labelledby="dashboard-connections-title"
 			>
-				<section class="dashboard-surface order-1 flex min-w-0 flex-col overflow-hidden xl:mr-4">
-					<header class="shrink-0 px-4 pb-3 pt-4">
-						<div class="flex items-center justify-between gap-3">
-							<div class="flex min-w-0 items-center gap-2.5">
-								<span
-									class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
-									aria-hidden="true"
-									><i class="fas fa-bolt text-sm"></i
-								></span>
-								<div class="min-w-0">
-									<h2 class="text-base font-semibold">{{ t('dashboard.quickConnect') }}</h2>
-									<p class="truncate text-xs text-text-secondary">
-										{{ t('dashboard.quickConnectHint') }}
-									</p>
-								</div>
-							</div>
-							<div class="flex shrink-0 items-center gap-2">
-								<span class="text-xs text-text-secondary"
-									>{{ filtered.length }} / {{ connections.connections.value.length }}</span
-								>
-								<RouterLink
-									to="/connections"
-									:aria-label="t('dashboard.viewAllConnections')"
-									:title="t('dashboard.viewAllConnections')"
-									class="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-medium text-link transition-colors hover:bg-primary/10 hover:text-link-hover hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-link"
-								>
-									<span class="hidden sm:inline">{{ t('dashboard.viewAllConnections') }}</span>
-									<i class="fas fa-arrow-right text-xs" aria-hidden="true"></i>
-								</RouterLink>
-							</div>
-						</div>
-					</header>
+				<h2 id="dashboard-connections-title" class="sr-only">{{ t('dashboard.connectionList') }}</h2>
 
-					<UiScrollArea
-						class="h-[clamp(300px,42vh,440px)] xl:h-auto xl:flex-1"
-						:back-to-top-label="t('dashboard.backToTop')"
-					>
+				<UiScrollArea class="dashboard-scroll-area" :back-to-top-label="t('dashboard.backToTop')">
+					<div class="dashboard-status-content">
 						<UiListToolbar
 							v-model="search"
 							:search-label="t('dashboard.searchConnectionsPlaceholder')"
-							class="dashboard-toolbar"
+							class="dashboard-toolbar dashboard-status-toolbar"
 						>
 							<div class="min-w-0 sm:min-w-32">
 								<UiSelect
@@ -640,344 +704,625 @@
 									aria-hidden="true"
 								></i>
 							</UiButton>
+							<span class="dashboard-result-count shrink-0 text-xs text-text-secondary">
+								{{ filteredEntries.length }} / {{ connections.connections.value.length }}
+							</span>
+							<RouterLink
+								to="/connections"
+								:aria-label="t('dashboard.viewAllConnections')"
+								:title="t('dashboard.viewAllConnections')"
+								class="dashboard-manage-link hidden shrink-0 sm:inline-flex"
+							>
+								<span class="hidden sm:inline">{{ t('dashboard.viewAllConnections') }}</span>
+								<i class="fas fa-arrow-right text-xs" aria-hidden="true"></i>
+							</RouterLink>
 						</UiListToolbar>
 
-						<div class="p-1.5">
+						<div class="dashboard-status-grid-wrap">
 							<div
-								v-if="loading && filtered.length === 0"
+								v-if="loading && filteredEntries.length === 0"
 								class="py-14 text-center text-sm text-text-secondary"
 							>
 								{{ t('common.loading') }}
 							</div>
-							<ul v-else-if="filtered.length" class="dashboard-quick-connect-grid">
-								<li
-									v-for="item in filtered"
-									:key="item.id"
-									class="min-w-0"
-									:data-last-connected-at="item.lastConnectedAt ?? 0"
+							<div v-else-if="filteredEntries.length" class="dashboard-connection-sections">
+								<section
+									v-for="group in connectionGroups"
+									:key="group.type"
+									class="dashboard-connection-section"
+									:class="`dashboard-connection-section--${group.type.toLowerCase()}`"
+									:aria-labelledby="`dashboard-connection-section-${group.type}`"
 								>
-									<DashboardHostCard
-										as="button"
-										type="button"
-										compact
-										class="dashboard-quick-connect-card w-full text-left"
-										:name="item.name || item.host"
-										:aria-label="`${t('connections.actions.connect')} ${item.name || item.host}`"
-										@click="connect(item)"
-									>
-										<template #header>
-											<div class="flex min-w-0 items-center gap-3">
-												<span class="grid min-w-0 flex-1 gap-1">
-													<span
-														class="truncate text-sm font-semibold tracking-tight text-foreground"
-														:title="item.name || item.host"
-													>
-														{{ item.name || item.host }}
-													</span>
-													<span
-														class="truncate font-mono text-[11px] text-text-secondary"
-														:title="`${item.username}@${item.host}:${item.port}`"
-													>
-														{{ item.username }}@{{ item.host }}:{{ item.port }}
-													</span>
-												</span>
-												<span
-													class="shrink-0 rounded-md border border-border/60 bg-header/50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-secondary"
-												>
-													{{ item.type }}
-												</span>
+									<header class="dashboard-connection-section__header">
+										<h3 :id="`dashboard-connection-section-${group.type}`">
+											<button
+												type="button"
+												class="dashboard-connection-section__toggle"
+												:aria-expanded="isSectionExpanded(group.type)"
+												:aria-controls="`dashboard-connection-list-${group.type}`"
+												:aria-label="group.type"
+												:title="
+													t(
+														isSectionExpanded(group.type)
+															? 'common.collapse'
+															: 'common.expand',
+													)
+												"
+												@click="toggleSection(group.type)"
+											>
 												<i
-													class="dashboard-quick-connect-arrow fa-solid fa-arrow-right shrink-0 text-[11px] text-text-secondary"
+													class="fas fa-chevron-down dashboard-connection-section__chevron"
+													:class="{
+														'dashboard-connection-section__chevron--collapsed':
+															!isSectionExpanded(group.type),
+													}"
 													aria-hidden="true"
 												></i>
-											</div>
-											<div
-												class="mt-2.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/40 pt-2"
+												<span>{{ group.type }}</span>
+												<span class="dashboard-connection-section__count" aria-hidden="true">{{
+													group.entries.length
+												}}</span>
+											</button>
+										</h3>
+									</header>
+									<ul
+										v-show="isSectionExpanded(group.type)"
+										:id="`dashboard-connection-list-${group.type}`"
+										class="dashboard-connection-grid"
+									>
+										<li
+											v-for="entry in group.entries"
+											:key="entry.connection.id"
+											class="dashboard-connection-item"
+											:data-last-connected-at="entry.connection.lastConnectedAt ?? 0"
+											:data-connection-type="entry.connection.type"
+										>
+											<button
+												type="button"
+												class="dashboard-connection-card dashboard-host-card group"
+												:data-resource-state="entry.resource?.state ?? 'none'"
+												:aria-label="`${t('connections.actions.connect')} ${entry.connection.name || entry.connection.host}`"
+												@click="connect(entry.connection)"
 											>
-												<span class="mr-auto text-[11px] text-text-secondary">
-													{{ t('dashboard.lastConnected') }}
-													{{ formatRelativeTime(item.lastConnectedAt) }}
-												</span>
-												<span
-													v-for="tagName in tagNames(item)"
-													:key="tagName"
-													class="max-w-40 truncate rounded-full bg-primary/10 px-2 py-0.5 text-[10px] text-primary"
-													:title="tagName"
+												<div class="dashboard-connection-card__header">
+													<div class="dashboard-connection-card__identity">
+														<span
+															class="dashboard-connection-card__icon"
+															:class="
+																entry.connection.type === 'SSH'
+																	? 'dashboard-connection-card__icon--ssh'
+																	: 'dashboard-connection-card__icon--desktop'
+															"
+															aria-hidden="true"
+														>
+															<i
+																:class="
+																	entry.connection.type === 'SSH'
+																		? 'fas fa-server'
+																		: 'fas fa-display'
+																"
+															></i>
+														</span>
+														<span class="min-w-0">
+															<span class="flex min-w-0 items-center gap-2">
+																<strong
+																	class="truncate text-[15px] font-semibold tracking-tight text-foreground"
+																	:title="
+																		entry.connection.name || entry.connection.host
+																	"
+																>
+																	{{ entry.connection.name || entry.connection.host }}
+																</strong>
+																<span class="dashboard-connection-card__protocol">{{
+																	entry.connection.type
+																}}</span>
+																<span
+																	v-for="tagName in tagNames(entry.connection)"
+																	:key="tagName"
+																	class="dashboard-connection-card__tag max-w-24 min-w-0 shrink truncate rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-primary"
+																	:title="tagName"
+																>
+																	{{ tagName }}
+																</span>
+															</span>
+															<code
+																class="mt-1 block truncate text-[11px] text-text-secondary"
+																:title="`${entry.connection.username}@${entry.connection.host}:${entry.connection.port}`"
+															>
+																{{ entry.connection.username }}@{{
+																	entry.connection.host
+																}}:{{ entry.connection.port }}
+															</code>
+														</span>
+													</div>
+													<div class="dashboard-connection-card__aside">
+														<span class="dashboard-connection-card__state">
+															<span
+																class="h-1.5 w-1.5 shrink-0 rounded-full"
+																:class="resourceStatusTone(entry.resource)"
+																aria-hidden="true"
+															></span>
+															{{ t(resourceStatusKey(entry.resource)) }}
+														</span>
+														<div class="dashboard-connection-card__times">
+															<span
+																class="dashboard-connection-card__last-connected"
+																:title="`${t('dashboard.lastConnected')} ${formatRelativeTime(entry.connection.lastConnectedAt)}`"
+															>
+																{{
+																	formatRelativeTime(entry.connection.lastConnectedAt)
+																}}
+															</span>
+															<template
+																v-if="
+																	entry.connection.type === 'SSH' &&
+																	entry.resource?.state === 'ready'
+																"
+															>
+																<span
+																	class="dashboard-connection-card__time-divider"
+																	aria-hidden="true"
+																></span>
+																<span
+																	class="dashboard-connection-card__updated-at"
+																	:title="
+																		t('dashboard.resources.updatedAt', {
+																			time: formatRefreshTime(
+																				entry.resource.checkedAt,
+																			),
+																		})
+																	"
+																>
+																	{{ formatRefreshTime(entry.resource.checkedAt) }}
+																</span>
+															</template>
+														</div>
+													</div>
+												</div>
+
+												<div
+													v-if="
+														entry.connection.type === 'SSH' &&
+														entry.resource?.state === 'ready'
+													"
+													class="dashboard-resource-strip"
 												>
-													{{ tagName }}
-												</span>
-											</div>
-										</template>
-									</DashboardHostCard>
-								</li>
-							</ul>
+													<div class="dashboard-resource-gauges">
+														<DashboardResourceGauge
+															:gradient-id="`dashboard-gauge-${entry.connection.id}-cpu`"
+															:label="t('dashboard.resources.cpu')"
+															:value="resourceMetric(entry.resource, 'cpuPercent')"
+															:detail="t('dashboard.resources.usage')"
+															tone="cpu"
+														/>
+														<DashboardResourceGauge
+															:gradient-id="`dashboard-gauge-${entry.connection.id}-memory`"
+															:label="t('dashboard.resources.memory')"
+															:value="resourceMetric(entry.resource, 'memPercent')"
+															:detail="`${formatMemory(resourceMetric(entry.resource, 'memUsed'))} / ${formatMemory(resourceMetric(entry.resource, 'memTotal'))}`"
+															tone="memory"
+														/>
+														<DashboardResourceGauge
+															:gradient-id="`dashboard-gauge-${entry.connection.id}-disk`"
+															:label="t('dashboard.resources.disk')"
+															:value="resourceMetric(entry.resource, 'diskPercent')"
+															:detail="`${formatDisk(resourceMetric(entry.resource, 'diskUsed'))} / ${formatDisk(resourceMetric(entry.resource, 'diskTotal'))}`"
+															tone="disk"
+														/>
+													</div>
+												</div>
+												<div
+													v-else-if="
+														entry.connection.type === 'SSH' &&
+														entry.resource?.state === 'failed'
+													"
+													class="dashboard-resource-message dashboard-resource-message--error"
+													:title="t(resourceErrorKey(entry.resource))"
+												>
+													<i class="fas fa-triangle-exclamation" aria-hidden="true"></i>
+													<span>{{ t(resourceErrorKey(entry.resource)) }}</span>
+												</div>
+												<div
+													v-else-if="
+														entry.connection.type === 'SSH' &&
+														entry.resource?.state === 'waiting'
+													"
+													class="dashboard-resource-message"
+												>
+													<UiSpinner density="compact" />
+													<span>{{ t('dashboard.resources.waiting') }}</span>
+												</div>
+												<div
+													v-else-if="
+														entry.connection.type === 'SSH' &&
+														!preferences.values.value.dashboardShowRemoteResources
+													"
+													class="dashboard-resource-message"
+												>
+													<i class="fas fa-chart-simple" aria-hidden="true"></i>
+													<span>{{ t('dashboard.configured') }}</span>
+												</div>
+												<div
+													v-else-if="entry.connection.type === 'SSH'"
+													class="dashboard-resource-message"
+												>
+													<i class="fas fa-chart-simple" aria-hidden="true"></i>
+													<span>{{ t('dashboard.resources.waiting') }}</span>
+												</div>
+											</button>
+										</li>
+									</ul>
+								</section>
+							</div>
 							<div v-else class="py-14 text-center text-sm text-text-secondary">
 								<template v-if="search">{{ t('dashboard.noConnectionsMatchSearch') }}</template>
 								<template v-else-if="tagId !== ''">{{ t('dashboard.noConnectionsWithTag') }}</template>
 								<template v-else>{{ t('dashboard.noConnections') }}</template>
 							</div>
 						</div>
-					</UiScrollArea>
-				</section>
-
-				<section
-					v-if="preferences.values.value.dashboardShowRemoteResources"
-					class="dashboard-surface order-2 flex min-w-0 flex-col overflow-hidden xl:ml-4"
-				>
-					<header
-						class="flex shrink-0 flex-col gap-2 px-4 pb-3 pt-4 sm:flex-row sm:items-center sm:justify-between"
-					>
-						<div class="flex min-w-0 items-center gap-2.5">
-							<span
-								class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
-								aria-hidden="true"
-							>
-								<i class="fa-solid fa-server text-sm" aria-hidden="true"></i>
-							</span>
-							<div class="min-w-0">
-								<h2 class="text-base font-semibold">{{ t('dashboard.resources.sshTitle') }}</h2>
-								<p class="mt-0.5 truncate text-xs text-text-secondary">
-									{{ t('dashboard.resources.sshHint') }}
-								</p>
-							</div>
-						</div>
-						<div class="flex flex-wrap items-center gap-2 text-[11px]">
-							<span class="rounded-full border border-border bg-header/40 px-2.5 py-1 text-text-secondary"
-								>{{ resources.remote.value.length }} {{ t('dashboard.resources.remote') }}</span
-							>
-							<span
-								class="rounded-full border border-success/25 bg-success/10 px-2.5 py-1 font-medium text-success"
-								>{{
-									t('dashboard.resources.snapshot', {
-										seconds: effectiveMonitoring?.hostIntervalSeconds ?? '—',
-									})
-								}}</span
-							>
-						</div>
-					</header>
-					<UiScrollArea
-						class="h-[clamp(300px,42vh,440px)] xl:h-auto xl:flex-1"
-						:back-to-top-label="t('dashboard.backToTop')"
-					>
-						<div class="space-y-2 px-2 pb-2">
-							<div
-								v-if="resources.remoteLoading.value && resources.remote.value.length === 0"
-								class="grid h-full min-h-0 place-items-center"
-							>
-								<UiSpinner />
-							</div>
-							<DashboardHostCard
-								v-for="remote in resources.remote.value"
-								:key="remote.key"
-								as="article"
-								title-tag="h3"
-								:name="remote.name"
-								:address="`${remote.username}@${remote.host}:${remote.port}`"
-								:status-dot-class="
-									remote.status ? 'bg-success' : remote.error ? 'bg-error' : 'bg-border'
-								"
-								:accent-class="
-									remote.status ? 'bg-success/70' : remote.error ? 'bg-error/70' : 'bg-border'
-								"
-							>
-								<div v-if="remote.status" class="mt-3 grid grid-cols-3 gap-1.5 sm:mt-3.5 sm:gap-4">
-									<div>
-										<div class="flex items-baseline justify-between gap-1 sm:gap-2">
-											<span class="text-[11px] font-medium text-text-secondary">{{
-												t('dashboard.resources.cpu')
-											}}</span>
-											<strong class="text-base font-semibold tabular-nums sm:text-lg">{{
-												percent(remote.status.cpuPercent)
-											}}</strong>
-										</div>
-										<div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
-											<div
-												class="h-full rounded-full bg-primary"
-												:style="{ width: percentageWidth(remote.status.cpuPercent) }"
-											></div>
-										</div>
-									</div>
-									<div
-										:title="`${formatMemory(remote.status.memUsed)} / ${formatMemory(remote.status.memTotal)}`"
-									>
-										<div class="flex items-baseline justify-between gap-1 sm:gap-2">
-											<span class="text-[11px] font-medium text-text-secondary">{{
-												t('dashboard.resources.memory')
-											}}</span>
-											<strong class="text-base font-semibold tabular-nums sm:text-lg">{{
-												percent(remote.status.memPercent)
-											}}</strong>
-										</div>
-										<div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
-											<div
-												class="h-full rounded-full bg-success"
-												:style="{ width: percentageWidth(remote.status.memPercent) }"
-											></div>
-										</div>
-										<div
-											class="mt-1 truncate text-[10px] tabular-nums tracking-tight text-text-secondary sm:text-[11px]"
-										>
-											{{ formatMemory(remote.status.memUsed) }} /
-											{{ formatMemory(remote.status.memTotal) }}
-										</div>
-									</div>
-									<div
-										:title="`${formatDisk(remote.status.diskUsed)} / ${formatDisk(remote.status.diskTotal)}`"
-									>
-										<div class="flex items-baseline justify-between gap-1 sm:gap-2">
-											<span class="text-[11px] font-medium text-text-secondary">{{
-												t('dashboard.resources.disk')
-											}}</span>
-											<strong class="text-base font-semibold tabular-nums sm:text-lg">{{
-												percent(remote.status.diskPercent)
-											}}</strong>
-										</div>
-										<div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80 sm:mt-2">
-											<div
-												class="h-full rounded-full bg-warning"
-												:style="{ width: percentageWidth(remote.status.diskPercent) }"
-											></div>
-										</div>
-										<div
-											class="mt-1 flex flex-wrap items-baseline gap-x-1 text-[10px] tabular-nums tracking-tight text-text-secondary sm:text-[11px]"
-										>
-											<span class="max-w-full truncate">{{
-												formatDisk(remote.status.diskUsed)
-											}}</span>
-											<span class="max-w-full truncate text-text-secondary/75"
-												>/ {{ formatDisk(remote.status.diskTotal) }}</span
-											>
-										</div>
-									</div>
-								</div>
-								<div
-									v-else-if="remote.error"
-									class="mt-3 truncate text-xs text-error"
-									:title="t(`systemOverview.errors.${remote.error}`)"
-								>
-									{{ t(`systemOverview.errors.${remote.error}`) }}
-								</div>
-								<div v-else class="mt-3 text-xs text-text-secondary">
-									{{ t('dashboard.resources.waiting') }}
-								</div>
-							</DashboardHostCard>
-							<div
-								v-if="!resources.remoteLoading.value && resources.remote.value.length === 0"
-								class="flex h-full min-h-0 items-center justify-center px-4 text-center text-xs text-text-secondary"
-							>
-								{{
-									resources.remoteError.value
-										? t(`systemOverview.errors.${resources.remoteError.value}`)
-										: t('dashboard.resources.noRemoteSessions')
-								}}
-							</div>
-						</div>
-					</UiScrollArea>
-				</section>
-			</div>
-
-			<aside class="border-t border-border/70 pt-5">
-				<header class="flex flex-col gap-3 pb-4 sm:flex-row sm:items-center sm:justify-between">
-					<div class="flex min-w-0 items-center gap-2.5">
-						<span
-							class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
-							aria-hidden="true"
-							><i class="fas fa-clock-rotate-left text-sm"></i
-						></span>
-						<div class="min-w-0">
-							<h2 class="text-base font-semibold">{{ t('dashboard.recentActivity') }}</h2>
-							<p class="mt-0.5 truncate text-xs text-text-secondary">
-								{{ t('dashboard.recentActivityHint') }}
-							</p>
-						</div>
 					</div>
-					<div class="flex items-center gap-3">
-						<span class="text-xs tabular-nums text-text-secondary">{{ activity.length }}</span
-						><RouterLink
-							to="/audit-logs"
-							class="text-sm font-medium text-link hover:text-link-hover hover:no-underline"
-							>{{ t('dashboard.viewFullAuditLog') }} →</RouterLink
-						>
-					</div>
-				</header>
-				<div
-					v-if="loading && activity.length === 0"
-					class="dashboard-muted-card rounded-xl py-10 text-center text-sm text-text-secondary"
-				>
-					{{ t('common.loading') }}
-				</div>
-				<ol v-else-if="activity.length" class="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-					<li
-						v-for="log in activity"
-						:key="log.id"
-						class="dashboard-muted-card min-w-0 rounded-xl px-4 py-3.5"
-					>
-						<div class="flex min-w-0 items-start justify-between gap-2">
-							<div class="flex min-w-0 items-center gap-2">
-								<span
-									class="activity-dot h-1.5 w-1.5 shrink-0 rounded-full"
-									:class="isFailedAction(log.event) ? 'bg-error' : 'bg-primary'"
-									aria-hidden="true"
-								></span>
-								<span
-									class="activity-title min-w-0 truncate text-sm font-medium leading-5"
-									:class="isFailedAction(log.event) ? 'text-error' : 'text-foreground'"
-									:title="actionLabel(log.event)"
-									>{{ actionLabel(log.event) }}</span
-								>
-							</div>
-							<time class="shrink-0 pt-0.5 text-[11px] text-text-secondary">{{
-								formatRelativeTime(log.createdAt)
-							}}</time>
-						</div>
-						<p
-							v-if="auditSummary(log)"
-							class="mt-1.5 truncate pl-3.5 text-xs text-text-secondary"
-							:title="auditSummary(log)"
-						>
-							{{ auditSummary(log) }}
-						</p>
-					</li>
-				</ol>
-				<div v-else class="dashboard-muted-card rounded-xl py-10 text-center text-sm text-text-secondary">
-					{{ t('dashboard.noRecentActivity') }}
-				</div>
-			</aside>
+				</UiScrollArea>
+			</section>
 		</div>
 	</main>
 </template>
 
 <style scoped>
-	.dashboard-quick-connect-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
-		gap: 8px;
+	.dashboard-surface.dashboard-status-surface {
+		min-width: 0;
+		border: 0;
+		background: transparent;
+		box-shadow: none;
 	}
-	.dashboard-quick-connect-card {
-		display: block;
-		height: 100%;
-		cursor: pointer;
-		appearance: none;
+
+	.dashboard-status-content {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		padding: 2px 6px 8px;
 	}
-	.dashboard-quick-connect-card:focus-visible {
+
+	.dashboard-scroll-area :deep(.ui-scroll-area__back) {
+		right: 24px;
+	}
+
+	.dashboard-scroll-area :deep(.ui-scroll-area__viewport) {
+		height: auto;
+		overflow-y: visible;
+		scrollbar-gutter: auto;
+	}
+
+	.dashboard-toolbar.dashboard-status-toolbar {
+		position: sticky;
+		top: 0;
+		z-index: 4;
+		margin: 0;
+		padding: 4px 0;
+		border: 0;
+		background: color-mix(in srgb, var(--app-bg-color) 94%, transparent);
+		box-shadow: none;
+		backdrop-filter: blur(10px);
+	}
+
+	.dashboard-result-count {
+		font-variant-numeric: tabular-nums;
+	}
+
+	.dashboard-manage-link {
+		display: inline-flex;
+		height: 2.375rem;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		padding-inline: 10px;
+		border-radius: 10px;
+		color: var(--link-active-color);
+		font-size: 12px;
+		font-weight: 600;
+		white-space: nowrap;
+		transition:
+			background-color 140ms ease,
+			color 140ms ease;
+	}
+
+	.dashboard-manage-link:hover {
+		background: color-mix(in srgb, var(--link-active-color) 10%, transparent);
+		color: var(--link-hover-color);
+		text-decoration: none;
+	}
+
+	.dashboard-manage-link:focus-visible {
 		outline: 2px solid var(--link-active-color);
 		outline-offset: 2px;
 	}
-	.dashboard-quick-connect-arrow {
+
+	.dashboard-status-grid-wrap {
+		min-width: 0;
+	}
+
+	.dashboard-connection-sections {
+		display: flex;
+		flex-direction: column;
+		gap: 20px;
+	}
+
+	.dashboard-connection-section {
+		--dashboard-card-height: 188px;
+		--dashboard-resource-height: 100px;
+		min-width: 0;
+	}
+
+	.dashboard-connection-section--rdp,
+	.dashboard-connection-section--vnc {
+		--dashboard-card-height: 76px;
+	}
+
+	.dashboard-connection-section__header {
+		display: flex;
+		align-items: center;
+		margin: 0 2px 9px;
+	}
+
+	.dashboard-connection-section__header h3 {
+		margin: 0;
+	}
+
+	.dashboard-connection-section__toggle {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		margin-left: -4px;
+		padding: 4px 7px 4px 4px;
+		border-radius: 8px;
+		color: var(--text-color-secondary);
+		font-size: 10px;
+		font-weight: 750;
+		letter-spacing: 0.14em;
+		cursor: pointer;
 		transition:
-			transform 140ms ease,
+			background-color 140ms ease,
 			color 140ms ease;
 	}
-	.dashboard-quick-connect-card:hover .dashboard-quick-connect-arrow,
-	.dashboard-quick-connect-card:focus-visible .dashboard-quick-connect-arrow {
-		color: var(--link-active-color);
-		transform: translateX(2px);
+
+	.dashboard-connection-section__toggle:hover {
+		color: var(--text-color);
+		background: color-mix(in srgb, var(--text-color) 6%, transparent);
 	}
+
+	.dashboard-connection-section__toggle:focus-visible {
+		outline: 2px solid var(--link-active-color);
+		outline-offset: 2px;
+	}
+
+	.dashboard-connection-section__chevron {
+		width: 10px;
+		font-size: 9px;
+		transition: transform 160ms ease;
+	}
+
+	.dashboard-connection-section__chevron--collapsed {
+		transform: rotate(-90deg);
+	}
+
+	.dashboard-connection-section__count {
+		display: inline-grid;
+		min-width: 18px;
+		height: 18px;
+		place-items: center;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--text-color) 6%, transparent);
+		color: var(--text-color-secondary);
+		font-size: 9px;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.dashboard-connection-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+		align-items: stretch;
+		gap: 12px;
+	}
+
+	.dashboard-connection-item {
+		display: flex;
+		width: 100%;
+		min-width: 0;
+	}
+
+	.dashboard-connection-card {
+		display: flex;
+		width: 100%;
+		height: var(--dashboard-card-height);
+		flex-direction: column;
+		padding: 16px 18px 14px;
+		color: inherit;
+		text-align: left;
+		cursor: pointer;
+		appearance: none;
+		border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+		border-radius: 18px;
+		background: color-mix(in srgb, var(--card-bg-color) 92%, var(--app-bg-color));
+		box-shadow:
+			inset 0 1px 0 color-mix(in srgb, white 9%, transparent),
+			0 14px 34px -30px color-mix(in srgb, var(--text-color) 58%, transparent);
+		transition:
+			border-color 150ms ease,
+			background-color 150ms ease,
+			box-shadow 150ms ease,
+			transform 150ms ease;
+	}
+
+	.dashboard-connection-card:hover {
+		border-color: color-mix(in srgb, var(--link-active-color) 42%, var(--border-color));
+		background: color-mix(in srgb, var(--card-bg-color) 97%, var(--app-bg-color));
+		box-shadow:
+			inset 0 1px 0 color-mix(in srgb, white 12%, transparent),
+			0 18px 38px -28px color-mix(in srgb, var(--link-active-color) 34%, transparent);
+		transform: translateY(-1px);
+	}
+
+	.dashboard-connection-card:focus-visible {
+		outline: 2px solid var(--link-active-color);
+		outline-offset: 2px;
+	}
+
+	.dashboard-connection-card__header {
+		display: flex;
+		min-width: 0;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 14px;
+	}
+
+	.dashboard-connection-card__identity {
+		display: flex;
+		min-width: 0;
+		align-items: center;
+		gap: 10px;
+	}
+
+	.dashboard-connection-card__icon {
+		display: grid;
+		width: 36px;
+		height: 36px;
+		flex: 0 0 auto;
+		place-items: center;
+		border-radius: 12px;
+		font-size: 13px;
+	}
+
+	.dashboard-connection-card__icon--ssh {
+		color: var(--link-active-color);
+		background: color-mix(in srgb, var(--link-active-color) 12%, transparent);
+	}
+
+	.dashboard-connection-card__icon--desktop {
+		color: var(--status-warning-text-color);
+		background: color-mix(in srgb, var(--color-warning) 16%, transparent);
+	}
+
+	.dashboard-connection-card__protocol {
+		flex: 0 0 auto;
+		padding: 1px 6px;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--text-color) 6%, transparent);
+		color: var(--text-color-secondary);
+		font-size: 9px;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+	}
+
+	.dashboard-connection-card__aside {
+		display: grid;
+		flex: 0 0 auto;
+		justify-items: end;
+		gap: 3px;
+	}
+
+	.dashboard-connection-card__state {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		color: var(--text-color-secondary);
+		font-size: 10px;
+		font-weight: 600;
+		white-space: nowrap;
+	}
+
+	.dashboard-connection-card__times {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		color: var(--text-color-secondary);
+		font-size: 8.5px;
+		font-variant-numeric: tabular-nums;
+		line-height: 1.2;
+		white-space: nowrap;
+	}
+
+	.dashboard-connection-card__last-connected {
+		font-variant-numeric: normal;
+	}
+
+	.dashboard-connection-card__time-divider {
+		width: 1px;
+		height: 8px;
+		background: color-mix(in srgb, var(--border-color) 78%, transparent);
+	}
+
+	.dashboard-connection-card__updated-at {
+		font-variant-numeric: tabular-nums;
+	}
+
+	.dashboard-overview-local__updated {
+		color: var(--text-color-secondary);
+		font-size: 9px;
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+	}
+
+	.dashboard-overview-local__status {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: 2px;
+		white-space: nowrap;
+	}
+
+	.dashboard-resource-strip {
+		display: flex;
+		min-width: 0;
+		height: var(--dashboard-resource-height);
+		flex: 1;
+		align-items: center;
+		margin-top: 10px;
+	}
+
+	.dashboard-resource-gauges {
+		display: flex;
+		min-width: 0;
+		width: 100%;
+		align-items: center;
+		justify-content: space-between;
+		gap: clamp(12px, 3vw, 22px);
+	}
+
+	.dashboard-resource-message {
+		display: flex;
+		height: var(--dashboard-resource-height);
+		flex: 1;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		margin-top: 10px;
+		color: var(--text-color-secondary);
+		font-size: 11px;
+		text-align: center;
+	}
+
+	.dashboard-resource-message {
+		border-radius: 12px;
+		background: color-mix(in srgb, var(--input-bg-color) 54%, transparent);
+	}
+
+	.dashboard-resource-message--error {
+		padding-inline: 12px;
+		color: var(--color-error);
+		background: color-mix(in srgb, var(--color-error) 7%, transparent);
+	}
+
+	.dashboard-resource-message--error span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
 	@media (prefers-reduced-motion: reduce) {
-		.dashboard-quick-connect-arrow {
+		.dashboard-connection-card {
 			transition: none;
 		}
 	}
+
 	.dashboard-overview-metrics {
 		container-type: inline-size;
 	}
@@ -1016,9 +1361,9 @@
 			0 10px 24px -24px color-mix(in srgb, var(--text-color) 38%, transparent);
 	}
 
-	@media (min-width: 1280px) {
+	@media (min-width: 1100px) {
 		.dashboard-page {
-			height: calc(100dvh - 2.75rem);
+			height: calc(100dvh - var(--app-header-height));
 			min-height: 0;
 			overflow: hidden;
 		}
@@ -1027,16 +1372,28 @@
 			display: grid;
 			height: 100%;
 			min-height: 0;
-			grid-template-rows: auto minmax(0, 1fr) auto;
+			grid-template-rows: auto minmax(0, 1fr);
 		}
 
 		.dashboard-workspace {
 			min-height: 0;
+			overflow: hidden;
 		}
 
 		.dashboard-surface {
 			height: 100%;
 			min-height: 0;
+		}
+
+		.dashboard-scroll-area {
+			min-height: 0;
+			flex: 1;
+		}
+
+		.dashboard-scroll-area :deep(.ui-scroll-area__viewport) {
+			height: 100%;
+			overflow-y: auto;
+			scrollbar-gutter: stable;
 		}
 	}
 
@@ -1056,6 +1413,30 @@
 	}
 
 	@media (max-width: 639px) {
+		.dashboard-connection-card__aside {
+			align-self: stretch;
+			align-content: space-between;
+		}
+
+		.dashboard-manage-link {
+			display: none;
+		}
+
+		.dashboard-status-toolbar :deep(.ui-list-toolbar__filters) {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.5rem auto;
+			align-items: center;
+		}
+
+		.dashboard-status-toolbar :deep(.ui-list-toolbar__filters > div),
+		.dashboard-status-toolbar :deep(.ui-select) {
+			width: 100%;
+		}
+
+		.dashboard-result-count {
+			justify-self: end;
+		}
+
 		.dashboard-connection-search {
 			--ui-control-radius: 8px;
 		}

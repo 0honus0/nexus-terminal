@@ -2,6 +2,7 @@
 	import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 	import { UiButton, UiSurface } from '@/foundation/ui';
 	import { useI18n } from 'vue-i18n';
+	import { useSettingsReloadSource } from '@/shared/feedback/public';
 	import { useAppearanceStore } from '../store/appearance.store';
 	import { useAppearanceEditor } from '../composables/use-appearance-editor';
 	import BasicAppearancePanel from './BasicAppearancePanel.vue';
@@ -20,6 +21,14 @@
 			editorGeneration.value++;
 		}
 	}
+
+	useSettingsReloadSource({
+		id: 'appearance-customizer',
+
+		pending: () => !store.busy && store.blocked,
+
+		reload: refresh,
+	});
 
 	const activeTab = ref<'ui' | 'terminal' | 'background' | 'other'>('ui');
 	const tabs = [
@@ -135,10 +144,6 @@
 					</nav>
 
 					<main :key="editorGeneration" class="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 md:px-6 md:py-4">
-						<p v-if="store.blocked" role="status">{{ t('appearanceNext.refreshRequired') }}</p>
-						<UiButton v-if="store.blocked" :disabled="store.busy" @click="refresh">{{
-							t('appearanceNext.refresh')
-						}}</UiButton>
 						<UiSurface v-if="activeTab === 'ui'" class="min-w-0 p-4"
 							><BasicAppearancePanel ref="uiPanel" section="ui" :show-ui-actions="false"
 						/></UiSurface>

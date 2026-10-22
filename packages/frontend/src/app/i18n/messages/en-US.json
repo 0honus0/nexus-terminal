@@ -69,6 +69,12 @@
     "hide": "Hide",
     "show": "Show Top Navigation"
   },
+  "appUpdate": {
+    "title": "A new version is ready",
+    "description": "The update is ready. Reload the page to use the latest version.",
+    "later": "Later",
+    "apply": "Update now"
+  },
   "time": {
     "unknown": "Unknown time",
     "invalidDate": "Invalid date"

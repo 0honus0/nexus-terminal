@@ -25,7 +25,6 @@ try {
 	const origin = 'http://127.0.0.1:' + port;
 	app = await createApp(join(directory, 'desktop.db'), {
 		encryptionKey: randomBytes(32),
-		guacd: { host: '127.0.0.1', port: services.port },
 	});
 	const backend = await app.listenHttp({
 		publicOrigin: origin,
@@ -117,16 +116,22 @@ try {
 		};
 
 		const ticket = 'A'.repeat(43);
-		const wire = { ticket, lastConnectedAt: 1700000000 };
+		const wire = {
+			ticket,
+			protocol: 'VNC',
+			host: '127.0.0.1',
+			port: 5900,
+			username: '',
+			password: 'private-password',
+		};
 		check(readSession(wire).ticket === ticket, 'strict successful ticket');
 		for (const value of [
 			{ ...wire, secret: 'private' },
 			{ ...wire, ticket: 'bad' },
-			{ ...wire, lastConnectedAt: 1.5 },
-			{ ...wire, lastConnectedAt: Number.MAX_SAFE_INTEGER },
+			{ ...wire, lastConnectedAt: 1700000000 },
 			{ ...wire, ticket: ticket + 'A' },
 		]) {
-			await rejects(() => readSession(value), 'invalid success refuses extras/ticket/time');
+			await rejects(() => readSession(value), 'invalid success refuses extras/ticket');
 		}
 		for (const value of [{ code: 'remote_unavailable', message: 'secret' }, { code: 'other' }, { code: 401 }])
 			await rejects(() => readFailure(value), 'strict safe failure');
@@ -135,9 +140,8 @@ try {
 		try {
 			window.fetch = async () => Response.json(wire);
 			check(
-				(await remoteDesktopApi.create(1, 'VNC', display, new AbortController().signal)).lastConnectedAt ===
-					1700000000000,
-				'wire seconds to application milliseconds',
+				(await remoteDesktopApi.create(1, 'VNC', display, new AbortController().signal)).ticket === ticket,
+				'ticket response carries no attempted connection time',
 			);
 			window.fetch = async () => Response.json({ code: 'forbidden' }, { status: 503 });
 			await rejects(
@@ -152,7 +156,7 @@ try {
 				(cause) => cause.code === 'operation_unknown' && cause.outcome === 'unknown',
 			);
 			window.fetch = async () =>
-				new Response('x'.repeat(1025), { headers: { 'content-type': 'application/json' } });
+				new Response('x'.repeat(65537), { headers: { 'content-type': 'application/json' } });
 			await rejects(
 				() => remoteDesktopApi.create(1, 'VNC', display, new AbortController().signal),
 				'complete response budget enforced',
@@ -194,7 +198,7 @@ try {
 					tickets: [],
 
 					connect(value) {
-						this.tickets.push(value);
+						this.tickets.push(value.ticket);
 					},
 
 					resize() {},
@@ -221,8 +225,8 @@ try {
 				states.push({ state, code: failure?.code });
 			},
 
-			onAttempt(id, time) {
-				attempts.push({ id, time });
+			onConnected(id) {
+				attempts.push({ id });
 			},
 		});
 		const target = { id: 1, name: 'test', type: 'VNC' };
@@ -230,19 +234,20 @@ try {
 		const host = document.createElement('div');
 		const first = owner.connect(target, display, input, host);
 		const second = owner.connect(target, display, input, host);
-		requests[0].resolve({ ticket, lastConnectedAt: 1700000000000 });
+		requests[0].resolve(wire);
 		await first;
 		check(
 			requests[0].signal.aborted && peers.length === 0 && attempts.length === 0,
-			'late cancelled ticket neither opens nor publishes attempt',
+			'late cancelled ticket neither opens nor publishes connection',
 		);
-		requests[1].resolve({ ticket: 'B'.repeat(43), lastConnectedAt: 1700000000000 });
+		requests[1].resolve({ ...wire, ticket: 'B'.repeat(43) });
 		await second;
 		check(
-			peers.length === 1 && attempts.length === 1 && peers[0].tickets[0] === 'B'.repeat(43),
+			peers.length === 1 && attempts.length === 0 && peers[0].tickets[0] === 'B'.repeat(43),
 			'new intent receives only its ticket',
 		);
 		peers[0].options.onState('connected');
+		check(attempts.length === 1 && attempts[0].id === target.id, 'only a connected peer requests metadata refresh');
 		owner.close();
 		const third = owner.connect(target, display, input, host);
 		peers[0].options.onFailure(new RemoteDesktopFailure('remote_unavailable', 'unknown'));
@@ -254,7 +259,8 @@ try {
 			'unknown attempt is not automatically replayed',
 		);
 		owner.close();
-		const { createGuacamoleDesktop } = await import('/src/features/remote-desktop/adapters/guacamole-desktop.ts');
+		const { createRdpDesktop } = await import('/src/features/remote-desktop/adapters/rdp-desktop.ts');
+		const { createVncDesktop } = await import('/src/features/remote-desktop/adapters/vnc-desktop.ts');
 		const mobile = document.createElement('textarea');
 		const subscriptions = new Set();
 		const add = mobile.addEventListener.bind(mobile);
@@ -267,44 +273,40 @@ try {
 			subscriptions.delete(listener);
 			return remove(type, listener, options);
 		};
-		for (let n = 0; n < 5; n++) {
-			const current = createGuacamoleDesktop({
-				hasTouch: true,
-				touchMode: 'direct',
-				mobileInput: mobile,
+		for (const factory of [createRdpDesktop, createVncDesktop]) {
+			for (let count = 0; count < 5; count++) {
+				const current = factory({
+					hasTouch: true,
+					touchMode: 'direct',
+					mobileInput: mobile,
 
-				onState() {},
+					onState() {},
 
-				onFailure(failure) {
-					throw failure;
-				},
-			});
-			current.setTouchMode('direct');
-			current.setTouchMode('touchpad');
-			current.setTouchMode('direct');
-			current.close();
-			check(
-				subscriptions.size === 0 && window.desktopBlurListeners.size === 0,
-				'repeated peer retires mobile and global display listeners ' + n,
-			);
+					onFailure(failure) {
+						throw failure;
+					},
+				});
+				current.setTouchMode('direct');
+				current.setTouchMode('touchpad');
+				current.close();
+				check(
+					subscriptions.size === 0 && window.desktopBlurListeners.size === 0,
+					'native peer retires its input listeners ' + count,
+				);
+			}
 		}
-		const { attachRemoteTouchInput } = await import('/src/features/remote-desktop/adapters/remote-touch-input.ts');
+		const { attachDesktopTouch } = await import('/src/features/remote-desktop/adapters/desktop-touch.ts');
 		for (const mode of ['direct', 'touchpad']) {
 			const element = document.createElement('div');
 			element.style.cssText = 'position:fixed;left:0;top:0;width:200px;height:200px';
+			const canvas = document.createElement('canvas');
+			canvas.width = 200;
+			canvas.height = 200;
+			element.append(canvas);
 			document.body.append(element);
 			const calls = [];
-			const touchInput = attachRemoteTouchInput(
-				element,
-				{
-					getDisplay: () => ({ showCursor() {} }),
-
-					sendMouseState(state) {
-						calls.push({ left: state.left, x: state.x, y: state.y });
-					},
-				},
-				mode,
-			);
+			for (const kind of ['mousedown', 'mouseup']) canvas.addEventListener(kind, () => calls.push(kind));
+			const touchInput = attachDesktopTouch(element, canvas, mode);
 			const touch = new Touch({ identifier: 1, target: element, clientX: 50, clientY: 50 });
 			element.dispatchEvent(
 				new TouchEvent('touchstart', { touches: [touch], changedTouches: [touch], cancelable: true }),
@@ -312,118 +314,109 @@ try {
 			element.dispatchEvent(
 				new TouchEvent('touchend', { touches: [], changedTouches: [touch], cancelable: true }),
 			);
-			await new Promise((resolve) => setTimeout(resolve, 300));
 			check(
-				calls.some((state) => state.left) && calls.some((state) => !state.left),
-				mode + ' real Guacamole gesture forwards press and release',
+				calls.includes('mousedown') && calls.includes('mouseup'),
+				mode + ' native gesture forwards press and release',
 			);
 			element.dispatchEvent(
 				new TouchEvent('touchstart', { touches: [touch], changedTouches: [touch], cancelable: true }),
 			);
-			touchInput.destroy();
+			touchInput.close();
 			const count = calls.length;
 			await new Promise((resolve) => setTimeout(resolve, 550));
 			check(
 				calls.length === count && element.style.touchAction === '',
-				mode + ' retirement cancels pending long press',
+				mode + ' retirement cancels pending gesture',
 			);
 			element.remove();
 		}
-		const { attachRemoteClipboard } = await import('/src/features/remote-desktop/adapters/remote-clipboard.ts');
+		const { attachDesktopClipboard } = await import('/src/features/remote-desktop/adapters/desktop-clipboard.ts');
 		const failures = [];
-		const client = { onclipboard: null };
-		const bridge = attachRemoteClipboard(document.createElement('div'), client, (failure) =>
-			failures.push(failure),
+		const bridge = attachDesktopClipboard(
+			document.createElement('div'),
+			async () => {},
+			(failure) => failures.push(failure),
 		);
-		const acks = [];
-		const stream = {
-			onblob: null,
-			onend: null,
-
-			sendAck(message, code) {
-				acks.push(code);
-			},
-		};
-		client.onclipboard(stream, 'text/plain');
-		const blob = btoa('a'.repeat(32768));
-		for (let n = 0; n < 33; n++) stream.onblob(blob);
+		bridge.receive('a'.repeat(1024 * 1024 + 1));
 		check(
-			failures.length === 1 && failures[0].code === 'input_failed' && acks.includes(0x0100),
-			'remote clipboard accumulation is bounded without truncation',
+			failures.length === 1 && failures[0].code === 'input_failed',
+			'remote clipboard rejects oversized text without truncation',
 		);
-		bridge.destroy();
-		check(client.onclipboard === null, 'clipboard retirement removes owner callback');
+		bridge.close();
+		bridge.receive('a'.repeat(1024 * 1024 + 1));
+		check(failures.length === 1, 'clipboard retirement ignores later data');
 
 		return checks;
 	});
 	console.log('CONTROLLED', controlled.length, controlled.join('\n'));
-	const ids = await page.evaluate(async () => {
-		const { createAccessApi } = await import('/src/features/auth/api/access-api.ts');
-		const access = createAccessApi();
-		await access.setup({
-			username: 'admin',
-			password: 'desktop-fixture-123',
-			confirmPassword: 'desktop-fixture-123',
-		});
-		await access.login({ username: 'admin', password: 'desktop-fixture-123' });
-		const ids = {};
-		for (const type of ['RDP', 'VNC']) {
-			const response = await fetch('/api/v1/targets/connections', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({
-					name: 'Frontend ' + type,
-					type,
-					host: 'desktop',
-					port: type === 'RDP' ? 3389 : 5900,
-					username: 'test',
-					route: 'direct',
-					proxyId: null,
-					notes: null,
-					rdpRemoteApp: null,
-					rdpRemoteAppDirectory: null,
-					rdpRemoteAppArguments: null,
-					tagIds: [],
-					jumpIds: [],
-				}),
+	const ids = await page.evaluate(
+		async (ports) => {
+			const { createAccessApi } = await import('/src/features/auth/api/access-api.ts');
+			const access = createAccessApi();
+			await access.setup({
+				username: 'admin',
+				password: 'desktop-fixture-123',
+				confirmPassword: 'desktop-fixture-123',
 			});
-			if (response.status !== 201) throw Error('create target ' + response.status);
-			const target = await response.json();
-			const result = await fetch('/api/v1/targets/connections/' + target.id + '/credential', {
-				method: 'PUT',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({
-					version: target.version,
-					credential: { kind: 'password', password: 'b10-pass' },
-				}),
-			});
-			if (result.status !== 200) throw Error('create credential');
-			ids[type] = target.id;
-		}
-		return ids;
-	});
+			await access.login({ username: 'admin', password: 'desktop-fixture-123' });
+			const ids = {};
+			for (const type of ['RDP', 'VNC']) {
+				const response = await fetch('/api/v1/targets/connections', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({
+						name: 'Frontend ' + type,
+						type,
+						host: '127.0.0.1',
+						port: type === 'RDP' ? ports.rdpPort : ports.vncPort,
+						username: 'test',
+						route: 'direct',
+						proxyId: null,
+						notes: null,
+						tagIds: [],
+						jumpIds: [],
+					}),
+				});
+				if (response.status !== 201) throw Error('create target ' + response.status);
+				const target = await response.json();
+				const result = await fetch('/api/v1/targets/connections/' + target.id + '/credential', {
+					method: 'PUT',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({
+						version: target.version,
+						credential: { kind: 'password', password: 'b10-pass' },
+					}),
+				});
+				if (result.status !== 200) throw Error('create credential');
+				ids[type] = target.id;
+			}
+			return ids;
+		},
+		{ rdpPort: services.rdpPort, vncPort: services.vncPort },
+	);
 	for (const protocol of ['VNC', 'RDP']) {
 		await page.evaluate(
 			async ({ id, protocol }) => {
 				const { createRemoteDesktopController } =
 					await import('/src/features/remote-desktop/model/remote-desktop-controller.ts');
 				const { remoteDesktopApi } = await import('/src/features/remote-desktop/api/remote-desktop-api.ts');
-				const { createGuacamoleDesktop } =
-					await import('/src/features/remote-desktop/adapters/guacamole-desktop.ts');
+				const { createBrowserDesktop } =
+					await import('/src/features/remote-desktop/adapters/browser-desktop.ts');
 				const host = document.createElement('div');
+				host.style.cssText = 'width:800px;height:600px';
 				document.body.append(host);
-				const fixture = { host, state: '', time: 0, failure: null };
+				const fixture = { host, state: '', connectionId: null, failure: null };
 				fixture.owner = createRemoteDesktopController({
 					api: remoteDesktopApi,
-					createPeer: createGuacamoleDesktop,
+					createPeer: createBrowserDesktop,
 
 					onState(state, failure) {
 						fixture.state = state;
 						fixture.failure = failure?.code;
 					},
 
-					onAttempt(_id, time) {
-						fixture.time = time;
+					onConnected(id) {
+						fixture.connectionId = id;
 					},
 				});
 				window.desktopFixture = fixture;
@@ -454,7 +447,7 @@ try {
 			},
 			{ timeout: 30000 },
 		);
-		assert.ok(await page.evaluate(() => window.desktopFixture.time > 1700000000000));
+		assert.equal(await page.evaluate(() => window.desktopFixture.connectionId), ids[protocol]);
 		services.x('windowfocus', services.x('search', '--name', 'B10-Desktop'));
 		await page.evaluate((text) => window.desktopFixture.owner.peer.sendText(text), 'frontend-' + protocol + '\n');
 		await waitFor(
@@ -492,7 +485,7 @@ try {
 					visible: true,
 					connection: { id, type: 'VNC', name: 'Formal desktop' },
 
-					onAttempted: (id, time) => attempts.push({ id, time }),
+					onConnected: (id) => attempts.push({ id }),
 				}),
 		});
 		mounted.use(i18n).mount(node);
@@ -502,8 +495,8 @@ try {
 	const modal = await page.evaluate(async () => {
 		const f = window.modalFixture;
 		const checks = [];
-		if (!(f.attempts.length === 1 && f.attempts[0].time > 1700000000000)) throw Error('formal attempt time');
-		checks.push('formal Modal publishes application milliseconds');
+		if (f.attempts.length !== 1) throw Error('formal connected event');
+		checks.push('formal Modal requests refresh only after connection');
 		for (const locale of ['en-US', 'zh-CN', 'ja-JP']) {
 			f.i18n.global.locale.value = locale;
 			await f.nextTick();
@@ -532,7 +525,7 @@ try {
 		'real controller and Modal retire display subscriptions',
 	);
 	console.log('MODAL', modal.length, modal.join('\n'));
-	console.log('Desktop frontend regression PASS; RemoteApp/Windows not covered.');
+	console.log('Desktop frontend regression PASS; Browser RDP/VNC; native Windows remains remote validation.');
 } finally {
 	const results = await Promise.allSettled(
 		[() => browser?.close(), () => vite?.close(), () => app?.close()].map((close) => Promise.resolve().then(close)),

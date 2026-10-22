@@ -134,37 +134,41 @@
 <template>
 	<UiModal
 		:visible="visible"
-		panel-class="!max-w-xl !max-h-[90vh] !p-6"
-		content-class="!overflow-hidden !py-0"
+		panel-class="ui-form-surface !max-w-2xl !p-4 sm:!p-6 lg:!p-7"
+		:panel-style="{ maxHeight: 'min(760px, calc(100dvh - 2rem))' }"
+		content-class="!flex !min-h-0 !flex-1 !flex-col !overflow-hidden !py-0"
 		@close="emit('close')"
 	>
-		<form id="batch-connection-editor" class="flex max-h-[78vh] min-h-0 flex-col" @submit.prevent="saveMetadata">
-			<h3 class="mb-6 shrink-0 text-center text-xl font-semibold">
+		<form id="batch-connection-editor" class="flex min-h-0 flex-1 flex-col" @submit.prevent="saveMetadata">
+			<h3 class="mb-5 shrink-0 text-lg font-semibold">
 				{{ t('connections.batchEdit.title') }} ({{ t('connections.batchEdit.selectedItems', { count }) }})
 			</h3>
-			<fieldset :disabled="loading" class="flex-grow space-y-4 overflow-y-auto pr-2">
-				<p class="text-sm text-text-secondary">{{ t('connections.separateSaves') }}</p>
-				<section class="rounded-md border border-border bg-background p-4">
-					<div class="mb-2 flex items-center justify-between">
-						<h4 class="text-base font-semibold">{{ t('connections.table.port') }}</h4>
+			<fieldset :disabled="loading" class="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pr-1 sm:pr-3">
+				<p class="connection-batch__hint">
+					<i class="fas fa-circle-info" aria-hidden="true" />
+					<span>{{ t('connections.separateSaves') }}</span>
+				</p>
+				<section class="ui-form-section connection-batch__section">
+					<div class="connection-batch__section-title">
+						<h4 class="!mb-0">{{ t('connections.table.port') }}</h4>
 						<UiCheckbox v-model="editPort" :aria-label="t('connections.form.port')" />
 					</div>
 					<UiFormField v-if="editPort" :label="t('connections.form.port')"
 						><UiInput v-model="port" type="number" min="1" max="65535"
 					/></UiFormField>
 				</section>
-				<section class="rounded-md border border-border bg-background p-4">
-					<div class="mb-2 flex items-center justify-between">
-						<h4 class="text-base font-semibold">{{ t('connections.form.sectionAuth') }}</h4>
+				<section class="ui-form-section connection-batch__section">
+					<div class="connection-batch__section-title">
+						<h4 class="!mb-0">{{ t('connections.form.sectionAuth') }}</h4>
 						<UiCheckbox v-model="editUsername" :aria-label="t('connections.form.username')" />
 					</div>
 					<UiFormField v-if="editUsername" :label="t('connections.form.username')"
 						><UiInput v-model="username" :placeholder="t('connections.batchEdit.leaveBlankNoChange')"
 					/></UiFormField>
 				</section>
-				<section class="rounded-md border border-border bg-background p-4">
-					<div class="mb-2 flex items-center justify-between">
-						<h4 class="text-base font-semibold">{{ t('connections.form.sectionAdvanced') }}</h4>
+				<section class="ui-form-section connection-batch__section">
+					<div class="connection-batch__section-title">
+						<h4 class="!mb-0">{{ t('connections.form.sectionAdvanced') }}</h4>
 						<UiCheckbox v-model="editAdvanced" :aria-label="t('connections.form.sectionAdvanced')" />
 					</div>
 					<div v-if="editAdvanced" class="space-y-3">
@@ -178,8 +182,7 @@
 							></UiFormField
 						>
 						<div>
-							<label
-								class="mb-1 flex items-center justify-between text-sm font-medium text-text-secondary"
+							<label class="connection-batch__toggle"
 								><span>{{ t('connections.table.tags') }}</span
 								><span class="flex items-center gap-2 text-xs font-normal"
 									><UiCheckbox
@@ -190,8 +193,7 @@
 							><ConnectionTagPicker v-if="editTags" v-model="tagIds" />
 						</div>
 						<div class="pt-2">
-							<label
-								class="mb-1 flex items-center justify-between text-sm font-medium text-text-secondary"
+							<label class="connection-batch__toggle"
 								><span>{{ t('connections.form.notes') }}</span
 								><span class="flex items-center gap-2 text-xs font-normal"
 									><UiCheckbox
@@ -203,8 +205,8 @@
 						</div>
 					</div>
 				</section>
-				<section class="space-y-3 rounded-md border border-border bg-background p-4">
-					<h4 class="text-base font-semibold">{{ t('connections.form.sectionAuth') }}</h4>
+				<section class="ui-form-section connection-batch__section space-y-3">
+					<h4>{{ t('connections.credentials') }}</h4>
 					<UiFormField :label="t('connections.form.authMethod')"
 						><UiSelect v-model="auth"
 							><option value="password">{{ t('connections.form.authMethodPassword') }}</option>
@@ -224,15 +226,11 @@
 						></UiFormField
 					>
 				</section>
-				<p
-					v-if="error"
-					class="rounded-md border border-error/30 bg-error/10 p-3 text-center text-sm text-error"
-					role="alert"
-				>
+				<p v-if="error" class="connection-batch__error" role="alert">
 					{{ error }}
 				</p>
 			</fieldset>
-			<footer class="mt-4 flex shrink-0 justify-end space-x-3 border-t border-border/50 pt-5">
+			<footer class="connection-batch__footer">
 				<UiButton type="button" @click="emit('close')">{{ t('common.cancel') }}</UiButton>
 				<UiButton type="button" appearance="soft" tone="warning" :disabled="loading" @click="saveCredential"
 					><template #leading><i class="fas fa-key" aria-hidden="true"></i></template
@@ -246,3 +244,103 @@
 		</form>
 	</UiModal>
 </template>
+
+<style scoped>
+	.connection-batch__hint {
+		display: flex;
+		align-items: flex-start;
+		gap: 7px;
+		margin-bottom: 4px;
+		color: var(--text-color-secondary);
+		font-size: 12px;
+		line-height: 1.55;
+	}
+
+	.connection-batch__hint i {
+		margin-top: 2px;
+		flex: 0 0 auto;
+		opacity: 0.72;
+	}
+
+	.connection-batch__section {
+		padding-top: 18px;
+		border-top: 1px solid color-mix(in srgb, var(--border-color) 34%, transparent);
+	}
+
+	.connection-batch__section:first-of-type {
+		padding-top: 10px;
+		border-top: 0;
+	}
+
+	.connection-batch__section-title {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+		margin-bottom: 12px;
+	}
+
+	.connection-batch__section h4 {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.connection-batch__section h4::before {
+		width: 2px;
+		height: 0.85rem;
+		flex: 0 0 auto;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--link-active-color) 72%, transparent);
+		content: '';
+	}
+
+	.connection-batch__toggle {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		margin-bottom: 6px;
+		color: var(--text-color-secondary);
+		font-size: 12px;
+		font-weight: 500;
+	}
+
+	.connection-batch__error {
+		margin-top: 12px;
+		padding: 9px 12px;
+		border-radius: 9px;
+		background: color-mix(in srgb, var(--status-error-color) 10%, transparent);
+		color: var(--status-error-color);
+		font-size: 12px;
+		line-height: 1.5;
+		text-align: center;
+	}
+
+	.connection-batch__footer {
+		display: flex;
+		flex: 0 0 auto;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		gap: 12px;
+		margin-top: 20px;
+		padding-top: 20px;
+		border-top: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
+	}
+
+	@media (max-width: 640px) {
+		.connection-batch__footer {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 8px;
+		}
+
+		.connection-batch__footer > :last-child {
+			grid-column: 1 / -1;
+		}
+
+		.connection-batch__footer :deep(.ui-button) {
+			width: 100%;
+		}
+	}
+</style>

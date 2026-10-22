@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { useFeedbackMessage } from '@/shared/feedback/public';
 	import { computed, onActivated, onMounted, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { UiButton } from '@/foundation/ui';
@@ -12,6 +13,12 @@
 	const status = ref<ModelRegistryStatus | null>(null);
 	const busy = ref(false);
 	const error = ref('');
+	let failureCause: unknown;
+	useFeedbackMessage(
+		() => error.value,
+		undefined,
+		() => failureCause,
+	);
 	const refreshBlocked = ref(false);
 	const statusError = computed(() => {
 		const code = status.value?.lastErrorCode;
@@ -19,6 +26,7 @@
 		const key = 'agent.settings.providers.registryErrors.' + code;
 		return te(key) ? t(key) : t('agent.settings.providers.registryErrorFallback');
 	});
+	useFeedbackMessage(() => statusError.value);
 	let generation = 0;
 	const scope = useAuthenticatedViewScope({
 		onRevoke() {
@@ -51,6 +59,7 @@
 			if (current !== generation || !scope.isCurrent(signal)) {
 				return;
 			}
+			failureCause = cause;
 			const unknown = cause instanceof AgentManagementFailure && cause.outcome === 'unknown';
 			error.value = t(
 				'agent.settings.providers.' + (unknown && refresh ? 'registryUnknown' : 'registryRequestFailed'),
@@ -86,15 +95,8 @@
 				><span>{{ status.entryCount }} {{ t('agent.settings.providers.registryModels') }}</span
 				><span v-if="status.generatedAt !== null"
 					>· {{ formatAgentDate(locale, new Date(status.generatedAt)) }}</span
-				><span v-if="status.lastErrorCode" class="rounded bg-warning/10 px-1.5 py-0.5 text-[11px] text-warning">
-					{{ statusError }}
-				</span>
-				<details v-if="status.lastErrorCode" class="text-[10px] text-text-secondary">
-					<summary class="cursor-pointer select-none">{{ t('agent.nativeRun.technicalDetails') }}</summary>
-					<code class="mt-1 block break-all">{{ status.lastErrorCode }}</code>
-				</details></template
+				></template
 			>
-			<p v-if="error" role="alert" class="text-error">{{ error }}</p>
 		</div>
 		<div class="flex items-center gap-2">
 			<UiButton

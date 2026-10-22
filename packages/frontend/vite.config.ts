@@ -86,6 +86,11 @@ export default defineConfig({
 				// Preserve the browser-facing Host so Backend same-origin validation sees the real origin.
 				changeOrigin: false,
 			},
+			'/ws/suspended-sessions': {
+				target: devBackendWebSocketOrigin,
+				ws: true,
+				changeOrigin: false,
+			},
 			'/ws/uploads': {
 				target: devBackendWebSocketOrigin,
 				ws: true,

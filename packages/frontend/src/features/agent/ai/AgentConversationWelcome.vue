@@ -143,7 +143,7 @@
 </script>
 <template>
 	<div
-		class="relative z-10 mx-auto flex min-h-[460px] max-w-3xl flex-col items-center justify-center px-4 py-4 text-center select-none"
+		class="relative z-10 mx-auto flex min-h-full max-w-3xl flex-col items-center justify-center px-4 py-4 text-center select-none"
 		@mouseenter="homePromptPaused = true"
 		@mouseleave="homePromptPaused = false"
 		@focusin="homePromptPaused = true"

@@ -255,9 +255,11 @@ test('SSH key management UI adds, renames without replacing private key, and del
 		const confirm = page.getByRole('dialog', { name: 'Please confirm' });
 		await expect(confirm).toContainText(EDITED_NAME);
 		await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
-		await expect(modal.getByRole('alert')).toContainText(
-			'The result is unknown and may already be saved. Refresh and review before submitting again.',
-		);
+		await expect(
+			page
+				.locator('.ui-notification[data-kind="error"]')
+				.filter({ hasText: 'The connection is unstable or the service is unavailable.' }),
+		).toBeVisible();
 		await expect(row).toBeVisible();
 		await page.unroute(`**/api/v1/targets/ssh-keys/${keyId}`);
 		await modal.getByRole('button', { name: 'Refresh and review', exact: true }).click();
@@ -293,9 +295,11 @@ test('SSH key selector and manager surface key-list loading failures without ove
 	await expect(form.getByText('Options could not be loaded. Refresh and review.', { exact: true })).toBeVisible();
 	await form.getByRole('button', { name: 'Manage SSH Keys', exact: true }).click();
 	const modal = keyManager(page);
-	// The public target owner deliberately localizes transport failures instead
-	// of leaking the browser's raw Network Error string into this modal.
-	await expect(modal.getByRole('alert')).toContainText('The operation failed. Please try again later.');
+	await expect(
+		page
+			.locator('.ui-notification[data-kind="error"]')
+			.filter({ hasText: 'The connection is unstable or the service is unavailable.' }),
+	).toBeVisible();
 	await expect
 		.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
 		.toBeLessThanOrEqual(1);

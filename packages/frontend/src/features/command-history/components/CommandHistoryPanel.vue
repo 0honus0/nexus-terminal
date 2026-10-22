@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { isNetworkFailure } from '@/client/http/network-failure';
 	import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 	import { storeToRefs } from 'pinia';
 	import { useI18n } from 'vue-i18n';
@@ -122,6 +123,20 @@
 		return true;
 	};
 
+	watch(error, (cause) => {
+		if (!cause || isNetworkFailure(cause)) return;
+		feedback.notifyError(preferenceFailureMessage(cause, t), 0, {
+			key: 'command-history',
+			label: t('common.refresh'),
+
+			disabled: () => loading.value,
+
+			onClick: () => {
+				void store.load(true).catch(() => undefined);
+			},
+		});
+	});
+
 	onMounted(() => {
 		void store.load().catch(() => undefined);
 		unregisterFocus = focusRegistry.register('commandHistorySearch', openSearch, () =>
@@ -144,6 +159,7 @@
 			}
 			await store.clear(signal);
 		} catch (cause) {
+			if (isNetworkFailure(cause) || cause === error.value) return;
 			if (!view.isCurrent(signal)) {
 				return;
 			}
@@ -160,6 +176,7 @@
 		try {
 			await store.remove(id, signal);
 		} catch (cause) {
+			if (isNetworkFailure(cause) || cause === error.value) return;
 			if (!view.isCurrent(signal)) {
 				return;
 			}
@@ -351,9 +368,6 @@
 				<i class="fas fa-spinner fa-spin mb-2 text-xl" aria-hidden="true"></i>
 				<p>{{ t('commandHistory.loading') }}</p>
 			</div>
-			<p v-else-if="error" class="p-4 text-sm text-error">
-				{{ t('commandHistory.loadFailed', { error: preferenceFailureMessage(error, t) }) }}
-			</p>
 			<div
 				v-else-if="!filtered.length"
 				class="flex min-h-0 flex-1 flex-col items-center justify-center p-6 text-center text-sm text-text-secondary"

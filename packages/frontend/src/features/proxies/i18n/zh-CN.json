@@ -2,6 +2,17 @@
   "proxies": {
     "title": "代理管理",
     "addProxy": "添加新代理",
+    "listTitle": "代理列表",
+    "searchPlaceholder": "搜索名称、主机或用户名",
+    "filterType": "按代理类型筛选",
+    "allTypes": "全部类型",
+    "authenticated": "需要认证",
+    "noAuthentication": "无需认证",
+    "noMatches": "没有符合当前搜索或筛选条件的代理。",
+    "summary": {
+      "label": "代理概览",
+      "total": "代理总数"
+    },
     "loading": "正在加载代理...",
     "error": "加载代理列表失败: {error}",
     "noProxies": "还没有任何代理配置。点击'添加新代理'来创建一个吧！",
@@ -12,6 +23,9 @@
     "form": {
       "title": "添加新代理",
       "titleEdit": "编辑代理",
+      "sectionBasic": "基本信息",
+      "sectionEndpoint": "网络地址",
+      "sectionCredentials": "认证信息",
       "name": "名称:",
       "type": "类型:",
       "host": "主机/IP:",

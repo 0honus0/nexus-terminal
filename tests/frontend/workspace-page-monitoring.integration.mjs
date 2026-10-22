@@ -108,9 +108,6 @@ try {
 						route: 'direct',
 						proxyId: null,
 						notes: null,
-						rdpRemoteApp: null,
-						rdpRemoteAppDirectory: null,
-						rdpRemoteAppArguments: null,
 						tagIds: [],
 						jumpIds: [],
 					},
@@ -181,7 +178,7 @@ try {
 	);
 	const firstResource = resourceResponses[0];
 	assert.ok(firstResource.status.memTotal > 0);
-	const remoteCard = page.locator('article.dashboard-host-card').filter({ hasText: 'Full page SSH' });
+	const remoteCard = page.locator('.dashboard-connection-card').filter({ hasText: 'Full page SSH' });
 	await remoteCard.waitFor();
 	assert.match(await remoteCard.innerText(), /CPU/);
 	const cached = await page.evaluate(async (target) => {

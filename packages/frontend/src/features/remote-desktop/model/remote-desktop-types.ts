@@ -14,8 +14,11 @@ export interface RemoteDesktopDisplay {
 
 export interface RemoteDesktopSession {
 	ticket: string;
-	/** Unix milliseconds in application state. */
-	lastConnectedAt: number;
+	protocol: RemoteDesktopProtocol;
+	host: string;
+	port: number;
+	username: string;
+	password: string;
 }
 
 export type RemoteDesktopState = 'idle' | 'connecting' | 'connected' | 'disconnecting' | 'disconnected' | 'error';
@@ -47,7 +50,7 @@ export interface RemoteDesktopApi {
 
 export interface RemoteDesktopPeer {
 	readonly element: HTMLElement;
-	connect(ticket: string): void;
+	connect(session: RemoteDesktopSession, display: RemoteDesktopDisplay): void;
 	resize(display: RemoteDesktopDisplay): void;
 	focus(): void;
 	setTouchMode(mode: RemoteTouchMode): void;

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 	import { ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiFormField, UiInput } from '@/foundation/ui';
-	import { useFeedback } from '@/shared/feedback/public';
+	import { UiButton, UiFormField, UiInput, UiSettingsGroup } from '@/foundation/ui';
+	import { useFeedback, useFeedbackMessage } from '@/shared/feedback/public';
 	import { useAuthenticatedViewScope } from '@/shared/session/public';
 	import { BACKUP_MAX_FILE_BYTES } from '@nexus-terminal/shared/system/backups/values';
 	import { BackupRequestFailure } from '../model/backup-types';
@@ -16,10 +16,22 @@
 	const importPassword = ref('');
 	const importFile = ref<File | null>(null);
 	const importInput = ref<HTMLInputElement | null>(null);
+	let exportFailureCause: unknown;
+	let importFailureCause: unknown;
 	const exportMessage = ref('');
 	const exportSuccess = ref(false);
 	const importMessage = ref('');
 	const importSuccess = ref(false);
+	useFeedbackMessage(
+		() => exportMessage.value,
+		() => (exportSuccess.value ? 'success' : 'error'),
+		() => exportFailureCause,
+	);
+	useFeedbackMessage(
+		() => importMessage.value,
+		() => (importSuccess.value ? 'success' : 'error'),
+		() => importFailureCause,
+	);
 	const view = useAuthenticatedViewScope({
 		available: () => props.active,
 
@@ -73,6 +85,7 @@
 		} catch (cause) {
 			if (view.isCurrent(signal)) {
 				exportSuccess.value = false;
+				exportFailureCause = cause;
 				exportMessage.value = failureMessage(cause);
 			}
 		}
@@ -86,6 +99,7 @@
 			return;
 		}
 		if (!file || file.size < 1 || file.size > BACKUP_MAX_FILE_BYTES) {
+			importFailureCause = undefined;
 			importMessage.value = t('settings.backup.invalidInput');
 			importSuccess.value = false;
 			return;
@@ -111,6 +125,7 @@
 		} catch (cause) {
 			if (view.isCurrent(signal)) {
 				importSuccess.value = false;
+				importFailureCause = cause;
 				importMessage.value = failureMessage(cause, true);
 			}
 		}
@@ -126,14 +141,9 @@
 </script>
 
 <template>
-	<section class="overflow-hidden rounded-xl border border-border bg-card shadow-sm" data-backup-settings>
-		<h2 class="border-b border-border bg-header/60 px-6 py-4 text-lg font-semibold text-foreground">
-			{{ t('settings.category.dataManagement') }}
-		</h2>
-		<div class="space-y-8 p-6">
-			<section>
-				<h3 class="mb-2 text-base font-semibold text-foreground">{{ t('settings.backup.title') }}</h3>
-				<p class="mb-4 max-w-3xl text-sm text-text-secondary">{{ t('settings.backup.description') }}</p>
+	<section class="settings-surface" data-backup-settings>
+		<div class="ui-settings-grid">
+			<UiSettingsGroup :title="t('settings.backup.title')" icon="fa-solid fa-file-export" tone="warning">
 				<form class="space-y-3" data-backup-export @submit.prevent="exportBackup">
 					<UiFormField
 						:label="t('settings.backup.currentPassword')"
@@ -165,32 +175,37 @@
 							></template>
 							{{ backup.busy ? t('common.loading') : t('settings.backup.export') }}
 						</UiButton>
-						<p
-							v-if="exportMessage"
-							:class="exportSuccess ? 'text-success' : 'text-error'"
-							class="text-sm"
-							role="status"
-						>
-							{{ exportMessage }}
-						</p>
 					</div>
 				</form>
-			</section>
-			<section class="border-t border-border/60 pt-6">
-				<h3 class="mb-2 text-base font-semibold text-foreground">{{ t('settings.backup.import') }}</h3>
-				<p class="mb-4 max-w-3xl text-sm text-text-secondary">{{ t('settings.backup.importDescription') }}</p>
+			</UiSettingsGroup>
+			<UiSettingsGroup :title="t('settings.backup.import')" icon="fa-solid fa-file-import" tone="info">
 				<form class="space-y-3" data-backup-import @submit.prevent="importBackup">
-					<UiFormField :label="t('settings.backup.backupFile')" for-id="backup-import-file" class="max-w-xl">
+					<UiFormField :label="t('settings.backup.backupFile')" for-id="backup-import-file">
 						<input
 							id="backup-import-file"
 							ref="importInput"
 							type="file"
-							class="block w-full min-w-0 overflow-hidden rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+							class="sr-only"
 							accept=".nexus-backup,application/octet-stream"
 							required
 							:disabled="backup.busy || backup.blocked"
 							@change="selectFile"
 						/>
+						<div class="flex min-w-0 flex-wrap items-center gap-2">
+							<UiButton
+								type="button"
+								appearance="soft"
+								tone="neutral"
+								:disabled="backup.busy || backup.blocked"
+								@click="importInput?.click()"
+							>
+								<template #leading><i class="fa-solid fa-folder-open" aria-hidden="true"></i></template>
+								{{ t('settings.backup.chooseFile') }}
+							</UiButton>
+							<span class="min-w-0 truncate text-xs text-text-secondary">
+								{{ importFile?.name || t('settings.backup.noFileSelected') }}
+							</span>
+						</div>
 					</UiFormField>
 					<UiFormField
 						:label="t('settings.backup.backupPassword')"
@@ -222,17 +237,9 @@
 							></template>
 							{{ backup.busy ? t('common.loading') : t('settings.backup.import') }}
 						</UiButton>
-						<p
-							v-if="importMessage"
-							:class="importSuccess ? 'text-success' : 'text-error'"
-							class="text-sm"
-							role="status"
-						>
-							{{ importMessage }}
-						</p>
 					</div>
 				</form>
-			</section>
+			</UiSettingsGroup>
 		</div>
 	</section>
 </template>

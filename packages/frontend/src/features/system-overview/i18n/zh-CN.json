@@ -17,7 +17,10 @@
     },
     "diagnostics": {
       "title": "宿主诊断",
+      "description": "进程、数据库与采集时刻的只读快照。",
       "failed": "无法读取宿主诊断，请刷新重试读取。",
+      "failedShort": "读取失败",
+      "ready": "读取正常",
       "runtime": "运行时",
       "uptime": "运行时长",
       "resident": "驻留内存",

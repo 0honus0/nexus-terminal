@@ -5,7 +5,7 @@
 	import { readStoredValue, stringStorageCodec, useDeviceCapabilities, writeStoredValue } from '@/foundation/browser';
 	import { useDraggablePosition, useResizeHandle } from '@/foundation/interaction';
 	import { remoteDesktopApi } from '../api/remote-desktop-api';
-	import { createGuacamoleDesktop } from '../adapters/guacamole-desktop';
+	import { createBrowserDesktop } from '../adapters/browser-desktop';
 	import { createRemoteDesktopController } from '../model/remote-desktop-controller';
 	import type {
 		RemoteDesktopConnection,
@@ -49,7 +49,7 @@
 	const emit = defineEmits<{
 		close: [];
 		sizeChange: [size: { width: number; height: number }];
-		attempted: [connectionId: number, lastConnectedAt: number];
+		connected: [connectionId: number];
 	}>();
 	const { t } = useI18n();
 	const device = useDeviceCapabilities();
@@ -87,7 +87,7 @@
 	let viewRevision = 0;
 	const controller = createRemoteDesktopController({
 		api: remoteDesktopApi,
-		createPeer: createGuacamoleDesktop,
+		createPeer: createBrowserDesktop,
 
 		onState(next, failure) {
 			state.value = next;
@@ -104,8 +104,8 @@
 			}
 		},
 
-		onAttempt(id, lastConnectedAt) {
-			emit('attempted', id, lastConnectedAt);
+		onConnected(id) {
+			emit('connected', id);
 		},
 	});
 	const unregisterSession = registerAuthenticatedSessionOwner('remote-desktop-modal', (event) => {
@@ -759,11 +759,6 @@
 	}
 
 	.remote-display-container :deep(canvas) {
-		/* guacamole-common-js writes `z-index: -1` inline on every layer canvas. Without an
-       important override the connected session can render behind this surface's black
-       background, producing a green Connected state with no visible remote image. Keep
-       the layers inside this isolated display stacking context so they cannot cover the
-       modal header, footer, or resize affordance. */
 		z-index: 1 !important;
 	}
 </style>

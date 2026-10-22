@@ -28,29 +28,44 @@ B5.2 只读步骤审计在原隔离 `features/agent/next` API/Controller/DEV vie
 
 Host Key管理归features/connections：model/host-key-types拥有独立Summary/Draft，host-key-mapper逐字段映射，api/host-keys-api消费Shared严格codec并核对确认响应的host/port/fingerprint；composables/use-host-key-management拥有弹窗局部状态，不建跨页面缓存；HostKeyManagementModal从正式Connections工具栏打开。它不依赖连接凭据表示。握手确认交互由 connections 的 model/host-key-trust 通过 public 暴露，消费独立 HostKeyTrustRequest；WorkspaceSocket 将 Shared challenge 白名单转成本地错误，RuntimeSession 在原建连任务中等待确认并重试，每个 endpoint 每次仅确认一次，取消保留标签且不后台重试；批量打开的确认串行排队，前端私有等待上限64项，排队取消立即解除 Session 等待，原队列继续追踪且不再弹出失效确认。关闭原 Session 撤销确认 signal；确认回执未知只读核对，不重放写入。非组件翻译经 shared/i18n 的应用安装能力读取，不反向引用 app。
 
-Connections的应用Summary/Draft/Controller/回执归model/connection-types，wire转换归connection-mapper；connections-api严格消费Shared并核对ID、原版本+1、导入回执数量/唯一ID，connection-test-api独立消费Remote测试安全状态。Store唯一拥有会话/revision围栏与最近连接毫秒缓存，use-connection-editor持编辑快照/安全凭据版本和独立保存，use-connection-management持批量/确认/测试/导出，connection-script是无副作用解析。创建复用单项import事务，不拼接两次写入；import可创建的Tags/Proxy/Key通过已有公开能力刷新目录，读取失败不改变原提交类别。跨功能只消费Connections public的应用类型和窄Store能力，不公开裸transport。批量编辑器延续旧版端口／身份／高级分区卡片，高级组默认折叠；配置与凭据模式仍按新接口各自提交，UI 折叠不改变各连接原版本与串行失败语义。
+Connections的应用Summary/Draft/Controller/回执归model/connection-types，wire转换归connection-mapper；connections-api严格消费Shared并核对ID、原版本+1、导入回执数量/唯一ID，connection-test-api独立消费Remote测试安全状态。Store唯一拥有会话/revision围栏与服务端连接列表投影，lastConnectedAt直接消费服务端毫秒/null，不保留本地最近记录或markConnected写入，use-connection-editor持编辑快照/安全凭据版本和独立保存，use-connection-management持批量/确认/测试/导出，connection-script是无副作用解析。创建复用单项import事务，不拼接两次写入；import可创建的Tags/Proxy/Key通过已有公开能力刷新目录，读取失败不改变原提交类别。跨功能只消费Connections public的应用类型和窄Store能力，不公开裸transport。批量编辑器延续旧版端口／身份／高级分区卡片，高级组默认折叠；配置与凭据模式仍按新接口各自提交，UI 折叠不改变各连接原版本与串行失败语义。
 
 Workspace复制/移动/归档的完整传输职责归 runtimes/workspace/adapters/transfer-adapters；capabilityAdapters只装配上传及该适配器。各任务只保留路径、原附件能力、进度、确认状态与期限，不缓存归档密码。应用请求/任务/失败仍唯一归 features/transfers/model/transfer-types，复用失败统一为TransferFailure；独立服务器HTTP任务归server-transfers-api、server-transfer-types/mapper及serverTransfers.store：Shared wire严格解码后转独立应用对象，不借用Workspace任务授权。
 
 正式Agent的Registry消费归`api/registry-api`与`api/management-request`；后者复用`client/http/json-client`，只持有Agent安全失败与协议预算，不持有认证状态。`model/registry-types`拥有独立应用对象，`registry-mapper`逐字段投影并将秒转为毫秒；状态卡片`settings/ModelRegistrySettings`独立安装在设置页，不依赖旧聚合settings加载成功。Provider编辑器的模型建议也经此入口；旧Registry Envelope/CSRF和Provider管理写接口已删除，不新增新协议到旧响应的兼容包装。Host/SDK已消费当前Shared Provider/模型目录，行为单列验收。
 
-正式执行设置归 `api/execution-api`、`model/execution-types`/`execution-mapper`、`composables/use-execution-settings` 和 `settings/ExecutionSettings`。Shared 持完整响应 codec、有限 profile/模型容量；mapper 将 tools 数组转本地可编辑文本，写入显式反向投影。组件复用原设置卡片的标题栏、分区与保存按钮样式，独立安装，不消费旧聚合 requestedSettings；模型目录仅投影候选，不借用旧 Provider DTO。
+正式执行设置归 `api/execution-api`、`model/execution-types`/`execution-mapper`、`composables/use-execution-settings` 和 `settings/ExecutionSettings`。Shared 持完整执行额度及响应 codec；mapper 对 limits/hardLimits 保留逐字段双向投影，不再包含独立 Child Profile 或工具名草稿。组件复用原设置卡片的标题栏、分区与保存按钮样式，独立安装，不消费旧聚合 requestedSettings；Subagent 直接继承主 Agent 模型、工具与执行限制；删除 Profile 表单与独立模型目录加载，仅保留公共协调容量和继承说明，不调整其它布局或样式。
 
 正式供应商管理归 `api/provider-management-api`、`model/provider-types`/`provider-mapper`、`composables/use-provider-management` 与 `settings/ModelProviderSettings`/`ProviderModelEditor`。ProviderDraft独立持原ID/version、可编辑能力与keep/replace/clear凭据意图；只读来源/观察不进入写命令。管理界面不常驻展示协议容量、事务流程或内部配置修订；版本仍由应用状态持有并用于 CAS，必要输入帮助、安全确认与失败恢复按实际操作显示。界面沿用四组分类及提供商添加／编辑 Modal；仅展示层恢复旧交互，管理状态和新协议保持唯一 owner，常规加载自动执行，失败恢复按钮按需展示。管理页独立安装，不从旧settings推导默认/fallback模型；更新按原版本CAS，未知/冲突只读恢复。发现已有Provider后读回观察才开放草稿，测试不自动重放；scope撤销清秘密、结果和确认；提供商弹窗同时绑定设置页及所属分类 active，离开后关闭并清草稿，返回先自动读取。正式Host/SDK已消费Shared；管理、原生运行与插件授权仍分别核对。
 
-App管理和治理归 `api/app-management-api`、`model/app-management-types`/`app-management-mapper`、`use-app-management`/`use-app-governance`；`AppManagementSettings`按真实实例ID装配具备独立授权/策略草稿的`AppGovernanceEditor`，权限在对应实例卡片内展开，选中实例变化通过key销毁原scope。`SafetyNetworkSettings`独立持禁用名单草稿；`AgentTargetPicker`复用Connections public的安全应用目录，保留未解析选择，不因加载失败清空授权。`use-agent-management-operation`统一单一编辑owner的请求互斥、generation、身份撤销和unknown只读围栏，不拥有业务对象。各写入仍按原版本显式投影；禁用名单Unix秒仅在mapper转毫秒。Host/集成/Memory的App读取已分别迁移，不拼旧App对象兼容。
+App管理和治理归 `api/app-management-api`、`model/app-management-types`/`app-management-mapper`、`use-app-management`/`use-app-governance`；`AppManagementSettings`按真实实例ID装配具备独立授权/策略草稿的`AppGovernanceEditor`，权限在对应实例卡片内展开，选中实例变化通过key销毁原scope。`SafetyNetworkSettings`独立持禁用名单草稿；能力项只控制启停，目标范围由全局禁用名单与本次 Run 目标选择收窄，不重复渲染逐项 SSH 目录。`use-agent-management-operation`统一单一编辑owner的请求互斥、generation、身份撤销和unknown只读围栏，不拥有业务对象。各写入仍按原版本显式投影；禁用名单Unix秒仅在mapper转毫秒。Host/集成的App读取已分别迁移，不拼旧App对象兼容；设置中的记忆管理已移除。
 
 Browser管理归browser-api、model/browser-types与browser-mapper及BrowserRuntimeSettings；配置保留原version、只读targets及独立弹窗草稿；卡片编辑仅在保存时提交，取消不写入。分类／设置页可见性经active绑定认证视图scope，失效清理弹窗和晚响应，返回自动重读。URL按Shared规范化后核对完整确认。双端容量归browser-values，持久Adapter独立解码，不引用wire DTO。
 
-AppScopedSettings持有管理卡片自己的App目录/选择和撤销scope，按实例key安装AppIntegrationEditor/AppMemoryEditor，不依赖旧聚合settings或声明名称。集成transport持真实/api/v1/apps命名空间、UUID创建头、CAS/删除正文与完整目录codec；integration-types/mapper持独立配置/文本草稿/目录，use-app-integrations持原修订、确认及未知创建原输入/键。集成列表与添加／编辑 Modal 分离，editorOpen 和草稿归 use-app-integrations；取消清草稿，原版本更新确认后关闭，创建确认后先只读核对。分类／页面 active 撤销旧等待并关闭 Modal，暂时隐藏保留未知创建的原输入／键，身份失效或销毁清除；读取当前列表不证明原创建未提交。原键重放只触发重新读取当前列表，不将首次回执当当前配置。旧MCP/ACP组件和旧API删除，模型调用/Host另行迁移。
+AppIntegrationSettings复用父页useAppManagement目录，默认选择实际nexus.agent实例或首个App，在旧集成标题栏内提供必要的App选择，按实例key安装AppIntegrationEditor。集成transport持真实/api/v1/apps命名空间、UUID创建头、CAS/删除正文与完整目录codec；integration-types/mapper持独立配置/文本草稿/目录，use-app-integrations持原修订、确认及未知创建原输入/键。集成列表保留旧卡片和图标操作栏，添加／编辑、删除确认及发现目录使用Modal；启停复用同一操作owner、当前CAS和凭据保留意图，不另建开关写入状态。editorOpen 和草稿归 use-app-integrations；取消清草稿，原版本更新确认后关闭，创建确认后先只读核对。分类／页面 active 撤销旧等待并关闭 Modal，暂时隐藏保留未知创建的原输入／键，身份失效或销毁清除；读取当前列表不证明原创建未提交。原键重放只触发重新读取当前列表，不将首次回执当当前配置。旧MCP/ACP协议组件和旧API删除，不恢复旧配置字段。
 
-Memory的transport归memory-management-api，独立对象及转换归memory-types/mapper；use-app-memory持offset页及当前审核快照，AppMemoryEditor在对应卡片内展示审核草稿与操作，不另设底部表单。MemoryImportEditor持来源读取/一次性确认及按分配ID的只读恢复，MemorySourcePicker持已发布来源分页与下拉选择；界面不要求手填内部ID，不常驻显示存储修订，CAS仍使用权威读取的原版本。导入完成推进列表本地修订，较早列表返回不能解除刷新围栏。App切换、身份撤销和离页清正文/确认，毫秒不重复放大；Slot组件不持业务写策略。
+Agent 设置不提供记忆管理入口，其专用组件、App 选择 owner、composable、API、mapper/types 与三语文案已删除。后端 Memory/Recall、审核 API、已有数据与备份保留；本次删除不授予执行权限或自动发布候选。
+
+### 对话记忆审核
+
+1. **职责与范围**：当前对话候选由独立 `use-conversation-memory` 持有；`NativeMemoryReview` 展示纯文本卡片及保存/拒绝，Surface 只协调侧栏与任务详情互斥，不自动批准记忆或工具权限。
+2. **子功能与目录**：专用 `api/conversation-memory-api`、`model/conversation-memory-types`/`conversation-memory-mapper`、`composables/use-conversation-memory`、`runtime/NativeMemoryReview.vue`；不恢复设置管理 owner。轮询间隔3秒、只读第一页50条，策略归 composable，协议上限归 Shared。
+3. **依赖方向**：Surface → 展示组件 → composable → API → 通用 management request；仅依赖 Shared 协议和自身显式 mapper，不引用后端私有类型，不共享 NativeRun 写入锁。
+4. **类型与转换**：Shared 解码完整列表/回执，API 校验 App、候选状态、来源、分页和审核回执关联，mapper 白名单转为独立 ConversationMemory；审核命令捕获原 id/App/content/version，禁止对象透传或自动递增猜测回执。
+5. **入口与安装**：Surface 按 thread.id 挂载专用 owner；侧栏关闭仅隐藏组件，不停止当前可见对话的新候选发现。复用原任务栏样式和窄屏浮层，新候选展开但不抢焦点，标题栏可重开。
+6. **数据、事务与并发**：持久化及人工 CAS 仍归后端；背景读取可被交互取代且不置 busy，写入串行。独立 writeBlocked 围栏阻止自动读取解除未知/冲突，显式重读成功后才能恢复；不重放失败审核。
+7. **生命周期与失败**：按 active、KeepAlive、身份、document.visibilityState、卸载停用请求展示及定时器。切换对话销毁原 owner，事件携带 threadId 复核；晚结果由 operation generation 拒绝。读取失败保留当前卡片并停止自动轮询，使用统一 Toast 和显式核对入口；未知写入在撤销时保留恢复要求。
+8. **当前能力与验收**：只覆盖当前对话 Root/Child 候选及 publish/reject，不含编辑、全 App 管理或撤销 UI。超过50条提示逐批处理；静态检查与行为验收分别记录于 testing，后台/切换/多窗口竞争与真实模型提案留远程验证。
 
 Artifact正式库归artifact-management-api、artifact-types/mapper、use-artifact-library与files/ArtifactLibraryView；由浮窗文件入口安装，目录/统计/写入分别持scope。ArtifactLibraryView只持固定页头、存储概览、筛选、虚拟列表、保留/删除/下载及按选中App清理的展示，桌面保持单行筛选，窄屏将搜索与类型/App/状态分行，offset分页、CAS和有界下载归use-artifact-library；文件库不常驻上传或技术引用表单。两步上传、完整有界字节校验和Blob URL归ArtifactPicker实际owner；NativeInputArtifacts持当前会话附件的版本读取、显式关联、紧凑胶囊及未知结果围栏。ArtifactPicker消费同一新transport和上层目录提供的App名称，未知来源显示产品文案而不向普通选择界面暴露appId，独立持私有上传意图、恢复与offset；文件选择保留原多选，容量由当前已选数量裁剪，use-artifact-picker串行上传并在每个异步阶段核对原App／视图。逐个确认后加入选择，首项失败即停止后续，未知只恢复当前预留，不自动重放；前面已确认项仍保留且使目录失效。Conversation/Host附件使用ManagedArtifact，不拼旧Artifact DTO。
 
-插件正式管理归plugin-management-api、plugin-data-api、plugin-types/mapper、use-plugin-management以及PluginManagementSettings/PluginRepositorySettings/PluginDataEditor；设置父页仅装配独立卡片，旧聚合settings、假安装进度与旧管理transport已删除。发布者version、包version、安装revision独立；数据原意图/operationId在未知后保持不变。快照仅在已准备升级的draining状态读取；普通单键读取与已移除数据清除不借用迁移快照。
+插件正式管理归plugin-management-api、plugin-data-api、plugin-types/mapper、use-plugin-management以及PluginManagementSettings/PluginRepositorySettings/PluginDataEditor；AgentSettingsPanel安装唯一普通插件管理owner，共供市场候选确认与App卡片卸载，安装目录确认刷新后由唯一App列表owner重新读取。标题栏保留刷新仓库，安装与升级仅从默认/第三方仓库选择插件，不提供本地包上传；市场按来源展示所有者、折叠、地址复制和紧凑插件卡片；官方应用徽标仅在默认目录发布者与实际安装签名身份匹配时显示，不以定义名冒充官方来源。旧聚合settings、假安装进度与旧管理transport已删除。发布者version、包version、安装revision独立；App卡片展示definitionVersion而非数字CAS。卸载确认复用当前排空/取消语义，数据清理独立确认，不虚构原子卸载删除。数据原意图/operationId在未知后保持不变。快照仅在draining状态读取；普通单键读取与已移除数据清除不借用迁移快照。
 
-官方仓库卡片首次安装的推荐读取／安装归 use-agent-onboarding，AgentOnboardingModal 只展示原确认界面；总开关不要求安装可选官方插件。安装成功才请求唯一 Execution owner 修改总开关，不自动授予插件权限；离页撤销回调，未知安装不自动重放。PluginRepositorySettings 只持仓库 CAS 与目录读取，来源失败分别处理；目录选包与信任发布者经事件交给 use-plugin-management，复用本地选包的候选确认、安装／升级和未知结果围栏，不复制写入 owner。预算与存储复用 QuantityInput；无效输入状态归父级 use-execution-settings，阻止保存旧有效值，显示缩写必须可精确往返。
+AppGovernanceEditor仅展示旧能力抽屉，AppExecutionPolicySettings/Editor恢复独立策略区、App选择与单位/上下文策略卡片。use-app-governance按grants/policy模式只初始化对应资源；二者各持独立版本、操作围栏和active撤销scope，不重复读取或写入另一资源。数量无效状态阻止提交旧有效值；批量能力切换只修改当前声明能力，不隐式删除待显式清理的不可用授权。当前新版无旧运行/审批汇总，不伪造指标，也不在普通卡片平铺创建实例或技术修订。
+
+use-app-management 是设置页 App/定义目录及刷新需求的唯一 owner，接入面板 active；面板仅将插件目录确认变化及 onboarding 成功投影为 reload 意图。两个资源独立排队，忙时合并一次后续读取，失效前读取不能回填；普通写入仍串行、使用原版本，不自动重试；自动目录刷新不解除既有或排队期间新产生的写入失败围栏，保留原入口显式核对。撤销清空目录及排队需求，返回重新读取，读取失败不伪造空列表。
+
+官方仓库卡片首次安装的推荐读取／安装归 use-agent-onboarding，AgentOnboardingModal 只展示原确认界面；总开关不要求安装可选官方插件。安装成功才请求唯一 Execution owner 修改总开关，不自动授予插件权限；离页撤销回调，未知安装不自动重放。PluginRepositorySettings 只持仓库 CAS 与目录读取，来源失败分别处理；目录选包与信任发布者经事件交给 use-plugin-management，复用同一候选确认、安装／升级和未知结果围栏，不复制写入 owner。预算与存储复用 QuantityInput；无效输入状态归父级 use-execution-settings，阻止保存旧有效值，显示缩写必须可精确往返。
 
 descriptor声明的消息容量与真实前端RPC预算同源；父桥在请求解码及响应派发前同时检查descriptor上限，核心子协议继续由各自严格codec限定。
 
@@ -58,9 +73,11 @@ descriptor声明的消息容量与真实前端RPC预算同源；父桥在请求�
 
 ## 3. 依赖方向
 
+通用操作结果由 Feedback 的 useFeedbackMessage 从业务 owner 状态投影到全局 NotificationHost；已识别的网络 cause 不再发布第二份业务错误，原 unknown/refreshRequired 状态保留。通知可携带有稳定范围 key 的具名只读 action，同文案但恢复范围不同的通知不互相替换 action；按钮禁用仍依赖原 owner；关闭通知不改变原状态。useSettingsReloadNotifications 将待核对源聚合为带“重新读取”的常驻 Toast，根卸载后不发布晚结果；各源继续持有原版本及恢复方法，离开后取消注册，不自动重放写入。字段校验、安全确认及实际业务状态不迁移为通用结果 Toast。
+
 Workspace连接事实仍唯一归RuntimeSession.state；LayoutRenderer与SessionSurface将connected/connecting投影给内嵌/浮窗FileManager，LayoutRenderer及SessionSurface→MobileTools同样传入StatusMonitor，connected为组件必填输入。连接中仅渲染紧凑加载行，idle/error/disconnected面板内容留白、不发布旧目录/指标，Files操作scope暂停并撤销旧意图。RuntimeSession在建连失败后保留原因并停止自动派发，foreground自动恢复不越过waitingForRetry；显式重试仍重新核对主机信任与所有权。TerminalView只消费原失败文字，剥离控制字符、限制1000字符后红色输出，与任意键重试提示间空一行；禁用输入时重试键不走远端输入。所有权未知继续原恢复UI，不显示可任意键重试。已连接后的真实文件及采样错误保留原安全映射。中英日文案由各feature持有，无Shared/HTTP变更。
 
-HTTP network-failure持有单一应用安装回调和具名cause分类，JSON/binary/Axios transport仅报告非主动取消的传输失败；App/main通过Feedback安装统一网络Toast，不让client依赖feature或UI。Feedback只对当前可见的同类同文案去重，错误默认常驻、成功/信息/警告仍3秒；关闭后后续失败可再次提示。Agent目录取消自绘浮层、共享操作反馈及连接/偏好/外观的已识别网络失败不重复提示；写入unknown/refreshRequired与原cause/outcome保留，业务拒绝仍使用原安全反馈。NotificationHost统一44px关闭按钮和窄屏容器，不自动重试任何写入，不把网络恢复当作原操作成功。
+HTTP network-failure持有单一应用安装回调和具名cause分类，JSON/binary/Axios transport仅报告非主动取消的传输失败；App/main通过Feedback安装统一网络Toast，不让client依赖feature或UI。Feedback对当前可见的同类同文案去重，并对错误保留15秒短期去重窗口，错误默认常驻、成功/信息/警告仍3秒；关闭通知不解除原业务围栏；去重窗口过后，后续失败可再次提示。Agent目录取消自绘浮层、共享操作反馈及连接/偏好/外观的已识别网络失败不重复提示；写入unknown/refreshRequired与原cause/outcome保留，业务拒绝仍使用原安全反馈。NotificationHost使用按内容收缩、最大340px的仪表盘卡片材质，关闭按钮保留44px点按区且窄屏不溢出，不自动重试任何写入，不把网络恢复当作原操作成功。
 
 app 装配 feature/runtime；feature 通过窄公开能力消费 runtime 和 foundation。跨功能通过公开入口/明确能力，不深层引用私有组件、Store 或实现。foundation 不反向依赖业务。新 Shared 契约按 [SHARED](SHARED.md) 消费，不在前端手写同义 DTO。
 
@@ -80,7 +97,7 @@ Tags的本地类型/mapper/API/Store归features/tags；use-tag-picker持有选�
 
 Targets正式资源请求归`client/targets/target-request`，它消费Shared安全错误、完整预算与已有同源Cookie传输，不持有登录状态。Proxy/SSH Key各自api严格解码集合、创建视图及更新联合；更新校验原ID/version+1，安全错误同时核对HTTP状态。各自model mapper将wire逐字段转为本地Summary，并将独立表单草稿转为Shared写命令；跨功能capabilities引用feature public的应用类型，删除旧Protocol别名。列表最多10,000项，Proxy完整JSON 64MiB、SSH Key 16MiB，拒绝重复ID、非法时间及额外私密字段。
 
-ProxiesView 的错误状态是显示副作用，不再通过 `v-else-if` 卸载最后一次确认的代理列表。错误 alert 与实体行并列；全部写入按钮仍按 Store 的 `needsRefresh` 围栏禁用，View 不重发未知 mutation，也不自行销毁缓存。
+ProxiesView 的错误状态是显示副作用，不再通过 `v-else-if` 卸载最后一次确认的代理列表。错误由全局 Toast 展示，不在实体列表正文重复插入 alert；全部写入按钮仍按 Store 的 `needsRefresh` 围栏禁用，View 不重发未知 mutation，也不自行销毁缓存。
 
 Workspace下载归runtimes/workspace/adapters/download-adapters，正式FileManager通过FilesystemDownloadPort消费；它复用同源有界JSON client，Shared严格解码201票据、有效期与有限安全失败，再显式投影本地{url}。只接收固定相对下载路由和单一ticket参数；目录URL由原connection/workspace/path编码构造，不接受任意服务端导航地址。原附件ACK/socket、生命周期AbortController和调用方signal共同限制派发及晚结果；FileManager失活、卸载或能力替换后不触发anchor。anchor交给浏览器后，文件交付不由Vue状态确认；服务器传输/归档能力已分别迁移，完整页面仍C2-D。
 
@@ -95,6 +112,8 @@ Workspace上传归adapters/upload-adapters，通过capabilityAdapters装配到�
 路由和 app 负责安装功能，view 负责展示和用户交互；异步协调、订阅和资源生命周期由明确 controller/runtime 持有。Agent next 与 Targets next 只在 DEV 路由安装，从 Auth public 消费同一 Access client，传独立 `/__next/api/v1/auth` 基址；正式认证默认 `/api/v1/auth`。基址只选择实际入口，不兼容旧响应。通用 UI 从 foundation/ui 的正式入口消费，功能布局由各业务 owner 负责，不把产品逻辑塞入基础组件。
 
 ## 6. 数据、事务与并发
+
+Connections 的 lastConnectedAt 只来自已严格解码的服务端毫秒/null。Workspace 建连及恢复、桌面 connected 挂钩通过 Connections public 只读刷新，不写入本地时间；恢复已有 SSH 不推进后端成功时间。Store 按连接 ID 取消同项旧刷新，刷新前及发布前撤销旧列表，完整列表发布推进 revision 使较早单项结果失效；身份重置与写入仍沿原 generation/revision 围栏。刷新失败保留旧列表并标记 needsRefresh，下次读取恢复；不把元数据刷新失败变成 SSH/桌面重新建连。没有 recent Map、markConnected 或旧时间兼容分支。
 
 桌面尺寸的本地编辑归RemoteDesktopModal，个人偏好写入仍归Preferences；App装配单次保存状态与有限失败反馈。保存期间同时禁用尺寸输入和拖动，避免两个完整偏好快照共用旧版本，以及较早响应回填正在编辑的尺寸；不自动以新版本重放失败写入。身份变化后旧保存不向新用户发布失败提示，已派发写入仍由原Preferences实例追踪。
 
@@ -140,7 +159,7 @@ WorkspaceSocket的NXW1解码与协议版本已消费Shared remote/workspace，�
 
 核心配置transport归Preferences的api/configuration-api，model/configuration-mapper将Shared完整配置转换成本地CoreConfiguration；Security通过Preferences public消费，不深层引用私有实现。CAPTCHA/IP面板由use-security-configuration持有各自原快照和草稿，GET/settings读取已保存配置，公共GET/settings/captcha只代表运行时快照。网络写入保留原快照其他policy字段及secret keep；CAPTCHA使用专项PUT。冲突或unknown阻止下一次写入，必须先只读刷新并重新核对。黑名单独立transport/controller归Security，消费Shared Access分页/解除，时间在边界转毫秒，confirm等待也受generation保护。
 
-核心Settings已使用Shared preferences/configuration完整配置和expectedVersion，CAPTCHA 使用 keep/clear/replace 且只读取 hasSecret；界面按已启用供应商展开字段和帮助，切换／停用清未提交密钥；配置版本仍留状态 owner，重启提示按 requiresRestart 显示。HTTP 失败/断流/unknown 后只读核对，不自动提交新版本；保存后当前认证与监控仍使用启动快照，重启才生效。布局等个人设置使用独立 preferences 契约，不能拼进核心 policy。
+核心Settings已使用Shared preferences/configuration完整配置和expectedVersion，CAPTCHA 使用 keep/clear/replace 且只读取 hasSecret；界面按已启用供应商展开字段和帮助，切换／停用清未提交密钥；配置版本仍留状态 owner。IP与监控保存成功提示已生效，监控展示实际effectiveMonitoring，不消费全局requiresRestart制造重启告警；CAPTCHA/Passkey站点仍按requiresRestart提示冷配置待激活。HTTP 失败/断流/unknown 后只读核对，不自动提交新版本；Dashboard重新激活时读取新生效周期，其他客户端没有配置推送保证。布局等个人设置使用独立 preferences 契约，不能拼进核心 policy。
 
 FilesystemBrowser独立持有requestedPath与已确认path；新导航立即更新意图，后台完成触发refresh时读取该目标，仍由loadToken保护晚结果。成功后使用实际listing.path，当前读取失败恢复到已确认path；旧失败不覆盖新意图。FileManager读取已加载目录时保留列表节点与aria-busy，首次读取才用加载画面替换列表；后台刷新不在pointerdown/click之间卸载交互目标，确认快照到达后再替换条目。未缓存的读取超过150ms才显示独立、不拦截指针的中央spinner覆盖层，不卸载列表；缓存命中同步展示，不置loading。切换终端目录按钮等待browser.loading结束，始终消费已确认的当前路径。
 
@@ -181,14 +200,14 @@ F1-A/B源码已覆盖正式setup/password/status/logout、TOTP/Passkey登录、�
 
 ## Dashboard 与认证资源生命周期
 
-1. **职责与范围**：Dashboard持有本页读取和轮询；认证变化由App同步分发，Workspace注册表负责原会话资源收尾，不由App异步加载后清空届时的注册表。
+1. **职责与范围**：Dashboard持有本页读取、连接状态投影、类型分区、搜索/标签/排序和轮询；连接状态默认消费服务端 `lastConnectedAt` 降序，独立最近连接区块不再维护，最近活动也不再由Dashboard读取。认证变化由App同步分发，Workspace注册表负责原会话资源收尾，不由App异步加载后清空届时的注册表。
 2. **子功能与目录**：页面读取与相对时间留app/pages/dashboard；Workspace关闭、挂起恢复围栏和关闭等待留runtime/session；不为撤销建立另一份资源表。
 3. **依赖方向**：App消费Auth和shared/session公开能力；已加载的Workspace注册表自行注册认证撤销，无资源时不为清理加载运行时。Header仅发起登出。
-4. **类型与转换**：Connections与Audit均消费Shared毫秒时间，经各自mapper显式投影；Dashboard格式函数只消费应用毫秒，不猜单位。
+4. **类型与转换**：Connections消费Shared毫秒时间并经mapper显式投影；Dashboard格式函数只消费应用毫秒，不猜单位。
 5. **入口与安装**：正式Dashboard经Router/KeepAlive安装；认证watch同步处理中间失效状态，同用户重新登录也撤销原实例。注册表加载时安装其认证owner。
 6. **数据、事务与并发**：页面每次刷新绑定原AbortController，停用或新刷新使旧结果和finally失效；注册表撤销同步移出原实例，再等待各自关闭，不让旧关闭修改新标签。
-7. **生命周期与失败**：页面停用取消读取、计时器和监控配置；恢复显式读回。Workspace批量关闭覆盖暂被替换标签隐藏的原实例，以及已移出标签但仍在关闭的任务；独立失败不跳过其它实例，unknown不冒充已释放。Session.dispose共享完整收尾Promise；挂起恢复在异步交付点核对原注册代次和实例，关闭替换标签不恢复旧标签。
-8. **当前能力与验收**：上述链路已实现；正式App/Router/Dashboard有限整页、同用户同tick认证替换、受控Workspace关闭/恢复竞态及真实SSH资源HTTP回退已有[当前证据](https://github.com/0honus0/nexus-terminal/blob/558c4b343ba0ef2316309d2e164b9c6075c47efc/doc/testing/E2E.md#f1-c2-d-整页与认证生命周期首批)。完整Workspace整页、跨业务撤销及桌面扩大交互仍待C2-D，不由本子集宣称阶段完成。
+7. **生命周期与失败**：页面停用取消在途读取、计时器和监控配置，但保留最后一次成功资源结果；恢复先显示缓存并按生效周期决定是否刷新，旧请求晚到不覆盖。Workspace批量关闭覆盖暂被替换标签隐藏的原实例，以及已移出标签但仍在关闭的任务；独立失败不跳过其它实例，unknown不冒充已释放。Session.dispose共享完整收尾Promise；挂起恢复在异步交付点核对原注册代次和实例，关闭替换标签不恢复旧标签。
+8. **当前能力与验收**：上述链路已实现；桌面 1100px 起为一屏卡片布局，连接按 SSH/RDP/VNC 分区且仅显示实际存在的类型，同一类型分区内卡片等宽等高并在剩余高度内滚动；SSH 为 188px，RDP/VNC 为 76px，上次连接与资源更新时间在状态下方以“相对时间 | 刷新时刻”紧凑展示，桌面类型不再渲染底部资源占位区。窄屏自然滚动且无页面级横向溢出。正式App/Router/Dashboard有限整页、同用户同tick认证替换、受控Workspace关闭/恢复竞态及真实SSH资源HTTP回退已有[当前证据](https://github.com/0honus0/nexus-terminal/blob/558c4b343ba0ef2316309d2e164b9c6075c47efc/doc/testing/E2E.md#f1-c2-d-整页与认证生命周期首批)。完整Workspace整页、跨业务撤销及桌面扩大交互仍待C2-D，不由本子集宣称阶段完成。
 
 ## Preferences 后续对接边界
 
@@ -219,13 +238,13 @@ B8跨App的plugin-api/agent-dispatcher/SDK父页已改用Shared plugins/intent-*
 ### 挂起目录与恢复边界
 
 1. **职责与范围**：ssh-suspend持管理目录、命名/终止/移除与日志操作；Workspace runtime持原终端、挂起移交与独立恢复ACK，不在View判断所有权。
-2. **子功能与目录**：features/ssh-suspend的api负责HTTP、model持本地类型/mapper与具名失败，composables持共享目录和轮询；runtime的suspend适配器与Model转换挂起协议，Session持实际附件/租约。
+2. **子功能与目录**：features/ssh-suspend的api负责HTTP及独立目录WS、model持本地类型/mapper与具名失败，composables持共享目录和引用计数订阅；App持登录级订阅，runtime的suspend适配器与Model转换挂起协议，Session持实际附件/租约。
 3. **依赖方向**：View→应用controller→HTTP transport→Shared；runtime跨功能只经ssh-suspend public。同一会话/附件的多步流程绑定原socket，不隐式重连另取权限。
 4. **类型与转换**：Shared remote/suspend持完整HTTP/WS成功/安全失败/有限值/容量和codec，协议对象显式转换本地应用对象；目录ISO时间与租约毫秒分别校验，不猜单位。管理HTTP和挂起WS的旧DTO及转导出已删除；Shared完整契约经严格codec进入独立本地对象。普通连接保留replayedBytes，挂起回执只核对真实baseline，不补造该字段。
-5. **入口与安装**：正式挂起面板消费五管理HTTP；mark/prepare/commit/resume/resumeAck/renew/history与事件经原WorkspaceSocket；HTTP与WS由Backend同一WorkspaceService持权威。
+5. **入口与安装**：App 登录后经 public 安装 `/ws/suspended-sessions` 共享订阅，面板只增加/释放订阅引用，不启动周期 HTTP；目录完整快照带连接内单调 revision，首次/重连重建快照基线，浏览器隐藏关闭、可见/网络恢复重连，1–30秒退避和45秒心跳期限有明确 owner。显式核对及操作后确认继续消费管理HTTP；mark/prepare/commit/resume/resumeAck/renew/history与事件经原WorkspaceSocket；HTTP与WS由Backend同一WorkspaceService持权威。推送先使旧HTTP结果失效，旧写入成功回执不得覆盖较新快照，自动快照不解除未知写入围栏。
 6. **数据、事务与并发**：不新增存储；目录只读刷新与写入结果分开，旧读取不能覆盖确认的命名/移除。未知写入保留保护，不自动重发；单条未知不由无关记录成功解除。
-7. **生命周期与失败**：面板卸载/停用/会话替换撤销原确认和交付；已派发结果保留未知。恢复先消费历史并校验原资源/租约，再独立ACK，成功后开放输入；ACK未知阻止重放。取消不跳过原资源清理，失败使用有限三语提示。
-8. **当前能力与验收**：管理五HTTP、独立应用mapper、会话epoch/读取generation/单记录写入保护已实现；poll不解除unknown，用户显式读回只清除该次读取之前的保护。Panel的KeepAlive停用/卸载/注销撤销原确认、请求及晚交付；store另持下载取消。正式Panel有限受控挂载与真实后端HTTP/OpenSSH专项归testing。mark/prepare/commit与独立恢复ACK/续租/历史、有限WS事件已接Shared。Session先核对baseline字节与原资源，再独立ACK；ACK释放的live字节保留累计offset。续租绑定原socket并串行，代次失效阻断晚结果。历史读取绑定原附件并有界解码，失败不推进本地成功状态；显式reset不吞在途读取失败。已标记标签关闭只detach，不发终止Workspace；在途写入关闭保留未知并追踪原任务。源码与专项证据归testing，完整App/页面与扩大故障组合仍C2-D。
+7. **生命周期与失败**：面板卸载/停用/会话替换撤销原确认和交付；已派发写入结果保留未知，目录与日志只读失败按原有限 code 显示读取失败，不借传输 unknown 宣称写入未知。Store 保留列表、具名 cause 和写入围栏；Panel 使用共享反馈 Toast，读取网络 cause 沿全局通知去重，写入未知不被网络去重隐藏。搜索栏保留只读核对按钮，关闭 Toast 不解除保护。恢复先消费历史并校验原资源/租约，再独立ACK，成功后开放输入；ACK未知阻止重放。取消不跳过原资源清理，失败使用有限三语提示。
+8. **当前能力与验收**：管理五HTTP、独立应用mapper、会话epoch/读取generation/单记录写入保护已实现；自动快照不解除unknown，用户显式读回只清除该次读取之前的保护。Panel的KeepAlive停用/卸载/注销撤销原确认、请求及晚交付；store另持下载取消。正式Panel有限受控挂载与真实后端HTTP/OpenSSH专项归testing。mark/prepare/commit与独立恢复ACK/续租/历史、有限WS事件已接Shared。Session先核对baseline字节与原资源，再独立ACK；ACK释放的live字节保留累计offset。续租绑定原socket并串行，代次失效阻断晚结果。历史读取绑定原附件并有界解码，失败不推进本地成功状态；显式reset不吞在途读取失败。已标记标签关闭只detach，不发终止Workspace；在途写入关闭保留未知并追踪原任务。源码与专项证据归testing，完整App/页面与扩大故障组合仍C2-D。
 
 ### Workspace 监控与 Docker
 
@@ -245,8 +264,8 @@ B8跨App的plugin-api/agent-dispatcher/SDK父页已改用Shared plugins/intent-*
 3. **依赖方向**：Dashboard → system-overview public → controller/API → 同源 JSON client 与 Shared；不借旧 Protocol 或存储对象。
 4. **类型与转换**：Shared 严格解码完整成功/安全失败，API 校验 HTTP 状态和原主机关联；mapper 白名单投影本机摘要及嵌套 SSH 样本。内存 MiB、磁盘 KiB，checkedAt/timestamp 毫秒。等待状态独立于协议，不伪造服务端时间。
 5. **入口与安装**：Dashboard 消费本机 GET /api/v1/system/status 与 SSH 单项 GET /api/v1/system/ssh-resources/:connectionId；后端集合入口仍存在，当前无前端消费者，不预留裸 API。
-6. **数据、事务与并发**：页面按规范 host/port 分组，最多四个独立请求，每个 worker 两次请求间等待 200ms；后端可回退同主机其他连接，返回 ID 不必等于查询 ID，但 key、host、port 必须对应原主机。无浏览器持久缓存，不修改后端共享采样 TTL。
-7. **生命周期与失败**：本机/远端各自 AbortController 和请求实例；停用/隐藏/卸载/会话重置使旧结果与 finally 失效。失败不显示原始异常，失败后的旧样本不标作实时；取消请求不证明共享远端采样停止。
+6. **数据、事务与并发**：页面按规范 host/port 分组，最多四个独立请求，每个 worker 两次请求间等待 200ms；后端可回退同主机其他连接，返回 ID 不必等于查询 ID，但 key、host、port 必须对应原主机。控制器在页面生命周期内保留最后一次成功结果以吸收 KeepAlive 往返，不写浏览器持久存储，也不修改后端共享采样 TTL。
+7. **生命周期与失败**：本机/远端各自 AbortController 和请求实例；请求及调度入口同时核对 Dashboard 活动、已提交路由与文档可见性，路由同步 watch 先撤销再等待 KeepAlive 停用；停用/隐藏/卸载/会话重置使旧结果与 finally 失效。失败不显示原始异常，失败后的旧样本不标作实时；取消请求不证明共享远端采样停止。
 8. **当前能力与验收**：本批实施与检查状态见当前方案及 testing；整体页面与桌面按各阶段验收，监控配置有独立验收，不由HTTP子项替代。
 
 ## 监控核心配置
@@ -263,13 +282,13 @@ B8跨App的plugin-api/agent-dispatcher/SDK父页已改用Shared plugins/intent-*
 ### 桌面前端（RDP/VNC）
 
 1. **职责与范围**：features/remote-desktop 持有桌面意图、有限应用状态和窗口；Backend 保有票据授权、目标凭据与真实资源配额，浏览器不重建其权威。
-2. **子功能与目录**：model/remote-desktop-types 唯一持有应用连接、显示、会话、失败与窄 peer 契约；remote-desktop-controller 协调签发/代次/原 peer，mapper 持有协议转换。api/remote-desktop-api 仅签发；adapters 持有 Guacamole、输入、剪贴板和原生监听。Modal 持窗口、全屏、软键盘 UI；launcher 白名单保存打开意图。
-3. **依赖方向**：App/Connections 经 public 打开 launcher/Modal；Modal 装配 controller、API 和 adapter，controller 不引入 Vue、Guacamole 或 HTTP。技术实现不借用 View 或其他业务私有状态；public 不导出裸 transport。
-4. **类型与转换**：Shared remote/desktop 完整成功/安全失败和 1 KiB 响应预算由 API 严格解码并核对 HTTP 状态；mapper 显式投影独立应用会话，Unix 秒转毫秒。App attempted 消费毫秒，不重复换算。query 逐字段构造并按 Shared 范围校验；第三方错误正文只留内部 cause，不进入 UI/日志。
-5. **入口与安装**：沿正式 Modal 和 App 入口替换旧 DTO，不新增 DEV 替代页。controller 只将票据交原 peer，经同源 /ws/remote-desktop 发送；认证变化由公开会话生命周期撤销，KeepAlive 停用关闭且激活不自动重放旧意图。
-6. **数据、事务与并发**：本功能无本地 SQL；请求 AbortController 与 generation 限定原意图，晚票据不发布最近尝试、不打开 WS，旧 callback/finally 不覆盖新实例。窗口尺寸持久化由个人 Preferences 消费，源码已迁移，完整交互仍待验。
-7. **生命周期与失败**：显式重连取得新票据，取消/断流/未知不自动重试。close 逐项清理并保留失败，清理未确认阻止原 controller 再开；关闭 GUI 不证明远端程序停止。Guacamole 精确版本补丁与监听局部代理见专题架构；剪贴板私有 1 MiB、最多四条并发接收流、VNC 文本单次 64 KiB，超限拒绝而非截断。
-8. **当前能力与验收**：原画面、键鼠、软键盘、触控模式、剪贴板、尺寸、最小化和全屏入口保留。源码/静态、本机真实桌面与受控时序证据分别归 testing；完整页面及扩大故障组合仍 C2-D，RemoteApp/Windows 的本轮外部操作不借历史验收。
+2. **子功能与目录**：model/remote-desktop-types 唯一持有应用连接、显示、会话、失败与窄 peer 契约；remote-desktop-controller 协调签发/代次/原 peer，mapper 持有协议转换。api/remote-desktop-api 仅签发；adapters 按协议懒加载 noVNC / IronRDP WASM，持有输入、剪贴板和原生监听。Modal 持窗口、全屏、软键盘 UI；launcher 白名单保存打开意图。
+3. **依赖方向**：App/Connections 经 public 打开 launcher/Modal；Modal 装配 controller、API 和 adapter，controller 不引入 Vue、厂商 SDK 或 HTTP。技术实现不借用 View 或其他业务私有状态；public 不导出裸 transport。
+4. **类型与转换**：Shared remote/desktop 完整成功/安全失败和 64 KiB 响应预算由 API 严格解码并核对 HTTP 状态；mapper 逐字段投影 ticket/protocol/host/port/username/password 的独立内存会话。App connected 事件经 Connections public 只读刷新服务端连接元数据，不消费签发时间。query 逐字段构造并按 Shared 范围校验；第三方错误正文只留内部 cause，不进入 UI/日志。
+5. **入口与安装**：沿正式 Modal 和 App 入口替换旧 DTO，不新增 DEV 替代页。controller 将内存会话交原 peer，WS URL 仅含票据；凭据不进入 URL、日志或本地存储；认证变化由公开会话生命周期撤销，KeepAlive 停用关闭且激活不自动重放旧意图。
+6. **数据、事务与并发**：本功能无本地 SQL；请求 AbortController 与 generation 限定原意图，晚票据不发布连接事件、不打开 WS，旧 callback/finally 不覆盖新实例。窗口尺寸持久化由个人 Preferences 消费，源码已迁移，完整交互仍待验。
+7. **生命周期与失败**：显式重连取得新票据，取消/断流/未知不自动重试。close 逐项清理并保留失败，清理未确认阻止原 controller 再开；关闭 GUI 不证明远端程序停止。SDK 晚连接 owner、二进制背压和清理见专题架构；剪贴板私有 1 MiB、批量文本单次 64 KiB，超限拒绝而非截断。
+8. **当前能力与验收**：原画面、键鼠、软键盘、触控模式、剪贴板、尺寸、最小化和全屏入口保留。本版源码/静态与行为证据分别归 testing；RemoteApp 已删除，真实新桥与浏览器 SDK 的 Windows/Linux、输入/剪贴板/触控及故障组合留远程验收，旧 Guacamole PASS 不作为本版证据。
 
 ### 文件编辑资源撤销
 
@@ -328,14 +347,14 @@ B8跨App的plugin-api/agent-dispatcher/SDK父页已改用Shared plugins/intent-*
 
 ### 审计安全摘要
 
-1. **职责与范围**：Audit展示后端安全审计字段，Dashboard复用最近活动读取；不再消费任意details、用户名或秘密正文。
-2. **子功能与目录**：model/audit-types与audit-mapper持独立应用对象/投影；api/audit-api消费Shared operations；Store拥有分页，views持筛选与展示。
-3. **依赖方向**：Dashboard通过Audit public使用应用读取能力；Audit→client/operations→Shared，不反向依赖Dashboard。
-4. **类型与转换**：event取Shared有限基础值，createdAt为Unix毫秒，id/来源/主体/路由/状态逐字段转换；旧秒时间和details类型删除。
-5. **入口与安装**：真实GET /settings/audit-logs，query由Shared严格验证；完整列表与Dashboard同步切换，无旧路径桥。
-6. **数据、事务与并发**：服务端nextOffset唯一权威，无total时只显示已加载数；核对每页请求范围、ID顺序/唯一性及跨页重复，筛选变更撤销原读取。
+1. **职责与范围**：Audit展示后端安全审计字段，不再消费任意details、用户名或秘密正文；页内“通知投递”视图只读展示通知终态，不管理渠道配置，也不重发通知。Dashboard不读取或展示审计活动。
+2. **子功能与目录**：model/audit-types与audit-mapper持独立应用对象/投影；auditPresentation只持无副作用的事件类别、范围标签和展示文案映射；api/audit-api消费Shared operations；Store拥有操作记录与投递记录两套独立分页；views持筛选、视图切换、时间线与自适应展示。
+3. **依赖方向**：Audit→client/operations→Shared，并经 notifications public 消费既有投递API、NotificationDelivery类型和安全失败映射；不反向依赖Dashboard或通知页面私有Store。
+4. **类型与转换**：审计event取Shared有限基础值，createdAt为Unix毫秒，id/来源/主体/路由/状态逐字段转换；投递继续使用通知 feature 的独立NotificationDelivery应用类型和既有mapper，不把通知秘密进入审计视图。
+5. **入口与安装**：真实GET /settings/audit-logs，query由Shared严格验证；仅审计页及其它实际消费者使用，无旧路径桥。
+6. **数据、事务与并发**：两类列表各自以服务端nextOffset为唯一权威，无total时只显示已加载数；核对每页请求范围、ID顺序/唯一性及跨页重复。相对时间范围在每次新读取与页面重新激活时按当前时刻重算from/to，继续加载沿用本次activeQuery；审计筛选变更撤销原读取，切换投递视图重新读取，不重放测试或派发。
 7. **生命周期与失败**：Store与列表分别持原认证和视图scope，失活/身份替换使晚结果失效，安全错误不输出技术正文。
-8. **当前能力与验收**：本批实施，实际完成与验证见方案/testing，既有旧审计受控证据不代表当前契约通过。
+8. **当前能力与验收**：操作记录与通知投递双视图已实现，通知页不再渲染投递列表；当前CDP验证时间线、时间范围请求、桌面/390/320布局、浅色主题及受控合成终态行，真实投递分页与失败恢复仍待完整E2E。
 
 ## Operations 通知管理
 
@@ -361,7 +380,7 @@ Shared 唯一定义 channel/event/status、完整 wire 请求/响应和容量。
 
 事件表单由 `NotificationSettingForm` 自身限定选项行宽：事件网格与 label `min-w-0`，UiCheckbox 不压缩，事件文本独立 `overflow-wrap:anywhere`。这修复匿名 flex 文本在 320px 撑宽的问题；不通过删事件、截断翻译或改变通用 UiCheckbox/Shared 合同取绿。
 
-通知列表和编辑器同时恢复旧版标题、操作按钮、渠道分区、事件网格与底部测试／保存层级。Webhook Header 仍是当前结构化行，SMTP／Telegram 秘密仍显式选择 keep/clear/replace；展示回退不恢复旧 flat config 或明文回显。新增操作事件必须在三语资源中具名，未翻译枚举不得直接出现在事件网格。
+通知列表和编辑器同时恢复旧版标题、操作按钮、渠道分区、事件网格与底部测试／保存层级。Webhook Header 仍是当前结构化行；新增渠道直接输入 SMTP 密码或 Telegram Bot Token，已有渠道编辑时才显式选择 keep/clear/replace。事件网格支持全选与反选。展示回退不恢复旧 flat config 或明文回显。新增操作事件必须在三语资源中具名，未翻译枚举不得直接出现在事件网格。
 
 ### 6. 数据、事务与并发
 
@@ -433,7 +452,7 @@ Shared system/backups定义完整请求/回执/错误和容量，应用Export/Re
 7. **生命周期与失败**：数据页隐藏/卸载/身份替换撤销原读取、确认及未派发意图；在途写入仍结清确定/未知结果。旧finally和晚详情不得覆盖新选择；失败不显示原异常正文。
 8. **当前能力与验收**：两轮源码审核、Frontend build和根check完成；12项隔离HTTP/真实持久化与浏览器专项通过，覆盖管理员分页、证据/CAS解除、正式三语页面、未知不重放、故障修订恢复及会话撤销。受影响外观14项、System11项与App43项通过；证据归testing。夹具占用经生产Adapter建立，不冒充真实远端操作或停止事实，外部效果仍由人工独立核对。
 
-Agent 设置按原四分类组织：AgentSettingsPanel 持唯一 useExecutionSettings/useAppManagement owner，ExecutionSettings 按预算、性能、存储、子任务展示同一草稿与 CAS，不能每张卡重复实例化设置状态。顶部启停只在没有草稿或硬限制确认时提交；Registry 放在 Provider 卡片内，文件库仅由 Host 文件入口消费。插件上传／暂存／验证由 usePluginManagement 编排，确认成功后只读刷新；unknown 阻止后续写入。Provider、App、插件、Browser 和安全页的卡片／抽屉层级按 `75289ef9^` 恢复，状态、CAS、秘密意图和恢复动作继续消费当前 Shared／应用 Model；旧协议字段、无来源统计和常驻诊断不恢复。
+Agent 设置按原四分类组织：AgentSettingsPanel 持唯一 useExecutionSettings/useAppManagement owner，ExecutionSettings 按预算、性能、存储、子任务展示同一草稿与 CAS，不能每张卡重复实例化设置状态。顶部启停只在没有草稿或硬限制确认时提交；Registry 放在 Provider 卡片内，文件库仅由 Host 文件入口消费。插件仓库下载／暂存／验证由 usePluginManagement 编排；本地包选择／上传状态、编排与无人消费的前端暂存 API 已移除，普通 Artifact 附件上传不受影响；确认成功后只读刷新；unknown 阻止后续写入。Provider、App、插件、Browser 和安全页的卡片／抽屉层级按 `75289ef9^` 恢复，状态、CAS、秘密意图和恢复动作继续消费当前 Shared／应用 Model；旧协议字段、无来源统计和常驻诊断不恢复。
 
 ## 原生 Agent Host 与工作区
 
@@ -526,15 +545,4 @@ Appearance 的字体保存、Presentation 的面板比例保存分别在所属�
 
 Terminal background由useTerminalBackground持有文档生命周期：同页会话切换只暂停/恢复；KeepAlive deactivation暂停并清空srcdoc，返回后先确认iframe可见尺寸再加载当前主题，避免脱离DOM期间文档重建以零视口初始化。iframe节点可缓存不代表内部document跨detach保留。
 
-AgentMaintenancePanel 通过 Agent public 由数据页高级维护装配，暂存核验／版本／手工数据与运行时管理只在该入口展示；沿用 use-plugin-management 和 PluginDataEditor 的原契约，不复制transport。active 绑定页面与维护展开状态，离页撤销回调，保留未知写入围栏和原数据意图，身份撤销清理。普通插件页只展示安装／升级／卸载与已卸载数据删除。
-
-### 对话记忆审核
-
-1. **职责与范围**：当前对话候选由独立 `use-conversation-memory` 持有；`NativeMemoryReview` 展示纯文本卡片及保存/拒绝，Surface 只协调侧栏与任务详情互斥，不自动批准记忆或工具权限。
-2. **子功能与目录**：专用 `api/conversation-memory-api`、`model/conversation-memory-types`/`conversation-memory-mapper`、`composables/use-conversation-memory`、`runtime/NativeMemoryReview.vue`；独立于设置管理 owner。轮询间隔3秒、只读第一页50条，策略归 composable，协议上限归 Shared。
-3. **依赖方向**：Surface → 展示组件 → composable → API → 通用 management request；仅依赖 Shared 协议和自身显式 mapper，不引用后端私有类型，不共享 NativeRun 写入锁。
-4. **类型与转换**：Shared 解码完整列表/回执，API 校验 App、候选状态、来源、分页和审核回执关联，mapper 白名单转为独立 ConversationMemory；审核命令捕获原 id/App/content/version，禁止对象透传或自动递增猜测回执。
-5. **入口与安装**：Surface 按 thread.id 挂载专用 owner；侧栏关闭仅隐藏组件，不停止当前可见对话的新候选发现。复用原任务栏样式和窄屏浮层，新候选展开但不抢焦点，标题栏可重开。
-6. **数据、事务与并发**：持久化及人工 CAS 仍归后端；背景读取可被交互取代且不置 busy，写入串行。独立 writeBlocked 围栏阻止自动读取解除未知/冲突，显式重读成功后才能恢复；不重放失败审核。
-7. **生命周期与失败**：按 active、KeepAlive、身份、document.visibilityState、卸载停用请求展示及定时器。切换对话销毁原 owner，事件携带 threadId 复核；晚结果由 operation generation 拒绝。读取失败保留当前卡片并停止自动轮询，使用统一 Toast 和显式核对入口；未知写入在撤销时保留恢复要求。
-8. **当前能力与验收**：只覆盖当前对话 Root/Child 候选及 publish/reject，不含编辑、全 App 管理或撤销 UI。超过50条提示逐批处理；静态检查与行为验收分别记录于 testing，后台/切换/多窗口竞争与真实模型提案留远程验证。
+数据页高级维护不再装配 AgentMaintenancePanel。当前前端只保留 HostDiagnosticsPanel 与 MutationRecoveryPanel；插件暂存恢复、版本目录、手工数据迁移和运行态观察没有 UI 入口，相关后端 API 与 use-plugin-management 的普通安装／升级消费者暂时保留。普通插件页只展示安装／升级／卸载与已卸载数据删除。

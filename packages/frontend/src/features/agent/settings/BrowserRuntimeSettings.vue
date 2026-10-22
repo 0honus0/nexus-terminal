@@ -1,7 +1,16 @@
 <script setup lang="ts">
 	import { computed, onActivated, onMounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiCheckbox, UiInfoHint, UiInput, UiModal, UiTextarea } from '@/foundation/ui';
+	import {
+		UiButton,
+		UiCheckbox,
+		UiFormActions,
+		UiFormField,
+		UiInfoHint,
+		UiInput,
+		UiModal,
+		UiTextarea,
+	} from '@/foundation/ui';
 	import {
 		AGENT_BROWSER_MAX_TARGETS,
 		AGENT_BROWSER_MAX_ENDPOINTS,
@@ -159,6 +168,13 @@
 		};
 	}
 
+	function setEndpointPriority(value: string | number | null): void {
+		const editor = endpointEditor.value;
+		const parsed = typeof value === 'number' ? value : Number(value);
+		if (!editor || !Number.isFinite(parsed)) return;
+		editor.draft.priority = Math.min(AGENT_BROWSER_MAX_PRIORITY, Math.max(0, Math.trunc(parsed)));
+	}
+
 	function closeEndpointEditor(): void {
 		if (!operation.busy.value) endpointEditor.value = null;
 	}
@@ -215,8 +231,6 @@
 				<UiInfoHint :text="t('agent.settings.browserRuntime.description')" />
 			</div>
 			<UiButton
-				appearance="soft"
-				tone="neutral"
 				type="button"
 				:disabled="blocked || targets.length >= AGENT_BROWSER_MAX_TARGETS"
 				@click="openTarget(null)"
@@ -225,13 +239,10 @@
 				>{{ t('agent.settings.browserRuntime.addTarget') }}
 			</UiButton>
 		</div>
-		<div v-if="operation.notice.value || operation.refreshRequired.value" class="space-y-2 px-4 py-3 sm:px-5">
-			<p v-if="operation.notice.value" role="status" class="text-sm">
-				{{ t('agent.settings.appManagement.' + operation.notice.value) }}
-			</p>
-			<p v-if="operation.refreshRequired.value && !operation.busy.value" class="text-sm text-warning">
-				{{ t('agent.settings.appManagement.refreshRequired') }}
-			</p>
+		<div
+			v-if="operation.refreshRequired.value || operation.notice.value === 'failed'"
+			class="space-y-2 px-4 py-3 sm:px-5"
+		>
 			<UiButton
 				v-if="operation.refreshRequired.value || operation.notice.value === 'failed'"
 				type="button"
@@ -292,8 +303,6 @@
 					>
 						<UiButton
 							type="button"
-							appearance="soft"
-							tone="neutral"
 							density="compact"
 							:disabled="blocked || target.endpoints.length >= AGENT_BROWSER_MAX_ENDPOINTS"
 							@click="openEndpointEditor(index)"
@@ -378,18 +387,16 @@
 					</div>
 				</div>
 			</article>
-			<button
+			<UiButton
 				type="button"
+				block
 				:disabled="blocked || targets.length >= AGENT_BROWSER_MAX_TARGETS"
-				class="group flex w-full cursor-pointer select-none items-center justify-center gap-2 rounded-xl border border-dashed border-border/80 bg-header/10 py-2.5 text-xs text-text-secondary transition-colors duration-200 hover:border-border-hover hover:bg-header/25 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+				class="min-h-10"
 				@click="openTarget(null)"
 			>
-				<i
-					class="fa-solid fa-plus text-[10px] text-text-secondary/70 transition-colors group-hover:text-foreground"
-					aria-hidden="true"
-				></i>
-				<span class="font-medium">{{ t('agent.settings.browserRuntime.addTarget') }}</span>
-			</button>
+				<i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
+				{{ t('agent.settings.browserRuntime.addTarget') }}
+			</UiButton>
 		</div>
 	</section>
 	<UiModal
@@ -401,31 +408,27 @@
 					: 'agent.settings.browserRuntime.editEndpoint',
 			)
 		"
-		panel-class="w-[min(560px,94vw)]"
+		panel-class="ui-form-surface !w-[calc(100vw-2rem)] !max-w-xl !p-4 sm:!p-6"
 		:close-on-backdrop="!operation.busy.value"
 		:close-on-escape="!operation.busy.value"
 		@close="closeEndpointEditor"
 	>
 		<form v-if="endpointEditor" id="browser-endpoint-editor" class="space-y-4" @submit.prevent="saveEndpoint">
-			<p v-if="operation.notice.value" role="status" class="text-sm">
-				{{ t('agent.settings.appManagement.' + operation.notice.value) }}
-			</p>
 			<fieldset :disabled="blocked" class="space-y-4">
-				<label class="block space-y-1 text-sm">
-					<span>{{ t('agent.settings.browserRuntime.url') }}</span>
-					<UiInput v-model="endpointEditor.draft.url" required />
-				</label>
-				<label class="block space-y-1 text-sm">
-					<span>{{ t('agent.settings.browserRuntime.priority') }}</span>
-					<input
-						v-model.number="endpointEditor.draft.priority"
+				<UiFormField :label="t('agent.settings.browserRuntime.url')" for-id="browser-endpoint-url">
+					<UiInput id="browser-endpoint-url" v-model="endpointEditor.draft.url" required />
+				</UiFormField>
+				<UiFormField :label="t('agent.settings.browserRuntime.priority')" for-id="browser-endpoint-priority">
+					<UiInput
+						id="browser-endpoint-priority"
+						:model-value="endpointEditor.draft.priority"
 						type="number"
 						min="0"
 						:max="AGENT_BROWSER_MAX_PRIORITY"
 						step="1"
-						class="w-full rounded border border-border bg-background p-2"
+						@update:model-value="setEndpointPriority"
 					/>
-				</label>
+				</UiFormField>
 				<UiCheckbox v-model="endpointEditor.draft.allowPlaintext">{{
 					t('agent.settings.browserRuntime.allowPlaintext')
 				}}</UiCheckbox>
@@ -435,10 +438,7 @@
 			</fieldset>
 		</form>
 		<template #footer>
-			<div class="flex justify-end gap-2">
-				<UiButton type="button" :disabled="operation.busy.value" @click="closeEndpointEditor">{{
-					t('common.cancel')
-				}}</UiButton>
+			<UiFormActions>
 				<UiButton
 					type="submit"
 					form="browser-endpoint-editor"
@@ -447,21 +447,44 @@
 					:disabled="blocked"
 					>{{ t('common.save') }}</UiButton
 				>
-			</div>
+				<UiButton
+					type="button"
+					appearance="soft"
+					tone="neutral"
+					:disabled="operation.busy.value"
+					@click="closeEndpointEditor"
+					>{{ t('common.cancel') }}</UiButton
+				>
+			</UiFormActions>
 		</template>
 	</UiModal>
 	<UiModal
 		:visible="targetDraft !== null"
 		:title="t(editingIndex === null ? 'agent.settings.browserRuntime.addTarget' : 'common.edit')"
-		panel-class="w-[min(680px,94vw)]"
+		panel-class="ui-form-surface !w-[calc(100vw-2rem)] !max-w-[35rem] !p-5 sm:!p-6"
 		:close-on-backdrop="!operation.busy.value"
 		:close-on-escape="!operation.busy.value"
 		@close="closeEditor"
 	>
-		<form v-if="targetDraft" id="browser-target-editor" class="space-y-4" @submit.prevent="saveTarget">
-			<p v-if="operation.notice.value" role="status" class="text-sm">
-				{{ t('agent.settings.appManagement.' + operation.notice.value) }}
-			</p>
+		<template #header>
+			<div class="flex min-w-0 items-center gap-3">
+				<span
+					class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary shadow-2xs"
+				>
+					<i class="fa-solid fa-window-maximize text-sm" aria-hidden="true"></i>
+				</span>
+				<div class="min-w-0">
+					<h2 class="truncate text-base font-semibold tracking-tight text-foreground">
+						{{ t(editingIndex === null ? 'agent.settings.browserRuntime.addTarget' : 'common.edit') }}
+					</h2>
+				</div>
+			</div>
+			<span
+				class="shrink-0 rounded-lg border border-border/60 bg-header/35 px-2 py-1 font-mono text-[10px] font-semibold tracking-wide text-text-secondary"
+				>CDP</span
+			>
+		</template>
+		<form v-if="targetDraft" id="browser-target-editor" class="space-y-5" @submit.prevent="saveTarget">
 			<UiButton
 				v-if="operation.refreshRequired.value"
 				type="button"
@@ -469,22 +492,43 @@
 				@click="load"
 				>{{ t('agent.settings.browserRuntime.reload') }}</UiButton
 			>
-			<fieldset :disabled="blocked" class="space-y-4">
-				<label class="block space-y-1 text-sm"
-					><span>{{ t('agent.settings.browserRuntime.targetId') }}</span
-					><UiInput v-model="targetDraft.id" required
-				/></label>
-				<label class="block space-y-1 text-sm"
-					><span>{{ t('agent.settings.browserRuntime.allowedUrls') }}</span
-					><UiTextarea v-model="targetDraft.patternsText" :min-rows="3"
-				/></label>
+			<fieldset :disabled="blocked" class="space-y-5">
+				<UiFormField :label="t('agent.settings.browserRuntime.targetId')" for-id="browser-target-id" required>
+					<template #label>
+						<span class="inline-flex items-center gap-1.5">
+							<i class="fa-solid fa-fingerprint text-[10px] text-primary/80" aria-hidden="true"></i>
+							{{ t('agent.settings.browserRuntime.targetId') }}
+						</span>
+					</template>
+					<UiInput
+						id="browser-target-id"
+						v-model="targetDraft.id"
+						autocomplete="off"
+						spellcheck="false"
+						required
+						class="font-mono text-[13px]"
+					/>
+				</UiFormField>
+				<UiFormField :label="t('agent.settings.browserRuntime.allowedUrls')" for-id="browser-target-patterns">
+					<template #label>
+						<span class="inline-flex items-center gap-1.5">
+							<i class="fa-solid fa-link text-[10px] text-primary/80" aria-hidden="true"></i>
+							{{ t('agent.settings.browserRuntime.allowedUrls') }}
+						</span>
+					</template>
+					<UiTextarea
+						id="browser-target-patterns"
+						v-model="targetDraft.patternsText"
+						:min-rows="4"
+						autocomplete="off"
+						spellcheck="false"
+						class="font-mono text-[13px] leading-relaxed"
+					/>
+				</UiFormField>
 			</fieldset>
 		</form>
 		<template #footer>
-			<div class="flex justify-end gap-2">
-				<UiButton type="button" :disabled="operation.busy.value" @click="closeEditor">{{
-					t('common.cancel')
-				}}</UiButton>
+			<UiFormActions>
 				<UiButton
 					type="submit"
 					form="browser-target-editor"
@@ -493,7 +537,15 @@
 					:disabled="blocked"
 					>{{ t('agent.settings.browserRuntime.save') }}</UiButton
 				>
-			</div>
+				<UiButton
+					type="button"
+					appearance="soft"
+					tone="neutral"
+					:disabled="operation.busy.value"
+					@click="closeEditor"
+					>{{ t('common.cancel') }}</UiButton
+				>
+			</UiFormActions>
 		</template>
 	</UiModal>
 </template>

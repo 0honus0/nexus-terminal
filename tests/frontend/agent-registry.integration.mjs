@@ -52,6 +52,7 @@ try {
 					if (id === '\0virtual:agent-registry-fixture')
 						return `
 					export { createApp, h, nextTick } from 'vue';
+					export { createPinia } from 'pinia';
 					export { default as RegistrySettings } from '/src/features/agent/settings/ModelRegistrySettings.vue';
 					export { default as i18n, setLocale } from '/src/app/i18n/index.ts';
 					export { authenticatedSessionLifecycle } from '/src/shared/session/authenticatedSessionLifecycle.ts';
@@ -76,8 +77,26 @@ try {
 			await import('/src/features/agent/api/registry-api.ts');
 		const { AgentManagementFailure } = await import('/src/features/agent/model/management-failure.ts');
 		const { createAccessApi } = await import('/src/features/auth/api/access-api.ts');
-		const { createApp, h, nextTick, RegistrySettings, i18n, setLocale, authenticatedSessionLifecycle } =
-			await import('/@id/__x00__virtual:agent-registry-fixture');
+		const {
+			createApp,
+			h,
+			nextTick,
+			createPinia,
+			RegistrySettings,
+			i18n,
+			setLocale,
+			authenticatedSessionLifecycle,
+		} = await import('/@id/__x00__virtual:agent-registry-fixture');
+		const { useNotificationStore } = await import('/src/shared/feedback/store/notification.store.ts');
+		const pinia = createPinia();
+		const notifications = useNotificationStore(pinia);
+
+		const unknownNotice = () =>
+			notifications.notifications.find(
+				(item) =>
+					item.kind === 'error' && item.message === i18n.global.t('agent.settings.providers.registryUnknown'),
+			);
+
 		const nativeFetch = window.fetch;
 		const checks = [];
 		let mounted;
@@ -199,7 +218,9 @@ try {
 			};
 			node = document.createElement('div');
 			document.body.append(node);
-			mounted = createApp({ render: () => h(RegistrySettings) }).use(i18n);
+			mounted = createApp({ render: () => h(RegistrySettings) })
+				.use(pinia)
+				.use(i18n);
 			mounted.mount(node);
 			await until(() => node.textContent.includes('3 models'));
 
@@ -210,7 +231,7 @@ try {
 			const refresh = () => buttons().find((button) => button.textContent.includes('Update now'));
 
 			refresh().click();
-			await until(() => node.querySelector('[role="alert"]'));
+			await until(() => unknownNotice());
 			check(
 				refresh().disabled && writes === 1 && !node.textContent.includes('operation_unknown'),
 				'unknown refresh blocks replay and uses safe localized message',
@@ -225,14 +246,13 @@ try {
 				setLocale(locale);
 				await nextTick();
 				buttons()[1].click();
-				await until(() => node.querySelector('[role="alert"]'));
+				await until(() => unknownNotice());
 				check(
-					node.querySelector('[role="alert"]').textContent ===
-						i18n.global.t('agent.settings.providers.registryUnknown'),
+					unknownNotice()?.message === i18n.global.t('agent.settings.providers.registryUnknown'),
 					locale + ' safe unknown message',
 				);
 				buttons()[0].click();
-				await until(() => !node.querySelector('[role="alert"]'));
+				await until(() => !buttons()[1].disabled);
 			}
 			setLocale('en-US');
 			await nextTick();

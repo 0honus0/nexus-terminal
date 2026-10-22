@@ -119,9 +119,6 @@ try {
 						route: 'direct',
 						proxyId: null,
 						notes: null,
-						rdpRemoteApp: null,
-						rdpRemoteAppDirectory: null,
-						rdpRemoteAppArguments: null,
 						tagIds: [],
 						jumpIds: [],
 					},
@@ -138,22 +135,37 @@ try {
 		(await app.targets.credentials.set(target.id, target.version, { kind: 'ssh_key', sshKeyId: sshKey.id })).status,
 		'updated',
 	);
+	const configured = await app.targets.get(target.id);
+	const connectedAt = Date.now();
+	await app.targets.connectionUsage.recordConnected(
+		configured.id,
+		configured.version,
+		configured.createdAt,
+		'SSH',
+		connectedAt,
+	);
 	await page.goto(origin + '/');
 	await page.getByText('controlled activity 1', { exact: true }).waitFor();
 	await page.locator('[data-last-connected-at]').first().waitFor();
 	checks.push('formal App/router/Dashboard uses real Access and Targets HTTP');
-	await page.evaluate(async () => {
-		const { getActivePinia, nextTick } = await import('/__lifecycle_imports.js');
-		const { useConnectionsStore } = await import('/src/features/connections/store/connections.store.ts');
-		const store = useConnectionsStore(getActivePinia());
-		store.markConnected(store.connections[0].id, Date.now() - 120000);
-		await nextTick();
-	});
 	const expected = new Intl.RelativeTimeFormat('en-US', { numeric: 'auto' }).format(-2, 'minute');
 	assert.equal((await page.locator('main time').first().textContent()).trim(), expected);
-	assert.ok((await page.locator('[data-last-connected-at]').first().textContent()).includes(expected));
-	assert.equal(await page.locator('main span').getByText(expected, { exact: true }).count(), 1);
-	checks.push('formal connection and Shared audit milliseconds both display two minutes ago');
+	assert.equal(
+		Number(await page.locator('[data-last-connected-at]').first().getAttribute('data-last-connected-at')),
+		connectedAt,
+	);
+	assert.match(
+		(await page.locator('[data-last-connected-at]').first().textContent()).trim(),
+		/^(?:now|\d+ seconds? ago)$/u,
+	);
+	assert.equal(
+		await page
+			.locator('main span')
+			.getByText(/^(?:now|\d+ seconds? ago)$/u)
+			.count(),
+		1,
+	);
+	checks.push('formal connection shows server milliseconds while Shared audit displays two minutes ago');
 	await page.locator('.app-header a.nav-link[href="/connections"]').click();
 	await page.waitForURL('**/connections');
 	delayAudit = true;

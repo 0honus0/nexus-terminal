@@ -1,20 +1,11 @@
-import { computed, onActivated, onMounted, ref, toRaw, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { useFeedbackMessage } from '@/shared/feedback/public';
+import { computed, onActivated, onMounted, ref, toRaw } from 'vue';
 import { useAuthenticatedViewScope } from '@/shared/session/use-authenticated-view-scope';
 import { AGENT_EXECUTION_LIMIT_KEYS } from '@nexus-terminal/shared/agent/execution/values';
-import {
-	confirmExecutionHardLimits,
-	getExecutionModelChoices,
-	getExecutionSettings,
-	previewExecutionHardLimits,
-	saveExecutionSettings,
-} from '../api/execution-api';
+import { getExecutionSettings, saveExecutionHardLimits, saveExecutionSettings } from '../api/execution-api';
 import { AgentManagementFailure } from '../model/management-failure';
-import type {
-	ExecutionLimits,
-	ExecutionModelChoice,
-	ExecutionSettings,
-	HardLimitConfirmation,
-} from '../model/execution-types';
+import type { ExecutionLimits, ExecutionSettings } from '../model/execution-types';
 import { agentHostEvents } from '../events/agent-host-events';
 
 function failureNotice(cause: unknown, writing: boolean): string {
@@ -34,64 +25,65 @@ export function useExecutionSettings() {
 	const saved = ref<ExecutionSettings | null>(null);
 	const draft = ref<ExecutionSettings | null>(null);
 	const hardDraft = ref<ExecutionLimits | null>(null);
-	const confirmation = ref<HardLimitConfirmation | null>(null);
-	const choices = ref<ExecutionModelChoice[]>([]);
+
 	const busy = ref(false);
-	const modelsBusy = ref(false);
-	const modelsFailed = ref(false);
+
 	const refreshRequired = ref(true);
 	const notice = ref('');
+	let failureCause: unknown;
+
+	const { t } = useI18n();
+	useFeedbackMessage(
+		() => (notice.value ? t('agent.settings.execution.' + notice.value) : ''),
+		() => (notice.value === 'saved' ? 'success' : 'error'),
+		() => failureCause,
+	);
 	const invalidLimits = ref(new Set<keyof ExecutionLimits>());
 	let generation = 0;
-	let modelsGeneration = 0;
+
 	const scope = useAuthenticatedViewScope({
 		onRevoke() {
 			generation += 1;
-			modelsGeneration += 1;
+
 			saved.value = null;
 			draft.value = null;
 			hardDraft.value = null;
-			confirmation.value = null;
-			choices.value = [];
+
 			busy.value = false;
-			modelsBusy.value = false;
-			modelsFailed.value = false;
+
 			refreshRequired.value = true;
 			notice.value = '';
+			failureCause = undefined;
 			invalidLimits.value.clear();
 		},
 	});
-	const dirty = computed(
-		() => invalidLimits.value.size > 0 || JSON.stringify(draft.value) !== JSON.stringify(saved.value),
-	);
-	const blocked = computed(() => busy.value || refreshRequired.value || draft.value === null);
 	const hardChanged = computed(
 		() =>
 			saved.value !== null &&
 			hardDraft.value !== null &&
 			AGENT_EXECUTION_LIMIT_KEYS.some((key) => saved.value?.hardLimits[key] !== hardDraft.value?.[key]),
 	);
-
-	watch(
-		hardDraft,
-		() => {
-			confirmation.value = null;
-		},
-		{ deep: true, flush: 'sync' },
+	const limitsChanged = computed(
+		() =>
+			saved.value !== null &&
+			draft.value !== null &&
+			(draft.value.enabled !== saved.value.enabled ||
+				AGENT_EXECUTION_LIMIT_KEYS.some((key) => draft.value?.limits[key] !== saved.value?.limits[key])),
 	);
+	const dirty = computed(() => invalidLimits.value.size > 0 || limitsChanged.value || hardChanged.value);
+	const blocked = computed(() => busy.value || refreshRequired.value || draft.value === null);
 
 	function accept(value: ExecutionSettings): void {
 		saved.value = value;
 		// Both objects are local application state; wire conversion belongs to the API mapper.
 		draft.value = structuredClone(toRaw(value));
 		hardDraft.value = structuredClone(toRaw(value.hardLimits));
-		confirmation.value = null;
 		invalidLimits.value.clear();
 		refreshRequired.value = false;
 	}
 
 	function setLimit(key: keyof ExecutionLimits, value: number | null): void {
-		if (blocked.value || confirmation.value || !draft.value) return;
+		if (blocked.value || hardChanged.value || !draft.value) return;
 		if (value === null) {
 			invalidLimits.value.add(key);
 			return;
@@ -100,39 +92,12 @@ export function useExecutionSettings() {
 		draft.value.limits[key] = value;
 	}
 
-	async function loadModels(): Promise<void> {
-		if (modelsBusy.value) {
-			return;
-		}
-		const signal = scope.capture();
-		if (!scope.isCurrent(signal)) {
-			return;
-		}
-		const current = ++modelsGeneration;
-		modelsBusy.value = true;
-		try {
-			const result = await getExecutionModelChoices(signal);
-			if (current !== modelsGeneration || !scope.isCurrent(signal)) {
-				return;
-			}
-			choices.value = result;
-			modelsFailed.value = false;
-		} catch {
-			if (current === modelsGeneration && scope.isCurrent(signal)) {
-				modelsFailed.value = true;
-			}
-		} finally {
-			if (current === modelsGeneration && scope.isCurrent(signal)) {
-				modelsBusy.value = false;
-			}
-		}
-	}
-
-	async function perform(operation: 'read' | 'save' | 'preview' | 'confirm'): Promise<void> {
+	async function perform(operation: 'read' | 'save'): Promise<void> {
 		if (busy.value || (operation !== 'read' && blocked.value)) {
 			return;
 		}
 		if (operation === 'save' && invalidLimits.value.size > 0) {
+			failureCause = undefined;
 			notice.value = 'invalid';
 			return;
 		}
@@ -143,50 +108,19 @@ export function useExecutionSettings() {
 		const current = ++generation;
 		const value = draft.value;
 		const proposed = hardDraft.value;
-		const pending = confirmation.value;
 		if (operation === 'save' && !dirty.value) {
 			return;
 		}
-		if (operation === 'preview' && (!proposed || !value || dirty.value || !hardChanged.value)) {
-			return;
-		}
-		if (operation === 'confirm') {
-			if (
-				!pending ||
-				!value ||
-				!proposed ||
-				dirty.value ||
-				pending.expectedVersion !== value.version ||
-				AGENT_EXECUTION_LIMIT_KEYS.some((key) => pending.proposed[key] !== proposed[key])
-			) {
-				return;
-			}
-			if (pending.expiresAt <= Date.now()) {
-				confirmation.value = null;
-				notice.value = 'expired';
-				return;
-			}
-		}
 		busy.value = true;
 		notice.value = '';
-		confirmation.value = null;
+		failureCause = undefined;
 		try {
-			if (operation === 'preview' && value && proposed) {
-				const result = await previewExecutionHardLimits(
-					value.version,
-					structuredClone(toRaw(proposed)),
-					signal,
-				);
-				if (current === generation && scope.isCurrent(signal)) {
-					confirmation.value = result;
-				}
-				return;
-			}
 			let result: ExecutionSettings;
 			if (operation === 'save' && value) {
-				result = await saveExecutionSettings(structuredClone(toRaw(value)), signal);
-			} else if (operation === 'confirm' && pending) {
-				result = await confirmExecutionHardLimits(pending, signal);
+				result =
+					hardChanged.value && proposed
+						? await saveExecutionHardLimits(value.version, structuredClone(toRaw(proposed)), signal)
+						: await saveExecutionSettings(structuredClone(toRaw(value)), signal);
 			} else {
 				result = await getExecutionSettings(signal);
 			}
@@ -202,6 +136,7 @@ export function useExecutionSettings() {
 			if (current !== generation || !scope.isCurrent(signal)) {
 				return;
 			}
+			failureCause = cause;
 			const failure = cause instanceof AgentManagementFailure ? cause : null;
 			notice.value = failureNotice(cause, operation !== 'read');
 			if (operation !== 'read' && failure?.outcome !== 'not_dispatched') {
@@ -215,7 +150,7 @@ export function useExecutionSettings() {
 	}
 
 	async function toggleEnabled(): Promise<void> {
-		if (blocked.value || dirty.value || hardChanged.value || confirmation.value || !draft.value) {
+		if (blocked.value || dirty.value || !draft.value) {
 			return;
 		}
 		draft.value.enabled = !draft.value.enabled;
@@ -225,7 +160,6 @@ export function useExecutionSettings() {
 	function loadInitial(): void {
 		if (draft.value === null) {
 			void perform('read');
-			void loadModels();
 		}
 	}
 
@@ -236,19 +170,17 @@ export function useExecutionSettings() {
 		toggleEnabled,
 		draft,
 		hardDraft,
-		confirmation,
-		choices,
+
 		busy,
-		modelsBusy,
-		modelsFailed,
+
 		refreshRequired,
 		notice,
 		dirty,
 		invalidLimits,
 		setLimit,
 		blocked,
+		limitsChanged,
 		hardChanged,
 		perform,
-		loadModels,
 	};
 }

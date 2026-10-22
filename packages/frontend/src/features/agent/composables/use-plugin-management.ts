@@ -9,13 +9,11 @@ import {
 	listPluginVersions,
 	retirePluginInstallation,
 	revokePluginPublisher,
-	stagePluginArtifact,
 	stagePluginCatalogEntry,
 	trustPluginPublisher,
 	upgradePluginInstallation,
 	verifyPluginStage,
 } from '../api/plugin-management-api';
-import { beginManagedArtifact, uploadManagedArtifact } from '../api/artifact-management-api';
 import type {
 	PluginInstallation,
 	PluginPublisher,
@@ -24,11 +22,11 @@ import type {
 	PluginVersion,
 	PluginCatalogEntry,
 } from '../model/plugin-types';
-import type { ManagedArtifact } from '../model/artifact-types';
 import { agentHostEvents } from '../events/agent-host-events';
 import { useAgentManagementOperation } from './use-agent-management-operation';
 
 export function usePluginManagement(available: () => boolean = () => true) {
+	const officialPublisherIds = ref<string[]>([]);
 	const publishers = ref<PluginPublisher[]>([]);
 	const installations = ref<PluginInstallation[]>([]);
 	const stages = ref<PluginStage[]>([]);
@@ -48,11 +46,9 @@ export function usePluginManagement(available: () => boolean = () => true) {
 	const runtimeAcknowledged = ref(false);
 	const mutationUnknown = ref(false);
 	const acknowledged = ref(false);
-	const uploadReservation = ref<ManagedArtifact | null>(null);
-	const uploadAppId = ref('');
-	const file = ref<File | null>(null);
 	let writeIntent: symbol | null = null;
 	const operation = useAgentManagementOperation((reason) => {
+		officialPublisherIds.value = [];
 		publishers.value = [];
 		installations.value = [];
 		stages.value = [];
@@ -67,9 +63,6 @@ export function usePluginManagement(available: () => boolean = () => true) {
 		runtimeAcknowledged.value = false;
 		mutationUnknown.value = reason === 'view' && (mutationUnknown.value || writeIntent !== null);
 		acknowledged.value = false;
-		uploadReservation.value = null;
-		uploadAppId.value = '';
-		file.value = null;
 	}, available);
 
 	async function load(): Promise<void> {
@@ -142,33 +135,6 @@ export function usePluginManagement(available: () => boolean = () => true) {
 	async function revoke(value: PluginPublisher): Promise<void> {
 		const original = structuredClone(toRaw(value));
 		await write((signal) => revokePluginPublisher(original, signal));
-	}
-
-	async function preparePackage(): Promise<void> {
-		if (!file.value || !uploadAppId.value) {
-			return;
-		}
-		const source = file.value;
-		const appId = uploadAppId.value;
-		await write(
-			async (signal) => {
-				const reserved = await beginManagedArtifact(appId, source, signal);
-				if (!signal.aborted) {
-					uploadReservation.value = reserved;
-				}
-				const artifact = await uploadManagedArtifact(reserved, source, signal);
-				if (!signal.aborted) {
-					uploadReservation.value = artifact;
-				}
-				const stage = await stagePluginArtifact(artifact, signal);
-				return verifyPluginStage(stage, signal);
-			},
-			(value) => {
-				selectedStageId.value = value.id;
-				candidate.value = value;
-				file.value = null;
-			},
-		);
 	}
 
 	async function prepareCatalogEntry(entry: PluginCatalogEntry, source: string | null): Promise<void> {
@@ -280,7 +246,6 @@ export function usePluginManagement(available: () => boolean = () => true) {
 		mutationUnknown.value = false;
 		acknowledged.value = false;
 		candidate.value = null;
-		file.value = null;
 		publicKeyPem.value = '';
 	}
 
@@ -296,6 +261,7 @@ export function usePluginManagement(available: () => boolean = () => true) {
 		if (active) initial();
 	});
 	return {
+		officialPublisherIds,
 		publishers,
 		installations,
 		stages,
@@ -312,16 +278,12 @@ export function usePluginManagement(available: () => boolean = () => true) {
 		runtimeAcknowledged,
 		mutationUnknown,
 		acknowledged,
-		uploadReservation,
-		uploadAppId,
-		file,
 		operation,
 		canWrite,
 		write,
 		load,
 		trust,
 		revoke,
-		preparePackage,
 		prepareCatalogEntry,
 		trustCatalogPublisher,
 		verify,

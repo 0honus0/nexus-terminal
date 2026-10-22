@@ -11,6 +11,7 @@
 		PluginPublisher,
 		PluginInstallation,
 	} from '../model/plugin-types';
+	import { useOperationFeedback } from '@/shared/feedback/public';
 	import type { ManagedApp } from '../model/app-management-types';
 
 	interface CatalogSource {
@@ -29,8 +30,12 @@
 		prepare: [entry: PluginCatalogEntry, source: string | null];
 		trust: [label: string, pem: string];
 		recommend: [];
+		officialPublishers: [keyIds: string[]];
 	}>();
 	const { t } = useI18n();
+	const feedback = useOperationFeedback('agent.settings.plugin-market');
+	const collapsedSources = ref(new Set<string>());
+	const copiedSourceUrl = ref('');
 	const repositories = ref<PluginRepositories | null>(null);
 	const repositoryUrl = ref('');
 	const searchQuery = ref('');
@@ -52,21 +57,70 @@
 	const locked = computed(
 		() => props.blocked || operation.busy.value || operation.refreshRequired.value || unknown.value,
 	);
-	const filteredCatalogs = computed(() => {
+
+	const totalPluginCount = computed(() =>
+		catalogs.value.reduce((total, item) => total + item.catalog.packages.length, 0),
+	);
+	const configuredRepositories = computed(() => repositories.value?.urls.map((url) => ({ url })) ?? []);
+	const filteredCatalogGroups = computed(() => {
 		const query = searchQuery.value.trim().toLowerCase();
-		return catalogs.value.map(({ source, catalog }) => ({
-			source,
-			url: catalog.repositoryUrl,
-			publishers: catalog.publishers,
-			entries: catalog.packages.filter(
-				(entry) =>
-					!query ||
-					[entry.displayName, entry.definitionId, entry.description].some((value) =>
-						value.toLowerCase().includes(query),
-					),
-			),
-		}));
+		return catalogs.value
+			.map(({ source, catalog }) => {
+				const address = new URL(catalog.repositoryUrl);
+				const segments = address.pathname.split('/').filter(Boolean);
+				const owner =
+					address.hostname === 'github.com' || address.hostname === 'raw.githubusercontent.com'
+						? (segments[0] ?? address.hostname)
+						: address.hostname;
+				return {
+					key: source ?? 'official',
+					owner,
+					official: source === null,
+					sourceUrl: catalog.repositoryUrl,
+					packages: catalog.packages
+						.filter(
+							(entry) =>
+								!query ||
+								[entry.displayName, entry.definitionId, entry.description].some((value) =>
+									value.toLowerCase().includes(query),
+								),
+						)
+						.map((entry) => ({ package: entry, catalog, source, official: source === null })),
+				};
+			})
+			.filter((group) => group.packages.length > 0 || !query);
 	});
+
+	function isGroupExpanded(key: string): boolean {
+		return !collapsedSources.value.has(key);
+	}
+
+	function toggleGroup(key: string): void {
+		if (collapsedSources.value.has(key)) collapsedSources.value.delete(key);
+		else collapsedSources.value.add(key);
+	}
+
+	async function copyCatalogUrl(url: string): Promise<void> {
+		try {
+			await navigator.clipboard.writeText(url);
+			copiedSourceUrl.value = url;
+		} catch (cause) {
+			feedback.notifyError({ operation: 'copy-source', message: t('agent.settings.plugins.copyFailed'), cause });
+		}
+	}
+
+	function trustRemotePublisher(catalog: PluginCatalog, keyId: string): void {
+		if (locked.value) return;
+		const publisher = catalog.publishers.find((item) => item.keyId === keyId);
+		if (publisher) emit('trust', publisher.label, publisher.publicKeyPem);
+	}
+
+	async function reload(): Promise<void> {
+		if (props.blocked || operation.busy.value) return;
+		await load();
+	}
+
+	defineExpose({ reload, busy: operation.busy });
 
 	function publisherTrusted(keyId: string): boolean {
 		return props.publishers.some((publisher) => publisher.keyId === keyId && publisher.revokedAt === null);
@@ -146,6 +200,12 @@
 			},
 			(result) => {
 				catalogs.value = result.items;
+				emit(
+					'officialPublishers',
+					result.items
+						.find((item) => item.source === null)
+						?.catalog.publishers.map((publisher) => publisher.keyId) ?? [],
+				);
 				if (result.failed) operation.notice.value = 'failed';
 			},
 			{ write: false },
@@ -207,14 +267,7 @@
 	);
 </script>
 <template>
-	<section class="space-y-3 border-t border-border pt-4">
-		<p
-			v-if="operation.notice.value && operation.notice.value !== 'saved'"
-			role="status"
-			class="text-sm text-warning"
-		>
-			{{ t('agent.settings.appManagement.' + operation.notice.value) }}
-		</p>
+	<section class="space-y-3">
 		<UiButton
 			v-if="operation.notice.value === 'failed' || operation.notice.value === 'conflict' || unknown"
 			type="button"
@@ -222,156 +275,372 @@
 			@click="load"
 			>{{ t('agent.pluginManagement.readRepositories') }}</UiButton
 		>
-		<div class="flex flex-wrap items-center justify-between gap-3">
-			<h4 class="text-sm font-semibold">{{ t('agent.pluginManagement.repositories') }}</h4>
-			<div class="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-				<div class="relative w-full min-w-0 sm:w-auto sm:min-w-[280px]">
-					<i
-						class="fa-solid fa-link absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-text-secondary"
-						aria-hidden="true"
-					></i>
-					<input
-						v-model="repositoryUrl"
-						type="text"
-						data-no-highlight
-						class="h-8.5 w-full rounded-lg border border-border bg-background pl-7 pr-2.5 shadow-2xs text-xs text-foreground placeholder:text-text-secondary/60 focus:border-border-hover focus:outline-none transition-all"
-						:placeholder="t('agent.settings.plugins.repositoryUrl')"
-						:aria-label="t('agent.settings.plugins.repositoryUrl')"
-						:disabled="locked"
-					/>
+		<div class="rounded-xl bg-header/25 p-3.5 sm:p-4">
+			<div class="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+				<div class="flex items-center gap-2">
+					<i class="fa-solid fa-boxes-stacked text-xs text-primary" aria-hidden="true"></i>
+					<h4 class="text-xs font-semibold text-foreground">
+						{{ t('agent.settings.plugins.remoteRepositories') }}
+					</h4>
+					<span
+						v-if="totalPluginCount > 0"
+						class="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-semibold text-primary"
+					>
+						{{ totalPluginCount }}
+					</span>
 				</div>
-				<UiButton
-					appearance="solid"
-					tone="primary"
-					type="button"
-					:disabled="locked || !repositoryUrl.trim()"
-					@click="addRepository"
-					>{{ t('agent.settings.plugins.addRepository') }}</UiButton
-				>
+
+				<div class="flex flex-wrap items-center gap-2">
+					<div class="relative w-full min-w-0 sm:w-auto sm:min-w-[280px]">
+						<i
+							class="fa-solid fa-link absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-text-secondary"
+							aria-hidden="true"
+						></i>
+						<input
+							v-model="repositoryUrl"
+							:aria-label="t('agent.settings.plugins.repositoryUrl')"
+							type="text"
+							data-no-highlight
+							class="h-8.5 w-full rounded-lg border border-border bg-background pl-7 pr-2.5 shadow-2xs text-xs text-foreground placeholder:text-text-secondary/60 focus:border-border-hover focus:outline-none transition-all"
+							:placeholder="t('agent.settings.plugins.repositoryUrl')"
+							:disabled="locked"
+						/>
+					</div>
+					<UiInfoHint
+						v-if="!repositoryUrl.trim()"
+						:text="t('agent.settings.disabledReason.repositoryRequired')"
+					/>
+					<UiButton
+						appearance="solid"
+						tone="primary"
+						type="button"
+						:disabled="locked || !repositoryUrl.trim()"
+						@click="addRepository"
+					>
+						{{ t('agent.settings.plugins.addRepository') }}
+					</UiButton>
+					<UiButton
+						type="button"
+						appearance="soft"
+						tone="neutral"
+						:disabled="locked"
+						:aria-label="t('agent.settings.plugins.refreshRemote')"
+						@click="reload"
+					>
+						<i
+							class="fa-solid fa-arrows-rotate text-xs"
+							:class="{ 'fa-spin': operation.busy.value }"
+							aria-hidden="true"
+						></i>
+						<span class="hidden whitespace-nowrap min-[360px]:inline">{{
+							t('agent.settings.plugins.refreshRemote')
+						}}</span>
+					</UiButton>
+				</div>
 			</div>
-		</div>
-		<div class="relative w-full">
-			<i
-				class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-text-secondary"
-				aria-hidden="true"
-			></i>
-			<input
-				v-model="searchQuery"
-				type="text"
-				data-no-highlight
-				class="h-8.5 w-full rounded-lg border border-border bg-background pl-8 pr-8 shadow-2xs text-xs text-foreground placeholder:text-text-secondary/60 focus:border-border-hover focus:outline-none transition-all"
-				:placeholder="t('agent.settings.plugins.searchPlaceholder')"
-				:aria-label="t('agent.settings.plugins.searchPlaceholder')"
-			/>
-			<button
-				v-if="searchQuery"
-				type="button"
-				class="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center text-xs text-text-secondary hover:text-foreground cursor-pointer"
-				:aria-label="t('common.clear')"
-				@click="searchQuery = ''"
-			>
-				<i class="fa-solid fa-circle-xmark" aria-hidden="true"></i>
-			</button>
-		</div>
-		<div v-if="repositories?.urls.length" class="flex flex-wrap gap-2 border-t border-border pt-3">
-			<div
-				v-for="url in repositories.urls"
-				:key="url"
-				class="flex max-w-full items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1 shadow-2xs text-xs"
-			>
-				<i class="fa-solid fa-globe text-[10px] text-primary/70" aria-hidden="true"></i>
-				<span class="max-w-[24rem] truncate font-mono text-[11px] sm:max-w-[36rem]" :title="url">{{
-					url
-				}}</span>
+
+			<div class="mt-3 relative w-full">
+				<i
+					class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-text-secondary"
+					aria-hidden="true"
+				></i>
+				<input
+					v-model="searchQuery"
+					:aria-label="t('agent.settings.plugins.searchPlaceholder')"
+					type="text"
+					data-no-highlight
+					class="h-8.5 w-full rounded-lg border border-border bg-background pl-8 pr-8 shadow-2xs text-xs text-foreground placeholder:text-text-secondary/60 focus:border-border-hover focus:outline-none transition-all"
+					:placeholder="t('agent.settings.plugins.searchPlaceholder')"
+				/>
 				<button
+					v-if="searchQuery"
 					type="button"
-					class="inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-text-secondary hover:bg-error/10 hover:text-error disabled:opacity-50"
-					:aria-label="t('agent.settings.plugins.removeRepository')"
-					:disabled="locked"
-					@click="removeRepository(url)"
+					class="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center text-xs text-text-secondary hover:text-foreground cursor-pointer"
+					@click="searchQuery = ''"
+					:aria-label="t('common.clear')"
 				>
-					<i class="fa-solid fa-xmark text-[10px]" aria-hidden="true"></i>
+					<i class="fa-solid fa-circle-xmark"></i>
 				</button>
 			</div>
-		</div>
-		<div class="space-y-3">
-			<details
-				v-for="group in filteredCatalogs"
-				:key="group.url"
-				open
-				class="overflow-hidden rounded-xl border border-border bg-card shadow-2xs"
-			>
-				<summary class="cursor-pointer break-all bg-header/25 px-4 py-3 text-xs font-semibold">
-					{{ group.source ?? t('agent.settings.plugins.officialRepository') }}
-				</summary>
-				<div class="space-y-3 p-3">
-					<template v-if="group.source !== null">
-						<div
-							v-for="publisher in group.publishers"
-							:key="publisher.keyId"
-							class="rounded-lg bg-header/25 p-3 text-xs"
-						>
-							<span class="font-medium">{{ publisher.label }}</span>
-							<details class="mt-2">
-								<summary class="cursor-pointer text-text-secondary">
-									{{ t('agent.settings.onboarding.detailsToggle') }}
-								</summary>
-								<p class="mt-2 break-all font-mono">{{ publisher.keyId }}</p>
-							</details>
-							<UiButton
-								v-if="!publisherTrusted(publisher.keyId)"
-								type="button"
-								:disabled="locked"
-								@click="emit('trust', publisher.label, publisher.publicKeyPem)"
-								>{{ t('agent.settings.plugins.trustRemotePublisher') }}</UiButton
-							>
-						</div>
-					</template>
-					<article
-						v-for="entry in group.entries"
-						:key="entry.definitionId + ':' + entry.version"
-						class="space-y-2.5 rounded-lg border border-border bg-background p-3 text-xs shadow-2xs transition-colors hover:border-primary/40"
+
+			<div v-if="configuredRepositories.length" class="mt-3 flex flex-wrap gap-2 pt-3 border-t border-border">
+				<div
+					v-for="repository in configuredRepositories"
+					:key="repository.url"
+					class="flex max-w-full items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1 shadow-2xs text-xs"
+				>
+					<i class="fa-solid fa-globe text-[10px] text-primary/70" aria-hidden="true"></i>
+					<span
+						class="max-w-[24rem] sm:max-w-[36rem] truncate font-mono text-[11px] text-foreground"
+						:title="repository.url"
+						>{{ repository.url }}</span
 					>
-						<div class="flex flex-wrap items-center justify-between gap-2">
-							<div class="flex min-w-0 flex-wrap items-center gap-2">
-								<span class="font-semibold">{{ entry.displayName }}</span>
-								<span class="font-mono text-text-secondary">v{{ entry.version }}</span>
-								<span
-									class="rounded-full px-2 py-0.5 text-[10px] font-medium"
-									:class="catalogEntryState(entry).tone"
-									>{{ catalogEntryState(entry).label }}</span
+					<button
+						type="button"
+						class="inline-flex h-6 w-6 items-center justify-center rounded text-text-secondary hover:bg-error/10 hover:text-error transition-colors disabled:opacity-50 cursor-pointer"
+						:aria-label="t('agent.settings.plugins.removeRepository')"
+						:disabled="locked"
+						@click="removeRepository(repository.url)"
+					>
+						<i class="fa-solid fa-xmark text-[10px]" aria-hidden="true"></i>
+					</button>
+				</div>
+			</div>
+
+			<div v-if="filteredCatalogGroups.length" class="mt-3.5 pt-3.5 border-t border-border space-y-3">
+				<div
+					v-for="group in filteredCatalogGroups"
+					:key="group.key"
+					class="overflow-hidden rounded-xl bg-header/25 transition-all duration-200"
+				>
+					<div
+						role="button"
+						tabindex="0"
+						:aria-expanded="isGroupExpanded(group.key)"
+						class="w-full flex flex-wrap items-center justify-between gap-2.5 px-3.5 sm:px-4 py-2.5 sm:py-3 hover:bg-header/30 transition-colors select-none cursor-pointer"
+						@click="toggleGroup(group.key)"
+						@keydown.enter.space.prevent="toggleGroup(group.key)"
+					>
+						<div class="flex flex-wrap items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
+							<i
+								:class="
+									isGroupExpanded(group.key)
+										? 'fa-solid fa-chevron-down'
+										: 'fa-solid fa-chevron-right'
+								"
+								class="text-[11px] text-text-secondary w-3 text-center transition-transform shrink-0"
+								aria-hidden="true"
+							></i>
+							<div
+								class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-header/80 text-foreground/80 border border-border/60"
+							>
+								<i class="fa-brands fa-github text-xs" aria-hidden="true"></i>
+							</div>
+							<div class="flex items-baseline gap-1.5 shrink-0">
+								<span class="text-xs text-text-secondary shrink-0"
+									>{{ t('agent.settings.plugins.repositorySource') }}:</span
 								>
+								<span class="text-xs sm:text-sm font-bold text-foreground font-mono">{{
+									group.owner
+								}}</span>
+							</div>
+							<span
+								v-if="group.official"
+								class="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary shrink-0"
+							>
+								<i class="fa-solid fa-certificate text-[8px]" aria-hidden="true"></i>
+								<span>{{ t('agent.settings.plugins.officialRepository') }}</span>
+							</span>
+							<span
+								v-else
+								class="inline-flex items-center gap-1 rounded-full border border-border/70 bg-header/60 px-2 py-0.5 text-[10px] font-medium text-text-secondary shrink-0"
+							>
+								<i class="fa-solid fa-network-wired text-[8px]" aria-hidden="true"></i>
+								<span>{{ t('agent.settings.plugins.thirdPartyRepository') }}</span>
+							</span>
+							<span
+								class="hidden xs:inline-flex rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 text-[10px] font-mono text-text-secondary shrink-0"
+							>
+								{{ t('agent.settings.plugins.pluginCount', { count: group.packages.length }) }}
+							</span>
+
+							<button
+								v-if="group.sourceUrl"
+								type="button"
+								class="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-header/60 hover:bg-header hover:border-border hover:text-foreground px-2 py-1 text-[11px] font-mono text-text-secondary transition-colors cursor-pointer max-w-full"
+								:title="group.sourceUrl"
+								@click.stop="copyCatalogUrl(group.sourceUrl)"
+								@keydown.stop
+								:aria-label="t('agent.settings.plugins.copy')"
+							>
+								<i
+									:class="
+										copiedSourceUrl === group.sourceUrl
+											? 'fa-solid fa-check text-success'
+											: 'fa-regular fa-copy'
+									"
+									class="text-[10px] shrink-0"
+									aria-hidden="true"
+								></i>
+								<span
+									class="truncate max-w-[280px] sm:max-w-[420px] md:max-w-[620px] lg:max-w-[820px] text-[11px]"
+									>{{ group.sourceUrl }}</span
+								>
+							</button>
+						</div>
+					</div>
+
+					<div
+						v-if="isGroupExpanded(group.key)"
+						class="space-y-1 border-t border-border/30 bg-background/25 px-3 sm:px-4"
+					>
+						<div class="flex items-center justify-between px-1 text-xs text-text-secondary font-medium">
+							<div class="flex items-center gap-1.5">
+								<i class="fa-solid fa-puzzle-piece text-[10px] text-primary" aria-hidden="true"></i>
+								<span>{{ t('agent.settings.plugins.repositoryPlugins') }}</span>
+							</div>
+							<span class="font-mono text-[11px]">{{
+								t('agent.settings.plugins.pluginCount', { count: group.packages.length })
+							}}</span>
+						</div>
+
+						<div class="grid grid-cols-1">
+							<div
+								v-for="{ package: entry, catalog, official, source } in group.packages"
+								:key="`${entry.definitionId}@${entry.version}`"
+								class="flex flex-col justify-between gap-3 border-b border-border/30 py-3 last:border-b-0 sm:flex-row sm:items-center hover:bg-card/30"
+							>
+								<div class="flex items-center gap-3 min-w-0 flex-1">
+									<div
+										class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm shadow-2xs transition-transform"
+										:class="
+											entry.definitionId === 'nexus.agent'
+												? 'bg-primary/15 text-primary ring-1 ring-primary/25'
+												: entry.definitionId === 'nexus.fullstack'
+													? 'bg-success/15 text-success ring-1 ring-success/25'
+													: 'bg-primary/10 text-primary ring-1 ring-primary/20'
+										"
+									>
+										<i
+											:class="
+												entry.definitionId === 'nexus.agent'
+													? 'fa-solid fa-wand-magic-sparkles'
+													: entry.definitionId === 'nexus.fullstack'
+														? 'fa-solid fa-layer-group'
+														: 'fa-solid fa-puzzle-piece'
+											"
+											aria-hidden="true"
+										></i>
+									</div>
+
+									<div class="min-w-0 flex-1">
+										<div class="flex flex-wrap items-center gap-2">
+											<span class="text-xs sm:text-sm font-bold text-foreground truncate">{{
+												entry.displayName
+											}}</span>
+											<span
+												class="rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 font-mono text-[11px] text-text-secondary"
+											>
+												v{{ entry.version }}
+											</span>
+											<span
+												class="rounded-full px-2 py-0.5 text-[11px] font-medium"
+												:class="catalogEntryState(entry).tone"
+												>{{ catalogEntryState(entry).label }}</span
+											>
+											<span class="hidden md:inline font-mono text-[11px] text-text-secondary/60">
+												{{ entry.definitionId }}
+											</span>
+										</div>
+
+										<div class="mt-0.5 flex items-center gap-2 text-xs text-text-secondary">
+											<p
+												class="truncate text-[11px] leading-relaxed max-w-md lg:max-w-xl"
+												:title="
+													entry.definitionId === 'nexus.agent'
+														? t('agent.settings.plugins.summaryNexusAgent')
+														: entry.definitionId === 'nexus.fullstack'
+															? t('agent.settings.plugins.summaryNexusFullstack')
+															: entry.description
+												"
+											>
+												{{
+													entry.definitionId === 'nexus.agent'
+														? t('agent.settings.plugins.summaryNexusAgent')
+														: entry.definitionId === 'nexus.fullstack'
+															? t('agent.settings.plugins.summaryNexusFullstack')
+															: entry.description
+												}}
+											</p>
+											<span
+												v-if="!entry.compatible"
+												class="shrink-0 text-[11px] text-warning font-mono"
+											>
+												{{
+													t('agent.settings.plugins.compatibilityShort', {
+														min: entry.minVersion,
+														max: entry.maxVersion,
+													})
+												}}
+											</span>
+										</div>
+									</div>
+								</div>
+
+								<div
+									class="flex shrink-0 items-center justify-between gap-2.5 pt-2 sm:justify-end sm:border-0 sm:pt-0"
+								>
+									<span
+										class="hidden sm:inline-flex items-center gap-1 text-[11px] text-text-secondary/70 font-mono"
+									>
+										<i class="fa-solid fa-shield-check text-success text-[10px]"></i>
+										<span>Ed25519</span>
+									</span>
+
+									<div class="flex items-center gap-1.5">
+										<UiButton
+											appearance="soft"
+											tone="neutral"
+											v-if="!official && !publisherTrusted(entry.publisherKeyId)"
+											type="button"
+											:disabled="
+												locked ||
+												!catalog.publishers.some(
+													(publisher) => publisher.keyId === entry.publisherKeyId,
+												)
+											"
+											@click="trustRemotePublisher(catalog, entry.publisherKeyId)"
+										>
+											{{ t('agent.settings.plugins.trustRemotePublisher') }}
+										</UiButton>
+
+										<UiButton
+											type="button"
+											:appearance="installedFor(entry) ? 'soft' : 'solid'"
+											:tone="installedFor(entry) ? 'neutral' : 'primary'"
+											:disabled="
+												locked ||
+												!entry.compatible ||
+												(!official && !publisherTrusted(entry.publisherKeyId))
+											"
+											@click="prepare(entry, source)"
+										>
+											<i
+												:class="
+													installedFor(entry)
+														? 'fa-solid fa-arrows-rotate text-[11px]'
+														: 'fa-solid fa-download text-[11px]'
+												"
+												aria-hidden="true"
+											></i>
+											<span>{{ catalogEntryAction(entry) }}</span>
+										</UiButton>
+									</div>
+								</div>
 							</div>
 						</div>
-						<p class="leading-relaxed text-text-secondary">{{ entry.description }}</p>
-						<p v-if="!entry.compatible" class="text-[11px] text-warning">
-							{{
-								t('agent.settings.plugins.compatibilityShort', {
-									min: entry.minVersion,
-									max: entry.maxVersion,
-								})
-							}}
-						</p>
-						<div class="flex justify-end">
-							<UiButton
-								type="button"
-								:appearance="installedFor(entry) ? 'soft' : 'solid'"
-								:tone="installedFor(entry) ? 'neutral' : 'primary'"
-								:disabled="
-									locked ||
-									!entry.compatible ||
-									(group.source !== null && !publisherTrusted(entry.publisherKeyId))
-								"
-								@click="prepare(entry, group.source)"
-								>{{ catalogEntryAction(entry) }}</UiButton
-							>
-						</div>
-					</article>
-					<p v-if="!group.entries.length" class="text-xs text-text-secondary">
-						{{ t('agent.settings.plugins.searchEmpty') }}
-					</p>
+					</div>
 				</div>
-			</details>
+			</div>
+
+			<div
+				v-else-if="catalogs.length > 0 && searchQuery"
+				class="mt-3.5 pt-6 pb-6 text-center border-t border-border"
+			>
+				<div
+					class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-header/60 text-text-secondary mb-2"
+				>
+					<i class="fa-solid fa-magnifying-glass text-xs" aria-hidden="true"></i>
+				</div>
+				<p class="text-xs text-text-secondary">{{ t('agent.settings.plugins.searchEmpty') }}</p>
+				<button
+					type="button"
+					class="mt-2 text-xs text-primary hover:underline cursor-pointer"
+					@click="searchQuery = ''"
+				>
+					{{ t('agent.settings.plugins.clearSearch') }}
+				</button>
+			</div>
 		</div>
 		<template v-if="unknown">
 			<p class="text-warning">{{ t('agent.pluginManagement.unknown') }}</p>

@@ -1,6 +1,6 @@
 import { computed, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useFeedback } from '@/shared/feedback/public';
+import { useFeedback, useFeedbackMessage } from '@/shared/feedback/public';
 import { useAuthSession } from '@/features/auth/public';
 import { targetErrorKey } from '@/client/targets/target-types';
 import { useConnectionTags, type TagSummary } from '@/features/tags/public';
@@ -17,6 +17,12 @@ export function useTagGroupManagement(props: TagGroupInput, events: { close(): v
 	const snapshot = ref<TagSummary | null>(null);
 	const saving = ref(false);
 	const message = ref('');
+	let failureCause: unknown;
+	useFeedbackMessage(
+		() => message.value,
+		undefined,
+		() => failureCause,
+	);
 	const requiresReview = ref(false);
 	let generation = 0;
 	let controller = new AbortController();
@@ -132,6 +138,7 @@ export function useTagGroupManagement(props: TagGroupInput, events: { close(): v
 			await work(signal, tag);
 		} catch (cause) {
 			if (current === generation) {
+				failureCause = cause;
 				message.value = t('tags.failures.' + targetErrorKey(cause));
 				requiresReview.value = tags.needsRefresh.value;
 			}

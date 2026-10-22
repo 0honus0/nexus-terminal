@@ -9,7 +9,9 @@
       "dataManagement": "数据管理"
     },
     "about": {
+      "appInfo": "应用信息",
       "version": "版本",
+      "project": "项目地址",
       "checkingUpdate": "正在检查更新...",
       "latestVersion": "已是最新版本",
       "updateAvailable": "发现新版本 {version}！",
@@ -51,6 +53,7 @@
       "allSettings": "所有设置",
       "settingsOverview": "设置中心"
     },
-    "advancedMaintenance": "诊断与恢复（高级）"
+    "advancedMaintenance": "诊断与恢复（高级）",
+    "advancedMaintenanceDescription": "系统状态、执行围栏与 Agent 数据维护"
   }
 }

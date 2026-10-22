@@ -22,12 +22,8 @@ export interface ConnectionSummary {
 	route: ConnectionRoute;
 	proxyId: number | null;
 	notes: string | null;
-	rdpRemoteApp: string | null;
-	rdpRemoteAppDirectory: string | null;
-	rdpRemoteAppArguments: string | null;
 	tagIds: number[];
 	jumpIds: number[];
-	/** Local observed connection time in milliseconds; never changes server metadata. */
 	lastConnectedAt: number | null;
 }
 
@@ -45,9 +41,6 @@ export interface ConnectionDraft {
 	tagIds: number[];
 	notes: string;
 	jumpIds: number[];
-	remoteApp: string;
-	remoteAppDirectory: string;
-	remoteAppArguments: string;
 }
 
 export interface CredentialSummary {
@@ -80,7 +73,6 @@ export interface ConnectionsController {
 	load(force?: boolean): Promise<ConnectionSummary[]>;
 	revalidate(maxAgeMs?: number): Promise<ConnectionSummary[]>;
 	refresh(id: number): Promise<ConnectionSummary>;
-	markConnected(id: number, timestamp: number): void;
 	create(input: TargetImportInput, signal?: AbortSignal): Promise<TargetImportItem[]>;
 	importMany(inputs: TargetImportInput[], signal?: AbortSignal): Promise<TargetImportItem[]>;
 	update(

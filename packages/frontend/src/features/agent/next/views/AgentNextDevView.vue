@@ -2,6 +2,8 @@
 	import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { createAccessApi, AuthRequestFailure } from '@/features/auth/public';
+	import { UiSelect } from '@/foundation/ui';
+	import type { UiSelectValue } from '@/foundation/ui';
 	import { createAgentNextApi } from '../api/agent-next-api';
 	import { AgentNextController, type AgentNextControllerState } from '../model/agent-next-controller';
 	import NativeThreadPanel from '../../host/NativeThreadPanel.vue';
@@ -48,6 +50,10 @@
 	const runId = ref('');
 	const expectedVersion = ref(1);
 	const selectedModelKey = ref('');
+
+	function setSelectedModel(value: UiSelectValue): void {
+		selectedModelKey.value = typeof value === 'string' ? value : '';
+	}
 
 	function modelKey(model: { providerId: string; modelId: string; configurationVersion: number }): string {
 		return JSON.stringify([model.providerId, model.modelId, model.configurationVersion]);
@@ -340,12 +346,16 @@
 				</button>
 				<label class="block">
 					{{ t('agentNext.modelSelection') }}
-					<select v-model="selectedModelKey" class="block w-full border p-2" :disabled="state.busy">
+					<UiSelect
+						:model-value="selectedModelKey"
+						:disabled="state.busy"
+						@update:model-value="setSelectedModel"
+					>
 						<option value="">{{ t('agentNext.chooseModel') }}</option>
 						<option v-for="model in state.availableModels" :key="modelKey(model)" :value="modelKey(model)">
 							{{ model.displayName }} · {{ model.modelId }} · v{{ model.configurationVersion }}
 						</option>
-					</select>
+					</UiSelect>
 				</label>
 				<label class="block">
 					{{ t('agentNext.prompt') }}

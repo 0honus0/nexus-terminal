@@ -2,7 +2,7 @@ import type { LocalSystemStatus } from '@nexus-terminal/shared/system/status/mod
 import type { SshResourceStatus } from '@nexus-terminal/shared/remote/monitoring/model';
 import type { LocalResourceStatus, SshResource, SshResourceTarget, ResourceFailureCode } from './system-overview-types';
 
-export function toLocalResource(value: LocalSystemStatus): LocalResourceStatus {
+export function toLocalResource(value: LocalSystemStatus, checkedAt: number): LocalResourceStatus {
 	return {
 		cpuPercent: value.cpuPercent,
 		memPercent: value.memPercent,
@@ -11,6 +11,7 @@ export function toLocalResource(value: LocalSystemStatus): LocalResourceStatus {
 		diskPercent: value.diskPercent,
 		diskUsed: value.diskUsed,
 		diskTotal: value.diskTotal,
+		checkedAt,
 	};
 }
 
@@ -77,5 +78,76 @@ export function toPendingResource(target: SshResourceTarget, error?: ResourceFai
 		port: target.port,
 		state: 'waiting',
 		checkedAt: null,
+	};
+}
+
+export function toRetainedResource(target: SshResourceTarget, previous?: SshResource): SshResource {
+	if (!previous) {
+		return toPendingResource(target);
+	}
+	const key = resourceKey(target.host, target.port);
+	const connectionId = target.id;
+	const name = target.name || target.host;
+	const username = target.username;
+	const host = target.host;
+	const port = target.port;
+	if (previous.state === 'ready') {
+		return {
+			key,
+			connectionId,
+			name,
+			username,
+			host,
+			port,
+			state: 'ready',
+			checkedAt: previous.checkedAt,
+			status: previous.status,
+			refreshError: previous.refreshError,
+		};
+	}
+	if (previous.state === 'failed') {
+		return {
+			key,
+			connectionId,
+			name,
+			username,
+			host,
+			port,
+			state: 'failed',
+			checkedAt: previous.checkedAt,
+			error: previous.error,
+		};
+	}
+	return {
+		key,
+		connectionId,
+		name,
+		username,
+		host,
+		port,
+		state: 'waiting',
+		checkedAt: null,
+	};
+}
+
+export function toRefreshFailureResource(
+	target: SshResourceTarget,
+	previous: SshResource | undefined,
+	error: ResourceFailureCode,
+): SshResource {
+	if (previous?.state !== 'ready') {
+		return toPendingResource(target, error);
+	}
+	return {
+		key: resourceKey(target.host, target.port),
+		connectionId: target.id,
+		name: target.name || target.host,
+		username: target.username,
+		host: target.host,
+		port: target.port,
+		state: 'ready',
+		checkedAt: previous.checkedAt,
+		status: previous.status,
+		refreshError: error,
 	};
 }

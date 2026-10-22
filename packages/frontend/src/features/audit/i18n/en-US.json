@@ -9,8 +9,52 @@
     "endOfList": "All records loaded",
     "loadMore": "Load more",
     "subtitle": "Review sign-ins, security changes, and connection activity at a glance.",
+    "tabs": {
+      "logs": "Activity",
+      "deliveries": "Notification deliveries"
+    },
+    "deliveries": {
+      "title": "Notification deliveries",
+      "hint": "Queued and dispatched mean accepted work, not confirmed delivery. Unknown results are never resent automatically.",
+      "loadedOnly": "{loaded} deliveries loaded",
+      "unknownCount": "{count} unknown",
+      "empty": "No deliveries yet.",
+      "statusLabel": "Delivery status",
+      "channel": "Notification channel",
+      "channelUnavailable": "Channel unavailable",
+      "updated": "Updated {time}",
+      "statusShort": {
+        "queued": "Queued",
+        "dispatched": "Dispatched",
+        "sent": "Sent",
+        "failed": "Failed",
+        "unknown": "Unknown"
+      },
+      "status": {
+        "queued": "Queued",
+        "dispatched": "Dispatched, awaiting result",
+        "sent": "Sent",
+        "failed": "Failed",
+        "unknown": "Delivery result unknown, verify the receiver before retrying"
+      }
+    },
     "refresh": "Refresh",
     "reset": "Reset",
+    "filters": {
+      "timeRange": "Time range",
+      "allTime": "All time",
+      "last24Hours": "Last 24 hours",
+      "last7Days": "Last 7 days",
+      "last30Days": "Last 30 days",
+      "clear": "Clear filters"
+    },
+    "httpStatus": {
+      "success": "Success",
+      "redirect": "Redirect",
+      "unauthorized": "Unauthorized",
+      "failed": "Failed",
+      "recorded": "Recorded"
+    },
     "emptyHint": "Try another keyword or reset the filters.",
     "unknownAction": "Other activity",
     "detailsHint": "Expand to inspect this activity",
@@ -71,7 +115,6 @@
       "AGENT_MEMORY_PUBLISHED": "Agent memory published",
       "AGENT_MEMORY_REJECTED": "Agent memory rejected",
       "AGENT_MEMORY_REVOKED": "Agent memory revoked",
-      "AGENT_MEMORY_IMPORTED": "Agent memory imported",
       "LOGIN_SUCCESS": "Login Success",
       "LOGIN_FAILURE": "Login Failure",
       "LOGOUT": "Logout",
@@ -107,9 +150,37 @@
       "PASSKEY_DELETE_UNAUTHORIZED": "Passkey Deletion Unauthorized",
       "PASSKEY_NAME_UPDATED": "Passkey Name Updated",
       "PASSKEY_NAME_UPDATE_UNAUTHORIZED": "Passkey Name Update Unauthorized",
-      "CAPTCHA_SETTINGS_UPDATED": "CAPTCHA Settings Updated"
+      "CAPTCHA_SETTINGS_UPDATED": "CAPTCHA Settings Updated",
+      "AGENT_APPROVAL_REQUIRED": "Agent approval required",
+      "AGENT_ATTENTION_REQUIRED": "Agent needs attention",
+      "AGENT_RUN_COMPLETED": "Agent run completed",
+      "AGENT_RUN_FAILED": "Agent run failed",
+      "AGENT_RUN_INTERRUPTED": "Agent run interrupted",
+      "IP_BLOCKED": "IP blocked",
+      "HTTP_MUTATION": "Data updated",
+      "HTTP_MUTATION_FAILED": "Data update failed",
+      "AGENT_EXECUTION_SETTINGS_UPDATED": "Agent execution settings updated",
+      "AGENT_ARTIFACT_CREATED": "Agent file created",
+      "AGENT_ARTIFACT_DELETED": "Agent file deleted",
+      "REMOTE_MUTATION_EVIDENCE_RECORDED": "Remote change evidence recorded",
+      "REMOTE_MUTATION_RELEASED": "Remote change evidence released"
+    },
+    "scopes": {
+      "pathHistory": "Path history",
+      "commandHistory": "Command history",
+      "connections": "Connection settings",
+      "proxies": "Proxy settings",
+      "sshKeys": "SSH keys",
+      "tags": "Tags",
+      "notifications": "Notification settings",
+      "settings": "System settings",
+      "agent": "Agent",
+      "account": "Account and security",
+      "system": "System data"
     },
     "allActions": "All actions",
+    "scopedMutation": "{context} updated",
+    "scopedMutationFailed": "{context} update failed",
     "parseErrorRaw": "Parse error — raw value: {raw}",
     "loadFailed": "Failed to load audit logs.",
     "loadedOnly": "{loaded} records loaded"

@@ -4,7 +4,7 @@
 
 <script setup lang="ts">
 	import { onBeforeUnmount, ref } from 'vue';
-	import { UiPopover } from '@/foundation/ui';
+	import { UiButton, UiPopover } from '@/foundation/ui';
 
 	const props = withDefaults(
 		defineProps<{
@@ -55,22 +55,18 @@
 		@open-change="onOpenChange"
 	>
 		<template #trigger-control="{ open: expanded }">
-			<button
-				type="button"
-				class="agent-config-summary flex h-[26px] items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium transition-colors duration-150 select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
-				:class="[
-					props.triggerVariant === 'square' ? 'agent-config-trigger-square' : '',
-					expanded
-						? 'border-border/70 bg-header/90 text-foreground shadow-xs'
-						: 'border-transparent bg-transparent text-text-secondary hover:border-border/50 hover:bg-header/70 hover:text-foreground',
-					props.triggerClass,
-				]"
+			<UiButton
+				:appearance="expanded ? 'soft' : 'ghost'"
+				density="compact"
+				:icon-only="props.triggerVariant === 'square'"
+				class="agent-config-summary"
+				:class="[props.triggerVariant === 'square' ? 'agent-config-trigger-square' : '', props.triggerClass]"
 				:disabled="props.disabled"
 				:aria-label="props.ariaLabel"
 				:title="props.title || undefined"
 			>
 				<slot name="trigger" :open="expanded" />
-			</button>
+			</UiButton>
 		</template>
 		<template #panel="{ close: closePanel }">
 			<slot name="panel" :close="(restoreFocus = true) => closePanel(restoreFocus)" />

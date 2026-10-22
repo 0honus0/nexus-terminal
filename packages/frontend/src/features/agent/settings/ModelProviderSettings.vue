@@ -1,9 +1,28 @@
 <script setup lang="ts">
-	import { computed, onBeforeUnmount, ref, watch } from 'vue';
+	import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiModal, UiInfoHint, UiEmptyState, UiResizeHandle } from '@/foundation/ui';
+	import {
+		UiButton,
+		UiCheckbox,
+		UiEmptyState,
+		UiFormActions,
+		UiFormField,
+		UiInfoHint,
+		UiInput,
+		UiModal,
+		UiResizeHandle,
+		UiSelect,
+		UiSwitch,
+	} from '@/foundation/ui';
+	import type { UiSelectOption, UiSelectValue } from '@/foundation/ui';
+	import { useDeviceCapabilities } from '@/foundation/browser';
+	import { useFeedback, useFeedbackMessage } from '@/shared/feedback/public';
 	import { useAuthenticatedViewScope } from '@/shared/session/use-authenticated-view-scope';
 	import {
+		AGENT_PROVIDER_MAX_MODEL_ID_BYTES,
+		AGENT_PROVIDER_MAX_NAME_BYTES,
+		AGENT_PROVIDER_MAX_SECRET_BYTES,
+		AGENT_PROVIDER_MAX_URL_BYTES,
 		AGENT_MODEL_CAPABILITY_FIELDS,
 		AGENT_PROVIDER_MODEL_LIMIT,
 	} from '@nexus-terminal/shared/agent/providers/values';
@@ -19,6 +38,11 @@
 	import ModelRegistrySettings from './ModelRegistrySettings.vue';
 
 	const { t, locale } = useI18n();
+	const feedback = useFeedback();
+	const device = useDeviceCapabilities();
+	const canResizePanel = computed(
+		() => !device.isMobile.value && !device.isNarrowViewport.value && !device.hasCoarsePointer.value,
+	);
 	const props = withDefaults(defineProps<{ active?: boolean }>(), { active: true });
 	const {
 		providers,
@@ -32,7 +56,7 @@
 		edit,
 		cancel,
 		load,
-		save,
+		save: saveDraft,
 		setEnabled,
 		remove,
 		discover,
@@ -47,6 +71,7 @@
 	);
 	const modelCount = computed(() => providers.value.reduce((total, provider) => total + provider.models.length, 0));
 	const showApiKey = ref(false);
+	const validationAttempted = ref(false);
 	const copiedUrl = ref<string | null>(null);
 	let copiedTimer: ReturnType<typeof setTimeout> | undefined;
 	const panelWidth = ref(576);
@@ -69,6 +94,13 @@
 
 		widthMultiplier: 2,
 		heightMultiplier: 2,
+
+		canStart: () => canResizePanel.value,
+	});
+	watch(canResizePanel, (canResize) => {
+		if (canResize) return;
+		resize.stopResize();
+		resized.value = false;
 	});
 	const query = ref('');
 	const selected = ref<string[]>([]);
@@ -79,6 +111,7 @@
 			query.value = '';
 			showApiKey.value = false;
 			resized.value = false;
+			validationAttempted.value = false;
 		},
 		{ flush: 'sync' },
 	);
@@ -97,6 +130,152 @@
 		discovered.value.filter((item) => item.id.toLowerCase().includes(query.value.toLowerCase())),
 	);
 	const currentProvider = computed(() => providers.value.find((provider) => provider.id === draft.value?.id));
+	const isNewProvider = computed(() => draft.value !== null && draft.value.id === null);
+	const credentialValue = computed({
+		get: () => (draft.value?.credential.action === 'replace' ? draft.value.credential.value : ''),
+
+		set: (value: string) => {
+			if (draft.value?.credential.action === 'replace') draft.value.credential.value = value;
+		},
+	});
+	const protocolOptions = computed<UiSelectOption[]>(() => [
+		{ value: 'chat-completions', label: t('agent.settings.providers.protocolChat') },
+		{ value: 'responses', label: t('agent.settings.providers.protocolResponses') },
+	]);
+	const credentialOptions = computed<UiSelectOption[]>(() => [
+		{ value: 'keep', label: t('agent.settings.providerManagement.keep') },
+		{ value: 'replace', label: t('agent.settings.providerManagement.replace') },
+		{ value: 'clear', label: t('agent.settings.providerManagement.clear') },
+	]);
+
+	interface ModelValidation {
+		id?: string;
+		contextWindow?: string;
+		maxOutputTokens?: string;
+	}
+
+	interface ProviderValidation {
+		name?: string;
+		baseUrl?: string;
+		credential?: string;
+		models: ModelValidation[];
+		messages: string[];
+	}
+
+	function utf8Bytes(value: string): number {
+		return new TextEncoder().encode(value).length;
+	}
+
+	function endpointError(value: string): string | undefined {
+		const trimmed = value.trim();
+		if (!trimmed) return t('agent.settings.providerManagement.validation.endpointRequired');
+		if (utf8Bytes(trimmed) > AGENT_PROVIDER_MAX_URL_BYTES) {
+			return t('agent.settings.providerManagement.validation.endpointTooLong', {
+				max: AGENT_PROVIDER_MAX_URL_BYTES,
+			});
+		}
+		try {
+			const url = new URL(trimmed);
+			if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+				return t('agent.settings.providerManagement.validation.endpointInvalid');
+			}
+		} catch {
+			return t('agent.settings.providerManagement.validation.endpointInvalid');
+		}
+		return undefined;
+	}
+
+	const validation = computed<ProviderValidation>(() => {
+		const value = draft.value;
+		if (!value) return { models: [], messages: [] };
+		const messages = new Set<string>();
+		const result: ProviderValidation = { models: [], messages: [] };
+
+		const name = value.name.trim();
+		if (!name) result.name = t('agent.settings.providerManagement.validation.nameRequired');
+		else if (utf8Bytes(name) > AGENT_PROVIDER_MAX_NAME_BYTES) {
+			result.name = t('agent.settings.providerManagement.validation.nameTooLong', {
+				max: AGENT_PROVIDER_MAX_NAME_BYTES,
+			});
+		}
+		if (result.name) messages.add(result.name);
+
+		result.baseUrl = endpointError(value.baseUrl);
+		if (result.baseUrl) messages.add(result.baseUrl);
+
+		if (value.credential.action === 'replace') {
+			if (!value.credential.value) {
+				result.credential = t('agent.settings.providerManagement.validation.credentialRequired');
+			} else if (utf8Bytes(value.credential.value) > AGENT_PROVIDER_MAX_SECRET_BYTES) {
+				result.credential = t('agent.settings.providerManagement.validation.credentialTooLong', {
+					max: AGENT_PROVIDER_MAX_SECRET_BYTES,
+				});
+			}
+		} else if (value.id === null) {
+			result.credential = t('agent.settings.providerManagement.validation.credentialRequired');
+		}
+		if (result.credential) messages.add(result.credential);
+
+		if (value.models.length === 0) {
+			messages.add(t('agent.settings.providerManagement.validation.modelsRequired'));
+		} else if (value.models.length > AGENT_PROVIDER_MODEL_LIMIT) {
+			messages.add(
+				t('agent.settings.providerManagement.validation.modelLimit', {
+					max: AGENT_PROVIDER_MODEL_LIMIT,
+				}),
+			);
+		}
+
+		const idCounts = new Map<string, number>();
+		for (const model of value.models) {
+			const id = model.id.trim();
+			if (id) idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
+		}
+
+		result.models = value.models.map((model) => {
+			const errors: ModelValidation = {};
+			const id = model.id.trim();
+			if (!id) errors.id = t('agent.settings.providerManagement.validation.modelIdRequired');
+			else if (utf8Bytes(id) > AGENT_PROVIDER_MAX_MODEL_ID_BYTES) {
+				errors.id = t('agent.settings.providerManagement.validation.modelIdTooLong', {
+					max: AGENT_PROVIDER_MAX_MODEL_ID_BYTES,
+				});
+			} else if ((idCounts.get(id) ?? 0) > 1) {
+				errors.id = t('agent.settings.providerManagement.validation.modelIdDuplicate');
+			}
+			if (!Number.isSafeInteger(model.contextWindow) || model.contextWindow < 1) {
+				errors.contextWindow = t('agent.settings.providerManagement.validation.contextWindowInvalid');
+			}
+			if (!Number.isSafeInteger(model.maxOutputTokens) || model.maxOutputTokens < 1) {
+				errors.maxOutputTokens = t('agent.settings.providerManagement.validation.maxOutputTokensInvalid');
+			} else if (
+				Number.isSafeInteger(model.contextWindow) &&
+				model.contextWindow > 0 &&
+				model.maxOutputTokens > model.contextWindow
+			) {
+				errors.maxOutputTokens = t('agent.settings.providerManagement.validation.outputExceedsContext');
+			}
+			if (errors.id) messages.add(errors.id);
+			if (errors.contextWindow) messages.add(errors.contextWindow);
+			if (errors.maxOutputTokens) messages.add(errors.maxOutputTokens);
+			return errors;
+		});
+
+		result.messages = [...messages];
+		return result;
+	});
+
+	watch(notice, (value) => {
+		if (!value) return;
+		const message = t('agent.settings.providerManagement.' + value);
+		if (['invalid', 'failed', 'unknown', 'conflict', 'inUse'].includes(value)) {
+			feedback.notifyError(message);
+		} else if (['saved', 'deleted', 'discovered', 'registryApplied'].includes(value)) {
+			feedback.notifySuccess(message);
+		} else {
+			feedback.notifyInfo(message);
+		}
+	});
 
 	onBeforeUnmount(() => {
 		if (copiedTimer !== undefined) clearTimeout(copiedTimer);
@@ -183,21 +362,15 @@
 		}
 	}
 
-	function setProtocol(event: Event): void {
-		if (!draft.value || !(event.target instanceof HTMLSelectElement)) {
-			return;
-		}
-		const value = event.target.value;
+	function setProtocol(value: UiSelectValue): void {
+		if (!draft.value) return;
 		if (value === 'chat-completions' || value === 'responses') {
 			draft.value.protocol = value;
 		}
 	}
 
-	function setCredential(event: Event): void {
-		if (!draft.value || !(event.target instanceof HTMLSelectElement)) {
-			return;
-		}
-		const value = event.target.value;
+	function setCredential(value: UiSelectValue): void {
+		if (!draft.value) return;
 		showApiKey.value = false;
 		if (value === 'replace') {
 			draft.value.credential = { action: 'replace', value: '' };
@@ -208,8 +381,30 @@
 		}
 	}
 
+	function toggleSelected(id: string, checked: boolean): void {
+		const next = new Set(selected.value);
+		if (checked) next.add(id);
+		else next.delete(id);
+		selected.value = [...next];
+	}
+
+	async function saveProvider(): Promise<void> {
+		if (!draft.value || blocked.value) return;
+		draft.value.name = draft.value.name.trim();
+		draft.value.baseUrl = draft.value.baseUrl.trim();
+		for (const model of draft.value.models) model.id = model.id.trim();
+		validationAttempted.value = true;
+		if (validation.value.messages.length > 0) {
+			feedback.notifyError(validation.value.messages.join(' '));
+			await nextTick();
+			document.querySelector<HTMLElement>('#provider-editor [aria-invalid="true"]')?.focus();
+			return;
+		}
+		await saveDraft();
+	}
+
 	function startResize(event: PointerEvent): void {
-		if (event.button !== 0 || !(event.currentTarget instanceof HTMLElement)) {
+		if (!canResizePanel.value || event.button !== 0 || !(event.currentTarget instanceof HTMLElement)) {
 			return;
 		}
 		const panel = event.currentTarget.closest('.provider-add-panel');
@@ -331,6 +526,21 @@
 			await remove(provider);
 		}
 	}
+
+	useFeedbackMessage(
+		() => {
+			const result = testResult.value;
+			if (!result || !testingModelId.value) return '';
+			const message = t(
+				result.ok ? 'agent.settings.providerManagement.testOk' : 'agent.settings.providerManagement.testFailed',
+				{ ms: result.latencyMs },
+			);
+			return (
+				testingModelId.value + ' · ' + message + (result.ok ? '' : ' · ' + testFailureMessage(result.errorCode))
+			);
+		},
+		() => (testResult.value?.ok ? 'success' : 'error'),
+	);
 </script>
 
 <template>
@@ -339,19 +549,19 @@
 		:aria-label="t('agent.settings.providerManagement.title')"
 	>
 		<div
-			class="agent-settings-head flex items-center justify-between gap-3 rounded-t-2xl border-b border-border bg-header/50 px-4 py-3 sm:px-5 sm:py-3.5"
+			class="agent-settings-head flex items-center justify-between gap-2 rounded-t-2xl border-b border-border bg-header/50 px-4 py-3 sm:gap-3 sm:px-5 sm:py-3.5"
 		>
-			<div class="flex min-w-0 items-center gap-2">
-				<h3 class="whitespace-nowrap text-sm font-semibold text-foreground">
+			<div class="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
+				<h3 class="min-w-0 truncate text-sm font-semibold text-foreground">
 					{{ t('agent.settings.providers.title') }}
 				</h3>
 				<span
-					class="whitespace-nowrap rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-[11px] font-medium text-text-secondary sm:px-2.5"
+					class="shrink-0 whitespace-nowrap rounded-full border border-border/70 bg-background/80 px-1.5 py-0.5 text-[11px] font-medium text-text-secondary sm:px-2.5"
 				>
 					<span class="hidden sm:inline">{{
 						t('agent.settings.providers.counts', { providers: providers.length, models: modelCount })
 					}}</span>
-					<span class="sm:hidden">{{ providers.length }} / {{ modelCount }}</span>
+					<span class="sm:hidden">{{ providers.length }}/{{ modelCount }}</span>
 				</span>
 				<UiInfoHint :text="t('agent.settings.providers.description')" class="shrink-0" />
 			</div>
@@ -360,22 +570,23 @@
 				appearance="soft"
 				tone="neutral"
 				:disabled="blocked || draft !== null"
-				class="w-auto shrink-0 whitespace-nowrap px-3.5"
+				class="w-auto shrink-0 whitespace-nowrap px-3 sm:px-3.5"
 				@click="edit(null)"
 			>
 				<span class="inline-flex items-center gap-1.5 text-xs"
 					><i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
-					<span>{{ t('agent.settings.providers.add') }}</span></span
+					<span class="provider-add-label provider-add-label--full">{{
+						t('agent.settings.providers.add')
+					}}</span>
+					<span class="provider-add-label provider-add-label--short">{{
+						t('agent.settings.providers.addShort')
+					}}</span></span
 				>
 			</UiButton>
 		</div>
 		<div class="space-y-4 p-4 sm:p-5">
 			<ModelRegistrySettings />
-			<p v-if="notice && !draft" role="status" class="text-sm">
-				{{ t('agent.settings.providerManagement.' + notice) }}
-			</p>
-			<div v-if="refreshRequired" role="alert" class="space-y-2 text-sm text-warning">
-				<p>{{ t('agent.settings.providerManagement.refreshRequired') }}</p>
+			<div v-if="refreshRequired && !busy" class="flex justify-end">
 				<UiButton type="button" :disabled="busy" @click="load">{{
 					t('agent.settings.providerManagement.read')
 				}}</UiButton>
@@ -631,58 +842,13 @@
 					</div>
 					<p class="text-xs text-text-secondary">{{ t('agent.settings.providers.testModalDesc') }}</p>
 				</div>
-				<p v-if="notice" role="status" class="text-sm">
-					{{ t('agent.settings.providerManagement.' + notice) }}
-				</p>
 				<div
 					v-if="refreshRequired"
 					class="space-y-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-warning"
 				>
-					<p>{{ t('agent.settings.providerManagement.refreshRequired') }}</p>
 					<UiButton type="button" :disabled="busy" @click="load">{{
 						t('agent.settings.providerManagement.read')
 					}}</UiButton>
-				</div>
-				<div
-					v-if="testResult && testingModelId"
-					role="status"
-					class="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs"
-					:class="
-						testResult.ok
-							? 'border-success/25 bg-success/10 text-success'
-							: 'border-error/25 bg-error/10 text-error'
-					"
-				>
-					<i
-						:class="testResult.ok ? 'fa-solid fa-check' : 'fa-solid fa-circle-exclamation'"
-						aria-hidden="true"
-					></i>
-					<span
-						>{{ testingModelId }} ·
-						{{
-							t(
-								testResult.ok
-									? 'agent.settings.providerManagement.testOk'
-									: 'agent.settings.providerManagement.testFailed',
-								{ ms: testResult.latencyMs },
-							)
-						}}</span
-					>
-					<span v-if="!testResult.ok">{{ testFailureMessage(testResult.errorCode) }}</span>
-					<span v-else-if="testResult.usage">{{
-						t('agent.settings.providerManagement.usage', {
-							input: testResult.usage.inputTokens,
-							output: testResult.usage.outputTokens,
-						})
-					}}</span>
-					<details v-if="!testResult.ok" class="w-full text-[10px] text-text-secondary">
-						<summary class="cursor-pointer">
-							{{ t('agent.settings.providerManagement.technicalDetails') }}
-						</summary>
-						<code class="mt-1 block break-all rounded bg-error/5 px-2 py-1">{{
-							testResult.errorCode
-						}}</code>
-					</details>
 				</div>
 				<div class="configured-models-pane space-y-3">
 					<article
@@ -774,11 +940,11 @@
 				</div>
 			</div>
 			<template #footer
-				><div class="flex justify-end">
+				><UiFormActions>
 					<UiButton type="button" appearance="soft" tone="neutral" :disabled="busy" @click="closeTests">{{
 						t('common.close')
 					}}</UiButton>
-				</div></template
+				</UiFormActions></template
 			>
 		</UiModal>
 		<UiModal
@@ -790,11 +956,13 @@
 			focus-on-open
 			restore-focus
 			panel-class="ui-form-surface provider-add-panel max-w-xl rounded-2xl p-5 sm:p-6"
+			content-class="provider-add-content"
 			@close="cancel"
 		>
-			<template #panel-overlay>
+			<template v-if="canResizePanel" #panel-overlay>
 				<UiResizeHandle
 					class="provider-add-resize-handle absolute bottom-0 right-0 z-40"
+					:disabled="!canResizePanel"
 					:title="t('agent.settings.providers.resize')"
 					:aria-label="t('agent.settings.providers.resize')"
 					@pointerdown.stop="startResize"
@@ -803,118 +971,135 @@
 			<p class="mb-4 text-xs leading-relaxed text-text-secondary">
 				{{ t('agent.settings.providers.modalDescription') }}
 			</p>
-			<p v-if="notice" role="status" class="mb-3 text-sm">
-				{{ t('agent.settings.providerManagement.' + notice) }}
-			</p>
 			<div
 				v-if="refreshRequired"
 				role="alert"
 				class="mb-3 space-y-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-warning"
 			>
-				<p>{{ t('agent.settings.providerManagement.refreshRequired') }}</p>
 				<UiButton type="button" :disabled="busy" @click="load">{{
 					t('agent.settings.providerManagement.read')
 				}}</UiButton>
 			</div>
-			<form v-if="draft" id="provider-editor" class="space-y-4" @submit.prevent="save">
-				<fieldset :disabled="blocked" class="space-y-4">
-					<section class="space-y-3 rounded-xl border border-border/70 bg-header/15 p-3.5 sm:p-4">
+			<form v-if="draft" id="provider-editor" class="space-y-4" @submit.prevent="saveProvider">
+				<fieldset :disabled="blocked" class="min-w-0 space-y-4">
+					<section class="space-y-3 rounded-xl bg-header/20 p-3.5 sm:p-4">
 						<h4 class="flex items-center gap-2 text-xs font-semibold text-foreground">
 							<i class="fa-solid fa-server text-[11px] text-primary" aria-hidden="true"></i>
 							{{ t('agent.settings.providers.title') }}
 						</h4>
-						<label class="block text-xs font-medium text-foreground"
-							><span class="mb-1 block">{{ t('agent.settings.providerManagement.name') }}</span>
-							<input
-								required
-								v-model="draft.name"
-								class="provider-modal-input h-9 w-full rounded-lg px-3 text-sm outline-none"
-							/>
-						</label>
-						<label class="block text-xs font-medium text-foreground"
-							><span class="mb-1 block">{{ t('agent.settings.providerManagement.endpoint') }}</span>
-							<input
-								required
+						<UiFormField
+							:label="t('agent.settings.providerManagement.name')"
+							for-id="provider-name"
+							:error="validationAttempted ? validation.name : undefined"
+							required
+						>
+							<UiInput id="provider-name" v-model="draft.name" autocomplete="off" />
+						</UiFormField>
+						<UiFormField
+							:label="t('agent.settings.providerManagement.endpoint')"
+							for-id="provider-endpoint"
+							:error="validationAttempted ? validation.baseUrl : undefined"
+							required
+						>
+							<UiInput
+								id="provider-endpoint"
 								v-model="draft.baseUrl"
 								type="url"
-								class="provider-modal-input h-9 w-full rounded-lg px-3 font-mono text-xs outline-none"
+								autocomplete="off"
+								spellcheck="false"
+								class="font-mono"
 							/>
-						</label>
-						<div class="grid gap-3 sm:grid-cols-2">
-							<label class="block text-xs font-medium text-foreground"
-								><span class="mb-1 block">{{ t('agent.settings.providers.protocol') }}</span>
-								<select
-									:value="draft.protocol"
-									class="provider-modal-input h-9 w-full rounded-lg px-3 text-xs outline-none"
-									@change="setProtocol"
-								>
-									<option value="chat-completions">Chat Completions</option>
-									<option value="responses">Responses</option>
-								</select>
-							</label>
+						</UiFormField>
+						<div class="grid gap-3 sm:grid-cols-2 sm:items-end">
+							<UiFormField :label="t('agent.settings.providers.protocol')" for-id="provider-protocol">
+								<UiSelect
+									id="provider-protocol"
+									:model-value="draft.protocol"
+									:options="protocolOptions"
+									@update:model-value="setProtocol"
+								/>
+							</UiFormField>
 							<label
-								class="flex items-center gap-2 self-end rounded-lg border border-border/60 bg-card px-3 py-2 text-xs"
+								for="provider-enabled"
+								class="flex h-9 cursor-pointer items-center justify-between gap-3 rounded-xl bg-card px-3 text-xs text-foreground sm:h-8 sm:self-end"
 							>
-								<input v-model="draft.enabled" type="checkbox" />
 								<span>{{ t('agent.settings.providerManagement.enabled') }}</span>
+								<UiSwitch id="provider-enabled" v-model="draft.enabled" />
 							</label>
 						</div>
 					</section>
 
-					<section class="space-y-3 rounded-xl border border-border/70 bg-header/15 p-3.5 sm:p-4">
-						<div class="flex flex-wrap items-center justify-between gap-2">
-							<h4 class="flex items-center gap-2 text-xs font-semibold text-foreground">
-								<i class="fa-solid fa-key text-[11px] text-primary" aria-hidden="true"></i>
-								{{ t('agent.settings.providerManagement.credential') }}
-							</h4>
-							<select
-								:value="draft.credential.action"
-								:aria-label="t('agent.settings.providerManagement.credential')"
-								class="provider-modal-input h-8 rounded-lg px-2.5 text-xs outline-none"
-								@change="setCredential"
-							>
-								<option value="keep">{{ t('agent.settings.providerManagement.keep') }}</option>
-								<option value="replace">{{ t('agent.settings.providerManagement.replace') }}</option>
-								<option v-if="draft.id" value="clear">
-									{{ t('agent.settings.providerManagement.clear') }}
-								</option>
-							</select>
-						</div>
-						<div v-if="draft.credential.action === 'replace'" class="flex gap-2">
-							<input
-								v-model="draft.credential.value"
-								:type="showApiKey ? 'text' : 'password'"
-								autocomplete="new-password"
-								:aria-label="t('agent.settings.providerManagement.credential')"
-								class="provider-modal-input h-9 min-w-0 flex-1 rounded-lg px-3 font-mono text-xs outline-none"
+					<section class="space-y-3 rounded-xl bg-header/20 p-3.5 sm:p-4">
+						<h4 class="flex items-center gap-2 text-xs font-semibold text-foreground">
+							<i class="fa-solid fa-key text-[11px] text-primary" aria-hidden="true"></i>
+							{{ t('agent.settings.providerManagement.credential') }}
+						</h4>
+						<UiFormField
+							v-if="!isNewProvider"
+							:label="t('agent.settings.providerManagement.credentialAction')"
+							for-id="provider-credential-action"
+						>
+							<UiSelect
+								id="provider-credential-action"
+								:model-value="draft.credential.action"
+								:options="credentialOptions"
+								@update:model-value="setCredential"
 							/>
-							<UiButton type="button" appearance="ghost" @click="showApiKey = !showApiKey">
-								<i
-									:class="showApiKey ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'"
-									class="text-[10px]"
-									aria-hidden="true"
-								></i
-								>{{
-									t(
-										showApiKey
-											? 'agent.settings.providers.hideCredential'
-											: 'agent.settings.providers.showCredential',
-									)
-								}}
-							</UiButton>
+						</UiFormField>
+						<div v-if="isNewProvider || draft.credential.action === 'replace'" class="space-y-1">
+							<label
+								v-if="isNewProvider"
+								for="provider-credential"
+								class="block text-xs font-medium text-foreground"
+							>
+								{{ t('agent.settings.providerManagement.credential') }}
+							</label>
+							<div class="flex items-start gap-2">
+								<div class="min-w-0 flex-1 space-y-1">
+									<UiInput
+										id="provider-credential"
+										v-model="credentialValue"
+										:type="showApiKey ? 'text' : 'password'"
+										autocomplete="new-password"
+										:aria-label="t('agent.settings.providerManagement.credential')"
+										:invalid="validationAttempted && Boolean(validation.credential)"
+										class="font-mono"
+									/>
+									<p
+										v-if="validationAttempted && validation.credential"
+										class="text-xs text-error"
+										role="alert"
+									>
+										{{ validation.credential }}
+									</p>
+								</div>
+								<UiButton type="button" appearance="ghost" @click="showApiKey = !showApiKey">
+									<i
+										:class="showApiKey ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'"
+										class="text-[10px]"
+										aria-hidden="true"
+									></i>
+									{{
+										t(
+											showApiKey
+												? 'agent.settings.providers.hideCredential'
+												: 'agent.settings.providers.showCredential',
+										)
+									}}
+								</UiButton>
+							</div>
 						</div>
 						<p class="text-[11px] leading-relaxed text-text-secondary">
 							{{ t('agent.settings.providerManagement.secretHelp') }}
 						</p>
 					</section>
 
-					<section class="space-y-3 rounded-xl border border-border/70 bg-header/15 p-3.5 sm:p-4">
+					<section class="space-y-3 rounded-xl bg-header/20 p-3.5 sm:p-4">
 						<div class="flex flex-wrap items-center justify-between gap-2">
 							<h4 class="flex items-center gap-2 text-xs font-semibold text-foreground">
 								<i class="fa-solid fa-brain text-[11px] text-primary" aria-hidden="true"></i>
 								{{ t('agent.settings.providers.configuredModels') }}
-								<span
-									class="rounded-full border border-border/60 bg-card px-2 py-0.5 font-mono text-[10px] text-text-secondary"
+								<span class="rounded-full bg-card px-2 py-0.5 font-mono text-[10px] text-text-secondary"
 									>{{ draft.models.length }} / {{ AGENT_PROVIDER_MODEL_LIMIT }}</span
 								>
 							</h4>
@@ -931,7 +1116,7 @@
 						<div
 							v-for="(model, index) in draft.models"
 							:key="index"
-							class="space-y-3 rounded-lg border border-border/60 bg-card p-3"
+							class="space-y-3 rounded-xl bg-card/65 p-3.5"
 						>
 							<div class="flex items-center justify-between gap-2">
 								<span class="text-[11px] font-semibold text-foreground">{{
@@ -950,11 +1135,12 @@
 							</div>
 							<ProviderModelEditor
 								:model-value="model"
+								:errors="validationAttempted ? validation.models[index] : undefined"
 								@update:model-value="(value) => draft?.models.splice(index, 1, value)"
 							/>
 							<div
 								v-if="currentProvider?.models.find((item) => item.id === model.id)?.observation"
-								class="space-y-2 rounded-md bg-header/25 p-2.5 text-[11px] text-text-secondary"
+								class="space-y-2 rounded-lg bg-header/25 p-2.5 text-[11px] text-text-secondary"
 							>
 								<p>{{ t('agent.settings.providerManagement.observationHelp') }}</p>
 								<div class="flex flex-wrap gap-2">
@@ -996,23 +1182,18 @@
 						t('agent.settings.providers.discoveryCount', { count: discovered.length })
 					}}</span>
 				</div>
-				<label class="block text-xs font-medium text-foreground"
-					><span class="mb-1 block">{{ t('agent.settings.providerManagement.filter') }}</span>
-					<input
-						v-model="query"
-						class="provider-modal-input h-9 w-full rounded-lg px-3 text-xs outline-none"
-					/>
-				</label>
+				<UiFormField :label="t('agent.settings.providerManagement.filter')" for-id="discovered-model-filter">
+					<UiInput id="discovered-model-filter" v-model="query" autocomplete="off" />
+				</UiFormField>
 				<div class="grid max-h-48 gap-1.5 overflow-auto sm:grid-cols-2">
 					<label
 						v-for="found in visibleDiscovered"
 						:key="found.id"
-						class="flex min-w-0 items-center gap-2 rounded-md bg-card/70 px-2.5 py-1.5 text-xs"
-						><input
-							v-model="selected"
-							type="checkbox"
-							:value="found.id"
+						class="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg bg-card/70 px-2.5 py-1.5 text-xs"
+						><UiCheckbox
+							:model-value="selected.includes(found.id)"
 							:disabled="blocked || !draft || draft.models.some((model) => model.id === found.id)"
+							@update:model-value="toggleSelected(found.id, $event)"
 						/><span class="truncate font-mono">{{ found.id }}</span></label
 					>
 				</div>
@@ -1033,10 +1214,19 @@
 				</div>
 			</div>
 			<template #footer>
-				<div class="flex justify-end gap-2">
-					<UiButton type="button" :disabled="busy" @click="cancel">{{ t('common.cancel') }}</UiButton>
-					<UiButton type="submit" form="provider-editor" :disabled="blocked">{{ t('common.save') }}</UiButton>
-				</div>
+				<UiFormActions>
+					<UiButton
+						type="submit"
+						form="provider-editor"
+						appearance="solid"
+						tone="primary"
+						:disabled="blocked"
+						>{{ t('common.save') }}</UiButton
+					>
+					<UiButton type="button" appearance="soft" tone="neutral" :disabled="busy" @click="cancel">{{
+						t('common.cancel')
+					}}</UiButton>
+				</UiFormActions>
 			</template>
 		</UiModal>
 		<UiModal
@@ -1054,10 +1244,7 @@
 				</p>
 			</div>
 			<template #footer
-				><div class="flex justify-end gap-2">
-					<UiButton type="button" appearance="soft" tone="neutral" @click="deleting = null">{{
-						t('common.cancel')
-					}}</UiButton>
+				><UiFormActions>
 					<UiButton
 						type="button"
 						appearance="solid"
@@ -1066,7 +1253,10 @@
 						@click="confirmDelete"
 						>{{ t('common.delete') }}</UiButton
 					>
-				</div></template
+					<UiButton type="button" appearance="soft" tone="neutral" @click="deleting = null">{{
+						t('common.cancel')
+					}}</UiButton>
+				</UiFormActions></template
 			>
 		</UiModal>
 	</section>

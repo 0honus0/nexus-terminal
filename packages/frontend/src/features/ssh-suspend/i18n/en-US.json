@@ -69,6 +69,7 @@
       "remote_unavailable": "Remote service unavailable.",
       "request_timeout": "Request timed out.",
       "request_failed": "Request failed. Read the latest state.",
+      "read_failed": "Suspended session data is temporarily unavailable. Refresh or try again later.",
       "protocol_failure": "Invalid response. Read the latest state.",
       "cancelled": "Operation cancelled.",
       "invalid_json": "Invalid request body.",

@@ -18,15 +18,17 @@ async function preferences(request: APIRequestContext) {
 }
 
 async function saveForm(page: Page, form: Locator, postSave: 'enabled' | 'disabled' = 'disabled'): Promise<void> {
+	const formId = await form.getAttribute('id');
+	const submit = formId ? page.locator(`button[form="${formId}"]`) : form.locator('button[type="submit"]');
 	const response = page.waitForResponse(
 		(value) => value.url().endsWith('/api/v1/settings/preferences') && value.request().method() === 'PUT',
 	);
-	await form.locator('button[type="submit"]').click();
+	await submit.click();
 	expect((await response).ok()).toBe(true);
 	// System forms keep Save available. Workspace forms disable it when no dirty
 	// draft remains. Both still require an independently verified API value.
-	if (postSave === 'enabled') await expect(form.locator('button[type="submit"]')).toBeEnabled();
-	else await expect(form.locator('button[type="submit"]')).toBeDisabled();
+	if (postSave === 'enabled') await expect(submit).toBeEnabled();
+	else await expect(submit).toBeDisabled();
 }
 
 async function systemTab(page: Page): Promise<void> {
@@ -151,7 +153,7 @@ test('preferences load failure fences writes until an explicit successful refres
 	expect(writes).toBe(0);
 });
 
-test('dashboard toggles are personal preferences while monitoring changes require restart', async ({
+test('dashboard toggles are personal preferences while monitoring changes apply without restart', async ({
 	page,
 	context,
 }) => {
@@ -171,7 +173,7 @@ test('dashboard toggles are personal preferences while monitoring changes requir
 		const resourceForm = page.locator('form').filter({ has: local });
 		await expect(local).toBeChecked();
 		await expect(remote).toBeChecked();
-		await step('save monitoring policy without claiming it is already effective', async () => {
+		await step('save and activate monitoring policy without restart', async () => {
 			const monitoring = page.locator('[data-monitoring-configuration]');
 			const hostInterval = core.policy.remoteHostRefreshIntervalSeconds === 17 ? 18 : 17;
 			await monitoring.locator('[data-monitoring-host]').fill(String(hostInterval));
@@ -180,12 +182,17 @@ test('dashboard toggles are personal preferences while monitoring changes requir
 			);
 			await monitoring.locator('[data-monitoring-save]').click();
 			expect((await savedResponse).ok()).toBe(true);
-			await expect(monitoring.locator('[data-monitoring-feedback]')).toContainText('Saved');
+			await expect(
+				page.locator('.ui-notification[data-kind="success"]').filter({ hasText: 'Saved' }),
+			).toBeVisible();
 			const saved = await getTestSettings(context.request);
 			expect(saved.policy.remoteHostRefreshIntervalSeconds).toBe(hostInterval);
 			expect(saved.policy.statusMonitorIntervalSeconds).toBe(core.policy.statusMonitorIntervalSeconds);
-			expect(saved.effectiveMonitoring).toEqual(core.effectiveMonitoring);
-			expect(saved.requiresRestart).toBe(true);
+			expect(saved.effectiveMonitoring).toEqual({
+				statusMonitorIntervalSeconds: saved.policy.statusMonitorIntervalSeconds,
+				remoteHostRefreshIntervalSeconds: hostInterval,
+			});
+			expect(saved.requiresRestart).toBe(core.requiresRestart);
 			const invalid = await context.request.put('/api/v1/settings', {
 				headers,
 				data: {
@@ -219,7 +226,7 @@ test('dashboard toggles are personal preferences while monitoring changes requir
 			await expect(remote).not.toBeChecked();
 		});
 		await page.goto('/');
-		await expect(page.getByRole('heading', { name: 'SSH resources', exact: true })).not.toBeVisible();
+		await expect(page.locator('.dashboard-gauge')).toHaveCount(0);
 	} finally {
 		const failures: unknown[] = [];
 		try {
@@ -294,10 +301,14 @@ test('frontend preferences and backend logging persist independently through the
 		await saveForm(page, page.locator('form').filter({ has: frontend }), 'enabled');
 		expect((await preferences(context.request)).frontendLogLevel).toBe('debug');
 		await selectUiOption(backend, targetLevel);
+		const backendSave = page.locator('[data-backend-logging] button[type="submit"]');
+		await expect(page.locator('[data-backend-logging] label span')).toBeHidden();
+		await expect(backendSave).toBeEnabled();
+		await expect(backendSave).toHaveAttribute('data-appearance', 'solid');
 		const savedResponse = page.waitForResponse(
 			(response) => response.url().endsWith('/api/v1/settings/logging') && response.request().method() === 'PUT',
 		);
-		await page.locator('[data-backend-logging] button[type="submit"]').click();
+		await backendSave.click();
 		// The successful PUT may navigate the Settings component before CDP can
 		// read its body. Confirm the original receipt, then independently read
 		// the persisted logging version and level through the API context.

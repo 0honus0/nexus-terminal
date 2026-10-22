@@ -1,11 +1,11 @@
-import { onActivated, onMounted, ref, toRaw } from 'vue';
+import { onActivated, onMounted, ref, toRaw, watch } from 'vue';
 import { getAppExecutionPolicy, getAppGrants, saveAppExecutionPolicy, saveAppGrants } from '../api/app-management-api';
 import type { AppExecutionPolicy, AppGrantInput, AppGrants, AppPolicyOverrides } from '../model/app-management-types';
 import { useAgentManagementOperation } from './use-agent-management-operation';
 import { agentHostEvents } from '../events/agent-host-events';
 
 /** The keyed App editor owns one instance; switching apps destroys its old request scope. */
-export function useAppGovernance(appId: string) {
+export function useAppGovernance(appId: string, section: 'grants' | 'policy', available: () => boolean = () => true) {
 	const grants = ref<AppGrants | null>(null);
 	const grantDraft = ref<AppGrantInput[]>([]);
 	const policy = ref<AppExecutionPolicy | null>(null);
@@ -13,11 +13,11 @@ export function useAppGovernance(appId: string) {
 	const grantOperation = useAgentManagementOperation(() => {
 		grants.value = null;
 		grantDraft.value = [];
-	});
+	}, available);
 	const policyOperation = useAgentManagementOperation(() => {
 		policy.value = null;
 		policyDraft.value = {};
-	});
+	}, available);
 
 	function acceptGrants(value: AppGrants): void {
 		grants.value = value;
@@ -73,14 +73,16 @@ export function useAppGovernance(appId: string) {
 	}
 
 	function initial(): void {
-		if (grants.value === null) {
+		if (!available()) return;
+		if (section === 'grants' && grants.value === null) {
 			void loadGrants();
 		}
-		if (policy.value === null) {
+		if (section === 'policy' && policy.value === null) {
 			void loadPolicy();
 		}
 	}
 
+	watch(available, initial);
 	onMounted(initial);
 	onActivated(initial);
 	return {

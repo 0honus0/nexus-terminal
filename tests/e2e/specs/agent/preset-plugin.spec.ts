@@ -253,7 +253,9 @@ test('official plugin source cannot be overridden by a configured third-party re
 	await selectAgentSettingsGroup(page, 'tools');
 	expect(new URL((await officialRead).url()).search).toBe('');
 	const section = page.getByRole('region', { name: 'Plugin management', exact: true });
-	await expect(section.getByTitle(repositoryUrl, { exact: true })).toBeVisible();
+	await expect(
+		section.getByRole('button', { name: 'Copy', exact: true }).filter({ hasText: repositoryUrl }),
+	).toBeVisible();
 	await expect(section.getByRole('button', { name: 'Read official catalog', exact: true })).toHaveCount(0);
 	// D16: actual first-party catalog, pinned publisher and signed download require external acceptance.
 });
@@ -353,19 +355,19 @@ test('frontend target owns a full Custom App Surface and connects through the is
 	await page.goto('/settings?tab=agent');
 	await selectAgentSettingsGroup(page, 'tools');
 	const section = page.getByRole('region', { name: 'Plugin management', exact: true });
-	// Read the installed records through their management owner before checking
-	// the separate diagnostics consumer in advanced maintenance.
-	await section.getByRole('button', { name: 'Read plugin directories', exact: true }).click();
+
+	const appsSection = page.getByRole('region', { name: 'Agent apps', exact: true });
+	await expect(section.getByRole('button', { name: 'Refresh repositories', exact: true })).toBeVisible();
+	await expect(section.locator('input[type="file"]')).toHaveCount(0);
+	await expect(section.getByRole('button', { name: 'Choose signed package', exact: true })).toHaveCount(0);
 	for (const installed of [custom, agent, fullstack]) {
-		await expect(
-			section
-				.locator('article')
-				.filter({ hasText: installed.definitionId })
-				.filter({
-					has: page.getByRole('button', { name: 'Uninstall / continue retirement', exact: true }),
-				}),
-		).toBeVisible();
+		const card = appsSection.locator('article[data-app-id="' + installed.appId + '"]');
+		await expect(card).toBeVisible();
+		await expect(card.getByText('v' + installed.version, { exact: true })).toBeVisible();
+		await expect(card.getByRole('button', { name: 'Uninstall', exact: true })).toBeDisabled();
+		await expect(card.getByRole('button', { name: 'Configure Policies', exact: true })).toBeVisible();
 	}
+
 	await captureFunctionalScreenshot(page, 'agent-plugins-multiple-installed.png', {
 		viewport: { width: 1440, height: 900 },
 	});
@@ -375,11 +377,10 @@ test('frontend target owns a full Custom App Surface and connects through the is
 		has: page.locator('summary').filter({ hasText: /^Diagnostics and recovery \(advanced\)$/ }),
 	});
 	await maintenance.getByText('Diagnostics and recovery (advanced)', { exact: true }).click();
-	await maintenance.getByText('Runtime observations', { exact: true }).click();
-	const runtimePicker = maintenance.getByRole('combobox', { name: 'App', exact: true });
-	for (const installed of [custom, agent, fullstack]) {
-		await expect(runtimePicker.locator('option[value="' + installed.appId + '"]')).toHaveCount(1);
-	}
+	await expect(maintenance.getByText('Host diagnostics', { exact: true })).toBeVisible();
+	await expect(maintenance.getByText('Machine mutation recovery', { exact: true })).toBeVisible();
+	await expect(maintenance.getByText('Installation recovery and upgrade packages', { exact: true })).toHaveCount(0);
+	await expect(maintenance.getByText('Runtime observations', { exact: true })).toHaveCount(0);
 	await page.goto('/connections');
 	const hub = await openAgentHub(page);
 
@@ -585,11 +586,6 @@ test('Nexus Agent subagent lifecycle preserves tool batches and reclaims child B
 				expectedVersion: configured.settings.version,
 				enabled: true,
 				limits: configured.settings.limits,
-				profiles: configured.settings.profiles.map((profile) =>
-					profile.name === 'worker'
-						? { ...profile, tools: ['collaboration_fact_read', 'browser_open'] }
-						: profile,
-				),
 			},
 		},
 		readAgentExecutionSettingsResponse,

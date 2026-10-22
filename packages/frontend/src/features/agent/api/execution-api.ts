@@ -9,22 +9,15 @@ import {
 	AGENT_EXECUTION_LIMIT_KEYS,
 	AGENT_EXECUTION_SETTINGS_MAX_BYTES,
 } from '@nexus-terminal/shared/agent/execution/values';
-import { readAgentProviderListResponse } from '@nexus-terminal/shared/agent/providers/http-codec';
-import { AGENT_PROVIDER_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/providers/values';
+
 import type { AgentExecutionSettingsUpdate } from '@nexus-terminal/shared/agent/execution/http';
 import {
 	fromExecutionSettings,
 	fromHardLimitConfirmation,
 	toExecutionLimits,
 	toExecutionUpdate,
-	toExecutionModelChoices,
 } from '../model/execution-mapper';
-import type {
-	ExecutionSettings,
-	ExecutionLimits,
-	HardLimitConfirmation,
-	ExecutionModelChoice,
-} from '../model/execution-types';
+import type { ExecutionSettings, ExecutionLimits, HardLimitConfirmation } from '../model/execution-types';
 import { requestAgentManagement } from './management-request';
 
 const ROOT = '/execution-settings';
@@ -71,8 +64,7 @@ export async function saveExecutionSettings(
 					(key) =>
 						result.settings.limits[key] !== expected?.limits[key] ||
 						result.settings.hardLimits[key] !== draft.hardLimits[key],
-				) ||
-				JSON.stringify(result.settings.profiles) !== JSON.stringify(expected.profiles)
+				)
 			) {
 				throw new Error('Execution update does not match the submitted settings');
 			}
@@ -84,7 +76,7 @@ export async function saveExecutionSettings(
 	return fromExecutionSettings(response.settings);
 }
 
-export async function previewExecutionHardLimits(
+async function previewExecutionHardLimits(
 	expectedVersion: number,
 	proposed: ExecutionLimits,
 	signal?: AbortSignal,
@@ -114,7 +106,7 @@ export async function previewExecutionHardLimits(
 	return fromHardLimitConfirmation(response.confirmation);
 }
 
-export async function confirmExecutionHardLimits(
+async function confirmExecutionHardLimits(
 	confirmation: HardLimitConfirmation,
 	signal?: AbortSignal,
 ): Promise<ExecutionSettings> {
@@ -143,14 +135,11 @@ export async function confirmExecutionHardLimits(
 	return fromExecutionSettings(response.settings);
 }
 
-export async function getExecutionModelChoices(signal?: AbortSignal): Promise<ExecutionModelChoice[]> {
-	const response = await requestAgentManagement({
-		method: 'GET',
-		path: '/ai/providers',
-		maxRequestBytes: AGENT_EXECUTION_SETTINGS_MAX_BYTES,
-		maxResponseBytes: AGENT_PROVIDER_MAX_RESPONSE_BYTES,
-		decode: readAgentProviderListResponse,
-		signal,
-	});
-	return toExecutionModelChoices(response);
+export async function saveExecutionHardLimits(
+	expectedVersion: number,
+	proposed: ExecutionLimits,
+	signal?: AbortSignal,
+): Promise<ExecutionSettings> {
+	const confirmation = await previewExecutionHardLimits(expectedVersion, proposed, signal);
+	return confirmExecutionHardLimits(confirmation, signal);
 }

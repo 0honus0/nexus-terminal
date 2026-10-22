@@ -8,8 +8,52 @@
     "endOfList": "すべての記録を表示しました",
     "loadMore": "さらに読み込む",
     "subtitle": "ログイン、セキュリティ変更、接続操作をわかりやすく確認できます。",
+    "tabs": {
+      "logs": "操作履歴",
+      "deliveries": "通知配信"
+    },
+    "deliveries": {
+      "title": "通知配信記録",
+      "hint": "キュー登録と送出は受付を表し、送信成功ではありません。結果不明の通知は自動再送しません。",
+      "loadedOnly": "{loaded} 件の配信を読み込み済み",
+      "unknownCount": "結果不明 {count} 件",
+      "empty": "配信記録はまだありません。",
+      "statusLabel": "配信状態",
+      "channel": "通知チャネル",
+      "channelUnavailable": "チャネルは利用できません",
+      "updated": "{time} に更新",
+      "statusShort": {
+        "queued": "キュー登録済み",
+        "dispatched": "送出済み",
+        "sent": "送信済み",
+        "failed": "送信失敗",
+        "unknown": "結果不明"
+      },
+      "status": {
+        "queued": "キュー登録済み",
+        "dispatched": "送出済み・結果待ち",
+        "sent": "送信済み",
+        "failed": "送信失敗",
+        "unknown": "配信結果不明・送信先を確認してください"
+      }
+    },
     "refresh": "更新",
     "reset": "リセット",
+    "filters": {
+      "timeRange": "期間",
+      "allTime": "全期間",
+      "last24Hours": "過去 24 時間",
+      "last7Days": "過去 7 日間",
+      "last30Days": "過去 30 日間",
+      "clear": "フィルターを解除"
+    },
+    "httpStatus": {
+      "success": "成功",
+      "redirect": "リダイレクト",
+      "unauthorized": "未認証",
+      "failed": "失敗",
+      "recorded": "記録済み"
+    },
     "emptyHint": "キーワードを変更するか、フィルターをリセットしてください。",
     "unknownAction": "その他の操作",
     "detailsHint": "展開して操作を確認",
@@ -71,7 +115,7 @@
       "AGENT_MEMORY_PUBLISHED": "Agent メモリーを公開",
       "AGENT_MEMORY_REJECTED": "Agent メモリーを却下",
       "AGENT_MEMORY_REVOKED": "Agent メモリーを撤回",
-      "AGENT_MEMORY_IMPORTED": "Agent メモリーをインポート",
+
       "LOGIN_SUCCESS": "ログイン成功",
       "LOGIN_FAILURE": "ログイン失敗",
       "LOGOUT": "ログアウト",
@@ -107,9 +151,37 @@
       "PASSKEY_DELETE_UNAUTHORIZED": "パスキー削除権限なし",
       "PASSKEY_NAME_UPDATED": "パスキー名更新済み",
       "PASSKEY_NAME_UPDATE_UNAUTHORIZED": "パスキー名更新権限なし",
-      "CAPTCHA_SETTINGS_UPDATED": "CAPTCHA 設定を更新"
+      "CAPTCHA_SETTINGS_UPDATED": "CAPTCHA 設定を更新",
+      "AGENT_APPROVAL_REQUIRED": "Agent の承認待ち",
+      "AGENT_ATTENTION_REQUIRED": "Agent の確認が必要です",
+      "AGENT_RUN_COMPLETED": "Agent の実行が完了しました",
+      "AGENT_RUN_FAILED": "Agent の実行に失敗しました",
+      "AGENT_RUN_INTERRUPTED": "Agent の実行が中断されました",
+      "IP_BLOCKED": "IP をブロックしました",
+      "HTTP_MUTATION": "データを更新しました",
+      "HTTP_MUTATION_FAILED": "データの更新に失敗しました",
+      "AGENT_EXECUTION_SETTINGS_UPDATED": "Agent 実行設定を更新しました",
+      "AGENT_ARTIFACT_CREATED": "Agent ファイルを作成しました",
+      "AGENT_ARTIFACT_DELETED": "Agent ファイルを削除しました",
+      "REMOTE_MUTATION_EVIDENCE_RECORDED": "リモート変更の証跡を記録しました",
+      "REMOTE_MUTATION_RELEASED": "リモート変更の証跡を解放しました"
+    },
+    "scopes": {
+      "pathHistory": "パス履歴",
+      "commandHistory": "コマンド履歴",
+      "connections": "接続設定",
+      "proxies": "プロキシ設定",
+      "sshKeys": "SSH キー",
+      "tags": "タグ",
+      "notifications": "通知設定",
+      "settings": "システム設定",
+      "agent": "Agent",
+      "account": "アカウントとセキュリティ",
+      "system": "システムデータ"
     },
     "allActions": "すべての操作",
+    "scopedMutation": "{context}を更新しました",
+    "scopedMutationFailed": "{context}の更新に失敗しました",
     "parseErrorRaw": "解析エラー — 生の値: {raw}",
     "loadFailed": "監査ログの読み込みに失敗しました。",
     "loadedOnly": "{loaded}件読み込み済み"

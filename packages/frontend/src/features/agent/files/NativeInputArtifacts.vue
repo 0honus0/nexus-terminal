@@ -2,6 +2,7 @@
 	import type { ViewRevocation } from '@/shared/session/use-authenticated-view-scope';
 	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
+	import { UiButton, UiCheckbox } from '@/foundation/ui';
 	import ArtifactPicker from './ArtifactPicker.vue';
 	import AgentConfigPopover from './AgentConfigPopover.vue';
 	import { attachManagedArtifact, getManagedArtifact } from '../api/artifact-management-api';
@@ -169,10 +170,11 @@
 			:disabled="locked"
 			compact
 		/>
-		<button
+		<UiButton
 			v-if="items.length && !prepared"
-			type="button"
-			class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-header hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+			density="compact"
+			appearance="ghost"
+			icon-only
 			:title="t('agent.nativeRun.bindAttachments')"
 			:aria-label="t('agent.nativeRun.bindAttachments')"
 			:disabled="locked || operation.refreshRequired.value"
@@ -183,7 +185,7 @@
 				:class="operation.busy.value ? 'fa-circle-notch fa-spin' : 'fa-paperclip'"
 				aria-hidden="true"
 			></i>
-		</button>
+		</UiButton>
 		<span
 			v-if="prepared"
 			class="flex h-7 w-7 shrink-0 items-center justify-center text-success"
@@ -212,22 +214,27 @@
 								: t('agent.settings.appManagement.' + (operation.notice.value || 'refreshRequired'))
 						}}
 					</p>
-					<button
-						type="button"
-						class="h-7 rounded-lg border border-border/70 px-2.5 text-[11px] text-text-secondary hover:bg-header disabled:opacity-50"
+					<UiButton
+						density="compact"
+						appearance="soft"
 						:disabled="disabled || operation.busy.value"
 						@click="read"
 					>
 						{{ t('agent.nativeRun.inspect') }}
-					</button>
+					</UiButton>
 					<template v-if="unknown">
-						<label class="flex items-start gap-2 leading-4 text-text-secondary">
-							<input v-model="acknowledged" type="checkbox" :disabled="operation.busy.value" />
+						<div class="flex items-start gap-2 leading-4 text-text-secondary">
+							<UiCheckbox
+								v-model="acknowledged"
+								density="compact"
+								:disabled="operation.busy.value"
+								:aria-label="t('agent.nativeRun.acknowledge')"
+							/>
 							<span>{{ t('agent.nativeRun.acknowledge') }}</span>
-						</label>
-						<button
-							type="button"
-							class="h-7 rounded-lg border border-border/70 px-2.5 text-[11px] text-text-secondary hover:bg-header disabled:opacity-50"
+						</div>
+						<UiButton
+							density="compact"
+							appearance="soft"
 							:disabled="
 								disabled ||
 								operation.busy.value ||
@@ -238,7 +245,7 @@
 							@click="newIntent"
 						>
 							{{ t('agent.nativeThreads.abandon') }}
-						</button>
+						</UiButton>
 					</template>
 				</div>
 			</template>

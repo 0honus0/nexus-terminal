@@ -1,3 +1,5 @@
+import { useI18n } from 'vue-i18n';
+import { useFeedbackMessage } from '@/shared/feedback/public';
 import { computed, onActivated, onMounted, ref, toRaw, watch } from 'vue';
 import { useAuthenticatedViewScope } from '@/shared/session/use-authenticated-view-scope';
 import {
@@ -28,6 +30,18 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 	const busy = ref(false);
 	const refreshRequired = ref(true);
 	const notice = ref('');
+	let failureCause: unknown;
+	const { t } = useI18n();
+	useFeedbackMessage(
+		() => (notice.value ? t('agent.settings.providerManagement.' + notice.value) : ''),
+		() =>
+			['saved', 'deleted', 'discovered', 'registryApplied'].includes(notice.value)
+				? 'success'
+				: ['noModels', 'noRegistry'].includes(notice.value)
+					? 'info'
+					: 'error',
+		() => failureCause,
+	);
 	const loaded = ref(false);
 	let generation = 0;
 	const scope = useAuthenticatedViewScope({
@@ -43,6 +57,7 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 			loaded.value = false;
 			refreshRequired.value = true;
 			notice.value = '';
+			failureCause = undefined;
 		},
 	});
 	const blocked = computed(() => busy.value || refreshRequired.value);
@@ -51,10 +66,15 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 		if (blocked.value) {
 			return;
 		}
-		draft.value = createProviderDraft(provider);
+		const next = createProviderDraft(provider);
+		// A new provider never has a stored secret, so the form starts in replace mode
+		// instead of exposing a meaningless keep/clear action.
+		if (provider === null) next.credential = { action: 'replace', value: '' };
+		draft.value = next;
 		discovered.value = [];
 		testResult.value = null;
 		notice.value = '';
+		failureCause = undefined;
 	}
 
 	function cancel(): void {
@@ -81,6 +101,7 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 		const current = ++generation;
 		busy.value = true;
 		notice.value = '';
+		failureCause = undefined;
 		testResult.value = null;
 		try {
 			const value = await action(signal);
@@ -92,6 +113,7 @@ export function useProviderManagement(options: { available?: () => boolean } = {
 			if (generation !== current || !scope.isCurrent(signal)) {
 				return;
 			}
+			failureCause = cause;
 			const failure = cause instanceof AgentManagementFailure ? cause : null;
 			if (failure?.code === 'version_conflict' || failure?.code === 'provider_configuration_stale') {
 				notice.value = 'conflict';

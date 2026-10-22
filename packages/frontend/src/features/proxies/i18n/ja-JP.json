@@ -2,6 +2,17 @@
   "proxies": {
     "title": "プロキシ管理",
     "addProxy": "新しいプロキシを追加",
+    "listTitle": "プロキシ一覧",
+    "searchPlaceholder": "名前、ホスト、ユーザー名を検索",
+    "filterType": "プロキシタイプで絞り込み",
+    "allTypes": "すべてのタイプ",
+    "authenticated": "認証あり",
+    "noAuthentication": "認証なし",
+    "noMatches": "現在の検索または絞り込みに一致するプロキシはありません。",
+    "summary": {
+      "label": "プロキシ概要",
+      "total": "プロキシ総数"
+    },
     "loading": "プロキシをロード中...",
     "error": "プロキシリストのロードに失敗しました: {error}",
     "noProxies": "プロキシがありません。'新しいプロキシを追加'をクリックして作成してください。",
@@ -12,6 +23,9 @@
     "form": {
       "title": "新しいプロキシを追加",
       "titleEdit": "プロキシの編集",
+      "sectionBasic": "基本情報",
+      "sectionEndpoint": "ネットワークアドレス",
+      "sectionCredentials": "認証情報",
       "name": "名前:",
       "type": "タイプ:",
       "host": "ホスト/IP:",

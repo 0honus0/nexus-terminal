@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { useFeedbackMessage, type NotificationKind } from '@/shared/feedback/public';
 	import { computed, reactive, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { OPERATION_EVENTS, type OperationEvent } from '@nexus-terminal/shared/operations/values';
@@ -49,7 +50,13 @@
 		chatId: '',
 	});
 	const message = ref('');
-	const testSuccess = ref(false);
+	const testKind = ref<NotificationKind>('info');
+	let failureCause: unknown;
+	useFeedbackMessage(
+		() => message.value,
+		() => testKind.value,
+		() => failureCause,
+	);
 	const testLoading = ref(false);
 	const view = useAuthenticatedViewScope({
 		available: () => props.visible,
@@ -61,7 +68,8 @@
 		form.secret = '';
 		headers.value = [];
 		message.value = '';
-		testSuccess.value = false;
+		testKind.value = 'info';
+		failureCause = undefined;
 	}
 
 	function resetDraft(): void {
@@ -96,7 +104,8 @@
 					}))
 				: [];
 		message.value = '';
-		testSuccess.value = false;
+		testKind.value = 'info';
+		failureCause = undefined;
 	}
 
 	watch(
@@ -155,7 +164,9 @@
 			kind: 'telegram',
 			origin: form.origin,
 			chatId: form.chatId,
-			botToken: secret(secretAction.value, form.secret),
+			botToken: props.setting
+				? secret(secretAction.value, form.secret)
+				: { action: 'replace', value: form.secret },
 			bodyTemplate,
 		};
 	}
@@ -177,7 +188,8 @@
 			return;
 		}
 		message.value = '';
-		testSuccess.value = false;
+		testKind.value = 'info';
+		failureCause = undefined;
 		testLoading.value = true;
 		try {
 			const result = props.setting
@@ -185,10 +197,17 @@
 				: await store.testUnsaved(buildConfig(), signal);
 			if (view.isCurrent(signal)) {
 				message.value = t('settings.notifications.deliveryStatus.' + result.status);
-				testSuccess.value = result.status === 'sent';
+				testKind.value =
+					result.status === 'sent'
+						? 'success'
+						: result.status === 'failed' || result.status === 'unknown'
+							? 'error'
+							: 'info';
 			}
 		} catch (cause) {
 			if (view.isCurrent(signal)) {
+				failureCause = cause;
+				testKind.value = 'error';
 				message.value = t(notificationFailureKey(cause));
 			}
 		} finally {
@@ -223,7 +242,7 @@
 		return (
 			form.origin.trim() !== '' &&
 			form.chatId.trim() !== '' &&
-			secretAction.value === 'replace' &&
+			(props.setting ? secretAction.value === 'replace' : true) &&
 			form.secret.trim() !== ''
 		);
 	});
@@ -233,14 +252,26 @@
 			? events.value.filter((value) => value !== event)
 			: [...events.value, event];
 	}
+
+	function selectAllEvents(): void {
+		events.value = [...OPERATION_EVENTS];
+	}
+
+	function invertEvents(): void {
+		const selected = new Set(events.value);
+		events.value = OPERATION_EVENTS.filter((event) => !selected.has(event));
+	}
 </script>
 
 <template>
-	<form v-if="visible" class="space-y-6 text-foreground" @submit.prevent="submit">
-		<h3 class="mb-4 text-lg font-semibold">
+	<form v-if="visible" class="flex min-h-0 flex-1 flex-col text-foreground" @submit.prevent="submit">
+		<h3 class="shrink-0 pb-4 text-lg font-semibold">
 			{{ t(setting ? 'settings.notifications.form.editTitle' : 'settings.notifications.form.addTitle') }}
 		</h3>
-		<fieldset :disabled="store.loading || store.needsRefresh" class="m-0 min-w-0 space-y-6 border-0 p-0">
+		<fieldset
+			:disabled="store.loading || store.needsRefresh"
+			class="m-0 min-h-0 min-w-0 flex-1 space-y-6 overflow-y-auto overscroll-y-contain border-0 p-0 pr-1 sm:pr-3"
+		>
 			<div class="space-y-4">
 				<UiFormField :label="t('settings.notifications.form.name')" for-id="setting-name"
 					><UiInput id="setting-name" v-model="form.name" required
@@ -398,20 +429,30 @@
 				<template v-else>
 					<UiFormField
 						:label="t('settings.notifications.form.telegramToken')"
-						for-id="notification-secret-action"
+						:for-id="setting ? 'notification-secret-action' : 'notification-telegram-token'"
 					>
-						<UiSelect id="notification-secret-action" v-model="secretAction" :options="actions" />
+						<template v-if="setting">
+							<UiSelect id="notification-secret-action" v-model="secretAction" :options="actions" />
+							<UiInput
+								v-if="secretAction === 'replace'"
+								v-model="form.secret"
+								type="password"
+								autocomplete="new-password"
+								:aria-label="t('settings.notifications.form.telegramToken')"
+								required
+							/>
+							<p v-else class="mt-1 text-xs text-text-secondary">
+								{{ t('settings.notifications.form.secretHint') }}
+							</p>
+						</template>
 						<UiInput
-							v-if="secretAction === 'replace'"
+							v-else
+							id="notification-telegram-token"
 							v-model="form.secret"
 							type="password"
 							autocomplete="new-password"
-							:aria-label="t('settings.notifications.form.telegramToken')"
 							required
 						/>
-						<p v-else class="mt-1 text-xs text-text-secondary">
-							{{ t('settings.notifications.form.secretHint') }}
-						</p>
 					</UiFormField>
 					<UiFormField :label="t('settings.notifications.form.telegramChatId')" for-id="notification-chat"
 						><UiInput id="notification-chat" v-model="form.chatId" required
@@ -433,10 +474,9 @@
 				</template>
 				<div class="border-t border-border/50 pt-4 text-center">
 					<UiButton
-						v-if="setting || canTest"
 						type="button"
 						density="compact"
-						:disabled="!canTest && !setting"
+						:disabled="!canTest"
 						:loading="testLoading"
 						@click="testChannel"
 						>{{
@@ -447,22 +487,25 @@
 							)
 						}}</UiButton
 					>
-					<small v-else class="mt-2 block text-xs text-text-secondary">{{
-						t('settings.notifications.form.fillRequiredToTest')
-					}}</small>
-					<small
-						v-if="message"
-						role="status"
-						:class="['mt-2 block text-xs', testSuccess ? 'text-success' : 'text-error']"
-						>{{ message }}</small
-					>
 				</div>
 			</section>
 
 			<div>
-				<label class="mb-2 block text-sm font-medium text-text-secondary">{{
-					t('settings.notifications.form.enabledEvents')
-				}}</label>
+				<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+					<label class="block text-sm font-medium text-text-secondary">{{
+						t('settings.notifications.form.enabledEvents')
+					}}</label>
+					<div class="flex items-center gap-1">
+						<UiButton type="button" appearance="ghost" density="compact" @click="selectAllEvents()">
+							<i class="fas fa-check-double" aria-hidden="true"></i>
+							<span>{{ t('settings.notifications.form.selectAllEvents') }}</span>
+						</UiButton>
+						<UiButton type="button" appearance="ghost" density="compact" @click="invertEvents()">
+							<i class="fas fa-right-left" aria-hidden="true"></i>
+							<span>{{ t('settings.notifications.form.invertEvents') }}</span>
+						</UiButton>
+					</div>
+				</div>
 				<div class="grid min-w-0 grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
 					<label
 						v-for="event in OPERATION_EVENTS"
@@ -478,7 +521,7 @@
 				</div>
 			</div>
 		</fieldset>
-		<div class="mt-6 flex justify-end space-x-3 border-t border-border pt-5">
+		<div class="mt-4 flex shrink-0 justify-end gap-3 border-t border-border pt-4">
 			<UiButton type="button" @click="emit('close')">{{ t('common.cancel') }}</UiButton>
 			<UiButton type="submit" appearance="solid" :disabled="store.loading || store.needsRefresh">{{
 				t('common.save')

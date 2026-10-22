@@ -33,6 +33,7 @@ export interface LocalResourceStatus {
 	diskPercent?: number;
 	diskUsed?: number;
 	diskTotal?: number;
+	checkedAt: number;
 }
 
 export interface SshResourceTarget {
@@ -55,7 +56,13 @@ interface ResourceIdentity {
 export type SshResource = ResourceIdentity &
 	(
 		| { state: 'waiting'; checkedAt: null; status?: never; error?: never }
-		| { state: 'ready'; checkedAt: number; status: ResourceMetrics; error?: never }
+		| {
+				state: 'ready';
+				checkedAt: number;
+				status: ResourceMetrics;
+				error?: never;
+				refreshError?: ResourceFailureCode;
+		  }
 		| { state: 'failed'; checkedAt: number | null; status?: never; error: ResourceFailureCode }
 	);
 

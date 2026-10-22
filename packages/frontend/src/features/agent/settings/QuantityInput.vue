@@ -1,6 +1,7 @@
 <script setup lang="ts">
 	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
+	import { UiInput } from '@/foundation/ui';
 	import {
 		parseQuantity,
 		getQuantityFeedback,
@@ -80,25 +81,33 @@
 		{ immediate: true },
 	);
 
-	const parsedNumber = computed(() => {
-		const parsed = parseQuantity(textValue.value, props.type);
-		if (parsed === null || parsed < props.min || parsed > props.max) return null;
-		return parsed;
+	const parsedValue = computed(() => parseQuantity(textValue.value, props.type));
+
+	const rangeFailure = computed<{ key: 'belowMinimum' | 'aboveMaximum'; value: string } | null>(() => {
+		const parsed = parsedValue.value;
+		if (parsed === null) return null;
+		if (parsed < props.min) {
+			return { key: 'belowMinimum', value: toCompactQuantityString(props.min, props.type) };
+		}
+		if (parsed > props.max) {
+			return { key: 'aboveMaximum', value: toCompactQuantityString(props.max, props.type) };
+		}
+		return null;
 	});
+
+	const parsedNumber = computed(() => (rangeFailure.value ? null : parsedValue.value));
 
 	const feedback = computed(() => {
 		if (!textValue.value.trim()) return null;
-		const result = getQuantityFeedback(textValue.value, props.type, quantityLabels.value);
-		if (result.valid && result.value !== null && (result.value < props.min || result.value > props.max)) {
-			return { ...result, valid: false };
-		}
-		return result;
+		return getQuantityFeedback(textValue.value, props.type, quantityLabels.value);
 	});
 
-	const onInput = (event: Event) => {
-		const target = event.target;
-		if (!(target instanceof HTMLInputElement)) return;
-		textValue.value = target.value;
+	const inputInvalid = computed(() =>
+		Boolean(textValue.value.trim() && (rangeFailure.value || feedback.value?.valid === false)),
+	);
+
+	const onInput = (value: string | number | null) => {
+		textValue.value = value === null ? '' : String(value);
 		emit('update:modelValue', parsedNumber.value);
 	};
 
@@ -135,7 +144,7 @@
 	const unitPills = computed(() => {
 		if (props.type === 'bytes') return ['K', 'M', 'G'];
 		if (props.type === 'tokens') return ['k', 'M'];
-		if (props.type === 'seconds') return ['m', 'h'];
+		if (props.type === 'seconds') return ['s', 'm', 'h'];
 		return [];
 	});
 
@@ -144,6 +153,9 @@
 	const isPillActive = (pill: string) => {
 		const raw = textValue.value.trim().toLowerCase();
 		if (!raw) return false;
+		if (props.type === 'seconds' && pill === 's' && /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(raw)) {
+			return true;
+		}
 		return raw.endsWith(pill.toLowerCase());
 	};
 
@@ -158,54 +170,50 @@
 	// 纯数字且输入有效时无需重复展示等号微反馈
 	const shouldShowFeedback = computed(() => {
 		if (!props.showFeedback || !textValue.value.trim()) return false;
-		if (props.type === 'number' && feedback.value?.valid) return false;
+		if (props.type === 'number' && feedback.value?.valid && !rangeFailure.value) return false;
 		return true;
 	});
 </script>
 
 <template>
 	<div class="quantity-input-root flex flex-col gap-1 w-full">
-		<div class="relative flex items-center">
-			<input
-				type="text"
-				:value="textValue"
-				:placeholder="inputPlaceholder"
-				:disabled="disabled"
-				:aria-label="ariaLabel || undefined"
-				:aria-invalid="feedback && !feedback.valid ? true : undefined"
-				data-no-highlight
-				class="h-8.5 w-full rounded-lg border border-border/80 bg-card px-2.5 font-mono text-xs text-foreground placeholder:text-text-secondary/50 focus:border-border-hover focus:outline-none transition-all disabled:opacity-50"
-				:class="[
-					hasPills ? 'pr-24' : '',
-					feedback && !feedback.valid ? 'border-error/50 focus:border-error' : '',
-				]"
-				@input="onInput"
-				@focus="onFocus"
-				@blur="onBlur"
-			/>
-
-			<!-- 快捷单位药丸组 -->
-			<div v-if="hasPills" class="absolute right-1.5 flex items-center gap-0.5">
-				<button
-					v-for="pill in unitPills"
-					:key="pill"
-					type="button"
-					tabindex="-1"
-					class="inline-flex h-6 min-w-6 items-center justify-center rounded px-1.5 font-mono text-[11px] font-semibold text-text-secondary/80 hover:bg-header hover:text-foreground transition-colors cursor-pointer select-none"
-					:class="{
-						'bg-primary/15 text-primary font-bold ring-1 ring-primary/30 shadow-xs': isPillActive(pill),
-					}"
-					:disabled="disabled"
-					@click.prevent="applyUnit(pill)"
-				>
-					{{ pill }}
-				</button>
-			</div>
-		</div>
+		<UiInput
+			:model-value="textValue"
+			:placeholder="inputPlaceholder"
+			:disabled="disabled"
+			:invalid="inputInvalid"
+			:aria-label="ariaLabel || undefined"
+			class="font-mono"
+			trailing-interactive
+			@update:model-value="onInput"
+			@focus="onFocus"
+			@blur="onBlur"
+		>
+			<template v-if="hasPills" #trailing>
+				<div class="flex items-center gap-0.5">
+					<button
+						v-for="pill in unitPills"
+						:key="pill"
+						type="button"
+						class="inline-flex h-6 min-w-6 items-center justify-center rounded px-1.5 font-mono text-[11px] font-semibold text-text-secondary/80 hover:bg-header hover:text-foreground transition-colors cursor-pointer select-none"
+						:class="{
+							'bg-primary/15 text-primary font-bold ring-1 ring-primary/30 shadow-xs': isPillActive(pill),
+						}"
+						:disabled="disabled"
+						@click.prevent="applyUnit(pill)"
+					>
+						{{ pill }}
+					</button>
+				</div>
+			</template>
+		</UiInput>
 
 		<!-- 实时换算与解析微反馈 -->
 		<div v-if="shouldShowFeedback" class="flex items-center justify-between px-0.5 text-[11px]">
-			<span v-if="feedback?.valid" class="truncate text-text-secondary flex items-center gap-1 font-mono">
+			<span v-if="rangeFailure" class="text-error font-mono">
+				{{ t(`agent.settings.quantity.${rangeFailure.key}`, { value: rangeFailure.value }) }}
+			</span>
+			<span v-else-if="feedback?.valid" class="truncate text-text-secondary flex items-center gap-1 font-mono">
 				<span class="text-primary font-semibold">≈ {{ feedback.readable }}</span>
 				<span class="opacity-60">({{ feedback.exact }})</span>
 			</span>

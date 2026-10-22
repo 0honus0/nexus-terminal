@@ -1,4 +1,5 @@
 import { HttpRequestFailure } from './request-failure';
+import { WebSocketConnectionFailure } from '../websocket/connection-failure';
 import { logger } from '../logging/logger';
 import { isAxiosError, isCancel } from 'axios';
 
@@ -21,6 +22,7 @@ export function isNetworkFailure(value: unknown): boolean {
 	while (value instanceof Error && !visited.has(value)) {
 		visited.add(value);
 		if (value instanceof HttpRequestFailure && value.code === 'request_failed') return true;
+		if (value instanceof WebSocketConnectionFailure) return true;
 		if (
 			isAxiosError(value) &&
 			!value.response &&

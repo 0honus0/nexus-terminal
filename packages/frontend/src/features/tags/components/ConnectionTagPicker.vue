@@ -12,7 +12,6 @@
 
 <template>
 	<div class="space-y-2">
-		<p v-if="message" role="alert" class="text-sm text-error">{{ message }}</p>
 		<button
 			v-if="message || data.needsRefresh.value"
 			type="button"

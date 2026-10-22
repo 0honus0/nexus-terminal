@@ -1,3 +1,4 @@
+import { useFeedbackMessage } from '@/shared/feedback/public';
 import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
@@ -20,7 +21,13 @@ export function usePasskeySettings(): PasskeySettingsController {
 	const loading = ref(false);
 	const needsRefresh = ref(true);
 	const message = ref('');
+	let failureCause: unknown;
 	const success = ref(false);
+	useFeedbackMessage(
+		() => message.value,
+		() => (success.value ? 'success' : 'error'),
+		() => failureCause,
+	);
 	let generation = 0;
 	let active = true;
 	let disposed = false;
@@ -61,6 +68,7 @@ export function usePasskeySettings(): PasskeySettingsController {
 		const signal = controller.signal;
 		loading.value = true;
 		message.value = '';
+		failureCause = undefined;
 		success.value = false;
 		let committed = false;
 		try {
@@ -78,6 +86,7 @@ export function usePasskeySettings(): PasskeySettingsController {
 			}
 		} catch (cause) {
 			if (current === generation && !disposed) {
+				failureCause = cause;
 				message.value = t(committed ? 'settings.passkey.error.refreshAfterChange' : authErrorKey(cause));
 				if (
 					committed ||

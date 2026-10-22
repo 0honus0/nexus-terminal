@@ -1,14 +1,414 @@
 # Nexus Terminal E2E
 
+## 指定站点真实 RDP 交互补测（2026-10-22）
+
+用户继续授权“测试别的功能”，并明确允许使用临时文本覆盖本机和远端剪贴板。按 PLAN D19，仅通过 `https://api.honus.top` 的正式桌面入口验证已提供目标；没有运行远端 shell、保存文件、改写连接凭据、重启 Backend、提交、推送或执行全量 E2E。本轮没有修改产品代码，USAGE/专题架构与当前实施状态同步刷新。
+
+环境为 `dev`、HEAD `8742ac29` 的未提交工作区，Node v22.23.1、Playwright 1.63.0、本机 Linux headless Chrome for Testing 153.0.8010.12；登录 Cookie 仅经现有浏览器 CDP 在内存传入隔离浏览器上下文，不输出或写入脚本。真实目标 Windows 上新建独立的内存 `data:` 输入页，RDP 负责实际输入，远端 CDP 仅初始化测试页、读取文本/鼠标证据及最后关闭测试页；不通过 CDP 代写待核对的文本或模拟远端成功。前端仍使用正式 Modal/controller/Adapter，临时页只隔离 Vite HMR 更新，不模拟 API/WS/RDP。
+
+| 场景               | 实际证据与结果                                                                                                                                                                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 桌面原生键盘       | Playwright 原生 keyboard.type 输入临时英文数字标记，远端测试 textarea 精确匹配；Ctrl+A/C、方向键、Home/End、退格，以及先释放 Ctrl 再释放字符键后的编辑结果均匹配。                                                                          |
+| 双向纯文本剪贴板   | 远端 Ctrl+C 后本机读取精确匹配；本机写入临时中英文文本、正式焦点同步、远端 Ctrl+V 后，远端 textarea 精确匹配。两侧为不同机器，不能用同一系统剪贴板的自读自写冒充传输。                                                                      |
+| 中文提交与失焦释放 | compositionstart/未提交 beforeinput/compositionend/紧随相同 beforeinput 后，远端“中文输入测试”仅出现一次；按住 Ctrl 时本机输入框失焦再恢复，后续输入仍精确匹配，没有粘住修饰键。                                                            |
+| 剪贴板权限拒绝     | 仅在隔离上下文把 clipboard-read 设为 denied，实际 readText 拒绝为 NotAllowedError；焦点同步后连接仍为 connected，后续原生键盘输入在远端精确匹配。上述桌面脚本共 8 项布尔断言全部 true，任一 false 会令脚本失败。                            |
+| 最小化/恢复        | 实际按钮最小化后对话框不可见、50×50 恢复按钮可达；恢复后仍 connected，同一个 WS 未关闭或重建。                                                                                                                                              |
+| 浏览器全屏/退出    | 实际全屏按钮令 document.fullscreenElement 存在、远端 Canvas 为 1440×1000；退出后回到已连接窗口，两次切换均保留原 WS。                                                                                                                       |
+| 手机模拟输入       | Chromium 移动仿真 390×844，文档 scrollWidth=390、Canvas 356×547；键盘按钮可聚焦真实移动 textarea。insertText 标记及中文 composition 提交均由远端独立 textarea 精确核对，中文 6 字符仅一次，本机隐藏输入框及时清空；远端 Ctrl+C 回读也匹配。 |
+| 直触               | 原生 CDP touchStart/touchEnd 的 isTrusted=true；点按、长按右键在远端输入页分别收到 button 0 和 button 2 的 down/up，右键产生真实 contextmenu，坐标与客户端映射对应。                                                                        |
+| 触控板与模式切换   | 单指移动在远端由 (40,73) 移到 (60,88)，双指点按收到右键 down/up/contextmenu，双指滑动收到远端 wheel；双击开始拖动后切模式，客户端 down/up 成对收口。                                                                                        |
+| 清理               | 桌面、窗口和手机脚本最终均观察到各自 WS 关闭，pageErrors 为空；本机 `ss -tnp` 无目标 13389 端口连接，远端残留测试页计数为 0。未关闭用户原有页签或保存测试内容；远端剪贴板允许保留临时文本，不承诺还原原富文本格式。                         |
+
+最终命令和安全输出：`node /tmp/nexus-rdp-desktop-input-local.mjs` → `/tmp/nexus-rdp-desktop-input-local.log`，`node /tmp/nexus-rdp-windows-local.mjs` → `/tmp/nexus-rdp-windows-local.log`，`node /tmp/nexus-rdp-mobile-local.mjs` → `/tmp/nexus-rdp-mobile-remote-input.log`；三份脚本的 `node --check` 通过。准备阶段依赖既有桌面焦点的输入核对曾为 false、较早的混合交互脚本曾等待超时，不能据此报告产品通过或失败；隔离远端测试输入页后，最终按真实远端值与事件复核全部匹配。初期移动诊断保留在 `/tmp/nexus-rdp-mobile-{local,debug,focused,scratch}.log`，最终证据不沿用它们的结果。
+
+范围限制：中文测试覆盖 composition 事件处理及去重，不等于已操作每一种系统输入法；手机为 Chromium 移动/触控仿真，不是 iOS/Android 真机软键盘。Win+R 等其它系统组合键、原生真机、多平台、VNC、长时间/并发压力及网络/清理故障仍待验。本轮未发现需要修改的业务代码，不把本轮检查等同全量 E2E。
+
+## 指定站点真实 RDP 验证（2026-10-22，基础链路通过）
+
+用户授权仅通过 `https://api.honus.top` 使用所提供目标验证真实 RDP，按 PLAN D19 执行；目标凭据不记录。工作区为 `dev`、HEAD `8742ac29` 及未提交修改。用户已重启 Backend：PID `1992285`，本机 Europe/London 时间 12:24:32 启动，晚于当前 `dist/main.js` 的 12:22:26 构建时间。本轮未自行重启、部署、提交或推送，未运行全量 E2E；仅刷新文档，无产品行为、职责或类型变更。
+
+使用现有已登录 Chrome `155.0.8059.85` 的 CDP，经站点 HTTPS 调用正式 `remoteDesktopApi` 和 `createBrowserDesktop`；使用目标已保存凭据，不新增连接或改写密码。先从实际 Dashboard 卡片打开原桌面弹窗，观察到“已连接”及非黑画面。随后用独立临时页验证正式 Adapter 生命周期，临时页仅屏蔽 Vite HMR 的 update/full-reload，防止并行开发热更新中断验收；没有模拟 HTTP、WS、RDP 数据或状态，没有禁用生产超时/容量限制。
+
+| 场景                 | 实际证据与结果                                                                                                                                                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 正式签票与秘密边界   | 两次 POST 均 200；成功字段精确为 host/password/port/protocol/ticket/username，目标关联匹配，Cache-Control 为 no-store、Pragma 为 no-cache。只记录字段名及布尔值，不记录字段秘密正文。                                           |
+| 认证与真实画面       | 首次 SDK 状态 connected；Canvas 1024×768，749,980 个非黑像素、3,174 种颜色；真实 WS 收到 453 帧、2,970,891 bytes。不是仅凭 TCP/TLS 桥就绪判断成功。                                                                             |
+| 鼠标移动与动态分辨率 | 发送无点击鼠标移动，再 resize 至 1100×800；等待 12 秒后 Canvas 为 1100×800，840,439 个非黑像素，原 WS 仍打开，Adapter failures 为空。仅证明输入派发及画面持续更新，不宣称已独立核对远端指针位置。                               |
+| 显式关闭             | 调用正式 peer.close，3 秒后观察到原 WS close（浏览器 code 1005，未携带关闭码），没有 Adapter failure。                                                                                                                          |
+| 新票据重连           | 再次通过正式 API 签票，与前票据不同；第二次 connected，Canvas 1024×768，749,965 个非黑像素，收到 393 帧、2,526,944 bytes；没有 Adapter failure。                                                                                |
+| 最终清理             | 第二次 peer.close 后观察到 WS close；临时测试页均已关闭，`ss -tnp` 无目标 13389 端口连接，Backend 原 PID 未改变。未发送文字/按键、未主动读写剪贴板或运行远端命令；正常 RDP 登录、显示尺寸及最近连接时间属于本次连接的预期效果。 |
+
+可复核命令：`node --check /tmp/nexus-real-rdp-check.mjs`、`node /tmp/nexus-real-rdp-check.mjs`；安全投影输出在 `/tmp/nexus-real-rdp-check.log`。临时脚本不包含密码或票据常量；运行时凭据仅由正式 API 交给原 SDK 内存实例。此次用原生 CDP WebSocket 新建临时目标成功；此前 Playwright 全浏览器附加超时仅保留为当时工具准备结果，不再是当前连接阻断。
+
+结论仅限指定真实目标的基本 RDP 认证/画面、短时连接、动态尺寸、关闭与新票据重连。VNC、键盘/IME/软键盘、剪贴板、触控、完整全屏恢复、多平台、长时间稳定性、16 路并发、故障收敛、跨设备挂起及全量 E2E 仍待验；不继承旧 Guacamole 的 PASS，不将本轮限定实机验证称为全量回归通过。
+
+## 挂起目录 WS 与浏览器 RDP/VNC 迁移（2026-10-22，静态收口）
+
+环境为本地 `dev`、HEAD `8742ac29b20561df88d556cc87cb411d410a493d` 的未提交工作区，保留其它修改；Node `/usr/local/bin/node` v22.23.1、pnpm `/usr/local/bin/pnpm` 11.26.0。按 PLAN D17 没有运行本地业务测试、浏览器、E2E 或测试收集，没有提交、推送、部署或触发远程任务。
+
+源码审核覆盖 App 登录订阅 → 挂起目录 store/stream → 独立 `/ws/suspended-sessions` → WorkspaceService 变化发布，以及 Dashboard 路由停用/恢复的采样取消。既有 Dashboard/mobile/集成断言已改为观察真实 WS 快照、跨客户端改名和离页不再请求 status；HTTP 管理及显式恢复仍保留。快照不解除写入未知围栏，旧 HTTP/WS 不能覆盖新状态。Dashboard 虚拟时钟只用于采样生命周期断言，不作为目录流真实心跳/重连的证据。
+
+桌面审核覆盖 Shared 六字段会话和 64 KiB 编码预算、HTTP no-store、协议关联、同步 WS bind、票据/目标/身份复查、RDCleanPath/X224/TLS、权威目标地址、二进制流控、socket/send/初始化真实关闭与 SDK 晚连接收尾。删除 guacd 依赖/补丁/Compose/环境配置，删除 RemoteApp 表单、三语文案、Shared/Targets/存储/快照字段和 SQL 列；同步更新 application/targets 唯一 v1 签名，明确不兼容旧开发库/快照。生产源码与锁文件无旧厂商/RemoteApp 消费者；测试保留旧字段拒绝/无控件断言及原文件名，smoke 保留禁止 guacd 服务断言。
+
+原桌面测试夹具已迁移为真实 TigerVNC/xrdp/xterm/vncconfig/xclip；正式浏览器 Adapter 负责画面/键鼠，control 只读取真实 X selection、终端文本与指针。既有 E2E 保留窗口、剪贴板、触控、软键盘、票据与权限断言；单独 raw WS 只验证真实 RDCleanPath/TLS 握手，不把它当作图像或远端认证证据。runner 安装真实桌面工具并参与缓存指纹，端口统一由 runner 分配，不再依赖 MockGuacd。
+
+静态检查：根 `pnpm run check`（双端 ESLint/类型、Shared build）、`pnpm run build`（Shared/Backend/Frontend）、`pnpm run format:all:check` 和 `git diff --check` 通过。日志为 `/tmp/nexus-browser-desktop-final-{check,build,format-check,diff}.log`；修改后既有 mjs/cjs 与新夹具的 `node --check`、smoke 的 `bash -n` 通过，记录于 `/tmp/nexus-browser-desktop-syntax.log`。五个受影响桌面/Dashboard/mobile E2E 入口以 `tsc --noEmit --target ES2022 --module esnext --moduleResolution bundler --esModuleInterop --skipLibCheck --types node --typeRoots ../../packages/frontend/node_modules/@types` 单独编译通过，日志为 `/tmp/nexus-browser-desktop-e2e-types.log`；初次缺少 Node types 的命令失败后显式引用已有类型，未新增依赖或放宽检查。其它已修改 E2E TS 通过 transpileModule 语法核对，未执行或收集测试。
+
+Frontend 构建有大 chunk 提醒：按需加载的 IronRDP JS/WASM chunk 约 6.07 MB，gzip 约 2.26 MB；未调整警告阈值。移除 guacd 减少后端服务/解码负担，但前端增加 WASM 下载，不将其表述为所有维度都变小。RDP 当前仍忽略目标证书校验；SDK 不提供 pending-connect 取消，保留晚成功 shutdown/run/free owner，限制已进入产品及专题文档。
+
+行为仍远程待验：跨设备挂起/接管/租约/断线与未知结果、首页离页/返回、双协议真实画面/剪贴板/IME/软键盘/触控/全屏、16 路与第 17 路准入、权限/目标变化、弱网与清理故障，以及 Windows/Linux 远端和不同客户端平台。新夹具本身也尚未行为执行；旧 Guacamole/B10/Windows PASS 仅属于旧实现，不作为本版验收。
+
+## 插件市场刷新仓库并入标题行（2026-10-22，本地 CDP）
+
+使用 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）进入“App 与扩展 → 插件市场”，未点击刷新或修改仓库配置。修复后请求视口 1152×900（实际 CSS 视口 `914×900`）下，仓库标题行高 `38px`，“刷新仓库”与标题及“添加仓库”同行，按钮为 `105×38px`。390×844 下仓库标题和 URL 输入分行，刷新按钮与添加按钮同排，分别为 `105×38px` 与 `82×38px`；320×700 下刷新按钮收起文字为 `45×38px` 图标按钮，仍与添加按钮同排，不再独占一行。三档页面均无横向溢出，控制台无异常。
+
+目标 Vue ESLint／Prettier、根 `pnpm run check`、Frontend build 与 `git diff --check` 通过。全量 `format:all:check` 仍被并行工作区既有格式告警阻断，本批未修改这些文件。证据：`/tmp/plugin-market-refresh-1152.png`、`/tmp/plugin-market-refresh-390.png`、`/tmp/plugin-market-refresh-320.png`。按 D17 未运行 E2E，未触发真实仓库刷新。
+
+## App 安全策略配置展开布局（2026-10-22，本地 CDP）
+
+使用 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）进入“App 与扩展 → Agent App”，展开“安全策略配置”。现为单一授权面板、分类浅分隔和独立能力卡片；请求视口 1152×900（实际 CSS 视口 `914×900`）下授权面板 `790×1478px`、能力卡 `366×68px`、卡片间距约 `10px`；390×844 下能力卡宽 `246px`、320×700 下宽 `185px`，均为单列且无横向溢出。
+
+临时勾选“读取文件”后，计数由 `0 / 19` 更新为 `1 / 19`，授权高亮和保存按钮可用状态同步出现；能力项内不再出现 SSH 目标范围选择器。截图后已刷新页面丢弃草稿，未保存授权。三档页面均无横向溢出，控制台无异常。证据：`/tmp/app-security-policy-1152.png`、`/tmp/app-security-policy-390.png`、`/tmp/app-security-policy-320.png`、`/tmp/app-security-policy-selected-1152.png`、`/tmp/app-security-policy-selected-390.png`、`/tmp/app-security-policy-selected-320.png`。
+
+目标 Vue ESLint／Prettier、根 `pnpm run check`、Frontend build 与 `git diff --check` 通过。全量 `format:all:check` 被并行工作区 `main.ts`、`remote/register.ts`、`connection-sql.ts` 与 Shared `connections/values.ts` 的既有格式告警阻断，本批未修改这些文件。按 D17 未运行 E2E。
+
+## Provider 标题统计与操作窄屏避让（2026-10-22，本地 CDP）
+
+使用本地 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）进入“模型与预算”，未改写 Provider 数据。修复后 `390×844` 下标题行为 `344×63px`，标题、计数徽标、信息提示与“添加 Provider”保持同一行且矩形不相交；`360×800` 与 `320×700` 下标题行自动增高为 `314×99px`、`274×99px`，操作按钮换到下一行并右对齐，统计徽标、提示与按钮均不重叠。各档页面均为 `scrollWidth=clientWidth`，控制台无异常。
+
+目标 Vue ESLint／Prettier、根 `pnpm run check`、Frontend build 与 `git diff --check` 通过；全量 `format:all:check` 被并行工作区的既有格式告警阻断，本批未修改这些文件。证据：`/tmp/provider-header-after-390.png`、`/tmp/provider-header-after-320.png`、`/tmp/provider-header-width-360.png`。按 D17 只验证响应式布局，未打开或保存 Provider 弹窗。
+
+## Agent App 与扩展页签化（2026-10-22，本地 CDP）
+
+使用本地 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）进入“App 与扩展”，依次切换 Agent App、MCP / ACP、插件市场、执行预算。桌面请求 1152×900（浏览器实际 CSS 视口 922×720）下外层工作区为单一容器，四个页签均显示完整；390×844 下窄屏隐藏页签图标后四项完整可见；320×700 下第四项在页签区域内滚动，页面级 `scrollWidth=clientWidth` 分别为 `922/922`、`390/390`、`320/320`。App 行、集成空态、插件仓库来源与预算字段均正常渲染，控制台无异常。
+
+目标 Vue 与三语 JSON 已通过 Prettier、ESLint、根 `pnpm run check`、`pnpm --filter @nexus-terminal/frontend build` 和 `git diff --check`。按 D17 未运行 E2E，也未触发真实授权、插件安装、预算保存或未知写入恢复。证据：`/tmp/agent-extensions-final-1152-apps.png`、`/tmp/agent-extensions-final-1152-integrations.png`、`/tmp/agent-extensions-final-1152-market.png`、`/tmp/agent-extensions-final-1152-budget.png`，以及 `/tmp/agent-extensions-final-390-*.png`、`/tmp/agent-extensions-final-320-*.png`。
+
+全量 `format:all:check` 被并行工作区 `tests/e2e/support/remote-desktop-websocket.cjs` 与 `test-desktop-server.mjs` 的既有 spacing 告警阻断，本批未修改这些文件。
+
+## 全局 Toast 避开顶部导航（2026-10-22，本地 CDP）
+
+使用本地 CDP（`https://api.honus.top`，未使用 9998）向 `shared-notifications` store 注入实际失败 Toast，未修改测试环境业务数据。桌面导航底部为 `60px`、Toast 顶部为 `72px`；390×844 下导航底部同为 `60px`、Toast 顶部同为 `72px`，间隔均为 `12px`。退出按钮与 Toast 的矩形相交检测均为 `false`，退出按钮中心仍命中 `/login` 链接；手机文档宽度保持 `390px`。临时从 DOM 移除 `.app-header` 并等待两帧后，Toast 宿主顶部回落到 `16px`，恢复导航后回到 `72px`。证据：`/tmp/toast-header-offset-desktop.png`、`/tmp/toast-header-offset-mobile.png`。
+
+`NotificationHost` Vue、`uiGen2.css` Prettier 与 ESLint、`pnpm --filter @nexus-terminal/frontend build`、根 `pnpm run check` 与 `git diff --check` 通过。全量 `pnpm run format:all:check` 仍受并行工作区 `tests/e2e/specs/ui/dashboard-workflows.spec.ts` 的既有格式告警影响，未修改该文件。按 D17 未运行 E2E；通知计时、合并、操作与关闭逻辑未改，注入的通知已在核对后清理。
+
+## Agent CDP 添加目标弹窗卡片优化（2026-10-22，本地 CDP）
+
+使用本地 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）打开“执行与集成 → CDP → 添加目标”，未保存目标。桌面窗口下弹窗为 `560×364px`，内容宽 `510.4px`，保存与取消按钮分别为 `107.6×32px`、`88×32px`；390×844 下弹窗 `358×355.2px`，320×568 下 `288×355.2px`，两档 `scrollWidth=clientWidth`，无横向溢出，窄屏按钮均等宽且为 32px 高。图标标题、CDP 标记、小号字段标签和等宽 URL 编辑区均正常渲染。证据：`/tmp/cdp-target-modal-after.png`、`/tmp/cdp-target-modal-after-390.png`、`/tmp/cdp-target-modal-after-320.png`。
+
+目标 Vue Prettier、ESLint、`pnpm --filter @nexus-terminal/frontend build`、根 `pnpm run check` 与 `git diff --check` 通过。全量 `pnpm run format:all:check` 仍受并行工作区 `tests/e2e/specs/ui/dashboard-workflows.spec.ts` 的既有格式告警影响，未修改该文件。按 D17 未执行真实保存、编辑回填、键盘焦点或 E2E；保存与取消继续使用原逻辑和统一基础按钮。
+
+## Agent CDP 按钮统一（2026-10-22，本地 CDP）
+
+使用本地 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）进入 Agent“执行与集成”的 CDP 区，未保存浏览器配置。1152×720 下，标题栏“添加目标”渲染为 `data-ui="button"`、`ui-button--soft`、neutral、38px；列表底部“添加目标”与 Endpoint“添加”使用同一基础按钮。打开“添加目标”后，弹窗“保存浏览器配置”为 solid/primary、“取消”为 soft/neutral，均为 32px；连接管理“添加连接”弹窗的确认／取消按钮同为 32px，结构和视觉已对齐。证据：`/tmp/agent-cdp-section.png`、`/tmp/agent-cdp-add-modal.png`。
+
+全仓按钮组件盘点为 `UiButton`、`UiFormActions`、`UiActionGroup`；旧 `BaseButton.vue` 已在提交 `dd40d0be` 删除，`rg` 无源码或测试引用，因此本批无需再次删除旧文件，也未新建同义按钮组件。目标 Vue Prettier、ESLint、`pnpm --filter @nexus-terminal/shared build`、`pnpm --filter @nexus-terminal/frontend build`、根 `pnpm run check` 与 `git diff --check` 通过。全量 `pnpm run format:all:check` 仅被并行工作区的 `tests/e2e/specs/ui/dashboard-workflows.spec.ts` 格式告警阻断，未修改该文件。按 D17 未执行真实保存、窄屏或 E2E；Endpoint 编辑／删除和危险操作继续保留原有语义色。
+
+## 全局禁用目标说明收进信息提示（2026-10-22，本地 CDP）
+
+使用本地 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）进入“安全与系统”并定位“全局禁用目标”。修改后页面正文中“这是跨会话、跨 Run 的全局硬限制”命中为 0，标题旁 `[data-ui="info-hint"]` 仍存在；点击后提示面板同时包含“聊天框下方的 SSH 只决定某次 Run”和“被全局禁用的目标即使在聊天框中被选中……Host 强制阻断”两段说明。截图证据：`/tmp/agent-denylist-hint-only.png`。
+
+三语 `scopeHint` 均删除且 JSON 解析通过；目标 Vue ESLint、Prettier、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check` 通过。CDP 未修改禁用草稿、原因或保存状态。按 D17 未运行本地业务测试、E2E 或测试收集；窄屏、键盘打开提示及真实保存仍随既有 Agent 安全回归覆盖。
+
+## 全局 Toast 等宽卡片材质（2026-10-22，本地 CDP）
+
+使用本地 CDP（`https://api.honus.top`，未使用 9998）在已登录页面直接向 `shared-notifications` store 注入短成功、长警告和带“重新读取”action 的失败通知，未触发真实保存或修改测试环境数据。桌面宿主和三条卡片均为 340px 宽，高度分别为 56/56/106px，`scrollWidth=clientWidth=338`；390×844 下卡片左右边界统一为 12/378px、宽 366px，高度 56/56/102px；320×700 下边界为 12/308px、宽 296px，高度 56/65/102px。三档文档宽度均等于视口宽度，短消息不再收缩，长文案与 action 只增加高度。
+
+卡片计算材质为细边框、`15px` 圆角、`color-mix(card-bg-color 95%, app-bg-color)` 底色、`inset 0 1px 0` 轻高光、低强度阴影和 2px 语义色侧线，与仪表盘连接卡片保持同一材质方向；状态仍由侧线、图标和语义色共同表达。通知计时、去重、错误驻留、`aria-live`、错误 `role=alert` 和 action 逻辑未改。证据：`/tmp/toast-equal-width-1152.png`、`/tmp/toast-equal-width-390.png`、`/tmp/toast-equal-width-320.png`。
+
+目标 Vue/CSS Prettier、NotificationHost ESLint、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check` 通过。按 D17 未运行本地业务测试、E2E 或测试收集；真实保存/测试动作产生的 Toast、键盘焦点、减少动态效果和成功/警告/信息三种独立状态仍随既有远程回归覆盖。
+
 ## 对话右侧记忆审核（2026-10-22）
 
 当前对话 Root/Child 的来源记忆由后端按 threadId 在分页前筛选，同事务校验当前用户/App 的线程归属；无来源候选不进入对话审核。对话独立 owner 每3秒读取一页50条，新候选展开原风格右侧栏，关闭不拒绝/发布，顶部按钮可重新打开；任务详情与记忆栏互斥，窄屏沿用浮层。只有人工点击保存才发布，拒绝和过期候选不进入 Recall。背景读取不置 busy，交互取代旧读取；未知/冲突保留原记录，显式核对原 memoryId 后再读列表，自动轮询不解除写入围栏或重发审核。读取失败保留卡片、停止轮询并提供恢复，active/KeepAlive/身份/文档可见性/卸载负责停止观察。
 
 扩展既有 `coverage-gaps.spec.ts` 的 Memory 生命周期断言：有真实线程但无来源的候选不会误入；缺失线程404，非法/重复 threadId 400。未新建业务测试，按 D17 未运行本地测试、浏览器、E2E 或测试收集。源码复核 Root/Child 共用 thread_id、分页前隔离、只读/写入晚结果、原版本 CAS、失效原文与统一 Toast；静态证据与真实交互验收分别记录。
 
-当前工作区的根 `pnpm run check`、`pnpm run build`（Shared/Backend/Frontend）、Shared check、最终 Backend check/build、本轮目标源码及既有断言 ESLint/Prettier、`git diff --check` 通过。日志为 `/tmp/nexus-conversation-memory-{check,build}.log`、`/tmp/nexus-conversation-memory-shared-check.log`、`/tmp/nexus-conversation-memory-backend-final.log`、`/tmp/nexus-conversation-memory-target-{lint,format}.log`。复核期间执行设置的并行工作区修改曾造成五处类型错误，后续重跑根检查和构建已通过；保留当时日志 `/tmp/nexus-conversation-memory-check-concurrent.log`，未修改或回滚无关文件。全量格式检查仍受 `use-artifact-library.ts`、`use-execution-settings.ts`、`AgentSettingsPanel.vue`、`ExecutionSettings.vue` 的其它未提交改动告警影响，不能记为通过；实际日志 `/tmp/nexus-conversation-memory-format-check.log`，本轮文档单独复核格式。
+根 `pnpm run check`、`pnpm run build`（Shared/Backend/Frontend）、Shared check、最终 Backend check/build、本轮目标源码及既有断言 ESLint/Prettier、`git diff --check` 通过。日志为 `/tmp/nexus-conversation-memory-{check,build}.log`、`/tmp/nexus-conversation-memory-shared-check.log`、`/tmp/nexus-conversation-memory-backend-final.log`、`/tmp/nexus-conversation-memory-target-{lint,format}.log`。复核期间执行设置的并行工作区修改曾造成五处类型错误，后续重跑根检查和构建已通过；保留当时日志 `/tmp/nexus-conversation-memory-check-concurrent.log`，未修改或回滚无关文件。全量格式检查仍受 `use-artifact-library.ts`、`use-execution-settings.ts`、`AgentSettingsPanel.vue`、`ExecutionSettings.vue` 的其它未提交改动告警影响，不能记为通过；实际日志 `/tmp/nexus-conversation-memory-format-check.log`，本轮文档单独复核格式。
 
-真实模型提案、同 App 不同线程/用户隔离、多页和多窗口审核竞争、未知回执/重新核对、关闭重开、切换线程、后台恢复、桌面/窄屏与键盘可访问性留远程验收。本次仅提交本功能相关变更，其它工作区改动保留；未推送或部署，未执行行为测试。
+真实模型提案、同 App 不同线程/用户隔离、多页和多窗口审核竞争、未知回执/重新核对、关闭重开、切换线程、后台恢复、桌面/窄屏与键盘可访问性留远程验收。没有提交、推送或部署。
+
+## 移除 Agent 设置记忆管理（2026-10-22）
+
+用户明确移除设置中的记忆管理模块。删除安全分组记忆卡片及专用 AppScopedSettings、AppMemoryEditor、use-app-memory、memory-management-api、memory-types/mapper 和三语 memoryManagement 文案；全仓引用核对未发现其它前端消费者。安全分组剩余协作限制与网络政策保持原布局。后端候选/审核/Recall、Shared 协议、持久数据与备份未修改，候选仍须人工发布；既有 coverage-gaps API E2E 继续验证原后端生命周期，不删除或跳过断言。前批针对已删除记忆 UI 的远程待验范围不再适用。
+
+本地 `dev`、HEAD `013f07061fbde592f7a3e3b6e53e02da24389bc2`，保留其它未提交修改；根 `pnpm run check`、`pnpm --filter @nexus-terminal/frontend build`、`pnpm run format:all:check` 与 `git diff --check` 通过。日志为 `/tmp/nexus-remove-memory-{check,build}.log`；全量格式结果另记 `/tmp/nexus-remove-memory-format-check.log`。按 D17 未新增或运行本地业务测试、浏览器、E2E 或测试收集。真实设置页入口消失与其它分组交互仍待远程核对；不将编译通过解释为界面行为通过。未提交推送，也未删除用户记忆数据。
+
+## 前后端架构偏移审核（2026-10-22）
+
+基线为本地 `dev`、HEAD `013f07061fbde592f7a3e3b6e53e02da24389bc2` 及原有大量未提交修改；未回滚其它改动。本批沿 App/定义/插件管理、记忆列表/审核与后台资源采样的 API → Shared codec/mapper → 应用 owner → Model/技术能力 → 出口/消费者核对状态、拒绝、取消与收尾，并核对配置热更新安装链。补查 Backend 跨模块/Bootstrap 依赖、Adapter 反向引用、Service/Model SQL，以及 Frontend 跨 feature、runtime/client/foundation 的深层引用；这些静态搜索不替代完整功能审核，不声称已逐行审核全部工作区。
+
+确认并修复：App 刷新在 busy 时静默丢失，插件变化后只读取 App 而遗漏定义目录；现由 use-app-management 合并排队读取，两份目录各自管理刷新，旧读失效后不回填。自动刷新不解除已存在或排队期间新产生的写入失败围栏，仍须原入口显式核对；不自动重试写入。App 目录、安全分组 App 选择及记忆审核接 active scope，停用同步清除选择/私有草稿并撤销旧回填。ResourceStatusService 仅缓存成功采样，失败结果不再等待最长一天的成功 TTL；共享在途、授权复查、取消与关闭归属保持不变。USAGE 与架构同步修正旧 TTL 起算和重启生效描述。不改布局、样式、导航或控件，仅补充必要 active 绑定。
+
+本轮 Node `/usr/local/bin/node` v22.23.1、pnpm `/usr/local/bin/pnpm` 11.26.0：`pnpm run check`、`pnpm run build`（Shared/Backend/Frontend）、`pnpm run format:all:check` 和 `git diff --check` 通过，日志为 `/tmp/nexus-architecture-audit-{check,build,format-check}.log`。按 D17 未新增或运行本地业务测试、浏览器、E2E 或测试收集；没有提交、推送或触发远程任务。待远程核对：插件安装/升级/卸载与 App 读写交错、定义目录刷新、排队后的未知写入围栏、记忆编辑离开/返回及晚响应隔离、SSH 失败恢复/并发共享/TTL 热更新与停机清理。
+
+## App 与扩展旧 UI 恢复（2026-10-22）
+
+展示依据为 `75289ef9^` 正式设置页面，协议仍为当前 Shared/API。App 卡片恢复包版本、权限抽屉及卸载确认；插件安装/卸载共享普通管理 owner，独立策略区只读取自己的策略资源；集成恢复图标操作栏、添加/编辑、删除和目录弹窗；市场恢复标题栏刷新、URL 添加/标签、搜索与可折叠来源/地址复制。按用户最新要求仅保留默认/第三方仓库下载，删除本地包上传入口、弹窗、状态、编排及无人消费的前端暂存 API；维护页的无消费者上传预留显示也一并移除，不涉及普通文件/附件上传。数据源缺失的旧运行/审批统计不恢复，排空数据清理按新版真实契约呈现，差异见 USAGE。
+
+同步既有 `preset-plugin.spec.ts`：来源 URL 复制按钮定位、已安装记录移到 App 卡片、真实包版本、启用 App 的卸载禁用、原权限按钮及无本地上传入口断言，保留后续高级维护与 SDK 链路；集成区域保持原可访问名称和 App 选择定位。按 D17 未新增或运行本地业务测试、浏览器、E2E 或测试收集。
+
+本轮根 `pnpm run check`、`pnpm --filter @nexus-terminal/frontend build`、`pnpm run format:all:check`、目标源码/既有用例 ESLint 和 `git diff --check` 通过；还静态核对恢复组件的三语言字面文案引用。初次还原日志为 `/tmp/nexus-app-ui-{check,build,format}-final.log`；移除本地包上传后重新执行，日志为 `/tmp/nexus-repository-only-check.log`、`/tmp/nexus-repository-only-build.log` 和 `/tmp/nexus-repository-only-format-check.log`。这些检查不能证明像素与行为验收通过：真实桌面/窄屏/键盘焦点、三语言、剪贴板权限、仓库下载/验签、第三方市场信任、安装/升级、卸载排空/取消/数据删除、授权范围、集成启停/发现以及未知写入/离页竞态仍待远程。未提交、推送或部署，保留工作区其它改动。
+
+## Subagent 继承主 Agent 与功能逻辑审核（2026-10-22）
+
+执行设置的 Shared 请求/响应、持久 JSON、双端 Model/mapper 和管理接口删除独立 profiles；前端删除模型目录加载及独立配置表单，仅保留公共协调容量与继承说明。delegate 删除 maxRequests/durationSeconds，九个协作工具使用当前 v3 定义，删除 collaboration_profiles。Child 同事务复制 Root 模型与执行快照，继承绝对期限及模型请求上限，工具与主 Agent 一致但排除嵌套委派和 Root 专属 join/cancel；原权限/审批、目标缩窄、家族账本及未知结果围栏不变。复审修正 SQL CHECK/持久解码的旧32次上限，改为引用 Shared 最大请求容量；初始v1签名更新，不兼容旧开发库。
+
+同步既有后端执行/协作/ACP/工具/浏览器夹具、存储集成、前端执行设置集成及 Agent Host/性能设置/插件 E2E。原独立模型用例改为继承说明、无独立模型控件及 Provider 变更不改执行设置；协作用例核对继承工具、Root deadline 和持久请求上限。前端夹具使用当前共享 editor/分区组件，保留版本冲突、未知结果围栏、确认过期、身份撤销和晚读取隔离；Provider 读取失败不阻止公共额度编辑。旧 duration/绝对期限注入仍作为非法委派字段拒绝用例，不恢复旧参数。
+
+功能源码审核覆盖已提交 `013f0706` 的网络失败归类/通知与 Pino、`6a34b081` 的缓存/在途共享，以及本地 Agent 执行/快照、数据目录、普通cd、挂起读取失败与配置热更新。发现 SourceAdmissionService 在等待封禁读取时若白名单收紧，仍可能接受旧准入事实；现于 await 后复查当前白名单和黑名单开关。普通cd仍取调用方的真实目录，不固定为根目录。未审核全部317个改动文件，不将局部源码审核解释为全仓无缺陷，也未调整无关 UI 风格或布局。
+
+`pnpm run check`、`pnpm run build`（Shared/Backend/Frontend）、最终 Backend build、`pnpm run format:all:check`、`git diff --check` 及本轮修改既有 mjs 的 `node --check` 通过；目标源码/既有测试 ESLint 通过。日志为 `/tmp/nexus-agent-inherit-{check,build,format}.log` 和 `/tmp/nexus-agent-inherit-backend-final.log`。按 D17 未新增或运行本地业务测试、浏览器、E2E 或测试收集；真实多 Child、共享预算耗尽、审批/撤权、取消与未知提交、白名单热更新交错及停机仍待远程 Actions。配置未知提交保守不激活，不根据持久值声称运行态已应用，须显式核对后保存确定配置或重启。未提交、推送或部署。
+
+## 核心配置热更新（2026-10-22）
+
+源码确认旧 ConfigurationService 只更新持久设置，Access/Remote 始终消费启动快照，前端所有保存均提示重启。本批改为串行 prepare → SQL CAS 确认 → 同步 apply：六个 IP/监控字段在原模块实例热更新；保留 CAPTCHA/Passkey 冷字段。状态订阅重排等待定时器，不额外并发或中断在途采样；资源 TTL 改变清旧缓存，晚成功按新 TTL 入缓存。失败 CAS 不激活，未知提交不猜测，停机晚确认不再通过拒绝准入的 installation 重新取有效态，原任务继续 drain；已停止的订阅不重新创建。
+
+同步既有 monitoring-configuration/auth 集成脚本的有效版本、模拟响应与成功提示，系统设置 E2E 改为即时有效周期，白名单 E2E 在保存/清空后直接验证同一来源拒绝/允许，黑名单 E2E 无重启产生真实封禁；受影响定位同步当前 settings-group、标题行表单提交和 Switch。三语言区分已应用与冷配置待重启；IP/监控不因其它冷配置误报重启。未新增或执行本地业务测试、浏览器、E2E 或测试收集（D17）。
+
+本轮根 `pnpm run check`、`pnpm run build`（Shared/Backend/Frontend）、`pnpm run format:all:check`、`git diff --check` 和两个修改集成脚本的 `node --check` 通过；受影响 E2E/集成脚本 ESLint 通过。日志为 `/tmp/nexus-hot-config-{check,build,format}.log`。真实远程采样时序、多客户端、白名单准入、已有封禁、新阈值、混合冷/热配置、未知提交和停机交错仍待远程 Actions，不用静态或历史 PASS 代替。本批未提交、推送或部署。
+
+## Agent 设置窄屏分组与滚动条间距（2026-10-22，本地 CDP）
+
+使用当前工作区经 `https://api.honus.top/settings?tab=agent` 核对，未直接访问 9998。390×844 与 320×700 下四个分类均为两列两行，单卡宽分别为 169px 与 134px；总开关卡片只显示开关和“活跃 App 1 / 1”，标题、信息按钮与活跃 App 保持同一行，页面 `scrollWidth=clientWidth`。Agent 设置卡片右缘到内容滚动条可用边界为 12px。
+
+Provider 添加弹窗恢复原尺寸与定位后正常显示：390×844 下为 `358×717.4px`，正文 `clientWidth=308px`、`offsetWidth=316px`、`scrollWidth=308px`、右侧内边距 12px；1024×768 下弹窗为 `576×736px`，正文无横向溢出，未额外增加全屏或侧栏避让样式。证据：`/tmp/agent-settings-scrollbar-gap-390.png`、`/tmp/agent-settings-320-final-gap.png`、`/tmp/provider-modal-reverted-390.png`。
+
+本轮 `pnpm --filter @nexus-terminal/frontend build`、目标文件 Prettier、目标 Vue ESLint 与 `git diff --check` 通过。未提交 Provider 写入，未验证真实触屏指针、软键盘弹出后的可视区变化、浅色主题及全部语言下的像素表现。未提交、推送或部署。
+
+## 挂起目录只读失败误报未知（2026-10-22）
+
+确认源码缺陷：`suspendedFailureKey` 原先把 HTTP 传输的 unknown 无条件解释为修改结果未知，目录 GET 的失败也进入同一文案。现对目录与日志按读取语义展示有限 code，服务端 internal/unknown 在只读场景使用三语读取失败文案；保留 cause 供全局网络去重。挂起 Panel 的正文告警迁至常驻 Toast，搜索栏保留具可访问名称的核对按钮；真实命名/终止/移除 unknown 仍设置 blockedIds，轮询和 Toast 关闭不能解除保护。
+
+同步既有 `suspended-sessions.integration.mjs` 的读失败保留目录且不新增写保护断言，以及权限失败 Toast/核对按钮断言；原未知修改、晚读取不能解除新围栏、取消及 KeepAlive 断言保留。按 D17 不新增/运行本地业务、浏览器及 E2E。本轮 `pnpm run check`、`pnpm --filter @nexus-terminal/frontend build`、`pnpm run format:all:check`、`git diff --check` 和该脚本 `node --check` 均通过，日志为 `/tmp/nexus-suspend-feedback-{check,build,format}.log`。用户现场此次偶发的实际网络/后端原因未复现；实际轮询、移交、Toast/关闭恢复、弱网并发与丢写入回执仍待远程，不能将源码定位/编译当作实机通过。未提交、推送或部署。
+
+## 统一实例数据目录（2026-10-22）
+
+用户明确采用破坏性布局，不处理旧数据。Bootstrap 现在统一从数据库父目录解析 `appearance/`、`artifacts/`、`plugins/`，用于资源打开、在线备份恢复和启动恢复；无旧路径读取、迁移、删除或环境变量兼容分支。Compose 仍挂载完整 data，SQLite 与恢复暂存文件仍在同一目录，Snapshot 原有逻辑分区和同级根约束不变。
+
+既有 backup 集成脚本更新真实 Artifact 损坏注入路径，并在源实例初始化后断言新目录存在、旧前缀目录未创建；Artifact 流句柄观察及 Linux 文件租约夹具同步新路径，不削弱真实句柄/权限撤销断言；Access 多实例夹具改为每实例独立目录，避免仅换 DB 文件名而共享资源根。按 D17 未新增或运行业务测试、浏览器及 E2E。本轮 `pnpm run check`、`pnpm --filter @nexus-terminal/backend build`、`pnpm run format:all:check`、`git diff --check` 及四个修改脚本的 `node --check` 均通过，日志为 `/tmp/nexus-data-dir-{check,build,format}.log`；空目录启动、背景/附件/插件实际读写、完整导出导入、恢复崩溃重启和实例隔离仍待远程验收。未移动/删除现场数据，未提交、推送或部署。
+
+## 终端目录切换普通 cd 回显（2026-10-22）
+
+源码对照确认：`75289ef9^` 的旧 `workspace-shell-integration.service` 已附带 INTERNAL_CD 标记及历史清理，但会隐藏提示符前的全部输出；当前 Adapter 保留后台输出，导致原包装可见。本批仅将真实 PTY 写入改为安全转义的普通 cd，移除无用的输出抑制/清行状态，保留 setup 清理、控制字符拒绝、提示符排队、当前附件与实际 cwd 核对。普通 cd 是否进入历史由远端 Shell 配置决定。
+
+同步已有 `terminal-protocol.spec.ts` 首次目录切换场景，核对普通 cd 独立回显且无 INTERNAL_CD；已有 `file-manager-navigation.spec.ts` 保留 HISTIGNORE 下不记录 cd、用户命令不丢失的断言，并检查无 INTERNAL_CD。按 D17 未新增或运行本地业务测试、浏览器或 E2E。本轮 `pnpm run check`、`pnpm run build`、`pnpm run format:all:check` 和 `git diff --check` 均通过，日志为 `/tmp/nexus-cd-{check,build,format}.log`；真实 Bash/Zsh、单引号/空格路径、前台程序等待、后台输出和历史配置待远程验收，不把编译当作行为通过。未提交、推送或部署。
+
+## 工作区与设置通用结果统一 Toast（2026-10-22）
+
+本批把工作区布局冲突/读取失败、命令列表和连接树恢复，以及设置的个人偏好、日志、安全、监控、外观、备份、宿主诊断、Agent 与密钥管理通用操作结果迁至全局 Toast；不再在正文插入错误横条。字段校验、危险确认与未知结果核对保留，待重启状态仍由业务 owner 持有并改由 Toast 展示，业务 owner 继续持有 CAS、原意图和刷新围栏。已识别网络 cause 沿原统一网络通知，关闭 Toast 不解除围栏。
+
+Toast 增加只读刷新 action；设置聚合核对从自动对话框改为常驻 Toast，页头待核对入口仍可重新打开。根卸载后不发布晚返回通知；恢复 Promise 使用 allSettled 汇总同步与异步失败，不重放原写入。同步迁移已有 monitoring、registry、execution、provider、targets 与 system-settings 断言，直接核对通知 store 或正式全局 Toast，而非已删除的正文节点。
+
+本批 `pnpm run check`、`pnpm run build`、`pnpm run format:all:check` 和 `git diff --check` 通过；既有 monitoring、registry、execution、provider、targets、notifications 集成脚本的 `node --check` 通过，仅作语法核对，未执行脚本。按 D17 不新增/运行本地业务测试、浏览器或 E2E。常驻/关闭、同文案去重及不同恢复范围隔离、弱网并发、只读恢复、各语言/窄屏与权限切换的实际交互仍待远程验收，类型及编译不作为这些行为通过的证据。主仓库本轮未提交、推送或部署。
+
+## 安全设置重启提示统一 Toast（2026-10-22，本地 CDP）
+
+使用当前工作区经 `https://api.honus.top/settings?tab=ipControl` 核对，未直接访问 9998。安全设置正文已移除 `ConfigurationStatus` 及“配置将在服务器重启后生效”“已保存，重启服务器后生效”节点，避免读取或保存时插入、移除提示导致布局跳动。IP 管控页面正文内对应文案数量为 0，页面 `scrollWidth=clientWidth`，无横向溢出。
+
+通过 CDP 向安全配置读取注入 `requiresRestart: true` 的待重启快照后，全局通知 store 得到一条 `warning`，正文为“验证码或 Passkey 站点配置将在服务器重启后生效。”，正文内联重启提示数量仍为 0。当前测试环境本身没有待重启冷配置，因此未触发真实页面 Toast；也没有对真实 CAPTCHA 配置执行需重启保存。`tests/frontend/auth.integration.mjs` 已改为直接检查通知 store，覆盖初次待重启 warning、CAPTCHA 保存 success、冲突及网络热保存 `savedLive` 断言，但按 D17 本轮未执行该集成脚本。
+
+本轮 `pnpm --filter @nexus-terminal/frontend build`、目标文件 Prettier、目标 Vue ESLint、`node --check tests/frontend/auth.integration.mjs` 与 `git diff --check` 通过。真实待重启保存、Toast 自动关闭/堆叠、窄屏与弱网并发交互仍待远程验收；注入响应只验证展示分支，不改写测试环境配置。
+
+## 设置页解释性副标题移除（2026-10-22，本地 CDP）
+
+使用当前工作区经 `https://api.honus.top/settings` 核对，未直接访问 9998。桌面 `1536×900` 依次检查工作区、系统、安全、IP 管控、数据管理、外观、Agent 和关于页：可见 `.ui-settings-group__description` 与 `.settings-content-head p` 均为 0，八页 `settings-page.scrollWidth=clientWidth`，无页面级横向溢出。移动端 `390×844` 复跑同八页，说明元素为 0 且页面无横向溢出；设置目录卡片不再渲染条目说明，主标题下也不再显示概览说明。
+
+展开“诊断与恢复（高级）”后，宿主诊断与机器突变恢复的分组标题均无副标题；机器突变恢复的原有核对警告仍以正文 warning 提示显示“解除只移除执行围栏，不重试原操作，也不证明原操作成功。请先独立核对远端实际效果。”，没有因移除标题说明丢失。证据：`/tmp/settings-subtitles-workspace.png`、`/tmp/settings-subtitles-system.png`、`/tmp/settings-subtitles-security.png`、`/tmp/settings-subtitles-ipControl.png`、`/tmp/settings-subtitles-data.png`、`/tmp/settings-subtitles-mobile-menu.png`、`/tmp/settings-maintenance-expanded.png`。
+
+目标文件 Prettier、目标 Vue ESLint、`pnpm --filter @nexus-terminal/frontend build` 与相关文件 `git diff --check` 通过。首次构建曾因并行改动的 `packages/frontend/src/features/agent/model/execution-mapper.ts:71` 报 `TS2741` 中断，该并行改动完成后重试通过；本批未修改该文件。工作区整体 `git diff --check` 仍被其他并行改动在 Agent execution 文件中的行尾空格和 EOF 空行阻断，未清理这些未知变更。设置值保存、机器突变证据录入/解除和真实窄屏交互动画仍待远程 E2E。
+
+## Agent 市场对照、官方插件发布与记忆导入移除（2026-10-22）
+
+本批对照 `75289ef9^` 的正式 Agent，不以开发页作为旧版基线；主仓库为 `dev` 工作区，未提交、推送或部署其中既有页面改动。按 D17 仅做源码、类型、格式、构建及发布资产完整性核对，不运行本地业务测试、浏览器或 E2E。
+
+| 功能             | 重构前事实                                                                                                            | 当前核对与处理                                                                                                                                                                                                    |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 默认与第三方市场 | `PluginManagementSettings.loadRemoteCatalogs` 并行读取官方及全部配置仓库，按来源展示；标题已是“可安装 App 与 Skill”。 | `PluginRepositorySettings.load` 仍读取官方及所有配置仓库，并保留成功结果；没有丢失多市场能力，但改为串行读取，部分失败只给通用提示。此处没有改名或另建 Skill 安装通道。                                           |
+| 官方目录与签名包 | 官方目录是默认安装来源，Skills 属于签名插件包。                                                                       | 线上 v1.0.0 的 publisher 多出 `schemaVersion`，SDK 为 `1.0.0`，manifest 含旧 `nexus/agents/agentSurface/targets`；分别违反当前目录白名单、SDK 精确值 `1` 和 manifest 白名单。通过发布新包修复，未放宽 Host 校验。 |
+| App 与启用引导   | 旧 `compose-agent` 创建空 AppRegistry，插件提供 App；首次启用先读取推荐并确认安装官方插件。                           | 当前 `ScopeService.list` 自动创建 `nexus.terminal`，设置开关直接调用 `execution.toggleEnabled`，推荐安装仍在市场。两项是仍存在的产品流程差异，本批没有擅自改动，也不宣称 Agent 已全部还原。                       |
+| 跨 App 记忆导入  | 旧 `MemorySettings` 与后端已有来源选择、预览和确认导入，并非重构新增。                                                | 用户本次明确删除：移除 UI、API、Shared codec/类型、Service/Model/Storage/SQL、确认表、快照登记和专属事件/三语文案；保留当前 App 提案、审核、发布、撤销、Recall、普通备份和通用 AppIntent。                        |
+
+记忆来源选择移除后，删除无人消费的 slot `apps` 参数与外部导入失效通知；列表读取仍由原 `useAgentManagementOperation` 独占并保护身份/离页竞态。专属 `agent_memory_imports` 已从当前初始结构及快照中移除，初始签名更新为 `backend-next-v1-initial-20261022-memory-scope`。按 H-12 不添加旧开发库兼容迁移，本批没有删除或重置任何数据库。测试夹具的 `memory.import` 只是通用 Intent 声明，不调用已删的记忆路由，未借此删除普通跨 App 通道。
+
+官方源码归独立仓库 `0honus0/nexus-agent-plugins`，提交并推送 `bda89fc66e1ed08f7ee5f27ced1d851785dac64d`。两个插件均发布为不可变新版本 `1.0.1`：精确 manifest/SDK、目录 publisher 白名单、catalog 独立 Nexus 范围（1.0.2–1.99.99），补齐显式 context/memory/artifact 等声明但不自动授权；Full-stack 改用当前 `request`、`valueJson`、CAS/operationId、布尔 health 和符合 CSP 的外部样式；官方 Skills 不再描述已移除的旧审批模式。
+
+- [源码验证 39733680384](https://github.com/0honus0/nexus-agent-plugins/actions/runs/39733680384)：当前提交的 `Plugin validation gate` 成功。
+- [草稿签名发布 39733748916](https://github.com/0honus0/nexus-agent-plugins/actions/runs/39733748916)：原固定 Ed25519 Publisher 身份签名并上传三个资产，成功；私钥仅在 Actions secret/runner 内使用。
+- [公开发布](https://github.com/0honus0/nexus-agent-plugins/releases/tag/v1.0.1)：草稿资产核对后发布；发布触发的 [Release 39733871666](https://github.com/0honus0/nexus-agent-plugins/actions/runs/39733871666) 及 [Validate 39733870820](https://github.com/0honus0/nexus-agent-plugins/actions/runs/39733870820) 均成功。
+
+草稿与公开资产分别下载并逐字节比较一致，`releases/latest/download/catalog.json` 与已核对目录一致。核对目录字段/SDK/范围、原 Publisher 指纹、公钥、两个 tar 的 size/SHA-256、Ed25519 签名、全部文件 hash/大小/清单及与提交源码的对应；没有执行插件代码或 Host 安装行为。
+
+| 资产                        | 字节  | SHA-256                                                            |
+| --------------------------- | ----- | ------------------------------------------------------------------ |
+| `nexus.agent-1.0.1.tar`     | 20480 | `d2250949930fcf1675a96ed13744c7e892374bf182e589f36e2ffc76136791ea` |
+| `nexus.fullstack-1.0.1.tar` | 20480 | `293c5b48ef67c42a5fa6ba32e4df47573fdcccb60aaff8a2ee71e608f740a36d` |
+
+本批静态与构建：官方 `node scripts/check.mjs`（两个插件）、全部发布脚本及两个运行入口 `node --check`、主仓库 `pnpm run check`、`pnpm run build`、`pnpm run format:all:check` 和两仓 `git diff --check` 通过。末次 schema/slot 小改后再次执行根 check 与前后端构建均通过；文档收口后再次核对全量格式及 diff。普通记忆管理、已移除入口不可达、多市场安装/升级及官方两个包在真实 Host 的安装、授权、运行仍待远程 E2E/现场验收；资产核验不等同于这些行为通过。
+
+## 设置页保存入口与文案统一（2026-10-22，本地 CDP）
+
+使用当前工作区经 `https://api.honus.top/settings` 核对，未直接访问 9998。工作区四组已从“保存本组”统一为“保存”；系统语言、时区、日志，首页与监控，监控核心配置，安全密码/CAPTCHA，IP 白名单/黑名单和外观标题栏颜色均把主保存按钮放在 `UiSettingsGroup` 标题右侧。未修改时按钮为 `soft + neutral` 且禁用，修改后才变为 `solid + primary`。
+
+1536×900 下系统三组按钮均为 `55.6×38px`，位于标题行右缘；安全、IP 管控、外观和工作区的可见分组均无标题与操作区重叠。390×844、320×844 下五个设置页签页面级 `scrollWidth=clientWidth`，标题可按需增高但操作区保持右对齐且不覆盖标题；320px 下语言、时区、日志、工作区、密码、Passkey、两步验证、CAPTCHA、IP 白名单及外观标题操作区均完成边界检查。
+
+通过真实 UI 草稿分别修改语言（`中文 → 日本語`）、时区、前端日志等级、工作区弹窗编辑器复选框、外观标题栏颜色和 IP 白名单文本：对应按钮均由 `disabled=true / soft / neutral` 变为 `disabled=false / solid / primary`；每次重新加载后草稿丢弃并恢复弱化禁用。全程未点击保存，未修改测试环境配置。证据：`/tmp/settings-saves-system-after.png`、`/tmp/settings-saves-workspace-after.png`、`/tmp/settings-saves-security-after.png`、`/tmp/settings-saves-ipControl-after.png`、`/tmp/settings-saves-appearance-after.png`、`/tmp/two-factor-saves-1536.png`。
+
+两步验证启用态的“禁用两步验证”已改为标题右侧按钮并通过 `form` 关联正文密码表单，但当前测试账号未启用 TOTP，启用态视觉和真实禁用提交仍未实机覆盖。目标 Prettier/ESLint、Frontend build、根 `pnpm run check`、`pnpm run format:all:check` 与 `git diff --check` 通过；全量格式首次被忽略目录 `tests/e2e/.tmp/vite-cache` 的生成缓存阻断，移出该缓存后通过，未修改无关源码。未提交、推送或部署。
+
+## 两步验证主操作移至标题栏右侧（2026-10-22，本地 CDP）
+
+使用当前工作区经 `https://api.honus.top/settings?tab=security` 核对，未直接访问 9998。两步验证未启用时，“启用两步验证”从正文底部移至 `UiSettingsGroup` 标题行操作区，与 Passkey 注册按钮采用同一右侧对齐方式；正文只保留当前状态提示，不再重复主操作。扫码配置、启用后密码禁用和读取失败重试的分支保持原语义。
+
+1536×900 下标题行高 `38px`，操作区与按钮均为 `107.6×38px` 且右缘对齐分组内容；390×844 下按钮为 `108×38px`。320×844 下标题允许换行但操作区仍右对齐，页面无横向溢出（`scrollWidth=clientWidth=320`）。截图证据包含 `/tmp/two-factor-wide.png`、`/tmp/two-factor-390.png`、`/tmp/two-factor-320.png`、`/tmp/two-factor-saves-1536.png`。最新源码已把启用后的禁用按钮也移至标题右侧，但测试账号未启用 TOTP；完整激活、启用态布局和真实禁用流程仍待远程 E2E。
+
+## 代理与通知管理窄屏操作与事件计数（2026-10-22，本地 CDP）
+
+使用当前工作区经 `https://api.honus.top/proxies` 与 `/notifications` 核对，未直接访问 9998。760px 以下两页的编辑、删除从内容右侧移到下方，作为等宽图文按钮；代理筛选在 360px 以下按行展开，通知筛选固定为搜索独占一行、类型与状态各半行。通知卡片只显示“已启用 49 项事件”，不再渲染事件名称示例；搜索仍会匹配事件名称。
+
+390×844 下代理工具栏为 `234px + 112px` 两列，通知卡片操作区宽 `330px`，两枚按钮各 `161×32px`。320×844 下页面均无横向溢出（`scrollWidth=clientWidth=320`）；代理工具栏收为单列 `284px`，通知工具栏为搜索 `284px`、类型与状态各 `138px`，卡片操作区 `260px`，两枚按钮各 `127×32px`。320px 通知卡片 DOM 的元信息实测仅为 `已启用 49 项事件`。截图为 `/tmp/proxies-320-final-v2.png`、`/tmp/proxies-390-final-v2.png`、`/tmp/notifications-320-final.png`。完整远程 E2E、浅色主题与更多物理设备未运行。
+
+## Agent 执行设置底部保存栏窄屏对齐（2026-10-22，本地 CDP）
+
+`https://api.honus.top/settings?tab=agent` 使用当前工作区核对，未直接访问 9998。原底部栏使用 `flex-wrap`，`320×568` 下提示文字占满首行后把“保存”按钮挤到下一行并靠左，形成高 `86px` 的断裂布局。现改为提示文字可换行、按钮不收缩的单行布局。
+
+修复后 `320×568` 下底部栏为 `288×64px`，提示文字 `188×40px` 分两行，保存按钮 `56×38px` 固定在右侧且垂直居中；`390×844` 下提示保持单行，按钮仍固定右侧。`1536×762` 桌面布局同样保持提示单行、按钮右侧对齐。三档均无页面级横向溢出。证据：`/tmp/execution-footer-wide-before.png`、`/tmp/execution-footer-390-before.png`、`/tmp/execution-footer-320-before.png`、`/tmp/execution-footer-390-after.png`、`/tmp/execution-footer-320-after.png`。
+
+## 成功与失败 Toast 视觉强化（2026-10-22，本地 CDP）
+
+`https://api.honus.top` 使用当前工作区核对，未直接访问 9998。通过页面内真实 `shared-notifications` store 同时展示成功与失败提示，未触发后端写入。桌面 1536×762 下成功 Toast 为 `400×58px`、失败为 `400×63.1px`；两类卡片分别命中 `--status-success-color` 与 `--status-error-color` 的边框、渐变底色、图标容器和左侧强调线，消息仍可完整换行。
+
+390×844 下两类 Toast 宽 `366px`；320×568 下宽 `294px`，长失败文案换行后卡片高度 `58px`，图标、关闭按钮和消息均未裁切，页面 `scrollWidth=clientWidth`。成功/失败卡片的圆角、阴影、内边距与关闭按钮尺寸在窄屏统一收紧；通知类型、时长、去重和关闭语义未改动。证据：`/tmp/toast-refined-wide.png`、`/tmp/toast-refined-mobile.png`、`/tmp/toast-refined-320.png`。浅色主题和更长的多段错误文案未单独验证。
+
+## Provider 添加弹窗移动端适配（2026-10-22，本地 CDP）
+
+`https://api.honus.top/settings?tab=agent` 使用当前工作区核对，未直接访问 9998。窄屏问题来自表单 `fieldset` 的浏览器默认最小内联尺寸把正文撑宽，而不是缩放柄本身：`320×568` 修复前正文 `scrollWidth=298px`、`clientWidth=238px`，可横向拖动；修复后两者均为 `238px`。弹窗为 `288×482.8px`，缩放柄不渲染，正文独立纵向滚动，保存/取消底栏保持可达。
+
+`390×844` 下弹窗为 `358×730.4px`，正文 `scrollWidth=clientWidth=300px`，缩放柄在设备能力回调完成后不存在；页面 `scrollWidth=clientWidth=390px`。桌面 `1536×762` 下缩放柄可见、启用，指针拖动会写入新的宽高；随后切入 `320px` 视口时内联尺寸被清除，弹窗恢复自适应，证明桌面能力保留且不会污染手机布局。本轮未提交 Provider 写入，未测试软键盘弹出后的可视区变化。证据：`/tmp/provider-320-after.png`、`/tmp/provider-390-after.png`、`/tmp/provider-mobile-current.png`。
+
+API 密钥区域进一步核对：标签独占一行后，输入框与“显示凭据”按钮同在下一行，`390×844` 下两者高度均为 `32px`，顶部和底部位置差值均为 0；输入框仍可收缩，按钮和说明文案未溢出。证据：`/tmp/provider-credential-aligned-390.png`。
+
+调用协议与启用开关同步核对：宽屏两者均为 `32px` 高，顶部和底部位置差值均为 0；`390×844` 下启用行宽 `280px`，`320×568` 下宽 `210px`，均与协议下拉框同宽并铺满单列，文字靠左、开关靠右。两种窄屏页面均无横向溢出。证据：`/tmp/provider-protocol-toggle-wide.png`、`/tmp/provider-protocol-toggle-390.png`、`/tmp/provider-protocol-toggle-320.png`。
+
+## 全局提示弹层与 Toast 重构（2026-10-22，本地 CDP）
+
+`https://api.honus.top` 使用当前工作区核对，未直接访问 9998。通过真实 `confirmConnectionHostKey` 入口打开 SSH 主机密钥变化提示：1536×762 下面板为 `500×354.5px`，390×844 下为 `358×352.5px`；详情区展示目标、已保存指纹和当前指纹，长指纹可换行，两个操作按钮在手机端各 `155px` 宽、`44px` 高，面板无横向或纵向溢出。取消正常收起且未写入信任。证据：`/tmp/global-host-key-dialog-wide.png`、`/tmp/global-prompts-mobile-2.png`。
+
+临时修改 `public/sw.js` 触发真实 Service Worker 更新事件，更新提示显示为 `420×127.5px` 玻璃面板，手机为 `358×157.3px`，操作按钮在手机端等宽 `44px`；验证后已立即还原 `public/sw.js`，工作区无该文件差异。全局 Toast 在桌面为 `400×59.6px`、手机为 `366×60px`，计算样式包含 `backdrop-filter: blur(14px) saturate(1.55)` 和语义色左侧强调线。证据：`/tmp/global-prompts-wide-final.png`、`/tmp/global-update-prompt-mobile-final3.png`。
+
+`tests/e2e/specs/ssh/connection.spec.ts` 仍以 `SSH Host Keys`、`Cancel` 和 `Trust and reconnect` 定位，重设计未改变可访问名称与按钮文案，按 D17 未运行该远程用例。目标 ESLint／Prettier、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过；浅色主题和扩大视口组合未运行。
+
+## 全局下拉基础组件统一（2026-10-22，本地 CDP）
+
+`packages/frontend/src` 已无原生 `<select>`／`</select>`。原剩余三处消费者已迁入 foundation `UiSelect`：Agent DEV 模型选择、Targets DEV SSH 连接选择，以及设置数据页高级维护中的突变结果与解除证据选择；空值占位、禁用态和证据校验保持原语义。
+
+`https://api.honus.top` 使用当前工作区核对，未直接访问 9998。1536×762 下依次检查仪表盘、连接管理、代理管理、通知管理、审计日志和设置的工作区／系统／外观／安全／IP 管控／数据管理／Agent 页：`document.querySelectorAll('select').length` 均为 0；所有可见 `.ui-select__trigger` 的计算样式均为 `backdrop-filter: blur(8px) saturate(1.45)` 与 48% 半透明填充。系统设置语言下拉实际展开后，浮层为 `backdrop-filter: blur(28px) saturate(1.85)`、37.8% 半透明填充，三个语言选项完整可读。证据：`/tmp/global-dropdown-glass.png`、`/tmp/global-dropdown-glass-open.png`。
+
+`tests/frontend/mutation-recovery.integration.mjs` 已按 ReKa 交互更新并实际通过 12 项检查：先展开高级维护区，再点击 `UiSelect` 并选择观察结果与证据选项，同时以 `data-value` 核对空值占位。目标 ESLint／Prettier、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过；完整远程 E2E、浅色主题和更多设备视口未运行。
+
+## Agent 空会话首页默认无内部滚动（2026-10-22，本地 CDP）
+
+`https://api.honus.top` 使用当前工作区核对，未直接访问 9998。临时启用 Agent 执行后打开默认 `1180×740` 悬浮窗并进入空会话首页：修复前会话 scroller `clientHeight=412`、`scrollHeight=500`、`scrollTop=87.2`，右侧出现滚动条；将欢迎区固定最小高度改为填满可用区后，`clientHeight=scrollHeight=412`、`scrollTop=0`，滚动条消失，页面无横向溢出。截图证据 `/tmp/agent-home-before.png`、`/tmp/agent-home-after.png`。验证后通过同一执行设置接口恢复 `enabled=false`，重新加载确认入口与窗口数量均为 0。
+
+`tests/e2e/specs/agent/configuration-hints.spec.ts` 在创建空会话并显示输入区后，新增 scroller `scrollHeight - clientHeight === 0` 断言。该用例按 D17 未运行；本轮静态检查将随当前批次执行。
+
+## Agent SSH 目标批量选择（2026-10-22）
+
+`tests/e2e/specs/agent/configuration-hints.spec.ts` 现创建两个真实测试 SSH 连接并启用执行设置；打开 Agent 的“选择 SSH 目标”弹层后，断言初始“全部停用”不可用，点击“全部启用”后两项均选中且“全部启用”不可用，点击“全部停用”后两项均取消，再保留原有单项勾选与 grants 为空断言。该用例覆盖当前 `AgentAppSurface` 直接写入 `useNativeRuns.connectionIds` 的批量交互，不派发 Run。
+
+本轮执行 `pnpm exec prettier --check`（目标文件）、目标 ESLint、`pnpm run check`、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check`，均通过。按 D17 未运行该 E2E；当前 `api.honus.top` 的 Agent 执行设置关闭，未为视觉截图临时开启，因此弹层实际布局、窄屏换行和启用态点击结果仍待浏览器验证。
+
+## Agent 执行关闭时隐藏悬浮入口（2026-10-22，本地 CDP）
+
+使用当前工作区经 `https://api.honus.top` 核对，未直接访问 9998。登录测试账号后打开 `/settings?tab=agent`，当前“Agent 功能”开关为 `aria-checked=false`；页面中 `[data-agent-launcher-trigger]` 数量为 0，`.agent-hub-window` 数量为 0。1536×762 CSS 视口下 `document.documentElement.scrollWidth=1528`，未出现页面级横向溢出。
+
+`tests/e2e/specs/agent/host.spec.ts` 对应用例已改为：先确保执行设置关闭并断言入口与窗口均不存在；通过设置开关启用后等待入口出现并打开窗口；全局导航期间窗口保留；再次从设置关闭后入口与窗口消失。本机按 D17 未运行该浏览器行为用例；本轮实际执行 `pnpm exec eslint packages/frontend/src/features/agent/host/AgentSurfaceHost.vue tests/e2e/specs/agent/host.spec.ts`、`pnpm run check`、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check`，均通过。未覆盖浅色主题、其他视口和启用状态下的实机开关切换。
+
+## 全局应用更新弹层与自动读取（2026-10-22，本地 CDP）
+
+使用当前工作区经 `https://api.honus.top` 核对，未直接访问 9998。代理、通知与审计标题区已无常驻刷新按钮，列表在进入页面时自动读取；代理、通知的异常提示仍保留重试，审计读取失败保留旧记录和重试。插件管理进入“App 与扩展”后自动读取已安装插件与仓库状态，标题区不再要求手动刷新；入口自身的“读取仓库与推荐”只在对应操作失败时出现。
+
+实际修改本地 `sw.js` 内容并触发 `registration.update()` 后，已有控制者的页面出现全局“新版本已就绪”弹层；1200×800 下弹层为 `560×130.1px`，标题、单句说明与“稍后／立即更新”完整显示。390×844 设备视口下以同一 `UiDialog` 打开状态核对为 `280×147.5px`，居中且无横向溢出；未点击“立即更新”执行重载，以免中断核对页。证据：`/tmp/app-update-prompt.png`、`/tmp/app-update-prompt-final-wide.png`、`/tmp/app-update-prompt-final-mobile.png`、`/tmp/agent-tools-after-auto-load.png`。
+
+待验：真实点击“立即更新”后的缓存清理、Worker 接管与登录态恢复，选择“稍后”后同一 Worker 不再提示，新 Worker 可再次提示，离线/多标签页/浅色主题组合。静态检查结果见本轮最终检查记录。
+
+## 连接管理中窄屏卡片与筛选栏自适应（2026-10-22，本地 CDP）
+
+使用当前工作区经 `https://api.honus.top/connections` 核对，未直接访问 9998。中屏筛选固定为两行：搜索独占一行，标签、当前排序、排序方向和批量开关在下一行；列表级“测试全部／连接全部”在右侧上下等分并撑满。连接卡片在 760px 以下保持名称、地址、最近连接三行左对齐，左侧类型图标垂直居中；360–760px 使用右侧竖排协议/标签块，360px 以下恢复名称同行。底部测试、编辑、克隆与连接作为同一组，左缘统一对齐类型图标列，按钮内容居中并带浅色细边框；空间足够时四个均显示图文，稍窄时前三项为图标、连接保留文字，极窄时四个均为图标且隐藏类型图标。窄屏批量栏固定为三枚选择操作与两枚批量动作两行，选择框在卡片左缘跨行居中。
+
+CDP 实测：390×844 与 640×900 均无横向溢出；390px 卡片宽 `358px`，右侧竖排标签块 `80px`，操作行 `334px`，四个图文按钮完整显示；640px 卡片宽 `592px`、操作行 `566.4px`，批量栏 `334×135.8px` 稳定为三加二两行。320×568 恢复名称行内标签并显示三图标加连接图文，256×520 隐藏类型图标并显示四图标；两种宽度均无横向溢出。
+
+证据：`/tmp/connections-final-390.png`、`/tmp/connections-batch3-390.png`、`/tmp/connections-border-640.png`、`/tmp/connections-border-320.png`、`/tmp/connections-align-256.png`。目标 Prettier/ESLint、`pnpm --filter @nexus-terminal/frontend build`、根 `pnpm run check` 与 `git diff --check` 通过。全量 `format:all:check` 被现有生成缓存 `tests/e2e/.tmp/vite-cache/**` 的大量 spacing 报错阻断，未修改该目录或无关源码。未提交、未部署。
+
+## Agent 设置总开关可见性恢复（2026-10-21，本地 CDP）
+
+最后成功发布的 `dev` 镜像标签 `ghcr.io/0honus0/nexus-terminal:dev` 的 `org.opencontainers.image.revision` 为 `d9a27832426524a13bc180225aab4eda03afff5e`；Actions `39531103157` 之后没有新的成功发布。源码对照确认该镜像与当前工作区的执行设置 API、mapper、composable 未变，失效点是设置页把总开关放在执行设置成功读取的条件内，读取失败会连同标题和控件隐藏。
+
+本地 CDP（`https://api.honus.top`，未使用 9998）验证：桌面页开关可见，实际启用→停用两次 PUT 均为 200，最终恢复停用；将 `GET /api/v1/agent/execution-settings` 返回 503 后，开关仍可见、处于禁用态并显示“不可用”，页面保留“读取已保存设置”入口。新增 `performance-settings.spec.ts` 失败态回归，检查开关可见、禁用与不可用文案。390×844 设备视口下开关仍可见，页面 `scrollWidth=304`、`clientWidth=312`，无横向溢出。证据：`/tmp/agent-switch-live.png`、`/tmp/agent-switch-390.png`、`/tmp/agent-switch-503-debug.png`。旧镜像未包含本次源码修复，须重新构建发布后才进入 `:dev`。
+
+## 代理与通知管理目录式布局（2026-10-21，本地 CDP）
+
+使用当前工作区经 `https://api.honus.top/proxies` 与 `/notifications` 核对，未直接访问 9998。桌面物理视口 `1920×1125`（CSS `1536×900`）下，两页均采用与连接管理一致的标题/主操作、概览卡、搜索筛选栏和无外框圆角列表；代理按协议显示总数、SOCKS5、HTTP 三项统计，通知显示总数及三种渠道统计。代理项显示协议、`host:port`、认证状态与图标编辑/删除，通知项显示类型、启用状态、目标地址、前三项订阅事件及同一组图标操作。通知页只保留渠道配置；投递记录已移到审计日志页。
+
+390×844 设备视口下页面实测 `scrollWidth=382`、`clientWidth=382`，无页面级横向溢出；代理与通知筛选器改为单列，卡片操作移至内容下方。320×568 下页面 `scrollWidth=312`、`clientWidth=312`，代理与通知弹窗均为 `280×536`。通知编辑器的内容区 `scrollHeight=2292`、`clientHeight=638`，标题和“取消／保存”底栏保持固定，内容独立滚动。
+
+通过界面创建两条临时 Webhook 通知渠道后删除，最终通知渠道数为 `0`；未触发真实通知投递、未测试外部供应商，也未覆盖浅色主题和更多物理设备。控制台无 error。证据：`/tmp/proxies-cdp-full.png`、`/tmp/proxies-390.png`、`/tmp/proxies-320.png`、`/tmp/proxy-form-desktop.png`、`/tmp/proxy-form-320.png`、`/tmp/notifications-with-cards.png`、`/tmp/notifications-390-card.png`、`/tmp/notifications-320.png`、`/tmp/notification-form-desktop.png`、`/tmp/notification-form-390.png`、`/tmp/notification-form-320.png`、`/tmp/notifications-390-refresh.png`。目标 ESLint/Prettier、`pnpm --filter @nexus-terminal/frontend build`、`pnpm run check`、`pnpm run format:all:check` 与 `git diff --check` 见本轮最终静态检查。
+
+通知编辑器在 1280×900 CSS 环境中实测“测试通知”按钮始终显示，未填写 URL 时按钮禁用，页面不再渲染“请填写必填字段以启用测试”提示；控制台无 error。证据：`/tmp/notification-form-test-button.png`。
+
+## 通知投递迁入审计日志（2026-10-21，本地 CDP）
+
+`https://api.honus.top/audit-logs` 现提供“操作记录 / 通知投递”两个视图，默认仍显示操作记录。通知投递视图显示时间、事件类型和投递状态，保留 unknown 数量提示、异常重试、继续加载和分页入口；通知页面不再读取或渲染投递记录。切换视图、重新读取或离开页面不会触发通知重发。
+
+测试环境当前没有真实投递记录，空态显示“暂无投递记录。”。为核对终态行布局，使用 Playwright 在浏览器内只读拦截投递列表响应并注入 `sent`、`failed` 两条合成记录，未向 webhook 或外部供应商发送请求；桌面与 390 设备视口下页面均无横向溢出（窄屏实测 `scrollWidth=304`、`clientWidth=312`），状态文案与图标完整进入 DOM 且为点击命中元素。控制台无 error。证据：`/tmp/audit-log-tabs-desktop.png`、`/tmp/audit-deliveries-desktop.png`、`/tmp/audit-deliveries-390.png`、`/tmp/audit-deliveries-rows-desktop.png`、`/tmp/audit-deliveries-rows-390.png`。真实通知终态读取、分页和失败恢复仍需完整 E2E 覆盖。
+
+## 审计日志时间线重构（2026-10-21，本地 CDP）
+
+操作记录由表头加详情块改为时间线：左侧时间列、事件类别节点、事件名称/范围/HTTP状态与用户/来源IP/对象/路由分层展示，去掉逐行边框和原始键值 `<pre>`。页头提供操作记录/通知投递切换、关键词、操作类型与全部时间/24小时/7天/30天筛选；时间范围实测发出带 `from/to` 的请求，筛选、重新激活或失败重试会按当前时刻重算范围，翻页继续沿用同一 `activeQuery`。通知投递沿用时间线骨架，显示短状态、渠道编号和更新时间；渠道编号为空时显示“渠道已不可用”，不再渲染 `#null`。
+
+`https://api.honus.top` 当前工作区核对：桌面物理视口 `1920×953`（CSS `1536×762`）、390×844 与 320×844 均无页面级横向溢出，320 下对象标签与 UUID 正常换行。用 `defaultUiTheme` 令牌临时切换浅色后，桌面仍无横向溢出和错误提示；核对后恢复原主题，不写入外观偏好。测试环境没有真实投递记录，使用浏览器内 Pinia 展示状态只读注入 `sent`、`failed`、`unknown` 三条合成记录，未派发通知或写入服务端；桌面三行宽度一致，390 行宽 `342px`，未知数量提示与三种状态标签完整。控制台无 error，运行时无 exception。证据：`/tmp/audit-refined-desktop.png`、`/tmp/audit-refined-light-desktop.png`、`/tmp/audit-refined-deliveries-desktop.png`、`/tmp/audit-refined-390.png`、`/tmp/audit-refined-deliveries-390.png`、`/tmp/audit-refined-320.png`。
+
+审计专用 UI E2E 使用独立端口启动，`specs/ui/audit-log-filtering.spec.ts` 两项全部通过：分页/虚拟列表、筛选、时间范围 `from/to`、窄屏无溢出，以及续页失败保留旧记录并重试。夹具时间戳改为当前时间以符合客户端对时间范围的严格校验；原始日志 `/tmp/nexus-audit-e2e-final.log`。真实投递分页、失败恢复与完整像素组合仍需回归。
+
+## SSH 主机密钥面板（2026-10-21，本地 CDP）
+
+`https://api.honus.top/connections` 的“更多操作 → SSH 主机密钥”使用当前本地工作区核对，未直接访问 9998。面板改为固定标题区、独立滚动内容和固定底栏；安全说明不再占据列表上方空间，改为标题右侧与全站一致的标准 `UiInfoHint`，悬停或键盘聚焦显示完整文案。
+
+桌面视口下弹窗 `896×730.4`，已信任密钥为单一容器内四行，实测行高约 `86.4px`，指纹完整显示且无横向滚动；手动建立信任的主机/端口同排，SHA-256 输入与 `93.6×32` 的紧凑“确认信任”按钮同排。面板只有底部一个“关闭”按钮，列表行“移除信任”仍打开原二次确认；实际点击后取消，未产生 `/host-keys/remove` POST。
+
+390×844 CSS 设备视口下弹窗 `x=16`、宽 `350.4`、高 `760`，主机与端口改为单列，指纹输入与 `93.6×32` 的确认按钮保持同行，按钮左侧无空缺；320×568 下同排布局仍无横向溢出（内容区 `scrollWidth=270`、`clientWidth=270`）。未执行确认信任或实际移除写入，未覆盖浅色主题、其他物理设备和弱网未知结果。
+
+证据：`/tmp/host-keys-refined-desktop-form.png`、`/tmp/host-keys-390-final.png`、`/tmp/host-keys-320-final.png`。静态结果为目标 ESLint/Prettier、`pnpm --filter @nexus-terminal/frontend build`、`pnpm run check`、`pnpm run format:all:check` 与 `git diff --check` 全部通过。
+
+## 连接表单细节、数字步进与列表密度（2026-10-21，本地 CDP）
+
+`https://api.honus.top/connections` 使用本地 CDP 核对当前工作区，未直接访问 9998。连接列表第一张卡与工具栏之间实测 `14px` 间距，卡片高度 `88px`，仍为标题/标签、地址、上次连接/状态三行；标签筛选触发器和展开选项均为居中文本，排序控件同为中心对齐。
+
+添加连接弹窗使用不透明表单表面，分区线为浅色单线。端口框隐藏浏览器原生 spinner，替换为主题化上下按钮；实际点击将端口由 `22` 增至 `23`，再连续降为 `21`，`22→23→21` 的 `valueAsNumber` 与输入值同步。`type=number` 计算样式为 `appearance: textfield`，步进按钮共两个。SSH“测试连接”改为普通基础按钮尺寸，与“确认添加／取消”同为 `32px` 高；测试延迟说明位于按钮右侧信息图标，悬停后浮层 `z-index=200`，`elementFromPoint` 命中 `info-hint-panel`，不再被模态层遮挡。
+
+390×844 CSS 视口下，添加弹窗实测 `x=16`、宽 `350.4`、高 `760`，无横向溢出；底部测试行在操作组上方，“确认添加／取消”各宽 `153.4px` 且完整位于面板内。批量编辑弹窗为 `x=16`、宽 `350.4`、高 `584.4`，标题显示“已选 2 项”，分区标题均带统一强调线，内容与底栏无横向溢出。桌面批量编辑使用同一不透明 `ui-form-surface`，配置/凭据分区、滚动内容和固定底栏保持原提交语义。
+
+证据：`/tmp/connections-number-stepper.png`、`/tmp/connections-tag-select-center.png`、`/tmp/connections-add-final-390.png`、`/tmp/connections-batch-final-390.png`、`/tmp/connections-add-final-1536.png`、`/tmp/connections-batch-final-1536.png`。本轮未保存连接、未触发真实 SSH 测试，也未核对浅色主题和更多物理设备；静态结果为目标 ESLint/Prettier、`pnpm --filter @nexus-terminal/frontend build`、`pnpm run check`、`pnpm run format:all:check` 和 `git diff --check` 全部通过。
+
+## 添加连接跳板机链样式（2026-10-21，本地 CDP）
+
+`https://api.honus.top/connections` 的添加连接弹窗中，跳板机区域已由逐行描边表单改为编号步骤链：宽屏实测两项时序号 `1/2` 由细连接线串联，添加按钮位于链尾；下拉展开后每个选项显示连接名称和 `用户名@主机:端口`。实际将第二跳从 `amd` 替换为 `hostbrr` 后 `data-value` 由 `1` 变为 `4`，移除第一跳后步骤由 2 降为 1，控制台无 error。
+
+390×844 设备视口下页面与弹窗无横向溢出（页面 `scrollWidth=304`、CSS 视口 `312`；弹窗 `scrollWidth=270`、`clientWidth=270`），跳板行与两个下拉均完整可操作。证据：`/tmp/connection-jump-after-modal-1.png`、`/tmp/connection-jump-after-menu.png`、`/tmp/connection-jump-after-390.png`、`/tmp/connection-jump-after-390-menu.png`。本批未保存或创建连接；真实保存与建链仍按既有测试范围。
+
+## 根磁盘占用百分比统一（2026-10-21，本地 CDP）
+
+修复前本机 `Nexus 本机` 显示约 72%，同根分区的 `pve_debian` 显示约 76%。`df -kP /` 的 Capacity 为 `76%`；两边接口的已用/总容量一致，但远端采用 `used / (used + available)`，本机采用 `used / total`。统一后两个 Adapter 共用 `platform/system/disk-percent.ts`。
+
+登录 `honus` 后经 `https://api.honus.top` 实测：`GET /api/v1/system/status` 为 `diskUsed=21686456`、`diskTotal=30154612`、`diskPercent=71.91754282893774`；`GET /api/v1/system/ssh-resources/6`（`pve_debian`）返回完全相同的三项。CDP 仪表盘的本机与 `pve_debian` 根磁盘均显示 `72%`，圆环 `stroke-dashoffset` 均为 `28`，截图 `/tmp/nexus-disk-percent-unified.png`。该结果只覆盖当前根分区和当前测试环境；非根挂载、其他文件系统预留策略及外部主机仍按各自真实采样。
+
+静态：目标文件 ESLint、`pnpm --filter @nexus-terminal/backend build`、根 `pnpm run check`、`pnpm run format:all:check` 与 `git diff --check` 通过。
+
+## 连接管理轻量布局与添加弹窗滚动（2026-10-21，本地 CDP）
+
+`https://api.honus.top/connections` 在 1536×900、1024×768、768×900、390×844、320×568 核对：统计区为四张独立概览卡，名称、类型与数量横向排列，1536/1024 单排、768/390/320 两列且 320px 无内部溢出；卡片无描边，列表九像素间隔、整行圆角底卡无额外边框，页面无横向溢出，六条连接均保留。标签筛选为可访问下拉，实测由“所有标签”切换到“本地”后列表即时变为 0 条、空状态正确，刷新后仍保持“本地”，随后恢复为“所有标签”。导航栏连接管理图标已替换为插头；更多菜单为不透明实心面板，背景图与 backdrop 均为 none；测试、编辑、克隆的 ghost 图标背景透明、无阴影和玻璃滤镜。
+
+添加新连接弹窗在 1536×900 与 390×844 均限制在视口内，表单内容独立滚动到底，底部“确认添加／取消”和测试说明保持可见；桌面 fieldset 可滚动 442px，移动端可滚动 523px，滚轮输入后 `scrollTop` 从 0 变为 400，脚本模式开关以既有 UiSwitch 呈现，控制台无错误。证据：`/tmp/connections-v4-{1536,1024,768,390,320}.png`、`/tmp/connections-v4-more-1536.png`、`/tmp/connection-modal-v3c-{top,bottom}-1536.png`、`/tmp/connection-modal-v3c-{top,bottom}-390.png`。Frontend build、根 `pnpm run check`、全量 `format:all:check` 与 `git diff --check` 通过。
 
 ## Backend Pino与网络Toast/终端失败等待（2026-10-21，待远程）
 
@@ -56,7 +456,25 @@ Frontend HTTP传输失败集中由App安装回调汇入一条驻留网络Toast�
 
 取消全局任务上限后重新执行：Backend check/build（含Shared build）、变更代码ESLint、涉及文件Prettier及git diff --check均通过；根check/全量格式仍由上述无关DashboardPage.vue的三处空行错误阻断。新日志为 `/tmp/nexus-observation-unlimited-{check,format,backend-check,build}.log`。未运行行为测试，尚未提交、推送或部署。
 
+## 服务端最近连接与仪表盘排序（2026-10-21，本地 CDP）
+
+子任务先在 `/home/honus/nexus-terminal-recent` 完成，随后合入主工作区。连接列表与单项的 `lastConnectedAt` 改为必填毫秒/null，后台只在 PTY 建立或桌面 guacd ready 后持久记录，前端删除本地 recent/markConnected 并改为成功后只读刷新。仪表盘默认按最近使用降序，可选名称、类型、修改时间或创建时间；名称/类型切换时默认升序，时间字段默认降序。独立“最近连接”区块删除，最近使用信息并入连接卡片，摘要标签改为“SSH 检测”。
+
+源码审核覆盖 Shared codec、Targets 的 storage/Model/public/HTTP 投影、初始 v1 精确签名、Remote 两类成功/取消/关闭链、Frontend API/mapper/Store/runtime，以及现有测试消费者。时间允许晚于配置 updatedAt，但不能早于 createdAt；历史写入不推进配置版本，SQL 同时核对 id/version/createdAt/type，旧结果或较小时间不覆盖新事实。
+
+`https://api.honus.top` 本地 CDP 实测：打开 `akko` SSH 后 API 返回新的毫秒 `lastConnectedAt`，返回仪表盘该连接自动排到首位并显示“39 秒钟前”；名称排序为 A→Z，切回最近使用为降序；后端重启后重新加载仍读到同一时间并保持首位。通过 CDP 路由拦截临时令 `dashboardShowRemoteResources=false` 核对了检测关闭态，摘要显示 `6 / 连接总数 / — / SSH 检测`，区块徽标显示“检测关闭”，SSH 卡片提供“前往设置”；未修改真实账号设置。本机资源随后按重构前样式并入顶部概览：桌面移除独立卡片外框，以竖向分隔线与连接摘要同排；700px 以下恢复上下排列并改用细分隔线。1440×900、1024×768、768×900 下三项指标保持单排且页面无横向溢出，390×844 下资源指标仍在同一行、摘要与资源上下排列；1440×900、1024×768 页面无纵向滚动，768×900、390×844 允许纵向滚动，六张连接卡和五张活动卡均保留。证据：`/tmp/dashboard-recent-1440.png`、`/tmp/dashboard-recent-1024.png`、`/tmp/dashboard-recent-768.png`、`/tmp/dashboard-recent-390.png`、`/tmp/dashboard-after-ssh-connect.png`、`/tmp/dashboard-detection-off.png`、`/tmp/dashboard-local-ref-1440.png`、`/tmp/dashboard-local-ref-1024.png`、`/tmp/dashboard-local-ref-768.png`、`/tmp/dashboard-local-ref-390.png`。
+
+Shared build、根 `pnpm run check`、Backend/Frontend build、`pnpm run format:all:check` 与 `git diff --check` 通过。按 D14 保持唯一初始 v1；本地测试库在备份后更新安装标记，并把旧桌面秒时间规范为毫秒，该开发环境处理不构成产品迁移。RDP/VNC 成功建连、跨浏览器持久读取、克隆/导入初始 null、备份往返、配置变更与并发单调写入、存储失败/未知提交、浅色主题和扩大视口组合仍待回归，不把本轮 CDP 与静态结果扩大为完整验收。
+
 开发前读取 [AGENTS](../AGENTS.md)，产品要求见 [USAGE](../USAGE.md)，当前工作见 [PLAN](../PLAN.md)。本文维护实际验证入口、覆盖边界和验收证据。
+
+## 仪表盘类型分区、环形指标与等高卡片（2026-10-21，本地 CDP）
+
+Dashboard 连接区改为按实际存在的 SSH/RDP/VNC 类型分区，筛选后没有内容的类型不渲染标题。SSH 卡片使用 CPU、内存、根磁盘环形指标；环形 `stroke-dasharray: 100`，进度偏移取 `100 - 百分比`，缺测显示 `—` 而非补零。状态下方以小字号展示上次连接相对时间与本次刷新时刻，以细竖线分隔；SSH 卡片高 `188px`，资源成功、等待、检测关闭和读取失败共用相同宽高。RDP/VNC 改为 `76px` 紧凑卡片，只保留连接信息、状态与上次连接时间，删除底部资源占位图标区，不混入 SSH 资源指标。
+
+`https://api.honus.top` CDP 在 1536×762 及窄屏核对：五张 SSH 卡片高度均为 188px，RDP 卡片为 76px，宽度一致；状态下方时间为“相对时间 | HH:mm:ss”且无横向溢出，卡片无内部溢出；CPU/内存/磁盘偏移分别与显示百分比相符；只有 SSH、RDP 两个实际类型分区出现；窄屏筛选行改为标签、排序、方向、计数四列，管理入口隐藏，页面无横向溢出。返回 Dashboard 时最后一次资源样本继续显示，不在刷新结果到达前跳变为等待态。
+
+独立端口运行完整 Dashboard E2E：`specs/ui/dashboard-workflows.spec.ts` 与 `specs/mobile/dashboard-mobile.spec.ts` 共 8 项通过，覆盖搜索/标签/排序持久化、检测关闭、失败/等待等高、RDP 启动、SSH 资源并发和移动端控件布局。`node tests/frontend/system-overview.integration.mjs` 通过缓存保留、取消晚响应、错误状态与会话清理断言。Frontend build（3925 modules）、ESLint、Prettier 和 `git diff --check` 通过。证据：`/tmp/dashboard-final-1440.png`、`/tmp/dashboard-final-390.png`、`/tmp/dashboard-final-rdp-section.png`；未执行 RDP/VNC 成功建连、浅色主题和全部缩放组合。
 
 ## 登录页正式 UI 重构（2026-10-21，本地 CDP）
 
@@ -711,6 +1129,8 @@ trace显示Save后为saving，测试已从磁盘读到新字节，但关闭时�
 
 第二批24560197触发[Actions 39572270233](https://github.com/0honus0/nexus-terminal/actions/runs/39572270233)，首批按workflow并发策略自动取消，取消不算失败或通过。取消前第1／4组原日志`/tmp/nexus-e2e-b251-shard-{1,4}.log`已揭示后续公共问题：同场景多App重名、统一Send的后续Run实际走appendInput。第三批修复夹具唯一名称与真实Send派发方法，保留完整原始回执／线程身份／显式follow-up判据。全量格式最终检查通过（`/tmp/nexus-e2e-fix-format-final.log`）；没有本地行为或用例收集。
 
+第三批68b72125触发[Actions 39572715320](https://github.com/0honus0/nexus-terminal/actions/runs/39572715320)。第二批取消前原日志`/tmp/nexus-e2e-2456-shard-{2,3,4,6,7}.log`还显示批量配置保存与模型推理级别采用了正式本地化名称；第四批同步精确按钮／checkbox名称，不改变保存副作用或持久验证。两测试文件ESLint、Prettier及diff检查通过，最新远程仍待完整八组。
+
 ### 2026-10-20 本批最终远程收口
 
 [Actions 39445026926](https://github.com/0honus0/nexus-terminal/actions/runs/39445026926)整体success，被测ddf5ce0e95c39367977cf08c951ce1e4d63b34ef。逐组读取原日志，各组通过数为53／38／54（52+1+1）／57（56+1）／46／60／74／66，共448项，无失败、flaky、重试或跳过用例；质量／格式／构建、Docker、runner及耗时统计success，可选截图任务skipped。原日志`/tmp/nexus-acp-receipt-job-<jobId>.log`。ACP取消首次11秒通过，文件预览编辑历史回归首次27秒通过；Files／插件独立场景通过。未扩大为多文件故障、完整像素或全部窄屏已验。
@@ -736,3 +1156,117 @@ trace显示Save后为saving，测试已从磁盘读到新字节，但关闭时�
 使用本地 CDP（`https://api.honus.top`，未使用 9998）核对当前工作区。会话侧栏恢复标题／更新时间行，App 切换器、会话附件选择器、文件来源、Agent 设置与通知页均未出现裸 UUID、模型目录错误码或已知通知事件枚举。真实接口回归中会话列表从 7 新建到 8，首次删除只进入确认态，第二次删除返回成功后回到 7；等待 3.7 秒未确认时列表不变，控制台无 error。注入 `/api/v1/agent/apps` 503 后，390×844 显示“无法加载 Agent 服务”和“重试”，没有原始操作／错误文本；设置、通知、Agent 会话和文件页均无页面级横向溢出（`scrollWidth=382`，视口 390）。
 
 证据：`/tmp/ui-final-directory-failure-390.png`、`/tmp/ui-continue2-agent-delete-confirm.png`、`/tmp/ui-continue2-agent-after-delete.png`、`/tmp/ui-continue2-agent-chat-390.png`、`/tmp/ui-continue2-agent-files-390.png`、`/tmp/ui-continue2-settings-agent-390.png`、`/tmp/ui-continue2-notifications-390.png`。测试环境没有 Provider、连接和 Artifact，真实 Run 发送、附件上传／关联／下载、文件清理、通知保存与外部投递未执行；这些场景和完整像素比对仍待验。
+
+### 2026-10-22 Agent 文件库紧凑工作区布局（本地 CDP）
+
+使用本地 CDP（`https://api.honus.top`，未使用 9998）核对当前工作区。默认 Agent 浮窗 `1180×740` 下，文件库页头由基线约 `212px` 降至 `142.4px`，文件库 `scrollWidth=clientWidth=1178`，文档无横向溢出。390×844 下页头为 `193.8px`，搜索与三个筛选分行后完整可见，文件库宽 `356px`、列表行宽 `354px`，所有行 `scrollWidth=clientWidth`；文件状态和大小在行内展示，保留／删除／下载三个按钮均有 `28×28` 可点击区域。搜索无结果时显示带重置动作的紧凑空态，重置后恢复列表；未选择 App 时清理按钮保持禁用。
+
+通过当前 Artifact API 临时创建 PDF、Markdown 和 gzip 三个文件，验证有数据列表、窄屏行布局与操作按钮，随后用同一 API 全部删除并确认剩余 0 项、存储回到 0 B。CDP 同时发现文件库遗漏 `vue-virtual-scroller` 定位样式，导致有数据时虚拟行脱离列表容器；补齐样式后 scroller 定位为 `relative`，行位于列表区内。证据：`/tmp/agent-files-after-wide-final2.png`、`/tmp/agent-files-after-390-final2.png`、`/tmp/agent-files-after-wide-empty-final.png`、`/tmp/agent-files-after-390-empty-final.png`、`/tmp/agent-files-after-390-filter-empty2.png`。
+
+本轮未执行真实下载、删除确认、清理确认或远程 E2E；完整像素与全部视口组合仍按 V-UI-01 待验。
+
+### 2026-10-22 系统设置后端日志控件反馈（本地 CDP）
+
+使用本地 CDP（`https://api.honus.top`，未使用 9998）核对系统设置。后端日志字段的重复标签现为视觉隐藏，触发器保留可访问名称；下拉从 `INFO` 切到 `DEBUG` 后，保存按钮由禁用变为启用，并使用主题 solid 主操作样式，当前生效级别仍显示 `INFO`。390×844 下标签占位高度为 0，页面无横向溢出，主按钮保持可见。本轮只修改前端草稿，未点击保存；真实 PUT、冲突和失败恢复继续由既有 `system-settings.spec.ts` 覆盖。
+
+`system-settings.spec.ts` 已新增标签隐藏、保存启用及 `data-appearance="solid"` 断言，但本轮未执行远程 E2E。证据：`/tmp/logging-before-changed.png`、`/tmp/logging-after-viewport.png`、`/tmp/logging-after-390-final.png`。
+
+### 2026-10-22 设置高级诊断与恢复内容重构（本地 CDP）
+
+使用本地 CDP（`https://api.honus.top`，未使用 9998）核对设置 → 数据 → 诊断与恢复（高级）。默认折叠；展开后宿主诊断呈宽屏 3 列、中屏 2 列、窄屏 1 列，机器突变恢复显示权威列表、空态和详情卡片，Agent 维护显示安装恢复、插件数据、版本目录与运行态核对四组。1536 宽、390×844 与 320×700 下文档 `scrollWidth` 均不超过视口；390 下 Agent 维护卡片宽 358px、插件数据卡宽 304px，320 下分别为 288px、234px。
+
+通过 CDP Fetch 模拟 `/api/v1/agent/plugins/{publishers,installations,stages,versions}` 与单安装 `data-snapshot`，验证插件有数据态：3 条快照（含已删除墓碑）、单键读取表单、保存／删除和批量迁移区均渲染；390 与 320 下无横向溢出。模拟响应只用于视觉检查，脚本结束已 `Fetch.disable` 并关闭临时页面，没有写入测试环境。真实机器突变记录和插件安装数据不存在，真实证据录入／释放、插件数据写入及服务端 CAS 未执行。
+
+证据：`/tmp/advanced-after-wide.png`、`/tmp/advanced-after-390.png`、`/tmp/advanced-after-320.png`、`/tmp/advanced-after-wide-agent.png`、`/tmp/advanced-after-390-agent.png`、`/tmp/advanced-after-320-agent.png`、`/tmp/advanced-mutation-detail-wide.png`、`/tmp/advanced-mutation-detail-390.png`、`/tmp/advanced-plugin-data-wide.png`、`/tmp/advanced-plugin-data-390.png`、`/tmp/advanced-plugin-data-320.png`。
+
+目标文件 Prettier、ESLint、JSON 解析、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check` 通过。`tests/frontend/mutation-recovery.integration.mjs` 本轮执行失败：测试仍等待 `[data-mutation-recovery]` 内的内联 alert，而当前并发改动已把操作提示迁到全局 Toast；该断言需由对应 owner 更新，不能视为本轮 UI 通过。完整远程 E2E、浅色主题和更多视口仍未运行。
+
+### 2026-10-22 设置分组标题垂直居中与数量范围提示（本地 CDP）
+
+使用本地 CDP（`https://api.honus.top`，未使用 9998）核对设置 → 安全。桌面 1920×953 下四个分组头部的图标、标题和右侧操作按钮中心线均为 `y=188`、`482.8`、`636.8`、`774.8`，头部计算样式为 `align-items:center`，标题无顶部外边距。390×844 与 320×700 下四组中心线分别是 `160`、`445.8`、`593.8`、`722.8`，图标、标题和操作区域逐组一致；分组头部 `scrollWidth=clientWidth`，文档宽度分别保持 390 与 320，未产生页面级横向溢出。导航自身保留横向滚动，不属于页面溢出。
+
+Agent 数量组件新增范围失败局部状态：合法单位表达超出当前字段上限时优先显示“超出范围：最大 …”，只有语法无法解析时才显示格式错误；`type=number` 的有效范围值仍不重复显示换算微反馈。测试环境后端仍返回旧版执行设置形状，正式 Agent 面板未渲染 Recall 字段；改在页面内临时挂载 `QuantityInput`（`max=32768`）验证：输入值 `1G` 显示 `Out of range; maximum 32K` 且 `aria-invalid=true`，输入 `not-a-size` 显示 `Invalid format; use a number with an optional unit`，临时应用随后已卸载。`performance-settings.spec.ts` 已新增对应断言，但按 D17 未运行该 E2E。
+
+证据：`/tmp/settings-security-390.png`、`/tmp/settings-security-320.png`、`/tmp/agent-settings-current.png`、`/tmp/recall-range-feedback.png`。真实 Agent 页面 Recall 输入与保存、完整 E2E 仍未执行；分类标题量测只覆盖安全页，其他使用同一 `UiSettingsGroup` 的页面共享样式结论，不扩大为全部页面交互验收。
+
+### 2026-10-22 Agent 管理预览入口移除（本地集成与 CDP）
+
+硬限制管理不再渲染预览按钮或二次确认面板，普通预算与硬限制共用顶部“保存”；`saveExecutionHardLimits` 仍在原 API 内部按后端契约调用 preview → confirm，用户只执行一次保存。文件库清理不再提供独立预览步骤，选择来源 App 后通过一次全局确认执行；文件内容预览保留。三语中无消费者的 `hardLimits.review`、`noPreviewChanges` 已删除，文件删除确认键由 `deletePreview` 改为 `deletePrompt`。
+
+`node tests/frontend/agent-execution.integration.mjs` 在本机隔离 SQLite 与 Vite 页中执行 28 项检查通过，包含“hard limits have no preview action”“actual component saves hard limits without a preview step”、普通预算与硬限制互斥、unknown/冲突恢复及认证撤销。测试未访问 `api.honus.top` 的生产数据，临时目录在结束时删除。
+
+使用本地 CDP（`https://api.honus.top`，未使用 9998）读取已登录的 `settings?tab=agent`：页面文本和可操作元素中“预览/preview”匹配为 0；展开“硬限制”后渲染 16 个字段，`previewActions=[]`，只有保存操作。全程未修改或保存测试环境设置。证据：`/tmp/agent-settings-preview-removal-desktop.png`。
+
+目标文件 Prettier、ESLint、三语 JSON 解析、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check` 通过。文件库清理未在真实测试账号点击最终确认，避免删除账号级可回收文件；真实清理、删除确认、窄屏布局及完整远程 Actions E2E 仍未执行。
+
+### 2026-10-22 全局禁用目标选中态去重（本地 CDP）
+
+使用本地 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）进入“安全与系统”并展开“全局禁用目标”。选择 SSH 目标 `akko` 后，顶部旧标签容器数量为 0，列表内高亮卡片为 1，顶部“这是跨会话、跨 Run 的全局硬限制”说明不包含目标名；标题计数由 `0 / 6` 更新为 `1 / 6`。核对后刷新页面丢弃草稿，未填写原因或保存。
+
+目标文件 ESLint、Prettier、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check` 通过。证据：`/tmp/agent-denylist-selected-only.png`。窄屏布局、批量禁止／允许及真实保存仍未在本轮执行。
+
+### 2026-10-22 设置分组窄屏左边界对齐（本地 CDP）
+
+使用本地 CDP（`https://api.honus.top/settings?tab=workspace`，未使用 9998）在 390×844 与 320×700 视口核对设置分组。修改前分组内边距为 15px，但标题因 30px 装饰图标和 9px 间距从 66px 开始，正文从 27px 开始；760px 以下隐藏图标后，390px 下“文件与编辑”标题与表单左边界均为 27px。320px 下“文件与编辑、终端与指令、首页与监控、监控核心配置、布局与高级设置”五组标题与正文均逐项对齐，页面 `scrollWidth=innerWidth` 为 390 和 320，没有横向溢出。
+
+目标 CSS Prettier、Frontend build 与 `git diff --check` 通过。证据：`/tmp/settings-mobile-aligned.png`。本轮只读取边界，未修改或保存设置；桌面 761px 以上图标布局保持原样。
+
+### 2026-10-22 Provider 弹窗左右留白对称（本地 CDP）
+
+使用本地 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）打开“模型与预算 → 添加 Provider”。修改前桌面表单左距面板 24.8px、右距 44.8px；改为左右对称内边距及双侧稳定滚动条槽后，1152×900 下左右均为 44.8px，390×844 与 320×700 下左右均为 40.8px，三档差值均小于 0.001px。正文 `scrollWidth=clientWidth`，文档未产生页面级横向溢出，滚动条与右侧内容保持 12px 内边距。
+
+证据：`/tmp/provider-modal-padding-before.png`、`/tmp/provider-modal-padding-1152.png`、`/tmp/provider-modal-padding-390.png`、`/tmp/provider-modal-padding-320.png`。目标 CSS Prettier、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过。本轮只打开弹窗读取布局，未填写、测试或保存 Provider；完整 E2E 仍按 D17 范围执行。
+
+### 2026-10-22 App 与扩展四分类等分（本地 CDP）
+
+使用本地 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）进入“App 与扩展”。四个页签现在为 `grid-cols-4`，1152×900 下每列约 160.06px、390×844 下 80.20px、320×700 下 62.60px，四列宽度差均为 0；四个标签的 `scrollWidth=clientWidth`，页签容器无横向滚动，文档宽度分别为 1144、382、312，均未超过对应视口。
+
+证据：`/tmp/agent-extensions-tabs-1152.png`、`/tmp/agent-extensions-tabs-390.png`、`/tmp/agent-extensions-tabs-320.png`。目标 ESLint、Prettier、Frontend build 与 `git diff --check` 通过。本轮只读取与切换页签，未执行资源写入或完整 E2E。
+
+### 2026-10-22 插件仓库折叠提示精简（本地 CDP）
+
+使用本地 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）进入“App 与扩展 → 插件市场”。官方仓库分组展开后仍显示仓库来源、复制按钮、插件列表与发布者区域，分组头 `aria-expanded=true`；页面“展开”和“收起”文字计数均为 0，文档 `scrollWidth=1144`、视口 1152，无页面级横向溢出。
+
+证据：`/tmp/plugin-repositories-without-expand-text.png`。目标 Prettier、ESLint、Frontend build 与 `git diff --check` 通过。本轮未添加、移除或保存仓库，也未执行完整 E2E。
+
+### 2026-10-22 设置页一致性与尺寸巡检（本地 CDP）
+
+使用本地 CDP（`https://api.honus.top/settings`，未使用 9998）巡检工作区、系统、外观、Agent、安全、IP 管控、数据管理和关于八个分类，未点击保存或改写测试环境设置。桌面请求 1440×1000（实际 CSS 视口 1152×800）下普通设置卡宽统一为 `780px`，390×844 下为 `358px`，320×700 下为 `288px`；关于页分别同宽，版本、状态和仓库入口均无悬空竖线。内容画布计算样式为 `scrollbar-gutter: stable`，长短页面切换时左右边界不再变化，三档文档均无页面级横向溢出。
+
+八页均未发现原生 `<select>` 残留，常规按钮高度统一为 `38px`，控制台无运行异常。数据管理双卡在桌面各 `384px`、窄屏恢复整行宽，属于页面既定双列布局；Appearance 首卡只保留标题与“自定义外观”操作，第二轮延迟加载后卡片宽仍为 `780px`。修改前后对比证据：`/tmp/settings-audit-*-1152.png`、`/tmp/settings-audit-*-390.png`、`/tmp/settings-audit-*-320.png`；修改后证据：`/tmp/settings-ui-about-1440-final.png`、`/tmp/settings-ui-about-390-final.png`、`/tmp/settings-ui-about-320-final.png`、`/tmp/settings-ui-system-1440-final.png`、`/tmp/settings-ui-system-390-final.png`、`/tmp/settings-ui-system-320-final.png`。
+
+目标 Vue ESLint、Prettier、`pnpm --filter @nexus-terminal/frontend build` 与 `git diff --check` 通过。本轮未提交、推送或部署，完整远程 E2E 仍未执行。
+
+### 2026-10-22 Toast 整卡状态色（本地 CDP）
+
+使用本地 CDP（`https://api.honus.top`，未使用 9998）通过页面内现有 notification store 同时展示成功、警告和失败 Toast，未触发业务写入。桌面请求 1440×1000（实际 CSS 视口 1152×800）下三条均为 `340×56px`；390×844 下均为 `366×56px`。成功卡背景、边框和阴影命中 `--status-success-color`，警告命中 `--status-warning-color`，失败命中 `--status-error-color`，图标容器与操作按钮使用同一语义 tone；页面无横向溢出，控制台无异常。
+
+验证后已从 store 清除临时通知，未改变驻留、去重、关闭或恢复逻辑。证据：`/tmp/toast-status-colors-1440.png`、`/tmp/toast-status-colors-390.png`。目标 CSS/Vue ESLint、Prettier、Frontend build 与 `git diff --check` 通过；浅色主题和真实业务失败回执尚未单独执行。
+
+### 2026-10-22 Toast 操作内联与 Provider 标题窄屏（本地 CDP）
+
+使用本地 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）在 320×700、390×844 与实际 CSS 视口 1152×720 下，直接向现有 notification store 注入带“重新读取”action 的警告通知，并读取模型 Provider 标题边界；未触发真实设置重载、保存或其他业务写入。
+
+320px 下警告 Toast 为 `296×92.75px`，图标 `28×28px`、说明正文左缘 62px，action 按钮为 `72×28px` 并接在文案末尾；390px 下卡片为 `366×73.38px`，桌面为 `340×97.9px`，三档 `scrollWidth=clientWidth` 且文档无横向溢出。单独注入成功、警告、失败三条 Toast 时，390px 高度分别为 `56px`、`73.38px`、`73.38px`，强调色分别命中绿、黄、红语义色。模型 Provider 标题行在 320px 下由 `94.59px` 恢复为 `63px`，390px 同为 `63px`，标题组、计数、说明入口和“添加”按钮保持同行，标题容器 `scrollWidth=clientWidth`。
+
+证据：`/tmp/toast-layout-320-polished.png`、`/tmp/toast-layout-390-polished.png`、`/tmp/toast-layout-1440-final.png`、`/tmp/toast-three-kinds-action-final.png`。验证后已清除注入通知。目标 Vue/CSS ESLint、Prettier、`pnpm --filter @nexus-terminal/frontend build`、根 `pnpm run check` 与 `git diff --check` 通过；按 D17 未运行本地业务测试、E2E 或测试收集，真实设置重载与窄屏键盘操作仍随既有回归覆盖。
+
+### 2026-10-22 高级维护移除插件安装与运行态入口（本地 CDP）
+
+使用本地 CDP（`https://api.honus.top/settings?tab=data`，未使用 9998）展开“诊断与恢复（高级）”。390×844、320×700 与实际 CSS 视口 1152×720 下均只显示“宿主诊断”和“机器突变恢复”；“安装恢复与升级包、插件数据与迁移、已安装版本目录、运行态核对”文本计数均为 0，`[data-agent-maintenance]` 节点计数为 0。三档文档宽度分别为 390、320、1144/1152，未产生页面级横向溢出，控制台无运行异常。
+
+宿主诊断仍读取到真实运行时、运行时长、内存、数据库版本和采集时间；机器突变恢复仍显示 warning 说明、权威列表与空态。`preset-plugin.spec.ts` 已删除从高级维护打开运行态下拉并核对三项安装的断言，改为断言两个保留分区可见、两个已移除分区不可见。目标 Vue/TS ESLint、Prettier、Frontend build、根 `pnpm run check`、全量格式检查与 `git diff --check` 通过。证据：`/tmp/advanced-without-agent-maintenance-390.png`、`/tmp/advanced-without-agent-maintenance-320.png`、`/tmp/advanced-without-agent-maintenance-1440.png`。按 D17 未运行完整远程 E2E；普通插件页安装／升级和卸载后数据删除仍由既有场景覆盖。
+
+### 2026-10-22 设置关于双卡布局（本地 CDP）
+
+使用本地 CDP（`https://api.honus.top/settings?tab=about`，未使用 9998）核对版本与项目地址布局，未点击更新链接、仓库链接或写入测试环境设置。桌面请求 1440×1000（实际 CSS 视口 1152×720）下“应用信息”分组宽 `780px`，版本与项目地址两卡各 `367px`、高约 `60px`；390×844 和 320×700 下自动单列，卡宽分别为 `328px` 和 `258px`。三档均保持设置分组内边距，仓库文本在卡内收起，文档无页面级横向溢出，控制台无运行异常。
+
+版本卡继续显示 `v1.0.2` 与“已是最新版本”状态，项目卡显示 `0honus0/nexus-terminal` 和外部链接图标；检查中、发现更新、检查失败的分支沿用原逻辑。目标 Vue/JSON Prettier、Vue ESLint、`pnpm --filter @nexus-terminal/frontend build`、根 `pnpm run check`、全量格式检查和 `git diff --check` 通过。证据：`/tmp/about-after-1440.png`、`/tmp/about-after-390.png`、`/tmp/about-after-320.png`。按 D17 未运行完整 E2E，未提交、推送或部署。
+
+### 2026-10-22 Toast 操作区与材质（本地 CDP）
+
+使用本地 CDP（`https://api.honus.top/`，未使用 9998）通过现有 notification store 注入成功、带“重新读取”的警告和失败三条通知；未触发真实保存、重读或业务写入。Toast 已改为无左侧状态图标的“状态标题 + 正文 + 底部确认按钮”，右上仅保留关闭按钮；成功通知的确认文案为“知道了”，带恢复动作的警告和失败显示原动作。
+
+实际 CSS 视口 1152×720 下桌面 Toast 宽 `288px`，成功/警告/失败高度分别为 `138.4px`、`138.4px`、`119.4px`，按钮 `84×28px`；390×844 下宽 `350px`，高度分别为 `122px`、`141px`、`122px`，按钮 `88×30px`；320×700 下宽 `280px`，高度分别为 `141px`、`141px`、`122px`，按钮 `88×30px`。三档按钮右缘均与关闭按钮精确对齐，卡片 `scrollWidth=clientWidth`，文档宽度分别保持 `1144/1152`、`390/390`、`320/320`，无页面级横向溢出。
+
+点击“知道了”后成功通知被移除；点击失败通知的“重新读取”后业务动作只执行一次，通知保留。卡片改为接近不透明的中性主题底与低饱和状态渐变，语义色收敛到标题、细边框和按钮，验证后已清除注入通知。证据：`/tmp/toast-layout-v7-desktop.png`、`/tmp/toast-layout-v7-390.png`、`/tmp/toast-layout-v7-320.png`。目标 Prettier、Vue/CSS ESLint、Frontend build、根 `pnpm run check`、全量格式检查和 `git diff --check` 均通过；按 D17 未运行完整 E2E，未提交、推送或部署。

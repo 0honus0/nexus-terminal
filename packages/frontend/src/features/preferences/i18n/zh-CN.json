@@ -25,7 +25,9 @@
     "logging": {
       "title": "日志等级",
       "frontendLabel": "前端日志等级:",
+      "frontendTitle": "前端日志等级",
       "backendLabel": "后端日志等级:",
+      "backendTitle": "后端日志等级",
       "description": "用于排查和性能调试。DEBUG/TRACE 会输出更详细的运行信息；性能统计仅在 DEBUG 或 TRACE 时输出。修改后立即生效。",
       "effective": "当前生效级别：{level}"
     },
@@ -56,7 +58,7 @@
     "language": {
       "title": "语言设置",
       "selectLabel": "界面语言:",
-      "saveButton": "保存语言",
+      "saveButton": "保存",
       "success": {
         "saved": "语言设置已成功保存。"
       },
@@ -210,14 +212,13 @@
     },
     "monitoring": {
       "title": "监控核心配置",
-      "hint": "仅管理员可修改。周期为1–86400秒，保存后下次重启统一生效；显示开关和图表不改变远端采样。",
+      "hint": "仅管理员可修改。周期为1–86400秒，保存即生效；在途采样结束后使用新间隔。显示开关不改变远端采样。",
       "effective": "当前生效：采样间隔 {status} 秒 · 主机缓存 TTL / 概览刷新 {host} 秒",
-      "restart": "配置已保存，重启后生效。",
       "status": "监控采样间隔（秒）",
       "host": "主机缓存 TTL / 概览刷新（秒）",
       "refresh": "只读重新加载并核对",
       "feedback": {
-        "saved": "保存成功；重启前仍使用上方当前生效值。",
+        "saved": "已保存并生效。",
         "conflict": "配置版本冲突。请先只读重新加载，核对后再保存。",
         "unknown": "结果未确认。先只读重新加载并核对，不要重复保存。",
         "invalid_input": "请输入范围内的整数周期。",

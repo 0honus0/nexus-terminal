@@ -9,6 +9,8 @@
 	import type { RemoteFileResourceView } from '@nexus-terminal/shared/remote/files/model';
 	import { createTargetsNextApi } from '../api/targets-next-api';
 	import { createAccessApi, AuthRequestFailure } from '@/features/auth/public';
+	import { UiSelect } from '@/foundation/ui';
+	import type { UiSelectValue } from '@/foundation/ui';
 	import type { TargetConnectionInput, TargetImportInput } from '@nexus-terminal/shared/targets/connections/http';
 	import type { TargetConnectionView } from '@nexus-terminal/shared/targets/connections/model';
 	import type { TargetProxyView } from '@nexus-terminal/shared/targets/proxies/model';
@@ -49,6 +51,11 @@
 	const hostKeyFingerprint = ref('');
 	const verifiedOutOfBand = ref(false);
 	const selectedRemoteId = ref<number | null>(null);
+
+	function setSelectedRemoteId(value: UiSelectValue): void {
+		selectedRemoteId.value = typeof value === 'number' ? value : null;
+	}
+
 	const name = ref('');
 	const host = ref('');
 	const port = ref(22);
@@ -284,9 +291,6 @@
 			route: 'direct',
 			proxyId: null,
 			notes: null,
-			rdpRemoteApp: null,
-			rdpRemoteAppDirectory: null,
-			rdpRemoteAppArguments: null,
 			tagIds: [],
 			jumpIds: [],
 		};
@@ -575,7 +579,7 @@
 				<h2 class="font-semibold">{{ t('targetsNext.terminalTitle') }}</h2>
 				<label class="block">
 					{{ t('targetsNext.connections') }}
-					<select v-model.number="selectedRemoteId" class="block w-full border p-2">
+					<UiSelect :model-value="selectedRemoteId" @update:model-value="setSelectedRemoteId">
 						<option :value="null">{{ t('targetsNext.selectTarget') }}</option>
 						<option
 							v-for="item in connections.filter((row) => row.type === 'SSH')"
@@ -584,7 +588,7 @@
 						>
 							{{ item.name }} ({{ item.host }}:{{ item.port }})
 						</option>
-					</select>
+					</UiSelect>
 				</label>
 				<RemoteNextTerminal
 					v-if="selectedRemoteId !== null"

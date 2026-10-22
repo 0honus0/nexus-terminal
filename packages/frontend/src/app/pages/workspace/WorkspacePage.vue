@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { isNetworkFailure } from '@/client/http/network-failure';
 	import {
 		computed,
 		defineAsyncComponent,
@@ -15,7 +16,6 @@
 	import { logger } from '@/client/logging/logger';
 	import { useDeviceCapabilities } from '@/foundation/browser';
 	import { createLatestValueSaver } from '@/foundation/async';
-	import { UiButton } from '@/foundation/ui';
 	import { useFeedback, preferenceFailureMessage } from '@/shared/feedback/public';
 	import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 	import { focusRegistry, normalizeShortcut, shortcutFromKeyboardEvent } from '@/shared/focus/public';
@@ -1009,6 +1009,20 @@
 		}
 	};
 
+	watch(workspaceLayout.error, (cause) => {
+		if (!cause || !isPageCurrent(pageScope.signal) || isNetworkFailure(cause)) return;
+		feedback.notifyError(preferenceFailureMessage(cause, t), 0, {
+			key: 'workspace-layout',
+			label: t('common.refresh'),
+
+			disabled: () => workspaceLayout.loading.value || !isPageCurrent(pageScope.signal),
+
+			onClick: () => {
+				void refreshWorkspaceSettings();
+			},
+		});
+	});
+
 	const loadQueryActions = async () => {
 		const signal = pageScope.signal;
 		if (!isPageCurrent(signal)) return;
@@ -1024,7 +1038,7 @@
 
 		// Consume one-shot query actions before starting any potentially slow connection work.
 		// ConnectionSummary success must never perform a later navigation: if the user returns to the
-		// dashboard while SSH is still connecting, the background completion should stay there.
+		// connections while SSH is still connecting, the background completion should stay there.
 		try {
 			await router.replace({ name: 'Workspace', query: {} });
 			for (const id of [...new Set(values)]) {
@@ -1170,12 +1184,6 @@
 		class="flex min-h-0 flex-col overflow-hidden bg-background"
 		:class="preferences.values.value.navBarVisible ? 'h-[calc(100dvh-var(--app-header-height))]' : 'h-dvh'"
 	>
-		<div v-if="workspaceLayout.error.value" role="alert" class="flex items-center gap-3 p-3 text-error">
-			<span>{{ preferenceFailureMessage(workspaceLayout.error.value, t) }}</span>
-			<UiButton :disabled="workspaceLayout.loading.value" @click="refreshWorkspaceSettings">{{
-				t('common.refresh')
-			}}</UiButton>
-		</div>
 		<WorkspaceTabBar
 			:sessions="registry.orderedSessions.value"
 			:active-id="registry.activeId.value"

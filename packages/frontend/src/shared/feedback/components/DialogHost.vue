@@ -16,6 +16,10 @@
 		() => store.state.confirmText || (store.state.kind === 'confirm' ? t('common.confirm') : t('common.ok')),
 	);
 	const cancelText = computed(() => store.state.cancelText || t('common.cancel'));
+	const tone = computed(() => store.state.tone ?? (store.state.destructive ? 'danger' : 'primary'));
+	const icon = computed(
+		() => store.state.icon ?? (store.state.destructive ? 'fas fa-exclamation-triangle' : 'fas fa-question-circle'),
+	);
 
 	const closeFromBackdrop = (): void => {
 		if (store.state.loading) return;
@@ -34,10 +38,22 @@
 		backdrop-trigger="mousedown"
 		:title="title"
 		:description="store.state.message"
-		:tone="store.state.destructive ? 'danger' : 'primary'"
-		:icon="store.state.destructive ? 'fas fa-exclamation-triangle' : 'fas fa-question-circle'"
+		:tone="tone"
+		:icon="icon"
 		@close="closeFromBackdrop"
 	>
+		<div v-if="store.state.details.length" class="ui-confirmation-panel__details" data-dialog-details>
+			<div
+				v-for="(detail, index) in store.state.details"
+				:key="`${detail.label}-${index}`"
+				class="ui-confirmation-panel__detail"
+				:data-mono="detail.mono || undefined"
+				:data-tone="detail.tone || 'default'"
+			>
+				<span class="ui-confirmation-panel__detail-label">{{ detail.label }}</span>
+				<span class="ui-confirmation-panel__detail-value">{{ detail.value }}</span>
+			</div>
+		</div>
 		<template #actions>
 			<UiButton
 				v-if="store.state.kind === 'confirm'"

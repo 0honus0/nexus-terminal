@@ -1,7 +1,7 @@
 import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { authErrorKey, useAuthSession } from '@/features/auth/public';
-import { useFeedback } from '@/shared/feedback/public';
+import { useFeedback, useFeedbackMessage } from '@/shared/feedback/public';
 import { ipBlacklistApi } from '../api/ip-blacklist-api';
 import type { BlockedAddress, IpBlacklistController } from '../model/security-types';
 
@@ -15,6 +15,12 @@ export function useIpBlacklist(): IpBlacklistController {
 	const loading = ref(false);
 	const needsRefresh = ref(true);
 	const message = ref('');
+	let failureCause: unknown;
+	useFeedbackMessage(
+		() => message.value,
+		undefined,
+		() => failureCause,
+	);
 	const pageSize = 50;
 	let generation = 0;
 	let active = true;
@@ -31,6 +37,7 @@ export function useIpBlacklist(): IpBlacklistController {
 		loading.value = false;
 		needsRefresh.value = true;
 		message.value = '';
+		failureCause = undefined;
 	}
 
 	async function execute(nextOffset: number, ip?: string): Promise<void> {
@@ -42,6 +49,7 @@ export function useIpBlacklist(): IpBlacklistController {
 		const signal = controller.signal;
 		loading.value = true;
 		message.value = '';
+		failureCause = undefined;
 		let committed = false;
 		try {
 			if (ip !== undefined) {
@@ -69,6 +77,7 @@ export function useIpBlacklist(): IpBlacklistController {
 		} catch (cause) {
 			if (current === generation && !disposed) {
 				needsRefresh.value = true;
+				failureCause = cause;
 				message.value = t(committed ? 'settings.configuration.refreshAfterChange' : authErrorKey(cause));
 			}
 		} finally {

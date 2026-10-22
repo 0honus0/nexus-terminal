@@ -13,7 +13,7 @@ interface ControllerOptions {
 	api: RemoteDesktopApi;
 	createPeer: RemoteDesktopPeerFactory;
 	onState(state: RemoteDesktopState, failure: RemoteDesktopFailure | null): void;
-	onAttempt(connectionId: number, lastConnectedAt: number): void;
+	onConnected(connectionId: number): void;
 }
 
 export function createRemoteDesktopController(options: ControllerOptions) {
@@ -68,8 +68,6 @@ export function createRemoteDesktopController(options: ControllerOptions) {
 			try {
 				const session = await options.api.create(connection.id, connection.type, display, controller.signal);
 				if (revision !== generation || controller.signal.aborted) return;
-				options.onAttempt(connection.id, session.lastConnectedAt);
-				if (revision !== generation || controller.signal.aborted) return;
 				const current = options.createPeer({
 					hasTouch: input.hasTouch,
 					touchMode: input.touchMode,
@@ -83,8 +81,7 @@ export function createRemoteDesktopController(options: ControllerOptions) {
 						}
 						options.onState(state, null);
 						if (state === 'connected') {
-							peer?.setTouchMode(input.touchMode);
-							peer?.resize(display);
+							options.onConnected(connection.id);
 						}
 					},
 
@@ -99,7 +96,7 @@ export function createRemoteDesktopController(options: ControllerOptions) {
 				});
 				peer = current;
 				host.replaceChildren(current.element);
-				current.connect(session.ticket);
+				current.connect(session, display);
 			} catch (cause) {
 				if (revision !== generation) return;
 				const failure =

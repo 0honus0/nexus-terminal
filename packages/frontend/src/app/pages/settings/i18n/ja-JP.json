@@ -9,7 +9,9 @@
       "dataManagement": "データ管理"
     },
     "about": {
+      "appInfo": "アプリ情報",
       "version": "バージョン",
+      "project": "プロジェクト",
       "checkingUpdate": "更新を確認中...",
       "latestVersion": "最新バージョンです",
       "updateAvailable": "新しいバージョン {version} が利用可能です！",
@@ -51,6 +53,7 @@
       "allSettings": "すべての設定",
       "settingsOverview": "設定センター"
     },
-    "advancedMaintenance": "診断と復旧（詳細）"
+    "advancedMaintenance": "診断と復旧（詳細）",
+    "advancedMaintenanceDescription": "システム状態、実行制限、Agent データの保守"
   }
 }

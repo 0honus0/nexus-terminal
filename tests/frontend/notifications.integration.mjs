@@ -413,7 +413,7 @@ try {
 	await page.getByText('Saved value exists', { exact: true }).waitFor();
 	assert.equal(await page.locator('form input[type=password]').count(), 0);
 	await page.locator('form').getByRole('button', { name: 'Test saved configuration', exact: true }).click();
-	await page.locator('form [role=status]').filter({ hasText: 'Queued' }).waitFor();
+	await page.locator('.ui-notification[data-kind="info"]').filter({ hasText: 'Queued' }).waitFor();
 	await page.locator('form').getByRole('button', { name: 'Cancel', exact: true }).click();
 	checks.push('formal edit shows presence only; saved test reports queued rather than falsely reporting sent');
 
@@ -436,9 +436,7 @@ try {
 	});
 	assert.equal(await page.locator('[data-notification-id]').count(), 0);
 	assert.equal(await page.locator('[data-runtime-boundary]').count(), 0);
-	checks.push(
-		'three locales expose safe recovery/delivery text and auth reset clears configuration and delivery caches',
-	);
+	checks.push('three locales expose safe recovery/delivery text and auth reset clears the configuration cache');
 	console.log('Notifications: ' + checks.length + ' checks PASS\n' + checks.join('\n'));
 } finally {
 	releaseUnknown?.();

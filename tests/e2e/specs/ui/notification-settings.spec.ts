@@ -251,7 +251,11 @@ test('notification settings empty and error states stay within a narrow viewport
 
 	await page.route('**/api/v1/settings/notifications', (route) => route.abort('failed'));
 	await page.reload();
-	await expect(settings.getByRole('alert')).toContainText('The result is unknown');
+	await expect(
+		page
+			.locator('.ui-notification[data-kind="error"]')
+			.filter({ hasText: 'The connection is unstable or the service is unavailable.' }),
+	).toBeVisible();
 	await expect(settings.getByRole('button', { name: 'Add Notification Channel', exact: true })).toHaveCount(0);
 	await expect(settings.getByRole('button', { name: 'Refresh and review', exact: true })).toBeEnabled();
 	const errorMetrics = await page.evaluate(() => ({

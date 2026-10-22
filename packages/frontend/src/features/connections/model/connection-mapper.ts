@@ -5,7 +5,7 @@ import type { UnsavedSshTestInput } from '@nexus-terminal/shared/targets/connect
 import { readUnsavedSshTest } from '@nexus-terminal/shared/targets/connections/test-codec';
 import type { ConnectionDraft, ConnectionSummary, CredentialSummary } from './connection-types';
 
-export function toConnectionSummary(value: TargetConnectionView, recent: number | null = null): ConnectionSummary {
+export function toConnectionSummary(value: TargetConnectionView): ConnectionSummary {
 	return {
 		id: value.id,
 		version: value.version,
@@ -19,12 +19,9 @@ export function toConnectionSummary(value: TargetConnectionView, recent: number 
 		route: value.route,
 		proxyId: value.proxyId,
 		notes: value.notes,
-		rdpRemoteApp: value.rdpRemoteApp,
-		rdpRemoteAppDirectory: value.rdpRemoteAppDirectory,
-		rdpRemoteAppArguments: value.rdpRemoteAppArguments,
 		tagIds: value.tagIds.map((id) => id),
 		jumpIds: value.jumpIds.map((id) => id),
-		lastConnectedAt: recent,
+		lastConnectedAt: value.lastConnectedAt,
 	};
 }
 
@@ -43,13 +40,10 @@ export function toConnectionDraft(value: ConnectionSummary | null): ConnectionDr
 		tagIds: value?.tagIds.map((id) => id) ?? [],
 		notes: value?.notes ?? '',
 		jumpIds: value?.jumpIds.map((id) => id) ?? [],
-		remoteApp: value?.rdpRemoteApp ?? '',
-		remoteAppDirectory: value?.rdpRemoteAppDirectory ?? '',
-		remoteAppArguments: value?.rdpRemoteAppArguments ?? '',
 	};
 }
 
-export function toConnectionInput(value: ConnectionDraft, remoteApp: boolean): TargetConnectionInput {
+export function toConnectionInput(value: ConnectionDraft): TargetConnectionInput {
 	return readConnectionInput({
 		name: value.name.trim() || value.host.trim(),
 		type: value.type,
@@ -59,9 +53,6 @@ export function toConnectionInput(value: ConnectionDraft, remoteApp: boolean): T
 		route: value.route,
 		proxyId: value.route === 'proxy' ? value.proxyId : null,
 		notes: value.notes || null,
-		rdpRemoteApp: value.type === 'RDP' && remoteApp ? value.remoteApp : null,
-		rdpRemoteAppDirectory: value.type === 'RDP' && remoteApp ? value.remoteAppDirectory || null : null,
-		rdpRemoteAppArguments: value.type === 'RDP' && remoteApp ? value.remoteAppArguments || null : null,
 		tagIds: value.tagIds.map((id) => id),
 		jumpIds: value.route === 'jump' ? value.jumpIds.map((id) => id) : [],
 	});

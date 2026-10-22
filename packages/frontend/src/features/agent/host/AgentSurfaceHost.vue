@@ -50,6 +50,10 @@
 			},
 			(next) => {
 				directory.value = next;
+				if (!next.executionEnabled) {
+					windowManager.closeHub();
+					return;
+				}
 				const enabled = next.apps.filter((app) => app.enabled);
 				if (!enabled.some((app) => app.id === windowManager.state.activeAppId)) {
 					const first = enabled.find((app) => app.surface === 'agent') ?? enabled[0];
@@ -116,7 +120,7 @@
 
 <template>
 	<Teleport to="body">
-		<template v-if="auth.authenticated.value && auth.userId.value === 1">
+		<template v-if="auth.authenticated.value && auth.userId.value === 1 && directory?.executionEnabled">
 			<AgentHubWindow v-if="directory" :directory="directory" @layout-change="persistLayout" />
 			<AgentLauncher
 				v-if="windowManager.state.status !== 'visible' || !directory"

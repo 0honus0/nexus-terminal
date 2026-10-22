@@ -1,7 +1,7 @@
 import { computed, onScopeDispose, ref, shallowReadonly } from 'vue';
 import { registerAuthenticatedSessionOwner } from '@/shared/session/public';
 import { systemOverviewApi } from '../api/system-overview-api';
-import { resourceKey, toPendingResource } from '../model/system-overview-mapper';
+import { resourceKey, toRefreshFailureResource, toRetainedResource } from '../model/system-overview-mapper';
 import {
 	ResourceFailure,
 	type LocalResourceStatus,
@@ -45,18 +45,26 @@ export function createSystemOverview(): SystemOverviewController {
 	let localRequest: AbortController | null = null;
 	let remoteRequest: AbortController | null = null;
 
-	function stopLocal(): void {
+	function abortLocal(): void {
 		localRequest?.abort();
 		localRequest = null;
 		localLoading.value = false;
+	}
+
+	function abortRemote(): void {
+		remoteRequest?.abort();
+		remoteRequest = null;
+		remoteLoading.value = false;
+	}
+
+	function stopLocal(): void {
+		abortLocal();
 		local.value = null;
 		localError.value = null;
 	}
 
 	function stopRemote(): void {
-		remoteRequest?.abort();
-		remoteRequest = null;
-		remoteLoading.value = false;
+		abortRemote();
 		remote.value = [];
 		remoteError.value = null;
 	}
@@ -81,7 +89,6 @@ export function createSystemOverview(): SystemOverviewController {
 			}
 		} catch (cause) {
 			if (localRequest === request) {
-				local.value = null;
 				localError.value = failureCode(cause);
 			}
 		} finally {
@@ -119,17 +126,25 @@ export function createSystemOverview(): SystemOverviewController {
 				}
 			}
 			const pending = [...unique.values()].sort((a, b) => (a.name || a.host).localeCompare(b.name || b.host));
-			remote.value = pending.map((target) => toPendingResource(target));
+			const retained = new Map(remote.value.map((item) => [item.key, item]));
+			remote.value = pending.map((target) =>
+				toRetainedResource(target, retained.get(resourceKey(target.host, target.port))),
+			);
 
 			async function loadHost(target: SshResourceTarget): Promise<void> {
 				let result: SshResource;
+				const key = resourceKey(target.host, target.port);
+				const previous = remote.value.find((current) => current.key === key);
 				try {
-					result = await systemOverviewApi.ssh(target, request.signal);
+					const response = await systemOverviewApi.ssh(target, request.signal);
+					result =
+						response.state === 'failed'
+							? toRefreshFailureResource(target, previous, response.error)
+							: response;
 				} catch (cause) {
-					result = toPendingResource(target, failureCode(cause));
+					result = toRefreshFailureResource(target, previous, failureCode(cause));
 				}
 				if (remoteRequest === request) {
-					const key = resourceKey(target.host, target.port);
 					remote.value = remote.value.map((current) => (current.key === key ? result : current));
 				}
 			}
@@ -150,7 +165,6 @@ export function createSystemOverview(): SystemOverviewController {
 			);
 		} catch (cause) {
 			if (remoteRequest === request) {
-				remote.value = [];
 				remoteError.value = failureCode(cause);
 			}
 		} finally {
@@ -163,13 +177,15 @@ export function createSystemOverview(): SystemOverviewController {
 
 	function deactivate(): void {
 		active = false;
-		stopLocal();
-		stopRemote();
+		abortLocal();
+		abortRemote();
 	}
 
 	function dispose(): void {
 		disposed = true;
 		deactivate();
+		stopLocal();
+		stopRemote();
 		unregister();
 	}
 

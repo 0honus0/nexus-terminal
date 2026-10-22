@@ -1,7 +1,8 @@
 <script setup lang="ts">
+	import { useFeedbackMessage } from '@/shared/feedback/public';
 	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiCheckbox } from '@/foundation/ui';
+	import { UiButton, UiCheckbox, UiInput } from '@/foundation/ui';
 	import AgentConfigPopover from './AgentConfigPopover.vue';
 	import { RecycleScroller } from 'vue-virtual-scroller';
 	import type { ManagedArtifact } from '../model/artifact-types';
@@ -20,6 +21,7 @@
 	const opened = ref(false);
 	const input = ref<HTMLInputElement | null>(null);
 	const error = ref('');
+	useFeedbackMessage(() => error.value);
 	const selectedIds = computed(() => new Set(props.modelValue.map((item) => item.id)));
 	const selectionLimit = 10;
 
@@ -132,70 +134,84 @@
 
 		<template #panel>
 			<div class="flex h-[340px] min-h-0 flex-col">
-				<div class="flex shrink-0 gap-1.5 border-b border-border/60 pb-2">
-					<input
+				<div class="flex shrink-0 items-center gap-1.5 border-b border-border/50 pb-2.5">
+					<UiInput
 						v-model="query"
 						type="search"
-						class="h-8 min-w-0 flex-1 rounded-lg border border-border/60 bg-background px-2.5 text-xs outline-none transition-colors focus:border-primary/50"
+						density="compact"
+						class="min-w-0 flex-1"
 						:placeholder="$t('agent.attachments.search')"
+						:aria-label="$t('agent.attachments.search')"
 						@keydown.enter.prevent="load()"
 					/>
-					<button
-						type="button"
-						class="h-8 rounded-lg px-2.5 text-xs font-medium text-text-secondary transition-colors hover:bg-header hover:text-foreground"
-						:disabled="busy"
-						@click="load()"
-					>
+					<UiButton density="compact" appearance="soft" :disabled="busy" @click="load()">
 						{{ $t('agent.attachments.searchAction') }}
-					</button>
-					<button
-						type="button"
-						class="h-8 rounded-lg bg-header/70 px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-header"
+					</UiButton>
+					<UiButton
+						density="compact"
+						appearance="solid"
 						:disabled="blocked || uploadUnknown || disabled || modelValue.length >= selectionLimit"
 						@click="input?.click()"
 					>
 						{{ $t('agent.attachments.upload') }}
-					</button>
+					</UiButton>
 					<input ref="input" type="file" multiple class="hidden" @change="chooseFile" />
 				</div>
-				<p v-if="operation.notice.value" class="p-2 text-xs" role="status">
-					{{ t('agent.settings.appManagement.' + operation.notice.value) }}
-				</p>
 				<p v-if="needsReload" class="p-2 text-xs">{{ t('agent.settings.appManagement.refreshRequired') }}</p>
 				<div
 					v-if="uploadUnknown || (reservation && reservation.status !== 'ready')"
 					class="space-y-2 p-2 text-xs"
 				>
-					<UiButton v-if="reservation" type="button" :disabled="busy" @click="checkUpload">{{
-						t('agent.artifactManagement.checkUpload')
-					}}</UiButton>
+					<UiButton
+						v-if="reservation"
+						density="compact"
+						appearance="soft"
+						:disabled="busy"
+						@click="checkUpload"
+					>
+						{{ t('agent.artifactManagement.checkUpload') }}
+					</UiButton>
 					<template v-if="uploadUnknown">
 						<p>{{ t('agent.artifactManagement.uploadUnknown') }}</p>
-						<UiCheckbox v-model="acknowledged">{{
-							t('agent.artifactManagement.acknowledgeUpload')
-						}}</UiCheckbox>
-						<UiButton type="button" :disabled="blocked || !acknowledged" @click="newIntent">{{
-							t('agent.artifactManagement.newUpload')
-						}}</UiButton>
+						<div class="flex items-start gap-2">
+							<UiCheckbox
+								v-model="acknowledged"
+								density="compact"
+								:aria-label="t('agent.artifactManagement.acknowledgeUpload')"
+							/>
+							<span>{{ t('agent.artifactManagement.acknowledgeUpload') }}</span>
+						</div>
+						<UiButton
+							density="compact"
+							appearance="soft"
+							:disabled="blocked || !acknowledged"
+							@click="newIntent"
+						>
+							{{ t('agent.artifactManagement.newUpload') }}
+						</UiButton>
 					</template>
 				</div>
-				<p v-if="error" class="shrink-0 px-1 py-2 text-xs text-error">{{ error }}</p>
 				<RecycleScroller class="min-h-0 flex-1 overflow-y-auto" :items="items" :item-size="54" key-field="id">
 					<template #default="{ item }">
 						<button
 							type="button"
-							class="flex h-[54px] w-full items-center gap-2.5 border-b border-border/50 px-2 text-left transition-colors hover:bg-header/60"
-							:class="selectedIds.has(item.id) ? 'bg-primary/8' : ''"
+							role="checkbox"
+							:aria-checked="selectedIds.has(item.id)"
+							class="flex h-[54px] w-full items-center gap-2.5 border-b border-border/40 px-2 text-left transition-colors hover:bg-header/45"
+							:class="selectedIds.has(item.id) ? 'bg-primary/[0.06]' : ''"
 							@click="toggle(item)"
 						>
-							<i
+							<span
+								class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] border transition-colors"
 								:class="
 									selectedIds.has(item.id)
-										? 'fa-solid fa-square-check text-primary'
-										: 'fa-regular fa-square text-text-secondary'
+										? 'border-primary bg-primary text-white'
+										: 'border-border/80 bg-background/50 text-transparent'
 								"
 								aria-hidden="true"
-							></i>
+							>
+								<i class="fa-solid fa-check text-[8px]"></i>
+							</span>
 							<span class="min-w-0 flex-1">
 								<span class="block truncate text-xs font-medium text-foreground">{{ item.name }}</span>
 								<span class="mt-0.5 block truncate text-[11px] text-text-secondary"
@@ -205,15 +221,17 @@
 						</button>
 					</template>
 				</RecycleScroller>
-				<button
+				<UiButton
 					v-if="nextOffset !== null"
-					type="button"
-					class="h-8 shrink-0 border-t border-border/60 text-xs font-medium text-text-secondary transition-colors hover:bg-header hover:text-foreground"
+					block
+					density="compact"
+					appearance="ghost"
+					class="shrink-0 rounded-none border-t border-border/45"
 					:disabled="busy || needsReload"
 					@click="load(true)"
 				>
 					{{ $t('agent.attachments.loadMore') }}
-				</button>
+				</UiButton>
 			</div>
 		</template>
 	</AgentConfigPopover>

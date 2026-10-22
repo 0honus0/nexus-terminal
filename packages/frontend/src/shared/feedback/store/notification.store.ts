@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import type { NotificationKind, UiNotification } from '../model';
+import type { NotificationKind, UiNotification, UiNotificationAction } from '../model';
 
 const DEFAULT_TIMEOUT_MS = 3000;
 const DEFAULT_ERROR_TIMEOUT_MS = 0;
@@ -19,23 +19,31 @@ export const useNotificationStore = defineStore('shared-notifications', () => {
 		kind: NotificationKind,
 		message: string,
 		timeoutMs = kind === 'error' ? DEFAULT_ERROR_TIMEOUT_MS : DEFAULT_TIMEOUT_MS,
+		action?: UiNotificationAction,
 	): number | null => {
 		const existing = notifications.value.find(
-			(notification) => notification.kind === kind && notification.message === message,
+			(notification) =>
+				notification.kind === kind &&
+				notification.message === message &&
+				(!notification.action || !action || notification.action.key === action.key),
 		);
-		if (existing) return existing.id;
+		if (existing) {
+			if (action) existing.action = action;
+			return existing.id;
+		}
 		if (kind === 'error') {
 			const now = Date.now();
-			const previous = recentErrors.get(message);
+			const dedupeKey = JSON.stringify([message, action?.key ?? null]);
+			const previous = recentErrors.get(dedupeKey);
 			if (previous !== undefined && now - previous < ERROR_DEDUPE_MS) return null;
-			recentErrors.set(message, now);
+			recentErrors.set(dedupeKey, now);
 			for (const [key, shownAt] of recentErrors) {
 				if (now - shownAt >= ERROR_DEDUPE_MS) recentErrors.delete(key);
 			}
 		}
 
 		const id = nextId++;
-		notifications.value.push({ id, kind, message, timeoutMs });
+		notifications.value.push({ id, kind, message, timeoutMs, action });
 		if (timeoutMs > 0) window.setTimeout(() => remove(id), timeoutMs);
 		return id;
 	};
@@ -47,7 +55,8 @@ export const useNotificationStore = defineStore('shared-notifications', () => {
 
 		success: (message: string, timeoutMs?: number) => show('success', message, timeoutMs),
 
-		error: (message: string, timeoutMs?: number) => show('error', message, timeoutMs),
+		error: (message: string, timeoutMs?: number, action?: UiNotificationAction) =>
+			show('error', message, timeoutMs, action),
 
 		info: (message: string, timeoutMs?: number) => show('info', message, timeoutMs),
 

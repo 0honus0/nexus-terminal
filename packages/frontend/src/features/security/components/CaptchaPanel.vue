@@ -1,20 +1,36 @@
 <script setup lang="ts">
-	import { watch } from 'vue';
+	import { computed, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiCheckbox, UiFormField, UiInput, UiSelect } from '@/foundation/ui';
+	import { UiButton, UiCheckbox, UiFormField, UiInput, UiSelect, UiSettingsGroup } from '@/foundation/ui';
+	import { useSettingsReloadSource } from '@/shared/feedback/public';
 	import { useSecurityConfiguration } from '../composables/use-security-configuration';
-	import ConfigurationStatus from './ConfigurationStatus.vue';
 	const { t } = useI18n();
 	const {
 		snapshot,
 		captcha: form,
 		loading,
 		needsRefresh,
-		message,
-		success,
 		refresh,
 		saveCaptcha,
-	} = useSecurityConfiguration();
+	} = useSecurityConfiguration('captcha');
+	useSettingsReloadSource({
+		id: 'security-captcha',
+
+		pending: () => !loading.value && needsRefresh.value,
+
+		reload: refresh,
+	});
+	const dirty = computed(() => {
+		const original = snapshot.value?.captcha;
+		if (!original) return false;
+		return (
+			form.value.enabled !== original.enabled ||
+			form.value.provider !== original.provider ||
+			form.value.siteKey !== original.siteKey ||
+			form.value.hostname !== original.hostname ||
+			form.value.secretAction !== 'keep'
+		);
+	});
 	watch(
 		[() => form.value.enabled, () => form.value.provider],
 		() => {
@@ -27,18 +43,19 @@
 	);
 </script>
 <template>
-	<section>
-		<h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.captcha.title') }}</h3>
-		<p class="mb-4 text-sm text-text-secondary">{{ t('settings.captcha.description') }}</p>
-		<ConfigurationStatus
-			:pending-restart="snapshot?.pendingRestart"
-			:loading="loading"
-			:needs-refresh="needsRefresh"
-			:message="message"
-			:success="success"
-			@refresh="refresh"
-		/>
-		<form class="space-y-4" @submit.prevent="saveCaptcha">
+	<UiSettingsGroup :title="t('settings.captcha.title')" icon="fa-solid fa-robot" tone="info">
+		<template #actions>
+			<UiButton
+				type="submit"
+				form="captcha-settings-form"
+				:appearance="dirty ? 'solid' : 'soft'"
+				:tone="dirty ? 'primary' : 'neutral'"
+				:loading="loading"
+				:disabled="!dirty || loading || needsRefresh"
+				>{{ t('common.save') }}</UiButton
+			>
+		</template>
+		<form id="captcha-settings-form" class="space-y-4" @submit.prevent="saveCaptcha">
 			<fieldset :disabled="loading || needsRefresh" class="space-y-4">
 				<label class="flex items-center gap-2 text-sm"
 					><UiCheckbox :disabled="loading || needsRefresh" v-model="form.enabled" />{{
@@ -52,10 +69,7 @@
 						<option value="recaptcha">reCAPTCHA</option></UiSelect
 					>
 				</UiFormField>
-				<div
-					v-if="form.enabled && form.provider !== 'none'"
-					class="ml-1 space-y-4 border-l-2 border-border/50 pl-4 pt-2"
-				>
+				<div v-if="form.enabled && form.provider !== 'none'" class="space-y-4 rounded-xl bg-header/25 p-4">
 					<p class="text-xs text-text-secondary">
 						{{
 							t(
@@ -117,15 +131,7 @@
 					/>
 					<p class="text-xs text-text-secondary">{{ t('settings.captcha.secretKeyHint') }}</p>
 				</div>
-				<UiButton
-					type="submit"
-					appearance="solid"
-					tone="primary"
-					:loading="loading"
-					:disabled="loading || needsRefresh"
-					>{{ t('common.save') }}</UiButton
-				>
 			</fieldset>
 		</form>
-	</section>
+	</UiSettingsGroup>
 </template>

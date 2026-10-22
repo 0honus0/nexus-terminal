@@ -12,7 +12,6 @@ export function useConnections(): ConnectionsController {
 		load: store.load,
 		revalidate: store.revalidate,
 		refresh: store.refresh,
-		markConnected: store.markConnected,
 		create: store.create,
 		importMany: store.importMany,
 		update: store.update,
@@ -24,8 +23,5 @@ export function useConnections(): ConnectionsController {
 }
 
 export const refreshConnection = (id: number) => useConnectionsStore().refresh(id);
-
-export const markConnectionConnected = (id: number, timestamp: number) =>
-	useConnectionsStore().markConnected(id, timestamp);
 
 export const resetConnectionsCache = (): void => useConnectionsStore().reset();

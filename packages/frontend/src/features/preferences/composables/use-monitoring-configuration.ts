@@ -1,3 +1,5 @@
+import { useI18n } from 'vue-i18n';
+import { useFeedbackMessage } from '@/shared/feedback/public';
 import { computed, onActivated, onDeactivated, onMounted, onScopeDispose, ref, shallowReadonly } from 'vue';
 import { registerAuthenticatedSessionOwner } from '@/shared/session/public';
 import {
@@ -23,7 +25,7 @@ function validInterval(value: number): boolean {
 	);
 }
 
-export function createMonitoringConfiguration(): MonitoringConfigurationController {
+export function createMonitoringConfiguration(onFailure?: (cause: unknown) => void): MonitoringConfigurationController {
 	const snapshot = ref<CoreConfiguration | null>(null);
 	const draft = ref<MonitoringDraft | null>(null);
 	const loading = ref(false);
@@ -91,6 +93,7 @@ export function createMonitoringConfiguration(): MonitoringConfigurationControll
 			if (request !== current) {
 				return;
 			}
+			onFailure?.(cause);
 			const failure = cause instanceof ConfigurationFailure ? cause : null;
 			feedback.value =
 				!failure || failure.outcome === 'unknown'
@@ -170,7 +173,16 @@ export function createMonitoringConfiguration(): MonitoringConfigurationControll
 }
 
 export function useMonitoringConfiguration(): MonitoringConfigurationController {
-	const controller = createMonitoringConfiguration();
+	let failureCause: unknown;
+	const controller = createMonitoringConfiguration((cause) => {
+		failureCause = cause;
+	});
+	const { t } = useI18n();
+	useFeedbackMessage(
+		() => (controller.feedback.value ? t('settings.monitoring.feedback.' + controller.feedback.value) : ''),
+		() => (controller.feedback.value === 'saved' ? 'success' : 'error'),
+		() => failureCause,
+	);
 	onMounted(controller.activate);
 	onActivated(controller.activate);
 	onDeactivated(controller.deactivate);

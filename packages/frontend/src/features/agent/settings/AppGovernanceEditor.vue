@@ -1,19 +1,11 @@
 <script setup lang="ts">
-	import { computed, onActivated, onMounted, toRaw } from 'vue';
+	import { computed, toRaw } from 'vue';
+	import { structurallyEqual } from '@/foundation/data';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiCheckbox } from '@/foundation/ui';
-	import { useConnections } from '@/features/connections/public';
-	import {
-		AGENT_EXECUTION_COMPACTION_MODES,
-		AGENT_EXECUTION_CONTEXT_PROFILES,
-		AGENT_EXECUTION_INTEGER_KEYS,
-		AGENT_GRANT_MAX_TARGET_IDS,
-		type AgentCapability,
-	} from '@nexus-terminal/shared/agent/governance/values';
+	import { UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
+	import type { AgentCapability } from '@nexus-terminal/shared/agent/governance/values';
 	import type { ManagedApp } from '../model/app-management-types';
 	import { useAppGovernance } from '../composables/use-app-governance';
-	import { useAgentManagementOperation } from '../composables/use-agent-management-operation';
-	import AgentTargetPicker from './AgentTargetPicker.vue';
 
 	type CapabilityCategory = 'files' | 'execution' | 'machine' | 'browser' | 'integration' | 'data';
 
@@ -74,23 +66,20 @@
 		'app.intents.exchange': 'fa-solid fa-right-left',
 	};
 
-	const props = defineProps<{ app: ManagedApp }>();
+	const props = defineProps<{ app: ManagedApp; active: boolean }>();
 	const { t } = useI18n();
-	const {
-		grants,
-		grantDraft,
-		policy,
-		policyDraft,
-		grantOperation,
-		policyOperation,
-		loadGrants,
-		loadPolicy,
-		saveGrants,
-		savePolicy,
-	} = useAppGovernance(props.app.id);
-	const connections = useConnections();
-	const directoryOperation = useAgentManagementOperation();
-	const targets = computed(() => connections.connections.value.filter((item) => item.type === 'SSH'));
+	const { grants, grantDraft, grantOperation, loadGrants, saveGrants } = useAppGovernance(
+		props.app.id,
+		'grants',
+		() => props.active,
+	);
+	const grantChanged = computed(
+		() =>
+			!structurallyEqual(
+				grantDraft.value,
+				grants.value?.grants.map((grant) => ({ capability: grant.capability, scope: grant.scope })) ?? [],
+			),
+	);
 	const definitions = computed(() => grants.value?.definitions ?? []);
 	const grantedCount = computed(
 		() => definitions.value.filter((definition) => grantFor(definition.id) !== undefined).length,
@@ -109,26 +98,6 @@
 	const grantBlocked = computed(
 		() => grantOperation.busy.value || grantOperation.refreshRequired.value || grants.value === null,
 	);
-	const policyBlocked = computed(
-		() => policyOperation.busy.value || policyOperation.refreshRequired.value || policy.value === null,
-	);
-
-	async function loadTargets(): Promise<void> {
-		await directoryOperation.execute(
-			() => connections.load(),
-			() => {},
-			{ write: false },
-		);
-	}
-
-	function initialTargets(): void {
-		if (directoryOperation.refreshRequired.value) {
-			void loadTargets();
-		}
-	}
-
-	onMounted(initialTargets);
-	onActivated(initialTargets);
 
 	function capabilityName(capability: AgentCapability): string {
 		return CAPABILITY_CATEGORIES[capability]
@@ -166,318 +135,171 @@
 	function setAllGrants(enabled: boolean): void {
 		if (grantBlocked.value) return;
 		if (!enabled) {
-			grantDraft.value = grantDraft.value.filter((grant) =>
-				definitions.value.some((definition) => definition.id === grant.capability),
-			);
 			for (const definition of definitions.value) setGrant(definition.id, false);
 			return;
 		}
 		for (const definition of definitions.value) setGrant(definition.id, true);
 	}
-
-	function modeFor(capability: AgentCapability): string {
-		const scope = grantFor(capability)?.scope;
-		return scope?.kind === 'targets' ? (scope.ssh?.mode ?? 'none') : 'none';
-	}
-
-	function selectMode(capability: AgentCapability, event: Event): void {
-		if (!(event.target instanceof HTMLSelectElement)) return;
-		const grant = grantFor(capability);
-		if (!grant || grant.scope.kind !== 'targets') return;
-		const value = event.target.value;
-		if (value === 'none') grant.scope.ssh = null;
-		else if (value === 'all') grant.scope.ssh = { mode: 'all' };
-		else if (value === 'ids') grant.scope.ssh = { mode: 'ids', ids: [] };
-	}
-
-	function idsFor(capability: AgentCapability): string[] {
-		const scope = grantFor(capability)?.scope;
-		return scope?.kind === 'targets' && scope.ssh?.mode === 'ids' ? scope.ssh.ids : [];
-	}
-
-	function setIds(capability: AgentCapability, ids: string[]): void {
-		const grant = grantFor(capability);
-		if (grant?.scope.kind === 'targets' && grant.scope.ssh?.mode === 'ids') {
-			grant.scope.ssh.ids = ids;
-		}
-	}
-
-	function toggleOverride(key: (typeof AGENT_EXECUTION_INTEGER_KEYS)[number], enabled: boolean): void {
-		if (policyBlocked.value || !policy.value) return;
-		if (enabled) policyDraft.value[key] = policy.value.effective[key];
-		else delete policyDraft.value[key];
-	}
-
-	function selectProfile(event: Event): void {
-		if (!(event.target instanceof HTMLSelectElement)) return;
-		const selected = event.target.value;
-		policyDraft.value.contextProfile = AGENT_EXECUTION_CONTEXT_PROFILES.find((value) => value === selected);
-	}
-
-	function selectCompaction(event: Event): void {
-		if (!(event.target instanceof HTMLSelectElement)) return;
-		const selected = event.target.value;
-		policyDraft.value.contextCompactionMode = AGENT_EXECUTION_COMPACTION_MODES.find((value) => value === selected);
-	}
-
-	function profileLabel(value: (typeof AGENT_EXECUTION_CONTEXT_PROFILES)[number]): string {
-		return t('agent.settings.executionPolicy.profile.' + value);
-	}
-
-	function compactionLabel(value: (typeof AGENT_EXECUTION_COMPACTION_MODES)[number]): string {
-		return t('agent.settings.executionPolicy.compaction.' + value);
-	}
 </script>
 <template>
 	<div class="space-y-4">
-		<section class="space-y-3 rounded-xl border border-border/70 bg-background/40 p-3.5">
-			<header class="flex flex-wrap items-start justify-between gap-2">
-				<div>
-					<div class="flex items-center gap-2">
-						<i class="fa-solid fa-shield-halved text-[11px] text-primary" aria-hidden="true"></i>
-						<h4 class="text-xs font-semibold text-foreground">
-							{{ t('agent.settings.appManagement.grants') }}
-						</h4>
-					</div>
-					<p class="mt-1 max-w-2xl text-[11px] leading-4 text-text-secondary">
-						{{ t('agent.settings.appManagement.grantHelp') }}
-					</p>
-				</div>
-				<span class="rounded-full bg-header px-2.5 py-1 text-[10px] font-medium text-text-secondary">
-					{{ t('agent.settings.apps.grantedCount', { granted: grantedCount, total: definitions.length }) }}
-				</span>
-			</header>
-			<p v-if="grantOperation.notice.value" role="status" class="text-xs">
-				{{ t('agent.settings.appManagement.' + grantOperation.notice.value) }}
-			</p>
-			<p v-if="grantOperation.refreshRequired.value" class="text-xs text-warning">
-				{{ t('agent.settings.appManagement.refreshRequired') }}
-			</p>
-			<div class="flex flex-wrap items-center gap-1.5">
-				<UiButton
-					v-if="grantOperation.refreshRequired.value || grantOperation.notice.value === 'failed'"
-					density="compact"
-					type="button"
-					:disabled="grantOperation.busy.value"
-					@click="loadGrants"
-				>
-					{{ t('agent.settings.appManagement.readGrants') }}
-				</UiButton>
-				<UiButton density="compact" appearance="ghost" :disabled="grantBlocked" @click="setAllGrants(true)">
-					{{ t('agent.settings.apps.enableAllCapabilities') }}
-				</UiButton>
-				<UiButton density="compact" appearance="ghost" :disabled="grantBlocked" @click="setAllGrants(false)">
-					{{ t('agent.settings.apps.disableAllCapabilities') }}
-				</UiButton>
-			</div>
-			<div
-				v-for="grant in unavailableGrants"
-				:key="grant.capability"
-				class="space-y-1 rounded-lg border border-warning/30 bg-warning/5 p-2.5 text-[11px] text-warning"
+		<section class="overflow-hidden rounded-xl bg-header/20">
+			<header
+				class="flex flex-col gap-3 border-b border-border/50 px-4 py-4 sm:px-5 md:flex-row md:items-center md:justify-between"
 			>
-				<p>
-					{{
-						t('agent.settings.appManagement.unavailableGrant', {
-							capability: capabilityName(grant.capability),
-						})
-					}}
-				</p>
-				<UiButton
-					density="compact"
-					appearance="ghost"
-					type="button"
-					@click="grantDraft = grantDraft.filter((item) => item.capability !== grant.capability)"
-				>
-					{{ t('common.delete') }}
-				</UiButton>
-			</div>
-			<fieldset :disabled="grantBlocked" class="space-y-3">
-				<section v-for="group in groupedDefinitions" :key="group.id" class="space-y-2">
-					<div
-						class="flex items-center gap-1.5 px-0.5 text-[10px] font-semibold uppercase tracking-wider text-text-secondary"
+				<div class="flex min-w-0 flex-wrap items-center gap-2">
+					<span
+						class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
 					>
-						<i :class="group.icon" class="text-[9px] text-primary" aria-hidden="true"></i>
+						<i class="fa-solid fa-shield-halved text-[11px]" aria-hidden="true"></i>
+					</span>
+					<h4 class="text-xs font-bold text-foreground">
+						{{ t('agent.settings.apps.capabilitiesHeader') }}
+					</h4>
+					<span class="rounded-full bg-background/60 px-2 py-0.5 font-mono text-[10px] text-text-secondary"
+						>{{ grantedCount }} / {{ definitions.length }}</span
+					>
+					<UiInfoHint :text="t('agent.settings.apps.capabilitiesSubtitle')" />
+				</div>
+				<div class="grid w-full grid-cols-2 gap-2 md:flex md:w-auto md:shrink-0 md:items-center">
+					<UiButton
+						v-if="grantOperation.refreshRequired.value || grantOperation.notice.value === 'failed'"
+						type="button"
+						class="col-span-2 justify-center md:col-auto"
+						:disabled="grantOperation.busy.value"
+						@click="loadGrants"
+						>{{ t('agent.settings.appManagement.readGrants') }}</UiButton
+					>
+					<UiButton
+						v-if="definitions.length"
+						appearance="soft"
+						tone="neutral"
+						type="button"
+						class="justify-center"
+						:disabled="grantBlocked"
+						@click="setAllGrants(grantedCount !== definitions.length)"
+					>
+						<span
+							class="inline-flex h-3.5 w-3.5 items-center justify-center rounded-[3px] border border-current text-[9px]"
+							aria-hidden="true"
+						>
+							<i v-if="grantedCount === definitions.length" class="fa-solid fa-check"></i>
+							<i v-else-if="grantedCount" class="fa-solid fa-minus"></i>
+						</span>
+						{{
+							t(
+								grantedCount === definitions.length
+									? 'agent.settings.apps.disableCapabilities'
+									: 'agent.settings.apps.enableCapabilities',
+							)
+						}}
+					</UiButton>
+					<UiButton
+						type="button"
+						appearance="solid"
+						tone="primary"
+						class="justify-center"
+						:disabled="grantBlocked || !grantChanged"
+						@click="saveGrants"
+					>
+						<i
+							:class="
+								grantOperation.busy.value ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-check'
+							"
+							aria-hidden="true"
+						></i>
+						{{
+							t(
+								grantOperation.busy.value
+									? 'agent.settings.apps.savingPermissions'
+									: 'agent.settings.apps.savePermissions',
+							)
+						}}
+					</UiButton>
+				</div>
+			</header>
+			<div v-if="unavailableGrants.length" class="space-y-2 border-b border-border/50 px-4 py-3.5 sm:px-5">
+				<div
+					v-for="grant in unavailableGrants"
+					:key="grant.capability"
+					class="flex flex-wrap items-center gap-2 rounded-lg bg-warning/8 px-3 py-2 text-[11px] text-warning"
+				>
+					<span class="min-w-0 flex-1">
+						{{
+							t('agent.settings.appManagement.unavailableGrant', {
+								capability: capabilityName(grant.capability),
+							})
+						}}
+					</span>
+					<UiButton
+						density="compact"
+						appearance="ghost"
+						type="button"
+						@click="grantDraft = grantDraft.filter((item) => item.capability !== grant.capability)"
+					>
+						{{ t('common.delete') }}
+					</UiButton>
+				</div>
+			</div>
+			<fieldset :disabled="grantBlocked" class="divide-y divide-border/45">
+				<section v-for="group in groupedDefinitions" :key="group.id" class="px-4 py-4 sm:px-5">
+					<div class="mb-3 flex items-center gap-2.5 text-[11px] font-semibold text-foreground">
+						<span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/8">
+							<i :class="group.icon" class="text-[9px] text-primary" aria-hidden="true"></i>
+						</span>
 						<span>{{ t(group.label) }}</span>
+						<span
+							class="ml-auto rounded-full bg-background/60 px-2.5 py-1 font-mono text-[10px] font-normal text-text-secondary"
+							>{{ group.definitions.filter((definition) => grantFor(definition.id)).length }} /
+							{{ group.definitions.length }}</span
+						>
 					</div>
-					<div class="grid gap-2 md:grid-cols-2">
+					<div class="grid gap-2.5 md:grid-cols-2">
 						<article
 							v-for="definition in group.definitions"
 							:key="definition.id"
-							class="rounded-xl border p-3 transition-colors"
+							class="rounded-xl px-3.5 py-3.5 ring-1 ring-inset transition-colors sm:px-4"
 							:class="
 								grantFor(definition.id)
-									? 'border-primary/30 bg-primary/[0.035]'
-									: 'border-border/60 bg-card/65'
+									? 'bg-primary/8 ring-primary/25'
+									: 'bg-background/25 ring-border/20 hover:bg-header/35 hover:ring-border/40'
 							"
 						>
-							<div class="flex items-start gap-2.5">
+							<div class="flex items-start gap-3">
 								<UiCheckbox
-									density="compact"
+									density="comfortable"
+									class="mt-0.5 shrink-0"
 									:model-value="grantFor(definition.id) !== undefined"
 									:aria-label="capabilityName(definition.id)"
 									@update:model-value="(checked) => setGrant(definition.id, checked)"
 								/>
-								<span
-									class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-header text-text-secondary"
-								>
-									<i
-										:class="capabilityIcon(definition.id)"
-										class="text-[10px]"
-										aria-hidden="true"
-									></i>
-								</span>
 								<div class="min-w-0">
-									<div class="text-xs font-semibold text-foreground">
-										{{ capabilityName(definition.id) }}
+									<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+										<i
+											:class="capabilityIcon(definition.id)"
+											class="w-3.5 shrink-0 text-center text-[11px] text-text-secondary"
+											aria-hidden="true"
+										></i>
+										<span class="text-xs font-semibold text-foreground">
+											{{ capabilityName(definition.id) }}
+										</span>
+										<code
+											class="rounded bg-header/60 px-1.5 py-0.5 font-mono text-[9px] leading-none text-text-secondary/70"
+											>{{ definition.id }}</code
+										>
 									</div>
-									<p class="mt-1 text-[11px] leading-4 text-text-secondary">
+									<p class="mt-1.5 text-[11px] leading-[1.6] text-text-secondary">
 										{{ capabilityDescription(definition.id) }}
 									</p>
 								</div>
 							</div>
-							<div
-								v-if="grantFor(definition.id) && definition.scopeKind === 'targets'"
-								class="mt-2.5 border-t border-border/45 pt-2.5"
-							>
-								<label class="flex items-center justify-between gap-2 text-[11px] text-text-secondary">
-									<span>{{ t('agent.settings.appManagement.sshScope') }}</span>
-									<select
-										:value="modeFor(definition.id)"
-										class="h-8 rounded-lg border border-border bg-background px-2 text-[11px] text-foreground outline-none focus:border-primary/45"
-										@change="selectMode(definition.id, $event)"
-									>
-										<option value="none">{{ t('agent.settings.appManagement.noTargets') }}</option>
-										<option value="all">{{ t('agent.settings.appManagement.allSsh') }}</option>
-										<option value="ids">{{ t('agent.settings.appManagement.selectedSsh') }}</option>
-									</select>
-								</label>
-								<AgentTargetPicker
-									v-if="modeFor(definition.id) === 'ids'"
-									class="mt-2"
-									:items="targets"
-									:model-value="idsFor(definition.id)"
-									:max="AGENT_GRANT_MAX_TARGET_IDS"
-									@update:model-value="(ids) => setIds(definition.id, ids)"
-								/>
-							</div>
 						</article>
 					</div>
 				</section>
-				<p
-					v-if="definitions.length === 0"
-					class="rounded-lg bg-background/55 px-3 py-6 text-center text-xs text-text-secondary"
-				>
+				<p v-if="definitions.length === 0" class="px-3.5 py-8 text-center text-xs text-text-secondary">
 					{{ t('agent.settings.apps.noCapabilities') }}
 				</p>
-				<UiButton type="button" appearance="solid" tone="primary" :disabled="grantBlocked" @click="saveGrants">
-					{{ t('agent.settings.appManagement.saveGrants') }}
-				</UiButton>
 			</fieldset>
 		</section>
-		<section class="space-y-3 rounded-xl border border-border/70 bg-background/40 p-3.5">
-			<header>
-				<div class="flex items-center gap-2">
-					<i class="fa-solid fa-sliders text-[11px] text-primary" aria-hidden="true"></i>
-					<h4 class="text-xs font-semibold text-foreground">
-						{{ t('agent.settings.appManagement.policy') }}
-					</h4>
-				</div>
-				<p class="mt-1 text-[11px] leading-4 text-text-secondary">
-					{{ t('agent.settings.appManagement.policyHelp') }}
-				</p>
-			</header>
-			<p v-if="policyOperation.notice.value" role="status" class="text-xs">
-				{{ t('agent.settings.appManagement.' + policyOperation.notice.value) }}
-			</p>
-			<p v-if="policyOperation.refreshRequired.value" class="text-xs text-warning">
-				{{ t('agent.settings.appManagement.refreshRequired') }}
-			</p>
-			<UiButton
-				v-if="policyOperation.refreshRequired.value || policyOperation.notice.value === 'failed'"
-				density="compact"
-				type="button"
-				:disabled="policyOperation.busy.value"
-				@click="loadPolicy"
-			>
-				{{ t('agent.settings.appManagement.readPolicy') }}
-			</UiButton>
-			<fieldset v-if="policy" :disabled="policyBlocked" class="space-y-3">
-				<div class="grid gap-2 sm:grid-cols-2">
-					<div
-						v-for="key in AGENT_EXECUTION_INTEGER_KEYS"
-						:key="key"
-						class="space-y-1.5 rounded-lg border border-border/55 bg-card/65 p-2.5"
-					>
-						<label class="flex items-center gap-2 text-[11px] font-medium text-foreground">
-							<UiCheckbox
-								density="compact"
-								:model-value="policyDraft[key] !== undefined"
-								@update:model-value="(checked) => toggleOverride(key, checked)"
-							/>
-							{{ t('agent.settings.executionPolicy.fields.' + key) }}
-						</label>
-						<input
-							v-if="policyDraft[key] !== undefined"
-							v-model.number="policyDraft[key]"
-							type="number"
-							min="1"
-							step="1"
-							:aria-label="t('agent.settings.executionPolicy.fields.' + key)"
-							class="h-8 w-full rounded-lg border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-primary/45"
-						/>
-						<p class="text-[10px] text-text-secondary">
-							{{ t('agent.settings.appManagement.effective', { value: policy.effective[key] }) }}
-						</p>
-					</div>
-				</div>
-				<label class="block space-y-1.5 text-[11px] font-medium text-foreground">
-					<span>{{ t('agent.settings.executionPolicy.fields.contextProfile') }}</span>
-					<select
-						:value="policyDraft.contextProfile ?? ''"
-						class="h-8 w-full rounded-lg border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-primary/45"
-						@change="selectProfile"
-					>
-						<option value="">
-							{{
-								t('agent.settings.appManagement.inherit', {
-									value: profileLabel(policy.effective.contextProfile),
-								})
-							}}
-						</option>
-						<option v-for="value in AGENT_EXECUTION_CONTEXT_PROFILES" :key="value" :value="value">
-							{{ profileLabel(value) }}
-						</option>
-					</select>
-				</label>
-				<label class="block space-y-1.5 text-[11px] font-medium text-foreground">
-					<span>{{ t('agent.settings.executionPolicy.fields.contextCompactionMode') }}</span>
-					<select
-						:value="policyDraft.contextCompactionMode ?? ''"
-						class="h-8 w-full rounded-lg border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-primary/45"
-						@change="selectCompaction"
-					>
-						<option value="">
-							{{
-								t('agent.settings.appManagement.inherit', {
-									value: compactionLabel(policy.effective.contextCompactionMode),
-								})
-							}}
-						</option>
-						<option v-for="value in AGENT_EXECUTION_COMPACTION_MODES" :key="value" :value="value">
-							{{ compactionLabel(value) }}
-						</option>
-					</select>
-				</label>
-				<UiButton type="button" appearance="solid" tone="primary" :disabled="policyBlocked" @click="savePolicy">
-					{{ t('common.save') }}
-				</UiButton>
-			</fieldset>
-		</section>
-		<p v-if="directoryOperation.notice.value" role="alert" class="text-xs text-warning">
-			{{ t('agent.settings.appManagement.targetsFailed') }}
-		</p>
-		<UiButton type="button" density="compact" :disabled="directoryOperation.busy.value" @click="loadTargets">
-			{{ t('agent.settings.appManagement.readTargets') }}
-		</UiButton>
 	</div>
 </template>

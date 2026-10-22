@@ -20,7 +20,7 @@ async function editNotes(page: Page, notes: string): Promise<void> {
 	await modal.getByRole('checkbox', { name: 'Advanced Options', exact: true }).check();
 	await modal.getByRole('checkbox', { name: 'Change notes', exact: true }).check();
 	await modal.locator('textarea').fill(notes);
-	await modal.getByRole('button', { name: 'Save', exact: true }).click();
+	await modal.getByRole('button', { name: 'Save connection settings', exact: true }).click();
 }
 
 async function cleanup(request: APIRequestContext): Promise<void> {

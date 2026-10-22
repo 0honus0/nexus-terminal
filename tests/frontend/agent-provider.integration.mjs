@@ -173,13 +173,20 @@ try {
 				throw Error('Provider UI did not converge: ' + node?.textContent?.slice(0, 400));
 			}
 
+			const { useNotificationStore } = await import('/src/shared/feedback/store/notification.store.ts');
+			let notifications;
+
+			const hasFeedback = (message) => notifications.notifications.some((item) => item.message.includes(message));
+
 			function mount(component) {
 				mounted?.unmount();
 				node?.remove();
 				node = document.createElement('div');
 				document.body.append(node);
 				mounted = createApp(component);
-				mounted.use(createPinia());
+				const pinia = createPinia();
+				notifications = useNotificationStore(pinia);
+				mounted.use(pinia);
 				mounted.use(i18n);
 				mounted.mount(node);
 			}
@@ -425,7 +432,7 @@ try {
 				input('Maximum output tokens', 128);
 				form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 				await nextTick();
-				await until(() => node.textContent.includes('Provider saved.'));
+				await until(() => hasFeedback('Provider saved.'));
 				check(
 					(await api.listManagedProviders()).some(
 						(item) => item.name === 'Created from actual card' && item.models[0].id === 'ui-model',
@@ -441,7 +448,7 @@ try {
 					window.fetch = async () => json({ code: 'internal_failure' }, 500);
 					// Reopening mounts the real automatic read, exposing recovery only after failure.
 					mount({ render: () => h(ProviderSettings) });
-					await until(() => node.textContent.includes(expected));
+					await until(() => hasFeedback(expected));
 					const read = Array.from(node.querySelectorAll('button')).find((b) =>
 						b.textContent.includes(
 							locale === 'zh-CN' ? '重新读取' : locale === 'ja-JP' ? '再読み込み' : 'Read again',
@@ -449,16 +456,13 @@ try {
 					);
 					read.click();
 					await nextTick();
-					await until(() => node.textContent.includes(expected));
+					await until(() => hasFeedback(expected));
 					check(!node.textContent.includes('internal_failure'), 'localized provider safe failure ' + locale);
 				}
 				window.fetch = nativeFetch;
 				await setLocale('en-US');
 				mount({ render: () => h(AgentSettingsPanel) });
-				await until(
-					() =>
-						node.textContent.includes('Model providers') && node.textContent.includes('Concurrent update'),
-				);
+				await until(() => node.textContent.includes('Model providers') && hasFeedback('Concurrent update'));
 				check(
 					node.querySelector('section[aria-label="Model providers"]') &&
 						node.querySelectorAll('nav button').length === 4,

@@ -4,7 +4,7 @@ import { TARGET_CONNECTION_MAX_TAGS } from '@nexus-terminal/shared/targets/conne
 import { targetIds } from '@nexus-terminal/shared/targets/http';
 import { useAuthSession } from '@/features/auth/public';
 import { TargetRequestFailure, targetErrorKey } from '@/client/targets/target-types';
-import { useFeedback } from '@/shared/feedback/public';
+import { useFeedback, useFeedbackMessage } from '@/shared/feedback/public';
 import { useConnectionTags } from './useConnectionTags';
 
 export function useTagPicker(selection: Ref<number[]>) {
@@ -14,6 +14,13 @@ export function useTagPicker(selection: Ref<number[]>) {
 	const { t } = useI18n();
 	const pending = ref(false);
 	const message = ref('');
+	let failureCause: unknown;
+	const messageSuccess = ref(false);
+	useFeedbackMessage(
+		() => message.value,
+		() => (messageSuccess.value ? 'success' : 'error'),
+		() => failureCause,
+	);
 	let active = true;
 	let generation = 0;
 	let controller = new AbortController();
@@ -24,6 +31,8 @@ export function useTagPicker(selection: Ref<number[]>) {
 		controller = new AbortController();
 		pending.value = false;
 		message.value = '';
+		failureCause = undefined;
+		messageSuccess.value = false;
 	}
 
 	async function execute(
@@ -37,10 +46,13 @@ export function useTagPicker(selection: Ref<number[]>) {
 		const signal = controller.signal;
 		pending.value = true;
 		message.value = '';
+		failureCause = undefined;
+		messageSuccess.value = false;
 		try {
 			await work(signal);
 		} catch (cause) {
 			if (active && current === generation) {
+				failureCause = cause;
 				message.value = t('tags.failures.' + targetErrorKey(cause, operation));
 			}
 		} finally {
@@ -63,6 +75,7 @@ export function useTagPicker(selection: Ref<number[]>) {
 		try {
 			selection.value = targetIds(values, TARGET_CONNECTION_MAX_TAGS);
 		} catch (cause) {
+			failureCause = cause;
 			message.value = t('tags.failures.' + targetErrorKey(cause));
 		}
 	}

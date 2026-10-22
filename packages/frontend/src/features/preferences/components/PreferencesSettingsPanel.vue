@@ -1,9 +1,9 @@
 <script setup lang="ts">
-	import { reactive, ref } from 'vue';
+	import { computed, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiCheckbox, UiFormField, UiInput, UiSelect } from '@/foundation/ui';
-	import { useFeedback } from '@/shared/feedback/public';
-	import { BackendLoggingPanel } from '@/features/logging/public';
+	import { UiButton, UiCheckbox, UiFormField, UiInput, UiSelect, UiSettingsGroup } from '@/foundation/ui';
+	import { useFeedback, useSettingsReloadSource } from '@/shared/feedback/public';
+	import { BackendLoggingPanel, useBackendLogging } from '@/features/logging/public';
 	import MonitoringConfigurationPanel from './MonitoringConfigurationPanel.vue';
 	import { usePreferencesEditor } from '../composables/use-preferences-editor';
 	import {
@@ -26,8 +26,32 @@
 		},
 	);
 	const editor = usePreferencesEditor(t);
-	const { form, loading, loadError, needsRefresh } = editor;
-	const sectionMessages = reactive<Record<string, { text: string; success: boolean }>>({});
+	const backendLogging = useBackendLogging();
+	const { form, baseline, loading, loadError, needsRefresh } = editor;
+	useSettingsReloadSource({
+		id: 'preferences-system',
+
+		pending: () =>
+			(!loading.value && (needsRefresh.value || Boolean(loadError.value))) ||
+			(!backendLogging.busy.value && backendLogging.needsRefresh.value),
+
+		reload: async () => {
+			const requests: Promise<unknown>[] = [];
+			if (!loading.value && (needsRefresh.value || loadError.value)) requests.push(editor.refresh());
+			if (!backendLogging.busy.value && backendLogging.needsRefresh.value)
+				requests.push(backendLogging.execute());
+			await Promise.allSettled(requests);
+		},
+	});
+	const languageDirty = computed(() => form.language !== baseline.value.language);
+	const timezoneDirty = computed(() => form.timezone !== baseline.value.timezone);
+	const frontendLogDirty = computed(() => form.frontendLogLevel !== baseline.value.frontendLogLevel);
+	const backendLogDirty = computed(
+		() =>
+			backendLogging.snapshot.value !== null &&
+			backendLogging.level.value !== backendLogging.snapshot.value.level,
+	);
+	const loggingDirty = computed(() => frontendLogDirty.value || backendLogDirty.value);
 
 	const validatePatch = (patch: Partial<UserPreferences>): string | null => {
 		const integerInRange = (value: number, min: number, max: number) =>
@@ -62,25 +86,43 @@
 		if (signal.aborted) return;
 		const validationError = validatePatch(patch);
 		if (validationError) {
-			sectionMessages[sectionId] = { text: validationError, success: false };
 			feedback.notifyError(validationError);
 			return;
 		}
 
 		savingSection.value = sectionId;
-		sectionMessages[sectionId] = { text: '', success: false };
 		try {
 			if (!(await editor.save(patch))) return;
 			const message = t('settings.preferences.saved');
-			sectionMessages[sectionId] = { text: message, success: true };
 			feedback.notifySuccess(message);
 		} catch (cause) {
 			if (!editor.view.isCurrent(signal)) return;
 			const message = t('settings.preferences.saveFailed', {
 				error: cause instanceof Error ? cause.message : String(cause),
 			});
-			sectionMessages[sectionId] = { text: message, success: false };
 			feedback.notifyError(message);
+		} finally {
+			if (editor.view.isCurrent(signal)) savingSection.value = null;
+		}
+	};
+
+	const saveLogging = async (): Promise<void> => {
+		if (savingSection.value !== null || !loggingDirty.value) return;
+		const signal = editor.view.capture();
+		if (signal.aborted) return;
+		const saveBackend = backendLogDirty.value;
+		savingSection.value = 'logging';
+		try {
+			if (frontendLogDirty.value) {
+				if (!(await editor.save({ frontendLogLevel: form.frontendLogLevel }))) return;
+			}
+			if (saveBackend) {
+				await backendLogging.execute(true);
+				if (backendLogging.needsRefresh.value) return;
+			}
+			if (!editor.view.isCurrent(signal)) return;
+			const message = t('settings.preferences.saved');
+			feedback.notifySuccess(message);
 		} finally {
 			if (editor.view.isCurrent(signal)) savingSection.value = null;
 		}
@@ -88,131 +130,121 @@
 </script>
 
 <template>
-	<section class="ui-solid-panel overflow-hidden rounded-xl">
-		<h2 class="border-b border-border/60 px-6 py-4 text-lg font-semibold text-foreground">
-			{{ props.section === 'system' ? t('settings.category.system') : t('settings.workspace.title') }}
+	<section class="settings-surface">
+		<h2
+			v-if="props.section !== 'system'"
+			class="border-b border-border/60 px-6 py-4 text-lg font-semibold text-foreground"
+		>
+			{{ t('settings.workspace.title') }}
 		</h2>
 
-		<UiButton
-			v-if="!loading && (needsRefresh || loadError)"
-			class="m-6"
-			:disabled="loading || editor.saving.value"
-			@click="editor.refresh"
-			>{{ t('common.refresh') }}</UiButton
-		>
 		<MonitoringConfigurationPanel v-if="props.section !== 'system'" class="m-6" />
 
 		<div v-if="loading" class="p-4 text-center text-text-secondary">
 			{{ t('common.loading') }}
 		</div>
 
-		<fieldset
-			v-else-if="props.section === 'system'"
-			:disabled="needsRefresh || editor.saving.value"
-			class="space-y-6 p-6"
-		>
-			<p v-if="loadError" class="rounded border border-error/40 bg-error/5 p-3 text-sm text-error">
-				{{ loadError }}
-			</p>
-			<form class="space-y-4" @submit.prevent="savePatch('language', { language: form.language })">
-				<h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.language.title') }}</h3>
-				<UiFormField :label="t('settings.language.selectLabel')" for-id="languageSelect">
-					<UiSelect id="languageSelect" v-model="form.language" :disabled="savingSection !== null">
-						<option v-for="locale in props.locales" :key="locale" :value="locale">
-							{{ preferenceLanguageNames[locale] || locale }}
-						</option>
-					</UiSelect>
-				</UiFormField>
-				<div class="flex flex-wrap items-center justify-between gap-3">
-					<UiButton type="submit" appearance="solid" tone="primary" :loading="savingSection === 'language'">
-						{{ t('settings.language.saveButton') }}
-					</UiButton>
-					<p
-						v-if="sectionMessages.language?.text"
-						class="text-sm"
-						:class="sectionMessages.language.success ? 'text-success' : 'text-error'"
-					>
-						{{ sectionMessages.language.text }}
-					</p>
-				</div>
-			</form>
-
-			<hr class="border-border/50" />
-
-			<form class="space-y-4" @submit.prevent="savePatch('timezone', { timezone: form.timezone })">
-				<h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.timezone.title') }}</h3>
-				<UiFormField :label="t('settings.timezone.selectLabel')" for-id="timezoneSelect">
-					<UiSelect id="timezoneSelect" v-model="form.timezone" :disabled="savingSection !== null">
-						<option v-for="timezone in commonTimezones" :key="timezone" :value="timezone">
-							{{ timezone }}
-						</option>
-					</UiSelect>
-					<p class="mt-1 text-xs text-text-secondary">{{ t('settings.timezone.description') }}</p>
-				</UiFormField>
-				<div class="flex flex-wrap items-center justify-between gap-3">
-					<UiButton type="submit" appearance="solid" tone="primary" :loading="savingSection === 'timezone'">{{
-						t('common.save')
-					}}</UiButton>
-					<p
-						v-if="sectionMessages.timezone?.text"
-						class="text-sm"
-						:class="sectionMessages.timezone.success ? 'text-success' : 'text-error'"
-					>
-						{{ sectionMessages.timezone.text }}
-					</p>
-				</div>
-			</form>
-
-			<hr class="border-border/50" />
-
-			<section class="space-y-4">
-				<h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.logging.title') }}</h3>
-				<div class="grid gap-4 md:grid-cols-2">
+		<fieldset v-else-if="props.section === 'system'" :disabled="needsRefresh || editor.saving.value">
+			<div class="ui-settings-groups">
+				<UiSettingsGroup :title="t('settings.language.title')" icon="fa-solid fa-language" tone="info">
+					<template #actions>
+						<UiButton
+							type="submit"
+							form="language-settings-form"
+							:appearance="languageDirty ? 'solid' : 'soft'"
+							:tone="languageDirty ? 'primary' : 'neutral'"
+							:loading="savingSection === 'language'"
+							:disabled="!languageDirty || savingSection !== null"
+						>
+							{{ t('common.save') }}
+						</UiButton>
+					</template>
 					<form
+						id="language-settings-form"
 						class="space-y-4"
-						@submit.prevent="
-							savePatch('logging', {
-								frontendLogLevel: form.frontendLogLevel,
-							})
-						"
+						@submit.prevent="savePatch('language', { language: form.language })"
 					>
-						<UiFormField :label="t('settings.logging.frontendLabel')" for-id="frontendLogLevelSelect">
+						<UiFormField :label="t('settings.language.selectLabel')" for-id="languageSelect">
+							<UiSelect id="languageSelect" v-model="form.language" :disabled="savingSection !== null">
+								<option v-for="locale in props.locales" :key="locale" :value="locale">
+									{{ preferenceLanguageNames[locale] || locale }}
+								</option>
+							</UiSelect>
+						</UiFormField>
+					</form>
+				</UiSettingsGroup>
+
+				<UiSettingsGroup :title="t('settings.timezone.title')" icon="fa-solid fa-earth-asia" tone="primary">
+					<template #actions>
+						<UiButton
+							type="submit"
+							form="timezone-settings-form"
+							:appearance="timezoneDirty ? 'solid' : 'soft'"
+							:tone="timezoneDirty ? 'primary' : 'neutral'"
+							:loading="savingSection === 'timezone'"
+							:disabled="!timezoneDirty || savingSection !== null"
+							>{{ t('common.save') }}</UiButton
+						>
+					</template>
+					<form
+						id="timezone-settings-form"
+						class="space-y-4"
+						@submit.prevent="savePatch('timezone', { timezone: form.timezone })"
+					>
+						<UiFormField :label="t('settings.timezone.selectLabel')" for-id="timezoneSelect">
+							<UiSelect id="timezoneSelect" v-model="form.timezone" :disabled="savingSection !== null">
+								<option v-for="timezone in commonTimezones" :key="timezone" :value="timezone">
+									{{ timezone }}
+								</option>
+							</UiSelect>
+						</UiFormField>
+					</form>
+				</UiSettingsGroup>
+
+				<UiSettingsGroup :title="t('settings.logging.title')" icon="fa-solid fa-file-lines" tone="accent">
+					<template #actions>
+						<UiButton
+							type="submit"
+							form="logging-settings-form"
+							:appearance="loggingDirty ? 'solid' : 'soft'"
+							:tone="loggingDirty ? 'primary' : 'neutral'"
+							:loading="savingSection === 'logging' || backendLogging.busy.value"
+							:disabled="
+								!loggingDirty ||
+								savingSection !== null ||
+								backendLogging.busy.value ||
+								backendLogging.needsRefresh.value
+							"
+							>{{ t('common.save') }}</UiButton
+						>
+					</template>
+					<form id="logging-settings-form" class="ui-settings-grid" @submit.prevent="saveLogging">
+						<section class="space-y-3">
+							<span class="text-xs font-semibold text-foreground">{{
+								t('settings.logging.frontendTitle')
+							}}</span>
 							<UiSelect
 								id="frontendLogLevelSelect"
 								v-model="form.frontendLogLevel"
+								:aria-label="t('settings.logging.frontendLabel')"
 								:disabled="savingSection !== null"
 							>
 								<option v-for="level in LOG_LEVELS" :key="level" :value="level">
 									{{ level.toUpperCase() }}
 								</option>
 							</UiSelect>
-						</UiFormField>
-						<div class="flex flex-wrap items-center justify-between gap-3">
-							<UiButton
-								type="submit"
-								appearance="solid"
-								tone="primary"
-								:loading="savingSection === 'logging'"
-								>{{ t('common.save') }}</UiButton
-							>
-							<p
-								v-if="sectionMessages.logging?.text"
-								class="text-sm"
-								:class="sectionMessages.logging.success ? 'text-success' : 'text-error'"
-							>
-								{{ sectionMessages.logging.text }}
-							</p>
-						</div>
+						</section>
+						<BackendLoggingPanel
+							:level="backendLogging.level.value"
+							:busy="backendLogging.busy.value"
+							:needs-refresh="backendLogging.needsRefresh.value"
+							@update:level="backendLogging.level.value = $event"
+						/>
 					</form>
-					<BackendLoggingPanel />
-				</div>
-				<p class="text-xs text-text-secondary">{{ t('settings.logging.description') }}</p>
-			</section>
+				</UiSettingsGroup>
+			</div>
 		</fieldset>
 		<fieldset v-else :disabled="needsRefresh || editor.saving.value" class="space-y-6 p-6">
-			<p v-if="loadError" class="rounded border border-error/40 bg-error/5 p-3 text-sm text-error">
-				{{ loadError }}
-			</p>
 			<section class="settings-section-content">
 				<h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.popupEditor.title') }}</h3>
 				<form
@@ -240,13 +272,6 @@
 							:loading="savingSection === 'popup-editor'"
 							>{{ t('common.save') }}</UiButton
 						>
-						<p
-							v-if="sectionMessages['popup-editor']?.text"
-							class="text-sm"
-							:class="sectionMessages['popup-editor'].success ? 'text-success' : 'text-error'"
-						>
-							{{ sectionMessages['popup-editor'].text }}
-						</p>
 					</div>
 				</form>
 			</section>
@@ -281,13 +306,6 @@
 							:loading="savingSection === 'popup-file-manager'"
 							>{{ t('common.save') }}</UiButton
 						>
-						<p
-							v-if="sectionMessages['popup-file-manager']?.text"
-							class="text-sm"
-							:class="sectionMessages['popup-file-manager'].success ? 'text-success' : 'text-error'"
-						>
-							{{ sectionMessages['popup-file-manager'].text }}
-						</p>
 					</div>
 				</form>
 			</section>
@@ -320,13 +338,6 @@
 							:loading="savingSection === 'share-editor-tabs'"
 							>{{ t('common.save') }}</UiButton
 						>
-						<p
-							v-if="sectionMessages['share-editor-tabs']?.text"
-							class="text-sm"
-							:class="sectionMessages['share-editor-tabs'].success ? 'text-success' : 'text-error'"
-						>
-							{{ sectionMessages['share-editor-tabs'].text }}
-						</p>
 					</div>
 				</form>
 			</section>
@@ -365,13 +376,6 @@
 							:loading="savingSection === 'sidebar-persistent'"
 							>{{ t('common.save') }}</UiButton
 						>
-						<p
-							v-if="sectionMessages['sidebar-persistent']?.text"
-							class="text-sm"
-							:class="sectionMessages['sidebar-persistent'].success ? 'text-success' : 'text-error'"
-						>
-							{{ sectionMessages['sidebar-persistent'].text }}
-						</p>
 					</div>
 				</form>
 			</section>
@@ -410,13 +414,6 @@
 							:loading="savingSection === 'command-input-sync'"
 							>{{ t('common.save') }}</UiButton
 						>
-						<p
-							v-if="sectionMessages['command-input-sync']?.text"
-							class="text-sm"
-							:class="sectionMessages['command-input-sync'].success ? 'text-success' : 'text-error'"
-						>
-							{{ sectionMessages['command-input-sync'].text }}
-						</p>
 					</div>
 				</form>
 			</section>
@@ -453,13 +450,6 @@
 							:loading="savingSection === 'connection-tags'"
 							>{{ t('common.save') }}</UiButton
 						>
-						<p
-							v-if="sectionMessages['connection-tags']?.text"
-							class="text-sm"
-							:class="sectionMessages['connection-tags'].success ? 'text-success' : 'text-error'"
-						>
-							{{ sectionMessages['connection-tags'].text }}
-						</p>
 					</div>
 				</form>
 			</section>
@@ -498,13 +488,6 @@
 							:loading="savingSection === 'quick-command-tags'"
 							>{{ t('common.save') }}</UiButton
 						>
-						<p
-							v-if="sectionMessages['quick-command-tags']?.text"
-							class="text-sm"
-							:class="sectionMessages['quick-command-tags'].success ? 'text-success' : 'text-error'"
-						>
-							{{ sectionMessages['quick-command-tags'].text }}
-						</p>
 					</div>
 				</form>
 			</section>
@@ -545,13 +528,6 @@
 							:loading="savingSection === 'quick-command-search'"
 							>{{ t('common.save') }}</UiButton
 						>
-						<p
-							v-if="sectionMessages['quick-command-search']?.text"
-							class="text-sm"
-							:class="sectionMessages['quick-command-search'].success ? 'text-success' : 'text-error'"
-						>
-							{{ sectionMessages['quick-command-search'].text }}
-						</p>
 					</div>
 				</form>
 			</section>
@@ -590,13 +566,6 @@
 							:loading="savingSection === 'quick-command-compact'"
 							>{{ t('common.save') }}</UiButton
 						>
-						<p
-							v-if="sectionMessages['quick-command-compact']?.text"
-							class="text-sm"
-							:class="sectionMessages['quick-command-compact'].success ? 'text-success' : 'text-error'"
-						>
-							{{ sectionMessages['quick-command-compact'].text }}
-						</p>
 					</div>
 				</form>
 			</section>
@@ -633,13 +602,6 @@
 							:loading="savingSection === 'terminal-scrollback'"
 							>{{ t('settings.terminalScrollback.saveButton') }}</UiButton
 						>
-						<p
-							v-if="sectionMessages['terminal-scrollback']?.text"
-							class="text-sm"
-							:class="sectionMessages['terminal-scrollback'].success ? 'text-success' : 'text-error'"
-						>
-							{{ sectionMessages['terminal-scrollback'].text }}
-						</p>
 					</div>
 				</form>
 			</section>
@@ -700,13 +662,6 @@
 							:loading="savingSection === 'spreadsheet-preview'"
 							>{{ t('common.save') }}</UiButton
 						>
-						<p
-							v-if="sectionMessages['spreadsheet-preview']?.text"
-							class="text-sm"
-							:class="sectionMessages['spreadsheet-preview'].success ? 'text-success' : 'text-error'"
-						>
-							{{ sectionMessages['spreadsheet-preview'].text }}
-						</p>
 					</div>
 				</form>
 			</section>
@@ -744,13 +699,6 @@
 							:loading="savingSection === 'file-manager-delete'"
 							>{{ t('common.save') }}</UiButton
 						>
-						<p
-							v-if="sectionMessages['file-manager-delete']?.text"
-							class="text-sm"
-							:class="sectionMessages['file-manager-delete'].success ? 'text-success' : 'text-error'"
-						>
-							{{ sectionMessages['file-manager-delete'].text }}
-						</p>
 					</div>
 				</form>
 			</section>
@@ -791,13 +739,6 @@
 							:loading="savingSection === 'terminal-right-click'"
 							>{{ t('common.save') }}</UiButton
 						>
-						<p
-							v-if="sectionMessages['terminal-right-click']?.text"
-							class="text-sm"
-							:class="sectionMessages['terminal-right-click'].success ? 'text-success' : 'text-error'"
-						>
-							{{ sectionMessages['terminal-right-click'].text }}
-						</p>
 					</div>
 				</form>
 			</section>
@@ -864,13 +805,6 @@
 							:loading="savingSection === 'dashboard-resources'"
 							>{{ t('common.save') }}</UiButton
 						>
-						<p
-							v-if="sectionMessages['dashboard-resources']?.text"
-							class="text-sm"
-							:class="sectionMessages['dashboard-resources'].success ? 'text-success' : 'text-error'"
-						>
-							{{ sectionMessages['dashboard-resources'].text }}
-						</p>
 					</div>
 				</form>
 			</section>
@@ -906,13 +840,6 @@
 							:loading="savingSection === 'status-ip'"
 							>{{ t('common.save') }}</UiButton
 						>
-						<p
-							v-if="sectionMessages['status-ip']?.text"
-							class="text-sm"
-							:class="sectionMessages['status-ip'].success ? 'text-success' : 'text-error'"
-						>
-							{{ sectionMessages['status-ip'].text }}
-						</p>
 					</div>
 				</form>
 			</section>
@@ -963,13 +890,6 @@
 							:loading="savingSection === 'docker'"
 							>{{ t('settings.docker.saveButton') }}</UiButton
 						>
-						<p
-							v-if="sectionMessages.docker?.text"
-							class="text-sm"
-							:class="sectionMessages.docker.success ? 'text-success' : 'text-error'"
-						>
-							{{ sectionMessages.docker.text }}
-						</p>
 					</div>
 				</form>
 			</section>
@@ -997,13 +917,6 @@
 							:loading="savingSection === 'layout-lock'"
 							>{{ t('common.save') }}</UiButton
 						>
-						<p
-							v-if="sectionMessages['layout-lock']?.text"
-							class="text-sm"
-							:class="sectionMessages['layout-lock'].success ? 'text-success' : 'text-error'"
-						>
-							{{ sectionMessages['layout-lock'].text }}
-						</p>
 					</div>
 				</form>
 			</section>
@@ -1038,13 +951,6 @@
 							:loading="savingSection === 'nav-bar-visible'"
 							>{{ t('common.save') }}</UiButton
 						>
-						<p
-							v-if="sectionMessages['nav-bar-visible']?.text"
-							class="text-sm"
-							:class="sectionMessages['nav-bar-visible'].success ? 'text-success' : 'text-error'"
-						>
-							{{ sectionMessages['nav-bar-visible'].text }}
-						</p>
 					</div>
 				</form>
 			</section>

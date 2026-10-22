@@ -1,7 +1,7 @@
 import { onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAuthSession } from '@/features/auth/public';
-import { useFeedback } from '@/shared/feedback/public';
+import { useFeedback, useFeedbackMessage } from '@/shared/feedback/public';
 import { useRuntimeFeatureCapabilities } from '@/shared/capabilities/public';
 import { TargetRequestFailure, targetErrorKey } from '@/client/targets/target-types';
 import { readConnectionImportRequest } from '@nexus-terminal/shared/targets/connections/http-codec';
@@ -39,6 +39,13 @@ export function useConnectionEditor(
 	const loading = ref(false);
 	const ready = ref(false);
 	const message = ref('');
+	let failureCause: unknown;
+	const messageSuccess = ref(false);
+	useFeedbackMessage(
+		() => message.value,
+		() => (messageSuccess.value ? 'success' : 'error'),
+		() => failureCause,
+	);
 	const receipts = ref<ConnectionImportReceipt[]>([]);
 	let generation = 0;
 	let controller: AbortController | null = null;
@@ -53,6 +60,8 @@ export function useConnectionEditor(
 		snapshot.value = null;
 		credential.value = null;
 		message.value = '';
+		failureCause = undefined;
+		messageSuccess.value = false;
 		receipts.value = [];
 	}
 
@@ -68,10 +77,13 @@ export function useConnectionEditor(
 		const signal = controller.signal;
 		loading.value = true;
 		message.value = '';
+		failureCause = undefined;
+		messageSuccess.value = false;
 		try {
 			await work(signal);
 		} catch (cause) {
 			if (current === generation && !signal.aborted) {
+				failureCause = cause;
 				message.value = t('connections.failures.' + targetErrorKey(cause, operation));
 			}
 		} finally {
@@ -115,6 +127,7 @@ export function useConnectionEditor(
 		if (signal.aborted) {
 			return;
 		}
+		messageSuccess.value = true;
 		message.value = t('connections.saved');
 		try {
 			const items = await data.load(true);

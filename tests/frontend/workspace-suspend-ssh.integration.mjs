@@ -62,9 +62,6 @@ try {
 		tagIds: [],
 		jumpIds: [],
 		notes: null,
-		rdpRemoteApp: null,
-		rdpRemoteAppDirectory: null,
-		rdpRemoteAppArguments: null,
 	});
 	assert.equal(
 		(await app.targets.credentials.set(target.id, target.version, { kind: 'ssh_key', sshKeyId: key.id })).status,

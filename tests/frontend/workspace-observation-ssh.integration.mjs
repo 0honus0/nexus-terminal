@@ -81,9 +81,6 @@ try {
 		tagIds: [],
 		jumpIds: [],
 		notes: null,
-		rdpRemoteApp: null,
-		rdpRemoteAppDirectory: null,
-		rdpRemoteAppArguments: null,
 	};
 	const unavailableTarget = await app.targets.create({
 		...targetInput,

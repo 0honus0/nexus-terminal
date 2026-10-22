@@ -97,7 +97,7 @@ test('password change UI updates the real login credential and can restore the t
 						newPassword: readRect('#newPassword'),
 						confirm: readRect('#confirmPassword'),
 						submit: readRect('section:has(#currentPassword) button[type="submit"]'),
-						message: readRect('section:has(#currentPassword) [role="status"]'),
+						message: readRect('.ui-notification[data-kind="error"]'),
 					},
 				};
 			});
@@ -125,7 +125,11 @@ test('password change UI updates the real login credential and can restore the t
 				)
 				.catch(() => undefined);
 			await submit.click();
-			await expect(form).toContainText('Please fill in all password fields.');
+			await expect(
+				page
+					.locator('.ui-notification[data-kind="error"]')
+					.filter({ hasText: 'Please fill in all password fields.' }),
+			).toBeVisible();
 			expect(await requestPromise).toBeUndefined();
 
 			await currentPassword.fill(E2E_ADMIN.password);
@@ -140,7 +144,11 @@ test('password change UI updates the real login credential and can restore the t
 				)
 				.catch(() => undefined);
 			await submit.click();
-			await expect(form).toContainText('New password and confirmation do not match.');
+			await expect(
+				page
+					.locator('.ui-notification[data-kind="error"]')
+					.filter({ hasText: 'New password and confirmation do not match.' }),
+			).toBeVisible();
 			expect(await mismatchRequest).toBeUndefined();
 		});
 
@@ -152,7 +160,11 @@ test('password change UI updates the real login credential and can restore the t
 			);
 			await submit.click();
 			expect((await responsePromise).status()).toBe(401);
-			await expect(form).toContainText('The username, password or verification code is incorrect.');
+			await expect(
+				page
+					.locator('.ui-notification[data-kind="error"]')
+					.filter({ hasText: 'The username, password or verification code is incorrect.' }),
+			).toBeVisible();
 			await expect(currentPassword).toHaveValue('');
 			await expect(newPassword).toHaveValue('');
 			await expect(confirmPassword).toHaveValue('');
@@ -322,7 +334,11 @@ test('passkey settings UI registers, renames, reloads, and deletes a real creden
 				page.on('request', countRename);
 				try {
 					await row.getByRole('button', { name: 'Save', exact: true }).click();
-					await expect(panel).toContainText('Check the input format and length.');
+					await expect(
+						page
+							.locator('.ui-notification[data-kind="error"]')
+							.filter({ hasText: 'Check the input format and length.' }),
+					).toBeVisible();
 					expect(dispatched).toBe(0);
 				} finally {
 					page.off('request', countRename);

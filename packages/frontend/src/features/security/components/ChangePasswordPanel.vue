@@ -1,10 +1,11 @@
 <script setup lang="ts">
-	import { onBeforeUnmount, onDeactivated, ref } from 'vue';
+	import { computed, onBeforeUnmount, onDeactivated, ref } from 'vue';
 	import { useRouter } from 'vue-router';
 	import { useI18n } from 'vue-i18n';
 	import { authErrorKey, useAuthSession } from '@/features/auth/public';
-	import { UiButton, UiFormField, UiInput } from '@/foundation/ui';
+	import { UiButton, UiFormField, UiInput, UiSettingsGroup } from '@/foundation/ui';
 	import { useFeedback } from '@/shared/feedback/public';
+	import { isNetworkFailure } from '@/client/http/network-failure';
 
 	const { t } = useI18n();
 	const feedback = useFeedback();
@@ -20,6 +21,7 @@
 	const confirmPassword = ref('');
 	const loading = ref(false);
 	const message = ref('');
+	const canSubmit = computed(() => Boolean(currentPassword.value && newPassword.value && confirmPassword.value));
 
 	function clearPasswords(): void {
 		currentPassword.value = '';
@@ -53,7 +55,7 @@
 		} catch (cause) {
 			if (!disposed) {
 				message.value = t(authErrorKey(cause));
-				feedback.notifyError(message.value);
+				if (!isNetworkFailure(cause)) feedback.notifyError(message.value);
 			}
 		} finally {
 			if (!disposed) {
@@ -80,9 +82,19 @@
 </script>
 
 <template>
-	<section>
-		<h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.changePassword.title') }}</h3>
-		<form class="space-y-4" @submit.prevent="submit">
+	<UiSettingsGroup :title="t('settings.changePassword.title')" icon="fa-solid fa-key" tone="success">
+		<template #actions>
+			<UiButton
+				type="submit"
+				form="change-password-form"
+				:appearance="canSubmit ? 'solid' : 'soft'"
+				:tone="canSubmit ? 'primary' : 'neutral'"
+				:loading="loading"
+				:disabled="!canSubmit || loading"
+				>{{ t('settings.changePassword.submit') }}</UiButton
+			>
+		</template>
+		<form id="change-password-form" class="space-y-4" @submit.prevent="submit">
 			<UiFormField :label="t('settings.changePassword.currentPassword')" for-id="currentPassword">
 				<UiInput
 					id="currentPassword"
@@ -97,14 +109,6 @@
 			<UiFormField :label="t('settings.changePassword.confirmPassword')" for-id="confirmPassword">
 				<UiInput id="confirmPassword" v-model="confirmPassword" type="password" autocomplete="new-password" />
 			</UiFormField>
-			<div class="flex items-center justify-between gap-4">
-				<UiButton type="submit" appearance="solid" tone="primary" :loading="loading">{{
-					t('settings.changePassword.submit')
-				}}</UiButton>
-				<p v-if="message" class="text-sm text-error" role="status">
-					{{ message }}
-				</p>
-			</div>
 		</form>
-	</section>
+	</UiSettingsGroup>
 </template>

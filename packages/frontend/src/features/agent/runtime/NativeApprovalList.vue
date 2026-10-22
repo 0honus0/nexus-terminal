@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { computed, onBeforeUnmount, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton } from '@/foundation/ui';
+	import { UiButton, UiTextarea } from '@/foundation/ui';
 	import type { ConnectionSummary } from '@/features/connections/public';
 	import type { NativeApproval, NativeRunAction } from '../model/native-run-types';
 
@@ -149,13 +149,16 @@
 					<label class="mb-1.5 block text-[11px] font-medium text-text-secondary">
 						{{ t('agent.approvals.feedbackLabel') }}
 					</label>
-					<textarea
+					<UiTextarea
 						v-model="feedback"
-						rows="2"
+						density="compact"
+						:min-rows="2"
+						resize="none"
 						maxlength="2000"
-						class="w-full resize-none rounded-md border border-border/70 bg-card px-2.5 py-2 text-[11px] text-foreground outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/15"
+						class="w-full text-[11px]"
 						:placeholder="t('agent.approvals.feedbackPlaceholder')"
-					></textarea>
+						:aria-label="t('agent.approvals.feedbackLabel')"
+					/>
 					<div class="mt-2 flex justify-end gap-1.5">
 						<UiButton
 							density="compact"

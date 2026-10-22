@@ -1,6 +1,7 @@
 <script setup lang="ts">
 	import { computed, onBeforeUnmount, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
+	import { UiButton, UiInput } from '@/foundation/ui';
 	import { createNativeThreadApi } from '../api/native-thread-api';
 	import { useNativeThreads } from '../composables/use-native-threads';
 	import type { NativeThread } from '../model/native-thread-types';
@@ -20,8 +21,7 @@
 		() => props.active,
 		(value) => emit('select', value),
 	);
-	const { items, nextCursor, title, selected, pending, pendingDelete, inspected, deleteInspected, busy, notice } =
-		editor;
+	const { items, nextCursor, title, selected, pending, pendingDelete, inspected, deleteInspected, busy } = editor;
 	const query = ref('');
 	const scroller = ref<HTMLElement | null>(null);
 	const confirmingDeleteId = ref<string | null>(null);
@@ -80,12 +80,6 @@
 		}
 		clearDeleteConfirmation();
 		void editor.remove(item);
-	}
-
-	function noticeText(): string {
-		return notice.value === 'deleteThreadActive'
-			? t('agent.operations.deleteThreadActiveHint')
-			: t('agent.settings.appManagement.' + notice.value);
 	}
 
 	async function createThread(): Promise<void> {
@@ -149,53 +143,58 @@
 				</div>
 			</div>
 			<div class="flex items-center gap-0.5">
-				<button
+				<UiButton
 					v-if="editor.refreshRequired.value"
-					type="button"
-					class="flex h-7 w-7 items-center justify-center rounded-lg text-warning transition-colors hover:bg-warning/10 disabled:opacity-50"
+					density="compact"
+					appearance="ghost"
+					tone="warning"
+					icon-only
 					:title="t('common.retry')"
 					:aria-label="t('common.retry')"
 					:disabled="disabled || busy || !!pending"
 					@click="editor.refresh"
 				>
 					<i class="fa-solid fa-rotate text-[9px]" aria-hidden="true"></i>
-				</button>
-				<button
-					type="button"
-					class="flex h-7 w-7 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-card/70 hover:text-foreground disabled:opacity-50"
+				</UiButton>
+				<UiButton
+					density="compact"
+					appearance="ghost"
+					tone="primary"
+					icon-only
 					:title="t('agent.operations.newThread')"
 					:aria-label="t('agent.operations.newThread')"
 					:disabled="!canCreate"
 					@click="createThread"
 				>
-					<i class="fa-solid fa-plus text-[9px] text-primary" aria-hidden="true"></i>
-				</button>
+					<i class="fa-solid fa-plus text-[9px]" aria-hidden="true"></i>
+				</UiButton>
 			</div>
 		</div>
 
 		<div class="shrink-0 border-b border-border/40 px-2.5 py-2">
-			<div class="relative flex items-center">
-				<i
-					class="fa-solid fa-magnifying-glass pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-text-secondary"
-					aria-hidden="true"
-				></i>
-				<input
-					v-model="query"
-					type="search"
-					data-no-highlight
-					class="h-7 w-full rounded-lg border border-transparent bg-background/55 pl-7.5 pr-7 text-[11px] text-foreground outline-none transition-all placeholder:text-text-secondary/40 hover:bg-card/65 focus:border-primary/20 focus:bg-card/80 focus:ring-2 focus:ring-primary/10"
-					:placeholder="t('agent.operations.searchThreads')"
-				/>
-				<button
-					v-if="query"
-					type="button"
-					:aria-label="t('agent.operations.clearSearch')"
-					class="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-text-secondary hover:text-foreground"
-					@click="query = ''"
-				>
-					<i class="fa-solid fa-xmark" aria-hidden="true"></i>
-				</button>
-			</div>
+			<UiInput
+				v-model="query"
+				type="search"
+				density="compact"
+				trailing-interactive
+				class="w-full"
+				:placeholder="t('agent.operations.searchThreads')"
+				:aria-label="t('agent.operations.searchThreads')"
+			>
+				<template #leading>
+					<i class="fa-solid fa-magnifying-glass text-[10px]" aria-hidden="true"></i>
+				</template>
+				<template v-if="query" #trailing>
+					<button
+						type="button"
+						:aria-label="t('agent.operations.clearSearch')"
+						class="ui-focusable flex h-5 w-5 items-center justify-center rounded-md text-[10px] text-text-secondary hover:bg-header hover:text-foreground"
+						@click="query = ''"
+					>
+						<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+					</button>
+				</template>
+			</UiInput>
 		</div>
 
 		<div ref="scroller" class="min-h-0 flex-1 overflow-y-auto px-2 py-1.5" @scroll.passive="handleScroll">
@@ -242,14 +241,12 @@
 						</div>
 					</div>
 				</button>
-				<button
-					type="button"
-					class="my-1 mr-1 flex w-7 shrink-0 items-center justify-center rounded-md text-[10px] transition-colors disabled:cursor-not-allowed disabled:opacity-35"
-					:class="
-						confirmingDeleteId === item.id
-							? 'bg-error/10 text-error'
-							: 'text-text-secondary/45 hover:bg-error/10 hover:text-error'
-					"
+				<UiButton
+					density="compact"
+					:appearance="confirmingDeleteId === item.id ? 'soft' : 'ghost'"
+					tone="danger"
+					icon-only
+					class="my-1 mr-1 shrink-0"
 					:title="
 						confirmingDeleteId === item.id
 							? t('agent.operations.confirmDeleteThread')
@@ -264,7 +261,7 @@
 					@click="requestDelete(item)"
 				>
 					<i class="fa-regular fa-trash-can" aria-hidden="true"></i>
-				</button>
+				</UiButton>
 			</div>
 
 			<div
@@ -278,10 +275,7 @@
 			</div>
 		</div>
 
-		<div
-			v-if="pending || pendingDelete || (notice && notice !== 'saved')"
-			class="shrink-0 border-t border-border/45 p-2.5"
-		>
+		<div v-if="pending || pendingDelete" class="shrink-0 border-t border-border/45 p-2.5">
 			<template v-if="pending">
 				<p class="text-[11px] leading-4 text-warning" role="status">{{ t('agent.nativeThreads.unknown') }}</p>
 				<details class="mt-1 text-[10px] text-text-secondary">
@@ -289,30 +283,25 @@
 					<code class="mt-1 block break-all">{{ pending.operationId }}</code>
 				</details>
 				<div class="mt-2 flex flex-wrap gap-1.5">
-					<button
-						type="button"
-						class="rounded-md border border-border/70 px-2 py-1 text-[11px] text-text-secondary hover:bg-header disabled:opacity-50"
-						:disabled="disabled || busy"
-						@click="editor.refresh"
-					>
+					<UiButton density="compact" appearance="soft" :disabled="disabled || busy" @click="editor.refresh">
 						{{ t('agent.nativeRun.inspect') }}
-					</button>
-					<button
-						type="button"
-						class="rounded-md border border-border/70 px-2 py-1 text-[11px] text-text-secondary hover:bg-header disabled:opacity-50"
+					</UiButton>
+					<UiButton
+						density="compact"
+						appearance="soft"
 						:disabled="disabled || busy || !inspected || editor.refreshRequired.value"
 						@click="retryPending"
 					>
 						{{ t('agent.nativeThreads.retry') }}
-					</button>
-					<button
-						type="button"
-						class="rounded-md border border-border/70 px-2 py-1 text-[11px] text-text-secondary hover:bg-header disabled:opacity-50"
+					</UiButton>
+					<UiButton
+						density="compact"
+						appearance="soft"
 						:disabled="disabled || busy || !inspected"
 						@click="editor.abandon"
 					>
 						{{ t('agent.nativeThreads.abandon') }}
-					</button>
+					</UiButton>
 				</div>
 			</template>
 			<template v-else-if="pendingDelete">
@@ -324,35 +313,27 @@
 					<code class="mt-1 block break-all">{{ pendingDelete.thread.id }}</code>
 				</details>
 				<div class="mt-2 flex flex-wrap gap-1.5">
-					<button
-						type="button"
-						class="rounded-md border border-border/70 px-2 py-1 text-[11px] text-text-secondary hover:bg-header disabled:opacity-50"
-						:disabled="disabled || busy"
-						@click="editor.refresh"
-					>
+					<UiButton density="compact" appearance="soft" :disabled="disabled || busy" @click="editor.refresh">
 						{{ t('agent.nativeRun.inspect') }}
-					</button>
-					<button
-						type="button"
-						class="rounded-md border border-border/70 px-2 py-1 text-[11px] text-text-secondary hover:bg-header disabled:opacity-50"
+					</UiButton>
+					<UiButton
+						density="compact"
+						appearance="soft"
 						:disabled="disabled || busy || !deleteInspected || editor.refreshRequired.value"
 						@click="editor.retryDelete"
 					>
 						{{ t('agent.nativeThreads.retry') }}
-					</button>
-					<button
-						type="button"
-						class="rounded-md border border-border/70 px-2 py-1 text-[11px] text-text-secondary hover:bg-header disabled:opacity-50"
+					</UiButton>
+					<UiButton
+						density="compact"
+						appearance="soft"
 						:disabled="disabled || busy || !deleteInspected"
 						@click="editor.abandonDelete"
 					>
 						{{ t('agent.nativeThreads.abandon') }}
-					</button>
+					</UiButton>
 				</div>
 			</template>
-			<p v-else class="text-[11px] leading-4 text-text-secondary" role="status">
-				{{ noticeText() }}
-			</p>
 		</div>
 	</section>
 </template>

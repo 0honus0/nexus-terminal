@@ -5,16 +5,13 @@ import { captureFunctionalScreenshot } from '../../support/functional-screenshot
 import { step } from '../../support/steps';
 import { E2E_ADMIN } from '../../support/test-identity';
 import { E2E_URLS } from '../../support/test-env';
-import { getTestSettings, updateTestSettings, restartTestBackend } from '../../support/settings';
+import { getTestSettings, updateTestSettings } from '../../support/settings';
 import { readAccessIpBlacklist, readAccessIpBlacklistRemove } from '../../../../packages/shared/src/access/http';
 
 const TEST_BLOCKED_IP = '198.51.100.24';
 const headers = { Origin: E2E_URLS.frontendOrigin };
 
-test('IP blacklist UI saves policy, activates it after restart, and removes a blocked IP', async ({
-	page,
-	context,
-}, testInfo) => {
+test('IP blacklist UI applies policy without restart and removes a blocked IP', async ({ page, context }, testInfo) => {
 	await loginAsInitialAdmin(context.request);
 	await setUiLanguage(context.request);
 	const original = await getTestSettings(context.request);
@@ -27,11 +24,9 @@ test('IP blacklist UI saves policy, activates it after restart, and removes a bl
 		await page.goto('/settings');
 		await page.getByRole('tab', { name: 'IP Control', exact: true }).click();
 		const blacklist = page
-			.locator('section.ui-solid-panel')
+			.locator('section.ui-settings-group')
 			.filter({ has: page.getByRole('heading', { name: 'IP Blacklist Management', exact: true }) });
-		// UiCheckbox renders through Reka CheckboxRoot; use the public control
-		// marker instead of assuming the primitive retains a custom switch role.
-		const toggle = blacklist.locator('[data-ui="checkbox"]').first();
+		const toggle = blacklist.getByRole('switch');
 		await expect(toggle).toHaveAttribute('aria-checked', 'true');
 		await blacklist.scrollIntoViewIfNeeded();
 		const metrics = await blacklist.evaluate((element) => {
@@ -71,7 +66,10 @@ test('IP blacklist UI saves policy, activates it after restart, and removes a bl
 			);
 			await button.click();
 			expect((await response).ok()).toBe(true);
-			await expect(button).toBeEnabled();
+			await expect(toggle).toBeEnabled();
+			await expect(page.locator('.ui-notification[data-kind="success"]').last()).toContainText(
+				'Saved and applied.',
+			);
 		}
 
 		await step('toggle saves only its own field and preserves neighbouring drafts', async () => {
@@ -93,9 +91,8 @@ test('IP blacklist UI saves policy, activates it after restart, and removes a bl
 		});
 		await step('invalid thresholds do not dispatch a policy mutation', async () => {
 			const before = await getTestSettings(context.request);
-			const form = blacklist.locator('form');
 			await blacklist.locator('#maxLoginAttempts').fill('0');
-			await form.locator('button[type="submit"]').click();
+			await blacklist.locator('button[type="submit"]').click();
 			expect(
 				await blacklist
 					.locator('#maxLoginAttempts')
@@ -104,7 +101,7 @@ test('IP blacklist UI saves policy, activates it after restart, and removes a bl
 			expect((await getTestSettings(context.request)).version).toBe(before.version);
 			await blacklist.locator('#maxLoginAttempts').fill('5');
 			await blacklist.locator('#loginBanDuration').fill('0');
-			await form.locator('button[type="submit"]').click();
+			await blacklist.locator('button[type="submit"]').click();
 			expect(
 				await blacklist
 					.locator('#loginBanDuration')
@@ -112,21 +109,19 @@ test('IP blacklist UI saves policy, activates it after restart, and removes a bl
 			).toBe(false);
 			expect((await getTestSettings(context.request)).version).toBe(before.version);
 		});
-		await step('save thresholds without falsely claiming the new policy is active', async () => {
+		await step('save thresholds and activate the policy immediately', async () => {
 			await blacklist.locator('#maxLoginAttempts').fill('2');
 			await blacklist.locator('#loginBanDuration').fill('420');
-			await savePolicy(blacklist.locator('form button[type="submit"]'));
+			await savePolicy(blacklist.locator('button[type="submit"]'));
 			const saved = await getTestSettings(context.request);
 			expect(saved.policy).toMatchObject({ maxLoginAttempts: 2, loginBanDuration: 420 });
-			expect(saved.effectiveVersion).toBe(original.effectiveVersion);
-			expect(saved.requiresRestart).toBe(true);
+			expect(saved.effectiveVersion).toBe(original.requiresRestart ? original.effectiveVersion : saved.version);
+			expect(saved.requiresRestart).toBe(original.requiresRestart);
 		});
-		await step('activate durable policy, produce a real ban, and remove it through the UI', async () => {
-			await restartTestBackend();
-			await loginAsInitialAdmin(context.request);
+		await step('produce a real ban without restart and remove it through the UI', async () => {
 			const active = await getTestSettings(context.request);
-			expect(active.effectiveVersion).toBe(active.version);
-			expect(active.requiresRestart).toBe(false);
+			expect(active.effectiveVersion).toBe(original.requiresRestart ? original.effectiveVersion : active.version);
+			expect(active.requiresRestart).toBe(original.requiresRestart);
 			for (let attempt = 0; attempt < 2; attempt += 1) {
 				const failed = await context.request.post('/api/v1/auth/login', {
 					headers: { ...headers, 'X-Forwarded-For': TEST_BLOCKED_IP },

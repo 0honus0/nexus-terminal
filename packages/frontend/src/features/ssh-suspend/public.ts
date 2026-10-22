@@ -4,6 +4,7 @@ export const loadSuspendedSessionsModal = () => import('./components/SuspendedSe
 
 export {
 	useSuspendedSessions,
+	startSuspendedSessionsSync,
 	applySuspendedAutoTermination,
 	refreshSuspendedSessionsCatalog,
 	resetSuspendedSessionsCatalog,

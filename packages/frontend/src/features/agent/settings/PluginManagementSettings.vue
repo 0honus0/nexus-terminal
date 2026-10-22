@@ -1,26 +1,36 @@
 <script setup lang="ts">
 	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
-	import { usePluginManagement } from '../composables/use-plugin-management';
-	import AppScopedSettings from './AppScopedSettings.vue';
+	import { UiButton, UiCheckbox, UiInfoHint, UiInput, UiTextarea } from '@/foundation/ui';
+	import type { usePluginManagement } from '../composables/use-plugin-management';
 	import PluginRepositorySettings from './PluginRepositorySettings.vue';
 	import PluginDataEditor from './PluginDataEditor.vue';
 	import type { PluginInstallation } from '../model/plugin-types';
 	import type { ManagedApp } from '../model/app-management-types';
 	import type { AgentCapability } from '@nexus-terminal/shared/agent/governance/values';
-	import { formatAgentDate } from '../locale-format';
 
-	const { t, te, locale } = useI18n();
-	const props = withDefaults(defineProps<{ active?: boolean; revision?: number; apps?: ManagedApp[] }>(), {
-		active: true,
-		revision: 0,
+	const { t, te } = useI18n();
+	const props = withDefaults(
+		defineProps<{
+			model: ReturnType<typeof usePluginManagement>;
+			active?: boolean;
+			revision?: number;
+			apps?: ManagedApp[];
+			embedded?: boolean;
+		}>(),
+		{
+			active: true,
+			revision: 0,
 
-		apps: () => [],
-	});
+			apps: () => [],
+
+			embedded: false,
+		},
+	);
 
 	const emit = defineEmits<{ recommend: [] }>();
 	const {
+		officialPublisherIds,
 		publishers,
 		installations,
 		versions,
@@ -31,29 +41,24 @@
 		publicKeyPem,
 		mutationUnknown,
 		acknowledged,
-		uploadAppId,
-		file,
 		operation,
 		canWrite,
 		load,
 		trust,
 		revoke,
-		preparePackage,
 		prepareCatalogEntry,
 		trustCatalogPublisher,
-		retire,
 		newIntent,
-	} = usePluginManagement(() => props.active);
+	} = props.model;
 	const showPublishers = ref(false);
-	const packageInput = ref<HTMLInputElement | null>(null);
 	const blocked = computed(() => !props.active || !canWrite());
 	watch(
-		() => props.revision,
-		() => {
-			if (props.active) void load();
+		() => [props.active, props.revision] as const,
+		([active, revision], previous) => {
+			if (active && (!previous || !previous[0] || previous[1] !== revision)) void load();
 		},
+		{ immediate: true },
 	);
-	const activeInstallations = computed(() => installations.value.filter((item) => item.status !== 'removed'));
 	const removedInstallations = computed(() => installations.value.filter((item) => item.status === 'removed'));
 
 	function installationName(installation: PluginInstallation): string {
@@ -63,53 +68,18 @@
 		);
 	}
 
-	function installationApp(installation: PluginInstallation): ManagedApp | undefined {
-		return props.apps.find((app) => app.id === installation.appId);
-	}
-
-	function installationState(installation: PluginInstallation): string {
-		if (installation.status === 'draining') return t('agent.settings.plugins.stateDraining');
-		const app = installationApp(installation);
-		if (app?.enabled) return t('agent.settings.plugins.stateEnabled');
-		if (app) return t('agent.settings.plugins.stateDisabled');
-		return t('agent.settings.plugins.stateInstalled');
-	}
-
-	function installationStateClass(installation: PluginInstallation): string {
-		if (installation.status === 'draining') return 'bg-warning/10 text-warning';
-		const app = installationApp(installation);
-		return app?.enabled ? 'bg-success/10 text-success' : 'bg-header text-text-secondary';
-	}
-
 	function pluginCapabilityName(capability: AgentCapability): string {
 		const key = `agent.settings.apps.capabilities.${capability}.name`;
 		return te(key) ? t(key) : t('agent.settings.apps.capabilityUnknownName');
 	}
-
-	function installationUpdatedAt(installation: PluginInstallation): string {
-		return formatAgentDate(locale.value, new Date(installation.updatedAt), { dateStyle: 'medium' });
-	}
-
-	async function choosePackage(event: Event, appId: string): Promise<void> {
-		if (event.target instanceof HTMLInputElement) {
-			file.value = event.target.files?.[0] ?? null;
-			event.target.value = '';
-			candidate.value = null;
-			uploadAppId.value = appId;
-			await preparePackage();
-		}
-	}
-
-	function openPackagePicker(): void {
-		packageInput.value?.click();
-	}
 </script>
 <template>
 	<section
-		class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs"
+		:class="embedded ? 'min-w-0' : 'overflow-hidden rounded-2xl border border-border bg-card shadow-xs'"
 		:aria-label="t('agent.pluginManagement.title')"
 	>
 		<div
+			v-if="!embedded"
 			class="agent-settings-head flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3.5 sm:px-5 sm:py-4"
 		>
 			<div class="flex items-center gap-2">
@@ -120,29 +90,16 @@
 					>{{ t('agent.settings.plugins.ecosystemBadge') }}</span
 				><UiInfoHint :text="t('agent.settings.plugins.remoteRepositoriesHint')" />
 			</div>
-			<UiButton type="button" appearance="soft" tone="neutral" :disabled="operation.busy.value" @click="load"
-				><i
-					:class="
-						operation.busy.value
-							? 'fa-solid fa-arrows-rotate fa-spin text-primary'
-							: 'fa-solid fa-arrows-rotate text-text-secondary'
-					"
-					class="text-xs"
-					aria-hidden="true"
-				></i
-				>{{ t('agent.pluginManagement.reload') }}</UiButton
-			>
 		</div>
-		<div class="space-y-5 p-4 sm:p-5">
-			<p v-if="operation.notice.value" role="status" class="rounded-lg bg-header/25 px-3 py-2 text-xs">
-				{{ t('agent.settings.appManagement.' + operation.notice.value) }}
-			</p>
-			<p
+		<div :class="embedded ? 'space-y-4' : 'space-y-5 p-4 sm:p-5'">
+			<div
 				v-if="operation.refreshRequired.value"
-				class="rounded-lg border border-warning/25 bg-warning/5 px-3 py-2 text-xs text-warning"
+				class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2 text-xs text-warning"
 			>
-				{{ t('agent.settings.appManagement.refreshRequired') }}
-			</p>
+				<UiButton type="button" density="compact" :disabled="operation.busy.value" @click="load">{{
+					t('agent.pluginManagement.reload')
+				}}</UiButton>
+			</div>
 
 			<template v-if="mutationUnknown">
 				<p class="text-sm text-warning">{{ t('agent.pluginManagement.unknown') }}</p>
@@ -154,35 +111,7 @@
 					>{{ t('agent.pluginManagement.newIntent') }}</UiButton
 				>
 			</template>
-			<AppScopedSettings :title="t('agent.pluginManagement.upload')">
-				<template #default="{ appId }">
-					<p class="text-sm">{{ t('agent.pluginManagement.uploadHelp') }}</p>
-					<div class="flex flex-wrap items-center gap-2">
-						<UiButton
-							type="button"
-							appearance="soft"
-							tone="neutral"
-							:disabled="blocked"
-							@click="openPackagePicker"
-						>
-							<i class="fa-solid fa-file-arrow-up text-xs text-primary" aria-hidden="true"></i>
-							{{ t('agent.settings.plugins.choosePackage') }}
-						</UiButton>
-						<input
-							ref="packageInput"
-							type="file"
-							class="hidden"
-							accept=".tar,application/x-tar"
-							:disabled="blocked"
-							:aria-label="t('agent.settings.plugins.choosePackage')"
-							@change="choosePackage($event, appId)"
-						/>
-						<span v-if="file" class="min-w-0 truncate text-xs text-text-secondary">
-							{{ file.name }} · {{ file.size }} B
-						</span>
-					</div>
-				</template>
-			</AppScopedSettings>
+
 			<div
 				v-if="candidate"
 				class="rounded-xl border border-primary/50 bg-primary/5 p-4 shadow-xs ring-1 ring-primary/20"
@@ -288,97 +217,17 @@
 				</div>
 			</div>
 
-			<div class="space-y-3">
-				<div class="flex flex-wrap items-center justify-between gap-2">
-					<h4 class="flex items-center gap-2 text-sm font-semibold text-foreground">
-						<i class="fa-solid fa-boxes-stacked text-[11px] text-primary" aria-hidden="true"></i>
-						{{ t('agent.settings.plugins.installed') }}
-						<span
-							class="rounded-full border border-border/60 bg-card px-2 py-0.5 font-mono text-[10px] text-text-secondary"
-							>{{ activeInstallations.length }}</span
-						>
-					</h4>
-				</div>
-				<p
-					v-if="!activeInstallations.length"
-					class="rounded-xl border border-dashed border-border/70 bg-header/10 py-6 text-center text-xs text-text-secondary"
-				>
-					{{ t('agent.settings.plugins.noneInstalled') }}
-				</p>
-				<article
-					v-for="installation in activeInstallations"
-					:key="installation.appId"
-					class="overflow-hidden rounded-xl border border-border/70 bg-card shadow-2xs transition-colors hover:bg-header/20"
-				>
-					<div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-						<div class="flex min-w-0 items-start gap-3">
-							<div
-								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-success/20 bg-success/10 text-success"
-							>
-								<i
-									:class="
-										installation.status === 'draining'
-											? 'fa-solid fa-hourglass-half'
-											: 'fa-solid fa-puzzle-piece'
-									"
-									class="text-base"
-									aria-hidden="true"
-								></i>
-							</div>
-							<div class="min-w-0">
-								<div class="flex flex-wrap items-center gap-2">
-									<p class="break-words text-sm font-semibold text-foreground">
-										{{ installationName(installation) }}
-									</p>
-									<span
-										class="rounded-md border border-border/60 bg-header/40 px-1.5 py-0.5 font-mono text-[10px] text-text-secondary"
-										>v{{ installation.version }}</span
-									>
-									<span
-										class="rounded-full px-2 py-0.5 text-[10px] font-medium"
-										:class="installationStateClass(installation)"
-										>{{ installationState(installation) }}</span
-									>
-								</div>
-							</div>
-						</div>
-						<div class="flex shrink-0 flex-wrap justify-end gap-2">
-							<UiButton
-								type="button"
-								appearance="soft"
-								tone="danger"
-								:disabled="blocked"
-								@click="retire(installation, false)"
-								>{{
-									t(
-										installation.status === 'draining'
-											? 'agent.settings.plugins.continueUninstall'
-											: 'agent.pluginManagement.remove',
-									)
-								}}</UiButton
-							>
-							<UiButton
-								v-if="installation.status === 'draining'"
-								type="button"
-								:disabled="blocked"
-								@click="retire(installation, true)"
-								>{{ t('agent.pluginManagement.cancelRetirement') }}</UiButton
-							>
-						</div>
-					</div>
-					<details class="border-t border-border/40 px-4 py-2 text-[10px] text-text-secondary">
-						<summary class="cursor-pointer">{{ t('agent.pluginManagement.technicalDetails') }}</summary>
-						<dl class="mt-1.5 grid gap-x-4 gap-y-1 break-all font-mono sm:grid-cols-2">
-							<div>app: {{ installation.appId }}</div>
-							<div>definition: {{ installation.definitionId }}</div>
-							<div>package: {{ installation.packageHash }}</div>
-							<div>publisher: {{ installation.publisherKeyId }}</div>
-							<div>revision: {{ installation.revision }}</div>
-							<div>updated: {{ installationUpdatedAt(installation) }}</div>
-						</dl>
-					</details>
-				</article>
-			</div>
+			<PluginRepositorySettings
+				:publishers="publishers"
+				:installations="installations"
+				:apps="apps"
+				:active="active"
+				:blocked="blocked || candidate !== null"
+				@prepare="prepareCatalogEntry"
+				@trust="trustCatalogPublisher"
+				@recommend="emit('recommend')"
+				@official-publishers="officialPublisherIds = $event"
+			/>
 			<div v-if="removedInstallations.length" class="rounded-xl border border-error/30 bg-error/5 p-4">
 				<div class="flex items-center gap-2 text-xs font-semibold text-error">
 					<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i
@@ -404,17 +253,7 @@
 				</div>
 			</div>
 
-			<PluginRepositorySettings
-				:publishers="publishers"
-				:installations="installations"
-				:apps="apps"
-				:active="active"
-				:blocked="blocked || candidate !== null"
-				@prepare="prepareCatalogEntry"
-				@trust="trustCatalogPublisher"
-				@recommend="emit('recommend')"
-			/>
-			<div class="overflow-hidden rounded-xl border border-border bg-header/20 shadow-2xs">
+			<div class="overflow-hidden rounded-xl bg-header/25">
 				<button
 					type="button"
 					class="flex w-full cursor-pointer items-center justify-between px-4 py-3 text-left select-none hover:bg-header/30"
@@ -444,19 +283,18 @@
 						{{ t('agent.settings.plugins.publisherHint') }}
 					</p>
 					<fieldset :disabled="blocked" class="space-y-2.5">
-						<input
+						<UiInput
 							v-model="label"
-							type="text"
-							data-no-highlight
-							class="h-8 w-full rounded-lg border border-border/80 bg-card px-3 text-xs text-foreground outline-none placeholder:text-text-secondary/60 focus:border-border-hover"
 							:placeholder="t('agent.settings.plugins.publisherLabel')"
+							:aria-label="t('agent.settings.plugins.publisherLabel')"
 						/>
-						<textarea
+						<UiTextarea
 							v-model="publicKeyPem"
-							data-no-highlight
-							class="h-24 w-full resize-y rounded-lg border border-border/80 bg-card p-2.5 font-mono text-xs text-foreground outline-none placeholder:text-text-secondary/60 focus:border-border-hover"
 							:placeholder="t('agent.settings.plugins.publisherPem')"
-						></textarea>
+							:aria-label="t('agent.settings.plugins.publisherPem')"
+							:min-rows="4"
+							class="font-mono"
+						/>
 						<div class="flex justify-end">
 							<UiButton
 								type="submit"

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 	import { computed, onBeforeUnmount, onMounted, onActivated, onDeactivated, ref, useId } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiInput } from '@/foundation/ui';
+	import { UiButton, UiInput } from '@/foundation/ui';
 	import { registerAuthenticatedSessionReset } from '@/shared/session/public';
-	import { useFeedback } from '@/shared/feedback/public';
+	import { useFeedback, useFeedbackMessage } from '@/shared/feedback/public';
+	import { isNetworkFailure } from '@/client/http/network-failure';
 	import { useSuspendedSessions, suspendedFailureKey } from '../composables/useSuspendedSessions';
 	import type { MarkedSuspendedSessionState, SuspendedSession } from '../model/suspended-session-types';
 
@@ -24,6 +25,11 @@
 	const { t } = useI18n();
 	const feedback = useFeedback();
 	const data = useSuspendedSessions();
+	useFeedbackMessage(
+		() => (data.error.value ? t(data.error.value) : ''),
+		() => 'error',
+		() => data.errorCause.value,
+	);
 	const editingId = ref<string | null>(null);
 	const editingName = ref('');
 	const renamingId = ref<string | null>(null);
@@ -64,14 +70,13 @@
 		}
 		panelActive = true;
 		viewController = new AbortController();
-		void data.load({ force: true });
-		data.startPolling();
+		data.startSync();
 	}
 
 	function deactivate(): void {
 		panelActive = false;
 		viewController.abort();
-		data.stopPolling();
+		data.stopSync();
 		editingId.value = null;
 		editingName.value = '';
 		renamingId.value = null;
@@ -189,8 +194,8 @@
 			}
 			feedback.notifySuccess(t('sshSuspend.notifications.logExportSuccess', { name: filename }));
 		} catch (cause) {
-			if (!owner.signal.aborted && viewController === owner) {
-				feedback.notifyError(t(suspendedFailureKey(cause)));
+			if (!owner.signal.aborted && viewController === owner && !isNetworkFailure(cause)) {
+				feedback.notifyError(t(suspendedFailureKey(cause, 'read')));
 			}
 		} finally {
 			if (!owner.signal.aborted && viewController === owner) {
@@ -232,13 +237,13 @@
 		role="region"
 		:aria-label="t('suspendedSshSessions.modalTitle')"
 	>
-		<div class="view-header shrink-0" :class="props.pageScroll ? 'mb-3 pb-3' : 'mb-2'">
+		<div class="view-header flex items-center gap-2 shrink-0" :class="props.pageScroll ? 'mb-3 pb-3' : 'mb-2'">
 			<UiInput
 				v-model="data.search.value"
 				type="text"
 				:aria-label="t('suspendedSshSessions.searchPlaceholder')"
 				:placeholder="t('suspendedSshSessions.searchPlaceholder')"
-				class="suspended-session-search w-full"
+				class="suspended-session-search min-w-0 flex-1"
 			>
 				<template #leading><i class="fas fa-search text-xs" aria-hidden="true"></i></template>
 				<template v-if="data.search.value" #trailing>
@@ -252,17 +257,19 @@
 					</button>
 				</template>
 			</UiInput>
-		</div>
-
-		<div
-			v-if="data.error.value"
-			class="rounded-lg border border-error/20 bg-error/5 p-2 text-xs text-error"
-			role="alert"
-		>
-			<p>{{ t(data.error.value) }}</p>
-			<button type="button" class="mt-1 underline" :disabled="data.loading.value" @click="data.recover()">
-				{{ t('sshSuspend.recover') }}
-			</button>
+			<UiButton
+				v-if="data.error.value"
+				type="button"
+				appearance="ghost"
+				icon-only
+				class="shrink-0"
+				:aria-label="t('sshSuspend.recover')"
+				:title="t('sshSuspend.recover')"
+				:disabled="data.loading.value"
+				@click="data.recover()"
+			>
+				<i class="fas fa-rotate-right" aria-hidden="true"></i>
+			</UiButton>
 		</div>
 
 		<!-- 列表容器 -->

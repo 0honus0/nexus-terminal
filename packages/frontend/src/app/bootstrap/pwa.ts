@@ -5,6 +5,7 @@ import {
 	stringStorageCodec,
 	writeStoredValue,
 } from '@/foundation/browser';
+import { reactive, readonly } from 'vue';
 
 const CACHE_PREFIX = 'nexus-terminal-cache-';
 const dynamicImportReloadStorage = {
@@ -15,6 +16,21 @@ const dynamicImportReloadStorage = {
 	legacyKeys: ['nexus-dynamic-import-reload'],
 } as const;
 const GLOBAL_DYNAMIC_IMPORT_RELOAD_COOLDOWN_MS = 60_000;
+const APP_UPDATE_CHECK_INTERVAL_MS = 60_000;
+
+const appUpdateState = reactive({
+	available: false,
+	applying: false,
+	dismissed: false,
+});
+
+export const appUpdate = readonly(appUpdateState);
+
+let serviceWorkerRegistration: ServiceWorkerRegistration | null = null;
+let pendingUpdateWorker: ServiceWorker | null = null;
+let dismissedUpdateWorker: ServiceWorker | null = null;
+let serviceWorkerControlledAtStartup = false;
+let lastUpdateCheckAt = 0;
 
 const isStaleDynamicImportError = (error: unknown): boolean => {
 	const message = error instanceof Error ? error.message : String(error);
@@ -73,15 +89,96 @@ const markGlobalReloadAttempt = (target: string): void => {
 	writeStoredValue(globalDynamicImportReloadStorage, { target, attemptedAt: Date.now() });
 };
 
+const announceAppUpdate = (worker: ServiceWorker | null): void => {
+	if (!serviceWorkerControlledAtStartup || appUpdateState.available || !worker || worker === dismissedUpdateWorker)
+		return;
+	pendingUpdateWorker = worker;
+	appUpdateState.available = true;
+	appUpdateState.dismissed = false;
+};
+
+const monitorUpdateWorker = (worker: ServiceWorker | null): void => {
+	if (!worker) return;
+
+	const check = (): void => {
+		if (worker.state === 'installed' || worker.state === 'activated') announceAppUpdate(worker);
+	};
+
+	check();
+	worker.addEventListener('statechange', check);
+};
+
+const monitorServiceWorkerRegistration = (registration: ServiceWorkerRegistration): void => {
+	serviceWorkerRegistration = registration;
+	if (registration.waiting) monitorUpdateWorker(registration.waiting);
+	if (registration.installing) monitorUpdateWorker(registration.installing);
+	registration.addEventListener('updatefound', () => monitorUpdateWorker(registration.installing));
+};
+
+const checkForAppUpdate = (force = false): void => {
+	const now = Date.now();
+	if (!force && now - lastUpdateCheckAt < APP_UPDATE_CHECK_INTERVAL_MS) return;
+	lastUpdateCheckAt = now;
+	void serviceWorkerRegistration?.update().catch(() => undefined);
+};
+
+export const dismissAppUpdate = (): void => {
+	appUpdateState.dismissed = true;
+	appUpdateState.available = false;
+	dismissedUpdateWorker = pendingUpdateWorker;
+	pendingUpdateWorker = null;
+};
+
+export const applyAppUpdate = async (): Promise<void> => {
+	if (!appUpdateState.available || appUpdateState.applying) return;
+	appUpdateState.applying = true;
+
+	const worker = pendingUpdateWorker;
+	if (worker && worker.state !== 'activated' && worker.state !== 'redundant') {
+		await new Promise<void>((resolve) => {
+			const finish = (): void => {
+				window.clearTimeout(timer);
+				worker.removeEventListener('statechange', finish);
+				resolve();
+			};
+
+			const timer = window.setTimeout(finish, 1_500);
+			worker.addEventListener('statechange', finish);
+		});
+	}
+
+	try {
+		await clearAppCaches();
+	} finally {
+		window.location.reload();
+	}
+};
+
+let serviceWorkerRegistrationInitialized = false;
+
 export const registerAppServiceWorker = (): void => {
 	if (!('serviceWorker' in navigator)) return;
+	if (serviceWorkerRegistrationInitialized) return;
+	serviceWorkerRegistrationInitialized = true;
+	serviceWorkerControlledAtStartup = Boolean(navigator.serviceWorker.controller);
+
+	navigator.serviceWorker.addEventListener('controllerchange', () => {
+		if (serviceWorkerControlledAtStartup) announceAppUpdate(navigator.serviceWorker.controller);
+	});
+	document.addEventListener('visibilitychange', () => {
+		if (document.visibilityState === 'visible') checkForAppUpdate();
+	});
+	window.addEventListener('online', () => checkForAppUpdate(true));
 
 	window.addEventListener(
 		'load',
 		() => {
 			void navigator.serviceWorker
 				.register('/sw.js?v=4', { updateViaCache: 'none' })
-				.then((registration) => registration.update())
+				.then((registration) => {
+					monitorServiceWorkerRegistration(registration);
+					checkForAppUpdate(true);
+				})
 				.catch(() => undefined);
 		},
 		{ once: true },

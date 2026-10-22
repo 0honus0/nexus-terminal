@@ -328,7 +328,7 @@ export async function deleteManagedArtifact(original: ManagedArtifact, signal?: 
 	});
 }
 
-export async function previewArtifactCleanup(appId: string, signal?: AbortSignal): Promise<ArtifactCleanupPlan> {
+async function previewArtifactCleanup(appId: string, signal?: AbortSignal): Promise<ArtifactCleanupPlan> {
 	const value = await requestAgentManagement({
 		...budgets,
 		method: 'POST',
@@ -345,7 +345,7 @@ export async function previewArtifactCleanup(appId: string, signal?: AbortSignal
 	return fromArtifactCleanup(value.confirmation);
 }
 
-export async function confirmArtifactCleanup(
+async function confirmArtifactCleanup(
 	appId: string,
 	plan: ArtifactCleanupPlan,
 	signal?: AbortSignal,
@@ -370,6 +370,11 @@ export async function confirmArtifactCleanup(
 		},
 	});
 	return fromArtifactCleanupResult(value);
+}
+
+export async function cleanupManagedArtifacts(appId: string, signal?: AbortSignal): Promise<ArtifactCleanupResult> {
+	const plan = await previewArtifactCleanup(appId, signal);
+	return confirmArtifactCleanup(appId, plan, signal);
 }
 
 export async function attachManagedArtifact(

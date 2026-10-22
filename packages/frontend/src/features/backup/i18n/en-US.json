@@ -15,6 +15,8 @@
       "description": "Export the current business configuration, Agent state, audit/notification records and referenced background, Artifact and plugin files. Account credentials, Passkeys and active resources are excluded.",
       "importDescription": "Backups from this instance can be imported while signed in without a backup password. Backups from another instance require the login password used when that backup was exported. Import replaces the backed-up business data and custom theme files.",
       "backupFile": "Backup file",
+      "chooseFile": "Choose file",
+      "noFileSelected": "No file selected",
       "backupPasswordHelp": "Leave blank for a backup created by this instance. For a cross-instance restore, enter the password used when the backup was exported.",
       "confirmImport": "Restore this backup and replace all backed-up business data? Verify the target instance first. Existing active resources will close.",
       "restoreStateTitle": "Backup restoration",

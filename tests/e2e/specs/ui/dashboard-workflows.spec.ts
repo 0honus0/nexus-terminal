@@ -1,4 +1,5 @@
 import { readSuspendedSessionCatalog } from '../../../../packages/shared/src/remote/suspend/http-codec';
+import { readSuspendedCatalogEvent } from '../../../../packages/shared/src/remote/suspend/events';
 import { readLocalSystemStatus } from '../../../../packages/shared/src/system/status/http-codec';
 import { readSshResourceStatusList } from '../../../../packages/shared/src/remote/monitoring/http-codec';
 import { E2E_URLS } from '../../support/test-env';
@@ -134,9 +135,6 @@ async function createConnection(
 						notes: `${name} notes`,
 						route: 'direct',
 						proxyId: null,
-						rdpRemoteApp: null,
-						rdpRemoteAppDirectory: null,
-						rdpRemoteAppArguments: null,
 						tagIds: [],
 						jumpIds: [],
 					},
@@ -159,20 +157,23 @@ async function createConnection(
 const dashboardRoot = (page: Page) => page.locator('.dashboard-page');
 
 const connectionRow = (page: Page, name: string) =>
-	page.locator('.dashboard-quick-connect-grid > li').filter({ has: page.getByTitle(name, { exact: true }) });
+	page.locator('.dashboard-connection-item').filter({ has: page.getByTitle(name, { exact: true }) });
 
 const remoteCard = (page: Page, address: string) =>
-	page.locator('article.dashboard-host-card').filter({ hasText: address });
+	page.locator('.dashboard-connection-card').filter({ hasText: address });
 
-const quickConnectPanel = (page: Page) => page.locator('.dashboard-workspace > section').first();
+const connectionPanel = (page: Page) => page.locator('.dashboard-status-surface');
 
-const resourcePanel = (page: Page) => page.locator('.dashboard-workspace > section').nth(1);
+const connectionTypeSection = (page: Page, type: 'SSH' | 'RDP' | 'VNC') =>
+	page
+		.locator('.dashboard-connection-section')
+		.filter({ has: page.getByRole('heading', { name: type, exact: true }) });
 
 const tagFilter = (page: Page) => page.getByRole('combobox', { name: '按标签筛选', exact: true });
 
 const sortFilter = (page: Page) => page.getByRole('combobox', { name: '排序方式', exact: true });
 
-test('desktop dashboard exposes suspended sessions without changing the main workspace layout', async ({
+test('desktop dashboard exposes suspended sessions and connection types in one stable surface', async ({
 	page,
 	context,
 }) => {
@@ -220,35 +221,29 @@ test('desktop dashboard exposes suspended sessions without changing the main wor
 
 	try {
 		const firstSuspendedId = await createSuspended('first');
+		let pushedIds: string[] = [];
+		page.on('websocket', (socket) => {
+			if (!socket.url().includes('/ws/suspended-sessions')) return;
+			socket.on('framereceived', ({ payload }) => {
+				const value: unknown = JSON.parse(String(payload));
+				const event = readSuspendedCatalogEvent(value);
+				if (event.type === 'snapshot') pushedIds = event.sessions.map((session) => session.id);
+			});
+		});
 		await page.setViewportSize({ width: 1440, height: 900 });
-		const firstCatalogResponse = page.waitForResponse(
-			(response) => response.url().includes('/api/v1/ssh-suspend/suspended-sessions') && response.ok(),
-		);
 		await page.goto('/');
-		await firstCatalogResponse;
 
 		const dashboard = dashboardRoot(page);
-		const workspace = dashboard.locator('.dashboard-workspace');
-		const quickConnect = quickConnectPanel(page);
-		const resources = resourcePanel(page);
+		const connections = connectionPanel(page);
+		const sshSection = connectionTypeSection(page, 'SSH');
 		const suspendedEntry = dashboard.getByRole('button', { name: /^Suspended sessions/ });
 		await expect(suspendedEntry).toBeVisible();
 		await expect(suspendedEntry).toContainText('Suspended sessions');
-		await expect(workspace).toBeVisible();
+		await expect(connections).toBeVisible();
+		await expect(sshSection).toBeVisible();
+		await expect(sshSection.getByRole('heading', { name: 'SSH', exact: true })).toBeVisible();
+		await expect(dashboard.locator('.dashboard-connection-sections')).toBeVisible();
 
-		const [workspaceBox, quickConnectBox, resourcesBox] = await Promise.all([
-			workspace.boundingBox(),
-			quickConnect.boundingBox(),
-			resources.boundingBox(),
-		]);
-		expect(workspaceBox).toBeTruthy();
-		expect(quickConnectBox).toBeTruthy();
-		expect(resourcesBox).toBeTruthy();
-		expect(Math.abs(quickConnectBox!.y - resourcesBox!.y)).toBeLessThanOrEqual(2);
-
-		// Prime the shared catalog on the dashboard, then create another suspended record.
-		// Opening the manager must force a fresh request rather than waiting for the polling cache.
-		const secondSuspendedId = await createSuspended('second');
 		let catalogRequests = 0;
 
 		const countCatalogRequest = (request: { url(): string }) => {
@@ -256,14 +251,27 @@ test('desktop dashboard exposes suspended sessions without changing the main wor
 		};
 
 		page.on('request', countCatalogRequest);
+		await expect.poll(() => pushedIds).toContain(firstSuspendedId);
+		const secondSuspendedId = await createSuspended('second');
+		await expect.poll(() => pushedIds, { timeout: 2500 }).toContain(secondSuspendedId);
 		const requestsBeforeOpen = catalogRequests;
 		await suspendedEntry.click();
 		await expect(page).toHaveURL(/\/workspace(?:\?|$)/);
 		const dialog = page.getByRole('region', { name: 'Suspended SSH Sessions', exact: true });
 		await expect(dialog).toBeVisible();
-		await expect.poll(() => catalogRequests, { timeout: 1_200 }).toBeGreaterThan(requestsBeforeOpen);
 		await expect(dialog.locator(`[data-suspend-id="${firstSuspendedId}"]`)).toBeVisible();
 		await expect(dialog.locator(`[data-suspend-id="${secondSuspendedId}"]`)).toBeVisible();
+		expect(catalogRequests).toBe(requestsBeforeOpen);
+		const externalRename = await context.request.put(`/api/v1/ssh-suspend/name/${secondSuspendedId}`, {
+			headers: { Origin: E2E_URLS.frontendOrigin },
+			data: { customName: 'Cross-device WS rename' },
+		});
+		expect(externalRename.ok()).toBeTruthy();
+		await expect(dialog.locator(`[data-suspend-id="${secondSuspendedId}"]`)).toContainText(
+			'Cross-device WS rename',
+			{ timeout: 2500 },
+		);
+		expect(catalogRequests).toBe(requestsBeforeOpen);
 		page.off('request', countCatalogRequest);
 	} finally {
 		for (const suspendedId of createdSuspendedIds) {
@@ -279,7 +287,7 @@ test('desktop dashboard exposes suspended sessions without changing the main wor
 	}
 });
 
-test('dashboard reconnect completion refreshes recent connection without navigating back to Workspace', async ({
+test('dashboard quick connect completion refreshes recent connection without navigating back to Workspace', async ({
 	page,
 	context,
 }) => {
@@ -324,10 +332,13 @@ test('dashboard reconnect completion refreshes recent connection without navigat
 		await page.locator('.app-nav-links').getByRole('link', { name: 'Dashboard', exact: true }).click();
 		await expect(page).toHaveURL(/\/$/);
 
-		const reconnect = page.getByRole('button', { name: 'Reconnect', exact: true });
 		const row = connectionRow(page, 'E2E SSH');
-		await expect(reconnect).toBeVisible();
 		await expect(row).toBeVisible();
+		const dashboardSummary = dashboardRoot(page).locator('section').first();
+		await expect(dashboardSummary.getByText(/^(Latest connection|最近连接|最近の接続)$/)).toHaveCount(0);
+		await expect(dashboardSummary.getByRole('button', { name: /^(Reconnect|重新连接|再接続)$/ })).toHaveCount(0);
+		const quickConnect = row.locator('.dashboard-connection-card');
+		await expect(quickConnect).toBeVisible();
 		const previousLastConnectedAt = Number(await row.getAttribute('data-last-connected-at'));
 		expect(previousLastConnectedAt).toBeGreaterThan(0);
 		// The recent-connection wire timestamp is whole Unix seconds. Two
@@ -338,7 +349,7 @@ test('dashboard reconnect completion refreshes recent connection without navigat
 		await expect.poll(() => Date.now()).toBeGreaterThan(previousLastConnectedAt + 1_000);
 
 		holdConnect = true;
-		await reconnect.click();
+		await quickConnect.click();
 		await connectStarted;
 
 		// The one-shot connectionId query is consumed immediately, before SSH finishes connecting.
@@ -398,10 +409,13 @@ test('SSH resource cards appear while their status requests are pending', async 
 		await page.goto('/', { waitUntil: 'domcontentloaded' });
 		await remoteRequestStarted;
 
-		const list = resourcePanel(page);
-		await expect(list).toBeVisible();
-		await expect(remoteCard(page, `${E2E_SSH.username}@${E2E_SSH.host}:${E2E_SSH.port}`)).toBeVisible();
-		await expect(list.locator('.ui-spinner')).toHaveCount(0);
+		const section = connectionTypeSection(page, 'SSH');
+		const card = remoteCard(page, `${E2E_SSH.username}@${E2E_SSH.host}:${E2E_SSH.port}`);
+		await expect(section).toBeVisible();
+		await expect(card).toBeVisible();
+		await expect(card).toContainText('Waiting for data');
+		await expect(card.locator('.ui-spinner')).toBeVisible();
+		expect(await card.evaluate((element) => element.getBoundingClientRect().height)).toBe(188);
 	} finally {
 		releaseRemoteResources?.();
 		await page.unrouteAll({ behavior: 'wait' });
@@ -436,9 +450,6 @@ test('a slow SSH resource does not hold back another host on the dashboard', asy
 						notes: null,
 						route: 'direct',
 						proxyId: null,
-						rdpRemoteApp: null,
-						rdpRemoteAppDirectory: null,
-						rdpRemoteAppArguments: null,
 						tagIds: [],
 						jumpIds: [],
 					},
@@ -480,12 +491,16 @@ test('a slow SSH resource does not hold back another host on the dashboard', asy
 		const goodCard = remoteCard(page, `${E2E_SSH.username}@${E2E_SSH.host}:${E2E_SSH.port}`);
 		const badCard = remoteCard(page, `slow@${badHost}:${badPort}`);
 		await expect(goodCard).toContainText('7%');
-		await expect(goodCard.getByText('SSH', { exact: true })).toHaveCount(0);
+		await expect(goodCard.locator('.dashboard-gauge')).toHaveCount(3);
+		await expect(goodCard.locator('.dashboard-connection-card__last-connected')).toBeVisible();
+		await expect(goodCard.locator('.dashboard-connection-card__updated-at')).toHaveText(/^\d{2}:\d{2}:\d{2}$/);
 		await expect(badCard).toBeVisible();
 		await expect(badCard).not.toContainText('The network request failed. Retry the read.');
+		expect(await badCard.evaluate((element) => element.getBoundingClientRect().height)).toBe(188);
 		releaseSlow?.();
 		await expect(badCard).toContainText('The network request failed. Retry the read.');
 		await expect(goodCard).toContainText('7%');
+		expect(await badCard.evaluate((element) => element.getBoundingClientRect().height)).toBe(188);
 	} finally {
 		releaseSlow?.();
 		await page.unrouteAll({ behavior: 'wait' });
@@ -504,6 +519,7 @@ test('a slow SSH resource does not hold back another host on the dashboard', asy
 
 test('resource failures stay inside their panels and do not block quick connect', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
+	await page.clock.install();
 	const originalSettingsResponse = await context.request.get('/api/v1/settings/preferences');
 	expect(originalSettingsResponse.ok()).toBeTruthy();
 	const originalSettings = readPreferencesResponse(await originalSettingsResponse.json()).preferences;
@@ -514,10 +530,14 @@ test('resource failures stay inside their panels and do not block quick connect'
 
 	const connectionId = await ensureTestSshConnection(context.request);
 
+	let localRequests = 0;
+	let remoteRequests = 0;
 	await page.route('**/api/v1/system/status', async (route) => {
+		localRequests += 1;
 		await route.abort('failed');
 	});
 	await page.route('**/api/v1/system/ssh-resources/*', async (route) => {
+		remoteRequests += 1;
 		await route.abort('failed');
 	});
 
@@ -525,20 +545,29 @@ test('resource failures stay inside their panels and do not block quick connect'
 		await page.goto('/');
 		const dashboard = dashboardRoot(page);
 		const local = dashboard.locator('.dashboard-overview-local');
-		const remoteList = resourcePanel(page);
 		const remoteError = remoteCard(page, `${E2E_SSH.username}@${E2E_SSH.host}:${E2E_SSH.port}`);
-		const connectionList = quickConnectPanel(page).getByRole('list');
+		const connectionList = connectionPanel(page).locator('.dashboard-connection-grid');
 		const row = connectionRow(page, 'E2E SSH');
 
 		await expect(local).toContainText('The network request failed. Retry the read.');
 		await expect(remoteError).toContainText('The network request failed. Retry the read.');
+		await page.locator('.app-nav-links a[href="/connections"]').click();
+		await expect(page).toHaveURL(/\/connections$/);
+		const pausedLocalRequests = localRequests;
+		const pausedRemoteRequests = remoteRequests;
+		await page.clock.fastForward(120_000);
+		expect(localRequests).toBe(pausedLocalRequests);
+		expect(remoteRequests).toBe(pausedRemoteRequests);
+		await page.locator('.app-nav-links a[href="/"]').click();
+		await expect.poll(() => localRequests).toBeGreaterThan(pausedLocalRequests);
+		await expect.poll(() => remoteRequests).toBeGreaterThan(pausedRemoteRequests);
 		await expect(connectionList).toBeVisible();
 		await expect(row).toBeVisible();
 		await expect(row.getByRole('button', { name: 'Connect E2E SSH', exact: true })).toBeEnabled();
 
-		await expect(remoteList).toBeVisible();
 		const card = row.getByRole('button', { name: 'Connect E2E SSH', exact: true });
 		await expect(card.getByText('Connect', { exact: true })).toHaveCount(0);
+		expect(await card.evaluate((element) => element.getBoundingClientRect().height)).toBe(188);
 		await card.focus();
 		await card.press('Enter');
 		await expect(page).toHaveURL(/\/workspace(?:\?|$)/);
@@ -610,14 +639,21 @@ test('dashboard filters connections and persists tag and sort preferences across
 		await page.goto('/');
 		const dashboard = dashboardRoot(page);
 		await expect(dashboard).toBeVisible();
-		await expect(resourcePanel(page)).toBeVisible();
+		await expect(connectionPanel(page)).toBeVisible();
 		await expect(dashboard.locator('.dashboard-overview-local')).toBeVisible();
-		await expect(dashboard.locator('article.dashboard-host-card')).toHaveCount(3, { timeout: 20_000 });
+		await expect(connectionTypeSection(page, 'SSH')).toBeVisible({ timeout: 20_000 });
 		await expect(dashboard.locator('.dashboard-overview-local')).toContainText('CPU');
+		await expect(dashboard.locator('.dashboard-overview-local__updated')).toHaveText(/更新于 \d{2}:\d{2}:\d{2}/);
 		const alphaRow = connectionRow(page, ALPHA_NAME);
 		const betaRow = connectionRow(page, BETA_NAME);
 		await expect(alphaRow).toContainText(ALPHA_NAME);
 		await expect(betaRow).toContainText(BETA_NAME);
+		await expect(alphaRow.locator('.dashboard-connection-card__tag')).toHaveText(ALPHA_TAG);
+		await expect(alphaRow.locator('.dashboard-connection-card__footer')).toHaveCount(0);
+		const protocolBox = await alphaRow.locator('.dashboard-connection-card__protocol').boundingBox();
+		const tagBox = await alphaRow.locator('.dashboard-connection-card__tag').boundingBox();
+		if (!protocolBox || !tagBox) throw new Error('connection protocol and tag must be visible');
+		expect(Math.abs(tagBox.y - protocolBox.y)).toBeLessThanOrEqual(2);
 
 		await step('search matches username and host fields', async () => {
 			const search = dashboard.locator('input[type="search"]');
@@ -664,7 +700,7 @@ test('dashboard filters connections and persists tag and sort preferences across
 			const finalDashboard = dashboardRoot(page);
 			await expect(sortFilter(page)).toHaveAttribute('data-value', 'name');
 			const visibleFixtureRows = finalDashboard
-				.locator('.dashboard-quick-connect-grid > li')
+				.locator('.dashboard-connection-item')
 				.filter({ hasText: /E2E Dashboard (Alpha|Beta)/ });
 			await expect(visibleFixtureRows).toHaveCount(2);
 			const texts = await visibleFixtureRows.allTextContents();
@@ -675,62 +711,57 @@ test('dashboard filters connections and persists tag and sort preferences across
 
 			await expect(finalDashboard.locator('.dashboard-overview-metrics')).toBeVisible();
 			await expect(finalDashboard.locator('a[href="/connections"]')).toBeVisible();
-			await expect(alphaRow.getByRole('button')).toBeVisible();
-			await expect(betaRow.getByRole('button')).toBeVisible();
+			await expect(alphaRow.locator('.dashboard-connection-card')).toBeVisible();
+			await expect(betaRow.locator('.dashboard-connection-card')).toBeVisible();
 		});
 
 		await step(
 			'dashboard renders configured SSH resources and keeps the current desktop layout stable',
 			async () => {
-				const remoteCards = page.locator('article.dashboard-host-card');
+				const remoteCards = page.locator('.dashboard-connection-card');
 				const e2eHostCard = remoteCards.filter({
 					hasText: `${E2E_SSH.username}@${E2E_SSH.host}:${E2E_SSH.port}`,
 				});
 
-				await expect(remoteCards).toHaveCount(3, { timeout: 20_000 });
+				await expect(connectionTypeSection(page, 'SSH')).toBeVisible({ timeout: 20_000 });
 				await expect(e2eHostCard).toHaveCount(1);
 				await expect(e2eHostCard).toContainText('CPU', { timeout: 20_000 });
-				await expect(
-					e2eHostCard
-						.locator('div.flex.flex-wrap.items-baseline')
-						.filter({ hasText: /^\d+(?:\.\d+)? (?:GB|TB)\s*\/\s*\d+(?:\.\d+)? (?:GB|TB)$/ }),
-				).toHaveText(/^\d+(?:\.\d+)? (?:GB|TB)\s*\/\s*\d+(?:\.\d+)? (?:GB|TB)$/);
+				await expect(e2eHostCard.locator('.dashboard-gauge')).toHaveCount(3);
+				await expect(e2eHostCard.locator('.dashboard-connection-card__updated-at')).toHaveAttribute(
+					'title',
+					/更新于 \d{2}:\d{2}:\d{2}/,
+				);
+				await expect(e2eHostCard.locator('.dashboard-gauge__detail').nth(1)).toHaveText(
+					/^\d+(?:\.\d+)? (?:GB|MB|TB)\s*\/\s*\d+(?:\.\d+)? (?:GB|MB|TB)$/,
+				);
+				const gauges = await e2eHostCard.locator('.dashboard-gauge').evaluateAll((items) =>
+					items.map((gauge) => {
+						const value = Number(
+							gauge.querySelector('.dashboard-gauge__value')?.textContent?.replace('%', ''),
+						);
+						const offset = Number.parseFloat(
+							getComputedStyle(gauge.querySelector('.dashboard-gauge__progress')!).strokeDashoffset,
+						);
+						return { value, offset };
+					}),
+				);
+				for (const gauge of gauges) {
+					expect(Number.isFinite(gauge.value)).toBeTruthy();
+					expect(Math.abs(gauge.offset - (100 - gauge.value))).toBeLessThanOrEqual(1);
+				}
 				await expect(page.getByText('活动 SSH 会话', { exact: true })).toHaveCount(0);
 
 				await page.setViewportSize({ width: 1440, height: 900 });
 				const dashboard = dashboardRoot(page);
-				const workspace = page.locator('.dashboard-workspace');
-				const quickConnect = quickConnectPanel(page);
-				const recentActivity = dashboard.getByRole('complementary');
-				const resources = resourcePanel(page);
-				const connectionList = quickConnect.getByRole('list');
-				const resourceList = resources.locator('.ui-scroll-area__viewport');
+				const statusPanel = connectionPanel(page);
+				const connectionList = statusPanel.locator('.ui-scroll-area__viewport');
 				const localResource = dashboard.locator('.dashboard-overview-local');
 
-				await expect(workspace).toBeVisible();
-				await expect(quickConnect).toBeVisible();
-				await expect(recentActivity).toBeVisible();
-				await expect(resources).toBeVisible();
+				await expect(statusPanel).toBeVisible();
 				await expect(connectionList).toBeVisible();
-				await expect(resourceList).toBeVisible();
 				await expect(localResource).toBeVisible();
 				await expect(localResource).toContainText('CPU');
-				const recentCard = recentActivity.locator('ol > li').first();
-				await expect(recentCard).toBeVisible();
-				const [activityDotBox, activityTitleBox] = await Promise.all([
-					recentCard.locator('.activity-dot').boundingBox(),
-					recentCard.locator('.activity-title').boundingBox(),
-				]);
-				expect(activityDotBox).not.toBeNull();
-				expect(activityTitleBox).not.toBeNull();
-				expect(
-					Math.abs(
-						activityDotBox!.y +
-							activityDotBox!.height / 2 -
-							(activityTitleBox!.y + activityTitleBox!.height / 2),
-					),
-				).toBeLessThanOrEqual(1);
-				await expect(resources.getByText('30 秒刷新', { exact: true })).toBeVisible();
+				await expect(dashboard.getByRole('complementary')).toHaveCount(0);
 				await expect(alphaRow).toBeVisible();
 				await expect(betaRow).toBeVisible();
 
@@ -787,53 +818,66 @@ test('dashboard filters connections and persists tag and sort preferences across
 					clientWidth: element.clientWidth,
 				}));
 				expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
+				const documentScroll = await page.evaluate(() => ({
+					scrollHeight: document.documentElement.scrollHeight,
+					clientHeight: document.documentElement.clientHeight,
+				}));
+				expect(documentScroll.scrollHeight).toBeLessThanOrEqual(documentScroll.clientHeight + 1);
 
-				const workspaceBox = await workspace.boundingBox();
-				const quickConnectBox = await quickConnect.boundingBox();
-				const recentActivityBox = await recentActivity.boundingBox();
-				const resourcesBox = await resources.boundingBox();
-				const resourceListBox = await resourceList.boundingBox();
-				expect(workspaceBox).not.toBeNull();
-				expect(quickConnectBox).not.toBeNull();
-				expect(recentActivityBox).not.toBeNull();
-				expect(resourcesBox).not.toBeNull();
-				expect(resourceListBox).not.toBeNull();
-				expect(Math.abs((quickConnectBox?.y ?? 0) - (resourcesBox?.y ?? 0))).toBeLessThanOrEqual(2);
-				expect(resourcesBox?.x ?? 0).toBeGreaterThan(
-					(quickConnectBox?.x ?? 0) + (quickConnectBox?.width ?? 0) - 2,
+				const sections = await dashboard.locator('.dashboard-connection-section').evaluateAll((items) =>
+					items.map((section) => ({
+						type: section.getAttribute('aria-labelledby')?.replace('dashboard-connection-section-', ''),
+						cards: [...section.querySelectorAll<HTMLElement>('.dashboard-connection-card')].map((card) => {
+							const rect = card.getBoundingClientRect();
+							return { width: rect.width, height: rect.height };
+						}),
+					})),
 				);
-				expect(recentActivityBox?.y ?? 0).toBeGreaterThan(
-					Math.max(
-						(quickConnectBox?.y ?? 0) + (quickConnectBox?.height ?? 0),
-						(resourcesBox?.y ?? 0) + (resourcesBox?.height ?? 0),
-					) - 2,
-				);
-				expect(Math.abs((recentActivityBox?.width ?? 0) - (workspaceBox?.width ?? 0))).toBeLessThanOrEqual(2);
-				expect((recentActivityBox?.y ?? 0) + Math.min(recentActivityBox?.height ?? 0, 120)).toBeLessThanOrEqual(
-					900,
-				);
+				expect(sections.length).toBeGreaterThan(0);
+				for (const section of sections) {
+					expect(['SSH', 'RDP', 'VNC']).toContain(section.type);
+					expect(section.cards.length).toBeGreaterThan(0);
+					const widths = section.cards.map((card) => card.width);
+					const heights = section.cards.map((card) => card.height);
+					expect(Math.max(...widths) - Math.min(...widths)).toBeLessThanOrEqual(1);
+					expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(1);
+					expect(Math.abs(heights[0]! - (section.type === 'SSH' ? 188 : 76))).toBeLessThanOrEqual(1);
+					if (section.type !== 'SSH') {
+						await expect(
+							dashboard.locator(`.dashboard-connection-section--${section.type!.toLowerCase()} small`),
+						).toHaveCount(0);
+					}
+				}
 
-				const remoteResourceBoxes = await remoteCards.evaluateAll((cards) =>
+				const cardGeometry = await page.locator('.dashboard-connection-card').evaluateAll((cards) =>
 					cards.map((card) => {
 						const rect = card.getBoundingClientRect();
-						return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+						return { width: rect.width, height: rect.height };
 					}),
 				);
-				const resourceScroll = await resourceList.evaluate((element) => ({
+				const widths = cardGeometry.map((card) => card.width);
+				expect(Math.max(...widths) - Math.min(...widths)).toBeLessThanOrEqual(1);
+
+				for (const type of ['SSH', 'RDP'] as const) {
+					const section = connectionTypeSection(page, type);
+					if ((await section.count()) === 0) continue;
+					const toggle = section.locator('.dashboard-connection-section__toggle');
+					const list = section.locator('.dashboard-connection-grid');
+					await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+					await toggle.click();
+					await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+					await expect(list).toBeHidden();
+					await toggle.click();
+					await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+					await expect(list).toBeVisible();
+				}
+
+				const connectionScroll = await connectionList.evaluate((element) => ({
 					clientHeight: element.clientHeight,
 					scrollHeight: element.scrollHeight,
 					overflowY: getComputedStyle(element).overflowY,
 				}));
-				expect(remoteResourceBoxes).toHaveLength(3);
-				expect(['auto', 'scroll']).toContain(resourceScroll.overflowY);
-				expect(resourceScroll.scrollHeight).toBeGreaterThanOrEqual(resourceScroll.clientHeight);
-				for (const box of remoteResourceBoxes) {
-					expect(box.left).toBeGreaterThanOrEqual((resourceListBox?.x ?? 0) - 2);
-					expect(box.right).toBeLessThanOrEqual(
-						(resourceListBox?.x ?? 0) + (resourceListBox?.width ?? 0) + 2,
-					);
-					expect(box.top).toBeGreaterThanOrEqual((resourceListBox?.y ?? 0) - 2);
-				}
+				expect(['auto', 'scroll']).toContain(connectionScroll.overflowY);
 
 				await captureFunctionalScreenshot(page, 'dashboard-home.png', {
 					viewport: { width: 1440, height: 900 },
@@ -848,9 +892,10 @@ test('dashboard filters connections and persists tag and sort preferences across
 			});
 
 			await page.reload({ waitUntil: 'domcontentloaded' });
-			await expect(resourcePanel(page)).toBeVisible();
+			await expect(connectionPanel(page)).toBeVisible();
 			await expect(page.locator('.dashboard-overview-local')).toHaveCount(0);
-			await expect(page.locator('article.dashboard-host-card')).toHaveCount(3, { timeout: 20_000 });
+			await expect(connectionTypeSection(page, 'SSH')).toBeVisible({ timeout: 20_000 });
+			await expect(page.locator('.dashboard-gauge').first()).toBeVisible({ timeout: 20_000 });
 
 			await updateUiPreferences(context.request, (preferences) => {
 				preferences.dashboardShowLocalResources = true;
@@ -859,8 +904,10 @@ test('dashboard filters connections and persists tag and sort preferences across
 
 			await page.reload({ waitUntil: 'domcontentloaded' });
 			await expect(page.locator('.dashboard-overview-local')).toBeVisible();
-			await expect(page.locator('article.dashboard-host-card')).toHaveCount(0);
-			await expect(resourcePanel(page)).toHaveCount(0);
+			await expect(connectionPanel(page)).toBeVisible();
+			await expect(connectionTypeSection(page, 'SSH')).toBeVisible({ timeout: 20_000 });
+			await expect(page.locator('.dashboard-gauge')).toHaveCount(0);
+			await expect(page.locator('.dashboard-connection-card[data-resource-state="none"]').first()).toBeVisible();
 
 			await updateUiPreferences(context.request, (preferences) => {
 				preferences.dashboardShowLocalResources = true;
@@ -870,10 +917,9 @@ test('dashboard filters connections and persists tag and sort preferences across
 			await page.reload({ waitUntil: 'domcontentloaded' });
 		});
 
-		await step('recent activity links to the full audit log view', async () => {
-			await dashboard.locator('a[href="/audit-logs"]').click();
-			await expect(page).toHaveURL(/\/audit-logs$/);
-			await expect(page.getByRole('heading', { name: '审计日志', exact: true })).toBeVisible();
+		await step('dashboard does not render the removed recent-activity panel', async () => {
+			await expect(dashboard.locator('a[href="/audit-logs"]')).toHaveCount(0);
+			await expect(dashboard.getByRole('complementary')).toHaveCount(0);
 		});
 	} finally {
 		await cleanupDashboardFixtures(context.request);

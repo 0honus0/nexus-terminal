@@ -1,8 +1,9 @@
 import type { SuspendedAutoTermination } from '../model/suspended-session-types';
-import { computed, ref } from 'vue';
+import { computed, ref, shallowRef } from 'vue';
 import { defineStore, storeToRefs } from 'pinia';
 import { registerAuthenticatedSessionReset } from '@/shared/session/public';
 import { suspendedSessionsApi } from '../api/suspended-sessions-api';
+import { subscribeSuspendedCatalog } from '../api/suspended-catalog-stream';
 import { SuspendedRequestFailure } from '../model/suspended-session-types';
 import type {
 	SuspendedSession,
@@ -13,22 +14,24 @@ import type {
 
 import type { SuspendedAutoTerminationViewModel } from '../model/suspended-session-types';
 
-export function suspendedFailureKey(cause: unknown): string {
+export function suspendedFailureKey(cause: unknown, operation: 'read' | 'mutation' = 'mutation'): string {
 	if (!(cause instanceof SuspendedRequestFailure)) {
 		return 'sshSuspend.errors.request_failed';
 	}
-	return 'sshSuspend.errors.' + (cause.outcome === 'unknown' ? 'operation_unknown' : cause.code);
+	if (operation === 'read' && (cause.code === 'operation_unknown' || cause.code === 'internal_failure')) {
+		return 'sshSuspend.errors.read_failed';
+	}
+	return (
+		'sshSuspend.errors.' +
+		(operation === 'mutation' && cause.outcome === 'unknown' ? 'operation_unknown' : cause.code)
+	);
 }
-
-const BASE_POLL_MS = 1500;
-const IDLE_POLL_MS = 10_000;
-const MAX_POLL_MS = 60_000;
-const HANDOFF_DELAYS = [0, 120, 300, 650, 1200];
 
 export const useSuspendedSessionsStore = defineStore('suspended-sessions', () => {
 	const sessions = ref<SuspendedSession[]>([]);
 	const loading = ref(false);
 	const error = ref<string | null>(null);
+	const errorCause = shallowRef<unknown>();
 	const blockedIds = ref(new Set<string>());
 	let epoch = 0;
 	let generation = 0;
@@ -37,12 +40,11 @@ export const useSuspendedSessionsStore = defineStore('suspended-sessions', () =>
 	let readPromise: Promise<SuspendedSessionsLoadResult> | null = null;
 	let readController: AbortController | null = null;
 	let refreshQueued = false;
-	let pollTimer: number | undefined;
-	let pollIntervalMs = BASE_POLL_MS;
-	const pollOwners = new Set<symbol>();
+	let stopStream: (() => void) | undefined;
+	let streamRevision = 0;
+	const syncOwners = new Set<symbol>();
 	const writes = new Map<string, AbortController>();
 	const downloads = new Set<AbortController>();
-	const handoffs = new Map<string, AbortController>();
 	const handledAutoTerminations = new Set<string>();
 
 	function invalidate(): void {
@@ -102,13 +104,15 @@ export const useSuspendedSessionsStore = defineStore('suspended-sessions', () =>
 						sessions.value = incoming;
 						loaded = true;
 						if (!blockedIds.value.size) {
+							errorCause.value = undefined;
 							error.value = null;
 						}
 						result = { ok: true };
 					} catch (cause) {
 						if (currentEpoch === epoch && current === generation && !controller.signal.aborted) {
 							if (!blockedIds.value.size) {
-								error.value = suspendedFailureKey(cause);
+								errorCause.value = cause;
+								error.value = suspendedFailureKey(cause, 'read');
 							}
 							result = {
 								ok: false,
@@ -133,16 +137,14 @@ export const useSuspendedSessionsStore = defineStore('suspended-sessions', () =>
 	function resetSuspendedSessionsCatalog(): void {
 		epoch += 1;
 		invalidate();
-		for (const controller of [...writes.values(), ...handoffs.values(), ...downloads]) {
+		for (const controller of [...writes.values(), ...downloads]) {
 			controller.abort();
 		}
 		writes.clear();
-		handoffs.clear();
 		downloads.clear();
-		pollOwners.clear();
-		window.clearTimeout(pollTimer);
-		pollTimer = undefined;
-		pollIntervalMs = BASE_POLL_MS;
+		syncOwners.clear();
+		stopStream?.();
+		stopStream = undefined;
 		loaded = false;
 		readPromise = null;
 		readController = null;
@@ -150,6 +152,7 @@ export const useSuspendedSessionsStore = defineStore('suspended-sessions', () =>
 		sessions.value = [];
 		loading.value = false;
 		error.value = null;
+		errorCause.value = undefined;
 		blockedIds.value = new Set();
 		handledAutoTerminations.clear();
 	}
@@ -169,12 +172,15 @@ export const useSuspendedSessionsStore = defineStore('suspended-sessions', () =>
 		const currentEpoch = epoch;
 		const controller = new AbortController();
 		writes.set(session.id, controller);
+		const revision = streamRevision;
 		invalidate();
 		try {
 			const value = await work(signal ? AbortSignal.any([controller.signal, signal]) : controller.signal);
 			if (currentEpoch === epoch) {
 				invalidate();
-				apply(value);
+				if (revision === streamRevision) {
+					apply(value);
+				}
 			}
 			return value;
 		} catch (cause) {
@@ -183,6 +189,7 @@ export const useSuspendedSessionsStore = defineStore('suspended-sessions', () =>
 					unknownRevision += 1;
 					blockedIds.value.add(session.id);
 				}
+				errorCause.value = undefined;
 				error.value = blockedIds.value.size
 					? 'sshSuspend.errors.operation_unknown'
 					: suspendedFailureKey(cause);
@@ -234,101 +241,61 @@ export const useSuspendedSessionsStore = defineStore('suspended-sessions', () =>
 		const result = await load({ force: true });
 		if (result.ok && currentEpoch === epoch && revision === unknownRevision && writes.size === 0) {
 			blockedIds.value.clear();
+			errorCause.value = undefined;
 			error.value = null;
 		}
 		return result;
 	}
 
-	function schedulePoll(): void {
-		if (!pollOwners.size || pollTimer !== undefined) {
-			return;
-		}
-		const currentEpoch = epoch;
-		pollTimer = window.setTimeout(async () => {
-			pollTimer = undefined;
-			if (currentEpoch !== epoch || !pollOwners.size) {
-				return;
-			}
-			const result = await load({ silent: true, force: true });
-			if (currentEpoch !== epoch || !pollOwners.size) {
-				return;
-			}
-			if (result.status === 429) {
-				pollIntervalMs = Math.min(pollIntervalMs * 2, MAX_POLL_MS);
-			} else if (!result.ok) {
-				pollIntervalMs = Math.min(Math.max(pollIntervalMs, IDLE_POLL_MS), MAX_POLL_MS);
-			} else {
-				pollIntervalMs = sessions.value.some((session) => session.status === 'active')
-					? BASE_POLL_MS
-					: IDLE_POLL_MS;
-			}
-			schedulePoll();
-		}, pollIntervalMs);
-	}
-
-	function startPolling(): () => void {
+	function startSync(): () => void {
 		const owner = Symbol();
-		pollOwners.add(owner);
-		schedulePoll();
+		syncOwners.add(owner);
+		if (!stopStream) {
+			const currentEpoch = epoch;
+			loading.value = !loaded;
+			stopStream = subscribeSuspendedCatalog(
+				(incoming) => {
+					if (currentEpoch !== epoch || !syncOwners.size) {
+						return;
+					}
+					streamRevision += 1;
+					invalidate();
+					sessions.value = incoming;
+					loaded = true;
+					loading.value = false;
+					if (!blockedIds.value.size) {
+						error.value = null;
+						errorCause.value = undefined;
+					}
+				},
+				(cause) => {
+					if (currentEpoch === epoch && syncOwners.size && !blockedIds.value.size) {
+						loading.value = false;
+						errorCause.value = cause;
+						error.value = suspendedFailureKey(cause, 'read');
+					}
+				},
+			);
+		}
 		return () => {
-			pollOwners.delete(owner);
-			if (!pollOwners.size) {
-				window.clearTimeout(pollTimer);
-				pollTimer = undefined;
-				pollIntervalMs = BASE_POLL_MS;
+			syncOwners.delete(owner);
+			if (!syncOwners.size) {
+				stopStream?.();
+				stopStream = undefined;
+				loading.value = false;
 			}
 		};
 	}
 
 	function refreshSuspendedSessionsAfterHandoff(workspaceId: string): void {
-		handoffs.get(workspaceId)?.abort();
-		const controller = new AbortController();
-		handoffs.set(workspaceId, controller);
-		const currentEpoch = epoch;
-		void (async () => {
-			let previousDelay = 0;
-			for (const delay of HANDOFF_DELAYS) {
-				await new Promise<void>((resolve, reject) => {
-					const abort = () => {
-						controller.signal.removeEventListener('abort', abort);
-						window.clearTimeout(timer);
-						reject(new DOMException('Handoff cancelled', 'AbortError'));
-					};
-
-					const timer = window.setTimeout(() => {
-						controller.signal.removeEventListener('abort', abort);
-						resolve();
-					}, delay - previousDelay);
-					controller.signal.addEventListener('abort', abort, { once: true });
-					if (controller.signal.aborted) {
-						abort();
-					}
-				});
-				previousDelay = delay;
-				if (currentEpoch !== epoch || controller.signal.aborted) {
-					return;
-				}
-				const result = await load({ silent: true, force: true });
-				if (
-					result.ok &&
-					sessions.value.some(
-						(session) => session.status === 'active' && session.originalWorkspaceId === workspaceId,
-					)
-				) {
-					return;
-				}
-			}
-		})()
-			.catch((cause: unknown) => {
-				if (currentEpoch === epoch && !controller.signal.aborted && !blockedIds.value.size) {
-					error.value = suspendedFailureKey(cause);
-				}
-			})
-			.finally(() => {
-				if (handoffs.get(workspaceId) === controller) {
-					handoffs.delete(workspaceId);
-				}
-			});
+		if (
+			!stopStream &&
+			!sessions.value.some(
+				(session) => session.originalWorkspaceId === workspaceId && session.status === 'active',
+			)
+		) {
+			void load({ silent: true, force: true });
+		}
 	}
 
 	async function exportLog(id: string, signal?: AbortSignal): Promise<string> {
@@ -352,12 +319,13 @@ export const useSuspendedSessionsStore = defineStore('suspended-sessions', () =>
 		sessions,
 		loading,
 		error,
+		errorCause,
 		blockedIds,
 		load,
 		recover,
 		rename,
 		remove,
-		startPolling,
+		startSync,
 		applySuspendedAutoTermination,
 		resetSuspendedSessionsCatalog,
 		removeSuspendedSessionFromCatalog,
@@ -370,6 +338,8 @@ export const applySuspendedAutoTermination = (
 ): SuspendedAutoTerminationViewModel | null => useSuspendedSessionsStore().applySuspendedAutoTermination(event);
 
 export const resetSuspendedSessionsCatalog = (): void => useSuspendedSessionsStore().resetSuspendedSessionsCatalog();
+
+export const startSuspendedSessionsSync = (): (() => void) => useSuspendedSessionsStore().startSync();
 
 registerAuthenticatedSessionReset('suspended-sessions-cache', resetSuspendedSessionsCatalog);
 
@@ -394,7 +364,7 @@ export const findSuspendedSessionById = (suspendedSessionId: string): SuspendedS
 
 export function useSuspendedSessions(): SuspendedSessionsController {
 	const store = useSuspendedSessionsStore();
-	const { sessions, loading, error } = storeToRefs(store);
+	const { sessions, loading, error, errorCause } = storeToRefs(store);
 	const search = ref('');
 	const filtered = computed(() => {
 		const term = search.value.trim().toLowerCase();
@@ -411,15 +381,16 @@ export function useSuspendedSessions(): SuspendedSessionsController {
 		search,
 		loading,
 		error,
+		errorCause,
 		filtered,
 		load: store.load,
 		recover: store.recover,
 
-		startPolling: () => {
-			stop ??= store.startPolling();
+		startSync: () => {
+			stop ??= store.startSync();
 		},
 
-		stopPolling: () => {
+		stopSync: () => {
 			stop?.();
 			stop = undefined;
 		},

@@ -69,6 +69,12 @@
     "hide": "非表示",
     "show": "Show Top Navigation"
   },
+  "appUpdate": {
+    "title": "新しいバージョンの準備ができました",
+    "description": "更新の準備ができました。再読み込みすると最新版を利用できます。",
+    "later": "後で",
+    "apply": "今すぐ更新"
+  },
   "time": {
     "unknown": "不明な時間",
     "invalidDate": "無効な日付"

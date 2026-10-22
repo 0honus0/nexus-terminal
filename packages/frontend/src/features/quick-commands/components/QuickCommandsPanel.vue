@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { isNetworkFailure } from '@/client/http/network-failure';
 	import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 	import { storeToRefs } from 'pinia';
 	import { useI18n } from 'vue-i18n';
@@ -59,6 +60,21 @@
 			tagDraft.value = '';
 		},
 	});
+
+	watch(error, (cause) => {
+		if (!cause || isNetworkFailure(cause)) return;
+		feedback.notifyError(preferenceFailureMessage(cause, t), 0, {
+			key: 'quick-commands',
+			label: t('common.refresh'),
+
+			disabled: () => loading.value,
+
+			onClick: () => {
+				void store.load(true).catch(() => undefined);
+			},
+		});
+	});
+
 	const saving = ref(false);
 	const formView = useAuthenticatedViewScope({
 		available: () => visible.value,
@@ -245,6 +261,7 @@
 				await store.renameTag(original, name, signal);
 			}
 		} catch (cause) {
+			if (isNetworkFailure(cause) || cause === error.value) return;
 			if (!view.isCurrent(signal)) {
 				return;
 			}
@@ -281,6 +298,7 @@
 				visible.value = false;
 			}
 		} catch (cause) {
+			if (isNetworkFailure(cause) || cause === error.value) return;
 			if (!formView.isCurrent(signal)) {
 				return;
 			}
@@ -351,6 +369,7 @@
 				}
 				await store.remove(command, signal);
 			} catch (cause) {
+				if (isNetworkFailure(cause) || cause === error.value) return;
 				if (!view.isCurrent(signal)) {
 					return;
 				}
@@ -396,6 +415,17 @@
 				@blur="handleSearchBlur"
 			/>
 			<button
+				v-if="error"
+				type="button"
+				class="quick-control"
+				:disabled="loading"
+				:title="t('common.refresh')"
+				:aria-label="t('common.refresh')"
+				@click="store.load(true).catch(() => undefined)"
+			>
+				<i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }" aria-hidden="true"></i>
+			</button>
+			<button
 				type="button"
 				class="quick-control"
 				:title="sortButtonTitle"
@@ -440,24 +470,12 @@
 			:style="rowStyle"
 			:data-row-scale="localScale.toFixed(2)"
 		>
-			<div v-if="error && store.items.length" role="alert" class="p-2 text-sm text-error">
-				{{ preferenceFailureMessage(error, t) }}
-				<button @click="store.load(true).catch(() => undefined)">{{ t('common.retry') }}</button>
-			</div>
 			<div
 				v-if="loading"
 				class="flex h-full flex-col items-center justify-center p-6 text-center text-sm text-text-secondary"
 			>
 				<i class="fas fa-spinner fa-spin mb-2 text-xl" aria-hidden="true"></i>
 				<p>{{ t('common.loading') }}</p>
-			</div>
-			<div
-				v-else-if="error && !store.items.length"
-				class="flex h-full flex-col items-center justify-center p-6 text-center text-sm text-error"
-			>
-				<i class="fas fa-exclamation-triangle mb-2 text-xl" aria-hidden="true"></i>
-				<p>{{ t('quickCommands.notifications.loadFailed', { error: preferenceFailureMessage(error, t) }) }}</p>
-				<button @click="store.load(true).catch(() => undefined)">{{ t('common.retry') }}</button>
 			</div>
 			<div
 				v-else-if="!(showTags ? groups.length : flat.length) && search"

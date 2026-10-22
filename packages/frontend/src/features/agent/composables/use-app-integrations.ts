@@ -164,6 +164,21 @@ export function useAppIntegrations(appId: string, available: () => boolean = () 
 		);
 	}
 
+	async function toggle(item: ManagedIntegration): Promise<void> {
+		if (blocked.value || pendingCreate.value || original.value !== null) return;
+		const baseline = structuredClone(toRaw(item));
+		const input = toIntegrationDraft(baseline);
+		input.enabled = !baseline.enabled;
+		await operation.execute(
+			(signal) => updateManagedIntegration(appId, baseline, input, signal),
+			(value) => {
+				items.value = items.value.map((item) => (item.id === value.id ? value : item));
+				if (discovery.value?.integration.id === value.id) discovery.value = null;
+			},
+			{ write: true },
+		);
+	}
+
 	async function discover(item: ManagedIntegration): Promise<void> {
 		if (blocked.value || pendingCreate.value || item.configuration.kind !== 'mcp') {
 			return;
@@ -210,5 +225,6 @@ export function useAppIntegrations(appId: string, available: () => boolean = () 
 		save,
 		remove,
 		discover,
+		toggle,
 	};
 }

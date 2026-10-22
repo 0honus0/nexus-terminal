@@ -62,12 +62,16 @@
 	}
 </script>
 <template>
-	<div class="p-2">
-		<h3 class="mb-6 text-center text-lg font-semibold">
+	<form class="flex min-h-0 flex-1 flex-col text-foreground" @submit.prevent="submit">
+		<h3 class="shrink-0 pb-4 text-lg font-semibold">
 			{{ proxy ? t('proxies.form.titleEdit') : t('proxies.form.title') }}
 		</h3>
-		<form @submit.prevent="submit">
-			<fieldset class="space-y-4" :disabled="loading">
+		<fieldset
+			class="m-0 min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-y-contain border-0 p-0 pr-1 sm:pr-3"
+			:disabled="loading"
+		>
+			<section class="ui-form-section space-y-4">
+				<h4>{{ t('proxies.form.sectionBasic') }}</h4>
 				<UiFormField :label="t('proxies.form.name')"
 					><UiInput id="proxy-name" v-model="form.name" required
 				/></UiFormField>
@@ -77,12 +81,20 @@
 						<option value="HTTP">HTTP</option></UiSelect
 					></UiFormField
 				>
-				<UiFormField :label="t('proxies.form.host')"
-					><UiInput id="proxy-host" v-model="form.host" required
-				/></UiFormField>
-				<UiFormField :label="t('proxies.form.port')"
-					><UiInput id="proxy-port" v-model="form.port" type="number" min="1" max="65535" required
-				/></UiFormField>
+			</section>
+			<section class="ui-form-section space-y-4">
+				<h4>{{ t('proxies.form.sectionEndpoint') }}</h4>
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_120px]">
+					<UiFormField :label="t('proxies.form.host')"
+						><UiInput id="proxy-host" v-model="form.host" required
+					/></UiFormField>
+					<UiFormField :label="t('proxies.form.port')"
+						><UiInput id="proxy-port" v-model="form.port" type="number" min="1" max="65535" required
+					/></UiFormField>
+				</div>
+			</section>
+			<section class="ui-form-section space-y-4">
+				<h4>{{ t('proxies.form.sectionCredentials') }}</h4>
 				<UiFormField :label="`${t('proxies.form.username')} (${t('proxies.form.optional')})`"
 					><UiInput id="proxy-username" v-model="form.username"
 				/></UiFormField>
@@ -97,21 +109,21 @@
 						><UiCheckbox v-model="form.clearPassword" />{{ t('proxies.form.clearStoredPassword') }}</label
 					></UiFormField
 				>
-				<p
-					v-if="error"
-					class="rounded-md border border-error/30 bg-error/10 p-3 text-center text-sm font-medium text-error"
-				>
-					{{ error }}
-				</p>
-				<div class="mt-6 flex justify-end space-x-3 border-t border-border pt-5">
-					<UiButton type="submit" appearance="solid" tone="primary" :loading="loading">{{
-						t('common.save')
-					}}</UiButton
-					><UiButton type="button" :disabled="loading" @click="emit('cancel')">{{
-						t('proxies.form.cancel')
-					}}</UiButton>
-				</div>
-			</fieldset>
-		</form>
-	</div>
+			</section>
+			<p
+				v-if="error"
+				class="rounded-md border border-error/30 bg-error/10 p-3 text-center text-sm font-medium text-error"
+			>
+				{{ error }}
+			</p>
+		</fieldset>
+		<div class="mt-4 flex shrink-0 justify-end gap-3 border-t border-border pt-4">
+			<UiButton type="button" :disabled="loading" @click="emit('cancel')">{{
+				t('proxies.form.cancel')
+			}}</UiButton>
+			<UiButton type="submit" appearance="solid" tone="primary" :loading="loading">{{
+				t('common.save')
+			}}</UiButton>
+		</div>
+	</form>
 </template>

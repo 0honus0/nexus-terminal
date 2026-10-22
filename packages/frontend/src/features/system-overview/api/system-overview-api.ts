@@ -83,7 +83,7 @@ export const systemOverviewApi = {
 			},
 			signal,
 		);
-		return toLocalResource(value);
+		return toLocalResource(value, Date.now());
 	},
 
 	async ssh(target: SshResourceTarget, signal?: AbortSignal): Promise<SshResource> {

@@ -1,3 +1,4 @@
+import { useFeedbackMessage, type NotificationKind } from '@/shared/feedback/public';
 import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAuthSession } from '@/features/auth/public';
@@ -24,7 +25,7 @@ function failureKey(cause: unknown, committed: boolean): string {
 	return cause.code === 'invalid_input' ? 'auth.errors.invalidInput' : 'auth.errors.generic';
 }
 
-export function useSecurityConfiguration(): SecurityConfigurationController {
+export function useSecurityConfiguration(section: 'network' | 'captcha'): SecurityConfigurationController {
 	const { t } = useI18n();
 	const auth = useAuthSession();
 	const snapshot = ref<CoreConfiguration | null>(null);
@@ -45,7 +46,14 @@ export function useSecurityConfiguration(): SecurityConfigurationController {
 	const loading = ref(false);
 	const needsRefresh = ref(true);
 	const message = ref('');
+	const notificationKind = ref<NotificationKind>('error');
+	let failureCause: unknown;
 	const success = ref(false);
+	useFeedbackMessage(
+		() => message.value,
+		() => notificationKind.value,
+		() => failureCause,
+	);
 	let generation = 0;
 	let active = true;
 	let disposed = false;
@@ -68,6 +76,8 @@ export function useSecurityConfiguration(): SecurityConfigurationController {
 		loading.value = false;
 		needsRefresh.value = true;
 		message.value = '';
+		notificationKind.value = 'error';
+		failureCause = undefined;
 		success.value = false;
 	}
 
@@ -90,7 +100,10 @@ export function useSecurityConfiguration(): SecurityConfigurationController {
 		needsRefresh.value = false;
 	}
 
-	async function execute(work?: (signal: AbortSignal) => Promise<CoreConfiguration | void>): Promise<void> {
+	async function execute(
+		work?: (signal: AbortSignal) => Promise<CoreConfiguration | void>,
+		live = false,
+	): Promise<void> {
 		if (loading.value || disposed || !active || (work && (needsRefresh.value || !snapshot.value))) {
 			return;
 		}
@@ -99,6 +112,8 @@ export function useSecurityConfiguration(): SecurityConfigurationController {
 		const signal = controller.signal;
 		loading.value = true;
 		message.value = '';
+		notificationKind.value = 'error';
+		failureCause = undefined;
 		success.value = false;
 		let committed = false;
 		try {
@@ -112,8 +127,16 @@ export function useSecurityConfiguration(): SecurityConfigurationController {
 			}
 			publish(result);
 			if (work) {
-				message.value = t('settings.configuration.saved');
+				notificationKind.value = 'success';
+				message.value = t(
+					live || !result.pendingRestart
+						? 'settings.configuration.savedLive'
+						: 'settings.configuration.saved',
+				);
 				success.value = true;
+			} else if (section === 'captcha' && result.pendingRestart) {
+				notificationKind.value = 'warning';
+				message.value = t('settings.configuration.restart');
 			}
 		} catch (cause) {
 			if (current !== generation || disposed) {
@@ -121,6 +144,7 @@ export function useSecurityConfiguration(): SecurityConfigurationController {
 			}
 			const conflict = cause instanceof ConfigurationFailure && cause.code === 'version_conflict';
 			const unknown = !(cause instanceof ConfigurationFailure) || cause.outcome === 'unknown';
+			failureCause = cause;
 			message.value = t(failureKey(cause, committed));
 			if (
 				committed ||
@@ -163,7 +187,7 @@ export function useSecurityConfiguration(): SecurityConfigurationController {
 				: draft.loginBanDuration,
 		};
 		const current = generation;
-		await execute((signal) => configurationApi.saveNetwork(original, input, signal));
+		await execute((signal) => configurationApi.saveNetwork(original, input, signal), true);
 		if (changes && generation === current + 1 && success.value) {
 			// A switch saves its own field without submitting or clearing neighbouring drafts.
 			network.value = {

@@ -46,7 +46,7 @@
 </script>
 <template>
 	<section class="space-y-3 text-xs">
-		<section class="rounded-xl border border-border/70 bg-card p-3.5 shadow-xs">
+		<section class="rounded-xl border border-border/55 bg-card/85 p-3.5 shadow-xs">
 			<div class="flex items-start justify-between gap-2">
 				<div class="min-w-0">
 					<div class="text-[10px] font-semibold uppercase tracking-wider text-text-secondary">
@@ -85,11 +85,11 @@
 			</div>
 
 			<div class="mt-3 grid grid-cols-2 gap-2 border-t border-border/50 pt-2.5 text-[11px]">
-				<div class="rounded-lg border border-border/40 bg-background/50 p-2">
+				<div class="rounded-lg bg-background/45 p-2">
 					<div class="text-text-secondary">{{ t('agent.tasks.startedAt') }}</div>
 					<div class="mt-0.5 font-mono text-[10px] text-foreground">{{ formatTime(run.createdAt) }}</div>
 				</div>
-				<div class="rounded-lg border border-border/40 bg-background/50 p-2">
+				<div class="rounded-lg bg-background/45 p-2">
 					<div class="text-text-secondary">{{ t('agent.tasks.updatedAt') }}</div>
 					<div class="mt-0.5 font-mono text-[10px] text-foreground">{{ formatTime(run.updatedAt) }}</div>
 				</div>
@@ -106,7 +106,7 @@
 			<article
 				v-for="item in children"
 				:key="item.id"
-				class="rounded-xl border border-border/70 bg-card p-3 shadow-xs"
+				class="rounded-xl border border-border/55 bg-card/80 p-3 shadow-xs"
 			>
 				<div class="flex items-start justify-between gap-2">
 					<div class="min-w-0">
@@ -151,7 +151,7 @@
 			</article>
 		</section>
 
-		<section v-if="child" class="rounded-xl border border-border/70 bg-card p-3 shadow-xs">
+		<section v-if="child" class="rounded-xl border border-border/55 bg-card/80 p-3 shadow-xs">
 			<header class="flex items-center justify-between gap-2">
 				<div class="min-w-0">
 					<h4 class="text-xs font-semibold text-foreground">{{ t('agent.nativeRun.messages') }}</h4>
@@ -173,7 +173,7 @@
 				<li
 					v-for="message in messages"
 					:key="message.sequence"
-					class="rounded-lg border border-border/45 bg-background/45 px-2.5 py-2 text-[11px]"
+					class="rounded-lg bg-background/45 px-2.5 py-2 text-[11px]"
 				>
 					<div class="flex items-center justify-between gap-2">
 						<span class="font-medium text-foreground">#{{ message.sequence }}</span>
@@ -191,7 +191,7 @@
 			</ul>
 		</section>
 
-		<details class="rounded-xl border border-border/70 bg-card p-3 shadow-xs">
+		<details class="rounded-xl border border-border/55 bg-card/80 p-3 shadow-xs">
 			<summary class="cursor-pointer text-[11px] font-medium text-text-secondary hover:text-foreground">
 				{{ t('agent.nativeRun.technicalDetails') }}
 			</summary>
@@ -207,7 +207,7 @@
 				<dt>Thread</dt>
 				<dd class="break-all text-foreground">{{ run.threadId }}</dd>
 			</dl>
-			<details class="mt-2 rounded-lg border border-border/45 bg-background/45 p-2">
+			<details class="mt-2 rounded-lg bg-background/45 p-2">
 				<summary class="cursor-pointer text-[10px] font-medium text-text-secondary">
 					{{ t('agent.nativeRun.events') }}
 				</summary>

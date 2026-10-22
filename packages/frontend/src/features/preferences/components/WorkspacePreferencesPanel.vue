@@ -1,9 +1,9 @@
 <script setup lang="ts">
-	import { computed, reactive, ref } from 'vue';
+	import { computed, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import { structurallyEqual } from '@/foundation/data';
-	import { UiButton, UiCheckbox, UiFormField, UiInput, UiSelect } from '@/foundation/ui';
-	import { useFeedback } from '@/shared/feedback/public';
+	import { UiButton, UiCheckbox, UiFormField, UiInput, UiSelect, UiSettingsGroup } from '@/foundation/ui';
+	import { useFeedback, useSettingsReloadSource } from '@/shared/feedback/public';
 	import MonitoringConfigurationPanel from './MonitoringConfigurationPanel.vue';
 	import { usePreferencesEditor } from '../composables/use-preferences-editor';
 	import type { UserPreferences } from '../model/preferences-types';
@@ -15,13 +15,14 @@
 	const emit = defineEmits<{ saved: [preferences: UserPreferences] }>();
 	const editor = usePreferencesEditor(t);
 	const { form, baseline, loading, loadError, needsRefresh, preferences } = editor;
-	const savingGroup = ref<GroupId | null>(null);
-	const groupMessages = reactive<Record<GroupId, { text: string; success: boolean } | null>>({
-		files: null,
-		commands: null,
-		monitoring: null,
-		layout: null,
+	useSettingsReloadSource({
+		id: 'preferences-workspace',
+
+		pending: () => !loading.value && (needsRefresh.value || Boolean(loadError.value)),
+
+		reload: editor.refresh,
 	});
+	const savingGroup = ref<GroupId | null>(null);
 
 	const fileKeys = [
 		'showPopupFileEditor',
@@ -59,9 +60,6 @@
 	const commandsDirty = computed(() => isDirty(commandKeys));
 	const monitoringDirty = computed(() => isDirty(monitoringKeys));
 	const layoutDirty = computed(() => isDirty(layoutKeys));
-	const dirtyCount = computed(
-		() => [filesDirty.value, commandsDirty.value, monitoringDirty.value, layoutDirty.value].filter(Boolean).length,
-	);
 
 	const patchFor = (keys: readonly (keyof UserPreferences)[]): Partial<UserPreferences> => {
 		const patch: Partial<UserPreferences> = {};
@@ -99,24 +97,20 @@
 		const patch = patchFor(keys);
 		const validationError = validatePatch(patch);
 		if (validationError) {
-			groupMessages[group] = { text: validationError, success: false };
 			feedback.notifyError(validationError);
 			return;
 		}
 		savingGroup.value = group;
-		groupMessages[group] = null;
 		try {
 			if (!(await editor.save(patch))) return;
 			emit('saved', { ...preferences.values.value });
 			const message = t('settings.preferences.saved');
-			groupMessages[group] = { text: message, success: true };
 			feedback.notifySuccess(message);
 		} catch (cause) {
 			if (!editor.view.isCurrent(signal)) return;
 			const message = t('settings.preferences.saveFailed', {
 				error: cause instanceof Error ? cause.message : String(cause),
 			});
-			groupMessages[group] = { text: message, success: false };
 			feedback.notifyError(message);
 		} finally {
 			if (editor.view.isCurrent(signal)) savingGroup.value = null;
@@ -125,114 +119,67 @@
 </script>
 
 <template>
-	<section class="workspace-preferences min-w-0">
-		<UiButton
-			v-if="!loading && (needsRefresh || loadError)"
-			class="mb-3"
-			:disabled="loading || editor.saving.value"
-			@click="editor.refresh"
-			>{{ t('common.refresh') }}</UiButton
-		>
-		<header class="flex flex-col gap-2 px-1 py-3 sm:flex-row sm:items-center sm:justify-between">
-			<div class="min-w-0">
-				<h2 class="text-lg font-semibold text-foreground">{{ t('settings.workspace.title') }}</h2>
-				<p class="mt-1 max-w-3xl text-xs leading-5 text-text-secondary">
-					{{ t('settings.workspace.organizedDescription') }}
-				</p>
-			</div>
-			<span
-				v-if="dirtyCount"
-				class="w-fit shrink-0 rounded-full bg-warning/10 px-2.5 py-1 text-[11px] font-medium text-warning"
-			>
-				{{ t('settings.workspace.unsavedGroups', { count: dirtyCount }) }}
-			</span>
-		</header>
-
+	<section class="workspace-preferences settings-surface min-w-0">
 		<div v-if="loading" class="p-6 text-center text-sm text-text-secondary">{{ t('common.loading') }}</div>
-		<div v-else class="space-y-5">
-			<p v-if="loadError" class="rounded-lg border border-error/40 bg-error/5 p-3 text-sm text-error">
-				{{ loadError }}
-			</p>
-
-			<form class="workspace-preferences__group" @submit.prevent="saveGroup('files', fileKeys)">
-				<div class="border-b border-border/60 px-4 py-3">
-					<h3 class="text-sm font-semibold text-foreground">{{ t('settings.workspace.groups.files') }}</h3>
-					<p class="mt-1 text-xs text-text-secondary">{{ t('settings.workspace.groups.filesHint') }}</p>
-				</div>
-				<div class="grid gap-3 p-3 lg:grid-cols-2">
-					<div class="workspace-preferences__field">
-						<label
-							for="showPopupFileEditor"
-							class="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground"
-						>
+		<div v-else class="ui-settings-groups">
+			<UiSettingsGroup :title="t('settings.workspace.groups.files')" icon="fa-solid fa-folder-tree" tone="info">
+				<template #actions>
+					<UiButton
+						type="submit"
+						form="workspace-files-form"
+						:appearance="filesDirty ? 'solid' : 'soft'"
+						:tone="filesDirty ? 'primary' : 'neutral'"
+						:disabled="!filesDirty"
+						:loading="savingGroup === 'files'"
+						>{{ t('common.save') }}</UiButton
+					>
+				</template>
+				<form id="workspace-files-form" @submit.prevent="saveGroup('files', fileKeys)">
+					<div class="workspace-preferences__grid">
+						<label class="workspace-preferences__toggle" for="showPopupFileEditor">
 							<UiCheckbox
 								id="showPopupFileEditor"
 								v-model="form.showPopupFileEditor"
 								:disabled="savingGroup !== null || needsRefresh || loading"
-								class="mt-0.5"
 							/>
-							<span class="min-w-0">{{ t('settings.popupEditor.enableLabel') }}</span>
+							<span>
+								<strong>{{ t('settings.popupEditor.enableLabel') }}</strong>
+								<small>{{ t('settings.popupEditor.description') }}</small>
+							</span>
 						</label>
-						<details class="mt-2 text-xs text-text-secondary">
-							<summary class="cursor-pointer select-none text-primary">
-								{{ t('settings.workspace.moreDetails') }}
-							</summary>
-							<p class="mt-1 leading-5">{{ t('settings.popupEditor.description') }}</p>
-						</details>
-					</div>
-					<div class="workspace-preferences__field">
-						<label
-							for="showPopupFileManager"
-							class="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground"
-						>
+						<label class="workspace-preferences__toggle" for="showPopupFileManager">
 							<UiCheckbox
 								id="showPopupFileManager"
 								v-model="form.showPopupFileManager"
 								:disabled="savingGroup !== null || needsRefresh || loading"
-								class="mt-0.5"
 							/>
-							<span>{{ t('settings.popupFileManager.enableLabel') }}</span>
+							<span>
+								<strong>{{ t('settings.popupFileManager.enableLabel') }}</strong>
+								<small>{{ t('settings.popupFileManager.description') }}</small>
+							</span>
 						</label>
-						<p class="mt-2 text-xs leading-5 text-text-secondary">
-							{{ t('settings.popupFileManager.description') }}
-						</p>
-					</div>
-					<div class="workspace-preferences__field">
-						<label
-							for="shareFileEditorTabs"
-							class="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground"
-						>
+						<label class="workspace-preferences__toggle" for="shareFileEditorTabs">
 							<UiCheckbox
 								id="shareFileEditorTabs"
 								v-model="form.shareFileEditorTabs"
 								:disabled="savingGroup !== null || needsRefresh || loading"
-								class="mt-0.5"
 							/>
-							<span>{{ t('settings.shareEditorTabs.enableLabel') }}</span>
+							<span>
+								<strong>{{ t('settings.shareEditorTabs.enableLabel') }}</strong>
+								<small>{{ t('settings.shareEditorTabs.description') }}</small>
+							</span>
 						</label>
-						<p class="mt-2 text-xs leading-5 text-text-secondary">
-							{{ t('settings.shareEditorTabs.description') }}
-						</p>
-					</div>
-					<div class="workspace-preferences__field">
-						<label
-							for="fileManagerShowDeleteConfirmation"
-							class="flex cursor-pointer items-start gap-2 text-sm font-medium text-foreground"
-						>
+						<label class="workspace-preferences__toggle" for="fileManagerShowDeleteConfirmation">
 							<UiCheckbox
 								id="fileManagerShowDeleteConfirmation"
 								v-model="form.fileManagerShowDeleteConfirmation"
 								:disabled="savingGroup !== null || needsRefresh || loading"
-								class="mt-0.5"
 							/>
-							<span>{{ t('settings.workspace.fileManagerShowDeleteConfirmationLabel') }}</span>
+							<span>
+								<strong>{{ t('settings.workspace.fileManagerShowDeleteConfirmationLabel') }}</strong>
+							</span>
 						</label>
-					</div>
-					<div class="workspace-preferences__field lg:col-span-2">
-						<div class="mb-3 text-sm font-medium text-foreground">
-							{{ t('settings.workspace.spreadsheetPreviewLimits.title') }}
-						</div>
-						<div class="grid gap-3 sm:grid-cols-2">
+						<div class="workspace-preferences__field-grid">
 							<UiFormField
 								:label="t('settings.workspace.spreadsheetPreviewLimits.rowsLabel')"
 								for-id="spreadsheetPreviewRowsPerPage"
@@ -262,48 +209,93 @@
 								/>
 							</UiFormField>
 						</div>
-						<p class="mt-2 text-xs leading-5 text-text-secondary">
+						<p class="workspace-preferences__hint">
 							{{ t('settings.workspace.spreadsheetPreviewLimits.hint') }}
 						</p>
 					</div>
-				</div>
-				<div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-3">
-					<p class="min-h-4 text-xs" :class="groupMessages.files?.success ? 'text-success' : 'text-error'">
-						{{ groupMessages.files?.text }}
-					</p>
+				</form>
+			</UiSettingsGroup>
+
+			<UiSettingsGroup :title="t('settings.workspace.groups.commands')" icon="fa-solid fa-terminal" tone="accent">
+				<template #actions>
 					<UiButton
 						type="submit"
-						appearance="solid"
-						tone="primary"
-						:disabled="!filesDirty"
-						:loading="savingGroup === 'files'"
-						>{{ t('settings.workspace.saveGroup') }}</UiButton
+						form="workspace-commands-form"
+						:appearance="commandsDirty ? 'solid' : 'soft'"
+						:tone="commandsDirty ? 'primary' : 'neutral'"
+						:disabled="!commandsDirty"
+						:loading="savingGroup === 'commands'"
+						>{{ t('common.save') }}</UiButton
 					>
-				</div>
-			</form>
-
-			<form class="workspace-preferences__group" @submit.prevent="saveGroup('commands', commandKeys)">
-				<div class="border-b border-border/60 px-4 py-3">
-					<h3 class="text-sm font-semibold text-foreground">{{ t('settings.workspace.groups.commands') }}</h3>
-					<p class="mt-1 text-xs text-text-secondary">{{ t('settings.workspace.groups.commandsHint') }}</p>
-				</div>
-				<div class="grid gap-3 p-3 lg:grid-cols-2">
-					<div class="workspace-preferences__field">
-						<label
-							for="workspaceSidebarPersistent"
-							class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-							><UiCheckbox
+				</template>
+				<form id="workspace-commands-form" @submit.prevent="saveGroup('commands', commandKeys)">
+					<div class="workspace-preferences__grid">
+						<label class="workspace-preferences__toggle" for="workspaceSidebarPersistent">
+							<UiCheckbox
 								id="workspaceSidebarPersistent"
 								v-model="form.workspaceSidebarPersistent"
 								:disabled="savingGroup !== null || needsRefresh || loading"
-								class="mt-0.5"
-							/><span>{{ t('settings.workspace.sidebarPersistentLabel') }}</span></label
-						>
-						<p class="mt-2 text-xs text-text-secondary">
-							{{ t('settings.workspace.sidebarPersistentDescription') }}
-						</p>
-					</div>
-					<div class="workspace-preferences__field">
+							/>
+							<span>
+								<strong>{{ t('settings.workspace.sidebarPersistentLabel') }}</strong>
+								<small>{{ t('settings.workspace.sidebarPersistentDescription') }}</small>
+							</span>
+						</label>
+						<label class="workspace-preferences__toggle" for="showConnectionTags">
+							<UiCheckbox
+								id="showConnectionTags"
+								v-model="form.showConnectionTags"
+								:disabled="savingGroup !== null || needsRefresh || loading"
+							/>
+							<span>
+								<strong>{{ t('settings.workspace.showConnectionTagsLabel') }}</strong>
+								<small>{{ t('settings.workspace.showConnectionTagsDescription') }}</small>
+							</span>
+						</label>
+						<label class="workspace-preferences__toggle" for="showQuickCommandTags">
+							<UiCheckbox
+								id="showQuickCommandTags"
+								v-model="form.showQuickCommandTags"
+								:disabled="savingGroup !== null || needsRefresh || loading"
+							/>
+							<span>
+								<strong>{{ t('settings.workspace.showQuickCommandTagsLabel') }}</strong>
+								<small>{{ t('settings.workspace.showQuickCommandTagsDescription') }}</small>
+							</span>
+						</label>
+						<label class="workspace-preferences__toggle" for="quickCommandsCollapsibleSearch">
+							<UiCheckbox
+								id="quickCommandsCollapsibleSearch"
+								v-model="form.quickCommandsCollapsibleSearch"
+								:disabled="savingGroup !== null || needsRefresh || loading"
+							/>
+							<span>
+								<strong>{{ t('settings.workspace.quickCommandsCollapsibleSearchLabel') }}</strong>
+								<small>{{ t('settings.workspace.quickCommandsCollapsibleSearchDescription') }}</small>
+							</span>
+						</label>
+						<label class="workspace-preferences__toggle" for="quickCommandsCompactMode">
+							<UiCheckbox
+								id="quickCommandsCompactMode"
+								v-model="form.quickCommandsCompactMode"
+								:disabled="savingGroup !== null || needsRefresh || loading"
+							/>
+							<span>
+								<strong>{{ t('settings.workspace.quickCommandsCompactModeLabel') }}</strong>
+								<small>{{ t('settings.workspace.quickCommandsCompactModeDescription') }}</small>
+							</span>
+						</label>
+						<label class="workspace-preferences__toggle" for="terminalRightClickCopyPaste">
+							<UiCheckbox
+								id="terminalRightClickCopyPaste"
+								v-model="form.terminalRightClickCopyPaste"
+								:disabled="savingGroup !== null || needsRefresh || loading"
+							/>
+							<span>
+								<strong>{{ t('settings.workspace.terminalRightClickCopyPasteLabel') }}</strong>
+								<small>{{ t('settings.workspace.terminalRightClickCopyPasteDescription') }}</small>
+							</span>
+						</label>
 						<UiFormField
 							:label="t('settings.commandInputSync.selectLabel')"
 							for-id="commandInputSyncTarget"
@@ -321,70 +313,8 @@
 									{{ t('settings.commandInputSync.targetCommandHistory') }}
 								</option>
 							</UiSelect>
+							<p class="workspace-preferences__hint">{{ t('settings.commandInputSync.description') }}</p>
 						</UiFormField>
-						<p class="mt-2 text-xs text-text-secondary">{{ t('settings.commandInputSync.description') }}</p>
-					</div>
-					<div class="workspace-preferences__field">
-						<label
-							for="showConnectionTags"
-							class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-							><UiCheckbox
-								id="showConnectionTags"
-								v-model="form.showConnectionTags"
-								:disabled="savingGroup !== null || needsRefresh || loading"
-								class="mt-0.5"
-							/><span>{{ t('settings.workspace.showConnectionTagsLabel') }}</span></label
-						>
-						<p class="mt-2 text-xs text-text-secondary">
-							{{ t('settings.workspace.showConnectionTagsDescription') }}
-						</p>
-					</div>
-					<div class="workspace-preferences__field">
-						<label
-							for="showQuickCommandTags"
-							class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-							><UiCheckbox
-								id="showQuickCommandTags"
-								v-model="form.showQuickCommandTags"
-								:disabled="savingGroup !== null || needsRefresh || loading"
-								class="mt-0.5"
-							/><span>{{ t('settings.workspace.showQuickCommandTagsLabel') }}</span></label
-						>
-						<p class="mt-2 text-xs text-text-secondary">
-							{{ t('settings.workspace.showQuickCommandTagsDescription') }}
-						</p>
-					</div>
-					<div class="workspace-preferences__field">
-						<label
-							for="quickCommandsCollapsibleSearch"
-							class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-							><UiCheckbox
-								id="quickCommandsCollapsibleSearch"
-								v-model="form.quickCommandsCollapsibleSearch"
-								:disabled="savingGroup !== null || needsRefresh || loading"
-								class="mt-0.5"
-							/><span>{{ t('settings.workspace.quickCommandsCollapsibleSearchLabel') }}</span></label
-						>
-						<p class="mt-2 text-xs text-text-secondary">
-							{{ t('settings.workspace.quickCommandsCollapsibleSearchDescription') }}
-						</p>
-					</div>
-					<div class="workspace-preferences__field">
-						<label
-							for="quickCommandsCompactMode"
-							class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-							><UiCheckbox
-								id="quickCommandsCompactMode"
-								v-model="form.quickCommandsCompactMode"
-								:disabled="savingGroup !== null || needsRefresh || loading"
-								class="mt-0.5"
-							/><span>{{ t('settings.workspace.quickCommandsCompactModeLabel') }}</span></label
-						>
-						<p class="mt-2 text-xs text-text-secondary">
-							{{ t('settings.workspace.quickCommandsCompactModeDescription') }}
-						</p>
-					</div>
-					<div class="workspace-preferences__field">
 						<UiFormField
 							:label="t('settings.terminalScrollback.limitLabel')"
 							for-id="terminalScrollbackLimit"
@@ -398,93 +328,82 @@
 								step="1"
 								:disabled="savingGroup !== null || needsRefresh || loading"
 							/>
+							<p class="workspace-preferences__hint">{{ t('settings.terminalScrollback.limitHint') }}</p>
 						</UiFormField>
-						<p class="mt-2 text-xs text-text-secondary">{{ t('settings.terminalScrollback.limitHint') }}</p>
 					</div>
-					<div class="workspace-preferences__field">
-						<label
-							for="terminalRightClickCopyPaste"
-							class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-							><UiCheckbox
-								id="terminalRightClickCopyPaste"
-								v-model="form.terminalRightClickCopyPaste"
-								:disabled="savingGroup !== null || needsRefresh || loading"
-								class="mt-0.5"
-							/><span>{{ t('settings.workspace.terminalRightClickCopyPasteLabel') }}</span></label
-						>
-						<p class="mt-2 text-xs text-text-secondary">
-							{{ t('settings.workspace.terminalRightClickCopyPasteDescription') }}
-						</p>
-					</div>
-				</div>
-				<div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-3">
-					<p class="min-h-4 text-xs" :class="groupMessages.commands?.success ? 'text-success' : 'text-error'">
-						{{ groupMessages.commands?.text }}
-					</p>
+				</form>
+			</UiSettingsGroup>
+
+			<UiSettingsGroup
+				:title="t('settings.workspace.groups.monitoring')"
+				icon="fa-solid fa-gauge-high"
+				tone="success"
+			>
+				<template #actions>
 					<UiButton
 						type="submit"
-						appearance="solid"
-						tone="primary"
-						:disabled="!commandsDirty"
-						:loading="savingGroup === 'commands'"
-						>{{ t('settings.workspace.saveGroup') }}</UiButton
+						form="workspace-monitoring-form"
+						:appearance="monitoringDirty ? 'solid' : 'soft'"
+						:tone="monitoringDirty ? 'primary' : 'neutral'"
+						:disabled="!monitoringDirty"
+						:loading="savingGroup === 'monitoring'"
+						>{{ t('common.save') }}</UiButton
 					>
-				</div>
-			</form>
-
-			<section class="workspace-preferences__group">
-				<div class="border-b border-border/60 px-4 py-3">
-					<h3 class="text-sm font-semibold text-foreground">
-						{{ t('settings.workspace.groups.monitoring') }}
-					</h3>
-					<p class="mt-1 text-xs text-text-secondary">{{ t('settings.workspace.groups.monitoringHint') }}</p>
-				</div>
-				<MonitoringConfigurationPanel class="mx-3 mt-3" />
-				<form class="border-t border-border/60" @submit.prevent="saveGroup('monitoring', monitoringKeys)">
-					<div class="grid gap-3 p-3 lg:grid-cols-2">
-						<div class="workspace-preferences__field">
-							<div class="space-y-2">
-								<label
-									for="dashboardShowLocalResources"
-									class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-									><UiCheckbox
-										id="dashboardShowLocalResources"
-										v-model="form.dashboardShowLocalResources"
-										:aria-label="t('settings.dashboardResources.localLabel')"
-										:disabled="savingGroup !== null || needsRefresh || loading"
-										class="mt-0.5"
-									/><span>{{ t('settings.dashboardResources.localLabel') }}</span></label
-								>
-								<label
-									for="dashboardShowRemoteResources"
-									class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-									><UiCheckbox
-										id="dashboardShowRemoteResources"
-										v-model="form.dashboardShowRemoteResources"
-										:aria-label="t('settings.dashboardResources.remoteLabel')"
-										:disabled="savingGroup !== null || needsRefresh || loading"
-										class="mt-0.5"
-									/><span>{{ t('settings.dashboardResources.remoteLabel') }}</span></label
-								>
-							</div>
-						</div>
-						<div class="workspace-preferences__field">
-							<label
-								for="showStatusMonitorIpAddress"
-								class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-								><UiCheckbox
-									id="showStatusMonitorIpAddress"
-									v-model="form.showStatusMonitorIpAddress"
-									:disabled="savingGroup !== null || needsRefresh || loading"
-									class="mt-0.5"
-								/><span>{{ t('settings.statusMonitorShowIp.enableLabel') }}</span></label
+				</template>
+				<form
+					id="workspace-monitoring-form"
+					class="mt-4"
+					@submit.prevent="saveGroup('monitoring', monitoringKeys)"
+				>
+					<div class="workspace-preferences__grid">
+						<label class="workspace-preferences__toggle" for="dashboardShowLocalResources">
+							<UiCheckbox
+								id="dashboardShowLocalResources"
+								v-model="form.dashboardShowLocalResources"
+								:aria-label="t('settings.dashboardResources.localLabel')"
+								:disabled="savingGroup !== null || needsRefresh || loading"
+							/>
+							<span
+								><strong>{{ t('settings.dashboardResources.localLabel') }}</strong></span
 							>
-						</div>
-						<div class="workspace-preferences__field">
+						</label>
+						<label class="workspace-preferences__toggle" for="dashboardShowRemoteResources">
+							<UiCheckbox
+								id="dashboardShowRemoteResources"
+								v-model="form.dashboardShowRemoteResources"
+								:aria-label="t('settings.dashboardResources.remoteLabel')"
+								:disabled="savingGroup !== null || needsRefresh || loading"
+							/>
+							<span
+								><strong>{{ t('settings.dashboardResources.remoteLabel') }}</strong></span
+							>
+						</label>
+						<label class="workspace-preferences__toggle" for="showStatusMonitorIpAddress">
+							<UiCheckbox
+								id="showStatusMonitorIpAddress"
+								v-model="form.showStatusMonitorIpAddress"
+								:disabled="savingGroup !== null || needsRefresh || loading"
+							/>
+							<span
+								><strong>{{ t('settings.statusMonitorShowIp.enableLabel') }}</strong></span
+							>
+						</label>
+						<label class="workspace-preferences__toggle" for="dockerDefaultExpand">
+							<UiCheckbox
+								id="dockerDefaultExpand"
+								v-model="form.dockerDefaultExpand"
+								:disabled="savingGroup !== null || needsRefresh || loading"
+							/>
+							<span
+								><strong>{{ t('settings.docker.defaultExpandLabel') }}</strong></span
+							>
+						</label>
+						<div class="workspace-preferences__field-grid">
 							<UiFormField
 								:label="t('settings.docker.refreshIntervalLabel')"
 								for-id="dockerStatusIntervalSeconds"
-								><UiInput
+							>
+								<UiInput
 									id="dockerStatusIntervalSeconds"
 									v-model="form.dockerStatusIntervalSeconds"
 									type="number"
@@ -492,109 +411,126 @@
 									max="86400"
 									step="1"
 									:disabled="savingGroup !== null || needsRefresh || loading"
-							/></UiFormField>
-							<label
-								for="dockerDefaultExpand"
-								class="mt-3 flex cursor-pointer items-start gap-2 text-sm font-medium"
-								><UiCheckbox
-									id="dockerDefaultExpand"
-									v-model="form.dockerDefaultExpand"
-									:disabled="savingGroup !== null || needsRefresh || loading"
-									class="mt-0.5"
-								/><span>{{ t('settings.docker.defaultExpandLabel') }}</span></label
-							>
+								/>
+							</UiFormField>
 						</div>
 					</div>
-					<div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-3">
-						<p
-							class="min-h-4 text-xs"
-							:class="groupMessages.monitoring?.success ? 'text-success' : 'text-error'"
-						>
-							{{ groupMessages.monitoring?.text }}
-						</p>
-						<UiButton
-							type="submit"
-							appearance="solid"
-							tone="primary"
-							:disabled="!monitoringDirty"
-							:loading="savingGroup === 'monitoring'"
-							>{{ t('settings.workspace.saveGroup') }}</UiButton
-						>
-					</div>
 				</form>
-			</section>
+			</UiSettingsGroup>
 
-			<details class="workspace-preferences__group">
-				<summary
-					class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 select-none hover:bg-card/20 transition-colors"
-				>
-					<span
-						><span class="block text-sm font-semibold text-foreground">{{
-							t('settings.workspace.groups.advanced')
-						}}</span
-						><span class="mt-1 block text-xs text-text-secondary">{{
-							t('settings.workspace.groups.advancedHint')
-						}}</span></span
+			<MonitoringConfigurationPanel />
+
+			<UiSettingsGroup
+				:title="t('settings.workspace.groups.advanced')"
+				icon="fa-solid fa-sliders"
+				tone="primary"
+				compact
+			>
+				<template #actions>
+					<UiButton
+						type="submit"
+						form="workspace-layout-form"
+						:appearance="layoutDirty ? 'solid' : 'soft'"
+						:tone="layoutDirty ? 'primary' : 'neutral'"
+						:disabled="!layoutDirty"
+						:loading="savingGroup === 'layout'"
+						>{{ t('common.save') }}</UiButton
 					>
-					<i class="fa-solid fa-chevron-down shrink-0 text-xs text-text-secondary" aria-hidden="true"></i>
-				</summary>
-				<form class="border-t border-border/60" @submit.prevent="saveGroup('layout', layoutKeys)">
-					<div class="grid gap-3 p-3 lg:grid-cols-2">
-						<div class="workspace-preferences__field">
-							<label for="layoutLocked" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-								><UiCheckbox
-									id="layoutLocked"
-									v-model="form.layoutLocked"
-									:disabled="savingGroup !== null || needsRefresh || loading"
-									class="mt-0.5"
-								/><span>{{ t('settings.workspace.layoutLockLabel') }}</span></label
-							>
-							<p class="mt-2 text-xs text-text-secondary">
-								{{ t('settings.workspace.layoutLockDescription') }}
-							</p>
-						</div>
-						<div class="workspace-preferences__field">
-							<label for="navBarVisible" class="flex cursor-pointer items-start gap-2 text-sm font-medium"
-								><UiCheckbox
-									id="navBarVisible"
-									v-model="form.navBarVisible"
-									:disabled="savingGroup !== null || needsRefresh || loading"
-									class="mt-0.5"
-								/><span>{{ t('settings.workspace.navBarVisibleLabel') }}</span></label
-							>
-							<p class="mt-2 text-xs text-text-secondary">
-								{{ t('settings.workspace.navBarVisibleDescription') }}
-							</p>
-						</div>
-					</div>
-					<div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-3">
-						<p
-							class="min-h-4 text-xs"
-							:class="groupMessages.layout?.success ? 'text-success' : 'text-error'"
-						>
-							{{ groupMessages.layout?.text }}
-						</p>
-						<UiButton
-							type="submit"
-							appearance="solid"
-							tone="primary"
-							:disabled="!layoutDirty"
-							:loading="savingGroup === 'layout'"
-							>{{ t('settings.workspace.saveGroup') }}</UiButton
-						>
+				</template>
+				<form id="workspace-layout-form" @submit.prevent="saveGroup('layout', layoutKeys)">
+					<div class="workspace-preferences__grid">
+						<label class="workspace-preferences__toggle" for="layoutLocked">
+							<UiCheckbox
+								id="layoutLocked"
+								v-model="form.layoutLocked"
+								:disabled="savingGroup !== null || needsRefresh || loading"
+							/>
+							<span>
+								<strong>{{ t('settings.workspace.layoutLockLabel') }}</strong>
+								<small>{{ t('settings.workspace.layoutLockDescription') }}</small>
+							</span>
+						</label>
+						<label class="workspace-preferences__toggle" for="navBarVisible">
+							<UiCheckbox
+								id="navBarVisible"
+								v-model="form.navBarVisible"
+								:disabled="savingGroup !== null || needsRefresh || loading"
+							/>
+							<span>
+								<strong>{{ t('settings.workspace.navBarVisibleLabel') }}</strong>
+								<small>{{ t('settings.workspace.navBarVisibleDescription') }}</small>
+							</span>
+						</label>
 					</div>
 				</form>
-			</details>
+			</UiSettingsGroup>
 		</div>
 	</section>
 </template>
 
 <style scoped>
-	.workspace-preferences__group {
-		border-top: 1px solid var(--border-color);
+	.workspace-preferences__grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 14px 18px;
 	}
-	.workspace-preferences__field {
+
+	.workspace-preferences__toggle {
+		display: flex;
 		min-width: 0;
-		padding: 12px 4px;
+		align-items: flex-start;
+		gap: 10px;
+		padding: 10px 11px;
+		border-radius: 11px;
+		background: color-mix(in srgb, var(--card-bg-color) 54%, transparent);
+		cursor: pointer;
+	}
+
+	.workspace-preferences__toggle strong {
+		display: block;
+		color: var(--text-color);
+		font-size: 12px;
+		font-weight: 600;
+		line-height: 1.45;
+	}
+
+	.workspace-preferences__toggle small {
+		display: block;
+		margin-top: 3px;
+		color: var(--text-color-secondary);
+		font-size: 11px;
+		font-weight: 400;
+		line-height: 1.55;
+	}
+
+	.workspace-preferences__field-grid {
+		display: grid;
+		min-width: 0;
+		grid-column: 1 / -1;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 12px;
+	}
+
+	.workspace-preferences__hint {
+		margin-top: 5px;
+		color: var(--text-color-secondary);
+		font-size: 11px;
+		line-height: 1.55;
+	}
+
+	.workspace-preferences__footer {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 10px;
+		margin-top: 14px;
+	}
+
+	@media (max-width: 760px) {
+		.workspace-preferences__grid,
+		.workspace-preferences__field-grid {
+			grid-template-columns: minmax(0, 1fr);
+		}
 	}
 </style>

@@ -6,4 +6,4 @@ export { resetAuditCache } from './composables/resetAuditCache';
 
 export type { AuditEntry, AuditPage, AuditQuery } from './model/audit-types';
 
-export { auditSummary } from './model/auditPresentation';
+export { auditContextKey } from './model/auditPresentation';

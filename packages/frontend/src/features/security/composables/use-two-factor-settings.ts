@@ -1,3 +1,4 @@
+import { useFeedbackMessage } from '@/shared/feedback/public';
 import { onActivated, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { authErrorKey, AuthRequestFailure, createAccessApi, useAuthSession } from '@/features/auth/public';
@@ -10,7 +11,13 @@ export function useTwoFactorSettings(enabled: () => boolean, changed: () => void
 	const disablePassword = ref('');
 	const loading = ref(false);
 	const message = ref('');
+	let failureCause: unknown;
 	const success = ref(false);
+	useFeedbackMessage(
+		() => message.value,
+		() => (success.value ? 'success' : 'error'),
+		() => failureCause,
+	);
 	const api = createAccessApi();
 	const auth = useAuthSession();
 	const needsRefresh = ref(false);
@@ -38,11 +45,13 @@ export function useTwoFactorSettings(enabled: () => boolean, changed: () => void
 		const signal = controller.signal;
 		loading.value = true;
 		message.value = '';
+		failureCause = undefined;
 		success.value = false;
 		try {
 			await operation(signal);
 		} catch (cause) {
 			if (current === generation && !disposed) {
+				failureCause = cause;
 				message.value = t(authErrorKey(cause));
 				if (!(cause instanceof AuthRequestFailure) || cause.outcome === 'unknown') {
 					needsRefresh.value = true;
@@ -113,6 +122,7 @@ export function useTwoFactorSettings(enabled: () => boolean, changed: () => void
 			needsRefresh.value = false;
 			reset();
 			message.value = '';
+			failureCause = undefined;
 		} else {
 			message.value = t(state === 'anonymous' ? 'auth.errors.expired' : 'auth.errors.unknown');
 		}

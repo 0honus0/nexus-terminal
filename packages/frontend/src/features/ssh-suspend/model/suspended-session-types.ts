@@ -57,11 +57,12 @@ export interface SuspendedSessionsController {
 	search: Ref<string>;
 	loading: Ref<boolean>;
 	error: Ref<string | null>;
+	errorCause: Ref<unknown>;
 	filtered: ComputedRef<SuspendedSession[]>;
 	load(options?: SuspendedSessionsLoadOptions): Promise<SuspendedSessionsLoadResult>;
 	recover(): Promise<SuspendedSessionsLoadResult>;
-	startPolling(): void;
-	stopPolling(): void;
+	startSync(): void;
+	stopSync(): void;
 	rename(session: SuspendedSession, name: string, signal?: AbortSignal): Promise<string>;
 	remove(session: SuspendedSession, signal?: AbortSignal): Promise<void>;
 	exportLog(id: string, signal?: AbortSignal): Promise<string>;

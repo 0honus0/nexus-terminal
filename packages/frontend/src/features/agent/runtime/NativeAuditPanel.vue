@@ -1,6 +1,7 @@
 <script setup lang="ts">
 	import { ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
+	import { UiButton, UiInput } from '@/foundation/ui';
 	import { AGENT_RUN_STEP_MAX_COUNT } from '@nexus-terminal/shared/agent/runs/values';
 	import { getNativeStep, listNativeStepEvents, getNativeTool, listNativeToolEvents } from '../api/native-audit-api';
 	import { useAgentManagementOperation } from '../composables/use-agent-management-operation';
@@ -22,6 +23,13 @@
 	const toolEvents = ref<NativeToolEvent[]>([]);
 	const stepCursor = ref(0);
 	const toolCursor = ref(0);
+
+	function setStepIndex(value: string | number | null): void {
+		const parsed = typeof value === 'number' ? value : Number(value);
+		if (!Number.isFinite(parsed)) return;
+		stepIndex.value = Math.min(AGENT_RUN_STEP_MAX_COUNT, Math.max(1, Math.trunc(parsed)));
+	}
+
 	const operation = useAgentManagementOperation(
 		() => {
 			step.value = null;
@@ -75,65 +83,107 @@
 	}
 </script>
 <template>
-	<details class="space-y-2 rounded border border-border p-3">
-		<summary>{{ t('agent.nativeRun.audit') }}</summary>
-		<p class="text-xs">{{ t('agent.nativeRun.auditHelp') }}</p>
-		<p v-if="operation.notice.value" role="status">
-			{{ t('agent.settings.appManagement.' + operation.notice.value) }}
-		</p>
-		<form class="flex flex-wrap gap-2" @submit.prevent="readStep()">
-			<label
-				>{{ t('agent.nativeRun.step') }}
-				<input
-					v-model.number="stepIndex"
-					type="number"
-					min="1"
-					:max="AGENT_RUN_STEP_MAX_COUNT"
-					class="w-20 border bg-background p-1"
-			/></label>
-			<button :disabled="disabled || operation.busy.value">{{ t('agent.nativeRun.read') }}</button>
-			<button v-if="step" type="button" :disabled="disabled || operation.busy.value" @click="readStep(true)">
-				{{ t('agent.nativeRun.moreEvents') }}
-			</button>
-		</form>
-		<div v-if="step" class="text-xs">
-			<p>
-				{{ step.stepIndex }} · {{ t('agent.nativeRun.stepStates.' + step.state) }} · v{{ step.revision }} ·
-				{{ step.textBytes }} bytes
-			</p>
-			<p v-if="step.inputTokens !== undefined">
-				{{ t('agent.nativeRun.tokens') }}: {{ step.inputTokens }} / {{ step.outputTokens }}
-			</p>
-			<ul>
-				<li v-for="event in stepEvents" :key="event.sequence">
-					#{{ event.sequence }} · {{ event.kind }}
-					<template v-if="event.kind === 'text.delta'">· {{ event.textBytes }} bytes</template
-					><template v-else-if="event.kind === 'usage'"
-						>· {{ event.inputTokens }} / {{ event.outputTokens }}</template
-					>
-				</li>
-			</ul>
-		</div>
-		<form class="flex flex-wrap gap-2" @submit.prevent="readTool()">
-			<label
-				>{{ t('agent.nativeRun.toolId') }}
-				<input v-model="toolId" class="min-w-0 border bg-background p-1" required
-			/></label>
-			<button :disabled="disabled || operation.busy.value">{{ t('agent.nativeRun.read') }}</button>
-			<button v-if="tool" type="button" :disabled="disabled || operation.busy.value" @click="readTool(true)">
-				{{ t('agent.nativeRun.moreEvents') }}
-			</button>
-		</form>
-		<div v-if="tool" class="text-xs">
-			<p>
-				{{ tool.toolName }} · {{ tool.state }} · v{{ tool.revision }} · {{ tool.capability }} · {{ tool.risk }}
-			</p>
-			<p>{{ t('agent.nativeRun.target') }}: {{ tool.targetId ?? '—' }} · {{ tool.operationHash }}</p>
-			<ul>
-				<li v-for="event in toolEvents" :key="event.revision">
-					#{{ event.revision }} · {{ event.state }} · {{ event.operationHash }}
-				</li>
-			</ul>
+	<details class="rounded-xl border border-border/55 bg-card/70 p-3">
+		<summary class="cursor-pointer text-xs font-medium text-foreground">
+			{{ t('agent.nativeRun.audit') }}
+		</summary>
+		<div class="mt-2 space-y-3">
+			<p class="text-[11px] leading-4 text-text-secondary">{{ t('agent.nativeRun.auditHelp') }}</p>
+			<form class="flex flex-wrap items-end gap-2" @submit.prevent="readStep()">
+				<label class="flex items-center gap-2 text-[11px] text-text-secondary">
+					<span>{{ t('agent.nativeRun.step') }}</span>
+					<UiInput
+						:model-value="stepIndex"
+						type="number"
+						min="1"
+						:max="AGENT_RUN_STEP_MAX_COUNT"
+						density="compact"
+						class="w-20"
+						:aria-label="t('agent.nativeRun.step')"
+						@update:model-value="setStepIndex"
+					/>
+				</label>
+				<UiButton
+					type="submit"
+					density="compact"
+					appearance="soft"
+					:disabled="disabled || operation.busy.value"
+				>
+					{{ t('agent.nativeRun.read') }}
+				</UiButton>
+				<UiButton
+					v-if="step"
+					type="button"
+					density="compact"
+					appearance="ghost"
+					:disabled="disabled || operation.busy.value"
+					@click="readStep(true)"
+				>
+					{{ t('agent.nativeRun.moreEvents') }}
+				</UiButton>
+			</form>
+			<div v-if="step" class="rounded-lg bg-background/50 p-2.5 text-[11px]">
+				<p class="text-text-secondary">
+					{{ step.stepIndex }} · {{ t('agent.nativeRun.stepStates.' + step.state) }} · v{{ step.revision }} ·
+					{{ step.textBytes }} bytes
+				</p>
+				<p v-if="step.inputTokens !== undefined" class="mt-1 text-text-secondary">
+					{{ t('agent.nativeRun.tokens') }}: {{ step.inputTokens }} / {{ step.outputTokens }}
+				</p>
+				<ul class="mt-2 space-y-1">
+					<li v-for="event in stepEvents" :key="event.sequence" class="break-all text-text-secondary">
+						#{{ event.sequence }} · {{ event.kind }}
+						<template v-if="event.kind === 'text.delta'">· {{ event.textBytes }} bytes</template>
+						<template v-else-if="event.kind === 'usage'"
+							>· {{ event.inputTokens }} / {{ event.outputTokens }}</template
+						>
+					</li>
+				</ul>
+			</div>
+			<form class="flex flex-wrap items-end gap-2" @submit.prevent="readTool()">
+				<label class="flex min-w-0 items-center gap-2 text-[11px] text-text-secondary">
+					<span class="shrink-0">{{ t('agent.nativeRun.toolId') }}</span>
+					<UiInput
+						v-model="toolId"
+						density="compact"
+						class="min-w-0 flex-1"
+						required
+						:aria-label="t('agent.nativeRun.toolId')"
+					/>
+				</label>
+				<UiButton
+					type="submit"
+					density="compact"
+					appearance="soft"
+					:disabled="disabled || operation.busy.value"
+				>
+					{{ t('agent.nativeRun.read') }}
+				</UiButton>
+				<UiButton
+					v-if="tool"
+					type="button"
+					density="compact"
+					appearance="ghost"
+					:disabled="disabled || operation.busy.value"
+					@click="readTool(true)"
+				>
+					{{ t('agent.nativeRun.moreEvents') }}
+				</UiButton>
+			</form>
+			<div v-if="tool" class="rounded-lg bg-background/50 p-2.5 text-[11px]">
+				<p class="text-text-secondary">
+					{{ tool.toolName }} · {{ tool.state }} · v{{ tool.revision }} · {{ tool.capability }} ·
+					{{ tool.risk }}
+				</p>
+				<p class="mt-1 break-all text-text-secondary">
+					{{ t('agent.nativeRun.target') }}: {{ tool.targetId ?? '—' }} · {{ tool.operationHash }}
+				</p>
+				<ul class="mt-2 space-y-1">
+					<li v-for="event in toolEvents" :key="event.revision" class="break-all text-text-secondary">
+						#{{ event.revision }} · {{ event.state }} · {{ event.operationHash }}
+					</li>
+				</ul>
+			</div>
 		</div>
 	</details>
 </template>

@@ -2,31 +2,101 @@
 	import { computed, onActivated, onMounted, ref, shallowRef } from 'vue';
 	import { storeToRefs } from 'pinia';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiEmptyState, UiManagementCard, UiSpinner } from '@/foundation/ui';
-	import { useFeedback } from '@/shared/feedback/public';
+	import { UiButton, UiInput, UiModal, UiSelect, UiSpinner } from '@/foundation/ui';
+	import { useFeedback, useFeedbackMessage } from '@/shared/feedback/public';
 	import { useAuthenticatedViewScope } from '@/shared/session/public';
 	import NotificationSettingForm from '../components/NotificationSettingForm.vue';
 	import { useNotificationsStore } from '../store/notifications.store';
 	import { notificationFailureKey } from '../model/notification-failure';
 	import type { NotificationSetting, NotificationChange } from '../model/notification-types';
 
+	type ChannelKind = NotificationSetting['config']['kind'];
+	type EnabledFilter = 'all' | 'enabled' | 'disabled';
+
 	const { t, te } = useI18n();
 	const feedback = useFeedback();
 	const store = useNotificationsStore();
-	const { items, deliveries, nextOffset, loading, error, needsRefresh } = storeToRefs(store);
+	const { items, loading, error, needsRefresh } = storeToRefs(store);
 	const editing = shallowRef<NotificationSetting | null>(null);
 	const formVisible = ref(false);
 	const message = ref('');
-	const deliveriesOpen = ref(false);
+	let failureCause: unknown;
+	const search = ref('');
+	const typeFilter = ref<'all' | ChannelKind>('all');
+	const enabledFilter = ref<EnabledFilter>('all');
 	const view = useAuthenticatedViewScope({ onRevoke: closeForm });
-	const unknownDeliveryCount = computed(
-		() => deliveries.value.filter((delivery) => delivery.status === 'unknown').length,
-	);
+
+	const eventLabel = (event: string) =>
+		te('settings.notifications.events.' + event)
+			? t('settings.notifications.events.' + event)
+			: t('settings.notifications.unknownEvent');
+
+	const channelEndpoint = (item: NotificationSetting): string => {
+		const config = item.config;
+		if (config.kind === 'webhook') return config.url;
+		if (config.kind === 'email') return config.to;
+		return config.chatId;
+	};
+
+	const filteredChannels = computed(() => {
+		const query = search.value.trim().toLowerCase();
+		return items.value.filter((item) => {
+			if (typeFilter.value !== 'all' && item.config.kind !== typeFilter.value) return false;
+			if (enabledFilter.value === 'enabled' && !item.enabled) return false;
+			if (enabledFilter.value === 'disabled' && item.enabled) return false;
+			if (!query) return true;
+			const eventText = item.events.map(eventLabel).join(' ');
+			return `${item.name} ${item.config.kind} ${channelEndpoint(item)} ${eventText}`
+				.toLowerCase()
+				.includes(query);
+		});
+	});
+
+	const summary = computed(() => {
+		const channels = items.value;
+		return [
+			{
+				key: 'total',
+				label: t('settings.notifications.summary.total'),
+				value: channels.length,
+				icon: 'fa-solid fa-bell',
+				tone: 'primary',
+			},
+			{
+				key: 'webhook',
+				label: t('settings.notifications.types.webhook'),
+				value: channels.filter((item) => item.config.kind === 'webhook').length,
+				icon: 'fa-solid fa-globe',
+				tone: 'info',
+			},
+			{
+				key: 'email',
+				label: t('settings.notifications.types.email'),
+				value: channels.filter((item) => item.config.kind === 'email').length,
+				icon: 'fa-solid fa-envelope',
+				tone: 'warm',
+			},
+			{
+				key: 'telegram',
+				label: t('settings.notifications.types.telegram'),
+				value: channels.filter((item) => item.config.kind === 'telegram').length,
+				icon: 'fa-brands fa-telegram',
+				tone: 'accent',
+			},
+		];
+	});
+
+	const notice = computed(() => message.value || (error.value ? t(notificationFailureKey(error.value)) : ''));
 
 	function closeForm(): void {
 		formVisible.value = false;
 		editing.value = null;
 		message.value = '';
+		failureCause = undefined;
+	}
+
+	function requestCloseForm(): void {
+		if (!loading.value) closeForm();
 	}
 
 	async function load(recover = false): Promise<void> {
@@ -39,11 +109,9 @@
 		}
 		try {
 			await store.load(recover, signal);
-			if (view.isCurrent(signal)) {
-				await store.loadDeliveries(false, signal);
-			}
 		} catch (cause) {
 			if (view.isCurrent(signal)) {
+				failureCause = cause;
 				message.value = t(notificationFailureKey(cause));
 			}
 		}
@@ -73,6 +141,7 @@
 			}
 		} catch (cause) {
 			if (view.isCurrent(signal)) {
+				failureCause = cause;
 				message.value = t(notificationFailureKey(cause));
 			}
 		}
@@ -97,26 +166,17 @@
 			await store.remove(id, version, signal);
 		} catch (cause) {
 			if (view.isCurrent(signal)) {
+				failureCause = cause;
 				message.value = t(notificationFailureKey(cause));
 			}
 		}
 	}
 
-	async function loadDeliveries(append: boolean): Promise<void> {
-		const signal = view.capture();
-		try {
-			await store.loadDeliveries(append, signal);
-		} catch (cause) {
-			if (view.isCurrent(signal)) {
-				message.value = t(notificationFailureKey(cause));
-			}
-		}
-	}
+	const channelIcon = (kind: ChannelKind): string =>
+		kind === 'webhook' ? 'fa-solid fa-globe' : kind === 'email' ? 'fa-solid fa-envelope' : 'fa-brands fa-telegram';
 
-	const eventLabel = (event: string) =>
-		te('settings.notifications.events.' + event)
-			? t('settings.notifications.events.' + event)
-			: t('settings.notifications.unknownEvent');
+	const channelTone = (kind: ChannelKind): string =>
+		kind === 'webhook' ? 'info' : kind === 'email' ? 'warm' : 'accent';
 
 	onMounted(() => void load());
 	let initialActivation = true;
@@ -127,185 +187,206 @@
 		}
 		void load();
 	});
+	useFeedbackMessage(
+		() => notice.value,
+		undefined,
+		() => failureCause ?? error.value,
+	);
 </script>
 
 <template>
-	<div class="p-4 text-foreground">
-		<div class="mx-auto max-w-6xl p-0">
-			<h2 class="mb-4 border-b border-border pb-2 text-xl font-semibold text-foreground">
-				{{ t('settings.notifications.title') }}
-			</h2>
-			<div
-				v-if="error || message"
-				role="alert"
-				class="mb-4 rounded border-l-4 border-error bg-error/10 p-4 text-error"
-			>
-				{{ message || t(notificationFailureKey(error)) }}
-			</div>
-			<div class="mb-4 flex flex-wrap gap-3">
+	<main class="ui-catalog-page">
+		<div class="ui-catalog-shell">
+			<h1 class="ui-catalog-title">{{ t('settings.notifications.title') }}</h1>
+
+			<div class="ui-catalog-actions">
 				<UiButton
 					v-if="!error && !message"
 					type="button"
 					appearance="solid"
-					:disabled="loading || needsRefresh"
+					tone="primary"
+					:disabled="loading || needsRefresh || Boolean(error) || Boolean(message)"
 					@click="openAdd"
-					>{{ t('settings.notifications.addChannel') }}</UiButton
 				>
-				<UiButton
-					v-if="!loading && (needsRefresh || error || message)"
-					type="button"
-					:disabled="loading"
-					@click="load(true)"
-					>{{ t('settings.notifications.refresh') }}</UiButton
-				>
+					<i class="fas fa-plus" aria-hidden="true"></i>
+					{{ t('settings.notifications.addChannel') }}
+				</UiButton>
 			</div>
-			<div v-if="loading && !items.length && !error" class="p-4 text-center text-text-secondary italic">
-				<UiSpinner class="mx-auto" />
+
+			<div class="ui-catalog-summary" role="group" :aria-label="t('settings.notifications.summary.label')">
+				<div v-for="item in summary" :key="item.key" class="ui-catalog-stat" :data-tone="item.tone">
+					<span class="ui-catalog-stat__icon" aria-hidden="true"><i :class="item.icon"></i></span>
+					<span class="ui-catalog-stat__label">{{ item.label }}</span>
+					<strong class="ui-catalog-stat__value">{{ item.value }}</strong>
+				</div>
 			</div>
-			<UiEmptyState
-				v-else-if="!loading && !error && !items.length"
-				class="mb-4"
-				icon="fa-solid fa-bell-slash"
-				:description="t('settings.notifications.noChannels')"
-			/>
-			<div v-else-if="!loading && !error && items.length > 0" class="mt-4 grid gap-4">
-				<UiManagementCard
-					v-for="item in items"
-					:key="item.id"
-					:data-notification-id="item.id"
-					class="notifications-channel-card"
-				>
-					<div class="min-w-0 flex-grow">
-						<div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-							<strong class="min-w-0 break-words text-base font-semibold text-foreground">{{
-								item.name
-							}}</strong>
-							<span
-								class="rounded-full border border-border/60 bg-card/20 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-text-secondary"
-								>{{ t('settings.notifications.types.' + item.config.kind) }}</span
-							>
-							<span
-								class="rounded-full border px-2 py-0.5 text-xs font-semibold uppercase tracking-wider"
-								:class="
-									item.enabled
-										? 'border-success/30 bg-success/10 text-success'
-										: 'border-warning/30 bg-warning/10 text-warning'
-								"
-								>{{ t(item.enabled ? 'common.enabled' : 'common.disabled') }}</span
-							>
-						</div>
-						<small class="mt-1 block break-words text-sm text-text-secondary">{{
-							item.events.length
-								? t('settings.notifications.triggers') + ': ' + item.events.map(eventLabel).join(', ')
-								: t('settings.notifications.noEventsEnabled')
-						}}</small>
+
+			<section class="ui-catalog-panel" aria-labelledby="notification-channel-list-title">
+				<header class="ui-catalog-panel__head">
+					<div class="ui-catalog-panel__title">
+						<span class="ui-catalog-panel__mark" aria-hidden="true">
+							<i class="fas fa-bell"></i>
+						</span>
+						<h2 id="notification-channel-list-title">
+							{{ t('settings.notifications.channelsTitle') }}
+							<span class="ui-catalog-panel__count">{{ filteredChannels.length }}</span>
+						</h2>
 					</div>
-					<template #actions>
-						<UiButton
-							type="button"
-							appearance="soft"
-							:disabled="loading || needsRefresh"
-							@click="openEdit(item)"
-							><i class="fas fa-pencil-alt mr-1 text-xs" aria-hidden="true"></i
-							>{{ t('common.edit') }}</UiButton
-						>
-						<UiButton
-							type="button"
-							appearance="ghost"
-							tone="danger"
-							:disabled="loading || needsRefresh"
-							@click="remove(item)"
-							><i class="fas fa-trash-alt mr-1 text-xs" aria-hidden="true"></i
-							>{{ t('common.delete') }}</UiButton
-						>
-					</template>
-				</UiManagementCard>
-			</div>
-			<div v-if="formVisible" class="ui-form-surface rounded-xl p-4 sm:p-6">
+				</header>
+
+				<div class="ui-catalog-toolbar ui-catalog-toolbar--notifications">
+					<UiInput
+						v-model="search"
+						type="search"
+						density="comfortable"
+						:placeholder="t('settings.notifications.searchPlaceholder')"
+						:aria-label="t('common.search')"
+					>
+						<template #leading><i class="fas fa-magnifying-glass" aria-hidden="true"></i></template>
+					</UiInput>
+					<UiSelect
+						v-model="typeFilter"
+						density="comfortable"
+						text-align="center"
+						:aria-label="t('settings.notifications.filterType')"
+					>
+						<option value="all">{{ t('settings.notifications.allTypes') }}</option>
+						<option value="webhook">{{ t('settings.notifications.types.webhook') }}</option>
+						<option value="email">{{ t('settings.notifications.types.email') }}</option>
+						<option value="telegram">{{ t('settings.notifications.types.telegram') }}</option>
+					</UiSelect>
+					<UiSelect
+						v-model="enabledFilter"
+						density="comfortable"
+						text-align="center"
+						:aria-label="t('settings.notifications.filterStatus')"
+					>
+						<option value="all">{{ t('common.all') }}</option>
+						<option value="enabled">{{ t('common.enabled') }}</option>
+						<option value="disabled">{{ t('common.disabled') }}</option>
+					</UiSelect>
+				</div>
+				<div v-if="needsRefresh" class="mb-3 flex justify-end">
+					<UiButton type="button" density="compact" :disabled="loading" @click="load(true)">
+						{{ t('settings.notifications.refresh') }}
+					</UiButton>
+				</div>
+
+				<div v-if="loading && !items.length && !error" class="ui-catalog-empty">
+					<UiSpinner />
+					<p>{{ t('common.loading') }}</p>
+				</div>
+				<div v-else-if="!error && filteredChannels.length === 0" class="ui-catalog-empty">
+					<span class="ui-catalog-empty__icon" aria-hidden="true">
+						<i
+							class="fas"
+							:class="
+								search || typeFilter !== 'all' || enabledFilter !== 'all'
+									? 'fa-magnifying-glass'
+									: 'fa-bell-slash'
+							"
+						></i>
+					</span>
+					<p v-if="!items.length">{{ t('settings.notifications.noChannels') }}</p>
+					<p v-else>{{ t('settings.notifications.noMatches') }}</p>
+				</div>
+				<ul v-else-if="!error" class="ui-catalog-list">
+					<li v-for="item in filteredChannels" :key="item.id">
+						<article class="notifications-channel-card ui-catalog-card" :data-notification-id="item.id">
+							<span
+								class="ui-catalog-card__icon"
+								:data-tone="channelTone(item.config.kind)"
+								aria-hidden="true"
+							>
+								<i :class="channelIcon(item.config.kind)"></i>
+							</span>
+							<div class="ui-catalog-card__content">
+								<div class="ui-catalog-card__heading">
+									<strong class="ui-catalog-card__name">{{ item.name }}</strong>
+									<span class="ui-catalog-badge">
+										{{ t('settings.notifications.types.' + item.config.kind) }}
+									</span>
+									<span
+										class="ui-catalog-badge"
+										:class="
+											item.enabled ? 'ui-catalog-badge--success' : 'ui-catalog-badge--warning'
+										"
+									>
+										{{ t(item.enabled ? 'common.enabled' : 'common.disabled') }}
+									</span>
+								</div>
+								<code class="ui-catalog-card__address" :title="channelEndpoint(item)">
+									{{ channelEndpoint(item) }}
+								</code>
+								<div class="ui-catalog-card__meta">
+									<span v-if="item.events.length" class="ui-catalog-card__meta-item">
+										<i class="fas fa-bolt" aria-hidden="true"></i>
+										{{
+											t('settings.notifications.enabledEventCount', {
+												count: item.events.length,
+											})
+										}}
+									</span>
+									<span v-if="!item.events.length" class="ui-catalog-card__meta-item">
+										<i class="fas fa-bolt-slash" aria-hidden="true"></i>
+										{{ t('settings.notifications.noEventsEnabled') }}
+									</span>
+								</div>
+							</div>
+							<div class="ui-catalog-card__actions">
+								<UiButton
+									type="button"
+									appearance="soft"
+									icon-only
+									density="comfortable"
+									class="ui-catalog-card__action"
+									:disabled="loading || needsRefresh"
+									:aria-label="t('common.edit')"
+									:title="t('common.edit')"
+									@click="openEdit(item)"
+								>
+									<i class="fas fa-pen" aria-hidden="true"></i>
+									<span class="ui-catalog-card__action-label">{{ t('common.edit') }}</span>
+								</UiButton>
+								<UiButton
+									type="button"
+									appearance="soft"
+									tone="danger"
+									icon-only
+									density="comfortable"
+									class="ui-catalog-card__action"
+									:disabled="loading || needsRefresh"
+									:aria-label="t('common.delete')"
+									:title="t('common.delete')"
+									@click="remove(item)"
+								>
+									<i class="fas fa-trash-alt" aria-hidden="true"></i>
+									<span class="ui-catalog-card__action-label">{{ t('common.delete') }}</span>
+								</UiButton>
+							</div>
+						</article>
+					</li>
+				</ul>
+			</section>
+
+			<UiModal
+				:visible="formVisible"
+				:z-index="150"
+				:close-on-backdrop="false"
+				panel-class="ui-form-surface !w-[calc(100vw-2rem)] !max-w-3xl !p-4 sm:!p-6"
+				:panel-style="{ height: 'min(780px, calc(100dvh - 2rem))', maxHeight: 'calc(100dvh - 2rem)' }"
+				content-class="!flex !min-h-0 !flex-1 !flex-col !overflow-hidden !py-0"
+				@close="requestCloseForm"
+			>
 				<NotificationSettingForm
+					v-if="formVisible"
 					:key="editing?.id ?? 'new'"
 					:visible="formVisible"
 					:setting="editing"
 					@close="closeForm"
 					@save="save"
 				/>
-			</div>
-			<section class="mt-6 border-t border-border pt-4">
-				<button
-					type="button"
-					class="flex w-full flex-wrap items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-header/50 focus-visible:ring-2 focus-visible:ring-primary"
-					:aria-expanded="deliveriesOpen"
-					aria-controls="notification-deliveries"
-					@click="deliveriesOpen = !deliveriesOpen"
-				>
-					<i
-						:class="[
-							'fas',
-							deliveriesOpen ? 'fa-chevron-down' : 'fa-chevron-right',
-							'w-3 text-xs text-text-secondary',
-						]"
-						aria-hidden="true"
-					/>
-					<h3 class="font-semibold">{{ t('settings.notifications.deliveries') }}</h3>
-					<span
-						v-if="unknownDeliveryCount"
-						class="rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning"
-					>
-						{{ t('settings.notifications.unknownDeliveries', { count: unknownDeliveryCount }) }}
-					</span>
-					<span class="ml-auto text-xs text-text-secondary">
-						{{ t(deliveriesOpen ? 'common.collapse' : 'common.expand') }}
-					</span>
-				</button>
-				<div v-if="deliveriesOpen" id="notification-deliveries" class="mt-3 space-y-3 px-2">
-					<div class="flex flex-wrap items-start gap-3">
-						<p class="min-w-0 flex-1 text-sm text-text-secondary">
-							{{ t('settings.notifications.deliveryHint') }}
-						</p>
-						<UiButton type="button" density="compact" :disabled="loading" @click="loadDeliveries(false)">{{
-							t('common.refresh')
-						}}</UiButton>
-					</div>
-					<ul v-if="deliveries.length" class="space-y-2">
-						<li
-							v-for="delivery in deliveries"
-							:key="delivery.id"
-							class="break-words rounded border p-3 text-sm"
-							:class="
-								delivery.status === 'unknown'
-									? 'border-warning/30 bg-warning/[0.06] text-warning'
-									: 'border-border'
-							"
-							:data-delivery-id="delivery.id"
-						>
-							{{ eventLabel(delivery.event) }} ·
-							{{ t('settings.notifications.deliveryStatus.' + delivery.status) }} ·
-							{{ new Date(delivery.createdAt).toLocaleString() }}
-						</li>
-					</ul>
-					<p v-else class="text-sm text-text-secondary">{{ t('settings.notifications.noDeliveries') }}</p>
-					<UiButton
-						v-if="nextOffset !== null"
-						type="button"
-						:disabled="loading"
-						@click="loadDeliveries(true)"
-						>{{ t('settings.notifications.loadMore') }}</UiButton
-					>
-				</div>
-			</section>
+			</UiModal>
 		</div>
-	</div>
+	</main>
 </template>
-
-<style scoped>
-	@media (max-width: 639px) {
-		.notifications-channel-card :deep(.ui-action-group[data-layout='management']) {
-			min-width: 0;
-		}
-		.notifications-channel-card :deep(.ui-button--action-management) {
-			min-width: 0;
-			white-space: normal;
-			overflow-wrap: anywhere;
-		}
-	}
-</style>

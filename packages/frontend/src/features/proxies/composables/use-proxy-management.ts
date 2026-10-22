@@ -3,7 +3,7 @@ import { useI18n } from 'vue-i18n';
 import type { TargetProxyInput } from '@nexus-terminal/shared/targets/proxies/http';
 import { useAuthSession } from '@/features/auth/public';
 import { targetErrorKey } from '@/client/targets/target-types';
-import { useFeedback } from '@/shared/feedback/public';
+import { useFeedback, useFeedbackMessage } from '@/shared/feedback/public';
 import type { ProxySummary } from '../model/proxy-types';
 import { useProxies } from './useProxies';
 
@@ -16,6 +16,13 @@ export function useProxyManagement() {
 	const editing = ref<ProxySummary | null>(null);
 	const loading = ref(false);
 	const message = ref('');
+	let failureCause: unknown;
+	const messageSuccess = ref(false);
+	useFeedbackMessage(
+		() => message.value,
+		() => (messageSuccess.value ? 'success' : 'error'),
+		() => failureCause,
+	);
 	let generation = 0;
 	let active = true;
 	let disposed = false;
@@ -29,6 +36,8 @@ export function useProxyManagement() {
 		editing.value = null;
 		loading.value = false;
 		message.value = '';
+		failureCause = undefined;
+		messageSuccess.value = false;
 	}
 
 	async function execute(
@@ -43,10 +52,14 @@ export function useProxyManagement() {
 		const signal = controller.signal;
 		loading.value = true;
 		message.value = '';
+		failureCause = undefined;
+		messageSuccess.value = false;
 		try {
 			await work(signal);
 		} catch (cause) {
 			if (current === generation && !disposed) {
+				failureCause = cause;
+				messageSuccess.value = false;
 				message.value = t('proxies.failures.' + targetErrorKey(cause, operation));
 				if (data.needsRefresh.value) {
 					modal.value = false;

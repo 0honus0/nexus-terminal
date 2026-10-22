@@ -208,15 +208,20 @@ try {
 		try {
 			const controller = create();
 			await controller.loadLocal();
+			const firstLocalCheckedAt = controller.local.value.checkedAt;
 			check(
-				controller.local.value.cpuPercent === 0 && controller.local.value.diskUsed === undefined,
+				controller.local.value.cpuPercent === 0 &&
+					controller.local.value.diskUsed === undefined &&
+					Number.isFinite(firstLocalCheckedAt),
 				'zero preserved and missing disk absent',
 			);
 			handler = () => json({ code: 'forbidden' }, 503);
 			await controller.loadLocal();
 			check(
-				controller.localError.value === 'protocol_failure' && controller.local.value === null,
-				'HTTP failure status mismatch clears stale sample',
+				controller.localError.value === 'protocol_failure' &&
+					controller.local.value.cpuPercent === 0 &&
+					controller.local.value.checkedAt === firstLocalCheckedAt,
+				'HTTP failure status mismatch retains last sample',
 			);
 			handler = () => json({ code: 'remote_unavailable', stderr: 'secret' }, 503);
 			await controller.loadLocal();
@@ -275,9 +280,24 @@ try {
 				controller.remote.value[0].state === 'ready' && controller.remote.value[0].connectionId === 99,
 				'same-host fallback connection accepted',
 			);
+			handler = () => {
+				throw Error('private network body');
+			};
+			await controller.loadRemote(async () => [target(1)]);
+			check(
+				controller.remote.value[0].state === 'ready' &&
+					controller.remote.value[0].status.cpuPercent === 0 &&
+					controller.remote.value[0].checkedAt === 123 &&
+					controller.remote.value[0].refreshError === 'request_failed',
+				'refresh failure retains last successful host sample',
+			);
 			handler = () => json(resource(2));
 			await controller.loadRemote(async () => [target(1)]);
-			check(controller.remote.value[0].error === 'protocol_failure', 'foreign host association rejected');
+			check(
+				controller.remote.value[0].state === 'ready' &&
+					controller.remote.value[0].refreshError === 'protocol_failure',
+				'foreign host association rejected without dropping last sample',
+			);
 			handler = () => json({ ...resource(1), status: { timestamp: 120 } });
 			await controller.loadRemote(async () => [target(1)]);
 			check(controller.remote.value[0].status.cpuPercent === undefined, 'remote missing metric not zero');
@@ -288,9 +308,10 @@ try {
 			};
 			await controller.loadRemote(async () => [target(1)]);
 			check(
-				controller.remote.value[0].error === 'host_key_untrusted' &&
+				controller.remote.value[0].state === 'ready' &&
+					controller.remote.value[0].refreshError === 'host_key_untrusted' &&
 					controller.remote.value[0].checkedAt === 123,
-				'producer failure retains server check time',
+				'producer failure retains last successful sample and server check time',
 			);
 			let active = 0,
 				peak = 0,
@@ -310,6 +331,7 @@ try {
 					active--;
 				}
 			};
+			controller.stopRemote();
 			const aggregate = controller.loadRemote(async () => [
 				target(1),
 				target(2),
@@ -335,14 +357,18 @@ try {
 			targets.resolve([target(1)]);
 			await lateTargets;
 			check(
-				controller.remote.value.length === 0 && remoteCalls === 5,
-				'deactivation blocks late target catalog and dispatch',
+				controller.remote.value.length === 5 &&
+					controller.remote.value.every((item) => item.state === 'ready') &&
+					controller.local.value.cpuPercent === 9 &&
+					remoteCalls === 5,
+				'deactivation preserves samples and blocks late dispatch',
 			);
 			controller.activate();
 			const late = deferred();
 			handler = () => late.promise;
 			const lateRequest = controller.loadRemote(async () => [target(1)]);
 			await until(() => controller.remote.value.length === 1);
+			check(controller.remote.value[0].state === 'ready', 'refresh retains last host snapshot');
 			authenticatedSessionLifecycle.attach(1);
 			authenticatedSessionLifecycle.logout();
 			late.resolve(json(resource(1)));

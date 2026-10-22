@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { computed, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiModal } from '@/foundation/ui';
+	import { UiButton, UiFormActions, UiModal } from '@/foundation/ui';
 	import type { PluginCatalogEntry } from '../model/plugin-types';
 
 	const props = defineProps<{
@@ -78,9 +78,6 @@
 
 		<template v-if="entry">
 			<div class="space-y-4">
-				<p v-if="notice" role="alert" class="text-sm text-warning">
-					{{ t('agent.settings.appManagement.' + notice) }}
-				</p>
 				<UiButton v-if="needsRead" type="button" :disabled="busy" @click="emit('read')">{{
 					t('agent.settings.appManagement.readApps')
 				}}</UiButton>
@@ -248,15 +245,12 @@
 		</template>
 
 		<template #footer>
-			<div class="flex items-center justify-between gap-3">
+			<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 				<div class="flex items-center gap-1.5 text-[11px] text-text-secondary">
 					<i class="fa-solid fa-lock text-[10px] text-success"></i>
 					<span>{{ $t('agent.settings.onboarding.sandboxProtected') }}</span>
 				</div>
-				<div class="flex items-center gap-2">
-					<UiButton appearance="soft" tone="neutral" type="button" :disabled="busy" @click="emit('close')">
-						{{ $t('agent.settings.onboarding.cancel') }}
-					</UiButton>
+				<UiFormActions>
 					<UiButton
 						appearance="solid"
 						tone="primary"
@@ -272,7 +266,10 @@
 								: $t('agent.settings.onboarding.installAndEnable')
 						}}</span>
 					</UiButton>
-				</div>
+					<UiButton appearance="soft" tone="neutral" type="button" :disabled="busy" @click="emit('close')">
+						{{ $t('agent.settings.onboarding.cancel') }}
+					</UiButton>
+				</UiFormActions>
 			</div>
 		</template>
 	</UiModal>

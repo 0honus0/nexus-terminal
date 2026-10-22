@@ -49,17 +49,38 @@ async function confirmPresentedHostKey(input: HostKeyTrustRequest, signal: Abort
 		return false;
 	}
 	const feedback = useFeedback();
+	const changed = input.expectedFingerprint !== null;
 	const accepted = await feedback.confirm({
 		signal,
 		title: t('hostKeys.title'),
-		message: t(input.expectedFingerprint === null ? 'hostKeys.firstConnection' : 'hostKeys.changedConnection', {
+		message: t(changed ? 'hostKeys.changedConnection' : 'hostKeys.firstConnection', {
 			host: input.host,
 			port: input.port,
 			fingerprint: input.fingerprint,
 			expectedFingerprint: input.expectedFingerprint ?? '',
 		}),
+		details: [
+			{ label: t('hostKeys.endpoint'), value: `${input.host}:${input.port}` },
+			...(input.expectedFingerprint === null
+				? []
+				: [
+						{
+							label: t('hostKeys.savedFingerprint'),
+							value: input.expectedFingerprint,
+							mono: true,
+						} as const,
+					]),
+			{
+				label: t('hostKeys.fingerprint'),
+				value: input.fingerprint,
+				mono: true,
+				tone: changed ? 'danger' : 'primary',
+			},
+		],
 		confirmText: t('hostKeys.confirmAndConnect'),
-		destructive: input.expectedFingerprint !== null,
+		destructive: changed,
+		tone: changed ? 'danger' : 'primary',
+		icon: changed ? 'fas fa-shield-halved' : 'fas fa-fingerprint',
 	});
 	if (!accepted || signal.aborted) {
 		return false;

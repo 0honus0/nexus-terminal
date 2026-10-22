@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-	import { UiButton } from '@/foundation/ui';
+	import { UiButton, UiCheckbox } from '@/foundation/ui';
 	import { useI18n } from 'vue-i18n';
 	import { useNativeRuns } from '../composables/use-native-runs';
 	import { isNativeRunActive, nativeModelKey } from '../model/native-run-rules';
@@ -13,6 +13,7 @@
 	import AgentMessageBody from '../ai/AgentMessageBody.vue';
 	import AgentConversationWelcome from '../ai/AgentConversationWelcome.vue';
 	import type { NativeThread } from '../model/native-thread-types';
+	import type { NativeModel } from '../model/native-run-types';
 
 	const props = defineProps<{
 		appId: string;
@@ -130,6 +131,33 @@
 	);
 
 	const selectedModel = computed(() => models.value.find((model) => nativeModelKey(model) === modelKey.value));
+
+	function selectModel(model: NativeModel, close: () => void): void {
+		if (blocked.value) return;
+		modelKey.value = nativeModelKey(model);
+		close();
+	}
+
+	function setConnectionSelected(id: number, selected: boolean): void {
+		const next = new Set(connectionIds.value);
+		if (selected) next.add(id);
+		else next.delete(id);
+		connectionIds.value = [...next];
+	}
+
+	const allConnectionsSelected = computed(
+		() =>
+			connections.value.length > 0 &&
+			connections.value.every((connection) => connectionIds.value.includes(connection.id)),
+	);
+
+	function setAllConnectionsSelected(selected: boolean): void {
+		if (blocked.value) return;
+		connectionIds.value = selected
+			? connections.value.map((connection) => connection.id).sort((left, right) => left - right)
+			: [];
+	}
+
 	const activeRun = computed(() => run.value !== null && isNativeRunActive(run.value));
 	const hasMoreEntries = computed(() => Object.values(entryCursor.value).some((value) => value > 0));
 	const sendDisabled = computed(
@@ -277,9 +305,11 @@
 			<header
 				class="relative z-10 flex h-10 shrink-0 items-center gap-2 border-b border-border/50 bg-header/40 px-3.5 backdrop-blur-xs"
 			>
-				<button
-					type="button"
-					class="agent-thread-toggle flex h-7.5 w-7.5 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-card/60 text-text-secondary hover:bg-header hover:text-foreground"
+				<UiButton
+					density="compact"
+					appearance="ghost"
+					icon-only
+					class="agent-header-tool agent-thread-toggle shrink-0"
 					:aria-expanded="threadsOverlay ? threadDrawerOpen : threadSidebarVisible"
 					aria-controls="agent-thread-sidebar"
 					:aria-label="t('agent.operations.openThreads')"
@@ -290,7 +320,7 @@
 					"
 				>
 					<i class="fa-regular fa-comments text-xs" aria-hidden="true"></i>
-				</button>
+				</UiButton>
 				<span class="truncate text-xs font-semibold tracking-tight text-foreground">{{
 					thread?.title || t('agent.operations.untitledThread')
 				}}</span>
@@ -300,17 +330,19 @@
 					:class="runStatusClass"
 					>{{ t('agent.nativeRun.states.' + run.status) }}</span
 				>
-				<button
+				<UiButton
 					v-if="run"
-					type="button"
-					class="flex h-7.5 w-7.5 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-card/60 text-text-secondary hover:bg-header hover:text-foreground"
+					density="compact"
+					appearance="ghost"
+					icon-only
+					class="agent-header-tool shrink-0"
 					:aria-label="t('agent.ui.toggleTasks')"
 					:aria-expanded="taskRailVisible"
 					aria-controls="agent-task-rail"
 					@click="taskRailVisible = !taskRailVisible"
 				>
 					<i class="fa-solid fa-list-check text-xs" aria-hidden="true"></i>
-				</button>
+				</UiButton>
 				<UiButton
 					v-if="thread && (memoryCount || memoryNeedsRead || memoryRailVisible)"
 					density="compact"
@@ -327,33 +359,57 @@
 			</header>
 			<!-- The transcript owns scrolling; the composer stays docked above the bottom edge. -->
 			<div class="relative z-10 flex min-h-0 flex-1 flex-col gap-3 p-3 sm:p-4">
-				<p v-if="!executionEnabled" role="status">{{ t('agent.nativeRun.executionDisabled') }}</p>
-				<p v-if="operation.notice.value && operation.notice.value !== 'saved'" role="status">
-					{{ t('agent.settings.appManagement.' + operation.notice.value) }}
-				</p>
-				<section v-if="pending" class="space-y-2 rounded border border-warning p-3">
-					<p>{{ t('agent.nativeRun.unknown') }}</p>
-					<details class="text-xs text-text-secondary">
+				<div
+					v-if="!executionEnabled"
+					role="status"
+					class="agent-session-notice mx-auto w-full max-w-3xl rounded-lg border border-warning/25 bg-warning/[0.055] px-3 py-2 text-[11px] leading-4 text-warning"
+				>
+					{{ t('agent.nativeRun.executionDisabled') }}
+				</div>
+				<section
+					v-if="pending"
+					class="agent-unknown-panel space-y-2.5 rounded-xl border border-warning/30 bg-warning/[0.055] p-3"
+				>
+					<p class="text-xs font-medium text-warning">{{ t('agent.nativeRun.unknown') }}</p>
+					<details class="rounded-lg bg-background/45 p-2 text-xs text-text-secondary">
 						<summary class="cursor-pointer select-none">
 							{{ t('agent.nativeRun.technicalDetails') }}
 						</summary>
 						<code class="mt-1 block break-all">{{ pending.operationId }}</code>
 					</details>
-					<div class="flex flex-wrap gap-3">
-						<UiButton :disabled="operation.busy.value" @click="runtime.inspectIntent">
-							{{ t('agent.nativeRun.inspect') }}</UiButton
-						><UiButton
+					<div class="flex flex-wrap gap-2">
+						<UiButton
+							density="compact"
+							appearance="soft"
+							:disabled="operation.busy.value"
+							@click="runtime.inspectIntent"
+						>
+							{{ t('agent.nativeRun.inspect') }}
+						</UiButton>
+						<UiButton
+							density="compact"
+							appearance="soft"
 							:disabled="operation.busy.value || !inspected || operation.refreshRequired.value"
 							@click="runtime.mutate(null, true)"
 						>
 							{{ t('agent.nativeThreads.retry') }}
 						</UiButton>
 					</div>
-					<label class="flex gap-2"
-						><input v-model="acknowledged" type="checkbox" :disabled="operation.busy.value" />{{
-							t('agent.nativeRun.acknowledge')
-						}}</label
-					><UiButton :disabled="operation.busy.value || !inspected || !acknowledged" @click="runtime.abandon">
+					<div class="flex items-start gap-2 text-[11px] leading-4 text-text-secondary">
+						<UiCheckbox
+							v-model="acknowledged"
+							density="compact"
+							:disabled="operation.busy.value"
+							:aria-label="t('agent.nativeRun.acknowledge')"
+						/>
+						<span>{{ t('agent.nativeRun.acknowledge') }}</span>
+					</div>
+					<UiButton
+						density="compact"
+						appearance="soft"
+						:disabled="operation.busy.value || !inspected || !acknowledged"
+						@click="runtime.abandon"
+					>
 						{{ t('agent.nativeThreads.abandon') }}
 					</UiButton>
 				</section>
@@ -374,15 +430,16 @@
 						@scroll.passive="handleTranscriptScroll"
 					>
 						<div v-if="hasMoreEntries" class="mx-auto mb-4 flex max-w-3xl justify-center">
-							<button
-								type="button"
-								class="rounded-full bg-card/80 px-3.5 py-2 text-xs text-text-secondary shadow-sm hover:bg-header hover:text-foreground disabled:opacity-50"
+							<UiButton
+								density="compact"
+								appearance="soft"
+								class="rounded-full px-3.5"
 								:disabled="operation.busy.value || threadBusy"
 								@click="runtime.readEntries"
 							>
 								<i class="fa-solid fa-clock-rotate-left mr-1.5" aria-hidden="true"></i>
 								{{ t('agent.conversation.loadOlder') }}
-							</button>
+							</UiButton>
 						</div>
 						<AgentConversationWelcome
 							v-if="!entries.length"
@@ -451,17 +508,18 @@
 					>
 						<div class="mx-auto max-w-3xl">
 							<div v-if="inputArtifacts.length" class="mb-2 flex flex-wrap gap-1.5">
-								<button
+								<UiButton
 									v-for="artifact in inputArtifacts"
 									:key="artifact.id"
-									type="button"
-									class="max-w-56 truncate rounded-full bg-background/80 px-3 py-1.5 text-xs text-text-secondary transition-colors hover:bg-header hover:text-foreground"
+									density="compact"
+									appearance="soft"
+									class="max-w-56 rounded-full px-3"
 									:title="artifact.name"
 									@click="removeInputArtifact(artifact.id)"
 								>
 									<i class="fa-solid fa-paperclip mr-1" aria-hidden="true"></i>{{ artifact.name }}
 									<span class="ml-1 opacity-60" aria-hidden="true">×</span>
-								</button>
+								</UiButton>
 							</div>
 							<div class="agent-composer-status mb-1.5 flex min-h-6 items-center justify-between gap-2">
 								<span
@@ -472,17 +530,18 @@
 									<span class="px-1 text-text-secondary/40">·</span>
 									{{ t('agent.conversation.sendHintNewline') }}
 								</span>
-								<button
+								<UiButton
 									v-if="showJumpToLatest"
-									type="button"
-									class="agent-jump-latest inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-card/70 px-2.5 text-[11px] text-text-secondary shadow-xs backdrop-blur-md transition-colors hover:bg-header hover:text-foreground"
+									density="compact"
+									appearance="soft"
+									class="agent-jump-latest shrink-0 rounded-full px-2.5"
 									:title="t('agent.ui.latest')"
 									:aria-label="t('agent.ui.latest')"
 									@click="scrollToBottom"
 								>
 									<i class="fa-solid fa-arrow-down text-[9px]" aria-hidden="true"></i>
 									<span class="agent-jump-latest-label">{{ t('agent.ui.latest') }}</span>
-								</button>
+								</UiButton>
 							</div>
 							<form
 								class="agent-composer-shell overflow-hidden rounded-xl border border-border/65 bg-card/88 shadow-sm backdrop-blur-md transition-all duration-200 hover:border-border-hover focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/15"
@@ -509,7 +568,7 @@
 										<AgentConfigPopover
 											:ariaLabel="t('agent.nativeRun.model')"
 											:disabled="blocked"
-											panel-class="w-72"
+											panel-class="w-80"
 										>
 											<template #trigger
 												><i class="fa-solid fa-microchip text-[9px]" aria-hidden="true"></i
@@ -518,24 +577,53 @@
 												}}</span
 												><i class="fa-solid fa-chevron-down text-[7px]" aria-hidden="true"></i
 											></template>
-											<template #panel>
-												<label class="block text-sm"
-													>{{ t('agent.nativeRun.model')
-													}}<select
-														v-model="modelKey"
-														class="ml-2 max-w-full rounded border bg-background p-2"
-														:disabled="blocked"
+											<template #panel="{ close }">
+												<div class="agent-model-picker">
+													<header class="agent-model-picker__head">
+														<span>{{ t('agent.nativeRun.model') }}</span>
+														<span
+															v-if="selectedModel"
+															class="agent-model-picker__current"
+															>{{ selectedModel.providerName }}</span
+														>
+													</header>
+													<div
+														v-if="models.length"
+														class="agent-model-list"
+														role="listbox"
+														:aria-label="t('agent.nativeRun.model')"
 													>
-														<option value="">{{ t('agent.nativeRun.chooseModel') }}</option>
-														<option
+														<button
 															v-for="model in models"
 															:key="nativeModelKey(model)"
-															:value="nativeModelKey(model)"
+															type="button"
+															role="option"
+															class="agent-model-option"
+															:aria-selected="nativeModelKey(model) === modelKey"
+															:disabled="blocked"
+															@click="selectModel(model, close)"
 														>
-															{{ model.providerName }} / {{ model.modelId }}
-														</option>
-													</select></label
-												>
+															<span class="agent-model-option__mark" aria-hidden="true">
+																<i class="fa-solid fa-microchip"></i>
+															</span>
+															<span class="agent-model-option__body">
+																<strong>{{ model.modelId }}</strong>
+																<small
+																	>{{ model.providerName }} ·
+																	{{ model.protocol }}</small
+																>
+															</span>
+															<i
+																v-if="nativeModelKey(model) === modelKey"
+																class="fa-solid fa-check agent-model-option__check"
+																aria-hidden="true"
+															></i>
+														</button>
+													</div>
+													<p v-else class="agent-model-picker__empty">
+														{{ t('agent.nativeRun.noModels') }}
+													</p>
+												</div>
 											</template>
 										</AgentConfigPopover>
 										<AgentConfigPopover
@@ -553,20 +641,71 @@
 												><i class="fa-solid fa-chevron-down text-[7px]" aria-hidden="true"></i
 											></template>
 											<template #panel>
-												<fieldset :disabled="blocked" class="max-h-32 overflow-auto text-xs">
-													<legend>{{ t('agent.nativeRun.targets') }}</legend>
-													<label
-														v-for="connection in connections"
-														:key="connection.id"
-														class="mr-3 inline-flex gap-1"
-														><input
-															v-model="connectionIds"
-															type="checkbox"
-															:value="connection.id"
-														/>{{ connection.name }}</label
+												<fieldset class="min-w-0 text-xs">
+													<legend class="mb-2 text-[11px] font-medium text-text-secondary">
+														{{ t('agent.nativeRun.targets') }}
+													</legend>
+													<div
+														v-if="connections.length"
+														class="mb-2 flex items-center justify-between gap-2 rounded-lg bg-header/25 px-2 py-1.5"
 													>
-												</fieldset></template
-											>
+														<span
+															class="shrink-0 text-[11px] tabular-nums text-text-secondary"
+														>
+															{{ connectionIds.length }} / {{ connections.length }}
+														</span>
+														<div class="flex shrink-0 items-center gap-1">
+															<UiButton
+																type="button"
+																density="compact"
+																appearance="ghost"
+																:disabled="blocked || allConnectionsSelected"
+																@click="setAllConnectionsSelected(true)"
+															>
+																{{ t('agent.operations.enableAllTargets') }}
+															</UiButton>
+															<UiButton
+																type="button"
+																density="compact"
+																appearance="ghost"
+																:disabled="blocked || connectionIds.length === 0"
+																@click="setAllConnectionsSelected(false)"
+															>
+																{{ t('agent.operations.disableAllTargets') }}
+															</UiButton>
+														</div>
+													</div>
+													<div class="agent-target-list max-h-52 space-y-0.5 overflow-y-auto">
+														<div
+															v-for="connection in connections"
+															:key="connection.id"
+															class="agent-target-row flex items-center gap-2 rounded-lg px-1.5 py-1.5"
+														>
+															<UiCheckbox
+																:id="`agent-target-${connection.id}`"
+																:value="connection.id"
+																density="compact"
+																:model-value="connectionIds.includes(connection.id)"
+																:disabled="blocked"
+																@update:model-value="
+																	setConnectionSelected(connection.id, $event)
+																"
+															/>
+															<label
+																:for="`agent-target-${connection.id}`"
+																class="min-w-0 flex-1 cursor-pointer truncate text-[11px] text-foreground"
+																>{{ connection.name }}</label
+															>
+														</div>
+														<p
+															v-if="connections.length === 0"
+															class="rounded-lg bg-background/50 px-2.5 py-3 text-[11px] text-text-secondary"
+														>
+															{{ t('agent.operations.noTargets') }}
+														</p>
+													</div>
+												</fieldset>
+											</template>
 										</AgentConfigPopover>
 									</div>
 									<div class="agent-composer-actions flex shrink-0 items-center gap-1.5">
@@ -586,21 +725,27 @@
 												}
 											"
 										/>
-										<button
+										<UiButton
 											v-if="activeRun"
-											type="button"
-											class="agent-stop-button flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-error/45 bg-error/10 text-[11px] font-semibold text-error transition-colors hover:bg-error/20 disabled:cursor-not-allowed disabled:opacity-50"
+											density="compact"
+											appearance="soft"
+											tone="danger"
+											icon-only
+											class="agent-stop-button shrink-0"
 											:aria-label="t('agent.conversation.cancelRun')"
 											:title="t('agent.conversation.cancelRun')"
 											:disabled="blocked"
 											@click="stopRun"
 										>
-											<i class="fa-solid fa-stop text-[10px] text-error" aria-hidden="true"></i>
-										</button>
-										<button
+											<i class="fa-solid fa-stop text-[10px]" aria-hidden="true"></i>
+										</UiButton>
+										<UiButton
 											v-else
 											type="submit"
-											class="agent-send-button flex h-7 items-center gap-1 rounded-lg bg-primary px-2.5 text-[11px] font-semibold text-white shadow-xs transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:border disabled:border-border/70 disabled:bg-foreground/[0.07] disabled:text-text-secondary disabled:opacity-50 disabled:shadow-none"
+											density="compact"
+											appearance="solid"
+											tone="primary"
+											class="agent-send-button shrink-0"
 											:aria-label="t('agent.conversation.send')"
 											:title="
 												sendDisabled
@@ -613,7 +758,7 @@
 										>
 											<span class="agent-send-label">{{ t('agent.conversation.send') }}</span>
 											<i class="fa-solid fa-arrow-up text-xs" aria-hidden="true"></i>
-										</button>
+										</UiButton>
 									</div>
 								</div>
 							</form>
@@ -652,9 +797,15 @@
 		>
 			<header class="mb-3 flex items-center justify-between border-b border-border/50 pb-2">
 				<h3 class="text-xs font-semibold">{{ t('agent.tasks.title') }}</h3>
-				<button type="button" :aria-label="t('common.close')" @click="taskRailVisible = false">
+				<UiButton
+					density="compact"
+					appearance="ghost"
+					icon-only
+					:aria-label="t('common.close')"
+					@click="taskRailVisible = false"
+				>
 					<i class="fa-solid fa-xmark" aria-hidden="true"></i>
-				</button>
+				</UiButton>
 			</header>
 			<NativeRunDetails
 				:key="run.id"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import { isNetworkFailure } from '@/client/http/network-failure';
 	import {
 		computed,
 		defineAsyncComponent,
@@ -66,6 +67,22 @@
 	const loading = ref(true);
 	const loadError = ref('');
 	const tagLoadFailed = ref(false);
+	let loadFailureCause: unknown;
+	watch([loadError, tagLoadFailed, loading], () => {
+		if (loading.value || isNetworkFailure(loadFailureCause)) return;
+		const message = loadError.value || (tagLoadFailed.value ? t('workspaceConnectionList.tagLoadFailed') : '');
+		if (!message) return;
+		feedback.notifyError(message, 0, {
+			key: 'workspace-connections',
+			label: t('common.refresh'),
+
+			disabled: () => loading.value || !root.value?.isConnected,
+
+			onClick: () => {
+				if (root.value?.isConnected) void load(true);
+			},
+		});
+	});
 	const auth = useAuthSession();
 	let loadGeneration = 0;
 
@@ -80,17 +97,17 @@
 		context.value = null;
 	}
 
-	const reportTagLoadFailure = () => feedback.notifyError(t('workspaceConnectionList.tagLoadFailed'));
-
 	const load = async (force = false): Promise<void> => {
 		const current = ++loadGeneration;
 		loading.value = true;
+		loadFailureCause = undefined;
 		loadError.value = '';
 		tagLoadFailed.value = false;
 		try {
 			await data.load(force);
 		} catch (cause) {
 			if (current === loadGeneration) {
+				loadFailureCause = cause;
 				loadError.value = t('connections.failures.' + targetErrorKey(cause, 'read'));
 			}
 			return;
@@ -102,10 +119,10 @@
 		if (current === loadGeneration && props.showTags) {
 			try {
 				await tags.load();
-			} catch {
+			} catch (cause) {
 				if (current === loadGeneration) {
 					tagLoadFailed.value = true;
-					reportTagLoadFailure();
+					loadFailureCause = cause;
 				}
 			}
 		}
@@ -291,26 +308,6 @@
 		class="workspace-connection-list flex min-h-0 flex-col text-foreground"
 		:class="props.pageScroll ? 'workspace-connection-list--page' : 'h-full overflow-hidden'"
 	>
-		<p v-if="management.message.value" role="status" class="break-words px-2 pt-2 text-xs text-text-secondary">
-			{{ management.message.value }}
-		</p>
-		<div
-			v-if="!loading && (loadError || tagLoadFailed || data.needsRefresh.value)"
-			role="alert"
-			class="m-2 flex flex-wrap items-center gap-2 rounded-md border border-warning/25 bg-warning/10 px-2 py-1.5 text-xs text-warning"
-		>
-			<span class="min-w-0 flex-1">
-				{{
-					loadError ||
-					(data.needsRefresh.value
-						? t('connections.failures.recovery_required')
-						: t('workspaceConnectionList.tagLoadFailed'))
-				}}
-			</span>
-			<UiButton type="button" density="compact" :disabled="management.loading.value" @click="load(true)">{{
-				t('connections.refresh')
-			}}</UiButton>
-		</div>
 		<div class="workspace-connection-toolbar flex items-center gap-2" :class="props.pageScroll ? 'mb-3' : 'p-2'">
 			<UiInput
 				v-model="search"
@@ -334,6 +331,17 @@
 				</template>
 			</UiInput>
 			<UiButton
+				v-if="!loading && (loadError || tagLoadFailed || data.needsRefresh.value)"
+				type="button"
+				icon-only
+				class="!h-8 !w-8 shrink-0"
+				:title="t('common.refresh')"
+				:aria-label="t('common.refresh')"
+				@click="load(true)"
+			>
+				<i class="fas fa-sync-alt" aria-hidden="true"></i>
+			</UiButton>
+			<UiButton
 				type="button"
 				appearance="solid"
 				tone="primary"
@@ -350,9 +358,6 @@
 		<div v-if="loading" class="flex h-full items-center justify-center text-text-secondary">
 			<i class="fas fa-spinner fa-spin mr-2" aria-hidden="true"></i>{{ t('common.loading') }}
 		</div>
-		<div v-else-if="loadError" class="flex h-full items-center justify-center px-4 text-center text-error">
-			<i class="fas fa-exclamation-triangle mr-2" aria-hidden="true"></i>{{ loadError }}
-		</div>
 
 		<div
 			v-else
@@ -366,7 +371,7 @@
 				<i class="fas fa-search mb-2 text-xl" aria-hidden="true"></i>
 				<p>{{ t('workspaceConnectionList.noResults', { searchTerm: search }) }}</p>
 			</div>
-			<div v-else-if="!data.connections.value.length" class="p-6 text-center text-text-secondary">
+			<div v-else-if="!data.connections.value.length && !loadError" class="p-6 text-center text-text-secondary">
 				<i class="fas fa-plug mb-2 text-xl" aria-hidden="true"></i>
 				<p>{{ t('connections.noConnections') }}</p>
 				<UiButton type="button" appearance="solid" tone="primary" class="mt-4" @click="addConnection">

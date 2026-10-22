@@ -1,7 +1,7 @@
 import { onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAuthSession } from '@/features/auth/public';
-import { useFeedback } from '@/shared/feedback/public';
+import { useFeedback, useFeedbackMessage } from '@/shared/feedback/public';
 import { TargetRequestFailure, targetErrorKey } from '@/client/targets/target-types';
 import { InvalidTargetPayload } from '@nexus-terminal/shared/targets/http';
 import {
@@ -25,6 +25,13 @@ export function useConnectionManagement() {
 	const batchModal = ref(false);
 	const loading = ref(false);
 	const message = ref('');
+	let failureCause: unknown;
+	const messageSuccess = ref(false);
+	useFeedbackMessage(
+		() => message.value,
+		() => (messageSuccess.value ? 'success' : 'error'),
+		() => failureCause,
+	);
 	const testing = ref(new Set<number>());
 	const testResults = ref(new Map<number, ConnectionTestSummary>());
 	const batchSnapshots = ref<ConnectionSummary[]>([]);
@@ -42,6 +49,8 @@ export function useConnectionManagement() {
 		testing.value = new Set();
 		testResults.value = new Map();
 		message.value = '';
+		failureCause = undefined;
+		messageSuccess.value = false;
 	}
 
 	async function execute(
@@ -55,10 +64,14 @@ export function useConnectionManagement() {
 		const signal = controller.signal;
 		loading.value = true;
 		message.value = '';
+		failureCause = undefined;
+		messageSuccess.value = false;
 		try {
 			await work(signal);
 		} catch (cause) {
 			if (current === generation && !signal.aborted) {
+				failureCause = cause;
+				messageSuccess.value = false;
 				message.value = t('connections.failures.' + targetErrorKey(cause, operation));
 			}
 		} finally {
@@ -171,6 +184,7 @@ export function useConnectionManagement() {
 				}
 			}
 		}
+		messageSuccess.value = true;
 		message.value = t('connections.completed', { count: completed });
 		batchModal.value = false;
 	}
@@ -267,9 +281,6 @@ export function useConnectionManagement() {
 						route: item.route,
 						proxyId: item.proxyId,
 						notes: item.notes,
-						rdpRemoteApp: item.rdpRemoteApp,
-						rdpRemoteAppDirectory: item.rdpRemoteAppDirectory,
-						rdpRemoteAppArguments: item.rdpRemoteAppArguments,
 						tagIds: item.tagIds.map((id) => id),
 						jumpIds: item.jumpIds.map((id) => id),
 					},
@@ -289,6 +300,8 @@ export function useConnectionManagement() {
 				URL.revokeObjectURL(url);
 			}
 		} catch (cause) {
+			failureCause = cause;
+			messageSuccess.value = false;
 			message.value = t('connections.failures.' + targetErrorKey(cause));
 		}
 	}

@@ -12,8 +12,6 @@ import type {
 
 export const useNotificationsStore = defineStore('notifications', () => {
 	const items = shallowRef<NotificationSetting[]>([]);
-	const deliveries = shallowRef<NotificationDelivery[]>([]);
-	const nextOffset = ref<number | null>(null);
 	const error = shallowRef<unknown>(null);
 	const needsRefresh = ref(true);
 	const pending = ref(0);
@@ -27,8 +25,6 @@ export const useNotificationsStore = defineStore('notifications', () => {
 		failureRevision++;
 		queue = Promise.resolve();
 		items.value = [];
-		deliveries.value = [];
-		nextOffset.value = null;
 		pending.value = 0;
 		error.value = null;
 		needsRefresh.value = true;
@@ -145,9 +141,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
 	function testSaved(id: string, permission?: AbortSignal): Promise<NotificationDelivery> {
 		return mutate(
 			(signal) => notificationsApi.testSaved(id, signal),
-			(delivery) => {
-				deliveries.value = [delivery, ...deliveries.value.filter((item) => item.id !== delivery.id)];
-			},
+			() => undefined,
 			permission,
 		);
 	}
@@ -156,35 +150,13 @@ export const useNotificationsStore = defineStore('notifications', () => {
 		const frozen = toNotificationConfig(config);
 		return mutate(
 			(signal) => notificationsApi.testUnsaved(frozen, signal),
-			(delivery) => {
-				deliveries.value = [delivery, ...deliveries.value.filter((item) => item.id !== delivery.id)];
-			},
+			() => undefined,
 			permission,
 		);
 	}
 
-	function loadDeliveries(append = false, permission?: AbortSignal): Promise<void> {
-		return enqueue(async (signal) => {
-			const offset = append ? nextOffset.value : 0;
-			if (offset === null) {
-				return;
-			}
-			const page = await notificationsApi.deliveries(offset, 40, signal);
-			if (signal.aborted) {
-				throw new OperationsRequestFailure('cancelled', 'not_dispatched');
-			}
-			if (append && page.items.some((item) => deliveries.value.some((old) => old.id === item.id))) {
-				throw new OperationsRequestFailure('protocol_failure', 'unknown');
-			}
-			deliveries.value = append ? [...deliveries.value, ...page.items] : page.items;
-			nextOffset.value = page.nextOffset;
-		}, permission);
-	}
-
 	return {
 		items,
-		deliveries,
-		nextOffset,
 		error,
 		needsRefresh,
 		loading: computed(() => pending.value > 0),
@@ -194,6 +166,5 @@ export const useNotificationsStore = defineStore('notifications', () => {
 		remove,
 		testSaved,
 		testUnsaved,
-		loadDeliveries,
 	};
 });

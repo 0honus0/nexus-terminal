@@ -43,7 +43,7 @@
 		:focus-on-open="focusOnOpen"
 		:restore-focus="restoreFocus"
 		:backdrop-trigger="backdropTrigger"
-		panel-class="ui-form-surface ui-confirmation-panel"
+		panel-class="ui-confirmation-panel"
 		role="dialog"
 		:aria-modal="true"
 		:aria-labelledby="titleId"

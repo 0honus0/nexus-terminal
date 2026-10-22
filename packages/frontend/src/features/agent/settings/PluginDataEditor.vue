@@ -1,7 +1,7 @@
 <script setup lang="ts">
-	import { ref, toRaw, watch } from 'vue';
+	import { ref, toRaw, useId, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton } from '@/foundation/ui';
+	import { UiBadge, UiButton, UiCheckbox, UiEmptyState, UiFormField, UiInput, UiTextarea } from '@/foundation/ui';
 	import {
 		getPluginDataSnapshot,
 		migratePluginData,
@@ -31,6 +31,7 @@
 	);
 	const emit = defineEmits<{ changed: [] }>();
 	const { t } = useI18n();
+	const id = useId();
 	const snapshot = ref<PluginDataSnapshot | null>(null);
 	const key = ref('');
 	const loadedKey = ref<string | null>(null);
@@ -275,111 +276,499 @@
 	}
 </script>
 <template>
-	<details class="space-y-2 rounded border border-border p-2" @toggle="onToggle">
-		<summary>{{ t(retainedOnly ? 'agent.settings.plugins.deleteData' : 'agent.pluginManagement.data') }}</summary>
-		<p class="text-xs">
-			{{ t(retainedOnly ? 'agent.settings.plugins.deleteDataWarning' : 'agent.pluginManagement.dataHelp') }}
-		</p>
-		<p v-if="operation.notice.value" role="status">
-			{{ t('agent.settings.appManagement.' + operation.notice.value) }}
-		</p>
-		<UiButton
-			v-if="!retainedOnly || operation.notice.value"
-			type="button"
-			:disabled="disabled || operation.busy.value"
-			@click="read"
-			>{{ t('agent.pluginManagement.readData') }}</UiButton
-		>
-		<template v-if="snapshot && !retainedOnly">
-			<p class="text-xs">r{{ snapshot.revision }} · {{ snapshot.items.length }}</p>
-			<p v-for="item in snapshot.items" :key="item.key" class="break-all text-xs">
-				{{ item.key }} · v{{ item.version }} ·
-				{{ item.valueJson === null ? t('agent.pluginManagement.tombstone') : item.valueJson }}
+	<details class="plugin-data" @toggle="onToggle">
+		<summary class="plugin-data__summary">
+			<span class="plugin-data__icon" aria-hidden="true">
+				<i class="fa-solid fa-database"></i>
+			</span>
+			<span class="plugin-data__heading">
+				<span class="plugin-data__title">{{
+					t(retainedOnly ? 'agent.settings.plugins.deleteData' : 'agent.pluginManagement.snapshot')
+				}}</span>
+				<span class="plugin-data__meta">
+					{{ installation.definitionId }} · v{{ installation.version }} · r{{ installation.revision }}
+				</span>
+			</span>
+			<UiBadge v-if="snapshot && !retainedOnly" tone="neutral" density="compact">
+				r{{ snapshot.revision }} · {{ snapshot.items.length }}
+			</UiBadge>
+			<i class="plugin-data__chevron fa-solid fa-chevron-down" aria-hidden="true"></i>
+		</summary>
+
+		<div class="plugin-data__body">
+			<p class="plugin-data__help">
+				{{ t(retainedOnly ? 'agent.settings.plugins.deleteDataWarning' : 'agent.pluginManagement.dataHelp') }}
 			</p>
-		</template>
-		<fieldset :disabled="disabled || operation.busy.value || pending !== null" class="space-y-2">
-			<template v-if="!retainedOnly"
-				><label class="block"
-					>{{ t('agent.pluginManagement.dataKey')
-					}}<input v-model="key" class="ml-2 rounded border border-border bg-background p-2"
-				/></label>
-				<UiButton type="button" :disabled="!key" @click="readKey">{{
-					t('agent.pluginManagement.readKey')
-				}}</UiButton>
-				<label class="block"
-					>JSON<textarea
-						v-model="valueJson"
-						class="mt-1 w-full rounded border border-border bg-background p-2"
-					/>
+			<div v-if="!retainedOnly || operation.notice.value" class="plugin-data__toolbar">
+				<UiButton
+					type="button"
+					appearance="soft"
+					density="compact"
+					:disabled="disabled || operation.busy.value"
+					@click="read"
+				>
+					<i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
+					{{ t('agent.pluginManagement.readData') }}
+				</UiButton>
+				<span v-if="snapshot && !retainedOnly" class="plugin-data__snapshot-meta">
+					{{ t('agent.pluginManagement.snapshotRevision', { revision: snapshot.revision }) }}
+				</span>
+			</div>
+
+			<section v-if="snapshot && !retainedOnly" class="plugin-data__snapshot">
+				<div class="plugin-data__section-head">
+					<h5>{{ t('agent.pluginManagement.snapshot') }}</h5>
+					<span>{{ snapshot.items.length }}</span>
+				</div>
+				<UiEmptyState
+					v-if="!snapshot.items.length"
+					icon="fa-solid fa-database"
+					:title="t('agent.pluginManagement.noSnapshotItems')"
+					dense
+				/>
+				<ul v-else class="plugin-data__items">
+					<li v-for="item in snapshot.items" :key="item.key">
+						<div class="plugin-data__item-head">
+							<code>{{ item.key }}</code>
+							<span>v{{ item.version }}</span>
+						</div>
+						<pre>{{
+							item.valueJson === null ? t('agent.pluginManagement.tombstone') : item.valueJson
+						}}</pre>
+					</li>
+				</ul>
+			</section>
+
+			<fieldset :disabled="disabled || operation.busy.value || pending !== null" class="plugin-data__form">
+				<template v-if="!retainedOnly">
+					<section class="plugin-data__form-section">
+						<div class="plugin-data__section-head">
+							<h5>{{ t('agent.pluginManagement.keyEditor') }}</h5>
+							<span>{{ t('agent.pluginManagement.keyEditorHint') }}</span>
+						</div>
+						<div class="plugin-data__key-row">
+							<UiFormField :label="t('agent.pluginManagement.dataKey')" :for-id="`${id}-data-key`">
+								<UiInput :id="`${id}-data-key`" v-model="key" autocomplete="off" spellcheck="false" />
+							</UiFormField>
+							<UiButton
+								type="button"
+								appearance="soft"
+								density="compact"
+								:disabled="!key"
+								@click="readKey"
+							>
+								{{ t('agent.pluginManagement.readKey') }}
+							</UiButton>
+						</div>
+						<UiFormField :label="'JSON'" :for-id="`${id}-data-json`">
+							<UiTextarea :id="`${id}-data-json`" v-model="valueJson" :min-rows="5" class="font-mono" />
+						</UiFormField>
+						<div class="plugin-data__actions">
+							<UiButton
+								type="button"
+								appearance="solid"
+								tone="primary"
+								density="compact"
+								:disabled="operation.refreshRequired.value || loadedKey !== key || !key || !valueJson"
+								@click="save(false)"
+							>
+								{{ t('common.save') }}
+							</UiButton>
+							<UiButton
+								type="button"
+								tone="danger"
+								density="compact"
+								:disabled="operation.refreshRequired.value || loadedKey !== key || !key"
+								@click="save(true)"
+							>
+								{{ t('common.delete') }}
+							</UiButton>
+						</div>
+					</section>
+
+					<section class="plugin-data__form-section">
+						<div class="plugin-data__section-head">
+							<h5>{{ t('agent.pluginManagement.migration') }}</h5>
+							<span>{{ t('agent.pluginManagement.migrationHint') }}</span>
+						</div>
+						<UiFormField
+							:label="t('agent.pluginManagement.migrationItems')"
+							:for-id="`${id}-migration-json`"
+						>
+							<UiTextarea
+								:id="`${id}-migration-json`"
+								v-model="migrationJson"
+								:min-rows="5"
+								class="font-mono"
+							/>
+						</UiFormField>
+						<div class="plugin-data__actions">
+							<UiButton
+								type="button"
+								density="compact"
+								:disabled="operation.refreshRequired.value || snapshot === null || !migrationJson"
+								@click="migrate"
+							>
+								<i class="fa-solid fa-right-left" aria-hidden="true"></i>
+								{{ t('agent.pluginManagement.migrate') }}
+							</UiButton>
+						</div>
+					</section>
+				</template>
+
+				<section v-if="installation.status === 'removed'" class="plugin-data__danger">
+					<div class="plugin-data__danger-copy">
+						<h5>{{ t('agent.pluginManagement.purge') }}</h5>
+						<p>{{ t('agent.settings.plugins.deleteDataWarning') }}</p>
+					</div>
+					<label class="plugin-data__check">
+						<UiCheckbox v-model="purgeAcknowledged" />
+						<span>{{ t('agent.pluginManagement.confirmPurge') }}</span>
+					</label>
+					<UiButton
+						type="button"
+						tone="danger"
+						density="compact"
+						:disabled="operation.refreshRequired.value || !purgeAcknowledged"
+						@click="purge"
+					>
+						{{ t('agent.pluginManagement.purge') }}
+					</UiButton>
+				</section>
+			</fieldset>
+
+			<section v-if="pending" class="plugin-data__pending">
+				<div class="plugin-data__section-head">
+					<h5>{{ t('agent.pluginManagement.pendingIntent') }}</h5>
+				</div>
+				<p class="plugin-data__pending-copy">
+					{{ t('agent.pluginManagement.pendingData')
+					}}<template v-if="!retainedOnly"> · {{ pending.operationId }}</template>
+				</p>
+				<div class="plugin-data__actions">
+					<UiButton
+						v-if="pendingAction === 'write'"
+						type="button"
+						appearance="soft"
+						density="compact"
+						:disabled="disabled || operation.busy.value"
+						@click="inspectPendingKey"
+					>
+						{{ t('agent.pluginManagement.readKey') }}
+					</UiButton>
+					<UiButton
+						type="button"
+						appearance="solid"
+						tone="primary"
+						density="compact"
+						:disabled="disabled || operation.busy.value || operation.refreshRequired.value"
+						@click="dispatch"
+					>
+						{{ t('agent.pluginManagement.retryDataIntent') }}
+					</UiButton>
+				</div>
+				<pre v-if="observedData !== null" class="plugin-data__observed">{{ observedData }}</pre>
+				<label class="plugin-data__check">
+					<UiCheckbox v-model="abandonAcknowledged" />
+					<span>{{ t('agent.pluginManagement.acknowledge') }}</span>
 				</label>
 				<UiButton
 					type="button"
-					:disabled="operation.refreshRequired.value || loadedKey !== key || !key || !valueJson"
-					@click="save(false)"
-					>{{ t('common.save') }}</UiButton
+					density="compact"
+					:disabled="
+						disabled || operation.busy.value || operation.refreshRequired.value || !abandonAcknowledged
+					"
+					@click="abandon"
 				>
-				<UiButton
-					type="button"
-					:disabled="operation.refreshRequired.value || loadedKey !== key || !key"
-					@click="save(true)"
-					>{{ t('common.delete') }}</UiButton
-				>
-				<label class="block"
-					>{{ t('agent.pluginManagement.migrationItems')
-					}}<textarea
-						v-model="migrationJson"
-						class="mt-1 w-full rounded border border-border bg-background p-2"
-					/>
-				</label>
-				<UiButton
-					type="button"
-					:disabled="operation.refreshRequired.value || snapshot === null || !migrationJson"
-					@click="migrate"
-					>{{ t('agent.pluginManagement.migrate') }}</UiButton
-				> </template
-			><label v-if="installation.status === 'removed'" class="block"
-				><input v-model="purgeAcknowledged" type="checkbox" />{{
-					t('agent.pluginManagement.confirmPurge')
-				}}</label
-			>
-			<UiButton
-				v-if="installation.status === 'removed'"
-				type="button"
-				:disabled="operation.refreshRequired.value || installation.status !== 'removed' || !purgeAcknowledged"
-				@click="purge"
-				>{{ t('agent.pluginManagement.purge') }}</UiButton
-			>
-		</fieldset>
-		<template v-if="pending"
-			><p class="break-all text-xs">
-				{{ t('agent.pluginManagement.pendingData')
-				}}<template v-if="!retainedOnly"> · {{ pending.operationId }}</template>
-			</p>
-			<UiButton
-				v-if="pendingAction === 'write'"
-				type="button"
-				:disabled="disabled || operation.busy.value"
-				@click="inspectPendingKey"
-				>{{ t('agent.pluginManagement.readKey') }}</UiButton
-			>
-			<p v-if="observedData !== null" class="whitespace-pre-wrap break-all text-xs">{{ observedData }}</p>
-			<UiButton
-				type="button"
-				:disabled="disabled || operation.busy.value || operation.refreshRequired.value"
-				@click="dispatch"
-				>{{ t('agent.pluginManagement.retryDataIntent') }}</UiButton
-			>
-			<label class="block text-xs"
-				><input v-model="abandonAcknowledged" type="checkbox" />{{
-					t('agent.pluginManagement.acknowledge')
-				}}</label
-			>
-			<UiButton
-				type="button"
-				:disabled="disabled || operation.busy.value || operation.refreshRequired.value || !abandonAcknowledged"
-				@click="abandon"
-				>{{ t('agent.pluginManagement.newIntent') }}</UiButton
-			>
-		</template>
+					{{ t('agent.pluginManagement.newIntent') }}
+				</UiButton>
+			</section>
+		</div>
 	</details>
 </template>
+
+<style scoped>
+	.plugin-data {
+		min-width: 0;
+		overflow: hidden;
+		border-radius: 11px;
+		background: color-mix(in srgb, var(--header-bg-color) 24%, transparent);
+	}
+
+	.plugin-data__summary {
+		display: flex;
+		min-width: 0;
+		align-items: center;
+		gap: 9px;
+		padding: 10px 11px;
+		cursor: pointer;
+		list-style: none;
+	}
+
+	.plugin-data__summary::-webkit-details-marker {
+		display: none;
+	}
+
+	.plugin-data__icon {
+		display: grid;
+		width: 27px;
+		height: 27px;
+		flex: 0 0 auto;
+		place-items: center;
+		border-radius: 8px;
+		background: color-mix(in srgb, var(--link-active-color) 9%, transparent);
+		color: var(--link-active-color);
+		font-size: 9px;
+	}
+
+	.plugin-data__heading {
+		display: flex;
+		min-width: 0;
+		flex: 1;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.plugin-data__title {
+		color: var(--text-color);
+		font-size: 11px;
+		font-weight: 650;
+	}
+
+	.plugin-data__meta {
+		overflow: hidden;
+		color: var(--text-color-secondary);
+		font-size: 9px;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.plugin-data__chevron {
+		flex: 0 0 auto;
+		color: var(--text-color-secondary);
+		font-size: 8px;
+		transition: transform 150ms ease;
+	}
+
+	.plugin-data[open] .plugin-data__chevron {
+		transform: rotate(180deg);
+	}
+
+	.plugin-data__body {
+		display: flex;
+		min-width: 0;
+		flex-direction: column;
+		gap: 10px;
+		padding: 0 11px 11px;
+	}
+
+	.plugin-data__help {
+		color: var(--text-color-secondary);
+		font-size: 10px;
+		line-height: 1.6;
+	}
+
+	.plugin-data__notice {
+		display: flex;
+		gap: 8px;
+		align-items: flex-start;
+		padding: 8px 9px;
+		border-radius: 8px;
+		background: color-mix(in srgb, var(--link-active-color) 6%, transparent);
+		color: var(--text-color-secondary);
+		font-size: 10px;
+		line-height: 1.5;
+	}
+
+	.plugin-data__notice > i {
+		margin-top: 2px;
+	}
+
+	.plugin-data__toolbar,
+	.plugin-data__actions,
+	.plugin-data__key-row {
+		display: flex;
+		min-width: 0;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 7px;
+	}
+
+	.plugin-data__key-row {
+		align-items: flex-end;
+	}
+
+	.plugin-data__key-row > :first-child {
+		min-width: 160px;
+		flex: 1;
+	}
+
+	.plugin-data__snapshot-meta {
+		color: var(--text-color-secondary);
+		font-size: 9px;
+	}
+
+	.plugin-data__snapshot,
+	.plugin-data__form-section,
+	.plugin-data__pending {
+		min-width: 0;
+		padding: 10px;
+		border-radius: 9px;
+		background: color-mix(in srgb, var(--card-bg-color) 40%, transparent);
+	}
+
+	.plugin-data__section-head {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 10px;
+		margin-bottom: 8px;
+	}
+
+	.plugin-data__section-head h5 {
+		color: var(--text-color);
+		font-size: 10.5px;
+		font-weight: 650;
+	}
+
+	.plugin-data__section-head > span {
+		color: var(--text-color-secondary);
+		font-size: 9px;
+	}
+
+	.plugin-data__items {
+		display: flex;
+		max-height: 224px;
+		flex-direction: column;
+		gap: 5px;
+		overflow-y: auto;
+	}
+
+	.plugin-data__items li {
+		min-width: 0;
+		padding: 8px;
+		border-radius: 7px;
+		background: color-mix(in srgb, var(--header-bg-color) 40%, transparent);
+	}
+
+	.plugin-data__item-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+	}
+
+	.plugin-data__item-head code,
+	.plugin-data__items pre,
+	.plugin-data__observed {
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-size: 9px;
+	}
+
+	.plugin-data__item-head code {
+		overflow-wrap: anywhere;
+		color: var(--text-color);
+	}
+
+	.plugin-data__item-head span {
+		color: var(--text-color-secondary);
+		font-size: 8.5px;
+	}
+
+	.plugin-data__items pre {
+		margin-top: 4px;
+		overflow-wrap: anywhere;
+		color: var(--text-color-secondary);
+		white-space: pre-wrap;
+	}
+
+	.plugin-data__form {
+		display: flex;
+		min-width: 0;
+		flex-direction: column;
+		gap: 9px;
+	}
+
+	.plugin-data__form-section {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.plugin-data__danger {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 10px;
+		border-radius: 9px;
+		background: color-mix(in srgb, var(--status-error-color) 7%, transparent);
+	}
+
+	.plugin-data__danger-copy h5 {
+		color: var(--status-error-color);
+		font-size: 10.5px;
+		font-weight: 650;
+	}
+
+	.plugin-data__danger-copy p,
+	.plugin-data__pending-copy {
+		margin-top: 3px;
+		color: var(--text-color-secondary);
+		font-size: 9.5px;
+		line-height: 1.55;
+	}
+
+	.plugin-data__check {
+		display: flex;
+		align-items: flex-start;
+		gap: 8px;
+		color: var(--text-color-secondary);
+		cursor: pointer;
+		font-size: 10px;
+		line-height: 1.55;
+	}
+
+	.plugin-data__pending {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		background: color-mix(in srgb, var(--status-warning-color) 7%, var(--card-bg-color) 32%);
+	}
+
+	.plugin-data__observed {
+		max-height: 150px;
+		padding: 8px;
+		overflow: auto;
+		border-radius: 7px;
+		background: color-mix(in srgb, var(--header-bg-color) 44%, transparent);
+		color: var(--text-color-secondary);
+		overflow-wrap: anywhere;
+		white-space: pre-wrap;
+	}
+
+	@media (max-width: 560px) {
+		.plugin-data__summary {
+			align-items: flex-start;
+		}
+
+		.plugin-data__summary :deep([data-ui='badge']) {
+			display: none;
+		}
+
+		.plugin-data__key-row {
+			align-items: stretch;
+		}
+
+		.plugin-data__key-row > :first-child {
+			min-width: 100%;
+		}
+
+		.plugin-data__key-row :deep([data-ui='button']) {
+			align-self: flex-start;
+		}
+
+		.plugin-data__actions :deep([data-ui='button']) {
+			flex: 1 1 auto;
+		}
+	}
+</style>

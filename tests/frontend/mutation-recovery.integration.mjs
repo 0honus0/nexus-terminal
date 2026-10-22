@@ -251,18 +251,21 @@ try {
 	});
 	await page.goto(origin + '/settings');
 	await page.getByRole('tab', { name: /Data/i }).click();
+	await page.getByText('Diagnostics and recovery (advanced)', { exact: true }).click();
 	const panel = page.locator('[data-mutation-recovery]');
 	await panel.getByRole('button', { name: /^fixture-04/ }).click();
 	await panel.locator('[data-mutation-detail]').waitFor();
 	assert.equal(await panel.getByRole('checkbox', { checked: true }).count(), 0);
-	assert.equal(await panel.locator('#mutation-outcome').inputValue(), '');
+	const outcomeSelect = panel.locator('#mutation-outcome');
+	assert.equal(await outcomeSelect.getAttribute('data-value'), '');
 	await panel.getByRole('button', { name: 'Record evidence', exact: true }).click();
 	await panel.getByRole('alert').filter({ hasText: 'Confirm both resources' }).waitFor();
 	await panel.getByRole('checkbox', { name: 'I have independently verified the producer has stopped' }).check();
 	await panel
 		.getByRole('checkbox', { name: 'I have independently verified the related resources have stopped' })
 		.check();
-	await panel.getByLabel('Observed outcome', { exact: true }).selectOption('partially_applied');
+	await outcomeSelect.click();
+	await page.getByRole('option', { name: 'Partially applied', exact: true }).click();
 	const observed = new Date(Date.now() - 2000);
 	const local = new Date(observed.getTime() - observed.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
 	await panel.getByLabel('Observation time', { exact: true }).fill(local);
@@ -273,10 +276,12 @@ try {
 	await page.waitForFunction(
 		async () => (await (await fetch('/api/v1/remote/mutations/fixture-04')).json()).revision === 3,
 	);
-	await panel.locator('#mutation-evidence option:not([disabled])').waitFor({ state: 'attached' });
-	assert.equal(await panel.locator('#mutation-evidence').inputValue(), '');
-	const evidenceId = await panel.locator('#mutation-evidence option:not([disabled])').getAttribute('value');
-	await panel.getByLabel('Evidence for release', { exact: true }).selectOption(evidenceId);
+	const evidenceSelect = panel.locator('#mutation-evidence');
+	await evidenceSelect.click();
+	const evidenceOption = page.getByRole('option').first();
+	await evidenceOption.waitFor();
+	assert.equal(await evidenceSelect.getAttribute('data-value'), '');
+	await evidenceOption.click();
 	await panel.getByRole('button', { name: 'Release execution fence', exact: true }).click();
 	const dialog = page.getByRole('dialog').filter({ hasText: 'Release this execution fence' });
 	await dialog.waitFor();

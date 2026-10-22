@@ -9,7 +9,9 @@
       "dataManagement": "Data Management"
     },
     "about": {
+      "appInfo": "Application info",
       "version": "Version",
+      "project": "Project",
       "checkingUpdate": "Checking for update...",
       "latestVersion": "Up to date",
       "updateAvailable": "Update available: {version}!",
@@ -51,6 +53,7 @@
       "allSettings": "All Settings",
       "settingsOverview": "Settings Overview"
     },
-    "advancedMaintenance": "Diagnostics and recovery (advanced)"
+    "advancedMaintenance": "Diagnostics and recovery (advanced)",
+    "advancedMaintenanceDescription": "System status, execution fences, and Agent data maintenance"
   }
 }

@@ -189,7 +189,7 @@
 			await updatePosition();
 		} catch (cause) {
 			if (view.isCurrent(signal)) {
-				errorMessage.value = preferenceFailureMessage(cause, t);
+				feedback.notifyError(preferenceFailureMessage(cause, t));
 			}
 		} finally {
 			if (view.isCurrent(signal)) {

@@ -116,10 +116,14 @@ test('notification UI localizes delivery status while preserving the wire event 
 	// The durable delivery list may advance from queued to sent *after* the
 	// POST returns but before the read-back. The form still owns its original
 	// accepted receipt; only the refreshed ledger may claim final delivery.
-	await expect(page.locator('form [role="status"]')).toHaveText(translations.queued);
+	await expect(
+		page.locator('.ui-notification[data-kind="info"]').filter({ hasText: translations.queued }),
+	).toBeVisible();
 	await waitForTestDelivery(context.request, delivery.id, 'sent');
 	await page.getByRole('button', { name: '取消', exact: true }).click();
-	await page.getByRole('button', { name: '刷新', exact: true }).click();
+	await expect(page.locator('[data-delivery-id]')).toHaveCount(0);
+	await page.goto('/audit-logs');
+	await page.getByRole('tab', { name: '通知投递', exact: true }).click();
 	await expect(page.locator('[data-delivery-id="' + delivery.id + '"]')).toContainText('已发送');
 });
 
@@ -212,10 +216,12 @@ test('notification CRUD persists events and exposes a failed delivery without re
 				updated,
 			);
 			await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-			await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+			await page.goto('/audit-logs');
+			await page.getByRole('tab', { name: 'Notification deliveries', exact: true }).click();
 			const row = page.locator('[data-delivery-id="' + failed.id + '"]');
 			await expect(row).toContainText('Failed');
 			await expect(row).not.toContainText(FAILURE_WEBHOOK_URL);
+			await page.goto('/notifications');
 		});
 		await card.getByRole('button', { name: 'Edit', exact: true }).click();
 		await page.getByRole('checkbox', { name: 'Enabled', exact: true }).uncheck();

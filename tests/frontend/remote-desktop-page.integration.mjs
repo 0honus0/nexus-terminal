@@ -25,7 +25,6 @@ try {
 	const origin = 'http://127.0.0.1:' + port;
 	app = await createApp(join(directory, 'desktop.db'), {
 		encryptionKey: randomBytes(32),
-		guacd: { host: '127.0.0.1', port: services.port },
 	});
 	const backend = await app.listenHttp({
 		publicOrigin: origin,
@@ -85,55 +84,59 @@ try {
 		if (request.failure()?.errorText === 'net::ERR_NETWORK_CHANGED') networkChanges += 1;
 	});
 	await page.goto(origin + '/__desktop');
-	const ids = await page.evaluate(async () => {
-		for (const action of ['setup', 'login']) {
-			const response = await fetch('/api/v1/auth/' + action, {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify(
-					action === 'setup'
-						? { username: 'admin', password: 'desktop-fixture-123', confirmPassword: 'desktop-fixture-123' }
-						: { username: 'admin', password: 'desktop-fixture-123' },
-				),
-			});
-			if (!response.ok) throw Error(action + ' failed: ' + response.status);
-		}
-		const ids = {};
-		for (const type of ['RDP', 'VNC']) {
-			const response = await fetch('/api/v1/targets/connections', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({
-					name: 'Frontend ' + type,
-					type,
-					host: 'desktop',
-					port: type === 'RDP' ? 3389 : 5900,
-					username: 'test',
-					route: 'direct',
-					proxyId: null,
-					notes: null,
-					rdpRemoteApp: null,
-					rdpRemoteAppDirectory: null,
-					rdpRemoteAppArguments: null,
-					tagIds: [],
-					jumpIds: [],
-				}),
-			});
-			if (response.status !== 201) throw Error('create target ' + response.status);
-			const target = await response.json();
-			const result = await fetch('/api/v1/targets/connections/' + target.id + '/credential', {
-				method: 'PUT',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({
-					version: target.version,
-					credential: { kind: 'password', password: 'b10-pass' },
-				}),
-			});
-			if (result.status !== 200) throw Error('create credential');
-			ids[type] = target.id;
-		}
-		return ids;
-	});
+	const ids = await page.evaluate(
+		async (ports) => {
+			for (const action of ['setup', 'login']) {
+				const response = await fetch('/api/v1/auth/' + action, {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify(
+						action === 'setup'
+							? {
+									username: 'admin',
+									password: 'desktop-fixture-123',
+									confirmPassword: 'desktop-fixture-123',
+								}
+							: { username: 'admin', password: 'desktop-fixture-123' },
+					),
+				});
+				if (!response.ok) throw Error(action + ' failed: ' + response.status);
+			}
+			const ids = {};
+			for (const type of ['RDP', 'VNC']) {
+				const response = await fetch('/api/v1/targets/connections', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({
+						name: 'Frontend ' + type,
+						type,
+						host: '127.0.0.1',
+						port: type === 'RDP' ? ports.rdpPort : ports.vncPort,
+						username: 'test',
+						route: 'direct',
+						proxyId: null,
+						notes: null,
+						tagIds: [],
+						jumpIds: [],
+					}),
+				});
+				if (response.status !== 201) throw Error('create target ' + response.status);
+				const target = await response.json();
+				const result = await fetch('/api/v1/targets/connections/' + target.id + '/credential', {
+					method: 'PUT',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({
+						version: target.version,
+						credential: { kind: 'password', password: 'b10-pass' },
+					}),
+				});
+				if (result.status !== 200) throw Error('create credential');
+				ids[type] = target.id;
+			}
+			return ids;
+		},
+		{ rdpPort: services.rdpPort, vncPort: services.vncPort },
+	);
 	// Docker bridge changes can invalidate Chromium's initial module requests.
 	// Only this read-only navigation may restart; setup and mutations never replay.
 	for (let attempt = 0; ; attempt += 1) {
@@ -285,8 +288,8 @@ try {
 		await page.touchscreen.tap(displayBox.x + touchX, displayBox.y + 100);
 		await waitFor(
 			() => Promise.resolve(originalSocket.frames.slice(frameCount).map(String)),
-			(frames) => frames.some((frame) => frame.includes('5.mouse')),
-			'Direct touch sends a real Guacamole mouse instruction',
+			(frames) => frames.some((frame) => frame !== ''),
+			'Direct touch sends protocol input on the real connection',
 			15000,
 		);
 		await waitFor(
@@ -295,7 +298,7 @@ try {
 			'Browser direct touch moves the real remote pointer',
 			15000,
 		);
-		assert.ok(originalSocket.frames.slice(frameCount).some((frame) => String(frame).includes('5.mouse')));
+		assert.ok(originalSocket.frames.length > frameCount);
 		checks.push(protocol + ' browser direct-touch event reaches the actual remote pointer');
 
 		await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
@@ -303,14 +306,9 @@ try {
 		await page.evaluate((text) => navigator.clipboard.writeText(text), clipboardText);
 		await displayElement.focus();
 		await waitFor(
-			() =>
-				Promise.resolve(
-					originalSocket.frames.some((frame) =>
-						String(frame).includes(Buffer.from(clipboardText).toString('base64')),
-					),
-				),
-			Boolean,
-			'Permitted browser clipboard is sent through the original real Guacamole stream',
+			() => services.clipboard(),
+			(text) => text === clipboardText,
+			'Browser clipboard reaches actual remote X selection',
 			15000,
 		);
 		const cdp = await page.context().newCDPSession(page);

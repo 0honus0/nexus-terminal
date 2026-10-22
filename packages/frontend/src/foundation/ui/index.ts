@@ -28,6 +28,8 @@ export { default as UiEmptyState } from './UiEmptyState.vue';
 
 export { default as UiFormField } from './UiFormField.vue';
 
+export { default as UiFormActions } from './UiFormActions.vue';
+
 export { default as UiInfoHint } from './UiInfoHint.vue';
 
 export { default as UiTooltip } from './UiTooltip.vue';
@@ -43,6 +45,8 @@ export { default as UiPopover } from './UiPopover.vue';
 export { default as UiResizeHandle } from './UiResizeHandle.vue';
 
 export { default as UiSelect } from './UiSelect.vue';
+
+export { default as UiSettingsGroup } from './UiSettingsGroup.vue';
 
 export { default as UiSlider } from './UiSlider.vue';
 

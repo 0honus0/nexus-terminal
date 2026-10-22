@@ -1,6 +1,7 @@
 <script setup lang="ts">
 	import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
+	import { UiButton, UiInput } from '@/foundation/ui';
 	import type { HostApp } from '../model/host-types';
 
 	const props = defineProps<{ apps: HostApp[]; activeAppId: string | null }>();
@@ -9,7 +10,7 @@
 
 	const open = ref(false);
 	const query = ref('');
-	const triggerRef = ref<HTMLButtonElement | null>(null);
+	const triggerRef = ref<HTMLElement | null>(null);
 	const panelRef = ref<HTMLElement | null>(null);
 	const position = ref({ left: '0px', top: '0px', maxWidth: '0px', maxHeight: '0px' });
 	/*
@@ -115,7 +116,7 @@
 		open.value = false;
 		positioned.value = false;
 		hubResizeObserver?.disconnect();
-		if (restoreFocus) queueMicrotask(() => triggerRef.value?.focus());
+		if (restoreFocus) queueMicrotask(() => triggerRef.value?.querySelector<HTMLButtonElement>('button')?.focus());
 	};
 
 	const selectApp = (appId: string) => {
@@ -150,28 +151,30 @@
 </script>
 
 <template>
-	<div class="relative inline-flex shrink-0 items-center">
-		<button
-			ref="triggerRef"
-			type="button"
-			class="agent-app-new-tab flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-transparent text-text-secondary/70 transition-colors hover:bg-card/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
-			:class="open ? 'bg-card/70 text-foreground' : ''"
+	<div ref="triggerRef" class="relative inline-flex shrink-0 items-center">
+		<UiButton
+			density="compact"
+			:appearance="open ? 'soft' : 'ghost'"
+			:icon-only="true"
+			class="agent-app-new-tab rounded-full"
 			:aria-label="$t('agent.hub.chooseApp')"
 			:title="$t('agent.hub.chooseApp')"
 			:aria-expanded="open"
 			@click="toggle"
 		>
 			<i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
-		</button>
+		</UiButton>
 
 		<Teleport to="body">
 			<div
 				v-if="open"
 				data-agent-hub-portal
 				ref="panelRef"
+				role="dialog"
+				:aria-label="$t('agent.hub.chooseApp')"
 				tabindex="-1"
 				:style="[position, positioned ? null : { visibility: 'hidden' }]"
-				class="fixed z-[60] flex w-72 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-2xl outline-none backdrop-blur-md"
+				class="ui-surface ui-radius--panel ui-glass-panel fixed z-[60] flex w-72 flex-col overflow-hidden shadow-2xl outline-none"
 			>
 				<div
 					class="flex items-center justify-between border-b border-border/60 px-3 py-2 text-xs font-semibold"
@@ -184,31 +187,32 @@
 							{{ candidateApps.length }}
 						</span>
 					</div>
-					<button
-						type="button"
-						class="flex h-6 w-6 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-header hover:text-foreground"
-						:aria-label="$t('agent.hub.close')"
-						:title="$t('agent.hub.close')"
+					<UiButton
+						density="compact"
+						appearance="ghost"
+						icon-only
+						:aria-label="$t('agent.hub.closeApps')"
+						:title="$t('agent.hub.closeApps')"
 						@click.stop="close()"
 					>
 						<i class="fa-solid fa-xmark text-xs" aria-hidden="true"></i>
-					</button>
+					</UiButton>
 				</div>
 
-				<div v-if="candidateApps.length > 4" class="border-b border-border/50 p-2">
-					<div class="relative">
-						<i
-							class="fa-solid fa-magnifying-glass pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-text-secondary"
-							aria-hidden="true"
-						></i>
-						<input
-							v-model="query"
-							type="search"
-							class="h-7 w-full rounded-lg border border-border/60 bg-background/80 pl-7 pr-2 text-xs outline-none focus:border-border-hover focus:ring-1 focus:ring-border/40"
-							:placeholder="$t('agent.hub.searchApps')"
-							autofocus
-						/>
-					</div>
+				<div v-if="candidateApps.length > 4" class="border-b border-border/45 p-2">
+					<UiInput
+						v-model="query"
+						type="search"
+						density="compact"
+						class="w-full"
+						:placeholder="$t('agent.hub.searchApps')"
+						:aria-label="$t('agent.hub.searchApps')"
+						autofocus
+					>
+						<template #leading>
+							<i class="fa-solid fa-magnifying-glass text-[10px]" aria-hidden="true"></i>
+						</template>
+					</UiInput>
 				</div>
 
 				<div class="max-h-64 overflow-y-auto p-1.5 space-y-1">

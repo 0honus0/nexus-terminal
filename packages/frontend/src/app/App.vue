@@ -5,21 +5,24 @@
 	import { preloadAuthenticatedRoutes } from './router';
 	import { logger } from '@/client/logging/logger';
 	import AppHeader from './shell/AppHeader.vue';
+	import AppUpdatePrompt from './shell/AppUpdatePrompt.vue';
 	import { useAuthSession } from '@/features/auth/public';
 	import { BackupRecoveryOverlay, useBackupStore } from '@/features/backup/public';
 	import { loadAppearanceCustomizerModal, useAppearance } from '@/features/appearance/public';
 	import { AgentSurfaceHost } from '@/features/agent/public';
-	import { markConnectionConnected, useConnections } from '@/features/connections/public';
+	import { refreshConnection, useConnections } from '@/features/connections/public';
 	import { ConnectionTagPicker, useConnectionTags } from '@/features/tags/public';
 	import { useProxies } from '@/features/proxies/public';
 	import { SshKeySelector, useSshKeys } from '@/features/ssh-keys/public';
 	import { loadTerminalView } from '@/features/terminal/public';
 	import { loadRemoteDesktopModal, remoteDesktopLauncher } from '@/features/remote-desktop/public';
 	import { usePreferences } from '@/features/preferences/public';
+	import { startSuspendedSessionsSync } from '@/features/ssh-suspend/public';
 	import {
 		DialogHost,
 		NotificationHost,
 		RuntimeErrorBoundary,
+		useSettingsReloadNotifications,
 		useOperationFeedback,
 		preferenceFailureMessage,
 	} from '@/shared/feedback/public';
@@ -30,9 +33,11 @@
 	const RemoteDesktopModal = defineAsyncComponent(loadRemoteDesktopModal);
 	const AppearanceCustomizerModal = defineAsyncComponent(loadAppearanceCustomizerModal);
 	const auth = useAuthSession();
+	let stopSuspendedSync: (() => void) | undefined;
 	const route = useRoute();
 	const { t } = useI18n();
 	const desktopFeedback = useOperationFeedback('remote-desktop.size');
+	useSettingsReloadNotifications();
 	const desktopSizeSaving = ref(false);
 	const backup = useBackupStore();
 	const connections = useConnections();
@@ -93,8 +98,10 @@
 			: preferences.values.value.rdpModalHeight,
 	);
 
-	const updateRemoteDesktopConnection = (connectionId: number, lastConnectedAt: number) => {
-		markConnectionConnected(connectionId, lastConnectedAt);
+	const updateRemoteDesktopConnection = (connectionId: number) => {
+		void refreshConnection(connectionId).catch((cause) =>
+			logger.debug({ err: cause, connectionId }, 'Desktop connection metadata refresh failed'),
+		);
 	};
 
 	const saveRemoteDesktopSize = async (size: { width: number; height: number }): Promise<void> => {
@@ -147,8 +154,11 @@
 				const result = authenticatedSessionLifecycle.attach(userId);
 				reportSessionCleanupFailures(result);
 				if (result?.event.type === 'user-changed') {
+					stopSuspendedSync?.();
+					stopSuspendedSync = undefined;
 					disposeAuthenticatedShell();
 				}
+				stopSuspendedSync ??= startSuspendedSessionsSync();
 				preloadAuthenticatedRoutes();
 				void appearance
 					.load()
@@ -158,6 +168,8 @@
 					.catch((cause) => logger.error({ err: cause }, 'Failed to load application preferences'));
 				return;
 			}
+			stopSuspendedSync?.();
+			stopSuspendedSync = undefined;
 			const result = authenticatedSessionLifecycle.logout();
 			reportSessionCleanupFailures(result);
 			if (result) {
@@ -168,6 +180,7 @@
 	);
 
 	onBeforeUnmount(() => {
+		stopSuspendedSync?.();
 		reportSessionCleanupFailures(authenticatedSessionLifecycle.dispose());
 		remoteDesktopLauncher.close();
 	});
@@ -198,7 +211,7 @@
 			:height="remoteDesktopHeight"
 			:size-saving="desktopSizeSaving"
 			@size-change="saveRemoteDesktopSize"
-			@attempted="updateRemoteDesktopConnection"
+			@connected="updateRemoteDesktopConnection"
 			@close="remoteDesktopLauncher.close()"
 		/>
 		<AppearanceCustomizerModal
@@ -208,5 +221,6 @@
 		/>
 		<NotificationHost />
 		<DialogHost />
+		<AppUpdatePrompt />
 	</div>
 </template>

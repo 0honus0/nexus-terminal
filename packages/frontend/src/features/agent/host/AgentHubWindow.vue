@@ -2,7 +2,7 @@
 	import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 	import { logger } from '@/client/logging/logger';
 	import { structurallyEqual } from '@/foundation/data';
-	import { overlayStack, UiResizeHandle, type OverlayStackRegistration } from '@/foundation/ui';
+	import { overlayStack, UiButton, UiResizeHandle, type OverlayStackRegistration } from '@/foundation/ui';
 	import type { HostApp, HostDirectory } from '../model/host-types';
 	import PluginAppFrame from './PluginAppFrame.vue';
 	import AgentAppSwitcher from './AgentAppSwitcher.vue';
@@ -775,14 +775,10 @@
 					class="agent-hub-view-switch flex shrink-0 items-center rounded-md bg-header/45 p-0.5 backdrop-blur-xs"
 					:aria-label="$t('agent.hub.views')"
 				>
-					<button
-						type="button"
-						class="agent-hub-view-button flex h-7 items-center gap-1.5 rounded-[5px] px-2 text-[11px] font-medium transition-colors duration-150 select-none"
-						:class="
-							state.hubView === 'conversation'
-								? 'bg-background/90 text-foreground shadow-xs font-semibold'
-								: 'text-text-secondary hover:bg-background/45 hover:text-foreground'
-						"
+					<UiButton
+						density="compact"
+						:appearance="state.hubView === 'conversation' ? 'soft' : 'ghost'"
+						class="agent-hub-view-button rounded-[5px] px-2"
 						:aria-label="$t('agent.hub.conversation')"
 						:aria-pressed="state.hubView === 'conversation'"
 						@click="agentWindowManager.setHubView('conversation')"
@@ -797,15 +793,11 @@
 							aria-hidden="true"
 						></i>
 						<span class="agent-hub-nav-label">{{ $t('agent.hub.conversation') }}</span>
-					</button>
-					<button
-						type="button"
-						class="agent-hub-view-button flex h-7 items-center gap-1.5 rounded-[5px] px-2 text-[11px] font-medium transition-colors duration-150 select-none"
-						:class="
-							state.hubView === 'files'
-								? 'bg-background/90 text-foreground shadow-xs font-semibold'
-								: 'text-text-secondary hover:bg-background/45 hover:text-foreground'
-						"
+					</UiButton>
+					<UiButton
+						density="compact"
+						:appearance="state.hubView === 'files' ? 'soft' : 'ghost'"
+						class="agent-hub-view-button rounded-[5px] px-2"
 						:aria-label="$t('agent.hub.files')"
 						:aria-pressed="state.hubView === 'files'"
 						@click="agentWindowManager.setHubView('files')"
@@ -820,26 +812,30 @@
 							aria-hidden="true"
 						></i>
 						<span class="agent-hub-nav-label">{{ $t('agent.hub.files') }}</span>
-					</button>
+					</UiButton>
 				</nav>
 
 				<div class="h-3.5 w-px shrink-0 bg-border/60 mx-0.5"></div>
 
 				<!-- 窗口操作按键 -->
 				<div class="flex items-center gap-0.5">
-					<button
-						type="button"
-						class="flex h-7.5 w-7.5 items-center justify-center rounded-lg text-text-secondary hover:bg-header hover:text-foreground transition-colors"
+					<UiButton
+						density="compact"
+						appearance="ghost"
+						icon-only
+						class="agent-hub-window-control"
 						:title="$t('agent.hub.minimize')"
 						:aria-label="$t('agent.hub.minimize')"
 						@click="agentWindowManager.minimizeHub()"
 					>
 						<i class="fa-solid fa-minus text-[11px]" aria-hidden="true"></i>
-					</button>
-					<button
-						type="button"
-						class="flex h-7.5 w-7.5 items-center justify-center rounded-lg text-text-secondary hover:bg-header hover:text-foreground transition-colors"
-						:title="$t('agent.hub.maximize')"
+					</UiButton>
+					<UiButton
+						density="compact"
+						appearance="ghost"
+						icon-only
+						class="agent-hub-window-control"
+						:title="state.maximized ? $t('agent.hub.restore') : $t('agent.hub.maximize')"
 						:aria-label="state.maximized ? $t('agent.hub.restore') : $t('agent.hub.maximize')"
 						@click="agentWindowManager.toggleMaximize()"
 					>
@@ -848,16 +844,18 @@
 							class="text-[11px]"
 							aria-hidden="true"
 						></i>
-					</button>
-					<button
-						type="button"
-						class="flex h-7.5 w-7.5 items-center justify-center rounded-lg text-text-secondary hover:bg-error/10 hover:text-error transition-colors"
+					</UiButton>
+					<UiButton
+						density="compact"
+						appearance="ghost"
+						icon-only
+						class="agent-hub-window-control agent-hub-window-close"
 						:title="$t('agent.hub.close')"
 						:aria-label="$t('agent.hub.close')"
 						@click="agentWindowManager.closeHub()"
 					>
 						<i class="fa-solid fa-xmark text-xs" aria-hidden="true"></i>
-					</button>
+					</UiButton>
 				</div>
 			</div>
 		</header>
@@ -928,6 +926,8 @@
 	.agent-hub-window {
 		container-type: inline-size;
 		container-name: agent-hub-window;
+		max-width: 100vw;
+		max-height: 100dvh;
 		overscroll-behavior: contain;
 		box-shadow:
       /* Stays black in every theme (overlay is rgb(0 0 0 / 60%) light, /80% dark). */
@@ -1035,6 +1035,11 @@
 	.agent-hub-view-button {
 		font-size: 11px;
 		line-height: 1;
+	}
+
+	.agent-hub-window-close:not(:disabled):hover {
+		color: var(--status-error-color);
+		background: color-mix(in srgb, var(--status-error-color) 10%, transparent);
 	}
 
 	@container agent-hub-window (max-width: 900px) {

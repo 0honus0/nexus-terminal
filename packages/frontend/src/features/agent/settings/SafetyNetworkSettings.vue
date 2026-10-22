@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { computed, onActivated, onMounted, ref, toRaw } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiButton, UiCheckbox, UiInfoHint } from '@/foundation/ui';
+	import { UiButton, UiCheckbox, UiInfoHint, UiInput } from '@/foundation/ui';
 	import { useConnections } from '@/features/connections/public';
 	import { AGENT_DENYLIST_MAX_TARGETS } from '@nexus-terminal/shared/agent/governance/values';
 	import { getAgentDenylist, saveAgentDenylist } from '../api/app-management-api';
@@ -22,10 +22,6 @@
 	const connections = useConnections();
 	const blocked = computed(() => operation.busy.value || operation.refreshRequired.value || saved.value === null);
 	const allConnections = computed(() => connections.connections.value);
-	const blockedConnections = computed(() => {
-		const selectedIds = new Set(draft.value.connectionIds);
-		return allConnections.value.filter((connection) => selectedIds.has(connection.id));
-	});
 	const filteredConnections = computed(() => {
 		const query = searchQuery.value.trim().toLowerCase();
 		if (!query) return allConnections.value;
@@ -60,6 +56,9 @@
 			storedIds.some((id, index) => id !== draftIds[index])
 		);
 	});
+	const safetyHint = computed(
+		() => `${t('agent.settings.safety.description')} ${t('agent.settings.safety.guardrails')}`,
+	);
 	const allFilteredBlocked = computed(
 		() =>
 			filteredConnections.value.length > 0 &&
@@ -174,7 +173,7 @@
 							})
 						}}
 					</span>
-					<UiInfoHint :text="t('agent.settings.safety.description')" />
+					<UiInfoHint :text="safetyHint" />
 				</div>
 			</div>
 			<div class="flex items-center gap-2">
@@ -201,52 +200,11 @@
 			</div>
 		</div>
 
-		<div class="border-t border-border/55 px-4 py-3 sm:px-5">
-			<div class="flex items-start gap-2.5">
-				<i class="fa-solid fa-lock mt-0.5 shrink-0 text-[10px] text-text-secondary/65" aria-hidden="true"></i>
-				<div class="min-w-0 flex-1">
-					<div class="text-[11px] leading-relaxed text-text-secondary">
-						{{ t('agent.settings.safety.scopeHint') }}
-					</div>
-					<div v-if="blockedConnections.length" class="mt-2 flex flex-wrap gap-1.5">
-						<span
-							v-for="connection in blockedConnections.slice(0, 6)"
-							:key="connection.id"
-							class="inline-flex max-w-52 items-center gap-1 rounded-md bg-error/8 px-2 py-1 text-[11px] text-error"
-						>
-							<i class="fa-solid fa-ban text-[8px]" aria-hidden="true"></i>
-							<span class="truncate">{{ connection.name || connection.host }}</span>
-						</span>
-						<span
-							v-if="blockedConnections.length > 6"
-							class="rounded-md bg-header/60 px-2 py-1 text-[11px] text-text-secondary"
-							>+{{ blockedConnections.length - 6 }}</span
-						>
-					</div>
-				</div>
-			</div>
-		</div>
-
 		<div v-if="expanded" class="space-y-4 border-t border-border p-4 sm:p-5">
-			<div
-				class="flex items-start gap-2.5 rounded-lg bg-header/25 p-3.5 text-xs leading-relaxed text-text-secondary"
-			>
-				<i class="fa-solid fa-shield-halved mt-0.5 shrink-0 text-sm text-primary/80"></i>
-				<span>{{ t('agent.settings.safety.guardrails') }}</span>
-			</div>
-
-			<p
-				v-if="operation.notice.value"
-				role="status"
-				class="rounded-lg border border-border/60 bg-header/25 px-3 py-2 text-xs"
-			>
-				{{ t('agent.settings.appManagement.' + operation.notice.value) }}
-			</p>
 			<div
 				v-if="operation.refreshRequired.value"
 				class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2 text-xs text-warning"
 			>
-				<span>{{ t('agent.settings.appManagement.refreshRequired') }}</span>
 				<UiButton
 					v-if="operation.refreshRequired.value || operation.notice.value === 'failed'"
 					type="button"
@@ -258,19 +216,17 @@
 			</div>
 
 			<div class="flex flex-col justify-between gap-2.5 sm:flex-row sm:items-center">
-				<div class="relative max-w-md flex-1">
-					<i
-						class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-text-secondary/70"
-						aria-hidden="true"
-					></i>
-					<input
-						v-model="searchQuery"
-						type="text"
-						data-no-highlight
-						class="h-8.5 w-full rounded-xl border border-border bg-background pl-8.5 pr-3 text-xs text-foreground shadow-2xs outline-none transition-all placeholder:text-text-secondary/60 focus:border-border-hover"
-						:placeholder="t('agent.settings.safety.searchConnections')"
-					/>
-				</div>
+				<UiInput
+					v-model="searchQuery"
+					type="search"
+					class="max-w-md flex-1"
+					:placeholder="t('agent.settings.safety.searchConnections')"
+					:aria-label="t('agent.settings.safety.searchConnections')"
+				>
+					<template #leading>
+						<i class="fa-solid fa-magnifying-glass text-xs" aria-hidden="true"></i>
+					</template>
+				</UiInput>
 				<div v-if="filteredConnections.length > 0" class="flex items-center gap-2">
 					<UiButton
 						appearance="soft"
@@ -463,13 +419,13 @@
 					</div>
 				</div>
 				<div class="flex flex-col items-stretch gap-2.5 sm:flex-row sm:items-center">
-					<input
+					<UiInput
 						v-model="draft.reason"
 						type="text"
 						maxlength="512"
-						data-no-highlight
-						class="h-8 flex-1 rounded-lg border border-border bg-background px-3 text-xs text-foreground shadow-2xs outline-none transition-all placeholder:text-text-secondary/60 focus:border-border-hover"
+						class="flex-1"
 						:placeholder="t('agent.settings.safety.reasonPlaceholder')"
+						:aria-label="t('agent.settings.safety.reason')"
 						@keydown.enter.prevent="save"
 					/>
 					<UiButton

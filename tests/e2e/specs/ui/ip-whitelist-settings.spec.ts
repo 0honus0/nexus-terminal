@@ -8,7 +8,7 @@ import { getTestSettings, updateTestSettings } from '../../support/settings';
 
 const WHITELIST = '127.0.0.1\n10.0.0.0/8\n192.168.0.0/16';
 
-test('IP whitelist UI saves and reloads the configured allow-list without enabling access control', async ({
+test('IP whitelist UI applies and reloads the configured allow-list without restart', async ({
 	page,
 	context,
 }, testInfo) => {
@@ -19,7 +19,7 @@ test('IP whitelist UI saves and reloads the configured allow-list without enabli
 	try {
 		await page.goto('/settings');
 		await page.getByRole('tab', { name: 'IP Control', exact: true }).click();
-		const whitelist = page.locator('section.ui-solid-panel').filter({ has: page.locator('#ipWhitelist') });
+		const whitelist = page.locator('section.ui-settings-group').filter({ has: page.locator('#ipWhitelist') });
 		await expect(whitelist).toBeVisible();
 		await whitelist.scrollIntoViewIfNeeded();
 		const beforeMetrics = await whitelist.evaluate((element) => {
@@ -80,10 +80,20 @@ test('IP whitelist UI saves and reloads the configured allow-list without enabli
 			});
 			await whitelist.getByRole('button', { name: 'Save', exact: true }).click();
 			expect((await responsePromise).ok()).toBeTruthy();
-			await expect(whitelist).toContainText('Saved. Restart the server to apply this configuration.');
+			await expect(page.locator('.ui-notification[data-kind="success"]').last()).toContainText(
+				'Saved and applied.',
+			);
 			const persisted = await getTestSettings(context.request);
 			expect(persisted.policy.ipWhitelist).toBe(WHITELIST);
-			expect(persisted.effectiveVersion).toBe(original.effectiveVersion);
+			expect(persisted.effectiveVersion).toBe(
+				original.requiresRestart ? original.effectiveVersion : persisted.version,
+			);
+			expect(persisted.requiresRestart).toBe(original.requiresRestart);
+			const blocked = await context.request.get('/api/v1/status', {
+				headers: { 'X-Forwarded-For': '203.0.113.24' },
+			});
+			expect(blocked.status()).toBe(403);
+			expect(await blocked.json()).toEqual({ code: 'forbidden' });
 		});
 
 		await step('reload keeps the saved whitelist visible', async () => {
@@ -94,7 +104,7 @@ test('IP whitelist UI saves and reloads the configured allow-list without enabli
 
 		await step('clear the whitelist through the UI and persist the empty allow-list', async () => {
 			const reloadedWhitelist = page
-				.locator('section.ui-solid-panel')
+				.locator('section.ui-settings-group')
 				.filter({ has: page.locator('#ipWhitelist') });
 			await reloadedWhitelist.locator('#ipWhitelist').fill('');
 			const responsePromise = page.waitForResponse(
@@ -102,10 +112,19 @@ test('IP whitelist UI saves and reloads the configured allow-list without enabli
 			);
 			await reloadedWhitelist.getByRole('button', { name: 'Save', exact: true }).click();
 			expect((await responsePromise).ok()).toBeTruthy();
-			await expect(reloadedWhitelist).toContainText('Saved. Restart the server to apply this configuration.');
+			await expect(page.locator('.ui-notification[data-kind="success"]').last()).toContainText(
+				'Saved and applied.',
+			);
 			const persisted = await getTestSettings(context.request);
 			expect(persisted.policy.ipWhitelist).toBe('');
-			expect(persisted.effectiveVersion).toBe(original.effectiveVersion);
+			const allowed = await context.request.get('/api/v1/status', {
+				headers: { 'X-Forwarded-For': '203.0.113.24' },
+			});
+			expect(allowed.ok()).toBe(true);
+			expect(persisted.effectiveVersion).toBe(
+				original.requiresRestart ? original.effectiveVersion : persisted.version,
+			);
+			expect(persisted.requiresRestart).toBe(original.requiresRestart);
 			await page.reload();
 			await page.getByRole('tab', { name: 'IP Control', exact: true }).click();
 			await expect(page.locator('#ipWhitelist')).toHaveValue('');

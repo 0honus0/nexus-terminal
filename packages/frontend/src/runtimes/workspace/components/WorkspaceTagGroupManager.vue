@@ -15,7 +15,6 @@
 		name,
 		snapshot,
 		saving,
-		message,
 		requiresReview,
 		modalTitle,
 		filtered,
@@ -53,7 +52,6 @@
 		@close="emit('close')"
 	>
 		<div v-if="tag" class="flex min-h-0 flex-col py-4">
-			<p v-if="message" role="alert" class="px-4 text-sm text-error">{{ message }}</p>
 			<p v-if="requiresReview || tags.needsRefresh.value" class="px-4 text-sm">{{ t('tags.reopenToRefresh') }}</p>
 			<div class="space-y-3 border-b border-border/50 px-4 pb-4">
 				<div class="grid gap-1.5 text-sm text-text-secondary">

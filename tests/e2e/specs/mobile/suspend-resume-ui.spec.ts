@@ -510,22 +510,33 @@ test('cached suspended cards remain visible while a remounted panel refreshes it
 			return Boolean(suspended);
 		})
 		.toBeTruthy();
+	let release!: () => void;
+	const barrier = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	let holdSnapshot = false;
+	let refreshes = 0;
+	await page.routeWebSocket('**/ws/suspended-sessions', (socket) => {
+		const server = socket.connectToServer();
+		server.onMessage(async (message) => {
+			if (holdSnapshot) {
+				refreshes += 1;
+				await barrier;
+			}
+			socket.send(message);
+		});
+	});
 	await page.goto('/workspace');
 	const card = page.locator(`[data-suspend-id="${suspended!.id}"]`);
 	await expect(card).toBeVisible();
 	await page.locator('.app-nav-links a[href="/settings"]').click();
 	await expect(page).toHaveURL(/\/settings$/);
-	let release!: () => void;
-	const barrier = new Promise<void>((resolve) => {
-		release = resolve;
+	holdSnapshot = true;
+	const renamed = await context.request.put(`/api/v1/ssh-suspend/name/${suspended!.id}`, {
+		headers: { Origin: E2E_URLS.frontendOrigin },
+		data: { customName: 'WS refreshed cached session' },
 	});
-	let refreshes = 0;
-	await page.route('**/api/v1/ssh-suspend/suspended-sessions', async (route) => {
-		if (route.request().method() !== 'GET') return route.continue();
-		refreshes += 1;
-		await barrier;
-		await route.continue();
-	});
+	expect(renamed.ok()).toBeTruthy();
 	try {
 		await page.locator('.app-nav-links a[href="/workspace"]').click();
 		await expect.poll(() => refreshes).toBeGreaterThan(0);
@@ -535,6 +546,7 @@ test('cached suspended cards remain visible while a remounted panel refreshes it
 		release();
 	}
 	await expect(card).toBeVisible();
+	await expect(card).toContainText('WS refreshed cached session');
 	await card.getByRole('button', { name: 'Resume', exact: true }).click();
 	await expect(page.getByText(/resumed successfully\.$/)).toBeVisible({ timeout: 20_000 });
 	await expect(page.locator('.command-bar-command-input')).toBeEnabled();

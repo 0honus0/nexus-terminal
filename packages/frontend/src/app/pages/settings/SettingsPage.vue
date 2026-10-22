@@ -3,7 +3,7 @@
 	import { useI18n } from 'vue-i18n';
 	import { useRoute, useRouter } from 'vue-router';
 	import { loadAppearanceSettingsPanel, useAppearance } from '@/features/appearance/public';
-	import { AgentSettingsPanel, AgentMaintenancePanel } from '@/features/agent/public';
+	import { AgentSettingsPanel } from '@/features/agent/public';
 	import { BackupSettingsPanel } from '@/features/backup/public';
 	import { MutationRecoveryPanel } from '@/features/mutation-recovery/public';
 	import { HostDiagnosticsPanel } from '@/features/system-overview/public';
@@ -26,11 +26,6 @@
 	const auth = useAuthSession();
 	const appearance = useAppearance();
 	const active = ref<SettingsTab>('workspace');
-	const maintenanceExpanded = ref(false);
-
-	function toggleMaintenance(event: Event): void {
-		if (event.target instanceof HTMLDetailsElement) maintenanceExpanded.value = event.target.open;
-	}
 
 	const visited = reactive(new Set<SettingsTab>(['workspace']));
 	const mobileView = ref<'menu' | 'detail'>('detail');
@@ -53,7 +48,6 @@
 		icon: string;
 		iconColor: string;
 		iconBg: string;
-		descriptionKey: string;
 		badge?: string;
 	}
 
@@ -74,7 +68,6 @@
 					icon: 'fa-solid fa-laptop-code',
 					iconColor: 'text-blue-500',
 					iconBg: 'bg-blue-500/10',
-					descriptionKey: 'settings.descriptions.workspace',
 				},
 				{
 					value: 'system',
@@ -82,7 +75,6 @@
 					icon: 'fa-solid fa-sliders',
 					iconColor: 'text-indigo-500',
 					iconBg: 'bg-indigo-500/10',
-					descriptionKey: 'settings.descriptions.system',
 				},
 				{
 					value: 'appearance',
@@ -90,7 +82,6 @@
 					icon: 'fa-solid fa-palette',
 					iconColor: 'text-purple-500',
 					iconBg: 'bg-purple-500/10',
-					descriptionKey: 'settings.descriptions.appearance',
 				},
 			],
 		},
@@ -104,7 +95,6 @@
 					icon: 'fa-solid fa-wand-magic-sparkles',
 					iconColor: 'text-violet-500',
 					iconBg: 'bg-violet-500/10',
-					descriptionKey: 'settings.descriptions.agent',
 					badge: 'AI',
 				},
 			],
@@ -119,7 +109,6 @@
 					icon: 'fa-solid fa-shield-halved',
 					iconColor: 'text-emerald-500',
 					iconBg: 'bg-emerald-500/10',
-					descriptionKey: 'settings.descriptions.security',
 				},
 				{
 					value: 'ipControl',
@@ -127,7 +116,6 @@
 					icon: 'fa-solid fa-network-wired',
 					iconColor: 'text-teal-500',
 					iconBg: 'bg-teal-500/10',
-					descriptionKey: 'settings.descriptions.ipControl',
 				},
 				{
 					value: 'data',
@@ -135,7 +123,6 @@
 					icon: 'fa-solid fa-database',
 					iconColor: 'text-amber-500',
 					iconBg: 'bg-amber-500/10',
-					descriptionKey: 'settings.descriptions.data',
 				},
 			],
 		},
@@ -149,7 +136,6 @@
 					icon: 'fa-solid fa-circle-info',
 					iconColor: 'text-sky-500',
 					iconBg: 'bg-sky-500/10',
-					descriptionKey: 'settings.descriptions.about',
 				},
 			],
 		},
@@ -246,7 +232,6 @@
 			<div v-if="mobileView === 'menu'" class="space-y-6 lg:hidden py-4 sm:py-6">
 				<header class="px-1">
 					<h1 class="text-xl font-bold tracking-tight text-foreground">{{ t('settings.title') }}</h1>
-					<p class="mt-1 text-xs text-text-secondary">{{ t('settings.mobile.settingsOverview') }}</p>
 				</header>
 
 				<div v-for="group in tabGroups" :key="group.id" class="space-y-2">
@@ -282,9 +267,6 @@
 											{{ item.badge }}
 										</span>
 									</div>
-									<p class="mt-0.5 text-xs text-text-secondary truncate">
-										{{ t(item.descriptionKey) }}
-									</p>
 								</div>
 							</div>
 							<i
@@ -357,13 +339,12 @@
 				</div>
 
 				<!-- 桌面端左侧悬浮控制岛 (Desktop Vertically Centered Floating Island) -->
-				<aside class="hidden lg:flex flex-col justify-center shrink-0 w-64 xl:w-72 h-full py-6 select-none">
+				<aside class="hidden lg:flex flex-col justify-center shrink-0 w-64 xl:w-72 h-full py-4 select-none">
 					<div
-						class="settings-sidebar ui-solid-panel rounded-2xl p-3.5 xl:p-4 flex flex-col justify-between min-h-[560px] xl:min-h-[620px] max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-y-contain no-scrollbar"
+						class="settings-sidebar rounded-[20px] p-3.5 xl:p-4 flex flex-col justify-between min-h-[560px] xl:min-h-[620px] max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-y-contain no-scrollbar"
 					>
 						<div class="space-y-3.5 xl:space-y-4">
-							<!-- 侧边栏头部 (Floating Dock Header) -->
-							<div class="flex items-center gap-2.5 px-2.5 pt-1 pb-3.5 border-b border-border">
+							<div class="settings-sidebar__head flex items-center gap-2.5 px-2.5 pt-1 pb-2">
 								<div
 									class="settings-icon-tile flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400"
 								>
@@ -443,9 +424,8 @@
 							</nav>
 						</div>
 
-						<!-- 底部状态指示 (Subtle Status & Version) -->
 						<div
-							class="pt-3 px-2 border-t border-border flex items-center justify-between text-xs text-text-secondary select-none font-medium"
+							class="pt-3 px-2 flex items-center justify-between text-xs text-text-secondary select-none font-medium"
 						>
 							<span class="inline-flex items-center gap-1.5 font-medium">
 								<span
@@ -461,10 +441,9 @@
 				<!-- 右侧主内容区 (Independent Scroll Canvas) -->
 				<section
 					ref="contentContainer"
-					class="min-w-0 flex-1 h-full min-h-0 overflow-y-auto overscroll-y-contain pt-1.5 pb-4 lg:py-6 pr-1 lg:pr-3 space-y-4 touch-pan-y"
+					class="settings-content-canvas min-w-0 flex-1 h-full min-h-0 overflow-y-auto overscroll-y-contain pt-1.5 pb-4 lg:py-5 pr-1 lg:pr-3 space-y-4 touch-pan-y"
 				>
-					<!-- 桌面端页面头部信息 (Seamless Borderless Header Banner) -->
-					<div class="hidden lg:flex items-center justify-between pb-3.5 border-b border-border">
+					<div class="settings-content-head hidden lg:flex items-center justify-between">
 						<div class="flex items-center gap-3">
 							<div
 								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-xs"
@@ -476,15 +455,11 @@
 								<h2 class="text-base font-bold text-foreground leading-tight">
 									{{ t(currentTab.labelKey) }}
 								</h2>
-								<p class="text-xs text-text-secondary mt-1 leading-tight">
-									{{ t(currentTab.descriptionKey) }}
-								</p>
 							</div>
 						</div>
 					</div>
 
-					<!-- 子面板容器 -->
-					<div>
+					<div class="settings-content-stack">
 						<WorkspacePreferencesPanel
 							v-if="visited.has('workspace')"
 							v-show="active === 'workspace'"
@@ -532,15 +507,26 @@
 						<details
 							v-if="visited.has('data')"
 							v-show="active === 'data'"
-							class="rounded-xl border border-border bg-card p-4"
-							@toggle="toggleMaintenance"
+							class="ui-settings-group settings-maintenance"
 						>
-							<summary class="cursor-pointer text-sm font-medium">
-								{{ t('settings.advancedMaintenance') }}
+							<summary class="flex cursor-pointer list-none items-center gap-3">
+								<span class="ui-settings-group__icon" aria-hidden="true">
+									<i class="fa-solid fa-screwdriver-wrench"></i>
+								</span>
+								<span class="settings-maintenance__heading">
+									<span class="text-sm font-semibold text-foreground">{{
+										t('settings.advancedMaintenance')
+									}}</span>
+								</span>
+								<i
+									class="settings-maintenance__chevron fa-solid fa-chevron-down ml-auto text-[10px] text-text-secondary"
+									aria-hidden="true"
+								></i>
 							</summary>
-							<HostDiagnosticsPanel :active="active === 'data'" />
-							<MutationRecoveryPanel :active="active === 'data'" />
-							<AgentMaintenancePanel :active="active === 'data' && maintenanceExpanded" />
+							<div class="settings-maintenance__body">
+								<HostDiagnosticsPanel :active="active === 'data'" />
+								<MutationRecoveryPanel :active="active === 'data'" />
+							</div>
 						</details>
 						<AppearanceSettingsPanel
 							:active="active === 'appearance'"
@@ -576,6 +562,87 @@
 <style scoped>
 	.settings-page {
 		background: var(--app-bg-color);
+		--settings-card-bg: color-mix(in srgb, var(--card-bg-color) 58%, var(--app-bg-color));
+		--settings-card-bg-strong: color-mix(in srgb, var(--card-bg-color) 74%, var(--app-bg-color));
+	}
+
+	.settings-sidebar {
+		border: 1px solid color-mix(in srgb, var(--border-color) 48%, transparent);
+		background: color-mix(in srgb, var(--card-bg-color) 70%, var(--app-bg-color));
+		box-shadow: 0 24px 64px -58px color-mix(in srgb, var(--text-color) 48%, transparent);
+	}
+
+	.settings-sidebar__head {
+		border-bottom: 0;
+	}
+
+	.settings-content-head {
+		padding: 2px 2px 13px;
+	}
+
+	.settings-content-canvas {
+		scrollbar-gutter: stable;
+	}
+
+	.settings-content-stack {
+		display: flex;
+		min-width: 0;
+		flex-direction: column;
+		gap: 14px;
+	}
+
+	.settings-maintenance__chevron {
+		transition: transform 160ms ease;
+	}
+
+	.settings-maintenance,
+	.settings-maintenance[open] {
+		padding: 0;
+		border-radius: 0;
+		background: transparent;
+		box-shadow: none;
+	}
+
+	.settings-maintenance > summary {
+		padding: 16px 18px;
+		border-radius: 16px;
+		background: color-mix(in srgb, var(--card-bg-color) 68%, var(--app-bg-color));
+		box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-rim) 44%, transparent);
+	}
+
+	.settings-maintenance__heading {
+		display: flex;
+		min-width: 0;
+		flex-direction: column;
+		gap: 3px;
+	}
+
+	.settings-maintenance__body {
+		display: flex;
+		min-width: 0;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	.settings-maintenance[open] .settings-maintenance__chevron {
+		transform: rotate(180deg);
+	}
+
+	.settings-maintenance[open] > summary {
+		margin-bottom: 12px;
+	}
+
+	@media (max-width: 640px) {
+		.settings-maintenance > summary {
+			padding: 14px 15px;
+			border-radius: 14px;
+		}
+	}
+
+	.settings-mobile-toolbar {
+		border-color: color-mix(in srgb, var(--border-color) 45%, transparent);
+		background: color-mix(in srgb, var(--card-bg-color) 72%, var(--app-bg-color));
+		box-shadow: none;
 	}
 
 	/* Settings actions are used repeatedly across long forms. Give the shared buttons a larger
@@ -595,21 +662,19 @@
 	}
 
 	.settings-icon-tile {
-		border: 1px solid color-mix(in srgb, var(--link-active-color) 22%, rgb(255 255 255 / 34%));
-		box-shadow: inset 0 1px 0 rgb(255 255 255 / 34%);
+		border: 0;
+		box-shadow: none;
 	}
 
 	.settings-nav-item--active,
 	.settings-mobile-tab--active {
-		border-color: color-mix(in srgb, var(--link-active-color) 24%, rgb(255 255 255 / 38%));
-		background: color-mix(in srgb, var(--card-bg-color) 82%, var(--link-active-color) 18%);
-		box-shadow:
-			inset 0 1px 0 rgb(255 255 255 / 36%),
-			0 8px 20px -16px color-mix(in srgb, var(--text-color) 28%, transparent);
+		border-color: transparent;
+		background: color-mix(in srgb, var(--card-bg-color) 72%, var(--link-active-color) 12%);
+		box-shadow: none;
 	}
 
 	.settings-nav-item--idle {
-		background: var(--card-bg-color);
+		background: transparent;
 	}
 
 	.settings-nav-item--idle:hover,
@@ -621,6 +686,50 @@
 
 	.settings-catalog-item:active {
 		background: var(--input-bg-color);
+	}
+
+	/* Child panels keep their own spacing; the page supplies the shared canvas. */
+	.settings-page :deep(.settings-surface) {
+		overflow: visible;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+		box-shadow: none;
+	}
+
+	.settings-page :deep(.settings-surface > h2) {
+		display: none;
+	}
+
+	.settings-page :deep(#settings-panel-workspace .workspace-preferences__group) {
+		overflow: hidden;
+		border: 0 !important;
+		border-radius: 16px;
+		background: var(--settings-card-bg);
+	}
+
+	.settings-page :deep(#settings-panel-workspace .workspace-preferences__group > div:first-child),
+	.settings-page :deep(#settings-panel-workspace .workspace-preferences__group > summary) {
+		border-bottom: 0 !important;
+		padding: 14px 16px 4px;
+	}
+
+	.settings-page :deep(#settings-panel-workspace .workspace-preferences__field) {
+		padding: 8px 4px;
+	}
+
+	.settings-page :deep(#settings-panel-workspace .workspace-preferences__group .border-t) {
+		border-top: 0 !important;
+	}
+
+	.settings-page :deep(#settings-panel-workspace .workspace-preferences__group > form > div:last-child) {
+		padding: 8px 16px 14px;
+	}
+
+	@media (max-width: 1023px) {
+		.settings-content-canvas {
+			padding-inline: 0;
+		}
 	}
 
 	.no-scrollbar::-webkit-scrollbar {

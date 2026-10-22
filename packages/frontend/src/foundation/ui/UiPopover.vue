@@ -6,6 +6,7 @@
 
 	type PopoverPlacement = 'top' | 'bottom';
 	type PopoverAlign = 'start' | 'center' | 'end';
+	type PopoverSurface = 'glass' | 'solid';
 
 	const props = withDefaults(
 		defineProps<{
@@ -16,6 +17,7 @@
 			offset?: number;
 			boundarySelector?: string;
 			panelClass?: string;
+			surface?: PopoverSurface;
 			disabled?: boolean;
 			triggerAppearance?: UiAppearance;
 			triggerTone?: UiTone;
@@ -32,6 +34,7 @@
 			offset: 8,
 			boundarySelector: '',
 			panelClass: '',
+			surface: 'glass',
 			disabled: false,
 			triggerAppearance: 'soft',
 			triggerTone: 'neutral',
@@ -123,7 +126,7 @@
 					position-strategy="fixed"
 					:aria-label="props.ariaLabel"
 					class="ui-surface ui-radius--panel ui-popover__panel ui-glass-panel"
-					:class="props.panelClass"
+					:class="[props.surface === 'solid' && 'ui-popover__panel--solid', props.panelClass]"
 					@close-auto-focus="onCloseAutoFocus"
 				>
 					<slot name="panel" :close="close" />

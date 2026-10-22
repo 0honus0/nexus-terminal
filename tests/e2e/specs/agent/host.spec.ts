@@ -32,6 +32,7 @@ import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { E2E_URLS } from '../../support/test-env';
+import { expectUiSelectValue, selectUiOption } from '../../support/ui-select';
 test.use({ actionTimeout: 10_000 });
 test('Agent launcher stays passive until the user explicitly opens the Hub', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
@@ -631,24 +632,39 @@ test('Agent create-thread Retry retains the exact operation after an unknown out
 	await page.unroute(workspacePath);
 });
 
-test('Agent execution enable is independent of the launcher and its global window survives navigation', async ({
-	page,
-	context,
-}) => {
+test('Agent execution setting gates the launcher and its global window', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 	await setUiLanguage(context.request);
 	const app = await createTestAgentApp(context.request);
+	const original = await requestAgentJson(
+		context.request,
+		{ method: 'GET', path: '/execution-settings' },
+		readAgentExecutionSettingsResponse,
+	);
+	if (original.settings.enabled) {
+		await requestAgentJson(
+			context.request,
+			{
+				method: 'PUT',
+				path: '/execution-settings',
+				data: {
+					expectedVersion: original.settings.version,
+					enabled: false,
+					limits: original.settings.limits,
+				},
+			},
+			readAgentExecutionSettingsResponse,
+		);
+	}
 	await page.goto('/settings?tab=agent');
 	await selectAgentSettingsGroup(page, 'runtime');
-	const enable = page.getByRole('button', { name: 'Enable Agent', exact: true });
+	const enable = page.getByRole('switch', { name: 'Agent feature', exact: true });
 	await expect(enable).toBeEnabled();
+	await expect(enable).not.toBeChecked();
 	const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
 	const hub = page.locator('section[aria-label="Agent"]');
-	await expect(launcher).toBeVisible();
-	await launcher.click();
-	await expect(hub).toBeVisible();
-	await expect(hub).toContainText('Execution is disabled');
-	await hub.getByRole('button', { name: 'Close Agent', exact: true }).click();
+	await expect(launcher).toHaveCount(0);
+	await expect(hub).toHaveCount(0);
 	const save = page.waitForResponse(
 		(response) =>
 			new URL(response.url()).pathname === '/api/v1/agent/execution-settings' &&
@@ -656,10 +672,12 @@ test('Agent execution enable is independent of the launcher and its global windo
 	);
 	await enable.click();
 	expect((await save).status()).toBe(200);
-	await expect(page.getByRole('button', { name: 'Disable Agent', exact: true })).toBeEnabled();
+	await expect(enable).toBeChecked();
+	await expect(launcher).toBeVisible();
 	await launcher.click();
 	await expect(hub).toBeVisible();
 	await expect(hub).toContainText(app.name);
+	await expect(hub).not.toContainText('Execution is disabled');
 	await captureFunctionalScreenshot(page, 'agent-native-enabled.png', { viewport: { width: 1440, height: 900 } });
 	const bounds = await hub.boundingBox();
 	expect(bounds).not.toBeNull();
@@ -671,7 +689,7 @@ test('Agent execution enable is independent of the launcher and its global windo
 			})),
 		)
 		.toEqual({ root: 'hidden', body: 'hidden' });
-	for (const name of ['Connections', 'Dashboard']) {
+	for (const name of ['Connections', 'Dashboard', 'Settings']) {
 		await page
 			.locator('.app-nav-links')
 			.getByRole('link', { name, exact: true })
@@ -680,6 +698,19 @@ test('Agent execution enable is independent of the launcher and its global windo
 		await expect(launcher).toHaveCount(0);
 		expect(await hub.boundingBox()).toEqual(bounds);
 	}
+	await hub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
+	await expect(hub).toBeHidden();
+	await selectAgentSettingsGroup(page, 'runtime');
+	const disabledSave = page.waitForResponse(
+		(response) =>
+			new URL(response.url()).pathname === '/api/v1/agent/execution-settings' &&
+			response.request().method() === 'PUT',
+	);
+	await enable.click();
+	expect((await disabledSave).status()).toBe(200);
+	await expect(enable).not.toBeChecked();
+	await expect(launcher).toHaveCount(0);
+	await expect(hub).toHaveCount(0);
 });
 
 test('Agent settings load independently of retired Runner endpoints and expose current Browser and ACP owners', async ({
@@ -751,17 +782,18 @@ test('Agent settings surface exposes the current control plane and saves explici
 	const form = editor.locator('form');
 	await form.getByRole('textbox', { name: 'Name', exact: true }).fill('Settings UI Provider');
 	await form.getByRole('textbox', { name: 'API endpoint', exact: true }).fill(E2E_URLS.openAiProviderOrigin + '/v1');
-	await form.getByRole('combobox', { name: 'API credential', exact: true }).selectOption('replace');
+	await selectUiOption(form.getByRole('combobox', { name: 'Credential action', exact: true }), 'replace');
 	await form.locator('input[type="password"]').fill('e2e-provider-secret');
-	await form.getByRole('checkbox', { name: 'Enabled', exact: true }).check();
+	const enabled = form.getByRole('switch', { name: 'Enabled', exact: true });
+	if ((await enabled.getAttribute('aria-checked')) !== 'true') await enabled.click();
 	await form.getByRole('button', { name: 'Add model manually', exact: true }).click();
 	await form.getByRole('textbox', { name: 'Model ID', exact: true }).fill('e2e-model');
 	await form.getByRole('spinbutton', { name: 'Context window', exact: true }).fill('131072');
 	await form.getByRole('spinbutton', { name: 'Maximum output tokens', exact: true }).fill('128');
 	await form.getByRole('checkbox', { name: 'Supports tools', exact: true }).check();
-	await form.getByRole('checkbox', { name: 'low', exact: true }).check();
-	await form.getByRole('checkbox', { name: 'high', exact: true }).check();
-	await form.getByRole('combobox', { name: 'Default effort', exact: true }).selectOption('high');
+	await form.getByRole('checkbox', { name: 'Low', exact: true }).check();
+	await form.getByRole('checkbox', { name: 'High', exact: true }).check();
+	await selectUiOption(form.getByRole('combobox', { name: 'Default effort', exact: true }), 'high');
 	const creation = page.waitForResponse(
 		(response) =>
 			new URL(response.url()).pathname === '/api/v1/agent/ai/providers' && response.request().method() === 'POST',
@@ -786,12 +818,14 @@ test('Agent settings surface exposes the current control plane and saves explici
 	await card.getByRole('button', { name: 'Models & test (1)', exact: true }).click();
 	const testDialog = page.getByRole('dialog', { name: 'Configured models & test', exact: true });
 	await testDialog.getByRole('button', { name: 'Send real connection test', exact: true }).click();
-	await expect(testDialog.getByRole('status').filter({ hasText: /^Test succeeded in/ })).toBeVisible();
+	await expect(
+		page.locator('.ui-notification[data-kind="success"]').filter({ hasText: /Test succeeded in/ }),
+	).toBeVisible();
 	await testDialog.getByRole('button', { name: 'Close', exact: true }).click();
 	await card.getByRole('button', { name: 'Discover and record models', exact: true }).click();
 	await expect(editor.getByRole('textbox', { name: 'Filter discovered models', exact: true })).toBeVisible();
-	const protocol = form.getByRole('combobox', { name: 'Protocol', exact: true }).first();
-	await protocol.selectOption('responses');
+	const protocol = form.locator('#provider-protocol');
+	await selectUiOption(protocol, 'responses');
 	const update = page.waitForResponse(
 		(response) =>
 			new URL(response.url()).pathname === `/api/v1/agent/ai/providers/${provider.id}` &&
@@ -806,7 +840,7 @@ test('Agent settings surface exposes the current control plane and saves explici
 	expect(provider.protocol).toBe('responses');
 	await expect(form).toHaveCount(0);
 	await card.getByRole('button', { name: 'Edit', exact: true }).click();
-	await protocol.selectOption('chat-completions');
+	await selectUiOption(protocol, 'chat-completions');
 	const providerPath = `**/api/v1/agent/ai/providers/${provider.id}`;
 	await page.route(providerPath, async (route) => {
 		if (route.request().method() === 'PATCH')
@@ -823,7 +857,7 @@ test('Agent settings surface exposes the current control plane and saves explici
 	await page.unroute(providerPath);
 	await editor.getByRole('button', { name: 'Read again (discard draft)', exact: true }).click();
 	await card.getByRole('button', { name: 'Edit', exact: true }).click();
-	await expect(protocol).toHaveValue('responses');
+	await expectUiSelectValue(protocol, 'responses');
 	await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
 	await captureFunctionalScreenshot(page, 'agent-settings-models.png', { viewport: { width: 1440, height: 900 } });
 	await selectAgentSettingsGroup(page, 'runtime');
@@ -831,42 +865,13 @@ test('Agent settings surface exposes the current control plane and saves explici
 	await captureFunctionalScreenshot(page, 'agent-settings-runtime.png', { viewport: { width: 1440, height: 900 } });
 });
 
-test('explicit profile models retain unavailable versions instead of silently selecting a fallback', async ({
-	page,
-	context,
-}) => {
+test('Subagents inherit main Agent limits without independent model settings', async ({ page, context }) => {
 	await loginAsInitialAdmin(context.request);
 	await setUiLanguage(context.request);
 	let provider = await createAgentProvider(context.request);
 	const original = await requestAgentJson(
 		context.request,
 		{ method: 'GET', path: '/execution-settings' },
-		readAgentExecutionSettingsResponse,
-	);
-	const profiles = original.settings.profiles.map((profile) => ({
-		...profile,
-		model:
-			profile.name === 'explore'
-				? {
-						kind: 'explicit' as const,
-						providerId: provider.id,
-						modelId: 'e2e-model',
-						configurationVersion: provider.version,
-					}
-				: profile.model,
-	}));
-	const saved = await requestAgentJson(
-		context.request,
-		{
-			method: 'PUT',
-			path: '/execution-settings',
-			data: {
-				expectedVersion: original.settings.version,
-				enabled: original.settings.enabled,
-				limits: original.settings.limits,
-				profiles,
-			},
-		},
 		readAgentExecutionSettingsResponse,
 	);
 	provider = await requestAgentJson(
@@ -881,8 +886,6 @@ test('explicit profile models retain unavailable versions instead of silently se
 	await page.goto('/settings?tab=agent');
 	await selectAgentSettingsGroup(page, 'safety');
 	const execution = page.getByRole('region', { name: 'Subagents', exact: true });
-	const model = execution.getByRole('combobox', { name: 'Model and configuration version', exact: true }).first();
-	await expect(model.locator('option:checked')).toHaveText('e2e-model · v1 — Unavailable / verify version');
 	await requestAgentJson(
 		context.request,
 		{ method: 'DELETE', path: `/ai/providers/${provider.id}?expectedVersion=${provider.version}` },
@@ -891,14 +894,20 @@ test('explicit profile models retain unavailable versions instead of silently se
 	// Normal reads load on entry; the recovery button is reserved for failed/unknown state.
 	await page.reload();
 	await selectAgentSettingsGroup(page, 'safety');
-	await expect(model.locator('option:checked')).toHaveText('e2e-model · v1 — Unavailable / verify version');
+	await expect(
+		execution.getByText(
+			'Subagents inherit the main Agent model, tools and execution limits, sharing family budgets and the main task deadline.',
+			{ exact: true },
+		),
+	).toBeVisible();
+	await expect(execution.getByRole('combobox')).toHaveCount(0);
 	const current = await requestAgentJson(
 		context.request,
 		{ method: 'GET', path: '/execution-settings' },
 		readAgentExecutionSettingsResponse,
 	);
-	expect(current.settings.version).toBe(saved.settings.version);
-	expect(current.settings.profiles).toEqual(saved.settings.profiles);
+	expect(current.settings).toEqual(original.settings);
+	expect(current.settings).not.toHaveProperty('profiles');
 });
 
 test('Agent Host preserves an open surface when a directory refresh fails and recovers through explicit read', async ({

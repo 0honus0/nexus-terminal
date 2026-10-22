@@ -94,9 +94,9 @@ try {
 			after.revision !== before.revision + 1 ||
 			after.statusIntervalSeconds !== 7 ||
 			after.hostIntervalSeconds !== 47 ||
-			after.effectiveMonitoring.statusIntervalSeconds !== 3 ||
-			after.effectiveMonitoring.hostIntervalSeconds !== 30 ||
-			!after.pendingRestart
+			after.effectiveMonitoring.statusIntervalSeconds !== 7 ||
+			after.effectiveMonitoring.hostIntervalSeconds !== 47 ||
+			after.pendingRestart
 		)
 			throw Error('saved/effective facts diverged');
 		if (
@@ -112,10 +112,10 @@ try {
 			if (!(cause instanceof ConfigurationFailure) || cause.code !== 'version_conflict') throw cause;
 		}
 		const saved = await configurationApi.get();
-		if (saved.statusIntervalSeconds !== 7 || saved.effectiveRevision !== before.effectiveRevision)
+		if (saved.statusIntervalSeconds !== 7 || saved.effectiveRevision !== saved.revision)
 			throw Error('CAS changed saved authority');
 		return [
-			'real HTTP save and startup-effective separation',
+			'real HTTP save applies monitoring without restart',
 			'unrelated configuration preserved',
 			'stale CAS refused and read-only authority',
 		];
@@ -159,6 +159,7 @@ try {
 		const { default: WorkspacePanel } =
 			await import('/src/features/preferences/components/WorkspacePreferencesPanel.vue');
 		const { default: StatusCharts } = await import('/src/features/status-monitor/components/StatusCharts.vue');
+		const { useNotificationStore } = await import('/src/shared/feedback/store/notification.store.ts');
 		const nativeFetch = window.fetch;
 		const baseline = await (await nativeFetch('/api/v1/settings')).json();
 		const checks = [];
@@ -254,8 +255,13 @@ try {
 					)
 						throw Error('incorrect configuration write projection');
 					result.version = command.expectedVersion + 1;
-					result.requiresRestart = true;
+					result.effectiveVersion = result.version;
+					result.requiresRestart = false;
 					result.policy = command.policy;
+					result.effectiveMonitoring = {
+						statusMonitorIntervalSeconds: command.policy.statusMonitorIntervalSeconds,
+						remoteHostRefreshIntervalSeconds: command.policy.remoteHostRefreshIntervalSeconds,
+					};
 					if (mode === 'wrong-value') result.policy.statusMonitorIntervalSeconds++;
 					return json(result);
 				}
@@ -301,8 +307,8 @@ try {
 			await owner.save();
 			check(
 				owner.feedback.value === 'saved' &&
-					owner.snapshot.value.effectiveMonitoring.statusIntervalSeconds === 7,
-				'save never activates pending interval',
+					owner.snapshot.value.effectiveMonitoring.statusIntervalSeconds === 12,
+				'save activates monitoring interval without restart',
 			);
 			mode = 'late';
 			const late = owner.refresh();
@@ -346,7 +352,17 @@ try {
 				node = document.createElement('div');
 				document.body.append(node);
 				mounted = createApp({ render: () => h(component) });
-				mounted.use(createPinia()).use(i18n).mount(node);
+				const pinia = createPinia();
+				const notifications = useNotificationStore(pinia);
+				mounted.use(pinia).use(i18n).mount(node);
+
+				const savedFeedback = () =>
+					notifications.notifications.some(
+						(item) =>
+							item.kind === 'success' &&
+							item.message === i18n.global.t('settings.monitoring.feedback.saved'),
+					);
+
 				await until(() => node.querySelector('input[data-monitoring-status]'));
 				check(
 					node.querySelectorAll('[data-monitoring-configuration]').length === 1,
@@ -365,14 +381,14 @@ try {
 					new Event('submit', { bubbles: true, cancelable: true }),
 				);
 				await nextTick();
-				await until(() => writes > count && node.querySelector('[data-monitoring-feedback]'));
+				await until(() => writes > count && savedFeedback());
 				check(
 					!node.querySelector('[data-monitoring-refresh]'),
 					component.__name + ' hides recovery refresh after a confirmed save',
 				);
 				check(
-					writes === count + 1 && node.querySelector('[data-monitoring-feedback]'),
-					component.__name + ' performs one write and renders feedback',
+					writes === count + 1 && savedFeedback(),
+					component.__name + ' performs one write and publishes Toast feedback',
 				);
 				for (const locale of ['en-US', 'zh-CN', 'ja-JP']) {
 					i18n.global.locale.value = locale;

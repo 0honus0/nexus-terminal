@@ -1,10 +1,6 @@
 import { ref, type Ref } from 'vue';
 import { logger } from '@/client/logging/logger';
-import {
-	markConnectionConnected,
-	confirmConnectionHostKey,
-	type ConnectionSummary,
-} from '@/features/connections/public';
+import { refreshConnection, confirmConnectionHostKey, type ConnectionSummary } from '@/features/connections/public';
 import {
 	createTerminalSessionState,
 	type TerminalSessionState,
@@ -326,9 +322,9 @@ export class WorkspaceRuntimeSession {
 				},
 				'Workspace connection attempt succeeded',
 			);
-			if (result.lastConnectedAt !== undefined) {
-				markConnectionConnected(this.connection.id, result.lastConnectedAt);
-			}
+			void refreshConnection(this.connection.id).catch((cause) =>
+				logger.debug({ err: cause, workspaceId: this.id }, 'Connection metadata refresh failed'),
+			);
 			void (
 				phase === 'reconnect' ? this.filesystemState.browser.refresh() : this.filesystemState.ensureLoaded()
 			).catch((error) =>
@@ -638,9 +634,9 @@ export class WorkspaceRuntimeSession {
 			this.reconnectAttempt = 0;
 			this.state.value = 'connected';
 			this.startSuspendOwnerHeartbeat();
-			if (result.lastConnectedAt !== undefined) {
-				markConnectionConnected(this.connection.id, result.lastConnectedAt);
-			}
+			void refreshConnection(this.connection.id).catch((cause) =>
+				logger.debug({ err: cause, workspaceId: this.id }, 'Connection metadata refresh failed'),
+			);
 			void this.filesystemState
 				.ensureLoaded()
 				.catch((cause) =>

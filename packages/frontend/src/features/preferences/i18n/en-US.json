@@ -25,7 +25,9 @@
     "logging": {
       "title": "Log levels",
       "frontendLabel": "Frontend log level:",
+      "frontendTitle": "Frontend log level",
       "backendLabel": "Backend log level:",
+      "backendTitle": "Backend log level",
       "description": "Controls diagnostic and performance logging. DEBUG/TRACE emit more runtime detail; performance samples are emitted only at DEBUG or TRACE. Changes take effect immediately.",
       "effective": "Effective level: {level}"
     },
@@ -56,7 +58,7 @@
     "language": {
       "title": "Language Settings",
       "selectLabel": "Interface Language:",
-      "saveButton": "Save Language",
+      "saveButton": "Save",
       "success": {
         "saved": "Language settings saved successfully."
       },
@@ -210,14 +212,13 @@
     },
     "monitoring": {
       "title": "Core monitoring settings",
-      "hint": "Administrators only. Intervals are 1–86400 seconds and take effect together after restart. Display toggles and charts do not control remote sampling.",
+      "hint": "Administrators only. Intervals are 1–86400 seconds and apply on save; active samples finish before using the new interval. Display toggles do not control remote sampling.",
       "effective": "Effective: sample interval {status}s · host cache TTL / overview refresh {host}s",
-      "restart": "Settings saved. Restart to apply.",
       "status": "Sampling interval (seconds)",
       "host": "Host cache TTL / overview refresh (seconds)",
       "refresh": "Reload and review without writing",
       "feedback": {
-        "saved": "Saved. The effective values shown above remain in use until restart.",
+        "saved": "Saved and applied.",
         "conflict": "Configuration version conflict. Reload and review before saving again.",
         "unknown": "Result unconfirmed. Reload and review without repeating the write.",
         "invalid_input": "Enter integer intervals within the allowed range.",

@@ -1,17 +1,15 @@
 <script setup lang="ts">
-	import { computed, reactive, ref } from 'vue';
+	import { computed, reactive, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
-	import AppManagementSettings from './AppManagementSettings.vue';
+	import AgentExtensionsSettings from './AgentExtensionsSettings.vue';
+	import { usePluginManagement } from '../composables/use-plugin-management';
 	import BrowserRuntimeSettings from './BrowserRuntimeSettings.vue';
-	import AppScopedSettings from './AppScopedSettings.vue';
-	import AppIntegrationEditor from './AppIntegrationEditor.vue';
-	import AppMemoryEditor from './AppMemoryEditor.vue';
 	import ModelProviderSettings from './ModelProviderSettings.vue';
-	import { UiButton } from '@/foundation/ui';
+	import { UiInfoHint, UiSwitch } from '@/foundation/ui';
+	import { useSettingsReloadSource } from '@/shared/feedback/public';
 	import { useExecutionSettings } from '../composables/use-execution-settings';
 	import { useAppManagement } from '../composables/use-app-management';
 	import ExecutionSettings from './ExecutionSettings.vue';
-	import PluginManagementSettings from './PluginManagementSettings.vue';
 	import SafetyNetworkSettings from './SafetyNetworkSettings.vue';
 	import AgentOnboardingModal from './AgentOnboardingModal.vue';
 	import { useAgentOnboarding } from '../composables/use-agent-onboarding';
@@ -27,7 +25,21 @@
 	type SettingsGroup = (typeof groups)[number]['id'];
 	const activeGroup = ref<SettingsGroup>('models');
 	const execution = useExecutionSettings();
-	const management = useAppManagement();
+	useSettingsReloadSource({
+		id: 'agent-execution-settings',
+
+		pending: () =>
+			!execution.busy.value &&
+			(execution.refreshRequired.value || Boolean(execution.notice.value && execution.notice.value !== 'saved')),
+
+		reload: () => execution.perform('read'),
+	});
+	const management = useAppManagement(() => props.active);
+	const plugins = usePluginManagement(() => props.active && activeGroup.value === 'tools');
+	watch(plugins.installations, () => {
+		if (props.active && activeGroup.value === 'tools' && !plugins.operation.refreshRequired.value)
+			management.reload();
+	});
 	const enabledApps = computed(() => management.apps.value.filter((app) => app.enabled).length);
 	const visitedGroups = reactive(new Set<SettingsGroup>(['models']));
 	const pluginRevision = ref(0);
@@ -35,18 +47,36 @@
 		available: () => props.active,
 
 		canEnable: () =>
-			props.active &&
-			!execution.blocked.value &&
-			!execution.dirty.value &&
-			!execution.hardChanged.value &&
-			!execution.confirmation.value,
+			props.active && !execution.blocked.value && !execution.dirty.value && !execution.hardChanged.value,
 
 		onReady() {
 			pluginRevision.value += 1;
 			if (execution.saved.value?.enabled === false) void execution.toggleEnabled();
-			void management.loadApps();
+			management.reload();
 		},
 	});
+
+	const agentEnabled = computed({
+		get: () => execution.saved.value?.enabled ?? false,
+
+		set: (enabled: boolean) => {
+			if (enabled === agentEnabled.value) return;
+			void toggleAgent();
+		},
+	});
+	const agentToggleDisabled = computed(
+		() =>
+			!execution.saved.value ||
+			onboarding.operation.busy.value ||
+			management.appOperation.busy.value ||
+			onboarding.visible.value ||
+			execution.blocked.value ||
+			execution.dirty.value ||
+			execution.hardChanged.value,
+	);
+	const featureHelp = computed(
+		() => `${t('agent.settings.feature.description')} ${t('agent.settings.feature.schedulerHint')}`,
+	);
 
 	async function toggleAgent(): Promise<void> {
 		if (onboarding.operation.busy.value || onboarding.visible.value) return;
@@ -62,67 +92,32 @@
 <template>
 	<div class="agent-settings-panel space-y-3 sm:space-y-4">
 		<div
-			v-if="execution.saved.value"
 			class="agent-settings-master rounded-xl border border-border bg-card px-3.5 py-2.5 sm:px-4 sm:py-3 shadow-xs"
+			:aria-busy="execution.busy.value"
 		>
-			<span
-				class="agent-settings-master__status inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
-				:class="execution.saved.value.enabled ? 'bg-success/10 text-success' : 'bg-header text-text-secondary'"
-				><span
-					class="h-1.5 w-1.5 rounded-full"
-					:class="execution.saved.value.enabled ? 'bg-success' : 'bg-text-secondary'"
-				></span
-				>{{
-					t(
-						execution.saved.value.enabled
-							? 'agent.settings.feature.stateLabels.enabled'
-							: 'agent.settings.feature.stateLabels.disabled',
-					)
-				}}</span
-			>
-			<span
-				class="agent-settings-master__apps inline-flex items-center justify-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-xs text-text-secondary"
-				><span>{{ t('agent.settings.summary.activeApps') }}</span
-				><span class="font-mono font-medium text-foreground"
-					>{{ enabledApps }} / {{ management.apps.value.length }}</span
-				></span
-			>
-			<UiButton
-				type="button"
+			<div class="agent-settings-master__heading">
+				<h2 class="text-sm font-semibold tracking-tight text-foreground">
+					{{ t('agent.settings.feature.title') }}
+				</h2>
+				<UiInfoHint :text="featureHelp" />
+				<span
+					class="agent-settings-master__apps inline-flex items-center justify-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-xs text-text-secondary"
+				>
+					<span>{{ t('agent.settings.summary.activeApps') }}</span>
+					<span class="font-mono font-medium text-foreground">
+						{{ enabledApps }} / {{ management.apps.value.length }}
+					</span>
+				</span>
+			</div>
+			<UiSwitch
+				id="agent-feature-enabled"
+				v-model="agentEnabled"
 				density="compact"
-				class="agent-settings-master__toggle text-xs"
-				:appearance="execution.saved.value.enabled ? 'soft' : 'solid'"
-				:tone="execution.saved.value.enabled ? 'danger' : 'neutral'"
-				:disabled="
-					onboarding.operation.busy.value ||
-					management.appOperation.busy.value ||
-					onboarding.visible.value ||
-					execution.blocked.value ||
-					execution.dirty.value ||
-					execution.hardChanged.value ||
-					execution.confirmation.value !== null
-				"
-				@click="toggleAgent"
-				><i
-					:class="execution.saved.value.enabled ? 'fa-solid fa-power-off' : 'fa-solid fa-play'"
-					aria-hidden="true"
-				></i
-				>{{
-					t(
-						execution.saved.value.enabled
-							? 'agent.settings.feature.disable'
-							: 'agent.settings.feature.enable',
-					)
-				}}</UiButton
-			>
+				:disabled="agentToggleDisabled"
+				:aria-label="t('agent.settings.feature.title')"
+				:title="t('agent.settings.feature.title')"
+			/>
 		</div>
-		<p
-			v-if="onboarding.operation.notice.value && onboarding.operation.notice.value !== 'saved'"
-			role="alert"
-			class="text-sm text-warning"
-		>
-			{{ t('agent.settings.appManagement.' + onboarding.operation.notice.value) }}
-		</p>
 		<AgentOnboardingModal
 			v-if="onboarding.entry.value"
 			:entry="onboarding.entry.value"
@@ -148,19 +143,10 @@
 			@confirm="onboarding.confirm"
 			@read="onboarding.request"
 		/>
-		<template
-			v-if="
-				(execution.saved.value && execution.refreshRequired.value) ||
-				(execution.notice.value && execution.notice.value !== 'saved')
-			"
-			><p v-if="execution.notice.value" role="alert" class="text-sm text-warning">
-				{{ t('agent.settings.execution.' + execution.notice.value) }}
-			</p>
-			<UiButton type="button" :disabled="execution.busy.value" @click="execution.perform('read')">{{
-				t('agent.settings.execution.read')
-			}}</UiButton></template
+		<nav
+			class="agent-settings-nav grid w-full grid-cols-4 gap-2 sm:gap-2.5"
+			:aria-label="t('agent.settings.navigation')"
 		>
-		<nav class="grid w-full grid-cols-4 gap-2 sm:gap-2.5" :aria-label="t('agent.settings.navigation')">
 			<button
 				v-for="group in groups"
 				:key="group.id"
@@ -186,19 +172,11 @@
 			<ExecutionSettings :editor="execution" section="budget" />
 		</div>
 		<div v-if="visitedGroups.has('tools')" v-show="activeGroup === 'tools'" class="space-y-5">
-			<AppManagementSettings :model="management" />
-			<AppScopedSettings :title="t('agent.settings.integrationManagement.title')">
-				<template #default="{ appId }"
-					><AppIntegrationEditor
-						:key="appId"
-						:app-id="appId"
-						:active="props.active && activeGroup === 'tools'"
-				/></template>
-			</AppScopedSettings>
-			<PluginManagementSettings
+			<AgentExtensionsSettings
+				:model="management"
+				:plugins="plugins"
 				:active="props.active && activeGroup === 'tools'"
 				:revision="pluginRevision"
-				:apps="management.apps.value"
 				@recommend="onboarding.request"
 			/>
 		</div>
@@ -208,11 +186,6 @@
 			<ExecutionSettings :editor="execution" section="storage" />
 		</div>
 		<div v-if="visitedGroups.has('safety')" v-show="activeGroup === 'safety'" class="space-y-5">
-			<AppScopedSettings :title="t('agent.settings.memoryManagement.title')">
-				<template #default="{ appId, apps }"
-					><AppMemoryEditor :key="appId" :app-id="appId" :apps="apps"
-				/></template>
-			</AppScopedSettings>
 			<ExecutionSettings :editor="execution" section="subagents" />
 			<SafetyNetworkSettings />
 		</div>
@@ -222,35 +195,56 @@
 <style scoped>
 	.agent-settings-panel {
 		container-type: inline-size;
+		padding-inline-end: 0.75rem;
 	}
 
 	.agent-settings-master {
-		display: grid;
-		grid-template-columns: auto auto minmax(0, 1fr);
+		display: flex;
 		align-items: center;
+		justify-content: space-between;
 		gap: 1rem;
 	}
 
-	.agent-settings-master__status,
-	.agent-settings-master__apps,
-	.agent-settings-master__toggle {
+	.agent-settings-master__heading {
+		display: flex;
 		min-width: 0;
-		max-width: 100%;
-		overflow-wrap: anywhere;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
 	}
 
-	.agent-settings-master__toggle {
-		justify-self: end;
+	.agent-settings-master__apps {
+		min-width: 0;
+		max-width: 100%;
+		white-space: nowrap;
 	}
 
 	@container (max-width: 480px) {
 		.agent-settings-master {
-			grid-template-columns: repeat(3, minmax(0, 1fr));
+			align-items: flex-start;
+			gap: 0.75rem;
+		}
+
+		.agent-settings-nav {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+
+		.agent-settings-master :deep(.ui-switch) {
+			margin-top: 0.25rem;
+		}
+	}
+
+	@container (max-width: 360px) {
+		.agent-settings-master {
 			gap: 0.5rem;
 		}
 
-		.agent-settings-master__toggle {
-			justify-self: stretch;
+		.agent-settings-master__heading {
+			gap: 0.375rem;
+		}
+
+		.agent-settings-master__apps {
+			padding-inline: 0.5rem;
 		}
 	}
 </style>

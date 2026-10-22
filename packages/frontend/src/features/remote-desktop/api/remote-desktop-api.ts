@@ -67,7 +67,9 @@ export const remoteDesktopApi: RemoteDesktopApi = {
 		}
 		try {
 			if (response.status === 200) {
-				return toSession(readRemoteDesktopSessionResponse(response.body));
+				const session = readRemoteDesktopSessionResponse(response.body);
+				if (session.protocol !== protocol) throw new RemoteDesktopFailure('protocol_failure', 'unknown');
+				return toSession(session);
 			}
 			const failure = readRemoteDesktopFailureResponse(response.body);
 			if (!matchesStatus(failure.code, response.status)) {

@@ -69,6 +69,7 @@
       "remote_unavailable": "远端暂不可用。",
       "request_timeout": "请求超时。",
       "request_failed": "请求失败，请读取最新状态。",
+      "read_failed": "暂时无法读取挂起会话数据，请稍后刷新或重试。",
       "protocol_failure": "响应无效，请读取最新状态。",
       "cancelled": "操作已取消。",
       "invalid_json": "请求格式无效。",

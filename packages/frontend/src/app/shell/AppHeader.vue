@@ -8,7 +8,7 @@
 	import { usePreferences } from '@/features/preferences/public';
 	import { releaseRepository, releaseRepositoryUrl } from '@/app/config/release';
 	import { useHorizontalDragScroll } from '@/foundation/interaction';
-	import { useFeedback } from '@/shared/feedback/public';
+	import { useFeedback, useSettingsReloadStore } from '@/shared/feedback/public';
 
 	const emit = defineEmits<{ customizeAppearance: [] }>();
 	const router = useRouter();
@@ -17,17 +17,70 @@
 	const auth = useAuthSession();
 	const preferences = usePreferences();
 	const feedback = useFeedback();
+	const settingsReload = useSettingsReloadStore();
 	const loggingOut = ref(false);
 	const navigationLinks = ref<HTMLElement | null>(null);
 	const navigationDrag = useHorizontalDragScroll();
-	const navigation = [
-		{ path: '/', label: 'nav.dashboard' },
-		{ path: '/workspace', label: 'nav.terminal' },
-		{ path: '/connections', label: 'nav.connections' },
-		{ path: '/proxies', label: 'nav.proxies' },
-		{ path: '/notifications', label: 'nav.notifications' },
-		{ path: '/audit-logs', label: 'nav.auditLogs' },
-		{ path: '/settings', label: 'nav.settings' },
+	type NavigationItem = {
+		path: string;
+		label: string;
+		iconPaths: string[];
+		dividerBefore?: boolean;
+	};
+	const navigation: NavigationItem[] = [
+		{
+			path: '/',
+			label: 'nav.dashboard',
+			iconPaths: [
+				'M5.4 4h3.2A1.4 1.4 0 0 1 10 5.4v3.2A1.4 1.4 0 0 1 8.6 10H5.4A1.4 1.4 0 0 1 4 8.6V5.4A1.4 1.4 0 0 1 5.4 4Z',
+				'M15.4 4h3.2A1.4 1.4 0 0 1 20 5.4v3.2a1.4 1.4 0 0 1-1.4 1.4h-3.2A1.4 1.4 0 0 1 14 8.6V5.4A1.4 1.4 0 0 1 15.4 4Z',
+				'M5.4 14h3.2a1.4 1.4 0 0 1 1.4 1.4v3.2A1.4 1.4 0 0 1 8.6 20H5.4A1.4 1.4 0 0 1 4 18.6v-3.2A1.4 1.4 0 0 1 5.4 14Z',
+				'M15.4 14h3.2a1.4 1.4 0 0 1 1.4 1.4v3.2a1.4 1.4 0 0 1-1.4 1.4h-3.2a1.4 1.4 0 0 1-1.4-1.4v-3.2a1.4 1.4 0 0 1 1.4-1.4Z',
+			],
+		},
+		{
+			path: '/workspace',
+			label: 'nav.terminal',
+			iconPaths: [
+				'M6.2 5h11.6a2.4 2.4 0 0 1 2.4 2.4v9.2a2.4 2.4 0 0 1-2.4 2.4H6.2a2.4 2.4 0 0 1-2.4-2.4V7.4A2.4 2.4 0 0 1 6.2 5Z',
+				'M7.2 9.3l2.5 2.2-2.5 2.2M11.6 14h4.8',
+			],
+		},
+		{
+			path: '/connections',
+			label: 'nav.connections',
+			dividerBefore: true,
+			iconPaths: ['M8.5 4v4M15.5 4v4', 'M6.5 8h11v2.5a5.5 5.5 0 0 1-11 0V8Z', 'M12 16v4'],
+		},
+		{
+			path: '/proxies',
+			label: 'nav.proxies',
+			iconPaths: ['M5 8h12M14 5l3 3-3 3M19 16H7M10 13l-3 3 3 3'],
+		},
+		{
+			path: '/notifications',
+			label: 'nav.notifications',
+			iconPaths: [
+				'M6.8 10a5.2 5.2 0 1 1 10.4 0c0 4 1.8 5.2 1.8 5.2H5S6.8 14 6.8 10Z',
+				'M10 18.2a2.1 2.1 0 0 0 4 0',
+			],
+		},
+		{
+			path: '/audit-logs',
+			label: 'nav.auditLogs',
+			iconPaths: ['M6 4.5h9l3 3v12H6V4.5Z', 'M9 8.5h5M9 11.5h6M9 14.5h6M9 17.5h3.8'],
+		},
+		{
+			path: '/settings',
+			label: 'nav.settings',
+			dividerBefore: true,
+			iconPaths: [
+				'M4 7h8M17 7h3M4 17h3M12 17h8M4 12h5M14 12h6',
+				'M16.7 7a2.2 2.2 0 1 1-4.4 0 2.2 2.2 0 0 1 4.4 0Z',
+				'M11.7 17a2.2 2.2 0 1 1-4.4 0 2.2 2.2 0 0 1 4.4 0Z',
+				'M13.7 12a2.2 2.2 0 1 1-4.4 0 2.2 2.2 0 0 1 4.4 0Z',
+			],
+		},
 	];
 
 	const revealActivePage = async (): Promise<void> => {
@@ -69,7 +122,7 @@
 		v-if="route.name !== 'Workspace' || preferences.values.value.navBarVisible"
 		class="app-header sticky top-0 z-30 shrink-0"
 	>
-		<nav class="ui-floating-nav app-navigation" :aria-label="t('common.primaryNavigation')">
+		<nav class="app-navigation" :aria-label="t('common.primaryNavigation')">
 			<RouterLink to="/" class="app-brand" :aria-label="t('nav.dashboard')">
 				<img src="@/assets/logo-small.png" :alt="t('projectName')" class="h-7 w-auto shrink-0" />
 			</RouterLink>
@@ -84,12 +137,29 @@
 				@click.capture="navigationDrag.click"
 				@dragstart.prevent
 			>
-				<RouterLink v-for="item in navigation" :key="item.path" class="nav-link inline-flex" :to="item.path">{{
-					t(item.label)
-				}}</RouterLink>
+				<template v-for="item in navigation" :key="item.path">
+					<span v-if="item.dividerBefore" class="nav-divider" aria-hidden="true"></span>
+					<RouterLink class="nav-link" :to="item.path">
+						<svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+							<path v-for="path in item.iconPaths" :key="path" :d="path" />
+						</svg>
+						<span>{{ t(item.label) }}</span>
+					</RouterLink>
+				</template>
 			</div>
 
 			<div class="app-nav-tools flex shrink-0 items-center gap-1">
+				<button
+					v-if="settingsReload.pendingCount > 0"
+					type="button"
+					class="icon-link inline-flex settings-reload-indicator"
+					:title="t('feedback.settingsReload.indicator', { count: settingsReload.pendingCount })"
+					:aria-label="t('feedback.settingsReload.indicator', { count: settingsReload.pendingCount })"
+					@click="settingsReload.open"
+				>
+					<i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
+					<span class="settings-reload-indicator__dot" aria-hidden="true"></span>
+				</button>
 				<a
 					class="icon-link hidden md:inline-flex"
 					:href="releaseRepositoryUrl"
@@ -143,6 +213,7 @@
 	.app-header {
 		height: var(--app-header-height);
 		padding: calc(6px + env(safe-area-inset-top, 0px)) 8px 6px;
+		background: var(--app-bg-color);
 	}
 	.app-navigation {
 		display: grid;
@@ -153,6 +224,7 @@
 		height: 48px;
 		margin-inline: auto;
 		padding-inline: 16px;
+		background: transparent;
 	}
 	.app-brand {
 		display: inline-flex;
@@ -164,6 +236,13 @@
 		display: flex;
 		align-items: center;
 		gap: 4px;
+	}
+	.nav-divider {
+		width: 1px;
+		height: 20px;
+		flex: 0 0 auto;
+		margin-inline: 3px;
+		background: color-mix(in srgb, var(--border-color) 58%, transparent);
 	}
 	.app-nav-tools {
 		justify-self: end;
@@ -181,12 +260,45 @@
 			background-color 150ms ease;
 	}
 
+	.settings-reload-indicator {
+		position: relative;
+	}
+
+	.settings-reload-indicator__dot {
+		position: absolute;
+		top: 7px;
+		right: 7px;
+		width: 6px;
+		height: 6px;
+		border-radius: 999px;
+		background: var(--status-warning-color);
+		box-shadow: 0 0 0 2px var(--app-bg-color);
+	}
+
 	.nav-link {
-		min-height: 36px;
-		padding: 0.375rem 0.75rem;
-		font-size: 0.875rem;
-		font-weight: 500;
+		display: inline-flex;
+		min-height: 38px;
+		align-items: center;
+		justify-content: center;
+		gap: 7px;
+		padding: 0.375rem 0.6875rem;
+		font-size: 0.8125rem;
+		font-weight: 560;
 		white-space: nowrap;
+		border: 1px solid transparent;
+	}
+
+	.nav-icon {
+		width: 16px;
+		height: 16px;
+		flex: 0 0 auto;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 1.7;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+		opacity: 0.78;
+		transition: opacity 150ms ease;
 	}
 
 	.icon-link {
@@ -201,13 +313,20 @@
 
 	.nav-link:hover,
 	.icon-link:hover {
-		color: var(--link-hover-color);
-		background: var(--nav-item-active-bg-color);
+		color: var(--text-color);
+		background: color-mix(in srgb, var(--card-bg-color) 72%, transparent);
+		border-color: color-mix(in srgb, var(--border-color) 70%, transparent);
 	}
 
 	.nav-link.router-link-exact-active {
 		color: var(--link-active-color);
-		background: var(--nav-item-active-bg-color);
+		border-color: transparent;
+		background: color-mix(in srgb, var(--link-active-color) 13%, var(--app-bg-color));
+	}
+
+	.nav-link:hover .nav-icon,
+	.nav-link.router-link-exact-active .nav-icon {
+		opacity: 1;
 	}
 
 	.nav-link:focus-visible,
@@ -239,13 +358,12 @@
 		}
 		.app-nav-links .nav-link {
 			flex-shrink: 0;
-			min-height: 36px;
-			padding-inline: 12px;
+			min-height: 38px;
+			padding-inline: 11px;
 			border-radius: 9px;
 		}
 		.app-nav-links .nav-link.router-link-exact-active {
 			font-weight: 600;
-			box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--link-active-color) 24%, transparent);
 		}
 		.app-nav-links .nav-link:focus-visible {
 			outline-offset: -2px;

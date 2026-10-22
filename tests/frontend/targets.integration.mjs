@@ -147,6 +147,7 @@ const producerConnection = {
 	version: 1,
 	createdAt: 0,
 	updatedAt: 0,
+	lastConnectedAt: null,
 	name: 'connection',
 	type: 'SSH',
 	host: 'localhost',
@@ -155,9 +156,6 @@ const producerConnection = {
 	route: 'direct',
 	proxyId: null,
 	notes: null,
-	rdpRemoteApp: null,
-	rdpRemoteAppDirectory: null,
-	rdpRemoteAppArguments: null,
 	tagIds: [],
 	jumpIds: [],
 };
@@ -300,6 +298,12 @@ try {
 			const { authenticatedSessionLifecycle } = await import('/src/shared/session/public.ts');
 			const pinia = createPinia();
 			setActivePinia(pinia);
+			const { useNotificationStore } = await import('/src/shared/feedback/store/notification.store.ts');
+			const notifications = useNotificationStore(pinia);
+
+			const hasFeedback = (key) =>
+				notifications.notifications.some((item) => item.message === i18n.global.t(key));
+
 			const auth = useAuthStore(pinia);
 			const access = createAccessApi();
 			await access.setup({
@@ -499,9 +503,6 @@ try {
 						route: 'proxy',
 						proxyId: proxy.id,
 						notes: null,
-						rdpRemoteApp: null,
-						rdpRemoteAppDirectory: null,
-						rdpRemoteAppArguments: null,
 						tagIds: [],
 						jumpIds: [],
 					}),
@@ -585,11 +586,7 @@ try {
 					invalidFile.items.add(new File([new Uint8Array([255])], 'invalid-key'));
 					fileInput.files = invalidFile.files;
 					fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-					await until(() =>
-						document
-							.querySelector('[role="alert"]')
-							?.textContent.includes(i18n.global.t('sshKeys.failures.invalid_input')),
-					);
+					await until(() => hasFeedback('sshKeys.failures.invalid_input'));
 					check(
 						document.getElementById('key-private').value === '',
 						'real file input rejects malformed UTF-8',
@@ -844,7 +841,7 @@ try {
 					[...selector.node.querySelectorAll('button')]
 						.find((button) => button.textContent.trim() === i18n.global.t('sshKeys.refresh'))
 						.click();
-					await until(() => selector.node.textContent.includes(i18n.global.t('sshKeys.failures.failed')));
+					await until(() => hasFeedback('sshKeys.failures.failed'));
 					check(
 						!selector.node.textContent.includes(i18n.global.t('sshKeys.failures.unknown')),
 						'failed read does not claim an unknown save',
@@ -1005,9 +1002,6 @@ try {
 						route: 'direct',
 						proxyId: null,
 						notes: null,
-						rdpRemoteApp: null,
-						rdpRemoteAppDirectory: null,
-						rdpRemoteAppArguments: null,
 						tagIds: [],
 						jumpIds: [],
 					}),
@@ -1196,7 +1190,7 @@ try {
 					[...picker.node.querySelectorAll('button')]
 						.find((button) => button.textContent.trim() === i18n.global.t('tags.refresh'))
 						.click();
-					await until(() => picker.node.querySelector('[role="alert"]'));
+					await until(() => hasFeedback('tags.failures.failed'));
 					check(
 						selectedTags.value[0] === preservedId &&
 							!picker.node.textContent.includes(i18n.global.t('tags.failures.unknown')),
@@ -1410,7 +1404,7 @@ try {
 						controlled,
 					);
 					dialogs.accept();
-					await until(() => document.body.textContent.includes(i18n.global.t('hostKeys.saved')));
+					await until(() => hasFeedback('hostKeys.saved'));
 					check(
 						(await hostKeysApi.list()).some((pin) => pin.host === 'ui.example'),
 						'real formal pin form confirms and stores trust',
@@ -1418,7 +1412,7 @@ try {
 					hostButton('hostKeys.remove').click();
 					await until(() => dialogs.state.visible);
 					dialogs.accept();
-					await until(() => document.body.textContent.includes(i18n.global.t('hostKeys.removed')));
+					await until(() => hasFeedback('hostKeys.removed'));
 					check(
 						!(await hostKeysApi.list()).some((pin) => pin.host === updatedPin.host),
 						'real formal pin removal deletes the selected address',
@@ -1439,7 +1433,12 @@ try {
 					hostButton('hostKeys.confirm').click();
 					await until(() => dialogs.state.visible);
 					dialogs.accept();
-					await until(() => document.body.textContent.includes(i18n.global.t('hostKeys.failures.unknown')));
+					await until(
+						() =>
+							hostButton('hostKeys.confirm').disabled &&
+							hostButton('hostKeys.refresh') &&
+							!hostButton('hostKeys.refresh').disabled,
+					);
 					check(
 						hostButton('hostKeys.confirm').disabled && unknownWrites === 1,
 						'lost pin acknowledgement blocks automatic and manual replay',
@@ -1616,9 +1615,6 @@ try {
 						route: 'direct',
 						proxyId: null,
 						notes: null,
-						rdpRemoteApp: null,
-						rdpRemoteAppDirectory: null,
-						rdpRemoteAppArguments: null,
 						tagIds: [],
 						jumpIds: [],
 					});
