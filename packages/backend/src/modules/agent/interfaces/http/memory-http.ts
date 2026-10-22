@@ -130,7 +130,12 @@ export function createMemoryHttpRoutes(
 
 	add('GET', '/memories', async (ctx, actor) => {
 		const query = readAgentMemoryListQuery(ctx.query);
-		const page = await service.list(actor, { status: query.status, limit: query.limit, offset: query.offset });
+		const page = await service.list(actor, {
+			status: query.status,
+			limit: query.limit,
+			offset: query.offset,
+			threadId: query.threadId,
+		});
 		return { items: page.items.map(toWire), nextOffset: page.nextOffset };
 	});
 	add(

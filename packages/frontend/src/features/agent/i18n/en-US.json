@@ -1,5 +1,15 @@
 {
   "agent": {
+    "memoryReview": {
+      "title": "Memory review",
+      "hint": "Suggested by the Agent. Only memories you approve are saved for this app to recall.",
+      "save": "Save memory",
+      "reject": "Do not save",
+      "reload": "Reload and verify",
+      "empty": "No memories awaiting review",
+      "expired": "This suggestion has expired. Choose Do not save to dismiss it.",
+      "more": "More memories are waiting. Review this batch to see the next."
+    },
     "settings": {
       "tab": "Agent",
       "title": "Agent",

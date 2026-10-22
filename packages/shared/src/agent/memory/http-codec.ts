@@ -66,8 +66,8 @@ export function readAgentMemoryConfirm(value: unknown): AgentMemoryConfirmReques
 
 export function readAgentMemoryListQuery(query: URLSearchParams): AgentMemoryListQuery {
 	if (
-		[...query.keys()].some((k) => !['status', 'limit', 'offset'].includes(k)) ||
-		['status', 'limit', 'offset'].some((k) => query.getAll(k).length > 1)
+		[...query.keys()].some((k) => !['status', 'limit', 'offset', 'threadId'].includes(k)) ||
+		['status', 'limit', 'offset', 'threadId'].some((k) => query.getAll(k).length > 1)
 	) {
 		throw new InvalidAgentPayload();
 	}
@@ -88,11 +88,15 @@ export function readAgentMemoryListQuery(query: URLSearchParams): AgentMemoryLis
 		return agentInteger(Number(v), min, max);
 	}
 
-	return {
+	const result: AgentMemoryListQuery = {
 		status: selected,
 		limit: number('limit', 20, 1, AGENT_MEMORY_MAX_PAGE),
 		offset: number('offset', 0, 0, 10000),
 	};
+	if (query.has('threadId')) {
+		result.threadId = readAgentId(query.get('threadId'));
+	}
+	return result;
 }
 
 export function readAgentMemoryView(value: unknown): AgentMemoryView {

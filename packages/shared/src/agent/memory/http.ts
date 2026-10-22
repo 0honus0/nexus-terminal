@@ -32,6 +32,7 @@ export interface AgentMemoryListQuery {
 	status: AgentMemoryStatus | 'all';
 	limit: number;
 	offset: number;
+	threadId?: string;
 }
 
 export interface AgentMemoryResponse {

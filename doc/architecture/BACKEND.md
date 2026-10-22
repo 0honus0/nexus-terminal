@@ -1415,3 +1415,5 @@ Remote register 安装 `/api/v1/transfers/send`、`status`、`status/:taskId`、
 ### 8. 当前能力与验收
 
 五HTTP、Shared完整codec、正式API/store/SendFiles/Progress消费者已实现。列表采用UUID游标每页8项，时间为Unix毫秒；输入拒绝同名/嵌套源与同文本endpoint，scp/rsync均复制目录本身。命令和原始结果留Adapter，有限失败经Model映射；原会话在独立持久准入事务及执行期复查。真实双端点OpenSSH与受控取消/未知/重启/清理、正式store浏览器回归见testing；完整页面及跨业务撤销仍C2-D，公网与非直连目标不在通过范围。部署与生产切换不在本批范围。
+
+Memory 列表通过 Shared 可选 threadId → HTTP 白名单投影 → Service 独立 MemoryQuery → Model → storage 参数 → SQLite Adapter 接线。Adapter 在原读取事务核对 thread 属于当前 user/App，分页前通过来源 Run 的 thread_id 筛选，包含 Root/Child；无来源的记录不匹配，缺失或异 App 的线程为 not_found。不传参数仍是实际全 App 管理用途，不是旧协议兼容。候选原文、来源、状态和版本只由原事务持久 owner 修改；本次不改 schema、权限或人工审核政策。

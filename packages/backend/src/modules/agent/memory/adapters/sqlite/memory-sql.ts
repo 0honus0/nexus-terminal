@@ -128,16 +128,32 @@ export class SqliteMemoryStorage implements MemoryStorage {
 		status: AgentMemoryStatus | 'all',
 		offset: number,
 		limit: number,
+		threadId: string | null,
 	): Promise<StoredMemory[]> {
 		return this.db.transaction(async (tx) => {
 			const app = await tx.one('SELECT id FROM agent_apps WHERE id=? AND user_id=?', [scope.appId, scope.userId]);
 			if (!app) {
 				throw new MemoryStorageRefusal('not_found');
 			}
+			if (
+				threadId !== null &&
+				!(await tx.one('SELECT id FROM agent_threads WHERE id=? AND user_id=? AND app_id=?', [
+					threadId,
+					scope.userId,
+					scope.appId,
+				]))
+			) {
+				throw new MemoryStorageRefusal('not_found');
+			}
 			return (
 				await tx.all(
-					"SELECT * FROM agent_memories WHERE user_id=? AND app_id=? AND (?='all' OR status=?) ORDER BY created_at DESC,id LIMIT ? OFFSET ?",
-					[scope.userId, scope.appId, status, status, limit, offset],
+					`SELECT m.* FROM agent_memories m
+					 WHERE m.user_id=? AND m.app_id=? AND (?='all' OR m.status=?)
+					 AND (? IS NULL OR EXISTS (
+						 SELECT 1 FROM agent_runs r WHERE r.id=m.source_run_id
+						 AND r.user_id=m.user_id AND r.app_id=m.app_id AND r.thread_id=?
+					 )) ORDER BY m.created_at DESC,m.id LIMIT ? OFFSET ?`,
+					[scope.userId, scope.appId, status, status, threadId, threadId, limit, offset],
 				)
 			).map(memoryRow);
 		});

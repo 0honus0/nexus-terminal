@@ -8,6 +8,7 @@
 	import NativeInputArtifacts from '../files/NativeInputArtifacts.vue';
 	import AgentConfigPopover from '../files/AgentConfigPopover.vue';
 	import NativeRunDetails from '../runtime/NativeRunDetails.vue';
+	import NativeMemoryReview from '../runtime/NativeMemoryReview.vue';
 	import NativeApprovalList from '../runtime/NativeApprovalList.vue';
 	import AgentMessageBody from '../ai/AgentMessageBody.vue';
 	import AgentConversationWelcome from '../ai/AgentConversationWelcome.vue';
@@ -26,6 +27,9 @@
 	const threadSidebarVisible = ref(true);
 	const threadDrawerOpen = ref(false);
 	const taskRailVisible = ref(false);
+	const memoryRailVisible = ref(false);
+	const memoryCount = ref(0);
+	const memoryNeedsRead = ref(false);
 	const auditToolId = ref('');
 	const pendingThreadSelection = ref<NativeThread | null>(null);
 	const scroller = ref<HTMLElement | null>(null);
@@ -83,6 +87,40 @@
 		inputArtifacts,
 		attachmentsReady,
 	} = runtime;
+
+	watch(
+		() => thread.value?.id,
+		() => {
+			memoryRailVisible.value = false;
+			memoryCount.value = 0;
+			memoryNeedsRead.value = false;
+		},
+		{ flush: 'sync' },
+	);
+	watch(
+		taskRailVisible,
+		(visible) => {
+			if (visible) memoryRailVisible.value = false;
+		},
+		{ flush: 'sync' },
+	);
+	watch(
+		memoryRailVisible,
+		(visible) => {
+			if (visible) taskRailVisible.value = false;
+		},
+		{ flush: 'sync' },
+	);
+
+	function memoryProposed(threadId: string): void {
+		if (props.active && thread.value?.id === threadId) memoryRailVisible.value = true;
+	}
+
+	function memorySummary(threadId: string, count: number, needsRead: boolean): void {
+		if (thread.value?.id !== threadId) return;
+		memoryCount.value = count;
+		memoryNeedsRead.value = needsRead;
+	}
 
 	watch(
 		() => run.value?.id,
@@ -214,7 +252,10 @@
 	<div
 		ref="layoutRoot"
 		class="agent-surface-layout relative grid h-full min-h-0"
-		:class="{ 'is-threads-hidden': !threadSidebarVisible, 'has-task-rail': run && taskRailVisible }"
+		:class="{
+			'is-threads-hidden': !threadSidebarVisible,
+			'has-task-rail': (run && taskRailVisible) || memoryRailVisible,
+		}"
 	>
 		<aside
 			id="agent-thread-sidebar"
@@ -270,6 +311,19 @@
 				>
 					<i class="fa-solid fa-list-check text-xs" aria-hidden="true"></i>
 				</button>
+				<UiButton
+					v-if="thread && (memoryCount || memoryNeedsRead || memoryRailVisible)"
+					density="compact"
+					appearance="ghost"
+					class="agent-header-tool shrink-0"
+					:aria-label="t('agent.memoryReview.title')"
+					:aria-expanded="memoryRailVisible"
+					aria-controls="agent-memory-rail"
+					@click="memoryRailVisible = !memoryRailVisible"
+				>
+					<i class="fa-solid fa-brain text-xs" aria-hidden="true"></i>
+					<span>{{ memoryCount }}</span>
+				</UiButton>
 			</header>
 			<!-- The transcript owns scrolling; the composer stays docked above the bottom edge. -->
 			<div class="relative z-10 flex min-h-0 flex-1 flex-col gap-3 p-3 sm:p-4">
@@ -569,12 +623,27 @@
 			</div>
 		</main>
 		<button
-			v-if="run && taskRailVisible"
+			v-if="(run && taskRailVisible) || memoryRailVisible"
 			type="button"
 			class="agent-task-backdrop absolute inset-0 z-20 hidden bg-black/20"
 			:aria-label="t('common.close')"
-			@click="taskRailVisible = false"
+			@click="
+				taskRailVisible = false;
+				memoryRailVisible = false;
+			"
 		></button>
+		<NativeMemoryReview
+			v-if="thread"
+			:key="thread.id"
+			:app-id="appId"
+			:thread-id="thread.id"
+			:active="active"
+			:visible="memoryRailVisible"
+			class="agent-task-rail min-h-0 overflow-y-auto border-l border-border/50 bg-background p-3"
+			@close="memoryRailVisible = false"
+			@proposed="memoryProposed"
+			@summary="memorySummary"
+		/>
 		<aside
 			v-if="run && taskRailVisible"
 			id="agent-task-rail"

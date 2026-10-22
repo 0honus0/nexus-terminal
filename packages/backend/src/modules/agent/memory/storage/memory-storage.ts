@@ -67,6 +67,7 @@ export interface MemoryStorage {
 		status: AgentMemoryStatus | 'all',
 		offset: number,
 		limit: number,
+		threadId: string | null,
 	): Promise<StoredMemory[]>;
 	get(scope: StoredMemoryScope, id: string): Promise<StoredMemory | null>;
 	create(

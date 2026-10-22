@@ -323,3 +323,5 @@ scope/workspace-http 及 workspace-http-codec 唯一定义18项工作区请求/�
 pending/running/unknown 的 Root 或 Child 阻止删除，安全失败复用 agent/values 的 active_run_conflict（HTTP 409）；线程/App版本冲突使用 version_conflict，缺失/异 App线程使用 not_found，不根据错误正文归类。事务删除线程、全部 Run 和所属持久子表及附件引用，Memory 保留并清除 sourceRunId、推进自身版本；Artifact 元数据和文件保留。SQL、事务、状态准入和记忆版本耗尽判断均由 Backend 各自 owner 持有，Shared 不定义存储事实或删除策略对象。没有删除回执重放或墓碑兼容层，重复删除为 not_found；未知结果应保留原 threadId/expectedVersion 并先只读核对，不自动重放旧创建意图。
 
 验收边界为严格 unknown 输入、方法/线程/App/version/envelope 响应关联、现有消费者编译，以及 Backend 当前 v1 隔离 SQLite 的 FK/级联、拒绝和回滚验证；正式删除 UI、真实插件/原生 HTTP 交付丢失与并发竞争仍须各自整链验收，静态和隔离证据不扩大为全量行为通过。
+
+Memory 列表查询增加可选 threadId，严格 UUID 解码并拒绝重复参数；后端分页前按同用户/App 来源 Run 的对话过滤，包含子任务，来源为空的记录不匹配。对话专用前端 owner 消费候选列表及 publish/reject，不传 threadId 仍是全 App 管理用途；协议、应用及存储分别持独立类型并显式投影。

@@ -2,6 +2,8 @@ export { useOperationFeedback } from './composables/useOperationFeedback';
 
 export { useFeedback } from './composables/useFeedback';
 
+export { useFeedbackMessage } from './composables/useFeedbackMessage';
+
 export { default as DialogHost } from './components/DialogHost.vue';
 
 export { default as NotificationHost } from './components/NotificationHost.vue';

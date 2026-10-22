@@ -80,9 +80,11 @@ export class MemoryModel {
 	}
 
 	async list(owner: MemoryScope, query: MemoryQuery): Promise<MemoryRecord[]> {
-		return (await storage(() => this.storage.list(scope(owner), query.status, query.offset, query.limit))).map(
-			fromStorage,
-		);
+		return (
+			await storage(() =>
+				this.storage.list(scope(owner), query.status, query.offset, query.limit, query.threadId ?? null),
+			)
+		).map(fromStorage);
 	}
 
 	async get(owner: MemoryScope, id: string): Promise<MemoryRecord | null> {

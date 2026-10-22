@@ -527,3 +527,14 @@ Appearance 的字体保存、Presentation 的面板比例保存分别在所属�
 Terminal background由useTerminalBackground持有文档生命周期：同页会话切换只暂停/恢复；KeepAlive deactivation暂停并清空srcdoc，返回后先确认iframe可见尺寸再加载当前主题，避免脱离DOM期间文档重建以零视口初始化。iframe节点可缓存不代表内部document跨detach保留。
 
 AgentMaintenancePanel 通过 Agent public 由数据页高级维护装配，暂存核验／版本／手工数据与运行时管理只在该入口展示；沿用 use-plugin-management 和 PluginDataEditor 的原契约，不复制transport。active 绑定页面与维护展开状态，离页撤销回调，保留未知写入围栏和原数据意图，身份撤销清理。普通插件页只展示安装／升级／卸载与已卸载数据删除。
+
+### 对话记忆审核
+
+1. **职责与范围**：当前对话候选由独立 `use-conversation-memory` 持有；`NativeMemoryReview` 展示纯文本卡片及保存/拒绝，Surface 只协调侧栏与任务详情互斥，不自动批准记忆或工具权限。
+2. **子功能与目录**：专用 `api/conversation-memory-api`、`model/conversation-memory-types`/`conversation-memory-mapper`、`composables/use-conversation-memory`、`runtime/NativeMemoryReview.vue`；独立于设置管理 owner。轮询间隔3秒、只读第一页50条，策略归 composable，协议上限归 Shared。
+3. **依赖方向**：Surface → 展示组件 → composable → API → 通用 management request；仅依赖 Shared 协议和自身显式 mapper，不引用后端私有类型，不共享 NativeRun 写入锁。
+4. **类型与转换**：Shared 解码完整列表/回执，API 校验 App、候选状态、来源、分页和审核回执关联，mapper 白名单转为独立 ConversationMemory；审核命令捕获原 id/App/content/version，禁止对象透传或自动递增猜测回执。
+5. **入口与安装**：Surface 按 thread.id 挂载专用 owner；侧栏关闭仅隐藏组件，不停止当前可见对话的新候选发现。复用原任务栏样式和窄屏浮层，新候选展开但不抢焦点，标题栏可重开。
+6. **数据、事务与并发**：持久化及人工 CAS 仍归后端；背景读取可被交互取代且不置 busy，写入串行。独立 writeBlocked 围栏阻止自动读取解除未知/冲突，显式重读成功后才能恢复；不重放失败审核。
+7. **生命周期与失败**：按 active、KeepAlive、身份、document.visibilityState、卸载停用请求展示及定时器。切换对话销毁原 owner，事件携带 threadId 复核；晚结果由 operation generation 拒绝。读取失败保留当前卡片并停止自动轮询，使用统一 Toast 和显式核对入口；未知写入在撤销时保留恢复要求。
+8. **当前能力与验收**：只覆盖当前对话 Root/Child 候选及 publish/reject，不含编辑、全 App 管理或撤销 UI。超过50条提示逐批处理；静态检查与行为验收分别记录于 testing，后台/切换/多窗口竞争与真实模型提案留远程验证。

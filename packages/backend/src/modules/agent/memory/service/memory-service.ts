@@ -100,6 +100,9 @@ export class MemoryService {
 
 	async list(scope: MemoryScope, query: MemoryQuery): Promise<{ items: MemoryRecord[]; nextOffset: number | null }> {
 		validateScope(scope);
+		if (query.threadId !== undefined) {
+			validateId(query.threadId);
+		}
 		if (
 			!Number.isSafeInteger(query.offset) ||
 			query.offset < 0 ||
@@ -114,6 +117,7 @@ export class MemoryService {
 			status: query.status,
 			offset: query.offset,
 			limit: query.limit + 1,
+			threadId: query.threadId,
 		});
 		return {
 			items: items.slice(0, query.limit),

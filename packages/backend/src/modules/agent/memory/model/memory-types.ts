@@ -41,6 +41,7 @@ export interface MemoryQuery {
 	status: AgentMemoryStatus | 'all';
 	offset: number;
 	limit: number;
+	threadId?: string;
 }
 
 export interface MemoryImport {

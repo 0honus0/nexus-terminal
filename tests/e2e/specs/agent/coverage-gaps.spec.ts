@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
-import { requestAgentJson, createTestAgentApp, enableTestAgentExecution } from '../../support/agent';
+import {
+	requestAgentJson,
+	requestAgentWorkspace,
+	createTestAgentApp,
+	enableTestAgentExecution,
+} from '../../support/agent';
 import { installTestPlugin, stageTestPlugin } from '../../support/plugins';
 import { readAgentAppListResponse, readAgentAppResponse } from '../../../../packages/shared/src/agent/scope/http-codec';
 import {
@@ -193,6 +198,32 @@ test('Memory proposal, review, list, stale-CAS rejection, and revoke close the p
 		readAgentMemoryListResponse,
 	);
 	expect(candidates.items).toContainEqual(proposed);
+	const thread = await requestAgentWorkspace(request, app, {
+		method: 'agent.threads.create',
+		params: { operationId: randomUUID(), title: 'Memory review scope' },
+	});
+	if (thread.method !== 'agent.threads.create') throw new Error('Unexpected thread confirmation');
+	const scoped = await requestAgentJson(
+		request,
+		{ method: 'GET', path: path + '?status=candidate&limit=50&offset=0&threadId=' + thread.value.id },
+		readAgentMemoryListResponse,
+	);
+	expect(scoped.items).toEqual([]);
+	expect(scoped.nextOffset).toBeNull();
+	const missingThread = await requestAgentJson(
+		request,
+		{ method: 'GET', path: path + '?threadId=' + randomUUID(), status: 404 },
+		readAgentErrorResponse,
+	);
+	expect(missingThread.code).toBe('not_found');
+	for (const query of ['threadId=invalid', 'threadId=' + thread.value.id + '&threadId=' + thread.value.id]) {
+		const invalidThread = await requestAgentJson(
+			request,
+			{ method: 'GET', path: path + '?' + query, status: 400 },
+			readAgentErrorResponse,
+		);
+		expect(invalidThread.code).toBe('invalid_input');
+	}
 	const { memory: published } = await requestAgentJson(
 		request,
 		{

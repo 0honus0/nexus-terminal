@@ -1,5 +1,15 @@
 {
   "agent": {
+    "memoryReview": {
+      "title": "待审核记忆",
+      "hint": "以下内容由 Agent 提议。只有你点击保存后，才会成为此应用可召回的记忆。",
+      "save": "保存记忆",
+      "reject": "不保存",
+      "reload": "重新读取并核对",
+      "empty": "暂无待审核记忆",
+      "expired": "此提案已过期，无法保存，可选择不保存。",
+      "more": "还有更多待审核记忆，处理本批后会继续显示。"
+    },
     "settings": {
       "tab": "Agent",
       "title": "Agent",

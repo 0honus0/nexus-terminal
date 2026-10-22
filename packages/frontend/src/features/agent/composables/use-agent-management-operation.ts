@@ -1,3 +1,5 @@
+import { useI18n } from 'vue-i18n';
+import { useFeedbackMessage } from '@/shared/feedback/public';
 import { ref } from 'vue';
 import { useAuthenticatedViewScope, type ViewRevocation } from '@/shared/session/use-authenticated-view-scope';
 import { AgentManagementFailure } from '../model/management-failure';
@@ -23,6 +25,18 @@ export function useAgentManagementOperation(onRevoke?: (reason: ViewRevocation) 
 	const busy = ref(false);
 	const refreshRequired = ref(true);
 	const notice = ref('');
+	let failureCause: unknown;
+	const { t } = useI18n();
+	useFeedbackMessage(
+		() =>
+			notice.value === 'deleteThreadActive'
+				? t('agent.operations.deleteThreadActiveHint')
+				: notice.value
+					? t('agent.settings.appManagement.' + notice.value)
+					: '',
+		() => (notice.value === 'saved' ? 'success' : 'error'),
+		() => failureCause,
+	);
 	let generation = 0;
 	let backgroundRequest: AbortController | null = null;
 	const scope = useAuthenticatedViewScope({
@@ -35,6 +49,7 @@ export function useAgentManagementOperation(onRevoke?: (reason: ViewRevocation) 
 			busy.value = false;
 			refreshRequired.value = true;
 			notice.value = '';
+			failureCause = undefined;
 			onRevoke?.(reason);
 		},
 	});
@@ -60,6 +75,7 @@ export function useAgentManagementOperation(onRevoke?: (reason: ViewRevocation) 
 		const current = ++generation;
 		busy.value = !options.background;
 		notice.value = '';
+		failureCause = undefined;
 		try {
 			const result = await action(requestSignal);
 			if (generation !== current || !scope.isCurrent(signal)) {
@@ -74,6 +90,7 @@ export function useAgentManagementOperation(onRevoke?: (reason: ViewRevocation) 
 			if (generation !== current || !scope.isCurrent(signal)) {
 				return;
 			}
+			failureCause = cause;
 			const failure = cause instanceof AgentManagementFailure ? cause : null;
 			notice.value = !options.write && isNetworkFailure(cause) ? '' : failureNotice(cause, options.write);
 			if (options.write && (!failure || failure.outcome !== 'not_dispatched')) {

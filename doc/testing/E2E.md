@@ -1,5 +1,15 @@
 # Nexus Terminal E2E
 
+## 对话右侧记忆审核（2026-10-22）
+
+当前对话 Root/Child 的来源记忆由后端按 threadId 在分页前筛选，同事务校验当前用户/App 的线程归属；无来源候选不进入对话审核。对话独立 owner 每3秒读取一页50条，新候选展开原风格右侧栏，关闭不拒绝/发布，顶部按钮可重新打开；任务详情与记忆栏互斥，窄屏沿用浮层。只有人工点击保存才发布，拒绝和过期候选不进入 Recall。背景读取不置 busy，交互取代旧读取；未知/冲突保留原记录，显式核对原 memoryId 后再读列表，自动轮询不解除写入围栏或重发审核。读取失败保留卡片、停止轮询并提供恢复，active/KeepAlive/身份/文档可见性/卸载负责停止观察。
+
+扩展既有 `coverage-gaps.spec.ts` 的 Memory 生命周期断言：有真实线程但无来源的候选不会误入；缺失线程404，非法/重复 threadId 400。未新建业务测试，按 D17 未运行本地测试、浏览器、E2E 或测试收集。源码复核 Root/Child 共用 thread_id、分页前隔离、只读/写入晚结果、原版本 CAS、失效原文与统一 Toast；静态证据与真实交互验收分别记录。
+
+当前工作区的根 `pnpm run check`、`pnpm run build`（Shared/Backend/Frontend）、Shared check、最终 Backend check/build、本轮目标源码及既有断言 ESLint/Prettier、`git diff --check` 通过。日志为 `/tmp/nexus-conversation-memory-{check,build}.log`、`/tmp/nexus-conversation-memory-shared-check.log`、`/tmp/nexus-conversation-memory-backend-final.log`、`/tmp/nexus-conversation-memory-target-{lint,format}.log`。复核期间执行设置的并行工作区修改曾造成五处类型错误，后续重跑根检查和构建已通过；保留当时日志 `/tmp/nexus-conversation-memory-check-concurrent.log`，未修改或回滚无关文件。全量格式检查仍受 `use-artifact-library.ts`、`use-execution-settings.ts`、`AgentSettingsPanel.vue`、`ExecutionSettings.vue` 的其它未提交改动告警影响，不能记为通过；实际日志 `/tmp/nexus-conversation-memory-format-check.log`，本轮文档单独复核格式。
+
+真实模型提案、同 App 不同线程/用户隔离、多页和多窗口审核竞争、未知回执/重新核对、关闭重开、切换线程、后台恢复、桌面/窄屏与键盘可访问性留远程验收。本次仅提交本功能相关变更，其它工作区改动保留；未推送或部署，未执行行为测试。
+
 ## Backend Pino与网络Toast/终端失败等待（2026-10-21，待远程）
 
 Backend由NativeLogger切换Platform PinoLogger，原Logger及Operations应用链不变；前后端均为catalog Pino9.14.0。后端同步stderr、白名单time/severity/code/facts、32facts/16KiB及级别过滤保持，移除旧实现和安装路径，lock仅新增backend对已有Pino的依赖。
