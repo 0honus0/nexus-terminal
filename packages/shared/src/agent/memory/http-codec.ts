@@ -5,6 +5,7 @@ import {
 	AGENT_MEMORY_MAX_CONTENT_BYTES,
 	AGENT_MEMORY_MAX_BODY_BYTES,
 	AGENT_MEMORY_MAX_PAGE,
+	AGENT_MEMORY_MAX_OFFSET,
 	AGENT_MEMORY_MAX_RESPONSE_BYTES,
 } from './values.js';
 import type { AgentMemoryView } from './model.js';
@@ -70,7 +71,7 @@ export function readAgentMemoryListQuery(query: URLSearchParams): AgentMemoryLis
 		if (v === null) {
 			return fallback;
 		}
-		if (!/^(0|[1-9][0-9]{0,8})$/u.test(v)) {
+		if (!/^(0|[1-9][0-9]{0,15})$/u.test(v)) {
 			throw new InvalidAgentPayload();
 		}
 		return agentInteger(Number(v), min, max);
@@ -79,7 +80,7 @@ export function readAgentMemoryListQuery(query: URLSearchParams): AgentMemoryLis
 	const result: AgentMemoryListQuery = {
 		status: selected,
 		limit: number('limit', 20, 1, AGENT_MEMORY_MAX_PAGE),
-		offset: number('offset', 0, 0, 10000),
+		offset: number('offset', 0, 0, AGENT_MEMORY_MAX_OFFSET),
 	};
 	if (query.has('threadId')) {
 		result.threadId = readAgentId(query.get('threadId'));
@@ -157,5 +158,5 @@ export function readAgentMemoryListResponse(value: unknown): AgentMemoryListResp
 	if (new Set(items.map((v) => v.id)).size !== items.length) {
 		throw new InvalidAgentPayload();
 	}
-	return { items, nextOffset: r.nextOffset === null ? null : agentInteger(r.nextOffset, 1, 10000) };
+	return { items, nextOffset: r.nextOffset === null ? null : agentInteger(r.nextOffset, 1, AGENT_MEMORY_MAX_OFFSET) };
 }

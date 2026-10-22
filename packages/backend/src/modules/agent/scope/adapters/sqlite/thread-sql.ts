@@ -107,7 +107,7 @@ export class SqliteThreadStorage implements ThreadStorage {
 		access: StoredThreadAccess,
 		input: StoredThreadMutation,
 		admit: (facts: StoredThreadAccessFacts) => void,
-		admitCapacity: (threads: number, commands: number) => void,
+		admitCapacity: (threads: number) => void,
 	): Promise<ThreadRecord> {
 		return this.db.transaction(async (tx) => {
 			await this.check(tx, access, admit);
@@ -131,22 +131,19 @@ export class SqliteThreadStorage implements ThreadStorage {
 				await this.check(tx, access, admit);
 				return result;
 			}
-			const counts = await tx.one(
-				'SELECT (SELECT COUNT(*) FROM agent_threads WHERE user_id=? AND app_id=?) AS threads,(SELECT COUNT(*) FROM agent_thread_commands WHERE user_id=? AND app_id=?) AS commands',
-				[access.userId, access.appId, access.userId, access.appId],
-			);
+			const counts = await tx.one('SELECT COUNT(*) AS threads FROM agent_threads WHERE user_id=? AND app_id=?', [
+				access.userId,
+				access.appId,
+			]);
 			if (
 				!counts ||
 				typeof counts.threads !== 'number' ||
-				typeof counts.commands !== 'number' ||
 				!Number.isSafeInteger(counts.threads) ||
-				!Number.isSafeInteger(counts.commands) ||
-				counts.threads < 0 ||
-				counts.commands < 0
+				counts.threads < 0
 			) {
 				throw new Error('Corrupt thread capacity');
 			}
-			admitCapacity(counts.threads, counts.commands);
+			admitCapacity(counts.threads);
 			const threadId = input.kind === 'create' ? input.operationId : input.threadId;
 			if (input.kind === 'create') {
 				const existing = await tx.one('SELECT id FROM agent_threads WHERE id=?', [threadId]);

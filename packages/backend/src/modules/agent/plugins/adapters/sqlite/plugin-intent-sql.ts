@@ -204,6 +204,10 @@ export class SqlitePluginIntentStorage implements PluginIntentStorage {
 				}
 				return replay;
 			}
+			await tx.run(
+				"UPDATE agent_plugin_intents SET input_json='{}',artifact_ids_json='[]' WHERE user_id=? AND (revoked_at IS NOT NULL OR expires_at<=?) AND (input_json!='{}' OR artifact_ids_json!='[]')",
+				[userId, now],
+			);
 			for (const id of input.artifactIds) {
 				try {
 					facts.artifacts.push(await this.artifacts.source(tx, userId, appId, id));
@@ -220,8 +224,8 @@ export class SqlitePluginIntentStorage implements PluginIntentStorage {
 			);
 			facts.count = integer(count?.count);
 			const evidence = await tx.one(
-				'SELECT COUNT(*) AS count,COALESCE(SUM(length(CAST(input_json AS BLOB))),0) AS bytes FROM agent_plugin_intents WHERE user_id=?',
-				[userId],
+				'SELECT COUNT(*) AS count,COALESCE(SUM(length(CAST(input_json AS BLOB))),0) AS bytes FROM agent_plugin_intents WHERE user_id=? AND revoked_at IS NULL AND expires_at>?',
+				[userId, now],
 			);
 			facts.evidenceCount = integer(evidence?.count);
 			facts.evidenceBytes = integer(evidence?.bytes);

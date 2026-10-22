@@ -25,7 +25,7 @@ interface ActiveSample {
 /** Dashboard host grouping is application policy; SSH collection is owned by observations. */
 export class ResourceStatusService {
 	private readonly cache = new Map<string, CacheEntry>();
-	private readonly inFlight = new Map<string, ActiveSample>();
+	private readonly inFlight = new Map<string, Map<string | null, ActiveSample>>();
 	private readonly tasks = new Set<Promise<unknown>>();
 	private readonly controller = new AbortController();
 	private readonly failures = new FailureSummary();
@@ -155,7 +155,8 @@ export class ResourceStatusService {
 		if (cached?.fingerprint === fingerprint && cached.expiresAt > Date.now()) {
 			return Promise.resolve(cached.value);
 		}
-		const active = this.inFlight.get(key);
+		const sessions = this.inFlight.get(key) ?? new Map<string | null, ActiveSample>();
+		const active = sessions.get(token);
 		if (active?.fingerprint === fingerprint) {
 			return active.task;
 		}
@@ -163,10 +164,16 @@ export class ResourceStatusService {
 			fingerprint,
 			task: Promise.resolve().then(() => this.collect(token, key, candidates)),
 		};
-		this.inFlight.set(key, entry);
+		sessions.set(token, entry);
+		this.inFlight.set(key, sessions);
 		const task = entry.task
 			.then((value) => {
-				if (this.accepting && this.inFlight.get(key) === entry && value.error === undefined) {
+				if (
+					this.accepting &&
+					this.inFlight.get(key) === sessions &&
+					sessions.get(token) === entry &&
+					value.error === undefined
+				) {
 					this.cache.set(key, { fingerprint, value, expiresAt: Date.now() + this.refreshSeconds * 1000 });
 				}
 				return value;
@@ -178,8 +185,11 @@ export class ResourceStatusService {
 				throw error;
 			})
 			.finally(() => {
-				if (this.inFlight.get(key) === entry) {
-					this.inFlight.delete(key);
+				if (this.inFlight.get(key) === sessions && sessions.get(token) === entry) {
+					sessions.delete(token);
+					if (!sessions.size) {
+						this.inFlight.delete(key);
+					}
 				}
 				this.tasks.delete(task);
 			});

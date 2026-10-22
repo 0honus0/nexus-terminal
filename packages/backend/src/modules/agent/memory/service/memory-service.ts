@@ -3,7 +3,11 @@ import type { OperationEvent } from '@nexus-terminal/shared/operations/values';
 import type { ExecutionService } from '../../execution/service/execution-service.js';
 import { randomUUID } from 'node:crypto';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
-import { AGENT_MEMORY_MAX_CONTENT_BYTES, AGENT_MEMORY_MAX_PAGE } from '@nexus-terminal/shared/agent/memory/values';
+import {
+	AGENT_MEMORY_MAX_CONTENT_BYTES,
+	AGENT_MEMORY_MAX_PAGE,
+	AGENT_MEMORY_MAX_OFFSET,
+} from '@nexus-terminal/shared/agent/memory/values';
 import { AgentFailure } from '../../agent-failure.js';
 import type { MemoryModel } from '../model/memory-model.js';
 import type {
@@ -104,7 +108,7 @@ export class MemoryService {
 		if (
 			!Number.isSafeInteger(query.offset) ||
 			query.offset < 0 ||
-			query.offset > 10000 ||
+			query.offset > AGENT_MEMORY_MAX_OFFSET ||
 			!Number.isSafeInteger(query.limit) ||
 			query.limit < 1 ||
 			query.limit > AGENT_MEMORY_MAX_PAGE

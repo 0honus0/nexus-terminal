@@ -1,5 +1,55 @@
 # Nexus Terminal E2E
 
+## 累计配额修复续审与提交（2026-10-22）
+
+用户授权修复后提交。复查 stage 回收与引用/退役 CAS、同包复用的内容和身份复核、插件墓碑/历史回执退役、有效容量与备份注册、完整历史后缀及首轮模型预算；保留未知状态、不可变版本和防重放证据。追加修复历史读取成本：先物化最近有限候选，再做步骤/工具及正文体积关联聚合，不再让全部旧对话参与候选统计；完整对话仍持久保留。
+
+上一节所述并行 `StatusMonitor.vue` 阻断已由原修改更新，不覆盖或提交该 UI 文件。本轮重新运行静态检查，不复用先前 PASS；D17 下不运行行为测试、浏览器或 E2E，不推送、重启或部署。跨阈值循环、故障注入、跨设备注销、长对话供应商请求及备份恢复仍待远程验收。
+
+本轮 `pnpm run check`、`pnpm run build`、`pnpm run format:all:check` 均退出 0，日志分别为 `/tmp/nexus-quota-followup-check.log`、`/tmp/nexus-quota-followup-build.log`、`/tmp/nexus-quota-followup-format.log`；构建仍有既有大 chunk 提示。`git diff --check` 与两份既有集成脚本的 `node --check` 通过。暂存范围排除并行工作区/状态监控等 UI 调整及其文档、临时文件和设计产物；这些检查不代表行为/E2E 已通过。
+
+另将暂存内容导出到 `/tmp/nexus-quota-index.XidjQG` 核对独立交付：双端 ESLint 通过，随后 pnpm 因复用的 `node_modules` 为符号链接拒绝任务状态目录，未将该命令记为通过（`/tmp/nexus-quota-index-check.log`）。改为在该快照直接执行既有 `vue-tsc --noEmit`、`tsc --noEmit`，两端均退出 0（`/tmp/nexus-quota-index-types.log`），不依赖未暂存 UI 的新增导出。
+
+## 累计配额及四项缺陷修复（2026-10-22，源码收口／全量静态受并行 UI 阻断）
+
+沿上一轮四项P2修复真实owner，不改模板/样式，保留并行UI变更。相同签名包复用原stage并复核Blob/hash/信任，退役绑定ID/version不变；无引用stage新建前回收旧缓存，保护versions/retirements/未知staging，删除失败保留failed及原因；同版本同hash核验不进入升级；在途主机采样按登录隔离，成功缓存仍共享且逐等待者认证。
+
+追加盘点及源码修复：正常closed诊断按App保留128项，未知/曾未知证据不裁剪；数据按有效键/8MiB准入、每键最新有效回执保留正文，旧回执保留身份并返回version_conflict；取消32次迁移/清除与4096次Thread命令终身限制；Memory/Publisher/Intent/机器恢复claim只计有效状态，Intent失效正文压缩，released备份注册同样不计活跃额度；Memory/Artifact分页不受10,000历史偏移限制；插件集合以完整编码预算约束，versions名称列表与当前安装一对一。长对话按最近连续完整Run滑窗，首轮继续按编码/Provider预算移除旧完整消息与来源，随后锁定来源并保留逐步连续性校验。历史窗口不删除持久对话，不伪造摘要或授权。
+
+已静态同步既有 `backend-next-plugin-owner-faults.integration.mjs`（4095历史种子后循环保留并继续构造）及 `backend-next-plugins.integration.mjs`（当前回执幂等、过时回执拒绝）断言；按D17不新增或运行行为测试、浏览器或E2E。跨256次选包/4096次写入、跨设备注销、清理/提交失败、自然过期、长对话模型窗口及备份恢复整链仍待远程验收。本轮不提交、推送或重启。
+
+本轮真实静态结果（不继承历史PASS）：
+
+| 检查                | 结果与证据                                                                                                                                                                                                                                                                                      |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared/Backend 构建 | 最新 `pnpm run build` 的前两段成功，随后 Frontend 类型失败；日志 `/tmp/nexus-quota-build.log`。                                                                                                                                                                                                 |
+| 根检查              | 首轮退出0（`/tmp/nexus-quota-check.log`）；并行 UI 改动后末轮退出1（`/tmp/nexus-quota-check-final.log`），双端 ESLint 通过，Frontend vue-tsc 在 StatusMonitor.vue 报15项 TS2339（模板中 controller/chartColors.value）及1项 TS2322（nullable metric）。没有改动该文件，不报告当前全量类型通过。 |
+| 全量格式            | 首轮通过；末轮 `pnpm run format:all:check` 退出1，仅报告并行 StatusMonitor.vue 的Prettier问题，日志 `/tmp/nexus-quota-format.log`。                                                                                                                                                             |
+| 本轮目标检查        | Backend/Shared/两处插件前端逻辑、六份相关文档及两份既有脚本的目标Prettier检查、`git diff --check` 和两份 `node --check` 通过；未运行脚本行为。                                                                                                                                                  |
+
+上述全量阻断须待原 owner 完成并行 UI 修改后重跑；本轮没有覆盖、回滚或代修该 UI。静态检查不证明本轮新增循环、并发与故障恢复路径已通过实机回归。
+
+## 前后端三轮源码复审（2026-10-22）
+
+本节保留上一轮审查当时的发现与证据，当前四项修复见上一节，不能把原发现当作仍未修复的现状。范围为 `7151fca9` 与当时未提交清理；工作区还存在并行 UI 调整，本轮保留，不修改功能代码、UI、USAGE 或契约。第一轮核对 Agent 仓库/候选/安装/退役和删除残留；第二轮核对挂起 WS/HTTP、身份撤销及共享状态采样；第三轮核对桌面签发、票据消费、TCP/TLS/WS 与前端 SDK 收尾，并反查前两轮疑点。以下为沿源码确认的缺陷，未运行行为复现：
+
+- **P2：准备升级后离开页面，无法用重新选包直接完成原升级。** `use-plugin-management.ts:44` 在工具页停用时清空 candidate；重新选包经 `plugin-service.ts:812` 生成新 stage UUID。`plugin-sql.ts:820`（以及 install 的 707）要求与原 retirement 的 stage ID/version 完全相同，因此哪怕同一包，完成升级仍冲突。原 stage 读取后端保留，但正式前端已无恢复入口。触发：准备升级成功 → 切设置分组/刷新/取消候选 → 重新选择原版本 → 完成升级。无数据迁移时可取消退役后重新开始，不能把这当作直接续接成功。修复应从权威 retirement 恢复原候选，不放宽 stage CAS 或恢复旧维护 UI。
+- **P2：有效操作会永久耗尽 stage 配额。** `plugin-service.ts:812` 每次从仓库下载/重新核验都创建新 stage；`plugin-sql.ts:1065` 统计用户全部 stage，含 installed/failed，而服务在总数256时拒绝。候选取消只清前端 ref；现有 stage owner 无删除/过期/相同包复用流程。连续选包后取消、核验同一包或正常升级均累积记录及包文件，最终无法再安装/升级，重启不清除。USAGE 588 确有256项容量约束，但不能为保留容量而遗漏回收。修复须保留实际版本、正在安装/退役及未知结果引用，只回收确定无引用项或复用安全等价候选，不简单移除容量。
+- **P2：已安装同版本的“重新核验”仍开放必失败的升级动作。** `PluginRepositorySettings.vue:170` 对同版本提供重新核验；候选区只要有安装实例，就给出准备升级。`use-plugin-management.ts:158` 不区分同版本，调用 prepare-upgrade；后端 `plugin-service.ts:572` 明确拒绝 replacement 与当前版本相同，必然 version_conflict。修复应把相同版本/相同包的核验与真正升级分开，不把成功核验接入必失败写入，也不放宽后端不可变版本约束。
+- **P2：共享主机采样继承首个请求的登录，另一设备会被连带拒绝。** `resource-status-service.ts:164` 用首个 token 创建采样，160行按目标 fingerprint 把同主机其它会话加入同一 Promise；`observation-service.ts:344` 在采样过程继续复查这个 token。若设备 A 发起采样、设备 B 加入等待后 A 登出/到期，采样抛 unauthenticated；`resource-status-service.ts:133` 继续向 B 传播，B 自己的登录有效也收不到本轮结果。这不是未授权数据泄露，但破坏多登录隔离。修复可按会话区分在途采样，或由明确共享授权 owner 承担采样并逐等待者验证；不能去掉身份复查。
+
+挂起目录初始快照/修订、事件变化时拒绝旧读、写入未知围栏、可见性停流/重连、服务端事件身份复查，以及桌面票据一次消费/目标版本/晚收尾已逐链核对，本轮未确认其它具体缺陷。SDK pending connect 无取消 API、目标证书不验证等现有限制已有专题文档，不另冒充新缺陷，也不据此宣称长时/故障行为通过。
+
+`pnpm run check`、`pnpm run build` 均退出 0，日志 `/tmp/nexus-audit-rounds-check.log`、`/tmp/nexus-audit-rounds-build.log`；构建仍有既有大 chunk 提示。`pnpm run format:all:check` 退出 0，日志 `/tmp/nexus-audit-rounds-format.log`；`git diff --check` 通过。遵守 D17，未新增/运行本地行为测试、浏览器或 E2E；没有提交、推送、部署或重启。本轮结论是审查发现，不是修复或真实回归通过。
+
+## 已删除前端功能残留清理（2026-10-22）
+
+基于 `7151fca9` 清理前端死链：旧插件维护面板的暂存列表/手工核验/运行观测确认、手动创建 App、孤立仪表盘卡片与系统边界卡片/选择工具、旧工作区追加工具/描述与终端通道抽象，以及对应三语失效文案。仓库候选安装/升级、版本显示名称、实际插件 RPC、App 启停与未知写入围栏保留。后端接口与 Shared 无改动。
+
+源码引用复核覆盖导入图、API/composable 调用、模板与动态翻译；静态 import 图无新孤立业务文件（只剩入口和环境声明），所有活跃 Vue 文件零修改，只删除两个无入口组件；已核对 USAGE「Plugin 与 MCP」，当前产品操作和恢复说明不变。设置加载不再请求无人展示的 `/plugins/stages`；服务端该接口保留。
+
+本轮 `pnpm run check` 通过，日志 `/tmp/nexus-residue-check.log`；`pnpm run build:frontend` 退出 0，日志 `/tmp/nexus-residue-build.log`，仍有既有大 chunk 提示。首次全量格式检查发现新 PLAN 表格需对齐，修正后 `pnpm run format:all:check` 退出 0，日志 `/tmp/nexus-residue-format-final.log`；`git diff --check` 通过。三语各删除53个无消费者叶子键，保留文案值未改；静态引用与活跃 Vue/Backend/Shared 零改动检查通过。按 D17 未新增/运行本地行为、浏览器或 E2E，不宣称真实安装/升级/恢复回归通过。未提交、推送、部署或重启；保留未跟踪的临时和设计产物。
+
 ## 本地修改统一提交前检查（2026-10-22）
 
 用户授权将全部本地功能修改提交并推送 `dev`。基于 `10ae19c5` 的完整工作区，`pnpm run check`、`pnpm run build`、`pnpm run format:all:check` 均退出 0，记录分别为 `/tmp/nexus-precommit-{check,build,format}.log`；构建仍有大 chunk 提示，不作为失败。最初尝试只收桌面相关修改时，隔离暂存快照发现已提交前端依赖未提交的 Agent `profiles` 删除契约，不能单独交付；最终按用户指令纳入完整前后端功能配套，不把不完整快照的类型失败记作整套源码通过。

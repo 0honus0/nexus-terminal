@@ -122,8 +122,8 @@ export class PluginService {
 					}
 					this.admitMigration(actor, appId, userId, current, runtimeClosed, upgradePending);
 				},
-				(keys, bytes, retained) => {
-					if (keys > AGENT_PLUGIN_MAX_MIGRATION_KEYS || bytes > 8 * 1024 * 1024 || retained >= 32) {
+				(keys, bytes) => {
+					if (keys > AGENT_PLUGIN_MAX_MIGRATION_KEYS || bytes > 8 * 1024 * 1024) {
 						throw new AgentFailure('limit_exceeded');
 					}
 				},
@@ -403,8 +403,7 @@ export class PluginService {
 					throw new AgentFailure('version_conflict');
 				}
 			},
-			(current, keyCount, operationCount, dataBytes, operationBytes) =>
-				decidePluginData(input, current, keyCount, operationCount, dataBytes, operationBytes),
+			(current, keyCount, dataBytes) => decidePluginData(input, current, keyCount, dataBytes),
 		);
 	}
 
@@ -421,12 +420,9 @@ export class PluginService {
 						throw new AgentFailure('version_conflict');
 					}
 				},
-				(currentRevision, purgeCount) => {
+				(currentRevision) => {
 					if (currentRevision !== revision) {
 						throw new AgentFailure('version_conflict');
-					}
-					if (purgeCount >= 32) {
-						throw new AgentFailure('limit_exceeded');
 					}
 				},
 			),
@@ -568,7 +564,7 @@ export class PluginService {
 					!replacement?.manifest ||
 					replacement.manifest.id !== current.definitionId ||
 					replacement.version !== stageVersion ||
-					replacement.status !== 'verified' ||
+					(replacement.status !== 'verified' && replacement.status !== 'installed') ||
 					replacement.manifest.version === current.version
 				) {
 					throw new AgentFailure('version_conflict');
@@ -608,7 +604,7 @@ export class PluginService {
 					throw new AgentFailure('forbidden');
 				}
 				if (
-					staged.status !== 'verified' ||
+					(staged.status !== 'verified' && staged.status !== 'installed') ||
 					!current ||
 					current.appId !== appId ||
 					current.status !== 'draining' ||
@@ -809,12 +805,19 @@ export class PluginService {
 			) {
 				throw new AgentFailure('forbidden');
 			}
-			const staged = await this.model.stage(actor, randomUUID(), bytes, signal, (userId, total) => {
+			const reusable = await this.model.reusableStage(actor, bytes, signal, (userId, current, publisher) => {
 				identity(actor, userId);
-				if (total >= 256) {
-					throw new AgentFailure('limit_exceeded');
+				if (current !== null && (!publisher || publisher.revokedAt !== null)) {
+					throw new AgentFailure('forbidden');
 				}
 			});
+			if (reusable !== null) {
+				return reusable;
+			}
+			await this.model.pruneStages(actor, 127, (userId) => identity(actor, userId));
+			const staged = await this.model.stage(actor, randomUUID(), bytes, signal, (userId) =>
+				identity(actor, userId),
+			);
 			return this.model.verify(
 				actor,
 				staged.id,
@@ -878,12 +881,8 @@ export class PluginService {
 			if (createHash('sha256').update(bytes).digest('hex') !== artifact.sha256) {
 				throw new AgentFailure('version_conflict');
 			}
-			return this.model.stage(actor, randomUUID(), bytes, signal, (userId, total) => {
-				identity(actor, userId);
-				if (total >= 256) {
-					throw new AgentFailure('limit_exceeded');
-				}
-			});
+			await this.model.pruneStages(actor, 127, (userId) => identity(actor, userId));
+			return this.model.stage(actor, randomUUID(), bytes, signal, (userId) => identity(actor, userId));
 		});
 	}
 

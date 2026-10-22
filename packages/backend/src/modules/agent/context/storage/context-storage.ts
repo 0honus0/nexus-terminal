@@ -62,7 +62,8 @@ export interface ContextStorage {
 	): Promise<StoredThreadEntries | null>;
 	readHistory(
 		command: StoredContextHistoryCommand,
-		admit: (facts: StoredContextHistoryFacts) => void,
+		sourceLimit: number,
+		fits: (facts: StoredContextHistoryFacts) => boolean,
 	): Promise<StoredContextHistoryBundle | null>;
 }
 

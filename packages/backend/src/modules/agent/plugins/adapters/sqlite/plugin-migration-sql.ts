@@ -5,7 +5,7 @@ import type {
 	StoredPluginDataMigration,
 	StoredPluginDataMigrationResult,
 } from '../../storage/plugin-migration-storage.js';
-import { pluginDataRow } from './plugin-data-sql.js';
+import { pluginDataRow, readPluginData } from './plugin-data-sql.js';
 import { AGENT_PLUGIN_MAX_MIGRATION_KEYS } from '@nexus-terminal/shared/agent/plugins/values';
 
 export async function readPluginDataSnapshot(
@@ -15,7 +15,7 @@ export async function readPluginDataSnapshot(
 ): Promise<StoredPluginData[]> {
 	return (
 		await tx.all(
-			'SELECT key,version,value_json,updated_at FROM agent_plugin_data WHERE user_id=? AND app_id=? ORDER BY key LIMIT ?',
+			'SELECT key,version,value_json,updated_at FROM agent_plugin_data WHERE user_id=? AND app_id=? AND value_json IS NOT NULL ORDER BY key LIMIT ?',
 			[userId, appId, AGENT_PLUGIN_MAX_MIGRATION_KEYS + 1],
 		)
 	).map(pluginDataRow);
@@ -26,7 +26,7 @@ export async function migratePluginData(
 	userId: number,
 	appId: string,
 	input: StoredPluginDataMigration,
-	admit: (keys: number, bytes: number, retained: number) => void,
+	admit: (keys: number, bytes: number) => void,
 ): Promise<StoredPluginDataMigrationResult> {
 	const previous = await tx.one(
 		'SELECT * FROM agent_plugin_data_migrations WHERE user_id=? AND app_id=? AND operation_id=?',
@@ -59,6 +59,14 @@ export async function migratePluginData(
 	}
 	const current = await readPluginDataSnapshot(tx, userId, appId);
 	const source = new Map(current.map((item) => [item.key, item]));
+	for (const item of input.items) {
+		if (!source.has(item.key)) {
+			const stored = await readPluginData(tx, userId, appId, item.key);
+			if (stored !== null) {
+				source.set(item.key, stored);
+			}
+		}
+	}
 	const destination = new Map(input.items.map((item) => [item.key, item]));
 	if (
 		destination.size !== input.items.length ||
@@ -67,20 +75,12 @@ export async function migratePluginData(
 	) {
 		throw new PluginStorageRefusal('version_conflict');
 	}
-	const count = await tx.one(
-		'SELECT COUNT(*) AS retained FROM agent_plugin_data_migrations WHERE user_id=? AND app_id=?',
-		[userId, appId],
-	);
-	if (typeof count?.retained !== 'number' || !Number.isSafeInteger(count.retained) || count.retained < 0) {
-		throw new Error('Corrupt migration count');
-	}
 	admit(
-		input.items.length,
+		input.items.filter((item) => item.valueJson !== null).length,
 		input.items.reduce(
 			(bytes, item) => bytes + (item.valueJson === null ? 0 : Buffer.byteLength(item.valueJson, 'utf8')),
 			0,
 		),
-		count.retained,
 	);
 	let changedKeys = 0;
 	for (const item of input.items) {
@@ -94,6 +94,10 @@ export async function migratePluginData(
 		await tx.run(
 			'INSERT INTO agent_plugin_data(user_id,app_id,key,version,value_json,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(user_id,app_id,key) DO UPDATE SET version=excluded.version,value_json=excluded.value_json,updated_at=excluded.updated_at',
 			[userId, appId, item.key, (old?.version ?? 0) + 1, item.valueJson, input.now],
+		);
+		await tx.run(
+			'UPDATE agent_plugin_data_operations SET retired=1,value_json=NULL WHERE user_id=? AND app_id=? AND key=? AND retired=0',
+			[userId, appId, item.key],
 		);
 		changedKeys++;
 	}

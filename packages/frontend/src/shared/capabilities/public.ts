@@ -3,7 +3,6 @@ import type { ConnectionSummary } from '@/features/connections/public';
 import type { TagSummary } from '@/features/tags/public';
 import type { ProxySummary } from '@/features/proxies/public';
 import type { SshKeySummary } from '@/features/ssh-keys/public';
-import type { TerminalViewport } from '@/features/terminal/public';
 
 export interface RuntimeAuthCapability {
 	userId: ComputedRef<number | null>;
@@ -36,18 +35,6 @@ export interface RuntimeSshKeysCapability {
 	selector: Component;
 }
 
-export interface RuntimeTerminalOutput {
-	data: string | Uint8Array;
-}
-
-export interface RuntimeTerminalChannel {
-	sendInput(data: string): void | Promise<void>;
-	resize(viewport: TerminalViewport): void | Promise<void>;
-	onOutput(handler: (output: RuntimeTerminalOutput) => void): () => void;
-	onClose(handler: (reason?: string) => void): () => void;
-	onError(handler: (message: string) => void): () => void;
-}
-
 export interface RuntimeFeatureCapabilities {
 	auth: RuntimeAuthCapability;
 	connections: RuntimeConnectionsCapability;
@@ -75,4 +62,4 @@ export const useRuntimeFeatureCapabilities = (): RuntimeFeatureCapabilities => {
 	return capabilities;
 };
 
-export type { ConnectionSummary, TerminalViewport };
+export type { ConnectionSummary };

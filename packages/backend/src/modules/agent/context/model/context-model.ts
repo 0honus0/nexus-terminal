@@ -95,7 +95,8 @@ export class ContextModel {
 
 	async readHistory(
 		command: ContextHistoryCommand,
-		admit: (facts: ContextHistoryFacts) => void,
+		sourceLimit: number,
+		fits: (facts: ContextHistoryFacts) => boolean,
 	): Promise<ContextHistoryBundle | null> {
 		const turns = await agentStorage(() =>
 			this.storage.readHistory(
@@ -106,8 +107,9 @@ export class ContextModel {
 					expectedVersion: command.expectedVersion,
 					includeThread: command.includeThread,
 				},
+				sourceLimit,
 				(facts) =>
-					admit({
+					fits({
 						sources: facts.sources,
 						runs: facts.runs,
 						steps: facts.steps,

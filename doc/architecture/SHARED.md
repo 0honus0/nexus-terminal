@@ -242,7 +242,7 @@ html-themes 的四个精确出口包含来源取值、名称/正文/完整编码
 
 ### B8 集成与插件源码边界
 
-Shared agent/integrations的model/http/http-codec/values及browser-*契约由新管理HTTP和模型工具消费者消费；内部配置、存储对象和技术资源保持独立类型并显式投影。秘密只定义写意图与存在标志。Shared agent/plugins已有publisher/stage/verify/install、升级/卸载/取消退役请求、安装/不可变版本/descriptor及严格响应codec。基础预算、entry命名空间和取值归values；32 MiB完整响应容纳当前用户256个stage/版本。新增独立数据/清除请求和安全对象，JSON文本128 KiB、key128 bytes；完整数据写入与RPC消息512 KiB，管理列表仍32 MiB。events/rpc-codec持有两端核心九方法；frontend-events/frontend-rpc-codec精确导出iframe握手、前端27方法及纯解码，实际消费者是Backend HTTP与交付的有限SDK。SDK窗口/MessagePort/计时器归Backend插件frontend Adapter，不进入Shared；host.appInfo和storage.get/put/delete与intents五方法均已有两端实际消费者，前端Agent管理/Run/订阅已有SDK消费者，正式父页的Shared RPC桥已消费，原生Host仍待迁移。不能从导出文件存在推断消费者完备。新manifest与正式前端迁移差异归实施方案F1，当前不保留旧Protocol桥。
+Shared agent/integrations的model/http/http-codec/values及browser-*契约由新管理HTTP和模型工具消费者消费；内部配置、存储对象和技术资源保持独立类型并显式投影。秘密只定义写意图与存在标志。Shared agent/plugins已有publisher/stage/verify/install、升级/卸载/取消退役请求、安装/不可变版本/descriptor及严格响应codec。基础预算、entry命名空间和取值归values；管理集合仍检查32 MiB完整编码预算，不再另按累计4096条解码拒绝；缓存保留数属于Backend政策，实际前后端继续消费相同stage状态和对象。新增独立数据/清除请求和安全对象，JSON文本128 KiB、key128 bytes；完整数据写入与RPC消息512 KiB，管理列表仍32 MiB。events/rpc-codec持有两端核心九方法；frontend-events/frontend-rpc-codec精确导出iframe握手、前端27方法及纯解码，实际消费者是Backend HTTP与交付的有限SDK。SDK窗口/MessagePort/计时器归Backend插件frontend Adapter，不进入Shared；host.appInfo和storage.get/put/delete与intents五方法均已有两端实际消费者，前端Agent管理/Run/订阅已有SDK消费者，正式父页的Shared RPC桥已消费，原生Host仍待迁移。不能从导出文件存在推断消费者完备。新manifest与正式前端迁移差异归实施方案F1，当前不保留旧Protocol桥。
 
 插件backend-sdk提供纯后端扩展context/请求/安全回复和生命周期类型；NativePluginBackendRuntime是实际consumer，NodeWorker不依赖App类型。repository-model/http/http-codec提供完整仓库设置CAS、目录、stage及推荐响应；版本格式、完整目录容量和源数量在values唯一维护，Shared与包/目录Adapter消费同一版本取值。所有新出口精确列入package.json；后端与正式插件管理已接HTTP/Source管理，整体Agent前端对接仍未完成；B10已验证交付SDK在真实Chromium中的有限依赖/握手/订阅链，未代替正式父页或完整仓库验收；B10另有实际仓库HTTP/目录/下载和子进程backend-sdk九方法的有限行为证据，未新增类型或扩大权限。
 
@@ -315,6 +315,8 @@ scope/http-codec的实例/定义集合、创建与状态更新已由正式App管
 ### 集成、Browser与Memory管理边界
 
 Browser的目标/端点/URL规则容量统一归browser-values，由Shared codec、持久Adapter及正式编辑器共同消费。integrations/http新增创建头和固定删除响应，由真实Backend入口与前端transport消费；集合引用唯一MAX_ITEMS，视图校验时间先后。MCP/ACP配置、完整目录及凭据写意图在前端逐字段转为独立应用对象，UUID创建键与原配置版本分别保留，不拼旧DTO。
+
+Memory/Artifact的分页offset与nextOffset采用各自values的安全整数预算，给每页容量预留加法空间，不再把10,000有效资源数当作历史分页终点；Backend准入与双端codec/transport共用。
 
 Memory四HTTP的完整codec由后端管理入口、对话候选审核及既有 API E2E 消费；正式设置记忆管理及其专用前端消费者已移除，不保留旧入口或伪造自动审核。列表查询增加可选 threadId，严格 UUID 解码并拒绝重复参数；后端分页前按来源 Run 的对话过滤，来源为空的记录不匹配。前端只用当前对话候选列表和版本化 publish/reject；不传 threadId 的全 App 列表及撤销 API 仍保留。跨App导入的请求、响应、codec及导入事件已删除，不保留旧协议分支。毫秒、单条/完整JSON预算仍归Shared；已有记忆、人工审核规则及运行时 Recall 保留。Run工具与正式Host各消费所属真实契约，管理接口不替代执行权限。
 

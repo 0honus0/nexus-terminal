@@ -1,23 +1,18 @@
 import { computed, onActivated, onMounted, ref, toRaw, watch } from 'vue';
 import {
-	acknowledgePluginRuntime,
-	getPluginRuntime,
 	installPluginStage,
 	listPluginInstallations,
 	listPluginPublishers,
-	listPluginStages,
 	listPluginVersions,
 	retirePluginInstallation,
 	revokePluginPublisher,
 	stagePluginCatalogEntry,
 	trustPluginPublisher,
 	upgradePluginInstallation,
-	verifyPluginStage,
 } from '../api/plugin-management-api';
 import type {
 	PluginInstallation,
 	PluginPublisher,
-	PluginRuntime,
 	PluginStage,
 	PluginVersion,
 	PluginCatalogEntry,
@@ -29,9 +24,7 @@ export function usePluginManagement(available: () => boolean = () => true) {
 	const officialPublisherIds = ref<string[]>([]);
 	const publishers = ref<PluginPublisher[]>([]);
 	const installations = ref<PluginInstallation[]>([]);
-	const stages = ref<PluginStage[]>([]);
 	const versions = ref<PluginVersion[]>([]);
-	const selectedStageId = ref('');
 	const candidate = ref<PluginStage | null>(null);
 	const candidateInstallation = computed(() =>
 		installations.value.find(
@@ -40,10 +33,6 @@ export function usePluginManagement(available: () => boolean = () => true) {
 	);
 	const label = ref('');
 	const publicKeyPem = ref('');
-	const runtime = ref<PluginRuntime | null>(null);
-	const runtimeAppId = ref('');
-	const runtimeInstanceId = ref('');
-	const runtimeAcknowledged = ref(false);
 	const mutationUnknown = ref(false);
 	const acknowledged = ref(false);
 	let writeIntent: symbol | null = null;
@@ -51,16 +40,10 @@ export function usePluginManagement(available: () => boolean = () => true) {
 		officialPublisherIds.value = [];
 		publishers.value = [];
 		installations.value = [];
-		stages.value = [];
 		versions.value = [];
-		selectedStageId.value = '';
 		candidate.value = null;
 		label.value = '';
 		publicKeyPem.value = '';
-		runtime.value = null;
-		runtimeAppId.value = '';
-		runtimeInstanceId.value = '';
-		runtimeAcknowledged.value = false;
 		mutationUnknown.value = reason === 'view' && (mutationUnknown.value || writeIntent !== null);
 		acknowledged.value = false;
 	}, available);
@@ -68,22 +51,17 @@ export function usePluginManagement(available: () => boolean = () => true) {
 	async function load(): Promise<void> {
 		await operation.execute(
 			async (signal) => {
-				const [publishers, installations, stages, versions] = await Promise.all([
+				const [publishers, installations, versions] = await Promise.all([
 					listPluginPublishers(signal),
 					listPluginInstallations(signal),
-					listPluginStages(signal),
 					listPluginVersions(signal),
 				]);
-				return { publishers, installations, stages, versions };
+				return { publishers, installations, versions };
 			},
 			(value) => {
 				publishers.value = value.publishers;
 				installations.value = value.installations;
-				stages.value = value.stages;
 				versions.value = value.versions;
-				if (!value.stages.some((item) => item.id === selectedStageId.value)) {
-					selectedStageId.value = '';
-				}
 			},
 			{ write: false },
 		);
@@ -142,19 +120,20 @@ export function usePluginManagement(available: () => boolean = () => true) {
 		await write(
 			(signal) => stagePluginCatalogEntry(original, source, signal),
 			(value) => {
-				selectedStageId.value = value.id;
-				candidate.value = value;
+				const current = installations.value.find(
+					(item) =>
+						item.status === 'installed' &&
+						item.definitionId === value.manifest?.id &&
+						item.version === value.manifest.version &&
+						item.packageHash === value.packageHash,
+				);
+				candidate.value = current ? null : value;
 			},
 		);
 	}
 
 	async function trustCatalogPublisher(name: string, pem: string): Promise<void> {
 		await write((signal) => trustPluginPublisher(name, pem, signal));
-	}
-
-	async function verify(stage: PluginStage): Promise<void> {
-		const original = structuredClone(toRaw(stage));
-		await write((signal) => verifyPluginStage(original, signal));
 	}
 
 	async function install(stage: PluginStage): Promise<void> {
@@ -169,10 +148,18 @@ export function usePluginManagement(available: () => boolean = () => true) {
 
 	async function applyCandidate(): Promise<void> {
 		const stage = candidate.value;
-		if (!stage || stage.status !== 'verified') {
+		if (!stage || (stage.status !== 'verified' && stage.status !== 'installed')) {
 			return;
 		}
 		const installation = candidateInstallation.value;
+		if (
+			installation?.status === 'installed' &&
+			installation.version === stage.manifest?.version &&
+			installation.packageHash === stage.packageHash
+		) {
+			candidate.value = null;
+			return;
+		}
 		if (!installation) {
 			await install(stage);
 			return;
@@ -195,48 +182,6 @@ export function usePluginManagement(available: () => boolean = () => true) {
 	async function retire(installation: PluginInstallation, cancel: boolean): Promise<void> {
 		const original = structuredClone(toRaw(installation));
 		await write((signal) => retirePluginInstallation(original, cancel, signal));
-	}
-
-	async function upgrade(installation: PluginInstallation, prepare: boolean): Promise<void> {
-		const selected = stages.value.find((item) => item.id === selectedStageId.value);
-		if (!selected || selected.status !== 'verified' || selected.manifest?.id !== installation.definitionId) {
-			return;
-		}
-		const original = structuredClone(toRaw(installation));
-		const stage = structuredClone(toRaw(selected));
-		await write((signal) => upgradePluginInstallation(original, stage, prepare, signal));
-	}
-
-	async function readRuntime(): Promise<void> {
-		if (operation.busy.value || operation.refreshRequired.value) {
-			return;
-		}
-		const appId = runtimeAppId.value;
-		const instanceId = runtimeInstanceId.value.trim() || null;
-		await operation.execute(
-			(signal) => getPluginRuntime(appId, instanceId, signal),
-			(value) => {
-				runtime.value = value;
-				runtimeAcknowledged.value = false;
-			},
-			{ write: false },
-		);
-	}
-
-	async function acknowledgeRuntime(): Promise<void> {
-		const installation = installations.value.find((item) => item.appId === runtime.value?.appId);
-		if (!runtime.value || !installation || !runtimeAcknowledged.value || runtime.value.state !== 'unknown') {
-			return;
-		}
-		const original = structuredClone(toRaw(runtime.value));
-		const current = structuredClone(toRaw(installation));
-		await write(
-			(signal) => acknowledgePluginRuntime(current, original, signal),
-			(value) => {
-				runtime.value = value;
-				runtimeAcknowledged.value = false;
-			},
-		);
 	}
 
 	function newIntent(): void {
@@ -264,34 +209,22 @@ export function usePluginManagement(available: () => boolean = () => true) {
 		officialPublisherIds,
 		publishers,
 		installations,
-		stages,
 		versions,
-		selectedStageId,
 		candidate,
 		candidateInstallation,
 		applyCandidate,
 		label,
 		publicKeyPem,
-		runtime,
-		runtimeAppId,
-		runtimeInstanceId,
-		runtimeAcknowledged,
 		mutationUnknown,
 		acknowledged,
 		operation,
 		canWrite,
-		write,
 		load,
 		trust,
 		revoke,
 		prepareCatalogEntry,
 		trustCatalogPublisher,
-		verify,
-		install,
 		retire,
-		upgrade,
-		readRuntime,
-		acknowledgeRuntime,
 		newIntent,
 	};
 }

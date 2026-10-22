@@ -96,10 +96,11 @@ export class SqliteMemoryStorage implements MemoryStorage {
 				));
 			identityUserId = current ? scope.userId : null;
 		}
-		const count = await tx.one('SELECT COUNT(*) AS count FROM agent_memories WHERE user_id=? AND app_id=?', [
-			scope.userId,
-			scope.appId,
-		]);
+		const now = Date.now();
+		const count = await tx.one(
+			"SELECT COUNT(*) AS count FROM agent_memories WHERE user_id=? AND app_id=? AND status!='revoked' AND (expires_at IS NULL OR expires_at>?)",
+			[scope.userId, scope.appId, now],
+		);
 		if (!count) {
 			throw new Error('Memory count missing');
 		}
@@ -116,7 +117,7 @@ export class SqliteMemoryStorage implements MemoryStorage {
 			identityUserId,
 			sourceExists,
 			count: memoryInteger(count.count),
-			now: Date.now(),
+			now,
 		};
 	}
 

@@ -38,10 +38,11 @@ export async function currentContextSources(
 		command.appId,
 		storedText(current.thread_id),
 		storedInteger(current.thread_sequence, 1),
+		snapshot.sources.length ? snapshot.sources[0].sequence - 1 : storedInteger(current.thread_sequence, 1) - 1,
 	];
 	const count = await tx.one(
 		`SELECT COUNT(*) AS count FROM agent_runs WHERE user_id=? AND app_id=? AND thread_id=?
-		 AND run_kind='root' AND thread_sequence<?`,
+		 AND run_kind='root' AND thread_sequence<? AND thread_sequence>?`,
 		params,
 	);
 	if (count === null || count.count !== snapshot.sources.length) {
@@ -49,7 +50,7 @@ export async function currentContextSources(
 	}
 	const sources = await tx.all(
 		`SELECT id,version,thread_sequence,status FROM agent_runs WHERE user_id=? AND app_id=? AND thread_id=?
-		 AND run_kind='root' AND thread_sequence<? ORDER BY thread_sequence`,
+		 AND run_kind='root' AND thread_sequence<? AND thread_sequence>? ORDER BY thread_sequence`,
 		params,
 	);
 	return (

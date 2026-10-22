@@ -90,7 +90,7 @@ export class ThreadModel {
 	async mutate(
 		access: ThreadAccess,
 		input: ThreadMutation,
-		admitCapacity: (threads: number, commands: number) => void,
+		admitCapacity: (threads: number) => void,
 		admit: (facts: ThreadAccessFacts) => void,
 	): Promise<AgentThread> {
 		const requestHash = createHash('sha256')

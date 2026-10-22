@@ -138,10 +138,8 @@ export class PluginRuntimeService {
 		try {
 			await this.model.reserveRuntime(
 				{ userId, appId, instanceId, revision: source.installation.revision },
-				(current, key, enabled, retained) => {
-					if (retained >= 4096) {
-						throw new AgentFailure('limit_exceeded');
-					}
+				128,
+				(current, key, enabled) => {
 					authorizePluginContent(current, key, enabled);
 					if (this.closing || signal.aborted || current.revision !== source.installation.revision) {
 						throw new AgentFailure('version_conflict');
@@ -273,13 +271,8 @@ export class PluginRuntimeService {
 			};
 			return {
 				method: input.method,
-				value: await this.model.runtimeMutateData(
-					userId,
-					appId,
-					mutation,
-					validate,
-					(current, keys, operations, bytes, resultBytes) =>
-						decidePluginData(mutation, current, keys, operations, bytes, resultBytes),
+				value: await this.model.runtimeMutateData(userId, appId, mutation, validate, (current, keys, bytes) =>
+					decidePluginData(mutation, current, keys, bytes),
 				),
 			};
 		});

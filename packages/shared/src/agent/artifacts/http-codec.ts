@@ -5,6 +5,7 @@ import {
 	AGENT_ARTIFACT_CONTENT_TYPES,
 	AGENT_ARTIFACT_MAX_BYTES,
 	AGENT_ARTIFACT_MAX_PAGE,
+	AGENT_ARTIFACT_MAX_OFFSET,
 	AGENT_ARTIFACT_MAX_RESPONSE_BYTES,
 } from './values.js';
 import type {
@@ -97,7 +98,7 @@ export function readAgentArtifactQuery(query: URLSearchParams): AgentArtifactQue
 		if (raw === null) {
 			return fallback;
 		}
-		if (!/^(0|[1-9][0-9]{0,8})$/u.test(raw)) {
+		if (!/^(0|[1-9][0-9]{0,15})$/u.test(raw)) {
 			throw new InvalidAgentPayload();
 		}
 		return agentInteger(Number(raw), min, max);
@@ -109,7 +110,7 @@ export function readAgentArtifactQuery(query: URLSearchParams): AgentArtifactQue
 		retained: retained === null ? null : retained === 'true',
 		kind,
 		q: query.get('q') === null || query.get('q') === '' ? '' : agentText(query.get('q'), 256),
-		offset: number('offset', 0, 0, 10000),
+		offset: number('offset', 0, 0, AGENT_ARTIFACT_MAX_OFFSET),
 		limit: number('limit', 20, 1, AGENT_ARTIFACT_MAX_PAGE),
 	};
 }
@@ -185,7 +186,10 @@ export function readAgentArtifactListResponse(value: unknown): AgentArtifactList
 	if (new Set(items.map((v) => v.id)).size !== items.length) {
 		throw new InvalidAgentPayload();
 	}
-	return { items, nextOffset: r.nextOffset === null ? null : agentInteger(r.nextOffset, 1, 10000) };
+	return {
+		items,
+		nextOffset: r.nextOffset === null ? null : agentInteger(r.nextOffset, 1, AGENT_ARTIFACT_MAX_OFFSET),
+	};
 }
 
 export function readAgentArtifactStorage(value: unknown): AgentArtifactStorageView {

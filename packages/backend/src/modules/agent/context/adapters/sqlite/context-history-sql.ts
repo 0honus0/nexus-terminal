@@ -193,7 +193,8 @@ export class SqliteContextStorage implements ContextStorage {
 
 	readHistory(
 		command: StoredContextHistoryCommand,
-		admit: (facts: StoredContextHistoryFacts) => void,
+		sourceLimit: number,
+		fits: (facts: StoredContextHistoryFacts) => boolean,
 	): Promise<StoredContextHistoryBundle | null> {
 		return this.db.transaction(async (tx) => {
 			const current = await tx.one(
@@ -220,54 +221,61 @@ export class SqliteContextStorage implements ContextStorage {
 				storedInteger(current.thread_sequence, 1),
 				0,
 			];
-			const total = await tx.one(
-				'SELECT COUNT(*) AS count FROM agent_runs WHERE id IN (' + HISTORY_SCOPE + ')',
-				params,
+			const candidates = await tx.all(
+				`WITH recent AS MATERIALIZED (
+				 SELECT id,version,thread_sequence,status,length(CAST(input_text AS BLOB)) AS input_bytes
+				 FROM agent_runs WHERE user_id=? AND app_id=? AND thread_id=?
+				 AND run_kind='root' AND thread_sequence<? AND thread_sequence>?
+				 ORDER BY thread_sequence DESC LIMIT ?
+				) SELECT r.id,r.version,r.thread_sequence,r.status,
+				 (SELECT COUNT(*) FROM agent_run_model_steps s WHERE s.run_id=r.id) AS steps,
+				 (SELECT COUNT(*) FROM agent_run_tools t WHERE t.run_id=r.id AND NOT EXISTS(SELECT 1 FROM agent_acp_permissions p WHERE p.tool_id=t.id)) AS tools,
+				 r.input_bytes
+				 +(SELECT COALESCE(SUM(length(CAST(e.text_delta AS BLOB))),0) FROM agent_run_model_step_events e WHERE e.run_id=r.id AND e.kind='text.delta')
+				 +(SELECT COALESCE(SUM(length(CAST(s.proposals_json AS BLOB))),0) FROM agent_run_model_steps s WHERE s.run_id=r.id)
+				 +(SELECT COALESCE(SUM(length(CAST(t.result_text AS BLOB))),0) FROM agent_run_tools t WHERE t.run_id=r.id AND NOT EXISTS(SELECT 1 FROM agent_acp_permissions p WHERE p.tool_id=t.id)) AS bytes
+				 FROM recent r ORDER BY r.thread_sequence DESC`,
+				[...params, sourceLimit],
 			);
-			if (!total) {
-				throw new Error('Missing source totals');
+			const selected: SqlRow[] = [];
+			let facts: StoredContextHistoryFacts = { sources: 0, runs: 0, steps: 0, tools: 0, bytes: 0 };
+			for (const row of candidates) {
+				const candidate = {
+					sources: facts.sources + 1,
+					runs: facts.runs + 1,
+					steps: facts.steps + storedInteger(row.steps),
+					tools: facts.tools + storedInteger(row.tools),
+					bytes: facts.bytes + storedInteger(row.bytes),
+				};
+				if (!fits(candidate)) {
+					break;
+				}
+				selected.push(row);
+				facts = candidate;
 			}
-			const sourceCount = storedInteger(total.count);
-			admit({ sources: sourceCount, runs: 0, steps: 0, tools: 0, bytes: 0 });
-			const sourceRows = await tx.all(
-				'SELECT id,version,thread_sequence,status FROM agent_runs WHERE id IN (' +
-					HISTORY_SCOPE +
-					') ORDER BY thread_sequence',
-				params,
-			);
-			const sources = sourceRows.map(sourceRow);
-			if (sources.length !== sourceCount) {
-				throw new Error('Context source count mismatch');
-			}
-			const summary = await historySummary(tx, params, sources);
+			selected.reverse();
+			const sources = selected.map(sourceRow);
+			params[4] = sources.length ? sources[0].sequence - 1 : storedInteger(current.thread_sequence, 1) - 1;
+			let summary = sources.length ? await historySummary(tx, params, sources) : null;
 			if (summary !== null) {
-				params[4] = sources[summary.coveredRuns - 1].sequence;
+				const summarized = selected.slice(0, summary.coveredRuns);
+				const compacted = {
+					sources: facts.sources,
+					runs: facts.runs - summarized.length,
+					steps: facts.steps - summarized.reduce((sum, row) => sum + storedInteger(row.steps), 0),
+					tools: facts.tools - summarized.reduce((sum, row) => sum + storedInteger(row.tools), 0),
+					bytes:
+						facts.bytes -
+						summarized.reduce((sum, row) => sum + storedInteger(row.bytes), 0) +
+						Buffer.byteLength(summary.content, 'utf8'),
+				};
+				if (fits(compacted)) {
+					facts = compacted;
+					params[4] = sources[summary.coveredRuns - 1].sequence;
+				} else {
+					summary = null;
+				}
 			}
-			const totals = await tx.one(
-				'WITH history AS (' +
-					HISTORY_SCOPE +
-					') SELECT ' +
-					'(SELECT COUNT(*) FROM history) AS runs,' +
-					'(SELECT COUNT(*) FROM agent_run_model_steps s JOIN history h ON h.id=s.run_id) AS steps,' +
-					'(SELECT COUNT(*) FROM agent_run_tools t JOIN history h ON h.id=t.run_id WHERE NOT EXISTS(SELECT 1 FROM agent_acp_permissions p WHERE p.tool_id=t.id)) AS tools,' +
-					'(SELECT COALESCE(SUM(length(CAST(r.input_text AS BLOB))),0) FROM agent_runs r JOIN history h ON h.id=r.id)' +
-					"+(SELECT COALESCE(SUM(length(CAST(e.text_delta AS BLOB))),0) FROM agent_run_model_step_events e JOIN history h ON h.id=e.run_id WHERE e.kind='text.delta')" +
-					'+(SELECT COALESCE(SUM(length(CAST(s.proposals_json AS BLOB))),0) FROM agent_run_model_steps s JOIN history h ON h.id=s.run_id)' +
-					'+(SELECT COALESCE(SUM(length(CAST(t.result_text AS BLOB))),0) FROM agent_run_tools t JOIN history h ON h.id=t.run_id WHERE NOT EXISTS(SELECT 1 FROM agent_acp_permissions p WHERE p.tool_id=t.id)) AS bytes',
-				params,
-			);
-			if (!totals) {
-				throw new Error('Missing context history totals');
-			}
-			const facts = {
-				sources: sourceCount,
-				runs: storedInteger(totals.runs),
-				steps: storedInteger(totals.steps),
-				tools: storedInteger(totals.tools),
-				bytes:
-					storedInteger(totals.bytes) + (summary === null ? 0 : Buffer.byteLength(summary.content, 'utf8')),
-			};
-			admit(facts);
 			const roots = await tx.all(
 				'SELECT id,version,thread_sequence,status,input_text FROM agent_runs WHERE id IN (' +
 					HISTORY_SCOPE +

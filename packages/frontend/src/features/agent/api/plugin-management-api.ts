@@ -21,11 +21,6 @@ import {
 	readAgentPluginRepositoryUrl,
 } from '@nexus-terminal/shared/agent/plugins/repository-http-codec';
 import {
-	readAgentPluginRuntimeAcknowledgement,
-	readAgentPluginRuntimeAcknowledged,
-	readAgentPluginRuntimeObservation,
-} from '@nexus-terminal/shared/agent/plugins/runtime-http-codec';
-import {
 	AGENT_PLUGIN_MAX_BODY_BYTES,
 	AGENT_PLUGIN_MAX_RESPONSE_BYTES,
 } from '@nexus-terminal/shared/agent/plugins/values';
@@ -36,7 +31,6 @@ import type {
 	PluginPublisher,
 	PluginRecommendation,
 	PluginRepositories,
-	PluginRuntime,
 	PluginStage,
 	PluginVersion,
 } from '../model/plugin-types';
@@ -46,7 +40,6 @@ import {
 	fromPluginPublisher,
 	fromPluginRecommendation,
 	fromPluginRepositories,
-	fromPluginRuntime,
 	fromPluginStage,
 	fromPluginVersion,
 } from '../model/plugin-mapper';
@@ -137,18 +130,6 @@ export async function listPluginInstallations(signal?: AbortSignal): Promise<Plu
 	return value.items.map(fromPluginInstallation);
 }
 
-export async function listPluginStages(signal?: AbortSignal): Promise<PluginStage[]> {
-	const value = await requestAgentManagement({
-		...budgets,
-		method: 'GET',
-		path: '/plugins/stages',
-		signal,
-
-		decode: (value) => readAgentPluginItems(value, readAgentPluginStageView),
-	});
-	return value.items.map(fromPluginStage);
-}
-
 export async function listPluginVersions(signal?: AbortSignal): Promise<PluginVersion[]> {
 	const value = await requestAgentManagement({
 		...budgets,
@@ -159,31 +140,6 @@ export async function listPluginVersions(signal?: AbortSignal): Promise<PluginVe
 		decode: (value) => readAgentPluginItems(value, readAgentPluginVersionView),
 	});
 	return value.items.map(fromPluginVersion);
-}
-
-export async function verifyPluginStage(original: PluginStage, signal?: AbortSignal): Promise<PluginStage> {
-	const value = await requestAgentManagement({
-		...budgets,
-		method: 'POST',
-		path: '/plugins/verify',
-		signal,
-
-		input: () => readAgentPluginInstall({ stageId: original.id, expectedVersion: original.version }),
-
-		decode(value) {
-			const stage = readAgentPluginStageView(value);
-			if (
-				stage.id !== original.id ||
-				stage.version <= original.version ||
-				stage.status !== 'verified' ||
-				stage.packageHash !== original.packageHash
-			) {
-				throw new Error('Plugin verification confirmation mismatch');
-			}
-			return stage;
-		},
-	});
-	return fromPluginStage(value);
 }
 
 export async function installPluginStage(original: PluginStage, signal?: AbortSignal): Promise<PluginInstallation> {
@@ -372,7 +328,7 @@ export async function stagePluginCatalogEntry(
 			if (
 				stage.packageHash !== entry.sha256 ||
 				stage.sizeBytes !== entry.sizeBytes ||
-				stage.status !== 'verified' ||
+				(stage.status !== 'verified' && stage.status !== 'installed') ||
 				stage.manifest?.id !== entry.definitionId ||
 				stage.manifest.version !== entry.version ||
 				stage.publisherKeyId !== entry.publisherKeyId
@@ -411,64 +367,4 @@ export async function installRecommendedPlugin(signal?: AbortSignal): Promise<Pl
 		decode: readAgentPluginInstallation,
 	});
 	return fromPluginInstallation(value);
-}
-
-export async function getPluginRuntime(
-	appId: string,
-	instanceId: string | null,
-	signal?: AbortSignal,
-): Promise<PluginRuntime | null> {
-	let suffix = '';
-	try {
-		if (instanceId !== null) {
-			suffix = '/' + encodeURIComponent(readAgentId(instanceId));
-		}
-	} catch (cause) {
-		throw new AgentManagementFailure('invalid_input', 'not_dispatched', { cause });
-	}
-	const value = await requestAgentManagement({
-		...budgets,
-		method: 'GET',
-		path: installationPath(appId) + '/runtime' + suffix,
-		signal,
-
-		decode(value) {
-			const item = readAgentPluginRuntimeObservation(value, appId);
-			if (item && instanceId !== null && item.instanceId !== instanceId) {
-				throw new Error('Runtime instance mismatch');
-			}
-			return item;
-		},
-	});
-	return value === null ? null : fromPluginRuntime(value);
-}
-
-export async function acknowledgePluginRuntime(
-	installation: PluginInstallation,
-	original: PluginRuntime,
-	signal?: AbortSignal,
-): Promise<PluginRuntime> {
-	const value = await requestAgentManagement({
-		...budgets,
-		method: 'POST',
-		path: installationPath(installation.appId) + '/runtime/acknowledge',
-		signal,
-
-		input: () =>
-			readAgentPluginRuntimeAcknowledgement({
-				expectedRevision: installation.revision,
-				instanceRevision: original.revision,
-				instanceId: original.instanceId,
-				confirmed: true,
-			}),
-
-		decode: (value) =>
-			readAgentPluginRuntimeAcknowledged(value, installation.appId, {
-				expectedRevision: installation.revision,
-				instanceRevision: original.revision,
-				instanceId: original.instanceId,
-				confirmed: true,
-			}),
-	});
-	return fromPluginRuntime(value);
 }

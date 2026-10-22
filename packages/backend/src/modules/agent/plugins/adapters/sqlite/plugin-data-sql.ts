@@ -49,42 +49,35 @@ export async function mutatePluginData(
 	userId: number,
 	appId: string,
 	input: StoredPluginDataMutation,
-	decide: (
-		current: StoredPluginData | null,
-		keyCount: number,
-		operationCount: number,
-		dataBytes: number,
-		operationBytes: number,
-	) => void,
+	decide: (current: StoredPluginData | null, keyCount: number, dataBytes: number) => void,
 ): Promise<StoredPluginData> {
 	const replay = await tx.one(
-		'SELECT content_hash,key,version,value_json,updated_at FROM agent_plugin_data_operations WHERE user_id=? AND app_id=? AND operation_id=?',
+		'SELECT content_hash,key,version,value_json,updated_at,retired FROM agent_plugin_data_operations WHERE user_id=? AND app_id=? AND operation_id=?',
 		[userId, appId, input.operationId],
 	);
 	if (replay) {
-		if (replay.content_hash !== input.contentHash) {
+		if (replay.content_hash !== input.contentHash || replay.retired !== 0) {
 			throw new PluginStorageRefusal('version_conflict');
 		}
 		return pluginDataRow(replay);
 	}
 	const current = await readPluginData(tx, userId, appId, input.key);
 	const counts = await tx.one(
-		'SELECT (SELECT COUNT(*) FROM agent_plugin_data WHERE user_id=? AND app_id=?) AS keys,(SELECT COUNT(*) FROM agent_plugin_data_operations WHERE user_id=? AND app_id=? AND retired=0) AS operations,(SELECT COALESCE(SUM(LENGTH(CAST(value_json AS BLOB))),0) FROM agent_plugin_data WHERE user_id=? AND app_id=?) AS data_bytes,(SELECT COALESCE(SUM(LENGTH(CAST(value_json AS BLOB))),0) FROM agent_plugin_data_operations WHERE user_id=? AND app_id=?) AS operation_bytes',
-		[userId, appId, userId, appId, userId, appId, userId, appId],
+		'SELECT COUNT(*) AS keys,COALESCE(SUM(LENGTH(CAST(value_json AS BLOB))),0) AS data_bytes FROM agent_plugin_data WHERE user_id=? AND app_id=? AND value_json IS NOT NULL',
+		[userId, appId],
 	);
-	if (
-		typeof counts?.keys !== 'number' ||
-		typeof counts.operations !== 'number' ||
-		typeof counts.data_bytes !== 'number' ||
-		typeof counts.operation_bytes !== 'number'
-	) {
+	if (typeof counts?.keys !== 'number' || typeof counts.data_bytes !== 'number') {
 		throw new Error('Plugin data count missing');
 	}
-	decide(current, counts.keys, counts.operations, counts.data_bytes, counts.operation_bytes);
+	decide(current, counts.keys, counts.data_bytes);
 	if (current?.version === Number.MAX_SAFE_INTEGER) {
 		throw new PluginStorageRefusal('version_conflict');
 	}
 	const version = (current?.version ?? 0) + 1;
+	await tx.run(
+		'UPDATE agent_plugin_data_operations SET retired=1,value_json=NULL WHERE user_id=? AND app_id=? AND key=? AND retired=0',
+		[userId, appId, input.key],
+	);
 	await tx.run(
 		'INSERT INTO agent_plugin_data VALUES(?,?,?,?,?,?) ON CONFLICT(user_id,app_id,key) DO UPDATE SET version=excluded.version,value_json=excluded.value_json,updated_at=excluded.updated_at',
 		[userId, appId, input.key, version, input.valueJson, input.now],

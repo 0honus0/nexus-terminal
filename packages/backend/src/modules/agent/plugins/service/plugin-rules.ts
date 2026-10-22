@@ -5,9 +5,7 @@ export function decidePluginData(
 	input: PluginDataMutation,
 	current: PluginData | null,
 	keyCount: number,
-	operationCount: number,
 	dataBytes: number,
-	operationBytes: number,
 ): void {
 	if (
 		(current?.version ?? 0) !== input.expectedVersion ||
@@ -18,10 +16,8 @@ export function decidePluginData(
 	const bytes = input.valueJson === null ? 0 : Buffer.byteLength(input.valueJson, 'utf8');
 	const replaced = current?.valueJson === null || current === null ? 0 : Buffer.byteLength(current.valueJson, 'utf8');
 	if (
-		(current === null && keyCount >= 1024) ||
-		operationCount >= 4096 ||
-		dataBytes - replaced + bytes > 8 * 1024 * 1024 ||
-		operationBytes + bytes > 32 * 1024 * 1024
+		((current === null || current.valueJson === null) && input.valueJson !== null && keyCount >= 1024) ||
+		dataBytes - replaced + bytes > 8 * 1024 * 1024
 	) {
 		throw new AgentFailure('limit_exceeded');
 	}

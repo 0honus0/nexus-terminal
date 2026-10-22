@@ -7,16 +7,14 @@ import type { ContextModel } from '../model/context-model.js';
 import type { ContextHistoryCommand, ContextHistoryFacts } from '../model/context-types.js';
 import { ContextService } from './context-service.js';
 
-function admitHistory(facts: ContextHistoryFacts): void {
-	if (
-		facts.sources > CONTEXT_MAX_SOURCES ||
-		facts.runs > CONTEXT_MAX_SOURCES ||
-		facts.steps > 1024 ||
-		facts.tools > 4096 ||
-		facts.bytes > 512 * 1024
-	) {
-		throw new AgentFailure('limit_exceeded');
-	}
+function fitsHistory(facts: ContextHistoryFacts): boolean {
+	return (
+		facts.sources <= CONTEXT_MAX_SOURCES &&
+		facts.runs <= CONTEXT_MAX_SOURCES &&
+		facts.steps <= 1024 &&
+		facts.tools <= 4096 &&
+		facts.bytes <= 512 * 1024
+	);
 }
 
 export class ContextHistoryService {
@@ -46,7 +44,7 @@ export class ContextHistoryService {
 	}
 
 	async open(command: ContextHistoryCommand, prompt: string): Promise<ContextService | null> {
-		const history = await this.model.readHistory(command, admitHistory);
+		const history = await this.model.readHistory(command, CONTEXT_MAX_SOURCES, fitsHistory);
 		return history === null ? null : new ContextService(prompt, history);
 	}
 }

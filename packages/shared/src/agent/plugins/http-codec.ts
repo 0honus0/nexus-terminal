@@ -300,7 +300,7 @@ export function readAgentPluginDescriptor(input: unknown): AgentPluginDescriptor
 
 export function readAgentPluginItems<T>(input: unknown, read: (value: unknown) => T): { items: T[] } {
 	const row = agentRecord(input, ['items'], AGENT_PLUGIN_MAX_RESPONSE_BYTES);
-	if (!Array.isArray(row.items) || row.items.length > 4096) {
+	if (!Array.isArray(row.items)) {
 		throw new InvalidAgentPayload();
 	}
 	return { items: row.items.map(read) };

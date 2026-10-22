@@ -108,7 +108,7 @@ export class SqlitePluginStorage implements PluginStorage {
 			runtimeClosed: boolean,
 			upgradePending: boolean,
 		) => void,
-		admitCapacity: (keys: number, bytes: number, retained: number) => void,
+		admitCapacity: (keys: number, bytes: number) => void,
 	): Promise<StoredPluginDataMigrationResult> {
 		return this.db.transaction(async (tx) => {
 			await this.migrationAuthority(tx, userId, digest, appId, admit);
@@ -210,29 +210,11 @@ export class SqlitePluginStorage implements PluginStorage {
 
 	reserveRuntime(
 		input: StoredPluginRuntimeLease,
-		admit: (
-			current: StoredPluginInstallation,
-			publisher: StoredPluginPublisher | null,
-			enabled: boolean,
-			retained: number,
-		) => void,
+		historyLimit: number,
+		admit: (current: StoredPluginInstallation, publisher: StoredPluginPublisher | null, enabled: boolean) => void,
 	): Promise<void> {
 		return this.db.transaction(async (tx) => {
-			const count = await tx.one('SELECT COUNT(*) AS count FROM agent_plugin_runtime_history WHERE user_id=?', [
-				input.userId,
-			]);
-			if (!count || typeof count.count !== 'number' || !Number.isSafeInteger(count.count) || count.count < 0) {
-				throw new Error('Corrupt runtime history count');
-			}
-			const retained = count.count;
-
-			const validate = (
-				current: StoredPluginInstallation,
-				publisher: StoredPluginPublisher | null,
-				enabled: boolean,
-			) => admit(current, publisher, enabled, retained);
-
-			const { current } = await this.runtimeAuthority(tx, input.userId, input.appId, validate);
+			const { current } = await this.runtimeAuthority(tx, input.userId, input.appId, admit);
 			if (current.revision !== input.revision || current.status !== 'installed') {
 				throw new PluginStorageRefusal('version_conflict');
 			}
@@ -250,10 +232,14 @@ export class SqlitePluginStorage implements PluginStorage {
 				);
 			}
 			await tx.run(
+				"DELETE FROM agent_plugin_runtime_history WHERE user_id=? AND app_id=? AND state='closed' AND unknown_at IS NULL AND instance_id NOT IN (SELECT instance_id FROM agent_plugin_runtime_history WHERE user_id=? AND app_id=? AND state='closed' AND unknown_at IS NULL ORDER BY updated_at DESC,instance_id DESC LIMIT ?)",
+				[input.userId, input.appId, input.userId, input.appId, historyLimit],
+			);
+			await tx.run(
 				"INSERT INTO agent_plugin_runtime_instances(user_id,app_id,instance_id,revision,state,updated_at) VALUES(?,?,?,?,'opening',?) ON CONFLICT(user_id,app_id) DO UPDATE SET instance_id=excluded.instance_id,revision=excluded.revision,state='opening',updated_at=excluded.updated_at,unknown_at=NULL,acknowledged_at=NULL",
 				[input.userId, input.appId, input.instanceId, input.revision, input.now],
 			);
-			await this.runtimeAuthority(tx, input.userId, input.appId, validate);
+			await this.runtimeAuthority(tx, input.userId, input.appId, admit);
 		});
 	}
 
@@ -290,7 +276,7 @@ export class SqlitePluginStorage implements PluginStorage {
 		operationId: string,
 		now: number,
 		admit: (identity: number | null, current: StoredPluginInstallation) => void,
-		decide: (currentRevision: number, purgeCount: number) => void,
+		decide: (currentRevision: number) => void,
 	): Promise<StoredPluginDataPurge> {
 		return this.db.transaction(async (tx) => {
 			const current = await this.installation(tx, userId, appId);
@@ -322,14 +308,7 @@ export class SqlitePluginStorage implements PluginStorage {
 					updatedAt: replay.updated_at,
 				};
 			}
-			const count = await tx.one(
-				'SELECT COUNT(*) AS count FROM agent_plugin_data_purges WHERE user_id=? AND app_id=?',
-				[userId, appId],
-			);
-			if (typeof count?.count !== 'number') {
-				throw new Error('Plugin purge count missing');
-			}
-			decide(current.revision, count.count);
+			decide(current.revision);
 			assertRevisionAvailable(current.revision);
 			const exhausted = await tx.one(
 				'SELECT key FROM agent_plugin_data WHERE user_id=? AND app_id=? AND value_json IS NOT NULL AND version>=? LIMIT 1',
@@ -463,13 +442,7 @@ export class SqlitePluginStorage implements PluginStorage {
 			publisher: StoredPluginPublisher | null,
 			enabled: boolean,
 		) => void,
-		decide: (
-			current: StoredPluginData | null,
-			keyCount: number,
-			operationCount: number,
-			dataBytes: number,
-			operationBytes: number,
-		) => void,
+		decide: (current: StoredPluginData | null, keyCount: number, dataBytes: number) => void,
 	): Promise<StoredPluginData> {
 		return this.db.transaction(async (tx) => {
 			await this.dataAuthority(tx, userId, digest, appId, admit);
@@ -481,7 +454,7 @@ export class SqlitePluginStorage implements PluginStorage {
 
 	async versions(userId: number): Promise<StoredPluginVersion[]> {
 		const rows = await this.db.all(
-			"SELECT DISTINCT v.definition_id,v.version,v.manifest_json,v.package_hash,v.publisher_key_id FROM agent_plugin_versions v JOIN agent_plugin_stages s ON s.package_hash=v.package_hash AND s.publisher_key_id=v.publisher_key_id WHERE s.user_id=? AND s.status='installed' ORDER BY v.definition_id,v.version",
+			'SELECT v.definition_id,v.version,v.manifest_json,v.package_hash,v.publisher_key_id FROM agent_plugin_versions v JOIN agent_plugin_installations i ON i.definition_id=v.definition_id AND i.version=v.version AND i.package_hash=v.package_hash AND i.publisher_key_id=v.publisher_key_id WHERE i.user_id=? ORDER BY v.definition_id,v.version',
 			[userId],
 		);
 		return rows.map((row) => {
@@ -631,13 +604,7 @@ export class SqlitePluginStorage implements PluginStorage {
 		appId: string,
 		input: StoredPluginDataMutation,
 		admit: (current: StoredPluginInstallation, publisher: StoredPluginPublisher | null, enabled: boolean) => void,
-		decide: (
-			current: StoredPluginData | null,
-			keyCount: number,
-			operationCount: number,
-			dataBytes: number,
-			operationBytes: number,
-		) => void,
+		decide: (current: StoredPluginData | null, keyCount: number, dataBytes: number) => void,
 	): Promise<StoredPluginData> {
 		return this.db.transaction(async (tx) => {
 			await this.runtimeAuthority(tx, userId, appId, admit);
@@ -974,9 +941,10 @@ export class SqlitePluginStorage implements PluginStorage {
 	): Promise<StoredPluginPublisher> {
 		return this.db.transaction(async (tx) => {
 			const existing = (await publishers(tx, userId)).find((item) => item.keyId === record.keyId) ?? null;
-			const count = await tx.one('SELECT COUNT(*) AS count FROM agent_plugin_publishers WHERE user_id=?', [
-				userId,
-			]);
+			const count = await tx.one(
+				'SELECT COUNT(*) AS count FROM agent_plugin_publishers WHERE user_id=? AND revoked_at IS NULL',
+				[userId],
+			);
 			if (typeof count?.count !== 'number') {
 				throw new Error('Publisher count missing');
 			}
@@ -1059,14 +1027,10 @@ export class SqlitePluginStorage implements PluginStorage {
 		userId: number,
 		digest: string,
 		record: StoredPluginStage,
-		admit: (identity: number | null, count: number) => void,
+		admit: (identity: number | null) => void,
 	): Promise<StoredPluginStage> {
 		return this.db.transaction(async (tx) => {
-			const count = await tx.one('SELECT COUNT(*) AS count FROM agent_plugin_stages WHERE user_id=?', [userId]);
-			if (typeof count?.count !== 'number') {
-				throw new Error('Stage count missing');
-			}
-			admit(await this.identity(tx, digest), count.count);
+			admit(await this.identity(tx, digest));
 			await tx.run('INSERT INTO agent_plugin_stages VALUES(?,?,?,?,?,?,?,?,?,?)', [
 				record.id,
 				userId,
@@ -1084,6 +1048,84 @@ export class SqlitePluginStorage implements PluginStorage {
 				throw new Error('Created stage missing');
 			}
 			return saved;
+		});
+	}
+
+	reusableStage(
+		userId: number,
+		digest: string,
+		packageHash: string,
+		admit: (
+			identity: number | null,
+			current: StoredPluginStage | null,
+			publisher: StoredPluginPublisher | null,
+		) => void,
+	): Promise<StoredPluginStage | null> {
+		return this.db.transaction(async (tx) => {
+			const row = await tx.one(
+				`SELECT s.* FROM agent_plugin_stages s WHERE s.user_id=? AND s.package_hash=?
+				 AND s.status IN ('verified','installed') ORDER BY
+				 EXISTS(SELECT 1 FROM agent_plugin_retirements r WHERE r.stage_id=s.id) DESC,
+				 s.updated_at DESC,s.id DESC LIMIT 1`,
+				[userId, packageHash],
+			);
+			const current = row === null ? null : stageRow(row);
+			const publisher =
+				current === null
+					? null
+					: ((await publishers(tx, userId)).find((item) => item.keyId === current.publisherKeyId) ?? null);
+			admit(await this.identity(tx, digest), current, publisher);
+			return current;
+		});
+	}
+
+	claimStageCleanup(
+		userId: number,
+		digest: string,
+		retain: number,
+		admit: (identity: number | null) => void,
+	): Promise<StoredPluginStage[]> {
+		return this.db.transaction(async (tx) => {
+			admit(await this.identity(tx, digest));
+			const rows = await tx.all(
+				`SELECT s.* FROM agent_plugin_stages s WHERE s.user_id=? AND s.status!='staging'
+				 AND NOT EXISTS(SELECT 1 FROM agent_plugin_versions v WHERE v.stage_id=s.id)
+				 AND NOT EXISTS(SELECT 1 FROM agent_plugin_retirements r WHERE r.stage_id=s.id)
+				 ORDER BY s.updated_at DESC,s.id DESC LIMIT -1 OFFSET ?`,
+				[userId, retain],
+			);
+			const result: StoredPluginStage[] = [];
+			for (const row of rows) {
+				const current = stageRow(row);
+				assertRevisionAvailable(current.version);
+				await tx.run(
+					"UPDATE agent_plugin_stages SET status='failed',version=version+1,manifest_json=NULL,publisher_key_id=NULL WHERE id=?",
+					[current.id],
+				);
+				result.push({
+					id: current.id,
+					packageHash: current.packageHash,
+					sizeBytes: current.sizeBytes,
+					status: 'failed',
+					version: current.version + 1,
+					publisherKeyId: null,
+					manifest: null,
+					createdAt: current.createdAt,
+					updatedAt: current.updatedAt,
+				});
+			}
+			return result;
+		});
+	}
+
+	finishStageCleanup(userId: number, id: string, version: number): Promise<void> {
+		return this.db.transaction(async (tx) => {
+			await tx.run(
+				`DELETE FROM agent_plugin_stages WHERE user_id=? AND id=? AND version=? AND status='failed'
+				 AND NOT EXISTS(SELECT 1 FROM agent_plugin_versions WHERE stage_id=?)
+				 AND NOT EXISTS(SELECT 1 FROM agent_plugin_retirements WHERE stage_id=?)`,
+				[userId, id, version, id, id],
+			);
 		});
 	}
 

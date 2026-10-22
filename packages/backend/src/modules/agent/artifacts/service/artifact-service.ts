@@ -7,6 +7,7 @@ import {
 	AGENT_ARTIFACT_MAX_CLEANUP_ITEMS,
 	AGENT_ARTIFACT_MAX_BYTES,
 	AGENT_ARTIFACT_MAX_PAGE,
+	AGENT_ARTIFACT_MAX_OFFSET,
 } from '@nexus-terminal/shared/agent/artifacts/values';
 import { AgentFailure, ToolCleanupFailure, isAgentDrainFailure } from '../../agent-failure.js';
 import type { ArtifactModel } from '../model/artifact-model.js';
@@ -522,7 +523,7 @@ export class ArtifactService {
 			query.limit > AGENT_ARTIFACT_MAX_PAGE ||
 			!Number.isSafeInteger(query.offset) ||
 			query.offset < 0 ||
-			query.offset > 10000 ||
+			query.offset > AGENT_ARTIFACT_MAX_OFFSET ||
 			Buffer.byteLength(query.q, 'utf8') > 256
 		) {
 			throw new AgentFailure('invalid_input');

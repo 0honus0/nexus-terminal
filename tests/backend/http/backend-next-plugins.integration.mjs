@@ -298,7 +298,7 @@ await test(
 					403,
 				);
 			});
-			await t.test('plugin data writes have CAS and replay immutable original result', async () => {
+			await t.test('plugin data writes replay current receipts and reject superseded receipts', async () => {
 				const input = {
 					expectedRevision: installation.revision,
 					expectedVersion: 0,
@@ -309,6 +309,7 @@ await test(
 					expectStatus(await f.api('PUT', dataPath('setting'), input), 200),
 				);
 				assert.equal(initialData.version, 1);
+				assert.deepEqual(expectStatus(await f.api('PUT', dataPath('setting'), input), 200), initialData);
 				const next = expectStatus(
 					await f.api('PUT', dataPath('setting'), {
 						...input,
@@ -319,7 +320,7 @@ await test(
 					200,
 				);
 				assert.equal(next.version, 2);
-				assert.deepEqual(expectStatus(await f.api('PUT', dataPath('setting'), input), 200), initialData);
+				expectStatus(await f.api('PUT', dataPath('setting'), input), 409);
 				assert.equal((await data('setting')).valueJson, '{"count":2}');
 				expectStatus(await f.api('PUT', dataPath('setting'), { ...input, valueJson: '{"count":999}' }), 409);
 			});

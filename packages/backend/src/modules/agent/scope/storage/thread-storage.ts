@@ -73,7 +73,7 @@ export interface ThreadStorage {
 		access: StoredThreadAccess,
 		input: StoredThreadMutation,
 		admit: (facts: StoredThreadAccessFacts) => void,
-		admitCapacity: (threads: number, commands: number) => void,
+		admitCapacity: (threads: number) => void,
 	): Promise<ThreadRecord>;
 	remove(
 		access: StoredThreadAccess,

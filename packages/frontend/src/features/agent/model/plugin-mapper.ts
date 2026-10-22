@@ -13,7 +13,6 @@ import type {
 	AgentPluginRecommended,
 	AgentPluginRepositorySettings,
 } from '@nexus-terminal/shared/agent/plugins/repository-model';
-import type { AgentPluginRuntimeObservation } from '@nexus-terminal/shared/agent/plugins/runtime-model';
 import type {
 	AgentPluginDataSnapshot,
 	AgentPluginDataMigrationResult,
@@ -28,7 +27,6 @@ import type {
 	PluginCatalogEntry,
 	PluginRecommendation,
 	PluginRepositories,
-	PluginRuntime,
 	PluginDataValue,
 	PluginDataSnapshot,
 	PluginDataPurge,
@@ -132,18 +130,6 @@ export function fromPluginRecommendation(value: AgentPluginRecommended): PluginR
 	return {
 		entry: value.entry === null ? null : fromPluginCatalogEntry(value.entry),
 		installation: value.installation === null ? null : fromPluginInstallation(value.installation),
-	};
-}
-
-export function fromPluginRuntime(value: AgentPluginRuntimeObservation): PluginRuntime {
-	return {
-		appId: value.appId,
-		instanceId: value.instanceId,
-		revision: value.revision,
-		state: value.state,
-		updatedAt: value.updatedAt,
-		unknownAt: value.unknownAt,
-		acknowledgedAt: value.acknowledgedAt,
 	};
 }
 

@@ -103,8 +103,8 @@ export class ThreadService {
 		return this.model.mutate(
 			access,
 			command,
-			(threads, commands) => {
-				if ((input.kind === 'create' && threads >= 512) || commands >= 4096) {
+			(threads) => {
+				if (input.kind === 'create' && threads >= 512) {
 					throw new AgentFailure('limit_exceeded');
 				}
 			},

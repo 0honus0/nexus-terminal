@@ -89,7 +89,7 @@ export interface PluginStorage {
 			runtimeClosed: boolean,
 			upgradePending: boolean,
 		) => void,
-		admitCapacity: (keys: number, bytes: number, retained: number) => void,
+		admitCapacity: (keys: number, bytes: number) => void,
 	): Promise<StoredPluginDataMigrationResult>;
 	withFrontendAdmission<T>(
 		userId: number,
@@ -124,12 +124,8 @@ export interface PluginStorage {
 	recoverRuntimes(now: number): Promise<void>;
 	reserveRuntime(
 		input: StoredPluginRuntimeLease,
-		admit: (
-			current: StoredPluginInstallation,
-			publisher: StoredPluginPublisher | null,
-			enabled: boolean,
-			retained: number,
-		) => void,
+		historyLimit: number,
+		admit: (current: StoredPluginInstallation, publisher: StoredPluginPublisher | null, enabled: boolean) => void,
 	): Promise<void>;
 	settleRuntime(input: StoredPluginRuntimeLease, state: 'active' | 'closed' | 'unknown'): Promise<void>;
 
@@ -150,13 +146,7 @@ export interface PluginStorage {
 		appId: string,
 		input: StoredPluginDataMutation,
 		admit: (current: StoredPluginInstallation, publisher: StoredPluginPublisher | null, enabled: boolean) => void,
-		decide: (
-			current: StoredPluginData | null,
-			keyCount: number,
-			operationCount: number,
-			dataBytes: number,
-			operationBytes: number,
-		) => void,
+		decide: (current: StoredPluginData | null, keyCount: number, dataBytes: number) => void,
 	): Promise<StoredPluginData>;
 
 	purgeData(
@@ -167,7 +157,7 @@ export interface PluginStorage {
 		operationId: string,
 		now: number,
 		admit: (identity: number | null, current: StoredPluginInstallation) => void,
-		decide: (currentRevision: number, purgeCount: number) => void,
+		decide: (currentRevision: number) => void,
 	): Promise<StoredPluginDataPurge>;
 
 	readData(
@@ -193,13 +183,7 @@ export interface PluginStorage {
 			publisher: StoredPluginPublisher | null,
 			enabled: boolean,
 		) => void,
-		decide: (
-			current: StoredPluginData | null,
-			keyCount: number,
-			operationCount: number,
-			dataBytes: number,
-			operationBytes: number,
-		) => void,
+		decide: (current: StoredPluginData | null, keyCount: number, dataBytes: number) => void,
 	): Promise<StoredPluginData>;
 
 	versions(userId: number): Promise<StoredPluginVersion[]>;
@@ -283,8 +267,25 @@ export interface PluginStorage {
 		userId: number,
 		digest: string,
 		record: StoredPluginStage,
-		admit: (identity: number | null, count: number) => void,
+		admit: (identity: number | null) => void,
 	): Promise<StoredPluginStage>;
+	reusableStage(
+		userId: number,
+		digest: string,
+		packageHash: string,
+		admit: (
+			identity: number | null,
+			current: StoredPluginStage | null,
+			publisher: StoredPluginPublisher | null,
+		) => void,
+	): Promise<StoredPluginStage | null>;
+	claimStageCleanup(
+		userId: number,
+		digest: string,
+		retain: number,
+		admit: (identity: number | null) => void,
+	): Promise<StoredPluginStage[]>;
+	finishStageCleanup(userId: number, id: string, version: number): Promise<void>;
 	getStage(userId: number, id: string): Promise<StoredPluginStage | null>;
 	updateStage(
 		userId: number,

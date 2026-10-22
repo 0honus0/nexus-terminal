@@ -17,7 +17,7 @@ import type { BlobStore } from '../../../../platform/blobs/blob-store.js';
 import { BlobFailure } from '../../../../platform/blobs/blob-store.js';
 import type { PackageSignature } from '../../../../platform/packages/package-reader.js';
 import type { PluginPackageDecoder } from '../storage/plugin-package.js';
-import { AgentFailure, AgentResourceFenced, ToolCleanupFailure } from '../../agent-failure.js';
+import { AgentFailure, AgentResourceFenced, ToolCleanupFailure, aggregateAgentFailures } from '../../agent-failure.js';
 import { agentStorage } from '../../agent-storage-failure.js';
 import type {
 	StoredPluginData,
@@ -168,7 +168,7 @@ export class PluginModel {
 			runtimeClosed: boolean,
 			upgradePending: boolean,
 		) => void,
-		admitCapacity: (keys: number, bytes: number, retained: number) => void,
+		admitCapacity: (keys: number, bytes: number) => void,
 	): Promise<PluginDataMigrationResult> {
 		const items = input.items
 			.map((item) => ({ key: item.key, expectedVersion: item.expectedVersion, valueJson: item.valueJson }))
@@ -255,7 +255,7 @@ export class PluginModel {
 		revision: number,
 		operationId: string,
 		admit: (userId: number | null, current: PluginInstallation) => void,
-		decide: (currentRevision: number, purgeCount: number) => void,
+		decide: (currentRevision: number) => void,
 	): Promise<PluginDataPurge> {
 		const result = await storage(() =>
 			this.storage.purgeData(
@@ -321,13 +321,7 @@ export class PluginModel {
 			publisher: PluginPublisher | null,
 			enabled: boolean,
 		) => void,
-		decide: (
-			current: PluginData | null,
-			keyCount: number,
-			operationCount: number,
-			dataBytes: number,
-			operationBytes: number,
-		) => void,
+		decide: (current: PluginData | null, keyCount: number, dataBytes: number) => void,
 	): Promise<PluginData> {
 		const contentHash = createHash('sha256')
 			.update(JSON.stringify([input.expectedRevision, input.key, input.expectedVersion, input.valueJson]))
@@ -347,14 +341,8 @@ export class PluginModel {
 					},
 					(userId, current, key, enabled) =>
 						admit(userId, installation(current), key === null ? null : publisher(key), enabled),
-					(current, keyCount, operationCount, dataBytes, operationBytes) =>
-						decide(
-							current === null ? null : data(current),
-							keyCount,
-							operationCount,
-							dataBytes,
-							operationBytes,
-						),
+					(current, keyCount, dataBytes) =>
+						decide(current === null ? null : data(current), keyCount, dataBytes),
 				),
 			),
 		);
@@ -551,12 +539,8 @@ export class PluginModel {
 
 	async reserveRuntime(
 		lease: PluginRuntimeLease,
-		admit: (
-			current: PluginInstallation,
-			publisher: PluginPublisher | null,
-			enabled: boolean,
-			retained: number,
-		) => void,
+		historyLimit: number,
+		admit: (current: PluginInstallation, publisher: PluginPublisher | null, enabled: boolean) => void,
 	): Promise<void> {
 		await storage(() =>
 			this.storage.reserveRuntime(
@@ -567,8 +551,8 @@ export class PluginModel {
 					revision: lease.revision,
 					now: Date.now(),
 				},
-				(current, key, enabled, retained) =>
-					admit(installation(current), key === null ? null : publisher(key), enabled, retained),
+				historyLimit,
+				(current, key, enabled) => admit(installation(current), key === null ? null : publisher(key), enabled),
 			),
 		);
 	}
@@ -667,13 +651,7 @@ export class PluginModel {
 		appId: string,
 		input: PluginDataMutation,
 		admit: (current: PluginInstallation, publisher: PluginPublisher | null, enabled: boolean) => void,
-		decide: (
-			current: PluginData | null,
-			keyCount: number,
-			operationCount: number,
-			dataBytes: number,
-			operationBytes: number,
-		) => void,
+		decide: (current: PluginData | null, keyCount: number, dataBytes: number) => void,
 	): Promise<PluginData> {
 		const contentHash = createHash('sha256')
 			.update(JSON.stringify([input.expectedRevision, input.key, input.expectedVersion, input.valueJson]))
@@ -690,8 +668,7 @@ export class PluginModel {
 					now: Date.now(),
 				},
 				(current, key, enabled) => admit(installation(current), key === null ? null : publisher(key), enabled),
-				(current, keys, operations, dataBytes, operationBytes) =>
-					decide(current === null ? null : data(current), keys, operations, dataBytes, operationBytes),
+				(current, keys, dataBytes) => decide(current === null ? null : data(current), keys, dataBytes),
 			),
 		);
 		return data(result);
@@ -1076,13 +1053,102 @@ export class PluginModel {
 		return stage(value);
 	}
 
+	async reusableStage(
+		actor: PluginActor,
+		bytes: Uint8Array,
+		signal: AbortSignal,
+		admit: (identity: number | null, current: PluginStage | null, publisher: PluginPublisher | null) => void,
+	): Promise<PluginStage | null> {
+		const hash = createHash('sha256').update(bytes).digest('hex');
+
+		const find = () =>
+			storage(() =>
+				this.storage.reusableStage(
+					actor.userId,
+					this.tokens.digest(actor.token),
+					hash,
+					(identity, current, key) =>
+						admit(identity, current === null ? null : stage(current), key === null ? null : publisher(key)),
+				),
+			);
+
+		const current = await find();
+		if (current === null) {
+			return null;
+		}
+		const digest = createHash('sha256');
+		let count = 0;
+		try {
+			if ((await this.blobs.size(current.id)) !== current.sizeBytes) {
+				throw new AgentFailure('version_conflict');
+			}
+			for await (const chunk of this.blobs.read(
+				current.id,
+				{ start: 0, endInclusive: current.sizeBytes - 1 },
+				signal,
+			)) {
+				count += chunk.byteLength;
+				if (count > current.sizeBytes) {
+					throw new AgentFailure('version_conflict');
+				}
+				digest.update(chunk);
+			}
+		} catch (error) {
+			if (error instanceof AgentFailure) {
+				throw error;
+			}
+			blobFailure(error);
+		}
+		if (signal.aborted) {
+			throw new AgentFailure('provider_unavailable');
+		}
+		if (count !== bytes.byteLength || digest.digest('hex') !== hash) {
+			throw new AgentFailure('version_conflict');
+		}
+		const latest = await find();
+		if (signal.aborted) {
+			throw new AgentFailure('provider_unavailable');
+		}
+		if (latest?.id !== current.id || latest.version !== current.version) {
+			throw new AgentFailure('version_conflict');
+		}
+		return stage(latest);
+	}
+
+	async pruneStages(actor: PluginActor, retain: number, admit: (identity: number | null) => void): Promise<void> {
+		const records = await storage(() =>
+			this.storage.claimStageCleanup(actor.userId, this.tokens.digest(actor.token), retain, admit),
+		);
+		const failures: unknown[] = [];
+		for (const record of records) {
+			try {
+				try {
+					await this.blobs.remove(record.id);
+				} catch (error) {
+					if (!(error instanceof BlobFailure && error.kind === 'not_found')) {
+						blobFailure(error);
+					}
+				}
+				await storage(() => this.storage.finishStageCleanup(actor.userId, record.id, record.version));
+			} catch (error) {
+				failures.push(error);
+			}
+		}
+		if (failures.length) {
+			throw aggregateAgentFailures(failures, 'Plugin stage cleanup failed');
+		}
+	}
+
 	async stage(
 		actor: PluginActor,
 		id: string,
 		bytes: Uint8Array,
 		signal: AbortSignal,
-		admit: (identity: number | null, count: number) => void,
+		admit: (identity: number | null) => void,
 	): Promise<PluginStage> {
+		if (signal.aborted) {
+			throw new AgentFailure('provider_unavailable');
+		}
 		const hash = createHash('sha256').update(bytes).digest('hex'),
 			now = Date.now();
 		const staged = await storage(() =>
@@ -1100,7 +1166,12 @@ export class PluginModel {
 					createdAt: now,
 					updatedAt: now,
 				},
-				admit,
+				(identity) => {
+					if (signal.aborted) {
+						throw new AgentFailure('provider_unavailable');
+					}
+					admit(identity);
+				},
 			),
 		);
 
@@ -1128,7 +1199,7 @@ export class PluginModel {
 					staged.version,
 					Date.now(),
 					(identity, current) => {
-						admit(identity, 0);
+						admit(identity);
 						if (current.status !== 'staging') {
 							throw new AgentFailure('version_conflict');
 						}

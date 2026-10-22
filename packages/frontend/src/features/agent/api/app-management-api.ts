@@ -4,7 +4,6 @@ import {
 	readAgentAppPath,
 	readAgentAppResponse,
 	readAgentAppStateUpdateRequest,
-	readAgentCreateAppRequest,
 } from '@nexus-terminal/shared/agent/scope/http-codec';
 import { AGENT_APP_MAX_RESPONSE_BYTES } from '@nexus-terminal/shared/agent/scope/values';
 import { AGENT_MAX_JSON_BODY_BYTES } from '@nexus-terminal/shared/agent/values';
@@ -22,7 +21,6 @@ import {
 	AGENT_GOVERNANCE_MAX_GRANT_BODY_BYTES,
 	AGENT_GOVERNANCE_MAX_RESPONSE_BYTES,
 } from '@nexus-terminal/shared/agent/governance/values';
-import type { AgentCreateAppRequest } from '@nexus-terminal/shared/agent/scope/http';
 import type {
 	AgentExecutionPolicyReplaceRequest,
 	AgentGrantReplaceRequest,
@@ -80,39 +78,6 @@ export async function listAppDefinitions(signal?: AbortSignal): Promise<AppDefin
 		signal,
 	});
 	return result.map(fromAppDefinition);
-}
-
-export async function createManagedApp(name: string, definitionId: string, signal?: AbortSignal): Promise<ManagedApp> {
-	let expected: AgentCreateAppRequest | null = null;
-	const result = await requestAgentManagement({
-		method: 'POST',
-		path: '/apps',
-		expectedStatus: 201,
-
-		input() {
-			expected = readAgentCreateAppRequest({ name, definitionId });
-			return expected;
-		},
-
-		maxRequestBytes: AGENT_MAX_JSON_BODY_BYTES,
-		maxResponseBytes: AGENT_MAX_JSON_BODY_BYTES,
-
-		decode(value) {
-			const app = readAgentAppResponse(value);
-			if (
-				!expected ||
-				app.name !== expected.name.trim() ||
-				app.definitionId !== expected.definitionId ||
-				app.version !== 1
-			) {
-				throw new Error('Unexpected App creation confirmation');
-			}
-			return app;
-		},
-
-		signal,
-	});
-	return fromManagedApp(result);
 }
 
 export async function setManagedAppEnabled(

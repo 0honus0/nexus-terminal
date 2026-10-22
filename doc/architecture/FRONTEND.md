@@ -61,6 +61,10 @@ Artifact正式库归artifact-management-api、artifact-types/mapper、use-artifa
 
 插件正式管理归plugin-management-api、plugin-data-api、plugin-types/mapper、use-plugin-management以及PluginManagementSettings/PluginRepositorySettings/PluginDataEditor；AgentSettingsPanel安装唯一普通插件管理owner，共供市场候选确认与App卡片卸载，安装目录确认刷新后由唯一App列表owner重新读取。标题栏保留刷新仓库，安装与升级仅从默认/第三方仓库选择插件，不提供本地包上传；市场按来源展示所有者、折叠、地址复制和紧凑插件卡片；官方应用徽标仅在默认目录发布者与实际安装签名身份匹配时显示，不以定义名冒充官方来源。旧聚合settings、假安装进度与旧管理transport已删除。发布者version、包version、安装revision独立；App卡片展示definitionVersion而非数字CAS。卸载确认复用当前排空/取消语义，数据清理独立确认，不虚构原子卸载删除。数据原意图/operationId在未知后保持不变。快照仅在draining状态读取；普通单键读取与已移除数据清除不借用迁移快照。
 
+仓库候选接受Shared已有verified/installed状态，核对包hash/大小、manifest与发布者后转换；已安装同版本同hash核验只记录成功，不开放必失败升级。准备升级后重新选同一包由后端复用权威stage，前端不伪造退役绑定或放宽安装CAS；不改模板和样式。
+
+正式管理客户端只保留仓库候选安装/升级，不读取旧维护面板的暂存列表，也不持有手工核验、运行实例观测/确认或手动创建 App 的无消费者状态、API 包装及映射。对应后端管理接口与 Shared 契约保留；实际插件运行仍由 plugin-runtime-api 与 host-bridge 消费，不与维护诊断混用。
+
 AppGovernanceEditor仅展示旧能力抽屉，AppExecutionPolicySettings/Editor恢复独立策略区、App选择与单位/上下文策略卡片。use-app-governance按grants/policy模式只初始化对应资源；二者各持独立版本、操作围栏和active撤销scope，不重复读取或写入另一资源。数量无效状态阻止提交旧有效值；批量能力切换只修改当前声明能力，不隐式删除待显式清理的不可用授权。当前新版无旧运行/审批汇总，不伪造指标，也不在普通卡片平铺创建实例或技术修订。
 
 use-app-management 是设置页 App/定义目录及刷新需求的唯一 owner，接入面板 active；面板仅将插件目录确认变化及 onboarding 成功投影为 reload 意图。两个资源独立排队，忙时合并一次后续读取，失效前读取不能回填；普通写入仍串行、使用原版本，不自动重试；自动目录刷新不解除既有或排队期间新产生的写入失败围栏，保留原入口显式核对。撤销清空目录及排队需求，返回重新读取，读取失败不伪造空列表。

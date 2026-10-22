@@ -67,7 +67,9 @@ export class SqliteMachineMutationStorage implements MachineMutationStorage {
 				}
 			}
 			const resources = await tx.one('SELECT COUNT(*) AS total FROM remote_machine_mutations');
-			const history = await tx.one('SELECT COUNT(*) AS total FROM remote_machine_mutation_claims');
+			const history = await tx.one(
+				"SELECT COUNT(*) AS total FROM remote_machine_mutation_claims WHERE state!='released'",
+			);
 			if (
 				!resources ||
 				!history ||

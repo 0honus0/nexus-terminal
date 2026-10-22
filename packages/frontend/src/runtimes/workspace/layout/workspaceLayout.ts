@@ -7,8 +7,6 @@ import type { WorkspaceLayoutNodeState, WorkspaceSidebar } from '../model/presen
 
 export const WORKSPACE_LAYOUT_MIN_SIZE = 5;
 
-const WORKSPACE_LAYOUT_MAX_CHILDREN = Math.floor(100 / WORKSPACE_LAYOUT_MIN_SIZE);
-
 const paneNames = new Set<WorkspacePane>(WORKSPACE_PANES);
 
 export const createDefaultWorkspaceLayout = (): WorkspaceLayoutNodeState => ({
@@ -105,32 +103,6 @@ export const rebalanceWorkspaceLayoutChildren = (
 		const size = index === changedIndex ? changedSize : otherSizes[otherIndex++];
 		return sameSize(child.size, size!) ? child : { ...child, size };
 	});
-};
-
-export const appendWorkspaceLayoutChild = (
-	children: readonly WorkspaceLayoutNodeState[],
-	child: WorkspaceLayoutNodeState,
-	preferredSize = 25,
-): WorkspaceLayoutNodeState[] => {
-	if (children.length >= WORKSPACE_LAYOUT_MAX_CHILDREN) return [...children];
-	const nextSize = children.length
-		? Math.min(
-				Math.max(preferredSize, WORKSPACE_LAYOUT_MIN_SIZE),
-				100 - WORKSPACE_LAYOUT_MIN_SIZE * children.length,
-			)
-		: 100;
-	const existingSizes = normalizeSizes(
-		children.map((existingChild) => existingChild.size),
-		100 - nextSize,
-	);
-	return [
-		...children.map((existingChild, index) =>
-			sameSize(existingChild.size, existingSizes[index]!)
-				? existingChild
-				: { ...existingChild, size: existingSizes[index] },
-		),
-		{ ...child, size: nextSize },
-	];
 };
 
 export const normalizeWorkspaceLayout = (node: WorkspaceLayoutNodeState): WorkspaceLayoutNodeState => {

@@ -94,7 +94,7 @@ await test('The original runtime lifecycle admits 32 waiting tasks and close wai
 	assert.deepEqual(await fs.readdir(f.database + '.modules'), []);
 });
 
-await test('Runtime history accepts its 4096th record and refuses another construction without deleting evidence', async (t) => {
+await test('Runtime history rotates confirmed closed records and continues constructing instances', async (t) => {
 	const f = await openPlugins(t);
 	const plugin = await f.install('history-budget', { backend: 'export function health() { return true; }' });
 	await plugin.enabled(false);
@@ -145,14 +145,15 @@ await test('Runtime history accepts its 4096th record and refuses another constr
 	assert.notEqual(current().instance_id, previous.instance_id);
 	await plugin.enabled(false);
 	const final = current();
-	assert.equal(db.prepare('SELECT COUNT(*) AS n FROM agent_plugin_runtime_history').get().n, 4096);
-	assert.deepEqual(expectStatus(await enable(f, plugin), 503), { code: 'operation_unknown' });
-	assert.deepEqual(current(), final);
-	assert.equal(db.prepare('SELECT COUNT(*) AS n FROM agent_plugin_runtime_history').get().n, 4096);
+	assert.equal(db.prepare('SELECT COUNT(*) AS n FROM agent_plugin_runtime_history').get().n, 128);
+	expectStatus(await enable(f, plugin), 200);
+	assert.notEqual(current().instance_id, final.instance_id);
+	assert.equal(db.prepare('SELECT COUNT(*) AS n FROM agent_plugin_runtime_history').get().n, 128);
 	assert.equal(
-		expectStatus(await f.api('GET', base + plugin.appId + '/runtime/' + previous.instance_id), 200).instanceId,
-		previous.instance_id,
+		expectStatus(await f.api('GET', base + plugin.appId + '/runtime/' + final.instance_id), 200).instanceId,
+		final.instance_id,
 	);
+	await plugin.enabled(false);
 	assert.deepEqual(await fs.readdir(f.database + '.modules'), []);
 });
 

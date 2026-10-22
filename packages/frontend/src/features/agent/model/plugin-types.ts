@@ -3,7 +3,6 @@ import type {
 	AgentPluginInstallationStatus,
 	AgentPluginStageStatus,
 } from '@nexus-terminal/shared/agent/plugins/values';
-import type { AgentPluginRuntimeState } from '@nexus-terminal/shared/agent/plugins/runtime-values';
 
 export interface PluginPublisher {
 	keyId: string;
@@ -85,16 +84,6 @@ export interface PluginCatalog {
 export interface PluginRecommendation {
 	entry: PluginCatalogEntry | null;
 	installation: PluginInstallation | null;
-}
-
-export interface PluginRuntime {
-	appId: string;
-	instanceId: string;
-	revision: number;
-	state: AgentPluginRuntimeState;
-	updatedAt: number;
-	unknownAt: number | null;
-	acknowledgedAt: number | null;
 }
 
 export interface PluginDataValue {
