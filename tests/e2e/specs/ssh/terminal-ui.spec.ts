@@ -1,3 +1,4 @@
+import { networkFailureToast } from '../../support/feedback';
 import { readPreferencesUpdate } from '../../../../packages/shared/src/preferences/presentation/http-codec';
 import { getTestFocus, updateTestFocus } from '../../support/presentation';
 import { readAppearanceView } from '../../../../packages/shared/src/preferences/appearance/http-codec';
@@ -1230,7 +1231,7 @@ test('a failed logout still releases live Workspace sessions before reporting th
 	await page.route('**/api/v1/auth/logout', async (route) => route.abort('failed'));
 
 	await page.getByRole('link', { name: 'Logout', exact: true }).click();
-	await expect(page.getByRole('alert')).not.toHaveText('');
+	await expect(networkFailureToast(page)).toBeVisible();
 	await expect(page).toHaveURL(/\/workspace(?:\?|$)/);
 	await expect(tabBar.getByRole('tab')).toHaveCount(0);
 	await expect(page.getByRole('heading', { name: 'Connections & sessions', exact: true })).toBeVisible();

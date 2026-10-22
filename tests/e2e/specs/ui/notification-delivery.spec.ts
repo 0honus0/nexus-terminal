@@ -184,8 +184,7 @@ test('notification CRUD persists events and exposes a failed delivery without re
 		const card = page.locator('[data-notification-id]').filter({ hasText: CRUD_CHANNEL_NAME });
 		await page.reload();
 		await expect(card).toContainText('Enabled');
-		await expect(card).toContainText('Login Success');
-		await expect(card).toContainText('SSH Connection Failed');
+		await expect(card).toContainText('2 events enabled');
 		await card.getByRole('button', { name: 'Edit', exact: true }).click();
 		await expect(page.getByRole('checkbox', { name: 'Enabled', exact: true })).toBeChecked();
 		await expect(page.getByLabel('Login Success', { exact: true })).toBeChecked();

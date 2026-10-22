@@ -1,3 +1,4 @@
+import { networkFailureToast } from '../../support/feedback';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import type { Response } from '@playwright/test';
 import { loginAsInitialAdmin } from '../../support/auth';
@@ -65,9 +66,7 @@ test('connections page remains usable when connection tags fail to load', async 
 	await expect(
 		page.getByRole('listitem').filter({ has: page.getByText(E2E_SSH.name, { exact: true }) }),
 	).toBeVisible();
-	await expect(
-		page.getByText('Failed to load connection tags. Connections are still available.', { exact: true }),
-	).toBeVisible();
+	await expect(networkFailureToast(page)).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Add New Connection', exact: true })).toBeEnabled();
 });
 

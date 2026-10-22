@@ -71,10 +71,7 @@ test('quick command search stays visible by default and can be collapsed behind 
 				.filter({ has: page.getByRole('heading', { name: 'Terminal & commands', exact: true }) });
 			await expect(settings).toBeVisible();
 
-			const checkbox = settings.getByRole('checkbox', {
-				name: 'Collapse the search box into a search button by default',
-				exact: true,
-			});
+			const checkbox = settings.getByRole('checkbox').and(page.locator('#quickCommandsCollapsibleSearch'));
 			await expect(checkbox).not.toBeChecked();
 			await checkbox.check();
 

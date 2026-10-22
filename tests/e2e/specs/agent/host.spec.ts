@@ -19,6 +19,8 @@ import {
 import type { AgentWorkspaceRequest } from '../../../../packages/shared/src/agent/scope/workspace-http';
 import {
 	openAgentConversations,
+	openAgentHub,
+	selectAgentExtensionsSection,
 	selectAgentSettingsGroup,
 	createTestAgentApp,
 	enableTestAgentExecution,
@@ -253,7 +255,7 @@ test('Agent Hub native buttons keep a 24px physical pointer-target floor', async
 	await createTestAgentApp(context.request);
 	await enableTestAgentExecution(context.request);
 	await page.goto('/connections');
-	await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
+	await openAgentHub(page);
 
 	const hub = page.locator('section[aria-label="Agent"]');
 	await expect(hub).toBeVisible();
@@ -296,7 +298,7 @@ test('Agent Hub resizing keeps its current center and its bottom-right handle fo
 	await createTestAgentApp(context.request);
 	await enableTestAgentExecution(context.request);
 	await page.goto('/connections');
-	await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
+	await openAgentHub(page);
 	const hub = page.locator('section[aria-label="Agent"]');
 	await expect(hub).toBeVisible();
 	const handle = hub.locator('button[data-ui="resize-handle"]');
@@ -503,6 +505,7 @@ test('Agent thread selection retains its identity while authoritative history is
 	await loginAsInitialAdmin(context.request);
 	await setUiLanguage(context.request);
 	const app = await createTestAgentApp(context.request);
+	await enableTestAgentExecution(context.request);
 
 	const create = async (title: string) => {
 		const result = await requestAgentWorkspace(context.request, app, {
@@ -538,7 +541,7 @@ test('Agent thread selection retains its identity while authoritative history is
 	});
 	try {
 		await page.goto('/connections');
-		await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
+		await openAgentHub(page);
 		const hub = page.locator('section[aria-label="Agent"]');
 		await openAgentConversations(page);
 		const threads = hub.locator('#agent-thread-sidebar');
@@ -579,6 +582,7 @@ test('Agent create-thread Retry retains the exact operation after an unknown out
 	await loginAsInitialAdmin(context.request);
 	await setUiLanguage(context.request);
 	const app = await createTestAgentApp(context.request);
+	await enableTestAgentExecution(context.request);
 
 	const list = async () => {
 		const result = await requestAgentWorkspace(context.request, app, {
@@ -609,7 +613,7 @@ test('Agent create-thread Retry retains the exact operation after an unknown out
 		}
 	});
 	await page.goto('/connections');
-	await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
+	await openAgentHub(page);
 	const hub = page.locator('section[aria-label="Agent"]');
 	await openAgentConversations(page);
 	const threads = hub.locator('#agent-thread-sidebar');
@@ -700,6 +704,7 @@ test('Agent execution setting gates the launcher and its global window', async (
 	}
 	await hub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
 	await expect(hub).toBeHidden();
+	await page.getByRole('tab', { name: 'Agent', exact: true }).click();
 	await selectAgentSettingsGroup(page, 'runtime');
 	const disabledSave = page.waitForResponse(
 		(response) =>
@@ -729,11 +734,12 @@ test('Agent settings load independently of retired Runner endpoints and expose c
 	for (const [group, name] of [
 		['models', 'Model providers'],
 		['runtime', 'Execution and performance'],
-		['tools', 'MCP / ACP integrations'],
 	] as const) {
 		await selectAgentSettingsGroup(page, group);
 		await expect(panel.getByRole('region', { name, exact: true })).toBeVisible();
 	}
+	await selectAgentExtensionsSection(page, 'integrations');
+	await expect(panel.getByRole('region', { name: 'MCP / ACP integrations', exact: true })).toBeVisible();
 	await selectAgentSettingsGroup(page, 'runtime');
 	await expect(panel.getByRole('region', { name: 'CDP', exact: true })).toBeVisible();
 	await expect(panel.getByRole('heading', { name: 'Workspace dev environment', exact: true })).toHaveCount(0);
@@ -752,14 +758,18 @@ test('Agent settings surface exposes the current control plane and saves explici
 	for (const [group, name] of [
 		['models', 'Model providers'],
 		['runtime', 'Execution and performance'],
-		['tools', 'Agent apps and permissions'],
 		['runtime', 'CDP'],
-		['tools', 'MCP / ACP integrations'],
-		['safety', 'Memory management'],
 	] as const) {
 		await selectAgentSettingsGroup(page, group);
 		await expect(panel.getByRole('region', { name, exact: true })).toBeVisible();
 	}
+	await selectAgentExtensionsSection(page, 'apps');
+	await expect(panel.getByRole('region', { name: 'Agent apps', exact: true })).toBeVisible();
+	await selectAgentExtensionsSection(page, 'integrations');
+	await expect(panel.getByRole('region', { name: 'MCP / ACP integrations', exact: true })).toBeVisible();
+	await selectAgentSettingsGroup(page, 'safety');
+	await expect(panel.getByRole('region', { name: 'Agent global target denylist', exact: true })).toBeVisible();
+	await expect(panel.getByRole('region', { name: 'Memory management', exact: true })).toHaveCount(0);
 	await selectAgentSettingsGroup(page, 'models');
 	const providers = panel.getByRole('region', { name: 'Model providers', exact: true });
 
@@ -917,8 +927,9 @@ test('Agent Host preserves an open surface when a directory refresh fails and re
 	await loginAsInitialAdmin(context.request);
 	await setUiLanguage(context.request);
 	const app = await createTestAgentApp(context.request);
+	await enableTestAgentExecution(context.request);
 	await page.goto('/connections');
-	await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
+	await openAgentHub(page);
 	const hub = page.locator('section[aria-label="Agent"]');
 	await openAgentConversations(page);
 	await hub.locator('#agent-thread-sidebar').getByRole('button', { name: 'New', exact: true }).click();
@@ -927,7 +938,7 @@ test('Agent Host preserves an open surface when a directory refresh fails and re
 	const appsPath = '**/api/v1/agent/apps';
 	await page.route(appsPath, (route) => route.fulfill({ status: 503, json: { code: 'storage_unavailable' } }));
 	await hub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
-	await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
+	await openAgentHub(page);
 	await expect(page.getByRole('alert').filter({ hasText: 'Unable to load Agent services' })).toBeVisible();
 	await expect(hub).toBeVisible();
 	await expect(prompt).toHaveValue('Unsaved local prompt');
@@ -987,6 +998,7 @@ test('Agent tabs own independent local drafts and observe external threads throu
 	await loginAsInitialAdmin(context.request);
 	await setUiLanguage(context.request);
 	const app = await createTestAgentApp(context.request);
+	await enableTestAgentExecution(context.request);
 	const initialThread = await requestAgentWorkspace(context.request, app, {
 		method: 'agent.threads.create',
 		params: { operationId: randomUUID(), title: 'Shared initial conversation' },
@@ -1002,11 +1014,11 @@ test('Agent tabs own independent local drafts and observe external threads throu
 		if (new URL(socket.url()).pathname === '/ws/agent') sockets += 1;
 	});
 	await page.goto('/connections');
-	await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
+	await openAgentHub(page);
 	const follower = await context.newPage();
 	try {
 		await follower.goto('/connections');
-		await follower.getByRole('button', { name: 'Open Agent', exact: true }).click();
+		await openAgentHub(follower);
 		await openAgentConversations(page);
 		await openAgentConversations(follower);
 		const firstHub = page.locator('section[aria-label="Agent"]');
@@ -1031,7 +1043,7 @@ test('Agent tabs own independent local drafts and observe external threads throu
 		});
 		if (result.method !== 'agent.threads.create') throw new Error('Unexpected thread');
 		await secondHub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
-		await follower.getByRole('button', { name: 'Open Agent', exact: true }).click();
+		await openAgentHub(follower);
 		await openAgentConversations(follower);
 		await expect(
 			secondThreads.getByRole('button').filter({ has: follower.getByText('External thread', { exact: true }) }),
@@ -1062,13 +1074,16 @@ test('concurrent Agent settings preserve dirty drafts and reject their original 
 		// model-call capacity still equals the current maximum run capacity.
 		// Use the independently editable (and bounded by Runs) model-call limit
 		// to exercise the same concurrent CAS conflict without invalid input.
-		const leaderInput = leader.getByRole('spinbutton', { name: 'Concurrent model calls', exact: true });
-		const otherInput = other.getByRole('spinbutton', { name: 'Concurrent model calls', exact: true });
+		const leaderInput = leader.getByRole('textbox', { name: 'Concurrent model calls', exact: true });
+		const otherInput = other.getByRole('textbox', { name: 'Concurrent model calls', exact: true });
 		const original = Number(await leaderInput.inputValue());
-		const maximum = Number(await leaderInput.getAttribute('max'));
-		const runs = Number(
-			await leader.getByRole('spinbutton', { name: 'Concurrent Runs', exact: true }).inputValue(),
+		const current = await requestAgentJson(
+			context.request,
+			{ method: 'GET', path: '/execution-settings' },
+			readAgentExecutionSettingsResponse,
 		);
+		const maximum = current.settings.hardLimits.maxConcurrentModelCalls;
+		const runs = Number(await leader.getByRole('textbox', { name: 'Concurrent Runs', exact: true }).inputValue());
 		const alternatives = Array.from({ length: Math.min(maximum, runs) }, (_, index) => index + 1).filter(
 			(value) => value !== original,
 		);
@@ -1082,7 +1097,9 @@ test('concurrent Agent settings preserve dirty drafts and reject their original 
 		);
 		await leader.getByRole('button', { name: 'Save', exact: true }).click();
 		expect((await leaderSave).status()).toBe(200);
-		await expect(leader.getByText('Settings saved.', { exact: true })).toBeVisible();
+		await expect(
+			page.locator('.ui-notification[data-kind="success"]').filter({ hasText: 'Settings saved.' }),
+		).toBeVisible();
 		await expect(otherInput).toHaveValue(String(alternatives[1]));
 		const conflict = follower.waitForResponse(
 			(response) =>
@@ -1092,11 +1109,13 @@ test('concurrent Agent settings preserve dirty drafts and reject their original 
 		await other.getByRole('button', { name: 'Save', exact: true }).click();
 		expect((await conflict).status()).toBe(409);
 		await expect(
-			other.getByText('The version changed. Read saved settings and review a new draft.', { exact: true }),
+			follower
+				.locator('.ui-notification')
+				.filter({ hasText: 'The version changed. Read saved settings and review a new draft.' }),
 		).toBeVisible();
 		await expect(otherInput).toHaveValue(String(alternatives[1]));
 		await expect(other.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
-		await other.getByRole('button', { name: 'Read saved settings (discard draft)', exact: true }).click();
+		await follower.getByRole('button', { name: 'Reload settings', exact: true }).click();
 		await expect(otherInput).toHaveValue(String(alternatives[0]));
 	} finally {
 		await follower.close();

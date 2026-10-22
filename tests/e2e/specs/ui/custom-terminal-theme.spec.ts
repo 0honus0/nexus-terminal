@@ -39,7 +39,7 @@ test('custom terminal theme UI creates, edits, applies, persists, and deletes a 
 					.toBeLessThanOrEqual(1);
 				await expect(
 					customizer.locator(
-						'button:not([data-ui="button"]):not([data-ui="checkbox"]):not([data-ui="switch"]):not([role="combobox"])',
+						'button:not([data-ui="button"]):not([data-ui="checkbox"]):not([data-ui="switch"]):not([role="combobox"]):not([data-ui="input"] .ui-input__number-button)',
 					),
 				).toHaveCount(0);
 				await expect(main.locator('input:not([type="file"]):not([data-no-highlight])')).toHaveCount(0);

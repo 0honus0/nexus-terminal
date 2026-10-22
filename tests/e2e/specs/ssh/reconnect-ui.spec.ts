@@ -438,10 +438,7 @@ for (const background of [false, true]) {
 	});
 }
 
-test('disconnected SSH retries periodically and any key reconnects immediately', async ({ page, context }) => {
-	// Two real reconnect cycles include the remote SSH connect timeout between
-	// the 2s and 4s backoff periods. Leave enough end-to-end time for both
-	// attempts under CI contention without changing the reconnect policy.
+test('a failed SSH reconnect waits for a key and then reconnects immediately', async ({ page, context }) => {
 	test.setTimeout(120_000);
 	await loginAsInitialAdmin(context.request);
 	await configureSshE2eSettings(context.request);
@@ -591,43 +588,24 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
 			await expect(terminal.locator('.xterm')).toHaveClass(/enable-mouse-events/);
 		});
 
-		await step(
-			'SSH outage triggers more than one automatic reconnect cycle',
-			async () => {
-				await setTestSshOnline(false);
+		await step('a failed reconnect stops automatic attempts until explicit user input', async () => {
+			await setTestSshOnline(false);
+			await expect.poll(() => workspaceConnectRequests, { timeout: 40_000 }).toBe(initialConnectRequestCount + 1);
+			await expect
+				.poll(() => frontendDebugLogs.some((entry) => entry.msg === 'Workspace reconnect attempt failed'))
+				.toBeTruthy();
+			await expect(terminal.locator('.xterm-rows')).toContainText('Press any key to reconnect');
+			await page.waitForTimeout(4500);
+			expect(workspaceConnectRequests).toBe(initialConnectRequestCount + 1);
+		});
 
-				// First reconnect is scheduled after 2s and the next after 4s. A failed
-				// SSH dial may itself consume the configured ~20s transport deadline;
-				// two real attempts can therefore require more than 25s before their
-				// requests are observable. This bound covers both actual dials without
-				// changing backoff, omitting attempts, or weakening the expected count.
-				// The clean Workspace
-				// transport may reuse the same already-open /ws/workspace control socket after an
-				// SSH-level connect failure, so business reconnect attempts are counted by their
-				// workspace.connect requests rather than by forcing a new WebSocket per attempt.
-				await expect
-					.poll(() => workspaceConnectRequests, { timeout: 40_000 })
-					.toBeGreaterThanOrEqual(initialConnectRequestCount + 2);
-				await expect
-					.poll(() => frontendDebugLogs.some((entry) => entry.msg === 'Workspace reconnect scheduled'))
-					.toBeTruthy();
-				await expect
-					.poll(() => frontendDebugLogs.some((entry) => entry.msg === 'Workspace reconnect attempt failed'))
-					.toBeTruthy();
-			},
-			60_000,
-		);
-
-		await step('any terminal key interrupts backoff and reconnects immediately', async () => {
+		await step('any terminal key starts an explicit reconnect immediately', async () => {
 			await setTestSshOnline(true);
 			const beforeKeypress = workspaceConnectRequests;
 
 			await xtermInput.focus();
 			await page.keyboard.press('x');
 
-			// The scheduled retry is still in backoff. A fresh workspace.connect request
-			// within 2.5s therefore comes from reconnectNow(), even when the control socket
-			// itself is intentionally reused.
 			await expect.poll(() => workspaceConnectRequests, { timeout: 2_500 }).toBeGreaterThan(beforeKeypress);
 			await expect
 				.poll(() => workspaceConnectResponses, { timeout: 5_000 })

@@ -1,3 +1,4 @@
+import { dismissToasts } from '../../support/feedback';
 import { listTestHtmlThemes, removeTestHtmlTheme, updateTestHtmlRepository } from '../../support/html-themes';
 import type { AppearanceView } from '../../../../packages/shared/src/preferences/appearance/model';
 import { readAppearanceView } from '../../../../packages/shared/src/preferences/appearance/http-codec';
@@ -118,7 +119,7 @@ test('appearance writes stay fenced after a catalog failure and recover through 
 	try {
 		await page.goto('/settings');
 		await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
-		const input = page.getByRole('textbox', { name: 'Title bar color', exact: true });
+		const input = page.locator('#windowThemeColorInput');
 		await expect(input).toBeDisabled();
 		expect((await appearance(context.request)).windowThemeColor).toBe(targetColor);
 		await page.unroute('**/api/v1/terminal-themes');
@@ -152,7 +153,7 @@ test('appearance settings report a main appearance load failure and keep default
 	await expect(
 		page.getByText('Failed to load appearance settings. Current defaults remain available.', { exact: true }),
 	).toBeVisible();
-	await expect(page.getByRole('textbox', { name: 'Title bar color', exact: true })).toBeVisible();
+	await expect(page.locator('#windowThemeColorInput')).toBeVisible();
 });
 
 test('PWA window title bar color updates immediately and persists across reload', async ({ page, context }) => {
@@ -201,7 +202,7 @@ test('PWA window title bar color updates immediately and persists across reload'
 		await page.goto('/settings');
 		await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
 
-		const input = page.getByRole('textbox', { name: 'Title bar color', exact: true });
+		const input = page.locator('#windowThemeColorInput');
 		await expect(input).toBeEnabled();
 		await input.fill(targetColor);
 		// A normal load has no refresh control. Enter the real conflict-recovery
@@ -240,7 +241,7 @@ test('PWA window title bar color updates immediately and persists across reload'
 		await page.unrouteAll({ behavior: 'wait' });
 		await page.reload({ waitUntil: 'domcontentloaded' });
 		await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
-		await expect(page.getByRole('textbox', { name: 'Title bar color', exact: true })).toHaveValue(targetColor);
+		await expect(page.locator('#windowThemeColorInput')).toHaveValue(targetColor);
 		await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
 	} finally {
 		holdAppearanceLoads = false;
@@ -965,6 +966,7 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
 		);
 
 		await step('uploaded backgrounds are really removed and page CSS is cleared', async () => {
+			await dismissToasts(page);
 			await customizer.getByRole('button', { name: 'Background', exact: true }).click();
 			const pageDelete = page.waitForResponse(
 				(response) =>

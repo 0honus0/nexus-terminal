@@ -1,3 +1,4 @@
+import { networkFailureToast } from '../../support/feedback';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { step } from '../../support/steps';
@@ -172,12 +173,7 @@ test('proxy UI preserves, updates, and explicitly clears a stored password', asy
 		const confirm = page.getByRole('dialog').filter({ hasText: CLEARED_NAME });
 		await expect(confirm).toBeVisible();
 		await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
-		await expect(
-			page.getByText(
-				'The result is unknown and may already be saved. Refresh and review before submitting again.',
-				{ exact: true },
-			),
-		).toBeVisible();
+		await expect(networkFailureToast(page)).toBeVisible();
 		await expect(row.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
 		await expect(row).toBeVisible();
 		await page.unroute(`**/api/v1/targets/proxies/${proxyId}`);

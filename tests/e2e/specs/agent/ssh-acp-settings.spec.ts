@@ -1,5 +1,10 @@
 import { openNativeTaskPanel } from '../../fixtures/agent/native-task';
-import { openAgentConversations, openAgentHub, selectAgentModel, selectAgentSettingsGroup } from '../../support/agent';
+import {
+	openAgentConversations,
+	openAgentHub,
+	selectAgentModel,
+	selectAgentExtensionsSection,
+} from '../../support/agent';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -83,7 +88,7 @@ for (const decision of ['denied', 'cancelled'] as const) {
 		const argv = [process.execPath, path.resolve(__dirname, '../../fixtures/agent/acp-process.mjs'), evidencePath];
 
 		await page.goto('/settings?tab=agent');
-		await selectAgentSettingsGroup(page, 'tools');
+		await selectAgentExtensionsSection(page, 'integrations');
 		const section = page.getByRole('region', { name: 'MCP / ACP integrations', exact: true });
 		await selectUiOption(
 			section.getByRole('combobox', { name: 'Edit app permissions and policy', exact: true }),
@@ -157,7 +162,7 @@ for (const decision of ['denied', 'cancelled'] as const) {
 		expect(listResponse.status()).toBe(200);
 		expect(readAgentIntegrationList(await listResponse.json()).items).toContainEqual(integration);
 		await page.reload();
-		await selectAgentSettingsGroup(page, 'tools');
+		await selectAgentExtensionsSection(page, 'integrations');
 		await selectUiOption(
 			section.getByRole('combobox', { name: 'Edit app permissions and policy', exact: true }),
 			app.id,

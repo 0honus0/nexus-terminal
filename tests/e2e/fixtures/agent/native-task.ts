@@ -231,7 +231,12 @@ export async function startNativeTask(
 	const boxes = targets.getByRole('checkbox');
 	for (let index = 0; index < (await boxes.count()); index++) {
 		const box = boxes.nth(index);
-		await box.setChecked(connectionIds.includes(Number(await box.getAttribute('value'))));
+		const checkboxId = await box.getAttribute('id');
+		const selected = connectionIds.some((connectionId) => `agent-target-${connectionId}` === checkboxId);
+		await box.setChecked(selected);
+	}
+	for (const connectionId of connectionIds) {
+		await expect(targets.locator(`#agent-target-${connectionId}`)).toBeChecked();
 	}
 	await task.page.keyboard.press('Escape');
 	await expect(targets).toBeHidden();
@@ -242,7 +247,10 @@ export async function startNativeTask(
 	const hasRun = await hub.getByRole('button', { name: 'Show or hide task panel', exact: true }).isVisible();
 	if (followUp) expect(hasRun).toBe(true);
 	const method = hasRun ? 'agent.runs.appendInput' : 'agent.runs.create';
-	const { result } = await captureNativeCommand(task, method, () => send.click());
+	const { command, result } = await captureNativeCommand(task, method, () => send.click());
+	if (command.method === 'agent.runs.create' || command.method === 'agent.runs.appendInput') {
+		expect(command.params.input.connectionIds).toEqual(connectionIds);
+	}
 	if (result.method !== 'agent.runs.create' && result.method !== 'agent.runs.appendInput') {
 		throw new Error('Unexpected Run receipt');
 	}

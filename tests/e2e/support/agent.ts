@@ -182,6 +182,24 @@ export async function selectAgentSettingsGroup(
 		.click();
 }
 
+export async function selectAgentExtensionsSection(
+	page: Page,
+	section: 'apps' | 'integrations' | 'market' | 'budget',
+): Promise<void> {
+	await selectAgentSettingsGroup(page, 'tools');
+	const labels = {
+		apps: 'Agent apps',
+		integrations: 'MCP / ACP',
+		market: 'Plugin market',
+		budget: 'Execution budget',
+	};
+	const tab = page
+		.getByRole('tablist', { name: 'Apps and extensions', exact: true })
+		.getByRole('tab', { name: labels[section], exact: true });
+	await tab.click();
+	await expect(tab).toHaveAttribute('aria-selected', 'true');
+}
+
 /** Open the existing docked sidebar or narrow-window drawer through its visible control. */
 export async function openAgentConversations(page: Page): Promise<void> {
 	const toggle = page.locator('.agent-hub-window').getByRole('button', { name: 'Open conversations', exact: true });

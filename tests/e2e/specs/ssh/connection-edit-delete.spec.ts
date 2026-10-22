@@ -46,7 +46,7 @@ test('saved SSH connection can be tested, renamed without re-entering password, 
 		await row.getByRole('button', { name: 'Test', exact: true }).click();
 		const response = await responsePromise;
 		expect(response.ok()).toBeTruthy();
-		await expect(row.locator('.text-success')).toContainText('Connection test successful!');
+		await expect(row.locator('.connection-meta__item--success')).toContainText('Connection test successful!');
 	});
 
 	await step('edit changes only the name and leaves the stored password untouched', async () => {
@@ -78,7 +78,7 @@ test('saved SSH connection can be tested, renamed without re-entering password, 
 		await row.getByRole('button', { name: 'Test', exact: true }).click();
 		const response = await responsePromise;
 		expect(response.ok()).toBeTruthy();
-		await expect(row.locator('.text-success')).toContainText('Connection test successful!');
+		await expect(row.locator('.connection-meta__item--success')).toContainText('Connection test successful!');
 	});
 
 	await step('delete from the edit form removes the connection from UI and persistence', async () => {

@@ -1,4 +1,5 @@
 import { selectAgentSettingsGroup } from '../../support/agent';
+import { dismissToasts } from '../../support/feedback';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { requestAgentJson } from '../../support/agent';
@@ -38,6 +39,7 @@ test('execution settings validate before dispatch, save the original CAS and rej
 			page.locator('.ui-notification[data-kind="error"]').filter({ hasText: 'Invalid settings.' }),
 		).toBeVisible();
 		expect(writes).toBe(0);
+		await dismissToasts(page);
 	}
 	// The master switch is a complete versioned setting; it must not disappear on read failure.
 	await input.fill(String(original));
@@ -106,7 +108,7 @@ test('Agent feature master switch remains visible when execution settings cannot
 	const toggle = page.getByRole('switch', { name: 'Agent feature', exact: true });
 	await expect(toggle).toBeVisible();
 	await expect(toggle).toBeDisabled();
-	await expect(page.getByText('Unavailable', { exact: true })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Reload settings', exact: true })).toBeVisible();
 });
 
 test('Recall byte quantities distinguish range errors from invalid syntax', async ({ page, context }) => {

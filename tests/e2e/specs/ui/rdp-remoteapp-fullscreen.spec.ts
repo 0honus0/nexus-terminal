@@ -525,7 +525,13 @@ test('VNC pointer resize and restore-button dragging share the same window seman
 		preferences.vncModalHeight = 650;
 	});
 
-	const connectionId = await createRemoteConnection(context.request, 'VNC', POINTER_VNC_NAME, '192.0.2.92', 5901);
+	const connectionId = await createRemoteConnection(
+		context.request,
+		'VNC',
+		POINTER_VNC_NAME,
+		'127.0.0.1',
+		E2E_PORTS.vnc,
+	);
 	try {
 		await step('Connections also launches VNC globally without replacing its route', async () => {
 			await page.goto('/connections');

@@ -1,3 +1,4 @@
+import { dismissToasts } from '../../support/feedback';
 import { execFile } from 'node:child_process';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -180,6 +181,7 @@ test('HTML and HTM open in the editor, read failures stay local, and the folder 
 			{ exact: true },
 		),
 	).toBeVisible();
+	await dismissToasts(page);
 	await popup.getByTitle('Close Editor', { exact: true }).first().click();
 	await expect(popup).toBeHidden();
 	try {
@@ -192,6 +194,7 @@ test('HTML and HTM open in the editor, read failures stay local, and the folder 
 				exact: true,
 			}),
 		).toBeVisible();
+		await dismissToasts(page);
 		await popup.getByTitle('Close Editor', { exact: true }).first().click();
 		await expect(popup).toBeHidden();
 	} finally {

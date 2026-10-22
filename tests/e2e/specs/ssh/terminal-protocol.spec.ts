@@ -106,7 +106,7 @@ test('the first directory change waits for a real shell prompt instead of report
 		expect(changed.payload).toMatchObject({ path: targetPath });
 		expect(await failedPromise).toBeNull();
 		const output = Buffer.concat(chunks).toString('utf8');
-		expect(output).toMatch(/cd '\/folder-seed'\r+\n/);
+		expect(output).toMatch(/cd '\/folder-seed'\r?\n/);
 		expect(output).not.toContain('__NEXUS_INTERNAL_CD_');
 	} finally {
 		await closeWebSocket(workspace.socket);

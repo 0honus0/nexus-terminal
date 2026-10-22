@@ -22,6 +22,7 @@ import { selectUiOption } from '../../support/ui-select';
 import {
 	openAgentConversations,
 	selectAgentSettingsGroup,
+	selectAgentExtensionsSection,
 	requestAgentJson,
 	requestAgentWorkspace,
 	enableTestAgentExecution,
@@ -250,7 +251,7 @@ test('official plugin source cannot be overridden by a configured third-party re
 			new URL(candidate.url()).pathname === '/api/v1/agent/plugins/official/catalog',
 	);
 	await page.goto('/settings?tab=agent');
-	await selectAgentSettingsGroup(page, 'tools');
+	await selectAgentExtensionsSection(page, 'market');
 	expect(new URL((await officialRead).url()).search).toBe('');
 	const section = page.getByRole('region', { name: 'Plugin management', exact: true });
 	await expect(
@@ -357,10 +358,12 @@ test('frontend target owns a full Custom App Surface and connects through the is
 	const section = page.getByRole('region', { name: 'Plugin management', exact: true });
 
 	const appsSection = page.getByRole('region', { name: 'Agent apps', exact: true });
+	await selectAgentExtensionsSection(page, 'market');
 	await expect(section.getByRole('button', { name: 'Refresh repositories', exact: true })).toBeVisible();
 	await expect(section.locator('input[type="file"]')).toHaveCount(0);
 	await expect(section.getByRole('button', { name: 'Choose signed package', exact: true })).toHaveCount(0);
 	for (const installed of [custom, agent, fullstack]) {
+		await selectAgentExtensionsSection(page, 'apps');
 		const card = appsSection.locator('article[data-app-id="' + installed.appId + '"]');
 		await expect(card).toBeVisible();
 		await expect(card.getByText('v' + installed.version, { exact: true })).toBeVisible();
@@ -371,6 +374,7 @@ test('frontend target owns a full Custom App Surface and connects through the is
 	await captureFunctionalScreenshot(page, 'agent-plugins-multiple-installed.png', {
 		viewport: { width: 1440, height: 900 },
 	});
+	await selectAgentExtensionsSection(page, 'market');
 	await expect(section.getByText('Runtime observations', { exact: true })).toHaveCount(0);
 	await page.goto('/settings?tab=data');
 	const maintenance = page.locator('details').filter({

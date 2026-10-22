@@ -126,12 +126,7 @@ test('password change UI updates the real login credential and can restore the t
 					},
 				)
 				.catch(() => undefined);
-			await submit.click();
-			await expect(
-				page
-					.locator('.ui-notification[data-kind="error"]')
-					.filter({ hasText: 'Please fill in all password fields.' }),
-			).toBeVisible();
+			await expect(submit).toBeDisabled();
 			expect(await requestPromise).toBeUndefined();
 
 			await currentPassword.fill(E2E_ADMIN.password);

@@ -570,8 +570,8 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
 					response.url().endsWith('/api/v1/settings/preferences') && response.request().method() === 'PUT',
 			);
 			await rowsPerPage
-				.locator('xpath=ancestor::form[1]')
-				.getByRole('button', { name: 'Save group', exact: true })
+				.locator('xpath=ancestor::section[1]')
+				.getByRole('button', { name: 'Save', exact: true })
 				.click();
 			expect((await responsePromise).ok()).toBeTruthy();
 

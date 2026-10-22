@@ -92,22 +92,23 @@ test('data management UI exports a real backup file and imports it through the f
 			expect(connectionsExport.ok()).toBeFalsy();
 			expect(connectionsExport.headers()['content-type'] ?? '').not.toContain('application/zip');
 
-			const fileInput = section.locator('input[type="file"]');
-			const fileChrome = await fileInput.evaluate((element) => {
+			const fileButton = section.getByRole('button', { name: 'Choose file', exact: true });
+			await expect(fileButton).toBeVisible();
+			const fileChrome = await fileButton.evaluate((element) => {
 				const style = getComputedStyle(element);
 				return {
 					topLeft: Number.parseFloat(style.borderTopLeftRadius),
 					topRight: Number.parseFloat(style.borderTopRightRadius),
 					bottomLeft: Number.parseFloat(style.borderBottomLeftRadius),
 					bottomRight: Number.parseFloat(style.borderBottomRightRadius),
-					overflow: style.overflow,
+					overflow: element.scrollWidth - element.clientWidth,
 				};
 			});
 			expect(fileChrome.topLeft).toBeGreaterThan(0);
 			expect(fileChrome.topRight).toBeGreaterThan(0);
 			expect(fileChrome.bottomLeft).toBeGreaterThan(0);
 			expect(fileChrome.bottomRight).toBeGreaterThan(0);
-			expect(['hidden', 'clip']).toContain(fileChrome.overflow);
+			expect(fileChrome.overflow).toBeLessThanOrEqual(1);
 		},
 	);
 

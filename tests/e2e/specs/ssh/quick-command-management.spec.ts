@@ -290,7 +290,7 @@ test('quick commands remain usable when the tag catalog fails to load', async ({
 			})
 			.toBeGreaterThan(before);
 		await page.unroute('**/api/v1/quick-command-tags?*');
-		await quickView.getByRole('button', { name: 'Retry', exact: true }).click();
+		await quickView.getByRole('button', { name: 'Refresh', exact: true }).click();
 		await expect(quickView.getByRole('alert')).toHaveCount(0);
 		await expect(quickView.getByText(TAG_FAILURE_TAG, { exact: true })).toBeVisible();
 	} finally {

@@ -1,3 +1,4 @@
+import { networkFailureToast, dismissToasts } from '../../support/feedback';
 import { E2E_URLS } from '../../support/test-env';
 import { expect, test, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
@@ -1005,15 +1006,8 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
 		const exportUrl = `**/api/v1/ssh-suspend/log/${primary!.id}`;
 		await page.route(exportUrl, (route) => route.abort());
 		await hanging.getByRole('button', { name: 'Export Log', exact: true }).click();
-		// The current SuspendedSessions export owner reports a safe unknown
-		// request failure, not the retired generic "Network Error" toast.
-		// Keep the blocked download and intact suspended record assertions.
-		await expect(
-			page.getByText(
-				'Operation outcome is unknown. Read and verify the latest state before another action. No automatic retry.',
-				{ exact: true },
-			),
-		).toBeVisible({ timeout: 15_000 });
+		await expect(networkFailureToast(page)).toBeVisible({ timeout: 15_000 });
+		await dismissToasts(page);
 		await page.unroute(exportUrl);
 		expect((await suspendedSessions(context.request)).some((session) => session.id === primary!.id)).toBeTruthy();
 		await expect(hanging).toBeVisible();

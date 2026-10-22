@@ -335,7 +335,9 @@ test('2FA settings UI completes setup, reports errors, reloads, and disables the
 			await panel.getByRole('button', { name: 'Verify & Activate', exact: true }).click();
 			expect((await verifyPromise).ok()).toBeTruthy();
 			await expect(panel).toContainText('Two-factor authentication is enabled.');
-			await expect(panel).toContainText('Two-factor authentication activated successfully!');
+			await expect(
+				page.getByRole('alert').filter({ hasText: 'Two-factor authentication activated successfully!' }),
+			).toBeVisible();
 		});
 
 		await step('reload preserves enabled 2FA state and rejects a wrong disable password', async () => {
@@ -351,7 +353,11 @@ test('2FA settings UI completes setup, reports errors, reloads, and disables the
 			);
 			await reloadedPanel.getByRole('button', { name: 'Disable Two-Factor Authentication', exact: true }).click();
 			expect((await wrongPasswordPromise).status()).toBe(401);
-			await expect(reloadedPanel).toContainText('The username, password or verification code is incorrect.');
+			await expect(
+				page
+					.getByRole('alert')
+					.filter({ hasText: 'The username, password or verification code is incorrect.' }),
+			).toBeVisible();
 		});
 
 		await step('disable 2FA through the Security UI and verify the real server state', async () => {
@@ -364,7 +370,9 @@ test('2FA settings UI completes setup, reports errors, reloads, and disables the
 			);
 			await reloadedPanel.getByRole('button', { name: 'Disable Two-Factor Authentication', exact: true }).click();
 			expect((await disablePromise).ok()).toBeTruthy();
-			await expect(reloadedPanel).toContainText('Two-factor authentication disabled successfully.');
+			await expect(
+				page.getByRole('alert').filter({ hasText: 'Two-factor authentication disabled successfully.' }),
+			).toBeVisible();
 			await expect
 				.poll(
 					async () =>

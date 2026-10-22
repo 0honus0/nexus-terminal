@@ -343,6 +343,9 @@ test('mobile RDP opens keyboard explicitly and persists touch mode without recon
 		await expect(connectionList).toBeVisible();
 		await connectionList.getByText(connectionName, { exact: true }).first().click();
 		await expect(page.getByRole('dialog', { name: connectionName, exact: true })).toBeVisible();
+		await expect(page.getByRole('dialog', { name: connectionName, exact: true })).toContainText('Connected', {
+			timeout: 15_000,
+		});
 	};
 
 	try {

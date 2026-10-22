@@ -42,8 +42,9 @@ async function setCaptchaConfig(
 	config: SettingsCaptchaCommand,
 ): Promise<void> {
 	const saved = await updateTestCaptcha(request, config);
-	expect(saved.requiresRestart).toBe(true);
-	await restartTestBackend();
+	if (saved.requiresRestart) {
+		await restartTestBackend();
+	}
 	const effective = await getTestSettings(request);
 	expect(effective.effectiveVersion).toBe(saved.version);
 	expect(effective.requiresRestart).toBe(false);

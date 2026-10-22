@@ -90,7 +90,7 @@ async function switchInterfaceToChinese(page: Page): Promise<void> {
 	const save = page.waitForResponse(
 		(response) => response.url().includes('/api/v1/settings/preferences') && response.request().method() === 'PUT',
 	);
-	await page.getByRole('button', { name: 'Save Language' }).click();
+	await page.locator('button[form="language-settings-form"]').click();
 	expect((await save).ok()).toBeTruthy();
 	await expect(page.getByRole('tab', { name: '系统' })).toBeVisible();
 }

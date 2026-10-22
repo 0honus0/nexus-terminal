@@ -1,5 +1,13 @@
 # Nexus Terminal E2E
 
+## 远程 Actions 修复第二批（2026-10-22，不改 UI）
+
+`3ec0f570` 的 [39823945737](https://github.com/0honus0/nexus-terminal/actions/runs/39823945737) 静态、构建及 Docker smoke 通过，八个行为分片仍失败。离线 trace 已确认 Agent Run 的 `input.connectionIds` 为空；Reka checkbox 的交互节点不提供原生 input value，夹具改按控件 ID 选择并同时断言选中状态及实际派发目标，不放宽后端授权。
+
+第二批同步当前嵌套 App/集成/市场分页、Agent 启用前提、设置保存及 dirty 状态、统一 Toast 反馈与显式关闭、真实 VNC 夹具及 RDP 连接就绪、SSH 结果与初始加载定位。终端断线验证首次自动恢复失败后等待任意键，保留按键恢复、真实 Shell 与几何断言。Workspace 前台恢复不再无条件额外读取 HTTP 挂起目录，断开挂起会话 reconciliation 仍读取权威事实；USAGE 已同步。
+
+本地仅执行静态和构建：根 `pnpm run check`、`pnpm run build`、`pnpm run format:all:check` 与 `git diff --check` 均通过，日志 `/tmp/nexus-e2e-repair2-final-{check,build,format}.log`。尚待处理记忆审核迁移、挂起目录竞争、桌面剪贴板与窄屏溢出，不宣称全量 E2E 已通过，不纳入并行 UI 变更。
+
 ## 远程 Actions 修复首批（2026-10-22，不改 UI）
 
 失败基线为 [39789022254](https://github.com/0honus0/nexus-terminal/actions/runs/39789022254)，被测 SHA `7151fca95bf9951b3739f8674e19e37bbde14672`。8 个分片均有失败；最长分片的 24 个原生 Agent 场景首先卡在已移除的原生模型 select，末尾上传场景被 15 分钟整组期限中断，不能据此判定上传本身失败。当前尚无新的远程通过证据。

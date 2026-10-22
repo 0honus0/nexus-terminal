@@ -1,3 +1,4 @@
+import { networkFailureToast } from '../../support/feedback';
 import { readTagList } from '../../../../packages/shared/src/targets/tags/http-codec';
 import { readConnectionList, readConnectionView } from '../../../../packages/shared/src/targets/connections/http-codec';
 import { readTestConnectionImportId } from '../../support/targets';
@@ -133,11 +134,7 @@ test('workspace connection list remains usable when connection tags fail to load
 	await page.goto('/workspace');
 	const list = await openWorkspaceConnectionPicker(page);
 	await expect(list.locator(`li[data-connection-id="${primaryId}"]`)).toBeVisible();
-	await expect(
-		list
-			.getByRole('alert')
-			.getByText('Failed to load connection tags. Connections are still available.', { exact: true }),
-	).toBeVisible();
+	await expect(networkFailureToast(page)).toBeVisible();
 });
 
 test('workspace connection list remains usable when main preferences fail to load', async ({ page, context }) => {

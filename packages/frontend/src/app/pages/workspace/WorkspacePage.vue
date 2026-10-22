@@ -957,8 +957,6 @@
 		const signal = pageScope.signal;
 		await Promise.all(registry.orderedSessions.value.map((session) => session.recoverForeground()));
 		if (!isPageCurrent(signal) || document.visibilityState !== 'visible') return;
-		await refreshSuspendedSessionsCatalog();
-		if (!isPageCurrent(signal)) return;
 		await reconcileDisconnectedWorkspaceSessions({ kickOrdinary: true });
 	};
 
