@@ -1,5 +1,4 @@
 import type { AgentCompactionMode, AgentContextProfile } from '@nexus-terminal/shared/agent/governance/values';
-import type { AgentChildProfile } from '@nexus-terminal/shared/agent/collaboration/values';
 
 export interface ExecutionLimits {
 	maxModelRequests: number;
@@ -20,18 +19,6 @@ export interface ExecutionLimits {
 	artifactTtlSeconds: number;
 }
 
-export type ProfileModel =
-	{ kind: 'inherit' } | { kind: 'explicit'; providerId: string; modelId: string; configurationVersion: number };
-
-export interface ExecutionProfile {
-	name: AgentChildProfile;
-	enabled: boolean;
-	model: ProfileModel;
-	maxRequests: number;
-	maxSeconds: number;
-	tools: string[];
-}
-
 export interface ExecutionSettings {
 	contextCompactionMode: AgentCompactionMode;
 	contextProfile: AgentContextProfile;
@@ -39,7 +26,7 @@ export interface ExecutionSettings {
 	enabled: boolean;
 	limits: ExecutionLimits;
 	hardLimits: ExecutionLimits;
-	profiles: ExecutionProfile[];
+
 	updatedAt: number;
 }
 

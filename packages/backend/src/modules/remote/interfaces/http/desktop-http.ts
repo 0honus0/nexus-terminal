@@ -93,11 +93,15 @@ function ticketRoute(protocol: RemoteDesktopProtocol, service: DesktopService): 
 				if (!controller.signal.aborted && !ctx.response.destroyed && !ctx.response.writableEnded) {
 					const response: RemoteDesktopSessionResponse = {
 						ticket: result.ticket,
-						lastConnectedAt: result.lastConnectedAt,
+						protocol: result.connection.protocol,
+						host: result.connection.host,
+						port: result.connection.port,
+						username: result.connection.username ?? '',
+						password: result.connection.password,
 					};
 					pendingTicket = result.ticket;
 					try {
-						ctx.send(200, response);
+						ctx.send(200, response, { 'Cache-Control': 'no-store', Pragma: 'no-cache' });
 					} catch (error) {
 						service.discard(result.ticket);
 						pendingTicket = null;

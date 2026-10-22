@@ -30,7 +30,6 @@ export interface StoredCollaborationAuthority {
 }
 
 export interface StoredDelegateCommand extends StoredCollaborationAuthority {
-	model: import('../../providers/storage/provider-storage.js').StoredModelReference | null;
 	id: string;
 	requestHash: string;
 	objective: string;
@@ -87,10 +86,6 @@ export interface RunCollaborationStorage {
 	delegate(
 		command: StoredDelegateCommand,
 		admit: (facts: StoredChildAdmissionFacts) => boolean,
-		resolve: (
-			provider: import('../../providers/storage/provider-storage.js').ProviderStoredRow,
-			reference: import('../../providers/storage/provider-storage.js').StoredModelReference,
-		) => import('./run-storage.js').StoredFrozenInput | null,
 	): Promise<StoredChildCreation | null>;
 	cancelChildren(
 		scope: StoredParticipantScope,

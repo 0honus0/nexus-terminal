@@ -44,15 +44,6 @@ export interface MemoryQuery {
 	threadId?: string;
 }
 
-export interface MemoryImport {
-	id: string;
-	memoryId: string;
-	sourceAppId: string;
-	sourceMemoryId: string;
-	sourceVersion: number;
-	expiresAt: number;
-}
-
 export interface MemoryAdmissionFacts {
 	appExists: boolean;
 	enabled: boolean;
@@ -81,17 +72,4 @@ export interface MemoryRecallInput {
 export interface MemoryRecallItem {
 	memory: MemoryRecord;
 	score: number;
-}
-
-export interface MemoryImportCreation {
-	id: string;
-	memoryId: string;
-	sourceAppId: string;
-	sourceMemoryId: string;
-	ttlMs: number;
-}
-
-export interface MemoryImportFacts {
-	source: MemoryRecord;
-	sourceEnabled: boolean;
 }

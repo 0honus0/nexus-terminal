@@ -2,11 +2,15 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createServer as createNetServer } from 'node:net';
+import { createServer as createViteServer } from '../../../packages/frontend/node_modules/vite/dist/node/index.js';
 import { createRequire } from 'node:module';
 import { DatabaseSync } from 'node:sqlite';
 import { openManagement } from '../http/management-fixture.mjs';
 import { expectStatus } from './openssh-fixture.mjs';
 import { openDesktopServices, desktopPeer, waitFor } from './desktop-fixture.mjs';
+import { browserDesktopPeer } from './desktop-browser-peer.mjs';
 
 const { chromium } = createRequire(new URL('../../e2e/package.json', import.meta.url))('@playwright/test');
 
@@ -15,6 +19,8 @@ export async function openDesktopManagement(t, label) {
 	let services;
 	let f;
 	let browser;
+	let vite;
+	const issued = new Map();
 	const peers = new Set();
 	const warnings = [];
 
@@ -41,6 +47,7 @@ export async function openDesktopManagement(t, label) {
 		const owners = [
 			() => f?.close(),
 			() => browser?.close(),
+			() => vite?.close(),
 			() => services && writeFile('/tmp/nexus-b10-batch11-desktop-' + label + '-services.log', services.logs()),
 		];
 		const closed = await Promise.allSettled(owners.map((close) => Promise.resolve().then(close)));
@@ -60,7 +67,48 @@ export async function openDesktopManagement(t, label) {
 		}
 	});
 	services = await openDesktopServices();
-	f = await openManagement(directory, { guacd: { host: '127.0.0.1', port: services.port } });
+
+	const allocatePort = async () => {
+		const server = createNetServer();
+		await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+		const port = server.address().port;
+		await new Promise((resolve) => server.close(resolve));
+		return port;
+	};
+
+	const frontendPort = await allocatePort();
+	const backendPort = await allocatePort();
+	const origin = 'http://127.0.0.1:' + frontendPort;
+	f = await openManagement(directory, {}, { origin, port: backendPort });
+	vite = await createViteServer({
+		root: fileURLToPath(new URL('../../../packages/frontend', import.meta.url)),
+		configFile: fileURLToPath(new URL('../../../packages/frontend/vite.config.ts', import.meta.url)),
+		cacheDir: join(directory, 'vite-cache'),
+		logLevel: 'error',
+		server: {
+			host: '127.0.0.1',
+			port: frontendPort,
+			strictPort: true,
+			proxy: {
+				'/api': { target: 'http://127.0.0.1:' + backendPort, changeOrigin: false },
+				'/ws/remote-desktop': { target: 'ws://127.0.0.1:' + backendPort, changeOrigin: false, ws: true },
+			},
+		},
+		plugins: [
+			{
+				name: 'desktop-bridge-fixture',
+
+				configureServer(server) {
+					server.middlewares.use('/__desktop-bridge', (_request, response) => {
+						response.setHeader('Content-Type', 'text/html');
+						response.end('<!doctype html><title>Desktop bridge fixture</title>');
+					});
+				},
+			},
+		],
+	});
+	await vite.listen();
+	browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
 	const base = '/api/v1/targets/connections';
 
 	const create = async (type, port, password = 'b10-pass') => {
@@ -68,15 +116,12 @@ export async function openDesktopManagement(t, label) {
 			await f.api('POST', base, {
 				name: 'B10 ' + type,
 				type,
-				host: 'desktop',
-				port,
+				host: services.host,
+				port: port === 3389 ? services.rdpPort : services.vncPort,
 				username: 'test',
 				route: 'direct',
 				proxyId: null,
 				notes: null,
-				rdpRemoteApp: null,
-				rdpRemoteAppDirectory: null,
-				rdpRemoteAppArguments: null,
 				tagIds: [],
 				jumpIds: [],
 			}),
@@ -115,14 +160,18 @@ export async function openDesktopManagement(t, label) {
 
 	const issue = async (id, type, query = '') => {
 		const result = expectStatus(await f.api('POST', path(id, type) + query), 200);
-		assert.deepEqual(Object.keys(result).sort(), ['lastConnectedAt', 'ticket']);
+		assert.deepEqual(Object.keys(result), ['ticket', 'protocol', 'host', 'port', 'username', 'password']);
+		issued.set(result.ticket, result);
 		assert.match(result.ticket, /^[A-Za-z0-9_-]{43}$/u);
-		assert.ok(Number.isSafeInteger(result.lastConnectedAt));
 		return result.ticket;
 	};
 
 	const peerFor = (ticket, headers) => {
-		const peer = desktopPeer(f, ticket, headers);
+		const response = issued.get(ticket);
+		const peer =
+			!response || (headers && Object.keys(headers).length > 0)
+				? desktopPeer(f, ticket, headers)
+				: browserDesktopPeer(browser, f, origin, response);
 		peers.add(peer);
 		return peer;
 	};
@@ -133,8 +182,6 @@ export async function openDesktopManagement(t, label) {
 		return peer;
 	};
 
-	// guacd detects abruptly lost clients within its own 15-second timeout.
-	// Upstream release is observed separately from local WS/TCP shutdown.
 	const settled = async () =>
 		waitFor(
 			() => services.connections(),
@@ -148,51 +195,13 @@ export async function openDesktopManagement(t, label) {
 		const result = await peer.closed;
 		assert.equal(result.code, code);
 		assert.equal(
-			peer.instructions.some((item) => item[0] === ''),
+			peer.events.some((event) => event.kind === 'ready'),
 			false,
 		);
 		return peer;
 	};
 
-	const decodedImage = async (peer) => {
-		browser ??= await chromium.launch({ headless: true, args: ['--no-sandbox'] });
-		const image = await waitFor(
-			() => {
-				const streams = new Map();
-				for (const item of peer.instructions) {
-					if (item[0] === 'img' && item[3] === '0') {
-						streams.set(item[1], { mime: item[4], chunks: [] });
-					}
-					if (item[0] === 'blob') {
-						streams.get(item[1])?.chunks.push(Buffer.from(item[2], 'base64'));
-					}
-					if (item[0] === 'end' && streams.has(item[1])) {
-						const value = streams.get(item[1]);
-						return { mime: value.mime, bytes: Buffer.concat(value.chunks) };
-					}
-				}
-				return null;
-			},
-			(value) => value !== null,
-			'actual complete desktop image stream',
-		);
-		assert.match(image.mime, /^image\/(png|jpeg)$/u);
-		const page = await browser.newPage();
-		try {
-			const size = await page.evaluate(
-				async (url) => {
-					const img = new Image();
-					img.src = url;
-					await img.decode();
-					return { width: img.naturalWidth, height: img.naturalHeight };
-				},
-				'data:' + image.mime + ';base64,' + image.bytes.toString('base64'),
-			);
-			assert.ok(size.width > 0 && size.height > 0);
-		} finally {
-			await page.close();
-		}
-	};
+	const decodedImage = (peer) => peer.decodedImage();
 
 	return {
 		f,

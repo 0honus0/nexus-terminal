@@ -56,6 +56,9 @@ export async function openManagement(directory, options = {}, transport = { orig
 	}
 	return {
 		api,
+
+		getSessionCookie: () => cookie,
+
 		database,
 		password,
 		login,

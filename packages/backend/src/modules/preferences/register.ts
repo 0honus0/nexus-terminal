@@ -53,6 +53,15 @@ import { ConfigurationService } from './configuration/service/configuration-serv
 import { SqliteConfigurationStorage } from './configuration/adapters/sqlite/configuration-sql.js';
 import { createConfigurationRoutes } from './interfaces/http/configuration-http.js';
 
+export interface PreferencesRuntimeConfiguration {
+	ipWhitelist: string;
+	ipBlacklistEnabled: boolean;
+	maxLoginAttempts: number;
+	loginBanDuration: number;
+	statusMonitorIntervalSeconds: number;
+	remoteHostRefreshIntervalSeconds: number;
+}
+
 export interface PreferencesSeed {
 	ipWhitelist: string;
 	ipBlacklistEnabled: boolean;
@@ -81,6 +90,7 @@ export interface PreferencesRegistrationOptions {
 }
 
 export interface RegisteredPreferences {
+	installRuntimeReload(prepare: (configuration: PreferencesRuntimeConfiguration) => () => void): void;
 	installTransactionIdentityReader(read: (tx: SqlExecutor, digest: string) => Promise<number | null>): void;
 	installation: PreferencesInstallation;
 	routes(access: AccessPublicApi): HttpRoute[];
@@ -149,6 +159,18 @@ export async function registerPreferences(options: PreferencesRegistrationOption
 	);
 	let closePromise: Promise<void> | null = null;
 	return {
+		installRuntimeReload: (prepare) =>
+			service.installRuntimeReload((policy) =>
+				prepare({
+					ipWhitelist: policy.ipWhitelist,
+					ipBlacklistEnabled: policy.ipBlacklistEnabled,
+					maxLoginAttempts: policy.maxLoginAttempts,
+					loginBanDuration: policy.loginBanDuration,
+					statusMonitorIntervalSeconds: policy.statusMonitorIntervalSeconds,
+					remoteHostRefreshIntervalSeconds: policy.remoteHostRefreshIntervalSeconds,
+				}),
+			),
+
 		installTransactionIdentityReader: (read) => {
 			storage.installTransactionIdentityReader(read);
 			historyStorage.installTransactionIdentityReader(read);

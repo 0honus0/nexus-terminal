@@ -4,21 +4,11 @@ import {
 } from '@nexus-terminal/shared/agent/governance/values';
 import {
 	AGENT_EXECUTION_LIMIT_KEYS,
-	AGENT_EXECUTION_PROFILE_MAX_REQUESTS,
-	AGENT_EXECUTION_PROFILE_MAX_TOOLS,
-	AGENT_EXECUTION_PROFILE_MODEL_MAX_BYTES,
-	AGENT_EXECUTION_PROFILE_TOOL_MAX_BYTES,
 	AGENT_EXECUTION_LIMIT_MAXIMA,
 	AGENT_EXECUTION_SETTINGS_MAX_BYTES,
 } from '@nexus-terminal/shared/agent/execution/values';
-import { AGENT_CHILD_PROFILES } from '@nexus-terminal/shared/agent/collaboration/values';
-import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
-import type {
-	StoredExecutionLimits,
-	StoredExecutionSettings,
-	StoredExecutionProfile,
-	StoredProfileModel,
-} from '../../storage/execution-storage.js';
+
+import type { StoredExecutionLimits, StoredExecutionSettings } from '../../storage/execution-storage.js';
 
 export function executionInteger(value: unknown, min = 0, max = Number.MAX_SAFE_INTEGER): number {
 	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < min || value > max) {
@@ -36,18 +26,6 @@ function object(value: unknown, keys: readonly string[]): Record<string, unknown
 		throw new Error('Corrupt execution keys');
 	}
 	return record;
-}
-
-function text(value: unknown, max: number): string {
-	if (
-		typeof value !== 'string' ||
-		!value ||
-		Buffer.byteLength(value, 'utf8') > max ||
-		Buffer.from(value, 'utf8').toString('utf8') !== value
-	) {
-		throw new Error('Corrupt execution text');
-	}
-	return value;
 }
 
 function boolean(value: unknown): boolean {
@@ -91,58 +69,6 @@ export function executionLimits(value: unknown): StoredExecutionLimits {
 	};
 }
 
-function profiles(value: unknown): StoredExecutionProfile[] {
-	if (!Array.isArray(value) || value.length !== 3) {
-		throw new Error('Corrupt execution profiles');
-	}
-	const items = value.map((raw: unknown) => {
-		const r = object(raw, ['name', 'enabled', 'model', 'maxRequests', 'maxSeconds', 'tools']);
-		const name = AGENT_CHILD_PROFILES.find((v) => v === r.name);
-		if (!name || !Array.isArray(r.tools) || r.tools.length > AGENT_EXECUTION_PROFILE_MAX_TOOLS) {
-			throw new Error('Corrupt execution profile');
-		}
-		const model = object(
-			r.model,
-			r.model !== null && typeof r.model === 'object' && 'kind' in r.model && r.model.kind === 'inherit'
-				? ['kind']
-				: ['kind', 'providerId', 'modelId', 'configurationVersion'],
-		);
-		let selection: StoredProfileModel;
-		if (model.kind === 'inherit') {
-			selection = { kind: 'inherit' };
-		} else if (model.kind === 'explicit') {
-			const providerId = text(model.providerId, 36);
-			if (!AGENT_ID_PATTERN.test(providerId)) {
-				throw new Error('Corrupt profile model');
-			}
-			selection = {
-				kind: 'explicit',
-				providerId,
-				modelId: text(model.modelId, AGENT_EXECUTION_PROFILE_MODEL_MAX_BYTES),
-				configurationVersion: executionInteger(model.configurationVersion, 1),
-			};
-		} else {
-			throw new Error('Corrupt profile selection');
-		}
-		const tools = r.tools.map((v: unknown) => text(v, AGENT_EXECUTION_PROFILE_TOOL_MAX_BYTES));
-		if (new Set(tools).size !== tools.length || tools.some((v) => !/^[a-z][a-z0-9_]*$/u.test(v))) {
-			throw new Error('Corrupt profile tools');
-		}
-		return {
-			name,
-			enabled: boolean(r.enabled),
-			model: selection,
-			maxRequests: executionInteger(r.maxRequests, 1, AGENT_EXECUTION_PROFILE_MAX_REQUESTS),
-			maxSeconds: executionInteger(r.maxSeconds, 1, AGENT_EXECUTION_LIMIT_MAXIMA.maxActiveSeconds),
-			tools,
-		};
-	});
-	if (new Set(items.map((item) => item.name)).size !== 3) {
-		throw new Error('Duplicate execution profiles');
-	}
-	return items;
-}
-
 export function executionDocument(json: unknown): StoredExecutionSettings {
 	if (typeof json !== 'string' || Buffer.byteLength(json, 'utf8') > AGENT_EXECUTION_SETTINGS_MAX_BYTES) {
 		throw new Error('Corrupt execution JSON');
@@ -152,7 +78,7 @@ export function executionDocument(json: unknown): StoredExecutionSettings {
 		'enabled',
 		'limits',
 		'hardLimits',
-		'profiles',
+
 		'updatedAt',
 		'contextCompactionMode',
 		'contextProfile',
@@ -174,7 +100,7 @@ export function executionDocument(json: unknown): StoredExecutionSettings {
 		enabled: boolean(r.enabled),
 		limits,
 		hardLimits,
-		profiles: profiles(r.profiles),
+
 		updatedAt: executionInteger(r.updatedAt),
 	};
 }

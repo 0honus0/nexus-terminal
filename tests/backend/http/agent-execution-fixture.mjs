@@ -160,9 +160,6 @@ export async function openAgentExecution(directory, sshd) {
 			tagIds: [],
 			jumpIds: [],
 			notes: null,
-			rdpRemoteApp: null,
-			rdpRemoteAppDirectory: null,
-			rdpRemoteAppArguments: null,
 		});
 		connectionId = target.id;
 		assert.equal(
@@ -190,7 +187,6 @@ export async function openAgentExecution(directory, sshd) {
 				expectedVersion: settings.version,
 				enabled: true,
 				limits: settings.limits,
-				profiles: settings.profiles,
 			}),
 			200,
 		);
@@ -308,10 +304,13 @@ export async function openAgentExecution(directory, sshd) {
 		},
 
 		rows(table, run) {
-			assert.ok(['agent_run_tools', 'agent_tool_jobs', 'agent_run_model_steps'].includes(table));
+			assert.ok(
+				['agent_run_tools', 'agent_tool_jobs', 'agent_run_model_steps', 'agent_run_children'].includes(table),
+			);
 			const db = new DatabaseSync(database, { readOnly: true });
 			try {
-				return db.prepare('SELECT * FROM ' + table + ' WHERE run_id=? ORDER BY created_at').all(run.id);
+				const order = table === 'agent_run_children' ? 'rowid' : 'created_at';
+				return db.prepare('SELECT * FROM ' + table + ' WHERE run_id=? ORDER BY ' + order).all(run.id);
 			} finally {
 				db.close();
 			}

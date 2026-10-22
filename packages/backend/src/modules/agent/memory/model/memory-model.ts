@@ -17,9 +17,6 @@ import type {
 	MemoryQuery,
 	MemoryAdmissionFacts,
 	MemoryReviewTask,
-	MemoryImport,
-	MemoryImportCreation,
-	MemoryImportFacts,
 } from './memory-types.js';
 
 function fromStorage(row: StoredMemory): MemoryRecord {
@@ -138,72 +135,6 @@ export class MemoryModel {
 			),
 		);
 		return fromStorage(saved);
-	}
-
-	async previewImport(
-		actor: MemoryActor,
-		input: MemoryImportCreation,
-		clock: () => number,
-		admit: (facts: MemoryAdmissionFacts) => void,
-		admitSource: (facts: MemoryImportFacts, confirmations: number, now: number) => void,
-	): Promise<MemoryImport> {
-		const row = await storage(() =>
-			this.storage.previewImport(
-				scope(actor),
-				this.authorization(actor),
-				{
-					id: input.id,
-					memoryId: input.memoryId,
-					sourceAppId: input.sourceAppId,
-					sourceMemoryId: input.sourceMemoryId,
-					ttlMs: input.ttlMs,
-				},
-				clock,
-				(facts) => admit(fromFacts(facts)),
-				(facts, confirmations, now) =>
-					admitSource(
-						{ source: fromStorage(facts.source), sourceEnabled: facts.sourceEnabled },
-						confirmations,
-						now,
-					),
-			),
-		);
-		return {
-			id: row.id,
-			memoryId: row.memoryId,
-			sourceAppId: row.sourceAppId,
-			sourceMemoryId: row.sourceMemoryId,
-			sourceVersion: row.sourceVersion,
-			expiresAt: row.expiresAt,
-		};
-	}
-
-	async confirmImport(
-		actor: MemoryActor,
-		id: string,
-		clock: () => number,
-		admit: (facts: MemoryAdmissionFacts) => void,
-		admitSource: (facts: MemoryImportFacts, now: number) => void,
-	): Promise<MemoryRecord> {
-		return fromStorage(
-			await storage(() =>
-				this.storage.confirmImport(
-					scope(actor),
-					this.authorization(actor),
-					id,
-					clock,
-					(facts) => admit(fromFacts(facts)),
-					(facts, now) =>
-						admitSource(
-							{
-								source: fromStorage(facts.source),
-								sourceEnabled: facts.sourceEnabled,
-							},
-							now,
-						),
-				),
-			),
-		);
 	}
 
 	async recall(

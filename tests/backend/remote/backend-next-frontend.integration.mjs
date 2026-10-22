@@ -64,9 +64,6 @@ try {
 		tagIds: [],
 		jumpIds: [],
 		notes: null,
-		rdpRemoteApp: null,
-		rdpRemoteAppDirectory: null,
-		rdpRemoteAppArguments: null,
 	});
 	await app.targets.credentials.set(target.id, target.version, {
 		kind: 'password',

@@ -1,3 +1,4 @@
+import { AGENT_EXECUTION_LIMIT_MAXIMA } from '@nexus-terminal/shared/agent/execution/values';
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 
 export async function initializeRunCollaboration(tx: SqlExecutor): Promise<void> {
@@ -10,7 +11,7 @@ export async function initializeRunCollaboration(tx: SqlExecutor): Promise<void>
 			profile TEXT NOT NULL,
 			output_text TEXT,
 			tools_json TEXT NOT NULL,
-			max_requests INTEGER NOT NULL CHECK(max_requests BETWEEN 1 AND 32),
+			max_requests INTEGER NOT NULL CHECK(max_requests BETWEEN 1 AND ${AGENT_EXECUTION_LIMIT_MAXIMA.maxModelRequests}),
 			dependencies_json TEXT NOT NULL,
 			dependency_mode TEXT NOT NULL CHECK(dependency_mode IN ('success','settled')),
 			CHECK(run_id!=parent_id)

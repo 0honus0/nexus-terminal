@@ -46,15 +46,6 @@ export interface StoredMemoryReviewTask {
 	decision: AgentMemoryDecision;
 }
 
-export interface StoredMemoryImport {
-	id: string;
-	memoryId: string;
-	sourceAppId: string;
-	sourceMemoryId: string;
-	sourceVersion: number;
-	expiresAt: number;
-}
-
 export class MemoryStorageRefusal extends Error {
 	constructor(readonly code: 'not_found' | 'version_conflict') {
 		super(code);
@@ -85,22 +76,6 @@ export interface MemoryStorage {
 		admit: (facts: StoredMemoryFacts) => void,
 		decide: (memory: StoredMemory, now: number) => StoredMemoryReviewTask,
 	): Promise<StoredMemory>;
-	previewImport(
-		scope: StoredMemoryScope,
-		auth: StoredMemoryAuthorization,
-		input: StoredMemoryImportCreation,
-		clock: () => number,
-		admit: (facts: StoredMemoryFacts) => void,
-		admitSource: (facts: StoredMemoryImportFacts, confirmations: number, now: number) => void,
-	): Promise<StoredMemoryImport>;
-	confirmImport(
-		scope: StoredMemoryScope,
-		auth: StoredMemoryAuthorization,
-		id: string,
-		clock: () => number,
-		admit: (facts: StoredMemoryFacts) => void,
-		admitSource: (facts: StoredMemoryImportFacts, now: number) => void,
-	): Promise<StoredMemory>;
 	recall(
 		scope: StoredMemoryScope,
 		auth: StoredMemoryAuthorization,
@@ -108,17 +83,4 @@ export interface MemoryStorage {
 		limit: number,
 		admit: (facts: StoredMemoryFacts) => void,
 	): Promise<StoredMemory[]>;
-}
-
-export interface StoredMemoryImportCreation {
-	id: string;
-	memoryId: string;
-	sourceAppId: string;
-	sourceMemoryId: string;
-	ttlMs: number;
-}
-
-export interface StoredMemoryImportFacts {
-	source: StoredMemory;
-	sourceEnabled: boolean;
 }

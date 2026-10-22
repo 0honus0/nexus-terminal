@@ -46,23 +46,19 @@ await test('B10 real VNC/RDP display, input, admission and transport faults', { 
 		expectStatus(await f.api('POST', path(vnc, 'vnc'), {}), 400);
 		assert.deepEqual(await get(vnc), before);
 	});
-	await t.test('missing password still records attempt without changing configuration version', async () => {
+	await t.test('missing password does not record a successful connection', async () => {
 		const id = await create('VNC', 5900, null);
 		const before = await get(id);
 		expectStatus(await f.api('POST', path(id, 'vnc')), 400);
 		const after = await get(id);
 		assert.equal(after.version, before.version);
-		assert.ok(recent(id) > 0);
+		assert.equal(recent(id), null);
 		assert.equal(services.connections(), 0);
 	});
 	await t.test('VNC reaches real desktop pixels and forwards keyboard/mouse to X server', async () => {
 		const peer = await connect(vnc, 'vnc');
 		await decodedImage(peer);
-		assert.ok(
-			peer.instructions.some(
-				(item) => item[0] === 'size' && item[1] === '0' && item[2] === '800' && item[3] === '600',
-			),
-		);
+		assert.ok(peer.events.some((item) => item.kind === 'size' && item.width === 800 && item.height === 600));
 		peer.send('mouse', 120, 90, 0);
 		await waitFor(
 			() => services.x('getmouselocation', '--shell'),
@@ -107,7 +103,7 @@ await test('B10 real VNC/RDP display, input, admission and transport faults', { 
 		await peer.close();
 		await settled();
 	});
-	await t.test('binary Guacamole frames reach real VNC with an empty stored username', async () => {
+	await t.test('binary protocol frames reach real VNC with an empty stored username', async () => {
 		const id = await create('VNC', 5900);
 		await change(id, { username: '' });
 		const peer = await connect(id, 'vnc');
@@ -123,6 +119,7 @@ await test('B10 real VNC/RDP display, input, admission and transport faults', { 
 			(value) => value.includes('binary-actual'),
 			'binary input actual xterm',
 		);
+		assert.ok(peer.events.some((event) => event.kind === 'sent' && event.binary));
 		await peer.close();
 		await settled();
 	});
@@ -137,23 +134,35 @@ await test('B10 real VNC/RDP display, input, admission and transport faults', { 
 		await fresh.close();
 		await settled();
 	});
-	await t.test('successful ticket marks only lastConnectedAt and never returns stored secrets', async () => {
-		const before = await get(vnc);
-		const beforeRecent = recent(vnc);
-		const ticket = await issue(vnc, 'vnc');
-		const after = await get(vnc);
-		assert.equal(after.version, before.version);
-		assert.ok(recent(vnc) >= beforeRecent);
-		const peer = peerFor(ticket);
-		await peer.ready();
-		await decodedImage(peer);
-		const wire = JSON.stringify(peer.instructions);
-		for (const secret of ['b10-pass', ticket, 'nexus-bridge-id', 'encryptedPassword']) {
-			assert.equal(wire.includes(secret), false);
-		}
-		await peer.close();
-		await settled();
-	});
+	await t.test(
+		'only a ready bridge records lastConnectedAt without changing configuration version or exposing secrets',
+		async () => {
+			const before = await get(vnc);
+			const beforeRecent = recent(vnc);
+			const ticket = await issue(vnc, 'vnc');
+			const after = await get(vnc);
+			assert.equal(after.version, before.version);
+			assert.equal(recent(vnc), beforeRecent);
+			const peer = peerFor(ticket);
+			await peer.ready();
+			await decodedImage(peer);
+			await waitFor(
+				() => recent(vnc),
+				(timestamp) => timestamp > beforeRecent,
+				'ready bridge records server milliseconds',
+			);
+			const connected = await get(vnc);
+			assert.equal(connected.lastConnectedAt, recent(vnc));
+			assert.equal(connected.version, before.version);
+			assert.equal(connected.updatedAt, before.updatedAt);
+			const wire = JSON.stringify(peer.events);
+			for (const secret of ['b10-pass', ticket, 'nexus-bridge-id', 'encryptedPassword']) {
+				assert.equal(wire.includes(secret), false);
+			}
+			await peer.close();
+			await settled();
+		},
+	);
 	await t.test('consumed ticket cannot be replayed', async () => {
 		const ticket = await issue(vnc, 'vnc');
 		const peer = peerFor(ticket);
@@ -169,7 +178,7 @@ await test('B10 real VNC/RDP display, input, admission and transport faults', { 
 		await waitFor(
 			() =>
 				pair.map((peer) => ({
-					ready: peer.instructions.some((item) => item[0] === ''),
+					ready: peer.events.some((item) => item.kind === 'ready'),
 					closed: peer.closeResult,
 				})),
 			(values) =>
@@ -289,27 +298,32 @@ await test('B10 real VNC/RDP display, input, admission and transport faults', { 
 		const id = await create('VNC', 5900, 'incorrect');
 		const peer = peerFor(await issue(id, 'vnc'));
 		await peer.closed;
-		assert.equal(JSON.stringify(peer.instructions).includes('incorrect'), false);
+		assert.equal(JSON.stringify(peer.events).includes('incorrect'), false);
 		await settled();
 		const healthy = await connect(vnc, 'vnc');
 		await healthy.close();
 		await settled();
 	});
 	await t.test(
-		'guacd termination closes real peer; restart accepts a fresh independently issued ticket',
+		'desktop server termination closes real peer; restart accepts a fresh independently issued ticket',
 		async () => {
 			const peer = await connect(vnc, 'vnc');
-			services.stopGuacd();
+			services.stopDesktop();
 			await peer.closed;
 			await settled();
 			const unavailable = peerFor(await issue(vnc, 'vnc'));
 			await unavailable.closed;
 			assert.equal(
-				unavailable.instructions.some((item) => item[0] === ''),
+				unavailable.events.some((item) => item.kind === 'ready'),
 				false,
 			);
-			assert.equal(JSON.stringify(unavailable.instructions).includes('b10-pass'), false);
-			services.startGuacd();
+			assert.equal(JSON.stringify(unavailable.events).includes('b10-pass'), false);
+			await services.startDesktop();
+			await waitFor(
+				() => services.x('search', '--name', 'B10-Desktop'),
+				(value) => value.length > 0,
+				'desktop restarted',
+			);
 			const fresh = await connect(vnc, 'vnc');
 			await fresh.close();
 			await settled();

@@ -79,6 +79,12 @@ test('the first directory change waits for a real shell prompt instead of report
 	const connectionId = await ensureTestSshConnection(request);
 	const targetPath = '/folder-seed';
 	const workspace = await openWorkspaceSession(request, connectionId, `cwd-${crypto.randomUUID()}`);
+	const chunks: Buffer[] = [];
+	workspace.socket.on('message', (raw: Buffer, binary: boolean) => {
+		if (!binary) return;
+		const frame = decodeWorkspaceBinaryFrame(raw);
+		if (frame.kind === 'terminal') chunks.push(Buffer.from(frame.data));
+	});
 
 	try {
 		// Historical race: issue the first cwd change immediately after workspace.connect completes.
@@ -99,6 +105,9 @@ test('the first directory change waits for a real shell prompt instead of report
 		const changed = await changedPromise;
 		expect(changed.payload).toMatchObject({ path: targetPath });
 		expect(await failedPromise).toBeNull();
+		const output = Buffer.concat(chunks).toString('utf8');
+		expect(output).toMatch(/cd '\/folder-seed'\r+\n/);
+		expect(output).not.toContain('__NEXUS_INTERNAL_CD_');
 	} finally {
 		await closeWebSocket(workspace.socket);
 	}

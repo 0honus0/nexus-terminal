@@ -1,4 +1,5 @@
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
+import type { TargetsPublicApi } from '../../../targets/public.js';
 import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.js';
 import { RecentResults } from '../../../../platform/lifecycle/recent-results.js';
 import { CLOSED_SESSION_TTL_MS, MAX_RECENTLY_RELEASED } from '../session-limits.js';
@@ -64,6 +65,7 @@ export class RemoteSessionService {
 
 	constructor(
 		private readonly model: RemoteSessionModel,
+		private readonly targets: Pick<TargetsPublicApi, 'get' | 'connectionUsage'>,
 		private readonly viewportLimits: { readonly columns: number; readonly rows: number } = {
 			columns: REMOTE_TERMINAL_MAX_COLUMNS,
 			rows: REMOTE_TERMINAL_MAX_ROWS,
@@ -154,6 +156,10 @@ export class RemoteSessionService {
 	): Promise<RemoteSessionSnapshot> {
 		let opened: RemoteSessionResource | null = null;
 		try {
+			const target = await this.targets.get(request.targetId);
+			if (controller.signal.aborted || !this.accepting) {
+				throw new RemoteSessionFailure('remote_unavailable');
+			}
 			opened = await this.model.open({
 				targetId: request.targetId,
 				columns: request.columns,
@@ -162,6 +168,18 @@ export class RemoteSessionService {
 				timeoutMs: request.timeoutMs,
 				signal: controller.signal,
 			});
+			if (controller.signal.aborted || !this.accepting || !opened.isOpen) {
+				throw new RemoteSessionFailure('remote_unavailable');
+			}
+			if (target?.type === 'SSH') {
+				await this.targets.connectionUsage.recordConnected(
+					target.id,
+					target.version,
+					target.createdAt,
+					'SSH',
+					Date.now(),
+				);
+			}
 			if (controller.signal.aborted || !this.accepting || !opened.isOpen) {
 				throw new RemoteSessionFailure('remote_unavailable');
 			}

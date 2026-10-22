@@ -30,6 +30,7 @@ export function toConnectionDto(value: ConnectionSnapshot): TargetConnectionView
 		version: value.version,
 		createdAt: value.createdAt,
 		updatedAt: value.updatedAt,
+		lastConnectedAt: value.lastConnectedAt,
 		name: value.name,
 		type: value.type,
 		host: value.host,
@@ -38,9 +39,6 @@ export function toConnectionDto(value: ConnectionSnapshot): TargetConnectionView
 		route: value.route,
 		proxyId: value.proxyId,
 		notes: value.notes,
-		rdpRemoteApp: value.rdpRemoteApp,
-		rdpRemoteAppDirectory: value.rdpRemoteAppDirectory,
-		rdpRemoteAppArguments: value.rdpRemoteAppArguments,
 		tagIds: value.tagIds.map((id) => id),
 		jumpIds: value.jumpIds.map((id) => id),
 	};

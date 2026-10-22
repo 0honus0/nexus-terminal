@@ -125,7 +125,6 @@ export async function openHttpListener(options: HttpServerOptions): Promise<Http
 						// lifetime, not just its handshake.
 						trackWebSocketTask(
 							Promise.resolve(route.connectedRaw(ws, request, url)).finally(() => {
-								// guacamole-lite may remove HTTP's close listener.
 								// An unresolved technical close must retain the
 								// socket for another shutdown attempt rather than
 								// treating a rejected raw task as closed.

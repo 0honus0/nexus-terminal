@@ -132,8 +132,6 @@ export function respondPresetModel(messages, userText, response, send) {
 						objective: userText.includes('browser=true')
 							? `E2E_BROWSER_LIFECYCLE ${crypto.randomUUID()} version=${Number(/version=(\d+)/.exec(userText)?.[1])} E2E_CHILD_BROWSER_LIFECYCLE`
 							: 'E2E_NATIVE_PLUGIN_CHILD_BATCH Validate both tool results in one model turn.',
-						maxRequests: 8,
-						durationSeconds: 120,
 						dependencyMode: 'success',
 					},
 				],

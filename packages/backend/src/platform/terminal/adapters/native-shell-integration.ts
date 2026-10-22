@@ -18,7 +18,6 @@ interface Setup {
 	reject(error: Error): void;
 }
 
-const CLEAR_LINE = Buffer.from('\r\x1b[2K', 'ascii');
 const SETUP_TIMEOUT_MS = 5000;
 const MAX_SETUP_BYTES = 4096;
 
@@ -92,7 +91,6 @@ class NativeShellIntegration implements ShellIntegrationPort {
 	private probeTask: Promise<void> | null = null;
 	private hookTask: Promise<void> | null = null;
 	private markerRemainder = Buffer.alloc(0);
-	private suppressUntilPrompt = false;
 	private userInputSeen = false;
 
 	constructor(private readonly options: ShellIntegrationOptions) {}
@@ -119,7 +117,6 @@ class NativeShellIntegration implements ShellIntegrationPort {
 	onAttachmentReleased(): void {
 		this.userInputSeen = true;
 		this.atPrompt = false;
-		this.suppressUntilPrompt = false;
 	}
 
 	private assertOpen(): void {
@@ -368,15 +365,7 @@ class NativeShellIntegration implements ShellIntegrationPort {
 		const visible: Buffer[] = [];
 		let cursor = 0;
 		while (begin >= 0) {
-			if (this.suppressUntilPrompt) {
-				// An internal cd echo is possible, but suppressing every byte
-				// here also hides unrelated background job stdout. Preserve it.
-				if (begin > cursor) {
-					visible.push(data.subarray(cursor, begin));
-				}
-				visible.push(CLEAR_LINE);
-				this.suppressUntilPrompt = false;
-			} else if (begin > cursor) {
+			if (begin > cursor) {
 				visible.push(data.subarray(cursor, begin));
 			}
 			this.atPrompt = true;
@@ -399,20 +388,7 @@ class NativeShellIntegration implements ShellIntegrationPort {
 	changeDirectory(directory: string): void {
 		this.assertOpen();
 		this.atPrompt = false;
-		this.suppressUntilPrompt = true;
-		const historyToken = marker('INTERNAL_CD');
-		this.write(
-			Buffer.from(
-				'\x15cd ' +
-					quote(directory) +
-					'; : ' +
-					quote(historyToken) +
-					'; ' +
-					cleanHistory(this.kind, historyToken) +
-					'\r',
-				'utf8',
-			),
-		);
+		this.write(Buffer.from('\x15cd ' + quote(directory) + '\r', 'utf8'));
 	}
 
 	close(): void {

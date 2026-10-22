@@ -79,8 +79,6 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 			input: {
 				profile: 'explore',
 				objective,
-				maxRequests: 8,
-				durationSeconds: 120,
 				dependencyMode: 'success',
 				...extra,
 			},
@@ -89,53 +87,62 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 
 	try {
 		sshd = await openSshd(root);
-		await scenario('delegation and join preserve isolated history, profile and safe observation', async (f) => {
-			const objective = f.program('independent child', (results, body) => {
-				assert.equal(results.length, 0);
-				assert.equal(body.messages.filter((message) => message.role === 'user').length, 1);
-				const names = body.tools.map((tool) => tool.function.name);
-				assert.ok(names.includes('file_read'));
-				assert.ok(!names.includes('file_write'));
-				assert.ok(!names.includes('collaboration_delegate'));
-				return {};
-			});
-			const run = await f.start('private parent context', (results) => {
-				if (!results.length) {
-					return delegate(objective);
-				}
-				if (results.length === 1) {
-					return {
-						name: 'collaboration_join',
-						input: { childIds: [results[0].id], mode: 'all', waitSeconds: 5 },
-					};
-				}
-				assert.equal(results[1].ready, true);
-				assert.equal(results[1].children[0].status, 'completed');
-				assert.equal(results[1].children[0].output, 'Fixture finished');
-				return {};
-			});
-			assert.equal((await children(f, run, 0)).length, 0);
-			await f.approve(await f.approval(run, 'collaboration_delegate'));
-			await f.wait(run, 'completed');
-			const [child] = await children(f, run, 1);
-			assert.equal(child.status, 'completed');
-			assert.equal(child.parentId, run.id);
-			assert.deepEqual(Object.keys(child).sort(), [
-				'deadlineAt',
-				'id',
-				'parentId',
-				'profile',
-				'status',
-				'version',
-			]);
-			const call = f.calls.find((value) => value.key === objective);
-			assert.ok(call);
-			assert.ok(!JSON.stringify(call.body).includes('private parent context'));
-			assert.equal(f.calls.length, 4);
-			await f.restart();
-			assert.equal((await children(f, run, 1))[0].status, 'completed');
-			assert.equal(f.calls.length, 4);
-		});
+		await scenario(
+			'delegation inherits tools and budgets while preserving isolated history and safe observation',
+			async (f) => {
+				const objective = f.program('independent child', (results, body) => {
+					assert.equal(results.length, 0);
+					assert.equal(body.messages.filter((message) => message.role === 'user').length, 1);
+					const names = body.tools.map((tool) => tool.function.name);
+					assert.ok(names.includes('file_read'));
+					assert.ok(names.includes('file_write'));
+					assert.ok(!names.includes('collaboration_delegate'));
+					return {};
+				});
+				const run = await f.start('private parent context', (results) => {
+					if (!results.length) {
+						return delegate(objective);
+					}
+					if (results.length === 1) {
+						return {
+							name: 'collaboration_join',
+							input: { childIds: [results[0].id], mode: 'all', waitSeconds: 5 },
+						};
+					}
+					assert.equal(results[1].ready, true);
+					assert.equal(results[1].children[0].status, 'completed');
+					assert.equal(results[1].children[0].output, 'Fixture finished');
+					return {};
+				});
+				assert.equal((await children(f, run, 0)).length, 0);
+				await f.approve(await f.approval(run, 'collaboration_delegate'));
+				await f.wait(run, 'completed');
+				const [child] = await children(f, run, 1);
+				assert.equal(child.status, 'completed');
+				assert.equal(child.parentId, run.id);
+				assert.equal(child.deadlineAt, run.deadlineAt);
+				const settings = expectStatus(await f.api('GET', '/api/v1/agent/execution-settings'), 200).settings;
+				assert.equal(
+					f.rows('agent_run_children', { id: child.id })[0].max_requests,
+					settings.limits.maxModelRequests,
+				);
+				assert.deepEqual(Object.keys(child).sort(), [
+					'deadlineAt',
+					'id',
+					'parentId',
+					'profile',
+					'status',
+					'version',
+				]);
+				const call = f.calls.find((value) => value.key === objective);
+				assert.ok(call);
+				assert.ok(!JSON.stringify(call.body).includes('private parent context'));
+				assert.equal(f.calls.length, 4);
+				await f.restart();
+				assert.equal((await children(f, run, 1))[0].status, 'completed');
+				assert.equal(f.calls.length, 4);
+			},
+		);
 		await scenario('Root cancel fences a running Child and a pending dependency without replay', async (f) => {
 			const first = f.program('running child', () => ({ hold: true }));
 			const second = f.program('dependent child', () => assert.fail('Dependent Provider must not dispatch'));
@@ -443,27 +450,20 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 			assert.equal(f.calls.length, 2);
 		});
 		await scenario(
-			'model profile/list/cancel keeps independent control approval and family ownership',
+			'model list/cancel keeps independent control approval and family ownership',
 			async (f, directory, releases, cleanup) => {
 				const objective = f.program('model cancelled child', () => ({ hold: true }));
 				const run = await f.start('model family control', (results) => {
 					switch (results.length) {
 						case 0:
-							return { name: 'collaboration_profiles', input: {} };
-						case 1:
-							assert.deepEqual(results[0].map((profile) => profile.name).sort(), [
-								'explore',
-								'review',
-								'worker',
-							]);
 							return delegate(objective);
-						case 2:
+						case 1:
 							return { name: 'collaboration_list', input: {} };
-						case 3:
-							assert.equal(results[2].children[0].id, results[1].id);
-							return { name: 'collaboration_cancel', input: { childIds: [results[1].id] } };
+						case 2:
+							assert.equal(results[1].children[0].id, results[0].id);
+							return { name: 'collaboration_cancel', input: { childIds: [results[0].id] } };
 						default:
-							assert.equal(results[3].children[0].status, 'cancelled');
+							assert.equal(results[2].children[0].status, 'cancelled');
 							return {};
 					}
 				});
@@ -477,7 +477,7 @@ await test('B10 actual Root/Child collaboration ownership', { timeout: 60000 }, 
 				assert.equal((await children(f, run, 1))[0].status, 'cancelled');
 				assert.deepEqual(
 					f.rows('agent_run_tools', run).map((tool) => tool.state),
-					['completed', 'completed', 'completed', 'completed'],
+					['completed', 'completed', 'completed'],
 				);
 			},
 		);

@@ -111,11 +111,6 @@ async function main(): Promise<void> {
 			},
 			passkeys: parsePasskeySites(http.publicOrigin),
 		}),
-
-		guacd: {
-			host: process.env.GUACD_HOST?.trim() || 'localhost',
-			port: parsePort(process.env.GUACD_PORT ?? '4822', 'GUACD_PORT'),
-		},
 	});
 	try {
 		const address = await app.listenHttp(http);

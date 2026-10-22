@@ -129,9 +129,6 @@ export async function remoteFilesFixture(t) {
 			tagIds: [],
 			jumpIds: [],
 			notes: null,
-			rdpRemoteApp: null,
-			rdpRemoteAppDirectory: null,
-			rdpRemoteAppArguments: null,
 		});
 		assert.equal(
 			(

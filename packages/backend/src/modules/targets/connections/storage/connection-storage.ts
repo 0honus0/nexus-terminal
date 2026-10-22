@@ -19,9 +19,6 @@ export interface ConnectionData {
 	route: ConnectionRoute;
 	proxyId: number | null;
 	notes: string | null;
-	rdpRemoteApp: string | null;
-	rdpRemoteAppDirectory: string | null;
-	rdpRemoteAppArguments: string | null;
 	jumpIds: number[];
 	tagIds: number[];
 }
@@ -31,6 +28,7 @@ export interface StoredConnection extends ConnectionData {
 	version: number;
 	createdAt: number;
 	updatedAt: number;
+	lastConnectedAt: number | null;
 }
 
 export type MutationResult =
@@ -45,6 +43,13 @@ export interface ConnectionStorage {
 	clone(id: number, name: string): Promise<StoredConnection | null>;
 	delete(id: number): Promise<boolean>;
 	setTags(id: number, expectedVersion: number, tagIds: number[]): Promise<MutationResult>;
+	recordConnected(
+		id: number,
+		version: number,
+		createdAt: number,
+		type: ConnectionType,
+		timestamp: number,
+	): Promise<void>;
 }
 
 /** Facts read under the same write transaction; no application objects cross this boundary. */

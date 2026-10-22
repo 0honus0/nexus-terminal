@@ -105,19 +105,6 @@ await test('B10 actual SSH ACP integration and inner permissions', { timeout: 60
 			let run;
 			let rootRun;
 			if (child) {
-				const path = '/api/v1/agent/execution-settings';
-				const settings = expectStatus(await f.api('GET', path), 200).settings;
-				expectStatus(
-					await f.api('PUT', path, {
-						expectedVersion: settings.version,
-						enabled: true,
-						limits: settings.limits,
-						profiles: settings.profiles.map((profile) =>
-							profile.name === 'worker' ? { ...profile, tools: ['acp_integration_execute'] } : profile,
-						),
-					}),
-					200,
-				);
 				const objective = f.program('ACP restricted Child', execute);
 				rootRun = await f.start('ACP Child owner', (results) => {
 					if (!results.length) {
@@ -127,8 +114,6 @@ await test('B10 actual SSH ACP integration and inner permissions', { timeout: 60
 								profile: 'worker',
 								objective,
 								targets: [String(f.connectionId)],
-								maxRequests: 8,
-								durationSeconds: 120,
 								dependencyMode: 'success',
 							},
 						};

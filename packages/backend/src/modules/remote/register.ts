@@ -60,7 +60,8 @@ import { createFileDownloadHttpRoutes } from './interfaces/http/file-download-ht
 import { createWorkspaceFilesRoute } from './interfaces/ws/workspace-files.js';
 import { createUploadStreamRoute } from './interfaces/ws/upload-stream.js';
 import { createSuspendHttpRoutes } from './interfaces/http/suspend-http.js';
-import { GuacamoleDesktopAdapter } from '../../platform/desktop/adapters/guacamole-desktop.js';
+import { createSuspendedCatalogWebSocketRoute } from './interfaces/ws/suspended-catalog-ws.js';
+import { BrowserDesktopAdapter } from '../../platform/desktop/adapters/browser-desktop.js';
 import { DesktopService } from './desktop/service/desktop-service.js';
 import { DesktopModel } from './desktop/model/desktop-model.js';
 import { createDesktopHttpRoutes } from './interfaces/http/desktop-http.js';
@@ -77,17 +78,16 @@ interface RemoteRegistrationOptions {
 	ssh: MachineSshFactory;
 	verifyHostKey: MachineConnectOptions['verifyHostKey'] | null;
 	hostKeys: Pick<HostKeyManagement, 'list'>;
-	targets: Pick<TargetsPublicApi, 'get' | 'list' | 'desktopTargets'>;
+	targets: Pick<TargetsPublicApi, 'get' | 'list' | 'desktopTargets' | 'connectionUsage'>;
 	statusIntervalSeconds?: number;
 	resourceRefreshSeconds?: number;
 	access: AccessPublicApi;
-	guacdHost?: string;
-	guacdPort?: number;
 	/** Root beside the configured SQLite data file, never process.cwd(). */
 	logDirectory?: string;
 }
 
 interface RemoteRegistration {
+	prepareMonitoringConfiguration(statusIntervalSeconds: number, resourceRefreshSeconds: number): () => void;
 	publicApi: RemoteSessions;
 	operations: RemoteMachineOperations;
 	httpRoutes(): HttpRoute[];
@@ -142,10 +142,10 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		mutations,
 	);
 	const connectionTests = new ConnectionTestService(new ConnectionTestModel(machines), options.access);
-	const service = new RemoteSessionService(new RemoteSessionModel(machines));
+	const service = new RemoteSessionService(new RemoteSessionModel(machines), options.targets);
 	// Independent technical PTY leases: public Remote/Agent sessions never enumerate
 	// or claim ordinary Workspace shell resources.
-	const workspaceShells = new RemoteSessionService(new RemoteSessionModel(machines), {
+	const workspaceShells = new RemoteSessionService(new RemoteSessionModel(machines), options.targets, {
 		columns: WORKSPACE_TERMINAL_MAX_COLUMNS,
 		rows: WORKSPACE_TERMINAL_MAX_ROWS,
 	});
@@ -199,11 +199,13 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		observations,
 		options.resourceRefreshSeconds,
 	);
-	const desktopModel = new DesktopModel(
-		new GuacamoleDesktopAdapter(options.guacdHost ?? 'localhost', options.guacdPort ?? 4822),
-		new SecureSessionTokens(),
+	const desktopModel = new DesktopModel(new BrowserDesktopAdapter(), new SecureSessionTokens());
+	const desktops = new DesktopService(
+		options.access,
+		options.targets.desktopTargets,
+		desktopModel,
+		options.targets.connectionUsage,
 	);
-	const desktops = new DesktopService(options.access, options.targets.desktopTargets, desktopModel);
 	const publicApi: RemoteSessions = {
 		open: (input) => remoteBoundary(async () => toSessionView(await service.open(toOpenSessionRequest(input)))),
 
@@ -242,6 +244,15 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		publicApi,
 		operations: remoteOperations(operations),
 
+		prepareMonitoringConfiguration: (statusIntervalSeconds, resourceRefreshSeconds) => {
+			const applyStatus = observations.prepareStatusInterval(statusIntervalSeconds);
+			const applyResources = resources.prepareRefreshInterval(resourceRefreshSeconds);
+			return () => {
+				applyStatus();
+				applyResources();
+			};
+		},
+
 		installTransactionIdentityReader: (read) => mutationStorage.installTransactionIdentityReader(read),
 
 		initialize: async () => {
@@ -262,6 +273,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		],
 
 		webSocketRoutes: () => [
+			createSuspendedCatalogWebSocketRoute(options.access, workspaces),
 			createDesktopWebSocketRoute(options.access, desktops, desktopModel),
 			createRemoteWebSocketRoute(owner, service),
 			createWorkspaceFilesRoute(options.access, files, workspaces, observations),

@@ -11,13 +11,10 @@ import type { AgentMemoryView } from './model.js';
 import type {
 	AgentMemoryProposalRequest,
 	AgentMemoryReviewRequest,
-	AgentMemoryImportRequest,
-	AgentMemoryConfirmRequest,
 	AgentMemoryPath,
 	AgentMemoryListQuery,
 	AgentMemoryResponse,
 	AgentMemoryListResponse,
-	AgentMemoryImportResponse,
 } from './http.js';
 
 function confidence(value: unknown): number {
@@ -53,15 +50,6 @@ export function readAgentMemoryReview(value: unknown): AgentMemoryReviewRequest 
 		decision,
 		content: r.content === null ? null : agentText(r.content, AGENT_MEMORY_MAX_CONTENT_BYTES),
 	};
-}
-
-export function readAgentMemoryImport(value: unknown): AgentMemoryImportRequest {
-	const r = agentRecord(value, ['sourceAppId', 'sourceMemoryId']);
-	return { sourceAppId: readAgentId(r.sourceAppId), sourceMemoryId: readAgentId(r.sourceMemoryId) };
-}
-
-export function readAgentMemoryConfirm(value: unknown): AgentMemoryConfirmRequest {
-	return { confirmationId: readAgentId(agentRecord(value, ['confirmationId']).confirmationId) };
 }
 
 export function readAgentMemoryListQuery(query: URLSearchParams): AgentMemoryListQuery {
@@ -170,25 +158,4 @@ export function readAgentMemoryListResponse(value: unknown): AgentMemoryListResp
 		throw new InvalidAgentPayload();
 	}
 	return { items, nextOffset: r.nextOffset === null ? null : agentInteger(r.nextOffset, 1, 10000) };
-}
-
-export function readAgentMemoryImportResponse(value: unknown): AgentMemoryImportResponse {
-	const r = agentRecord(agentRecord(value, ['confirmation']).confirmation, [
-		'id',
-		'memoryId',
-		'sourceAppId',
-		'sourceMemoryId',
-		'sourceVersion',
-		'expiresAt',
-	]);
-	return {
-		confirmation: {
-			id: readAgentId(r.id),
-			memoryId: readAgentId(r.memoryId),
-			sourceAppId: readAgentId(r.sourceAppId),
-			sourceMemoryId: readAgentId(r.sourceMemoryId),
-			sourceVersion: agentInteger(r.sourceVersion, 1),
-			expiresAt: agentInteger(r.expiresAt, 1),
-		},
-	};
 }

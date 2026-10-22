@@ -5,9 +5,6 @@ import {
 	TARGET_CONNECTION_HOST_MAX_BYTES,
 	TARGET_CONNECTION_USERNAME_MAX_BYTES,
 	TARGET_CONNECTION_NOTES_MAX_BYTES,
-	TARGET_RDP_REMOTE_APP_MAX_BYTES,
-	TARGET_RDP_REMOTE_APP_DIRECTORY_MAX_BYTES,
-	TARGET_RDP_REMOTE_APP_ARGUMENTS_MAX_BYTES,
 } from '@nexus-terminal/shared/targets/connections/values';
 import type { SqlExecutor, SqlReader } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
@@ -23,32 +20,8 @@ import type {
 import { readSshGraph } from './ssh-graph-sql.js';
 import { TargetReferenceInUse } from '../../../storage/target-storage-refusal.js';
 
-const columnNames = [
-	'name',
-	'type',
-	'host',
-	'port',
-	'username',
-	'route',
-	'proxy_id',
-	'notes',
-	'rdp_remote_app',
-	'rdp_remote_app_directory',
-	'rdp_remote_app_arguments',
-] as const;
-const propertyNames = [
-	'name',
-	'type',
-	'host',
-	'port',
-	'username',
-	'route',
-	'proxyId',
-	'notes',
-	'rdpRemoteApp',
-	'rdpRemoteAppDirectory',
-	'rdpRemoteAppArguments',
-] as const;
+const columnNames = ['name', 'type', 'host', 'port', 'username', 'route', 'proxy_id', 'notes'] as const;
+const propertyNames = ['name', 'type', 'host', 'port', 'username', 'route', 'proxyId', 'notes'] as const;
 
 interface ConnectionColumnValues {
 	columns: string[];
@@ -104,9 +77,6 @@ export function readConnectionMetadataRow(row: Record<string, unknown>): Omit<St
 	if (route !== 'direct' && route !== 'proxy' && route !== 'jump') {
 		throw new Error('Corrupt route');
 	}
-	if (row.last_connected_at !== null) {
-		decodeInteger(row.last_connected_at, 0);
-	}
 	return {
 		id: decodeInteger(row.id),
 		name: decodeString(row.name, TARGET_CONNECTION_NAME_MAX_BYTES, false),
@@ -117,18 +87,13 @@ export function readConnectionMetadataRow(row: Record<string, unknown>): Omit<St
 		route,
 		proxyId: row.proxy_id === null ? null : decodeInteger(row.proxy_id),
 		notes: decodeNullableString(row.notes, TARGET_CONNECTION_NOTES_MAX_BYTES),
-		rdpRemoteApp: decodeNullableString(row.rdp_remote_app, TARGET_RDP_REMOTE_APP_MAX_BYTES),
-		rdpRemoteAppDirectory: decodeNullableString(
-			row.rdp_remote_app_directory,
-			TARGET_RDP_REMOTE_APP_DIRECTORY_MAX_BYTES,
-		),
-		rdpRemoteAppArguments: decodeNullableString(
-			row.rdp_remote_app_arguments,
-			TARGET_RDP_REMOTE_APP_ARGUMENTS_MAX_BYTES,
-		),
 		version: decodeInteger(row.version),
 		createdAt: decodeInteger(row.created_at, 0),
 		updatedAt: decodeInteger(row.updated_at, 0),
+		lastConnectedAt:
+			row.last_connected_at === null
+				? null
+				: decodeInteger(row.last_connected_at, decodeInteger(row.created_at, 0)),
 	};
 }
 
@@ -329,5 +294,20 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 
 	setTags(id: number, expectedVersion: number, tagIds: number[]): Promise<MutationResult> {
 		return this.update(id, expectedVersion, { tagIds });
+	}
+
+	recordConnected(
+		id: number,
+		version: number,
+		createdAt: number,
+		type: StoredConnection['type'],
+		timestamp: number,
+	): Promise<void> {
+		return this.db.transaction(async (tx) => {
+			await tx.run(
+				'UPDATE connections SET last_connected_at=? WHERE id=? AND version=? AND created_at=? AND type=? AND (last_connected_at IS NULL OR last_connected_at<?)',
+				[timestamp, id, version, createdAt, type, timestamp],
+			);
+		});
 	}
 }

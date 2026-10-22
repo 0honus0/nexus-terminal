@@ -1,4 +1,4 @@
-import type { RemoteDesktopErrorCode } from './values.js';
+import type { RemoteDesktopErrorCode, RemoteDesktopProtocol } from './values.js';
 
 export interface RemoteDesktopDisplayRequest {
 	width?: number;
@@ -10,10 +10,13 @@ export interface RemoteDesktopSessionPath {
 	id: number;
 }
 
-/** Only an opaque one-use bearer. Credentials stay server-side. */
 export interface RemoteDesktopSessionResponse {
 	ticket: string;
-	lastConnectedAt: number;
+	protocol: RemoteDesktopProtocol;
+	host: string;
+	port: number;
+	username: string;
+	password: string;
 }
 
 export interface RemoteDesktopFailureResponse {

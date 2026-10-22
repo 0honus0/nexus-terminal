@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { dirname, join } from 'node:path';
 import { until } from '../remote/openssh-fixture.mjs';
 
 // Linux leases block the real NativeBlobStore open without replacing its implementation.
@@ -26,7 +27,7 @@ close($file) or die "close: $!";
 
 export async function holdBlobOpen(t, f, artifact) {
 	assert.equal(process.platform, 'linux');
-	const child = spawn('perl', ['-e', holder, f.database + '.artifacts/' + artifact.id + '.blob']);
+	const child = spawn('perl', ['-e', holder, join(dirname(f.database), 'artifacts', artifact.id + '.blob')]);
 	const messages = [];
 	let stderr = '';
 	let failed;

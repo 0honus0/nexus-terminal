@@ -1,21 +1,11 @@
-import { agentRecord, agentInteger, agentText, readAgentId, InvalidAgentPayload } from '../http-codec.js';
-import { AGENT_CHILD_PROFILES } from '../collaboration/values.js';
+import { agentRecord, agentInteger, readAgentId, InvalidAgentPayload } from '../http-codec.js';
+
 import {
 	AGENT_EXECUTION_LIMIT_KEYS,
-	AGENT_EXECUTION_PROFILE_MAX_REQUESTS,
-	AGENT_EXECUTION_PROFILE_MAX_TOOLS,
-	AGENT_EXECUTION_PROFILE_MODEL_MAX_BYTES,
-	AGENT_EXECUTION_PROFILE_TOOL_MAX_BYTES,
 	AGENT_EXECUTION_LIMIT_MAXIMA,
 	AGENT_EXECUTION_SETTINGS_MAX_BYTES,
 } from './values.js';
-import type {
-	AgentExecutionLimits,
-	AgentExecutionProfile,
-	AgentExecutionSettingsView,
-	AgentHardLimitPreviewView,
-	AgentProfileModel,
-} from './model.js';
+import type { AgentExecutionLimits, AgentExecutionSettingsView, AgentHardLimitPreviewView } from './model.js';
 import type {
 	AgentExecutionSettingsUpdate,
 	AgentHardLimitPreviewRequest,
@@ -51,75 +41,8 @@ export function readAgentExecutionLimits(value: unknown): AgentExecutionLimits {
 	};
 }
 
-export function readAgentExecutionProfiles(value: unknown): AgentExecutionProfile[] {
-	if (!Array.isArray(value) || value.length !== AGENT_CHILD_PROFILES.length) {
-		throw new InvalidAgentPayload();
-	}
-	const items = value.map((raw: unknown) => {
-		const r = agentRecord(
-			raw,
-			['name', 'enabled', 'model', 'maxRequests', 'maxSeconds', 'tools'],
-			AGENT_EXECUTION_SETTINGS_MAX_BYTES,
-		);
-		const name = AGENT_CHILD_PROFILES.find((v) => v === r.name);
-		if (
-			!name ||
-			typeof r.enabled !== 'boolean' ||
-			!Array.isArray(r.tools) ||
-			r.tools.length > AGENT_EXECUTION_PROFILE_MAX_TOOLS
-		) {
-			throw new InvalidAgentPayload();
-		}
-		const model = agentRecord(
-			r.model,
-			r.model !== null && typeof r.model === 'object' && 'kind' in r.model && r.model.kind === 'inherit'
-				? ['kind']
-				: ['kind', 'providerId', 'modelId', 'configurationVersion'],
-		);
-		let selection: AgentProfileModel;
-		if (model.kind === 'inherit') {
-			selection = { kind: 'inherit' };
-		} else if (model.kind === 'explicit') {
-			selection = {
-				kind: 'explicit',
-				providerId: readAgentId(model.providerId),
-				modelId: agentText(model.modelId, AGENT_EXECUTION_PROFILE_MODEL_MAX_BYTES),
-				configurationVersion: agentInteger(model.configurationVersion, 1),
-			};
-		} else {
-			throw new InvalidAgentPayload();
-		}
-		const tools = r.tools.map((tool: unknown) => {
-			const name = agentText(tool, AGENT_EXECUTION_PROFILE_TOOL_MAX_BYTES);
-			if (!/^[a-z][a-z0-9_]*$/u.test(name)) {
-				throw new InvalidAgentPayload();
-			}
-			return name;
-		});
-		if (new Set(tools).size !== tools.length) {
-			throw new InvalidAgentPayload();
-		}
-		return {
-			name,
-			enabled: r.enabled,
-			model: selection,
-			maxRequests: agentInteger(r.maxRequests, 1, AGENT_EXECUTION_PROFILE_MAX_REQUESTS),
-			maxSeconds: agentInteger(r.maxSeconds, 1, AGENT_EXECUTION_LIMIT_MAXIMA.maxActiveSeconds),
-			tools,
-		};
-	});
-	if (new Set(items.map((v) => v.name)).size !== AGENT_CHILD_PROFILES.length) {
-		throw new InvalidAgentPayload();
-	}
-	return items;
-}
-
 export function readAgentExecutionSettingsUpdate(value: unknown): AgentExecutionSettingsUpdate {
-	const r = agentRecord(
-		value,
-		['expectedVersion', 'enabled', 'limits', 'profiles'],
-		AGENT_EXECUTION_SETTINGS_MAX_BYTES,
-	);
+	const r = agentRecord(value, ['expectedVersion', 'enabled', 'limits'], AGENT_EXECUTION_SETTINGS_MAX_BYTES);
 	if (typeof r.enabled !== 'boolean') {
 		throw new InvalidAgentPayload();
 	}
@@ -127,14 +50,13 @@ export function readAgentExecutionSettingsUpdate(value: unknown): AgentExecution
 		expectedVersion: agentInteger(r.expectedVersion),
 		enabled: r.enabled,
 		limits: readAgentExecutionLimits(r.limits),
-		profiles: readAgentExecutionProfiles(r.profiles),
 	};
 }
 
 export function readAgentExecutionSettingsView(value: unknown): AgentExecutionSettingsView {
 	const r = agentRecord(
 		value,
-		['version', 'enabled', 'limits', 'hardLimits', 'profiles', 'updatedAt'],
+		['version', 'enabled', 'limits', 'hardLimits', 'updatedAt'],
 		AGENT_EXECUTION_SETTINGS_MAX_BYTES,
 	);
 	if (typeof r.enabled !== 'boolean') {
@@ -150,7 +72,7 @@ export function readAgentExecutionSettingsView(value: unknown): AgentExecutionSe
 		enabled: r.enabled,
 		limits,
 		hardLimits,
-		profiles: readAgentExecutionProfiles(r.profiles),
+
 		updatedAt: agentInteger(r.updatedAt),
 	};
 }

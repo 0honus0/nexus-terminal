@@ -8,19 +8,15 @@ export interface DesktopDisplay {
 
 export interface DesktopTicketResult {
 	ticket: string;
-	lastConnectedAt: number;
+	connection: DesktopConnection;
 }
 
-/** App fact, not a third-party Guacamole settings record. */
 export interface DesktopConnection {
 	protocol: RemoteDesktopProtocol;
 	host: string;
 	port: number;
 	username: string | null;
 	password: string;
-	rdpRemoteApp: string | null;
-	rdpRemoteAppDirectory: string | null;
-	rdpRemoteAppArguments: string | null;
 }
 
 export interface DesktopTicket {

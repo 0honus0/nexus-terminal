@@ -269,9 +269,6 @@ await test('B10 Agent tool approval, actual SSH effects and revocation', { timeo
 			tagIds: [],
 			jumpIds: [],
 			notes: null,
-			rdpRemoteApp: null,
-			rdpRemoteAppDirectory: null,
-			rdpRemoteAppArguments: null,
 		});
 		connectionId = target.id;
 		assert.equal(
@@ -299,7 +296,6 @@ await test('B10 Agent tool approval, actual SSH effects and revocation', { timeo
 				expectedVersion: settings.version,
 				enabled: true,
 				limits: settings.limits,
-				profiles: settings.profiles,
 			}),
 			200,
 		);

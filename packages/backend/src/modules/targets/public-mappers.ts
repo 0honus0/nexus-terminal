@@ -104,14 +104,12 @@ export function toTrustedDesktopTarget(value: ResolvedDesktopTarget): TrustedDes
 	return {
 		id: value.id,
 		version: value.version,
+		createdAt: value.createdAt,
 		protocol: value.protocol,
 		host: value.host,
 		port: value.port,
 		username: value.username,
 		password: value.password,
-		rdpRemoteApp: value.rdpRemoteApp,
-		rdpRemoteAppDirectory: value.rdpRemoteAppDirectory,
-		rdpRemoteAppArguments: value.rdpRemoteAppArguments,
 	};
 }
 
@@ -135,9 +133,6 @@ export function toConnectionInput(input: PublicMetadata): InternalMetadata {
 		route: input.route,
 		proxyId: input.proxyId,
 		notes: input.notes,
-		rdpRemoteApp: input.rdpRemoteApp,
-		rdpRemoteAppDirectory: input.rdpRemoteAppDirectory,
-		rdpRemoteAppArguments: input.rdpRemoteAppArguments,
 		tagIds: [...input.tagIds],
 		jumpIds: [...input.jumpIds],
 	};
@@ -169,15 +164,6 @@ export function toConnectionPatch(input: Partial<PublicMetadata>): Partial<Inter
 	if (input.notes !== undefined) {
 		result.notes = input.notes;
 	}
-	if (input.rdpRemoteApp !== undefined) {
-		result.rdpRemoteApp = input.rdpRemoteApp;
-	}
-	if (input.rdpRemoteAppDirectory !== undefined) {
-		result.rdpRemoteAppDirectory = input.rdpRemoteAppDirectory;
-	}
-	if (input.rdpRemoteAppArguments !== undefined) {
-		result.rdpRemoteAppArguments = input.rdpRemoteAppArguments;
-	}
 	if (input.tagIds !== undefined) {
 		result.tagIds = [...input.tagIds];
 	}
@@ -193,6 +179,7 @@ export function toConnectionView(record: InternalSnapshot): PublicSnapshot {
 		version: record.version,
 		createdAt: record.createdAt,
 		updatedAt: record.updatedAt,
+		lastConnectedAt: record.lastConnectedAt,
 		name: record.name,
 		type: record.type,
 		host: record.host,
@@ -201,9 +188,6 @@ export function toConnectionView(record: InternalSnapshot): PublicSnapshot {
 		route: record.route,
 		proxyId: record.proxyId,
 		notes: record.notes,
-		rdpRemoteApp: record.rdpRemoteApp,
-		rdpRemoteAppDirectory: record.rdpRemoteAppDirectory,
-		rdpRemoteAppArguments: record.rdpRemoteAppArguments,
 		tagIds: [...record.tagIds],
 		jumpIds: [...record.jumpIds],
 	};

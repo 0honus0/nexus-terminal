@@ -2,14 +2,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readdir, readlink } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { openPlugins } from './plugin-management-fixture.mjs';
 import { expectStatus, until } from '../remote/openssh-fixture.mjs';
 import { AGENT_ARTIFACT_MAX_BYTES } from '../../../packages/shared/dist/agent/artifacts/values.js';
 
 // Observe the actual server file handle, rather than infer backpressure from a paused client alone.
 async function openBlobHandles(f, artifact) {
-	const path = f.database + '.artifacts/' + artifact.id + '.blob';
+	const path = join(dirname(f.database), 'artifacts', artifact.id + '.blob');
 	const targets = await Promise.all(
 		(await readdir('/proc/self/fd')).map(async (fd) => {
 			try {

@@ -1,4 +1,3 @@
-import type { IncomingMessage } from 'node:http';
 import type WebSocket from 'ws';
 
 export class DesktopTransportFailure extends Error {
@@ -15,28 +14,14 @@ export interface DesktopTransportRequest {
 	protocol: 'rdp' | 'vnc';
 	host: string;
 	port: number;
-	username: string | null;
-	password: string;
-	width: number;
-	height: number;
-	dpi: number;
-	security: 'any';
 	ignoreCertificate: boolean;
-	resizeMethod: 'display-update';
-	remoteApp: string | null;
-	remoteAppDirectory: string | null;
-	remoteAppArguments: string | null;
+}
+
+export interface DesktopTransportPeer {
+	open(options: DesktopTransportRequest, onTerminated: () => void): Promise<void>;
 }
 
 export interface DesktopTransport {
-	/** Resolves at guacd 'ready', not when the connection task is dispatched.
-	 * onTerminated is emitted only after the Guacamole close owner runs
-	 * and its underlying guacd TCP socket closure is confirmed. */
-	open(
-		socket: WebSocket,
-		request: IncomingMessage,
-		options: DesktopTransportRequest,
-		onTerminated: () => void,
-	): Promise<void>;
+	bind(socket: WebSocket): DesktopTransportPeer;
 	close(): Promise<void>;
 }

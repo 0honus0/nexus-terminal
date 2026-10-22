@@ -14,10 +14,8 @@ import type {
 	MemoryReview,
 	MemoryQuery,
 	MemoryAdmissionFacts,
-	MemoryImport,
 	MemoryRecallInput,
 	MemoryRecallItem,
-	MemoryImportFacts,
 } from '../model/memory-types.js';
 
 function validateScope(scope: MemoryScope): void {
@@ -196,52 +194,6 @@ export class MemoryService {
 				: input.decision === 'reject'
 					? 'AGENT_MEMORY_REJECTED'
 					: 'AGENT_MEMORY_REVOKED',
-		);
-	}
-
-	previewImport(actor: MemoryActor, sourceAppId: string, sourceMemoryId: string): Promise<MemoryImport> {
-		validateScope(actor);
-		validateId(sourceAppId);
-		validateId(sourceMemoryId);
-		if (actor.kind !== 'session' || sourceAppId === actor.appId) {
-			throw new AgentFailure('invalid_input');
-		}
-		return this.model.previewImport(
-			actor,
-			{ id: randomUUID(), memoryId: randomUUID(), sourceAppId, sourceMemoryId, ttlMs: 600000 },
-			Date.now,
-			admit(actor, true),
-			(facts, confirmations, now) => {
-				if (confirmations >= 128) {
-					throw new AgentFailure('limit_exceeded');
-				}
-				this.admitImport(facts, now);
-			},
-		);
-	}
-
-	private admitImport(facts: MemoryImportFacts, now: number): void {
-		if (
-			!facts.sourceEnabled ||
-			facts.source.status !== 'published' ||
-			(facts.source.expiresAt !== null && facts.source.expiresAt <= now)
-		) {
-			throw new AgentFailure('version_conflict');
-		}
-	}
-
-	confirmImport(actor: MemoryActor, id: string): Promise<MemoryRecord> {
-		validateScope(actor);
-		validateId(id);
-		if (actor.kind !== 'session') {
-			throw new AgentFailure('invalid_input');
-		}
-		return this.notice(
-			this.model.confirmImport(actor, id, Date.now, admit(actor, true), (facts, now) =>
-				this.admitImport(facts, now),
-			),
-			actor,
-			'AGENT_MEMORY_IMPORTED',
 		);
 	}
 

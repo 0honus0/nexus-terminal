@@ -28,13 +28,11 @@ export type CollaborationInput =
 			profile: AgentChildProfile;
 			objective: string;
 			targets: number[];
-			maxRequests: number;
-			durationSeconds: number;
+
 			dependencies: string[];
 			dependencyMode: 'success' | 'settled';
 	  }
 	| { action: 'list' }
-	| { action: 'profiles' }
 	| { action: 'join'; childIds: string[]; mode: 'all' | 'any'; waitSeconds: number }
 	| { action: 'cancel'; childIds: string[] }
 	| { action: 'send'; recipientId: string; body: string; ttlSeconds: number }
@@ -64,7 +62,6 @@ export interface CollaborationPage {
 }
 
 export interface DelegateCommand {
-	model: import('../../providers/model/provider-types.js').ModelReference | null;
 	scope: ParticipantScope;
 	operationId: string;
 	operationHash: string;

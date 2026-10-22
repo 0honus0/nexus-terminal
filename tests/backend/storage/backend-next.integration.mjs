@@ -14,9 +14,6 @@ const make = (name, { route = 'direct', proxyId = null, tagIds = [], jumpIds = [
 	route,
 	proxyId,
 	notes: null,
-	rdpRemoteApp: null,
-	rdpRemoteAppDirectory: null,
-	rdpRemoteAppArguments: null,
 	tagIds,
 	jumpIds,
 });

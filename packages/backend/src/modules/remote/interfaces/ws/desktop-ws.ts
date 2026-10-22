@@ -33,7 +33,7 @@ export function createDesktopWebSocketRoute(
 			return service.accept(
 				readRequestCookie(request, ACCESS_SESSION_COOKIE_NAME),
 				ticket,
-				model.createPeer(socket, request),
+				model.createPeer(socket),
 			);
 		},
 	};

@@ -1,6 +1,3 @@
-import { resolveFrozenModel } from '../../providers/provider-capability-rules.js';
-import { fromStoredProvider } from '../../providers/model/provider-projection.js';
-import { toStoredFrozen } from './run-projection.js';
 import { AgentFailure } from '../../agent-failure.js';
 import { agentStorage } from '../../agent-storage-failure.js';
 import { CollaborationStorageRefusal } from '../storage/run-collaboration-storage.js';
@@ -96,14 +93,6 @@ export class RunCollaborationModel {
 			this.owner.delegate(
 				{
 					scope: toScope(command.scope),
-					model:
-						command.model === null
-							? null
-							: {
-									providerId: command.model.providerId,
-									modelId: command.model.modelId,
-									configurationVersion: command.model.configurationVersion,
-								},
 					operationId: command.operationId,
 					operationHash: command.operationHash,
 					now: command.now,
@@ -126,14 +115,6 @@ export class RunCollaborationModel {
 						now: facts.now,
 						dependencies: facts.dependencies.map(fromParticipant),
 					}),
-				(provider, reference) => {
-					const frozen = resolveFrozenModel(fromStoredProvider(provider), {
-						providerId: reference.providerId,
-						modelId: reference.modelId,
-						configurationVersion: reference.configurationVersion,
-					});
-					return frozen === null ? null : toStoredFrozen(frozen);
-				},
 			),
 		);
 		return value

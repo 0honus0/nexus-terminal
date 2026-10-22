@@ -272,7 +272,7 @@ await test(
 
 		const open = async (name, config = configuration(), options = {}) => {
 			const origin = options.origin ?? 'http://127.0.0.1:0';
-			const app = await createApp(join(directory, name + '.db'), {
+			const app = await createApp(join(directory, name, 'nexus-terminal.db'), {
 				encryptionKey: randomBytes(32),
 
 				configuration: () => config,

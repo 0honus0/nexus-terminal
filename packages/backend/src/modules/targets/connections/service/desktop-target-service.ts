@@ -14,10 +14,4 @@ export class DesktopTargetService {
 			}
 		});
 	}
-
-	markAttempt(id: number, version: number, timestamp: number): Promise<boolean> {
-		validateTargetId(id);
-		validateTargetId(version);
-		return this.model.markAttempt(id, version, timestamp);
-	}
 }

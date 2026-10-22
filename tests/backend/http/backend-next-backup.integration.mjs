@@ -4,7 +4,7 @@ import { randomBytes, randomUUID, createHash } from 'node:crypto';
 import { request } from 'node:http';
 import { mkdtemp, mkdir, writeFile, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createApp } from '../../../packages/backend/dist/bootstrap/create-app.js';
 import { PluginService } from '../../../packages/backend/dist/modules/agent/plugins/service/plugin-service.js';
@@ -129,6 +129,11 @@ await test(
 			await mkdir(sourceDirectory);
 			sshd = await openSshd(root);
 			source = await openAgentExecution(sourceDirectory, sshd);
+			const sourceFiles = await readdir(sourceDirectory);
+			for (const name of ['appearance', 'artifacts', 'plugins']) {
+				assert.ok(sourceFiles.includes(name), 'Data directory must contain ' + name);
+				assert.ok(!sourceFiles.includes('state.db.' + name), 'Legacy resource directory must not be created');
+			}
 			await boot();
 			expectStatus(
 				await api('POST', '/api/v1/auth/setup', {
@@ -376,7 +381,7 @@ await test(
 			await t.test(
 				'actual Artifact corruption blocks export and repairing bytes releases export admission',
 				async () => {
-					const rootPath = source.database + '.artifacts';
+					const rootPath = join(dirname(source.database), 'artifacts');
 					const files = await readdir(rootPath, { recursive: true });
 					let path;
 					for (const file of files) {

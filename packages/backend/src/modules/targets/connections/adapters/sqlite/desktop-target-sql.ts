@@ -35,26 +35,14 @@ export class SqliteDesktopTargetAdapter implements DesktopTargetStorage {
 			return {
 				id: metadata.id,
 				version: metadata.version,
+				createdAt: metadata.createdAt,
 				type: metadata.type,
 				host: metadata.host,
 				port: metadata.port,
 				username: metadata.username,
 				route: metadata.route,
-				rdpRemoteApp: metadata.rdpRemoteApp,
-				rdpRemoteAppDirectory: metadata.rdpRemoteAppDirectory,
-				rdpRemoteAppArguments: metadata.rdpRemoteAppArguments,
 				encryptedPassword: credential?.kind === 'password' ? credential.encryptedPassword : null,
 			};
-		});
-	}
-
-	markAttempt(id: number, version: number, timestamp: number): Promise<boolean> {
-		return this.db.transaction(async (tx) => {
-			const result = await tx.run(
-				"UPDATE connections SET last_connected_at=? WHERE id=? AND version=? AND type IN ('RDP','VNC')",
-				[timestamp, id, version],
-			);
-			return result.changes === 1;
 		});
 	}
 }

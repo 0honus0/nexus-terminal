@@ -184,6 +184,7 @@ export class WorkspaceService {
 	private readonly exports = new Map<AbortController, { id: string; task: Promise<boolean> }>();
 	private readonly suspended = new Map<string, WorkspaceRecord>();
 	private readonly disconnected = new Map<string, SuspendedTombstone>();
+	private readonly catalogListeners = new Set<(userId: number) => void>();
 	private readonly autoTerminationListeners = new Set<
 		(userId: number, suspendedId: string, reason: SuspendedTerminationReason) => void
 	>();
@@ -237,6 +238,23 @@ export class WorkspaceService {
 				}
 			}
 			this.detach(record.id, mark.ownerId);
+		}
+	}
+
+	onSuspendedCatalogChanged(listener: (userId: number) => void): () => void {
+		this.catalogListeners.add(listener);
+		return () => {
+			this.catalogListeners.delete(listener);
+		};
+	}
+
+	private publishSuspendedCatalogChanged(userId: number): void {
+		for (const listener of this.catalogListeners) {
+			try {
+				listener(userId);
+			} catch (cause) {
+				this.recordFailure(cause);
+			}
 		}
 	}
 
@@ -954,6 +972,7 @@ export class WorkspaceService {
 		};
 		record.suspend = mark;
 		this.suspended.set(mark.id, record);
+		this.publishSuspendedCatalogChanged(record.userId);
 		if (initialBuffer) {
 			this.appendSuspendedOutput(record, mark, Buffer.from(initialBuffer, 'utf8'), true);
 		}
@@ -1071,6 +1090,7 @@ export class WorkspaceService {
 			record.suspend = null;
 			this.suspended.delete(mark.id);
 			record.historyCursor = null;
+			this.publishSuspendedCatalogChanged(record.userId);
 		}
 	}
 
@@ -1159,6 +1179,7 @@ export class WorkspaceService {
 		this.records.set(workspaceId, record); // Reserved before the first async log operation.
 		mark.ownerId = attachmentId;
 		try {
+			this.publishSuspendedCatalogChanged(record.userId);
 			// Pausing a disposed PTY is a real failure. The pending alias and
 			// owner reservation must roll back even when pause throws.
 			this.shells.pauseOutput(record.shellId);
@@ -1283,6 +1304,7 @@ export class WorkspaceService {
 			record.suspend.ownerId = null;
 			record.suspend.leaseExpiresAt = null;
 		}
+		this.publishSuspendedCatalogChanged(record.userId);
 		// Queue overflow may have initiated closeRecord while replaying the
 		// late chunks. Never undo its fail-closed pause on the same stack.
 		if (
@@ -1357,6 +1379,7 @@ export class WorkspaceService {
 		mark.generation = ownerGeneration;
 		mark.ownerId = attachmentId;
 		mark.leaseExpiresAt = Date.now() + 45_000;
+		this.publishSuspendedCatalogChanged(record.userId);
 		record.output = [...(pending.history.length ? [pending.history] : []), ...pending.lateOutput];
 		record.outputBytes = pending.history.length + pending.lateBytes;
 		record.offset = record.outputBytes;
@@ -1540,6 +1563,7 @@ export class WorkspaceService {
 			record.phase !== 'cleanup_unknown'
 		) {
 			record.suspend.customName = name.trim() || null;
+			this.publishSuspendedCatalogChanged(userId);
 			return;
 		}
 		const tombstone = this.disconnected.get(suspendedId);
@@ -1547,6 +1571,7 @@ export class WorkspaceService {
 			throw new WorkspaceFailure('not_found');
 		}
 		tombstone.mark.customName = name.trim() || null;
+		this.publishSuspendedCatalogChanged(userId);
 	}
 
 	async terminateSuspended(token: string | null, suspendedId: string): Promise<boolean> {
@@ -1582,6 +1607,7 @@ export class WorkspaceService {
 		if (this.disconnected.get(id) === tombstone) {
 			clearTimeout(tombstone.timer);
 			this.disconnected.delete(id);
+			this.publishSuspendedCatalogChanged(userId);
 		}
 		return true;
 	}
@@ -1764,6 +1790,7 @@ export class WorkspaceService {
 			throw new WorkspaceFailure('conflict');
 		}
 		mark.leaseExpiresAt = Date.now() + 45_000;
+		this.publishSuspendedCatalogChanged(this.record(id).userId);
 		return { generation: mark.generation, leaseExpiresAt: mark.leaseExpiresAt };
 	}
 
@@ -2036,6 +2063,7 @@ export class WorkspaceService {
 		if (retained && mark) {
 			mark.ownerId = null;
 			mark.leaseExpiresAt = null;
+			this.publishSuspendedCatalogChanged(record.userId);
 			this.publishFileState(record, { kind: 'opening' });
 			mark.retentionTimer = setTimeout(() => {
 				if ((record.phase === 'suspended' || record.phase === 'suspend_resuming') && record.suspend === mark) {
@@ -2426,6 +2454,9 @@ export class WorkspaceService {
 		const closing = Promise.resolve().then(() => this.closeRecordOwned(record, reason));
 		record.closePromise = closing;
 		record.phase = 'closing';
+		if (record.suspend) {
+			this.publishSuspendedCatalogChanged(record.userId);
+		}
 		return this.track(closing);
 	}
 
@@ -2611,6 +2642,7 @@ export class WorkspaceService {
 				};
 				tombstone.timer.unref();
 				this.disconnected.set(mark.id, tombstone);
+				this.publishSuspendedCatalogChanged(record.userId);
 			}
 		}
 	}

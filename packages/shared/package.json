@@ -820,6 +820,10 @@
       "types": "./dist/remote/transfers/server-codec.d.ts",
       "default": "./dist/remote/transfers/server-codec.js"
     },
+    "./remote/suspend/events": {
+      "types": "./dist/remote/suspend/events.d.ts",
+      "default": "./dist/remote/suspend/events.js"
+    },
     "./remote/suspend/http-codec": {
       "types": "./dist/remote/suspend/http-codec.d.ts",
       "default": "./dist/remote/suspend/http-codec.js"

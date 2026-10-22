@@ -85,6 +85,7 @@ for (const changedKey of [false, true]) {
 		await page.goto(`/workspace?connectionId=${connectionId}`);
 		const dialog = page.getByRole('dialog', { name: 'SSH Host Keys', exact: true });
 		await expect(dialog).toBeVisible();
+		await expect(dialog.locator('[data-dialog-details]')).toBeVisible();
 		await expect(dialog).toContainText(actual.fingerprint);
 		if (changedKey) await expect(dialog).toContainText(previousFingerprint);
 		const tabs = page.locator('.terminal-tab-shell').getByRole('tab');

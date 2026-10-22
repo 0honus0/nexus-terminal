@@ -1,10 +1,3 @@
-import type {
-	ProviderStorage,
-	ProviderStoredRow,
-	StoredModelReference,
-} from '../../../providers/storage/provider-storage.js';
-import type { StoredFrozenInput } from '../../storage/run-storage.js';
-import type { SqliteRuntime } from '../../../../../platform/storage/sqlite/sqlite-runtime.js';
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 import type {
 	RunCollaborationStorage,
@@ -46,13 +39,6 @@ export async function children(tx: SqlExecutor, scope: StoredParticipantScope): 
 }
 
 export class SqliteRunCollaborationStorage extends CollaborationDataSql implements RunCollaborationStorage {
-	constructor(
-		db: SqliteRuntime,
-		private readonly providers: ProviderStorage,
-	) {
-		super(db);
-	}
-
 	messageMetadata(scope: StoredParticipantScope, after: number, limit: number): Promise<StoredMessageMetadataPage> {
 		return this.db.transaction(async (tx) => {
 			const owner = await participant(tx, scope);
@@ -84,7 +70,6 @@ export class SqliteRunCollaborationStorage extends CollaborationDataSql implemen
 	delegate(
 		command: StoredDelegateCommand,
 		admit: (facts: StoredChildAdmissionFacts) => boolean,
-		resolve: (provider: ProviderStoredRow, reference: StoredModelReference) => StoredFrozenInput | null,
 	): Promise<StoredChildCreation | null> {
 		return this.db.transaction(async (tx) => {
 			const parent = await collaborationAuthority(tx, command);
@@ -118,14 +103,6 @@ export class SqliteRunCollaborationStorage extends CollaborationDataSql implemen
 				return null;
 			}
 			const peers = await children(tx, command.scope);
-			const selected =
-				command.model === null
-					? null
-					: await this.providers.snapshot(tx, command.scope.userId, command.model.providerId);
-			const frozen = command.model === null ? null : selected === null ? null : resolve(selected, command.model);
-			if (command.model !== null && frozen === null) {
-				return null;
-			}
 			if (
 				!admit({
 					parent,
@@ -166,27 +143,10 @@ export class SqliteRunCollaborationStorage extends CollaborationDataSql implemen
 					command.dependencyMode,
 				],
 			);
-			if (frozen === null) {
-				await tx.run(
-					'INSERT INTO agent_run_frozen_inputs(run_id,provider_id,provider_version,credential_revision,model_id,base_url,protocol,capabilities_json,execution_policy) SELECT ?,provider_id,provider_version,credential_revision,model_id,base_url,protocol,capabilities_json,execution_policy FROM agent_run_frozen_inputs WHERE run_id=?',
-					[command.id, parent.id],
-				);
-			} else {
-				await tx.run(
-					'INSERT INTO agent_run_frozen_inputs(run_id,provider_id,provider_version,credential_revision,model_id,base_url,protocol,capabilities_json,execution_policy) VALUES(?,?,?,?,?,?,?,?,?)',
-					[
-						command.id,
-						frozen.providerId,
-						frozen.providerVersion,
-						frozen.credentialRevision,
-						frozen.modelId,
-						frozen.baseUrl,
-						frozen.protocol,
-						JSON.stringify(frozen.capabilities),
-						frozen.executionPolicy,
-					],
-				);
-			}
+			await tx.run(
+				'INSERT INTO agent_run_frozen_inputs(run_id,provider_id,provider_version,credential_revision,model_id,base_url,protocol,capabilities_json,execution_policy) SELECT ?,provider_id,provider_version,credential_revision,model_id,base_url,protocol,capabilities_json,execution_policy FROM agent_run_frozen_inputs WHERE run_id=?',
+				[command.id, parent.id],
+			);
 			await tx.run(
 				'INSERT INTO agent_run_execution_settings(run_id,settings_json) SELECT ?,settings_json FROM agent_run_execution_settings WHERE run_id=?',
 				[command.id, parent.id],

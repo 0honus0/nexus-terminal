@@ -113,25 +113,6 @@ export class RunCollaborationService {
 		let result: unknown;
 		if (input.action === 'delegate') {
 			result = await this.delegate(scope, input, operation, signal);
-		} else if (input.action === 'profiles') {
-			const settings = await this.settings.frozen(scope.userId, scope.appId, scope.runId);
-			result = settings.profiles
-				.filter((profile) => profile.enabled)
-				.map((profile) => ({
-					name: profile.name,
-					tools: profile.tools.map((tool) => tool),
-					maxRequests: profile.maxRequests,
-					maxSeconds: profile.maxSeconds,
-					model:
-						profile.model.kind === 'inherit'
-							? { kind: 'inherit' }
-							: {
-									kind: 'explicit',
-									providerId: profile.model.providerId,
-									modelId: profile.model.modelId,
-									configurationVersion: profile.model.configurationVersion,
-								},
-				}));
 		} else if (input.action === 'list') {
 			result = { children: (await this.model.children(scope)).map(view) };
 		} else if (input.action === 'join' || input.action === 'cancel') {
@@ -256,27 +237,10 @@ export class RunCollaborationService {
 			if (!parent || parent.parentId !== null) {
 				throw new AgentFailure('invalid_input');
 			}
-			const profile = frozen.profiles.find((value) => value.name === input.profile);
-			if (
-				!profile ||
-				!profile.enabled ||
-				input.maxRequests > profile.maxRequests ||
-				input.durationSeconds > profile.maxSeconds
-			) {
-				throw new AgentFailure('invalid_input');
-			}
 			const now = Date.now();
-			const deadline = Math.min(now + input.durationSeconds * 1000, parent.deadline);
+			const deadline = parent.deadline;
 			const command: DelegateCommand = {
 				scope,
-				model:
-					profile.model.kind === 'inherit'
-						? null
-						: {
-								providerId: profile.model.providerId,
-								modelId: profile.model.modelId,
-								configurationVersion: profile.model.configurationVersion,
-							},
 				operationId: operation.id,
 				operationHash: operation.operationHash,
 				id: randomUUID(),
@@ -287,7 +251,7 @@ export class RunCollaborationService {
 							input.profile,
 							input.objective,
 							input.targets,
-							input.maxRequests,
+							frozen.limits.maxModelRequests,
 							deadline,
 							input.dependencies,
 							input.dependencyMode,
@@ -297,8 +261,15 @@ export class RunCollaborationService {
 				objective: input.objective,
 				targets: input.targets.map((id) => id),
 				profile: input.profile,
-				tools: profile.tools.map((name) => name),
-				maxRequests: input.maxRequests,
+				tools: this.definitions(parent)
+					.filter(
+						(tool) =>
+							!['collaboration_delegate', 'collaboration_join', 'collaboration_cancel'].includes(
+								tool.name,
+							),
+					)
+					.map((tool) => tool.name),
+				maxRequests: frozen.limits.maxModelRequests,
 				deadline,
 				dependencies: input.dependencies.map((id) => id),
 				dependencyMode: input.dependencyMode,

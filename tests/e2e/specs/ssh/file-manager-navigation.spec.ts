@@ -867,6 +867,7 @@ test('file-manager terminal path sync does not pollute bash command history with
 		expect(historyOutput).not.toContain('__NEXUS_HOOK_BEGIN_');
 		expect(historyOutput).not.toContain('__NEXUS_HOOK_END_');
 		expect(historyOutput).not.toContain('__nexus_prompt_marker');
+		expect(historyOutput).not.toContain('__NEXUS_INTERNAL_CD_');
 		expect(historyOutput).not.toContain(`cd '${FAVORITE_PATH}'`);
 		expect(historyOutput).toContain('echo USER_HISTORY_SENTINEL');
 	} finally {

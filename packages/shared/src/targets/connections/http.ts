@@ -11,9 +11,6 @@ export interface TargetConnectionInput {
 	route: ConnectionRoute;
 	proxyId: number | null;
 	notes: string | null;
-	rdpRemoteApp: string | null;
-	rdpRemoteAppDirectory: string | null;
-	rdpRemoteAppArguments: string | null;
 	tagIds: number[];
 	jumpIds: number[];
 }

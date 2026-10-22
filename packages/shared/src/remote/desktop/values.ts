@@ -14,7 +14,9 @@ export const REMOTE_DESKTOP_MAX_DPI = 480;
 
 export type RemoteDesktopProtocol = 'RDP' | 'VNC';
 
-export const REMOTE_DESKTOP_RESPONSE_MAX_BYTES = 1024;
+export const REMOTE_DESKTOP_RESPONSE_MAX_BYTES = 64 * 1024;
+
+export const REMOTE_DESKTOP_FRAME_MAX_BYTES = 2 * 1024 * 1024;
 
 export const REMOTE_DESKTOP_ERROR_CODES = [
 	'invalid_input',

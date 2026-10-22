@@ -15,12 +15,7 @@ import type { ExecutionService } from '../../execution/service/execution-service
 import type { ExecutionActor } from '../../execution/model/execution-types.js';
 import { AgentOperationError } from '../../public-errors.js';
 import { agentErrorStatus } from './agent-http-status.js';
-import {
-	fromExecutionLimits,
-	fromExecutionProfile,
-	toExecutionSettings,
-	toHardLimitPreview,
-} from './execution-mapper.js';
+import { fromExecutionLimits, toExecutionSettings, toHardLimitPreview } from './execution-mapper.js';
 
 function send(ctx: HttpRouteContext, status: number, value: unknown): void {
 	try {
@@ -112,13 +107,7 @@ export function createExecutionHttpRoutes(
 		const input = readAgentExecutionSettingsUpdate(await ctx.json());
 		return {
 			settings: toExecutionSettings(
-				await service.update(
-					actor,
-					input.expectedVersion,
-					input.enabled,
-					fromExecutionLimits(input.limits),
-					input.profiles.map(fromExecutionProfile),
-				),
+				await service.update(actor, input.expectedVersion, input.enabled, fromExecutionLimits(input.limits)),
 			),
 		};
 	});

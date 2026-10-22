@@ -12,7 +12,12 @@ import type {
 	RemoteDesktopSessionResponse,
 	RemoteDesktopFailureResponse,
 } from './http.js';
-import { record, integer } from '../../common/http-codec.js';
+import { record } from '../../common/http-codec.js';
+import {
+	TARGET_CONNECTION_HOST_MAX_BYTES,
+	TARGET_CONNECTION_USERNAME_MAX_BYTES,
+	TARGET_CONNECTION_PASSWORD_MAX_BYTES,
+} from '../../targets/connections/values.js';
 
 export class InvalidRemoteDesktopPayload extends Error {
 	constructor() {
@@ -73,13 +78,36 @@ export function readRemoteDesktopTicket(query: URLSearchParams): string {
 }
 
 export function readRemoteDesktopSessionResponse(value: unknown): RemoteDesktopSessionResponse {
-	const item = record(value, ['ticket', 'lastConnectedAt'], REMOTE_DESKTOP_RESPONSE_MAX_BYTES);
-	if (typeof item.ticket !== 'string') {
+	const item = record(
+		value,
+		['ticket', 'protocol', 'host', 'port', 'username', 'password'],
+		REMOTE_DESKTOP_RESPONSE_MAX_BYTES,
+	);
+	if (
+		typeof item.ticket !== 'string' ||
+		(item.protocol !== 'RDP' && item.protocol !== 'VNC') ||
+		typeof item.host !== 'string' ||
+		item.host.length === 0 ||
+		new TextEncoder().encode(item.host).byteLength > TARGET_CONNECTION_HOST_MAX_BYTES ||
+		typeof item.port !== 'number' ||
+		!Number.isInteger(item.port) ||
+		item.port < 1 ||
+		item.port > 65535 ||
+		typeof item.username !== 'string' ||
+		new TextEncoder().encode(item.username).byteLength > TARGET_CONNECTION_USERNAME_MAX_BYTES ||
+		typeof item.password !== 'string' ||
+		item.password.length === 0 ||
+		new TextEncoder().encode(item.password).byteLength > TARGET_CONNECTION_PASSWORD_MAX_BYTES
+	) {
 		throw new InvalidRemoteDesktopPayload();
 	}
 	return {
 		ticket: readRemoteDesktopTicket(new URLSearchParams({ ticket: item.ticket })),
-		lastConnectedAt: integer(item.lastConnectedAt, 1, Math.floor(Number.MAX_SAFE_INTEGER / 1000)),
+		protocol: item.protocol,
+		host: item.host,
+		port: item.port,
+		username: item.username,
+		password: item.password,
 	};
 }
 

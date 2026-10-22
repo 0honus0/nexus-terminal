@@ -427,7 +427,7 @@ export function registerAgent(
 	);
 	const jobModel = new ToolJobModel(new SqliteToolJobStorage(sqlite));
 	const collaboration = new RunCollaborationService(
-		new RunCollaborationModel(new SqliteRunCollaborationStorage(sqlite, providerStorage)),
+		new RunCollaborationModel(new SqliteRunCollaborationStorage(sqlite)),
 		{
 			admit: (work, maxRuns) => execution.admitCreate(work, maxRuns),
 

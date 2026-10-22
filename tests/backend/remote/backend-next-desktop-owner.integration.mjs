@@ -32,20 +32,13 @@ function fixture(t) {
 				return {
 					id: 1,
 					version: 1,
-					protocol: 'rdp',
+					createdAt: 1,
+					protocol: 'RDP',
 					host: 'desktop.local',
 					port: 3389,
 					username: 'isolated-user',
 					password: 'isolated-password',
-					rdpRemoteApp: null,
-					rdpRemoteAppDirectory: null,
-					rdpRemoteAppArguments: null,
 				};
-			},
-
-			async markAttempt() {
-				state.attempts++;
-				return true;
 			},
 		},
 		new DesktopModel(
@@ -59,6 +52,11 @@ function fixture(t) {
 				digest: (value) => tokens.digest(value),
 			},
 		),
+		{
+			async recordConnected() {
+				state.attempts++;
+			},
+		},
 	);
 	t.after(() => owner.close());
 	return { owner, state };
@@ -71,7 +69,7 @@ await test('Desktop pending capacity includes in-flight and cancelled-but-unsett
 	state.get = () => release.promise;
 	const cancellation = new AbortController();
 	const requests = Array.from({ length: 1024 }, (_, index) =>
-		owner.issue('session', 1, 'rdp', display, index === 0 ? cancellation.signal : undefined),
+		owner.issue('session', 1, 'RDP', display, index === 0 ? cancellation.signal : undefined),
 	);
 	const completed = Promise.allSettled(requests);
 	await until(
@@ -80,7 +78,7 @@ await test('Desktop pending capacity includes in-flight and cancelled-but-unsett
 		'all real owner reservations waiting',
 	);
 	await assert.rejects(
-		owner.issue('session', 1, 'rdp', display),
+		owner.issue('session', 1, 'RDP', display),
 		(error) => error instanceof DesktopFailure && error.code === 'limit_exceeded',
 	);
 	cancellation.abort();
@@ -89,7 +87,7 @@ await test('Desktop pending capacity includes in-flight and cancelled-but-unsett
 		(error) => error instanceof DesktopFailure && error.code === 'remote_unavailable',
 	);
 	await assert.rejects(
-		owner.issue('session', 1, 'rdp', display),
+		owner.issue('session', 1, 'RDP', display),
 		(error) => error instanceof DesktopFailure && error.code === 'limit_exceeded',
 	);
 	release.resolve();
@@ -99,11 +97,11 @@ await test('Desktop pending capacity includes in-flight and cancelled-but-unsett
 		new Set(results.filter((result) => result.status === 'fulfilled').map((result) => result.value.ticket)).size,
 		1023,
 	);
-	assert.equal(state.attempts, 1023);
-	await owner.issue('session', 1, 'rdp', display);
+	assert.equal(state.attempts, 0);
+	await owner.issue('session', 1, 'RDP', display);
 	assert.equal(state.issued, 1024);
 	await assert.rejects(
-		owner.issue('session', 1, 'rdp', display),
+		owner.issue('session', 1, 'RDP', display),
 		(error) => error instanceof DesktopFailure && error.code === 'limit_exceeded',
 	);
 });
@@ -115,7 +113,7 @@ await test('Desktop original 15-second issue deadline fences late Targets comple
 	state.get = () => release.promise;
 	const started = performance.now();
 	await assert.rejects(
-		owner.issue('session', 1, 'rdp', display),
+		owner.issue('session', 1, 'RDP', display),
 		(error) => error instanceof DesktopFailure && error.code === 'remote_unavailable',
 	);
 	assert.ok(performance.now() - started >= 14900);
@@ -128,14 +126,14 @@ await test('Desktop original 15-second issue deadline fences late Targets comple
 		'late target read really settles',
 	);
 	state.get = null;
-	await owner.issue('session', 1, 'rdp', display);
-	assert.equal(state.attempts, 1);
+	await owner.issue('session', 1, 'RDP', display);
+	assert.equal(state.attempts, 0);
 	assert.equal(state.issued, 1);
 });
 
 await test('Desktop original 30-second handshake deadline closes its peer and awaits late technical termination', async (t) => {
 	const { owner } = fixture(t);
-	const issued = await owner.issue('session', 1, 'rdp', display);
+	const issued = await owner.issue('session', 1, 'RDP', display);
 	const release = gate();
 	const disconnected = gate();
 	const listeners = [];

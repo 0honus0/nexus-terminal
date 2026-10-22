@@ -3,9 +3,9 @@ import {
 	DesktopTransportFailure,
 	type DesktopTransport,
 	type DesktopTransportRequest,
+	type DesktopTransportPeer,
 } from '../../../../platform/desktop/desktop-port.js';
 import type { DesktopConnection, DesktopDisplay, DesktopPeer } from './desktop-types.js';
-import type { IncomingMessage } from 'node:http';
 import type WebSocket from 'ws';
 import { DesktopFailure } from '../desktop-errors.js';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
@@ -22,9 +22,6 @@ export function toDesktopConnection(source: TrustedDesktopTarget): DesktopConnec
 		port: source.port,
 		username: source.username || null,
 		password: source.password,
-		rdpRemoteApp: source.rdpRemoteApp,
-		rdpRemoteAppDirectory: source.rdpRemoteAppDirectory,
-		rdpRemoteAppArguments: source.rdpRemoteAppArguments,
 	};
 }
 
@@ -51,7 +48,13 @@ export class DesktopModel {
 		}
 	}
 
-	createPeer(socket: WebSocket, request: IncomingMessage): DesktopPeer {
+	createPeer(socket: WebSocket): DesktopPeer {
+		let transportPeer: DesktopTransportPeer;
+		try {
+			transportPeer = this.transport.bind(socket);
+		} catch (cause) {
+			throw new DesktopFailure('remote_unavailable', { cause });
+		}
 		return {
 			get isOpen() {
 				return socket.readyState === socket.OPEN;
@@ -101,9 +104,9 @@ export class DesktopModel {
 				});
 			},
 
-			open: async (connection, display, onTerminated) => {
+			open: async (connection, _display, onTerminated) => {
 				try {
-					await this.transport.open(socket, request, toDesktopTransport(connection, display), onTerminated);
+					await transportPeer.open(toDesktopTransport(connection), onTerminated);
 				} catch (cause) {
 					if (cause instanceof DesktopTransportFailure && cause.reason === 'cleanup_failed') {
 						throw new RemoteResourceCleanupFailure([cause]);
@@ -123,22 +126,11 @@ export class DesktopModel {
 	}
 }
 
-/** Application → technical adapter, with explicitly named Guacamole defaults. */
-function toDesktopTransport(connection: DesktopConnection, display: DesktopDisplay): DesktopTransportRequest {
+function toDesktopTransport(connection: DesktopConnection): DesktopTransportRequest {
 	return {
 		protocol: connection.protocol === 'RDP' ? 'rdp' : 'vnc',
 		host: connection.host,
 		port: connection.port,
-		username: connection.username,
-		password: connection.password,
-		width: display.width ?? 1024,
-		height: display.height ?? 768,
-		dpi: display.dpi ?? 96,
-		security: 'any',
 		ignoreCertificate: true,
-		resizeMethod: 'display-update',
-		remoteApp: connection.protocol === 'RDP' ? connection.rdpRemoteApp : null,
-		remoteAppDirectory: connection.protocol === 'RDP' ? connection.rdpRemoteAppDirectory : null,
-		remoteAppArguments: connection.protocol === 'RDP' ? connection.rdpRemoteAppArguments : null,
 	};
 }

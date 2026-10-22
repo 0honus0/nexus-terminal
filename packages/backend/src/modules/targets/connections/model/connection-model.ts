@@ -86,6 +86,16 @@ export class ConnectionModel {
 		return this.storage.delete(id).catch(targetModelFailure);
 	}
 
+	recordConnected(
+		id: number,
+		version: number,
+		createdAt: number,
+		type: ConnectionSnapshot['type'],
+		timestamp: number,
+	): Promise<void> {
+		return this.storage.recordConnected(id, version, createdAt, type, timestamp).catch(targetModelFailure);
+	}
+
 	async setTags(id: number, version: number, tags: number[]): Promise<ConnectionMutation> {
 		return toApplicationMutation(await this.storage.setTags(id, version, [...tags]).catch(targetModelFailure));
 	}

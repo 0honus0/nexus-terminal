@@ -8,8 +8,6 @@ import {
 	readAgentMemoryPath,
 	readAgentMemoryProposal,
 	readAgentMemoryReview,
-	readAgentMemoryImport,
-	readAgentMemoryConfirm,
 	readAgentMemoryListQuery,
 } from '@nexus-terminal/shared/agent/memory/http-codec';
 import { readAgentGovernanceAppPath } from '@nexus-terminal/shared/agent/governance/http-codec';
@@ -180,28 +178,5 @@ export function createMemoryHttpRoutes(
 			),
 		};
 	});
-	add('POST', '/memories/imports/preview', async (ctx, actor) => {
-		const input = readAgentMemoryImport(await ctx.json());
-		const result = await service.previewImport(actor, input.sourceAppId, input.sourceMemoryId);
-		return {
-			confirmation: {
-				id: result.id,
-				memoryId: result.memoryId,
-				sourceAppId: result.sourceAppId,
-				sourceMemoryId: result.sourceMemoryId,
-				sourceVersion: result.sourceVersion,
-				expiresAt: result.expiresAt,
-			},
-		};
-	});
-	add(
-		'POST',
-		'/memories/imports/confirm',
-		async (ctx, actor) => {
-			const input = readAgentMemoryConfirm(await ctx.json());
-			return { memory: toWire(await service.confirmImport(actor, input.confirmationId)) };
-		},
-		201,
-	);
 	return routes;
 }

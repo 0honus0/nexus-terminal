@@ -13,23 +13,12 @@ export async function initializeConnectionsSchema(db: SqlExecutor): Promise<void
       route TEXT NOT NULL CHECK(route IN ('direct','proxy','jump')),
       proxy_id INTEGER REFERENCES proxies(id) ON DELETE RESTRICT,
       notes TEXT,
-      rdp_remote_app TEXT,
-      rdp_remote_app_directory TEXT,
-      rdp_remote_app_arguments TEXT,
       version INTEGER NOT NULL CHECK(version>=1),
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
-      last_connected_at INTEGER,
+      last_connected_at INTEGER CHECK(last_connected_at BETWEEN created_at AND 9007199254740991),
       CHECK ((route='proxy' AND proxy_id IS NOT NULL) OR (route!='proxy' AND proxy_id IS NULL)),
-      CHECK (route!='jump' OR type='SSH'),
-      CHECK (
-        (type='RDP' AND
-          ((rdp_remote_app IS NOT NULL) OR
-           (rdp_remote_app_directory IS NULL AND rdp_remote_app_arguments IS NULL)))
-        OR
-        (type!='RDP' AND
-          rdp_remote_app IS NULL AND rdp_remote_app_directory IS NULL AND rdp_remote_app_arguments IS NULL)
-      )
+      CHECK (route!='jump' OR type='SSH')
     );
     CREATE INDEX IF NOT EXISTS idx_connections_proxy ON connections(proxy_id);
     CREATE TABLE IF NOT EXISTS connection_tags(

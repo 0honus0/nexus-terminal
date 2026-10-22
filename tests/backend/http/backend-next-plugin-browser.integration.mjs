@@ -225,7 +225,6 @@ await test('B10 real signed sandbox, complete SDK imports and MessagePort RPC', 
 				expectedVersion: settings.version,
 				enabled: true,
 				limits: settings.limits,
-				profiles: settings.profiles,
 			}),
 			200,
 		);

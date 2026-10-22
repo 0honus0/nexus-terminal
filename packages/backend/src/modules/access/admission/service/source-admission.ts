@@ -6,7 +6,7 @@ import { readAllowedNetworks } from '../source-ip-rules.js';
 
 /** One Access entry policy shared by HTTP requests and WS upgrades. */
 export class SourceAdmissionService {
-	private readonly networks: readonly AllowedNetwork[];
+	private networks: readonly AllowedNetwork[];
 
 	constructor(
 		whitelist: string,
@@ -17,14 +17,23 @@ export class SourceAdmissionService {
 		this.networks = readAllowedNetworks(whitelist).map((entry) => addresses.parseNetwork(entry));
 	}
 
+	prepareWhitelist(whitelist: string): () => void {
+		const networks = readAllowedNetworks(whitelist).map((entry) => this.addresses.parseNetwork(entry));
+		return () => {
+			this.networks = networks;
+		};
+	}
+
 	async admit(source: string): Promise<boolean> {
 		const address = this.addresses.resolve(source);
 		if (address === null || !this.isAllowed(address)) {
 			return false;
 		}
-		return (
-			!this.failures.shouldEnforce(address.isInternal) || (await this.sessions.checkLoginAdmission(address.ip))
-		);
+		if (!this.failures.shouldEnforce(address.isInternal)) {
+			return true;
+		}
+		const admitted = await this.sessions.checkLoginAdmission(address.ip);
+		return this.isAllowed(address) && (!this.failures.shouldEnforce(address.isInternal) || admitted);
 	}
 
 	async admitAuthenticationSource(source: string): Promise<boolean> {

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { request as playwrightRequest } from '@playwright/test';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { E2E_ADMIN, loginAsInitialAdmin } from '../../support/auth';
-import { E2E_URLS } from '../../support/test-env';
+import { E2E_URLS, E2E_PORTS } from '../../support/test-env';
 const {
 	openRemoteDesktopWebSocket,
 	waitForRemoteDesktopTicketRejection,
@@ -35,19 +35,16 @@ const createRdpConnection = async (request: APIRequestContext, name: string): Pr
 					connection: {
 						type: 'RDP',
 						name,
-						host: '192.0.2.88',
-						port: 3389,
+						host: '127.0.0.1',
+						port: E2E_PORTS.rdp,
 						username: 'rdp-http-user',
 						route: 'direct',
 						proxyId: null,
 						notes: null,
-						rdpRemoteApp: '||notepad',
-						rdpRemoteAppDirectory: 'C:\\RemoteApps',
-						rdpRemoteAppArguments: '/A sample.txt',
 						tagIds: [],
 						jumpIds: [],
 					},
-					credential: { kind: 'password', password: 'rdp-http-password' },
+					credential: { kind: 'password', password: 'b10-pass' },
 				},
 			],
 		},
@@ -67,9 +64,10 @@ const createSessionTicket = async (request: APIRequestContext, connectionId: num
 	);
 	expect(session.status(), await session.text()).toBe(200);
 	const payload = readRemoteDesktopSessionResponse(await session.json());
-	expect(payload).toMatchObject({ ticket: expect.any(String), lastConnectedAt: expect.any(Number) });
-	expect(Object.keys(payload).sort()).toEqual(['lastConnectedAt', 'ticket']);
-	expect(payload.lastConnectedAt).toBeGreaterThan(0);
+	expect(payload).toMatchObject({ ticket: expect.any(String) });
+	expect(Object.keys(payload)).toEqual(['ticket', 'protocol', 'host', 'port', 'username', 'password']);
+	expect(session.headers()['cache-control']).toBe('no-store');
+	expect(payload).toMatchObject({ protocol: 'RDP', host: '127.0.0.1', port: E2E_PORTS.rdp, password: 'b10-pass' });
 	expect(payload.ticket).toMatch(/^[A-Za-z0-9_-]{43}$/);
 	return payload.ticket;
 };
@@ -96,19 +94,27 @@ const insertUserWithAdminPassword = (username: string): void => {
 	execFileSync(process.execPath, ['-e', script, databasePath, E2E_ADMIN.username, username], { stdio: 'pipe' });
 };
 
-test('RDP RemoteApp options persist and create a remote desktop session', async ({ request }) => {
+test('RDP sessions use the binary bridge and reject removed RemoteApp fields', async ({ request }) => {
 	await loginAsInitialAdmin(request);
-	const connectionId = await createRdpConnection(request, 'E2E HTTP RDP RemoteApp');
+	const connectionId = await createRdpConnection(request, 'E2E HTTP RDP');
 
 	const persisted = await request.get(`/api/v1/targets/connections/${connectionId}`);
 	expect(persisted.ok()).toBeTruthy();
 	expect(readConnectionView(await persisted.json())).toMatchObject({
 		id: connectionId,
 		type: 'RDP',
-		rdpRemoteApp: '||notepad',
-		rdpRemoteAppDirectory: 'C:\\RemoteApps',
-		rdpRemoteAppArguments: '/A sample.txt',
 	});
+
+	for (const field of ['rdpRemoteApp', 'rdpRemoteAppDirectory', 'rdpRemoteAppArguments']) {
+		const latest = readConnectionView(
+			await (await request.get('/api/v1/targets/connections/' + connectionId)).json(),
+		);
+		const rejected = await request.put('/api/v1/targets/connections/' + connectionId, {
+			headers,
+			data: { version: latest.version, changes: { [field]: 'removed' } },
+		});
+		expect(rejected.status()).toBe(400);
+	}
 
 	const ticket = await createSessionTicket(request, connectionId);
 	const cookie = await sessionCookie(request);
@@ -118,7 +124,7 @@ test('RDP RemoteApp options persist and create a remote desktop session', async 
 		firstMessage: string;
 		close(): void;
 	};
-	expect(tunnel.firstMessage).toMatch(/(?:size|sync|name)/);
+	expect(tunnel.firstMessage).toMatch(/^30/);
 	tunnel.close();
 
 	const reused = (await waitForRemoteDesktopTicketRejection(ticket, cookie)) as { code: number; reason: string };
@@ -158,7 +164,7 @@ test('remote desktop ticket is bound to its authenticated user without consuming
 			firstMessage: string;
 			close(): void;
 		};
-		expect(ownerTunnel.firstMessage).toMatch(/(?:size|sync|name)/);
+		expect(ownerTunnel.firstMessage).toMatch(/^30/);
 		ownerTunnel.close();
 	} finally {
 		await otherRequest.dispose();

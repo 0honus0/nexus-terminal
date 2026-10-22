@@ -13,7 +13,7 @@ import { initializeSshKeySchema } from './ssh-keys/adapters/sqlite/ssh-key-schem
 export const targetMigrations: readonly SchemaMigration[] = [
 	{
 		version: 1,
-		signature: 'targets-v1-initial-20261009',
+		signature: 'targets-v1-initial-20261022-browser-desktop',
 
 		async apply(tx) {
 			await initializeProxiesSchema(tx);

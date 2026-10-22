@@ -10,7 +10,7 @@
 
 B4.2 因素的双端新增范围是密码成功后的 `requiresTwoFactor:true`、TOTP setup/verify/disable/二次登录、WebAuthn 的 options/verify、Passkey 发现/列表/改名/删除。Shared 不持有部分会话密钥、challenge 的服务端归属、TOTP secret 密文和签名算法；完整授权仍须 Access 验证。
 
-`packages/shared` 持有前后端同义同表示的基础取值、业务对象与完整通信契约；不持有后端秘密、权限状态、存储行、技术连接或 UI 草稿。正式认证、Targets、Workspace及已完成的配置管理均已消费 Shared；Agent的Registry、Provider、执行设置、App治理、集成/Browser管理与Memory也已接入，正式Agent Host/Run、正文、审批、Child、Step/Tool与插件SDK也已消费Shared；Frontend已移除Protocol依赖，旧 Backend 已移除，原实现从 Git 历史追溯，不被当前运行时调用。
+`packages/shared` 持有前后端同义同表示的基础取值、业务对象与完整通信契约；不持有后端秘密、权限状态、存储行、技术连接或 UI 草稿。正式认证、Targets、Workspace及已完成的配置管理均已消费 Shared；Agent的Registry、Provider、执行设置、App治理、集成/Browser管理也已接入，正式Agent Host/Run、正文、审批、Child、Step/Tool与插件SDK也已消费Shared；Frontend已移除Protocol依赖，旧 Backend 已移除，原实现从 Git 历史追溯，不被当前运行时调用。
 
 B4.1 Access 的双端范围是管理员初始化、密码登录、明确的认证状态、改密/登出、CAPTCHA 公开配置与黑名单读/解除；Shared 只规定传输形状/预算/有限值，真正身份、IP、失败阈值、因素生效、事务及来源信任由 Access/Platform 负责。正式前端F1首批已消费基础认证与TOTP成功codec，TOTP设置/改密消费者已接入，Passkey严格options/列表/成功联合codec归access/factors/passkey-codec，8MiB完整响应预算归access/values，后端options/列表与前端transport均消费；Auth浏览器Adapter显式投影，Security映射列表本地时间。黑名单完整页256KiB预算同样归Access values并由实际生产者和消费者引用；其余正式业务消费者已完成源码对接；本轮整链行为留远程回归，后端原行为证据归B10。
 
@@ -32,7 +32,7 @@ system/status 同时拥有 SystemHealthResponse、固定健康取值及 readSyst
 
 B3.2 新增 `remote/monitoring/{values,model,http,http-codec,events,workspace,workspace-codec}`、`remote/docker/{values,workspace,workspace-codec}` 和 `system/status/{values,model,http,http-codec}`。基础取值与对象隔离；Docker action 为唯一有限值，技术 Port 仅精确引用 values，不引入 Shared DTO。远端、本机事实分别定义，不通过大量可选字段混成全局状态集合。
 
-B3.3 新增 `remote/desktop/{values,http,http-codec}`：`values` 是 RDP/VNC 协议取值、显示范围、30 秒 ticket TTL、1,024 pending/16 active 产品容量及稳定安全错误；`http` 是 id path、纯 ticket/lastConnectedAt 响应与可选显示输入 DTO，不含账号密码、目标地址和 Guacamole 内部 bridge；`http-codec` 严格解码正整数 path，并从 query 读取单个 width/height/dpi（拒绝未知/重复/非十进制）、解析 43 字节表示的随机 ticket，成功/安全失败 decoder 也核对唯一键、43字符 ticket、可安全转毫秒的 Unix 秒及 1 KiB 完整 JSON 预算；正式桌面 transport 已消费并转为独立应用对象。有限错误值唯一归 values，不把技术配置放进浏览器。技术握手时限、真实清理与局部资源状态属于 Remote Service/Platform 私有生命周期，不进入 Shared。正式桌面 API 与 Modal 已迁移至该契约，旧桌面 DTO 和混合 SessionPort 出口已删除；双端有限验收与完整页面待验范围分别见 testing。
+B3.3 的 `remote/desktop/{values,http,http-codec}` 持有 RDP/VNC、显示范围、30 秒 ticket、1,024 pending/16 active、有限安全码和 2 MiB 二进制帧上限。HTTP 成功严格为 `{ticket,protocol,host,port,username,password}`，完整 JSON 最多 64 KiB；凭据仅供用户已接受的浏览器 SDK 内存消费，响应 no-store，不进入 URL、日志或持久存储。path/query 拒绝未知、重复或非十进制参数，成功/失败 codec 核对完整白名单、容量及 43 字符 ticket；前端另核对请求协议。秘密字段容量引用 Targets values，不 trim。后端仅取得不含密码的 TCP/TLS 技术请求，握手/关闭和队列策略归实际 owner。RemoteApp 契约已删除，完整调用链见远程桌面专题，本版行为仍待远程验收。
 
 ```text
 packages/shared/src/<domain>/<feature>/
@@ -201,7 +201,7 @@ Agent file_inspect/patch/move/delete 的模型私有命令、树节点及内容�
 
 ### B6.2D 协作契约边界
 
-`agent/collaboration/{values,model,http,http-codec}.ts` 定义已安装的 Child 列表、路径及消息元数据页、有限 profile 和容量，包出口精确列出。列表最多4项，消息元数据每页最多32项，完整响应16 KiB；取消复用 runs 的 expectedVersion/Idempotency-Key/成功联合与安全错误。严格 codec 检查字段、UUID、取值、唯一 Child/父归属和有序游标。后端 register/HTTP 各自白名单投影，Service 保持独立应用对象，Model 转独立 storage。十个模型协作工具的目标缩窄、正文/事实和上下文仍属私有 owner；观察 HTTP 不暴露正文、不推进模型扫描/消费水位。正式前端按 F-R23 后置，不能宣称已有双端验收。
+`agent/collaboration/{values,model,http,http-codec}.ts` 定义已安装的 Child 列表、路径及消息元数据页、有限 profile 和容量，包出口精确列出。列表最多4项，消息元数据每页最多32项，完整响应16 KiB；取消复用 runs 的 expectedVersion/Idempotency-Key/成功联合与安全错误。严格 codec 检查字段、UUID、取值、唯一 Child/父归属和有序游标。后端 register/HTTP 各自白名单投影，Service 保持独立应用对象，Model 转独立 storage。九个模型协作工具的目标缩窄、正文/事实和上下文仍属私有 owner；观察 HTTP 不暴露正文、不推进模型扫描/消费水位。正式前端按 F-R23 后置，不能宣称已有双端验收。
 
 ## Preferences 个人数据契约
 
@@ -217,14 +217,14 @@ Agent file_inspect/patch/move/delete 的模型私有命令、树节点及内容�
 2. **子功能与目录**：各域按 values/model/http/http-codec 放置，operations/http-codec 聚合该域纯解码；common/http-codec 仅放实际跨域复用的 unknown JSON 原语。基础取值与对象隔离，包出口精确列出实际文件。
 3. **依赖方向**：业务域可引用无业务依赖的 common；operations、system 不借用 Agent 解码器/默认容量。Shared 不引用 Backend/Frontend；前端 wire→本地状态转换仍归前端。
 4. **类型与转换**：请求、成功、错误、path/header/query 与二进制 Range/If-Match 分别表达；内部应用/存储类型保持独立，HTTP/Model 明确白名单。通知 secret 命令为 keep/clear/replace，读取仅含存在标志；executionState=governed 不是任务健康状态。
-5. **入口与安装**：Memory 六管理动作、Artifact元数据/二进制内容/库/引用/确认清理、执行设置和硬限制preview/confirm、Operations管理、宿主诊断均有Backend消费者。Operations日志/审计/通知及宿主诊断已有正式前端消费者；Agent相关完整管理仍F1，不据缺少前端目录删减契约。
+5. **入口与安装**：Memory 列表、单项读取、提案和审核四管理动作、Artifact元数据/二进制内容/库/引用/确认清理、执行设置和硬限制preview/confirm、Operations管理、宿主诊断均有Backend消费者。Operations日志/审计/通知及宿主诊断已有正式前端消费者；Agent相关完整管理仍F1，不据缺少前端目录删减契约。
 6. **数据、事务与并发**：版本/确认ID/分页在实际用例复查。Memory/Artifact/通知时间为毫秒，期限字段名明确单位；治理审批仍使用其既定秒表示。Memory视图校验到期晚于创建、审核位于创建/更新之间、发布审核早于到期；历史读取不要求当前尚未过期。Shared形状校验不能替代当前授权、SQL事务事实、文件发布或外部投递确认。
 7. **生命周期与失败**：响应预算含转义与完整外壳；Operations请求64KiB/响应8MiB，宿主诊断16KiB，Memory响应8MiB，Artifact JSON响应128KiB/单内容16MiB，清理一次最多128项，执行设置128KiB。unknown 不触发自动重放，配置/引用/观察不授予执行权。
 8. **当前能力与验收**：契约与真实后端消费者已接线；正式前端F1、故障/双端/外部服务行为B10。无业务消费者的预留事件移除，不增加旧字段兼容解码。
 
 B7 通知响应的顶层与内层配置采用同一响应字节预算，保持逐字段限制；NotificationDeliveryOutcome 从唯一 NotificationDeliveryStatus 收窄，供 Model/Service/Storage/Adapter 共用，不能各层重复声明取值。存储密文 JSON 的容量是 Adapter 私有技术限制，不添加 Shared 存储对象。
 
-执行设置的完整 `{settings}` / `{confirmation}` 响应 codec 已由正式前端执行卡片消费，三个 profile 的请求数、工具数及 UTF-8 容量归 execution/values，HTTP、持久解码、Service 与前端候选共同引用。每个 profile 嵌套解码采用本域128KiB预算，不沿用任意域默认值；前端独立草稿及工具名文本不进入 Shared。
+执行设置的完整 `{settings}` / `{confirmation}` 响应 codec 已由正式前端执行卡片消费，limits/hardLimits 及128KiB预算由 execution/values 唯一持有。请求、响应和持久文档均删除 profiles，严格拒绝旧字段；Child 请求上限继承主 Agent，存储约束与解码共同引用执行额度最大值，不保留独立32次上限。collaboration/values 的 profile 仅作为 explore/review/worker 角色标签，不能配置模型或权限。
 
 ## B8 契约与实施边界（双端源码已接线）
 
@@ -266,6 +266,8 @@ remote/mutations 的 values/model/http/http-codec 分别持有状态/来源/人�
 
 ### B9 Targets 导入与测试
 
+TargetConnectionView 的 lastConnectedAt 为必填 Unix 毫秒或 null，readConnectionView 严格拒绝缺字段、非安全整数和早于 createdAt 的时间；lastConnectedAt 可晚于 updatedAt，因为连接观测不修改配置。列表、单项、更新与克隆响应共用此契约，不接受客户端写入，也没有本地观察兜底。后端 Storage/Model/public/HTTP 与前端 Summary 均显式投影。桌面签发响应包含 ticket 与内存连接参数，不把签发时间作为成功时间返回；现有 Workspace 附件秒字段仍属于运行时协议，不用作连接列表最近记录。
+
 正式Connections/Proxy/SSH Key/Tags/Host Key API与组件已消费targets对应http/model/codec，保留本地Summary/草稿及显式投影；readConnectionList/readProxyList/readSshKeyList/readTagList严格核对集合唯一ID及时间关系。targets/values唯一维护管理集合10,000项，Proxy完整JSON 64MiB、SSH Key/Tag/Host Key各16MiB，后端列表生产者与正式前端有界读取共同消费；超限返回安全失败，不截断。Tag预算容纳每项128-byte名称的最坏JSON转义与安全整数元数据。Connections完整集合预算640MiB，容纳10,000项字段最坏JSON转义、关系和整数元数据；单项响应128KiB。正式连接表单、标签树、测试和新导入导出已有消费者，Remote运行协议仍留C2。
 
 connections/http 的导入写命令新增独立密码/Key引用/内联私钥联合与代理密码意图；文件按同一新格式数组读取，不增加旧密文/旧字段转换。values 唯一拥有 connectionsFile、每批50项、1MiB文件/JSON、16KiB multipart余量及64KiB私钥。import/codecs 严格解码，Backend及正式Connections transport/新文件导入已共同消费；浏览器读取文件后发送JSON items，multipart接口仍是独立生产入口。
@@ -284,7 +286,7 @@ Targets Host Key的列表codec严格核对小写host/port唯一性、完整指�
 
 SSH Key 名称/私钥/口令容量唯一归 `targets/ssh-keys/values.ts`（128 bytes/64 KiB/8 KiB），独立管理、连接导入、未保存测试和可信应用入口复用；移除connections中旧私钥容量导出，不保留别名。Proxy字段容量归 `targets/proxies/values.ts`，连接名称容量归 `targets/connections/values.ts`；Service应用校验不引用HTTP codec，持久行只引用values校验编码与范围。
 
-连接host/username/notes、RDP RemoteApp三字段及password容量统一归 `targets/connections/values.ts`，分别为512/256/4096、256/1024/4096、8192 UTF-8 bytes；完整请求预算仍独立。HTTP严格codec、可信应用入口和持久解码按各自语义消费基础值，不让存储层引用HTTP DTO/codec。
+连接host/username/notes及password容量统一归 `targets/connections/values.ts`，分别为512/256/4096、8192 UTF-8 bytes；完整请求预算仍独立。HTTP严格codec、可信应用入口和持久解码按各自语义消费基础值，不让存储层引用HTTP DTO/codec。
 
 `TARGET_CONNECTION_MAX_JUMPS`是每个保存/草稿连接的直接跳板ID容量16项，分别用于Shared codec、应用输入与恢复/存储校验；不借此常量暗中替代后端递归展开与总数政策。
 
@@ -298,6 +300,8 @@ remote/transfers/server-values唯一持有auto/rsync/scp、父/子有限状态�
 
 ### 挂起管理 HTTP
 
+`remote/suspend/events` 唯一拥有独立目录流的 snapshot/heartbeat 完整联合、严格 unknown 解码和完整帧预算（目录 1 MiB + 1 KiB）。snapshot 含连接内单调安全整数 revision，sessions 复用原目录严格解码；后端 WS 与前端 stream 共同消费并逐字段转换，不包含 SSH 字节、凭据或订阅者身份。重连版本基线只归当前 socket，不跨连接比较。
+
 remote/suspend的http/http-codec由Backend五管理HTTP与正式Frontend API共同消费，完整目录/命名/固定成功回执与有限安全失败均从unknown严格解码。values持64项/1MiB目录、4KiB管理正文及128MiB渲染后日志预算，私有32/64准入和日志窗口仍归Backend owner。目录ISO日期、Unix毫秒租约与attachment关联分别验证；输入名称规范化，响应名称必须已规范。WS请求/响应maps、严格workspace-result-codec和有限autoTerminated/revoked原因由Backend与正式WorkspaceSocket/Session/terminal消费者共同消费；原始snapshot 4MiB、完整JSON 24MiB+16KiB、history页256KiB分别校验。挂起回执复用基础附件字段，不虚构普通回放replayedBytes；Unix秒连接时间只在前端mapper转毫秒。独立ACK/串行续租、unknown与实际资源owner归Frontend/Backend，Shared不拥有socket或恢复政策。
 
 ### Provider 管理消费者
@@ -308,11 +312,11 @@ remote/suspend的http/http-codec由Backend五管理HTTP与正式Frontend API共�
 
 scope/http-codec的实例/定义集合、创建与状态更新已由正式App管理消费；governance/http-codec的完整授权、策略与目标名单经独立前端应用mapper消费，原版本和请求资源关联在transport核对。App实例UUID与定义ID/版本分开；授权scope在前端转为独立可编辑结构，空目标不表示全部。完整写命令按字段投影，策略继承以省略表达，不能将存在但值为undefined的字段送入严格decoder。前端适配按D17只核对源码与静态，远程Actions E2E待全部适配后统一执行。
 
-### 集成、Browser与Memory正式管理消费者
+### 集成、Browser与Memory管理边界
 
 Browser的目标/端点/URL规则容量统一归browser-values，由Shared codec、持久Adapter及正式编辑器共同消费。integrations/http新增创建头和固定删除响应，由真实Backend入口与前端transport消费；集合引用唯一MAX_ITEMS，视图校验时间先后。MCP/ACP配置、完整目录及凭据写意图在前端逐字段转为独立应用对象，UUID创建键与原配置版本分别保留，不拼旧DTO。
 
-Memory六HTTP的完整codec由正式记忆管理消费；offset分页、原版本审核、来源确认ID/来源版本/预分配memoryId均核对请求关联。毫秒、单条/完整JSON预算仍归Shared，审核草稿、本地到期输入和未知结果策略归前端。Run工具与正式Host各消费所属真实契约，管理接口不替代执行权限。
+Memory四HTTP的完整codec由后端管理入口、对话候选审核及既有 API E2E 消费；正式设置记忆管理及其专用前端消费者已移除，不保留旧入口或伪造自动审核。列表查询增加可选 threadId，严格 UUID 解码并拒绝重复参数；后端分页前按来源 Run 的对话过滤，来源为空的记录不匹配。前端只用当前对话候选列表和版本化 publish/reject；不传 threadId 的全 App 列表及撤销 API 仍保留。跨App导入的请求、响应、codec及导入事件已删除，不保留旧协议分支。毫秒、单条/完整JSON预算仍归Shared；已有记忆、人工审核规则及运行时 Recall 保留。Run工具与正式Host各消费所属真实契约，管理接口不替代执行权限。
 
 ### 原生与插件共用工作区契约
 
@@ -323,5 +327,3 @@ scope/workspace-http 及 workspace-http-codec 唯一定义18项工作区请求/�
 pending/running/unknown 的 Root 或 Child 阻止删除，安全失败复用 agent/values 的 active_run_conflict（HTTP 409）；线程/App版本冲突使用 version_conflict，缺失/异 App线程使用 not_found，不根据错误正文归类。事务删除线程、全部 Run 和所属持久子表及附件引用，Memory 保留并清除 sourceRunId、推进自身版本；Artifact 元数据和文件保留。SQL、事务、状态准入和记忆版本耗尽判断均由 Backend 各自 owner 持有，Shared 不定义存储事实或删除策略对象。没有删除回执重放或墓碑兼容层，重复删除为 not_found；未知结果应保留原 threadId/expectedVersion 并先只读核对，不自动重放旧创建意图。
 
 验收边界为严格 unknown 输入、方法/线程/App/version/envelope 响应关联、现有消费者编译，以及 Backend 当前 v1 隔离 SQLite 的 FK/级联、拒绝和回滚验证；正式删除 UI、真实插件/原生 HTTP 交付丢失与并发竞争仍须各自整链验收，静态和隔离证据不扩大为全量行为通过。
-
-Memory 列表查询增加可选 threadId，严格 UUID 解码并拒绝重复参数；后端分页前按同用户/App 来源 Run 的对话过滤，包含子任务，来源为空的记录不匹配。对话专用前端 owner 消费候选列表及 publish/reject，不传 threadId 仍是全 App 管理用途；协议、应用及存储分别持独立类型并显式投影。

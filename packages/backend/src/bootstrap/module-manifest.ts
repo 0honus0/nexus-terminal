@@ -33,6 +33,7 @@ import { SqliteSnapshotCollector } from '../platform/storage/sqlite/adapters/sna
 import { BACKUP_MAX_SNAPSHOT_BYTES } from '@nexus-terminal/shared/system/backups/values';
 import { applicationMigrations } from './schema.js';
 import { NativeSnapshotRestoreFiles } from '../platform/storage/sqlite/adapters/snapshot-restore-files.js';
+import { resolveDataPaths } from './data-paths.js';
 
 export interface RegisteredModules {
 	allowedOrigins: readonly string[];
@@ -55,7 +56,6 @@ interface ModuleRegistrationOptions {
 	secrets: SecretBox | null;
 	verifyHostKey: MachineConnectOptions['verifyHostKey'] | null;
 	configuration?: PreferencesRegistrationOptions['seed'];
-	guacd?: { host: string; port: number };
 	maintenance: BackupMaintenance;
 }
 
@@ -102,12 +102,12 @@ export async function registerModules({
 	secrets,
 	verifyHostKey,
 	configuration,
-	guacd,
 	maintenance,
 }: ModuleRegistrationOptions): Promise<RegisteredModules> {
-	const backgrounds = await NativeBlobStore.open(sqlite.path + '.appearance');
-	const artifacts = await NativeBlobStore.open(sqlite.path + '.artifacts');
-	const plugins = await NativeBlobStore.open(sqlite.path + '.plugins');
+	const paths = resolveDataPaths(sqlite.path);
+	const backgrounds = await NativeBlobStore.open(paths.appearance);
+	const artifacts = await NativeBlobStore.open(paths.artifacts);
+	const plugins = await NativeBlobStore.open(paths.plugins);
 	const preferences = await registerPreferences({
 		sqlite,
 		secrets,
@@ -167,13 +167,27 @@ export async function registerModules({
 			access: access.publicApi,
 			logDirectory: dirname(sqlite.path),
 			events: operations.publicApi,
-			guacdHost: guacd?.host ?? 'localhost',
-			guacdPort: guacd?.port ?? 4822,
 			statusIntervalSeconds: installed.statusMonitorIntervalSeconds,
 			resourceRefreshSeconds: installed.remoteHostRefreshIntervalSeconds,
 		});
 		owners.push(remote);
 		remote.installTransactionIdentityReader(access.readTransactionIdentity);
+		preferences.installRuntimeReload((configuration) => {
+			const applyAccess = access.prepareRuntimeConfiguration({
+				ipWhitelist: configuration.ipWhitelist,
+				ipBlacklistEnabled: configuration.ipBlacklistEnabled,
+				maxLoginAttempts: configuration.maxLoginAttempts,
+				loginBanDuration: configuration.loginBanDuration,
+			});
+			const applyMonitoring = remote.prepareMonitoringConfiguration(
+				configuration.statusMonitorIntervalSeconds,
+				configuration.remoteHostRefreshIntervalSeconds,
+			);
+			return () => {
+				applyAccess();
+				applyMonitoring();
+			};
+		});
 		const snapshot = new SqliteSnapshotCollector(
 			sqlite,
 			[
@@ -194,9 +208,9 @@ export async function registerModules({
 			new NativeSnapshotRestoreFiles(
 				sqlite.path,
 				new Map([
-					['appearance', sqlite.path + '.appearance'],
-					['artifacts', sqlite.path + '.artifacts'],
-					['plugins', sqlite.path + '.plugins'],
+					['appearance', paths.appearance],
+					['artifacts', paths.artifacts],
+					['plugins', paths.plugins],
 				]),
 			),
 		);

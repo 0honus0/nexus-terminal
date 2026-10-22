@@ -1,5 +1,3 @@
-import type { AgentChildProfile } from '../collaboration/values.js';
-
 export interface AgentExecutionLimits {
 	maxModelRequests: number;
 	maxToolExecutions: number;
@@ -19,24 +17,12 @@ export interface AgentExecutionLimits {
 	artifactTtlSeconds: number;
 }
 
-export type AgentProfileModel =
-	{ kind: 'inherit' } | { kind: 'explicit'; providerId: string; modelId: string; configurationVersion: number };
-
-export interface AgentExecutionProfile {
-	name: AgentChildProfile;
-	enabled: boolean;
-	model: AgentProfileModel;
-	maxRequests: number;
-	maxSeconds: number;
-	tools: string[];
-}
-
 export interface AgentExecutionSettingsView {
 	version: number;
 	enabled: boolean;
 	limits: AgentExecutionLimits;
 	hardLimits: AgentExecutionLimits;
-	profiles: AgentExecutionProfile[];
+
 	updatedAt: number;
 }
 

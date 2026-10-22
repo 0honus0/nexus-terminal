@@ -7,6 +7,10 @@ import type { RemoteObservationService } from './observation-service.js';
 import { ObservationFailure, type ObservationTarget, type ObservedSshResource } from '../model/observation-types.js';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import { OBSERVATION_MAX_RESOURCES } from '@nexus-terminal/shared/remote/monitoring/values';
+import {
+	SETTINGS_MONITORING_MIN_SECONDS,
+	SETTINGS_MONITORING_MAX_SECONDS,
+} from '@nexus-terminal/shared/preferences/configuration/values';
 
 interface CacheEntry {
 	fingerprint: string;
@@ -32,12 +36,32 @@ export class ResourceStatusService {
 		private readonly access: AccessPublicApi,
 		private readonly model: ObservationModel,
 		private readonly observations: RemoteObservationService,
-		private readonly refreshSeconds = 60,
+		private refreshSeconds = 60,
 	) {
-		if (!Number.isSafeInteger(refreshSeconds) || refreshSeconds < 1 || refreshSeconds > 86400) {
+		if (
+			!Number.isSafeInteger(refreshSeconds) ||
+			refreshSeconds < SETTINGS_MONITORING_MIN_SECONDS ||
+			refreshSeconds > SETTINGS_MONITORING_MAX_SECONDS
+		) {
 			throw new Error('Invalid resource refresh interval');
 		}
 		setMaxListeners(0, this.controller.signal);
+	}
+
+	prepareRefreshInterval(seconds: number): () => void {
+		if (
+			!Number.isSafeInteger(seconds) ||
+			seconds < SETTINGS_MONITORING_MIN_SECONDS ||
+			seconds > SETTINGS_MONITORING_MAX_SECONDS
+		) {
+			throw new Error('Invalid resource refresh interval');
+		}
+		return () => {
+			if (seconds !== this.refreshSeconds) {
+				this.refreshSeconds = seconds;
+				this.cache.clear();
+			}
+		};
 	}
 
 	private async authorize(token: string | null): Promise<number> {
@@ -142,7 +166,7 @@ export class ResourceStatusService {
 		this.inFlight.set(key, entry);
 		const task = entry.task
 			.then((value) => {
-				if (this.accepting && this.inFlight.get(key) === entry) {
+				if (this.accepting && this.inFlight.get(key) === entry && value.error === undefined) {
 					this.cache.set(key, { fingerprint, value, expiresAt: Date.now() + this.refreshSeconds * 1000 });
 				}
 				return value;

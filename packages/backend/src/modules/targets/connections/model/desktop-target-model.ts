@@ -12,14 +12,12 @@ function toDesktopSnapshot(source: StoredDesktopTarget): DesktopTargetSnapshot {
 	return {
 		id: source.id,
 		version: source.version,
+		createdAt: source.createdAt,
 		protocol: source.type,
 		host: source.host,
 		port: source.port,
 		username: source.username,
 		route: source.route,
-		rdpRemoteApp: source.rdpRemoteApp,
-		rdpRemoteAppDirectory: source.rdpRemoteAppDirectory,
-		rdpRemoteAppArguments: source.rdpRemoteAppArguments,
 	};
 }
 
@@ -47,21 +45,15 @@ export class DesktopTargetModel {
 			return {
 				id: snapshot.id,
 				version: snapshot.version,
+				createdAt: snapshot.createdAt,
 				protocol: snapshot.protocol,
 				host: snapshot.host,
 				port: snapshot.port,
 				username: snapshot.username,
 				password: ciphertext && this.secrets ? this.secrets.decrypt(ciphertext, 'connection:password') : null,
-				rdpRemoteApp: snapshot.rdpRemoteApp,
-				rdpRemoteAppDirectory: snapshot.rdpRemoteAppDirectory,
-				rdpRemoteAppArguments: snapshot.rdpRemoteAppArguments,
 			};
 		} catch (cause) {
 			return targetModelFailure(cause);
 		}
-	}
-
-	markAttempt(id: number, version: number, timestamp: number): Promise<boolean> {
-		return this.storage.markAttempt(id, version, timestamp).catch(targetModelFailure);
 	}
 }

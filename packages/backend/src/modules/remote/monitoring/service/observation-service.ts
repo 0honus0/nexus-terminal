@@ -2,6 +2,10 @@ import { FailureSummary } from '../../../../platform/lifecycle/failure-summary.j
 import type { MachineMutationService } from '../../machines/service/mutation-service.js';
 import { RemoteFileFailure } from '../../files/model/file-types.js';
 import type { ObservationErrorCode } from '@nexus-terminal/shared/remote/monitoring/values';
+import {
+	SETTINGS_MONITORING_MIN_SECONDS,
+	SETTINGS_MONITORING_MAX_SECONDS,
+} from '@nexus-terminal/shared/preferences/configuration/values';
 import { randomUUID } from 'node:crypto';
 import type { AccessPublicApi } from '../../../access/public.js';
 import type { TrustedSshTargetResolver } from '../../../targets/public.js';
@@ -30,6 +34,7 @@ interface ObservationTaskPolicy {
 export class RemoteObservationService {
 	private readonly tasks = new Map<AbortController, Promise<unknown>>();
 	private readonly subscriptions = new Set<() => void>();
+	private readonly reschedules = new Set<() => void>();
 	private readonly failures = new FailureSummary();
 	private readonly cleanups = new Set<Promise<void>>();
 	private accepting = true;
@@ -41,11 +46,33 @@ export class RemoteObservationService {
 		private readonly workspaces: WorkspaceService,
 		private readonly model: ObservationModel,
 		private readonly mutationClaims: MachineMutationService,
-		private readonly intervalSeconds = 3,
+		private intervalSeconds = 3,
 	) {
-		if (!Number.isSafeInteger(intervalSeconds) || intervalSeconds < 1 || intervalSeconds > 86400) {
+		if (
+			!Number.isSafeInteger(intervalSeconds) ||
+			intervalSeconds < SETTINGS_MONITORING_MIN_SECONDS ||
+			intervalSeconds > SETTINGS_MONITORING_MAX_SECONDS
+		) {
 			throw new Error('Invalid monitoring interval');
 		}
+	}
+
+	prepareStatusInterval(seconds: number): () => void {
+		if (
+			!Number.isSafeInteger(seconds) ||
+			seconds < SETTINGS_MONITORING_MIN_SECONDS ||
+			seconds > SETTINGS_MONITORING_MAX_SECONDS
+		) {
+			throw new Error('Invalid monitoring interval');
+		}
+		return () => {
+			if (seconds !== this.intervalSeconds) {
+				this.intervalSeconds = seconds;
+				for (const reschedule of this.reschedules) {
+					reschedule();
+				}
+			}
+		};
 	}
 
 	private run<T>(
@@ -176,6 +203,7 @@ export class RemoteObservationService {
 			}
 			signal.removeEventListener('abort', stop);
 			this.subscriptions.delete(stop);
+			this.reschedules.delete(reschedule);
 			// A late sampler can still update its own baseline; discard it only after settlement.
 			const cleanup = current
 				.catch(() => undefined)
@@ -218,14 +246,31 @@ export class RemoteObservationService {
 				})
 				.finally(() => {
 					if (!stopped) {
-						timer = setTimeout(() => fetch(false), this.intervalSeconds * 1000);
-						timer.unref();
+						schedule();
 					}
 				});
 			void current.catch(() => stop());
 		};
 
+		const schedule = () => {
+			if (timer) {
+				clearTimeout(timer);
+			}
+			timer = setTimeout(() => {
+				timer = null;
+				fetch(false);
+			}, this.intervalSeconds * 1000);
+			timer.unref();
+		};
+
+		const reschedule = () => {
+			if (!stopped && timer !== null) {
+				schedule();
+			}
+		};
+
 		this.subscriptions.add(stop);
+		this.reschedules.add(reschedule);
 		signal.addEventListener('abort', stop, { once: true });
 		if (signal.aborted) {
 			stop();

@@ -450,7 +450,7 @@ B2 传输任务的请求标识现在由同一 Workspace 内的 upload、copy/mov
 
 修改桌面窗口宽高或拖动后保存个人偏好；保存期间禁用尺寸输入及拖动，避免旧响应覆盖新编辑。失败使用本地化提示，冲突或结果未知先刷新核对，不自动重试写入。最小化、恢复与浏览器全屏不重建连接；手机点按操作鼠标，用右上“键盘”按钮开关软键盘，最小化/断开释放焦点。本地关闭不证明远端程序停止。
 
-新桥的指定目标 RDP 基础连接、常用键盘/中文 composition、双向纯文本剪贴板及拒绝授权、窗口/全屏切换、移动仿真输入与触控已验证；VNC、其它系统组合键、原生输入法及手机真机、长时/并发、多平台与资源故障仍待回归，不能当作全部桌面能力已验收。旧版 guacd/Windows 验收不作为本版通过证据。设计见 [远程桌面架构](architecture/REMOTE_DESKTOP.md)，检查状态见 [testing](testing/E2E.md)。
+新桥的指定目标 RDP 基础连接、常用键盘/中文 composition、双向纯文本剪贴板及拒绝授权、窗口/全屏切换、移动仿真输入与触控，以及分钟级持续输入、票据重放/过期拒绝、受控断线后显式重连、建连中关闭和刷新后的连接释放已验证；VNC、其它系统组合键、原生输入法及手机真机、小时级/空闲稳定性、并发、多平台及复杂网络/清理故障仍待回归，不能当作全部桌面能力已验收。旧版 guacd/Windows 验收不作为本版通过证据。设计见 [远程桌面架构](architecture/REMOTE_DESKTOP.md)，检查状态见 [testing](testing/E2E.md)。
 
 ## Agent
 
@@ -1071,6 +1071,8 @@ GET/PUT /api/v1/settings/logging 使用 {expectedVersion,level}，level为debug/
 ![安全设置](imgs/e2e/security-settings.png)
 
 ## 备份与恢复
+
+Compose 部署在 `.env` 用 `NEXUS_DATA_DIR` 指定宿主数据目录，默认 `./data`，容器内统一挂载为 `/app/data`；自定义目录后，外部备份也须使用该实际路径。桌面连接不再需要 guacd 服务或相关环境变量，详见 [部署说明](DEPLOYMENT.md)。
 
 实例使用一个独立数据目录，`NEXUS_DB_PATH` 指向其中的数据库文件。默认结构为 `data/nexus-terminal.db`、`data/appearance/`（背景资源）、`data/artifacts/`（Agent 附件与产物）、`data/plugins/`（插件包）；数据库目录即实例数据目录，不同实例须使用不同目录，不能仅更换同目录下的数据库文件名。启动自动创建资源子目录，SQLite 的 WAL/SHM 及恢复临时文件也保留在数据目录内。本次为破坏性布局调整，不读取、迁移或自动删除旧的 `nexus-terminal.db.appearance/`、`.artifacts/`、`.plugins/`；部署使用新的空数据目录，不将旧数据库单独拷入新目录。停机外部备份需保存完整数据目录及实例密钥，不能只复制 DB；应用内导出/导入仍使用原备份入口和逻辑文件分区。
 

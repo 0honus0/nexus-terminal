@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { readConnectionInput } from '../../../packages/shared/dist/targets/connections/http-codec.js';
+import { InvalidTargetPayload } from '../../../packages/shared/dist/targets/http.js';
 import { SqliteExecutionStorage } from '../../../packages/backend/dist/modules/agent/execution/adapters/sqlite/execution-sql.js';
 import { ExecutionModel } from '../../../packages/backend/dist/modules/agent/execution/model/execution-model.js';
 import { ExecutionService } from '../../../packages/backend/dist/modules/agent/execution/service/execution-service.js';
@@ -37,9 +39,6 @@ function metadata(name, route = 'direct', proxyId = null, jumpIds = []) {
 		jumpIds,
 		tagIds: [],
 		notes: null,
-		rdpRemoteApp: null,
-		rdpRemoteAppDirectory: null,
-		rdpRemoteAppArguments: null,
 	};
 }
 
@@ -84,13 +83,7 @@ try {
 	);
 	const settings = new ExecutionService(new ExecutionModel(executionStorage, tokens), async () => undefined);
 	const defaults = await settings.get(1);
-	await settings.update(
-		{ userId: 1, token: 'fixture-session' },
-		defaults.version,
-		true,
-		defaults.limits,
-		defaults.profiles,
-	);
+	await settings.update({ userId: 1, token: 'fixture-session' }, defaults.version, true, defaults.limits);
 	await db.close();
 	app = await createApp(dbPath, { encryptionKey: key });
 	const proxy = await app.targets.proxies.create({
@@ -128,9 +121,9 @@ try {
 	const retagged = await app.targets.setTags(host.id, edited.value.version, [tag.id, extraTag.id]);
 	assert.equal(retagged.status, 'updated');
 	assert.equal(await app.trustedSshTargets.fingerprintStored(host.id), f1);
-	await assert.rejects(
-		() => app.targets.create({ ...metadata('invalid-ssh'), rdpRemoteApp: 'notepad' }),
-		(error) => error.code === 'invalid_input',
+	assert.throws(
+		() => readConnectionInput({ ...metadata('invalid-ssh'), rdpRemoteApp: 'notepad' }),
+		InvalidTargetPayload,
 	);
 	await assert.rejects(
 		() => app.targets.sshKeys.delete(sshKey.id),

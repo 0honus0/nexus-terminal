@@ -7,14 +7,11 @@ import type {
 	StoredMemoryCreation,
 	StoredMemoryFacts,
 	StoredMemoryReviewTask,
-	StoredMemoryImport,
-	StoredMemoryImportCreation,
-	StoredMemoryImportFacts,
 	MemoryStorage,
 	StoredMemory,
 } from '../../storage/memory-storage.js';
 import { MemoryStorageRefusal } from '../../storage/memory-storage.js';
-import { memoryRow, memoryImportRow, memoryInteger } from './memory-row.js';
+import { memoryRow, memoryInteger } from './memory-row.js';
 import { currentParticipant } from '../../../runs/adapters/sqlite/run-participant-sql.js';
 import { toolOperation } from '../../../runs/adapters/sqlite/run-tool-row.js';
 
@@ -208,120 +205,6 @@ export class SqliteMemoryStorage implements MemoryStorage {
 				throw new Error('Reviewed memory missing');
 			}
 			return result;
-		});
-	}
-
-	previewImport(
-		scope: StoredMemoryScope,
-		auth: StoredMemoryAuthorization,
-		input: StoredMemoryImportCreation,
-		clock: () => number,
-		admit: (facts: StoredMemoryFacts) => void,
-		admitSource: (facts: StoredMemoryImportFacts, confirmations: number, now: number) => void,
-	): Promise<StoredMemoryImport> {
-		return this.db.transaction(async (tx) => {
-			admit(await this.facts(tx, scope, auth, null));
-			await tx.run('DELETE FROM agent_memory_imports WHERE expires_at<=?', [clock()]);
-			const count = await tx.one('SELECT COUNT(*) AS count FROM agent_memory_imports WHERE user_id=?', [
-				scope.userId,
-			]);
-			if (!count) {
-				throw new Error('Memory confirmation count missing');
-			}
-			const source = await getMemory(
-				tx,
-				{ userId: scope.userId, appId: input.sourceAppId },
-				input.sourceMemoryId,
-			);
-			const sourceApp = await tx.one('SELECT enabled FROM agent_apps WHERE id=? AND user_id=?', [
-				input.sourceAppId,
-				scope.userId,
-			]);
-			if (!source) {
-				throw new MemoryStorageRefusal('not_found');
-			}
-			const now = clock();
-			admitSource({ source, sourceEnabled: sourceApp?.enabled === 1 }, memoryInteger(count.count), now);
-			const expiresAt = now + input.ttlMs;
-			await tx.run(
-				'INSERT INTO agent_memory_imports(id,user_id,app_id,memory_id,source_app_id,source_memory_id,source_version,expires_at) VALUES(?,?,?,?,?,?,?,?)',
-				[
-					input.id,
-					scope.userId,
-					scope.appId,
-					input.memoryId,
-					input.sourceAppId,
-					input.sourceMemoryId,
-					source.version,
-					expiresAt,
-				],
-			);
-			return {
-				id: input.id,
-				memoryId: input.memoryId,
-				sourceAppId: input.sourceAppId,
-				sourceMemoryId: input.sourceMemoryId,
-				sourceVersion: source.version,
-				expiresAt,
-			};
-		});
-	}
-
-	confirmImport(
-		scope: StoredMemoryScope,
-		auth: StoredMemoryAuthorization,
-		id: string,
-		clock: () => number,
-		admit: (facts: StoredMemoryFacts) => void,
-		admitSource: (facts: StoredMemoryImportFacts, now: number) => void,
-	): Promise<StoredMemory> {
-		return this.db.transaction(async (tx) => {
-			admit(await this.facts(tx, scope, auth, null));
-			const row = await tx.one('SELECT * FROM agent_memory_imports WHERE id=? AND user_id=? AND app_id=?', [
-				id,
-				scope.userId,
-				scope.appId,
-			]);
-			if (!row) {
-				throw new MemoryStorageRefusal('not_found');
-			}
-			const confirmation = memoryImportRow(row);
-			const source = await getMemory(
-				tx,
-				{ userId: scope.userId, appId: confirmation.sourceAppId },
-				confirmation.sourceMemoryId,
-			);
-			const sourceApp = await tx.one('SELECT enabled FROM agent_apps WHERE id=? AND user_id=?', [
-				confirmation.sourceAppId,
-				scope.userId,
-			]);
-			if (!source || source.version !== confirmation.sourceVersion) {
-				throw new MemoryStorageRefusal('version_conflict');
-			}
-			const now = clock();
-			if (confirmation.expiresAt <= now || row.consumed_at !== null) {
-				throw new MemoryStorageRefusal('version_conflict');
-			}
-			admitSource({ source, sourceEnabled: sourceApp?.enabled === 1 }, now);
-			const consumed = await tx.run(
-				'UPDATE agent_memory_imports SET consumed_at=? WHERE id=? AND consumed_at IS NULL',
-				[now, id],
-			);
-			if (consumed.changes !== 1) {
-				throw new Error('Lost memory import CAS');
-			}
-			return insertMemory(
-				tx,
-				scope,
-				{
-					id: confirmation.memoryId,
-					content: source.content,
-					confidence: source.confidence,
-					expiresAt: source.expiresAt,
-					sourceRunId: null,
-				},
-				now,
-			);
 		});
 	}
 

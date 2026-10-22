@@ -370,8 +370,7 @@ const server = http.createServer(async (request, response) => {
 		const args = {
 			profile: 'explore',
 			objective: 'Return 42.',
-			maxRequests: 3,
-			durationSeconds: latestUserText.includes('boundary=duration') ? 121 : 30,
+			...(latestUserText.includes('boundary=duration') ? { durationSeconds: 121 } : {}),
 			dependencyMode: 'success',
 			...(latestUserText.includes('boundary=absolute')
 				? { deadlineAt: regressionInputs.deadlines.rejectedSentinel }

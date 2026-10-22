@@ -5,9 +5,6 @@ import {
 	TARGET_CONNECTION_HOST_MAX_BYTES,
 	TARGET_CONNECTION_USERNAME_MAX_BYTES,
 	TARGET_CONNECTION_NOTES_MAX_BYTES,
-	TARGET_RDP_REMOTE_APP_MAX_BYTES,
-	TARGET_RDP_REMOTE_APP_DIRECTORY_MAX_BYTES,
-	TARGET_RDP_REMOTE_APP_ARGUMENTS_MAX_BYTES,
 } from '@nexus-terminal/shared/targets/connections/values';
 import type { CredentialAssignment } from './model/connection-credential-types.js';
 import { TargetFailure } from '../target-failure.js';
@@ -27,15 +24,6 @@ export function validateConnection(data: ConnectionMetadata): ConnectionMetadata
 	if (data.notes !== null) {
 		validateTargetText(data.notes, TARGET_CONNECTION_NOTES_MAX_BYTES);
 	}
-	if (data.rdpRemoteApp !== null) {
-		validateTargetText(data.rdpRemoteApp, TARGET_RDP_REMOTE_APP_MAX_BYTES, false);
-	}
-	if (data.rdpRemoteAppDirectory !== null) {
-		validateTargetText(data.rdpRemoteAppDirectory, TARGET_RDP_REMOTE_APP_DIRECTORY_MAX_BYTES);
-	}
-	if (data.rdpRemoteAppArguments !== null) {
-		validateTargetText(data.rdpRemoteAppArguments, TARGET_RDP_REMOTE_APP_ARGUMENTS_MAX_BYTES);
-	}
 	validateConnectionTagCount(data.tagIds.length);
 	if (
 		data.jumpIds.length > TARGET_CONNECTION_MAX_JUMPS ||
@@ -46,17 +34,6 @@ export function validateConnection(data: ConnectionMetadata): ConnectionMetadata
 		throw new TargetFailure('invalid_input');
 	}
 	if (!['SSH', 'RDP', 'VNC'].includes(data.type) || !['direct', 'proxy', 'jump'].includes(data.route)) {
-		throw new TargetFailure('invalid_input');
-	}
-	if (
-		(data.type !== 'RDP' &&
-			(data.rdpRemoteApp !== null ||
-				data.rdpRemoteAppDirectory !== null ||
-				data.rdpRemoteAppArguments !== null)) ||
-		(data.type === 'RDP' &&
-			data.rdpRemoteApp === null &&
-			(data.rdpRemoteAppDirectory !== null || data.rdpRemoteAppArguments !== null))
-	) {
 		throw new TargetFailure('invalid_input');
 	}
 	for (const id of [...data.tagIds, ...data.jumpIds]) {
@@ -103,15 +80,6 @@ export function normalizeConnectionChanges(
 	}
 	if (changes.notes !== undefined) {
 		patch.notes = normalized.notes;
-	}
-	if (changes.rdpRemoteApp !== undefined) {
-		patch.rdpRemoteApp = normalized.rdpRemoteApp;
-	}
-	if (changes.rdpRemoteAppDirectory !== undefined) {
-		patch.rdpRemoteAppDirectory = normalized.rdpRemoteAppDirectory;
-	}
-	if (changes.rdpRemoteAppArguments !== undefined) {
-		patch.rdpRemoteAppArguments = normalized.rdpRemoteAppArguments;
 	}
 	if (changes.tagIds !== undefined) {
 		patch.tagIds = normalized.tagIds;

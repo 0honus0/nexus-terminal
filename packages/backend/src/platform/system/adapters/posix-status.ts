@@ -1,4 +1,5 @@
 import type { MachineCommandExecutor } from '../../ssh/ssh-port.js';
+import { diskUsedPercent } from '../disk-percent.js';
 import { StatusCollectionFailure, type MachineStatus, type MachineStatusCollector } from '../status-port.js';
 
 interface NetworkStats {
@@ -200,14 +201,15 @@ export class PosixServerStatusCollector implements MachineStatusCollector {
 			.filter(Boolean);
 		const data = lines.slice(1).find((line) => line.endsWith(' /')) ?? lines.at(-1) ?? '';
 		const fields = data.split(/\s+/);
-		const percentField = fields.find((v) => /^\d+%$/.test(v));
 		const total = Number(fields[1]),
-			used = Number(fields[2]),
-			percent = percentField ? Number(percentField.slice(0, -1)) : NaN;
+			used = Number(fields[2]);
+		const diskTotal = Number.isFinite(total) ? total : undefined;
+		const diskUsed = Number.isFinite(used) ? used : undefined;
 		return {
-			diskTotal: Number.isFinite(total) ? total : undefined,
-			diskUsed: Number.isFinite(used) ? used : undefined,
-			diskPercent: Number.isFinite(percent) ? percent : undefined,
+			diskTotal,
+			diskUsed,
+			diskPercent:
+				diskTotal === undefined || diskUsed === undefined ? undefined : diskUsedPercent(diskUsed, diskTotal),
 		};
 	}
 

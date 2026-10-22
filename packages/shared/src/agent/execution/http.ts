@@ -1,15 +1,9 @@
-import type {
-	AgentExecutionLimits,
-	AgentExecutionProfile,
-	AgentExecutionSettingsView,
-	AgentHardLimitPreviewView,
-} from './model.js';
+import type { AgentExecutionLimits, AgentExecutionSettingsView, AgentHardLimitPreviewView } from './model.js';
 
 export interface AgentExecutionSettingsUpdate {
 	expectedVersion: number;
 	enabled: boolean;
 	limits: AgentExecutionLimits;
-	profiles: AgentExecutionProfile[];
 }
 
 export interface AgentHardLimitPreviewRequest {

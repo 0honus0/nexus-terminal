@@ -33,24 +33,16 @@ export function collaborationTools(): ToolDefinition[] {
 		{
 			name: 'delegate',
 			description:
-				'Create one direct Child Run from a Root, at most four total. profile=explore|review|worker; objective is an independent task, not inherited private history. targets are decimal SSH connection ID strings narrowed from Root selection. maxRequests 1..32; durationSeconds 1..120 bounded by Root deadline. Optional dependencies are earlier Child UUIDs; dependencyMode=success|settled. Independent tool approval and current live grants still required. No nested delegation or automatic retry.',
+				'Create one direct Child Run from a Root, at most four total. profile=explore|review|worker; objective is an independent task, not inherited private history. targets are decimal SSH connection ID strings narrowed from Root selection. Model, tools and execution limits inherit the Root snapshot; the Root deadline and shared family budgets still apply. Optional dependencies are earlier Child UUIDs; dependencyMode=success|settled. Independent tool approval and current live grants still required. No nested delegation or automatic retry.',
 			fields: [
 				text('profile', 16),
 				text('objective', 8192),
 				texts('targets', 50, false),
-				integer('maxRequests', 1, 32),
-				integer('durationSeconds', 1, 120),
+
 				texts('dependencies', 4, false),
 				text('dependencyMode', 7),
 			],
 			mutation: true,
-		},
-		{
-			name: 'profiles',
-			description:
-				'List current server-owned bounded profiles and their tool allowlists. Profiles do not grant capabilities.',
-			fields: [],
-			mutation: false,
 		},
 		{
 			name: 'list',
@@ -113,7 +105,7 @@ export function collaborationTools(): ToolDefinition[] {
 	];
 	return definitions.map((value) => ({
 		name: 'collaboration_' + value.name,
-		version: '2.0.0',
+		version: '3.0.0',
 		description: value.description,
 		capability: 'app.intents.exchange',
 		risk: value.mutation ? 'control' : 'read',
@@ -186,14 +178,13 @@ export function collaborationInput(name: string, value: Record<string, unknown>)
 			profile,
 			objective,
 			targets,
-			maxRequests: number(value.maxRequests),
-			durationSeconds: number(value.durationSeconds),
+
 			dependencies: ids(value.dependencies),
 			dependencyMode,
 		};
 	}
-	if (name === 'collaboration_list' || name === 'collaboration_profiles') {
-		return { action: name === 'collaboration_list' ? 'list' : 'profiles' };
+	if (name === 'collaboration_list') {
+		return { action: 'list' };
 	}
 	if (name === 'collaboration_cancel') {
 		return { action: 'cancel', childIds: ids(value.childIds) };

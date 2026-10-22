@@ -14,12 +14,3 @@ export interface AgentMemoryView {
 	createdAt: number;
 	updatedAt: number;
 }
-
-export interface AgentMemoryImportView {
-	id: string;
-	memoryId: string;
-	sourceAppId: string;
-	sourceMemoryId: string;
-	sourceVersion: number;
-	expiresAt: number;
-}

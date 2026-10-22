@@ -7,5 +7,6 @@ chmod 600 /root/.vnc/passwd
 Xvnc :0 -geometry 800x600 -depth 24 -rfbport 5900 -localhost no -AlwaysShared -SecurityTypes VncAuth -PasswordFile /root/.vnc/passwd > /tmp/vnc.log 2>&1 &
 export DISPLAY=:0
 until xdotool getmouselocation >/dev/null 2>&1; do sleep 0.1; done
+vncconfig -nowin > /tmp/vncconfig.log 2>&1 &
 xterm -geometry 80x24+0+0 -title B10-Desktop -e sh -c 'printf "B10 real desktop ready\n"; cat > /tmp/typed.txt' > /tmp/xterm.log 2>&1 &
 exec xrdp --nodaemon --config /etc/xrdp/xrdp.ini

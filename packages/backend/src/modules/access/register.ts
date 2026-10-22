@@ -41,7 +41,7 @@ export interface AccessRegistrationOptions {
 		maxAttempts?: number;
 		banSeconds?: number;
 	};
-	/** Immutable installation snapshot from Preferences. */
+	/** Initial installation configuration from Preferences. */
 	ipWhitelist?: string;
 	captcha?: {
 		enabled: boolean;
@@ -73,7 +73,15 @@ function toAccessIdentity(identity: AuthenticatedIdentity): AccessIdentity {
 	};
 }
 
+export interface AccessRuntimeConfiguration {
+	ipWhitelist: string;
+	ipBlacklistEnabled: boolean;
+	maxLoginAttempts: number;
+	loginBanDuration: number;
+}
+
 export interface RegisteredAccess {
+	prepareRuntimeConfiguration(configuration: AccessRuntimeConfiguration): () => void;
 	/** Installation-only identity reader; executes through the caller-owned SQLite transaction. */
 	readTransactionIdentity(tx: SqlExecutor, digest: string): Promise<number | null>;
 	publicApi: AccessPublicApi;
@@ -169,6 +177,19 @@ export function registerAccess({
 	};
 	return {
 		publicApi,
+
+		prepareRuntimeConfiguration: (configuration) => {
+			const applyNetworks = admission.prepareWhitelist(configuration.ipWhitelist);
+			const applyFailures = failurePolicy.prepare({
+				enabled: configuration.ipBlacklistEnabled,
+				maxAttempts: configuration.maxLoginAttempts,
+				banSeconds: configuration.loginBanDuration,
+			});
+			return () => {
+				applyNetworks();
+				applyFailures();
+			};
+		},
 
 		readTransactionIdentity: async (tx, digest) => {
 			const record = await sessionStorage.validateInTransaction(tx, digest, Date.now);

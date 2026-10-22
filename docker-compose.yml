@@ -37,13 +37,8 @@ services:
       NEXUS_ENCRYPTION_KEY: ${NEXUS_ENCRYPTION_KEY:?Set a persistent base64 32-byte key in .env}
       NEXUS_PUBLIC_ORIGIN: ${NEXUS_PUBLIC_ORIGIN:-http://localhost:18111}
       NEXUS_TRUSTED_PROXIES: loopback,${NEXUS_TRUSTED_PROXIES:-uniquelocal}
-      GUACD_HOST: guacd
-      GUACD_PORT: 4822
     volumes:
-      - ./data:/app/data
-    depends_on:
-      guacd:
-        condition: service_started
+      - ${NEXUS_DATA_DIR:-./data}:/app/data
     healthcheck:
       test:
         - CMD-SHELL
@@ -52,13 +47,6 @@ services:
       timeout: 3s
       retries: 10
       start_period: 20s
-
-  guacd:
-    image: ${GUACD_IMAGE:-guacamole/guacd:latest}
-    container_name: nexus-terminal-guacd
-    restart: unless-stopped
-    networks:
-      - nexus-terminal-network
 
 networks:
   nexus-terminal-network:

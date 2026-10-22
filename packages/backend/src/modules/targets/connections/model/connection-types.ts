@@ -19,9 +19,6 @@ export interface ConnectionMetadata {
 	route: ConnectionRoute;
 	proxyId: number | null;
 	notes: string | null;
-	rdpRemoteApp: string | null;
-	rdpRemoteAppDirectory: string | null;
-	rdpRemoteAppArguments: string | null;
 	tagIds: number[];
 	jumpIds: number[];
 }
@@ -31,6 +28,7 @@ export interface ConnectionSnapshot extends ConnectionMetadata {
 	version: number;
 	createdAt: number;
 	updatedAt: number;
+	lastConnectedAt: number | null;
 }
 
 export type ConnectionMutation =

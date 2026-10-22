@@ -39,8 +39,6 @@ services:
     container_name: nexus-core-no-runner-frontend-$suffix
   backend:
     container_name: nexus-core-no-runner-backend-$suffix
-  guacd:
-    container_name: nexus-core-no-runner-guacd-$suffix
 networks:
   nexus-terminal-network:
     name: nexus-core-no-runner-network-$suffix
@@ -60,7 +58,7 @@ grep -v '^COMPOSE_PROFILES=' "$env_file" >"$env_file.tmp" || true; mv "$env_file
 services="$(compose config --services)"
 printf '%s\n' "$services" | grep -qx frontend
 printf '%s\n' "$services" | grep -qx backend
-printf '%s\n' "$services" | grep -qx guacd
+if printf '%s\n' "$services" | grep -qx guacd; then echo 'Default Compose unexpectedly includes guacd.' >&2; exit 1; fi
 if printf '%s\n' "$services" | grep -qx agent-runner; then echo 'Default Compose unexpectedly includes agent-runner.' >&2; exit 1; fi
 compose up -d
 for _ in {1..60}; do

@@ -6,9 +6,6 @@ import {
 	TARGET_CONNECTION_HOST_MAX_BYTES,
 	TARGET_CONNECTION_USERNAME_MAX_BYTES,
 	TARGET_CONNECTION_NOTES_MAX_BYTES,
-	TARGET_RDP_REMOTE_APP_MAX_BYTES,
-	TARGET_RDP_REMOTE_APP_DIRECTORY_MAX_BYTES,
-	TARGET_RDP_REMOTE_APP_ARGUMENTS_MAX_BYTES,
 	TARGET_CONNECTION_IMPORT_MAX_ITEMS,
 	TARGET_CONNECTION_IMPORT_FILE_MAX_BYTES,
 	TARGET_IMPORT_ERROR_CODES,
@@ -63,9 +60,6 @@ export const CONNECTION_FIELDS = [
 	'route',
 	'proxyId',
 	'notes',
-	'rdpRemoteApp',
-	'rdpRemoteAppDirectory',
-	'rdpRemoteAppArguments',
 	'tagIds',
 	'jumpIds',
 ] as const;
@@ -80,9 +74,6 @@ function readFields(row: Record<string, unknown>): TargetConnectionInput {
 		route: targetOption(row.route, CONNECTION_ROUTES),
 		proxyId: row.proxyId === null ? null : targetNumber(row.proxyId),
 		notes: targetNullable(row.notes, TARGET_CONNECTION_NOTES_MAX_BYTES),
-		rdpRemoteApp: targetNullable(row.rdpRemoteApp, TARGET_RDP_REMOTE_APP_MAX_BYTES),
-		rdpRemoteAppDirectory: targetNullable(row.rdpRemoteAppDirectory, TARGET_RDP_REMOTE_APP_DIRECTORY_MAX_BYTES),
-		rdpRemoteAppArguments: targetNullable(row.rdpRemoteAppArguments, TARGET_RDP_REMOTE_APP_ARGUMENTS_MAX_BYTES),
 		tagIds: targetIds(row.tagIds, TARGET_CONNECTION_MAX_TAGS),
 		jumpIds: targetIds(row.jumpIds, TARGET_CONNECTION_MAX_JUMPS),
 	};
@@ -93,7 +84,14 @@ export function readConnectionInput(input: unknown): TargetConnectionInput {
 }
 
 export function readConnectionView(input: unknown): TargetConnectionView {
-	const row = targetObject(input, [...CONNECTION_FIELDS, 'id', 'version', 'createdAt', 'updatedAt']);
+	const row = targetObject(input, [
+		...CONNECTION_FIELDS,
+		'id',
+		'version',
+		'createdAt',
+		'updatedAt',
+		'lastConnectedAt',
+	]);
 	const fields = readFields(row);
 	if (
 		targetNumber(row.updatedAt, Number.MAX_SAFE_INTEGER, 0) <
@@ -106,6 +104,14 @@ export function readConnectionView(input: unknown): TargetConnectionView {
 		version: targetNumber(row.version),
 		createdAt: targetNumber(row.createdAt, Number.MAX_SAFE_INTEGER, 0),
 		updatedAt: targetNumber(row.updatedAt, Number.MAX_SAFE_INTEGER, 0),
+		lastConnectedAt:
+			row.lastConnectedAt === null
+				? null
+				: targetNumber(
+						row.lastConnectedAt,
+						Number.MAX_SAFE_INTEGER,
+						targetNumber(row.createdAt, Number.MAX_SAFE_INTEGER, 0),
+					),
 		name: fields.name,
 		type: fields.type,
 		host: fields.host,
@@ -114,9 +120,6 @@ export function readConnectionView(input: unknown): TargetConnectionView {
 		route: fields.route,
 		proxyId: fields.proxyId,
 		notes: fields.notes,
-		rdpRemoteApp: fields.rdpRemoteApp,
-		rdpRemoteAppDirectory: fields.rdpRemoteAppDirectory,
-		rdpRemoteAppArguments: fields.rdpRemoteAppArguments,
 		tagIds: fields.tagIds,
 		jumpIds: fields.jumpIds,
 	};
@@ -154,15 +157,6 @@ export function readConnectionChanges(input: unknown): TargetConnectionChanges {
 				break;
 			case 'notes':
 				full.notes = targetNullable(value, TARGET_CONNECTION_NOTES_MAX_BYTES);
-				break;
-			case 'rdpRemoteApp':
-				full.rdpRemoteApp = targetNullable(value, TARGET_RDP_REMOTE_APP_MAX_BYTES);
-				break;
-			case 'rdpRemoteAppDirectory':
-				full.rdpRemoteAppDirectory = targetNullable(value, TARGET_RDP_REMOTE_APP_DIRECTORY_MAX_BYTES);
-				break;
-			case 'rdpRemoteAppArguments':
-				full.rdpRemoteAppArguments = targetNullable(value, TARGET_RDP_REMOTE_APP_ARGUMENTS_MAX_BYTES);
 				break;
 			case 'tagIds':
 				full.tagIds = targetIds(value, TARGET_CONNECTION_MAX_TAGS);

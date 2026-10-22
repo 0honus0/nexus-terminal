@@ -32,8 +32,6 @@ const backendEnv: Record<string, string> = {
 	NEXUS_E2E_DATA_ROOT: testDataDir,
 	NEXUS_E2E_ADMIN_USERNAME: E2E_ADMIN.username,
 	NEXUS_E2E_ADMIN_PASSWORD: E2E_ADMIN.password,
-	GUACD_HOST: '127.0.0.1',
-	GUACD_PORT: String(E2E_PORTS.guacd),
 	NEXUS_VITE_BACKEND_ORIGIN: E2E_URLS.backendOrigin,
 	NEXUS_PUBLIC_ORIGIN: E2E_URLS.frontendOrigin,
 };
@@ -141,9 +139,9 @@ export default defineConfig({
 			stderr: 'pipe',
 		},
 		{
-			command: 'node support/test-guacd-server.mjs',
+			command: 'node support/test-desktop-server.mjs',
 			cwd: e2eRoot,
-			url: `${E2E_URLS.guacdControlOrigin}/health`,
+			url: `${E2E_URLS.desktopControlOrigin}/health`,
 			reuseExistingServer: false,
 			timeout: 30_000,
 			stdout: 'pipe',

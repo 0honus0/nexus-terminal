@@ -209,20 +209,6 @@ export function registerAgentSnapshot(
 			],
 		},
 		{
-			name: 'agent_memory_imports',
-			columns: [
-				'id',
-				'user_id',
-				'app_id',
-				'memory_id',
-				'source_app_id',
-				'source_memory_id',
-				'source_version',
-				'expires_at',
-				'consumed_at',
-			],
-		},
-		{
 			name: 'agent_plugin_intents',
 			columns: [
 				'id',

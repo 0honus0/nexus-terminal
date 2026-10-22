@@ -19,9 +19,9 @@ import { TargetOperationError } from '../modules/targets/public-errors.js';
 import { AccessOperationError } from '../modules/access/public-errors.js';
 import { AgentOperationError } from '../modules/agent/public-errors.js';
 import { RemoteOperationError } from '../modules/remote/public-errors.js';
+import { resolveDataPaths } from './data-paths.js';
 
 export interface AppOptions {
-	guacd?: { host: string; port: number };
 	/** 32-byte application-managed key. Required for storing or resolving credentials. */
 	encryptionKey?: Uint8Array;
 	/** Explicit host-key trust owner for internal Remote SSH. Missing policy denies SSH opens. */
@@ -295,13 +295,14 @@ export async function createApp(dbPath: string, options: AppOptions = {}): Promi
 	let modules: RegisteredModules | null = null;
 	try {
 		await initializeSchema(db, applicationMigrations);
+		const paths = resolveDataPaths(db.path);
 		// Recover files from durable SQL evidence before any module creates resources or reads state.
 		const files = new NativeSnapshotRestoreFiles(
 			db.path,
 			new Map([
-				['appearance', db.path + '.appearance'],
-				['artifacts', db.path + '.artifacts'],
-				['plugins', db.path + '.plugins'],
+				['appearance', paths.appearance],
+				['artifacts', paths.artifacts],
+				['plugins', paths.plugins],
 			]),
 		);
 		await files.recover((id) => new SqliteSnapshotRestore(db).committed(id));
@@ -321,7 +322,6 @@ export async function createApp(dbPath: string, options: AppOptions = {}): Promi
 				secrets,
 				verifyHostKey: options.verifyHostKey ?? null,
 				configuration: options.configuration,
-				guacd: options.guacd,
 				maintenance: lifecycle.maintenance,
 			});
 

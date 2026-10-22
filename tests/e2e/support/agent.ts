@@ -127,7 +127,6 @@ export async function enableTestAgentExecution(request: APIRequestContext): Prom
 				expectedVersion: current.settings.version,
 				enabled: true,
 				limits: current.settings.limits,
-				profiles: current.settings.profiles,
 			}),
 		},
 		readAgentExecutionSettingsResponse,

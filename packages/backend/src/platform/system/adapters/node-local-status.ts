@@ -1,5 +1,6 @@
 import os from 'node:os';
 import { readFile, statfs } from 'node:fs/promises';
+import { diskUsedPercent } from '../disk-percent.js';
 import type { LocalStatusSnapshot, LocalStatusPort } from '../local-status-port.js';
 interface Cpu {
 	idle: number;
@@ -78,9 +79,8 @@ export class NodeLocalSystemStatusAdapter implements LocalStatusPort {
 				total = Number(s.blocks) * block,
 				free = Number(s.bfree) * block,
 				used = Math.max(0, total - free);
-			return total > 0
-				? { diskTotal: total / 1024, diskUsed: used / 1024, diskPercent: clamp((used / total) * 100) }
-				: {};
+			const diskPercent = diskUsedPercent(used, total);
+			return diskPercent === undefined ? {} : { diskTotal: total / 1024, diskUsed: used / 1024, diskPercent };
 		} catch {
 			return {};
 		}

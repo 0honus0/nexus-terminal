@@ -30,9 +30,6 @@ function connectionInput(name: string): TargetConnectionInput {
 		route: 'direct',
 		proxyId: null,
 		notes: null,
-		rdpRemoteApp: null,
-		rdpRemoteAppDirectory: null,
-		rdpRemoteAppArguments: null,
 		tagIds: [],
 		jumpIds: [],
 	};

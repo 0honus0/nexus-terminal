@@ -23,14 +23,22 @@ function admitAdministrator(actor: ConfigurationActor): void {
 	}
 }
 
-/** Immutable installed version; edits become effective together at the next application startup. */
 export class ConfigurationService {
 	private effective: ConfigurationRecord | null = null;
 	private accepting = true;
 	private readonly tasks = new PreferencesTasks();
 	private closePromise: Promise<void> | null = null;
+	private tail: Promise<void> = Promise.resolve();
+	private prepareReload: ((policy: ConfigurationPolicy) => () => void) | null = null;
 
 	constructor(private readonly model: ConfigurationModel) {}
+
+	installRuntimeReload(prepare: (policy: ConfigurationPolicy) => () => void): void {
+		if (this.prepareReload || !this.accepting) {
+			throw new PreferencesFailure('unavailable');
+		}
+		this.prepareReload = prepare;
+	}
 
 	async initialize(seed?: () => ConfigurationSeed): Promise<ConfigurationRecord> {
 		let saved = await this.model.find();
@@ -90,7 +98,17 @@ export class ConfigurationService {
 		if (this.tasks.size >= 8) {
 			return Promise.reject(new PreferencesFailure('unavailable'));
 		}
-		return this.tasks.run(work);
+		const pending = this.tail.then(() => {
+			if (!this.accepting) {
+				throw new PreferencesFailure('unavailable');
+			}
+			return work();
+		});
+		this.tail = pending.then(
+			() => undefined,
+			() => undefined,
+		);
+		return this.tasks.run(() => pending);
 	}
 
 	private view(record: ConfigurationRecord): ConfigurationView {
@@ -158,10 +176,51 @@ export class ConfigurationService {
 			},
 		};
 		this.validate(next);
+		if (!this.prepareReload) {
+			throw new PreferencesFailure('unavailable');
+		}
+		const apply = this.prepareReload(next.policy);
+		const installed = this.installation();
 		const saved = await this.model.update(expectedVersion, next, token, admitAdministrator);
 		if (!saved) {
 			throw new PreferencesFailure('version_conflict');
 		}
+		try {
+			apply();
+		} catch (cause) {
+			throw new PreferencesFailure('operation_unknown', { cause });
+		}
+		const sameCaptcha =
+			saved.captcha.enabled === installed.captcha.enabled &&
+			saved.captcha.provider === installed.captcha.provider &&
+			saved.captcha.siteKey === installed.captcha.siteKey &&
+			saved.captcha.secretKey === installed.captcha.secretKey &&
+			saved.captcha.expectedHostname === installed.captcha.expectedHostname;
+		const samePasskeys =
+			saved.policy.passkeys.length === installed.policy.passkeys.length &&
+			saved.policy.passkeys.every((site, index) => {
+				const active = installed.policy.passkeys[index];
+				return active?.origin === site.origin && active.rpId === site.rpId;
+			});
+		this.effective = {
+			version: sameCaptcha && samePasskeys ? saved.version : installed.version,
+			policy: {
+				ipWhitelist: saved.policy.ipWhitelist,
+				ipBlacklistEnabled: saved.policy.ipBlacklistEnabled,
+				maxLoginAttempts: saved.policy.maxLoginAttempts,
+				loginBanDuration: saved.policy.loginBanDuration,
+				statusMonitorIntervalSeconds: saved.policy.statusMonitorIntervalSeconds,
+				remoteHostRefreshIntervalSeconds: saved.policy.remoteHostRefreshIntervalSeconds,
+				passkeys: installed.policy.passkeys.map((site) => ({ origin: site.origin, rpId: site.rpId })),
+			},
+			captcha: {
+				enabled: installed.captcha.enabled,
+				provider: installed.captcha.provider,
+				siteKey: installed.captcha.siteKey,
+				secretKey: installed.captcha.secretKey,
+				expectedHostname: installed.captcha.expectedHostname,
+			},
+		};
 		return this.view(saved);
 	}
 

@@ -4,18 +4,15 @@ import type { ConnectionType, ConnectionRoute } from '@nexus-terminal/shared/tar
 export interface StoredDesktopTarget {
 	id: number;
 	version: number;
+	createdAt: number;
 	type: ConnectionType;
 	host: string;
 	port: number;
 	username: string;
 	route: ConnectionRoute;
-	rdpRemoteApp: string | null;
-	rdpRemoteAppDirectory: string | null;
-	rdpRemoteAppArguments: string | null;
 	encryptedPassword: string | null;
 }
 
 export interface DesktopTargetStorage {
 	get(id: number): Promise<StoredDesktopTarget | null>;
-	markAttempt(id: number, version: number, timestamp: number): Promise<boolean>;
 }

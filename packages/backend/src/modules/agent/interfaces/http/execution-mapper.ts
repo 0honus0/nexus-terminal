@@ -1,15 +1,9 @@
 import type {
 	AgentExecutionLimits,
-	AgentExecutionProfile,
 	AgentExecutionSettingsView,
 	AgentHardLimitPreviewView,
 } from '@nexus-terminal/shared/agent/execution/model';
-import type {
-	ExecutionLimits,
-	ExecutionProfile,
-	ExecutionSettings,
-	HardLimitPreview,
-} from '../../execution/model/execution-types.js';
+import type { ExecutionLimits, ExecutionSettings, HardLimitPreview } from '../../execution/model/execution-types.js';
 
 function toLimits(value: ExecutionLimits): AgentExecutionLimits {
 	return {
@@ -53,51 +47,13 @@ export function fromExecutionLimits(value: AgentExecutionLimits): ExecutionLimit
 	};
 }
 
-function toProfile(value: ExecutionProfile): AgentExecutionProfile {
-	return {
-		name: value.name,
-		enabled: value.enabled,
-		model:
-			value.model.kind === 'inherit'
-				? { kind: 'inherit' }
-				: {
-						kind: 'explicit',
-						providerId: value.model.providerId,
-						modelId: value.model.modelId,
-						configurationVersion: value.model.configurationVersion,
-					},
-		maxRequests: value.maxRequests,
-		maxSeconds: value.maxSeconds,
-		tools: value.tools.map((tool) => tool),
-	};
-}
-
-export function fromExecutionProfile(value: AgentExecutionProfile): ExecutionProfile {
-	return {
-		name: value.name,
-		enabled: value.enabled,
-		model:
-			value.model.kind === 'inherit'
-				? { kind: 'inherit' }
-				: {
-						kind: 'explicit',
-						providerId: value.model.providerId,
-						modelId: value.model.modelId,
-						configurationVersion: value.model.configurationVersion,
-					},
-		maxRequests: value.maxRequests,
-		maxSeconds: value.maxSeconds,
-		tools: value.tools.map((tool) => tool),
-	};
-}
-
 export function toExecutionSettings(value: ExecutionSettings): AgentExecutionSettingsView {
 	return {
 		version: value.version,
 		enabled: value.enabled,
 		limits: toLimits(value.limits),
 		hardLimits: toLimits(value.hardLimits),
-		profiles: value.profiles.map(toProfile),
+
 		updatedAt: value.updatedAt,
 	};
 }

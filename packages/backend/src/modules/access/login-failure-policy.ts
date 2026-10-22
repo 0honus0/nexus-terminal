@@ -13,22 +13,34 @@ function bounded(value: number | undefined, fallback: number, min: number, max: 
  * never silently activates a fixed ban for public clients.
  */
 export class LoginFailurePolicy {
-	readonly limits: LoginFailureLimits;
-	private readonly enabled: boolean;
+	private current: { enabled: boolean; limits: LoginFailureLimits };
+
+	get limits(): LoginFailureLimits {
+		return this.current.limits;
+	}
 
 	constructor(options: LoginFailurePolicyInput = { enabled: false }) {
 		if (typeof options.enabled !== 'boolean') {
 			throw new Error('Invalid Access login failure policy');
 		}
-		this.enabled = options.enabled;
-		this.limits = {
-			maxAttempts: bounded(options.maxAttempts, 5, 1, 1000),
-			banMs: bounded(options.banSeconds, 300, 1, 30 * 86400) * 1000,
-			windowMs: 15 * 60_000,
+		this.current = {
+			enabled: options.enabled,
+			limits: {
+				maxAttempts: bounded(options.maxAttempts, 5, 1, 1000),
+				banMs: bounded(options.banSeconds, 300, 1, 30 * 86400) * 1000,
+				windowMs: 15 * 60_000,
+			},
+		};
+	}
+
+	prepare(options: LoginFailurePolicyInput): () => void {
+		const next = new LoginFailurePolicy(options);
+		return () => {
+			this.current = next.current;
 		};
 	}
 
 	shouldEnforce(isInternal: boolean): boolean {
-		return this.enabled && !isInternal;
+		return this.current.enabled && !isInternal;
 	}
 }

@@ -55,12 +55,6 @@ export const TARGET_CONNECTION_USERNAME_MAX_BYTES = 256;
 
 export const TARGET_CONNECTION_NOTES_MAX_BYTES = 4096;
 
-export const TARGET_RDP_REMOTE_APP_MAX_BYTES = 256;
-
-export const TARGET_RDP_REMOTE_APP_DIRECTORY_MAX_BYTES = 1024;
-
-export const TARGET_RDP_REMOTE_APP_ARGUMENTS_MAX_BYTES = 4096;
-
 export const TARGET_CONNECTION_PASSWORD_MAX_BYTES = 8192;
 
 /** Immediate saved/draft jump references, distinct from recursive expansion depth. */

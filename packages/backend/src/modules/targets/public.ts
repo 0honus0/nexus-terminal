@@ -89,20 +89,27 @@ export interface ConnectionCatalogEntry {
 export interface TrustedDesktopTarget {
 	id: number;
 	version: number;
+	createdAt: number;
 	protocol: import('@nexus-terminal/shared/remote/desktop/values').RemoteDesktopProtocol;
 	host: string;
 	port: number;
 	username: string;
 	/** Null when the target has no password credential; no plaintext is stored. */
 	password: string | null;
-	rdpRemoteApp: string | null;
-	rdpRemoteAppDirectory: string | null;
-	rdpRemoteAppArguments: string | null;
 }
 
 export interface TrustedDesktopTargets {
 	get(id: number): Promise<TrustedDesktopTarget | null>;
-	markAttempt(id: number, version: number, timestamp: number): Promise<boolean>;
+}
+
+export interface ConnectionUsage {
+	recordConnected(
+		id: number,
+		version: number,
+		createdAt: number,
+		type: import('@nexus-terminal/shared/targets/connections/values').ConnectionType,
+		timestamp: number,
+	): Promise<void>;
 }
 
 export interface ConnectionMutations {
@@ -150,6 +157,7 @@ export type TargetsPublicApi = ConnectionCatalog &
 	ConnectionMutations & {
 		/** Private to trusted backend modules; never exposed on Targets HTTP. */
 		desktopTargets: TrustedDesktopTargets;
+		connectionUsage: ConnectionUsage;
 		proxies: ProxyManagement;
 		tags: TagManagement;
 		sshKeys: SshKeyManagement;

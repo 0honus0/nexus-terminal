@@ -4,7 +4,7 @@ import {
 	AGENT_MEMORY_MAX_CONTENT_BYTES,
 } from '@nexus-terminal/shared/agent/memory/values';
 import { AGENT_ID_PATTERN } from '@nexus-terminal/shared/agent/values';
-import type { StoredMemory, StoredMemoryImport } from '../../storage/memory-storage.js';
+import type { StoredMemory } from '../../storage/memory-storage.js';
 
 export function memoryInteger(value: unknown, minimum = 0): number {
 	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < minimum) {
@@ -61,20 +61,5 @@ export function memoryRow(row: Record<string, unknown>): StoredMemory {
 		version: memoryInteger(row.version, 1),
 		createdAt,
 		updatedAt,
-	};
-}
-
-export function memoryImportRow(row: Record<string, unknown>): StoredMemoryImport {
-	const expiresAt = memoryInteger(row.expires_at, 1);
-	if (row.consumed_at !== null && memoryInteger(row.consumed_at) >= expiresAt) {
-		throw new Error('Corrupt memory import consumption');
-	}
-	return {
-		id: memoryId(row.id),
-		memoryId: memoryId(row.memory_id),
-		sourceAppId: memoryId(row.source_app_id),
-		sourceMemoryId: memoryId(row.source_memory_id),
-		sourceVersion: memoryInteger(row.source_version, 1),
-		expiresAt,
 	};
 }

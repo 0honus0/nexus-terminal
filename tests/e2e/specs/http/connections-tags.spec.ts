@@ -160,10 +160,15 @@ test('background resource collection leaves metadata unchanged while Workspace r
 		const after = await request.get(root + '/connections/' + id);
 		expect(after.ok()).toBe(true);
 		expect(readConnectionView(await after.json())).toEqual(original);
-		// Recent connection time is session data, not a Targets management field.
 		const workspace = await openWorkspaceSession(request, id);
 		try {
 			expect(workspace.lastConnectedAt).toBeGreaterThan(0);
+			const connectedResponse = await request.get(root + '/connections/' + id);
+			expect(connectedResponse.ok()).toBe(true);
+			const connected = readConnectionView(await connectedResponse.json());
+			expect(connected.lastConnectedAt).toBeGreaterThan(0);
+			expect(connected.version).toBe(original.version);
+			expect(connected.updatedAt).toBe(original.updatedAt);
 		} finally {
 			await closeWebSocket(workspace.socket);
 		}

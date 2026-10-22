@@ -62,9 +62,7 @@ test('command input sync setting drives quick-command search and keyboard execut
 	try {
 		await step('enable Quick Commands sync through Workspace settings and persist it', async () => {
 			await page.goto('/settings');
-			const commandsGroup = page
-				.locator('form')
-				.filter({ has: page.getByRole('heading', { name: 'Terminal & commands', exact: true }) });
+			const commandsGroup = page.locator('form#workspace-commands-form');
 			const syncTarget = commandsGroup.locator('#commandInputSyncTarget');
 			await expect(syncTarget).toBeVisible();
 			await selectUiOption(syncTarget, 'quickCommands');
@@ -73,7 +71,7 @@ test('command input sync setting drives quick-command search and keyboard execut
 				(response) =>
 					response.url().endsWith('/api/v1/settings/preferences') && response.request().method() === 'PUT',
 			);
-			await commandsGroup.getByRole('button', { name: 'Save group', exact: true }).click();
+			await page.locator('button[form="workspace-commands-form"]').click();
 			expect((await responsePromise).ok()).toBeTruthy();
 
 			expect((await getUiPreferences(context.request)).preferences.commandInputSyncTarget).toBe('quickCommands');
@@ -206,9 +204,7 @@ test('file-manager delete confirmation setting can disable the prompt for real S
 	try {
 		await step('disable delete confirmation through Workspace settings and persist it', async () => {
 			await page.goto('/settings');
-			const filesGroup = page
-				.locator('form')
-				.filter({ has: page.getByRole('heading', { name: 'Files & editor', exact: true }) });
+			const filesGroup = page.locator('form#workspace-files-form');
 			const confirmation = filesGroup.getByRole('checkbox', {
 				name: 'Confirm before deleting files or folders',
 				exact: true,
@@ -220,7 +216,7 @@ test('file-manager delete confirmation setting can disable the prompt for real S
 				(response) =>
 					response.url().endsWith('/api/v1/settings/preferences') && response.request().method() === 'PUT',
 			);
-			await filesGroup.getByRole('button', { name: 'Save group', exact: true }).click();
+			await page.locator('button[form="workspace-files-form"]').click();
 			expect((await responsePromise).ok()).toBeTruthy();
 
 			expect((await getUiPreferences(context.request)).preferences.fileManagerShowDeleteConfirmation).toBe(false);

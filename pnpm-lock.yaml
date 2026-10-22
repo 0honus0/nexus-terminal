@@ -28,7 +28,6 @@ overrides:
 
 patchedDependencies:
   '@xterm/xterm@6.0.0': fdc066c72e28d5596d6fc51bf7caaa5d1b1cf7f65f947875e74fb6ba4fde8709
-  guacamole-common-js@1.5.0: 9a6ddcea88a6b7def4ab8f7014e33c3b670a8146bf83b1e870dd1ac38b81077c
   monaco-editor@0.56.0: c23d454741b9c602522924706171e4362a6cf35302051169b54531f4484538e7
 
 importers:
@@ -74,9 +73,6 @@ importers:
       archiver:
         specifier: ^8.0.0
         version: 8.0.0
-      guacamole-lite:
-        specifier: 1.2.0
-        version: 1.2.0
       iconv-lite:
         specifier: ^0.7.3
         version: 0.7.3
@@ -207,6 +203,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.43.13
         version: 6.43.13
+      '@devolutions/iron-remote-desktop-rdp':
+        specifier: 0.7.0
+        version: 0.7.0
       '@fortawesome/fontawesome-free':
         specifier: ^7.3.1
         version: 7.3.1
@@ -216,6 +215,9 @@ importers:
       '@nexus-terminal/shared':
         specifier: workspace:*
         version: link:../shared
+      '@novnc/novnc':
+        specifier: 1.7.0
+        version: 1.7.0
       '@simplewebauthn/browser':
         specifier: ^14.0.0
         version: 14.0.0
@@ -261,9 +263,6 @@ importers:
       dompurify:
         specifier: ^3.4.15
         version: 3.4.16
-      guacamole-common-js:
-        specifier: ^1.5.0
-        version: 1.5.0(patch_hash=9a6ddcea88a6b7def4ab8f7014e33c3b670a8146bf83b1e870dd1ac38b81077c)
       jschardet:
         specifier: ^3.1.4
         version: 3.1.4
@@ -319,9 +318,6 @@ importers:
         specifier: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
         version: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
     devDependencies:
-      '@types/guacamole-common-js':
-        specifier: ^1.5.5
-        version: 1.5.5
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.4
@@ -477,6 +473,9 @@ packages:
 
   '@codemirror/view@6.43.13':
     resolution: {integrity: sha512-sihaFrUzAsYBQsL9J2t69y8nfMQGwcYmggAZsk+kjPbjYZMyuf2hU8tUNTZ+P+isb6XRr8JE22TZlJxBoVdH1A==}
+
+  '@devolutions/iron-remote-desktop-rdp@0.7.0':
+    resolution: {integrity: sha512-CclAh4OS9aBoPJT0l7bih7ETOHPnB9KjT0drB0a6r5+Qh95pTEuQCx7uFN/XA2AlkFlrqx+DBAMDGYXmgsjHAQ==}
 
   '@esbuild/aix-ppc64@0.28.2':
     resolution: {integrity: sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==}
@@ -911,6 +910,9 @@ packages:
     resolution: {integrity: sha512-V+qptzsGnPMFxEbhwc6eDNMe5eDrfiBIp8qGpuRjAVIX4Kn2zxvwQ1Xco6Fwe+3tYIe3iLW8LM9D+SvjyJhqbQ==}
     engines: {node: '>= 10'}
 
+  '@novnc/novnc@1.7.0':
+    resolution: {integrity: sha512-ucEJOx4T2avIRCleodk7YobZj5O2Ga2AeLfQ69A/yjG9HHba2+PDgwSkN3FttrmG+70ZGx21sElNFouK13RzyA==}
+
   '@oxc-project/types@0.152.0':
     resolution: {integrity: sha512-oM/5rLBm2tPkg0iBgkH/FOeR3PCDpY19GTgAZjMFM8h9WI9VW7cLgzp6nwtarYKmovavIQZ+Fe/RKX/8C8O/Rw==}
 
@@ -1216,9 +1218,6 @@ packages:
 
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
-
-  '@types/guacamole-common-js@1.5.5':
-    resolution: {integrity: sha512-dqDYo/PhbOXFGSph23rFDRZRzXdKPXy/nsTkovFMb6P3iGrd0qGB5r5BXHmX5Cr/LK7L1TK9nYrTMbtPkhdXyg==}
 
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
@@ -1814,10 +1813,6 @@ packages:
     resolution: {integrity: sha512-z2S+W9X73hAUUki+N+9Za2lBlun89zigOyGrsax+KUQ6wKW4ZoWpEYBkGhQjwAjjDCkWxhY0VKEhk8wzY7F5cA==}
     engines: {node: '>=0.10.0'}
 
-  deep-extend@0.6.0:
-    resolution: {integrity: sha512-LOHxIOaPYdHlJRtCQfDIVZtfw/ufM8+rVj649RIHzcm/vGwQRXFt6OPqIFWsm2XEMrNIEtWR64sY1LEKD2vAOA==}
-    engines: {node: '>=4.0.0'}
-
   deep-is@0.1.4:
     resolution: {integrity: sha512-oIPzksmTg4/MriiaYGO+okXDT7ztn/w3Eptv/+gSIdMdKsJo0u4CfYNFJPy+4SKMuCqGw2wxnA+URMg3t8a/bQ==}
 
@@ -2065,13 +2060,6 @@ packages:
 
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
-
-  guacamole-common-js@1.5.0:
-    resolution: {integrity: sha512-zxztif3GGhKbg1RgOqwmqot8kXgv2HmHFg1EvWwd4q7UfEKvBcYZ0f+7G8HzvU+FUxF0Psqm9Kl5vCbgfrRgJg==}
-
-  guacamole-lite@1.2.0:
-    resolution: {integrity: sha512-NeSYgbT5s5rxF0SE/kzJsV5Gg0IvnqoTOCbNIUMl23z1+SshaVfLExpxrEXSGTG0cdvY5lfZC1fOAepYriaXGg==}
-    engines: {node: '>=10.0.0'}
 
   has-symbols@1.1.0:
     resolution: {integrity: sha512-1cDNdwJ2Jaohmb3sg4OmKaMBwuC48sYni5HUw2DvsC8LjGTLK9h+eb1X6RyuOHe4hT0ULCW68iomhjUoKUqlPQ==}
@@ -3373,6 +3361,8 @@ snapshots:
       style-mod: 4.1.3
       w3c-keyname: 2.2.8
 
+  '@devolutions/iron-remote-desktop-rdp@0.7.0': {}
+
   '@esbuild/aix-ppc64@0.28.2':
     optional: true
 
@@ -3747,6 +3737,8 @@ snapshots:
       '@napi-rs/canvas-win32-x64-msvc': 1.0.10
     optional: true
 
+  '@novnc/novnc@1.7.0': {}
+
   '@oxc-project/types@0.152.0': {}
 
   '@peculiar/asn1-android@2.9.4':
@@ -4027,8 +4019,6 @@ snapshots:
   '@types/esrecurse@4.3.1': {}
 
   '@types/estree@1.0.9': {}
-
-  '@types/guacamole-common-js@1.5.5': {}
 
   '@types/json-schema@7.0.15': {}
 
@@ -4632,8 +4622,6 @@ snapshots:
 
   decamelize@1.2.0: {}
 
-  deep-extend@0.6.0: {}
-
   deep-is@0.1.4: {}
 
   defu@6.1.7: {}
@@ -4903,16 +4891,6 @@ snapshots:
   gopd@1.2.0: {}
 
   graceful-fs@4.2.11: {}
-
-  guacamole-common-js@1.5.0(patch_hash=9a6ddcea88a6b7def4ab8f7014e33c3b670a8146bf83b1e870dd1ac38b81077c): {}
-
-  guacamole-lite@1.2.0:
-    dependencies:
-      deep-extend: 0.6.0
-      ws: 8.22.0
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
 
   has-symbols@1.1.0: {}
 

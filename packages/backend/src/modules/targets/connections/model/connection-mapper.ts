@@ -38,9 +38,6 @@ export function toStorage(value: ConnectionMetadata): ConnectionData {
 		route: value.route,
 		proxyId: value.proxyId,
 		notes: value.notes,
-		rdpRemoteApp: value.rdpRemoteApp,
-		rdpRemoteAppDirectory: value.rdpRemoteAppDirectory,
-		rdpRemoteAppArguments: value.rdpRemoteAppArguments,
 		tagIds: [...value.tagIds],
 		jumpIds: [...value.jumpIds],
 	};
@@ -52,6 +49,7 @@ export function fromStorage(value: StoredConnection): ConnectionSnapshot {
 		version: value.version,
 		createdAt: value.createdAt,
 		updatedAt: value.updatedAt,
+		lastConnectedAt: value.lastConnectedAt,
 		name: value.name,
 		type: value.type,
 		host: value.host,
@@ -60,9 +58,6 @@ export function fromStorage(value: StoredConnection): ConnectionSnapshot {
 		route: value.route,
 		proxyId: value.proxyId,
 		notes: value.notes,
-		rdpRemoteApp: value.rdpRemoteApp,
-		rdpRemoteAppDirectory: value.rdpRemoteAppDirectory,
-		rdpRemoteAppArguments: value.rdpRemoteAppArguments,
 		tagIds: [...value.tagIds],
 		jumpIds: [...value.jumpIds],
 	};
@@ -93,15 +88,6 @@ export function toStoragePatch(changes: Partial<ConnectionMetadata>): Partial<Co
 	}
 	if (changes.notes !== undefined) {
 		patch.notes = changes.notes;
-	}
-	if (changes.rdpRemoteApp !== undefined) {
-		patch.rdpRemoteApp = changes.rdpRemoteApp;
-	}
-	if (changes.rdpRemoteAppDirectory !== undefined) {
-		patch.rdpRemoteAppDirectory = changes.rdpRemoteAppDirectory;
-	}
-	if (changes.rdpRemoteAppArguments !== undefined) {
-		patch.rdpRemoteAppArguments = changes.rdpRemoteAppArguments;
 	}
 	if (changes.tagIds !== undefined) {
 		patch.tagIds = [...changes.tagIds];

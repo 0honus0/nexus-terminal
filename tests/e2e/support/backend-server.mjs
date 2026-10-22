@@ -117,7 +117,6 @@ async function openApplication() {
 	if (!directory) throw new Error('E2E data directory missing');
 	application = await createTestApplication(join(directory, 'nexus-terminal.db'), {
 		encryptionKey,
-		guacd: { host: '127.0.0.1', port: port('GUACD_PORT') },
 
 		configuration: () => ({
 			ipWhitelist: '',

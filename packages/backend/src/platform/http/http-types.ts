@@ -69,7 +69,6 @@ export interface HttpWebSocketRoute {
 	authorize(request: IncomingMessage, url: URL, sourceIp: string): Promise<boolean>;
 	/** Ordinary application WS routes use a bounded channel. */
 	connected?(channel: HttpWebSocketChannel, request: IncomingMessage, url: URL): void;
-	/** Third-party raw WebSocket protocol (e.g. Guacamole), not a business registry. */
 	connectedRaw?(socket: WebSocket, request: IncomingMessage, url: URL): Promise<void> | void;
 }
 

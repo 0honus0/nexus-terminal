@@ -2,7 +2,7 @@ import type { SqlRow } from '../../../../../platform/storage/sqlite/worker-types
 import { decodeProviderRow } from '../../../providers/adapters/sqlite/provider-row.js';
 import { integrationRow, integrationReceipt } from '../../../integrations/adapters/sqlite/integration-row.js';
 import { threadRow } from '../../../scope/adapters/sqlite/thread-row.js';
-import { memoryRow, memoryImportRow } from '../../../memory/adapters/sqlite/memory-row.js';
+import { memoryRow } from '../../../memory/adapters/sqlite/memory-row.js';
 import { readContextSnapshot } from '../../../context/adapters/sqlite/context-row.js';
 import { executionDocument, executionLimits } from '../../../execution/adapters/sqlite/execution-row.js';
 import { readApproval } from '../../../governance/adapters/sqlite/governance-row.js';
@@ -25,7 +25,6 @@ export function validateAgentSnapshotDocuments(rows: ReadonlyMap<string, readonl
 		['agent_integration_intents', integrationReceipt],
 		['agent_threads', threadRow],
 		['agent_memories', memoryRow],
-		['agent_memory_imports', memoryImportRow],
 		['agent_model_contexts', readContextSnapshot],
 		['agent_governance_approvals', readApproval],
 		['agent_run_tools', readToolOperation],

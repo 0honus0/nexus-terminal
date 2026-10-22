@@ -232,7 +232,6 @@ await test('B10 installed backend-next HTTP, durable state and model execution',
 						expectedVersion: settings.version,
 						enabled: true,
 						limits: settings.limits,
-						profiles: settings.profiles,
 					}),
 					200,
 				);

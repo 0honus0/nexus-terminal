@@ -1,5 +1,5 @@
 import type { AccessPublicApi } from '../../../access/public.js';
-import type { TrustedDesktopTargets } from '../../../targets/public.js';
+import type { TrustedDesktopTargets, ConnectionUsage } from '../../../targets/public.js';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import { toDesktopConnection } from '../model/desktop-model.js';
 import type { DesktopModel } from '../model/desktop-model.js';
@@ -31,7 +31,6 @@ interface TimedReservation {
 	expired: boolean;
 }
 
-/** Sole ticket and live-slot owner. Guacamole state remains technology-only. */
 export class DesktopService {
 	private readonly tickets = new Map<string, DesktopTicket>();
 	private readonly issuing = new Set<TimedReservation>();
@@ -46,6 +45,7 @@ export class DesktopService {
 		private readonly access: AccessPublicApi,
 		private readonly targets: TrustedDesktopTargets,
 		private readonly model: DesktopModel,
+		private readonly usage: ConnectionUsage,
 	) {}
 
 	private recordFailure(error: unknown): void {
@@ -153,15 +153,6 @@ export class DesktopService {
 					if (target.protocol !== protocol) {
 						throw new DesktopFailure('invalid_input');
 					}
-					// Match old semantics: valid target type counts as an attempt
-					// even if subsequent Guacamole/ticket setup fails.
-					const lastConnectedAt = Math.floor(Date.now() / 1000);
-					if (!(await this.targets.markAttempt(targetId, target.version, lastConnectedAt))) {
-						throw new DesktopFailure('conflict');
-					}
-					this.validateReservation(reservation, signal);
-					// Match the old recent-connection contract: an attempted
-					// desktop with no stored password still records the attempt.
 					if (!target.password) {
 						throw new DesktopFailure('invalid_input');
 					}
@@ -182,7 +173,7 @@ export class DesktopService {
 						expiresAt: Date.now() + REMOTE_DESKTOP_TICKET_TTL_MS,
 						display: { width: display.width, height: display.height, dpi: display.dpi },
 					});
-					return { ticket, lastConnectedAt };
+					return { ticket, connection: toDesktopConnection(target) };
 				} finally {
 					this.issuing.delete(reservation);
 				}
@@ -293,8 +284,6 @@ export class DesktopService {
 					if (peer.isClosed) {
 						this.slots.delete(slot);
 					} else {
-						// Vendor removes all pre-existing close listeners. Install
-						// this listener only after its terminal callback settles.
 						peer.onClosed(() => this.slots.delete(slot));
 					}
 				},
@@ -341,8 +330,15 @@ export class DesktopService {
 					retireAfterLateConfirmation();
 					void this.closeSlot(slot).catch((error) => this.recordFailure(error));
 				});
-				// guacd 'ready' may arrive after the original target/password
-				// or Access session changed while the handshake was in flight.
+				if (peer.isOpen && !slot.closing && this.accepting) {
+					await this.usage.recordConnected(
+						current.id,
+						current.version,
+						current.createdAt,
+						current.protocol,
+						Date.now(),
+					);
+				}
 				const latestUser = await this.identity(token);
 				const latestTarget = await this.targets.get(record.targetId);
 				if (
@@ -360,8 +356,6 @@ export class DesktopService {
 					this.startAuthorizationPoll(slot, token, record);
 				}
 			} catch (error) {
-				// Authentication/configuration failed before a transport was
-				// created: no guacd owner remains to send onTerminated.
 				if (!dispatched) {
 					confirmTechnicalTermination();
 				}
@@ -387,7 +381,6 @@ export class DesktopService {
 			]);
 		} catch (error) {
 			openingFailure = error;
-			// Guacamole's detailed error is technical and may carry secrets.
 			// Close waits for actual bridge settlement before freeing its slot.
 			if (!peer.isClosed) {
 				peer.disconnect();
@@ -398,9 +391,6 @@ export class DesktopService {
 				clearTimeout(openingTimer);
 			}
 		}
-		// Keep the Platform HTTP raw WebSocket task alive through real
-		// connection termination. The vendor's newConnection Promise alone
-		// completes before guacd is ready and cannot own this lifetime.
 		await ending;
 		try {
 			await this.closeSlot(slot);
@@ -460,8 +450,6 @@ export class DesktopService {
 			if (!slot.peer.isClosed) {
 				slot.peer.disconnect();
 			}
-			// A closed WebSocket alone is insufficient: the guacamole-lite
-			// ClientConnection may still own an asynchronous guacd open.
 			const actual = Promise.allSettled([
 				slot.peer.waitClosed(5000),
 				slot.opening,
@@ -483,9 +471,6 @@ export class DesktopService {
 			}
 			const closeFailed = confirmed[0].status === 'rejected' || confirmed[2].status === 'rejected';
 			if (closeFailed) {
-				// The opening rejection is the operation's cause, not proof
-				// that the socket/guacd cleanup was unsuccessful. Include it
-				// only when a separate close confirmation also failed.
 				throw new RemoteResourceCleanupFailure(
 					confirmed.flatMap((outcome) => (outcome.status === 'rejected' ? [outcome.reason] : [])),
 				);

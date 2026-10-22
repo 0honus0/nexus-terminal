@@ -23,23 +23,25 @@ docker compose ps
 docker compose logs --tail=100 backend
 ```
 
-默认访问 `http://localhost:18111`。仅发布 Frontend；仅本机访问时将 `ports` 改为 `127.0.0.1:18111:80`。
+默认访问 `http://localhost:18111`。远程桌面不再部署 guacd；更新后使用 `docker compose up -d --remove-orphans` 移除旧容器。浏览器内运行 RDP/VNC SDK，Backend 只桥接目标 TCP/TLS，必须能访问目标端口；公网部署使用 HTTPS。仅发布 Frontend；仅本机访问时将 `ports` 改为 `127.0.0.1:18111:80`。
 
 ## 配置与数据
 
-| 配置/路径                    | 用途                                                                                      |
-| ---------------------------- | ----------------------------------------------------------------------------------------- |
-| `NEXUS_IMAGE_REPOSITORY/TAG` | 镜像地址与已发布版本，开发镜像使用 `dev`                                                  |
-| `NEXUS_HTTP_PORT`            | Frontend 发布端口，默认 18111                                                             |
-| `NEXUS_PUBLIC_ORIGIN`        | 实际公开协议、域名和非默认端口，不带路径                                                  |
-| `NEXUS_ENCRYPTION_KEY`       | 必填、固定的 32-byte 标准 base64 实例密钥；不可每次重启重新生成                           |
-| `NEXUS_TRUSTED_PROXIES`      | IP/CIDR 或 proxy-addr 具名范围；Compose 默认 `loopback,uniquelocal`，只适用于受控隔离网络 |
-| `./data`                     | SQLite、邻接 `.artifacts/.appearance` 等持久文件；备份包含完整目录及实例密钥              |
-| `.env`                       | Compose 插值和 Backend env_file；首次初始化设置以后以持久配置为准                         |
-| `GUACD_IMAGE`                | 默认 `guacamole/guacd:latest`；Backend 内连 `guacd:4822`，3001 不公开                     |
-| `NEXUS_IPV6_SUBNET/GATEWAY`  | 默认 `fd01::/80` / `fd01::1`，与宿主冲突时修改                                            |
+| 配置/路径                    | 用途                                                                                       |
+| ---------------------------- | ------------------------------------------------------------------------------------------ |
+| `NEXUS_IMAGE_REPOSITORY/TAG` | 镜像地址与已发布版本，开发镜像使用 `dev`                                                   |
+| `NEXUS_HTTP_PORT`            | Frontend 发布端口，默认 18111                                                              |
+| `NEXUS_PUBLIC_ORIGIN`        | 实际公开协议、域名和非默认端口，不带路径                                                   |
+| `NEXUS_DATA_DIR`             | Compose 宿主数据目录，默认 `./data`；自定义后备份命令中的 `data` 也需替换为该目录          |
+| `NEXUS_ENCRYPTION_KEY`       | 必填、固定的 32-byte 标准 base64 实例密钥；不可每次重启重新生成                            |
+| `NEXUS_TRUSTED_PROXIES`      | IP/CIDR 或 proxy-addr 具名范围；Compose 默认 `loopback,uniquelocal`，只适用于受控隔离网络  |
+| `./data`                     | `nexus-terminal.db` 和 `appearance/`、`artifacts/`、`plugins/`；备份包含完整目录及实例密钥 |
+| `.env`                       | Compose 插值和 Backend env_file；首次初始化设置以后以持久配置为准                          |
+| `NEXUS_IPV6_SUBNET/GATEWAY`  | 默认 `fd01::/80` / `fd01::1`，与宿主冲突时修改                                             |
 
-首次 Passkey 站点从公开 Origin 推导；多站点可用 `NEXUS_PASSKEY_SITES` JSON 初始化。CAPTCHA、安全策略和站点配置在设置页维护，按界面提示重启激活。插件仓库与信任 Publisher 由管理接口配置，不使用旧 catalog 环境变量。写操作依赖当前会话、同源 Origin/Fetch Metadata，不使用旧 CSRF token 端点。
+数据库文件的父目录即实例数据目录；每个实例使用独立目录。资源目录不再拼接 `.db.appearance/.db.artifacts/.db.plugins`，本次布局为破坏性升级，不自动迁移旧目录或混用旧数据库；以新的空数据目录启动，旧目录需由操作者自行保管，程序不删除旧数据。Compose 的数据库固定为容器内 `/app/data/nexus-terminal.db`，通过 `.env` 的 `NEXUS_DATA_DIR` 配置宿主目录，默认仍为 `./data`。运行中可能出现 SQLite WAL/SHM、恢复日志和临时目录，勿手动清除正在使用的恢复文件。
+
+首次 Passkey 站点从公开 Origin 推导；多站点可用 `NEXUS_PASSKEY_SITES` JSON 初始化。CAPTCHA 和 Passkey 站点配置在设置页维护，按界面提示重启激活；IP 白名单、登录封禁策略、监控周期和资源缓存 TTL 保存后热更新。白名单保存前确认当前来源仍被允许，保留部署恢复入口。插件仓库与信任 Publisher 由管理接口配置，不使用旧 catalog 环境变量。写操作依赖当前会话、同源 Origin/Fetch Metadata，不使用旧 CSRF token 端点。
 
 ```bash
 docker compose up -d --force-recreate
@@ -93,7 +95,7 @@ pnpm run format:all:check
 单包用 `build:backend` / `build:frontend`。直接启动后端须提供 `NEXUS_DB_PATH`、`NEXUS_ENCRYPTION_KEY`、`NEXUS_PUBLIC_ORIGIN`；默认绑定 `127.0.0.1:3001`。
 
 ```bash
-NEXUS_DB_PATH=/absolute/path/nexus-terminal.db pnpm --filter @nexus-terminal/backend start
+NEXUS_DB_PATH=/absolute/path/data/nexus-terminal.db pnpm --filter @nexus-terminal/backend start
 scripts/build/build.sh docker
 ```
 

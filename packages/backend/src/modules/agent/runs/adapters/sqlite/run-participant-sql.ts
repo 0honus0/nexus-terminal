@@ -1,3 +1,4 @@
+import { AGENT_EXECUTION_LIMIT_MAXIMA } from '@nexus-terminal/shared/agent/execution/values';
 import { AGENT_CHILD_PROFILES } from '@nexus-terminal/shared/agent/collaboration/values';
 import { CollaborationStorageRefusal } from '../../storage/run-collaboration-storage.js';
 import type { StoredCollaborationAuthority } from '../../storage/run-collaboration-storage.js';
@@ -88,7 +89,7 @@ export async function participant(tx: SqlReader, scope: StoredParticipantScope):
 	const profile = AGENT_CHILD_PROFILES.find((value) => value === row.profile);
 	if (
 		!profile ||
-		storedInteger(row.max_requests, 1) > 32 ||
+		storedInteger(row.max_requests, 1) > AGENT_EXECUTION_LIMIT_MAXIMA.maxModelRequests ||
 		(status === 'completed') !== (row.output_text !== null) ||
 		(row.output_text !== null && Buffer.byteLength(storedText(row.output_text), 'utf8') > 8192) ||
 		storedStrings(row.dependencies_json).length > 4

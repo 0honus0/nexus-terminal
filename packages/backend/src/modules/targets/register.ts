@@ -140,9 +140,10 @@ export function registerTargets({ sqlite, secrets }: TargetsRegistrationOptions)
 					const value = await desktopTargets.get(id);
 					return value === null ? null : toTrustedDesktopTarget(value);
 				}),
-
-			markAttempt: (id, version, timestamp) =>
-				targetsBoundary(() => desktopTargets.markAttempt(id, version, timestamp)),
+		},
+		connectionUsage: {
+			recordConnected: (id, version, createdAt, type, timestamp) =>
+				targetsBoundary(() => service.recordConnected(id, version, createdAt, type, timestamp)),
 		},
 		hostKeys: {
 			list: () => targetsBoundary(async () => (await hostKeys.list()).map(toHostKeyView)),

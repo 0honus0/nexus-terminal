@@ -1,4 +1,4 @@
-import { TARGET_CONNECTION_NAME_MAX_BYTES } from '@nexus-terminal/shared/targets/connections/values';
+import { CONNECTION_TYPES, TARGET_CONNECTION_NAME_MAX_BYTES } from '@nexus-terminal/shared/targets/connections/values';
 import { TargetFailure } from '../../target-failure.js';
 import type {
 	ConnectionMetadata,
@@ -54,6 +54,27 @@ export class ConnectionService {
 	delete(id: number): Promise<boolean> {
 		validateId(id);
 		return this.model.delete(id);
+	}
+
+	recordConnected(
+		id: number,
+		version: number,
+		createdAt: number,
+		type: ConnectionSnapshot['type'],
+		timestamp: number,
+	): Promise<void> {
+		validateId(id);
+		validateId(version);
+		if (
+			!CONNECTION_TYPES.includes(type) ||
+			!Number.isSafeInteger(createdAt) ||
+			createdAt < 0 ||
+			!Number.isSafeInteger(timestamp) ||
+			timestamp < createdAt
+		) {
+			throw new TargetFailure('invalid_input');
+		}
+		return this.model.recordConnected(id, version, createdAt, type, timestamp);
 	}
 
 	setTags(id: number, version: number, tags: number[]): Promise<ConnectionMutation> {
