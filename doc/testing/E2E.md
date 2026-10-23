@@ -48,6 +48,16 @@
 
 两轮源码复审覆盖工作区响应方法/非空/Run 身份、取消后的空草稿与后续发送、单 App 与多 App 分支、根内容宽度与移动表头条件，以及所有原持久/剪贴板/扫描隔离断言。根 check、双端 build、全量格式和七份测试的静态类型通过，日志 `/tmp/nexus-e2e-fifth-{check,build,format,test-types}.log`；初次静态类型发现可空 Run 回执，初次格式发现函数间距，均已修正后重跑。未执行本地行为、浏览器、E2E 或 Playwright 收集，行为待后续远程验收。核对 USAGE 原任务刷新、菜单和文件列说明仍适用，产品与 UI 不变。
 
+## RDP 浏览器像素提交合并（2026-10-23）
+
+按用户要求保留浏览器 IronRDP 解码与透明桥，参考 Termix Remote Desktop 的脏区域合并思路；没有迁移后端 Worker 解码、Guacamole 协议或有损 JPEG。`rdp-frame-presenter` 仅在当前实例 context 合并已解码像素，下一次 animation frame 提交最新区域，不延迟键鼠或修改网络消息。底图最多 32 MiB；超预算或分配 RangeError 回退原绘制，不引入连接容量拒绝。画面尺寸赋值（包括相同值）、关闭时清理底图与回调，恢复原实例方法/属性。
+
+两轮源码复审覆盖固定 SDK 0.7 的真实 `putImageData` 调用与 width/height setter、WASM ImageData 的同步复制、重叠最新像素、负 dirty 尺寸/边界裁剪、零面积、全宽连续复制、区域数合并、后台回调暂停、超预算/分配失败回退及关闭/晚建连。SDK 原地修改/释放内存后不持有原像素 view；不新增逐帧全屏复制或帧队列。既有真实 RDP 主场景补绘制后的不透明像素与多颜色检查，防止只有 connected 和非零 Canvas 而没有真实画面；原认证、输入、剪贴板和全屏断言保留。
+
+根 check、双端 build、全量格式及目标测试静态类型通过，日志 `/tmp/nexus-rdp-present-{check,build,format,test-types}.log`，全宽复制优化后再通过前端构建 `/tmp/nexus-rdp-present-frontend-final.log`。七文件独立暂存快照 `/tmp/nexus-rdp-present-index` 的根 check、全量格式及双端 build 通过，日志 `/tmp/nexus-rdp-present-index-{check,format,build}.log`；初次快照未生成 Shared dist 导致模块解析失败，先独立构建其 Shared 后重新检查通过，不借用工作区编译产物。按 D17 不运行本地行为、浏览器、E2E 或收集。当前只证明源码与静态范围，真实像素回归、弱网体验、帧提交次数/主线程开销及多平台仍待远程验证；不能将上一轮 RDP 通过作为本批优化证据。
+
+第五批远程 [39964931894](https://github.com/0honus0/nexus-terminal/actions/runs/39964931894) / `8455791e` 最终为 435 通过、23 失败、1 超时；质量与 Docker smoke 通过。原始日志 `/tmp/nexus-e2e-39964931894-shard{1..8}.log`，清单 `/tmp/nexus-e2e-39964931894-cases.json`。历史菜单管理、窄屏连接标签管理、ACP 两分支及列缩放场景通过。文件导航窄屏列验证通过，后续失败在 Copy path 的旧 button 定位；移动多选通过选择/退出检查后出现更深失败，不能宣称整个场景通过。其余失败与历史分页、Send Files 超时仍继续跟进，不改产品 UI。本批像素合并不属于该被测 SHA，真实绘制回归待新远程。
+
 ## SSH 多会话隔离补测与漏检核对（2026-10-23）
 
 用户明确要求新增用例，本批据此新增源码；仍按 D17 不运行本地行为、浏览器或 E2E，不自动提交、推送或触发远程。最近远程 39920261630 测试的是 `798e204f2a547213652874dca3792bfd42a194f0`，该版本 Surface 只有一个 DOM 根节点；引入并列安装弹窗的改动仍在本地工作区，未进入该轮远程。原日志 shard 3 的 Connect All 和 shard 5 的 session-cache 都实际执行通过，不能据此声称当前工作区通过，也不能断言旧用例必然漏掉当前缺陷。

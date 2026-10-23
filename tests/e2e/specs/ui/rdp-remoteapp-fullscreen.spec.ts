@@ -153,6 +153,28 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 					.toMatchObject({ zIndex: '1', width: expect.any(Number), height: expect.any(Number) });
 				expect(await canvas.evaluate((element) => (element as HTMLCanvasElement).width)).toBeGreaterThan(0);
 				expect(await canvas.evaluate((element) => (element as HTMLCanvasElement).height)).toBeGreaterThan(0);
+				// A connected SDK and non-zero canvas do not prove its deferred pixel submission reached the screen.
+				await expect
+					.poll(() =>
+						canvas.evaluate((element) => {
+							if (!(element instanceof HTMLCanvasElement)) throw new Error('RDP canvas is missing');
+							const context = element.getContext('2d');
+							if (!context) throw new Error('RDP canvas context is missing');
+							const pixels = context.getImageData(0, 0, element.width, element.height).data;
+							let opaque = 0;
+							const colors = new Set<number>();
+							for (let index = 0; index < pixels.length; index += 256) {
+								if (pixels[index + 3] === 255) opaque++;
+								colors.add(
+									(pixels[index] ?? 0) * 65536 +
+										(pixels[index + 1] ?? 0) * 256 +
+										(pixels[index + 2] ?? 0),
+								);
+							}
+							return opaque > 100 && colors.size > 1;
+						}),
+					)
+					.toBe(true);
 				await modal.getByRole('button', { name: 'Close', exact: true }).click();
 				await expect(modal).toBeHidden();
 				await expect(page).toHaveURL(/\/connections$/);

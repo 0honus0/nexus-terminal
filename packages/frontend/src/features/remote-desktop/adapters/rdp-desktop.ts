@@ -11,6 +11,7 @@ import { logger } from '@/client/logging/logger';
 import { attachDesktopClipboard, MAX_CLIPBOARD_BYTES } from './desktop-clipboard';
 import { attachDesktopTouch } from './desktop-touch';
 import { DESKTOP_SCANCODES } from './desktop-keyboard';
+import { attachRdpFramePresenter } from './rdp-frame-presenter';
 import {
 	RemoteDesktopFailure,
 	type RemoteDesktopPeerFactory,
@@ -77,6 +78,8 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 			options.onFailure(new RemoteDesktopFailure('remote_unavailable', 'unknown', { cause }));
 		}
 	};
+
+	const stopPresenting = attachRdpFramePresenter(canvas, fail);
 
 	const inputFailure = (cause: unknown) => {
 		if (!closed) {
@@ -530,6 +533,7 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 			}
 			release();
 			closed = true;
+			stopPresenting();
 			if (timer) {
 				clearTimeout(timer);
 			}
