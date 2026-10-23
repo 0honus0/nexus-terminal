@@ -386,6 +386,8 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 	// a task whose connection fails, rather than fail admission for missing trust.
 	await trustTestSshHostKey(context.request, 1);
 	const destinationPath = path.resolve(__dirname, '../../.tmp/ssh-root/server-transfer-e2e');
+	const specialDirectoryName = '目录\n选择\t\'"$;[]';
+	const specialDirectoryPath = path.join(path.dirname(destinationPath), specialDirectoryName);
 	const validTargetName = `E2E Send OK ${crypto.randomUUID().slice(0, 8)}`;
 	const failedTargetName = `E2E Send Fail ${crypto.randomUUID().slice(0, 8)}`;
 	const validTargetResponse = await context.request.post('/api/v1/targets/connections/import', {
@@ -445,11 +447,18 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 		expect(opened.status()).toBe(201);
 		const resource = readRemoteFileOpenResponse(await opened.json());
 		try {
-			const created = await context.request.post(`/api/v1/remote/files/resources/${resource.id}/mkdir`, {
+			for (const directory of [destinationPath, specialDirectoryPath]) {
+				const created = await context.request.post(`/api/v1/remote/files/resources/${resource.id}/mkdir`, {
+					headers: { Origin: E2E_URLS.frontendOrigin },
+					data: { path: directory },
+				});
+				expect(created.status()).toBe(201);
+			}
+			const invalidPath = await context.request.post(`/api/v1/remote/files/resources/${resource.id}/stat`, {
 				headers: { Origin: E2E_URLS.frontendOrigin },
-				data: { path: destinationPath },
+				data: { path: destinationPath + '\u0000' },
 			});
-			expect(created.status()).toBe(201);
+			expect(invalidPath.status()).toBe(400);
 		} finally {
 			const closed = await context.request.delete(`/api/v1/remote/files/resources/${resource.id}`, {
 				headers: { Origin: E2E_URLS.frontendOrigin },
@@ -508,6 +517,17 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 				await targetPath.click();
 				const picker = page.getByRole('dialog', { name: 'Select destination directory', exact: true });
 				await expect(picker).toBeVisible();
+				// The listing includes a file with a newline, and this directory also
+				// exercises the path request. Neither may invalidate the whole list.
+				await picker
+					.getByRole('button', { name: specialDirectoryName.replace(/\s+/gu, ' '), exact: true })
+					.click();
+				await expect(picker.locator('[data-directory-picker-path]')).toHaveJSProperty(
+					'textContent',
+					specialDirectoryPath,
+				);
+				await picker.getByRole('button', { name: 'Parent Directory', exact: true }).click();
+				await expect(picker.locator('[data-directory-picker-path]')).toHaveText(path.dirname(destinationPath));
 				await picker.getByRole('button', { name: 'server-transfer-e2e', exact: true }).click();
 				await expect(picker.locator('[data-directory-picker-path]')).toHaveText(destinationPath);
 				await picker.getByRole('button', { name: 'Use this directory', exact: true }).click();

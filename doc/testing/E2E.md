@@ -1,5 +1,13 @@
 # Nexus Terminal E2E
 
+## 第六批：目录协议及菜单/审批定位（2026-10-23）
+
+远程 [39967104850](https://github.com/0honus0/nexus-terminal/actions/runs/39967104850) / `517f7814f035be1c9f92040811fe7e2b6bd8a033` 已结束，459 个场景最终 435 通过、23 失败、1 超时；按场景最后结果去重，保留 timedOut。质量、runner、Docker smoke 和 RDP 所在分片通过；不等同于弱网体验已验收。原日志 `/tmp/nexus-e2e-39967104850-shard{1..8}.log`，完整清单 `/tmp/nexus-e2e-39967104850-cases.json`。
+
+shard 4 的 Send Files trace 中独立 Files stat/list 均 200，列表含 `line\nbreak` 文件名，HTTP codec 拒绝控制字符后使整个目录显示未加载。修复对齐 SFTP 的合法 POSIX 名称；原场景增加含换行/制表符/引号的真实目录创建、选择器导航、完整路径保留及 NUL 请求 400，原记忆、取消、混合选择、传输及成功/失败结果断言保留。文件历史/收藏按 menuitem 定位；Agent 开关先关闭挡住点击的成功 Toast；审批按当前 Approve and run 入口，原哈希/版本和真实执行断言保留。不改产品 UI。
+
+两轮复审覆盖完整 HTTP→Files→SFTP 路径、POSIX 名称/Unicode/容量限制、JSON 与 shell 边界、菜单角色和原审批回执。工作区根 check、双端 build、目标测试静态类型通过，日志 `/tmp/nexus-e2e-sixth-{check,build,test-types}.log`；全量格式仅被并行工作区其它 PLAN 表格阻断，未修改该部分。9 文件独立暂存快照 `/tmp/nexus-e2e-sixth-index` 根 check、全量格式、双端 build 均通过，日志 `/tmp/nexus-e2e-sixth-index-{check,format,build}.log`。未执行本地行为测试、浏览器、E2E 或 Playwright 收集。其余视觉断言及功能失败继续保留，不能把本批源码修复写成远程通过。
+
 ## 远程失败入口与桌面尺寸修复（2026-10-23，第一批）
 
 基线为远程 [39942702527](https://github.com/0honus0/nexus-terminal/actions/runs/39942702527)，被测 `1dbad409f4b49c077fc35c0cb6a3c44890e01db4`。八组共 162 个唯一失败，其中 138 个首次失败停在旧命令输入 class；SSH helper 已等到 connected，不把入口失效判为 SSH 建连普遍失败。原日志、去重清单及 shard 1/3 产物保存在 `/tmp/nexus-e2e-39942702527-*`。

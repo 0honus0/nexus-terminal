@@ -81,7 +81,9 @@ function identifier(input: unknown): string {
 
 function path(input: unknown): string {
 	const value = string(input, REMOTE_FILE_MAX_PATH_BYTES);
-	if (!value.startsWith('/') || /[\u0000-\u001f\u007f\ufffd]/u.test(value)) {
+	// POSIX names may contain newlines and tabs; keep the same lossless
+	// representation as the SFTP boundary rather than rejecting a whole listing.
+	if (!value.startsWith('/') || /[\u0000\ufffd]/u.test(value)) {
 		throw new InvalidRemoteFilePayload();
 	}
 	return value;
@@ -151,7 +153,7 @@ export function readRemoteFileInfo(input: unknown): RemoteFileInfo {
 export function readRemoteFileEntry(input: unknown): RemoteFileEntry {
 	const row = record(input, ['name', 'info']);
 	const name = string(row.name, 255);
-	if (!name || name === '.' || name === '..' || /[\/\u0000-\u001f\u007f\ufffd]/u.test(name)) {
+	if (!name || name === '.' || name === '..' || /[\/\u0000\ufffd]/u.test(name)) {
 		throw new InvalidRemoteFilePayload();
 	}
 	return { name, info: readRemoteFileInfo(row.info) };

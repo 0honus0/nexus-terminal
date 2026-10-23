@@ -984,7 +984,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 			await expect(article).toContainText('shell_execute');
 			await expect(article).toContainText('Destructive');
 			const { command: input } = await captureNativeCommand(task, 'agent.approvals.resolve', () =>
-				article.getByRole('button', { name: 'Approve original operation', exact: true }).click(),
+				article.getByRole('button', { name: 'Approve and run', exact: true }).click(),
 			);
 			if (input.request.method !== 'agent.approvals.resolve') {
 				throw new Error('Unexpected approval command');

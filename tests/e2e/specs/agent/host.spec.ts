@@ -723,6 +723,7 @@ test('Agent execution setting gates the launcher and its global window', async (
 	await selectAgentSettingsGroup(page, 'runtime');
 	await expect(enable).toBeEnabled();
 	await expect(enable).toBeChecked();
+	await dismissToasts(page);
 	const disabledSave = page.waitForResponse(
 		(response) =>
 			new URL(response.url()).pathname === '/api/v1/agent/execution-settings' &&
