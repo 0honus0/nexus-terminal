@@ -9,6 +9,9 @@ import type {
 import type { SqlRow } from '../../../../../platform/storage/sqlite/worker-types.js';
 import {
 	PREFERENCE_LANGUAGES,
+	DESKTOP_WINDOW_MIN_WIDTH,
+	DESKTOP_WINDOW_MIN_HEIGHT,
+	DESKTOP_WINDOW_MAX_DIMENSION,
 	FRONTEND_LOG_LEVELS,
 	COMMAND_INPUT_SYNC_TARGETS,
 	WORKSPACE_PANES,
@@ -233,10 +236,10 @@ function readStoredPresentationPreferences(input: unknown): StoredPresentationPr
 		fileManagerColWidths: columnWidths(value.fileManagerColWidths),
 		spreadsheetPreviewRowsPerPage: integer(value.spreadsheetPreviewRowsPerPage, 10, 2000),
 		spreadsheetPreviewMaxColumns: integer(value.spreadsheetPreviewMaxColumns, 5, 200),
-		rdpModalWidth: integer(value.rdpModalWidth, 320, 8192),
-		rdpModalHeight: integer(value.rdpModalHeight, 200, 8192),
-		vncModalWidth: integer(value.vncModalWidth, 320, 8192),
-		vncModalHeight: integer(value.vncModalHeight, 200, 8192),
+		rdpModalWidth: integer(value.rdpModalWidth, DESKTOP_WINDOW_MIN_WIDTH, DESKTOP_WINDOW_MAX_DIMENSION),
+		rdpModalHeight: integer(value.rdpModalHeight, DESKTOP_WINDOW_MIN_HEIGHT, DESKTOP_WINDOW_MAX_DIMENSION),
+		vncModalWidth: integer(value.vncModalWidth, DESKTOP_WINDOW_MIN_WIDTH, DESKTOP_WINDOW_MAX_DIMENSION),
+		vncModalHeight: integer(value.vncModalHeight, DESKTOP_WINDOW_MIN_HEIGHT, DESKTOP_WINDOW_MAX_DIMENSION),
 		showConnectionTags: boolean(value.showConnectionTags),
 		showQuickCommandTags: boolean(value.showQuickCommandTags),
 	};

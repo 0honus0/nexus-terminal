@@ -2,7 +2,7 @@ import { authenticateTestRdp } from '../../support/desktop';
 import { readConnectionList } from '../../../../packages/shared/src/targets/connections/http-codec';
 import { readTestConnectionImportId } from '../../support/targets';
 import { expect, test, type APIRequestContext, type Locator, type Page } from '../../support/fixtures';
-import { loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
+import { getUiPreferences, loginAsInitialAdmin, updateUiPreferences } from '../../support/auth';
 import { step } from '../../support/steps';
 import { E2E_URLS, E2E_PORTS } from '../../support/test-env';
 
@@ -82,7 +82,7 @@ test('RDP browser client preserves settings, clipboard and browser fullscreen', 
 			await page.getByRole('button', { name: 'Add New Connection', exact: true }).click();
 			const form = page.locator('form');
 			await expect(form).toBeVisible();
-			await form.getByRole('button', { name: 'RDP', exact: true }).click();
+			await form.getByRole('radio', { name: 'RDP', exact: true }).click();
 			await expect(form.getByRole('switch', { name: 'Launch RemoteApp', exact: true })).toHaveCount(0);
 			await expect(form.getByText('RemoteApp alias', { exact: true })).toHaveCount(0);
 
@@ -447,7 +447,14 @@ async function exercisePointerWindow(page: Page): Promise<void> {
 		},
 	);
 	expect(resizeHitTarget).toBe(true);
-	await dragBy(page, resizeHandle, 120, 90);
+	const savedSize = page.waitForResponse(
+		(response) =>
+			new URL(response.url()).pathname === '/api/v1/settings/preferences' &&
+			response.request().method() === 'PUT',
+	);
+	// Pen/touch coordinates and browser zoom produce fractional CSS pixels.
+	await dragBy(page, resizeHandle, 120.125, 90.125);
+	expect((await savedSize).status()).toBe(200);
 	await expect.poll(async () => panel.boundingBox()).not.toBeNull();
 	const resizedPanelBox = await panel.boundingBox();
 	expect(resizedPanelBox).toBeTruthy();
@@ -461,6 +468,14 @@ async function exercisePointerWindow(page: Page): Promise<void> {
 	);
 	expect(resizedPanelBox!.width).toBeCloseTo(initialPanelBox!.width + 240, 0);
 	expect(resizedPanelBox!.height).toBeCloseTo(initialPanelBox!.height + 180, 0);
+	const { preferences } = await getUiPreferences(page.request);
+	const protocol = (await panel.locator('#rdp-modal-width').count()) > 0 ? 'RDP' : 'VNC';
+	expect(protocol === 'RDP' ? preferences.rdpModalWidth : preferences.vncModalWidth).toBe(
+		Math.round(resizedPanelBox!.width),
+	);
+	expect(protocol === 'RDP' ? preferences.rdpModalHeight : preferences.vncModalHeight).toBe(
+		Math.round(resizedPanelBox!.height),
+	);
 
 	await panel.getByRole('button', { name: 'Minimize', exact: true }).click();
 	await expect(panel).toBeHidden();

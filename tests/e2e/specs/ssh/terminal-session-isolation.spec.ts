@@ -71,7 +71,7 @@ for (const sameConnection of [false, true]) {
 			await tab.click();
 			const surface = await selectedSurface(tab);
 			await expect(owner === 'A' ? secondSurface : firstSurface).toBeHidden();
-			const commandInput = surface.locator('.command-bar-command-input');
+			const commandInput = surface.locator('input.command-bar-input');
 			await expect(commandInput).toBeEnabled();
 			await commandInput.fill(`printf 'NEXUS_VISIT_${index}_%s\\n' "$NEXUS_TAB_OWNER"`);
 			await commandInput.press('Enter');

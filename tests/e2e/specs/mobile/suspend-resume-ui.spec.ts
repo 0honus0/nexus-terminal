@@ -119,7 +119,7 @@ test('mobile terminal blocks input until foreground resume completes without rep
 		});
 	});
 	await connectTestSshFromConnectionsPage(page, connectionId);
-	const input = page.locator('.command-bar-command-input');
+	const input = page.locator('input.command-bar-input');
 	await expect(input).toBeEnabled();
 	dropProbe = true;
 	await page.evaluate(() => window.dispatchEvent(new Event('pageshow')));
@@ -254,7 +254,7 @@ test('mobile terminal gates automatic status replies during recovery and answers
 		});
 	});
 	await connectTestSshFromConnectionsPage(page, connectionId);
-	const command = page.locator('.command-bar-command-input');
+	const command = page.locator('input.command-bar-input');
 	const terminal = page.locator('.terminal-inner-container');
 	// Consume replies in a remote input loop rather than letting DSR bytes enter
 	// the shell's command-editing buffer and corrupt the next probe command.
@@ -414,7 +414,7 @@ test('foreground probes preserve healthy SSH and resume a half-open transport wi
 	await expect.poll(() => resumes, { timeout: 15_000 }).toBeGreaterThan(0);
 	expect(connects).toBe(initialConnects);
 	await expect(tab).toHaveAttribute('data-session-id', workspaceId!);
-	const input = page.locator('.command-bar-command-input');
+	const input = page.locator('input.command-bar-input');
 	await input.fill("printf 'FOREGROUND_%s\\n' RECOVERY_OK");
 	await input.press('Enter');
 	await expect(page.locator('.terminal-inner-container')).toContainText('FOREGROUND_RECOVERY_OK');
@@ -554,7 +554,7 @@ test('cached suspended cards remain visible while a remounted panel refreshes it
 	await expect(card).toContainText('WS refreshed cached session');
 	await card.getByRole('button', { name: 'Resume', exact: true }).click();
 	await expect(page.getByText(/resumed successfully\.$/)).toBeVisible({ timeout: 20_000 });
-	await expect(page.locator('.command-bar-command-input')).toBeEnabled();
+	await expect(page.locator('input.command-bar-input')).toBeEnabled();
 });
 
 test('mobile resumed terminal loads older suspended output when dragged downward', async ({ page, context }) => {
@@ -833,7 +833,7 @@ test('mobile resume replaces an immediately suspended tab without exposing a tem
 		await recoveredManager.getByRole('button', { name: 'Close', exact: true }).click();
 		await expect(recoveredManager).toBeHidden();
 
-		const recoveredInput = page.locator('.command-bar-command-input');
+		const recoveredInput = page.locator('input.command-bar-input');
 		await expect(recoveredInput).toBeEnabled({ timeout: 20_000 });
 		await recoveredInput.fill("printf 'AUTO_RECONCILE_OK\\n'");
 		await recoveredInput.press('Enter');
@@ -868,7 +868,7 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
 
 	const terminalText = async () => (await rows.locator(':scope > div').allTextContents()).join('');
 
-	const commandInput = page.locator('.command-bar-command-input');
+	const commandInput = page.locator('input.command-bar-input');
 	await expect(terminal).toBeVisible({ timeout: 20_000 });
 
 	await step('prepare a shell state that must survive suspend and resume', async () => {
@@ -1097,7 +1097,7 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
 				attachedWorkspaceId: resumedSessionId,
 			});
 
-		const resumedInput = page.locator('.command-bar-command-input');
+		const resumedInput = page.locator('input.command-bar-input');
 		await expect(resumedTab).toHaveAttribute('data-session-state', 'connected');
 		await expect(resumedTab.locator(':scope > span.rounded-full')).toHaveClass(/\bbg-green-500\b/);
 		await resumedInput.fill('printf \'AFTER_RESUME=%s\\n\' "$PWD"');

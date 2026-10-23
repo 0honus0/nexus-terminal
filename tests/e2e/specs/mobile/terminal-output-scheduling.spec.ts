@@ -24,7 +24,7 @@ test('visible mobile terminal consumes and renders SSH output while animation fr
 	await connectTestSshFromConnectionsPage(page, connectionId);
 	const terminal = page.locator('.terminal-inner-container');
 	await expect(terminal).toBeVisible();
-	const command = page.locator('.command-bar-command-input');
+	const command = page.locator('input.command-bar-input');
 	await command.fill("printf 'SCHEDULING_%s\\n' READY");
 	await command.press('Enter');
 	await expect(terminal.locator('.xterm-rows')).toContainText('SCHEDULING_READY');

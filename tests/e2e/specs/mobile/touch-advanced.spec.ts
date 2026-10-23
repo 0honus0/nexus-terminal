@@ -388,7 +388,7 @@ test('mobile virtual keyboard sends modified navigation escape sequences and con
 }) => {
 	await connectMobileSsh(page, context.request);
 
-	const commandInput = page.locator('.command-bar-command-input');
+	const commandInput = page.locator('input.command-bar-input');
 	const terminalRows = page.locator('.terminal-inner-container .xterm-rows');
 	await page.getByRole('button', { name: 'Show virtual keyboard', exact: true }).click();
 	const keyboard = page.locator('.mobile-virtual-keyboard.virtual-keyboard-bar');
@@ -463,7 +463,7 @@ test('mobile virtual keyboard follows application cursor mode, pages function ke
 }) => {
 	await connectMobileSsh(page, context.request);
 
-	const commandInput = page.locator('.command-bar-command-input');
+	const commandInput = page.locator('input.command-bar-input');
 	const terminalRows = page.locator('.terminal-inner-container .xterm-rows');
 	await page.getByRole('button', { name: 'Show virtual keyboard', exact: true }).click();
 	const keyboard = page.locator('.mobile-virtual-keyboard.virtual-keyboard-bar');

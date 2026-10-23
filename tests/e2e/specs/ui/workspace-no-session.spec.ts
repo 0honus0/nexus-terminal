@@ -11,7 +11,7 @@ for (const width of [393, 1440]) {
 		await expect(start.locator('.workspace-connection-list')).toBeVisible();
 		await expect(start.locator('.suspended-sessions-panel')).toBeVisible();
 		await expect(start).toHaveCSS('overflow-y', 'auto');
-		await expect(start.locator('.session-list-container')).toHaveCSS('overflow-y', 'visible');
+		await expect(start.locator('.session-list-container')).toHaveCSS('overflow-y', 'auto');
 		await expect(start.locator('.workspace-connection-content')).toHaveCSS('overflow-y', 'visible');
 		await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
 		await expect(page.locator('.workspace-start-page')).toHaveCount(1);

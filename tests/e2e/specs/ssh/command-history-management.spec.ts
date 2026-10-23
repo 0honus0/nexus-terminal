@@ -29,7 +29,7 @@ test('command history UI searches, copies, re-runs, and deletes real terminal hi
 	await connectTestSshFromConnectionsPage(page, connectionId);
 
 	const terminalRows = page.locator('.terminal-inner-container .xterm-rows');
-	const commandInput = page.locator('.command-bar-command-input');
+	const commandInput = page.locator('input.command-bar-input');
 	const historyView = page.locator('.command-history-root').filter({ visible: true }).first();
 	await expect(historyView).toBeVisible({ timeout: 20_000 });
 

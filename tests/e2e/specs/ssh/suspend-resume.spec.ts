@@ -246,7 +246,7 @@ test('marking suspend keeps the UI tab interactive and unmarking keeps the shell
 	const terminal = page.getByRole('application', { name: 'Terminal', exact: true });
 	await expect(terminal).toBeVisible();
 	const activeTab = page.getByRole('tab', { selected: true });
-	const command = page.locator('.command-bar-command-input');
+	const command = page.locator('input.command-bar-input');
 	await command.fill(
 		"for ((i=0;i<2000;i++)); do printf 'SNAPSHOT_PROFILE_%04d_abcdefghijklmnopqrstuvwxyz\\n' \"$i\"; done; printf 'SNAPSHOT_%s\\n' PROFILE_DONE",
 	);

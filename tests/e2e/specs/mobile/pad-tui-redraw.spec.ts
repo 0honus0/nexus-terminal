@@ -19,7 +19,7 @@ for (const erase of ['full screen', 'individual rows'] as const) {
 		const connectionId = await ensureTestSshConnection(context.request);
 		await connectTestSshFromConnectionsPage(page, connectionId);
 		const terminal = page.locator('.terminal-inner-container');
-		const command = page.locator('.command-bar-command-input');
+		const command = page.locator('input.command-bar-input');
 		// A real remote input loop redraws on r and exits on q. This tests ANSI and
 		// browser resize ordering, not SIGWINCH: the pipe-based SSH fixture cannot
 		// model the remote PTY's signal semantics.

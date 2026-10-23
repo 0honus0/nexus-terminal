@@ -27,6 +27,12 @@ export type WorkspacePane = (typeof WORKSPACE_PANES)[number];
 
 export const PRESENTATION_REQUEST_MAX_BYTES = 128 * 1024;
 
+export const DESKTOP_WINDOW_MIN_WIDTH = 320;
+
+export const DESKTOP_WINDOW_MIN_HEIGHT = 200;
+
+export const DESKTOP_WINDOW_MAX_DIMENSION = 8192;
+
 export const PRESENTATION_RESPONSE_MAX_BYTES = 128 * 1024;
 
 export const PRESENTATION_LAYOUT_MAX_DEPTH = 12;

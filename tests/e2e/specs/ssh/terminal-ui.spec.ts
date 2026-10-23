@@ -120,7 +120,7 @@ test('saved custom focus shortcut moves focus from the live terminal to the comm
 		expect(persisted.shortcuts.commandInput).toBe('Alt+J');
 
 		const terminalInput = page.locator('.terminal-inner-container .xterm-helper-textarea');
-		const commandInput = page.locator('.command-bar-command-input');
+		const commandInput = page.locator('input.command-bar-input');
 		await terminalInput.focus();
 		await expect(terminalInput).toBeFocused();
 		await page.keyboard.press('Alt+J');
@@ -143,7 +143,7 @@ test('plain Alt cycles the configured focus sequence from a live terminal and wr
 		const connectionId = await ensureTestSshConnection(context.request);
 		await connectTestSshFromConnectionsPage(page, connectionId);
 		const terminalInput = page.locator('.terminal-inner-container .xterm-helper-textarea');
-		const commandInput = page.locator('.command-bar-command-input');
+		const commandInput = page.locator('input.command-bar-input');
 		await terminalInput.focus();
 		await expect(terminalInput).toBeFocused();
 
@@ -163,7 +163,7 @@ test('plain Alt cycles the configured focus sequence from a live terminal and wr
 	}
 });
 
-test('desktop command bar wraps only when needed and distributes second-row buttons across the input', async ({
+test('desktop command bar keeps command entry and scrollable controls usable at narrow widths', async ({
 	page,
 	context,
 }) => {
@@ -175,7 +175,7 @@ test('desktop command bar wraps only when needed and distributes second-row butt
 	const connectionId = await ensureTestSshConnection(context.request);
 	await connectTestSshFromConnectionsPage(page, connectionId);
 	const bar = page.locator('.command-bar-root--desktop');
-	const input = bar.locator('.command-bar-command-input');
+	const input = bar.locator('input.command-bar-input');
 	await expect(bar.getByRole('button')).toHaveCount(4);
 	for (const width of [720, 480, 400, 320, 300, 280, 240, 203, 202, 201, 180, 240, 720]) {
 		for (const height of [34, 65, 100, 180]) {
@@ -188,84 +188,54 @@ test('desktop command bar wraps only when needed and distributes second-row butt
 				},
 				{ width, height },
 			);
-			await expect
-				.poll(() =>
-					bar.evaluate((element) => {
-						const input = element.querySelector('input')!.getBoundingClientRect();
-						const tools = element.querySelector('.desktop-command-controls')!.getBoundingClientRect();
-						return input.bottom <= tools.top;
-					}),
-				)
-				.toBe(width < 202);
+			await expect(input).toBeVisible();
 			const geometry = await bar.evaluate((element) => {
 				const root = element.getBoundingClientRect();
 				const input = element.querySelector('input')!.getBoundingClientRect();
-				const buttons = [...element.querySelectorAll('button')].map((button) => button.getBoundingClientRect());
+				const controls = element.querySelector<HTMLElement>('.desktop-command-controls')!;
+				const tools = controls.getBoundingClientRect();
 				return {
-					input: { left: input.left, right: input.right, top: input.top, bottom: input.bottom },
-					buttons: buttons.map((button) => ({
-						left: button.left,
-						right: button.right,
-						top: button.top,
-						bottom: button.bottom,
-					})),
-					root: { left: root.left, right: root.right, top: root.top },
+					input: {
+						left: input.left,
+						right: input.right,
+						top: input.top,
+						bottom: input.bottom,
+						width: input.width,
+					},
+					tools: { left: tools.left, right: tools.right, top: tools.top, bottom: tools.bottom },
+					root: { left: root.left, right: root.right, top: root.top, bottom: root.bottom },
 					overflow: element.scrollWidth - element.clientWidth,
+					overflowX: getComputedStyle(controls).overflowX,
 				};
 			});
-			if (width >= 202) {
-				const buttonWidth = geometry.buttons[0].right - geometry.buttons[0].left;
-				expect(geometry.input.right - geometry.input.left).toBeGreaterThanOrEqual(buttonWidth * 2 - 1);
-				if (width === 202) {
-					expect(geometry.input.right - geometry.input.left).toBeLessThanOrEqual(buttonWidth * 2 + 1);
-				}
-			}
+			expect(geometry.input.width).toBeGreaterThan(0);
+			expect(geometry.input.left).toBeGreaterThanOrEqual(geometry.root.left);
+			expect(geometry.input.right).toBeLessThanOrEqual(geometry.tools.left + 1);
+			expect(geometry.tools.right).toBeLessThanOrEqual(geometry.root.right + 1);
 			expect(geometry.input.top).toBeGreaterThanOrEqual(geometry.root.top);
+			expect(geometry.input.bottom).toBeLessThanOrEqual(geometry.root.bottom + 1);
+			expect(
+				Math.abs((geometry.input.top + geometry.input.bottom - geometry.tools.top - geometry.tools.bottom) / 2),
+			).toBeLessThanOrEqual(1);
 			expect(geometry.overflow).toBeLessThanOrEqual(1);
-			for (const button of geometry.buttons) {
-				expect(button.left).toBeGreaterThanOrEqual(geometry.root.left);
-				expect(button.right).toBeLessThanOrEqual(geometry.root.right + 1);
-				if (width >= 202) {
-					expect(button.top).toBeGreaterThanOrEqual(geometry.input.top);
-					expect(button.bottom).toBeLessThanOrEqual(geometry.input.bottom);
-				}
-			}
-			if (width < 202) {
-				expect(Math.abs(geometry.buttons[0].left - geometry.input.left)).toBeLessThanOrEqual(1);
-				expect(Math.abs(geometry.buttons.at(-1)!.right - geometry.input.right)).toBeLessThanOrEqual(1);
-				const gaps = geometry.buttons
-					.slice(1)
-					.map((button, index) => button.left - geometry.buttons[index].right);
-				expect(Math.max(...gaps) - Math.min(...gaps)).toBeLessThanOrEqual(1);
-			}
+			expect(geometry.overflowX).toBe('auto');
 		}
 	}
-	// Search adds two buttons, so the same available width must adapt to its actual contents.
+	// Search shares the entry and keeps its keyboard navigation available when
+	// narrow panes hide the extra previous/next buttons.
 	await bar.evaluate((element) => {
 		element.style.width = '240px';
 		element.style.height = '100px';
-		element.scrollTop = 0;
 	});
 	await bar.getByTitle('Open terminal search').click();
-	await expect
-		.poll(() =>
-			bar.evaluate(
-				(element) =>
-					element.querySelector('input')!.getBoundingClientRect().bottom <=
-					element.querySelector('.desktop-command-controls')!.getBoundingClientRect().top,
-			),
-		)
-		.toBe(true);
-	await bar.getByTitle('Close terminal search').click();
-	await expect
-		.poll(() =>
-			bar.evaluate(
-				(element) =>
-					element.querySelector('input')!.getBoundingClientRect().bottom <=
-					element.querySelector('.desktop-command-controls')!.getBoundingClientRect().top,
-			),
-		)
-		.toBe(false);
+	await expect(input).toHaveAttribute('data-focus-id', 'terminalSearch');
+	await expect(input).toBeFocused();
+	await input.fill('DESKTOP_COMMAND_LAYOUT_OK');
+	await input.press('Enter');
+	await input.press('Shift+Enter');
+	await input.press('Escape');
+	await expect(input).toHaveAttribute('data-focus-id', 'commandInput');
+	await expect(input).toBeFocused();
 	await input.fill("printf 'DESKTOP_COMMAND_LAYOUT_OK\\n'");
 	await input.press('Enter');
 	await expect(page.locator('.terminal-inner-container')).toContainText('DESKTOP_COMMAND_LAYOUT_OK');
@@ -298,9 +268,9 @@ test('terminal coalesces continuous resizing while output and keyboard input rem
 	await expect.poll(() => resizeFrames.length).toBeGreaterThan(0);
 	await page.waitForTimeout(250);
 	await page
-		.locator('.command-bar-command-input')
+		.locator('input.command-bar-input')
 		.fill('for i in $(seq 1 30); do printf \'RESIZE_OUTPUT_%s\\n\' "$i"; sleep 0.02; done');
-	await page.locator('.command-bar-command-input').press('Enter');
+	await page.locator('input.command-bar-input').press('Enter');
 	await expect(terminal).toContainText('RESIZE_OUTPUT_1');
 	await input.focus();
 	resizeFrames.length = 0;
@@ -420,7 +390,7 @@ async function captureTerminalEvidence(page: Page, testInfo: TestInfo, name: 'be
 		const terminal = document.querySelector<HTMLElement>('[data-font-size]');
 		const inner = terminal?.querySelector<HTMLElement>('.terminal-inner-container');
 		const commandBar = document.querySelector<HTMLElement>('.command-bar-root');
-		const commandInput = commandBar?.querySelector<HTMLElement>('.command-bar-command-input');
+		const commandInput = commandBar?.querySelector<HTMLElement>('input.command-bar-input');
 
 		const rect = (element: Element | null | undefined) => {
 			if (!element) return null;
@@ -500,7 +470,7 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
 	await connectTestSshFromConnectionsPage(page, connectionId);
 
 	const terminal = page.locator('[data-font-size]');
-	const commandInput = page.locator('.command-bar-command-input');
+	const commandInput = page.locator('input.command-bar-input');
 
 	await step('terminal remains mounted after workspace connection', async () => {
 		await expect(terminal).toBeVisible({ timeout: 20_000 });
@@ -778,7 +748,7 @@ test('Ctrl+C interrupts a long-running terminal output stream', async ({ page, c
 
 	const terminal = page.locator('[data-font-size]');
 	const rows = terminal.locator('.xterm-rows');
-	const commandInput = page.locator('.command-bar-command-input');
+	const commandInput = page.locator('input.command-bar-input');
 	await commandInput.fill(
 		'saved_stty=$(stty -g); stty -isig; INTERRUPT_FINISHED=yes; (i=0; while :; do batch=0; while [ $batch -lt 20 ]; do printf \'INTERRUPT_STREAM_%06d\\n\' "$i"; i=$((i+1)); batch=$((batch+1)); done; sleep 0.01; done) & producer=$!; while IFS= read -r -n 1 key; do if [ "$key" = $\'\\003\' ]; then INTERRUPT_FINISHED=no; break; fi; done; kill "$producer"; wait "$producer" 2>/dev/null; stty "$saved_stty"; printf \'INTERRUPT_ACK\\n\'',
 	);
@@ -806,7 +776,7 @@ test('large terminal scrollback follows rapid scrollbar drags back to the newest
 
 	const terminal = page.locator('[data-font-size]');
 	const rows = terminal.locator('.xterm-rows');
-	const commandInput = page.locator('.command-bar-command-input');
+	const commandInput = page.locator('input.command-bar-input');
 	const bottomMarker = 'RAPID_SCROLL_BOTTOM';
 	await commandInput.fill(
 		`i=1; while [ $i -le 12000 ]; do printf 'RAPID_SCROLL_%05d\\n' "$i"; i=$((i+1)); done; printf '${bottomMarker}\\n'`,
@@ -878,7 +848,7 @@ test('terminal parser acknowledges sustained output and keeps accepting input', 
 			if (outputStarted) flowSamples.push({ ms: performance.now() - outputStarted, consumedBytes });
 		}
 	});
-	const input = page.locator('.command-bar-command-input');
+	const input = page.locator('input.command-bar-input');
 	await input.fill(
 		"for ((i=0;i<40000;i++)); do printf 'FLOW_PARSE_LINE_012345678901234567890123456789\\n'; done; printf 'FLOW_PARSE_DONE\\n'",
 	);
@@ -948,7 +918,7 @@ test('desktop terminal only uses Ctrl+Shift+C/V for keyboard clipboard actions',
 	await connectTestSshFromConnectionsPage(page, connectionId);
 	const terminal = page.locator('[data-font-size]');
 	const rows = terminal.locator('.xterm-rows');
-	const commandInput = page.locator('.command-bar-command-input');
+	const commandInput = page.locator('input.command-bar-input');
 	const marker = 'KEYBOARD_CLIPBOARD_COPY_MARKER';
 	const clipboardSentinel = 'CLIPBOARD_UNCHANGED';
 	await commandInput.fill(`printf '\\033[2J\\033[H\\n\\n\\n${marker}\\n'`);
@@ -994,7 +964,7 @@ test('desktop terminal right-click copies a selection then pastes when no select
 	await connectTestSshFromConnectionsPage(page, connectionId);
 
 	const terminal = page.locator('[data-font-size]');
-	const commandInput = page.locator('.command-bar-command-input');
+	const commandInput = page.locator('input.command-bar-input');
 	const rows = terminal.locator('.xterm-rows');
 	const copyMarker = 'DESKTOP_RIGHT_CLICK_COPY_MARKER';
 
@@ -1213,7 +1183,7 @@ test('desktop touch hardware keeps the legacy desktop Workspace classification',
 
 	const tabBar = page.locator('.terminal-tab-shell');
 	await expect(tabBar.getByRole('button', { name: 'Configure Layout', exact: true })).toBeVisible();
-	await expect(page.locator('.command-bar-command-input')).toBeVisible();
+	await expect(page.locator('input.command-bar-input')).toBeVisible();
 });
 
 test('a failed logout still releases live Workspace sessions before reporting the error', async ({ page, context }) => {

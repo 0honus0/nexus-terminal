@@ -152,7 +152,7 @@ export async function connectTestSshFromConnectionsPage(page: Page, connectionId
 			{ cause: error },
 		);
 	}
-	await expect(page.locator('.command-bar-command-input:visible')).toBeEnabled();
+	await expect(page.locator('input.command-bar-input:visible')).toBeEnabled();
 }
 
 const visibleFileManagerModal = (page: Page): Locator =>

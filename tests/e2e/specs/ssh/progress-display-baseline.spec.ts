@@ -584,7 +584,8 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 		});
 	} finally {
 		releaseInitialTransferList?.();
-		await page.unroute('**/api/v1/transfers/status');
+		// Let the released handler finish before removing its route.
+		await page.unrouteAll({ behavior: 'wait' });
 		let cursor: string | null = null;
 		do {
 			const tasksResponse = await context.request.get(

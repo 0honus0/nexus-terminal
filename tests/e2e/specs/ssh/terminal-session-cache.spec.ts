@@ -83,7 +83,7 @@ test('session switches retain terminal and background instances and skip unchang
 		await expect(page.getByRole('tab', { selected: true })).toHaveAttribute('data-session-state', 'connected', {
 			timeout: 35_000,
 		});
-		await expect(page.locator('.command-bar-command-input:visible')).toBeEnabled();
+		await expect(page.locator('input.command-bar-input:visible')).toBeEnabled();
 	}
 	const terminals = page.locator('.terminal-inner-container');
 	const backgrounds = page.locator('.terminal-custom-html');

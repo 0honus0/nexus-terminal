@@ -54,7 +54,7 @@ test('common terminal tools work through the real SSH session', async ({ page, c
 
 	const terminal = page.locator('.terminal-inner-container');
 	const rows = terminal.locator('.xterm-rows');
-	const commandInput = page.locator('.command-bar-command-input');
+	const commandInput = page.locator('input.command-bar-input');
 	const commandBar = page.locator('.command-bar-root');
 
 	await expect(terminal).toBeVisible({ timeout: 20_000 });

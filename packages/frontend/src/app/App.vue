@@ -2,6 +2,11 @@
 	import { computed, defineAsyncComponent, markRaw, onBeforeUnmount, ref, watch } from 'vue';
 	import { RouterView, useRoute } from 'vue-router';
 	import { useI18n } from 'vue-i18n';
+	import {
+		DESKTOP_WINDOW_MIN_WIDTH,
+		DESKTOP_WINDOW_MIN_HEIGHT,
+		DESKTOP_WINDOW_MAX_DIMENSION,
+	} from '@nexus-terminal/shared/preferences/presentation/values';
 	import { UiLoadingState } from '@/foundation/ui';
 	import { preloadAuthenticatedRoutes } from './router';
 	import { logger } from '@/client/logging/logger';
@@ -111,12 +116,22 @@
 			return;
 		}
 		const user = auth.user.value;
+		// Pointer coordinates can be fractional; narrow viewports can also be smaller
+		// than the persisted preference range. Keep the displayed window viewport-bound.
+		const width = Math.min(
+			DESKTOP_WINDOW_MAX_DIMENSION,
+			Math.max(DESKTOP_WINDOW_MIN_WIDTH, Math.round(size.width)),
+		);
+		const height = Math.min(
+			DESKTOP_WINDOW_MAX_DIMENSION,
+			Math.max(DESKTOP_WINDOW_MIN_HEIGHT, Math.round(size.height)),
+		);
 		desktopSizeSaving.value = true;
 		try {
 			await preferences.update(
 				type === 'VNC'
-					? { vncModalWidth: size.width, vncModalHeight: size.height }
-					: { rdpModalWidth: size.width, rdpModalHeight: size.height },
+					? { vncModalWidth: width, vncModalHeight: height }
+					: { rdpModalWidth: width, rdpModalHeight: height },
 			);
 		} catch (cause) {
 			if (auth.user.value === user) {

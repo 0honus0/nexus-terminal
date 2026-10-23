@@ -81,7 +81,7 @@ test('command input sync setting drives quick-command search and keyboard execut
 			'typing in the command bar filters Quick Commands and Enter executes the keyboard selection',
 			async () => {
 				await connectTestSshFromConnectionsPage(page, connectionId);
-				const commandInput = page.locator('.command-bar-command-input:visible');
+				const commandInput = page.locator('input.command-bar-input:visible');
 				const quickView = page.locator('.quick-commands-root:visible').first();
 				const quickSearch = quickView.getByPlaceholder('Search name or command...', { exact: true });
 				const row = quickView.locator(`[data-command-id="${commandId}"]`);
@@ -153,7 +153,7 @@ test('command input sync filters command history and executes the keyboard selec
 
 	try {
 		await connectTestSshFromConnectionsPage(page, connectionId);
-		const commandInput = page.locator('.command-bar-command-input:visible');
+		const commandInput = page.locator('input.command-bar-input:visible');
 		const historyView = page.locator('.command-history-root:visible').first();
 		const historySearch = historyView.locator('.command-history-search');
 		const historyRow = historyView.locator(`[data-history-id="${historyId}"]`);

@@ -31,7 +31,7 @@ async function createNonSshConnection(
 	await page.getByRole('button', { name: 'Add New Connection', exact: true }).click();
 	const form = page.locator('form.connection-form');
 	await expect(form).toBeVisible();
-	await form.getByRole('button', { name: type, exact: true }).click();
+	await form.getByRole('radio', { name: type, exact: true }).click();
 	await form.locator('#conn-name').fill(name);
 	await form.locator('#conn-host').fill(host);
 	await form.locator('#conn-port').fill(String(port));

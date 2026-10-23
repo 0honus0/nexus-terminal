@@ -73,7 +73,7 @@ test('SSH key management UI adds, renames without replacing private key, and del
 		await page.getByRole('button', { name: 'Add New Connection', exact: true }).click();
 		const connectionForm = page.locator('form.connection-form');
 		await expect(connectionForm).toBeVisible();
-		await connectionForm.getByRole('button', { name: 'SSH Key', exact: true }).click();
+		await connectionForm.getByRole('radio', { name: 'SSH Key', exact: true }).click();
 		const selector = connectionForm.locator('#ssh-key-select');
 		await expect(connectionForm.getByRole('button', { name: 'Saved SSH Key', exact: true })).toHaveCount(0);
 		await expect(connectionForm.getByRole('button', { name: 'Direct Private Key', exact: true })).toHaveCount(0);
@@ -242,7 +242,7 @@ test('SSH key management UI adds, renames without replacing private key, and del
 		await page.goto('/connections');
 		await page.getByRole('button', { name: 'Add New Connection', exact: true }).click();
 		const connectionForm = page.locator('form.connection-form');
-		await connectionForm.getByRole('button', { name: 'SSH Key', exact: true }).click();
+		await connectionForm.getByRole('radio', { name: 'SSH Key', exact: true }).click();
 		await connectionForm.getByRole('button', { name: 'Manage SSH Keys', exact: true }).click();
 		const modal = keyManager(page);
 		const row = modal.locator(`tr[data-key-id="${keyId}"]`);
@@ -291,7 +291,7 @@ test('SSH key selector and manager surface key-list loading failures without ove
 	await page.goto('/connections');
 	await page.getByRole('button', { name: 'Add New Connection', exact: true }).click();
 	const form = page.locator('form.connection-form');
-	await form.getByRole('button', { name: 'SSH Key', exact: true }).click();
+	await form.getByRole('radio', { name: 'SSH Key', exact: true }).click();
 	await expect(form.getByText('Options could not be loaded. Refresh and review.', { exact: true })).toBeVisible();
 	await form.getByRole('button', { name: 'Manage SSH Keys', exact: true }).click();
 	const modal = keyManager(page);

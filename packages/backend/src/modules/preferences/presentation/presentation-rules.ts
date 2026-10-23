@@ -1,5 +1,8 @@
 import {
 	PREFERENCE_LANGUAGES,
+	DESKTOP_WINDOW_MIN_WIDTH,
+	DESKTOP_WINDOW_MIN_HEIGHT,
+	DESKTOP_WINDOW_MAX_DIMENSION,
 	FRONTEND_LOG_LEVELS,
 	COMMAND_INPUT_SYNC_TARGETS,
 	WORKSPACE_PANES,
@@ -60,10 +63,10 @@ export function validatePresentation(value: PresentationData): void {
 		typeof prefs.navBarVisible !== 'boolean' ||
 		typeof prefs.fileManagerShowDeleteConfirmation !== 'boolean' ||
 		!number(prefs.fileManagerRowSizeMultiplier, 0.5, 2) ||
-		!integer(prefs.rdpModalWidth, 320, 8192) ||
-		!integer(prefs.rdpModalHeight, 200, 8192) ||
-		!integer(prefs.vncModalWidth, 320, 8192) ||
-		!integer(prefs.vncModalHeight, 200, 8192) ||
+		!integer(prefs.rdpModalWidth, DESKTOP_WINDOW_MIN_WIDTH, DESKTOP_WINDOW_MAX_DIMENSION) ||
+		!integer(prefs.rdpModalHeight, DESKTOP_WINDOW_MIN_HEIGHT, DESKTOP_WINDOW_MAX_DIMENSION) ||
+		!integer(prefs.vncModalWidth, DESKTOP_WINDOW_MIN_WIDTH, DESKTOP_WINDOW_MAX_DIMENSION) ||
+		!integer(prefs.vncModalHeight, DESKTOP_WINDOW_MIN_HEIGHT, DESKTOP_WINDOW_MAX_DIMENSION) ||
 		typeof prefs.showConnectionTags !== 'boolean' ||
 		typeof prefs.showQuickCommandTags !== 'boolean'
 	) {

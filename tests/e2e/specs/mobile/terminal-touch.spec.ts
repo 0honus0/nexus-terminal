@@ -261,7 +261,7 @@ test('mobile single-finger drag follows native touch scrolling direction and ret
 	await connectMobileTerminal(page, context.request);
 	const terminal = page.locator('[data-font-size]');
 	const rows = terminal.locator('.xterm-rows');
-	const commandInput = page.locator('.command-bar-command-input');
+	const commandInput = page.locator('input.command-bar-input');
 
 	await commandInput.fill(`i=1; while [ "$i" -le 120 ]; do printf 'MOBILE_SCROLL_%03d\\n' "$i"; i=$((i+1)); done`);
 	await commandInput.press('Enter');
@@ -283,7 +283,7 @@ test('mobile single-finger drag follows native touch scrolling direction and ret
 test('mobile drag scrolls interactive alternate-screen terminal applications', async ({ page, context }) => {
 	await connectMobileTerminal(page, context.request);
 	const rows = page.locator('.terminal-inner-container .xterm-rows');
-	const commandInput = page.locator('.command-bar-command-input');
+	const commandInput = page.locator('input.command-bar-input');
 	await commandInput.fill(
 		"printf '\\033[?1049hALT_READY\\n'; IFS= read -r -s -n 3; printf '\\033[?1049lALT_SCROLL_RECEIVED\\n'",
 	);
@@ -296,7 +296,7 @@ test('mobile drag scrolls interactive alternate-screen terminal applications', a
 test('mobile drag reaches terminal applications that request mouse wheel events', async ({ page, context }) => {
 	await connectMobileTerminal(page, context.request);
 	const rows = page.locator('.terminal-inner-container .xterm-rows');
-	const commandInput = page.locator('.command-bar-command-input');
+	const commandInput = page.locator('input.command-bar-input');
 	await commandInput.fill(
 		"printf '\\033[?1000h\\033[?1006hMOUSE_READY\\n'; IFS= read -r -s -d M; printf '\\033[?1000l\\033[?1006lMOUSE_SCROLL_RECEIVED\\n'",
 	);
@@ -342,7 +342,7 @@ test('mobile terminal long press selects a word, exposes selection handles, and 
 	await enableClipboard(context);
 	await connectMobileTerminal(page, context.request);
 	const marker = 'MOBILE_TOUCH_COPY_MARKER';
-	const commandInput = page.locator('.command-bar-command-input');
+	const commandInput = page.locator('input.command-bar-input');
 	const rows = page.locator('.terminal-inner-container .xterm-rows');
 	let originalTextareaState: Awaited<ReturnType<typeof terminalTextareaState>> | null = null;
 
@@ -412,7 +412,7 @@ test('mobile terminal cancels an unfinished touch selection when leaving and ret
 }) => {
 	test.setTimeout(60_000);
 	await connectMobileTerminal(page, context.request);
-	const commandInput = page.locator('.command-bar-command-input');
+	const commandInput = page.locator('input.command-bar-input');
 	const marker = 'MOBILE_CANCELLED_SELECTION';
 	await commandInput.fill(`printf '\\033[2J\\033[H\\n\\n\\n${marker}\\n'`);
 	await commandInput.press('Enter');

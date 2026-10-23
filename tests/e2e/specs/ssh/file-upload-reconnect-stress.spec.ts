@@ -88,7 +88,7 @@ test('repeated cancelled-upload teardown keeps fresh Workspace WebSockets reconn
 			await connectTestSshFromConnectionsPage(activePage, connectionId);
 			await openConnectedFileManager(activePage);
 			await expect(
-				activePage.locator('.command-bar-command-input'),
+				activePage.locator('input.command-bar-input'),
 				`cycle ${cycle}: fresh Workspace control socket should reconnect after teardown`,
 			).toBeEnabled();
 			expect(

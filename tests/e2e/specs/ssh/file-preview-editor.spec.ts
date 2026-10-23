@@ -138,7 +138,7 @@ async function openConnectionFromWorkspacePicker(page: Page, connectionId: numbe
 		'connected',
 		{ timeout: 20_000 },
 	);
-	await expect(page.locator('.command-bar-command-input:visible')).toBeEnabled();
+	await expect(page.locator('input.command-bar-input:visible')).toBeEnabled();
 }
 
 async function ctrlWheel(target: Locator, deltaY: number): Promise<void> {

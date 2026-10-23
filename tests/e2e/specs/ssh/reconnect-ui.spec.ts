@@ -94,7 +94,7 @@ async function openConnectionFromWorkspacePicker(page: Page, connectionId: numbe
 	expect(connection, `Connection ${connectionId} must be persisted before opening a second Workspace`).toBeTruthy();
 	if (!connection) throw new Error(`Connection ${connectionId} is missing`);
 	await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
-	const picker = page.getByRole('heading', { name: 'Connections & sessions', exact: true });
+	const picker = page.getByRole('heading', { name: 'New session', exact: true });
 	await expect(picker).toBeVisible();
 	const row = page.locator(`.workspace-connection-list [data-connection-id="${connectionId}"]`);
 	await expect(row).toBeVisible();
@@ -106,7 +106,7 @@ async function openConnectionFromWorkspacePicker(page: Page, connectionId: numbe
 	const selected = page.locator('.terminal-tab-shell').getByRole('tab', { selected: true });
 	await expect(selected).toHaveAttribute('title', connection.name || connection.host, { timeout: 35_000 });
 	await expect(selected).toHaveAttribute('data-session-state', 'connected', { timeout: 35_000 });
-	await expect(page.locator('.command-bar-command-input:visible')).toBeEnabled();
+	await expect(page.locator('input.command-bar-input:visible')).toBeEnabled();
 }
 
 async function xtermGeometry(terminal: Locator): Promise<{ width: string; height: string; rowCount: number }> {
@@ -237,7 +237,7 @@ test('initial SSH failure removes its connecting tab without automatic retry', a
 
 		const tabs = page.locator('.terminal-tab-shell').getByRole('tab');
 		await expect(tabs).toHaveCount(0, { timeout: 15_000 });
-		await expect(page.getByRole('heading', { name: 'Connections & sessions', exact: true })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'New session', exact: true })).toBeVisible();
 
 		expect(
 			await page.evaluate(
@@ -281,7 +281,7 @@ test('hidden terminals consume sustained output without animation frames or reco
 	});
 	await connectTestSshFromConnectionsPage(page, connectionId);
 	const terminal = page.locator('.terminal-inner-container');
-	const command = page.locator('.command-bar-command-input');
+	const command = page.locator('input.command-bar-input');
 	await expect(command).toBeEnabled();
 	await command.fill('export NEXUS_BACKGROUND_SHELL=$$');
 	await command.press('Enter');
@@ -354,7 +354,7 @@ test('transport resume retains terminal output and the active SSH input line', a
 	const terminal = page.locator('.terminal-inner-container');
 	const rows = terminal.locator('.xterm-rows');
 	const input = terminal.locator('.xterm-helper-textarea');
-	const command = page.locator('.command-bar-command-input');
+	const command = page.locator('input.command-bar-input');
 	const tab = page.getByRole('tab', { selected: true });
 	await command.fill("printf 'RETAINED_SSH_OUTPUT\\n'");
 	await command.press('Enter');
@@ -392,7 +392,7 @@ for (const background of [false, true]) {
 			const rows = terminal.locator('.xterm-rows');
 			const input = terminal.locator('.xterm-helper-textarea');
 			const tab = page.getByRole('tab', { selected: true });
-			const command = page.locator('.command-bar-command-input');
+			const command = page.locator('input.command-bar-input');
 			await command.fill("printf 'OLD_SSH_OUTPUT\\n'");
 			await command.press('Enter');
 			await expect(rows).toContainText('OLD_SSH_OUTPUT');
@@ -531,7 +531,7 @@ test('a failed SSH reconnect waits for a key and then reconnects immediately', a
 		await connectTestSshFromConnectionsPage(page, connectionId);
 		const terminal = page.locator('.terminal-inner-container');
 		const xtermInput = terminal.locator('.xterm-helper-textarea');
-		const commandInput = page.locator('.command-bar-command-input');
+		const commandInput = page.locator('input.command-bar-input');
 
 		await step('initial SSH session is connected', async () => {
 			await expect(terminal).toBeVisible({ timeout: 20_000 });
@@ -1059,7 +1059,7 @@ test.describe('M08.03-a mobile Workspace session lifecycle', () => {
 
 		const activeTab = () => page.locator('.terminal-tab-shell').locator('[role="tab"][aria-selected="true"]');
 
-		const visibleCommandInput = () => page.locator('.command-bar-command-input:visible').first();
+		const visibleCommandInput = () => page.locator('input.command-bar-input:visible').first();
 
 		const visibleTerminalRows = () => page.locator('.terminal-inner-container:visible .xterm-rows').first();
 
@@ -1163,7 +1163,7 @@ test.describe('M08.03-a mobile Workspace session lifecycle', () => {
 					.getByRole('button', { name: 'Close Tab', exact: true })
 					.click();
 				await expect(tabs).toHaveCount(0);
-				await expect(page.getByRole('heading', { name: 'Connections & sessions', exact: true })).toBeVisible();
+				await expect(page.getByRole('heading', { name: 'New session', exact: true })).toBeVisible();
 				await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
 				const list = page.locator('.workspace-connection-list');
 				await expect(list).toBeVisible();

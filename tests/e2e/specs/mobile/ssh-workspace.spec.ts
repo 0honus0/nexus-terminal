@@ -60,7 +60,7 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
 		expect(commandBarBox!.height).toBeLessThan(terminalBox!.height / 2);
 
 		if (functionalScreenshotsEnabled()) {
-			const commandInput = page.locator('.command-bar-command-input');
+			const commandInput = page.locator('input.command-bar-input');
 			await commandInput.fill('clear');
 			await commandInput.press('Enter');
 			await commandInput.fill("printf 'Nexus mobile SSH\\n'");

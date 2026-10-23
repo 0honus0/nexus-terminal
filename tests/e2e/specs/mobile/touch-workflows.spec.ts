@@ -481,13 +481,13 @@ test('mobile shared Progress Display stays dormant until transfer work is hidden
 	await connectMobileSsh(page, context.request);
 	await expect(page.getByRole('button', { name: 'Progress Display', exact: true })).toHaveCount(0);
 	await expect(page.locator('.terminal-inner-container')).toBeVisible();
-	await expect(page.locator('.command-bar-command-input')).toBeVisible();
+	await expect(page.locator('input.command-bar-input')).toBeVisible();
 });
 
 test('mobile virtual keyboard Ctrl modifier reaches the live SSH input stream', async ({ page, context }) => {
 	await connectMobileSsh(page, context.request);
 
-	const commandInput = page.locator('.command-bar-command-input');
+	const commandInput = page.locator('input.command-bar-input');
 	const terminalRows = page.locator('.terminal-inner-container .xterm-rows');
 
 	await step('start a one-byte remote reader, then open the compact mobile keyboard and arm Ctrl', async () => {

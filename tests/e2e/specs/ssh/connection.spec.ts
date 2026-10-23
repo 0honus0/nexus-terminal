@@ -114,7 +114,7 @@ for (const changedKey of [false, true]) {
 		expect((await readPin())?.fingerprint).toBe(actual.fingerprint);
 		expect(trustWrites).toBe(1);
 		expect(connectRequests).toBe(3);
-		const command = page.locator('.command-bar-command-input:visible');
+		const command = page.locator('input.command-bar-input:visible');
 		await expect(command).toBeEnabled();
 		await command.fill("printf '%s%s\\n' 'HOST_KEY_CONFIRMED_' 'E2E'");
 		await command.press('Enter');
@@ -160,9 +160,9 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
 		expect(response.ok()).toBeTruthy();
 		// Browser navigation can invalidate the CDP response body. The actual
 		// result must be rendered as Success by the UI, not merely return HTTP 200.
-		const testResult = page.locator('form footer span.text-success');
+		const testResult = page.locator('form footer [data-ui="badge"][data-tone="success"]');
 		await expect(testResult).toBeVisible();
-		await expect(testResult).toHaveClass(/text-success/);
+		await expect(testResult).toHaveAttribute('data-tone', 'success');
 		await expect(testResult).toContainText('Success');
 	});
 
@@ -208,7 +208,7 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
 
 		if (functionalScreenshotsEnabled()) {
 			const terminal = page.getByRole('application', { name: 'Terminal', exact: true });
-			const commandInput = page.locator('.command-bar-command-input');
+			const commandInput = page.locator('input.command-bar-input');
 			await expect(terminal).toBeVisible({ timeout: 20_000 });
 			await expect(commandInput).toBeEnabled({ timeout: 20_000 });
 			const embeddedFileManager = page.locator('.file-manager-root table').filter({ visible: true });
@@ -290,7 +290,7 @@ test('Connect All waits for each Workspace binding before mounted file managers 
 			'data-workspace-id',
 			(await firstTab.getAttribute('data-session-id')) ?? '',
 		);
-		const commandInput = page.locator('.command-bar-command-input:visible').first();
+		const commandInput = page.locator('input.command-bar-input:visible').first();
 		await expect(commandInput).toBeEnabled();
 		await commandInput.fill('for i in $(seq 1 80); do echo NEXUS_BACKGROUND_BATCH_$i; sleep 0.03; done');
 		await commandInput.press('Enter');

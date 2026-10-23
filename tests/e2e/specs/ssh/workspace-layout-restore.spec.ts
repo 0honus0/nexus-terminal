@@ -55,7 +55,7 @@ test('workspace keeps the live terminal and draft cached across page navigation'
 	const connectionId = await ensureTestSshConnection(context.request);
 	await connectTestSshFromConnectionsPage(page, connectionId);
 	const terminal = page.locator('.terminal-inner-container');
-	const command = page.locator('.command-bar-command-input');
+	const command = page.locator('input.command-bar-input');
 	await command.fill("printf 'LAYOUT_RESTORE_READY\\n'");
 	await command.press('Enter');
 	await expect(terminal).toContainText('LAYOUT_RESTORE_READY');

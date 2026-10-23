@@ -126,9 +126,9 @@ test('regular connection form tests and creates a persisted working SSH connecti
 		const response = await responsePromise;
 		expect(response.status()).toBe(422);
 		expect(readConnectionTestFailure(await response.json())).toEqual({ code: 'connection_failed' });
-		const result = form.locator('footer span.text-error');
+		const result = form.locator('footer [data-ui="badge"][data-tone="danger"]');
 		await expect(result).toBeVisible();
-		await expect(result).toHaveClass(/text-error/);
+		await expect(result).toHaveAttribute('data-tone', 'danger');
 		await expect(result).toContainText('SSH connection failed.');
 		await expect(form).toBeVisible();
 		await form.locator('#conn-port').fill(String(E2E_SSH.port));
@@ -145,9 +145,9 @@ test('regular connection form tests and creates a persisted working SSH connecti
 		expect(response.ok()).toBeTruthy();
 		// Navigation can retire the CDP response body. The result must still
 		// appear as success on the real SSH connection-test form.
-		const result = form.locator('footer span.text-success');
+		const result = form.locator('footer [data-ui="badge"][data-tone="success"]');
 		await expect(result).toBeVisible();
-		await expect(result).toHaveClass(/text-success/);
+		await expect(result).toHaveAttribute('data-tone', 'success');
 	});
 
 	let connectionId = 0;

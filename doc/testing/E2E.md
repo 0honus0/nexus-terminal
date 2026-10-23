@@ -1,5 +1,15 @@
 # Nexus Terminal E2E
 
+## 远程失败入口与桌面尺寸修复（2026-10-23，第一批）
+
+基线为远程 [39942702527](https://github.com/0honus0/nexus-terminal/actions/runs/39942702527)，被测 `1dbad409f4b49c077fc35c0cb6a3c44890e01db4`。八组共 162 个唯一失败，其中 138 个首次失败停在旧命令输入 class；SSH helper 已等到 connected，不把入口失效判为 SSH 建连普遍失败。原日志、去重清单及 shard 1/3 产物保存在 `/tmp/nexus-e2e-39942702527-*`。
+
+第一批将命令输入、连接类型/认证 radio、连接测试徽标、新会话入口与挂起列表滚动断言对接当前真实 UI，保留发送、焦点、搜索、隔离、成功/失败及无横向溢出断言；命令栏响应式场景改为当前单行及独立横向工具滚动，键盘查找继续覆盖。Send Files 的 held route 在释放后等待 handler 完成再移除，避免 continue 与 unroute 竞争。
+
+桌面保存边界对小数像素取整，并将窄屏或超大窗口映射到 Shared 的持久范围；不改变实际窗口和 UI。现有 RDP/VNC 拖拽场景改用小数坐标并断言保存返回 200 及实际持久尺寸，不新增或运行本地行为测试。
+
+工作区根 check、双端 build、全量 format 通过，日志 `/tmp/nexus-e2e-current-{check,build,format}.log`。测试 TypeScript 首次命令缺少前端别名，未记通过；补临时静态配置后通过，见 `/tmp/nexus-e2e-current-test-types-final.log`。两轮源码核对覆盖真实 DOM、全部旧输入定位、保存整数范围与 held route 收尾。并行 UI/偏好变更保留，不纳入本批提交；35 文件的独立暂存快照 `/tmp/nexus-e2e-first-index` 根 check、全量格式及双端 build 均通过，日志 `/tmp/nexus-e2e-first-index-{check,format,build}.log`；新远程结果待补。真实 RDP 建连错误、分块刷新及解锁后其它失败仍待处理，不能声称 138 项已通过。
+
 ## SSH 多会话隔离补测与漏检核对（2026-10-23）
 
 用户明确要求新增用例，本批据此新增源码；仍按 D17 不运行本地行为、浏览器或 E2E，不自动提交、推送或触发远程。最近远程 39920261630 测试的是 `798e204f2a547213652874dca3792bfd42a194f0`，该版本 Surface 只有一个 DOM 根节点；引入并列安装弹窗的改动仍在本地工作区，未进入该轮远程。原日志 shard 3 的 Connect All 和 shard 5 的 session-cache 都实际执行通过，不能据此声称当前工作区通过，也不能断言旧用例必然漏掉当前缺陷。

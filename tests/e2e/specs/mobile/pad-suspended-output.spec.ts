@@ -37,7 +37,7 @@ for (const recovery of ['touch', 'mouse wheel'] as const) {
 		const connectionId = await ensureTestSshConnection(context.request);
 		await connectTestSshFromConnectionsPage(page, connectionId);
 		const terminal = page.locator('.terminal-inner-container');
-		const command = page.locator('.command-bar-command-input');
+		const command = page.locator('input.command-bar-input');
 
 		const drag = async (direction = 1) => {
 			expect(await terminal.evaluate((element) => getComputedStyle(element).touchAction)).toBe('none');
@@ -197,7 +197,7 @@ for (const outputKind of ['line logs', 'single line'] as const) {
 			const terminal = page.locator('.terminal-inner-container');
 			await expect(terminal).toContainText('PAD_LATEST_SCREEN');
 			await expect(terminal).toHaveClass(/terminal-mobile-touch/);
-			const command = page.locator('.command-bar-command-input');
+			const command = page.locator('input.command-bar-input');
 			await command.fill('if [[ "$PAD_SHELL" == "$$" ]]; then printf "%s%s\\n" PAD_ORIGINAL_ SHELL_OK; fi');
 			await command.press('Enter');
 			await expect(terminal).toContainText('PAD_ORIGINAL_SHELL_OK');
