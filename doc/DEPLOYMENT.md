@@ -51,12 +51,28 @@ docker compose up -d --force-recreate
 
 ## HTTPS 与代理
 
+公网入口建议开启 HTTPS 与 HTTP/2，在实际终止 TLS 的反向代理中设置；容器间继续 HTTP/1.1。Nginx Proxy Manager 可在站点 SSL 设置中开启 HTTP/2。若边缘已支持 Brotli，可启用其静态响应压缩；容器原生交付 gzip，不要求额外 Brotli 模块。不要在 CDN 或代理启用全站强制缓存：只对带内容哈希的 `/assets/` 使用长期缓存，`/api/`、`/ws/`、插件 SDK/页面及 HTML/SW 保持各自原策略。
+
+生产 Vite 构建会对 JS/MJS、CSS、HTML、JSON、SVG 和 WASM 生成 `.gz` 旁文件（至少 1 KiB 且压缩更小），Nginx 使用 `gzip_static on` 按 Accept-Encoding 协商；原文件保留，更新后的 Dockerfile 复制整个前端 build 插件目录，无需额外环境变量。哈希字体/图片与 JS 一样缓存一年，非哈希图片仍为七天；HTML/SW 不长期缓存。该优化需要重新构建并更新 Frontend 镜像/容器；只刷新浏览器不能替换已部署资源，不需要迁移数据或修改 Backend 配置。
+
 ```nginx
+# http 上下文：普通 HTTP 使用可复用连接，只有 WebSocket 才升级。
+map $http_upgrade $nexus_connection_upgrade {
+    default upgrade;
+    '' '';
+}
+
+upstream nexus_frontend {
+    server 127.0.0.1:18111;
+    keepalive 32;
+}
+
+# 放在已配置证书的 HTTPS server 内；HTTP/2 同样在该 server 开启。
 location / {
-    proxy_pass http://127.0.0.1:18111;
+    proxy_pass http://nexus_frontend;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
+    proxy_set_header Connection $nexus_connection_upgrade;
     proxy_set_header Host $http_host;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;

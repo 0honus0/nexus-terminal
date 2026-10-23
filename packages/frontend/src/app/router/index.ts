@@ -19,30 +19,40 @@ const loadWorkspacePage = () => import('../pages/workspace/WorkspacePage.vue');
 
 let authenticatedPreloadScheduled = false;
 
-export const preloadAuthenticatedRoutes = (): void => {
-	if (authenticatedPreloadScheduled || typeof window === 'undefined') return;
+const canPreloadRoutes = (): boolean => {
+	if (navigator.onLine === false || document.visibilityState !== 'visible') return false;
 	const connection = (
 		navigator as Navigator & {
-			connection?: { saveData?: boolean; effectiveType?: string };
+			connection?: { saveData?: boolean; effectiveType?: string; rtt?: number; downlink?: number };
 		}
 	).connection;
-	if (connection?.saveData || connection?.effectiveType === 'slow-2g' || connection?.effectiveType === '2g') return;
+	return !(
+		connection?.saveData ||
+		['slow-2g', '2g', '3g'].includes(connection?.effectiveType ?? '') ||
+		(connection?.rtt !== undefined && connection.rtt >= 300) ||
+		(connection?.downlink !== undefined && connection.downlink <= 1)
+	);
+};
+
+export const preloadAuthenticatedRoutes = (): void => {
+	if (authenticatedPreloadScheduled || typeof window === 'undefined' || !canPreloadRoutes()) return;
 	authenticatedPreloadScheduled = true;
 
 	const preload = async () => {
 		// Warm the common connection/terminal path only. Settings and administrative
 		// pages stay lazy instead of competing with the current page's requests.
 		for (const loader of [loadConnectionsView, loadWorkspacePage]) {
+			if (!canPreloadRoutes()) return;
 			await loader().catch(() => undefined);
 		}
 	};
 
 	const requestIdle = (
 		window as Window & {
-			requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
+			requestIdleCallback?: (callback: () => void) => number;
 		}
 	).requestIdleCallback;
-	if (requestIdle) requestIdle(() => void preload(), { timeout: 2_500 });
+	if (requestIdle) requestIdle.call(window, () => void preload());
 	else window.setTimeout(() => void preload(), 800);
 };
 

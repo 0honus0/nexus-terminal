@@ -1655,3 +1655,13 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 首轮根 check、全量格式及双端 build 通过；源码复审补齐文本失败后停止后续批次。第二轮核对独立 6 文件提交快照，检查事件顺序、按键释放、慢消费者的暂停/恢复、并行发送失败及 close 等待，快照静态检查、全量格式及双端构建通过。复审进一步将批次限制为 32 完整字符，计入非 BMP 字符可能生成的 UTF-16 代理对按下/释放与指针事件；最终源码补充检查和前端构建通过，补充日志为 `/tmp/nexus-rdp-input-isolated-final-{check,format,frontend}.log`。其余日志为 `/tmp/nexus-rdp-input-{check,format,build}.log` 与 `/tmp/nexus-rdp-input-isolated-{check,format,build}.log`。
 
 按 D17 未运行本地行为、浏览器或 E2E，也未注入真实弱网。远程需回归普通键/长按/组合键、中英 IME、跨批次与非 BMP 字符文本、换行/Tab、鼠标洪泛时键盘输入、拖动最终坐标与窗口外释放、失焦/切换/关闭无晚输入，以及 RDP/VNC 的弱网长时间传输、缓冲排空与发送错误后的真实关闭。静态通过不证明实际输入延迟已改善；本轮沿用用户的两轮复审及提交要求，仅提交这些变更，不推送、部署或重启后端。
+
+### 2026-10-23 前端首屏与静态交付（仅静态与产物）
+
+范围：首屏原静态依赖分组、弱网/省流/后台停止路由预取、构建 gzip 旁文件、哈希字体/图片缓存与 Docker 构建插件目录复制；保持 UI 源码与操作入口。首轮同一工作区构建的 HTML 直接 JS/CSS 引用从 54 个降到 5 个，原始字节从 1,746,867 降至 1,733,350，统一 gzip-9 从 508,603 降至 483,349；该工作区含并行 UI 修改，不能跨不同源码比较实际时延。321 个 gzip 旁文件逐一解压后与原文件完全一致，均达到至少 1 KiB 且压缩更小，包含 index.html。远程桌面、编辑器及文件预览继续动态加载。
+
+两轮审核完成：首轮复核分包标签、压缩并发、预取前复查及缓存匹配优先级，修复 Dockerfile 未复制前轮新增 build 插件目录、哈希字体图片被七天规则覆盖的问题。根 check、全量格式、Frontend build 与构建插件的独立严格 TypeScript/ESLint 检查通过，日志为 `/tmp/nexus-front-delivery-{check,format,build,plugin-check,plugin-lint}.log`。第二轮对仅含本次 10 文件变更的暂存快照执行根 check、全量格式、Frontend build 和插件专项静态检查，均通过；日志为 `/tmp/nexus-front-delivery-isolated-{check,format,build,plugin-check,plugin-lint}.log`。独立快照首屏同为 5 个引用（原始 1,720,614 字节、gzip-9 482,020 字节），314 个 gzip 逐一解压一致，WASM 二进制校验保持原 SHA-256。通过 JS AST 追踪全部首屏静态导入，只有 runtime/vendor/core 三个 JS，TerminalView、Monaco、RDP 与 PDF/表格/文档/数据库预览均不在静态闭包内；产物证据为 `/tmp/nexus-front-delivery-artifacts.log`。
+
+独立快照的 `docker build --target frontend-builder` 通过，日志为 `/tmp/nexus-front-delivery-docker-final.log`；生产配置在现有 Alpine Nginx 1.30.4 镜像中通过 `nginx -t`，确认包含 gzip_static 模块，日志为 `/tmp/nexus-front-delivery-nginx.log`。DEPLOYMENT 代理示例补齐临时 http/server 外壳后通过本机 Nginx 配置静态检查，日志为 `/tmp/nexus-front-delivery-proxy-example.log`。仅构建自有校验镜像和检查配置，未启动应用服务。
+
+按 PLAN D17 未运行本地行为、浏览器或 E2E；未测试真实压缩协商、冷/热缓存、路由视觉与弱网导航耗时，也未部署、重启服务或修改实际边缘代理。远程需回归登录/主页/Workspace/设置的路由、重功能动态加载、PDF worker、缺失资产返回 404、gzip/identity 协商、HTML/SW 更新与 hash 字体图片缓存；静态请求数下降不证明端到端延迟。本次仅提交上述变更，不含并行 UI/安装功能，不推送。

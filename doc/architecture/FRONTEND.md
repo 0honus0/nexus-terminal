@@ -604,6 +604,17 @@ Terminal background由useTerminalBackground持有文档生命周期：同页会�
 
 数据页高级维护不再装配 AgentMaintenancePanel。当前前端只保留 HostDiagnosticsPanel 与 MutationRecoveryPanel；插件暂存恢复、版本目录、手工数据迁移和运行态观察没有 UI 入口，相关后端 API 与 use-plugin-management 的普通安装／升级消费者暂时保留。普通插件页只展示安装／升级／卸载与已卸载数据删除。
 
+## 首屏分包与静态交付
+
+1. **职责与范围**：Vite 只合并首屏原有静态依赖，减少初始资源请求；Router 在网络和空闲条件允许时预取常用页面，Nginx 负责静态压缩与缓存。保持 UI 与主动导航行为。
+2. **子功能与目录**：vite.config.ts 持有 `$initial` 分组；build/precompressed-assets.ts 生成 gzip 旁文件；app/router 持有预取判定；nginx.conf 与根 Dockerfile 交付产物。
+3. **依赖方向**：构建插件仅依赖 Vite/Node，不进入浏览器运行时。首屏 vendor 分组仅接收原静态依赖，Monaco、远程桌面和文件预览仍沿各自动态入口加载。
+4. **类型与转换**：沿用 Vite Plugin/产物与 Node 字节类型，浏览器 connection/idle callback 为局部可选技术能力；无 Shared、HTTP/WS 或业务契约变化。
+5. **入口与安装**：生产构建安装预压缩插件；Docker frontend-builder 显式复制整个 build 目录。Nginx 使用 gzip_static 协商旁文件，动态 gzip 保留，客户端不支持时仍读取原文件；HTTPS HTTP/2 由实际 TLS 边缘配置。
+6. **数据、事务与并发**：仅处理至少 1 KiB 且压缩更小的 HTML/JS/MJS/CSS/JSON/SVG/WASM 构建产物，最多四个压缩任务并发。哈希资产含字体图片使用一年 immutable 缓存；HTML/SW 及时更新，API、认证和插件策略保持原 owner。
+7. **生命周期与失败**：构建压缩失败使构建失败，不交付缺失原文件的包。预取在调度及每个动态加载前复核离线、显隐、省流、2G/3G、RTT 和带宽；支持 requestIdleCallback 时不设强制超时。停止后台预取不影响用户主动导航，导入失败仍交由原路由恢复路径处理。
+8. **当前能力与验收**：静态分包、压缩一致性、类型、镜像构建及 Nginx 配置检查见 testing；真实浏览器资源调度、视觉、冷/热缓存与弱网耗时按 D17 待远程验收。部署生效步骤见 DEPLOYMENT，不将产物请求数视为实测延迟。
+
 ## 保持 UI 的列表、终端与资源加载优化
 
 1. **职责与范围**：连接管理和工作区目录组件拥有派生列表；terminalOutputWriter 拥有输出批处理；Vite 构建拥有 IronRDP WASM 资产拆分。不更改布局、样式、尺寸及操作入口。

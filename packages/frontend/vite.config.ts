@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue';
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath } from 'node:url';
 import { rdpWasmAssets } from './build/rdp-wasm-assets.ts';
+import { precompressedAssets } from './build/precompressed-assets.ts';
 
 const resolveLocalModule = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
@@ -31,12 +32,23 @@ export default defineConfig({
 			),
 		},
 	},
-	plugins: [rdpWasmAssets(), vue(), tailwindcss()],
+	plugins: [rdpWasmAssets(), vue(), tailwindcss(), precompressedAssets()],
 	oxc: {
 		target: 'es2025',
 	},
 	build: {
 		target: 'es2025',
+		rolldownOptions: {
+			output: {
+				codeSplitting: {
+					// Only group modules already required by the entry; keep optional feature graphs lazy.
+					groups: [
+						{ name: 'app-vendor', tags: ['$initial'], test: /[\\/]node_modules[\\/]/, priority: 20 },
+						{ name: 'app-core', tags: ['$initial'], priority: 10 },
+					],
+				},
+			},
+		},
 		// Monaco and its language workers are intentionally emitted as large,
 		// independently cached chunks. The default 500 kB threshold reports these
 		// expected editor assets as warnings even though they are already split.
