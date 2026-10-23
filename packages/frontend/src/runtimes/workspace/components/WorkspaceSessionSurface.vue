@@ -189,11 +189,6 @@
 	const FILE_MANAGER_POPUP_DEFAULT_WIDTH = 896;
 	const FILE_MANAGER_POPUP_MIN_WIDTH = 170;
 	const FILE_MANAGER_POPUP_MIN_HEIGHT = 320;
-	const FILE_MANAGER_POPUP_ACTION_SIZE = 30;
-	const FILE_MANAGER_POPUP_ACTION_GAP = 4;
-	const FILE_MANAGER_POPUP_TOOLBAR_INLINE_PADDING = 10;
-	const FILE_MANAGER_POPUP_FRAME_WIDTH = 2;
-	const FILE_MANAGER_POPUP_SNAP_DISTANCE = 18;
 
 	const fileManagerPopupAvailableWidth = () => Math.max(1, window.innerWidth - 32);
 
@@ -204,32 +199,6 @@
 
 	const fileManagerPopupResponsiveMinHeight = () =>
 		Math.min(FILE_MANAGER_POPUP_MIN_HEIGHT, fileManagerPopupAvailableHeight());
-
-	const fileManagerPopupSingleRowWidth = () => {
-		const actionCount = 7 + (props.showPopupFileEditor ? 1 : 0);
-		return (
-			actionCount * FILE_MANAGER_POPUP_ACTION_SIZE +
-			(actionCount - 1) * FILE_MANAGER_POPUP_ACTION_GAP +
-			FILE_MANAGER_POPUP_TOOLBAR_INLINE_PADDING +
-			FILE_MANAGER_POPUP_FRAME_WIDTH
-		);
-	};
-
-	const snapFileManagerPopupWidth = (width: number) => {
-		const twoByFourWidth = Math.max(
-			FILE_MANAGER_POPUP_MIN_WIDTH,
-			4 * FILE_MANAGER_POPUP_ACTION_SIZE +
-				3 * FILE_MANAGER_POPUP_ACTION_GAP +
-				FILE_MANAGER_POPUP_TOOLBAR_INLINE_PADDING +
-				FILE_MANAGER_POPUP_FRAME_WIDTH,
-		);
-		const singleRowWidth = fileManagerPopupSingleRowWidth();
-		return (
-			[twoByFourWidth, singleRowWidth].find(
-				(candidate) => Math.abs(width - candidate) <= FILE_MANAGER_POPUP_SNAP_DISTANCE,
-			) ?? width
-		);
-	};
 
 	const defaultFileManagerPopupSize = () => ({
 		width: Math.min(FILE_MANAGER_POPUP_DEFAULT_WIDTH, fileManagerPopupAvailableWidth()),
@@ -575,7 +544,6 @@
 		// bottom-right corner follows the resize handle rather than moving at half speed.
 		widthMultiplier: 2,
 		heightMultiplier: 2,
-		widthSnap: snapFileManagerPopupWidth,
 	});
 	const editorPopupSizing = usePersistentResizablePanel({
 		storageKey: EDITOR_POPUP_SIZE_KEY,

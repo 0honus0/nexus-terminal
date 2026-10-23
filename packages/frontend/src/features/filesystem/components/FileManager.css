@@ -151,7 +151,7 @@
 
 .file-manager-actions {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(var(--fm-control-size), 1fr));
+	grid-template-columns: repeat(4, minmax(0, 1fr));
 	width: 100%;
 	min-width: 0;
 	align-items: center;
@@ -659,6 +659,26 @@
 	.file-manager-dialog-actions :deep(.ui-button) {
 		height: 44px;
 		min-height: 44px;
+	}
+}
+
+/* Single-row thresholds include 28px controls, 4px gaps and 10px toolbar padding.
+   Keep four columns below them so the 170px minimum cannot strand a 5+3 row. */
+@container file-manager-pane (min-width: 230px) {
+	.file-manager-actions:not(:has(> button:nth-child(8))) {
+		grid-template-columns: repeat(7, minmax(0, 1fr));
+	}
+}
+
+@container file-manager-pane (min-width: 262px) {
+	.file-manager-actions:has(> button:nth-child(8)):not(:has(> button:nth-child(9))) {
+		grid-template-columns: repeat(8, minmax(0, 1fr));
+	}
+}
+
+@container file-manager-pane (min-width: 294px) {
+	.file-manager-actions:has(> button:nth-child(9)) {
+		grid-template-columns: repeat(9, minmax(0, 1fr));
 	}
 }
 

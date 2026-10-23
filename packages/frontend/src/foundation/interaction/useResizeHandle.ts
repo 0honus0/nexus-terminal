@@ -12,7 +12,6 @@ export interface ResizeHandleOptions {
 	minHeight: number | (() => number);
 	maxWidth?: () => number;
 	maxHeight?: () => number;
-	widthSnap?: (width: number) => number;
 	canStart?: (event: PointerEvent) => boolean;
 	onStart?: (size: ResizeSize) => void;
 	onMove?: (size: ResizeSize) => void;
@@ -59,7 +58,7 @@ export function useResizeHandle(options: ResizeHandleOptions) {
 			minWidth,
 			maxWidth,
 		);
-		options.width.value = clamp(options.widthSnap?.(nextWidth) ?? nextWidth, minWidth, maxWidth);
+		options.width.value = nextWidth;
 		options.height.value = clamp(
 			startHeight + (event.clientY - startY) * heightDirection * (options.heightMultiplier ?? 1),
 			resolveLimit(options.minHeight),

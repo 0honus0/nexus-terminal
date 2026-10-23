@@ -1,5 +1,13 @@
 # Nexus Terminal E2E
 
+## 文件管理器连续缩放回归（2026-10-23，待远程）
+
+用户单独授权修复拖动阻力，不混入 E2E 视觉适配。移除浮窗 pointermove 的 ±18px widthSnap 和分栏松手吸附；保留 170px 最小宽度、居中浮窗的双倍指针倍率、最大宽度及持久化。按钮按实际七/八/九个选择单行或四列，不再在最小宽度留下 5+3。
+
+新增 `ssh/file-manager-resize.spec.ts`，经真实 SSH/文件管理器入口进行一次不松手的双向拖动，逐点校验 310px 至 158px 请求区间的实际宽度（下限 170px），覆盖原单行吸附范围、换行断点和最小宽度吸附区；同时验证八按钮为 1×8 或 2×4、按钮不小于 28px、无横向溢出，松手与关闭重开不改变最终 310px。不执行本地行为测试。前批 `72dd5714` / 远程 `39998158139` 尚在运行，本批不推送取消它。
+
+两轮源码复审覆盖全部 widthSnap 消费者移除、指针倍率/边界、七/八/九按钮断点、键盘分栏、保存恢复及取消/卸载收尾。目标测试静态类型通过，日志 `/tmp/nexus-file-resize-test-types.log`。工作区根 check 被并行外观组件的 UiPopover 必填属性类型错误阻断，全量格式被其它 PLAN 表格阻断，未修改这些内容。10 文件独立暂存快照 `/tmp/nexus-file-resize-index` 的根 check、全量格式及双端 build 通过，日志 `/tmp/nexus-file-resize-index-{check,format,build}.log`；未将静态通过记为实际拖动或新 E2E 通过。
+
 ## 第六批：目录协议及菜单/审批定位（2026-10-23）
 
 远程 [39967104850](https://github.com/0honus0/nexus-terminal/actions/runs/39967104850) / `517f7814f035be1c9f92040811fe7e2b6bd8a033` 已结束，459 个场景最终 435 通过、23 失败、1 超时；按场景最后结果去重，保留 timedOut。质量、runner、Docker smoke 和 RDP 所在分片通过；不等同于弱网体验已验收。原日志 `/tmp/nexus-e2e-39967104850-shard{1..8}.log`，完整清单 `/tmp/nexus-e2e-39967104850-cases.json`。

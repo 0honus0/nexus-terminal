@@ -42,6 +42,8 @@ Frontend展示产品状态并驱动用例，服务端事实不在浏览器重建
 
 ### 基础组件与响应式呈现
 
+文件管理器的换行由 Filesystem CSS 按容器实际宽度及七/八/九个按钮选择单行或四列；Workspace 只维护浮窗/分栏最小最大尺寸和持久化。foundation 的 resize 按原指针起点及倍率连续计算，不插入业务宽度吸附，松手保存实际宽度；窗口关闭、卸载和取消沿原监听清理流程处理。
+
 1. **职责与范围**：自研组件统一控件、主题、密度、反馈与叠层；业务状态、授权、CAS 和未知结果保护仍归 feature/runtime，不引入完整第三方管理 UI 框架替代现有设计。
 2. **子功能与目录**：`foundation/ui` 定义组件和 `uiTypes`，由 `index.ts` 精确导出；`app/styles/tokens.css` 持主题变量，`uiGen2.css` 和 `uiCatalog.css` 持共用样式，经 `global.css` 安装。功能专用布局保留在所属 feature/runtime。
 3. **依赖方向**：app/feature/runtime → foundation；组件不导入认证、业务 Store 或 Backend。全局通知由 `shared/feedback` 持有，基础内联提示不代替操作结果通知。

@@ -191,62 +191,13 @@
 	watch(splitRoot, observeSplitSize, { flush: 'post' });
 	onBeforeUnmount(() => splitResizeObserver?.disconnect());
 
-	const containsWorkspacePane = (node: WorkspaceLayoutNodeState, component: string): boolean =>
-		node.type === 'pane'
-			? node.component === component
-			: (node.children ?? []).some((child) => containsWorkspacePane(child, component));
-
-	const snapFileManagerPaneSize = (sizes: readonly number[]): readonly number[] => {
-		if (props.node.direction !== 'horizontal' || !containsWorkspacePane(props.node, 'fileManager')) return sizes;
-		const splitElement = splitRoot.value?.$el;
-		if (!(splitElement instanceof HTMLElement)) return sizes;
-		const paneElements = Array.from(splitElement.children).filter((element) =>
-			element.classList.contains('splitpanes__pane'),
-		);
-		const paneIndex = paneElements.findIndex((element) =>
-			Boolean(element.querySelector('[data-workspace-pane="fileManager"]')),
-		);
-		const fileManagerPane = paneElements[paneIndex]?.querySelector<HTMLElement>(
-			'[data-workspace-pane="fileManager"]',
-		);
-		if (paneIndex < 0 || !fileManagerPane) return sizes;
-		const actionRow = fileManagerPane.querySelector<HTMLElement>('.file-manager-actions');
-		const firstButton = actionRow?.querySelector<HTMLElement>('button');
-		const toolbar = fileManagerPane.querySelector<HTMLElement>('.file-manager-toolbar');
-		if (!actionRow || !firstButton || !toolbar || !sizes[paneIndex]) return sizes;
-
-		const buttonWidth = firstButton.getBoundingClientRect().width;
-		const buttonCount = actionRow.querySelectorAll('button').length;
-		const actionStyle = getComputedStyle(actionRow);
-		const gap = Number.parseFloat(actionStyle.columnGap) || 0;
-		const controlSize = Number.parseFloat(actionStyle.getPropertyValue('--fm-control-size')) || buttonWidth;
-		const toolbarStyle = getComputedStyle(toolbar);
-		const horizontalPadding =
-			(Number.parseFloat(toolbarStyle.paddingLeft) || 0) + (Number.parseFloat(toolbarStyle.paddingRight) || 0);
-		const twoByFourWidth = Math.max(170, 4 * controlSize + 3 * gap + horizontalPadding);
-		// Splitpanes converts pane percentages back to pixels after subtracting splitter
-		// tracks, so include a small width margin to keep the final row on one line.
-		const singleRowWidth = buttonCount * controlSize + (buttonCount - 1) * gap + horizontalPadding + 4;
-		const currentWidth = fileManagerPane.getBoundingClientRect().width;
-		const snapWidth = [twoByFourWidth, singleRowWidth].find(
-			(candidate) => Math.abs(currentWidth - candidate) <= 18,
-		);
-		if (!snapWidth || !splitElement.clientWidth) return sizes;
-
-		const snappedSize = (snapWidth / splitElement.clientWidth) * 100;
-		const otherTotal = sizes.reduce((total, size) => total + size, 0) - sizes[paneIndex]!;
-		if (otherTotal <= 0) return sizes;
-		const remaining = 100 - snappedSize;
-		return sizes.map((size, index) => (index === paneIndex ? snappedSize : (size / otherTotal) * remaining));
-	};
-
 	const handleLayoutResize = (payload: SplitpanesResizedPayload): void => {
 		// Splitpanes also emits `resized` while panes register or reconcile. Only an
 		// explicit splitter interaction owns and persists Workspace layout sizes.
 		if (!payload.event || props.layoutLocked || props.node.type !== 'container') return;
 		const sizes = payload.panes.map((pane) => pane.size);
 		if (sizes.length !== (props.node.children?.length ?? 0) || sizes.some((size) => !Number.isFinite(size))) return;
-		emit('layoutResize', props.node.id, [...snapFileManagerPaneSize(sizes)]);
+		emit('layoutResize', props.node.id, sizes);
 	};
 
 	const paneMinimumSize = (child: WorkspaceLayoutNodeState): number =>
