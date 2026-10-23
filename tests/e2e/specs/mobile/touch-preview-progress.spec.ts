@@ -270,10 +270,7 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
 	await expect(nextPageButton).toBeVisible();
 	await expect(outlineToggle).toBeVisible();
 	await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false');
-	const closedOutlineToggleStyle = await outlineToggle.evaluate((element) => {
-		const style = getComputedStyle(element);
-		return { color: style.color, backgroundColor: style.backgroundColor };
-	});
+	await expect(outlineToggle).toHaveAttribute('data-appearance', 'ghost');
 	await expect(previewHorizontalScrollbar(dialog)).toBeHidden();
 
 	const scroller = pdfScroller(dialog);
@@ -286,28 +283,15 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
 	await outlineToggle.click();
 	await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
 	await expect(outlineToggle).toHaveAttribute('aria-expanded', 'true');
-	await expect
-		.poll(() =>
-			outlineToggle.evaluate((element) => {
-				const style = getComputedStyle(element);
-				return { color: style.color, backgroundColor: style.backgroundColor };
-			}),
-		)
-		.not.toEqual(closedOutlineToggleStyle);
+	await expect(outlineToggle).toHaveAttribute('data-appearance', 'soft');
+	await expect(outlineToggle).toHaveAttribute('data-tone', 'primary');
 
-	// Tapping the same toolbar button to hide the drawer must also clear its
-	// visual active state. Touch browsers can otherwise leave :hover stuck.
+	// Neutral hover can remain on touch devices; it must not retain selected appearance.
 	await outlineToggle.click();
 	await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
 	await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false');
-	await expect
-		.poll(() =>
-			outlineToggle.evaluate((element) => {
-				const style = getComputedStyle(element);
-				return { color: style.color, backgroundColor: style.backgroundColor };
-			}),
-		)
-		.toEqual(closedOutlineToggleStyle);
+	await expect(outlineToggle).toHaveAttribute('data-appearance', 'ghost');
+	await expect(outlineToggle).toHaveAttribute('data-tone', 'neutral');
 
 	await outlineToggle.click();
 	await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');

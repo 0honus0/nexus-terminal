@@ -769,7 +769,7 @@
 			padding-inline: 0.45rem;
 		}
 	}
-	@container quick-commands-pane (max-width: 140px) {
+	@container quick-commands-pane (max-width: 260px) {
 		.quick-commands-controls {
 			flex-wrap: wrap;
 			justify-content: space-between;

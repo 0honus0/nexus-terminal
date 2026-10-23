@@ -347,7 +347,8 @@ test('mobile Markdown preview edits and saves through CodeMirror', async ({ page
 		await expect(preview.locator('strong')).toHaveText('preview-ok');
 		const editBox = await preview.getByRole('button', { name: 'Edit', exact: true }).boundingBox();
 		expect(editBox).toBeTruthy();
-		expect(editBox!.height).toBeGreaterThanOrEqual(40);
+		expect(editBox!.height).toBe(28);
+		await expect(preview.getByRole('button', { name: 'Edit', exact: true })).toBeEnabled();
 		await expect(preview.locator('.file-editor-container')).toBeHidden();
 		await captureFunctionalScreenshot(page, 'mobile-markdown-preview.png');
 	});

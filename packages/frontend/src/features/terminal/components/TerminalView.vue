@@ -366,12 +366,25 @@
 				await writeTerminal(chunk);
 			}
 			if (!terminal || generation !== historyViewGeneration) return;
+			// xterm 6 updates its custom scrollbar dimensions on the next frame.
+			// Anchoring before that sync clamps to the previous live window's extent.
+			await new Promise<void>((resolve) => {
+				const finish = () => {
+					window.clearTimeout(timer);
+					window.cancelAnimationFrame(frame);
+					resolve();
+				};
+
+				const frame = window.requestAnimationFrame(finish);
+				const timer = window.setTimeout(finish, 100);
+			});
+			if (!terminal || generation !== historyViewGeneration) return;
 			const anchoredViewportY = Math.max(
 				0,
 				Math.min(terminal.buffer.active.baseY, continuationStart - terminal.rows),
 			);
 			terminal.scrollToLine(anchoredViewportY);
-			historyLastViewportY = anchoredViewportY;
+			historyLastViewportY = terminal.buffer.active.viewportY;
 			syncSearchDecorations();
 		} finally {
 			if (generation === historyViewGeneration) {

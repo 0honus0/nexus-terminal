@@ -105,7 +105,7 @@
 
 	<div
 		v-else
-		class="flex h-9 min-w-0 max-w-[min(72vw,22rem)] items-center gap-1 rounded-lg border border-border bg-background px-1 shadow-sm sm:h-8"
+		class="preview-search-controls flex h-9 max-w-[min(72vw,22rem)] items-center gap-1 rounded-lg border border-border bg-background px-1 shadow-sm sm:h-8"
 	>
 		<UiSearchInput
 			ref="inputRef"
@@ -114,7 +114,7 @@
 			:aria-label="t('fileManager.preview.search', 'Search in document')"
 			:clear-label="t('fileManager.preview.searchClose', 'Close search')"
 			density="compact"
-			class="min-w-20 flex-1"
+			class="preview-search-input flex-1"
 			@update:model-value="emit('update:query', $event)"
 			@keydown="handleInputKeydown"
 		/>
@@ -164,3 +164,13 @@
 		</UiButton>
 	</div>
 </template>
+
+<style scoped>
+	.preview-search-controls {
+		min-width: 16rem;
+		flex-shrink: 0;
+	}
+	.preview-search-input {
+		min-width: 6rem;
+	}
+</style>

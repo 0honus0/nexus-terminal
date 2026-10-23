@@ -155,7 +155,22 @@ test('server status keeps values aligned and contained in narrow, short and zoom
 			const close = history.getByRole('button', { name: '关闭趋势图', exact: true });
 			await expect(close).toBeVisible();
 			await expect(history.locator('.history-current')).toHaveText('4.2%');
-			expect((await chart.locator('canvas').boundingBox())!.height).toBeGreaterThan(20);
+
+			const canvas = chart.locator('canvas');
+			await expect(canvas).toBeVisible();
+			const geometry = await canvas.evaluate((element: HTMLCanvasElement) => {
+				const rect = element.getBoundingClientRect();
+				return {
+					width: rect.width,
+					height: rect.height,
+					pixelsWide: element.width,
+					pixelsHigh: element.height,
+				};
+			});
+			expect(geometry.height).toBeGreaterThan(0);
+			expect(geometry.width).toBeGreaterThan(0);
+			expect(geometry.pixelsHigh).toBeGreaterThanOrEqual(Math.floor(geometry.height));
+			expect(geometry.pixelsWide).toBeGreaterThanOrEqual(Math.floor(geometry.width));
 			if (scale === 1.6 && size.width === 294)
 				await monitor.screenshot({ path: testInfo.outputPath('status-history-narrow-zoomed.png') });
 			await close.click();

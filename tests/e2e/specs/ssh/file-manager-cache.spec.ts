@@ -140,6 +140,8 @@ test('hover preloads only the intended directory and clicking shares its already
 	try {
 		await connectTestSshFromConnectionsPage(page, await ensureTestSshConnection(context.request));
 		await openConnectedFileManager(page);
+		await manager(page).locator('.file-manager-path-input').hover();
+		// Leaving the list cancels its queued hover; also drain both initial reads.
 		// The embedded browser may still be finishing its initial read when the popup is ready.
 		// Drain both before resetting the server's global OPENDIR counter.
 		await expect.poll(() => observation.inFlight.size).toBe(0);

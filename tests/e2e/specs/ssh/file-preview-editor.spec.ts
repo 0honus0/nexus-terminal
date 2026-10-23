@@ -700,7 +700,9 @@ test('file previews and text editor protect historical file-opening regressions'
 		}));
 		expect(searchCornerMetrics.barRadius).toBeGreaterThan(0);
 		expect(searchCornerMetrics.inputRadius).toBeGreaterThan(0);
+		expect((await pdfSearch.boundingBox())!.width).toBeGreaterThanOrEqual(24);
 		await pdfSearch.fill('target');
+		expect((await pdfSearch.boundingBox())!.width).toBeGreaterThanOrEqual(24);
 		await expect(previewSearchCount(dialog, '1/2')).toHaveText('1/2');
 		await expect(pdfCurrentPage(dialog)).toHaveValue('2');
 		await expect(dialog.locator('mark[data-preview-search-active]')).toHaveText('target');

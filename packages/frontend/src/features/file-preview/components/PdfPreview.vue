@@ -778,6 +778,12 @@
 		-webkit-overflow-scrolling: touch;
 	}
 
+	@media (min-width: 640px) {
+		.pdf-toolbar:has(.preview-search-controls) {
+			flex-wrap: wrap;
+		}
+	}
+
 	@media (max-width: 639px) {
 		.pdf-preview-root {
 			padding-bottom: 3.35rem;

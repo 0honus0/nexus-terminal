@@ -16,6 +16,13 @@ import { selectUiOption } from '../../support/ui-select';
 
 const row = (page: Page, filename: string) => fileManagerRow(page, filename);
 
+async function openPreview(page: Page, filename: string): Promise<void> {
+	const target = row(page, filename);
+	// FileManager switches to single-click activation below the real 768px breakpoint.
+	if ((page.viewportSize()?.width ?? 1440) < 768) await target.click();
+	else await target.dblclick();
+}
+
 const documentPopup = (page: Page): Locator =>
 	page.locator('[data-document-mode="preview"][data-workspace-active="true"]:visible').first();
 
@@ -221,7 +228,7 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
 
 	await slowStep('open an image preview and hide the preview workspace without closing its tab', async () => {
 		const filename = '预览-测试.png';
-		await row(page, filename).dblclick();
+		await openPreview(page, filename);
 		const dialog = documentPopup(page);
 		await expect(dialog.locator('img')).toBeVisible();
 		await hidePreview(page, filename);
@@ -229,7 +236,7 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
 
 	await slowStep('open PDF and preserve page two while opening other previews', async () => {
 		const filename = 'preview.pdf';
-		await row(page, filename).dblclick();
+		await openPreview(page, filename);
 		const dialog = documentPopup(page);
 		await expect(visiblePdfPageCount(dialog)).toHaveText('3');
 		await dialog.getByRole('button', { name: 'Next page', exact: true }).click();
@@ -239,7 +246,7 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
 
 	await slowStep('open XLSX and preserve the selected worksheet while opening DOCX', async () => {
 		const filename = 'preview.xlsx';
-		await row(page, filename).dblclick();
+		await openPreview(page, filename);
 		const dialog = documentPopup(page);
 		await expect(dialog.getByRole('button', { name: 'Next page', exact: true })).toHaveCount(0);
 		await worksheetTab(dialog, 'Second').click();
@@ -249,7 +256,7 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
 
 	await slowStep('DOCX opens in the same preview workspace with four switchable tabs', async () => {
 		const filename = 'preview.docx';
-		await row(page, filename).dblclick();
+		await openPreview(page, filename);
 		const dialog = documentPopup(page);
 		await expect(dialog.getByText('Nexus DOCX E2E', { exact: true })).toBeVisible({ timeout: 20_000 });
 
@@ -324,7 +331,7 @@ test('PDF XLSX and DOCX previews use one content scrollbar while XLSX sheet tabs
 		async () => {
 			await page.setViewportSize({ width: 760, height: 860 });
 			const filename = 'preview.pdf';
-			await row(page, filename).dblclick();
+			await openPreview(page, filename);
 			const dialog = documentPopup(page);
 			await expect(visiblePdfPageCount(dialog)).toHaveText('3');
 			for (let index = 0; index < 5; index += 1)
@@ -369,7 +376,7 @@ test('PDF XLSX and DOCX previews use one content scrollbar while XLSX sheet tabs
 	await slowStep('XLSX content and worksheet-tab horizontal scrolling remain separate controls', async () => {
 		await page.setViewportSize({ width: 760, height: 860 });
 		const filename = 'preview.xlsx';
-		await row(page, filename).dblclick();
+		await openPreview(page, filename);
 		const dialog = documentPopup(page);
 		await expect(dialog.getByText('Nexus XLSX E2E', { exact: true })).toBeVisible();
 		const { scrollbar, scroller } = await dragBottomScrollbar(
@@ -403,7 +410,7 @@ test('PDF XLSX and DOCX previews use one content scrollbar while XLSX sheet tabs
 	await slowStep('compact one-sheet XLSX hides horizontal controls when nothing exceeds the viewport', async () => {
 		await page.setViewportSize({ width: 1280, height: 860 });
 		const filename = 'compact-preview.xlsx';
-		await row(page, filename).dblclick();
+		await openPreview(page, filename);
 		const dialog = documentPopup(page);
 		await expect(dialog.getByText('Compact A1', { exact: true })).toBeVisible();
 		const scroller = spreadsheetScroller(dialog);
@@ -423,7 +430,7 @@ test('PDF XLSX and DOCX previews use one content scrollbar while XLSX sheet tabs
 	await slowStep('DOCX exposes clipped wide table content through the dedicated bottom scrollbar', async () => {
 		await page.setViewportSize({ width: 1280, height: 860 });
 		const filename = 'preview.docx';
-		await row(page, filename).dblclick();
+		await openPreview(page, filename);
 		const dialog = documentPopup(page);
 		await expect(dialog.getByText('Nexus DOCX E2E', { exact: true })).toBeVisible({ timeout: 20_000 });
 		await expect(dialog.getByText('Wide DOCX Column C', { exact: true })).toBeAttached();
@@ -456,7 +463,7 @@ test('preview tabs force refresh externally changed Markdown image PDF XLSX and 
 
 	await slowStep('Markdown keeps stale content until the preview refresh button reloads it', async () => {
 		const filename = 'README-e2e.md';
-		await row(page, filename).dblclick();
+		await openPreview(page, filename);
 		const dialog = documentPopup(page);
 		await expect(dialog.getByRole('heading', { name: 'Nexus Markdown E2E' })).toBeVisible();
 		await page.keyboard.press('Control+f');
@@ -479,7 +486,7 @@ test('preview tabs force refresh externally changed Markdown image PDF XLSX and 
 
 	await slowStep('image refresh bypasses the cached inline URL and reloads changed pixels', async () => {
 		const filename = '预览-测试.png';
-		await row(page, filename).dblclick();
+		await openPreview(page, filename);
 		const dialog = documentPopup(page);
 		const image = dialog.locator('img');
 		await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBe(1);
@@ -492,7 +499,7 @@ test('preview tabs force refresh externally changed Markdown image PDF XLSX and 
 
 	await slowStep('PDF refresh replaces the PDF.js document while preserving the current page', async () => {
 		const filename = 'preview.pdf';
-		await row(page, filename).dblclick();
+		await openPreview(page, filename);
 		const dialog = documentPopup(page);
 		await expect(visiblePdfPageCount(dialog)).toHaveText('3');
 		const outline = pdfOutline(dialog);
@@ -509,7 +516,7 @@ test('preview tabs force refresh externally changed Markdown image PDF XLSX and 
 
 	await slowStep('XLSX refresh reparses the workbook while preserving the selected sheet', async () => {
 		const filename = 'preview.xlsx';
-		await row(page, filename).dblclick();
+		await openPreview(page, filename);
 		const dialog = documentPopup(page);
 		await worksheetTab(dialog, 'Second').click();
 		await expect(dialog.getByText('Second Sheet E2E', { exact: true })).toBeVisible();
@@ -523,7 +530,7 @@ test('preview tabs force refresh externally changed Markdown image PDF XLSX and 
 
 	await slowStep('DOCX refresh rerenders the changed document in its existing tab', async () => {
 		const filename = 'preview.docx';
-		await row(page, filename).dblclick();
+		await openPreview(page, filename);
 		const dialog = documentPopup(page);
 		await expect(dialog.getByText('Nexus DOCX E2E', { exact: true })).toBeVisible({ timeout: 20_000 });
 		await replaceFixture(filename);
@@ -591,7 +598,7 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
 				await connectTestSshFromConnectionsPage(page, connectionId);
 				await openConnectedFileManager(page);
 				const filename = 'preview.xlsx';
-				await row(page, filename).dblclick();
+				await openPreview(page, filename);
 				const dialog = documentPopup(page);
 				await expect(dialog).toBeVisible({ timeout: 20_000 });
 
@@ -623,10 +630,17 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
 				await expect(dialog.getByText('E2E-A24', { exact: true })).toHaveCount(0);
 				await expect(spreadsheetRows(dialog)).toHaveCount(16);
 				await expect(spreadsheetRows(dialog).first()).not.toHaveClass(/spreadsheet-header-row/);
-				const lastPageOverflow = await spreadsheetScroller(dialog).evaluate(
-					(element) => element.scrollHeight - element.clientHeight,
-				);
-				expect(lastPageOverflow).toBeLessThanOrEqual(2);
+				const scroller = spreadsheetScroller(dialog);
+				await scroller.evaluate((element) => {
+					element.scrollTop = element.scrollHeight;
+				});
+				await expect
+					.poll(() =>
+						scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop),
+					)
+					.toBeLessThanOrEqual(1);
+				await expect(dialog.getByText('E2E-F40', { exact: true })).toBeInViewport();
+				await expect(scroller.getByRole('status')).toContainText('Showing 6 of 16 columns');
 				await captureFunctionalScreenshot(page, 'file-manager-spreadsheet-compact-last-page.png', {
 					viewport: { width: 1440, height: 900 },
 				});

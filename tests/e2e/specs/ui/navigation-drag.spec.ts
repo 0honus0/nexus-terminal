@@ -8,6 +8,9 @@ test('narrow desktop navigation and settings tabs scroll by dragging without sel
 	const navigation = page.locator('.app-nav-links');
 
 	const drag = async (element: typeof navigation) => {
+		await expect.poll(() => element.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeGreaterThan(0);
+		await page.evaluate(() => document.fonts.ready.then(() => undefined));
+		await expect(element).toBeVisible();
 		const box = await element.boundingBox();
 		expect(box).toBeTruthy();
 		await page.mouse.move(box!.x + box!.width - 20, box!.y + box!.height / 2);

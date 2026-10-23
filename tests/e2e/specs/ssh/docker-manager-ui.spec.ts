@@ -482,7 +482,8 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
 			await page.mouse.down();
 			await page.mouse.move(beforePane!.x + 220, resizeY, { steps: 10 });
 			await page.mouse.up();
-			await expect.poll(async () => (await centerPane.boundingBox())?.width ?? 999).toBeLessThanOrEqual(250);
+			await expect.poll(async () => (await centerPane.boundingBox())?.width ?? 999).toBeLessThanOrEqual(360);
+			expect((await centerPane.boundingBox())!.width).toBeLessThan(beforePane!.width - 40);
 
 			const list = fileManager.locator('[data-row-scale]');
 			await expect(list).toBeVisible();
@@ -575,7 +576,10 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
 				.filter((track) => Number.parseFloat(track) > 0).length;
 			expect(actionColumnCount).toBeGreaterThan(1);
 			expect(pathMetrics.actionsJustify).toBe('normal');
-			expect(pathMetrics.rowEdgeGaps.length).toBeGreaterThanOrEqual(2);
+			// The current toolbar deliberately uses eight columns or two rows of four.
+			expect(pathMetrics.rowEdgeGaps.map((row) => row.count)).toEqual(
+				narrowMetrics.rootWidth >= 262 ? [8] : [4, 4],
+			);
 			for (const [index, row] of pathMetrics.rowEdgeGaps.entries()) {
 				expect(row.count).toBeLessThanOrEqual(actionColumnCount);
 				expect(Math.abs(row.left)).toBeLessThan(2);

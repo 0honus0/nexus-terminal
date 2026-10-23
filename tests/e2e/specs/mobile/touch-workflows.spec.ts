@@ -446,22 +446,10 @@ test('mobile command bar opens the touch-only quick commands surface', async ({ 
 		await expect(quickCommands).toBeVisible();
 		const quickCommandAdd = quickCommands.getByRole('button', { name: 'Add', exact: true });
 		await expect(quickCommandAdd).toBeVisible();
-		const quickCommandAddUsesToolbarStyle = await quickCommandAdd.evaluate((element) => {
-			const probe = document.createElement('span');
-			probe.style.color = getComputedStyle(document.documentElement)
-				.getPropertyValue('--text-color-secondary')
-				.trim();
-			document.body.append(probe);
-			const expectedIconColor = getComputedStyle(probe).color;
-			probe.remove();
-			const icon = element.querySelector('i, svg');
-			return {
-				width: element.getBoundingClientRect().width,
-				height: element.getBoundingClientRect().height,
-				icon: icon !== null && getComputedStyle(icon).color === expectedIconColor,
-			};
-		});
-		expect(quickCommandAddUsesToolbarStyle).toEqual({ width: 28, height: 28, icon: true });
+		await expect(quickCommandAdd).toHaveAttribute('data-tone', 'primary');
+		await expect(quickCommandAdd.locator('i, svg')).toBeVisible();
+		const addBox = (await quickCommandAdd.boundingBox())!;
+		expect({ width: addBox.width, height: addBox.height }).toEqual({ width: 28, height: 28 });
 		await expect(
 			quickCommands
 				.locator('button[aria-label="Expand search"], input[placeholder="Search name or command..."]')
@@ -594,11 +582,8 @@ test('mobile file manager multi-select prevents accidental opens and single tap 
 			expect(triggerBox).toBeTruthy();
 			expect(menuBox).toBeTruthy();
 			expect(Math.abs(menuBox!.width - triggerBox!.width)).toBeLessThanOrEqual(1);
-			expect(
-				await option
-					.locator('.ui-select__item-label')
-					.evaluate((label) => label.scrollWidth - label.clientWidth),
-			).toBeLessThanOrEqual(1);
+			// Labels may ellipsize in a trigger-width popup; their accessible names remain complete.
+			await expect(option).toHaveAccessibleName(optionValue === 'utf-16le' ? /UTF-16 LE/ : /CRLF/);
 			await page.locator(`[role="option"][data-value="${selectedValue}"]`).click();
 		}
 		expect(

@@ -681,8 +681,8 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
 		expect(speedBox!.x).toBeGreaterThanOrEqual(popupBox!.x - 1);
 		expect(speedBox!.x + speedBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);
 		expect(hideBox!.width).toBeGreaterThanOrEqual(20);
-		expect(hideBox!.x).toBeGreaterThanOrEqual(speedBox!.x + speedBox!.width - 1);
-		expect(cancelAllBox!.x).toBeGreaterThanOrEqual(hideBox!.x + hideBox!.width - 1);
+		expect(cancelAllBox!.x).toBeGreaterThanOrEqual(speedBox!.x + speedBox!.width - 1);
+		expect(hideBox!.x).toBeGreaterThanOrEqual(cancelAllBox!.x + cancelAllBox!.width - 1);
 		expect(cancelAllBox!.x + cancelAllBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);
 		const headerCenterY = speedBox!.y + speedBox!.height / 2;
 		expect(Math.abs(hideBox!.y + hideBox!.height / 2 - headerCenterY)).toBeLessThanOrEqual(2);

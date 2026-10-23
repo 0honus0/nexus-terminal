@@ -28,6 +28,7 @@ test('status history fits fresh samples within the selected time limit and keeps
 	page.on('websocket', (socket) => {
 		if (new URL(socket.url()).pathname !== '/ws/workspace') return;
 		socket.on('framereceived', ({ payload }) => {
+			if (typeof payload !== 'string') return;
 			const frame = readWorkspaceMessage(JSON.parse(String(payload)));
 			if (frame.type !== 'status.sample') return;
 			const sample = readRemoteStatusSample(frame.payload);

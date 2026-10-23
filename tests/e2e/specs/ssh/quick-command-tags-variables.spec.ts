@@ -145,6 +145,10 @@ test('quick command tags and saved variables survive persistence, grouping, rena
 				const name = group.getByRole('button', { name: TAG_NAME, exact: true });
 				await expect(group).toBeVisible();
 
+				const originalHeaderHeight = (await header.boundingBox())!.height;
+				const topPadding = await list.evaluate((element) =>
+					Number.parseFloat(getComputedStyle(element).paddingTop),
+				);
 				await list.evaluate((element) => element.style.setProperty('--quick-row-scale', '2.5'));
 				const spacing = await Promise.all([
 					controls.boundingBox(),
@@ -157,8 +161,11 @@ test('quick command tags and saved variables survive persistence, grouping, rena
 				expect(listBox).not.toBeNull();
 				expect(headerBox).not.toBeNull();
 				expect(nameBox).not.toBeNull();
-				expect(headerBox!.y - listBox!.y).toBeLessThanOrEqual(3);
-				expect(nameBox!.y - controlsBox!.y - controlsBox!.height).toBeLessThanOrEqual(10);
+				expect(Math.abs(headerBox!.y - listBox!.y - topPadding)).toBeLessThanOrEqual(2);
+				expect(headerBox!.height).toBe(originalHeaderHeight);
+				expect(nameBox!.y).toBeGreaterThanOrEqual(headerBox!.y);
+				expect(nameBox!.y + nameBox!.height).toBeLessThanOrEqual(headerBox!.y + headerBox!.height);
+				expect(listBox!.y).toBeGreaterThanOrEqual(controlsBox!.y + controlsBox!.height - 1);
 
 				await list.evaluate((element) => element.style.removeProperty('--quick-row-scale'));
 				await page.setViewportSize({ width: 1440, height: 900 });

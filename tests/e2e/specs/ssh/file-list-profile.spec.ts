@@ -156,6 +156,7 @@ test('profiles real large-directory navigation and sort while retaining bounded 
 			for (let sample = 0; sample < 3; sample++) {
 				const rootRequests = listingRequests.get('/') ?? 0;
 				await manager.getByTitle('Refresh', { exact: true }).click();
+				await input.hover();
 				await expect.poll(() => listingRequests.get('/')).toBe(rootRequests + 1);
 				await expect.poll(() => pendingListings.size).toBe(0);
 				await input.fill(`/list-profile-${count}`);
@@ -171,7 +172,7 @@ test('profiles real large-directory navigation and sort while retaining bounded 
 				const renderedRows = await rows.count();
 				expect(renderedRows).toBeLessThan(200);
 				const sortMs = await manager.evaluate(async (element, count) => {
-					const button = element.querySelector('.file-manager-name-sort')!;
+					const button = element.querySelector<HTMLButtonElement>('.file-manager-name-sort')!;
 					const start = performance.now();
 					await new Promise<void>((resolve) => {
 						const observer = new MutationObserver(() => {

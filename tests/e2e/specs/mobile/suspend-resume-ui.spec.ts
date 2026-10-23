@@ -975,7 +975,8 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
 		expect(connectionsBox!.y).toBeLessThan(suspendedBox!.y);
 		await expect(emptyPanels).toHaveCSS('overflow-y', 'auto');
 		await expect(connectionsPanel.locator('.workspace-connection-content')).toHaveCSS('overflow-y', 'visible');
-		await expect(suspendedPanel.locator('.session-list-container')).toHaveCSS('overflow-y', 'visible');
+		// The page now bounds the suspended catalog independently of the outer page.
+		await expect(suspendedPanel.locator('.session-list-container')).toHaveCSS('overflow-y', 'auto');
 	});
 
 	await slowStep('Suspended Sessions UI resumes the hanging shell instead of opening a new SSH shell', async () => {

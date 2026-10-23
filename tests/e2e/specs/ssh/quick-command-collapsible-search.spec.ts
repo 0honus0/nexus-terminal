@@ -154,7 +154,9 @@ test('quick command search stays visible by default and can be collapsed behind 
 			const search = quickView.getByPlaceholder('Search name or command...', { exact: true });
 			await expect(search).toBeVisible();
 			await expect(search).toBeFocused();
+			expect((await search.boundingBox())!.width).toBeGreaterThanOrEqual(24);
 			await search.fill('Collapsible Search');
+			expect((await search.boundingBox())!.width).toBeGreaterThanOrEqual(24);
 			await expect(quickView.locator(`[data-command-id="${commandId}"]`)).toBeVisible();
 
 			await search.fill('');

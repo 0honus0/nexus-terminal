@@ -550,6 +550,11 @@
 			activeTargets.map((session) => session.adapters.terminal.sendInput(payload)),
 		);
 		if (!isCurrent()) return;
+		for (const [index, session] of activeTargets.entries()) {
+			if (results[index]?.status === 'fulfilled' && registry.sessions.get(session.id) === session) {
+				surfaces.get(session.id)?.scrollTerminalToBottom?.();
+			}
+		}
 		if (allSessions) {
 			if (activeTargets.length > 0) {
 				feedback.notifySuccess(
