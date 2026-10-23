@@ -14,6 +14,8 @@ import { encodeCleanPathResponse, readCleanPathRequest } from './rdcleanpath.js'
 const MAX_QUEUED_BYTES = 4 * 1024 * 1024;
 const SEND_HIGH_WATER_BYTES = 64 * 1024;
 const SEND_LOW_WATER_BYTES = 16 * 1024;
+// Stay within one typical TLS record so weak links do not wait for a large WS message before decoding.
+const FORWARD_BATCH_BYTES = 16 * 1024;
 const HANDSHAKE_TIMEOUT_MS = 20_000;
 const CLOSE_TIMEOUT_MS = 10_000;
 
@@ -36,6 +38,10 @@ class BrowserDesktopPeer implements DesktopTransportPeer {
 	private finished = false;
 	private initialized = false;
 	private sending = 0;
+	private readonly forwardChunks: Buffer[] = [];
+	private forwardBytes = 0;
+	private forwardImmediate: ReturnType<typeof setImmediate> | null = null;
+	private forwardPaused = false;
 	private onTerminated: (() => void) | null = null;
 	private timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -89,6 +95,12 @@ class BrowserDesktopPeer implements DesktopTransportPeer {
 				clearTimeout(this.timer);
 			}
 			this.timer = null;
+			if (this.forwardImmediate !== null) {
+				clearImmediate(this.forwardImmediate);
+				this.forwardImmediate = null;
+			}
+			this.forwardChunks.length = 0;
+			this.forwardBytes = 0;
 			this.queue.length = 0;
 			this.queuedBytes = 0;
 			this.rejectReady(new DesktopTransportFailure('unavailable'));
@@ -375,24 +387,64 @@ class BrowserDesktopPeer implements DesktopTransportPeer {
 		});
 	}
 
+	private sendForward(socket: net.Socket, bytes: Buffer): void {
+		const task = this.send(bytes);
+		if (this.ws.bufferedAmount >= SEND_HIGH_WATER_BYTES) {
+			this.forwardPaused = true;
+			socket.pause();
+		}
+		void task.then(() => {
+			if (this.forwardPaused && !this.closing && this.ws.bufferedAmount <= SEND_LOW_WATER_BYTES) {
+				this.forwardPaused = false;
+				socket.resume();
+			}
+		}, this.stop);
+	}
+
+	private flushForward(socket: net.Socket): void {
+		if (this.forwardImmediate !== null) {
+			clearImmediate(this.forwardImmediate);
+			this.forwardImmediate = null;
+		}
+		if (this.forwardBytes === 0) {
+			return;
+		}
+		const bytes =
+			this.forwardChunks.length === 1
+				? this.forwardChunks[0]
+				: Buffer.concat(this.forwardChunks, this.forwardBytes);
+		this.forwardChunks.length = 0;
+		this.forwardBytes = 0;
+		if (!this.closing && bytes) {
+			this.sendForward(socket, bytes);
+		}
+	}
+
 	private forward(socket: net.Socket): void {
-		let paused = false;
+		socket.once('end', () => this.flushForward(socket));
 		socket.on('data', (bytes: Buffer) => {
-			if (this.closing) {
+			if (this.closing || bytes.length === 0) {
 				return;
 			}
-			// Keep the byte stream moving until the real outbound buffer needs backpressure.
-			const task = this.send(bytes);
-			if (this.ws.bufferedAmount >= SEND_HIGH_WATER_BYTES) {
-				paused = true;
-				socket.pause();
+			if (this.options?.protocol !== 'rdp') {
+				this.sendForward(socket, bytes);
+				return;
 			}
-			void task.then(() => {
-				if (paused && !this.closing && this.ws.bufferedAmount <= SEND_LOW_WATER_BYTES) {
-					paused = false;
-					socket.resume();
-				}
-			}, this.stop);
+			if (this.forwardBytes + bytes.length > FORWARD_BATCH_BYTES) {
+				this.flushForward(socket);
+			}
+			if (bytes.length >= FORWARD_BATCH_BYTES) {
+				this.sendForward(socket, bytes);
+				return;
+			}
+			this.forwardChunks.push(bytes);
+			this.forwardBytes += bytes.length;
+			if (this.forwardBytes >= FORWARD_BATCH_BYTES) {
+				this.flushForward(socket);
+			} else {
+				// Coalesce TLS records from this I/O turn without waiting for a timer or a full batch.
+				this.forwardImmediate ??= setImmediate(() => this.flushForward(socket));
+			}
 		});
 	}
 }

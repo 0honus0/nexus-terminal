@@ -21,6 +21,7 @@ import {
 type RdpSession = Awaited<ReturnType<InstanceType<typeof Backend.SessionBuilder>['connect']>>;
 
 const POINTER_INTERVAL_MS = 16;
+const RESIZE_QUIET_MS = 150;
 // Allow surrogate-pair press/releases and a pointer within Fast-Path's 255-event count.
 const TEXT_BATCH_CHARACTERS = 32;
 
@@ -59,6 +60,7 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 	let textInputActive = false;
 	let touchMode = options.touchMode;
 	let latestDisplay: RemoteDesktopDisplay | null = null;
+	let requestedDisplay: RemoteDesktopDisplay | null = null;
 	const clipboardTasks = new Set<Promise<void>>();
 	const pressedKeys = new Set<number>();
 	const pressedButtons = new Set<number>();
@@ -68,6 +70,7 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	let pointerTimer: ReturnType<typeof setTimeout> | null = null;
 	let pendingPointer: { x: number; y: number } | null = null;
+	let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
 	const fail = (cause: unknown) => {
 		if (!closed) {
@@ -301,20 +304,40 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 
 	const context = (event: Event) => event.preventDefault();
 
-	const resize = (display: RemoteDesktopDisplay) => {
-		latestDisplay = display;
-		if (closed || !session) {
+	const scaleFactor = (display: RemoteDesktopDisplay) =>
+		Math.min(500, Math.max(100, Math.round((display.dpi / 96) * 100)));
+
+	const flushResize = () => {
+		resizeTimer = null;
+		const display = latestDisplay;
+		if (closed || !session || !display) {
+			return;
+		}
+		if (
+			requestedDisplay?.width === display.width &&
+			requestedDisplay.height === display.height &&
+			scaleFactor(requestedDisplay) === scaleFactor(display)
+		) {
 			return;
 		}
 		flushPointer();
 		try {
-			session.resize(
-				display.width,
-				display.height,
-				Math.min(500, Math.max(100, Math.round((display.dpi / 96) * 100))),
-			);
+			session.resize(display.width, display.height, scaleFactor(display));
+			requestedDisplay = display;
 		} catch (cause) {
 			inputFailure(cause);
+		}
+	};
+
+	const resize = (display: RemoteDesktopDisplay) => {
+		latestDisplay = { width: display.width, height: display.height, dpi: display.dpi };
+		if (resizeTimer !== null) {
+			clearTimeout(resizeTimer);
+			resizeTimer = null;
+		}
+		if (!closed && session) {
+			// Keep the existing bitmap during a drag instead of repeatedly rebuilding the remote desktop.
+			resizeTimer = setTimeout(flushResize, RESIZE_QUIET_MS);
 		}
 	};
 
@@ -435,6 +458,12 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 			if (closed) {
 				connected.shutdown();
 			} else {
+				const negotiated = connected.desktopSize();
+				try {
+					requestedDisplay = { width: negotiated.width, height: negotiated.height, dpi: 96 };
+				} finally {
+					negotiated.free();
+				}
 				if (options.hasTouch) {
 					touch = attachDesktopTouch(element, canvas, touchMode);
 				}
@@ -505,6 +534,10 @@ export const createRdpDesktop: RemoteDesktopPeerFactory = (options) => {
 				clearTimeout(timer);
 			}
 			timer = null;
+			if (resizeTimer !== null) {
+				clearTimeout(resizeTimer);
+				resizeTimer = null;
+			}
 			clipboard.close();
 			touch?.close();
 			keyboard.removeEventListener('keydown', key);

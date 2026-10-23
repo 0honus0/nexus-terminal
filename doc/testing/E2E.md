@@ -1665,3 +1665,15 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 独立快照的 `docker build --target frontend-builder` 通过，日志为 `/tmp/nexus-front-delivery-docker-final.log`；生产配置在现有 Alpine Nginx 1.30.4 镜像中通过 `nginx -t`，确认包含 gzip_static 模块，日志为 `/tmp/nexus-front-delivery-nginx.log`。DEPLOYMENT 代理示例补齐临时 http/server 外壳后通过本机 Nginx 配置静态检查，日志为 `/tmp/nexus-front-delivery-proxy-example.log`。仅构建自有校验镜像和检查配置，未启动应用服务。
 
 按 PLAN D17 未运行本地行为、浏览器或 E2E；未测试真实压缩协商、冷/热缓存、路由视觉与弱网导航耗时，也未部署、重启服务或修改实际边缘代理。远程需回归登录/主页/Workspace/设置的路由、重功能动态加载、PDF worker、缺失资产返回 404、gzip/identity 协商、HTML/SW 更新与 hash 字体图片缓存；静态请求数下降不证明端到端延迟。本次仅提交上述变更，不含并行 UI/安装功能，不推送。
+
+### 2026-10-23 RDP 尺寸与接收调度（仅静态）
+
+范围：RDP 150ms 尺寸稳定后提交、基于初始协商尺寸及有效 DPI 去重；后端同 I/O 轮小块按序合并至最多 16 KiB，单块达到阈值立即发送，尾部不等待凑满，正常读端结束先提交，关闭清理 immediate/暂存数据。VNC 保留逐块派发，原 64/16 KiB 水位、4 MiB 缓冲保护和真实发送回调收敛保持；输入、SDK 二进制、图像解码/质量与 UI 源码不变。
+
+已对照固定 IronRDP 0.7.0 发布源码核对：Session.desktopSize 读取初始协商结果且返回需释放的 DesktopSize；resize 仅向 SDK 通道提交，不是远端应用确认。SDK 使用 AsyncRead/LocalFuturesFramed 读取 WS 字节流，不依赖远端每个 TCP chunk 的 WS 边界；softbuffer 局部绘制保持原实现。首轮审核将拟定 64 KiB 小块合并收敛为 16 KiB，避免弱网等待大 WS 消息，并补正常读端结束的尾部提交。
+
+工作区根 check/build 与全量格式日志为 `/tmp/nexus-rdp-display-{check,build,format}.log`；全量格式通过，根 check/build 受并行 UI 新增四个 command-bar 偏好与 Frontend UserPreferences/Backend StoredPresentationPreferences 转换不一致影响，不改动该 UI/协议工作区。
+
+第二轮对仅含本次六文件的暂存快照复审 initial/DPI/快速恢复原尺寸、晚建连与关闭取消，以及片段顺序、阈值、大块、EOF、背压恢复与失败收敛；独立快照的根 `pnpm run check`、`pnpm run format:all:check`、双端 `pnpm run build` 通过，日志为 `/tmp/nexus-rdp-display-isolated-{check,format,build}.log`。产物确认后端仍按 16 KiB 合并并取消 immediate，前端 WASM 仍为 4,511,023 字节且 SHA-256 与前轮相同，gzip 解压一致。本轮只提交这六文件，不含并行 UI/安装功能，不推送或部署；需要更新前端并重启后端加载新实现，未代为重启。
+
+按 D17 未运行本地行为、浏览器或 E2E，也未注入弱网；后续远程需回归初始/动态尺寸、非默认 DPI、拖动中快速返回原尺寸、全屏/最小化恢复、尺寸待提交时关闭/切连接，以及小块/大块/混合 PDU、背压排空、远端 EOF 和发送失败后的关闭。不将静态通过写成真实延迟或分块显示已消除。
