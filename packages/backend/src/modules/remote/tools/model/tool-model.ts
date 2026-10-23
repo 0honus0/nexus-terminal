@@ -5,6 +5,7 @@ import type { RemoteToolInstaller } from '../../../../platform/tools/tool-port.j
 import { ToolExecutionFailure } from '../../../../platform/tools/tool-port.js';
 import type { SessionTokens } from '../../../../platform/security/session-tokens.js';
 import type { MachineConnection } from '../../../../platform/ssh/ssh-port.js';
+import { MachineConnectionFailure } from '../../../../platform/ssh/ssh-port.js';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
 import { RemoteHostKeyUntrustedError } from '../../machines/model/machine-errors.js';
 import {
@@ -24,6 +25,9 @@ function failure(cause: unknown): RemoteToolFailure {
 	}
 	if (cause instanceof RemoteHostKeyUntrustedError) {
 		return new RemoteToolFailure('host_key_untrusted', { cause });
+	}
+	if (cause instanceof MachineConnectionFailure) {
+		return new RemoteToolFailure('connection_unavailable', { cause });
 	}
 	if (cause instanceof TargetOperationError) {
 		return new RemoteToolFailure(

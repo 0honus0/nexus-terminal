@@ -37,6 +37,7 @@ export const TOOL_ERROR_CODES = [
 	'unsupported',
 	'authentication_failed',
 	'installation_failed',
+	'connection_unavailable',
 	'unavailable',
 	'operation_unknown',
 	'limit_exceeded',

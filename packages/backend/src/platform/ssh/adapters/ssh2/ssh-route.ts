@@ -3,6 +3,7 @@ import net from 'node:net';
 import type { EventEmitter } from 'node:events';
 import type { Duplex } from 'node:stream';
 import type { MachineEndpoint, MachineProxy, MachineConnectOptions } from '../../ssh-port.js';
+import { MachineConnectionFailure } from '../../ssh-port.js';
 
 export interface ConnectedRoute {
 	readonly clients: Client[];
@@ -527,6 +528,14 @@ export async function openSshRoute(endpoint: MachineEndpoint, options: MachineCo
 		}
 		if (failures.length) {
 			throw new AggregateError([error, ...failures], 'SSH route and cleanup failed');
+		}
+		if (
+			!options.signal?.aborted &&
+			error instanceof Error &&
+			'code' in error &&
+			['ECONNREFUSED', 'EHOSTUNREACH', 'ENETUNREACH', 'ETIMEDOUT'].some((code) => code === error.code)
+		) {
+			throw new MachineConnectionFailure('unreachable', { cause: error });
 		}
 		throw error;
 	} finally {

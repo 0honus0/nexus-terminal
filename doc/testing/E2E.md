@@ -909,7 +909,7 @@ Dashboard 连接区改为按实际存在的 SSH/RDP/VNC 类型分区，筛选后
 
 ## 登录页正式 UI 重构（2026-10-21，本地 CDP）
 
-按用户明确要求将正式 `LoginView` 重构为 `doc/mockups/login.html` 当前设计，保留密码登录、TOTP 二阶段、Passkey、CAPTCHA 插槽、安全错误映射和原路由跳转。右侧取消独立卡片边框、底色与阴影；主题按钮移到右侧面板右上角；普通登录不再显示工作区副标题；登录主按钮改为品牌粉紫纯色、无渐变和位移动效；Passkey 入口始终显示，并移除登录页的 `has-configured` 预探测及对应前端 API/状态。新增文案同步中英日三语。
+按用户明确要求将正式 `LoginView` 重构为当期登录页设计稿，保留密码登录、TOTP 二阶段、Passkey、CAPTCHA 插槽、安全错误映射和原路由跳转。右侧取消独立卡片边框、底色与阴影；主题按钮移到右侧面板右上角；普通登录不再显示工作区副标题；登录主按钮改为品牌粉紫纯色、无渐变和位移动效；Passkey 入口始终显示，并移除登录页的 `has-configured` 预探测及对应前端 API/状态。新增文案同步中英日三语。
 
 `https://api.honus.top` 本地 CDP 已验证 1440×900、1024×768、1024×600、768×1024、390×844、320×568 和 844×390 均无页面级横向/纵向溢出；矮横屏使用紧凑双栏，主题按钮与 Passkey 入口完整可见。登录页网络记录只有 needs-setup、status、captcha config，未发起 `/passkey/has-configured`。错误密码返回 401 并显示“用户名、密码或验证码不正确。”且停留登录页；`honus` / `honustest` 返回 200 后跳转仪表盘。密码显隐、记住我、主题切换和 localStorage 持久化均正常。Passkey 点击后 authentication-options 返回 200 并进入浏览器认证等待；本次未配置虚拟凭据，不把该结果扩大为 Passkey 登录成功。测试环境未启用 2FA/CAPTCHA，二者只核对原调用链与插槽保留。
 

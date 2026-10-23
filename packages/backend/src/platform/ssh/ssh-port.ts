@@ -37,6 +37,17 @@ export interface MachineConnectOptions {
 	verifyHostKey(host: string, port: number, publicKey: Buffer): boolean;
 }
 
+/** A native network rejection before a machine was acquired; excludes cleanup failure. */
+export class MachineConnectionFailure extends Error {
+	constructor(
+		readonly reason: 'unreachable',
+		options?: ErrorOptions,
+	) {
+		super('SSH connection ' + reason, options);
+		this.name = 'MachineConnectionFailure';
+	}
+}
+
 export interface MachinePty {
 	readonly term?: string;
 	readonly columns: number;

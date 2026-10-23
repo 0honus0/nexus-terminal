@@ -31,7 +31,7 @@ function status(code: ToolErrorCode): number {
 	if (code === 'limit_exceeded') {
 		return 429;
 	}
-	return code === 'unavailable' || code === 'shutting_down' ? 503 : 422;
+	return code === 'unavailable' || code === 'connection_unavailable' || code === 'shutting_down' ? 503 : 422;
 }
 
 async function handle(ctx: HttpRouteContext, owner: RemoteToolService, installing: boolean): Promise<void> {

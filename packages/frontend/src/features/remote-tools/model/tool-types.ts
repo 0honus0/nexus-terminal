@@ -16,6 +16,8 @@ export type ToolRequirement =
 			method: ServerTransferMethod;
 	  };
 
+export type ToolPreparation = 'ready' | 'deferred' | 'cancelled';
+
 export interface ToolOffer {
 	targetId: number;
 	tools: RemoteTool[];
