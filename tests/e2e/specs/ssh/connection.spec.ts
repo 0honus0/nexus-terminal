@@ -277,8 +277,19 @@ test('Connect All waits for each Workspace binding before mounted file managers 
 
 		const firstTab = tabs.filter({ hasText: `${prefix} A` });
 		const secondTab = tabs.filter({ hasText: `${prefix} B` });
+		const visibleSurfaces = page.locator('[data-workspace-surface]:visible');
+		await expect(visibleSurfaces).toHaveCount(1);
+		await expect(visibleSurfaces).toHaveAttribute(
+			'data-workspace-id',
+			(await page.getByRole('tab', { selected: true }).getAttribute('data-session-id')) ?? '',
+		);
 		await firstTab.click();
 		await expect(firstTab).toHaveAttribute('aria-selected', 'true');
+		await expect(visibleSurfaces).toHaveCount(1);
+		await expect(visibleSurfaces).toHaveAttribute(
+			'data-workspace-id',
+			(await firstTab.getAttribute('data-session-id')) ?? '',
+		);
 		const commandInput = page.locator('.command-bar-command-input:visible').first();
 		await expect(commandInput).toBeEnabled();
 		await commandInput.fill('for i in $(seq 1 80); do echo NEXUS_BACKGROUND_BATCH_$i; sleep 0.03; done');
@@ -286,6 +297,11 @@ test('Connect All waits for each Workspace binding before mounted file managers 
 		await page.waitForTimeout(120);
 		await secondTab.click();
 		await expect(secondTab).toHaveAttribute('aria-selected', 'true');
+		await expect(visibleSurfaces).toHaveCount(1);
+		await expect(visibleSurfaces).toHaveAttribute(
+			'data-workspace-id',
+			(await secondTab.getAttribute('data-session-id')) ?? '',
+		);
 		await page.waitForTimeout(2_800);
 		await firstTab.click();
 		await expect(firstTab).toHaveAttribute('aria-selected', 'true');

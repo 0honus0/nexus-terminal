@@ -1247,7 +1247,7 @@
 		>
 			<WorkspaceSessionSurface
 				v-for="session in registry.orderedSessions.value"
-				v-show="session.id === registry.activeId.value || session.id === preparingSessionId"
+				:visible="session.id === registry.activeId.value || session.id === preparingSessionId"
 				:key="session.id"
 				:ref="(value) => setSurface(session.id, value)"
 				class="absolute inset-0"

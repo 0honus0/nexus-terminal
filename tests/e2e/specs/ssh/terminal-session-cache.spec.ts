@@ -114,6 +114,13 @@ test('session switches retain terminal and background instances and skip unchang
 		});
 		await tab.click();
 		await expect(tab).toHaveAttribute('aria-selected', 'true');
+		await expect(page.locator('[data-workspace-surface]:visible')).toHaveCount(1);
+		await expect(terminals.filter({ visible: true })).toHaveCount(1);
+		await expect(backgrounds.filter({ visible: true })).toHaveCount(1);
+		for (const otherIndex of [0, 1, 2].filter((value) => value !== index)) {
+			await expect(terminals.nth(otherIndex)).toBeHidden();
+			await expect(backgrounds.nth(otherIndex)).toBeHidden();
+		}
 		await expect(terminals.nth(index)).toBeVisible();
 		const canvas = backgrounds.nth(index).contentFrame().locator('#scene');
 		await expect(backgrounds.nth(index)).toBeVisible();

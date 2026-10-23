@@ -10,6 +10,8 @@
 
 ### 通用远端依赖确认
 
+`WorkspacePage` 通过 `visible` 传递会话显隐；`WorkspaceSessionSurface` 禁用隐式属性继承，将 `$attrs` 和 `v-show` 显式绑定到真实会话容器。定位、预显示和可访问属性不依赖组件根节点数量，新增浮层不能破坏终端标签隔离；UiModal 继续使用原 Teleport。
+
 `features/remote-tools` 持有独立应用要求/offer、严格 Shared HTTP 转换、`useRemoteTools` 意图生命周期与复用 `RemoteToolInstallDialog`。真实消费者为 SendFilesModal 和 WorkspaceSessionSurface 的 archive 派发前路径；复用既有 UiModal/FormField/Input/Button，不重设计页面。密码仅在弹窗短期存在，确认、失效及关闭清除，不写 store/storage/logger；确认等待监听与 session/view AbortSignal 一同收尾。安装中禁用关闭和重复确认；只有真实安装回执关联原 target 且视图有效才能派发原操作，失败 Toast，未知不自动重试。未执行本地交互验收。
 
 ### 服务器发送的目录选择

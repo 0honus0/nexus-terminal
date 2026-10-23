@@ -1,5 +1,21 @@
 # Nexus Terminal E2E
 
+## SSH 多会话隔离补测与漏检核对（2026-10-23）
+
+用户明确要求新增用例，本批据此新增源码；仍按 D17 不运行本地行为、浏览器或 E2E，不自动提交、推送或触发远程。最近远程 39920261630 测试的是 `798e204f2a547213652874dca3792bfd42a194f0`，该版本 Surface 只有一个 DOM 根节点；引入并列安装弹窗的改动仍在本地工作区，未进入该轮远程。原日志 shard 3 的 Connect All 和 shard 5 的 session-cache 都实际执行通过，不能据此声称当前工作区通过，也不能断言旧用例必然漏掉当前缺陷。
+
+覆盖缺口：原缓存场景断言目标终端与背景可见、实例保留，但未完整断言所有非选中内容隐藏；原 Connect All 场景检查连接、协议错误和返回后的后台输出，未验证两个 shell 的输入/输出隔离。上一批已补 Connect All 的唯一可见容器与选中 ID，本批再补缓存场景的唯一可见容器、终端、背景及非选中内容隐藏断言。
+
+新增 `ssh/terminal-session-isolation.spec.ts` 两个场景：分别从“新建连接标签”打开不同连接配置、重复打开同一配置，检查第二标签自动选中、唯一可见容器与会话 ID 一致、不同 Workspace ID、独立 shell 变量、终端键盘输入与命令栏派发、反复 A/B 切换不混入另一会话输出，以及关闭 B 后 A 保留原 shell 并可继续输入。标记在远端 printf 时组合，完整期望值不出现在输入命令内，避免命令回显假阳性。不注入组件状态、不改 UI 或测试夹具。新文件由现有 SSH project 和分组脚本自动发现，无需手动白名单。
+
+本批根 `pnpm run check`、双端 `pnpm run build`、完整 `pnpm run format:all:check`、目标 ESLint/Prettier、三份 SSH 场景的 TypeScript 语法转换与 `git diff --check` 通过；日志 `/tmp/nexus-ssh-isolation-{check,build,format,lint,target-format}.log`。仅转换检查语法，不加载执行测试，也未启动 Playwright 收集；上述新增行为未执行，不能记为 E2E 通过。未提交、推送或部署。
+
+## SSH 第二标签画面隔离（2026-10-23）
+
+源码确认安装弹窗作为 WorkspaceSessionSurface 的并列根节点，使父组件 v-show 与 class 无法落到真实容器。独立修复改由 WorkspacePage 传递 visible，Surface 禁用隐式属性继承，将 v-show 与 $attrs 显式绑定真实容器，不依赖安装模块或根节点数量；本地安装弹窗同时保留在原容器内，但其未提交功能不纳入本次独立提交。不修改 UI 样式、会话通道或后台输出。提交前重新执行根 check、双端 build、目标 ESLint、暂存九文件 Prettier 与暂存 diff 检查通过，日志 `/tmp/nexus-ssh-commit-{check,build,lint}.log`；本次只提交独立修复、回归与文档，不推送或部署。
+
+既有 SSH connection.spec.ts 两会话场景补强新开与 A/B 切换后的唯一可见容器及选中会话 ID 断言，保留后台输出完成断言。根 `pnpm run check`、双端 `pnpm run build`、完整 `pnpm run format:all:check`、目标 Prettier 与 `git diff --check` 通过，日志为 `/tmp/nexus-ssh-surface-{check,build,format,target-format}.log`。按 PLAN D17 未运行本地行为测试、浏览器或 E2E，真实切换与安装浮层仍待远程验收。未提交、推送或部署。
+
 ## 远程 E2E 后端范围修复（2026-10-23）
 
 本轮按用户要求先处理后端与服务端夹具，不改正在重构的前端源码、UI 或浏览器测试交互。读取远程 [39830123543](https://github.com/0honus0/nexus-terminal/actions/runs/39830123543) 的八组原始 job 日志，被测 SHA 为 `8f10e54166cf322d4362f1e35fd865cdf6a96c08`；当前本地基线为 `00ec5bfb` 加未提交工作区。原轮质量与 Docker smoke 通过，日志中 HTTP 50、Auth 6、WebSocket 4、SSH 191 个完成记录均为 passed；没有在这些分组确认后端失败，不将这些旧 SHA 记录扩大为当前后端全量通过。

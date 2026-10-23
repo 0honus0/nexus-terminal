@@ -67,6 +67,8 @@
 	const ProgressCenter = defineAsyncComponent(loadProgressCenter);
 	const SendFilesModal = defineAsyncComponent(loadSendFilesModal);
 	const UploadConflictModal = defineAsyncComponent(loadUploadConflictModal);
+	// Session visibility and inherited attributes belong to the actual container, even with sibling overlays.
+	defineOptions({ inheritAttrs: false });
 
 	interface TerminalApi {
 		focus?: () => void;
@@ -92,6 +94,7 @@
 	}
 
 	const props = defineProps<{
+		visible?: boolean;
 		active?: boolean;
 		session: WorkspaceRuntimeSession;
 		layout: WorkspaceLayoutNodeState;
@@ -1237,6 +1240,8 @@
 
 <template>
 	<div
+		v-show="visible !== false"
+		v-bind="$attrs"
 		ref="surfaceRoot"
 		data-workspace-surface
 		:data-workspace-id="session.id"
