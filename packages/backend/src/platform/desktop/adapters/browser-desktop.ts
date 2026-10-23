@@ -14,10 +14,57 @@ import { encodeCleanPathResponse, readCleanPathRequest } from './rdcleanpath.js'
 const MAX_QUEUED_BYTES = 4 * 1024 * 1024;
 const SEND_HIGH_WATER_BYTES = 64 * 1024;
 const SEND_LOW_WATER_BYTES = 16 * 1024;
-// Stay within one typical TLS record so weak links do not wait for a large WS message before decoding.
-const FORWARD_BATCH_BYTES = 16 * 1024;
 const HANDSHAKE_TIMEOUT_MS = 20_000;
 const CLOSE_TIMEOUT_MS = 10_000;
+
+function rdpFrameLength(bytes: Buffer): number | null {
+	if (bytes.length < 2) {
+		return null;
+	}
+	if (bytes[0] === 3) {
+		if (bytes[1] !== 0) {
+			throw new DesktopTransportFailure('unavailable');
+		}
+		if (bytes.length < 4) {
+			return null;
+		}
+		const length = bytes.readUInt16BE(2);
+		if (length < 7) {
+			throw new DesktopTransportFailure('unavailable');
+		}
+		return length;
+	}
+	if (bytes[0] === 0x30) {
+		// CredSSP uses DER messages before the RDP data stream starts.
+		if (bytes[1] < 128) {
+			return 2 + bytes[1];
+		}
+		const count = bytes[1] & 127;
+		if (count === 0 || count > 3) {
+			throw new DesktopTransportFailure('unavailable');
+		}
+		if (bytes.length < 2 + count) {
+			return null;
+		}
+		const length = bytes.readUIntBE(2, count) + 2 + count;
+		if (length > REMOTE_DESKTOP_FRAME_MAX_BYTES) {
+			throw new DesktopTransportFailure('unavailable');
+		}
+		return length;
+	}
+	if ((bytes[0] & 0x3f) !== 0) {
+		throw new DesktopTransportFailure('unavailable');
+	}
+	if (bytes[1] >= 128 && bytes.length < 3) {
+		return null;
+	}
+	const header = bytes[1] < 128 ? 2 : 3;
+	const length = header === 2 ? bytes[1] : ((bytes[1] & 127) << 8) | bytes[2];
+	if (length < header) {
+		throw new DesktopTransportFailure('unavailable');
+	}
+	return length;
+}
 
 function toBuffer(data: RawData): Buffer {
 	if (Buffer.isBuffer(data)) {
@@ -38,9 +85,7 @@ class BrowserDesktopPeer implements DesktopTransportPeer {
 	private finished = false;
 	private initialized = false;
 	private sending = 0;
-	private readonly forwardChunks: Buffer[] = [];
-	private forwardBytes = 0;
-	private forwardImmediate: ReturnType<typeof setImmediate> | null = null;
+	private rdpPending = Buffer.alloc(0);
 	private forwardPaused = false;
 	private onTerminated: (() => void) | null = null;
 	private timer: ReturnType<typeof setTimeout> | null = null;
@@ -95,12 +140,7 @@ class BrowserDesktopPeer implements DesktopTransportPeer {
 				clearTimeout(this.timer);
 			}
 			this.timer = null;
-			if (this.forwardImmediate !== null) {
-				clearImmediate(this.forwardImmediate);
-				this.forwardImmediate = null;
-			}
-			this.forwardChunks.length = 0;
-			this.forwardBytes = 0;
+			this.rdpPending = Buffer.alloc(0);
 			this.queue.length = 0;
 			this.queuedBytes = 0;
 			this.rejectReady(new DesktopTransportFailure('unavailable'));
@@ -401,27 +441,7 @@ class BrowserDesktopPeer implements DesktopTransportPeer {
 		}, this.stop);
 	}
 
-	private flushForward(socket: net.Socket): void {
-		if (this.forwardImmediate !== null) {
-			clearImmediate(this.forwardImmediate);
-			this.forwardImmediate = null;
-		}
-		if (this.forwardBytes === 0) {
-			return;
-		}
-		const bytes =
-			this.forwardChunks.length === 1
-				? this.forwardChunks[0]
-				: Buffer.concat(this.forwardChunks, this.forwardBytes);
-		this.forwardChunks.length = 0;
-		this.forwardBytes = 0;
-		if (!this.closing && bytes) {
-			this.sendForward(socket, bytes);
-		}
-	}
-
 	private forward(socket: net.Socket): void {
-		socket.once('end', () => this.flushForward(socket));
 		socket.on('data', (bytes: Buffer) => {
 			if (this.closing || bytes.length === 0) {
 				return;
@@ -430,20 +450,26 @@ class BrowserDesktopPeer implements DesktopTransportPeer {
 				this.sendForward(socket, bytes);
 				return;
 			}
-			if (this.forwardBytes + bytes.length > FORWARD_BATCH_BYTES) {
-				this.flushForward(socket);
-			}
-			if (bytes.length >= FORWARD_BATCH_BYTES) {
-				this.sendForward(socket, bytes);
-				return;
-			}
-			this.forwardChunks.push(bytes);
-			this.forwardBytes += bytes.length;
-			if (this.forwardBytes >= FORWARD_BATCH_BYTES) {
-				this.flushForward(socket);
-			} else {
-				// Coalesce TLS records from this I/O turn without waiting for a timer or a full batch.
-				this.forwardImmediate ??= setImmediate(() => this.flushForward(socket));
+			try {
+				if (this.rdpPending.length + bytes.length > MAX_QUEUED_BYTES) {
+					throw new DesktopTransportFailure('unavailable');
+				}
+				const pending = this.rdpPending.length ? Buffer.concat([this.rdpPending, bytes]) : bytes;
+				let offset = 0;
+				while (offset < pending.length && !this.closing) {
+					const remaining = pending.subarray(offset);
+					const length = rdpFrameLength(remaining);
+					if (length === null || length > remaining.length) {
+						break;
+					}
+					// The SDK drops unread bytes when its connection handshake completes.
+					// Keep each PDU in its own WS message, even when TLS combines several PDUs.
+					this.sendForward(socket, remaining.subarray(0, length));
+					offset += length;
+				}
+				this.rdpPending = this.closing ? Buffer.alloc(0) : Buffer.from(pending.subarray(offset));
+			} catch {
+				this.stop();
 			}
 		});
 	}

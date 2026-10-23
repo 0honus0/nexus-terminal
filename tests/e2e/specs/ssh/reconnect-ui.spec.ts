@@ -822,7 +822,7 @@ test('tab bulk-close actions release only the targeted live Workspace sessions',
 		await tabForName(name).click({ button: 'right' });
 		const menu = page.getByRole('menu');
 		await expect(menu).toBeVisible();
-		await menu.getByRole('button', { name: action, exact: true }).click();
+		await menu.getByRole('menuitem', { name: action, exact: true }).click();
 	};
 
 	try {
@@ -963,7 +963,7 @@ test('HTML terminal background starts with a visible viewport after session swit
 		await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
 		await page.getByTitle('Customize Style').click();
 		const customizer = page.getByRole('heading', { name: 'Appearance Customizer', exact: true }).locator('../..');
-		await customizer.getByRole('button', { name: 'Background', exact: true }).click();
+		await customizer.getByRole('tab', { name: 'Background', exact: true }).click();
 		await customizer.getByPlaceholder('Search local themes...', { exact: true }).fill(presetName);
 		const row = customizer.getByRole('listitem').filter({ hasText: presetName.replace(/\.html$/, '') });
 		await expect(row).toBeVisible();
@@ -1151,9 +1151,9 @@ test.describe('M08.03-a mobile Workspace session lifecycle', () => {
 				});
 				const menu = page.getByRole('menu');
 				await expect(menu).toBeVisible();
-				await expect(menu.getByRole('button', { name: 'Close Other Tabs', exact: true })).toBeVisible();
+				await expect(menu.getByRole('menuitem', { name: 'Close Other Tabs', exact: true })).toBeVisible();
 				await captureWorkspaceEvidence(page, testInfo, 'after');
-				await menu.getByRole('button', { name: 'Close Other Tabs', exact: true }).click();
+				await menu.getByRole('menuitem', { name: 'Close Other Tabs', exact: true }).click();
 				await expect(tabs).toHaveCount(1);
 				await expect(tabForName(MULTI_SESSION_NAMES[1])).toHaveAttribute('aria-selected', 'true');
 			});

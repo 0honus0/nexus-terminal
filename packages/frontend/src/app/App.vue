@@ -238,7 +238,9 @@
 			:visible="true"
 			@close="appearance.closeCustomizer()"
 		/>
-		<NotificationHost />
+		<Teleport to="body">
+			<NotificationHost :inert="backup.blocked" />
+		</Teleport>
 		<DialogHost />
 		<AppUpdatePrompt />
 	</div>

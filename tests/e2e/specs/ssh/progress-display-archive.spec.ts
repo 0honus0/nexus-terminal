@@ -232,9 +232,9 @@ test('a sidebar FileManager can unmount without orphaning its hidden archive tas
 		await expect(source).toBeVisible({ timeout: 20_000 });
 
 		await source.click({ button: 'right' });
-		const compress = menu(page).getByRole('button', { name: 'Compress', exact: true });
+		const compress = menu(page).getByRole('menuitem', { name: 'Compress', exact: true });
 		await compress.hover();
-		await page.getByRole('menu').getByRole('button', { name: 'Compress to zip', exact: true }).click();
+		await page.getByRole('menu').getByRole('menuitem', { name: 'Compress to zip', exact: true }).click();
 
 		const popup = visibleProgressCenter(page);
 		const task = visibleProgressTask(page, 'archive-source.zip');

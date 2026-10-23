@@ -876,10 +876,16 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 		await expect(hub.getByRole('button', { name: 'Environment', exact: true })).toHaveCount(0);
 		await expect(hub.getByRole('button', { name: 'Execution mode', exact: true })).toHaveCount(0);
 		await openNativeTaskPanel(page);
+		await hub
+			.getByRole('complementary', { name: 'Tasks', exact: true })
+			.locator('details > summary')
+			.filter({ hasText: /^Technical details$/ })
+			.first()
+			.click();
 		await hub.getByText('Step and tool audit', { exact: true }).click();
 		const audit = hub
 			.locator('details')
-			.filter({ has: page.locator('summary').filter({ hasText: /^Step and tool audit$/ }) });
+			.filter({ has: page.locator(':scope > summary').filter({ hasText: /^Step and tool audit$/ }) });
 		await audit.getByLabel('Step index', { exact: true }).fill('1');
 		await audit.getByRole('button', { name: 'Refresh current state', exact: true }).first().click();
 		await expect(audit).toContainText('step.completed');

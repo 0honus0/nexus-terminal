@@ -710,7 +710,7 @@ test('Agent execution setting gates the launcher and its global window', async (
 	}
 	await hub.getByRole('button', { name: 'Minimize Agent', exact: true }).click();
 	await expect(hub).toBeHidden();
-	await page.getByRole('tab', { name: 'Agent', exact: true }).click();
+	await page.locator('[role="tab"][aria-controls="settings-panel-agent"]:visible').click();
 	await selectAgentSettingsGroup(page, 'runtime');
 	const disabledSave = page.waitForResponse(
 		(response) =>

@@ -25,6 +25,10 @@
 	const state = agentWindowManager.state;
 	const activeApp = computed(() => props.directory.apps.find((app) => app.id === state.activeAppId) ?? null);
 	const visible = computed(() => state.status === 'visible');
+	const resumeRevision = ref(0);
+	watch(visible, (shown) => {
+		if (shown) resumeRevision.value += 1;
+	});
 	const hasOpened = ref(visible.value);
 	const hubWindowRef = ref<HTMLElement | null>(null);
 	let backgroundScrollRestore: (() => void) | null = null;
@@ -105,6 +109,9 @@
 		Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(isActuallyFocusable);
 
 	const resolveHubOwnedPortal = (target: HTMLElement): HTMLElement | null => {
+		// Global feedback stays interactive while the application behind this modal is inert.
+		const notificationHost = target.closest<HTMLElement>('.ui-notification-host');
+		if (notificationHost) return notificationHost;
 		const markedPortal = target.closest<HTMLElement>('[data-agent-hub-portal]');
 		if (markedPortal) return markedPortal;
 
@@ -887,6 +894,7 @@
 					:app-id="resident.appId"
 					:active="visible && state.hubView !== 'files' && state.activeAppId === resident.appId"
 					:app-version="resident.version"
+					:resume-revision="resumeRevision"
 					:app-names="appNames"
 					:execution-enabled="directory.executionEnabled"
 				/>

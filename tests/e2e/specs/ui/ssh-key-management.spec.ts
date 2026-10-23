@@ -211,7 +211,7 @@ test('SSH key management UI adds, renames without replacing private key, and del
 		const row = page.getByRole('listitem').filter({ has: page.getByText(CONNECTION_NAME, { exact: true }) });
 		await row.getByRole('button', { name: 'Edit', exact: true }).click();
 		await expect(form).toBeVisible();
-		await form.getByRole('button', { name: 'Password', exact: true }).click();
+		await form.getByRole('radio', { name: 'Password', exact: true }).click();
 		await form.locator('#conn-password').fill(E2E_SSH.password);
 		const updatePromise = page.waitForResponse(
 			(response) =>

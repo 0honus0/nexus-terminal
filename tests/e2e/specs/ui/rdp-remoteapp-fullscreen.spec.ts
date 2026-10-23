@@ -354,9 +354,17 @@ test('wide RDP restores the legacy 120 DPI connection rule', async ({ page, cont
 				request.method() === 'POST' &&
 				request.url().includes(`/api/v1/connections/${connectionId}/rdp-session`),
 		);
-		const tunnelPromise = page.waitForEvent('websocket', {
-			predicate: (socket) => socket.url().includes('/ws/remote-desktop'),
-		});
+		const received: Buffer[] = [];
+		const tunnelPromise = page
+			.waitForEvent('websocket', {
+				predicate: (socket) => socket.url().includes('/ws/remote-desktop'),
+			})
+			.then((socket) => {
+				socket.on('framereceived', ({ payload }) => {
+					if (typeof payload !== 'string') received.push(Buffer.from(payload));
+				});
+				return socket;
+			});
 		await connectionList.getByText(name, { exact: true }).first().click();
 
 		const sessionRequest = await sessionRequestPromise;
@@ -371,6 +379,13 @@ test('wide RDP restores the legacy 120 DPI connection rule', async ({ page, cont
 		expect(tunnelUrl.searchParams.has('dpi')).toBe(false);
 		await expect(remoteWindow(page)).toContainText('Connected', { timeout: 15_000 });
 		await authenticateTestRdp(page);
+		// The handshake must not consume a WS message containing the next RDP PDU.
+		const tpkt = received.filter((frame) => frame[0] === 3);
+		expect(tpkt.length).toBeGreaterThan(0);
+		for (const frame of tpkt) {
+			expect(frame.length).toBeGreaterThanOrEqual(7);
+			expect(frame.readUInt16BE(2)).toBe(frame.length);
+		}
 	} finally {
 		await context.request.delete(`/api/v1/targets/connections/${connectionId}`, {
 			headers: { Origin: E2E_URLS.frontendOrigin },

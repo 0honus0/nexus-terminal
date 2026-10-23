@@ -9,6 +9,7 @@
 	const props = defineProps<{
 		appId: string;
 		active: boolean;
+		resumeRevision?: number;
 		disabled?: boolean;
 		autoLoad?: boolean;
 		apiBase?: '/api/v1/agent' | '/__next/api/v1/agent';
@@ -119,10 +120,28 @@
 
 	watch(busy, (value) => emit('working', value), { flush: 'sync' });
 	watch([busy, pending, pendingDelete], clearDeleteConfirmation);
+	let pendingRefresh = false;
+	let lastResumeRevision: number | undefined;
+
+	function refreshWhenIdle(): void {
+		if (!pendingRefresh || !props.active || !props.autoLoad || busy.value) return;
+		pendingRefresh = false;
+		lastResumeRevision = props.resumeRevision;
+		void editor.refresh();
+	}
+
+	watch(busy, refreshWhenIdle);
 	watch(
-		() => props.active,
-		(value) => {
-			if (value && props.autoLoad && (!loaded.value || editor.refreshRequired.value)) void editor.refresh();
+		() => [props.active, props.resumeRevision] as const,
+		([active, revision]) => {
+			if (
+				active &&
+				props.autoLoad &&
+				(!loaded.value || editor.refreshRequired.value || revision !== lastResumeRevision)
+			) {
+				pendingRefresh = true;
+				refreshWhenIdle();
+			}
 		},
 		{ immediate: true },
 	);

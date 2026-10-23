@@ -335,10 +335,10 @@ test('existing archive progress popup hides and restores through Progress Displa
 	try {
 		await slowStep('compress creates the existing archive progress popup', async () => {
 			await rightClickRow(page, 'archive-source.txt');
-			const compress = menu(page).getByRole('button', { name: 'Compress', exact: true });
+			const compress = menu(page).getByRole('menuitem', { name: 'Compress', exact: true });
 			await expect(compress).toBeVisible();
 			await compress.hover();
-			await page.getByRole('menu').getByRole('button', { name: 'Compress to zip', exact: true }).click();
+			await page.getByRole('menu').getByRole('menuitem', { name: 'Compress to zip', exact: true }).click();
 
 			const center = visibleProgressCenter(page);
 			await expect(center).toBeVisible({ timeout: 10_000 });

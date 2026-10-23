@@ -45,10 +45,10 @@ export async function rightClickRow(page: Page, filename: string): Promise<void>
 
 export async function startZipCompression(page: Page, filename: string): Promise<void> {
 	await rightClickRow(page, filename);
-	const compress = menu(page).getByRole('button', { name: 'Compress', exact: true });
+	const compress = menu(page).getByRole('menuitem', { name: 'Compress', exact: true });
 	await expect(compress).toBeVisible();
 	await compress.hover();
-	await page.getByRole('menu').getByRole('button', { name: 'Compress to zip', exact: true }).click();
+	await page.getByRole('menu').getByRole('menuitem', { name: 'Compress to zip', exact: true }).click();
 }
 
 export async function clickMenuItem(page: Page, label: string): Promise<void> {

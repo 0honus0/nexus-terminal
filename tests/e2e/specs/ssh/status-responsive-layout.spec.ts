@@ -54,7 +54,17 @@ test('server status keeps values aligned and contained in narrow, short and zoom
 		timeout: 35_000,
 	});
 	const monitor = page.locator('.status-monitor:visible').first();
-	await expect(monitor.locator('.metric-memory .detail-total')).toHaveText('93.7');
+	const resources = monitor.locator('.metric-row:not(.network-row)');
+	const labels = [
+		'CPU 4.2% 负载 1.57',
+		'内存 12.9% 12.1 / 93.7 GB',
+		'Swap 0.0% 0 / 0 GB',
+		'磁盘 15.0% 127.8 / 915.7 GB',
+	];
+	await expect(resources).toHaveCount(4);
+	await expect(monitor.locator('.network-interface')).toHaveText('enp35s0');
+	await expect(monitor.locator('.rate-down')).toHaveText('↓ 197.9K/s');
+	await expect(monitor.locator('.rate-up')).toHaveText('↑ 30.1K/s');
 
 	for (const scale of [1, 1.6]) {
 		if (scale === 1.6) {
@@ -81,55 +91,49 @@ test('server status keeps values aligned and contained in narrow, short and zoom
 					zIndex: '1000',
 				});
 			}, size);
+			await expect(resources).toHaveCount(4);
+			for (let index = 0; index < labels.length; index++) {
+				await expect(resources.nth(index)).toHaveAttribute('aria-label', labels[index]);
+			}
 			const layout = await monitor.evaluate((element) => {
 				const rect = (target: Element) => {
-					const { left, right, top, bottom } = target.getBoundingClientRect();
-					return { left, right, top, bottom };
+					const { left, right, top, bottom, width, height } = target.getBoundingClientRect();
+					return { left, right, top, bottom, width, height };
 				};
 
 				return {
-					cards: [...element.querySelectorAll('.metric-card:not(.network-card)')].map((card) => ({
+					pane: rect(element),
+					cards: [...element.querySelectorAll('.metric-row:not(.network-row)')].map((card) => ({
 						card: rect(card),
-						identity: rect(card.querySelector('.metric-identity')!),
-						detail: rect(card.querySelector('.metric-detail')!),
-						percent: rect(card.querySelector('.metric-percent')!),
-						progress: rect(card.querySelector('.metric-progress')!),
-						identityOverflow:
-							card.querySelector('.metric-identity')!.scrollWidth -
-							card.querySelector('.metric-identity')!.clientWidth,
-						detailOverflow:
-							card.querySelector('.metric-detail')!.scrollWidth -
-							card.querySelector('.metric-detail')!.clientWidth,
+						parts: [...card.querySelectorAll('.small-icon, .metric-copy, .metric-reading, .metric-track')]
+							.filter((part) => part.getClientRects().length > 0)
+							.map(rect),
+						readingOverflow:
+							card.querySelector('.metric-reading')!.scrollWidth -
+							card.querySelector('.metric-reading')!.clientWidth,
 					})),
 				};
 			});
 			for (const metric of layout.cards) {
-				for (const bounds of [metric.identity, metric.detail, metric.percent, metric.progress]) {
-					expect(bounds.left, JSON.stringify({ scale, size, metric })).toBeGreaterThanOrEqual(
-						metric.card.left - 1,
-					);
-					expect(bounds.right, JSON.stringify({ scale, size, metric })).toBeLessThanOrEqual(
-						metric.card.right + 1,
-					);
-					expect(bounds.top).toBeGreaterThanOrEqual(metric.card.top - 1);
-					expect(bounds.bottom).toBeLessThanOrEqual(metric.card.bottom + 1);
+				const diagnostic = JSON.stringify({ scale, size, metric });
+				expect(metric.card.width, diagnostic).toBeGreaterThan(0);
+				expect(metric.card.height, diagnostic).toBeGreaterThan(0);
+				expect(metric.card.left, diagnostic).toBeGreaterThanOrEqual(layout.pane.left - 1);
+				expect(metric.card.right, diagnostic).toBeLessThanOrEqual(layout.pane.right + 1);
+				expect(metric.card.bottom, diagnostic).toBeLessThanOrEqual(layout.pane.bottom + 1);
+				expect(metric.parts.length, diagnostic).toBeGreaterThanOrEqual(3);
+				for (const bounds of metric.parts) {
+					expect(bounds.left, diagnostic).toBeGreaterThanOrEqual(metric.card.left - 1);
+					expect(bounds.right, diagnostic).toBeLessThanOrEqual(metric.card.right + 1);
+					expect(bounds.top, diagnostic).toBeGreaterThanOrEqual(metric.card.top - 1);
+					expect(bounds.bottom, diagnostic).toBeLessThanOrEqual(metric.card.bottom + 1);
 				}
-				const progressCenter = (metric.progress.top + metric.progress.bottom) / 2;
-				const percentCenter = (metric.percent.top + metric.percent.bottom) / 2;
-				expect(Math.abs(progressCenter - percentCenter)).toBeLessThan(2);
-				expect(metric.progress.right).toBeLessThan(metric.percent.left);
-				expect(metric.progress.right - metric.progress.left).toBeGreaterThan(10);
-				expect(metric.percent.top).toBeGreaterThanOrEqual(metric.detail.bottom - 1);
-				const identityCenter = (metric.identity.top + metric.identity.bottom) / 2;
-				const detailCenter = (metric.detail.top + metric.detail.bottom) / 2;
-				expect(Math.abs(identityCenter - detailCenter)).toBeLessThan(2);
-				expect(metric.identity.right).toBeLessThanOrEqual(metric.detail.left);
-				expect(metric.identityOverflow).toBeLessThanOrEqual(1);
-				expect(metric.detailOverflow).toBeLessThanOrEqual(1);
+				expect(metric.readingOverflow, diagnostic).toBeLessThanOrEqual(1);
 			}
+
 			if (scale === 1.6 && size.width === 294)
 				await monitor.screenshot({ path: testInfo.outputPath('status-narrow-zoomed.png') });
-			await monitor.locator('.metric-cpu').click();
+			await monitor.getByRole('button', { name: /^CPU / }).click();
 			const history = monitor.locator('.history-card');
 			const chart = history.locator('.status-history-chart');
 			await expect(history).toBeVisible();
@@ -141,20 +145,20 @@ test('server status keeps values aligned and contained in narrow, short and zoom
 				await expect(chart).toHaveAttribute('data-range-minutes', String(range));
 				const box = (await button.boundingBox())!;
 				const pane = (await monitor.boundingBox())!;
-				const close = (await history.locator('.history-close').boundingBox())!;
-				expect(Math.abs(box.y + box.height / 2 - close.y - close.height / 2)).toBeLessThan(1);
-				expect(box.x + box.width).toBeLessThanOrEqual(close.x + 1);
+				const controls = (await history.locator('.range-tabs').boundingBox())!;
+				expect(box.y).toBeGreaterThanOrEqual(controls.y);
+				expect(box.y + box.height).toBeLessThanOrEqual(controls.y + controls.height);
 				expect(box.x).toBeGreaterThanOrEqual(pane.x);
 				expect(box.x + box.width).toBeLessThanOrEqual(pane.x + pane.width);
 				expect(box.y + box.height).toBeLessThanOrEqual(pane.y + pane.height);
 			}
-			const controls = history.locator('.history-controls');
-			expect((await controls.boundingBox())!.height).toBeLessThanOrEqual(24.1);
-			expect(await controls.evaluate((element) => getComputedStyle(element).borderTopStyle)).toBe('solid');
+			const close = history.getByRole('button', { name: '关闭趋势图', exact: true });
+			await expect(close).toBeVisible();
+			await expect(history.locator('.history-current')).toHaveText('4.2%');
 			expect((await chart.locator('canvas').boundingBox())!.height).toBeGreaterThan(20);
 			if (scale === 1.6 && size.width === 294)
 				await monitor.screenshot({ path: testInfo.outputPath('status-history-narrow-zoomed.png') });
-			await history.locator('.history-close').click();
+			await close.click();
 			await expect(history).toHaveCount(0);
 		}
 	}

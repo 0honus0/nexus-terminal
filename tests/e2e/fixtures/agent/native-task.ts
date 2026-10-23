@@ -248,8 +248,8 @@ export async function startNativeTask(
 	if (followUp) expect(hasRun).toBe(true);
 	const method = hasRun ? 'agent.runs.appendInput' : 'agent.runs.create';
 	const { command, result } = await captureNativeCommand(task, method, () => send.click());
-	if (command.method === 'agent.runs.create' || command.method === 'agent.runs.appendInput') {
-		expect(command.params.input.connectionIds).toEqual(connectionIds);
+	if (command.request.method === 'agent.runs.create' || command.request.method === 'agent.runs.appendInput') {
+		expect(command.request.params.input.connectionIds).toEqual(connectionIds);
 	}
 	if (result.method !== 'agent.runs.create' && result.method !== 'agent.runs.appendInput') {
 		throw new Error('Unexpected Run receipt');

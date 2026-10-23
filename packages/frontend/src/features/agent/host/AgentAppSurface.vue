@@ -18,6 +18,7 @@
 	const props = defineProps<{
 		appId: string;
 		appVersion: number;
+		resumeRevision?: number;
 		appNames?: Record<string, string>;
 		executionEnabled: boolean;
 		active: boolean;
@@ -294,6 +295,7 @@
 			<NativeThreadPanel
 				:app-id="appId"
 				:active="active"
+				:resume-revision="resumeRevision"
 				:disabled="operation.busy.value || bindingBusy || !!pending || !attachmentsReady"
 				auto-load
 				@select="selectNativeThread"

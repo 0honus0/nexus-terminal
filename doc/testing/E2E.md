@@ -10,6 +10,14 @@
 
 工作区根 check、双端 build、全量 format 通过，日志 `/tmp/nexus-e2e-current-{check,build,format}.log`。测试 TypeScript 首次命令缺少前端别名，未记通过；补临时静态配置后通过，见 `/tmp/nexus-e2e-current-test-types-final.log`。两轮源码核对覆盖真实 DOM、全部旧输入定位、保存整数范围与 held route 收尾。并行 UI/偏好变更保留，不纳入本批提交；35 文件的独立暂存快照 `/tmp/nexus-e2e-first-index` 根 check、全量格式及双端 build 均通过，日志 `/tmp/nexus-e2e-first-index-{check,format,build}.log`；新远程结果待补。真实 RDP 建连错误、分块刷新及解锁后其它失败仍待处理，不能声称 138 项已通过。
 
+## 第二批远程 E2E 修复（2026-10-23）
+
+第二批 E2E 修复已完成两轮源码复核：外观 tab、设置 radio、菜单 menuitem 和 Agent 审计的技术详情折叠入口对接当前真实组件；服务器状态用四个真实资源、完整可访问数值、网络吞吐、容器范围和趋势切换验证，不保留旧卡片类名造成的空循环。Agent 连续无效保存每次发送 Toast，重新展开只读刷新线程目录且保留已选草稿；全局通知移至背景 inert 区域外，并加入 Agent 焦点允许区域，保留现有通知样式及备份锁定。现有 performance-settings 和 host 场景覆盖真实保存拒绝、通知关闭和跨页线程更新。
+
+远程 [39951440073](https://github.com/0honus0/nexus-terminal/actions/runs/39951440073) / `639b2ef6` 已结束，八组有 74 个唯一失败，质量门禁和 Docker smoke 通过。RDP/VNC 小数拖拽保存场景通过；RDP 建连仍失败，不算通过。原始日志 `/tmp/nexus-e2e-39951440073-shard{1..8}.log`，去重清单 `/tmp/nexus-e2e-39951440073-cases.json`。源码核对 IronRDP 0.7 的握手预读丢弃风险后，桥改为完整协议消息逐条发送，保留 TPKT/Fast-Path/CredSSP、背压、有界残片及关闭语义。新改动尚未通过远程验证，不宣称消除弱网渐进显示。
+
+第二批工作区与独立暂存快照 `/tmp/nexus-e2e-second-index` 的根 check、全量格式及双端 build 通过，日志 `/tmp/nexus-e2e-second-{check,format,build}.log` 和 `/tmp/nexus-e2e-second-index-{check,format,build}.log`；测试严格静态类型通过，日志 `/tmp/nexus-e2e-second-test-types.log`。两轮复审覆盖消息长度/残片、背压和收尾、恢复刷新竞态、通知焦点及真实 DOM 断言。未执行本地行为、浏览器、E2E 或 Playwright 收集；24 文件分批提交后以新远程结果验收，其余失败继续保留。
+
 ## SSH 多会话隔离补测与漏检核对（2026-10-23）
 
 用户明确要求新增用例，本批据此新增源码；仍按 D17 不运行本地行为、浏览器或 E2E，不自动提交、推送或触发远程。最近远程 39920261630 测试的是 `798e204f2a547213652874dca3792bfd42a194f0`，该版本 Surface 只有一个 DOM 根节点；引入并列安装弹窗的改动仍在本地工作区，未进入该轮远程。原日志 shard 3 的 Connect All 和 shard 5 的 session-cache 都实际执行通过，不能据此声称当前工作区通过，也不能断言旧用例必然漏掉当前缺陷。

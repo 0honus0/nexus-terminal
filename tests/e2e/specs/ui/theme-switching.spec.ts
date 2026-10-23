@@ -474,7 +474,7 @@ test('terminal preset themes load from the API, switch through the UI, and persi
 				.getByRole('heading', { name: 'Appearance Customizer', exact: true })
 				.locator('../..');
 			await expect(customizer).toBeVisible();
-			await customizer.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
+			await customizer.getByRole('tab', { name: 'Terminal Styles', exact: true }).click();
 
 			const search = customizer.getByPlaceholder('Search theme name...', { exact: true });
 			await search.fill(targetTheme!.name);
@@ -508,7 +508,7 @@ test('terminal preset themes load from the API, switch through the UI, and persi
 			const customizer = page
 				.getByRole('heading', { name: 'Appearance Customizer', exact: true })
 				.locator('../..');
-			await customizer.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
+			await customizer.getByRole('tab', { name: 'Terminal Styles', exact: true }).click();
 
 			const activeThemeName = customizer.getByRole('combobox', { name: 'Active Theme', exact: true });
 			await expect(activeThemeName).toHaveText(targetTheme!.name);
@@ -577,7 +577,7 @@ test('style customizer keeps mobile geometry stable and persists custom UI, inde
 		});
 
 		await step('desktop and mobile terminal typography plus text effects persist independently', async () => {
-			await customizer.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
+			await customizer.getByRole('tab', { name: 'Terminal Styles', exact: true }).click();
 			await appearanceField(customizer, 'Terminal Font').fill('E2E Terminal Mono, monospace');
 			await appearanceField(customizer, 'Terminal Font Size').fill('17');
 			await appearanceField(customizer, 'Mobile Terminal Font Size').fill('23');
@@ -628,7 +628,7 @@ test('style customizer keeps mobile geometry stable and persists custom UI, inde
 		});
 
 		await step('desktop and mobile editor typography persist independently and survive reload', async () => {
-			await customizer.getByRole('button', { name: 'Other Settings', exact: true }).click();
+			await customizer.getByRole('tab', { name: 'Other Settings', exact: true }).click();
 			await appearanceField(customizer, 'Editor Font Family').fill('E2E Editor Mono, monospace');
 			await appearanceField(customizer, 'Editor Font Size').fill('15');
 			await appearanceField(customizer, 'Mobile Editor Font Size').fill('21');
@@ -643,10 +643,10 @@ test('style customizer keeps mobile geometry stable and persists custom UI, inde
 			await page.reload({ waitUntil: 'domcontentloaded' });
 			await page.getByTitle('Customize Style').click();
 			const reloaded = appearanceCustomizer(page);
-			await reloaded.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
+			await reloaded.getByRole('tab', { name: 'Terminal Styles', exact: true }).click();
 			await expect(appearanceField(reloaded, 'Terminal Font Size')).toHaveValue('17');
 			await expect(appearanceField(reloaded, 'Mobile Terminal Font Size')).toHaveValue('23');
-			await reloaded.getByRole('button', { name: 'Other Settings', exact: true }).click();
+			await reloaded.getByRole('tab', { name: 'Other Settings', exact: true }).click();
 			await expect(appearanceField(reloaded, 'Editor Font Size')).toHaveValue('15');
 			await expect(appearanceField(reloaded, 'Mobile Editor Font Size')).toHaveValue('21');
 		});
@@ -690,7 +690,7 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
 		await page.goto('/');
 		await page.getByTitle('Customize Style').click();
 		const customizer = appearanceCustomizer(page);
-		await customizer.getByRole('button', { name: 'Background', exact: true }).click();
+		await customizer.getByRole('tab', { name: 'Background', exact: true }).click();
 		await expect(customizer.getByRole('heading', { name: 'Page Background', exact: true })).toBeVisible();
 
 		await step('page and terminal background uploads persist and remain inside the mobile viewport', async () => {
@@ -905,7 +905,7 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
 			// next independent Save, rather than submitting a stale expectedVersion.
 			await page.reload({ waitUntil: 'domcontentloaded' });
 			await page.getByTitle('Customize Style').click();
-			await customizer.getByRole('button', { name: 'Background', exact: true }).click();
+			await customizer.getByRole('tab', { name: 'Background', exact: true }).click();
 			await customizer.getByRole('combobox', { name: 'HTML Background Themes', exact: true }).click();
 			await page.getByRole('option', { name: 'Remote Themes', exact: true }).click();
 			await expect(appearanceField(customizer, 'Remote HTML Themes Repository URL')).toHaveValue(
@@ -968,7 +968,7 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
 
 		await step('uploaded backgrounds are really removed and page CSS is cleared', async () => {
 			await dismissToasts(page);
-			await customizer.getByRole('button', { name: 'Background', exact: true }).click();
+			await customizer.getByRole('tab', { name: 'Background', exact: true }).click();
 			const pageDelete = page.waitForResponse(
 				(response) =>
 					response.url().endsWith('/api/v1/appearance/background/page') &&

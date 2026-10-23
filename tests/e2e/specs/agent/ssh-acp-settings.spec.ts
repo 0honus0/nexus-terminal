@@ -102,7 +102,10 @@ for (const decision of ['denied', 'cancelled'] as const) {
 		}
 		await section.getByRole('button', { name: 'Create integration', exact: true }).click();
 		const editor = page.getByRole('dialog', { name: 'Create integration', exact: true });
-		await selectUiOption(editor.getByRole('combobox', { name: 'Kind', exact: true }), 'acp');
+		await editor
+			.getByRole('radiogroup', { name: 'Kind', exact: true })
+			.getByRole('radio', { name: 'ACP', exact: true })
+			.click();
 		await editor.getByRole('textbox', { name: 'Name', exact: true }).fill('SSH ACP settings fixture');
 		await selectUiOption(
 			editor.getByRole('combobox', { name: 'SSH connection', exact: true }),

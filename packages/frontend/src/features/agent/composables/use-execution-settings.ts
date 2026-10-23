@@ -1,5 +1,5 @@
 import { useI18n } from 'vue-i18n';
-import { useFeedbackMessage } from '@/shared/feedback/public';
+import { useFeedback, useFeedbackMessage } from '@/shared/feedback/public';
 import { computed, onActivated, onMounted, ref, toRaw } from 'vue';
 import { useAuthenticatedViewScope } from '@/shared/session/use-authenticated-view-scope';
 import { AGENT_EXECUTION_LIMIT_KEYS } from '@nexus-terminal/shared/agent/execution/values';
@@ -33,6 +33,7 @@ export function useExecutionSettings() {
 	let failureCause: unknown;
 
 	const { t } = useI18n();
+	const feedback = useFeedback();
 	useFeedbackMessage(
 		() => (notice.value ? t('agent.settings.execution.' + notice.value) : ''),
 		() => (notice.value === 'saved' ? 'success' : 'error'),
@@ -98,7 +99,9 @@ export function useExecutionSettings() {
 		}
 		if (operation === 'save' && invalidLimits.value.size > 0) {
 			failureCause = undefined;
-			notice.value = 'invalid';
+			notice.value = '';
+			// Each rejected save is an action, including after the previous Toast was closed.
+			feedback.notifyError(t('agent.settings.execution.invalid'));
 			return;
 		}
 		const signal = scope.capture();
