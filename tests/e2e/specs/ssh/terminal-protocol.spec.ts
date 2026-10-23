@@ -12,6 +12,7 @@ import {
 	openWorkspaceSession,
 	requestWorkspace,
 	sendJson,
+	waitForBinaryText,
 	waitForJson,
 } from '../../support/ws';
 
@@ -108,6 +109,35 @@ test('the first directory change waits for a real shell prompt instead of report
 		const output = Buffer.concat(chunks).toString('utf8');
 		expect(output).toMatch(/cd '\/folder-seed'\r?\n/);
 		expect(output).not.toContain('__NEXUS_INTERNAL_CD_');
+	} finally {
+		await closeWebSocket(workspace.socket);
+	}
+});
+
+test('shell directory tracking remains available after ordinary user input', async ({ request }) => {
+	await loginAsInitialAdmin(request);
+	await resetTestSshFilesystem();
+	const connectionId = await ensureTestSshConnection(request);
+	const workspace = await openWorkspaceSession(request, connectionId, `cwd-after-input-${crypto.randomUUID()}`);
+
+	try {
+		const sentinel = waitForBinaryText(workspace.socket, 'DIRECTORY_AFTER_INPUT_READY', 10_000);
+		await requestWorkspace(workspace.socket, 'terminal.input', {
+			data: "printf 'DIRECTORY_AFTER_INPUT_READY\\n'\r",
+		});
+		await sentinel;
+		await expect(requestWorkspace(workspace.socket, 'terminal.currentDirectory')).resolves.toBe('/');
+
+		const requestId = `cwd-after-input-${crypto.randomUUID()}`;
+		const changed = waitForJson(
+			workspace.socket,
+			(message) => message.type === 'terminal.directoryChanged' && message.payload?.requestId === requestId,
+			20_000,
+		);
+		await expect(
+			requestWorkspace(workspace.socket, 'terminal.changeDirectory', { path: '/folder-seed' }, requestId),
+		).resolves.toMatchObject({ queued: true });
+		expect((await changed).payload).toMatchObject({ path: '/folder-seed' });
 	} finally {
 		await closeWebSocket(workspace.socket);
 	}

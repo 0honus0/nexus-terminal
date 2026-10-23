@@ -30,6 +30,12 @@ export class WorkspaceShellService {
 		}
 	}
 
+	async initialize(): Promise<void> {
+		this.assertOpen();
+		await this.model.ensureHook();
+		this.assertOpen();
+	}
+
 	async changeDirectory(
 		requestId: string,
 		requested: string,

@@ -265,7 +265,7 @@
   "workspaceConnectionList": {
     "untagged": "タグなし",
     "groupActions": "グループ操作",
-    "searchPlaceholder": "名前またはホストを検索...",
+    "searchPlaceholder": "接続を検索",
     "noResults": "\"{searchTerm}\"に一致する接続は見つかりませんでした。",
     "allConnectionsTaggedSuccess": "すべての接続にタグが正常に追加されました。",
     "noConnectionsToTag": "タグ付けする接続はありません。",

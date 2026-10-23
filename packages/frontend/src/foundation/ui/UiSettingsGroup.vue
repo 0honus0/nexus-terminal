@@ -21,7 +21,12 @@
 </script>
 
 <template>
-	<section class="ui-settings-group" :data-tone="props.tone" :data-compact="props.compact || undefined">
+	<section
+		class="ui-settings-group"
+		:data-tone="props.tone"
+		:data-compact="props.compact || undefined"
+		:data-body-empty="!slots.default || undefined"
+	>
 		<header v-if="props.title || slots.actions" class="ui-settings-group__head">
 			<div v-if="props.icon" class="ui-settings-group__icon" aria-hidden="true">
 				<i :class="props.icon"></i>
@@ -36,7 +41,7 @@
 				<slot name="actions"></slot>
 			</div>
 		</header>
-		<div class="ui-settings-group__body">
+		<div v-if="slots.default" class="ui-settings-group__body">
 			<slot></slot>
 		</div>
 	</section>

@@ -9,7 +9,7 @@ import { logger } from '@/client/logging/logger';
 import type { TerminalChannel, TerminalOutput, TerminalViewport } from '@/features/terminal/public';
 import { TerminalDirectoryFailure, type TerminalDirectoryPort } from '@/features/filesystem/public';
 import { WorkspaceSocket } from '../protocol/workspaceSocket';
-import { WorkspaceRequestFailure } from '../model/workspace-error-types';
+import { WorkspaceDispatchFailure, WorkspaceRequestFailure } from '../model/workspace-error-types';
 import {
 	toTerminalInputRequest,
 	toTerminalResizeRequest,
@@ -227,8 +227,16 @@ export const createTerminalDirectoryPort = (
 	connectionId?: number,
 ): TerminalDirectoryPort => ({
 	async readCurrentDirectory() {
-		const result = await socket.requestConnected('terminal.currentDirectory', {});
-		return readWorkspaceTerminalCurrentDirectory(result);
+		try {
+			const result = await socket.requestConnected('terminal.currentDirectory', {});
+			return readWorkspaceTerminalCurrentDirectory(result);
+		} catch (cause) {
+			const code =
+				cause instanceof WorkspaceRequestFailure || cause instanceof WorkspaceDispatchFailure
+					? cause.code
+					: 'operation_unknown';
+			throw new TerminalDirectoryFailure(code, { cause });
+		}
 	},
 
 	changeDirectory(path, options) {

@@ -21,6 +21,8 @@
       "title": "通知设置",
       "addChannel": "添加通知渠道",
       "channelsTitle": "通知渠道",
+      "enableChannel": "启用渠道",
+      "disableChannel": "停用渠道",
       "searchPlaceholder": "搜索渠道、地址或事件",
       "filterType": "按渠道类型筛选",
       "filterStatus": "按启用状态筛选",

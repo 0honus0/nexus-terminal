@@ -89,19 +89,19 @@
 
 <template>
 	<section
-		class="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-header/30 px-3.5 py-2.5 text-xs"
+		class="flex items-center justify-between gap-2 rounded-xl bg-header/30 px-3.5 py-2.5 text-xs"
 		:aria-label="t('agent.settings.providers.registryTitle')"
 	>
-		<div class="flex flex-wrap items-center gap-2 text-text-secondary">
-			<span class="font-medium text-foreground">{{ t('agent.settings.providers.registryTitle') }}</span>
-			<template v-if="status"
-				><span>{{ status.entryCount }} {{ t('agent.settings.providers.registryModels') }}</span
-				><span v-if="status.generatedAt !== null"
-					>· {{ formatAgentDate(locale, new Date(status.generatedAt)) }}</span
-				></template
+		<div class="flex min-w-0 flex-1 items-center gap-2 text-text-secondary">
+			<span class="shrink-0 font-medium text-foreground">{{ t('agent.settings.providers.registryTitle') }}</span>
+			<span v-if="status" class="min-w-0 truncate whitespace-nowrap"
+				>{{ status.entryCount }} {{ t('agent.settings.providers.registryModels')
+				}}<template v-if="status.generatedAt !== null">
+					· {{ formatAgentDate(locale, new Date(status.generatedAt)) }}
+				</template></span
 			>
 		</div>
-		<div class="flex items-center gap-2">
+		<div class="flex shrink-0 items-center gap-2">
 			<UiButton
 				v-if="error || refreshBlocked"
 				type="button"

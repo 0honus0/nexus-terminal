@@ -572,6 +572,9 @@ export class WorkspaceService {
 					void this.closeRecord(record, reason).catch(() => undefined);
 				}),
 			);
+			// Prepare prompt tracking before the first attachment can send user input.
+			// A shell without Bash/Zsh integration remains usable when preparation fails.
+			const shellIntegrationReady = record.shellIntegration.initialize().catch(() => undefined);
 			const target = await this.untilAbort(this.targets.get(record.connectionId), record.controller.signal);
 			if (!target) {
 				throw new WorkspaceFailure('not_found');
@@ -587,6 +590,7 @@ export class WorkspaceService {
 			record.controller.signal.throwIfAborted();
 			record.phase = 'attached';
 			record.fileTask = this.track(this.openFiles(record, token, shell.fingerprint));
+			await shellIntegrationReady;
 			return this.lease(record);
 		} catch (error) {
 			primary = error;

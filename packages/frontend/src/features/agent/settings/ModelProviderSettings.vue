@@ -934,7 +934,7 @@
 			:close-on-escape="!busy"
 			focus-on-open
 			restore-focus
-			panel-class="ui-form-surface provider-add-panel max-w-xl rounded-2xl p-5 sm:p-6"
+			panel-class="ui-form-surface provider-add-panel max-w-xl rounded-2xl !p-3 sm:!p-4"
 			content-class="provider-add-content"
 			@close="cancel"
 		>
@@ -1073,11 +1073,11 @@
 					</section>
 
 					<section class="space-y-3 rounded-xl bg-header/20 p-3.5 sm:p-4">
-						<div class="flex flex-wrap items-center justify-between gap-2">
-							<h4 class="flex items-center gap-2 text-xs font-semibold text-foreground">
+						<div class="flex items-center justify-between gap-2">
+							<h4 class="flex min-w-0 flex-1 items-center gap-2 text-xs font-semibold text-foreground">
 								<i class="fa-solid fa-brain text-[11px] text-primary" aria-hidden="true"></i>
-								{{ t('agent.settings.providers.configuredModels') }}
-								<UiBadge appearance="ghost" density="compact" class="font-mono"
+								<span class="truncate">{{ t('agent.settings.providers.configuredModels') }}</span>
+								<UiBadge appearance="ghost" density="compact" class="shrink-0 font-mono"
 									>{{ draft.models.length }} / {{ AGENT_PROVIDER_MODEL_LIMIT }}</UiBadge
 								>
 							</h4>
@@ -1086,6 +1086,7 @@
 								type="button"
 								appearance="soft"
 								density="compact"
+								class="shrink-0 whitespace-nowrap"
 								@click="discover(null)"
 								><i class="fa-solid fa-magnifying-glass text-[10px]" aria-hidden="true"></i
 								>{{ t('agent.settings.providerManagement.discoverEndpoint') }}</UiButton

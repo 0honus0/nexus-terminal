@@ -195,7 +195,7 @@
 								</div>
 							</div>
 						</div>
-						<div class="flex shrink-0 flex-wrap items-center justify-end gap-2 self-end sm:self-center">
+						<div class="agent-app-actions flex shrink-0 flex-wrap items-center justify-end gap-2 self-end">
 							<UiButton
 								appearance="soft"
 								tone="neutral"
@@ -337,3 +337,33 @@
 		</template>
 	</UiModal>
 </template>
+
+<style scoped>
+	@media (max-width: 639px) {
+		.agent-app-actions {
+			display: grid;
+			width: 100%;
+			grid-template-columns: minmax(0, 1.35fr) repeat(2, minmax(0, 1fr));
+			gap: 6px;
+		}
+
+		.agent-app-actions :deep([data-ui='button']) {
+			width: 100%;
+			min-width: 0;
+			white-space: nowrap;
+			--ui-control-padding-inline: 6px;
+			--ui-control-gap: 4px;
+			--ui-control-font-size: 10px;
+		}
+
+		.agent-app-actions :deep(.fa-chevron-down) {
+			display: none;
+		}
+	}
+
+	@media (max-width: 359px) {
+		.agent-app-actions :deep(.fa-shield-halved) {
+			display: none;
+		}
+	}
+</style>

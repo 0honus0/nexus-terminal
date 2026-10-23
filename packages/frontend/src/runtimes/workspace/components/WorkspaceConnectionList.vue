@@ -405,7 +405,7 @@
 			<UiSearchInput
 				v-model="search"
 				data-focus-id="connectionListSearch"
-				:aria-label="t('workspaceConnectionList.searchPlaceholder')"
+				:aria-label="t('common.search')"
 				:placeholder="t('workspaceConnectionList.searchPlaceholder')"
 				:clear-label="t('common.clear')"
 				class="workspace-connection-search min-w-0 flex-1"
@@ -599,7 +599,7 @@
 								>
 									{{ connection.name || connection.host }}
 								</span>
-								<span v-if="props.launchpad" class="workspace-connection-subline">
+								<span class="workspace-connection-subline">
 									<span class="workspace-connection-host truncate">
 										{{ connection.username }}@{{ connection.host }}:{{ connection.port }}
 									</span>
@@ -655,7 +655,7 @@
 						<span class="workspace-connection-name truncate" :title="connection.name || connection.host">
 							{{ connection.name || connection.host }}
 						</span>
-						<span v-if="props.launchpad" class="workspace-connection-subline">
+						<span class="workspace-connection-subline">
 							<span class="workspace-connection-host truncate">
 								{{ connection.username }}@{{ connection.host }}:{{ connection.port }}
 							</span>
@@ -806,10 +806,9 @@
 		gap: 0.35rem;
 		padding: 0.5rem 0.5rem 0.35rem;
 	}
-	.workspace-connection-list:not(.workspace-connection-list--launchpad)
-		.workspace-connection-search
-		:deep(.ui-input) {
+	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-search {
 		height: 1.9rem;
+		min-height: 1.9rem;
 		border-color: transparent;
 		background: color-mix(in srgb, var(--input-bg-color) 44%, transparent);
 		box-shadow: inset 0 1px 1px rgb(0 0 0 / 4%);
@@ -828,6 +827,7 @@
 	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-add {
 		width: 1.9rem;
 		height: 1.9rem;
+		min-height: 1.9rem;
 		border-radius: 0.5rem;
 	}
 	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-content {
@@ -869,6 +869,9 @@
 	}
 	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-name {
 		font-size: 0.76rem;
+	}
+	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-subline {
+		display: none;
 	}
 	.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-empty {
 		margin: auto;
@@ -913,10 +916,6 @@
 			:deep(.ui-input__adornment) {
 			display: none;
 		}
-		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-add {
-			width: 1.7rem;
-			height: 1.7rem;
-		}
 		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-group {
 			padding-inline: 0.3rem;
 		}
@@ -925,6 +924,62 @@
 		}
 		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-group-actions {
 			margin-left: 0;
+		}
+	}
+	@container workspace-connection-pane (min-width: 13rem) {
+		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-toolbar {
+			gap: 0.5rem;
+			padding: 0.5rem 0.6rem 0.4rem;
+		}
+		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-search {
+			height: 2rem;
+			min-height: 2rem;
+			border-radius: 0.5rem;
+		}
+		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-add {
+			width: 2rem;
+			height: 2rem;
+			min-height: 2rem;
+			border-radius: 0.5rem;
+		}
+		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-content {
+			padding: 0.25rem 0.4rem 0.5rem;
+		}
+		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-group {
+			min-height: 2rem;
+			padding: 0.25rem 0.5rem;
+			border-radius: 0.5rem;
+		}
+		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-group-name {
+			font-size: 0.76rem;
+		}
+		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-item {
+			min-height: 2.5rem;
+			margin-block: 0.1rem;
+			padding: 0.35rem 0.5rem;
+			border-radius: 0.5rem;
+		}
+		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-icon {
+			width: 1.15rem;
+			margin-right: 0.5rem;
+			font-size: 0.75rem;
+		}
+		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-name {
+			font-size: 0.8rem;
+			line-height: 1.25;
+		}
+		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-subline {
+			display: flex;
+			margin-top: 0.08rem;
+		}
+		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-host,
+		.workspace-connection-list:not(.workspace-connection-list--launchpad) .workspace-connection-time {
+			font-size: 0.64rem;
+			opacity: 0.64;
+		}
+		.workspace-connection-list:not(.workspace-connection-list--launchpad)
+			.workspace-connection-item.bg-primary\/20 {
+			box-shadow: inset 2px 0 0 var(--link-active-color);
 		}
 	}
 	.workspace-connection-list--page .workspace-connection-section {
@@ -976,17 +1031,19 @@
 
 	.workspace-connection-list--launchpad .workspace-connection-toolbar {
 		margin-bottom: 1.25rem;
-		gap: 0.625rem;
+		gap: 0.5rem;
 	}
 
-	.workspace-connection-list--launchpad .workspace-connection-search :deep(.ui-input) {
-		height: 2.75rem;
+	.workspace-connection-list--launchpad .workspace-connection-search {
+		height: 2.5rem;
+		min-height: 2.5rem;
 		border-radius: 0.625rem;
 	}
 
 	.workspace-connection-list--launchpad .workspace-connection-add,
 	.workspace-connection-list--launchpad .workspace-connection-toolbar > [data-ui='button'] {
-		height: 2.75rem;
+		height: 2.5rem;
+		min-height: 2.5rem;
 		border-radius: 0.625rem;
 	}
 
@@ -995,9 +1052,9 @@
 	}
 
 	.workspace-connection-list--launchpad .workspace-connection-toolbar > .workspace-connection-add {
-		height: 2rem;
-		padding-inline: 0.625rem;
-		border-radius: 0.5rem;
+		height: 2.5rem;
+		padding-inline: 0.75rem;
+		border-radius: 0.625rem;
 	}
 
 	.workspace-connection-add-label {

@@ -21,6 +21,8 @@
       "title": "Notification Settings",
       "addChannel": "Add Notification Channel",
       "channelsTitle": "Notification Channels",
+      "enableChannel": "Enable channel",
+      "disableChannel": "Disable channel",
       "searchPlaceholder": "Search channel, address or event",
       "filterType": "Filter by channel type",
       "filterStatus": "Filter by enabled state",

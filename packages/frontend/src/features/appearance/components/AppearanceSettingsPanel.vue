@@ -129,7 +129,13 @@
 <template>
 	<section class="settings-surface">
 		<div class="ui-settings-groups">
-			<UiSettingsGroup :title="t('settings.appearance.title')" icon="fa-solid fa-palette" tone="accent">
+			<UiSettingsGroup
+				class="appearance-intro-card"
+				:title="t('settings.appearance.title')"
+				icon="fa-solid fa-palette"
+				tone="accent"
+				compact
+			>
 				<template #actions>
 					<UiButton appearance="solid" tone="primary" @click="emit('customize')">
 						{{ t('settings.appearance.customizeButton') }}
@@ -193,6 +199,10 @@
 </template>
 
 <style scoped>
+	.appearance-intro-card {
+		padding-block: 10px;
+	}
+
 	.appearance-color-picker {
 		display: grid;
 		width: 42px;

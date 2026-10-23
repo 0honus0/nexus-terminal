@@ -21,6 +21,8 @@
       "title": "通知設定",
       "addChannel": "通知チャンネルを追加",
       "channelsTitle": "通知チャンネル",
+      "enableChannel": "チャンネルを有効化",
+      "disableChannel": "チャンネルを無効化",
       "searchPlaceholder": "チャンネル、アドレス、イベントを検索",
       "filterType": "チャンネルタイプで絞り込み",
       "filterStatus": "有効状態で絞り込み",

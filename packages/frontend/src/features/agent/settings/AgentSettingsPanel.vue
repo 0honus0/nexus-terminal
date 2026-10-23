@@ -247,4 +247,10 @@
 			padding-inline: 0.5rem;
 		}
 	}
+
+	@media (max-width: 1023px) {
+		.agent-settings-panel {
+			padding-inline-end: 0;
+		}
+	}
 </style>

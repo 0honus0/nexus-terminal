@@ -9,15 +9,28 @@
 	}
 }
 
+:global(.provider-add-content) {
+	padding-inline: 0 0.25rem;
+	scrollbar-gutter: stable;
+}
+
 @media (max-width: 639px), (pointer: coarse) {
 	.provider-add-resize-handle {
 		display: none;
 	}
-}
 
-:global(.provider-add-content) {
-	padding-inline: 0.75rem;
-	scrollbar-gutter: stable both-edges;
+	:global(.provider-add-content) {
+		padding-inline: 0;
+		scrollbar-gutter: auto;
+		scrollbar-width: none;
+		-ms-overflow-style: none;
+	}
+
+	:global(.provider-add-content::-webkit-scrollbar) {
+		display: none;
+		width: 0;
+		height: 0;
+	}
 }
 
 .provider-modal-input {

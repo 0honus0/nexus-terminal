@@ -189,13 +189,11 @@ RDP 计数修复的远程证据：Connections、Dashboard、Workspace 三个打�
 
 使用 `https://api.honus.top/workspace`、真实 `amd` 连接及 `1920×953` 视口核对。命令栏 `265.72×41.69px`、文件管理器 `265.72×569.95px`，两处工具按钮均计算为 `1px` 边框、边框色 `34%`，面板 `scrollWidth-clientWidth=0`。文件管理器 `.file-manager-actions` 的计算背景为 `rgba(0, 0, 0, 0)`、`box-shadow` 为 `none`，工具组整体外框已移除；1×8 按钮排布和文件列表未改变。证据：`.tmp/command-bar-buttons-border.png`、`.tmp/file-manager-tool-borders.png`。目标 ESLint、Prettier、Frontend build 与 `git diff --check` 通过。
 
-## 命令栏按钮独立显隐（2026-10-23，本地隔离 CDP）
+## 终端右上角按钮独立显隐（2026-10-23，本地 CDP）
 
-使用隔离数据库启动临时 Backend `3002` 与 HTTPS Vite `9999`，避免修改正式测试库或账号。先用旧版本偏好记录读取，四个 `showCommandBar*` 字段均按 `true` 补齐；四项全部保存为 `false` 后重新读取仍为 `false`，版本由 `279` 推进到 `280`；清空 `false`、焦点 `true`、编辑器 `false`、搜索 `true` 的部分组合读回一致，版本为 `281`。旧记录只在新偏好读取边界补默认值，下一次保存写回完整 Shared 结构。
+使用隔离数据库旧记录与新版偏好契约核对兼容读取：旧 `showCommandBar*` 键被允许但忽略，四个新字段按 `true` 补齐；四项保存为 `false` 后重新读取仍为 `false`，部分组合读回一致，下一次保存只写新字段。桌面 CDP 分别关闭四项后，对应挂起会话、顶栏、进度和布局按钮消失；重新开启后恢复。配置布局仍只在桌面显示，进度入口开启后常显。
 
-桌面 CDP 下四枚按钮默认均为 `28×28px`。全部关闭后按钮数为 0，输入框由 `169.72px` 自动扩至 `227.72px`；仅开启焦点与搜索时只渲染这两枚按钮，输入框保持 `169.72px`。`390×844` 手机且四项入口全部开启时，输入框为 `118×30px`、七枚工具按钮均为 `32×32px`，页面无横向溢出；关闭四项对应的手机入口后输入框扩至 `220×30px`，只保留快捷指令、状态、键盘和 Docker，页面仍无横向溢出。设置页在桌面为四列，手机为 `2×2`，每项 `160×42px`。
-
-编辑器按钮同时受“弹窗编辑器”总开关约束；搜索已打开时仍保留关闭与查找操作，焦点切换只用于桌面。证据：`.tmp/command-bar-toggle-settings-1440.png`、`.tmp/command-bar-toggle-settings-mobile-final.png`、`.tmp/command-bar-all-hidden.png`、`.tmp/command-bar-partial.png`、`.tmp/command-bar-mobile-all-visible.png`、`.tmp/command-bar-mobile-all-hidden.png`。根 `pnpm run check`、双端 build、目标 Prettier 与 `git diff --check` 通过。临时环境已停止，正式 Backend `3001` 未重启；新偏好需重启正式后端后生效。未提交、推送或部署。
+后端使用旧版偏好记录的隔离数据库启动后，读取版本 `281` 自动补齐四个新字段为 `true`。CDP `1440×900` 真实 `amd` SSH 会话下，标签栏默认显示挂起会话、隐藏、进度显示和配置布局四项；逐项关闭后版本从 `300` 推进至 `304`，每次只移除对应按钮；四项全关后右侧操作按钮为 0，关闭标签页与新建连接仍保留，命令栏已启用按钮保持可见。设置页四个新 ID 均存在、四个旧命令栏 ID 均不存在，最后恢复四项为 `true`，数据库 JSON 的旧键数量为 0。证据：`.tmp/workspace-tabbar-defaults-1440.png`、`.tmp/workspace-tabbar-all-off-1440.png`、`.tmp/workspace-tabbar-settings-1440.png`。
 
 ## 服务器状态方形卡片与网络图标居中（2026-10-23，本地 CDP）
 
@@ -210,6 +208,10 @@ RDP 计数修复的远程证据：Connections、Dashboard、Workspace 三个打�
 工作区设置的“首页与监控”将本机/远程资源开关与监控采样/主机缓存周期、Docker 默认展开与状态刷新周期合并为 2×2 的紧凑卡片，分组右上角保留单一保存入口。`1440×1000` 下分组 `1020px` 宽，四张卡片各 `487×54px`，周期输入容器各 `108×28px`；`390×844` 下分组 `350px` 宽，带周期卡片 `320×80px`，无横向溢出，页面 `scrollWidth=382 < innerWidth=390`。
 
 `node tests/frontend/monitoring-configuration.integration.mjs` 通过真实 HTTP/重启、CAS 冲突/未知结果、三组件与中英日翻译在内的 57 项断言，确认合并分组一次提交只产生一次核心写入并发布成功 Toast。证据：`.tmp/monitoring-group-final-1440.png`、`.tmp/monitoring-group-final-390.png`。目标 Prettier/ESLint、Frontend 类型检查与 `git diff --check` 通过。
+
+## 首页与监控窄屏时间控件单行（2026-10-23，本地 CDP）
+
+使用 `https://api.honus.top/settings?tab=workspace` 核对。`390×844`、`320×844` 与 `1440×844` 下卡片顺序均为“显示本机资源 → 显示远程资源 → 默认展开容器详情 → 在状态监视器中显示IP地址”，四卡均为 `54px` 高，三个周期卡片不再换行；“采样/缓存/刷新”可见文字已移除，只显示时钟、数值和单位，时间输入仍保留完整 `aria-label`。`390px` 下时间控件为 `108×28px`，`320px` 下卡片内边距与时间控件自动收窄为 `8px / 100px`，标题与时间仍同处一行，页面 `scrollWidth=clientWidth`。证据：`.tmp/monitor-order-390.png`、`.tmp/monitor-order-320.png`、`.tmp/monitor-order-1440.png`。本轮只读取设置并切换视口，未保存任何偏好。
 
 ## 日志等级标题对齐与挂起会话搜索文案（2026-10-23，本地 CDP）
 
@@ -1622,11 +1624,11 @@ Agent 数量组件新增范围失败局部状态：合法单位表达超出当�
 
 目标 CSS Prettier、Frontend build 与 `git diff --check` 通过。证据：`/tmp/settings-mobile-aligned.png`。本轮只读取边界，未修改或保存设置；桌面 761px 以上图标布局保持原样。
 
-### 2026-10-22 Provider 弹窗左右留白对称（本地 CDP）
+### 2026-10-23 Provider 弹窗紧凑留白与模型库单行（本地 CDP）
 
-使用本地 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）打开“模型与预算 → 添加 Provider”。修改前桌面表单左距面板 24.8px、右距 44.8px；改为左右对称内边距及双侧稳定滚动条槽后，1152×900 下左右均为 44.8px，390×844 与 320×700 下左右均为 40.8px，三档差值均小于 0.001px。正文 `scrollWidth=clientWidth`，文档未产生页面级横向溢出，滚动条与右侧内容保持 12px 内边距。
+使用远程 CDP（`https://api.honus.top/settings?tab=agent`，未使用 9998）在独立临时页核对，未提交，也未填写、测试或保存 Provider。模型库状态条在 `1440×900`、`390×844`、`320×700` 与 `280×700` 下均为单行，状态文字可截断，“立即更新”按钮不换行，状态条 `scrollWidth=clientWidth`。
 
-证据：`/tmp/provider-modal-padding-before.png`、`/tmp/provider-modal-padding-1152.png`、`/tmp/provider-modal-padding-390.png`、`/tmp/provider-modal-padding-320.png`。目标 CSS Prettier、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过。本轮只打开弹窗读取布局，未填写、测试或保存 Provider；完整 E2E 仍按 D17 范围执行。
+添加 Provider 弹窗在 `1440×900` 下内容左缘距面板约 17px，在 `390×844`、`320×700` 下约 13px；三档内容右缘距滚动条可用边界约 12px，正文 `scrollWidth=clientWidth`，无横向溢出，面板与表单尺寸、字段及保存取消流程未改变。证据：`.tmp/agent-registry-final-320.png`、`.tmp/agent-provider-final-1440.png`、`.tmp/agent-provider-final-390.png`、`.tmp/agent-provider-final-320.png`。目标 Prettier、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过；完整 E2E 仍按 D17 范围执行。
 
 ### 2026-10-22 App 与扩展四分类等分（本地 CDP）
 
@@ -1783,3 +1785,27 @@ RDP Adapter 将文本从逐字符 SDK 调用改为最多 32 个完整字符一�
 使用 `https://api.honus.top`、真实登录会话和 Agent 浮窗核对。首次进入“文件”视图发生时，Network 收到 `/api/v1/agent/files?q=&limit=20&offset=0`、`/api/v1/agent/files/storage` 与 `/api/v1/agent/apps`；切换到“会话”后收到 0 个 `/api/v1/agent/` 请求，再切回“文件”仍为 0 个。两侧组件保持挂载，已加载列表与选择状态未被清空。
 
 本实现只在 Agent 文件/会话视图切换中启用显式保留；首次进入、筛选变化、显式重试、写入后失效、读取失败和认证身份失效仍执行原有重新读取或清理。未执行真实多文件列表、活跃 Run 轮询恢复、附件上传及登录失效竞态；未修改远端文件或配置。目标 ESLint、Prettier、根 `pnpm run check`、Frontend build 与 `git diff --check` 通过。
+
+### 2026-10-23 工作区设置移除重复布局入口（本地 CDP）
+
+在 `https://api.honus.top/settings?tab=workspace` 的 `1440×900` 视口确认“布局与高级设置”分组已移除，工作区设置面板内不存在 `layoutLocked` 与 `navBarVisible` 控件；对应偏好字段仍由接口返回，布局配置器和终端标签栏的顶栏显隐按钮继续作为实际开关。证据：`.tmp/settings-workspace-advanced-removed.png`。目标 Prettier、根 `pnpm run check`、Frontend build 与 `git diff --check` 通过。
+
+### 2026-10-23 文件管理器终端目录在用户输入后仍可用（本地 CDP）
+
+使用 `https://api.honus.top/workspace` 的真实 `amd` SSH 会话核对。Workspace 建连后先向终端输入普通命令，再点击“从终端同步当前路径”，文件管理器从 `/` 更新到终端当前目录 `/root`；随后在文件管理器进入 `/etc` 并点击“将终端目录切换到当前路径”，收到 `terminal.directoryChangeQueued`、请求回执和 `terminal.directoryChanged`，终端提示符进入 `/etc`，再次同步仍得到 `/etc`。
+
+终端初始输出不再包含内部 PID 探测、`PROMPT_COMMAND` Hook、`stty -echo` 或 `__NEXUS_*` 标记；内部初始化成功后只保留登录 banner、正常提示符和用户实际执行的命令。证据：`.tmp/fm-directory-verified.png`。根 `pnpm run check`、双端 build、目标 Prettier 与 `git diff --check` 通过；新增 SSH 场景已加入 `tests/e2e/specs/ssh/terminal-protocol.spec.ts`，本轮未运行整套远程 E2E。
+
+### 2026-10-23 工作区连接列表排布（本地 CDP）
+
+使用 `https://api.honus.top` 的真实登录会话核对启动页连接列表：`1440/1024/768/640/390/320` 六档宽度下搜索框和添加按钮均保持 `40px` 高，提示为“搜索连接”，列表与页面均无横向溢出。进入真实 `amd` 会话后，终端紧凑连接栏在 `225px` 宽时搜索/添加均为 `32px`，连接行 `44.8px` 并显示主机与最近时间；模拟 `180px` 极窄栏时信息自动退回单行 `27.5px`，工具栏仍无溢出。选中项左侧细高亮、分组菜单和原连接打开流程保持可用。证据：`.tmp/workspace-connections-after-1440.png`、`.tmp/workspace-connections-after-390.png`、`.tmp/compact-final-verified-225.png`、`.tmp/compact-final-verified-180.png`、`.tmp/cdp-workspace-final-verified.png`。根 `pnpm run check`、Frontend build、目标 Prettier/ESLint 与 `git diff --check` 通过；未运行整套远程 E2E。
+
+### 2026-10-23 Agent 设置移动端右边界对齐（本地 CDP）
+
+使用 `https://api.honus.top/settings?tab=agent` 与真实登录会话核对。隐藏手机端设置画布滚动条后，Agent 面板仍保留 `12px` 的滚动条占位；现仅在 `1023px` 以下将面板右侧内边距归零。`390×844` 下画布与“Agent 功能”首卡右缘同为 `370px`；`320×700` 下同为 `300px`，偏差 `0px`。两档画布滚动条宽度均为 `0`，内容 `scrollHeight` 大于可视高度且仍可触控滚动，文档无页面级横向溢出。桌面 `1440×900` 仍保持 Agent 面板 `12px` 右内边距、画布稳定滚动条槽和原布局。证据：`.tmp/agent-settings-right-align-390.png`、`.tmp/agent-settings-right-align-320.png`。目标 ESLint、Prettier、Frontend build、根 `pnpm run check`、全量格式与 `git diff --check` 通过；未运行整套远程 E2E。
+
+### 2026-10-23 设置与通知渠道细节收口（本地 CDP）
+
+使用 `https://api.honus.top` 与真实登录会话核对。`390×844`、`320×700` 与 `280×700` 下 Agent App 操作区均为 `3` 列；`390px` 时三枚按钮宽度约 `125.72/93.14/93.14px`，`320px` 时约 `97.52/72.23/72.25px`、`top` 完全一致，容器 `scrollWidth=clientWidth`；`280px` 时约 `81.39/60.30/60.31px`。安全策略盾牌在 `360–639px` 显示、`359px` 以下隐藏，手机三档文字仍完整。外观设置首个无正文卡片高度由 `90px` 降至 `58px`，空 body 不再渲染；自定义外观在 `768/1024/1440px` 使用 `136px` 侧栏、每项 `115×52px`；手机收起时只显示当前分类选择器，`390/320px` 宽 `358/288px`、高 `46px`，展开面板与触发器同宽，四项均为 `46px` 单列行，选择后菜单关闭且面板标题同步切换；所有宽度均无横向溢出或页面错误。图标与文字作为整体在控件内水平居中；选中项左侧 `2px` 高亮线为绝对定位，不再挤压内容。
+
+通知页创建临时 Webhook 渠道后，通过卡片按钮完成启用和停用，两次 PUT 均成功并收到成功 Toast；`390/320px` 下启用/编辑/删除三按钮同排且无横向溢出，随后通过确认弹窗删除临时渠道，剩余匹配项为 `0`。快捷按钮按点击后的动作着色：启用动作为绿色开启图标，停用动作为红色关闭图标，图标、按钮文字、底色和边框均使用对应语义色；启用态实测按钮文字与图标为 `rgb(220, 53, 69)`，停用态为 `rgb(40, 167, 69)`。文件管理器进入 `/etc` 后，名称文字中心相对图标中心上移约 `2.97px`，行高与虚拟列表未变化。`workspace/system/appearance/security/ipControl/data/agent/about` 八个设置标签以及外观弹窗正文在手机端均无可见滚动条，内容仍可滑动。添加 Provider 弹窗在 `390×844` 与 `320×700` 下正文 `padding-inline=0px`、`scrollbar-gutter=auto`、可见滚动条宽度 `0`，`scrollHeight` 大于可视高度且仍可滚动，正文 `scrollWidth=clientWidth`。证据：`.tmp/settings-round2-customizer-320.png`、`.tmp/settings-round2-customizer-390.png`、`.tmp/settings-round2-customizer-1440.png`、`.tmp/settings-round2-app-actions-320.png`、`.tmp/settings-round2-app-actions-390.png`、`.tmp/notifications-toggle-320.png`、`.tmp/notifications-toggle-390.png`、`.tmp/notifications-toggle-color-390.png`、`.tmp/notifications-toggle-color-red-390.png`、`.tmp/notifications-toggle-red-enabled-390.png`、`.tmp/fm-align-round2-1440.png`、`.tmp/security-shield-mobile-390.png`、`.tmp/security-shield-mobile-320.png`、`.tmp/security-shield-mobile-280.png`、`.tmp/provider-mobile-final-390.png`、`.tmp/provider-mobile-final-320.png`、`.tmp/appearance-nav-grid-1440.png`、`.tmp/appearance-mobile-switcher-320.png`、`.tmp/appearance-mobile-switcher-390.png`、`.tmp/appearance-mobile-switcher-open-320.png`、`.tmp/appearance-mobile-switcher-open-390.png`、`.tmp/appearance-mobile-switcher-desktop-1440.png`。目标 ESLint、Prettier、Frontend build、根 `pnpm run check`、全量格式与 `git diff --check` 通过；未运行整套远程 E2E。

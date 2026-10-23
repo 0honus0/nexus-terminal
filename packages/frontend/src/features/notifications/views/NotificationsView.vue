@@ -8,6 +8,7 @@
 	import NotificationSettingForm from '../components/NotificationSettingForm.vue';
 	import { useNotificationsStore } from '../store/notifications.store';
 	import { notificationFailureKey } from '../model/notification-failure';
+	import { toNotificationToggleChange } from '../model/notification-mapper';
 	import type { NotificationSetting, NotificationChange } from '../model/notification-types';
 
 	type ChannelKind = NotificationSetting['config']['kind'];
@@ -164,6 +165,24 @@
 		}
 		try {
 			await store.remove(id, version, signal);
+		} catch (cause) {
+			if (view.isCurrent(signal)) {
+				failureCause = cause;
+				message.value = t(notificationFailureKey(cause));
+			}
+		}
+	}
+
+	async function toggle(item: NotificationSetting): Promise<void> {
+		const signal = view.capture();
+		if (signal.aborted || loading.value || needsRefresh.value) {
+			return;
+		}
+		try {
+			await store.save(toNotificationToggleChange(item), { id: item.id, version: item.version }, signal);
+			if (view.isCurrent(signal)) {
+				feedback.notifySuccess(t('common.saved'));
+			}
 		} catch (cause) {
 			if (view.isCurrent(signal)) {
 				failureCause = cause;
@@ -332,6 +351,47 @@
 								</div>
 							</div>
 							<div class="ui-catalog-card__actions">
+								<UiButton
+									type="button"
+									appearance="soft"
+									:tone="item.enabled ? 'danger' : 'success'"
+									icon-only
+									density="comfortable"
+									class="ui-catalog-card__action notifications-channel-toggle"
+									:data-channel-enabled="item.enabled"
+									:disabled="loading || needsRefresh"
+									:aria-label="
+										t(
+											item.enabled
+												? 'settings.notifications.disableChannel'
+												: 'settings.notifications.enableChannel',
+										)
+									"
+									:title="
+										t(
+											item.enabled
+												? 'settings.notifications.disableChannel'
+												: 'settings.notifications.enableChannel',
+										)
+									"
+									@click="toggle(item)"
+								>
+									<i
+										:class="
+											item.enabled
+												? 'fas fa-toggle-off text-danger'
+												: 'fas fa-toggle-on text-success'
+										"
+										aria-hidden="true"
+									></i>
+									<span class="ui-catalog-card__action-label">{{
+										t(
+											item.enabled
+												? 'settings.notifications.disableChannel'
+												: 'settings.notifications.enableChannel',
+										)
+									}}</span>
+								</UiButton>
 								<UiButton
 									type="button"
 									appearance="soft"

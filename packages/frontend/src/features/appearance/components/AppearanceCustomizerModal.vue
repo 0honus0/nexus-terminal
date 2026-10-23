@@ -1,6 +1,6 @@
 <script setup lang="ts">
-	import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-	import { UiButton, UiSurface } from '@/foundation/ui';
+	import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+	import { UiButton, UiPopover, UiSurface } from '@/foundation/ui';
 	import { useI18n } from 'vue-i18n';
 	import { useSettingsReloadSource } from '@/shared/feedback/public';
 	import { useAppearanceStore } from '../store/appearance.store';
@@ -37,6 +37,7 @@
 		{ id: 'background', label: 'styleCustomizer.backgroundSettings', icon: 'fa-solid fa-image' },
 		{ id: 'other', label: 'styleCustomizer.otherSettings', icon: 'fa-solid fa-sliders' },
 	] as const;
+	const activeTabDefinition = computed(() => tabs.find((tab) => tab.id === activeTab.value) ?? tabs[0]);
 	const root = ref<HTMLElement | null>(null);
 	const dialog = ref<HTMLElement | null>(null);
 	const uiPanel = ref<InstanceType<typeof BasicAppearancePanel> | null>(null);
@@ -141,15 +142,71 @@
 				</header>
 
 				<div class="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+					<div class="appearance-customizer-mobile-nav">
+						<UiPopover
+							:ariaLabel="t(activeTabDefinition.label)"
+							placement="bottom"
+							align="start"
+							:offset="6"
+							wrapper-class="block w-full"
+							panel-class="appearance-customizer-mobile-popover"
+						>
+							<template #trigger-control="{ open }">
+								<button
+									type="button"
+									class="appearance-customizer-mobile-trigger ui-focusable"
+									aria-haspopup="listbox"
+									:aria-expanded="open"
+								>
+									<span class="appearance-customizer-nav__icon" aria-hidden="true">
+										<i :class="activeTabDefinition.icon"></i>
+									</span>
+									<span class="appearance-customizer-mobile-trigger__label">{{
+										t(activeTabDefinition.label)
+									}}</span>
+									<span class="appearance-customizer-mobile-trigger__chevron" aria-hidden="true">
+										<i class="fa-solid fa-chevron-down"></i>
+									</span>
+								</button>
+							</template>
+							<template #panel="{ close }">
+								<div
+									class="appearance-customizer-mobile-menu"
+									role="listbox"
+									:aria-label="t('settings.appearance.title')"
+								>
+									<button
+										v-for="tab in tabs"
+										:key="tab.id"
+										type="button"
+										role="option"
+										class="appearance-customizer-nav__item ui-focusable"
+										:data-active="activeTab === tab.id || undefined"
+										:aria-selected="activeTab === tab.id"
+										@click="
+											activeTab = tab.id;
+											close();
+										"
+									>
+										<span class="appearance-customizer-nav__icon" aria-hidden="true">
+											<i :class="tab.icon"></i>
+										</span>
+										<span class="appearance-customizer-nav__label">{{ t(tab.label) }}</span>
+									</button>
+								</div>
+							</template>
+						</UiPopover>
+					</div>
+
 					<nav
-						class="appearance-customizer-nav border-b border-border bg-header md:border-b-0 md:border-r"
+						class="appearance-customizer-nav appearance-customizer-nav--desktop border-border bg-header md:border-r"
 						role="tablist"
 						:aria-label="t('settings.appearance.title')"
 					>
 						<button
 							v-for="(tab, index) in tabs"
-							:key="tab.id"
 							:id="`appearance-customizer-tab-${tab.id}`"
+							:key="tab.id"
 							type="button"
 							role="tab"
 							class="appearance-customizer-nav__item ui-focusable"
@@ -172,7 +229,7 @@
 						:key="editorGeneration"
 						role="tabpanel"
 						:aria-labelledby="`appearance-customizer-tab-${activeTab}`"
-						class="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 md:px-6 md:py-4"
+						class="appearance-customizer-content min-h-0 min-w-0 flex-1 overflow-y-auto p-3 md:px-6 md:py-4"
 					>
 						<UiSurface v-if="activeTab === 'ui'" class="min-w-0 p-4"
 							><BasicAppearancePanel ref="uiPanel" section="ui" :show-ui-actions="false"
@@ -220,16 +277,113 @@
 </template>
 
 <style scoped>
+	.appearance-customizer-mobile-nav {
+		display: flex;
+		flex: 0 0 auto;
+		width: 100%;
+		padding: 10px 12px;
+		border-bottom: 1px solid color-mix(in srgb, var(--border-color) 48%, transparent);
+		background: color-mix(in srgb, var(--header-bg-color) 72%, transparent);
+	}
+
+	.appearance-customizer-mobile-trigger {
+		position: relative;
+		display: flex;
+		gap: 10px;
+		align-items: center;
+		width: min(100%, 360px);
+		min-height: 46px;
+		padding: 7px 10px;
+		border: 1px solid color-mix(in srgb, var(--link-active-color) 24%, var(--border-color));
+		border-radius: 12px;
+		background: color-mix(in srgb, var(--card-bg-color) 72%, var(--link-active-color) 10%);
+		color: var(--text-color);
+		text-align: left;
+		cursor: pointer;
+		box-shadow:
+			inset 0 1px 0 color-mix(in srgb, white 8%, transparent),
+			0 8px 18px -18px rgb(0 0 0 / 42%);
+		transition:
+			background-color 140ms ease,
+			border-color 140ms ease;
+	}
+
+	.appearance-customizer-mobile-trigger::before {
+		position: absolute;
+		top: 10px;
+		bottom: 10px;
+		left: 0;
+		width: 2px;
+		border-radius: 999px;
+		background: var(--link-active-color);
+		content: '';
+	}
+
+	.appearance-customizer-mobile-trigger:hover {
+		border-color: color-mix(in srgb, var(--link-active-color) 34%, var(--border-color));
+		background: color-mix(in srgb, var(--card-bg-color) 68%, var(--link-active-color) 14%);
+	}
+
+	.appearance-customizer-mobile-trigger__label {
+		min-width: 0;
+		overflow: hidden;
+		font-size: 13px;
+		font-weight: 600;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.appearance-customizer-mobile-trigger__chevron {
+		display: grid;
+		width: 22px;
+		height: 22px;
+		flex: 0 0 auto;
+		margin-left: auto;
+		place-items: center;
+		border-radius: 7px;
+		background: color-mix(in srgb, var(--text-color) 6%, transparent);
+		color: var(--text-color-secondary);
+		font-size: 9px;
+		transition: transform 160ms ease;
+	}
+
+	.appearance-customizer-mobile-trigger[data-state='open'] .appearance-customizer-mobile-trigger__chevron {
+		transform: rotate(180deg);
+	}
+
+	.appearance-customizer-mobile-menu {
+		display: grid;
+		gap: 4px;
+	}
+
+	.appearance-customizer-mobile-menu .appearance-customizer-nav__item {
+		justify-content: flex-start;
+		text-align: left;
+	}
+
+	:global(.appearance-customizer-mobile-popover) {
+		z-index: 1100;
+		width: min(calc(100vw - 24px), 360px);
+		padding: 6px;
+		border-color: color-mix(in srgb, var(--border-color) 58%, transparent);
+		background: color-mix(in srgb, var(--header-bg-color) 92%, transparent);
+		box-shadow: 0 18px 48px -26px rgb(0 0 0 / 72%);
+	}
+
 	.appearance-customizer-nav {
 		display: flex;
 		flex: 0 0 auto;
-		flex-direction: row;
-		gap: 6px;
+		flex-direction: column;
+		gap: 5px;
 		width: 100%;
-		padding: 10px;
-		overflow-x: auto;
+		padding: 8px;
+		overflow-x: hidden;
 		overflow-y: hidden;
 		scrollbar-width: none;
+	}
+
+	.appearance-customizer-nav--desktop {
+		display: none;
 	}
 
 	.appearance-customizer-nav::-webkit-scrollbar {
@@ -239,22 +393,23 @@
 	.appearance-customizer-nav__item {
 		position: relative;
 		display: flex;
-		flex: 1 1 0;
-		flex-direction: column;
+		flex: 0 0 auto;
+		flex-direction: row;
 		align-items: center;
 		justify-content: center;
-		gap: 4px;
-		min-width: 68px;
-		min-height: 56px;
-		padding: 6px 4px;
+		gap: 9px;
+		width: 100%;
+		min-width: 0;
+		min-height: 46px;
+		padding: 7px 10px;
 		border: 1px solid transparent;
 		border-radius: 11px;
 		background: transparent;
 		color: var(--text-color-secondary);
 		font-size: 12px;
-		font-weight: 560;
+		font-weight: 500;
 		line-height: 1.2;
-		text-align: left;
+		text-align: center;
 		white-space: nowrap;
 		cursor: pointer;
 		transition:
@@ -264,22 +419,27 @@
 	}
 
 	.appearance-customizer-nav__item:hover:not([data-active]) {
-		background: color-mix(in srgb, var(--card-bg-color) 42%, transparent);
+		background: color-mix(in srgb, var(--card-bg-color) 44%, transparent);
 		color: var(--text-color);
 	}
 
 	.appearance-customizer-nav__item[data-active] {
-		border-color: color-mix(in srgb, var(--link-active-color) 18%, transparent);
-		background: color-mix(in srgb, var(--card-bg-color) 58%, var(--link-active-color) 7%);
+		border-color: color-mix(in srgb, var(--link-active-color) 24%, var(--border-color));
+		background: color-mix(in srgb, var(--card-bg-color) 72%, var(--link-active-color) 12%);
 		color: var(--text-color);
+		font-weight: 600;
+		box-shadow:
+			inset 0 1px 0 color-mix(in srgb, white 9%, transparent),
+			0 8px 18px -18px rgb(0 0 0 / 42%);
 	}
 
 	.appearance-customizer-nav__item[data-active]::after {
 		position: absolute;
-		right: 10px;
-		bottom: 0;
-		left: 10px;
-		height: 2px;
+		top: 10px;
+		bottom: 10px;
+		left: 0;
+		display: block;
+		width: 2px;
 		border-radius: 999px;
 		background: var(--link-active-color);
 		content: '';
@@ -287,21 +447,21 @@
 
 	.appearance-customizer-nav__icon {
 		display: grid;
-		width: 24px;
-		height: 24px;
+		width: 26px;
+		height: 26px;
 		flex: 0 0 auto;
 		place-items: center;
-		border-radius: 7px;
-		background: color-mix(in srgb, var(--text-color) 5%, transparent);
+		border-radius: 8px;
+		background: color-mix(in srgb, var(--text-color) 6%, transparent);
 		color: var(--text-color-secondary);
-		font-size: 11px;
+		font-size: 10px;
 		transition:
 			background-color 140ms ease,
 			color 140ms ease;
 	}
 
 	.appearance-customizer-nav__item[data-active] .appearance-customizer-nav__icon {
-		background: color-mix(in srgb, var(--link-active-color) 14%, var(--card-bg-color));
+		background: color-mix(in srgb, var(--link-active-color) 10%, transparent);
 		color: var(--link-active-color);
 	}
 
@@ -312,39 +472,45 @@
 	}
 
 	@media (min-width: 768px) {
+		.appearance-customizer-mobile-nav {
+			display: none;
+		}
+
+		.appearance-customizer-nav--desktop {
+			display: flex;
+		}
+
 		.appearance-customizer-nav {
-			flex-direction: column;
-			gap: 4px;
-			width: 184px;
-			padding: 12px;
+			gap: 6px;
+			width: 136px;
+			padding: 16px 10px;
 			overflow: visible;
 		}
 
 		.appearance-customizer-nav__item {
-			flex: 0 0 auto;
-			flex-direction: row;
-			justify-content: flex-start;
-			gap: 10px;
-			width: 100%;
 			min-width: 0;
-			min-height: 44px;
-			padding: 6px 10px 6px 12px;
-		}
-
-		.appearance-customizer-nav__item[data-active]::after {
-			top: 10px;
-			right: auto;
-			bottom: 10px;
-			left: 0;
-			width: 2px;
-			height: auto;
+			min-height: 52px;
+			padding: 8px 10px;
 		}
 
 		.appearance-customizer-nav__icon {
-			width: 28px;
-			height: 28px;
+			width: 30px;
+			height: 30px;
 			border-radius: 9px;
-			font-size: 12px;
+			font-size: 11px;
+		}
+	}
+
+	@media (max-width: 767px) {
+		.appearance-customizer-content {
+			scrollbar-width: none;
+			-ms-overflow-style: none;
+		}
+
+		.appearance-customizer-content::-webkit-scrollbar {
+			display: none;
+			width: 0;
+			height: 0;
 		}
 	}
 </style>

@@ -647,16 +647,33 @@
 	.docker-stats-grid {
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 0.25rem 0.35rem;
+		gap: 1px;
 		margin: 0;
 		padding: 0;
+		overflow: hidden;
+		border: 1px solid color-mix(in srgb, var(--border-color) 28%, transparent);
+		border-radius: 0.5rem;
+		background: color-mix(in srgb, var(--border-color) 28%, transparent);
 	}
 
 	.docker-stat {
 		min-width: 0;
-		padding: 0.28rem 0.38rem;
-		border-radius: 0.38rem;
-		background: color-mix(in srgb, var(--text-color) 3.5%, transparent);
+		padding: 0.34rem 0.42rem 0.38rem;
+		border-radius: 0;
+		background: color-mix(in srgb, var(--app-bg-color) 82%, var(--text-color) 2.5%);
+	}
+
+	.docker-stat:last-child {
+		display: flex;
+		grid-column: 1 / -1;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+
+	.docker-stat:last-child dd {
+		margin-top: 0;
+		text-align: right;
 	}
 
 	.docker-stat dt {
@@ -675,6 +692,7 @@
 		color: var(--text-color);
 		font-family: var(--font-family-monospace);
 		font-size: 0.63rem;
+		font-variant-numeric: tabular-nums;
 		line-height: 1.35;
 	}
 
@@ -720,8 +738,8 @@
 			flex: 0 0 1.75rem;
 		}
 
-		.docker-stats-grid {
-			grid-template-columns: repeat(5, minmax(0, 1fr));
+		.docker-stat {
+			padding: 0.42rem 0.52rem 0.46rem;
 		}
 	}
 

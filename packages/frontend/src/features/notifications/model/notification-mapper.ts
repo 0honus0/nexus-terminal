@@ -121,6 +121,54 @@ export function toNotificationChange(value: NotificationChange): NotificationCre
 	};
 }
 
+export function toNotificationToggleChange(value: NotificationSetting): NotificationChange {
+	const config = value.config;
+	if (config.kind === 'webhook') {
+		return {
+			name: value.name,
+			enabled: !value.enabled,
+			events: value.events.map((event) => event),
+			config: {
+				kind: 'webhook',
+				url: config.url,
+				method: config.method,
+				headers: config.headers.map((header) => ({ name: header.name, value: { action: 'keep' } })),
+				bodyTemplate: config.bodyTemplate,
+			},
+		};
+	}
+	if (config.kind === 'email') {
+		return {
+			name: value.name,
+			enabled: !value.enabled,
+			events: value.events.map((event) => event),
+			config: {
+				kind: 'email',
+				to: config.to,
+				from: config.from,
+				host: config.host,
+				port: config.port,
+				secure: config.secure,
+				username: config.username,
+				password: { action: 'keep' },
+				bodyTemplate: config.bodyTemplate,
+			},
+		};
+	}
+	return {
+		name: value.name,
+		enabled: !value.enabled,
+		events: value.events.map((event) => event),
+		config: {
+			kind: 'telegram',
+			origin: config.origin,
+			chatId: config.chatId,
+			botToken: { action: 'keep' },
+			bodyTemplate: config.bodyTemplate,
+		},
+	};
+}
+
 export function snapshotNotificationChange(value: NotificationChange): NotificationChange {
 	return {
 		name: value.name,

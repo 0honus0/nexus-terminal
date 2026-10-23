@@ -265,7 +265,7 @@
   "workspaceConnectionList": {
     "untagged": "未标记",
     "groupActions": "分组操作",
-    "searchPlaceholder": "搜索名称或主机...",
+    "searchPlaceholder": "搜索连接",
     "noResults": "未找到匹配 \"{searchTerm}\" 的连接。",
     "allConnectionsTaggedSuccess": "所有连接已成功添加标签。",
     "noConnectionsToTag": "没有需要添加标签的连接。",

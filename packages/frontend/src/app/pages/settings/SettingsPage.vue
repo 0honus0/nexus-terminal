@@ -725,6 +725,15 @@
 	@media (max-width: 1023px) {
 		.settings-content-canvas {
 			padding-inline: 0;
+			scrollbar-gutter: auto;
+			scrollbar-width: none;
+			-ms-overflow-style: none;
+		}
+
+		.settings-content-canvas::-webkit-scrollbar {
+			display: none;
+			width: 0;
+			height: 0;
 		}
 	}
 

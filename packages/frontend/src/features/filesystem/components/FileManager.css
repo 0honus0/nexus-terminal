@@ -559,7 +559,7 @@
 	display: block;
 	min-width: 0;
 	overflow: hidden;
-	padding-block: 1px;
+	padding-block: 0 4px;
 	line-height: inherit;
 	text-overflow: ellipsis;
 	white-space: nowrap;

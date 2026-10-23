@@ -12,6 +12,8 @@ interface Setup {
 	start: Buffer;
 	end: Buffer;
 	buffer: Buffer;
+	echoStart: Buffer;
+	suppressing: boolean;
 	capturing: boolean;
 	timer: ReturnType<typeof setTimeout>;
 	resolve(): void;
@@ -261,6 +263,8 @@ class NativeShellIntegration implements ShellIntegrationPort {
 				start: Buffer.from(start, 'ascii'),
 				end: Buffer.from(end, 'ascii'),
 				buffer: Buffer.alloc(0),
+				echoStart: Buffer.from('stty -echo', 'ascii'),
+				suppressing: false,
 				capturing: false,
 				timer: setTimeout(() => {
 					if (this.setup === setup) {
@@ -300,17 +304,30 @@ class NativeShellIntegration implements ShellIntegrationPort {
 			let joined = Buffer.concat([setup.buffer, value]);
 			let visiblePrefix = Buffer.alloc(0);
 			if (!setup.capturing) {
-				const begin = joined.indexOf(setup.start);
-				if (begin < 0) {
-					// Never discard arbitrary terminal output while waiting for
-					// a probe. Retain only a possible fragmented marker prefix.
-					const held = partialSuffix(joined, setup.start);
-					setup.buffer = Buffer.from(joined.subarray(joined.length - held));
-					value = joined.subarray(0, joined.length - held);
-				} else {
-					visiblePrefix = joined.subarray(0, begin);
-					joined = joined.subarray(begin);
-					setup.capturing = true;
+				if (!setup.suppressing) {
+					const echo = joined.indexOf(setup.echoStart);
+					if (echo < 0) {
+						const held = partialSuffix(joined, setup.echoStart);
+						setup.buffer = Buffer.from(joined.subarray(joined.length - held));
+						value = joined.subarray(0, joined.length - held);
+						joined = Buffer.alloc(0);
+					} else {
+						visiblePrefix = joined.subarray(0, echo);
+						joined = joined.subarray(echo);
+						setup.suppressing = true;
+					}
+				}
+				if (setup.suppressing && !setup.capturing) {
+					const begin = joined.indexOf(setup.start);
+					if (begin < 0) {
+						const held = partialSuffix(joined, setup.start);
+						setup.buffer = Buffer.from(joined.subarray(joined.length - held));
+						value = visiblePrefix;
+						joined = Buffer.alloc(0);
+					} else {
+						joined = joined.subarray(begin);
+						setup.capturing = true;
+					}
 				}
 			}
 			if (setup.capturing) {

@@ -411,6 +411,10 @@
 	margin-bottom: 16px;
 }
 
+.ui-settings-group[data-body-empty] .ui-settings-group__head {
+	margin-bottom: 0;
+}
+
 .ui-settings-group__icon {
 	display: grid;
 	width: 34px;

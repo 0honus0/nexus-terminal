@@ -1,8 +1,14 @@
 import { FilesystemFailure } from './filesystem-types';
+import { TerminalDirectoryFailure } from './terminal-directory-types';
 
 /** Translate finite application failures; locally authored UI messages remain local. */
 export function filesystemFailureMessage(value: unknown, translate: (key: string) => string): string {
-	const code = value instanceof FilesystemFailure ? value.code : typeof value === 'string' ? value : undefined;
+	const code =
+		value instanceof FilesystemFailure || value instanceof TerminalDirectoryFailure
+			? value.code
+			: typeof value === 'string'
+				? value
+				: undefined;
 	if (code === 'operation_unknown') {
 		return translate('fileManager.errors.operationUnknown');
 	}
