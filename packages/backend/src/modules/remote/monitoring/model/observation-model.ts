@@ -4,6 +4,7 @@ import { DOCKER_MAX_CONTAINERS } from '@nexus-terminal/shared/remote/docker/valu
 import type { ConnectionCatalog, TrustedSshTargetResolver } from '../../../targets/public.js';
 import { OBSERVATION_MAX_RESOURCES } from '@nexus-terminal/shared/remote/monitoring/values';
 import type { ObservationTarget } from './observation-types.js';
+import { observationTargetKey } from './observation-targets.js';
 import type { ReadDiagnostics } from '../../machines/model/operation-types.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { RemoteMachineModel } from '../../machines/model/machine-model.js';
@@ -232,7 +233,11 @@ export class ObservationModel {
 		};
 	}
 
-	async listTargets(signal?: AbortSignal): Promise<ObservationTarget[]> {
+	async listTargets(
+		signal?: AbortSignal,
+		connectionId?: number,
+		hostKeys?: ReadonlySet<string>,
+	): Promise<ObservationTarget[]> {
 		let catalog: Awaited<ReturnType<ConnectionCatalog['list']>>;
 		try {
 			signal?.throwIfAborted();
@@ -241,9 +246,19 @@ export class ObservationModel {
 		} catch (cause) {
 			throw new ObservationFailure('remote_unavailable', { cause });
 		}
-		const rows = catalog.filter((row) => row.type === 'SSH');
+		let rows = catalog.filter((row) => row.type === 'SSH');
 		if (rows.length > OBSERVATION_MAX_RESOURCES) {
 			throw new ObservationFailure('limit_exceeded');
+		}
+		if (connectionId !== undefined) {
+			const selected = rows.find((row) => row.id === connectionId);
+			if (!selected) {
+				throw new ObservationFailure('not_found');
+			}
+			const key = observationTargetKey(selected.host, selected.port);
+			rows = rows.filter((row) => observationTargetKey(row.host, row.port) === key);
+		} else if (hostKeys) {
+			rows = rows.filter((row) => hostKeys.has(observationTargetKey(row.host, row.port)));
 		}
 		const result: ObservationTarget[] = [];
 		let index = 0;

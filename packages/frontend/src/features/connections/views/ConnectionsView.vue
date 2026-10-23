@@ -116,14 +116,9 @@
 	watch(() => (auth.isAuthenticated.value ? auth.user.value?.id : null), resetPanels, { flush: 'sync' });
 	onDeactivated(resetPanels);
 	onBeforeUnmount(resetPanels);
-	const filtered = computed(() => {
-		const q = search.value.toLowerCase().trim();
-		const values = data.connections.value.filter((c) => {
-			if (tagId.value !== '' && !c.tagIds.includes(tagId.value)) return false;
-			return !q || `${c.name ?? ''} ${c.host} ${c.port} ${c.username} ${c.notes ?? ''}`.toLowerCase().includes(q);
-		});
+	const sortedConnections = computed(() => {
 		const direction = sortOrder.value === 'asc' ? 1 : -1;
-		return [...values].sort((a, b) => {
+		return [...data.connections.value].sort((a, b) => {
 			if (sort.value === 'name') return (a.name ?? a.host).localeCompare(b.name ?? b.host) * direction;
 			if (sort.value === 'type') return a.type.localeCompare(b.type) * direction;
 			if (sort.value === 'updated') return (a.updatedAt - b.updatedAt) * direction;
@@ -132,6 +127,21 @@
 			const bTime = b.lastConnectedAt ?? (sortOrder.value === 'asc' ? Number.POSITIVE_INFINITY : -1);
 			return (aTime - bTime) * direction;
 		});
+	});
+	const searchableConnections = computed(() =>
+		sortedConnections.value.map((connection) => ({
+			connection,
+			text: `${connection.name ?? ''} ${connection.host} ${connection.port} ${connection.username} ${connection.notes ?? ''}`.toLowerCase(),
+		})),
+	);
+	const filtered = computed(() => {
+		const q = search.value.toLowerCase().trim();
+		return searchableConnections.value
+			.filter(
+				({ connection, text }) =>
+					(tagId.value === '' || connection.tagIds.includes(tagId.value)) && (!q || text.includes(q)),
+			)
+			.map(({ connection }) => connection);
 	});
 	const connectionTypeCounts = computed<Record<ConnectionSummary['type'], number>>(() => {
 		const counts: Record<ConnectionSummary['type'], number> = { SSH: 0, RDP: 0, VNC: 0 };
@@ -185,10 +195,10 @@
 		void router.push({ name: 'Workspace', query: { connectionId: ids } });
 	};
 
+	const tagNameById = computed(() => new Map(tags.items.value.map((tag) => [tag.id, tag.name])));
+
 	const tagNames = (connection: ConnectionSummary) =>
-		connection.tagIds
-			.map((id) => tags.items.value.find((tag) => tag.id === id)?.name)
-			.filter((name): name is string => Boolean(name));
+		connection.tagIds.map((id) => tagNameById.value.get(id)).filter((name): name is string => Boolean(name));
 
 	const toggleSelected = (id: number) => {
 		const next = new Set(selected.value);
@@ -484,6 +494,16 @@
 					<li
 						v-for="c in filtered"
 						:key="c.id"
+						v-memo="[
+							c,
+							batch,
+							selected.has(c.id),
+							testing.has(c.id),
+							testResults.get(c.id),
+							locale,
+							tagNameById,
+							formatRelativeTime(c.lastConnectedAt),
+						]"
 						class="connection-card"
 						:class="[
 							selected.has(c.id) ? 'ring-2 ring-primary/70 ring-offset-1 ring-offset-background' : '',

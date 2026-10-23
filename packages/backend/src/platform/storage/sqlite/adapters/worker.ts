@@ -1,5 +1,5 @@
 import { parentPort, workerData, type MessagePort } from 'node:worker_threads';
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { installUnicodeTextFunctions } from './unicode-text.js';
 import type { WorkerSqliteError } from '../sqlite-errors.js';
 import { decodeWorkerRequest, type WorkerRequest } from '../worker-types.js';
@@ -21,10 +21,29 @@ function serializeError(error: unknown): WorkerSqliteError {
 
 function executeQuery(db: DatabaseSync, request: Exclude<WorkerRequest, { kind: 'close' | 'diagnostics' }>): unknown {
 	if (request.kind === 'exec') {
+		// Keep hot statements across normal transactions; schema/setup scripts invalidate the cache.
+		if (!['BEGIN IMMEDIATE', 'COMMIT', 'ROLLBACK'].includes(request.sql)) {
+			statements.clear();
+		}
 		db.exec(request.sql);
 		return null;
 	}
-	const statement = db.prepare(request.sql);
+	let statement = statements.get(request.sql);
+	if (statement) {
+		statements.delete(request.sql);
+	} else {
+		statement = db.prepare(request.sql);
+	}
+	// Bound retained SQL/handles; oversized one-off queries still execute without entering the cache.
+	if (request.sql.length <= 16_384) {
+		if (statements.size >= 128) {
+			const oldest = statements.keys().next().value;
+			if (oldest !== undefined) {
+				statements.delete(oldest);
+			}
+		}
+		statements.set(request.sql, statement);
+	}
 	switch (request.kind) {
 		case 'all':
 			return statement.all(...request.params);
@@ -60,6 +79,7 @@ function handleRequest(port: MessagePort, db: DatabaseSync, request: WorkerReque
 			return;
 		}
 		if (request.kind === 'close') {
+			statements.clear();
 			db.close();
 			port.postMessage({ id: request.id, value: null });
 			port.close();
@@ -77,6 +97,7 @@ if (port === null) {
 	throw new Error('SQLite worker requires a parent port');
 }
 const db = new DatabaseSync(databasePath(workerData));
+const statements = new Map<string, StatementSync>();
 installUnicodeTextFunctions(db);
 db.exec('PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000');
 port.on('message', (value: unknown) => {

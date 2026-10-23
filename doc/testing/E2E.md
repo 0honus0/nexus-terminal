@@ -1637,3 +1637,13 @@ Agent 数量组件新增范围失败局部状态：合法单位表达超出当�
 分栏视觉线仍为 1px，透明拖拽热区扩展到 splitter 两侧约 16px。将指针放在 splitter 中心左侧 12px（已超出 9px 原生 splitter 区域）按下并拖动，文件管理 pane 从 `246.546875px` 调整到 `230.296875px`，证明扩展热区实际参与命中；随后恢复正常中心拖拽，未修改远端文件。
 
 证据：`.tmp/fm-embedded-1x8-cdp.png`、`.tmp/fm-embedded-2x4-cdp.png`、`.tmp/cdp-drag-splitter.mjs`、`.tmp/fm-embedded-cdp-probe.mjs`。目标 Prettier、目标 ESLint、Frontend build、根 `pnpm run check` 与 `git diff --check` 通过；全量格式检查仅因并行修改的 `BackupSettingsPanel.vue` 既有格式失败，未改动该无关文件。本轮为本地 CDP UI 验收，不替代完整 E2E；未提交、推送或部署。
+
+### 2026-10-23 前后端性能优化（仅静态与产物）
+
+范围：连接目录事务批读、SQLite Worker 语句 LRU、监控按请求主机计算及复核指纹、连接列表排序/检索索引与线性标签分组、单层列表 memo、后台 xterm 解析批次调度、RDP WASM 资产拆分。未变更 UI 样式、布局和操作入口。嵌套分组保留原渲染，完整 DOM 与键盘/滚动访问保持；Monaco 已按需加载，本轮未删除编辑功能。
+
+证据：根 `pnpm run check`、双端 `pnpm run build` 通过；全量格式初次通过，最终重查受并行修改的 FileManager.css 格式影响，未改动该 UI 文件；本轮性能文件单独检查。构建插件及 Vite 配置补充独立严格 TypeScript/ESLint 检查。RDP 构建 JS 为 52,275 字节，WASM 为 4,511,023 字节（原内嵌 Base64 为 6,014,700 字节），二进制 SHA-256 为 `68b5c65280e5348ea418cd0aba2e4e28f9bd4051c2cf9fd4b84d721847ef3363`，与依赖中内嵌内容逐字节一致；产物 JS 正确引用 hash WASM，首页 HTML 未直接引入该资产。日志为 `/tmp/nexus-performance-{check,format,build,build-types}.log`。
+
+按 PLAN D17 未运行本地行为、浏览器或 E2E，未测真实 CPU/网络收益。远程需核对大目录完整元数据/标签/跳板、监控同主机多凭据回退与配置变更冲突、定向刷新不驱逐其它主机、多 SSH 隐藏刷屏与前台切换/续接/关闭的输出完整和消费顺序、列表搜索排序/选择/语言/高亮，以及 RDP 冷/热缓存连接与部署 WASM MIME/压缩。静态通过不等于上述行为已验收；本轮按用户授权提交性能修改，不含并行 UI/安装功能，未推送或部署。
+
+两轮复审：第一轮复核目录事务/关联解码、监控配置与授权失效、SQLite 语句缓存淘汰、终端 flush/drain/discard 及消费确认，补齐连接列表 memo 的相对时间失效，避免文案停留在旧时间。第二轮复核 15 文件的独立暂存内容，工作区目录仅保留检索/分组优化，排除对未提交 launchpad UI 的依赖；通过暂存快照另建临时目录，仅执行类型、格式及双端构建。独立证据日志为 `/tmp/nexus-performance-isolated-{check,format,build}.log`；此快照没有工作区的 FileManager.css 格式修改。

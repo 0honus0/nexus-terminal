@@ -107,6 +107,14 @@ export async function readConnection(tx: SqlReader, id: number): Promise<StoredC
 		'SELECT jump_connection_id,position FROM connection_jumps WHERE connection_id=? ORDER BY position',
 		[id],
 	);
+	return decodeConnection(row, tags, jumps);
+}
+
+function decodeConnection(
+	row: Record<string, unknown>,
+	tags: Record<string, unknown>[],
+	jumps: Record<string, unknown>[],
+): StoredConnection {
 	if (tags.length > TARGET_CONNECTION_MAX_TAGS || jumps.length > TARGET_CONNECTION_MAX_JUMPS) {
 		throw new Error('Corrupt connection relationship capacity');
 	}
@@ -211,15 +219,31 @@ export class ConnectionSqliteAdapter implements ConnectionStorage {
 
 	list(): Promise<StoredConnection[]> {
 		return this.db.transaction(async (tx) => {
-			const rows = await tx.all('SELECT id FROM connections ORDER BY id');
-			const items: StoredConnection[] = [];
-			for (const row of rows) {
-				const connection = await readConnection(tx, decodeInteger(row.id));
-				if (connection) {
-					items.push(connection);
+			// Read one consistent snapshot with three Worker round trips, independent of catalog size.
+			const rows = await tx.all('SELECT * FROM connections ORDER BY id');
+			const tagRows = await tx.all(
+				'SELECT connection_id,tag_id FROM connection_tags ORDER BY connection_id,tag_id',
+			);
+			const jumpRows = await tx.all(
+				'SELECT connection_id,jump_connection_id,position FROM connection_jumps ORDER BY connection_id,position',
+			);
+			const tags = new Map<number, Record<string, unknown>[]>();
+			const jumps = new Map<number, Record<string, unknown>[]>();
+			for (const [source, grouped] of [
+				[tagRows, tags],
+				[jumpRows, jumps],
+			] as const) {
+				for (const row of source) {
+					const id = decodeInteger(row.connection_id);
+					const group = grouped.get(id) ?? [];
+					group.push(row);
+					grouped.set(id, group);
 				}
 			}
-			return items;
+			return rows.map((row) => {
+				const id = decodeInteger(row.id);
+				return decodeConnection(row, tags.get(id) ?? [], jumps.get(id) ?? []);
+			});
 		});
 	}
 

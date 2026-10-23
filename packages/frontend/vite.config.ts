@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath } from 'node:url';
+import { rdpWasmAssets } from './build/rdp-wasm-assets.ts';
 
 const resolveLocalModule = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
@@ -30,7 +31,7 @@ export default defineConfig({
 			),
 		},
 	},
-	plugins: [vue(), tailwindcss()],
+	plugins: [rdpWasmAssets(), vue(), tailwindcss()],
 	oxc: {
 		target: 'es2025',
 	},

@@ -154,15 +154,17 @@
 		},
 	);
 	const tagMap = computed(() => new Map(tags.tags.value.map((tag) => [tag.id, tag.name])));
+	const searchableConnections = computed(() =>
+		data.connections.value.map((connection) => ({
+			connection,
+			text: `${connection.name ?? ''} ${connection.host} ${connection.username} ${connection.tagIds.map((id) => tagMap.value.get(id) ?? '').join(' ')}`.toLowerCase(),
+		})),
+	);
 	const filtered = computed(() => {
 		const q = search.value.trim().toLowerCase();
-		return data.connections.value.filter(
-			(connection) =>
-				!q ||
-				`${connection.name ?? ''} ${connection.host} ${connection.username} ${connection.tagIds.map((id) => tagMap.value.get(id) ?? '').join(' ')}`
-					.toLowerCase()
-					.includes(q),
-		);
+		return searchableConnections.value
+			.filter(({ text }) => !q || text.includes(q))
+			.map(({ connection }) => connection);
 	});
 	const groups = computed(() => {
 		const result = new Map<number, ConnectionSummary[]>();
@@ -170,7 +172,13 @@
 		for (const connection of filtered.value) {
 			const ids = connection.tagIds.filter((id) => tagMap.value.has(id));
 			if (!ids.length) untagged.push(connection);
-			else for (const id of ids) result.set(id, [...(result.get(id) ?? []), connection]);
+			else {
+				for (const id of ids) {
+					const group = result.get(id) ?? [];
+					group.push(connection);
+					result.set(id, group);
+				}
+			}
 		}
 		const tagged: Array<{ key: string; tagId: number | null; name: string; connections: ConnectionSummary[] }> = [
 			...result.entries(),

@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { setMaxListeners } from 'node:events';
 import type { AccessPublicApi } from '../../../access/public.js';
 import type { ObservationModel } from '../model/observation-model.js';
+import { observationTargetKey } from '../model/observation-targets.js';
 import type { RemoteObservationService } from './observation-service.js';
 import { ObservationFailure, type ObservationTarget, type ObservedSshResource } from '../model/observation-types.js';
 import { RemoteResourceCleanupFailure } from '../../resource-errors.js';
@@ -79,7 +80,7 @@ export class ResourceStatusService {
 	}
 
 	private key(target: ObservationTarget): string {
-		return target.host.trim().toLowerCase() + ':' + target.port;
+		return observationTargetKey(target.host, target.port);
 	}
 
 	private fingerprint(targets: ObservationTarget[]): string {
@@ -243,7 +244,7 @@ export class ResourceStatusService {
 		connectionId?: number,
 	): Promise<ObservedSshResource[]> {
 		const userId = await this.authorize(token);
-		const targets = await this.model.listTargets(signal);
+		const targets = await this.model.listTargets(signal, connectionId);
 		signal.throwIfAborted();
 		const groups = new Map<string, ObservationTarget[]>();
 		for (const target of targets) {
@@ -255,14 +256,18 @@ export class ResourceStatusService {
 		if (groups.size > OBSERVATION_MAX_RESOURCES) {
 			throw new ObservationFailure('limit_exceeded');
 		}
-		for (const key of this.cache.keys()) {
-			if (!groups.has(key)) {
+		const now = Date.now();
+		for (const [key, entry] of this.cache) {
+			if (entry.expiresAt <= now || (connectionId === undefined && !groups.has(key))) {
 				this.cache.delete(key);
 			}
 		}
-		for (const key of this.inFlight.keys()) {
-			if (!groups.has(key)) {
-				this.inFlight.delete(key);
+		// A targeted refresh is only a partial catalog; preserve unrelated live samples/tasks.
+		if (connectionId === undefined) {
+			for (const key of this.inFlight.keys()) {
+				if (!groups.has(key)) {
+					this.inFlight.delete(key);
+				}
 			}
 		}
 		let entries = [...groups.entries()];
@@ -307,12 +312,17 @@ export class ResourceStatusService {
 		if ((await this.authorize(token)) !== userId) {
 			throw new ObservationFailure('unauthenticated');
 		}
-		const latest = await this.model.listTargets(signal);
+		const latest = await this.model.listTargets(signal, undefined, new Set(entries.map(([key]) => key)));
 		signal.throwIfAborted();
+		const latestGroups = new Map<string, ObservationTarget[]>();
+		for (const target of latest) {
+			const key = this.key(target);
+			const group = latestGroups.get(key) ?? [];
+			group.push(target);
+			latestGroups.set(key, group);
+		}
 		for (const [key, candidates] of entries) {
-			if (
-				this.fingerprint(latest.filter((target) => this.key(target) === key)) !== this.fingerprint(candidates)
-			) {
+			if (this.fingerprint(latestGroups.get(key) ?? []) !== this.fingerprint(candidates)) {
 				throw new ObservationFailure('conflict');
 			}
 		}

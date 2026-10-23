@@ -1465,3 +1465,14 @@ Remote register 安装 `/api/v1/transfers/send`、`status`、`status/:taskId`、
 ### 8. 当前能力与验收
 
 五HTTP、Shared完整codec、正式API/store/SendFiles/Progress消费者已实现。列表采用UUID游标每页8项，时间为Unix毫秒；输入拒绝同名/嵌套源与同文本endpoint，scp/rsync均复制目录本身。命令和原始结果留Adapter，有限失败经Model映射；原会话在独立持久准入事务及执行期复查。真实双端点OpenSSH与受控取消/未知/重启/清理、正式store浏览器回归见testing；完整页面及跨业务撤销仍C2-D，公网与非直连目标不在通过范围。部署与生产切换不在本批范围。
+
+## 连接目录与监控读取性能
+
+1. **职责与范围**：Targets 连接 Adapter 拥有目录关联批读；Remote monitoring 拥有主机候选筛选及指纹复核；SQLite Worker 拥有预编译语句缓存。优化不改变连接数据、授权或监控公开结果。
+2. **子功能与目录**：connection-sql 在原事务中批读 connections、connection_tags、connection_jumps 并复用逐条解码；observation-targets 定义原有主机分组规则；worker 缓存最多 128 条、SQL 文本不超过 16,384 字符的 StatementSync。容量仅用于淘汰缓存，超出仍正常执行。
+3. **依赖方向**：保持 Service → Model → Adapter；SQL 及数据库句柄仅在 Adapter。monitoring 的 Model/Service 复用本模块纯分组规则，不新增跨模块入口。
+4. **类型与转换**：沿用 StoredConnection、ObservationTarget 和 WorkerRequest；存储关联仍按原字段、容量、位置和路由约束校验。不新增 Shared 字段，不缓存身份、授权或目标凭据。
+5. **入口与安装**：原连接目录、资源状态入口与 Worker 安装点不变，无新 HTTP/WS 路由或迁移。
+6. **数据、事务与并发**：目录三次 SELECT 共用原事务和稳定排序；定向监控在指纹计算前筛选同 host/port 候选，保留同主机连接回退。返回前按请求主机重新读取并线性分组校验完整配置指纹，仍含代理、跳板与凭据变更。
+7. **生命周期与失败**：定向目录保留其它主机有效缓存与在途索引，每次读取淘汰过期样本，避免仅做定向刷新时长期保留失效项；保留原授权复核、取消、失败不缓存及真实任务清理。语句缓存按使用顺序淘汰，事务控制保留缓存，其它 exec 清理，数据库关闭前清空，不改变执行与错误协议。
+8. **当前能力与验收**：源码已接入原消费者；全量监控仍执行必要的前后指纹校验，不宣称消除所有目录成本。静态检查、产物及未执行行为范围见 testing/E2E；性能实测与并发配置变更回归按 PLAN D17 留远程验收。

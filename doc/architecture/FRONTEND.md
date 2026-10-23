@@ -603,3 +603,14 @@ Appearance 的字体保存、Presentation 的面板比例保存分别在所属�
 Terminal background由useTerminalBackground持有文档生命周期：同页会话切换只暂停/恢复；KeepAlive deactivation暂停并清空srcdoc，返回后先确认iframe可见尺寸再加载当前主题，避免脱离DOM期间文档重建以零视口初始化。iframe节点可缓存不代表内部document跨detach保留。
 
 数据页高级维护不再装配 AgentMaintenancePanel。当前前端只保留 HostDiagnosticsPanel 与 MutationRecoveryPanel；插件暂存恢复、版本目录、手工数据迁移和运行态观察没有 UI 入口，相关后端 API 与 use-plugin-management 的普通安装／升级消费者暂时保留。普通插件页只展示安装／升级／卸载与已卸载数据删除。
+
+## 保持 UI 的列表、终端与资源加载优化
+
+1. **职责与范围**：连接管理和工作区目录组件拥有派生列表；terminalOutputWriter 拥有输出批处理；Vite 构建拥有 IronRDP WASM 资产拆分。不更改布局、样式、尺寸及操作入口。
+2. **子功能与目录**：现有组件分离排序和搜索，缓存检索文本与标签索引，分组使用线性追加；连接管理列表使用显式依赖的 v-memo，工作区仅优化检索与分组。build/rdp-wasm-assets.ts 从固定依赖提取内嵌 WASM 为独立 hash 资产。Monaco 已有组件、语言及 worker 按需加载，保留完整编辑能力。
+3. **依赖方向**：列表继续消费原 feature/public；终端写入归现有 model，不引入全局调度器；构建插件仅依赖 Vite/Node，不进入业务运行时。
+4. **类型与转换**：沿用 ConnectionSummary 与原写入回调，无 Shared/后端契约变化。WASM 在构建边界解码并校验模块头，资产 URL 交由 Vite 重写。
+5. **入口与安装**：插件安装于 vite.config 的 build 流程；开发模式保留依赖原资源。现有 RDP/VNC 与编辑器动态 import 入口不变。
+6. **数据、事务与并发**：搜索复用排序与文本索引；缓存随连接、标签与排序响应式失效。所有列表 DOM 及原滚动结构保留，不用高度估算或移除屏外节点；memo 覆盖选择、测试结果、语言、标签及最近连接相对时间文案，工作区目录保留原渲染。后台输出等待已提交批次解析后再调度下一批，前台与显式 flush 仍按序立即提交。
+7. **生命周期与失败**：输出 credit 只在实际解析后归还，drain 保留空写入屏障；discard 以 generation 隔离旧回调。后台调度使用 timer，不依赖 requestAnimationFrame。构建找不到预期内嵌二进制时明确失败，不生成缺失资产的发布包；WASM 下载和连接失败继续由现有远程桌面 owner 处理。
+8. **当前能力与验收**：源码优化保留原 UI 与控制流；静态检查及二进制一致性见 testing/E2E。真实多 SSH 刷屏、切换、长目录键盘/搜索、RDP 冷缓存连接与网络耗时按 D17 待远程验收，不能仅凭构建宣称交互已通过。
