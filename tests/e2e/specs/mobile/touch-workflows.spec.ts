@@ -10,8 +10,10 @@ import {
 	ensureTestSshConnection,
 	fileManagerRow,
 	openConnectedFileManager,
+	openMobileProgressDisplay,
 	resetTestSshFilesystem,
 } from '../../support/ssh';
+import { closeProgressDisplay } from '../ssh/progress-display.helpers';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { slowStep, step } from '../../support/steps';
 
@@ -452,14 +454,14 @@ test('mobile command bar opens the touch-only quick commands surface', async ({ 
 			document.body.append(probe);
 			const expectedIconColor = getComputedStyle(probe).color;
 			probe.remove();
-			const icon = element.querySelector('i');
+			const icon = element.querySelector('i, svg');
 			return {
 				width: element.getBoundingClientRect().width,
 				height: element.getBoundingClientRect().height,
-				icon: icon instanceof HTMLElement && getComputedStyle(icon).color === expectedIconColor,
+				icon: icon !== null && getComputedStyle(icon).color === expectedIconColor,
 			};
 		});
-		expect(quickCommandAddUsesToolbarStyle).toEqual({ width: 26, height: 26, icon: true });
+		expect(quickCommandAddUsesToolbarStyle).toEqual({ width: 28, height: 28, icon: true });
 		await expect(
 			quickCommands
 				.locator('button[aria-label="Expand search"], input[placeholder="Search name or command..."]')
@@ -472,11 +474,16 @@ test('mobile command bar opens the touch-only quick commands surface', async ({ 
 	});
 });
 
-test('mobile shared Progress Display stays dormant until transfer work is hidden', async ({ page, context }) => {
+test('mobile shared Progress Display opens an empty catalog and returns to the terminal', async ({ page, context }) => {
 	await connectMobileSsh(page, context.request);
-	await expect(page.getByRole('button', { name: 'Progress Display', exact: true })).toHaveCount(0);
+	const display = await openMobileProgressDisplay(page);
+	await expect(display.getByText('There are no hidden progress tasks.', { exact: true })).toBeVisible();
+	await expect(display.locator('.hidden-progress-task-row')).toHaveCount(0);
+	await expect(display.getByText('There are no active transfer tasks currently.', { exact: true })).toBeVisible();
+	await closeProgressDisplay(display);
 	await expect(page.locator('.terminal-inner-container')).toBeVisible();
 	await expect(page.locator('input.command-bar-input')).toBeVisible();
+	await expect(page.locator('input.command-bar-input')).toBeEnabled();
 });
 
 test('mobile virtual keyboard Ctrl modifier reaches the live SSH input stream', async ({ page, context }) => {

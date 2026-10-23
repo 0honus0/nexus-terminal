@@ -11,8 +11,10 @@ import {
 	configureSshE2eSettings,
 	connectTestSshFromConnectionsPage,
 	ensureTestSshConnection,
+	openDesktopProgressDisplay,
 	resetTestSshFilesystem,
 } from '../../support/ssh';
+import { closeProgressDisplay } from './progress-display.helpers';
 import { step } from '../../support/steps';
 import { E2E_URLS } from '../../support/test-env';
 
@@ -577,8 +579,14 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
 			});
 	});
 
-	await step('shared Progress Display stays dormant until there is hidden transfer work', async () => {
-		await expect(page.getByRole('button', { name: 'Progress Display', exact: true })).toHaveCount(0);
+	await step('shared Progress Display opens an empty catalog before transfer work exists', async () => {
+		const display = await openDesktopProgressDisplay(page);
+		await expect(display.getByText('There are no hidden progress tasks.', { exact: true })).toBeVisible();
+		await expect(display.locator('.hidden-progress-task-row')).toHaveCount(0);
+		await expect(display.getByText('There are no active transfer tasks currently.', { exact: true })).toBeVisible();
+		await closeProgressDisplay(display);
+		await expect(terminal).toBeVisible();
+		await expect(page.locator('input.command-bar-input')).toBeEnabled();
 	});
 
 	await step('interactive keystrokes use the low-latency terminal input path', async () => {

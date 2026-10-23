@@ -542,7 +542,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 
 		await favoriteItem.click({ button: 'right' });
 		favoriteContext = page.getByRole('menu');
-		await favoriteContext.getByRole('button', { name: 'Change terminal directory', exact: true }).click();
+		await favoriteContext.getByRole('menuitem', { name: 'Change terminal directory', exact: true }).click();
 		await expect(favorites).toBeHidden();
 		await manager(page).getByRole('button', { name: 'Sync current path from terminal', exact: true }).click();
 		await expect(pathInput(page)).toHaveValue(FAVORITE_PATH, { timeout: 20_000 });
